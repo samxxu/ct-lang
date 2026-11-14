@@ -2,7 +2,7 @@
 
 > **状态**：草案。未评审、未签字；本轮只写规划文档，不改 `selfhost/`、`test/`、`examples/`、
 > `docs/language-spec.md`，不 bump、不打 tag、不 push。
-> **基线**：`/Users/samxx/trae-ws/ct-lang`，HEAD `ff1b9140`，`CTC_VERSION "0.44.1"`
+> **基线**：`/Users/samxx/trae-ws/ct-lang`，规划提交 `94556f29`，`CTC_VERSION "0.44.1"`
 > （`selfhost/ct-ast/main.ct:36`）。工作树有另一条线未提交的 `examples/**` 与 `issues/README.md`，
 > 本文与各卡均不碰。
 > **输入（事实基线）**：[language-capability-gaps.md](../proposals/language-capability-gaps.md)（22 条）、
@@ -18,6 +18,8 @@
 > 版本号按仓库惯例「相号即次版本号」（PH-44 → `v0.44.0` 实测）。
 > **前置**：本波在 **PH-45 收口后**开工。PH-45 未收口时，PH-46 的 S0 以 PH-45 收口提交为基线，
 > 且两相不并发跑门禁。
+> **责任边界（重要）**：**本仓库只维护规格、计划与验收判据，不执行实现。** 各相代码、夹具、
+> golden 与门禁接入由外部 DeepSeek harness 完成；交接方式见 §10，已知缺陷与绕法见 §11。
 
 ---
 
@@ -155,7 +157,9 @@
 
 ---
 
-## 5 每相通用流程（四件套）
+## 5 每相通用流程（四件套；执行方 = 外部 harness）
+
+> 本节步骤由外部 DeepSeek harness 执行；本仓库只维护卡片与判据，不代笔实现，也不替验收签字。
 
 1. **S0 核现状（只读）**：spec / tutorial / README / glossary / roadmap 现在怎么写，实现真实行为是什么；
    输出写进卡内「现状与缺口」，记 `baseline: <sha>`。S0 不产提交。
@@ -206,7 +210,7 @@
 
 ---
 
-## 8 建议先开哪一相
+## 8 交接建议先派哪一相
 
 **PH-46**，理由按权重：
 
@@ -235,3 +239,119 @@
 | 52 被期待「一次解决连写」 | 52 | 验收里出现 `v["a"]["b"]` | RL1-E11 + 卡内明写「只覆盖单层」；连写归包层 |
 | 与文档线并发改 `language-spec.md` | 全部 | 同一行两条修补线 | §3.1 规则：按句切片、等落定、收口贴最终 diff |
 | 与 PH-45 并发跑门禁 | 全部 | `check-all.sh` 交叉失败 | 串行跑；45 未收口时 46 基线取 45 收口提交 |
+
+---
+
+## 10 交接说明（规格与计划在本仓，实现在外部）
+
+### 10.1 读起顺序
+
+外部 harness 只按下面顺序读，**不要从 `docs/history/` 或旧草案反推**：
+
+1. 本文 §1 总览、§3 依赖、§8 起手建议、§11 已知缺陷 —— 先确定做什么、先后与坑。
+2. 目标相卡 `docs/design/phase4N.md` —— §0 现状、§2 决策、§3 诊断、§4 切片、§6 验收。
+3. 证据与裁定：[proposals/language-capability-gaps.md](../proposals/language-capability-gaps.md)、
+   [proposals/ct-json-capability-blockers.md](../proposals/ct-json-capability-blockers.md)、
+   [proposals/custom-index-protocol.md](../proposals/custom-index-protocol.md)（仅 PH-52）、
+   [reviews/2026-11-15-deepseek-ct-proposal-review.md](../reviews/2026-11-15-deepseek-ct-proposal-review.md)、
+   [review/ct-json-proposal-review.md](../review/ct-json-proposal-review.md)。
+4. 行为规约：[AGENTS.md](../../AGENTS.md)（提交、门禁、版本、T-7 红证）。
+5. `docs/language-spec.md`：**只读**；要改时必须按句切片且先与本仓库文档线协调（§3.1）。
+
+### 10.2 构建（从干净克隆到 `ct-ast`，与 `selfhost/check-ast.sh:388-412` 同形）
+
+```sh
+cd <ct-lang>
+work=$(mktemp -d)
+cc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc"
+"$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c"
+cc -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1"
+"$work/l1" build selfhost/l2/driver.ct -o "$work/l2src"
+cc -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2"
+"$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc"
+cc -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast"
+```
+
+产物用法与 `check-ast.sh` 一致：单文件 `"$work/ct-ast" <x>.ct -o <x>.c`；工程模式
+`"$work/ct-ast" build <dir>/main.ct -o <outdir>`。安装版 `ct` 的等价命令是 `ct <x>.ct` /
+`ct build <dir>`，两者不得混用基线。
+
+> 构建链任一环失败即为环境问题，**不要**据此改判据或改冻结层（`selfhost/l0| l1 | l2` 冻结）。
+
+### 10.3 门禁
+
+| 用途 | 命令 | 通过判据 |
+| --- | --- | --- |
+| 全量硬门禁（收口必须） | `bash selfhost/check-all.sh` | 退出码 0，末行 `check-all: OK (11 hard gates green)` |
+| 单相快速回环 | `bash selfhost/check-ast.sh` | 退出码 0，末行 `0 failed` |
+| golden 与 fixpoint | `bash selfhost/check-goldens.sh` | 退出码 0；L1/L2 fixpoint 段通过 |
+| 生成 C 零告警 | `bash selfhost/check-warnings.sh` | 退出码 0，`0 failed` |
+| 内存安全 | `bash selfhost/check-sanitizers.sh` | 退出码 0（**`detect_leaks=0`**，该脚本不报泄漏） |
+| 文档与状态 | `python3 test/docs/check-docs.py` | 退出码 0；`phase status` 与本表一致 |
+
+11 道硬门禁的完整清单以 `selfhost/check-all.sh:10-24` 为准（`test/run.sh`、`check-goldens`、
+`check-archive`、`check-m2a`、`ct-tour`、editor grammar、`test/pkg/run.sh`、`check-ast`、
+`check-warnings`、`check-semantics`、`check-docs`）。**门禁条数、版本号、判据宽度都不许改。**
+
+### 10.4 提交与分支
+
+| 项 | 要求 |
+| --- | --- |
+| 提交格式 | `<type>(<scope>): <subject>`，英文祈使 ≤50 字符；`type ∈ feat\|fix\|docs\|refactor\|test\|chore`，`scope ∈ parser\|codegen\|rewrite\|cli\|selfhost\|docs\|example` |
+| 正文 | 中文说明「为什么 + 怎么验证」，一提交一事；不合并红证与实现 |
+| 红证（T-7） | `test(<scope>): PH-4N 红` 为实现的**父提交**；正文含 `baseline: <sha>` 与原始输出；harness 用 `git archive <baseline>` 到 `/tmp` 复跑，不用工作树产物 |
+| 暂存 | 用显式路径（`git add <file>` 或 `git commit --only <file>`）；**禁止** `git add -A`、`git add .` |
+| 分支 | 仓库**没有**成文的分支命名规则（`AGENTS.md` 未规定）。约定：一相一分支 `phase/4N-<slug>`，基于交接基线；不合入主分支前不 rebase 别人在途改动 |
+| 禁止 | 不 push、不打 tag、不改 `CTC_VERSION`（版本移动只在收口提交内，由本仓库指令触发）；遇 `.git/index.lock` 等 3–5 秒重试，最多 5 次，**不得删除他人的锁** |
+
+### 10.5 目录归属
+
+| 目录 / 文件 | 外部 harness | 本仓库（规格线） |
+| --- | --- | --- |
+| `selfhost/ct-ast/**` | 可改（本相范围） | 只读 |
+| `lib/std/**` | 可改（PH-47 / 50 范围） | 只读 |
+| `test/ast/**`、`test/modules/**`、`test/pkg/**` | 可改（新增夹具；不动既有断言） | 只读 |
+| `examples/**` | 只可新增本相样例 | **在改**（有未提交改动，见 §10.7） |
+| `selfhost/check-*.sh` | 只可追加断言，不改既有断言与条数 | 只读 |
+| `docs/language-spec.md` | 只可按句改本相独占句 | **在改**（文档线），需先协调 |
+| `docs/tutorial.md`、`docs/package-guide.md` | 可改（本相小节） | 只读 |
+| `docs/design/phase4N.md`、`docs/roadmap.md` | 只可回写状态行与交付证据 | 维护 |
+| `selfhost/l0/ctc.c`、`selfhost/l1/**`、`selfhost/l2/**` | **禁止** | 只读（冻结层） |
+
+### 10.6 交付物形态
+
+每个任务一条：提交 sha + 该任务的验收命令原文 + 原始输出（T-3）。相收口另附：
+`check-all.sh` 末行、11 道各自末行原文、`git diff --stat` 区间、生成物逐字节对比方式（`cmp`/`git diff`）。
+
+### 10.7 交接基线
+
+- 规格基线：本文件的**最后一次提交**即交接基线（上一版规划提交为 `94556f29`，`CTC_VERSION 0.44.1`）；
+  取法：`git log -1 --format=%H -- docs/design/phase46-52-plan.md`。
+- 工作树可能有本仓库另一条线的未提交改动（`examples/**` 若干、`issues/README.md`）。外部 harness
+  应基于**干净克隆**开工；若复用同一工作树，先确认这些改动不属于自己，不得提交、不得回滚。
+- PH-45 未收口时，PH-46 的 S0 基线改取 PH-45 收口提交，并在交付报告里写明。
+
+---
+
+## 11 已知缺陷与绕法（外部 harness 会撞上的集中表）
+
+「绕法」只用于**在对应相交付前让其他相不被卡死**；不得把绕法写进语言语义、不得据此改判据。
+每条绕法都必须在卡的 §8 复现段落里留一条反例（红证），证明缺陷当时确实存在。
+
+| # | 缺陷 | 表现 | 撞上的相 | 绕法（临时） | 证据 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `Map` 条目按值进共享头 | `ct build` 报 `field has incomplete type`；单文件绿 | **46**（正题）、47/50（同文件面） | 元素改指针或改 `Vec`；不得把元素定义硬塞共享头 | 提案 J-1 |
+| 2 | 指针接收者 `.` 调发射 `S_f(&p)` | `cc` 只告警、非空时结果错 | **51**（正题）、52 与任何链式 | 一律写 `p->f()`；不得忽略 `incompatible-pointer-types` | 评审一 §0.4 |
+| 3 | `Map` 键只收 `int/long/char *` 且不复制 | `Str` 键硬错；含 `\0` 键碰撞；改缓冲后查不到 | **47**（正题）、52 的 JSON 单层 | 键拷到长寿命缓冲；含 NUL 用 `int` 序号键 | E-2 / E-4 / J-2 |
+| 4 | 指针字段 Drop 胶水传 `T**` | `leaf drop 22792752`，rc=0 无诊断 | **48**（正题）、49（AutoDrop） | 手写 `release()` 显式释放，不依赖自动胶水 | G-4 |
+| 5 | 跨单元 Drop 调空桩 | `delete` 后真实 Drop 体不跑（只打印 `done`） | **48**（正题）、49 | 在消费单元本地释放；不得假定跨单元可用 | G-2 / J-3 |
+| 6 | `own` 不接工厂返回值 | `'own' requires a malloc or calloc initialiser` | **49**（正题）、ct-json 解码 | 普通指针 + 显式 `free`，错误路径手工清理 | G-3 / J-4 |
+| 7 | 容器越界/缺键退零值 | `missing=0x0`、`oob=0` 与真值不可分 | **50**（正题）、ct-json | `Map` 用哨兵值 + 自维护存在性；`Vec` 用伴随 `found` 数组 | C-2 / C-3 / J-7 |
+| 8 | 自定义下标未实现 | `ct` rc=0，`cc` 报 `subscripted value is not an array` | **52**（正题）、ct-json 访问 | 显式 `get("k")`；多级逐层 `get` | F-1 / REQ-L1 |
+| 9 | 方法结果不能作接收者 | 链式第二跳报无法解析 | 任何链式方案（52） | 逐跳落局部变量 | B-2 / SH-73 |
+| 10 | 跨 union 成员字段链 | `cannot resolve the method trait` | ct-json（非本波） | 先落局部变量再调用 | N-9 |
+| 11 | 同单元同名函数只告警 | `cc` 报 conflicting types | 非本波 | 改名 | G-1 |
+| 12 | `#define` 不导出到生成头 | 宏在消费单元不可见 | 非本波 | 用 `pub` 常量 / `pub enum` | D-1 |
+
+> 撞表原则：**先确认自己在哪一相**。属于本相的缺陷必须在本相修掉并留红证；不属于本相的，
+> 按「绕法」列走，并在交付报告里注明「受 #N 限制，绕法为 …」。禁止为了让本相夹具变绿而改判据。

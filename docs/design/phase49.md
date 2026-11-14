@@ -1,7 +1,8 @@
 # Phase 49 — `own` 所有权转移（初始化式接工厂返回值）
 
 > **状态：规划中**（草案，待评审；未立项；本轮只写卡，不改代码）
-> **基线**：HEAD `ff1b9140`（`ct-ast v0.44.1`）；起点为 PH-48 收口提交。
+> **归属**：本仓库维护规格与判据；**实现由外部 DeepSeek harness 执行**（交接见 [计划 §10](phase46-52-plan.md)）。
+> **基线**：`94556f29`（规划提交，`CTC_VERSION 0.44.1`）；起点为 PH-48 收口提交。
 > **依赖**：[phase48.md](phase48.md)（AutoDrop 与 Drop 体走同一出口）。
 > **规模**：编译器 130–250；夹具 40–80；文档 30–50；合计 **200–380**（±40%）。
 > **版本**：收口 bump `v0.49.0`；tag / push 需用户单独授权。
@@ -104,3 +105,36 @@ g6_own_in_sig.ct:7:1: error: 'own' is only allowed inside a function body
 | R49-3 | 依赖 PH-48 的跨单元 Drop 体 | 跨单元 own 释放不执行 | 48 先收口；49 的夹具含跨单元一例 |
 | R49-4 | 被要求顺手支持返回类型 `own` | 评审提出 | D49-3 / D49-4 已明写非目标；不临时扩面 |
 | R49-5 | golden 漂移 | `check-goldens` 红 | 逐字节核对后重生成 |
+
+## 8 交接：复现与验收锚点
+
+### 8.1 现状复现（基线 `94556f29`，全部在 `/tmp`，不入仓）
+
+前置：按 [计划 §10.2](phase46-52-plan.md) 构建 `$work/ct-ast`。
+
+```sh
+mkdir -p /tmp/p49 && cd /tmp/p49
+# g2.ct: struct P *make(int); own struct P *p = make(3);
+# g6.ct: own struct P *make(int) { ... }
+"$work/ct-ast" g2.ct -o g2.c ; echo "g2 rc=$?"
+"$work/ct-ast" g6.ct -o g6.c ; echo "g6 rc=$?"
+```
+
+| 探针 | 期望 rc | 原始输出（引自提案 G-3，2026-11-15 实测） |
+| --- | --- | --- |
+| `g2.ct` | 1 | `g2_own_return.ct:15:1: error: 'own' requires a malloc or calloc initialiser` |
+| `g6.ct` | 1 | `g6_own_in_sig.ct:7:1: error: 'own' is only allowed inside a function body` |
+
+### 8.2 验收锚点（外部可见证据）
+
+| 证据 | 判据 | 允许变化 | 不允许 |
+| --- | --- | --- | --- |
+| 工厂形态 | `p49_own_factory` rc=0，块尾执行 Drop | 新增夹具 | 顺手支持返回位置 `own` |
+| 零值 | `p49_own_null` rc=0，块尾不释放、不崩溃 | 新增夹具 | 用 `free(0)` 掩盖记账问题 |
+| 负例 | L49-1 / L49-2 / L49-3 三条 rc=1、不落 `.c` | 新文案 | 降级为 warning |
+| 既有形态 | `own p = malloc(...)` 夹具与 golden 逐字节不变 | — | 既有 own 产物任何 diff |
+| 清理链 | `p49_own_try`（own + `?` + errdefer）输出顺序与 PH-40 冻结一致 | 新增夹具 | 改清理顺序 |
+| 内存 | `bash selfhost/check-sanitizers.sh` rc=0（`detect_leaks=0`） | — | 宣称已跑泄漏检测 |
+| fixpoint 与全量 | `check-goldens.sh` fixpoint 段 rc=0；`check-all.sh` 末行 `OK (11 hard gates green)` | 重生成受影响 golden（逐字节核对） | 手改 golden、改门禁 |
+
+撞上 §11：本相是 #6 的正题；跨单元释放依赖 #5 已由 PH-48 关闭，若未关闭则本相只交付单单元夹具并注明。

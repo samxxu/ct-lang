@@ -1,7 +1,8 @@
 # Phase 51 — 指针接收者 `.` 调用的发射缺陷（链式前置）
 
 > **状态：规划中**（草案，待评审；未立项；**影响面待 S0 确认**；本轮只写卡，不改代码）
-> **基线**：HEAD `ff1b9140`（`ct-ast v0.44.1`）。
+> **归属**：本仓库维护规格与判据；**实现由外部 DeepSeek harness 执行**（交接见 [计划 §10](phase46-52-plan.md)）。
+> **基线**：`94556f29`（规划提交，`CTC_VERSION 0.44.1`）。
 > **依赖**：无硬前置；但**必须先于 [phase52.md](phase52.md) 的连写验收**，也是任何链式方案的共同前置。
 > **规模**：50–120（选「硬错」）／100–250（选「自动解引用」）；合计按 S0 结论取一档（±40%）。
 > **版本**：收口 bump `v0.51.0`；tag / push 需用户单独授权。
@@ -114,3 +115,38 @@ S0 必须给出计数（`test/`、`examples/`、`lib/std` 三处），这个计�
 | R51-3 | 修了 `.` 但 `->` 的链路仍受 SH-73 限制 | 连写仍失败 | 本相不承诺连写；SH-73 另案 |
 | R51-4 | 产物级断言与既有 warning 基线冲突 | `-Werror` 下其他 warning 引爆 | 只对「本相夹具」加 `-Werror=incompatible-pointer-types`，不改全局 `cc` 选项 |
 | R51-5 | 把「加 warning」当成修复 | 生成物仍传 `S**` | O3 + E51-3 锁产物 |
+
+## 8 交接：复现与验收锚点
+
+### 8.1 现状复现（基线 `94556f29`，全部在 `/tmp`，不入仓）
+
+前置：按 [计划 §10.2](phase46-52-plan.md) 构建 `$work/ct-ast`。
+
+```sh
+mkdir -p /tmp/p51 && cd /tmp/p51
+# pr.ct: pub struct S { int id; }  impl S { pub int get_id() { return self.id; } }
+#        func main() { struct S *p = S_new(); int got = p.get_id(); printf("got=%d\n", got); }
+"$work/ct-ast" pr.ct -o pr.c ; echo "ct rc=$?"
+cc -std=c99 -c pr.c -o pr.o ; echo "cc rc=$?"
+grep -n 'S_get_id(&p)' pr.c
+```
+
+| 观察点 | 期望现状 | 说明 |
+| --- | --- | --- |
+| `ct rc` | 0 | 不报错、不警告 |
+| `cc rc` | 0，但有 `incompatible pointer types` warning | **精确文案以本机为准**（评审一只记录「只给 warning」，未逐字抄录） |
+| 生成 C | 命中 `S_get_id(&p)` | 形参是 `void *` / `S *`，实际传 `S **` |
+| 运行 | `got` 为错值（非 `p->id`） | 非空时结果已错，不是「空指针才崩」 |
+
+### 8.2 验收锚点（外部可见证据）
+
+| 证据 | 判据 | 允许变化 | 不允许 |
+| --- | --- | --- | --- |
+| 产物级 | 生成 C 以 `-Werror=incompatible-pointer-types` 编译，rc=0 | 新夹具的编译选项 | 改全局 `CC` 选项或放宽到 warning |
+| 选型 A | `p51_ptr_receiver_dot` rc=1、文案 L51-1、不落 `.c` | 新文案 | 降级为 warning |
+| 选型 B | 生成 C 出现 `S_get_id(p)`，运行得 `p->id` | 受影响 golden 重生成（逐字节核对） | 手改 golden |
+| `->` 路径 | `p51_arrow_ok` 行为与产物不变 | — | 任何 diff |
+| 影响面 | S0 计数（`test/`、`examples/`、`lib/std`）写入交付报告；选 A 时必须为 0 | — | 跳过统计直接选 A |
+| 全量 | `check-warnings.sh` `0 failed`；`check-all.sh` 末行 `OK (11 hard gates green)` | 新增夹具 | 改门禁/版本 |
+
+撞上 §11：本相是 #2 的正题；52 及任何链式方案在收口前一律按 #2 绕法写 `->`。

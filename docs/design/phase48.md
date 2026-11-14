@@ -1,7 +1,8 @@
 # Phase 48 — Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体）
 
 > **状态：规划中**（草案，待评审；未立项；本轮只写卡，不改代码）
-> **基线**：HEAD `ff1b9140`（`ct-ast v0.44.1`）；与容器族正交，可与 PH-46 并行开发，门禁串行。
+> **归属**：本仓库维护规格与判据；**实现由外部 DeepSeek harness 执行**（交接见 [计划 §10](phase46-52-plan.md)）。
+> **基线**：`94556f29`（规划提交，`CTC_VERSION 0.44.1`）；与容器族正交，可与 PH-46 并行开发，门禁串行。
 > **依赖**：无硬前置；收口后 [phase49.md](phase49.md) 才能开工（同一 AutoDrop 出口）。
 > **规模**：编译器 200–350；夹具 60–120；文档 40–80；合计 **300–550**（±40%）。
 > **版本**：收口 bump `v0.48.0`；tag / push 需用户单独授权。
@@ -114,3 +115,35 @@ static void Node_Drop_drop(void *self) {
 | R48-3 | 胶水 golden 大面积变化 | `check-goldens` 红 | 逐字节核对后重生成 |
 | R48-4 | 把「容器 release 不跑元素 Drop」顺手改掉 | 容器夹具变化 | 明写非目标，留 PH-50 |
 | R48-5 | ASAN 只在本地/nightly | 有人宣称「进了硬门禁」 | 卡面写明：本相必跑，但不计入 11 道硬门禁 |
+
+## 8 交接：复现与验收锚点
+
+### 8.1 现状复现（基线 `94556f29`，全部在 `/tmp`，不入仓）
+
+前置：按 [计划 §10.2](phase46-52-plan.md) 构建 `$work/ct-ast`。
+
+```sh
+mkdir -p /tmp/p48 && cd /tmp/p48
+# g8.ct: struct Leaf { int id; use Drop; } / struct Node { Leaf *leaf; use Drop; }
+# d4.ct: lib.h.ct 定义 impl Drop，main.ct 里 delete r
+"$work/ct-ast" g8.ct -o g8.c && cc -std=c99 g8.c -o g8 && ./g8 ; echo "g8 rc=$?"
+"$work/ct-ast" build d4/main.ct -o d4out && cc -std=c99 d4out/*.c -o d4 && ./d4 ; echo "d4 rc=$?"
+```
+
+| 探针 | 期望 rc | 原始输出（引自提案 G-4 / G-2，2026-11-15 实测） |
+| --- | --- | --- |
+| `g8.ct` | 0 | `leaf drop 22792752`（应为 `2`；id 被读成指针低 32 位） |
+| `d4/main.ct` | 0 | 只打印 `done`，缺 `res drop 7`（跨单元调了空桩） |
+
+### 8.2 验收锚点（外部可见证据）
+
+| 证据 | 判据 | 允许变化 | 不允许 |
+| --- | --- | --- | --- |
+| 胶水 | `p48_ptr_field_glue` 输出 `leaf drop 2` 且仅一次 | 新增夹具 | 改成自动 `free`（非目标） |
+| 跨单元 | `p48_cross_unit_drop` 输出 `res drop 7` + `done` | 新增夹具 | 保留空桩兜底 |
+| 生成物 | 指针字段胶水含判空、不取地址；值字段胶水不变 | 两类形态的生成 C 变化 | 值字段胶水任何 diff |
+| 内存 | `bash selfhost/check-sanitizers.sh` rc=0（`detect_leaks=0`） | — | 用 sanitizer 代替泄漏判据 |
+| 诊断 | L48-2 命中、rc=1、不落 `.c` | 新文案 | 降级为 warning |
+| fixpoint 与全量 | `check-goldens.sh` fixpoint 段 rc=0；`check-all.sh` 末行 `OK (11 hard gates green)` | 重生成受影响 golden（逐字节核对） | 手改 golden、改门禁 |
+
+撞上 §11：本相是 #4 / #5 的正题，两处必须都修；49 的跨单元 own 验收依赖本相，不得跳过。

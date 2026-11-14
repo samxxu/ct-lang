@@ -1,7 +1,8 @@
 # Phase 46 — `Map` 元素完整性（`Map<K, 用户 struct>` 在 `ct build` 下可编译）
 
 > **状态：规划中**（草案，待评审；未立项；本轮只写卡，不改代码）
-> **基线**：HEAD `ff1b9140`（`ct-ast v0.44.1`）；工作树含另一条线的未提交改动，本卡不碰。
+> **归属**：本仓库维护规格与判据；**实现由外部 DeepSeek harness 执行**（交接见 [计划 §10](phase46-52-plan.md)）。
+> **基线**：`94556f29`（规划提交，`CTC_VERSION 0.44.1`）；工作树可能另有 `examples/**` 未提交改动，开工用干净克隆。
 > **依赖**：无硬前置；基线取 PH-45 收口提交（见 [phase45.md](phase45.md)），两相不并发跑门禁。
 > **规模**：编译器 80–160；夹具 50–100；文档 20–40；合计 **150–280**（±40%）。
 > **版本**：收口 bump `v0.46.0`（五处 `CTC_VERSION` + 两处 README + 受影响 golden 重生成）；tag / push 需用户单独授权。
@@ -113,3 +114,35 @@
 | R46-3 | 与 PH-47 同改 `Map` 生成物 | 两相并行时冲突 | 串行：47 在 46 收口后开工 |
 | R46-4 | `--lib` 头面回归（PH-39 的 `.abi.h` 与 `visibility`） | 导出工程构建失败 | E46-3 锁死；不改 `.abi.h` 生成规则 |
 | R46-5 | 单文件模式行为被顺手改动 | 单文件 golden 变化 | 单文件路径不在本相改动面；变化即停 |
+
+## 8 交接：复现与验收锚点
+
+### 8.1 现状复现（基线 `94556f29`，全部在 `/tmp`，不入仓）
+
+前置：按 [计划 §10.2](phase46-52-plan.md) 构建 `$work/ct-ast`。
+
+```sh
+mkdir -p /tmp/p46 && cd /tmp/p46
+# lib.h.ct: pub struct JsonRef { int tag; }
+# main.ct : import "lib.h.ct"; pub struct Doc { Map<char *, JsonRef> slots; }
+"$work/ct-ast" main.ct -o main.c ; echo "single rc=$?"
+"$work/ct-ast" build main.ct -o out ; echo "build rc=$?"
+```
+
+| 模式 | 期望 rc | 原始输出（引自提案 J-1，2026-11-15 实测） |
+| --- | --- | --- |
+| 单文件 | 0 | — |
+| build | 1 | `.ctbuild/Vec.h:31:20: error: field has incomplete type 'struct JsonRef'` |
+
+### 8.2 验收锚点（外部可见证据）
+
+| 证据 | 判据 | 允许变化 | 不允许 |
+| --- | --- | --- | --- |
+| 夹具输出 | `p46_map_struct` 的 stdout 与单文件模式逐字相等 | 新增夹具/样例 | 改断言把错就错 |
+| 门禁计数 | `check-ast.sh` 末行 `0 failed`，passed 数 = 基线 + 本相新增夹具数 | 随新增夹具增加 | 减少、跳过、标 skip |
+| 生成物 | 四种对照形态（`Vec<US>` / `Map<char*,US*>` / `Map<char*,void*>` / `Map<char*,int>`）产物逐字节相同 | 本相新增形态产生新 golden | 既有 golden 出现任何 diff |
+| fixpoint | `check-goldens.sh` 的 L1/L2 fixpoint 段 + `check-ast.sh` self-hosting 段 rc=0 | — | 关闭 fixpoint 或放宽比较 |
+| 全量 | `bash selfhost/check-all.sh` rc=0，末行 `check-all: OK (11 hard gates green)` | — | 改门禁条数/版本号/判据 |
+| `--lib` | `p46_lib_export` rc=0，导出头符号面与 PH-39 口径一致 | 新增 `MapEntry_*` 符号 | 把元素定义拖进 `.abi.h` |
+
+撞上 §11：本相是正题 #1，必须在本相修掉；不得用「元素改指针」的绕法充当本相交付。

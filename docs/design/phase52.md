@@ -1,7 +1,8 @@
 # Phase 52 — 自定义类型下标 `[]`（REQ-L1，方案 A，单层）
 
 > **状态：规划中**（草案，待评审；未立项；**方向已裁定**：接，方案 A，单层；本轮只写卡，不改代码）
-> **基线**：HEAD `ff1b9140`（`ct-ast v0.44.1`）；起点为 PH-51 收口提交（连写验收依赖 51）。
+> **归属**：本仓库维护规格与判据；**实现由外部 DeepSeek harness 执行**（交接见 [计划 §10](phase46-52-plan.md)）。
+> **基线**：`94556f29`（规划提交，`CTC_VERSION 0.44.1`）；起点为 PH-51 收口提交（连写验收依赖 51）。
 > **依赖**：PH-31（`v[i]` / `m[k]` 糖与 L31-3/L31-4 写保护）、PH-34（非泛型固有 `impl`）、
 > [phase51.md](phase51.md)（链式前置；单层下标本身不依赖 51）。
 > **规模**：编译器 150–280；夹具 70–130；文档 30–60；合计 **250–470**（±40%）。
@@ -135,3 +136,38 @@
 | R52-4 | 泛型还原失败，文案给 `Box_int` | 泛型上触发 L1 | `RL1-D6`：先 `ct_impl_inst` 还原，失败才退回 C 拼写 |
 | R52-5 | 草案锚点继续漂移 | S0 直接引用旧行号 | 本卡已标注「行号已漂移，S0 重定位」；卡内不写死易漂行号 |
 | R52-6 | 被要求扩成方案 B | 评审提出「同类型两个 get」 | D52-2 已明写另立需求；不临时扩面 |
+
+## 8 交接：复现与验收锚点
+
+### 8.1 现状复现（基线 `94556f29`，全部在 `/tmp`，不入仓）
+
+前置：按 [计划 §10.2](phase46-52-plan.md) 构建 `$work/ct-ast`。
+
+```sh
+mkdir -p /tmp/p52 && cd /tmp/p52
+# ci.ct: pub struct X { int n; }  impl X { pub int get(char *k) { return self.n; } }
+#        func main() { X x = X_new(); int a = x[0]; int b = x["k"]; }
+"$work/ct-ast" ci.ct -o ci.c ; echo "ct rc=$?"
+cc -std=c99 -c ci.c -o ci.o ; echo "cc rc=$?"
+```
+
+| 观察点 | 期望现状 | 原始输出（引自提案 F-1 / REQ-L1，2026-11-15 实测） |
+| --- | --- | --- |
+| `ct rc` | 0 | 原样发射 C 下标，无诊断 |
+| `cc`（`x[0]`） | 1 | `subscripted value is not an array, pointer, or vector` |
+| `cc`（`x["k"]`） | 1 | `array subscript is not an integer` |
+
+### 8.2 验收锚点（外部可见证据）
+
+| 证据 | 判据 | 允许变化 | 不允许 |
+| --- | --- | --- | --- |
+| 读形态 | `p52_read`、`p52_generic` 编译运行，展开为 `get(...)` | 新增夹具 | 回退 C 下标 |
+| 写形态 | `p52_write` 展开为 `set(k,v)`，读回新值 | 新增夹具 | 允许右值接收者写入 |
+| 负例 | `p52_errors.sh` 覆盖 RL1-L1–RL1-L9，`file:line:col` 与文案逐字命中，不落 `.c` | 新诊断族 | 把任一条降级为 warning |
+| C 透传 | `p52_c_passthrough`：C 数组/指针下标产物逐字节不变 | — | 任何 diff |
+| 单层边界 | `p52_ptr_receiver` 证明 `p["k"]` 仍是 C 语义；文档写明不做 | 文档句 | 偷偷扩指针协议 |
+| JSON 单层 | `p52_json_single`：`v["k"]` 正确；`v[0]` 在方案 A 下 rc=1 并提示 `get_idx` | 新增样例 | 用 `v[0]` 当成功用例 |
+| fixpoint | `check-ast.sh` self-hosting 段 rc=0；`check-goldens.sh` fixpoint 段 rc=0 | — | 关闭 fixpoint |
+| 全量 | `check-all.sh` 末行 `OK (11 hard gates green)`；`check-warnings.sh` `0 failed` | 新增夹具 | 改门禁/版本 |
+
+撞上 §11：本相是 #8 的正题；#2（指针接收者）由 PH-51 先关闭，未关闭时连写夹具一律按 `->` 绕法写并注明。

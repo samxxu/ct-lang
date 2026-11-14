@@ -1,7 +1,8 @@
 # Phase 47 — 容器键协议与键所有权（`Str` 键 + `put_owned`）
 
 > **状态：规划中**（草案，待评审；未立项；本轮只写卡，不改代码）
-> **基线**：HEAD `ff1b9140`（`ct-ast v0.44.1`）；起点为 PH-46 收口提交。
+> **归属**：本仓库维护规格与判据；**实现由外部 DeepSeek harness 执行**（交接见 [计划 §10](phase46-52-plan.md)）。
+> **基线**：`94556f29`（规划提交，`CTC_VERSION 0.44.1`）；起点为 PH-46 收口提交。
 > **依赖**：[phase46.md](phase46.md)（同一 `Map` 生成面与 `lib/std/Vec.h.ct`）。
 > **规模**：编译器 150–280；`lib/std` 100–180；夹具 80–160；文档 50–80；合计 **380–700**（±40%）。
 > **版本**：收口 bump `v0.47.0`；tag / push 需用户单独授权。
@@ -120,3 +121,36 @@ strcpy(buf, "key2");            /* "key1" 查不到：键只存了指针 */
 | R47-3 | 负例文案是冻结面（既有两条断言） | 既有 `L29-*` 夹具红 | 本相明确记录「文案变更」并同步断言，不加新限制 |
 | R47-4 | 与文档线并发改 `language-spec.md` | 同一行两条修补线 | 按 [phase46-52-plan.md](phase46-52-plan.md) §3.1：按句切片、等落定 |
 | R47-5 | 用户期待「任意类型键」而本相只给 `Str` | 评审提出 | D47-1 已写明触发条件；不临时扩面 |
+
+## 8 交接：复现与验收锚点
+
+### 8.1 现状复现（基线 `94556f29`，全部在 `/tmp`，不入仓）
+
+前置：按 [计划 §10.2](phase46-52-plan.md) 构建 `$work/ct-ast`。
+
+```sh
+mkdir -p /tmp/p47 && cd /tmp/p47
+# e2b.ct: Map<struct Str, int> m;              —— 期望编译期硬错
+# e5.ct : char buf[]; m.put(buf,1); 改 buf；  —— 期望 rc=0 但查不到旧键
+"$work/ct-ast" e2b.ct -o e2b.c ; echo "type rc=$?"
+"$work/ct-ast" e5.ct -o e5.c && cc -std=c99 e5.c -o e5 && ./e5 ; echo "copy rc=$?"
+```
+
+| 探针 | 期望 rc | 原始输出（引自提案 E-2 / E-4，2026-11-15 实测） |
+| --- | --- | --- |
+| `e2b.ct` | 1 | `e2b_str_key.ct:5:26: error: Map does not support key type 'struct Str' (use int, long or char *)` |
+| `e5.ct` | 0 | `key1=0x0 key2=0x1017d6fd8`（键未复制，改缓冲即失效） |
+
+### 8.2 验收锚点（外部可见证据）
+
+| 证据 | 判据 | 允许变化 | 不允许 |
+| --- | --- | --- | --- |
+| 键语义 | `p47_str_key`：`len==2`，两个含 `\0` 的键各取回原值 | 新增夹具 | 用 `strcmp` 语义掩盖碰撞 |
+| 复制语义 | `p47_put_owned`：改源缓冲后仍可查；释放后不崩溃 | 新增 API 与夹具 | 默认 `put` 改成复制（破坏零迁移） |
+| 生成物 | `Map<char *, V>` 既有 125 条 golden 逐字节不变 | 仅新增 `Str` 键产物 | 既有 `Map` 产物任何 diff |
+| 文案 | `p47_errors.sh` 命中 L47-1，rc=1，不落 `.c` | 只允许更新既有两条键类型断言文案（本相登记） | 放宽为 warning 或删除负例 |
+| 内存 | `bash selfhost/check-sanitizers.sh` rc=0（`detect_leaks=0`，**不宣称泄漏检测**） | — | 以 sanitizer 通过代替泄漏判据 |
+| 泄漏 | `check-warnings.sh` 的编译期分析无新增告警 + 运行期计数器 | — | 声称 LeakSanitizer 已跑 |
+| fixpoint 与全量 | `check-goldens.sh` fixpoint 段 rc=0；`check-all.sh` 末行 `OK (11 hard gates green)` | — | 改门禁/版本 |
+
+撞上 §11：本相是 #3 的正题；#1（共享头）由 PH-46 先关闭，若 46 未收口则本相夹具改用指针元素。
