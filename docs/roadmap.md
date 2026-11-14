@@ -58,7 +58,7 @@
 | Phase 42 | `impl` 方法可见性（方法级 `pub`，默认私有） | ✅ 完成 | v0.42.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase42-draft.md) |
 | Phase 43 | 错误出口类型契约（`return err:` 载荷检查） | ✅ 完成 | v0.43.0 | [卡](design/phase43.md) |
 | Phase 44 | `?` 错误传播运算符（后缀 `?`，同 `E`） | ✅ 完成 | v0.44.0 | [卡](design/phase44.md) |
-| Phase 45 | 类型契约一致性（闭包 `return` 与指针基类型判据） | ⬜ 已定稿 / 待实施 | — | [卡](design/phase45.md) |
+| Phase 45 | 类型契约一致性（闭包 `return` 与指针基类型判据） | ⬜ 规划中（已签字，2026-11-15；排在 PH-46 之前） | — | [卡](design/phase45.md) |
 | Phase 46 | `Map` 元素完整性（用户 struct 按值入 `Map`，`ct build` 可编译） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase46.md) |
 | Phase 47 | 容器键协议（`Str` 键深拷贝；`put_owned` 已删） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase47.md) |
 | Phase 48 | Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase48.md) |

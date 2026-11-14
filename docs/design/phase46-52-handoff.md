@@ -9,22 +9,33 @@
 ## 1 施工顺序与理由
 
 ```text
-PH-46 ──► PH-47 ──► PH-50
-  │
-PH-48 ──► PH-49
-  │
-PH-51 ──► PH-52
+PH-45-S1 ──► PH-45-S2 ──► PH-46 ──► PH-47 ──► PH-50
+                              │
+                            PH-48 ──► PH-49
+                              │
+                            PH-51 ──► PH-52
 ```
 
 | 顺序 | 理由 |
 | --- | --- |
+| 45-S1 → 45-S2 | S1 只加 `ncl_stack == 0` 前置；S2 才动 `chk_assignable`，两刀不共享代码路径，可分别验收回滚 |
+| 45 → 46 | PH-45 已由用户 2026-11-15 直接签字立案，排在本波之前；46 的基线取 45 收口提交 |
 | 46 → 47 → 50 | 同一份 `Map` 生成物与 `lib/std/Vec.h.ct`；47 依赖 46 的条目归属，50 依赖 47 的 `Str` 键比较 |
 | 48 → 49 | 49 的 AutoDrop 要调 48 的真实 Drop 体 |
 | 51 → 52 | 52 的连写验收依赖 51；两者都动 `Expr.h.ct` |
 | 46 与 48 | 可并行**开发**（只在发射器重叠），**门禁必须串行** |
 | 47 的 `Map<Str,用户 struct>` | 以 46 收口为条件；否则该夹具改用指针元素 |
 
-**先派 PH-46**：最小、无设计分歧、是 47 的硬前置（`≤120` 行）。
+**先派 PH-45（两刀），再派 PH-46**。PH-45 不属于本波，判据在 [phase45.md](phase45.md) §4/§6。
+
+### 1.1 PH-45 两刀的交接面
+
+| 项 | 45-S1 闭包 `return` 跳过 | 45-S2 指针四位置判据 |
+| --- | --- | --- |
+| 入口条件 | 干净克隆；`CT_STD_DIR=<repo>/lib/std`；先存 `examples/18` 的 `--types` 失败原文（rc=1，两条） | S1 收口提交；先存 209/210 `check_only/struct_ptr.ct` 的 rc=0 现状与四位置探针 |
+| 出口证据 | `Stmt.h.ct:1996-2002` / `:2038-2060` 前置 `ncl_stack == 0`；42/42 examples `--types` 全绿；闭包 `return err:;` 漏判变硬错 | `Expr.h.ct:6281` 短路替换；四位置负例 4/4、层数 1/1；`check-ast.sh` 三处硬编码同步 |
+| 门禁 | `check-ast.sh` 末行 `0 failed`；`check --types` 42/42 | `check-ast.sh` + `check-warnings.sh` 均 `0 failed`；`check-all` 11 道全绿 |
+| 禁止事项 | 不做闭包返回类型推断（phase43 §0.2）；不改 `parse_closure` / `ret_type` | 不新建第二个兼容内核；不动 `void *`/裸 `0`/typedef/数组/闭包/fnptr 跳过面；不手改 golden |
 
 ---
 
@@ -32,6 +43,8 @@ PH-51 ──► PH-52
 
 | 卡 | 入口条件 | 出口证据（必须贴原文） |
 | --- | --- | --- |
+| 45-S1 | 干净克隆；`CT_STD_DIR` 已设；`examples/18` 失败原文已存 `/tmp/p45-base/` | `--types` 42/42；`examples/18` rc=0 输出为空；闭包 `return err:;` 负例命中 `an error return needs a value` |
+| 45-S2 | S1 收口提交；209/210 现状与四位置探针已存 | 四位置负例 4/4；`u = a` 三入口 rc=1；`check-ast.sh` 末行 `0 failed`；golden 快照 `cmp` |
 | 46 | 干净克隆；四形态基线快照已存 `/tmp` | `p46` build/单文件 stdout `cmp` rc=0；四形态产物 `cmp`；`nm` 新增符号 = 0；`check-all` 末行 |
 | 47 | 46 收口提交；`Map` 两份既有特化基线快照 | `p47_str_key` 输出；`p47_release` 计数；既有 `Map` 产物 `cmp`；两条负例命中 |
 | 48 | 干净克隆（可并行 46） | `p48_ptr_field_glue` / `p48_cross_unit_drop` stdout `cmp`；`p48_errors` L48-2；`grep` 无 `&_self->` |
@@ -48,6 +61,8 @@ PH-51 ──► PH-52
 
 | 时机 | 命令 | 判据 |
 | --- | --- | --- |
+| 45-S1 每片 | `for f in examples/*/*.ct; do ct-ast check --types "$f"; done` | 42/42 rc=0；`examples/18` 输出为空 |
+| 45-S2 每片 | `bash selfhost/check-ast.sh && bash selfhost/check-warnings.sh` | 两份末行均 `0 failed` |
 | 每片提交前 | `bash selfhost/check-ast.sh` | 末行 `0 failed` |
 | 改 `lib/std` 的卡（47/50） | `bash selfhost/check-goldens.sh` | rc=0，fixpoint 段通过 |
 | 改发射器的卡（46/48/51） | `bash selfhost/check-warnings.sh` | `0 failed` |
@@ -69,6 +84,8 @@ PH-51 ──► PH-52
 5. 不用 `git add -A` / `git add .`；只用显式路径；遇 `.git/index.lock` 等 3–5 秒重试，最多 5 次，不删他人的锁。
 6. 不 push、不打 tag；不改 `docs/language-spec.md` 本相独占句之外的内容（文档线在改）。
 7. 不实现本卡范围外的「顺手修复」；缺陷按计划 §11 的绕法处理并在报告注明编号。
+8. PH-45 两刀不得越界：S1 只加 `ncl_stack == 0` 前置，不做闭包返回类型推断；S2 只替换 `:6281`
+   的指针短路，不新建第二个兼容内核、不改 `void *`/裸 `0`/typedef/数组/闭包/fnptr 的跳过面。
 
 ---
 
