@@ -1,173 +1,104 @@
-# Phase 52 — 自定义类型下标 `[]`（REQ-L1，方案 A，单层）
+# Phase 52 — 自定义类型下标 `[]`（REQ-L1，方案 A，只主张单层字符串键）
 
-> **状态：规划中**（草案，待评审；未立项；**方向已裁定**：接，方案 A，单层；本轮只写卡，不改代码）
-> **归属**：本仓库维护规格与判据；**实现由外部 DeepSeek harness 执行**（交接见 [计划 §10](phase46-52-plan.md)）。
-> **基线**：`94556f29`（规划提交，`CTC_VERSION 0.44.1`）；起点为 PH-51 收口提交（连写验收依赖 51）。
-> **依赖**：PH-31（`v[i]` / `m[k]` 糖与 L31-3/L31-4 写保护）、PH-34（非泛型固有 `impl`）、
-> [phase51.md](phase51.md)（链式前置；单层下标本身不依赖 51）。
-> **规模**：编译器 150–280；夹具 70–130；文档 30–60；合计 **250–470**（±40%）。
-> **版本**：收口 bump `v0.52.0`；tag / push 需用户单独授权。
-> **纪律**：依据是 [custom-index-protocol.md](../proposals/custom-index-protocol.md) 的 `RL1-*`，
-> **不引** `phase40-draft.md` / `E40-*`（评审一 §1 #4/#5 已判该引用张冠李戴）。
+> **状态：规划中**（定稿候选；本卡只写规格，实现由外部 harness 执行）
+> **归属**：本仓库维护规格与判据；实现由外部 harness 交付（[手册](phase46-52-handoff.md)）。
+> **基线**：本卡最后一次提交；起点为 PH-51 收口提交（连写验收依赖 51）。
+> **规模**：250–470 行。
+> **版本**：`v0.52.0`（若采纳 U-4 A）。
+> **依据**：[custom-index-protocol.md](../proposals/custom-index-protocol.md) 的 `RL1-*`；**不引** `phase40-draft.md` / `E40-*`。
 
-## 0 背景与裁定
+## 0 一句话目标
 
-**现状**：用户类型 `b[0]` 被 `ct-ast` 原样发射为 C 下标，`cc` 才报
-`subscripted value is not an array, pointer, or vector`（`b["k"]` 报 `array subscript is not an integer`）。
-`Vec` / `Map` 的内建下标可用，写形态是硬错（`a Vec subscript is read-only; use set(i, v)`）。
+让 `obj["k"]` / `obj["k"] = v` 在用户类型上按固有 `get`/`set` 展开（方案 A：名 + 参数个数），并且**只主张单层、只主张可读字符串键**。
 
-**已裁定（评审一 §3、§6 Q1）**：
+## 1 本卡做 / 本卡不做
 
-| 项 | 裁定 |
+| 做 | 不做 |
 | --- | --- |
-| 是否立项 | **接**，按 `custom-index-protocol.md` 的 `RL1-D*` / `RL1-L*` / `RL1-E*` 验收 |
-| 签名匹配 | **方案 A**：方法名 + 参数个数 + 非 `static`；不做调用点参数类型匹配 |
-| 分名 | JSON 侧用 `get_idx(int)` 与 `get(char *)` 两个名字，同一类型不同时重载 `get` |
-| 覆盖层级 | **只覆盖单层**；`p[k]`（`p` 为用户类型指针）保持 C 指针算术 |
-| 多级访问 | 由包层返回值类型承担（`get` 返回 `JsonRef` 值并给 `JsonRef` 实现 `get`），语言侧不扩 |
+| 读形态 `obj[k]` → `obj.get(k)`；写形态语句 `obj[k]=v` → `obj.set(k,v)` | 方案 B（按参数类型选 `get`） |
+| 九条诊断 L52-1–L52-9 + L52-10（`get` 跨单元私有） | 指针接收者进协议（`p[k]` 保持 C 语义） |
+| C 数组/指针/`Vec`/`Map` 透传零变化 | `x[k].field = v`、`x[k].m()` —— 仍落 `cc`，列范围外 |
+| 单层字符串键验收（`v["k"]`） | **`v[0]` 不主张、不验收、不诊断**（已知洞，D52-6） |
+| 数字下标若 `get` 参数为 `char*` → 静默空，文档禁止 | 其他运算符重载 |
 
-**代码锚点（行号已漂移，S0 必须重定位）**：
+## 2 前置依赖
 
-| 主题 | 位置 |
-| --- | --- |
-| `container_index_check`（V29-4 的拒绝守卫） | 评审一实测在 `selfhost/ct-ast/frontend/parse/Expr.h.ct:3870-3883`；草案 §2.3 的 `:3729-3742` 已过期 |
-| `[` 后缀解析与 `Vec` / `Map` 糖 | 草案记 `Expr.h.ct:3957-4007`，S0 复核 |
-| 固有方法查找 | `Expr.h.ct` 的 `inst_inherent_method`，S0 复核 |
-| 静态类型推导 | `Expr.h.ct` 的 `static_ctype`，S0 复核 |
-| `N_MCALL` 发射 | `Emitter.h.ct` 的 `N_MCALL` 分支（`:4863` 起） |
+PH-34（固有 `impl`）、PH-31（`Vec`/`Map` 下标糖与写保护）、PH-51（连写验收）。
 
-## 1 目标 / 非目标
-
-### 1.1 目标
-
-| 编号 | 内容 |
-| --- | --- |
-| RL1-O1 | 读形态：`obj[k]` → `obj.get(k)`，覆盖非泛型 struct 与泛型实例 |
-| RL1-O2 | 写形态：语句 `obj[k] = v;` → `obj.set(k, v);`，只收左值接收者 |
-| RL1-O3 | 诊断 RL1-L1–RL1-L9 全部编译期硬错并指名类型，不落 `.c` |
-| RL1-O4 | C 数组 / 指针 / `Vec` / `Map` 的既有语义与文案逐字不变（`RL1-D8` / `RL1-E5` / `RL1-E6`） |
-| RL1-O5 | **单层边界写进判据**：新增 `RL1-E11` 锁死 `p[k]`（`p: struct X *`）保持 C 语义，并在文档写明 |
-
-### 1.2 非目标
-
-| 不做 | 理由 |
-| --- | --- |
-| 方案 B：按参数类型选 `get`（同类型 `get(char*)` + `get(int)`） | 需要调用点重载解析与新的诊断族；评审一 §3 判为独立需求，不借 L1 的壳 |
-| 指针接收者进入协议 / 连写下标 `v["a"]["b"]` | `RL1-D8` 明确不做；多级由包层返回值类型承担 |
-| 其他运算符重载（`+` / `==` / `()`） | 只做 `[]` |
-| trait 提供的 `get` / `set` | 只认固有方法；trait 方法可能来自 vtable，会改变派发语义 |
-| `set`-only 类型 | 读形态是写形态的解析前置，v1 要求 `get` 存在 |
-| 文件作用域 / 常量初始化器里的自定义下标 | 无接收者静态类型可判 |
-
-## 2 设计决定
-
-| 编号 | 决定 | 为什么不用另一种 |
-| --- | --- | --- |
-| **D52-1** | 沿用 `RL1-D1`–`RL1-D8`，不重写草案的决策体系 | 评审一 §3 已确认草案是现成可排期路径；重写会引入两套编号 |
-| **D52-2** | 签名匹配只认「名 + 参数个数 + 非 `static`」（方案 A） | 方案 B 要动 `static_ctype` 与重载解析，回归面大于收益；JSON 已接受 `get_idx` 分名 |
-| **D52-3** | `p[k]` 保持 C 指针算术，**不**进协议；新增 `RL1-E11` 断言该口径 | 指针协议要定义「值 / 指针同一协议」与自动解引用，成本远高于 L1 |
-| **D52-4** | 写形态只收语句位置 + 左值接收者；复合赋值 / 取地址 / `own` 右值各一条硬错 | 复用 `RL1-L6`–`RL1-L9`；右值接收者会被发射成临时量，写入静默丢失 |
-| **D52-5** | 缺协议是硬错，不回退 C 下标 | 回退正是「`ct-ast` rc=0、`cc` 才报错」的根因 |
-
-## 3 诊断
-
-沿用草案编号与文案（S1 冻结后逐字断言，位置一律指向 `[` 的 `file:line:col`）：
-
-| 编号 | 触发 | 文案（草案） |
-| --- | --- | --- |
-| RL1-L1 | 无 `get` | `type 'X' has no subscript: declare 'V get(K)' in impl X` |
-| RL1-L2 | 有 `get` 无 `set`，写形态 | `type 'X' has a read-only subscript: declare 'void set(K, V)' in impl X` |
-| RL1-L3 | `get` 参数个数 ≠ 1 | `type 'X' has no subscript: 'get' must take 1 parameter` |
-| RL1-L4 | `set` 参数个数 ≠ 2 | `type 'X' has no writable subscript: 'set' must take 2 parameters` |
-| RL1-L5 | `get` / `set` 是 `static` | `type 'X' has no subscript: 'get' must be an instance method` |
-| RL1-L6 | `+=` / `++` / `--` | `a custom subscript supports only '='; use set(k, v)` |
-| RL1-L7 | `&obj[k]` | `cannot take the address of a custom subscript; bind it to a local first` |
-| RL1-L8 | 写形态非语句或接收者非左值 | `a custom subscript write needs a statement and an lvalue receiver` |
-| RL1-L9 | 右值是 `own` / `borrow` 变量 | `a custom subscript set cannot take an 'own' or 'borrow' value` |
-| RL1-E11 | （判据，非诊断）`p[k]` 保持 C 语义 | 文档写明「用户类型指针不进协议」；不新增文案 |
-
-## 4 任务切分
-
-| 切片 | 内容 | 边界 |
-| --- | --- | --- |
-| **S0** | 只读核查：重定位上述锚点、复核 `static_ctype` 覆盖形态、`inst_inherent_method` 约束、草案 §2.2 红证复跑；记 `baseline: <sha>` | 不产提交 |
-| **S1** | 红证：`p52_read` / `p52_write` / `RL1-L1` 负例（先跑出 `cc` 报错或缺失诊断） | 只含夹具与 `baseline:` |
-| **S2** | 读形态 + 缺协议硬错（`RL1-L1` / `RL1-L3` / `RL1-L5`） | ≤3 文件 |
-| **S3** | 写形态 + 左值/语句判定（`RL1-L2` / `RL1-L4` / `RL1-L6`–`RL1-L9`） | 复用 `RL1-L8` 判定 |
-| **S4** | 泛型实例类型名还原（`RL1-D6`）+ C 数组/指针透传 + `RL1-E11` | 只补分支，不改容器路径 |
-| **S5** | 文档：spec 新增小节（中英对称）+ `bindings-and-patterns.md` 一处；spec 冲突记 `blocked-by` | 由本相独占编号 |
-| **S6** | 收口：11 道门禁全绿、bump `0.52.0` | 收口 |
-
-依赖：S0 → S1 → S2 → S3 → S4 → S5 → S6；每片 ≤150 行、≤3 文件。
-
-## 5 完成定义（四件套）
-
-| 面 | 交付 |
-| --- | --- |
-| 实现 | 读 / 写形态与九条诊断全部生效；`Vec` / `Map` / C 下标零变化 |
-| 诊断 | RL1-L1–L1-L9 各一条负例，文案与位置逐字命中，不落 `.c` |
-| 文档 | 自定义下标协议、单层边界、`get_idx` 分名建议、`p[k]` 不做口径 |
-| 门禁 | 夹具进 `check-ast.sh`；`RL1-E5` / `E6` 逐字不变；`check-all.sh` 11 道全绿 |
-
-## 6 验收
-
-| ID | 断言 | 命令 / 阈值 |
-| --- | --- | --- |
-| **RL1-E1** | 非泛型 `struct X` + `int get(int)`：`x[1]` 展开为 `x.get(1)`，可编译运行 | 夹具 `p52_read` |
-| **RL1-E2** | 泛型 `Box<int>` + `get`：同样展开，无模板名残留 | 夹具 `p52_generic` |
-| **RL1-E3** | `void set(int,int)`：`x[1] = 9;` 展开为 `x.set(1,9)`，读回 9 | 夹具 `p52_write` |
-| **RL1-E4** | RL1-L1–RL1-L9 各一条负例，`file:line:col` 与文案逐字命中 | `p52_errors.sh` |
-| **RL1-E5** | C 数组、`int *`、`struct X *` 下标语义与产物不变 | 夹具 `p52_c_passthrough` |
-| **RL1-E6** | `Vec` / `Map` 的 L31-3 / L31-4 文案与产物逐字不变 | 既有负例继续绿 |
-| **RL1-E7** | 同一负例在 `ct-ast` 与 `ct check` 下同文案、同位置 | 双模式断言 |
-| **RL1-E8** | 自举 fixpoint 通过 | `check-ast.sh` self-hosting 段 |
-| **RL1-E9** | 全量门禁零失败 | `check-all.sh` 11 道 |
-| **RL1-E10** | 任务清单每项可独立验收 | 本卡 §4 的 verify 逐条 |
-| **RL1-E11** | `p["k"]`（`p: struct X *`）**不**进入协议：仍是 C 语义（字符串键由 `cc` 报错、数字键是指针算术），文档写明；`v["a"]["b"]` 不在本相验收内 | 夹具 `p52_ptr_receiver` + spec 句 |
-| **RL1-E12** | JSON 侧单层可用：`v["k"]` 编译并返回正确节点；`v[0]` 在方案 A 下是硬错（提示 `get_idx`） | 夹具 `p52_json_single` |
-
-## 7 风险与不做项
-
-| 编号 | 风险 / 不做项 | 触发信号 | 处置 |
-| --- | --- | --- | --- |
-| R52-1 | 验收里出现 `v["a"]["b"]` | 评审或包方按连写排期 | RL1-E11 锁单层；多级归包层 `JsonRef` |
-| R52-2 | `static_ctype` 对复杂接收者推不出，糖不生效、退回 C 下标 | `f().box[k]` 形态 | `RL1-R1`：只对可解析接收者承诺；失败不静默（硬错而非回退） |
-| R52-3 | 右值接收者写入丢失 | `make()[0] = 1;` 通过 | `RL1-L8` 硬错；夹具锁 |
-| R52-4 | 泛型还原失败，文案给 `Box_int` | 泛型上触发 L1 | `RL1-D6`：先 `ct_impl_inst` 还原，失败才退回 C 拼写 |
-| R52-5 | 草案锚点继续漂移 | S0 直接引用旧行号 | 本卡已标注「行号已漂移，S0 重定位」；卡内不写死易漂行号 |
-| R52-6 | 被要求扩成方案 B | 评审提出「同类型两个 get」 | D52-2 已明写另立需求；不临时扩面 |
-
-## 8 交接：复现与验收锚点
-
-### 8.1 现状复现（基线 `94556f29`，全部在 `/tmp`，不入仓）
-
-前置：按 [计划 §10.2](phase46-52-plan.md) 构建 `$work/ct-ast`。
+## 3 现状（实测）
 
 ```sh
 mkdir -p /tmp/p52 && cd /tmp/p52
-# ci.ct: pub struct X { int n; }  impl X { pub int get(char *k) { return self.n; } }
-#        func main() { X x = X_new(); int a = x[0]; int b = x["k"]; }
-"$work/ct-ast" ci.ct -o ci.c ; echo "ct rc=$?"
-cc -std=c99 -c ci.c -o ci.o ; echo "cc rc=$?"
+# ci.ct: struct X { int n; } + int get(char *k)
+"$work/ct-ast" ci.ct -o ci.c ; echo "ct=$?"      # 0（原样发射 C 下标）
+cc -std=c99 -c ci.c -o ci.o                      # 1
+# x[0]   -> subscripted value is not an array, pointer, or vector
+# x["k"] -> array subscript is not an integer
 ```
 
-| 观察点 | 期望现状 | 原始输出（引自提案 F-1 / REQ-L1，2026-11-15 实测） |
+**`v[0]` 的实测事实（裁决席）**：方案 A 下 `v[0]` 会展开成 `get(0)`；`0` 是空指针常量，
+`cc -Wall -Wextra` 零告警；`Map<char*,V>::get` 有 `if (k == 0) return 0;`，故**静默返回空**，rc=0。
+→ 数字下标不是「会硬错」，而是**静默空值**，本卡不主张它。
+
+代码锚点（已更新）：守卫 `Expr.h.ct:3867-3883`；`[` 后缀 `Expr.h.ct:4083-4162`；实例查找
+`ct_inst_find`（不是 `ct_impl_inst`）；发射 `Emitter.h.ct` 的 `N_MCALL` 分支。
+
+## 4 修法方向
+
+| 点 | 位置 | 改法 |
 | --- | --- | --- |
-| `ct rc` | 0 | 原样发射 C 下标，无诊断 |
-| `cc`（`x[0]`） | 1 | `subscripted value is not an array, pointer, or vector` |
-| `cc`（`x["k"]`） | 1 | `array subscript is not an integer` |
+| 下标守卫 | `Expr.h.ct:3867-3883` | 用户类型分支进入协议查找，不再直接放行 C 下标 |
+| `[` 后缀 | `Expr.h.ct:4083-4162` | 读/写形态分流；写只收语句 + 左值接收者 |
+| 实例查找 | `ct_inst_find` | 泛型实例按 `ct_inst_find` 还原类型名 |
+| 协议匹配 | 新增小函数 | 名 + 参数个数 + 非 `static`；**不看参数类型**（D52-2） |
+| 跨单元可见性 | 同处 | `get`/`set` 在定义单元私有、消费单元不可见 → L52-10 |
 
-### 8.2 验收锚点（外部可见证据）
+**D52-2（冻结）**：方案 A；同类型不能同时有 `get(char*)` 与 `get(int)`。
+**D52-5（冻结）**：缺协议一律硬错，**不回退 C 下标**。
+**D52-6（冻结，已知洞）**：数字下标会展开成 `get(0)` 并静默返回空（若 `get` 接受 `char*`）。
+文档必须写「JSON 数字下标用 `get_idx`，禁止写 `v[0]`」；本卡不修此洞。
 
-| 证据 | 判据 | 允许变化 | 不允许 |
+## 5 任务切分
+
+| 切片 | 内容 | 出口 |
+| --- | --- | --- |
+| S0 | 核对三处锚点、`static_ctype` 覆盖、`ct_inst_find`；复跑红证 | 无提交 |
+| S1 | 红证：`x["k"]` 落 `cc`；`x[0]` 记录静默空 | `test: PH-52 红` |
+| S2 | 读形态 + L52-1/L52-3/L52-5/L52-10 | ≤150 行 |
+| S3 | 写形态 + L52-2/L52-4/L52-6–L52-9 | ≤150 行 |
+| S4 | C 透传 + `Vec`/`Map` 零变化 + D52-6 文档句 | 夹具与文档 |
+| S5 | 收口 | §6 |
+
+## 6 验收判据
+
+| ID | 命令 / 比对 | 通过条件 | 失败条件 |
 | --- | --- | --- | --- |
-| 读形态 | `p52_read`、`p52_generic` 编译运行，展开为 `get(...)` | 新增夹具 | 回退 C 下标 |
-| 写形态 | `p52_write` 展开为 `set(k,v)`，读回新值 | 新增夹具 | 允许右值接收者写入 |
-| 负例 | `p52_errors.sh` 覆盖 RL1-L1–RL1-L9，`file:line:col` 与文案逐字命中，不落 `.c` | 新诊断族 | 把任一条降级为 warning |
-| C 透传 | `p52_c_passthrough`：C 数组/指针下标产物逐字节不变 | — | 任何 diff |
-| 单层边界 | `p52_ptr_receiver` 证明 `p["k"]` 仍是 C 语义；文档写明不做 | 文档句 | 偷偷扩指针协议 |
-| JSON 单层 | `p52_json_single`：`v["k"]` 正确；`v[0]` 在方案 A 下 rc=1 并提示 `get_idx` | 新增样例 | 用 `v[0]` 当成功用例 |
-| fixpoint | `check-ast.sh` self-hosting 段 rc=0；`check-goldens.sh` fixpoint 段 rc=0 | — | 关闭 fixpoint |
-| 全量 | `check-all.sh` 末行 `OK (11 hard gates green)`；`check-warnings.sh` `0 failed` | 新增夹具 | 改门禁/版本 |
+| E52-1 | `p52_read`：`X x; x["k"]` 运行输出 `cmp` | rc=0 且 `cmp` rc=0 | 落 `cc` 或值错 |
+| E52-2 | `p52_generic`：`Box<int>` 实例同样展开，生成 C 无模板名残留 | `grep` 零命中 | 残留 `Box_int_get` 之外的模板名 |
+| E52-3 | `p52_write`：`x["k"] = 9;` 后读回 9 | 输出 `9` | 编译失败或值错 |
+| E52-4 | `p52_errors.sh`：九条负例的 `file:line:col` 与文案逐字表 | 全命中 | 任一条不符 |
+| E52-5 | `p52_c_passthrough`：C 数组/`int*`/`struct X*` 产物快照 `cmp` | rc=0 | 任一 diff |
+| E52-6 | `p52_visibility`：`get` 跨单元私有 → rc=1、文案 L52-10 | 命中 | 放行 |
+| E52-7 | `p52_str_only`：`v["k"]` 编译运行；**`v[0]` 不在本表** | 输出 `cmp` | 把 `v[0]` 当成功用例 |
+| E52-8 | `check-goldens.sh` fixpoint + `check-ast.sh` self-hosting | rc=0 | 任一失败 |
+| E52-9 | `bash selfhost/check-all.sh` | 11 green | 任一失败 |
 
-撞上 §11：本相是 #8 的正题；#2（指针接收者）由 PH-51 先关闭，未关闭时连写夹具一律按 `->` 绕法写并注明。
+## 7 范围外归属
+
+| 项 | 归属 |
+| --- | --- |
+| `v[0]` 数字下标（静默空） | D52-6 已知洞；未来方案 B 或 `get_idx` 包层 |
+| `p[k]` 指针接收者 | 不做（C 指针算术） |
+| 连写 `v["a"]["b"]` | 包层 `JsonRef` |
+| `x[k].field = v` / `x[k].m()` | 仍落 `cc`；另案 |
+| 安全 B（参数类型匹配） | 另立相（U-1 C） |
+
+## 8 风险与回滚
+
+| 风险 | 信号 | 回滚 |
+| --- | --- | --- |
+| 验收里出现 `v[0]` | 评审/包方按数字下标排期 | 回滚 S4；按 D52-6 只主张字符串键 |
+| 不可解析接收者回退 C 下标 | 生成 C 含原样 `[` | 回滚 S2；按 D52-5 硬错 |
+| 右值接收者写入丢失 | `make()[0]=1` 通过 | 回滚 S3；L52-8 必须命中 |
+| 泛型名还原失败 | 文案出现 `Box_int` | 回滚；用 `ct_inst_find` |
+| golden 漂移 | `check-goldens` 红 | 逐字节核对后重生成；否则回滚 |

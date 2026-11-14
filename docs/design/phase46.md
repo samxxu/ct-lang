@@ -1,148 +1,100 @@
-# Phase 46 — `Map` 元素完整性（`Map<K, 用户 struct>` 在 `ct build` 下可编译）
+# Phase 46 — `Map` 元素完整性（用户 struct 按值入 `Map`，`ct build` 可编译）
 
-> **状态：规划中**（草案，待评审；未立项；本轮只写卡，不改代码）
-> **归属**：本仓库维护规格与判据；**实现由外部 DeepSeek harness 执行**（交接见 [计划 §10](phase46-52-plan.md)）。
-> **基线**：`94556f29`（规划提交，`CTC_VERSION 0.44.1`）；工作树可能另有 `examples/**` 未提交改动，开工用干净克隆。
-> **依赖**：无硬前置；基线取 PH-45 收口提交（见 [phase45.md](phase45.md)），两相不并发跑门禁。
-> **规模**：编译器 80–160；夹具 50–100；文档 20–40；合计 **150–280**（±40%）。
-> **版本**：收口 bump `v0.46.0`（五处 `CTC_VERSION` + 两处 README + 受影响 golden 重生成）；tag / push 需用户单独授权。
-> **纪律**：不改 `Map` API、不改 `MapEntry` 字段布局、不改键规则（键归 [phase47.md](phase47.md)）、不碰 `Vec` 生成物。
+> **状态：规划中**（定稿候选，待评审签字；本卡只写规格，实现由外部 harness 执行）
+> **归属**：本仓库维护规格与判据；实现与夹具由外部 DeepSeek harness 交付（[手册](phase46-52-handoff.md)）。
+> **基线**：本卡最后一次提交（`git log -1 --format=%H -- docs/design/phase46.md`）；PH-45 未收口时不做前置假设。
+> **规模**：≤120 行（编译器；裁决席按 F1 下调）。夹具与文档另计。
+> **版本**：收口 bump `v0.46.0`（若采纳裁决 U-4 A）。
 
-## 0 背景与缺口
+## 0 一句话目标
 
-**事实（v0.44.1 实测，来源 [ct-json-capability-blockers.md](../proposals/ct-json-capability-blockers.md) J-1 / [language-capability-gaps.md](../proposals/language-capability-gaps.md) C-4）**：
+让 `Map<K, 用户 struct>` 在 `ct build`（多单元）下生成完整类型的条目结构并跑通，而不是只在单文件下通过。
 
-| 形态 | 单文件 `ct x.ct` | `ct build` |
+## 1 本卡做 / 本卡不做
+
+| 做 | 不做 |
+| --- | --- |
+| 修 `MapEntry_*` 的**单元归属**：元素类型是用户 struct 时，条目结构下沉到使用它的翻译单元 | 不改 `Map` API、`MapEntry` 字段与布局 |
+| 同时覆盖第二实参判定（`MapEntry` 不是白名单类型，`inst_elem_foreign` 需认它） | 不改键类型白名单、键比较（归 PH-47） |
+| 单单元与多单元两档都验收；`--lib` 导出面不回归 | 不引入「元素必须完整类型」的新限制条款 |
+| 生成物按 `/tmp` 快照 `cmp`，不引入新符号 | 不碰 `Vec` 生成物 |
+
+## 2 前置依赖
+
+无硬前置。与 PH-48 共享「单元归属策略」：本卡的 D46-2 先冻结，PH-48 的 S0 引用它（不合并两相）。
+
+## 3 现状（实测）
+
+| 形态 | 单文件 | `ct build` |
 | --- | --- | --- |
-| `Vec<JsonRef>` | 通过 | 通过（实例在单元内） |
-| `Map<char *, JsonRef *>` | 通过 | 通过 |
-| `Map<char *, void *>` | 通过 | 通过 |
-| `Map<char *, JsonRef>` | 通过 | **失败** |
+| `Vec<JsonRef>` / `Map<char*,JsonRef*>` / `Map<char*,void*>` / `Map<char*,int>` | 通过 | 通过 |
+| `Map<char*, JsonRef>` | 通过 | **失败** |
 
 ```text
 .ctbuild/Vec.h:31:20: error: field has incomplete type 'struct JsonRef'
 ```
 
-根因：`MapEntry<K, V>` 的 `value` 字段按值写进**共享头**，而该头不 include 元素定义所在的单元；
-`Vec` 的实例已经能留到单元内解决，`Map` 的条目结构没跟上。**单文件模式通过**，所以包方在探针上验不出来。
-
-**代码锚点（行号以 S0 复核为准）**：
-
-| 主题 | 位置 |
-| --- | --- |
-| `MapEntry` 命名（`struct MapEntry_<enc>`） | `selfhost/ct-ast/frontend/parse/Stmt.h.ct:940-960` |
-| 模板实例的单元归属（`via_hdr` 判定） | `selfhost/ct-ast/backend/emit/Emitter.h.ct:1597-1618` |
-| 导出模板实例的归属 | `Emitter.h.ct:1699-1718` |
-| `MapEntry` 声明 | `lib/std/Vec.h.ct:47-50` |
-| `ct_build` 的共享头 | `.ctbuild/Vec.h`（生成物） |
-
-## 1 目标 / 非目标
-
-### 1.1 目标
-
-| 编号 | 内容 |
-| --- | --- |
-| O1 | `Map<char *, UserStruct>` 在 `ct build` 下可编译、可 `put` / `get` / `remove` / `foreach` / `release`，运行结果与单文件模式一致 |
-| O2 | `MapEntry_<K>_<V>` 的 `value` 字段在**使用它的翻译单元**里是完整类型：条目结构下沉到实例化单元，或共享头补上元素定义单元的头 |
-| O3 | 四种既有形态产物逐字不变：`Vec<UserStruct>`、`Map<char *, UserStruct *>`、`Map<char *, void *>`、`Map<char *, int>` |
-| O4 | `--lib` 导出面不回归：含 `Map<char *, UserStruct>` 字段的 `.h.ct` 仍可 `ct build --lib` |
-
-### 1.2 非目标
-
-| 不做 | 归属 |
-| --- | --- |
-| 键类型白名单、键比较、键所有权 | [phase47.md](phase47.md) |
-| `Map` API 形态与 `MapEntry` 字段布局变更 | 本卡不动；布局变更会破坏既有 golden 与 `from` 结构体字面量 |
-| 跨单元 Drop 与指针字段胶水 | [phase48.md](phase48.md) |
-| 容器元素「必须是完整类型」的新限制条款 | 不引入；这是发射归属问题，不是语言限制 |
-
-## 2 设计决定
-
-| 编号 | 决定 | 为什么不用另一种 |
-| --- | --- | --- |
-| **D46-1** | 只改发射位置/可见性，不改 `MapEntry` 字段、不改 `Map` 方法体 | 改布局会连带 `from`/`foreach` 与全部 `Map` golden，收益为零 |
-| **D46-2** | 首选「条目结构下沉到实例化单元」；仅当 S0 证明与 `--lib` 共享头契约冲突时，才改用「共享头补 `#include` 元素定义单元」 | 下沉与 `Vec` 的既有做法一致，不需要在共享头里追依赖；补 include 会把用户单元的头拉进生成头，扩大 `--lib` 面 |
-| **D46-3** | 不新增诊断；本相消除的是 `cc` 侧错误 | 发空桩/放行的不是本相要修的面 |
-| **D46-4** | 受影响的 golden 只能重生成后逐字节核对，禁止手改 | 仓库红线：手改 `*.expected.*` 视为失败 |
-
-## 3 诊断
-
-无新增用户可见诊断。内部不变式（由夹具断言，不作为文案交付）：
-
-- `MapEntry_<K>_<V>` 在其出现的每个 `.c` 中都可见完整 `V`；
-- 同一实例不得在两个单元各发一份可见定义（`static` 或唯一定义点）。
-
-## 4 任务切分
-
-| 切片 | 内容 | 边界 |
-| --- | --- | --- |
-| **S0** | 只读核查：复现 `j10b`、定位 `MapEntry` 发射与 `via_hdr` 归属、对照 `Vec` 做法、确认 `--lib` 影响；记 `baseline: <sha>` | 不产提交 |
-| **S1** | 红证：`test/ast/p46_map_struct/`（build 模式，`Map<char *, JsonRef>` 入 `.h.ct`）+ 运行断言，先跑出 `incomplete type` | 只含夹具，提交正文带 `baseline:` 与原始输出 |
-| **S2** | 发射修正：按 D46-2 选定方案落地；≤3 文件、≤150 行 | 不动 `Map` 方法体 |
-| **S3** | 回归夹具：四种对照形态 + `foreach` / `remove` / `from` + 单文件与 build 双模式；golden 重生成 | 只含夹具与 golden |
-| **S4** | 文档：容器章节的「元素完整性」一句；spec 由文档线占用时记 `blocked-by: docs-correction` | 不改其他章节 |
-| **S5** | 收口：`check-all.sh` 11 道全绿、bump `0.46.0` | 收口 |
-
-依赖：S0 → S1 → S2 → S3 → S4 → S5；每片 ≤150 行、≤3 文件，仓库随时可构建。
-
-## 5 完成定义（四件套）
-
-| 面 | 交付 |
-| --- | --- |
-| 实现 | `Map<char *, UserStruct>` 在 build 模式可编译运行；无 TODO、无「暂不支持」分支 |
-| 诊断 | 无新诊断；不变式由夹具锁死（重复定义、缺失完整类型各一条负向断言） |
-| 文档 | 容器章节写明条目结构的使用单元可见性；`docs/package-guide.md` 一句使用提示 |
-| 门禁 | 新夹具进 `check-ast.sh`；`check-goldens` 绿；`check-all.sh` 11 道全绿；红证按 T-7 提交 |
-
-## 6 验收
-
-| ID | 断言 | 命令 / 阈值 |
-| --- | --- | --- |
-| **E46-1** | build 模式 `Map<char *, JsonRef>` 可编译并运行，输出与单文件模式一致 | `p46_map_struct` 运行输出逐字相等 |
-| **E46-2** | 四种对照形态 rc=0，产物逐字不变 | `check-goldens` 82/82（数量以收口实测为准），diff 为空 |
-| **E46-3** | `--lib` 场景：含该字段的 `.h.ct` 可导出，`nm -g` 面与第 39 相口径一致 | `p46_lib_export` rc=0 |
-| **E46-4** | 同一实例不出现两份可见定义 | `grep -c 'struct MapEntry_'` 按预期 = 1 |
-| **E46-5** | 零回归：`check-warnings` 无新增告警；`check-ast` 全绿 | 收口贴原始末行 |
-| **E46-6** | 红证链完整：`test(...)` 提交是实现提交的父提交，正文含 `baseline: <sha>` 与原始输出 | `git log --oneline -2` |
-
-## 7 风险与不做项
-
-| 编号 | 风险 / 不做项 | 触发信号 | 处置 |
-| --- | --- | --- | --- |
-| R46-1 | 条目结构下沉后两个单元各发一份，`cc` 报重复定义 | 目标文件出现两份 `MapEntry_*` | 固定唯一定义点；`static` 或按单元归属二选一，S0 冻结 |
-| R46-2 | 改发射归属导致大面积 golden 漂移 | `check-goldens` 红且 diff 面大 | 逐字节核对后重生成，提交正文写原因 |
-| R46-3 | 与 PH-47 同改 `Map` 生成物 | 两相并行时冲突 | 串行：47 在 46 收口后开工 |
-| R46-4 | `--lib` 头面回归（PH-39 的 `.abi.h` 与 `visibility`） | 导出工程构建失败 | E46-3 锁死；不改 `.abi.h` 生成规则 |
-| R46-5 | 单文件模式行为被顺手改动 | 单文件 golden 变化 | 单文件路径不在本相改动面；变化即停 |
-
-## 8 交接：复现与验收锚点
-
-### 8.1 现状复现（基线 `94556f29`，全部在 `/tmp`，不入仓）
-
-前置：按 [计划 §10.2](phase46-52-plan.md) 构建 `$work/ct-ast`。
+复现（基线提交，`/tmp`，`m.h` 无需初始化）：
 
 ```sh
 mkdir -p /tmp/p46 && cd /tmp/p46
 # lib.h.ct: pub struct JsonRef { int tag; }
-# main.ct : import "lib.h.ct"; pub struct Doc { Map<char *, JsonRef> slots; }
-"$work/ct-ast" main.ct -o main.c ; echo "single rc=$?"
-"$work/ct-ast" build main.ct -o out ; echo "build rc=$?"
+# main.ct : struct Doc { Map<char *, JsonRef> slots; }
+"$work/ct-ast" main.ct -o main.c ; echo "single=$?"        # 0
+"$work/ct-ast" build main.ct -o out ; echo "build=$?"      # 1 + 上面的错误
 ```
 
-| 模式 | 期望 rc | 原始输出（引自提案 J-1，2026-11-15 实测） |
+## 4 修法方向（指到文件与函数）
+
+| 点 | 位置 | 改法 |
 | --- | --- | --- |
-| 单文件 | 0 | — |
-| build | 1 | `.ctbuild/Vec.h:31:20: error: field has incomplete type 'struct JsonRef'` |
+| 实例/条目归属判定 | `selfhost/ct-ast/backend/emit/Emitter.h.ct:1981-2016`（`inst_elem_foreign`） | 把 `MapEntry_<K,V>` 纳入「元素在 foreign 单元」的判定：`V` 为用户类型时条目结构随使用单元发射 |
+| 具体实例发射 | `Emitter.h.ct:1609-1625` | 按 D46-2 只在该条目被使用的单元发一份完整定义；其他单元不发 |
+| 声明通道 | `Emitter.h.ct:1597-1618` | 需要前置声明时只发 `struct MapEntry_*;`，不重复定义 |
+| 模板声明 | `lib/std/Vec.h.ct:47-50` | 不改 |
 
-### 8.2 验收锚点（外部可见证据）
+**D46-2（冻结）**：唯一方案 = 条目结构下沉到使用单元。删除「共享头补 `#include`」备选（会形成 include 环，且把用户头拉进 `--lib` 面）。
 
-| 证据 | 判据 | 允许变化 | 不允许 |
+**D46-5（冻结）**：`MapEntry_*` 是 C 结构体标签，不产生连接符号；任何「新增符号」的判据都作废。
+
+## 5 任务切分
+
+| 切片 | 内容 | 出口 |
+| --- | --- | --- |
+| S0 | 只读核对上述四处锚点与实际分支；产出「条目归属现状」一页 | 无提交 |
+| S1 | 红证夹具（单文件绿 / build 红）+ 原始输出 | `test: PH-46 红`，父提交即红证 |
+| S2 | 改 `inst_elem_foreign` + 发射归属 | ≤3 文件、≤120 行 |
+| S3 | 四形态对照 + `foreach`/`remove`/`from` 回归 + `--lib` 导出 | 新增夹具与快照 |
+| S4 | 文档：容器章节「元素完整性」一句；`language-spec.md` 等文档线落定 | 或记 `blocked-by` |
+| S5 | 收口 | 见 §6 |
+
+## 6 验收判据（可执行、可判真假）
+
+| ID | 命令 / 比对 | 通过条件 | 失败条件 |
 | --- | --- | --- | --- |
-| 夹具输出 | `p46_map_struct` 的 stdout 与单文件模式逐字相等 | 新增夹具/样例 | 改断言把错就错 |
-| 门禁计数 | `check-ast.sh` 末行 `0 failed`，passed 数 = 基线 + 本相新增夹具数 | 随新增夹具增加 | 减少、跳过、标 skip |
-| 生成物 | 四种对照形态（`Vec<US>` / `Map<char*,US*>` / `Map<char*,void*>` / `Map<char*,int>`）产物逐字节相同 | 本相新增形态产生新 golden | 既有 golden 出现任何 diff |
-| fixpoint | `check-goldens.sh` 的 L1/L2 fixpoint 段 + `check-ast.sh` self-hosting 段 rc=0 | — | 关闭 fixpoint 或放宽比较 |
-| 全量 | `bash selfhost/check-all.sh` rc=0，末行 `check-all: OK (11 hard gates green)` | — | 改门禁条数/版本号/判据 |
-| `--lib` | `p46_lib_export` rc=0，导出头符号面与 PH-39 口径一致 | 新增 `MapEntry_*` 符号 | 把元素定义拖进 `.abi.h` |
+| E46-1 | `"$work/ct-ast" build /tmp/p46/main.ct -o /tmp/p46/out && cc -std=c99 /tmp/p46/out/*.c -o /tmp/p46/bin && /tmp/p46/bin > /tmp/p46/build.txt`；`"$work/ct-ast" /tmp/p46/main.ct -o /tmp/p46/single.c && cc … && …/single > /tmp/p46/single.txt`；`cmp /tmp/p46/single.txt /tmp/p46/build.txt` | rc 全 0 且 `cmp` rc=0 | 任一 rc≠0 或 `cmp` 有差异 |
+| E46-2 | 收口前后各生成一份 `/tmp/p46/before-<file>.c` 与 `after`，`cmp` 四种对照形态 | 四对 `cmp` 全 rc=0 | 任一有 diff |
+| E46-3 | `nm -g --defined-only` 比较基线与本相产物 | **新增符号数 = 0** | 出现任何新符号 |
+| E46-4 | `grep -c 'struct MapEntry_' /tmp/p46/out/*.c`，按文件分别统计 | header 侧 0 份、使用单元 1 份 | 0 份或 ≥2 份 |
+| E46-5 | `bash selfhost/check-all.sh` | rc=0，末行 `check-all: OK (11 hard gates green)` | 任一失败 |
+| E46-6 | 红证链：`git log --oneline -2`，test 提交为实现父提交，正文含 `baseline: <sha>` + 原始输出 | 结构符合 T-7 | 红证与实现同提交 / 无 baseline |
 
-撞上 §11：本相是正题 #1，必须在本相修掉；不得用「元素改指针」的绕法充当本相交付。
+## 7 范围外归属
+
+| 项 | 归属 |
+| --- | --- |
+| 键类型、键比较、键所有权 | PH-47 |
+| 跨单元 Drop | PH-48 |
+| `Map` 的 `has` 入口 | PH-50 |
+| 多单元下仍失败的情形（若 S0 证明 `--lib` 与下沉互斥） | O1 降级为 O4 条件，写进收口报告，不扩张本卡 |
+
+## 8 风险与回滚
+
+| 风险 | 信号 | 回滚 |
+| --- | --- | --- |
+| 两个单元各发一份完整定义 | E46-4 计数 ≥2 | 回到 S2 前的提交；归属判定改为「首个使用单元」 |
+| 既有 `Vec` 生成物漂移 | E46-2 有 diff | 回滚 S2；归属判定必须只对 `MapEntry` 生效 |
+| `--lib` 导出头回归 | E46-3 新符号或导出失败 | 回滚 S2；改用前置声明通道（`1597-1618`） |
+| golden 漂移 | `check-goldens` 红 | 只允许重生成受影响文件，逐字节核对；否则回滚 |
+
+**回滚粒度**：S2 一个提交可整体回退，S3 夹具保留不受影响。
