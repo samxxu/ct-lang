@@ -18,7 +18,7 @@
 | 胶水按**类型 owner 单元**发射（不是「本单元符号表」） | 不改 Drop 顺序、不改 `self` 绑定 |
 | 跨单元通过 `extern` 声明调用真实体；头文件传播「impl 存在/可见」信号 | 不把 Drop 体放进 `.abi.h` |
 | 有 impl 但不可见 → 硬错 L48-2，**不再发空桩** | 不改容器的 `release` 语义 |
-| 补 `Emitter.h.ct:2615-2619` 的 `static` 原型通道（改为条件发射） | 不把 `try_release_payload` 纳入「同判据」 |
+| 补 `Emitter.h.ct:2628-2632`（`emit_vtable_fwd`）的 `static` 原型通道（改为条件发射） | 不把 `try_release_payload` 纳入「同判据」 |
 
 ## 2 前置依赖
 
@@ -39,14 +39,36 @@ mkdir -p /tmp/p48 && cd /tmp/p48
 "$work/ct-ast" build d4/main.ct -o d4out && cc -std=c99 d4out/*.c -o d4 && ./d4  # 只有 done
 ```
 
-代码锚点（裁决席已核）：
+代码锚点（2026-11-15 按 `v0.47.0` HEAD 复核；优先按符号名定位，行号会随发射器增长漂移）：
 
-| 事实 | 位置 |
+| 事实 | 位置（符号 + 行号） |
 | --- | --- |
-| 胶水只为「本单元符号表 + 非模板」发射；`has_drop_impl` 真则跳过 | `Emitter.h.ct:3101-3115` |
-| 无 impl 时发函数体；无 Drop 字段则 `(void)_self`（空桩） | `Emitter.h.ct:3114-3139` |
-| 本单元对所有 `uses_drop` 发 `static … _Drop_drop(void *self);` | `Emitter.h.ct:2615-2619` |
-| 第二发射点 `try_release_payload` 对指针字段早退 | `Emitter.h.ct:5764-5770`、`:5800-5801` |
+| 胶水只为「本单元符号表 + 非模板」发射；`has_drop_impl` 真则跳过 | `emit_impls`，`Emitter.h.ct:3114-3127`（过滤在 `:3116`、`:3118`、`:3121`、`:3127`） |
+| 无 impl 时发函数体；无 Drop 字段则 `(void)_self`（空桩） | `emit_impls`，`Emitter.h.ct:3128-3152`（空桩在 `:3151`） |
+| 指针字段按地址调子 Drop（本卡要改的点） | `emit_impls`，`Emitter.h.ct:3146`：`%s_Drop_drop(&_self->%s);` |
+| 本单元对所有 `uses_drop` 发 `static … _Drop_drop(void *self);` | `emit_vtable_fwd`，`Emitter.h.ct:2628-2632` |
+| 第二发射点 `try_release_payload` 对指针字段早退 | `try_release_payload`，`Emitter.h.ct:5768-5784`；早退在 `:5779-5781` |
+
+### 3.1 S0 基线（v0.47.0 当前 HEAD 重录，2026-11-15）
+
+**不沿用旧卡读数**。用 HEAD `46969693` 的源码按 `check-ast.sh` 的引导链构建 `ct-ast`，
+`CT_STD_DIR=<repo>/lib/std`，两个探针原样重跑：
+
+| 形态 | rc | 实测输出 | 生成 C 关键行 |
+| --- | --- | --- | --- |
+| 单单元 `Node{Leaf *leaf} use Drop` | 0 / cc 0 / run 0 | `node ready`、`leaf drop 21110480`、`done` | `Node_Drop_drop` 体内：`Leaf_Drop_drop(&_self->leaf);`（`v47/g8.c:24`） |
+| 跨单元（`impl Drop` 在 `.h.ct`，`delete` 在 `main.ct`） | 0 / cc 0 / run 0 | 只有 `done`，缺 `res drop 7` | `res.c:8,10` **和** `main.c:9,12` 各发一份 `static lib_Res_Drop_drop`；`main.c` 那份是空桩（`(void)_self`），`delete` 调的是它（`main.c:20`） |
+
+与旧卡 §3 的差异：
+
+| 项 | 旧卡 §3（v0.44.x 读数） | v0.47.0 重录 |
+| --- | --- | --- |
+| 单单元输出 | `leaf drop <垃圾 id>` | 同（本次 `21110480`），`cc` 仍 rc=0 |
+| 跨单元输出 | 只有 `done` | 同；另查明机制是**两个单元各发一份 static**，`main` 那份空桩被 `delete` 命中 |
+| 锚点行号 | `3101-3115` / `3114-3139` / `2615-2619` / `5764-5770` / `5800-5801` | 见上表（`:3114-3127` / `:3128-3152` / `:2628-2632` / `:5768-5784` / `:5779-5781`） |
+| PH-46 影响 | — | `git diff v0.44.2..v0.47.0 -- Emitter.h.ct` 共 +18/−4，**0 处 `Drop_drop` hunk**、1 处 `inst_elem_foreign`；46 的实例 body 下沉没有改胶水逻辑，只把行号推后（原型/胶水区间 +13 行）。结论仍是「按单元符号表发射」，不是旧读数被推翻 |
+
+重录结论：**行为读数与旧卡一致，机制细节补齐（每单元重复 static 定义）**；本卡判据无需改。
 
 ## 4 修法方向（两个独立决策）
 
@@ -54,9 +76,9 @@ mkdir -p /tmp/p48 && cd /tmp/p48
 
 | 点 | 位置 | 改法 |
 | --- | --- | --- |
-| 发射过滤 | `Emitter.h.ct:3101-3115` | 判据从「本单元符号表」改为「类型 owner 单元」（与 PH-46 的 `inst_elem_foreign` 同源判定） |
-| 指针字段分支 | `Emitter.h.ct:3132` | `if (_self->f) <T>_Drop_drop(_self->f);` |
-| 第二发射点 | `Emitter.h.ct:5764-5770`、`:5800-5801` | 明确**不在本卡断言面**；若同一指针字段形态出现，按 D48-1 判空，不做 `&` 取址 |
+| 发射过滤 | `emit_impls`，`Emitter.h.ct:3114-3127` | 判据从「本单元符号表」改为「类型 owner 单元」（与 PH-46 的 `inst_elem_foreign` 同源判定） |
+| 指针字段分支 | `emit_impls`，`Emitter.h.ct:3146` | `if (_self->f) <T>_Drop_drop(_self->f);` |
+| 第二发射点 | `try_release_payload`，`Emitter.h.ct:5768-5784`；早退 `:5779-5781` | 明确**不在本卡断言面**；若同一指针字段形态出现，按 D48-1 判空，不做 `&` 取址 |
 
 ### 4.2 决策二：跨单元怎么看见（D48-2，需裁决 U-2）
 
@@ -66,7 +88,7 @@ mkdir -p /tmp/p48 && cd /tmp/p48
 | 消费单元 | 只发 `extern void <S>_Drop_drop(void *);`，不发函数体 |
 | 头文件 | 传播 `uses_drop` + `has_drop_impl`（或等价可见性位）；消费单元据此三态决策 |
 | 三态 | ① impl 可见 → `extern`；② 无 impl → 本单元按字段发胶水；③ 有 impl 不可见 → 硬错 L48-2，不落 `.c` |
-| 原型通道 | `Emitter.h.ct:2615-2619` 的 `static` 原型改为条件发射：仅当本单元会发函数体时发 `static`，否则发 `extern` |
+| 原型通道 | `emit_vtable_fwd`，`Emitter.h.ct:2628-2632` 的 `static` 原型改为条件发射：仅当本单元会发函数体时发 `static`，否则发 `extern` |
 
 ## 5 任务切分
 
