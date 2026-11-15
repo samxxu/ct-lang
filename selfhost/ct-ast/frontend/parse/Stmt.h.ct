@@ -1875,12 +1875,6 @@ impl StmtOps for Stmt {
             if (self->switch_depth > 0)
                 return tool::diag::ct_sem_error(eline, ecol,
                     "errdefer is not allowed here", self->mem->path);
-            {
-                size_t pl = strlen(self->mem->path);
-                if (pl >= 5 && strcmp(self->mem->path + pl - 5, ".h.ct") == 0)
-                    return tool::diag::ct_sem_error(eline, ecol,
-                        "errdefer is not allowed here", self->mem->path);
-            }
             if (self->ndefer_blocks == 0)
                 return tool::diag::ct_sem_error(eline, ecol,
                     "errdefer is not allowed here", self->mem->path);
@@ -1921,12 +1915,6 @@ impl StmtOps for Stmt {
             if (self->switch_depth > 0)
                 return tool::diag::ct_sem_error(dline, dcol,
                     "defer is not allowed inside a switch", self->mem->path);
-            {
-                size_t pl = strlen(self->mem->path);
-                if (pl >= 5 && strcmp(self->mem->path + pl - 5, ".h.ct") == 0)
-                    return tool::diag::ct_sem_error(dline, dcol,
-                        "defer is not allowed in a .h.ct unit", self->mem->path);
-            }
             if (self->ndefer_blocks == 0)
                 return tool::diag::ct_sem_error(dline, dcol,
                     "defer is only allowed inside a function", self->mem->path);

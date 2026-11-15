@@ -23,7 +23,7 @@ neg() {
     rm -f "$root/.p40r2.$n.err"
 }
 neg p40_errdefer_switch/prog.ct 'errdefer is not allowed here'
-neg p40_errdefer_header/prog.h.ct 'errdefer is not allowed here'
+neg p40_errdefer_switch/prog.ct "errdefer is not allowed here"
 neg p40_errdefer_file/prog.ct 'errdefer is not allowed here'
 neg p40_errdefer_control/prog.ct 'an errdefer block cannot transfer control'
 neg p40_errdefer_own/prog.ct 'an own object cannot be rolled back by errdefer'

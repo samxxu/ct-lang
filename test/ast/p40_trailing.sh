@@ -37,7 +37,7 @@ neg p40_trailing_assign 'a trailing defer needs a single declaration'
 neg p40_trailing_for 'a trailing defer needs a single declaration'
 neg p40_trailing_dollar "'\$' is read-only and only valid in the trailing block"
 neg p40_trailing_nested 'an errdefer block cannot transfer control'
-neg p40_trailing_header/prog.h.ct 'errdefer is not allowed here'
+neg p40_errdefer_file/prog.ct 'errdefer is not allowed here'
 neg p40_trailing_switch 'errdefer is not allowed here'
 neg p40_trailing_shadow "a trailing block cannot shadow the '\$' name"
 if [ "$fail" -eq 0 ]; then echo "p40_r5: OK"; fi

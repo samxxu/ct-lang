@@ -1,0 +1,17 @@
+/*
+ * A `.h.ct` unit may define `pub` function bodies; `defer` / `errdefer` must
+ * behave there exactly as in a `.ct` unit (LANG-1, v0.53.2).  The unit suffix
+ * used to be a blanket ban (L38-3 / L40-5), which forced packages like ct-sse
+ * to hand-write cleanup in every failure branch.
+ */
+#include <stdio.h>
+
+namespace lib;
+
+pub int with_cleanup(int fail)
+{
+    defer { printf("defer "); }
+    errdefer { printf("errdefer "); }
+    if (fail) return err: 7;
+    return 3;
+}

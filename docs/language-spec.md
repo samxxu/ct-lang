@@ -506,9 +506,11 @@ int load(void)
   `return` / `break` / `continue` / 嵌套 `defer` 报 `a defer block cannot transfer control`；defer 内
   label 报 `a defer block cannot declare a label`；`switch` 内 defer 报
   `defer is not allowed inside a switch`（v1 不定义 case/fallthrough 语义，case 内嵌套块也禁止）；
-  文件作用域 defer 报 `defer is only allowed inside a function`；`.h.ct` 内（含函数体）defer 报
-  `defer is not allowed in a .h.ct unit`。
-- **不做**：`errdefer`、`try` / `?`、全局或头文件里的 defer、defer 内的控制转移、`switch` 内 defer（T38-1–T38-4）。
+  文件作用域 defer 报 `defer is only allowed inside a function`。
+  **v0.53.2 起** `.h.ct` 单元的函数体与 `.ct` 一致，`defer` / `errdefer` 均可用；此前后缀检查会报
+  `defer is not allowed in a .h.ct unit`（L38-3）与 `errdefer is not allowed here`（L40-5），该限制已撤销。
+  `.m.ct` 是映射单元，本就不能定义函数（`a .m.ct unit cannot define a function`），两种块在那里不可达。
+- **不做**：`errdefer`、`try` / `?`、全局作用域的 defer、defer 内的控制转移、`switch` 内 defer（T38-1–T38-4）。
 
 #### 4.10 `map`（Phase 11 新增 + SH-20 扩展，仅 ct-ast）
 
@@ -2501,8 +2503,8 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 ### 4.58 `errdefer`、`err:` 错误出口与尾随声明（Phase 40，仅 ct-ast）
 
 - **错误出口**：`return err: expr;` / `return err:;`（仅 void）/ `break err:;` / `continue err:;`。`err:` 只在 `return` / `break` / `continue` 之后识别；其它位置 `err` 仍是普通标识符。非 void 写 `return err:;` 报 `an error return needs a value`（L40-1），void 写值报 `a void function cannot return a value`（L40-2），循环外报 L40-3，`switch` 内 `break err:` 报 L40-4。
-- **errdefer**：`errdefer { … }` 与 `defer` 共用同一条块栈；条目带 `on_error`，只在错误出口执行。普通 `return` / `break` / `continue` / 落出只跑 `defer`，丢弃 `errdefer`。`return err` 跑函数内全部活跃条目，`break err` / `continue err` 只跑退出到的那层块；单栈 LIFO（不按种类分段）。
-- **边界**：`switch`、`.h.ct`、文件作用域禁止 errdefer（L40-5）；errdefer 内禁止控制转移和嵌套 `defer` / `errdefer`（L40-6）；`own` 变量出现在 errdefer 或 errdefer 内声明 `own` 都报 L40-7；`goto` 跨带 errdefer 的块报 L40-8。
+- **errdefer**：`errdefer { … }` 与 `defer` 共用同一条块栈；条目带 `on_error`，只在错误出口执行。普通 `return` / `break` / `continue` / 落出只跑 `defer`，丢弃 `errdefer`。`return err` 跑函数内全部活跃条目，`break err` / `continue err` 只跑退出到的那层块；单栈 LIFO（不按种类分段）。**触发只看出口形态，不看返回值**：`return err: 7;` 触发，`return 7;`（Ok 路径）与 `return -1;`（普通返回）都不触发——后者不是错误出口。
+- **边界**：`switch`、文件作用域禁止 errdefer（L40-5）；errdefer 内禁止控制转移和嵌套 `defer` / `errdefer`（L40-6）；`own` 变量出现在 errdefer 或 errdefer 内声明 `own` 都报 L40-7；`goto` 跨带 errdefer 的块报 L40-8。**v0.53.2 起** `.h.ct` 单元的函数体内允许 `errdefer`（原 L40-5 的后缀限制已撤销，见 §4.9）。
 - **尾随声明**：`Type name = expr defer { … };` / `errdefer { … };` 只允许单声明符；`$` 是 `name` 的只读别名，块内可直接写名字。赋值形式、多声明符、`for` 初始化报 L40-9；语句首 `$ = …` 或对 `$` 赋值报 L40-10，range/into 之外的其它表达式位置仍沿用既有 `unexpected token`。尾随块在初始值之后注册，初始值可能失败时由作者在块内 guard（如 `if ($) …`）；尾随块内声明与 `$` 同名变量会报 `a trailing block cannot shadow the '$' name`。
 - **不做**：`Result` / `?` / 异常、`goto err:`、错误传播、函数级错误标志、赋值形式尾随、多声明符尾随（开放项 T40-1…T40-5）。
 

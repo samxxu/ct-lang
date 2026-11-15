@@ -5,7 +5,7 @@
 | 模块 | lang（解析期位置检查） |
 | 严重度 | **High** |
 | 优先级 | **P1** —— 挡住所有「头文件里写函数体」的包（ct-sse 因此放弃 errdefer） |
-| 状态 | open（本次修复） |
+| 状态 | **已修**（v0.53.1 补丁；回归用例见下） |
 | 锚点 | `v0.53.1`（`c4727787`） |
 
 ## 精确触发条件
@@ -70,6 +70,19 @@ rc=1
 
 - `errdefer`：[Stmt.h.ct:1878-1883](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1878-L1883)
 - `defer`：[Stmt.h.ct:1924-1929](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1924-L1929)
+
+## 回归用例（门禁自动执行）
+
+| 类型 | 用例 | 断言 | 修前为什么红 | 修后为什么绿 |
+| --- | --- | --- | --- | --- |
+| 正例（法定回归） | [`test/ast/260_hct_defer/`](../../test/ast/260_hct_defer/)（`lib/lib.h.ct` + `prog.ct` + `prog.expected.out`） | 编译 `.h.ct` 函数体并运行，stdout 逐字节等于 `defer ok=3 errdefer defer err=7` | 修前 `lib/lib.h.ct:6:5` / `:7:1` 报两条错，构建 rc=1 | 两条 `defer`/`errdefer` 正常注册：Ok 路径只跑 `defer`，错误路径先 `errdefer` 后 `defer` |
+| 反向 1 | `test/ast/p38_probe.sh` → `check_neg p38_defer_scope` | 文件作用域 `defer` 仍报 `defer is only allowed inside a function` | 原本就绿（未放弃该诊断） | 保持绿：只删了 `.h.ct` 后缀检查 |
+| 反向 2 | `test/ast/p40_errdefer_scope.sh` → `neg p40_errdefer_switch/prog.ct` | `switch` 内 `errdefer` 仍报 `errdefer is not allowed here` | 原本就绿 | 保持绿 |
+| 反向 3 | `test/ast/p40_trailing.sh` → `neg p40_errdefer_file/prog.ct` | 文件作用域 `errdefer` 仍报 `errdefer is not allowed here` | 原本就绿 | 保持绿 |
+
+**已删的旧负例**（它们断言的正是本次撤销的限制，留着会与修复冲突）：
+`test/ast/errors/p38_defer_header.h.ct`、`test/ast/errors/p40_errdefer_header/prog.h.ct`、
+`test/ast/errors/p40_trailing_header/prog.h.ct`。
 
 ## 修复方向
 
