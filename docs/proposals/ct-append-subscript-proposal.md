@@ -133,7 +133,7 @@ v.push(32);         // rc=0；len=3，v[2]=32
 
 ## 6 非目标
 
-- 原「不放开 `v[i] = x`」**已废止**：由 PH-62 接管（越界硬错 + 常量折叠）；
+- 原「不放开 `v[i] = x`」**已废止**：由 PH-62 接管（`set` 补齐再写，`len = max(len, i+1)`）；
   本提案只保留 `v[] = x` 切片，不再作为独立非目标；
 - 不支持 `Map` / C 数组 / `Str` 的空下标；
 - 不做 `insert(i, x)` / `reserve` / `resize` / 拼接；
@@ -158,7 +158,7 @@ v.push(32);         // rc=0；len=3，v[2]=32
 | A4 | 读 `v[]`、`v[] += 1`、`v[] == x`、`v[][]`、`v[]={1,2}` 全部硬错，诊断含「只能出现在 `=` 左侧」 |
 | A5 | `Map<char*,int> m; m[]=1;` → 硬错，提示用 `put(k, v)` |
 | A6 | `int a[2]; a[]=1;` → 硬错，提示 C 数组不能增长 |
-| A7 | 原「`v[0]=9;` 仍报 read-only」**已废止**：由 PH-62 改为可写 + 越界硬错，见 [可写下标提案](ct-writable-subscript-proposal.md) |
+| A7 | 原「`v[0]=9;` 仍报 read-only」**已废止**：由 PH-62 改为可写 + `set` 补齐再写，见 [可写下标提案](ct-writable-subscript-proposal.md) |
 | A8 | RHS 类型不匹配 → 与 `push` 相同的类型错误，不写 `.c` |
 | A9 | `make_vec()[] = 1;` → 硬错（接收者必须是 lvalue） |
 | A10 | 生成 C 只含 `Vec_<enc>_push` + abort 包装；`.abi.h` 逐字节不变 |
