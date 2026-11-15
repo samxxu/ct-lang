@@ -36,6 +36,12 @@
 会撞上 `'Vec' is a built-in type and cannot be redeclared`。处理方式：升级 `std` 包到删除容器章节的
 版本，或删掉项目里的 `import std::vec` / `import std::map` 与本地副本；容器 API 与旧包一致。
 
+## 命名
+
+内置层遵循 [language-spec §5.1](../../docs/language-spec.md)：函数 / 方法 `snake_case` 且动作动词开头，
+类型 `PascalCase`，任何位置不用小驼峰；libc 直映射（`printf`、`puts` 等）保留原名。
+`Vec.len` / `has` / `at`、`Map.len` / `has`、`Str.len` 是既有保留名，不因该条改名。
+
 ## 语义口径
 
 - **移动语义 + 显式 `retain()`**：变量间直接拷贝是硬错；从函数调用初始化/赋值视为移交；

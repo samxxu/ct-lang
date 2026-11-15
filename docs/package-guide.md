@@ -88,6 +88,8 @@ acme/
 
 - 包名：`[a-z0-9][a-z0-9-]*`（小写字母、数字、连字符；不以连字符开头）。
 - **仓库名 = 包名**：`github.com/ct-pkg/<name>`。
+- 包内源码命名遵循 [language-spec §5.1](language-spec.md)：函数 / 方法 `snake_case` 且动作动词开头，
+  类型 `PascalCase`，任何位置不用小驼峰；libc 直映射（`printf` 等）保留原名。
 - tag：`v<version>`；索引行的 `tag` 字段记录实际 tag（可带或不带 `v`）。
 - `dep` 的范围沿用 Phase 8 子集：`^x.y.z`、`~x.y.z`、`>=` / `>` / `<` / `<=` / `=`、裸版本（精确）
   或 `*`，多个条件用空格表示 AND。解析用 MVS（取满足范围的最低版本）。
