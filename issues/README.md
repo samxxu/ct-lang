@@ -356,11 +356,15 @@
 | LANG-4 | **High**（静默） | 数字下标匹配到参数类型不符的 `get`，编译通过、静默返回空值（`v[0]` → `get(0)`） | [lang-4-subscript-type-mismatch-silent-empty.md](lang/lang-4-subscript-type-mismatch-silent-empty.md) |
 | LANG-1 | **High** | `.h.ct` 单元函数体内 `defer` / `errdefer` 被后缀检查拒绝；`.m.ct` 不可达属另一限制 | [lang-1-hct-defer-errdefer-rejected.md](lang/lang-1-hct-defer-errdefer-rejected.md) |
 | LANG-2 | **High** | 带 `namespace` 的单元里静态固有方法不可用（同单元/跨单元均失败，实例方法正常） | [lang-2-namespaced-static-method-unresolved.md](lang/lang-2-namespaced-static-method-unresolved.md) |
-| LANG-5 | **High**（字段形态静默） | 方法/下标结果不能作接收者：方法形态硬错、`x["k"].field` 静默产出坏 C；多级链受单层限制 | [lang-5-result-as-receiver.md](lang/lang-5-result-as-receiver.md) |
+| LANG-5 | **High**（字段形态静默） | 方法/下标结果不能作接收者：方法形态**已修**（v0.53.1）、`x["k"].field` 仍静默产出坏 C；并入 ct-json JSON-2 | [lang-5-result-as-receiver.md](lang/lang-5-result-as-receiver.md) |
+| LANG-13 | **High** | 同类型三级下标链 `v["a"]["b"]["c"]` 被接收者物化深度拒绝（ct-json JSON-1，**已修**） | [lang-13-three-level-subscript-chain.md](lang/lang-13-three-level-subscript-chain.md) |
 | LANG-9 | **High**（ABI 锁死 + 静默） | 结构体字段（含非 `pub`）全部进生成头；字段级 `pub` 被原样发射成非法 C 且 ct-ast 退出 0 | [lang-9-struct-field-visibility-abi.md](lang/lang-9-struct-field-visibility-abi.md) |
+| LANG-11 | **High** | 同名 `.h.ct` + `.ct` 共用 `.ctbuild/<base>.c`：实现单元不自动编译，手加入参即 `duplicate symbol` | [lang-11-same-base-unit-output-collision.md](lang/lang-11-same-base-unit-output-collision.md) |
 | LANG-6 | Medium | `ct install` 只打印 `-I vendor/<包名>`，`src/` 布局的包消费方报 `cannot resolve import` | **并入 [PKG-2](packages/pkg-2-ct-install-package-root-import.md)**（不另立文件） |
 | LANG-3 | Medium | `MAX_CALLS` 固定 1024、按整次构建累计、拆单元无效；每条 324 字节 | [lang-3-max-calls-fixed-cap.md](lang/lang-3-max-calls-fixed-cap.md) |
+| LANG-14 | Medium | struct 形参收到非 struct 实参只报 warning、由 cc 兜底（ct-json JSON-3，**已修**） | [lang-14-charptr-to-struct-arg-warning.md](lang/lang-14-charptr-to-struct-arg-warning.md) |
 | LANG-10 | Medium（feature） | 诊断无可机读格式：门禁靠 `grep 'warning:'`、编辑器/CI 只能读人用文本，改文案即可能静默变绿 | [lang-10-machine-readable-diagnostics.md](lang/lang-10-machine-readable-diagnostics.md) |
+| LANG-12 | Medium（feature） | 自定义类型没有属性访问协议：`doc.server.host` 落到 C 字段规则，CT 放行、`cc` 报 `no member named` | [lang-12-property-access-protocol.md](lang/lang-12-property-access-protocol.md) |
 | LANG-7 | Low | 静态方法解析失败报 `use of an undeclared variable`，列号指向类型名 | [lang-7-undeclared-variable-points-at-type.md](lang/lang-7-undeclared-variable-points-at-type.md) |
 | LANG-8 | Low | 裸 `5.method()` 因 `5.` 被扫成浮点而报 `unexpected token`；加空格可绕 | [lang-8-numeric-literal-dot-lexing.md](lang/lang-8-numeric-literal-dot-lexing.md) |
 
