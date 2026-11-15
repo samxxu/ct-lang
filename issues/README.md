@@ -352,6 +352,12 @@
 | PKG-7 | Medium | `ct build` 不读 `ct.lock`，不自动补 `-I`（**已修**，PH-54 S2 / SP-008） | [pkg-7-build-does-not-read-lock.md](packages/pkg-7-build-does-not-read-lock.md) |
 | PKG-8 | Medium | 本地目录覆盖共享库时构建期无留痕（**已修**，PH-54 S2/S3 / SP-015） | [pkg-8-local-override-no-trace.md](packages/pkg-8-local-override-no-trace.md) |
 | PKG-9 | **High**（静默） | 清单缺 `publisher` / `ns-root` 时 `ct get` 不报错、rc=0，静默退回 v1 单行 lock；只有 `ct pkg check` 才报（**open**，建议 v0.58.2） | [pkg-9-missing-identity-fields-silent-v1-lock.md](packages/pkg-9-missing-identity-fields-silent-v1-lock.md) |
+| PKG-10 | Medium | `ct pkg check` 只校验四字段存在性：`licence` 缺失、`dep` 短名、不可满足的 `requires`、版本与 tag 不一致均通过 | [pkg-10-pkg-check-criteria-too-narrow.md](packages/pkg-10-pkg-check-criteria-too-narrow.md) |
+| PKG-11 | Medium | 无索引解析器时限定名退化成 `https://ct/http`，报 `git clone ... failed`，误导为网络问题 | [pkg-11-qualified-name-falls-back-to-url.md](packages/pkg-11-qualified-name-falls-back-to-url.md) |
+| PKG-12 | **High**（静默） | `ct migrate` 打印清单缺字段错误后仍返回 0，脚本会带着未迁移 vendor 继续 | [pkg-12-migrate-returns-zero-on-failure.md](packages/pkg-12-migrate-returns-zero-on-failure.md) |
+| PKG-13 | Medium | `ct install` 打印的 `-I` 与 dev override 冲突，照抄即 `unit ... exists in two import roots` | [pkg-13-install-printed-include-collides-with-override.md](packages/pkg-13-install-printed-include-collides-with-override.md) |
+| PKG-14 | Medium | `ct verify --strict` 拒绝 dev override，本地开发态无法严格校验 | [pkg-14-verify-strict-rejects-dev-override.md](packages/pkg-14-verify-strict-rejects-dev-override.md) |
+| PKG-15 | Medium | `ct pkg check` 扫描包内所有文本文件，文档示例中的 `-I /绝对路径` 会误判整包红 | [pkg-15-pkg-check-scans-all-text-files.md](packages/pkg-15-pkg-check-scans-all-text-files.md) |
 
 ### `lang/` —— 语言 / 编译器缺陷（2026-11-15 登记）
 
@@ -375,6 +381,7 @@
 | LANG-14 | Medium | struct 形参收到非 struct 实参只报 warning、由 cc 兜底（ct-json JSON-3，**已修** `struct_arg_from_charptr`） | [lang-14-charptr-to-struct-arg-warning.md](lang/lang-14-charptr-to-struct-arg-warning.md) |
 | LANG-16 | Medium | 诊断位置源过期：块注释后列号偏移、`1:-3788` 类负列（patch 0.53.16，与 PH-62 独立） | [lang-16-diagnostic-position-negative.md](lang/lang-16-diagnostic-position-negative.md) |
 | LANG-17 | **High**（静默） | 超长预处理行（`#define` / `#include` > 159 字节）被静默截断，截断点合法时全链路 rc=0 但语义已改（DF-1 转入） | [lang-17-preprocessor-line-truncation.md](lang/lang-17-preprocessor-line-truncation.md) |
+| LANG-18 | **High** | 泛型指针作为结构体字段（`Map<Str, int> *index;`）报 `expected a field name`；0.58→0.60 回归 | [lang-18-generic-pointer-struct-field-parse.md](lang/lang-18-generic-pointer-struct-field-parse.md) |
 | LANG-10 | Medium（feature） | 诊断无可机读格式：门禁靠 `grep 'warning:'`、编辑器/CI 只能读人用文本，改文案即可能静默变绿 | [lang-10-machine-readable-diagnostics.md](lang/lang-10-machine-readable-diagnostics.md) |
 | LANG-12 | Medium（feature） | 自定义类型没有属性访问协议：`doc.server.host` 落到 C 字段规则，CT 放行、`cc` 报 `no member named` | [lang-12-property-access-protocol.md](lang/lang-12-property-access-protocol.md) |
 | LANG-15 | Medium（feature） | 枚举成员不能写 `FsErrCode::FS_ERR_OUT_OF_BOUNDS`：值位置 `Type::Member` 被当成命名空间变量（PH-57） | [lang-15-qualified-enum-member-value.md](lang/lang-15-qualified-enum-member-value.md) |
