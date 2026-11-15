@@ -1083,9 +1083,9 @@ else
 fi
 if ( cd "$S1/proj" && HOME="$S1/home" CT_HOME="$S1/cthome" \
         "$work/ct-ast" install >"$S1/i.out" 2>"$S1/i.err" ) \
-   && grep -Fq -- "-I $STORE/src" "$S1/i.out" \
+   && ! grep -Fq -- "-I " "$S1/i.out" \
    && grep -Fq "# lock-format: v2" "$S1/i.out"; then
-    ok "S1 install points -I at the store ns-root"
+    ok "S1 install omits -I for a v2 lock (build adds it)"
 else
     bad "S1 install" "$(cat "$S1/i.out" "$S1/i.err")"
 fi

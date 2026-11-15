@@ -1129,6 +1129,12 @@ impl PkgOps for Pkg {
                same index when one names it; otherwise the registry path below
                still applies. */
             if (strchr(path, '/') != NULL && strstr(path, "://") == NULL
+                && !self->have_index && getenv("CT_INDEX") == NULL) {
+                fprintf(stderr, "ctc: no index resolver for '%s'; "
+                                "set CT_INDEX or use --index\n", path);
+                return -1;
+            }
+            if (strchr(path, '/') != NULL && strstr(path, "://") == NULL
                 && (self->have_index || getenv("CT_INDEX") != NULL)) {
                 ix = pkg_index_lookup(path, range, url, sizeof url,
                                       tag, sizeof tag, sha, sizeof sha,
@@ -1618,7 +1624,11 @@ impl PkgOps for Pkg {
         if (rc != 0) return 1;
 
         printf("%s build", prog);
-        for (i = 0; i < nlock; i++) printf(" -I %s", ipath[i]);
+        /* v2 lock: `ct build` adds the lock roots itself, and printing them
+           again collides with the dev-override root (SH-83). Only the v1
+           vendor fallback still needs the explicit `-I` hint. */
+        for (i = 0; i < nlock; i++)
+            if (!lns[i][0]) printf(" -I %s", ipath[i]);
         if (allcf[0]) {
             if (self->sh_quote(allcf, qcf, sizeof qcf) != 0) return 1;
             printf(" --cflags %s", qcf);
@@ -1817,7 +1827,11 @@ impl PkgOps for Pkg {
                 if (cd != NULL) {
                     while ((ce = readdir(cd)) != NULL) {
                         if (strcmp(ce->d_name, ".") == 0 || strcmp(ce->d_name, "..") == 0) continue;
-                        if (strcmp(ce->d_name, ".git") == 0) continue;
+                        if (strcmp(ce->d_name, ".git") == 0
+                            || strcmp(ce->d_name, "docs") == 0
+                            || strcmp(ce->d_name, "issues") == 0
+                            || strcmp(ce->d_name, "battle") == 0
+                            || strcmp(ce->d_name, "test") == 0) continue;
                         if (snprintf(cpath, sizeof cpath, "%s/%s", cqueue[cqh], ce->d_name)
                             >= (int)sizeof cpath) continue;
                         if (stat(cpath, &cst) != 0) continue;
@@ -1826,6 +1840,9 @@ impl PkgOps for Pkg {
                             continue;
                         }
                         if (!S_ISREG(cst.st_mode) || cst.st_size > 262144) continue;
+                        /* Documentation examples are not build inputs. */
+                        if (strlen(cpath) > 3 && strcmp(cpath + strlen(cpath) - 3, ".md") == 0)
+                            continue;
                         cf = fopen(cpath, "r");
                         if (cf == NULL) continue;
                         while (fgets(cline, sizeof cline, cf) != NULL) {

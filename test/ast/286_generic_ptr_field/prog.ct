@@ -1,0 +1,14 @@
+#include <stdio.h>
+
+struct Doc {
+    Map<Str, int> *index;
+    int n;
+}
+
+int main(void)
+{
+    Doc d;
+    d.n = 1;
+    printf("%d\n", d.n);
+    return 0;
+}
