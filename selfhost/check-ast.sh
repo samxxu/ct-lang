@@ -3770,6 +3770,13 @@ if bash test/ast/p45_contract.sh "$work/ct-ast"; then
 else
     bad "p45/contract" "type contract consistency failed"
 fi
+# Phase 46: a `Map<K, user struct>` keeps its `MapEntry_*` body in the unit
+# that names it (E46-1 / E46-3 / E46-4).
+if bash test/ast/p46_map.sh "$work/ct-ast" "$CC"; then
+    ok "p46/map-user-struct"
+else
+    bad "p46/map-user-struct" "Map<K, user struct> ownership failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

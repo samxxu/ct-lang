@@ -2309,6 +2309,10 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **跨单元单态化（Phase 31 T31-2）**：消费方单元实例化 `Vec<T>` / `Map<K, V>` 且元素 owner 与容器
   模板 owner 不同时，该单元的 `.c` 发射私有的 `static` 元素 helper 与实例方法副本；`.h` 只保留类型，
   vtable 与实例数据留在 owner 单元，所以两个消费方不会在链接期撞名。
+- **元素完整性（Phase 46）**：`Map<K, V>` 的 `V` 是用户 struct 时，嵌套的
+  `struct MapEntry_<K,V>` 完整定义下沉到实际使用该 `Map` 的翻译单元；层头只留
+  `struct MapEntry_<K,V>;` 前置声明，`ct build` 不再因 incomplete type 失败。`Map` API、
+  `MapEntry` 字段与布局不变，且不产生新的链接符号。
 - 泛型 trait 由 §4.55 承接；本相只支持非泛型 trait 作约束。
 
 ### 4.55 泛型 trait（Phase 35，仅 ct-ast）

@@ -57,6 +57,7 @@
 | Phase 43 | **`return err:` 载荷类型契约**：`err:` 载荷必须可赋给函数返回类型；L43-1 硬错、四入口一致、不写坏 C；普通 return 保持 `--types` 可选 | 新增 | ✅ 完成（2026-11-14；R1–R6；收口 `v0.43.0`；[design/phase43.md](../design/phase43.md)） | check-ast **1364/0**、test/run 155、warnings 616/0、docs **1035 links / 224 files**；`p43/errors` 4/4；样例 `examples/45_error_return_contract` |
 | Phase 44 | **后缀 `?` 错误传播**：`Result<T,E>` 的失败以 `Outer::err` 返回，成功取 `value`；`?:` 消歧；L44-1..4；临时量清理 | 新增 | ✅ 完成（2026-11-14；S1–S9；收口 `v0.44.0`；[design/phase44.md](../design/phase44.md)） | `p44/syntax` 22/22、`p44/errors` 9/9、`p44/drop` 7/7；check-ast **1370/0**、test/run 156、warnings 632/0、docs 1035/224 |
 | Phase 45 | **类型契约一致性**：闭包 `return` 跳过 + 指针基类型/层数判据；L45-1/2 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.45.0`；[卡](../design/phase45.md)） | `p45/contract` 6/6；examples `--types` 42/42；check-ast **1376/0**、warnings 632/0 |
+| Phase 46 | **`Map` 元素完整性**：用户 struct 按值入 `Map`，`MapEntry` body 下沉使用单元 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.46.0`；[卡](../design/phase46.md)） | `240_map_user_struct` build 绿；`p46/map-user-struct` 0 failures；check-ast 1378/0 |
 
 > **Agent 内核运行库（ct-pkg，外部）**：`arena` / `sync` / `callback` 今天可做，`result` / `string` 分别等 Phase 34 / 36，ABI 打包等 Phase 39；提案见 [proposals/ct-pkg-agent-runtime.md](../proposals/ct-pkg-agent-runtime.md)。
 
@@ -149,6 +150,7 @@
 | v0.44.0 | Phase 44 后缀 `?` 错误传播（2026-11-14） | 后缀 `?` + `N_TRY`；L44-1/2/3/4；`Outer::err` 失败返回；临时量 move+zero；errdefer/defer/own 清理；22 例消歧、9 例诊断、7 例 ASAN；check-ast 1370/0、test/run 156、warnings 632/0；tag `v0.44.0`。 |
 | v0.44.1 | Phase 44 位置/门禁修复（2026-11-14） | 三目条件与 `into` 中的 `?` 改 L44-4；`p44/drop` 接入 check-ast；新增 2 个位置负例；check-ast 1371/0。 | tag `v0.44.1`。
 | v0.45.0 | Phase 45 类型契约一致性（2026-11-15） | 闭包 return 按 §4.53 跳过；指针初值/赋值/return/容器实参比较基类型与层数；L45-1/2；p45/contract 6/6；check-ast 1376/0、test/run 156、warnings 632/0；tag `v0.45.0`。 |
+| v0.46.0 | Phase 46 Map 元素完整性（2026-11-15） | `MapEntry_*` 纳入 foreign 元素判定；用户 struct 按值入 `Map` 的多单元 build 可编译；body 下沉使用单元；无新符号；check-ast 1378/0、test/run 156；tag `v0.46.0`。 |
 | v0.44.2 | 接口值返回四条静默 UB / 边界修复（2026-11-15） | A-1 `.m.ct` 可 import `.h.ct`（`fb55985c`）；SH-72 动态派发按 trait 签名给返回类型（`5ff69ac3`）；SH-74 impl 内 `return self` 发 `(void *)_self`（`d6e82e25`）；SH-75 局部 struct 返回接口改堆拷贝（`b5797cbf`）；新夹具 `238_iface_ret_value` / `237_iface_ret_self` / `239_local_iface_return` + `sh71_map_import_hdr`，SH-75 另配 ASAN use-after-return；check-ast 1376/0、test/run 156、warnings 631/0、docs 1205/239。已知限制：接口无析构槽，堆上装箱对象随进程存活。 | tag `v0.44.2`。
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../../AGENTS.md) 第 5 节）。

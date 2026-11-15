@@ -1,6 +1,6 @@
 # Phase 46 — `Map` 元素完整性（用户 struct 按值入 `Map`，`ct build` 可编译）
 
-> **状态：规划中**（已定稿；2026-11-15 签字；未实施；实现由外部 harness 执行）
+> **状态：完成（2026-11-15；v0.46.0；S1–S5 全绿）**
 > **归属**：本仓库维护规格与判据；实现与夹具由外部 DeepSeek harness 交付（[手册](phase46-52-handoff.md)）。
 > **基线**：本卡最后一次提交（`git log -1 --format=%H -- docs/design/phase46.md`）；PH-45 未收口时不做前置假设。
 > **规模**：≤120 行（编译器；裁决席按 F1 下调）。夹具与文档另计。
@@ -98,3 +98,16 @@ mkdir -p /tmp/p46 && cd /tmp/p46
 | golden 漂移 | `check-goldens` 红 | 只允许重生成受影响文件，逐字节核对；否则回滚 |
 
 **回滚粒度**：S2 一个提交可整体回退，S3 夹具保留不受影响。
+
+### 9 收口记录（2026-11-15）
+
+| 项 | 结果 |
+| --- | --- |
+| E46-1 | 单文件 / build 输出 `cmp` rc=0；`put 1 get 1 tag 7 len 1` |
+| E46-2 | 四种对照形态前后逐字节一致；目标形态仅 body 从 `Vec.h` 移到 `prog.c` |
+| E46-3 | `nm -g --defined-only` 无 `MapEntry_*` 符号 |
+| E46-4 | 产物头 0 份 body，使用单元 1 份；`--lib` ABI 面无 `MapEntry_` |
+| E46-5 | check-all 11/11 |
+| E46-6 | 红证 `p46_map.sh` 基线 4 failures → 0 |
+
+tag/push：`v0.46.0` annotated tag 与分支自动 push。

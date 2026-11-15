@@ -1,0 +1,6 @@
+put 1 get 1 tag 7 len 1
+it a 7
+it b 8
+remove 1 len 1
+left b 8
+from 1 tag 9

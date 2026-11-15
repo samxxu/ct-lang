@@ -1,0 +1,54 @@
+/* Phase 46 / E46-1..E46-4: a `Map<char *, user struct>` element. The entry
+   struct spells the value by value, so its body can only be printed by this
+   unit; the layer's header forwards it instead of defining it. */
+import lib::types;
+
+#include <stdio.h>
+
+struct JsonRef jsonref_make(int tag)
+{
+    struct JsonRef r;
+    r.tag = tag;
+    return r;
+}
+
+struct Doc {
+    Map<char *, JsonRef> slots;
+}
+
+int main(void)
+{
+    struct Doc d;
+    Map<char *, JsonRef> view;
+    JsonRef r;
+    JsonRef *got;
+    int ok;
+    int removed;
+
+    d.slots.h = 0;
+    r = jsonref_make(7);
+    ok = d.slots.put("a", r);
+    got = d.slots.get("a");
+    printf("put %d get %d tag %d len %d\n", ok, got != 0,
+           got != 0 ? got->tag : -1, d.slots.len());
+
+    d.slots.put("b", jsonref_make(8));
+    view.h = d.slots.h;
+    foreach (view) {
+        printf("it %s %d\n", item.key, item.value.tag);
+    }
+
+    removed = d.slots.remove("a");
+    printf("remove %d len %d\n", removed, d.slots.len());
+    foreach (view) {
+        printf("left %s %d\n", item.key, item.value.tag);
+    }
+    d.slots.release();
+
+    /* the brace literal lowers to `Map::from`, the same entry struct */
+    Map<char *, JsonRef> built = { "x": jsonref_make(9) };
+    got = built.get("x");
+    printf("from %d tag %d\n", got != 0, got != 0 ? got->tag : -1);
+    built.release();
+    return 0;
+}
