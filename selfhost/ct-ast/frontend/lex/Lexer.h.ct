@@ -196,6 +196,7 @@ impl LexOps for Lexer {
         }
         if (c == '"' || c == '\'') {
             char q = (char)c;
+            int toolong = 0;
             n = 0;
             self->toktext[n] = q;
             n++;
@@ -203,16 +204,20 @@ impl LexOps for Lexer {
             while (self->src[self->pos] && self->src[self->pos] != q) {
                 if (self->src[self->pos] == '\\' && self->src[self->pos + 1]) {
                     if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+                    else toolong = 1;
                     self->pos++;
                 }
                 if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+                else toolong = 1;
                 self->pos++;
             }
             if (self->src[self->pos] == q) {
                 if (n + 1 < MAX_TEXT) { self->toktext[n] = q; n++; }
+                else toolong = 1;
                 self->pos++;
             }
             self->toktext[n] = 0;
+            if (toolong) self->toktrunc = 1;
             self->tok = T_STR;
             return;
         }

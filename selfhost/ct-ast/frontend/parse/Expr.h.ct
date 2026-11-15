@@ -5054,6 +5054,8 @@ impl ExprOps for Expr {
                joined string is not limited by MAX_TEXT */
             while (self->lex->tok == T_STR) {
                 int m = 0;
+                if (self->lex->toktrunc)
+                    return self->sup->fail("string literal is too long (max 158 bytes; split it)");
                 while (self->lex->toktext[m]) {
                     if (self->arena->str_put((unsigned char)self->lex->toktext[m]) != 0)
                         return self->sup->fail("string pool is full");

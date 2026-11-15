@@ -39,6 +39,7 @@ import runtime::arena::Arena;
 #define N_ARROW  25
 #define N_INDEX  26
 #define N_ADDR   27
+#define N_DEREF  28
 #define N_BOX    34
 #define N_CAST   35
 #define N_SIZEOF 36
@@ -649,6 +650,16 @@ impl TypeOps for TypeCheck {
         for (u = 0; u < self->sym->structs[si].nuse; u++)
             if (strcmp(self->sym->structs[si].use[u], trait) == 0) found = 1;
         if (!found) return self->fail("the struct does not use this trait");
+        /* A non-pointer box takes the operand's address. Only an addressable
+           operand may be boxed; a struct-valued call is an rvalue, and
+           `(void *)&mk()` is invalid C. Reject it here instead of emitting C
+           the backend cannot compile. */
+        if (!is_ptr) {
+            int k = self->arena->nodes[n].kind;
+            if (k != N_VAR && k != N_MEMBER && k != N_ARROW
+                && k != N_INDEX && k != N_DEREF)
+                return self->fail("cannot box an rvalue struct; assign it to a variable first");
+        }
         box = self->new_node(N_BOX);
         if (box < 0) return -1;
         self->arena->nodes[box].a = n;
