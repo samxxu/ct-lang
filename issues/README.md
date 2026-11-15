@@ -343,6 +343,25 @@
 | PKG-1 | Medium | `hal-posix` 的 `now_ms` 在开机约 24.8 天后回绕为负，违反 `hal` 的单调契约 | [pkg-1-hal-posix-now-ms-overflow.md](packages/pkg-1-hal-posix-now-ms-overflow.md) |
 | PKG-2 | Medium | `ct install` 只打印 `-I vendor/<包名>`：包内单元在 `src/<ns>/` 时消费端照抄即报 `cannot resolve import`（**open / 未来处理**，不阻塞当前相） | [pkg-2-ct-install-package-root-import.md](packages/pkg-2-ct-install-package-root-import.md) |
 
+### `lang/` —— 语言 / 编译器缺陷（2026-11-15 登记）
+
+> **登记来源**：v0.53.x 规范复核与外部包（ct-json / rill-dsl / ct-sse / nexcore）实测。
+> **排序理由**：「是否静默出错」优先于「挡了多少下游」——静默错误（编译通过、运行给错值）排最前，
+> 其次是挡形态的硬错，再次是配置/容量类，最后是只影响排查效率的文案类。
+> **合并关系**：LANG-6 与既有 [PKG-2](packages/pkg-2-ct-install-package-root-import.md) 同源，
+> 不另立文件，以 PKG-2 为准。
+
+| ID | 严重度 | 标题 | 文件 |
+| --- | --- | --- | --- |
+| LANG-4 | **High**（静默） | 数字下标匹配到参数类型不符的 `get`，编译通过、静默返回空值（`v[0]` → `get(0)`） | [lang-4-subscript-type-mismatch-silent-empty.md](lang/lang-4-subscript-type-mismatch-silent-empty.md) |
+| LANG-1 | **High** | `.h.ct` 单元函数体内 `defer` / `errdefer` 被后缀检查拒绝；`.m.ct` 不可达属另一限制 | [lang-1-hct-defer-errdefer-rejected.md](lang/lang-1-hct-defer-errdefer-rejected.md) |
+| LANG-2 | **High** | 带 `namespace` 的单元里静态固有方法不可用（同单元/跨单元均失败，实例方法正常） | [lang-2-namespaced-static-method-unresolved.md](lang/lang-2-namespaced-static-method-unresolved.md) |
+| LANG-5 | **High**（字段形态静默） | 方法/下标结果不能作接收者：方法形态硬错、`x["k"].field` 静默产出坏 C；多级链受单层限制 | [lang-5-result-as-receiver.md](lang/lang-5-result-as-receiver.md) |
+| LANG-6 | Medium | `ct install` 只打印 `-I vendor/<包名>`，`src/` 布局的包消费方报 `cannot resolve import` | **并入 [PKG-2](packages/pkg-2-ct-install-package-root-import.md)**（不另立文件） |
+| LANG-3 | Medium | `MAX_CALLS` 固定 1024、按整次构建累计、拆单元无效；每条 324 字节 | [lang-3-max-calls-fixed-cap.md](lang/lang-3-max-calls-fixed-cap.md) |
+| LANG-7 | Low | 静态方法解析失败报 `use of an undeclared variable`，列号指向类型名 | [lang-7-undeclared-variable-points-at-type.md](lang/lang-7-undeclared-variable-points-at-type.md) |
+| LANG-8 | Low | 裸 `5.method()` 因 `5.` 被扫成浮点而报 `unexpected token`；加空格可绕 | [lang-8-numeric-literal-dot-lexing.md](lang/lang-8-numeric-literal-dot-lexing.md) |
+
 ### 标准库（ct-pkg 包 `std`）
 
 | ID | 严重度 | 标题 | 文件 |
