@@ -968,6 +968,141 @@ else
 fi
 
 echo
+echo "== S1: shared store =="
+S1="$work/s1"
+mkdir -p "$S1/home" "$S1/cthome" "$S1/proj" "$S1/pkgs/std/src"
+printf 'name = std\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S1/pkgs/std/ct.pkg"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S1/pkgs/std/src/std.h.ct"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/std@^0.1.0\n' >"$S1/proj/ct.pkg"
+STORE="$S1/cthome/pkg/ct/std/0.1.0"
+if ( cd "$S1/proj" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" get ../pkgs/std >"$S1/g.out" 2>"$S1/g.err" ); then
+    ok "S1 get exits 0"
+else
+    bad "S1 get" "non-zero exit: $(cat "$S1/g.err")"
+fi
+if [ -f "$STORE/ct.pkg" ] && [ -f "$STORE/src/std.h.ct" ]; then
+    ok "S1 writes \$CT_HOME/pkg/<pub>/<name>/<ver>"
+else
+    bad "S1 store" "store tree is incomplete"
+fi
+if [ -f "$S1/proj/vendor/std/ct.pkg" ]; then
+    ok "S1 still writes vendor/ for compatibility"
+else
+    bad "S1 vendor" "vendor/std is missing"
+fi
+if [ "$(head -1 "$S1/proj/ct.lock")" = "# ct-lock 2" ] \
+   && [ "$(awk 'NR>1{print NF}' "$S1/proj/ct.lock" | sort -u)" = "7" ]; then
+    ok "S1 lock is v2 with seven fields per row"
+else
+    bad "S1 lock" "unexpected lock: $(cat "$S1/proj/ct.lock")"
+fi
+if ( cd "$S1/proj" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" install >"$S1/i.out" 2>"$S1/i.err" ) \
+   && grep -Fq -- "-I $STORE/src" "$S1/i.out" \
+   && grep -Fq "# lock-format: v2" "$S1/i.out"; then
+    ok "S1 install points -I at the store ns-root"
+else
+    bad "S1 install" "$(cat "$S1/i.out" "$S1/i.err")"
+fi
+before="$(find "$STORE" -type f -exec shasum -a 256 {} + | sort | shasum -a 256 | awk '{print $1}')"
+if ( cd "$S1/proj" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" get ../pkgs/std >"$S1/g2.out" 2>"$S1/g2.err" ); then
+    after="$(find "$STORE" -type f -exec shasum -a 256 {} + | sort | shasum -a 256 | awk '{print $1}')"
+    if [ "$before" = "$after" ]; then
+        ok "S1 same-version reinstall is a no-op"
+    else
+        bad "S1 reinstall" "store content changed"
+    fi
+else
+    bad "S1 reinstall" "non-zero exit: $(cat "$S1/g2.err")"
+fi
+printf '// changed\n' >>"$S1/pkgs/std/src/std.h.ct"
+if ( cd "$S1/proj" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" get ../pkgs/std >"$S1/g3.out" 2>"$S1/g3.err" ); then
+    bad "S1 digest mismatch" "a changed same-version package was overwritten"
+elif grep -Fq "different digest" "$S1/g3.err"; then
+    ok "S1 same version with a different digest is a hard error"
+else
+    bad "S1 digest mismatch" "wrong diagnostic: $(cat "$S1/g3.err")"
+fi
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S1/pkgs/std/src/std.h.ct"
+mkdir -p "$S1/pkgs/std2/src" "$S1/proj2"
+printf 'name = std\npublisher = ct\nversion = 0.2.0\nns-root = src\n' >"$S1/pkgs/std2/ct.pkg"
+printf 'pub int twice(int x);\n' >"$S1/pkgs/std2/src/std.h.ct"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/std2@^0.2.0\n' >"$S1/proj2/ct.pkg"
+if ( cd "$S1/proj2" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" get ../pkgs/std2 >"$S1/g4.out" 2>"$S1/g4.err" ) \
+   && [ -d "$S1/cthome/pkg/ct/std/0.1.0" ] \
+   && [ -d "$S1/cthome/pkg/ct/std/0.2.0" ]; then
+    ok "S1 lets two versions coexist"
+else
+    bad "S1 versions" "$(cat "$S1/g4.err")"
+fi
+mkdir -p "$S1/pkgs/nsbad" "$S1/proj3"
+printf 'name = nsbad\npublisher = ct\nversion = 0.1.0\n' >"$S1/pkgs/nsbad/ct.pkg"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/nsbad@^0.1.0\n' >"$S1/proj3/ct.pkg"
+if ( cd "$S1/proj3" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" get ../pkgs/nsbad >"$S1/ns.out" 2>"$S1/ns.err" ); then
+    bad "S1 missing ns-root" "expected a non-zero exit"
+elif grep -Fq "is missing 'ns-root'" "$S1/ns.err"; then
+    ok "S1 requires ns-root"
+else
+    bad "S1 missing ns-root" "wrong diagnostic: $(cat "$S1/ns.err")"
+fi
+mkdir -p "$S1/pkgs/nsabs/src" "$S1/proj4"
+printf 'name = nsabs\npublisher = ct\nversion = 0.1.0\nns-root = /tmp\n' >"$S1/pkgs/nsabs/ct.pkg"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/nsabs@^0.1.0\n' >"$S1/proj4/ct.pkg"
+if ( cd "$S1/proj4" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" get ../pkgs/nsabs >"$S1/na.out" 2>"$S1/na.err" ); then
+    bad "S1 absolute ns-root" "expected a non-zero exit"
+elif grep -Fq "must be a relative path" "$S1/na.err"; then
+    ok "S1 rejects an absolute ns-root"
+else
+    bad "S1 absolute ns-root" "wrong diagnostic: $(cat "$S1/na.err")"
+fi
+mkdir -p "$S1/pkgs/nopub/src" "$S1/proj5"
+printf 'name = nopub\nversion = 0.1.0\nns-root = src\n' >"$S1/pkgs/nopub/ct.pkg"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/nopub@^0.1.0\n' >"$S1/proj5/ct.pkg"
+if ( cd "$S1/proj5" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" get ../pkgs/nopub >"$S1/np.out" 2>"$S1/np.err" ); then
+    bad "S1 missing publisher" "expected a non-zero exit"
+elif grep -Fq "is missing 'publisher'" "$S1/np.err"; then
+    ok "S1 requires publisher when ns-root is present"
+else
+    bad "S1 missing publisher" "wrong diagnostic: $(cat "$S1/np.err")"
+fi
+mkdir -p "$S1/pkgs/plocal/src" "$S1/proj6"
+printf 'name = plocal\npublisher = local\nversion = 0.1.0\nns-root = src\n' >"$S1/pkgs/plocal/ct.pkg"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/plocal@^0.1.0\n' >"$S1/proj6/ct.pkg"
+if ( cd "$S1/proj6" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" get ../pkgs/plocal >"$S1/pl.out" 2>"$S1/pl.err" ); then
+    bad "S1 local publisher" "expected a non-zero exit"
+elif grep -Fq "is missing 'publisher'" "$S1/pl.err"; then
+    ok "S1 rejects publisher 'local'"
+else
+    bad "S1 local publisher" "wrong diagnostic: $(cat "$S1/pl.err")"
+fi
+printf x >>"$STORE/src/std.h.ct"
+if ( cd "$S1/proj" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" install >"$S1/t.out" 2>"$S1/t.err" ); then
+    bad "S1 tampered store" "a changed store passed install"
+elif grep -Fq "does not match ct.lock" "$S1/t.err"; then
+    ok "S1 install rejects a tampered store"
+else
+    bad "S1 tampered store" "wrong diagnostic: $(cat "$S1/t.err")"
+fi
+printf 'dup 0.1.0 pubA file:///tmp/a 0.1.0 sha256:%064d\ndup 0.1.0 pubB file:///tmp/b 0.1.0 sha256:%064d\n' 0 0 >"$S1/index"
+if ( cd "$S1/proj" && HOME="$S1/home" CT_HOME="$S1/cthome" \
+        "$work/ct-ast" get --index ../index dup >"$S1/amb.out" 2>"$S1/amb.err" ); then
+    bad "S1 ambiguous index" "expected a non-zero exit"
+elif grep -Fq "is ambiguous" "$S1/amb.err"; then
+    ok "S1 bare index name with two publishers is ambiguous"
+else
+    bad "S1 ambiguous index" "wrong diagnostic: $(cat "$S1/amb.err")"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]

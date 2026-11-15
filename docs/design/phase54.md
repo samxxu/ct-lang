@@ -89,3 +89,16 @@ S0 只新增只读子命令与一行输出注释，回滚 = `git revert` 单个�
 | 门禁 | check-ast 1444/0、test/run 156、warnings 689/0、docs 1446/265 |
 
 S1（v0.55.0）未开工；本收口只发 v0.54.0。
+
+## 9. S1 收口记录（2026-11-15，v0.55.0）
+
+| SP | 结果 |
+| --- | --- |
+| SP-001 | store `<CT_HOME>/pkg/<pub>/<name>/<ver>` 落盘；`vendor/` 兼容写保留 |
+| SP-002/003/004 | `publisher` / `ns-root` 必填与形态校验；`local` 拒绝 |
+| SP-005/020 | 多版本并存；同版本同摘要 no-op、异摘要报错 |
+| SP-007/014 | install 离线读 store；裸名歧义硬错 |
+| SP-017/019 | v2 头 + 7 字段；store 摘要不符报错 |
+| 门禁 | `test/pkg/run.sh` 106/0；check-ast 1444/0；check-all 11/11 |
+
+S2（`ct build` 读 lock、`--locked`、dev override）未开工。

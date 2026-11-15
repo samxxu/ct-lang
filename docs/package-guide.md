@@ -69,6 +69,8 @@ acme/
 | 键 | 必填 | 含义 |
 | --- | --- | --- |
 | `name` | 是 | 包名，见 §3 |
+| `publisher` | S1 起是 | 发布方；与 `name` 组成 `<publisher>/<name>`，store 路径的第一段；`local` 保留字 |
+| `ns-root` | S1 起是 | 包内单元树根（相对包根，无 `..`，目录必须存在）；`-I` 指向 `<版本目录>/<ns-root>` |
 | `version` | 是 | `x.y.z`（工具只解析前三位数字；预发布 / 构建元数据不纳入） |
 | `dep` | 否，可重复 | 依赖，`name` 或 `name@range`；格式与 Phase 8 一致 |
 | `cflags` | 否 | 消费者编译该包时附加的编译选项，`ct install` 折进打印的命令 |
@@ -76,8 +78,10 @@ acme/
 | `requires` | 否 | 对编译器版本的约束；**不满足时 `ct get` / `ct install` 失败**，`--force` 才降级为告警 |
 | `licence` | 否 | 许可证标识（SPDX 风格，如 `MIT`）。**仅约定，工具不解析** |
 
-约定而不是工具的强制项：工具只强制 `name` 与 `version` 非空；`name` / `version` 缺失或为空时
-`ct get` 报 `cannot read '<dir>/ct.pkg'`。命名、tag、目录与 `licence` 由索引收录与 CI 审核。
+S1 起 `publisher` + `ns-root` 是 store 与 lock v2 的必填身份；写 `ns-root` 不再被静默忽略。
+**兼容例外**：两个键都缺失的旧清单仍按 v1 处理（`vendor/` + 四字段 lock），以保住旧工程；
+只缺一个、或 `publisher = local`、`ns-root` 为绝对路径/含 `..`/目录不存在时硬错。
+命名、tag、目录与 `licence` 由索引收录与 CI 审核。
 
 `cflags` / `ldflags` / `requires` 由 `ct install` 读取；`install` 把每个包的 `cflags` / `ldflags`
 拼进**一条** `ct build` 命令，遇到不满足的 `requires` 直接失败（`ct install --force` 才继续，
@@ -98,20 +102,24 @@ acme/
 ### 4. 发布、索引与消费
 
 1. **发布**：仓库根放 `ct.pkg` 与源码，打 tag `v<version>` 并推送。
-2. **索引收录**：在 `ct-pkg/index` 的 `index` 文件追加一行，五字段、空白分隔：
+2. **索引收录**：在 `ct-pkg/index` 的 `index` 文件追加一行，六字段、空白分隔：
 
    ```
-   name version git-url tag sha256:<64 hex>
+   name version publisher git-url tag sha256:<64 hex>
    ```
+
+   旧的五字段行（无 publisher）仍可读；裸名同时命中两个 publisher 时 `ct get` 硬错
+   `'<name>' is ambiguous; write <publisher>/<name>`。
 
    摘要按 `ct.lock` 的同一算法计算（按路径排序后把每个文件的相对路径与内容汇入单流 SHA-256）。
    索引由 CI 生成并提交（18.2），本地可用 `CT_INDEX=<file>` 或 `--index <file>` 指向任意纯文本索引。
 3. **消费**：
 
    ```sh
-   ct get <name>@<range>        # 裸名经索引解析；本地目录用 ./path 或 file://
-   ct verify                    # 离线：校验 vendor/ 与 ct.lock 的摘要
-   ct install                   # 离线：校验摘要与依赖覆盖，打印一条可直接执行的 ct build 命令
+   ct get <pub>/<name>@<range>  # 发布方限定；裸名仅在索引唯一时可用（歧义即硬错）
+   ct get ./path                # 本地目录同样按清单的 publisher/ns-root 落 store
+   ct verify                    # 离线：v2 校验 store、v1 校验 vendor 的摘要
+   ct install                   # 离线：校验摘要与依赖覆盖，打印带 store ns-root 的 ct build 命令
    ct update                    # 离线：按 ct.pkg 重解并重写 ct.lock
    ```
 
@@ -185,28 +193,29 @@ ct build -I vendor/fsguard main.ct -o build
 还需要 `-Isrc`；而 `ct.pkg` 的 `cflags` 只进 `cc` 行、不参与 import 解析。真实案例见
 [PKG-2](../issues/packages/pkg-2-ct-install-package-root-import.md)。
 
-#### 8.3 `ct install` 只发 `-I <包根>`，且不校验 import
+#### 8.3 `ct install` 的 `-I` 形态，且不校验 import
 
-- 生成点固定为 `-I vendor/<name>`（[Pkg.h.ct:1388-1396](../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1388-L1396)）。
-- 它只做三件事：校验 `ct.lock` 摘要、校验 `dep` 被 lock 覆盖、拼 `cflags`/`ldflags`。
+- v2 lock：`-I $CT_HOME/pkg/<publisher>/<name>/<version>/<ns-root>`（`ns-root = .` 时省掉末段）。
+- v1 lock（旧工程）：`-I vendor/<name>`，与 S0 之前逐字一致。
+- 它只做三件事：校验 lock 摘要（v2 查 store，v1 查 vendor）、校验 `dep` 被 lock 覆盖、拼 `cflags`/`ldflags`。
 - **不解析 import**：包内单元找不到时它照样 `rc=0`。`ct install` 退出码 0 ≠ 消费者能编译。
 
-#### 8.4 `ct.pkg` 的真实键，以及 `namespace` 与 `ns-root` 的区别
+#### 8.4 `namespace` 与 `ns-root`
 
-现行键只有 §2 表里那七个（`name` / `version` / `dep` / `cflags` / `ldflags` / `requires` / `licence`）。
+- S1 起 `ns-root` 是清单的必填键：store 的 `-I` 指向 `<版本目录>/<ns-root>`，`ct pkg check` 校验
+  相对路径、无 `..`、目录存在。
+- 旧的 **`namespace = <首段>`** 仍被编译器读取（`Module.h.ct` `ct_rel_cands`），作为兼容键保留；
+  新包不要再写它，两者语义相反：`namespace` 剥掉 import 首段，`ns-root` 给根目录加一层前缀。
+- `ct build --ns-root <dir>` 仍是独立的单元格级目录校验，与清单键无关。
 
-- **不存在 `ns-root`**。写了不会报错，也不会生效——未知键被静默忽略。
-- 实际生效的是未文档化的 **`namespace = <首段>`**：编译器在 `-I` 根下读 `<根>/ct.pkg`，
-  若 import 路径以 `namespace` 值开头，就**剥掉这段**再找文件（`Module.h.ct` `ct_rel_cands`）。
-- 两者语义相反：`namespace` 是「把 import 首段拿掉」，`ns-root` 是「给根目录加一层前缀」。
-  把 `namespace` 当 `ns-root` 写，表现是「文件明明在，却解析不到」。
-- 单元格级目录校验仍靠 `ct build --ns-root <dir>`：它校验「声明 namespace = 目录路径」，与包清单的键无关。
+#### 8.5 共享库（S1）与仍未做的部分
 
-#### 8.5 依赖解析的现状
-
-- 缓存键是**裸包名**（`~/.cache/ct-pkg/<name>`）；spec 的发布方段被丢弃，两个发布方的同名包会互相串用缓存。
-- 依赖图内同名包**静默取首个**，无警告、无错误；只有版本范围对不上时 `ct install` 才报「未被 lock 覆盖」。
-- `ct build` **不读 `ct.lock`**：删掉 lock 只要 `-I` 对就仍能构建。
-- 本地目录与 `-I` 同名时，**导入方所在目录静默胜出**，不告警；`ct get` 也不会因为你项目里已有同名目录而跳过下载。
+- store：`$CT_HOME/pkg/<publisher>/<name>/<version>/`（`CT_HOME` 默认 `$HOME/.ct`）；同版本重装
+  摘要相同即 no-op、不同即硬错且不覆盖；不同版本目录可并存。
+- `ct get` 仍写 `vendor/<name>` 兼容旧工程；v2 lock 每行七字段
+  `<pub>/<name> <version> <type> <locator> <commit|-> <ns-root> <sha256:…>`。
+- 缓存键仍是**裸包名**（`~/.cache/ct-pkg/<name>`）；S2 才处理依赖图同名包与 `ct build` 读 lock。
+- `ct build` **仍不读 `ct.lock`**；`ct install` 已按 v2 输出 store `-I`。
+- 本地目录与 `-I` 同名时仍静默胜出；`ct get` 不因项目已有同名目录而跳过下载（S2 dev override 留痕）。
 - 逐条缺陷见 [PKG-3 … PKG-8](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)。
 
