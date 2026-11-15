@@ -70,8 +70,8 @@
 | Phase 54 | ct-pkg 共享库包体系（工具侧：store / lock v2 / `ns-root`） | 🟨 实施中（S0–S3、S5/S6 仓内完成；S7 待兼容期） | v0.54.0–v0.58.0（S0–S3、S5/S6 各一个 MINOR；偏移见 AGENTS §0.3） | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
 | Phase 57 | 限定名与 namespace 常量（类型位置 `A::B`、值位置 `Type::Member`；SH-18 + LANG-15） | ⬜ 规划中（未开卡） | v0.59.0 | [重排](planning/post-58-plan.md) |
 | Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ⬜ 规划中 | v0.60.0 | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) · [重排](planning/post-58-plan.md) |
-| Phase 60 | 视图节点注记（`view` 子句） | ⬜ 规划中（仅提案） | v0.61.0 | [提案](proposals/ct-view-annotation-proposal.md) · [重排](planning/post-58-plan.md) |
-| Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | ⬜ 规划中（仅提案） | v0.62.0 | [提案](proposals/ct-writable-subscript-proposal.md) · [重排](planning/post-58-plan.md) |
+| Phase 60 | 视图节点注记（`view` 子句） | ⬜ 待确认消费者（无消费者则不立相） | 条件位 v0.61.0（跳过则不占位） | [提案](proposals/ct-view-annotation-proposal.md) · [重排](planning/post-58-plan.md) |
+| Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | ⬜ 规划中（仅提案） | v0.62.0（PH-60 跳过时 v0.61.0） | [提案](proposals/ct-writable-subscript-proposal.md) · [重排](planning/post-58-plan.md) · [序列](planning/post-58-phase-sequence.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
@@ -118,12 +118,12 @@
 3. **文档收口**：PH-54 S6 历史 errata、issue 状态回填、过时提案退役（不占版本位）。
 4. **PH-57 限定名**（SH-18 + LANG-15）→ **v0.59.0**：无前置、无卡，先开卡即可开工。
 5. **PH-59 M1 模型导出** → **v0.60.0**：真实前置是 LANG-10 7c（`Field` 补行列），不是不存在的「PH-58」。
-6. **PH-60 视图注记** → **v0.61.0**：等 PH-59 schema 冻结且有真实消费者；无消费者则空置该版本位，不后移。
+6. **PH-60 视图注记** → 条件位 **v0.61.0**：等 PH-59 schema 冻结且确认真实消费者；无消费者则**不立相**，PH-62 顺延到 v0.61.0，不留空号。
 7. **PH-62 可写下标**（吸收 PH-61）→ **v0.62.0**：方向已通过研判，先开卡，再按 S0–S3 切片。
 8. **PH-54 S7 删除 vendor**：最后做，前置是 S6 errata 完成与 S7 仓内自证三条全绿。
 
-> 版本位按 AGENTS §0.3 的相位表：PH-54 已占 v0.54.0–v0.58.0，后续从 v0.59.0 起按下一个空位连续分配；
-> 上列为预留位，某相取消时其位空置，不重排已预留的后续相位。`v0.58.x` 只收 fix。
+> 版本位按 AGENTS §0.3 的相位表：PH-54 已占 v0.54.0–v0.58.0，后续从 v0.59.0 起按下一个空位连续分配。
+> PH-60 为条件相位：无消费者则不立相，PH-62 与 PH-63 依次顺延，不空占版本位。`v0.58.x` 只收 fix。
 
 编号说明：Phase 55 / 56 / 58 不再作为 phase 存在（分别并入 PH-62、放弃、拆成 patch + 前置任务）；
 PH-61 已被 PH-62 吸收。**本轮不重排既有编号**；版本位与 phase 号的偏移问题见
