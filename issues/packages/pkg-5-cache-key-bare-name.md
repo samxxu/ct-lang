@@ -7,7 +7,7 @@
 | 严重度 | High |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`fetch_git`：`%s/.cache/ct-pkg/<name>`，`git fetch` 沿用已有 origin） |
-| 状态 | **open**；随 S1 一起修（[Phase 54 卡 §3](../../docs/design/phase54.md)） |
+| 状态 | **open**（PH-54 S1 未覆盖；`Pkg.h.ct:865` 缓存目录仍用裸名，`:885-899` 不校验 origin）；58 后重排列为 **P0**，先于其它包机制项 |
 
 ## 现象
 

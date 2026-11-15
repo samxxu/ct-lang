@@ -345,6 +345,12 @@
 | ID | 严重度 | 标题 | 文件 |
 | --- | --- | --- | --- |
 | PKG-2 | Medium | `ct install` 曾只打印 `-I vendor/<包名>`，包内单元在 `src/<ns>/` 时消费端照抄即报 `cannot resolve import`（**已解决**：v0.55.0 `ns-root`、v0.58.0 `ct build` 读 lock） | [pkg-2-ct-install-package-root-import.md](packages/pkg-2-ct-install-package-root-import.md) |
+| PKG-3 | Medium | `ct.pkg` 未知键（如 `ns-root`）被静默忽略；`ns-root` 已改为读取并硬错，未知键告警仍缺（**部分解决**） | [pkg-3-unknown-keys-silently-ignored.md](packages/pkg-3-unknown-keys-silently-ignored.md) |
+| PKG-4 | Medium | 依赖图内同名包静默取首个，无诊断（**已修**，PH-54 S2 / SP-006、SP-013） | [pkg-4-duplicate-package-name-silent-first.md](packages/pkg-4-duplicate-package-name-silent-first.md) |
+| PKG-5 | **High** | `ct get` 缓存键是裸包名，不同发布方的同名包互相串用（**open**，58 后 P0） | [pkg-5-cache-key-bare-name.md](packages/pkg-5-cache-key-bare-name.md) |
+| PKG-6 | Medium | `ct install` 不校验 import 解析，解析不到仍返回 0（**open**） | [pkg-6-install-does-not-validate-imports.md](packages/pkg-6-install-does-not-validate-imports.md) |
+| PKG-7 | Medium | `ct build` 不读 `ct.lock`，不自动补 `-I`（**已修**，PH-54 S2 / SP-008） | [pkg-7-build-does-not-read-lock.md](packages/pkg-7-build-does-not-read-lock.md) |
+| PKG-8 | Medium | 本地目录覆盖共享库时构建期无留痕（**已修**，PH-54 S2/S3 / SP-015） | [pkg-8-local-override-no-trace.md](packages/pkg-8-local-override-no-trace.md) |
 
 ### `lang/` —— 语言 / 编译器缺陷（2026-11-15 登记）
 
@@ -367,6 +373,7 @@
 | LANG-3 | Medium | `MAX_CALLS` 固定 1024、按整次构建累计、拆单元无效；每条 324 字节 | [lang-3-max-calls-fixed-cap.md](lang/lang-3-max-calls-fixed-cap.md) |
 | LANG-14 | Medium | struct 形参收到非 struct 实参只报 warning、由 cc 兜底（ct-json JSON-3，**已修** `struct_arg_from_charptr`） | [lang-14-charptr-to-struct-arg-warning.md](lang/lang-14-charptr-to-struct-arg-warning.md) |
 | LANG-16 | Medium | 诊断位置源过期：块注释后列号偏移、`1:-3788` 类负列（patch 0.53.16，与 PH-62 独立） | [lang-16-diagnostic-position-negative.md](lang/lang-16-diagnostic-position-negative.md) |
+| LANG-17 | **High**（静默） | 超长预处理行（`#define` / `#include` > 159 字节）被静默截断，截断点合法时全链路 rc=0 但语义已改（DF-1 转入） | [lang-17-preprocessor-line-truncation.md](lang/lang-17-preprocessor-line-truncation.md) |
 | LANG-10 | Medium（feature） | 诊断无可机读格式：门禁靠 `grep 'warning:'`、编辑器/CI 只能读人用文本，改文案即可能静默变绿 | [lang-10-machine-readable-diagnostics.md](lang/lang-10-machine-readable-diagnostics.md) |
 | LANG-12 | Medium（feature） | 自定义类型没有属性访问协议：`doc.server.host` 落到 C 字段规则，CT 放行、`cc` 报 `no member named` | [lang-12-property-access-protocol.md](lang/lang-12-property-access-protocol.md) |
 | LANG-15 | Medium（feature） | 枚举成员不能写 `FsErrCode::FS_ERR_OUT_OF_BOUNDS`：值位置 `Type::Member` 被当成命名空间变量（PH-57） | [lang-15-qualified-enum-member-value.md](lang/lang-15-qualified-enum-member-value.md) |

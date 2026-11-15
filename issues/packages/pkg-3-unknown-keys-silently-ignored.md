@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`read_manifest` 只认固定键）、[package-guide.md §8.4](../../docs/package-guide.md)（现状说明） |
-| 状态 | **open**；随 S1 一起修（[Phase 54 卡 §3](../../docs/design/phase54.md)） |
+| 状态 | **部分解决**（`ns-root` 已由 `pkg_read_identity` 读取，缺失/形态错误硬错；未知键仍无告警，`Pkg.h.ct:421-435` 只认 `name`/`version`/`dep`） |
 
 ## 现象
 

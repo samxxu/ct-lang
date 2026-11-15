@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`install()` 只校验摘要与 dep 覆盖） |
-| 状态 | **open**；随 S2 一起修（[Phase 54 卡 §3](../../docs/design/phase54.md)） |
+| 状态 | **open**（S2 只落了编译侧 `-I`，`Pkg.h.ct` 内无 `cannot resolve import` 的试解析）；58 后重排：紧随 PKG-5 |
 
 ## 现象
 

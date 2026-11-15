@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | `selfhost/ct-ast/frontend/module/Module.h.ct`（无 `ct.lock` 引用）、`selfhost/ct-ast/tool/driver/Driver.h.ct`（同样无） |
-| 状态 | **open**；随 S2 一起落地（[Phase 54 卡 §3](../../docs/design/phase54.md)） |
+| 状态 | **已修**（PH-54 S2：SP-008；`ct build` 默认读 `ct.lock` 并自动补 `-I`，显式 `-I` 优先） |
 
 ## 现象
 
