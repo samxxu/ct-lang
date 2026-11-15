@@ -157,16 +157,26 @@ C 库 `extern` 零回归、诊断区分类型/值位置。依赖 LANG-11 patch�
 | **0.53.4** | LANG-13：三级链 + `m["a"]["b"]` plain 链 | `doc["a"]["b"]["c"]` 与 `m["a"]?["b"]?["c"]` 通过；plain `m["a"]["b"]` 要么自动解引用、要么硬错并提示 `?[`；`test/ast/263` + 负例 | 依赖 0.53.2/0.53.3 |
 | **0.53.5** | LANG-14：`char *`→`Str` 诊断 | `take("k")` rc=1、不落 `.c`；`int*`↔`char*` 仍 warning；`str_from` 通过 | 依赖 0.53.2 |
 | **0.53.6** | LANG-11：同名 `.h.ct`/`.ct` 产物冲突 | 两单元工程 rc=0；每个 `.c` 只出现一次；`extern` 链接 | 独立（Pkg/Driver） |
-| **0.53.7** | LANG-8：`5.method()` 词法 | `5.method()`、`5.0`、`5..6` 三组 | 独立（Lexer） |
-| **0.53.8** | LANG-7：未声明变量诊断（先复验） | 指向变量名、行号正确；若已由 LANG-2 覆盖则关闭 | 独立 |
-| **0.53.9** | LANG-3：MAX_CALLS | 1025 调用点可编译；单文件/多单元一致；超限诊断 | 独立（l0/l1） |
-| **0.53.10** | LANG-9：struct 字段 ABI | 私有字段不进头；`pub` 字段进头；跨单元访问硬错 | **单独发**，冻结其它 header/Emitter 改动 |
-| **0.53.11** | SH-65（+SH-67 若同根） | 闭包字面量 / 先绑变量两种入口 rc=0 且 `cc` 过 | 依赖 0.53.4 |
-| **0.53.12** | SH-60 1a/1b（条件） | 视 D-60-1 裁定；未裁定不发 | 条件 |
+| **0.53.7** | SH-76：内置层缺失误诊为 `expected a field name`（安装相对探测 + 明确诊断） | 四条探针在无 cwd `lib/std` 时 rc=0；`B`/`H` 仍过；compile/build 结论一致；隐层负例点名 `CT_STD_DIR`、不写 `.c`；裸 `Map *` 仍报类型实参缺失 | 与 0.53.6 同为 `Driver/Module` 族，**必须串行**；若一并改 `Expr` 诊断，再排到 0.53.12 之后 |
+| **0.53.8** | LANG-8：`5.method()` 词法 | `5.method()`、`5.0`、`5..6` 三组 | 独立（Lexer） |
+| **0.53.9** | LANG-7：未声明变量诊断（先复验） | 指向变量名、行号正确；若已由 LANG-2 覆盖则关闭 | 独立 |
+| **0.53.10** | LANG-3：MAX_CALLS | 1025 调用点可编译；单文件/多单元一致；超限诊断 | 独立（l0/l1） |
+| **0.53.11** | LANG-9：struct 字段 ABI | 私有字段不进头；`pub` 字段进头；跨单元访问硬错 | **单独发**，冻结其它 header/Emitter 改动 |
+| **0.53.12** | SH-65（+SH-67 若同根） | 闭包字面量 / 先绑变量两种入口 rc=0 且 `cc` 过 | 依赖 0.53.4 |
+| **0.53.13** | SH-60 1a/1b（条件） | 视 D-60-1 裁定；未裁定不发 | 条件 |
+
+**SH-76 判定（新并入）**：v0.53.0 实测「无 `lib/std` / 未设 `CT_STD_DIR`」时 compile 与 build
+**同样**报 `1:15 expected a field name`，设上 `CT_STD_DIR` 或 cwd 放 `lib/std` 后**同样** rc=0——
+所以不是「L0 与 L2 两套解析器结论相反」。随附 `ctc` 是 `ct` 的符号链接，compile / build 共用
+`frontend/parse`；真正的分叉是冻结种子 `l0/ctc.c` 与 ct-ast 代际（L0 不依赖模板表）。根因是
+内置层探测只有 `CT_STD_DIR` / cwd / 输入同级三路，缺「安装相对」候选，且找不到时静默继续解析。
+与 LANG-11 同改 `Driver.h.ct` 但根因不同，**不合并**，只串行。
 
 **合并规则：** 只有同一 issue / 同一根因可合并。`LANG-5` 方法 + 字段 → 0.53.2；
-`SH-67` 若确认与 SH-65 同根 → 并入 0.53.11；其余一个 PATCH 一条，按 V-3 不攒批。
-**可并行开发：** LANG-6/8/9/11 文件族不重叠；发版仍串行。**必须串行：** LANG-5 → LANG-4 → LANG-13 → LANG-14 → SH-65（TypeCheck/Expr/Emitter/golden）。
+`SH-67` 若确认与 SH-65 同根 → 并入 0.53.12；其余一个 PATCH 一条，按 V-3 不攒批。
+**可并行开发：** LANG-8/9/3 与 TypeCheck 链文件族不重叠；发版仍串行。**必须串行：**
+LANG-5 → LANG-4 → LANG-13 → LANG-14 → SH-65（TypeCheck/Expr/Emitter/golden）；
+LANG-11 → SH-76（Driver/Module）。
 
 ---
 
@@ -178,6 +188,10 @@ C 库 `extern` 零回归、诊断区分类型/值位置。依赖 LANG-11 patch�
 4. **Map plain `[]` / `.field`**：当前静默发射坏 C；安全替代是 `?[` / `?.`，但 plain 形态仍应「可用或硬错」，不能留在 `cc`。
 5. **PH-54 版本位**：A 方案要改 roadmap 的 `v0.55–v0.60`；本轮只登记，不改 roadmap。
 6. **并行会话**：`TypeCheck` / `Emitter` / `main` / `Driver` / `Pkg` / `test/pkg` / `test/ast/263` 未触碰。
+7. **SH-76 索引行待补**：`issues/README.md` 当前有并行会话未提交的改动，本轮不写该文件；
+   SH-76 的索引行由并行改动落地后一并补，避免把别人的半成品带进本提交。
+8. **SH-76 环境证据**：现场「`ctc` 失败 / `ct build` 正常」在 v0.53.0 同 cwd 下不可复现；
+   已按「内置层找不到」复现两条路径。报告方需补 `ctc -v`、`ct -v`、`pwd`、`CT_STD_DIR` 才能定位其环境差异。
 
 ---
 
@@ -185,5 +199,6 @@ C 库 `extern` 零回归、诊断区分类型/值位置。依赖 LANG-11 patch�
 
 - 规则：[D-005](../decisions/D-005.md)；AGENTS §6.8 引用。
 - 本评估：`docs/planning/open-items-routing.md`。
-- 不改 `docs/roadmap.md`、`docs/design/phase53.md`、`docs/design/phase54.md`、`issues/**`、`selfhost/**`。
+- 新条目：[SH-76](../../issues/selfhost/sh76-builtin-layer-missing-misdiagnosis.md)（内置层缺失误诊）。
+- 不改 `docs/roadmap.md`、`docs/design/phase53.md`、`docs/design/phase54.md`、既有 `issues/**` 条目、`selfhost/**`。
 - 只本地提交，不 push、不打 tag。
