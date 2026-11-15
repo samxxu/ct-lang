@@ -44,11 +44,12 @@
 | [history/design/phase31.md](history/design/phase31.md) | 已完成的阶段计划（Phase 31）：接口值进容器（`Vec<Show>` / `Map<char *, Show>`）与嵌套容器的元素寿命与所有权、`v[i]` / `m[k]` 仅展开为 `get`、`Vec` / `Map` 花括号初值（E31-1–E31-23、L31-1–L31-21、D31-1–D31-17 见正文） |
 | [design/phase32-draft.md](design/phase32-draft.md) – [design/phase42-draft.md](design/phase42-draft.md) | 阶段草案（Phase 32–42，均已完成）：类型安全网 / 有界泛型 struct / 生态可用性 / 泛型 trait / 泛型 Drop 与 `Str` / trait 签名硬错与运行期契约 / `defer` / C ABI 与库制品 / `errdefer` 错误出口 / 原子并发（`atomic T`）/ `impl` 方法可见性；状态以 [roadmap.md](roadmap.md) 为准 |
 | [design/phase43.md](design/phase43.md) · [design/phase44.md](design/phase44.md) · [design/phase45.md](design/phase45.md) | 已完成（Phase 43–45）：43 错误出口类型契约 / 44 `?` 传播 / 45 闭包 `return` 与指针基类型判据；收口版本见 [roadmap.md](roadmap.md)；未立项评估结论与门禁欠账见 [planning/requirements-pool.md](planning/requirements-pool.md) |
-| [design/phase46-52-plan.md](design/phase46-52-plan.md) | 分期方案（Phase 46–52；46 / 47 已收口，48 起待实施）：排序依据、相间依赖、硬阻塞前置、裁定状态、本波不覆盖清单；**§10 交接说明、§11 缺陷与绕法、§12 实战限制、§13 裁决落地与 errata** |
-| [design/phase46-52-handoff.md](design/phase46-52-handoff.md) | 施工手册（给外部实现方；45–47 已收口，自 PH-48 起适用）：施工顺序、每卡入口条件与出口证据、门禁命令、禁止事项、收口五样证据 |
+| [design/phase46-52-plan.md](design/phase46-52-plan.md) | 分期方案（Phase 46–52；46–49 已收口，50 起待实施）：排序依据、相间依赖、硬阻塞前置、裁定状态、本波不覆盖清单；**§10 交接说明、§11 缺陷与绕法、§12 实战限制、§13 裁决落地与 errata、§14 远端文档债** |
+| [design/phase46-52-handoff.md](design/phase46-52-handoff.md) | 施工手册（给外部实现方；45–49 已收口，自 PH-50 起适用）：施工顺序、每卡入口条件与出口证据、门禁命令、禁止事项、收口五样证据 |
 | [reviews/phase46-52-freeze-verdict.md](reviews/phase46-52-freeze-verdict.md) | 定稿裁决：四组实测、73 条输入逐条结论（采纳 67 / 部分 6 / 不采纳 1）、5 条已于 2026-11-15 按建议值签字 |
 | [design/phase46.md](design/phase46.md) · [design/phase47.md](design/phase47.md) | 已完成（Phase 46–47）：46 `Map` 元素完整性 / 47 容器键协议（`Str` 键深拷贝）；收口版本见 [roadmap.md](roadmap.md) |
-| [design/phase48.md](design/phase48.md) · [design/phase49.md](design/phase49.md) · [design/phase50.md](design/phase50.md) · [design/phase51.md](design/phase51.md) · [design/phase52.md](design/phase52.md) | 规划中·已定稿（Phase 48–52，2026-11-15 签字，未实施）：Drop 语义闭环 / `own` 所有权转移 / 容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
+| [design/phase48.md](design/phase48.md) · [design/phase49.md](design/phase49.md) | 已完成（Phase 48–49）：48 Drop 语义闭环 / 49 `own` 所有权转移；收口版本见 [roadmap.md](roadmap.md) |
+| [design/phase50.md](design/phase50.md) · [design/phase51.md](design/phase51.md) · [design/phase52.md](design/phase52.md) | 规划中·已定稿（Phase 50–52，2026-11-15 签字，未实施）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
 | [proposals/ct-pkg-agent-runtime.md](proposals/ct-pkg-agent-runtime.md) | ct-pkg `std` 的 Agent 内核运行库提案：`arena` / `sync` / `result` / `string` / `callback` 契约与交付顺序 |
 | [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 记录（记录 / 待商定 / 暂不排期）：`?.` 是纯语法糖，最小版本只收指针接收者 + 字段访问；后续格与三个卡点留 battle |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |

@@ -71,12 +71,12 @@
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
 >
-> **Phase 45–47 已收口**（v0.45.0 / v0.46.0 / v0.47.0）；**Phase 48–52 已于 2026-11-15 签字定稿、待实施**：
+> **Phase 45–49 已收口**（v0.45.0–v0.49.0）；**Phase 50–52 已于 2026-11-15 签字定稿、待实施**：
 > 七张卡的结构、修法与可执行判据已按
 > [裁决记录](reviews/phase46-52-freeze-verdict.md)改定（73 条输入：采纳 67 / 部分 6 / 不采纳 1），
 > 五条待裁项全部按建议值签字。总排期与依赖见 [phase46-52-plan.md](design/phase46-52-plan.md)，
 > 施工入口见 [phase46-52-handoff.md](design/phase46-52-handoff.md)。
-> 45–47 的流程缺口（无 T-7 红证父提交、正文 `red: n/a`）已在
+> 45–49 的流程缺口（无 T-7 红证父提交、正文 `red: n/a`）已在
 > [plan §13.1](design/phase46-52-plan.md) 登记，不补造红证；
 > 数字下标（`v[0]`）的参数类型匹配登记为 [REQ-JSACCESS-1](planning/requirements-pool.md)，
 > 属「JS 风格访问」长期目标，**不占相号、不得砍掉**。`?.` 可选链按现形态已驳回；
