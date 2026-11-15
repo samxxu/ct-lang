@@ -109,7 +109,8 @@
 
 ### v0.58.0 之后的排期（2026-11-15 重排）
 
-逐项证据、依赖与放弃/合并理由见 [post-58-plan.md](planning/post-58-plan.md)。顺序：
+逐项证据、依赖与放弃/合并理由见 [post-58-plan.md](planning/post-58-plan.md)；
+可直接照着走的施工顺序见 [post-58-phase-sequence.md](planning/post-58-phase-sequence.md)。顺序：
 
 1. **静默错误 patch**：PKG-5（缓存键裸名）→ LANG-9（字段可见性）→ LANG-4（下标类型错配）
    → LANG-17（预处理行截断）→ LANG-5 字段形态 / LANG-11。
