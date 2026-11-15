@@ -339,6 +339,12 @@
 | SH-77 | Low | `ABI_HASH` 只覆盖导出名，判不出签名级漂移（已被 REQ-ABI-2 承接，不排期） | [sh77-abi-hash-name-only.md](selfhost/sh77-abi-hash-name-only.md) |
 | SH-78 | Medium | `--lib` 导出面只收根单元 `pub` 自由函数，`impl` 的 `pub` 方法不计入（设计口径，不排期） | [sh78-lib-export-free-functions-only.md](selfhost/sh78-lib-export-free-functions-only.md) |
 | SH-79 | **High** | `--emit-map` 两个 facet：`--lib` 不落文件、build 的 `file` 指向内置层（patch 0.53.8） | [sh79-build-lib-emit-map-silent.md](selfhost/sh79-build-lib-emit-map-silent.md) |
+| SH-80 | Medium | `ct pkg check` 只验四字段存在；`dep` 完整名与 `version`/tag 一致性未兑现 | [sh80-pkg-check-criteria-narrow.md](selfhost/sh80-pkg-check-criteria-narrow.md) |
+| SH-81 | Medium | 无索引解析器时限定名被当成 `https://<publisher>/<name>` 去 clone | [sh81-qualified-name-falls-back-to-url.md](selfhost/sh81-qualified-name-falls-back-to-url.md) |
+| SH-82 | **High**（静默） | `ct migrate` 打印缺字段错误后仍返回 0，调用方无法判断迁移失败 | [sh82-migrate-returns-zero-on-failure.md](selfhost/sh82-migrate-returns-zero-on-failure.md) |
+| SH-83 | Medium | `ct install` 打印的 `-I` 与 dev override 冲突，照抄即 `two import roots` | [sh83-install-printed-include-collides-with-override.md](selfhost/sh83-install-printed-include-collides-with-override.md) |
+| SH-84 | Medium | `ct verify --strict` 无本地开发态校验路径（现行为符合 SP-016，属能力缺口） | [sh84-verify-strict-no-dev-override-path.md](selfhost/sh84-verify-strict-no-dev-override-path.md) |
+| SH-85 | Medium | `ct pkg check` 扫描全部文本文件，文档示例中的绝对 `-I` 会误判整工程红 | [sh85-pkg-check-scans-docs.md](selfhost/sh85-pkg-check-scans-docs.md) |
 
 ### `packages/` —— CT 包管理工具缺陷
 
@@ -352,12 +358,6 @@
 | PKG-7 | Medium | `ct build` 不读 `ct.lock`，不自动补 `-I`（**已修**，PH-54 S2 / SP-008） | [pkg-7-build-does-not-read-lock.md](packages/pkg-7-build-does-not-read-lock.md) |
 | PKG-8 | Medium | 本地目录覆盖共享库时构建期无留痕（**已修**，PH-54 S2/S3 / SP-015） | [pkg-8-local-override-no-trace.md](packages/pkg-8-local-override-no-trace.md) |
 | PKG-9 | **High**（静默） | 清单缺 `publisher` / `ns-root` 时 `ct get` 不报错、rc=0，静默退回 v1 单行 lock；只有 `ct pkg check` 才报（**open**，建议 v0.58.2） | [pkg-9-missing-identity-fields-silent-v1-lock.md](packages/pkg-9-missing-identity-fields-silent-v1-lock.md) |
-| PKG-10 | Medium | `ct pkg check` 只校验四字段存在性：`licence` 缺失、`dep` 短名、不可满足的 `requires`、版本与 tag 不一致均通过 | [pkg-10-pkg-check-criteria-too-narrow.md](packages/pkg-10-pkg-check-criteria-too-narrow.md) |
-| PKG-11 | Medium | 无索引解析器时限定名退化成 `https://ct/http`，报 `git clone ... failed`，误导为网络问题 | [pkg-11-qualified-name-falls-back-to-url.md](packages/pkg-11-qualified-name-falls-back-to-url.md) |
-| PKG-12 | **High**（静默） | `ct migrate` 打印清单缺字段错误后仍返回 0，脚本会带着未迁移 vendor 继续 | [pkg-12-migrate-returns-zero-on-failure.md](packages/pkg-12-migrate-returns-zero-on-failure.md) |
-| PKG-13 | Medium | `ct install` 打印的 `-I` 与 dev override 冲突，照抄即 `unit ... exists in two import roots` | [pkg-13-install-printed-include-collides-with-override.md](packages/pkg-13-install-printed-include-collides-with-override.md) |
-| PKG-14 | Medium | `ct verify --strict` 拒绝 dev override，本地开发态无法严格校验 | [pkg-14-verify-strict-rejects-dev-override.md](packages/pkg-14-verify-strict-rejects-dev-override.md) |
-| PKG-15 | Medium | `ct pkg check` 扫描包内所有文本文件，文档示例中的 `-I /绝对路径` 会误判整包红 | [pkg-15-pkg-check-scans-all-text-files.md](packages/pkg-15-pkg-check-scans-all-text-files.md) |
 
 ### `lang/` —— 语言 / 编译器缺陷（2026-11-15 登记）
 
