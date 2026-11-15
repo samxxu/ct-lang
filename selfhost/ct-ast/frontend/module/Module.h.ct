@@ -107,6 +107,7 @@ pub trait ModuleOps {
     int  write_unit_header(int u);
     int  write_header(const char *outc);
     int  write_map(const char *dest, int prog, int u);
+    int  write_model(const char *dest, int prog);
 }
 
 pub struct Module {
@@ -149,6 +150,8 @@ pub struct Module {
     int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
     char map_path[1024];
     int  have_map;
+    char model_path[1024];
+    int  have_model;
     const char *prog;
     int  diag_json;             /* --diagnostics=json */
     int  diag_emitted;          /* build: warnings already printed before emit */
@@ -1251,6 +1254,7 @@ impl ModuleOps for Module {
         self->line_mode = 1;
         self->line_force = -1;
         self->have_map = 0;
+        self->have_model = 0;
         self->emit_c = 0;
         self->lib_mode = 0;
         self->lib_root = -1;
@@ -1267,7 +1271,7 @@ impl ModuleOps for Module {
                 printf("usage: %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
                        "                 [--locked] [--emit-c] [--lib] [--runtime-checks] [--outdir <dir>] [--cc <path>]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
-                       "                 [--line|--no-line] [--emit-map <file|->]\n"
+                       "                 [--line|--no-line] [--emit-map <file|->] [--emit-model <file|->]\n"
                        "                 [--diagnostics=text|json] [--std=c99|gnu99|c11]\n",
                        self->prog);
                 return 0;
@@ -1371,6 +1375,20 @@ impl ModuleOps for Module {
                     return 1;
                 }
                 self->have_map = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--emit-model") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ctc: --emit-model needs an argument\n");
+                    return 1;
+                }
+                i++;
+                if (snprintf(self->model_path, sizeof self->model_path, "%s", argv[i])
+                    >= (int)sizeof self->model_path) {
+                    fprintf(stderr, "ctc: model path is too long\n");
+                    return 1;
+                }
+                self->have_model = 1;
                 continue;
             }
             if (strcmp(argv[i], "-o") == 0) {
@@ -1822,6 +1840,9 @@ impl ModuleOps for Module {
         if (self->have_map && self->write_map(self->map_path, self->units[0].prog, 0) != 0) {
             return frontend::parse::ct_parse_report();
         }
+        if (self->have_model && self->write_model(self->model_path, self->units[0].prog) != 0) {
+            return frontend::parse::ct_parse_report();
+        }
         if (!self->diag_emitted && tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;
         if (self->emit_c) {
             /* The old shape, unchanged: print the suggested line, run nothing.
@@ -1980,6 +2001,17 @@ cmd_too_long:
     {
         const char *why;
         if (backend::emit::ct_emit_map(dest, prog, u) != 0) {
+            why = backend::emit::ct_emit_last_error();
+            if (why[0]) return self->fail(why);
+            return -1;
+        }
+        return 0;
+    }
+
+    int write_model(const char *dest, int prog)
+    {
+        const char *why;
+        if (backend::emit::ct_emit_model(dest, prog) != 0) {
             why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail(why);
             return -1;

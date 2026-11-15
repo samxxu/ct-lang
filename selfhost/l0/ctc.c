@@ -58,7 +58,7 @@
 #define MAX_DEPTH  8
 #define MAX_FUNCS  64
 
-#define CTC_VERSION "0.59.0"
+#define CTC_VERSION "0.60.0"
 
 /* ---------------------------------------------------------------- data */
 

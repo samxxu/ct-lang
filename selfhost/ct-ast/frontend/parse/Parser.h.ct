@@ -1938,6 +1938,8 @@ impl ParseOps for Parser {
                          "%s", self->arena->nodes[m].text);
                 snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].dims, MAX_TEXT,
                          "%s", self->arena->nodes[m].text3);
+                self->sym->structs[si].fields[self->sym->structs[si].nfields].line =
+                    self->arena->nodes[m].line;
                 self->sym->structs[si].nfields++;
             } else {
                 /* silently dropping the 65th field would skip its vptr and
@@ -1958,6 +1960,7 @@ impl ParseOps for Parser {
             snprintf(self->pend_fields[self->npend].name, MAX_TEXT, "%s", nm);
             snprintf(self->pend_fields[self->npend].type, MAX_TEXT, "%s", self->arena->nodes[m].text);
             snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", self->arena->nodes[m].text3);
+            self->pend_fields[self->npend].line = self->arena->nodes[m].line;
             self->npend++;
         } else {
             snprintf(msg, sizeof msg, "too many fields in a record (limit %d)", MAX_FIELDS);

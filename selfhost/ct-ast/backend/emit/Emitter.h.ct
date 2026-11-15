@@ -164,6 +164,7 @@ trait EmitOps {
     int  emit_vtable_fwd(int prog);
     int  header_guard(const char *base, char *out, int cap);
     int  write_map(const char *dest, int prog, int u);
+    int  write_model(const char *dest, int prog);
     int  emit_json_str(FILE *f, const char *s);
     int  emit_node(int n, int ind);
     int  emit_field(int n, int ind);
@@ -5612,6 +5613,138 @@ impl EmitOps for Emitter {
     /* `--emit-map`: the published JSON shape (compiler / file / traits /
        structs / functions / impls / calls). `u < 0` means compile mode, where
        the tables cover the single unit. */
+    /* PH-59 M1: the language-neutral declaration model. Deliberately narrower
+       than the map: struct/union fields, enum members and function signatures.
+       `visibility` stays `unknown` until LANG-9 lands; `loc` carries file+line
+       (LANG-10 7c's column is the documented degradation). */
+    int write_model(const char *dest, int prog)
+    {
+        FILE *f;
+        const char *path;
+        int n, i, j, first;
+        (void)self;
+
+        if (strcmp(dest, "-") == 0) {
+            f = stdout;
+        } else {
+            f = fopen(dest, "w");
+            if (!f) return self->fail("cannot write the model");
+        }
+        path = self->path;
+        fputs("{\n  \"schema\": \"ct.model\",\n  \"schema_version\": 1,\n", f);
+        fputs("  \"compiler\": \"ct v", f);
+        self->emit_json_str(f, self->version);
+        fputs("\",\n  \"file\": \"", f);
+        self->emit_json_str(f, path);
+        fputs("\",\n  \"structs\": [", f);
+
+        first = 1;
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            int si, bi, bn, skip = 0;
+            if (self->arena->nodes[n].kind != N_STRUCT
+                && self->arena->nodes[n].kind != N_UNION) continue;
+            for (bi = 0; bi < self->nbuiltin && !skip; bi++) {
+                int bu = self->builtins[bi];
+                if (bu < 0 || bu >= *self->nunits) continue;
+                for (bn = self->arena->nodes[self->units[bu].prog].a; bn >= 0;
+                     bn = self->arena->nodes[bn].next)
+                    if (bn == n) { skip = 1; break; }
+            }
+            if (skip) continue;
+            if (strcmp(self->arena->nodes[n].text2, "ct_buf") == 0
+                || strcmp(self->arena->nodes[n].text2, "Vec") == 0
+                || strcmp(self->arena->nodes[n].text2, "Map") == 0
+                || strcmp(self->arena->nodes[n].text2, "MapEntry") == 0
+                || strcmp(self->arena->nodes[n].text2, "Option") == 0
+                || strcmp(self->arena->nodes[n].text2, "Result") == 0
+                || strcmp(self->arena->nodes[n].text2, "Str") == 0) continue;
+            if (!first) fputc(',', f);
+            fputs("{\"kind\":\"", f);
+            fputs(self->arena->nodes[n].kind == N_UNION ? "union" : "struct", f);
+            fputs("\",\"name\":\"", f);
+            self->emit_json_str(f, self->arena->nodes[n].text2);
+            fputs("\",\"file\":\"", f);
+            self->emit_json_str(f, path);
+            fprintf(f, "\",\"line\":%d,\"fields\":[", self->arena->nodes[n].line);
+            si = self->sym->find_struct(self->arena->nodes[n].text2);
+            if (si >= 0) {
+                for (i = 0; i < self->sym->structs[si].nfields; i++) {
+                    if (i > 0) fputc(',', f);
+                    fputs("{\"name\":\"", f);
+                    self->emit_json_str(f, self->sym->structs[si].fields[i].name);
+                    fputs("\",\"type\":\"", f);
+                    self->emit_json_str(f, self->sym->structs[si].fields[i].type);
+                    fputs("\",\"visibility\":\"unknown\",\"loc\":{\"file\":\"", f);
+                    self->emit_json_str(f, path);
+                    fprintf(f, "\",\"line\":%d}}",
+                            self->sym->structs[si].fields[i].line);
+                }
+            }
+            fputs("]}", f);
+            first = 0;
+        }
+        fputs("],\n  \"enums\": [", f);
+        first = 1;
+        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            int m, bi, bn, skip = 0;
+            if (self->arena->nodes[n].kind != N_ENUM) continue;
+            for (bi = 0; bi < self->nbuiltin && !skip; bi++) {
+                int bu = self->builtins[bi];
+                if (bu < 0 || bu >= *self->nunits) continue;
+                for (bn = self->arena->nodes[self->units[bu].prog].a; bn >= 0;
+                     bn = self->arena->nodes[bn].next)
+                    if (bn == n) { skip = 1; break; }
+            }
+            if (skip) continue;
+            if (!first) fputc(',', f);
+            fputs("{\"kind\":\"enum\",\"name\":\"", f);
+            self->emit_json_str(f, self->arena->nodes[n].text);
+            fputs("\",\"file\":\"", f);
+            self->emit_json_str(f, path);
+            fprintf(f, "\",\"line\":%d,\"members\":[", self->arena->nodes[n].line);
+            for (m = self->arena->nodes[n].a, i = 0; m >= 0; m = self->arena->nodes[m].next, i++) {
+                int val = 0;
+                if (i > 0) fputc(',', f);
+                if (self->arena->nodes[m].a >= 0
+                    && self->arena->nodes[self->arena->nodes[m].a].kind == N_NUM)
+                    val = (int)self->arena->nodes[self->arena->nodes[m].a].num;
+                fputs("{\"name\":\"", f);
+                self->emit_json_str(f, self->arena->nodes[m].text2);
+                fprintf(f, "\",\"value\":%d}", val);
+            }
+            fputs("]}", f);
+            first = 0;
+        }
+        fputs("],\n  \"functions\": [", f);
+        first = 1;
+        for (i = 0; i < self->sym->nfunc; i++) {
+            if (strncmp(self->sym->funcs[i].name, "str_", 4) == 0
+                || strncmp(self->sym->funcs[i].name, "vec_", 4) == 0
+                || strncmp(self->sym->funcs[i].name, "map_", 4) == 0
+                || strncmp(self->sym->funcs[i].name, "option_", 7) == 0
+                || strncmp(self->sym->funcs[i].name, "result_", 7) == 0) continue;
+            if (!first) fputc(',', f);
+            fputs("{\"name\":\"", f);
+            self->emit_json_str(f, self->sym->funcs[i].name);
+            fputs("\",\"cname\":\"", f);
+            self->emit_json_str(f, self->sym->funcs[i].cname);
+            fputs("\",\"visibility\":\"unknown\",\"returns\":\"", f);
+            self->emit_json_str(f, self->sym->funcs[i].ret);
+            fprintf(f, "\",\"line\":%d,\"params\":[", self->sym->funcs[i].line);
+            for (j = 0; j < self->sym->funcs[i].nparams; j++) {
+                if (j > 0) fputc(',', f);
+                fputs("{\"type\":\"", f);
+                self->emit_json_str(f, self->sym->funcs[i].ptype[j]);
+                fputs("\"}", f);
+            }
+            fputs("]}", f);
+            first = 0;
+        }
+        fputs("]\n}\n", f);
+        if (f != stdout && fclose(f) != 0) return self->fail("cannot write the model");
+        return 0;
+    }
+
     int write_map(const char *dest, int prog, int u)
     {
         FILE *f;
@@ -6210,6 +6343,12 @@ pub int ct_emit_map(const char *dest, int prog, int u);
 int ct_emit_map(const char *dest, int prog, int u)
 {
     return g_emit.write_map(dest, prog, u);
+}
+
+pub int ct_emit_model(const char *dest, int prog);
+int ct_emit_model(const char *dest, int prog)
+{
+    return g_emit.write_model(dest, prog);
 }
 
 pub const char *ct_emit_last_error(void);

@@ -236,6 +236,7 @@ pub struct Trait {
 pub struct Field {
     char name[160];
     char type[160];
+    int  line;                  /* PH-59: declaration line for the model export */
     /* array dims (`[2]`, `[N]`): a designated initialiser cannot reach an
        element, so such a field's vptrs are written by a loop instead */
     char dims[160];

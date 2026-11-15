@@ -1,0 +1,19 @@
+namespace demo;
+
+pub enum Kind { KIND_SMALL = 1, KIND_LARGE = 7 }
+
+pub struct Box {
+    int value;
+    int hidden;
+    enum Kind kind;
+}
+
+pub int box_get(struct Box *b)
+{
+    return b->value;
+}
+
+pub int box_add(struct Box *b, int n)
+{
+    return b->value + n;
+}

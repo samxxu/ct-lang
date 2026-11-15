@@ -278,7 +278,7 @@ impl DriverOps for Driver {
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s <input.ct> [-o <output.c>] [--line|--no-line]\n"
-                       "              [--emit-map <file|->] [--diagnostics=text|json] [--std=c99|gnu99|c11]\n"
+                       "              [--emit-map <file|->] [--emit-model <file|->] [--diagnostics=text|json] [--std=c99|gnu99|c11]\n"
                        "       %s check <input.ct> [--types] [--diagnostics=text|json] [--std=c99|gnu99|c11]\n"
                        "       %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>] [--locked]\n"
                        "                 [--emit-c] [--outdir <dir>] [--cc <path>]\n"
@@ -408,6 +408,20 @@ impl DriverOps for Driver {
                     return 1;
                 }
                 self->m->have_map = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--emit-model") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ctc: --emit-model needs an argument\n");
+                    return 1;
+                }
+                i++;
+                if (snprintf(self->m->model_path, sizeof self->m->model_path, "%s", argv[i])
+                    >= (int)sizeof self->m->model_path) {
+                    fprintf(stderr, "ctc: model path is too long\n");
+                    return 1;
+                }
+                self->m->have_model = 1;
                 continue;
             }
             if (strcmp(argv[i], "-o") == 0) {
@@ -591,6 +605,9 @@ impl DriverOps for Driver {
             return frontend::parse::ct_parse_report();
         }
         if (self->m->have_map && self->m->write_map(self->m->map_path, prog, -1) != 0) {
+            return frontend::parse::ct_parse_report();
+        }
+        if (self->m->have_model && self->m->write_model(self->m->model_path, prog) != 0) {
             return frontend::parse::ct_parse_report();
         }
         if (tool::diag::ct_diag_emit(self->m->diag_json, 0) != 0) return 1;

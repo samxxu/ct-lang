@@ -1,6 +1,6 @@
 # Phase 59 · 模型导出 `--emit-model`（S0：无 import 单单元端到端）
 
-**状态：规划中**（已立项，待实施；M1 = 无 import 单单元端到端）
+**状态：完成**（v0.60.0；M1 = 无 import 单单元端到端）
 
 | 项 | 值 |
 | --- | --- |
@@ -114,3 +114,11 @@ red: rc=<N>, "<失败文案>"
 
 **已定降级路径**（写死于此，不属未决）：LANG-10 7c 若滑期，J11 降为「`loc` 只带 `file` + `line`」，并在 golden 与卡内显式标注缺 `col`；
 **不得**退回「不写 `loc`」——那等于把回指卖点从首版摘掉，且日后补要 +1 schema 大版本。
+
+## 9. 收口记录（2026-11-16，v0.60.0）
+
+- `--emit-model <file>` 输出 `schema=ct.model`、`schema_version=1`；
+- struct 全字段（含私有 + `loc.file`/`line`，列按降级路径省略）、枚举成员与值、函数签名；
+- 内置 `Str`/`Vec`/`Map`/`Option`/`Result` 未进入模型；
+- `test/model/run.sh` 12/0：信封、字段、枚举、函数、相对路径、确定性、E2E、负例；
+- `check-all` 11/11。
