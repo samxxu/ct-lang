@@ -357,6 +357,7 @@
 | LANG-1 | **High** | `.h.ct` 单元函数体内 `defer` / `errdefer` 被后缀检查拒绝；`.m.ct` 不可达属另一限制 | [lang-1-hct-defer-errdefer-rejected.md](lang/lang-1-hct-defer-errdefer-rejected.md) |
 | LANG-2 | **High** | 带 `namespace` 的单元里静态固有方法不可用（同单元/跨单元均失败，实例方法正常） | [lang-2-namespaced-static-method-unresolved.md](lang/lang-2-namespaced-static-method-unresolved.md) |
 | LANG-5 | **High**（字段形态静默） | 方法/下标结果不能作接收者：方法形态硬错、`x["k"].field` 静默产出坏 C；多级链受单层限制 | [lang-5-result-as-receiver.md](lang/lang-5-result-as-receiver.md) |
+| LANG-9 | **High**（ABI 锁死 + 静默） | 结构体字段（含非 `pub`）全部进生成头；字段级 `pub` 被原样发射成非法 C 且 ct-ast 退出 0 | [lang-9-struct-field-visibility-abi.md](lang/lang-9-struct-field-visibility-abi.md) |
 | LANG-6 | Medium | `ct install` 只打印 `-I vendor/<包名>`，`src/` 布局的包消费方报 `cannot resolve import` | **并入 [PKG-2](packages/pkg-2-ct-install-package-root-import.md)**（不另立文件） |
 | LANG-3 | Medium | `MAX_CALLS` 固定 1024、按整次构建累计、拆单元无效；每条 324 字节 | [lang-3-max-calls-fixed-cap.md](lang/lang-3-max-calls-fixed-cap.md) |
 | LANG-7 | Low | 静态方法解析失败报 `use of an undeclared variable`，列号指向类型名 | [lang-7-undeclared-variable-points-at-type.md](lang/lang-7-undeclared-variable-points-at-type.md) |
