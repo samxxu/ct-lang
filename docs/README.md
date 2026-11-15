@@ -35,6 +35,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [roadmap.md](roadmap.md) | 简要阶段表：阶段 / 主题 / 状态 / 收口版本 / 详情入口 |
+| [planning/post-58-plan.md](planning/post-58-plan.md) | v0.58.0 之后的重排评估：在册项矩阵、依赖、顺序与并行、放弃/合并清单、编号断裂与待裁定 | 决定 58 之后先做什么、哪些不做 |
 | [history/phase-log.md](history/phase-log.md) | 逐相流水账：Phase 0–42 的详细记录、版本记录、已定决策与待定项 |
 | [history/design/phase20.md](history/design/phase20.md) · [history/design/phase21.md](history/design/phase21.md) · [history/design/phase24.md](history/design/phase24.md) · [history/design/phase25.md](history/design/phase25.md) · [history/design/phase26.md](history/design/phase26.md) | 已完成的阶段计划（Phase 20–26）：包支持 / 非逃逸栈闭包 / `loop` 语法糖 / `loop(a..b)` 范围 / 数组 range 初值 / 静态映射调用的闭包实参 / 泛型函数；phase17、phase18、phase19、phase22、phase23 与 phase25–phase31 已按 DOC-66 归档到 [history/design/](history/design/) |
 | [history/design/phase27.md](history/design/phase27.md) | 已完成的阶段记录（Phase 27）：`foreach` 语句形态（数组形态已实现，容器协议由 Phase 29 解冻；语法、展开规则与决策见正文） |
@@ -53,7 +54,7 @@
 | [design/phase53.md](design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
 | [proposals/ct-model-export-proposal.md](proposals/ct-model-export-proposal.md) | 模型导出 `--emit-model` 提案（Phase 59 依据） | 查看编译器模型导出设计 |
 | [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 设计记录（已定稿为施工卡）：`?.` 的语义、切词策略、值接收者裁定与 battle 结论；施工以 [design/phase53.md](design/phase53.md) 为准 |
-| [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（未立项、待排期）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
+| [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（**已并入 PH-62**）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
 | [proposals/defect-namespaced-static-method.md](proposals/defect-namespaced-static-method.md) | 缺陷请求（待修）：带 `namespace` 的单元里静态固有方法报 `use of an undeclared variable`；含两种最小复现、边界表、名字解析定位、下游绕法与 N1–N5 判据 |
 | [reviews/max-calls-limit.md](reviews/max-calls-limit.md) | 只读核对：`MAX_CALLS` 1024 的计数口径（按已解析自由函数调用表达式）、固定表成因（无「禁止动态分配」证据）、按需增长的改动面与外部包余量实测 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
