@@ -208,14 +208,20 @@ ct build -I vendor/fsguard main.ct -o build
   新包不要再写它，两者语义相反：`namespace` 剥掉 import 首段，`ns-root` 给根目录加一层前缀。
 - `ct build --ns-root <dir>` 仍是独立的单元格级目录校验，与清单键无关。
 
-#### 8.5 共享库（S1）与仍未做的部分
+#### 8.5 共享库与构建（S1/S2）
 
 - store：`$CT_HOME/pkg/<publisher>/<name>/<version>/`（`CT_HOME` 默认 `$HOME/.ct`）；同版本重装
   摘要相同即 no-op、不同即硬错且不覆盖；不同版本目录可并存。
 - `ct get` 仍写 `vendor/<name>` 兼容旧工程；v2 lock 每行七字段
   `<pub>/<name> <version> <type> <locator> <commit|-> <ns-root> <sha256:…>`。
-- 缓存键仍是**裸包名**（`~/.cache/ct-pkg/<name>`）；S2 才处理依赖图同名包与 `ct build` 读 lock。
-- `ct build` **仍不读 `ct.lock`**；`ct install` 已按 v2 输出 store `-I`。
-- 本地目录与 `-I` 同名时仍静默胜出；`ct get` 不因项目已有同名目录而跳过下载（S2 dev override 留痕）。
+- **`ct build` 默认读 `./ct.lock`**：v2 git 行自动补 `-I $CT_HOME/pkg/<pkg>/<ver>/<ns-root>`，
+  v2 `dir` 行使用本地路径并在 stderr 打 `note: '<pkg>' resolves to the local directory (dev override)`。
+  用户显式 `-I` 仍然有效且排在前面；重复根由既有导入规则去重。
+- `ct build --locked`：store 缺失报 `is not installed`、摘要不符报 `does not match ct.lock`，不回退；
+  无 lock 或 v1 lock 也直接失败。
+- 无 `ct.lock`：回退 `vendor/<name>` 并**只**打一次
+  `warning: no ct.lock; reading vendor/ (legacy layout)`；既无 lock 也无 vendor 时保持安静。
+- lock 内同一裸包名出现两行（不论发布方）→ `package '<name>' is required twice: a/<name> and b/<name>`。
+- 仍未做：`ct verify --strict` / `ct migrate`（S3）、dev override 在 lock 之外的构建期校验、缓存键按发布方隔离。
 - 逐条缺陷见 [PKG-3 … PKG-8](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)。
 

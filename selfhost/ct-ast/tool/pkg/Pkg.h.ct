@@ -2194,7 +2194,7 @@ static int pkg_verify_lock(const char *prog, char lname[][MAX_TEXT], char lver[]
     FILE *f;
     char line[MAX_PKG_LINE];
     char vdir[MAX_PKG_PATH], vdig[80];
-    int rc;
+    int rc, i, j;
 
     *nlock = 0;
     rc = 0;
@@ -2280,6 +2280,18 @@ static int pkg_verify_lock(const char *prog, char lname[][MAX_TEXT], char lver[]
     }
     if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot read './ct.lock'\n"); return 1; }
     if (*nlock == 0) { fprintf(stderr, "ctc: ct.lock is empty\n"); return 1; }
+    /* SP-006/SP-013: one row per package; two rows sharing the bare name are a
+       hard error even under different publishers. */
+    for (i = 0; i < *nlock; i++)
+        for (j = i + 1; j < *nlock; j++) {
+            const char *bi = strrchr(lname[i], '/');
+            const char *bj = strrchr(lname[j], '/');
+            if (strcmp(bi ? bi + 1 : lname[i], bj ? bj + 1 : lname[j]) == 0) {
+                fprintf(stderr, "ctc: package '%s' is required twice: %s and %s\n",
+                        bi ? bi + 1 : lname[i], lname[i], lname[j]);
+                return 1;
+            }
+        }
     return rc;
 }
 
@@ -2469,6 +2481,179 @@ static int pkg_verify(const char *prog)
 
 /* ---- S0: lock format recognition -------------------------------------- */
 
+/* S2: the build-time lock reader. The driver calls this before `build_main`
+   and appends every root as an explicit `-I` (after the user's own flags), so
+   import resolution and the existing duplicate/clash rules stay unchanged.
+   `locked` is `--locked`: store presence and digest are then strict. */
+pub int ct_pkg_lock_roots(const char *prog, int locked, char *roots, int *nroots, char *notes, int *nnotes);
+int ct_pkg_lock_roots(const char *prog, int locked, char *roots, int *nroots, char *notes, int *nnotes)
+{
+    FILE *f;
+    char line[MAX_PKG_LINE];
+    char head[64];
+    char full[MAX_PKG_DEPS][MAX_PKG_PATH];
+    char bare[MAX_PKG_DEPS][MAX_TEXT];
+    char ver[MAX_PKG_DEPS][32];
+    char typ[MAX_PKG_DEPS][16];
+    char loc[MAX_PKG_DEPS][MAX_PKG_PATH];
+    char nsr[MAX_PKG_DEPS][MAX_PKG_PATH];
+    char dig[MAX_PKG_DEPS][80];
+    int nrow, fmt, i, j;
+    DIR *d;
+    struct dirent *e;
+    struct stat st;
+
+    *nroots = 0;
+    *nnotes = 0;
+    f = fopen("./ct.lock", "r");
+    if (f == NULL) {
+        if (locked) {
+            fprintf(stderr, "ctc: no './ct.lock'; --locked needs a lock\n");
+            return 1;
+        }
+        d = opendir("./vendor");
+        if (d != NULL) {
+            while ((e = readdir(d)) != NULL) {
+                char p[MAX_PKG_PATH];
+                if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+                if (snprintf(p, sizeof p, "./vendor/%s", e->d_name) >= (int)sizeof p) continue;
+                if (stat(p, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+                if (*nroots >= MAX_PKG_DEPS) {
+                    fprintf(stderr, "ctc: too many vendored packages\n");
+                    closedir(d);
+                    return 1;
+                }
+                snprintf(roots + (*nroots) * 512, 512, "%s", p);
+                (*nroots)++;
+            }
+            closedir(d);
+        }
+        if (*nroots > 0)
+            fprintf(stderr, "ctc: warning: no ct.lock; reading vendor/ (legacy layout)\n");
+        return 0;
+    }
+    fmt = 1;
+    if (fgets(head, sizeof head, f) != NULL
+        && strncmp(head, "# ct-lock 2", 11) == 0
+        && (head[11] == '\n' || head[11] == '\r' || head[11] == 0))
+        fmt = 2;
+    else
+        rewind(f);
+    if (locked && fmt == 1) {
+        fprintf(stderr, "ctc: ct.lock is v1 (no '# ct-lock 2' header); --locked requires v2\n");
+        fclose(f);
+        return 1;
+    }
+    nrow = 0;
+    while (fgets(line, sizeof line, f) != NULL) {
+        char *tok[12];
+        char *p;
+        int ntok;
+        size_t ll;
+        ntok = 0;
+        p = line;
+        ll = strlen(line);
+        while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) {
+            ll = ll - 1;
+            line[ll] = 0;
+        }
+        while (*p) {
+            while (*p == ' ' || *p == '\t') p++;
+            if (!*p) break;
+            if (ntok < 12) {
+                tok[ntok] = p;
+                ntok++;
+            }
+            while (*p && *p != ' ' && *p != '\t') p++;
+            if (*p) {
+                *p = 0;
+                p++;
+            }
+        }
+        if (ntok == 0 || tok[0][0] == '#' || ntok < 4) continue;
+        if (nrow >= MAX_PKG_DEPS) {
+            fprintf(stderr, "ctc: ct.lock lists more than %d packages\n", MAX_PKG_DEPS);
+            fclose(f);
+            return 1;
+        }
+        snprintf(full[nrow], MAX_PKG_PATH, "%s", tok[0]);
+        {
+            const char *ls = strrchr(tok[0], '/');
+            snprintf(bare[nrow], MAX_TEXT, "%s", ls ? ls + 1 : tok[0]);
+        }
+        snprintf(ver[nrow], 32, "%s", tok[1]);
+        typ[nrow][0] = 0;
+        loc[nrow][0] = 0;
+        nsr[nrow][0] = 0;
+        dig[nrow][0] = 0;
+        if (ntok >= 7) {
+            snprintf(typ[nrow], 16, "%s", tok[2]);
+            snprintf(loc[nrow], MAX_PKG_PATH, "%s", tok[3]);
+            snprintf(nsr[nrow], MAX_PKG_PATH, "%s", tok[5]);
+            snprintf(dig[nrow], 80, "%s", tok[6]);
+        }
+        nrow++;
+    }
+    fclose(f);
+    if (nrow == 0) {
+        fprintf(stderr, "ctc: ct.lock is empty\n");
+        return 1;
+    }
+    /* SP-006/SP-013: the graph pins one version per package, so two rows with
+       the same bare name (any publisher) are a hard error before any store
+       lookup can mask it. */
+    for (i = 0; i < nrow; i++)
+        for (j = i + 1; j < nrow; j++)
+            if (strcmp(bare[i], bare[j]) == 0) {
+                fprintf(stderr, "ctc: package '%s' is required twice: %s and %s\n",
+                        bare[i], full[i], full[j]);
+                return 1;
+            }
+    for (i = 0; i < nrow; i++) {
+        if (typ[i][0] == 0) {
+            /* v1: vendor/<name> stays the include root. */
+            snprintf(roots + (*nroots) * 512, 512, "vendor/%s", full[i]);
+            (*nroots)++;
+            continue;
+        }
+        if (strcmp(typ[i], "dir") == 0) {
+            if (strcmp(nsr[i], ".") == 0)
+                snprintf(roots + (*nroots) * 512, 512, "%s", loc[i]);
+            else
+                snprintf(roots + (*nroots) * 512, 512, "%s/%s", loc[i], nsr[i]);
+            snprintf(notes + (*nnotes) * 512, 512,
+                     "'%s' resolves to the local directory (dev override): %s",
+                     full[i], loc[i]);
+            (*nnotes)++;
+            (*nroots)++;
+        } else if (strcmp(typ[i], "git") == 0) {
+            char sdir[MAX_PKG_PATH], sdig[80];
+            if (pkg_store_pkgdir(full[i], ver[i], sdir, sizeof sdir) != 0) return 1;
+            if (stat(sdir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+                fprintf(stderr, "ctc: '%s' is not installed at '%s'\n", full[i], sdir);
+                return 1;
+            }
+            if (locked) {
+                if (g_pkg.dir_digest(sdir, sdig, sizeof sdig) != 0
+                    || strcmp(sdig, dig[i]) != 0) {
+                    fprintf(stderr, "ctc: '%s' does not match ct.lock\n", full[i]);
+                    return 1;
+                }
+            }
+            if (strcmp(nsr[i], ".") == 0)
+                snprintf(roots + (*nroots) * 512, 512, "%s", sdir);
+            else
+                snprintf(roots + (*nroots) * 512, 512, "%s/%s", sdir, nsr[i]);
+            (*nroots)++;
+        } else {
+            fprintf(stderr, "ctc: ct.lock row '%s' has an unknown source type '%s'\n",
+                    full[i], typ[i]);
+            return 1;
+        }
+    }
+    (void)prog;
+    return 0;
+}
 /* Only primitives cross the unit boundary (the same shape L2 uses for core.ct):
    the driver hands over its name and the version string, then dispatches. */
 pub int ct_pkg_get(int argc, char **argv, const char *prog, const char *version);

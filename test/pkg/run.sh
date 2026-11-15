@@ -1103,6 +1103,123 @@ else
 fi
 
 echo
+echo "== S2: build reads ct.lock =="
+S2="$work/s2"
+mkdir -p "$S2/home" "$S2/cthome" "$S2/pkg/src" "$S2/proj"
+printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S2/pkg/ct.pkg"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S2/pkg/src/p.h.ct"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkg@^0.1.0\n' >"$S2/proj/ct.pkg"
+printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$S2/proj/main.ct"
+if ( cd "$S2/proj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" get ../pkg >"$S2/g.out" 2>"$S2/g.err" ); then
+    ok "S2 fixture get exits 0"
+else
+    bad "S2 fixture get" "$(cat "$S2/g.err")"
+fi
+# Turn the dir row into a store-backed git row: build never reads the URL, only
+# the package/version/ns-root/digest fields.
+awk 'NR>1 && $1=="ct/p" { print "ct/p 0.1.0 git file:///nonexistent deadbeef " $6 " " $7; next } { print }' \
+    "$S2/proj/ct.lock" >"$S2/proj/ct.lock.tmp" && mv "$S2/proj/ct.lock.tmp" "$S2/proj/ct.lock"
+if ( cd "$S2/proj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" build main.ct -o "$S2/app" >"$S2/b.out" 2>"$S2/b.err" ) \
+   && [ "$("$S2/app")" = "42" ]; then
+    ok "S2 build auto-adds the store ns-root -I"
+else
+    bad "S2 build store" "$(cat "$S2/b.out" "$S2/b.err")"
+fi
+if ( cd "$S2/proj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" build main.ct -o "$S2/app2" --locked >"$S2/l.out" 2>"$S2/l.err" ); then
+    ok "S2 --locked accepts a matching store"
+else
+    bad "S2 --locked" "$(cat "$S2/l.out" "$S2/l.err")"
+fi
+printf x >>"$S2/cthome/pkg/ct/p/0.1.0/src/p.h.ct"
+if ( cd "$S2/proj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" build main.ct -o "$S2/app3" --locked >"$S2/t.out" 2>"$S2/t.err" ); then
+    bad "S2 --locked tamper" "a tampered store passed --locked"
+elif grep -Fq "does not match ct.lock" "$S2/t.err"; then
+    ok "S2 --locked rejects a store digest mismatch"
+else
+    bad "S2 --locked tamper" "wrong diagnostic: $(cat "$S2/t.err")"
+fi
+rm -rf "$S2/cthome/pkg/ct/p"
+if ( cd "$S2/proj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" build main.ct -o "$S2/app4" --locked >"$S2/m.out" 2>"$S2/m.err" ); then
+    bad "S2 --locked missing" "a missing store passed --locked"
+elif grep -Fq "is not installed" "$S2/m.err"; then
+    ok "S2 --locked rejects a missing store"
+else
+    bad "S2 --locked missing" "wrong diagnostic: $(cat "$S2/m.err")"
+fi
+# dev override: a dir row produces the note and uses the local tree.
+mkdir -p "$S2/devpkg/src" "$S2/devproj"
+printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S2/devpkg/ct.pkg"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S2/devpkg/src/p.h.ct"
+printf 'name = demo\nversion = 0.1.0\ndep = ../devpkg@^0.1.0\n' >"$S2/devproj/ct.pkg"
+printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(6)); return 0; }\n' >"$S2/devproj/main.ct"
+( cd "$S2/devproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+    "$work/ct-ast" get ../devpkg >/dev/null 2>&1 )
+if ( cd "$S2/devproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" build main.ct -o "$S2/devapp" >"$S2/d.out" 2>"$S2/d.err" ) \
+   && grep -Fq "resolves to the local directory (dev override)" "$S2/d.err" \
+   && [ "$("$S2/devapp")" = "12" ]; then
+    ok "S2 dir row is a dev override with a note"
+else
+    bad "S2 dev override" "$(cat "$S2/d.out" "$S2/d.err")"
+fi
+# no lock: vendor/ is the fallback and the warning appears once.
+mkdir -p "$S2/vproj/vendor/p"
+printf 'name = demo\nversion = 0.1.0\n' >"$S2/vproj/ct.pkg"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S2/vproj/vendor/p/p.h.ct"
+printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(5)); return 0; }\n' >"$S2/vproj/main.ct"
+if ( cd "$S2/vproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" build main.ct -o "$S2/vapp" >"$S2/v.out" 2>"$S2/v.err" ) \
+   && [ "$(grep -c "no ct.lock; reading vendor/" "$S2/v.err")" = "1" ] \
+   && [ "$("$S2/vapp")" = "10" ]; then
+    ok "S2 no lock falls back to vendor/ with one warning"
+else
+    bad "S2 vendor fallback" "$(cat "$S2/v.out" "$S2/v.err")"
+fi
+# no lock and no vendor: still builds, and does not add the fallback warning.
+mkdir -p "$S2/nproj"
+printf 'name = demo\nversion = 0.1.0\n' >"$S2/nproj/ct.pkg"
+printf 'int main(void){return 0;}\n' >"$S2/nproj/main.ct"
+if ( cd "$S2/nproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" build main.ct -o "$S2/napp" >"$S2/n.out" 2>"$S2/n.err" ) \
+   && ! grep -Fq "no ct.lock; reading vendor/" "$S2/n.err"; then
+    ok "S2 no lock and no vendor stays quiet"
+else
+    bad "S2 no vendor" "$(cat "$S2/n.out" "$S2/n.err")"
+fi
+# duplicate rows: same bare name under two publishers.
+mkdir -p "$S2/dproj"
+printf 'int main(void){return 0;}\n' >"$S2/dproj/main.ct"
+printf '# ct-lock 2\na/p 0.1.0 git u c src sha256:%064d\nb/p 0.1.0 git u c src sha256:%064d\n' 0 0 >"$S2/dproj/ct.lock"
+if ( cd "$S2/dproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" build main.ct -o "$S2/dapp" >"$S2/dd.out" 2>"$S2/dd.err" ); then
+    bad "S2 duplicate lock" "two rows for one package passed"
+elif grep -Fq "is required twice" "$S2/dd.err"; then
+    ok "S2 duplicate lock rows are a hard error"
+else
+    bad "S2 duplicate lock" "wrong diagnostic: $(cat "$S2/dd.err")"
+fi
+# explicit -I still works with no lock and no vendor.
+mkdir -p "$S2/iproj"
+printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(7)); return 0; }\n' >"$S2/iproj/main.ct"
+if ( cd "$S2/iproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
+        "$work/ct-ast" build main.ct -I ../devpkg/src -o "$S2/iapp" >"$S2/i.out" 2>"$S2/i.err" ) \
+   && [ "$("$S2/iapp")" = "14" ]; then
+    ok "S2 explicit -I still works"
+else
+    bad "S2 explicit -I" "$(cat "$S2/i.out" "$S2/i.err")"
+fi
+if "$work/ct-ast" build --help 2>&1 | grep -Fq -- "--locked"; then
+    ok "S2 build --help documents --locked"
+else
+    bad "S2 help" "--locked is not documented"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]

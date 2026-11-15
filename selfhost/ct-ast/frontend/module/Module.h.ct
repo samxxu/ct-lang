@@ -1262,7 +1262,7 @@ impl ModuleOps for Module {
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
-                       "                 [--emit-c] [--lib] [--runtime-checks] [--outdir <dir>] [--cc <path>]\n"
+                       "                 [--locked] [--emit-c] [--lib] [--runtime-checks] [--outdir <dir>] [--cc <path>]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->]\n"
                        "                 [--diagnostics=text|json] [--std=c99|gnu99|c11]\n",

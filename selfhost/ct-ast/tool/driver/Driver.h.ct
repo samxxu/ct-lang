@@ -30,6 +30,7 @@ import frontend::sym::Symbols;
 import runtime::arena::Arena;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::pkg::Pkg;
 
 #define MAX_PATH 1024
 #define MAX_FLAGS 1024                  /* mirrors Module.h.ct's --cflags cap */
@@ -212,8 +213,51 @@ impl DriverOps for Driver {
                 break;
             }
         }
-        if (argc > 1 && strcmp(argv[1], "build") == 0)
-            return self->m->build_main(argc - 1, argv + 1);
+        if (argc > 1 && strcmp(argv[1], "build") == 0) {
+            /* S2: `build` reads ./ct.lock and the roots become explicit `-I`
+               entries after the user's own flags. `--locked` is consumed here
+               because `build_main` has no concept of strictness. */
+            char roots[16][512];
+            char notes[16][512];
+            char *bargv[256];
+            int nroots, nnotes, locked, bi, ai, want_help;
+            nroots = 0;
+            nnotes = 0;
+            locked = 0;
+            want_help = 0;
+            for (ai = 2; ai < argc; ai++) {
+                if (strcmp(argv[ai], "--locked") == 0) locked = 1;
+                if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0
+                    || strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0)
+                    want_help = 1;
+            }
+            /* help/version must not depend on the project's lock being valid */
+            if (want_help) return self->m->build_main(argc - 1, argv + 1);
+            if (tool::pkg::ct_pkg_lock_roots(self->version, locked,
+                                              roots[0], &nroots, notes[0], &nnotes) != 0)
+                return 1;
+            for (ai = 0; ai < nnotes; ai++)
+                fprintf(stderr, "ctc: note: %s\n", notes[ai]);
+            bi = 0;
+            bargv[bi++] = "build";
+            for (ai = 2; ai < argc; ai++) {
+                if (strcmp(argv[ai], "--locked") == 0) continue;
+                if (bi >= 250) {
+                    fprintf(stderr, "ctc: too many build arguments\n");
+                    return 1;
+                }
+                bargv[bi++] = argv[ai];
+            }
+            for (ai = 0; ai < nroots; ai++) {
+                if (bi >= 250) {
+                    fprintf(stderr, "ctc: too many build arguments\n");
+                    return 1;
+                }
+                bargv[bi++] = "-I";
+                bargv[bi++] = roots[ai];
+            }
+            return self->m->build_main(bi, bargv);
+        }
         /* `ct compile <file>` is the documented spelling, so the keyword is
            consumed here; otherwise the loop below would take it for the input.
            `ct check` (19.4) walks the same path and stops before emission:
@@ -236,7 +280,7 @@ impl DriverOps for Driver {
                 printf("usage: %s <input.ct> [-o <output.c>] [--line|--no-line]\n"
                        "              [--emit-map <file|->] [--diagnostics=text|json] [--std=c99|gnu99|c11]\n"
                        "       %s check <input.ct> [--types] [--diagnostics=text|json] [--std=c99|gnu99|c11]\n"
-                       "       %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
+                       "       %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>] [--locked]\n"
                        "                 [--emit-c] [--outdir <dir>] [--cc <path>]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->]\n"

@@ -67,6 +67,7 @@
 | Phase 53 | **可选链 `?.`**：指针/map、值上取到的指针/map 跳；单次求值、短路、L53-1..7 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.53.0`；[卡](../design/phase53.md)） | `p53/optional` 0 failures；check-ast 1436/0 |
 | Phase 54 S0 | **ct-pkg 观测片**：lock 格式、pkg check 骨架、现状文档 | 新增 | ✅ 完成（2026-11-15；v0.54.0；S1–S7 待实施；[卡](../design/phase54.md)） | S0 段 5 断言；check-all 11/11 |
 | Phase 54 S1 | **共享库最小可用**：store、v2 lock、按 lock 生成 `-I` | 新增 | ✅ 完成（2026-11-15；v0.55.0；[卡](../design/phase54.md)） | `test/pkg/run.sh` 106/0；check-all 11/11 |
+| Phase 54 S2 | **编译读 lock**：自动 `-I`、`--locked`、dev override、重复包 | 新增 | ✅ 完成（2026-11-15；v0.56.0；[卡](../design/phase54.md)） | `test/pkg/run.sh` 117/0；check-all 11/11 |
 
 > **Agent 内核运行库（ct-pkg，外部）**：`arena` / `sync` / `callback` 今天可做，`result` / `string` 分别等 Phase 34 / 36，ABI 打包等 Phase 39；提案见 [proposals/ct-pkg-agent-runtime.md](../proposals/ct-pkg-agent-runtime.md)。
 
@@ -169,6 +170,7 @@
 | v0.53.0 | Phase 53 可选链 `?.`（2026-11-15） | parser 组合 `?.`/`?[`；指针/map/值上指针；短路与单次求值；L53-1..7；T1 三目不变；check-ast 1436/0、warnings 675/0；tag `v0.53.0`。 |
 | v0.54.0 | Phase 54 S0 观测片（2026-11-15） | lock v1/v2 识别；`ct pkg check` 只读骨架；S0 夹具；pkg-3…8 落库；check-ast 1444/0、warnings 689/0；tag `v0.54.0`。 |
 | v0.55.0 | Phase 54 S1 共享库最小可用（2026-11-15） | publisher/ns-root 校验；store 落盘；v2 lock 7 字段；按 lock 生成 -I；同版本 no-op/摘要错；裸名歧义；test/pkg 106/0；tag `v0.55.0`。 |
+| v0.56.0 | Phase 54 S2 编译读 lock（2026-11-15） | build 默认读 lock/自动 -I、--locked、vendor 回退告警、dev override note、重复包硬错；test/pkg 117/0；tag `v0.56.0`。 |
 | v0.44.2 | 接口值返回四条静默 UB / 边界修复（2026-11-15） | A-1 `.m.ct` 可 import `.h.ct`（`fb55985c`）；SH-72 动态派发按 trait 签名给返回类型（`5ff69ac3`）；SH-74 impl 内 `return self` 发 `(void *)_self`（`d6e82e25`）；SH-75 局部 struct 返回接口改堆拷贝（`b5797cbf`）；新夹具 `238_iface_ret_value` / `237_iface_ret_self` / `239_local_iface_return` + `sh71_map_import_hdr`，SH-75 另配 ASAN use-after-return；check-ast 1376/0、test/run 156、warnings 631/0、docs 1205/239。已知限制：接口无析构槽，堆上装箱对象随进程存活。 | tag `v0.44.2`。
 | v0.53.1 | 规范复核登记的两处 P0 实现缺陷（2026-11-15） | ① 表达式位置的字符串字面量超 158 字节由「静默截断」改为编译期硬错 `string literal is too long (max 158 bytes; split it)`（Lexer 记 `toktrunc`、`Expr` 的 `T_STR` 分支硬错、`ParseSupport::lex_next` 只对 `T_ID` 消费该标志）；② 右值 struct 装箱由「发射 `(void *)&mk()` 交 `cc`」改为编译期硬错 `cannot box an rvalue struct; assign it to a variable first`（`TypeCheck::maybe_box` 增加可寻址性判定）；规范 §2 / §4.8 / §4.30 / §6.2 / §8 同步到 v0.53.1；`CTC_VERSION` 五处同步到 `0.53.1`，71 个 golden/expected 仅版本 token 变化。PATCH fix，不新建 tag。 |
 

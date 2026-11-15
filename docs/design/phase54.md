@@ -102,3 +102,16 @@ S1（v0.55.0）未开工；本收口只发 v0.54.0。
 | 门禁 | `test/pkg/run.sh` 106/0；check-ast 1444/0；check-all 11/11 |
 
 S2（`ct build` 读 lock、`--locked`、dev override）未开工。
+
+## 10. S2 收口记录（2026-11-15，v0.56.0）
+
+| SP | 结果 |
+| --- | --- |
+| SP-006/013 | build/install/verify 拒绝同名重复，`is required twice` |
+| SP-008 | `ct build` 默认读 `ct.lock` 并自动补 `-I`；显式 `-I` 优先 |
+| SP-009 | `--locked` 缺失/摘要不符硬错，不回退 |
+| SP-010 | 无 lock 退回 `vendor/`，告警一次；无 vendor 不报错 |
+| SP-015 | `dir` 行触发 dev override `note:` |
+| 门禁 | test/pkg 117/0；check-ast 1444/0；check-all 11/11 |
+
+S3（verify/migrate）未开工。
