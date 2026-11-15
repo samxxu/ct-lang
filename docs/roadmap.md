@@ -68,7 +68,7 @@
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ✅ 完成 | v0.52.0 | [卡](design/phase52.md) |
 | Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | ✅ 完成 | v0.53.0 | [卡](design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
 | Phase 54 | ct-pkg 共享库包体系（工具侧：store / lock v2 / `ns-root`） | 🟨 实施中（S0–S3、S5/S6 仓内完成；S7 待兼容期） | v0.58.0（S0–S3 已各自收口；S7 收口时实算） | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
-| Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ⬜ 规划中 | 不提前钉号（PH-54 之后按当时 MINOR 实算） | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) |
+| Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ⬜ 规划中 | 不提前钉号（PH-54 之后按当时 MINOR 实算） | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) · [重排](planning/post-58-plan.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
@@ -100,6 +100,24 @@
 | S7 | 删除 `vendor/` 支持 | 待定（收口时实算） | 兼容期两个 minor 无 v1 lock 工程（由各包仓举证） | 本仓无 vendor 读写；v1 lock 只报错 | 恢复 S3 读路径一个 minor |
 
 > 包仓对齐（原 S4：std / ct-http / ct-fsguard / ct-json / ct-sse / ct-token / ct-process / ct-llm-sse）归各包仓，不属于本 phase；本仓只提供工具与判据，移交清单按仓分发。
+
+### v0.58.0 之后的排期（2026-11-15 重排）
+
+逐项证据、依赖与放弃/合并理由见 [post-58-plan.md](planning/post-58-plan.md)。顺序：
+
+1. **静默错误 patch**：PKG-5（缓存键裸名）→ LANG-9（字段可见性）→ LANG-4（下标类型错配）
+   → LANG-17（预处理行截断）→ LANG-5 字段形态 / LANG-11。
+2. **诊断与工具**：LANG-16 / LANG-8 / LANG-7 / LANG-3（Lexer 与 Expr 族串行）、SH-76；SH-79 只挡 PH-59 M2。
+3. **文档收口**：PH-54 S6 历史 errata、issue 状态回填、过时提案退役（不占版本位）。
+4. **PH-59 M1 模型导出**：真实前置是 LANG-10 7c（`Field` 补行列），不是不存在的「PH-58」。
+5. **PH-62 可写下标**：方向已通过研判，先开卡，再按 S0–S3 切片；与 PH-59 可并行开发。
+6. **PH-57 限定名**（SH-18 + LANG-15）：与 PH-62 同为 Parse/TypeCheck 族，必须串行。
+7. **PH-60 视图注记**：等 PH-59 schema 冻结且有真实消费者。
+8. **PH-54 S7 删除 vendor**：最后做，前置是 S6 errata 完成与兼容期口径统一。
+
+编号说明：Phase 55 / 56 / 58 不再作为 phase 存在（分别并入 PH-62、放弃、拆成 patch + 前置任务）；
+PH-61 已被 PH-62 吸收。**本轮不重排既有编号**；版本位与 phase 号的偏移问题见
+[post-58-plan.md](planning/post-58-plan.md) §8，待裁定。
 
 ### 未排期（治理项）
 
