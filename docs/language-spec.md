@@ -1940,8 +1940,13 @@ int apply(int base) {
 - **保留名（封闭清单，只豁免「动词 / 前缀开头」一条，不豁免大小写规则）**：
   - 内置层：`Vec.len`、`Vec.has`、`Vec.at`、`Map.len`、`Map.has`、`Str.len`；
   - `std` 包：`std::str::String.len`（即 `std::str.len`）、旧 `std::vec` 的 `len` / `at`、
-    旧 `std::map` 的 `len`。
-  这些是存量豁免，不因本条改名；**新增查询方法不得加入本清单**，仍按动词 / 前缀规则。
+    旧 `std::map` 的 `len`、`std::num` 的 `max` / `min`（`int` / `long` / `long long` 三个宿主）。
+  这些是存量豁免（`std::num` 的两个名字是 std `0.2.0` 的既有名），不因本条改名；
+  **新增查询方法不得加入本清单**，仍按动词 / 前缀规则。
+- **不设「数学惯用词」类例外**：`max` / `min` 是按名字登记的存量豁免，不是一类新前缀；
+  新的数学接口（`abs` / `clamp` / `sum` 等）不得据此免检，确需例外时逐个登记并留决策记录。
+  理由：类别例外无法机械判定，闭名单可审计；libc 例外已有精确边界（同名直映射），不再开第二个
+  模糊口子。
 - 名词开头不合规：`last_error` 这类名字必须改为 `get_last_error`；`std` 已按此改。
 - 小驼峰存量名（如 `findChar`、`startsWith`、`readFile`、`codepointCount`）**不进入保留名**：
   它们只适用下文的「存量按包节奏清理」，不豁免大小写规则。
@@ -2185,9 +2190,13 @@ int main(void) {
 ### 7. 容量上限
 
 > 下表是 **L0**（冻结种子）的上限。**ct-ast**（安装入口）把用户可见的上限整体抬高：`MAX_NODES` 262144、
-> `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、`MAX_FIELDS` 64、`MAX_FUNCS` 256、
+> `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、`MAX_FIELDS` 64、`MAX_FUNCS` 512、
 > `MAX_PARAMS` 16、`MAX_VARS` 4096、`MAX_TYPES` 256、`MAX_CALLS` 1024；其余（`MAX_TEXT` / `MAX_PATH` /
 > `MAX_SCOPE` / `MAX_UNITS` / `MAX_IMPORTS` / `MAX_MAPS`）不变。策略仍是「固定上限 + 越界硬报错」，未改成动态分配。
+>
+> `MAX_FUNCS` 是**整个程序**的累计预算：`build` 模式共用一张符号表，`nfunc` 跨单元累加
+> （builtin 层经 `nfunc_base` 扣除），不是「每个单元各有一份配额」。越界文案为
+> `too many functions (limit 512, whole program)`（依据：`frontend/parse/ParseSupport.h.ct` 的判界点）。
 >
 > 实现细节（ct-ast）：`MAX_NODES` 是 `selfhost/ct-ast/runtime/arena/Arena.h.ct` 里的宏，只在 `alloc` 判界时使用；
 > 而节点数组会随 `pub struct Arena` 进入生成的 `Arena.h`，**宏不跨翻译单元**，所以该字段写的是字面量
