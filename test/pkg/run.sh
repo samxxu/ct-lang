@@ -138,6 +138,26 @@ else
 fi
 
 echo
+echo "== ct install rejects an import the printed -I list cannot resolve =="
+# PKG-6: install's success means the printed `ct build` line can resolve the
+# project's imports. A missing unit must fail here, not at build time.
+mkdir -p "$work/p6pkg" "$work/p6proj"
+printf 'name = p6pkg\nversion = 0.1.0\n' >"$work/p6pkg/ct.pkg"
+printf 'name = demo6\nversion = 0.1.0\n' >"$work/p6proj/ct.pkg"
+printf 'import missing::Absent;\nint main(void) { return 0; }\n' >"$work/p6proj/main.ct"
+if ( cd "$work/p6proj" && "$work/ct-ast" get ../p6pkg >/dev/null 2>&1 ); then
+    if ( cd "$work/p6proj" && "$work/ct-ast" install >"$work/p6i.out" 2>"$work/p6i.err" ); then
+        bad "PKG-6 install" "expected a non-zero exit"
+    elif grep -Fq "cannot resolve import 'missing/Absent'" "$work/p6i.err"; then
+        ok "install rejects an unresolved import"
+    else
+        bad "PKG-6 install" "wrong diagnostic: $(cat "$work/p6i.err")"
+    fi
+else
+    bad "PKG-6 fixture" "ct get failed: $(cat "$work/p6g.err" 2>/dev/null)"
+fi
+
+echo
 echo "== ct get refuses a package that requires a newer compiler =="
 # P20-04: `requires` is a hard failure in `get` too, and the check runs before
 # ct.lock is merged or written, so a refused package leaves the lock untouched.

@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`install()` 只校验摘要与 dep 覆盖） |
-| 状态 | **open**（S2 只落了编译侧 `-I`，`Pkg.h.ct` 内无 `cannot resolve import` 的试解析）；58 后重排：紧随 PKG-5 |
+| 状态 | **已修**（v0.58.2：install 按 lock 的 `-I` 试解析项目 import，解析不到硬错；`test/pkg/run.sh` 134/0） |
 
 ## 现象
 
@@ -48,3 +48,17 @@ build rc=1
 ## 修复排期
 
 S2（编译读 lock）：校验逻辑与 `ct build` 共用同一套 `-I` 计算，避免两处漂移。
+
+## 处置（v0.58.2）
+
+- `install()` 在打印命令前扫描项目根的所有 `.ct` 单元，抽出 `import a::b;`。
+- 按 `::` → `/` 转成相对路径，先查当前目录，再查 lock 计算出的每个 `-I` 根；找不到 `.h.ct` / `.ct` 即报
+  `ctc: '<unit>' cannot resolve import '<rel>'`，退出码非 0。
+- 与 `ct build` 共用同一套 `ipath[]`，避免两处 `-I` 计算漂移。
+
+## 验证
+
+```console
+$ bash test/pkg/run.sh
+== summary: 134 passed, 0 failed ==
+```

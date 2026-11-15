@@ -1460,6 +1460,7 @@ impl PkgOps for Pkg {
         char ipath[MAX_PKG_DEPS][MAX_PKG_PATH];
         char allcf[MAX_PKG_CMD], alldf[MAX_PKG_CMD], qcf[MAX_PKG_CMD], qlf[MAX_PKG_CMD];
         char dpath[MAX_PKG_PATH], drange[32], dname[MAX_TEXT];
+        char iline[MAX_PKG_LINE], imp[MAX_TEXT], rel[MAX_PKG_PATH], cand[MAX_PKG_PATH];
         char lockhead[64];
         FILE *lockf;
         int ndeps, nlock, i, j, rc, units, seen, lockfmt;
@@ -1538,6 +1539,70 @@ impl PkgOps for Pkg {
                 return 1;
             }
         }
+
+        /* PKG-6: `install` promises a command that can build. Resolve every
+           `import a::b` in the project units against the same roots the
+           printed `-I` list will hand to `ct build`; a miss is a failed
+           install, not a successful hint. */
+        d = opendir(".");
+        if (d) {
+            for (;;) {
+                e = readdir(d);
+                if (e == NULL) break;
+                nl = strlen(e->d_name);
+                if (nl <= 3 || strcmp(e->d_name + nl - 3, ".ct") != 0) continue;
+                f = fopen(e->d_name, "r");
+                if (f == NULL) continue;
+                while (fgets(iline, sizeof iline, f) != NULL) {
+                    char *p = iline, *q = imp;
+                    while (*p == ' ' || *p == '\t') p++;
+                    if (strncmp(p, "import", 6) != 0) continue;
+                    p += 6;
+                    if (*p != ' ' && *p != '\t') continue;
+                    while (*p == ' ' || *p == '\t') p++;
+                    while (*p && *p != ';' && *p != ' ' && *p != '\t'
+                           && *p != '\n' && *p != '\r') {
+                        if (q - imp + 1 >= (int)sizeof imp) break;
+                        *q++ = *p++;
+                    }
+                    *q = 0;
+                    if (!imp[0]) continue;
+                    q = rel;
+                    for (p = imp; *p; p++) {
+                        if (*p == ':' && p[1] == ':') {
+                            *q++ = '/';
+                            p++;
+                        } else {
+                            *q++ = *p;
+                        }
+                        if (q - rel + 1 >= (int)sizeof rel) break;
+                    }
+                    *q = 0;
+                    seen = 0;
+                    if (snprintf(cand, sizeof cand, "%s.h.ct", rel) < (int)sizeof cand
+                        && stat(cand, &st) == 0 && S_ISREG(st.st_mode)) seen = 1;
+                    if (!seen && snprintf(cand, sizeof cand, "%s.ct", rel) < (int)sizeof cand
+                        && stat(cand, &st) == 0 && S_ISREG(st.st_mode)) seen = 1;
+                    for (j = 0; !seen && j < nlock; j++) {
+                        if (snprintf(cand, sizeof cand, "%s/%s.h.ct", ipath[j], rel)
+                            < (int)sizeof cand
+                            && stat(cand, &st) == 0 && S_ISREG(st.st_mode)) seen = 1;
+                        if (!seen
+                            && snprintf(cand, sizeof cand, "%s/%s.ct", ipath[j], rel)
+                               < (int)sizeof cand
+                            && stat(cand, &st) == 0 && S_ISREG(st.st_mode)) seen = 1;
+                    }
+                    if (!seen) {
+                        fprintf(stderr, "ctc: '%s' cannot resolve import '%s'\n",
+                                e->d_name, rel);
+                        rc = 1;
+                    }
+                }
+                fclose(f);
+            }
+            closedir(d);
+        }
+        if (rc != 0) return 1;
 
         printf("%s build", prog);
         for (i = 0; i < nlock; i++) printf(" -I %s", ipath[i]);
