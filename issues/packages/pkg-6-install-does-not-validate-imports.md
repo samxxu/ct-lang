@@ -16,11 +16,11 @@
 ## 最小复现
 
 ```sh
-# 用真实包 ct-fsguard（单元在 src/fsguard/）
+# 用一个单元在 src/<ns>/ 的本地包（v0.53.x 现场）
 mkdir -p /tmp/p6/proj && cd /tmp/p6/proj
 printf 'name = usefs\nversion = 0.1.0\n' >ct.pkg
 printf 'import fsguard::FsGuard;\nint main(void){ return 0; }\n' >main.ct
-ct get /path/to/ct-fsguard && ct install; echo "install rc=$?"
+ct get ../pkg-fsguard && ct install; echo "install rc=$?"
 ct build -I vendor/fsguard main.ct -o build; echo "build rc=$?"
 ```
 
@@ -37,7 +37,7 @@ build rc=1
 
 - `ct install` 用 lock 里的 ns-root 离线试解析每个 `dep` 的公开单元；解析不到即失败：
   `ctc: '<publisher>/<name>@<version>' cannot resolve import '<rel>'`。
-- 目标形态与判据见 [SP-022](../../docs/planning/ct-pkg-shared-store-requirements.md)。
+- 目标形态见 [提案 §5](../../docs/proposals/ct-pkg-shared-store.md)；包仓侧的 `ns-root` 声明归各包仓，不属于本仓任何 phase。
 
 ## 交叉引用
 

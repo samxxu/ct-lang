@@ -27,7 +27,7 @@
 | [construction.md](construction.md) | 对象构造语义（vptr 由谁、何时写入） | 排查构造期问题 |
 | [patterns.md](patterns.md) | 设计模式在现有特性下的写法 | 判断「要不要新增语言特性」 |
 | [memory-guide.md](memory-guide.md) | 内存实践：`own` / `borrow` / 工厂 / 池 / arena | 写持有资源的代码 |
-| [package-guide.md](package-guide.md) | 包作者指南：`ct.pkg` 键、命名 / 版本 / tag、索引收录、许可证、常见失败 | 发布或消费一个包 |
+| [package-guide.md](package-guide.md) | 包作者指南：`ct.pkg` 键、`ns-root`、`ct install` / `ct build` 行为、常见失败 | 编写或消费一个包 |
 | [modern-oo-gap.md](modern-oo-gap.md) | 需求侧评估：以现代化 OO 为参照的差距清单、battle 记录与三档结论 | 判断「还缺哪些语言特性」 |
 
 ### 计划与台账
@@ -51,7 +51,7 @@
 | [design/phase48.md](design/phase48.md) · [design/phase49.md](design/phase49.md) | 已完成（Phase 48–49）：48 Drop 语义闭环 / 49 `own` 所有权转移；收口版本见 [roadmap.md](roadmap.md) |
 | [design/phase50.md](design/phase50.md) · [design/phase51.md](design/phase51.md) · [design/phase52.md](design/phase52.md) | 已完成（Phase 50–52，0.50.0 至 0.53.0）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
 | [design/phase53.md](design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
-| [proposals/ct-pkg-agent-runtime.md](proposals/ct-pkg-agent-runtime.md) | ct-pkg `std` 的 Agent 内核运行库提案：`arena` / `sync` / `result` / `string` / `callback` 契约与交付顺序 |
+| [proposals/ct-model-export-proposal.md](proposals/ct-model-export-proposal.md) | 模型导出 `--emit-model` 提案（Phase 59 依据） | 查看编译器模型导出设计 |
 | [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 设计记录（已定稿为施工卡）：`?.` 的语义、切词策略、值接收者裁定与 battle 结论；施工以 [design/phase53.md](design/phase53.md) 为准 |
 | [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（未立项、待排期）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
 | [proposals/defect-namespaced-static-method.md](proposals/defect-namespaced-static-method.md) | 缺陷请求（待修）：带 `namespace` 的单元里静态固有方法报 `use of an undeclared variable`；含两种最小复现、边界表、名字解析定位、下游绕法与 N1–N5 判据 |

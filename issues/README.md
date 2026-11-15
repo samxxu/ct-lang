@@ -340,12 +340,11 @@
 | SH-78 | Medium | `--lib` 导出面只收根单元 `pub` 自由函数，`impl` 的 `pub` 方法不计入（设计口径，不排期） | [sh78-lib-export-free-functions-only.md](selfhost/sh78-lib-export-free-functions-only.md) |
 | SH-79 | **High** | `--emit-map` 两个 facet：`--lib` 不落文件、build 的 `file` 指向内置层（patch 0.53.8） | [sh79-build-lib-emit-map-silent.md](selfhost/sh79-build-lib-emit-map-silent.md) |
 
-### `packages/` —— 外部包（`ct-pkg`）
+### `packages/` —— CT 包管理工具缺陷
 
 | ID | 严重度 | 标题 | 文件 |
 | --- | --- | --- | --- |
-| PKG-1 | Medium | `hal-posix` 的 `now_ms` 在开机约 24.8 天后回绕为负，违反 `hal` 的单调契约 | [pkg-1-hal-posix-now-ms-overflow.md](packages/pkg-1-hal-posix-now-ms-overflow.md) |
-| PKG-2 | Medium | `ct install` 只打印 `-I vendor/<包名>`：包内单元在 `src/<ns>/` 时消费端照抄即报 `cannot resolve import`（**open / 未来处理**，不阻塞当前相） | [pkg-2-ct-install-package-root-import.md](packages/pkg-2-ct-install-package-root-import.md) |
+| PKG-2 | Medium | `ct install` 曾只打印 `-I vendor/<包名>`，包内单元在 `src/<ns>/` 时消费端照抄即报 `cannot resolve import`（**已解决**：v0.55.0 `ns-root`、v0.58.0 `ct build` 读 lock） | [pkg-2-ct-install-package-root-import.md](packages/pkg-2-ct-install-package-root-import.md) |
 
 ### `lang/` —— 语言 / 编译器缺陷（2026-11-15 登记）
 
@@ -376,9 +375,7 @@
 
 ### 标准库（ct-pkg 包 `std`）
 
-| ID | 严重度 | 标题 | 文件 |
-| --- | --- | --- | --- |
-| STD-1 | Medium | std 面向应用层能力缺口（String 增量 / fs 原子写+rename / 公开 stat 优先；Map 按需；Vec 泛化与 UTF-8 宽度 0.x 不做）（已决策；实现归 ct-pkg 的 `std` 包，本仓不跟） | [std1-markdown-readiness.md](std/std1-markdown-readiness.md) |
+`std` 的能力缺口与实现归 ct-pkg 的 `std` 包，不属于本仓；相关记录随包外移交清单分发。
 
 ## 汇总
 
@@ -1373,9 +1370,9 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 
 门禁：`./test/run.sh`、`bash selfhost/check-all.sh`、`python3 test/docs/check-docs.py` 全绿。
 
-## 外部报告复核（2026-11-15，`v0.44.1` / `13db6cad`，ct-http 0.1.0 阻塞清单）
+## 外部报告复核（2026-11-15，`v0.44.1` / `13db6cad`，外部包 0.1.0 阻塞清单）
 
-来源：`ct-http/docs/review/ct-http-0.1.0-blockers.md` §2–§5（仓库外文档，按外部报告处理）。
+来源：外部包仓的阻塞清单 §2–§5（仓库外文档，按外部报告处理；原文不复制，逐仓移交见包外册）。
 探针在 `/tmp/ctr/**`，未写入仓库树；四组最小用例均独立复现，`ct` 与 `cc` 都跑过。
 
 | 组 | 结论 | 编号 | 建议 |

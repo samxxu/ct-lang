@@ -15,12 +15,12 @@
 
 ## 最小复现
 
-前置：`~/.cache/ct-pkg/http` 已存在（origin 为 `https://github.com/ct-pkg/http`）。
+前置：`~/.cache/ct-pkg/util` 已存在（origin 为发布方 `a` 的仓库）。
 
 ```sh
 mkdir -p /tmp/p5/proj && cd /tmp/p5/proj
 printf 'name = demo\nversion = 0.1.0\n' >ct.pkg
-ct get foo/http; echo "rc=$?"; cat ct.lock
+ct get b/util; echo "rc=$?"; cat ct.lock
 ```
 
 实际输出：
@@ -28,10 +28,10 @@ ct get foo/http; echo "rc=$?"; cat ct.lock
 ```text
 vendored 1 package(s)
 rc=0
-http 0.1.0 git b4b7b43… sha256:12613dbf…
+util 0.1.0 git b4b7b43… sha256:12613dbf…
 ```
 
-`foo` 不是 `ct-pkg`，却拿到了 `ct-pkg/http` 的代码。冷机器上同一 spec 会变成：
+`b` 不是原发布方，却拿到了 `a` 的代码。冷机器上同一 spec 会变成：
 
 ```text
 $ ct get someorg/somepkg

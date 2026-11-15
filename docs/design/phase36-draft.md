@@ -109,7 +109,7 @@
 
 #### 3.2.1 表示与所有权
 
-`Str` 的**目标位置**是 ct-pkg `std/string`（拟由该包提供，见 `docs/proposals/ct-pkg-agent-runtime.md` §2.4），**不是 `lib/std`**。本相只冻结下面的契约，不假定该包已存在；buffer 由 shim 拥有：
+`Str` 的**目标位置**是 ct-pkg `std/string`（外部包计划，不在本仓），**不是 `lib/std`**。本相只冻结下面的契约，不假定该包已存在；buffer 由 shim 拥有：
 
 ```c
 pub struct Str { CStr *h; } use Drop;

@@ -4,7 +4,7 @@
 > **基线**：PH-38 收口提交（`v0.38.0`）；S0 在该提交上重建并记录实际 sha 与门禁数字。
 > **文档形态**：`phase39-draft.md`；design window 7/12，不触发归档。
 > **前置**：[phase34-draft.md](phase34-draft.md)（`pub` 语义）、[phase36-draft.md](phase36-draft.md)（`Str` 的 ABI 边界）、[phase38-draft.md](phase38-draft.md)（收口基线）。
-> **关联**：[modern-oo-gap.md](../modern-oo-gap.md) §3.8、[proposals/ct-pkg-agent-runtime.md](../proposals/ct-pkg-agent-runtime.md)、[D-001](../decisions/D-001.md)、[D-002](../decisions/D-002.md)。
+> **关联**：[modern-oo-gap.md](../modern-oo-gap.md) §3.8、[D-001](../decisions/D-001.md)、[D-002](../decisions/D-002.md)。
 > **规模**：编译器/驱动 220–500；夹具 100–180；文档 50–90；合计 **370–770**（±40%）。
 > **纪律**：收口时 bump `v0.39.0`；tag/push 按 `AGENTS.md` 0.3 `phase-tag-requires-user-approval` 等用户批准。
 
