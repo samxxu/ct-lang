@@ -1937,8 +1937,14 @@ int apply(int base) {
 
 - 类型参数允许单大写字母（`T`、`K`、`V`），不要求拼成单词。
 - 「动作动词开头」按评审判断；`get_` / `set_` / `has_` / `is_` / `to_` / `from_` 等前缀视为动词。
-- 既有查询名 `Vec.len` / `Vec.has` / `Vec.at`、`Map.len` / `Map.has`、`Str.len` 作为**保留名**，
-  不因本条改名；新增查询方法仍按动词/前缀规则。
+- **保留名（封闭清单，只豁免「动词 / 前缀开头」一条，不豁免大小写规则）**：
+  - 内置层：`Vec.len`、`Vec.has`、`Vec.at`、`Map.len`、`Map.has`、`Str.len`；
+  - `std` 包：`std::str::String.len`（即 `std::str.len`）、旧 `std::vec` 的 `len` / `at`、
+    旧 `std::map` 的 `len`。
+  这些是存量豁免，不因本条改名；**新增查询方法不得加入本清单**，仍按动词 / 前缀规则。
+- 名词开头不合规：`last_error` 这类名字必须改为 `get_last_error`；`std` 已按此改。
+- 小驼峰存量名（如 `findChar`、`startsWith`、`readFile`、`codepointCount`）**不进入保留名**：
+  它们只适用下文的「存量按包节奏清理」，不豁免大小写规则。
 
 **libc 直映射例外**：只有把 libc 同名函数零成本映射进来的接口，才保留 libc 拼写
 （`printf`、`puts`、`fflush`、`sqrt`、`fabs` 等）。边界：
@@ -1958,7 +1964,7 @@ int apply(int base) {
 
 **判据（评审用）**：
 
-1. 函数 / 方法名匹配 `^[a-z][a-z0-9_]*$`，且首词为动词或上列查询前缀；
+1. 函数 / 方法名匹配 `^[a-z][a-z0-9_]*$`，且首词为动词或上列查询前缀（保留名清单除外）；
 2. 类型名匹配 `^[A-Z][A-Za-z0-9]*$`，缩写作 `Http` 不写 `HTTP`；
 3. 任何标识符不匹配小驼峰形态（首词小写后紧跟大写，如 `readFile`）；
 4. libc 例外仅限同名单映射调用；包装层不得占用 libc 名；
