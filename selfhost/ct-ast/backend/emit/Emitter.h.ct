@@ -2312,7 +2312,7 @@ impl EmitOps for Emitter {
        to, so it is an error rather than a silent reordering. */
     int hoist_scan(int n, int top)
     {
-        int root;
+        int root, lvl, i, nc, chain[MAX_HOISTS];
         (void)self;
 
         if (n < 0) return 0;
@@ -2353,21 +2353,30 @@ impl EmitOps for Emitter {
         if (!self->opt_scan
             && self->arena->nodes[n].kind == N_MCALL
             && self->arena->nodes[n].aux != 6) {
-            int ok = 0;
-            char bt[MAX_TEXT];
-            root = self->arena->nodes[n].a;
-            while (root >= 0 && (self->arena->nodes[root].kind == N_MEMBER
-                                 || self->arena->nodes[root].kind == N_ARROW))
-                root = self->arena->nodes[root].a;
-            bt[0] = 0;
-            if (root >= 0 && !self->arena->nodes[root].text3[0]) {
+            /* LANG-13: collect the whole receiver chain and name it innermost
+               first. Every level of `v["a"]["b"]["c"]` is a call result whose
+               address the next level would take, so a chain of any depth needs
+               one temporary per level. Only the receiver path is walked, so the
+               optional / `into` bookkeeping a recursive `hoist_scan` would
+               repeat is not redone; the recursion below sees `text3` set on
+               each named node and skips it. */
+            nc = 0;
+            lvl = n;
+            for (;;) {
+                int ok = 0;
+                char bt[MAX_TEXT];
+                root = self->arena->nodes[lvl].a;
+                while (root >= 0 && (self->arena->nodes[root].kind == N_MEMBER
+                                     || self->arena->nodes[root].kind == N_ARROW))
+                    root = self->arena->nodes[root].a;
+                if (root < 0 || self->arena->nodes[root].text3[0]) break;
                 if (self->arena->nodes[root].kind == N_CALL) {
                     ok = self->sym->find_func(self->arena->nodes[root].text2) >= 0;
                     /* a call through a function pointer: the parser left the
                        result type on the node, so it can be named */
                     if (!ok && self->arena->nodes[root].text[0]
-                        && (self->arena->nodes[n].aux == 9
-                            || self->arena->nodes[n].aux == 10)) ok = 1;
+                        && (self->arena->nodes[lvl].aux == 9
+                            || self->arena->nodes[lvl].aux == 10)) ok = 1;
                 }
                 /* Phase 31 O3: a chained subscript (`g[i][j]`, `b.mv()[0]`)
                    puts the inner call in receiver position; its result is an
@@ -2380,16 +2389,24 @@ impl EmitOps for Emitter {
                     int rd = 0;
                     if (hoist_ctype(root, bt, sizeof bt, &rd) && rd == 0) ok = 1;
                 }
+                if (!ok) break;
+                if (nc >= MAX_HOISTS)
+                    return self->fail_from(n, "too many hoisted receivers in one statement");
+                chain[nc] = root;
+                nc++;
+                if (self->arena->nodes[root].kind != N_MCALL) break;
+                lvl = root;
             }
-            if (ok) {
+            if (nc > 0) {
                 if (!top)
                     return self->fail_from(n, "a method call on a temporary is only allowed at the start of a statement or of an assignment");
-                if (self->nhoist >= MAX_HOISTS)
-                    return self->fail_from(n, "too many hoisted receivers in one statement");
-                snprintf(self->arena->nodes[root].text3, MAX_TEXT, "__ct_tmp%d", self->ntmp);
-                self->ntmp++;
-                self->hoist_calls[self->nhoist] = root;
-                self->nhoist++;
+                for (i = nc - 1; i >= 0; i--) {
+                    snprintf(self->arena->nodes[chain[i]].text3, MAX_TEXT,
+                             "__ct_tmp%d", self->ntmp);
+                    self->ntmp++;
+                    self->hoist_calls[self->nhoist] = chain[i];
+                    self->nhoist++;
+                }
             }
         }
         if (self->arena->nodes[n].a >= 0 && self->hoist_scan(self->arena->nodes[n].a, 0) != 0) return -1;

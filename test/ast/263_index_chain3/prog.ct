@@ -1,0 +1,18 @@
+/* LANG-13（ct-json JSON-1）：同类型三级下标链在声明初始化位置合法。
+   每一级 `[k]` 都是一次 `<T>_get(&recv, k)`，发射器把接收者链逐级物化
+   （`__ct_tmp0` 最内层），生成的是三个普通 C 语句。 */
+#include <stdio.h>
+
+struct Ref { int n; }
+
+impl Ref {
+    Ref get(int k) { struct Ref r = { self->n + k }; return r; }
+}
+
+int main(void)
+{
+    struct Ref doc = { 1 };
+    struct Ref b = doc[2][3][4];
+    printf("%d\n", b.n);
+    return 0;
+}
