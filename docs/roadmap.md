@@ -66,7 +66,7 @@
 | Phase 50 | 容器取用契约（`has` / `at`；出参形态已废） | ✅ 完成 | v0.50.0 | [卡](design/phase50.md) |
 | Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ✅ 完成 | v0.51.0 | [卡](design/phase51.md) |
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ✅ 完成 | v0.52.0 | [卡](design/phase52.md) |
-| Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | 🚧 实施中 | v0.53.0（待收口） | [卡](design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
+| Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | 🟨 实施中 | v0.53.0（待收口） | [卡](design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
