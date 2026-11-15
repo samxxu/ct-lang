@@ -290,7 +290,7 @@ PH-60 仍未开卡，等 PH-59 schema 冻结。
 | --- | --- |
 | 性质 | **B 新能力**：`m[k] = v` / `v[i] = x` / 嵌套写是新语法与新语义；其中「朴素嵌套读发出坏 C」是 A 类子项，可先止血 |
 | 现状 | `m["a"]=1` → `a Map subscript is read-only; use put(k, v)`；`v[0]=9` → `read-only; use set(i, v)`；`doc["server"]["host"]="..."` → 生成 `Map_get(&doc,"server")["host"]=...`，cc 报 `array subscript is not an integer`；`m["a"][0]=1` → cc 报 `assigning to 'struct Vec_int' from int`；`?["x"] =` → `optional chain/subscript is not an lvalue` |
-| 语义 | **下标是 get/put/set 的糖**：`m[k]`→`get`、`v[i]`→`get`、`m[k]=v`→`put`、`v[i]=x`→`set`；读侧不存在「越界」，取不到即零值/空；`set` **补齐再写**：`i>=len` 时 `len=max(len,i+1)`，中间洞为零值，`has(i)` 为真；负下标写报错；分配失败 abort；Map 写缺键即创建，NULL 键报错；嵌套读零值传播，嵌套写 Map 建空、Vec 按 set 补齐；洞释放跳过全零元素 |
+| 语义 | **下标是 get/put/set 的糖**：`m[k]`→`get`、`v[i]`→`get`、`m[k]=v`→`put`、`v[i]=x`→`set`；读侧不存在「越界」，取不到即零值/空；`set` **补齐再写**：`i>=len` 时 `len=max(len,i+1)`，中间洞为零值，`has(i)` 为真；负下标写报错；分配失败 abort；Map 写缺键即创建，NULL 键报错；嵌套读零值传播，嵌套写 Map 建空、Vec 按 set 补齐；洞释放统一在 `__ct_elem_release`（值类型快路径、句柄按类型谓词）；大跨度只 warning（`CT_VEC_GROW_WARN_SPAN`，可调非契约），不拒绝 |
 | 文档 | [提案](../proposals/ct-writable-subscript-proposal.md)、[研判](../review/ct-writable-subscript-proposal-review.md)；PH-61 提案/研判标注「并入 PH-62，作为 S1 切片」 |
 | 落点 | **PH-62**；PH-61 的 `v[] = x` 作为 S1；**未排 phase 卡** |
 | 依赖 | 无语言依赖；改 `Expr` / TypeCheck / Emitter，与 TypeCheck/Expr 族串行；与 PH-53/54/57/58/59/60 无依赖 |
