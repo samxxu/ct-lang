@@ -67,8 +67,11 @@
 | Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ✅ 完成 | v0.51.0 | [卡](design/phase51.md) |
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ✅ 完成 | v0.52.0 | [卡](design/phase52.md) |
 | Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | ✅ 完成 | v0.53.0 | [卡](design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
-| Phase 54 | ct-pkg 共享库包体系（工具侧：store / lock v2 / `ns-root`） | 🟨 实施中（S0–S3、S5/S6 仓内完成；S7 待兼容期） | v0.58.0（S0–S3 已各自收口；S7 收口时实算） | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
-| Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ⬜ 规划中 | 不提前钉号（PH-54 之后按当时 MINOR 实算） | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) · [重排](planning/post-58-plan.md) |
+| Phase 54 | ct-pkg 共享库包体系（工具侧：store / lock v2 / `ns-root`） | 🟨 实施中（S0–S3、S5/S6 仓内完成；S7 待兼容期） | v0.54.0–v0.58.0（S0–S3、S5/S6 各一个 MINOR；偏移见 AGENTS §0.3） | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
+| Phase 57 | 限定名与 namespace 常量（类型位置 `A::B`、值位置 `Type::Member`；SH-18 + LANG-15） | ⬜ 规划中（未开卡） | v0.59.0 | [重排](planning/post-58-plan.md) |
+| Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ⬜ 规划中 | v0.60.0 | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) · [重排](planning/post-58-plan.md) |
+| Phase 60 | 视图节点注记（`view` 子句） | ⬜ 规划中（仅提案） | v0.61.0 | [提案](proposals/ct-view-annotation-proposal.md) · [重排](planning/post-58-plan.md) |
+| Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | ⬜ 规划中（仅提案） | v0.62.0 | [提案](proposals/ct-writable-subscript-proposal.md) · [重排](planning/post-58-plan.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
@@ -97,9 +100,12 @@
 | S3 | 校验与迁移：`ct verify` 校 store、`ct migrate`、`--strict` | v0.57.0 ✅ | S2 收口 | SP-016/029 全绿 | 恢复 vendor 读路径 |
 | S5 | 消费端与门禁切换（仓内）：`test/pkg` 共享库用例、双 HOME 复现性、安装脚本提示 | v0.58.0 ✅ | S3 收口 | SP-028 告警落地；本仓无手算 `-I` | 恢复旧构建脚本 |
 | S6 | 文档改写与 errata | v0.58.0（公开文档 ✅；历史 errata 待办） | S5 | SP-030 现行文档通过（历史 errata 待办） | 回滚文档提交 |
-| S7 | 删除 `vendor/` 支持 | 待定（收口时实算） | 兼容期两个 minor 无 v1 lock 工程（由各包仓举证） | 本仓无 vendor 读写；v1 lock 只报错 | 恢复 S3 读路径一个 minor |
+| S7 | 删除 `vendor/` 支持 | 待定（收口时实算） | **仓内自证（三条可执行）**：① `test/pkg` 的 v1 / 无 lock 工程 `ct build` RC=0，stderr 含 `is read from vendor/ (v1)`；② `ct install` 对每个 v1 包只告警一次；③ `ct migrate` 后移走 `vendor/` 仍可 build | 本仓无 vendor 读写；v1 lock 只报错 | 恢复 S3 读路径一个 minor |
 
 > 包仓对齐（原 S4：std / ct-http / ct-fsguard / ct-json / ct-sse / ct-token / ct-process / ct-llm-sse）归各包仓，不属于本 phase；本仓只提供工具与判据，移交清单按仓分发。
+>
+> 包仓迁移状态（是否已迁移、`ct migrate` 是否覆盖其全部包、PK-6/12 是否绿）是**外部登记项**，
+> 由各包仓自行维护；CT 不追踪、不判定、不代为登记，也不进入本 phase 的完成判据。
 
 ### v0.58.0 之后的排期（2026-11-15 重排）
 
@@ -109,11 +115,14 @@
    → LANG-17（预处理行截断）→ LANG-5 字段形态 / LANG-11。
 2. **诊断与工具**：LANG-16 / LANG-8 / LANG-7 / LANG-3（Lexer 与 Expr 族串行）、SH-76；SH-79 只挡 PH-59 M2。
 3. **文档收口**：PH-54 S6 历史 errata、issue 状态回填、过时提案退役（不占版本位）。
-4. **PH-59 M1 模型导出**：真实前置是 LANG-10 7c（`Field` 补行列），不是不存在的「PH-58」。
-5. **PH-62 可写下标**：方向已通过研判，先开卡，再按 S0–S3 切片；与 PH-59 可并行开发。
-6. **PH-57 限定名**（SH-18 + LANG-15）：与 PH-62 同为 Parse/TypeCheck 族，必须串行。
-7. **PH-60 视图注记**：等 PH-59 schema 冻结且有真实消费者。
-8. **PH-54 S7 删除 vendor**：最后做，前置是 S6 errata 完成与兼容期口径统一。
+4. **PH-57 限定名**（SH-18 + LANG-15）→ **v0.59.0**：无前置、无卡，先开卡即可开工。
+5. **PH-59 M1 模型导出** → **v0.60.0**：真实前置是 LANG-10 7c（`Field` 补行列），不是不存在的「PH-58」。
+6. **PH-60 视图注记** → **v0.61.0**：等 PH-59 schema 冻结且有真实消费者；无消费者则空置该版本位，不后移。
+7. **PH-62 可写下标**（吸收 PH-61）→ **v0.62.0**：方向已通过研判，先开卡，再按 S0–S3 切片。
+8. **PH-54 S7 删除 vendor**：最后做，前置是 S6 errata 完成与 S7 仓内自证三条全绿。
+
+> 版本位按 AGENTS §0.3 的相位表：PH-54 已占 v0.54.0–v0.58.0，后续从 v0.59.0 起按下一个空位连续分配；
+> 上列为预留位，某相取消时其位空置，不重排已预留的后续相位。`v0.58.x` 只收 fix。
 
 编号说明：Phase 55 / 56 / 58 不再作为 phase 存在（分别并入 PH-62、放弃、拆成 patch + 前置任务）；
 PH-61 已被 PH-62 吸收。**本轮不重排既有编号**；版本位与 phase 号的偏移问题见
