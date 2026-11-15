@@ -1,0 +1,10 @@
+/* LANG-14（ct-json JSON-3）：`char *` 传给 struct 形参在 C 里必然失败，
+   现在是 CT 自己的硬错，不再降级成 warning 交给 `cc` 兜底。 */
+struct S { char *p; }
+
+static int take(struct S s) { (void)s; return 0; }
+
+int main(void)
+{
+    return take("k");
+}

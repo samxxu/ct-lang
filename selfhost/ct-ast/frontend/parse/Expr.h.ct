@@ -1456,15 +1456,37 @@ impl ExprOps for Expr {
             if (!skip && self->sup->expr_ctype(cur, at, sizeof at) != 0) skip = 1;
             if (!skip && strchr(at, '[')) skip = 1;   /* a decayed array */
             if (!skip) {
+                int fdp = 0, adp = 0;
+                const char *q;
+                /* LANG-14: a pointer mismatch between structs is still
+                   convertible in C (with a diagnostic), only a by-value
+                   struct against anything else is not. */
+                for (q = ft; *q; q++) if (*q == '*') fdp++;
+                for (q = at; *q; q++) if (*q == '*') adp++;
                 r = arg_class(ft, at, fb, sizeof fb, ab, sizeof ab);
                 if (r == 2) {
                     int fs = self->sym->find_struct(fb + 6);
                     int as = self->sym->find_struct(ab + 6);
-                    r = (fs < 0 || as < 0) ? -1 : (fs != as);
+                    r = (fs < 0 || as < 0) ? -1 : ((fs != as) ? 2 : 0);
+                }
+                if (r == 2) {
+                    snprintf(msg, cap, "argument %d: expected '%s', got '%s'",
+                             k + 1, ft, at);
+                    if (fdp == 0 || adp == 0) return 2;
+                    return 1;
                 }
                 if (r == 1) {
                     snprintf(msg, cap, "argument %d: expected '%s', got '%s'",
                              k + 1, ft, at);
+                    /* LANG-14: C rejects a by-value struct actual / formal
+                       against anything but the same struct, so the ct stage
+                       stops here instead of leaving the error to `cc`. The
+                       arithmetic and pointer spellings keep the warning level:
+                       C accepts those with a diagnostic and converts. `tclass`
+                       reads the tag from the source spelling (`fb` is
+                       whitespace-free, so `struct S` is `structS` there). */
+                    if ((fdp == 0 || adp == 0)
+                        && (tclass(ft, fb) == 1 || tclass(at, ab) == 1)) return 2;
                     return 1;
                 }
             }
@@ -1478,8 +1500,19 @@ impl ExprOps for Expr {
     int argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi)
     {
         char msg[MAX_TEXT];
+        char full[MAX_TEXT];
+        int r;
 
-        if (self->argtype_mismatch(args, fi, ti, mi, msg, sizeof msg)) {
+        r = self->argtype_mismatch(args, fi, ti, mi, msg, sizeof msg);
+        if (r == 2) {
+            /* LANG-14: a struct on either side cannot be converted by C, so
+               this is a hard error with the same wording the static-recipe
+               path uses (`argtype_check_static`). */
+            snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
+            tool::diag::ct_sem_error(line, col, full, self->sup->mem->path);
+            return -1;
+        }
+        if (r == 1) {
             if (self->sup->type_warn(line, col, callee, msg) != 0)
                 return self->sup->fail("too many warnings");
         }

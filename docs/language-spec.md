@@ -1940,6 +1940,9 @@ int apply(int base) {
 **签名检查分入口**：`ct check` / `ct compile` 不比对 impl 方法签名（参数类型、个数、返回类型都原样搬运）；
 `ct build` 在生成头之前比对，参数类型 / 个数 / 返回类型不一致按 L45-1 / L45-2 **硬错**（v0.45.0 起）。
 普通函数调用实参的元数 / 类型：默认路径只报警告，`ct check --types` 才把类型不一致升为错误（§4.53）。
+**v0.53.2 起例外**：至少一侧是**按值 `struct`** 的不一致（`char *` 传给 `Str` 形参、两个不同 struct 按值传递）
+在默认路径就是**硬错**（`error: type mismatch: '<callee>' argument <n>: expected '<T>', got '<U>'`），
+因为 C 无法转换、只会把同一条错误再报一次；`struct P *` ↔ `struct Q *` 这类指针不一致与算术类宽松规则保持不变。
 trait / struct **重名**不是静默接受：ct-ast 报 `duplicate trait '<name>'` / `duplicate struct '<name>'`；
 L0 / L2 仍取最先出现者，后者不可达、不报错。
 

@@ -362,7 +362,7 @@
 | LANG-11 | **High** | 同名 `.h.ct` + `.ct` 共用 `.ctbuild/<base>.c`：实现单元不自动编译，手加入参即 `duplicate symbol` | [lang-11-same-base-unit-output-collision.md](lang/lang-11-same-base-unit-output-collision.md) |
 | LANG-6 | Medium | `ct install` 只打印 `-I vendor/<包名>`，`src/` 布局的包消费方报 `cannot resolve import` | **并入 [PKG-2](packages/pkg-2-ct-install-package-root-import.md)**（不另立文件） |
 | LANG-3 | Medium | `MAX_CALLS` 固定 1024、按整次构建累计、拆单元无效；每条 324 字节 | [lang-3-max-calls-fixed-cap.md](lang/lang-3-max-calls-fixed-cap.md) |
-| LANG-14 | Medium | struct 形参收到非 struct 实参只报 warning、由 cc 兜底（ct-json JSON-3） | [lang-14-charptr-to-struct-arg-warning.md](lang/lang-14-charptr-to-struct-arg-warning.md) |
+| LANG-14 | Medium | struct 形参收到非 struct 实参只报 warning、由 cc 兜底（ct-json JSON-3，**已修** `struct_arg_from_charptr`） | [lang-14-charptr-to-struct-arg-warning.md](lang/lang-14-charptr-to-struct-arg-warning.md) |
 | LANG-10 | Medium（feature） | 诊断无可机读格式：门禁靠 `grep 'warning:'`、编辑器/CI 只能读人用文本，改文案即可能静默变绿 | [lang-10-machine-readable-diagnostics.md](lang/lang-10-machine-readable-diagnostics.md) |
 | LANG-12 | Medium（feature） | 自定义类型没有属性访问协议：`doc.server.host` 落到 C 字段规则，CT 放行、`cc` 报 `no member named` | [lang-12-property-access-protocol.md](lang/lang-12-property-access-protocol.md) |
 | LANG-7 | Low | 静态方法解析失败报 `use of an undeclared variable`，列号指向类型名 | [lang-7-undeclared-variable-points-at-type.md](lang/lang-7-undeclared-variable-points-at-type.md) |

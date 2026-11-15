@@ -5,8 +5,8 @@
 | 模块 | lang（诊断分级） |
 | 严重度 | Medium |
 | 优先级 | **P2** —— 不产生错误二进制，但 CT 把错误留给 C 编译器，诊断位置与级别都不一致 |
-| 状态 | 修复中（本相登记后即修） |
-| 锚点 | `v0.53.1`（`3337ac7a`） |
+| 状态 | **已修**（v0.53.2 工作树，回归 `struct_arg_from_charptr` / `struct_arg_wrong_struct`） |
+| 锚点 | `v0.53.2`（工作树） |
 | 上游 | ct-json [JSON-3](../../../ct-json/issues/JSON-3.md) |
 
 ## 精确触发条件
@@ -34,16 +34,19 @@ rc=1
 ## 根因与修法
 
 `Expr::argtype_mismatch`（19.2）把「确定的类型不一致」一律返回 1，`argtype_check` 按
-[规范 §6.1](../../docs/language-spec.md) 的统一口径报 warning。对**算术类 / 指针层数**
-不一致保留 warning（C 允许带诊断继续），但**任一侧基类型是 struct** 时 C 一定报 error，
-CT 应自己终止：`argtype_mismatch` 对此返回 2，`argtype_check` 升为
+[规范 §6.1](../../docs/language-spec.md) 的统一口径报 warning。修法：**至少一侧是按值 struct**
+（`fdp == 0 || adp == 0`，任一侧基类型是 struct）时返回 2，`argtype_check` 升为
 `error: type mismatch: '<callee>' argument <n>: expected '<T>', got '<U>'`（与静态配方
 `argtype_check_static` 同一句文案）。
 
+边界刻意收窄：`struct P *` ↔ `struct Q *` 这类**指针**不一致在 C 里带诊断可转换，仍保持
+warning（既有 `atype_fn` / `atype_m` 用例即此形态）；算术类宽松规则不动。
+
 ## 影响面评估（warning → error）
 
-- 该 warning 只在 **C 必然拒绝** 的 struct 形态上升级；`int *` ↔ `char *` 这类
-  「C 允许带诊断继续」的指针不一致仍保持 warning，因此不会收紧现有可编译代码。
+- 该 warning 只在 **C 必然拒绝** 的按值 struct 形态上升级；`struct P *` ↔ `struct Q *`、
+  `int *` ↔ `char *` 这类「C 允许带诊断继续」的指针不一致仍保持 warning，因此不会收紧
+  现有可编译代码（首轮把指针形态也升级，被 `atype_fn` / `atype_m` 两个既有用例抓红，已收窄）。
 - 下游实测：ct-json / rill-dsl / ct-sse / ct-fsguard / ct-http 的构建设置均要求
   warning-free；这类调用当前都以 cc error 收场，没有任何包依赖该 warning 得到可运行产物
   （JSON-3 原文同结论）。

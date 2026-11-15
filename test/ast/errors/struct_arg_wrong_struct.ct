@@ -1,0 +1,12 @@
+/* LANG-14 反向覆盖（同一条路径的另一种形态）：两个不同 struct 之间按值传递
+   在 C 里同样必然失败，必须是 CT 自己的硬错。 */
+struct A { int n; }
+struct B { int n; }
+
+static int take(struct A a) { return a.n; }
+
+int main(void)
+{
+    struct B b = { 1 };
+    return take(b);
+}
