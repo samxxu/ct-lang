@@ -341,6 +341,7 @@
 | ID | 严重度 | 标题 | 文件 |
 | --- | --- | --- | --- |
 | PKG-1 | Medium | `hal-posix` 的 `now_ms` 在开机约 24.8 天后回绕为负，违反 `hal` 的单调契约 | [pkg-1-hal-posix-now-ms-overflow.md](packages/pkg-1-hal-posix-now-ms-overflow.md) |
+| PKG-2 | Medium | `ct install` 只打印 `-I vendor/<包名>`：包内单元在 `src/<ns>/` 时消费端照抄即报 `cannot resolve import`（**open / 未来处理**，不阻塞当前相） | [pkg-2-ct-install-package-root-import.md](packages/pkg-2-ct-install-package-root-import.md) |
 
 ### 标准库（ct-pkg 包 `std`）
 
