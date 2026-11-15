@@ -5,7 +5,7 @@
 | 模块 | lang（parser / 结构体字段解析） |
 | 定性 | 编译回归：同一文件普通字段正常，泛型指针字段报字段名错误 |
 | 严重度 | **High**（阻断真实工程编译） |
-| 状态 | open |
+| 状态 | 受理（P0，v0.61.x patch） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 实测版本 | v0.60.0 |
 | 承诺出处 | [语言规范 §4.51](../../docs/language-spec.md)（泛型 struct 已落地；`Map<K,V>` 是泛型 struct） |
@@ -59,3 +59,14 @@ $ echo $?
 
 - [LANG-9](lang-9-struct-field-visibility-abi.md)：结构体字段的解析与发射。
 - [LANG-17](lang-17-preprocessor-line-truncation.md)：同属「编译失败/静默改义」的回归族。
+
+## 本仓评估（2026-11-16）
+
+- **受理：是**
+- **定性：实现缺陷（回归）**——泛型 struct 与指针字段都是既有能力，组合后编译失败。
+- **依据：** 语言规范 §4.51（[language-spec.md](../../docs/language-spec.md)）写明泛型 struct
+  与内置 `Map<K,V>` 已落地；struct 指针字段是既有语法。代码路径上，
+  `Parser.h.ct:2039` 依赖 `parse_type` 把首 declarator 的 `*` 收进 `typebuf`，
+  而 `:2074` 在 token 仍为 `*` 时报 `expected a field name`，说明泛型类型后的 `*` 未被收进。
+- **优先级 / 落点：** P0；`v0.61.x` patch（回归不走 phase）。补 `Map<Str, int> *field;`
+  与 `Vec<int> *field;` 两个夹具，并确认 0.58 的旧产物仍可编译。

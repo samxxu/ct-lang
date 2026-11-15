@@ -5,7 +5,7 @@
 | 模块 | selfhost（`ct migrate` / vendor 迁移 / 发布前准备） |
 | 类型 | 能力缺口（迁移结果不可被调用方判断） |
 | 严重度 | **High**（静默失败） |
-| 状态 | open |
+| 状态 | 受理（P0，v0.61.x patch） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [需求 SP-029](../../docs/planning/ct-pkg-shared-store-requirements.md)、[提案 §10 S3 验收](../../docs/proposals/ct-pkg-shared-store.md) |
 
@@ -55,3 +55,12 @@ $ echo $?
 
 - [SH-80](sh80-pkg-check-criteria-narrow.md)：同类「发现问题但门禁不阻断」。
 - [SH-84](sh84-verify-strict-no-dev-override-path.md)：严格校验的入口缺失。
+
+## 本仓评估（2026-11-16）
+
+- **受理：是**
+- **定性：实现缺陷**——失败路径没有把退出码传播出去。
+- **依据：** SP-029（[需求](../../docs/planning/ct-pkg-shared-store-requirements.md)）承诺
+  「`ct migrate` 后删除 `vendor/` 仍可构建」；退出码没有单独条目（无对应承诺），
+  但 rc=0 使调用方无法验证承诺是否达成。按 AGENTS §6.8 的「静默」口径按 bug 处理。
+- **优先级 / 落点：** P0；`v0.61.x` patch。失败即非零，并输出成功/失败汇总。

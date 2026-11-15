@@ -5,7 +5,7 @@
 | 模块 | selfhost（`ct get` 包发布引用 / 限定名解析） |
 | 类型 | 诊断缺陷（承诺的发布引用形态没有解析路径） |
 | 严重度 | Medium |
-| 状态 | open |
+| 状态 | 受理（P2，v0.61.x patch） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [提案 §7 引用方式](../../docs/proposals/ct-pkg-shared-store.md) |
 
@@ -54,3 +54,13 @@ $ echo $?
 ## 关联
 
 - [SH-80](sh80-pkg-check-criteria-narrow.md)：同属清单语义在工具侧没有完整兑现。
+
+## 本仓评估（2026-11-16）
+
+- **受理：是**
+- **定性：实现缺陷**——诊断路径错误，不是需求缺口。
+- **依据：** 提案 §7（[ct-pkg-shared-store.md](../../docs/proposals/ct-pkg-shared-store.md)）
+  定义 `ct get <publisher>/<name>@<range>` 为发布引用方式；§8 的固定错误文案里没有
+  「把限定名当 URL」这一项。无对应承诺（「无索引解析器」的错误文案尚未定义）。
+- **优先级 / 落点：** P2；`v0.61.x` patch，不占 phase。无索引时应报解析链缺失，
+  并补一条固定文案与夹具。

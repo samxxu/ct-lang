@@ -5,7 +5,7 @@
 | 模块 | selfhost（`ct pkg check` / 包清单读取 / 发布前门禁） |
 | 类型 | 能力缺口（包发布前的清单校验未兑现已声明语义） |
 | 严重度 | Medium |
-| 状态 | open |
+| 状态 | 不受理（非问题，2026-11-16 本仓评估） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [提案 §7 字段表](../../docs/proposals/ct-pkg-shared-store.md)、[§9 判据范围](../../docs/proposals/ct-pkg-shared-store.md)、[§7 版本与 tag 一致性](../../docs/proposals/ct-pkg-shared-store.md) |
 
@@ -62,3 +62,15 @@ ok: 4 criteria
 
 - [SH-85](sh85-pkg-check-scans-docs.md)：同一命令的扫描范围。
 - [SH-82](sh82-migrate-returns-zero-on-failure.md)：同类「检查发现问题但调用方拿不到失败」。
+
+## 本仓评估（2026-11-16）
+
+- **受理：否（非问题）**
+- **定性：非问题**——判据边界已由提案明确划出，不是实现与承诺不一致。
+- **依据：** 提案 §9（[ct-pkg-shared-store.md](../../docs/proposals/ct-pkg-shared-store.md)）明确：
+  「本仓只承诺 `ct pkg check R` 的实现范围：PK-1/2/5/8；其余判据（命名空间一致性、tag 一致、
+  依赖全名、离线解析等）由发布侧用自身门禁举证」。§7 字段表把 `licence` 标为**非必填**，
+  并写明「约定，工具不解析」。
+- **结论：** `dep` 全名、`requires` 可满足性、`version`/tag 一致性都不在 CT 已声明的判据内，
+  外部「检查过窄」的定性不成立。若项目要扩大判据，属**需求变更**：先改 §9 与 SP 判据，
+  再实现，不能当缺陷直接修。

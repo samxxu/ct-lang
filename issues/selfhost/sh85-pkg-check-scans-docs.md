@@ -5,7 +5,7 @@
 | 模块 | selfhost（`ct pkg check` / 包清单 / 发布文档扫描） |
 | 类型 | 能力缺口（检查范围超出 CT 已声明的判据） |
 | 严重度 | Medium |
-| 状态 | open |
+| 状态 | 受理（P2，v0.61.x patch） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [提案 §9 判据范围](../../docs/proposals/ct-pkg-shared-store.md)、[需求 SP-024](../../docs/planning/ct-pkg-shared-store-requirements.md) |
 
@@ -54,3 +54,14 @@ $ echo $?
 ## 关联
 
 - [SH-80](sh80-pkg-check-criteria-narrow.md)：同一命令的判据覆盖面与作用域。
+
+## 本仓评估（2026-11-16）
+
+- **受理：是**
+- **定性：实现缺陷**——检查范围超出构建输入，把发布文档的示例当成包内容。
+- **依据：** SP-024（[需求](../../docs/planning/ct-pkg-shared-store-requirements.md)）把
+  「包内不得出现指向自身绝对路径的 `-I`」列在**发布侧自查**一栏；提案 §9
+  （[ct-pkg-shared-store.md](../../docs/proposals/ct-pkg-shared-store.md)）只声明
+  `ct pkg check` 的 PK-1/2/5/8 范围。无对应承诺（扫描的文件集未定义）。
+- **优先级 / 落点：** P2；`v0.61.x` patch。先把扫描范围限定为 `ct.pkg`、`ct.lock`、
+  `*.ct`、`*.h.ct` 与构建脚本，再补一条文档示例夹具。

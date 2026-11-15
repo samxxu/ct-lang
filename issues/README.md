@@ -339,12 +339,12 @@
 | SH-77 | Low | `ABI_HASH` 只覆盖导出名，判不出签名级漂移（已被 REQ-ABI-2 承接，不排期） | [sh77-abi-hash-name-only.md](selfhost/sh77-abi-hash-name-only.md) |
 | SH-78 | Medium | `--lib` 导出面只收根单元 `pub` 自由函数，`impl` 的 `pub` 方法不计入（设计口径，不排期） | [sh78-lib-export-free-functions-only.md](selfhost/sh78-lib-export-free-functions-only.md) |
 | SH-79 | **High** | `--emit-map` 两个 facet：`--lib` 不落文件、build 的 `file` 指向内置层（patch 0.53.8） | [sh79-build-lib-emit-map-silent.md](selfhost/sh79-build-lib-emit-map-silent.md) |
-| SH-80 | Medium | 包发布前的清单校验只验四字段存在；`dep` 完整名与 `version`/tag 一致性未兑现 | [sh80-pkg-check-criteria-narrow.md](selfhost/sh80-pkg-check-criteria-narrow.md) |
-| SH-81 | Medium | 无索引解析器时限定名被当成 `https://<publisher>/<name>` 去 clone | [sh81-qualified-name-falls-back-to-url.md](selfhost/sh81-qualified-name-falls-back-to-url.md) |
-| SH-82 | **High**（静默） | `ct migrate` 打印缺字段错误后仍返回 0，调用方无法判断迁移失败 | [sh82-migrate-returns-zero-on-failure.md](selfhost/sh82-migrate-returns-zero-on-failure.md) |
-| SH-83 | Medium | `ct install` 打印的 `-I` 与 dev override 冲突，照抄即 `two import roots` | [sh83-install-printed-include-collides-with-override.md](selfhost/sh83-install-printed-include-collides-with-override.md) |
-| SH-84 | Medium | `ct verify --strict` 无本地开发态校验路径（现行为符合 SP-016，属能力缺口） | [sh84-verify-strict-no-dev-override-path.md](selfhost/sh84-verify-strict-no-dev-override-path.md) |
-| SH-85 | Medium | 包发布前的检查扫描全部文本，发布文档示例中的绝对 `-I` 会误判整包红 | [sh85-pkg-check-scans-docs.md](selfhost/sh85-pkg-check-scans-docs.md) |
+| SH-80 | 非问题 | 包发布前的清单校验只验四字段存在；`dep` 全名与 `version`/tag 一致性按提案 §9 属发布侧判据，不在 CT 范围 | [sh80-pkg-check-criteria-narrow.md](selfhost/sh80-pkg-check-criteria-narrow.md) |
+| SH-81 | P2 | 无索引解析器时限定名被当成 `https://<publisher>/<name>` 去 clone | [sh81-qualified-name-falls-back-to-url.md](selfhost/sh81-qualified-name-falls-back-to-url.md) |
+| SH-82 | **P0（High）** | `ct migrate` 打印校验错误后仍返回 0，调用方无法判断迁移失败 | [sh82-migrate-returns-zero-on-failure.md](selfhost/sh82-migrate-returns-zero-on-failure.md) |
+| SH-83 | P1 | `ct install` 打印的 `-I` 与 dev override 冲突，照抄即 `two import roots` | [sh83-install-printed-include-collides-with-override.md](selfhost/sh83-install-printed-include-collides-with-override.md) |
+| SH-84 | 非问题 | `ct verify --strict` 拒绝 dev override 符合 SP-016；本地严格校验属需求变更 | [sh84-verify-strict-no-dev-override-path.md](selfhost/sh84-verify-strict-no-dev-override-path.md) |
+| SH-85 | P2 | 包发布前的检查扫描全部文本，发布文档示例中的绝对 `-I` 会误判整包红 | [sh85-pkg-check-scans-docs.md](selfhost/sh85-pkg-check-scans-docs.md) |
 
 ### `packages/` —— CT 包管理工具缺陷
 
@@ -381,7 +381,7 @@
 | LANG-14 | Medium | struct 形参收到非 struct 实参只报 warning、由 cc 兜底（ct-json JSON-3，**已修** `struct_arg_from_charptr`） | [lang-14-charptr-to-struct-arg-warning.md](lang/lang-14-charptr-to-struct-arg-warning.md) |
 | LANG-16 | Medium | 诊断位置源过期：块注释后列号偏移、`1:-3788` 类负列（patch 0.53.16，与 PH-62 独立） | [lang-16-diagnostic-position-negative.md](lang/lang-16-diagnostic-position-negative.md) |
 | LANG-17 | **High**（静默） | 超长预处理行（`#define` / `#include` > 159 字节）被静默截断，截断点合法时全链路 rc=0 但语义已改（DF-1 转入） | [lang-17-preprocessor-line-truncation.md](lang/lang-17-preprocessor-line-truncation.md) |
-| LANG-18 | **High** | 包发布工程编译回归：泛型指针结构体字段（`Map<Str, int> *index;`）报 `expected a field name` | [lang-18-generic-pointer-struct-field-parse.md](lang/lang-18-generic-pointer-struct-field-parse.md) |
+| LANG-18 | **P0（High）** | 包发布工程编译回归：泛型指针结构体字段（`Map<Str, int> *index;`）报 `expected a field name` | [lang-18-generic-pointer-struct-field-parse.md](lang/lang-18-generic-pointer-struct-field-parse.md) |
 | LANG-10 | Medium（feature） | 诊断无可机读格式：门禁靠 `grep 'warning:'`、编辑器/CI 只能读人用文本，改文案即可能静默变绿 | [lang-10-machine-readable-diagnostics.md](lang/lang-10-machine-readable-diagnostics.md) |
 | LANG-12 | Medium（feature） | 自定义类型没有属性访问协议：`doc.server.host` 落到 C 字段规则，CT 放行、`cc` 报 `no member named` | [lang-12-property-access-protocol.md](lang/lang-12-property-access-protocol.md) |
 | LANG-15 | Medium（feature） | 枚举成员不能写 `FsErrCode::FS_ERR_OUT_OF_BOUNDS`：值位置 `Type::Member` 被当成命名空间变量（PH-57） | [lang-15-qualified-enum-member-value.md](lang/lang-15-qualified-enum-member-value.md) |

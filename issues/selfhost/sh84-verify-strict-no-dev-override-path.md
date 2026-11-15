@@ -5,7 +5,7 @@
 | 模块 | selfhost（`ct verify --strict` / 包 lock / dev override） |
 | 类型 | 能力缺口（不是回归；现有行为符合已写下的判据） |
 | 严重度 | Medium |
-| 状态 | open |
+| 状态 | 不受理（非问题；改动需先改 SP-016） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [需求 SP-016](../../docs/planning/ct-pkg-shared-store-requirements.md)、[提案 §10 S3](../../docs/proposals/ct-pkg-shared-store.md) |
 
@@ -55,3 +55,14 @@ $ echo $?
 ## 关联
 
 - [SH-83](sh83-install-printed-include-collides-with-override.md)：同属 dev override 的规则边界。
+
+## 本仓评估（2026-11-16）
+
+- **受理：否（非问题）**
+- **定性：非问题**——当前行为与已写下的判据一致；「本地态也要严格校验」是能力不足，
+  属**需求需要变更**，不是缺陷。
+- **依据：** SP-016（[需求](../../docs/planning/ct-pkg-shared-store-requirements.md)）明确
+  「`ct verify --strict` 在 lock 含 `dir` 行或 vendor 回退时失败」；提案 §10 S3
+  （[ct-pkg-shared-store.md](../../docs/proposals/ct-pkg-shared-store.md)）同一判据。
+- **若要支持：** 先改需求（新增开关或 `--strict --allow-override` 语义），再实现；
+  不能按缺陷直接修。文档里可补一句「`--strict` 只验 store-backed lock」，属于文档补齐。
