@@ -1327,6 +1327,52 @@ else
 fi
 
 echo
+echo "== S5: dual-HOME reproducibility =="
+S5="$work/s5"
+mkdir -p "$S5/repo/p/src" "$S5/proj1" "$S5/proj2"
+printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S5/repo/p/ct.pkg"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S5/repo/p/src/p.h.ct"
+( cd "$S5/repo/p" && git init -q && git add -A \
+    && git -c user.email=a@b -c user.name=a commit -qm one && git tag 0.1.0 )
+for n in 1 2; do
+    mkdir -p "$S5/home$n" "$S5/cthome$n" "$S5/c$n"
+    printf 'name = demo\nversion = 0.1.0\ndep = ct/p@^0.1.0\n' >"$S5/proj$n/ct.pkg"
+    printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$S5/proj$n/main.ct"
+    ( cd "$S5/proj$n" && HOME="$S5/home$n" CT_HOME="$S5/cthome$n" \
+        CT_REGISTRY=file://"$S5/repo" "$work/ct-ast" get p@^0.1.0 >/dev/null 2>&1 \
+      && HOME="$S5/home$n" CT_HOME="$S5/cthome$n" \
+        "$work/ct-ast" build main.ct -o "$S5/app$n" >"$S5/b$n.out" 2>"$S5/b$n.err" \
+      && HOME="$S5/home$n" CT_HOME="$S5/cthome$n" \
+        "$work/ct-ast" build main.ct --emit-c -o "$S5/c$n" >/dev/null 2>&1 )
+    # The store root and project root are the only differences the compiler may
+    # see; normalize them and compare the emitted C tree.
+    ( cd "$S5/c$n" && find . -type f ! -path './.ctcache/*' | sort | while read -r f; do
+        printf '== %s ==\n' "$f"
+        sed -e "s|$S5/cthome$n|@STORE@|g" -e "s|$S5/proj$n|@PROJ@|g" "$f"
+      done ) >"$S5/norm$n"
+done
+if cmp -s "$S5/proj1/ct.lock" "$S5/proj2/ct.lock"; then
+    ok "S5 the same v2 lock is written under both HOMEs"
+else
+    bad "S5 locks" "$(diff "$S5/proj1/ct.lock" "$S5/proj2/ct.lock" | head -5)"
+fi
+if [ -x "$S5/app1" ] && [ -x "$S5/app2" ] \
+   && [ "$("$S5/app1")" = "42" ] && [ "$("$S5/app2")" = "42" ] \
+   && [ -s "$S5/norm1" ] && cmp -s "$S5/norm1" "$S5/norm2"; then
+    ok "S5 builds produce identical normalized C and output under two HOMEs"
+else
+    bad "S5 build" "$(cat "$S5/b1.err" "$S5/b2.err")"
+fi
+if ( cd "$S5/proj1" && HOME="$S5/home1" CT_HOME="$S5/cthome1" \
+        "$work/ct-ast" verify --strict >/dev/null 2>&1 ) \
+   && ( cd "$S5/proj2" && HOME="$S5/home2" CT_HOME="$S5/cthome2" \
+        "$work/ct-ast" verify --strict >/dev/null 2>&1 ); then
+    ok "S5 both stores pass --strict independently"
+else
+    bad "S5 verify" "one of the isolated stores failed --strict"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]

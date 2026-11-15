@@ -13,14 +13,16 @@
 
 ### 1. 一个包长什么样
 
-包仓库的**根目录就是包根**：`ct.pkg`、`LICENSE` 与源码单元并列，不嵌套子目录。
-「包根 = 单元根」是当前契约（陷阱与替代机制见 §8.1、§8.4）。
+包仓库的**根目录是包根**：`ct.pkg` 与 `LICENSE` 放在根，源码单元放在清单
+`ns-root` 指定的子目录（`ns-root = .` 时单元与 `ct.pkg` 并列）。消费者拿到的 `-I` 是
+`<store>/<publisher>/<name>/<version>/<ns-root>`，不再假设「包根 = 单元根」。
 
 ```
 hello/
 ├── ct.pkg          # 清单（唯一由工具强制的文件）
 ├── LICENSE         # 许可证（发布约定必备；工具不校验，见 §5）
-└── hello.h.ct      # 源码单元，可多个
+└── src/            # ns-root，可换成别的相对目录或 .
+    └── hello.h.ct  # 源码单元，可多个
 ```
 
 源码单元遵守 [AGENTS.md](../AGENTS.md) §2 的「一单元一主类型」：
@@ -173,32 +175,24 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 > [提案](proposals/ct-pkg-shared-store.md)、[需求定稿](planning/ct-pkg-shared-store-requirements.md) 与
 > [Phase 54 卡](design/phase54.md)；那是一次**契约变更**，不是增量字段。
 
-#### 8.1 包根即单元根，不支持嵌套
+#### 8.1 `ns-root` 取代「包根 = 单元根」
 
-- 包仓库根 = 包根 = 单元树根：`ct.pkg`、`LICENSE` 与 `*.h.ct` / `*.m.ct` 并列。
-- `import a::b::U` 在 `-I <包根>` 下按 `<包根>/a/b/U.h.ct` 查找；目录名必须与命名空间首段一致。
-- **没有** `ns-root` 键，也没有任何「单元树在子目录」的官方形态。
+- 包根仍是仓库根（放 `ct.pkg` / `LICENSE`），单元树根由 `ns-root` 声明；`ns-root` 必须是相对
+  包根、不含 `..`、目录存在。
+- `import a::b::U` 在 `-I <store>/<pkg>/<ver>/<ns-root>` 下按 `<ns-root>/a/b/U.h.ct` 查找；
+  目录名仍须与命名空间首段一致。
+- 旧的「包根 = 单元根」只在 §9 的兼容期成立，不再是新包的契约。
 
-#### 8.2 `src/<ns>/` 布局在当前机制下不可消费
+#### 8.2 单元在 `src/` 的包现在可直接消费
 
-包把单元放在 `src/fsguard/FsGuard.h.ct`，消费者照抄 `ct install` 的输出：
-
-```sh
-ct install          # ct build -I vendor/fsguard main.ct -o build
-ct build -I vendor/fsguard main.ct -o build
-# ctc: cannot resolve import 'fsguard/FsGuard'
-# rc=1
-```
-
-即使消费者自己改成 `-I vendor/fsguard/src`，如果单元的 C 头路径写成 `#include "fsguard/X.shim.h"`，
-还需要 `-Isrc`；而 `ct.pkg` 的 `cflags` 只进 `cc` 行、不参与 import 解析。真实案例见
-[PKG-2](../issues/packages/pkg-2-ct-install-package-root-import.md)。
+例如 `ns-root = src` 的 fsguard，`ct get` 后 `ct build` 自动补 store 的 `-I …/src`，消费者不再
+手写 include root；`ct install` 打印的也是这个目录。旧工程若仍把单元放在包根，只在 §9 的 v1
+兼容路径下工作。
 
 #### 8.3 `ct install` 的 `-I` 形态，且不校验 import
 
 - v2 lock：`-I $CT_HOME/pkg/<publisher>/<name>/<version>/<ns-root>`（`ns-root = .` 时省掉末段）。
-- v1 lock（旧工程）：`-I vendor/<name>`，与 S0 之前逐字一致。
-- 它只做三件事：校验 lock 摘要（v2 查 store，v1 查 vendor）、校验 `dep` 被 lock 覆盖、拼 `cflags`/`ldflags`。
+- 它只做三件事：校验 store 摘要、校验 `dep` 被 lock 覆盖、拼 `cflags`/`ldflags`。
 - **不解析 import**：包内单元找不到时它照样 `rc=0`。`ct install` 退出码 0 ≠ 消费者能编译。
 
 #### 8.4 `namespace` 与 `ns-root`
@@ -213,15 +207,14 @@ ct build -I vendor/fsguard main.ct -o build
 
 - store：`$CT_HOME/pkg/<publisher>/<name>/<version>/`（`CT_HOME` 默认 `$HOME/.ct`）；同版本重装
   摘要相同即 no-op、不同即硬错且不覆盖；不同版本目录可并存。
-- `ct get` 仍写 `vendor/<name>` 兼容旧工程；v2 lock 每行七字段
-  `<pub>/<name> <version> <type> <locator> <commit|-> <ns-root> <sha256:…>`。
+- v2 lock 每行七字段 `<pub>/<name> <version> <type> <locator> <commit|-> <ns-root> <sha256:…>`；
+  旧工程仍写 `vendor/` 的行为见 §9。
 - **`ct build` 默认读 `./ct.lock`**：v2 git 行自动补 `-I $CT_HOME/pkg/<pkg>/<ver>/<ns-root>`，
   v2 `dir` 行使用本地路径并在 stderr 打 `note: '<pkg>' resolves to the local directory (dev override)`。
   用户显式 `-I` 仍然有效且排在前面；重复根由既有导入规则去重。
 - `ct build --locked`：store 缺失报 `is not installed`、摘要不符报 `does not match ct.lock`，不回退；
   无 lock 或 v1 lock 也直接失败。
-- 无 `ct.lock`：回退 `vendor/<name>` 并**只**打一次
-  `warning: no ct.lock; reading vendor/ (legacy layout)`；既无 lock 也无 vendor 时保持安静。
+- 无 `ct.lock` 时的 vendor 回退只属兼容期，见 §9。
 - lock 内同一裸包名出现两行（不论发布方）→ `package '<name>' is required twice: a/<name> and b/<name>`。
 - `ct verify`：v2 行检查版本目录存在与第 7 字段摘要；缺失报 `is not installed`、不符报
   `does not match ct.lock`。`--strict` 拒绝任何 `dir` 行或 v1 vendor 回退。
@@ -234,3 +227,26 @@ ct build -I vendor/fsguard main.ct -o build
   S7 移除 vendor 路径；缓存键仍按裸包名。
 - 逐条缺陷见 [PKG-3 … PKG-8](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)。
 
+### 9. 兼容期：v1 lock 与 `vendor/`
+
+这一节描述**旧工程**，不是新包的现行契约。兼容期结束后（S7）整节删除。
+
+- v1 lock（无 `# ct-lock 2` 头）仍按 vendor 读取；`ct build` 无 `ct.lock` 时枚举 `vendor/*`，
+  打一次 `warning: no ct.lock; reading vendor/ (legacy layout)`，并对每个包打
+  `warning: '<name>' is read from vendor/ (v1); run 'ct migrate'`。
+- `ct install` 对 v1 lock 打印 `-I vendor/<name>`（与 S0 之前逐字一致），摘要校验也读 `vendor/`。
+- 旧「包根 = 单元根」的布局只在这里成立。包把单元放在 `src/fsguard/FsGuard.h.ct` 而消费者照抄
+  v1 输出时，会看到：
+
+```sh
+ct install          # ct build -I vendor/fsguard main.ct -o build
+ct build -I vendor/fsguard main.ct -o build
+# ctc: cannot resolve import 'fsguard/FsGuard'
+# rc=1
+```
+
+  即使改成 `-I vendor/fsguard/src`，若 C 头路径写成 `#include "fsguard/X.shim.h"` 还要 `-Isrc`；
+  `ct.pkg` 的 `cflags` 只进 `cc` 行、不参与 import 解析。真实案例见
+  [PKG-2](../issues/packages/pkg-2-ct-install-package-root-import.md)。
+- 升级路径：`ct migrate` 把 `vendor/` 树写入 store 并重写 v2 lock；随后 `mv vendor /tmp/v`，
+  `ct build main.ct -o build` 从 store 取包，不再需要 vendor。

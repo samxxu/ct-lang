@@ -217,7 +217,7 @@
 | 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct update` / `ct install` / `ct verify` 子命令，Phase 8 落地（本地目录源 + git 源），Phase 17.5 补齐更新、校验与索引，Phase 18 建组织（`github.com/ct-pkg`）并发布首批官方包 |
 | 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `licence` / 可重复的 `dep = <spec>[@<range>]`（D21）；17.5 增可选 `cflags` / `ldflags` / `requires`。**未知键静默忽略**：`ns-root` / `publisher` 当前不存在，写了也不生效（[PKG-3](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)） |
 | 锁文件（lock file） | `ct.lock` | 每个依赖一行 `name ver kind ref digest`；`kind` 为 `dir` 或 `git`，末列是 `sha256:<64 hex>` 的整棵包树摘要（按路径排序后单流哈希；D23 / D27，SH-44）。**没有**发布方、ns-root 与格式头；`ct build` 当前不读它 |
-| vendored 目录 | `vendor/<name>/` | `ct get` 同步进来的包树；`ct install` 打印 `-I vendor/<name>`（恒为包根，不读包内布局），且**不校验 import 能否解析**——它退出 0 不代表消费者可用 |
+| 共享 store | `$CT_HOME/pkg/<publisher>/<name>/<version>/` | `ct get` 写入、`ct build` 按 v2 `ct.lock` 自动读取的包树；`-I` 指向 `<version>/<ns-root>`。兼容期的旧工程仍可能读 `vendor/<name>/`（见 package-guide §9） |
 | 包根（package root） | 含 `ct.pkg` 的目录 | **现状契约**：包根即单元树根，单元与清单并列、不嵌套；`-I` 恒为包根。`src/<ns>/` 布局在当前机制下不可消费（[package-guide §8](package-guide.md)） |
 | 单元树根（ns-root） | `ct.pkg` 的目标键 | 共享库提案引入的目标形态（[需求 SP-003](planning/ct-pkg-shared-store-requirements.md)）；**当前版本不存在**。与下一条不是同一件事 |
 | 命名空间前缀键（`namespace`） | `ct.pkg` 的现状键 | 编译器实际读取的键：命中 import 首段时**剥掉**该段再在 `-I` 根下找文件；与 `ns-root`（给根目录**加**前缀）语义相反。未写入包作者指南，易被误当成 ns-root（[PKG-3](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)） |

@@ -703,14 +703,13 @@ static int raw_helper(int n) { return n + 1; }
 
 ## 10. 标准库：`std`
 
-`std` 是独立的 **ct-pkg 包**（包名 `std`，namespace 仍是 `std::<mod>`），不随本仓库发布，也不在
-`ct` 二进制里；用 `ct get std` 拉进项目的 `vendor/`，再按 `ct install` 打印的 include root 构建
-（导入仍要显式给 `-I`，没有默认搜索路径）：
+`std` 是独立的 **ct-pkg 包**（发布方 `ct`，包名 `std`，namespace 仍是 `std::<mod>`），不随本仓库
+发布，也不在 `ct` 二进制里；`ct get` 把它写进共享 store 并写 v2 `ct.lock`，`ct build` 自动从 lock
+补 store 的 include root，消费者不再手写 `-I`：
 
 ```sh
-ct get std
-ct install                              # 打印 ct build -I vendor/std ...
-ct build -I vendor/std main.ct -o main
+ct get ct/std@^0.1.0
+ct build main.ct -o main
 ```
 
 namespace 固定为 `std::<mod>`，调用只有一种形态：方法。宿主是 C 已有类型的模块（`str` / `fs` /
@@ -734,7 +733,7 @@ int main(void)
 }
 ```
 
-下表路径相对包的 namespace 根（安装后是 `vendor/std/std/`）：
+下表路径相对包的 `ns-root`（本机安装后是 `$CT_HOME/pkg/ct/std/<version>/<ns-root>/`）：
 
 | 单元 | namespace | 方法 |
 | --- | --- | --- |
@@ -803,20 +802,20 @@ buf.encode(233, 16);
 
 三条约定：缓冲区不够返回 `-1` / `NULL`，绝不静默截断；**不依赖 `delete`**，每个资源类型都有显式
 `free()` / `reset()` / `clear()`；`Map` 固定容量、满载拒绝新键，不自动 rehash。详见包内
-`std/README.md`（`ct get std` 后位于 `vendor/std/std/README.md`）。
+`std/README.md`（`ct get` 后位于 `$CT_HOME/pkg/ct/std/<version>/<ns-root>/README.md`）。
 
 每个模块有一对文档：`README.md` 是参考（方法全集、参数、返回值、内存归属、本模块的坑），
 `tutorial.md` 是从零写到能用的过程。这里的总览不重复它们的内容；两文件都在包内同一目录
-（`vendor/std/std/<mod>/`）：
+（`$CT_HOME/pkg/ct/std/<version>/<ns-root>/<mod>/`）：
 
 | 模块 | 参考 | 教程 |
 | --- | --- | --- |
-| `std::str` / `std::vec` | `vendor/std/std/str/README.md` · `vendor/std/std/vec/README.md` | `vendor/std/std/str/tutorial.md` · `vendor/std/std/vec/tutorial.md` |
-| `std::fs` | `vendor/std/std/fs/README.md` | `vendor/std/std/fs/tutorial.md` |
-| `std::utf8` | `vendor/std/std/utf8/README.md` | `vendor/std/std/utf8/tutorial.md` |
-| `std::map` | `vendor/std/std/map/README.md` | `vendor/std/std/map/tutorial.md` |
-| `std::arena` | `vendor/std/std/arena/README.md` | `vendor/std/std/arena/tutorial.md` |
-| `std::test` | `vendor/std/std/test/README.md` | `vendor/std/std/test/tutorial.md` |
+| `std::str` / `std::vec` | `<ns-root>/str/README.md` · `<ns-root>/vec/README.md` | `<ns-root>/str/tutorial.md` · `<ns-root>/vec/tutorial.md` |
+| `std::fs` | `<ns-root>/fs/README.md` | `<ns-root>/fs/tutorial.md` |
+| `std::utf8` | `<ns-root>/utf8/README.md` | `<ns-root>/utf8/tutorial.md` |
+| `std::map` | `<ns-root>/map/README.md` | `<ns-root>/map/tutorial.md` |
+| `std::arena` | `<ns-root>/arena/README.md` | `<ns-root>/arena/tutorial.md` |
+| `std::test` | `<ns-root>/test/README.md` | `<ns-root>/test/tutorial.md` |
 
 ### 10.1 闭包：把上下文带进回调
 
@@ -1722,6 +1721,9 @@ Result<long, char *> twice(int n)
 `struct B *`；`void *`、裸 `0`、typedef、数组、闭包和函数指针仍跳过。闭包块体内的
 `return` 不再按外层函数返回类型检查，避免 `examples/18_generic_string_table` 的假阳性。
 
+> **兼容期**：旧 v1 工程仍可能由 `ct install` 打印 `-I vendor/std ...`，并按 vendor 读取；那是 S7
+> 之前保留的兼容路径，新工程请用 `ct migrate` 升级（见 [package-guide §9](package-guide.md#9-兼容期v1-lock-与-vendor)）。
+
 ## 11. 命令行速查
 
 | 命令 | 作用 |
@@ -1740,10 +1742,11 @@ Result<long, char *> twice(int n)
 | `ct … --diagnostics=json\|text` | 告警格式（默认 `text` 写 stderr）；`ct check` 下同一批记录按错误报告（`file:line:col:`），JSON 对象带 `"severity":"error"` 与 `"col"` |
 | `ct … --line` / `--no-line` | 覆盖 `#line` 默认（`build` 默认开、`compile` 默认关） |
 | `ct … --std=c99\|gnu99` | 写进 C 编译器的命令行，产物暂无异 |
-| `ct get [--force] <spec>[@<range>]` | 拉包到 `vendor/`，写 `ct.lock`（唯一会用系统 `git` 的子命令）；裸名可经 `--index <file>` / `CT_INDEX` 查显式索引；包的 `requires` 不满足则失败且不改动既有 `ct.lock`（`--force` 继续并告警） |
-| `ct update` | 离线按 `ct.pkg` 重解依赖，沿用 `ct.lock` 已钉住的提交并重写 `ct.lock` |
-| `ct install` | 离线校验 `ct.lock` 与 `vendor/`，把各包的 `cflags` / `ldflags` 与 `-I` 拼成**一条**构建命令 |
-| `ct verify` | 离线校验 `vendor/` 与 `ct.lock`，只报告，不写任何文件 |
+| `ct get [--force] <spec>[@<range>]` | 拉包进共享 store（`$CT_HOME/pkg/<publisher>/<name>/<version>/`）并写 v2 `ct.lock`（唯一会用系统 `git` 的子命令）；裸名可经 `--index <file>` / `CT_INDEX` 查显式索引；包的 `requires` 不满足则失败且不改动既有 `ct.lock`（`--force` 继续并告警） |
+| `ct update` | 离线：v2 校验 store 并保留已钉住的版本；v1 沿用旧 vendor 路径重解 |
+| `ct install` | 离线校验 `ct.lock` 与 store，把各包的 `cflags` / `ldflags` 与 store 的 `-I` 拼成**一条**构建命令 |
+| `ct verify [--strict]` | 离线校验 store（v2）或 `vendor/`（v1）与 `ct.lock`；`--strict` 拒绝 `dir` 行与 v1 回退 |
+| `ct migrate` | 离线把 v1 `vendor/` 树写进 store 并重写 v2 `ct.lock` |
 | `ct -v` / `ct -h` | 版本 / 用法 |
 
 退出码：成功 `0`，语法或 I/O 错误 `1`。**源码诊断**（解析期与语义期）格式为 `文件:行:列: error: 描述`；

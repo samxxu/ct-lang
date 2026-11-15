@@ -167,10 +167,9 @@ say "installed $prefix/ct ($version) and $prefix/ctc"
 
 # --- 5. standard library -------------------------------------------------------
 # `std` is a normal ct-pkg package, not part of this repository or of the binary,
-# so there is nothing to copy here. It is installed into a project's own vendor
-# tree, and `ct install` prints the include root that project has to pass (D17-2:
-# the compiler still has no default search path).
-say "the standard library is a package; in your project run: ct get std && ct install"
+# so there is nothing to copy here. `ct get` writes it into the shared store and
+# `ct build` reads the v2 lock, so the consumer passes no manual include root.
+say "the standard library is a package; in your project run: ct get ct/std && ct build main.ct -o main"
 
 case ":$PATH:" in
     *":$prefix:"*) ;;
@@ -185,8 +184,8 @@ Next steps:
   /tmp/greeter
 
 Standard library (a ct-pkg package, per project):
-  ct get std
-  ct install                             # prints the -I line to pass to ct build
+  ct get ct/std
+  ct build main.ct -o main               # reads ct.lock and adds the store include root
 
 Tutorial: https://github.com/$repo/blob/main/docs/tutorial.md
 EOF

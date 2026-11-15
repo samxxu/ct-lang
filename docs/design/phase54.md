@@ -127,3 +127,14 @@ S3（verify/migrate）未开工。
 | 门禁 | test/pkg 127/0；check-ast 1444/0；check-all 11/11 |
 
 S4（外部包仓）未执行。
+
+## 12. S5/S6 收口记录（2026-11-15，v0.58.0，仓内部分）
+
+| 项 | 结果 |
+| --- | --- |
+| S5 | 双 HOME/CT_HOME 同 lock 构建：lock 逐字节一致、运行输出一致、规范化生成 C 一致；SP-028 vendor 回退告警 |
+| S6 | package-guide/tutorial/README/README.en/install.sh/glossary 改为 store 为现行机制；`-I vendor/` 仅兼容期 |
+| 门禁 | test/pkg 130/0；check-ast 1444/0；check-all 11/11 |
+
+**未完成/阻塞**：S4 需要外部包仓（ct-std/ct-fsguard/ct-json 等）在场并打 tag；S7 删除 vendor 支持
+须等兼容期结束。Phase 54 不宣称整体完成。

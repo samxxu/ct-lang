@@ -2791,6 +2791,8 @@ int ct_pkg_lock_roots(const char *prog, int locked, char *roots, int *nroots, ch
                     return 1;
                 }
                 snprintf(roots + (*nroots) * 512, 512, "%s", p);
+                fprintf(stderr, "ctc: warning: '%s' is read from vendor/ (v1); run 'ct migrate'\n",
+                        e->d_name);
                 (*nroots)++;
             }
             closedir(d);
@@ -2880,6 +2882,8 @@ int ct_pkg_lock_roots(const char *prog, int locked, char *roots, int *nroots, ch
         if (typ[i][0] == 0) {
             /* v1: vendor/<name> stays the include root. */
             snprintf(roots + (*nroots) * 512, 512, "vendor/%s", full[i]);
+            fprintf(stderr, "ctc: warning: '%s' is read from vendor/ (v1); run 'ct migrate'\n",
+                    full[i]);
             (*nroots)++;
             continue;
         }
