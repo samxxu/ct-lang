@@ -1,0 +1,29 @@
+/* Phase 52 / E52-7: only a single-layer string key is claimed. The protocol
+   compares the key itself; `x[0]` is deliberately not a success case (D52-6). */
+#include <stdio.h>
+#include <string.h>
+
+struct Store {
+    int found;
+}
+
+impl Store {
+    int get(char *k)
+    {
+        return strcmp(k, "name") == 0;
+    }
+    void set(char *k, int v)
+    {
+        self->found = v;
+    }
+}
+
+int main(void)
+{
+    Store s;
+    s.found = 0;
+    printf("get=%d\n", s["name"]);
+    s["name"] = 3;
+    printf("set=%d\n", s.found);
+    return 0;
+}

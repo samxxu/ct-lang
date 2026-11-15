@@ -2489,3 +2489,28 @@ Result<long, char *> twice(int n)
   不同星数报 L45-1 / L45-2；`void *` ↔ 任意对象指针、裸 `0`、typedef、数组、闭包、
   函数指针仍保持跳过。
 - 文案沿用 `initializer:` / `assignment:` / `return:` / `argument <n>:`。
+
+### 4.64 自定义类型下标（Phase 52，仅 ct-ast）
+
+- **读形态**：非指针的 `struct` 值接收者、且类型在 `impl` 里有固有 `get` 时，`obj[k]`
+  展开为 `obj.get(k)`（复用 `N_MCALL` / `aux = 9`，与容器下标同形）。**方案 A**：只匹配
+  名字 + 参数个数（1）+ 非 `static`，**不看参数类型**（D52-2）。
+- **写形态**：语句 `obj[k] = v;` 展开为 `obj.set(k, v)`；`set` 同样只按名字 + 参数个数（2）
+  + 非 `static` 匹配。只支持普通 `=`、且接收者必须是可回溯到变量的左值（D52-4）。
+- **诊断**（位置一律指向 `[`；一次只报一条）：
+  - L52-1 缺 `get`：`type 'X' has no subscript: declare 'V get(K)' in impl X`
+  - L52-2 缺 `set`（只读）：`type 'X' has a read-only subscript: declare 'void set(K, V)' in impl X`
+  - L52-3 `get` 参数个数不是 1；L52-4 `set` 参数个数不是 2
+  - L52-5 `get` / `set` 是 `static`
+  - L52-6 `+=` / `++` / `--`：`a custom subscript supports only '='; use set(k, v)`
+  - L52-7 `&obj[k]`：`cannot take the address of a custom subscript; bind it to a local first`
+  - L52-8 写形态不是语句或接收者非左值
+  - L52-9 右值是 `own` / `borrow` 变量
+  - L52-10 `get` / `set` 在定义单元私有、消费单元不可见
+- **不进入协议**：`struct X *p` 的 `p[k]` 保持 C 指针算术；C 数组 / `int *` / 指针到 struct 的
+  `[]` 逐字节不变；`Vec` / `Map` 的下标糖与 L31-3 / L31-4 写保护不变；trait 提供的 `get` 不算
+  （只认固有 `impl`）。
+- **已知洞（D52-6）**：数字下标 `v[0]` 会按方案 A 展开成 `get(0)`；若 `get` 接受 `char *`，
+  这是空指针常量，`cc` 零告警且 `get` 返回空——**静默空值，不诊断**。JSON 数字下标请用
+  `get_idx`，禁止写 `v[0]`；后续由 REQ-JSACCESS-1 完整实现。
+- **范围外**：`x[k].field = v`、`x[k].m()`、连写 `v["a"]["b"]` 仍落 `cc` / 包层，不在本相。

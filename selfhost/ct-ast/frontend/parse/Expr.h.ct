@@ -252,6 +252,17 @@ trait ExprTraitInst {
     int  parse_trait_inst_type(char *out, int cap);
 }
 
+/* PH-52: the user-type subscript protocol lives in its own trait because
+   `ExprOps` is at MAX_METHODS. `custom_index_label` renders `Box<int>` for an
+   instance row and the bare name otherwise; `custom_index_method` matches the
+   inherent method by name + arity only (D52-2) and emits L52-1..L52-5 / L52-10
+   on failure. */
+pub trait ExprSubscript {
+    int  custom_index_label(const char *bty, char *out, int cap);
+    int  custom_index_method(const char *bty, const char *name, int want,
+                             int line, int col, int writable);
+}
+
 /* Phase 32: the opt-in `--types` gate. Its own trait because `ExprOps` already
    sits at MAX_METHODS, and both grammars that need the gate -- the expression
    layer and the statement layer -- hold this object. */
@@ -445,7 +456,7 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprTypes, ExprTraitInst, ExprTry;
+} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprTry;
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -2960,6 +2971,21 @@ impl ExprOps for Expr {
             int aline = self->lex->tokline;
             int acol = self->lex->tokstart - self->lex->lstart + 1;
             k2 = self->arena->nodes[left].kind;
+            /* PH-52 L52-6/L52-8: a custom subscript only writes as a plain
+               `=` statement; a value-position assignment has no statement for
+               the void `set`, and a compound operator has no read-modify-write
+               spelling in the protocol. */
+            if (self->container_subscript_kind(left) == 3) {
+                int cl = self->arena->nodes[left].line;
+                int cc = self->arena->nodes[left].num;
+                if (strcmp(self->lex->toktext, "=") != 0)
+                    return tool::diag::ct_sem_error(cl, cc,
+                        "a custom subscript supports only '='; use set(k, v)",
+                        self->sup->mem->path);
+                return tool::diag::ct_sem_error(cl, cc,
+                    "a custom subscript write needs a statement and an lvalue receiver",
+                    self->sup->mem->path);
+            }
             /* Phase 31 O3 (L31-3/L31-4): an assignment in a value position
                writes the target just like the statement form. */
             if (self->container_write_check(left) != 0) return -1;
@@ -3931,6 +3957,11 @@ impl ExprOps for Expr {
                 if (strncmp(self->arena->nodes[n].text, "struct Map_", 11) == 0
                     || strncmp(self->arena->nodes[n].text, "Map_", 4) == 0)
                     return 2;
+                /* PH-52: a sugar node carries the `[` position; an explicit
+                   `x.get(k)` call does not, so it keeps the generic
+                   "not assignable" wording instead of the subscript rule. */
+                if (self->arena->nodes[n].line > 0 && self->arena->nodes[n].num > 0)
+                    return 3;
                 return 0;
             }
             if (k != N_MEMBER && k != N_ARROW) return 0;
@@ -3953,6 +3984,11 @@ impl ExprOps for Expr {
                                             self->arena->nodes[at].num,
                                             "a Vec subscript is read-only; use set(i, v)",
                                             self->sup->mem->path);
+        if (k == 3)
+            return tool::diag::ct_sem_error(self->arena->nodes[at].line,
+                                            self->arena->nodes[at].num,
+                                            "a custom subscript supports only '='; use set(k, v)",
+                                            self->sup->mem->path);
         return tool::diag::ct_sem_error(self->arena->nodes[at].line,
                                         self->arena->nodes[at].num,
                                         "a Map subscript is read-only; use put(k, v)",
@@ -3962,11 +3998,17 @@ impl ExprOps for Expr {
     /* Phase 31 O3 (L31-5): a subscript names a value, so it has no address. */
     int container_addr_check(int n)
     {
+        int k = self->container_subscript_kind(n);
         int at = n;
-        if (self->container_subscript_kind(n) == 0) return 0;
+        if (k == 0) return 0;
         while (at >= 0 && (self->arena->nodes[at].kind == N_MEMBER
                            || self->arena->nodes[at].kind == N_ARROW))
             at = self->arena->nodes[at].a;
+        if (k == 3)
+            return tool::diag::ct_sem_error(self->arena->nodes[at].line,
+                                            self->arena->nodes[at].num,
+                                            "cannot take the address of a custom subscript; bind it to a local first",
+                                            self->sup->mem->path);
         return tool::diag::ct_sem_error(self->arena->nodes[at].line,
                                         self->arena->nodes[at].num,
                                         "cannot take the address of a container subscript; bind it to a local first",
@@ -4137,6 +4179,48 @@ impl ExprOps for Expr {
                        temporary before taking its address. The result type is
                        read here, while local names still resolve (`fp()`), and
                        left on the call node for that materialisation. */
+                    rt = n;
+                    while (rt >= 0 && (self->arena->nodes[rt].kind == N_MEMBER
+                                       || self->arena->nodes[rt].kind == N_ARROW))
+                        rt = self->arena->nodes[rt].a;
+                    if (rt >= 0 && self->arena->nodes[rt].kind == N_CALL
+                        && !self->arena->nodes[rt].text[0]) {
+                        rd2 = 0;
+                        if (self->static_ctype(rt, rty, sizeof rty, &rd2, 0)
+                            && rd2 == 0)
+                            snprintf(self->arena->nodes[rt].text, MAX_TEXT, "%s", rty);
+                    }
+                    n = m;
+                    continue;
+                }
+                /* PH-52 D52-2/D52-5: a non-pointer struct value with an
+                   inherent `get` uses the same N_MCALL shape as the container
+                   sugar. Missing / bad protocols are hard errors here -- the
+                   parser never falls back to a C subscript for this branch.
+                   Pointer receivers keep C pointer arithmetic (PH-51 / D52). */
+                if (known && bd == 0 && strchr(bty, '*') == 0
+                    && strncmp(bty, "struct ", 7) == 0
+                    && strncmp(bty, "struct Vec_", 11) != 0
+                    && strncmp(bty, "struct Map_", 11) != 0) {
+                    int bl = self->lex->tokline;
+                    int bc = self->lex->tokstart - self->lex->lstart + 1;
+                    int gm, rt, rd2;
+                    char rty[MAX_TEXT];
+                    gm = self->custom_index_method(bty, "get", 1, bl, bc, 0);
+                    if (gm < 0) return -1;
+                    self->sup->lex_next();
+                    idx = self->parse_expr();
+                    if (idx < 0) return -1;
+                    if (self->sup->expect("]") != 0) return -1;
+                    m = self->sup->new_node(N_MCALL);
+                    if (m < 0) return -1;
+                    self->arena->nodes[m].aux = 9;
+                    self->arena->nodes[m].line = bl;
+                    self->arena->nodes[m].num = bc;
+                    snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", bty);
+                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "get");
+                    self->arena->nodes[m].a = n;
+                    self->arena->nodes[m].b = idx;
                     rt = n;
                     while (rt >= 0 && (self->arena->nodes[rt].kind == N_MEMBER
                                        || self->arena->nodes[rt].kind == N_ARROW))
@@ -6067,6 +6151,94 @@ impl ExprOps for Expr {
         (*self->ncalls)++;
         return 0;
     }
+}
+
+impl ExprSubscript for Expr {
+    /* PH-52 D52-2: the diagnostics name the user's spelling, not the encoded
+       instance tag. `Box<int>` comes from the instance row; a plain struct
+       keeps its declared name. */
+    int custom_index_label(const char *bty, char *out, int cap)
+    {
+        const char *base;
+        int inst, n;
+        struct StructInst *ins;
+
+        (void)self;
+        base = (strncmp(bty, "struct ", 7) == 0) ? bty + 7 : bty;
+        inst = frontend::sym::ct_inst_find(base);
+        if (inst >= 0) {
+            ins = frontend::sym::ct_insts(&n);
+            if (ins && inst < n && ins[inst].nargs > 0) {
+                if (ins[inst].nargs > 1)
+                    snprintf(out, (size_t)cap, "%s<%s, %s>", ins[inst].tmpl,
+                             ins[inst].carg[0], ins[inst].carg[1]);
+                else
+                    snprintf(out, (size_t)cap, "%s<%s>", ins[inst].tmpl,
+                             ins[inst].carg[0]);
+                return 0;
+            }
+        }
+        snprintf(out, (size_t)cap, "%s", base);
+        return 0;
+    }
+
+    /* PH-52 D52-2 / D52-5: protocol matching is name + arity + instance
+       (never the parameter type); a miss is a hard error, never a C subscript
+       fallback. `writable` selects the set-side wording. Returns the method
+       node on success; a diagnostic has already been emitted on failure. */
+    int custom_index_method(const char *bty, const char *name, int want,
+                            int line, int col, int writable)
+    {
+        int m, p, got = 0;
+        char label[MAX_TEXT];
+        char msg[MAX_TEXT];
+
+        self->custom_index_label(bty, label, sizeof label);
+        m = self->inst_inherent_method(bty, name);
+        if (m == -2) {
+            if (writable)
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no writable subscript: '%s' is private to its unit",
+                    label, name);
+            else
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no subscript: '%s' is private to its unit",
+                    label, name);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        if (m < 0) {
+            if (writable)
+                snprintf(msg, sizeof msg,
+                    "type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s",
+                    label, label);
+            else
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no subscript: declare 'V get(K)' in impl %s",
+                    label, label);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        if (self->arena->nodes[m].c) {
+            snprintf(msg, sizeof msg,
+                "type '%s' has no subscript: '%s' must be an instance method",
+                label, name);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        for (p = self->arena->nodes[m].a; p > 0; p = self->arena->nodes[p].next)
+            got++;
+        if (got != want) {
+            if (writable)
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no writable subscript: 'set' must take 2 parameters",
+                    label);
+            else
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no subscript: 'get' must take 1 parameter",
+                    label);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        return m;
+    }
+
 }
 
 impl ExprTraitInst for Expr {

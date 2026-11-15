@@ -1,0 +1,22 @@
+/* PH-52 L52-4: `set` takes one parameter instead of two. */
+struct X {
+    int n;
+}
+
+impl X {
+    int get(char *k)
+    {
+        return self->n;
+    }
+    void set(char *k)
+    {
+        self->n = 1;
+    }
+}
+
+int main(void)
+{
+    X x;
+    x["k"] = 2;
+    return 0;
+}

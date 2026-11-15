@@ -1,0 +1,34 @@
+/* PH-52 L52-9: `set` is not allowed to receive an `own` handle (AutoDrop would
+   release it again). */
+struct X {
+    int n;
+}
+
+struct P {
+    int n;
+} use Drop;
+
+impl Drop for P {
+    void drop()
+    {
+    }
+}
+
+impl X {
+    int get(char *k)
+    {
+        return self->n;
+    }
+    void set(char *k, int v)
+    {
+        self->n = v;
+    }
+}
+
+int main(void)
+{
+    X x;
+    own struct P *p = malloc(sizeof(struct P));
+    x["k"] = p;
+    return 0;
+}

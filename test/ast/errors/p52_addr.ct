@@ -1,0 +1,19 @@
+/* PH-52 L52-7: `get` returns a value, so the subscript has no address. */
+struct X {
+    int n;
+}
+
+impl X {
+    int get(char *k)
+    {
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    X x;
+    x.n = 1;
+    int *p = &x["k"];
+    return p == 0;
+}

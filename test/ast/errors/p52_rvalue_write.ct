@@ -1,0 +1,28 @@
+/* PH-52 L52-8: a write needs a statement and an lvalue receiver. */
+struct X {
+    int n;
+}
+
+struct X make(void)
+{
+    struct X x;
+    x.n = 1;
+    return x;
+}
+
+impl X {
+    int get(char *k)
+    {
+        return self->n;
+    }
+    void set(char *k, int v)
+    {
+        self->n = v;
+    }
+}
+
+int main(void)
+{
+    make()["k"] = 1;
+    return 0;
+}

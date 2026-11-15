@@ -1,0 +1,18 @@
+/* PH-52 L52-2: `get` exists, `set` does not -- read-only subscript. */
+struct X {
+    int n;
+}
+
+impl X {
+    int get(char *k)
+    {
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    X x;
+    x["k"] = 2;
+    return 0;
+}

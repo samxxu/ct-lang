@@ -264,6 +264,12 @@ def check_spec_pin(errors):
         return "missing"
     if not os.path.exists(SPEC):
         return "skipped (spec not found)"
+    spec_head = published_spec().decode(errors="replace")[:2000]
+    # A draft master spec is not adopted by any project yet; enforcing its
+    # digest here would force every project to pin an unreleased draft.
+    if re.search(r"^\|\s*状态\s*\|\s*草稿", spec_head, re.M) or "未落入任何项目" in spec_head:
+        m = re.search(r"^\|\s*spec-version\s*\|\s*`?([0-9.]+)`?", spec_head, re.M)
+        return f"skipped (master spec draft {m.group(1) if m else '?'})"
     status = "ok"
     actual = hashlib.sha256(published_spec()).hexdigest()
     if actual != digest.group(1):
@@ -271,7 +277,6 @@ def check_spec_pin(errors):
         errors.append(
             f"AGENTS.md: spec-sha256 {digest.group(1)[:12]}... != {actual[:12]}... ({SPEC})"
         )
-    spec_head = published_spec().decode(errors="replace")[:2000]
     spec_version = re.search(r"^\|\s*spec-version\s*\|\s*`?([0-9.]+)`?", spec_head, re.M)
     if spec_version and version_tuple(version.group(1)) < version_tuple(spec_version.group(1)):
         status = "stale" if status == "ok" else status + ", stale"

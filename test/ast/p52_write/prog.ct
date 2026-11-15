@@ -1,0 +1,28 @@
+/* Phase 52 / E52-3: the statement `x["k"] = 9;` expands to `set(k, 9)` and
+   the read-back sees 9. */
+#include <stdio.h>
+#include <string.h>
+
+struct X {
+    int v;
+}
+
+impl X {
+    int get(char *k)
+    {
+        return self->v;
+    }
+    void set(char *k, int n)
+    {
+        self->v = n;
+    }
+}
+
+int main(void)
+{
+    X x;
+    x.v = 1;
+    x["k"] = 9;
+    printf("v=%d\n", x["k"]);
+    return 0;
+}

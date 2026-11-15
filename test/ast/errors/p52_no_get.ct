@@ -1,0 +1,11 @@
+/* PH-52 L52-1: a struct value with no inherent `get`. */
+struct X {
+    int n;
+}
+
+int main(void)
+{
+    X x;
+    x.n = 1;
+    return x["k"];
+}

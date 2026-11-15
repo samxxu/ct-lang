@@ -3811,6 +3811,13 @@ if bash test/ast/p51_dot.sh "$work/ct-ast" "$CC"; then
 else
     bad "p51/dot" "pointer-receiver dot diagnostic failed"
 fi
+# Phase 52: user-type `obj[k]` / `obj[k] = v` protocol (scheme A) plus the
+# L52-1..L52-10 diagnostics and the C / Vec / Map passthrough.
+if bash test/ast/p52_subscript.sh "$work/ct-ast" "$CC"; then
+    ok "p52/subscript"
+else
+    bad "p52/subscript" "custom subscript protocol failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

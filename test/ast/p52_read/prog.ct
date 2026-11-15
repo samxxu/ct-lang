@@ -1,0 +1,25 @@
+/* Phase 52 / E52-1: `x["k"]` on a user struct with an inherent `get` expands
+   to `get(k)` (scheme A: name + arity only). License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+#include <string.h>
+
+struct X {
+    int n;
+    int seen;
+}
+
+impl X {
+    int get(char *k)
+    {
+        if (strcmp(k, "a") == 0) return self->n;
+        return -1;
+    }
+}
+
+int main(void)
+{
+    X x;
+    x.n = 7;
+    printf("a=%d z=%d\n", x["a"], x["z"]);
+    return 0;
+}

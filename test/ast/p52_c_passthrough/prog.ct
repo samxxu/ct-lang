@@ -1,0 +1,23 @@
+/* Phase 52 / E52-5: C arrays, pointers and pointer-to-struct keep C subscript
+   arithmetic; the protocol only applies to a non-pointer struct value. */
+#include <stdio.h>
+
+struct X {
+    int n;
+}
+
+int main(void)
+{
+    int arr[3];
+    int *p;
+    struct X x;
+    struct X *px;
+    arr[0] = 1;
+    arr[1] = 2;
+    arr[2] = 3;
+    p = arr;
+    x.n = 7;
+    px = &x;
+    printf("%d %d %d\n", arr[1], p[2], px[0].n);
+    return 0;
+}

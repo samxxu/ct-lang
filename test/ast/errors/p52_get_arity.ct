@@ -1,0 +1,18 @@
+/* PH-52 L52-3: `get` takes two parameters (scheme A checks the count only). */
+struct X {
+    int n;
+}
+
+impl X {
+    int get(char *a, char *b)
+    {
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    X x;
+    x.n = 1;
+    return x["k"];
+}

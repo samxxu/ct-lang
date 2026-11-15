@@ -1,0 +1,10 @@
+pub struct X {
+    int n;
+}
+
+impl X {
+    int get(char *k)
+    {
+        return self->n;
+    }
+}

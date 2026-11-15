@@ -1,0 +1,18 @@
+/* PH-52 L52-5: a static `get` is not an instance method. */
+struct X {
+    int n;
+}
+
+impl X {
+    static int get(char *k)
+    {
+        return 1;
+    }
+}
+
+int main(void)
+{
+    X x;
+    x.n = 1;
+    return x["k"];
+}

@@ -3912,6 +3912,48 @@ impl StmtOps for Stmt {
             /* `N_DEREF` never fills `tt` below, and `iface_ref_type` reads it:
                an empty string is the "no type derived" case */
             tt[0] = 0;
+            /* PH-52: `obj[k] = v;` rewrites the parsed read sugar into a
+               `set(k, v)` call. Only a plain `=` statement with an lvalue
+               receiver is accepted; the generic assignment path below would
+               emit `x[...] = v` (or `get(...) = v`) and lose the write. */
+            if (self->ex->container_subscript_kind(e) == 3) {
+                int cl = self->arena->nodes[e].line;
+                int cc = self->arena->nodes[e].num;
+                int recv = self->arena->nodes[e].a;
+                int sm, vi, widx;
+                while (recv >= 0
+                       && (self->arena->nodes[recv].kind == N_MEMBER
+                           || self->arena->nodes[recv].kind == N_ARROW))
+                    recv = self->arena->nodes[recv].a;
+                if (recv < 0 || self->arena->nodes[recv].kind != N_VAR)
+                    return tool::diag::ct_sem_error(cl, cc,
+                        "a custom subscript write needs a statement and an lvalue receiver",
+                        self->sup->mem->path);
+                sm = self->ex->custom_index_method(self->arena->nodes[e].text,
+                                                   "set", 2, cl, cc, 1);
+                if (sm < 0) return -1;
+                self->sup->lex_next();
+                self->ex->into_ok = 1;
+                rhs = self->ex->parse_expr();
+                self->ex->into_ok = 0;
+                if (rhs < 0) return -1;
+                if (self->arena->nodes[rhs].kind == N_VAR) {
+                    vi = self->sym->find_var(self->arena->nodes[rhs].text2);
+                    if (vi >= 0 && (self->sym->vars[vi].autodrop
+                                    || self->sym->vars[vi].borrowed))
+                        return tool::diag::ct_sem_error(cl, cc,
+                            "a custom subscript set cannot take an 'own' or 'borrow' value",
+                            self->sup->mem->path);
+                }
+                widx = self->arena->nodes[e].b;
+                if (widx < 0)
+                    return self->sup->fail("a custom subscript has no index");
+                self->arena->nodes[widx].next = rhs;
+                snprintf(self->arena->nodes[e].text2, MAX_TEXT, "set");
+                n = self->sup->new_node(N_EXPR);
+                if (n < 0) return -1;
+                self->arena->nodes[n].a = e;
+            } else {
             k = self->arena->nodes[e].kind;
             /* Phase 31 O3 (L31-3/L31-4): `v[i] = x` / `m[k] = x`. */
             if (self->ex->container_write_check(e) != 0) return -1;
@@ -3983,6 +4025,7 @@ impl StmtOps for Stmt {
                 /* Phase 31 S23b (L31-23): rebinding a view follows the source. */
                 frontend::parse::expr_view_bind(self->ex,
                                                 self->arena->nodes[e].text2, rhs);
+            }
             }
         } else if (self->arena->nodes[e].kind == N_POST) {
             n = e;
