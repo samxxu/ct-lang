@@ -17,7 +17,7 @@
 | **3** | **PH-54 包机制** | 不插队；按 §4 判断为 PH-54 内工作分解 |
 | **4** | **PH-55+ 新特性** | 只保留经批准的容器点访问 / 自定义 `get` 协议 / 限定名 / 诊断；排在包机制之后 |
 | **5** | **PH-59 模型导出 → PH-60 视图注记** | 两项只到**提案 + 研判**，未排 phase 卡；研判结论见 §8。模型导出必须先于注记 |
-| **6** | **PH-61 追加下标** | `v[] = x` 为语法糖提案，只到研判；见 §9，未排 phase 卡 |
+| **6** | **PH-62 可写下标与嵌套链** | 吸收 PH-61 的 `v[] = x`；`m[k] = v`、`v[i] = x`、`m["a"]["b"]` 读写；见 §9，未排 phase 卡 |
 
 ---
 
@@ -148,7 +148,7 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 | 分类 | **phase**，不是 patch：`ns-root` 取代「包根 = 单元根」、发布方身份、共享 store、v2 lock，是工具契约变更 |
 | 编号 | **PH-54**（已在实施 S0，不另起号） |
 | 与 S0–S7 | **推荐 A：PH-54 一个 phase，S0–S7 作为 phase 内工作分解，只保留 `v0.54.0` 一个 MINOR**。符合 AGENTS V-1；现 roadmap 的 `v0.54–v0.60` 是混合写法，需在 PH-54 收口前改为「S 工作分解 + 单一版本位」 |
-| 备选 B | 若每片独立发版，则 S0–S7 提升为 PH-54…PH-60；语言新特性顺延 PH-61+，且要重排 S4/S6 版本位 |
+| 备选 B | 若每片独立发版，则 S0–S7 提升为 PH-54…PH-60；语言新特性顺延 PH-62+，且要重排 S4/S6 版本位 |
 | PKG-3…8 | 全部随 PH-54 S1/S2/S4；PKG-5 列为 S1 首任务；PKG-7 是需求缺口（B），其余是 bug 但依赖新模型（D-005 §2.4 例外） |
 | 顺序 | PH-53 之后；不插队 |
 
@@ -284,13 +284,13 @@ PH-60 仍未开卡，等 PH-59 schema 冻结。
 模型导出必须在注记之前：注记的产出没有模型出口就是「写了没人读」。两者与 PH-53/54/57 无依赖，
 不改其判据；PH-58 的字段位置对模型导出是**必带项**（J11），PH-58 滑期则降级为只带 `line`，不退化为缺席。
 
-## 9 追加下标语法（`v[] = x`，2026-11-15 提案）
+## 9 容器下标可写与嵌套链（PH-62，吸收 PH-61，2026-11-15 提案）
 
 | 项 | 结论 |
 | --- | --- |
-| 性质 | **语法糖**：能力已有 `Vec::push`；空下标今天是解析错误，故属新语法形态（B），不是 bug |
-| 现状 | `v.push(32)` rc=0；`v[] = 32` → `expected an expression`；`v[0] = 9` → `a Vec subscript is read-only; use set(i, v)`；`m["a"] = 1` → `read-only; use put(k, v)` |
-| 边界 | 只对 `Vec<T>`；`Map` / C 数组 / `Str` 硬错；`v[i] = x` 保持拒绝；只允许语句位置、无返回值；失败即 abort；容量复用 `push`（翻倍、无越界概念）；`at` 借用指针在追加后失效 |
-| 文档 | [提案](../proposals/ct-append-subscript-proposal.md)、[研判](../review/ct-append-subscript-proposal-review.md) |
-| 落点 | 拟占 **PH-61**；若 PH-56 容器语法批次复活，作为其切片；**未排 phase 卡** |
-| 依赖 | 无语言依赖；改 `Expr` / Emitter，与 TypeCheck/Expr 族串行；与 PH-53/54/57/58/59/60 无依赖 |
+| 性质 | **B 新能力**：`m[k] = v` / `v[i] = x` / 嵌套写是新语法与新语义；其中「朴素嵌套读发出坏 C」是 A 类子项，可先止血 |
+| 现状 | `m["a"]=1` → `a Map subscript is read-only; use put(k, v)`；`v[0]=9` → `read-only; use set(i, v)`；`doc["server"]["host"]="..."` → 生成 `Map_get(&doc,"server")["host"]=...`，cc 报 `array subscript is not an integer`；`m["a"][0]=1` → cc 报 `assigning to 'struct Vec_int' from int`；`?["x"] =` → `optional chain/subscript is not an lvalue` |
+| 语义 | 语句级赋值、无返回值；读类型不变（Map `V*`、Vec `T`）；Vec 越界硬错 + 常量折叠；嵌套读缺键零值传播；嵌套写只对 Map 中间层自动创建；物化用 `Map_get` 指针 + `Vec_at` 指针；临时 Map 句柄 release |
+| 文档 | [提案](../proposals/ct-writable-subscript-proposal.md)、[研判](../review/ct-writable-subscript-proposal-review.md)；PH-61 提案/研判标注「并入 PH-62，作为 S1 切片」 |
+| 落点 | **PH-62**；PH-61 的 `v[] = x` 作为 S1；**未排 phase 卡** |
+| 依赖 | 无语言依赖；改 `Expr` / TypeCheck / Emitter，与 TypeCheck/Expr 族串行；与 PH-53/54/57/58/59/60 无依赖 |

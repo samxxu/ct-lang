@@ -2,9 +2,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 状态 | **提案（待研判）**；不排 phase 卡、不改 `selfhost/**` |
+| 状态 | **已被 PH-62 吸收**；保留作 S1 切片参考，不单独排期、不排 phase 卡 |
 | 来源 | 负责人语言需求（2026-11-15）：`fields[] = 32;` 表示在末尾追加一个元素 |
-| 拟占 | `PH-61`（若 PH-56 容器语法批次复活，可并入该批，不另占号） |
+| 拟占 | 并入 **PH-62**（`v[] = x` 作为 S1 切片），不再单独占号 |
 | 关联 | `Vec::push` / `Vec::set` / `Vec::at` / `Vec::has`、SH-79（模型导出）、PH-58 |
 | 定性 | **语法糖**（能力已存在：`v.push(x)`）；新语法形态 → 走提案，不走 patch |
 
@@ -133,7 +133,8 @@ v.push(32);         // rc=0；len=3，v[2]=32
 
 ## 6 非目标
 
-- 不放开 `v[i] = x`（继续用 `set`，越界 no-op 语义不在本提案改）；
+- 原「不放开 `v[i] = x`」**已废止**：由 PH-62 接管（越界硬错 + 常量折叠）；
+  本提案只保留 `v[] = x` 切片，不再作为独立非目标；
 - 不支持 `Map` / C 数组 / `Str` 的空下标；
 - 不做 `insert(i, x)` / `reserve` / `resize` / 拼接；
 - 不做运算符重载（`+=` 等）；
@@ -157,7 +158,7 @@ v.push(32);         // rc=0；len=3，v[2]=32
 | A4 | 读 `v[]`、`v[] += 1`、`v[] == x`、`v[][]`、`v[]={1,2}` 全部硬错，诊断含「只能出现在 `=` 左侧」 |
 | A5 | `Map<char*,int> m; m[]=1;` → 硬错，提示用 `put(k, v)` |
 | A6 | `int a[2]; a[]=1;` → 硬错，提示 C 数组不能增长 |
-| A7 | `v[0]=9;` 仍报 `a Vec subscript is read-only; use set(i, v)`（零回归） |
+| A7 | 原「`v[0]=9;` 仍报 read-only」**已废止**：由 PH-62 改为可写 + 越界硬错，见 [可写下标提案](ct-writable-subscript-proposal.md) |
 | A8 | RHS 类型不匹配 → 与 `push` 相同的类型错误，不写 `.c` |
 | A9 | `make_vec()[] = 1;` → 硬错（接收者必须是 lvalue） |
 | A10 | 生成 C 只含 `Vec_<enc>_push` + abort 包装；`.abi.h` 逐字节不变 |
@@ -165,8 +166,10 @@ v.push(32);         // rc=0；len=3，v[2]=32
 
 ## 9 排位与后续
 
-- 位置：拟占 **PH-61**（PH-59 模型导出、PH-60 注记之后）；若 PH-56 容器语法批次被激活，
-  本条件为其切片，不另占号；
+- 位置：**并入 PH-62**（[容器下标可写与嵌套链](ct-writable-subscript-proposal.md)），作为其 S1 切片；
+  不再单独占 PH-61，也不单独排期；
+- 理由：PH-62 要放开 `v[i] = x`，与本提案原「不放开」非目标直接冲突；先发会造成同一处语法/发射返工；
 - 依赖：无语言依赖；改 `frontend/parse/Expr.h.ct` 与 `Emitter`，与 TypeCheck/Expr 族**串行**；
-- 需一次研判（反证见 [ct-append-subscript-proposal-review](../review/ct-append-subscript-proposal-review.md)）；
-- 研判通过后才写需求定稿、进 roadmap、开 phase 卡；提案阶段不改 `selfhost/**`。
+- 研判记录见 [ct-append-subscript-proposal-review](../review/ct-append-subscript-proposal-review.md)；
+  该记录的「不放开 `v[i] = x`」结论已被 PH-62 取代；
+- 提案阶段不改 `selfhost/**`、不排 phase 卡。
