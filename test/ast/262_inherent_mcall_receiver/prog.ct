@@ -1,0 +1,20 @@
+/* LANG-5（ct-json JSON-2）：固有方法结果 / 自定义下标结果可以直接作下一个方法
+   的接收者——接收者的静态类型由声明返回类型给出，不再落到 trait 分支被白名单拒绝。
+   两条都在声明初始化 / 赋值右值的位置，也就是接收者物化允许的位置。 */
+#include <stdio.h>
+
+struct Ref { int n; }
+
+impl Ref {
+    Ref get(int k) { struct Ref r = { self->n + k }; return r; }
+    int has(int k) { return self->n == k; }
+}
+
+int main(void)
+{
+    struct Ref doc = { 1 };
+    struct Ref b = doc.get(2).get(4);
+    int present = doc[2].has(3);
+    printf("%d %d\n", b.n, present);
+    return 0;
+}

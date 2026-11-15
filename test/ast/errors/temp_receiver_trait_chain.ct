@@ -1,0 +1,18 @@
+/* LANG-5 反向覆盖（SH-73 边界保持）：trait 动态派发的方法结果不能再作接收者，
+   `i.next().val()` 仍须以定位诊断拒绝；修复只放开固有方法结果，没有把
+   临时值接收者一律放行。 */
+trait M { M next(void); int val(void); }
+
+struct S { int n; } use M;
+
+impl M for S {
+    M next(void) { struct S t = { self->n + 1 }; return t; }
+    int val(void) { return self->n; }
+}
+
+int main(void)
+{
+    struct S s = { 1 };
+    M i = s;
+    return i.next().val();
+}

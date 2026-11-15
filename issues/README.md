@@ -356,7 +356,7 @@
 | LANG-4 | **High**（静默） | 数字下标匹配到参数类型不符的 `get`，编译通过、静默返回空值（`v[0]` → `get(0)`） | [lang-4-subscript-type-mismatch-silent-empty.md](lang/lang-4-subscript-type-mismatch-silent-empty.md) |
 | LANG-1 | **High** | `.h.ct` 单元函数体内 `defer` / `errdefer` 被后缀检查拒绝；`.m.ct` 不可达属另一限制 | [lang-1-hct-defer-errdefer-rejected.md](lang/lang-1-hct-defer-errdefer-rejected.md) |
 | LANG-2 | **High** | 带 `namespace` 的单元里静态固有方法不可用（同单元/跨单元均失败，实例方法正常） | [lang-2-namespaced-static-method-unresolved.md](lang/lang-2-namespaced-static-method-unresolved.md) |
-| LANG-5 | **High**（字段形态静默） | 方法/下标结果不能作接收者：方法形态**已修**（v0.53.1）、`x["k"].field` 仍静默产出坏 C；并入 ct-json JSON-2 | [lang-5-result-as-receiver.md](lang/lang-5-result-as-receiver.md) |
+| LANG-5 | **High**（字段形态静默） | 方法/下标结果不能作接收者：方法形态**已修**（`262_inherent_mcall_receiver`）、`x["k"].field` 仍静默产出坏 C；并入 ct-json JSON-2 | [lang-5-result-as-receiver.md](lang/lang-5-result-as-receiver.md) |
 | LANG-13 | **High** | 同类型三级下标链 `v["a"]["b"]["c"]` 被接收者物化深度拒绝（ct-json JSON-1，**已修**） | [lang-13-three-level-subscript-chain.md](lang/lang-13-three-level-subscript-chain.md) |
 | LANG-9 | **High**（ABI 锁死 + 静默） | 结构体字段（含非 `pub`）全部进生成头；字段级 `pub` 被原样发射成非法 C 且 ct-ast 退出 0 | [lang-9-struct-field-visibility-abi.md](lang/lang-9-struct-field-visibility-abi.md) |
 | LANG-11 | **High** | 同名 `.h.ct` + `.ct` 共用 `.ctbuild/<base>.c`：实现单元不自动编译，手加入参即 `duplicate symbol` | [lang-11-same-base-unit-output-collision.md](lang/lang-11-same-base-unit-output-collision.md) |
