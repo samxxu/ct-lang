@@ -96,6 +96,13 @@ rc=1
 它从未承诺「CT 侧头声明 + 实现定义」的分离。**判 B**；登记归并行会话（namespace 常量/限定名），
 本轮不抢号。
 
+**最小修法与影响面（1c，若未来做）**：先裁定 `pub extern` 在 namespace 内是否按命名空间 mangling。
+若支持分离，符号表要把 `pub extern` 登记成 `ns_K`（而不是空命名空间），`.h` 发 `extern const int ns_K;`，
+`.ct` 定义发 `const int ns_K = 5;`；代码生成只改声明名；ABI 会改变已发布 `pub extern` 的 C 符号名，
+必须跟语言版本说明；既有「指向 C 库」的 `extern` 保持不 mangling（需要一个显式区分语法，如 `pub extern "C"`）。
+**回归断言**：`.h.ct` 只声明 + `.ct` 定义时 rc=0、`ns::K` 读到 5；未加 `pub` 的 `.ct` 定义不进头；
+C 库 `extern` 用例零回归。
+
 **最小修法与影响面（1b）**：给 `.h.ct` 与 `.ct` 的产物分配不同路径（例如
 `.ctbuild/<base>.c` 与 `.ctbuild/<base>_impl.c`），或在 `import <h.ct>` 时按同 base 自动带上 `.ct`。
 不动符号表；不动 ABI；既有 `.h.ct` 单文件的产物路径不变，只影响「同 base 双单元」这一种组合。
