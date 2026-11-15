@@ -347,7 +347,7 @@
 | PKG-2 | Medium | `ct install` 曾只打印 `-I vendor/<包名>`，包内单元在 `src/<ns>/` 时消费端照抄即报 `cannot resolve import`（**已解决**：v0.55.0 `ns-root`、v0.58.0 `ct build` 读 lock） | [pkg-2-ct-install-package-root-import.md](packages/pkg-2-ct-install-package-root-import.md) |
 | PKG-3 | Medium | `ct.pkg` 未知键（如 `ns-root`）被静默忽略；`ns-root` 已改为读取并硬错，未知键告警仍缺（**部分解决**） | [pkg-3-unknown-keys-silently-ignored.md](packages/pkg-3-unknown-keys-silently-ignored.md) |
 | PKG-4 | Medium | 依赖图内同名包静默取首个，无诊断（**已修**，PH-54 S2 / SP-006、SP-013） | [pkg-4-duplicate-package-name-silent-first.md](packages/pkg-4-duplicate-package-name-silent-first.md) |
-| PKG-5 | **High** | `ct get` 缓存键是裸包名，不同发布方的同名包互相串用（**open**，58 后 P0） | [pkg-5-cache-key-bare-name.md](packages/pkg-5-cache-key-bare-name.md) |
+| PKG-5 | **High** | `ct get` 缓存键是裸包名，不同发布方的同名包互相串用（**已修**，v0.58.1 / `fb82420c`） | [pkg-5-cache-key-bare-name.md](packages/pkg-5-cache-key-bare-name.md) |
 | PKG-6 | Medium | `ct install` 不校验 import 解析，解析不到仍返回 0（**open**） | [pkg-6-install-does-not-validate-imports.md](packages/pkg-6-install-does-not-validate-imports.md) |
 | PKG-7 | Medium | `ct build` 不读 `ct.lock`，不自动补 `-I`（**已修**，PH-54 S2 / SP-008） | [pkg-7-build-does-not-read-lock.md](packages/pkg-7-build-does-not-read-lock.md) |
 | PKG-8 | Medium | 本地目录覆盖共享库时构建期无留痕（**已修**，PH-54 S2/S3 / SP-015） | [pkg-8-local-override-no-trace.md](packages/pkg-8-local-override-no-trace.md) |
