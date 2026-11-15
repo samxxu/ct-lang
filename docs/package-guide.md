@@ -13,14 +13,14 @@
 
 ### 1. 一个包长什么样
 
-包仓库的**根目录是包根**：`ct.pkg` 与 `LICENSE` 放在根，源码单元放在清单
+包仓库的**根目录是包根**：`ct.pkg` 放在根，源码单元放在清单
 `ns-root` 指定的子目录（`ns-root = .` 时单元与 `ct.pkg` 并列）。消费者拿到的 `-I` 是
 `<store>/<publisher>/<name>/<version>/<ns-root>`，不再假设「包根 = 单元根」。
 
 ```
 hello/
 ├── ct.pkg          # 清单（唯一由工具强制的文件）
-├── LICENSE         # 许可证（发布约定必备；工具不校验，见 §5）
+├── LICENSE         # 可选；工具不校验
 └── src/            # ns-root，可换成别的相对目录或 .
     └── hello.h.ct  # 源码单元，可多个
 ```
@@ -61,8 +61,6 @@ acme/
   所以自检要传包根、并把包内单元都作为入参。
 - 没有 `namespace` 声明的单元不受目录规则约束（C 映射单元与 `.m.ct` shim 多属此类），它们的位置
   只由 `import a::b::Unit` 的解析路径决定。向这类单元补命名空间会改变其导出符号，属于破坏性变更。
-- 本仓库（ct-pkg）另提供 `tools/check-layout.sh`，遍历全部包的 `*.ct`、读出命名空间并与相对目录
-  比对，可放进 CI：`tools/check-layout.sh`（或指定包根 `tools/check-layout.sh hal sqlite`）。
 
 ### 2. `ct.pkg` 的键
 
@@ -83,57 +81,50 @@ acme/
 S1 起 `publisher` + `ns-root` 是 store 与 lock v2 的必填身份；写 `ns-root` 不再被静默忽略。
 **兼容例外**：两个键都缺失的旧清单仍按 v1 处理（`vendor/` + 四字段 lock），以保住旧工程；
 只缺一个、或 `publisher = local`、`ns-root` 为绝对路径/含 `..`/目录不存在时硬错。
-命名、tag、目录与 `licence` 由索引收录与 CI 审核。
 
 `cflags` / `ldflags` / `requires` 由 `ct install` 读取；`install` 把每个包的 `cflags` / `ldflags`
 拼进**一条** `ct build` 命令，遇到不满足的 `requires` 直接失败（`ct install --force` 才继续，
 并把原因打到 stderr）。`requires` 也在 `ct get` 里检查，且**发生在写 `ct.lock` 之前**：不满足时本次
 `get` 失败、既有 `ct.lock` 一个字节都不改（`ct get --force` 才继续并告警）。
 
-### 3. 命名、版本与 tag
+### 3. 命名与依赖版本范围
 
 - 包名：`[a-z0-9][a-z0-9-]*`（小写字母、数字、连字符；不以连字符开头）。
-- **仓库名 = 包名**：`github.com/ct-pkg/<name>`。
 - 包内源码命名遵循 [language-spec §5.1](language-spec.md)：函数 / 方法 `snake_case` 且动作动词开头，
   类型 `PascalCase`，任何位置不用小驼峰；libc 直映射（`printf` 等）保留原名。
-- tag：`v<version>`；索引行的 `tag` 字段记录实际 tag（可带或不带 `v`）。
 - `dep` 的范围沿用 Phase 8 子集：`^x.y.z`、`~x.y.z`、`>=` / `>` / `<` / `<=` / `=`、裸版本（精确）
   或 `*`，多个条件用空格表示 AND。解析用 MVS（取满足范围的最低版本）。
-- 破坏性变更必须换 `x.y.z` 的主版本号；本阶段不研究传递更新的策略。
 
-### 4. 发布、索引与消费
+### 4. 消费
 
-1. **发布**：仓库根放 `ct.pkg` 与源码，打 tag `v<version>` 并推送。
-2. **索引收录**：在 `ct-pkg/index` 的 `index` 文件追加一行，六字段、空白分隔：
+索引由 `ct get` 读取，是纯文本、空白分隔的六字段行：
 
-   ```
-   name version publisher git-url tag sha256:<64 hex>
-   ```
+```
+name version publisher git-url tag sha256:<64 hex>
+```
 
-   旧的五字段行（无 publisher）仍可读；裸名同时命中两个 publisher 时 `ct get` 硬错
-   `'<name>' is ambiguous; write <publisher>/<name>`。
+旧的五字段行（无 publisher）仍可读；裸名同时命中两个 publisher 时 `ct get` 硬错
+`'<name>' is ambiguous; write <publisher>/<name>`。摘要按 `ct.lock` 的同一算法计算（按路径排序后
+把每个文件的相对路径与内容汇入单流 SHA-256）。本地可用 `CT_INDEX=<file>` 或 `--index <file>`
+指向任意纯文本索引。
 
-   摘要按 `ct.lock` 的同一算法计算（按路径排序后把每个文件的相对路径与内容汇入单流 SHA-256）。
-   索引由 CI 生成并提交（18.2），本地可用 `CT_INDEX=<file>` 或 `--index <file>` 指向任意纯文本索引。
-3. **消费**：
+```sh
+ct get <pub>/<name>@<range>  # 发布方限定；裸名仅在索引唯一时可用（歧义即硬错）
+ct get ./path                # 本地目录同样按清单的 publisher/ns-root 落 store
+ct verify [--strict]         # 离线：v2 校验 store、v1 校验 vendor；--strict 拒绝 dir/v1
+ct install                   # 离线：校验摘要与依赖覆盖，打印带 store ns-root 的 ct build 命令
+ct migrate                   # 离线：把 vendor/ 搬进 store，重写 v2 lock（保留版本/发布方）
+ct update                    # 离线：v2 校验 store 并保留钉住的版本
+```
 
-   ```sh
-   ct get <pub>/<name>@<range>  # 发布方限定；裸名仅在索引唯一时可用（歧义即硬错）
-   ct get ./path                # 本地目录同样按清单的 publisher/ns-root 落 store
-   ct verify [--strict]         # 离线：v2 校验 store、v1 校验 vendor；--strict 拒绝 dir/v1
-   ct install                   # 离线：校验摘要与依赖覆盖，打印带 store ns-root 的 ct build 命令
-   ct migrate                   # 离线：把 vendor/ 搬进 store，重写 v2 lock（保留版本/发布方）
-   ct update                    # 离线：v2 校验 store 并保留钉住的版本
-   ```
-
-   `ct verify` 只做摘要校验，**不读 `ct.pkg`**；清单里的 `dep` 是否被 `ct.lock` 覆盖由 `ct install` 判定
-   （缺依赖时报 `dependency '<spec>' is not satisfied by ct.lock`）。
-   `ct get` 一次只解析一个 spec，但会保留 `ct.lock` 中本次没有重解的其它行；重复 get 同一个包只替换
-   该包的行，不会重复。这样再 get 一个新包不会把先前钉住的版本弄丢，随后的 `ct update` 仍按锁里的
-   commit 解析。
-   `ct get` 可用 git——它是**包管理路径**里唯一的子进程调用点；`ct update` / `ct verify` / `ct install`
-   零网络、零子进程。编译器侧 `ct compile` / `ct build --emit-c` 零网络、零子进程，但 `ct build`
-   的默认形态会经 `$CC` 派生子进程去链接（`--cc` > `$CC` > `cc`）。
+`ct verify` 只做摘要校验，**不读 `ct.pkg`**；清单里的 `dep` 是否被 `ct.lock` 覆盖由 `ct install` 判定
+（缺依赖时报 `dependency '<spec>' is not satisfied by ct.lock`）。
+`ct get` 一次只解析一个 spec，但会保留 `ct.lock` 中本次没有重解的其它行；重复 get 同一个包只替换
+该包的行，不会重复。这样再 get 一个新包不会把先前钉住的版本弄丢，随后的 `ct update` 仍按锁里的
+commit 解析。
+`ct get` 可用 git——它是**包管理路径**里唯一的子进程调用点；`ct update` / `ct verify` / `ct install`
+零网络、零子进程。编译器侧 `ct compile` / `ct build --emit-c` 零网络、零子进程，但 `ct build`
+的默认形态会经 `$CC` 派生子进程去链接（`--cc` > `$CC` > `cc`）。
 
 ### 5. C ABI 静态库（`ct build --lib`）
 
@@ -152,50 +143,44 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 - 非 `pub` 顶层函数/全局在 `--lib` 下是 `static`；导出定义是 `visibility("default")`，其余以 `-fvisibility=hidden` 编译。
 - 不做按值 struct / `pub` 全局 / 泛型函数 / dylib / MSVC；这些是 T39-1–T39-3 的开放项（见 [phase39 卡](design/phase39-draft.md) §7）。
 
-### 6. 许可证
-
-- 官方纯 `.ct` 包：**MIT**。
-- C 库映射包：沿用上游许可证，并在 `ct.pkg` 的 `licence` 标注。
-- 每个包必须有 `LICENSE` 文件；`licence` 键只是约定，工具不校验文件内容。
-
-### 7. 常见失败
+### 6. 常见失败
 
 | 现象 | 原因 | 处置 |
 | --- | --- | --- |
 | `cannot read '<dir>/ct.pkg'` | 缺清单，或 `name` / `version` 为空 | 补键；值不能为空白 |
 | `... does not satisfy '<range>'` | 版本不在范围内 | 改 `dep` 范围或发新版 |
-| `no tag of '<name>' satisfies '<range>'` | git 源没有匹配 tag | 打 `v<version>` tag |
+| `no tag of '<name>' satisfies '<range>'` | git 源没有匹配 tag | 归包仓处理；本仓不复述发布步骤 |
 | `digest ... does not match ct.lock` | `vendor/` 被改动或锁过期 | 重新 `ct get` / `ct update` |
 | `requires 'ct >= …'` 报错 | 编译器版本偏旧 | 升级编译器；确需继续时用 `ct get --force` / `ct install --force` |
 | 索引读不到 | `--index` / `CT_INDEX` 路径错 | 检查路径；无索引时裸名无法解析 |
 
-### 8. 现状契约与陷阱（改契约前必读）
+### 7. 现状契约与陷阱（改契约前必读）
 
-> 本节记录 **`ct v0.53.x` 的真实行为**，不是目标设计。目标机制（`publisher` / `ns-root` / 共享库）见
-> [提案](proposals/ct-pkg-shared-store.md)、[需求定稿](planning/ct-pkg-shared-store-requirements.md) 与
-> [Phase 54 卡](design/phase54.md)；那是一次**契约变更**，不是增量字段。
+> 本节记录 **`ct v0.58.0` 的真实行为**。机制来源见
+> [提案](proposals/ct-pkg-shared-store.md) 与 [需求定稿](planning/ct-pkg-shared-store-requirements.md)；
+> 早期版本的差异只在 §8 的兼容期成立。
 
-#### 8.1 `ns-root` 取代「包根 = 单元根」
+#### 7.1 `ns-root` 取代「包根 = 单元根」
 
-- 包根仍是仓库根（放 `ct.pkg` / `LICENSE`），单元树根由 `ns-root` 声明；`ns-root` 必须是相对
+- 包根仍是仓库根（放 `ct.pkg`），单元树根由 `ns-root` 声明；`ns-root` 必须是相对
   包根、不含 `..`、目录存在。
 - `import a::b::U` 在 `-I <store>/<pkg>/<ver>/<ns-root>` 下按 `<ns-root>/a/b/U.h.ct` 查找；
   目录名仍须与命名空间首段一致。
-- 旧的「包根 = 单元根」只在 §9 的兼容期成立，不再是新包的契约。
+- 旧的「包根 = 单元根」只在 §8 的兼容期成立，不再是新包的契约。
 
-#### 8.2 单元在 `src/` 的包现在可直接消费
+#### 7.2 单元在 `src/` 的包现在可直接消费
 
 例如 `ns-root = src` 的 fsguard，`ct get` 后 `ct build` 自动补 store 的 `-I …/src`，消费者不再
-手写 include root；`ct install` 打印的也是这个目录。旧工程若仍把单元放在包根，只在 §9 的 v1
+手写 include root；`ct install` 打印的也是这个目录。旧工程若仍把单元放在包根，只在 §8 的 v1
 兼容路径下工作。
 
-#### 8.3 `ct install` 的 `-I` 形态，且不校验 import
+#### 7.3 `ct install` 的 `-I` 形态，且不校验 import
 
 - v2 lock：`-I $CT_HOME/pkg/<publisher>/<name>/<version>/<ns-root>`（`ns-root = .` 时省掉末段）。
 - 它只做三件事：校验 store 摘要、校验 `dep` 被 lock 覆盖、拼 `cflags`/`ldflags`。
 - **不解析 import**：包内单元找不到时它照样 `rc=0`。`ct install` 退出码 0 ≠ 消费者能编译。
 
-#### 8.4 `namespace` 与 `ns-root`
+#### 7.4 `namespace` 与 `ns-root`
 
 - S1 起 `ns-root` 是清单的必填键：store 的 `-I` 指向 `<版本目录>/<ns-root>`，`ct pkg check` 校验
   相对路径、无 `..`、目录存在。
@@ -203,18 +188,18 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
   新包不要再写它，两者语义相反：`namespace` 剥掉 import 首段，`ns-root` 给根目录加一层前缀。
 - `ct build --ns-root <dir>` 仍是独立的单元格级目录校验，与清单键无关。
 
-#### 8.5 共享库与构建（S1/S2）
+#### 7.5 共享库与构建（S1/S2）
 
 - store：`$CT_HOME/pkg/<publisher>/<name>/<version>/`（`CT_HOME` 默认 `$HOME/.ct`）；同版本重装
   摘要相同即 no-op、不同即硬错且不覆盖；不同版本目录可并存。
 - v2 lock 每行七字段 `<pub>/<name> <version> <type> <locator> <commit|-> <ns-root> <sha256:…>`；
-  旧工程仍写 `vendor/` 的行为见 §9。
+  旧工程仍写 `vendor/` 的行为见 §8。
 - **`ct build` 默认读 `./ct.lock`**：v2 git 行自动补 `-I $CT_HOME/pkg/<pkg>/<ver>/<ns-root>`，
   v2 `dir` 行使用本地路径并在 stderr 打 `note: '<pkg>' resolves to the local directory (dev override)`。
   用户显式 `-I` 仍然有效且排在前面；重复根由既有导入规则去重。
 - `ct build --locked`：store 缺失报 `is not installed`、摘要不符报 `does not match ct.lock`，不回退；
   无 lock 或 v1 lock 也直接失败。
-- 无 `ct.lock` 时的 vendor 回退只属兼容期，见 §9。
+- 无 `ct.lock` 时的 vendor 回退只属兼容期，见 §8。
 - lock 内同一裸包名出现两行（不论发布方）→ `package '<name>' is required twice: a/<name> and b/<name>`。
 - `ct verify`：v2 行检查版本目录存在与第 7 字段摘要；缺失报 `is not installed`、不符报
   `does not match ct.lock`。`--strict` 拒绝任何 `dir` 行或 v1 vendor 回退。
@@ -223,11 +208,11 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
   迁移行是 store-backed 的 `git - -`（v1 未记录 URL；commit 若存在则保留）。
 - `ct update` 对 v2 是**离线 pin 审计**：校验 store、要求 `ct.pkg` 的每个直接依赖都被 lock 覆盖，
   把钉住的 v2 行原样写回；不会在无网络时凭空选择新版本。缺依赖报 `is not satisfied by ct.lock`。
-- 仍未做：S4 包仓声明对齐（publisher/ns-root/tag）、S5 的 vendor 读取告警、S6 文档收口、
-  S7 移除 vendor 路径；缓存键仍按裸包名。
+- 边界：包仓的 `publisher` / `ns-root` / tag 声明归各包仓，不属于本仓任何 phase。本仓尚未做的是 S7
+  移除 vendor 路径；缓存键仍按裸包名（PKG-5）。
 - 逐条缺陷见 [PKG-3 … PKG-8](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)。
 
-### 9. 兼容期：v1 lock 与 `vendor/`
+### 8. 兼容期：v1 lock 与 `vendor/`
 
 这一节描述**旧工程**，不是新包的现行契约。兼容期结束后（S7）整节删除。
 
