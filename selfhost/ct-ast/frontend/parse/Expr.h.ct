@@ -4060,9 +4060,13 @@ impl ExprOps for Expr {
     {
         while (n >= 0) {
             int k = self->arena->nodes[n].kind;
+            /* PH-62 S4: a nested write's receiver is `at` (the slot-creating
+               form); the write path must rewrite that node to `put` as well,
+               so both names mark a writable container subscript. */
             if (k == N_MCALL
                 && (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)
-                && strcmp(self->arena->nodes[n].text2, "get") == 0) {
+                && (strcmp(self->arena->nodes[n].text2, "get") == 0
+                    || strcmp(self->arena->nodes[n].text2, "at") == 0)) {
                 if (strncmp(self->arena->nodes[n].text, "struct Vec_", 11) == 0
                     || strncmp(self->arena->nodes[n].text, "Vec_", 4) == 0)
                     return 1;
@@ -4304,6 +4308,81 @@ impl ExprOps for Expr {
                     }
                     n = m;
                     continue;
+                }
+                /* PH-62 S4: a container sugar node answers its element, so a
+                   nested `Map<char *, Map<char *, int>>` lookup has a pointer
+                   to the inner handle (`get` / `at` return `V *`). The next
+                   subscript indexes the pointee, not the handle: wrap the
+                   sugar in a deref and keep calling a method of the stripped
+                   type. `at` creates a missing Map entry in place, so a write
+                   chain (`m["a"]["b"] = 7`) always has a live inner handle and
+                   the `put` rewrite below never emits `get(...)[k] = ...`
+                   (W7). Only a sugar node is wrapped -- it carries the `[`
+                   position; an explicit `x.get(k)` result keeps its C
+                   meaning, exactly like the read-only rule above. */
+                if (known && bd == 0 && strchr(bty, '*') != 0 && n >= 0
+                    && self->arena->nodes[n].kind == N_MCALL
+                    && self->arena->nodes[n].line > 0
+                    && self->arena->nodes[n].num > 0
+                    && (strcmp(self->arena->nodes[n].text2, "get") == 0
+                        || strcmp(self->arena->nodes[n].text2, "at") == 0)) {
+                    char pty[MAX_TEXT];
+                    size_t pl;
+                    int star, pointee_map, recv_map, bl, bc, d;
+                    star = 0;
+                    snprintf(pty, sizeof pty, "%s", bty);
+                    pl = strlen(pty);
+                    while (pl > 0 && pty[pl - 1] == ' ') {
+                        pl--;
+                        pty[pl] = 0;
+                    }
+                    if (pl > 0 && pty[pl - 1] == '*') {
+                        star = 1;
+                        pl--;
+                        pty[pl] = 0;
+                    }
+                    while (pl > 0 && pty[pl - 1] == ' ') {
+                        pl--;
+                        pty[pl] = 0;
+                    }
+                    pointee_map = strncmp(pty, "struct Map_", 11) == 0 ? 1 : 0;
+                    recv_map = strncmp(self->arena->nodes[n].text, "struct Map_", 11) == 0
+                               || strncmp(self->arena->nodes[n].text, "Map_", 4) == 0;
+                    if (star && strchr(pty, '*') == 0
+                        && (pointee_map || strncmp(pty, "struct Vec_", 11) == 0)) {
+                        bl = self->lex->tokline;
+                        bc = self->lex->tokstart - self->lex->lstart + 1;
+                        self->sup->lex_next();
+                        idx = self->parse_expr();
+                        if (idx < 0) return -1;
+                        if (self->sup->expect("]") != 0) return -1;
+                        d = self->sup->new_node(N_DEREF);
+                        if (d < 0) return -1;
+                        self->arena->nodes[d].a = n;
+                        /* A Map receiver creates the missing entry so the
+                           outer call (read `at` / write `put`) has a live
+                           handle; a Vec receiver keeps `get`, whose
+                           out-of-range answer is the zero handle the rest of
+                           the chain reads (E31-24). The outer call itself is
+                           `at` only for a Map pointee: `Vec::at` answers a
+                           slot pointer, but a subscript names the value, and
+                           Map's `get` pointer is the read shape the sugar has
+                           always had. */
+                        if (recv_map)
+                            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "at");
+                        m = self->sup->new_node(N_MCALL);
+                        if (m < 0) return -1;
+                        self->arena->nodes[m].aux = 9;
+                        self->arena->nodes[m].line = bl;
+                        self->arena->nodes[m].num = bc;
+                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", pty);
+                        snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s",
+                                 pointee_map ? "at" : "get");
+                        self->arena->nodes[m].a = d;
+                        self->arena->nodes[m].b = idx;
+                        n = m;
+                        continue;
+                    }
                 }
                 /* PH-52 D52-2/D52-5: a non-pointer struct value with an
                    inherent `get` uses the same N_MCALL shape as the container

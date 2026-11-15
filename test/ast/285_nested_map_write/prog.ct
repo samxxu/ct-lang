@@ -1,0 +1,14 @@
+/* PH-62 S4: a nested Map write creates the missing inner entry (`at` on the
+   receiver) and rewrites the outer sugar to `put`, so the generated C never
+   takes the form `Map_get(...)[k] = ...` (W7). The read side derefs the slot
+   pointer `at` answers with the declared zero value (W6). */
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, Map<char *, int> > m;
+    m.h = 0;
+    m["a"]["b"] = 7;
+    printf("%d\n", *m["a"]["b"]);
+    return 0;
+}
