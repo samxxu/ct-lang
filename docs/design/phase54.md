@@ -1,10 +1,10 @@
 # Phase 54 · ct-pkg 共享库包体系（切片 S0：观测与只读骨架）
 
-**状态：实施中**（S0 完成 v0.54.0；S1–S7 见 [roadmap](../roadmap.md) 与[需求定稿](../planning/ct-pkg-shared-store-requirements.md)）
+**状态：实施中**（S0–S3、S5/S6 仓内部分已完成；S7 待兼容期。原 S4 包仓对齐属包外，不在本相跟踪，见 [roadmap](../roadmap.md)）
 
 | 项 | 值 |
 | --- | --- |
-| 依据 | [提案 §10 S0](../proposals/ct-pkg-shared-store.md)、[需求 SP-002/003/004/018/021/024/027](../planning/ct-pkg-shared-store-requirements.md) |
+| 依据 | [提案 §10 S0](../proposals/ct-pkg-shared-store.md)、[需求 SP-002/003/004/018/024/027](../planning/ct-pkg-shared-store-requirements.md) |
 | 版本位 | v0.54.0（S0 收口动作；本轮实现提交**不** bump，bump 与 golden 重生成在收口评审后单独提交） |
 | 只动 | `selfhost/ct-ast/tool/pkg/Pkg.h.ct`、`selfhost/ct-ast/main.ct`、`test/pkg/run.sh`、`docs/**` |
 | 不碰 | `selfhost/ct-ast/frontend/**`（含其他会话在改的 `TypeCheck.h.ct`）、`selfhost/l2/**`、golden |
@@ -47,7 +47,7 @@
 | --- | --- | --- |
 | J1 | 旧工程 `ct install` 的 stdout 只比 v0.53.0 多一行 `# lock-format: v1`，其余逐字节不变 | `diff <(旧输出) <(新输出)` 仅差该行 |
 | J2 | `ct install --help` / `ct build` / 其他子命令输出不变 | 既有 `test/pkg/run.sh` 断言全绿 |
-| J3 | `ct pkg check ../ct-fsguard` RC≠0，且 stderr 含 `is missing 'publisher'` | 直接跑 |
+| J3 | `test/pkg/run.sh` 的 S0 夹具 `$work/s0/nopub`（缺 `publisher`）`ct pkg check` RC≠0，且 stderr 含 `is missing 'publisher'` | 仓内夹具，随 `test/pkg/run.sh` 执行 |
 | J4 | 四键齐备、`ns-root` 存在且无绝对 `-I` 的包 RC=0，stdout 含 `ok: 4 criteria` | 直接跑 |
 | J5 | `ns-root` 缺失 / 绝对 / 不存在 分别命中 §8 对应文案 | 三个夹具 |
 | J6 | `cflags = -I /abs/path` 的包 RC≠0 且含 `absolute -I` | 夹具 |
@@ -126,7 +126,7 @@ S3（verify/migrate）未开工。
 | update | v2 pin 离线审计，不重新联网 |
 | 门禁 | test/pkg 127/0；check-ast 1444/0；check-all 11/11 |
 
-S4（外部包仓）未执行。
+S4（包仓对齐）已移出本 phase：`publisher` / `ns-root` / tag / 各仓测试改写归对应包仓，本卡不再跟踪，也不再作为收口判据。
 
 ## 12. S5/S6 收口记录（2026-11-15，v0.58.0，仓内部分）
 
@@ -136,5 +136,4 @@ S4（外部包仓）未执行。
 | S6 | package-guide/tutorial/README/README.en/install.sh/glossary 改为 store 为现行机制；`-I vendor/` 仅兼容期 |
 | 门禁 | test/pkg 130/0；check-ast 1444/0；check-all 11/11 |
 
-**未完成/阻塞**：S4 需要外部包仓（ct-std/ct-fsguard/ct-json 等）在场并打 tag；S7 删除 vendor 支持
-须等兼容期结束。Phase 54 不宣称整体完成。
+**未完成/阻塞**：S7 删除 vendor 支持须等兼容期结束，兼容期举证由各包仓在包外册完成；本相不宣称整体完成。
