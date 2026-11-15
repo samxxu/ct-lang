@@ -3,9 +3,9 @@
 | 项 | 值 |
 | --- | --- |
 | 模块 | selfhost（`--lib` ABI 头） |
-| 类型 | **设计口径**（不是缺陷） |
+| 类型 | **已由既有需求承接**（不是新缺陷） |
 | 严重度 | Low（`.abi.h` 原型已逐行变化，签名漂移仍可观测） |
-| 状态 | rejected（按 D39-12 / D42-10，不排期；只补文档） |
+| 状态 | superseded（并入 [REQ-ABI-2](../../docs/planning/requirements-pool.md#L162)，P2，触发条件 = 下游需要 `#if` 编译期 pin） |
 | 锚点 | `v0.53.1`（`55d89e2b`）；实测 `ct-ast v0.53.1`（HEAD 重建） |
 
 ## 现象
@@ -47,16 +47,17 @@ long lib_box_get(struct lib_Box *);
 
 ## 定性
 
-**拒绝（设计）**，不是 bug：
+**不是新缺陷**：Phase 39 D39-12 明文定义哈希 = 导出名排序后的 FNV-1a；Phase 42 D42-10 明确
+「不以 `ABI_HASH` 单独作证据」，签名面以 `.abi.h` diff 为准。本次实测里 `.abi.h` 原型确实从
+`int` 变成 `long`，ABI 漂移可观测。
 
-- Phase 39 D39-12 明文定义哈希 = **导出名**排序后的 FNV-1a；
-- Phase 42 D42-10 明文要求「不以 `ABI_HASH` 单独作证据」，签名面以 `.abi.h` 逐字节 diff 为准；
-- 本次实测里 `.abi.h` 原型确实从 `int` 变成 `long`，ABI 漂移**可观测**，只是哈希不承担这个职责。
+该需求已登记为 [REQ-ABI-2](../../docs/planning/requirements-pool.md#L162)（P2，open）：
+仅当下游出现 `#if` 编译期 pin 需求时才改哈希输入；否则按 REQ-ABI-1 的「重新生成 + 归一化 diff」。
+本条 superseded，不再单独排期。
 
 ## 落点
 
-不排期。需要签名级摘要时另立新特性（改哈希输入 = 已发布契约变更），归工具链 phase，
-不在本轮的 patch 队列里。
+随 **REQ-ABI-2** 的触发条件；不占 patch、不占 phase。触发前只补文档。
 
 ## 文档动作
 

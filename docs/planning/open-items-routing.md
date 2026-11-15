@@ -16,6 +16,7 @@
 | **2** | **PH-53 可选链** | patch 清完后才进 S0；仓库卡面显示 `v0.53.0` 已完成，若重开则从 S0 重走（见 §5.1） |
 | **3** | **PH-54 包机制** | 不插队；按 §4 判断为 PH-54 内工作分解 |
 | **4** | **PH-55+ 新特性** | 只保留经批准的容器点访问 / 自定义 `get` 协议 / 限定名 / 诊断；排在包机制之后 |
+| **5** | **PH-59 模型导出 → PH-60 视图注记** | 两项只到**提案 + 研判**，未排 phase 卡；研判结论见 §8。模型导出必须先于注记 |
 
 ---
 
@@ -161,7 +162,7 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 | 1 | 带 namespace 的静态固有方法 | 跨单元 `Box.make(3)`、同单元无 `pub` 两探针均 rc=0；夹具 `261` 通过 | **已修**（LANG-2，v0.53.1） | 无；若仍红需附 `ct -v` 与原文 |
 | 2 | `MAX_CALLS=1024` 整次构建累计 | 1030 个 `f();` → `calls.ct:1024:8: error: too many calls`；文案无上限/口径/建议 | **A**（LANG-3） | **0.53.11**；补诊断判据 D1–D4 |
 | 3 | `.h.ct` 里 `errdefer` | 复现 rc=0；夹具 `260` 通过 | **已修**（LANG-1，v0.53.1） | 无；若仍红需附 `ct -v` |
-| 4 | `ABI_HASH` 判不出签名漂移 | `int`→`long`，`.abi.h` 原型变、哈希仍 `0x6cdaf7f5` | **C 设计**（D39-12 名字级哈希） | 不排期；[SH-77](../../issues/selfhost/sh77-abi-hash-name-only.md) 记档 + 文档 |
+| 4 | `ABI_HASH` 判不出签名漂移 | `int`→`long`，`.abi.h` 原型变、哈希仍 `0x6cdaf7f5` | **已由 REQ-ABI-2 承接**（P2，触发条件） | 不占 patch/phase；[SH-77](../../issues/selfhost/sh77-abi-hash-name-only.md) superseded |
 | 5 | `--lib` 导出面只收自由函数 | `pub struct` + `impl` 的 `pub` 方法 → `no exported functions`；加自由函数后 rc=0 | **C 设计**（D39-2 / D42-10） | 不排期；[SH-78](../../issues/selfhost/sh78-lib-export-free-functions-only.md) + 文档 |
 | 6 | `build --lib --emit-map` 不写文件 | rc=0，`map.json` 不存在；compile 模式同参数写出 1558 字节 | **A**（SH-79） | **0.53.8**；显式支持或硬错 |
 | 7a | 警告通道 JSON | `--diagnostics=json` 输出 `{"warnings":[…]}` | **D**（已实现，缺夹具） | 并进 0.53.14 回归 |
@@ -175,8 +176,9 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 
 - **1 与 3 同类**：都是「已在 v0.53.1 修好、报告基于旧二进制」；HEAD 重建后两条复现均 rc=0，
   夹具 `261` / `260` 在跑。没有新根因，不开新号。
-- **4 不同类**：不是「已实现的东西不可见」，而是冻结设计把哈希限定为**导出名**；签名漂移由
-  `.abi.h` 原型逐行体现（D42-10 明确不以哈希单独作证据）。因此判 C，不按 bug 修。
+- **4 不同类**：不是「实现不可见」，而是冻结设计把哈希限定为**导出名**；签名漂移由
+  `.abi.h` 原型逐行体现（D42-10）。该诉求已有 [REQ-ABI-2](../planning/requirements-pool.md#L162)
+  承接（P2，触发条件），不重开、不占 patch。
 - 与 1/3 表面相似（都像「不可见」），但 1/3 是实现回归、4 是契约范围，修复动作完全不同。
 
 | PATCH | 收哪条 | 必须加的回归 | 依赖 / 串行 |
@@ -187,7 +189,7 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 | **0.53.5** | LANG-14：`char *`→`Str` 诊断 | `take("k")` rc=1、不落 `.c`；`int*`↔`char*` 仍 warning；`str_from` 通过 | 依赖 0.53.2 |
 | **0.53.6** | LANG-11：同名 `.h.ct`/`.ct` 产物冲突 | 两单元工程 rc=0；每个 `.c` 只出现一次；`extern` 链接 | 独立（Pkg/Driver） |
 | **0.53.7** | SH-76：内置层缺失误诊为 `expected a field name`（安装相对探测 + 明确诊断） | 四条探针在无 cwd `lib/std` 时 rc=0；`B`/`H` 仍过；compile/build 结论一致；隐层负例点名 `CT_STD_DIR`、不写 `.c`；裸 `Map *` 仍报类型实参缺失 | 与 0.53.6 同为 `Driver/Module` 族，**必须串行**；若一并改 `Expr` 诊断，再排到 0.53.12 之后 |
-| **0.53.8** | SH-79：`build --lib --emit-map` 静默不写文件 | 文件存在且 JSON 可解析；与 compile 模式键集合一致；无开关时零产物；若改硬错则诊断含 `--emit-map` | 与 0.53.6/0.53.7 同 `Driver/Module` 族，**串行**；根因不同不合并 |
+| **0.53.8** | SH-79：`--emit-map` 两个 facet（`--lib` 不落文件、build 的 `file` 指内置层） | ①②③④⑤：compile 落文件；build 落文件；`--lib` 落文件；`file` 全部指向输入单元且 `Box`/`main` 在册；无开关零产物、重跑逐字节相同 | 与 0.53.6/0.53.7 同 `Driver/Module/Emitter` 族，**串行**；根因不同不合并；排在 LANG-9 之前 |
 | **0.53.9** | LANG-8：`5.method()` 词法 | `5.method()`、`5.0`、`5..6` 三组 | 独立（Lexer） |
 | **0.53.10** | LANG-7：未声明变量诊断（先复验） | 指向变量名、行号正确；若已由 LANG-2 覆盖则关闭 | 与 Expr/Parser 族串行 |
 | **0.53.11** | LANG-3：MAX_CALLS 上限与诊断 | 1024 通过、1025 命中 D1–D4（含上限/累计/建议/位置）；两单元 500+600 位置正确；不写 `.c` | 与 Expr/Parser 族串行（`:55`、`Parser:3759`） |
@@ -246,3 +248,32 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
   SH-18（类型位置）、PH-54（包机制）。
 - 不改 `docs/roadmap.md`、`docs/design/phase53.md`、`docs/design/phase54.md`、发版契约、`selfhost/**`。
 - 只本地提交，不 push、不打 tag。
+
+---
+
+## 8 SwiftCT 静态映射（2026-11-15 第二批）
+
+### 8.1 A 组：SH-79 扩为两个 facet（patch 0.53.8）
+
+| facet | 实测 | 根因 |
+| --- | --- | --- |
+| `build --lib --emit-map` 不落文件 | rc=0，目标文件不存在 | `--lib` 在 `Module.h.ct:1573-1610` 提前收口，未走 `write_map` |
+| `build --emit-map` 的 `file` 错 | `nb.json` 全部 `file` = `lib/std/Vec.h.ct`，输入 `Box`/`main` 缺失 | `Module.h.ct:1819` 固定写 `units[0].prog`，`units[0]` 是内置层 |
+
+0.53.8 验收按 SH-79 的 R1–R5：compile 落文件、build 落文件、`--lib` 落文件、**`file` 必须是输入单元**、
+无开关零产物且重跑逐字节相同。与 LANG-10 / PH-58 **不合并**：那两条是诊断通道，本条是代码模型映射；
+只共享「信封/版本/路径/确定性」口径（见模型导出提案 §5）。
+
+### 8.2 B 组：两项提案（只到研判，不排 phase 卡）
+
+| 提案 | 文档 | 拟占 | 结论 | 前置 |
+| --- | --- | --- | --- | --- |
+| 模型图导出 | [ct-model-export-proposal](../proposals/ct-model-export-proposal.md) | **PH-59** | 通过方向：新 `--emit-model`，不扩 `--emit-map` 契约；schema 版本化 | LANG-9（可见性）；PH-58 之后 |
+| 视图节点注记 | [ct-view-annotation-proposal](../proposals/ct-view-annotation-proposal.md) | **PH-60** | 通过方向：struct 后置 `view` 子句；零 ABI | **PH-59 schema 冻结** |
+
+研判记录：[swiftct-mapping-proposal-review](../review/swiftct-mapping-proposal-review.md)。两项都还没写
+`REQ-*`、没进 roadmap、没开 phase 卡；按「提案 → 研判 → 需求定稿 → roadmap → phase」继续。
+
+**顺序**：PH-53 → PH-54 → PH-57 → PH-58 → **PH-59 模型导出 → PH-60 视图注记**。
+模型导出必须在注记之前：注记的产出没有模型出口就是「写了没人读」。两者与 PH-53/54/57 无依赖，
+不改其判据；PH-58 的字段位置只是模型的可选字段，不构成阻塞。
