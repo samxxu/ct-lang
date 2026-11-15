@@ -1,0 +1,15 @@
+/* Phase 48 / E48-2: the consumer unit only sees `lib::Res`'s header; `delete`
+   must call the real Drop body exported by that unit, in order.
+   License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+#include <stdlib.h>
+import lib::res;
+
+int main(void)
+{
+    own Res *r = malloc(sizeof(struct Res));
+    r->id = 7;
+    delete r;
+    printf("done\n");
+    return 0;
+}

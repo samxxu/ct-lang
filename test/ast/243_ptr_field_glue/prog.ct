@@ -1,0 +1,33 @@
+/* Phase 48 / E48-1, E48-6: a pointer field in the automatic Drop glue passes
+   the child object, not the field's address. `Node` writes no impl, so the glue
+   must run `Leaf_Drop_drop(node->leaf)` exactly once and never `&node->leaf`
+   (which would read the pointer's low bytes as the child). The child memory
+   still belongs to the explicit owner: the fixture frees it after `delete`.
+   License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Leaf {
+    int id;
+} use Drop;
+
+impl Drop for Leaf {
+    void drop() { printf("leaf drop %d\n", self->id); }
+}
+
+struct Node {
+    Leaf *leaf;
+} use Drop;
+
+int main(void)
+{
+    own Node *n = malloc(sizeof(struct Node));
+    Leaf *leaf;
+    n->leaf = malloc(sizeof(struct Leaf));
+    n->leaf->id = 7;
+    leaf = n->leaf;
+    delete n;
+    free(leaf);
+    printf("done\n");
+    return 0;
+}

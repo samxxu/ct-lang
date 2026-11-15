@@ -2958,6 +2958,12 @@ impl ParseOps for Parser {
         /* the borrow declaration needs to know that this unit wrote the handback
            body: `use Handback` alone would hand back to nothing */
         if (strcmp(rtrait, "Handback") == 0) self->sym->structs[si].has_handback_impl = 1;
+        /* PH-48 D48-2: the concrete impl Drop marks the struct row too. The
+           generic template path already does this when an instance is created;
+           without it a consumer unit could not distinguish no impl at all (the
+           owner emits the recursive glue) from an impl in a different unit
+           (L48-2). */
+        if (strcmp(rtrait, "Drop") == 0) self->sym->structs[si].has_drop_impl = 1;
         brace_line = self->lex->tokline;
         brace_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->sup->expect("{") != 0) return -1;

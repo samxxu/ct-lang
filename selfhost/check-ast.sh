@@ -3784,6 +3784,12 @@ if bash test/ast/p47_map.sh "$work/ct-ast" "$CC"; then
 else
     bad "p47/map-str-key" "Map<Str, V> key protocol failed"
 fi
+# Phase 48: pointer-field Drop glue and the cross-unit Drop body (E48-1/2/5/6).
+if bash test/ast/p48_drop.sh "$work/ct-ast" "$CC"; then
+    ok "p48/drop"
+else
+    bad "p48/drop" "pointer-field Drop glue or cross-unit Drop body failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

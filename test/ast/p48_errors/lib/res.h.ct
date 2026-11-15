@@ -1,0 +1,7 @@
+/* PH-48 L48-2 negative: the exported struct uses Drop, but the impl lives in a
+   different unit, so this header has no real prototype to publish. */
+namespace lib;
+
+pub struct Res {
+    int id;
+} use Drop;

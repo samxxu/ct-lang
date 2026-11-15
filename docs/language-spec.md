@@ -1877,8 +1877,9 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
 - 顶层构造不支持嵌套。
 - **生成物里「声明了但没用到」的 `static` 实体**：一个 `impl` 总会发射 `<S>_<T>_vtable`，一个
   `use Drop` 的 struct 总会发射 `<S>_Drop_drop`，即使本单元从不调用该 trait 的方法、也不 `delete`
-  （ct-ast 不做跨过程可达性分析）。这些符号一律带 `__attribute__((unused))`，因此 `cc -Wall -Wextra`
-  不会因为它们告警；属性与既有的 `__ct_init` 的 `__attribute__((constructor))` 同源，需要
+  （ct-ast 不做跨过程可达性分析）。compile 模式下这些符号带 `__attribute__((unused))` 的 `static`
+  形态；PH-48 起 build 模式的 Drop 体由 owner 单元以非 `static` 发出（头文件带真原型），因此不会
+  因「未使用」告警。属性与既有的 `__ct_init` 的 `__attribute__((constructor))` 同源，需要
   GCC / clang。它们**不影响**语义与运行。
 - **闭包**（Phase 21，仅 ct-ast）的限制是语言规则，不是实现缺口：不能进 `.h.ct`、不能作返回值 /
   字段 / 元素、闭包变量只能调用不能搬走、`qsort` 类无 env 槽的 C API 接不了；另有 E8 / E9
@@ -2332,6 +2333,8 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 ### 4.56 `Drop` 与长度前缀字符串 `Str`（Phase 36，仅 ct-ast）
 
 - **`Drop` trait**：`use Drop` 只置位、不进 `use[]` 列表；`delete p` 调用 `<S>_Drop_drop(p)`，无 vtable/vptr。无显式 `impl Drop` 时，编译器按字段**声明顺序**为每个 `uses_drop` 字段递归生成释放胶水；写了显式 `impl Drop for S`（或 `impl<T> Drop for Box<T>`）即**自负全责**，不再生成字段胶水，需在体里手动释放资源。
+- **指针字段胶水（PH-48）**：自动胶水对指针字段写 `if (_self->f) Child_Drop_drop(_self->f);`——判空、把子对象传给它的 Drop，**不取字段地址、也不 `free` 子指针**；所有权仍归显式 `impl Drop`。值字段仍是 `Child_Drop_drop(&_self->f)`。多星指针与带维度的指针数组不递归（没有单一子对象可传），由显式 impl 负责。
+- **跨单元 `Drop`（PH-48，D48-2 / U-2 A）**：Drop 体只由**声明该 struct 的单元**发射一次，链接性独立于 `pub`（默认可见）；该单元的生成头文件发布真原型 `void <S>_Drop_drop(void *);`，消费单元只发 `extern` 声明并调用它。`impl Drop for S` 必须写在 struct 的同一单元：写在别的单元时类型头没有原型，构建在写任何 `.c` 之前硬错 L48-2（`Drop body for 'struct Res' is not visible through its header`），不再生成静默空桩。显式 `impl` 仍负责释放子指针。
 - **泛型 Drop**：`impl<T> Drop for Box<T>` 每实例单态化出一个 `Box_int_Drop_drop` / `Box_Str_Drop_drop`，不产生模板态 `Box_Drop_drop`；声明在首次使用之后仍生效（impl 在 emit 阶段解析）。容器元素协议（Phase 31）对普通 struct 同样生效：`Vec<Str>` / `Vec<Probe>` 的 `release()` 会调用元素的 `release()`。
 - **重复释放诊断**：`drop()` 体内同一 `self` 字段不得 `release()` 两次，报 `field 'X' is released more than once in drop()`。
 - **`Str`**：内建于 `lib/std/Str.h.ct`，布局 `{ char *data; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_from(s)` / `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` / `str_compare(a, b)` / `str_c_str(s)`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。

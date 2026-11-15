@@ -184,6 +184,11 @@ trait EmitOps {
     int  map_vtable_exported(int i);
     int  emit_link_externs(int prog, int u);
     int  emit_inherent_protos(int prog);
+    /* PH-48 D48-2: the concrete `impl Drop` unit and the callable check; both
+       live on the trait so the compiler's MAX_FUNCS budget stays untouched
+       (the self-hosted build is at its top-level signature ceiling). */
+    int  unit_has_drop_impl(int u, int si);
+    int  drop_visible(int si);
     int  node_mentions(int n, const char *name);
     int  emit_trait_decls(void);
     int  emit_impls(int prog);
@@ -1506,6 +1511,23 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
         }
     }
 
+    /* PH-48 D48-2: the exported Drop surface. A `pub` struct that `use Drop`
+       and is declared here publishes the real non-static prototype iff this
+       unit emits its body (an explicit impl here, or the recursive glue when
+       there is no impl anywhere). The prototype is the visibility bit a
+       consumer's `delete` relies on; an impl written in another unit leaves
+       the header silent, which is L48-2. */
+    for (i = 0; i < self->sym->nstructs; i++) {
+        if (!self->sym->structs[i].uses_drop) continue;
+        if (self->sym->structs[i].is_template || self->sym->structs[i].is_inst) continue;
+        if (!self->sym->structs[i].is_pub) continue;
+        if (self->sym->structs[i].owner != u) continue;
+        if (self->sym->structs[i].has_drop_impl
+            && !self->unit_has_drop_impl(u, i)) continue;
+        fprintf(self->out, "void %s_Drop_drop(void *);\n",
+                self->sym->structs[i].name);
+    }
+
     /* Phase 29: a `pub` template publishes every instance of it here, so a
        consumer only includes this header instead of repeating the layout. */
     if (emit_struct_insts(self, u, 1) != 0) return -1;
@@ -2583,6 +2605,45 @@ impl EmitOps for Emitter {
         return 0;
     }
 
+    /* PH-48 D48-2: 1 when unit `u` declares a concrete `impl Drop for S` at its
+       top level. Concrete impls are AST nodes (they have no `ct_impls` row), so
+       the owning unit is found by walking that unit's program, not by a field
+       on the struct row. */
+    int unit_has_drop_impl(int u, int si)
+    {
+        int n;
+        if (u < 0 || u >= *self->nunits || si < 0) return 0;
+        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
+             n = self->arena->nodes[n].next)
+            if (self->arena->nodes[n].kind == N_IMPL
+                && self->arena->nodes[n].aux == si
+                && strcmp(self->arena->nodes[n].text2, "Drop") == 0)
+                return 1;
+        return 0;
+    }
+
+    /* PH-48 D48-2: 1 when this unit may call `<S>_Drop_drop`. Compile mode is
+       one TU, so everything is visible. In build mode the body is emitted once,
+       by the struct's owner unit, and only there (or through the owner's
+       header); an impl that lives in some other unit has no prototype in the
+       type's header, which is the L48-2 case the module layer rejects before
+       emission. Generic instance rows keep the legacy path (their writer is
+       decided by the instance ownership rules, not by the struct owner). */
+    int drop_visible(int si)
+    {
+        int owner;
+
+        if (self->cur_unit < 0) return 1;
+        if (si < 0 || si >= self->sym->nstructs) return 1;
+        if (!self->sym->structs[si].uses_drop) return 1;
+        if (self->sym->structs[si].is_inst) return 1;
+        owner = self->sym->structs[si].owner;
+        if (owner < 0) return 1;
+        if (owner == self->cur_unit) return 1;
+        if (!self->sym->structs[si].has_drop_impl) return 1;
+        return self->unit_has_drop_impl(owner, si);
+    }
+
     /* Tentative definitions so a global declared above an impl can already
        point at its vtable; C99 6.9.2 lets the definition below complete them. */
     int emit_vtable_fwd(int prog)
@@ -2625,11 +2686,41 @@ impl EmitOps for Emitter {
                             tname, self->sym->structs[si].name, tname);
             }
         }
-        /* a `delete` in a function body runs before the drop definition below */
-        for (si = 0; si < self->sym->nstructs; si++)
-            if (self->sym->structs[si].uses_drop && !self->sym->structs[si].is_template)
-                fprintf(self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
+        /* a `delete` in a function body runs before the drop definition below.
+           PH-48 D48-2: in build mode the definition is owned by exactly one
+           unit, so only that unit writes the non-static prototype; every other
+           unit declares `extern` and calls the owner's body (compile mode keeps
+           the old static pair byte for byte, and generic instance rows keep
+           their legacy writer). */
+        for (si = 0; si < self->sym->nstructs; si++) {
+            int owner, legacy;
+            if (!self->sym->structs[si].uses_drop
+                || self->sym->structs[si].is_template) continue;
+            owner = self->sym->structs[si].owner;
+            legacy = (self->cur_unit < 0 || owner < 0
+                      || self->sym->structs[si].is_inst);
+            if (self->cur_unit < 0) {
+                fprintf(self->out,
+                        "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
                         self->sym->structs[si].name);
+            } else if (legacy) {
+                /* the legacy writer emits a static body in every unit */
+                fprintf(self->out,
+                        "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
+                        self->sym->structs[si].name);
+            } else if (owner == self->cur_unit) {
+                /* no local body: the impl lives elsewhere (L48-2, rejected by
+                   the module layer) and a stale prototype would be a lie */
+                if (self->sym->structs[si].has_drop_impl
+                    && !self->unit_has_drop_impl(self->cur_unit, si))
+                    continue;
+                fprintf(self->out, "void %s_Drop_drop(void *self);\n",
+                        self->sym->structs[si].name);
+            } else {
+                fprintf(self->out, "extern void %s_Drop_drop(void *self);\n",
+                        self->sym->structs[si].name);
+            }
+        }
         /* a `borrow` release runs before the handback definition below */
         for (si = 0; si < self->sym->nstructs; si++)
             if (self->sym->structs[si].has_handback_impl)
@@ -2918,13 +3009,24 @@ impl EmitOps for Emitter {
                 if (emit_closures(self, owner, self->arena->nodes[m].line) != 0) return -1;
                 self->nclvar = 0;
                 self->closure_ci = 0;
-                fprintf(self->out, "static %s ", mret);
-                /* A drop that nothing deletes is dead code; marking it keeps the
-                   output clean under -Wall without changing what is emitted. The
-                   attribute goes before the declarator: clang rejects the
-                   trailing position on a definition (-Wgcc-compat). */
-                if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0)
-                    fputs("__attribute__((unused)) ", self->out);
+                /* PH-48 D48-2 (U-2 A): a concrete Drop body is one link symbol,
+                   not a per-unit static copy. Compile mode keeps the static pair
+                   byte for byte; in build mode the owner unit exports the body
+                   (the struct's header carries its prototype) so a consumer's
+                   `delete` reaches the real implementation. Handback keeps the
+                   old linkage: PH-38 owns its channel. */
+                if (strcmp(tname, "Drop") == 0 && self->cur_unit >= 0) {
+                    fprintf(self->out, "%s ", mret);
+                } else {
+                    fprintf(self->out, "static %s ", mret);
+                    /* A drop that nothing deletes is dead code; marking it keeps
+                       the output clean under -Wall without changing what is
+                       emitted. The attribute goes before the declarator: clang
+                       rejects the trailing position on a definition
+                       (-Wgcc-compat). */
+                    if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0)
+                        fputs("__attribute__((unused)) ", self->out);
+                }
                 fprintf(self->out, "%s_%s_%s(void *self",
                         self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
                 k = self->arena->nodes[m].a;
@@ -3110,30 +3212,60 @@ impl EmitOps for Emitter {
             }
         }
         /* A struct that `use Drop` but writes no impl gets a drop that recurses
-           into its Drop-using value fields, the same shape L2 generates. */
+           into its Drop-using fields, the same shape L2 generates.
+           PH-48 D48-1: a pointer field passes the child object, never its
+           address: `if (_self->f) Child_Drop_drop(_self->f);`. The child is not
+           freed here -- ownership stays with the explicit Drop body (D48-1).
+           PH-48 D48-2: in build mode only the struct's owner unit emits the
+           body; consumers call it through the owner's non-static symbol. The
+           legacy shapes (compile mode, generic instance rows and a row with no
+           owner) keep the old static body so their products stay byte-identical
+           (E48-4). */
         {
         int si;
         for (si = 0; si < self->sym->nstructs; si++) {
-            int has = 0, fi, used = 0;
+            int has = 0, fi, used = 0, legacy;
+            const char *sname;
             if (!self->sym->structs[si].uses_drop) continue;
             /* P36 S2a2: a template row (`struct Box<T>`) has no concrete C type,
                so no glue is emitted for it; instances carry the flag instead. */
             if (self->sym->structs[si].is_template) continue;
-            has = self->sym->structs[si].has_drop_impl;
-            if (!has)
-                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
-                    if (self->arena->nodes[n].kind == N_IMPL && self->arena->nodes[n].aux == si
-                        && strcmp(self->arena->nodes[n].text2, "Drop") == 0) has = 1;
-            if (has) continue;
-            fprintf(self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self) {\n",
-                    self->sym->structs[si].name);
-            fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n",
-                    self->sym->structs[si].name, self->sym->structs[si].name);
+            legacy = (self->cur_unit < 0 || self->sym->structs[si].owner < 0
+                      || self->sym->structs[si].is_inst);
+            if (!legacy) {
+                if (self->sym->structs[si].owner != self->cur_unit) continue;
+                /* an explicit impl owns the body; an impl elsewhere is L48-2
+                   and the module layer already refused the build */
+                if (self->sym->structs[si].has_drop_impl) continue;
+            } else {
+                has = self->sym->structs[si].has_drop_impl;
+                if (!has)
+                    for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
+                        if (self->arena->nodes[n].kind == N_IMPL
+                            && self->arena->nodes[n].aux == si
+                            && strcmp(self->arena->nodes[n].text2, "Drop") == 0) has = 1;
+                if (has) continue;
+            }
+            sname = self->sym->structs[si].name;
+            if (legacy)
+                fprintf(self->out,
+                        "static void __attribute__((unused)) %s_Drop_drop(void *self) {\n",
+                        sname);
+            else
+                fprintf(self->out, "void %s_Drop_drop(void *self) {\n", sname);
+            fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n", sname, sname);
             for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
                 char base[MAX_TEXT];
                 const char *ft = self->sym->structs[si].fields[fi].type;
+                int stars = 0;
+                const char *q;
                 size_t bl;
                 int ci;
+                for (q = ft; *q; q++)
+                    if (*q == '*') stars++;
+                /* a pointer array has no single child object; leave it to the
+                   explicit Drop body */
+                if (stars > 0 && self->sym->structs[si].fields[fi].dims[0]) continue;
                 if (strncmp(ft, "struct ", 7) == 0) ft += 7;
                 snprintf(base, sizeof base, "%s", ft);
                 bl = strlen(base);
@@ -3142,7 +3274,14 @@ impl EmitOps for Emitter {
                     base[bl] = 0;
                 }
                 ci = self->sym->find_struct(base);
-                if (ci >= 0 && self->sym->structs[ci].uses_drop) {
+                if (ci < 0 || !self->sym->structs[ci].uses_drop) continue;
+                if (stars == 1) {
+                    fprintf(self->out, "    if (_self->%s) %s_Drop_drop(_self->%s);\n",
+                            self->sym->structs[si].fields[fi].name,
+                            self->sym->structs[ci].name,
+                            self->sym->structs[si].fields[fi].name);
+                    used = 1;
+                } else if (stars == 0) {
                     fprintf(self->out, "    %s_Drop_drop(&_self->%s);\n",
                             self->sym->structs[ci].name, self->sym->structs[si].fields[fi].name);
                     used = 1;
@@ -3812,6 +3951,17 @@ impl EmitOps for Emitter {
             }
             self->emit_indent(ind);
             if (si >= 0 && self->sym->structs[si].uses_drop) {
+                /* PH-48 D48-2 (L48-2): never turn an unreachable body into a
+                   local stub. The module layer rejects the exported case before
+                   emission; this guard covers a row reached some other way. */
+                if (!self->drop_visible(si)) {
+                    char vmsg[MAX_TEXT * 2];
+                    snprintf(vmsg, sizeof vmsg,
+                             "Drop body for 'struct %s' is not visible in this unit;"
+                             " move 'impl Drop for %s' into the unit that declares the struct",
+                             self->sym->structs[si].name, self->sym->structs[si].name);
+                    return self->fail_from(n, vmsg);
+                }
                 /* a Drop struct runs its drop before the memory goes away */
                 fputs("if (", self->out);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;

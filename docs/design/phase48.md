@@ -1,6 +1,6 @@
 # Phase 48 — Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体）
 
-> **状态：规划中**（已定稿；2026-11-15 签字；未实施；实现由外部 harness 执行）
+> **状态：完成（2026-11-15；v0.48.0；S1–S6 全绿）**
 > **归属**：本仓库维护规格与判据；实现由外部 harness 交付（[手册](phase46-52-handoff.md)）。
 > **基线**：本卡最后一次提交；与容器族正交，可与 PH-46 并行开发，门禁串行。
 > **规模**：300–550 行（编译器 + 夹具 + 文档）。
@@ -110,3 +110,17 @@ mkdir -p /tmp/p48 && cd /tmp/p48
 | 与 PH-42 可见性冲突（若 U-2 选 B） | 链接失败 | 按 U-2 结论重裁；默认 A 不受影响 |
 | golden 漂移 | `check-goldens` 红 | 逐字节核对后重生成；否则回滚 |
 | 把 sanitizer 当硬门禁宣传 | 报告措辞 | 卡面已写：本相必跑，不计入 11 道 |
+
+### 9 收口记录（2026-11-15）
+
+| 项 | 结果 |
+| --- | --- |
+| E48-1 | `243_ptr_field_glue`：`leaf drop 7` / `done`；生成物 `if (_self->leaf) Leaf_Drop_drop(_self->leaf);`，无 `&_self->` |
+| E48-2 | `244_cross_unit_drop`：`res drop 7` / `done`；header 原型 + consumer `extern` |
+| E48-3 | 两夹具 ASAN/UBSAN 直接验证 0 报告；check-sanitizers 整体有既存红，按卡面不计入 11 道 |
+| E48-4 | `225_generic_drop` / `63_own_return_field` 产物逐字节一致 |
+| E48-5 | L48-2：rc=1、定位到 struct、不写 `.c` |
+| E48-6 | 指针字段判空、无取址；值字段胶水不变 |
+| E48-7 | check-all 11/11；check-ast 1385/0、warnings 647/0 |
+
+tag/push：`v0.48.0` annotated tag 与分支自动 push。

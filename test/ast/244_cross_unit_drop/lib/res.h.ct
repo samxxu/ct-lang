@@ -1,0 +1,15 @@
+/* Phase 48 / E48-2: a `pub struct ... use Drop` whose body lives in the same
+   header unit. The header publishes the non-static prototype and the unit's
+   `.c` exports the body, so a consumer's `delete` reaches it.
+   License: MIT; see LICENSE.EXCEPTION */
+namespace lib;
+
+#include <stdio.h>
+
+pub struct Res {
+    int id;
+} use Drop;
+
+impl Drop for Res {
+    void drop() { printf("res drop %d\n", self->id); }
+}

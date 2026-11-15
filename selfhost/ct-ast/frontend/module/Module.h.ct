@@ -53,6 +53,7 @@ import tool::sh::Sh;
 #define N_STRUCT  20
 #define N_TYPEDEF 21
 #define N_GLOBAL  22
+#define N_IMPL    33
 #define N_ENUM    45
 #define N_ENUMVAL 46
 #define N_UNION   48
@@ -93,6 +94,10 @@ pub trait ModuleOps {
     int  register_visible_type_aliases(int u);
     int  scan_forward_type_aliases(const char *path, int owner);
     int  check_ns_dir(int u);
+    /* PH-48 D48-2 (L48-2): every exported `use Drop` struct must publish its
+       `<S>_Drop_drop` body from the unit that declares it; an impl written in
+       another unit has no prototype in the type's header. */
+    int  check_drop_visibility(void);
     int  cache_order(int u, int *state, int *order, int *n);
     int  cache_key_of(int u, char *out, int cap);
     int  lib_scan(int root_u);
@@ -916,6 +921,63 @@ impl ModuleOps for Module {
         return 0;
     }
 
+    /* PH-48 D48-2 / L48-2: an exported `use Drop` struct publishes its
+       `<S>_Drop_drop` body through its own header. The body may be an explicit
+       `impl Drop` in that unit or the recursive glue the unit emits when there
+       is no impl; an impl written in a different unit leaves the header with no
+       real prototype, so a consumer could only call an empty stub (the silent
+       behaviour this phase removes). Reject the build before any `.c` is
+       written, at the struct's own line. */
+    int check_drop_visibility(void)
+    {
+        int si, u, n, found, line;
+        const char *name;
+
+        for (si = 0; si < self->sym->nstructs; si++) {
+            if (!self->sym->structs[si].uses_drop) continue;
+            if (self->sym->structs[si].is_template || self->sym->structs[si].is_inst) continue;
+            if (!self->sym->structs[si].is_pub) continue;
+            u = self->sym->structs[si].owner;
+            if (u < 0 || u >= self->nunits) continue;
+            if (!self->units[u].is_hdr) continue;
+            if (!self->sym->structs[si].has_drop_impl) continue;
+            found = 0;
+            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
+                 n = self->arena->nodes[n].next)
+                if (self->arena->nodes[n].kind == N_IMPL
+                    && self->arena->nodes[n].aux == si
+                    && strcmp(self->arena->nodes[n].text2, "Drop") == 0) {
+                    found = 1;
+                    break;
+                }
+            if (found) continue;
+            name = self->sym->structs[si].name;
+            line = 1;
+            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
+                 n = self->arena->nodes[n].next)
+                if (self->arena->nodes[n].kind == N_STRUCT
+                    && strcmp(self->arena->nodes[n].text2, name) == 0) {
+                    line = self->arena->nodes[n].line;
+                    break;
+                }
+            {
+                char bare[MAX_TEXT];
+                char msg[MAX_TEXT * 2];
+                const char *shown = name;
+                size_t pl = strlen(self->units[u].nsprefix);
+                if (pl > 0 && strncmp(name, self->units[u].nsprefix, pl) == 0)
+                    shown = name + pl;
+                snprintf(bare, sizeof bare, "%s", shown);
+                snprintf(msg, sizeof msg,
+                         "Drop body for 'struct %s' is not visible through its header;"
+                         " move 'impl Drop for %s' into the unit that declares the struct",
+                         bare, bare);
+                return tool::diag::ct_sem_error(line, 1, msg, self->units[u].path);
+            }
+        }
+        return 0;
+    }
+
     /* A unit that declares a namespace must sit in the matching directory under
        `--ns-root` (D13 option A: validation, not derivation). */
     int check_ns_dir(int u)
@@ -1504,6 +1566,10 @@ impl ModuleOps for Module {
                     return 1;
                 }
             }
+            /* PH-48 L48-2: reject an exported Drop whose body cannot be reached
+               through the type's header before any product is written. */
+            if (self->check_drop_visibility() != 0)
+                return frontend::parse::ct_parse_report();
             if (self->lib_mode) {
                 const char *od = self->outdir_opt ? self->outdir_opt : ".ctbuild";
                 char hp[MAX_PATH];

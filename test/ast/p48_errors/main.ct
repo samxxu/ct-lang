@@ -1,0 +1,13 @@
+#include <stdio.h>
+#include <stdlib.h>
+import lib::res;
+import lib::res_impl;
+
+int main(void)
+{
+    own Res *r = malloc(sizeof(struct Res));
+    r->id = 7;
+    delete r;
+    printf("done\n");
+    return 0;
+}
