@@ -1,9 +1,9 @@
-# SH-80 · `ct pkg check` 的判据窄于 CT 已声明的清单语义
+# SH-80 · 包发布前的清单校验：`ct pkg check` 判据窄于已声明的清单语义
 
 | 项 | 值 |
 | --- | --- |
-| 模块 | selfhost（`ct pkg check` / 清单读取） |
-| 类型 | 能力缺口（已声明的语义未在检查中兑现） |
+| 模块 | selfhost（`ct pkg check` / 包清单读取 / 发布前门禁） |
+| 类型 | 能力缺口（包发布前的清单校验未兑现已声明语义） |
 | 严重度 | Medium |
 | 状态 | open |
 | 锚点 | v0.60.0（`14a99b27`） |
@@ -11,8 +11,10 @@
 
 ## CT 承诺了什么
 
+包发布链路的入口是包清单，清单字段语义由提案 §7 定义：
+
 - §7 定义 `dep` 形如 `<publisher>/<name>@<range>`，`requires` 是编译器版本约束；
-  `licence` 是 SPDX 约定，**工具不解析**。
+  `licence` 标为**非必填**，并写明「约定，工具不解析」。
 - §7 规定 `version` 与引用 tag 不一致时，由 `ct get` / `ct verify` 报错。
 - §9 明确 `ct pkg check` 的实现范围是 **PK-1/2/5/8**。
 
@@ -21,8 +23,9 @@
 `ct pkg check` 对一份清单只输出 `ok: 4 criteria`，实际只检查 `name` / `version` / `publisher` / `ns-root`
 四项**是否存在**：
 
-1. 有 `licence` 的清单删掉该字段后仍是 `ok: 4 criteria`——按 §7 这不算 CT 的判据，属承诺边界内；
-2. `dep = http` 短名照过——§7 已声明 `dep` 必须是完整名，这一条未兑现；
+1. 有 `licence` 的清单删掉该字段后仍是 `ok: 4 criteria`——§7 把 `licence` 标为非必填且工具不解析，
+   这是已接受的设计口径，**不算缺口**；
+2. `dep = pkg-b` 短名照过——§7 已声明 `dep` 必须是完整名，这一条未兑现；
 3. `requires = ct >= 999.0.0` 照过——§7 声明了该字段，但没有可满足性检查；
 4. `version` 与最近 tag 不一致不查——§7 把一致性判给 `ct get` / `ct verify`，但发布前路径同样没有拦住。
 
@@ -30,7 +33,7 @@
 
 ```console
 $ mkdir -p /tmp/sh80/src
-$ printf 'name = demo\nversion = 0.2.0\npublisher = ct\nns-root = src\nlicence = MIT\n' > /tmp/sh80/ct.pkg
+$ printf 'name = pkg-a\nversion = 0.2.0\npublisher = pub-a\nns-root = src\nlicence = MIT\n' > /tmp/sh80/ct.pkg
 $ ct pkg check /tmp/sh80
 ok: 4 criteria
 
@@ -38,7 +41,7 @@ $ sed -i '' '/^licence/d' /tmp/sh80/ct.pkg
 $ ct pkg check /tmp/sh80
 ok: 4 criteria
 
-$ printf 'dep = http\n' >> /tmp/sh80/ct.pkg
+$ printf 'dep = pkg-b\n' >> /tmp/sh80/ct.pkg
 $ ct pkg check /tmp/sh80
 ok: 4 criteria
 ```

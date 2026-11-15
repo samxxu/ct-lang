@@ -1,8 +1,8 @@
-# SH-85 · `ct pkg check` 扫描工程内所有文本文件，文档示例中的绝对 `-I` 会误判
+# SH-85 · 包发布前的检查范围：`ct pkg check` 扫描全部文本，发布文档示例被误判
 
 | 项 | 值 |
 | --- | --- |
-| 模块 | selfhost（`ct pkg check` 扫描范围） |
+| 模块 | selfhost（`ct pkg check` / 包清单 / 发布文档扫描） |
 | 类型 | 能力缺口（检查范围超出 CT 已声明的判据） |
 | 严重度 | Medium |
 | 状态 | open |
@@ -12,13 +12,13 @@
 ## CT 承诺了什么
 
 - §9：`ct pkg check` 只实现 PK-1/2/5/8，其余判据不在 CT 的实现范围。
-- SP-024 把「不得出现指向自身绝对路径的 `-I`」列为工程侧自查项，不是 CT 全文件扫描的承诺。
+- SP-024 把「不得出现指向自身绝对路径的 `-I`」列为包发布侧自查项，不是 CT 全文件扫描的承诺。
 
-CT 没有承诺扫描工程内全部文本文件。
+CT 没有承诺扫描包内全部文本文件。
 
 ## 实测差距
 
-`README.md` 或其它文档里出现示例命令 `-I /绝对路径`，`ct pkg check` 会让整个工程判红：
+`README.md` 或其它发布文档里出现示例命令 `-I /绝对路径`，`ct pkg check` 会让整个包判红：
 
 ```console
 $ ct pkg check .
@@ -33,7 +33,7 @@ $ echo $?
 
 ```console
 $ mkdir -p /tmp/sh85/src && cd /tmp/sh85
-$ printf 'name = demo\nversion = 0.2.0\npublisher = ct\nns-root = src\n' > ct.pkg
+$ printf 'name = pkg-a\nversion = 0.2.0\npublisher = pub-a\nns-root = src\n' > ct.pkg
 $ printf '示例：ct build -I /opt/ct/include\n' > README.md
 $ ct pkg check .
 ctc: 'README.md' contains an absolute -I
@@ -45,11 +45,11 @@ $ echo $?
 
 - 扫描范围限定为构建相关文件：`ct.pkg`、`ct.lock`、`*.ct`、`*.h.ct`、构建脚本；
 - 或扫描时跳过 Markdown 围栏代码块与文档目录；
-- 若保留全文件扫描，诊断必须说明「文档命中」并允许显式豁免，而不是直接判整工程红。
+- 若保留全文件扫描，诊断必须说明「文档命中」并允许显式豁免，而不是直接判整个包红。
 
 ## 影响
 
-文档里的安装/构建示例与检查互相冲突；工程要么删掉示例，要么无法通过检查。
+文档里的安装/构建示例与发布检查互相冲突；包要么删掉示例，要么无法通过检查。
 
 ## 关联
 

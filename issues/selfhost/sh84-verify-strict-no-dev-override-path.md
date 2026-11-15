@@ -1,8 +1,8 @@
-# SH-84 · `ct verify --strict` 没有本地开发态的校验路径
+# SH-84 · 包发布的严格校验：`ct verify --strict` 没有本地开发态路径
 
 | 项 | 值 |
 | --- | --- |
-| 模块 | selfhost（`ct verify --strict` 与 dev override） |
+| 模块 | selfhost（`ct verify --strict` / 包 lock / dev override） |
 | 类型 | 能力缺口（不是回归；现有行为符合已写下的判据） |
 | 严重度 | Medium |
 | 状态 | open |
@@ -18,7 +18,7 @@ SP-016 明确：`ct verify --strict` 在 lock 含 `dir` 行或 vendor 回退时*
 
 ## 实测差距
 
-差距在于：CT 没有提供本地开发态的严格校验入口。本地开发时用 dev override 指向工作目录，
+差距在于：包发布前没有本地开发态的严格校验入口。本地开发时用 dev override 指向工作目录，
 `ct verify --strict` 直接拒绝，只能在 store 化之后才验：
 
 ```console
