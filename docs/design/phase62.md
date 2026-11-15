@@ -1,11 +1,11 @@
 # Phase 62 · 容器下标可写与嵌套链
 
-**状态：实施中**（S1–S4 完成；S5 所有权/golden 未完成）
+**状态：完成**（v0.61.0）
 
 | 项 | 值 |
 | --- | --- |
 | 依据 | [研判](../review/ct-writable-subscript-proposal-review.md) §3 裁定（A1–A7 / W1–W22）；[提案](../proposals/ct-writable-subscript-proposal.md)；[序列](../planning/post-58-phase-sequence.md) |
-| 版本位 | `version-minor: 62`；收口 **v0.62.0**（PH-60 跳过时占 v0.61.0，按 AGENTS §0.3 实算） |
+| 版本位 | `version-minor: 61`；收口 **v0.61.0**（PH-60 跳过，d=1，按 AGENTS §0.3 相位表实算） |
 | 只动 | `selfhost/ct-ast/frontend/parse/Expr.h.ct`、`TypeCheck.h.ct`、`frontend/sym/Symbols.h.ct`、`backend/emit/Emitter.h.ct`、`test/ast/**`、`docs/**` |
 | 不碰 | `selfhost/l0/**`、`selfhost/l1/**`、`selfhost/l2/**`、`golden/**`、外部包仓 |
 
@@ -64,3 +64,11 @@ doc["a"]["b"] = 1;     /* 嵌套：缺中间 Map 建空，Vec 按 set 补齐 */
 ## 5. 回滚
 
 按切片 `git revert`；S2 的 `set` 语义与 S1 绑定回滚，不能只退一半。
+
+## 6. 收口记录（2026-11-16，v0.61.0）
+
+- S1/S2/S3：Vec/Map 单层写、`Vec::set` 补齐/负下标/扩容 abort；
+- S4：嵌套 Map 写读（`Map::at` 槽指针 + `N_DEREF`），`285_nested_map_write` 输出 7；
+- S5：`284_vec_hole` 覆盖洞的 has/get/release；ASan 构建下 285 无内存错误；`at` 只进 `.c` static；
+  大跨度 warning 阈值 1024；
+- `check-ast` 1450/0，`check-all` 11/11。

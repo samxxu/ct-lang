@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 /* Root namespace on purpose: the layer is pre-parsed, not imported, so `Vec` /
    `Map` have to be spelled exactly as the user writes them (D29-3). */
 
@@ -143,6 +144,9 @@ impl<T> Vec<T> {
             self->h->cap = 0;
             self->h->data = 0;
         }
+        if (i >= self->h->len && i - self->h->len > 1024)
+            fprintf(stderr, "ctc: warning: Vec growth span %d exceeds CT_VEC_GROW_WARN_SPAN (1024)\n",
+                    i - self->h->len);
         if (i >= self->h->cap) {
             nc = self->h->cap == 0 ? 4 : self->h->cap;
             while (nc <= i) nc = nc * 2;

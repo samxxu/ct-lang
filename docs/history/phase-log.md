@@ -179,6 +179,7 @@
 | v0.58.2 | PKG-6 install 试解析 import（2026-11-16） | install 按 lock 的 `-I` 检查项目 import，解析不到硬错；test/pkg 134/0；tag `v0.58.2`。 |
 | v0.58.3 | PKG-3 未知键告警（2026-11-16） | `read_manifest` 对未知键发 warning；test/pkg 135/0；tag `v0.58.3`。 |
 | v0.59.0 | Phase 57 限定名与 namespace 常量（2026-11-16） | `Type::Member` 同/跨单元可用；`ns::Type` 类型位置可用；SH-18、LANG-15 收口；tag `v0.59.0`。 |
+| v0.61.0 | Phase 62 容器下标可写与嵌套链（2026-11-16） | Vec/Map 单层写、Vec::set 补齐、嵌套 Map 写读；check-ast 1450/0；tag `v0.61.0`。 |
 | v0.60.0 | Phase 59 模型导出 M1（2026-11-16） | `--emit-model` schema 1、字段/枚举/函数、相对路径与确定性；test/model 12/0；tag `v0.60.0`。 |
 | v0.44.2 | 接口值返回四条静默 UB / 边界修复（2026-11-15） | A-1 `.m.ct` 可 import `.h.ct`（`fb55985c`）；SH-72 动态派发按 trait 签名给返回类型（`5ff69ac3`）；SH-74 impl 内 `return self` 发 `(void *)_self`（`d6e82e25`）；SH-75 局部 struct 返回接口改堆拷贝（`b5797cbf`）；新夹具 `238_iface_ret_value` / `237_iface_ret_self` / `239_local_iface_return` + `sh71_map_import_hdr`，SH-75 另配 ASAN use-after-return；check-ast 1376/0、test/run 156、warnings 631/0、docs 1205/239。已知限制：接口无析构槽，堆上装箱对象随进程存活。 | tag `v0.44.2`。
 | v0.53.1 | 规范复核登记的两处 P0 实现缺陷（2026-11-15） | ① 表达式位置的字符串字面量超 158 字节由「静默截断」改为编译期硬错 `string literal is too long (max 158 bytes; split it)`（Lexer 记 `toktrunc`、`Expr` 的 `T_STR` 分支硬错、`ParseSupport::lex_next` 只对 `T_ID` 消费该标志）；② 右值 struct 装箱由「发射 `(void *)&mk()` 交 `cc`」改为编译期硬错 `cannot box an rvalue struct; assign it to a variable first`（`TypeCheck::maybe_box` 增加可寻址性判定）；规范 §2 / §4.8 / §4.30 / §6.2 / §8 同步到 v0.53.1；`CTC_VERSION` 五处同步到 `0.53.1`，71 个 golden/expected 仅版本 token 变化。PATCH fix，不新建 tag。 |

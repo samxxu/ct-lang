@@ -10,5 +10,6 @@ int main(void)
     m.h = 0;
     m["a"]["b"] = 7;
     printf("%d\n", *m["a"]["b"]);
+    m.release();
     return 0;
 }
