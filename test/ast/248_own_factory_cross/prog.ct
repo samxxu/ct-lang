@@ -1,0 +1,12 @@
+/* Phase 49 / E49-1: a cross-unit factory return is accepted and the consumer's
+   AutoDrop reaches the owner's Drop body (PH-48). License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+import lib::p;
+
+int main(void)
+{
+    own struct P *p = make(7);
+    printf("n=%d\n", p->n);
+    printf("done\n");
+    return 0;
+}

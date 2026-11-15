@@ -1,0 +1,41 @@
+/* Phase 49 / E49-6: an `own` factory value and the `?` failure path keep the
+   PH-40 cleanup order (`errdefer` runs before the owned object's Drop); the
+   factory allocation is released exactly once. License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Res {
+    int id;
+} use Drop;
+
+impl Drop for Res {
+    void drop() { printf("drop %d\n", self->id); }
+}
+
+struct Res *make(int id)
+{
+    struct Res *r = malloc(sizeof(struct Res));
+    r->id = id;
+    return r;
+}
+
+Result<long, char *> fail(void)
+{
+    return err: (Result<long, char *>){ 0, 0, "boom" };
+}
+
+Result<long, char *> run(void)
+{
+    own struct Res *r = make(7);
+    errdefer { printf("errdefer\n"); }
+    long v = fail()?;
+    printf("unreachable %ld\n", v);
+    return (Result<long, char *>){ 1, v, 0 };
+}
+
+int main(void)
+{
+    Result<long, char *> r = run();
+    printf("rc=%d %s\n", r.ok, r.err);
+    return 0;
+}

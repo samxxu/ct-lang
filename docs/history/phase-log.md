@@ -60,6 +60,7 @@
 | Phase 46 | **`Map` 元素完整性**：用户 struct 按值入 `Map`，`MapEntry` body 下沉使用单元 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.46.0`；[卡](../design/phase46.md)） | `240_map_user_struct` build 绿；`p46/map-user-struct` 0 failures；check-ast 1378/0 |
 | Phase 47 | **容器键协议**：`Str` 键深拷贝、len+memcmp、键释放；`char *` 借用不变 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.47.0`；[卡](../design/phase47.md)） | `241/242`、`p47/map-str-key` 0 failures；check-ast 1382/0 |
 | Phase 48 | **Drop 语义闭环**：指针字段胶水、跨单元 Drop 体、L48-2 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.48.0`；[卡](../design/phase48.md)） | `243/244`、`p48/drop` 0 failures；check-ast 1385/0 |
+| Phase 49 | **`own` 所有权转移**：工厂返回值初始化、零值不记账、L49-1/2/3 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.49.0`；[卡](../design/phase49.md)） | `p49/own` 0 failures；check-ast 1394/0 |
 
 > **Agent 内核运行库（ct-pkg，外部）**：`arena` / `sync` / `callback` 今天可做，`result` / `string` 分别等 Phase 34 / 36，ABI 打包等 Phase 39；提案见 [proposals/ct-pkg-agent-runtime.md](../proposals/ct-pkg-agent-runtime.md)。
 
@@ -155,6 +156,7 @@
 | v0.46.0 | Phase 46 Map 元素完整性（2026-11-15） | `MapEntry_*` 纳入 foreign 元素判定；用户 struct 按值入 `Map` 的多单元 build 可编译；body 下沉使用单元；无新符号；check-ast 1378/0、test/run 156；tag `v0.46.0`。 |
 | v0.47.0 | Phase 47 容器键协议（2026-11-15） | `Map<Str,V>` 特化：len+memcmp、put 深拷贝、覆盖/remove/release 释放键；foreach 借用；L47-1 四类键；check-ast 1382/0、warnings 640/0；tag `v0.47.0`。 |
 | v0.48.0 | Phase 48 Drop 语义闭环（2026-11-15） | 指针字段胶水判空/不取址；胶水按 owner 单元发射；跨单元 Drop 体 extern；L48-2 空桩硬错；check-ast 1385/0、warnings 647/0；tag `v0.48.0`。 |
+| v0.49.0 | Phase 49 `own` 所有权转移（2026-11-15） | 工厂返回值 `own` 初始化；零值不记账；L49-1/2/3；跨单元工厂；既有 own 产物不变；check-ast 1394/0、warnings 656/0；tag `v0.49.0`。 |
 | v0.44.2 | 接口值返回四条静默 UB / 边界修复（2026-11-15） | A-1 `.m.ct` 可 import `.h.ct`（`fb55985c`）；SH-72 动态派发按 trait 签名给返回类型（`5ff69ac3`）；SH-74 impl 内 `return self` 发 `(void *)_self`（`d6e82e25`）；SH-75 局部 struct 返回接口改堆拷贝（`b5797cbf`）；新夹具 `238_iface_ret_value` / `237_iface_ret_self` / `239_local_iface_return` + `sh71_map_import_hdr`，SH-75 另配 ASAN use-after-return；check-ast 1376/0、test/run 156、warnings 631/0、docs 1205/239。已知限制：接口无析构槽，堆上装箱对象随进程存活。 | tag `v0.44.2`。
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../../AGENTS.md) 第 5 节）。

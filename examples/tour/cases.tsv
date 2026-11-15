@@ -43,7 +43,7 @@
 15_memory|manual_shim_wrong|build|no|0|free(p) bypasses pkt_free: payload and counter lost
 15_memory|borrow_handback|compile|no|0|borrow + Handback returns to the pool
 15_memory|borrow_delete|compile|no|1|negative: delete on a borrowed pointer
-15_memory|own_factory|compile|no|1|negative: own cannot take a factory result
+15_memory|own_factory|compile|no|0|own takes a factory result; the exit runs its real Drop
 15_memory|leak_warning|compile-warn|no|0|static "potential leak" warning, exit 0
 16_diagnostics|sig_text|check|no|1|signature mismatch, text; spec §6.1 is outdated
 16_diagnostics|sig_json|check-json|no|1|same finding as JSON (type=signature_mismatch)

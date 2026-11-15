@@ -1,0 +1,39 @@
+/* Phase 49 / E49-1: `own struct P *p = make(7);` accepts a call whose Symbols
+   row returns the literal `struct P *`, and the existing AutoDrop exit runs
+   the real Drop body once. The counters are printed after the inner block
+   closes, so `drops=1` is the value the release produced.
+   License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct P {
+    int n;
+} use Drop;
+
+static int g_allocs = 0;
+static int g_drops = 0;
+
+impl Drop for P {
+    void drop() {
+        g_drops = g_drops + 1;
+        printf("drop %d\n", self->n);
+    }
+}
+
+struct P *make(int n)
+{
+    struct P *p = malloc(sizeof(struct P));
+    p->n = n;
+    g_allocs = g_allocs + 1;
+    return p;
+}
+
+int main(void)
+{
+    {
+        own struct P *p = make(7);
+        printf("n=%d\n", p->n);
+    }
+    printf("allocs=%d drops=%d\n", g_allocs, g_drops);
+    return 0;
+}

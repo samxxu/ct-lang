@@ -3790,6 +3790,13 @@ if bash test/ast/p48_drop.sh "$work/ct-ast" "$CC"; then
 else
     bad "p48/drop" "pointer-field Drop glue or cross-unit Drop body failed"
 fi
+# Phase 49: a factory call may initialise `own`, a zero owns nothing, and the
+# return-position `own` / duplicate-binding diagnostics are pinned (E49-1..6).
+if bash test/ast/p49_own.sh "$work/ct-ast" "$CC"; then
+    ok "p49/own"
+else
+    bad "p49/own" "own factory initializer or diagnostics failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

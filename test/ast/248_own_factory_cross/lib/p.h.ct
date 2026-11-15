@@ -1,0 +1,20 @@
+/* Phase 49 / E49-1 cross-unit shape: the factory and the Drop body live in the
+   struct's header unit; the consumer only writes `own ... = make(7);`.
+   License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+#include <stdlib.h>
+
+pub struct P {
+    int n;
+} use Drop;
+
+impl Drop for P {
+    void drop() { printf("drop %d\n", self->n); }
+}
+
+pub struct P *make(int n)
+{
+    struct P *p = malloc(sizeof(struct P));
+    p->n = n;
+    return p;
+}

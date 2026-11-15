@@ -1,0 +1,16 @@
+/* PH-49 L49-1: any pointer expression other than malloc/calloc or a factory
+   call returning `struct P *` stays rejected. */
+struct P {
+    int n;
+} use Drop;
+
+impl Drop for P {
+    void drop() { }
+}
+
+int main(void)
+{
+    int x = 1;
+    own struct P *p = &x;
+    return 0;
+}

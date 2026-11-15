@@ -1,0 +1,18 @@
+/* PH-49 L49-2: two `own` bindings for the same identifier in one scope would
+   emit two declarations and two releases. */
+#include <stdlib.h>
+
+struct P {
+    int n;
+} use Drop;
+
+impl Drop for P {
+    void drop() { }
+}
+
+int main(void)
+{
+    own struct P *p = malloc(sizeof(struct P));
+    own struct P *p = malloc(sizeof(struct P));
+    return 0;
+}

@@ -1,0 +1,3 @@
+errdefer
+drop 7
+rc=0 boom

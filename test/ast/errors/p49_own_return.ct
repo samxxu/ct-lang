@@ -1,0 +1,18 @@
+/* PH-49 L49-3: a return type cannot be `own`; the call site carries it. */
+struct P {
+    int n;
+} use Drop;
+
+impl Drop for P {
+    void drop() { }
+}
+
+own struct P *make(void)
+{
+    return 0;
+}
+
+int main(void)
+{
+    return 0;
+}

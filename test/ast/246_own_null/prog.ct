@@ -1,0 +1,31 @@
+/* Phase 49 / E49-2: a factory that returns 0 owns nothing, and a literal zero
+   initializer is not registered at all; the release's `if (p)` guard makes
+   both safe without a drop. License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct P {
+    int n;
+} use Drop;
+
+static int g_drops = 0;
+
+impl Drop for P {
+    void drop() { g_drops = g_drops + 1; }
+}
+
+struct P *make_null(void)
+{
+    return 0;
+}
+
+int main(void)
+{
+    {
+        own struct P *p = make_null();
+        own struct P *q = 0;
+        printf("p-null=%d q-null=%d\n", p == 0, q == 0);
+    }
+    printf("drops=%d\n", g_drops);
+    return 0;
+}

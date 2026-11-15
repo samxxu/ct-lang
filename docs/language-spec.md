@@ -384,6 +384,8 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | 源码形态 | 处理 |
 | --- | --- |
 | `own Person *p = malloc(sizeof(struct Person));` | 去掉 `own` 后照常声明；登记 autodrop |
+| `own Person *p = make();`（工厂返回 `struct Person *`） | 同上；初始化式可以是**返回类型字面量为 `struct X *` 的函数调用**（PH-49） |
+| `own Person *p = 0;`（零值） | 去掉 `own` 后照常声明，但**不登记** autodrop（零值不拥有对象，块尾不释放） |
 | 声明作用域的闭合 `}`（行首） | 在该行之前插入 `if (p) { Person_Drop_drop(p); free(p); p = 0; }` |
 | 每个 `return` 之前（L2 要求行首；ct-ast 无位置要求） | 同上，插入全部 autodrop 变量的释放（声明逆序） |
 | 每个 `break` / `continue` 之前（仅 ct-ast） | 同上，只释放该循环体（含嵌套块）自建立以来登记的 autodrop 变量；`switch` 只登记 `break` 基线，`case … break` 不会碰循环外的 `own` |
@@ -393,9 +395,16 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 
 约束与限制：
 
-- 只支持 `own T *p = malloc|calloc(...);`：必须是**结构体指针**、必须由 `malloc` / `calloc` 初始化、
-  且该 struct 必须 `use Drop`；否则编译期报错。
-- `own` 只允许出现在**函数体内**（文件作用域报错）；不支持数组形态（`own T *ps[n]`）。
+- 初始化式只有三种：`malloc(...)`、`calloc(...)`，或一个**自由函数调用**且其 `Symbols` 记录的返回类型
+  字面量为 `struct X *`（X 必须与声明的结构体一致，PH-49 D49-1）。判定只看调用点与符号表返回串，
+  不做表达式类型推导；`&x`、字段取址、指针算术等其他指针表达式仍是 L49-1 硬错。
+  必须是**结构体指针**且该 struct 必须 `use Drop`；否则编译期报错。
+- **零值**初始化（`= 0`）合法但不登记 autodrop：块尾不释放，也不产生诊断；运行时工厂返回 0 时依赖
+  既有的 `if (p)` 守卫。同一作用域对同一标识符写两次 `own` 是 L49-2 硬错（不做数据流分析；
+  嵌套作用域的同名遮蔽不受影响）。
+- `own` 只允许出现在**函数体内**。文件作用域的 `own` 变量仍报旧文案；写在**返回类型位置**的 `own`
+  （`own struct P *make(void)`）保持拒绝，但报 L49-3 并指向调用点写法。不支持数组形态
+  （`own T *ps[n]`）。
 - 同一作用域的多个 `own` 变量按**声明逆序**释放。
 - L2 要求闭合 `}` 与 `return` 位于**行首**；行内形式（`b->n = 1; }`、`if (p) return 0;`）编译期报错，
   不静默跳过——逐行注入无法把释放语句安全地放进条件分支。**ct-ast 只对 `}` 有该要求**：`return`

@@ -62,7 +62,7 @@
 | Phase 46 | `Map` 元素完整性（用户 struct 按值入 `Map`，`ct build` 可编译） | ✅ 完成 | v0.46.0 | [卡](design/phase46.md) |
 | Phase 47 | 容器键协议（`Str` 键深拷贝；`put_owned` 已删） | ✅ 完成 | v0.47.0 | [卡](design/phase47.md) |
 | Phase 48 | Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体） | ✅ 完成 | v0.48.0 | [卡](design/phase48.md) |
-| Phase 49 | `own` 所有权转移（初始化式接工厂返回值） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase49.md) |
+| Phase 49 | `own` 所有权转移（初始化式接工厂返回值） | ✅ 完成 | v0.49.0 | [卡](design/phase49.md) |
 | Phase 50 | 容器取用契约（`has` / `at`；出参形态已废） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase50.md) |
 | Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase51.md) |
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ⬜ 规划中（已定稿，2026-11-15 签字） | — | [卡](design/phase52.md) |

@@ -137,7 +137,7 @@ L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`
 | 15_memory/manual_shim_wrong | 直接 `free(p)`：payload 与 shim 记账丢失 | ct-ast | `15_memory/manual_shim_wrong/{main.ct,pkt/*}` | `expected.out` |
 | 15_memory/borrow_handback | borrow + Handback：逆序还池，不销毁 | ct-ast | `15_memory/borrow_handback/prog.ct` | `expected.out` |
 | 15_memory/borrow_delete | 反例：delete 借来的指针 | ct-ast | `15_memory/borrow_delete/prog.ct` | `expected.err`，退出 1 |
-| 15_memory/own_factory | 反例：own 接工厂返回值 | ct-ast | `15_memory/own_factory/prog.ct` | `expected.err`，退出 1 |
+| 15_memory/own_factory | own 接工厂返回值：出口跑真实 Drop | ct-ast | `15_memory/own_factory/prog.ct` | `expected.out` |
 | 15_memory/leak_warning | 静态诊断 potential leak：warning + 退出 0 | ct-ast | `15_memory/leak_warning/prog.ct` | `expected.warn` + `expected.out` |
 | 16_diagnostics/sig_text | 签名不符（参数个数），文本通道 | ct-ast | `16_diagnostics/sig_text/prog.ct` | `expected.err`，退出 1 |
 | 16_diagnostics/sig_json | 同一发现的 JSON：`type=signature_mismatch` | ct-ast | `16_diagnostics/sig_json/prog.ct` | `expected.json`，退出 1 |
@@ -209,8 +209,10 @@ L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`
     活过接口值的使用期，或改为在堆上分配并返回指针。复现命令：
     `cc -fsanitize=address -g <generated>.c -o x && ASAN_OPTIONS=detect_stack_use_after_return=1 ./x`
     → `stack-use-after-return`，退出码 134（macOS）。样例：`15_memory/box_escape`。
-14. **`own` 只接受可见的 `malloc`/`calloc` 初始化式**：工厂或 shim 返回的指针不能直接
-    `own`（`15_memory/own_factory`，退出 1）；要按对方的契约 `delete` 或调用配套释放函数。
+14. **`own` 接受 `malloc`/`calloc` 或返回 `struct X *` 的工厂调用**：PH-49 起工厂返回值
+    可以直接 `own`（`15_memory/own_factory`，退出 0），但工厂返回类型必须与声明类型一致；
+    `&x`、字段取址、指针算术等其他指针表达式仍是 L49-1 硬错。shim 有自己的分配器契约时，
+    仍应按对方的契约 `delete` 或调用配套释放函数。
 15. **`borrow` / `Handback` 不是 `Drop`**：`Handback` 只把控制权还回池（对象还在），
     `delete` 一个借来的指针会被编译器拒绝（`15_memory/borrow_delete`，退出 1）。
     池对象的所有权在池，不在借用者。

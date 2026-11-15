@@ -1,0 +1,8 @@
+/* PH-49 L49-1 (literal card shape): a non-struct pointer expression stays
+   rejected before the Drop prerequisite is even considered. */
+int main(void)
+{
+    int x = 1;
+    own int *p = &x;
+    return 0;
+}
