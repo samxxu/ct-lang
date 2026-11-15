@@ -6,7 +6,7 @@
 | --- | --- |
 | 依据 | [模型导出提案](../proposals/ct-model-export-proposal.md) §3 方案 B、§4 格式、§9 M1–M7；[静态映射可行性与决策](static-mapping-feasibility.md) §2（六条，含 §2.6 字段级回指）；[研判 §4](../review/swiftct-mapping-proposal-review.md) |
 | 版本位 | **不提前钉号**：排在 PH-54 之后，开卡时按当时的 MINOR 实算。PH-54 从 S0 到 S7 要吃几个版本位目前只是估算，预留号一旦和实际消耗错开就得整批重编号 |
-| 前置 | **PH-58**（字段级位置）：`Field` 补 `loc` 是 J11 的前提；PH-58 滑期则按 §8 降级为「只带 `line`」 |
+| 前置 | **LANG-10 7c（字段级位置）**：`Field` 补 `loc` 是 J11 的前提；该任务滑期则按 §8 降级为「只带 `line`」。LANG-9（字段可见性）不阻塞 M1：未落地前 `visibility` 写 `unknown`（已定）。原卡写的「PH-58」是 `open-items-routing.md` 的草案号，未在 roadmap 立项 |
 | 只动 | `selfhost/ct-ast/tool/driver/Driver.h.ct`、`selfhost/ct-ast/backend/emit/Emitter.h.ct`、`selfhost/ct-ast/frontend/sym/Symbols.h.ct`、`selfhost/ct-ast/main.ct`、`test/model/**`、`docs/**` |
 | 不碰 | `selfhost/ct-ast/frontend/TypeCheck.h.ct`、`selfhost/l2/**`、`golden/**`、`.ai-engineering` |
 | 在途冲突 | 当前工作树有他人在改 `Driver.h.ct` / `main.ct` / `Pkg.h.ct` / `test/pkg/run.sh`；开工前须等其落定，提交用显式路径 |
@@ -87,7 +87,7 @@ case1/box.h.ct  →  ct --emit-model m.json  →  夹具生成器  →  box_gen.
 
 | # | 里程碑 | 范围 | 依赖 |
 | --- | --- | --- | --- |
-| **M1** | 无 import 单单元端到端（本卡主体） | J1–J11 | PH-58（字段位置，J11 前置） |
+| **M1** | 无 import 单单元端到端（本卡主体） | J1–J11 | LANG-10 7c（字段位置，J11 前置） |
 | **M2** | 多单元 / 多根 | `units[]` 正确、合并语义、`build` 模式判据 | **SH-79（0.53.8）两项 facet 落地**；§2.3 已定「首版单单元」，多根合并语义进 M2 再定 |
 
 M2 不在本卡实现，仅登记。**多单元不得用「生成器自己拼模型图」绕过**：那会把 CT 的出口缺陷固化进包。
@@ -112,5 +112,5 @@ red: rc=<N>, "<失败文案>"
 | --- | --- | --- |
 | 版本位 | **不提前钉号** | 排在 PH-54 之后，开卡时按当时的 MINOR 实算；预留给固定号会与 PH-54 的实际消耗错开 |
 
-**已定降级路径**（写死于此，不属未决）：PH-58 若滑期，J11 降为「`loc` 只带 `file` + `line`」，并在 golden 与卡内显式标注缺 `col`；
+**已定降级路径**（写死于此，不属未决）：LANG-10 7c 若滑期，J11 降为「`loc` 只带 `file` + `line`」，并在 golden 与卡内显式标注缺 `col`；
 **不得**退回「不写 `loc`」——那等于把回指卖点从首版摘掉，且日后补要 +1 schema 大版本。
