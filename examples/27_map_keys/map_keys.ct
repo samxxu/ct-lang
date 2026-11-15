@@ -1,10 +1,11 @@
-// 27_map_keys - the three key types of the built-in `Map` (Phase 29, V29-1)
+// 27_map_keys - the integer and pointer key types of the built-in `Map`
+// (Phase 29, V29-1; `Str` joins the roster in Phase 47)
 //
 // A key is compared by content: `int` and `long` by their bytes, `char *` by
 // `strcmp`. The two paths are separate `impl` blocks, so a 64-bit `long` can
 // never fall into the string comparison just because it is as wide as a
-// pointer. A key outside the whitelist (`int`, `long`, `char *`) is rejected at
-// compile time (L29-8).
+// pointer. A key outside the whitelist (`int`, `long`, `char *`, `Str`) is
+// rejected at compile time (L29-8 / L47-1).
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast

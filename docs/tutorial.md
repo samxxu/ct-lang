@@ -1414,7 +1414,9 @@ int main(void)
   内置层在 `ct compile` 与 `ct build` 两条路径都自动加载，不需要 `import` / `-I`；旧项目若还
   `import std::vec`，会与内置名冲突（`'Vec' is a built-in type and cannot be redeclared`），
   须升级 `std` 包或删掉该 import。
-- `Map` 的键只接受 `int` / `long` / `char *`；其余类型在类型实参处硬错（L29-8）。
+- `Map` 的键只接受 `int` / `long` / `char *` / `Str`；其余类型在类型实参处硬错（L29-8 / L47-1）。
+  `Str` 键按 `len` + 字节比较、在 `put` 时深拷贝，内嵌 `\0` 安全；`foreach` 暴露的 `Str` 键是借用，
+  不得 `release` 键。
 - 完整样例：[22_foreach_map](../examples/22_foreach_map/foreach_map.ct)、
   [23_generic_stack](../examples/23_generic_stack/generic_stack.ct)、
   [24_vec_ops](../examples/24_vec_ops/vec_ops.ct)、

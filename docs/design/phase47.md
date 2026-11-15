@@ -1,6 +1,6 @@
 # Phase 47 — 容器键协议（`Str` 键，默认深拷贝）
 
-> **状态：规划中**（已定稿；2026-11-15 签字；未实施；实现由外部 harness 执行）
+> **状态：完成（2026-11-15；v0.47.0；S1–S6 全绿）**
 > **归属**：本仓库维护规格与判据；实现由外部 harness 交付（[手册](phase46-52-handoff.md)）。
 > **基线**：本卡最后一次提交；起点为 PH-46 收口提交（同一 `Map` 生成面）。
 > **规模**：**520–820 行**（裁决席按 R47-4 上调：三份实现 + 键释放 + 诊断）。
@@ -103,3 +103,16 @@ mkdir -p /tmp/p47 && cd /tmp/p47
 | `Str` 特化与既有两份不一致 | E47-3 有 diff | 回滚 S2 |
 | 负例文案变化被当成放宽 | 既有断言 rc=0 | 回滚 S4；文案变更必须登记 |
 | `Map<char*,V>` golden 漂移 | `check-goldens` 红 | 回滚 S3 的共享分支改动 |
+
+### 9 收口记录（2026-11-15）
+
+| 项 | 结果 |
+| --- | --- |
+| E47-1 | `241_map_str_key`：嵌入 NUL、源 Str 释放后仍命中；compile/build 输出一致 |
+| E47-2 | `242_map_str_release`：put/覆盖/remove/release 计数各一次，`live=0`；ASAN/UBSAN 绿 |
+| E47-3 | `Map<int>` / `Map<char *>` 产物与基线逐字节一致 |
+| E47-4 | `p47_map_struct_key` 文案四类键；两条既有负例更新 |
+| E47-5 | `foreach` 键借用可读；文档写明不得 release |
+| E47-6 | check-all 11/11；check-ast 1382/0 |
+
+tag/push：`v0.47.0` annotated tag 与分支自动 push。

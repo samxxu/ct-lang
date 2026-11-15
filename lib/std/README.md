@@ -43,9 +43,14 @@
   即使 `retain` 出的兄弟句柄还持有共享缓冲，也不是静默 no-op / 二次递减。
 - **不自动析构**：容器没有 `Drop` 级联；`own` / `borrow` 不能进容器。
 - **`Map` 插入序**：紧凑 entries + 删除左移；扩容不改顺序，golden 稳定。
-- **`Map` 键**：白名单 `int` / `long` / `char *`，由编译器在类型实参处强制（L29-8）。`int` / `long`
-  按键的字节比较，`char *` 走 `strcmp`；两条路径分别是 `impl<K, V> Map<K, V>` 与
-  `impl<V> Map<char *, V>`，不以 `sizeof` 判断键类别（64 位下 `long` 与指针同宽）。
+- **`Map` 键**：白名单 `int` / `long` / `char *` / `Str`，由编译器在类型实参处强制（L29-8 / L47-1）。
+  `int` / `long` 按键的字节比较，`char *` 走 `strcmp`，`Str` 按 `len` 加 `memcmp` 比较恰好那么多
+  字节（内嵌 `\0` 是数据，不碰撞）；三份实现分别是 `impl<K, V> Map<K, V>`、
+  `impl<V> Map<char *, V>` 与 `impl<V> Map<Str, V>`，不以 `sizeof` 判断键类别（64 位下 `long`
+  与指针同宽）。**`Str` 键在 `put` 时深拷贝**（`str_from_len`），条目的 `release` / `remove` /
+  覆盖写各释放一次；`char *` 键仍**借用**调用方的指针，生命周期由调用方负责（D47-3′）。
+- **`Map` 的 `foreach` 键**：`foreach` 暴露的 `Str` 键是**借用**（条目自己仍拥有它）；
+  **不得 release 键**，否则与条目释放构成双释放（D47-6）。只读使用，或先 `retain()` 取独立副本。
 - **构造入口**：`impl<T> Vec<T>` 里的 `static Vec<T> from(T *items, int n)` 是唯一会读取
   `Vec` 布局的构造路径；编译器的 range 初值语法糖只降级成
   `Vec_<enc>_from((T[n]){ … }, n)`，不知道 `ct_buf` 与字段（phase29 §11）。源码里也可以直接写

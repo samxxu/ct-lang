@@ -2236,9 +2236,12 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   当实参是消费方单元里的 struct 时，`Option<X>` / `Result<X, …>` 的布局与方法都在消费方发射
   （层头文件里字段不完整，只留前向声明）；标量实参的实例仍定义在层头文件里。payload 按值拷贝，
   `release` 是 no-op；自动释放与 pattern matching 属后续阶段（D34-8 / T34-1）。
-- **`Map` 的键**：只接受 `int` / `long` / `char *`，其他类型在类型实参处硬错（L29-8）。`int` / `long`
-  按键的字节比较，`char *` 走 `strcmp`；两条路径是 `lib/std/Vec.h.ct` 里两个 `impl` 块，不靠
-  `sizeof` 猜测键的类别。
+- **`Map` 的键**：只接受 `int` / `long` / `char *` / `Str`，其他类型在类型实参处硬错（L29-8 / L47-1，
+  文案列出四类键）。`int` / `long` 按键的字节比较，`char *` 走 `strcmp`（**借用**调用方指针），
+  `Str` 按 `len` 加 `memcmp` 比较恰好 `len` 字节（内嵌 `\0` 不截断、不碰撞），并在 `put` 时
+  **深拷贝**键、在覆盖写 / `remove` / `release` 时各释放一次；三份实现是
+  `lib/std/Vec.h.ct` 里的三个 `impl` 块，不靠 `sizeof` 猜测键的类别。`foreach` 暴露的 `Str` 键是
+  **借用**，**不得 release 键**（条目仍拥有它，D47-6）。
 - **容器语义**：`Vec` / `Map` 是引用计数的句柄（共享 `ct_buf`），`retain` 增加、`release` 减少并
   返回剩余计数，归零时释放。`release` 之后该句柄即失效：对同一句柄再次 `release` 是硬错（`abort`），
   即使共享缓冲还被 `retain` 出的兄弟句柄持有，也不会把计数再减一次。`Vec.get` / `Map.get`

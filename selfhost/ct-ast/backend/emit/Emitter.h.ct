@@ -2090,6 +2090,17 @@ static int inst_emit_elem_protos(struct Emitter *self, int ii)
        Container elements get their methods from the instance impls above. */
     if (elem_has_life(self, elem) && inst_emit_elem_method_protos(self, elem) != 0)
         return -1;
+    /* PH-47: a `Map` also stores its key by value. An owning key (`Str`) is
+       deep-copied and released by the key block in `lib/std/Vec.h.ct`, whose
+       bodies sit with the instance methods and call the key's `retain` /
+       `release` before those inherent definitions are written; compile mode has
+       no header to supply the prototypes, so forward-declare them here too.
+       The key is only a plain struct for the `Str` block (the other keys are
+       `int`, `long` or `char *`), so the other key blocks are unchanged. */
+    if (strcmp(ins[ii].tmpl, "Map") == 0
+        && elem_has_life(self, ins[ii].ctype[0])
+        && inst_emit_elem_method_protos(self, ins[ii].ctype[0]) != 0)
+        return -1;
     fprintf(self->out, "static void %s__elem_retain(%s *e);\n",
             ins[ii].name, elem);
     fprintf(self->out, "static void %s__elem_release(%s *e);\n",

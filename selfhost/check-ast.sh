@@ -3777,6 +3777,13 @@ if bash test/ast/p46_map.sh "$work/ct-ast" "$CC"; then
 else
     bad "p46/map-user-struct" "Map<K, user struct> ownership failed"
 fi
+# Phase 47: a `Str` key compares by len + bytes, owns a deep copy, releases it
+# once, and keeps the older key blocks byte-identical (E47-1..E47-5).
+if bash test/ast/p47_map.sh "$work/ct-ast" "$CC"; then
+    ok "p47/map-str-key"
+else
+    bad "p47/map-str-key" "Map<Str, V> key protocol failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi
@@ -6973,7 +6980,7 @@ p29_neg L31_5_vec_addr "cannot take the address of a container subscript; bind i
 # S20b review: the instance tag is a C struct name, and a nested key is
 # reported by that tag.
 p29_neg L31_inst_tag_collision "the instance name 'Vec_int' collides with a declared struct" 11:14
-p29_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (use int, long or char *)" 7:24
+p29_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (key types: int, long, char *, Str)" 7:24
 # ---- Phase 31 S23a: a borrowed view carries no ownership ----
 # The bit lives on the local symbol and is set from `get` / `entry` / `foreach
 # item` (and propagated through an assignment), so every release form below is
@@ -7137,7 +7144,7 @@ elif ! diff -u examples/27_map_keys/map_keys.expected.out "$work/p29mk.run" \
 else
     ok "p29 V29-1 (int / long / char * keys: one definition each, expected output)"
 fi
-p29_neg map_key_bad "Map does not support key type 'char' (use int, long or char *)" 6:20
+p29_neg map_key_bad "Map does not support key type 'char' (key types: int, long, char *, Str)" 6:20
 
 # ---- Phase 29 V29-2: a released handle cannot be released twice ----
 # `v.retain()` makes a second handle; releasing `v` twice must not decrement the

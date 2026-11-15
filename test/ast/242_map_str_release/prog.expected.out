@@ -1,0 +1,7 @@
+put-new alloc=3 free=0
+put-new alloc=1 free=0
+put-over alloc=1 free=1
+put-new alloc=1 free=0
+remove alloc=0 free=1
+map-release alloc=0 free=4
+balance allocs=9 frees=9 live=0

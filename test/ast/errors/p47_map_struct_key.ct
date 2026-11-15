@@ -1,0 +1,12 @@
+/* PH-47 L47-1: a key outside the four supported types is refused at the type
+   argument, before any instance is registered or a `.c` is written. */
+struct Key {
+    int n;
+}
+
+int main(void)
+{
+    Map<struct Key, int> m;
+    m.h = 0;
+    return 0;
+}

@@ -1,0 +1,88 @@
+/* Phase 47 / E47-2: the key lifecycle, counted. A counted allocator wraps
+   `malloc` / `realloc` / `free` after the standard headers, so every deep-copied
+   key and every release is visible. The deltas pin: a new `put` copies the key
+   once, an overwrite copies once and releases the old copy once, `remove`
+   releases one key, and the final `release` releases the remaining keys plus
+   the entry buffer and its header. Every allocation is freed exactly once
+   (`live=0`), which is the explicit leak evidence the platform's ASAN cannot
+   give (LeakSanitizer is unavailable on macOS).
+   License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+#include <stdlib.h>
+
+#ct-raw
+static int g_allocs;
+static int g_frees;
+static void *__ct_count_malloc(size_t n)
+{
+    g_allocs = g_allocs + 1;
+    return (malloc)(n);
+}
+static void *__ct_count_realloc(void *p, size_t n)
+{
+    if (p != 0) g_frees = g_frees + 1;
+    g_allocs = g_allocs + 1;
+    return (realloc)(p, n);
+}
+static void __ct_count_free(void *p)
+{
+    if (p != 0) g_frees = g_frees + 1;
+    (free)(p);
+}
+static int __ct_allocs(void)
+{
+    return g_allocs;
+}
+static int __ct_frees(void)
+{
+    return g_frees;
+}
+#ct-endraw
+
+/* Function-like macros: the wrappers above call `(malloc)(n)`, which the
+   preprocessor does not expand. */
+#define malloc(n) __ct_count_malloc(n)
+#define realloc(p, n) __ct_count_realloc(p, n)
+#define free(p) __ct_count_free(p)
+
+int main(void)
+{
+    Str k1 = str_from_len("one", 3);
+    Str k2 = str_from_len("two", 3);
+    Str k3 = str_from_len("three", 5);
+    Map<Str, int> m;
+    int a, f;
+    m.h = 0;
+
+    a = __ct_allocs(); f = __ct_frees();
+    m.put(k1, 1);
+    printf("put-new alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
+
+    a = __ct_allocs(); f = __ct_frees();
+    m.put(k2, 2);
+    printf("put-new alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
+
+    a = __ct_allocs(); f = __ct_frees();
+    m.put(k1, 11);
+    printf("put-over alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
+
+    a = __ct_allocs(); f = __ct_frees();
+    m.put(k3, 3);
+    printf("put-new alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
+
+    a = __ct_allocs(); f = __ct_frees();
+    m.remove(k2);
+    printf("remove alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
+
+    k1.release();
+    k2.release();
+    k3.release();
+
+    a = __ct_allocs(); f = __ct_frees();
+    m.release();
+    printf("map-release alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
+
+    printf("balance allocs=%d frees=%d live=%d\n", __ct_allocs(), __ct_frees(),
+           __ct_allocs() - __ct_frees());
+    return 0;
+}

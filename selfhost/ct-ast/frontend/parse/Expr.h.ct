@@ -2165,13 +2165,17 @@ impl ExprOps for Expr {
            `Hash` / `Eq` bound to widen that, so the key whitelist is enforced
            here, before an instance is registered or any C is emitted. A key
            outside it would otherwise be compared by whatever the generic block
-           happens to do, which is how `long` used to reach `strcmp`. */
+           happens to do, which is how `long` used to reach `strcmp`.
+           PH-47 L47-1: `Str` joins the roster. A struct type argument is
+           canonicalized as `struct Str`, so that spelling is what the check
+           sees; the message lists all four key types so a rejected spelling
+           names its alternatives. */
         if (strcmp(tname, "Map") == 0 && nargs >= 1
             && strcmp(carg[0], "int") != 0 && strcmp(carg[0], "long") != 0
-            && strcmp(carg[0], "char*") != 0) {
+            && strcmp(carg[0], "char*") != 0 && strcmp(carg[0], "struct Str") != 0) {
             char kmsg[MAX_TEXT * 2];
             snprintf(kmsg, sizeof kmsg,
-                     "Map does not support key type '%s' (use int, long or char *)",
+                     "Map does not support key type '%s' (key types: int, long, char *, Str)",
                      carg[0]);
             return self->sup->fail(kmsg);
         }

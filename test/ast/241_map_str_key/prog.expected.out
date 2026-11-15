@@ -1,0 +1,10 @@
+len=2 v1=1 v2=2
+source released: len=2 v1=1
+get missing: 1
+key len=3 starts-a=1 second=0 value=1
+key len=3 starts-a=1 second=0 value=2
+overwrite=1
+v1=7 len=2
+remove=1 len=1
+get after remove: 7
+release=0
