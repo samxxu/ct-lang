@@ -59,9 +59,9 @@
 | Phase 45 | **类型契约一致性**：闭包 `return` 跳过 + 指针基类型/层数判据；L45-1/2 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.45.0`；[卡](design/phase45.md)） | `p45/contract` 6/6；examples `--types` 42/42；check-ast **1376/0**、warnings 632/0 |
 | Phase 46 | **`Map` 元素完整性**：用户 struct 按值入 `Map`，`MapEntry` body 下沉使用单元 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.46.0`；[卡](design/phase46.md)） | `240_map_user_struct` build 绿；`p46/map-user-struct` 0 failures；check-ast 1378/0 |
 | Phase 47 | **容器键协议**：`Str` 键深拷贝、len+memcmp、键释放；`char *` 借用不变 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.47.0`；[卡](design/phase47.md)） | `241/242`、`p47/map-str-key` 0 failures；check-ast 1382/0 |
-| Phase 48 | **Drop 语义闭环**：指针字段胶水、跨单元 Drop 体、L48-2 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.48.0`；[卡](../design/phase48.md)） | `243/244`、`p48/drop` 0 failures；check-ast 1385/0 |
-| Phase 49 | **`own` 所有权转移**：工厂返回值初始化、零值不记账、L49-1/2/3 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.49.0`；[卡](../design/phase49.md)） | `p49/own` 0 failures；check-ast 1394/0 |
-| Phase 50 | **容器取用契约**：`has` / `at`，越界与缺键可判，借用指针 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.50.0`；[卡](../design/phase50.md)） | `p50/has` 0 failures；32 行表；check-ast 1400/0 |
+| Phase 48 | **Drop 语义闭环**：指针字段胶水、跨单元 Drop 体、L48-2 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.48.0`；[卡](design/phase48.md)） | `243/244`、`p48/drop` 0 failures；check-ast 1385/0 |
+| Phase 49 | **`own` 所有权转移**：工厂返回值初始化、零值不记账、L49-1/2/3 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.49.0`；[卡](design/phase49.md)） | `p49/own` 0 failures；check-ast 1394/0 |
+| Phase 50 | **容器取用契约**：`has` / `at`，越界与缺键可判，借用指针 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.50.0`；[卡](design/phase50.md)） | `p50/has` 0 failures；32 行表；check-ast 1400/0 |
 | Phase 51 | **指针接收者 `.` 发射缺陷**：L51-1 硬错，要求 `->` | 新增 | ✅ 完成（2026-11-15；S1–S5；选型 A；收口 `v0.51.0`；[卡](../design/phase51.md)） | `p51/dot` 0 failures；check-ast 1405/0 |
 | Phase 52 | **自定义类型下标 `[]`**：单层字符串键 get/set、L52-1..10 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.52.0`；[卡](../design/phase52.md)） | `p52/subscript` 0 failures；check-ast 1420/0 |
 | Phase 53 | **可选链 `?.`**：指针/map、值上取到的指针/map 跳；单次求值、短路、L53-1..7 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.53.0`；[卡](../design/phase53.md)） | `p53/optional` 0 failures；check-ast 1436/0 |
