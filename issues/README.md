@@ -360,6 +360,7 @@
 | LANG-9 | **High**（ABI 锁死 + 静默） | 结构体字段（含非 `pub`）全部进生成头；字段级 `pub` 被原样发射成非法 C 且 ct-ast 退出 0 | [lang-9-struct-field-visibility-abi.md](lang/lang-9-struct-field-visibility-abi.md) |
 | LANG-6 | Medium | `ct install` 只打印 `-I vendor/<包名>`，`src/` 布局的包消费方报 `cannot resolve import` | **并入 [PKG-2](packages/pkg-2-ct-install-package-root-import.md)**（不另立文件） |
 | LANG-3 | Medium | `MAX_CALLS` 固定 1024、按整次构建累计、拆单元无效；每条 324 字节 | [lang-3-max-calls-fixed-cap.md](lang/lang-3-max-calls-fixed-cap.md) |
+| LANG-10 | Medium（feature） | 诊断无可机读格式：门禁靠 `grep 'warning:'`、编辑器/CI 只能读人用文本，改文案即可能静默变绿 | [lang-10-machine-readable-diagnostics.md](lang/lang-10-machine-readable-diagnostics.md) |
 | LANG-7 | Low | 静态方法解析失败报 `use of an undeclared variable`，列号指向类型名 | [lang-7-undeclared-variable-points-at-type.md](lang/lang-7-undeclared-variable-points-at-type.md) |
 | LANG-8 | Low | 裸 `5.method()` 因 `5.` 被扫成浮点而报 `unexpected token`；加空格可绕 | [lang-8-numeric-literal-dot-lexing.md](lang/lang-8-numeric-literal-dot-lexing.md) |
 
