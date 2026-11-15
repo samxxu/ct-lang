@@ -2211,6 +2211,10 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **固有方法**：`impl<T> Name<Args> { … }` 给实例加方法，落码 `<Instance>_<method>`，调用点
   **静态派发**（`v.push(3)` → `Vec_int_push(&v, 3)`），不生成 vtable、不装箱；同一实例可同时有
   多个 `impl` 块。实参只检查元数、不检查类型，是已知限制（`docs/history/design/phase29.md` §10.2）。
+- **`.` 与 `->`（PH-51，仅 ct-ast）**：结构体指针作为方法接收者必须用 `->`；`.` 是硬错 L51-1
+  （`'.' cannot call method 'f' through a pointer receiver; use '->f()'`），不会再发射 `S_f(&p)` /
+  `Vec_int_push(&p, …)`。值接收者的 `.`、接口指针的 `.`（`Show *p; p.m()`，按接口值派发）与
+  类型宿主（`map … for type`，含 `char *`）的 `.` 都不受影响。
 - **带 `use` 的泛型 impl**：`impl<T> Stack<T> use Show { … }` 落码 `<Instance>_<Trait>_<method>`
   与 `<Instance>_<Trait>_vtable`，沿用既有 trait / vptr 路径；固有方法优先于 trait 方法。
 - **静态固有方法与 range 初值构造（Phase 29 P29 补丁）**：`impl` 体内可写

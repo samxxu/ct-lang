@@ -62,6 +62,7 @@
 | Phase 48 | **Drop 语义闭环**：指针字段胶水、跨单元 Drop 体、L48-2 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.48.0`；[卡](../design/phase48.md)） | `243/244`、`p48/drop` 0 failures；check-ast 1385/0 |
 | Phase 49 | **`own` 所有权转移**：工厂返回值初始化、零值不记账、L49-1/2/3 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.49.0`；[卡](../design/phase49.md)） | `p49/own` 0 failures；check-ast 1394/0 |
 | Phase 50 | **容器取用契约**：`has` / `at`，越界与缺键可判，借用指针 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.50.0`；[卡](../design/phase50.md)） | `p50/has` 0 failures；32 行表；check-ast 1400/0 |
+| Phase 51 | **指针接收者 `.` 发射缺陷**：L51-1 硬错，要求 `->` | 新增 | ✅ 完成（2026-11-15；S1–S5；选型 A；收口 `v0.51.0`；[卡](../design/phase51.md)） | `p51/dot` 0 failures；check-ast 1405/0 |
 
 > **Agent 内核运行库（ct-pkg，外部）**：`arena` / `sync` / `callback` 今天可做，`result` / `string` 分别等 Phase 34 / 36，ABI 打包等 Phase 39；提案见 [proposals/ct-pkg-agent-runtime.md](../proposals/ct-pkg-agent-runtime.md)。
 
@@ -159,6 +160,7 @@
 | v0.48.0 | Phase 48 Drop 语义闭环（2026-11-15） | 指针字段胶水判空/不取址；胶水按 owner 单元发射；跨单元 Drop 体 extern；L48-2 空桩硬错；check-ast 1385/0、warnings 647/0；tag `v0.48.0`。 |
 | v0.49.0 | Phase 49 `own` 所有权转移（2026-11-15） | 工厂返回值 `own` 初始化；零值不记账；L49-1/2/3；跨单元工厂；既有 own 产物不变；check-ast 1394/0、warnings 656/0；tag `v0.49.0`。 |
 | v0.50.0 | Phase 50 容器取用契约（2026-11-15） | `Vec::has/at`、三份 `Map::has`；借用指针；32 行一致性表；`get` 不变；check-ast 1400/0、warnings 661/0；tag `v0.50.0`。 |
+| v0.51.0 | Phase 51 指针接收者 `.` 缺陷（2026-11-15） | `.` + 指针接收者改 L51-1 硬错，要求 `->`；泛型/非泛型/trait 覆盖；`->`/值接收者/接口指针不变；check-ast 1405/0、warnings 662/0；tag `v0.51.0`。 |
 | v0.44.2 | 接口值返回四条静默 UB / 边界修复（2026-11-15） | A-1 `.m.ct` 可 import `.h.ct`（`fb55985c`）；SH-72 动态派发按 trait 签名给返回类型（`5ff69ac3`）；SH-74 impl 内 `return self` 发 `(void *)_self`（`d6e82e25`）；SH-75 局部 struct 返回接口改堆拷贝（`b5797cbf`）；新夹具 `238_iface_ret_value` / `237_iface_ret_self` / `239_local_iface_return` + `sh71_map_import_hdr`，SH-75 另配 ASAN use-after-return；check-ast 1376/0、test/run 156、warnings 631/0、docs 1205/239。已知限制：接口无析构槽，堆上装箱对象随进程存活。 | tag `v0.44.2`。
 
 版本号定义在 `ctc.c` 的 `CTC_VERSION`，并写入生成物注释；改动它必须重新生成全部 golden（见 [AGENTS.md](../../AGENTS.md) 第 5 节）。

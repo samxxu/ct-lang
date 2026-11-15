@@ -4264,6 +4264,19 @@ impl ExprOps for Expr {
                             return tool::diag::ct_sem_error(mline, mcol,
                                 "method is private to its unit", self->sup->mem->path);
                         } else if (inm >= 0) {
+                            /* PH-51 D51-1 (selection A / L51-1): a pointer
+                               receiver spelled with `.` would hand `S **` to
+                               the method (`S_f(&p)`; the generic instance hides
+                               it behind `void *self`). Require the arrow
+                               spelling; the `->` path itself is unchanged. */
+                            if (!arrow && piface) {
+                                char pmsg[MAX_TEXT];
+                                snprintf(pmsg, sizeof pmsg,
+                                    "'.' cannot call method '%s' through a pointer receiver; use '->%s()'",
+                                    fname, fname);
+                                return tool::diag::ct_sem_error(mline, mcol, pmsg,
+                                                                self->sup->mem->path);
+                            }
                             /* Phase 31 S23b (L31-22): the loop reads the very
                                container the body would mutate. */
                             if ((strcmp(fname, "clear") == 0
@@ -4381,6 +4394,18 @@ impl ExprOps for Expr {
                             }
                         } else if (self->sup->method_trait(rtype, fname, trname, sizeof trname) == 0) {
                             char tr2[MAX_TEXT];
+                            /* PH-51 D51-1: the same pointer-receiver defect on
+                               the trait dispatch path; an interface pointer
+                               ('.vt' dispatch) was handled above and keeps its
+                               dot spelling. */
+                            if (!arrow && piface) {
+                                char pmsg[MAX_TEXT];
+                                snprintf(pmsg, sizeof pmsg,
+                                    "'.' cannot call method '%s' through a pointer receiver; use '->%s()'",
+                                    fname, fname);
+                                return tool::diag::ct_sem_error(mline, mcol, pmsg,
+                                                                self->sup->mem->path);
+                            }
                             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
                             /* 19.3 (SH-46): a second trait of the same struct
                                declaring the method means the bare call keeps

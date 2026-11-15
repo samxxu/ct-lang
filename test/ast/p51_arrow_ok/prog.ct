@@ -1,0 +1,62 @@
+/* Phase 51 / E51-2: the `->` path is untouched and still passes the receiver
+   as a pointer. The interface-pointer `.` spelling is also untouched: a
+   `Show *` dispatches through the interface value, not through a struct
+   receiver. License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+
+struct S {
+    int id;
+}
+
+impl S {
+    void bump(int n)
+    {
+        self->id = self->id + n;
+    }
+}
+
+trait Show {
+    int show();
+}
+
+struct Circle {
+    int r;
+} use Show;
+
+impl Show for Circle {
+    int show()
+    {
+        return self->r;
+    }
+}
+
+int main(void)
+{
+    struct S s;
+    struct S *p = &s;
+    Vec<int> v;
+    Vec<int> *vp;
+    Circle c;
+    Show iv;
+    Show *ip;
+
+    s.id = 1;
+    p->bump(2);
+    s.bump(1);
+    printf("id=%d\n", s.id);
+
+    v.h = 0;
+    v.push(3);
+    vp = &v;
+    vp->push(4);
+    vp->push(5);
+    printf("len=%d\n", v.len());
+
+    c.r = 6;
+    iv = c;
+    ip = &iv;
+    printf("show=%d\n", ip.show());
+
+    v.release();
+    return 0;
+}

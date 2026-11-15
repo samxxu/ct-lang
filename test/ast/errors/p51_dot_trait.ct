@@ -1,0 +1,23 @@
+/* PH-51 L51-1: the same rule on the trait dispatch path; an interface pointer
+   (`Show *`) is a different receiver kind and keeps `.`. */
+trait Counter {
+    int value();
+}
+
+struct Tally {
+    int n;
+} use Counter;
+
+impl Counter for Tally {
+    int value()
+    {
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Tally t;
+    Tally *p = &t;
+    return p.value();
+}

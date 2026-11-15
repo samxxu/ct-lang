@@ -1,0 +1,20 @@
+/* PH-51 L51-1: a non-generic struct pointer must use `->`; `.` would emit
+   `S_bump(&p, 2)` and pass `struct S **` to a `struct S *` parameter. */
+struct S {
+    int id;
+}
+
+impl S {
+    void bump(int n)
+    {
+        self->id = self->id + n;
+    }
+}
+
+int main(void)
+{
+    struct S s;
+    struct S *p = &s;
+    p.bump(2);
+    return 0;
+}

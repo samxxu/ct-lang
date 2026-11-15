@@ -1,0 +1,12 @@
+/* PH-51 L51-1: a generic instance pointer must use `->`; `.` would pass the
+   pointer's address to the `void *self` method. */
+int main(void)
+{
+    Vec<int> v;
+    Vec<int> *p;
+    v.h = 0;
+    p = &v;
+    p.push(7);
+    v.release();
+    return 0;
+}

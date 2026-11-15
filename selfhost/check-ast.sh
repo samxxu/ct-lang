@@ -3804,6 +3804,13 @@ if bash test/ast/p50_has.sh "$work/ct-ast" "$CC"; then
 else
     bad "p50/has" "container has/at contract failed"
 fi
+# Phase 51: `.` on a pointer receiver is L51-1 (selection A); `->` and the
+# legitimate value / interface-pointer receivers stay unchanged.
+if bash test/ast/p51_dot.sh "$work/ct-ast" "$CC"; then
+    ok "p51/dot"
+else
+    bad "p51/dot" "pointer-receiver dot diagnostic failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi
