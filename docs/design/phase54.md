@@ -1,6 +1,6 @@
 # Phase 54 · ct-pkg 共享库包体系（切片 S0：观测与只读骨架）
 
-**状态：实施中**（S0；S1–S7 见 [roadmap](../roadmap.md) 与[需求定稿](../planning/ct-pkg-shared-store-requirements.md)）
+**状态：实施中**（S0 完成 v0.54.0；S1–S7 见 [roadmap](../roadmap.md) 与[需求定稿](../planning/ct-pkg-shared-store-requirements.md)）
 
 | 项 | 值 |
 | --- | --- |
@@ -76,3 +76,16 @@ S0 只新增只读子命令与一行输出注释，回滚 = `git revert` 单个�
 | D-2 | 越界文案已改为全程序口径 `too many functions (limit N, whole program)`，不再写 `in unit X` | 依据：`ParseSupport.h.ct` 的判界点、`Expr.h.ct` 的泛型实例路径与 `check-ast.sh` cap fixture |
 | D-3 | 为容纳 v1 告警，`test/pkg/run.sh` 原有的「无 requires 的包静默安装」断言改为「除 v1 告警外无 stderr」 | 判据不放宽：仅放行这一条已文档化的新告警 |
 
+## 8. S0 收口记录（2026-11-15）
+
+| 项 | 结果 |
+| --- | --- |
+| D1 | v1/v2 lock 识别；`ct install` 输出 `# lock-format: v1/v2`，v1 告警 |
+| D2 | `ct pkg check <dir>` 只读骨架（PK-1/2/5/8） |
+| D3 | `test/pkg/run.sh` 的 S0 段全绿（5 断言） |
+| D4 | 包指南 §8 / 术语 / pkg-3…pkg-8 落库 |
+| D5/D6 | 提案裁定、需求定稿、roadmap 版本位 |
+| J1–J8 | 全绿；check-all 11/11 |
+| 门禁 | check-ast 1444/0、test/run 156、warnings 689/0、docs 1446/265 |
+
+S1（v0.55.0）未开工；本收口只发 v0.54.0。
