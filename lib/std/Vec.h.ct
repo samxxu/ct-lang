@@ -132,8 +132,30 @@ impl<T> Vec<T> {
     pub void set(int i, T v)
     {
         T *d;
-        if (self->h == 0 || i < 0 || i >= self->h->len) return;
+        void *raw;
+        int nc;
+        if (i < 0) abort();
+        if (self->h == 0) {
+            self->h = (struct ct_buf *)malloc(sizeof(struct ct_buf));
+            if (self->h == 0) abort();
+            self->h->refs = 1;
+            self->h->len = 0;
+            self->h->cap = 0;
+            self->h->data = 0;
+        }
+        if (i >= self->h->cap) {
+            nc = self->h->cap == 0 ? 4 : self->h->cap;
+            while (nc <= i) nc = nc * 2;
+            raw = realloc(self->h->data, (size_t)(nc * (int)sizeof(v)));
+            if (raw == 0) abort();
+            self->h->data = raw;
+            self->h->cap = nc;
+        }
         d = self->h->data;
+        if (i >= self->h->len) {
+            memset(&d[self->h->len], 0, (size_t)((i + 1 - self->h->len) * (int)sizeof(v)));
+            self->h->len = i + 1;
+        }
         __ct_elem_retain(&v);
         __ct_elem_release(&d[i]);
         d[i] = v;

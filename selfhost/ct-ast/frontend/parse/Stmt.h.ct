@@ -44,6 +44,7 @@ import tool::diag::Diag;
 #define B_BOR 16
 #define B_XOR 14
 #define N_INDEX 26
+#define N_MCALL 30
 #define N_ARROW 25
 #define N_ASSIGN 13
 #define N_BIN 11
@@ -3947,7 +3948,25 @@ impl StmtOps for Stmt {
                `set(k, v)` call. Only a plain `=` statement with an lvalue
                receiver is accepted; the generic assignment path below would
                emit `x[...] = v` (or `get(...) = v`) and lose the write. */
-            if (self->ex->container_subscript_kind(e) == 3) {
+            if (self->arena->nodes[e].kind == N_MCALL
+                && (self->ex->container_subscript_kind(e) == 1
+                    || self->ex->container_subscript_kind(e) == 2)) {
+                int ck = self->ex->container_subscript_kind(e);
+                int idx;
+                self->sup->lex_next();
+                self->ex->into_ok = 1;
+                rhs = self->ex->parse_expr();
+                self->ex->into_ok = 0;
+                if (rhs < 0) return -1;
+                idx = self->arena->nodes[e].b;
+                if (idx < 0) return self->sup->fail("a container subscript has no index");
+                self->arena->nodes[idx].next = rhs;
+                snprintf(self->arena->nodes[e].text2, MAX_TEXT, "%s",
+                         ck == 1 ? "set" : "put");
+                n = self->sup->new_node(N_EXPR);
+                if (n < 0) return -1;
+                self->arena->nodes[n].a = e;
+            } else if (self->ex->container_subscript_kind(e) == 3) {
                 int cl = self->arena->nodes[e].line;
                 int cc = self->arena->nodes[e].num;
                 int recv = self->arena->nodes[e].a;

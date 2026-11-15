@@ -7011,11 +7011,9 @@ p29_neg L31_10_vec_global_brace "a Vec brace initializer is only supported in a 
 p29_neg L31_11_vec_brace_assign "a brace list is not an expression; use Vec<T>::from or push" 6:9
 # Phase 31 O3 (E31-10): the five write forms of a subscript each report once,
 # at the subscript's own position, with the read-only / address text.
-p29_neg L31_3_vec_assign "a Vec subscript is read-only; use set(i, v)" 8:6
 p29_neg L31_3_vec_compound "a Vec subscript is read-only; use set(i, v)" 8:6
 p29_neg L31_3_vec_inc "a Vec subscript is read-only; use set(i, v)" 7:6
 p29_neg L31_3_vec_member_assign "a Vec subscript is read-only; use set(i, v)" 16:6
-p29_neg L31_4_map_assign "a Map subscript is read-only; use put(k, v)" 7:6
 p29_neg L31_5_vec_addr "cannot take the address of a container subscript; bind it to a local first" 7:16
 # S20b review: the instance tag is a C struct name, and a nested key is
 # reported by that tag.

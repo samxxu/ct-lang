@@ -1,0 +1,9 @@
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v = {3};
+    v[0] = 4;
+    printf("%d\n", v.get(0));
+    return 0;
+}
