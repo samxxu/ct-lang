@@ -49,8 +49,9 @@ trait PkgOps {
     int  git_run(const char *cmd, const char *outfile);
     int  read_line_of(const char *path, char *buf, size_t cap);
     int  git_pick_tag(const char *cache, const char *range, char *tag, size_t tcap);
-    int  fetch_git(const char *url, const char *name, const char *range,
-                   const char *pin_tag, const char *expect_sha, int depth);
+    int  fetch_git(const char *url, const char *name, const char *cache_pub,
+                   const char *range, const char *pin_tag, const char *expect_sha,
+                   int depth);
     int  get_git(const char *spec, const char *range, int depth);
     int  get_spec(const char *spec, const char *base, int depth);
     int  get_one(const char *dir, const char *range, int depth);
@@ -71,7 +72,8 @@ trait PkgOps {
 static int pkg_read_meta(const char *dir, char *cflags, size_t ccap,
                          char *ldflags, size_t lcap, char *req, size_t rcap);
 static int pkg_index_lookup(const char *name, const char *range, char *url, size_t ucap,
-                            char *tag, size_t tcap, char *sha, size_t scap);
+                            char *tag, size_t tcap, char *sha, size_t scap,
+                            char *pub, size_t pcap);
 static int pkg_append_words(char *dst, size_t cap, const char *src);
 static int pkg_check_requires(const char *pkg, const char *req);
 static int pkg_verify_lock(const char *prog, char lname[][MAX_TEXT], char lver[][32],
@@ -833,8 +835,9 @@ impl PkgOps for Pkg {
        `pin_tag`/`expect_sha` come from the index (both NULL for a plain spec).
        In `offline` mode (`ct update`) nothing is cloned or fetched, and a
        commit ct.lock already pins wins over tag selection. */
-    int fetch_git(const char *url, const char *name, const char *range,
-                  const char *pin_tag, const char *expect_sha, int depth)
+    int fetch_git(const char *url, const char *name, const char *cache_pub,
+                  const char *range, const char *pin_tag, const char *expect_sha,
+                  int depth)
     {
         char hdir[MAX_PKG_CMD], root[MAX_PKG_CMD], cache[MAX_PKG_CMD], gitdir[MAX_PKG_CMD];
         char out[MAX_PKG_CMD], q1[MAX_PKG_CMD], q2[MAX_PKG_CMD], cmd[MAX_PKG_CMD];
@@ -862,7 +865,25 @@ impl PkgOps for Pkg {
         }
         if (snprintf(hdir, sizeof hdir, "%s/.cache", home) >= (int)sizeof hdir) return -1;
         if (snprintf(root, sizeof root, "%s/.cache/ct-pkg", home) >= (int)sizeof root) return -1;
-        if (snprintf(cache, sizeof cache, "%s/%s", root, name) >= (int)sizeof cache) return -1;
+        /* The cache key carries the publisher: two publishers may ship a
+           package with the same name, and a bare-name cache silently reuses
+           whichever one happened to be fetched first (PKG-5). */
+        if (cache_pub && cache_pub[0]) {
+            char pdir[MAX_PKG_CMD];
+            if (!self->offline
+                && (self->ensure_dir(hdir) != 0 || self->ensure_dir(root) != 0)) {
+                fprintf(stderr, "ctc: cannot create the package cache '%s'\n", root);
+                return -1;
+            }
+            if (snprintf(pdir, sizeof pdir, "%s/%s", root, cache_pub) >= (int)sizeof pdir) return -1;
+            if (!self->offline && self->ensure_dir(pdir) != 0) {
+                fprintf(stderr, "ctc: cannot create the package cache '%s'\n", pdir);
+                return -1;
+            }
+            if (snprintf(cache, sizeof cache, "%s/%s", pdir, name) >= (int)sizeof cache) return -1;
+        } else if (snprintf(cache, sizeof cache, "%s/%s", root, name) >= (int)sizeof cache) {
+            return -1;
+        }
         if (snprintf(gitdir, sizeof gitdir, "%s/.git", cache) >= (int)sizeof gitdir) return -1;
         if (snprintf(out, sizeof out, "%s/.ct-pkg.out", root) >= (int)sizeof out) return -1;
         if (!self->offline && (self->ensure_dir(hdir) != 0 || self->ensure_dir(root) != 0)) {
@@ -873,6 +894,20 @@ impl PkgOps for Pkg {
         fresh = 0;
         if (stat(gitdir, &st) != 0) fresh = 1;
         else if (!S_ISDIR(st.st_mode)) fresh = 1;
+        if (!fresh && !self->offline) {
+            char origin[MAX_PKG_CMD];
+            if (self->sh_quote(cache, q2, sizeof q2) != 0) return -1;
+            w = snprintf(cmd, sizeof cmd, "git -C %s config --get remote.origin.url", q2);
+            if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+            if (self->git_run(cmd, out) != 0
+                || self->read_line_of(out, origin, sizeof origin) != 0
+                || strcmp(origin, url) != 0) {
+                fprintf(stderr, "ctc: cache for '%s/%s' has a different origin; "
+                                "remove '%s' and retry\n",
+                        cache_pub && cache_pub[0] ? cache_pub : "?", name, cache);
+                return -1;
+            }
+        }
         if (self->offline) {
             if (fresh) {
                 fprintf(stderr, "ctc: '%s' is not cached; run '%s get' first\n",
@@ -1030,8 +1065,17 @@ impl PkgOps for Pkg {
     /* A spec that names a git source: resolve its url and name, then fetch. */
     int get_git(const char *spec, const char *range, int depth)
     {
-        char url[MAX_PKG_CMD], name[MAX_TEXT];
+        char url[MAX_PKG_CMD], name[MAX_TEXT], publisher[MAX_TEXT];
+        const char *slash;
 
+        publisher[0] = 0;
+        slash = strchr(spec, '/');
+        if (slash && !strstr(spec, "://") && !strstr(spec, "@")) {
+            size_t pl = (size_t)(slash - spec);
+            if (pl == 0 || pl >= sizeof publisher) return -1;
+            memcpy(publisher, spec, pl);
+            publisher[pl] = 0;
+        }
         if (self->git_url(spec, url, sizeof url) != 0) {
             fprintf(stderr, "ctc: cannot resolve a git url for '%s'\n", spec);
             return -1;
@@ -1040,7 +1084,7 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: cannot derive a package name from '%s'\n", spec);
             return -1;
         }
-        return self->fetch_git(url, name, range, NULL, NULL, depth);
+        return self->fetch_git(url, name, publisher, range, NULL, NULL, depth);
     }
 
     /* Every dependency edge takes this: split off the range, then route to
@@ -1050,7 +1094,7 @@ impl PkgOps for Pkg {
     int get_spec(const char *spec, const char *base, int depth)
     {
         char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
-        char url[MAX_PKG_CMD], tag[MAX_TEXT], sha[80], bare[MAX_TEXT];
+        char url[MAX_PKG_CMD], tag[MAX_TEXT], sha[80], bare[MAX_TEXT], pub[MAX_TEXT];
         int ix;
         (void)self;
 
@@ -1058,9 +1102,10 @@ impl PkgOps for Pkg {
         if (self->is_git_ref(path)) {
             if (strchr(path, '/') == NULL && strstr(path, "://") == NULL) {
                 ix = pkg_index_lookup(path, range, url, sizeof url,
-                                      tag, sizeof tag, sha, sizeof sha);
+                                      tag, sizeof tag, sha, sizeof sha,
+                                      pub, sizeof pub);
                 if (ix == 0)
-                    return self->fetch_git(url, path, range, tag, sha, depth);
+                    return self->fetch_git(url, path, pub, range, tag, sha, depth);
                 if (ix == -1) return -1;
                 if (ix == 2) {
                     fprintf(stderr, "ctc: package '%s' is not in the index\n", path);
@@ -1073,10 +1118,11 @@ impl PkgOps for Pkg {
             if (strchr(path, '/') != NULL && strstr(path, "://") == NULL
                 && (self->have_index || getenv("CT_INDEX") != NULL)) {
                 ix = pkg_index_lookup(path, range, url, sizeof url,
-                                      tag, sizeof tag, sha, sizeof sha);
+                                      tag, sizeof tag, sha, sizeof sha,
+                                      pub, sizeof pub);
                 if (ix == 0) {
                     if (self->git_name(path, bare, sizeof bare) != 0) return -1;
-                    return self->fetch_git(url, bare, range, tag, sha, depth);
+                    return self->fetch_git(url, bare, pub, range, tag, sha, depth);
                 }
                 if (ix == -1) return -1;
             }
@@ -2008,10 +2054,11 @@ static int pkg_read_meta(const char *dir, char *cflags, size_t ccap,
    Returns 0 on a hit, 1 when no index is configured, 2 when the name (or
    range) has no entry, and -1 when a configured index cannot be read. */
 static int pkg_index_lookup(const char *name, const char *range, char *url, size_t ucap,
-                            char *tag, size_t tcap, char *sha, size_t scap)
+                            char *tag, size_t tcap, char *sha, size_t scap,
+                            char *pub, size_t pcap)
 {
     char path[MAX_PKG_PATH], line[MAX_PKG_LINE];
-    char ambb[MAX_TEXT];
+    char ambb[MAX_TEXT], bestpub[MAX_TEXT];
     const char *ip;
     const char *slash;
     FILE *f;
@@ -2031,6 +2078,7 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
     plen = slash ? (size_t)(slash - name) : 0;
     bestset = 0;
     found = 0;
+    bestpub[0] = 0;
     bad = 0;
     amb = 0;
     ambb[0] = 0;
@@ -2119,13 +2167,17 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
                 best[0] = v[0];
                 best[1] = v[1];
                 best[2] = v[2];
+                snprintf(bestpub, sizeof bestpub, "%s", publisher);
                 bestset = 1;
                 found = 1;
             }
         }
     }
     fclose(f);
-    if (found) return 0;
+    if (found) {
+        if (pub && pcap) snprintf(pub, pcap, "%s", bestpub);
+        return 0;
+    }
     return bad ? -1 : 2;
 }
 

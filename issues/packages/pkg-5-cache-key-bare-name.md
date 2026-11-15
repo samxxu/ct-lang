@@ -7,7 +7,7 @@
 | 严重度 | High |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`fetch_git`：`%s/.cache/ct-pkg/<name>`，`git fetch` 沿用已有 origin） |
-| 状态 | **open**（PH-54 S1 未覆盖；`Pkg.h.ct:865` 缓存目录仍用裸名，`:885-899` 不校验 origin）；58 后重排列为 **P0**，先于其它包机制项 |
+| 状态 | **已修**（v0.58.1：缓存键带发布方并校验 origin；`test/pkg/run.sh` 133/0） |
 
 ## 现象
 
@@ -52,3 +52,19 @@ ctc: git clone of 'https://someorg/somepkg' failed
 ## 修复排期
 
 S1（工具最小可用）：缓存路径与 origin 校验一起改；迁移期旧裸名缓存视为不可用并重新 clone。
+
+## 处置（v0.58.1）
+
+- `fetch_git` 的缓存键改为 `<publisher>/<name>`；裸名调用保留旧路径，避免无发布方的旧索引失效。
+- 缓存已存在时读取 `remote.origin.url`，与本次 spec/index 的 URL 不一致即报 `different origin`，不复用。
+- `pkg_index_lookup` 增补发布方输出，索引命中时把 `<publisher>/<name>` 传给缓存键。
+- `get_git` 从限定 spec 中提取发布方；本地目录与旧五字段索引不改变行为。
+
+## 验证
+
+```console
+$ bash test/pkg/run.sh
+== summary: 133 passed, 0 failed ==
+```
+
+新增三条断言：两个发布方同名包各用独立缓存；`b/util` 取到 b 的源码；缓存 origin 与索引不一致时硬错。

@@ -580,6 +580,54 @@ else
     fi
 
     echo
+    echo "== two publishers may ship the same package name =="
+    # PKG-5: the cache key must carry the publisher. Both sources are local
+    # git repos; the index maps `a/util` and `b/util` to them. Fetching b after
+    # a must not reuse a's cache (the old bare-name key did, silently).
+    mkdir -p "$work/pub/a/util" "$work/pub/b/util" "$work/p5seed" "$work/p5a" "$work/p5b" "$work/p5home"
+    for pub in a b; do
+        ( cd "$work/pub/$pub/util" \
+            && git init -q \
+            && printf 'name = util\npublisher = %s\nns-root = .\nversion = 0.1.0\n' "$pub" >ct.pkg \
+            && printf 'int util_value(void) { return %s; }\n' "$([ "$pub" = a ] && echo 1 || echo 2)" >util.c \
+            && git add -A && git commit -qm "$pub" && git tag 0.1.0 )
+    done
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/p5seed/ct.pkg"
+    ( cd "$work/p5seed" && HOME="$work/p5home" "$work/ct-ast" get "$work/pub/a/util" >/dev/null 2>&1 ) \
+        && adig="$(awk '$1 == "a/util" { print $NF }' "$work/p5seed/ct.lock")"
+    ( cd "$work/p5seed" && HOME="$work/p5home" "$work/ct-ast" get "$work/pub/b/util" >/dev/null 2>&1 ) \
+        && bdig="$(awk '$1 == "b/util" { print $NF }' "$work/p5seed/ct.lock")"
+    printf 'util 0.1.0 a file://%s/pub/a/util 0.1.0 %s\n' "$work" "$adig" >"$work/p5.index"
+    printf 'util 0.1.0 b file://%s/pub/b/util 0.1.0 %s\n' "$work" "$bdig" >>"$work/p5.index"
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/p5a/ct.pkg"
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/p5b/ct.pkg"
+    if ( cd "$work/p5a" && HOME="$work/p5home" "$work/ct-ast" get --index "$work/p5.index" a/util >/dev/null 2>"$work/p5a.err" ) \
+       && ( cd "$work/p5b" && HOME="$work/p5home" "$work/ct-ast" get --index "$work/p5.index" b/util >/dev/null 2>"$work/p5b.err" ); then
+        if [ -d "$work/p5home/.cache/ct-pkg/a/util/.git" ] && [ -d "$work/p5home/.cache/ct-pkg/b/util/.git" ]; then
+            ok "the cache key separates publishers"
+        else
+            bad "PKG-5 cache" "expected a/util and b/util caches"
+        fi
+        if [ -f "$work/p5b/vendor/util/util.c" ] && grep -Fq 'return 2' "$work/p5b/vendor/util/util.c"; then
+            ok "b/util gets b's source, not a's cached copy"
+        else
+            bad "PKG-5 vendor" "b/util took the wrong source: $(cat "$work/p5b/vendor/util/util.c" 2>/dev/null)"
+        fi
+    else
+        bad "PKG-5 get" "$(cat "$work/p5a.err" "$work/p5b.err")"
+    fi
+    # A cache whose origin no longer matches the index must not be reused.
+    printf 'util 0.1.0 a file://%s/pub/b/util 0.1.0 %s\n' "$work" "$adig" >"$work/p5.bad"
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/p5a/ct.pkg"
+    if ( cd "$work/p5a" && HOME="$work/p5home" "$work/ct-ast" get --index "$work/p5.bad" a/util >/dev/null 2>"$work/p5c.err" ); then
+        bad "PKG-5 origin" "expected a non-zero exit"
+    elif grep -Fq "different origin" "$work/p5c.err"; then
+        ok "a cached origin that disagrees with the index is rejected"
+    else
+        bad "PKG-5 origin" "wrong diagnostic: $(cat "$work/p5c.err")"
+    fi
+
+    echo
     echo "== a second ct get keeps the rows the first one pinned =="
     # PKG-2: one invocation resolves one spec; rewriting ct.lock from that run's
     # rows alone unpins everything fetched earlier, and the next `ct update`
