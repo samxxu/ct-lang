@@ -70,7 +70,7 @@
 | Phase 54 | ct-pkg 共享库包体系（工具侧：store / lock v2 / `ns-root`） | 🟨 实施中（S0–S3、S5/S6 仓内完成；S7 待兼容期） | v0.54.0–v0.58.0（S0–S3、S5/S6 各一个 MINOR；偏移见 AGENTS §0.3） | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
 | Phase 57 | 限定名与 namespace 常量（类型位置 `A::B`、值位置 `Type::Member`；SH-18 + LANG-15） | ✅ 完成 | v0.59.0 | [卡](design/phase57.md) · [重排](planning/post-58-plan.md) |
 | Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ✅ 完成 | v0.60.0 | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) · [重排](planning/post-58-plan.md) |
-| Phase 60 | 视图节点注记（`view` 子句） | ⬜ 待确认消费者（无消费者则不立相） | 条件位 v0.61.0（跳过则不占位） | [提案](proposals/ct-view-annotation-proposal.md) · [重排](planning/post-58-plan.md) |
+| Phase 60 | 视图节点注记（`view` 子句） | ⏭️ 跳过（无消费者，[D-006](decisions/D-006.md)） | 不占位 | [提案](proposals/ct-view-annotation-proposal.md) · [决策](decisions/D-006.md) |
 | Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | 🟨 实施中（S1–S3 完成；S4/S5 待做） | v0.62.0（PH-60 跳过时 v0.61.0） | [卡](design/phase62.md) · [提案](proposals/ct-writable-subscript-proposal.md) · [研判](review/ct-writable-subscript-proposal-review.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
