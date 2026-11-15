@@ -433,6 +433,19 @@ impl PkgOps for Pkg {
                 memcpy(deps[*ndeps], v, vl);
                 deps[*ndeps][vl] = 0;
                 (*ndeps)++;
+            } else if (!((kl == 9 && strncmp(ls, "publisher", 9) == 0)
+                         || (kl == 7 && strncmp(ls, "ns-root", 7) == 0)
+                         || (kl == 6 && strncmp(ls, "cflags", 6) == 0)
+                         || (kl == 7 && strncmp(ls, "ldflags", 7) == 0)
+                         || (kl == 8 && strncmp(ls, "requires", 8) == 0)
+                         || (kl == 7 && (strncmp(ls, "licence", 7) == 0
+                                         || strncmp(ls, "license", 7) == 0))
+                         || (kl == 9 && strncmp(ls, "namespace", 9) == 0)
+                         || (kl == 6 && strncmp(ls, "source", 6) == 0)
+                         || (kl == 7 && strncmp(ls, "website", 7) == 0)
+                         || (kl == 4 && strncmp(ls, "type", 4) == 0))) {
+                fprintf(stderr, "ctc: warning: '%s/ct.pkg' has unknown key '%.*s'\n",
+                        dir, (int)kl, ls);
             }
         }
         fclose(f);

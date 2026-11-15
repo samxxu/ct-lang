@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`read_manifest` 只认固定键）、[package-guide.md §8.4](../../docs/package-guide.md)（现状说明） |
-| 状态 | **部分解决**（`ns-root` 已由 `pkg_read_identity` 读取，缺失/形态错误硬错；未知键仍无告警，`Pkg.h.ct:421-435` 只认 `name`/`version`/`dep`） |
+| 状态 | **已修**（v0.58.3：`read_manifest` 对未知键发 `has unknown key` 告警；`test/pkg/run.sh` 135/0） |
 
 ## 现象
 
@@ -46,3 +46,18 @@ ctc: cannot resolve import 'beta/Beta'     # rc=1
 ## 修复排期
 
 S1（工具最小可用）：`read_manifest` 增加键白名单与告警，`ns-root` / `publisher` 升为已知键。不得在切片前单独改实现。
+
+## 处置（v0.58.3）
+
+- `read_manifest` 保留既有解析，同时对不在已知集合内的键发
+  `ctc: warning: '<dir>/ct.pkg' has unknown key '<key>'`。
+- 已知集合：`name` / `version` / `dep` / `publisher` / `ns-root` / `cflags` / `ldflags` / `requires` /
+  `licence` / `license` / `namespace` / `source` / `type` / `website`。
+- 未知键不阻断构建，只提示；`ns-root` / `publisher` 的形态错误仍由 S1 硬错。
+
+## 验证
+
+```console
+$ bash test/pkg/run.sh
+== summary: 135 passed, 0 failed ==
+```

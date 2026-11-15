@@ -158,6 +158,22 @@ else
 fi
 
 echo
+echo "== ct pkg warns about unknown manifest keys =="
+mkdir -p "$work/p3pkg" "$work/p3proj"
+printf 'name = p3pkg\nversion = 0.1.0\nfrobnicate = yes\n' >"$work/p3pkg/ct.pkg"
+printf 'name = demo3\nversion = 0.1.0\ndep = ../p3pkg@^0.1.0\n' >"$work/p3proj/ct.pkg"
+printf 'int main(void) { return 0; }\n' >"$work/p3proj/main.ct"
+if ( cd "$work/p3proj" && "$work/ct-ast" get ../p3pkg >"$work/p3.out" 2>"$work/p3.err" ); then
+    if grep -Fq "has unknown key 'frobnicate'" "$work/p3.err"; then
+        ok "unknown keys produce a warning"
+    else
+        bad "PKG-3 warning" "missing warning: $(cat "$work/p3.err")"
+    fi
+else
+    bad "PKG-3 get" "non-zero exit: $(cat "$work/p3.err")"
+fi
+
+echo
 echo "== ct get refuses a package that requires a newer compiler =="
 # P20-04: `requires` is a hard failure in `get` too, and the check runs before
 # ct.lock is merged or written, so a refused package leaves the lock untouched.
