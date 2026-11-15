@@ -1,0 +1,34 @@
+/* Phase 53 / E53-6: `m["a"]?.b?.c` short-circuits on a missing key and on a
+   null intermediate pointer. */
+#include <stdio.h>
+
+struct C {
+    int v;
+}
+
+struct B {
+    struct C *c;
+}
+
+int main(void)
+{
+    Map<char *, struct B> m;
+    struct B b;
+    struct B bz;
+    struct C c;
+    int full;
+    int missing;
+    int midnull;
+    m.h = 0;
+    b.c = &c;
+    c.v = 8;
+    m.put("a", b);
+    full = m["a"]?.c?.v;
+    missing = m["x"]?.c?.v;
+    bz.c = 0;
+    m.put("z", bz);
+    midnull = m["z"]?.c?.v;
+    printf("full=%d missing=%d midnull=%d\n", full, missing, midnull);
+    m.release();
+    return 0;
+}

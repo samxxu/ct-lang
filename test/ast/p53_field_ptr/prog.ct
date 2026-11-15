@@ -1,0 +1,23 @@
+/* Phase 53 / E53-2: a pointer obtained from a value field is materialised once
+   in a `__ct_optN` before the conditional. */
+#include <stdio.h>
+
+struct B {
+    int c;
+}
+
+struct A {
+    struct B *b;
+}
+
+int main(void)
+{
+    struct A a;
+    struct B b;
+    a.b = &b;
+    b.c = 7;
+    printf("present=%d", a.b?.c);
+    a.b = 0;
+    printf(" missing=%d\n", a.b?.c);
+    return 0;
+}

@@ -1,0 +1,22 @@
+/* Phase 53 / E53-3: `m["k"]?.c` calls `get` once and tests its V*. */
+#include <stdio.h>
+
+struct B {
+    int c;
+}
+
+int main(void)
+{
+    Map<char *, struct B> m;
+    struct B b;
+    int hit;
+    int miss;
+    m.h = 0;
+    b.c = 7;
+    m.put("k", b);
+    hit = m["k"]?.c;
+    miss = m["x"]?.c;
+    printf("hit=%d miss=%d\n", hit, miss);
+    m.release();
+    return 0;
+}

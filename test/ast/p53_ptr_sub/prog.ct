@@ -1,0 +1,14 @@
+/* Phase 53 / E53-5: `p?[i]` is `(p ? p[i] : 0)`; a null pointer never reads. */
+#include <stdio.h>
+
+int main(void)
+{
+    int a[3];
+    int *p = a;
+    int *q = 0;
+    a[0] = 1;
+    a[1] = 2;
+    a[2] = 3;
+    printf("hit=%d null=%d\n", p?[1], q?[1]);
+    return 0;
+}

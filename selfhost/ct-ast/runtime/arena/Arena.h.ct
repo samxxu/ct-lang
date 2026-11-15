@@ -35,6 +35,9 @@ pub struct Node {
     char text[160];
     char text2[160];
     char text3[160];
+    /* Phase 53: the receiver type of an optional-chain node, kept beside the
+       result type so the emitter can declare its `__ct_optN` temporary. */
+    char text4[160];
 }
 
 pub trait ArenaOps {

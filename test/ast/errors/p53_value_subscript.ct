@@ -1,0 +1,11 @@
+/* PH-53 L53-2: `?[` on a struct value. */
+struct A {
+    int b;
+}
+
+int main(void)
+{
+    struct A a;
+    a.b = 1;
+    return a?[0];
+}

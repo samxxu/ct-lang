@@ -99,6 +99,11 @@ import tool::diag::Diag;
    `Result<T, E>` value); the `?` position is kept in `line` / `num` for the
    diagnostics. */
 #define N_TRY 71
+/* Phase 53: the optional-chain node. `a` is the receiver, `aux` selects field
+   (1), pointer subscript (2) or map-pointer subscript (3); `text` is the
+   field / map-instance name, `text2` the result type, `text3` the emitter
+   temporary, `text4` the receiver type. */
+#define N_OPT 72
 #define P_DEC 2
 #define P_INC 1
 #define T_EOF 0
@@ -261,6 +266,17 @@ pub trait ExprSubscript {
     int  custom_index_label(const char *bty, char *out, int cap);
     int  custom_index_method(const char *bty, const char *name, int want,
                              int line, int col, int writable);
+}
+
+/* Phase 53: parser-level optional chain (`?.` / `?[`). Kept out of `ExprOps`
+   (at MAX_METHODS) like the other small traits. The lookahead never consumes;
+   the two builders allocate `N_OPT` and emit the frozen L53 diagnostics. */
+pub trait ExprOptional {
+    int  opt_suffix_kind(void);
+    int  opt_field(int recv, const char *fname, int line, int col);
+    int  opt_subscript(int recv, int idx, int line, int col);
+    int  opt_lvalue_check(int n, int line, int col);
+    int  opt_result_ok(const char *ty, int subscript, int line, int col);
 }
 
 /* Phase 32: the opt-in `--types` gate. Its own trait because `ExprOps` already
@@ -456,7 +472,7 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprTry;
+} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry;
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -2971,6 +2987,10 @@ impl ExprOps for Expr {
             int aline = self->lex->tokline;
             int acol = self->lex->tokstart - self->lex->lstart + 1;
             k2 = self->arena->nodes[left].kind;
+            /* PH-53 L53-6. */
+            if (self->opt_lvalue_check(left, self->arena->nodes[left].line,
+                                       self->arena->nodes[left].num) != 0)
+                return -1;
             /* PH-52 L52-6/L52-8: a custom subscript only writes as a plain
                `=` statement; a value-position assignment has no statement for
                the void `set`, and a compound operator has no read-modify-write
@@ -3491,6 +3511,10 @@ impl ExprOps for Expr {
             if (e < 0) return -1;
             if (is_range_index(self->arena, e))
                 return self->sup->fail("the range index '$' is not a variable");
+            /* PH-53 L53-6. */
+            if (self->opt_lvalue_check(e, self->arena->nodes[e].line,
+                                       self->arena->nodes[e].num) != 0)
+                return -1;
             /* Phase 31 O3 (L31-3/L31-4): `++v[i]` / `--v[i]` write the value. */
             if (self->container_write_check(e) != 0) return -1;
             n = self->sup->new_node(N_PRE);
@@ -3522,6 +3546,10 @@ impl ExprOps for Expr {
             if (e < 0) return -1;
             if (is_range_index(self->arena, e))
                 return self->sup->fail("the range index '$' is not a variable");
+            /* PH-53 L53-6. */
+            if (self->opt_lvalue_check(e, self->arena->nodes[e].line,
+                                       self->arena->nodes[e].num) != 0)
+                return -1;
             /* Phase 31 O3 (L31-5): `&v[i]` has no object to name. */
             if (self->container_addr_check(e) != 0) return -1;
             n = self->sup->new_node(N_ADDR);
@@ -3850,6 +3878,12 @@ impl ExprOps for Expr {
             if (i < 0) return 0;
             if (!self->ctype_expand(self->sym->vars[i].type, tmp, sizeof tmp, 0)) return 0;
             return self->fnptr_ret(tmp, out, cap);
+        case N_OPT:
+            /* PH-53: the optional result is recorded at parse time (the
+               emitter and chained `?.` both need it). */
+            if (!self->arena->nodes[n].text2[0]) return 0;
+            if (snprintf(out, cap, "%s", self->arena->nodes[n].text2) >= cap) return 0;
+            return 1;
         case N_MCALL:
             /* An inherent method of an instantiated struct keeps its AST node
                (`text` is the declared return type); a trait method reads the
@@ -4276,6 +4310,12 @@ impl ExprOps for Expr {
                 mcol = self->lex->tokstart - self->lex->lstart + 1;
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+                    /* PH-53 L53-7: a method call whose receiver is an optional
+                       chain is not supported (evaluation count undefined). */
+                    if (self->arena->nodes[n].kind == N_OPT)
+                        return tool::diag::ct_sem_error(mline, mcol,
+                            "optional method calls are not supported; assign the receiver to a variable first",
+                            self->sup->mem->path);
                     args = self->parse_args();
                     if (args < 0) return -1;
                     m = self->sup->new_node(N_MCALL);
@@ -4718,6 +4758,40 @@ impl ExprOps for Expr {
                 int qline, qcol;
                 char qty[MAX_TEXT];
                 int qad = 0;
+                int okind, oline, ocol;
+                /* PH-53: `?.` / `?[` are parser combinations, not lexer
+                   tokens. `?.5` must fall through to the conditional operator
+                   (T1), so the lookahead never consumes. */
+                okind = self->opt_suffix_kind();
+                if (okind != 0) {
+                    oline = self->lex->tokline;
+                    ocol = self->lex->tokstart - self->lex->lstart + 1;
+                    self->sup->lex_next();      /* the `?` */
+                    if (okind == 1) {
+                        self->sup->lex_next();  /* the `.` */
+                        if (self->lex->tok != T_ID)
+                            return self->sup->fail("expected a field name after '?.'");
+                        snprintf(fname, sizeof fname, "%s", self->lex->toktext);
+                        self->sup->lex_next();
+                        if (self->lex->tok == T_PUNCT
+                            && strcmp(self->lex->toktext, "(") == 0)
+                            return tool::diag::ct_sem_error(oline, ocol,
+                                "optional method calls are not supported; assign the receiver to a variable first",
+                                self->sup->mem->path);
+                        m = self->opt_field(n, fname, oline, ocol);
+                        if (m < 0) return -1;
+                        n = m;
+                        continue;
+                    }
+                    self->sup->lex_next();      /* the `[` */
+                    idx = self->parse_expr();
+                    if (idx < 0) return -1;
+                    if (self->sup->expect("]") != 0) return -1;
+                    m = self->opt_subscript(n, idx, oline, ocol);
+                    if (m < 0) return -1;
+                    n = m;
+                    continue;
+                }
                 if (!self->q_suffix_ahead()) break;
                 qline = self->lex->tokline;
                 qcol = self->lex->tokstart - self->lex->lstart + 1;
@@ -4756,6 +4830,10 @@ impl ExprOps for Expr {
             int k;
             if (is_range_index(self->arena, n))
                 return self->sup->fail("the range index '$' is not a variable");
+            /* PH-53 L53-6. */
+            if (self->opt_lvalue_check(n, self->arena->nodes[n].line,
+                                       self->arena->nodes[n].num) != 0)
+                return -1;
             /* Phase 31 O3 (L31-3/L31-4): `v[i]++` writes the value. */
             if (self->container_write_check(n) != 0) return -1;
             k = self->arena->nodes[n].kind;
@@ -6239,6 +6317,213 @@ impl ExprSubscript for Expr {
         return m;
     }
 
+}
+
+impl ExprOptional for Expr {
+    /* PH-53 §4.5: no lexer token; look past the `?` and restore. `.5` is a
+       ternary's float literal, never an optional chain. 1 = field, 2 = `[`. */
+    int opt_suffix_kind(void)
+    {
+        int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc;
+        int kind = 0;
+        long snum;
+        char stext[MAX_TEXT];
+        char ssuf[8];
+
+        sp = self->lex->pos;
+        sbol = self->lex->bol;
+        stok = self->lex->tok;
+        snum = self->lex->toknum;
+        sline = self->lex->line;
+        stokline = self->lex->tokline;
+        sstart = self->lex->tokstart;
+        slstart = self->lex->lstart;
+        sfloat = self->lex->tokfloat;
+        strunc = self->lex->toktrunc;
+        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        snprintf(ssuf, sizeof ssuf, "%s", self->lex->toksuffix);
+        self->sup->lex_next();
+        if (self->lex->tok == T_NUM && self->lex->toktext[0] == '.') {
+            kind = 0;
+        } else if (self->lex->tok == T_PUNCT
+                   && strcmp(self->lex->toktext, ".") == 0) {
+            self->sup->lex_next();
+            if (self->lex->tok == T_ID) kind = 1;
+        } else if (self->lex->tok == T_PUNCT
+                   && strcmp(self->lex->toktext, "[") == 0) {
+            kind = 2;
+        }
+        self->lex->pos = sp;
+        self->lex->bol = sbol;
+        self->lex->tok = stok;
+        self->lex->toknum = snum;
+        self->lex->line = sline;
+        self->lex->tokline = stokline;
+        self->lex->tokstart = sstart;
+        self->lex->lstart = slstart;
+        self->lex->tokfloat = sfloat;
+        self->lex->toktrunc = strunc;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf);
+        return kind;
+    }
+
+    /* PH-53 L53-3/L53-4: a struct/union value has no NULL representation. */
+    int opt_result_ok(const char *ty, int subscript, int line, int col)
+    {
+        char label[MAX_TEXT];
+        char msg[MAX_TEXT];
+
+        (void)self;
+        if (strchr(ty, '*') != 0) return 0;
+        if (strncmp(ty, "struct ", 7) != 0 && strncmp(ty, "union ", 6) != 0)
+            return 0;
+        self->custom_index_label(ty, label, sizeof label);
+        if (subscript)
+            snprintf(msg, sizeof msg,
+                "optional subscript result must be a pointer or scalar; '%s' has no NULL representation",
+                label);
+        else
+            snprintf(msg, sizeof msg,
+                "optional chain result must be a pointer or scalar; '%s' has no NULL representation",
+                label);
+        return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+    }
+
+    /* `recv?.field`: recv must be a struct pointer; the field must exist and
+       its value must have a NULL spelling (L53-3). */
+    int opt_field(int recv, const char *fname, int line, int col)
+    {
+        char rty[MAX_TEXT];
+        char base[MAX_TEXT];
+        char fty[MAX_TEXT];
+        char msg[MAX_TEXT];
+        size_t n;
+        int ad = 0, si, fi, i, m, inst, nins;
+        struct StructInst *ins;
+
+        /* L53-5: `m["k"]` already answers `V *`; when V is itself a pointer the
+           result is `V **` and `->field` would be one level off. */
+        if (self->arena->nodes[recv].kind == N_MCALL
+            && self->arena->nodes[recv].aux == 9
+            && strcmp(self->arena->nodes[recv].text2, "get") == 0
+            && strncmp(self->arena->nodes[recv].text, "struct Map_", 11) == 0) {
+            inst = frontend::sym::ct_inst_find(self->arena->nodes[recv].text + 7);
+            ins = frontend::sym::ct_insts(&nins);
+            if (inst >= 0 && ins && inst < nins && ins[inst].nargs == 2
+                && strchr(ins[inst].ctype[1], '*') != 0)
+                return tool::diag::ct_sem_error(line, col,
+                    "optional chain on a map lookup requires a value-typed V; got pointer value type; use a map of values or guard the inner pointer",
+                    self->sup->mem->path);
+        }
+        if (!self->static_ctype(recv, rty, sizeof rty, &ad, 0) || ad != 0)
+            return self->sup->fail("cannot resolve the receiver type of '?.'");
+        if (strchr(rty, '*') == 0)
+            return tool::diag::ct_sem_error(line, col,
+                "optional chain '?.' requires a pointer receiver; a struct value has no empty state",
+                self->sup->mem->path);
+        snprintf(base, sizeof base, "%s", rty);
+        n = strlen(base);
+        while (n > 0 && base[n - 1] == ' ') n--;
+        if (n == 0 || base[n - 1] != '*')
+            return tool::diag::ct_sem_error(line, col,
+                "optional chain '?.' requires a pointer receiver; a struct value has no empty state",
+                self->sup->mem->path);
+        n--;
+        while (n > 0 && base[n - 1] == ' ') n--;
+        base[n] = 0;
+        if (strncmp(base, "struct ", 7) == 0) {
+            snprintf(msg, sizeof msg, "%s", base + 7);
+            snprintf(base, sizeof base, "%s", msg);
+        }
+        si = self->sym->find_struct(base);
+        if (si < 0) return self->sup->fail("the '?.' receiver is not a struct pointer");
+        fi = -1;
+        for (i = 0; i < self->sym->structs[si].nfields; i++)
+            if (strcmp(self->sym->structs[si].fields[i].name, fname) == 0) {
+                fi = i;
+                break;
+            }
+        if (fi < 0) {
+            snprintf(msg, sizeof msg, "type '%s' has no field '%s'", base, fname);
+            return self->sup->fail(msg);
+        }
+        if (!self->ctype_expand(self->sym->structs[si].fields[fi].type,
+                                fty, sizeof fty, 0))
+            return self->sup->fail("cannot resolve the optional field type");
+        if (self->opt_result_ok(fty, 0, line, col) != 0) return -1;
+        m = self->sup->new_node(N_OPT);
+        if (m < 0) return -1;
+        self->arena->nodes[m].a = recv;
+        self->arena->nodes[m].aux = 1;
+        self->arena->nodes[m].line = line;
+        self->arena->nodes[m].num = col;
+        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", fname);
+        snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fty);
+        snprintf(self->arena->nodes[m].text4, MAX_TEXT, "%s", rty);
+        return m;
+    }
+
+    /* `recv?[key]`: C pointer element or `Map *` get; L53-2 / L53-4. */
+    int opt_subscript(int recv, int idx, int line, int col)
+    {
+        char rty[MAX_TEXT];
+        char base[MAX_TEXT];
+        char rty2[MAX_TEXT];
+        size_t n;
+        int ad = 0, m, inst, nins;
+        struct StructInst *ins;
+
+        if (!self->static_ctype(recv, rty, sizeof rty, &ad, 0) || ad != 0)
+            return self->sup->fail("cannot resolve the receiver type of '?['");
+        if (strchr(rty, '*') == 0)
+            return tool::diag::ct_sem_error(line, col,
+                "optional subscript '?[' requires a pointer receiver; a struct value has no empty state",
+                self->sup->mem->path);
+        snprintf(base, sizeof base, "%s", rty);
+        n = strlen(base);
+        while (n > 0 && base[n - 1] == ' ') n--;
+        n--;                            /* exactly one pointer layer */
+        while (n > 0 && base[n - 1] == ' ') n--;
+        base[n] = 0;
+        m = self->sup->new_node(N_OPT);
+        if (m < 0) return -1;
+        self->arena->nodes[m].a = recv;
+        self->arena->nodes[m].b = idx;
+        self->arena->nodes[m].line = line;
+        self->arena->nodes[m].num = col;
+        snprintf(self->arena->nodes[m].text4, MAX_TEXT, "%s", rty);
+        if (strncmp(base, "struct Map_", 11) == 0
+            && (inst = frontend::sym::ct_inst_find(base + 7)) >= 0) {
+            ins = frontend::sym::ct_insts(&nins);
+            if (!ins || inst >= nins || ins[inst].nargs != 2)
+                return self->sup->fail("cannot resolve the Map value type");
+            snprintf(rty2, sizeof rty2, "%s *", ins[inst].ctype[1]);
+            self->arena->nodes[m].aux = 3;
+            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", base + 7);
+            snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", rty2);
+            return m;
+        }
+        if (self->opt_result_ok(base, 1, line, col) != 0) return -1;
+        self->arena->nodes[m].aux = 2;
+        snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", base);
+        return m;
+    }
+
+    /* PH-53 L53-6: an optional chain is a value, never an lvalue. Walk the
+       member/arrow chain so `p?.b.f = 1` is refused at the `?.`. */
+    int opt_lvalue_check(int n, int line, int col)
+    {
+        int at = n;
+
+        while (at >= 0 && (self->arena->nodes[at].kind == N_MEMBER
+                           || self->arena->nodes[at].kind == N_ARROW))
+            at = self->arena->nodes[at].a;
+        if (at < 0 || self->arena->nodes[at].kind != N_OPT) return 0;
+        return tool::diag::ct_sem_error(line, col,
+            "optional chain/subscript is not an lvalue; it cannot be assigned or address-taken",
+            self->sup->mem->path);
+    }
 }
 
 impl ExprTraitInst for Expr {

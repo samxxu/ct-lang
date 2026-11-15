@@ -3818,6 +3818,12 @@ if bash test/ast/p52_subscript.sh "$work/ct-ast" "$CC"; then
 else
     bad "p52/subscript" "custom subscript protocol failed"
 fi
+# Phase 53: parser-level `?.` / `?[` on pointer receivers (optional chain).
+if bash test/ast/p53_optional.sh "$work/ct-ast" "$CC"; then
+    ok "p53/optional"
+else
+    bad "p53/optional" "optional chain failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

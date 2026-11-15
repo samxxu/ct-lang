@@ -1,0 +1,16 @@
+/* PH-53 L53-5: the Map value type is itself a pointer. */
+struct B {
+    int x;
+}
+
+int main(void)
+{
+    Map<char *, struct B *> m;
+    struct B *b = malloc(sizeof(struct B));
+    m.h = 0;
+    b->x = 1;
+    m.put("k", b);
+    int r = m["k"]?.x;
+    m.release();
+    return r;
+}

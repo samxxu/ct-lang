@@ -76,6 +76,7 @@ import runtime::arena::Arena;
 #define N_CAST    35
 #define N_SIZEOF  36
 #define N_TERN    37
+#define N_OPT     72
 #define N_BREAK   38
 #define N_CONT    39
 #define N_DECLS   40
@@ -174,6 +175,7 @@ trait EmitOps {
     int  hoist_rvalue(int n);
     int  hoist_scan(int n, int top);
     int  emit_hoists(int ind);
+    int  hoist_expr(int n, int ind);
     int  emit_cond(int n);
     int  emit_indent(int n);
     int  emit_type_decl(int n, int ind, int with_semi);
@@ -253,6 +255,12 @@ struct Emitter {
     /* emission scratch */
     int  hoist_calls[4];
     int  nhoist;
+    /* PH-53: optional-chain nodes whose receiver needs a `__ct_optN`
+       temporary. The declaration is emitted at the statement head; the
+       assignment stays in the ternary's condition so evaluation is lazy. */
+    int  opt_nodes[8];
+    int  nopt;
+    int  opt_scan;              /* PH-53: collect optional temps only */
     /* Phase 30: receivers whose block is spliced at the statement head */
     int  into_nodes[4];
     int  ninto;
@@ -2285,6 +2293,7 @@ impl EmitOps for Emitter {
         int saved, root;
         (void)self;
         self->nhoist = 0;
+        self->nopt = 0;
         root = (self->arena->nodes[n].kind == N_ASSIGN) ? self->arena->nodes[n].b : self->arena->nodes[n].a;
         saved = self->arena->nodes[n].next;
         self->arena->nodes[n].next = -1;
@@ -2307,6 +2316,20 @@ impl EmitOps for Emitter {
         (void)self;
 
         if (n < 0) return 0;
+        /* PH-53: a non-identifier optional receiver is named once. The
+           declaration lands at the statement head; the assignment stays in the
+           conditional, so `f()` is still evaluated at most once and only when
+           the surrounding expression reaches it. */
+        if (self->arena->nodes[n].kind == N_OPT
+            && self->arena->nodes[n].a >= 0
+            && self->arena->nodes[self->arena->nodes[n].a].kind != N_VAR) {
+            if (self->nopt >= 8)
+                return self->fail_from(n, "too many optional-chain temporaries in one statement");
+            snprintf(self->arena->nodes[n].text3, MAX_TEXT, "__ct_opt%d", self->ntmp);
+            self->ntmp++;
+            self->opt_nodes[self->nopt] = n;
+            self->nopt++;
+        }
         /* Phase 30: an `into` receiver is materialised once, and its block is
            spliced in front of the statement. Do not walk `b` here -- those are
            statements, and they get their own hoists when they are emitted. */
@@ -2327,7 +2350,8 @@ impl EmitOps for Emitter {
            receiver is substituted once and nothing takes its address, so a
            call result in an argument position compiles as written and needs
            no temporary. Only dynamic dispatch materialises its receiver. */
-        if (self->arena->nodes[n].kind == N_MCALL
+        if (!self->opt_scan
+            && self->arena->nodes[n].kind == N_MCALL
             && self->arena->nodes[n].aux != 6) {
             int ok = 0;
             char bt[MAX_TEXT];
@@ -2383,6 +2407,12 @@ impl EmitOps for Emitter {
         int hd;
         (void)self;
 
+        for (i = 0; i < self->nopt; i++) {
+            self->emit_indent(ind);
+            fprintf(self->out, "%s %s;\n",
+                    self->arena->nodes[self->opt_nodes[i]].text4,
+                    self->arena->nodes[self->opt_nodes[i]].text3);
+        }
         for (i = 0; i < self->nhoist; i++) {
             hd = 0;
             hty[0] = 0;
@@ -2407,7 +2437,7 @@ impl EmitOps for Emitter {
             self->raw_call = -1;
             fputs(";\n", self->out);
         }
-        /* Phase 30 §2.3: promote by value category. A pointer receiver is
+    /* Phase 30 §2.3: promote by value category. A pointer receiver is
            copied; a left-value value receiver is addressed in place; a
            right-value value receiver is moved into a fresh local. The block's
            statements then splice in at the same indentation. */
@@ -2440,7 +2470,24 @@ impl EmitOps for Emitter {
         }
         self->nhoist = 0;
         self->ninto = 0;
+        self->nopt = 0;
         return 0;
+    }
+
+    /* PH-53: run the optional-temp scan for one condition / for-header
+       expression and write the declarations at `ind`. */
+    int hoist_expr(int n, int ind)
+    {
+        if (n < 0) return 0;
+        self->nhoist = 0;
+        self->nopt = 0;
+        self->opt_scan = 1;
+        if (self->hoist_scan(n, 1) != 0) {
+            self->opt_scan = 0;
+            return -1;
+        }
+        self->opt_scan = 0;
+        return self->emit_hoists(ind);
     }
 
     /* PP lines, then types/globals in source order, then prototypes, then the
@@ -4043,6 +4090,10 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_DECLS) {
             int c = self->arena->nodes[n].a;
             while (c >= 0) {
+                /* PH-53: each declarator's initialiser may carry an optional
+                   chain; its temporary declaration goes before that line. */
+                if (self->hoist_rvalue(c) != 0) return -1;
+                if (self->emit_hoists(ind) != 0) return -1;
                 self->emit_indent(ind);
                 if (self->emit_inline(c) != 0) return -1;
                 fputs(";\n", self->out);
@@ -4126,6 +4177,7 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_IF) {
+            if (self->hoist_expr(self->arena->nodes[n].a, ind) != 0) return -1;
             self->emit_indent(ind);
             fputs("if (", self->out);
             if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
@@ -4139,6 +4191,7 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_WHILE) {
+            if (self->hoist_expr(self->arena->nodes[n].a, ind) != 0) return -1;
             self->emit_indent(ind);
             fputs("while (", self->out);
             if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
@@ -4147,6 +4200,9 @@ impl EmitOps for Emitter {
         }
         if (self->arena->nodes[n].kind == N_FOR) {
             int init = self->arena->nodes[n].a;
+            if (self->hoist_expr(self->arena->nodes[n].a, ind) != 0) return -1;
+            if (self->hoist_expr(self->arena->nodes[n].b, ind) != 0) return -1;
+            if (self->hoist_expr(self->arena->nodes[n].c, ind) != 0) return -1;
             /* C only allows `register` or no storage class in a for's first
                declaration (C99 6.8.5.3), so `for (static int i = 0; ...)` is a
                GNU extension that gcc rejects under -std=c99. Emit the
@@ -4303,6 +4359,7 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_SWITCH) {
+            if (self->hoist_expr(self->arena->nodes[n].a, ind) != 0) return -1;
             self->emit_indent(ind);
             fputs("switch (", self->out);
             if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
@@ -4333,6 +4390,7 @@ impl EmitOps for Emitter {
         }
         if (self->arena->nodes[n].kind == N_DOWHILE) {
             int b, c;
+            if (self->hoist_expr(self->arena->nodes[n].a, ind) != 0) return -1;
             self->emit_indent(ind);
             fputs("do {\n", self->out);
             /* `parse_branch` wraps even a single statement in an N_BLOCK, so
@@ -4877,6 +4935,43 @@ impl EmitOps for Emitter {
                 fprintf(self->out, "%s.value;\n", qt);
             }
             fputs("})", self->out);
+            return 0;
+        }
+        /* PH-53: `(recv ? recv->f : 0)`, with a `__ct_optN` temporary when the
+           receiver is not a simple identifier. The assignment sits in the
+           condition, so a null receiver short-circuits the field/index/get. */
+        if (self->arena->nodes[n].kind == N_OPT) {
+            int use_temp = self->arena->nodes[n].text3[0] != 0;
+            fputs("(", self->out);
+            if (use_temp) {
+                fputs("(", self->out);
+                fputs(self->arena->nodes[n].text3, self->out);
+                fputs(" = ", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(")", self->out);
+            } else if (self->emit_expr(self->arena->nodes[n].a) != 0) {
+                return -1;
+            }
+            fputs(" ? ", self->out);
+            if (self->arena->nodes[n].aux == 1) {
+                if (use_temp) fputs(self->arena->nodes[n].text3, self->out);
+                else if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fprintf(self->out, "->%s", self->arena->nodes[n].text);
+            } else if (self->arena->nodes[n].aux == 2) {
+                if (use_temp) fputs(self->arena->nodes[n].text3, self->out);
+                else if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs("[", self->out);
+                if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+                fputs("]", self->out);
+            } else {
+                fprintf(self->out, "%s_get(", self->arena->nodes[n].text);
+                if (use_temp) fputs(self->arena->nodes[n].text3, self->out);
+                else if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(", ", self->out);
+                if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+                fputs(")", self->out);
+            }
+            fputs(" : 0)", self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_TERN) {

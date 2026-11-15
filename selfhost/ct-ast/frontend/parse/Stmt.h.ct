@@ -3875,6 +3875,10 @@ impl StmtOps for Stmt {
             int op = 0, k2;
             char oc = self->lex->toktext[0];
             k2 = self->arena->nodes[e].kind;
+            /* PH-53 L53-6: an optional chain is a value. */
+            if (self->ex->opt_lvalue_check(e, self->arena->nodes[e].line,
+                                           self->arena->nodes[e].num) != 0)
+                return -1;
             /* Phase 31 O3 (L31-3/L31-4): `v[i] += 1` writes the value. */
             if (self->ex->container_write_check(e) != 0) return -1;
             if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX
@@ -3912,6 +3916,10 @@ impl StmtOps for Stmt {
             /* `N_DEREF` never fills `tt` below, and `iface_ref_type` reads it:
                an empty string is the "no type derived" case */
             tt[0] = 0;
+            /* PH-53 L53-6: `p?.b = 1` / `p?[i] = x`. */
+            if (self->ex->opt_lvalue_check(e, self->arena->nodes[e].line,
+                                           self->arena->nodes[e].num) != 0)
+                return -1;
             /* PH-52: `obj[k] = v;` rewrites the parsed read sugar into a
                `set(k, v)` call. Only a plain `=` statement with an lvalue
                receiver is accepted; the generic assignment path below would

@@ -1,0 +1,16 @@
+/* Phase 53 / E53-8 / T1: `c?.5 : 1.0` stays the conditional operator; the
+   `.5` is a float literal, not an optional-chain field. */
+#include <stdio.h>
+
+int main(void)
+{
+    int c;
+    double d;
+    c = 1;
+    d = c?.5 : 1.0;
+    printf("%.1f", d);
+    c = 0;
+    d = c?.5 : 1.0;
+    printf(" %.1f\n", d);
+    return 0;
+}

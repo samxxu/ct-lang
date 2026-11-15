@@ -1,0 +1,12 @@
+/* PH-53 L53-6: an optional chain is not assignable. */
+struct B {
+    int c;
+}
+
+int main(void)
+{
+    struct B b;
+    struct B *p = &b;
+    p?.c = 1;
+    return 0;
+}

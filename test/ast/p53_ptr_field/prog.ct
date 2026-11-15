@@ -1,0 +1,17 @@
+/* Phase 53 / E53-1: `p?.f` on a struct pointer is `(p ? p->f : 0)`.
+   License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+
+struct B {
+    int b;
+}
+
+int main(void)
+{
+    struct B obj;
+    struct B *p = &obj;
+    struct B *q = 0;
+    obj.b = 7;
+    printf("present=%d missing=%d\n", p?.b, q?.b);
+    return 0;
+}

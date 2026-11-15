@@ -1,0 +1,11 @@
+/* PH-53 L53-4: the optional pointer element is a struct value. */
+struct B {
+    int x;
+}
+
+int main(void)
+{
+    struct B b;
+    struct B *p = &b;
+    return p?[0].x;
+}

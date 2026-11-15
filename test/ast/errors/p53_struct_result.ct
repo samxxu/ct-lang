@@ -1,0 +1,15 @@
+/* PH-53 L53-3: the optional field is a struct value. */
+struct B {
+    int x;
+}
+
+struct A {
+    struct B c;
+}
+
+int main(void)
+{
+    struct A a;
+    struct A *p = &a;
+    return p?.c.x;
+}

@@ -1,0 +1,25 @@
+/* Phase 53 / E53-7: `f()?.b` calls `f` exactly once. */
+#include <stdio.h>
+
+struct B {
+    int c;
+}
+
+static int calls = 0;
+
+static struct B *make(int ok)
+{
+    struct B *b;
+    calls++;
+    if (!ok) return 0;
+    b = malloc(sizeof(struct B));
+    b->c = 9;
+    return b;
+}
+
+int main(void)
+{
+    int got = make(1)?.c;
+    printf("got=%d calls=%d\n", got, calls);
+    return 0;
+}

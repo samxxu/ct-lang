@@ -1,0 +1,19 @@
+/* PH-53 L53-7: optional method call. */
+struct B {
+    int x;
+}
+
+impl B {
+    int f(void)
+    {
+        return self->x;
+    }
+}
+
+int main(void)
+{
+    struct B b;
+    struct B *p = &b;
+    b.x = 1;
+    return p?.f();
+}

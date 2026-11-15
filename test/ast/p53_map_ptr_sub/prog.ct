@@ -1,0 +1,20 @@
+/* Phase 53 / E53-4: `m?["k"]` on a Map pointer tests the Map first. */
+#include <stdio.h>
+
+int main(void)
+{
+    Map<char *, int> m;
+    Map<char *, int> *mp = &m;
+    Map<char *, int> *np = 0;
+    int *hit;
+    int *miss;
+    int *nil;
+    m.h = 0;
+    m.put("k", 5);
+    hit = mp?["k"];
+    miss = mp?["x"];
+    nil = np?["k"];
+    printf("hit=%d miss=%d nil=%d\n", hit ? *hit : -1, miss == 0, nil == 0);
+    m.release();
+    return 0;
+}
