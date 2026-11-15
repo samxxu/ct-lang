@@ -27,7 +27,7 @@ ct build（CT 侧）+ 包内 bridging header（构建产物）→ Xcode / SPM
 
 ---
 
-## 2 已定（5 条）
+## 2 已定（6 条）
 
 ### 2.1 bridging header 判为构建产物
 
@@ -83,18 +83,25 @@ ct build（CT 侧）+ 包内 bridging header（构建产物）→ Xcode / SPM
 | 判据要求 | 最小样例必须**包含一个枚举字段**，不能只在文档里写支持 |
 | 依据 | 枚举是 UI 状态机与选项集的常见形态；首版不含会让生成器第一版就撞墙，后续补又要动 schema |
 
+### 2.6 字段级位置回指必带
+
+| 项 | 裁定 |
+| --- | --- |
+| 范围 | `fields[]` **必带** `loc{file,line,col}`，指向字段声明处 |
+| 依赖 | **PH-58**（字段级位置，[routing §3.4/7c](../planning/open-items-routing.md)）；PH-58 本来就排在 PH-59 之前 |
+| 滑期降级 | PH-58 若滑期，降级为「只带 `line`」并在卡内显式标注缺 `col`；不得退回到「不写该键」 |
+| 判据要求 | 必须有一条能真红的断言：`loc` 存在且指向声明行/列；golden 用**字段级**定位，不许停在 struct 级 |
+| 依据 1 | 提案自己的 schema 规则：字段从「可缺席」变「必有」属于改义，按定义要 +1 大版本——那就等于 PH-59 出厂即欠一次大版本 |
+| 依据 2 | 原 J1–J10 没有一条断言位置，golden 停在 struct 级也能全绿，等于「回指」这个卖点没有判据 |
+
 ---
 
-## 3 待定（1 条，不得用默认值写死）
+## 3 待定（无）
 
-### 3.1 字段级回指
+原「字段级回指」已按 §2.6 转「必带」；异步/流式/动态增删已按 §2.4 转非目标；多单元已按 §2.3 转 M2。
+与映射相关的待定项已清零。剩余的**版本位冲突**不属于映射决策，登记在 [Phase 59 卡](phase59.md) §8。
 
-- **争点**：`fields[].line` / `col` 本期是否主张。
-- **阻塞范围**：阻塞 Xcode 从生成物跳回**具体字段**的能力与生成器报错的精度；技术上还要动 `Field` 结构（当前只有 `name`/`type`/`dims`，无 `loc`）。
-- **不阻塞**：struct / 函数级回指（记录上已有 `line` / `col`）。
-- **可选口径**：A 沿用「本期不主张」，`fields[].line` 留空且不写该键；B 本期补 `Field.loc`（含前端改动）。
-
-> 以上一条与 §2 五条不冲突；§2 已定的五条在待定项定稿前即可施工，且 Phase 59 只实现 §2 的范围。
+> §2 六条即当前全量裁定，Phase 59 只实现这六条的范围。
 
 ---
 
@@ -103,6 +110,6 @@ ct build（CT 侧）+ 包内 bridging header（构建产物）→ Xcode / SPM
 | 文档 | 关系 |
 | --- | --- |
 | [模型导出提案](../proposals/ct-model-export-proposal.md) | schema 格式、方案取舍、非目标；§4.1 已含 §2.2 |
-| [视图注记提案](../proposals/ct-view-annotation-proposal.md) | 依赖本文件 §3.1/§3.2 定稿后才能冻结 schema |
-| [Phase 59 卡](phase59.md) | 只实现 §2 已定 + §3 未阻塞部分；待定项在卡内标「不主张」 |
-| [open-items-routing §8](../planning/open-items-routing.md) | 排位与 SH-79 的边界 |
+| [视图注记提案](../proposals/ct-view-annotation-proposal.md) | 依赖本文件 §2.2/§2.5/§2.6 冻结后才能定 schema |
+| [Phase 59 卡](phase59.md) | 实现 §2 六条；待定项已清空 |
+| [open-items-routing §8](../planning/open-items-routing.md) | 排位、SH-79 与 PH-58 字段位置的边界 |
