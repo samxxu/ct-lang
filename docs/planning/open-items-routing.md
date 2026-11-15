@@ -198,6 +198,7 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 | **0.53.13** | SH-65（+SH-67 若同根） | 闭包字面量 / 先绑变量两种入口 rc=0 且 `cc` 过 | 依赖 0.53.4 |
 | **0.53.14** | LANG-10（7b）：解析错误走 JSON 通道 | `--diagnostics=json` 下解析错误输出可解析对象；默认文本逐字节不变；警告 JSON 补夹具（7a） | 与 Driver/Diag 族串行（0.53.8 之后） |
 | **0.53.15** | SH-60 1a/1b（条件） | 视 D-60-1 裁定；未裁定不发 | 条件 |
+| **0.53.16** | LANG-16：诊断位置源过期（块注释后列号偏移、`1:-3788` 类负列） | 三探针列为 `4:4` / `4:17` / `84:4`；诊断禁止输出 `col<=0`；`at<0` 不越界读；文本其余零变化 | 与 0.53.9 同 `Lexer.h.ct` 族，**必须串行**；与 PH-62 **无依赖**（可任意先后，仅合并时串行） |
 
 **SH-76 判定（新并入）**：v0.53.0 实测「无 `lib/std` / 未设 `CT_STD_DIR`」时 compile 与 build
 **同样**报 `1:15 expected a field name`，设上 `CT_STD_DIR` 或 cwd 放 `lib/std` 后**同样** rc=0——
@@ -225,8 +226,7 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
 4. **Map plain `[]` / `.field`**：当前静默发射坏 C；安全替代是 `?[` / `?.`，但 plain 形态仍应「可用或硬错」，不能留在 `cc`。
 5. **PH-54 版本位**：A 方案要改 roadmap 的 `v0.55–v0.60`；本轮只登记，不改 roadmap。
 6. **并行会话**：`TypeCheck` / `Emitter` / `main` / `Driver` / `Pkg` / `test/pkg` / `test/ast/263` 未触碰。
-7. **SH-76 索引行待补**：`issues/README.md` 当前有并行会话未提交的改动，本轮不写该文件；
-   SH-76 的索引行由并行改动落地后一并补，避免把别人的半成品带进本提交。
+7. **索引行已补**：`issues/README.md` 的 LANG-15/16、SH-76–79 已登记（并行改动已落地，工作树干净）。
 8. **SH-76 环境证据**：现场「`ctc` 失败 / `ct build` 正常」在 v0.53.0 同 cwd 下不可复现；
    已按「内置层找不到」复现两条路径。报告方需补 `ctc -v`、`ct -v`、`pwd`、`CT_STD_DIR` 才能定位其环境差异。
 9. **LANG-1 / LANG-2 报告差异**：HEAD `v0.53.1` 重建后两条均 rc=0（夹具 `260` / `261`）；
@@ -244,7 +244,8 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
   [SH-77](../../issues/selfhost/sh77-abi-hash-name-only.md)（ABI_HASH 仅名字，拒绝）、
   [SH-78](../../issues/selfhost/sh78-lib-export-free-functions-only.md)（`--lib` 只导出自由函数，拒绝）、
   [SH-79](../../issues/selfhost/sh79-build-lib-emit-map-silent.md)（`build --lib --emit-map` 静默）、
-  [LANG-15](../../issues/lang/lang-15-qualified-enum-member-value.md)（`Type::Member` 取值，PH-57）。
+  [LANG-15](../../issues/lang/lang-15-qualified-enum-member-value.md)（`Type::Member` 取值，PH-57）、
+  [LANG-16](../../issues/lang/lang-16-diagnostic-position-negative.md)（诊断位置源过期，patch 0.53.16）。
 - 复用编号：LANG-1 / LANG-2（已修复核）、LANG-3（补诊断判据）、LANG-10（拆三块）、LANG-14（已在序列）、
   SH-18（类型位置）、PH-54（包机制）。
 - 不改 `docs/roadmap.md`、`docs/design/phase53.md`、`docs/design/phase54.md`、发版契约、`selfhost/**`。
@@ -294,3 +295,4 @@ PH-60 仍未开卡，等 PH-59 schema 冻结。
 | 文档 | [提案](../proposals/ct-writable-subscript-proposal.md)、[研判](../review/ct-writable-subscript-proposal-review.md)；PH-61 提案/研判标注「并入 PH-62，作为 S1 切片」 |
 | 落点 | **PH-62**；PH-61 的 `v[] = x` 作为 S1；**未排 phase 卡** |
 | 依赖 | 无语言依赖；改 `Expr` / TypeCheck / Emitter，与 TypeCheck/Expr 族串行；与 PH-53/54/57/58/59/60 无依赖 |
+| 边界 | 与 [LANG-16](../../issues/lang/lang-16-diagnostic-position-negative.md)（patch 0.53.16）**互不依赖**：PH-62 管写语义，LANG-16 管位置源与诊断兜底；W1–W22 与 P1–P6 无交叉；仅同改 `Expr.h.ct` 时合并串行 |
