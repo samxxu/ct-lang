@@ -3,7 +3,7 @@
 > **类型**：语言缺陷 / 修复请求（可直接施工）
 > **基线**：`v0.53.1`（工作树 `5df13013` 之后）
 > **严重度**：Medium（有绕法，但绕法要把工厂降级成自由函数，破坏包 API 形态）
-> **状态**：待修（本文件只登记，不含实现）
+> **状态**：**已修**（LANG-2，v0.53.1；回归夹具 `261_namespaced_static`）
 > **与既有记录的关系**：未见同名缺陷单。`docs/history/design/phase31.md` 的 P15 是「泛型 impl 体内
 > 兄弟方法不可见」，**不是**本条；`docs/proposals/language-capability-gaps.md` 与
 > `docs/planning/requirements-pool.md` 检索无同名条目。若后续发现重复，以本条为准合并，不做第二份。

@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 状态 | **提案（待研判）**；不排 phase 卡、不改 `selfhost/**` |
+| 状态 | **方向已通过研判**（[研判](../review/ct-writable-subscript-proposal-review.md)）；待开 PH-62 卡后施工 |
 | 来源 | 负责人判定为必须补的能力缺口：Map / Vec 只能读不能写，JSON 写回无法完成（2026-11-15） |
 | 拟占 | **PH-62**；吸收 PH-61（`v[] = x` 作为其中一个切片），不另立两个 phase |
 | 关联 | [PH-61 追加下标](ct-append-subscript-proposal.md)、LANG-13（三级链）、PH-53（`?.` / `?[`）、`Vec::get/set/at`、`Map::get/put` |

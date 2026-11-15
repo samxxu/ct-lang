@@ -1,5 +1,9 @@
 # 提案：用户类型下标运算符（REQ-INDEX-1）
 
+> **并入 PH-62（2026-11-15 重排）**：本文自述「未立项、未过分析，不作数」；其协议设计转入
+> PH-62 的设计附件，与 REQ-JSACCESS-1 / REQ-INDEX-1 同一套匹配机制。不要单独立项。
+> 见 [post-58-plan.md](../planning/post-58-plan.md) §6。
+
 > **状态：提案 / 未立项 / 未过分析，不作数**（2026-11-15）。
 > **基线**：本仓 `v0.53.1` 之前的工作树（`v0.53.0` 之后，含两处 P0 修复）；立项时 S0 记录 `baseline: <sha>` 并复跑 §1。
 > **关联**：[requirements-pool.md](../planning/requirements-pool.md) 的 `REQ-INDEX-1`（本条登记）、`REQ-L1`（PH-52 已交付方案 A）、
