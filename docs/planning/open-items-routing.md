@@ -246,6 +246,8 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
   [SH-79](../../issues/selfhost/sh79-build-lib-emit-map-silent.md)（`build --lib --emit-map` 静默）、
   [LANG-15](../../issues/lang/lang-15-qualified-enum-member-value.md)（`Type::Member` 取值，PH-57）、
   [LANG-16](../../issues/lang/lang-16-diagnostic-position-negative.md)（诊断位置源过期，patch 0.53.16）。
+- 核查：[内置层与 `std` 包同名](../review/builtin-layer-vs-std-package-name-check.md)（`65481e6f`；
+  结论：不冲突，物理改名后置）。
 - 复用编号：LANG-1 / LANG-2（已修复核）、LANG-3（补诊断判据）、LANG-10（拆三块）、LANG-14（已在序列）、
   SH-18（类型位置）、PH-54（包机制）。
 - 不改 `docs/roadmap.md`、`docs/design/phase53.md`、`docs/design/phase54.md`、发版契约、`selfhost/**`。

@@ -1938,11 +1938,17 @@ int apply(int base) {
 - 类型参数允许单大写字母（`T`、`K`、`V`），不要求拼成单词。
 - 「动作动词开头」按评审判断；`get_` / `set_` / `has_` / `is_` / `to_` / `from_` 等前缀视为动词。
 - **保留名（封闭清单，只豁免「动词 / 前缀开头」一条，不豁免大小写规则）**：
-  - 内置层：`Vec.len`、`Vec.has`、`Vec.at`、`Map.len`、`Map.has`、`Str.len`；
-  - `std` 包：`std::str::String.len`（即 `std::str.len`）、旧 `std::vec` 的 `len` / `at`、
+  - 内置层：`Vec.len`、`Vec.has`、`Vec.at`、`Map.len`、`Map.has`（`Str` 只有字段 `len` 与自由函数
+    `str_len`，**没有 `len` 方法**，因此不进保留名）；
+  - `std` 包：`std::str::String.len`（即 `std::str.len`；std 侧若改名为 `CStrOps`，CT 待其发版后
+    再同步本条，不预先改）、旧 `std::vec` 的 `len` / `at`、
     旧 `std::map` 的 `len`、`std::num` 的 `max` / `min`（`int` / `long` / `long long` 三个宿主）。
   这些是存量豁免（`std::num` 的两个名字是 std `0.2.0` 的既有名），不因本条改名；
   **新增查询方法不得加入本清单**，仍按动词 / 前缀规则。
+- **映射层 trait 不是值类型**：`std::str::String`、`std::io` 的 `Path` / `File` 挂在宿主
+  （`char *` / `IoFile *`）上提供方法，名字按 trait 的 PascalCase 规则，但不得当 struct 或类型别名使用；
+  是否改名（例如 `String` → `CStrOps`）由所属 ct-pkg 包决定，CT 不替包保留或改名。`Path` / `File`
+  分别映射 `char *` 与 `IoFile *`，与内建 `Str` / `Vec` 无关。
 - **不设「数学惯用词」类例外**：`max` / `min` 是按名字登记的存量豁免，不是一类新前缀；
   新的数学接口（`abs` / `clamp` / `sum` 等）不得据此免检，确需例外时逐个登记并留决策记录。
   理由：类别例外无法机械判定，闭名单可审计；libc 例外已有精确边界（同名直映射），不再开第二个
@@ -2552,7 +2558,9 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 - **重复释放诊断**：`drop()` 体内同一 `self` 字段不得 `release()` 两次，报 `field 'X' is released more than once in drop()`。
 - **`Str`**：内建于 `lib/std/Str.h.ct`，布局 `{ char *data; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_from(s)` / `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` / `str_compare(a, b)` / `str_c_str(s)`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。
 - **所有权形态**：`Str` 是值句柄，按值传递浅拷贝指针（不自动深拷贝，需显式 `retain()`）；`own Str *p = malloc(sizeof(struct Str)); ...; delete p;` 由 `Drop` 释放 buffer 再 free 结构体并置空指针。`Option<T>` / `Result<T,E>` 已加 `use Drop`，其 `none()` / `ok()` / `err()` 工厂零初始化未使用的 payload，使无条件胶水安全释放。
-- **字符串契约归属**：ct-pkg 的 `std/string`（外部包）提供高层次字符串契约；本仓内建 `Str` 是长度前缀的低层句柄，二者不重复。
+- **与 std 包 `String` 的关系**：`std::str::String` 是挂在 `char *` 上的方法层 trait（[String.m.ct](../../../std/std/str/String.m.ct)），
+  不是 `Str` 的子类型、别名或构造器；本仓内建 `Str` 是长度前缀的低层值句柄，二者不重复、无继承关系。
+  `String` 改名为 `CStrOps` 归 ct-pkg `std` 侧处置，CT 侧只在包发版后同步 §5.1 的保留名，不改 `Str`。
 
 ### 4.57 C ABI 静态库（`ct build --lib`，Phase 39，仅 ct-ast）
 

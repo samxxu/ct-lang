@@ -40,8 +40,9 @@
 
 内置层遵循 [language-spec §5.1](../../docs/language-spec.md)：函数 / 方法 `snake_case` 且动作动词开头，
 类型 `PascalCase`，任何位置不用小驼峰；libc 直映射（`printf`、`puts` 等）保留原名。
-`Vec.len` / `has` / `at`、`Map.len` / `has`、`Str.len` 以及 `std::str::String.len` 是既有保留名，
-不因该条改名；保留名只豁免「动词开头」，不豁免小驼峰。
+`Vec.len` / `has` / `at`、`Map.len` / `has` 以及 `std::str::String.len` 是既有保留名，
+不因该条改名；保留名只豁免「动词开头」，不豁免小驼峰。`Str` 只有字段 `len` 与自由函数
+`str_len`，**没有 `len` 方法**，因此不在保留名清单里。
 
 ## 语义口径
 
