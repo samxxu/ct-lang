@@ -38,7 +38,7 @@
 | SP-009 | `ct build --locked` 在 lock 与 store 不一致（目录缺失/摘要不符）时立即失败，不回退 | 删掉版本目录后 `ct build --locked` RC≠0 且文案含 `is not installed` 或 `does not match` | S2 |
 | SP-010 | 无 `ct.lock` 的工程退回 `vendor/` 并打警告；无 vendor 亦无 lock 时不新增报错 | 删除 lock 的旧工程 `ct build` 仍 RC=0（若原先可构建），stderr 含 `no ct.lock; reading vendor/` | S2 |
 | SP-011 | 编译期零网络：`ct build` / `ct compile` 不发起任何网络调用 | `env -u HOME http_proxy=http://127.0.0.1:9 ct build …` RC=0 | 现状已成立，回归保持 |
-| SP-012 | `import` 只写 `<name>::<Unit>`；发布方不得出现在 import 路径中 | `grep -rnE '^import .*/' <消费者>` 零命中 | S4/S5 |
+| SP-012 | `import` 只写 `<name>::<Unit>`；发布方不得出现在 import 路径中 | 归消费者仓自查；本仓只保留语法口径，不设跨仓验收 | 包外 |
 | SP-013 | 依赖图内包名唯一；同名（无论发布方）即硬错 | 两个同名 `dep` 的工程 `ct install` RC≠0 且含 `is required twice` | S2 |
 | SP-014 | 裸名在索引中对应多个发布方时硬错 | 构造双发布方索引 → `ct get <name>` RC≠0 且含 `is ambiguous` | S1 |
 
@@ -58,16 +58,23 @@
 | SP-019 | store 内摘要不符必须报错，不静默重装 | 篡改 store 文件后 `ct verify` RC≠0 且含 `does not match ct.lock` | S1/S3 |
 | SP-020 | 同版本重复安装为 no-op（摘要相同）或报错（摘要不同），不得覆盖已有目录 | 连续两次 `ct get` 同版本：第二次不改变版本目录的 mtime/内容 | S1 |
 
-### 包仓库约定
+### 包仓库约定（边界，不在本仓）
+
+以下六条归各包仓执行与举证，**不属于 Phase 54 或任何 CT phase**；参数与逐仓动作见包外移交清单。
+
+| ID | 要求 | 归属 |
+| --- | --- | --- |
+| SP-021 | 包根必须有可解析的 `ct.pkg`（`name`/`publisher`/`version`/`ns-root` 四键非空） | 各包仓 |
+| SP-022 | `ns-root` 下每个可导入单元的命名空间与其相对路径一致（`::`→`/`），且首段唯一 | 各包仓 |
+| SP-023 | `ns-root` 下至少一个 `.h.ct` / `.m.ct` 单元 | 各包仓 |
+| SP-024 | 包内不得出现指向自身绝对路径的 `-I` | 各包仓 |
+| SP-025 | tag `v<version>` 与 `ct.pkg` 的 `version` 一致，且 tag 为默认分支可达提交 | 各包仓 |
+| SP-026 | 依赖一律写 `<publisher>/<name>@<range>`，禁止裸名与无版本依赖 | 各包仓 |
+
+### 只读校验（本仓）
 
 | ID | 要求（二值判据） | 验收命令 | 切片 |
 | --- | --- | --- | --- |
-| SP-021 | 包根必须有可解析的 `ct.pkg`（`name`/`publisher`/`version`/`ns-root` 四键非空） | `ct pkg check R` RC=0 | S0 骨架 / S4 全量 |
-| SP-022 | `ns-root` 下每个可导入单元的命名空间与其相对路径一致（`::`→`/`），且首段唯一 | `ct pkg check R --resolve` RC=0 | S4 |
-| SP-023 | `ns-root` 下至少一个 `.h.ct` / `.m.ct` 单元 | `find R/$(ct pkg get ns-root) -name '*.h.ct' -o -name '*.m.ct'` 非空 | S4 |
-| SP-024 | 包内不得出现指向自身绝对路径的 `-I` | `ct pkg check R` 不输出 `absolute -I`，RC=0 | **S0** |
-| SP-025 | tag `v<version>` 与 `ct.pkg` 的 `version` 一致，且 tag 为默认分支可达提交 | `git describe --tags --exact-match` 输出等于 `v$(ct pkg get version)`；`git merge-base --is-ancestor <tag> HEAD` RC=0 | S4 |
-| SP-026 | 依赖一律写 `<publisher>/<name>@<range>`，禁止裸名与无版本依赖 | `ct pkg check R --deps` RC=0 | S4 |
 | SP-027 | `ct pkg check` 只读：运行前后包目录内容摘要不变 | 运行前后 `find R -type f -exec sha256sum {} +` 结果一致 | **S0** |
 
 ### 兼容与文档

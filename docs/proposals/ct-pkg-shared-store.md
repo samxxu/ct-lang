@@ -3,7 +3,7 @@
 | 项 | 值 |
 | --- | --- |
 | 状态 | **已裁定**（2026-11-15，§12 五问已由负责人拍定；条款按 §12 修订，不含实现） |
-| 范围 | `ct get` / `ct install` / `ct update` / `ct verify`、`ct build` 的 `-I` 生成、`ct.pkg` / `ct.lock` 格式、ct-pkg 各包仓布局 |
+| 范围 | `ct get` / `ct install` / `ct update` / `ct verify`、`ct build` 的 `-I` 生成、`ct.pkg` / `ct.lock` 格式；包仓自身的声明与发布不在本提案范围 |
 | 契约变更 | **本提案改的是既有契约**：`docs/package-guide.md` §1 现写死「包根即包根、单元与 `ct.pkg` 并列不嵌套」，本提案以 `ns-root` 取代该隐含约定；`ct install` 的 `-I vendor/<name>` 输出契约同时作废。不是「加几个字段」 |
 | 现状核对 | `ct v0.53.0` 实测：包固定落 `./vendor/<name>`；无共享库；`ct.pkg` 的 `ns-root` 无读取点；`ct install` 固定打印 `-I vendor/<name>`；同名包静默取首个；`ct build` 不读 `ct.lock`（详见核对报告，未入库） |
 | 不做 | 新语言关键字、私库鉴权、GC/沙箱、传递更新的 MVS 策略变更 |
@@ -30,8 +30,8 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 - 每个版本目录 = 一份完整包树（`ct.pkg` + `ns-root` 下的单元 + LICENSE + 其它文件）。
 - **版本目录不可变**：同版本重复安装只做摘要校验；摘要不符报错，不覆盖。升级 = 新增目录。
 - 删除某版本只能由 `ct pkg gc`（显式命令）执行，不在 `get`/`install` 中隐式回收。
-- 发布方与包名字符集同为 `[a-z0-9][a-z0-9-]*`；`publisher` 由 `ct.pkg` 声明，与 git 组织解耦（`github.com/ct-pkg/std` 的 publisher 写作 `ct`）。
-- git 侧的 `~/.cache/ct-pkg` 退化为纯传输缓存，**键改为 `<publisher>/<name>`**；不得再用裸名（现状 `ct get foo/http` 会复用 `ct-pkg/http` 的克隆，见核对报告 §9）。
+- 发布方与包名字符集同为 `[a-z0-9][a-z0-9-]*`；`publisher` 由 `ct.pkg` 声明，与 git 组织解耦（同一 git 组织下可以有多个发布方）。
+- git 侧的 `~/.cache/ct-pkg` 退化为纯传输缓存，**键改为 `<publisher>/<name>`**；不得再用裸名（裸名会跨发布方复用克隆，见核对报告 §9）。
 
 ## 2. 解析顺序
 
@@ -102,13 +102,11 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 
 `dev override` 的留痕必须同时出现在两处：`ct.lock` 的 `dir` 行 + 构建 stderr 的 `note:`。现状只有 `dir` 行，构建期无提示。
 
-## 7. 发布与 tag
+## 7. 发布与引用（边界）
 
-1. 仓根放 `ct.pkg`（含 `publisher` / `ns-root`）。
-2. 版本 = tag：打 annotated tag `v<version>`，tag 提交上 `ct.pkg` 的 `version` 必须与 tag 完全一致；tag 必须是默认分支可达提交（禁止游离 tag）。
-3. 索引行扩展为六字段：`name version publisher git-url tag sha256:<64hex>`。
-4. 引用方式：`ct get <publisher>/<name>@<range>`；裸名仅在索引中唯一时可用。
-5. 破坏性变更换主版本；不做传递更新策略变更。
+包仓的 `ct.pkg` 声明、版本号、tag、发布与索引收录归各包仓，不属于本提案或任何 CT phase；本仓只定义 `ct.pkg` / `ct.lock` 的读取格式与 `ct get <publisher>/<name>@<range>` 的引用方式。裸名仅在索引中唯一时可用。
+
+工具侧唯一约束是读取一致性：`ct.pkg` 的 `version` 与引用到的 tag 不一致时按“库内缺版本/摘要不符”处理，由 `ct get` / `ct verify` 报错。
 
 ## 8. 错误文案（固定字符串，供门禁断言）
 
@@ -125,25 +123,9 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 | 旧 lock | `ctc: ct.lock is v1; run 'ct migrate' (or 'ct update') to write v2` |
 | import 解析不到 | 沿用 `ctc: cannot resolve import '<rel>'`（不新增文案） |
 
-## 9. 包仓库判据（可直接做成门禁）
+## 9. 包仓判据（边界）
 
-`R` = 包仓根；`NR = $(ct pkg get ns-root)`。
-
-| ID | 判据 | 验收 |
-| --- | --- | --- |
-| PK-1 | `R/ct.pkg` 存在且可解析 | `ct pkg check R` |
-| PK-2 | `name` / `publisher` / `version` / `ns-root` 非空 | `ct pkg check R --fields` |
-| PK-3 | `name`、`publisher` 字符集合规 | 同上 |
-| PK-4 | `version` 为 `x.y.z`，且与 tag `v<version>` 一致 | `git describe --tags --exact-match` |
-| PK-5 | `ns-root` 相对、无 `..`、目录存在 | `test -d "R/$NR"` |
-| PK-6 | `ns-root` 下每个可导入单元的命名空间 = 相对路径（`::`→`/`），首段唯一 | `ct build --ns-root "R/$NR" <units>` |
-| PK-7 | `ns-root` 下至少一个 `.h.ct` / `.m.ct` 公开单元 | `find "R/$NR" -name '*.h.ct' -o -name '*.m.ct'` |
-| PK-8 | 包内无指向自身绝对路径的 `-I` | `grep -rn -- '-I */' --exclude-dir=.git R` |
-| PK-9 | `cflags` 中 `-I` 只能相对包根且目录存在 | `ct pkg check R --flags` |
-| PK-10 | 依赖一律 `<publisher>/<name>@<range>`，无裸名、无无版本依赖 | `ct pkg check R --deps` |
-| PK-11 | 依赖图内包名唯一 | `ct install` 解析期 |
-| PK-12 | 每个单元都能从 `ns-root` 按 `import` 解析（离线） | `ct pkg check R --resolve` |
-| PK-13 | tag `v<version>` 且为 HEAD 可达提交 | `git merge-base --is-ancestor <tag> HEAD` |
+包仓判据 PK-1…PK-13 的执行与举证归各包仓，不属于本提案或任何 CT phase。本仓只承诺 `ct pkg check R` 的实现范围：**PK-1/2/5/8**；其余判据（命名空间一致性、tag 一致、依赖全名、离线解析等）由包仓用自身门禁举证。判据原文与逐仓动作随包外移交清单分发。
 
 ## 10. 迁移切片（先工具、后包、最后收口）
 
@@ -152,8 +134,8 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 ### S0 · 观测与防回归（工具）
 
 - 交付：`ct pkg check` 只读子命令骨架（PK-1/2/5/8）、lock 格式头识别（读到 v1 只告警）、`ct install` 输出旁加 `# lock-format: v1` 注释行。
-- 判据：旧工程 `ct install` 输出除注释行外逐字节不变；`ct pkg check` 对 `ct-fsguard` 判出缺 `publisher`。
-- 验收：`ct pkg check ../ct-fsguard; echo $?` → 非 0；旧 `test/pkg/run.sh` 全绿。
+- 判据：旧工程 `ct install` 输出除注释行外逐字节不变；`ct pkg check` 对缺 `publisher` 的仓内夹具判出失败。
+- 验收：`bash test/pkg/run.sh` 的 S0 段对 `$work/s0/nopub` 夹具断言 RC≠0；旧 `test/pkg/run.sh` 全绿。
 - 影响：无行为变更。
 
 ### S1 · 最小可用（工具，必须先于任何包仓改动）
@@ -177,26 +159,16 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 - 验收：`ct migrate && mv vendor /tmp/v && ct build main.ct -o build` RC=0。
 - 影响：可开始删除 `vendor/`。
 
-### S4 · 包仓声明对齐（包侧，按仓逐个提交）
+### S4 · 包仓声明对齐（边界，不在本仓）
 
-- 交付（逐仓）：
-  - `std`：`publisher = ct`、`ns-root = .`；处理 `v0.2.0` 游离 tag（并回 main 或重打）。
-  - `ct-http`：`publisher = ct`、`ns-root = .`；`test/gates/p10_install.sh` 改断言 store 路径。
-  - `ct-fsguard`：`publisher = ct`、`ns-root = src`；`cflags` 去掉 `-Isrc`（由 ns-root 推导）；打 `v0.1.0`。
-  - `ct-json`：`publisher = ct`、`ns-root = src`；修 `src/json.h.ct:84`；确定 `import` 形态；打 tag。
-  - `ct-sse`：`publisher = ct`、`ns-root = .`；打 `v0.11.0`。
-  - `ct-token` / `ct-process` / `ct-llm-sse`：补 `publisher`、`ns-root`；依赖改 `<publisher>/<name>@<range>`；明确「规格占位」或补单元。
-  - `nexcore` / `swiftct`：登记为「非 ct 包」，不补 `ct.pkg`。
-- 判据：每仓 `ct pkg check` 的 PK-1/2/4/5/6/10/12 全绿。
-- 验收：`ct pkg check <repo>` RC=0；`ct get <publisher>/<name>@<range> && ct install` 后消费者 RC=0。
-- 影响：`ct-json` / `ct-token` / `ct-llm-sse` / `ct-process` 在本片之前不可消费，属既有状态，不因本片回退。
+包仓的 `ct.pkg` 声明、tag、测试断言与发布归各包仓，不属于本提案或任何 CT phase。本仓不排期、不验收、不代改；逐仓动作与前置条件随包外移交清单分发。
 
-### S5 · 消费端与门禁切换（收口）
+### S5 · 消费端与门禁切换（仓内）
 
-- 交付：各仓 `test/`、`tools/` 去掉手算 `-I`；`ct-lang` 的 `test/pkg/run.sh` 增加共享库用例；安装脚本提示改为新命令。
-- 判据：全仓无 `-I vendor/` 硬编码；两个临时 HOME 下同一 lock 构建结果一致（可复现性）。
-- 验收：`grep -rn -- '-I vendor/' --exclude-dir=.git .` 零命中；`HOME=/tmp/h1` 与 `HOME=/tmp/h2` 各自 `ct get && ct build` 产物一致。
-- 影响：旧文档全部失效，需与 S6 同批发布。
+- 交付（本仓）：`test/pkg/run.sh` 增加共享库用例与双 HOME 复现性；`install.sh` 提示改为 store 命令。
+- 判据：本仓测试与安装提示无 `-I vendor/` 硬编码；两个临时 HOME 下同一 lock 构建结果一致。
+- 验收：`bash test/pkg/run.sh` 全绿；`HOME=/tmp/h1` 与 `HOME=/tmp/h2` 各自 `ct get && ct build` 产物一致。
+- 边界：各包仓的 `test/`、`tools/` 去掉手算 `-I` 归各包仓，不在本仓执行。
 
 ### S6 · 文档与 errata（收口）
 
@@ -217,7 +189,7 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 - **共存**：S1–S5 期间 `ct get` 同时写共享库与 `vendor/`；`ct install` / `ct build` 优先共享库；**无 `ct.lock` 的工程退回 `vendor/` 并告警**（D5），已有 v1 lock 的工程按 `dir`/vendor 语义继续读。
 - **提示**：`ct install` 对每个仍从 `vendor/` 取包的依赖打印一次
   `ctc: warning: '<name>' is read from vendor/ (v1); run 'ct migrate'`，同一进程最多一次/包。
-- **删除前置条件**：连续两个 minor 版本无 v1 lock 工程；`ct migrate` 覆盖全部已知包；`ct pkg check` 在全部已知包上 PK-6/12 绿。
+- **删除前置条件**：连续两个 minor 版本无 v1 lock 工程（本仓可自证）；“`ct migrate` 覆盖全部已知包”“全部已知包 PK-6/12 绿”由各包仓在包外册举证，不作为本仓发版判据。
 - **删除动作**：S7。删除前不得移除 `ct migrate`（保留下载/重装能力）。
 
 ## 12. 裁定结果（2026-11-15，负责人）
@@ -226,9 +198,9 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 
 | # | 裁定 | 被取代的提案文本 | 影响条款 |
 | --- | --- | --- | --- |
-| D1 | `publisher` **必填**，不从源推导（`dir` 源、镜像、仓库搬家三种情况都会歧义） | §3「本地开发可写 `publisher = local`」的宽松写法；§7「与 git 组织解耦」仅保留命名建议，不再允许推导 | §3、§7、§8、PK-2 |
-| D2 | `ns-root` **必填**，缺失即硬错并给修复提示；**不留 `.` 默认值**（隐式默认正是当前缺陷来源） | §3 表格中「`src` 或 `.`」的可选语气、§3 末尾「默认 `.`」；§9 PK-5 的 `NR` 取值路径不变，但缺键即失败 | §3、§8、PK-2、PK-5 |
-| D3 | **接受「包名全局唯一」**：`import` 不带发布方是既定口径，依赖图内重名硬错 | 无文本冲突，改为显式代价声明 | §0-2、§6、PK-11 |
+| D1 | `publisher` **必填**，不从源推导（`dir` 源、镜像、仓库搬家三种情况都会歧义） | §3「本地开发可写 `publisher = local`」的宽松写法；§1「与 git 组织解耦」仅保留命名建议，不再允许推导 | §1、§3、§8 |
+| D2 | `ns-root` **必填**，缺失即硬错并给修复提示；**不留 `.` 默认值**（隐式默认正是当前缺陷来源） | §3 表格中「`src` 或 `.`」的可选语气、§3 末尾「默认 `.`」 | §3、§8 |
+| D3 | **接受「包名全局唯一」**：`import` 不带发布方是既定口径，依赖图内重名硬错 | 无文本冲突，改为显式代价声明 | §0-2、§6 |
 | D4 | **库内多版本可共存，单工程只解析一个版本**：磁盘按版本分目录并存，lock 一包一行，同一次构建不允许同包两版本 | §4 末尾的模糊表述（「不是同一包多版本同时进图」）改为明确禁令与原因（C 无模块隔离） | §1、§4、§6 |
 | D5 | **`ct build` 默认读 lock**；`--locked` 供 CI 强校验（不一致立即失败）；无 lock 的工程退回 `vendor/` 并打警告 | §5 原「`ct.lock` 存在即读；不存在不报错」；§11 「`vendor/` 仅在 lock v1 时被读」扩展为「无 lock 也读」 | §2、§5、§11、S2 |
 
