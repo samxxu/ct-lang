@@ -1,0 +1,15 @@
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<Vec<int> > vv;
+    Vec<int> inner;
+    vv.h = 0;
+    inner.h = 0;
+    vv.push(inner);
+    vv.set(2, inner);
+    Vec<int> hole = vv.get(1);
+    printf("%d %d %d\n", vv.len(), vv.has(1), hole.len());
+    vv.release();
+    return 0;
+}
