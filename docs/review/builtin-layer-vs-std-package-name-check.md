@@ -15,10 +15,10 @@
 | 子问题 | 结论 | 证据 |
 | --- | --- | --- |
 | 内置层占什么命名空间 | **根命名空间**（裸名 `Vec` / `Map` / `Option` / `Result` / `Str`） | `lib/std/*.ct` 全部无 `namespace`；[Vec.h.ct:19-20](../../lib/std/Vec.h.ct#L19-L20)「Root namespace on purpose: the layer is pre-parsed, not imported … (D29-3)」 |
-| 外部包占什么命名空间 | `std::<模块>` | [String.m.ct:47](../../../std/std/str/String.m.ct#L47)、`Fs.m.ct:29`、`Io.h.ct:19`、`Num.m.ct:28`、`Test.h.ct:27` 等 |
-| 同名单元 | **没有** | 内置：`Vec`（含 `Map`/`MapEntry`）、`Option`、`Result`、`Str`；外部：`Arena`、`Fs`、`File`、`Io`、`Stdout`、`Math`、`Real`、`Num`、`String`、`Test`、`Utf8Ops`（`std/str` 无 `Str` 结构体，[String.m.ct:9-11](../../../std/std/str/String.m.ct#L9-L11)） |
+| 外部包占什么命名空间 | `std::<模块>` | `String.m.ct:47`、`Fs.m.ct:29`、`Io.h.ct:19`、`Num.m.ct:28`、`Test.h.ct:27` 等（外部仓文件，本仓不复制） |
+| 同名单元 | **没有** | 内置：`Vec`（含 `Map`/`MapEntry`）、`Option`、`Result`、`Str`；外部：`Arena`、`Fs`、`File`、`Io`、`Stdout`、`Math`、`Real`、`Num`、`String`、`Test`、`Utf8Ops`（`std/str` 无 `Str` 结构体，见 `String.m.ct:9-11`） |
 | 命名空间首段 | **不撞**：内置是根，外部是 `std` | 同上；`std` 只作为外部包的命名空间首段出现 |
-| `import std::...` 解析歧义 | **无歧义**：内置单元不可 import | 实测 `import std::Vec;` → `ctc: cannot resolve import 'std/Vec'`（`-I /Users/samxx/trae-ws/std`，`CT_STD_DIR` 指内置层） |
+| `import std::...` 解析歧义 | **无歧义**：内置单元不可 import | 实测 `import std::Vec;` → `ctc: cannot resolve import 'std/Vec'`（`-I <外部 std 仓>`，`CT_STD_DIR` 指内置层） |
 
 ### 实测（`/tmp/ctname`）
 
@@ -65,8 +65,7 @@ t3: import std::str::String; + Str s = str_from("abc"); + str_len(s)
 - [lib/std/README.md:5-17](../../lib/std/README.md#L5-L17)（范围）、[:28-29](../../lib/std/README.md#L28-L29)（类型表+保留名）、
   [:43](../../lib/std/README.md#L43)（保留名）、[:80-83](../../lib/std/README.md#L80-L83)（`Str`）。
 - [README.md:468](../../README.md#L468)、[README.en.md:64](../../README.en.md#L64)。
-- 外部包侧也写了内置层路径：[std README:14-15](../../../std/README.md#L14-L15)、[:240-241](../../../std/README.md#L240-L241)、[:378](../../../std/README.md#L378)；
-  [ct.pkg:38](../../../std/ct.pkg#L38) `name = std`、[:40](../../../std/ct.pkg#L40) `ns-root = .`。
+- 外部包侧也有同类内置层路径写法；逐条引用属外部仓，本仓不复制，记录随包外移交清单分发。
 
 ### 2.3 测试与 golden
 

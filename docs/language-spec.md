@@ -2558,7 +2558,7 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 - **重复释放诊断**：`drop()` 体内同一 `self` 字段不得 `release()` 两次，报 `field 'X' is released more than once in drop()`。
 - **`Str`**：内建于 `lib/std/Str.h.ct`，布局 `{ char *data; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_from(s)` / `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` / `str_compare(a, b)` / `str_c_str(s)`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。
 - **所有权形态**：`Str` 是值句柄，按值传递浅拷贝指针（不自动深拷贝，需显式 `retain()`）；`own Str *p = malloc(sizeof(struct Str)); ...; delete p;` 由 `Drop` 释放 buffer 再 free 结构体并置空指针。`Option<T>` / `Result<T,E>` 已加 `use Drop`，其 `none()` / `ok()` / `err()` 工厂零初始化未使用的 payload，使无条件胶水安全释放。
-- **与 std 包 `String` 的关系**：`std::str::String` 是挂在 `char *` 上的方法层 trait（[String.m.ct](../../../std/std/str/String.m.ct)），
+- **与 std 包 `String` 的关系**：`std::str::String` 是挂在 `char *` 上的方法层 trait（由外部 `std` 包提供 `String.m.ct`），
   不是 `Str` 的子类型、别名或构造器；本仓内建 `Str` 是长度前缀的低层值句柄，二者不重复、无继承关系。
   `String` 改名为 `CStrOps` 归 ct-pkg `std` 侧处置，CT 侧只在包发版后同步 §5.1 的保留名，不改 `Str`。
 

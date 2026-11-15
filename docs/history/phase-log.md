@@ -71,7 +71,7 @@
 | Phase 54 S3 | **校验与迁移**：verify --strict、migrate、update v2 | 新增 | ✅ 完成（2026-11-15；v0.57.0；[卡](../design/phase54.md)） | `test/pkg/run.sh` 127/0；check-all 11/11 |
 | Phase 54 S5/S6 | **消费端/文档仓内部分**：双 HOME、vendor 告警、store 文档 | 新增 | ✅ 仓内完成（2026-11-15；v0.58.0；S4/S7 阻塞；[卡](../design/phase54.md)） | `test/pkg/run.sh` 130/0；check-all 11/11 |
 
-> **Agent 内核运行库（ct-pkg，外部）**：`arena` / `sync` / `callback` 今天可做，`result` / `string` 分别等 Phase 34 / 36，ABI 打包等 Phase 39；提案见 [proposals/ct-pkg-agent-runtime.md](../proposals/ct-pkg-agent-runtime.md)。
+> **Agent 内核运行库（ct-pkg，外部）**：`arena` / `sync` / `callback` 今天可做，`result` / `string` 分别等 Phase 34 / 36，ABI 打包等 Phase 39；属外部包计划，不在本仓（原文链接已随包外移交清单移出）。
 
 > **未排期（治理项）**：① **增量编译基准**——build cache 已有（Phase 10.5 的 cold/warm 与依赖失效），先在 Phase 36 收口提交上测冷/热构建与内核规模语料，再决定是否立项；② **稳定子集清单**——Z6 的 1.0 冻结原则已有，补 trait / Drop / arena 的具体清单，属文档治理，不占 Phase 编号。
 

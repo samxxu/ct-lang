@@ -7,7 +7,7 @@
 | 优先级 | **P2** —— 不产生错误二进制，但 CT 把错误留给 C 编译器，诊断位置与级别都不一致 |
 | 状态 | **已修**（v0.53.2 工作树，回归 `struct_arg_from_charptr` / `struct_arg_wrong_struct`） |
 | 锚点 | `v0.53.2`（工作树） |
-| 上游 | ct-json [JSON-3](../../../ct-json/issues/JSON-3.md) |
+| 上游 | ct-json JSON-3（仓库外记录，本仓不复制） |
 
 ## 精确触发条件
 

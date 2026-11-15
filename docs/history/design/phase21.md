@@ -9,7 +9,7 @@
 > **版本口径：Phase 21 ↔ `v0.21.x`，收口 bump 到 `v0.21.0`。** 当前仓库 `v0.20.3`（`CTC_VERSION` 五处一致）。
 > 前置：Phase 17 / 18 / 19 / 20 均已完成；Phase 20 = 包支持（[phase20.md](phase20.md)，已完成，与本相无语义依赖）。
 > 关联：[borrow 设计](borrow.md)、[language-spec](../../language-spec.md)、
-> [std 能力缺口](../../../issues/std/std1-markdown-readiness.md)、[roadmap](../../roadmap.md)。
+> std 能力缺口（外部包，记录随包外移交清单）、[roadmap](../../roadmap.md)。
 
 ---
 
@@ -46,7 +46,7 @@ D17-1 已按此恢复编号）。据此：
    `v0.21.0`；不并入 `v0.20.x`。阶段内只有需要重生成 golden 的修复才用 patch 位。
 2. **Phase 20 与本相相互独立。** Phase 20（包支持）独占 `v0.20.x`，本相占 `v0.21.x`；
    两相的改动面（包解析 / 发射器诊断 vs 闭包降级）不重叠，可并行，不存在「闭包要等 20 完结」的依赖。
-3. **Phase 21 的软冲突（D21-12，已定稿 2026-11-08）**：`issues/std/std1-markdown-readiness.md` 用
+3. **Phase 21 的软冲突（D21-12，已定稿 2026-11-08）**：外部 `std` 包的能力缺口记录用
    「Phase 21+」指代泛型。本计划占用 21，且**不引入泛型**；该表述改为「Phase 22+ / 1.0 之后」，
    `Callable` 按签名一族硬写。否则读者会以为闭包内含泛型。
 4. 门禁实数：`selfhost/check-all.sh` 当前 **11 道**硬门禁。Phase 19 roadmap 行里的「12 道」是笔误，
