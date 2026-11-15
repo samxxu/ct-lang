@@ -1,0 +1,155 @@
+{
+  "battle": "langcap-1",
+  "head": "3337ac7a",
+  "head_after": "89b1124b",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2",
+    "cc": "Apple clang (system default)",
+    "binary": "/Users/samxx/.local/bin/ct v0.53.0",
+    "repo_binary": "/Users/samxx/trae-ws/ct-lang/ctc v0.53.1 (single-file only; build is not supported)",
+    "std_dir": "/Users/samxx/trae-ws/ct-lang/lib/std",
+    "probe_root": "/tmp/lcb",
+    "date": "2026-11-15T15:20:00+08:00",
+    "note": "v0.53.0 与 v0.53.1 的差异只有 LANG-1 / LANG-2 两处解析修复，不涉及本轮九条。探针全部在 /tmp，不写仓库。"
+  },
+  "rounds": 1,
+  "method": "逐条最小复现：写 .ct 探针到 /tmp/lcb，用已安装 ct v0.53.0 跑 build，记录 rc 与原始诊断；文档依据用 grep/Read 取 file:line。",
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "counter",
+      "ref": "verdict.md#J-1 / spec:774-785",
+      "command": "cd /tmp/lcb/p1 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build -I . app/main.ct -o out && ./out; echo exit=$?",
+      "exit": 0,
+      "output": "'cc' -std=c99 -I '.ctbuild' ... '-o' 'out'\nexit=14",
+      "reproduced": true,
+      "note": "ns/cfg.h.ct 定义 pub const int K / int ARR[3] / Pair P；消费方 ns::K + ns::ARR[1] + ns::P.a = 14。"
+    },
+    {
+      "id": "V2",
+      "side": "claim",
+      "ref": "verdict.md#J-1b / spec:616",
+      "command": "cd /tmp/lcb/p4 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build -I . app/main.ct lib/cfg.ct -o out",
+      "exit": 1,
+      "output": "'cc' ... '.ctbuild/cfg.c' '.ctbuild/cfg.c' '-o' 'out'\nduplicate symbol '_K' in: .../cfg-a54c9a.o .../cfg-8b58ac.o\nduplicate symbol '_ARR' in: ...\nrc=1",
+      "reproduced": true,
+      "note": "同名 cfg.h.ct + cfg.ct 共用 .ctbuild/cfg.c；只 import cfg 时同目录 .ct 不被编译。"
+    },
+    {
+      "id": "V3",
+      "side": "claim",
+      "ref": "verdict.md#J-1c / spec:778-779",
+      "command": "cd /tmp/lcb/p12 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build -I . app/main.ct ns/cfgimpl.ct -o out",
+      "exit": 1,
+      "output": "app/main.ct:2:30: error: no variable of that name in that namespace (qualified type names are not supported; use the bare name or an alias import)\nrc=1",
+      "reproduced": true,
+      "note": "ns/cfg.h.ct 写 pub extern const int K；ns/cfgimpl.ct 写 namespace ns; const int K=5; 裸 K 版本链接期报 _K 未定义。"
+    },
+    {
+      "id": "V4",
+      "side": "counter",
+      "ref": "verdict.md#J-2 / spec:905-908",
+      "command": "cd /tmp/lcb/p3 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build -I . app/main.ct -o out",
+      "exit": 0,
+      "output": "ns::FS_ERR_NOT_FOUND -> rc=0; FsErrCode::FS_ERR_NOT_FOUND -> app/main.ct:2:52: error: no variable of that name in that namespace (qualified type names are not supported; use the bare name or an alias import); ns::FsErrCode::FS_ERR_NOT_FOUND -> 同类报错",
+      "reproduced": true,
+      "note": "三种写法分别跑；namespace 限定可用，enum 类型作用域不可用。"
+    },
+    {
+      "id": "V5",
+      "side": "claim",
+      "ref": "verdict.md#J-4 / bindings-and-patterns.md:10-47",
+      "command": "cd /tmp/lcb/p5 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build a.ct -o out",
+      "exit": 1,
+      "output": "a.ct:12:14: error: no member named 'server' in 'struct JsonRef'\n   12 |     return r.server.host;\n1 error generated.\nrc=1",
+      "reproduced": true,
+      "note": "ct 放行，cc 报字段不存在；无属性协议。"
+    },
+    {
+      "id": "V6",
+      "side": "claim",
+      "ref": "verdict.md#J-5b / requirements-pool.md:76",
+      "command": "cd /tmp/lcb/p6 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build a.ct -o out",
+      "exit": 1,
+      "output": "a.ct:17:36: error: conflicting types for 'J_get'\n   17 | static ... int J_get(struct J *self, int i) {\na.ct:10:39: note: previous definition is here\n   10 | static ... char * J_get(struct J *self, char * k) {\nrc=1",
+      "reproduced": true,
+      "note": "两个 get 都发射 J_get；REQ-JSACCESS-1 承诺并存。"
+    },
+    {
+      "id": "V7",
+      "side": "claim",
+      "ref": "verdict.md#J-6 / sh73:59-69",
+      "command": "cd /tmp/lcb/p7 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build a.ct -o out",
+      "exit": 1,
+      "output": "a.ct:8:1: error: a method call on a temporary is only allowed at the start of a statement or of an assignment\na.ct:8:1: error: method receiver must be a variable, an element, a call or a field chain",
+      "reproduced": true,
+      "note": "v0.53.0 的两次探针：第一次跑三级链，第二次跑 d[\"a\"].has(\"b\")；两条文案分别记录。LANG-13 声称已修，但 test/ast/263_index_chain3 不在仓库；LANG-5 的固有方法修复有 test/ast/262 在途、未提交。均只记为「声称 / 在途」，未复验。"
+    },
+    {
+      "id": "V8",
+      "side": "claim",
+      "ref": "verdict.md#J-7 / spec:1209 / modern-oo-gap.md:339",
+      "command": "cd /tmp/lcb/p8 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build a.ct -o out",
+      "exit": 1,
+      "output": "a.ct:21:22: warning: format specifies type 'char *' but the argument has type 'struct JsonRef' [-Wformat]\na.ct:22:37: error: invalid operands to binary expression ('struct JsonRef' and 'int')\nrc=1",
+      "reproduced": true,
+      "note": "去掉 +1 后 rc=0，只有 -Wformat warning；运行期按 UB。"
+    },
+    {
+      "id": "V9",
+      "side": "counter",
+      "ref": "verdict.md#J-8 / spec:2249-2250 / spec:2367-2370",
+      "command": "cd /tmp/lcb/p9 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build a.ct -o out; CT_STD_DIR=... ct build b.ct -o outb",
+      "exit": 1,
+      "output": "a.ct:4:16: error: unexpected token\nrc=1\n'cc' ... '-o' 'outb'\nrc_vec=0",
+      "reproduced": true,
+      "note": "a.ct 是 for (int e in a)；b.ct 是 foreach (Vec<int>)，rc=0。"
+    },
+    {
+      "id": "V10",
+      "side": "counter",
+      "ref": "verdict.md#J-9b / spec:2187-2192",
+      "command": "cd /tmp/lcb/p10 && CT_STD_DIR=/Users/samxx/trae-ws/ct-lang/lib/std ~/.local/bin/ct build a.ct -o out; CT_STD_DIR=... ct check a.ct",
+      "exit": 1,
+      "output": "a.ct:3:40: warning: type mismatch: 'has' argument 1: expected 'struct Str', got 'char *'\na.ct:16:16: error: passing 'char[5]' to parameter of incompatible type 'struct Str'\nrc=1\n== check\na.ct:3:40: error: type mismatch: ...\nrc_check=1",
+      "reproduced": true,
+      "note": "v0.53.0：ct build 先 warning，cc 再 error；ct check 直接 error。LANG-14 声称 v0.53.1 已升 error，但 test/ast/264_struct_arg_mismatch / errors/struct_arg_from_charptr.ct 不在仓库，未复验。"
+    }
+  ],
+  "anchors": [
+    "docs/language-spec.md:616",
+    "docs/language-spec.md:774",
+    "docs/language-spec.md:778",
+    "docs/language-spec.md:783",
+    "docs/language-spec.md:905",
+    "docs/language-spec.md:1209",
+    "docs/language-spec.md:1973",
+    "docs/language-spec.md:2187",
+    "docs/language-spec.md:2249",
+    "docs/language-spec.md:2367",
+    "docs/language-spec.md:2492",
+    "docs/language-spec.md:2646",
+    "docs/package-guide.md:16",
+    "docs/package-guide.md:42",
+    "docs/planning/requirements-pool.md:76",
+    "docs/planning/requirements-pool.md:110",
+    "docs/modern-oo-gap.md:339",
+    "issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md:59",
+    "issues/lang/lang-4-subscript-type-mismatch-silent-empty.md:11",
+    "issues/lang/lang-5-result-as-receiver.md:13",
+    "issues/lang/lang-13-three-level-subscript-chain.md:36",
+    "issues/lang/lang-14-charptr-to-struct-arg-warning.md:34",
+    "issues/packages/pkg-2-ct-install-package-root-import.md:100"
+  ],
+  "checks": [
+    { "criterion": "J-1", "verdict": "1a=D; 1b=A; 1c=B", "evidence": ["V1", "V2", "V3"] },
+    { "criterion": "J-2", "verdict": "B", "evidence": ["V4"] },
+    { "criterion": "J-3", "verdict": "C（现状契约）；src/ 支持=B", "evidence": ["docs/package-guide.md:16", "docs/package-guide.md:42", "issues/packages/pkg-2-ct-install-package-root-import.md:100"] },
+    { "criterion": "J-4", "verdict": "B", "evidence": ["V5"] },
+    { "criterion": "J-5", "verdict": "5a=A; 5b=B", "evidence": ["V6", "issues/lang/lang-4-subscript-type-mismatch-silent-empty.md:11", "docs/planning/requirements-pool.md:76"] },
+    { "criterion": "J-6", "verdict": "6a=A（LANG-13 声称已修，未复验）; 6b=A（LANG-5/JSON-2 修复在途）; 6c=A（open）; 6d=C", "evidence": ["V7", "issues/lang/lang-13-three-level-subscript-chain.md:36", "issues/lang/lang-5-result-as-receiver.md:62", "issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md:59"] },
+    { "criterion": "J-7", "verdict": "7a=C; 7b=C", "evidence": ["V8", "docs/modern-oo-gap.md:339", "docs/language-spec.md:1209"] },
+    { "criterion": "J-8", "verdict": "8a=C; 8b=D", "evidence": ["V9", "docs/language-spec.md:2249", "docs/language-spec.md:2367"] },
+    { "criterion": "J-9", "verdict": "9a=C; 9b=A（LANG-14 声称已修，未复验）", "evidence": ["V10", "docs/language-spec.md:2492", "issues/lang/lang-14-charptr-to-struct-arg-warning.md:34"] }
+  ]
+}
