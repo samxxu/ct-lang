@@ -500,6 +500,8 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 GPL-3.0-or-later（编译器本体，见 [LICENSE](LICENSE)）；生成的 `.c`/`.h` 与你的 `.ct` **不受 GPL 约束**
 （[LICENSE.EXCEPTION](LICENSE.EXCEPTION)）；`examples/`、`test/`、`editors/` 为 MIT。
 
+For commercial licensing or exceptions, contact: samxxu@gmail.com
+
 ### 7. 联系
 
 作者 Sam X. Xu · samxxu@gmail.com · 问题与建议优先开 [Issue](https://github.com/samxxu/ct-lang/issues)。

@@ -89,6 +89,8 @@ GPL-3.0-or-later for the compiler itself (see [LICENSE](LICENSE)); the `.c` / `.
 sources are **not covered by the GPL** ([LICENSE.EXCEPTION](LICENSE.EXCEPTION)); `examples/`, `test/` and
 `editors/` are MIT.
 
+For commercial licensing or exceptions, contact: samxxu@gmail.com
+
 ### 7. Contact
 
 Author: Sam X. Xu · samxxu@gmail.com · please open an [issue](https://github.com/samxxu/ct-lang/issues) first.
