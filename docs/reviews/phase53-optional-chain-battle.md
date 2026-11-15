@@ -52,11 +52,18 @@
 
 ## 2 裁定
 
-**不支持普通 struct 值接收者的 `?.`。**
+**不支持普通 struct 值接收者的 `?.`；但值上取到的指针 / map 跳可以继续 `?.`。**
 
 - `?.` 的接收者只收**指针**（含 `Map::get` 返回的 `T*`）；`p?.field` 展开为 `(p ? p->field : 0)`；
   map 键缺失时整链短路，结果 `0`/NULL，不引入新运行时。
-- 普通 struct 值接收者：编译期硬错。错误必须写明「值类型没有空状态，请用指针或显式可空类型」。
+- **普通 struct 值接收者本身**（`a?.b`，`a` 是 struct 值）：编译期硬错。错误必须写明
+  「值类型没有空状态，请用指针或显式可空类型」。
+- **值上取到的一跳**（`a.b?.c`，`a` 是 struct 值、`b` 是指针或 map）：允许。这里的 `?.` 接收者是
+  `a.b`（指针），不是 `a`；它走的是指针规则，不是「值类型支持」。map 形态同理，但要求
+  `Map<K, V>` 的 `V` 是值类型：`a.m["k"]?.c` 的接收者是 `get` 返回的 `V*`；若 `V` 本身是指针，
+  `get` 返回 `V**`，`a.m["k"]?.c` 不成立（需 `(*a.m["k"])?.c`，不属于本正例）。
+- **接收者只求值一次**：`a.b?.c` 的展开必须先把 `a.b` 落到临时量，再判空；直接写
+  `a.b ? a.b->c : 0` 会在 `a.b` 含调用时求值两次（实测见 §5.2 `c3`）。
 - 本卡**不引入** `Maybe<T>` / `T?` / 新的类型标记；若将来要做，单独立相，判据至少覆盖：
   布局与 ABI、`has` 的读写、含 Drop 字段的 move/部分移动、`?.` 结果类型、ASAN 双释放反例。
 - 重新开启条件：出现「必须用值语义返回可缺失 struct」的真实下游需求，且接受新类型的成本；
@@ -107,12 +114,21 @@ no .c
 | --- | --- | --- |
 | T1 | `c?.5 : 1.0`，`c=1` 与 `c=0` 各一份；`ct` 生成 C 后 `cc` 并运行 | `ct` rc=0；生成 C 含 `(c ? .5 : 1.0)`（`.5` 未被切开）；两个分支输出分别符合三目；运行 rc=0 |
 | T2 | `p?.b`，`p` 为 `struct S *`；分别传有效地址与 `0` | `ct` rc=0；生成 C 含 `(p ? p->b : 0)`；有效时输出字段值，`0` 时输出 `0` |
-| T3 | `s?.b`，`s` 为普通 `struct S` 值 | `ct` rc=1；不落 `.c`；stderr 命中卡面指定的硬错文案（须点名「值类型没有空状态」） |
-| T4 | map 链：`m["k"]?.p`（`p` 为指针字段），键存在 / 缺失各一份 | 存在时取到字段；缺失时整链短路为 `0`；生成 C 无新增运行时 helper |
+| **N1** | `s?.b`，`s` 为普通 `struct S` 值 | `ct` rc=1；不落 `.c`；stderr 命中卡面指定的**值接收者**硬错文案；**不得**落成 `'?' needs a Result operand` |
+| **P1** | `a.b?.c`，`a` 为 `struct H` 值、`b` 为 `struct B *`；`b` 有效 / `0` 各一份 | `ct` rc=0；生成 C 先把 `a.b` 落临时量再展开（`t ? t->c : 0`）；有效输出字段值，`0` 时输出 `0` |
+| **P2** | `a.m["k"]?.c`，`m` 为 `Map<char *, B>`（`V` 是值类型）；键存在 / 缺失各一份 | `ct` rc=0；生成 C 只调用一次 `get`；存在输出字段值，缺失输出 `0` |
+| **P2b** | `a.m["k"]?.c`，`m` 为 `Map<char *, B *>`（`V` 是指针） | `get` 返回 `B**`；该形态必须硬错，或要求显式 `(*a.m["k"])?.c`；不得把 `B**` 当 `B*` 去取 `.c` |
+| **P3** | 接收者含副作用的 `a.b?.c`（如 `make().b?.c`） | 接收者表达式只求值一次；对照：naive 两遍展开会调用两次（`c3`） |
 | T5 | `p?.5`（`?` 后是浮点字面量） | 按三目处理；若三目不完整则语法错误，**不得**被识别成可选链 |
 | T6 | `a ? .5 : 1.0` 既有形态 | 与 T1 产物一致；作为回归控制 |
 
-> T3 的编号与文案由卡面落定；本记录只钉行为，不替代卡面。
+> N1 / P1 / P2 的文案与编号由卡面落定；本记录只钉行为，不替代卡面。
+>
+> **当前实现的事实（必须如实写进卡面 S0）**：`?.` 尚未实现。N1、P1、P2 三个用例在
+> `ct v0.44.1` 上全部 rc=1，且报同一条 `'?' needs a Result operand`；**正例目前走不通**，
+> 现有实现没有「值上取到的一跳」这个接收者类型判定，也没有把 `a.b` 落临时量的路径。
+> 卡面必须先落接收者类型区分与单次求值，P1/P2 才可能转绿；不得把「现在 rc=1」解释成
+> 「正例被类型系统拒绝」。
 
 ---
 
@@ -125,6 +141,11 @@ no .c
 | `t1_ternary_dot5.ct` | `ct ... -o t1.c`；`cc`；运行 | `ct_rc=0`；`155: double d = (c ? .5 : 1.0);`；`run_rc=0` |
 | `t2_value_optional.ct` | `ct ... -o t2.c` | `ct_rc=1`；`error: '?' needs a Result operand`；无 `.c` |
 | `t3_ptr_optional.ct` | `ct ... -o t3.c` | `ct_rc=1`；同一文案；无 `.c` |
+| `p1_field_ptr_optional.ct` | `ct ... -o p1.c`（`a.b?.c`，`b` 为指针） | `ct_rc=1`；同一文案；无 `.c`（正例当前走不通） |
+| `p2_map_optional.ct` | `ct ... -o p2.c`（`a.m["k"]?.c`，`m` 为 `Map<char*, B*>*`） | `ct_rc=1`；同一文案；无 `.c`（正例当前走不通） |
+| `p3_field_ptr_manual.ct` | `ct ... -o p3.c`；`cc`；运行（显式 `h.b ? h.b->c : 0`） | `ct_rc=0`；生成 `x = (h.b ? h.b->c : 0);`；`run_rc=0` |
+| `p4_map_manual.ct` | `ct ... -o p4.c`；`cc`；运行（`Map<char*, B*>`，`V` 为指针） | `ct_rc=0`；`cc` 警告 `incompatible pointer types`（`B*` ← `B**`）；`run_rc=1` |
+| `p5_map_value_manual.ct` | `ct ... -o p5.c`；`cc`；运行（`Map<char*, B>`，`V` 为值） | `ct_rc=0`；生成 `x = (t ? t->c : 0);`；`run_rc=0` |
 
 ### 5.2 C 探针（`cc -Wall -Wextra -std=c99`；ASAN 用 `-fsanitize=address`）
 
@@ -141,14 +162,17 @@ no .c
 | `p9_dot5.c` | `cc_rc=0`；`run_rc=0` |
 | `p10_ptr_field.c` | `cc_rc=0`；`present=5 missing=0` |
 | `p11_maybe_drop.c` | ASAN `double-free`；`run_rc=134` |
+| `c1_field_ptr_target.c` | `cc_rc=0`；`present=7 missing=0`（`h.b ? h.b->c : 0`） |
+| `c2_map_target.c` | `cc_rc=0`；`present=7 missing=0 calls=2`（两次调用各一次 `get`） |
+| `c3_double_eval.c` | `cc_rc=0`；`naive=7 calls=2`、`hoisted=7 calls=1` |
 
 ---
 
 ## 6 对既有记录的影响
 
 - [phase53-optional-chain-draft.md](../proposals/phase53-optional-chain-draft.md) §4.2 由「切词冲突」
-  改为「切词策略」；不再作为阻塞或风险项。
+  改为「切词策略」；§4.1 补「值上取到的一跳」；§2 / §5 同步接收者范围。切词不再作为阻塞或风险项。
 - [phase53-scope-draft.md](../proposals/phase53-scope-draft.md) 的 B1 行同步：普通 struct 值接收者
-  已裁定不支持；`?.` 只收指针/map。
+  仍不支持；值上取到的指针/map 跳允许；当前实现两者走同一拒绝路径，卡面必须先补接收者判定。
 - [phase46-52-plan.md](../design/phase46-52-plan.md) §4.2 的「独立 token 破坏 `c?.5`」不再是驳回理由；
   本记录只登记，不回改已冻结计划正文。
