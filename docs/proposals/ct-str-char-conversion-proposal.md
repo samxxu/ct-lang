@@ -4,6 +4,7 @@
 | --- | --- |
 | 性质 | 跨项目反馈形成的提案；供 CT 项目组评估。**是否受理、编号、落点与排期由项目组决定** |
 | 状态 | 待评估；未立项，不占 phase |
+| 评审记录 | [ct-str-char-conversion-battle.md](../reviews/ct-str-char-conversion-battle.md)（2026-11-16，主张 / 反证 / 裁判：部分受理） |
 | 范围 | 内置 `Str` 与 `char *` 之间的转换规则 |
 | 事实基线 | v0.61.0（当前 HEAD）；`Str` 实现见 [Str.h.ct](../../lib/std/Str.h.ct) |
 | 不在范围 | 排期、phase 编号、其他字符串类型、C 侧内存管理策略的改造 |
