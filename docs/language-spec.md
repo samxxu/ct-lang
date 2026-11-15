@@ -2311,6 +2311,9 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `Type<Args>::name(args)`；**非泛型 struct 的静态方法用 `Type.name(args)`**（`Counter.make()`），
   写 `Counter::make()` 会报 `no function`。`static` 只能进固有 impl，带 `use` 的泛型 impl 与经典
   `impl Trait for Struct` 里都是硬错（vtable 槽位没有接收者）。
+  **v0.53.2 起**接收者按与类型解析相同的规则解析：`namespace lib;` 里声明的 `Box` 在单元内写
+  `Box.make(...)` 即可，跨单元 `import lib::lib;` 后同样写裸名 `Box.make(...)`（落码
+  `lib_Box_make`），不再报 `use of an undeclared variable`；不存在的类型名仍是硬错。
   `Vec<T>` 因此有 `Vec<T>::from(T *items, int n)`（复制 `n` 个元素）。声明初值
   `a..b { expr }` 与 Phase 24 的 `a..b(expr)` 同义；当声明类型是 `Vec<T>` 时，range 是
   「产物为静态数组」的表达式，降级为 `Vec_<enc>_from((T[n]){ … }, n)`，因此

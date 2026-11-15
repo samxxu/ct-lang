@@ -1,0 +1,10 @@
+#include <stdio.h>
+
+import lib::lib;
+
+int main(void)
+{
+    Box b = Box.make(3);
+    printf("%d\n", b.get());
+    return 0;
+}

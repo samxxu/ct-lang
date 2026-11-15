@@ -1,0 +1,15 @@
+/*
+ * LANG-2: a static inherent method must be callable from a unit that declares
+ * `namespace`, and from a consumer that imports it.  Regression for
+ * `use of an undeclared variable` at the dot of `Box.make(3)`.
+ */
+namespace lib;
+
+pub struct Box {
+    int n;
+}
+
+impl Box {
+    pub static Box make(int n) { Box b; b.n = n; return b; }
+    pub int get(void) { return self->n; }
+}

@@ -5236,7 +5236,20 @@ impl ExprOps for Expr {
                A bare struct name that is not a static call falls through to
                the ordinary variable path below, where it is reported as an
                undeclared variable. */
-            if (self->sym->find_struct(self->lex->toktext) >= 0) {
+            /* LANG-2: the receiver may name a struct declared in the current
+               namespace (`lib_Box`) or exported from an imported one, so the
+               lookup goes through the same resolution the type layer uses
+               instead of comparing the bare token against the struct table.
+               `stext2` keeps the source spelling for diagnostics and rewind. */
+            {
+                char sres2[MAX_TEXT];
+                char sqn2[MAX_TEXT];
+                snprintf(sres2, sizeof sres2, "%s", self->lex->toktext);
+                if (self->sym->find_struct(sres2) < 0
+                    && self->sym->resolve_type(sres2, sqn2, (int)sizeof sqn2) == 0
+                    && self->sym->find_struct(sqn2) >= 0)
+                    snprintf(sres2, sizeof sres2, "%s", sqn2);
+                if (self->sym->find_struct(sres2) >= 0) {
                 int sp2, sbol2, stok2, sline2, stokline2, sstart2, slstart2;
                 long snum2;
                 int sfloat2, strunc2;
@@ -5259,7 +5272,7 @@ impl ExprOps for Expr {
                         snprintf(sm2, sizeof sm2, "%s", self->lex->toktext);
                         self->sup->lex_next();
                         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
-                            snprintf(sibase, sizeof sibase, "struct %s", stext2);
+                            snprintf(sibase, sizeof sibase, "struct %s", sres2);
                             args = self->parse_args();
                             if (args < 0) return -1;
                             {
@@ -5296,6 +5309,7 @@ impl ExprOps for Expr {
                 self->lex->tokfloat = sfloat2; self->lex->toktrunc = strunc2;
                 snprintf(self->lex->toktext, sizeof self->lex->toktext, "%s", stext2);
                 snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf2);
+                }
             }
             n = self->sup->new_node(N_VAR);
             if (n < 0) return -1;
