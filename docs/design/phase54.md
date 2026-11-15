@@ -5,7 +5,7 @@
 | 项 | 值 |
 | --- | --- |
 | 依据 | [提案 §10 S0](../proposals/ct-pkg-shared-store.md)、[需求 SP-002/003/004/018/024/027](../planning/ct-pkg-shared-store-requirements.md) |
-| 版本位 | v0.54.0（S0 收口动作；本轮实现提交**不** bump，bump 与 golden 重生成在收口评审后单独提交） |
+| 版本位 | v0.54.0–v0.58.0（S0–S3、S5/S6 各一个 MINOR；PH-54 多占 4 个 MINOR，相位表见 [AGENTS §0.3](../../AGENTS.md#03-偏离项)） |
 | 只动 | `selfhost/ct-ast/tool/pkg/Pkg.h.ct`、`selfhost/ct-ast/main.ct`、`test/pkg/run.sh`、`docs/**` |
 | 不碰 | `selfhost/ct-ast/frontend/**`（含其他会话在改的 `TypeCheck.h.ct`）、`selfhost/l2/**`、golden |
 
@@ -136,15 +136,15 @@ S4（包仓对齐）已移出本 phase：`publisher` / `ns-root` / tag / 各仓�
 | S6 | package-guide/tutorial/README/README.en/install.sh/glossary 改为 store 为现行机制；`-I vendor/` 仅兼容期 |
 | 门禁 | test/pkg 130/0；check-ast 1444/0；check-all 11/11 |
 
-**未完成/阻塞**：S7 删除 vendor 支持须等兼容期结束，兼容期举证由各包仓在包外册完成；本相不宣称整体完成。
+**未完成/阻塞**：S7 删除 vendor 支持须等兼容期结束；S7 判据只用仓内可观测项自证，包仓迁移状态不入判据。本相不宣称整体完成。
 
 ## 13. v0.58.0 之后的重排结论（2026-11-15）
 
 | 项 | 结论 |
 | --- | --- |
 | S6 历史 errata | **未做**。提案 §10 S6 要求给历史 phase 文档加「已被共享库取代」一节；全仓 grep 该短语为 0 命中。纯文档，可随时做 |
-| S7 前置口径 | **冲突，待裁定**。本卡与 roadmap 写「由各包仓举证」，提案 §11 写「本仓可自证」；统一前 S7 无法收口。本卡不改判据 |
-| S7 时间 | 按「连续两个 minor 无 v1 lock 工程」，v0.58.0 之后至少再发两个 MINOR 才谈 |
+| S7 前置口径 | **已定（2026-11-15）：本仓自证**。三条可执行判据见 roadmap S7 行；包仓迁移状态是外部登记项，由各包仓维护，CT 不追踪、不判定 |
+| S7 时间 | 仍按「连续两个 minor」的兼容期节奏；v0.58.0 之后至少再发两个 MINOR 才谈收口 |
 | 包机制后续 | PKG-5（缓存键裸名，代码 `Pkg.h.ct:865` 仍按裸名）、PKG-6（install 不试解析 import）仍 open；PKG-4/7/8 已由 S2/S3 落地，issue 状态待回填 |
 
 排序、依赖与放弃/合并清单见 [post-58-plan.md](../planning/post-58-plan.md)。

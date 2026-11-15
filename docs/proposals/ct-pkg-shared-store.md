@@ -189,7 +189,8 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 - **共存**：S1–S5 期间 `ct get` 同时写共享库与 `vendor/`；`ct install` / `ct build` 优先共享库；**无 `ct.lock` 的工程退回 `vendor/` 并告警**（D5），已有 v1 lock 的工程按 `dir`/vendor 语义继续读。
 - **提示**：`ct install` 对每个仍从 `vendor/` 取包的依赖打印一次
   `ctc: warning: '<name>' is read from vendor/ (v1); run 'ct migrate'`，同一进程最多一次/包。
-- **删除前置条件**：连续两个 minor 版本无 v1 lock 工程（本仓可自证）；“`ct migrate` 覆盖全部已知包”“全部已知包 PK-6/12 绿”由各包仓在包外册举证，不作为本仓发版判据。
+- **删除前置条件（仓内自证）**：① `test/pkg` 的 v1 / 无 lock 工程 `ct build` RC=0，且 stderr 含 `'<name>' is read from vendor/ (v1)`；② `ct install` 对每个 v1 包只告警一次；③ `ct migrate` 后移走 `vendor/` 仍可 build。三条都可在本仓直接执行。
+- **包仓迁移状态（登记项，不判定）**：「`ct migrate` 覆盖全部已知包」「全部已知包 PK-6/12 绿」由各包仓自行维护；CT 不追踪、不验收、不代为登记，也不作为 S7 的完成判据。
 - **删除动作**：S7。删除前不得移除 `ct migrate`（保留下载/重装能力）。
 
 ## 12. 裁定结果（2026-11-15，负责人）
