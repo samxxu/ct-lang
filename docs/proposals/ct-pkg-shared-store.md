@@ -2,8 +2,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 状态 | **提案**（2026-11-15，待评审；不含实现） |
+| 状态 | **已裁定**（2026-11-15，§12 五问已由负责人拍定；条款按 §12 修订，不含实现） |
 | 范围 | `ct get` / `ct install` / `ct update` / `ct verify`、`ct build` 的 `-I` 生成、`ct.pkg` / `ct.lock` 格式、ct-pkg 各包仓布局 |
+| 契约变更 | **本提案改的是既有契约**：`docs/package-guide.md` §1 现写死「包根即包根、单元与 `ct.pkg` 并列不嵌套」，本提案以 `ns-root` 取代该隐含约定；`ct install` 的 `-I vendor/<name>` 输出契约同时作废。不是「加几个字段」 |
 | 现状核对 | `ct v0.53.0` 实测：包固定落 `./vendor/<name>`；无共享库；`ct.pkg` 的 `ns-root` 无读取点；`ct install` 固定打印 `-I vendor/<name>`；同名包静默取首个；`ct build` 不读 `ct.lock`（详见核对报告，未入库） |
 | 不做 | 新语言关键字、私库鉴权、GC/沙箱、传递更新的 MVS 策略变更 |
 
@@ -12,8 +13,9 @@
 1. **包身份 = `<publisher>/<name>`**，磁盘 = `~/.ct/pkg/<publisher>/<name>/<version>/`。
 2. **`import` 只写包名与单元**（`import <name>::<Unit>`），发布方不进源码；因此同一依赖图内包名必须唯一，重名即硬错。
 3. **项目根只留 `ct.pkg` 与 `ct.lock`**；`vendor/` 进入兼容期后删除。
-4. **`ct build` 按 lock 生成 `-I`**，不再要求消费者手抄 `ct install` 的输出。
+4. **`ct build` 默认读 `ct.lock` 生成 `-I`**，不再要求消费者手抄 `ct install` 的输出；`--locked` 供 CI 强校验（lock 与库不一致立即失败）。
 5. **包自己用 `ns-root` 声明单元树根**，工具据此拼 `-I`，取消「包根下同名目录」这一隐含约定。
+6. **库内多版本可并存，单工程只解析一个版本**：磁盘按版本分目录，lock 一包一行，同一次构建不得同包两版本（C 无模块隔离，必然符号冲突）。
 
 ## 1. 目录与共享库
 
@@ -49,9 +51,9 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 | 键 | 必填 | 含义 |
 | --- | --- | --- |
 | `name` | 是 | 包名，`[a-z0-9][a-z0-9-]*`；依赖图内唯一 |
-| `publisher` | 是（发布时） | 发布方，store 一级目录；本地开发可写 `publisher = local` |
+| `publisher` | 是 | 发布方，store 一级目录；`dir` 源也必须写真实发布方，不接受推导或 `local` 占位（D1） |
 | `version` | 是 | `x.y.z` |
-| `ns-root` | 是（显式声明） | 单元树根，相对路径、无 `..`、目录必须存在；`src` 或 `.` |
+| `ns-root` | 是 | 单元树根，相对路径、无 `..`、目录必须存在；**无默认值**，缺键硬错（D2） |
 | `dep` | 否 | `<publisher>/<name>@<range>`，可重复 |
 | `cflags` / `ldflags` | 否 | 消费者构建选项；`-I` 只允许相对包根 |
 | `requires` | 否 | 编译器版本约束 |
@@ -85,7 +87,8 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 
 - `ns-root = .` 时路径收敛为版本目录本身，不做多余拼接。
 - `ct install` 打印完整命令（含 `--cflags` / `--ldflags`）；`ct build` 读 lock 时自动追加同样的 `-I`，用户显式 `-I` 仍然有效并优先，重复根去重，两处同名单元仍按现状报 `unit '…' exists in two import roots`。
-- `ct build` 读 lock 的条件：`./ct.lock` 存在即读；不存在不报错（未使用包的项目不受影响）。
+- `ct build` **默认读 `./ct.lock`**；`--locked` 为 CI 强校验模式：lock 与共享库不一致（版本目录缺失、摘要不符、`dir` 行在白名单外）立即失败，不做任何回退。
+- 无 `ct.lock` 的工程退回 `vendor/` 并打警告：`ctc: warning: no ct.lock; reading vendor/ (legacy layout)`；`vendor/` 也没有时保持现状（无包可用，不额外报错）。
 
 ## 6. 冲突与本地覆盖
 
@@ -211,16 +214,22 @@ $CT_HOME/pkg/                 # CT_HOME 默认 $HOME/.ct，可用环境变量覆
 
 ## 11. 兼容期
 
-- **共存**：S1–S5 期间 `ct get` 同时写共享库与 `vendor/`；`ct install` 优先共享库，`vendor/` 仅在 lock v1 时被读。
+- **共存**：S1–S5 期间 `ct get` 同时写共享库与 `vendor/`；`ct install` / `ct build` 优先共享库；**无 `ct.lock` 的工程退回 `vendor/` 并告警**（D5），已有 v1 lock 的工程按 `dir`/vendor 语义继续读。
 - **提示**：`ct install` 对每个仍从 `vendor/` 取包的依赖打印一次
   `ctc: warning: '<name>' is read from vendor/ (v1); run 'ct migrate'`，同一进程最多一次/包。
 - **删除前置条件**：连续两个 minor 版本无 v1 lock 工程；`ct migrate` 覆盖全部已知包；`ct pkg check` 在全部已知包上 PK-6/12 绿。
 - **删除动作**：S7。删除前不得移除 `ct migrate`（保留下载/重装能力）。
 
-## 12. 评审要点（需要裁定）
+## 12. 裁定结果（2026-11-15，负责人）
 
-1. `publisher` 是 `ct.pkg` 必填，还是允许从 git 组织推导并只作校验？（本提案取必填 + 校验一致。）
-2. `ns-root` 必填 vs 默认 `.`？（本提案取必填，避免隐含约定复活。）
-3. 依赖写 `<publisher>/<name>` 而 `import` 只写 `<name>`，是否接受「包名全局唯一」这一代价？
-4. 多版本共存是否只做「不同包各自钉版本」，不做同一包多版本同图？
-5. `ct build` 默认读 lock，还是仅在 `--locked` 下读？（本提案取默认读、缺 lock 不报错。）
+以下五条为**已裁定**，不再讨论；与裁定前文本的差异以本节为准。
+
+| # | 裁定 | 被取代的提案文本 | 影响条款 |
+| --- | --- | --- | --- |
+| D1 | `publisher` **必填**，不从源推导（`dir` 源、镜像、仓库搬家三种情况都会歧义） | §3「本地开发可写 `publisher = local`」的宽松写法；§7「与 git 组织解耦」仅保留命名建议，不再允许推导 | §3、§7、§8、PK-2 |
+| D2 | `ns-root` **必填**，缺失即硬错并给修复提示；**不留 `.` 默认值**（隐式默认正是当前缺陷来源） | §3 表格中「`src` 或 `.`」的可选语气、§3 末尾「默认 `.`」；§9 PK-5 的 `NR` 取值路径不变，但缺键即失败 | §3、§8、PK-2、PK-5 |
+| D3 | **接受「包名全局唯一」**：`import` 不带发布方是既定口径，依赖图内重名硬错 | 无文本冲突，改为显式代价声明 | §0-2、§6、PK-11 |
+| D4 | **库内多版本可共存，单工程只解析一个版本**：磁盘按版本分目录并存，lock 一包一行，同一次构建不允许同包两版本 | §4 末尾的模糊表述（「不是同一包多版本同时进图」）改为明确禁令与原因（C 无模块隔离） | §1、§4、§6 |
+| D5 | **`ct build` 默认读 lock**；`--locked` 供 CI 强校验（不一致立即失败）；无 lock 的工程退回 `vendor/` 并打警告 | §5 原「`ct.lock` 存在即读；不存在不报错」；§11 「`vendor/` 仅在 lock v1 时被读」扩展为「无 lock 也读」 | §2、§5、§11、S2 |
+
+裁定后的验收条目见 [planning/ct-pkg-shared-store-requirements.md](../planning/ct-pkg-shared-store-requirements.md)。

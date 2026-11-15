@@ -67,6 +67,7 @@
 | Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ✅ 完成 | v0.51.0 | [卡](design/phase51.md) |
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ✅ 完成 | v0.52.0 | [卡](design/phase52.md) |
 | Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | ✅ 完成 | v0.53.0 | [卡](design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
+| Phase 54 | ct-pkg 共享库包体系（S0–S7） | 🟨 实施中 | v0.54.0–v0.60.0 | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
@@ -82,6 +83,21 @@
 > `?.` 可选链经第二轮 battle 定稿为 **Phase 53 施工**：只收指针 / map，struct 值接收者拒绝；
 > 切词按 parser 组合识别（`c?.5 : 1.0` 保持三目），见 [施工卡](design/phase53.md)。
 > 原记录保留为设计依据；其余候选（DF-1/2/3、REQ-JSACCESS-1 等）留需求池或后续相，不占 PH-53。
+
+### ct-pkg 共享库包体系（Phase 54，S0–S7）
+
+契约变更：以 `ct.pkg` 的 `ns-root` 取代「包根 = 单元根」的隐含约定，`ct install` 的 `-I vendor/<name>` 输出契约作废。判据见[需求定稿](planning/ct-pkg-shared-store-requirements.md)，条款见[提案](proposals/ct-pkg-shared-store.md)。
+
+| 切片 | 主题 | 版本位 | 前置 | 退出判据 | 回滚 |
+| --- | --- | --- | --- | --- | --- |
+| S0 | 观测：lock 格式识别、`ct pkg check` 只读骨架、现状文档与缺陷落库 | v0.54.0 | 无 | [phase54.md](design/phase54.md) §4 J1–J8 全绿 | `git revert` 单提交 |
+| S1 | 工具最小可用：`publisher`/`ns-root` 解析、store 落盘、lock v2、按 lock 生成 `-I` | v0.55.0 | S0 收口 | SP-001/002/003/004/005/007/014/017/019/020 全绿 | 关闭 store 写路径，恢复 vendor 写 |
+| S2 | 编译读 lock：默认读、`--locked`、dev override 留痕、同名/裸名硬错 | v0.56.0 | S1 收口 | SP-006/008/009/010/011/013/015 全绿 | 去掉 `--locked` 与自动 `-I`，保留显式 `-I` |
+| S3 | 校验与迁移：`ct verify` 校 store、`ct migrate`、`--strict` | v0.57.0 | S2 收口 | SP-016/029 全绿 | 恢复 vendor 读路径 |
+| S4 | 包仓对齐：std / http / fsguard / json / sse / token / process / llm-sse | 外部仓（工具下限 v0.57.0） | S1 收口（可与 S2/S3 并行） | SP-021–026 每仓全绿 | 逐仓 `git revert` |
+| S5 | 消费端与门禁切换：去手算 `-I`、双 HOME 复现性 | v0.58.0 | S3 + S4 收口 | SP-028 全绿；`-I vendor/` 零命中 | 恢复旧构建脚本 |
+| S6 | 文档改写与 errata | v0.58.0（同批） | S5 | SP-030 全绿 | 回滚文档提交 |
+| S7 | 删除 `vendor/` 支持 | v0.60.0 | 兼容期两个 minor（v0.58/v0.59）无 v1 lock 工程 | 全仓无 vendor 读写；v1 lock 只报错 | 恢复 S3 读路径一个 minor |
 
 ### 未排期（治理项）
 

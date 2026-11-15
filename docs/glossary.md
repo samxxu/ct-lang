@@ -215,9 +215,12 @@
 | 绑定（bindings） | `test/bindings/<库>/` 下的 `.ct` / `#include` + 镜像 trait/struct + `map` | **已实现**：首个 binding 为 `test/bindings/mock-hal/`（Phase 12.1）；跨单元消费已由 Batch 2 解除限制 |
 | 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← CT 定义点；Phase 6.1 已落地（D16） |
 | 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct update` / `ct install` / `ct verify` 子命令，Phase 8 落地（本地目录源 + git 源），Phase 17.5 补齐更新、校验与索引，Phase 18 建组织（`github.com/ct-pkg`）并发布首批官方包 |
-| 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `license` / 可重复的 `dep = <spec>[@<range>]`（D21）；17.5 增可选 `cflags` / `ldflags` / `requires` |
-| 锁文件（lock file） | `ct.lock` | 每个依赖一行 `name ver kind ref digest`；`kind` 为 `dir` 或 `git`，末列是 `sha256:<64 hex>` 的整棵包树摘要（按路径排序后单流哈希；D23 / D27，SH-44） |
-| vendored 目录 | `vendor/<name>/` | `ct get` 同步进来的包树；`ct build -I vendor/<name>` 使用它 |
+| 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `licence` / 可重复的 `dep = <spec>[@<range>]`（D21）；17.5 增可选 `cflags` / `ldflags` / `requires`。**未知键静默忽略**：`ns-root` / `publisher` 当前不存在，写了也不生效（[PKG-3](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)） |
+| 锁文件（lock file） | `ct.lock` | 每个依赖一行 `name ver kind ref digest`；`kind` 为 `dir` 或 `git`，末列是 `sha256:<64 hex>` 的整棵包树摘要（按路径排序后单流哈希；D23 / D27，SH-44）。**没有**发布方、ns-root 与格式头；`ct build` 当前不读它 |
+| vendored 目录 | `vendor/<name>/` | `ct get` 同步进来的包树；`ct install` 打印 `-I vendor/<name>`（恒为包根，不读包内布局），且**不校验 import 能否解析**——它退出 0 不代表消费者可用 |
+| 包根（package root） | 含 `ct.pkg` 的目录 | **现状契约**：包根即单元树根，单元与清单并列、不嵌套；`-I` 恒为包根。`src/<ns>/` 布局在当前机制下不可消费（[package-guide §8](package-guide.md)） |
+| 单元树根（ns-root） | `ct.pkg` 的目标键 | 共享库提案引入的目标形态（[需求 SP-003](planning/ct-pkg-shared-store-requirements.md)）；**当前版本不存在**。与下一条不是同一件事 |
+| 命名空间前缀键（`namespace`） | `ct.pkg` 的现状键 | 编译器实际读取的键：命中 import 首段时**剥掉**该段再在 `-I` 根下找文件；与 `ns-root`（给根目录**加**前缀）语义相反。未写入包作者指南，易被误当成 ns-root（[PKG-3](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)） |
 | 最小版本选择（MVS） | `ct get` | 每个依赖取满足所有范围的最低版本；无 tag 的 git 源回退默认分支 HEAD（D23） |
 | 契约包（contract package） | `ct-pkg/hal` | 只有 `pub trait` 声明的纯 `.h.ct` 包（`Uart` / `Gpio` / `Clock` / `Log`），不含实现；平台包按它提供实现（Phase 18.3，`hal 0.1.0`） |
 | 平台包（platform package） | `ct-pkg/hal-posix` | binding 形式（`#include` 直通 + 镜像 trait/struct + 全局实例 + `map`）实现契约包；一份源码覆盖 macOS / Linux，`ct.pkg` 带 `cflags = -D_POSIX_C_SOURCE=200809L`（glibc 在 `-std=c99` 下隐藏 POSIX 声明；生成头先于源码 PP 行输出，故只能走 cc 命令行）。一个 `posix_hal` 实例可装箱成四个 trait（Phase 18.4） |
@@ -247,6 +250,8 @@
 | 包装函数 ↔ 直接绑定 | 前者多一层转发（`-> f(args)`）；后者 vtable 槽直接指向 C 函数（`-> f;`），零生成 |
 | mangling ↔ cname | mangling 是**规则**（加 `A_B_` 前缀）；cname 是**结果**（`A_B_S`） |
 | 正例 ↔ 负例 | 正例必须成功且输出匹配；负例必须非零退出且诊断匹配 |
+| `namespace` 键 ↔ `ns-root` | 前者是**现状**的剥前缀键（`import app::x` → 找 `x`）；后者是**目标**的单元树根（`import app::x` → 找 `<ns-root>/app/x`）。两者不可互换，当前版本只认前者 |
+| 包根 ↔ 单元树根 | 当前二者恒等（包根即单元根）；新机制下二者分离，`-I` 指向 `<包根>/<ns-root>` |
 | golden ↔ oracle | golden 是具体期望产物；oracle 是产出这些期望的**参照实现**（L0 / L2 / `overreach-oracle` tag） |
 | 关卡 ↔ 测试层 | 关卡是 `check-all.sh` 的 11 个条目（整体判据）；层是 `test/run.sh` 内部的分组（build / unit / cases …） |
 | Phase ↔ Batch | Phase 与版本一一对应（`v0.n.x`）；Batch 是可独立收口的工作单元，Phase 结束后仍可继续累加 |

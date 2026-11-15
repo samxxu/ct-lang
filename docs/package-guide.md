@@ -14,6 +14,7 @@
 ### 1. 一个包长什么样
 
 包仓库的**根目录就是包根**：`ct.pkg`、`LICENSE` 与源码单元并列，不嵌套子目录。
+「包根 = 单元根」是当前契约（陷阱与替代机制见 §8.1、§8.4）。
 
 ```
 hello/
@@ -154,3 +155,56 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 | `digest ... does not match ct.lock` | `vendor/` 被改动或锁过期 | 重新 `ct get` / `ct update` |
 | `requires 'ct >= …'` 报错 | 编译器版本偏旧 | 升级编译器；确需继续时用 `ct get --force` / `ct install --force` |
 | 索引读不到 | `--index` / `CT_INDEX` 路径错 | 检查路径；无索引时裸名无法解析 |
+
+### 8. 现状契约与陷阱（改契约前必读）
+
+> 本节记录 **`ct v0.53.x` 的真实行为**，不是目标设计。目标机制（`publisher` / `ns-root` / 共享库）见
+> [提案](proposals/ct-pkg-shared-store.md)、[需求定稿](planning/ct-pkg-shared-store-requirements.md) 与
+> [Phase 54 卡](design/phase54.md)；那是一次**契约变更**，不是增量字段。
+
+#### 8.1 包根即单元根，不支持嵌套
+
+- 包仓库根 = 包根 = 单元树根：`ct.pkg`、`LICENSE` 与 `*.h.ct` / `*.m.ct` 并列。
+- `import a::b::U` 在 `-I <包根>` 下按 `<包根>/a/b/U.h.ct` 查找；目录名必须与命名空间首段一致。
+- **没有** `ns-root` 键，也没有任何「单元树在子目录」的官方形态。
+
+#### 8.2 `src/<ns>/` 布局在当前机制下不可消费
+
+包把单元放在 `src/fsguard/FsGuard.h.ct`，消费者照抄 `ct install` 的输出：
+
+```sh
+ct install          # ct build -I vendor/fsguard main.ct -o build
+ct build -I vendor/fsguard main.ct -o build
+# ctc: cannot resolve import 'fsguard/FsGuard'
+# rc=1
+```
+
+即使消费者自己改成 `-I vendor/fsguard/src`，如果单元的 C 头路径写成 `#include "fsguard/X.shim.h"`，
+还需要 `-Isrc`；而 `ct.pkg` 的 `cflags` 只进 `cc` 行、不参与 import 解析。真实案例见
+[PKG-2](../issues/packages/pkg-2-ct-install-package-root-import.md)。
+
+#### 8.3 `ct install` 只发 `-I <包根>`，且不校验 import
+
+- 生成点固定为 `-I vendor/<name>`（[Pkg.h.ct:1388-1396](../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1388-L1396)）。
+- 它只做三件事：校验 `ct.lock` 摘要、校验 `dep` 被 lock 覆盖、拼 `cflags`/`ldflags`。
+- **不解析 import**：包内单元找不到时它照样 `rc=0`。`ct install` 退出码 0 ≠ 消费者能编译。
+
+#### 8.4 `ct.pkg` 的真实键，以及 `namespace` 与 `ns-root` 的区别
+
+现行键只有 §2 表里那七个（`name` / `version` / `dep` / `cflags` / `ldflags` / `requires` / `licence`）。
+
+- **不存在 `ns-root`**。写了不会报错，也不会生效——未知键被静默忽略。
+- 实际生效的是未文档化的 **`namespace = <首段>`**：编译器在 `-I` 根下读 `<根>/ct.pkg`，
+  若 import 路径以 `namespace` 值开头，就**剥掉这段**再找文件（`Module.h.ct` `ct_rel_cands`）。
+- 两者语义相反：`namespace` 是「把 import 首段拿掉」，`ns-root` 是「给根目录加一层前缀」。
+  把 `namespace` 当 `ns-root` 写，表现是「文件明明在，却解析不到」。
+- 单元格级目录校验仍靠 `ct build --ns-root <dir>`：它校验「声明 namespace = 目录路径」，与包清单的键无关。
+
+#### 8.5 依赖解析的现状
+
+- 缓存键是**裸包名**（`~/.cache/ct-pkg/<name>`）；spec 的发布方段被丢弃，两个发布方的同名包会互相串用缓存。
+- 依赖图内同名包**静默取首个**，无警告、无错误；只有版本范围对不上时 `ct install` 才报「未被 lock 覆盖」。
+- `ct build` **不读 `ct.lock`**：删掉 lock 只要 `-I` 对就仍能构建。
+- 本地目录与 `-I` 同名时，**导入方所在目录静默胜出**，不告警；`ct get` 也不会因为你项目里已有同名目录而跳过下载。
+- 逐条缺陷见 [PKG-3 … PKG-8](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)。
+
