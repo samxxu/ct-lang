@@ -67,7 +67,7 @@
 | Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ✅ 完成 | v0.51.0 | [卡](design/phase51.md) |
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ✅ 完成 | v0.52.0 | [卡](design/phase52.md) |
 | Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | ✅ 完成 | v0.53.0 | [卡](design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
-| Phase 54 | ct-pkg 共享库包体系（S0–S7） | 🟨 实施中（S0–S3、S5/S6 仓内完成；S4 外部仓、S7 兼容期阻塞） | v0.54.0–v0.60.0 | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
+| Phase 54 | ct-pkg 共享库包体系（工具侧：store / lock v2 / `ns-root`） | 🟨 实施中（S0–S3、S5/S6 仓内完成；S7 待兼容期） | v0.58.0（S0–S3 已各自收口；S7 收口时实算） | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
 | Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ⬜ 规划中 | 不提前钉号（PH-54 之后按当时 MINOR 实算） | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
@@ -95,20 +95,20 @@
 | S1 | 工具最小可用：`publisher`/`ns-root` 解析、store 落盘、lock v2、按 lock 生成 `-I` | v0.55.0 ✅ | S0 收口 | SP-001/002/003/004/005/007/014/017/019/020 全绿 | 关闭 store 写路径，恢复 vendor 写 |
 | S2 | 编译读 lock：默认读、`--locked`、dev override 留痕、同名/裸名硬错 | v0.56.0 ✅ | S1 收口 | SP-006/008/009/010/011/013/015 全绿 | 去掉 `--locked` 与自动 `-I`，保留显式 `-I` |
 | S3 | 校验与迁移：`ct verify` 校 store、`ct migrate`、`--strict` | v0.57.0 ✅ | S2 收口 | SP-016/029 全绿 | 恢复 vendor 读路径 |
-| S4 | 包仓对齐：std / http / fsguard / json / sse / token / process / llm-sse | 外部仓（工具下限 v0.57.0） | S1 收口（可与 S2/S3 并行） | SP-021–026 每仓全绿 | 逐仓 `git revert` |
-| S5 | 消费端与门禁切换：去手算 `-I`、双 HOME 复现性 | v0.58.0（仓内部分 ✅；S4 外部仓待办） | S3 + S4 收口 | SP-028 全绿；`-I vendor/` 零命中 | 恢复旧构建脚本 |
-| S6 | 文档改写与 errata | v0.58.0（公开文档 ✅；历史 errata 待办） | S5 | SP-030 全绿 | 回滚文档提交 |
-| S7 | 删除 `vendor/` 支持 | v0.60.0 | 兼容期两个 minor（v0.58/v0.59）无 v1 lock 工程 | 全仓无 vendor 读写；v1 lock 只报错 | 恢复 S3 读路径一个 minor |
+| S5 | 消费端与门禁切换（仓内）：`test/pkg` 共享库用例、双 HOME 复现性、安装脚本提示 | v0.58.0 ✅ | S3 收口 | SP-028 告警落地；本仓无手算 `-I` | 恢复旧构建脚本 |
+| S6 | 文档改写与 errata | v0.58.0（公开文档 ✅；历史 errata 待办） | S5 | SP-030 现行文档通过（历史 errata 待办） | 回滚文档提交 |
+| S7 | 删除 `vendor/` 支持 | 待定（收口时实算） | 兼容期两个 minor 无 v1 lock 工程（由各包仓举证） | 本仓无 vendor 读写；v1 lock 只报错 | 恢复 S3 读路径一个 minor |
+
+> 包仓对齐（原 S4：std / ct-http / ct-fsguard / ct-json / ct-sse / ct-token / ct-process / ct-llm-sse）归各包仓，不属于本 phase；本仓只提供工具与判据，移交清单按仓分发。
 
 ### 未排期（治理项）
 
 - **增量编译基准**：build cache 已有（Phase 10.5 的 cold/warm 与依赖失效），先在 Phase 36 收口提交上测冷/热构建与内核规模语料，再决定是否立项。
 - **稳定子集清单**：Z6 的 1.0 冻结原则已有，补 trait / Drop / arena 的具体清单，属文档治理，不占 Phase 编号。
 
-### 外部计划
+### 外部计划（不在本仓）
 
-- **Agent 内核运行库（ct-pkg，外部）**：`arena` / `sync` / `callback` 今天可做，`result` / `string` 分别等 Phase 34 / 36，ABI 打包等 Phase 39；提案见 [proposals/ct-pkg-agent-runtime.md](proposals/ct-pkg-agent-runtime.md)。
-- **ct-pkg Phase 2**：生态映射包，计划文档在同级 ct-pkg 仓库 `docs/phase2.md`。
+- 包仓计划（Agent 内核运行库、ct-pkg Phase 2 等）归各包仓，不属于本仓任何 phase；按仓分发的移交清单见包外册。
 
 ### 已定决策与待定项
 
