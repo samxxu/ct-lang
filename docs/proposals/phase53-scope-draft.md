@@ -90,7 +90,7 @@
 
 | 序 | 候选 | 依据（可核查） | 范围与成本量级 | 风险 / 前置 |
 | --- | --- | --- | --- | --- |
-| B1 | `?.` 可选链重新设计 | 现形态已驳回，理由见 [plan §4.2](../design/phase46-52-plan.md)：值接收者三元不成立、`a?[k]` 两种接收者都不合法、独立 token 破坏 `c?.5 : 1.0`、JSON 需要的是可选调用/下标。记录在 [phase53-optional-chain-draft.md](phase53-optional-chain-draft.md)。 | 未估；涉及词法、后缀链、零值表示，属高风险相。 | 重新设计门槛已写在 plan §4.2；未过门槛前不应占相号。 |
+| B1 | `?.` 可选链（指针 / map） | 前置裁定：map 键缺失整链跳出、结果 NULL；指针接收者 `p?.field` 展开为 `(p ? p->field : 0)`；切词在 parser 内按 `?` 后 token 组合识别，`c?.5 : 1.0` 保持三目，**不是阻塞项**（[battle 记录 §3](../reviews/phase53-optional-chain-battle.md)）。普通 struct 值接收者已于 2026-11-15 裁定**不支持**（[battle §2](../reviews/phase53-optional-chain-battle.md)）：值类型没有「不存在」状态，零值/哨兵不可判定，含 Drop 字段浅拷贝 ASAN 双释放。`a?[k]` 仍单列。 | 未估；只做指针/map 链，范围小于原「重新设计」；不引入 `Maybe<T>` / `T?`。 | 若要求值语义可缺失，须另立可空类型相；不得塞进本卡，也不得用零值冒充缺失。 |
 | B2 | `.h.ct` 内允许 `defer` / `errdefer` | 明文限制：`defer is not allowed in a .h.ct unit`（[language-spec.md:441](../language-spec.md)；实现 `Stmt.h.ct:1492`）。包作者只能逐失败点手写释放，漏释放风险随失败点线性上升（[plan §11 #13](../design/phase46-52-plan.md)）。 | 未估；属语义放宽，需先定「`.h.ct` 的出口」规则。 | 与「接口单元不产生实现」的既有模型相邻，容易扩成新相；收益是包作者体验，不是下游硬阻塞。 |
 | B3 | A-3：类型位置的限定名 `ns::Type` | 多单元多命名空间包只能靠 alias 绕；缺口表标 P2、未修（[language-capability-gaps.md:1534](language-capability-gaps.md)）。 | 「动四处文法」，无行数估算（[plan §6](../design/phase46-52-plan.md)）。 | 与 PH-51 的类型求值面相邻；改动面广。 |
 | B4 | G-1：同单元同名函数只告警 | `cc` 报 conflicting types，诊断在 C 编译器（缺口表 `:1550`）。 | 小；诊断前移即可。 | 价值低，绕法便宜（改名）。 |
