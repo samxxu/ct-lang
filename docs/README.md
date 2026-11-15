@@ -56,6 +56,8 @@
 | [proposals/ct-model-export-proposal.md](proposals/ct-model-export-proposal.md) | 模型导出 `--emit-model` 提案（Phase 59 依据） | 查看编译器模型导出设计 |
 | [proposals/ct-str-char-conversion-proposal.md](proposals/ct-str-char-conversion-proposal.md) | 语言侧使用反馈提案（**待项目组评估**）：`Str` → `char *` 借用视图、`char *` → `Str` 三处隐式深拷贝、目标类型决定产出与归属；实现口径与排期由项目组裁定 | 查看字符串接口互操作提案 |
 | [reviews/ct-str-char-conversion-battle.md](reviews/ct-str-char-conversion-battle.md) | 上述提案的一轮对抗评审：主张席 C1–C8 判据、反证席 R1–R10 反例与代价、裁判席**部分受理**（借用限立即实参、深拷贝限三处、失败终止暂缓） | 查看裁定与待决事项 |
+| [proposals/ct-str-builtin-type-proposal.md](proposals/ct-str-builtin-type-proposal.md) | 语言侧提案（**待项目组评估**）：`Str` 作为语言内置类型的身份、P1/P2/P3 三条已定前提与布局承诺；迁移路径与待定项留给项目组 | 查看 `Str` 内置化提案 |
+| [reviews/ct-str-builtin-type-battle.md](reviews/ct-str-builtin-type-battle.md) | 上述提案的一轮对抗评审：主张席 C1–C8、反证席 R1–R11、裁判席**部分受理**（内置身份与布局受理；立即搬进编译器、一次性切换、隐式 NULL、默认终止等不受理） | 查看裁定与待决事项 |
 | [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 设计记录（已定稿为施工卡）：`?.` 的语义、切词策略、值接收者裁定与 battle 结论；施工以 [design/phase53.md](design/phase53.md) 为准 |
 | [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（**已并入 PH-62**）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
 | [proposals/defect-namespaced-static-method.md](proposals/defect-namespaced-static-method.md) | 缺陷请求（待修）：带 `namespace` 的单元里静态固有方法报 `use of an undeclared variable`；含两种最小复现、边界表、名字解析定位、下游绕法与 N1–N5 判据 |
