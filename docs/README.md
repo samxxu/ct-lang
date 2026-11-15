@@ -54,6 +54,7 @@
 | [design/phase50.md](history/design/phase50.md) · [design/phase51.md](design/phase51.md) · [design/phase52.md](design/phase52.md) | 已完成（Phase 50–52，0.50.0 至 0.53.0）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
 | [design/phase53.md](design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
 | [proposals/ct-model-export-proposal.md](proposals/ct-model-export-proposal.md) | 模型导出 `--emit-model` 提案（Phase 59 依据） | 查看编译器模型导出设计 |
+| [proposals/ct-str-char-conversion-proposal.md](proposals/ct-str-char-conversion-proposal.md) | 外部反馈提案（**待项目组评估**）：`Str` → `char *` 借用视图、`char *` → `Str` 三处隐式深拷贝、失败终止；实现口径与排期由项目组裁定 | 查看字符串接口互操作提案 |
 | [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 设计记录（已定稿为施工卡）：`?.` 的语义、切词策略、值接收者裁定与 battle 结论；施工以 [design/phase53.md](design/phase53.md) 为准 |
 | [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（**已并入 PH-62**）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
 | [proposals/defect-namespaced-static-method.md](proposals/defect-namespaced-static-method.md) | 缺陷请求（待修）：带 `namespace` 的单元里静态固有方法报 `use of an undeclared variable`；含两种最小复现、边界表、名字解析定位、下游绕法与 N1–N5 判据 |
