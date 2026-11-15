@@ -53,6 +53,7 @@
 | [design/phase53.md](design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
 | [proposals/ct-pkg-agent-runtime.md](proposals/ct-pkg-agent-runtime.md) | ct-pkg `std` 的 Agent 内核运行库提案：`arena` / `sync` / `result` / `string` / `callback` 契约与交付顺序 |
 | [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 设计记录（已定稿为施工卡）：`?.` 的语义、切词策略、值接收者裁定与 battle 结论；施工以 [design/phase53.md](design/phase53.md) 为准 |
+| [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（未立项、待排期）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
 

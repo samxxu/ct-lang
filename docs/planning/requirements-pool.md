@@ -14,10 +14,15 @@
 | `what` | 允许自定义 struct 在 `impl` 中声明签名匹配的 `get` / `set` 后使用 `obj[key]` / `obj[idx]` 下标语法，由编译器展开为对应方法调用；类型未声明该协议时是编译期硬错，错误信息必须指名类型。 |
 | `why` | Agent 内核与 Rill DSL 的 JSON/参数表需要在自定义容器上写 `env["key"]`、`args[i]`；今天只有 `Vec` / `Map` 有下标糖，用户类型只能写 `env.get("key")`，把宿主语言的容器习惯泄漏进上层 DSL，也让「换容器实现」变成调用点改写。该语法只做方法调用的语法糖，零运行时，符合 Z1/Z3。 |
 | `priority` | `P0` |
-| `status` | `open` |
+| `status` | `done`（PH-52 方案 A，v0.52.0；只主张单层字符串键，`v[0]` 的已知洞见 `REQ-JSACCESS-1` 与 `REQ-INDEX-1`） |
 | `owner` | REQ（待指派） |
-| `last-touched` | 2026-11-13 |
+| `last-touched` | 2026-11-15 |
 | `block` | 空（未阻塞） |
+
+> **落地口径（2026-11-15 回填）**：PH-52 按方案 A 交付，夹具以 `p52_*` 命名（`p52_read` / `p52_generic` /
+> `p52_write` / `p52_c_passthrough` / `p52_str_only` / `p52_private` / `p52_subscript.sh`），下表 A1–A7 里
+> `233_*` / `L1_*` 的旧命名未采用；判据内容由 `test/ast/p52_*` 与 `check-ast.sh` 的对应断言覆盖。
+> `v[0]` 不在方案 A 的验收面内，已拆到 `REQ-JSACCESS-1` 与 `REQ-INDEX-1`。
 
 ### 验收判据（每条带命令）
 
@@ -96,6 +101,45 @@ L4 走契约，L7/L10/L8 拒绝或后置；本池只登记 L1。
 
 裁决记录 U-1 A（2026-11-15 签字）+ 用户原话「等 CT 完成了语言特性的更新之后，要完整实现这个目标」。
 PH-52 的 D52-6 指向本条。
+
+## REQ-INDEX-1 — 用户类型下标运算符：把「名 + 参数个数」的糖补成完整协议
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-INDEX-1` |
+| `what` | 用户类型在固有 `impl` 中声明 `V get(K)` / `void set(K, V)`（或借用形态 `V *get(K)`）后，`x[k]` 读、`x[k] = v` 写、`*x[k] = v` 借写三种形态都由编译器静态展开为方法调用；同类型可并存不同参数类型的 `get`，实参类型决定选哪一版；`+=` / `++` / `&x[k]` 要么明确支持、要么明确硬错。语言只规定「协议」，不规定缺失/越界语义（由包用 `NULL` 或 `Option<V>` 表达）。 |
+| `why` | PH-52 交付的方案 A 只按「名 + 参数个数 + 非 static」匹配，于是 `char *get(char*)` 存在时 `x[0]` 会静默展开成 `get(0)` 并返回空（D52-6）。下游 ct-json 的 `doc[0]["k"]`、rill-dsl 的容器下标都卡在这一层，今天只能提供 `get_idx(i)` 过渡方法，把容器的调用习惯泄漏进上层 DSL。用户 2026-11-15 拍板「方向是必须支持」。 |
+| `priority` | `P1` |
+| `status` | `open` |
+| `owner` | REQ（待指派） |
+| `last-touched` | 2026-11-15 |
+| `block` | 空（不占相号；`REQ-JSACCESS-1` 是本条的第一步，须先落地） |
+
+### 验收判据（实现后生效）
+
+| # | 判据 | 命令 / 锚点 |
+| --- | --- | --- |
+| A1 | 同类型并存 `int get(int)` 与 `char *get(char *)`：`x[0]` / `x["k"]` 各选其版，产物可编译运行 | `./selfhost/check-ast.sh 2>&1 \| grep -F "ok    index_overload_both"` |
+| A2 | 只有 `char *get(char *)` 时 `x[0]` 是编译期硬错，文案列出候选签名 | `./selfhost/check-ast.sh 2>&1 \| grep -F "INDEX_1_no_candidate"` |
+| A3 | 借用形态 `int *get(int)`：`*x[0] = 7;` 发射为对返回指针的解引用赋值，运行读到 `7` | `./selfhost/check-ast.sh 2>&1 \| grep -F "ok    index_borrow_write"` |
+| A4 | `x[k] += 1` / `x[k]++` / `&x[k]` 的行为二值化：要么全支持（借用形态下等价于 `set` / 解引用），要么全部硬错且文案一致 | `./selfhost/check-ast.sh 2>&1 \| grep -F "INDEX_L"` |
+| A5 | 写在值位置、右值接收者、`static`、参数个数不符仍是硬错，文案与 PH-52 的 L52-* 逐字不回归 | 既有 `test/ast/p52_*` 与 `p52_subscript.sh` 全绿 |
+| A6 | `Vec` / `Map` 内建下标零回归（`v[0]`、`m["k"]` 与写保护文案逐字不变） | 既有 `p52_str_only` / L31 负例全绿 |
+| A7 | 全量门禁零失败 | `bash selfhost/check-all.sh 2>&1 \| tail -3` |
+
+### 范围外
+
+- 不放宽 L29-11 / L29-13（容器不装 `own` / `borrow` 值、不装带 vptr 的实体）。
+- 不做其它运算符重载（`+` / `==` / `()`）。
+- 不做 `x[k].field` / `x[k].m()` 的成员跳转（仍落 `cc`；见 `docs/proposals/user-index-operator.md` §5）。
+- 不做接口值（trait 对象）上的下标派发；见同文档 §3 议题 A 的裁定。
+- 不新增运行期语义：协议只做方法调用的静态糖。
+
+### 来源
+
+用户裁决（2026-11-15，「CT 要增加用户类型可定义下标运算符的语言能力，方向是必须支持」）+ ct-json 复评实测。
+承接 `REQ-L1`（PH-52 方案 A 已交付）与 `REQ-JSACCESS-1`（参数类型匹配）。
+设计草案：[user-index-operator.md](../proposals/user-index-operator.md)。
 
 ## REQ-ABI-1 — 用 ABI 哈希做导出面校验（评估后不采纳）
 
