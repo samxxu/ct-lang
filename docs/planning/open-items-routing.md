@@ -271,8 +271,13 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
 | 模型图导出 | [ct-model-export-proposal](../proposals/ct-model-export-proposal.md) | **PH-59** | 通过方向：新 `--emit-model`，不扩 `--emit-map` 契约；schema 版本化；**字段全量导出（含非 `pub`）**，`visibility` 在 LANG-9 前标 `unknown`（已定） | LANG-9（可见性）；PH-58 之后 |
 | 视图节点注记 | [ct-view-annotation-proposal](../proposals/ct-view-annotation-proposal.md) | **PH-60** | 通过方向：struct 后置 `view` 子句；零 ABI | **PH-59 schema 冻结** |
 
-研判记录：[swiftct-mapping-proposal-review](../review/swiftct-mapping-proposal-review.md)。两项都还没写
-`REQ-*`、没进 roadmap、没开 phase 卡；按「提案 → 研判 → 需求定稿 → roadmap → phase」继续。
+研判记录：[swiftct-mapping-proposal-review](../review/swiftct-mapping-proposal-review.md)；
+决策记录：[static-mapping-feasibility](../design/static-mapping-feasibility.md)。
+
+**PH-59 已开卡（2026-11-15）**：[phase59.md](../design/phase59.md)，范围 = 无 `import` 单单元端到端（M1）；
+多单元/多根列为 M2，**依赖本文件 §8.1 的 SH-79 两项 facet 落地**。已定三条：bridging header 判为构建产物、
+模型导出全字段（`visibility` 在 LANG-9 前为 `unknown`）、首版不做多单元且不自己拼模型图。
+PH-60 仍未开卡，等 PH-59 schema 冻结。
 
 **顺序**：PH-53 → PH-54 → PH-57 → PH-58 → **PH-59 模型导出 → PH-60 视图注记**。
 模型导出必须在注记之前：注记的产出没有模型出口就是「写了没人读」。两者与 PH-53/54/57 无依赖，

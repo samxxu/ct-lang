@@ -56,11 +56,11 @@
 | Phase 40 | errdefer + err: 错误出口 + 尾随声明 | ✅ 完成 | v0.40.0 | [卡](design/phase40-draft.md) |
 | Phase 41 | 原子并发能力（`atomic T` + 内建原子操作） | ✅ 完成 | v0.41.0 | [卡](design/phase41-draft.md) · [D-004](decisions/D-004.md) |
 | Phase 42 | `impl` 方法可见性（方法级 `pub`，默认私有） | ✅ 完成 | v0.42.0 | [流水账](history/phase-log.md#阶段总览详表) · [卡](design/phase42-draft.md) |
-| Phase 43 | 错误出口类型契约（`return err:` 载荷检查） | ✅ 完成 | v0.43.0 | [卡](design/phase43.md) |
-| Phase 44 | `?` 错误传播运算符（后缀 `?`，同 `E`） | ✅ 完成 | v0.44.0 | [卡](design/phase44.md) |
-| Phase 45 | 类型契约一致性（闭包 `return` 与指针基类型判据） | ✅ 完成 | v0.45.0 | [卡](design/phase45.md) |
-| Phase 46 | `Map` 元素完整性（用户 struct 按值入 `Map`，`ct build` 可编译） | ✅ 完成 | v0.46.0 | [卡](design/phase46.md) |
-| Phase 47 | 容器键协议（`Str` 键深拷贝；`put_owned` 已删） | ✅ 完成 | v0.47.0 | [卡](design/phase47.md) |
+| Phase 43 | 错误出口类型契约（`return err:` 载荷检查） | ✅ 完成 | v0.43.0 | [卡](history/design/phase43.md) |
+| Phase 44 | `?` 错误传播运算符（后缀 `?`，同 `E`） | ✅ 完成 | v0.44.0 | [卡](history/design/phase44.md) |
+| Phase 45 | 类型契约一致性（闭包 `return` 与指针基类型判据） | ✅ 完成 | v0.45.0 | [卡](history/design/phase45.md) |
+| Phase 46 | `Map` 元素完整性（用户 struct 按值入 `Map`，`ct build` 可编译） | ✅ 完成 | v0.46.0 | [卡](history/design/phase46.md) |
+| Phase 47 | 容器键协议（`Str` 键深拷贝；`put_owned` 已删） | ✅ 完成 | v0.47.0 | [卡](history/design/phase47.md) |
 | Phase 48 | Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体） | ✅ 完成 | v0.48.0 | [卡](design/phase48.md) |
 | Phase 49 | `own` 所有权转移（初始化式接工厂返回值） | ✅ 完成 | v0.49.0 | [卡](design/phase49.md) |
 | Phase 50 | 容器取用契约（`has` / `at`；出参形态已废） | ✅ 完成 | v0.50.0 | [卡](design/phase50.md) |
@@ -68,6 +68,7 @@
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ✅ 完成 | v0.52.0 | [卡](design/phase52.md) |
 | Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | ✅ 完成 | v0.53.0 | [卡](design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
 | Phase 54 | ct-pkg 共享库包体系（S0–S7） | 🟨 实施中 | v0.54.0–v0.60.0 | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
+| Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ⬜ 规划中 | 待定（与 PH-54 版本位冲突，候选 v0.61.0） | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
