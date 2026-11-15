@@ -1,0 +1,13 @@
+/* LANG-15: a value-position qualified enum member. */
+#include <stdio.h>
+
+namespace demo;
+
+pub enum Code { CODE_OK = 2, CODE_BAD = 7 }
+
+int main(void)
+{
+    int e = Code::CODE_BAD;
+    printf("%d\n", e);
+    return 0;
+}

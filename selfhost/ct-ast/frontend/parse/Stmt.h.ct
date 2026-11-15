@@ -1714,6 +1714,41 @@ impl StmtOps for Stmt {
             snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
             return look;
         }
+        /* PH-57: a qualified type (`net::Conn`) starts a declaration even
+           though the first segment alone is not a type name. */
+        {
+            const char *p = self->lex->src + self->lex->tokstart
+                            + strlen(self->lex->toktext);
+            char qn[MAX_TEXT];
+            int qw;
+            while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+            if (p[0] == ':' && p[1] == ':') {
+                snprintf(qn, sizeof qn, "%s", self->lex->toktext);
+                while (p[0] == ':' && p[1] == ':') {
+                    p += 2;
+                    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+                    qw = (int)strlen(qn);
+                    if (qw + 1 >= (int)sizeof qn) return 0;
+                    qn[qw] = '_';
+                    qw++;
+                    while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                           || (*p >= '0' && *p <= '9') || *p == '_') {
+                        if (qw + 1 >= (int)sizeof qn) return 0;
+                        qn[qw] = *p;
+                        qw++;
+                        p++;
+                    }
+                    qn[qw] = 0;
+                    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+                }
+                /* A type is followed by `*` or the declarator's name; `.` /
+                   `(` after the chain is the qualified value/call form. */
+                if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                      || *p == '_' || *p == '*')) return 0;
+                if (self->sup->resolve_type(qn, rn, sizeof rn) == 0
+                    && self->sym->find_type(rn) >= 0) return 1;
+            }
+        }
         if (self->ex->is_type_word(self->lex->toktext)) return 1;
         if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
         if (self->sym->find_type(rn) >= 0) return 1;

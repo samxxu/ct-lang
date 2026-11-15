@@ -1,0 +1,10 @@
+#include <stdio.h>
+
+import net::lib;
+
+int main(void)
+{
+    net::Conn *c = 0;
+    printf("%d\n", c == 0);
+    return 0;
+}

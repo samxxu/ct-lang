@@ -6,7 +6,7 @@
 | 严重度 | **Medium**（2026-10-22 复核升级：trait 类型连裸名也不可用） |
 | 锚点 | commit `2ead601`（v0.12.0）；复核于 `224c08f`（Batch 2 收尾） |
 | 文件 | [selfhost/ct-ast/frontend/parse/Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct)（`parse_type`）、[frontend/parse/Parser.h.ct](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L841-L854)（trait 名注册）、[frontend/sym/Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L491)（`resolve_type`） |
-| 状态 | 部分修复（2026-10-22：裸名已可用；限定类型名仍不支持，诊断已明确） |
+| 状态 | **已修**（v0.59.0：类型位置 `ns::Type` 可用；`test/ast/273_qualified_type`） |
 
 ## 现象
 

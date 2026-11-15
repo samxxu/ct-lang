@@ -1,0 +1,9 @@
+#include <stdio.h>
+
+import lib::lib;
+
+int main(void)
+{
+    printf("%d\n", Code::CODE_BAD);
+    return 0;
+}

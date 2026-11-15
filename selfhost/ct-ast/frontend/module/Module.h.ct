@@ -690,6 +690,9 @@ impl ModuleOps for Module {
                     }
                     if (self->sym->declare_const(cmn, ccn, cns, 1) < 0)
                         return self->fail(self->sym->last_error());
+                    if (self->sym->declare_const(cmn, ccn,
+                                                 self->arena->nodes[gn].text, 1) < 0)
+                        return self->fail(self->sym->last_error());
                 }
             }
             /* Exported types of the dependency, reachable by their bare name

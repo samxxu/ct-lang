@@ -1861,6 +1861,47 @@ impl ExprOps for Expr {
                 int ti;
                 char rname[MAX_TEXT];
                 char iface[MAX_TEXT];
+                /* PH-57: `ns::Type` in a type position. The first segment is
+                   still the current token; peek past it before consuming so a
+                   plain name keeps the existing path below. */
+                {
+                    const char *qp = self->lex->src + self->lex->tokstart + strlen(self->lex->toktext);
+                    while (*qp == ' ' || *qp == '\t') qp++;
+                    if (qp[0] == ':' && qp[1] == ':') {
+                        char qn[MAX_TEXT];
+                        int qw, qti;
+                        snprintf(qn, sizeof qn, "%s", self->lex->toktext);
+                        self->sup->lex_next();
+                        for (;;) {
+                            if (self->lex->tok != T_PUNCT
+                                || strcmp(self->lex->toktext, "::") != 0) break;
+                            self->sup->lex_next();
+                            if (self->lex->tok != T_ID)
+                                return self->sup->fail("expected a type name after '::'");
+                            qw = (int)strlen(qn);
+                            if (qw + 1 + (int)strlen(self->lex->toktext) >= (int)sizeof qn)
+                                return self->sup->fail("qualified type name is too long");
+                            qn[qw] = '_';
+                            snprintf(qn + qw + 1, sizeof qn - (size_t)qw - 1, "%s",
+                                     self->lex->toktext);
+                            self->sup->lex_next();
+                        }
+                        if (self->sym->resolve_type(qn, rname, sizeof rname) != 0)
+                            return self->sup->fail("unknown qualified type name");
+                        qti = self->sym->find_type(rname);
+                        if (qti < 0) return self->sup->fail("unknown qualified type name");
+                        if (self->sym->type_kind[qti] == 1) {
+                            if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+                        } else if (self->sym->type_kind[qti] == 5) {
+                            if (self->type_append(out, cap, &n, "enum") != 0) return -1;
+                        } else if (self->sym->type_kind[qti] == 6) {
+                            if (self->type_append(out, cap, &n, "union") != 0) return -1;
+                        }
+                        if (self->type_append(out, cap, &n, rname) != 0) return -1;
+                        self->sup->add_type(rname, self->sym->type_kind[qti]);
+                        continue;
+                    }
+                }
                 /* Phase 26 fix (SH-63): the declaration's type parameter wins
                    over a same-named tag; it is kept as `T` for emission. */
                 if (self->in_generic_tparam[0]
@@ -5585,10 +5626,22 @@ impl ExprOps for Expr {
                 }
                 if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
                     if (self->sym->find_qualified_global(qv, self->arena->nodes[n].text2,
-                                                         qc, MAX_TEXT) != 0)
+                                                         qc, MAX_TEXT) != 0) {
+                        char etn[MAX_TEXT];
+                        int eti;
+                        if (self->sym->resolve_type(qv, etn, sizeof etn) == 0
+                            && (eti = self->sym->find_type(etn)) >= 0
+                            && self->sym->type_kind[eti] == 5) {
+                            char emsg[MAX_TEXT * 2];
+                            snprintf(emsg, sizeof emsg, "'%s' has no member '%s'",
+                                     qv, self->arena->nodes[n].text2);
+                            return self->sup->fail(emsg);
+                        }
+
                         return self->sup->fail("no variable of that name in that namespace"
                                                " (qualified type names are not supported;"
                                                " use the bare name or an alias import)");
+                    }
                     snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", qc);
                     return n;
                 }

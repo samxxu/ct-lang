@@ -2416,6 +2416,10 @@ impl ParseOps for Parser {
             self->arena->nodes[m].line = mline;
             if (self->sym->declare_const(mname, cname, nsbuf, 0) < 0)
                 return self->sup->fail(self->sym->last_error());
+            /* PH-57: also key the member by its source enum tag so the value
+               form `Type::Member` resolves through find_qualified_global. */
+            if (name[0] && self->sym->declare_const(mname, cname, name, 0) < 0)
+                return self->sup->fail(self->sym->last_error());
             self->sup->lex_next();
             if (self->sup->accept("=")) {
                 int eline, ecol;

@@ -1,0 +1,8 @@
+namespace demo;
+
+pub enum Code { CODE_OK = 2 }
+
+int main(void)
+{
+    return Code::CODE_MISSING;
+}
