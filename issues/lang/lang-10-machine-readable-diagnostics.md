@@ -75,3 +75,16 @@ ct-sse 侧的门禁目前用 `grep 'warning:'` 判零 warning——等于把「�
 - 不做 LSP server；
 - 不做诊断国际化；
 - 不改现有诊断的文案与语义（只加通道）。
+
+## 2026-11-15 复核：能力已部分落地，拆成三块
+
+HEAD `v0.53.1` 重建 `ct-ast` 实测：
+
+| 面 | 实测 | 现状判定 |
+| --- | --- | --- |
+| 警告通道的 JSON | `ct check --types --diagnostics=json` 输出 `{"warnings":[{"severity":"error","type":"type_mismatch","file":...,"line":3,"col":18,...}]}` | **已实现**；缺夹具与负例，记 **D**（补证据，不新开能力） |
+| 解析错误的 JSON | `ct check --diagnostics=json parse.ct` 仍输出 `parse.ct:1:1: error: unexpected token`（stderr，纯文本） | **A bug**：usage 全局宣称 `--diagnostics=text\|json`，解析通道静默回退文本 |
+| 字段级位置 | `Symbols.h.ct:232-238` 的 `Field{name,type,dims}` 无 `line/col`；结构体字段相关诊断只能回到 struct 行 | **B 新特性**：要动前端模型，归 PH-58 |
+
+因此本条不再整体按 feature 排期：解析错误 JSON 进 patch（与 LANG-3 的诊断判据共用夹具），
+字段位置进 PH-58，警告 JSON 只补夹具复验。原「请求」与「验收判据」保留作为能力全量目标。

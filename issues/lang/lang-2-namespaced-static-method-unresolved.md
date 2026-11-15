@@ -7,6 +7,7 @@
 | 优先级 | **P1** —— 挡住 ct-sse / nexcore 的工厂形态（有绕法，但绕法要把 API 降级成自由函数） |
 | 状态 | **已修**（v0.53.1 补丁；回归用例见文末） |
 | 锚点 | `v0.53.1`（`c4727787`） |
+| 2026-11-15 复核 | HEAD `v0.53.1` 重建 `ct-ast`：跨单元 `Box.make(3)` 与同单元无 `pub` 两种探针均 rc=0；夹具 [test/ast/261_ns_static_method](../../test/ast/261_ns_static_method/prog.ct) 通过。`Expr.h.ct` 的裸名查找已改为 `resolve_type` 后再 `find_struct`。报告中的 `:5239` 是修复前源码位置 |
 | 详情 | [defect-namespaced-static-method.md](../../docs/proposals/defect-namespaced-static-method.md)（完整边界表与判据） |
 
 ## 精确触发条件

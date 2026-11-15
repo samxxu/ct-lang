@@ -55,3 +55,22 @@ rc=1
 - 存储：[Parser.h.ct:3759](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L3759) 的 `static struct Call g_calls[1024]`；
 - 计数点：[Expr.h.ct:5732](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L5732)；上限检查：`:6227`；
 - 归零只在整次 build（`Module.h.ct:1503`）与单文件编译（`Driver.h.ct:438`）。
+
+## 诊断判据（2026-11-15 补）
+
+当前超限原文（HEAD `v0.53.1` 重建，1030 个 `f();` 的探针）：
+
+```text
+calls.ct:1024:8: error: too many calls
+```
+
+只有「第几个调用点 + 一句话」，没有上限值、没有累计口径、没有绕法。修复时必须同时满足：
+
+| ID | 断言 |
+| --- | --- |
+| D1 | 文案含上限与口径：`MAX_CALLS=1024`（整次构建累计） |
+| D2 | 位置指向**触发上限的那个调用点**（`file:line:col`），不是文件开头或函数起点 |
+| D3 | 给一条可执行建议：拆成多次 `ct build` / `--lib` 分层，或改用函数指针 |
+| D4 | 不写 `.c` 产物，rc=1，且诊断走 `--diagnostics=json` 时是结构化对象（与 LANG-10 联动） |
+
+回归夹具：1024 条通过、1025 条命中 D1–D4、两单元 500+600 仍在入口第 524 条命中且位置正确。
