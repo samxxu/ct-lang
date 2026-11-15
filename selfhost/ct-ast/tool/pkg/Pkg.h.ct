@@ -80,7 +80,8 @@ static int pkg_read_pins(void);
 static int pkg_pin_ref(const char *name, char *ref, size_t cap);
 static int pkg_lock_keep(char *dst, size_t cap);
 static int pkg_update(const char *prog);
-static int pkg_verify(const char *prog);
+static int pkg_verify(const char *prog, int strict);
+static int pkg_verify_strict(void);
 /* S1 shared store: identity fields, $CT_HOME layout, and the digest-preserving
    commit. The helpers stay file-static because they need no vtable slot. */
 static int pkg_read_identity(const char *dir, char *publisher, size_t pcap,
@@ -2421,6 +2422,74 @@ static int pkg_lock_keep(char *dst, size_t cap)
     return 0;
 }
 
+/* S3: the v2 update is an offline pin audit. The store is verified, every
+   direct dependency must be covered by a row, and the pinned rows are written
+   back unchanged (no new version can appear without a network fetch). */
+static int pkg_update_v2(const char *prog)
+{
+    FILE *f;
+    char buf[MAX_LOCK];
+    size_t n;
+    long sz;
+    char pname[MAX_TEXT], pver[32], pdeps[MAX_PKG_DEPS][MAX_PKG_PATH];
+    char lname[MAX_PKG_DEPS][MAX_TEXT], lver[MAX_PKG_DEPS][32];
+    char lns[MAX_PKG_DEPS][MAX_TEXT], ldig[MAX_PKG_DEPS][80];
+    int ndeps, nlock, i, j, seen, rc;
+
+    ndeps = 0;
+    nlock = 0;
+    f = fopen("./ct.pkg", "r");
+    if (!f) { fprintf(stderr, "ctc: cannot open './ct.pkg'\n"); return 1; }
+    fclose(f);
+    if (g_pkg.read_manifest(".", pname, sizeof pname, pver, sizeof pver,
+                            pdeps, &ndeps) != 0) {
+        fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
+        return 1;
+    }
+    if (pkg_verify_lock(prog, lname, lver, lns, ldig, &nlock) != 0) return 1;
+    rc = 0;
+    for (i = 0; i < ndeps; i++) {
+        char path[MAX_PKG_PATH], range[32], dname[MAX_TEXT];
+        if (g_pkg.split_spec(pdeps[i], path, sizeof path, range, sizeof range) != 0
+            || g_pkg.dep_name(pdeps[i], dname, sizeof dname) != 0) {
+            fprintf(stderr, "ctc: bad dependency '%s'\n", pdeps[i]);
+            rc = 1;
+            continue;
+        }
+        seen = 0;
+        for (j = 0; j < nlock; j++) {
+            const char *ls = strrchr(lname[j], '/');
+            if ((strcmp(lname[j], dname) == 0
+                 || (ls != NULL && strcmp(ls + 1, dname) == 0))
+                && g_pkg.range_match(range, lver[j]))
+                seen = 1;
+        }
+        if (!seen) {
+            fprintf(stderr, "ctc: dependency '%s' is not satisfied by ct.lock\n", pdeps[i]);
+            rc = 1;
+        }
+    }
+    if (rc != 0) return 1;
+    f = fopen("./ct.lock", "r");
+    if (!f) { fprintf(stderr, "ctc: no './ct.lock'; run `%s get` first\n", prog); return 1; }
+    if (fseek(f, 0, SEEK_END) != 0 || (sz = ftell(f)) < 0
+        || (size_t)sz >= sizeof buf || fseek(f, 0, SEEK_SET) != 0) {
+        fprintf(stderr, "ctc: ct.lock is too large to update\n");
+        fclose(f);
+        return 1;
+    }
+    n = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    if (n != (size_t)sz) { fprintf(stderr, "ctc: cannot read './ct.lock'\n"); return 1; }
+    buf[n] = 0;
+    f = fopen("./ct.lock", "w");
+    if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+    fputs(buf, f);
+    if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+    printf("updated %d package(s)\n", nlock);
+    return 0;
+}
+
 /* `ct update`: re-resolve ct.pkg, keeping the git commits ct.lock pins and
    never fetching from a remote -- local directories and the cache only. */
 static int pkg_update(const char *prog)
@@ -2430,6 +2499,17 @@ static int pkg_update(const char *prog)
     int ndeps, i, rc;
 
     ndeps = 0;
+    f = fopen("./ct.lock", "r");
+    if (f != NULL) {
+        char head[64];
+        int v2 = 0;
+        if (fgets(head, sizeof head, f) != NULL
+            && strncmp(head, "# ct-lock 2", 11) == 0
+            && (head[11] == '\n' || head[11] == '\r' || head[11] == 0))
+            v2 = 1;
+        fclose(f);
+        if (v2) return pkg_update_v2(prog);
+    }
     f = fopen("./ct.pkg", "r");
     if (!f) {
         fprintf(stderr, "ctc: cannot open './ct.pkg'\n");
@@ -2467,13 +2547,200 @@ static int pkg_update(const char *prog)
     return 0;
 }
 
+/* SP-016: `--strict` refuses a lock that still depends on a dev override
+   (`dir` row) or on the v1 vendor fallback. The store digest check follows. */
+static int pkg_verify_strict(void)
+{
+    FILE *f;
+    char line[MAX_PKG_LINE];
+    char head[64];
+    int fmt;
+
+    f = fopen("./ct.lock", "r");
+    if (f == NULL) return 0;            /* pkg_verify_lock reports the missing lock */
+    fmt = 1;
+    if (fgets(head, sizeof head, f) != NULL
+        && strncmp(head, "# ct-lock 2", 11) == 0
+        && (head[11] == '\n' || head[11] == '\r' || head[11] == 0))
+        fmt = 2;
+    else
+        rewind(f);
+    if (fmt == 1) {
+        fprintf(stderr, "ctc: ct.lock is v1; --strict requires v2\n");
+        fclose(f);
+        return 1;
+    }
+    while (fgets(line, sizeof line, f) != NULL) {
+        char *tok[12];
+        char *p;
+        int ntok;
+        size_t ll;
+        ntok = 0;
+        p = line;
+        ll = strlen(line);
+        while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) {
+            ll = ll - 1;
+            line[ll] = 0;
+        }
+        while (*p) {
+            while (*p == ' ' || *p == '\t') p++;
+            if (!*p) break;
+            if (ntok < 12) { tok[ntok] = p; ntok++; }
+            while (*p && *p != ' ' && *p != '\t') p++;
+            if (*p) { *p = 0; p++; }
+        }
+        if (ntok >= 7 && strcmp(tok[2], "dir") == 0) {
+            fprintf(stderr, "ctc: '%s' is a dev override (dir row); --strict requires a store-backed lock\n",
+                    tok[0]);
+            fclose(f);
+            return 1;
+        }
+    }
+    fclose(f);
+    return 0;
+}
+
+/* SP-029: rewrite a v1 lock as v2 and put every vendored tree into the store.
+   The vendor copy is the source of truth (and stays in place); the new rows are
+   store-backed (`git - -`) so a later build does not need vendor/. */
+static int pkg_migrate(const char *prog)
+{
+    FILE *f;
+    char line[MAX_PKG_LINE];
+    char head[64];
+    char out[MAX_LOCK];
+    int outlen, nrow, fmt, i, rc;
+    char mname[MAX_TEXT], mver[32];
+    char deps[MAX_PKG_DEPS][MAX_PKG_PATH];
+    char publisher[MAX_TEXT], nsroot[MAX_PKG_PATH];
+    char src[MAX_PKG_PATH], dig[80], store[MAX_PKG_PATH];
+    char name[MAX_TEXT], ver[32], typ[16], commit[64];
+    int ndeps;
+    struct stat st;
+
+    outlen = 0;
+    out[0] = 0;
+    f = fopen("./ct.lock", "r");
+    if (f == NULL) {
+        fprintf(stderr, "ctc: no './ct.lock'; nothing to migrate\n");
+        return 1;
+    }
+    fmt = 1;
+    if (fgets(head, sizeof head, f) != NULL
+        && strncmp(head, "# ct-lock 2", 11) == 0
+        && (head[11] == '\n' || head[11] == '\r' || head[11] == 0))
+        fmt = 2;
+    else
+        rewind(f);
+    if (fmt == 2) {
+        fprintf(stderr, "ctc: ct.lock is already v2; nothing to migrate\n");
+        fclose(f);
+        return 1;
+    }
+    nrow = 0;
+    rc = 0;
+    while (fgets(line, sizeof line, f) != NULL) {
+        char *tok[12];
+        char *p;
+        int ntok, w;
+        size_t ll;
+        ntok = 0;
+        p = line;
+        ll = strlen(line);
+        while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) {
+            ll = ll - 1;
+            line[ll] = 0;
+        }
+        while (*p) {
+            while (*p == ' ' || *p == '\t') p++;
+            if (!*p) break;
+            if (ntok < 12) { tok[ntok] = p; ntok++; }
+            while (*p && *p != ' ' && *p != '\t') p++;
+            if (*p) { *p = 0; p++; }
+        }
+        if (ntok == 0 || tok[0][0] == '#' || ntok < 5) continue;
+        snprintf(name, sizeof name, "%s", tok[0]);
+        snprintf(ver, sizeof ver, "%s", tok[1]);
+        snprintf(typ, sizeof typ, "%s", tok[2]);
+        commit[0] = 0;
+        if (strcmp(typ, "git") == 0) snprintf(commit, sizeof commit, "%s", tok[3]);
+        snprintf(dig, sizeof dig, "%s", tok[ntok - 1]);
+        if (snprintf(src, sizeof src, "./vendor/%s", name) >= (int)sizeof src) {
+            fprintf(stderr, "ctc: package path too long for '%s'\n", name);
+            rc = 1;
+            continue;
+        }
+        if (stat(src, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            fprintf(stderr, "ctc: '%s' is locked but not vendored at '%s'\n", name, src);
+            rc = 1;
+            continue;
+        }
+        ndeps = 0;
+        if (g_pkg.read_manifest(src, mname, sizeof mname, mver, sizeof mver,
+                                deps, &ndeps) != 0) {
+            fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", src);
+            rc = 1;
+            continue;
+        }
+        if (strcmp(mname, name) != 0 || strcmp(mver, ver) != 0) {
+            fprintf(stderr, "ctc: '%s/ct.pkg' names '%s %s', lock says '%s %s'\n",
+                    src, mname, mver, name, ver);
+            rc = 1;
+            continue;
+        }
+        if (pkg_read_identity(src, publisher, sizeof publisher,
+                              nsroot, sizeof nsroot) != 0) {
+            fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", src);
+            rc = 1;
+            continue;
+        }
+        if (g_pkg.dir_digest(src, store, sizeof store) != 0
+            || strcmp(store, dig) != 0) {
+            fprintf(stderr, "ctc: '%s' does not match ct.lock\n", name);
+            rc = 1;
+            continue;
+        }
+        if (pkg_store_commit(src, publisher, name, ver, nsroot, dig,
+                             store, sizeof store) != 0) {
+            rc = 1;
+            continue;
+        }
+        w = snprintf(out + outlen, sizeof out - (size_t)outlen,
+                     "%s/%s %s git - %s %s %s\n", publisher, name, ver,
+                     commit[0] ? commit : "-", nsroot, dig);
+        if (w < 0 || (size_t)w >= sizeof out - (size_t)outlen) {
+            fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
+            fclose(f);
+            return 1;
+        }
+        outlen += w;
+        nrow++;
+    }
+    fclose(f);
+    if (rc != 0) return 1;
+    if (nrow == 0) {
+        fprintf(stderr, "ctc: ct.lock is empty\n");
+        return 1;
+    }
+    f = fopen("./ct.lock", "w");
+    if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+    fputs("# ct-lock 2\n", f);
+    fputs(out, f);
+    if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+    printf("migrated %d package(s)\n", nrow);
+    (void)i;
+    (void)prog;
+    return 0;
+}
+
 /* `ct verify`: the offline half of install -- no manifest, no command. */
-static int pkg_verify(const char *prog)
+static int pkg_verify(const char *prog, int strict)
 {
     char lname[MAX_PKG_DEPS][MAX_TEXT], lver[MAX_PKG_DEPS][32];
     char lns[MAX_PKG_DEPS][MAX_TEXT], ldig[MAX_PKG_DEPS][80];
     int nlock;
 
+    if (strict && pkg_verify_strict() != 0) return 1;
     if (pkg_verify_lock(prog, lname, lver, lns, ldig, &nlock) != 0) return 1;
     printf("verified %d package(s)\n", nlock);
     return 0;
@@ -2702,14 +2969,46 @@ int ct_pkg_update(int argc, char **argv, const char *prog, const char *version)
 pub int ct_pkg_verify(int argc, char **argv, const char *prog, const char *version);
 int ct_pkg_verify(int argc, char **argv, const char *prog, const char *version)
 {
+    int ai, strict = 0;
+
+    g_pkg.prog = prog;
+    g_pkg.version = version;
+    for (ai = 0; ai < argc; ai++) {
+        if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
+            printf("usage: %s verify [--strict]\n", prog);
+            printf("  check the store (v2) or vendor/ (v1) against ct.lock (offline)\n");
+            printf("  --strict  reject dir rows and the v1 vendor fallback\n");
+            return 0;
+        }
+        if (strcmp(argv[ai], "--strict") == 0) {
+            strict = 1;
+            continue;
+        }
+        if (strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0) {
+            printf("%s v%s\n", prog, version);
+            return 0;
+        }
+        if (argv[ai][0] == '-') {
+            fprintf(stderr, "ctc: unknown option '%s'\n", argv[ai]);
+            return 1;
+        }
+        fprintf(stderr, "ctc: unexpected argument '%s'\n", argv[ai]);
+        return 1;
+    }
+    return pkg_verify(prog, strict);
+}
+
+pub int ct_pkg_migrate(int argc, char **argv, const char *prog, const char *version);
+int ct_pkg_migrate(int argc, char **argv, const char *prog, const char *version)
+{
     int ai;
 
     g_pkg.prog = prog;
     g_pkg.version = version;
     for (ai = 0; ai < argc; ai++) {
         if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
-            printf("usage: %s verify\n", prog);
-            printf("  check vendor/ against ct.lock (offline)\n");
+            printf("usage: %s migrate\n", prog);
+            printf("  move vendor/ packages into the shared store and rewrite ct.lock as v2\n");
             return 0;
         }
         if (strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0) {
@@ -2723,5 +3022,5 @@ int ct_pkg_verify(int argc, char **argv, const char *prog, const char *version)
         fprintf(stderr, "ctc: unexpected argument '%s'\n", argv[ai]);
         return 1;
     }
-    return pkg_verify(prog);
+    return pkg_migrate(prog);
 }

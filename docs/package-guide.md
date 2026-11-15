@@ -118,9 +118,10 @@ S1 起 `publisher` + `ns-root` 是 store 与 lock v2 的必填身份；写 `ns-r
    ```sh
    ct get <pub>/<name>@<range>  # 发布方限定；裸名仅在索引唯一时可用（歧义即硬错）
    ct get ./path                # 本地目录同样按清单的 publisher/ns-root 落 store
-   ct verify                    # 离线：v2 校验 store、v1 校验 vendor 的摘要
+   ct verify [--strict]         # 离线：v2 校验 store、v1 校验 vendor；--strict 拒绝 dir/v1
    ct install                   # 离线：校验摘要与依赖覆盖，打印带 store ns-root 的 ct build 命令
-   ct update                    # 离线：按 ct.pkg 重解并重写 ct.lock
+   ct migrate                   # 离线：把 vendor/ 搬进 store，重写 v2 lock（保留版本/发布方）
+   ct update                    # 离线：v2 校验 store 并保留钉住的版本
    ```
 
    `ct verify` 只做摘要校验，**不读 `ct.pkg`**；清单里的 `dep` 是否被 `ct.lock` 覆盖由 `ct install` 判定
@@ -222,6 +223,14 @@ ct build -I vendor/fsguard main.ct -o build
 - 无 `ct.lock`：回退 `vendor/<name>` 并**只**打一次
   `warning: no ct.lock; reading vendor/ (legacy layout)`；既无 lock 也无 vendor 时保持安静。
 - lock 内同一裸包名出现两行（不论发布方）→ `package '<name>' is required twice: a/<name> and b/<name>`。
-- 仍未做：`ct verify --strict` / `ct migrate`（S3）、dev override 在 lock 之外的构建期校验、缓存键按发布方隔离。
+- `ct verify`：v2 行检查版本目录存在与第 7 字段摘要；缺失报 `is not installed`、不符报
+  `does not match ct.lock`。`--strict` 拒绝任何 `dir` 行或 v1 vendor 回退。
+- `ct migrate`：读 v1 lock 与 `vendor/<name>`，把每棵树写入 store（摘要必须与 lock 一致），
+  重写为七字段 v2 lock；随后 `mv vendor /tmp/v && ct build main.ct -o build` 不再需要 vendor。
+  迁移行是 store-backed 的 `git - -`（v1 未记录 URL；commit 若存在则保留）。
+- `ct update` 对 v2 是**离线 pin 审计**：校验 store、要求 `ct.pkg` 的每个直接依赖都被 lock 覆盖，
+  把钉住的 v2 行原样写回；不会在无网络时凭空选择新版本。缺依赖报 `is not satisfied by ct.lock`。
+- 仍未做：S4 包仓声明对齐（publisher/ns-root/tag）、S5 的 vendor 读取告警、S6 文档收口、
+  S7 移除 vendor 路径；缓存键仍按裸包名。
 - 逐条缺陷见 [PKG-3 … PKG-8](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)。
 

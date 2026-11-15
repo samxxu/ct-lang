@@ -1220,6 +1220,113 @@ else
 fi
 
 echo
+echo "== S3: verify, migrate, update =="
+S3="$work/s3"
+mkdir -p "$S3/home" "$S3/cthome" "$S3/pkg/src" "$S3/proj"
+printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S3/pkg/ct.pkg"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S3/pkg/src/p.h.ct"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkg@^0.1.0\n' >"$S3/proj/ct.pkg"
+printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(9)); return 0; }\n' >"$S3/proj/main.ct"
+( cd "$S3/proj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+    "$work/ct-ast" get ../pkg >/dev/null 2>&1 )
+printf x >>"$S3/cthome/pkg/ct/p/0.1.0/src/p.h.ct"
+if ( cd "$S3/proj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" verify >"$S3/v1.out" 2>"$S3/v1.err" ); then
+    bad "S3 verify tamper" "a tampered store passed verify"
+elif grep -Fq "does not match ct.lock" "$S3/v1.err"; then
+    ok "S3 verify rejects a store digest mismatch"
+else
+    bad "S3 verify tamper" "wrong diagnostic: $(cat "$S3/v1.err")"
+fi
+rm -rf "$S3/cthome/pkg/ct/p"
+if ( cd "$S3/proj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" verify >"$S3/v2.out" 2>"$S3/v2.err" ); then
+    bad "S3 verify missing" "a missing store passed verify"
+elif grep -Fq "is not installed" "$S3/v2.err"; then
+    ok "S3 verify rejects a missing store"
+else
+    bad "S3 verify missing" "wrong diagnostic: $(cat "$S3/v2.err")"
+fi
+( cd "$S3/proj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+    "$work/ct-ast" get ../pkg >/dev/null 2>&1 )
+# dir row: strict rejects it, plain verify accepts it.
+mkdir -p "$S3/dev/src" "$S3/devproj"
+printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S3/dev/ct.pkg"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S3/dev/src/p.h.ct"
+printf 'name = demo\nversion = 0.1.0\ndep = ../dev@^0.1.0\n' >"$S3/devproj/ct.pkg"
+printf 'import p;\nint main(void) { return twice(1); }\n' >"$S3/devproj/main.ct"
+( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+    "$work/ct-ast" get ../dev >/dev/null 2>&1 )
+if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" verify >"$S3/vd.out" 2>"$S3/vd.err" ); then
+    ok "S3 verify accepts a dir row without --strict"
+else
+    bad "S3 verify dir" "$(cat "$S3/vd.err")"
+fi
+if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" verify --strict >"$S3/vs.out" 2>"$S3/vs.err" ); then
+    bad "S3 strict dir" "a dir row passed --strict"
+elif grep -Fq "dev override (dir row)" "$S3/vs.err"; then
+    ok "S3 --strict rejects a dir row"
+else
+    bad "S3 strict dir" "wrong diagnostic: $(cat "$S3/vs.err")"
+fi
+# v1 lock: strict rejects the vendor fallback.
+awk 'NR>1 { print $1 ~ /\// ? substr($1,index($1,"/")+1) : $1, $2, $3, $4, $NF }' \
+    "$S3/devproj/ct.lock" >"$S3/devproj/ct.lock.v1" && mv "$S3/devproj/ct.lock.v1" "$S3/devproj/ct.lock"
+if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" verify --strict >"$S3/vv.out" 2>"$S3/vv.err" ); then
+    bad "S3 strict v1" "a v1 lock passed --strict"
+elif grep -Fq "ct.lock is v1" "$S3/vv.err"; then
+    ok "S3 --strict rejects the v1 vendor fallback"
+else
+    bad "S3 strict v1" "wrong diagnostic: $(cat "$S3/vv.err")"
+fi
+# migrate that v1 project: vendor -> store, v2 lock, then build without vendor.
+if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" migrate >"$S3/m.out" 2>"$S3/m.err" ); then
+    if [ "$(head -1 "$S3/devproj/ct.lock")" = "# ct-lock 2" ] \
+       && [ "$(awk 'NR>1{print NF}' "$S3/devproj/ct.lock" | sort -u)" = "7" ] \
+       && [ -d "$S3/cthome/pkg/ct/p/0.1.0" ]; then
+        ok "S3 migrate writes a v2 store-backed lock"
+    else
+        bad "S3 migrate lock" "$(cat "$S3/devproj/ct.lock")"
+    fi
+else
+    bad "S3 migrate" "$(cat "$S3/m.err")"
+fi
+mv "$S3/devproj/vendor" "$S3/devproj/vendor.moved"
+if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" build main.ct -o "$S3/mapp" >"$S3/mb.out" 2>"$S3/mb.err" ); then
+    ok "S3 build works after vendor/ is moved away"
+else
+    bad "S3 migrate build" "$(cat "$S3/mb.err")"
+fi
+if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" verify --strict >"$S3/ms.out" 2>"$S3/ms.err" ); then
+    ok "S3 migrated lock passes --strict"
+else
+    bad "S3 migrated strict" "$(cat "$S3/ms.err")"
+fi
+cp "$S3/devproj/ct.lock" "$S3/devproj/ct.lock.before"
+if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" update >"$S3/u.out" 2>"$S3/u.err" ) \
+   && cmp -s "$S3/devproj/ct.lock.before" "$S3/devproj/ct.lock"; then
+    ok "S3 update preserves v2 pins"
+else
+    bad "S3 update v2" "$(cat "$S3/u.out" "$S3/u.err")"
+fi
+printf 'dep = ct/ghost@^1.0.0\n' >>"$S3/devproj/ct.pkg"
+if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" update >"$S3/ug.out" 2>"$S3/ug.err" ); then
+    bad "S3 update missing" "an unsatisfied dependency passed update"
+elif grep -Fq "is not satisfied by ct.lock" "$S3/ug.err"; then
+    ok "S3 update reports an unsatisfied dependency"
+else
+    bad "S3 update missing" "wrong diagnostic: $(cat "$S3/ug.err")"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]

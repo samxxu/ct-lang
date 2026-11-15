@@ -287,9 +287,13 @@ impl DriverOps for Driver {
                        "                 [--diagnostics=text|json] [--std=c99|gnu99|c11]\n"
                        "       %s get <spec>[@<range>]\n"
                        "       %s install\n"
+                       "       %s verify [--strict]\n"
+                       "       %s migrate\n"
+                       "       %s update\n"
                        "       %s pkg check <dir>\n",
                        self->m->prog, self->m->prog, self->m->prog, self->m->prog,
-                       self->m->prog, self->m->prog);
+                       self->m->prog, self->m->prog, self->m->prog, self->m->prog,
+                       self->m->prog);
                 return 0;
             }
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {

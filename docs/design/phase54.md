@@ -115,3 +115,15 @@ S2（`ct build` 读 lock、`--locked`、dev override）未开工。
 | 门禁 | test/pkg 117/0；check-ast 1444/0；check-all 11/11 |
 
 S3（verify/migrate）未开工。
+
+## 11. S3 收口记录（2026-11-15，v0.57.0）
+
+| SP | 结果 |
+| --- | --- |
+| SP-016 | verify --strict 拒绝 dir 行与 v1 lock |
+| SP-019 | store 摘要不符报 `does not match ct.lock` |
+| SP-029 | migrate 后移走 vendor 仍可 build；lock 重写为 v2 |
+| update | v2 pin 离线审计，不重新联网 |
+| 门禁 | test/pkg 127/0；check-ast 1444/0；check-all 11/11 |
+
+S4（外部包仓）未执行。
