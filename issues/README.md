@@ -335,6 +335,10 @@
 | SH-73 | Info | 动态派发的临时值接收者被拒：`a.m().n()` 不能作下一跳（保持：有意边界；延后） | [sh73-temp-receiver-dynamic-dispatch.md](selfhost/sh73-temp-receiver-dynamic-dispatch.md) |
 | SH-74 | **High** | impl 方法返回接口值时生成 `&_self`：指向被调栈帧且多一层间接，`.self` 逃逸后 exit 0 读到错误值（**已修** `d6e82e25`，2026-11-15；回归 `test/ast/237_iface_ret_self`） | [sh74-impl-iface-return-self-codegen.md](selfhost/sh74-impl-iface-return-self-codegen.md) |
 | SH-75 | **High** | 非 `self` 的局部 struct 返回接口值：装箱取局部地址，悬垂栈帧静默读错值（**已修** `b5797cbf`，2026-11-15；回归 `test/ast/239_local_iface_return` + ASAN UAR） | [sh75-local-iface-return-dangling.md](selfhost/sh75-local-iface-return-dangling.md) |
+| SH-76 | **High** | 找不到内置层时泛型字段被误诊为 `expected a field name`：容器字段在源码树外不可用（patch 0.53.7） | [sh76-builtin-layer-missing-misdiagnosis.md](selfhost/sh76-builtin-layer-missing-misdiagnosis.md) |
+| SH-77 | Low | `ABI_HASH` 只覆盖导出名，判不出签名级漂移（已被 REQ-ABI-2 承接，不排期） | [sh77-abi-hash-name-only.md](selfhost/sh77-abi-hash-name-only.md) |
+| SH-78 | Medium | `--lib` 导出面只收根单元 `pub` 自由函数，`impl` 的 `pub` 方法不计入（设计口径，不排期） | [sh78-lib-export-free-functions-only.md](selfhost/sh78-lib-export-free-functions-only.md) |
+| SH-79 | **High** | `--emit-map` 两个 facet：`--lib` 不落文件、build 的 `file` 指向内置层（patch 0.53.8） | [sh79-build-lib-emit-map-silent.md](selfhost/sh79-build-lib-emit-map-silent.md) |
 
 ### `packages/` —— 外部包（`ct-pkg`）
 
@@ -363,8 +367,10 @@
 | LANG-6 | Medium | `ct install` 只打印 `-I vendor/<包名>`，`src/` 布局的包消费方报 `cannot resolve import` | **并入 [PKG-2](packages/pkg-2-ct-install-package-root-import.md)**（不另立文件） |
 | LANG-3 | Medium | `MAX_CALLS` 固定 1024、按整次构建累计、拆单元无效；每条 324 字节 | [lang-3-max-calls-fixed-cap.md](lang/lang-3-max-calls-fixed-cap.md) |
 | LANG-14 | Medium | struct 形参收到非 struct 实参只报 warning、由 cc 兜底（ct-json JSON-3，**已修** `struct_arg_from_charptr`） | [lang-14-charptr-to-struct-arg-warning.md](lang/lang-14-charptr-to-struct-arg-warning.md) |
+| LANG-16 | Medium | 诊断位置源过期：块注释后列号偏移、`1:-3788` 类负列（patch 0.53.16，与 PH-62 独立） | [lang-16-diagnostic-position-negative.md](lang/lang-16-diagnostic-position-negative.md) |
 | LANG-10 | Medium（feature） | 诊断无可机读格式：门禁靠 `grep 'warning:'`、编辑器/CI 只能读人用文本，改文案即可能静默变绿 | [lang-10-machine-readable-diagnostics.md](lang/lang-10-machine-readable-diagnostics.md) |
 | LANG-12 | Medium（feature） | 自定义类型没有属性访问协议：`doc.server.host` 落到 C 字段规则，CT 放行、`cc` 报 `no member named` | [lang-12-property-access-protocol.md](lang/lang-12-property-access-protocol.md) |
+| LANG-15 | Medium（feature） | 枚举成员不能写 `FsErrCode::FS_ERR_OUT_OF_BOUNDS`：值位置 `Type::Member` 被当成命名空间变量（PH-57） | [lang-15-qualified-enum-member-value.md](lang/lang-15-qualified-enum-member-value.md) |
 | LANG-7 | Low | 静态方法解析失败报 `use of an undeclared variable`，列号指向类型名 | [lang-7-undeclared-variable-points-at-type.md](lang/lang-7-undeclared-variable-points-at-type.md) |
 | LANG-8 | Low | 裸 `5.method()` 因 `5.` 被扫成浮点而报 `unexpected token`；加空格可绕 | [lang-8-numeric-literal-dot-lexing.md](lang/lang-8-numeric-literal-dot-lexing.md) |
 
