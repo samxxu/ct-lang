@@ -268,7 +268,7 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
 
 | 提案 | 文档 | 拟占 | 结论 | 前置 |
 | --- | --- | --- | --- | --- |
-| 模型图导出 | [ct-model-export-proposal](../proposals/ct-model-export-proposal.md) | **PH-59** | 通过方向：新 `--emit-model`，不扩 `--emit-map` 契约；schema 版本化 | LANG-9（可见性）；PH-58 之后 |
+| 模型图导出 | [ct-model-export-proposal](../proposals/ct-model-export-proposal.md) | **PH-59** | 通过方向：新 `--emit-model`，不扩 `--emit-map` 契约；schema 版本化；**字段全量导出（含非 `pub`）**，`visibility` 在 LANG-9 前标 `unknown`（已定） | LANG-9（可见性）；PH-58 之后 |
 | 视图节点注记 | [ct-view-annotation-proposal](../proposals/ct-view-annotation-proposal.md) | **PH-60** | 通过方向：struct 后置 `view` 子句；零 ABI | **PH-59 schema 冻结** |
 
 研判记录：[swiftct-mapping-proposal-review](../review/swiftct-mapping-proposal-review.md)。两项都还没写

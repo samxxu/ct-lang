@@ -104,10 +104,21 @@ SwiftCT 侧列出的最小集：struct 名、字段名、字段类型、字段�
    增加字段 / 增加条目，消费方必须忽略未知字段；删除或改义必须 +1 大版本。
 2. **确定性**：单元按输入顺序、单元内声明按源码顺序；同一输入重复运行逐字节相同。
 3. **路径**：一律相对项目根（`-I` 根），不写绝对路径；`lib/std` 内置层默认不导出。
-4. **可见性**：`pub` / `private`，以 LANG-9 修好后的字段可见性为准；LANG-9 未落地前该字段标
-   `"visibility": "unknown"`，不猜。
+4. **可见性**：字段**全量导出，含非 `pub` 字段**；`visibility` 在 LANG-9 落地前一律
+   `"unknown"`，落地后填 `pub` / `private`。
 5. **kind**：`struct` / `union` / `enum`（enum 的成员表第一版可不导出，列为非目标）。
 6. **不含**：C 语句 AST、表达式树、内联汇编、注释、位置信息（位置是可选字段，随 PH-58 补）。
+
+### 4.1 字段范围（已定，2026-11-15）
+
+| 项 | 裁定 |
+| --- | --- |
+| 导出范围 | struct 的**全部字段**，包含非 `pub` 字段；不按可见性过滤 |
+| 字段顺序 | 与源码声明（即内存布局）顺序一致 |
+| `visibility` | LANG-9 落地前一律 `"unknown"`；落地后填 `"pub"` / `"private"` |
+| 依据 | CT 的布局不分公开私有；漏掉非 `pub` 字段会让生成器还原出的结构体与 `.abi.h` 对不上 |
+
+这条裁定优先于「只导出公开面」的直觉；`--lib` 的 ABI 面仍只含自由函数，但**模型导出不是 ABI 面**。
 
 ## 5 与 PH-58 / LANG-10 的边界（是否合并）
 
@@ -130,7 +141,7 @@ SwiftCT 侧列出的最小集：struct 名、字段名、字段类型、字段�
 | 测试 | golden 1 份 + 多单元夹具 1 份 + 确定性重跑 1 条 + 负例（无可见字段仍输出空数组） |
 | 风险 1 | schema 漂移：生成器依赖未写入契约的字段 → 用 golden + 版本规则约束 |
 | 风险 2 | 与 `--emit-map` 两套遍历漂移 → 共用一个内部模型结构，只换序列化 |
-| 风险 3 | 可见性依赖 LANG-9；未落地时导出的 `visibility` 不可信 → 先标 `unknown`，不猜 |
+| 风险 3 | 消费方把 `visibility: "unknown"` 当成 `private` → 文档写死「unknown = 未判定，不得据此过滤字段」 |
 | 风险 4 | 绝对路径泄露构建机信息 → 强制相对路径，测试断言不含 `/tmp/` |
 
 ## 7 非目标
@@ -138,6 +149,7 @@ SwiftCT 侧列出的最小集：struct 名、字段名、字段类型、字段�
 - 不做通用 AST / IR 导出；
 - 不做类型推断或语义补全；
 - 不做 LSP / 增量模型服务；
+- **不做可见性过滤**：不把非 `pub` 字段排除在 `fields` 之外（已定全量导出，见 §4.1）；
 - 不导出 enum 成员与宏（第一版）；
 - 不替代 `--emit-map` 的调试用途；
 - 不引入运行时反射。
@@ -155,12 +167,13 @@ SwiftCT 侧列出的最小集：struct 名、字段名、字段类型、字段�
 | --- | --- |
 | M1 | `ct build --emit-model m.json` 落文件，`schema` / `schema_version` 正确，可 `json.load` |
 | M2 | 多单元工程：输入单元的 struct/function 全部在，`lib/std` 内置层不出现 |
-| M3 | 每个字段含 `name` / `type` / `visibility`；每个函数含 `returns` / `params[].type` |
+| M3 | **每个字段（含非 `pub`）**都含 `name` / `type` / `visibility`；字段顺序与声明/布局一致；每个函数含 `returns` / `params[].type` |
 | M4 | 路径全为相对路径（断言不含 `/tmp/` 与绝对根） |
 | M5 | 同一输入连续运行两次，输出逐字节相同 |
 | M6 | 不带 `--emit-model` 时 `.c` / `.h` / `.abi.h` 零变化（golden 全绿） |
-| M7 | LANG-9 未落地时 `visibility` 为 `unknown`；落地后私有/pub 区分正确 |
+| M7 | LANG-9 未落地时 `visibility` 为 `unknown`（不得据此过滤字段）；落地后私有/pub 区分正确 |
 | M8 | 至少一个外部消费者夹具（SwiftCT PHP 生成器的最小读取脚本）能解析并按名取到字段 |
+| M9 | 私有字段必须出现在 `fields` 中；按模型还原的 struct 字段名/顺序与 `.abi.h` 一致 |
 
 ## 10 排位与依赖
 
@@ -173,5 +186,7 @@ SwiftCT 侧列出的最小集：struct 名、字段名、字段类型、字段�
 
 - 本提案需经过一次研判（两席 battle 或逐条反证），记录在
   [swiftct-mapping-proposal-review](../../docs/review/swiftct-mapping-proposal-review.md)；
+- **已定（2026-11-15，负责人裁定）**：字段全量导出（含非 `pub`），`visibility` 在 LANG-9 前
+  一律 `unknown`；依据是布局不分公开私有，漏字段会让生成结构体与 `.abi.h` 对不上（§4.1）；
 - 研判通过后才写需求定稿（`REQ-MODEL-*`）、进 roadmap、开 phase 卡；
 - 提案阶段不改 `selfhost/**`、不排 phase 卡。
