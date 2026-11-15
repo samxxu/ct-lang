@@ -66,22 +66,22 @@
 | Phase 50 | 容器取用契约（`has` / `at`；出参形态已废） | ✅ 完成 | v0.50.0 | [卡](design/phase50.md) |
 | Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ✅ 完成 | v0.51.0 | [卡](design/phase51.md) |
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ✅ 完成 | v0.52.0 | [卡](design/phase52.md) |
-| Phase 53 | `?.` 语法糖记录（待商定、暂不排期） | ⬜ 记录 / 待商定 / 暂不排期 | — | [记录](proposals/phase53-optional-chain-draft.md) |
+| Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | ⬜ 规划中（已冻结，待实施） | v0.53.0（待收口） | [卡](design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
 >
-> **Phase 45–49 已收口**（v0.45.0–v0.49.0）；**Phase 50–52 已于 2026-11-15 签字定稿、待实施**：
-> 七张卡的结构、修法与可执行判据已按
+> **Phase 45–52 已收口**（v0.45.0–v0.52.0）；Phase 50–52 的卡面、修法与判据按
 > [裁决记录](reviews/phase46-52-freeze-verdict.md)改定（73 条输入：采纳 67 / 部分 6 / 不采纳 1），
 > 五条待裁项全部按建议值签字。总排期与依赖见 [phase46-52-plan.md](design/phase46-52-plan.md)，
 > 施工入口见 [phase46-52-handoff.md](design/phase46-52-handoff.md)。
 > 45–49 的流程缺口（无 T-7 红证父提交、正文 `red: n/a`）已在
 > [plan §13.1](design/phase46-52-plan.md) 登记，不补造红证；
 > 数字下标（`v[0]`）的参数类型匹配登记为 [REQ-JSACCESS-1](planning/requirements-pool.md)，
-> 属「JS 风格访问」长期目标，**不占相号、不得砍掉**。`?.` 可选链按现形态已驳回；
-> 以 **Phase 53 记录**占位（待商定、暂不排期、不承诺实现），见
-> [phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md)。
+> 属「JS 风格访问」长期目标，**不占相号、不得砍掉**。
+> `?.` 可选链经第二轮 battle 定稿为 **Phase 53 施工**：只收指针 / map，struct 值接收者拒绝；
+> 切词按 parser 组合识别（`c?.5 : 1.0` 保持三目），见 [施工卡](design/phase53.md)。
+> 原记录保留为设计依据；其余候选（DF-1/2/3、REQ-JSACCESS-1 等）留需求池或后续相，不占 PH-53。
 
 ### 未排期（治理项）
 

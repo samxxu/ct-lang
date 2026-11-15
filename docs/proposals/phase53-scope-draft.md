@@ -1,6 +1,7 @@
 # PH-53 立项草案：候选、依据与待裁项
 
-> **状态：草案（首版，2026-11-15）**。只供项目负责人讨论拍板，不是施工卡，不含可执行判据。
+> **状态：讨论材料（2026-11-15）；Q1/Q2 已落定：PH-53 = `?.` 可选链，施工卡见 [design/phase53.md](../design/phase53.md)。**
+> 其余候选处置见 §8；本文件不再是待拍板草案，保留为选择依据。
 > **基线**：`1d49bb1a`（`v0.52.0` 之后 4 个纯文档提交；工作树干净）。
 > **纪律**：本文件只新增文档；不改实现、不改卡片判据、不改 golden、不 bump、不 push、不打 tag。
 > **证据口径**：仓库内事实带文件与行号；仓库外事实写明来源路径，未在本机重跑。
@@ -11,20 +12,16 @@
 
 1. **PH-46–52 已全部实施完毕**：七张卡的状态行均为「完成」，`v0.46.0`–`v0.52.0` 七个 annotated tag
    本地与 `origin` 一致；`v0.52.0` 收口提交正文记录 `check-all 11/11`、`check-ast 1420/0`。
-   但 `docs/roadmap.md`、`docs/README.md`、`phase46-52-plan.md`、`phase46-52-handoff.md`
-   仍写着「50–52 待实施 / 下一刀 PH-50」——**同一仓库内的文档与 tag、卡面互相矛盾**（§1.2）。
-2. **PH-53 目前不是实施相**：roadmap 把 53 记成 `?.` 的占位记录（`docs/roadmap.md:69`），
-   状态是「记录 / 待商定 / 暂不排期」。这与「不立项的内容不占相号」的既有口径冲突（§1.2 第 6 条）。
-   定 PH-53 做什么，先要决定这个占位怎么处置。
-3. **建议首选：`ct build` 前端静默缺陷 DF-1/DF-2/DF-3**（§2.1 A1）。理由：DF-1 是当前唯一
-   「`ct` rc=0、无诊断、生成 C 与源码不一致」的缺陷，且代码里仍可指到未置 `toktrunc` 的
-   T_PP 分支（`selfhost/ct-ast/frontend/lex/Lexer.h.ct:90-99`）；RILL 正是因此退回单文件
-   `ctc`（`ct-build-frontend-defects.md:15-21`）。
-4. **次选两项**：REQ-JSACCESS-1（ct-json 已把 `data["server"]` / `items[0]` 写成目标形态）与
-   B-2/SH-73（ct-http 的「一行链」，目前是明示降级）。两者都能做，但都不是静默错产物。
-5. **无论选哪项，文档真相修复应先行或作为 S0**：roadmap / docs 索引 / plan / handoff 的口径
-   与 tag 事实冲突，继续往下排期会让下一个执行方拿错基线（§1.2）。
-6. 需要拍板的 5 道题见 §5；本文件只给建议值，不代替签字。
+   当时 `docs/roadmap.md`、`docs/README.md`、`phase46-52-plan.md`、`phase46-52-handoff.md`
+   仍写着「50–52 待实施 / 下一刀 PH-50」——**本轮已修正**（§8）。
+2. **PH-53 当时只是 `?.` 的占位记录**，状态「记录 / 待商定 / 暂不排期」。2026-11-15 已裁定：
+   PH-53 = `?.` 可选链施工，卡面 [design/phase53.md](../design/phase53.md)，见 §8。
+3. **当时建议首选 A1（前端 DF-1/DF-2/DF-3）**；该建议已被 Q1 裁定取代：A1 留需求池 / 后续相，
+   **不进 PH-53**。理由与证据仍保留在 §2.1。
+4. **当时次选 A2（REQ-JSACCESS-1）与 A3（B-2/SH-73）**；两者均不进 PH-53，处置见 §8。
+5. **文档真相**：roadmap / docs/README / plan / handoff 的 50–52 排期矛盾已修正；
+   能力缺口总表与 `language-spec.md:673` 仍留后续文档治理（§8 C3）。
+6. 5 道题的落定情况见 §8：Q1/Q2/Q4 已定，Q3/Q5 仍开放；本文件保留为选择依据。
 
 ---
 
@@ -146,6 +143,9 @@
 
 ## 5 需要负责人拍板的选择题
 
+> **2026-11-15 已裁定：Q1 = B1（`?.` 可选链）；Q2 = 原占位转为施工卡，不再另占相号。**
+> 下表保留当时的选项与成本，供追溯；不再代表待决状态。
+
 ### Q1 PH-53 的主题选哪一项？
 
 | 选项 | 内容 | 影响 | 成本量级 |
@@ -206,11 +206,11 @@
 
 | 主题 | 位置 |
 | --- | --- |
-| 50–52 已完成、53 占位 | [roadmap.md:66-69](../roadmap.md) |
-| roadmap 自相矛盾句 | [roadmap.md:74](../roadmap.md) |
-| 索引页旧口径 | [docs/README.md:47](../README.md)、`:52` |
-| 计划表旧状态 / 下一刀 | [phase46-52-plan.md:42](../design/phase46-52-plan.md)、`:62-68` |
-| 施工手册旧顺序 | [phase46-52-handoff.md:13](../design/phase46-52-handoff.md)、`:26`、`:139` |
+| 50–52 已收口、53 施工卡 | [roadmap.md](../roadmap.md) 的 Phase 52 / 53 行 |
+| 50–52 旧口径（已修正） | [roadmap.md](../roadmap.md) 的 Phase 45–52 段 |
+| 索引页旧口径（已修正） | [docs/README.md](../README.md) 的 Phase 50–53 行 |
+| 计划表历史口径 | [phase46-52-plan.md](../design/phase46-52-plan.md) 顶部说明 |
+| 施工手册历史顺序 | [phase46-52-handoff.md](../design/phase46-52-handoff.md) 顶部说明 |
 | DF-1/2/3 修复单 | [ct-build-frontend-defects.md](ct-build-frontend-defects.md) |
 | DF-1 代码锚点 | `selfhost/ct-ast/frontend/lex/Lexer.h.ct:18`、`:90-99`、`:108-110` |
 | 能力缺口总表（部分过期） | [language-capability-gaps.md:1530-1557](language-capability-gaps.md) |
@@ -220,3 +220,26 @@
 | REQ-JSACCESS-1 | [requirements-pool.md:66-98](../planning/requirements-pool.md) |
 | ABI 三条 | [requirements-pool.md:118-155](../planning/requirements-pool.md) |
 | 红证与流程缺口 | [phase46-52-plan.md:425-436](../design/phase46-52-plan.md) |
+
+---
+
+## 8 决策落定与候选处置（2026-11-15）
+
+**Q1 已裁定**：PH-53 施工主题 = B1 `?.` 可选链，卡面 [design/phase53.md](../design/phase53.md)，
+版本 `v0.53.0`。**Q2 已裁定**：原 `?.` 记录转为施工卡，相号不再闲置，记录保留为设计依据。
+**Q4** 由卡面固定为 `v0.53.0`；**Q3** 按「历史不补造红证、本卡 S1 先红」执行；
+**Q5** 下游兼容语料不纳入本卡，留治理项。
+
+| 候选 | 处置 | 落点 |
+| --- | --- | --- |
+| B1 `?.` 可选链 | **本相施工** | [phase53.md](../design/phase53.md) |
+| A1 DF-1/DF-2/DF-3 | 留需求池 / 下一相候选；**不占 PH-53** | [ct-build-frontend-defects.md](ct-build-frontend-defects.md) |
+| A2 REQ-JSACCESS-1 | 留需求池，不占相号；`v[0]` 仍不主张 | [requirements-pool.md:66-98](../planning/requirements-pool.md) |
+| A3 B-2 / SH-73 | 独立缺陷，留后续相候选 | `issues/selfhost/sh73-*.md` |
+| A4 ABI 加固 | 留需求池；防御性，不阻塞 | [requirements-pool.md:118-155](../planning/requirements-pool.md) |
+| B2 `.h.ct` 的 `defer` / `errdefer` | 留需求池 / 后续相 | 本文件 §2.2 |
+| B3 A-3、B4 G-1、B5 诊断、B6 REQ-MEM-2、B7 REQ-TYPE-1 | 留需求池 / 后续相 | [requirements-pool.md](../planning/requirements-pool.md) |
+| C1 CI 口径、C2 红证门禁、C4 下游语料、C5 基准与稳定子集 | 留治理项，不占相号 | 本文件 §2.3 |
+| C3 文档真相 | 本轮已修正 roadmap / docs/README 的 50–52 排期矛盾，并在 plan / handoff 顶部加 PH-53 说明；能力缺口总表与 `language-spec.md:673` 仍留后续文档治理 | [roadmap.md](../roadmap.md)、[docs/README.md](../README.md) |
+
+**不预排 PH-54**；下一相由负责人另行立项。
