@@ -5,7 +5,7 @@
 | 项 | 值 |
 | --- | --- |
 | 依据 | [模型导出提案](../proposals/ct-model-export-proposal.md) §3 方案 B、§4 格式、§9 M1–M7；[静态映射可行性与决策](static-mapping-feasibility.md) §2（六条，含 §2.6 字段级回指）；[研判 §4](../review/swiftct-mapping-proposal-review.md) |
-| 版本位 | **待定**：PH-54 已占用 v0.54.0–v0.60.0；候选 v0.61.0，需负责人确认后再 bump |
+| 版本位 | **不提前钉号**：排在 PH-54 之后，开卡时按当时的 MINOR 实算。PH-54 从 S0 到 S7 要吃几个版本位目前只是估算，预留号一旦和实际消耗错开就得整批重编号 |
 | 前置 | **PH-58**（字段级位置）：`Field` 补 `loc` 是 J11 的前提；PH-58 滑期则按 §8 降级为「只带 `line`」 |
 | 只动 | `selfhost/ct-ast/tool/driver/Driver.h.ct`、`selfhost/ct-ast/backend/emit/Emitter.h.ct`、`selfhost/ct-ast/frontend/sym/Symbols.h.ct`、`selfhost/ct-ast/main.ct`、`test/model/**`、`docs/**` |
 | 不碰 | `selfhost/ct-ast/frontend/TypeCheck.h.ct`、`selfhost/l2/**`、`golden/**`、`.ai-engineering` |
@@ -106,11 +106,11 @@ red: rc=<N>, "<失败文案>"
 
 只新增一个输出开关与一份夹具，不改代码发射；回滚 = `git revert` 单个提交。`.c` / `.h` / `.abi.h` 零影响（J7 兜底）。
 
-## 8 未决与降级
+## 8 版本位与降级路径
 
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
-| 版本位 | **待定** | 与 PH-54 的 v0.54–v0.60 冲突，收口 bump 前须确认 |
+| 版本位 | **不提前钉号** | 排在 PH-54 之后，开卡时按当时的 MINOR 实算；预留给固定号会与 PH-54 的实际消耗错开 |
 
-**已定降级路径**（不属未决，写死于此）：PH-58 若滑期，J11 降为「`loc` 只带 `file` + `line`」，并在 golden 与卡内显式标注缺 `col`；
+**已定降级路径**（写死于此，不属未决）：PH-58 若滑期，J11 降为「`loc` 只带 `file` + `line`」，并在 golden 与卡内显式标注缺 `col`；
 **不得**退回「不写 `loc`」——那等于把回指卖点从首版摘掉，且日后补要 +1 schema 大版本。
