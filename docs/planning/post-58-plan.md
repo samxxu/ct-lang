@@ -14,18 +14,18 @@
 2. **PH-59 模型导出可以开工，但不是「等 PH-58」**：`PH-58` 在 roadmap 里不存在，是 `open-items-routing.md` 的草案号；它的实际前置是「`Field` 补行列」与（可选的）LANG-9 可见性。
 3. **PH-62 可写下标方向已通过研判，但没有卡**；它比模型导出更贴下游（JSON 写回），却还差一张卡才能施工。
 4. **PH-55 / PH-56 / PH-58 不建议作为 phase 存在**：一个已被 PH-62 吸收，一个是冗余语法糖，一个应拆成 patch + 一条前置任务。PH-60 保留但排在模型导出之后。
-5. **PH-54 的 S7 现在无法按现判据收口**：roadmap 写「由各包仓举证」，提案 §11 写「本仓可自证」，两处冲突；这是口径问题，不是工作量问题。
+5. **PH-54 的 S7 判据已定（2026-11-15）：本仓自证**。包仓迁移状态降级为外部登记项，由各包仓自行维护，CT 不追踪、不判定。
 
 ## 2. 编号与断裂（只记录，不重排）
 
 | # | 现象 | 证据 | 处理建议 |
 | --- | --- | --- | --- |
-| N-1 | Phase 55–58 在 roadmap 中**完全没有行、没有卡**，却被 `open-items-routing.md` 当作已分配编号使用 | roadmap 只有 Phase 54、59 两行（`docs/roadmap.md:70-71`）；routing `:105-142` | 55/56/58 按 §6 放弃或拆解；57 保留为「未开工、无卡」的候选，不补卡面 |
+| N-1 | Phase 55–58 在 roadmap 中**没有卡**，却被 `open-items-routing.md` 当作已分配编号使用 | roadmap 原只有 Phase 54、59 两行；routing `:105-142` | 55/56/58 按 §6 放弃或拆解；57 保留为「未开工、无卡」的候选，本轮已补其版本位行 |
 | N-2 | `PH-58` 被 phase59 卡与两份提案当作**硬前置**引用，但仓库里没有这张卡 | `docs/design/phase59.md:9`、`:115`；`docs/proposals/ct-model-export-proposal.md:8`；`docs/proposals/ct-view-annotation-proposal.md:8` | 把引用改成真实缺陷号（LANG-10 7c），见 §7 |
 | N-3 | PH-54 的切片序列缺 S4 | `phase54.md:3`、`:129`；S4 已移出本相 | 这是**定义性删除**，不是漏项；不得当作待办补回 |
 | N-4 | PH-61 已被 PH-62 吸收 | `docs/proposals/ct-append-subscript-proposal.md:5` | 61 成为永久空号；不重排、不回收 |
-| N-5 | 版本位与 phase 号已脱钩：PH-54 吃掉 v0.54.0–v0.58.0 五个 MINOR，而 AGENTS `deviation: version-minor-offset` 只登记到 PH-44 | `AGENTS.md:320-335`（最后一条 PH-44，d=0）；roadmap Phase 54 行写 v0.58.0 | **待裁定**：登记永久偏移（d=-4）或明确改为「版本位与 phase 解耦」。见 §8，本文件不自行改判 |
-| N-6 | Phase 59 的版本位写「不提前钉号」，与 V-1「MINOR == n」名义冲突 | `docs/roadmap.md:71`、`phase59.md:113` | 属于 N-5 的同一决定，合并裁定 |
+| N-5 | 版本位与 phase 号已脱钩：PH-54 吃掉 v0.54.0–v0.58.0 五个 MINOR，而 AGENTS `deviation: version-minor-offset` 只登记到 PH-44 | `AGENTS.md:320-341`；roadmap Phase 54 行 | **已裁定（2026-11-15）**：认偏移、不重打 tag，后续按相位表连续分配；见 AGENTS §0.3 |
+| N-6 | Phase 59 的版本位原写「不提前钉号」，与 V-1「MINOR == n」名义冲突 | `phase59.md:113` | **已裁定**：钉 v0.60.0，随 N-5 的相位表 |
 
 > 历史空号（Phase 13–16 未使用、27–30 与 31–33 合并发布）见 roadmap 备注，不在本轮处理范围。
 
@@ -120,30 +120,31 @@
 2. **issue 状态回填**：PKG-4/7/8 已修；PKG-3 部分；PKG-2 已解决；顺手修汇总计数。
 3. **退役册标注**：`ct-json-capability-blockers`、`language-capability-gaps`、`custom-index-protocol`、`user-index-operator` 按 §6 标注去向。
 
-### 第 3 批 · PH-59 M1（模型导出）
+### 第 3 批 · PH-57（限定名，含 SH-18 + LANG-15）→ v0.59.0
+
+纯语言特性，无前置。版本位必须随收口单调递增，因此 PH-57 排在 PH-59 之前，先开卡。
+与 PH-62 同为 Parse/TypeCheck 族，**串行**；它不阻塞包机制（包仓的 `PK-*` 判据已归包外）。
+
+### 第 4 批 · PH-59 M1（模型导出）→ v0.60.0
 
 前置只有两件：`Field` 补 `line`/`col`（LANG-10 7c），以及决定 `visibility` 是否等 LANG-9（不等则写 `unknown`，这是已定降级）。
 J11 依赖字段级 `loc`；若暂不做 7c，按 `phase59.md:115` 降级为「`file` + `line`」，但要接受日后补 `col` 需 +1 schema 版本。
 `SH-79` 两项 facet 只进 M2，不挡 M1。
 
-### 第 4 批 · PH-62（可写下标与嵌套链）
+### 第 5 批 · PH-60（视图注记）→ v0.61.0
+
+只在 PH-59 schema 冻结且出现真实消费者后开卡；否则继续停在提案，版本位空置、不后移。
+
+### 第 6 批 · PH-62（可写下标与嵌套链）→ v0.62.0
 
 顺序：先开卡（把 PH-55 / REQ-JSACCESS-1 / REQ-INDEX-1 并进来），再按研判建议切片：
 S0 读物化与诊断位置 → S1 `v[] = x` → S2 `set` 补齐 / `len` / 洞释放 → S3 嵌套写。
 它与 PH-59 **可以并行开发**（PH-59 在 Driver/Emitter，PH-62 在 Expr/TypeCheck），但改 `Emitter` / `Symbols` 时要串行。
 
-### 第 5 批 · PH-57（限定名，含 SH-18 + LANG-15）
-
-纯语言特性，无外部前置；与 PH-62 同为 Parse/TypeCheck 族，**必须串行**。它不阻塞包机制（包仓的 `PK-*` 判据已归包外）。
-
-### 第 6 批 · PH-60（视图注记）
-
-只在 PH-59 schema 冻结且出现真实消费者后开卡；否则继续停在提案。
-
 ### 第 7 批 · PH-54 S7（删 vendor）
 
-最后做，因为它**删除回退路径**。前置：S6 errata 完成；兼容期口径统一；`ct migrate` 保留。
-按「连续两个 minor 无 v1 lock 工程」的现文，最早也要在 v0.58.0 之后再发两个 MINOR 才谈收口。
+最后做，因为它**删除回退路径**。前置：S6 errata 完成；S7 仓内自证三条全绿（v1 工程可 build、`ct install` 每包告警一次、`ct migrate` 后移走 vendor 仍可 build）；`ct migrate` 保留。
+包仓迁移状态是外部登记项，不入本相判据。按兼容期节奏，v0.58.0 之后再发两个 MINOR 才谈收口，最早 **v0.61.0**。
 
 ## 5. 并行 / 串行
 
@@ -183,12 +184,18 @@ S0 读物化与诊断位置 → S1 `v[] = x` → S2 `set` 补齐 / `len` / 洞�
 - `phase59.md` 与本文件相关提案里的「前置 PH-58」改为「LANG-10 7c（`Field` 补行列）」；`PH-58` 注明是 `open-items-routing.md` 的草案号，未在 roadmap 立项。
 - `open-items-routing.md` 顶部加作废口径横幅：0.53.x patch 位与 PH-55–62 草案号在 v0.58.0 后不再执行，正文保留作研判依据。
 - 新增 LANG-17（预处理行截断），把 `ct-build-frontend-defects.md` 的 DF-1 从提案搬进台账。
+- 版本位按 AGENTS §0.3 的相位表钉号：PH-54 记 v0.54.0–v0.58.0，PH-57 / 59 / 60 / 62 依次记 v0.59.0 / v0.60.0 / v0.61.0 / v0.62.0。
+- S7 判据改为仓内自证三条；包仓迁移状态明确为外部登记项，CT 不追踪。
 
 ## 8. 待裁定（不自行决定）
 
-1. **V-1 版本偏移**：PH-54 实际消耗 v0.54.0–v0.58.0 五个 MINOR，`AGENTS.md` 的 `deviation: version-minor-offset` 只写到 PH-44。需要二选一：登记永久偏移（d=-4，PH-59 收口将落在 v0.63.0）或明确把版本位与 phase 号解耦。**本轮不改 AGENTS、不改号。**
-2. **S7 前置口径**：roadmap 写「由各包仓举证」，提案 §11 写「本仓可自证」。需统一，否则 S7 永远无法收口。**本轮只记录，不改判据。**
-3. **CI-7**：补 `v0.19.0` tag 还是关闭条目。
+> 2026-11-15 已裁定两条（保留记录）；仅 CI-7 仍待决定。
+
+1. ~~V-1 版本偏移~~ **已裁定：认偏移、不重打已发布 tag、功能不降 PATCH**。PH-54 覆盖 v0.54.0–v0.58.0；
+   后续按「下一个空位」连续分配：**PH-57 → v0.59.0、PH-59 → v0.60.0、PH-60 → v0.61.0、PH-62 → v0.62.0**。
+   换算表与 d 值见 AGENTS §0.3。
+2. ~~S7 前置口径~~ **已裁定：本仓自证**。三条可执行判据见 roadmap S7 行；包仓迁移状态降级为外部登记项，CT 不追踪、不判定。
+3. **CI-7**：补 `v0.19.0` tag 还是关闭条目，仍待决定；未打 tag、未关闭。
 
 ## 9. 验收建议
 

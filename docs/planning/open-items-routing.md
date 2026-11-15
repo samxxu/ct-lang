@@ -129,7 +129,7 @@
 | 判据草案 | E56-1 `m.server?.host` 返回预期值；E56-2 缺键 → `0`；E56-3 `m.server.host` 硬错；E56-4 静态 struct 字段零变化；E56-5 `m["server"]?.host` 零回归 |
 | 关系 PH-53 | PH-53 已覆盖安全形态；PH-56 只在主控明确要语法糖时开，且排在 PH-53 后 |
 
-### 3.3 PH-57 · 限定名与 namespace 常量（保留）
+### 3.3 PH-57 · 限定名与 namespace 常量（保留；v0.59.0）
 
 `SH-18` 类型位置 `A::B`；`LANG-15` 值位置 `Type::Member`（`FsErrCode::FS_ERR_OUT_OF_BOUNDS`）；
 enum 类型作用域 `E::M`；namespace 内 `pub extern` 头声明 + `.ct` 定义。
@@ -152,7 +152,7 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 | --- | --- |
 | 分类 | **phase**，不是 patch：`ns-root` 取代「包根 = 单元根」、发布方身份、共享 store、v2 lock，是工具契约变更 |
 | 编号 | **PH-54**（已在实施 S0，不另起号） |
-| 与 S0–S7 | **推荐 A：PH-54 一个 phase，S0–S7 作为 phase 内工作分解，只保留 `v0.54.0` 一个 MINOR**。符合 AGENTS V-1；现 roadmap 的 `v0.54–v0.60` 是混合写法，需在 PH-54 收口前改为「S 工作分解 + 单一版本位」 |
+| 与 S0–S7 | **推荐 A（未采纳）**：当初建议只保留 `v0.54.0` 一个 MINOR；实际执行为 S0–S3、S5/S6 各一个 MINOR，PH-54 占 v0.54.0–v0.58.0。现行版本位见 [AGENTS §0.3](../../AGENTS.md#03-偏离项) 与 [post-58-plan](post-58-plan.md) |
 | 备选 B | 若每片独立发版，则 S0–S7 提升为 PH-54…PH-60；语言新特性顺延 PH-62+，且要重排 S4/S6 版本位 |
 | PKG-3…8 | 全部随 PH-54 S1/S2/S4；PKG-5 列为 S1 首任务；PKG-7 是需求缺口（B），其余是 bug 但依赖新模型（D-005 §2.4 例外） |
 | 顺序 | PH-53 之后；不插队 |
