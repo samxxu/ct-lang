@@ -850,7 +850,8 @@ else
     bad "conventions install" "non-zero exit: $(cat "$work/ci.err")"
 fi
 # Phase 18.3: a package that carries no `requires` is not a warning case.
-if [ -s "$work/ci.err" ]; then
+# S0: the v1 lock note is the only stderr line allowed here.
+if [ -n "$(grep -v "ct.lock is v1" "$work/ci.err")" ]; then
     bad "conventions install" "unexpected stderr for a package without requires: $(cat "$work/ci.err")"
 else
     ok "a package without requires installs silently"
@@ -872,6 +873,98 @@ elif grep -Fq "ct.pkg" "$work/nn.err"; then
     ok "a manifest with an empty name is refused"
 else
     bad "manifest name" "wrong diagnostic: $(cat "$work/nn.err")"
+fi
+
+echo
+echo "== S0: lock format and ct pkg check =="
+# S0/D1: a v1 lock (no header) is recognised and called out.
+if ( cd "$work/proj" && "$work/ct-ast" install >"$work/s0i.out" 2>"$work/s0i.err" ); then
+    if grep -Fq "# lock-format: v1" "$work/s0i.out"; then
+        ok "install prints '# lock-format: v1'"
+    else
+        bad "lock format note" "missing '# lock-format: v1': $(cat "$work/s0i.out")"
+    fi
+    if grep -Fq "ct.lock is v1" "$work/s0i.err"; then
+        ok "install warns about a v1 lock"
+    else
+        bad "lock format warning" "missing v1 warning: $(cat "$work/s0i.err")"
+    fi
+else
+    bad "lock format v1" "install failed: $(cat "$work/s0i.err")"
+fi
+# S0/D1: a `# ct-lock 2` header is recognised and suppresses the v1 warning.
+cp "$work/proj/ct.lock" "$work/s0.lock.v1"
+{ printf '# ct-lock 2\n'; cat "$work/s0.lock.v1"; } >"$work/proj/ct.lock"
+if ( cd "$work/proj" && "$work/ct-ast" install >"$work/s0v2.out" 2>"$work/s0v2.err" ); then
+    if grep -Fq "# lock-format: v2" "$work/s0v2.out" && ! grep -Fq "ct.lock is v1" "$work/s0v2.err"; then
+        ok "install recognises a v2 header"
+    else
+        bad "lock format v2" "unexpected: $(cat "$work/s0v2.out" "$work/s0v2.err")"
+    fi
+else
+    bad "lock format v2" "install failed: $(cat "$work/s0v2.err")"
+fi
+cp "$work/s0.lock.v1" "$work/proj/ct.lock"
+# S0/D2: `ct pkg check` is read-only and judges PK-1/2/5/8.
+mkdir -p "$work/s0/good/src/demo" "$work/s0/nopub" "$work/s0/nons" \
+         "$work/s0/absns" "$work/s0/nodir" "$work/s0/absi"
+printf 'name = demo\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$work/s0/good/ct.pkg"
+printf 'namespace demo;\n' >"$work/s0/good/src/demo/Demo.h.ct"
+printf 'name = demo\nversion = 0.1.0\nns-root = src\n' >"$work/s0/nopub/ct.pkg"
+printf 'name = demo\npublisher = ct\nversion = 0.1.0\n' >"$work/s0/nons/ct.pkg"
+printf 'name = demo\npublisher = ct\nversion = 0.1.0\nns-root = /abs\n' >"$work/s0/absns/ct.pkg"
+printf 'name = demo\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$work/s0/nodir/ct.pkg"
+printf 'name = demo\npublisher = ct\nversion = 0.1.0\nns-root = .\ncflags = -I /opt/x\n' >"$work/s0/absi/ct.pkg"
+before=$(cd "$work/s0/good" && find . -type f | sort | xargs shasum -a 256)
+if "$work/ct-ast" pkg check "$work/s0/good" >"$work/s0g.out" 2>"$work/s0g.err"; then
+    if grep -Fq "ok: 4 criteria" "$work/s0g.out"; then
+        ok "pkg check passes a fully declared package"
+    else
+        bad "pkg check good" "missing ok line: $(cat "$work/s0g.out")"
+    fi
+else
+    bad "pkg check good" "non-zero exit: $(cat "$work/s0g.err")"
+fi
+after=$(cd "$work/s0/good" && find . -type f | sort | xargs shasum -a 256)
+if [ "$before" = "$after" ]; then
+    ok "pkg check is read-only"
+else
+    bad "pkg check read-only" "the package tree changed"
+fi
+if "$work/ct-ast" pkg check "$work/s0/nopub" >"$work/s0n.out" 2>"$work/s0n.err"; then
+    bad "pkg check publisher" "expected a non-zero exit"
+elif grep -Fq "is missing 'publisher'" "$work/s0n.err"; then
+    ok "pkg check requires publisher"
+else
+    bad "pkg check publisher" "wrong diagnostic: $(cat "$work/s0n.err")"
+fi
+if "$work/ct-ast" pkg check "$work/s0/nons" >"$work/s0ns.out" 2>"$work/s0ns.err"; then
+    bad "pkg check ns-root" "expected a non-zero exit"
+elif grep -Fq "is missing 'ns-root'" "$work/s0ns.err"; then
+    ok "pkg check requires ns-root"
+else
+    bad "pkg check ns-root" "wrong diagnostic: $(cat "$work/s0ns.err")"
+fi
+if "$work/ct-ast" pkg check "$work/s0/absns" >"$work/s0a.out" 2>"$work/s0a.err"; then
+    bad "pkg check absolute ns-root" "expected a non-zero exit"
+elif grep -Fq "must be a relative path" "$work/s0a.err"; then
+    ok "pkg check rejects an absolute ns-root"
+else
+    bad "pkg check absolute ns-root" "wrong diagnostic: $(cat "$work/s0a.err")"
+fi
+if "$work/ct-ast" pkg check "$work/s0/nodir" >"$work/s0d.out" 2>"$work/s0d.err"; then
+    bad "pkg check missing ns-root dir" "expected a non-zero exit"
+elif grep -Fq "is not a directory" "$work/s0d.err"; then
+    ok "pkg check rejects a missing ns-root directory"
+else
+    bad "pkg check missing ns-root dir" "wrong diagnostic: $(cat "$work/s0d.err")"
+fi
+if "$work/ct-ast" pkg check "$work/s0/absi" >"$work/s0ai.out" 2>"$work/s0ai.err"; then
+    bad "pkg check absolute -I" "expected a non-zero exit"
+elif grep -Fq "contains an absolute -I" "$work/s0ai.err"; then
+    ok "pkg check rejects an absolute -I"
+else
+    bad "pkg check absolute -I" "wrong diagnostic: $(cat "$work/s0ai.err")"
 fi
 
 echo

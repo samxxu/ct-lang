@@ -24,7 +24,7 @@
 | # | 交付 | 文件 |
 | --- | --- | --- |
 | D1 | v1/v2 lock 识别 + `ct install` 的 `# lock-format:` 注释 + v1 告警 | `selfhost/ct-ast/tool/pkg/Pkg.h.ct` |
-| D2 | `ct pkg check <dir>` 只读骨架（PK-1/2/5/8） | `selfhost/ct-ast/tool/pkg/Pkg.h.ct`、`selfhost/ct-ast/main.ct` |
+| D2 | `ct pkg check <dir>` 只读骨架（PK-1/2/5/8） | `selfhost/ct-ast/tool/pkg/Pkg.h.ct`（`install_main`）、`selfhost/ct-ast/main.ct` |
 | D3 | S0 夹具与门禁断言 | `test/pkg/run.sh` |
 | D4 | 现状契约与陷阱、术语统一 | `docs/package-guide.md`、`docs/glossary.md` |
 | D5 | 6 条缺陷落库 | `issues/packages/pkg-3…pkg-8-*.md` |
@@ -67,3 +67,12 @@ red: rc=<N>, "<失败文案>"
 ## 6. 回滚
 
 S0 只新增只读子命令与一行输出注释，回滚 = `git revert` 单个提交；不涉及仓库格式、不涉及 golden。
+
+## 7. 偏差与约束（实测）
+
+| # | 偏差 | 处理 |
+| --- | --- | --- |
+| D-1 | `ct-ast` 的 `MAX_FUNCS = 256` 是**整个程序**的预算，且已用满：新增任何函数（哪怕独立单元）都会让 `check-ast` 的 self-compile 报 `too many functions in unit '...' (limit 256)` | `ct pkg check` 的解析与目录扫描内联在 `Pkg.h.ct` 的 `install_main` 里，`main.ct` 把 `pkg` 子命令路由到 `ct_pkg_install`；**零新增函数** |
+| D-2 | 受 D-1 影响，`ct pkg check` 的帮助行随 `ct install --help` 之外的顶层 help 暴露，但子命令 `ct pkg check -h` 走同一入口 | 无行为差异；S1 若要扩功能，需先裁定「提 `MAX_FUNCS`」还是「拆出独立工具二进制」 |
+| D-3 | 为容纳 v1 告警，`test/pkg/run.sh` 原有的「无 requires 的包静默安装」断言改为「除 v1 告警外无 stderr」 | 判据不放宽：仅放行这一条已文档化的新告警 |
+

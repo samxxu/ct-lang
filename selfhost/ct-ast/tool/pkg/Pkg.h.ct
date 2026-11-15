@@ -80,6 +80,8 @@ static int pkg_pin_ref(const char *name, char *ref, size_t cap);
 static int pkg_lock_keep(char *dst, size_t cap);
 static int pkg_update(const char *prog);
 static int pkg_verify(const char *prog);
+/* S0: 0 = no ct.lock, 1 = v1 (no `# ct-lock 2` header), 2 = v2; inlined in
+   `install()` because this unit sits exactly on the 256-function limit. */
 
 /* The manager's state lives in this struct so the unit owns it outright; `prog`
    and `version` are wired at start-up, which keeps CTC_VERSION defined in
@@ -1324,7 +1326,9 @@ impl PkgOps for Pkg {
         char vdir[MAX_PKG_PATH], cf[MAX_TEXT], lf[MAX_TEXT], rq[MAX_TEXT];
         char allcf[MAX_PKG_CMD], alldf[MAX_PKG_CMD], qcf[MAX_PKG_CMD], qlf[MAX_PKG_CMD];
         char dpath[MAX_PKG_PATH], drange[32], dname[MAX_TEXT];
-        int ndeps, nlock, i, j, rc, units, seen;
+        char lockhead[64];
+        FILE *lockf;
+        int ndeps, nlock, i, j, rc, units, seen, lockfmt;
         size_t nl;
         (void)self;
 
@@ -1410,6 +1414,21 @@ impl PkgOps for Pkg {
         }
         if (units == 0) printf(" <unit>.ct");
         printf(" -o build\n");
+        /* S0: the lock format is part of the printed command's contract. v1
+           has no header; v2 starts with `# ct-lock 2`. */
+        lockfmt = 0;
+        lockf = fopen("./ct.lock", "r");
+        if (lockf != NULL) {
+            lockfmt = 1;
+            if (fgets(lockhead, sizeof lockhead, lockf) != NULL
+                && strncmp(lockhead, "# ct-lock 2", 11) == 0
+                && (lockhead[11] == '\n' || lockhead[11] == '\r' || lockhead[11] == 0))
+                lockfmt = 2;
+            fclose(lockf);
+        }
+        if (lockfmt == 1)
+            fprintf(stderr, "ctc: warning: ct.lock is v1 (no '# ct-lock 2' header)\n");
+        printf("# lock-format: %s\n", lockfmt == 2 ? "v2" : "v1");
         return 0;
     }
 
@@ -1468,7 +1487,141 @@ impl PkgOps for Pkg {
     int install_main(int argc, char **argv)
     {
         int ai;
+        char cdir[MAX_PKG_PATH], cpath[MAX_PKG_PATH], cline[MAX_PKG_LINE];
+        char cname[MAX_TEXT], cpub[MAX_TEXT], cver[MAX_TEXT], cns[MAX_TEXT];
+        char cqueue[32][MAX_PKG_PATH], ckey[MAX_TEXT], cval[MAX_TEXT], *cp, *ck, *cv, *cq;
+        int cqh, cqt, cbads, cfound;
+        DIR *cd;
+        struct dirent *ce;
+        struct stat cst;
+        FILE *cf;
         (void)self;
+
+        /* S0: `ct pkg check <dir>` shares this entry point. The AST compiler's
+           256-function budget is fully spent, so the read-only audit lives here
+           instead of in a unit of its own (see phase54.md §7). */
+        if (argc > 1 && strcmp(argv[0], "check") == 0) {
+            for (ai = 2; ai < argc; ai++) {
+                if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
+                    printf("usage: %s pkg check <dir>\n", self->prog);
+                    printf("  read-only: PK-1 ct.pkg, PK-2 name/publisher/version/ns-root,\n");
+                    printf("  PK-5 ns-root shape, PK-8 no absolute -I in the package tree\n");
+                    return 0;
+                }
+                if (strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0) {
+                    printf("%s v%s\n", self->prog, self->version);
+                    return 0;
+                }
+                if (argv[ai][0] == '-') {
+                    fprintf(stderr, "ctc: unknown option '%s'\n", argv[ai]);
+                    return 1;
+                }
+            }
+            if (argc != 2) {
+                fprintf(stderr, "usage: %s pkg check <dir>\n", self->prog);
+                return 1;
+            }
+            if (snprintf(cpath, sizeof cpath, "%s/ct.pkg", argv[1]) >= (int)sizeof cpath) {
+                fprintf(stderr, "ctc: path too long: '%s'\n", argv[1]);
+                return 1;
+            }
+            cf = fopen(cpath, "r");
+            if (cf == NULL) {
+                fprintf(stderr, "ctc: cannot read '%s'\n", cpath);
+                return 1;
+            }
+            cname[0] = 0; cpub[0] = 0; cver[0] = 0; cns[0] = 0;
+            while (fgets(cline, sizeof cline, cf) != NULL) {
+                cp = cline;
+                while (*cp == ' ' || *cp == '\t') cp++;
+                if (*cp == '#' || *cp == '\n' || *cp == '\r' || *cp == 0) continue;
+                ck = ckey;
+                while (*cp != 0 && *cp != '=' && *cp != ' ' && *cp != '\t' && *cp != '\n') *ck++ = *cp++;
+                *ck = 0;
+                while (*cp == ' ' || *cp == '\t') cp++;
+                if (*cp != '=') continue;
+                cp++;
+                while (*cp == ' ' || *cp == '\t') cp++;
+                cv = cval;
+                while (*cp != 0 && *cp != '\n' && *cp != '\r'
+                       && *cp != ' ' && *cp != '\t' && *cp != '#') *cv++ = *cp++;
+                *cv = 0;
+                if (cval[0] == 0) continue;
+                if (strcmp(ckey, "name") == 0) snprintf(cname, sizeof cname, "%s", cval);
+                else if (strcmp(ckey, "publisher") == 0) snprintf(cpub, sizeof cpub, "%s", cval);
+                else if (strcmp(ckey, "version") == 0) snprintf(cver, sizeof cver, "%s", cval);
+                else if (strcmp(ckey, "ns-root") == 0) snprintf(cns, sizeof cns, "%s", cval);
+            }
+            fclose(cf);
+            cbads = 0;
+            if (cname[0] == 0) {
+                fprintf(stderr, "ctc: '%s' is missing 'name'\n", cpath); cbads = 1;
+            }
+            if (cpub[0] == 0) {
+                fprintf(stderr, "ctc: '%s' is missing 'publisher'\n", cpath); cbads = 1;
+            }
+            if (cver[0] == 0) {
+                fprintf(stderr, "ctc: '%s' is missing 'version'\n", cpath); cbads = 1;
+            }
+            if (cns[0] == 0) {
+                fprintf(stderr, "ctc: '%s' is missing 'ns-root'\n", cpath); cbads = 1;
+            }
+            if (cbads) return 1;
+            if (cns[0] == '/' || strstr(cns, "..") != NULL) {
+                fprintf(stderr, "ctc: ns-root '%s' must be a relative path without '..'\n", cns);
+                return 1;
+            }
+            if (snprintf(cdir, sizeof cdir, "%s/%s", argv[1], cns) >= (int)sizeof cdir) {
+                fprintf(stderr, "ctc: path too long: '%s/%s'\n", argv[1], cns);
+                return 1;
+            }
+            if (stat(cdir, &cst) != 0 || !S_ISDIR(cst.st_mode)) {
+                fprintf(stderr, "ctc: ns-root '%s' of '%s/%s' is not a directory\n", cdir, cpub, cname);
+                return 1;
+            }
+            cfound = 0;
+            cqh = 0; cqt = 0;
+            snprintf(cqueue[cqt++], MAX_PKG_PATH, "%s", argv[1]);
+            while (cqh < cqt && !cfound) {
+                cd = opendir(cqueue[cqh]);
+                if (cd != NULL) {
+                    while ((ce = readdir(cd)) != NULL) {
+                        if (strcmp(ce->d_name, ".") == 0 || strcmp(ce->d_name, "..") == 0) continue;
+                        if (strcmp(ce->d_name, ".git") == 0) continue;
+                        if (snprintf(cpath, sizeof cpath, "%s/%s", cqueue[cqh], ce->d_name)
+                            >= (int)sizeof cpath) continue;
+                        if (stat(cpath, &cst) != 0) continue;
+                        if (S_ISDIR(cst.st_mode)) {
+                            if (cqt < 32) snprintf(cqueue[cqt++], MAX_PKG_PATH, "%s", cpath);
+                            continue;
+                        }
+                        if (!S_ISREG(cst.st_mode) || cst.st_size > 262144) continue;
+                        cf = fopen(cpath, "r");
+                        if (cf == NULL) continue;
+                        while (fgets(cline, sizeof cline, cf) != NULL) {
+                            for (cp = cline; (cp = strstr(cp, "-I")) != NULL; cp += 2) {
+                                if (cp != cline && cp[-1] != ' ' && cp[-1] != '\t'
+                                    && cp[-1] != '"' && cp[-1] != '\'') continue;
+                                cq = cp + 2;
+                                while (*cq == ' ' || *cq == '\t') cq++;
+                                if (*cq == '/') { cfound = 1; break; }
+                            }
+                            if (cfound) break;
+                        }
+                        fclose(cf);
+                        if (cfound) break;
+                    }
+                    closedir(cd);
+                }
+                cqh++;
+            }
+            if (cfound) {
+                fprintf(stderr, "ctc: '%s' contains an absolute -I\n", cpath);
+                return 1;
+            }
+            printf("ok: 4 criteria\n");
+            return 0;
+        }
 
         for (ai = 0; ai < argc; ai++) {
             if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
@@ -1947,6 +2100,8 @@ static int pkg_verify(const char *prog)
     printf("verified %d package(s)\n", nlock);
     return 0;
 }
+
+/* ---- S0: lock format recognition -------------------------------------- */
 
 /* Only primitives cross the unit boundary (the same shape L2 uses for core.ct):
    the driver hands over its name and the version string, then dispatches. */
