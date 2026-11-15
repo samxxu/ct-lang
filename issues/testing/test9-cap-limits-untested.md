@@ -11,7 +11,7 @@
 ## 现象
 
 ct-ast 的容量上限集中在 `Symbols.h.ct`：
-`MAX_TEXT 160` / `MAX_PARAMS 16` / `MAX_FUNCS 256` / `MAX_VARS 4096` / `MAX_SCOPE 256` /
+`MAX_TEXT 160` / `MAX_PARAMS 16` / `MAX_FUNCS 512`（Phase 54 S0 起）/ `MAX_VARS 4096` / `MAX_SCOPE 256` /
 `MAX_TYPES 256` / `MAX_METHODS 64` / `MAX_TRAITS 64` / `MAX_STRUCTS 128` / `MAX_FIELDS 64`。
 规格要求越界「一律报错、不静默截断」（`docs/language-spec.md:59`），但绝大多数上限**没有任何夹具**。
 

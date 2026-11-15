@@ -6,7 +6,7 @@
 | 严重度 | Low |
 | 锚点 | commit `c27da3d`（`v0.19.1` + 1 commit，2026-11-03）；本机 `ct v0.19.1` 复现 |
 | 文件 | [Symbols.h.ct:259](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L259)、[:292](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L292)、[:474](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L474)；[ParseSupport.h.ct:248](../../selfhost/ct-ast/frontend/parse/ParseSupport.h.ct#L248)、[:286](../../selfhost/ct-ast/frontend/parse/ParseSupport.h.ct#L286) |
-| 状态 | 已修复（2026-11-10 复核：四类容量诊断均点名单元与上限，`check-ast.sh` 的 cap 段有断言） |
+| 状态 | 已修复（2026-11-10 复核：四类容量诊断均点名上限，`check-ast.sh` 的 cap 段有断言；函数于 Phase 54 S0 改为全程序口径，见文末更正） |
 
 ## 现象
 
@@ -60,10 +60,22 @@ Low：不影响编译结果，但生成式源码（函数 / 结构体成批生�
 
 本条修复已在后续轮次落地，只是状态行没有回填：
 
-- `ParseSupport.h.ct:255` 报 `too many functions in unit '<name>' (limit N)`；
+- `ParseSupport.h.ct:255` 报 `too many functions in unit '<name>' (limit N)`（Phase 54 S0 起改为
+  `too many functions (limit 512, whole program)`，见文末更正）；
   `Symbols.h.ct:679` 报 `too many structs in unit '<name>' (limit N)`；
   `Symbols.h.ct:434/476` 报 `too many variables in unit '<name>' (limit N)`；
   `check-ast.sh:3800` 起报 `too many parameters in unit '<name>' (limit 16)`。
 - `check-ast.sh` 的 `capacity limits (generated)` 段（[3781-3810](../../selfhost/check-ast.sh#L3781-L3810)）
   用 `cap_check` 同时断言非零退出与完整文案（含单元名与上限）。
 - 未做：「行号指向触顶声明行」仍按现状落在类别收尾处；固定上限改动态扩容属能力决策（SH-1 / SH-48）。
+
+## 更正（Phase 54 S0，2026-11-15）
+
+`MAX_FUNCS` **不是按单元计的配额**：`build` 模式共用一张符号表，`nfunc` 跨单元累加（builtin 层经
+`nfunc_base` 扣除），触顶发生在「整次构建累计到上限」的那一刻，与当前解析到哪个单元无关。因此
+`in unit '<name>'` 会把原因归错单元；`docs/language-spec.md` §7 与 `ParseSupport.h.ct` 已改成
+`too many functions (limit 512, whole program)`（依据：`frontend/parse/ParseSupport.h.ct` 的判界点；
+实测 ct-ast 自编用 250/512，再加 262 个空函数仍可编译、263 个即触顶）。上限同时由 256 抬到 512。
+
+上面「修复建议」第 1、2 条的单元名写法对函数这一类**作废**；`too many structs` / `too many variables` /
+`too many parameters` 仍是按单元或按函数的计数，文案不变。

@@ -42,7 +42,7 @@
 #define MAX_DEPTH  8
 #define MAX_VARS   512
 #define MAX_SCOPE  256
-#define MAX_FUNCS  256
+#define MAX_FUNCS  512
 #define MAX_UNITS  64                     /* units in one `ctc build` run */
 #define MAX_BUILD  32                     /* inputs on a single command line */
 #define MAX_IMPORTS 32                    /* `import` lines per unit */
@@ -5239,7 +5239,7 @@ impl RewriteOps for Pipe {
             for (q = 0; q < sym->nfuncs; q++)
                 if (strcmp(sym->funcs[q].cname, cname) == 0) { fi = q; break; }
             if (fi < 0) {
-                if (sym->nfuncs >= MAX_FUNCS) die(0, "too many functions (max %d)", MAX_FUNCS);
+                if (sym->nfuncs >= MAX_FUNCS) die(0, "too many functions (limit %d, whole program)", MAX_FUNCS);
                 fi = sym->nfuncs++;
                 sym->funcs[fi].ret_owned = 0;   /* fresh row: no ownership fact yet */
             }

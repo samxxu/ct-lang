@@ -9,7 +9,7 @@
  * pointer to the single instance and calls it as `self->sup`.
  *
  * Macros do not cross a unit boundary, so the caps and token kinds used here
- * are declared here; MAX_FUNCS 256, MAX_PARAMS 16 and MAX_TEXT 160 are the
+ * are declared here; MAX_FUNCS 512, MAX_PARAMS 16 and MAX_TEXT 160 are the
  * values `frontend/sym/Symbols.h.ct` lists.
  */
 #include <stdio.h>
@@ -22,7 +22,9 @@ import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import tool::diag::Diag;
 
-#define MAX_FUNCS 256
+/* Mirror of Symbols.h.ct's whole-program function budget (macros do not cross
+   units). Raised 256 -> 512 together with the other three mirrors. */
+#define MAX_FUNCS 512
 #define MAX_PARAMS 16
 #define MAX_TEXT 160
 #define T_EOF 0
@@ -254,8 +256,7 @@ impl SupportOps for ParseSupport {
         fresh = 0;
         if (i < 0) {
             if (self->sym->nfunc >= self->sym->nfunc_base + MAX_FUNCS) {
-                snprintf(msg, sizeof msg, "too many functions in unit '%s' (limit %d)",
-                         self->sym->unit_name(), MAX_FUNCS);
+                snprintf(msg, sizeof msg, "too many functions (limit %d, whole program)", MAX_FUNCS);
                 return self->fail(msg);
             }
             i = self->sym->nfunc;

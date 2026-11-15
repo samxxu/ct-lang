@@ -15,7 +15,7 @@
 
 | 上限 | L2（构建 ct-ast 的编译器） | ct-ast（编译用户代码） |
 | --- | --- | --- |
-| `MAX_FUNCS` | 256 | 256 |
+| `MAX_FUNCS` | 512（Phase 54 S0 由 256 抬至） | 512 |
 | `MAX_MAP_IMPLS` | 512 | —（同族上限更宽） |
 | `MAX_STRUCT` | 64 | `MAX_STRUCTS` 128 |
 | `MAX_FIELDS` | 32 | 64 |

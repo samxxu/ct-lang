@@ -1772,7 +1772,7 @@ Result<long, char *> twice(int n)
 7. **struct 类型的数组字段**：L0 / L2 不支持，ct-ast 已支持（逐元素写 vptr，见 §6 与
    [language-spec §6](language-spec.md)）；其余组合先查 [language-spec §4.8](language-spec.md)。
 8. **上限是硬报错**：ct-ast 提高到 `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、
-   `MAX_FUNCS` 256、`MAX_VARS` 4096…，越界直接报错，绝不静默截断。[§7](language-spec.md) 有全表。
+   `MAX_FUNCS` 512（整个程序累计，不是单单元配额）、`MAX_VARS` 4096…，越界直接报错，绝不静默截断。[§7](language-spec.md) 有全表。
 
 ## 13. 下一步
 

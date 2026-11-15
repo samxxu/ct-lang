@@ -72,7 +72,7 @@ S0 只新增只读子命令与一行输出注释，回滚 = `git revert` 单个�
 
 | # | 偏差 | 处理 |
 | --- | --- | --- |
-| D-1 | `ct-ast` 的 `MAX_FUNCS = 256` 是**整个程序**的预算，且已用满：新增任何函数（哪怕独立单元）都会让 `check-ast` 的 self-compile 报 `too many functions in unit '...' (limit 256)` | `ct pkg check` 的解析与目录扫描内联在 `Pkg.h.ct` 的 `install_main` 里，`main.ct` 把 `pkg` 子命令路由到 `ct_pkg_install`；**零新增函数** |
-| D-2 | 受 D-1 影响，`ct pkg check` 的帮助行随 `ct install --help` 之外的顶层 help 暴露，但子命令 `ct pkg check -h` 走同一入口 | 无行为差异；S1 若要扩功能，需先裁定「提 `MAX_FUNCS`」还是「拆出独立工具二进制」 |
+| D-1 | `ct-ast` 的 `MAX_FUNCS` 曾是 `256` 的**整程序**预算且已用满：新增任何函数（哪怕独立单元）都会让 `check-ast` 的 self-compile 报 `too many functions in unit '...' (limit 256)`。**已裁定并落地升到 512**（4 处镜像宏 + cap fixture 同步），该阻塞解除 | S0 期间 `ct pkg check` 的解析与目录扫描内联在 `Pkg.h.ct` 的 `install_main`，`main.ct` 把 `pkg` 子命令路由到 `ct_pkg_install`；S1 起可按常规拆单元，不必再为零函数额度绕行 |
+| D-2 | 越界文案已改为全程序口径 `too many functions (limit N, whole program)`，不再写 `in unit X` | 依据：`ParseSupport.h.ct` 的判界点、`Expr.h.ct` 的泛型实例路径与 `check-ast.sh` cap fixture |
 | D-3 | 为容纳 v1 告警，`test/pkg/run.sh` 原有的「无 requires 的包静默安装」断言改为「除 v1 告警外无 stderr」 | 判据不放宽：仅放行这一条已文档化的新告警 |
 

@@ -4736,22 +4736,22 @@ cap_check params "too many parameters in unit 'cap_params.ct' (limit 16)" "$work
 cap_check methods "too many trait methods" "$work/cap_methods.ct"
 {
     i=0
-    while [ "$i" -lt 256 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
+    while [ "$i" -lt 512 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
     printf 'int main(void) { return 0; }\n'
 } >"$work/cap_funcs.ct"
-cap_check funcs "too many functions in unit 'cap_funcs.ct' (limit 256)" "$work/cap_funcs.ct"
-# The boundary itself: 255 helpers plus `main` is exactly the cap and must build,
-# while one more is refused above.
+cap_check funcs "too many functions (limit 512, whole program)" "$work/cap_funcs.ct"
+# The boundary itself: 511 helpers plus `main` is exactly the cap and must build,
+# while one more is refused above. The budget is whole-program, not per unit.
 {
     i=0
-    while [ "$i" -lt 255 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
+    while [ "$i" -lt 511 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
     printf 'int main(void) { return 0; }\n'
 } >"$work/cap_funcs_max.ct"
 if "$work/ct-ast" "$work/cap_funcs_max.ct" -o "$work/cap-funcs-max.c" \
         >"$work/cap-funcs-max.out" 2>"$work/cap-funcs-max.err"; then
-    ok "cap funcs (256 accepted)"
+    ok "cap funcs (512 accepted)"
 else
-    bad "cap funcs (256 accepted)" "$(cat "$work/cap-funcs-max.err")"
+    bad "cap funcs (512 accepted)" "$(cat "$work/cap-funcs-max.err")"
 fi
 {
     printf 'int main(void)\n'

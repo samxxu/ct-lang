@@ -315,7 +315,7 @@
 | SH-50 | Medium | `ct check` 的语义诊断缺列号，与 `file:line:col: error:` 契约不符 | [sh50-check-diag-no-column.md](selfhost/sh50-check-diag-no-column.md) |
 | SH-51 | Info | `--cflags` / `--ldflags` 经 `system()` 原样执行，透传面大于参数面（已采纳方案 B：文档标注「shell 片段，勿传不可信内容」；方案 A 未实施） | [sh51-build-flags-command-surface.md](selfhost/sh51-build-flags-command-surface.md) |
 | SH-52 | **High** | 命名空间静态初始化器不重写被引用全局的名字，生成的 C 无法编译（已修，`2e3fe4a`） | [sh52-namespace-static-initializer.md](selfhost/sh52-namespace-static-initializer.md) |
-| SH-53 | Low | 容量触顶诊断不点名上限值与单元（已修；2026-11-10 复核：四类文案含单元名 + limit，`check-ast.sh` cap 段断言） | [sh53-capacity-message-limit-and-unit.md](selfhost/sh53-capacity-message-limit-and-unit.md) |
+| SH-53 | Low | 容量触顶诊断不点名上限值与单元（已修；2026-11-10 复核：四类文案含 limit，struct / vars / params 另含单元名；函数于 Phase 54 S0 改为全程序口径，`check-ast.sh` cap 段断言） | [sh53-capacity-message-limit-and-unit.md](selfhost/sh53-capacity-message-limit-and-unit.md) |
 | SH-54 | Medium | compile 模式静默丢弃 `-I`，`--help` 仍宣称可用 | [sh54-compile-include-flag-silently-ignored.md](selfhost/sh54-compile-include-flag-silently-ignored.md) |
 | SH-55 | Low | `import` 拒绝文案不给替代路径，`ct check` 复用时报「compile mode」 | [sh55-import-reject-message-not-actionable.md](selfhost/sh55-import-reject-message-not-actionable.md) |
 | SH-56 | Medium | 映射方法（`.m.ct` 静态 trait / `map`）不校验实参个数，多余实参静默丢弃（已修，`aae6c33` + `686211a`） | [sh56-map-method-arity-unchecked.md](selfhost/sh56-map-method-arity-unchecked.md) |
@@ -1339,7 +1339,7 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 | SH-15 | 待修 | `test/ast/22_map_direct` 直绑零 wrapper；`--emit-map` 标 `"inline":true` | 已修复 |
 | SH-16 | 待修 | `test/ast/23_impl_unused`；`(void)` 语句前移到函数体开头 | 已修复 |
 | SH-17 | 待修 | `Module.h.ct:507` 的 `depu` 去重；`test/modules/xunit_box` 生成物单次 `#include` | 已修复 |
-| SH-53 | 待处理 | `ParseSupport.h.ct:255`、`Symbols.h.ct:434/476/679` 均含单元名 + limit；`check-ast.sh` cap 段断言 | 已修复 |
+| SH-53 | 待处理 | `ParseSupport.h.ct:255` 为全程序口径 `(limit N, whole program)`；`Symbols.h.ct:434/476/679` 含单元名 + limit；`check-ast.sh` cap 段断言 | 已修复 |
 | DOC-25 | 待修 | README 中英写明 `-I` 只对 build 生效、compile 下提示被忽略 | 已修复 |
 | DOC-26 | 待修 | grammar 27 项、无 105 残留、tag 布局边界 `v0.12.0` | 已修复 |
 | DOC-27 | 待修 | `test/README.md` 含 `patterns/` 行与动态计数口径 | 已修复 |

@@ -10,7 +10,7 @@
  *
  * Macros do not cross a unit boundary, so this unit declares the symbol-table
  * caps; a unit that reads one of them mirrors the value listed here (MAX_TEXT
- * 160, MAX_PARAMS 16, MAX_FUNCS 256, MAX_VARS 4096, MAX_SCOPE 256, MAX_TYPES
+ * 160, MAX_PARAMS 16, MAX_FUNCS 512, MAX_VARS 4096, MAX_SCOPE 256, MAX_TYPES
  * 256, MAX_METHODS 64, MAX_TRAITS 64, MAX_STRUCTS 128, MAX_FIELDS 64). The
  * array lengths are spelled out as literals because a `pub struct` lands in the
  * generated header, which carries no macros.
@@ -28,7 +28,11 @@
    only when that cap is about to change. */
 #define MAX_TEXT    160
 #define MAX_PARAMS  16
-#define MAX_FUNCS   256
+/* Whole-program budget: `nfunc` accumulates across every unit in one build
+   (build mode shares one symbol table), so this is one cap for the entire
+   program, not a per-unit allowance. The table itself is MAX_FUNCS + 64 rows.
+   Raised 256 -> 512 when ct-ast hit the 256 ceiling exactly (Phase 54 S0). */
+#define MAX_FUNCS   512
 #define MAX_VARS    4096
 #define MAX_SCOPE   256
 #define MAX_TYPES   256

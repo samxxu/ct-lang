@@ -64,9 +64,10 @@ trait PkgOps {
 
 /* `ct update` / `ct verify` helpers. They are file statics rather than more
    `PkgOps` methods because L2 -- the compiler that builds ct-ast -- caps the
-   whole program at MAX_FUNCS 128 (17/128 free here) and MAX_MAP_IMPLS 256
-   (2/256 left). They own no per-compile state beyond `g_pkg`, which is one
-   unit-wide instance, so a static that names it directly reads the same. */
+   whole program at MAX_FUNCS (512 since Phase 54; ct-ast used 250 of it when
+   the cap was raised) and MAX_MAP_IMPLS 256 (2/256 left). They own no
+   per-compile state beyond `g_pkg`, which is one unit-wide instance, so a
+   static that names it directly reads the same. */
 static int pkg_read_meta(const char *dir, char *cflags, size_t ccap,
                          char *ldflags, size_t lcap, char *req, size_t rcap);
 static int pkg_index_lookup(const char *name, const char *range, char *url, size_t ucap,

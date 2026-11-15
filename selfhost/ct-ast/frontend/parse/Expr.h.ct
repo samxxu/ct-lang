@@ -53,7 +53,8 @@ import tool::diag::Diag;
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 1024
-#define MAX_FUNCS 256
+/* Mirror of Symbols.h.ct's whole-program budget; macros do not cross units. */
+#define MAX_FUNCS 512
 /* Phase 32 S7: the argument start positions of the call being parsed. The
    array is a stack: a nested call appends after its parent's frame. */
 #define MAX_ARG_POS 32
@@ -1636,6 +1637,7 @@ impl ExprOps for Expr {
     {
         char cname[MAX_TEXT];
         char tmp[MAX_TEXT];
+        char msg[MAX_TEXT];
         int i, k, ni, fi, suffix, taken, seq;
 
         seq = 1;
@@ -1648,8 +1650,10 @@ impl ExprOps for Expr {
         }
         if (self->sym->nginsts >= MAX_GENERIC_INSTS)
             return self->sup->fail("too many generic instances in this unit");
-        if (self->sym->nfunc >= self->sym->nfunc_base + MAX_FUNCS)
-            return self->sup->fail("too many functions in this unit");
+        if (self->sym->nfunc >= self->sym->nfunc_base + MAX_FUNCS) {
+            snprintf(msg, sizeof msg, "too many functions (limit %d, whole program)", MAX_FUNCS);
+            return self->sup->fail(msg);
+        }
         /* `<name>__ct<N>`; a user function may already hold the spelling, so a
            numeric suffix is retried a bounded number of times (R6). Another
            unit's static instance is not a collision in this unit's C file. */
