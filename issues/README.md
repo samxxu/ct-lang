@@ -257,7 +257,7 @@
 | CI-4 | Medium | 仓库无 CI 配置，九道门禁只靠手工执行（已修 2026-11-02，`810e0fc` + `bc1fd52`） | [ci-4-no-ci-config.md](ci/ci-4-no-ci-config.md) |
 | CI-5 | Low | `packages.yml` 的 push / PR 路径过滤不覆盖 `selfhost/ct-ast/tool/pkg/**` 与 `test/pkg/**` | [ci-5-packages-workflow-path-filters.md](ci/ci-5-packages-workflow-path-filters.md) |
 | CI-6 | Low | CI 两个 job 名仍写 `nine hard gates`（实际 12 道） | [ci-6-gate-label-nine.md](ci/ci-6-gate-label-nine.md) |
-| CI-7 | Medium | `v0.19.0` 没有 git tag，安装与验收口径不可用（blocked：待明确指令，不擅自动 tag / bump；2026-11-10 复核仍无该 tag） | [ci-7-v0190-untagged.md](ci/ci-7-v0190-untagged.md) |
+| CI-7 | Medium | `v0.19.0` 没有 git tag，安装与验收口径不可用（**已解决**：2026-11-15 补 annotated tag，归档恢复 200） | [ci-7-v0190-untagged.md](ci/ci-7-v0190-untagged.md) |
 | CI-8 | Medium | 方法论 G9 的 spec pin 缺失，项目无法自证与主规范同版 | [ci-8-g9-spec-pin-missing.md](ci/ci-8-g9-spec-pin-missing.md) |
 
 ### `selfhost/` —— 代码结构与容量
@@ -1357,7 +1357,7 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 | CI-3 | ⬜ 未修复 | `check-all.sh:37-52` 统一预检 `cc` / `diff` / `python3` / `git` | 已修复 |
 | SH-51 | 待决策（索引） | 方案 B 已落地：README 标注 `--cflags` / `--ldflags` 是 shell 片段 | 已采纳方案 B |
 | SH-61 | 待变参 trait WIP 落地 | `Parser.h.ct:2061/2266` 仍拒 `a trait method cannot be variadic` | **blocked**（未修） |
-| CI-7 | 待明确指令 | `git tag -l v0.19.0` 为空 | **blocked**（未修） |
+| CI-7 | 已解决 | 2026-11-15 补 annotated `v0.19.0`（→ `4b9946b`） | **已解决**（归档补 tag 后 200） |
 | STD-1 | 已决策 | 实现属 ct-pkg 的 `std` 包，本仓不跟 | 保持（越界不做） |
 | DOC-63 | 待处理 | `docs/tutorial.md:5` / `docs/memory-guide.md:5` 已改为「当前主线 ct-ast，不固定版本号」 | 已修复 |
 

@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | [install.sh:27](../../install.sh#L27)（`-V/--version REF`）、[L72](../../install.sh#L72)（`archive/$ref.tar.gz`）；验收口径 [docs/roadmap.md:33](../../docs/roadmap.md#L33) |
-| 状态 | blocked（待明确指令，不擅自动 tag / bump；2026-11-10 复核：`git tag -l v0.19.0` 仍为空，`v0.19.1` 在） |
+| 状态 | **已解决**（2026-11-15：补 annotated tag `v0.19.0`，归档恢复 200；完整 `install.sh` 构建未在本轮执行） |
 
 ## 现象
 
@@ -60,3 +60,21 @@ Medium：文档说 `v0.19.0` 已收口，安装器却拉不到该版本；用户
 - 建议 3（`install.sh` 明确报 `unknown version`）：需要网络探测 tags 或维护可用列表，且只在「按不存在
   的 tag 安装」时才有价值；在 tag 补齐前不构成修复合集的一部分，留作独立改进。
 - 旁注：`$ ct -v` 显示 `v0.16.2` 是复核机器上安装的旧二进制，与仓库源码无关，不计入本条。
+
+## 2026-11-15 收口
+
+- **补 tag**：`v0.19.0` 为 annotated tag，对象 `4aa944cfdd0a5813fa98f3164cd003bca7eb9c30`，
+  指向 `4b9946b6f09389881e74da38ada208360103cec7`（0.19.0 时期最后一个提交，`v0.19.1` 的祖先）；
+  tag 消息注明「事后补打、补打日期与依据」。已推送。
+- **远端核对**：`git ls-remote --tags origin 'v0.19.*'` 同时列出 `v0.19.0`（ peel 到 `4b9946b6`）
+  与 `v0.19.1`（peel 到 `4176c636`）。
+- **归档验证（补 tag 前）**：`v0.19.0` 的 codeload 与 `archive/refs/tags` 两个地址均 **404**；
+  `v0.19.1` 对照为 **200**，说明不是网络整体不通。
+- **归档验证（补 tag 后）**：
+  - `curl -sS -o /dev/null -w '%{http_code}' --max-time 40 "https://codeload.github.com/samxxu/ct-lang/tar.gz/refs/tags/v0.19.0"`
+    → **200**（40 秒内收到 1,338,322 字节，未下完即超时，但响应码已为 200）；
+  - `https://api.github.com/repos/samxxu/ct-lang/tarball/v0.19.0` → **200**；
+  - `v0.19.1` 对照 → **200**。
+- **结论**：归档缺失是「tag 不存在」导致；补 tag 后 `install.sh` 使用的
+  `https://github.com/<repo>/archive/<ref>.tar.gz` 路径恢复可用。完整 `install.sh --version v0.19.0`
+  的下载与构建未在本轮执行，残余风险在构建链而非归档可达性。
