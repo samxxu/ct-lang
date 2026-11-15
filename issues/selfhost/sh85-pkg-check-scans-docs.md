@@ -65,3 +65,8 @@ $ echo $?
   `ct pkg check` 的 PK-1/2/5/8 范围。无对应承诺（扫描的文件集未定义）。
 - **优先级 / 落点：** P2；`v0.61.x` patch。先把扫描范围限定为 `ct.pkg`、`ct.lock`、
   `*.ct`、`*.h.ct` 与构建脚本，再补一条文档示例夹具。
+
+## 处置（v0.61.1）
+
+- PK-8 扫描跳过 `docs/`、`issues/`、`battle/`、`test/` 与 `.md`；
+- 提交 `7b332432`；含绝对 `-I` 的 README 下 `ct pkg check` 返回 `ok: 4 criteria`。

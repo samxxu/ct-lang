@@ -65,3 +65,8 @@ $ echo $?
   `-I` 与 dev override 双留痕。
 - **优先级 / 落点：** P1；`v0.61.x` patch。输出对 override 去重，或只打印未被覆盖的根；
   冲突诊断列出两个根来源。
+
+## 处置（v0.61.1）
+
+- v2 lock 的 `ct install` 不再打印 `-I`；`ct build` 自行读 lock 加根，避免 dev override 双根；
+- 提交 `7b332432`；`test/pkg` 135/0。

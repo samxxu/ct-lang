@@ -70,3 +70,8 @@ $ echo $?
   而 `:2074` 在 token 仍为 `*` 时报 `expected a field name`，说明泛型类型后的 `*` 未被收进。
 - **优先级 / 落点：** P0；`v0.61.x` patch（回归不走 phase）。补 `Map<Str, int> *field;`
   与 `Vec<int> *field;` 两个夹具，并确认 0.58 的旧产物仍可编译。
+
+## 处置（v0.61.1）
+
+- 复核：当前 `HEAD` 已能编译 `Map<Str, int> *index;`，新增 `test/ast/286_generic_ptr_field` 固化；
+- 提交 `7b332432`；`check-ast` 1451/0。
