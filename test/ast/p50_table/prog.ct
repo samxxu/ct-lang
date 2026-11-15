@@ -1,0 +1,140 @@
+/* Phase 50 / E50-3: the fixed 32-row consistency table. Every row prints
+   `id,has,hit,val`; `hit` is `at(i) != 0` for `Vec` and `get(k) != 0` for
+   `Map`, and `val` is the borrowed value (or -1 for a miss). An in-range zero
+   value and a present zero payload both print `has=1,hit=1,val=0`; misses
+   print `has=0,hit=0,val=-1`. License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v;
+    Vec<int> e;
+    Vec<Str> sv;
+    Map<char *, int> mc;
+    Map<int, int> mi;
+    Map<long, int> ml;
+    Map<Str, int> ms;
+    Map<char *, int> ec;
+    Map<Str, int> es;
+    Map<int, int> ei;
+    Str s1 = str_from_len("a\0b", 3);
+    Str s2 = str_from_len("a\0c", 3);
+    Str longer = str_from_len("a\0bX", 4);
+    Str prefix = str_from_len("a\0", 2);
+    Str plain = str_from("a");
+    Str empty = str_from_len("", 0);
+    int *p;
+    Str *sp;
+
+    v.h = 0;
+    v.push(0);
+    v.push(7);
+    v.push(-3);
+
+    p = v.at(0);
+    printf("1,%d,%d,%d\n", v.has(0), p != 0, p ? *p : -1);
+    p = v.at(1);
+    printf("2,%d,%d,%d\n", v.has(1), p != 0, p ? *p : -1);
+    p = v.at(2);
+    printf("3,%d,%d,%d\n", v.has(2), p != 0, p ? *p : -1);
+    p = v.at(3);
+    printf("4,%d,%d,%d\n", v.has(3), p != 0, p ? *p : -1);
+    p = v.at(-1);
+    printf("5,%d,%d,%d\n", v.has(-1), p != 0, p ? *p : -1);
+    p = v.at(99);
+    printf("6,%d,%d,%d\n", v.has(99), p != 0, p ? *p : -1);
+
+    e.h = 0;
+    p = e.at(0);
+    printf("7,%d,%d,%d\n", e.has(0), p != 0, p ? *p : -1);
+    p = e.at(-1);
+    printf("8,%d,%d,%d\n", e.has(-1), p != 0, p ? *p : -1);
+
+    sv.h = 0;
+    sv.push(str_from_len("a\0b", 3));
+    sv.push(str_from(""));
+    sp = sv.at(0);
+    printf("9,%d,%d,%d\n", sv.has(0), sp != 0, sp ? sp->len : -1);
+    sp = sv.at(1);
+    printf("10,%d,%d,%d\n", sv.has(1), sp != 0, sp ? sp->len : -1);
+    sp = sv.at(2);
+    printf("11,%d,%d,%d\n", sv.has(2), sp != 0, sp ? sp->len : -1);
+    sp = sv.at(-1);
+    printf("12,%d,%d,%d\n", sv.has(-1), sp != 0, sp ? sp->len : -1);
+
+    mc.h = 0;
+    mc.put("a", 1);
+    mc.put("b", 0);
+    p = mc.get("a");
+    printf("13,%d,%d,%d\n", mc.has("a"), p != 0, p ? *p : -1);
+    p = mc.get("b");
+    printf("14,%d,%d,%d\n", mc.has("b"), p != 0, p ? *p : -1);
+    p = mc.get("c");
+    printf("15,%d,%d,%d\n", mc.has("c"), p != 0, p ? *p : -1);
+    p = mc.get("");
+    printf("16,%d,%d,%d\n", mc.has(""), p != 0, p ? *p : -1);
+
+    mi.h = 0;
+    mi.put(0, 10);
+    mi.put(5, 0);
+    p = mi.get(0);
+    printf("17,%d,%d,%d\n", mi.has(0), p != 0, p ? *p : -1);
+    p = mi.get(5);
+    printf("18,%d,%d,%d\n", mi.has(5), p != 0, p ? *p : -1);
+    p = mi.get(1);
+    printf("19,%d,%d,%d\n", mi.has(1), p != 0, p ? *p : -1);
+    p = mi.get(-1);
+    printf("20,%d,%d,%d\n", mi.has(-1), p != 0, p ? *p : -1);
+
+    ml.h = 0;
+    ml.put(7L, 70);
+    ml.put(8L, 0);
+    p = ml.get(7L);
+    printf("21,%d,%d,%d\n", ml.has(7L), p != 0, p ? *p : -1);
+    p = ml.get(8L);
+    printf("22,%d,%d,%d\n", ml.has(8L), p != 0, p ? *p : -1);
+    p = ml.get(9L);
+    printf("23,%d,%d,%d\n", ml.has(9L), p != 0, p ? *p : -1);
+
+    ms.h = 0;
+    ms.put(s1, 1);
+    ms.put(s2, 2);
+    p = ms.get(s1);
+    printf("24,%d,%d,%d\n", ms.has(s1), p != 0, p ? *p : -1);
+    p = ms.get(s2);
+    printf("25,%d,%d,%d\n", ms.has(s2), p != 0, p ? *p : -1);
+    p = ms.get(longer);
+    printf("26,%d,%d,%d\n", ms.has(longer), p != 0, p ? *p : -1);
+    p = ms.get(prefix);
+    printf("27,%d,%d,%d\n", ms.has(prefix), p != 0, p ? *p : -1);
+    p = ms.get(plain);
+    printf("28,%d,%d,%d\n", ms.has(plain), p != 0, p ? *p : -1);
+    p = ms.get(empty);
+    printf("29,%d,%d,%d\n", ms.has(empty), p != 0, p ? *p : -1);
+
+    ec.h = 0;
+    p = ec.get("a");
+    printf("30,%d,%d,%d\n", ec.has("a"), p != 0, p ? *p : -1);
+
+    es.h = 0;
+    p = es.get(s1);
+    printf("31,%d,%d,%d\n", es.has(s1), p != 0, p ? *p : -1);
+
+    ei.h = 0;
+    p = ei.get(0);
+    printf("32,%d,%d,%d\n", ei.has(0), p != 0, p ? *p : -1);
+
+    v.release();
+    sv.release();
+    mc.release();
+    mi.release();
+    ml.release();
+    ms.release();
+    s1.release();
+    s2.release();
+    longer.release();
+    prefix.release();
+    plain.release();
+    empty.release();
+    return 0;
+}

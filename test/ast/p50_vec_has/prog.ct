@@ -1,0 +1,36 @@
+/* Phase 50 / E50-1: `has` and `at` agree; an in-range zero value is present
+   (`has == 1`, `*at == 0`) while an out-of-range index answers
+   `has == 0 && at == 0`. `get` is untouched (D50-1) and `at` is a borrow
+   (D50-2). License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+
+int main(void)
+{
+    Vec<int> v;
+    Vec<int> empty;
+    int *p;
+    int *miss;
+
+    v.h = 0;
+    v.push(0);
+    v.push(7);
+
+    miss = v.at(5);
+    printf("oob has=%d at=%d\n", v.has(5), miss == 0);
+
+    p = v.at(0);
+    printf("zero has=%d hit=%d val=%d\n", v.has(0), p != 0, p ? *p : -1);
+
+    p = v.at(1);
+    printf("one has=%d hit=%d val=%d\n", v.has(1), p != 0, p ? *p : -1);
+
+    miss = v.at(-1);
+    printf("neg has=%d at=%d\n", v.has(-1), miss == 0);
+
+    empty.h = 0;
+    miss = empty.at(0);
+    printf("empty has=%d at=%d\n", empty.has(0), miss == 0);
+
+    v.release();
+    return 0;
+}

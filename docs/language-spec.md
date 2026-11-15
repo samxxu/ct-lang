@@ -2257,6 +2257,12 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   即使共享缓冲还被 `retain` 出的兄弟句柄持有，也不会把计数再减一次。`Vec.get` / `Map.get`
   越界或未命中返回零值 / 空指针，`set` 越界是 no-op。`Map` 按**插入序**遍历，重复键原位改值，
   `remove` 让后继条目左移。
+- **`has` / `at`（Phase 50，D50-1/2/3）**：`Vec<T>::has(i) -> int` 与
+  `Vec<T>::at(i) -> T *`，`Map<K,V>::has(k) -> int`（`int` / `char *` / `Str` 三份键实现）。
+  `has` 只判存在（`at` 是否非 `0` 与它一致）；`at` 命中返回**借用指针**，未命中返回 `0`，
+  不用零值哨兵——因此「元素值恰好是 0」与「越界/缺键」可区分。**`get` 的签名与语义不变**。
+  借用指针不复制元素、不增加引用，在容器被修改或 `release` 后失效；调用方不得 `release` 它，
+  容器只认元素自己的 `retain`/`release` 协议，`release` 不额外递归释放元素。
 - **`foreach` 容器协议**：数组与 `Vec` 同时绑定 `item`（元素的值拷贝）与只读 `i`；`Map` 只绑定
   `item`，它是 `MapEntry`，用 `item.key` / `item.value` 读写。长度在循环开始前取一次。对 `i`
   赋值 / 自增 / 取地址是硬错（L29-16），循环体内重声明 `item` 或 `i` 是硬错（L29-17），

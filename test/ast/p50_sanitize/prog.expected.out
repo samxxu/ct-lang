@@ -1,0 +1,4 @@
+vec has=1 len=5 zero=1
+vec zero len=0
+vec miss=0 at=1
+map has=1 val=7

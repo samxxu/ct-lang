@@ -3797,6 +3797,13 @@ if bash test/ast/p49_own.sh "$work/ct-ast" "$CC"; then
 else
     bad "p49/own" "own factory initializer or diagnostics failed"
 fi
+# Phase 50: `Vec::has/at` and `Map::has` for the three key families; the 32-row
+# consistency table and the borrowed-pointer ASAN probe are part of the harness.
+if bash test/ast/p50_has.sh "$work/ct-ast" "$CC"; then
+    ok "p50/has"
+else
+    bad "p50/has" "container has/at contract failed"
+fi
 else
     bad "p40 r5" "$(cat "$work/p40r5.out" "$work/p40r5.err")"
 fi

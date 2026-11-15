@@ -1,0 +1,31 @@
+/* Phase 50 / E50-2: `Map::has` agrees with `Map::get` for the three key
+   families; a present zero value is `has == 1` with `*get == 0`, a missing key
+   is `has == 0 && get == 0`. `get` keeps returning `V *` (D50-1). */
+#include <stdio.h>
+
+int main(void)
+{
+    Map<int, int> mi;
+    Map<char *, int> mc;
+    int *p;
+
+    mi.h = 0;
+    mi.put(0, 10);
+    mi.put(5, 0);
+    p = mi.get(5);
+    printf("int hit=%d has=%d get=%d val=%d\n", p != 0, mi.has(5), p != 0, p ? *p : -1);
+    p = mi.get(9);
+    printf("int miss=%d has=%d get=%d\n", p == 0, mi.has(9), p == 0);
+    mi.release();
+
+    mc.h = 0;
+    mc.put("a", 1);
+    mc.put("b", 0);
+    p = mc.get("b");
+    printf("str hit=%d has=%d val=%d\n", p != 0, mc.has("b"), p ? *p : -1);
+    p = mc.get("c");
+    printf("str miss=%d has=%d get=%d\n", p == 0, mc.has("c"), p == 0);
+    printf("str null=%d\n", mc.has(0));
+    mc.release();
+    return 0;
+}

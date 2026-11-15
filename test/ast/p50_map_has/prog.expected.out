@@ -1,0 +1,5 @@
+int hit=1 has=1 get=1 val=0
+int miss=1 has=0 get=1
+str hit=1 has=1 val=0
+str miss=1 has=0 get=1
+str null=0

@@ -1,0 +1,4 @@
+nul-a has=1 hit=1 val=0
+nul-b has=1 hit=1 val=2
+longer=0 prefix=0 plain=0
+miss get=1

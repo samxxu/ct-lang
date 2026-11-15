@@ -1,0 +1,33 @@
+/* Phase 50 / E50-5: a `Str` key compares by len + bytes, so an embedded NUL is
+   data (`a\0b` != `a\0c`) and a longer/shorter prefix is a miss. A present zero
+   value still reports `has == 1`. License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+
+int main(void)
+{
+    Str a = str_from_len("a\0b", 3);
+    Str b = str_from_len("a\0c", 3);
+    Str longer = str_from_len("a\0bX", 4);
+    Str prefix = str_from_len("a\0", 2);
+    Str plain = str_from("a");
+    Map<Str, int> m;
+    int *p;
+
+    m.h = 0;
+    m.put(a, 0);
+    m.put(b, 2);
+    p = m.get(a);
+    printf("nul-a has=%d hit=%d val=%d\n", m.has(a), p != 0, p ? *p : -1);
+    p = m.get(b);
+    printf("nul-b has=%d hit=%d val=%d\n", m.has(b), p != 0, p ? *p : -1);
+    printf("longer=%d prefix=%d plain=%d\n", m.has(longer), m.has(prefix), m.has(plain));
+    p = m.get(longer);
+    printf("miss get=%d\n", p == 0);
+    m.release();
+    a.release();
+    b.release();
+    longer.release();
+    prefix.release();
+    plain.release();
+    return 0;
+}

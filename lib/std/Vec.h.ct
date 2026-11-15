@@ -104,6 +104,28 @@ impl<T> Vec<T> {
         return d[i];
     }
 
+    /* PH-50 D50-1/D50-3: the bounds predicate that makes an in-range zero
+       value distinguishable from an out-of-range read. `get` keeps its
+       zero-value answer unchanged (D50-1). */
+    pub int has(int i)
+    {
+        if (self->h == 0) return 0;
+        return i >= 0 && i < self->h->len;
+    }
+
+    /* PH-50 D50-2/D50-3: a borrowed pointer to the slot itself, never a copy
+       and never an extra reference. The caller must not `release` it; the
+       pointer is invalidated by any later mutation of this container (the same
+       lifetime `get`'s interior pointer has). 0 when the index is out of
+       range, so `has` / `at` agree and no zero sentinel is needed. */
+    pub T *at(int i)
+    {
+        T *d;
+        if (self->h == 0 || i < 0 || i >= self->h->len) return 0;
+        d = self->h->data;
+        return &d[i];
+    }
+
     /* Out of range is a no-op. The new value is retained before the old slot is
        released, so `v.set(i, v.get(i))` stays safe when the slot is the only
        owner. */
@@ -271,6 +293,19 @@ impl<V> Map<char *, V> {
         return 0;
     }
 
+    /* PH-50: key presence with the exact comparison `get` uses; the value is
+       not copied and nothing is retained. A NULL key is absent, like `get`. */
+    pub int has(char *k)
+    {
+        int i;
+        struct MapEntry<char *, V> *es;
+        if (self->h == 0 || k == 0) return 0;
+        es = (struct MapEntry<char *, V> *)self->h->data;
+        for (i = 0; i < self->h->len; i++)
+            if (strcmp(es[i].key, k) == 0) return 1;
+        return 0;
+    }
+
     pub int remove(char *k)
     {
         int i;
@@ -428,6 +463,22 @@ impl<V> Map<Str, V> {
                 && (k.len == 0
                     || memcmp(es[i].key.data, k.data, (size_t)k.len) == 0))
                 return &es[i].value;
+        return 0;
+    }
+
+    /* PH-50: len + memcmp, the same comparison `get` uses, so an embedded NUL
+       is data and never a terminator. The value is not copied. */
+    pub int has(struct Str k)
+    {
+        int i;
+        struct MapEntry<struct Str, V> *es;
+        if (self->h == 0 || k.len < 0) return 0;
+        es = (struct MapEntry<struct Str, V> *)self->h->data;
+        for (i = 0; i < self->h->len; i++)
+            if (es[i].key.len == k.len
+                && (k.len == 0
+                    || memcmp(es[i].key.data, k.data, (size_t)k.len) == 0))
+                return 1;
         return 0;
     }
 
@@ -623,6 +674,20 @@ impl<K, V> Map<K, V> {
         for (i = 0; i < self->h->len; i++)
             if (memcmp(&es[i].key, &k, sizeof(k)) == 0)
                 return &es[i].value;
+        return 0;
+    }
+
+    /* PH-50: key presence for the byte-compared integer keys. `char *` and
+       `Str` are served by their earlier blocks, exactly like `get` (V29-1). */
+    pub int has(K k)
+    {
+        int i;
+        struct MapEntry<K, V> *es;
+        if (self->h == 0) return 0;
+        es = (struct MapEntry<K, V> *)self->h->data;
+        for (i = 0; i < self->h->len; i++)
+            if (memcmp(&es[i].key, &k, sizeof(k)) == 0)
+                return 1;
         return 0;
     }
 
