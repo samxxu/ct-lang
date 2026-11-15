@@ -71,7 +71,7 @@
 | Phase 57 | 限定名与 namespace 常量（类型位置 `A::B`、值位置 `Type::Member`；SH-18 + LANG-15） | ✅ 完成 | v0.59.0 | [卡](design/phase57.md) · [重排](planning/post-58-plan.md) |
 | Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ✅ 完成 | v0.60.0 | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) · [重排](planning/post-58-plan.md) |
 | Phase 60 | 视图节点注记（`view` 子句） | ⬜ 待确认消费者（无消费者则不立相） | 条件位 v0.61.0（跳过则不占位） | [提案](proposals/ct-view-annotation-proposal.md) · [重排](planning/post-58-plan.md) |
-| Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | ⬜ 规划中（卡面已冻结） | v0.62.0（PH-60 跳过时 v0.61.0） | [卡](design/phase62.md) · [提案](proposals/ct-writable-subscript-proposal.md) · [研判](review/ct-writable-subscript-proposal-review.md) |
+| Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | 🟨 实施中（S1–S3 完成；S4/S5 待做） | v0.62.0（PH-60 跳过时 v0.61.0） | [卡](design/phase62.md) · [提案](proposals/ct-writable-subscript-proposal.md) · [研判](review/ct-writable-subscript-proposal-review.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
