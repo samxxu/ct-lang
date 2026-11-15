@@ -5,7 +5,7 @@
 | 模块 | selfhost（`ct verify --strict` / 包 lock / dev override） |
 | 类型 | 能力缺口（不是回归；现有行为符合已写下的判据） |
 | 严重度 | Medium |
-| 状态 | 不受理（非问题；改动需先改 SP-016） |
+| 状态 | rejected（已取消，不受理；2026-11-16 用户裁定） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [需求 SP-016](../../docs/planning/ct-pkg-shared-store-requirements.md)、[提案 §10 S3](../../docs/proposals/ct-pkg-shared-store.md) |
 
@@ -66,3 +66,8 @@ $ echo $?
   （[ct-pkg-shared-store.md](../../docs/proposals/ct-pkg-shared-store.md)）同一判据。
 - **若要支持：** 先改需求（新增开关或 `--strict --allow-override` 语义），再实现；
   不能按缺陷直接修。文档里可补一句「`--strict` 只验 store-backed lock」，属于文档补齐。
+
+## 用户裁定（2026-11-16）
+
+- **取消，不受理。**
+- 不再作为待修 issue 跟踪；后续如需扩大判据/本地严格校验，按需求变更重新立项。

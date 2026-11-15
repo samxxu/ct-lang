@@ -339,11 +339,11 @@
 | SH-77 | Low | `ABI_HASH` 只覆盖导出名，判不出签名级漂移（已被 REQ-ABI-2 承接，不排期） | [sh77-abi-hash-name-only.md](selfhost/sh77-abi-hash-name-only.md) |
 | SH-78 | Medium | `--lib` 导出面只收根单元 `pub` 自由函数，`impl` 的 `pub` 方法不计入（设计口径，不排期） | [sh78-lib-export-free-functions-only.md](selfhost/sh78-lib-export-free-functions-only.md) |
 | SH-79 | **High** | `--emit-map` 两个 facet：`--lib` 不落文件、build 的 `file` 指向内置层（patch 0.53.8） | [sh79-build-lib-emit-map-silent.md](selfhost/sh79-build-lib-emit-map-silent.md) |
-| SH-80 | 非问题 | 包发布前的清单校验只验四字段存在；`dep` 全名与 `version`/tag 一致性按提案 §9 属发布侧判据，不在 CT 范围 | [sh80-pkg-check-criteria-narrow.md](selfhost/sh80-pkg-check-criteria-narrow.md) |
+| SH-80 | 已取消 | 包发布前的清单校验只验四字段存在；`dep` 全名与 `version`/tag 一致性按提案 §9 属发布侧判据，不在 CT 范围 | [sh80-pkg-check-criteria-narrow.md](selfhost/sh80-pkg-check-criteria-narrow.md) |
 | SH-81 | P2 | 已修 v0.61.1； 无索引解析器时限定名被当成 `https://<publisher>/<name>` 去 clone | [sh81-qualified-name-falls-back-to-url.md](selfhost/sh81-qualified-name-falls-back-to-url.md) |
 | SH-82 | **P0（High）** | 已修 v0.61.1； `ct migrate` 打印校验错误后仍返回 0，调用方无法判断迁移失败 | [sh82-migrate-returns-zero-on-failure.md](selfhost/sh82-migrate-returns-zero-on-failure.md) |
 | SH-83 | P1 | 已修 v0.61.1； `ct install` 打印的 `-I` 与 dev override 冲突，照抄即 `two import roots` | [sh83-install-printed-include-collides-with-override.md](selfhost/sh83-install-printed-include-collides-with-override.md) |
-| SH-84 | 非问题 | `ct verify --strict` 拒绝 dev override 符合 SP-016；本地严格校验属需求变更 | [sh84-verify-strict-no-dev-override-path.md](selfhost/sh84-verify-strict-no-dev-override-path.md) |
+| SH-84 | 已取消 | `ct verify --strict` 拒绝 dev override 符合 SP-016；本地严格校验属需求变更 | [sh84-verify-strict-no-dev-override-path.md](selfhost/sh84-verify-strict-no-dev-override-path.md) |
 | SH-85 | P2 | 已修 v0.61.1； 包发布前的检查扫描全部文本，发布文档示例中的绝对 `-I` 会误判整包红 | [sh85-pkg-check-scans-docs.md](selfhost/sh85-pkg-check-scans-docs.md) |
 
 ### `packages/` —— CT 包管理工具缺陷
