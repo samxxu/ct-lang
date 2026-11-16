@@ -628,6 +628,14 @@ else
     bad "p0_trait_array_multidim" "$(head -2 "$work/p0md.err")"
 fi
 
+# PH-64 T1: the vtable and every vptr pointing at it are `const` (so a bare-metal
+# link can place them in .rodata); `sizeof` must not move.
+if bash test/ast/p64_const_vtable.sh "$work/ct-ast" >"$work/p64cv.out" 2>"$work/p64cv.err"; then
+    ok "p64_const_vtable"
+else
+    bad "p64_const_vtable" "$(cat "$work/p64cv.out" "$work/p64cv.err")"
+fi
+
 # E34-8 (P34 S7): a boxed interface payload keeps the layer's product shape.
 cat >"$work/p34_opt_iface.expected" <<'P34IFACE'
 struct Option_Show__iface {
