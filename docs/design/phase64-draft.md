@@ -62,29 +62,29 @@
 
 ## 5. 进度与阻塞（未收口）
 
-**已交付：PH-64-T1**（`49bc9549`，vtable 与 `__vptr` / `vt` 成套 const）。
+**已交付**
 
-| 验收 | 结果 |
-| --- | --- |
-| `bash test/ast/p64_const_vtable.sh` | `OK p64cv`（红证见 `b5000b1c`） |
-| `bash selfhost/check-ast.sh` | rc=0（1458/0） |
-| p39 r8 `--emit-c` 字节基线 | 随 const 文本重写（3 组 6 行摘要） |
+| 任务 | 提交 | 验收 |
+| --- | --- | --- |
+| T1 const vtable | `b5000b1c` 红 → `49bc9549` | `bash test/ast/p64_const_vtable.sh` → `OK p64cv` |
+| T3 `--alloc` | `e254b259` 红 → `f69c07fb` | `bash test/ast/p64_alloc.sh` → `OK p64alloc` |
+| T5 无初值数组硬错 | `09a3b779` 红 → `8ef87fb6` | `bash test/ast/p64_no_init_array.sh` → `OK p64nia` |
 
-**未交付：T2 / T3 / T4 / T5**，阻塞点逐条记录如下（不许以「差不多」收口，6.3 A-2）：
+`bash selfhost/check-ast.sh` → rc=0（1460/0）；三个探针都已在门禁里，红证都在父提交正文。
 
-- **T2（按需单元）是 T4 的前置**：`ct build --emit-c` 今天把 `Vec` / `Option` / `Result` / `Str`
-  四个内置单元无条件解析并各发一份 `.c/.h`（实测最小程序产物 = 四单元 + 自身）。
-  要让「最小程序只有自身 `.c`」，需要把「单元是否被使用」记录到符号表：
-  `StructDef.owner` 只在非实例行有值（`frontend/sym/Symbols.h.ct:283` 的注释），实例行是 `-1`，
-  所以 `add_struct_inst`（`:927`）处拿不到模板所属单元。可走的两条路：
-  ① 在 `add_struct_inst` 前由解析器传入模板 owner，实例行记 `owner`，发射时按 owner 过滤；
-  ② 给单元表加 `used` 位，在解析到 `Vec` / `Option` / `Result` / `Str` 的实例或非模板符号引用时置位。
-  两者都要动 `frontend/sym` 与 `frontend/parse`，属于跨单元改动，需要单独立项评审。
-- **T3（`--alloc`）依赖 T4 的硬错语义**：`own` / `delete` 无映射时在 `--freestanding` 下硬错，
-  需要先有开关；映射本身（`Emitter` 把 `malloc(` / `free(` 换成用户符号）可独立做，
-  但 E4 的验收要在 T4 之后才有意义。
-- **T4 / T5 未开工**：卡面的 `--freestanding` 开关与符号面门禁尚未实现；
-  在 T2 落地前，最小程序的 `nm -u` 一定含 libc 符号（`Vec.c` 带 `fprintf` / `abort`），E1 不可能绿。
+**未交付：T2 / T4（互为前置）**
 
-**结论：PH-64 保持「在研」，不 bump MINOR、不打 tag。** 下一步是 T2 的立项（跨 `frontend/sym` +
-`frontend/parse` 的改动面），完成后 T3→T4→T5 才能按依赖顺序收口。
+- **T2（按需单元）是 T4 的前置**。实测最小程序 `--emit-c` 仍产出
+  `Vec.c/.h`、`Option.c/.h`、`Result.c/.h`、`Str.c/.h` 与自身 `.c`；四个单元的
+  `.h` 带 `<stdio.h>/<stdlib.h>/<string.h>`，`Str.c` 还有 `free` 调用。
+  E1（每单元 `nm -u` ⊆ 允许集）在产物集合不变的前提下不可能绿。
+- 「单元是否被使用」在符号表里没有落点：`StructDef.owner` 只在非实例行有值
+  （`frontend/sym/Symbols.h.ct:283`），`add_struct_inst`（`:927`）拿不到模板 owner；
+  模板名在 `ct_inst_add(enc, tname, …)` 里是有的，可作为「实例 → 单元」的判据，
+  但 `Str` 这类非模板单元还要另一条判据（引用扫描或 used 位）。
+- 影响面：跳过未用单元会改变 `--emit-c` 的产物集合，`test/pkg` 的 build 断言、
+  `check-ast` 的模块段与 p39 r8 字节基线都要同步复核——这是单独立项的工作量。
+
+**结论：PH-64 保持「在研」，不 bump MINOR、不打 tag。** 下一步是给
+`frontend/sym` 的实例行补 owner（或给单元表加 used 位），再以它为 T2 的唯一判据；
+T4 的开关、符号面门禁与 T5 的硬错可复用本轮已落的 `--freestanding` / `--alloc` 骨架。
