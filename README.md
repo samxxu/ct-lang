@@ -443,6 +443,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h`；只接受**单文件单元**，`import` 需改用 `ct build`（`-I` 同理只对 build 生效，compile 下会提示被忽略） |
 | `ct <in.ct> -o <out.c>` | 指定输出路径 |
 | `ct build <in.ct>… [-o <exe>]` | 多文件构建：默认把生成的 `.c` 放进 `.ctbuild/`（`--outdir` 可改），再调用本地 C 编译器产出可执行文件（`-o` 是文件名，默认 `a.out`）；`--emit-c` 只发射 `.c`（`.h.ct` 另写 `.h`），此时 `-o` 是输出目录；`--runtime-checks` 在接口派发前检查空 vtable（默认关闭，关闭时产物不变） |
+| `ct build --freestanding [--alloc <m,f[,r,c]>]` | 裸机生成契约（PH-64）：`--freestanding` 不发射构造函数、不隐式拉内置层与 libc/堆；无初值的文件作用域 trait 数组带位置硬错。`--alloc` 把编译器与源码里的 `malloc`/`free`（可扩展 `realloc`/`calloc`）换成目标分配器，并在每个生成单元头部补原型；`--freestanding` 下未映射的堆调用同样硬错 |
 | `ct build --lib <root.h.ct> [-o <lib.a>]` | C ABI 静态库：根 `.h.ct` 的 C 兼容 `pub` 函数进入 `<base>.abi.h`，产物为 `lib<base>.a`（`-o` 可改；`--outdir` 默认 `.ctbuild`）；泛型模板跳过并警告，不兼容签名/`main`/`pub` 全局/shim 硬错；`nm -g` 面 ⊋ 导出面，只有 `.abi.h` 的声明是 ABI（Phase 39） |
 | `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`（仅单文件单元，`import` 不被接受）：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移（以及既有的 leak / 借用类发现）一律以 `error:` 报告，有任何发现退出 `1`，干净退出 `0`（`--diagnostics=json` 时对象带 `"severity":"error"`，并带 `"col"`） |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |

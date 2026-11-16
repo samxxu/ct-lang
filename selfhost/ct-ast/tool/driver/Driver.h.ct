@@ -285,6 +285,7 @@ impl DriverOps for Driver {
                        "                 [--cflags <s>] [--ldflags <s>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->]\n"
                        "                 [--diagnostics=text|json] [--std=c99|gnu99|c11]\n"
+                       "                 [--freestanding] [--alloc <m,f[,r,c]>]\n"
                        "       %s get <spec>[@<range>]\n"
                        "       %s install\n"
                        "       %s verify [--strict]\n"
