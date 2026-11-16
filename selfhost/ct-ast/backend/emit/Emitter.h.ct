@@ -237,6 +237,9 @@ struct Emitter {
        emitter includes its header explicitly. -1 when the layer is absent. */
     int  builtins[4];   /* P34 S9a: Vec / Option / Result layer units */
     int  nbuiltin;
+    /* PH-64 T2: slot-parallel liveness; a dead layer unit is not included and
+       not emitted, so the product set follows what the program can reach. */
+    int *builtin_live;
     struct MapTable  *maps;   int *nmaps;
     struct Call *calls;  int *ncalls;
     int  *build_mode;
@@ -1420,6 +1423,7 @@ static int emit_unit_body(struct Emitter *self, int u)
        unit does not own is included. */
     for (i = 0; i < self->nbuiltin; i++) {
         int bu = self->builtins[i];
+        if (self->builtin_live && !self->builtin_live[i]) continue;
         if (bu < 0 || bu >= *self->nunits || bu == u) continue;
         fprintf(self->out, "#include \"%s.h\"\n", self->units[bu].base);
     }
@@ -1577,6 +1581,7 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
        does not own. */
     for (i = 0; i < self->nbuiltin; i++) {
         int bu = self->builtins[i];
+        if (self->builtin_live && !self->builtin_live[i]) continue;
         if (bu < 0 || bu >= *self->nunits || bu == u) continue;
         fprintf(self->out, "#include \"%s.h\"\n", self->units[bu].base);
     }
@@ -6411,6 +6416,12 @@ void ct_emit_bind_flags(int *freestanding, char *alloc_map)
 {
     g_emit.freestanding = freestanding;
     g_emit.alloc_map = alloc_map;
+}
+
+pub void ct_emit_bind_builtin_live(int *live);
+void ct_emit_bind_builtin_live(int *live)
+{
+    g_emit.builtin_live = live;
 }
 
 /* `--alloc A[,B[,C[,D]]]` is parsed at emission time, not at bind time: the
