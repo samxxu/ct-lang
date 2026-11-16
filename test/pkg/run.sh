@@ -625,6 +625,21 @@ else
     else
         bad "CT_INDEX" "non-zero exit: $(cat "$work/ie.err")"
     fi
+    if ( cd "$work" && unset CT_INDEX && HOME="$work/home2" \
+            "$work/ct-ast" get ct/http >"$work/noindex.out" 2>"$work/noindex.err" ); then
+        bad "no-index guidance" "expected a non-zero exit"
+    elif grep -Fq "no index resolver for 'ct/http'" "$work/noindex.err" \
+         && grep -Fq "publisher-qualified package name" "$work/noindex.err" \
+         && grep -Fq "1) built-in / official library" "$work/noindex.err" \
+         && grep -Fq "ct get http" "$work/noindex.err" \
+         && grep -Fq "2) publisher-qualified package" "$work/noindex.err" \
+         && grep -Fq "ct get --index <file> ct/http" "$work/noindex.err" \
+         && grep -Fq "name version publisher git-url tag sha256" "$work/noindex.err" \
+         && grep -Fq "CT_REGISTRY only applies to bare names" "$work/noindex.err"; then
+        ok "a qualified name without an index explains the resolver"
+    else
+        bad "no-index guidance" "wrong diagnostic: $(cat "$work/noindex.err")"
+    fi
     if ( cd "$work/idxuse" && HOME="$work/home2" \
             "$work/ct-ast" get --index "$work/index" absent >"$work/ia.out" 2>"$work/ia.err" ); then
         bad "index missing-name" "expected a non-zero exit"
