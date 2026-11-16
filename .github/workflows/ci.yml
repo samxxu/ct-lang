@@ -57,6 +57,13 @@ jobs:
       CC: clang
     steps:
       - uses: actions/checkout@v4
+      # Ubuntu's `clang` package does not ship libclang_rt.asan; the p44/p50
+      # probes link with -fsanitize=address,undefined and skip (rc 77) without
+      # it. Install the matching runtime so the job actually exercises them.
+      - name: sanitizer runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y "libclang-rt-$(clang -dumpversion | cut -d. -f1)-dev"
       - name: L0 suite
         run: bash test/run.sh
       - name: AST compiler suite

@@ -15,6 +15,10 @@ cc=${2:-cc}
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/p50-has.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
+if ! sh "$(dirname "$0")/sanitizer_ok.sh" "$cc" >/dev/null 2>&1; then
+    echo "skip: '$cc' cannot link -fsanitize=address,undefined (Ubuntu clang needs libclang-rt-<major>-dev)" >&2
+    exit 77
+fi
 fail=0
 fail_msg() { echo "FAIL $*" >&2; fail=$((fail + 1)); }
 ok_msg() { echo "ok $*"; }

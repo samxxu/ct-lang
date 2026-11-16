@@ -111,22 +111,50 @@ for d in test/ast/*/; do
     [ -d "$d" ] || continue
     d="${d%/}"
     name="$(basename "$d")"
+    # The same three fixtures check-ast.sh leaves to their dedicated probes: a
+    # null-vtable dispatch (p37), a cancelled thread and a refcount race (p41).
+    case "$name" in 219_runtime_guard|p41_cancel_flag|p41_refcount) continue;; esac
     src="$d/prog.ct"
     [ -f "$src" ] || continue
     c="$work/$name.c"
     exe="$work/$name.bin"
 
-    if ! "$work/ct-ast" "$src" -o "$c" >"$work/$name.out" 2>"$work/$name.err"; then
-        bad "$name" "ct-ast failed: $(cat "$work/$name.err")"
-        continue
-    fi
-    if sanitizer_report "$work/$name.out" "$work/$name.err"; then
-        bad "$name" "ct-ast emitted a sanitizer report"
-        continue
-    fi
-    if ! "$SANCC" -Wall -Wextra -std=c99 -pthread "$c" -o "$exe" 2>"$work/$name.cc"; then
-        bad "$name" "generated C did not build: $(cat "$work/$name.cc")"
-        continue
+    # A fixture with a mapping unit or a header unit is multi-file: `import` is
+    # a build-mode feature, so it goes through `build --emit-c` and every unit
+    # is compiled here (the same split check-ast.sh uses).
+    if [ -n "$(find "$d" \( -name '*.m.ct' -o -name '*.h.ct' \) -print -quit)" ]; then
+        md="$work/$name.mod"
+        incs=""
+        rm -rf "$md"
+        mkdir -p "$md"
+        for h in $(find "$d" -name '*.shim.h'); do incs="$incs -I $(dirname "$h")"; done
+        if ! "$work/ct-ast" build --emit-c $incs "$src" -o "$md" \
+                >"$work/$name.out" 2>"$work/$name.err"; then
+            bad "$name" "ct-ast build failed: $(cat "$work/$name.err")"
+            continue
+        fi
+        if sanitizer_report "$work/$name.out" "$work/$name.err"; then
+            bad "$name" "ct-ast emitted a sanitizer report"
+            continue
+        fi
+        if ! "$SANCC" -Wall -Wextra -std=c99 -pthread $incs -I "$md" "$md"/*.c \
+                $(find "$d" -name '*.shim.c') -o "$exe" 2>"$work/$name.cc"; then
+            bad "$name" "generated C did not build: $(cat "$work/$name.cc")"
+            continue
+        fi
+    else
+        if ! "$work/ct-ast" "$src" -o "$c" >"$work/$name.out" 2>"$work/$name.err"; then
+            bad "$name" "ct-ast failed: $(cat "$work/$name.err")"
+            continue
+        fi
+        if sanitizer_report "$work/$name.out" "$work/$name.err"; then
+            bad "$name" "ct-ast emitted a sanitizer report"
+            continue
+        fi
+        if ! "$SANCC" -Wall -Wextra -std=c99 -pthread "$c" -o "$exe" 2>"$work/$name.cc"; then
+            bad "$name" "generated C did not build: $(cat "$work/$name.cc")"
+            continue
+        fi
     fi
     if ! "$exe" >"$work/$name.stdout" 2>"$work/$name.stderr"; then
         bad "$name" "the program exited non-zero"
@@ -166,6 +194,9 @@ echo "== negative fixtures (test/ast/errors/*.ct) =="
 for src in test/ast/errors/*.ct; do
     [ -f "$src" ] || continue
     name="$(basename "$src" .ct)"
+    # Phase 37: these exit 0 in compile mode by design (warning); their
+    # build/check severity is asserted by test/ast/p37_probe.sh in check-ast.
+    case "$name" in p37_sig_*) continue;; esac
     "$work/ct-ast" "$src" -o "$work/neg.c" >"$work/neg.out" 2>"$work/neg.err"
     st=$?
     if [ "$st" -ge 128 ]; then

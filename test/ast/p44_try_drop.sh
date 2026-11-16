@@ -16,6 +16,10 @@ san="-fsanitize=address,undefined -fno-omit-frame-pointer"
 work="${TMPDIR:-/tmp}/p44drop.$$"
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 mkdir -p "$work" || exit 1
+if ! sh "$(dirname "$0")/sanitizer_ok.sh" "$CC" >/dev/null 2>&1; then
+    echo "skip: '$CC' cannot link -fsanitize=address,undefined (Ubuntu clang needs libclang-rt-<major>-dev)" >&2
+    exit 77
+fi
 pass=0
 fail=0
 ok()  { pass=$((pass + 1)); printf '  ok    %s\n' "$1"; }

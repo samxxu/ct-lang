@@ -226,8 +226,12 @@ mkdir -p "$work" || exit 1
 
 pass=0
 fail=0
+skipped=0
 ok()  { pass=$((pass + 1)); printf '  ok    %s\n' "$1"; }
 bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
+# A probe that cannot run on this host (no sanitizer runtime, no BSD libc) exits
+# 77; it is reported, counted, and never silently green.
+skip() { skipped=$((skipped + 1)); printf '  skip  %s: %s\n' "$1" "$2"; }
 
 echo "cc: $CC"
 echo
@@ -3830,11 +3834,12 @@ if bash test/ast/p44_try_errors.sh "$work/ct-ast"; then
 else
     bad "p44/errors" "postfix '?' diagnostics failed"
 fi
-if bash test/ast/p44_try_drop.sh "$work/ct-ast"; then
-    ok "p44/drop"
-else
-    bad "p44/drop" "postfix '?' temporary lifetime failed"
-fi
+bash test/ast/p44_try_drop.sh "$work/ct-ast" >"$work/p44drop.out" 2>&1
+case $? in
+    0) ok "p44/drop" ;;
+    77) skip "p44/drop" "$(sed -n '1p' "$work/p44drop.out")" ;;
+    *) bad "p44/drop" "$(grep -m1 'FAIL' "$work/p44drop.out" || echo "postfix '?' temporary lifetime failed")" ;;
+esac
 if bash test/ast/p45_contract.sh "$work/ct-ast"; then
     ok "p45/contract"
 else
@@ -3869,11 +3874,12 @@ else
 fi
 # Phase 50: `Vec::has/at` and `Map::has` for the three key families; the 32-row
 # consistency table and the borrowed-pointer ASAN probe are part of the harness.
-if bash test/ast/p50_has.sh "$work/ct-ast" "$CC"; then
-    ok "p50/has"
-else
-    bad "p50/has" "container has/at contract failed"
-fi
+bash test/ast/p50_has.sh "$work/ct-ast" "$CC" >"$work/p50has.out" 2>&1
+case $? in
+    0) ok "p50/has" ;;
+    77) skip "p50/has" "$(sed -n '1p' "$work/p50has.out")" ;;
+    *) bad "p50/has" "$(grep -m1 'FAIL' "$work/p50has.out" || echo "container has/at contract failed")" ;;
+esac
 # Phase 51: `.` on a pointer receiver is L51-1 (selection A); `->` and the
 # legitimate value / interface-pointer receivers stay unchanged.
 if bash test/ast/p51_dot.sh "$work/ct-ast" "$CC"; then
@@ -7804,6 +7810,6 @@ else
 fi
 
 echo
-echo "== summary: $pass passed, $fail failed =="
+echo "== summary: $pass passed, $fail failed, $skipped skipped =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]
