@@ -14,6 +14,7 @@
  * `pub struct` lands in the generated header, which carries no macros.
  */
 #include <stdio.h>
+#include <limits.h>
 
 #define MAX_TEXT   160
 #define T_EOF    0
@@ -54,6 +55,15 @@ pub struct Lexer {
 } use LexOps;
 
 pub struct Lexer *lexer_get(void);
+
+/* A literal wider than `long` is reported by whoever needs the value
+   (`range_bound_value` re-reads the spelling); the scanner itself must not
+   invoke signed overflow on the way there (UBSAN gate, SH-86 follow-up). */
+static long num_accumulate(long v, int base, int d)
+{
+    if (v > (LONG_MAX - d) / base) return LONG_MAX;
+    return v * base + d;
+}
 
 impl LexOps for Lexer {
     /* Whitespace, comments and preprocessor lines are skipped before the token
@@ -127,7 +137,7 @@ impl LexOps for Lexer {
                     else if (h >= 'a' && h <= 'f') dv = h - 'a' + 10;
                     else if (h >= 'A' && h <= 'F') dv = h - 'A' + 10;
                     else break;
-                    self->toknum = self->toknum * 16 + dv;
+                    self->toknum = num_accumulate(self->toknum, 16, dv);
                     self->pos++;
                 }
             } else if (c == '0' && self->src[self->pos + 1] >= '0' && self->src[self->pos + 1] <= '7') {
@@ -136,13 +146,13 @@ impl LexOps for Lexer {
                    a decimal value) */
                 self->pos++;
                 while (self->src[self->pos] >= '0' && self->src[self->pos] <= '7') {
-                    self->toknum = self->toknum * 8 + (self->src[self->pos] - '0');
+                    self->toknum = num_accumulate(self->toknum, 8, self->src[self->pos] - '0');
                     self->pos++;
                 }
             } else {
                 int isflt = 0;
                 while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
-                    self->toknum = self->toknum * 10 + (self->src[self->pos] - '0');
+                    self->toknum = num_accumulate(self->toknum, 10, self->src[self->pos] - '0');
                     self->pos++;
                 }
                 /* A fraction or an exponent makes the literal floating. `1...5`
