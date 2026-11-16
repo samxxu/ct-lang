@@ -74,6 +74,8 @@
 | Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | ✅ 完成 | v0.61.0 | [卡](design/phase62.md) · [提案](proposals/ct-writable-subscript-proposal.md) · [研判](review/ct-writable-subscript-proposal-review.md) |
 | Phase 63 | 删除 `vendor/` 支持（PH-54 S7） | ✅ 完成 | v0.62.0 | [卡](design/phase63.md) · [提案](proposals/ct-pkg-shared-store.md) |
 
+| Phase 64 | 裸机生成契约（`--freestanding` / 按需单元 / `--alloc` / const vtable） | ✅ 完成 | v0.63.0 | [卡](design/phase64-draft.md) · [需求](planning/hardware-readiness-requirements.md) |
+
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
 >

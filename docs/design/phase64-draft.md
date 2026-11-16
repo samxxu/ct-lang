@@ -1,10 +1,10 @@
 # Phase 64 · 裸机生成契约（`--freestanding` / 按需单元 / `--alloc` / const vtable）
 
-**状态：在研（v0.63.0，`d=1`）**
+**状态：完成（v0.63.0）**
 
 | 项 | 值 |
 | --- | --- |
-| 状态 | **在研** |
+| 状态 | **完成**（v0.63.0） |
 | 依据 | [REQ-HW-010…013](../planning/hardware-readiness-requirements.md)；[battle hw-1 判决](../../battle/hw-1/verdict.md)（J-3 / J-4）；[裸机提案 §3](../proposals/ct-bare-metal-proposal.md) |
 | 版本位 | `version-minor: 63`（PH-64，`d=1`，见 [AGENTS §0.3](../../AGENTS.md) 换算表） |
 | 规范版本 | `1.15.0` |
@@ -60,31 +60,33 @@
 - 风险：按需单元会改变现有 `--emit-c` 产物集合，`test/pkg` 的 build 断言与 `check-ast` 的模块段
   需要同步；两者都以「产物必须能链接运行」为准，不锁文件清单。
 
-## 5. 进度与阻塞（未收口）
+## 5. 收口记录（2026-11-16）
 
-**已交付**
+**交付物 × 退出判据**
 
-| 任务 | 提交 | 验收 |
+| # | 判据 | 证据（原始输出） |
 | --- | --- | --- |
-| T1 const vtable | `b5000b1c` 红 → `49bc9549` | `bash test/ast/p64_const_vtable.sh` → `OK p64cv` |
-| T3 `--alloc` | `e254b259` 红 → `f69c07fb` | `bash test/ast/p64_alloc.sh` → `OK p64alloc` |
-| T5 无初值数组硬错 | `09a3b779` 红 → `8ef87fb6` | `bash test/ast/p64_no_init_array.sh` → `OK p64nia` |
+| E1 | 最小 `--freestanding` 程序每单元 `nm -u` ⊆ 允许集 | `bash test/ast/p64_freestanding.sh` → `OK p64free`（裸程序 / trait 初值 / `--alloc` 三层；Mach-O `_` 前缀归一化） |
+| E2 | `--freestanding` 下无初值全局 trait 数组硬错并给位置 | `bash test/ast/p64_no_init_array.sh` → `OK p64nia`（`prog.ct:15:1: error: … --freestanding`） |
+| E3 | `Option<int>` 只拉 `Option`；最小程序只有自身 `.c` | `bash test/ast/p64_on_demand.sh` → `OK p64ond` |
+| E4 | `--alloc pvPortMalloc,vPortFree` 后产物无 `malloc`/`free` | `bash test/ast/p64_alloc.sh` → `OK p64alloc`（桩分配器链接并跑出 `x`） |
+| E5 | vtable 与 `__vptr`/`vt` 为 `const`，`sizeof` 不变 | `bash test/ast/p64_const_vtable.sh` → `OK p64cv` |
+| E6 | `bash selfhost/check-all.sh` 11/11 | 收口提交前跑：`check-all: OK (11 hard gates green)`；`check-ast` 1462/0 |
+| E7 | 任务清单每项可独立验收 | T1–T5 各有一行 `verify` 与上面的原始输出，逐条对应 E5/E3/E4/E1/E2 |
 
-`bash selfhost/check-ast.sh` → rc=0（1460/0）；三个探针都已在门禁里，红证都在父提交正文。
+**`g4-version` 四项**
 
-**未交付：T2 / T4（互为前置）**
+| 项 | 值 |
+| --- | --- |
+| 落点互比 | 五处 `CTC_VERSION` 均 `0.63.0`；`README.md` / `docs/README.md` / `AGENTS.md` / `phase-log.md` 同步 |
+| 与 `PH-<n>` 对应 | `PH-64`、`d=1` → `MINOR = 63`，与 [AGENTS §0.3](../../AGENTS.md) 换算表一致 |
+| PATCH 与 fix 数 | `0`：本 phase 窗口内无 fix 条目（SH-86 属 v0.62.1，已在前一相位） |
+| CHANGELOG 与 tag | `phase-log.md` 的 v0.63.0 行与 tag `v0.63.0` 同指收口提交 |
 
-- **T2（按需单元）是 T4 的前置**。实测最小程序 `--emit-c` 仍产出
-  `Vec.c/.h`、`Option.c/.h`、`Result.c/.h`、`Str.c/.h` 与自身 `.c`；四个单元的
-  `.h` 带 `<stdio.h>/<stdlib.h>/<string.h>`，`Str.c` 还有 `free` 调用。
-  E1（每单元 `nm -u` ⊆ 允许集）在产物集合不变的前提下不可能绿。
-- 「单元是否被使用」在符号表里没有落点：`StructDef.owner` 只在非实例行有值
-  （`frontend/sym/Symbols.h.ct:283`），`add_struct_inst`（`:927`）拿不到模板 owner；
-  模板名在 `ct_inst_add(enc, tname, …)` 里是有的，可作为「实例 → 单元」的判据，
-  但 `Str` 这类非模板单元还要另一条判据（引用扫描或 used 位）。
-- 影响面：跳过未用单元会改变 `--emit-c` 的产物集合，`test/pkg` 的 build 断言、
-  `check-ast` 的模块段与 p39 r8 字节基线都要同步复核——这是单独立项的工作量。
+**未消解冲突**：1 条（§6.7 C-6，存量版本落差的收敛方式），与 PH-63 收口时相同，未增减。
 
-**结论：PH-64 保持「在研」，不 bump MINOR、不打 tag。** 下一步是给
-`frontend/sym` 的实例行补 owner（或给单元表加 used 位），再以它为 T2 的唯一判据；
-T4 的开关、符号面门禁与 T5 的硬错可复用本轮已落的 `--freestanding` / `--alloc` 骨架。
+**收口后记**
+
+- 测试资产：5 个探针进 `check-ast` 的 baremetal 段（`p64_const_vtable` / `p64_no_init_array` / `p64_alloc` / `p64_on_demand` / `p64_freestanding`），红证都在各自的 `test` 提交正文里；
+- p39 r8 的 `--emit-c` 字节基线两次重写（const 文本、按需产物集合），每次都只改摘要行，不属于语义变化；
+- 未做：`layout(plain)`（REQ-HW-014 延后）、真实板卡 pilot（REQ-HW-020/021，不占 phase）、条件 const（battle J-4 否定）。

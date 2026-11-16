@@ -389,6 +389,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 换算表：`d = n - MINOR`，PH-57/59/62 为 **-2 / -1 / 1**（PH-60 跳过）；`g1-version` 与 `g8-version` 按本表核对，
 > PH-62 起恢复 `d = 0`。新增 phase 一律先查本表，不得按 phase 号直接当 MINOR。
 > **PH-60 为条件相位**：无确认消费者则不立相，PH-62 → v0.61.0、PH-63 → v0.62.0，版本位不空置。
+> 2026-11-16：PH-64 → v0.63.0（d=1，按表中「下一个空位」）；SH-86 P0 → v0.62.1（fix，已打 tag）。
 
 `deviation: fix-tags`
 
@@ -435,9 +436,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.62.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.63.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.62.1；Phase 43–53 已收口，Phase 54 S0–S7 全部完成（S4 包仓对齐属包外）。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.63.0；Phase 43–53 已收口，Phase 54 S0–S7 全部完成（S4 包仓对齐属包外）。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
