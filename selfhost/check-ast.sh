@@ -644,6 +644,14 @@ else
     bad "p64_no_init_array" "$(cat "$work/p64nia.out" "$work/p64nia.err")"
 fi
 
+# PH-64 T3: --alloc maps the compiler's own heap calls and the source's
+# malloc/free onto the target's allocator, so a -nostdlib link needs no libc.
+if bash test/ast/p64_alloc.sh "$work/ct-ast" >"$work/p64al.out" 2>"$work/p64al.err"; then
+    ok "p64_alloc"
+else
+    bad "p64_alloc" "$(cat "$work/p64al.out" "$work/p64al.err")"
+fi
+
 # E34-8 (P34 S7): a boxed interface payload keeps the layer's product shape.
 cat >"$work/p34_opt_iface.expected" <<'P34IFACE'
 struct Option_Show__iface {
