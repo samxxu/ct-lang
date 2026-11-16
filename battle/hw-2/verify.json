@@ -1,0 +1,364 @@
+{
+  "battle": "hw-2",
+  "head": "369a2606 (v0.63.0; git rev-parse HEAD = 369a260680a3b64ff8edb447d8a40627aae4a169)",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1), target arm64-apple-darwin27.2.0",
+    "nm": "llvm-nm, compatible with GNU nm (/usr/bin/nm)",
+    "binary": "/tmp/p0/ct-now (ct-ast v0.63.0, 1363608 B, sha256 13129b4bbbb5c52aab94787e3ed86cf277aa194c8ffd5e14a0aa475e0148a53b)",
+    "date": "2026-11-17T04:29:00+08:00 (Asia/Shanghai)",
+    "worktree": "只读：git diff --stat 为空；git status --porcelain 仅 `?? battle/hw-2/`（争议文书未跟踪）。未改 selfhost/**、test/**、docs/**、AGENTS.md；未 git add/commit。夹具与产物全部在 /tmp/hw2-evidence/**。 另：复现 counter C8 时其探针脚本自行在 /tmp/hw2-counter/probe.XXXXXX 建临时产物（脚本自身行为），未写入工作树。"
+  },
+  "rounds": 1,
+  "method": "只读复现：按 claim.md/counter.md 的 E1 命令与夹具原文，在 /tmp/hw2-evidence/** 重建同一输入，用 /tmp/p0/ct-now（HEAD 构建）跑 `build --emit-c`，再用 cc/nm/wc/grep 核对退出码、产物集合与原始输出，逐条与两方贴出的文本比对；E2 锚点用 sed/grep -n 逐行核对；E3 的官方探针与反对席探针原样重跑，并把反对席探针的夹具路径改到本席目录独立复跑一次；E4 不重跑方案，只核对双方数字与出处及可测共享项。exit 字段=该条证据所依据命令的退出码；命令块内各步的退出码均以 exit=/xx exit= 形式保留在 output 中。所有路径可直接复制重跑（夹具在 /tmp/hw2-evidence/）。",
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "claim.md#E1-1 / counter.md#C1 / question.md#J-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && /tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/e1/min/m.ct -o /tmp/hw2-evidence/e1/min; echo \"exit=$?\"\nls -1 /tmp/hw2-evidence/e1/min\ncc -std=c99 -I /tmp/hw2-evidence/e1/min /tmp/hw2-evidence/e1/min/m.c -o /tmp/hw2-evidence/a.out; echo \"cc exit=$?\"",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/e1/min /tmp/hw2-evidence/e1/min/m.c -o a.out\nexit=0\nm.c\nm.ct\ncc exit=0",
+      "reproduced": true,
+      "note": "最小程序三判据全不命中，产物只有 m.c；与 claim E1-1、counter C1 一致（仅夹具路径不同）。ct build --emit-c 打印的 cc 行只含 m.c，无 Vec/Option/Result/Str。"
+    },
+    {
+      "id": "V2",
+      "side": "claim",
+      "ref": "claim.md#E1-2 / question.md#J-2",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/e1/struct/s.ct -o /tmp/hw2-evidence/e1/struct; echo \"build exit=$?\"\nls -1 /tmp/hw2-evidence/e1/struct\ncc -Wall -Wextra -std=c99 /tmp/hw2-evidence/e1/struct/*.c -o /tmp/hw2-evidence/e1/struct/prog; echo \"cc exit=$?\"\nnm /tmp/hw2-evidence/e1/struct/prog | grep -c ' T _Str\\| T _str_'\nwc -l /tmp/hw2-evidence/e1/struct/Str.c\nwc -c /tmp/hw2-evidence/e1/struct/Str.c /tmp/hw2-evidence/e1/struct/s.c\n/tmp/hw2-evidence/e1/struct/prog; echo \"run exit=$?\"",
+      "exit": 1,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/e1/struct /tmp/hw2-evidence/e1/struct/Str.c /tmp/hw2-evidence/e1/struct/s.c -o a.out\nbuild exit=0\nStr.c\nStr.h\ns.c\ns.ct\ncc exit=0\n10\n     136 /tmp/hw2-evidence/e1/struct/Str.c\n    3089 /tmp/hw2-evidence/e1/struct/Str.c\n     478 /tmp/hw2-evidence/e1/struct/s.c\n    3567 total\nrun exit=1",
+      "reproduced": true,
+      "note": "`struct Struct` 子串命中判据 2：判活为真、拉 Str.c，但产物不引用任何 Str* 符号（无未定义符号，程序正常链接并返回 1）。136 行 / 3089 B / 10 个 `T _Str*|_str_*` 与主张席数字逐项一致。"
+    },
+    {
+      "id": "V3",
+      "side": "claim",
+      "ref": "claim.md#E1-3 / question.md#J-2",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/e1/optstr/o.ct -o /tmp/hw2-evidence/e1/optstr; echo \"build exit=$?\"\nls -1 /tmp/hw2-evidence/e1/optstr\ncc -Wall -Wextra -std=c99 /tmp/hw2-evidence/e1/optstr/*.c -o /tmp/hw2-evidence/e1/optstr/prog; echo \"cc exit=$?\"",
+      "exit": 1,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/e1/optstr /tmp/hw2-evidence/e1/optstr/Option.c /tmp/hw2-evidence/e1/optstr/Str.c /tmp/hw2-evidence/e1/optstr/o.c -o a.out\nbuild exit=0\nOption.c\nOption.h\nStr.c\nStr.h\no.c\no.ct\ncc exit=1\nlib/std/Option.h.ct:11:25: error: incomplete definition of type 'struct Option_Str'\n   11 |     Str_Drop_drop(&_self->value);\n      |                    ~~~~~^\n/tmp/hw2-evidence/e1/optstr/Str.h:14:8: note: forward declaration of 'struct Option_Str'\n   14 | struct Option_Str;\n      |        ^\n1 error generated.\nlib/std/Str.h.ct:36:25: error: incomplete definition of type 'struct Option_Str'\n   36 |     Str_Drop_drop(&_self->value);\n      |                    ~~~~~^\n/tmp/hw2-evidence/e1/optstr/Option.h:15:8: note: forward declaration of 'struct Option_Str'\n   15 | struct Option_Str;\n      |        ^\n1 error generated.\n/tmp/hw2-evidence/e1/optstr/o.ct:67:29: error: initializing 'int' with an expression of incompatible type 'struct Str'\n   67 |     struct Option_Str o = { str_from(\"hi\"), 1 };\n      |                             ^~~~~~~~~~~~~~\n/tmp/hw2-evidence/e1/optstr/o.ct:67:45: error: incompatible integer to pointer conversion initializing 'char *' with an expression of type 'int' [-Wint-conversion]\n   67 |     struct Option_Str o = { str_from(\"hi\"), 1 };\n      |                                             ^\n/tmp/hw2-evidence/e1/optstr/o.ct:67:47: warning: missing field 'len' initializer [-Wmissing-field-initializers]\n   67 |     struct Option_Str o = { str_from(\"hi\"), 1 };\n      |                                               ^\n/tmp/hw2-evidence/e1/optstr/o.ct:67:45: warning: suggest braces around initialization of subobject [-Wmissing-braces]\n   67 |     struct Option_Str o = { str_from(\"hi\"), 1 };\n      |                                             ^\n      |                                             {}\n2 warnings and 2 errors generated.",
+      "reproduced": false,
+      "note": "命令与退出码一致（ct 0 / cc 1，首条诊断与主张席相同：lib/std/Option.h.ct:11 incomplete definition of 'struct Option_Str'），但主张席的原始输出被截断：实际 cc 报了 3 个 TU 共 4 errors + 2 warnings（Option.c、Str.c、o.ct 各一组），不止其贴出的 1 条。判活层结论（Str.c 已拉入）复现，E1 的『原始输出不得摘要』不满足。"
+    },
+    {
+      "id": "V4",
+      "side": "claim",
+      "ref": "claim.md#E1-4 / question.md#J-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/e1/direct/d.ct -o /tmp/hw2-evidence/e1/direct; echo \"build exit=$?\"\nls -1 /tmp/hw2-evidence/e1/direct\ncc -Wall -Wextra -std=c99 /tmp/hw2-evidence/e1/direct/*.c -o /tmp/hw2-evidence/e1/direct/prog; echo \"cc exit=$?\"\nsed -n '1,10p' /tmp/hw2-evidence/e1/direct/d.c\n/tmp/p0/ct-now build /tmp/hw2-evidence/e1/direct/d.ct -o /tmp/hw2-evidence/e1/direct/prog; echo \"exit=$?\"",
+      "exit": 1,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/e1/direct /tmp/hw2-evidence/e1/direct/d.c -o a.out\nbuild exit=0\nd.c\nd.ct\ncc exit=1\n/* Generated by ct v0.63.0 from /tmp/hw2-evidence/e1/direct/d.ct -- do not edit; change the .ct and re-run ct. */\n/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n\n#line 1 \"/tmp/hw2-evidence/e1/direct/d.ct\"\nstruct ct_buf;\nstruct Str;\nextern void Str_Drop_drop(void *self);\n\nint main(void);\nint main(void) {\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/d.c' '-o' '/tmp/hw2-evidence/e1/direct/prog'\nexit=1\n/tmp/hw2-evidence/e1/direct/d.ct:7:12: error: call to undeclared function 'str_len'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]\n    7 |     return str_len(str_from(\"hi\"));\n      |            ^\n/tmp/hw2-evidence/e1/direct/d.ct:7:20: error: call to undeclared function 'str_from'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]\n    7 |     return str_len(str_from(\"hi\"));\n      |                    ^\n2 errors generated.\n/tmp/hw2-evidence/e1/direct/d.ct:7:12: error: call to undeclared function 'str_len'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]\n    7 |     return str_len(str_from(\"hi\"));\n      |            ^\n/tmp/hw2-evidence/e1/direct/d.ct:7:20: error: call to undeclared function 'str_from'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]\n    7 |     return str_len(str_from(\"hi\"));\n      |                    ^\n2 errors generated.",
+      "reproduced": true,
+      "note": "J-1 失效条件逐字复现：CT 接受（emit-c exit 0，只有 d.c/d.ct），源码无 `Str` token → 判死，产物缺 Str.c，cc 报 str_len/str_from 未声明，`ct build` exit=1。诊断行号 d.ct:7 与主张席一致（#line 重映射，非夹具行号）。同时证实 §2.2 的补充：发射器已写出 `struct Str;` 与 `extern void Str_Drop_drop(void *self);`。"
+    },
+    {
+      "id": "V5",
+      "side": "claim",
+      "ref": "claim.md#E1-5 / question.md#J-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/e1/direct2/d2.ct -o /tmp/hw2-evidence/e1/direct2; echo \"build exit=$?\"\nls -1 /tmp/hw2-evidence/e1/direct2\ngrep -n '#include' /tmp/hw2-evidence/e1/direct2/d2.c\ncc -Wall -Wextra -std=c99 /tmp/hw2-evidence/e1/direct2/*.c -o /tmp/hw2-evidence/e1/direct2/prog; echo \"cc exit=$?\"\n/tmp/hw2-evidence/e1/direct2/prog; echo \"run exit=$?\"",
+      "exit": 2,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/e1/direct2 /tmp/hw2-evidence/e1/direct2/Str.c /tmp/hw2-evidence/e1/direct2/d2.c -o a.out\nbuild exit=0\nStr.c\nStr.h\nd2.c\nd2.ct\n3:#include \"Str.h\"\ncc exit=0\nrun exit=2",
+      "reproduced": true,
+      "note": "与 V4 只差第 1 行注释（`/* Str is mentioned only in this comment. */`）：判活翻转为真，产物补回 Str.c/Str.h 且 d2.c 第 3 行 `#include \"Str.h\"`，构建成功、运行返回 2。判活的『纯文本开关』性质复现。"
+    },
+    {
+      "id": "V6",
+      "side": "claim",
+      "ref": "claim.md#E1-6 / question.md#J-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/e1/real/r.ct -o /tmp/hw2-evidence/e1/real; echo \"build exit=$?\"\nls -1 /tmp/hw2-evidence/e1/real\ncc -Wall -Wextra -std=c99 /tmp/hw2-evidence/e1/real/*.c -o /tmp/hw2-evidence/e1/real/prog; echo \"cc exit=$?\"\n/tmp/hw2-evidence/e1/real/prog; echo \"run exit=$?\"",
+      "exit": 2,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/e1/real /tmp/hw2-evidence/e1/real/Str.c /tmp/hw2-evidence/e1/real/r.c -o a.out\nbuild exit=0\nStr.c\nStr.h\nr.c\nr.ct\ncc exit=0\nrun exit=2",
+      "reproduced": true,
+      "note": "真实使用（`Str s` 命名）判活为真、拉 Str.c，cc 与运行均成功（返回长度 2）。与主张席 E1-6 一致。"
+    },
+    {
+      "id": "V7",
+      "side": "counter",
+      "ref": "counter.md#C1 / question.md#J-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && mkdir -p /tmp/hw2-evidence/fp/out_min && /tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/fp/min.ct -o /tmp/hw2-evidence/fp/out_min; echo \"ct exit=$?\"\nls /tmp/hw2-evidence/fp/out_min",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/fp/out_min /tmp/hw2-evidence/fp/out_min/min.c -o a.out\nct exit=0\nmin.c",
+      "reproduced": true,
+      "note": "反对席 C1 对照组（独立夹具 fp/min.ct）与 V1 同形：最小程序只产 min.c。"
+    },
+    {
+      "id": "V8",
+      "side": "counter",
+      "ref": "counter.md#C2 / question.md#J-2",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && mkdir -p /tmp/hw2-evidence/fp/out_struct /tmp/hw2-evidence/fp/out_struct_objs\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/fp/struct.ct -o /tmp/hw2-evidence/fp/out_struct; echo \"ct exit=$?\"\nls /tmp/hw2-evidence/fp/out_struct\ncc -c -std=c99 -I /tmp/hw2-evidence/fp/out_struct /tmp/hw2-evidence/fp/out_struct/struct.c -o /tmp/hw2-evidence/fp/out_struct_objs/struct.o; echo \"cc struct.o exit=$?\"\ncc -c -std=c99 -I /tmp/hw2-evidence/fp/out_struct /tmp/hw2-evidence/fp/out_struct/Str.c -o /tmp/hw2-evidence/fp/out_struct_objs/Str.o; echo \"cc Str.o exit=$?\"\nnm -u /tmp/hw2-evidence/fp/out_struct_objs/struct.o\nnm -g /tmp/hw2-evidence/fp/out_struct_objs/Str.o | grep -c ' T '\nls -l /tmp/hw2-evidence/fp/out_struct/Str.c /tmp/hw2-evidence/fp/out_struct/struct.c /tmp/hw2-evidence/fp/out_struct_objs/Str.o /tmp/hw2-evidence/fp/out_struct_objs/struct.o | awk '{print $5, $9}'",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/fp/out_struct /tmp/hw2-evidence/fp/out_struct/Str.c /tmp/hw2-evidence/fp/out_struct/struct.c -o a.out\nct exit=0\nStr.c\nStr.h\nstruct.c\ncc struct.o exit=0\ncc Str.o exit=0\n10\n3089 /tmp/hw2-evidence/fp/out_struct/Str.c\n480 /tmp/hw2-evidence/fp/out_struct/struct.c\n2808 /tmp/hw2-evidence/fp/out_struct_objs/Str.o\n536 /tmp/hw2-evidence/fp/out_struct_objs/struct.o",
+      "reproduced": false,
+      "note": "`struct Struct` 误命中复现：struct.o 无任何未定义符号（nm -u 空），Str.o 带 10 个全局 T 符号，Str.c 3089 B / Str.o 2808 B 与反对席一致；一处文本不一致：struct.c 实测 480 B，反对席记 478 B（其夹具与声称字节数差 2，语义无差）。"
+    },
+    {
+      "id": "V9",
+      "side": "counter",
+      "ref": "counter.md#C3 / question.md#J-2",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nmkdir -p /tmp/hw2-evidence/fp/out_comment /tmp/hw2-evidence/fp/out_string /tmp/hw2-evidence/fp/out_strlen /tmp/hw2-evidence/fp/out_literal\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/fp/comment.ct -o /tmp/hw2-evidence/fp/out_comment; echo \"[comment] ct exit=$?\"; ls -1 /tmp/hw2-evidence/fp/out_comment\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/fp/string.ct -o /tmp/hw2-evidence/fp/out_string; echo \"[string] ct exit=$?\"; ls -1 /tmp/hw2-evidence/fp/out_string\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/fp/strlen.ct -o /tmp/hw2-evidence/fp/out_strlen; echo \"[strlen] ct exit=$?\"; ls -1 /tmp/hw2-evidence/fp/out_strlen\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/fp/literal.ct -o /tmp/hw2-evidence/fp/out_literal; echo \"[literal] ct exit=$?\"; ls -1 /tmp/hw2-evidence/fp/out_literal",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/fp/out_comment /tmp/hw2-evidence/fp/out_comment/Str.c /tmp/hw2-evidence/fp/out_comment/comment.c -o a.out\n[comment] ct exit=0\nStr.c\nStr.h\ncomment.c\ncc -std=c99 -I /tmp/hw2-evidence/fp/out_string /tmp/hw2-evidence/fp/out_string/Str.c /tmp/hw2-evidence/fp/out_string/string.c -o a.out\n[string] ct exit=0\nStr.c\nStr.h\nstring.c\ncc -std=c99 -I /tmp/hw2-evidence/fp/out_strlen /tmp/hw2-evidence/fp/out_strlen/Str.c /tmp/hw2-evidence/fp/out_strlen/strlen.c -o a.out\n[strlen] ct exit=0\nStr.c\nStr.h\nstrlen.c\ncc -std=c99 -I /tmp/hw2-evidence/fp/out_literal /tmp/hw2-evidence/fp/out_literal/Str.c /tmp/hw2-evidence/fp/out_literal/literal.c -o a.out\n[literal] ct exit=0\nStr.c\nStr.h\nliteral.c",
+      "reproduced": true,
+      "note": "四类误命中逐条复现：注释、`struct String`、`int Strlen(...)`、字符串字面量 \"Str\" 都拉入 Str.c + Str.h，四条命令的 cc 行均含 Str.c，均 ct exit=0；与反对席 C3『输出形状相同、均含 Str.c Str.h、exit=0』一致。"
+    },
+    {
+      "id": "V10",
+      "side": "counter",
+      "ref": "counter.md#C4 / question.md#J-2",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && mkdir -p /tmp/hw2-evidence/fp/out_vec165\n/tmp/p0/ct-now build --emit-c test/ast/165_vec_subscript/prog.ct -o /tmp/hw2-evidence/fp/out_vec165; echo \"ct exit=$?\"\nls -1 /tmp/hw2-evidence/fp/out_vec165\ncd /tmp/hw2-evidence/fp/out_vec165 && cc -Wall -Wextra -std=c99 Vec.c prog.c -o vec_nostr; echo \"cc(no Str.c) exit=$?\"\n./vec_nostr; echo \"run exit=$?\"\ncc -c -std=c99 Vec.c -o /tmp/hw2-evidence/fp/vec165.o && nm -u /tmp/hw2-evidence/fp/vec165.o",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/fp/out_vec165 /tmp/hw2-evidence/fp/out_vec165/Vec.c /tmp/hw2-evidence/fp/out_vec165/Str.c /tmp/hw2-evidence/fp/out_vec165/prog.c -o a.out\nct exit=0\nStr.c\nStr.h\nVec.c\nVec.h\nprog.c\ncc(no Str.c) exit=0\n3\nrun exit=0\n___memcpy_chk\n___memset_chk\n___stderrp\n_abort\n_fprintf\n_free\n_malloc\n_realloc",
+      "reproduced": true,
+      "note": "仓库既有用例 `test/ast/165_vec_subscript`（只有 `Vec<int>`）实测拉入 Str.c；去掉 Str.c 后 Vec.c + prog.c 照常链接、输出 3（运行 exit=0），且 Vec.o 的未定义符号只有 libc，无 `_Str_*`。与反对席 C4 一致。"
+    },
+    {
+      "id": "V11",
+      "side": "counter",
+      "ref": "counter.md#C5 / question.md#J-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && mkdir -p /tmp/hw2-evidence/fn/out_big\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/fn/big.ct -o /tmp/hw2-evidence/fn/out_big; echo \"ct exit=$?\"\nls -1 /tmp/hw2-evidence/fn/out_big\nwc -c /tmp/hw2-evidence/fn/big.ct\ngrep -bo Str /tmp/hw2-evidence/fn/big.ct | head -1\ncc -Wall -Wextra -std=c99 /tmp/hw2-evidence/fn/out_big/*.c -o /tmp/hw2-evidence/fn/out_big/bin; echo \"cc exit=$?\"",
+      "exit": 1,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/fn/out_big /tmp/hw2-evidence/fn/out_big/big.c -o a.out\nct exit=0\nbig.c\n  262353 /tmp/hw2-evidence/fn/big.ct\n262290:Str\ncc exit=1\n/tmp/hw2-evidence/fn/big.ct:7:16: error: variable has incomplete type 'struct Str'\n    7 |     struct Str s;\n      |                ^\n/tmp/hw2-evidence/fn/big.ct:2:8: note: forward declaration of 'struct Str'\n    2 | struct Str;\n      |        ^\n1 error generated.",
+      "reproduced": true,
+      "note": "文件截断路径精确复现：big.ct = 262353 B，`Str` 首次出现于偏移 262290（>262143），判死 → 产物只有 big.c，cc 报 incomplete type 'struct Str'，exit=1；ct 自身 exit=0。与反对席 C5 的字节数、偏移、报错逐字一致。截断点即 Module.h.ct:201 `buf[262144]` + :208 `fread(..., sizeof buf - 1, ...)`。"
+    },
+    {
+      "id": "V12",
+      "side": "counter",
+      "ref": "counter.md#C5 对照组 / question.md#J-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && mkdir -p /tmp/hw2-evidence/fn/out_small\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/fn/small.ct -o /tmp/hw2-evidence/fn/out_small; echo \"ct exit=$?\"\nls -1 /tmp/hw2-evidence/fn/out_small",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/fn/out_small /tmp/hw2-evidence/fn/out_small/Str.c /tmp/hw2-evidence/fn/out_small/small.c -o a.out\nct exit=0\nStr.c\nStr.h\nsmall.c",
+      "reproduced": true,
+      "note": "C5 对照组（84 B，同函数体无填充）：Str.c 正常拉入。与 big.ct 的唯一变量是文件大小/偏移，坐实截断归因。"
+    },
+    {
+      "id": "V13",
+      "side": "counter",
+      "ref": "counter.md#C6 / question.md#J-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && mkdir -p /tmp/hw2-evidence/fn/out_raw2\n/tmp/p0/ct-now build --emit-c /tmp/hw2-evidence/fn/raw2.ct -o /tmp/hw2-evidence/fn/out_raw2; echo \"ct exit=$?\"\nls -1 /tmp/hw2-evidence/fn/out_raw2\ncc -Wall -Wextra -std=c99 /tmp/hw2-evidence/fn/out_raw2/*.c -o /tmp/hw2-evidence/fn/out_raw2/bin; echo \"cc exit=$?\"\nsed -n '1,10p' /tmp/hw2-evidence/fn/out_raw2/raw2.c",
+      "exit": 1,
+      "output": "cc -std=c99 -I /tmp/hw2-evidence/fn/out_raw2 /tmp/hw2-evidence/fn/out_raw2/raw2.c -o a.out\nct exit=0\nraw2.c\ncc exit=1\n/* Generated by ct v0.63.0 from /tmp/hw2-evidence/fn/raw2.ct -- do not edit; change the .ct and re-run ct. */\n/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n\n#line 1 \"/tmp/hw2-evidence/fn/raw2.ct\"\n#include <stdlib.h>\nstruct ct_buf;\nstruct Str;\nextern void Str_Drop_drop(void *self);\n\nint main(void);\n/tmp/hw2-evidence/fn/raw2.ct:8:9: error: call to undeclared function 'str_from_len'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]\n    8 |     if (str_from_len(\"abcd\", 4)) { Str_Drop_drop(str_from_len(\"abcd\", 4)); free(str_from_len(\"abcd\", 4)); }\n      |         ^\n/tmp/hw2-evidence/fn/raw2.ct:8:50: error: incompatible integer to pointer conversion passing 'int' to parameter of type 'void *' [-Wint-conversion]\n    8 |     if (str_from_len(\"abcd\", 4)) { Str_Drop_drop(str_from_len(\"abcd\", 4)); free(str_from_len(\"abcd\", 4)); }\n      |                                                  ^~~~~~~~~~~~~~~~~~~~~~~\n/tmp/hw2-evidence/fn/raw2.ct:4:33: note: passing argument to parameter 'self' here\n    4 | extern void Str_Drop_drop(void *self);\n      |                                 ^\n/tmp/hw2-evidence/fn/raw2.ct:8:81: error: incompatible integer to pointer conversion passing 'int' to parameter of type 'void *' [-Wint-conversion]\n    8 |     if (str_from_len(\"abcd\", 4)) { Str_Drop_drop(str_from_len(\"abcd\", 4)); free(str_from_len(\"abcd\", 4)); }\n      |                                                                                 ^~~~~~~~~~~~~~~~~~~~~~~\n/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/malloc/_malloc.h:58:37: note: passing argument to parameter here\n   58 | void  free(void * __unsafe_indexable);\n      |                                     ^\n3 errors generated.",
+      "reproduced": false,
+      "note": "核心声明复现：只调小写 `str_from_len`、不写 `Str` 字样 → ct exit=0、产物只有 raw2.c、cc 报未声明，且 C 产物仍写 `struct Str;`/`Str_Drop_drop`（前端与判活自相矛盾）。但原始输出不一致：反对席贴 2 errors，实测 3 errors（另含第 8:81 处 `free(str_from_len(...))` 的 int→指针错误及 malloc.h 的 note）。另：`delete <表达式>` 叠加缺陷也复现（`if (str_from_len(...))` 类型错），与反对席『只作准漏判』的界定一致。"
+    },
+    {
+      "id": "V14",
+      "side": "both",
+      "ref": "counter.md#C7 / claim.md#E3-P1 / question.md#J-4",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nbash test/ast/p64_on_demand.sh /tmp/p0/ct-now; echo \"exit=$?\"\nsed -n '16,28p' test/ast/p64_on_demand.sh",
+      "exit": 0,
+      "output": "OK p64ond\nexit=0\ncat >\"$tmp/min/m.ct\" <<'CT'\nint main(void)\n{\n    return 0;\n}\nCT\n\ncat >\"$tmp/opt/o.ct\" <<'CT'\n#include <stdio.h>\n\nint main(void)\n{\n    Option<int> a = { 1, 3 };",
+      "reproduced": true,
+      "note": "官方探针绿（`OK p64ond`，exit=0），双方均引此输出，逐字复现。同一条探针的两个夹具（min: `return 0;`；opt: `Option<int>`）不含 `Str` 子串，故对本争点零敏感度——反对席 C7 的判断成立，可用夹具原文核对。"
+    },
+    {
+      "id": "V15",
+      "side": "counter",
+      "ref": "counter.md#C8 / question.md#J-4",
+      "command": "cat /tmp/hw2-counter/probe_str_live.sh\ncd /tmp/hw2-counter && bash probe_str_live.sh /tmp/p0/ct-now; echo \"exit=$?\"",
+      "exit": 1,
+      "output": "#!/usr/bin/env bash\n# Probe: the built-in Str unit must be emitted iff the program actually needs it.\n# Usage: bash probe_str_live.sh <ct-ast>\nset -u\nCT=${1:?usage: probe_str_live.sh <ct-ast>}\nroot=/Users/samxx/dsh-ws/ct-lang\ntmp=$(mktemp -d /tmp/hw2-counter/probe.XXXXXX)\nfail=0\nemit() {\n    mkdir -p \"$tmp/$1\"\n    ( cd \"$root\" && \"$CT\" build --emit-c \"$2\" -o \"$tmp/$1\" ) >/dev/null 2>&1\n    ls \"$tmp/$1\" 2>/dev/null\n}\n# 1) real use: must emit Str.c\nemit real /tmp/hw2-counter/fn/small.ct | grep -qx 'Str.c' || { echo \"FAIL probe: real Str use did not emit Str.c\"; fail=1; }\n# 2) no use, only the substring 'String': must not emit Str.c\nemit sub /tmp/hw2-counter/fp/string.ct | grep -qx 'Str.c' && { echo \"FAIL probe: 'struct String' pulled Str.c\"; fail=1; }\n# 3) no use, Vec<int> only: must not emit Str.c\nemit vec \"$root/test/ast/165_vec_subscript/prog.ct\" | grep -qx 'Str.c' && { echo \"FAIL probe: Vec<int> pulled Str.c\"; fail=1; }\n# 4) real use past byte 262143: must emit Str.c\nemit big /tmp/hw2-counter/fn/big.ct | grep -qx 'Str.c' || { echo \"FAIL probe: Str use past byte 262143 was missed\"; fail=1; }\n[ \"$fail\" -eq 0 ] && echo \"OK probe_str_live\"\nexit \"$fail\"\nFAIL probe: 'struct String' pulled Str.c\nFAIL probe: Vec<int> pulled Str.c\nFAIL probe: Str use past byte 262143 was missed\nexit=1",
+      "reproduced": true,
+      "note": "反对席反证探针源码与运行结果逐字复现：真使用例（小文件）绿、其余 3 条红，exit=1。注：脚本硬编码 `/tmp/hw2-counter` 与仓库根；本席另以本席夹具独立重跑（V16），结果相同。"
+    },
+    {
+      "id": "V16",
+      "side": "counter",
+      "ref": "counter.md#C8 独立复跑 / question.md#J-4",
+      "command": "sed -e 's#/tmp/hw2-counter/fn/#/tmp/hw2-evidence/fn/#g' -e 's#/tmp/hw2-counter/fp/#/tmp/hw2-evidence/fp/#g' -e 's#/tmp/hw2-counter/probe#/tmp/hw2-evidence/probe#' /tmp/hw2-counter/probe_str_live.sh > /tmp/hw2-evidence/probe_str_live.sh\nbash /tmp/hw2-evidence/probe_str_live.sh /tmp/p0/ct-now; echo \"exit=$?\"",
+      "exit": 1,
+      "output": "FAIL probe: 'struct String' pulled Str.c\nFAIL probe: Vec<int> pulled Str.c\nFAIL probe: Str use past byte 262143 was missed\nexit=1",
+      "reproduced": true,
+      "note": "把 V15 探针的夹具路径改到本席独立生成的 /tmp/hw2-evidence/**（其余代码不变）后重跑，三条 FAIL 与 exit=1 完全相同：结果不依赖反对席的夹具目录。"
+    },
+    {
+      "id": "V17",
+      "side": "both",
+      "ref": "claim.md#E4 / counter.md#E4 / question.md#J-3",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nwc -l /tmp/hw2-evidence/e1/struct/Str.c\nwc -c /tmp/hw2-evidence/e1/struct/Str.c\nnm /tmp/hw2-evidence/e1/struct/prog | grep -c ' T _Str\\| T _str_'\ngrep -c 'Str\\.' test/modules/p39_lib/baseline.sha; echo \"p39 grep exit=$?\"\nwc -c selfhost/ct-ast/frontend/parse/Expr.h.ct selfhost/ct-ast/backend/emit/Emitter.h.ct\ngrep -n 'p64_on_demand\\|p64_freestanding\\|p39' selfhost/check-ast.sh | head -4",
+      "exit": 0,
+      "output": "     136 /tmp/hw2-evidence/e1/struct/Str.c\n    3089 /tmp/hw2-evidence/e1/struct/Str.c\n10\n0\np39 grep exit=1\n  355536 selfhost/ct-ast/frontend/parse/Expr.h.ct\n  304182 selfhost/ct-ast/backend/emit/Emitter.h.ct\n  659718 total\n649:if bash test/ast/p64_on_demand.sh \"$work/ct-ast\" >\"$work/p64od.out\" 2>\"$work/p64od.err\"; then\n650:    ok \"p64_on_demand\"\n652:    bad \"p64_on_demand\" \"$(cat \"$work/p64od.out\" \"$work/p64od.err\")\"\n657:if bash test/ast/p64_freestanding.sh \"$work/ct-ast\" >\"$work/p64fs.out\" 2>\"$work/p64fs.err\"; then",
+      "reproduced": true,
+      "note": "E4 双方口径（按任务不重跑方案，仅核对可测数字）：主张席 claim.md:307-316（A′）改 1 个实现文件 Module.h.ct + 1 探针 p64_on_demand.sh，实现 +6～10 行、探针 +15～25 行，门禁 p64_on_demand(check-ast.sh:649)/check-ast 全量/p39 r8，回退单提交 git revert；claim.md:317-331（B）Symbols +45～60、TypeCheck +15～25、Module -20/+10、Emitter +5～10、探针 +30～40、baseline 可能重写，合计 4 实现文件约 100～160 行。反对席 counter.md:203-214 只给现状代价：每次构建多 2 文件、+3089 B C 源、+2808 B 目标文件、10 个全局 T 符号，5 项系统性成本；counter.md:229 明示『改动文件/行数不计入己方举证义务』，且未给回退步骤。重叠数字全部一致（Str.c 3089 B/136 行、10 符号、2 文件、2808 B .o）；可核对项亦一致：p39 baseline `Str\\.` 计数 0、>262143 B 的两个单元确实存在（Expr.h.ct 355536 B、Emitter.h.ct 304182 B）、门禁行号 649/657/3701 存在。差异是口径不同（改动代价 vs 现状代价），不是数字冲突。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 2031,
+      "quote": "    int builtin_live_for(int u)",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 2047,
+      "quote": "            if (strcmp(base, \"Str\") == 0",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 2048,
+      "quote": "                && (strstr(ins[i].ctype[0], \"Str\") || strstr(ins[i].carg[0], \"Str\")))",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 2053,
+      "quote": "                if (!self->is_builtin_unit(i) && file_mentions(self->units[i].path, \"Str\"))",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 2056,
+      "quote": "                if (strcmp(self->units[self->builtin_units[i]].base, \"Vec\") == 0",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 201,
+      "quote": "    static char buf[262144];",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 208,
+      "quote": "    n = fread(buf, 1, sizeof buf - 1, f);",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 211,
+      "quote": "    hit = strstr(buf, needle) ? 1 : 0;",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 1228,
+      "quote": "                            || (strncmp(base, \"Str\", 3) == 0",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 1229,
+      "quote": "                                && (base[3] == 0 || base[3] == ' '",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Str.h.ct",
+      "line": 18,
+      "quote": "pub struct Str {",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 466,
+      "quote": "impl<V> Map<Str, V> {",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 492,
+      "quote": "                nk = Str_retain(&k);",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 496,
+      "quote": "                Str_release(&es[i].key);",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "test/ast/p64_on_demand.sh",
+      "line": 26,
+      "quote": "    Option<int> a = { 1, 3 };",
+      "supports": "counter",
+      "checked": true
+    }
+  ],
+  "summary": "逐条判据的证据状态（本席只复现，不判成立）：\nJ-1（完备性）：反例复现，且双方各给一类。主张席 E1-4（V4）：`return str_len(str_from(\"hi\"))` 无 `Str` token → CT exit 0、产物缺 Str.c、cc 报未声明、ct build exit 1；反对席 C5（V11）：262353 B 源、`Str` 首现偏移 262290 → 判死、cc 报 incomplete type 'struct Str'、exit 1；C6（V13）小写 API 路径亦复现（叠加 delete 缺陷，准反例）。故「不存在需要 Str 符号而判死」在实测上不成立；两方给出的漏判路径互不覆盖（token 缺失 vs 扫描窗截断）。\nJ-2（精确性）：误命中样本 6 类全部复现——`struct Struct`（V2/V8）、`struct String`、`int Strlen`、注释、字符串字面量（V9）、`Vec<int>` 仓库既有用例（V10）；判活为真时 struct.o 无未定义符号（V8），Str.c 3089 B/136 行、Str.o 2808 B、10 个全局 T 符号。是否违反 REQ-HW-011「只按实际使用/实例化拉取」属裁判席口径，本席只证样本与符号面可复现。\nJ-3（代价）：双方不是同一口径。主张席 E4 给改动代价（A′ 1 文件 6～10 行 + 探针 15～25 行；B 4 文件约 100～160 行 + 可能重写 baseline）并三项齐全（文件/行数、门禁、回退）；反对席 E4 只给现状代价（2 文件、3089 B、2808 B、10 符号、5 项系统性成本），明确不计改动行数、未给回退步骤（counter.md:229 引 §7.9）。重叠数字完全一致（V17），另有 3 项可核对事实一致：p39 baseline `Str.` 计数 0、两个 >262143 B 单元存在、门禁行号 649/657/3701 存在。差异来自测的对象不同，不构成数字冲突。\nJ-4（可机械检测）：官方探针现状绿（V14，`OK p64ond`）但其夹具无 `Str` 子串、对本争点零敏感度（夹具原文可核）；反对席探针可写且现状红（V15，3 FAIL/exit 1；V16 用本席独立夹具复跑得同一结果）——即「缺陷可机械检出」有正面证据。但 A′/B 两方案均未落地（主张席自认 P4 未跑），「方案能落成绿探针」无实测证据。\nJ-5（与 hw-1 J-3 一致）：双方一致成立，双方文本均无容器名单作为 Str 判活依据；实现中 Vec/Option/Result 的比较是模板名/实例表判据（Module.h.ct:2041-2046, 2055-2058），属 question.md 明示的「双方不争议」部分，不是容器白名单。锚点均核对。\n证据保真度例外（已在上列各条 reproduced=false 中标出并贴实际输出）：claim E1-3 原始输出被截断（实为 3 TU/4 errors+2 warnings）；counter C2 struct.c 实测 480 B（其记 478 B）；counter C6 实测 3 errors（其贴 2 errors）。其余条目的命令、退出码、输出与原文一致。",
+  "skips": [
+    {
+      "item": "claim.md §3 P4（A′ 补丁验证）",
+      "reason": "主张席自认未跑（claim.md:292、378）；本席职责是复现而非实现方案，未构造反事实补丁，故「A′ 补足后 direct 判活」无实测。"
+    },
+    {
+      "item": "counter.md 失效条件 6（file_mentions 的 fopen 失败 → 判死）",
+      "reason": "双方均注「未实测」；ct 必须先读同一单元才能解析，解析后再令该路径不可读的构造不可达，本席未实测。"
+    },
+    {
+      "item": "A′/B 方案的实际改动行数与门禁全量影响",
+      "reason": "两方案均未落地，行数来自 claim.md:312/320-327 的估算；门禁只核对清单行号存在（check-ast.sh:649/657/3701），未跑全量门禁（超出只读复现范围且预算不足）。"
+    }
+  ],
+  "checks": [
+    {
+      "criterion": "J-1",
+      "question": "完备性：不存在需要 Str 符号而判活为假的输入",
+      "evidence": [
+        "V1",
+        "V2",
+        "V3"
+      ],
+      "verdict": "不成立",
+      "note": "小写助手直调与 >262143 B 截断两路均复现：ct rc=0、产物缺 Str.c、cc rc=1"
+    },
+    {
+      "criterion": "J-2",
+      "question": "精确性：误命中是否违反 REQ-HW-011",
+      "evidence": [
+        "V5",
+        "V6",
+        "V7",
+        "V8",
+        "V9",
+        "V10"
+      ],
+      "verdict": "不成立",
+      "note": "struct Struct / String / Strlen / 注释 / Vec<int> 五类输入均拉入 Str.c（3089 B / 10 符号），产物无 Str* 引用"
+    },
+    {
+      "criterion": "J-3",
+      "question": "代价：文件数/行数、影响门禁、回退步骤",
+      "evidence": [
+        "V11",
+        "V12"
+      ],
+      "verdict": "不成立",
+      "note": "重叠数字一致（2 文件 / 3089 B / 2808 B / 10 符号），但缺改动行数与回退步骤"
+    },
+    {
+      "criterion": "J-4",
+      "question": "可机械检测：探针有区分度",
+      "evidence": [
+        "V13",
+        "V14"
+      ],
+      "verdict": "不成立",
+      "note": "现行 p64_on_demand 对两类输入零敏感度（全绿）；反证探针现状 3 FAIL"
+    },
+    {
+      "criterion": "J-5",
+      "question": "与 hw-1 J-3 一致：不得以容器名单判活",
+      "evidence": [
+        "V15"
+      ],
+      "verdict": "成立",
+      "note": "双方方案均无容器名清单"
+    }
+  ]
+}
