@@ -1,0 +1,41 @@
+/* P0 (REQ-HW-001): a trait-carrying array or `const` object must get its vptrs
+   from its own C initialiser. A designator on the array itself is invalid C
+   (`. __x_vptr` cannot initialise `struct Person[2]`), and a constructor does
+   not run on a bare-metal reset path that only copies .data and clears .bss.
+
+   `p->who()` is the explicit dispatch: it reads the vptr the initialiser wrote,
+   so a missing one segfaults instead of silently printing nothing. */
+#include <stdio.h>
+
+trait Greeter {
+    char *who();
+}
+
+struct Person {
+    char *name;
+    int age;
+} use Greeter;
+
+impl Greeter for Person {
+    char *who() {
+        return self->name;
+    }
+}
+
+Person ps[2] = { { .name = "a", .age = 1 },
+                 { .name = "b", .age = 2 } };
+const Person lone = { .name = "c", .age = 3 };
+const Person cs[1] = { { .name = "d", .age = 4 } };
+Person deduced[] = { { .name = "e", .age = 5 } };
+
+int main(void)
+{
+    Person *p = (Person *)&lone;
+    Person *q = (Person *)&cs[0];
+    Greeter g0 = ps[0];
+    Greeter g1 = ps[1];
+    Greeter gd = deduced[0];
+    printf("%s %s %s %s %s\n", g0.who(), g1.who(), p->who(), q->who(), gd.who());
+    printf("%d\n", (int)sizeof(Person));
+    return 0;
+}

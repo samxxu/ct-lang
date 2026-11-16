@@ -598,6 +598,36 @@ for d in test/ast/*/; do
     ok "$name"
 done
 
+# P0 (REQ-HW-001/002): the vptr of an array element must come from the C
+# initialiser, not from a constructor. The fixture loop above already proves the
+# product builds and runs; these two probes pin the *shape* it must have.
+p0src=test/ast/287_trait_array_vptr_init/prog.ct
+if ! "$work/ct-ast" "$p0src" -o "$work/p0arr.c" >"$work/p0arr.out" 2>"$work/p0arr.err"; then
+    bad "p0_trait_array_init" "ct-ast failed: $(cat "$work/p0arr.err")"
+else
+    if grep -q '__attribute__((constructor))' "$work/p0arr.c"; then
+        bad "p0_trait_array_init" "an initialised array still emits a constructor"
+    else
+        ok "p0_trait_array_init (initialised arrays carry no constructor)"
+    fi
+    # five trait-carrying objects: ps[0], ps[1], lone, cs[0], deduced[0]
+    n_vptr=$(grep -o '\.__greeter_vptr = &Person_Greeter_vtable' "$work/p0arr.c" | wc -l | tr -d ' ')
+    if [ "$n_vptr" = "5" ]; then
+        ok "p0_trait_array_static_vptr (5 initialiser designators, one per object)"
+    else
+        bad "p0_trait_array_static_vptr" "expected 5 vptr designators, found $n_vptr"
+    fi
+fi
+# The negative half: a shape the fix must reject rather than emit bad C.
+if "$work/ct-ast" test/ast/errors/trait_array_multidim.ct -o "$work/p0md.c" \
+        >"$work/p0md.out" 2>"$work/p0md.err"; then
+    bad "p0_trait_array_multidim" "expected a non-zero exit"
+elif grep -qF "trait_array_multidim.ct:18:1: error: a multi-dimensional array cannot hold trait-carrying values" "$work/p0md.err"; then
+    ok "p0_trait_array_multidim (rejected in ct, with a position)"
+else
+    bad "p0_trait_array_multidim" "$(head -2 "$work/p0md.err")"
+fi
+
 # E34-8 (P34 S7): a boxed interface payload keeps the layer's product shape.
 cat >"$work/p34_opt_iface.expected" <<'P34IFACE'
 struct Option_Show__iface {

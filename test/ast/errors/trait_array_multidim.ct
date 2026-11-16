@@ -1,0 +1,23 @@
+/* P0 (REQ-HW-002): a multi-dimensional array of trait-carrying values has no
+   single vptr slot to write, and today's per-dimension loop emits a type-error
+   for the inner row. It must be rejected in `ct`, with a position. */
+trait Greeter {
+    char *who();
+}
+
+struct Person {
+    char *name;
+} use Greeter;
+
+impl Greeter for Person {
+    char *who() {
+        return self->name;
+    }
+}
+
+Person grid[2][2];
+
+int main(void)
+{
+    return 0;
+}
