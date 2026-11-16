@@ -636,6 +636,14 @@ else
     bad "p64_const_vtable" "$(cat "$work/p64cv.out" "$work/p64cv.err")"
 fi
 
+# PH-64 T5: `--freestanding` emits no constructor, so a file-scope trait array
+# without an initialiser must be rejected in `ct` with a position.
+if bash test/ast/p64_no_init_array.sh "$work/ct-ast" >"$work/p64nia.out" 2>"$work/p64nia.err"; then
+    ok "p64_no_init_array"
+else
+    bad "p64_no_init_array" "$(cat "$work/p64nia.out" "$work/p64nia.err")"
+fi
+
 # E34-8 (P34 S7): a boxed interface payload keeps the layer's product shape.
 cat >"$work/p34_opt_iface.expected" <<'P34IFACE'
 struct Option_Show__iface {
