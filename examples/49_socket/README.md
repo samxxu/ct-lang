@@ -25,7 +25,8 @@
 2. 工厂写成 `(SOCK_STREAM).make_socket(AF_INET)`：协议类型作接收者，地址族作实参。
 3. `bind` / `listen` / `connect` 返回**接收者自身**，所以建连可以一路链下去。
 4. `accept` 产出 `own` 句柄，所有权在调用方。
-5. `recv` / `send` 返回字节数，不返回接收者，**不参与链**。
+5. `receive` / `send` 也都返回**接收者自身**，可以继续链；读到的字节数由出参带回——
+   `int n = 0; conn.receive(buf, 1024, &n)`。`send` 的写入字节数不在链上返回（见 §6）。
 6. 关闭由包内完成：`own` 句柄离开作用域时释放，调用点没有 `close`。
 
 ---
@@ -53,15 +54,16 @@ int serve_once(void)
         return -1;
     }
 
-    /* recv / send 返回字节数，单独成句，不接在链上。 */
+    /* receive 的字节数走出参；回显前必须先校验 n，所以这里断开链。 */
     char buf[4096];
-    int n = peer.recv(buf, sizeof(buf));
+    int n = 0;
+    peer.receive(buf, sizeof(buf), &n);
     if (n <= 0) {
         return -1;          /* 0 = 对端关闭，<0 = 错误；需要区分时看包内 errno */
     }
 
-    int sent = peer.send(buf, n);      /* 原样回显 */
-    return sent == n ? 0 : -1;
+    peer.send(buf, n);      /* 原样回显；返回接收者，这里不需要继续链 */
+    return peer.failed() ? -1 : 0;
 }
 ```
 
@@ -78,17 +80,16 @@ int request_once(void)
         return -1;
     }
 
-    int sent = conn.send("ping", 4);
-    if (sent != 4) {
-        return -1;
-    }
-
+    /* send → receive 连成一链；字节数由 receive 的出参带回。 */
     char buf[64];
-    int n = conn.recv(buf, sizeof(buf));
+    int n = 0;
+    conn.send("ping", 4)
+        .receive(buf, sizeof(buf), &n);
+
     if (n != 4 || memcmp(buf, "ping", 4) != 0) {
         return -1;
     }
-    return 0;
+    return conn.failed() ? -1 : 0;
 }
 ```
 
@@ -102,7 +103,7 @@ int main(int argc, char **argv)
     if (argc > 1 && strcmp(argv[1], "server") == 0) {
         return serve_once();          /* 先起：阻塞在 accept */
     }
-    return request_once();            /* 后起：connect → send → recv */
+    return request_once();            /* 后起：connect → send → receive */
 }
 ```
 
@@ -133,10 +134,22 @@ int main(int argc, char **argv)
 反过来说，如果 std 侧最终选择「打断链」，本文的链只保留 `make_socket(...).bind(...)` 一段，
 其余拆句即可，语义不变。
 
-### 5.2 `recv` / `send` 不参与链
+### 5.2 `receive` / `send` 能链，但字节数出了链，数据依赖会逼你断开
 
-它们返回字节数，天然是命令式调用；为了链式改成返回接收者，会把「写了多少字节」丢掉，反而
-需要额外查询。本文让它们单独成句，数据循环按普通 C 写法处理。
+两者都返回接收者，固定载荷的「收完就回」可以写成一条链：
+
+```c
+int n = 0;
+conn.receive(buf, 1024, &n)
+    .send("ok", 2);
+```
+
+但只要回显的长度取决于刚读到的 `n`，就必须在两步之间判断 `n <= 0`（对端关闭或错误），
+把 `send` 接在同一链上会带着非法长度继续。本文的服务端因此拆成两句，中间放校验；客户端
+「发固定 `ping`、再收」没有这个依赖，保持一链。
+
+另外，`send` 的写入字节数不在链上返回；需要确认实际写入量时，只能依赖包内提供的出参形态
+（见 §6 第 3 条），链本身只表达顺序，不表达结果。
 
 ### 5.3 `accept` 出 `own`，但关闭只跟作用域走
 
@@ -160,6 +173,7 @@ int main(int argc, char **argv)
 
 1. `failed()` 的名字与返回形态（布尔、错误码，还是两者）；
 2. 错误句柄上 `accept()` 的返回物（空 `own` 句柄的具体表示）；
-3. `recv` 的 `0` 与 `<0` 是否合并，包内是否暴露 `errno`；
+3. `receive` 的 `0` 与 `<0` 是否合并，包内是否暴露 `errno`；`send` 的写入字节数是否需要
+   出参形态；
 4. `bind` 的地址参数形态（`"0.0.0.0"` 字面量 + 端口，还是地址结构体）；
 5. 包名与 import 路径（本文写 `std::net`，以 std 侧最终命名为准）。
