@@ -1,6 +1,7 @@
 # examples —— 示例索引
 
-每个目录是一份可运行的小程序，覆盖 `ct` 的一类能力。分为五组：**impl / vtable**、
+每个目录是一份可运行的小程序，覆盖 `ct` 的一类能力；唯一例外是 `49_socket`（文档型样例，
+std 侧 API 尚未落地，不进编译与运行门禁）。分为五组：**impl / vtable**、
 **类型宿主（type host）**、**闭包**、**loop 语义**、**数组初值与泛型**。
 
 ## impl / vtable
@@ -98,6 +99,12 @@
 | `32_container_subscript` | 下标糖（Phase 31）：`v[i]` / `m[k]` 读写分离、链式 `g[i][j]` 与越界返回空句柄 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `33_vec_brace_init` | `Vec` 花括号初值（Phase 31）：拥有型元素、空 `{}` 的非空 header、与 `from` 等价 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `34_map_literal` | `Map` 字面量（Phase 31）：插入序、重复键原位覆盖、编译期重复键报 `duplicate key` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+
+## 网络（文档型）
+
+| 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
+| --- | --- | --- | --- |
+| `49_socket` | socket 的链式调用形态：`Socket` 是 `FileDesc` 的纯别名，`(SOCK_STREAM).make_socket(AF_INET)` 起手，`bind` / `listen` / `connect` 返回自身，`accept` 出 `own` 句柄，`recv` / `send` 返回字节数；附建连失败与链式的矛盾判断 | std 侧 `FileDesc` / `Socket` 落地（当前仓库内不存在） | **不进门禁**：只有 `README.md`，代码为形态示意 |
 
 ## 门禁归属说明
 
