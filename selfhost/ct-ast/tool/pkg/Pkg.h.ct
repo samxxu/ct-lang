@@ -1088,8 +1088,27 @@ impl PkgOps for Pkg {
                still applies. */
             if (strchr(path, '/') != NULL && strstr(path, "://") == NULL
                 && !self->have_index && getenv("CT_INDEX") == NULL) {
-                fprintf(stderr, "ctc: no index resolver for '%s'; "
-                                "set CT_INDEX or use --index\n", path);
+                const char *leaf = strrchr(path, '/') + 1;
+                fprintf(stderr,
+                    "ctc: no index resolver for '%s'\n"
+                    "  '%s' is a publisher-qualified package name; without an index\n"
+                    "  there is no mapping from that name to a git URL.\n"
+                    "  Choose the case that matches how the package is published:\n"
+                    "  1) built-in / official library (bare name, no publisher):\n"
+                    "       ct get %s\n"
+                    "     uses CT_REGISTRY (default https://github.com/ct-pkg).\n"
+                    "  2) publisher-qualified package (what you typed):\n"
+                    "       ct get --index <file> %s\n"
+                    "       CT_INDEX=<file> ct get %s\n"
+                    "     the index is a local plain-text file; line format:\n"
+                    "       name version publisher git-url tag sha256:<64 hex>\n"
+                    "  3) known git URL:\n"
+                    "       ct get https://<host>/<publisher>/<repo>\n"
+                    "  4) local checkout:\n"
+                    "       ct get ./path-to-%s\n"
+                    "  Note: CT_REGISTRY only applies to bare names without '/';\n"
+                    "        '%s' requires an index (case 2) or a URL/path (case 3/4).\n",
+                    path, path, leaf, path, path, leaf, path);
                 return -1;
             }
             if (strchr(path, '/') != NULL && strstr(path, "://") == NULL
