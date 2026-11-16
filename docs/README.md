@@ -36,6 +36,7 @@
 | --- | --- |
 | [roadmap.md](roadmap.md) | 简要阶段表：阶段 / 主题 / 状态 / 收口版本 / 详情入口 |
 | [planning/post-58-plan.md](planning/post-58-plan.md) | 58 之后的重排评估：在册项矩阵、依赖、顺序与并行、放弃/合并清单、编号断裂与待裁定 | 决定 58 之后先做什么、哪些不做 |
+| [planning/hardware-readiness-requirements.md](planning/hardware-readiness-requirements.md) | 硬件可用性需求（评估会产出，**未立项**）：P0 数组/const vptr、PH-64 freestanding/alloc/const vtable、硬件 pilot；含采纳/延后/不采纳与顺序 | 查看硬件需求与验收 |
 | [planning/post-58-phase-sequence.md](planning/post-58-phase-sequence.md) | 58 之后的正式 phase 序列：包管理器线先收口、语言线按依赖排序、版本位与并行车道 | 照着走的施工顺序 |
 | [history/phase-log.md](history/phase-log.md) | 逐相流水账：Phase 0–42 的详细记录、版本记录、已定决策与待定项 |
 | [history/design/phase20.md](history/design/phase20.md) · [history/design/phase21.md](history/design/phase21.md) · [history/design/phase24.md](history/design/phase24.md) · [history/design/phase25.md](history/design/phase25.md) · [history/design/phase26.md](history/design/phase26.md) | 已完成的阶段计划（Phase 20–26）：包支持 / 非逃逸栈闭包 / `loop` 语法糖 / `loop(a..b)` 范围 / 数组 range 初值 / 静态映射调用的闭包实参 / 泛型函数；phase17、phase18、phase19、phase22、phase23 与 phase25–phase31 已按 DOC-66 归档到 [history/design/](history/design/) |
@@ -53,6 +54,7 @@
 | [design/phase48.md](history/design/phase48.md) · [design/phase49.md](history/design/phase49.md) | 已完成（Phase 48–49）：48 Drop 语义闭环 / 49 `own` 所有权转移；收口版本见 [roadmap.md](roadmap.md) |
 | [design/phase50.md](history/design/phase50.md) · [design/phase51.md](history/design/phase51.md) · [design/phase52.md](design/phase52.md) | 已完成（Phase 50–52，0.50.0 至 0.53.0）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
 | [design/phase53.md](design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
+| [proposals/ct-bare-metal-proposal.md](proposals/ct-bare-metal-proposal.md) | 裸机生成契约提案（**待 CT 组评估**）：数组/const vptr 静默坏 C、constructor、按需 std 单元、`--alloc`、const vtable；建议 P0 patch + PH-64 | 查看裸机生成契约提案 |
 | [proposals/ct-hardware-pilot-proposal.md](proposals/ct-hardware-pilot-proposal.md) | 工程试点提案（**待 CT 组评估**）：不新增语法，用真实 MCU 验证 CT 生成 C 的上层业务/驱动封装、交叉编译、volatile/ISR/DMA/ABI/实时性/调试；底层保留 C/汇编 | 查看硬件参考工程提案 |
 | [proposals/ct-model-export-proposal.md](proposals/ct-model-export-proposal.md) | 模型导出 `--emit-model` 提案（Phase 59 依据） | 查看编译器模型导出设计 |
 | [proposals/ct-str-char-conversion-proposal.md](proposals/ct-str-char-conversion-proposal.md) | 语言侧使用反馈提案（**待项目组评估**）：`Str` → `char *` 借用视图、`char *` → `Str` 三处隐式深拷贝、目标类型决定产出与归属；实现口径与排期由项目组裁定 | 查看字符串接口互操作提案 |

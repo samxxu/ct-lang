@@ -1,0 +1,807 @@
+{
+  "battle": "hw-1",
+  "head": "485129c9 (v0.62.0)；任务给出的 HEAD 基线。当前工作树为 7cabdce9 且含未提交的 Pkg 诊断改动（任务声明与本题无关），本席未使用工作树产物。",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2 (build 26B123)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1), target arm64-apple-darwin27.2.0",
+    "nm": "llvm-nm (Apple Command Line Tools)",
+    "binary": "/tmp/pkgdiag/ct-ast (ct-ast v0.62.0, sha256 390c4d94095703f2058000a0d9659de2236f192f30de4d8ff75d2e03c60fbc0d)",
+    "l0_probe": "/tmp/hw1v/ctc（由 selfhost/l0/ctc.c 现编，-Wall -Wextra -Wno-format-truncation，仅用于确认 L0 行为）",
+    "date": "2026-11-16T18:12:13+08:00 (Asia/Shanghai)",
+    "note": "所有探针只写 /tmp/hw1v；未改 selfhost/**、test/**、docs/proposals/**、docs/design/**。"
+  },
+  "rounds": 1,
+  "method": "只读复现与独立裁决：用 /tmp/pkgdiag/ct-ast 生成/构建，用 cc -Wall -Wextra、nm -u、nm -m、ld -r、otool、diff/cmp 和计数脚本核对；不实现 A/B 任何方案，因此『P0 后』『PH-64 后』的行为只在生成物层模拟并明确标注。",
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "claim.md#E1-1 / counter.md#2.1 / question.md#J-1",
+      "command": "cd /tmp/hw1v && /tmp/pkgdiag/ct-ast ps.ct -o ps.c; echo \"ct rc=$?\"\ngrep -n '__greeter_vptr = ' ps.c\ngrep -nE '__ct_init|__ct_i <' ps.c\ncc -std=c99 -Wall -Wextra -c ps.c -o ps.o; echo \"cc rc=$?\"",
+      "exit": 1,
+      "output": "ct rc=0\n21:struct Person ps[2] = { { .name = \"a\", .age = 1 },\n22:                 { .name = \"b\", .age = 2 } , .__greeter_vptr = &Person_Greeter_vtable};\n36:static void __ct_init(void) __attribute__((constructor));\n39:    for (__ct_i = 0; __ct_i < 2; __ct_i++) {\n40:        ps[__ct_i].__greeter_vptr = &Person_Greeter_vtable;\ncc rc=1\nps.c:22:46: error: field designator cannot initialize a non-struct, non-union type 'struct Person[2]'\n1 error generated.",
+      "reproduced": true,
+      "note": "文件作用域带初值 trait 数组：ct rc=0 但生成坏 C；第 22 行把顶层 designator 追加到数组初值之后。第 36-40 行同时证明带初值数组仍发 constructor。claim E1-1 与 counter 2.1 的机制逐字复现（行号因夹具不同为 22/40，非其 51/186）。"
+    },
+    {
+      "id": "V2",
+      "side": "both",
+      "ref": "claim.md#E1-1（局部数组）/ counter.md#2.1",
+      "command": "cd /tmp/hw1v && /tmp/pkgdiag/ct-ast local.ct -o local.c; echo \"ct rc=$?\"\ngrep -n '__greeter_vptr = ' local.c\ngrep -c '__ct_init' local.c\ncc -std=c99 -Wall -Wextra -c local.c -o local.o; echo \"cc rc=$?\"",
+      "exit": 1,
+      "output": "ct rc=0\n31:    struct Person ps[2] = { { .name = \"a\", .age = 1 }, { .name = \"b\", .age = 2 } , .__greeter_vptr = &Person_Greeter_vtable};\n0\ncc rc=1\nlocal.c:31:84: error: field designator cannot initialize a non-struct, non-union type 'struct Person[2]'\n1 error generated.",
+      "reproduced": true,
+      "note": "局部数组同样追加顶层 designator → cc rc=1。与文件作用域不同：局部带初值数组没有 __ct_init（grep -c=0），constructor 只由文件作用域数组触发。"
+    },
+    {
+      "id": "V3",
+      "side": "both",
+      "ref": "counter.md#2.1（空上界）/ question.md#P0 `[]` 推导",
+      "command": "cd /tmp/hw1v && /tmp/pkgdiag/ct-ast opens.ct -o opens.c; echo \"ct rc=$?\"\ngrep -nE '__greeter_vptr = |__ct_i <' opens.c\ncc -std=c99 -Wall -Wextra -c opens.c -o opens.o; echo \"cc rc=$?\"",
+      "exit": 1,
+      "output": "ct rc=0\n21:struct Person ops[] = { { .name = \"a\", .age = 1 }, { .name = \"b\", .age = 2 } , .__greeter_vptr = &Person_Greeter_vtable};\n38:    for (__ct_i = 0; __ct_i < ; __ct_i++) {\ncc rc=1\nopens.c:21:80: error: field designator cannot initialize a non-struct, non-union type 'struct Person[]'\nopens.c:38:31: error: expected expression",
+      "reproduced": true,
+      "note": "`[]` 推导：既有坏 designator，又生成空循环上界 `__ct_i < ;`。counter 2.1 的 arr2 空上界结论成立，且 P0 必须同时处理构造器循环。"
+    },
+    {
+      "id": "V4",
+      "side": "verify",
+      "ref": "proposal B6 / claim.md#E3-P1 / question.md#P0 多维",
+      "command": "cd /tmp/hw1v && /tmp/pkgdiag/ct-ast multi.ct -o multi.c; echo \"ct rc=$?\"\ngrep -nE '__greeter_vptr = |__ct_i <' multi.c\ncc -std=c99 -Wall -Wextra -c multi.c -o multi.o; echo \"cc rc=$?\"",
+      "exit": 1,
+      "output": "ct rc=0\n22:                   { { .name = \"c\", .age = 3 }, { .name = \"d\", .age = 4 } } , .__greeter_vptr = &Person_Greeter_vtable};\n38:    for (__ct_i = 0; __ct_i < 2; __ct_i++) {\n39:        g[__ct_i].__greeter_vptr = &Person_Greeter_vtable;\ncc rc=1\nmulti.c:22:79: error: field designator cannot initialize a non-struct, non-union type 'struct Person[2][2]'\nmulti.c:39:18: error: member reference base type 'struct Person[2]' is not a structure or union",
+      "reproduced": true,
+      "note": "多维 trait 数组今天不是 ct 阶段硬错（ct rc=0），而是生成两种坏 C（顶层 designator + 把数组元素当 struct 写 vptr）。P0 若要满足 B6/claim P1 的『硬错并指明多维数组 + trait』必须新加诊断；现有生成物没有。"
+    },
+    {
+      "id": "V5",
+      "side": "verify",
+      "ref": "proposal B5 / question.md#P0 部分初始化",
+      "command": "cd /tmp/hw1v && cat > partial.ct <<'EOF'\n#include <stdio.h>\ntrait Greeter { char *who(); }\nstruct Person { char *name; int age; } use Greeter;\nimpl Greeter for Person { char *who() { return self->name; } }\nPerson ps[4] = { { .name = \"a\", .age = 1 }, { .name = \"b\", .age = 2 } };\nint main(void) { return ps[3].who() == 0; }\nEOF\n/tmp/pkgdiag/ct-ast partial.ct -o partial.c; echo \"ct rc=$?\"\ngrep -nE '__greeter_vptr = |__ct_i <' partial.c\ncc -std=c99 -Wall -Wextra -c partial.c -o partial.o; echo \"cc rc=$?\"",
+      "exit": 1,
+      "output": "ct rc=0\n21:struct Person ps[4] = { { .name = \"a\", .age = 1 }, { .name = \"b\", .age = 2 } , .__greeter_vptr = &Person_Greeter_vtable};\n37:    for (__ct_i = 0; __ct_i < 4; __ct_i++) {\n38:        ps[__ct_i].__greeter_vptr = &Person_Greeter_vtable;\ncc rc=1\npartial.c:21:80: error: field designator cannot initialize a non-struct, non-union type 'struct Person[4]'\n1 error generated.",
+      "reproduced": true,
+      "note": "部分初始化（2/4）今天由 constructor 补到 4 个元素，但坏 designator 仍在最外层；B5 的尾部元素语义在 P0 后必须由元素内嵌 vptr 或静态 designator 保证，不能依赖 constructor。"
+    },
+    {
+      "id": "V6",
+      "side": "both",
+      "ref": "claim.md#E1-3 / counter.md#2.2 / question.md#P0 constructor",
+      "command": "cd /tmp/hw1v && /tmp/pkgdiag/ct-ast noinit.ct -o noinit.c\ncc -std=c99 -c noinit.c -o noinit.o\nnm -m noinit.o | grep -E 'vtable|mod_init'\notool -l noinit.o | grep -c '__mod_init_func'\ngrep -c '__ct_init' ps.c local.c constarr.c\ncc -std=c99 localnoinit.c -o localnoinit.bin && ./localnoinit.bin; echo \"localnoinit run rc=$?\"",
+      "exit": 0,
+      "output": "00000000000000e8 (__DATA,__data) non-external _Person_Greeter_vtable\n00000000000000f0 (__DATA,__mod_init_func) non-external ltmp3\n1\nps.c:2\nlocal.c:0\nconstarr.c:0\na\nlocalnoinit run rc=0",
+      "reproduced": true,
+      "note": "无初值文件作用域数组：vtable 在 __DATA,__data（可写、非 Flash），constructor 符号进 __mod_init_func（otool 计数 1）。带初值文件作用域数组 ps.c 仍发 constructor（grep 计数 2=声明+定义）；局部带初值数组 0；const 数组 0（vptr 被静默丢掉，见 V8）。局部无初值数组不是 constructor，而是逐元素 vptr 写入（localnoinit 运行 rc=0）。"
+    },
+    {
+      "id": "V7",
+      "side": "claim",
+      "ref": "claim.md#E1-2 / question.md#P0 const 标量",
+      "command": "cd /tmp/hw1v && /tmp/pkgdiag/ct-ast constscalar.ct -o constscalar.c; echo \"ct rc=$?\"\ngrep -nE 'const struct Person single|__greeter_vptr = ' constscalar.c\ncc -std=c99 -Wall -Wextra constscalar.c -o constscalar 2>constscalar.warn; echo \"cc rc=$?\"; cat constscalar.warn\n./constscalar; echo \"run rc=$?\"",
+      "exit": 139,
+      "output": "ct rc=0\n21:const struct Person single = { .name = \"a\", .age = 1 };\n（没有 __greeter_vptr = 行）\ncc rc=0\n（无告警）\nrun rc=139\n（bash: Segmentation fault: 11）",
+      "reproduced": true,
+      "note": "const 标量：ct/cc 全绿，vptr 静默为 0；显式转换后派发 today 即段错误（claim 的更强主张成立）。根因不是『等 SH-60 才危险』。"
+    },
+    {
+      "id": "V8",
+      "side": "claim",
+      "ref": "claim.md#E1-2 / question.md#P0 const 数组",
+      "command": "cd /tmp/hw1v && /tmp/pkgdiag/ct-ast constarr.ct -o constarr.c\ngrep -c '__greeter_vptr = ' constarr.c; grep -c '__ct_init' constarr.c\ncc -std=c99 -Wall -Wextra -c constarr.c -o constarr.o; echo \"cc rc=$?\"\ncc -std=c99 constarrdisp.c -o constarrdisp && ./constarrdisp; echo \"dispatch run rc=$?\"",
+      "exit": 139,
+      "output": "0\n0\ncc rc=0\ndispatch run rc=139",
+      "reproduced": true,
+      "note": "const 数组：0 个 vptr、0 个 constructor；普通编译 rc=0（死代码不暴露），显式转换派发 rc=139。const 标量与数组同一根因。"
+    },
+    {
+      "id": "V9",
+      "side": "verify",
+      "ref": "question.md#P0 / J-1",
+      "command": "cd /tmp/hw1v && for f in ps local opens multi partial noinit constscalar constarr localnoinit; do\n  cc -std=c99 -Wall -Wextra -c $f.c -o /tmp/hw1v/t.o 2>/dev/null; echo \"$f cc=$?\"\ndone",
+      "exit": 0,
+      "output": "ps cc=1\nlocal cc=1\nopens cc=1\nmulti cc=1\npartial cc=1\nnoinit cc=0\nconstscalar cc=0\nconstarr cc=0\nlocalnoinit cc=0",
+      "reproduced": true,
+      "note": "`cc -std=c99 -Wall -Wextra -c` 退出码：四类带初值数组（文件作用域/局部/[]/多维/部分初始化）均 1；无初值数组、const 标量、const 数组、局部无初值数组均 0（后三者是静默错值，不是编译错误）。"
+    },
+    {
+      "id": "V10",
+      "side": "claim",
+      "ref": "claim.md#3 E2 / proposal §2.1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nsed -n '91,104p' selfhost/ct-ast/backend/emit/Init.h.ct\nsed -n '2916,2940p' selfhost/ct-ast/backend/emit/Emitter.h.ct\nsed -n '2858,2862p' selfhost/ct-ast/backend/emit/Emitter.h.ct\ngrep -n 'int type_has_array_init' selfhost/ct-ast/frontend/type/TypeCheck.h.ct",
+      "exit": 0,
+      "output": "Init.h.ct:99   if (strncmp(base, \"struct \", 7) == 0) base += 7;     /* 不剥 const */\nInit.h.ct:101  si = self->sym->find_struct(base);\nInit.h.ct:102  if (si < 0) return 0;                                  /* const struct Person -> 0 个 vptr */\nEmitter.h.ct:2918  if (len < 2 || t[len - 1] != '}') {               /* 只看末字符 }，不看数组维度 */\nEmitter.h.ct:2934  fwrite(t, 1, (size_t)(len - 1), self->out);        /* 先写元素初值 */\nEmitter.h.ct:2936-2939  fputs(\", \"); emit_vptr_items(...)            /* 再追加顶层 .__x_vptr */\nEmitter.h.ct:2860-2861  text3[0] || type_has_array_init(...)          /* 数组后缀即触发 constructor，与是否有初值无关 */\nTypeCheck.h.ct:707      int type_has_array_init(const char *type)",
+      "reproduced": true,
+      "note": "根因 file:line 逐条复核：Init.h.ct 只剥 `struct ` 不剥 `const ` → const 对象 find_struct 失败 → 返回 0；Emitter.h.ct 只按末字符 `}` 判定初值、无条件追加顶层 designator；constructor 触发条件只看数组后缀（text3[0]）或数组字段，不看初值是否存在。"
+    },
+    {
+      "id": "V11",
+      "side": "verify",
+      "ref": "claim.md#E1-4（『四个单元无条件进场』）/ proposal §2.4",
+      "command": "cd /tmp/hw1v && rm -rf b1 && mkdir b1 && /tmp/pkgdiag/ct-ast build --emit-c plain.ct --outdir b1; echo \"tmp rc=$?\"; ls b1\ncd /Users/samxx/dsh-ws/ct-lang && rm -rf /tmp/hw1v/b2 && mkdir /tmp/hw1v/b2 && /tmp/pkgdiag/ct-ast build --emit-c /tmp/hw1v/plain.ct --outdir /tmp/hw1v/b2; echo \"root rc=$?\"; ls /tmp/hw1v/b2\ncd /tmp/hw1v && rm -rf b3 && mkdir b3 && CT_STD_DIR=/Users/samxx/dsh-ws/ct-lang/lib/std /tmp/pkgdiag/ct-ast build --emit-c plain.ct --outdir b3; echo \"env rc=$?\"; ls b3",
+      "exit": 0,
+      "output": "cc -std=c99 -I b1 b1/plain.c -o a.out\ntmp rc=0\nplain.c\ncc -std=c99 -I /tmp/hw1v/b2 /tmp/hw1v/b2/Vec.c /tmp/hw1v/b2/Option.c /tmp/hw1v/b2/Result.c /tmp/hw1v/b2/Str.c /tmp/hw1v/b2/plain.c -o a.out\nroot rc=0\nOption.c Option.h Result.c Result.h Str.c Str.h Vec.c Vec.h plain.c\ncc -std=c99 -I b3 b3/Vec.c b3/Option.c b3/Result.c b3/Str.c b3/plain.c -o a.out\nenv rc=0\nOption.c Option.h Result.c Result.h Str.c Str.h Vec.c Vec.h plain.c",
+      "reproduced": true,
+      "note": "『四个单元无条件进场』不成立：是否发现内置层取决于 CT_STD_DIR、cwd 的 lib/std、或输入文件旁的 ../lib/std（Module.h.ct:429/1545-1550）；在 /tmp 无这些路径时最小程序只发 plain.c。claim/counter 的『四单元』是在仓库根或 CT_STD_DIR 下成立，不是无条件。"
+    },
+    {
+      "id": "V12",
+      "side": "both",
+      "ref": "claim.md#E1-4 / counter.md#2.4 / question.md#四单元",
+      "command": "cd /tmp/hw1v/b3 && for f in Vec Option Result Str plain; do\n  cc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -c $f.c -o $f.o; echo \"$f cc=$?\"; nm -u $f.o\ndone\ncc -ffreestanding -nostdlib -fno-stack-protector -Wl,-static -Wl,-e,_main Vec.o Option.o Result.o Str.o plain.o -o all.bin; echo \"link rc=$?\"\nld -r Vec.o Option.o Result.o Str.o plain.o -o combined.o; echo \"ld -r rc=$?\"; nm -u combined.o",
+      "exit": 1,
+      "output": "Vec cc=0  nm -u: （空）\nOption cc=0 nm -u: （空）\nResult cc=0 nm -u: （空）\nStr cc=0 nm -u: _free _malloc\nplain cc=0 nm -u: （空）\nlink rc=1\nUndefined symbols for architecture arm64:\n  \"_free\", referenced from:\n      _Str_Drop_drop in Str.o\n      _Str_release in Str.o\n  \"_malloc\", referenced from:\n      _str_from_len in Str.o\n      _str_concat in Str.o\n      _str_c_str in Str.o\nld: symbol(s) not found for architecture arm64\nld -r rc=0\nnm -u combined.o: _free _malloc",
+      "reproduced": true,
+      "note": "四单元里只有 Str 在未实例化时也带 _free/_malloc；Vec/Option/Result 未实例化时 nm -u 为空。因此最小程序在 -nostdlib 下链接失败的唯一符号是 _free/_malloc（Str.o），与 claim E1-4 一致。`ld -r` 也保留这两个未定义符号。"
+    },
+    {
+      "id": "V13",
+      "side": "both",
+      "ref": "counter.md#2.5 / claim.md#E1-4 / question.md#freestanding",
+      "command": "cd /tmp/hw1v\n# fwvec=Vec<int> 程序；fwopt=Option<int>.unwrap 程序；fwres=Result 程序；fwos=只用 Option<int>.is_some\nfor d in fwvec fwopt fwres; do for f in Vec Option Result Str; do\n  cc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -c $d/$f.c -o $d/x.o\n  printf '%s/%s: ' $d $f; nm -u $d/x.o | tr '\\n' ' '; echo\ndone; done\n# 仅声明、不调用任何方法\nCT_STD_DIR=/Users/samxx/dsh-ws/ct-lang/lib/std /tmp/pkgdiag/ct-ast build --emit-c opt_decl.ct --outdir fwod >/dev/null\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -c fwod/Option.c -o fwod/Option.o\nprintf 'opt_decl/Option: '; nm -u fwod/Option.o | tr '\\n' ' '; echo\nCT_STD_DIR=/Users/samxx/dsh-ws/ct-lang/lib/std /tmp/pkgdiag/ct-ast build --emit-c vec_decl.ct --outdir fwvd >/dev/null\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -c fwvd/Vec.c -o fwvd/Vec.o\nprintf 'vec_decl/Vec: '; nm -u fwvd/Vec.o | tr '\\n' ' '; echo\nCT_STD_DIR=/Users/samxx/dsh-ws/ct-lang/lib/std /tmp/pkgdiag/ct-ast build --emit-c res_decl.ct --outdir fwrd >/dev/null\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -c fwrd/Result.c -o fwrd/Result.o\nprintf 'res_decl/Result: '; nm -u fwrd/Result.o | tr '\\n' ' '; echo",
+      "exit": 0,
+      "output": "fwvec/Vec: ___memcpy_chk ___memset_chk ___stderrp _abort _fprintf _free _malloc _realloc\nfwvec/Option: （空；该程序未实例化 Option）\nfwvec/Result: （空）\nfwvec/Str: _free _malloc\nfwopt/Vec: （空）\nfwopt/Option: ___stderrp _abort _fprintf\nfwopt/Result: （空）\nfwopt/Str: _free _malloc\nfwres/Option: （空）\nfwres/Result: ___stderrp _abort _fprintf\nfwres/Str: _free _malloc\nopt_decl/Option: ___stderrp _abort _fprintf\nvec_decl/Vec: ___memcpy_chk ___memset_chk ___stderrp _abort _fprintf _free _malloc _realloc\nres_decl/Result: ___stderrp _abort _fprintf",
+      "reproduced": true,
+      "note": "容器符号面（本机 clang，-ffreestanding -nostdlib）：Vec<int> 任何实例化（哪怕只声明变量、不调方法）→ 8 个未定义符号（5 非分配 + malloc/free/realloc）；Option<int>/Result<int> 任何实例化（含仅声明变量）→ 3 个（__stderrp/_abort/_fprintf）；Str → 2 个（_free/_malloc）。夹具：fwvec/fwopt/fwres 来自 test/ast/165/215/216 的 prog.ct，fwos/fwod/fwvd/fwrd 来自 /tmp/hw1v 的 opt_some.ct / opt_decl.ct / vec_decl.ct / res_decl.ct。注意 Vec 是 8 个不是 counter 散文里的 9 个（其 E1-4 原始输出也是 8 个 token）。"
+    },
+    {
+      "id": "V14",
+      "side": "counter",
+      "ref": "counter.md#2.6 / lib/std/Option.h.ct:59-60 / Result.h.ct:77-78",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && grep -nE 'fprintf[(]stderr|abort[(][)]' lib/std/Option.h.ct lib/std/Result.h.ct\ngrep -nE 'fprintf|abort' /tmp/hw1v/fwopt/Option.c /tmp/hw1v/fwres/Result.c\nnm -g /tmp/hw1v/fwos/Option.o | grep -E ' T | U '",
+      "exit": 0,
+      "output": "lib/std/Option.h.ct:59:  fprintf(stderr, \"Option: unwrap on a none value\\n\");\nlib/std/Option.h.ct:60:  abort();\nlib/std/Result.h.ct:77:   fprintf(stderr, \"Result: unwrap on an error value\\n\");\nlib/std/Result.h.ct:78:   abort();\nlib/std/Result.h.ct:86:   fprintf(stderr, \"Result: unwrap_err on an ok value\\n\");\nlib/std/Result.h.ct:87:   abort();\nfwopt/Option.c:43-44  fprintf(stderr,...); abort();\nfwres/Result.c:60-61,69-70  fprintf(stderr,...); abort();\nfwos/Option.o: T _Option_int_unwrap ... U ___stderrp _abort _fprintf",
+      "reproduced": true,
+      "note": "Option.unwrap 确实发 fprintf(stderr)+abort；Result 的 unwrap/unwrap_err 同样。关键扩展：即使用户只调用 is_some（fwos），Option<int> 实例化仍发射全部方法（含 unwrap），nm -u 仍是 3 个 libc 符号。counter 只说『用了 unwrap 见 2.6』，低估了触发面。"
+    },
+    {
+      "id": "V15",
+      "side": "verify",
+      "ref": "question.md#freestanding / proposal --alloc",
+      "command": "cd /tmp/hw1v && cat > pool.c <<'EOF'\n#include <stddef.h>\nvoid *pool_alloc(size_t n) { (void)n; return 0; }\nvoid pool_free(void *p) { (void)p; }\nvoid *pool_realloc(void *p, size_t n) { (void)p; (void)n; return 0; }\nEOF\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -c pool.c -o pool.o\n# Str: 只映射 malloc/free\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -Dmalloc=pool_alloc -Dfree=pool_free -c fw3/Str.c -o Str_alloc.o\nnm -u Str_alloc.o\nld -r Str_alloc.o pool.o -o str_comb.o; nm -u str_comb.o\n# Vec: 映射 malloc/free/realloc\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -Dmalloc=pool_alloc -Dfree=pool_free -Drealloc=pool_realloc -c fwvec/Vec.c -o Vec_alloc.o\nnm -u Vec_alloc.o\nld -r Vec_alloc.o pool.o -o vec_comb.o; nm -u vec_comb.o\n# 只映射 malloc/free 时 Vec 的剩余\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -Dmalloc=pool_alloc -Dfree=pool_free -c fwvec/Vec.c -o Vec_mf.o\nnm -u Vec_mf.o\n# Option/Result 不受映射影响\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -Dmalloc=pool_alloc -Dfree=pool_free -c fwopt/Option.c -o Option_mf.o\nnm -u Option_mf.o\n# 编译选项会改变符号名\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -D_FORTIFY_SOURCE=0 -c fwvec/Vec.c -o Vec_f0.o; nm -u Vec_f0.o\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -O2 -c fwvec/Vec.c -o Vec_o2.o; nm -u Vec_o2.o",
+      "exit": 0,
+      "output": "Str_alloc.o: _pool_alloc _pool_free\nld -r Str_alloc.o pool.o -> nm -u: （空）\nVec_alloc.o: ___memcpy_chk ___memset_chk ___stderrp _abort _fprintf _pool_alloc _pool_free _pool_realloc\nld -r Vec_alloc.o pool.o -> nm -u: ___memcpy_chk ___memset_chk ___stderrp _abort _fprintf\nVec_mf.o: ___memcpy_chk ___memset_chk ___stderrp _abort _fprintf _pool_alloc _pool_free _realloc\nOption_mf.o: ___stderrp _abort _fprintf\nVec_f0.o: ___stderrp _abort _fprintf _free _malloc _memcpy _memset _realloc\nVec_o2.o: ___stderrp _abort _bzero _fprintf _free _malloc _memcpy _realloc",
+      "reproduced": true,
+      "note": "--alloc 映射后的真实剩余：Str 只需 malloc/free，映射成 pool_alloc/pool_free 后 ld -r 可做到 nm -u 空；Vec 即使把 malloc/free/realloc 全部映射，仍剩 5 个非分配符号（memcpy/memset/abort/fprintf+stderr），且符号名随编译选项变（FORTIFY 的 __*_chk、-O2 的 bzero），所以『符号集 ⊆ 允许集』的允许集必须按目标工具链/选项固定或做归一化。"
+    },
+    {
+      "id": "V16",
+      "side": "verify",
+      "ref": "question.md#pilot 先行 / counter.md#E1-6",
+      "command": "cd /tmp/hw1v && rm -rf cp && mkdir cp\nCT_STD_DIR=/Users/samxx/dsh-ws/ct-lang/lib/std /tmp/pkgdiag/ct-ast build --emit-c pilot.ct --outdir cp\ncd cp\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -I .. -c pilot.c -o pilot.o; echo \"pilot.c rc=$?\"; nm -u pilot.o\ncc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -I .. -c ../pilot_shim.c -o pilot_shim.o\nld -r pilot.o pilot_shim.o -o combined.o; echo \"ld -r rc=$?\"; nm -u combined.o\ncc -ffreestanding -nostdlib -fno-stack-protector -Wl,-static -Wl,-e,_main pilot.o pilot_shim.o -o pilot.bin; echo \"static link rc=$?\"; ./pilot.bin; echo \"run rc=$?\"\n# 只编实际使用的 .c：不编 Vec/Option/Result/Str\n# 全编五单元再 ld -r：\nfor f in Vec Option Result Str; do cc -std=c99 -ffreestanding -nostdlib -fno-stack-protector -I .. -c $f.c -o $f.o 2>/dev/null; done\nld -r pilot.o Vec.o Option.o Result.o Str.o -o combined_all.o; nm -u combined_all.o",
+      "exit": 137,
+      "output": "cc -std=c99 -I cp cp/Vec.c cp/Option.c cp/Result.c cp/Str.c cp/pilot.c -o a.out\nct rc=0\npilot.c rc=0\nnm -u pilot.o: _pilot_shim\nld -r rc=0\nnm -u combined.o: （空）\nstatic link rc=0\nrun rc=137（Killed: 9）\nnm -u combined_all.o: _free _malloc _pilot_shim\n# 无 std 发现（从 /tmp 直接 build）时只发 pilot.c：\nct rc=0; ls cp2 -> pilot.c; cc rc=0; nm -u pilot.o -> _pilot_shim",
+      "reproduced": true,
+      "note": "pilot 先行在『对象/可重定位层』成立：无堆 trait+局部对象+C shim 的生成物只需 pilot.c（+生成的 .h，若 std 被发现），nm -u 只有 shim，ld -r 后为空。但宿主 macOS 无法真正运行 -nostdlib 静态可执行文件（rc=137 Killed:9），所以『可启动镜像』必须在目标工具链上验证，本机只能证到对象层。若照 ct build 打印的命令把五个 .c 一起编，ld -r 会带回 _free/_malloc（Str.o），必须手工只挑实际使用的 .c；这是 pilot 先行的一项未文档化前提。"
+    },
+    {
+      "id": "V17",
+      "side": "both",
+      "ref": "claim.md#E1-4 / question.md#freestanding 现状",
+      "command": "cd /tmp/hw1v && /tmp/pkgdiag/ct-ast --freestanding plain.ct -o z1.c; echo \"rc=$?\"\n/tmp/pkgdiag/ct-ast --alloc pvPortMalloc,vPortFree plain.ct -o z2.c; echo \"rc=$?\"\n/tmp/pkgdiag/ct-ast build --freestanding --emit-c plain.ct --outdir b1; echo \"build rc=$?\"",
+      "exit": 1,
+      "output": "ctc: unknown option '--freestanding'\nrc=1\nctc: unknown option '--alloc'\nrc=1\nctc: unknown option '--freestanding'\nbuild rc=1",
+      "reproduced": true,
+      "note": "`--freestanding` 与 `--alloc` 今天都不存在（compile/build 两条路径都 unknown option）。PH-64 的 S1/S2 是新增 CLI/生成契约，不是现状。"
+    },
+    {
+      "id": "V18",
+      "side": "both",
+      "ref": "claim.md#E3-P3 / counter.md#2.7 / question.md#const vtable",
+      "command": "cd /tmp/hw1v && /tmp/pkgdiag/ct-ast vt.ct -o vt.c\ngrep -nE 'Greeter_vtbl|__greeter_vptr|Greeter_vtable|iface' vt.c\ncc -std=c99 -Wall -Wextra -c vt.c -o vt.o; echo \"baseline cc=$?\"; nm -m vt.o | grep -i vtable\n# 只把定义改 const\nsed 's/^static struct Greeter_vtbl Person_Greeter_vtable/static const struct Greeter_vtbl Person_Greeter_vtable/' vt.c > vt_only.c\ncc -std=c99 -Wall -Wextra -c vt_only.c -o vt_only.o; echo \"only-def cc=$?\"\n# 定义 + __vptr + vt 三处都 const\nsed -e 's/^static struct Greeter_vtbl Person_Greeter_vtable/static const struct Greeter_vtbl Person_Greeter_vtable/'     -e 's/struct Greeter_vtbl [*]__greeter_vptr;/const struct Greeter_vtbl *__greeter_vptr;/'     -e 's/struct Greeter_vtbl [*]vt;/const struct Greeter_vtbl *vt;/' vt.c > vt_all.c\ncc -std=c99 -Wall -Wextra -c vt_all.c -o vt_all.o; echo \"all-const cc=$?\"; nm -m vt_all.o | grep -i vtable\n# sizeof 前后\ncc -std=c99 size.c -o size_before && ./size_before\nsed -e 's/^static struct Greeter_vtbl Person_Greeter_vtable/static const struct Greeter_vtbl Person_Greeter_vtable/'     -e 's/struct Greeter_vtbl [*]__greeter_vptr;/const struct Greeter_vtbl *__greeter_vptr;/'     -e 's/struct Greeter_vtbl [*]vt;/const struct Greeter_vtbl *vt;/' size.c > size_all.c\ncc -std=c99 -Wall -Wextra size_all.c -o size_after && ./size_after\n# 跨 TU const/non-const\nmkdir -p xmode && cd xmode\ncat > a.c <<'EOF'\nstruct V { int x; };\nconst struct V v = { 7 };\nEOF\ncat > b.c <<'EOF'\nstruct V { int x; };\nextern struct V v;\nint main(void) { return v.x; }\nEOF\ncc -c a.c -o a.o && cc -c b.c -o b.o && cc a.o b.o -o x.bin && ./x.bin; echo \"cross run rc=$?\"",
+      "exit": 0,
+      "output": "baseline: static struct Greeter_vtbl Person_Greeter_vtable ...; struct Greeter_vtbl *__greeter_vptr; struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };\nbaseline cc=0; (__DATA,__data) _Person_Greeter_vtable\nonly-def cc=0；2 warnings: initializing 'struct Greeter_vtbl *' with an expression of type 'const struct Greeter_vtbl *' discards qualifiers\nall-const cc=0；(__DATA,__const) _Person_Greeter_vtable\nsizeof before/after: 24 16 / 24 16\ncross TU link rc=0; run rc=7",
+      "reproduced": true,
+      "note": "vtable 定义可以改 const：定义+__vptr+vt 三处同改后 -Wall -Wextra 零告警，vtable 从 __DATA,__data 移到 __DATA,__const；sizeof(struct Person)=24、sizeof(iface)=16 前后不变；跨 TU 的 const/non-const 合成夹具链接/运行 rc=0（布局同为 8 字节指针，链接层不报错，但类型不一致属 UB）。只改定义会得到 2 条 discard-qualifiers 告警，所以三处必须成套改。map/boxing 与导出 vtable 的同类改造也实测零告警（p28 六文件 rc=0、输出 7）。"
+    },
+    {
+      "id": "V19",
+      "side": "verify",
+      "ref": "claim.md#E4（『const golden 0 文件/0 行』）/ counter.md#E2",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngrep -nE 'struct %s_vtbl|struct %s_vtbl \\*|__%s_vptr|extern struct %s_vtbl' selfhost/ct-ast/backend/emit/Emitter.h.ct\ngrep -cE 'grep.*(extern )?struct [A-Za-z_0-9]+_vtbl' selfhost/check-ast.sh",
+      "exit": 0,
+      "output": "1596  struct %s_vtbl *__%s_vptr;\n1861  static struct %s_vtbl %s_%s_vtable ... = {\n2729/2732/2747/2750  前向声明\n2842  struct %s_iface { void *self; struct %s_vtbl *vt; };\n3142/3145  定义\n3266/3269  定义\n3398/3401  map 定义\n3516  struct %s_vtbl *__%s_vptr;\n3728/3742/3752  extern 声明\n= 17 个声明/定义发射点（三种形态）\ncheck-ast.sh 中带类型文本的 vtable grep = 7 条",
+      "reproduced": true,
+      "note": "const 的生成物形态确实只有三种（vtable 定义、__vptr、iface.vt），但源码里的字符串发射点有 17 处（定义 7、前向 4、extern 3、vptr/vt 3）；claim/counter 的『8 个发射点』少算了 9 处。若只改部分声明，同 TU 会出现 const 丢弃告警，跨 TU 则是类型不一致。"
+    },
+    {
+      "id": "V20",
+      "side": "both",
+      "ref": "question.md#const golden / claim.md#E4 / counter.md#E4",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngrep -rl 'Generated by ct v0.62.0' test/cases | wc -l\ngrep -rl 'Generated by ct v0.62.0' test/cases | grep -c '\\.expected\\.c$'\ngrep -rl 'Generated by ct v0.62.0' test/cases | grep -c '\\.expected\\.h$'\nls test/cases/*.expected.* | wc -l\ngrep -rlE '\\[[0-9]*\\] += \\{' test/cases --include='*.expected.c' | wc -l\ngrep -rl 'const struct ' test/cases --include='*.expected.c' | wc -l\ngrep -rl '__ct_init' test/cases/*.expected.c | wc -l\nfind test/ast -name '*.expected.c' -o -name '*.expected.h' | wc -l\n# check-goldens / test/run.sh / check-ast 的文本比较：\nsed -n '150,153p' selfhost/check-goldens.sh\nsed -n '105,111p' test/run.sh\nsed -n '806,809p' selfhost/check-ast.sh\n# 若把 test/cases c+h 当文本 oracle，三种形态会动的行数：\npython3 - <<'PY'\nimport glob,re,collections\nfiles=sorted(glob.glob('test/cases/*.expected.c'))+sorted(glob.glob('test/cases/*.expected.h'))\npats={'def':re.compile(r'^(static )?struct [A-Za-z_0-9]+_vtbl [A-Za-z_0-9]+( __attribute__\\(\\(unused\\)\\))? = \\{'),\n'vptr':re.compile(r'^    struct [A-Za-z_0-9]+_vtbl \\*__[A-Za-z_0-9]+_vptr;$'),\n'vt':re.compile(r'^    struct [A-Za-z_0-9]+_vtbl \\*vt;$')}\ncnt=collections.Counter(); hit=set()\nfor f in files:\n  for l in open(f):\n    for k,p in pats.items():\n      if p.match(l): cnt[k]+=1; hit.add(f)\nprint(dict(cnt), sum(cnt.values()), len(hit))\nPY",
+      "exit": 0,
+      "output": "50（25 .c + 25 .h）\n25\n25\n73（25 .expected.c + 25 .expected.h + 23 .expected.out；.ct 源不计入）\n0（无带初值 trait 数组）\n0（无 const struct）\n2（23_file_scope 与 27_static_file_scope 的无初值数组 constructor）\n0（test/ast 无 .c/.h golden）\ncheck-goldens.sh:152  cmp -s \"$got_c\" \"$exp_c\" && cmp -s \"$got_h\" \"$exp_h\"\ntest/run.sh:105        diff -u \"$exp_c\" \"$TMP/$name.c\"\ncheck-ast.sh:807-809   D34: ... Golden `.c` / `.h` files are not compared ...\n{'vt': 54, 'vptr': 64, 'def': 32} 150 48",
+      "reproduced": true,
+      "note": "P0 的 semantic 影响：test/cases 无带初值 trait 数组、无 const struct，故 0 语义变化；但 P0 是 fix → V-3 +PATCH → 五处 CTC_VERSION 同步 → L0/L1 banner 行变 → test/run.sh 与 check-goldens.sh 逐字节比较 .c 和 .h → 50 个 golden 产物各变 1 行（25 .c + 25 .h），claim E1-5 的 50 成立。const（PH-64 S3）则相反：check-ast 明确不比 .c/.h，L0/L1 golden 不受 ct-ast emitter 影响 → 0 个 golden 文件；但 check-ast 里有 7 条带类型文本的 vtable 断言（1743/2410/2411/2463/2464/2801/2897）会因 const 文本失效。若真把 test/cases c+h 当文本 oracle，本席数到 48 个文件/150 行，不是 claim 的 52/163，也不是 counter 的 48/73（73 = 25 .c + 25 .h + 23 .out；.ct 源不在内）。"
+    },
+    {
+      "id": "V21",
+      "side": "both",
+      "ref": "question.md#版本 / claim.md#E4 / proposal §8.1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nsed -n '339,342p' AGENTS.md\ngrep -n 'version-minor' docs/design/phase62.md docs/design/phase63.md\npython3 -c \"print('PH-62 d=',62-61,'PH-63 d=',63-62,'PH-64 next MINOR 63 => v0.63.0 d=',64-63)\"\ngrep -n '#define CTC_VERSION' selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct selfhost/l2/driver.ct selfhost/ct-ast/main.ct\nsed -n '15p' docs/decisions/D-005.md",
+      "exit": 0,
+      "output": "AGENTS.md:339  > **PH-57 → v0.59.0、PH-59 → v0.60.0、PH-60 跳过、PH-62 → v0.61.0（d=1）、PH-63 → v0.62.0**。\nAGENTS.md:341  > PH-62 起恢复 `d = 0`。新增 phase 一律先查本表...\nphase62.md:8   `version-minor: 61`；收口 v0.61.0（d=1）\nphase63.md:9   `version-minor: 62`；收口 v0.62.0（d=1）\nPH-62 d= 1 PH-63 d= 1 PH-64 next MINOR 63 => v0.63.0 d= 1\n五处 #define CTC_VERSION \"0.62.0\"\nD-005:15  ... ② 编译通过但静默给错结果 / 静默发射坏 C | **PATCH** | ... 一次 fix 一个 PATCH",
+      "reproduced": true,
+      "note": "AGENTS §0.3 自相矛盾：339 行写 PH-62 → v0.61.0（d=1）、PH-63 → v0.62.0；341 行却写『PH-62 起恢复 d=0』。按相位卡实算 PH-62/63 都是 d=1，且逐相 +1 MINOR 时偏移恒定，d=0 不可能从 PH-62 起自动恢复。PH-64 的下一个 MINOR 是 63 → **v0.63.0，d=1**（proposal §8.1 正确）；claim E4 写成『v0.63.0（MINOR 64，d=1）』自相矛盾（v0.63.0 的 MINOR 是 63）。P0 属 D-005 的『静默坏 C/静默错值』→ 必须 +PATCH；版本五处同步 + README/docs → banner 50 行必变。"
+    },
+    {
+      "id": "V22",
+      "side": "verify",
+      "ref": "question.md#pilot / proposal 两文",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngrep -nE '未立项|草案|不占 phase|不先分配 phase|试点期间不升级' docs/proposals/ct-bare-metal-proposal.md docs/proposals/ct-hardware-pilot-proposal.md\nls docs/planning | head\ngrep -rn '裸机|freestanding|硬件|PH-64' docs/planning/requirements-pool.md docs/planning/post-58-plan.md || echo '(no requirement entries)'",
+      "exit": 0,
+      "output": "bare-metal:5  性质：使用方提案；供 CT 项目组评估...\nbare-metal:6  状态：**草案；未立项，不占 phase**\npilot:5  性质：工程试点提案；未立项、不占 phase、不要求新语法\npilot:10 请求：... 不先分配 phase 号\npilot:60 一个 CT 版本：... 试点期间不升级\ndocs/planning 下无 hardware/PH-64 条目（requirements-pool/post-58-plan 零命中）",
+      "reproduced": true,
+      "note": "两份提案都自报『未立项 / 不占 phase』，pilot 明确不先分配 phase 号；H0 冻结 CT 版本且试点期间不升级。因此 pilot-before-PH-64 会冻结在 pre-PH-64 版本上，不能验证 PH-64 的 S1/S2/S3（A 的事实）；但同一句也说明 pilot 不是 phase（B 的事实）。至本席核对，docs/planning 里没有硬件/PH-64 的 REQ 条目，也没有新需求文档。"
+    },
+    {
+      "id": "V23",
+      "side": "both",
+      "ref": "question.md#P0 / L0 冻结边界",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && cc -std=c99 -Wall -Wextra -Wno-format-truncation selfhost/l0/ctc.c -o /tmp/hw1v/ctc\ncd /tmp/hw1v\nfor f in ps local opens noinit constscalar constarr multi; do ./ctc $f.ct -o ${f}_l0.c; echo \"$f rc=$?\"; done\ngrep -c '__greeter_vptr = ' constscalar_l0.c constarr_l0.c\ncc -std=c99 -w constscalar_l0.c -o constscalar_l0 && ./constscalar_l0; echo \"L0 constscalar run rc=$?\"\n./ctc /Users/samxx/dsh-ws/ct-lang/selfhost/l1/ctc.ct -o l1.c && cc -std=c99 -w l1.c -o l1\n./l1 ps.ct -o ps_l1.c; echo \"L1 ps rc=$?\"\n./l1 constscalar.ct -o constscalar_l1.c && cc -std=c99 -w constscalar_l1.c -o constscalar_l1 && ./constscalar_l1; echo \"L1 const run rc=$?\"",
+      "exit": 139,
+      "output": "ps rc=1  ps.ct:1:1: error: struct 'Person': only 'Type name[<n>];' arrays are supported\nlocal rc=1（同）\nopens rc=1（同）\nmulti rc=1（同）\nnoinit rc=0\nconstscalar rc=0（vptr 计数 0）\nconstarr rc=0（vptr 计数 0）\nL0 constscalar run rc=139\nL1 ps rc=1（同一硬错）\nL1 const run rc=139",
+      "reproduced": true,
+      "note": "L0/L1 对带初值 trait 数组是硬错（不是坏 C），所以 P0 的数组修复只能落 ct-ast；新夹具必须放 test/ast（test/cases 的 L0/L1 oracle 产不出该形态）。但 L0/L1 的 const vptr 缺失同样存在（L0/L1 的 constscalar 运行 rc=139），而 P0 只修 ct-ast → L0/L1 的 const 缺陷仍在（作为冻结 oracle 的已知限制）。这支持『P0 行为修复只在 ct-ast、L0/L1 只随 V-3 改版本号』的范围，但也说明『P0 修了 const』只对入口 ct-ast 成立。"
+    },
+    {
+      "id": "V24",
+      "side": "verify",
+      "ref": "claim.md#E1-5 / counter.md#E4（golden 零变化）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngrep -rl 'Generated by ct v0.62.0' test/cases | wc -l\nfor f in test/cases/*.expected.c test/cases/*.expected.h; do n=$(grep -c 'Generated by ct v0.62.0' \"$f\"); [ \"$n\" != 1 ] && echo \"$f $n\"; done\ngrep -n 'diff -u \"$exp_c\"' test/run.sh\ngrep -n 'cmp -s \"$got_c\" \"$exp_c\"' selfhost/check-goldens.sh\ngrep -n 'Golden `.c` / `.h` files are not compared' selfhost/check-ast.sh",
+      "exit": 0,
+      "output": "50\n（无输出：每个文件恰 1 行 banner 版本）\ntest/run.sh:104  if ! diff -u \"$exp_c\" \"$TMP/$name.c\" ...\ncheck-goldens.sh:152  cmp -s \"$got_c\" \"$exp_c\" && cmp -s \"$got_h\" \"$exp_h\"\ncheck-ast.sh:808  Golden `.c` / `.h` files are not compared",
+      "reproduced": true,
+      "note": "L0(test/run.sh) 与 L1(check-goldens.sh) 都逐字节比较 .c/.h；ct-ast(check-ast.sh) 只比 exit/编译/输出。故 P0 的 +PATCH 使 50 个 banner 行变（counter『P0 golden 零变化』不成立），而 PH-64 const 不改任何 golden（claim『0 文件/0 行』成立，但漏了 7 条 check-ast 文本断言）。"
+    },
+    {
+      "id": "V25",
+      "side": "verify",
+      "ref": "claim.md#E3-P3 / question.md#const vtable（导出 vtable 与 extern）",
+      "command": "cd /tmp/hw1v && rm -rf p28c p28cc && mkdir p28c p28cc\n(cd /Users/samxx/dsh-ws/ct-lang && /tmp/pkgdiag/ct-ast build --emit-c test/modules/p28_bound_cross_unit/prog.ct --outdir /tmp/hw1v/p28c)\ncp p28c/* p28cc/ && cd p28cc\nperl -pi -e '\n  s/^static struct (\\w+_vtbl) (\\w+) __attribute__\\(\\(unused\\)\\);/static const struct $1 $2 __attribute__((unused));/;\n  s/^static struct (\\w+_vtbl) (\\w+) __attribute__\\(\\(unused\\)\\) = \\{/static const struct $1 $2 __attribute__((unused)) = {/;\n  s/^struct (\\w+_vtbl) (\\w+) = \\{/const struct $1 $2 = {/;\n  s/^struct (\\w+_vtbl) (\\w+);/const struct $1 $2;/;\n  s/^extern struct (\\w+_vtbl) (\\w+);/extern const struct $1 $2;/;\n  s/^(\\s+)struct (\\w+_vtbl) \\*__(\\w+)_vptr;/$1const struct $2 *__$3_vptr;/;\n  s/^(\\s+)struct (\\w+_vtbl) \\*vt;/$1const struct $2 *vt;/;\n' *.c *.h\ngrep -n 'Compare_vtbl' lib.c lib.h\nfor f in *.c; do cc -std=c99 -Wall -Wextra -I . -c $f -o ${f%.c}.o 2>${f%.c}.warn; echo \"$f rc=$? warn=$(wc -l < ${f%.c}.warn)\"; done\ncc *.o -o prog.bin && ./prog.bin; echo \"run rc=$?\"\ncat /Users/samxx/dsh-ws/ct-lang/test/modules/p28_bound_cross_unit/expected.out",
+      "exit": 0,
+      "output": "lib.c:13:const struct Compare_vtbl Point_Compare_vtable;\nlib.c:22:const struct Compare_vtbl Point_Compare_vtable = {\nlib.h:21:    const struct Compare_vtbl *vt;\nlib.h:24:extern const struct Compare_vtbl Point_Compare_vtable;\nlib.h:28:    const struct Compare_vtbl *__compare_vptr;\nOption.c rc=0 warn=       0\nResult.c rc=0 warn=       0\nStr.c rc=0 warn=       0\nVec.c rc=0 warn=       0\nlib.c rc=0 warn=       0\nprog.c rc=0 warn=       0\nrun rc=0\n7",
+      "reproduced": true,
+      "note": "导出 vtable（lib.c 定义 + lib.h extern）与 iface.vt/__vptr 全部加 const 后，跨单元 build 的 6 个 .c 文件 -Wall -Wextra 零告警、链接运行 rc=0、输出与 p28_bound_cross_unit/expected.out 一致（7）。这既证明 const 可跨单元成立，也证明 check-ast 的 1743/2410/2411/2463/2464/2801/2897 文本断言必须同步改成 const 形态。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "selfhost/ct-ast/backend/emit/Init.h.ct",
+      "line": 99,
+      "text": "if (strncmp(base, \"struct \", 7) == 0) base += 7;",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Init.h.ct",
+      "line": 101,
+      "text": "si = self->sym->find_struct(base); (const 前缀未剥 → find 失败)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Init.h.ct",
+      "line": 102,
+      "text": "if (si < 0) return 0;",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2918,
+      "text": "if (len < 2 || t[len - 1] != '}') {",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2934,
+      "text": "fwrite(t, 1, (size_t)(len - 1), self->out);",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2936,
+      "text": "fputs(\", \"); emit_vptr_items(...)  /* 顶层 designator */",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2860,
+      "text": "text3[0] || self->ty->type_has_array_init(...)  /* constructor 触发，不看初值 */",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/type/TypeCheck.h.ct",
+      "line": 707,
+      "text": "int type_has_array_init(const char *type)",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 1596,
+      "text": "fprintf(out, \"    struct %s_vtbl *__%s_vptr;\\n\", ...)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 1861,
+      "text": "fprintf(out, \"static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\\n\", ...)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2842,
+      "text": "fprintf(out, \"struct %s_iface {\\n    void *self;\\n    struct %s_vtbl *vt;\\n};\\n\\n\", ...)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 1550,
+      "text": "if (self->find_builtin(inputs[0], base, bpath, sizeof bpath) != 0) continue;",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/module/Module.h.ct",
+      "line": 429,
+      "text": "int find_builtin(...)  /* CT_STD_DIR / lib/std / ../lib/std */",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 153,
+      "text": "raw = realloc(self->h->data, ...)",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 73,
+      "text": "if (v.h == 0) abort();",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Vec.h.ct",
+      "line": 148,
+      "text": "fprintf(stderr, \"ctc: warning: Vec growth span ...\\n\", ...)",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Str.h.ct",
+      "line": 25,
+      "text": "free(self->data);",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Str.h.ct",
+      "line": 39,
+      "text": "r.data = (char *)malloc((size_t)n + 1);",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Option.h.ct",
+      "line": 59,
+      "text": "fprintf(stderr, \"Option: unwrap on a none value\\n\");",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Option.h.ct",
+      "line": 60,
+      "text": "abort();",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Result.h.ct",
+      "line": 77,
+      "text": "fprintf(stderr, \"Result: unwrap on an error value\\n\");",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "lib/std/Result.h.ct",
+      "line": 78,
+      "text": "abort();",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 807,
+      "text": "D34: Golden `.c` / `.h` files are not compared",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 1743,
+      "text": "grep -qF 'extern struct Compare_vtbl Point_Compare_vtable;' ...",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 2410,
+      "text": "grep -q '^extern struct Stream_vtbl Conn_Stream_vtable;$' ...",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 2411,
+      "text": "grep -q '^struct Stream_vtbl Conn_Stream_vtable = {$' ...",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 2463,
+      "text": "grep -q '^extern struct hal_Writer_vtbl hal_Writer_vtable;$' ...",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 2464,
+      "text": "grep -q '^struct hal_Writer_vtbl hal_Writer_vtable = {' ...",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 2801,
+      "text": "grep -q 'static struct Controller_vtbl uart1_Controller_vtable __attribute__((unused)) = {' ...",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 2897,
+      "text": "grep -q '^struct hal_Writer_vtbl hal_Writer_vtable = {' ...",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-goldens.sh",
+      "line": 152,
+      "text": "cmp -s \"$got_c\" \"$exp_c\" && cmp -s \"$got_h\" \"$exp_h\"",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "test/run.sh",
+      "line": 104,
+      "text": "diff -u \"$exp_c\" \"$TMP/$name.c\"",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 339,
+      "text": "PH-62 → v0.61.0（d=1）、PH-63 → v0.62.0",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 341,
+      "text": "PH-62 起恢复 `d = 0`",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 389,
+      "text": "当前版本 v0.62.0（CTC_VERSION）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase62.md",
+      "line": 8,
+      "text": "version-minor: 61；收口 v0.61.0（d=1）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase63.md",
+      "line": 9,
+      "text": "version-minor: 62；收口 v0.62.0（d=1）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/decisions/D-005.md",
+      "line": 15,
+      "text": "静默给错结果 / 静默发射坏 C → PATCH；一次 fix 一个 PATCH",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/proposals/ct-hardware-pilot-proposal.md",
+      "line": 60,
+      "text": "一个 CT 版本：... 试点期间不升级",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "docs/proposals/ct-bare-metal-proposal.md",
+      "line": 6,
+      "text": "状态：草案；未立项，不占 phase",
+      "supports": "both",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "question": "P0 是否独立成立、范围是否最小、既有 golden 是否零变化",
+      "claim": "A：P0 独立 patch；范围含数组/const；语义零 golden，banner 50 行随 V-3 变化",
+      "counter": "B：P0 先做；范围须含 [] 与带初值数组不发 constructor；test/cases 无覆盖故零 golden",
+      "evidence": [
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V7",
+        "V8",
+        "V9",
+        "V10",
+        "V20",
+        "V24"
+      ],
+      "status": "unresolved",
+      "substatus": {
+        "independent": "pass：坏 C / const 丢失都在 ct-ast 的 Emitter/Init；不依赖 freestanding；L0/L1 对带初值数组硬错、const 缺陷另存（V23）",
+        "scope_minimal": "pass（附条件）：必须含 const 标量与 const 数组（今天 139），否则留下同类静默错值；B 的 B1 表述只列数组/[]/constructor，未列 const 标量",
+        "semantic_golden": "pass：test/cases 中带初值 trait 数组 0、const struct 0；两处无初值 constructor 不受影响",
+        "literal_zero_golden": "fail：P0 是 fix → +PATCH → 五处 CTC_VERSION → 50 个 golden 产物（25 .c + 25 .h）各变 1 行 banner"
+      },
+      "fact": "A 的复现、const 标量段错误、banner 50 行事实成立；B 的 []/constructor 事实也成立，但其『P0 golden 零变化』在 V-3 下不成立。J-1 的『既有 golden 零变化』按字面 fail（50 个 banner 产物各 1 行），按 A 修订的『语义零变化 + banner』口径 pass；EDITOR 需先裁定口径，故 J-1 整体记 unresolved。P0 的数组夹具只能进 test/ast（L0/L1 产不出）；const 修复只对 ct-ast 入口成立，L0/L1 oracle 仍有 const 段错误（V23）。",
+      "judge_note": "『范围最小』需先裁定 P0 是否把 const 标量纳入同一 issue/fix；若拆成两个 fix，则 PATCH 数与 banner 重生成次数按 V-3 另算。"
+    },
+    {
+      "id": "J-2",
+      "question": "顺序：P0 → pilot → PH-64，还是 P0 → PH-64 → pilot；以先证据后契约还是先契约后验证评分",
+      "claim": "A：P0 → PH-64 → pilot；契约先在 host 上可测，pilot 只做验证",
+      "counter": "B：P0 → pilot → PH-64；先用真实板暴露需求，再冻结契约",
+      "evidence": [
+        "V11",
+        "V12",
+        "V16",
+        "V17",
+        "V22"
+      ],
+      "status": "unresolved",
+      "substatus": {
+        "pilot_without_ph64": "pass（对象层）：无堆 trait+局部对象+C shim 的生成物只需 pilot.c，nm -u 只有 shim，ld -r 后为空；不需要 S1/S2",
+        "pilot_after_ph64_validation": "pass（仅逻辑）：pilot §3.1 要求 H0 冻结版本、试点期间不升级，所以 pilot-before-PH-64 冻结在 pre-PH-64 版本，不能验证 PH-64 的输出；只有 after 才能验证两者",
+        "target_evidence": "unavailable：本机 macOS 不能运行 -nostdlib 静态可执行文件（rc=137 Killed:9），无 ARM 交叉工具链与板卡"
+      },
+      "fact": "两条顺序各有事实支撑：B 的『pilot 今天就能在对象层跑』成立（V16），A 的『H0 冻结使 before-pilot 不能验证 PH-64』也成立（V22）。二者不是同一命题：若 pilot 的目的是『发现需求』，before 更合适；若目的是『验证 PH-64 契约』，after 才成立。目标板/交叉工具链证据本机无法产生。",
+      "judge_note": "这是目标选择（discovery vs validation），不是纯事实胜负；需要 EDITOR 先定义 pilot 的验收命题。"
+    },
+    {
+      "id": "J-3",
+      "question": "freestanding 容器/allocator 边界是否可机械验收；是否允许 Str/Vec 在 --alloc 下使用",
+      "claim": "A：Vec/Map/Str 一律硬错（--alloc 也不能带回）；Option/Result 按需拉；按容器名单禁最可机械验收",
+      "counter": "B：按每单元 nm -u 符号面分层；Str 只用 malloc/free，--alloc 下可用；Vec 需 realloc 故不可",
+      "evidence": [
+        "V12",
+        "V13",
+        "V14",
+        "V15",
+        "V17"
+      ],
+      "status": "pass",
+      "substatus": {
+        "symbol_set_criterion": "pass：nm -u 可直接枚举，且与实际链接面一一对应；允许集必须按目标工具链/选项固定（FORTIFY 的 __*_chk、-O2 的 bzero 会改名）",
+        "container_name_criterion": "fail（作为 sound 判据）：会禁掉符号面干净的 Str（映射后 2 个 pool 符号、ld -r 空），却放过任何实例化都带 fprintf/abort 的 Option/Result",
+        "str_under_alloc": "pass：Str 只需 malloc/free；映射后 nm -u = _pool_alloc/_pool_free，与 pool stub 做 ld -r 为空",
+        "vec_under_alloc": "fail：即使 malloc/free/realloc 全映射，仍剩 5 个非分配符号（memcpy/memset/abort/fprintf/stderr）；Vec 是 8 个未定义符号不是 9 个",
+        "option_result": "fail（现状）：任何实例化（哪怕只声明变量或用 is_some、不碰 unwrap）都发射全部方法，Option<int>/Result<...> nm -u = 3 个 libc 符号；--alloc 不改变"
+      },
+      "fact": "B 的符号面事实成立（Str 2、Vec 8、Option/Result 3）；A 的『Vec 不能 freestanding』结论成立，但理由只提 realloc 不完整；A 的『Option/Result 纯值按需仍可用』与『容器名单最可机械验收』都不成立。可机械验收的是『按每单元 nm -u ⊆ 允许集』；按容器名单不是 sound 判据。",
+      "judge_note": "若采用符号集判据，Option/Result 必须要么被禁（现状），要么先让 S1 裁剪未用方法/把 abort+fprintf 改成可替换钩子；否则 F2 的 nm -u 空对任何使用 Option/Result 的程序都不成立。"
+    },
+    {
+      "id": "J-4",
+      "question": "const vtable 全量 vs 条件：ABI 风险、golden 成本、跨模式链接",
+      "claim": "A：一次改到底；全量 golden 成本 0",
+      "counter": "B：可全量但先证伪 ABI；条件化只作回退；称 48/73 golden",
+      "evidence": [
+        "V18",
+        "V19",
+        "V20",
+        "V25"
+      ],
+      "status": "pass",
+      "substatus": {
+        "full_const": "pass：定义+__vptr+vt 三处同改后 -Wall -Wextra 零告警；vtable 落 __DATA,__const；map/boxing/导出 vtable 也零告警",
+        "abi_layout": "pass：sizeof(struct Person)=24、sizeof(iface)=16 前后不变；跨 TU const/non-const 合成夹具 link/run rc=0（链接层不报错；类型不一致属 UB）",
+        "golden_artifacts": "pass：check-ast D34 明确不比 .c/.h；test/cases 是 L0/L1 oracle → const 变化对 golden 为 0 文件/0 行（claim 正确）",
+        "gate_assertions": "fail（成本不为 0）：check-ast 有 7 条带类型文本的 vtable grep（1743/2410/2411/2463/2464/2801/2897）会因 const 文本失效",
+        "counter_48_73": "fail：73 = 25 .expected.c + 25 .expected.h + 23 .expected.out（全部 .expected.*；.ct 源不在内）；48 个文件含 vtable 文本，但没有 gate 比较这些文本；若真做文本 oracle，本席数到 48 文件/150 行（claim 的 52/163 也未复现）"
+      },
+      "fact": "A 的『全量可行、ABI 布局不变、golden 0』成立；B 的『ABI 风险』未复现，『48/73 golden』不成立。双方都低估了 check-ast 的 7 条文本断言；const 的真实成本是 17 个 emitter 声明点 + 7 条 gate 断言，而非 golden。",
+      "judge_note": "条件化仍会让 .h 类型随模式变化；全量在链接层无 ABI 障碍，但必须同步 7 条 gate 断言并保证三处成套改。"
+    },
+    {
+      "id": "J-5",
+      "question": "pilot 是否占 phase 号；失败/通过如何影响 PH-64",
+      "claim": "A：pilot 不占 phase；PH-64 收口后 P0/H1/H2，失败 no-go",
+      "counter": "B：pilot 在 PH-64 前；PH-64 可拆两相",
+      "evidence": [
+        "V22"
+      ],
+      "status": "unresolved",
+      "substatus": {
+        "pilot_not_phase": "pass：pilot 提案 §8.2 明确不先分配 phase 号；性质=工程试点、未立项、不占 phase",
+        "pilot_effect_on_ph64": "unresolved：pilot 的 H5 go/no-go 没有写它对 PH-64 的约束（no-go 是否停 PH-64？go 是否改范围？），文档只说『发现的缺陷走 issue/patch』",
+        "naming_collision": "unresolved：pilot 的 P0/P1 与 patch P0/PH-64 同名，验收文档需改名以免混用"
+      },
+      "fact": "B 的『pilot 不占 phase 号』事实成立（两提案一致）；但『失败/通过如何影响 PH-64』没有可执行记录，A 的『no-go 即停』也只覆盖 pilot 本身，没写 PH-64。拆两相（B5）与顺序正交，文档未裁定。",
+      "judge_note": "先把 pilot 的交付/停手条件与 PH-64 的关系写成一条可判定的记录，否则 J-5 无法机械验收。"
+    },
+    {
+      "id": "J-6",
+      "question": "新需求文档是否可执行：每条 REQ 有优先级、验收、依赖、来源，且不把提案写成已承诺",
+      "claim": "A：以主张为骨架写新需求文档，逐条 REQ 带四字段",
+      "counter": "B：两份提案均自报未立项；需求文档须区分提案与承诺",
+      "evidence": [
+        "V22"
+      ],
+      "status": "unresolved",
+      "substatus": {
+        "doc_exists": "fail：docs/planning 下无硬件/PH-64 需求文档或 REQ 条目",
+        "proposal_vs_commitment": "pass（B 的事实）：两份提案分别自报『草案；未立项，不占 phase』与『未立项、不占 phase、不要求新语法』"
+      },
+      "fact": "B 的『两提案均未立项』事实成立；A 的『将写需求文档』尚未交付，无法核对四字段（优先级/验收/依赖/来源）。本席不能把提案文本当成已承诺。",
+      "judge_note": "J-6 要等新需求文档落盘后才能判定；当前只能判定『提案未被写成承诺』这一点。"
+    }
+  ],
+  "unreproduced": [
+    {
+      "ref": "claim.md#E1-1 行号 51/186 与 E1-2 行号 20/32",
+      "reason": "夹具文本不同，行号不同；机制逐字复现（本席 ps.c:22、ps.c:40、constscalar.c:21/34），不是事实失败。"
+    },
+    {
+      "ref": "claim.md#E1-4『四个单元无条件进场』",
+      "reason": "只在 std 层可发现（CT_STD_DIR / cwd/lib/std / 输入旁 ../lib/std）时成立；/tmp 无路径时最小程序只发 plain.c（V11）。"
+    },
+    {
+      "ref": "claim.md#§6-2『Option/Result 纯值按需拉仍可用』",
+      "reason": "任何实例化都发射全部方法并带 fprintf/abort：声明变量即 3 个符号，is_some 也是 3 个；不是按方法/按调用裁剪（V13/V14）。"
+    },
+    {
+      "ref": "claim.md#E4『52 文件/163 行』（若纳入文本 oracle）",
+      "reason": "本席对 test/cases c+h 按定义/__vptr/vt 三种形态数到 48 文件/150 行；全部 test/** 的 .expected.c/h 为 64 文件/188 行。52/163 未复现。"
+    },
+    {
+      "ref": "counter.md#E4『const 48/73 golden』",
+      "reason": "73 = 25 .expected.c + 25 .expected.h + 23 .expected.out（.ct 源不在内），48 个文件含 vtable 文本；但当前没有任何 gate 比较这些 .c/.h 文本，故不是 golden 变更数。若做文本 oracle，本席数到 48 文件/150 行。"
+    },
+    {
+      "ref": "counter.md#E5-2『Vec 9 个』",
+      "reason": "本机 nm -u Vec<int>.o 是 8 个符号（5 非分配 + malloc/free/realloc），counter 自己的 E1-4 原始输出也是 8 个 token；其散文 9 个是误计。"
+    },
+    {
+      "ref": "claim/counter『const 发射点 8 个』",
+      "reason": "生成物形态是三种，但 Emitter.h.ct 中有 17 个声明/定义字符串发射点（定义 7、前向 4、extern 3、vptr/vt 3），见 V19。8 个只覆盖部分形态。"
+    },
+    {
+      "ref": "counter.md#E4『P0 一个 fix 提交、golden 零变化』",
+      "reason": "P0 是 fix → V-3 +PATCH → L0/L1 逐字节比较 → 50 个 banner 产物各 1 行；语义零变化不等于文本零变化（V20/V24）。"
+    },
+    {
+      "ref": "counter.md#E1-6『static link rc=0』（可启动）",
+      "reason": "本机 `-Wl,-static -Wl,-e,_main` link rc=0，但运行 rc=137（Killed:9，macOS 不支持完全静态可执行）；只能证到对象/可重定位层。目标板/ARM 交叉工具链不在本机。"
+    },
+    {
+      "ref": "pilot 的『可启动镜像』与 A1–A10 目标证据",
+      "reason": "无板卡、无 ARM GCC/Clang；本机只能证明生成物可在 -ffreestanding -nostdlib 下编译/ld -r，不能证明上板启动，也不能裁决 pilot-before/after 的实证优劣。"
+    },
+    {
+      "ref": "J-6 的四字段需求文档",
+      "reason": "docs/planning 下没有硬件/PH-64 需求文档或 REQ 条目；本席不能核对优先级/验收/依赖/来源。"
+    }
+  ],
+  "findings": {
+    "p0_bad_c": "带初值 trait 数组在 ct-ast v0.62.0 有四个入口全部复现：文件作用域（ps.c:22）、局部（local.c:31）、`[]`（opens.c:21 + 空上界 opens.c:38）、多维（multi.c:22 + multi.c:39）。ct 全部 rc=0，`cc -std=c99 -Wall -Wextra -c` 全部 rc=1。多维度今天不是 ct 阶段硬错，与 proposal B6/claim P1 的目标态有差距。",
+    "p0_const": "const 标量与 const 数组都丢 vptr：Init.h.ct:99 只剥 `struct ` 不剥 `const `，find_struct 失败后直接 return 0。const 标量 constscalar 与 const 数组 constarrdisp 经显式转换派发均 rc=139；cc 全绿。claim 的『const 标量今天就段错误』成立，P0 必须纳入 const。",
+    "p0_constructor": "文件作用域带初值数组仍发 constructor（ps.c 计数 2；partial.c 的 4 元素循环也发），因为 Emitter.h.ct:2860 只看数组后缀/数组字段、不看初值是否存在；局部带初值数组没有 constructor（local.c 计数 0）；无初值文件作用域数组仍走 constructor（无初值回归基线 23/27 两个 golden 也是这个形状）；局部无初值数组用逐元素写，不经 constructor。",
+    "p0_golden": "test/cases 没有带初值 trait 数组（0）也没有 const struct（0），所以 P0 的语义 golden 影响为 0；但 P0 是 fix → +PATCH → 五处 CTC_VERSION 同步 → L0/L1 逐字节比较的 50 个 golden 产物（25 .c + 25 .h）各变 1 行 banner。L0/L1 对带初值 trait 数组本来就硬错，故新夹具必须进 test/ast（无 .c/.h golden）。",
+    "p0_l0": "L0（现编 ctc）与 L1 对带初值 trait 数组硬错：`ps.ct:1:1: error: struct 'Person': only 'Type name[<n>];' arrays are supported`；它们对 const 标量同样丢 vptr（L0/L1 constscalar 运行 rc=139）。因此 P0 的数组修复只能落 ct-ast，const 修复也只对入口 ct-ast 生效；L0/L1 作为冻结 oracle 仍带 const 缺陷（已知限制）。",
+    "four_units": "『ct build --emit-c 总发 Vec/Option/Result/Str』不成立：是否发现内置层取决于 CT_STD_DIR、cwd/lib/std、输入文件旁 ../lib/std（Module.h.ct:429/1550）；在 /tmp 无这些路径时最小程序只发 plain.c。仓库根或 CT_STD_DIR 下确实四单元 + 主单元，且 build 打印的 cc 命令把五个 .c 一起编。",
+    "nostdlib": "四单元在 -ffreestanding -nostdlib 下的未定义符号：未实例化时 Vec/Option/Result 为空、Str 为 `_free _malloc`；因此最小程序链接失败只缺这两个。实例化后：Vec<int> 8 个（5 非分配 + malloc/free/realloc），Option<int>/Result 3 个（__stderrp/_abort/_fprintf）。--alloc 映射后 Str 只剩 pool_alloc/pool_free（可 ld -r 空），Vec 仍剩 5 个非分配符号，Option/Result 不变。",
+    "option_result": "关键新事实：Option/Result 的方法不是按调用裁剪的。只要实例化（哪怕只是声明 `Option<int> a;` 或用 is_some），Option.c/Result.c 就发射全部方法（含 unwrap），nm -u 固定 3 个 libc 符号。因此 A 的『Option/Result 纯值按需拉仍可用』与 F2 的『nm -u 为空』互相冲突；要让它们 freestanding，PH-64 必须裁剪未用方法或把 abort/fprintf 改成可替换钩子。",
+    "criterion_choice": "可机械验收的是『每单元 nm -u ⊆ 允许集』：nm 可直接枚举，与实际链接面一致；允许集必须按目标工具链/选项固定或归一化（FORTIFY 的 __*_chk、-O2 的 bzero 会改名）。『按容器名单禁』也可机械实现，但不是 sound 判据：它禁掉符号面干净的 Str（--alloc + pool 后 2 个符号），却放过实例化即带 fprintf/abort 的 Option/Result。Str 在 --alloc 下可用；Vec/Map 不可；Option/Result 现状不可。",
+    "const_vtable": "const 可行：定义 + __vptr + vt 三处同改 → -Wall -Wextra 零告警，vtable 从 __DATA,__data 到 __DATA,__const；sizeof 不变（Person 24、iface 16）；跨 TU const/non-const 合成夹具 link/run rc=0；map/boxing/导出 vtable 也零告警（p28 六文件 rc=0，输出 7）。只改定义会触发 discard-qualifiers 告警，三处必须成套。",
+    "const_cost": "const 的真实成本不是 golden：check-ast D34 不比 .c/.h，test/cases 是 L0/L1 oracle → 0 个 golden 文件/0 行。但 emitter 有 17 个声明/定义字符串发射点（不是 8），check-ast 有 7 条带类型文本的 vtable grep 会失效（1743/2410/2411/2463/2464/2801/2897）。若真做 test/cases c+h 文本 oracle，本席数到 48 文件/150 行；claim 的 52/163 与 counter 的 48/73 均未复现，且 48/73 的 73 = 25 .c + 25 .h + 23 .out（.ct 源不在内）。",
+    "version_d": "AGENTS §0.3 矛盾：339 行 PH-62 → v0.61.0（d=1）且 PH-63 → v0.62.0；341 行却写『PH-62 起恢复 d=0』。相位卡 62/63 都是 d=1；逐相 +1 MINOR 时偏移恒定，d=0 不会自动恢复。PH-64 的下一个 MINOR 是 63 → v0.63.0、d=1（proposal §8.1 正确）；claim 的『v0.63.0（MINOR 64，d=1）』是笔误/自相矛盾。",
+    "p0_patch": "P0 属 D-005 的『静默坏 C / 静默错值』→ 必须 +PATCH（v0.62.1），五处 CTC_VERSION + README/docs 同步；L0/L1 逐字节 golden 的 banner 必变 → 50 个产物各 1 行。P0 若拆成多个 fix，则按 V-3 每个 fix 一次 PATCH、各自 banner 重生成；『P0 一个 fix』本身需要 issue 归并口径。",
+    "pilot_phase": "pilot 提案自报未立项、不占 phase、H0 冻结版本且试点期间不升级；pilot 的 P0/P1 与 patch P0/PH-64 同名，文档需改名。pilot 不占 phase 号这一点成立；失败/通过如何影响 PH-64 没有记录。",
+    "pilot_order": "pilot 先行在对象层可行：无堆 trait+局部对象+C shim 的生成物只编 pilot.c，nm -u 只有 shim，ld -r 后为空；不需要 S1/S2。但宿主 macOS 无法运行 -nostdlib 静态可执行文件（rc=137 Killed:9），且 H0 冻结版本使 before-pilot 不能验证 PH-64 输出。故 J-2 是目标选择而非事实胜负。",
+    "j_summary": "J-1 unresolved（独立/范围/语义 pass；字面『zero golden』fail：50 banner 行）；J-2 unresolved；J-3 pass（符号集判据；容器名单不 sound）；J-4 pass（全量 const/ABI/golden-0；7 条 gate 断言）；J-5 unresolved（不占 phase 成立，影响未定义）；J-6 unresolved（文档未交付）。本席不写 A/B 最终胜负。"
+  },
+  "criteria": [
+    {
+      "id": "J-1",
+      "status": "unresolved",
+      "fact_side": "A 的复现/范围/banner 成立；B 的 []/constructor 成立但『zero golden』不成立；『零变化』按字面 fail、按语义 pass，口径待 EDITOR 裁定",
+      "evidence": [
+        "V1",
+        "V2",
+        "V3",
+        "V6",
+        "V7",
+        "V8",
+        "V20",
+        "V24"
+      ]
+    },
+    {
+      "id": "J-2",
+      "status": "unresolved",
+      "fact_side": "A 的 H0 冻结事实 + B 的 pilot 对象层可跑事实同时成立；顺序取决于 pilot 目的",
+      "evidence": [
+        "V16",
+        "V22"
+      ]
+    },
+    {
+      "id": "J-3",
+      "status": "pass",
+      "fact_side": "B 的符号面事实成立；A 的 Vec-not-supportable 结论成立，但 Option/Result 与容器名单判据不成立",
+      "evidence": [
+        "V12",
+        "V13",
+        "V14",
+        "V15"
+      ]
+    },
+    {
+      "id": "J-4",
+      "status": "pass",
+      "fact_side": "A 的全量 const/ABI/golden-0 成立；B 的 ABI 风险与 48/73 不成立；双方漏 7 条 gate 断言",
+      "evidence": [
+        "V18",
+        "V19",
+        "V20",
+        "V25"
+      ]
+    },
+    {
+      "id": "J-5",
+      "status": "unresolved",
+      "fact_side": "B 的『不占 phase』成立；失败/通过对 PH-64 的影响未定义",
+      "evidence": [
+        "V22"
+      ]
+    },
+    {
+      "id": "J-6",
+      "status": "unresolved",
+      "fact_side": "B 的『未立项』成立；A 的需求文档尚未交付",
+      "evidence": [
+        "V22"
+      ]
+    }
+  ]
+}
