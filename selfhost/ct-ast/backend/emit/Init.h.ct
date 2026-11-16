@@ -28,6 +28,9 @@ pub trait InitOps {
     int emit_vptr_stmts(const char *recv, const char *type, int ind);
     int emit_field_vptrs(int si, int started, const char *raw);
     int emit_array_field_vptrs(int si, const char *recv, int ind);
+    int type_needs_nested_init(const char *type);
+    int emit_elem_vptrs(const char *raw, const char *type);
+    const char *strip_quals(const char *type);
 }
 
 pub struct Init {
@@ -41,14 +44,29 @@ static void put_indent(FILE *f, int n)
     for (i = 0; i < n * 4; i++) fputc(' ', f);
 }
 
+/* A declaration's type text can carry `const`; the struct lookup and the vtable
+   name only need the base type, so drop the qualifier once here. */
+static const char *unqual(const char *type)
+{
+    while (strncmp(type, "const ", 6) == 0) type += 6;
+    while (*type == ' ') type++;
+    return type;
+}
+
 impl InitOps for Init {
+    const char *strip_quals(const char *type)
+    {
+        (void)self;
+        return unqual(type);
+    }
+
     int type_has_vptr(const char *type)
     {
         const char *base;
         int si;
         (void)self;
 
-        base = type;
+        base = unqual(type);
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         si = self->sym->find_struct(base);
@@ -66,7 +84,7 @@ impl InitOps for Init {
         int si, fi;
         (void)self;
 
-        base = type;
+        base = unqual(type);
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         snprintf(tb, sizeof tb, "%s", base);
@@ -95,7 +113,7 @@ impl InitOps for Init {
         int si, u, i;
         (void)self;
 
-        base = type;
+        base = unqual(type);
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         si = self->sym->find_struct(base);
@@ -126,7 +144,7 @@ impl InitOps for Init {
         int si, u, i, fi;
         (void)self;
 
-        base = type;
+        base = unqual(type);
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         snprintf(tb, sizeof tb, "%s", base);
@@ -278,6 +296,93 @@ impl InitOps for Init {
                 put_indent(f, ind + depth);
                 fputs("}\n", f);
             }
+        }
+        return 0;
+    }
+
+    /* True when a value of `type` needs vptrs that a single designator cannot
+       reach: a non-pointer, non-array field of struct-with-traits type. Such an
+       element keeps the constructor path, because an array element has no
+       designator for its nested fields. */
+    int type_needs_nested_init(const char *type)
+    {
+        const char *base;
+        char tb[MAX_TEXT];
+        size_t tl;
+        int si, fi;
+        (void)self;
+
+        base = unqual(type);
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        snprintf(tb, sizeof tb, "%s", base);
+        tl = strlen(tb);
+        while (tl > 0 && tb[tl - 1] == ' ') {
+            tl--;
+            tb[tl] = 0;
+        }
+        if (strchr(tb, '*') != 0) return 0;
+        si = self->sym->find_struct(tb);
+        if (si < 0) return 0;
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+            char ft[MAX_TEXT];
+            if (self->sym->structs[si].fields[fi].dims[0]) continue;
+            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            if (strchr(ft, '*') != 0) continue;
+            if (self->type_needs_init(ft)) return 1;
+        }
+        return 0;
+    }
+
+    /* Write a captured `{ … }` initialiser for a one-dimensional array, adding
+       the element vptrs where C can actually reach them: inside each element's
+       own braces. A designator after the closing `}` of the array is not valid
+       C, which is what the old code emitted.
+
+       String and character literals are copied verbatim, so a `"}"` in a name
+       does not move the brace depth. Only the element level is extended; a
+       nested value field keeps the constructor path (see
+       `type_needs_nested_init`). */
+    int emit_elem_vptrs(const char *raw, const char *type)
+    {
+        FILE *f = (FILE *)(*self->out);
+        int i, depth;
+        (void)self;
+
+        depth = 0;
+        for (i = 0; raw[i]; i++) {
+            char c = raw[i];
+            if (c == '"' || c == '\'') {
+                char q = c;
+                fputc(c, f);
+                i++;
+                while (raw[i] && raw[i] != q) {
+                    fputc(raw[i], f);
+                    if (raw[i] == '\\' && raw[i + 1]) {
+                        i++;
+                        fputc(raw[i], f);
+                    }
+                    i++;
+                }
+                if (raw[i]) fputc(raw[i], f);
+                continue;
+            }
+            if (c == '(' || c == '[') { depth++; fputc(c, f); continue; }
+            if (c == ')' || c == ']') { depth--; fputc(c, f); continue; }
+            if (c == '{') { depth++; fputc(c, f); continue; }
+            if (c == '}') {
+                if (depth == 2) {
+                    int j = i - 1;
+                    while (j > 0 && (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n' || raw[j] == '\r'))
+                        j--;
+                    if (raw[j] != '{') fputs(", ", f);
+                    if (self->emit_vptr_items("", type) != 0) return -1;
+                }
+                depth--;
+                fputc(c, f);
+                continue;
+            }
+            fputc(c, f);
         }
         return 0;
     }
