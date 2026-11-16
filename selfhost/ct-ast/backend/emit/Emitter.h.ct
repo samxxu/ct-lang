@@ -245,6 +245,11 @@ struct Emitter {
     /* PH-64: the bare-metal contract, bound by `ct_emit_bind_flags`. */
     int  *freestanding;
     char *alloc_map;
+    /* PH-64: the split of `--alloc A[,B[,C[,D]]]`; defaults keep libc. */
+    char alloc_m[64];
+    char alloc_f[64];
+    char alloc_r[64];
+    char alloc_c[64];
     /* Phase 39 R3: set only while the module layer asks for `<base>.abi.h`. */
     int  *abi_mode;
     int  *abi_root;
@@ -1379,6 +1384,12 @@ static int emit_unit_body(struct Emitter *self, int u)
             self->version, self->path);
     fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
           self->out);
+    /* PH-64: with --alloc the target's allocator is declared here, so the
+       mapped calls below have a prototype without pulling <stdlib.h>. */
+    if (self->alloc_map && self->alloc_map[0]) {
+        fprintf(self->out, "extern void *%s(__SIZE_TYPE__);\n", self->alloc_m);
+        fprintf(self->out, "extern void %s(void *);\n", self->alloc_f);
+    }
     if (self->runtime_checks && *self->runtime_checks) {
         fputs("#include <stdio.h>\n#include <stdlib.h>\n", self->out);
         fputs("static void *__attribute__((unused)) __ct_vt_guard(void *vt, const char *file, int line, const char *method)\n"
@@ -2588,6 +2599,10 @@ impl EmitOps for Emitter {
         self->gprefix = self->sym->ns;
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
             if (self->arena->nodes[n].kind == N_PP) fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+        if (self->alloc_map && self->alloc_map[0]) {
+            fprintf(self->out, "extern void *%s(__SIZE_TYPE__);\n", self->alloc_m);
+            fprintf(self->out, "extern void %s(void *);\n", self->alloc_f);
+        }
         if (self->sym->atomic_used) {
         fputs(
 "static inline __attribute__((unused)) int __ct_atomic_load_int(_Atomic(int) *p)\n"
@@ -4020,12 +4035,16 @@ impl EmitOps for Emitter {
                     int v = self->arena->nodes[b].a;
                     fputs("{\n", self->out);
                     ind++;
+                    if (self->freestanding && *self->freestanding
+                        && strcmp(self->alloc_m, "malloc") == 0)
+                        return self->fail_from(n,
+                            "boxing needs a heap allocator; pass --alloc <malloc-symbol>,<free-symbol>");
                     self->emit_indent(ind);
-                    fputs("extern void *malloc(__SIZE_TYPE__);\n", self->out);
+                    fprintf(self->out, "extern void *%s(__SIZE_TYPE__);\n", self->alloc_m);
                     self->emit_indent(ind);
                     snprintf(tmp, sizeof tmp,
-                             "struct %s *__ct_box = (struct %s *)malloc(sizeof *__ct_box);\n",
-                             self->arena->nodes[b].text2, self->arena->nodes[b].text2);
+                             "struct %s *__ct_box = (struct %s *)%s(sizeof *__ct_box);\n",
+                             self->arena->nodes[b].text2, self->arena->nodes[b].text2, self->alloc_m);
                     fputs(tmp, self->out);
                     self->emit_indent(ind);
                     fputs("*__ct_box = ", self->out);
@@ -4117,7 +4136,11 @@ impl EmitOps for Emitter {
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fprintf(self->out, ") { %s_Drop_drop(", self->sym->structs[si].name);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fputs("); free(", self->out);
+                if (self->freestanding && *self->freestanding
+                    && strcmp(self->alloc_f, "free") == 0)
+                    return self->fail_from(n,
+                        "releasing needs a heap allocator; pass --alloc <malloc-symbol>,<free-symbol>");
+                fprintf(self->out, "); %s(", self->alloc_f);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 /* null the pointer: L2's shape (README / language-spec list it),
                    and the second release on another path is then a no-op */
@@ -4131,7 +4154,11 @@ impl EmitOps for Emitter {
             }
             fputs("if (", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fputs(") { free(", self->out);
+            if (self->freestanding && *self->freestanding
+                && strcmp(self->alloc_f, "free") == 0)
+                return self->fail_from(n,
+                    "releasing needs a heap allocator; pass --alloc <malloc-symbol>,<free-symbol>");
+            fprintf(self->out, ") { %s(", self->alloc_f);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs("); ", self->out);
             if (asg) {
@@ -5574,6 +5601,15 @@ impl EmitOps for Emitter {
             } else if (strcmp(self->arena->nodes[n].text2, "__ct_elem_release") == 0
                        && self->ginst[0]) {
                 fprintf(self->out, "%s__elem_release(", self->ginst);
+            } else if (self->alloc_map && self->alloc_map[0]
+                       && strcmp(self->arena->nodes[n].text2, "malloc") == 0) {
+                /* PH-64: `--alloc` renames the allocation calls the source
+                   makes too, or the product still carries an undefined
+                   `malloc` and cannot link under -nostdlib. */
+                fprintf(self->out, "%s(", self->alloc_m);
+            } else if (self->alloc_map && self->alloc_map[0]
+                       && strcmp(self->arena->nodes[n].text2, "free") == 0) {
+                fprintf(self->out, "%s(", self->alloc_f);
             } else {
                 fprintf(self->out, "%s(", self->arena->nodes[n].text2);
             }
@@ -6377,6 +6413,40 @@ void ct_emit_bind_flags(int *freestanding, char *alloc_map)
     g_emit.alloc_map = alloc_map;
 }
 
+/* `--alloc A[,B[,C[,D]]]` is parsed at emission time, not at bind time: the
+   bind runs before the driver has read the command line. Defaults keep libc, so
+   a build without --alloc is byte-identical to before. */
+static void sync_alloc(struct Emitter *e)
+{
+    const char *p;
+    int which;
+
+    snprintf(e->alloc_m, sizeof e->alloc_m, "malloc");
+    snprintf(e->alloc_f, sizeof e->alloc_f, "free");
+    snprintf(e->alloc_r, sizeof e->alloc_r, "realloc");
+    snprintf(e->alloc_c, sizeof e->alloc_c, "calloc");
+    if (!e->alloc_map || !e->alloc_map[0]) return;
+    p = e->alloc_map;
+    which = 0;
+    while (which < 4) {
+        const char *comma = strchr(p, ',');
+        size_t n = comma ? (size_t)(comma - p) : strlen(p);
+        char *dst = which == 0 ? e->alloc_m
+                  : which == 1 ? e->alloc_f
+                  : which == 2 ? e->alloc_r : e->alloc_c;
+        size_t cap = which == 0 ? sizeof e->alloc_m
+                   : which == 1 ? sizeof e->alloc_f
+                   : which == 2 ? sizeof e->alloc_r : sizeof e->alloc_c;
+        if (n > 0 && n < cap) {
+            memcpy(dst, p, n);
+            dst[n] = 0;
+        }
+        if (!comma) break;
+        p = comma + 1;
+        which++;
+    }
+}
+
 pub void ct_emit_bind_parse(int *nparams, void *pend_fields, int *npend);
 void ct_emit_bind_parse(int *nparams, void *pend_fields, int *npend)
 {
@@ -6417,12 +6487,14 @@ void ct_emit_set_path(const char *path)
 pub int ct_emit_program(int prog);
 int ct_emit_program(int prog)
 {
+    sync_alloc(&g_emit);
     return g_emit.emit_program(prog);
 }
 
 pub int ct_emit_unit(int u);
 int ct_emit_unit(int u)
 {
+    sync_alloc(&g_emit);
     return g_emit.emit_unit(u);
 }
 
