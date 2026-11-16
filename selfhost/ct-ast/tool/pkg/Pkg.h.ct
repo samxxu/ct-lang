@@ -2913,8 +2913,6 @@ int ct_pkg_lock_roots(const char *prog, int locked, char *roots, int *nroots, ch
     char nsr[MAX_PKG_DEPS][MAX_PKG_PATH];
     char dig[MAX_PKG_DEPS][80];
     int nrow, fmt, i, j;
-    DIR *d;
-    struct dirent *e;
     struct stat st;
 
     *nroots = 0;
@@ -2925,27 +2923,8 @@ int ct_pkg_lock_roots(const char *prog, int locked, char *roots, int *nroots, ch
             fprintf(stderr, "ctc: no './ct.lock'; --locked needs a lock\n");
             return 1;
         }
-        d = opendir("./vendor");
-        if (d != NULL) {
-            while ((e = readdir(d)) != NULL) {
-                char p[MAX_PKG_PATH];
-                if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
-                if (snprintf(p, sizeof p, "./vendor/%s", e->d_name) >= (int)sizeof p) continue;
-                if (stat(p, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
-                if (*nroots >= MAX_PKG_DEPS) {
-                    fprintf(stderr, "ctc: too many vendored packages\n");
-                    closedir(d);
-                    return 1;
-                }
-                snprintf(roots + (*nroots) * 512, 512, "%s", p);
-                fprintf(stderr, "ctc: warning: '%s' is read from vendor/ (v1); run 'ct migrate'\n",
-                        e->d_name);
-                (*nroots)++;
-            }
-            closedir(d);
-        }
-        if (*nroots > 0)
-            fprintf(stderr, "ctc: warning: no ct.lock; reading vendor/ (legacy layout)\n");
+        /* S7: vendor/ is no longer a build input. A project without a lock
+           simply has no lock roots; explicit `-I` still works. */
         return 0;
     }
     fmt = 1;
@@ -2955,8 +2934,8 @@ int ct_pkg_lock_roots(const char *prog, int locked, char *roots, int *nroots, ch
         fmt = 2;
     else
         rewind(f);
-    if (locked && fmt == 1) {
-        fprintf(stderr, "ctc: ct.lock is v1 (no '# ct-lock 2' header); --locked requires v2\n");
+    if (fmt == 1) {
+        fprintf(stderr, "ctc: ct.lock is v1 (no '# ct-lock 2' header); run 'ct migrate'\n");
         fclose(f);
         return 1;
     }
@@ -3027,12 +3006,9 @@ int ct_pkg_lock_roots(const char *prog, int locked, char *roots, int *nroots, ch
             }
     for (i = 0; i < nrow; i++) {
         if (typ[i][0] == 0) {
-            /* v1: vendor/<name> stays the include root. */
-            snprintf(roots + (*nroots) * 512, 512, "vendor/%s", full[i]);
-            fprintf(stderr, "ctc: warning: '%s' is read from vendor/ (v1); run 'ct migrate'\n",
+            fprintf(stderr, "ctc: ct.lock row '%s' has no source type; run 'ct migrate'\n",
                     full[i]);
-            (*nroots)++;
-            continue;
+            return 1;
         }
         if (strcmp(typ[i], "dir") == 0) {
             if (strcmp(nsr[i], ".") == 0)

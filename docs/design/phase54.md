@@ -136,7 +136,7 @@ S4（包仓对齐）已移出本 phase：`publisher` / `ns-root` / tag / 各仓�
 | S6 | package-guide/tutorial/README/README.en/install.sh/glossary 改为 store 为现行机制；`-I vendor/` 仅兼容期 |
 | 门禁 | test/pkg 130/0；check-ast 1444/0；check-all 11/11 |
 
-**未完成/阻塞**：S7 删除 vendor 支持须等兼容期结束；S7 判据只用仓内可观测项自证，包仓迁移状态不入判据。本相不宣称整体完成。
+**未完成/阻塞**：S7 读路径已删除（v1 lock 直接报错、无 lock 不再读 vendor/）；`ct get` 仍写 vendor/，写路径与 SP-028 告警删除待做。本相不宣称整体完成。
 
 ## 13. v0.58.0 之后的重排结论（2026-11-15）
 

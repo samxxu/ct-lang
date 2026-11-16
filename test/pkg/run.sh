@@ -365,17 +365,14 @@ fi
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/ct.pkg"
 
 echo
-echo "== ct build compiles against vendor/ =="
+echo "== ct build rejects a v1 vendor lock =="
 mkdir -p "$work/proj/out"
 if ( cd "$work/proj" && "$work/ct-ast" build --emit-c -I vendor/util main.ct -o out >"$work/b.out" 2>"$work/b.err" ); then
-    if "$CC" "$work/proj/out"/*.c -o "$work/app" 2>"$work/bc.err" \
-       && [ "$("$work/app")" = "42" ]; then
-        ok "imports a vendored package and runs"
-    else
-        bad "build vendor" "compile/run failed: $(cat "$work/bc.err")"
-    fi
+    bad "build v1" "a v1 lock passed"
+elif grep -Fq "ct.lock is v1" "$work/b.err"; then
+    ok "v1 lock is rejected before any vendor read"
 else
-    bad "build vendor" "ct build failed: $(cat "$work/b.err")"
+    bad "build v1" "wrong diagnostic: $(cat "$work/b.err")"
 fi
 
 echo
@@ -1251,18 +1248,18 @@ if ( cd "$S2/devproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
 else
     bad "S2 dev override" "$(cat "$S2/d.out" "$S2/d.err")"
 fi
-# no lock: vendor/ is the fallback and the warning appears once.
+# no lock: vendor/ is no longer a build input; imports must be explicit.
 mkdir -p "$S2/vproj/vendor/p"
 printf 'name = demo\nversion = 0.1.0\n' >"$S2/vproj/ct.pkg"
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S2/vproj/vendor/p/p.h.ct"
 printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(5)); return 0; }\n' >"$S2/vproj/main.ct"
 if ( cd "$S2/vproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
-        "$work/ct-ast" build main.ct -o "$S2/vapp" >"$S2/v.out" 2>"$S2/v.err" ) \
-   && [ "$(grep -c "no ct.lock; reading vendor/" "$S2/v.err")" = "1" ] \
-   && [ "$("$S2/vapp")" = "10" ]; then
-    ok "S2 no lock falls back to vendor/ with one warning"
+        "$work/ct-ast" build main.ct -o "$S2/vapp" >"$S2/v.out" 2>"$S2/v.err" ); then
+    bad "S2 vendor fallback" "vendor/ was still read"
+elif grep -Fq "cannot resolve import 'p'" "$S2/v.err"; then
+    ok "S2 no lock does not read vendor/"
 else
-    bad "S2 vendor fallback" "$(cat "$S2/v.out" "$S2/v.err")"
+    bad "S2 vendor fallback" "wrong diagnostic: $(cat "$S2/v.out" "$S2/v.err")"
 fi
 # no lock and no vendor: still builds, and does not add the fallback warning.
 mkdir -p "$S2/nproj"
