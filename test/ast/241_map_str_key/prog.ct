@@ -14,6 +14,7 @@ int main(void)
     Str plain = str_from("a");
     Map<Str, int> m;
     int *v;
+    int removed;
     m.h = 0;
     m.put(a, 1);
     m.put(b, 2);
@@ -27,7 +28,11 @@ int main(void)
     }
     printf("overwrite=%d\n", m.put(a2, 7));
     printf("v1=%d len=%d\n", *m.get(a2), m.len());
-    printf("remove=%d len=%d\n", m.remove(b), m.len());
+    /* Two statements: `printf`'s argument evaluation order is unspecified, and
+       GCC/x86-64 reads them right to left (the CI failure: `len` was sampled
+       before the removal). */
+    removed = m.remove(b);
+    printf("remove=%d len=%d\n", removed, m.len());
     v = m.get(a2);
     printf("get after remove: %d\n", v == 0 ? -1 : *v);
     printf("release=%d\n", m.release());
