@@ -32,6 +32,9 @@ editors/**/node_modules/
 .trae/
 .trae-html-share-packages/
 
+# Session scratch (DB-4): temporary products live in .temp/ and never ship.
+.temp/
+
 # One-off evaluation outputs at the repo root (dated scratch dirs). Reports
 # belong under docs/history/reports/; a root `YYYY-MM-DD/` is working material,
 # not part of the tree.
