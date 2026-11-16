@@ -334,6 +334,26 @@ impl DriverOps for Driver {
                 self->m->emit_c = 1;   /* compile mode already emits only C */
                 continue;
             }
+            /* PH-64: the bare-metal contract. --freestanding turns off the
+               constructor and the implicit heap; --alloc names the target's
+               allocator so heap-owning values stop pulling libc. */
+            if (strcmp(argv[i], "--freestanding") == 0) {
+                self->m->freestanding = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--alloc") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ctc: --alloc needs an argument\n");
+                    return 1;
+                }
+                i++;
+                if (snprintf(self->m->alloc_map, sizeof self->m->alloc_map, "%s", argv[i])
+                        >= (int)sizeof self->m->alloc_map) {
+                    fprintf(stderr, "ctc: --alloc value is too long\n");
+                    return 1;
+                }
+                continue;
+            }
             /* Phase 32: consumed here so the pre-scan's gate is not an
                unknown option in the loop; the flag itself is already set. */
             if (strcmp(argv[i], "--types") == 0) {

@@ -171,6 +171,11 @@ pub struct Module {
     int  abi_exports[256];      /* root function indices in the export set */
     int  abi_n;
     int  runtime_checks;        /* --runtime-checks: guard null vtables in build */
+    /* PH-64: `--freestanding` promises the product needs no host runtime: no
+       constructor, no libc, no implicit heap. `--alloc A[,B[,C[,D]]]` maps
+       malloc/free/realloc/calloc onto the target's own symbols. */
+    int  freestanding;
+    char alloc_map[256];
     const char *exe;
     const char *outdir_opt;
     const char *cc;
@@ -1261,6 +1266,8 @@ impl ModuleOps for Module {
         self->abi_mode = 0;
         self->abi_n = 0;
         self->runtime_checks = 0;
+        self->freestanding = 0;
+        self->alloc_map[0] = 0;
         self->exe = NULL;
         self->outdir_opt = NULL;
         self->cc = NULL;
@@ -1290,6 +1297,23 @@ impl ModuleOps for Module {
             }
             if (strcmp(argv[i], "--runtime-checks") == 0) {
                 self->runtime_checks = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--freestanding") == 0) {
+                self->freestanding = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--alloc") == 0) {
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "ctc: --alloc needs an argument\n");
+                    return 1;
+                }
+                i++;
+                if (snprintf(self->alloc_map, sizeof self->alloc_map, "%s", argv[i])
+                        >= (int)sizeof self->alloc_map) {
+                    fprintf(stderr, "ctc: --alloc value is too long\n");
+                    return 1;
+                }
                 continue;
             }
             if (strcmp(argv[i], "--outdir") == 0) {

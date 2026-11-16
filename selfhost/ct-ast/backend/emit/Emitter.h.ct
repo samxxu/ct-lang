@@ -242,6 +242,9 @@ struct Emitter {
     int  *build_mode;
     int  *line_mode;
     int  *runtime_checks;  /* Phase 37 O2: guard a null vtable before iface dispatch */
+    /* PH-64: the bare-metal contract, bound by `ct_emit_bind_flags`. */
+    int  *freestanding;
+    char *alloc_map;
     /* Phase 39 R3: set only while the module layer asks for `<base>.abi.h`. */
     int  *abi_mode;
     int  *abi_root;
@@ -2916,6 +2919,10 @@ impl EmitOps for Emitter {
         int n, any;
         (void)self;
 
+        /* PH-64: a bare-metal reset path never calls the constructor, so
+           `--freestanding` emits none; every object that would have needed one
+           is rejected above, with a position. */
+        if (self->freestanding && *self->freestanding) return 0;
         any = 0;
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
             if (unit_init_needed(self, n)) any = 1;
@@ -3677,6 +3684,10 @@ impl EmitOps for Emitter {
             if (self->init->type_needs_init(self->arena->nodes[n].text)
                 && dims_depth(self->arena->nodes[n].text3) > 1)
                 return self->fail_from(n, "a multi-dimensional array cannot hold trait-carrying values");
+            if (self->freestanding && *self->freestanding && unit_init_needed(self, n))
+                return self->fail_from(n,
+                    "this file-scope object needs a constructor to fill its vptrs, "
+                    "which --freestanding does not emit; give it an initialiser");
             self->emit_indent(ind);
             if (self->arena->nodes[n].aux == 1) fputs("static ", self->out);
             if (self->emit_global_decl(n) != 0) return -1;
@@ -6355,6 +6366,15 @@ void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
     g_emit.abi_root = abi_root;
     g_emit.abi_exports = abi_exports;
     g_emit.abi_n = abi_n;
+}
+
+/* PH-64: the bare-metal flags live in their own bind, so the long table
+   signature above does not grow for two scalars. */
+pub void ct_emit_bind_flags(int *freestanding, char *alloc_map);
+void ct_emit_bind_flags(int *freestanding, char *alloc_map)
+{
+    g_emit.freestanding = freestanding;
+    g_emit.alloc_map = alloc_map;
 }
 
 pub void ct_emit_bind_parse(int *nparams, void *pend_fields, int *npend);
