@@ -644,6 +644,14 @@ else
     bad "p64_no_init_array" "$(cat "$work/p64nia.out" "$work/p64nia.err")"
 fi
 
+# PH-64 T2: the built-in layer is emitted on demand -- a bare program gets no
+# container unit, `Option<int>` pulls `Option` and nothing else.
+if bash test/ast/p64_on_demand.sh "$work/ct-ast" >"$work/p64od.out" 2>"$work/p64od.err"; then
+    ok "p64_on_demand"
+else
+    bad "p64_on_demand" "$(cat "$work/p64od.out" "$work/p64od.err")"
+fi
+
 # PH-64 T3: --alloc maps the compiler's own heap calls and the source's
 # malloc/free onto the target's allocator, so a -nostdlib link needs no libc.
 if bash test/ast/p64_alloc.sh "$work/ct-ast" >"$work/p64al.out" 2>"$work/p64al.err"; then
