@@ -59,6 +59,7 @@
 | [proposals/ct-str-builtin-type-proposal.md](proposals/ct-str-builtin-type-proposal.md) | 语言侧提案（**待项目组评估**）：`Str` 内置身份、P1/P2/P3、方法映射、借用可存变量与只读布局、不表示空状态、显式失败返回；语言侧可用后 std 保留一个 MINOR 兼容 shim 再移除 | 查看 `Str` 内置化提案 |
 | [reviews/ct-str-builtin-type-battle.md](reviews/ct-str-builtin-type-battle.md) | 上述提案的一轮对抗评审与后续裁定：主张席 C1–C8、反证席 R1–R16、裁判席**部分受理**；负责人裁定走语言层、方法层为 C 函数映射 | 查看裁定与待决事项 |
 | [reviews/ct-str-null-state-battle.md](reviews/ct-str-null-state-battle.md) | `Str` 空状态问题的一轮对抗评审：不表示无值 / 表示无值 / 可失败构造三条路线；裁判**不受理空状态与静默转空串**，`NULL` 只在构造点显式处理 | 查看空状态裁定 |
+| [proposals/ct-pure-type-alias-proposal.md](proposals/ct-pure-type-alias-proposal.md) | 语言侧提案（**待项目组评估**）：现有 `type` 别名的现状评估（部分够用）与放开普通 `.ct` 单元声明；纯同义词、不改判等与赋值、方法随宿主可见、`own` 一致 | 查看纯类型别名提案 |
 | [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 设计记录（已定稿为施工卡）：`?.` 的语义、切词策略、值接收者裁定与 battle 结论；施工以 [design/phase53.md](design/phase53.md) 为准 |
 | [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（**已并入 PH-62**）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
 | [proposals/defect-namespaced-static-method.md](proposals/defect-namespaced-static-method.md) | 缺陷请求（待修）：带 `namespace` 的单元里静态固有方法报 `use of an undeclared variable`；含两种最小复现、边界表、名字解析定位、下游绕法与 N1–N5 判据 |
