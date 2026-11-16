@@ -652,6 +652,14 @@ else
     bad "p64_on_demand" "$(cat "$work/p64od.out" "$work/p64od.err")"
 fi
 
+# PH-64 T4: the --freestanding symbol surface -- every unit compiles under
+# -ffreestanding -nostdlib and its `nm -u` stays inside the allowed set.
+if bash test/ast/p64_freestanding.sh "$work/ct-ast" >"$work/p64fs.out" 2>"$work/p64fs.err"; then
+    ok "p64_freestanding"
+else
+    bad "p64_freestanding" "$(cat "$work/p64fs.out" "$work/p64fs.err")"
+fi
+
 # PH-64 T3: --alloc maps the compiler's own heap calls and the source's
 # malloc/free onto the target's allocator, so a -nostdlib link needs no libc.
 if bash test/ast/p64_alloc.sh "$work/ct-ast" >"$work/p64al.out" 2>"$work/p64al.err"; then
