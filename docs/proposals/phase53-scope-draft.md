@@ -33,7 +33,7 @@
 | --- | --- | --- |
 | HEAD / 分支 | `1d49bb1a`，`main` 比 `origin/main` 领先 4 个文档提交 | `git status -sb`；`git log --oneline -5` |
 | 收口 tag | `v0.45.0`–`v0.52.0` 均为 annotated tag，远端同名 tag 指向同一提交 | `git cat-file -t v0.52.0`；`git ls-remote --tags origin` |
-| 50–52 卡面 | 三张卡第 3 行均为「状态：完成（2026-11-15；v0.5x.0；S1–S5 全绿）」 | [phase50.md:3](../history/design/phase50.md)、[phase51.md:3](../design/phase51.md)、[phase52.md:3](../design/phase52.md) |
+| 50–52 卡面 | 三张卡第 3 行均为「状态：完成（2026-11-15；v0.5x.0；S1–S5 全绿）」 | [phase50.md:3](../history/design/phase50.md)、[phase51.md:3](../history/design/phase51.md)、[phase52.md:3](../design/phase52.md) |
 | 收口门禁记录 | `v0.52.0` 正文：`check-all 11/11；check-ast 1420/0、warnings 667/0、docs 1224/243` | `git log -1 43b8c992` |
 | 版本落点 | `CTC_VERSION` 五处为 `0.52.0`（`main.ct`、`l0/ctc.c`、`l1/ctc.ct`、`l2/core.ct`、`l2/driver.ct`） | `selfhost/ct-ast/main.ct:36` |
 | 门禁重跑 | **本次未重跑**：只读核对，未构建、未执行仓库脚本；上述数字引自收口提交正文 | 见 §1.3 |

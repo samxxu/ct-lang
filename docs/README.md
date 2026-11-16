@@ -2,7 +2,7 @@
 
 > 中文
 >
-> **当前版本 v0.61.1。** 本目录的 `design/` 保留**最近 12 个已完成阶段**的设计文档（当前在研
+> **当前版本 v0.62.0。** 本目录的 `design/` 保留**最近 12 个已完成阶段**的设计文档（当前在研
 > 阶段计入），更早的 `design/phase*.md` 必须退役到 [history/design/](history/design/)；评审报告
 > 与其余历史记录在 [history/](history/README.md)。仓库入口见 [../README.md](../README.md)，改动
 > 规约见 [../AGENTS.md](../AGENTS.md)。
@@ -51,7 +51,7 @@
 | [reviews/phase46-52-freeze-verdict.md](reviews/phase46-52-freeze-verdict.md) | 定稿裁决：四组实测、73 条输入逐条结论（采纳 67 / 部分 6 / 不采纳 1）、5 条已于 2026-11-15 按建议值签字 |
 | [history/design/phase46.md](history/design/phase46.md) · [history/design/phase47.md](history/design/phase47.md) | 已完成（Phase 46–47）：46 `Map` 元素完整性 / 47 容器键协议（`Str` 键深拷贝）；收口版本见 [roadmap.md](roadmap.md) |
 | [design/phase48.md](history/design/phase48.md) · [design/phase49.md](history/design/phase49.md) | 已完成（Phase 48–49）：48 Drop 语义闭环 / 49 `own` 所有权转移；收口版本见 [roadmap.md](roadmap.md) |
-| [design/phase50.md](history/design/phase50.md) · [design/phase51.md](design/phase51.md) · [design/phase52.md](design/phase52.md) | 已完成（Phase 50–52，0.50.0 至 0.53.0）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
+| [design/phase50.md](history/design/phase50.md) · [design/phase51.md](history/design/phase51.md) · [design/phase52.md](design/phase52.md) | 已完成（Phase 50–52，0.50.0 至 0.53.0）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
 | [design/phase53.md](design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
 | [proposals/ct-model-export-proposal.md](proposals/ct-model-export-proposal.md) | 模型导出 `--emit-model` 提案（Phase 59 依据） | 查看编译器模型导出设计 |
 | [proposals/ct-str-char-conversion-proposal.md](proposals/ct-str-char-conversion-proposal.md) | 语言侧使用反馈提案（**待项目组评估**）：`Str` → `char *` 借用视图、`char *` → `Str` 三处隐式深拷贝、目标类型决定产出与归属；实现口径与排期由项目组裁定 | 查看字符串接口互操作提案 |

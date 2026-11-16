@@ -64,14 +64,15 @@
 | Phase 48 | Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体） | ✅ 完成 | v0.48.0 | [卡](history/design/phase48.md) |
 | Phase 49 | `own` 所有权转移（初始化式接工厂返回值） | ✅ 完成 | v0.49.0 | [卡](history/design/phase49.md) |
 | Phase 50 | 容器取用契约（`has` / `at`；出参形态已废） | ✅ 完成 | v0.50.0 | [卡](history/design/phase50.md) |
-| Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ✅ 完成 | v0.51.0 | [卡](design/phase51.md) |
+| Phase 51 | 指针接收者 `.` 调用的发射缺陷（链式前置） | ✅ 完成 | v0.51.0 | [卡](history/design/phase51.md) |
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ✅ 完成 | v0.52.0 | [卡](design/phase52.md) |
 | Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | ✅ 完成 | v0.53.0 | [卡](design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
-| Phase 54 | ct-pkg 共享库包体系（工具侧：store / lock v2 / `ns-root`） | 🟨 实施中（S0–S3、S5/S6 仓内完成；S7 待兼容期） | v0.54.0–v0.58.0（S0–S3、S5/S6 各一个 MINOR；偏移见 AGENTS §0.3） | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
+| Phase 54 | ct-pkg 共享库包体系（工具侧：store / lock v2 / `ns-root`） | ✅ 完成（S0–S7） | v0.54.0–v0.58.0（S0–S3、S5/S6 各一个 MINOR；偏移见 AGENTS §0.3） | [卡](design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
 | Phase 57 | 限定名与 namespace 常量（类型位置 `A::B`、值位置 `Type::Member`；SH-18 + LANG-15） | ✅ 完成 | v0.59.0 | [卡](design/phase57.md) · [重排](planning/post-58-plan.md) |
 | Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ✅ 完成 | v0.60.0 | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) · [重排](planning/post-58-plan.md) |
 | Phase 60 | 视图节点注记（`view` 子句） | ⏭️ 跳过（无消费者，[D-006](decisions/D-006.md)） | 不占位 | [提案](proposals/ct-view-annotation-proposal.md) · [决策](decisions/D-006.md) |
 | Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | ✅ 完成 | v0.61.0 | [卡](design/phase62.md) · [提案](proposals/ct-writable-subscript-proposal.md) · [研判](review/ct-writable-subscript-proposal-review.md) |
+| Phase 63 | 删除 `vendor/` 支持（PH-54 S7） | ✅ 完成 | v0.62.0 | [卡](design/phase63.md) · [提案](proposals/ct-pkg-shared-store.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
@@ -100,7 +101,7 @@
 | S3 | 校验与迁移：`ct verify` 校 store、`ct migrate`、`--strict` | v0.57.0 ✅ | S2 收口 | SP-016/029 全绿 | 恢复 vendor 读路径 |
 | S5 | 消费端与门禁切换（仓内）：`test/pkg` 共享库用例、双 HOME 复现性、安装脚本提示 | v0.58.0 ✅ | S3 收口 | SP-028 告警落地；本仓无手算 `-I` | 恢复旧构建脚本 |
 | S6 | 文档改写与 errata | v0.58.0（公开文档与历史 errata ✅） | S5 | SP-030 现行文档通过（历史 errata 待办） | 回滚文档提交 |
-| S7 | 删除 `vendor/` 支持 | 待定（读路径已删，写路径待删） | **仓内自证（三条可执行）**：① `test/pkg` 的 v1 / 无 lock 工程 `ct build` RC=0，stderr 含 `is read from vendor/ (v1)`；② `ct install` 对每个 v1 包只告警一次；③ `ct migrate` 后移走 `vendor/` 仍可 build | 本仓无 vendor 读写；v1 lock 只报错 | 恢复 S3 读路径一个 minor |
+| S7 | 删除 `vendor/` 支持 | v0.62.0 ✅ | **仓内自证（三条可执行）**：① `test/pkg` 的 v1 / 无 lock 工程 `ct build` RC=0，stderr 含 `is read from vendor/ (v1)`；② `ct install` 对每个 v1 包只告警一次；③ `ct migrate` 后移走 `vendor/` 仍可 build | 本仓无 vendor 读写；v1 lock 只报错 | 恢复 S3 读路径一个 minor |
 
 > 包仓对齐（原 S4：std / ct-http / ct-fsguard / ct-json / ct-sse / ct-token / ct-process / ct-llm-sse）归各包仓，不属于本 phase；本仓只提供工具与判据，移交清单按仓分发。
 >

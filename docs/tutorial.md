@@ -1745,7 +1745,7 @@ Result<long, char *> twice(int n)
 | `ct get [--force] <spec>[@<range>]` | 拉包进共享 store（`$CT_HOME/pkg/<publisher>/<name>/<version>/`）并写 v2 `ct.lock`（唯一会用系统 `git` 的子命令）；裸名可经 `--index <file>` / `CT_INDEX` 查显式索引；包的 `requires` 不满足则失败且不改动既有 `ct.lock`（`--force` 继续并告警） |
 | `ct update` | 离线：v2 校验 store 并保留已钉住的版本；v1 沿用旧 vendor 路径重解 |
 | `ct install` | 离线校验 `ct.lock` 与 store，把各包的 `cflags` / `ldflags` 与 store 的 `-I` 拼成**一条**构建命令 |
-| `ct verify [--strict]` | 离线校验 store（v2）或 `vendor/`（v1）与 `ct.lock`；`--strict` 拒绝 `dir` 行与 v1 回退 |
+| `ct verify [--strict]` | 离线校验 store 与 v2 `ct.lock`；`--strict` 拒绝 `dir` 行与 v1 lock |
 | `ct migrate` | 离线把 v1 `vendor/` 树写进 store 并重写 v2 `ct.lock` |
 | `ct -v` / `ct -h` | 版本 / 用法 |
 

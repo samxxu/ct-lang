@@ -79,7 +79,7 @@ acme/
 | `licence` | 否 | 许可证标识（SPDX 风格，如 `MIT`）。**仅约定，工具不解析** |
 
 S1 起 `publisher` + `ns-root` 是 store 与 lock v2 的必填身份；写 `ns-root` 不再被静默忽略。
-**兼容例外**：两个键都缺失的旧清单仍按 v1 处理（`vendor/` + 四字段 lock），以保住旧工程；
+**S7 后**：`publisher` / `ns-root` 是必填身份；缺失直接失败，不再退回 `vendor/`；
 只缺一个、或 `publisher = local`、`ns-root` 为绝对路径/含 `..`/目录不存在时硬错。
 
 `cflags` / `ldflags` / `requires` 由 `ct install` 读取；`install` 把每个包的 `cflags` / `ldflags`
@@ -193,45 +193,36 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 - store：`$CT_HOME/pkg/<publisher>/<name>/<version>/`（`CT_HOME` 默认 `$HOME/.ct`）；同版本重装
   摘要相同即 no-op、不同即硬错且不覆盖；不同版本目录可并存。
 - v2 lock 每行七字段 `<pub>/<name> <version> <type> <locator> <commit|-> <ns-root> <sha256:…>`；
-  旧工程仍写 `vendor/` 的行为见 §8。
+  S7 后不再写 `vendor/`；旧工程迁移见 §8。
 - **`ct build` 默认读 `./ct.lock`**：v2 git 行自动补 `-I $CT_HOME/pkg/<pkg>/<ver>/<ns-root>`，
   v2 `dir` 行使用本地路径并在 stderr 打 `note: '<pkg>' resolves to the local directory (dev override)`。
   用户显式 `-I` 仍然有效且排在前面；重复根由既有导入规则去重。
 - `ct build --locked`：store 缺失报 `is not installed`、摘要不符报 `does not match ct.lock`，不回退；
   无 lock 或 v1 lock 也直接失败。
-- 无 `ct.lock` 时的 vendor 回退只属兼容期，见 §8。
+- 无 `ct.lock` 时不再回退 `vendor/`；旧工程先 `ct migrate`，见 §8。
 - lock 内同一裸包名出现两行（不论发布方）→ `package '<name>' is required twice: a/<name> and b/<name>`。
 - `ct verify`：v2 行检查版本目录存在与第 7 字段摘要；缺失报 `is not installed`、不符报
-  `does not match ct.lock`。`--strict` 拒绝任何 `dir` 行或 v1 vendor 回退。
+  `does not match ct.lock`。`--strict` 拒绝任何 `dir` 行或 v1 lock。
 - `ct migrate`：读 v1 lock 与 `vendor/<name>`，把每棵树写入 store（摘要必须与 lock 一致），
   重写为七字段 v2 lock；随后 `mv vendor /tmp/v && ct build main.ct -o build` 不再需要 vendor。
   迁移行是 store-backed 的 `git - -`（v1 未记录 URL；commit 若存在则保留）。
 - `ct update` 对 v2 是**离线 pin 审计**：校验 store、要求 `ct.pkg` 的每个直接依赖都被 lock 覆盖，
   把钉住的 v2 行原样写回；不会在无网络时凭空选择新版本。缺依赖报 `is not satisfied by ct.lock`。
-- 边界：包仓的 `publisher` / `ns-root` / tag 声明归各包仓，不属于本仓任何 phase。本仓尚未做的是 S7
-  移除 vendor 路径；缓存键仍按裸包名（PKG-5）。
+- 边界：包仓的 `publisher` / `ns-root` / tag 声明归各包仓，不属于本仓任何 phase。
+  S7 已删除 vendor 路径；缓存键仍按裸包名（PKG-5）。
 - 逐条缺陷见 [PKG-3 … PKG-8](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)。
 
-### 8. 兼容期：v1 lock 与 `vendor/`
+### 8. v1 迁移：`ct migrate`
 
-这一节描述**旧工程**，不是新包的现行契约。兼容期结束后（S7）整节删除。
-
-- v1 lock（无 `# ct-lock 2` 头）仍按 vendor 读取；`ct build` 无 `ct.lock` 时枚举 `vendor/*`，
-  打一次 `warning: no ct.lock; reading vendor/ (legacy layout)`，并对每个包打
-  `warning: '<name>' is read from vendor/ (v1); run 'ct migrate'`。
-- `ct install` 对 v1 lock 打印 `-I vendor/<name>`（与 S0 之前逐字一致），摘要校验也读 `vendor/`。
-- 旧「包根 = 单元根」的布局只在这里成立。包把单元放在 `src/fsguard/FsGuard.h.ct` 而消费者照抄
-  v1 输出时，会看到：
+S7 已删除 `vendor/` 读写；v1 lock 与无 lock 的 vendor 工程不再构建。唯一保留的桥是
+`ct migrate`：它读取旧 `vendor/<name>` 树，校验摘要后写入共享 store，并把 `ct.lock` 重写为 v2。
 
 ```sh
-ct install          # ct build -I vendor/fsguard main.ct -o build
-ct build -I vendor/fsguard main.ct -o build
-# ctc: cannot resolve import 'fsguard/FsGuard'
-# rc=1
+ct migrate                  # 读取 v1 + vendor/，写入 store 与 v2 lock
+mv vendor /tmp/v            # 迁移后可移走
+ct build main.ct -o build   # 从 store 取包
 ```
 
-  即使改成 `-I vendor/fsguard/src`，若 C 头路径写成 `#include "fsguard/X.shim.h"` 还要 `-Isrc`；
-  `ct.pkg` 的 `cflags` 只进 `cc` 行、不参与 import 解析。真实案例见
-  [PKG-2](../issues/packages/pkg-2-ct-install-package-root-import.md)。
-- 升级路径：`ct migrate` 把 `vendor/` 树写入 store 并重写 v2 lock；随后 `mv vendor /tmp/v`，
-  `ct build main.ct -o build` 从 store 取包，不再需要 vendor。
+迁移失败（缺 `publisher` / `ns-root`、摘要不符、vendor 缺项）时 `ct migrate` 返回非零，
+不会把旧目录当成成功。v1 lock 的 `ct build` / `install` / `verify` / `update` 都直接报错并提示
+`run 'ct migrate'`；`ct get` 也拒绝在 v1 lock 上追加 v2 行。

@@ -4,14 +4,14 @@
 #
 # Builds the whole bootstrap chain (L0 -> L1 -> L2 -> ct-ast, the compiler that
 # now ships `get`/`install`) and exercises `ct get` on a throwaway project:
-# manifest parsing, a version range, a recursive local `dep`, vendoring into
-# `vendor/<name>` and the resolution order recorded in `ct.lock`.
+# manifest parsing, a version range, a recursive local `dep`, the shared store
+# ($CT_HOME/pkg/<publisher>/<name>/<version>) and the v2 `ct.lock` rows.
 # Phase 8.2 adds a git source: a local git repository stands in for the registry
 # (so the test needs no network), and the `git` absent case must fail hard. The
 # cache and the registry are redirected through HOME / CT_REGISTRY.
-# Phase 8.3 adds `ct install`, which checks the vendored tree against the lock's
-# content digests and the manifest's dependencies, then prints a `ct build`
-# command; a tampered tree, a missing package or an uncovered dependency fails.
+# Phase 8.3 adds `ct install`, which checks the store against the lock's content
+# digests and the manifest's dependencies, then prints a `ct build` command; a
+# tampered tree, a missing package or an uncovered dependency fails.
 # The error branches of both subcommands are covered too: no or empty `ct.lock`,
 # a missing or incomplete `ct.pkg`, a malformed `dep` and bad `ct get` arguments.
 # Phase 17.5 adds the comparator ranges, `ct update` / `ct verify`, the explicit
@@ -20,6 +20,10 @@
 # Phase 20 (P20-04) makes an unsatisfied `requires` a hard failure in both `get`
 # and `install`; `--force` downgrades it to a warning, and a refused `get` must
 # leave an existing `ct.lock` byte-identical (the check precedes the write).
+# PH-54 S7 removes vendor/ from the read and write paths: `get` only writes the
+# shared store and a v2 lock, `install`/`verify`/`update` only read the store,
+# and a v1 lock is a hard error that points at the one-time `ct migrate` bridge
+# (which still reads an existing vendor/ tree and rewrites it as v2).
 #
 # Usage:  bash test/pkg/run.sh
 #         CC=gcc bash test/pkg/run.sh
@@ -37,6 +41,13 @@ work="${work%/}/ct-pkg-test.$$"
 
 rm -rf "$work"
 mkdir -p "$work" || exit 1
+
+# Every `ct get` installs into the shared store; keep it inside the throwaway
+# root so the real $HOME is never touched. Suites that need isolation override
+# CT_HOME inline.
+CT_HOME="$work/cthome"
+export CT_HOME
+mkdir -p "$CT_HOME" || exit 1
 
 pass=0
 fail=0
@@ -78,9 +89,9 @@ echo "== a project and two local packages =="
 mkdir -p "$work/proj" "$work/pkgs/util" "$work/pkgs/extra"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/ct.pkg"
 printf 'import util;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$work/proj/main.ct"
-printf 'name = util\nversion = 0.2.0\nlicense = MIT\ndep = ../extra@^0.1.0\n' >"$work/pkgs/util/ct.pkg"
+printf 'name = util\npublisher = ct\nversion = 0.2.0\nns-root = .\nlicense = MIT\ndep = ../extra@^0.1.0\n' >"$work/pkgs/util/ct.pkg"
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/pkgs/util/util.h.ct"
-printf 'name = extra\nversion = 0.1.0\n' >"$work/pkgs/extra/ct.pkg"
+printf 'name = extra\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >"$work/pkgs/extra/ct.pkg"
 printf 'int extra_value(void) { return 7; }\n' >"$work/pkgs/extra/extra.c"
 ok "fixtures created"
 
@@ -91,27 +102,45 @@ if ( cd "$work/proj" && "$work/ct-ast" get ../pkgs/util >"$work/get.out" 2>"$wor
 else
     bad "ct get" "non-zero exit: $(cat "$work/get.err")"
 fi
-if [ -f "$work/proj/vendor/util/ct.pkg" ] && [ -f "$work/proj/vendor/util/util.h.ct" ]; then
-    ok "vendors the requested package"
+if [ -f "$CT_HOME/pkg/ct/util/0.2.0/ct.pkg" ] \
+   && [ -f "$CT_HOME/pkg/ct/util/0.2.0/util.h.ct" ]; then
+    ok "stores the requested package"
 else
-    bad "ct get" "vendor/util is incomplete"
+    bad "ct get" "the store copy of util is incomplete"
 fi
-if [ -f "$work/proj/vendor/extra/ct.pkg" ] && [ -f "$work/proj/vendor/extra/extra.c" ]; then
-    ok "vendors the transitive dependency"
+if [ -f "$CT_HOME/pkg/ct/extra/0.1.0/ct.pkg" ] \
+   && [ -f "$CT_HOME/pkg/ct/extra/0.1.0/extra.c" ]; then
+    ok "stores the transitive dependency"
 else
-    bad "ct get" "vendor/extra is incomplete"
+    bad "ct get" "the store copy of extra is incomplete"
+fi
+if [ ! -e "$work/proj/vendor" ]; then
+    ok "ct get writes no vendor/ tree"
+else
+    bad "ct get" "vendor/ was created"
 fi
 if [ -f "$work/proj/ct.lock" ]; then
     first="$(sed -n 1p "$work/proj/ct.lock")"
-    second="$(sed -n 2p "$work/proj/ct.lock")"
-    case "$first" in
-        extra\ 0.1.0*) ok "the lock lists the dependency first" ;;
-        *) bad "ct.lock" "expected extra first, got '$first'" ;;
+    row1="$(sed -n 2p "$work/proj/ct.lock")"
+    row2="$(sed -n 3p "$work/proj/ct.lock")"
+    if [ "$first" = "# ct-lock 2" ]; then
+        ok "the lock starts with the v2 header"
+    else
+        bad "ct.lock" "expected the v2 header, got '$first'"
+    fi
+    case "$row1" in
+        ct/extra\ 0.1.0\ dir\ *) ok "the lock lists the dependency first" ;;
+        *) bad "ct.lock" "expected ct/extra first, got '$row1'" ;;
     esac
-    case "$second" in
-        util\ 0.2.0*) ok "the lock lists the requested package second" ;;
-        *) bad "ct.lock" "expected util second, got '$second'" ;;
+    case "$row2" in
+        ct/util\ 0.2.0\ dir\ *) ok "the lock lists the requested package second" ;;
+        *) bad "ct.lock" "expected ct/util second, got '$row2'" ;;
     esac
+    if [ "$(awk 'NR>1{print NF}' "$work/proj/ct.lock" | sort -u)" = "7" ]; then
+        ok "every lock row has seven v2 fields"
+    else
+        bad "ct.lock" "unexpected row width: $(awk 'NR>1{print NF}' "$work/proj/ct.lock" | sort -u)"
+    fi
 else
     bad "ct.lock" "was not written"
 fi
@@ -124,25 +153,29 @@ else
 fi
 
 echo
-echo "== ct install: verifies the lock and prints a build command =="
+echo "== ct install: verifies the store and prints a build command =="
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/i.out" 2>"$work/i.err" ); then
     ok "ct install exits 0"
 else
     bad "ct install" "non-zero exit: $(cat "$work/i.err")"
 fi
-if grep -Fq -- "-I vendor/util" "$work/i.out" && grep -Fq -- "-I vendor/extra" "$work/i.out" \
-   && grep -Fq "build" "$work/i.out"; then
-    ok "suggests -I roots for every vendored package"
+if grep -Fq "build" "$work/i.out" && grep -Fq "# lock-format: v2" "$work/i.out"; then
+    ok "prints a store-backed build command"
 else
     bad "ct install" "no suggested build command: $(cat "$work/i.out")"
 fi
+if ! grep -Fq -- "-I " "$work/i.out"; then
+    ok "the v2 build command needs no explicit -I (build reads the lock)"
+else
+    bad "ct install" "unexpected -I in: $(cat "$work/i.out")"
+fi
 
 echo
-echo "== ct install rejects an import the printed -I list cannot resolve =="
+echo "== ct install rejects an import the lock roots cannot resolve =="
 # PKG-6: install's success means the printed `ct build` line can resolve the
 # project's imports. A missing unit must fail here, not at build time.
 mkdir -p "$work/p6pkg" "$work/p6proj"
-printf 'name = p6pkg\nversion = 0.1.0\n' >"$work/p6pkg/ct.pkg"
+printf 'name = p6pkg\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >"$work/p6pkg/ct.pkg"
 printf 'name = demo6\nversion = 0.1.0\n' >"$work/p6proj/ct.pkg"
 printf 'import missing::Absent;\nint main(void) { return 0; }\n' >"$work/p6proj/main.ct"
 if ( cd "$work/p6proj" && "$work/ct-ast" get ../p6pkg >/dev/null 2>&1 ); then
@@ -160,7 +193,7 @@ fi
 echo
 echo "== ct pkg warns about unknown manifest keys =="
 mkdir -p "$work/p3pkg" "$work/p3proj"
-printf 'name = p3pkg\nversion = 0.1.0\nfrobnicate = yes\n' >"$work/p3pkg/ct.pkg"
+printf 'name = p3pkg\npublisher = ct\nversion = 0.1.0\nns-root = .\nfrobnicate = yes\n' >"$work/p3pkg/ct.pkg"
 printf 'name = demo3\nversion = 0.1.0\ndep = ../p3pkg@^0.1.0\n' >"$work/p3proj/ct.pkg"
 printf 'int main(void) { return 0; }\n' >"$work/p3proj/main.ct"
 if ( cd "$work/p3proj" && "$work/ct-ast" get ../p3pkg >"$work/p3.out" 2>"$work/p3.err" ); then
@@ -178,7 +211,7 @@ echo "== ct get refuses a package that requires a newer compiler =="
 # P20-04: `requires` is a hard failure in `get` too, and the check runs before
 # ct.lock is merged or written, so a refused package leaves the lock untouched.
 mkdir -p "$work/hi" "$work/proj2"
-printf 'name = hi\nversion = 0.1.0\nrequires = ct >= 99.0.0\n' >"$work/hi/ct.pkg"
+printf 'name = hi\npublisher = ct\nversion = 0.1.0\nns-root = .\nrequires = ct >= 99.0.0\n' >"$work/hi/ct.pkg"
 printf 'pub int hi(void);\nint hi(void) { return 1; }\n' >"$work/hi/hi.h.ct"
 printf 'name = demo2\nversion = 0.1.0\ndep = ../hi@^0.1.0\n' >"$work/proj2/ct.pkg"
 printf 'int main(void) { return 0; }\n' >"$work/proj2/main.ct"
@@ -196,7 +229,7 @@ else
     ok "a failed get does not create ct.lock"
 fi
 # An existing lock must survive the failure byte-for-byte, not be half-merged.
-printf 'old 0.0.0 dir ./vendor/old sha256:%064d\n' 0 >"$work/proj2/ct.lock"
+printf '# ct-lock 2\nct/old 0.0.0 dir ./old - . sha256:%064d\n' 0 >"$work/proj2/ct.lock"
 cp "$work/proj2/ct.lock" "$work/proj2/ct.lock.before"
 if ( cd "$work/proj2" && "$work/ct-ast" get ../hi >/dev/null 2>&1 ); then
     bad "requires failure" "ct get should still refuse the package"
@@ -236,7 +269,7 @@ fi
 echo
 echo "== ct get accepts a package whose requires is satisfied =="
 mkdir -p "$work/lo" "$work/proj3"
-printf 'name = lo\nversion = 0.1.0\nrequires = ct >= 0.1.0\n' >"$work/lo/ct.pkg"
+printf 'name = lo\npublisher = ct\nversion = 0.1.0\nns-root = .\nrequires = ct >= 0.1.0\n' >"$work/lo/ct.pkg"
 printf 'pub int lo(void);\nint lo(void) { return 1; }\n' >"$work/lo/lo.h.ct"
 if ( cd "$work/proj3" && "$work/ct-ast" get ../lo >"$work/log.out" 2>"$work/log.err" ); then
     if grep -Fq "requires" "$work/log.err"; then
@@ -253,7 +286,7 @@ echo "== requires accepts a comparator glued to 'ct' =="
 # M3: `ct>=99.0.0` is a version range, not an unsupported clause -- the operator
 # after the name must not depend on a separating space.
 mkdir -p "$work/hi2" "$work/proj4"
-printf 'name = hi2\nversion = 0.1.0\nrequires = ct>=99.0.0\n' >"$work/hi2/ct.pkg"
+printf 'name = hi2\npublisher = ct\nversion = 0.1.0\nns-root = .\nrequires = ct>=99.0.0\n' >"$work/hi2/ct.pkg"
 printf 'pub int hi2(void);\nint hi2(void) { return 1; }\n' >"$work/hi2/hi2.h.ct"
 printf 'name = demo4\nversion = 0.1.0\n' >"$work/proj4/ct.pkg"
 if ( cd "$work/proj4" && "$work/ct-ast" get ../hi2 >"$work/hig2.out" 2>"$work/hig2.err" ); then
@@ -265,32 +298,34 @@ else
 fi
 
 echo
-echo "== ct get refuses an upgrade without touching vendor/ =="
-# M2: the requires check runs before the tree is copied, so a refused upgrade
-# leaves the previously vendored copy byte-identical, not only ct.lock.
+echo "== ct get refuses an upgrade without touching the store or the lock =="
+# M2: the requires check runs before the tree is committed, so a refused upgrade
+# leaves the previously stored copy byte-identical, not only ct.lock.
 mkdir -p "$work/up/proj" "$work/up/v1" "$work/up/v2"
-printf 'name = mix\nversion = 0.1.0\n' >"$work/up/v1/ct.pkg"
+printf 'name = mix\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >"$work/up/v1/ct.pkg"
 printf 'pub int mix(void);\nint mix(void) { return 1; }\n' >"$work/up/v1/mix.h.ct"
-printf 'name = mix\nversion = 0.2.0\nrequires = ct >= 99.0.0\n' >"$work/up/v2/ct.pkg"
+printf 'name = mix\npublisher = ct\nversion = 0.2.0\nns-root = .\nrequires = ct >= 99.0.0\n' >"$work/up/v2/ct.pkg"
 printf 'pub int mix(void);\nint mix(void) { return 2; }\n' >"$work/up/v2/mix.h.ct"
 printf 'name = up\nversion = 0.1.0\n' >"$work/up/proj/ct.pkg"
 if ( cd "$work/up/proj" && "$work/ct-ast" get ../v1 >/dev/null 2>&1 ); then
-    ok "the baseline get vendors mix 0.1.0"
+    ok "the baseline get stores mix 0.1.0"
 else
     bad "requires upgrade" "the baseline get failed"
 fi
-cp -R "$work/up/proj/vendor/mix" "$work/up/before"
+cp -R "$CT_HOME/pkg/ct/mix/0.1.0" "$work/up/before"
+cp "$work/up/proj/ct.lock" "$work/up/lock.before"
 if ( cd "$work/up/proj" && "$work/ct-ast" get ../v2 >/dev/null 2>&1 ); then
     bad "requires upgrade" "ct get should refuse the upgrade"
-elif diff -r "$work/up/before" "$work/up/proj/vendor/mix" >/dev/null 2>&1; then
-    ok "a refused upgrade leaves vendor/mix byte-identical"
+elif diff -r "$work/up/before" "$CT_HOME/pkg/ct/mix/0.1.0" >/dev/null 2>&1 \
+     && cmp -s "$work/up/lock.before" "$work/up/proj/ct.lock"; then
+    ok "a refused upgrade leaves the store and ct.lock byte-identical"
 else
-    bad "requires upgrade" "vendor/mix changed on the failure path"
+    bad "requires upgrade" "the store or ct.lock changed on the failure path"
 fi
 
 echo
-echo "== ct install rejects a tampered vendor tree =="
-printf 'pub int twice(int x);\nint twice(int x) { return 99; }\n' >"$work/proj/vendor/util/util.h.ct"
+echo "== ct install rejects a tampered store tree =="
+printf 'pub int twice(int x);\nint twice(int x) { return 99; }\n' >"$CT_HOME/pkg/ct/util/0.2.0/util.h.ct"
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/it.out" 2>"$work/it.err" ); then
     bad "install tamper" "expected a non-zero exit"
 elif grep -Fq "does not match ct.lock" "$work/it.err"; then
@@ -298,12 +333,12 @@ elif grep -Fq "does not match ct.lock" "$work/it.err"; then
 else
     bad "install tamper" "wrong diagnostic: $(cat "$work/it.err")"
 fi
-printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/proj/vendor/util/util.h.ct"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$CT_HOME/pkg/ct/util/0.2.0/util.h.ct"
 
 echo
 echo "== ct install rejects a same-size tamper =="
 # SH-44: a change that keeps the file's length must still be caught.
-printf 'pub int twice(int x);\nint twice(int x) { return 3 * x; }\n' >"$work/proj/vendor/util/util.h.ct"
+printf 'pub int twice(int x);\nint twice(int x) { return 3 * x; }\n' >"$CT_HOME/pkg/ct/util/0.2.0/util.h.ct"
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/is.out" 2>"$work/is.err" ); then
     bad "install same-size tamper" "expected a non-zero exit"
 elif grep -Fq "does not match ct.lock" "$work/is.err"; then
@@ -311,7 +346,7 @@ elif grep -Fq "does not match ct.lock" "$work/is.err"; then
 else
     bad "install same-size tamper" "wrong diagnostic: $(cat "$work/is.err")"
 fi
-printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/proj/vendor/util/util.h.ct"
+printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$CT_HOME/pkg/ct/util/0.2.0/util.h.ct"
 
 echo
 echo "== ct install rejects a legacy FNV digest =="
@@ -329,16 +364,16 @@ fi
 mv "$work/proj/ct.lock.good" "$work/proj/ct.lock"
 
 echo
-echo "== ct install rejects a missing vendored package =="
-mv "$work/proj/vendor/extra" "$work/proj/vendor/extra.bak"
+echo "== ct install rejects a missing store package =="
+mv "$CT_HOME/pkg/ct/extra/0.1.0" "$CT_HOME/pkg/ct/extra/0.1.0.bak"
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/im.out" 2>"$work/im.err" ); then
     bad "install missing" "expected a non-zero exit"
-elif grep -Fq "not vendored" "$work/im.err"; then
-    ok "rejects a missing vendored package"
+elif grep -Fq "is not installed" "$work/im.err"; then
+    ok "rejects a missing store package"
 else
     bad "install missing" "wrong diagnostic: $(cat "$work/im.err")"
 fi
-mv "$work/proj/vendor/extra.bak" "$work/proj/vendor/extra"
+mv "$CT_HOME/pkg/ct/extra/0.1.0.bak" "$CT_HOME/pkg/ct/extra/0.1.0"
 
 echo
 echo "== ct install rejects an uncovered manifest dependency =="
@@ -365,15 +400,19 @@ fi
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/ct.pkg"
 
 echo
-echo "== ct build rejects a v1 vendor lock =="
+echo "== ct build rejects a v1 lock =="
 mkdir -p "$work/proj/out"
-if ( cd "$work/proj" && "$work/ct-ast" build --emit-c -I vendor/util main.ct -o out >"$work/b.out" 2>"$work/b.err" ); then
+cp "$work/proj/ct.lock" "$work/proj/ct.lock.v2"
+printf 'util 0.2.0 dir ./untouched sha256:%064d\n' 0 >"$work/proj/ct.lock"
+if ( cd "$work/proj" && "$work/ct-ast" build --emit-c main.ct -o out >"$work/b.out" 2>"$work/b.err" ); then
     bad "build v1" "a v1 lock passed"
-elif grep -Fq "ct.lock is v1" "$work/b.err"; then
-    ok "v1 lock is rejected before any vendor read"
+elif grep -Fq "ct.lock is v1" "$work/b.err" \
+     && grep -Fq "run 'ct migrate'" "$work/b.err"; then
+    ok "build rejects a v1 lock and points at ct migrate"
 else
     bad "build v1" "wrong diagnostic: $(cat "$work/b.err")"
 fi
+mv "$work/proj/ct.lock.v2" "$work/proj/ct.lock"
 
 echo
 echo "== a range that cannot match =="
@@ -467,10 +506,10 @@ else
     mkdir -p "$reg/gutil"
     ( cd "$reg/gutil" \
         && git init -q \
-        && printf 'name = gutil\nversion = 0.1.0\n' >ct.pkg \
+        && printf 'name = gutil\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >ct.pkg \
         && printf 'int gutil_value(void) { return 3; }\n' >gutil.c \
         && git add -A && git commit -qm one && git tag 0.1.0 \
-        && printf 'name = gutil\nversion = 0.2.0\n' >ct.pkg \
+        && printf 'name = gutil\npublisher = ct\nversion = 0.2.0\nns-root = .\n' >ct.pkg \
         && git add -A && git commit -qm two && git tag v0.2.0 )
     mkdir -p "$work/home"
     if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
@@ -479,10 +518,11 @@ else
     else
         bad "ct get <git>" "non-zero exit: $(cat "$work/g.err")"
     fi
-    if [ -f "$work/proj/vendor/gutil/ct.pkg" ] && [ -f "$work/proj/vendor/gutil/gutil.c" ]; then
-        ok "vendors the git package"
+    if [ -f "$CT_HOME/pkg/ct/gutil/0.1.0/ct.pkg" ] \
+       && [ -f "$CT_HOME/pkg/ct/gutil/0.1.0/gutil.c" ]; then
+        ok "stores the git package"
     else
-        bad "ct get <git>" "vendor/gutil is incomplete"
+        bad "ct get <git>" "the store copy of gutil is incomplete"
     fi
     # D24: the manifest records what `get` brought in, so `install` can be run
     # later without re-typing the spec.
@@ -491,10 +531,10 @@ else
     else
         bad "ct.pkg <git>" "missing the gutil dep: $(cat "$work/proj/ct.pkg")"
     fi
-    if grep -Eq "^gutil 0\.1\.0 git [0-9a-f]{40} sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
+    if grep -Eq "^ct/gutil 0\.1\.0 git file://.* [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
         ok "MVS picks the lowest satisfying tag and pins its commit"
     else
-        bad "ct.lock <git>" "expected 'gutil 0.1.0 git <commit> sha256:<digest>', got: $(grep gutil "$work/proj/ct.lock")"
+        bad "ct.lock <git>" "expected a seven-field v2 gutil row, got: $(grep gutil "$work/proj/ct.lock")"
     fi
 
     echo
@@ -502,15 +542,15 @@ else
     mkdir -p "$reg/notags"
     ( cd "$reg/notags" \
         && git init -q \
-        && printf 'name = notags\nversion = 0.0.1\n' >ct.pkg \
+        && printf 'name = notags\npublisher = ct\nversion = 0.0.1\nns-root = .\n' >ct.pkg \
         && printf 'int notags_value(void) { return 9; }\n' >notags.c \
         && git add -A && git commit -qm one )
     if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
             "$work/ct-ast" get "notags@*" >"$work/h.out" 2>"$work/h.err" ); then
-        if grep -Eq "^notags 0\.0\.1 git [0-9a-f]{40} sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
+        if grep -Eq "^ct/notags 0\.0\.1 git file://.* [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
             ok "locks the default branch tip when there is no tag"
         else
-            bad "ct.lock <HEAD>" "expected 'notags 0.0.1 git <commit> sha256:<digest>', got: $(grep notags "$work/proj/ct.lock")"
+            bad "ct.lock <HEAD>" "expected a seven-field v2 notags row, got: $(grep notags "$work/proj/ct.lock")"
         fi
     else
         bad "ct get <HEAD>" "non-zero exit: $(cat "$work/h.err")"
@@ -533,7 +573,7 @@ else
     mkdir -p "$reg/mismatch"
     ( cd "$reg/mismatch" \
         && git init -q \
-        && printf 'name = other\nversion = 0.1.0\n' >ct.pkg \
+        && printf 'name = other\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >ct.pkg \
         && printf 'int other_value(void) { return 1; }\n' >other.c \
         && git add -A && git commit -qm one && git tag 0.1.0 )
     if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
@@ -548,12 +588,12 @@ else
     echo
     echo "== an explicit index resolves a bare package name =="
     # A throwaway project pins gutil 0.1.0 and its digest; the digest is the
-    # index entry's fifth field, so the index can vouch for the vendored tree.
+    # index entry's fifth field, so the index can vouch for the stored tree.
     mkdir -p "$work/idxseed" "$work/home2"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/idxseed/ct.pkg"
     if ( cd "$work/idxseed" && HOME="$work/home2" CT_REGISTRY="file://$reg" \
             "$work/ct-ast" get "gutil@^0.1.0" >"$work/is.out" 2>"$work/is.err" ); then
-        dig="$(awk '$1 == "gutil" { print $NF }' "$work/idxseed/ct.lock")"
+        dig="$(awk '$1 == "ct/gutil" { print $NF }' "$work/idxseed/ct.lock")"
         printf 'gutil 0.1.0 file://%s/gutil 0.1.0 %s\n' "$reg" "$dig" >"$work/index"
         ok "a seeded lock supplies the index digest"
     else
@@ -567,12 +607,12 @@ else
     else
         bad "index lookup" "non-zero exit: $(cat "$work/ix.err")"
     fi
-    if [ -f "$work/idxuse/vendor/gutil/ct.pkg" ]; then
-        ok "the index entry's git source is vendored"
+    if [ -f "$CT_HOME/pkg/ct/gutil/0.1.0/ct.pkg" ]; then
+        ok "the index entry's git source is stored"
     else
-        bad "index vendor" "vendor/gutil is missing"
+        bad "index store" "the store copy of gutil is missing"
     fi
-    if grep -Eq "^gutil 0\.1\.0 git [0-9a-f]{40} sha256:[0-9a-f]{64}$" "$work/idxuse/ct.lock"; then
+    if grep -Eq "^ct/gutil 0\.1\.0 git file://.* [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/idxuse/ct.lock"; then
         ok "the indexed version and digest reach ct.lock"
     else
         bad "index lock" "unexpected lock line: $(grep gutil "$work/idxuse/ct.lock")"
@@ -641,10 +681,11 @@ else
         else
             bad "PKG-5 cache" "expected a/util and b/util caches"
         fi
-        if [ -f "$work/p5b/vendor/util/util.c" ] && grep -Fq 'return 2' "$work/p5b/vendor/util/util.c"; then
+        if [ -f "$CT_HOME/pkg/b/util/0.1.0/util.c" ] \
+           && grep -Fq 'return 2' "$CT_HOME/pkg/b/util/0.1.0/util.c"; then
             ok "b/util gets b's source, not a's cached copy"
         else
-            bad "PKG-5 vendor" "b/util took the wrong source: $(cat "$work/p5b/vendor/util/util.c" 2>/dev/null)"
+            bad "PKG-5 store" "b/util took the wrong source: $(cat "$CT_HOME/pkg/b/util/0.1.0/util.c" 2>/dev/null)"
         fi
     else
         bad "PKG-5 get" "$(cat "$work/p5a.err" "$work/p5b.err")"
@@ -663,15 +704,15 @@ else
     echo
     echo "== a second ct get keeps the rows the first one pinned =="
     # PKG-2: one invocation resolves one spec; rewriting ct.lock from that run's
-    # rows alone unpins everything fetched earlier, and the next `ct update`
-    # re-picks the lowest tag, so an index tag such as v0.2.0 is lost.
+    # rows alone would drop every package fetched earlier, so an index tag such
+    # as v0.2.0 silently disappears from the pins.
     mkdir -p "$work/pkgs/one" "$work/pinseed" "$work/pinhome" "$work/pinproj"
-    printf 'name = one\nversion = 1.0.0\n' >"$work/pkgs/one/ct.pkg"
+    printf 'name = one\npublisher = ct\nversion = 1.0.0\nns-root = .\n' >"$work/pkgs/one/ct.pkg"
     printf 'int one_value(void) { return 1; }\n' >"$work/pkgs/one/one.c"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/pinseed/ct.pkg"
     if ( cd "$work/pinseed" && HOME="$work/pinhome" CT_REGISTRY="file://$reg" \
             "$work/ct-ast" get "gutil@>=0.2.0" >"$work/ps.out" 2>"$work/ps.err" ); then
-        pdig="$(awk '$1 == "gutil" { print $NF }' "$work/pinseed/ct.lock")"
+        pdig="$(awk '$1 == "ct/gutil" { print $NF }' "$work/pinseed/ct.lock")"
         printf 'gutil 0.2.0 file://%s/gutil v0.2.0 %s\n' "$reg" "$pdig" >"$work/index2"
         ok "a seed lock supplies the 0.2.0 digest"
     else
@@ -690,20 +731,20 @@ else
     else
         bad "second get" "non-zero exit: $(cat "$work/p2.err")"
     fi
-    if grep -Fq 'gutil 0.2.0 ' "$work/pinproj/ct.lock"; then
+    if grep -Fq 'ct/gutil 0.2.0 ' "$work/pinproj/ct.lock"; then
         ok "the second get leaves the first package pinned"
     else
         bad "lock merge" "the gutil row was dropped: $(cat "$work/pinproj/ct.lock")"
     fi
-    if [ "$(grep -c '^one 1\.0\.0 ' "$work/pinproj/ct.lock")" = "1" ]; then
+    if [ "$(grep -c '^ct/one 1\.0\.0 ' "$work/pinproj/ct.lock")" = "1" ]; then
         ok "the second get writes its own row once"
     else
         bad "lock merge" "unexpected one rows: $(cat "$work/pinproj/ct.lock")"
     fi
     if ( cd "$work/pinproj" && HOME="$work/pinhome" CT_REGISTRY="file://$reg" \
             "$work/ct-ast" update >"$work/pu.out" 2>"$work/pu.err" ); then
-        if grep -Fq 'gutil 0.2.0 ' "$work/pinproj/ct.lock"; then
-            ok "update keeps 0.2.0 instead of re-picking the lowest tag"
+        if grep -Fq 'ct/gutil 0.2.0 ' "$work/pinproj/ct.lock"; then
+            ok "update keeps the pinned 0.2.0 row"
         else
             bad "update pin" "gutil moved: $(grep gutil "$work/pinproj/ct.lock")"
         fi
@@ -718,8 +759,8 @@ else
     fi
     if ( cd "$work/pinproj" && HOME="$work/pinhome" \
             "$work/ct-ast" get --index "$work/index2" gutil >"$work/p3.out" 2>"$work/p3.err" ); then
-        if [ "$(grep -c '^gutil ' "$work/pinproj/ct.lock")" = "1" ] \
-           && [ "$(grep -c '^one ' "$work/pinproj/ct.lock")" = "1" ]; then
+        if [ "$(grep -c '^ct/gutil ' "$work/pinproj/ct.lock")" = "1" ] \
+           && [ "$(grep -c '^ct/one ' "$work/pinproj/ct.lock")" = "1" ]; then
             ok "re-getting a package replaces its row instead of duplicating it"
         else
             bad "lock replace" "unexpected rows: $(cat "$work/pinproj/ct.lock")"
@@ -754,17 +795,17 @@ fi
 
 echo
 echo "== a local package whose directory differs from its manifest name =="
-# `get` vendors under the manifest name; `install` must resolve the same name
+# `get` stores under the manifest name; `install` must resolve the same name
 # from the dep spec instead of trusting the directory segment.
 mkdir -p "$work/pkgs/dirname"
-printf 'name = realname\nversion = 0.1.0\n' >"$work/pkgs/dirname/ct.pkg"
+printf 'name = realname\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >"$work/pkgs/dirname/ct.pkg"
 printf 'int realname_value(void) { return 1; }\n' >"$work/pkgs/dirname/a.c"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/dirname@^0.1.0\n' >"$work/proj/ct.pkg"
 if ( cd "$work/proj" && "$work/ct-ast" get ../pkgs/dirname >"$work/rn.out" 2>"$work/rn.err" ); then
-    if [ -d "$work/proj/vendor/realname" ]; then
-        ok "get vendors under the manifest name"
+    if [ -d "$CT_HOME/pkg/ct/realname/0.1.0" ]; then
+        ok "get stores under the manifest name"
     else
-        bad "get dirname" "vendor/realname is missing"
+        bad "get dirname" "the store copy of realname is missing"
     fi
     if ( cd "$work/proj" && "$work/ct-ast" install >"$work/rni.out" 2>"$work/rni.err" ); then
         ok "install resolves the same manifest name"
@@ -778,7 +819,7 @@ fi
 echo
 echo "== version ranges: comparators and space-separated AND =="
 mkdir -p "$work/pkgs/rutil" "$work/rproj"
-printf 'name = rutil\nversion = 1.2.0\n' >"$work/pkgs/rutil/ct.pkg"
+printf 'name = rutil\npublisher = ct\nversion = 1.2.0\nns-root = .\n' >"$work/pkgs/rutil/ct.pkg"
 printf 'int rutil_value(void) { return 1; }\n' >"$work/pkgs/rutil/r.c"
 printf 'name = demo\nversion = 0.1.0\n' >"$work/rproj/ct.pkg"
 if ( cd "$work/rproj" && "$work/ct-ast" get '../pkgs/rutil@>=1.0.0 <2.0.0' >"$work/rg1.out" 2>"$work/rg1.err" ); then
@@ -797,32 +838,40 @@ fi
 echo
 echo "== build metadata: cflags / ldflags / requires =="
 mkdir -p "$work/pkgs/meta" "$work/pkgs/mbad" "$work/mproj"
-printf 'name = meta\nversion = 0.1.0\ncflags = -DMETA=1\nldflags = -lm\nrequires = ct >= 0.1.0\n' >"$work/pkgs/meta/ct.pkg"
+printf 'name = meta\npublisher = ct\nversion = 0.1.0\nns-root = .\ncflags = -DMETA=1\nldflags = -lm\nrequires = ct >= 0.1.0\n' >"$work/pkgs/meta/ct.pkg"
 printf 'int meta_value(void) { return 1; }\n' >"$work/pkgs/meta/m.c"
-printf 'name = mbad\nversion = 0.1.0\nrequires = ct >= 9.0.0\n' >"$work/pkgs/mbad/ct.pkg"
+printf 'name = mbad\npublisher = ct\nversion = 0.1.0\nns-root = .\nrequires = ct >= 9.0.0\n' >"$work/pkgs/mbad/ct.pkg"
 printf 'int mbad_value(void) { return 2; }\n' >"$work/pkgs/mbad/b.c"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/meta@^0.1.0\ndep = ../pkgs/mbad@^0.1.0\n' >"$work/mproj/ct.pkg"
 if ( cd "$work/mproj" && "$work/ct-ast" get ../pkgs/meta >"$work/mg.out" 2>"$work/mg.err" ); then
-    ok "get vendors the first metadata package"
+    ok "get stores the first metadata package"
 else
     bad "metadata get" "non-zero exit: $(cat "$work/mg.err")"
 fi
+# `get --force` is the only way a package with an unsatisfied `requires` enters
+# the store; update then audits both pins instead of re-resolving ct.pkg.
+if ( cd "$work/mproj" && "$work/ct-ast" get --force ../pkgs/mbad >"$work/mbg.out" 2>"$work/mbg.err" ); then
+    ok "get --force stores the unsatisfied metadata package"
+else
+    bad "metadata get" "non-zero exit: $(cat "$work/mbg.err")"
+fi
 
 echo
-echo "== ct update: resolve ct.pkg offline, keep the lock honest =="
+echo "== ct update: audit the store and every ct.pkg dependency, keep the lock honest =="
 if ( cd "$work/mproj" && "$work/ct-ast" update >"$work/u.out" 2>"$work/u.err" ); then
     if grep -Fq "updated 2 package(s)" "$work/u.out"; then
-        ok "update re-resolves every ct.pkg dependency and rewrites ct.lock"
+        ok "update verifies every ct.pkg dependency and rewrites ct.lock"
     else
         bad "update" "wrong output: $(cat "$work/u.out")"
     fi
 else
     bad "update" "non-zero exit: $(cat "$work/u.err")"
 fi
-if [ -f "$work/mproj/vendor/mbad/ct.pkg" ] && [ -f "$work/mproj/vendor/meta/ct.pkg" ]; then
-    ok "update vendors the dependencies ct.pkg names"
+if [ -f "$CT_HOME/pkg/ct/mbad/0.1.0/ct.pkg" ] \
+   && [ -f "$CT_HOME/pkg/ct/meta/0.1.0/ct.pkg" ]; then
+    ok "update keeps the dependencies ct.pkg names in the store"
 else
-    bad "update" "vendor/ is incomplete"
+    bad "update" "the store is incomplete"
 fi
 if ( cd "$work/mproj" && "$work/ct-ast" update --bogus >"$work/uo.out" 2>"$work/uo.err" ); then
     bad "update unknown-option" "expected a non-zero exit"
@@ -842,7 +891,7 @@ fi
 echo
 echo "== ct install --force: one command carrying each package's flags =="
 if ( cd "$work/mproj" && "$work/ct-ast" install --force >"$work/mi.out" 2>"$work/mi.err" ); then
-    ok "install --force accepts a lock that update wrote"
+    ok "install --force accepts the audited lock"
 else
     bad "install after update" "non-zero exit: $(cat "$work/mi.err")"
 fi
@@ -868,7 +917,7 @@ echo "== P20-08: an unsupported requires points at dep =="
 # `requires` only understands a compiler-version range. A package dependency
 # written there is not that, so the message must name the key that does it.
 mkdir -p "$work/pkgs/lng" "$work/lngproj"
-printf 'name = lng\nversion = 0.1.0\nrequires = utils >= 1.0\n' >"$work/pkgs/lng/ct.pkg"
+printf 'name = lng\npublisher = ct\nversion = 0.1.0\nns-root = .\nrequires = utils >= 1.0\n' >"$work/pkgs/lng/ct.pkg"
 printf 'pub int lng(void);\nint lng(void) { return 1; }\n' >"$work/pkgs/lng/lng.h.ct"
 printf 'name = lngproj\nversion = 0.1.0\ndep = ../pkgs/lng@^0.1.0\n' >"$work/lngproj/ct.pkg"
 printf 'int main(void) { return 0; }\n' >"$work/lngproj/main.ct"
@@ -885,21 +934,21 @@ else
 fi
 
 echo
-echo "== ct verify: the lock against the vendored tree =="
+echo "== ct verify: the lock against the store =="
 if ( cd "$work/mproj" && "$work/ct-ast" verify >"$work/v.out" 2>"$work/v.err" ); then
     if grep -Fq "verified 2 package(s)" "$work/v.out"; then
-        ok "verify accepts an untampered vendor tree"
+        ok "verify accepts an untampered store"
     else
         bad "verify" "wrong output: $(cat "$work/v.out")"
     fi
 else
     bad "verify" "non-zero exit: $(cat "$work/v.err")"
 fi
-printf 'int meta_value(void) { return 3; }\n' >"$work/mproj/vendor/meta/m.c"
+printf 'int meta_value(void) { return 3; }\n' >"$CT_HOME/pkg/ct/meta/0.1.0/m.c"
 if ( cd "$work/mproj" && "$work/ct-ast" verify >"$work/vt.out" 2>"$work/vt.err" ); then
     bad "verify tampered" "expected a non-zero exit"
 elif grep -Fq "does not match ct.lock" "$work/vt.err"; then
-    ok "verify rejects a tampered vendored file"
+    ok "verify rejects a tampered stored file"
 else
     bad "verify tampered" "wrong diagnostic: $(cat "$work/vt.err")"
 fi
@@ -909,14 +958,14 @@ echo "== package conventions: the agreed manifest keys (Phase 18.1) =="
 # `licence` and other agreed-but-unparsed keys must not disturb resolution, and
 # must not leak into the command `install` prints.
 mkdir -p "$work/pkgs/lic" "$work/cproj"
-printf '# the agreed keys, plus keys the tool ignores\nname = lic\nversion = 1.0.0\nlicence = MIT\nwebsite = https://example.invalid\n' >"$work/pkgs/lic/ct.pkg"
+printf '# the agreed keys, plus keys the tool ignores\nname = lic\npublisher = ct\nversion = 1.0.0\nns-root = .\nlicence = MIT\nwebsite = https://example.invalid\n' >"$work/pkgs/lic/ct.pkg"
 printf 'int lic_value(void) { return 0; }\n' >"$work/pkgs/lic/l.c"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/lic@^1.0.0\n' >"$work/cproj/ct.pkg"
 if ( cd "$work/cproj" && "$work/ct-ast" get ../pkgs/lic >"$work/cg.out" 2>"$work/cg.err" ); then
-    if [ -f "$work/cproj/vendor/lic/ct.pkg" ]; then
+    if [ -f "$CT_HOME/pkg/ct/lic/1.0.0/ct.pkg" ]; then
         ok "get ignores licence and an unknown manifest key"
     else
-        bad "conventions get" "vendor/lic is missing"
+        bad "conventions get" "the store copy of lic is missing"
     fi
 else
     bad "conventions get" "non-zero exit: $(cat "$work/cg.err")"
@@ -930,12 +979,12 @@ if ( cd "$work/cproj" && "$work/ct-ast" install >"$work/ci.out" 2>"$work/ci.err"
 else
     bad "conventions install" "non-zero exit: $(cat "$work/ci.err")"
 fi
-# Phase 18.3: a package that carries no `requires` is not a warning case.
-# S0: the v1 lock note is the only stderr line allowed here.
-if [ -n "$(grep -v "ct.lock is v1" "$work/ci.err")" ]; then
-    bad "conventions install" "unexpected stderr for a package without requires: $(cat "$work/ci.err")"
-else
+# Phase 18.3: a package that carries no `requires` is not a warning case, and
+# S7 leaves no v1 lock note behind.
+if [ -z "$(cat "$work/ci.err")" ]; then
     ok "a package without requires installs silently"
+else
+    bad "conventions install" "unexpected stderr for a package without requires: $(cat "$work/ci.err")"
 fi
 # `name` and `version` are the only required keys, and an empty one counts as missing.
 mkdir -p "$work/pkgs/nover" "$work/pkgs/noname"
@@ -958,24 +1007,36 @@ fi
 
 echo
 echo "== S0: lock format and ct pkg check =="
-# S0/D1: a v1 lock (no header) is recognised and called out.
+# S7: a v1 lock (no header) is a hard error and points at the one-time bridge.
+cp "$work/proj/ct.lock" "$work/proj/ct.lock.v2"
+awk 'NR>1 { print $1 ~ /\// ? substr($1,index($1,"/")+1) : $1, $2, $3, $4, $NF }' \
+    "$work/proj/ct.lock.v2" >"$work/proj/ct.lock"
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/s0i.out" 2>"$work/s0i.err" ); then
-    if grep -Fq "# lock-format: v1" "$work/s0i.out"; then
-        ok "install prints '# lock-format: v1'"
-    else
-        bad "lock format note" "missing '# lock-format: v1': $(cat "$work/s0i.out")"
-    fi
-    if grep -Fq "ct.lock is v1" "$work/s0i.err"; then
-        ok "install warns about a v1 lock"
-    else
-        bad "lock format warning" "missing v1 warning: $(cat "$work/s0i.err")"
-    fi
+    bad "install v1" "a v1 lock passed install"
+elif grep -Fq "ct.lock is v1" "$work/s0i.err" \
+     && grep -Fq "run 'ct migrate'" "$work/s0i.err"; then
+    ok "install rejects a v1 lock and points at ct migrate"
 else
-    bad "lock format v1" "install failed: $(cat "$work/s0i.err")"
+    bad "install v1" "wrong diagnostic: $(cat "$work/s0i.err")"
 fi
-# S0/D1: a `# ct-lock 2` header is recognised and suppresses the v1 warning.
-cp "$work/proj/ct.lock" "$work/s0.lock.v1"
-{ printf '# ct-lock 2\n'; cat "$work/s0.lock.v1"; } >"$work/proj/ct.lock"
+if ( cd "$work/proj" && "$work/ct-ast" verify >"$work/s0v.out" 2>"$work/s0v.err" ); then
+    bad "verify v1" "a v1 lock passed verify"
+elif grep -Fq "ct.lock is v1" "$work/s0v.err" \
+     && grep -Fq "run 'ct migrate'" "$work/s0v.err"; then
+    ok "verify rejects a v1 lock and points at ct migrate"
+else
+    bad "verify v1" "wrong diagnostic: $(cat "$work/s0v.err")"
+fi
+if ( cd "$work/proj" && "$work/ct-ast" update >"$work/s0u.out" 2>"$work/s0u.err" ); then
+    bad "update v1" "a v1 lock passed update"
+elif grep -Fq "ct.lock is v1" "$work/s0u.err" \
+     && grep -Fq "run 'ct migrate'" "$work/s0u.err"; then
+    ok "update rejects a v1 lock and points at ct migrate"
+else
+    bad "update v1" "wrong diagnostic: $(cat "$work/s0u.err")"
+fi
+mv "$work/proj/ct.lock.v2" "$work/proj/ct.lock"
+# The v2 lock installs and reports its format.
 if ( cd "$work/proj" && "$work/ct-ast" install >"$work/s0v2.out" 2>"$work/s0v2.err" ); then
     if grep -Fq "# lock-format: v2" "$work/s0v2.out" && ! grep -Fq "ct.lock is v1" "$work/s0v2.err"; then
         ok "install recognises a v2 header"
@@ -985,7 +1046,6 @@ if ( cd "$work/proj" && "$work/ct-ast" install >"$work/s0v2.out" 2>"$work/s0v2.e
 else
     bad "lock format v2" "install failed: $(cat "$work/s0v2.err")"
 fi
-cp "$work/s0.lock.v1" "$work/proj/ct.lock"
 # S0/D2: `ct pkg check` is read-only and judges PK-1/2/5/8.
 mkdir -p "$work/s0/good/src/demo" "$work/s0/nopub" "$work/s0/nons" \
          "$work/s0/absns" "$work/s0/nodir" "$work/s0/absi"
@@ -1067,10 +1127,10 @@ if [ -f "$STORE/ct.pkg" ] && [ -f "$STORE/src/std.h.ct" ]; then
 else
     bad "S1 store" "store tree is incomplete"
 fi
-if [ -f "$S1/proj/vendor/std/ct.pkg" ]; then
-    ok "S1 still writes vendor/ for compatibility"
+if [ ! -e "$S1/proj/vendor" ]; then
+    ok "S1 get writes no vendor/ tree"
 else
-    bad "S1 vendor" "vendor/std is missing"
+    bad "S1 vendor" "vendor/ was created"
 fi
 if [ "$(head -1 "$S1/proj/ct.lock")" = "# ct-lock 2" ] \
    && [ "$(awk 'NR>1{print NF}' "$S1/proj/ct.lock" | sort -u)" = "7" ]; then
@@ -1261,13 +1321,13 @@ elif grep -Fq "cannot resolve import 'p'" "$S2/v.err"; then
 else
     bad "S2 vendor fallback" "wrong diagnostic: $(cat "$S2/v.out" "$S2/v.err")"
 fi
-# no lock and no vendor: still builds, and does not add the fallback warning.
+# no lock and no vendor: still builds, and prints no fallback warning.
 mkdir -p "$S2/nproj"
 printf 'name = demo\nversion = 0.1.0\n' >"$S2/nproj/ct.pkg"
 printf 'int main(void){return 0;}\n' >"$S2/nproj/main.ct"
 if ( cd "$S2/nproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
         "$work/ct-ast" build main.ct -o "$S2/napp" >"$S2/n.out" 2>"$S2/n.err" ) \
-   && ! grep -Fq "no ct.lock; reading vendor/" "$S2/n.err"; then
+   && [ ! -s "$S2/n.err" ]; then
     ok "S2 no lock and no vendor stays quiet"
 else
     bad "S2 no vendor" "$(cat "$S2/n.out" "$S2/n.err")"
@@ -1352,53 +1412,63 @@ elif grep -Fq "dev override (dir row)" "$S3/vs.err"; then
 else
     bad "S3 strict dir" "wrong diagnostic: $(cat "$S3/vs.err")"
 fi
-# v1 lock: strict rejects the vendor fallback.
+# v1 lock: --strict rejects it before any store read, pointing at the bridge.
 awk 'NR>1 { print $1 ~ /\// ? substr($1,index($1,"/")+1) : $1, $2, $3, $4, $NF }' \
     "$S3/devproj/ct.lock" >"$S3/devproj/ct.lock.v1" && mv "$S3/devproj/ct.lock.v1" "$S3/devproj/ct.lock"
 if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
         "$work/ct-ast" verify --strict >"$S3/vv.out" 2>"$S3/vv.err" ); then
     bad "S3 strict v1" "a v1 lock passed --strict"
-elif grep -Fq "ct.lock is v1" "$S3/vv.err"; then
-    ok "S3 --strict rejects the v1 vendor fallback"
+elif grep -Fq "ct.lock is v1" "$S3/vv.err" \
+     && grep -Fq "run 'ct migrate'" "$S3/vv.err"; then
+    ok "S3 --strict rejects a v1 lock and points at ct migrate"
 else
     bad "S3 strict v1" "wrong diagnostic: $(cat "$S3/vv.err")"
 fi
-# migrate that v1 project: vendor -> store, v2 lock, then build without vendor.
-if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+# S7 keeps exactly one bridge: a hand-built v1 project (five-field lock plus a
+# vendor/ tree) still migrates into the store. The vendored tree is a copy of
+# the store's p 0.1.0, and the lock digest is that tree's digest.
+mkdir -p "$S3/mproj/vendor/p"
+cp -R "$S3/cthome/pkg/ct/p/0.1.0/." "$S3/mproj/vendor/p/"
+mdig="$(awk '$1 == "ct/p" { print $NF }' "$S3/proj/ct.lock")"
+printf 'p 0.1.0 dir ./vendor/p %s\n' "$mdig" >"$S3/mproj/ct.lock"
+printf 'name = demo\nversion = 0.1.0\ndep = ../pkg@^0.1.0\n' >"$S3/mproj/ct.pkg"
+printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(9)); return 0; }\n' >"$S3/mproj/main.ct"
+if ( cd "$S3/mproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
         "$work/ct-ast" migrate >"$S3/m.out" 2>"$S3/m.err" ); then
-    if [ "$(head -1 "$S3/devproj/ct.lock")" = "# ct-lock 2" ] \
-       && [ "$(awk 'NR>1{print NF}' "$S3/devproj/ct.lock" | sort -u)" = "7" ] \
+    if [ "$(head -1 "$S3/mproj/ct.lock")" = "# ct-lock 2" ] \
+       && [ "$(awk 'NR>1{print NF}' "$S3/mproj/ct.lock" | sort -u)" = "7" ] \
        && [ -d "$S3/cthome/pkg/ct/p/0.1.0" ]; then
         ok "S3 migrate writes a v2 store-backed lock"
     else
-        bad "S3 migrate lock" "$(cat "$S3/devproj/ct.lock")"
+        bad "S3 migrate lock" "$(cat "$S3/mproj/ct.lock")"
     fi
 else
     bad "S3 migrate" "$(cat "$S3/m.err")"
 fi
-mv "$S3/devproj/vendor" "$S3/devproj/vendor.moved"
-if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
-        "$work/ct-ast" build main.ct -o "$S3/mapp" >"$S3/mb.out" 2>"$S3/mb.err" ); then
+mv "$S3/mproj/vendor" "$S3/mproj/vendor.moved"
+if ( cd "$S3/mproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+        "$work/ct-ast" build main.ct -o "$S3/mapp" >"$S3/mb.out" 2>"$S3/mb.err" ) \
+   && [ "$("$S3/mapp")" = "18" ]; then
     ok "S3 build works after vendor/ is moved away"
 else
-    bad "S3 migrate build" "$(cat "$S3/mb.err")"
+    bad "S3 migrate build" "$(cat "$S3/mb.out" "$S3/mb.err")"
 fi
-if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+if ( cd "$S3/mproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
         "$work/ct-ast" verify --strict >"$S3/ms.out" 2>"$S3/ms.err" ); then
     ok "S3 migrated lock passes --strict"
 else
     bad "S3 migrated strict" "$(cat "$S3/ms.err")"
 fi
-cp "$S3/devproj/ct.lock" "$S3/devproj/ct.lock.before"
-if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+cp "$S3/mproj/ct.lock" "$S3/mproj/ct.lock.before"
+if ( cd "$S3/mproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
         "$work/ct-ast" update >"$S3/u.out" 2>"$S3/u.err" ) \
-   && cmp -s "$S3/devproj/ct.lock.before" "$S3/devproj/ct.lock"; then
+   && cmp -s "$S3/mproj/ct.lock.before" "$S3/mproj/ct.lock"; then
     ok "S3 update preserves v2 pins"
 else
     bad "S3 update v2" "$(cat "$S3/u.out" "$S3/u.err")"
 fi
-printf 'dep = ct/ghost@^1.0.0\n' >>"$S3/devproj/ct.pkg"
-if ( cd "$S3/devproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
+printf 'dep = ct/ghost@^1.0.0\n' >>"$S3/mproj/ct.pkg"
+if ( cd "$S3/mproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
         "$work/ct-ast" update >"$S3/ug.out" 2>"$S3/ug.err" ); then
     bad "S3 update missing" "an unsatisfied dependency passed update"
 elif grep -Fq "is not satisfied by ct.lock" "$S3/ug.err"; then
