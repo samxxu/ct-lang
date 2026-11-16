@@ -139,7 +139,7 @@ pub struct JsonValue {
 | --- | --- | --- | --- |
 | A1 | `get(char *key) → JsonValue*` | **采纳** | 与 `Map::get` 的 NULL 契约一致；把「缺键 = NULL、值为 null = TAG_NULL」写进头注释 |
 | A2 | `get_idx(int i) → JsonValue*` | **采纳** | 与提案一的方案 A 自洽（`[]` 只绑一个 `get`）；越界返回 NULL |
-| A3 | `type()` / `is_null()` | **采纳** | 名字建议 `json_type` 前缀或 `json_tag`，避免与 C++ 关键字观感冲突（非阻断） |
+| A3 | `type()` / `is_null()` | **采纳** | 名字建议 `json_type` 前缀或 `json_tag`，避免与语言既有标识符观感冲突（非阻断） |
 | A4 | `v["server"]` 单层 | **有条件采纳** | 依赖 L1；落地后展开为 `v.get("server")`。注意 `v` 是值还是指针要先定（`impl` 的 `self` 都是指针） |
 | A5 | `v["server"]["port"]` | **驳回** | 实测 `root.get("a")->get("b")` 直接报 `method receiver must be a variable, an element, a call or a field chain`（SH-73）。不是「中间为 0 会崩」，是**编译期就过不去**；L1 只负责第一跳 |
 | A6 | `data?.server?.port` | **驳回** | `?.` 的语义是字段访问；`JsonValue` 没有 `server` 字段。要支持这种写法，`?.` 必须定义成「对声明了 `get` 的类型展开为 `get("server")`」，那是另一套语义，提案一没提 |

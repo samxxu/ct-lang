@@ -27,7 +27,7 @@ impl Greeter for Person {
 | `trait Greeter {` | `storage.type` + `entity.name.type` |
 | `} use Greeter, Counter;` | `keyword` + one `entity.name.type` per trait |
 | `impl Greeter for Person {` | `storage.type`, `keyword`, two `entity.name.type` |
-| `self->name` | `variable.language` (like C++ `this`) |
+| `self->name` | `variable.language`（`self` 是语言内建接收者） |
 | `import a::b as C;` | `keyword` + namespace path + alias |
 | `map trait T for instance x {` | `storage.type` + trait/instance names |
 | `map trait T for namespace A::B {` | `storage.type` + trait/host names |

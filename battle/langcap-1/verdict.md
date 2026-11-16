@@ -123,7 +123,7 @@ C 库 `extern` 用例零回归。
 
 规约只承诺「enum 成员的 namespace mangling」与「限定名 `app::High`」
 （[language-spec.md:905-908](../../docs/language-spec.md#L905-L908)），没有承诺 **enum 类型作用域**。
-C 也没有 `Enum::Member`；这是 C++ 风格的新语法。SH-18 只覆盖「类型位置的 `A::B`」
+C 也没有 `Enum::Member`；这是现行规范之外新引入的带限定符语法。SH-18 只覆盖「类型位置的 `A::B`」
 （[ct-ast-qualified-type-name-rejected.md:11-55](../../issues/selfhost/ct-ast-qualified-type-name-rejected.md#L11-L55)），
 不覆盖值位置。**判 B**，登记归并行会话；本轮只补一条诊断建议：值位置遇到 `Type::Member` 时
 不要复用「qualified type names」文案，应报「`FsErrCode` 是类型，成员访问请写 `ns::FS_ERR_NOT_FOUND`
@@ -428,7 +428,7 @@ LANG-14 把这条定为「struct 形参收到非 struct 实参只报 warning，�
 | **已修（声称）** | 6a 三级下标链（LANG-13） | 小–中（级联物化） | ct-json 的 `doc["a"]["b"]["c"]` | issue 写已修，但 `test/ast/263_index_chain3` 不在仓库；夹具落地后再确认 |
 | **已修（声称）** | 9b `Str` 形参诊断（LANG-14） | 小（分级） | 所有 `Str` 调用点 | issue 写已修，但 `test/ast/264_struct_arg_mismatch` 不在仓库；夹具落地后再确认 |
 | **P3** | 1c namespace 分离 | 小–中 | 包内「头声明 + 实现定义」 | 需要先裁定 `extern` 是否 mangling；归并行会话 |
-| **P3** | 2 enum 作用域 | 小 | 迁移 C++ 风格的常量访问 | 有 namespace 限定写法；先改诊断文案即可 |
+| **P3** | 2 enum 作用域 | 小 | 迁移带限定符的常量访问写法 | 有 namespace 限定写法；先改诊断文案即可 |
 | **P3** | 3 `src/` 包布局（PKG-2） | 小（工具）/ 文档 | ct-fsguard 等 `src/` 包 | 现状契约已成立；是否放宽是生态决策 |
 | **P3** | 6d trait 动态派发（SH-73） | 中（100–300 行） | 接口值一行链 | 逐跳落变量可绕；改生成物风险高，延后 |
 | **不排期** | 7 运算符 / printf | — | — | 明文「不做」；printf 由用户负责 |
