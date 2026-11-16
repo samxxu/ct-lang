@@ -1778,7 +1778,7 @@ if "$work/ct-ast" build --emit-c test/modules/p28_bound_cross_unit/prog.ct \
         >"$work/p28xu.cc" 2>&1 \
    && "$work/p28xu/prog" > "$work/p28xu.run" \
    && cmp -s "$work/p28xu.run" test/modules/p28_bound_cross_unit/expected.out \
-   && grep -qF 'extern struct Compare_vtbl Point_Compare_vtable;' "$work/p28xu/lib.h" \
+   && grep -qF 'extern const struct Compare_vtbl Point_Compare_vtable;' "$work/p28xu/lib.h" \
    && grep -qF 'Point_Compare_vtable.cmp(&a, (&b))' "$work/p28xu/prog.c"; then
     ok "p28_bound_cross_unit (impl in the dependency, instance in the entry)"
 else
@@ -2445,8 +2445,8 @@ rm -rf "$mod-xb"
 mkdir -p "$mod-xb"
 if "$work/ct-ast" build --emit-c test/modules/xunit_box/main.ct -o "$mod-xb" \
         >"$work/mxb.out" 2>"$work/mxb.err" \
-   && grep -q '^extern struct Stream_vtbl Conn_Stream_vtable;$' "$mod-xb/net.h" \
-   && grep -q '^struct Stream_vtbl Conn_Stream_vtable = {$' "$mod-xb/net.c" \
+   && grep -q '^extern const struct Stream_vtbl Conn_Stream_vtable;$' "$mod-xb/net.h" \
+   && grep -q '^const struct Stream_vtbl Conn_Stream_vtable = {$' "$mod-xb/net.c" \
    && [ "$(grep -c '#include "net.h"' "$mod-xb/main.c")" = "1" ] \
    && "$CC" -Wall -Wextra -std=c99 "$mod-xb"/*.c -o "$work/mxb.bin" 2>"$work/mxb.cc" \
    && "$work/mxb.bin" >"$work/mxb.stdout" 2>&1 \
@@ -2498,8 +2498,8 @@ rm -rf "$mod-nh"
 mkdir -p "$mod-nh"
 if "$work/ct-ast" build --emit-c test/modules/ns_host/main.ct -o "$mod-nh" \
         >"$work/mnh4.out" 2>"$work/mnh4.err" \
-   && grep -q '^extern struct hal_Writer_vtbl hal_Writer_vtable;$' "$mod-nh/writer.h" \
-   && grep -q '^struct hal_Writer_vtbl hal_Writer_vtable = {' "$mod-nh/writer.c" \
+   && grep -q '^extern const struct hal_Writer_vtbl hal_Writer_vtable;$' "$mod-nh/writer.h" \
+   && grep -q '^const struct hal_Writer_vtbl hal_Writer_vtable = {' "$mod-nh/writer.c" \
    && grep -q '^static int hal_Writer_write(void \*self' "$mod-nh/writer.c" \
    && grep -q '(void \*)0, &hal_Writer_vtable' "$mod-nh/main.c" \
    && "$CC" -Wall -Wextra -std=c99 "$mod-nh"/*.c -o "$work/mnh4.bin" 2>"$work/mnh4.cc" \
@@ -2836,7 +2836,7 @@ echo "== map construct (11.1-11.2) =="
 if "$work/ct-ast" test/ast/13_map_instance/prog.ct -o "$work/mmap.c" \
         >"$work/mmap.out" 2>"$work/mmap.err" \
    && grep -q 'static int uart1_Controller_send(void \*self' "$work/mmap.c" \
-   && grep -q 'static struct Controller_vtbl uart1_Controller_vtable __attribute__((unused)) = {' "$work/mmap.c"; then
+   && grep -q 'static const struct Controller_vtbl uart1_Controller_vtable __attribute__((unused)) = {' "$work/mmap.c"; then
     ok "map (wrapper + vtable emitted)"
 else
     bad "map emit" "$(cat "$work/mmap.err")"
@@ -2932,7 +2932,7 @@ if "$work/ct-ast" --emit-map - test/ast/26_ns_host/prog.ct -o "$work/mnh.c" \
         >"$work/mnh.map" 2>"$work/mnh.err" \
    && grep -q '(void \*)0, &hal_Writer_vtable' "$work/mnh.c" \
    && grep -q '^static int hal_Writer_write(void \*self' "$work/mnh.c" \
-   && grep -q '^struct hal_Writer_vtbl hal_Writer_vtable = {' "$work/mnh.c" \
+   && grep -q '^const struct hal_Writer_vtbl hal_Writer_vtable = {' "$work/mnh.c" \
    && grep -q '"host":"namespace"' "$work/mnh.map"; then
     ok "map (namespace host: NULL self, exported vtable, JSON host)"
 else

@@ -1656,7 +1656,7 @@ static int inst_emit_one(struct Emitter *self, int ii)
             low[k] = c;
         }
         low[k] = 0;
-        fprintf(self->out, "    struct %s_vtbl *__%s_vptr;\n",
+        fprintf(self->out, "    const struct %s_vtbl *__%s_vptr;\n",
                 self->sym->structs[ti].use[v], low);
     }
     fputs("};\n\n", self->out);
@@ -1921,7 +1921,7 @@ static int impl_emit_one(struct Emitter *self, int ki, int ii)
                                      ins[ii].ctype[0], ins[ii].ctype[1], -1,
                                      cuse, sizeof cuse) != 0)
                 return -1;
-            fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
+            fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
                     cuse, ins[ii].name, cuse);
             for (m = self->arena->nodes[im[ki].node].a; m >= 0; m = self->arena->nodes[m].next) {
                 if (!first) fputs(",\n", self->out);
@@ -2789,10 +2789,10 @@ impl EmitOps for Emitter {
             if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0)
                 continue;   /* no vptr, no vtable */
             if (self->vtable_exported(si, tname))
-                fprintf(self->out, "struct %s_vtbl %s_%s_vtable;\n",
+                fprintf(self->out, "const struct %s_vtbl %s_%s_vtable;\n",
                         tname, self->sym->structs[si].name, tname);
             else
-                fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
+                fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
                         tname, self->sym->structs[si].name, tname);
         }
         /* adoptions that need no impl: an all-default trait fills its own
@@ -2807,10 +2807,10 @@ impl EmitOps for Emitter {
                 tname = self->sym->structs[si].use[ui];
                 if (!adoption_default_only(self, si, tname)) continue;
                 if (self->vtable_exported(si, tname))
-                    fprintf(self->out, "struct %s_vtbl %s_%s_vtable;\n",
+                    fprintf(self->out, "const struct %s_vtbl %s_%s_vtable;\n",
                             tname, self->sym->structs[si].name, tname);
                 else
-                    fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
+                    fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
                             tname, self->sym->structs[si].name, tname);
             }
         }
@@ -2902,7 +2902,7 @@ impl EmitOps for Emitter {
                 fputs(");\n", self->out);
             }
             fputs("};\n", self->out);
-            fprintf(self->out, "struct %s_iface {\n    void *self;\n    struct %s_vtbl *vt;\n};\n\n",
+            fprintf(self->out, "struct %s_iface {\n    void *self;\n    const struct %s_vtbl *vt;\n};\n\n",
                     self->sym->traits[t].name, self->sym->traits[t].name);
         }
         return 0;
@@ -3209,10 +3209,10 @@ impl EmitOps for Emitter {
                 /* a trait nothing dispatches leaves the table unreferenced; an
                    exported one is reachable from the consumer unit instead */
                 if (self->vtable_exported(si, tname))
-                    fprintf(self->out, "struct %s_vtbl %s_%s_vtable = {\n",
+                    fprintf(self->out, "const struct %s_vtbl %s_%s_vtable = {\n",
                             tname, self->sym->structs[si].name, tname);
                 else
-                    fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
+                    fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
                             tname, self->sym->structs[si].name, tname);
                 u = 0;
                 for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
@@ -3333,10 +3333,10 @@ impl EmitOps for Emitter {
                 for (dm = 0; dm < self->sym->traits[ti].nm; dm++)
                     if (emit_default_method(self, si, stype, ti, dm, n) != 0) return -1;
                 if (self->vtable_exported(si, tname))
-                    fprintf(self->out, "struct %s_vtbl %s_%s_vtable = {\n",
+                    fprintf(self->out, "const struct %s_vtbl %s_%s_vtable = {\n",
                             tname, self->sym->structs[si].name, tname);
                 else
-                    fprintf(self->out, "static struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
+                    fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
                             tname, self->sym->structs[si].name, tname);
                 for (dm = 0; dm < self->sym->traits[ti].nm; dm++) {
                     if (dm > 0) fputs(",\n", self->out);
@@ -3465,10 +3465,10 @@ impl EmitOps for Emitter {
                 /* an instance nothing boxes leaves its table unreferenced; a
                    mapped `pub` global is reachable from every importing unit */
                 if (self->map_vtable_exported(i))
-                    fprintf(self->out, "struct %s_vtbl %s = {\n",
+                    fprintf(self->out, "const struct %s_vtbl %s = {\n",
                             self->maps[i].trait, self->maps[i].vtable);
                 else
-                    fprintf(self->out, "static struct %s_vtbl %s __attribute__((unused)) = {\n",
+                    fprintf(self->out, "static const struct %s_vtbl %s __attribute__((unused)) = {\n",
                             self->maps[i].trait, self->maps[i].vtable);
                 for (j = 0; j < self->maps[i].nb; j++) {
                     if (j > 0) fputs(",\n", self->out);
@@ -3583,7 +3583,7 @@ impl EmitOps for Emitter {
                     }
                     low[i] = 0;
                     self->emit_indent(ind + 1);
-                    fprintf(self->out, "struct %s_vtbl *__%s_vptr;\n",
+                    fprintf(self->out, "const struct %s_vtbl *__%s_vptr;\n",
                             self->sym->structs[si].use[u], low);
                 }
             }
@@ -3799,7 +3799,7 @@ impl EmitOps for Emitter {
             if (!self->arena->nodes[n].text2[0]) continue;   /* P34 S4: inherent, no vtable */
             tname = self->arena->nodes[n].text2;
             if (!self->vtable_exported(si, tname)) continue;
-            fprintf(self->out, "extern struct %s_vtbl %s_%s_vtable;\n",
+            fprintf(self->out, "extern const struct %s_vtbl %s_%s_vtable;\n",
                     tname, self->sym->structs[si].name, tname);
             any = 1;
         }
@@ -3813,7 +3813,7 @@ impl EmitOps for Emitter {
                 tname = self->sym->structs[si].use[ui];
                 if (!adoption_default_only(self, si, tname)) continue;
                 if (!self->vtable_exported(si, tname)) continue;
-                fprintf(self->out, "extern struct %s_vtbl %s_%s_vtable;\n",
+                fprintf(self->out, "extern const struct %s_vtbl %s_%s_vtable;\n",
                         tname, self->sym->structs[si].name, tname);
                 any = 1;
             }
@@ -3823,7 +3823,7 @@ impl EmitOps for Emitter {
                 if (self->maps[i].unit != u) continue;
                 if (self->maps[i].is_static) continue;
                 if (!self->map_vtable_exported(i)) continue;
-                fprintf(self->out, "extern struct %s_vtbl %s;\n",
+                fprintf(self->out, "extern const struct %s_vtbl %s;\n",
                         self->maps[i].trait, self->maps[i].vtable);
                 any = 1;
             }
