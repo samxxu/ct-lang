@@ -6,7 +6,7 @@
 | 定性 | 需求实现：把 `printf` 等 I/O 作为内置例外，按调用补头 |
 | 严重度 | Medium（输出契约/依赖面） |
 | 优先级 | P1 |
-| 状态 | `open`（DEV 已处置，待复核） |
+| 状态 | verified |
 | 依据 | [D-008](../../docs/decisions/D-008.md) |
 | 文件 | `selfhost/ct-ast/frontend/parse/**`、`backend/emit/Emitter.h.ct`、`frontend/module/Module.h.ct`、`test/ast/**` |
 
@@ -63,3 +63,36 @@
   `p66/docs` 五支全绿（`check-ast` 1477/0）；
 - 已知边界：`vprintf` 族不补；`syslog`/`open`/`fcntl` 等集合外不补（D-008 §3）；
   `--freestanding` 不补且调用未声明时报错。
+
+## 复核（REV，2026-11-18）
+
+| 项 | 值 |
+| --- | --- |
+| 复核人 | REV |
+| HEAD | `8739ec96`（`ct-ast v0.65.1`；macOS arm64 / Apple clang 21.0.0） |
+| 结论 | `verified` |
+
+命令与原始输出（`W=/tmp/rev2`，七步自举构建；探针按注释 `env -u CT_C_BOUNDARY`）：
+
+```console
+$ env -u CT_C_BOUNDARY bash test/ast/p66_io_detect.sh "$W/ct-ast" ; echo rc=$?
+OK p66/io-detect
+rc=0
+$ env -u CT_C_BOUNDARY bash test/ast/p66_io_emit.sh "$W/ct-ast" ; echo rc=$?
+OK p66/io-emit
+rc=0
+$ env -u CT_C_BOUNDARY bash test/ast/p66_io_empty.sh "$W/ct-ast" ; echo rc=$?
+OK p66/io-empty
+rc=0
+$ env -u CT_C_BOUNDARY bash test/ast/p66_io_boundary.sh "$W/ct-ast" ; echo rc=$?
+OK p66/io-boundary
+rc=0
+$ bash test/ast/p66_io_docs.sh ; echo rc=$?
+OK p66/docs
+rc=0
+```
+
+五支探针覆盖 A1–A8：空程序零系统头（两种模式）、`printf`/`puts`/`fprintf`/
+`scanf` 补一次 `<stdio.h>`、`wprintf` 补 `<wchar.h>`、`syslog` 不补、同名
+`printf` 不抢、`--freestanding` 硬错且无产物、重复调用去重。无失败项。
+逐条对照见 [复核结论](../../docs/reviews/2026-11-18-fix-rev-verdict-batch2.md) §2.1。

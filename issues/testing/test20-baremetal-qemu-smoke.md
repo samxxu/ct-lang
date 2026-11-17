@@ -5,7 +5,7 @@
 | 模块 | test（`test/baremetal-qemu/`） |
 | 类型 | 测试缺口（PH-64 的符号面只到 `nm -u`，没有"能启动、能进中断"的证据） |
 | 严重度 | Medium |
-| 状态 | `open`（DEV 已处置，待复核） |
+| 状态 | verified |
 | 锚点 | `v0.63.4`（`72ed6dc6`） |
 | 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[PH-64 卡](../../docs/design/phase64-draft.md) |
 
@@ -37,3 +37,36 @@ QEMU 的 `lm3s6965evb` 是 Cortex-M3 通用模型，**不是** STM32F4 / nRF52 /
 
 - [SH-90](../selfhost/sh90-freestanding-compile-mode-layer.md)：该冒烟顺带发现的 compile 模式缺口；
 - [PH-64 卡 §5](../../docs/design/phase64-draft.md)：符号面证据。
+
+## 复核（REV，2026-11-18）
+
+| 项 | 值 |
+| --- | --- |
+| 复核人 | REV |
+| HEAD | `8739ec96`（`ct-ast v0.65.1`；macOS arm64 / Apple clang 21.0.0） |
+| 结论 | `verified` |
+
+命令与原始输出（`W=/tmp/rev2`；`arm-none-eabi-gcc` / `qemu-system-arm` 均在本机）：
+
+```console
+$ env -u CT_C_BOUNDARY bash test/baremetal-qemu/run.sh "$W/ct-ast" ; echo rc=$?
+OK baremetal-qemu
+rc=0
+```
+
+按 run.sh 步骤手工复跑，取客人输出：
+
+```console
+$ arm-none-eabi-nm -u /tmp/rev2/bm/fw.elf | wc -l
+0
+$ timeout 10 qemu-system-arm -M lm3s6965evb -display none -monitor none -serial stdio \
+    -semihosting-config enable=on,target=native -kernel /tmp/rev2/bm/fw.elf
+boot ok
+tick=3
+$ diff -u test/baremetal-qemu/prog.expected.out /tmp/rev2/bm/out.txt ; echo rc=$?
+rc=0
+```
+
+`boot ok`（复位 + UART）、`tick=3`（SysTick ISR）、QEMU 退出 0、`nm -u` 为空、
+产物零系统头，四条判据齐备。无失败项。
+逐条对照见 [复核结论](../../docs/reviews/2026-11-18-fix-rev-verdict-batch2.md) §2.4。
