@@ -198,6 +198,34 @@ PH-52 的 D52-6 指向本条。
 | `last-touched` | 2026-11-14 |
 | `block` | 空（未阻塞） |
 
+## REQ-PKG-1 — 发布 lint 归 ct-pkg，`ct pkg check` 只做过渡
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-PKG-1` |
+| `what` | 把 `ct pkg check` 当前的 4 条发布前 lint（ct.pkg 可读、name/publisher/version/ns-root 必填、ns-root 形状/存在、包树无绝对 `-I`）及其扩展（version/tag、namespace 目录、dep/requires、c-boundary）迁到 ct-pkg 的 shell 工具；`package.sh` 不再调用 `ct pkg check`；CT 侧保留一个过渡版本后删除。`ct get/install` 的消费者校验不删。 |
+| `why` | 发布 lint 属于包治理，不应反向依赖已安装的 ct；`package.sh` 当前靠 `ct pkg check` 才能跑，CI/维护者环境被编译器绑定。CT 只应保留消费者必须的 manifest/identity/store/lock/digest/dep 校验。 |
+| `priority` | `P1` |
+| `status` | `open` |
+| `owner` | REQ（ct-pkg 协调；CT 侧只做 deprecation） |
+| `last-touched` | 2026-11-18 |
+| `block` | ct-pkg 先实现 shell `check` 并让 `package.sh` 脱离 ct；否则 CT 不立 phase、不删 `ct pkg check` |
+
+### 验收判据（草案）
+
+| # | 判据 | 命令 / 锚点 |
+| --- | --- | --- |
+| A1 | ct-pkg `check` 覆盖当前 4 条 + version/tag、namespace、dep/requires、c-boundary | ct-pkg CI 夹具；与 CT 旧 4 条逐条对照 |
+| A2 | `package.sh` 不再调用 `ct pkg check`，无 ct 安装的 CI 也能跑 | `grep -n 'ct pkg check' package.sh` 零命中；干净 CI |
+| A3 | `ct pkg check` 过渡期保留并打印 deprecation；删除后 `ct pkg` 仍保持 install/check 语义 | 过渡夹具；删除提交 |
+| A4 | `ct get/install` 的 identity/store/lock/digest/dep 校验不变 | 现有 `test/pkg` 全绿 |
+
+### 落点
+
+- **当前不占 phase**；这是跨项目需求，先入池。
+- 若必须占 CT phase，候选 **`v0-PH-72`**（类型检查 68–71 之后、v1.0 之前），但只装 CT 侧 deprecation/删除；ct-pkg 的 shell check 不在 CT phase 内。
+- 触发条件：ct-pkg 受理并给出 shell `check` 的验收；否则保持现状。
+
 ## REQ-TYPE-1 — 默认路径全量类型检查（本期不做）
 
 | 字段 | 值 |
