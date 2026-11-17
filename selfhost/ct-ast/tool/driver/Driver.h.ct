@@ -85,22 +85,38 @@ static int src_has_word(const char *s, const char *w)
     return 0;
 }
 
-/* The unit is used when the source names its type or calls one of the
-   functions the unit itself declared (ranges are known after parsing it). */
-static int layer_used(const char *src, int bi, int fstart, int fend, struct Symbols *sym)
+/* Does the source use any identifier with this prefix (`str_`)? */
+static int src_has_prefix(const char *s, const char *pre)
 {
-    static const char *const types[4] = { "Vec", "Map", "Option", "Result" };
-    int i, n;
+    size_t pn = strlen(pre);
+    const char *p = s;
 
-    if (bi == 3) {
-        if (src_has_word(src, "Str")) return 1;
-    } else {
-        for (i = 0; i < 2; i++)
-            if (src_has_word(src, types[bi == 0 ? i : bi + 1])) return 1;
+    while (*p) {
+        const char *q;
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+              || (*p >= '0' && *p <= '9') || *p == '_')) {
+            p++;
+            continue;
+        }
+        q = p;
+        while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
+               || (*q >= '0' && *q <= '9') || *q == '_') q++;
+        if ((size_t)(q - p) >= pn && strncmp(p, pre, pn) == 0) return 1;
+        p = q;
     }
-    for (n = fstart; n < fend; n++)
-        if (src_has_word(src, sym->funcs[n].name)) return 1;
     return 0;
+}
+
+/* PH-66 R3: decide BEFORE parsing. Parsing an unused unit would leave its
+   symbols in the tables, and the emitter would then declare (never define)
+   things like `Str_Drop_drop` -- a `-Wunused-function` warning on GCC. */
+static int layer_wanted(const char *src, int bi)
+{
+    if (src == 0) return 1;
+    if (bi == 0) return src_has_word(src, "Vec") || src_has_word(src, "Map");
+    if (bi == 1) return src_has_word(src, "Option");
+    if (bi == 2) return src_has_word(src, "Result");
+    return src_has_word(src, "Str") || src_has_prefix(src, "str_");
 }
 
 impl DriverOps for Driver {
@@ -140,7 +156,7 @@ impl DriverOps for Driver {
         const char *env;
         const char *slash;
         const char *savepath;
-        int bi, i, prog, n, head, fstart, fend;
+        int bi, i, prog, n, head;
         char *insrc = 0;
         FILE *probe;
 
@@ -179,6 +195,7 @@ impl DriverOps for Driver {
             base = bi == 0 ? "Vec.h.ct"
                  : (bi == 1 ? "Option.h.ct"
                  : (bi == 2 ? "Result.h.ct" : "Str.h.ct"));
+            if (insrc && !layer_wanted(insrc, bi)) continue;
             prog = -1;
             for (i = 0; i < 3; i++) {
                 cand[0] = 0;
@@ -217,9 +234,7 @@ impl DriverOps for Driver {
                 self->lex->tokstart = 0;
                 self->p->unit_is_hdr = 1;
                 self->p->unit_is_map = 0;
-                fstart = self->sym->nfunc;
                 prog = frontend::parse::ct_parse_program();
-                fend = self->sym->nfunc;
                 self->m->path = savepath;
                 self->mem->path = savepath;
                 self->sym->path = savepath;
@@ -230,7 +245,6 @@ impl DriverOps for Driver {
                 break;
             }
             if (prog < 0) continue;
-            if (insrc && !layer_used(insrc, bi, fstart, fend, self->sym)) continue;
             if (head < 0) {
                 head = prog;
             } else {
