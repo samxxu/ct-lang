@@ -1,0 +1,510 @@
+{
+  "battle": "defer-init-1",
+  "head": "91aeb189",
+  "environment": {
+    "os": "Darwin 27.2.0 arm64 (Darwin Kernel 27.2.0, xnu-13432.41.4~25)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "binary": "/tmp/dv/ct-ast (ct-ast v0.65.1, sha256 114357b05dae43d945ae113ed8f988f96bdf4ec09ee8d4239e51d1eda7b450f6)",
+    "source_baseline": "/tmp/dv/src = git archive ce6aa436（题面基线）；HEAD 91aeb189 与之仅差 docs/README.md 与 docs/planning/phase-migration-blockers.md（git diff --stat 见 E00b），因此 ct-ast 源码与基线逐字相同",
+    "date": "2026-11-18T06:26:57+08:00 (Asia/Shanghai)",
+    "cwd": "探针在 /tmp/dv/src（基线导出）与 /tmp/dv/probes（/tmp 一次性产物）；仓库工作树只多 battle/defer-init-1/ 未跟踪目录，未改源码/规范/测试",
+    "note_exit": "evidence[].exit 记的是被观察工具（ct-ast/cc/ASan/门禁脚本）的退出码；个别 command 末尾的 `; echo rc=$?` 只用于日志，不改变 exit 列。"
+  },
+  "rounds": 1,
+  "method": "只读复核：从 ce6aa436 导出源码到 /tmp 并本地四级自举出 ct-ast v0.65.1（L0→L1→L2→ct-ast），所有行为探针在 /tmp 生成 C、用 cc/ASan 验证；源码与规范只读。未实现 A/B 任何方案，因此 A 侧实现代价与“实现后”行为均按现状 + 源码阅读推断并逐条标注。",
+  "evidence": [
+    {
+      "id": "E00",
+      "side": "verify",
+      "ref": "环境与基线",
+      "command": "cd /tmp/dv/src && mkdir -p /tmp/dv/l2src /tmp/dv/astsrc && cc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o /tmp/dv/ctc && echo L0_OK && /tmp/dv/ctc selfhost/l1/ctc.ct -o /tmp/dv/l1.c && cc -Wall -Wextra -std=c99 /tmp/dv/l1.c -o /tmp/dv/l1 && echo L1_OK && /tmp/dv/l1 build selfhost/l2/driver.ct -o /tmp/dv/l2src && cc -Wall -Wextra -std=c99 /tmp/dv/l2src/*.c -o /tmp/dv/l2 && echo L2_OK && /tmp/dv/l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/dv/astsrc && cc -Wall -Wextra -std=c99 /tmp/dv/astsrc/*.c -o /tmp/dv/ct-ast && echo BUILD_OK && /tmp/dv/ct-ast --version && shasum -a 256 /tmp/dv/ct-ast",
+      "exit": 0,
+      "output": "L0_OK\nL1_OK\nL2_OK\nBUILD_OK\nct-ast v0.65.1\n114357b05dae43d945ae113ed8f988f96bdf4ec09ee8d4239e51d1eda7b450f6  /tmp/dv/ct-ast",
+      "reproduced": true,
+      "note": "自举链无警告（-Wall -Wextra）；本席独立重建的二进制与 claim（/tmp/di）和 counter（/tmp/defer-battle）都不是同一份。基线导出源与 HEAD 源码相同：E00b 的 git diff --stat 只显示两个 docs 文件。"
+    },
+    {
+      "id": "E00b",
+      "side": "verify",
+      "ref": "基线 ce6aa436 与 HEAD 91aeb189 的差异",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && git diff --stat ce6aa436 91aeb189 && git status --porcelain",
+      "exit": 0,
+      "output": " docs/README.md                            |  1 +\n docs/planning/phase-migration-blockers.md | 67 +++++++++++++++++++++++++++++++\n 2 files changed, 68 insertions(+)\n?? battle/defer-init-1/",
+      "reproduced": true,
+      "note": "HEAD 只比基线多两个 docs 文件；工作树唯一未跟踪项是本 battle 的 verify.json 目录，未改源码/规范/测试。"
+    },
+    {
+      "id": "E01",
+      "side": "both",
+      "ref": "question.md#判据 J-1/J-3；spec §4.9.1:498-499",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; $B check $P/s1_defer_stmt.ct; echo rc=$?; $B check $P/s2_defer_expr_stmt.ct; echo rc=$?",
+      "exit": 1,
+      "output": "s1（`defer { printf(\"d\\n\"); }` 语句）: rc=0（check 静默通过）\ns2（语句位 `defer Some_new(7);`）:\n/tmp/dv/probes/s2_defer_expr_stmt.ct:5:19: error: unexpected token\nrc=1",
+      "reproduced": true,
+      "note": "现行 defer 确实只收块形态：语句位只有 `defer {` 是关键字（Stmt.h.ct:1380-1391 的 defer_ahead 只看 `defer` 后首个非空白字符是否 `{`）；`defer expr;` 在语句位报 unexpected token。"
+    },
+    {
+      "id": "E02",
+      "side": "both",
+      "ref": "counter.md#1-3 / claim.md#E1 / question.md#J-3",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; for f in s3_defer_ident s4_defer_fn a2_ident_only a7_ident_expr a3_ptr_ident a4_fn_defer_ptr a6_fwd_fn_defer a8_ptr_arith; do echo \"== $f ==\"; $B check $P/$f.ct; echo \"rc=$?\"; done",
+      "exit": 1,
+      "output": "== s3_defer_ident ==（int defer = 3; printf(defer)）rc=0\n== s4_defer_fn ==（static int defer(int); int y = defer(41);）rc=0\n== a2_ident_only ==（int defer = 7; int z = defer;）rc=0\n== a7_ident_expr ==（int defer = 3; int y = defer + 1; int z = defer * 2;）rc=0\n== a3_ptr_ident ==（struct Some *defer = &x; struct Some *s = defer;）rc=0\n== a4_fn_defer_ptr ==（static struct Some *defer(int); struct Some *s = defer(7);）rc=0\n== a6_fwd_fn_defer ==（struct Some *s = defer(7); static struct Some *defer(int) {...} 定义在后）\n/tmp/dv/probes/a6_fwd_fn_defer.ct:11: error: potential leak: 'p' (Some*) allocated but never deleted\nrc=1\n== a8_ptr_arith ==（struct Some *defer = Some_new(3); struct Some *s = defer + 1;）\n/tmp/dv/probes/a8_ptr_arith.ct:4: error: potential leak: 'p' (Some*) allocated but never deleted\nrc=1",
+      "reproduced": true,
+      "note": "a4/a6/a8 的 rc=1 来自既有 leak 误报（工厂内 malloc 在 check 模式升级为 error，与 defer 无关；同形状的 m1/m4 也有该误报）。去掉工厂/改用 main 内分配后 a3/a4/a6/a8 均可编译运行（见 E20 的 a3/a4/a6 运行证据）。关键事实：这些程序在语言层合法，且都在“指针声明初始化式、`=` 后第一个 token 是 defer”的位置——正是 A 的判定规则会捕获的位置。"
+    },
+    {
+      "id": "E03",
+      "side": "claim",
+      "ref": "claim.md#E1-1",
+      "command": "cd /tmp/dv/src && /tmp/dv/ct-ast check /tmp/dv/probes/exact/m1_defer_init.ct; echo rc=$?",
+      "exit": 1,
+      "output": "/tmp/dv/probes/exact/m1_defer_init.ct:4:41: error: use of an undeclared variable\nrc=1",
+      "reproduced": true,
+      "note": "逐字复现主张席 E1-1（4:41、undeclared variable、rc=1）。机制：初始化式走 parse_expr（Stmt.h.ct:3774），`defer` 被当普通标识符查符号表失败；报错位置是 defer 之后的 token（同一 fixture 换行后 m1 报 7:28、q1 报 7:27），所以 4:41 是 Some_new 而非 defer 的位置。"
+    },
+    {
+      "id": "E04",
+      "side": "both",
+      "ref": "question.md#J-3（`defer {` / `defer(`）",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; for f in s5_defer_block_after_eq q1 q2 q5; do echo \"== $f ==\"; $B check $P/$f.ct; echo rc=$?; done",
+      "exit": 1,
+      "output": "== s5（struct Some *s = defer { delete s; };）==\n/tmp/dv/probes/s5_defer_block_after_eq.ct:7:28: error: use of an undeclared variable\nrc=1\n== q1（struct Some *s = defer;）==\n/tmp/dv/probes/q1.ct:7:27: error: use of an undeclared variable\nrc=1\n== q2（struct Some *s = defer 7;）==\n/tmp/dv/probes/q2.ct:7:28: error: use of an undeclared variable\nrc=1\n== q5（struct Some *s = Some_new(7) defer;）==\n/tmp/dv/probes/q5.ct:7:34: error: unexpected token\nrc=1",
+      "reproduced": true,
+      "note": "`= defer {` 今天不是关键字路径（A 的“其后不是 `{` 才算 A”会保持它为错误，与现状一致）；`= defer` 后面直接是 `;`/数字时也是普通标识符路径；`defer` 在 trailing 位置缺 `{` 才是 unexpected token。"
+    },
+    {
+      "id": "E05",
+      "side": "both",
+      "ref": "claim.md#E1-2/E1-4 / counter.md#2 / spec §4.9:456-470",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; bash test/ast/p49_own.sh $B cc; echo rc=$?; for f in exact/m2_own_nodrop exact/m3_own_int w1_own_charp w2_own_malloc_int; do echo \"== $f ==\"; $B check /tmp/dv/probes/$f.ct; echo rc=$?; done",
+      "exit": 1,
+      "output": "ok E49-1 factory initializer (allocs=1 drops=1, guarded release)\nok E49-1 cross-unit factory (consumer release, owner Drop body)\nok E49-2 zero initializer (not registered, guarded factory null)\nok p49_own_addr (14:1)\nok p49_own_int_addr (6:1)\nok p49_own_dup (16:1)\nok p49_own_return (10:1)\nok E49-6 own + ? + errdefer (PH-40 order)\np49/own: 0 failure(s)\nrc=0\n== exact/m2_own_nodrop ==\n/tmp/dv/probes/exact/m2_own_nodrop.ct:3:1: error: struct 'Some' does not use trait 'Drop'\nrc=1\n== exact/m3_own_int ==\n/tmp/dv/probes/exact/m3_own_int.ct:2:1: error: struct 'int' does not use trait 'Drop'\nrc=1\n== w1_own_charp ==\n/tmp/dv/probes/w1_own_charp.ct:4:1: error: struct 'char' does not use trait 'Drop'\nrc=1\n== w2_own_malloc_int ==\n/tmp/dv/probes/w2_own_malloc_int.ct:4:1: error: struct 'int' does not use trait 'Drop'\nrc=1",
+      "reproduced": true,
+      "note": "主张席 E1-2 与 E1-4 逐字复现（m2/m3 的行:列 3:1 / 2:1 与 claim 完全一致）。own 覆盖：Drop 工厂（E49-1）、零值不登记（E49-2，运行 see E10 z2/own 零值）；拒非 Drop struct（m2）、拒 int*/char*（m3/w1/w2）。p49 的 E49-1 生成物是 `if (p) { R_Drop_drop(p); free(p); p = 0; }` 形状（另见 E08）。"
+    },
+    {
+      "id": "E06",
+      "side": "counter",
+      "ref": "spec §4.9:480-484（own 逃逸/重赋值取消）",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; $B $P/w3_own_reassign.ct -o $P/w3.c && cc -std=c99 $P/w3.c -o $P/w3.bin && $P/w3.bin; echo rc=$?; grep -c 'R_Drop_drop(p)' $P/w3.c; echo grep_rc=$?; $B $P/w4_own_escape.ct -o $P/w4.c && cc -std=c99 $P/w4.c -o $P/w4.bin && $P/w4.bin; echo rc=$?; grep -c 'R_Drop_drop(p)' $P/w4.c; echo grep_rc=$?",
+      "exit": 0,
+      "output": "（w3 own 重赋值 s = malloc(...)）\n/tmp/dv/probes/w3_own_reassign.ct:7: warning: potential leak: 'p' (R*) allocated but never deleted\nrc=0 / 程序无输出\n0\ngrep_rc=1（无匹配）\n（w4 own return p 逃逸）\nv=5\nrc=0\n0\ngrep_rc=1（无匹配）",
+      "reproduced": true,
+      "note": "own 的既有语义：重赋值与 return 逃逸都**静默取消** autodrop（不报错、不释放：生成物 0 个 R_Drop_drop(p) 调用）。这与主张席给 A 定的“重赋值/逃逸报错”不同——A 的诊断是 own 没有的新规则，不是复用。"
+    },
+    {
+      "id": "E07",
+      "side": "both",
+      "ref": "question.md#J-4 / spec §4.9.1:500-503 / §4.58:2575-2582",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; for f in r1_trailing_return exact/b2_trailing_break c2_trailing_continue e1_return_err_trailing e2_break_err_trailing; do echo \"== $f ==\"; $B $P/$f.ct -o $P/$f.c 2>/dev/null && cc -std=c99 $P/$f.c -o $P/$f.bin && $P/$f.bin; echo rc=$?; done; bash test/ast/p40_trailing.sh $B; echo p40r5_rc=$?; bash test/ast/p40_errdefer_scope.sh $B; echo p40r2_rc=$?; bash test/ast/p40_order_own.sh $B; echo p40r4_rc=$?",
+      "exit": 0,
+      "output": "== r1（return 30 / return 40 / 落出）==\ncleanup 3\nf3=30\ncleanup 4\nf4=40\nrc=0\n== b2（break）==\nbody 0\nfree 0\nfree 1\nrc=0\n== c2（continue）==\nbody 0\nfree 0\nfree 1\nbody 2\nfree 2\nrc=0\n== e1（return err: 7）==\ncleanup 1\nok=1\ncleanup 0\nerr=7\nrc=0\n== e2（break err:）==\ncleanup 0\ndone\nrc=0\np40_r5: OK\np40r5_rc=0\np40_r2: OK\np40r2_rc=0\np40_r4: OK\np40r4_rc=0",
+      "reproduced": true,
+      "note": "尾随块四条出口（落出/return/break/continue）全跑，err 出口（return err:/break err:）也跑；break 只跑退出到的那层块（b2 无 free 2），continue 继续下一轮（c2 每轮一次）。r1 生成物把 body 内联到 3 个出口（exit 各一份），与 N_DEFER_RUN 的发射方式一致。"
+    },
+    {
+      "id": "E08",
+      "side": "claim",
+      "ref": "claim.md#E1-4/语义表（释放动作）/ spec §4.56:2554",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; echo '-- t1 int* --'; $B $P/t1_int_trailing.ct -o $P/t1.c 2>/dev/null && cc -std=c99 $P/t1.c -o $P/t1.bin && $P/t1.bin; grep -n 'free(p)' $P/t1.c; echo '-- t2 Drop --'; $B $P/t2_drop_trailing.ct -o $P/t2.c 2>/dev/null && cc -std=c99 $P/t2.c -o $P/t2.bin && $P/t2.bin; grep -n 'R_Drop_drop(p)' $P/t2.c; echo '-- o3 plain delete Drop --'; $B $P/o3_del_drop.ct -o $P/o3.c 2>/dev/null && cc -std=c99 $P/o3.c -o $P/o3.bin && $P/o3.bin; grep -n 'R_Drop_drop(p)' $P/o3.c",
+      "exit": 0,
+      "output": "-- t1 int* --（int *p = malloc(sizeof(int)) defer { delete p; };）\nv=7\nfree int\n14:            if (p) { free(p); p = 0; }\n20:        if (p) { free(p); p = 0; }\n-- t2 Drop --（struct R *p = R_new(9) defer { delete p; };）\nbody 9\nexit\ndrop 9\n30:            if (p) { R_Drop_drop(p); free(p); p = 0; }\n36:        if (p) { R_Drop_drop(p); free(p); p = 0; }\n-- o3（语句 delete p，Drop）--\ndrop 9\n25:    if (p) { R_Drop_drop(p); free(p); p = 0; }",
+      "reproduced": true,
+      "note": "尾随块 + `delete` 的现有发射形状 = 主张席给 A 定的释放动作（`if (name) { [X_Drop_drop(name);] free(name); name = 0; }`），且标量 `int *` 与 Drop struct 都正确。这同时证伪 A 的 E1-4 “非 Drop 堆对象与标量指针只有 A”：尾随块同样覆盖（见 note 的 t1/t2）。"
+    },
+    {
+      "id": "E09",
+      "side": "claim",
+      "ref": "claim.md#E1-5",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; $B $P/exact/m4_trailing_return.ct -o $P/exact/m4.c 2>&1 | tail -1; cc -std=c99 -fsanitize=address $P/exact/m4.c -o $P/exact/m4.asan && ASAN_OPTIONS=detect_leaks=0 $P/exact/m4.asan 2>&1 | grep -m1 -E 'ERROR: AddressSanitizer|SUMMARY: AddressSanitizer'; echo rc=$?; $B $P/d3_trailing_escape.ct -o $P/d3.c 2>&1 | tail -1; cc -std=c99 -fsanitize=address $P/d3.c -o $P/d3.asan && ASAN_OPTIONS=detect_leaks=0 $P/d3.asan 2>&1 | grep -m1 -E 'ERROR: AddressSanitizer|SUMMARY: AddressSanitizer'; echo rc=$?",
+      "exit": 0,
+      "output": "/tmp/dv/probes/exact/m4_trailing_return.ct:3: warning: potential leak: 'p' (Some*) allocated but never deleted\n==15334==ERROR: AddressSanitizer: heap-use-after-free ...\nSUMMARY: AddressSanitizer: heap-use-after-free (m4.asan:arm64+0x100000854) in main+0x74\nrc=0\n/tmp/dv/probes/d3_trailing_escape.ct:4: warning: potential leak: 'p' (Some*) allocated but never deleted\n==15342==ERROR: AddressSanitizer: heap-use-after-free ...\nSUMMARY: AddressSanitizer: heap-use-after-free (d3.asan:arm64+0x100000854) in main+0x74\nrc=0",
+      "reproduced": true,
+      "note": "复现主张席 E1-5 的 UAF：m4（`return s;` 尾随 delete）与 d3（`q = s; return q;`）都被 ASan 抓 heap-use-after-free；编译器只给无关的 leak 警告并照常出产物。完整 ASan 栈在 /tmp/dv/evidence.log（本文件只摘 ERROR/SUMMARY 行，grep 的 rc=0 是 grep 的退出码）。"
+    },
+    {
+      "id": "E10",
+      "side": "both",
+      "ref": "claim.md#E3 行 7/8 / counter.md#P2",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; echo '-- d2 重赋值 --'; $B $P/d2_trailing_reassign.ct -o $P/d2.c 2>/dev/null && cc -std=c99 $P/d2.c -o $P/d2.bin && $P/d2.bin; echo rc=$?; echo '-- z1 零值 --'; $B $P/z1_zero_trailing.ct -o $P/z1.c 2>/dev/null && cc -std=c99 $P/z1.c -o $P/z1.bin && $P/z1.bin; echo rc=$?; echo '-- z2 工厂返 0 --'; $B $P/z2_null_factory.ct -o $P/z2.c 2>/dev/null && cc -std=c99 $P/z2.c -o $P/z2.bin && $P/z2.bin; echo rc=$?",
+      "exit": 0,
+      "output": "-- d2 重赋值 --（s = Some_new(7) defer{...}；s = Some_new(8);）\nn=8\nexit free 8\nrc=0\n-- z1 零值 --（struct Some *s = 0 defer { ... delete s; };）\nalive 1\nexit\nrc=0\n-- z2 工厂返 0 --（Some_new(0) 返回 0）\nn=0 不存在（if (s) 跳过）\nexit\nrc=0",
+      "reproduced": true,
+      "note": "重赋值：尾随块不报错，退出时释放的是新对象（free 8），旧对象泄漏——正是 A 声称要在编译期报错的场景（E3 行 7）。零值/失败构造：`if (s)` 守卫使退出动作成为 no-op，不崩（E3 行 4）。"
+    },
+    {
+      "id": "E11",
+      "side": "both",
+      "ref": "question.md#J-3 / spec §4.58:2580 L40-9",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; for f in n1_multi n2_assign n3_forinit; do echo \"== $f ==\"; $B check $P/$f.ct; echo rc=$?; done",
+      "exit": 1,
+      "output": "== n1_multi（struct Some *a = 0, *b = 0 defer { delete a; };）==\n/tmp/dv/probes/n1_multi.ct:6:32: error: a trailing defer needs a single declaration\nrc=1\n== n2_assign（s = Some_new(1) defer { delete s; };）==\n/tmp/dv/probes/n2_assign.ct:8:21: error: a trailing defer needs a single declaration\nrc=1\n== n3_forinit（for (struct Some *s = Some_new(1) defer {...}; ...)）==\n/tmp/dv/probes/n3_forinit.ct:7:39: error: a trailing defer needs a single declaration\nrc=1",
+      "reproduced": true,
+      "note": "与 counter 的 p5/p6/p7、p40_trailing.sh 的 p40_trailing_multi/assign/for 负例同文案（行:列因夹具写法不同而异：counter 2:22/4:29/2:20，本席 6:32/8:21/7:39）。单声明符限制的实现点是 Stmt.h.ct:1498；for 初始化与赋值形式在 parse_stmt 的其它两处也报同文案（Stmt.h.ct:2568、for-init 分支）。"
+    },
+    {
+      "id": "E12",
+      "side": "both",
+      "ref": "question.md#J-5 / spec §4.9.1:510-511",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; echo '-- trailing defer in .h.ct --'; $B check $P/hct/lib.h.ct; echo rc=$?; echo '-- block defer in .h.ct --'; $B check $P/hct/lib2.h.ct; echo rc=$?",
+      "exit": 1,
+      "output": "-- trailing defer in .h.ct --\n/tmp/dv/probes/hct/lib.h.ct:12:34: error: defer is not allowed in a .h.ct unit\nrc=1\n-- block defer in .h.ct --\nrc=0",
+      "reproduced": true,
+      "note": "规范 §4.9.1:510-511 明说 `.h.ct` 的后缀禁令（L38-3）已撤销、defer/errdefer 在 .h.ct 与 .ct 一致；但 parse_trailing_defer 仍对 `Type name = expr defer {...}` 报 `defer is not allowed in a .h.ct unit`（Stmt.h.ct:1489-1494），块级 defer 则允许。260_hct_defer 夹具只测块级 defer（E17），所以现有门禁没抓到这个分叉。A 若“复用 parse_trailing_defer”又与主张席的“`.h.ct` 允许”同时成立，必须先改这段检查（主张席成本表未计）。"
+    },
+    {
+      "id": "E13",
+      "side": "claim",
+      "ref": "claim.md#E4 / E3 关键段（desugar 与尾随块不可区分）",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; $B $P/mix_order.ct -o $P/mix.c 2>/dev/null && cc -std=c99 $P/mix.c -o $P/mix.bin && $P/mix.bin; echo rc=$?; grep -n 'printf(\"cleanup' $P/r1.c; grep -n 'if (s) {' $P/r2.c",
+      "exit": 0,
+      "output": "body\nc\nb 1\na\nrc=0\n24:                printf(\"cleanup %d\\n\", s->n);\n33:            printf(\"cleanup %d\\n\", s->n);\n39:        printf(\"cleanup %d\\n\", s->n);\n24:            if (s) { free(s); s = 0; }\n30:        if (s) { free(s); s = 0; }\n",
+      "reproduced": true,
+      "note": "混合顺序：块级 defer(a)、尾随块(b)、块级 defer(c) → body/c/b/a，整体 LIFO 且尾随块在声明点登记（与 §4.38/4.58 一致，A 继承）。r1/r2 显示尾随块 body 在**每个出口内联一份**（r1 三份 cleanup；r2 两份 `if (s)`），N_DEFER 节点本身不发射（Emitter.h.ct:4025），出口是 N_DEFER_RUN 包裹体（:4023-4025）。因此 A 若 desugar 成 `N_DEFER` + body=`delete name;`，生成 C 与“尾随块写 delete”逐字同形——运行时夹具无法区分 A 与尾随块（主张席此点成立）；可区分的只有 A 新增的语法/诊断行与 .h.ct 行为。"
+    },
+    {
+      "id": "E14",
+      "side": "verify",
+      "ref": "补充：非堆工厂 + 既有 delete 守卫",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; echo '-- own + 非堆工厂（返回 static struct 指针）--'; $B check $P/g1_own_static_factory.ct; echo check_rc=$?; $B $P/g1_own_static_factory.ct -o $P/g1.c 2>/dev/null && cc -std=c99 $P/g1.c -o $P/g1.bin && $P/g1.bin; echo rc=$?; echo '-- 尾随块 + 非堆工厂 --'; $B $P/g2_trailing_static_factory.ct -o $P/g2.c 2>/dev/null && cc -std=c99 $P/g2.c -o $P/g2.bin && $P/g2.bin; echo rc=$?",
+      "exit": 134,
+      "output": "-- own + 非堆工厂 --\ncheck_rc=0\nn=5\ndrop 5\nbash: ... Abort trap: 6   /tmp/dv/probes/g1.bin\nrc=134\n-- 尾随块 + 非堆工厂 --\nn=5\nbash: ... Abort trap: 6   /tmp/dv/probes/g2.bin\nrc=134",
+      "reproduced": true,
+      "note": "反例：`static struct Some *get_static(void){ return &g; }` 是“返回 struct X * 的工厂调用”，own 与尾随块都接受，然后对非堆指针 free → abort。A 的“只收 malloc/calloc/工厂调用”白名单（claim 初始化式限制）无法把 &g 与 malloc 区分开，所以 A 的“缺省就正确/只收堆来源可防非法 free”在该角落不成立；这是 own 已存在、A 会继承的缺陷，不是 B 独有。"
+    },
+    {
+      "id": "E15",
+      "side": "both",
+      "ref": "counter.md#E1（p2/p2c/p3/p14/p8/p9）/ claim.md#E1-2",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; echo '-- 字符数 --'; printf '%s\\n' 'own Some *s = Some_new();' 'Some *s = defer Some_new();' 'Some *s = Some_new() defer { delete s; };' | awk '{print length($0), $0}'; echo '-- B 的三条覆盖路径 --'; $B $P/n6_own_drop.ct -o $P/n6.c 2>/dev/null && cc -std=c99 $P/n6.c -o $P/n6.bin && $P/n6.bin; $B $P/t3_two_stmt.ct -o $P/t3.c 2>/dev/null && cc -std=c99 $P/t3.c -o $P/t3.bin && $P/t3.bin; $B $P/t2_drop_trailing.ct -o $P/t2.c 2>/dev/null && cc -std=c99 $P/t2.c -o $P/t2.bin && $P/t2.bin",
+      "exit": 0,
+      "output": "25 own Some *s = Some_new();\n27 Some *s = defer Some_new();\n41 Some *s = Some_new() defer { delete s; };\n-- own --\ndrop 9\n-- 两条语句 --\nbody 7\ncleanup 7\n-- 尾随块 --\nbody 9\nexit\ndrop 9",
+      "reproduced": true,
+      "note": "counter 的字符数 25 vs 27 vs 41 逐字复现（带 `struct` 前缀则是 32/34/48）。B 的三条覆盖路径（own Drop、声明+块级 defer、尾随块）各自都能一行/两行写出并正确清理；A 的唯一增量是 `defer expr` 比尾随块短 14 字符（27 vs 41）。"
+    },
+    {
+      "id": "E16",
+      "side": "both",
+      "ref": "claim.md#E4 / counter.md#5（代价）",
+      "command": "cd /tmp/dv/src && wc -l selfhost/ct-ast/frontend/parse/Stmt.h.ct selfhost/ct-ast/frontend/parse/Expr.h.ct selfhost/ct-ast/backend/emit/Emitter.h.ct selfhost/ct-ast/backend/mem/Memory.h.ct selfhost/ct-ast/frontend/parse/Parser.h.ct; echo '-- 可比函数行数 --'; sed -n '1472,1527p' selfhost/ct-ast/frontend/parse/Stmt.h.ct | wc -l; sed -n '1380,1391p' selfhost/ct-ast/frontend/parse/Stmt.h.ct | wc -l; sed -n '2458,2476p' selfhost/ct-ast/frontend/parse/Stmt.h.ct | wc -l; echo '-- N_DEFER 发射点 --'; grep -n 'N_DEFER' selfhost/ct-ast/backend/emit/Emitter.h.ct; echo '-- 初始化式 parse_expr --'; sed -n '3774p' selfhost/ct-ast/frontend/parse/Stmt.h.ct; echo '-- own 逃逸/重赋值取消点 --'; grep -n 'autodrop = 0\\|owned = 0' selfhost/ct-ast/backend/mem/Memory.h.ct | head",
+      "exit": 0,
+      "output": "4144 selfhost/ct-ast/frontend/parse/Stmt.h.ct\n7217 selfhost/ct-ast/frontend/parse/Expr.h.ct\n6593 selfhost/ct-ast/backend/emit/Emitter.h.ct\n481 selfhost/ct-ast/backend/mem/Memory.h.ct\n3978 selfhost/ct-ast/frontend/parse/Parser.h.ct\n22413 total\n-- 可比函数行数 --\n56\n12\n19\n-- N_DEFER 发射点 --\n121:#define N_DEFER_RUN 70\n122:#define N_DEFER 69\n4023:        if (self->arena->nodes[n].kind == N_DEFER_RUN)\n4025:        if (self->arena->nodes[n].kind == N_DEFER) return 0;\n5068:                if (self->arena->nodes[h].kind == N_DEFER_RUN)\n-- 初始化式 parse_expr --\n                    e = self->ex->parse_expr();\n-- own 逃逸/重赋值取消点 --\n336:            self->sym->vars[i].owned = 0;\n378:                    self->sym->vars[i].autodrop = 0;\n384:            self->sym->vars[i].owned = 0;\n386:            if (self->expr_returns(rhs, self->sym->vars[i].name)) self->sym->vars[i].autodrop = 0;\n409:            self->sym->vars[i].owned = 0;",
+      "reproduced": true,
+      "note": "实测 parse_trailing_defer 是 1472-1527 共 **56 行**，不是主张/反对双方写的“51 行 1472-1522”（截短了尾部 5 行：trailing_alias/errdefer_own_refs/defer_add/err 标记/return）；defer_ahead 12 行（1380-1391）；own 前置分支 19 行（2458-2476）。A 的初始化式接入点在 :3774 的 parse_expr 之前；A 若做“逃逸/重赋值报错”，需要动 Memory.h.ct:336/378/384-409 这些既有取消点（own 在这里静默取消），主张席把它算进 Stmt.h.ct 的 ~30 行诊断里，不准确但量级不大。"
+    },
+    {
+      "id": "E17",
+      "side": "both",
+      "ref": "question.md#J-5/J-6（现有夹具/golden）",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; for t in 220_defer_order 224_defer_branches 223_defer_own_order 221_defer_paths 222_defer_return 236_result_try_defer 247_own_try; do $B test/ast/$t/prog.ct -o $P/g_$t.c >/dev/null 2>&1 && cc -std=c99 $P/g_$t.c -o $P/g_$t.bin 2>/dev/null && $P/g_$t.bin > $P/g_$t.out 2>&1 && diff -q test/ast/$t/prog.expected.out $P/g_$t.out >/dev/null && echo \"GOLDEN_OK $t\" || echo \"GOLDEN_FAIL $t\"; done; mkdir -p $P/hct260out; $B build --emit-c test/ast/260_hct_defer/prog.ct -o $P/hct260out >/dev/null 2>&1 && cc -std=c99 -I $P/hct260out $P/hct260out/*.c -o $P/hct260.bin 2>/dev/null && $P/hct260.bin > $P/hct260.out && diff -q test/ast/260_hct_defer/prog.expected.out $P/hct260.out >/dev/null && echo GOLDEN_OK 260_hct_defer; $B examples/42_defer/prog.ct -o $P/ex42.c >/dev/null 2>&1 && cc -std=c99 $P/ex42.c -o $P/ex42.bin 2>/dev/null && $P/ex42.bin > $P/ex42.out && diff -q examples/42_defer/prog.expected.out $P/ex42.out >/dev/null && echo GOLDEN_OK examples/42_defer",
+      "exit": 0,
+      "output": "GOLDEN_OK 220_defer_order\nGOLDEN_OK 224_defer_branches\nGOLDEN_OK 223_defer_own_order\nGOLDEN_OK 221_defer_paths\nGOLDEN_OK 222_defer_return\nGOLDEN_OK 236_result_try_defer\nGOLDEN_OK 247_own_try\nGOLDEN_OK 260_hct_defer\nGOLDEN_OK examples/42_defer",
+      "reproduced": true,
+      "note": "所有 defer/own/尾随块 golden 在基线二进制上全绿。仓库里含 `defer` 的 .ct 文件 42 个；`= *defer` 的源码 0 处（test/examples/selfhost/lib 全扫）；224_defer_branches/prog.ct:72 有 `int defer = 1;` 钉住标识符用法。所以 A 不需要改任何现有夹具/golden（前提是它不改 `= defer` 的既有多义读法，见 E02）。"
+    },
+    {
+      "id": "E18",
+      "side": "both",
+      "ref": "claim.md#E3 行 2/3/6/9 / counter.md#3",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; echo '-- delete &x 今天可编译 --'; $B check $P/n4_del_addr.ct; echo check_rc=$?; $B $P/n4_del_addr.ct -o $P/n4.c 2>/dev/null && cc -std=c99 $P/n4.c -o $P/n4.bin && $P/n4.bin; echo run_rc=$?; echo '-- own+trailing / own+defer init --'; $B check $P/o1_own_trailing.ct; echo rc=$?; $B check $P/o2_own_defer_init.ct; echo rc=$?",
+      "exit": 1,
+      "output": "-- delete &x 今天可编译 --\ncheck_rc=0\nbash: ... Abort trap: 6   /tmp/dv/probes/n4.bin\nrun_rc=134\n-- own+trailing --\n/tmp/dv/probes/o1_own_trailing.ct:7:48: error: unexpected token\nrc=1\n-- own+defer init --\n/tmp/dv/probes/o2_own_defer_init.ct:8:29: error: use of an undeclared variable\nrc=1",
+      "reproduced": true,
+      "note": "`delete &x` 今天编译通过（check_rc=0）并在运行时 abort——主张席“实测 delete &x 当前可编译”成立；A 若要防非法 free，必须自己加“仅堆来源”诊断（它列的 E3 行 3）。`own T *s = malloc(...) defer {...}` 今天报 unexpected token（不可组合），`own T *s = defer e;` 今天走 undeclared 路径；所以 A 的“own 与 defer 互斥”是新增诊断，不是既有行为。exit 列取最后一条 check 的 rc=1；n4 的运行退出码是 134。"
+    },
+    {
+      "id": "E19",
+      "side": "counter",
+      "ref": "counter.md#4（P2：两条语句/拆块可复现 A 的表达力）",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; echo '-- for-init 等价：外包块 + 块级 defer --'; $B $P/f3_forinit_outerblock.ct -o $P/f3.c 2>/dev/null && cc -std=c99 $P/f3.c -o $P/f3.bin && $P/f3.bin; echo rc=$?; echo '-- 赋值形态等价：赋值 + defer --'; $B $P/f4_assign_two_stmt.ct -o $P/f4.c 2>/dev/null && cc -std=c99 $P/f4.c -o $P/f4.bin && $P/f4.bin; echo rc=$?",
+      "exit": 0,
+      "output": "-- for-init 等价 --（外层 block: struct Some *s = Some_new(0); defer {...}; for(...) { if(i==1) break; ... }）\nbody 0\ncleanup 1\nafter\nrc=0\n-- 赋值形态等价 --（s = Some_new(1); defer {...}）\nbody 1\ncleanup 1\nrc=0",
+      "reproduced": true,
+      "note": "counter 的 P2 成立：尾随块不收的 for 初始化与赋值形态，都能用“外包块+声明+块级 defer”或“赋值+块级 defer”在相同作用域/出口语义下复现（break 也跑清理，cleanup 1 后 after）。A 的增量是字符数与 for-init 的单行写法，不是表达能力。"
+    },
+    {
+      "id": "E20",
+      "side": "verify",
+      "ref": "补充：A 侧规则捕获合法程序的完整列表",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; for f in a3_ptr_ident a4_fn_defer_ptr a6_fwd_fn_defer a7_ident_expr a8_ptr_arith; do echo \"== $f ==\"; $B $P/$f.ct -o $P/$f.c 2>/dev/null && cc -std=c99 $P/$f.c -o $P/$f.bin 2>/dev/null && $P/$f.bin; echo run_rc=$?; done",
+      "exit": 0,
+      "output": "== a3_ptr_ident ==\n1\nrun_rc=0\n== a4_fn_defer_ptr ==\nn=7\nrun_rc=0\n== a6_fwd_fn_defer ==\nn=7\nrun_rc=0\n== a7_ident_expr ==\n3 4 6\nrun_rc=0\n== a8_ptr_arith ==\nok 1\nrun_rc=0",
+      "reproduced": true,
+      "note": "这 5 个程序今天都编译运行（a4/a6 的 `defer(7)` 是名为 defer 的函数调用；a6 的定义在 main 之后，说明解析期符号表不可依赖；a3 是 `struct Some *s = defer;` 指针变量初始化；a8 是 `defer + 1` 指针算术）。A 的判定“`=` 后 token 为 defer 且其后不是 `{` 才算 A”会把它们全部改判为 A（a4/a6 的 expr 变成 `(7)`，a3 变成空 expr，a8 变成 `+1`），所以 A 需要比主张席所述更强的消歧规则或例外。"
+    },
+    {
+      "id": "E21",
+      "side": "both",
+      "ref": "question.md#J-5（C 超集）/ 自发检查",
+      "command": "cd /tmp/dv/src && B=/tmp/dv/ct-ast; P=/tmp/dv/probes; for f in s1_defer_stmt r1_trailing_return t1_int_trailing t2_drop_trailing mix_order; do echo \"== $f ==\"; cc -Wall -Wextra -std=c99 $P/$f.c -o $P/$f.warn 2>&1 | head -3; done; echo '-- 现有错误夹具文案未变 --'; for f in test/ast/errors/p38_defer_control.ct test/ast/errors/p38_defer_switch.ct test/ast/errors/p38_goto_cross.ct; do $B check $f 2>&1 | head -1; done",
+      "exit": 0,
+      "output": "（-Wall -Wextra 无输出 = 生成 C 零警告）\n-- 现有错误夹具文案 --\ntest/ast/errors/p38_defer_control.ct:4:9: error: a defer block cannot transfer control\ntest/ast/errors/p38_defer_switch.ct:5:9: error: defer is not allowed inside a switch\ntest/ast/errors/p38_goto_cross.ct:5:1: error: a goto cannot cross a block with defer",
+      "reproduced": true,
+      "note": "尾随块/A 形状生成的 C 在 -Wall -Wextra 下零警告；defer/errdefer/goto 的现有诊断逐字未变。C 超集与既有诊断面都不构成 A 的障碍（前提是 desugar 到 N_DEFER）。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "docs/language-spec.md",
+      "line": 498,
+      "text": "`defer { … }` 只能出现在函数体内的语句位置，后面必须紧跟 `{`；其它位置的 `defer` 仍是普通标识符（D38-7）。只收块形态，没有 `defer expr;`。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 374,
+      "text": "| `delete q;` | `if (q) { free(q); q = 0; }`（`q` 必须是已登记的指针变量；ct-ast 会置空） |",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 467,
+      "text": "~470: own 初始化式只接受 malloc/calloc/返回 struct X * 的工厂调用；必须是 struct 指针且 use Drop",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 2580,
+      "text": "尾随声明 `Type name = expr defer { … };` 只允许单声明符；赋值/多声明符/for 初始化报 L40-9；尾随块在初始值之后注册",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 510,
+      "text": "**v0.53.2 起** `.h.ct` 单元的函数体与 `.ct` 一致，`defer` / `errdefer` 均可用；此前后缀检查报 L38-3/L40-5，该限制已撤销（:510-511）",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 1380,
+      "text": "int defer_ahead(void)（:1380-1391，12 行）：仅在 `defer` 后首个非空白字符为 `{` 时认关键字",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 1472,
+      "text": "int parse_trailing_defer(int decl)（:1472-1527，56 行；主张/反对写 1472-1522=51 行，少算尾部 5 行）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 1498,
+      "text": "\"a trailing defer needs a single declaration\" —— 单声明符限制的实现点",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 1678,
+      "text": "kw[] 语句关键字表：borrow/break/.../while；defer 不在表中（上下文关键字，D38-7）",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 2160,
+      "text": "if (self->mem->leak_active && self->sup->leak_delete(e) != 0) —— delete 取消 leak 跟踪/autodrop",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 2458,
+      "text": "own 前置分支（:2458-2476，19 行）：parse_decl_node + mark_owned",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 2562,
+      "text": "if (self->parse_trailing_defer(s) != 0) —— 声明语句后的尾随块接入点",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 3774,
+      "text": "e = self->ex->parse_expr(); —— 局部声明初始化式的解析点（A 的挂点）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 4023,
+      "text": "N_DEFER_RUN 发射 body；N_DEFER 本身 return 0（:4025）",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 5068,
+      "text": "try_cleanup 里 N_DEFER_RUN 的出口发射",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/mem/Memory.h.ct",
+      "line": 428,
+      "text": "int leak_delete(int e) —— 取消 owned/autodrop（:428-437）",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/mem/Memory.h.ct",
+      "line": 336,
+      "text": "leak_decl/leak_assign/leak_return 中 own 逃逸/重赋值的静默取消点（:336/:378/:384-409）",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "test/ast/224_defer_branches/prog.ct",
+      "line": 72,
+      "text": "    int defer = 1;",
+      "supports": "counter",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "question": "语义清晰：defer 在两种位置是否可区分，是否违反“defer=延迟”直觉",
+      "claim": "A：位置受限（仅单声明符指针初始化式），`=` 后是 defer 且其后非 `{` 才算 A；语句位/标识符不变；延迟的是释放不是构造（Go 先例）",
+      "counter": "B：defer 既有语义是延迟执行；初始化式里的 defer 是立即求值 + 延迟清理，时间语义相反，J-1 受损",
+      "evidence": [
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E20",
+        "E21"
+      ],
+      "verdict": "unresolved（价值判断为主；硬事实对 B 有利）",
+      "fact": "语法位置本身可区分是 A 的事实：defer 是上下文关键字、不在 kw[]（Stmt.h.ct:1678），语句位 `defer {` 合法（E01）而 `defer expr;` 报 unexpected token（E01），A 只需在初始化式位置加分支，不改语句位。B 的“defer=延迟”直觉是解释分歧，A 用 Go `defer f(g())`（g 立即、f 延迟）与“赋值 `s =` 明示构造立即发生”反驳，属可辩论的价值判断。但 A 的判定规则在源码层不可靠（硬事实）：`struct Some *s = defer;`、`= defer(7)`（同名函数、含前向声明）、`= defer + 1`（指针算术）今天全部合法（E02/E20），A 的“`=` 后是 defer 且其后非 `{`”会把它们改判。故 J-1 的“可区分”只在比主张席所述更强的规则下成立；B 的“语义反转”不被事实证伪，A 的“不受损”也不成立。"
+    },
+    {
+      "id": "J-2",
+      "question": "与 own/Drop/尾随块重叠：是否产生两套资源机制",
+      "claim": "A：不新增模型，desugar 到 §4.58 尾随块 + 隐式 delete；own 自动 Drop、defer 负责无 Drop 释放，二者不能同时登记；J-2 按“资源模型数”成立",
+      "counter": "B：已有 own（Drop）、尾随块/块级 defer（显式清理）、errdefer；A 第 4 点还要新增互斥检查，资源机制从两套变三套",
+      "evidence": [
+        "E05",
+        "E06",
+        "E08",
+        "E10",
+        "E15",
+        "E18",
+        "E19"
+      ],
+      "verdict": "unresolved（口径依赖：模型数 A 成立、拼写/机制数 B 成立；覆盖事实对 B 有利）",
+      "fact": "覆盖事实：own 覆盖 Drop 工厂与零值（E05 E49-1/E49-2，零值不登记）；尾随块覆盖非 Drop struct 与标量指针（E08：`int *p = malloc(...) defer { delete p; }` 生成 `if (p){free(p);p=0;}`；Drop 生成 `if (p){R_Drop_drop(p);free(p);p=0;}`）——这正是 A 声明的释放动作。因此 A 不增加表达能力（E19：for-init/赋值形态可用外包块/两条语句复现），唯一增量是第三种拼写。资源模型数：A 复用 N_DEFER 栈与 delete，无新运行模型（E13 生成 C 同形）。机制/拼写数：A 新增第三套写法，并新增 own 与尾随块都没有的错误规则（A 要报重赋值/逃逸/own 互斥；own 今天静默取消——E06，尾随块不报——E10，own+trailing 今天不可组合——E18）。主张席 E1-4 的“非 Drop 堆对象与标量指针只有 A”被 E08 证伪（尾随块同样覆盖，且是 A 声称要复用的同一机制）。"
+    },
+    {
+      "id": "J-3",
+      "question": "语法歧义：defer 作标识符、声明/表达式/块边界",
+      "claim": "A：`=` 后 token 为 defer 且其后不是 `{` 才算 A；`int defer = 3;` 仍编译、语句位 `defer Some_new(7);` 仍 unexpected token",
+      "counter": "B：defer 现在是合法变量名（224:72）与函数名（p2c），A 必须在同一位置容纳两种读法",
+      "evidence": [
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E17",
+        "E20"
+      ],
+      "verdict": "fail（A 的现有判定规则）；B 的事实成立",
+      "fact": "硬事实：defer 是上下文关键字、不在 kw[]（Stmt.h.ct:1678），今天合法且都落在“指针声明初始化式、`=` 后第一个 token 是 defer”位置的有：a3 `struct Some *s = defer;`（E20 运行 1）、a4 `struct Some *s = defer(7);`（调用同名函数，输出 n=7）、a6 同形但函数定义在 main 之后（前向声明，解析期符号表不可依赖，输出 n=7）、a8 `struct Some *s = defer + 1;`（指针算术，输出 ok 1），以及 a7 的 `int defer = 3; int y = defer + 1;`（输出 3 4 6）。A 的规则会把 a3 变空 expr、a4/a6 变 expr `(7)`、a8 变 expr `+1`；靠符号表消歧对 a6 这种前向声明不可靠。A 的 E3 行 9 只钉了 `int defer = 3;` 与语句位 `defer Some_new(7);`（E01/E02 证实这两条确实不变），但漏了“defer 出现在初始化式右值首 token”的全部既有合法程序。要兼容必须加“defer 不是声明前可见的符号/后随 token 属于 A 的 expr 且不是 (、+、;、,”等更强规则，或只在类型/堆来源可判时走 A——两者都不是零成本 lookahead。"
+    },
+    {
+      "id": "J-4",
+      "question": "控制流/错误路径：return/break/continue/errdefer/构造失败",
+      "claim": "A：登记在声明点，落出/return/break/continue 都跑，return err: 无条件跑；空值/失败构造由 if (name) 守卫；逃逸诊断消除 E1-5 的 UAF",
+      "counter": "B：四条出口由既有 defer 覆盖；A 反而要新增顺序/失败/多声明符规则",
+      "evidence": [
+        "E07",
+        "E09",
+        "E10",
+        "E11",
+        "E13",
+        "E14",
+        "E15"
+      ],
+      "verdict": "unresolved（出口继承成立；安全性依赖未实现的诊断）",
+      "fact": "出口事实（对 A 有利，因为可从尾随块继承）：落出/return/break/continue 全跑（E07 r1/b2/c2），err 出口（return err:/break err:）也跑（E07 e1/e2）；break 只跑退出到的那层块（b2 无 free 2）；零值/工厂返 0 由 `if (s)` 守卫成为 no-op、不崩（E10 z1/z2）。A 声称用逃逸诊断消除 E1-5：尾随块今天确实 UAF（E09 ASan heap-use-after-free，m4 与 d3），重赋值会释放新对象并泄漏旧对象（E10 d2，无诊断）。但：own 的既有逃逸/重赋值是静默取消（E06：w3/w4 生成 0 个 R_Drop_drop 调用），A 的“报错”是 own 没有的新规则，需要改 Memory.h.ct:336/378/384-409 的取消点（主张席把它归在 Stmt.h.ct 的 30 行诊断里）；且 A 的“只收 malloc/calloc/工厂”白名单不能保证可 free——返回 `&static` 的工厂被 own 与尾随块都接受并 abort（E15 g1/g2 rc=134），A 会继承。故 A 的出口语义成立，但“缺省就正确/消除 UAF”依赖尚未实现的诊断，且白名单留下非堆工厂漏洞。"
+    },
+    {
+      "id": "J-5",
+      "question": "兼容性：现有 defer/own/尾随块夹具、golden、C 超集",
+      "claim": "A：零 golden 改动；不改 defer_ahead 与语句位语义；`.h.ct` 允许（:510-511）",
+      "counter": "B：A 必须改 defer_ahead（1489-1494？）并区分 defer 变量/函数；迁移面与标识符兼容风险",
+      "evidence": [
+        "E05",
+        "E07",
+        "E11",
+        "E12",
+        "E17",
+        "E20",
+        "E21"
+      ],
+      "verdict": "unresolved（夹具/golden/C 超集 = pass；语言级标识符兼容与 .h.ct = fail/矛盾）",
+      "fact": "夹具与 golden：7 个 defer/own 夹具 + 260_hct_defer + examples/42_defer 全绿（E17）；p40_trailing/p40_errdefer_scope/p40_order_own/p49_own 全绿（E05/E07）；错误夹具文案逐字不变（E11/E21）；生成 C 在 -Wall -Wextra 零警告（E21）。仓库内 `= *defer` 源码 0 处、224:72 的 `int defer = 1;` 只钉声明位（E17），所以 A 不迫改任何现有夹具/golden——“零 golden 改动”成立。语言级兼容：A 的规则会改判 E20 的 5 个合法程序（a3/a4/a6/a7/a8，均编译运行通过），这不是夹具能挡的破坏。`.h.ct`：规范 §4.9.1:510-511 说后缀禁令已撤销，块级 defer 在 .h.ct 合法（E12 rc=0），但尾随 defer 仍被 parse_trailing_defer 报 `defer is not allowed in a .h.ct unit`（E12 rc=1；Stmt.h.ct:1489-1494）。A 若“复用 parse_trailing_defer”又主张“.h.ct 允许”，两者不能同时成立，必须先改这段检查（主张席成本表未计）或另开路径（则“复用”不成立）。"
+    },
+    {
+      "id": "J-6",
+      "question": "实现代价：parser/emitter/CFG/诊断/迁移",
+      "claim": "A：parser +80-100 行、Memory/Parser/Diag +28 行、emitter 0、文档/测试 ~200-250 行、1 stage、3 提交、现有夹具/golden 零改动",
+      "counter": "B：parser 100-200 行 + 3 个源码文件 + 规范/测试；B 源码/规范/测试/门禁 0 行；无迁移",
+      "evidence": [
+        "E08",
+        "E13",
+        "E16",
+        "E17",
+        "E21"
+      ],
+      "verdict": "B=pass（0 行）；A=unresolved（零 emitter/零 golden 成立；总量不可精确，且低估 .h.ct 与诊断两处）",
+      "fact": "B 的 0 行是现状即证据（E16/E17 全绿，源码未改）。A 的零 emitter 成立：N_DEFER 节点本身不发射（Emitter.h.ct:4025），出口由 N_DEFER_RUN 内联 body（:4023-4025/:5068），且现有 delete 已发射出 A 声明的释放形状（E08）；零 golden 成立（E17，0 处 `= defer`）。parser 可比量实测：defer_ahead 12 行（:1380-1391）、parse_trailing_defer **56 行**（:1472-1527，双方写的“51 行 1472-1522”截短 5 行）、own 前置分支 19 行（:2458-2476）、A 的初始化式挂点在 :3774 的 parse_expr 之前；A 的逃逸/重赋值诊断需动 Memory.h.ct:336/378/384-409，`.h.ct` 需改 :1489-1494 或另开路径——两处都不在“parser +80-100/Memory +28”内。测试面按 p49 模式约 134 行脚本 + 9 个夹具（E3 行 1-9），文档 1-2 节。主张席 80-100 与反对席 100-200 都只是估算；未实现不可精确（unresolved）。另：A 需要 3 个提交（test 红 + feat + docs）与 1 stage，这点双方无争议。"
+    }
+  ],
+  "findings": {
+    "claim_reproduced": "主张席 E1-1（m1 4:41 undeclared variable rc=1）、E1-2（p49 三行 ok/E49-1/E49-2/0 failure）、E1-4（m2 3:1、m3 2:1 L49-1）、E1-3（p40_r5 OK；b2 body0/free0/free1）、E1-5（m4 ASan heap-use-after-free）逐字复现；E3 的“desugar 后运行时不可区分”成立（E13）。",
+    "counter_reproduced": "反对席 E1 逐条复现：p49 tail `0 failure(s)`、p40_r2 OK、220 LIFO body/b/a、224 末行 `defer=1`、p1 `undeclared variable` rc=1、p2/p2c rc=0、p3/p5/p6/p7 同文案（行:列因夹具格式不同）、字符数 25/27/41、p14/p8/p9 等效覆盖（E05/E07/E15）。",
+    "hard_findings_against_A": [
+      "A 的判定规则会改判 5 个今天合法的程序（a3 `= defer;`、a4/a6 `= defer(7)` 同名函数含前向声明、a8 `= defer + 1` 指针算术；a7 非指针声明在宽规则下同样受影响）——J-3 失败，语言级兼容破坏（E02/E20）。",
+      "A 的“非 Drop 堆对象与标量指针只有 A”不成立：尾随块 + delete 对 `int *` 与非 Drop struct 生成完全相同的释放形状（E08 t1/m4），A 无新能力。",
+      "A 的“只收 malloc/calloc/工厂”白名单不能保证可 free：返回 static struct 指针的工厂被 own 与尾随块接受并 abort（E15），A 继承该漏洞。",
+      "A 的逃逸/重赋值报错是 own 没有的新规则（own 静默取消：E06），需改 Memory.h.ct 的取消点，与“复用尾随块/不新增规则”的叙事有张力。",
+      "A 的“复用 parse_trailing_defer”与“`.h.ct` 允许”不能同时成立：parse_trailing_defer 对 .h.ct 直接报 `defer is not allowed in a .h.ct unit`（E12），而规范 §4.9.1:510-511 说后缀禁令已撤销（块级 defer 在 .h.ct 合法）。"
+    ],
+    "hard_findings_for_A": [
+      "现有 defer 只收块形态、`defer expr;` 语句报 unexpected token（E01）；defer 是上下文关键字（kw[] 无它），位置可区分。",
+      "尾随块运行期四条出口 + err 出口 + 零值守卫都正确（E07/E10），A 继承；现有 golden 全绿（E17），A 的“零 golden 改动”成立。",
+      "A 的释放动作 = 现有 delete 的发射（E08），emitter 0 行、复用 N_DEFER 栈成立（E13/E16）。",
+      "尾随块在 return/重赋值逃逸上今天静默 UAF/泄漏（E09/E10），A 的诊断（若实现）确实能消除这一类缺陷。"
+    ],
+    "anchor_drift": "主张席 Stmt.h.ct:1385-1390、反对席 1384-1390 指向 defer_ahead 中段；实际函数是 1380-1391（12 行）。双方写 parse_trailing_defer “1472-1522 / 51 行”，实际 1472-1527 / 56 行（尾部 trailing_alias/errdefer_own_refs/defer_add/err 标记/return 被截掉）。Emitter 4023-4025、spec 374/498-499/467-470/2580、Memory 428、224:72 全部准确。",
+    "pre_existing_note": "尾随块在 .h.ct 被拒（Stmt.h.ct:1489-1494）与 §4.9.1:510-511“后缀禁令已撤销”不一致；260_hct_defer 只测块级 defer，故现有门禁未抓。这不是本 battle 的产物，但直接影响 A 的 `.h.ct` 主张与“复用 parse_trailing_defer”的成本。",
+    "cost_summary": "B：源码/规范/测试/门禁 0 行（现状即证据）。A：emitter 0、现有 golden 0 改动成立；可测可比量 = defer_ahead 12 行 + parse_trailing_defer 56 行 + own 分支 19 行 + 初始化式 parse_expr(:3774) + 逃逸/重赋值诊断（Memory.h.ct:336/378/384-409）+ .h.ct 检查(:1489-1494) + 9 夹具/1 探针脚本(~134 行)。主张席 80-100 与反对席 100-200 均为估算，未实现不可精确。"
+  },
+  "unreproduced": [
+    {
+      "ref": "claim.md#E4 / counter.md#5（A 的精确源码行数与“实现后”行为）",
+      "reason": "A 未实现，无法实测其 parser/诊断行数、9 条 E3 预测、以及“实现 A 后现有 golden 不变”的最终结论。本席只能给出可比函数的实测行数（E16）与现状夹具/golden 全绿（E17），A 侧成本与行为均标注为估算/预测。"
+    },
+    {
+      "ref": "counter.md#E1 的 p13（“对 int fd 发射 free(fd)”）",
+      "reason": "没有对应夹具可跑；且主张席 A 的语义表把初始化式限定为“堆来源的指针声明”，`int fd = defer open(...)` 本就不在 A 的范围内，p13 攻击的是 A 之外的宽松变体（strawman 风险）。B 的“清理动作不可判定”论点只在“A 接受任意工厂/任意指针”时成立。"
+    },
+    {
+      "ref": "counter.md#E2 的 `Stmt.h.ct:1389-1394` 与“A 必须改 defer_ahead”",
+      "reason": "实际 defer_ahead 是 :1380-1391；A 若在初始化式分支里拦截，可以不改 defer_ahead（主张席此点成立）。反对方的“必须改 defer_ahead”措辞不准确；但“必须改 parse_trailing_defer 的 .h.ct 检查或另开路径”成立（E12）。"
+    }
+  ],
+  "note": "本席只取证与逐条核对，不写最终判决；A 未实现，凡 A 的实现代价/实现后行为均为估算并标注。"
+}
