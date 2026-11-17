@@ -1,0 +1,487 @@
+{
+  "battle": "cinclude-1",
+  "head": "85579c4d",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2 (build 26B123)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "nm": "llvm-nm, compatible with GNU nm",
+    "source_baseline": "/tmp/vc/src（git archive 85579c4d 解出；Emitter.h.ct / Parser.h.ct / main.ct / Vec.h.ct / language-spec.md 的 sha256 与 git show 85579c4d:<path> 逐一相同）",
+    "binary": "/tmp/vc/ct-ast（ct-ast v0.63.2，sha256 83a0f726b28d2ae860292e2b79530660a065a2dc2683484c11780fee0c7ef2e3；由 L0→L1→L2 build 在 /tmp 重建）",
+    "l2": "/tmp/vc/l2（由 L1 的 build 编出，冻结归档；只打印建议 cc 行、不执行 cc）",
+    "date": "2026-11-17T14:03:50+08:00 (Asia/Shanghai)",
+    "note": "全部证据取自 /tmp/vc/src 的只读副本与 /tmp/vc 下的探针；工作树未提交改动（battle/cinclude-1 与一个 docs/reviews 文件）未作为证据。"
+  },
+  "rounds": 1,
+  "method": "只读复算 + 行为探针 + 迁移模拟：(1) 计数脚本独立重写；(2) 用 HEAD 自举出的 ct-ast v0.63.2 跑 include/raw/extern/#define/shim/C-link 探针；(3) 在 /tmp 副本上模拟 A 的 ct-ast 与 lib/std 迁移（静态 shim include），检验 L1/L2 零改动下的构建可行性；(4) 全量 check-ast 确认基线绿。A/B 都未实现，因此凡是『翻默认后』的预测都只到机制层，并明确标注；不写最终判决。",
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "claim.md#2 E1 / counter.md#2.1",
+      "command": "cd /tmp/vc/src && P='^[[:space:]]*#include[[:space:]]+[<\"]'\ngrep -rlE --include='*.ct' \"$P\" . | wc -l\ngrep -rE --include='*.ct' -h \"$P\" . | wc -l\nfor d in selfhost lib examples test; do\n  printf '%s %s/%s\\n' \"$d\" \\\n    \"$(grep -rlE --include='*.ct' \"$P\" \"$d\" | wc -l | tr -d ' ')\" \\\n    \"$(grep -rE --include='*.ct' -h \"$P\" \"$d\" | wc -l | tr -d ' ')\"\ndone",
+      "exit": 0,
+      "output": "688\n845\nselfhost 22/68\nlib 4/8\nexamples 172/210\ntest 490/559",
+      "reproduced": true,
+      "note": "主张席 E1 与反方 §2.1 的总数与四组分解逐项复现。`.ct` 总数 1289，688/1289 = 53.4%（counter 的 53.4% 成立）。本席用与主张席相同的 `^[[:space:]]*#include[[:space:]]+[<\"]` 口径；counter 的 `^#include` 口径亦得 688/845。全仓无行首缩进的 include（见 V20），两种口径在现存语料上等价。"
+    },
+    {
+      "id": "V2",
+      "side": "both",
+      "ref": "claim.md#2 E1 注 / counter.md#2.1",
+      "command": "cd /tmp/vc/src && P='^[[:space:]]*#include[[:space:]]+[<\"]'\n# 按后缀\nfor s in .ct .h.ct .m.ct; do echo \"$s $(grep -rlE --include=\"*$s\" \"$P\" . | wc -l)/$(grep -rE --include=\"*$s\" -h \"$P\" . | wc -l)\"; done\n# 普通 .ct 行数（排除 .h.ct/.m.ct）\ngrep -rnE --include='*.ct' \"$P\" . | grep -vE '\\.(h|m)\\.ct:' | wc -l\n# 分组（files/lines），plain 行按文件后缀过滤\nfor d in selfhost selfhost/ct-ast selfhost/l1 selfhost/l2 lib/std examples test test/ast test/modules test/cases; do\n  plain_lines=$(grep -rnE --include='*.ct' \"$P\" \"$d\" | grep -vE '\\.(h|m)\\.ct:' | wc -l | tr -d ' ')\n  plain_f=$(grep -rlE --include='*.ct' \"$P\" \"$d\" | grep -vE '\\.(h|m)\\.ct$' | wc -l | tr -d ' ')\n  h=$(grep -rhE --include='*.h.ct' \"$P\" \"$d\" | wc -l | tr -d ' '); hf=$(grep -rlE --include='*.h.ct' \"$P\" \"$d\" | wc -l | tr -d ' ')\n  m=$(grep -rhE --include='*.m.ct' \"$P\" \"$d\" | wc -l | tr -d ' '); mf=$(grep -rlE --include='*.m.ct' \"$P\" \"$d\" | wc -l | tr -d ' ')\n  printf '%-16s plain %s/%s  h %s/%s  m %s/%s\\n' \"$d\" \"$plain_f\" \"$plain_lines\" \"$hf\" \"$h\" \"$mf\" \"$m\"\ndone",
+      "exit": 0,
+      "output": "*.ct 688/845\n*.h.ct 32/67\n*.m.ct 28/33\n745\nselfhost          plain 4/20    h 18/48   m 0/0\nselfhost/ct-ast   plain 1/3     h 18/48   m 0/0\nselfhost/l1       plain 1/5     h 0/0     m 0/0\nselfhost/l2       plain 2/12    h 0/0     m 0/0\nlib/std           plain 0/0     h 4/8     m 0/0\nexamples          plain 160/198 h 0/0     m 12/12\ntest              plain 464/527 h 10/11   m 16/21\ntest/ast          plain 355/406 h 4/5     m 5/6\ntest/modules      plain 68/73   h 5/5     m 11/15\ntest/cases        plain 25/28   h 0/0     m 0/0",
+      "reproduced": true,
+      "note": "主张席的 selfhost 细分 ct-ast 19/51、l1 1/5、l2 2/12 复现（ct-ast = main.ct 1/3 + 18 个 .h.ct 48 行）；counter 的『另 l1/l2 3 文件/17 行』复现；lib/std 4/8 全是 .h.ct。注意 .ct 后缀总数 1289 中含 .h.ct 136、.m.ct 43。"
+    },
+    {
+      "id": "V3",
+      "side": "both",
+      "ref": "claim.md#2 E1（include 目标直方图）",
+      "command": "cd /tmp/vc/src && P='^[[:space:]]*#include[[:space:]]+[<\"]'\ngrep -rhE --include='*.ct' \"$P\" . | sed -E 's/^[[:space:]]*#include[[:space:]]+//' | sort | uniq -c | sort -rn | head -20",
+      "exit": 0,
+      "output": " 638 <stdio.h>\n  82 <stdlib.h>\n  47 <string.h>\n  22 <stddef.h>\n  11 <stdarg.h>\n   4 <time.h>\n   4 <sys/stat.h>\n   4 <ctype.h>\n   3 <stdbool.h>\n   2 <sys/types.h>\n   2 <stdint.h>\n   2 <pthread.h>\n   2 <limits.h>\n   2 <dirent.h>\n   2 \"pkt.shim.h\"\n   1 <unistd.h>\n   1 <stdalign.h>\n   1 <setjmp.h>\n   1 <sched.h>\n   1 \"units.shim.h\\\"",
+      "reproduced": true,
+      "note": "主张席的 638/82/47/22/11 逐项复现。stdlib/stdio/string 合计 767/845 = 90.8%；stdio 638/845 = 75.5%（主张席『语言重心在 libc』成立）。另有 3 条是对手工 shim 头的 include（`pkt.shim.h` ×2、`units.shim.h` ×1），说明『.ct 手工 include 自有 shim』在 examples 已有先例。"
+    },
+    {
+      "id": "V4",
+      "side": "verify",
+      "ref": "question.md#证据要求（#ct-raw / extern / #define 规模）",
+      "command": "cd /tmp/vc/src\ngrep -rnE '^[[:space:]]*#ct-raw' --include='*.ct' .            # 指令行\ngrep -rl '#ct-raw' --include='*.ct' . | wc -l                  # 任意提及的文件\ngrep -rn '#ct-raw' --include='*.ct' . | wc -l                  # 任意提及的行\ngrep -rnE '^[[:space:]]*extern\\b' --include='*.ct' .            # extern 行\nfor d in selfhost lib examples test; do\n  printf '%s %s\\n' \"$d\" \"$(grep -rhcE '^[[:space:]]*#define\\b' --include='*.ct' \"$d\" | awk '{s+=$1} END{print s}')\"\ndone",
+      "exit": 0,
+      "output": "（#ct-raw 指令行）\n./test/ast/65_raw/prog.ct:5:#ct-raw\n./test/ast/242_map_str_release/prog.ct:13:#ct-raw\n./test/ast/errors/raw_not_line_start.ct:7:  #ct-raw\n./test/ast/errors/raw_unclosed.ct:7:#ct-raw\n./test/ast/errors/raw_end_trailing.ct:7:#ct-raw\n8\n17\n（extern 行）\n./test/ast/errors/foreach_unsized_global.ct:3:extern int ext[];\n./test/ast/errors/extern_function.ct:5:extern int counter(void) {\n./test/modules/extern_decl/lib.h.ct:4:extern int lib_flag;\n./selfhost/ct-ast/frontend/module/Module.h.ct:74:extern char *realpath(const char *path, char *resolved);\n（#define）\nselfhost 424\nlib 0\nexamples 3\ntest 14",
+      "reproduced": true,
+      "note": "counter 的『#ct-raw 17 行/8 文件』是字符串提及数（含 3 个编译器源文件的实现/注释）；真正的 #ct-raw 指令只有 5 行：2 个正例 fixture + 3 个 errors fixture。但这不削弱绕过面：语言机制对任意 .ct 可用（V15 实测）。extern 的 4 行里只有 2 条是真实声明，其中一条在编译器自身（Module.h.ct:74，V24）。#define 441 行里 377 在 ct-ast（MAX_* 常量等），所以 A 若把 #define 纳入同一条 hard error，会直接命中编译器自身 377 行。"
+    },
+    {
+      "id": "V5",
+      "side": "verify",
+      "ref": "claim.md#3 E2（31 shim/500 行）/ counter.md#2.2",
+      "command": "cd /tmp/vc/src\nfor f in $(find . -name '*.shim.h' | sort); do\n  d=$(dirname \"$f\"); b=$(basename \"$f\" .shim.h)\n  printf '%s mct=%s shimc=%s lines=%s inc=%s\\n' \"$f\" \\\n    \"$([ -f \"$d/$b.m.ct\" ] && echo yes || echo NO)\" \\\n    \"$([ -f \"$d/$b.shim.c\" ] && echo yes || echo no)\" \\\n    \"$(wc -l < \"$f\" | tr -d ' ')\" \"$(grep -cE '^[[:space:]]*#include' \"$f\" | tr -d ' ')\"\ndone\nfind . -name '*.shim.h' | wc -l; find . -name '*.shim.c' | wc -l\ncat $(find . -name '*.shim.h') | wc -l; cat $(find . -name '*.shim.c') | wc -l",
+      "exit": 0,
+      "output": "./examples/tour/15_memory/manual_shim/pkt/pkt.shim.h mct=NO shimc=yes lines=20 inc=0\n./examples/tour/15_memory/manual_shim_wrong/pkt/pkt.shim.h mct=NO shimc=yes lines=20 inc=0\n./test/ast/153_into_type_host/lib/lib.shim.h mct=NO shimc=no lines=5 inc=0\n（其余 28 个 .shim.h 均 mct=yes）\n31\n5\n500\n106",
+      "reproduced": true,
+      "note": "31 个 .shim.h / 5 个 .shim.c / 500 行主张席全部复现；12 行 include 在 .shim.h、10 行在 .shim.c。但只有 28 个 shim 与 `.m.ct` 配对（编译器只为 .m.ct 探测，spec 680）；3 个没有 `.m.ct`：`manual_shim/pkt` 与 `manual_shim_wrong/pkt` 是 plain `.ct` 手工 include（V3 的两条 `pkt.shim.h`），`test/ast/153_into_type_host/lib/lib.shim.h` 是未被引用的残件。`examples/tour/15_memory/manual_shim/main.ct` + `pkt.shim.c` 是仓内唯一『shim 只经 .ct 手工 include、.shim.c 手工链接』的现成先例。"
+    },
+    {
+      "id": "V6",
+      "side": "verify",
+      "ref": "question.md#2（自举证据链）；p42-1/verify.json 的基线方法",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && git archive 85579c4d | tar -x -C /tmp/vc/src\ncd /tmp/vc/src\ncc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o /tmp/vc/ctc\n/tmp/vc/ctc selfhost/l1/ctc.ct -o /tmp/vc/l1.c\ncc -Wall -Wextra -std=c99 /tmp/vc/l1.c -o /tmp/vc/l1\n/tmp/vc/l1 build selfhost/l2/driver.ct -o /tmp/vc/l2src\ncc -Wall -Wextra -std=c99 /tmp/vc/l2src/*.c -o /tmp/vc/l2\n/tmp/vc/l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/vc/astsrc\ncc -Wall -Wextra -std=c99 /tmp/vc/astsrc/*.c -o /tmp/vc/ct-ast\n/tmp/vc/ct-ast --version\nshasum -a 256 /tmp/vc/ct-ast",
+      "exit": 0,
+      "output": "BUILD_DONE rc=0\nct-ast v0.63.2\n83a0f726b28d2ae860292e2b79530660a065a2dc2683484c11780fee0c7ef2e3  /tmp/vc/ct-ast",
+      "reproduced": true,
+      "note": "全部证据在 `git archive 85579c4d` 解出的只读副本上取得，不用工作树未提交改动；关键文件 sha256 与 `git show 85579c4d:<path>` 相同（Emitter.h.ct / Parser.h.ct / main.ct / Vec.h.ct / language-spec.md 逐一核对）。L2 由 L1 的 build 编出，ct-ast 由 L2 的 build 编出（`l2 build -I selfhost/ct-ast ...`），与 README §手工自举一致。"
+    },
+    {
+      "id": "V7",
+      "side": "counter",
+      "ref": "counter.md#4 P4 / AGENTS.md §2（l2 冻结）",
+      "command": "cd /tmp/vc/src\n/tmp/vc/l2 build -I test/modules/map_unit test/modules/map_unit/main.ct -o /tmp/vc/l2map; echo rc=$?\n/tmp/vc/l2 build test/modules/map_unit/libc/libc.m.ct -o /tmp/vc/l2m2; echo rc=$?\n/tmp/vc/ct-ast build test/modules/map_unit/libc/libc.m.ct -o /tmp/vc/l2m3; echo rc=$?",
+      "exit": 1,
+      "output": "ctc: cannot resolve import 'libc/libc' from 'test/modules/map_unit/main.ct'\nrc=1\ncc -std=c99 /tmp/vc/l2m2/libc.m.c -o a.out\nrc=0\nctc: a .m.ct unit produces no output; import it from a .ct unit\nrc=1",
+      "reproduced": true,
+      "note": "counter 的 P4 逐字复现（rc=1，消息相同）：L2 不能解析 `.m.ct` 的 import。补充两点反方没说的：(a) 直接把 `.m.ct` 当输入交给 L2，它按普通单元编出 `libc.m.c`（rc=0），L2 只是不认识『映射单元』语义；(b) ct-ast 拒绝直接 build `.m.ct`（rc=1，要求 import）。所以 A 若让 ct-ast 的源码 import 一个 `.m.ct`，L2 这一代直接断链；若 ct-ast 只 include 一个普通 shim 头，L2 可以透传（V8）。"
+    },
+    {
+      "id": "V8",
+      "side": "verify",
+      "ref": "question.md#2 J-1（A 的迁移在 L2 侧是否可行）",
+      "command": "cd /tmp/vc && rm -rf astshim astshim_out && cp -r src/selfhost/ct-ast astshim && cd astshim\ncat > ctlibc.shim.h <<'EOF'\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <sys/stat.h>\n#include <limits.h>\n#include <ctype.h>\n#include <unistd.h>\n#include <dirent.h>\nEOF\nfind . -name '*.ct' -print0 | xargs -0 perl -0pi -e \\\n  's/^[ \\t]*#include[ \\t]+[<\"][^\\n>\"]*[>\"]/#include \"ctlibc.shim.h\"/mg'\ngrep -rn '#include \"ctlibc.shim.h\"' --include='*.ct' . | wc -l\nmkdir -p /tmp/vc/astshim_out\n/tmp/vc/l2 build -I /tmp/vc/astshim /tmp/vc/astshim/main.ct -o /tmp/vc/astshim_out; echo l2_rc=$?\ncc -Wall -Wextra -std=c99 /tmp/vc/astshim_out/*.c -o /tmp/vc/astshim/ct-ast-noi; echo cc_noI_rc=$?\ncc -Wall -Wextra -std=c99 -I /tmp/vc/astshim /tmp/vc/astshim_out/*.c -o /tmp/vc/astshim/ct-ast-i; echo cc_I_rc=$?\n/tmp/vc/astshim/ct-ast-i --version",
+      "exit": 0,
+      "output": "51（替换后的 shim include 行数）\nl2_rc=0\n42（生成 .c+.h 文件数）\ncc_noI_rc=1\n/tmp/vc/astshim/runtime/arena/Arena.h.ct:13:10: fatal error: 'ctlibc.shim.h' file not found\ncc_I_rc=0\nct-ast v0.63.2",
+      "reproduced": true,
+      "note": "A 的『ct-ast 换 ctlibc.shim.h』在 L1/L2 源码零改动下可行：L2 照常透传 include 行并完成 build（rc=0），生成物带上 shim include。但自举链的 cc 步（README §手工自举、check-ast.sh:6114-6130）没有 `-I`，照原命令 rc=1；加 `-I <shim 目录>` 后 rc=0 且得到可运行的 v0.63.2。结论：不是 L1/L2 阻塞，而是『必须把 shim 部署/-I 纳入 A』；另外主张席 E4 写的『≈51 行 + 1 个 shim 头』漏掉了这一项，且一个共享 `ctlibc.shim.h` 与主张席自己『唯一例外 `#include \"<base>.shim.h\"`（本单元自有 shim）』的措辞冲突（19 个单元要各配一个 base 同名 shim，或改规则允许共享 shim）。"
+    },
+    {
+      "id": "V9",
+      "side": "verify",
+      "ref": "selfhost/check-ast.sh:6114-6130（self-hosting 9.6 / fixpoint）",
+      "command": "rm -rf /tmp/vc/astshim_self && mkdir -p /tmp/vc/astshim_self\n/tmp/vc/astshim/ct-ast-i build --emit-c -I /tmp/vc/astshim /tmp/vc/astshim/main.ct -o /tmp/vc/astshim_self\ncc -Wall -Wextra -std=c99 /tmp/vc/astshim_self/*.c -o /tmp/vc/astshim/self-noi; echo cc_noI_rc=$?\ncc -Wall -Wextra -std=c99 -I /tmp/vc/astshim /tmp/vc/astshim_self/*.c -o /tmp/vc/astshim/self-i; echo cc_I_rc=$?\n/tmp/vc/astshim/self-i --version",
+      "exit": 0,
+      "output": "self_emit_rc=0\n9:#include \"ctlibc.shim.h\"\n10:#include \"ctlibc.shim.h\"\ncc_noI_rc=1\nIn file included from /tmp/vc/astshim_self/Arena.c:3:\n/tmp/vc/astshim_self/Arena.h:8:10: fatal error: 'ctlibc.shim.h' file not found\ncc_I_rc=0\nct-ast v0.63.2",
+      "reproduced": true,
+      "note": "check-ast.sh 的 self-hosting 段用 `\"$CC\" -Wall -Wextra -std=c99 \"$work/self1\"/*.c -o \"$work/ct-ast2\"`（无 -I）做不动点。A 迁移后的 ct-ast 自编产物带 shim include，这一行 rc=1；加 -I 后 rc=0。即 A 必须改门禁的 cc 行（或让 ct-ast 把 shim 复制进产物目录），这与『语言默认 + 迁移』是两件事，A 的 E4 没列。"
+    },
+    {
+      "id": "V10",
+      "side": "verify",
+      "ref": "question.md#2 J-1 / A『.ct 也只许 include 自有 shim』",
+      "command": "cd /tmp/vc/shimbypass\nprintf '#include \"main.shim.h\"\\nint main(void){ SAY(\"shim-bypass\"); return helper_from_shim(); }\\n' > main.ct\nprintf '#include <stdio.h>\\nstatic inline int helper_from_shim(void){ return 0; }\\n#define SAY(x) puts(x)\\n' > main.shim.h\n/tmp/vc/ct-ast build -I . main.ct -o /tmp/vc/shimbypass/app; echo ct_build_rc=$?\n/tmp/vc/ct-ast build --emit-c -I . main.ct -o /tmp/vc/shimbypass/out5; echo emit_rc=$?\ncc -Wall -Wextra -std=c99 -I /tmp/vc/shimbypass/out5 /tmp/vc/shimbypass/out5/*.c \\\n   -o /tmp/vc/shimbypass/out5/app2; echo cc_onlyout_rc=$?\ncc -Wall -Wextra -std=c99 -I /tmp/vc/shimbypass/out5 -I /tmp/vc/shimbypass \\\n   /tmp/vc/shimbypass/out5/*.c -o /tmp/vc/shimbypass/out5/app; echo cc_srcI_rc=$?\n/tmp/vc/shimbypass/out5/app",
+      "exit": 0,
+      "output": "ct_build_rc=1\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/main.c' '-o' '/tmp/vc/shimbypass/app'\nmain.ct:1:10: fatal error: 'main.shim.h' file not found\nemit_rc=0\ncc -std=c99 -I /tmp/vc/shimbypass/out5 /tmp/vc/shimbypass/out5/main.c -o a.out\ncc_onlyout_rc=1\nmain.ct:1:10: fatal error: 'main.shim.h' file not found\ncc_srcI_rc=0\nshim-bypass",
+      "reproduced": true,
+      "note": "plain `.ct` include 自有 `<base>.shim.h` 在 HEAD 根本跑不通 `ct build`：cc 行只有 `-I .ctbuild`，shim 既没被复制也没被 -I 指向；`--emit-c` 打印的 cc 行同样只有输出目录。只有手工加 `-I <源目录>` 才成功。所以 A 的『只许 shim include』对 `.ct` 不是『只改谁能 include』，必须先补构建侧的 shim 探测/部署（当前只有 `.m.ct` 有，spec 680）。"
+    },
+    {
+      "id": "V11",
+      "side": "both",
+      "ref": "claim.md#3（Emitter 1563-1572）/ counter.md#4 P5 / spec 680",
+      "command": "rm -rf /tmp/vc/hdrprobe && mkdir -p /tmp/vc/hdrprobe/out && cd /tmp/vc/hdrprobe\ncat > thing.h.ct <<'EOF'\n#include <stdio.h>\npub struct Thing { int n; }\npub int thing_get(Thing *t) { return t->n; }\nEOF\ncat > thing.shim.h <<'EOF'\n#define THING_SHIM_SEEN 1\nstatic int thing_shim_helper(void) { return 7; }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport thing;\nint main(void) { struct Thing t; t.n = 3; printf(\"%d\\n\", thing_get(&t)); return 0; }\nEOF\n/tmp/vc/ct-ast build --emit-c main.ct -o out; echo ct_rc=$?\ncat out/thing.h\ngrep -rn 'THING_SHIM_SEEN\\|thing.shim.h' out/ || echo not-referenced\ncc -std=c99 -I out out/*.c -o out/app && ./out/app",
+      "exit": 0,
+      "output": "ct_rc=0\n#ifndef THING_H\n#define THING_H\n...\n#include <stdio.h>\n\nstruct Thing;\nstruct Thing {\n    int n;\n};\nint thing_get(struct Thing *);\n#endif\nnot-referenced\n3",
+      "reproduced": true,
+      "note": "`.h.ct` 的 `#include <stdio.h>` 被复制进**公开** `.h`（Emitter.h.ct:1563-1572：只复制 `#include`，`#define` 不复制），姊妹 `thing.shim.h` 完全不被探测（spec 680：编译器只为 `.m.ct` 探测 shim）。这是 A 对 `.h.ct` 的硬机制缺口：不能只删 include 行。"
+    },
+    {
+      "id": "V12",
+      "side": "counter",
+      "ref": "counter.md#4 P5（.h.ct 旁的 shim 被忽略）/ claim.md#3（A 要把 shim 用作 .h.ct 的 include）",
+      "command": "rm -rf /tmp/vc/hdrshim && mkdir -p /tmp/vc/hdrshim/out && cd /tmp/vc/hdrshim\ncat > lib.h.ct <<'EOF'\n#include \"lib.shim.h\"\npub struct Box2 { int n; }\npub int box2_get(Box2 *b) { return b->n + LIB_SHIM_BONUS; }\nEOF\ncat > lib.shim.h <<'EOF'\n#include <stdio.h>\n#define LIB_SHIM_BONUS 2\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport lib;\nint main(void) { struct Box2 b; b.n = 40; printf(\"%d\\n\", box2_get(&b)); return 0; }\nEOF\n/tmp/vc/ct-ast build --emit-c main.ct -o out; echo ct_rc=$?\nsed -n '8p' out/lib.h\ncc -std=c99 -I out out/*.c -o out/app; echo cc_rc=$?\ncp lib.shim.h out/ && cc -std=c99 -I out out/*.c -o out/app && ./out/app\n/tmp/vc/ct-ast build -I . main.ct -o /tmp/vc/hdrshim/app; echo ct_build_rc=$?",
+      "exit": 1,
+      "output": "ct_rc=0\n#include \"lib.shim.h\"\ncc_rc=1\nout/lib.h:8:10: fatal error: 'lib.shim.h' file not found\n42\nct_build_rc=1\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/main.c' '.ctbuild/lib.c' '-o' '/tmp/vc/hdrshim/app'\n.ctbuild/lib.h:8:10: fatal error: 'lib.shim.h' file not found",
+      "reproduced": true,
+      "note": "counter P5 的机制复现（生成头仍指回源 include，没有自动 shim）；本席再补一步：把 include 换成 shim 后，shim 必须被部署到生成头旁边（或 -I）才能编译，`ct build` 不复制 shim、不加 -I（rc=1）。所以 A 对 `.h.ct` 要『shim include 进公开头』还缺一个 header shim 的部署机制。"
+    },
+    {
+      "id": "V13",
+      "side": "verify",
+      "ref": "question.md#2 J-1（lib/std 能否在不改 L1/L2 前提下迁移）",
+      "command": "cd /tmp/vc && rm -rf stdshim foo2 stdprog && cp -r src/lib/std stdshim\ncat > stdshim/std.shim.h <<'EOF'\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\nEOF\nfind stdshim -name '*.h.ct' -print0 | xargs -0 perl -0pi -e \\\n  's/^[ \\t]*#include[ \\t]+[<\"][^\\n>\"]*[>\"]/#include \"std.shim.h\"/mg'\nmkdir -p foo2/lib && cp -r stdshim foo2/lib/std\nmkdir -p stdprog/out2 && cat > stdprog/main.ct <<'EOF'\n#include <stdio.h>\nint main(void)\n{\n    Vec<int> v; v.h = 0; v.push(1);\n    Str s = str_from(\"hi\");\n    Vec<Str> vs = { s };\n    printf(\"%d %d\\n\", v.len(), vs.len());\n    v.release(); vs.release(); s.release();\n    return 0;\n}\nEOF\nCT_STD_DIR=/tmp/vc/foo2/lib/std /tmp/vc/ct-ast build --emit-c /tmp/vc/stdprog/main.ct -o /tmp/vc/stdprog/out2; echo ct_rc=$?\nhead -10 /tmp/vc/stdprog/out2/Vec.h\ncc -std=c99 -I /tmp/vc/stdprog/out2 /tmp/vc/stdprog/out2/*.c -o /tmp/vc/stdprog/app2; echo cc_rc=$?\ncc -std=c99 -I /tmp/vc/stdprog/out2 -I /tmp/vc/foo2/lib/std /tmp/vc/stdprog/out2/*.c -o /tmp/vc/stdprog/app2 && /tmp/vc/stdprog/app2\nCT_STD_DIR=/tmp/vc/foo2/lib/std /tmp/vc/ct-ast build /tmp/vc/stdprog/main.ct -o /tmp/vc/stdprog/app3; echo ct_build_rc=$?",
+      "exit": 1,
+      "output": "ct_rc=0\n（out2/Vec.h:8-10）\n#include \"std.shim.h\"\n#include \"std.shim.h\"\n#include \"std.shim.h\"\n/tmp/vc/stdprog/out2/Str.h:8:10: fatal error: 'std.shim.h' file not found\ncc_rc=1\ncc2_rc=0\n1 1\nct_build_rc=1\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/Vec.c' '.ctbuild/Str.c' '.ctbuild/main.c' '-o' '/tmp/vc/stdprog/app3'\n.ctbuild/Vec.h:8:10: fatal error: 'std.shim.h' file not found",
+      "reproduced": true,
+      "note": "lib/std 的 8 行 include 可以换成 1 个 shim（4 个 .h.ct 文本级迁移），ct-ast 能生成产物（rc=0，运行 1 1）。但 `ct build` 的 cc 行只带 `-I .ctbuild`，shim 不在产物目录也不在 -I 上，**任何使用容器的程序 rc=1**；必须让 ct-ast 复制 shim 或把 std 源目录加进 -I。主张席『lib/std 同法』只在『手工 cc 加 -I』下成立。附带：builtin 层的路径判定依赖 `lib/std/` 子串（Parser.h.ct:2164），迁移后的 std 必须仍放在名为 lib/std 的目录下。"
+    },
+    {
+      "id": "V14",
+      "side": "both",
+      "ref": "claim.md#3 E2（.m.ct/shim 契约）/ counter.md#2.2；spec 675-690",
+      "command": "rm -rf /tmp/vc/mhal2 && mkdir -p /tmp/vc/mhal2/hal && cd /tmp/vc/mhal2\ncat > hal/mock_hal.h <<'EOF'\n#ifndef MOCK_HAL_H\n#define MOCK_HAL_H\nint mock_hal_send(const char *buf, int len);\nint mock_hal_count(void);\n#endif\nEOF\ncat > hal/mock.m.ct <<'EOF'\n#include \"mock_hal.h\"\nnamespace hal;\npub trait Controller { int send(char *buf, int len); int count(); }\nmap trait Controller for namespace hal {\n    send(buf, len) -> mock_hal_send(buf, len);\n    count()        -> mock_hal_count();\n}\nEOF\ncat > hal/mock.shim.h <<'EOF'\n#ifndef MOCK_SHIM_H\n#define MOCK_SHIM_H\n#include \"mock_hal.h\"\n#endif\nEOF\ncat > hal/mock.shim.c <<'EOF'\n#include \"mock.shim.h\"\nstatic int g_sent;\nint mock_hal_send(const char *buf, int len) { (void)buf; g_sent += len; return len; }\nint mock_hal_count(void) { return g_sent; }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport hal::mock;\nint main(void)\n{\n    char b[] = \"abc\";\n    printf(\"%d %d\\n\", hal::Controller.send(b, 3), hal::Controller.count());\n    return 0;\n}\nEOF\n/tmp/vc/ct-ast build -I . main.ct -o /tmp/vc/mhal2/app; echo ct_build_rc=$?\ngrep -n 'mock.shim.h' .ctbuild/main.c\n/tmp/vc/mhal2/app; echo run_rc=$?\n# .m.ct 能声明什么？消费者 import 后：\nrm -rf /tmp/vc/mres && mkdir -p /tmp/vc/mres/x && cd /tmp/vc/mres\ncat > x/x.m.ct <<'EOF'\nnamespace x;\nint g_state;\npub int f(void) { return 1; }\npub trait T { int m(); }\nmap trait T for namespace x { m() -> f(); }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport x::x;\nint main(void) { printf(\"%d\\n\", x::T.m()); return 0; }\nEOF\n/tmp/vc/ct-ast build -I /tmp/vc/mres /tmp/vc/mres/main.ct -o /tmp/vc/mres/app; echo mct_global_rc=$?\ncat > x/x.m.ct <<'EOF'\nnamespace x;\npub trait T { int m(); }\nstruct S { int n; }\nS inst;\nmap trait T for instance inst { m() -> 0; }\nEOF\n/tmp/vc/ct-ast build -I /tmp/vc/mres /tmp/vc/mres/main.ct -o /tmp/vc/mres/app2; echo mct_instance_rc=$?",
+      "exit": 1,
+      "output": "ct_build_rc=0\n'cc' -std=c99 -I './hal' -I '.ctbuild' '.ctbuild/main.c' './hal/mock.shim.c' '-o' '/tmp/vc/mhal2/app'\n3:#include \"mock.shim.h\"\n3 3\nrun_rc=0\n/tmp/vc/mres/x/x.m.ct:2:1: error: a .m.ct unit cannot declare a global variable\nctc: 1 error(s) generated\nmct_global_rc=1\n/tmp/vc/mres/x/x.m.ct:3:1: error: a .m.ct unit cannot declare a type\n/tmp/vc/mres/x/x.m.ct:4:1: error: a .m.ct unit cannot declare a global variable\nctc: 2 error(s) generated\nmct_instance_rc=1",
+      "reproduced": true,
+      "note": "官方路径（`.m.ct` + `<base>.shim.h/.c`）在 HEAD 完整可用：消费者 .c 自动 include shim、cc 行加 `-I ./hal`、`.shim.c` 进同一条 cc 行，运行 3 3。但『厂商 SDK 只用 .m.ct 表达』不成立：`.m.ct` 不能声明全局/类型/实例（错误原文见上），凡需要 CT 侧实例宿主（如 mock-hal 的 `uart1`）或有状态初始化，就必须 `.h.ct` 或把状态搬进 `.shim.c`。无状态函数式 SDK 可用 `.m.ct` + header-only shim（posix-socket 即此形态）。"
+    },
+    {
+      "id": "V15",
+      "side": "claim",
+      "ref": "claim.md#2 不利证据 1 / E3 P2",
+      "command": "cd /tmp/vc/raw\ncat > p.ct <<'EOF'\n#ct-raw\n#include <stdio.h>\n#ct-endraw\nint main(void) { printf(\"raw-bypass\\n\"); return 0; }\nEOF\ncd /tmp/vc/src\n/tmp/vc/ct-ast /tmp/vc/raw/p.ct -o /tmp/vc/raw/p.c; echo ct_rc=$?\ngrep -n '#include' /tmp/vc/raw/p.c\ncc -Wall -Wextra -std=c99 /tmp/vc/raw/p.c -o /tmp/vc/raw/p; echo cc_rc=$?\n/tmp/vc/raw/p",
+      "exit": 0,
+      "output": "ct_rc=0\n3:#include <stdio.h>\n4:#include <stdlib.h>\n5:#include <string.h>\n6:#include <stdio.h>\n7:#include <stdlib.h>\n8:#include <stdio.h>\n9:#include <stdlib.h>\n10:#include <stdlib.h>\n25:#include <stdio.h>\nraw-bypass\ncc_rc=0",
+      "reproduced": true,
+      "note": "主张席 E1-1/P2 的 raw 绕过逐字复现：raw 块内的 `#include <stdio.h>` 原样进入生成物（第 25 行），cc 零警告、运行输出 raw-bypass。注意 3-10 行是编译器自动注入的 lib/std include（V21），25 才是 raw；『只查 include 的源级规则』必须同时扫 raw 原文才可能堵住这一条。"
+    },
+    {
+      "id": "V16",
+      "side": "claim",
+      "ref": "claim.md#2 不利证据 2",
+      "command": "cd /tmp/vc/byp\nprintf 'extern int puts(const char *s);\\nint main(void){ puts(\"extern-bypass\"); return 0; }\\n' > e.ct\ncd /tmp/vc/src\n/tmp/vc/ct-ast /tmp/vc/byp/e.ct -o /tmp/vc/byp/e.c; echo ct_rc=$?\ngrep -n 'puts' /tmp/vc/byp/e.c\ncc -Wall -Wextra -std=c99 /tmp/vc/byp/e.c -o /tmp/vc/byp/e; echo cc_rc=$?\n/tmp/vc/byp/e",
+      "exit": 0,
+      "output": "ct_rc=0\n32:int puts(const char *);\n155:    puts(\"extern-bypass\");\nextern-bypass\ncc_rc=0",
+      "reproduced": true,
+      "note": "主张席 extern 绕过复现：无 include，生成物自己发射 `int puts(const char *);`（第 32 行），运行 extern-bypass。A 的 P2 第②项要求 `.ct/.h.ct` 的 extern 也受限；但 `errno` 的官方用法就是 `extern int errno;`（spec 1801），且编译器自身用 extern 声明 realpath（V24），所以扩面会同时改官方用法和编译器源码。"
+    },
+    {
+      "id": "V17",
+      "side": "claim",
+      "ref": "claim.md#2 不利证据 3（#define）",
+      "command": "cd /tmp/vc/byp\ncat > d.ct <<'EOF'\n#include <stdio.h>\n#define GREETING \"define-bypass\"\n#define SAY(x) puts(x)\nint main(void){ SAY(GREETING); return 0; }\nEOF\ncd /tmp/vc/src\n/tmp/vc/ct-ast /tmp/vc/byp/d.ct -o /tmp/vc/byp/d.c; echo ct_rc=$?\ngrep -n 'GREETING\\|SAY' /tmp/vc/byp/d.c\ncc -Wall -Wextra -std=c99 /tmp/vc/byp/d.c -o /tmp/vc/byp/d; echo cc_rc=$?\n/tmp/vc/byp/d",
+      "exit": 0,
+      "output": "ct_rc=0\n12:#define GREETING \"define-bypass\"\n13:#define SAY(x) puts(x)\n157:    SAY(GREETING);\ndefine-bypass\ncc_rc=0",
+      "reproduced": true,
+      "note": "`#define` 也是直通 C 通道：函数式宏 `SAY(x) puts(x)` 原样进生成物并在 C 侧展开，运行 define-bypass。全仓 441 行 #define（ct-ast 377 行，V4），A 的『#define 指向 C 符号同样受限』需要语义判断（哪些宏体引用 C 符号），不是行前缀规则；若一刀切，编译器自身 377 行先中招。"
+    },
+    {
+      "id": "V18",
+      "side": "verify",
+      "ref": "question.md#4 J-3（C 文件/链接）",
+      "command": "cd /tmp/vc/byp\nprintf '#ct-raw\\nint helper_from_c(int);\\n#ct-endraw\\nint main(void){ return helper_from_c(41) == 42 ? 0 : 1; }\\n' > l.ct\nprintf 'int helper_from_c(int x){ return x + 1; }\\n' > helper.c\n/tmp/vc/ct-ast l.ct -o l.c; echo ct_rc=$?\ncc -Wall -Wextra -std=c99 l.c helper.c -o l; echo cc_rc=$?\n./l; echo run_rc=$?",
+      "exit": 0,
+      "output": "ct_rc=0\ncc_rc=0\nrun_rc=0",
+      "reproduced": true,
+      "note": "link 面不受编译器管辖：`.ct` 里既没有 include 也没有 extern，只靠 raw 原型 + 手工把 `helper.c` 加进 cc 行即可调用任意 C 实现（rc=0）。即使 A 把 include/extern/#define 全部收进 hard error，用户仍可用自己的 Makefile/cc 行链接任意对象；而 `.shim.c` 又是 A 明确允许的官方出口——所以『封装』无法由 include 规则本身保证。"
+    },
+    {
+      "id": "V19",
+      "side": "verify",
+      "ref": "question.md#4 J-3 / claim.md#2 P5（shim 真实性）",
+      "command": "cd /tmp/vc/shimbypass\n# shim 里放任意 C（include + static inline + 宏 + 无关函数）\ncat > main.shim.h <<'EOF'\n#include <stdio.h>\n#include <stdlib.h>\nstatic inline int helper_from_shim(void){ return 0; }\n#define SAY(x) puts(x)\nstatic int also_arbitrary_c(int n){ return n + 1; }\nEOF\n/tmp/vc/ct-ast build --emit-c main.ct -o out; echo ct_rc=$?\ncc -Wall -Wextra -std=c99 -I out -I . out/main.c -o out/app; echo cc_rc=$?\n./out/app\n# 换成任意名字的 shim 仍通过\nsed -i '' 's/main.shim.h/anything.shim.h/' main.ct\nsed -i '' 's/shim-bypass/renamed-shim/' main.ct\ncp main.shim.h anything.shim.h\n/tmp/vc/ct-ast build --emit-c main.ct -o out2; echo ct_rc2=$?\ncc -std=c99 -I out2 -I . out2/main.c -o out2/app && ./out2/app",
+      "exit": 0,
+      "output": "ct_rc=0\nIn file included from main.ct:1:\n./main.shim.h:7:12: warning: unused function 'also_arbitrary_c' [-Wunused-function]\nshim-bypass\ncc_rc=0\nct_rc2=0\nrenamed-shim",
+      "reproduced": true,
+      "note": "A 的例外『唯一例外是 `<base>.shim.h`』只约束**文件名**，不约束内容：shim 头可以放任意 include、宏、static inline、任意 C 函数（rc=0、运行 shim-bypass）。HEAD 也不校验 shim 名与单元名匹配（`anything.shim.h` 同样 rc=0）。所以『C 库必须经过一次封装』在 A 下退化为『把 include 移到隔壁一个叫 *.shim.h 的文件』——主张席 P5 想用『只有 include、无包装函数的比例 <30%』衡量，但那只是度量，不是可验收的规则。"
+    },
+    {
+      "id": "V20",
+      "side": "verify",
+      "ref": "question.md#4 J-3（写法变体）/ spec 605-610、672",
+      "command": "cd /tmp/vc/ind\nprintf '  #include <stdio.h>\\nint main(void){ printf(\"indented\\\\n\"); return 0; }\\n' > a.ct\nprintf 'int main(void){ return 0; }\\n#include <stdio.h>\\n' > b.ct\nprintf '# include <stdio.h>\\nint main(void){ return 0; }\\n' > c.ct\nfor f in a b c; do /tmp/vc/ct-ast $f.ct -o $f.c; echo \"$f rc=$?\"; done\ngrep -n '#include\\|# include' c.c\n# .m.ct：include 放在 trait/map 之后仍被接受\nrm -rf /tmp/vc/mmap && mkdir -p /tmp/vc/mmap/x && cd /tmp/vc/mmap\ncat > x/x.m.ct <<'EOF'\nnamespace x;\npub trait T { int m(); }\n#include <stdio.h>\nmap trait T for namespace x { m() -> puts(\"x\"); }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport x::x;\nint main(void) { int n = x::T.m(); printf(\"%d\\n\", n); return 0; }\nEOF\n/tmp/vc/ct-ast build -I /tmp/vc/mmap main.ct -o /tmp/vc/mmap/app; echo mct_mid_include_rc=$?",
+      "exit": 0,
+      "output": "a rc=0\nb rc=0\nc rc=0\n3:# include <stdio.h>\nmct_mid_include_rc=0",
+      "reproduced": true,
+      "note": "三种写法都 rc=0 并原样进生成物：行首缩进、include 写在 main 之后（emitter 把 N_PP 提前到 prologue）、`# include`（# 与 include 之间有空格）。`.m.ct` 的 `#include` 也不要求位于 prologue 顶部（Parser.h.ct:1345-1353 只按 token 文本判定，不看位置），只有 `#ct-raw` 会被 `.m.ct` 拒绝。因此 A 的机械验收不能用『行首 #include』grep 或简单的 `strncmp(toktext, \"#include\", 8)`：至少 `# include` 与 mid-file 两种会漏，必须是解析器级的 T_PP 规范化 + 位置/块扫描。"
+    },
+    {
+      "id": "V21",
+      "side": "verify",
+      "ref": "question.md#4 J-3 / docs/language-spec.md:43、1792",
+      "command": "mkdir -p /tmp/vc/triv\nprintf 'int main(void)\\n{\\n    return 0;\\n}\\n' > /tmp/vc/triv/t.ct\ncd /tmp/vc/src\n/tmp/vc/ct-ast /tmp/vc/triv/t.ct -o /tmp/vc/triv/t.c\nhead -12 /tmp/vc/triv/t.c\n/tmp/vc/ct-ast --freestanding /tmp/vc/triv/t.ct -o /tmp/vc/triv/tf.c; echo fs_rc=$?\nhead -12 /tmp/vc/triv/tf.c\ngrep -n '^#include' lib/std/*.h.ct",
+      "exit": 0,
+      "output": "/* Generated by ct v0.63.2 ... */\n/* Generated output ... */\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <stdlib.h>\nfs_rc=0\n（--freestanding 的生成物头部同样是这 8 行 include）\nlib/std/Option.h.ct:23:#include <stdio.h>\nlib/std/Option.h.ct:24:#include <stdlib.h>\nlib/std/Result.h.ct:21:#include <stdio.h>\nlib/std/Result.h.ct:22:#include <stdlib.h>\nlib/std/Str.h.ct:16:#include <stdlib.h>\nlib/std/Vec.h.ct:17:#include <stdio.h>\nlib/std/Vec.h.ct:18:#include <stdlib.h>\nlib/std/Vec.h.ct:19:#include <string.h>",
+      "reproduced": true,
+      "note": "编译器自动加载的 lib/std 会把 stdio/stdlib/string 注入**每一个**生成物（连空 main 也一样），`--freestanding` 也不抑制。这直接说明：A 只能把 include 从『用户源码』迁进 shim，无法把 C 头从产物里去掉；『避免绕开 CT 基础库』的收益不在产物层，而在这层 include 本来就来自基础库自身（lib/std 4 个 .h.ct）。"
+    },
+    {
+      "id": "V22",
+      "side": "both",
+      "ref": "claim.md#5 E4（门禁）/ counter.md#5 E4",
+      "command": "cd /tmp/vc/src\ngrep -rnE \"grep -q.*#include\" selfhost/*.sh test/*.sh | wc -l\ngrep -rnE \"grep -q.*#include\" selfhost/*.sh test/*.sh\ngrep -cE \"printf.*#include\" selfhost/check-ast.sh\nfor d in test examples; do\n  echo \"$d expected.* $(find $d -name '*.expected.*' | wc -l) expected.c $(find $d -name '*.expected.c' | wc -l) expected.out $(find $d -name '*.expected.out' | wc -l)\"\ndone\ngrep -rl '#include' --include='*.expected.c' test | wc -l\ngrep -rl '#include' --include='*.expected.h' test | wc -l",
+      "exit": 0,
+      "output": "11\nselfhost/check-ast.sh:2029   && grep -q '^#include <stdio.h>$' \"$mod-hdr/main.h\" \\\nselfhost/check-ast.sh:2053   && grep -q '^#include <stdlib.h>' \"$mod-mu/main.c\" \\\nselfhost/check-ast.sh:2087   && grep -q '^#include <stdlib.h>' \"$mod-muc/parse.c\" \\\nselfhost/check-ast.sh:2088   && grep -q '^#include <stdlib.h>' \"$mod-muc/main.c\" \\\nselfhost/check-ast.sh:2134   && grep -q '^#include <stdlib.h>' \"$work/mmch/main.c\" \\\nselfhost/check-ast.sh:2135   && grep -q '^#include <string.h>' \"$work/mmch/main.c\" \\\nselfhost/check-ast.sh:2192   && grep -qF '#include \"lib.shim.h\"' \"$work/mmsh/main.c\" \\\nselfhost/check-ast.sh:2279   && grep -qF '#include \"lit.shim.h\"' \"$work/mmlit/main.c\" \\\nselfhost/check-ast.sh:2440   && grep -qF '#include \"socket.shim.h\"' \"$work/mpsock/demo.c\" \\\nselfhost/check-ast.sh:2458   && grep -q '^#include <stdio.h>$' \"$mod-pro/main.h\" \\\nselfhost/check-ast.sh:4723   && ! grep -q '^#include \"contract2.h\"' \"$work/contract2.c\"\n16\ntest expected.* 444 expected.c 62 expected.out 319\nexamples expected.* 50 expected.c 0 expected.out 50\n60\n0",
+      "reproduced": true,
+      "note": "60 个 expected.c 含 include（62 个中只有 sig_mismatch/sig_mismatch_json 两个不含）、test 444 个 expected 文件、319 个 expected.out：主张席 E4 与 counter E4 的数全部复现；expected.h 0 个含 include。但『门禁只有 2 条 hdr 断言』被两方都低估：check-ast.sh 里 `grep -q ... #include` 的正向断言共 11 条（另 pkt/hdr/hdr_prologue/shim 等），脚本内硬编码 `printf ... #include` 的 fixture 16 处。A 的 grandfather 若覆盖 test/**，这些今天不改也绿；一旦测试 fixture 也迁移，11 条断言与 60 个 golden 都要跟着改/重生成，成本高于两方所写。"
+    },
+    {
+      "id": "V23",
+      "side": "both",
+      "ref": "claim.md#3 E2 / counter.md#3 E2 / question.md#6 J-5",
+      "command": "cd /tmp/vc/src\nsed -n '43p;605,610p;671,673p;675,690p;910,913p;1792p;1801p' docs/language-spec.md\ngrep -n 'Z3' docs/modern-oo-gap.md\nsed -n '8p' README.en.md",
+      "exit": 0,
+      "output": "43:1. 顶层构造以行首关键字开始（`trait` / `struct` / `union` / `enum` / `impl` / `pub` / `namespace` / `import`）；普通 C 声明与语句原样透传。\n605:`.m.ct` 是**映射单元**：只允许 `namespace`、`import`、`#include` / `#define`（prologue）、`pub trait`\n671:`.m.ct` 的 prologue（`#include` / `#define`）按整行去重后展开进**消费者** `.c` 顶部（banner 之后），\n672:消费者不写这些 `#include` 也能编译；消费者 `.h` 不含 prologue。`ct compile` 不解析 import，\n675:**伴随 C shim（第三十九批，仅 ct-ast）**：映射单元可以让同目录同名的 C 文件承担 recipe 写不出的\n680:- 编译器只为 `.m.ct` 探测 shim（`foo.h.ct` / `foo.ct` 旁的 `foo.shim.h` 被忽略）；命中的文件必须是\n912:- 生成物按原样发射 `offsetof(struct S, f)`，因此**源文件必须自己写 `#include <stddef.h>`**——\n913:  生成物只透传源文件里的 `#include`，不会替它补。\n1792:CT 没有预处理器：`#include` 只按整行透传到生成物，头文件内容不参与解析。因此一个来自 C 头文件的\n1801:| `errno` | **不放行**，需自己写 `extern int errno;` | 声明后 `return errno;` |\ndocs/modern-oo-gap.md:37:| Z3 | C 超集 | 语法糖必须能无歧义脱糖到 C |\nREADME.en.md:8:**ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into plain C.",
+      "reproduced": true,
+      "note": "两方引用的规范锚点全部存在且行号正确。需要补两条对冲：spec 43 的『普通 C 声明与语句原样透传』与 1792 的『include 只按整行透传』是 A 要改的既有契约；spec 912-913 明确要求源文件自己写 stddef include；spec 680 明确 shim 只为 .m.ct 探测——这三条共同说明 A 不是纯策略开关，而是语言契约变更 + 新机制。"
+    },
+    {
+      "id": "V24",
+      "side": "claim",
+      "ref": "claim.md#3 E2（不利 A）/ question.md#4（extern 直接 C 使用）",
+      "command": "cd /tmp/vc/src\nsed -n '70,76p' selfhost/ct-ast/frontend/module/Module.h.ct",
+      "exit": 0,
+      "output": "/* `realpath` is POSIX/XSI, and glibc hides its declaration under `-std=c99`\n   (strict ANSI) unless a feature-test macro asks for it. Declare the symbol\n   here so the build stays flag-free; this is the POSIX.1 prototype. */\nextern char *realpath(const char *path, char *resolved);",
+      "reproduced": true,
+      "note": "编译器自身就靠 `extern` 直接声明 C 符号（realpath），且这条**不经过任何 include**：它是 A 的『C 声明只能经 shim 暴露』的直接反例。A 若把 extern 纳入 hard error，必须把这条搬进 shim（并解决 V8 的 shim 部署），或删掉 realpath 用法；两方成本表都没列这一条。"
+    },
+    {
+      "id": "V25",
+      "side": "verify",
+      "ref": "counter.md#2.2（L2 build）/ selfhost/l2/driver.ct:406",
+      "command": "cd /tmp/vc/src\nsed -n '404,410p' selfhost/l2/driver.ct\ngrep -n 'system(' selfhost/l2/driver.ct selfhost/l2/core.ct\nrm -rf /tmp/vc/bootshim && mkdir -p /tmp/vc/bootshim/out4\nprintf 'int main(void) { return 0; }\\n' > /tmp/vc/bootshim/thing.ct\n/tmp/vc/l2 build /tmp/vc/bootshim/thing.ct -o /tmp/vc/bootshim/out4; echo rc=$?\nls /tmp/vc/bootshim/a.out /tmp/vc/bootshim/out4/a.out 2>&1 || true",
+      "exit": 0,
+      "output": "/* `build`: resolve imports, compile every unit in dependency order in\n   multi-file mode, then print the suggested cc command. The compiler never\n   invokes a C compiler itself (it stays dependency-free). */\nselfhost/l2/driver.ct:1087:        return system(\"git --version >/dev/null 2>&1\") == 0;\nselfhost/l2/driver.ct:1128:        return system(full);\ncc -std=c99 /tmp/vc/bootshim/out4/thing.c -o a.out\nrc=0\nls: /tmp/vc/bootshim/a.out: No such file or directory\nls: /tmp/vc/bootshim/out4/a.out: No such file or directory",
+      "reproduced": true,
+      "note": "L2（冻结归档）不执行 cc，只打印建议命令；自举链里的 cc 步是外部（README/门禁）跑的。因此 A 迁移 ct-ast 时的 shim include 解析问题落在『外部 cc 命令与产物目录』上，而不是 L2 语义——这既解释了为什么 V8 加 -I 就能过，也说明 A 必须同步改自举脚本/门禁，否则链断在 cc。"
+    },
+    {
+      "id": "V26",
+      "side": "counter",
+      "ref": "counter.md#2.4（清单键忽略）/ claim.md#1（Pkg.h.ct:435-438）",
+      "command": "rm -rf /tmp/vc/pkgprobe && mkdir -p /tmp/vc/pkgprobe/app /tmp/vc/pkgprobe/out2 && cd /tmp/vc/pkgprobe\ncat > app/ct.pkg <<'EOF'\nname = app\npublisher = acme\nversion = 1.0.0\nns-root = .\nc-include = forbid\nEOF\ncat > app/main.ct <<'EOF'\n#include <stdio.h>\nint main(void) { printf(\"x\\n\"); return 0; }\nEOF\n/tmp/vc/ct-ast pkg check /tmp/vc/pkgprobe/app; echo pkgcheck_rc=$?\n/tmp/vc/ct-ast build --emit-c -I /tmp/vc/pkgprobe/app /tmp/vc/pkgprobe/app/main.ct -o /tmp/vc/pkgprobe/out2; echo build_rc=$?\nsed -n '424,438p' /tmp/vc/src/selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "exit": 0,
+      "output": "ok: 4 criteria\npkgcheck_rc=0\ncc -std=c99 -I /tmp/vc/pkgprobe/out2 /tmp/vc/pkgprobe/out2/main.c -o a.out\nbuild_rc=0\n（build 不读 c-include；main.ct 里的 #include <stdio.h> 照常编译）\nPkg.h.ct:435-436: fprintf(stderr, \"ctc: warning: '%s/ct.pkg' has unknown key '%.*s'\\n\", dir, (int)kl, ls);",
+      "reproduced": true,
+      "note": "`c-include = forbid` 今天不会生效：`ct pkg check` 报 ok（4 criteria）且不警告；`ct build` 根本不读这个键（build 路径只用 `ct_pkg_key` 读 namespace/layout，Module.h.ct:2313/2374/2452）。B 的『包清单一行开关』不是现成能力，要先实现清单键解析 + build 读取；旧工具会静默忽略，需要 `requires` 钉版本。反方自己在 E4 承认这一点，未夸大。"
+    },
+    {
+      "id": "V27",
+      "side": "claim",
+      "ref": "claim.md#2 不利证据 4 / E4",
+      "command": "cd /tmp/vc/src\nP='\\b(printf|fprintf|snprintf|fputs|fputc|puts|malloc|calloc|realloc|free|strlen|strcmp|strncmp|strcpy|strchr|strstr|memcpy|memset|fopen|fclose|stat|system)[[:space:]]*\\('\ngrep -rEoh --include='*.ct' \"$P\" selfhost/ct-ast | wc -l\ngrep -rEoh --include='*.ct' \"$P\" selfhost/ct-ast | sed 's/[[:space:]]*($//' | sort | uniq -c | sort -rn | head -6",
+      "exit": 0,
+      "output": "4360\n1304 snprintf\n1173 strcmp\n 507 fprintf\n 491 fputs\n 228 strncmp\n 207 strlen",
+      "reproduced": true,
+      "note": "主张席 E4 的 4360 个调用点下限逐字复现（22 个常用名）。这量化了『每个调用都包一层』的成本；A 的可行版本只能靠 `static inline` + 宏别名（≈51 行 + shim），但那正是 V19 的『shim 内容不受限』——别名层本身不强制任何封装语义。"
+    },
+    {
+      "id": "V28",
+      "side": "verify",
+      "ref": "基线门禁（HEAD 全量 check-ast）",
+      "command": "cd /tmp/vc/src && bash selfhost/check-ast.sh > /tmp/vc/check-ast.log 2>&1; echo CHECK_AST_RC=$?\ntail -2 /tmp/vc/check-ast.log",
+      "exit": 0,
+      "output": "CHECK_AST_RC=0\n== summary: 1463 passed, 0 failed, 0 skipped ==",
+      "reproduced": true,
+      "note": "在 85579c4d 的只读副本上全量 check-ast 绿（1463 项，0 失败 0 跳过），确认基线本身健康，V22 的 include 断言是绿门禁的一部分；A 的迁移必须让这 1463 项在新默认下继续绿（或改动对应断言并补负例）。"
+    },
+    {
+      "id": "V29",
+      "side": "verify",
+      "ref": "claim.md#4 E4（.m.ct 迁移面）/ spec 605-610",
+      "command": "cd /tmp/vc/src\ngrep -rhE '^[[:space:]]*#include[[:space:]]+<' --include='*.m.ct' . | wc -l\ngrep -rhE '^[[:space:]]*#include[[:space:]]+\"[^\"]*\\.shim\\.h\"' --include='*.m.ct' . | wc -l\ngrep -rlnE '^[[:space:]]*#include' --include='*.m.ct' . | wc -l",
+      "exit": 0,
+      "output": "22\n11\n28",
+      "reproduced": true,
+      "note": ".m.ct 的 33 行 include 里 22 行是系统头、11 行是自有 shim（examples 的 11 个映射单元已经写成 `#include \"<base>.shim.h\"`）。A 的『.m.ct 只许自有 shim』迁移面 = 16 个 test fixture + 1 个 example 的 22 行系统 include 进 shim；examples 侧已是目标形态，说明这条规则在 .m.ct 侧摩擦最小。"
+    },
+    {
+      "id": "V30",
+      "side": "verify",
+      "ref": "question.md#3 J-2（.h.ct 的 C 互操作）/ 本席补充",
+      "command": "cd /tmp/vc/hdrtrans\ncat > pub.h.ct <<'EOF'\n#include <stdio.h>\npub struct P { int n; }\npub int p_get(P *p) { return p->n; }\nEOF\ncat > main.ct <<'EOF'\nimport pub;\nint main(void) { struct P p; p.n = 5; printf(\"%d\\n\", p_get(&p)); return 0; }\nEOF\n/tmp/vc/ct-ast build --emit-c main.ct -o out; echo ct_rc=$?\ngrep -n '#include' out/main.c\ncc -std=c99 -I out out/*.c -o out/app; echo cc_rc=$?\n./out/app",
+      "exit": 0,
+      "output": "ct_rc=0\n3:#include \"pub.h\"\ncc_rc=0\n5",
+      "reproduced": true,
+      "note": "`.h.ct` 的 include 不只属于自己：它被复制进公开 `pub.h`，消费者 `main.ct` 没写 stdio 也能用 printf（main.c 只 include \"pub.h\"，rc=0 运行 5）。所以 A 禁 `.h.ct` 的直接 include 会改变公开头提供的传递性 C 声明——这是 J-2/J-5 的真实兼容面，不是仓库内部整洁问题。"
+    },
+    {
+      "id": "V31",
+      "side": "verify",
+      "ref": "question.md#3（.h.ct C 互操作）/ 本席补充（公开头 C 类型）",
+      "command": "rm -rf /tmp/vc/hdrtype && mkdir -p /tmp/vc/hdrtype/out && cd /tmp/vc/hdrtype\ncat > f.h.ct <<'EOF'\n#include <stdio.h>\npub struct Holder { FILE *fp; }\npub int holder_fd(Holder *h) { return h->fp ? 1 : 0; }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport f;\nint main(void) { struct Holder h; h.fp = 0; printf(\"%d\\n\", holder_fd(&h)); return 0; }\nEOF\n/tmp/vc/ct-ast build --emit-c main.ct -o out; echo ct_rc=$?\nhead -12 out/f.h\ncc -std=c99 -I out out/*.c -o out/app && ./out/app\nsed -i '' '/^#include <stdio.h>$/d' out/f.h\ncc -std=c99 -I out out/*.c -o out/app2 > cc2.log 2>&1; echo cc_after_strip_rc=$?; head -4 cc2.log",
+      "exit": 0,
+      "output": "ct_rc=0\n（out/f.h）\n#include <stdio.h>\n\nstruct Holder;\nstruct Holder {\n    FILE * fp;\n};\nint holder_fd(struct Holder *);\n0\nIn file included from out/f.c:3:\nout/f.h:11:5: error: unknown type name 'FILE'\n    11 |     FILE * fp;\n       |     ^\ncc_after_strip_rc=1",
+      "reproduced": true,
+      "note": "`.h.ct` 的公开类型可以直接命名 C 头里的类型（FILE*），代价是 `#include <stdio.h>` 必须随公开 `.h` 发布（Emitter 1563-1572）。把该 include 删掉（模拟 A 只删不许 shim 的中间态）后消费者 cc 报 unknown type name 'FILE'（rc=1）。所以 A 对 `.h.ct` 要么新增 header-shim 部署，要么要求公开类型改成 opaque/void*——两者都是接口变更，不是『删 include』。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "question": "默认禁止后 ct-ast 与 lib/std 能否构建，是否必须永久豁免",
+      "claim": "A：ct-ast 19/51、lib/std 4/8 必须迁，不永久豁免；l1/l2 冻结归档（1/5、2/12）是唯一永久例外；L2 编 ct-ast",
+      "counter": "B：默认保留则零改动；A 的迁移被自举链挡住（L2 不认识 .m.ct/shim）",
+      "evidence": [
+        "V6",
+        "V7",
+        "V8",
+        "V9",
+        "V13",
+        "V24",
+        "V29"
+      ],
+      "verdict": "A=unresolved（可迁移，但必须把 shim 部署/-I 纳入 A；否则 ct-ast 自举 cc 与 lib/std 消费者都 rc=1）；B=pass（零改动）；HEAD=pass",
+      "fact": "『L2 不认识 .m.ct』成立（V7：rc=1，cannot resolve import 'libc/libc'），它挡住的是 ct-ast 采用 `.m.ct`+自动 shim 的路线，不挡住『ct-ast 源码改成 include 一个普通 shim 头』：同一份 L2 对 51 行替换后的 ct-ast 仍 build rc=0（V8）。但自举链的 cc 步（README 手工自举与 check-ast.sh:6114-6130 的 fixpoint）没有 -I，照原命令 rc=1（V8/V9）；lib/std 换成 shim 后 `ct build` 的任何消费者都 rc=1（V13），因为 cc 行只有 -I .ctbuild、shim 未复制。所以 A 的『不改 L1/L2』为真，『不改门禁/构建命令』为假；且主张席自己提的共享 ctlibc.shim.h 与『唯一例外 <base>.shim.h（本单元自有 shim）』措辞冲突。另：编译器自身用 extern realpath（V24），A 的 extern 限制若落地，ct-ast 还要多迁这一条。"
+    },
+    {
+      "id": "J-2",
+      "question": "C 互操作：厂商 HAL/SDK、binding、.m.ct/shim 是否仍可表达，成本多少",
+      "claim": "A：.m.ct + shim 全保留，binding 与厂商 SDK 改用 shim 暴露声明，.h.ct 不再直通；仓内 31 shim/500 行已够证明可表达",
+      "counter": "B：.m.ct+shim 继续，.h.ct 真实 C 类型保留；strict 包用 shim 或 opaque/void *",
+      "evidence": [
+        "V5",
+        "V11",
+        "V12",
+        "V14",
+        "V29",
+        "V30",
+        "V31"
+      ],
+      "verdict": "A=unresolved（.m.ct 侧可表达；.h.ct 侧缺 header-shim 机制）；B=pass（默认保留；strict 库需 opaque/void* 的代价真实）",
+      "fact": "官方 `.m.ct`+shim 在 HEAD 完整可用（V14：build rc=0、cc 行带 -I './hal' 与 .shim.c、运行 3 3；posix-socket 是 header-only shim 的现成例子）。但 `.m.ct` 不能声明全局/类型/实例（错误原文见 V14），所以 mock-hal 这类『CT 侧全局实例 + 初始化函数』的 binding 无法只用 `.m.ct` 表达，要么留 `.h.ct`，要么把状态搬进 `.shim.c`。`.h.ct` 侧：include 被复制进公开头（V11），姊妹 shim 被忽略（V11），把 include 换成自有 shim 后必须把 shim 部署到生成头旁或加 -I（V12），而 `ct build` 两者都不做；公开头里的 C 类型（FILE*）又要求 include 在头里（V31）。故 A『.h.ct 不再直通、改用 shim』是新增 header-shim 能力，不是删行；31 个 shim 里只有 28 个与 .m.ct 配对，`.h.ct` 侧今天 0 个 shim include（V5）。"
+    },
+    {
+      "id": "J-3",
+      "question": "可执行性：只禁 #include 是否真能阻止绕过（extern、#ct-raw、.m.ct、#define、C 文件）",
+      "claim": "A：只禁 include 不足，须扩到 raw 原文/extern/.m.ct prologue/#define 四项；缺一项则 A 的 J-3 失败",
+      "counter": "B：只禁 include 不能阻止绕过；B 把它定位为 policy guardrail，可另加 c-raw/c-extern=forbid",
+      "evidence": [
+        "V15",
+        "V16",
+        "V17",
+        "V18",
+        "V19",
+        "V20",
+        "V21",
+        "V24"
+      ],
+      "verdict": "A=fail（按其『只禁 include』版本；扩到四项后仍 fail，见 fact）；B=pass（按 guardrail 口径）/ fail（若 J-3 要求零绕过）",
+      "fact": "四条主绕过全部实测 rc=0：raw 内 include（V15）、自写 extern puts（V16）、函数式 #define（V17）、raw 原型 + 外部 C 文件链接（V18）。再加两条 A 的清单没覆盖的：(a) shim 内容不受限——把任意 C 放进 <base>.shim.h 即可（V19，且 HEAD 不校验 shim 名，anything.shim.h 也过）；(b) 写法变体——行首缩进、include 写在 main 之后、`# include` 都 rc=0 且原样进生成物（V20），只查行首 #include 或只 strncmp(\"#include\") 会漏。`.m.ct` 的 whitelist 只按 token 文本判定、不限制位置（V20）；并且编译器给每个产物注入 stdio/stdlib/string（V21，--freestanding 也不抑制），所以『把 C 头从源码里禁掉』既封不住 link 面，也去不掉产物里的 C 边界。B 的『guardrail 而非沙箱』口径与实测一致；A 若声称零绕过则被自身 E3 以外的两个面（shim 内容、写法变体）再次击穿。"
+    },
+    {
+      "id": "J-4",
+      "question": "迁移成本：688 文件、examples/test、std、版本/兼容窗口",
+      "claim": "A：688 文件/845 行；真实迁移仅 ct-ast 19/51 + lib/std 4/8；examples/test 走 grandfather；两 MINOR",
+      "counter": "B：A 需 688 文件/845 行 + 490 个 test 文件；B 零语料、新包 opt-in",
+      "evidence": [
+        "V1",
+        "V2",
+        "V4",
+        "V22",
+        "V27"
+      ],
+      "verdict": "A=pass-with-grandfather（665 文件/786 行 grandfather；23 文件/59 行真迁）但漏算构建/门禁成本；B=pass（0 语料）",
+      "fact": "数：688/845 总；test 490/559、examples 172/210 合计 662/688 文件 = 96.2%、769/845 行 = 91.0% 是夹具/示例；真迁面 = selfhost 22 - l1/l2 3 = 19 文件/51 行 + lib/std 4/8 = 23/59。golden 侧 60/62 个 expected.c 含 include、test 444 个 expected.*、319 个 expected.out（V22）；grandfather 覆盖 test/** 时这些零改动。hidden cost：11 条 include 正向门禁断言、16 处脚本内 include fixture（V22）；ct-ast/libstd 的 shim 部署与自举 cc 改动（V8/V9/V13）；若走『每个调用都包』则 4360 个调用点（V27）。所以 A 的『两 MINOR』在文本迁移上成立，在『期间 11 道门禁仍绿』上不成立——除非把构建侧改动算进同一窗口。"
+    },
+    {
+      "id": "J-5",
+      "question": "兼容性：C 超集/既有规范/包消费者是否被破坏",
+      "claim": "A：pre-1.0 用 MINOR + 迁移说明；60 golden、2 条 hdr 断言、444 expected；外部 ct-pkg std 不在本仓",
+      "counter": "B：默认不变，C 超集不破；A 触及 688/1289（53.4%）并改变生成头",
+      "evidence": [
+        "V11",
+        "V12",
+        "V13",
+        "V22",
+        "V23",
+        "V30"
+      ],
+      "verdict": "A=fail-as-default（破坏既有契约，需窗口与迁移说明才可谈）；B=pass（默认零破坏）",
+      "fact": "规范层的既有契约：spec 43『普通 C 声明与语句原样透传』、1792『#include 只按整行透传』、912-913『源文件必须自己写 stddef include』、Z3『语法糖无歧义脱糖到 C』（V23）。实证的消费者破坏面：`.h.ct` include 进公开头并被消费者传递使用（V30，没写 stdio 也能 printf）；lib/std shim 迁移会让所有 `ct build` 消费者失败（V13）；688/1289 = 53.4% 文件含 include。A 的 grandfather 能把仓内实际破坏压到 23 个文件，但 external ct-pkg std 与第三方 binding 不受本仓控制（主张席 E4 自己把它列为边界），strict/默认翻转的兼容窗口只能靠 MINOR + 迁移说明吸收。B 默认不变，故 J-5 由 B 成立。"
+    },
+    {
+      "id": "J-6",
+      "question": "策略形态：语言默认、包策略、严格模式三者哪个可机械验收且可回退",
+      "claim": "A：语言默认可机械验收（诊断/退出码），回退=删硬错；B 的包策略要先实现清单键（当前 unknown-key 仅警告）",
+      "counter": "B：两个机械开关（CLI / ct.pkg），可 grep、可验收、可一键回退；旧工具忽略未知键需 requires 钉版本",
+      "evidence": [
+        "V26",
+        "V24",
+        "V21",
+        "V6"
+      ],
+      "verdict": "A=pass（诊断+退出码可验收，回退=翻默认）但 blast radius 最大；B=pass（可验收、回退最小）但今天不是现成能力",
+      "fact": "实测 `c-include = forbid` 在 HEAD 完全无效：`ct pkg check` 报 ok（4 criteria）不警告，`ct build` 不读该键（V26）；源码里只有 pkg_load 对未知键 fprintf warning，且 `ct verify` 不读 ct.pkg（package-guide 123）。所以 B 的『包策略一行开关』需要新增清单键解析 + build 读取 + 诊断 + 负例，不是零代码；优势是零语料迁移、旧包不受影响、回退=删键/删 flag。A 的验收最直接（编译器 error + 退出码），但回退要同时处理 688 文件的 grandfather 清单与已落地的 shim；且 A 的『默认』必须依赖额外豁免清单才不破基线，机械上是『诊断 + allow 清单』两件套。`--freestanding`（PH-64）已提供目标级符号面机制，但只关 constructor/heap，不抑制 include（V21），不能替代 include 策略。"
+    }
+  ],
+  "findings": {
+    "counting": "688 文件/845 行成立，四组分解（selfhost 22/68、lib 4/8、examples 172/210、test 490/559）与 selfhost 细分（ct-ast 19/51 = main.ct 1/3 + 18 个 .h.ct 48 行；l1 1/5；l2 2/12）全部复现。按后缀：plain .ct 628/745、.h.ct 32/67、.m.ct 28/33；lib/std 4 个 .h.ct/8 行；examples 的 .m.ct 12/12；test 的 .h.ct 10/11、.m.ct 16/21。include 目标以 libc 为主（stdio 638、stdlib 82、string 47 = 767/845；stdio 75.5%）。#ct-raw 真实指令只有 5 行（2 个正例 + 3 个 errors fixture），counter 的 17 行/8 文件是含注释与编译器源码的字符串提及；extern 4 行里 2 条真实（其中 Module.h.ct:74 在编译器自身）；#define 441 行（ct-ast 377、selfhost 424）。31 个 .shim.h / 5 个 .shim.c / 500+106 行成立，但只有 28 个 shim 与 .m.ct 配对。",
+    "bootstrap": "A 的 ct-ast 迁移在 L1/L2 源码零改动下可完成（L2 对 51 行换成 shim include 的 ct-ast build rc=0，加 -I 后得到可运行 ct-ast）；被挡住的是 `.m.ct` 路线（L2 不能 resolve .m.ct import，rc=1）与『不改构建命令』的假设：自举 cc 行无 -I（rc=1），check-ast 的 fixpoint cc 行无 -I（rc=1），lib/std 迁移后 `ct build` 的 cc 行也无 shim 的 -I（rc=1）。所以『永久豁免』不是必须，但 A 必须新增 shim 部署/-I 这一构建侧机制并改动自举脚本/门禁；主张席的『≈51 行 + 1 个 shim 头』漏了这部分，且共享 ctlibc.shim.h 与『唯一例外 <base>.shim.h』自相矛盾。",
+    "hct_interop": "`.h.ct` 的 #include 被复制进公开 `.h`（Emitter.h.ct:1563-1572），并成为消费者的传递性声明（消费者不写 stdio 也能 printf）；姊妹 `.shim.h` 不被探测（spec 680）。把 `.h.ct` 的 include 换成自有 shim 在语法上可行，但生成头会 include 该 shim，而 `ct build` 不复制 shim、不加 -I，消费者 cc 立刻 rc=1；公开头出现 C 类型（FILE*）时又必须有 include 在头里。故 A 对 `.h.ct` 需要新 header-shim 部署机制（或改公开类型），不是删行。",
+    "bypass_surface": "只禁 include 不成立：raw 内 include、自写 extern、函数式 #define、raw 原型+外部 .c 链接、shim 内任意 C、任意 shim 文件名、行首缩进/mid-file/`# include` 写法全部 rc=0。扩到四项（raw/extern/#define/.m.ct prologue）后仍有 shim 内容与 link 面两个缺口；且 #define 一刀切会命中 ct-ast 自身 377 行、extern 一刀切会命中 errno 官方用法与编译器 realpath。编译器还给每个产物注入 stdio/stdlib/string（--freestanding 不抑制），include 边界在产物层无法消除。",
+    "shim_machinery": "现有机制只为 `.m.ct` 探测 `<base>.shim.h/.c`：消费者 .c 自动 include、cc 行加 -I、.shim.c 进 cc 行（实测 rc=0、运行 3 3）。`.ct`/`.h.ct` 没有对应机制：`.ct` 手工 include + 手工链接有 2 个现成先例（manual_shim/pkt），但 `ct build` 不给 -I、不复制 shim；`.h.ct` 的 shim include 会被复制进公开头却不会被部署。若 A 要求『只有 shim 可 include』，至少要补：① 把 shim 探测扩到 `.ct/.h.ct`（或显式 include + 自动 -I/复制）；② 在自举脚本、check-ast fixpoint、ct build 的 cc 行与 builtin 层产物目录处理 -I/复制；③ .h.ct 的 header shim 发布/部署；④ shim 内容策略（否则任意 C 进 shim）；⑤ allow 清单 + ratchet + 对应负例门禁。A 的现有文字只覆盖 ①的一部分，②③④⑤ 未提。",
+    "compat_gates": "基线 check-ast 全绿（1463 passed / 0 failed / 0 skipped）。include 依赖：60/62 expected.c 含 include（仅 sig_mismatch 两个不含）、test 444 个 expected.*、319 个 expected.out、examples 50 个 expected.*；check-ast.sh 有 11 条 `grep -q ... #include` 正向断言（claim/counter 都只说 2 条）与 16 处脚本内 include fixture。grandfather 覆盖 test/** 时这些可不动；但 A 若迁移测试 fixture，11 条断言、60 个 golden、444 个 expected 都要跟着改/重生成，且每条新断言按 G5/G8 要带负例与 CR。",
+    "cost_numbers": "真迁面 23 文件/59 行（ct-ast 19/51 + lib/std 4/8）；grandfather 665 文件/786 行（96.2% 文件、91.0% 行在 test+examples）。若『每次 C 调用都包装』= 4360 个调用点（22 个常用名；snprintf 1304、strcmp 1173、fprintf 507、fputs 491）。#define 侧 441 行（ct-ast 377）。两 MINOR 窗口内可完成文本迁移，但构建侧改动（shim 部署、-I、门禁 cc 行）与 11 条断言/444 个 expected 的连带改动必须一并计入，A 的 E4 低估了这部分。",
+    "side_observations": [
+      "counter 的『#ct-raw 17 行/8 文件』应更正为『字符串提及 17/8；真实指令 5 行（含 3 个 errors fixture）』——绕过面论证仍成立，因为语言机制对任意源可用（V15），但语料统计口径不同。",
+      "claim 的『31 个 .shim.h、500 行已够证明可表达』应更正为『28 个与 .m.ct 配对；2 个是 plain .ct 手工 shim；1 个未被引用』；且『只有 shim 可 include』在 .ct/.h.ct 侧没有编译器机制，只有 examples/tour/15_memory 的手工先例。",
+      "claim 的『ct-ast 19/51 迁 ctlibc.shim.h』与它自己的例外『`#include \"<base>.shim.h\"`（本单元自有 shim）』冲突：共享 shim 不满足 base 同名；要么改成 19 个单元各自 shim，要么改规则允许共享 shim（后者进一步弱化『封装』语义）。",
+      "claim/counter 都低估门禁断言数（11 条 include 正向断言 vs 2 条 hdr 断言）；但 A 的 grandfather 覆盖 test/** 时这部分成本可以推迟，不能算作 A 的即时成本，也不能算作零成本。",
+      "counter 的 P4（L2 .m.ct rc=1）与 P5（.h.ct shim 被忽略）都复现；counter 的『A 的机械迁移在自举链上不成立』需要收窄：L2 挡住的是 `.m.ct` 路线，挡不住普通 shim include 路线，真正让迁移不成立的是 cc/-I 与 header-shim 部署。",
+      "两侧都没有实测『A 实现后新包 `#include <stdio.h>` rc=1』（无实现），因此 P1/P2/P3/P4 的终态预测仍是预测；本席只裁决机制与既有事实。"
+    ]
+  },
+  "unreproduced": [
+    {
+      "item": "A/B 的实现终态（硬错诊断文本、allow-c-include 文件/包标记、--strict-c-include、ct.pkg 的 c-include=forbid）",
+      "reason": "HEAD 无任何实现，双方也未提交代码；本席只能复现机制与现有行为，不能运行『翻默认后』的 rc=1/rc=0 端到端预测。",
+      "what_would_settle": "任一实现分支落地后，按 claim P1/P2/P3 与 counter P1/P2/P3 各跑正负例并贴原始输出。"
+    },
+    {
+      "item": "外部 ct-pkg std 包的迁移与兼容",
+      "reason": "不在本仓（AGENTS.md §2：ct-pkg/std 为独立包，仓内不保存）；无法在本仓复现其 include 规模与迁移节奏。",
+      "what_would_settle": "在 ct-pkg/std 仓按同一口径统计并做 A/B 迁移演练。"
+    },
+    {
+      "item": "『每一条 C 调用都包装』方案的可行性",
+      "reason": "4360 个调用点的全量包装未实现；本席只复现调用点计数与 51 行 shim 方案的可构建性。",
+      "what_would_settle": "对 ct-ast 做一次全量包装分支并跑 check-ast/check-goldens。"
+    }
+  ],
+  "criteria": [
+    {
+      "id": "J-1",
+      "verdict": "A=unresolved（可迁移，但必须把 shim 部署/-I 纳入 A；否则 ct-ast 自举 cc 与 lib/std 消费者都 rc=1）；B=pass（零改动）；HEAD=pass"
+    },
+    {
+      "id": "J-2",
+      "verdict": "A=unresolved（.m.ct 侧可表达；.h.ct 侧缺 header-shim 机制）；B=pass（默认保留；strict 库需 opaque/void* 的代价真实）"
+    },
+    {
+      "id": "J-3",
+      "verdict": "A=fail（按其『只禁 include』版本；扩到四项后仍 fail，见 fact）；B=pass（按 guardrail 口径）/ fail（若 J-3 要求零绕过）"
+    },
+    {
+      "id": "J-4",
+      "verdict": "A=pass-with-grandfather（665 文件/786 行 grandfather；23 文件/59 行真迁）但漏算构建/门禁成本；B=pass（0 语料）"
+    },
+    {
+      "id": "J-5",
+      "verdict": "A=fail-as-default（破坏既有契约，需窗口与迁移说明才可谈）；B=pass（默认零破坏）"
+    },
+    {
+      "id": "J-6",
+      "verdict": "A=pass（诊断+退出码可验收，回退=翻默认）但 blast radius 最大；B=pass（可验收、回退最小）但今天不是现成能力"
+    }
+  ]
+}
