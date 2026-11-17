@@ -751,6 +751,20 @@ else
     bad "p66/io-empty" "$(cat "$work/p66emp.out" "$work/p66emp.err" | head -4)"
 fi
 
+# PH-66 R4: the edges -- user-defined names, names outside the set, freestanding.
+if env -u CT_C_BOUNDARY bash test/ast/p66_io_boundary.sh "$work/ct-ast" >"$work/p66bnd.out" 2>"$work/p66bnd.err"; then
+    ok "p66/io-boundary"
+else
+    bad "p66/io-boundary" "$(cat "$work/p66bnd.out" "$work/p66bnd.err" | head -4)"
+fi
+
+# PH-66 R5: the I/O exception is documented in the spec, guide and README.
+if bash test/ast/p66_io_docs.sh >"$work/p66doc.out" 2>"$work/p66doc.err"; then
+    ok "p66/docs"
+else
+    bad "p66/docs" "$(cat "$work/p66doc.out" "$work/p66doc.err" | head -4)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
