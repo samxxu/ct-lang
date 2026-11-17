@@ -730,6 +730,13 @@ else
     bad "p65/docs" "$(cat "$work/p65doc.out" "$work/p65doc.err" | head -4)"
 fi
 
+# PH-66 R1: the libc I/O set is detected from direct calls only.
+if env -u CT_C_BOUNDARY bash test/ast/p66_io_detect.sh "$work/ct-ast" >"$work/p66det.out" 2>"$work/p66det.err"; then
+    ok "p66/io-detect"
+else
+    bad "p66/io-detect" "$(cat "$work/p66det.out" "$work/p66det.err" | head -4)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.

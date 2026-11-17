@@ -327,7 +327,7 @@ pub struct Expr {
     /* PH-66 R1: every direct call's source name, resolved or not. The call
        graph above only keeps calls to known functions; libc I/O is unknown by
        design, so it needs this second list. */
-    char io_names[128][64];
+    char io_names[512][64];
     int  nio;
     /* A function-pointer declarator carries its name inside the type
        (`int (*cb)(void *)`), so `parse_type` reads it and the caller takes it
@@ -1202,7 +1202,7 @@ static int record_io_call(struct Expr *e, const char *callee)
     if (callee == 0 || callee[0] == 0) return 0;
     for (i = 0; i < e->nio; i++)
         if (strcmp(e->io_names[i], callee) == 0) return 0;
-    if (e->nio >= 128) return e->sup->fail("too many distinct calls");
+    if (e->nio >= 512) return e->sup->fail("too many distinct calls");
     snprintf(e->io_names[e->nio], 64, "%s", callee);
     e->nio++;
     return 0;
