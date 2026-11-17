@@ -35,6 +35,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [roadmap.md](roadmap.md) | 简要阶段表：阶段 / 主题 / 状态 / 收口版本 / 详情入口 |
+| [planning/typecheck-semantic-plan.md](planning/typecheck-semantic-plan.md) | 类型/语义检查规划（**未开卡**）：PH-67 类型核心 → PH-68 跨单元/泛型 → PH-69 CFG → PH-70 own/borrow；全部 opt-in，不进编译路径 | 查看类型检查方案 |
 | [planning/post-58-plan.md](planning/post-58-plan.md) | 58 之后的重排评估：在册项矩阵、依赖、顺序与并行、放弃/合并清单、编号断裂与待裁定 | 决定 58 之后先做什么、哪些不做 |
 | [planning/hardware-readiness-requirements.md](planning/hardware-readiness-requirements.md) | 硬件可用性需求（评估会产出，**未立项**）：P0 数组/const vptr、PH-64 freestanding/alloc/const vtable、硬件 pilot；含采纳/延后/不采纳与顺序 | 查看硬件需求与验收 |
 | [planning/post-58-phase-sequence.md](planning/post-58-phase-sequence.md) | 58 之后的正式 phase 序列：包管理器线先收口、语言线按依赖排序、版本位与并行车道 | 照着走的施工顺序 |
@@ -45,7 +46,7 @@
 | [history/design/phase29.md](history/design/phase29.md) | 已完成的阶段计划（Phase 29，泛型两阶段第二相）：泛型 struct + 内置 `Vec`/`Map`，解冻 `foreach` 容器协议（`Map` 遍历为硬判据）、`Vec`/`Map` 从 `ct-pkg/std` 迁入 `lib/std/`（std 其余模块不动）（D29-1–D29-16 见正文） |
 | [history/design/phase30.md](history/design/phase30.md) | 已完成的阶段计划（Phase 30）：接收者语境块 `<receiver> into { … }`——块内 `.name` 访问接收者成员/方法、`$` 指代自身；`into` 为后置上下文关键字，块结束后仍返回接收者、可继续接后缀链或连续多段 `into`；语句形态与值形态（初始化器 / 赋值 / `return`，结果为接收者本身）；接收者只求值一次并按 value category 提升；`.m.ct` 类型宿主（含 shim）可作接收者、`$ =` 可接链（D30-1–D30-19 见正文） |
 | [history/design/phase31.md](history/design/phase31.md) | 已完成的阶段计划（Phase 31）：接口值进容器（`Vec<Show>` / `Map<char *, Show>`）与嵌套容器的元素寿命与所有权、`v[i]` / `m[k]` 仅展开为 `get`、`Vec` / `Map` 花括号初值（E31-1–E31-23、L31-1–L31-21、D31-1–D31-17 见正文） |
-| [design/phase32-draft.md](design/phase32-draft.md) – [design/phase42-draft.md](design/phase42-draft.md) | 阶段草案（Phase 32–42，均已完成）：类型安全网 / 有界泛型 struct / 生态可用性 / 泛型 trait / 泛型 Drop 与 `Str` / trait 签名硬错与运行期契约 / `defer` / C ABI 与库制品 / `errdefer` 错误出口 / 原子并发（`atomic T`）/ `impl` 方法可见性；状态以 [roadmap.md](roadmap.md) 为准 |
+| [history/design/phase32.md](history/design/phase32.md) – [history/design/phase42.md](history/design/phase42.md) | 阶段草案（Phase 32–42，均已完成）：类型安全网 / 有界泛型 struct / 生态可用性 / 泛型 trait / 泛型 Drop 与 `Str` / trait 签名硬错与运行期契约 / `defer` / C ABI 与库制品 / `errdefer` 错误出口 / 原子并发（`atomic T`）/ `impl` 方法可见性；状态以 [roadmap.md](roadmap.md) 为准 |
 | [history/design/phase43.md](history/design/phase43.md) · [history/design/phase44.md](history/design/phase44.md) · [history/design/phase45.md](history/design/phase45.md) | 已完成（Phase 43–45）：43 错误出口类型契约 / 44 `?` 传播 / 45 闭包 `return` 与指针基类型判据；收口版本见 [roadmap.md](roadmap.md)；未立项评估结论与门禁欠账见 [planning/requirements-pool.md](planning/requirements-pool.md) |
 | [design/phase46-52-plan.md](design/phase46-52-plan.md) | 分期方案（Phase 46–52；46–52 已收口）：排序依据、相间依赖、硬阻塞前置、裁定状态、本波不覆盖清单；**§10 交接说明、§11 缺陷与绕法、§12 实战限制、§13 裁决落地与 errata、§14 远端文档债** |
 | [design/phase46-52-handoff.md](design/phase46-52-handoff.md) | 施工手册（给外部实现方；45–52 已收口，保留为历史施工入口）：施工顺序、每卡入口条件与出口证据、门禁命令、禁止事项、收口五样证据 |

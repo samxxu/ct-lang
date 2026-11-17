@@ -1,0 +1,673 @@
+{
+  "battle": "typecheck-1",
+  "head": "ed172075",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2 (build 26B123)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "binary": "/tmp/tcv/ct-ast (ct-ast v0.65.1, sha256 114357b05dae43d945ae113ed8f988f96bdf4ec09ee8d4239e51d1eda7b450f6)；与 /tmp/tc1/ct-ast 逐字节相同（本席独立自举复算）",
+    "source_baseline": "/Users/samxx/dsh-ws/ct-lang @ ed172075；自举链 L0(selfhost/l0/ctc.c) -> L1(selfhost/l1/ctc.ct) -> L2(selfhost/l2/driver.ct) -> ct-ast(selfhost/ct-ast/main.ct)",
+    "date": "2026-11-18T04:51–05:10+08:00 (Asia/Shanghai)",
+    "note": "验证期间并发会话把 HEAD 从 ed172075 推到 2ac78fe7（48aa6110/2ac78fe7），并持续改动 docs/battle 工作树；但 `git diff ed172075..HEAD -- selfhost test` 与 `git diff -- selfhost test` 均为 0 行（HEAD 移动只含 docs/issues），故本席二进制与探针同时代表基线 ed172075 与当前源码。本席只写 /tmp/tcv 与 battle/typecheck-1/verify.json，未改 selfhost/test/docs/language-spec。"
+  },
+  "rounds": 1,
+  "method": "只读复算 + 行为探针：独立重建 L0→L1→L2→ct-ast；用同一二进制跑 9 个坏程序与 530/1052 个 .ct 的 plain check 与 --types 对照；逐条核对两方 file:line 锚点、行数、节点覆盖与门禁口径；不实现 A/B，不做前后性能/正确性外推。所有写入仅在 /tmp/tcv 与 battle/typecheck-1/verify.json。",
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "counter.md#环境（binary sha256 前缀 114357b05dae43d9）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && cc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o /tmp/tcv/ctc && /tmp/tcv/ctc selfhost/l1/ctc.ct -o /tmp/tcv/l1.c && cc -Wall -Wextra -std=c99 /tmp/tcv/l1.c -o /tmp/tcv/l1 && /tmp/tcv/l1 build selfhost/l2/driver.ct -o /tmp/tcv/l2src && cc -Wall -Wextra -std=c99 /tmp/tcv/l2src/*.c -o /tmp/tcv/l2 && /tmp/tcv/l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/tcv/astsrc && cc -Wall -Wextra -std=c99 /tmp/tcv/astsrc/*.c -o /tmp/tcv/ct-ast && /tmp/tcv/ct-ast --version && shasum -a 256 /tmp/tcv/ct-ast /tmp/tc1/ct-ast",
+      "exit": 0,
+      "output": "ct-ast v0.65.1\n114357b05dae43d945ae113ed8f988f96bdf4ec09ee8d4239e51d1eda7b450f6  /tmp/tcv/ct-ast\n114357b05dae43d945ae113ed8f988f96bdf4ec09ee8d4239e51d1eda7b450f6  /tmp/tc1/ct-ast",
+      "reproduced": true,
+      "note": "本席从仓库源码重跑整条自举链，产物与主张/反证席共用的 /tmp/tc1/ct-ast 逐字节一致，反证席的 binary 口径可信；后续全部探针用 /tmp/tcv/ct-ast。"
+    },
+    {
+      "id": "V2",
+      "side": "both",
+      "ref": "claim.md#1.1 / #1.2 / #3 M1–M6；counter.md#2",
+      "command": "cd /tmp/tcv/probes && for f in bad_assign bad_expr bad_ret break_outside dup_case uninit noret arr_str ptr_assign; do /tmp/tcv/ct-ast compile $f.ct -o $f.c; echo compile=$?; cc -Wall -Wextra -std=c99 $f.c -o $f.bin; echo cc=$?; /tmp/tcv/ct-ast check $f.ct; echo check=$?; /tmp/tcv/ct-ast check --types $f.ct; echo types=$?; /tmp/tcv/ct-ast build $f.ct -o $f.build; echo build=$?; done",
+      "exit": 0,
+      "output": "bad_assign      compile=0 cc=1 check=0 types=1 build=1\nbad_expr        compile=0 cc=1 check=0 types=0 build=1\nbad_ret         compile=0 cc=1 check=0 types=1 build=1\nbreak_outside   compile=0 cc=1 check=0 types=0 build=1\ndup_case        compile=0 cc=1 check=0 types=0 build=1\nuninit          compile=0 cc=0 check=0 types=0 build=0   (cc: -Wuninitialized warning)\nnoret           compile=0 cc=0 check=0 types=0 build=0   (cc: -Wreturn-type warning)\narr_str         compile=0 cc=0 check=0 types=1 build=0\nptr_assign      compile=0 cc=0 check=0 types=0 build=0   (cc: -Wincompatible-pointer-types warning)",
+      "reproduced": true,
+      "note": "M1/M3 被 --types 抓（bad_assign/bad_ret），M2/M5/M6 不被抓（bad_expr/break_outside/dup_case/uninit/noret）。cc 的 rc 是 C 编译器对生成物的判定，不是 ct 的类型检查。`ct build` 对 M1–M5 也是 rc=1，但诊断来自 cc（bad_assign.c:16:7 ...），且 `ct build --emit-c` 同 5 个 rc=0（V4）；'ct 绿' 只成立于 compile / build --emit-c，不成立于 `ct build` 端到端。"
+    },
+    {
+      "id": "V3",
+      "side": "both",
+      "ref": "claim.md#1.1 / #2（Driver.h.ct:277-284）；counter.md#2（Driver.h.ct:352-355）",
+      "command": "cd /tmp/tcv/probes && /tmp/tcv/ct-ast build --types bad_assign.ct -o /tmp/tcv/x; echo rc=$?; /tmp/tcv/ct-ast compile --types bad_assign.ct -o /tmp/tcv/x.c; echo rc=$?; /tmp/tcv/ct-ast --types bad_assign.ct -o /tmp/tcv/x.c; echo rc=$?",
+      "exit": 0,
+      "output": "ctc: --types is only valid with 'ct check'\nrc=1\nctc: --types is only valid with 'ct check'\nrc=1\nctc: --types is only valid with 'ct check'\nrc=1",
+      "reproduced": true,
+      "note": "`--types` 在 build/compile 上按名拒绝（L32-7 的 CLI 诊断），所以 'build/compile 是否做类型检查' 的答案是：不做，且开关不可用；`ct build` 的 rc=1 来自随后的 cc 子进程。"
+    },
+    {
+      "id": "V4",
+      "side": "claim",
+      "ref": "claim.md#1.1（ct build --types）/ #3 M1–M6",
+      "command": "cd /tmp/tcv/probes && for f in bad_assign bad_expr bad_ret break_outside dup_case uninit noret; do d=/tmp/tcv/be_$f; rm -rf $d; mkdir -p $d; /tmp/tcv/ct-ast build --emit-c $f.ct -o $d; echo \"$f rc=$?\"; done",
+      "exit": 0,
+      "output": "bad_assign rc=0\nbad_expr rc=0\nbad_ret rc=0\nbreak_outside rc=0\ndup_case rc=0\nuninit rc=0\nnoret rc=0",
+      "reproduced": true,
+      "note": "`ct build --emit-c` 对 7 个坏程序全部 rc=0（含 struct 互赋、指针算术、错误 return、break 越界、重复 case）；与 `ct compile` 同属'ct 绿、C 红'窗口。这修正 claim 的措辞：不是 `ct build` 绿，而是 build 的发射阶段绿、build 的 cc 阶段红。"
+    },
+    {
+      "id": "V5",
+      "side": "counter",
+      "ref": "counter.md#2 不利证据 1；claim.md#1.3",
+      "command": "cd /tmp/tcv/probes && for f in arr1 arr2 arr3 arr4 arr5 arr6 ptrinit; do /tmp/tcv/ct-ast check $f.ct >/dev/null 2>&1; p=$?; /tmp/tcv/ct-ast check --types $f.ct >/dev/null 2>/tmp/tcv/$f.err; t=$?; echo \"$f plain=$p types=$t $(cat /tmp/tcv/$f.err)\"; done",
+      "exit": 0,
+      "output": "arr1       plain=0 types=1  arr1.ct:1:29: error: initializer: expected 'char', got 'char *'\narr2       plain=0 types=1  arr2.ct:1:30: error: initializer: expected 'char', got 'char *'\narr3       plain=0 types=0\narr4       plain=0 types=0\narr5       plain=0 types=0\narr6       plain=0 types=0\nptrinit    plain=0 types=0",
+      "reproduced": true,
+      "note": "误报不限于 `char s[]`：`char s[2] = \"x\"` 同样误报（formal 是元素类型 'char'，数组维度在 text3 被丢掉，Stmt.h.ct:3788 把 typebuf 传给 chk_assignable）；`char *s = \"x\"`、`int a[] = {1,2}`、`int a[2] = {1,2}`、struct 数组、`int *ip = cp` 全部静默。故误报面是'字符串字面量初始化 char 数组'，不是'所有数组'。"
+    },
+    {
+      "id": "V6",
+      "side": "both",
+      "ref": "claim.md#1.3；counter.md#2",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && /tmp/tcv/ct-ast check --types test/ast/234_err_return_contract/prog.ct; echo types=$?; /tmp/tcv/ct-ast check test/ast/234_err_return_contract/prog.ct; echo plain=$?; /tmp/tcv/ct-ast compile test/ast/234_err_return_contract/prog.ct -o /tmp/tcv/234.c; echo compile=$?; cc -std=c99 /tmp/tcv/234.c -o /tmp/tcv/234 && /tmp/tcv/234; echo run=$?",
+      "exit": 0,
+      "output": "test/ast/234_err_return_contract/prog.ct:9:23: error: initializer: expected 'char', got 'char *'\ntypes=1\nplain=0\ncompile=0\n3 x\nrun=0",
+      "reproduced": true,
+      "note": "234 的误报在 `static char s[] = \"x\";`（第 9 行），与最小复现 arr1/arr2 同因；`ct build` 能过并运行出 `3 x`，与 prog.expected.out 一致。它是现有绿夹具（plain check rc=0）。"
+    },
+    {
+      "id": "V7",
+      "side": "both",
+      "ref": "claim.md#1.3（289 sweep）；counter.md#2（530 sweep，FP 1/438）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && for f in $(find test/ast -maxdepth 2 -name prog.ct) $(find examples test/cases -name '*.ct'); do p=0; /tmp/tcv/ct-ast check \"$f\" >/dev/null 2>&1 || p=1; t=0; /tmp/tcv/ct-ast check --types \"$f\" >/dev/null 2>&1 || t=1; i=0; grep -qE '^import ' \"$f\" && i=1; echo \"$p $t $i $f\"; done | awk '{c[$1\"/\"$2\"/\"$3]++; if($1==0)g++; if($1==0&&$2==1)fp++; if($2==1&&$1==1&&$3==0)pr++} END{for(k in c) print k,c[k]; print \"plain-green\",g,\"types-only\",fp,\"plain-red-nonimport\",pr}'",
+      "exit": 0,
+      "output": "total 530\n(plain,types,import): (0,0,0)=437  (1,1,0)=51  (1,1,1)=41  (0,1,0)=1\nplain green=438; types-only=1 (test/ast/234_err_return_contract/prog.ct); import=41\nast:      262 plain-green / 1 types-only / 5 plain-red non-import / 21 import\ncases:     24 plain-green / 0 types-only / 1 plain-red\n examples: 151 plain-green / 0 types-only / 45 plain-red / 20 import",
+      "reproduced": true,
+      "note": "反证席的 530/437/41/52 与 1/438=0.228% 完全复现。主张席的 ast-only 262 绿 / 27 红也复现：21 import + 5 plain-red（loop shadow ×3、foreach shadow ×1、loop count ×1）+ 1 个真误报。主张席把后 5 个写成'4 个 loop 遮蔽 + 1 个 loop 计数'，分类略粗但总数对；其 0.35% 用的是 1/289（把 27 个非绿样本也算进分母），合法语料分母应为 438（0.23%）或 ast-only 262（0.38%）。"
+    },
+    {
+      "id": "V8",
+      "side": "verify",
+      "ref": "question.md#J-1（误报如何量化）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && for f in $(find test -name '*.ct'); do p=0; /tmp/tcv/ct-ast check \"$f\" >/dev/null 2>&1 || p=1; t=0; /tmp/tcv/ct-ast check --types \"$f\" >/dev/null 2>&1 || t=1; i=0; grep -qE '^import ' \"$f\" && i=1; echo \"$p $t $i $f\"; done | awk '{k[$1\"/\"$2\"/\"$3]++; if($1==0)g++; if($1==0&&$2==1){tp++; if($4 ~ /check_errors/)a++; else if($4 ~ /errors\\/p44/)b++; else if($4 ~ /errors\\/p45/)cc++; else if($4 ~ /probes/)d++; else e++}} END{for(x in k) print x,k[x]; print \"plain-rc0\",g,\"types-only\",tp; print \"  check_errors\",a,\"p44\",b,\"p45\",cc,\"probes\",d,\"other\",e}'",
+      "exit": 0,
+      "output": "1/1/0 401\n1/1/1 123\n0/0/0 501\n0/1/0 27\nplain-rc0 528 types-only 27\n  check_errors 12 p44 2 p45 5 probes 7 other 1\nother=1 即 test/ast/234_err_return_contract/prog.ct（唯一合法 FP）；26 个设计负例 + 1 个合法 FP = 27。\nimport=123，全部 plain-red（含在 1/1/1 里）",
+      "reproduced": true,
+      "note": "把 1052 个 test .ct 全扫一遍：唯一'合法语料 plain 绿 / --types 红'仍是 234；另外 26 个 types-only 红是设计成'只能由 --types 抓'的负例（check_errors、p44/p45 errors、p32 probes）。这支持反证席的 FP 口径，也说明 530 语料口径已把负例目录排除在外是合理的；但它同时暴露 530 口径漏掉 738 个 test .ct（其中 123 个 import）。"
+    },
+    {
+      "id": "V9",
+      "side": "counter",
+      "ref": "counter.md#2 不利证据 3（--types 只在 p32 夹具上跑）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && awk -F'\\t' 'NR>1 && $1!=\"path\"{n++} END{print \"manifest rows\",n}' test/probes/p32_legal_manifest.tsv; awk -F'\\t' '$1!=\"path\"{print $1}' test/probes/p32_legal_manifest.tsv | sort -u > /tmp/tcv/man.txt; awk -F'\\t' '{print $4}' /tmp/tcv/sweep.tsv | sort -u > /tmp/tcv/cor.txt; echo \"intersection $(comm -12 /tmp/tcv/man.txt /tmp/tcv/cor.txt | wc -l)\"; echo \"corpus-not-in-manifest $(comm -23 /tmp/tcv/cor.txt /tmp/tcv/man.txt | wc -l)\"; grep -c '234' test/probes/p32_legal_manifest.tsv || true; grep -c -- '--types' selfhost/check-semantics.sh || true; grep -c '^run_gate \"' selfhost/check-all.sh",
+      "exit": 0,
+      "output": "279 test/probes/p32_legal_manifest.tsv   (= 278 data rows)\n11 run_gate\ncheck-semantics.sh: no --types\nmanifest rows=278; ∩530 corpus=250; 530-not-in-manifest=280; examples=56; test/ast=194; test/modules=28; 234 absent",
+      "reproduced": true,
+      "note": "反证席'没有对全语料的例行扫描'方向成立：check-ast 的 p32 段用一张 278 行手写 allowlist（250/530 语料，280 个语料条目不在表内，234 恰好不在表内），且 gate 10（check-semantics）完全不跑 --types。但措辞'只在 p32 夹具上跑'偏轻：allowlist 覆盖 194 个 test/ast + 56 个 example + 28 个 module 入口，是一个回归闸，不是两三个探针。"
+    },
+    {
+      "id": "V10",
+      "side": "both",
+      "ref": "claim.md#1.3 / counter.md#3",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && wc -l selfhost/ct-ast/frontend/type/TypeCheck.h.ct selfhost/ct-ast/frontend/parse/Expr.h.ct selfhost/ct-ast/frontend/parse/Stmt.h.ct selfhost/ct-ast/frontend/parse/Parser.h.ct selfhost/ct-ast/backend/mem/Memory.h.ct",
+      "exit": 0,
+      "output": "1061 TypeCheck.h.ct\n7217 Expr.h.ct\n4144 Stmt.h.ct\n3978 Parser.h.ct\n 481 Memory.h.ct\n(另: ParseSupport 653, MapBuild 897, Driver 828, Symbols 2278, Emitter 6593, Module 2858, Diag 561; ct-ast 全部 .ct/.h.ct 合计 35,968 行)",
+      "reproduced": true,
+      "note": "主张席的五个行数与仓库完全一致（1,061 / 7,217 / 4,144 / 3,978 / 481），无四舍五入或旧版偏差。"
+    },
+    {
+      "id": "V11",
+      "side": "verify",
+      "ref": "claim.md#4（现有类型设施 ≈300 行）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && awk 计区间：arg_class 673-703、chk_type 6874-6973、chk_assignable 6974-7012、chk_mcall_args 7013-7064",
+      "exit": 0,
+      "output": "arg_class 31\nchk_type 100\nchk_assignable 39\nchk_mcall_args 52\n三个被点名函数合计 170；加 chk_mcall_args 合计 222",
+      "reproduced": true,
+      "note": "主张席'chk_type/chk_assignable/arg_class ≈300'偏高 35%（对 170）到 76%；即使把 L32-6 的 chk_mcall_args 也算进去仍只有 222。这个误差方向使 A 的'待补'显得更小（现有设施更少 → 新写更多），但量级不变。"
+    },
+    {
+      "id": "V12",
+      "side": "both",
+      "ref": "claim.md#2（chk_type 12 种 / static_ctype 10 种）；claim.md#4（Expr 32 + Stmt 44，待补 20 + 40）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && 统计 Arena/Expr/Stmt 内 N_* 种类与 chk_type/static_ctype/expr_type 的 case/if 分支",
+      "exit": 0,
+      "output": "全仓 distinct N_* = 70；Expr.h.ct 引用 32，Stmt.h.ct 引用 44，union 57，overlap 19（sum 76）\nchk_type case = 12（N_NUM N_FNUM N_STR N_TRY N_VAR N_MEMBER N_ARROW N_DEREF N_ADDR N_INDEX N_CALL N_MCALL）\nstatic_ctype case = 10（N_VAR N_TRY N_INDEX N_DEREF N_ADDR N_MEMBER N_ARROW N_CALL N_OPT N_MCALL）\nexpr_type 覆盖 18（N_VAR N_INDEX N_ADDR N_STR N_CAST N_COMPOUND N_VAARG N_SIZEOF N_OFFSETOF N_INTO N_INTO_SELF N_NUM N_FNUM N_CALL N_MCALL N_MEMBER N_ARROW N_BOX）\n按语义粗分：expr 35 / stmt 20 / decl-meta 15",
+      "reproduced": true,
+      "note": "主张席的 12 / 10 / 246 三处计数全部复现；'Expr 32 + Stmt 44' 也是文件局部引用计数，但两者不是不相交集合（重叠 19，全仓 70），相加 76 会重复计 19 个共享节点。'待补 20 expr + 40 stmt = 60' 与 70-12=58 只差约 3%，但同样重复计共享节点，不能当作独立节点清单。expr_type 的 18 种比 chk_type 的 12 种更能代表可复用设施。"
+    },
+    {
+      "id": "V13",
+      "side": "counter",
+      "ref": "counter.md#6.3（仓库没有 CFG / 基本块 / pass 框架）；requirements-pool.md REQ-MEM-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && grep -rniE 'basic.?block|control.?flow|cfg|domin|dataflow|data.?flow|definite|live variable|reachab' selfhost/ct-ast --include='*.h.ct'",
+      "exit": 0,
+      "output": "命中全部是无关文本：Symbols/Module 的 'reachable'（导入可达性）、Stmt.h.ct:4 的头注释 'control flow'、Expr.h.ct:3253 的 `cfg into { … }.port`（标识符 cfg）、Emitter 的 'unreachable slot'。无 basic block / dominator / dataflow / definite-assignment / liveness 的结构或函数。",
+      "reproduced": true,
+      "note": "仓库自己的登记更硬：requirements-pool.md REQ-MEM-1 写'无 CFG、无 IR、无基本块、无独立 pass 框架'，量级 '5,000 行以上'，当前判定 dormant/'本期不做'。反证席 J-5 的第 3 点成立，且不是推测而是仓库书面登记。"
+    },
+    {
+      "id": "V14",
+      "side": "both",
+      "ref": "claim.md#4（Memory 481）；counter.md#6.3（所有权是名字扫描）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && grep -n 'own_decl\\|own_kind\\|own_base' selfhost/ct-ast/backend/mem/Memory.h.ct; grep -nE '^    (int|const char \\*) [a-z_]+\\(' selfhost/ct-ast/backend/mem/Memory.h.ct; grep -rn 'ct_sem_error' selfhost/ct-ast --include='*.h.ct' | wc -l",
+      "exit": 0,
+      "output": "own_decl[4096] :57, own_kind[4096] :59, own_base[256] :65\nMemory 方法 13 个：mark_owned, own_factory_ok, expr_alloc, expr_mentions, expr_returns, ret_same_struct, leak_decl, leak_scope, leak_assign, leak_return, leak_delete, warn_leak, fail\nct_sem_error 调用 246 处",
+      "reproduced": true,
+      "note": "Memory 是作用域台账 + 名字/表达式扫描：own_decl/own_kind 记声明位置与 own/borrow 类别，leak_* 在声明/赋值/return/delete 处记账；它没有基本块、控制流边或定值格。主张席的'246 处 ct_sem_error'复现；'语义硬错已有先例'成立。"
+    },
+    {
+      "id": "V15",
+      "side": "both",
+      "ref": "question.md#J-5；claim.md#3 M5/M6",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && grep -n 'nbreak == 0\\|break_is_switch' selfhost/ct-ast/frontend/parse/Stmt.h.ct; grep -rn 'duplicate case' selfhost/ct-ast; /tmp/tcv/ct-ast check /tmp/tcv/probes/{break_outside,dup_case,noret,uninit}.ct",
+      "exit": 0,
+      "output": "`nbreak == 0` 只在 err: break 分支（Stmt.h.ct:2201），普通 break 无 loop/switch 深度守卫\nduplicate case：0 处实现\nbreak_outside / dup_case / noret / uninit 的 check 全部 rc=0；--types 也 rc=0\n已有：goto 未定义/重复 label/跨 defer block/声明在 label 后（Stmt.h.ct:3460/3558 等）、return 缺值(opt-in)/void 返回值、dup map key",
+      "reproduced": true,
+      "note": "CFG 类诊断只覆盖 goto/label 与部分 return；break 越界、重复 case、缺 return 路径、未初始化四个经典 CFG/定值错误全部不抓——这正是 B3/A 第 3 相要新写的部分，不能算'复用既有诊断'。"
+    },
+    {
+      "id": "V16",
+      "side": "claim",
+      "ref": "claim.md#1.3 / #2（err: 已硬错）",
+      "command": "cd /tmp/tcv/probes && /tmp/tcv/ct-ast compile errbad.ct -o errbad.c; echo compile=$?; /tmp/tcv/ct-ast check errbad.ct; echo check=$?",
+      "exit": 0,
+      "output": "errbad.ct:2:17: error: return: expected 'int', got 'char *'\nctc: 1 error(s) generated\ncompile=1\nerrbad.ct:2:17: error: return: expected 'int', got 'char *'\nctc: 1 error(s) generated\ncheck=1",
+      "reproduced": true,
+      "note": "`return err: \"x\"` 在类型不匹配时 compile 也硬错（Stmt.h.ct:2064 的 is_err 分支 + chk_assignable diag=7 走 ct_sem_error）。所以 A'把已知错误接到编译路径'在 err: 这一类已有先例；缺口是普通 init/assign/return/容器实参与 CFG/所有权。"
+    },
+    {
+      "id": "V17",
+      "side": "counter",
+      "ref": "counter.md#1 B1 验收（12 个 check_errors 仍为 error）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && for f in test/ast/check_errors/*.ct; do /tmp/tcv/ct-ast check --types \"$f\" >/dev/null 2>&1; rc=$?; echo \"$(basename $f) rc=$rc\"; done",
+      "exit": 0,
+      "output": "check_assign_ptr rc=1 / check_container_push rc=1 / check_container_put rc=1 / check_container_set rc=1 / check_container_struct rc=1 / check_generic_arg rc=1 / check_init_ptr rc=1 / check_return_in_void rc=1 / check_return_missing rc=1 / check_return_ptr rc=1 / check_return_struct rc=1 / check_struct_assign rc=1（12/12）",
+      "reproduced": true,
+      "note": "12 个 p32 负例全部在 --types 下 rc=1；它们是'设计成只能由 --types 抓'的夹具，不是 B1 的误报。"
+    },
+    {
+      "id": "V18",
+      "side": "verify",
+      "ref": "counter.md#2（1851 文件 / 495 expected.* / 530）/ counter.md#5（62 c / 320 out）/ question.md#J-2（1463+）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && find test -type f | wc -l; find test -name '*.expected.*' | sed 's/.*\\.expected\\.//' | sort | uniq -c; find test -name '*.expected.c' | wc -l; find test -name '*.expected.out' | wc -l; find test -name '*.ct' | wc -l; find examples -name '*.ct' | wc -l; find test/ast -maxdepth 1 -type d | wc -l",
+      "exit": 0,
+      "output": "test files = 1851\nexpected.*: abi.h 1, c 62, h 62, out 320  => 合计 445\n62 expected.c / 320 expected.out / 62 expected.h / 1 abi.h\ntest .ct = 1052; examples .ct = 216; 合计 1268\ntest/ast 子目录 = 299（find 含自身 300）\ncheck-ast 当前断言 = 1477 passed, 0 failed, 0 skipped",
+      "reproduced": true,
+      "note": "反证席的 1851、530、62、320 均复现；'495 个 *.expected.*' 不对，实为 445（62+62+320+1）。问题卡的'1463+ 夹具/golden'也混了口径：1,463 是 check-ast 的断言数（docs/design/phase65.md 记录），当前 HEAD 已是 1,477，不是夹具文件数。"
+    },
+    {
+      "id": "V19",
+      "side": "verify",
+      "ref": "counter.md#4 全局（check-all 11 门禁）/ counter.md#5",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && bash selfhost/check-all.sh > /tmp/tcv/checkall.log 2>&1; echo rc=$?; tail -5 /tmp/tcv/checkall.log",
+      "exit": 0,
+      "output": "checkall rc=0\n1) L0 suite: 156 passed, 0 failed\n2) check-goldens: OK (no regression, and the self-hosted rebuild agrees; L1' 25/25, L2 25/25, fixpoint)\n3) check-archive: OK (no regression)\n4) check-m2a: PASS\n5) ct-tour: OK\n6) editor grammar: 169 checks, 0 failed\n7) package manager: 147 passed, 0 failed\n8) check-ast: 1477 passed, 0 failed, 0 skipped\n9) check-warnings: 493 ok, 0 failed\n10) check-semantics: OK (23 assertions)\n11) check-docs: OK (1816 relative links in 290 files, v0.65.1, 11 hard gates, 7 phase status, 3 适用版本 header(s))\ncheck-all: OK (11 hard gates green)",
+      "reproduced": true,
+      "note": "基线 11 门禁全绿、退出 0；这是 J-2 的'现状兼容面'。check-ast 1,477 条断言（不是 1,463）、check-warnings 493、check-semantics 23。"
+    },
+    {
+      "id": "V20",
+      "side": "verify",
+      "ref": "counter.md#5（62 expected.c 重生成）；check-ast.sh:6396",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && grep -n 'expected.c' selfhost/check-ast.sh selfhost/check-goldens.sh selfhost/check-archive.sh | head; grep -c 'grep -q \"warning:' selfhost/check-ast.sh; sed -n '4075,4085p' /tmp/tcv/checkall.log",
+      "exit": 0,
+      "output": "expected.c 的消费方：check-goldens.sh（L1 产物）、check-archive.sh（L2 产物）、check-ast.sh:6267（L0 seed 产物）\ncheck-ast.sh:6396 注释：'The byte-level golden check lives in the L0-seed section above; ct-ast\\'s formatting is its own and is covered by the behavioural cases.'\ncheck-ast.sh 有 6 条 `grep -q \"warning:` 正向断言\ncheck-semantics：compile 下 atype / amb / drift 三类 finding 'stays a warning, exits 0 and writes its C'（3 条 ok）",
+      "reproduced": true,
+      "note": "62 个 expected.c 由 L0/L1/L2 生成，不由 ct-ast 生成；只在 ct-ast 里翻默认不会重生成 62 golden。反证席的'62 golden 全量重生成'在机制上不准确，除非同时改 L1/L2（但它们是冻结层）。真正会红的是：check-ast 的 6 条 compile-warning 断言 + corpus/behavioural 用例 + memory/errors 段与 L2 的逐字节诊断 diff（check-ast.sh:5567）。"
+    },
+    {
+      "id": "V21",
+      "side": "both",
+      "ref": "claim.md#1.3（own/borrow 硬错）/ counter.md#6.3",
+      "command": "cd /tmp/tcv/probes && export CT_C_BOUNDARY=allow; /tmp/tcv/ct-ast compile borrowre2.ct -o br2.c; echo compile=$?; /tmp/tcv/ct-ast compile leak2.ct -o leak2.c; echo compile=$?; /tmp/tcv/ct-ast check leak2.ct; echo check=$?",
+      "exit": 0,
+      "output": "borrowre2.ct:6:1: error: a borrowed pointer cannot be reassigned\ncompile=1\nleak2.ct:4: warning: potential leak: 'p' (S*) allocated but never deleted\ncompile=0\nleak2.ct:4: error: potential leak: 'p' (S*) allocated but never deleted\ncheck=1",
+      "reproduced": true,
+      "note": "own/borrow 已有两类能力：①局部硬错（borrow 重赋值、存入长寿对象、container 持 own/borrow、闭包逃逸、own 数组等）在 compile 也红；②泄漏诊断在 compile 是 warning、check 升 error。缺的是跨过程/字段/一层调用的写入摘要与 use-after-free（REQ-MEM-2 登记 300–600 行）。"
+    },
+    {
+      "id": "V22",
+      "side": "claim",
+      "ref": "claim.md#1.3（'同 sweep 下 examples/** 216 个全绿'）",
+      "command": "cd /tmp/tcv && awk -F'\\t' '$4 ~ /^examples\\//{c[$1\"/\"$2\"/\"$3]++} END{for(k in c) print k,c[k]}' sweep.tsv",
+      "exit": 0,
+      "output": "examples 216:  plain-green=151, types-only=0, plain-red=45, import(plain-red)=20\n即 --types 没有新增失败（FP=0），但 plain check 本身有 65/216 非绿（45 个设计负例 + 20 个 import 入口）",
+      "reproduced": true,
+      "note": "主张席'216 个全绿'按字面不成立；正确的可复现说法是'examples 上 --types 的 types-only 失败为 0'。这与 A 的兼容性论证方向一致（examples 无新增误报），但把它写成'全绿'会掩盖 45 个设计负例与 20 个 import 入口的存在。"
+    },
+    {
+      "id": "V23",
+      "side": "both",
+      "ref": "counter.md#3（requirements-pool.md:208）/ counter.md#5（5,000+ 行）/ claim.md#4",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && sed -n '198,230p' docs/planning/requirements-pool.md",
+      "exit": 0,
+      "output": "REQ-TYPE-1（2026-11-14）：'461 语料 rc 与 test/cases/*.expected.c 全量重生成；check-archive 的 ratchet 口径变化'\nREQ-MEM-1：'无 CFG、无 IR、无基本块、无独立 pass 框架'；'量级 5,000 行以上（AST→CFG、流敏感状态机、跨过程摘要、夹具与门禁四块）'；status dormant，'本期不做；量级 5,000+ 行，超过任一已收口相'\nREQ-MEM-2：单元内一层写入摘要 '300–600 行 + 夹具'，不做跨单元",
+      "reproduced": true,
+      "note": "'461' 是 requirements-pool 在 2026-11-14 的旧数（当时语料较少），当前可复现的扫描面是 530（289+216+25）或 1,268 个 .ct；反证席把 461 当 A 的现行影响面，属引用旧数。'5,000+ 行'是仓库对 CFG+所有权数据流的正式估算，正好卡在 A 的 4,000–7,000 上沿。"
+    },
+    {
+      "id": "V24",
+      "side": "claim",
+      "ref": "claim.md#3 M8（void * 往返）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && /tmp/tcv/ct-ast check --types test/ast/p45_contract/prog.ct; echo types=$?; /tmp/tcv/ct-ast check test/ast/p45_contract/prog.ct; echo plain=$?; /tmp/tcv/ct-ast compile test/ast/p45_contract/prog.ct -o /tmp/tcv/p45.c; echo compile=$?",
+      "exit": 0,
+      "output": "types=0\nplain=0\ncompile=0",
+      "reproduced": true,
+      "note": "M8（`void *` 往返 `struct A *`）在 --types 下不误报，与 §4.53 的 'void * ↔ 任意对象指针' 规则一致；A 的 M8=0 要求现状已满足。"
+    },
+    {
+      "id": "V25",
+      "side": "verify",
+      "ref": "claim.md#2（'只有三处粗检'）/ README.md:448",
+      "command": "cd /tmp/tcv/probes && /tmp/tcv/ct-ast check atype.ct; echo check=$?; /tmp/tcv/ct-ast check --types atype.ct; echo types=$?; /tmp/tcv/ct-ast compile atype.ct -o atype.c; echo compile=$?",
+      "exit": 0,
+      "output": "atype.ct:4:46: error: type mismatch: 'setp' argument 1: expected 'struct P *', got 'struct Q *'\ncheck=1\n(same line)\ntypes=1\natype.ct:4: warning: type mismatch: 'setp' argument 1: expected 'struct P *', got 'struct Q *'\ncompile=0",
+      "reproduced": true,
+      "note": "普通函数调用点的实参类型（19.2）在 plain check 已经抓，--types 不新增能力；L32-6 只补容器/泛型固有方法实参（v.push(\"s\")）。所以'--types 只检查 4 个位置'要写成：init / assign / return / mcall 实参；plain check 另有一套 19.1–19.3 的调用点检查，两者不可混为一谈。"
+    },
+    {
+      "id": "V26",
+      "side": "verify",
+      "ref": "claim.md#2（L32-4）/ language-spec.md:2480-2493",
+      "command": "cd /tmp/tcv/probes && /tmp/tcv/ct-ast compile retmissing.ct -o rm.c; echo compile=$?; /tmp/tcv/ct-ast check retmissing.ct; echo check=$?; /tmp/tcv/ct-ast check --types retmissing.ct; echo types=$?",
+      "exit": 0,
+      "output": "compile=0\ncheck=0\nretmissing.ct:2:5: error: return: missing a value (function returns 'int')\ntypes=1",
+      "reproduced": true,
+      "note": "L32-4（非 void 函数裸 `return;`）也是 types_mode 才判（Stmt.h.ct:2020）；compile 写出 `return;`，cc 才报 -Wreturn-mismatch。这属于 --types 的第 3 组（return），不是 CFG 的'缺返回路径'（后者在 M4/noret 下仍然不抓）。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "selfhost/ct-ast/tool/driver/Driver.h.ct",
+      "line": 277,
+      "text": "/* Phase 32: `--types` is an opt-in gate on `ct check` only. The scan",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/driver/Driver.h.ct",
+      "line": 282,
+      "text": "if (!(argc > 1 && strcmp(argv[1], \"check\") == 0)) {",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/driver/Driver.h.ct",
+      "line": 352,
+      "text": "if (strcmp(argv[1], \"check\") == 0) {",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/driver/Driver.h.ct",
+      "line": 353,
+      "text": "self->m->check_mode = 1;",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/driver/Driver.h.ct",
+      "line": 757,
+      "text": "if (self->m->check_mode) {",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/driver/Driver.h.ct",
+      "line": 472,
+      "text": "self->p->types_mode = 1;",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Expr.h.ct",
+      "line": 395,
+      "text": "/* Phase 32: points at the parser's `types_mode`, set only by `ct check",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Expr.h.ct",
+      "line": 3873,
+      "text": "int static_ctype(int n, char *out, int cap, int *array_depth, int depth)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Expr.h.ct",
+      "line": 4640,
+      "text": "if (self->types_mode && *self->types_mode) {",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Expr.h.ct",
+      "line": 6874,
+      "text": "int chk_type(int n, char *out, int cap, int *is_zero)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Expr.h.ct",
+      "line": 6962,
+      "text": "if (!self->static_ctype(n, out, cap, &ad, 0)) return -1;",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Expr.h.ct",
+      "line": 6974,
+      "text": "int chk_assignable(const char *formal, const char *actual, int is_zero, int diag)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Expr.h.ct",
+      "line": 7013,
+      "text": "int chk_mcall_args(const char *ibase, const char *fname, int args)",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 2020,
+      "text": "if (self->ex->types_mode && *self->ex->types_mode",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 2064,
+      "text": "&& (is_err || (self->ex->types_mode && *self->ex->types_mode))) {",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 2201,
+      "text": "if (self->nbreak == 0)",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 3781,
+      "text": "if (self->ex->types_mode && *self->ex->types_mode) {",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 3788,
+      "text": "if (self->ex->chk_assignable(typebuf, out, is_zero, 1) != 0)",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "line": 4044,
+      "text": "if (self->ex->types_mode && *self->ex->types_mode && tt[0]) {",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/mem/Memory.h.ct",
+      "line": 57,
+      "text": "int  own_decl[4096];         /* where each scope's `own` declarations start */",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/mem/Memory.h.ct",
+      "line": 65,
+      "text": "int  own_base[256];",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/type/TypeCheck.h.ct",
+      "line": 323,
+      "text": "int expr_type(int n, char *out, int cap)",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 2480,
+      "text": "- **开关**：`ct check --types` 只在三处做粗粒度类型校验——声明初值 / 赋值（含 `into` 块里的",
+      "supports": "claim",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 2490,
+      "text": "`ret_type`，不按外层函数判）；跨单元函数体与 `import` 单元不检查。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/planning/requirements-pool.md",
+      "line": 208,
+      "text": "| **影响** | 461 语料 rc 与 `test/cases/*.expected.c` 全量重生成；…",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "docs/planning/requirements-pool.md",
+      "line": 224,
+      "text": "| **影响** | …量级 5,000 行以上（AST→CFG、流敏感状态机、跨过程摘要、夹具与门禁四块）。",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "README.md",
+      "line": 448,
+      "text": "| `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`（仅单文件单元，`import` 不被接受）…",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 3551,
+      "text": "echo \"== p32 types (L32) ==\"",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 3773,
+      "text": "done < test/probes/p32_legal_manifest.tsv",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 5567,
+      "text": "# warning is byte-diffed against L2's, since D39 keeps diagnostics identical.",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-ast.sh",
+      "line": 6396,
+      "text": "# (The byte-level golden check lives in the L0-seed section above; ct-ast's",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/check-all.sh",
+      "line": 97,
+      "text": "run_gate \"1) L0 suite (test/run.sh)\" ./test/run.sh",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/diag/Diag.h.ct",
+      "line": 71,
+      "text": "int  strict;",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/diag/Diag.h.ct",
+      "line": 441,
+      "text": "void set_strict(int on)",
+      "supports": "verify",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Parser.h.ct",
+      "line": 134,
+      "text": "int  types_mode;",
+      "supports": "counter",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/parse/Parser.h.ct",
+      "line": 1352,
+      "text": "self->ex->types_mode = &self->types_mode;",
+      "supports": "counter",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "question": "覆盖与 soundness：能否消掉'ct 绿、C 红/运行错'；漏报/误报如何量化",
+      "claim": "A：全量进编译路径后 M1–M6 在 ct compile 下硬错、M7/M8 保持 0；误报按 289+216 语料 sweep 量化",
+      "counter": "B：opt-in 不承诺 sound，只承诺可量化错误预算（FP 率、skip 台账、探针命中率、旧语料零变化）；FP=1/438",
+      "evidence": [
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V7",
+        "V8",
+        "V15",
+        "V25",
+        "V26"
+      ],
+      "verdict": "J-1=unresolved；A=pass-on-premise / fail-on-completion；B=pass-on-boundary",
+      "fact": "窗口真实存在于 `ct compile` 与 `ct build --emit-c`：struct 互赋、指针算术、错误 return、break 越界、重复 case 五项实测 compile=0 / build --emit-c=0，而 cc=1（V2/V4）。但 claim 说'ct build 绿'不准确：`ct build`（无 --emit-c）这五项 rc=1，只是拒绝由 cc 给出，不是 ct 的类型检查（V2）。`--types` 只覆盖 4 个位置（init/assign/return/mcall 实参）、6 条诊断、chk_type 12 个节点：M1/M3 被抓，M2/M5/M6 仍 rc=0（V2）。误报可复现为 1/438=0.23%（530 语料，234 一条），全 test 1052 扫描的 27 个 types-only 里 26 个是设计负例，唯一合法 FP 仍是 234（V7/V8）。漏报面：35 个表达式节点覆盖 12、20 个语句节点覆盖 0，break/重复 case/缺 return/未初始化全不抓（V12/V15）。A 的'窗口真实'成立，B 的'opt-in 不承诺 sound、只给可量化预算'成立；A 的'1.0 前清零'没有 FP=0 或跨单元的落地证据，故判 unresolved。"
+    },
+    {
+      "id": "J-2",
+      "question": "兼容性：C 超集、既有夹具/golden、包生态是否被破坏",
+      "claim": "A：修完 234 类误报后，445 golden 逐字节不变，1,268 个 .ct 全量回归绿",
+      "counter": "B：opt-in 不改产物；A 会触发 461 语料 rc 与 62 个 expected.c 全量重生成",
+      "evidence": [
+        "V5",
+        "V6",
+        "V7",
+        "V8",
+        "V17",
+        "V18",
+        "V19",
+        "V20",
+        "V22",
+        "V23"
+      ],
+      "verdict": "J-2=pass-for-B / unresolved-for-A；B=pass；A=fail（现状）/ unresolved（修完 FP 后）",
+      "fact": "HEAD 的 11 道硬门禁全绿（check-ast 1477/0，check-goldens/archive/m2a/tour 全 OK，V19），所以'现状兼容面'是 0 破坏。B 的 opt-in 结构性不改产物：build/compile 直接拒绝 --types（V3），默认路径不经过 types_mode。A 强制默认的代价可逐条核：①234 是合法夹具（plain=0）且 --types=1，强制后行为门禁必红，A 必须先清零；②examples 216 并非'全绿'：151 plain-green、45 设计负例、20 import，正确表述是'--types 在 examples 上 types-only=0'（V22）；③check-ast 有 6 条 `grep -q \"warning:` 正向断言，加上 check-semantics 对 atype/amb/drift 的'compile 保持 warning、rc=0、写 C'断言，A 把 warning 升 error 会直接改这些断言（V20）；④62 个 expected.c 由 L0/L1/L2 生成，ct-ast 只做行为等价（check-ast.sh:6396），只在 ct-ast 强制默认不会重生成 62 golden——反证席的机制描述不准，若同时改 L1/L2 则撞冻结；⑤'461 语料'是 2026-11-14 的旧数，当前扫描面 530 / 全部 .ct 1,268（V18/V23）。包生态：本机 ~/.ct/pkg 无 ct/std，包门禁用临时夹具（147/0），未独立验证 ct/std 在 strict 下的表现，标 unresolved。"
+    },
+    {
+      "id": "J-3",
+      "question": "工作量：代码/测试/文档行数、phase 数、周期、风险",
+      "claim": "A：净增 4,000–7,000 行（含 250–400 负例夹具），4 相、每相 4–6 周、合计 4–6 个月",
+      "counter": "B：2,650–4,600 LOC（B1 250–400 / B2 400–700 / B3 1,500–2,500 / B4 500–1,000）；A 3,400–8,000，含完整 CFG+数据流所有权时仓库登记 5,000+",
+      "evidence": [
+        "V10",
+        "V11",
+        "V12",
+        "V13",
+        "V23"
+      ],
+      "verdict": "J-3=unresolved；B=pass（算术/分相自洽，B2 偏低）；A=unresolved（节点口径与周期不可核）",
+      "fact": "B 的算术正确：250+400+1,500+500=2,650，400+700+2,500+1,000=4,600；四相与 A 的四相范围同构，差别在默认值。A 的自报 4,000–7,000 与 counter 归给 A 的 3,400–8,000 都是量级估计，但口径不同：B 是编译器 LOC（夹具另计 100–250 行/相），A 把'250–400 个负例夹具'算进同一区间，两者不可直接比。节点依据：claim 的 Expr 32 + Stmt 44 = 76 是两文件的引用计数，union 57、重叠 19、全仓 70；chk_type 覆盖 12 → 缺 58 个 distinct 节点（23 expr + 20 stmt + 15 decl-meta），'20 expr + 40 stmt = 60' 总量只差 2（约 3.4%），但 split 不准（expr 少 3、decl-meta 并入 stmt 后多 5），不能当独立清单。现有设施：chk_type 100 + chk_assignable 39 + arg_class 31 + chk_mcall_args 52 = 222 行，claim 的'≈300'偏高 26–76%（V11）。B 的主要漏项是 B2：Module.h.ct 2,858 行、123 个 import-bearing test .ct（不是 41），而 check 今天在 import 处直接拒绝，要复用 build 单元图不止 400–700 行；B 自己把 B2 列为最高风险。双方共同漏项：docs/language-spec §4.53 改写、CLI/README/help、p32 manifest（278 行）与 6 条 warning 断言、L2 诊断逐字节约束（check-ast.sh:5567）、包生态、CFG/所有权 5,000+ 的 REQ-MEM-1 登记。A 的 4–6 个月无仓库校准来源；B 干脆没给周期。"
+    },
+    {
+      "id": "J-4",
+      "question": "增量价值：每相能否独立交付、是否可回退",
+      "claim": "A：每相一落地即进编译路径，单相 revert 回上一相；只允许一张 1.0 到期的临时豁免清单",
+      "counter": "B：四相独立验收/回退，关开关即回 HEAD 行为；B2 是唯一高风险相",
+      "evidence": [
+        "V3",
+        "V9",
+        "V19",
+        "V20"
+      ],
+      "verdict": "J-4=pass-for-B / unresolved-for-A；B=pass；A=unresolved",
+      "fact": "B 的回退机制是现成的：types_mode 是单一标志（Parser.h.ct:134/1352；Driver.h.ct:276/286/472），check 路径不写产物（Driver.h.ct:757-760），关开关即回 HEAD 行为；每相只动 types_mode 分支与新增检查，门禁可独立加。A 的'每相进编译路径'与'临时豁免清单'：清单在仓库里没有字段、生成器、门禁挂靠或 owner，只有一句声明；每相改默认都会撞 check-ast 的 6 条 compile-warning 断言、289 个 behavioural 用例与 67 个 corpus-equivalence 用例（V19/V20）。单相 git revert 在技术上可行，但每相都是用户可见行为变化，且 FP 一旦出现会立刻让门禁红，'独立交付'不等于'独立验收'。"
+    },
+    {
+      "id": "J-5",
+      "question": "语义检查可行性：CFG/定值/own/borrow 能做到什么程度",
+      "claim": "A：CFG 的 return/break/goto/switch、定值/初始化、不可达、impl 完整性、own/borrow/Drop 逃逸与释放顺序，4 相内做到",
+      "counter": "B：按已有 own/borrow/Drop 契约做可达子集；完整 CFG/借用检查 deferred；B3 1,500–2,500、B4 500–1,000",
+      "evidence": [
+        "V13",
+        "V14",
+        "V15",
+        "V16",
+        "V21",
+        "V23"
+      ],
+      "verdict": "J-5=pass-for-B / unresolved-for-A；B=pass（可达子集与仓库登记相符）；A=fail（scope 缺证据）",
+      "fact": "仓库没有 CFG/IR/基本块/pass 框架（V13；REQ-MEM-1 书面登记且 dormant，量级 5,000+ 行）。Memory 481 行是作用域台账 + 名字扫描（own_decl/own_kind/own_base 57-65，13 个方法），泄漏诊断是 may/must 路径提示（V14）。已有硬检查：borrow 重赋值/存入长寿对象、container 持 own/borrow、闭包逃逸、own 数组等走 ct_sem_error（全仓 246 处），compile 也红（V21）；但普通 break 越界、重复 case、缺 return 路径、未初始化全部不抓（V15）。B 的 B3/B4 若限定为 return 路径、switch 覆盖、一层写入摘要，与 REQ-MEM-2 的 300–600 行量级相符，属可达子集；B 明说'不承诺完整借用检查'（counter §7）。A 的'CFG + own/borrow/Drop 逃逸/释放顺序'要在 4,000–7,000 总预算内装下 REQ-MEM-1 的 5,000+ 所有权分析，只可能把所有权降级为名字扫描子集——A 没有写这个限制，也没有说明 Drop 释放顺序与跨过程摘要如何落地，故 scope 未证。"
+    },
+    {
+      "id": "J-6",
+      "question": "roadmap/策略：phase 序列、opt-in 开关、编译路径切换条件",
+      "claim": "A：4 相（claim §4）但 question 位置写'1–2 phase'；1.0 前强制；闸=234 清零 + 跨单元 + 4 相 6 个月",
+      "counter": "B：4 相后逐相接；切换=连续 2 个版本 FP=0 + 旧语料零变化 + 保留开关；A 实际 ≥5 相",
+      "evidence": [
+        "V3",
+        "V7",
+        "V9",
+        "V19",
+        "V20"
+      ],
+      "verdict": "J-6=pass-for-B / unresolved-for-A；B=pass；A=unresolved（phase 数自相矛盾）",
+      "fact": "B 的切换条件是可机械核对的三条：连续 2 版 FP=0、旧语料零变化、保留开关；开关已存在（types_mode），每相可独立挂门禁，roadmap 上只需排 4 个 phase 窗口。A 的 phase 数在两份自家文件里冲突：question.md:20 写'一个 phase 或两个 phase 内完成'，claim.md:119 写'4 相，不是 1 相'；counter 的'A 实际 ≥5'是推断，没有引用 A 的任务清单。A 的闸（234 清零 + 跨单元 + 4 相 6 个月）本身可核对，但'临时豁免清单'没有字段/生成器/owner，1.0 日期也没有和仓库 roadmap 对齐。B 的切换条件同样没有 owner/date，但它的 4 相与现有 types_mode 开关是现成机制，A 的 1.0 硬截止则把 FP=0 与跨单元两个未证项捆在同一个日期上。"
+    }
+  ],
+  "findings": {
+    "check_types_scope": "现有 `ct check --types` 是 4 个判定位置、6 条诊断：L32-1 声明初值（Stmt.h.ct:3781/3788）、L32-2 赋值含 into 的 .field（Stmt.h.ct:4044/4051）、L32-3/4/5 return（Stmt.h.ct:2020/2064/2080/2083）、L32-6 容器/泛型固有方法实参（Expr.h.ct:4640/4641/7013 的 chk_mcall_args）。规范 text（language-spec.md:2480）把它写成'三处'，是 init+assign / return / 容器实参三组的分组口径，不是 3 个调用点。判定内核 chk_type 只覆盖 12 个表达式节点（100 行），其余回落 static_ctype 的 10 个节点，仍判不出就静默；数组/函数指针/void/sizeof/_Generic/宏/跨单元 import 一律 skip。plain `ct check` 另有一套 19.1–19.3（arity、调用点实参类型、trait 歧义、impl 签名漂移）与既有 hard sem_error（246 处），strict=1 把 warning 全部升 error；`ct compile` 保持 warning + rc=0，`ct build` 用 strict=2 只对签名漂移硬错。",
+    "compile_path": "`ct build` / `ct compile` 自身不做 CT 类型检查：types_mode 只在 `ct check` 置位（Driver.h.ct:277-286），build/compile 传 `--types` 直接按名拒绝（V3）。`ct compile` 与 `ct build --emit-c` 对 M1–M6 全部 rc=0 并写出 C（V4）；`ct build`（无 --emit-c）rc=1 只是因为它在发射后调用本地 cc（AGENTS.md 的受控子进程例外），诊断是 cc 的 `file:line:col: error:`，不是 ct 的。故问题卡的'ct build/compile 是否做类型检查'应分三档回答：ct compile 不做、build --emit-c 不做、build 端到端被 cc 兜住。",
+    "fp_rate": "可复现口径：FP = 合法语料中 plain check rc=0 而 check --types rc=1 的文件数 / 合法语料中 plain check rc=0 的文件数。530 语料（289 test/ast prog.ct + 216 examples + 25 test/cases）分母 438、分子 1（234），FP=0.228%；ast-only 分母 262、分子 1，FP=0.382%；把 1052 个 test .ct 全扫，types-only 27 个，其中 26 个是设计负例（check_errors 12 / p44 errors 2 / p45 errors 5 / p32 probes 7），唯一合法 FP 仍是 234。claim 的 0.35% 用 1/289，把 27 个 plain-red 样本也算进分母，方法不对但数值接近。误报根因是 `char s[] = \"x\"` / `char s[2] = \"x\"`：声明类型在 typebuf 里只剩元素类型 'char'，维度在 text3，chk_assignable 把 `char *` 与 `char` 比较（Stmt.h.ct:3788）；`char *s = \"x\"`、`int a[] = {…}`、struct 数组均不误报。",
+    "coverage_counts": "全仓 70 个 distinct N_* 节点；按语义粗分 35 expr / 20 stmt / 15 decl-meta。chk_type 12 个 case（全部 expr），static_ctype 10 个（含 N_OPT），expr_type 18 个（可复用的类型推断）。Expr.h.ct 引用 32 个节点（其中 27 个是 expr、5 个非 expr）、Stmt.h.ct 引用 44 个，union 57、重叠 19。真实缺口：70-12=58 个 distinct 节点 = 23 个未被 chk_type 覆盖的 expr + 20 个 stmt + 15 个 decl-meta；claim 的'20 expr + 40 stmt = 60'总量接近（差 2，约 3.4%），但 split 不准：expr 少 3、把 15 个 decl-meta 并进'stmt'后仍多算 5。主张席的'Expr 32 + Stmt 44'与'待补 20 + 40'都来自文件局部引用计数，不是不相交清单；CFG/定值/不可达为零。",
+    "cfg_state": "无 CFG/IR/基本块/dominator/dataflow/definite-assignment 的任何结构或函数（V13；REQ-MEM-1 书面登记，5,000+ 行，dormant）。own/borrow 只有作用域台账 + 局部硬错 + 泄漏 warning：Memory 的 own_decl/own_kind/own_base（57-65）与 13 个 leak_*/mark_owned 方法，compile 侧 warning、check 侧 error；borrow 重赋值/存入长寿对象/container 持 own-borrow/闭包逃逸已在 compile 硬错（V21）。缺口是跨过程/字段写入摘要、use-after-free、Drop 释放顺序、return 路径与 switch 覆盖；break（非 err:）/重复 case/缺 return/未初始化全不抓（V15）。",
+    "workload": "B 的 2,650–4,600 算术正确、分相与 A 同构；B2 很可能低估（Module.h.ct 2,858 行；123 个 import-bearing test .ct + 20 个 examples import，不是 41；check 现在在 import 处直接拒绝，要复用 build 单元图到发射前）。A 的 4,000–7,000 与 counter 的 3,400–8,000 都是量级估计、口径不同（B 编译器 LOC、A 把夹具算进去），不能直接比较；A 的节点依据 20+40 与 58 个 distinct 缺口只差约 3%，但重复计了 19 个共享节点。现有设施 222 行（不是 ≈300）；expr_type 的 18 种是 B1 可复用的真实底子。双方共同漏项：language-spec §4.53 改写、CLI/README、p32 manifest（278 行）与 6 条 warning 断言、check-ast 与 L2 的逐字节诊断约束、包生态、REQ-MEM-1 的 5,000+ 所有权分析。A 的 4–6 个月没有校准；B 没有给周期。",
+    "compatibility": "HEAD 11 门禁全绿（check-ast 1477/0；check-goldens 25/25 + L1' 25 + L2 25；archive/m2a/tour/warnings 493/0/semantics 23/docs 1816 链接），所以基线兼容面是 0 破坏。B 的 opt-in 结构性不改产物（build/compile 拒绝 --types 且默认路径不读 types_mode）。A 强制默认的真实成本：234 会红（合法夹具 + --types 误报）；examples 216 中 65 个非绿（45 设计负例 + 20 import），'216 全绿'不成立；check-ast 6 条 compile-warning 断言 + check-semantics 的 3 类 finding 断言会因 warning→error 改变；62 个 expected.c 由 L0/L1/L2 生成、ct-ast 只做行为等价，只在 ct-ast 翻默认不会重生成它们，但 memory/errors 段与 L2 的逐字节诊断 diff 会破；461 是旧数，当前 530/1268。包生态（ct/std）本机缺失，未验证。",
+    "steelman": {
+      "A": "最强点：窗口是实测的（compile/build --emit-c rc=0 写出 cc 拒收的 C，M1–M6），opt-in 只要没人跑就等于没做；仓库已有 err:/own/borrow 的 hard-error 先例与 246 处 ct_sem_error，强制默认不是新开一种行为模式；1.0 是兼容性冻结点，之后收紧会被当成破坏性变更。A 的 M7/M8 反证行是诚实的自我约束。",
+      "B": "最强点：FP 可量化且当前非零（1/438），opt-in 让误报只伤主动开启的人，不阻断存量 C 超集/包生态；每相回退机制现成（types_mode 单一标志 + check 不写产物）；B 明说 ct check 不是验证器、不承诺 soundness，只承诺可量化预算——这是对'已经成熟、只差强制'最有力的反驳；A 的 6 个月与 FP=0 无证据。"
+    },
+    "side_observations": [
+      "claim 'examples/** 216 个全绿'不成立：151 plain-green / 45 plain-red（设计负例）/ 20 import；正确说法是 examples 上 --types 的 types-only 失败为 0（V22）。",
+      "claim 的 0.35% 用 1/289；合法语料分母应为 438（0.23%）或 ast-only 262（0.38%）（V7）。",
+      "claim 'chk_type/chk_assignable/arg_class ≈300 行'实测 170（三个函数）或 222（加 chk_mcall_args）（V11）。",
+      "claim 'ct build 绿'应改为'build --emit-c 绿'；`ct build` 端到端 rc=1，诊断来自 cc（V2/V4）。",
+      "counter '495 个 *.expected.*'实测 445（62 c + 62 h + 320 out + 1 abi.h）（V18）。",
+      "counter 说'A 声明 1–2 个 phase'引的是 question.md:20；claim.md:119 明写'4 相，不是 1 相'，A 自家两份文件冲突；'实际 ≥5'是推断，没有引用 A 的任务清单或证据。",
+      "counter '62 expected.c 全量重生成'的机制不准：expected.c 由 L1/L2/L0 生成，ct-ast 不做逐字节 golden（V20）；只有把检查同时推进 L1/L2 才会触发，而那两层冻结。",
+      "counter '461 语料'是 requirements-pool.md:208 的 2026-11-14 旧数；当前扫描面 530、全部 .ct 1,268（V18/V23）。",
+      "question '1463+ 夹具/golden'混了口径：1,463 是 check-ast 断言数（phase65.md），当前 HEAD 是 1,477；夹具/golden 数是 530/445/1,268（V18/V19）。",
+      "counter 的 binary sha256 前缀 114357b05dae43d9 与本席独立自举产物完全相同（V1）。",
+      "claim '246 处 ct_sem_error'与 '12 个 check_errors 仍 error'均复现（V14/V17）。",
+      "check-ast 的 p32 段不是'两三个探针'：它有一张 278 行 allowlist（250/530 语料）+ 22 行 coverage matrix，但 234 不在表内、280 个语料条目不在表内、gate 10 不跑 --types（V9）。"
+    ]
+  },
+  "unreproduced": [
+    "claim.md#1.3 'examples/** 216 个全绿'：实测 151 plain-green、45 plain-red、20 import；types-only 为 0 而不是'全绿'（V22）。",
+    "claim.md#1.3 '0.35%'：分母 289 含 27 个 plain-red 样本；合法语料 FP 是 1/438=0.23% 或 ast-only 1/262=0.38%（V7）。",
+    "claim.md#4 'chk_type/chk_assignable/arg_class ≈300 行'：实测 170（三函数）或 222（加 chk_mcall_args）（V11）。",
+    "claim.md#1.3 'ct build 绿'：`ct build`（无 --emit-c）对 M1–M5 rc=1；绿的是 compile / build --emit-c（V2/V4）。",
+    "counter.md#2 'test/ 下 495 个 *.expected.*'：实测 445（V18）。",
+    "counter.md#5 'A 声明 1–2 个 phase'：claim.md:119 自报 4 相；1–2 是 question.md:20 的位置描述；'A 实际 ≥5'无引用（checks#J-6）。",
+    "counter.md#5 '62 .expected.c 全量重生成'：ct-ast 不做逐字节 golden，62 个由 L0/L1/L2 生成；只在 ct-ast 强制默认不触发（V20）。",
+    "counter.md#5 '461 语料 rc'：requirements-pool 2026-11-14 旧数；当前 530 扫描面 / 1,268 .ct（V18/V23）。",
+    "question.md#J-2 '1463+ 夹具/golden'：1,463 是 check-ast 断言数且当前为 1,477，不是夹具文件数（V18/V19）。",
+    "claim.md#4 '4,000–7,000 行 / 4–6 个月'：量级估计本身不可证伪，且没有逐组件推导；4–6 个月无仓库校准来源（checks#J-3）。",
+    "A 的'临时豁免清单'：仓库内不存在字段、生成器、门禁挂靠或 owner，无法核对（checks#J-4）。",
+    "包生态（ct/std 在 strict 下的表现）：本机 ~/.ct/pkg 无 ct/std，包门禁用临时夹具，未独立验证（checks#J-2）。"
+  ]
+}
