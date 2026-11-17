@@ -1,6 +1,6 @@
 # Phase 65 — 严格 C 边界（外部库/用户默认 strict）
 
-> **状态：实施中**（2026-11-17 立项；卡已冻结；S0 已完成，R1 已完成（87aaad4e），R2 已完成（6f7ec245），R3 已完成（03e3b81e），R4 已完成（dbb13cf5），R5 已完成（8196ece4），R6 已完成，R7 已完成）。
+> **状态：完成**（2026-11-18 收口；`v0.64.0`；R1–R7 全部交付，E65-1…8 全绿）。
 > **基线**：当前 `HEAD 0e541f32`（`v0.63.2`）；S0 记录实际 sha 与门禁数字。
 > **文档形态**：`phase65-draft.md`；design window 7/12。
 > **依据**：[battle cinclude-2 判决](../../battle/cinclude-2/verdict.md)、[cinclude-1 判决](../../battle/cinclude-1/verdict.md)、[硬件需求](../planning/hardware-readiness-requirements.md) 的 C 边界部分。
@@ -186,3 +186,19 @@ S0 在 `0e541f32` 上冷构建 `ct`（`ct -v` = `v0.63.2`），记录 `check-ast
 - 编译器/工具 180–320；夹具 120–220；文档 50–90；合计 350–630。
 - 开工前 S0：`0e541f32` 冷构建、记录基线、复跑探针；不占任务行。
 - 收口：E65-1…8 全绿、11 道门禁绿、`version-minor=64`、五处 `CTC_VERSION` 到 `v0.64.0`、phase-log/对照表；tag 按 6.7 V-7，分支推送按 6.5。
+
+## 9 收口对照表（2026-11-18，v0.64.0）
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E65-1 | `bash test/ast/p65_policy.sh <ct-ast>` | `OK p65/policy`（八条策略 + 坏值拒绝） |
+| E65-2 | `bash test/ast/p65_include.sh <ct-ast>` | `OK p65/include`（3 负例 + 3 正例） |
+| E65-3 | `bash test/ast/p65_raw_extern.sh <ct-ast>` | `OK p65/raw-extern`（3 负例 + 3 正例） |
+| E65-4 | `bash test/ast/p65_map.sh <ct-ast>` | `OK p65/map`（include/对象宏正例 + 函数式宏负例） |
+| E65-5 | `bash test/ast/p65_hdr_shim.sh <ct-ast>` | `OK p65/hdr-shim`（公开头带 shim、`-I`、歧义硬错） |
+| E65-6 | `env -u CT_C_BOUNDARY bash test/ast/p65_regression.sh <ct-ast>` | `OK p65/regression (1296 grandfathered .ct sources)` + 外部 strict/allow 端到端 |
+| E65-7 | `bash test/ast/p65_docs.sh` + `python3 test/docs/check-docs.py` | `OK p65/docs`；check-docs `OK` |
+| E65-8 | `bash selfhost/check-ast.sh` / `bash selfhost/check-all.sh` | `1472 passed / 0 failed / 0 skipped`；`check-all: OK (11 hard gates green)` |
+| 版本 | 五处 `CTC_VERSION` | `v0.64.0`；tag `v0.64.0`（annotated，V-7 四项校验后推送） |
+
+任务级红证：R1 `3cfe6772`、R2 `9164e46c`、R3 `6c539422`、R4 `abe45eb4`、R5 `604340ef`、R6 `64fc41db`（相位前基线）、R7 `64fc41db`。
