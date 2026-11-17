@@ -9,7 +9,7 @@
 
 ## 0. 一句话
 
-**每个 MAJOR 从 `PH-0` 重新编号，phase ID 带 major 作用域：`v1-PH-0`、`v1-PH-1`；`MINOR == 本 major 内的 n`。历史 `PH-1…PH-73` 保留，永不复用。**
+**每个 MAJOR 从 `PH-0` 重新编号，phase ID 带 major 作用域：`v1-PH-0`、`v1-PH-1`；`MINOR == 本 major 内的 n`。历史 `PH-1…PH-73` 规范化为 `v0-PH-1…v0-PH-73`，旧写法作为别名保留，永不复用。**
 
 ## 1. 现状
 
@@ -27,11 +27,28 @@
 5. release train 允许一个 phase 内多个 stage（`S1`/`S2`），但**只有一个 phase 号、一次 MINOR bump**；stage 不是 phase，不单独占版本。
 6. tag 仍是 `v<M>.<n>.<p>`；phase 卡 `version-minor` 写 `n`（v1.0 为 0）。
 7. 旧 major 的 `deviation: version-minor-offset` 保留为历史；新 major 不再继承偏移。
+8. 历史 ID 规范化为 `v0-PH-<n>`（1–73）；`PH-<n>` 作为**兼容别名**继续可解析，
+   但新文档、新卡、工具输出使用 `v0-PH-*`。文件路径、tag、历史 battle 证据不强制改名。
+
+### 2.1 历史 ID 的“改名”边界
+
+“统一”指 **ID 文本**，不是重命名文件/tag：
+
+| 对象 | 是否改 | 说明 |
+| --- | --- | --- |
+| 文档中的 `PH-43` | 改成 `v0-PH-43` | roadmap、卡标题、phase-log、issue 标题、活跃文档 |
+| 卡文件名 `phase43.md` | **不改** | 改文件名会断链接；卡片内 `phase-id` 用新 ID |
+| tag `v0.43.0` | **不改** | 历史 tag 不可回改 |
+| battle 证据原文 | **不改** | 历史命令/输出保留 `PH-*`，加 alias 注记 |
+| 代码/测试字符串 | 不改 | 不因文档改名动行为 |
+| 新 major ID | `v1-PH-0` | 不复用 `PH-0` |
+
 
 ## 3. 例子
 
 | 事件 | phase | 版本 |
 | --- | --- | --- |
+| 旧 Phase 43 | `v0-PH-43`（旧 `PH-43` 别名） | `v0.43.0`（历史 tag 不动） |
 | v1.0 AST-only | `v1-PH-0` | `v1.0.0` |
 | v1.0.1 fix | 同 `v1-PH-0` | `v1.0.1` |
 | v1.1 语法重写 S1 + A S2 | `v1-PH-1`（S1/S2） | `v1.1.0` |
@@ -46,7 +63,7 @@
 | `g8-version` | 新 major 首相允许 MAJOR bump；同 major 内 MINOR 只 +1；tag 指向 |
 | `g4-version` | 版本落点核对支持 `v<M>`；CHANGELOG/tag 对齐 |
 | `g8-phase-freeze` | phase ID 带 major；stage 不改 phase 号 |
-| phase 卡 | 新增可选 `phase-id: v1-PH-0`；`version-minor: 0` |
+| phase 卡 | 新增 `phase-id: v0-PH-43` / `v1-PH-0`；`version-minor` 取 local n（v1.0 为 0） |
 | AGENTS | 生成块由主规范同步；项目侧不手改 |
 
 ## 5. 迁移
@@ -55,6 +72,11 @@
 - v1.0 开卡时用 `v1-PH-0`；旧 `PH-71` 之类的规划号作废，不创建卡。
 - 文档中 `PH-71/72/73` 的引用统一改为 `v1-PH-0` / `v1-PH-1`（S1/S2）。
 - 检查脚本先兼容两种 ID，再在新 major 生效后只认新 ID。
+- 迁移顺序：先加 alias 解析 → 再加 `phase-id` 字段 → 再批量替换活跃文档文本 → 最后把新文档默认写 `v0-PH-*`；
+  不要先删旧解析。
+- 批量替换只覆盖 `docs/design/**`、`docs/planning/**`、`docs/decisions/**`、`docs/proposals/**`、
+  `docs/roadmap.md`、`issues/**` 的 ID 文本；跳过 `battle/**` 原始证据、文件路径、tag、代码/测试。
+- 完成后跑 `check-docs` 与全量链接检查；`PH-*` 只应出现在别名说明/历史证据中。
 
 ## 6. 待裁定
 
