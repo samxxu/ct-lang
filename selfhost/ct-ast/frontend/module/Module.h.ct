@@ -96,6 +96,8 @@ pub trait ModuleOps {
     int  io_header_mask(int unit);
     int  io_header_mask_tail(int from);
     int  io_call_count(void);
+    const char *io_first_name(int from);
+    int  io_first_line(int from);
     int  unit_reaches(int from, int to);
     int  register_visible_type_aliases(int u);
     int  scan_forward_type_aliases(const char *path, int owner);
@@ -2438,6 +2440,7 @@ cmd_too_long:
         (void)self;
         for (i = 0; i < frontend::parse::ct_parse_io_call_count(); i++) {
             if (unit >= 0 && frontend::parse::ct_parse_io_call_unit(i) != unit) continue;
+            if (frontend::parse::ct_parse_io_call_known(i)) continue;
             h = io_header_for(frontend::parse::ct_parse_io_call_name(i));
             if (h == 0) continue;
             if (strcmp(h, "stdio.h") == 0) mask |= 1;
@@ -2456,12 +2459,41 @@ cmd_too_long:
 
         (void)self;
         for (i = from; i < frontend::parse::ct_parse_io_call_count(); i++) {
+            if (frontend::parse::ct_parse_io_call_known(i)) continue;
             h = io_header_for(frontend::parse::ct_parse_io_call_name(i));
             if (h == 0) continue;
             if (strcmp(h, "stdio.h") == 0) mask |= 1;
             else mask |= 2;
         }
         return mask;
+    }
+
+    /* The freestanding diagnostic names the first libc I/O call the product
+       would need; empty when there is none. */
+    const char *io_first_name(int from)
+    {
+        int i;
+
+        (void)self;
+        for (i = from; i < frontend::parse::ct_parse_io_call_count(); i++) {
+            if (frontend::parse::ct_parse_io_call_known(i)) continue;
+            if (io_header_for(frontend::parse::ct_parse_io_call_name(i)) != 0)
+                return frontend::parse::ct_parse_io_call_name(i);
+        }
+        return "";
+    }
+
+    int io_first_line(int from)
+    {
+        int i;
+
+        (void)self;
+        for (i = from; i < frontend::parse::ct_parse_io_call_count(); i++) {
+            if (frontend::parse::ct_parse_io_call_known(i)) continue;
+            if (io_header_for(frontend::parse::ct_parse_io_call_name(i)) != 0)
+                return frontend::parse::ct_parse_io_call_line(i);
+        }
+        return 0;
     }
 
     int io_call_count(void)

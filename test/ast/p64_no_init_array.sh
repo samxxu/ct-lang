@@ -77,8 +77,9 @@ Person ps[2] = { { .name = "a" }, { .name = "b" } };
 
 int main(void)
 {
-    printf("%s\n", ps[0].who());
-    return 0;
+    /* PH-66: a freestanding product may not call printf; the array semantics
+       are what this probe checks, so observe them without libc. */
+    return ps[0].who()[0] == 'a' ? 0 : 1;
 }
 CT
 if ! "$CT" --freestanding "$tmp/ok.ct" -o "$tmp/ok.c" >"$tmp/ok.log" 2>"$tmp/ok.err"; then

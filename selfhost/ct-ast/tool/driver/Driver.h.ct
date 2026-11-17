@@ -693,6 +693,21 @@ impl DriverOps for Driver {
             return frontend::parse::ct_parse_report();
         {
             prog = frontend::parse::ct_parse_program();
+            if (prog >= 0 && self->m->freestanding) {
+                const char *iofn = self->m->io_first_name(io_from);
+                /* Let the heap diagnostic win when the program also uses the
+                   allocator: "pass --alloc" is the first thing to fix there. */
+                const char *src = self->lex->src;
+                if (src && (src_has_word(src, "malloc") || src_has_word(src, "calloc")
+                            || src_has_word(src, "realloc")))
+                    iofn = "";
+                if (iofn[0]) {
+                    fprintf(stderr, "%s:%d: error: '%s' is not declared in a freestanding"
+                            " build; provide it through a shim\n",
+                            in, self->m->io_first_line(io_from), iofn);
+                    return 1;
+                }
+            }
             if (prog >= 0 && self->m->show_io_headers) {
                 int mask = self->m->io_header_mask_tail(io_from);
                 if (mask & 1) printf("stdio.h\n");
@@ -743,6 +758,7 @@ impl DriverOps for Driver {
               self->out);
         {
             int mask = self->m->io_header_mask_tail(io_from);
+            if (self->m->freestanding) mask = 0;
             backend::emit::ct_emit_bind_io_mask(mask);
             if (mask & 1) fputs("#include <stdio.h>\n", self->out);
             if (mask & 2) fputs("#include <wchar.h>\n", self->out);

@@ -3938,6 +3938,8 @@ pub void ct_parse_clear_error(void);
 pub int ct_parse_io_call_count(void);
 pub const char *ct_parse_io_call_name(int i);
 pub int ct_parse_io_call_unit(int i);
+pub int ct_parse_io_call_known(int i);
+pub int ct_parse_io_call_line(int i);
 void ct_parse_clear_error(void)
 {
     g_parse.sup->errmsg[0] = 0;
@@ -3961,4 +3963,16 @@ int ct_parse_io_call_unit(int i)
 {
     if (i < 0 || i >= g_parse.ex->nio) return -1;
     return g_parse.ex->io_owner[i];
+}
+
+int ct_parse_io_call_known(int i)
+{
+    if (i < 0 || i >= g_parse.ex->nio) return 0;
+    return g_parse.ex->io_known[i];
+}
+
+int ct_parse_io_call_line(int i)
+{
+    if (i < 0 || i >= g_parse.ex->nio) return 0;
+    return g_parse.ex->io_line[i];
 }
