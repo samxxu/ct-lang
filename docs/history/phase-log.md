@@ -183,6 +183,7 @@
 | v0.61.1 | 新 issue 批处理（2026-11-16） | LANG-18 泛型指针字段夹具；SH-81 限定名无索引报错；SH-82 复核已返回非零；SH-83 v2 install 不再打印 -I；SH-85 PK-8 跳过 docs/issues/test 与 .md；tag `v0.61.1`。 |
 | v0.62.0 | Phase 63 删除 vendor 支持（PH-54 S7，2026-11-16） | build/get/install/verify/update 去 vendor 读写；v1 lock 只报错；migrate 保留；test/pkg 141/0；tag `v0.62.0`。 |
 | v0.62.1 | P0 数组/const 的 vptr 静态初始化（REQ-HW-001/002，2026-11-16） | 带 trait 的数组元素与 const 标量/const 数组的 vptr 改由 C 初值本身写（`emit_elem_vptrs` 注入到元素花括号内），数组外层不再出现顶层设计式；带初值数组不再发 constructor，无初值数组保持原路径；多维 trait 数组在 `ct` 阶段硬错并给位置；`unqual` 让 `const struct X` 也能解析到结构体；25 个 case 的 `.c`/`.h` golden 各变 1 行 banner；check-ast 1457/0；tag `v0.62.1`。 |
+| v0.63.5 | SH-90 compile 模式 `--freestanding` 不再拼内置层（2026-11-18） | `Driver::load_builtin` 在 `freestanding` 时直接返回 -1：compile 模式不再无条件拼接 Vec/Str 层，产物无 `<stdio.h>`/`malloc`，`-nostdlib` 可链；p64_freestanding 增加 compile 模式正例；banner golden 随版本更新。 |
 | v0.63.4 | PKG-11 get 输出详情（2026-11-17） | `ct get` 默认输出 requested/resolved/source/tag/commit/store/digest/action 与汇总；`-q` 每包 `name version url`；`--json` 机器可读；test/pkg 147/0；banner golden 随版本更新。 |
 | v0.63.3 | PKG-10 默认取最新 tag（2026-11-17） | `ct get <git>` 省略 range / `*` 时取最新 tag，显式范围仍 MVS 最低；索引路径同规则；test/pkg 144/0；banner golden 随版本更新。 |
 | v0.63.2 | SH-87 内置层 `Str` 判活（2026-11-17） | 层函数名从 `fn_start..fn_end` 派生，只在被调用时计；`Str` 按整词匹配；词法级扫描跳过注释与字面量；整文件读取（旧实现 262144 B 截断）。探针三例：`str_from`/`str_len`、`struct Struct`、>262143 B。 |

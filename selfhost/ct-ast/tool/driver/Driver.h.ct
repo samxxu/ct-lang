@@ -101,6 +101,11 @@ impl DriverOps for Driver {
         int bi, i, prog, n, head;
         FILE *probe;
 
+        /* SH-90: `--freestanding` means no implicit layer. Splicing it anyway
+           put `<stdio.h>` and the `Str` unit's `malloc` calls into a product
+           that must link under `-nostdlib`; build mode already prunes, so the
+           two modes disagreed. */
+        if (self->m->freestanding) return -1;
         env = getenv("CT_STD_DIR");
         head = -1;
         /* P34 S9a: the layer spans `Vec.h.ct`, `Option.h.ct` and
