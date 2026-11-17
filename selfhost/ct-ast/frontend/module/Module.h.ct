@@ -192,23 +192,159 @@ pub struct Module {
 /* Declared here, after the struct, so the parameter spells the mangled type. */
 static int ct_pkg_ns_clash(struct Module *m, char *msg, int cap, char *file, int fcap);
 
-/* PH-64 T2: does this source file mention `needle`? A container the program
-   never names must not be emitted, and `Str` is not a template -- there is no
-   instance row to ask. A false positive only keeps a unit alive, which is the
-   pre-PH-64 behaviour, so a plain scan is enough. */
-static int file_mentions(const char *path, const char *needle)
+/* SH-87: is `word` one of layer unit `u`'s own functions? The list is derived
+   from the parsed rows (`fn_start..fn_end`), not written down here, so a new
+   helper in `lib/std/Str.h.ct` needs no second edit. */
+static int is_layer_fn(struct Symbols *sym, int fn_start, int fn_end, const char *word)
 {
-    static char buf[262144];
+    int i;
+    for (i = fn_start; i < fn_end; i++)
+        if (strcmp(sym->funcs[i].name, word) == 0) return 1;
+    return 0;
+}
+
+/* A whole-identifier match: `Str` counts, `Struct` / `String` / `Strlen` do
+   not (battle hw-2 J-2). */
+static int word_is(const char *s, const char *w)
+{
+    size_t n = strlen(w);
+    if (strncmp(s, w, n) != 0) return 0;
+    if (s[n] != 0) return 0;
+    return 1;
+}
+
+/* Does `s` carry `w` as a whole identifier? `struct Str` yes, `struct
+   Struct` no. */
+static int has_word(const char *s, const char *w)
+{
+    size_t wn = strlen(w);
+    const char *p = s;
+
+    while (*p) {
+        const char *q;
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+              || (*p >= '0' && *p <= '9') || *p == '_')) {
+            p++;
+            continue;
+        }
+        q = p;
+        while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
+               || (*q >= '0' && *q <= '9') || *q == '_') q++;
+        if ((size_t)(q - p) == wn && strncmp(p, w, wn) == 0) return 1;
+        p = q;
+    }
+    return 0;
+}
+
+/* Does this source use the built-in `Str` layer?
+
+   Three defects of the first version (battle hw-2): a substring match counted
+   `Struct` / `String` / comments (J-2), a single `fread` into a 256 KiB buffer
+   dropped the tail of a larger source (J-1), and the layer's lowercase helpers
+   (`str_from`, `str_len`) contain no `Str` at all (J-1). So: whole identifiers
+   only; comments and literals skipped; a layer function counts only when it is
+   called; the whole file is read. */
+static int file_uses_str(struct Symbols *sym, const char *path, int fn_start, int fn_end)
+{
     FILE *f;
-    size_t n;
-    int hit;
+    char *b;
+    char word[96];
+    size_t cap = 65536, n = 0, k;
+    int state = 0, i, wl = 0, pend = 0, hit = 0;
 
     f = fopen(path, "r");
     if (!f) return 0;
-    n = fread(buf, 1, sizeof buf - 1, f);
+    b = (char *)malloc(cap);
+    if (!b) {
+        fclose(f);
+        return 0;
+    }
+    for (;;) {
+        if (n + 1 >= cap) {
+            char *nb = (char *)realloc(b, cap * 2);
+            if (!nb) {
+                free(b);
+                fclose(f);
+                return 0;
+            }
+            b = nb;
+            cap *= 2;
+        }
+        k = fread(b + n, 1, cap - n - 1, f);
+        n += k;
+        if (k == 0) break;
+    }
     fclose(f);
-    buf[n] = 0;
-    hit = strstr(buf, needle) ? 1 : 0;
+    b[n] = 0;
+    for (i = 0; i < (int)n && !hit; i++) {
+        char c = b[i];
+        if (state == 1) {                    /* `// …` */
+            if (c == '\n') state = 0;
+            continue;
+        }
+        if (state == 2) {                    /* a block comment, ends at star-slash */
+            if (c == '*' && i + 1 < (int)n && b[i + 1] == '/') {
+                state = 0;
+                i++;
+            }
+            continue;
+        }
+        if (state == 3 || state == 4) {      /* a string or a character literal */
+            if (c == '\\' && i + 1 < (int)n) {
+                i++;
+                continue;
+            }
+            if ((state == 3 && c == '"') || (state == 4 && c == '\'')) state = 0;
+            continue;
+        }
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+            if (wl < (int)sizeof word - 1) word[wl++] = c;
+            pend = 0;
+            continue;
+        }
+        if (wl > 0) {
+            word[wl] = 0;
+            wl = 0;
+            if (word_is(word, "Str")) {
+                hit = 1;
+                break;
+            }
+            pend = is_layer_fn(sym, fn_start, fn_end, word);
+        }
+        if (c == '/' && i + 1 < (int)n && b[i + 1] == '/') {
+            state = 1;
+            i++;
+            continue;
+        }
+        if (c == '/' && i + 1 < (int)n && b[i + 1] == '*') {
+            state = 2;
+            i++;
+            continue;
+        }
+        if (c == '"') {
+            state = 3;
+            pend = 0;
+            continue;
+        }
+        if (c == '\'') {
+            state = 4;
+            pend = 0;
+            continue;
+        }
+        if (c == '(') {
+            if (pend) {
+                hit = 1;
+                break;
+            }
+            continue;
+        }
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') pend = 0;
+    }
+    if (!hit && wl > 0) {
+        word[wl] = 0;
+        if (word_is(word, "Str")) hit = 1;
+    }
+    free(b);
     return hit;
 }
 
@@ -2045,12 +2181,14 @@ cmd_too_long:
             if (strcmp(base, "Option") == 0 && strcmp(ins[i].tmpl, "Option") == 0) return 1;
             if (strcmp(base, "Result") == 0 && strcmp(ins[i].tmpl, "Result") == 0) return 1;
             if (strcmp(base, "Str") == 0
-                && (strstr(ins[i].ctype[0], "Str") || strstr(ins[i].carg[0], "Str")))
+                && (has_word(ins[i].ctype[0], "Str") || has_word(ins[i].carg[0], "Str")))
                 return 1;
         }
         if (strcmp(base, "Str") == 0) {
             for (i = 0; i < self->nunits; i++)
-                if (!self->is_builtin_unit(i) && file_mentions(self->units[i].path, "Str"))
+                if (!self->is_builtin_unit(i)
+                    && file_uses_str(self->sym, self->units[i].path,
+                                     self->units[u].fn_start, self->units[u].fn_end))
                     return 1;
             for (i = 0; i < self->nbuiltin; i++)
                 if (strcmp(self->units[self->builtin_units[i]].base, "Vec") == 0

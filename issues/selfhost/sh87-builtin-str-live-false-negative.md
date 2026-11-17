@@ -5,7 +5,7 @@
 | 模块 | selfhost（`frontend/module`：`Module::builtin_live_for` 的 `Str` 判据） |
 | 类型 | 生成缺陷（漏判导致链接失败；不是静默错值） |
 | 严重度 | **P1**（`ct` 退 0，`cc` 退 1；影响所有只调用层函数而不写类型名的程序） |
-| 状态 | `open` |
+| 状态 | `open`（DEV 已处置，待复核） |
 | 锚点 | `v0.63.0`（`369a2606`） |
 | 承诺出处 | [REQ-HW-011](../../docs/planning/hardware-readiness-requirements.md)；[battle/hw-2 判决](../../battle/hw-2/verdict.md)、[D-007](../../docs/decisions/D-007.md) |
 
