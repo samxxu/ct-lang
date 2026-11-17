@@ -77,10 +77,11 @@
 | Phase 64 | 裸机生成契约（`--freestanding` / 按需单元 / `--alloc` / const vtable） | ✅ 完成 | v0.63.0 | [卡](design/phase64.md) · [需求](planning/hardware-readiness-requirements.md) |
 | Phase 65 | 严格 C 边界（外部库/用户默认 strict；`.m.ct` 映射例外；CT 仓内 1.0 前代码豁免） | ✅ 完成 | v0.64.0 | [卡](design/phase65.md) · [battle](../battle/cinclude-2/verdict.md) |
 | Phase 66 | libc I/O 内置例外（按调用补头；空程序零系统头） | ✅ 完成 | v0.65.0 | [卡](design/phase66.md) · [D-008](decisions/D-008.md) · [SH-89](../issues/selfhost/sh89-libc-io-auto-include.md) |
-| Phase 67 | 类型核心（`ct check --types`；修 234 误报） | 🗺️ 规划中（未开卡） | v0.66.0（拟） | [方案](planning/typecheck-semantic-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
-| Phase 68 | 跨单元/泛型/trait 类型检查 | 🗺️ 规划中（未开卡） | v0.67.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
-| Phase 69 | CFG/定值/控制流语义检查 | 🗺️ 规划中（未开卡） | v0.68.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
-| Phase 70 | own/borrow/Drop + 包级 strict | 🗺️ 规划中（未开卡） | v0.69.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
+| Phase 67 | v0-PH-67 phase ID 迁移与文档漂移审查（规划卡；不执行） | ⬜ 规划中（未开卡） | v0.66.0（拟） | [卡](design/phase67.md) · [blockers](planning/phase-migration-blockers.md) |
+| `v0-PH-68` | 类型核心（`ct check --types`；修 234 误报） | 🗺️ 规划中（未开卡） | v0.67.0（拟） | [方案](planning/typecheck-semantic-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
+| `v0-PH-69` | 跨单元/泛型/trait 类型检查 | 🗺️ 规划中（未开卡） | v0.68.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
+| `v0-PH-70` | CFG/定值/控制流语义检查 | 🗺️ 规划中（未开卡） | v0.69.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
+| `v0-PH-71` | own/borrow/Drop + 包级 strict | 🗺️ 规划中（未开卡） | v0.70.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
 | `v1-PH-0` | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；B 检查器 opt-in） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
 | `v1-PH-1` | v1.1 语法现代化（S1）+ A strict 编译路径（S2） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线](planning/v1-release-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
 

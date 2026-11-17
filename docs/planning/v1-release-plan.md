@@ -99,10 +99,10 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 
 | 里程碑 | phase | 版本 | 说明 |
 | --- | --- | --- | --- |
-| B 类型核心 | PH-67 | v0.66.0 | opt-in |
-| B 跨单元 | PH-68 | v0.67.0 | opt-in |
-| B CFG | PH-69 | v0.68.0 | opt-in |
-| B own/borrow | PH-70 | v0.69.0 | opt-in |
+| B 类型核心 | v0-PH-68 | v0.67.0 | opt-in |
+| B 跨单元 | v0-PH-69 | v0.68.0 | opt-in |
+| B CFG | v0-PH-70 | v0.69.0 | opt-in |
+| B own/borrow | v0-PH-71 | v0.70.0 | opt-in |
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0` |
 | v1.1 语法现代化 | `v1-PH-1 / S1` | v1.1 train | 行为保持，不单独 bump |
 | v1.1 A strict | `v1-PH-1 / S2` | **v1.1.0** | 同一 phase 的 S2；一次 MINOR |
@@ -124,7 +124,7 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 
 ## 5. 建议顺序
 
-1. 完成 B（PH-67–70），保持 opt-in；
+1. 完成 B（v0-PH-68–71），保持 opt-in；
 2. 开 `v1-PH-0`（v1.0），先定 seed，再退 L1/L2；
 3. 开 `v1-PH-1 / S1`，现代语法重写 ct-ast，行为保持；
 4. 开 `v1-PH-1 / S2`，A strict 编译路径；
