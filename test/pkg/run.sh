@@ -548,6 +548,28 @@ else
         else
             bad "ct.lock <git> latest" "expected gutil 0.2.0, got: $(grep gutil "$work/latest/ct.lock")"
         fi
+        if grep -Fq "resolved   ct/gutil 0.2.0" "$work/latest.out" \
+           && grep -Fq "source   git file://" "$work/latest.out" \
+           && grep -Fq "action   installed" "$work/latest.out"; then
+            ok "default get reports resolved package, source and action"
+        else
+            bad "get detail" "unexpected output: $(cat "$work/latest.out")"
+        fi
+        if ( cd "$work/latest" && HOME="$work/home" CT_REGISTRY="file://$reg" \
+                "$work/ct-ast" get -q gutil >"$work/lq.out" 2>"$work/lq.err" ) \
+           && grep -Eq "^ct/gutil 0\.2\.0 file://" "$work/lq.out"; then
+            ok "quiet get reports name, version and url"
+        else
+            bad "get quiet" "unexpected output: $(cat "$work/lq.out" "$work/lq.err")"
+        fi
+        if ( cd "$work/latest" && HOME="$work/home" CT_REGISTRY="file://$reg" \
+                "$work/ct-ast" get --json gutil >"$work/lj.out" 2>"$work/lj.err" ) \
+           && grep -Fq '"version":"0.2.0"' "$work/lj.out" \
+           && grep -Fq '"action":"reused"' "$work/lj.out"; then
+            ok "json get reports the resolved package"
+        else
+            bad "get json" "unexpected output: $(cat "$work/lj.out" "$work/lj.err")"
+        fi
     else
         bad "ct get <git> latest" "non-zero exit: $(cat "$work/latest.err")"
     fi

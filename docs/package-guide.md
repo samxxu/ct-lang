@@ -123,6 +123,9 @@ ct update                    # 离线：v2 校验 store 并保留钉住的版本
 
 `ct verify` 只做摘要校验，**不读 `ct.pkg`**；清单里的 `dep` 是否被 `ct.lock` 覆盖由 `ct install` 判定
 （缺依赖时报 `dependency '<spec>' is not satisfied by ct.lock`）。
+`ct get` 默认逐包打印 `requested`、`resolved`、`source`、`tag/commit`、`store`、`digest` 与 `action`；
+`-q` / `--quiet` 每包一行 `name version url`；`--json` 输出 `requested`、`packages[]`、`summary`。
+
 `ct get` 一次只解析一个 spec，但会保留 `ct.lock` 中本次没有重解的其它行；重复 get 同一个包只替换
 该包的行，不会重复。这样再 get 一个新包不会把先前钉住的版本弄丢，随后的 `ct update` 仍按锁里的
 commit 解析。
