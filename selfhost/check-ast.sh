@@ -716,6 +716,13 @@ else
     bad "p65/hdr-shim" "$(cat "$work/p65hdr.out" "$work/p65hdr.err" | head -4)"
 fi
 
+# PH-65 R6: the grandfathered tree and an external project end to end.
+if env -u CT_C_BOUNDARY bash test/ast/p65_regression.sh "$work/ct-ast" >"$work/p65reg.out" 2>"$work/p65reg.err"; then
+    ok "p65/regression ($(tail -1 "$work/p65reg.out"))"
+else
+    bad "p65/regression" "$(cat "$work/p65reg.out" "$work/p65reg.err" | head -4)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
