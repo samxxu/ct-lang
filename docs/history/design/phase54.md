@@ -4,8 +4,8 @@
 
 | 项 | 值 |
 | --- | --- |
-| 依据 | [提案 §10 S0](../proposals/ct-pkg-shared-store.md)、[需求 SP-002/003/004/018/024/027](../planning/ct-pkg-shared-store-requirements.md) |
-| 版本位 | v0.54.0–v0.58.0（S0–S3、S5/S6 各一个 MINOR；PH-54 多占 4 个 MINOR，相位表见 [AGENTS §0.3](../../AGENTS.md#03-偏离项)） |
+| 依据 | [提案 §10 S0](../../proposals/ct-pkg-shared-store.md)、[需求 SP-002/003/004/018/024/027](../../planning/ct-pkg-shared-store-requirements.md) |
+| 版本位 | v0.54.0–v0.58.0（S0–S3、S5/S6 各一个 MINOR；PH-54 多占 4 个 MINOR，相位表见 [AGENTS §0.3](../../../AGENTS.md#03-偏离项)） |
 | 只动 | `selfhost/ct-ast/tool/pkg/Pkg.h.ct`、`selfhost/ct-ast/main.ct`、`test/pkg/run.sh`、`docs/**` |
 | 不碰 | `selfhost/ct-ast/frontend/**`（含其他会话在改的 `TypeCheck.h.ct`）、`selfhost/l2/**`、golden |
 
@@ -147,4 +147,4 @@ S4（包仓对齐）已移出本 phase：`publisher` / `ns-root` / tag / 各仓�
 | S7 时间 | 仍按「连续两个 minor」的兼容期节奏；v0.58.0 之后至少再发两个 MINOR 才谈收口 |
 | 包机制后续 | PKG-5（缓存键裸名，代码 `Pkg.h.ct:865` 仍按裸名）、PKG-6（install 不试解析 import）仍 open；PKG-4/7/8 已由 S2/S3 落地，issue 状态待回填 |
 
-排序、依赖与放弃/合并清单见 [post-58-plan.md](../planning/post-58-plan.md)。
+排序、依赖与放弃/合并清单见 [post-58-plan.md](../../planning/post-58-plan.md)。

@@ -153,7 +153,7 @@ rc=0
 
 ## 3 B 部分：phase 任务级红证核对
 
-方法：对 `phase65-draft.md` §9 / `phase66-draft.md` §9 列出的每个红证提交，
+方法：对 `phase65.md` §9 / `phase66.md` §9 列出的每个红证提交，
 核对（a）存在 `test(...) 红` 提交；（b）`git rev-parse <impl>^` 等于该 test 提交；
 （c）提交正文的 `baseline:` 值是 sha 且 `git merge-base --is-ancestor` 为真。
 不重跑红证（按要求只核对）。
@@ -219,7 +219,7 @@ rc=0
 be092eaf90437e93db4c1cd086533947   # 6/6 完全相同
 ```
 
-`git diff -U0 <立项> HEAD -- docs/design/phase65-draft.md` 的 hunk 只落在
+`git diff -U0 <立项> HEAD -- docs/design/phase65.md` 的 hunk 只落在
 第 3 行、74–75、118–120、189–204；§4/§5 位于 133–161，**未相交**。
 phase66 的 hunk 只落在第 3 行、108–124；§4/§5 位于 64–86，**未相交**。
 两者都只改了状态行、§3.4 可观测入口与收口对照表。

@@ -63,13 +63,13 @@
 | Phase 49 | **`own` 所有权转移**：工厂返回值初始化、零值不记账、L49-1/2/3 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.49.0`；[卡](design/phase49.md)） | `p49/own` 0 failures；check-ast 1394/0 |
 | Phase 50 | **容器取用契约**：`has` / `at`，越界与缺键可判，借用指针 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.50.0`；[卡](design/phase50.md)） | `p50/has` 0 failures；32 行表；check-ast 1400/0 |
 | Phase 51 | **指针接收者 `.` 发射缺陷**：L51-1 硬错，要求 `->` | 新增 | ✅ 完成（2026-11-15；S1–S5；选型 A；收口 `v0.51.0`；[卡](design/phase51.md)） | `p51/dot` 0 failures；check-ast 1405/0 |
-| Phase 52 | **自定义类型下标 `[]`**：单层字符串键 get/set、L52-1..10 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.52.0`；[卡](../design/phase52.md)） | `p52/subscript` 0 failures；check-ast 1420/0 |
-| Phase 53 | **可选链 `?.`**：指针/map、值上取到的指针/map 跳；单次求值、短路、L53-1..7 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.53.0`；[卡](../design/phase53.md)） | `p53/optional` 0 failures；check-ast 1436/0 |
-| Phase 54 S0 | **ct-pkg 观测片**：lock 格式、pkg check 骨架、现状文档 | 新增 | ✅ 完成（2026-11-15；v0.54.0；S1–S7 待实施；[卡](../design/phase54.md)） | S0 段 5 断言；check-all 11/11 |
-| Phase 54 S1 | **共享库最小可用**：store、v2 lock、按 lock 生成 `-I` | 新增 | ✅ 完成（2026-11-15；v0.55.0；[卡](../design/phase54.md)） | `test/pkg/run.sh` 106/0；check-all 11/11 |
-| Phase 54 S2 | **编译读 lock**：自动 `-I`、`--locked`、dev override、重复包 | 新增 | ✅ 完成（2026-11-15；v0.56.0；[卡](../design/phase54.md)） | `test/pkg/run.sh` 117/0；check-all 11/11 |
-| Phase 54 S3 | **校验与迁移**：verify --strict、migrate、update v2 | 新增 | ✅ 完成（2026-11-15；v0.57.0；[卡](../design/phase54.md)） | `test/pkg/run.sh` 127/0；check-all 11/11 |
-| Phase 54 S5/S6 | **消费端/文档仓内部分**：双 HOME、vendor 告警、store 文档 | 新增 | ✅ 仓内完成（2026-11-15；v0.58.0；S4/S7 阻塞；[卡](../design/phase54.md)） | `test/pkg/run.sh` 130/0；check-all 11/11 |
+| Phase 52 | **自定义类型下标 `[]`**：单层字符串键 get/set、L52-1..10 | 新增 | ✅ 完成（2026-11-15；S1–S5；收口 `v0.52.0`；[卡](../history/design/phase52.md)） | `p52/subscript` 0 failures；check-ast 1420/0 |
+| Phase 53 | **可选链 `?.`**：指针/map、值上取到的指针/map 跳；单次求值、短路、L53-1..7 | 新增 | ✅ 完成（2026-11-15；S1–S6；收口 `v0.53.0`；[卡](../history/design/phase53.md)） | `p53/optional` 0 failures；check-ast 1436/0 |
+| Phase 54 S0 | **ct-pkg 观测片**：lock 格式、pkg check 骨架、现状文档 | 新增 | ✅ 完成（2026-11-15；v0.54.0；S1–S7 待实施；[卡](../history/design/phase54.md)） | S0 段 5 断言；check-all 11/11 |
+| Phase 54 S1 | **共享库最小可用**：store、v2 lock、按 lock 生成 `-I` | 新增 | ✅ 完成（2026-11-15；v0.55.0；[卡](../history/design/phase54.md)） | `test/pkg/run.sh` 106/0；check-all 11/11 |
+| Phase 54 S2 | **编译读 lock**：自动 `-I`、`--locked`、dev override、重复包 | 新增 | ✅ 完成（2026-11-15；v0.56.0；[卡](../history/design/phase54.md)） | `test/pkg/run.sh` 117/0；check-all 11/11 |
+| Phase 54 S3 | **校验与迁移**：verify --strict、migrate、update v2 | 新增 | ✅ 完成（2026-11-15；v0.57.0；[卡](../history/design/phase54.md)） | `test/pkg/run.sh` 127/0；check-all 11/11 |
+| Phase 54 S5/S6 | **消费端/文档仓内部分**：双 HOME、vendor 告警、store 文档 | 新增 | ✅ 仓内完成（2026-11-15；v0.58.0；S4/S7 阻塞；[卡](../history/design/phase54.md)） | `test/pkg/run.sh` 130/0；check-all 11/11 |
 
 > **Agent 内核运行库（ct-pkg，外部）**：`arena` / `sync` / `callback` 今天可做，`result` / `string` 分别等 Phase 34 / 36，ABI 打包等 Phase 39；属外部包计划，不在本仓（原文链接已随包外移交清单移出）。
 

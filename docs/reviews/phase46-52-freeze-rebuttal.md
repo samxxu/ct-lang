@@ -1,7 +1,7 @@
 # PH-46–PH-52 定稿反证（反证席）
 
 > **角色**：反证席。只攻击、只举证，不写实现、不改卡、不改规范。
-> **范围**：[总计划](../design/phase46-52-plan.md) 与 [phase46.md](../history/design/phase46.md)…[phase52.md](../design/phase52.md) 七张卡。
+> **范围**：[总计划](../design/phase46-52-plan.md) 与 [phase46.md](../history/design/phase46.md)…[phase52.md](../history/design/phase52.md) 七张卡。
 > **基线**：HEAD `295d6ce`（`CTC_VERSION 0.44.1`）。工作树有另一条线未提交的 `0.44.2` 改动（82 个文件，`selfhost/` 只差版本串），
 > 本轮的探针全部在 `/tmp` 用该源码构建的 `ct-ast` 跑；本文与该线不交叉，提交只含本文。
 > **证据口径**：每条给 `file:line`、命令加输出、或 `/tmp` 探针路径。探针不入仓。
@@ -23,7 +23,7 @@
 | [PH-49](../history/design/phase49.md) | 0 | 3 | 0 | **不能**（三条卡面/判据修正后可签） |
 | [PH-50](../history/design/phase50.md) | 2 + G-2 | 2 | 0 | **不能**（须改 `try_get` 所有权结构，见 §12） |
 | [PH-51](../history/design/phase51.md) | 1 | 1 | 0 | **不能**（补泛型用例与判据即可） |
-| [PH-52](../design/phase52.md) | 1 | 3 | 0 | **不能**（收缩 E12 + 补两档诊断即可） |
+| [PH-52](../history/design/phase52.md) | 1 | 3 | 0 | **不能**（收缩 E12 + 补两档诊断即可） |
 
 > 合计 28 条：**阻断定稿 13 条、需修正 15 条、只做澄清 0 条**（按卡列相加为 16 条阻断，因为 G-2 对 46/47/50 各计一次；
 > 去重后为 13 条）。

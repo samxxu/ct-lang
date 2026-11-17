@@ -7,7 +7,7 @@
 | 严重度 | High（`check-warnings` 在 Ubuntu/GCC 上红，CI `ubuntu-gcc` 失败） |
 | 状态 | verified |
 | 锚点 | `v0.65.0`（`9c3f175e`） |
-| 承诺出处 | [PH-66 卡](../../docs/design/phase66-draft.md) R3；[D-008](../../docs/decisions/D-008.md) |
+| 承诺出处 | [PH-66 卡](../../docs/design/phase66.md) R3；[D-008](../../docs/decisions/D-008.md) |
 
 ## 现象
 

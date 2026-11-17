@@ -4,7 +4,7 @@
 | --- | --- |
 | 状态 | **评估完成，按本文件执行；不改实现代码** |
 | 基线 | `aa7aece3`（v0.58.0 + 文档分离 6 笔），与 `origin/main` 一致 |
-| 核对面 | `docs/roadmap.md`、`docs/design/phase54.md`、`docs/design/phase59.md`、`docs/planning/open-items-routing.md`、`docs/planning/requirements-pool.md`、`issues/**`、`docs/proposals/**` |
+| 核对面 | `docs/roadmap.md`、`docs/history/design/phase54.md`、`docs/design/phase59.md`、`docs/planning/open-items-routing.md`、`docs/planning/requirements-pool.md`、`issues/**`、`docs/proposals/**` |
 | 方法 | 逐份读仓库实际内容；条目状态以 issue 文件 + 代码现状交叉核对。**本轮未运行任何夹具或门禁**，凡标「读码」的结论只表示代码路径成立，不表示已复现 |
 | 说明 | 本仓没有 `docs/phases/` 目录；phase 卡在 `docs/design/`，归档在 `docs/history/design/` |
 

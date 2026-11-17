@@ -43,9 +43,9 @@
 | 7 | `Map<char *, struct P> m; int x = m["a"].x;` | **rc=1**：`member reference type 'struct P *' is a pointer; did you mean to use '->'?`；ct 先 rc=0 | **A bug** | `[]` 结果是 `P *`，`.x` 未自动解引用，静默发射坏 C；与 LANG-5 字段形态同根 | **0.53.2**（并入 LANG-5） |
 | 8 | `Map<char *, Map<char *, int>> m; int x = m["a"]["b"];` | **rc=1**：`array subscript is not an integer`；生成 `Map_get(&m,"a")["b"]`；ct 先 rc=0 | **A bug** | `m["a"]` 是 `Map *`，plain `[]` 未解引用；与 LANG-13 链式物化同族 | **0.53.4**（并入 LANG-13 链式修复） |
 | 9 | `m["a"]["b"]["c"]`（三层嵌套 Map） | 同上，plain `[]` 链 rc=1 | **A bug** | 同 #8；`?.`/`?[` 安全形态已可用 | **0.53.4** |
-| 10 | `m["a"]?["b"]` | rc=0，生成 `(t = get(&m,"a")) ? get(t,"b") : 0` | **由 PH-53 覆盖** | PH-53 `m?["k"]` + `m["k"]?.c`（[phase53:13-25](../design/phase53.md#L13-L25)） | — |
+| 10 | `m["a"]?["b"]` | rc=0，生成 `(t = get(&m,"a")) ? get(t,"b") : 0` | **由 PH-53 覆盖** | PH-53 `m?["k"]` + `m["k"]?.c`（[phase53:13-25](../history/design/phase53.md#L13-L25)） | — |
 | 11 | `m["a"]?["b"]?["c"]` | rc=0 | **由 PH-53 覆盖** | 同上 | — |
-| 12 | `Vec<T> *p; p?[i]` | PH-53 卡面明确收录 | **由 PH-53 覆盖** | `p?[i]`（[phase53:23](../design/phase53.md#L23)） | — |
+| 12 | `Vec<T> *p; p?[i]` | PH-53 卡面明确收录 | **由 PH-53 覆盖** | `p?[i]`（[phase53:23](../history/design/phase53.md#L23)） | — |
 
 > #1/#2 的「越界静默零值」不是 bug：D50-1 明确 `get` 零值语义不变，并要求用 `has`/`at` 区分。
 > 若要求 `[]` 本身返回「缺席」而不是零值，那是**新特性**（checked index / Option），不是当前承诺；
@@ -55,10 +55,10 @@
 
 | # | 写法（最小样例） | 实测 | 判定 | 依据 / PH-53 覆盖 | 落点 |
 | --- | --- | --- | --- | --- | --- |
-| 13 | `Map<char *, struct V> m; int n = m["a"]?.n;` | rc=0；生成 `(t = get(&m,"a")) ? t->n : 0` | **由 PH-53 覆盖** | `m["k"]?.c`，`V` 为值类型（[phase53:22](../design/phase53.md#L22)） | — |
+| 13 | `Map<char *, struct V> m; int n = m["a"]?.n;` | rc=0；生成 `(t = get(&m,"a")) ? t->n : 0` | **由 PH-53 覆盖** | `m["k"]?.c`，`V` 为值类型（[phase53:22](../history/design/phase53.md#L22)） | — |
 | 14 | `m["missing"]?.n` | rc=0；缺键 → `0` | **由 PH-53 覆盖** | 缺键 `get` 返回 `0`，三目短路 | — |
 | 15 | `m["a"]["x"]?.y`（plain 内层 `[]`） | **rc=1**：`array subscript is not an integer` | **A bug / 用 `?[` 绕** | plain `[]` 链是 #8 的 bug；安全形态 `m["a"]?["x"]?.y` rc=0（#16） | 0.53.4 |
-| 16 | `m["a"]?["x"]?.y` | rc=0 | **由 PH-53 覆盖** | `?[` + `?.` 组合（[phase53:23](../design/phase53.md#L23)） | — |
+| 16 | `m["a"]?["x"]?.y` | rc=0 | **由 PH-53 覆盖** | `?[` + `?.` 组合（[phase53:23](../history/design/phase53.md#L23)） | — |
 | 17 | `Map<char*, struct V>` 且 `V.obj` 是 `Map*`；`m["a"]?.obj?["x"]` | rc=0 | **由 PH-53 覆盖** | 字段指针 + `?[`；与 `m["a"]?.b?.c` 同族 | — |
 | 18 | `Vec<struct P> v; v[0]?.x` | **rc=1**：`optional chain '?.' requires a pointer receiver; a struct value has no empty state` | **C 拒绝（正确）** | 结构固定、`Vec::get` 返回值，无缺席态 | — |
 | 19 | `v.at(0)?.x` | rc=0 | **已具备** | `at` 返回 `T *`，有缺席态（[Vec.h.ct:121](../../lib/std/Vec.h.ct#L121)） | — |
@@ -255,7 +255,7 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
   结论：不冲突，物理改名后置）。
 - 复用编号：LANG-1 / LANG-2（已修复核）、LANG-3（补诊断判据）、LANG-10（拆三块）、LANG-14（已在序列）、
   SH-18（类型位置）、PH-54（包机制）。
-- 不改 `docs/roadmap.md`、`docs/design/phase53.md`、`docs/design/phase54.md`、发版契约、`selfhost/**`。
+- 不改 `docs/roadmap.md`、`docs/history/design/phase53.md`、`docs/history/design/phase54.md`、发版契约、`selfhost/**`。
 - 只本地提交，不 push、不打 tag。
 
 ---

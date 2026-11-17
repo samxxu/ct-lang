@@ -7,7 +7,7 @@
 | 严重度 | Medium（产物带 libc 头与 Str 代码；`-nostdlib` 链不上） |
 | 状态 | verified |
 | 锚点 | `v0.63.4`（`72ed6dc6`） |
-| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[PH-64 卡](../../docs/design/phase64-draft.md) |
+| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[PH-64 卡](../../docs/design/phase64.md) |
 
 ## 现象
 

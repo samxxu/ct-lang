@@ -357,7 +357,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 
 | 触发话术（用户或角色说） | 动作 | 产物 |
 | --- | --- | --- |
-| "开个新 phase" / "开始 PH-<n>" | 先出卡再开工：退出判据、任务清单、`version-minor` 写进卡片；命中 N-1 报三要素 | `docs/design/phase<NN>-draft.md`、`docs/session-map.md` |
+| "开个新 phase" / "开始 PH-<n>" | 先出卡再开工：退出判据、任务清单、`version-minor` 写进卡片；命中 N-1 报三要素 | `docs/design/phase<NN>.md`（不带 `-draft`；早年 phase32–42 的 `-draft` 保留为历史名）、`docs/session-map.md` |
 | "现在你是 <角色>" / 切换角色 | 先落 handoff，再按新角色落笔 | `handoff/<id>.md` |
 | "打 tag" / "发版" | 自动建 annotated tag、push tag 与分支（2026-11-13 用户授权） | tag、发布清单 |
 | "放宽一下" / "跳过门禁" | 拒绝；走 `deviation:` 或改主规范（S7） | `deviation:` 条目 + 用户签字 |

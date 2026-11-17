@@ -1,6 +1,6 @@
 # PH-53 立项草案：候选、依据与待裁项
 
-> **状态：讨论材料（2026-11-15）；Q1/Q2 已落定：PH-53 = `?.` 可选链，施工卡见 [design/phase53.md](../design/phase53.md)。**
+> **状态：讨论材料（2026-11-15）；Q1/Q2 已落定：PH-53 = `?.` 可选链，施工卡见 [history/design/phase53.md](../history/design/phase53.md)。**
 > 其余候选处置见 §8；本文件不再是待拍板草案，保留为选择依据。
 > **基线**：`1d49bb1a`（`v0.52.0` 之后 4 个纯文档提交；工作树干净）。
 > **纪律**：本文件只新增文档；不改实现、不改卡片判据、不改 golden、不 bump、不 push、不打 tag。
@@ -15,7 +15,7 @@
    当时 `docs/roadmap.md`、`docs/README.md`、`phase46-52-plan.md`、`phase46-52-handoff.md`
    仍写着「50–52 待实施 / 下一刀 PH-50」——**本轮已修正**（§8）。
 2. **PH-53 当时只是 `?.` 的占位记录**，状态「记录 / 待商定 / 暂不排期」。2026-11-15 已裁定：
-   PH-53 = `?.` 可选链施工，卡面 [design/phase53.md](../design/phase53.md)，见 §8。
+   PH-53 = `?.` 可选链施工，卡面 [history/design/phase53.md](../history/design/phase53.md)，见 §8。
 3. **当时建议首选 A1（前端 DF-1/DF-2/DF-3）**；该建议已被 Q1 裁定取代：A1 留需求池 / 后续相，
    **不进 PH-53**。理由与证据仍保留在 §2.1。
 4. **当时次选 A2（REQ-JSACCESS-1）与 A3（B-2/SH-73）**；两者均不进 PH-53，处置见 §8。
@@ -33,7 +33,7 @@
 | --- | --- | --- |
 | HEAD / 分支 | `1d49bb1a`，`main` 比 `origin/main` 领先 4 个文档提交 | `git status -sb`；`git log --oneline -5` |
 | 收口 tag | `v0.45.0`–`v0.52.0` 均为 annotated tag，远端同名 tag 指向同一提交 | `git cat-file -t v0.52.0`；`git ls-remote --tags origin` |
-| 50–52 卡面 | 三张卡第 3 行均为「状态：完成（2026-11-15；v0.5x.0；S1–S5 全绿）」 | [phase50.md:3](../history/design/phase50.md)、[phase51.md:3](../history/design/phase51.md)、[phase52.md:3](../design/phase52.md) |
+| 50–52 卡面 | 三张卡第 3 行均为「状态：完成（2026-11-15；v0.5x.0；S1–S5 全绿）」 | [phase50.md:3](../history/design/phase50.md)、[phase51.md:3](../history/design/phase51.md)、[phase52.md:3](../history/design/phase52.md) |
 | 收口门禁记录 | `v0.52.0` 正文：`check-all 11/11；check-ast 1420/0、warnings 667/0、docs 1224/243` | `git log -1 43b8c992` |
 | 版本落点 | `CTC_VERSION` 五处为 `0.52.0`（`main.ct`、`l0/ctc.c`、`l1/ctc.ct`、`l2/core.ct`、`l2/driver.ct`） | `selfhost/ct-ast/main.ct:36` |
 | 门禁重跑 | **本次未重跑**：只读核对，未构建、未执行仓库脚本；上述数字引自收口提交正文 | 见 §1.3 |
@@ -79,7 +79,7 @@
 | 序 | 候选 | 依据（可核查） | 范围与成本量级 | 风险 / 前置 |
 | --- | --- | --- | --- | --- |
 | A1 | **`ct build` 前端三缺陷 DF-1/DF-2/DF-3** | DF-1：`#` 行超过 159 字节被静默截断，`ct` rc=0；截断点合法时 6 变 3（[ct-build-frontend-defects.md:29-131](ct-build-frontend-defects.md)）。代码仍在：T_PP 分支 `Lexer.h.ct:90-99` 不置 `toktrunc`，而标识符分支 `:108-110` 会置；`MAX_TEXT` 为 160（`:18`）。RILL 因此退回单文件 `ctc`（同文 `:15-21`）。 | DF-1 中（切片存储 + 去重键；或先做「越界即硬错」的小方案）；DF-2 低–中（依赖 DF-1 存储）；DF-3 低（另有独立修法，[同文:201-278](ct-build-frontend-defects.md)）。按 PH-52 的量级校准约 200–400 行 ±40%。 | DF-2 必须先有 DF-1 的存储改造，否则拼接后立即截断，比现状更坏（同文 `:185-186`）。DF-1 可先上「硬错」版单独止血。 |
-| A2 | **REQ-JSACCESS-1：下标参数类型匹配（`v[0]`）** | PH-52 只主张单层字符串键；`v[0]` 实测展开成 `get(0)` 并静默返回空（[phase52.md:58-61](../design/phase52.md)）。ct-json 的目标形态是 `data["server"]` / `items[0].name`（`/Users/samxx/trae-ws/ct-json/README.md` 的 ADR-0007 段）。需求已登记、不占相号（[requirements-pool.md:66-98](../planning/requirements-pool.md)）。 | 未估；按 PH-52 同类 250–470 行估，另加候选签名匹配与诊断。 | 依赖 PH-52 收口（已满足）。多级连写仍归包层，不在本项。 |
+| A2 | **REQ-JSACCESS-1：下标参数类型匹配（`v[0]`）** | PH-52 只主张单层字符串键；`v[0]` 实测展开成 `get(0)` 并静默返回空（[phase52.md:58-61](../history/design/phase52.md)）。ct-json 的目标形态是 `data["server"]` / `items[0].name`（`/Users/samxx/trae-ws/ct-json/README.md` 的 ADR-0007 段）。需求已登记、不占相号（[requirements-pool.md:66-98](../planning/requirements-pool.md)）。 | 未估；按 PH-52 同类 250–470 行估，另加候选签名匹配与诊断。 | 依赖 PH-52 收口（已满足）。多级连写仍归包层，不在本项。 |
 | A3 | **B-2 / SH-73：方法结果作接收者（一行链）** | ct-http 的产品形态是一行链，现只能逐跳落变量；规约明写「方法调用的结果不能直接作下一跳接收者」（[language-spec.md:668-670](../language-spec.md)）。缺陷卡：[SH-73](../../issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md)。 | plan 给 100–300 行，且改既有生成物（[phase46-52-plan.md:191](../design/phase46-52-plan.md)）。 | 有明示降级路径；会动生成形状与 golden，风险高于 A1。 |
 | A4 | **ABI 导出面加固：REQ-ABI-3 / REQ-ABI-4 / REQ-ABI-2** | `.abi.h` 只为 `struct` 补前置声明，`enum` / `union` 形参被跳过（[requirements-pool.md:131-155](../planning/requirements-pool.md)）；`ABI_HASH` 只折函数名（`:118-129`）。nexcore 的基线是 `ct v0.44.2`，P1 依赖 C ABI 与 `nm` 白名单（`/Users/samxx/trae-ws/nexcore/docs/README.md` 状态行、`docs/roadmap.md` P1）。 | REQ-ABI-3/4 各约 10–30 行 + 头 golden；REQ-ABI-2 约 10 行 + 1 golden（需求池原文）。 | 触发条件是「下游用 `#if` 做编译期 pin」；当前是防御性加固，不是硬阻塞。 |
 
@@ -216,7 +216,7 @@
 | 能力缺口总表（部分过期） | [language-capability-gaps.md:1530-1557](language-capability-gaps.md) |
 | 规范旧陈述 | [language-spec.md:673-677](../language-spec.md) |
 | `?.` 记录 | [phase53-optional-chain-draft.md](phase53-optional-chain-draft.md) |
-| PH-52 的 `v[0]` 已知洞 | [phase52.md:58-61](../design/phase52.md) |
+| PH-52 的 `v[0]` 已知洞 | [phase52.md:58-61](../history/design/phase52.md) |
 | REQ-JSACCESS-1 | [requirements-pool.md:66-98](../planning/requirements-pool.md) |
 | ABI 三条 | [requirements-pool.md:118-155](../planning/requirements-pool.md) |
 | 红证与流程缺口 | [phase46-52-plan.md:425-436](../design/phase46-52-plan.md) |
@@ -225,14 +225,14 @@
 
 ## 8 决策落定与候选处置（2026-11-15）
 
-**Q1 已裁定**：PH-53 施工主题 = B1 `?.` 可选链，卡面 [design/phase53.md](../design/phase53.md)，
+**Q1 已裁定**：PH-53 施工主题 = B1 `?.` 可选链，卡面 [history/design/phase53.md](../history/design/phase53.md)，
 版本 `v0.53.0`。**Q2 已裁定**：原 `?.` 记录转为施工卡，相号不再闲置，记录保留为设计依据。
 **Q4** 由卡面固定为 `v0.53.0`；**Q3** 按「历史不补造红证、本卡 S1 先红」执行；
 **Q5** 下游兼容语料不纳入本卡，留治理项。
 
 | 候选 | 处置 | 落点 |
 | --- | --- | --- |
-| B1 `?.` 可选链 | **本相施工** | [phase53.md](../design/phase53.md) |
+| B1 `?.` 可选链 | **本相施工** | [phase53.md](../history/design/phase53.md) |
 | A1 DF-1/DF-2/DF-3 | 留需求池 / 下一相候选；**不占 PH-53** | [ct-build-frontend-defects.md](ct-build-frontend-defects.md) |
 | A2 REQ-JSACCESS-1 | 留需求池，不占相号；`v[0]` 仍不主张 | [requirements-pool.md:66-98](../planning/requirements-pool.md) |
 | A3 B-2 / SH-73 | 独立缺陷，留后续相候选 | `issues/selfhost/sh73-*.md` |

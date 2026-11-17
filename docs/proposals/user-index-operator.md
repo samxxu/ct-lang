@@ -8,7 +8,7 @@
 > **基线**：本仓 `v0.53.1` 之前的工作树（`v0.53.0` 之后，含两处 P0 修复）；立项时 S0 记录 `baseline: <sha>` 并复跑 §1。
 > **关联**：[requirements-pool.md](../planning/requirements-pool.md) 的 `REQ-INDEX-1`（本条登记）、`REQ-L1`（PH-52 已交付方案 A）、
 > `REQ-JSACCESS-1`（参数类型匹配，本提案的第一步）。
-> **前作**：[custom-index-protocol.md](custom-index-protocol.md)（REQ-L1 的设计草案）、[design/phase52.md](../design/phase52.md)（方案 A 施工卡与 D52-2 / D52-5 / D52-6）。
+> **前作**：[custom-index-protocol.md](custom-index-protocol.md)（REQ-L1 的设计草案）、[history/design/phase52.md](../history/design/phase52.md)（方案 A 施工卡与 D52-2 / D52-5 / D52-6）。
 > **规模估算**：编译器 150–300 行；夹具/断言 80–160 行；文档 30–60 行。
 > **纪律**：不 bump、不打 tag、不 push；本文件只登记与设计，不动实现。
 

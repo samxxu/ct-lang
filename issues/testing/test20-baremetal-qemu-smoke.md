@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 状态 | verified |
 | 锚点 | `v0.63.4`（`72ed6dc6`） |
-| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[PH-64 卡](../../docs/design/phase64-draft.md) |
+| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[PH-64 卡](../../docs/design/phase64.md) |
 
 ## 缺口
 
@@ -36,7 +36,7 @@ QEMU 的 `lm3s6965evb` 是 Cortex-M3 通用模型，**不是** STM32F4 / nRF52 /
 ## 关联
 
 - [SH-90](../selfhost/sh90-freestanding-compile-mode-layer.md)：该冒烟顺带发现的 compile 模式缺口；
-- [PH-64 卡 §5](../../docs/design/phase64-draft.md)：符号面证据。
+- [PH-64 卡 §5](../../docs/design/phase64.md)：符号面证据。
 
 ## 复核（REV，2026-11-18）
 

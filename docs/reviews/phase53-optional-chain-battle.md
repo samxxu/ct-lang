@@ -170,7 +170,7 @@ no .c
 
 ## 6 对既有记录的影响
 
-- 施工卡已落库：[design/phase53.md](../design/phase53.md)（2026-11-15；E53-1–E53-16）。
+- 施工卡已落库：[history/design/phase53.md](../history/design/phase53.md)（2026-11-15；E53-1–E53-16）。
 - [phase53-optional-chain-draft.md](../proposals/phase53-optional-chain-draft.md) §4.2 由「切词冲突」
   改为「切词策略」；§4.1 补「值上取到的一跳」；§2 / §5 同步接收者范围。切词不再作为阻塞或风险项。
 - [phase53-scope-draft.md](../proposals/phase53-scope-draft.md) 的 B1 行同步：普通 struct 值接收者

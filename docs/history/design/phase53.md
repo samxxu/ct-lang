@@ -1,12 +1,12 @@
 # Phase 53 — 可选链 `?.`（指针 / map；值上取到的指针或 map 跳）
 
 > **状态：完成（2026-11-15；v0.53.0；S1–S6 全绿）**
-> **归属**：本仓库维护规格与判据；实现由外部 harness 交付（[手册](phase46-52-handoff.md)）。
+> **归属**：本仓库维护规格与判据；实现由外部 harness 交付（[手册](../../design/phase46-52-handoff.md)）。
 > **基线**：PH-52 收口提交 `43b8c992`（`v0.52.0`）。
 > **规模**：250–450 行（估；按 PH-52 的 250–470 行量级校准，S0 核对后回填）。
 > **版本**：`v0.53.0`；`version-minor: 53`。
-> **依据**：[第二轮 battle](../reviews/phase53-optional-chain-battle.md)、
-> [设计记录](../proposals/phase53-optional-chain-draft.md)、[立项草案](../proposals/phase53-scope-draft.md)。
+> **依据**：[第二轮 battle](../../reviews/phase53-optional-chain-battle.md)、
+> [设计记录](../../proposals/phase53-optional-chain-draft.md)、[立项草案](../../proposals/phase53-scope-draft.md)。
 
 ## 0 一句话目标
 
@@ -190,9 +190,9 @@ T-7：S1 红提交是 S2–S5 的祖先；每片提交正文复述 `baseline`、
 | 可选方法调用 `a?.m()` | 本卡拒绝（L53-7）；求值次数语义未定 |
 | 赋值/取址 `p?.b = 1`、`&p?.b` | 本卡拒绝（L53-6） |
 | 用户类型 `get` 的指针接收者 | PH-52 明确不做；本卡不扩 |
-| `v[0]` 参数类型匹配 | [REQ-JSACCESS-1](../planning/requirements-pool.md)，不占相号 |
+| `v[0]` 参数类型匹配 | [REQ-JSACCESS-1](../../planning/requirements-pool.md)，不占相号 |
 | 多级 JSON `v["a"]["b"]` | 包层 `JsonRef` |
-| 前端 DF-1/DF-2/DF-3、B-2/SH-73、ABI 加固 | 需求池 / 后续相；不并入本卡（见 [立项草案 §8](../proposals/phase53-scope-draft.md)） |
+| 前端 DF-1/DF-2/DF-3、B-2/SH-73、ABI 加固 | 需求池 / 后续相；不并入本卡（见 [立项草案 §8](../../proposals/phase53-scope-draft.md)） |
 
 ## 9 风险与回滚
 
@@ -223,10 +223,10 @@ T-7：S1 红提交是 S2–S5 的祖先；每片提交正文复述 `baseline`、
 
 - 本卡即立项草案 Q1 的 **B1 选项**落定：PH-53 施工主题为 `?.` 可选链。
 - 原 `?.` 记录从「记录 / 待商定」转为设计依据，相号不再闲置；见
-  [设计记录](../proposals/phase53-optional-chain-draft.md)。
+  [设计记录](../../proposals/phase53-optional-chain-draft.md)。
 - 草案其余候选**不进本相**：A1 前端 DF-1/2/3、A2 REQ-JSACCESS-1、A3 SH-73、A4 ABI 加固
   留在需求池或后续相候选；C1/C2/C4/C5 留治理项；C3 文档真相随本卡落库一并修正。
-  具体处置表见 [立项草案 §8](../proposals/phase53-scope-draft.md)。
+  具体处置表见 [立项草案 §8](../../proposals/phase53-scope-draft.md)。
 - 本卡不预排 PH-54；后续相由负责人另行立项。
 
 ## 12 冻结与版本

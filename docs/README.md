@@ -52,8 +52,8 @@
 | [reviews/phase46-52-freeze-verdict.md](reviews/phase46-52-freeze-verdict.md) | 定稿裁决：四组实测、73 条输入逐条结论（采纳 67 / 部分 6 / 不采纳 1）、5 条已于 2026-11-15 按建议值签字 |
 | [history/design/phase46.md](history/design/phase46.md) · [history/design/phase47.md](history/design/phase47.md) | 已完成（Phase 46–47）：46 `Map` 元素完整性 / 47 容器键协议（`Str` 键深拷贝）；收口版本见 [roadmap.md](roadmap.md) |
 | [design/phase48.md](history/design/phase48.md) · [design/phase49.md](history/design/phase49.md) | 已完成（Phase 48–49）：48 Drop 语义闭环 / 49 `own` 所有权转移；收口版本见 [roadmap.md](roadmap.md) |
-| [design/phase50.md](history/design/phase50.md) · [design/phase51.md](history/design/phase51.md) · [design/phase52.md](design/phase52.md) | 已完成（Phase 50–52，0.50.0 至 0.53.0）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
-| [design/phase53.md](design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
+| [design/phase50.md](history/design/phase50.md) · [design/phase51.md](history/design/phase51.md) · [history/design/phase52.md](history/design/phase52.md) | 已完成（Phase 50–52，0.50.0 至 0.53.0）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
+| [history/design/phase53.md](history/design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
 | [proposals/ct-bare-metal-proposal.md](proposals/ct-bare-metal-proposal.md) | 裸机生成契约提案（**待 CT 组评估**）：数组/const vptr 静默坏 C、constructor、按需 std 单元、`--alloc`、const vtable；建议 P0 patch + PH-64 | 查看裸机生成契约提案 |
 | [proposals/ct-pkg-index-proposal.md](proposals/ct-pkg-index-proposal.md) | 索引仓提案（**待目标组评估**）：release dispatch + 定时扫描生成、签名/pin、digest 复用、allowlist；不在客户端扫描组织 | 查看包索引维护提案 |
 | [proposals/ct-pkg-package-maintainer-rules.md](proposals/ct-pkg-package-maintainer-rules.md) | 包仓维护者规则：`ct.pkg`、semver tag、release dispatch、digest、撤回与安全；配套索引提案 | 查看包仓发布规则 |
@@ -65,7 +65,7 @@
 | [reviews/ct-str-builtin-type-battle.md](reviews/ct-str-builtin-type-battle.md) | 上述提案的一轮对抗评审与后续裁定：主张席 C1–C8、反证席 R1–R16、裁判席**部分受理**；负责人裁定走语言层、方法层为 C 函数映射 | 查看裁定与待决事项 |
 | [reviews/ct-str-null-state-battle.md](reviews/ct-str-null-state-battle.md) | `Str` 空状态问题的一轮对抗评审：不表示无值 / 表示无值 / 可失败构造三条路线；裁判**不受理空状态与静默转空串**，`NULL` 只在构造点显式处理 | 查看空状态裁定 |
 | [proposals/ct-pure-type-alias-proposal.md](proposals/ct-pure-type-alias-proposal.md) | 语言侧提案（**待项目组评估**）：现有 `type` 别名的现状评估（部分够用）与放开普通 `.ct` 单元声明；纯同义词、不改判等与赋值、方法随宿主可见、`own` 一致 | 查看纯类型别名提案 |
-| [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 设计记录（已定稿为施工卡）：`?.` 的语义、切词策略、值接收者裁定与 battle 结论；施工以 [design/phase53.md](design/phase53.md) 为准 |
+| [proposals/phase53-optional-chain-draft.md](proposals/phase53-optional-chain-draft.md) | Phase 53 设计记录（已定稿为施工卡）：`?.` 的语义、切词策略、值接收者裁定与 battle 结论；施工以 [history/design/phase53.md](history/design/phase53.md) 为准 |
 | [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（**已并入 PH-62**）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
 | [proposals/defect-namespaced-static-method.md](proposals/defect-namespaced-static-method.md) | 缺陷请求（待修）：带 `namespace` 的单元里静态固有方法报 `use of an undeclared variable`；含两种最小复现、边界表、名字解析定位、下游绕法与 N1–N5 判据 |
 | [reviews/max-calls-limit.md](reviews/max-calls-limit.md) | 只读核对：`MAX_CALLS` 1024 的计数口径（按已解析自由函数调用表达式）、固定表成因（无「禁止动态分配」证据）、按需增长的改动面与外部包余量实测 |

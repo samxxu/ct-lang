@@ -75,7 +75,7 @@ ctc: 'hello' is ambiguous; write acme/hello or zed/hello
 - 维护方式：`packages.txt` 是 allowlist，夜间 workflow `index.yml` 重建并提交；`release-package.sh` 在发布 tag 后刷新索引（外部 `README.md:27`、`:81-83`、`:121`、`:182-187`）。
 - 外部 README 明确承认版本表达限制：`index always names each remote's highest v* tag`，`std` 需要同时服务旧编译器，`the index cannot express`（外部 `README.md:52-56`、`:73-77`）。
 
-这与仓内 Phase 18 的 D18-7 一致：`ct-pkg/index` 仓库、五字段纯文本、包 release 时 CI 追加/更新一行（[phase18.md:177](../history/design/phase18.md#L177)）。**但消费端在 PH-54 S1 已经升级为六字段**（[phase54.md:93-102](../design/phase54.md#L93-L102)），生产端仍停在五字段，契约出现分叉。
+这与仓内 Phase 18 的 D18-7 一致：`ct-pkg/index` 仓库、五字段纯文本、包 release 时 CI 追加/更新一行（[phase18.md:177](../history/design/phase18.md#L177)）。**但消费端在 PH-54 S1 已经升级为六字段**（[phase54.md:93-102](../history/design/phase54.md#L93-L102)），生产端仍停在五字段，契约出现分叉。
 
 ### 1.4 官方包清单的现状
 
@@ -102,7 +102,7 @@ ctc: '<cache>/ct.pkg' is missing 'publisher'
 
 （[Pkg.h.ct:1924-1938](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1924-L1938)）
 
-根因可以追到 PH-54 的 S4：**“S4（包仓对齐）已移出本 phase：`publisher` / `ns-root` / tag / 各仓测试改写归对应包仓，本卡不再跟踪，也不再作为收口判据”**（[phase54.md:129](../design/phase54.md#L129)）。消费者升级了，包仓对齐没有落在本仓任何 phase 的验收里。
+根因可以追到 PH-54 的 S4：**“S4（包仓对齐）已移出本 phase：`publisher` / `ns-root` / tag / 各仓测试改写归对应包仓，本卡不再跟踪，也不再作为收口判据”**（[phase54.md:129](../history/design/phase54.md#L129)）。消费者升级了，包仓对齐没有落在本仓任何 phase 的验收里。
 
 ## 2. 解析链路
 
@@ -592,8 +592,8 @@ FSG-02 的根因在当前代码仍在：`ct install` 的 import 校验只试 `%s
 | Phase 17.5 | 已交付 | 显式索引、`CT_INDEX`/`--index`、五字段 | [phase18.md:51](../history/design/phase18.md#L51) |
 | Phase 18.2 / D18-7 | 已交付（历史） | `ct-pkg/index`、五字段、gen/refresh、nightly | [phase18.md:94](../history/design/phase18.md#L94)、`:135`、`:177` |
 | Phase 20 P20-05 | 已交付后续 | 索引生成器移出本仓；消费端范围查询后补 | [phase-log.md:31](../history/phase-log.md#L31) |
-| PH-54 S1（v0.55.0） | 已交付 | 六字段、`publisher`/`ns-root`、限定名、歧义硬错、多版本 store | [phase54.md:93-102](../design/phase54.md#L93-L102) |
-| PH-54 S2/S3/S5/S6 | 已交付 | build 读 lock、verify/migrate/update、双 HOME 复现 | [phase54.md:106-137](../design/phase54.md#L106-L137) |
+| PH-54 S1（v0.55.0） | 已交付 | 六字段、`publisher`/`ns-root`、限定名、歧义硬错、多版本 store | [phase54.md:93-102](../history/design/phase54.md#L93-L102) |
+| PH-54 S2/S3/S5/S6 | 已交付 | build 读 lock、verify/migrate/update、双 HOME 复现 | [phase54.md:106-137](../history/design/phase54.md#L106-L137) |
 | PH-63 S7（v0.62.0） | 已交付 | 删 `vendor/`；缺身份字段在 store 提交处硬错 | [phase63.md:24-38](../design/phase63.md#L24-L38) |
 | SH-81（v0.61.1） | 已修 | 无索引时限定名不再被当成 URL，给出解析指引 | [issues/README.md:343](../../issues/README.md#L343)、[phase-log.md:183](../history/phase-log.md#L183) |
 | SH-83（v0.61.1） | 已修 | `ct install` v2 不再打印 `-I` | [issues/README.md:345](../../issues/README.md#L345) |

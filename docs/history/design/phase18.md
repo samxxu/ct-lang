@@ -3,7 +3,7 @@
 
 > **历史说明（2026-11-16）**：本文描述的 `vendor/` + 裸 `-I` 契约已被
 > Phase 54 的共享库（`$CT_HOME/pkg/<publisher>/<name>/<version>` + `ns-root` + lock v2）
-> 取代；`vendor/` 只在兼容期保留。现行契约见 [phase54](../../design/phase54.md)。
+> 取代；`vendor/` 只在兼容期保留。现行契约见 [phase54](../../history/design/phase54.md)。
 
 > 中文
 >
