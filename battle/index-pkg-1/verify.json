@@ -1,0 +1,986 @@
+{
+  "battle": "index-pkg-1",
+  "role": "VERIFY",
+  "seat": "evidence-index-pkg-1",
+  "generated_at": "2026-11-18T07:15:33+08:00",
+  "head": "a979ce0d",
+  "environment": {
+    "os": "macOS 27.2 (Darwin), arm64",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "git": "git version 2.54.0 (Apple Git-157)",
+    "ct_source": "git archive a979ce0d -> /tmp/verify-ip1/src",
+    "ct_binary": "/tmp/verify-ip1/bin/ct (install.sh, CT_SOURCE_DIR=., offline bootstrap L0->L1->L2->ct-ast)",
+    "ct_version": "ct v0.65.1",
+    "external_index_repo": "/Users/samxx/dsh-ws/ct-pkg-index @ 37fa8a3ca723100de8246b868834f4af20122d97 (dirty worktree; read-only in this verification)",
+    "external_worktree_state": "tools/package.sh untracked; publish-package.sh/release-package.sh deleted; README/packages.txt/index.yml modified; 12-row five-field index tracked",
+    "fixtures": "/tmp/verify-ip1/{staging/hal,alpha,registry/std,ct-a,empty}; rebuild via /tmp/verify-ip1/setup.sh",
+    "isolation": "CT_HOME/HOME under /tmp; no network writes; no edits to selfhost/, test/, docs/, install.sh",
+    "sandbox": "workspace-write; writes limited to /tmp and battle/index-pkg-1/verify.json",
+    "not_reproduced": [
+      "A 的 init/透传实现不存在（ct pkg init -> unexpected argument）；A 侧行为用 /tmp/verify-ip1/ct-a 按 A §1.2 等价模拟，不称实测 A 代码",
+      "publish 的写路径未执行（无 token、不写远端）；只验证缺 token 诊断与静态凭据路径"
+    ],
+    "source_baseline": "git archive a979ce0d；实际检出 HEAD 944f2c50（仅 docs 4 文件；selfhost/ 与 install.sh 无差异）",
+    "binary": "/tmp/verify-ip1/bin/ct（ct v0.65.1；从 a979ce0d 用 install.sh CT_SOURCE_DIR 离线自举）",
+    "external_index": "ct-pkg/index @ 37fa8a3ca723100de8246b868834f4af20122d97（工作树脏；本验证只读）；index 12 行五字段；无 tag/签名；tools/package.sh 未跟踪",
+    "date": "2026-11-18T07:15:33+08:00",
+    "note": "行为实验一律用 /tmp/verify-ip1/bin/ct；外部 index 只读；所有 HOME/CT_HOME/夹具在 /tmp/verify-ip1；仓库只新增本文件。",
+    "side_semantics": "evidence.side = 该证据支持哪一方论据（A/B/both/supplement），不是提供者；checks.facts_side 另记哪方事实成立。"
+  },
+  "rounds": 1,
+  "evidence": [
+    {
+      "id": "E-00-head",
+      "side": "both",
+      "ref": "question.md#基线 / claim.md#头部",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\necho \"HEAD=$(git rev-parse HEAD)\"\ngit log -2 --format='%h %s'\necho '--- diff a979ce0d..HEAD ---'\ngit diff --stat a979ce0d..HEAD\necho '--- status --porcelain ---'\ngit status --porcelain\necho '--- built binary ---'\n/tmp/verify-ip1/bin/ct -v\nexit 0",
+      "exit": 0,
+      "output": "HEAD=944f2c50b094dd836e3b7034cafbfc4c22107b63\n944f2c50 docs(phase67): open migration planning card (no execution)\na979ce0d docs(battle): reject default index fetch and pkg publish\n--- diff a979ce0d..HEAD ---\n docs/design/phase67.md                   | 70 ++++++++++++++++++++++++++++++++\n docs/planning/typecheck-semantic-plan.md | 18 ++++----\n docs/planning/v1-release-plan.md         | 10 ++---\n docs/roadmap.md                          |  9 ++--\n 4 files changed, 89 insertions(+), 18 deletions(-)\n--- status --porcelain ---\n?? battle/index-pkg-1/\n?? test/baremetal-renode/\n--- built binary ---\nct v0.65.1\n",
+      "reproduced": true,
+      "note": "基线核对：任务给的基线是 a979ce0d；实际检出 HEAD 为 944f2c50（仅 docs 4 个文件，selfhost/install.sh 无差异）。工作树只有未跟踪的 battle/ 与 test/baremetal-renode/。"
+    },
+    {
+      "id": "E-01a-source",
+      "side": "both",
+      "ref": "method（源码基线）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nrm -rf /tmp/verify-ip1/src-verify && mkdir -p /tmp/verify-ip1/src-verify\ngit archive a979ce0d | tar -x -C /tmp/verify-ip1/src-verify\ndiff -r /tmp/verify-ip1/src /tmp/verify-ip1/src-verify >/tmp/verify-ip1/src.diff 2>&1; rc=$?\necho \"diff_rc=$rc\"\necho \"diff_lines=$(wc -l < /tmp/verify-ip1/src.diff | tr -d ' ')\"\nhead -5 /tmp/verify-ip1/src.diff\nrm -rf /tmp/verify-ip1/src-verify\nexit 0",
+      "exit": 0,
+      "output": "diff_rc=0\ndiff_lines=0\n",
+      "reproduced": true,
+      "note": "从 git archive a979ce0d 解出的树与 /tmp/verify-ip1/src 逐字相同（diff -r rc=0、0 行差异），证明自举用的是任务基线而不是工作树 HEAD 944f2c50。"
+    },
+    {
+      "id": "E-01-build",
+      "side": "both",
+      "ref": "method（独立自举）",
+      "command": "R=/tmp/verify-ip1\ncd $R/src\nCT_SOURCE_DIR=. CT_PREFIX=$R/bin sh install.sh > $R/build.log 2>&1; rc=$?\necho \"build_rc=$rc\"\ngrep -E 'building|installed|error' $R/build.log\n$R/bin/ct -v; echo \"ct_rc=$?\"\nexit $rc",
+      "exit": 0,
+      "output": "build_rc=0\n==> building L0 (the C seed)\n==> building L1\n==> building L2 (the regression oracle)\n==> building ct-ast (the installed entry)\n==> installed /tmp/verify-ip1/bin/ct (ct v0.65.1) and /tmp/verify-ip1/bin/ctc\nct v0.65.1\nct_rc=0\n",
+      "reproduced": true,
+      "note": "从 git archive a979ce0d 解出的源码用 install.sh（CT_SOURCE_DIR，离线）完整自举；本验证用的 ct 不是 ~/.local/bin/ct。"
+    },
+    {
+      "id": "E-02-pkg-eq",
+      "side": "both",
+      "ref": "claim.md#E1-1 / counter.md#E1-5",
+      "command": "R=/tmp/verify-ip1\ncd $R/empty\n$R/bin/ct pkg > pkg.out 2>&1; p=$?\n$R/bin/ct install > install.out 2>&1; i=$?\ndiff pkg.out install.out && echo 'IDENTICAL'\necho \"pkg_rc=$p install_rc=$i\"\ncat pkg.out\nexit 0",
+      "exit": 0,
+      "output": "IDENTICAL\npkg_rc=1 install_rc=1\nctc: cannot open './ct.pkg'\n",
+      "reproduced": true,
+      "note": "无参 `ct pkg` 与 `ct install` 的 stdout+stderr 逐字相同、退出码相同：pkg 当前就是 install 别名。空目录无 ct.pkg 时先报 cannot open './ct.pkg'。"
+    },
+    {
+      "id": "E-03-help-eq",
+      "side": "B",
+      "ref": "claim.md#E1-1",
+      "command": "R=/tmp/verify-ip1\ncd $R/empty\n$R/bin/ct pkg --help > h.pkg 2>&1\n$R/bin/ct install --help > h.install 2>&1\ndiff h.pkg h.install && echo 'IDENTICAL'\ncat h.pkg\nexit 0",
+      "exit": 0,
+      "output": "IDENTICAL\nusage: ct install [--force]\n  verify the store against ct.lock and print the suggested build command\n  --force  install even when a package 'requires' this compiler version\n",
+      "reproduced": true,
+      "note": "`ct pkg --help` 打印的是 install 的用法，与 `ct install --help` 逐字相同。"
+    },
+    {
+      "id": "E-04-subcommands",
+      "side": "B",
+      "ref": "claim.md#E1-1 / counter.md#E1-2",
+      "command": "R=/tmp/verify-ip1\ncd $R/empty\nfor a in \"check\" \"init\" \"publish json\" \"check /tmp\"; do\n  echo \"### ct pkg $a\"\n  $R/bin/ct pkg $a 2>&1\n  echo \"rc=$?\"\ndone\nexit 1",
+      "exit": 1,
+      "output": "### ct pkg check\nctc: unexpected argument 'check'\nrc=1\n### ct pkg init\nctc: unexpected argument 'init'\nrc=1\n### ct pkg publish json\nctc: unexpected argument 'publish'\nrc=1\n### ct pkg check /tmp\nctc: cannot read '/tmp/ct.pkg'\nrc=1\n",
+      "reproduced": true,
+      "note": "当前 `ct pkg` 下 check/init/publish 的实际分派：不带目录的 check 落到 install 分支（unexpected argument），init/publish 未实现，check <dir> 走原生只读审计。"
+    },
+    {
+      "id": "E-05-check-ok",
+      "side": "both",
+      "ref": "claim.md#E1-2 / counter.md#E1-1",
+      "command": "R=/tmp/verify-ip1\n$R/bin/ct pkg check $R/staging/hal; echo \"rc=$?\"\nexit 0",
+      "exit": 0,
+      "output": "ok: 4 criteria\nrc=0\n",
+      "reproduced": true,
+      "note": "原生 `ct pkg check <dir>` 对合法夹具返回 ok: 4 criteria、rc=0。"
+    },
+    {
+      "id": "E-06-main-lines",
+      "side": "both",
+      "ref": "question.md#证据要求 main.ct:121-122",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\necho '--- main.ct 118-123 ---'\nsed -n '118,123p' selfhost/ct-ast/main.ct\necho '--- numbered 121-122 ---'\nawk 'NR==121||NR==122{printf \"%d: %s\\n\",NR,$0}' selfhost/ct-ast/main.ct\nexit 0",
+      "exit": 0,
+      "output": "--- main.ct 118-123 ---\n        return tool::pkg::ct_pkg_verify(argc - 2, argv + 2, m->prog, CTC_VERSION);\n    if (argc > 1 && strcmp(argv[1], \"migrate\") == 0)\n        return tool::pkg::ct_pkg_migrate(argc - 2, argv + 2, m->prog, CTC_VERSION);\n    if (argc > 1 && strcmp(argv[1], \"pkg\") == 0)\n        return tool::pkg::ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);\n    return tool::driver::ct_driver_run(argc, argv);\n--- numbered 121-122 ---\n121:     if (argc > 1 && strcmp(argv[1], \"pkg\") == 0)\n122:         return tool::pkg::ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);\n",
+      "reproduced": true,
+      "note": "`pkg` 在 main.ct:121-122 直接路由到 tool::pkg::ct_pkg_install(argc-2, argv+2)，没有独立帮助/子命令表。"
+    },
+    {
+      "id": "E-07-help-lists",
+      "side": "both",
+      "ref": "counter.md#E1-2（ct -h 的发布入口）",
+      "command": "R=/tmp/verify-ip1\n$R/bin/ct -h 2>&1 | grep -n 'pkg check'\necho \"grep_rc=$?\"\nexit 0",
+      "exit": 0,
+      "output": "16:       ct pkg check <dir>\ngrep_rc=0\n",
+      "reproduced": true,
+      "note": "`ct -h` 已经列出 `ct pkg check <dir>`；A 的透传会抢走一个已文档化的前缀。"
+    },
+    {
+      "id": "E-08-readonly",
+      "side": "both",
+      "ref": "counter.md#E1-1 / question.md#J-2",
+      "command": "R=/tmp/verify-ip1\ncd $R\nfind staging -type f -exec shasum -a 256 {} \\; | sort > before.sha\nenv -u CT_HOME HOME=$R/bogus-home $R/bin/ct pkg check $R/staging/hal; echo \"check_rc=$?\"\nfind staging -type f -exec shasum -a 256 {} \\; | sort > after.sha\ndiff before.sha after.sha && echo 'HASHES_IDENTICAL'\nls -d $R/bogus-home 2>&1; echo \"bogus_home_rc=$?\"\nchmod -R a-w staging\nenv PATH= $R/bin/ct pkg check $R/staging/hal; echo \"readonly_tree_empty_path_rc=$?\"\nchmod -R u+w staging\nexit 0",
+      "exit": 0,
+      "output": "ok: 4 criteria\ncheck_rc=0\nHASHES_IDENTICAL\nls: /tmp/verify-ip1/bogus-home: No such file or directory\nbogus_home_rc=1\nok: 4 criteria\nreadonly_tree_empty_path_rc=0\n",
+      "reproduced": true,
+      "note": "只读证据：运行前后夹具树逐文件 SHA-256 相同；CT_HOME 未设且 HOME 指向不存在目录仍 rc=0、未创建 HOME；把树 chmod a-w、PATH 清空后仍 rc=0（无写、无子进程依赖）。"
+    },
+    {
+      "id": "E-09-static-scan",
+      "side": "both",
+      "ref": "question.md#证据要求 Pkg.h.ct 只读",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\necho '--- write/exec API scan inside the check block (1741-1874) ---'\nsed -n '1741,1874p' selfhost/ct-ast/tool/pkg/Pkg.h.ct | grep -nE 'fopen\\([^)]*\"[wa]|mkdir\\(|unlink\\(|rename\\(|system\\(|popen\\(|execv'\necho \"write_api_grep_rc=$?\"\necho '--- every fopen in the block ---'\nsed -n '1741,1874p' selfhost/ct-ast/tool/pkg/Pkg.h.ct | grep -n 'fopen'\nexit 0",
+      "exit": 0,
+      "output": "--- write/exec API scan inside the check block (1741-1874) ---\nwrite_api_grep_rc=1\n--- every fopen in the block ---\n29:            cf = fopen(cpath, \"r\");\n109:                        cf = fopen(cpath, \"r\");\n",
+      "reproduced": true,
+      "note": "静态证据：check 块内只有 fopen(...,\"r\") 和 opendir/stat，没有 mkdir/unlink/rename/system/popen/execv；与 E-08 的运行证据一致。"
+    },
+    {
+      "id": "E-10-pkgsh-tracked",
+      "side": "B",
+      "ref": "claim.md#E1-5 / §1.2",
+      "command": "cd /Users/samxx/dsh-ws/ct-pkg-index\necho '--- is tools/package.sh in 37fa8a3? ---'\ngit cat-file -e 37fa8a3:tools/package.sh; echo \"cat_file_rc=$?\"\necho '--- tracked tools at 37fa8a3 ---'\ngit ls-tree -r 37fa8a3 --name-only tools/\necho '--- commits touching tools/package.sh ---'\ngit log --all --oneline -- tools/package.sh | wc -l\necho '--- worktree status ---'\ngit status --porcelain -- tools/package.sh README.md index packages.txt\nexit 0",
+      "exit": 0,
+      "output": "--- is tools/package.sh in 37fa8a3? ---\nfatal: path 'tools/package.sh' exists on disk, but not in '37fa8a3'\ncat_file_rc=128\n--- tracked tools at 37fa8a3 ---\ntools/check-char-host.sh\ntools/check-layout.sh\ntools/gen-index.sh\ntools/publish-package.sh\ntools/refresh-index.sh\ntools/release-package.sh\ntools/repos.txt\ntools/sync-repos-tags.sh\n--- commits touching tools/package.sh ---\n       0\n--- worktree status ---\n M README.md\n M packages.txt\n?? tools/package.sh\n",
+      "reproduced": true,
+      "note": "关键独立发现：tools/package.sh 在 37fa8a3 根本不存在（git cat-file rc=128），也没有任何提交包含它；它只是工作树里的未跟踪文件。A 的 init 从 37fa8a3 clone 拿不到该脚本。"
+    },
+    {
+      "id": "E-11-pinned-clone",
+      "side": "B",
+      "ref": "claim.md#§1.1 init",
+      "command": "R=/tmp/verify-ip1\nrm -rf $R/index-clone\ngit clone -q --no-hardlinks /Users/samxx/dsh-ws/ct-pkg-index $R/index-clone\ncd $R/index-clone\ngit checkout -q 37fa8a3\necho \"HEAD=$(git log -1 --oneline)\"\necho '--- tools/ in the pinned clone ---'\nls tools/\ntest -e tools/package.sh; echo \"package_sh_present_rc=$?\"\necho '--- tracked README publish scripts ---'\ngrep -n 'package\\.sh\\|publish-package\\|release-package' README.md | head -5\necho '--- index rows ---'\nawk '{print NF}' index | sort | uniq -c\nexit 0",
+      "exit": 0,
+      "output": "HEAD=37fa8a3 index: absorb the workspace docs and tools trees\n--- tools/ in the pinned clone ---\ncheck-char-host.sh\ncheck-layout.sh\ngen-index.sh\npublish-package.sh\nrefresh-index.sh\nrelease-package.sh\nrepos.txt\nsync-repos-tags.sh\npackage_sh_present_rc=1\n--- tracked README publish scripts ---\n20:tools/publish-package.sh       create/push package repositories via the GitHub API\n21:tools/release-package.sh       push a tag, refresh the index, commit and push it\n120:| `tools/publish-package.sh [name]` | Creates a missing repository under the `ct-pkg` org through the GitHub REST API (RESTie), pushes `main`, pushes the tag from `tools/repos.txt`, then reads `content` back through the API to prove the push landed. Idempotent; never force-pushes. Needs `GITHUB_TOKEN` (or `GH_TOKEN`) with repo/workflow scope. `ORG` and `STAGING` are env overrides. |\n121:| `tools/release-package.sh <name> <tag>` | For an already-committed tag: checks that `$STAGING/<name>` is clean, the tag exists and `ct.pkg`'s `version` matches the tag; pushes `main` and the tag; runs `tools/refresh-index.sh`; commits and pushes `index`; then points the `tag` column of `tools/repos.txt` at `<tag>`. |\n126:`release-package.sh` rebuilds the whole index rather than appending to it.\n--- index rows ---\n  12 5\n",
+      "reproduced": true,
+      "note": "从本地仓 clone 并 checkout 37fa8a3：tools/ 下只有 publish-package.sh / release-package.sh，没有 package.sh；README 仍把旧脚本写成发布入口；index 仍是 12 行五字段。"
+    },
+    {
+      "id": "E-12-execbit-path",
+      "side": "both",
+      "ref": "claim.md#E1-5",
+      "command": "cd /Users/samxx/dsh-ws/ct-pkg-index\nstat -f '%Sp %N' tools/package.sh\n./tools/package.sh check hal; echo \"direct_exec_rc=$?\"\nls package.sh 2>&1; echo \"root_script_rc=$?\"\nls -la \"$HOME/.ct/index/package.sh\" 2>&1; echo \"cthome_script_rc=$?\"\nls \"$HOME/.ct\"\nexit 0",
+      "exit": 0,
+      "output": "-rw-r--r-- tools/package.sh\nbash: line 3: ./tools/package.sh: Permission denied\ndirect_exec_rc=126\nls: package.sh: No such file or directory\nroot_script_rc=1\nls: /Users/samxx/.ct/index/package.sh: No such file or directory\ncthome_script_rc=1\npkg\npkg-backup\n",
+      "reproduced": true,
+      "note": "脚本 mode 644、shebang bash；直接执行 rc=126（Permission denied）。仓内路径是 tools/package.sh，根目录没有 package.sh；$HOME/.ct/index/package.sh 不存在（~/.ct 只有 pkg 与 pkg-backup）。"
+    },
+    {
+      "id": "E-13-staging",
+      "side": "B",
+      "ref": "counter.md#E1-4",
+      "command": "cd /Users/samxx/dsh-ws/ct-pkg-index\nenv -u STAGING -u CT_BIN bash tools/package.sh check hal 2>&1; echo \"rc=$?\"\nexit 1",
+      "exit": 1,
+      "output": "== preflight ==\n\n--- hal ---\n\nERROR: /Users/samxx/vscspace/ct-pkg/hal is not a git repository; clone or create it first\n\n== workspace gates ==\nfind: /Users/samxx/vscspace/ct-pkg: No such file or directory\nok: 0 methods on 0 hosts, no duplicates\n  ok    check-char-host\n\n\nERROR: 1 package(s) failed the preflight\nrc=1\n",
+      "reproduced": true,
+      "note": "package.sh 默认 STAGING=$HOME/vscspace/ct-pkg（第 46 行）；该目录在本机不存在，任何 check 立即 rc=1。A 把维护机布局假设带进所有消费者机。"
+    },
+    {
+      "id": "E-14-credentials",
+      "side": "B",
+      "ref": "claim.md#E1-4 / counter.md#B2",
+      "command": "cd /Users/samxx/dsh-ws/ct-pkg-index\nenv -u GITHUB_TOKEN -u GH_TOKEN bash tools/package.sh publish hal 2>&1; echo \"publish_no_token_rc=$?\"\ncommand -v restie; echo \"restie_rc=$?\"\necho '--- token path in package.sh ---'\ngrep -n 'credential.helper' tools/package.sh\necho '--- CI write permission ---'\ngrep -n 'contents: write\\|cron' .github/workflows/index.yml\nexit 0",
+      "exit": 0,
+      "output": "== preflight ==\n\nERROR: set GITHUB_TOKEN (or GH_TOKEN) first: export GITHUB_TOKEN=github_pat_xxx\npublish_no_token_rc=1\n/Users/samxx/.cargo/bin/restie\nrestie_rc=0\n--- token path in package.sh ---\n129:            -c credential.helper= \\\n130:            -c 'credential.helper=!f() { echo username=x-access-token; echo \"password=$GITHUB_TOKEN\"; }; f' \\\n--- CI write permission ---\n13:    - cron: '0 18 * * *'   # 02:00 Asia/Shanghai\n17:  contents: write\n",
+      "reproduced": true,
+      "note": "publish 在 preflight 前就要求 GITHUB_TOKEN/GH_TOKEN（缺失 rc=1）；token 经 credential.helper 注入 git（127-131）；publish 还依赖 RESTie（本机恰好有，非普通用户保证）；index CI 有 contents: write。未执行任何写操作。"
+    },
+    {
+      "id": "E-15-two-answers",
+      "side": "A",
+      "ref": "counter.md#E1-3",
+      "command": "R=/tmp/verify-ip1\necho '--- ct pkg check (native, 4 criteria) ---'\n$R/bin/ct pkg check $R/alpha; echo \"native_rc=$?\"\necho '--- check-layout.sh (index gate) ---'\nCT_PKG_ROOT=$R bash /Users/samxx/dsh-ws/ct-pkg-index/tools/check-layout.sh $R/alpha 2>&1; echo \"layout_rc=$?\"\nexit 1",
+      "exit": 1,
+      "output": "--- ct pkg check (native, 4 criteria) ---\nok: 4 criteria\nnative_rc=0\n--- check-layout.sh (index gate) ---\nFAIL  alpha/Foo/bar.ct: namespace Baz::Qux expects directory Baz/Qux\n\n1 of 1 namespaced units do not match their directory\nlayout_rc=1\n",
+      "reproduced": true,
+      "note": "同一夹具：ct 说 OK（4 项），索引仓的 check-layout 说 FAIL。A 的『合并检查』收益（counter E1-3 的反向证据）是真实的，但只有在能调用 package.sh 时才拿得到。"
+    },
+    {
+      "id": "E-16-A-recursion",
+      "side": "B",
+      "ref": "claim.md#E1-3 / question.md#J-3",
+      "command": "R=/tmp/verify-ip1\ncd /Users/samxx/dsh-ws/ct-pkg-index\necho '### wrapper used to model A (cat) ###'\ncat $R/ct-a\necho\necho '### native: package.sh preflight calls native ct pkg check ###'\nSTAGING=$R/staging CT_PKG_ROOT=$R/staging CT_BIN=$R/bin/ct bash tools/package.sh check hal 2>&1; echo \"native_rc=$?\"\necho\necho '### A mapping: package.sh preflight calls ct -> ct pkg check -> package.sh check ###'\nSTAGING=$R/staging CT_PKG_ROOT=$R/staging CT_BIN=$R/ct-a bash tools/package.sh check hal 2>&1; echo \"a_rc=$?\"\necho\necho '### A direct: ct pkg check <abs dir> ###'\n$R/ct-a pkg check $R/staging/hal 2>&1; d=$?; echo \"direct_rc=$d\"; exit $d",
+      "exit": 1,
+      "output": "### wrapper used to model A (cat) ###\n#!/bin/bash\n# A's mapping (§1.2): ct pkg <args> -> $CT_HOME/index/tools/package.sh <args>\nshift\nexec bash /Users/samxx/dsh-ws/ct-pkg-index/tools/package.sh \"$@\"\n\n### native: package.sh preflight calls native ct pkg check ###\n== preflight ==\n\n--- hal ---\n  ok    hal: ct pkg check\n  ok    hal: check-layout\n  ok    hal v0.1.0 (manifest, clean tree, tag/version, identity)\n\n== workspace gates ==\nok: 0 methods on 0 hosts, no duplicates\n  ok    check-char-host\n\n  ok    every package passed the preflight\nnative_rc=0\n\n### A mapping: package.sh preflight calls ct -> ct pkg check -> package.sh check ###\n== preflight ==\n\n--- hal ---\n        == preflight ==\n        \n        ERROR: '/tmp/verify-ip1/staging/hal' is not a row in /Users/samxx/dsh-ws/ct-pkg-index/tools/repos.txt\n\nERROR: ct pkg check failed for hal\n\n== workspace gates ==\nok: 0 methods on 0 hosts, no duplicates\n  ok    check-char-host\n\n\nERROR: 1 package(s) failed the preflight\na_rc=1\n\n### A direct: ct pkg check <abs dir> ###\n== preflight ==\n\nERROR: '/tmp/verify-ip1/staging/hal' is not a row in /Users/samxx/dsh-ws/ct-pkg-index/tools/repos.txt\ndirect_rc=1\n",
+      "reproduced": true,
+      "note": "A 未实现，用 /tmp/verify-ip1/ct-a 按 A §1.2 忠实模拟（shift 后 exec 真 package.sh）。原生 rc=0；A 映射 rc=1，stderr 出现嵌套 `== preflight ==` 与 manifest_row 只认包名的错误：透传与 package.sh:199 的原生消费点直接冲突，不是透明透传。"
+    },
+    {
+      "id": "E-17-noarg-script",
+      "side": "B",
+      "ref": "claim.md#§1.2 / question.md#J-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-pkg-index\nbash tools/package.sh; echo \"rc=$?\"\nexit 0",
+      "exit": 0,
+      "output": "usage: tools/package.sh <command> [args]\n\n  check [<name> ...]      read-only preflight for packages (default: all)\n  publish <name>          create the repo if missing, push main + the tag\n                          from tools/repos.txt, then refresh and publish the\n                          index\n  release <name> <tag>    push an existing local tag, then refresh and\n                          publish the index\n\nBoth publish and release end with the same pipeline:\n  preflight -> push main + tag -> wait for the tag -> rebuild index ->\n  verify the row with `ct get` -> commit + push index -> sync repos.txt\n\nEnvironment:\n  ORG         GitHub organisation (default ct-pkg)\n  STAGING     local checkout root (default ~/vscspace/ct-pkg)\n  MANIFEST    release manifest (default tools/repos.txt)\n  INDEX_DIR   index repository (default this repository)\n  CT_BIN      compiler/driver (default `ct`, then `ct-ast`)\n  GITHUB_TOKEN / GH_TOKEN   token for the API and HTTPS pushes\n\nThe script is idempotent and never force-pushes.\nrc=2\n",
+      "reproduced": true,
+      "note": "package.sh 无参打印自己的 usage、rc=2。若 A 让无参 `ct pkg` 走脚本，就与当前 install 语义（E-02，rc=1）冲突。"
+    },
+    {
+      "id": "E-18-init-unimpl",
+      "side": "A",
+      "ref": "claim.md#§1.1 / P1/P3",
+      "command": "R=/tmp/verify-ip1\ncd $R/empty\n$R/bin/ct pkg init 2>&1; i=$?; echo \"init_rc=$i\"\nrm -rf $R/h-init; mkdir -p $R/h-init\nCT_HOME=$R/h-init HOME=$R/home $R/bin/ct get ct/std 2>&1; g=$?; echo \"get_rc=$g\"\necho '--- CT_HOME after failed get ---'\nfind $R/h-init -maxdepth 3\nexit $i",
+      "exit": 1,
+      "output": "ctc: unexpected argument 'init'\ninit_rc=1\nctc: no index resolver for 'ct/std'\n  'ct/std' is a publisher-qualified package name; without an index\n  there is no mapping from that name to a git URL.\n  Choose the case that matches how the package is published:\n  1) built-in / official library (bare name, no publisher):\n       ct get std\n     uses CT_REGISTRY (default https://github.com/ct-pkg).\n  2) publisher-qualified package (what you typed):\n       ct get --index <file> ct/std\n       CT_INDEX=<file> ct get ct/std\n     the index is a local plain-text file; line format:\n       name version publisher git-url tag sha256:<64 hex>\n  3) known git URL:\n       ct get https://<host>/<publisher>/<repo>\n  4) local checkout:\n       ct get ./path-to-std\n  Note: CT_REGISTRY only applies to bare names without '/';\n        'ct/std' requires an index (case 2) or a URL/path (case 3/4).\nget_rc=1\n--- CT_HOME after failed get ---\n/tmp/verify-ip1/h-init\n",
+      "reproduced": true,
+      "note": "`ct pkg init` 未实现（unexpected argument 'init'）。无索引时 `ct get ct/std` 报 no index resolver，并给出四条替代路径——A 的 init 缺口真实，但这是提案，不是现状。"
+    },
+    {
+      "id": "E-19-installsh",
+      "side": "both",
+      "ref": "claim.md#E1-7",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngrep -n 'index' install.sh; echo \"grep_index_rc=$?\"\necho '--- install.sh 168-188 ---'\nsed -n '168,188p' install.sh\nexit 0",
+      "exit": 0,
+      "output": "grep_index_rc=1\n--- install.sh 168-188 ---\n# --- 5. standard library -------------------------------------------------------\n# `std` is a normal ct-pkg package, not part of this repository or of the binary,\n# so there is nothing to copy here. `ct get` writes it into the shared store and\n# `ct build` reads the v2 lock, so the consumer passes no manual include root.\nsay \"the standard library is a package; in your project run: ct get ct/std && ct build main.ct -o main\"\n\ncase \":$PATH:\" in\n    *\":$prefix:\"*) ;;\n    *) warn \"'$prefix' is not on your PATH; add it with: export PATH=\\\"$prefix:\\$PATH\\\"\" ;;\nesac\n\ncat <<EOF\n\nNext steps:\n  ct -h                                  # usage\n  ct build examples/01_greeter/greeter.ct -o /tmp/greeter\n  /tmp/greeter\n\nStandard library (a ct-pkg package, per project):\n  ct get ct/std\n  ct build main.ct -o main               # reads ct.lock and adds the store include root\n",
+      "reproduced": true,
+      "note": "install.sh 全文无 'index'（grep rc=1）；安装后提示用户执行 `ct get ct/std`（172、186-187）。A 第 4 条『install.sh 不拉 index』是空改动，但也说明安装器与索引确实脱节。"
+    },
+    {
+      "id": "E-20-index-quality",
+      "side": "B",
+      "ref": "claim.md#E1-6 / question.md#J-5",
+      "command": "cd /Users/samxx/dsh-ws/ct-pkg-index\necho '--- fields per row ---'\nawk '{print NF}' index | sort | uniq -c\necho '--- first row ---'\nhead -1 index\necho '--- signature-ish hits ---'\ngrep -c 'signature\\|gpg\\|sig' index; echo \"sig_grep_rc=$?\"\necho '--- index tags ---'\ngit tag -l | wc -l\necho '--- gpgsig on 37fa8a3 ---'\ngit cat-file -p 37fa8a3 | grep -c '^gpgsig'; echo \"gpgsig_rc=$?\"\necho '--- CI trigger / permission ---'\ngrep -n 'cron\\|contents: write' .github/workflows/index.yml\nexit 0",
+      "exit": 0,
+      "output": "--- fields per row ---\n  12 5\n--- first row ---\nhal 0.1.0 https://github.com/ct-pkg/hal v0.1.0 sha256:d38db6f2f733a13a7067e465267d07eb4f8f1ecc2e486a772160d1a18a92fbde\n--- signature-ish hits ---\n0\nsig_grep_rc=1\n--- index tags ---\n       0\n--- gpgsig on 37fa8a3 ---\n0\ngpgsig_rc=1\n--- CI trigger / permission ---\n13:    - cron: '0 18 * * *'   # 02:00 Asia/Shanghai\n17:  contents: write\n",
+      "reproduced": true,
+      "note": "官方 index 是 12 行全五字段、无 publisher、无签名字段；index 仓无 tag，37fa8a3 提交未签名；CI 是夜间 cron + contents: write，所以索引内容每天可变。"
+    },
+    {
+      "id": "E-21-five-vs-six",
+      "side": "B",
+      "ref": "counter.md#E1-3 / question.md#J-4",
+      "command": "R=/tmp/verify-ip1\nrm -rf $R/e21; mkdir -p $R/e21 $R/e21h5 $R/e21h6 $R/e21hS $R/e21home5 $R/e21home6 $R/e21homeS\ncd $R/e21\necho '### five-field official index: ct get ct/std ###'\nCT_HOME=$R/e21h5 CT_INDEX=/Users/samxx/dsh-ws/ct-pkg-index/index HOME=$R/e21home5 $R/bin/ct get ct/std 2>&1; f=$?; echo \"five_field_rc=$f\"\necho '### build a six-field row (publisher=ct) from the local registry/std ###'\nD=$(CT_HOME=$R/e21hS CT_REGISTRY=$R/registry HOME=$R/e21homeS $R/bin/ct get std 2>&1 | awk '/digest/{print $2}')\necho \"digest=$D\"\nprintf 'std 0.1.0 ct %s v0.1.0 %s\\n' \"$R/registry/std\" \"$D\" > $R/index6\ncat $R/index6\necho '### six-field index: ct get ct/std ###'\nCT_HOME=$R/e21h6 CT_INDEX=$R/index6 HOME=$R/e21home6 $R/bin/ct get ct/std 2>&1; s=$?; echo \"six_field_rc=$s\"\nexit 0",
+      "exit": 0,
+      "output": "### five-field official index: ct get ct/std ###\nctc: git clone of 'https://ct/std' failed\nfive_field_rc=1\n### build a six-field row (publisher=ct) from the local registry/std ###\ndigest=sha256:c9aa037e8b6261e29c7805f93e8f438d390bd578cb19a1c327e01899c4b8e5b4\nstd 0.1.0 ct /tmp/verify-ip1/registry/std v0.1.0 sha256:c9aa037e8b6261e29c7805f93e8f438d390bd578cb19a1c327e01899c4b8e5b4\n### six-field index: ct get ct/std ###\nrequested  ct/std\nresolved   ct-pkg/std 0.1.0\n  source   git /tmp/verify-ip1/registry/std\n  tag      v0.1.0\n  commit   78cd8a200e46baf6479c7821821b1b3636698dec\n  store    /tmp/verify-ip1/e21h6/pkg/ct-pkg/std/0.1.0\n  digest   sha256:c9aa037e8b6261e29c7805f93e8f438d390bd578cb19a1c327e01899c4b8e5b4\n  action   reused\n1 package(s): 0 installed, 1 reused\nsix_field_rc=0\n",
+      "reproduced": true,
+      "note": "五字段官方索引下 `ct get ct/std` 解析失败（尝试 https://ct/std）；六字段、publisher=ct 的同一行可成功装载。故 A 的 init 单靠拉当前五字段索引并不能让 install.sh 的建议命令可用，必须先升六字段。"
+    },
+    {
+      "id": "E-22-cthome",
+      "side": "supplement",
+      "ref": "claim.md#§1.4",
+      "command": "R=/tmp/verify-ip1\nrm -rf $R/e22; mkdir -p $R/e22 $R/e22home $R/e22home2\ncd $R/e22\necho '### relative CT_HOME ###'\nCT_HOME=relstore HOME=$R/e22home $R/bin/ct get ./../registry/std 2>&1; r=$?; echo \"relative_rc=$r\"\nfind $R/e22/relstore -maxdepth 4 -type d\necho '### empty CT_HOME (falls back to $HOME/.ct) ###'\nCT_HOME= HOME=$R/e22home2 $R/bin/ct get ./../registry/std 2>&1; e=$?; echo \"empty_rc=$e\"\nfind $R/e22home2/.ct -maxdepth 3 -type d 2>/dev/null\nexit 0",
+      "exit": 0,
+      "output": "### relative CT_HOME ###\nrequested  ./../registry/std\nresolved   ct-pkg/std 0.1.0\n  source   dir ././../registry/std\n  store    relstore/pkg/ct-pkg/std/0.1.0\n  digest   sha256:c9aa037e8b6261e29c7805f93e8f438d390bd578cb19a1c327e01899c4b8e5b4\n  action   installed\n1 package(s): 1 installed, 0 reused\nrelative_rc=0\n/tmp/verify-ip1/e22/relstore\n/tmp/verify-ip1/e22/relstore/pkg\n/tmp/verify-ip1/e22/relstore/pkg/ct-pkg\n/tmp/verify-ip1/e22/relstore/pkg/ct-pkg/std\n/tmp/verify-ip1/e22/relstore/pkg/ct-pkg/std/0.1.0\n### empty CT_HOME (falls back to $HOME/.ct) ###\nrequested  ./../registry/std\nresolved   ct-pkg/std 0.1.0\n  source   dir ././../registry/std\n  store    /tmp/verify-ip1/e22home2/.ct/pkg/ct-pkg/std/0.1.0\n  digest   sha256:c9aa037e8b6261e29c7805f93e8f438d390bd578cb19a1c327e01899c4b8e5b4\n  action   reused\n1 package(s): 0 installed, 1 reused\nempty_rc=0\n/tmp/verify-ip1/e22home2/.ct\n/tmp/verify-ip1/e22home2/.ct/pkg\n/tmp/verify-ip1/e22home2/.ct/pkg/ct-pkg\n/tmp/verify-ip1/e22home2/.ct/pkg/ct-pkg/std\n",
+      "reproduced": true,
+      "note": "当前 pkg_store_root（Pkg.h.ct:1954-1961）只判断 CT_HOME 非空：相对 CT_HOME 被直接使用（relstore 落在 cwd），空值回退 $HOME/.ct。所以 claim §1.4 的『拒绝相对/空 CT_HOME』不是现状，A 必须新增校验。"
+    },
+    {
+      "id": "E-22b-budget-probe",
+      "side": "B",
+      "ref": "claim.md#E4",
+      "command": "bash /tmp/verify-ip1/budget-probe.sh\nexit $?",
+      "exit": 0,
+      "output": "probe_build_rc=0\nfunction definitions added: 100\ncompiled unused-function warnings: 100\n==> building L0 (the C seed)\n==> building L1\n==> building L2 (the regression oracle)\n==> building ct-ast (the installed entry)\n==> installed /tmp/verify-ip1/bin3/ct (ct v0.65.1) and /tmp/verify-ip1/bin3/ctc\nct v0.65.1\nok: 4 criteria\nprobe_done_rc=0\n",
+      "reproduced": true,
+      "note": "函数预算探针的可重建入口：/tmp/verify-ip1/budget-probe.sh 从 a979ce0d 的 src 复制出 src3，在 Pkg.h.ct 追加 100 个函数并完整自举；rc=0 且生成 100 条 unused-function 警告（证明函数被解析/发射）。"
+    },
+    {
+      "id": "E-23-budget",
+      "side": "B",
+      "ref": "claim.md#E4 / Pkg.h.ct:98",
+      "command": "R=/tmp/verify-ip1\ncd /Users/samxx/dsh-ws/ct-lang\necho '--- actual caps at HEAD ---'\ngrep -n '#define MAX_FUNCS ' selfhost/ct-ast/frontend/sym/Symbols.h.ct selfhost/l2/core.ct\ngrep -n '#define MAX_MAP_IMPLS ' selfhost/l2/core.ct\necho '--- stale 256 comments ---'\nsed -n '96,99p' selfhost/ct-ast/tool/pkg/Pkg.h.ct\nsed -n '1741,1743p' selfhost/ct-ast/tool/pkg/Pkg.h.ct\necho \"--- probe: extra functions in src3 ---\"\necho \"function definitions added: $(grep -cE '^static int verify_probe_[0-9]+\\(void\\)$' $R/src3/selfhost/ct-ast/tool/pkg/Pkg.h.ct)\"\necho \"compiled unused-function warnings: $(grep -c 'unused function' $R/build3.log)\"\ngrep -E 'building|installed' $R/build3.log\n$R/bin3/ct -v; echo \"bin3_rc=$?\"\n$R/bin3/ct pkg check $R/staging/hal; echo \"bin3_check_rc=$?\"\nexit 0",
+      "exit": 0,
+      "output": "--- actual caps at HEAD ---\nselfhost/ct-ast/frontend/sym/Symbols.h.ct:35:#define MAX_FUNCS   512\nselfhost/l2/core.ct:45:#define MAX_FUNCS  512\n52:#define MAX_MAP_IMPLS 512                 /* impl methods listed in `--emit-map` */\n--- stale 256 comments ---\n                            char *store, size_t scap);\n/* S0: 0 = no ct.lock, 1 = v1 (no `# ct-lock 2` header), 2 = v2; inlined in\n   `install()` because this unit sits exactly on the 256-function limit. */\n\n        /* S0: `ct pkg check <dir>` shares this entry point. The AST compiler's\n           256-function budget is fully spent, so the read-only audit lives here\n           instead of in a unit of its own (see phase54.md §7). */\n--- probe: extra functions in src3 ---\nfunction definitions added: 100\ncompiled unused-function warnings: 100\n==> building L0 (the C seed)\n==> building L1\n==> building L2 (the regression oracle)\n==> building ct-ast (the installed entry)\n==> installed /tmp/verify-ip1/bin3/ct (ct v0.65.1) and /tmp/verify-ip1/bin3/ctc\nct v0.65.1\nbin3_rc=0\nok: 4 criteria\nbin3_check_rc=0\n",
+      "reproduced": true,
+      "note": "反证 claim E4：实际 MAX_FUNCS=512（Symbols.h.ct:34 明说 256→512 于 Phase 54 提高），MAX_MAP_IMPLS=512；Pkg.h.ct:98/:1742 的 256 注释已过期。在 Pkg.h.ct 追加 100 个函数后完整自举 rc=0（探针见 E-22b 与 /tmp/verify-ip1/budget-probe.sh），生成的 C 里出现 100 条 unused-function 警告（证明这些函数确实被解析/发射），说明函数预算并未『恰好用满 256』。"
+    },
+    {
+      "id": "E-24-agents",
+      "side": "B",
+      "ref": "question.md#J-3 / AGENTS.md:543-550",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nsed -n '541,552p' AGENTS.md\nexit 0",
+      "exit": 0,
+      "output": "  `test/run.sh` 的 `dialect` 层驱动。方言所需的符号信息由编译器已产出的 map JSON（`--emit-map`）\n  提供，不在仓库内另造一套。\n- **例外（Phase 8 包管理）**：`ct get` 可调用**系统 `git`** 获取 git 源包，`ct get` / `ct install` 可把**本地目录源**同步进\n  `vendor/`。这是包管理子命令的受控例外——**零网络**不变，编译器核（`ct compile` / `ct build --emit-c`）仍\n  **零子进程**，且不得内置 HTTP 客户端。无 `git` 时 git 源硬报错并提示，本地源照常可用。Phase 17.5 的\n  `ct update` / `ct verify` 完全离线：`update` 只复用 `vendor/` 缓存与 `ct.lock` 已钉住的提交，`verify` 只读。\n  见 [design/phase8.md](docs/history/design/phase8.md)（D22 / D26）。\n- **例外（Phase 17 `ct build` 一步到位）**：`ct build` **默认**在发射 `.c` / `.h` 之后调用**本地 C 编译器**\n  （`$CC` / `--cc`，默认 `cc`）产出可执行文件——用户 2026-11-02 授权的受控子进程例外。**零网络**不变；\n  `ct compile` 与 `ct build --emit-c` 仍**零子进程**；`ct build` 不解析 `cc` 的诊断、不做增量链接、\n  不内置构建系统，路径与参数一律按单引号规则转义。见 [design/phase17.md](docs/history/design/phase17.md)（D17-9）。\n- **例外（Phase 12 bindings）**：仓库内 `test/bindings/**`（Phase 12 时在顶层，2026-11-13 迁入 `test/`），承载对既有 C 库的**声明式 binding**\n",
+      "reproduced": true,
+      "note": "AGENTS.md 的零网络例外只覆盖包管理（ct get/install 的 git/本地源）；编译器核零子进程。A 的 init（git clone）与透传（exec 外部脚本）都要扩写这条例外，属行为变更。"
+    },
+    {
+      "id": "E-25-prior-verdict",
+      "side": "B",
+      "ref": "counter.md#§6.5 / verdict.md:4,27",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nnl -ba battle/index-install-1/verdict.md | sed -n '1,6p;18,29p'\nexit 0",
+      "exit": 0,
+      "output": "     1\t# battle/index-install-1 判决\n     2\t\n     3\t> **状态：`closed`**（2026-11-18；裁判 EDITOR；1 轮 claim/counter/evidence）。\n     4\t> **结论：B 胜；A 的“install.sh 默认 clone index + ct pkg 执行发布脚本”不成立。可以采用 B′：安装不新增 git/index 依赖；索引显式更新并 pin；发布留在 index CI。**\n     5\t\n     6\t## 1 逐项判决\n    18\t\n    19\t1. **install.sh 不默认 clone index**；保持“下载源码 + 自举 + 安装”，不新增 git 依赖。\n    20\t2. **索引显式更新**：未来若加 `ct pkg index update`，必须：\n    21\t   - 用固定 commit/tag，不跟匿名 main；\n    22\t   - 原子写临时目录，失败不污染 `~/.ct/index`；\n    23\t   - 尊重 `CT_HOME`，不要固定 `$HOME/.ct`；\n    24\t   - 有签名/摘要校验；\n    25\t   - 离线失败只提示，不阻断 `ct`。\n    26\t3. **消费端可选**：`ct get` 可读取已存在的 `$CT_HOME/index/index`，但**不自动联网**；`CT_INDEX` 仍可覆盖。\n    27\t4. **发布留在 index 仓 CI**：`ct pkg` 不执行带 credentials 的发布脚本；最多提供只读 `ct pkg index check`/打印 CI 触发说明。\n    28\t5. **先修索引生产端**：官方索引当前五字段、`std/std` 解析失败；先达到六字段、publisher/ns-root、签名/pin，再谈安装集成。\n    29\t\n",
+      "reproduced": true,
+      "note": "index-install-1 已判『ct pkg 不执行带 credentials 的发布脚本；最多只读 ct pkg index check/打印 CI 说明』（verdict:4,27），并要求未来索引更新用固定 pin+原子+CT_HOME+签名（:21-25）。A 的透传（含 publish）与该判决冲突；init 半部与 B′ 方向一致但缺签名且默认 main。"
+    },
+    {
+      "id": "E-26-bare-registry",
+      "side": "B",
+      "ref": "install.sh:172/187",
+      "command": "R=/tmp/verify-ip1\nrm -rf $R/e26; mkdir -p $R/e26 $R/e26home\ncd $R/e26\nCT_HOME=$R/e26h CT_REGISTRY=$R/registry HOME=$R/e26home $R/bin/ct get std 2>&1; r=$?; echo \"rc=$r\"\ncat ct.lock\nexit 0",
+      "exit": 0,
+      "output": "requested  std\nresolved   ct-pkg/std 0.1.0\n  source   git /tmp/verify-ip1/registry/std\n  tag      v0.1.0\n  commit   78cd8a200e46baf6479c7821821b1b3636698dec\n  store    /tmp/verify-ip1/e26h/pkg/ct-pkg/std/0.1.0\n  digest   sha256:c9aa037e8b6261e29c7805f93e8f438d390bd578cb19a1c327e01899c4b8e5b4\n  action   reused\n1 package(s): 0 installed, 1 reused\nrc=0\n# ct-lock 2\nct-pkg/std 0.1.0 git /tmp/verify-ip1/registry/std 78cd8a200e46baf6479c7821821b1b3636698dec std sha256:c9aa037e8b6261e29c7805f93e8f438d390bd578cb19a1c327e01899c4b8e5b4\n",
+      "reproduced": true,
+      "note": "裸名 `ct get std` 经 CT_REGISTRY（本地 registry）离线成功，不需要索引。因此 install.sh:172/187 建议的 `ct get ct/std` 是文案选择问题，一行改成 `ct get std` 也能补洞；A 的 init 不是唯一解。"
+    },
+    {
+      "id": "E-27-fixtures",
+      "side": "both",
+      "ref": "method",
+      "command": "R=/tmp/verify-ip1\necho '--- fixture roots ---'\nls -d $R/staging/hal $R/alpha $R/registry/std $R/empty\necho '--- A wrapper ---'\ncat $R/ct-a\necho '--- hal tree (tracked) ---'\ncd $R/staging/hal && git ls-files\necho '--- setup script ---'\nls -l $R/setup.sh\nexit 0",
+      "exit": 0,
+      "output": "--- fixture roots ---\n/tmp/verify-ip1/alpha\n/tmp/verify-ip1/empty\n/tmp/verify-ip1/registry/std\n/tmp/verify-ip1/staging/hal\n--- A wrapper ---\n#!/bin/bash\n# A's mapping (§1.2): ct pkg <args> -> $CT_HOME/index/tools/package.sh <args>\nshift\nexec bash /Users/samxx/dsh-ws/ct-pkg-index/tools/package.sh \"$@\"\n--- hal tree (tracked) ---\nct.pkg\nhal/Uart.ct\n--- setup script ---\n-rw-------@ 1 samxx  wheel  1925 Nov 18 07:13 /tmp/verify-ip1/setup.sh\n",
+      "reproduced": true,
+      "note": "夹具清单；/tmp/verify-ip1/setup.sh 可重建全部夹具（hal、alpha、registry/std、ct-a、空目录）。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "question": "语义/命令兼容：ct pkg 当前是 install 别名，改成脚本入口是否破坏",
+      "claim": "A：ct pkg 改成 init + package.sh 入口，无参/有参行为可保持兼容",
+      "counter": "B：ct pkg 是 ct install 别名，改语义会破坏兼容；check 已是原生只读入口",
+      "evidence": [
+        "E-02-pkg-eq",
+        "E-03-help-eq",
+        "E-04-subcommands",
+        "E-06-main-lines",
+        "E-07-help-lists",
+        "E-17-noarg-script"
+      ],
+      "verdict": "B=pass（现状事实）；A=fail（兼容性主张被反证）",
+      "fact": "无参 ct pkg 与 ct install 的 stdout+stderr 逐字相同且都 rc=1；--help 也逐字相同；ct -h 已列 ct pkg check <dir>。A 的无参行为会变成 package.sh usage（rc=2），并抢走已文档化的 check 前缀。",
+      "result": "fail",
+      "result_semantics": "fail = A 在该判据上的主张被独立证据反证；pass = 成立；unresolved = 无法判定",
+      "facts_side": "B（A 与 B 在『当前是别名』上无分歧；A 的兼容性主张不成立）",
+      "note": "无参 ct pkg 与 ct install 的 stdout+stderr 逐字相同且都 rc=1；--help 也逐字相同；ct -h 已列 ct pkg check <dir>。A 的无参行为会变成 package.sh usage（rc=2），并抢走已文档化的 check 前缀。"
+    },
+    {
+      "id": "J-2",
+      "question": "安全：package.sh 的 credentials/写权限、任意参数透传",
+      "claim": "A：ct pkg <args> 透传 package.sh，用户显式调用即可",
+      "counter": "B：package.sh 的 publish 带 token/写权限，任意 argv 透传扩大攻击面",
+      "evidence": [
+        "E-14-credentials",
+        "E-12-execbit-path",
+        "E-16-A-recursion"
+      ],
+      "verdict": "B=pass；A=fail as written（收窄到 check 也与 J-3 冲突）",
+      "fact": "publish 前强制 GITHUB_TOKEN/GH_TOKEN，token 经 credential.helper 进入 git，且依赖 RESTie；index CI contents: write。A 的透传把任意 argv 交给该脚本并继承环境，ct pkg publish 可直达写路径；A 原形态没有 C2 的显式 run 隔离。未执行任何写操作。",
+      "result": "fail",
+      "facts_side": "B",
+      "note": "publish 前强制 GITHUB_TOKEN/GH_TOKEN，token 经 credential.helper 进入 git，且依赖 RESTie；index CI contents: write。A 的透传把任意 argv 交给该脚本并继承环境，ct pkg publish 可直达写路径；A 原形态没有 C2 的显式 run 隔离。未执行任何写操作。"
+    },
+    {
+      "id": "J-3",
+      "question": "架构：ct 零网络/子进程边界，index 可变 main",
+      "claim": "A：透传统一入口，ct 与 package.sh 检查一致",
+      "counter": "B：package.sh:199 已消费 ct pkg check；透传递归/参数错位；index 是可变 main",
+      "evidence": [
+        "E-16-A-recursion",
+        "E-10-pkgsh-tracked",
+        "E-11-pinned-clone",
+        "E-24-agents",
+        "E-09-static-scan"
+      ],
+      "verdict": "B=pass；A=fail（透传与消费者冲突，当前 pin 无脚本）",
+      "fact": "package.sh:199 以 ct pkg check 作 preflight 消费点；A 把它变成 package.sh check <abs>，manifest_row 只认包名而失败（原生 rc=0 vs A rc=1）。当前 main=37fa8a3 的 clone 没有 package.sh，A §1.1 的『校验 tools/package.sh』在 init 时必然失败（除非外部仓先提交该脚本）；AGENTS.md:543-550 的例外只覆盖包管理，A 需扩写。『统一 check』只有把 check 特判回原生才不破坏，但那已不是透明透传。",
+      "result": "fail",
+      "facts_side": "B",
+      "note": "package.sh:199 以 ct pkg check 作 preflight 消费点；A 把它变成 package.sh check <abs>，manifest_row 只认包名而失败（原生 rc=0 vs A rc=1）。当前 main=37fa8a3 的 clone 没有 package.sh，A §1.1 的『校验 tools/package.sh』在 init 时必然失败（除非外部仓先提交该脚本）；AGENTS.md:543-550 的例外只覆盖包管理，A 需扩写。『统一 check』只有把 check 特判回原生才不破坏，但那已不是透明透传。"
+    },
+    {
+      "id": "J-4",
+      "question": "UX：init 一次 vs 直接跑；首次提示是否足够",
+      "claim": "A：init 一次后 ct pkg 直接跑；无索引时首次提示不足",
+      "counter": "B：消费者机无法跑 package.sh；手动 CT_INDEX 只多一行",
+      "evidence": [
+        "E-18-init-unimpl",
+        "E-19-installsh",
+        "E-21-five-vs-six",
+        "E-26-bare-registry",
+        "E-13-staging"
+      ],
+      "verdict": "A 的 init 缺口=pass（真实）；A 的透传 UX=fail；B 的消费者不可用=pass；整体 unresolved",
+      "fact": "无索引时 ct get ct/std 报 no index resolver，install.sh:172/187 恰好建议这条命令，A 的 init 缺口真实。但 (a) 裸名 ct get std 经 CT_REGISTRY 可离线成功，一行文案也能补洞；(b) 当前五字段索引把 ct/std 解析成 https://ct/std 失败，init 单拉这份索引不能让 install.sh 的建议可用；(c) 消费者机无 STAGING，package.sh check rc=1。故 UX 的整体结论分裂，不能判 pass/fail。",
+      "result": "unresolved",
+      "facts_side": "A 的 init 缺口成立 + B 的透传不可用成立（两边各有一半）",
+      "note": "无索引时 ct get ct/std 报 no index resolver，install.sh:172/187 恰好建议这条命令，A 的 init 缺口真实。但 (a) 裸名 ct get std 经 CT_REGISTRY 可离线成功，一行文案也能补洞；(b) 当前五字段索引把 ct/std 解析成 https://ct/std 失败，init 单拉这份索引不能让 install.sh 的建议可用；(c) 消费者机无 STAGING，package.sh check rc=1。故 UX 的整体结论分裂，不能判 pass/fail。"
+    },
+    {
+      "id": "J-5",
+      "question": "索引质量：五字段/无签名/package.sh 发布脚本现状",
+      "claim": "A：init 拉 index，脚本与索引同仓演进",
+      "counter": "B：五字段/无签名/无 pin，不能作为执行信任根",
+      "evidence": [
+        "E-20-index-quality",
+        "E-10-pkgsh-tracked",
+        "E-11-pinned-clone",
+        "E-21-five-vs-six"
+      ],
+      "verdict": "B=pass；A 的信任前提=fail",
+      "fact": "index 12 行全五字段、无 publisher、无 signature/gpg/sig、index 仓无 tag、37fa8a3 无 gpgsig；package.sh 不在 37fa8a3、README 仍指向旧脚本。A 的隐式前提（可把脚本执行权交给该索引）因此不成立：把执行权交给一份未签名、夜间可变、且当前不在 pin 内的数据，pin 只能降漂移、不能证真实性。",
+      "result": "fail",
+      "facts_side": "B",
+      "note": "index 12 行全五字段、无 publisher、无 signature/gpg/sig、index 仓无 tag、37fa8a3 无 gpgsig；package.sh 不在 37fa8a3、README 仍指向旧脚本。A 的隐式前提（可把脚本执行权交给该索引）因此不成立：把执行权交给一份未签名、夜间可变、且当前不在 pin 内的数据，pin 只能降漂移、不能证真实性。"
+    },
+    {
+      "id": "J-6",
+      "question": "成本/回退：init、脚本查找、失败模式",
+      "claim": "A：约 150-220 行 + 跨仓协调；init/透传可回退",
+      "counter": "B：0 行源码；失败面 1 类（没有发布入口）",
+      "evidence": [
+        "E-23-budget",
+        "E-22-cthome",
+        "E-12-execbit-path",
+        "E-13-staging",
+        "E-18-init-unimpl"
+      ],
+      "verdict": "B 的 0 行/失败面=pass；A 的成本=unresolved（未实现，且 256 预算前提被反证）",
+      "fact": "A 未实现，总成本不可直接测。claim 的『Pkg.h.ct 已满 256 函数、不能就地加方法、需新拆单元』被反证：实际 MAX_FUNCS=512、MAX_MAP_IMPLS=512，追加 100 个函数后完整自举 rc=0；:98/:1742 的 256 注释已过期。可测失败模式真实存在：脚本 644（exec rc=126）、路径是 tools/package.sh、消费者无 STAGING、pin 默认 main、CT_HOME 相对路径当前被接受需新增校验。回退方面 A 会在用户机留 $CT_HOME/index clone，git revert 不回收；B 无新增状态。",
+      "result": "unresolved",
+      "facts_side": "B 的 0 行源码/失败面小成立；A 的成本估计部分被反证",
+      "note": "A 未实现，总成本不可直接测。claim 的『Pkg.h.ct 已满 256 函数、不能就地加方法、需新拆单元』被反证：实际 MAX_FUNCS=512、MAX_MAP_IMPLS=512，追加 100 个函数后完整自举 rc=0；:98/:1742 的 256 注释已过期。可测失败模式真实存在：脚本 644（exec rc=126）、路径是 tools/package.sh、消费者无 STAGING、pin 默认 main、CT_HOME 相对路径当前被接受需新增校验。回退方面 A 会在用户机留 $CT_HOME/index clone，git revert 不回收；B 无新增状态。"
+    }
+  ],
+  "checks_semantics": "checks 是 J-1..J-6 判定矩阵：result=pass 表示 A 在该判据上的主张经独立证据成立；fail 表示被反证；unresolved 表示依赖未实现代码或证据分裂。facts_side 记哪一方的事实陈述成立，不是最终胜负。",
+  "a_benefits": [
+    {
+      "id": "AB-1",
+      "benefit": "统一入口：一个 ct 命令跑 package.sh 的 check/publish/release 全生命周期",
+      "status": "conditional",
+      "evidence": [
+        "E-10-pkgsh-tracked",
+        "E-11-pinned-clone",
+        "E-17-noarg-script"
+      ],
+      "note": "工作树 README 把 package.sh 写成『single entry point for publishing』，诉求真实；但 37fa8a3 的 clone 里没有该脚本，只有外部仓先提交脚本并补执行位/文档后，这个收益才存在。"
+    },
+    {
+      "id": "AB-2",
+      "benefit": "检查一致：ct 只判 4 项，package.sh 的 preflight 还能跑 check-layout/check-char-host",
+      "status": "not-realizable-as-specified",
+      "evidence": [
+        "E-15-two-answers",
+        "E-16-A-recursion"
+      ],
+      "note": "差异真实（同一夹具 ct=ok、layout=FAIL）；但 A 的 check 透传会让 package.sh:199 的 preflight 变成 package.sh check <abs> 而失败。要保住这个收益必须把 check 特判回原生，A 就不再是『透明透传』。"
+    },
+    {
+      "id": "AB-3",
+      "benefit": "发现性：ct -h/README 没有发布入口",
+      "status": "real-but-doc-fixable",
+      "evidence": [
+        "E-04-subcommands",
+        "E-07-help-lists",
+        "E-19-installsh"
+      ],
+      "note": "ct -h 已列 ct pkg check <dir>，但没有任何 publish 入口；ct pkg publish 报 unexpected argument。counter 也承认这是文档缺陷，一行说明即可修，不必改命令语义。"
+    },
+    {
+      "id": "AB-4",
+      "benefit": "安装后即用：install.sh 让用户 ct get ct/std，但安装器不拉索引",
+      "status": "partly-real",
+      "evidence": [
+        "E-19-installsh",
+        "E-21-five-vs-six",
+        "E-26-bare-registry",
+        "E-18-init-unimpl"
+      ],
+      "note": "缺口真实；但裸名 ct get std 经 CT_REGISTRY 可离线成功（一行文案即可补），且当前五字段索引会让 ct/std 解析失败，init 单拉这份索引不足以让 install.sh 的建议可用。"
+    }
+  ],
+  "a_b_boundary": "A 的 init-only 部分（拉取/校验索引、不执行仓内脚本）等于 B 第 3 条，也与 index-install-1 的 B′ 方向一致；争点只剩『是否把 package.sh 透传给 ct pkg』。A 原形态把 init 与透传绑成一个方案，B 接受前者、拒绝后者。",
+  "prior_verdict_relation": {
+    "verdict": "battle/index-install-1/verdict.md（closed，2026-11-18）",
+    "consistent": [
+      "都认为 ct pkg 不应把带 credentials 的发布脚本接进编译器二进制（verdict:27）",
+      "A 的 init-only 方向与 B′ 的『索引显式更新、固定 pin、原子写、尊重 CT_HOME、签名/摘要校验』方向一致（verdict:19-25）"
+    ],
+    "conflicting": [
+      "A 的 publish/release 透传直接重开 index-install-1 已判不采纳的 A4『ct pkg 执行发布脚本』（verdict:4,33）",
+      "A 默认 main、--pin 可选、未提签名；B′ 要求固定 commit/tag + 签名/摘要校验（verdict:21,24）",
+      "A 的 check 透传把原生只读入口替换成外部脚本，超出 verdict:27『最多提供只读 ct pkg index check/打印 CI 说明』的边界（并把 package.sh:199 的消费点打断）"
+    ],
+    "evidence": [
+      "E-25-prior-verdict"
+    ]
+  },
+  "fact_checks": [
+    {
+      "id": "F-01",
+      "claim": "ct pkg 无参 == ct install 无参（逐字、同 rc）",
+      "result": "confirmed",
+      "side": "both",
+      "evidence": [
+        "E-02-pkg-eq"
+      ],
+      "note": "空目录输出均为 ctc: cannot open './ct.pkg'，rc=1。"
+    },
+    {
+      "id": "F-02",
+      "claim": "ct pkg --help == ct install --help",
+      "result": "confirmed",
+      "side": "both",
+      "evidence": [
+        "E-03-help-eq"
+      ],
+      "note": "逐字相同。"
+    },
+    {
+      "id": "F-03",
+      "claim": "ct pkg check <dir> 是原生只读 4 项审计",
+      "result": "confirmed",
+      "side": "both",
+      "evidence": [
+        "E-05-check-ok",
+        "E-08-readonly",
+        "E-09-static-scan"
+      ],
+      "note": "ok: 4 criteria rc=0；哈希不变；只 fopen r；空 PATH 可跑。"
+    },
+    {
+      "id": "F-04",
+      "claim": "不带目录的 ct pkg check 落到 install 分支",
+      "result": "confirmed",
+      "side": "both",
+      "evidence": [
+        "E-04-subcommands"
+      ],
+      "note": "输出 unexpected argument 'check'，因为 check 分支要求 argc>1；这是实现脆弱点，A 的诊断要求需注意。"
+    },
+    {
+      "id": "F-05",
+      "claim": "ct pkg init / publish 当前未实现",
+      "result": "confirmed",
+      "side": "both",
+      "evidence": [
+        "E-04-subcommands",
+        "E-18-init-unimpl"
+      ],
+      "note": "均 unexpected argument，rc=1。"
+    },
+    {
+      "id": "F-06",
+      "claim": "tools/package.sh 不在 37fa8a3，也未提交",
+      "result": "confirmed",
+      "side": "A（claim 已注明工作树有未提交修改，但未推出 clone 不含脚本）",
+      "evidence": [
+        "E-10-pkgsh-tracked",
+        "E-11-pinned-clone"
+      ],
+      "note": "git cat-file rc=128；git log --all 0 条；clone 后 test -e rc=1。这是 A 当前形态 init 可行性的决定性反证（外部仓提交该脚本后才会改变）。"
+    },
+    {
+      "id": "F-07",
+      "claim": "脚本路径是 tools/package.sh，$CT_HOME/index/package.sh 不存在",
+      "result": "confirmed",
+      "side": "B",
+      "evidence": [
+        "E-12-execbit-path"
+      ],
+      "note": "仓根无 package.sh；~/.ct/index/package.sh No such file。"
+    },
+    {
+      "id": "F-08",
+      "claim": "package.sh mode 644、直接 exec rc=126",
+      "result": "confirmed",
+      "side": "A（claim E1-5）",
+      "evidence": [
+        "E-12-execbit-path"
+      ],
+      "note": "必须由 ct 显式 bash 包裹。"
+    },
+    {
+      "id": "F-09",
+      "claim": "package.sh 默认 STAGING=~/vscspace/ct-pkg，消费者机失败",
+      "result": "confirmed",
+      "side": "B",
+      "evidence": [
+        "E-13-staging"
+      ],
+      "note": "该目录不存在，check hal rc=1；find 报 No such file。"
+    },
+    {
+      "id": "F-10",
+      "claim": "publish 需 token/RESTie，token 经 credential.helper",
+      "result": "confirmed",
+      "side": "B",
+      "evidence": [
+        "E-14-credentials"
+      ],
+      "note": "缺 token rc=1；restie 本机存在但为额外依赖；index.yml contents: write。"
+    },
+    {
+      "id": "F-11",
+      "claim": "A 的透传与 package.sh:199 的原生 check 消费点冲突（递归/参数错位）",
+      "result": "confirmed",
+      "side": "A（claim E1-3）",
+      "evidence": [
+        "E-16-A-recursion"
+      ],
+      "note": "A 用等价 wrapper 模拟；原生 rc=0 vs A rc=1，错误为 manifest_row 只认包名。不是无限递归，但语义已断。"
+    },
+    {
+      "id": "F-12",
+      "claim": "index 是 12 行五字段、无签名、无 tag、commit 未签",
+      "result": "confirmed",
+      "side": "both",
+      "evidence": [
+        "E-20-index-quality"
+      ],
+      "note": "awk NF 全 5；grep 签名 0；git tag 0；gpgsig 0。"
+    },
+    {
+      "id": "F-13",
+      "claim": "五字段索引无法解析 ct/std；六字段 publisher=ct 可解析",
+      "result": "confirmed",
+      "side": "B（并补充 A 的 init 不足）",
+      "evidence": [
+        "E-21-five-vs-six"
+      ],
+      "note": "五字段 -> https://ct/std 失败；六字段 + 本地 registry -> rc=0、digest 校验通过。"
+    },
+    {
+      "id": "F-14",
+      "claim": "install.sh 不拉 index，且建议 ct get ct/std",
+      "result": "confirmed",
+      "side": "A（claim E1-7）",
+      "evidence": [
+        "E-19-installsh"
+      ],
+      "note": "grep index rc=1；172/186-187 是 ct get ct/std。"
+    },
+    {
+      "id": "F-15",
+      "claim": "裸名 ct get std 经 CT_REGISTRY 离线可用",
+      "result": "confirmed",
+      "side": "补充事实（削弱 init 唯一性）",
+      "evidence": [
+        "E-26-bare-registry"
+      ],
+      "note": "rc=0，写 ct.lock；故 install.sh 文案可一行改。"
+    },
+    {
+      "id": "F-16",
+      "claim": "当前 CT_HOME 接受相对路径、空值回退 $HOME/.ct（不拒绝）",
+      "result": "confirmed",
+      "side": "补充事实（修正 claim §1.4 措辞）",
+      "evidence": [
+        "E-22-cthome"
+      ],
+      "note": "relstore 落在 cwd；空 CT_HOME 用 $HOME/.ct。A 若要求拒绝相对/空，需新增代码。"
+    },
+    {
+      "id": "F-17",
+      "claim": "Pkg.h.ct 已满 256 函数、不能就地加方法、需新拆单元",
+      "result": "refuted",
+      "side": "A（claim E4）",
+      "evidence": [
+        "E-23-budget"
+      ],
+      "note": "实际 MAX_FUNCS=512、MAX_MAP_IMPLS=512；追加 100 个函数后自举 rc=0，并产生 100 条 unused-function 警告证明被解析/发射。:98/:1742 的 256 注释在 Phase 54 提高上限后未更新。"
+    },
+    {
+      "id": "F-18",
+      "claim": "A 的 publish 透传与 index-install-1 判决冲突；init 半部方向一致但缺签名/pin 默认",
+      "result": "confirmed",
+      "side": "B（判决一致性）",
+      "evidence": [
+        "E-25-prior-verdict"
+      ],
+      "note": "verdict:4,27 明确 ct pkg 不执行带 credentials 的发布脚本；B′ 要求 pin+原子+CT_HOME+签名。A 默认 main、未提签名。"
+    },
+    {
+      "id": "F-19",
+      "claim": "ct -h 已列出 ct pkg check <dir>",
+      "result": "confirmed",
+      "side": "补充事实",
+      "evidence": [
+        "E-07-help-lists"
+      ],
+      "note": "A 的透传会抢走已文档化的前缀。"
+    },
+    {
+      "id": "F-20",
+      "claim": "A 的无参行为会从 install（rc=1）变成 package.sh usage（rc=2）",
+      "result": "confirmed",
+      "side": "B",
+      "evidence": [
+        "E-02-pkg-eq",
+        "E-17-noarg-script"
+      ],
+      "note": "package.sh 无参 rc=2；当前 ct pkg 无参 rc=1。"
+    },
+    {
+      "id": "F-21",
+      "claim": "A 的 init 具备固定 pin、原子落盘、签名/摘要校验",
+      "result": "unresolved",
+      "side": "A（未实现，只有文本）",
+      "evidence": [
+        "E-18-init-unimpl",
+        "E-20-index-quality",
+        "E-10-pkgsh-tracked"
+      ],
+      "note": "claim §1.1 默认拉 main、--pin 可选（与 B′ 的『固定 commit/tag』冲突）；原子 rename 只在 claim 文本里，未实现；index 无 signature/gpg 字段，sha256 是包树摘要而不是索引签名，无法证明来源。除『无签名/五字段』外，pin 与原子性均不可实测。"
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C-01",
+      "target": "claim E1-1 / counter E1-5",
+      "text": "两边输出不同不是矛盾：install 先读 ct.pkg 再读 ct.lock。空目录（无 ct.pkg）报 cannot open './ct.pkg'；有 ct.pkg 无 ct.lock 报 no './ct.lock'。本验证用空目录得到前者；/tmp 里有 ct.lock 无 ct.pkg，也报前者。"
+    },
+    {
+      "id": "C-02",
+      "target": "claim E4 / Pkg.h.ct:98",
+      "text": "『本单元恰在 256 函数上限、不能加方法』在 HEAD 不成立：MAX_FUNCS=512、MAX_MAP_IMPLS=512；追加 100 个函数自举成功。设计上仍可选择新拆单元，但成本依据需要重新给出，不能引用这个已过期的 256 上限。"
+    },
+    {
+      "id": "C-03",
+      "target": "claim §1.4",
+      "text": "『沿用 Pkg.h.ct:1954-1975 并拒绝相对/空 CT_HOME』与现状不符：现状只判非空，相对路径直接用；A 需要新增校验。"
+    },
+    {
+      "id": "C-04",
+      "target": "claim §1.2 / question 位置 A",
+      "text": "脚本路径应为 tools/package.sh；question 写的 $CT_HOME/index/package.sh 与 claim 写的 $CT_HOME/index/tools/package.sh 都不是现状可交付的路径——37fa8a3 没有该文件。"
+    },
+    {
+      "id": "C-05",
+      "target": "counter E1-2",
+      "text": "『$CT_HOME/index/package.sh 连路径都不存在』成立；但更深一层是 tools/package.sh 本身也未提交，clone/checkout 37fa8a3 拿不到。counter 未指出这一点。"
+    },
+    {
+      "id": "C-06",
+      "target": "counter §5",
+      "text": "『A 源码改动…Pkg.h.ct:1741-1743 已因函数预算被塞入审计逻辑』：审计逻辑放在 install() 入口是事实，但『函数预算已满』的理由引用的 256 上限已过期（F-17）。"
+    },
+    {
+      "id": "C-07",
+      "target": "counter E1-2 / README:450",
+      "text": "README:450 与 ct -h 确实没有 publish；但 ct -h 已列 ct pkg check <dir>（E-07），所以『发现性缺口』只针对 publish，不针对 check。"
+    }
+  ],
+  "open_questions": [
+    "A 若收窄为 init-only（不 exec 脚本），且改为固定 pin、六字段索引、签名/摘要校验，是否值得单独立项？本证据席不判。",
+    "MAX_MAP_IMPLS 的实际用量未测；F-17 只反证了 256 函数上限，未证明 trait 方法/映射实现预算也有同等余量。",
+    "index 仓维护者是否会把 tools/package.sh 提交并加执行位、README 是否同步，属外部仓决定，未验证。"
+  ],
+  "head_detail": {
+    "requested_baseline": "a979ce0d",
+    "checked_out_head": "944f2c50b094dd836e3b7034cafbfc4c22107b63",
+    "head_subject": "docs(phase67): open migration planning card (no execution)",
+    "version": "v0.65.1",
+    "delta_vs_baseline": "仅 docs/design/phase67.md、docs/planning/typecheck-semantic-plan.md、docs/planning/v1-release-plan.md、docs/roadmap.md；selfhost/ 与 install.sh 无差异",
+    "worktree": [
+      "?? battle/index-pkg-1/",
+      "?? test/baremetal-renode/"
+    ]
+  },
+  "round_log": [
+    {
+      "n": 1,
+      "focus": "ct pkg 语义与 ct pkg check 只读性",
+      "evidence": [
+        "E-00-head",
+        "E-01a-source",
+        "E-01-build",
+        "E-02-pkg-eq",
+        "E-03-help-eq",
+        "E-04-subcommands",
+        "E-05-check-ok",
+        "E-06-main-lines",
+        "E-07-help-lists",
+        "E-08-readonly",
+        "E-09-static-scan"
+      ],
+      "findings": "pkg == install（无参/--help 逐字相同）；pkg check <dir> 是原生只读 4 项审计，运行前后哈希一致、不建 HOME/CT_HOME、空 PATH 下仍 rc=0；main.ct:121-122 直接路由到 install。"
+    },
+    {
+      "n": 2,
+      "focus": "index 仓 package.sh 与 A 的透传映射",
+      "evidence": [
+        "E-10-pkgsh-tracked",
+        "E-11-pinned-clone",
+        "E-12-execbit-path",
+        "E-13-staging",
+        "E-14-credentials",
+        "E-15-two-answers",
+        "E-16-A-recursion",
+        "E-17-noarg-script"
+      ],
+      "findings": "37fa8a3 的 clone 没有 tools/package.sh（未跟踪），README 仍写旧脚本；脚本 644、路径 tools/、默认 STAGING=~/vscspace/ct-pkg、publish 需 token/RESTie；A 映射使 package.sh:199 的 preflight 递归/参数错位，原生 rc=0 vs A rc=1。"
+    },
+    {
+      "n": 3,
+      "focus": "init 可行性、索引质量、UX 与 CT_HOME",
+      "evidence": [
+        "E-18-init-unimpl",
+        "E-19-installsh",
+        "E-20-index-quality",
+        "E-21-five-vs-six",
+        "E-22-cthome",
+        "E-26-bare-registry"
+      ],
+      "findings": "init 未实现；index 五字段/无签名/无 tag；五字段索引把 ct/std 解析到 https://ct/std 失败，六字段 publisher=ct 成功；install.sh 不拉 index 且建议 ct get ct/std；裸名 ct get std 经 CT_REGISTRY 可离线成功；CT_HOME 接受相对路径、空值回退 HOME/.ct。"
+    },
+    {
+      "n": 4,
+      "focus": "成本/预算、规约边界与既有判决",
+      "evidence": [
+        "E-22b-budget-probe",
+        "E-23-budget",
+        "E-24-agents",
+        "E-25-prior-verdict"
+      ],
+      "findings": "MAX_FUNCS=512（非 256），追加 100 个函数仍自举成功；零网络/子进程例外需扩写；index-install-1 已判 ct pkg 不执行带 credentials 的发布脚本，A 的 publish 透传与其冲突。"
+    }
+  ],
+  "method": "只读复核 + 独立黑盒探针：从 git archive a979ce0d 用 install.sh CT_SOURCE_DIR 离线自举 /tmp/verify-ip1/bin/ct（ct v0.65.1），用 /tmp/verify-ip1 下的 hal/alpha/std 夹具复现 ct pkg / ct pkg check / package.sh preflight；外部 ct-pkg/index 只读 clone 到 /tmp 核对 37fa8a3 的脚本树、index 字段、tag/签名与发布脚本权限；A 的透传用 /tmp/verify-ip1/ct-a 按 claim §1.2 的映射等价模拟（A 未实现，不称实测 A 代码）；函数预算用 budget-probe.sh 追加 100 个函数后完整自举。仓库只新增本文件。",
+  "anchors": [
+    {
+      "file": "selfhost/ct-ast/main.ct",
+      "line": 121,
+      "text": "if (argc > 1 && strcmp(argv[1], \"pkg\") == 0) return tool::pkg::ct_pkg_install(argc - 2, argv + 2, ...);",
+      "supports": "pkg 是 install 别名，无独立子命令表",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 1741,
+      "text": "S0: `ct pkg check <dir>` 共享 install 入口；argc>1 且 argv[0]==check 时走只读审计",
+      "supports": "check 只读 4 项且入口复用 install",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 1872,
+      "text": "printf(\"ok: 4 criteria\"); return 0;",
+      "supports": "check 的正常输出与退出码",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 1954,
+      "text": "CT_HOME 非空则直接使用，否则 $HOME/.ct；不拒绝相对路径",
+      "supports": "A 需新增 CT_HOME 校验",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 2214,
+      "text": "六字段行带 publisher，旧五字段行仍合法",
+      "supports": "五字段 index 的 publisher 缺失会导致 ct/std 解析失败",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 98,
+      "text": "本单元恰在 256 函数上限 / AST 编译器 256-function budget 已用满",
+      "supports": "claim E4 的成本前提；但该注释已过期",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/frontend/sym/Symbols.h.ct",
+      "line": 34,
+      "text": "Raised 256 -> 512 when ct-ast hit the 256 ceiling exactly (Phase 54 S0); #define MAX_FUNCS 512",
+      "supports": "实际函数上限是 512",
+      "checked": true
+    },
+    {
+      "file": "selfhost/l2/core.ct",
+      "line": 52,
+      "text": "#define MAX_MAP_IMPLS 512",
+      "supports": "映射实现上限也是 512，不是注释里的 256",
+      "checked": true
+    },
+    {
+      "file": "install.sh",
+      "line": 172,
+      "text": "say \"... ct get ct/std ...\"; Standard library ...: ct get ct/std",
+      "supports": "安装器不拉索引却建议 ct/std",
+      "checked": true
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 543,
+      "text": "零网络例外只覆盖包管理（ct get 的 git / 本地源）；编译核零子进程",
+      "supports": "A 的 init/透传需扩写规约",
+      "checked": true
+    },
+    {
+      "file": "/Users/samxx/dsh-ws/ct-pkg-index/tools/package.sh",
+      "line": 46,
+      "text": "STAGING=\"${STAGING:-$HOME/vscspace/ct-pkg}\"",
+      "supports": "消费者机无 STAGING",
+      "checked": true
+    },
+    {
+      "file": "/Users/samxx/dsh-ws/ct-pkg-index/tools/package.sh",
+      "line": 84,
+      "text": "CT_BIN 默认 `ct`，再 `ct-ast`",
+      "supports": "A 安装后 package.sh 的 preflight 会调回 A 的 ct",
+      "checked": true
+    },
+    {
+      "file": "/Users/samxx/dsh-ws/ct-pkg-index/tools/package.sh",
+      "line": 110,
+      "text": "publish 要求 GITHUB_TOKEN/GH_TOKEN；push_git 用 credential.helper 注入 token",
+      "supports": "凭据进 ct 的风险",
+      "checked": true
+    },
+    {
+      "file": "/Users/samxx/dsh-ws/ct-pkg-index/tools/package.sh",
+      "line": 199,
+      "text": "\"$CT_BIN_RESOLVED\" pkg check \"$dir\" || fail \"ct pkg check failed for $name\"",
+      "supports": "A 的透传与原生 check 消费点冲突",
+      "checked": true
+    },
+    {
+      "file": "/Users/samxx/dsh-ws/ct-pkg-index/.github/workflows/index.yml",
+      "line": 13,
+      "text": "cron: '0 18 * * *'; permissions: contents: write",
+      "supports": "index 夜间可变且 CI 有写权限",
+      "checked": true
+    }
+  ],
+  "findings": {
+    "cli_semantics": "main.ct:121-122 把 pkg 整体交给 ct_pkg_install；无参 ct pkg 与 ct install 的 stdout+stderr 逐字相同且 rc=1，--help 也逐字相同。ct pkg check <dir> 是原生只读 4 项审计（rc=0，哈希不变，不建 HOME，空 PATH 可跑）。不带目录的 check 落到 install 分支报 unexpected argument；init/publish 未实现。A 的无参行为会变成 package.sh usage（rc=2），并抢走已文档化的 check 前缀。",
+    "check_readonly": "check 块（Pkg.h.ct:1741-1874）只有 fopen(...,\"r\")/opendir/stat，没有 mkdir/unlink/rename/system/popen/execv；运行前后夹具树 SHA-256 相同，CT_HOME/HOME 不被创建，chmod a-w + PATH 清空仍 rc=0。",
+    "package_script": "tools/package.sh 只是 ct-pkg/index 工作树的未跟踪文件：37fa8a3 的 git 对象里没有它（cat-file rc=128），git log --all 0 条，本地 clone+checkout 37fa8a3 的 tools/ 下只有 publish-package.sh/release-package.sh，README 仍把旧脚本写成发布入口。脚本 mode 644（直接 exec rc=126），路径是 tools/package.sh（仓根无 package.sh，~/.ct/index/package.sh 不存在）。默认 STAGING=~/vscspace/ct-pkg（消费者机不存在），publish 需 token/RESTie，token 经 credential.helper 进 git。",
+    "passthrough": "package.sh:199 用 `ct pkg check \"$dir\"` 做 preflight。A 的映射把它变成 `package.sh check <abs>`，manifest_row 只认包名而失败：原生 CT_BIN=ct rc=0，CT_BIN=ct-a rc=1，直接 `ct-a pkg check <abs>` rc=1。不是无限递归（在 manifest_row 处终止），但语义已断。要保留原生 check 必须特判，A 就不再是透明透传。",
+    "init_feasibility": "ct pkg init 未实现。A 的 init-only 方向与 B 第 3 条/B′ 一致，但 claim 的默认 main、--pin 可选、原子 rename 只在文本里；index 无 signature/gpg、无 tag、commit 未签名，sha256 是包树摘要而非索引签名。当前 CT_HOME 接受相对路径、空值回退 $HOME/.ct，A 若要拒绝相对/空需新增代码。",
+    "index_quality": "官方 index 12 行全部 5 字段：name/version/git-url/tag/sha256，无 publisher、无签名；index 仓 git tag 0 个，37fa8a3 commit 无 gpgsig；CI 夜间 cron + contents: write。五字段索引下 ct get ct/std 解析为 https://ct/std 并失败；六字段 publisher=ct 的同一行可成功（rc=0，摘要校验通过）。",
+    "budget": "Pkg.h.ct:98/:1742 说“256 函数已满”，但实际 MAX_FUNCS=512（Symbols.h.ct:34-35 明说 Phase 54 从 256 提到 512），MAX_MAP_IMPLS=512（core.ct:52）。在 Pkg.h.ct 追加 100 个函数后完整自举 rc=0，生成 C 出现 100 条 unused-function 警告（证明被解析/发射）。因此“必须新拆单元”的 256 依据不成立；trait 方法/映射实现的实际用量未单独测。",
+    "prior_verdict": "index-install-1 已判 B 胜、A 的 install.sh 默认 clone index + ct pkg 执行发布脚本不成立，并明确“ct pkg 不执行带 credentials 的发布脚本；最多只读 ct pkg index check”（verdict:4,27）。A 的 publish/release 透传直接重开其 A4；A 默认 main、未提签名与 B′ 的固定 pin+签名冲突；A 的 check 透传超出只读边界并打断 package.sh:199。A 的 init-only 部分则与 B′ 方向一致。",
+    "side_observations": [
+      "两边输出不同不是矛盾：install 先读 ct.pkg 再读 ct.lock。空目录（无 ct.pkg）报 cannot open './ct.pkg'；有 ct.pkg 无 ct.lock 报 no './ct.lock'。本验证用空目录得到前者；/tmp 里有 ct.lock 无 ct.pkg，也报前者。",
+      "『本单元恰在 256 函数上限、不能加方法』在 HEAD 不成立：MAX_FUNCS=512、MAX_MAP_IMPLS=512；追加 100 个函数自举成功。设计上仍可选择新拆单元，但成本依据需要重新给出，不能引用这个已过期的 256 上限。",
+      "『沿用 Pkg.h.ct:1954-1975 并拒绝相对/空 CT_HOME』与现状不符：现状只判非空，相对路径直接用；A 需要新增校验。",
+      "脚本路径应为 tools/package.sh；question 写的 $CT_HOME/index/package.sh 与 claim 写的 $CT_HOME/index/tools/package.sh 都不是现状可交付的路径——37fa8a3 没有该文件。",
+      "『$CT_HOME/index/package.sh 连路径都不存在』成立；但更深一层是 tools/package.sh 本身也未提交，clone/checkout 37fa8a3 拿不到。counter 未指出这一点。",
+      "『A 源码改动…Pkg.h.ct:1741-1743 已因函数预算被塞入审计逻辑』：审计逻辑放在 install() 入口是事实，但『函数预算已满』的理由引用的 256 上限已过期（F-17）。",
+      "README:450 与 ct -h 确实没有 publish；但 ct -h 已列 ct pkg check <dir>（E-07），所以『发现性缺口』只针对 publish，不针对 check。"
+    ]
+  },
+  "unreproduced": [
+    {
+      "ref": "A 的 init 全部行为（pin/原子 rename/失败清理/幂等）",
+      "reason": "HEAD 未实现（ct pkg init -> unexpected argument）；只能用 git clone/本地索引探针证明 pin 与脚本缺失的现状，无法实测 A 的原子性/清理语义。"
+    },
+    {
+      "ref": "A 的透传成功路径（ct pkg check/publish 经 A 跑通）",
+      "reason": "A 未实现；用 /tmp/verify-ip1/ct-a 按 §1.2 等价模拟，只证明了冲突失败路径，不能把模拟输出当作 A 代码实测。"
+    },
+    {
+      "ref": "publish 的写路径与 token 泄漏面",
+      "reason": "无 token、不写远端；只验证缺 token 诊断、credential.helper 静态路径和 CI contents: write，未执行任何写操作。"
+    },
+    {
+      "ref": "trait 方法 / MAX_MAP_IMPLS 的实际余量",
+      "reason": "100 函数探针只覆盖 MAX_FUNCS；未向 PkgOps 增加方法，故方法/映射实现预算只证到“256 上限已过期”，未测实际剩余槽位。"
+    },
+    {
+      "ref": "外部 index 仓何时提交 tools/package.sh / 何时升六字段+签名",
+      "reason": "外部仓决定，未验证；本报告只记录 37fa8a3 工作树/提交状态。"
+    }
+  ],
+  "rounds_note": "rounds=1 指 battle 的 claim/counter/evidence 一轮；round_log 是本证据席的 4 个验证批次（语义/只读、package.sh 与透传、init/索引/UX、预算/规约/既有判决）。"
+}
