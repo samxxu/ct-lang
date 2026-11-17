@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| spec-version | `1.15.0` |
+| spec-version | `1.16.0` |
 | 状态 | 草稿（待用户评审，未落入任何项目） |
 | 适用范围 | `/Users/samxx/trae-ws` 下全部项目；新项目按第 12 节纳管 |
 | 主规范落点 | `.ai-engineering/methodology/ai-coding-workflow.md`（v1 建议落点，见第 11 节） |
@@ -102,7 +102,7 @@
 | --- | --- | --- | --- |
 | 每次提交 | 机器 | 跑 `g4-snippets`、`g4-anchors` | 门禁输出 |
 | 每次发版 | 机器 + REQ | 全量 G4；`applies-to` 对齐发布 tag；跑 `g4-version` 四项对账 | 发版检查表 |
-| 每次 phase 收口 | 机器 + 主编 | 跑 `g4-version`：落点互比，与 `PH-<n>`、CHANGELOG、本 phase 的 fix 数对账 | 收口对照表 |
+| 每次 phase 收口 | 机器 + 主编 | 跑 `g4-version`：落点互比，与 `v<M>-PH-<n>`、CHANGELOG、本 phase 的 fix 数对账 | 收口对照表 |
 | 每轮评审 | REV | 报告必须有「文档时效」节，列出 `stale_docs`、`unverified_claims`、`docs_without_gate` 三项计数与清单 | 评审报告 |
 | 每轮评审 | REV | 发现即立 `DOC-*` 条目，附检测方式与锚点 | `issues/DOC-*.md` |
 
@@ -173,7 +173,7 @@
 
 **为什么模板不改成 `0.1T` 之类的异号。** 改号不会破坏 `g0-block`（块由主规范生成，改号后块与主规范仍逐字一致），真正的代价是：①编号与实参不再同名，读者要多做一次映射；②`0.1/0.2/0.3` 被 11.5 L-2、G0、12 节以「同名小节」引用，改号要连带改这些引用；③模板的用途是照抄填空，同号能直接对位。因此只在判据侧区分，不改号。
 
-**块里放什么（1.9.0 起）。** 块内只放"每轮都要照做"的部分：§5.4 状态词、§6.4 G0–G9 判据、§6.6 T-1…T-7、§6.7 V-1…V-7、§8.3 提交纪律、§9.8 DB-1…DB-5、§9.10 CF-1…CF-5、§11.5 L-1…L-7，加一张章节索引。原理章、角色交底、历史与附录不进块。全文副本在 `docs/spec/ai-coding-workflow.md`，块头 sha 与它绑定。**块里没有不等于没规定**（11.5 L-2 的边界）。
+**块里放什么（1.9.0 起）。** 块内只放"每轮都要照做"的部分：§5.4 状态词、§6.4 G0–G9 判据、§6.6 T-1…T-7、§6.7 V-1…V-7、§6.7.1 PN-1…PN-11、§8.3 提交纪律、§9.8 DB-1…DB-5、§9.10 CF-1…CF-5、§11.5 L-1…L-7，加一张章节索引。原理章、角色交底、历史与附录不进块。全文副本在 `docs/spec/ai-coding-workflow.md`，块头 sha 与它绑定。**块里没有不等于没规定**（11.5 L-2 的边界）。
 
 **CT 包另有专用规范。** `methodology/ct-package-coding-general.md`（CG-1…CG-7）收编对任何 CT 包都成立的编码条款；它只适用于 CT 包，不进生成块的判据摘录，也不改变主规范对其他项目的要求。
 
@@ -185,8 +185,8 @@
 - 本项目只能加严；放宽必须写 `deviation:` 并由用户签字（日期 + 理由）。
 - 生成块由 `<规范来源>/bin/sync-agents.sh --write AGENTS.md` 维护，不得手改块内任何字符。
 
-<!-- spec:begin version=1.15.0 sha256=<主规范实算摘要> -->
-（此块由 sync-agents.sh 生成：块头 + 章节索引 + 必做判据摘录（5.4 / 6.4 / 6.6 / 6.7 / 8.3 / 9.8 / 9.10 / 11.5），**不是规范全文**。全文副本写到 `docs/spec/ai-coding-workflow.md`，其 sha256 必须等于块头。）
+<!-- spec:begin version=1.16.0 sha256=<主规范实算摘要> -->
+（此块由 sync-agents.sh 生成：块头 + 章节索引 + 必做判据摘录（5.4 / 6.4 / 6.6 / 6.7 / 6.7.1 / 8.3 / 9.8 / 9.10 / 11.5），**不是规范全文**。全文副本写到 `docs/spec/ai-coding-workflow.md`，其 sha256 必须等于块头。）
 <!-- spec:end -->
 
 ### 0.1 本项目实例化
@@ -206,7 +206,7 @@
 
 | 触发话术（用户或角色说） | 动作 | 产物 |
 | --- | --- | --- |
-| "开个新 phase" / "开始 PH-<n>" | 先出卡再开工：退出判据、任务清单、`version-minor` 写进卡片；命中 N-1，派发报三要素 | `docs/phases/PH-<n>/card.md`、`docs/session-map.md` |
+| "开个新 phase" / "开始 v<M>-PH-<n>" | 先出卡再开工：退出判据、任务清单、`version-minor` 写进卡片；命中 N-1，派发报三要素 | `docs/phases/v<M>-PH-<n>/card.md`、`docs/session-map.md` |
 | "现在你是 <角色>" / 切换角色 | 先落 handoff，再按新角色落笔 | `handoff/<id>.md` |
 | "打 tag" / "发版" | 收口 tag 由 6.7 V-7 自动创建并推送，不另请示；手动补打/重打 tag、分支 push 或对外发版，只出提案并请示 | tag 提案、发布清单 |
 | "放宽一下" / "跳过门禁" | 拒绝；改走 `deviation:` 或先改主规范（S7） | `deviation:` 条目 + 用户签字 |
@@ -274,7 +274,7 @@ EDITOR 是项目**总负责人**：排期、拆任务、判定 phase 能否收�
 | 项 | 内容 |
 | --- | --- |
 | 拥有 | 路线图、phase 卡片、收口对照表、发布清单、决策记录的判决段 |
-| 产物 | `docs/planning/roadmap.md`、`docs/phases/PH-<n>/card.md`、`reviews/closeout-<phase>.md`、`docs/session-map.md`、`CHANGELOG.md`、tag 提案 |
+| 产物 | `docs/planning/roadmap.md`、`docs/phases/v<M>-PH-<n>/card.md`、`reviews/closeout-<phase>.md`、`docs/session-map.md`、`CHANGELOG.md`、tag 提案 |
 | 绝不写 | 需求池与技术池的条目内容（`what`/`why`/`priority`）、规格正文、架构方案、源码、测试夹具与断言、测试用例；Issue 的 `verified` |
 | 完成判据 | 每个 phase 的退出判据在开工前写死且逐条可检查；收口时给出"交付物 × 退出判据"对照表；池子体检有留痕 |
 | 停机条件 | 需要判断"做什么"或"架构怎么演进"（退回 REQ/ARCH）；退出判据写不出来；池中条目冲突无法编排 |
@@ -517,7 +517,7 @@ claim 块之外的一切（措辞、排版、示例位置、链接修复）DEV �
 
 | 字段 | 判据 |
 | --- | --- |
-| 编号 | `PH-<n>`，与目录 `docs/phases/PH-<n>/` 一致 |
+| 编号 | `v<M>-PH-<n>`，与目录 `docs/phases/v<M>-PH-<n>/` 一致；旧号迁移见 6.7.1 PN-4、PN-8 |
 | 目标 | 一句话，可被第三人复述 |
 | 范围 | 明确"做什么 / 不做什么" |
 | 交付物清单 | 每项一个路径 |
@@ -525,8 +525,10 @@ claim 块之外的一切（措辞、排版、示例位置、链接修复）DEV �
 | 退出判据 | 每条带命令或可核对锚点 |
 | 依赖 | 前置 phase / issue / 外部条件 |
 | 规范版本 | 开卡时项目生成块头的 `version` 快照；只有 `>= 1.6.0` 的卡片受 6.7 约束（6.7 适用边界） |
-| version-minor | 收口时应达到的 MINOR，等于 `PH-<n>`；PATCH 由 fix 数决定，不写进卡片（6.7） |
+| version-minor | 收口时应达到的 MINOR，等于该 MAJOR 内的 `n`；PATCH 由 fix 数决定，不写进卡片（6.7、6.7.1 PN-2） |
 | 已知风险 | 每条带触发信号 |
+
+同一 phase 内有多个 stage 时，卡片必须用 `## S1` / `## S2` 分段，每段各自贴红证与验收输出；单 stage 不要求分段（6.7.1 PN-10）。
 
 **硬规则：退出判据必须在开工前写死。** 中途只能新增下一个 phase，不能修改当前 phase 的退出判据。判据：`card.md` 的 `exit-criteria` 字段在本 phase 首个实现提交后不可变，由 G8 `g8-phase-freeze` 检查 diff；确需变更时关闭当前 phase 并新开一个。反例：Phase 20 立项时写"收口 v0.20.0"，P0 四项却是后来才识别的，结果 phase 变成"做到哪算哪"。
 
@@ -596,14 +598,14 @@ claim 块之外的一切（措辞、排版、示例位置、链接修复）DEV �
 | 门禁 | 名称 | 命令（项目实现） | 通过判据 | 负责 | 失败处置 |
 | --- | --- | --- | --- | --- | --- |
 | G0 | 规约纳管 | `tools/check.sh g0` | `g0-block` 三项：①块头 `version`/`sha256` 等于主规范头部与实算值；②块体与 `sync-agents.sh --print` 逐字相同；③`docs/spec/ai-coding-workflow.md` 存在且 sha256 等于块头。另加块外三段齐全：实例化 8 行（含三类常驻对话名与 phase 对话命名规则）、话术路由、偏离登记位（`g0-landing`；只认 `spec:end` 之后与 `spec:begin` 之前，块内同名节忽略）；`docs/session-map.md` 存在；`版本落点` 非空（6.7） | REQ | 刷新生成块（11.5）或补块外缺段；未落库的后果见 11.5 L-3 |
-| G1 | 主张完整 | `tools/check.sh g1` | 每条要求有 ID；每条验收判据有命令与阈值；无 `TBD`；phase 卡片必填项齐全（含任务清单与 `version-minor`，`g1-version` 校验其等于 `PH-<n>`，有偏离按 `d` 换算）且退出判据可核对、含「任务清单每项可独立验收」（`g1-phase-card`） | REQ | 退回立项/设计环节，不得进入实现 |
+| G1 | 主张完整 | `tools/check.sh g1` | 每条要求有 ID；每条验收判据有命令与阈值；无 `TBD`；phase 卡片必填项齐全（含任务清单与 `version-minor`，`g1-version` 按 6.7.1 PN-8 的窗口解析编号，校验 `version-minor == n`、ID 合法且未被撤号复用）且退出判据可核对、含「任务清单每项可独立验收」（`g1-phase-card`） | REQ | 退回立项/设计环节，不得进入实现 |
 | G2 | 设计可验收 | `tools/check.sh g2` | 每个接口/协议承诺映射到 `ACC-*` 条目 | REQ | 补映射表 |
 | G3 | 构建与单测 | `tools/check.sh g3` | 构建零警告；单元测试全绿；退出码 0 | DEV | 修复后重跑，贴原始输出 |
-| G4 | 文档可执行与时效 | `tools/check.sh g4` | 文档中每个可执行代码块来自 `docs/snippets/`；渲染结果与文件一致；snippet 编译/运行通过；引用锚点存在；`applies-to` 与当前发布锚点一致；单份文档 ≤ 300 行（`g4-size`；`AGENTS.md` 先剔除生成块再计数，DOC-S8）；README 结构与模块类型匹配（`g4-readme`）；发版前与 phase 收口时版本字段核对通过（`g4-version`，6.7 V-6） | DEV | 生成 snippet、补锚点、更新 `applies-to` 或按 8.4 分拆；无法同步则删除伪造代码块 |
+| G4 | 文档可执行与时效 | `tools/check.sh g4` | 文档中每个可执行代码块来自 `docs/snippets/`；渲染结果与文件一致；snippet 编译/运行通过；引用锚点存在；`applies-to` 与当前发布锚点一致；单份文档 ≤ 300 行（`g4-size`；`AGENTS.md` 先剔除生成块再计数，DOC-S8）；README 结构与模块类型匹配（`g4-readme`）；发版前与 phase 收口时版本字段核对通过（`g4-version`，6.7 V-6、6.7.1 PN-1/PN-2/PN-8） | DEV | 生成 snippet、补锚点、更新 `applies-to` 或按 8.4 分拆；无法同步则删除伪造代码块 |
 | G5 | 测试自证 | `tools/check.sh g5` | 每条判据至少 1 个用例；每个门禁断言至少有 1 个负例曾变红，红证按 6.6 T-7 带 `baseline: <sha>` 与原始输出（用当前代码复跑不算） | VERIFY | 补负例或补红证；无负例的断言不计入覆盖 |
 | G6 | 台账闭合 | `tools/check.sh g6` | 每个 Issue 的 `status` 合法且证据非空；无"无结论关闭"；池条目状态合法且无超窗未处理（`g6-pool`）；phase 收口每个 issue 只有一个去向；`g4-version` 报出的版本不一致有一条对应 Issue（未立案即失败，6.7 V-6） | REV | 退回对应条目 |
 | G7 | 安全机械项 | `tools/check.sh g7` | 密钥扫描 0 命中；锁文件与依赖清单一致；sanitizer 全绿 | SEC | 命中即 P0，阻断 |
-| G8 | 提交粒度与范围 | `tools/check.sh g8` | 一提交一事；路径在角色权限内；claim 变更带 CR；门禁变更带负例；当前 phase 退出判据未被修改（`g8-phase-freeze`）；同一 `task-id` 的 `test(...) 红` 提交是实现提交的父提交（6.6 T-7）；小循环/热修的改动范围与记录合规；版本号每次只 +1、MINOR 与 phase 对应、PATCH 只记 fix、纯文档提交不动版本号（`g8-version`，6.7 V-1…V-5）；phase 收口 tag 名、annotated 属性与指向提交（`g8-version`，6.7 V-7） | DEV | 拆分提交、补红证或补 CR |
+| G8 | 提交粒度与范围 | `tools/check.sh g8` | 一提交一事；路径在角色权限内；claim 变更带 CR；门禁变更带负例；当前 phase 退出判据未被修改（`g8-phase-freeze`）；同一 `task-id` 的 `test(...) 红` 提交是实现提交的父提交（6.6 T-7）；小循环/热修的改动范围与记录合规；版本号每次只 +1、MINOR 与 phase 对应（`v<M>-PH-<n>` 的本地 `n`）、PATCH 只记 fix、纯文档提交不动版本号（`g8-version`，6.7 V-1…V-5、6.7.1 PN-9/PN-10）；新 MAJOR 首次收口必须有签字 decision（`g8-version`，6.7.1 PN-9）；phase 收口 tag 名、annotated 属性与指向提交（`g8-version`，6.7 V-7） | DEV | 拆分提交、补红证或补 CR |
 | G9 | 规范锚定 | `tools/check.sh g9` | `AGENTS.md` 的 `spec-sha256` 与主规范一致；`spec-version` 不落后 | REQ | 更新 pin（单独提交） |
 
 本章新增的检查全部挂在既有门禁下，不新增门禁编号：`g1-phase-card`、`g1-version`、`g4-version`、`g6-pool`、`g8-phase-freeze`、`g8-version`。
@@ -666,43 +668,43 @@ $ git log --oneline -2
 | 位 | 什么时候 +1 | 触发者 |
 | --- | --- | --- |
 | MAJOR | 对外破坏性变更，且项目**已发布**；未发布的项目不因签名变更升 MAJOR（6.5） | 用户裁定 |
-| MINOR | **每个 phase 交付时**：`PH-<n>` 收口，MINOR 置为 `n`，PATCH 归零（登记了版本偏离的，按偏离里的偏移换算，见下） | phase 收口 |
+| MINOR | **每个 phase 交付时**：`v<M>-PH-<n>` 收口，MINOR 置为该 MAJOR 内的本地 `n`，PATCH 归零（旧 MAJOR 登记了版本偏离的，按偏离里的偏移换算，见下；新 MAJOR 不用偏移） | phase 收口 |
 | PATCH | **每次 fix**：单点修复、热修、缺陷修复；一次 fix 恰好 +1 | 该修复的提交 |
 
 | # | 规则 | 判据（机械） |
 | --- | --- | --- |
-| V-1 | MINOR 与 phase 严格一一对应：`PH-<n>` 交付时 `MINOR == n`（有版本偏离的按登记的偏移换算），即相对上一 phase 恰好 +1；不许多跳（不得从 `n-2` 直接到 `n`），不许同一 phase 内第二次 +MINOR；PATCH 随 MINOR 归零 | 收口提交的版本 `MINOR == n` 且前一版为其减一；同一 phase 窗口内出现两次 MINOR +1 即失败（`g8-version`、`g1-version`） |
+| V-1 | MINOR 与 phase 严格一一对应：`v<M>-PH-<n>` 交付时 `MINOR == n`（`n` 是当前 MAJOR 内的本地序号，见 6.7.1 PN-2；新 MAJOR 不用偏移，旧 MAJOR 的历史偏离只按 6.7.1 PN-9 登记），即相对上一 phase 恰好 +1；不许多跳（不得从 `n-2` 直接到 `n`），不许同一 phase 内第二次 +MINOR；PATCH 随 MINOR 归零 | 收口提交的版本 `MINOR == n` 且前一版为其减一；同一 phase 窗口内出现两次 MINOR +1 即失败（`g8-version`、`g1-version`） |
 | V-2 | phase 内的新功能不得占用 PATCH：PATCH 只记 fix，不记功能 | phase 窗口内每次 PATCH +1 都能追到一个被立案的缺陷条目（`g8-version`） |
 | V-3 | PATCH 与 fix 严格一一对应：一次 fix 一处缺陷、只 +1 一次；同一缺陷 `reopened` 后的返工不重复 +1（它仍是那一次 fix） | 该提交正文引用恰好一个 `issues/<id>.md`，且本次处置为 `fixed`（5.4、`g8-version`） |
 | V-4 | 不算 fix、因此不许单独 +PATCH：纯文档 / 措辞 / 格式 / 链接修订、注释、测试夹具与断言自身的修正（3.9 `test-fix`）、门禁脚本重构、CI 配置调整。唯一例外：该改动本身就是一条被立案的缺陷（例如文档写错、用户照做失败），此时按那条 Issue 的 `fixed` 计一次 fix | 提交路径集合命中上述类别、且正文未引用处置为 `fixed` 的 Issue → 失败（`g8-version`） |
 | V-5 | 版本号随它所标记的那次 fix / phase 收口在**同一提交**内移动；版本号不是独立事项，不另开提交。同一提交内声明处的三个数字必须一致（落点见下） | 版本落点与行为改动或收口记录同提交；只改版本号、不改任何行为或收口的提交 → 失败（`g8-version`） |
 | V-6 | 代码里的版本字段必须与工程状态对得上，**任何不一致即缺陷**：立 `Issue` 并按一次 fix 处置（PATCH +1，V-3）；不得记为历史遗留、不得 `deferred` 放着、不得只改一处凑绿 | 按本节「版本字段核对的两处时机」执行；发现不一致而未立案 → G6 失败；核对工具与两项判据见 `g4-version` |
-| V-7 | **phase 收口时版本移动、建 tag、推 tag 在同一次收口动作内完成**，不需要每次另行请示用户：创建 annotated tag `v<MAJOR>.<MINOR>.<PATCH>`（带 `v`，例 `v0.33.0`），指向收口提交，message 含 `PH-<n>` 与收口提交 sha 前 7 位；四项校验通过后 `git push origin <tag>`。**只有 phase tag，fix 不打 tag**（理由见下）。**分支推送不受本条影响**，仍按 6.5 须用户显式指令 | 推前四项全过才推：①名符合 `v<MAJOR>.<MINOR>.<PATCH>`；②`git cat-file -t` = `tag`；③`git rev-parse <tag>^{commit}` 等于收口提交；④该提交可在远端追溯（`git branch -r --contains <sha>` 非空）。任一项不过 → 不推、打印原因、非零退出；缺 tag、名不带 `v` 或未推成功即 `g8-version` 失败 |
+| V-7 | **phase 收口时版本移动、建 tag、推 tag 在同一次收口动作内完成**，不需要每次另行请示用户：创建 annotated tag `v<MAJOR>.<MINOR>.<PATCH>`（带 `v`，例 `v0.33.0`），指向收口提交，message 含 `<phase-id>`（`v<M>-PH-<n>`，见 6.7.1 PN-1）与收口提交 sha 前 7 位；四项校验通过后 `git push origin <tag>`。**只有 phase tag，fix 不打 tag**（理由见下）。**分支推送不受本条影响**，仍按 6.5 须用户显式指令 | 推前四项全过才推：①名符合 `v<MAJOR>.<MINOR>.<PATCH>`；②`git cat-file -t` = `tag`；③`git rev-parse <tag>^{commit}` 等于收口提交；④该提交可在远端追溯（`git branch -r --contains <sha>` 非空）。任一项不过 → 不推、打印原因、非零退出；缺 tag、名不带 `v` 或未推成功即 `g8-version` 失败 |
 
 **版本落点必须声明。** 一个项目的版本号出现在哪些位置，由该项目在 `AGENTS.md` 实例化节写一行 `版本落点`（例：`composer.json#version`、`src/Version.php:const VERSION`、`README.md` 两处徽章）。未声明即 G0 失败；声明了却没改全，同一提交内所有落点的三个数字不一致即 `g8-version` 失败。
 
 **版本字段核对的两处时机。** `g4-version` 只在两个时点跑，不逐提交跑（逐提交有 `g8-version`）：发版的发布检查表、phase 收口的收口对照表。核对四项：①落点之间相等；②`MAJOR.MINOR` 与 `PH-<n>` 对应（含偏离换算）；③`PATCH` 与该 phase 内的 fix 条目数相等；④CHANGELOG 最新条目与 tag（有此 phase 的 tag 时）所指版本一致。任一项不等即在报告里贴出两边的原值与出处，并按 V-6 立案。
 
-**与 phase 卡片对齐。** phase 卡片增加必填字段 `version-minor`，写收口时应达到的 MINOR（例：`30`），判据等于 `PH-<n>`；PATCH 不写进卡片——它由该 phase 内的 fix 数决定，写死就会和 V-3 打架。该字段与退出判据、任务清单同受冻结（6.2、6.6 T-6）：中途抬高 MINOR 或提前占用 PATCH 都算修改退出判据，由 `g8-phase-freeze` 拦。
+**与 phase 卡片对齐。** phase 卡片增加必填字段 `version-minor`，写收口时应达到的 MINOR——它等于 `phase-id` 中该 MAJOR 内的本地 `n`（例：`v1-PH-0` 写 `0`，`v1-PH-1` 写 `1`），判据见 6.7.1 PN-2；PATCH 不写进卡片——它由该 phase 内的 fix 数决定，写死就会和 V-3 打架。该字段与退出判据、任务清单同受冻结（6.2、6.6 T-6）：中途抬高 MINOR 或提前占用 PATCH 都算修改退出判据，由 `g8-phase-freeze` 拦。
 
 **挂在哪道门禁**（不新增门禁编号）：
 
 | 检查 | 挂靠 | 守哪些条 |
 | --- | --- | --- |
-| `g1-version` | G1 `g1-phase-card` 的扩展 | V-1：卡片 `version-minor` 必填，且等于 `PH-<n>`（有偏离的按登记换算） |
-| `g8-version` | G8 的扩展 | V-1…V-5：提交级逐次检查 |
-| `g4-version` | G4 的扩展（沿用 `g4-fresh` 的时效语义） | V-6：发版前与 phase 收口各核对一次 |
+| `g1-version` | G1 `g1-phase-card` 的扩展 | V-1（卡片侧）、6.7.1 PN-1/PN-2/PN-3/PN-7/PN-8：卡片 `version-minor` 必填，等于 `phase-id` 的本地 `n`；编号按窗口解析且不得复用撤号 |
+| `g8-version` | G8 的扩展 | V-1…V-5、V-7，6.7.1 PN-9/PN-10：提交级逐次检查；新 MAJOR 首次收口查签字 decision；同一 phase 只 bump 一次 MINOR |
+| `g4-version` | G4 的扩展（沿用 `g4-fresh` 的时效语义） | V-6、6.7.1 PN-1/PN-2/PN-8：发版前与 phase 收口各核对一次，版本落点与 `v<M>-PH-<n>` 对应 |
 | G0 实例化项 | G0 | `版本落点` 一行非空 |
 
-**V-7 的生效边界。** 只对 1.8.0 之后新开的 `PH-<n>` 生效；`PH-27`…`PH-33` 等已收口或在途的 phase 不因本条补打 tag，是否回补由用户单独决定（选项与代价见交付报告）。
+**V-7 的生效边界。** 只对 1.8.0 之后新开的 phase 生效（这些 phase 按 6.7.1 PN-4 迁移后称 `v0-PH-<n>`）；`v0-PH-27`…`v0-PH-33` 等已收口或在途的 phase 不因本条补打 tag，是否回补由用户单独决定（选项与代价见交付报告）。
 
 **tag 只标 phase，不标 fix。** 每个 fix 都 +PATCH（V-3），若逐个打 tag 会让 tag 数量随缺陷数膨胀；而 `applies-to: <tag|sha>` 已允许用 sha 钉住任意提交（§0.3），fix 不需要独立 tag。fix 只进 CHANGELOG，并在下一次 phase tag 时被一并覆盖。判据：一个 phase 窗口内 tag 数 = 1（phase tag），fix 提交上不建 tag。
 
 **tag 自动推 ≠ 发布到远端。** 收口 tag 连同创建一起 `git push origin <tag>`，属收口的一部分，不再逐次请示；但**分支推送**与对外发布仍须用户显式指令（6.5），发布仍按 6.2 的判据（API 稳定、迁移说明、CHANGELOG 完整）。这条区分是本节与发布判据的边界，不是例外。
 
-**适用边界：只对下一个新开的 phase 生效。** 本节自 1.6.0 起约束：开卡时项目 pin 的 `spec-version >= 1.6.0` 的 `PH-<n>` 受本节全部条款；已在途 phase 不追溯——`version-minor` 字段可缺、号段按原样收口。首个受约束的 phase 就是 1.6.0 之后新开的那个。判据：生成块头记的 `version`（三个位按数值比较，不是字典序），`g1-version` 只检查 `>= 1.6.0` 的项目。
+**适用边界：只对下一个新开的 phase 生效。** 本节自 1.6.0 起约束：开卡时项目 pin 的 `spec-version >= 1.6.0` 的 phase 受本节全部条款；已在途 phase 不追溯——`version-minor` 字段可缺、号段按原样收口。首个受约束的 phase 就是 1.6.0 之后新开的那个。编号形态自 1.16.0 起按 6.7.1 判。判据：生成块头记的 `version`（三个位按数值比较，不是字典序），`g1-version` 只检查 `>= 1.6.0` 的项目。
 
-**存量落差：登记偏离，不重新编号（本版选定）。** 一个项目若在 1.6.0 之前已走到 `PH-<n>` 而 `MINOR != n`，保留现有号段，在 `AGENTS.md` 的 `偏离项` 里登记一条针对版本号的 `deviation:`：写明偏移 `d = n - MINOR`、生效日期、理由、收敛方式，并由用户签字。判据：G0 认 `偏离项` 这一行；`g1-version` 用登记里的 `d` 换算，`MINOR == n - d`；没有签字即按 V-1 失败。
+**存量落差：登记偏离，不重新编号（本版选定）。** 一个项目若在 1.6.0 之前已走到 `PH-<n>`（迁移后称 `v0-PH-<n>`）而 `MINOR != n`，保留现有号段，在 `AGENTS.md` 的 `偏离项` 里登记一条针对版本号的 `deviation:`：写明偏移 `d = n - MINOR`、生效日期、理由、收敛方式，并由用户签字。判据：G0 认 `偏离项` 这一行；`g1-version` 用登记里的 `d` 换算，`MINOR == n - d`；没有签字即按 V-1 失败。**新 MAJOR 不适用本段**：从 `v1-PH-0` 起一律 `MINOR == n`，不继承旧偏移（6.7.1 PN-2）。
 
 | 做法 | 代价 | 适用 |
 | --- | --- | --- |
@@ -738,6 +740,66 @@ $ git log --oneline -2
 | C-6 | `deviation:` 的收敛方式与 V-1「不许多跳」 | 取决于每个项目的历史号段、是否已发布、远端是否已有 tag，规范不能代选 | 该项目在 `deviation:` 里三选一并由用户签字；登记后从本清单移除 |
 
 **冲突的处置纪律。** 条款之间冲突时只有两种合法处置：**改掉**（把改后条款与位置写进表，状态 `已消解`），或**登记为未消解**（写理由与收敛条件，进「未消解清单」，状态 `未消解`）。不得以"照录备查""另行讨论""已知问题"代替处置；发现冲突而不登记，视为隐藏冲突，G6 按「无结论关闭」处理。未消解清单每次 phase 收口清点一次，条数写进收口记录。
+
+### 6.7.1 phase 编号：MAJOR 作用域、迁移与双认（PN-1…PN-11）
+
+> 本节只管 **phase ID 的语法、迁移与它和 MINOR 的对应**；版本三位的其余规则仍在 6.7。两处表述冲突时，编号形态以本节为准，版本位何时移动仍按 V-1…V-7。
+
+| # | 规则 | 判据（机械） |
+| --- | --- | --- |
+| PN-1 | phase ID 为 `v<M>-PH-<n>`：`<M>` 是十进制 MAJOR，`<n>` 是该 MAJOR 内的 phase 序号；两者都不带前导零，`n` 从 0 起。目录、卡片编号字段、tag message、文档引用一律同形（例：`v1-PH-0`、`docs/phases/v1-PH-0/card.md`） | ID 匹配 `^v(0\|[1-9][0-9]*)-PH-(0\|[1-9][0-9]*)$`；`v01-PH-0`、`v1-PH-00`、`v1-ph-0` 均失败。裸 `PH-<n>` 只在 PN-8 的 W0/W1 窗口内合法 |
+| PN-2 | `MINOR == n`（`n` 是本 MAJOR 内的序号），PATCH 只记 fix；`v<M>.0.0 ↔ v<M>-PH-0`。新 MAJOR 不使用 `version-minor-offset`；旧 MAJOR 的偏移只作历史（6.7 存量落差段） | 卡片 `version-minor` 等于 `n`；收口版本 `MAJOR == M` 且 `MINOR == n`；新 MAJOR 的卡片或 `AGENTS.md` 出现为它新登记的 `version-minor-offset` 即失败 |
+| PN-3 | 每个 MAJOR 的第一个 phase 必须是 `n=0`；同一 MAJOR 内 `n` 只增不减，可以留空号（PN-7），不得回填或复用 | 不存在 `v<M>-PH-0` 时出现 `v<M>-PH-<n>`（n>0）即失败；同一 `<M>` 下目录与卡片中的 `n` 集合无重复 |
+| PN-4 | 项目升级到本规范前已有的 `PH-1…PH-<k>` 一次性机械迁移为 `v0-PH-1…v0-PH-<k>`；迁移后裸 `PH-<n>` 不再作为常规 ID，只允许出现在账本、`battle/**` 原始证据、别名说明、历史 tag 与历史提交信息中 | 迁移完成后，除上述五类位置外扫描不到裸 `PH-<n>`；目录名、卡片编号、文档引用全部为 `v0-PH-<n>` |
+| PN-5 | 更名只改**文件、目录、文档引用**；不改已推 tag、不改历史提交信息、不改 `battle/**` 原始证据、不改代码/测试字符串。逐类边界见下表 | 迁移提交的路径集合只落在文档、目录与文档引用；迁移前后 `git tag` 列表逐字相同；迁移提交的 diff 不触及 `battle/**`、源码与测试 |
+| PN-6 | 迁移必须留下账本 `docs/planning/phase-id-ledger.md`：头部一行 `window: W0\|W1\|W2\|W3`，表体一行一条「旧 ID / 新 ID / 旧路径 / 新路径 / 版本 / 状态」，状态只允许 `migrated`、`revoked`、`planned`。迁移由**一个脚本**完成机械重命名 + 全局替换 + 集合断言；任一断言不过即整体失败并回滚，不得手工补洞 | 脚本退出码 0；账本行数等于迁移前实际存在的 ID 数；`git diff --name-status` 的路径集合与账本「旧路径→新路径」集合相等；下列五条断言的原始输出贴在迁移提交正文或收口记录里 |
+| PN-7 | 撤号允许留空号，禁止复用：撤销 `v<M>-PH-<n>` 后，该 `n` 在本 MAJOR 内永久空缺，后来者只能取更大的 `n` 或另开 MAJOR | 账本对应行状态为 `revoked` 且保留新 ID；新建卡片的 `n` 不出现在任何 `revoked` 行；`g1-version` 对复用号失败 |
+| PN-8 | 双认窗口由项目在账本头部 `window:` 声明；四种窗口的解析集合见下表。窗口只由项目自己推进，每次推进单独提交并附负例 | `g1-version`/`g4-version`/`g8-version` 按 `window:` 选择解析集合；W2/W3 下必须存在「裸 `PH-<n>` 报红」的负例且该负例通过；`window:` 不在四值内即失败 |
+| PN-9 | 新 MAJOR 首次收口（`v<M>-PH-0` 的收口提交）时，`g8-version` 必须找到一份 decision 记录 `docs/decisions/D-<n>.md`，含 `major: <M>`、`target: v<M>.0.0`、`signer:`、`date:` 四个字段，且该记录在收口提交或其祖先中 | 四个字段缺一、`major`/`target` 不匹配、记录不存在或未入库 → 失败；口头确认、卡片备注、提交正文均不算 |
+| PN-10 | 同一 phase 可以分多个 stage（`S1`/`S2`…），但只占一个 phase 号、只 bump 一次 MINOR；每个 stage 必须有独立红/绿提交与独立收口判据，卡片内用 `## S1`/`## S2` 分段并各自贴验收输出。回滚 S2 不撤销 S1；回滚 S1 不得把 S2 的版本位提前 | 卡片 stage 段数等于声明的 stage 数；每段有 `baseline: <sha>` 的红证与验收输出（纯文档 stage 按 6.6 T-7 写 `no-test:` 并由评审签字）；同一 phase 在版本日志中只出现一个 MINOR 值；`g8-phase-freeze` 拒绝 stage 改 phase 号 |
+| PN-11 | 本节不新增门禁编号，按下表挂靠既有检查；参照实现在本仓 `bin/gates/phase_version.py`（无第三方依赖），项目侧照抄到 `tools/` 并由 `tools/check.sh` 的 `g1`/`g4`/`g8` 调用，只允许改适配层，不得改判定逻辑 | 各项目 `tools/check.sh` 能对同一 fixture 给出与参照实现相同的退出码与失败条目；自行改写判定逻辑视为偏离，须走 `deviation:` 并由用户签字 |
+
+**PN-5 的更名边界（逐类）**
+
+| 对象 | 改不改 | 规则 |
+| --- | --- | --- |
+| 文档中的 `PH-43` | 改 | `v0-PH-43` |
+| 卡片/设计文件 `phase43.md`、`phase64-draft.md` | 改 | `v0-phase43.md`、`v0-phase64.md`（去掉 `-draft`） |
+| 含 phase 号的目录 | 改 | `v0-phase<NN>` |
+| tag `v0.43.0` | 不改 | 历史 tag 不可回改 |
+| 历史提交信息 | 不改 | 不改写历史 |
+| `battle/**` 原始证据 | 不改 | 旧 ID、命令、输出原样保留；账本注明其为历史证据 |
+| 代码/测试中的字符串 | 不改 | 不为文档重命名改变行为 |
+
+**PN-6 的集合断言（五条，缺一不可）**
+
+1. 旧 ID 集合 = 迁移前目录与卡片中实际存在的 ID 集合；新 ID 集合 = 每个旧 ID 加 `v0-` 前缀后的集合；两者按同一映射一一对应，不增不减、不新增空洞。
+2. 旧路径集合与新路径集合按同一映射一一对应；每个新路径存在，对应的旧路径不存在。
+3. `docs/planning/roadmap.md` 的 phase 行数迁移前后相等。
+4. `check-docs` 零 dead link，重命名后锚点不丢。
+5. 除账本、`battle/**`、别名说明、历史 tag 与历史提交信息外，扫描不到裸 `PH-<n>`。
+
+**PN-8 的四种窗口**
+
+| 窗口 | `g1`/`g4`/`g8` 接受的 ID 形态 | 何时 |
+| --- | --- | --- |
+| W0 | 只认裸 `PH-<n>` | 迁移前 |
+| W1 | 同时认裸 `PH-<n>` 与 `v0-PH-<n>`；两种目录形态都认 | 重命名落地前 |
+| W2 | 只认 `v<M>-PH-<n>`；裸 `PH-<n>` 必须红 | 迁移提交之后 |
+| W3 | 只认 `v<M>-PH-<n>`；裸 `PH-<n>` 必须红 | v1.0 开卡之后 |
+
+没有账本时：仓库内存在 `docs/phases/PH-*` 视为 W0，否则视为 W3。迁移开始必须先建账本并把 `window:` 从 W0 推到 W1；W1→W2 的推进提交必须附旧形态负例，W2→W3 同。窗口结束条件由项目在账本里自行裁定并记录，不由本规范代选。
+
+**PN-11 的挂靠**
+
+| 检查 | 挂靠 | 守哪些条 |
+| --- | --- | --- |
+| `g1-version` | G1 `g1-phase-card` | PN-1、PN-2、PN-3、PN-7、PN-8；V-1 的卡片侧 |
+| `g8-version` | G8 | PN-1、PN-2、PN-8、PN-9、PN-10；V-1…V-5、V-7 |
+| `g4-version` | G4 | PN-1、PN-2、PN-8；V-6 的版本落点核对 |
+| `g8-phase-freeze` | G8 | PN-10：stage 不换 phase 号、不改退出判据 |
+
+**适用边界。** PN-1…PN-11 自 1.16.0 起生效：只对 1.16.0 之后新开的 phase、本次历史号段迁移、以及从 W0 起的窗口推进生效。迁移前已收口的 phase 只按 PN-5 改名，版本、tag 与退出判据不回改；在途 phase 按其卡片开卡时的规范版本收口，卡名在迁移中按 PN-6 改，但不得借迁移修改其版本位或验收判据。
 
 ---
 
@@ -1064,12 +1126,12 @@ what-changed: 原 `invalidation` 假定「单写者」，D-021 证明并发写�
 
 | 类型 | 格式 | 示例 |
 | --- | --- | --- |
-| phase 对话 | `[项目] P<nn> · <目标一句话>` | `[ct] P03 · 统一校验入口` |
+| phase 对话 | `[项目] v<M>-PH-<n> · <目标一句话>` | `[ct] v1-PH-3 · 统一校验入口` |
 | 需求池 | `[项目] 需求池` | `[ct] 需求池` |
 | 技术池 | `[项目] 技术池` | `[ct] 技术池` |
 | 评审 | `[项目] 评审` | `[ct] 评审` |
 
-判据：对话标题必须命中上表四种格式之一（battle 庭另按 `[项目] 庭 · <battle id>` 命名）；`<nn>` 两位补零，与 `PH-<n>` 编号一致；标题不符合的对话不得承接任务。
+判据：对话标题必须命中上表四种格式之一（battle 庭另按 `[项目] 庭 · <battle id>` 命名）；标题里的 phase ID 必须与卡片 `phase-id` 逐字一致（6.7.1 PN-1）；标题不符合的对话不得承接任务。
 
 ### 9.4 新开对话的三条准入理由
 
@@ -1077,7 +1139,7 @@ what-changed: 原 `invalidation` 假定「单写者」，D-021 证明并发写�
 
 | # | 理由 | 判据 |
 | --- | --- | --- |
-| N-1 | 新 phase 立项 | 存在对应的 `PH-<n>/card.md`，且该 phase 尚无对话 |
+| N-1 | 新 phase 立项 | 存在对应的 `docs/phases/v<M>-PH-<n>/card.md`，且该 phase 尚无对话 |
 | N-2 | 需要独立评审，且现有评审对话已封存 | 评审对话状态为封闭，且本次评审对象未被其他评审对话承接 |
 | N-3 | 原对话上下文已不可用（超长、失败、被取消） | 原对话标记不可用，且已落 handoff 包 |
 
@@ -1180,7 +1242,7 @@ what-changed: 原 `invalidation` 假定「单写者」，D-021 证明并发写�
 | CF-1 | 观察方只能提交提案；不得在目标仓创建 issue、不得占用目标仓的 issue 编号、不得改写目标仓的待办状态或索引（`issues/`、`ISSUES.md`、需求池、技术池、路线图、`session-map.md`） | 提案只落在提出方自己的仓或交接物里；目标仓的 `git diff`、提交路径集合与 `status` 变更里没有本次提案的任何写入（同一判据见 9.8 DB-5） |
 | CF-2 | 提案必须写明六项：现象、最小复现命令与原始输出、期望行为、影响范围、实测版本、承诺对应 | 六项均非空；「最小复现」给命令、原始输出与退出码，确实无法复现的写"不可复现"及已试路径；「实测版本」写到 tag 或 commit sha，并附环境 |
 | CF-3 | 「承诺对应」必须指向目标仓既有规范/需求/提案里**已声明**的承诺并给出章节；找不到就明写「无对应承诺条目」 | 该栏要么是可解析的 `§<x.y>`（章节存在），要么逐字为 `无对应承诺条目`；不得留空，也不得把提出方自己的期望写成对方的承诺 |
-| CF-4 | 是否受理、是否落成 issue、用什么编号、排进哪个阶段，全部由被提案的项目组自己决定；提出方不得代做，也不得在提案里预设 | 提案正文不出现"应开 P1""编号用 `<ID>`""排进 `PH-<n>`""请在本轮修复"一类决定；目标仓的状态与索引变更只出现在该项目组自己的提交或决策记录里 |
+| CF-4 | 是否受理、是否落成 issue、用什么编号、排进哪个阶段，全部由被提案的项目组自己决定；提出方不得代做，也不得在提案里预设 | 提案正文不出现"应开 P1""编号用 `<ID>`""排进 `v<M>-PH-<n>`""请在本轮修复"一类决定；目标仓的状态与索引变更只出现在该项目组自己的提交或决策记录里 |
 | CF-5 | 提案正文不得出现具体第三方项目的个例细节；需要指代时用中性占位（`项目 A`、`仓 B`、`某模块`） | 全文扫描不到第三方的项目名、绝对路径与 issue 编号；除占位词外没有个例描述 |
 
 **和 DB-5 的关系。** DB-5 是边界条款：不许写别人的仓，发现的问题只登记在本项目。本节是它下游的流程条款：登记之后怎么把意见交出去、对方怎么处置。DB-5 要求的"写明目标项目、路径与 `file:line`"仍是提案的地址字段，本节的六项是在它之上的内容要求，不替换它。两条同时生效；判据冲突时以 DB-5 的路径与写入判据为准（更严），本节不放宽 DB-5 的任何一条。
@@ -1282,7 +1344,7 @@ what-changed: 原 `invalidation` 假定「单写者」，D-021 证明并发写�
 
 | # | 段 | 内容 | 判据 |
 | --- | --- | --- | --- |
-| ① | 生成块 | `<!-- spec:begin version=<v> sha256=<s> -->` 到 `<!-- spec:end -->`：块头说明 + 章节索引 + 必做判据摘录（§5.4、§6.4、§6.6、§6.7、§8.3、§9.8、§9.10、§11.5 L-1…L-7）。**不再放全文** | 见 G0 的 `g0-block`，本节不重述 |
+| ① | 生成块 | `<!-- spec:begin version=<v> sha256=<s> -->` 到 `<!-- spec:end -->`：块头说明 + 章节索引 + 必做判据摘录（§5.4、§6.4、§6.6、§6.7、§6.7.1、§8.3、§9.8、§9.10、§11.5 L-1…L-7）。**不再放全文** | 见 G0 的 `g0-block`，本节不重述 |
 | ② | 全文副本 | `docs/spec/ai-coding-workflow.md`，与主规范逐字相同，不带块标记 | sha256 等于块头 `sha256`（`g0-block` 第③项） |
 | ③ | 实例化节 | 1.1 骨架的 0.1 表，8 行非空（含 `版本落点`） | 见 G0 的 `g0-landing` |
 | ④ | 话术路由 | 1.1 骨架的 0.2 表，每行三段：触发话术 / 动作 / 产物 | 见 G0 的 `g0-landing` |
@@ -1362,7 +1424,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 15 | 偏离项登记 | REQ | 无偏离写"无"；有偏离逐条带 `deviation:` 与用户签字 | [ ] |
 | 16 | phase 卡片带任务清单且可独立验收 | REQ | `tasks` 每项交付物 / 验收命令 / 回滚路径齐全；一条任务不同时覆盖 ≥2 条退出判据（6.6 T-1…T-5） | [ ] |
 | 17 | 红证先于实现 | REQ | 同一 `task-id` 的 `test(...) 红` 提交是实现提交的父提交；红证含 `baseline: <sha>` 与原始输出；`no-test:` 任务有理由与评审签字（6.6 T-7） | [ ] |
-| 18 | 版本号落点已声明，phase 卡片带 `version-minor`，收口已打本地 tag，存量落差有偏离登记 | REQ | `AGENTS.md` 的 `版本落点` 非空；`PH-<n>` 卡片 `version-minor` 等于 `n`（有偏离按 `d` 换算）；收口 tag 为 `v<版本>`、annotated、指向收口提交，且已推送到 origin（`git ls-remote --tags origin` 可查，6.7 V-7）；已有落差的项目在 `偏离项` 里有一条带日期的版本 `deviation:`（6.7、`g1-version`、`g8-version`） | [ ] |
+| 18 | 版本号落点已声明，phase 卡片带 `version-minor`，收口已打本地 tag，存量落差有偏离登记 | REQ | `AGENTS.md` 的 `版本落点` 非空；`v<M>-PH-<n>` 卡片 `version-minor` 等于本地 `n`（仅旧 MAJOR 可按 `d` 换算）；收口 tag 为 `v<版本>`、annotated、指向收口提交，且已推送到 origin（`git ls-remote --tags origin` 可查，6.7 V-7）；已有落差的项目在 `偏离项` 里有一条带日期的版本 `deviation:`（6.7、6.7.1 PN-2、`g1-version`、`g8-version`） | [ ] |
 | 19 | 生成块与全文副本可复现、清单已勾 | REQ | `bash <规范来源>/bin/sync-agents.sh --check AGENTS.md` 退出码 0（块逐字 + 副本 sha 都对）；11.5 清单该行状态为 `active` | [ ] |
 
 ---
@@ -1389,10 +1451,12 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 任务（task） | 最小可验收单位：一个交付物 + 一条验收命令 + 一次提交 + 可单独回滚；一个 phase 由若干任务组成（6.6） |
 | 红证（red proof） | 由任务基线提交的产物产生的失败输出，含 `baseline: <sha>`、命令、原始输出与退出码；必须在实现前采集，用当前代码复跑的不算（6.6 T-7） |
 | 小循环 / 热修 | 无独立交付边界的两种轻量通道（6.3） |
-| 产品版本 | 项目对外的 `MAJOR.MINOR.PATCH`：MINOR 与 phase 一一对应、PATCH 与 fix 一一对应，与主规范自己的 `spec-version` 是两套数（6.7、11.4） |
+| phase ID | phase 的稳定标识 `v<M>-PH-<n>`：`M` 是 MAJOR，`n` 是该 MAJOR 内的序号，从 0 起；目录、卡片、tag message 与文档引用同形（6.7.1 PN-1） |
+| 双认窗口 | 项目在账本头部声明的 phase ID 解析集合 W0–W3；窗口内允许旧形态，窗口结束后旧形态必须红（6.7.1 PN-8） |
+| 产品版本 | 项目对外的 `MAJOR.MINOR.PATCH`：MINOR 与 phase 的本地 `n` 一一对应、PATCH 与 fix 一一对应，与主规范自己的 `spec-version` 是两套数（6.7、6.7.1、11.4） |
 | fix | 版本意义上的修复单位：一处被立案的缺陷的一次处置，PATCH +1 一次；纯文档、注释、测试自身的修正不算（6.7 V-3、V-4） |
-| 版本偏离（version deviation） | 存量号段与 phase 对不上时登记的 `deviation:`，写明偏移、日期、理由与收敛方式，由用户签字；不是"历史遗留"的免除理由（6.7） |
-| 版本字段核对 | 发版前与 phase 收口各一次的四项对账：落点互比、与 `PH-<n>`、与 CHANGELOG、与本 phase 的 fix 数（6.7 V-6、`g4-version`） |
+| 版本偏离（version deviation） | 存量号段与 phase 对不上时登记的 `deviation:`，写明偏移、日期、理由与收敛方式，由用户签字；只对旧 MAJOR 作历史，新 MAJOR 不继承（6.7、6.7.1 PN-9） |
+| 版本字段核对 | 发版前与 phase 收口各一次的四项对账：落点互比、与 `v<M>-PH-<n>`、与 CHANGELOG、与本 phase 的 fix 数（6.7 V-6、`g4-version`） |
 | 落库（landing） | 把主规范经 `sync-agents.sh` 落到纳管项目两处：`AGENTS.md` 的 `spec:begin…spec:end` 块（章节索引 + 必做判据摘录）与 `docs/spec/ai-coding-workflow.md` 全文副本；块头 version/sha 等于主规范头部与实算值，块体与 `--print` 逐字可复现，副本 sha 等于块头；块外三段齐全。未落库即未纳管（11.5、`g0-block`） |
 | 全文副本 | 主规范全文在项目内的只读副本 `docs/spec/ai-coding-workflow.md`，不带块标记；块内只有判据摘录，细节查它（11.5 L-2 ②） |
 | phase tag | phase 收口时创建并推送的 annotated tag，名 `v<MAJOR>.<MINOR>.<PATCH>`，指向收口提交；随收口自动，不需另请示（含推到 origin）；分支推送与远端发布仍须用户指令。fix 不打 tag（6.7 V-7） |
