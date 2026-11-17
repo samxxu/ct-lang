@@ -1,0 +1,27 @@
+/* PH-66/TEST-20: a CT state machine on an emulated Cortex-M3. The point is not
+   the program: `boot ok` proves the reset path and UART, `tick=3` proves the
+   SysTick vector and an ISR written in C running next to CT-generated code,
+   and the clean exit code proves the freestanding product needed no libc. */
+#include "board.h"
+
+struct Counter {
+    int on;
+    int seen;
+};
+
+int main(void)
+{
+    struct Counter c;
+    c.on = 0;
+    c.seen = 0;
+    uart_puts("boot ok\n");
+    systick_start(2000);
+    c.on = 1;
+    while (c.seen < 3) {
+        if (c.on != 0) {
+            c.seen = (int)tick_count();
+        }
+    }
+    uart_puts("tick=3\n");
+    return 0;
+}

@@ -108,6 +108,11 @@
 
 ## 3. 硬件 pilot（验证项目，不占 phase）
 
+> **QEMU 冒烟（2026-11-17，[TEST-20](../../issues/testing/test20-baremetal-qemu-smoke.md)）**：
+> `test/baremetal-qemu/` 已能在 QEMU 的 `lm3s6965evb`（Cortex-M3）上启动 `--freestanding` 产物，
+> 覆盖向量表、`.data/.bss`、UART、SysTick ISR 与 `SYS_EXIT_EXTENDED`；这是 **pre-pilot 证据**，
+> 不替代下面的 pilot：三块目标板（STM32F4 / nRF52 / RP2040）都没有 QEMU 模型，DMA 也没有模型。
+
 ### REQ-HW-020 — 参考工程
 
 | 项 | 值 |
