@@ -1,0 +1,404 @@
+{
+  "battle": "cinclude-2",
+  "head": "729369fa",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2 (build 26B123)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "binary": "/tmp/ci2v/bin/ct（HEAD 自举，ct v0.63.2，sha256 fecc777fe319c99213d91f220def4044398c718d516bd32171bf4c08ce17ede3）",
+    "source_baseline": "HEAD 729369fa981024e41f76a9fad2e9cc03008ea8ea；工作树无 tracked 改动（git status 仅 ?? battle/cinclude-2/ 与既有 ?? docs/reviews/2026-11-17-pkg-index-audit.md），自举即 HEAD 源码",
+    "date": "2026-11-17T19:27+08:00 (Asia/Shanghai)",
+    "note": "只读仓库；构建与全部夹具落在 /tmp/ci2v；外部包统计只读 ~/.ct/pkg（DB-2 白名单）。"
+  },
+  "rounds": 1,
+  "method": "独立复算 + 行为探针：HEAD 源码四段自举出 ct v0.63.2；用该二进制在 /tmp/ci2v 下重建双方夹具（libc 直连、socketpair、map_unit、map_unit_varargs、posix-socket、mock-hal、sh71、map_unit_cross、map_unit_shim），并补做 .m.ct 声明矩阵、.h.ct/#shim/#include 部署、c-boundary 读取、7 类绕过、spelling 变体、宏通道与外部包统计。所有输出为原命令原始输出；夹具构造命令保留（长 heredoc 不省略）。不实现 A/B 任一方案，因此『strict 实现后』的预测只记录 HEAD 可观测事实并标注未实现。",
+  "evidence": [
+    {
+      "id": "V0",
+      "side": "verify",
+      "ref": "environment / 基线复现",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o /tmp/ci2v/bin/ctc\n/tmp/ci2v/bin/ctc selfhost/l1/ctc.ct -o /tmp/ci2v/l1.c\ngcc -Wall -Wextra -std=c99 /tmp/ci2v/l1.c -o /tmp/ci2v/bin/l1\n/tmp/ci2v/bin/l1 build selfhost/l2/driver.ct -o /tmp/ci2v/l2src\ngcc -Wall -Wextra -std=c99 /tmp/ci2v/l2src/*.c -o /tmp/ci2v/bin/l2\n/tmp/ci2v/bin/l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ci2v/astsrc\ngcc -Wall -Wextra -std=c99 /tmp/ci2v/astsrc/*.c -o /tmp/ci2v/bin/ct\n/tmp/ci2v/bin/ct --version\nshasum -a 256 /tmp/ci2v/bin/ct\ngit rev-parse HEAD",
+      "exit": 0,
+      "output": "ctc_ok\ncc /tmp/ci2v/l2src/core.c /tmp/ci2v/l2src/driver.c -o a.out\nl2_ok\nct_ok\nct v0.63.2\nfecc777fe319c99213d91f220def4044398c718d516bd32171bf4c08ce17ede3  /tmp/ci2v/bin/ct\n729369fa981024e41f76a9fad2e9cc03008ea8ea",
+      "reproduced": true,
+      "note": "全部构建步骤 rc=0；ct-ast 由 HEAD 自举，--version = ct v0.63.2。工作树无 tracked 改动（git status 仅 ?? battle/cinclude-2/ 与既有 ?? docs/reviews/2026-11-17-pkg-index-audit.md），因此构建即 HEAD 源码。后续证据全部用该二进制。"
+    },
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "claim.md#E1-1 / counter.md#E1-1 / question.md#1",
+      "command": "rm -rf /tmp/ci2v/e1 && mkdir -p /tmp/ci2v/e1/libc /tmp/ci2v/e1/out && cd /tmp/ci2v/e1\ncat > libc/libc.m.ct <<'EOF'\n#include <stdio.h>\n#include <stdlib.h>\n#define CT_TAG \"direct\"\nnamespace libc;\npub trait Env { char *get(char *n); int say(char *s); int fmt(char *f, int n); }\nmap trait Env for namespace libc { get(n) -> getenv(n); say(s) -> puts(s); fmt(f, n) -> printf(f, n); }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport libc::libc;\nint main(void)\n{\n    char *home = libc::Env.get(\"HOME\");\n    libc::Env.say(\"direct-map-no-shim\");\n    libc::Env.fmt(\"n=%d\\n\", 7);\n    printf(\"home=%s tag=%s\\n\", home ? \"yes\" : \"no\", CT_TAG);\n    return 0;\n}\nEOF\n/tmp/ci2v/bin/ct build --emit-c main.ct -o out; echo \"ct_rc=$?\"\ngrep -n '#include' out/main.c\ngrep -n 'getenv\\|puts\\|printf' out/main.c\ncc -Wall -Wextra -std=c99 -I out out/main.c -o out/main && ./out/main; echo \"run_rc=$?\"\nls out\ngrep -n 'shim\\.h' out/main.c; echo \"shim_include_grep_rc=$?\"\ngrep -n 'Env\\|vtable\\|vtbl\\|iface' out/main.c || echo '(no static-trait symbols in consumer .c)'\n/tmp/ci2v/bin/ct build main.ct -o out/prog 2>&1 | head -2",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/main.c -o a.out\nct_rc=0\n3:#include <stdio.h>\n4:#include <stdlib.h>\n9:#include <stdio.h>\n12:    char * home = getenv((\"HOME\"));\n13:    puts((\"direct-map-no-shim\"));\n14:    printf((\"n=%d\\n\"), (7));\n15:    printf(\"home=%s tag=%s\\n\", (home ? \"yes\" : \"no\"), CT_TAG);\ndirect-map-no-shim\nn=7\nhome=yes tag=direct\nrun_rc=0\nmain\nmain.c\nshim_include_grep_rc=1\n(no static-trait symbols in consumer .c)\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/main.c' '-o' 'out/prog'",
+      "reproduced": true,
+      "note": ".m.ct prologue 直连 <stdio.h>/<stdlib.h> 并 map getenv/puts/printf：ct build --emit-c rc=0，消费者 .c 顶部带这些 include，无 *.shim.h 参与（grep shim.h rc=1），ct 的 cc 行只有 main.c；运行输出与 claim/counter 的 E1-1 同类。注意 #define CT_TAG 也整行进消费者 .c（本文件是 V18/V19 同一通道的温和形态）。"
+    },
+    {
+      "id": "V2",
+      "side": "both",
+      "ref": "question.md#1（socketpair 指名）/ counter.md#E1-1 末句",
+      "command": "cd /tmp/ci2v/e1 && rm -rf posix out2 && mkdir -p posix out2\ncat > posix/sock.m.ct <<'EOF'\n#include <sys/socket.h>\n#include <unistd.h>\nnamespace posix;\npub trait Sock { int pair(int *sv); int send(int fd, char *b, int n); int recv(int fd, char *b, int n); }\nmap trait Sock for namespace posix { pair(sv) -> socketpair(AF_UNIX, SOCK_STREAM, 0, sv); send(fd, b, n) -> write(fd, b, n); recv(fd, b, n) -> read(fd, b, n); }\nEOF\ncat > smain.ct <<'EOF'\n#include <stdio.h>\nimport posix::sock;\nint main(void)\n{\n    int sv[2]; char buf[8]; int n;\n    if (posix::Sock.pair(sv) == -1) { printf(\"pair failed\\n\"); return 1; }\n    posix::Sock.send(sv[0], \"hello\", 5);\n    n = posix::Sock.recv(sv[1], buf, 5);\n    buf[n] = 0;\n    printf(\"%s %d\\n\", buf, n);\n    return 0;\n}\nEOF\n/tmp/ci2v/bin/ct build --emit-c smain.ct -o out2; echo \"ct_rc=$?\"\ngrep -n '#include' out2/smain.c\ngrep -n 'socketpair\\|write(\\|read(' out2/smain.c\ncc -Wall -Wextra -std=c99 out2/smain.c -o out2/smain && ./out2/smain; echo \"run_rc=$?\"\n# errno 作为 recipe 的对照\nmkdir -p err && cat > err/err.m.ct <<'EOF'\n#include <errno.h>\nnamespace err;\npub trait E { int err(); }\nmap trait E for namespace err { err() -> errno; }\nEOF\ncat > emain.ct <<'EOF'\n#include <stdio.h>\nimport err::err;\nint main(void) { printf(\"%d\\n\", err::E.err()); return 0; }\nEOF\nmkdir -p out3; /tmp/ci2v/bin/ct build --emit-c emain.ct -o out3 2>&1; echo \"errno_rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out2 out2/smain.c -o a.out\nct_rc=0\n3:#include <sys/socket.h>\n4:#include <unistd.h>\n8:#include <stdio.h>\n14:    if (socketpair(AF_UNIX, SOCK_STREAM, 0, (sv)) == (-1)) {\n18:    write((sv[0]), (\"hello\"), (5));\n19:    n = read((sv[1]), (buf), (5));\nhello 5\nrun_rc=0\n./err/err.m.ct:4:47: error: a map recipe must be a single call\nerrno_rc=1",
+      "reproduced": true,
+      "note": "socketpair/write/read 直连系统头 rc=0、运行 hello 5；生成的 .c 带 <sys/socket.h>/<unistd.h>，仍是零 shim。对照：errno 是全局量，map 到裸 errno 报 `a map recipe must be a single call`，因此『任意 C 面』不含全局量——这类形状必须进 shim（B 的 posix-socket 用 ct_sock_errno() 正是这个原因，V8）。"
+    },
+    {
+      "id": "V3",
+      "side": "both",
+      "ref": "claim.md#E1-1/E1-2 / counter.md#E1-4",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nmkdir -p /tmp/ci2v/e1o1 /tmp/ci2v/e1o9\n/tmp/ci2v/bin/ct build --emit-c test/modules/map_unit/main.ct -o /tmp/ci2v/e1o1; echo \"map_unit_rc=$?\"\ngrep -n '#include' /tmp/ci2v/e1o1/main.c\ngrep -n 'getenv\\|atoi' /tmp/ci2v/e1o1/main.c\ncc -Wall -Wextra -std=c99 -I /tmp/ci2v/e1o1 /tmp/ci2v/e1o1/main.c -o /tmp/ci2v/e1o1/demo && /tmp/ci2v/e1o1/demo\n/tmp/ci2v/bin/ct build --emit-c test/modules/map_unit_varargs/main.ct -o /tmp/ci2v/e1o9; echo \"varargs_rc=$?\"\ngrep -n '#include' /tmp/ci2v/e1o9/main.c\ngrep -n 'printf\\|snprintf\\|puts' /tmp/ci2v/e1o9/main.c | head -8\ncc -Wall -Wextra -std=c99 -I /tmp/ci2v/e1o9 /tmp/ci2v/e1o9/main.c -o /tmp/ci2v/e1o9/demo && /tmp/ci2v/e1o9/demo",
+      "exit": 0,
+      "output": "cc -std=c99 -I /tmp/ci2v/e1o1 /tmp/ci2v/e1o1/main.c -o a.out\nmap_unit_rc=0\n3:#include <stdio.h>\n4:#include <stdlib.h>\n5:#include <string.h>\n9:#include <stdio.h>\n10:#include <string.h>\n20:    int n = atoi((a));\n26:    char * home = getenv((\"HOME\"));\n42 2 0 1 zzz env-ok\ncc -std=c99 -I /tmp/ci2v/e1o9 /tmp/ci2v/e1o9/main.c -o a.out\nvarargs_rc=0\n3:#include <stdio.h>\n7:#include <stdio.h>\n16:    printf((\"type %d %d\\n\"), (4), (5));\n17:    puts((\"ns-puts\"));\n18:    printf((\"ns-zero\\n\"));\n19:    printf((\"ns-one %d\\n\"), (1));\n20:    printf((\"ns-three %d %d %d\\n\"), (1), (2), (3));\n21:    printf((\"ns-six %d %d %d %d %d %d\\n\"), (1), (2), (3), (4), (5), (6));\n22:    snprintf((buf), (sizeof(buf)), (\"%d/%d\"), (7), (9));\n23:    snprintf((plain), (sizeof(plain)), (\"one\"));\ntype 4 5\nns-puts\nns-zero\nns-one 1\nns-three 1 2 3\nns-six 1 2 3 4 5 6\n7/9 one",
+      "reproduced": true,
+      "note": "仓内现成夹具逐字复现 claim E1-1（libc.m.ct 直连 stdio/stdlib/string、map atoi/getenv/memset/sscanf）与 E1-2（io.m.ct 直连 stdio、printf/snprintf 变参直绑）。map_unit 生成物 include 在第 3-5 与 9-10 行（claim 只引 3-4 行），varargs 的 6p/18p 锚点精确（io.m.ct:6 是 include、:18 是 printf recipe）。"
+    },
+    {
+      "id": "V4",
+      "side": "both",
+      "ref": "claim.md#E2 / counter.md#E2 / question.md#2",
+      "command": "cd /tmp/ci2v && rm -rf e2 && mkdir -p e2/s e2/out && cd e2\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport s::s;\nint main(void) { printf(\"ok\\n\"); return 0; }\nEOF\nrun() { echo \"--- $1 ---\"; /tmp/ci2v/bin/ct build --emit-c main.ct -o out 2>&1; echo \"rc=$?\"; }\ncat > s/s.m.ct <<'EOF'\nnamespace s;\npub struct S { int n; }\nEOF\nrun \"a) struct\"\ncat > s/s.m.ct <<'EOF'\nnamespace s;\nint counter;\nEOF\nrun \"b) global\"\ncat > s/s.m.ct <<'EOF'\nnamespace s;\nimpl S { int get() { return 1; } }\nEOF\nrun \"c) impl\"\ncat > s/s.m.ct <<'EOF'\n#include <string.h>\nnamespace s;\nint ct_strlen(char *p) { return (int)strlen(p); }\nEOF\nrun \"d) function def\"\ncat > s/s.m.ct <<'EOF'\nnamespace s;\npub type FD = int;\nEOF\nrun \"e) pub type alias\"\ngrep -n 'typedef' out/main.c || echo '(no typedef)'\n/tmp/ci2v/bin/ct build /tmp/ci2v/e1/libc/libc.m.ct -o out 2>&1; echo \"build_mct_rc=$?\"\n/tmp/ci2v/bin/ct /tmp/ci2v/e1/libc/libc.m.ct -o out/lc.c 2>&1; echo \"compile_mct_rc=$?\"\ncat > s/s.m.ct <<'EOF'\nnamespace s;\nextern int ct_hidden(void);\npub trait X { int v(); }\nmap trait X for namespace s { v() -> ct_hidden(); }\nEOF\nrun \"f) extern in .m.ct\"\ncat > s/s.m.ct <<'EOF'\n#include <stdlib.h>\nnamespace s;\n_Static_assert(sizeof(int) == 4, \"int\");\npub trait X { int v(); }\nmap trait X for namespace s { v() -> atoi(\"1\"); }\nEOF\nrun \"g) _Static_assert in .m.ct\"\nrm -rf out && mkdir -p out && cat > s/s.m.ct <<'EOF'\nnamespace s;\ntype Hidden = int;\npub trait T { int v(); }\nmap trait T for namespace s { v() -> atoi(\"1\"); }\nEOF\n/tmp/ci2v/bin/ct build --emit-c main.ct -o out 2>&1; echo \"nonpub_alias_rc=$?\"\n",
+      "exit": 0,
+      "output": "--- a) struct ---\n./s/s.m.ct:2:5: error: a .m.ct unit cannot declare a type\nctc: 1 error(s) generated\nrc=1\n--- b) global ---\n./s/s.m.ct:2:1: error: a .m.ct unit cannot declare a global variable\nctc: 1 error(s) generated\nrc=1\n--- c) impl ---\n./s/s.m.ct:2:1: error: a .m.ct unit cannot contain an impl\nctc: 1 error(s) generated\nrc=1\n--- d) function def ---\n./s/s.m.ct:3:1: error: a .m.ct unit cannot define a function\nctc: 1 error(s) generated\nrc=1\n--- e) pub type alias ---\ncc -std=c99 -I out out/main.c -o a.out\nrc=0\n(no typedef)\nctc: a .m.ct unit produces no output; import it from a .ct unit\nbuild_mct_rc=1\nctc: a .m.ct unit produces no output; import it from a .ct unit\ncompile_mct_rc=1\n--- f) extern in .m.ct ---\n./s/s.m.ct:2:1: error: a .m.ct unit cannot declare a global variable\nctc: 1 error(s) generated\nrc=1\n--- g) _Static_assert in .m.ct ---\ncc -std=c99 -I out out/main.c -o a.out\nrc=0\n./s/s.m.ct:2:1: error: a type alias in a .m.ct unit must be 'pub'\nctc: 1 error(s) generated\nnonpub_alias_rc=1",
+      "reproduced": true,
+      "note": ".m.ct 能声明：namespace/import、#include/#define、pub trait（静态，无 vtable，V1 生成物中 grep Env/vtable/iface 全空）、pub type（只别名，不发射 typedef）、map、_Static_assert（build rc=0，见 case g）。不能：struct/enum/union（cannot declare a type）、全局（cannot declare a global variable）、impl、函数定义、extern（同全局报错）。.m.ct 不能单独 compile/build，也不能独立 build；非 pub 别名报 must be 'pub'。命令逐案覆写 s/s.m.ct，每次 build 的完整输出见 output。"
+    },
+    {
+      "id": "V5",
+      "side": "both",
+      "ref": "claim.md#E2（pub type 别名）/ question.md#2",
+      "command": "cd /tmp/ci2v && rm -rf e13 && mkdir -p e13/out e13/f && cd e13\ncat > f/f.m.ct <<'EOF'\n#include <stdio.h>\nnamespace f;\npub type File = FILE;\npub trait F { int eof(File *fp); }\nmap trait F for namespace f { eof(fp) -> feof(fp); }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport f::f;\nint main(void) { File *fp = stdin; printf(\"%d\\n\", f::F.eof(fp)); return 0; }\nEOF\n/tmp/ci2v/bin/ct build --emit-c main.ct -o out; echo \"ct_rc=$?\"\ngrep -n 'include\\|feof' out/main.c | head\ncc -Wall -Wextra -std=c99 out/main.c -o out/main && ./out/main; echo \"run_rc=$?\"\n# 结构体类型别名 + 单次调用 recipe\ncat > f/f.m.ct <<'EOF'\n#include <sys/stat.h>\nnamespace f;\npub type Stat = struct stat;\npub trait F { int get(int fd, Stat *st); }\nmap trait F for namespace f { get(fd, st) -> fstat(fd, st); }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport f::f;\nint main(void) { Stat st; if (f::F.get(1, &st) == 0) { printf(\"ok %d\\n\", (int)st.st_nlink >= 0); return 0; } printf(\"ok 1\\n\"); return 0; }\nEOF\nrm -rf out && mkdir out && /tmp/ci2v/bin/ct build --emit-c main.ct -o out; echo \"stat_rc=$?\"\ngrep -n 'typedef' out/main.c || echo '(no typedef)'\ngrep -n 'fstat\\|Stat' out/main.c | head\ncc -Wall -Wextra -std=c99 out/main.c -o out/main && ./out/main; echo \"stat_run_rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/main.c -o a.out\nct_rc=0\n3:#include <stdio.h>\n7:#include <stdio.h>\n11:    printf(\"%d\\n\", feof((fp)));\n0\nrun_rc=0\ncc -std=c99 -I out out/main.c -o a.out\nstat_rc=0\n(no typedef)\n11:    if (fstat((1), ((&st))) == 0) {\nok 1\nstat_run_rc=0",
+      "reproduced": true,
+      "note": "pub type 别名可覆盖不透明 C 类型（FILE）与 struct stat；别名不发射 typedef，只在使用点展开。struct 字段/全局量仍不可作 recipe（V2/V15 的 single-call 限制）——别名+单次函数调用是 .m.ct 表达真实 C 类型的上限形态。"
+    },
+    {
+      "id": "V6",
+      "side": "both",
+      "ref": "counter.md#E1-3 / claim.md#E1-3 / question.md#3",
+      "command": "cd /tmp/ci2v && rm -rf e3 && mkdir -p e3/out && cd e3\ncat > foo.h.ct <<'EOF'\n#include <stdio.h>\npub int foo(void) { return 7; }\nEOF\ncat > foo.shim.h <<'EOF'\n#include <stdlib.h>\nstatic inline int ct_shim_probe(void) { return 42; }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport foo;\nint main(void) { printf(\"%d\\n\", foo()); return 0; }\nEOF\n/tmp/ci2v/bin/ct build --emit-c main.ct -o out; echo \"ct_rc=$?\"\ncat -n out/foo.h\ngrep -rn 'shim' out/; echo \"grep_rc=$?\"\ngrep -rn 'ct_shim_probe' out/ || echo '(never referenced)'\ngrep -n 'Env\\|vtable\\|vtbl\\|iface' out/main.c || echo '(no static-trait symbols in consumer .c)'\n/tmp/ci2v/bin/ct build main.ct -o out/prog 2>&1 | head -2; ./out/prog\n# 仓内真实 binding：mock-hal 的 uart.h.ct 直通 include\ncd /Users/samxx/dsh-ws/ct-lang\nrm -rf /tmp/ci2v/claimA8 && mkdir -p /tmp/ci2v/claimA8\n/tmp/ci2v/bin/ct build --emit-c test/bindings/mock-hal/demo.ct -o /tmp/ci2v/claimA8 >/dev/null 2>&1; echo \"mock_rc=$?\"\ngrep -n '#include' /tmp/ci2v/claimA8/uart.h\nls test/bindings/mock-hal/*.shim.h; echo \"mock_shim_ls_rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/main.c out/foo.c -o a.out\nct_rc=0\n     1\t#ifndef FOO_H\n     2\t#define FOO_H\n     3\t\n     4\t/* Generated by ct v0.63.2 from ./foo.h.ct (multi-file mode: exported types; the matching .c\n     5\t   includes this header).\n     6\t   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n     7\t\n     8\t#include <stdio.h>\n     9\t\n    10\tint foo(void);\n    11\t\n    12\t#endif\ngrep_rc=1\n(never referenced)\n(no static-trait symbols in consumer .c)\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/main.c' '.ctbuild/foo.c' '-o' 'out/prog'\n7\nmock_rc=0\n8:#include \"mock_hal.h\"\nmock_shim_ls_rc=1\nls: test/bindings/mock-hal/*.shim.h: No such file or directory",
+      "reproduced": true,
+      "note": ".h.ct 的 #include 被复制进公开 .h（foo.h:8；Emitter.h.ct:1569 只复制 #include 行）；同目录姊妹 foo.shim.h 被完全忽略（out/ grep shim rc=1、ct_shim_probe 从不被引用、cc 行没有该目录 -I）。仓内 mock-hal 的 uart.h.ct 就是这条路径（公开 uart.h:8 #include \"mock_hal.h\"），且该目录没有 .shim.h。"
+    },
+    {
+      "id": "V7",
+      "side": "verify",
+      "ref": "question.md#3（ct build 是否部署/加 -I）/ claim.md#E1-3 的隐含前提",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nrm -rf /tmp/ci2v/e3m && mkdir -p /tmp/ci2v/e3m && rm -rf .ctbuild\n/tmp/ci2v/bin/ct build test/bindings/mock-hal/demo.ct -o /tmp/ci2v/e3m/prog > /tmp/ci2v/e3m/build.log 2>&1; build_rc=$?; echo \"build_rc=$build_rc\"\ncat /tmp/ci2v/e3m/build.log\nls .ctbuild\nls .ctbuild/mock_hal.h 2>&1\n# 门禁如何绕过这一缺口\nsed -n '872,881p' selfhost/check-ast.sh\nexit $build_rc",
+      "exit": 1,
+      "output": "build_rc=1\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/demo.c' '.ctbuild/uart.c' '-o' '/tmp/ci2v/e3m/prog'\nIn file included from .ctbuild/demo.c:3:\n.ctbuild/uart.h:8:10: fatal error: 'mock_hal.h' file not found\n    8 | #include \"mock_hal.h\"\n      |          ^~~~~~~~~~~~\n1 error generated.\nIn file included from .ctbuild/uart.c:3:\n.ctbuild/uart.h:8:10: fatal error: 'mock_hal.h' file not found\n    8 | #include \"mock_hal.h\"\n      |          ^~~~~~~~~~~~\n1 error generated.\ndemo.c\nuart.c\nuart.h\nls: .ctbuild/mock_hal.h: No such file or directory\nbd=test/bindings/mock-hal\nrm -rf \"$work/bind\"\nmkdir -p \"$work/bind\"\nif ! \"$work/ct-ast\" build --emit-c \"$bd/demo.ct\" -o \"$work/bind\" >\"$work/bind.out\" 2>\"$work/bind.err\"; then\n    bad \"test/bindings/mock-hal\" \"ct-ast failed: $(cat \"$work/bind.err\")\"\nelif ! grep -q \"uart1_Controller_vtable\" \"$work/bind/uart.c\"; then\n    bad \"test/bindings/mock-hal\" \"the map vtable was not emitted into the declaring unit\"\nelif ! \"$CC\" -Wall -Wextra -std=c99 -I \"$bd\" \"$work/bind\"/*.c \"$bd/mock_hal_impl.c\" \\\n        -o \"$work/bind.bin\" 2>\"$work/bind.cc\"; then\n    bad \"test/bindings/mock-hal\" \"generated C did not build warning-free: $(cat \"$work/bind.cc\")\"",
+      "reproduced": true,
+      "note": "ct build 不部署 .h.ct 源码旁被 include 的头、也不为它加 -I：`ct build` rc=1（.ctbuild 里只有 demo.c/uart.c/uart.h）。门禁 check-ast.sh:879 手工加 `-I \"$bd\"` 才能过。也就是说 .h.ct 的 include 是『构建环境自己保证可达』，规则若要求 shim 就必须新做部署/-I 传播；这与 .m.ct shim 的 -I（V8）不对称。"
+    },
+    {
+      "id": "V8",
+      "side": "both",
+      "ref": "counter.md#E1-4 / claim.md#P1 / question.md#3/#5",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngrep -n '#include' test/bindings/posix-socket/posix/socket.m.ct | wc -l\ngrep -n '#include' test/bindings/posix-socket/posix/socket.shim.h\nrm -rf /tmp/ci2v/e3p && mkdir -p /tmp/ci2v/e3p\n/tmp/ci2v/bin/ct build test/bindings/posix-socket/demo.ct -o /tmp/ci2v/e3p/demo 2>&1; echo \"build_rc=$?\"\n/tmp/ci2v/e3p/demo; echo \"run_rc=$?\"\nsed -n '1,4p' .ctbuild/demo.c\ncat test/bindings/posix-socket/demo.expected.out",
+      "exit": 0,
+      "output": "       0\n5:#include <errno.h>\n6:#include <sys/socket.h>\n7:#include <unistd.h>\n'cc' -std=c99 -I 'test/bindings/posix-socket/posix' -I '.ctbuild' '.ctbuild/demo.c' '-o' '/tmp/ci2v/e3p/demo'\nbuild_rc=0\nhello 5\nrun_rc=0\n/* Generated by ct v0.63.2 from test/bindings/posix-socket/demo.ct -- do not edit; change the .ct and re-run ct. */\n/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n#include \"socket.shim.h\"\n\nhello 5",
+      "reproduced": true,
+      "note": "shim-only 接真实 POSIX 成立：socket.m.ct 0 个 include，socket.shim.h 承担系统头 + static inline 包装，消费者 .c 自动 `#include \"socket.shim.h\"`（第 3 行），cc 行带 `-I .../posix`，运行 hello 5（与 demo.expected.out 一致）。这是 B 侧最强的可行性证据。"
+    },
+    {
+      "id": "V9",
+      "side": "counter",
+      "ref": "counter.md#E1-4 末段 / P2",
+      "command": "cd /tmp/ci2v && rm -rf e4 && mkdir -p e4/out e4/io && cd e4\ncat > io/io.m.ct <<'EOF'\nnamespace io;\npub trait Io {\n    int puts(char *s);\n    int printf(char *fmt, ...);\n    int snformat(char *buf, int cap, char *fmt, ...);\n}\nmap trait Io for namespace io {\n    puts(s)                      -> puts(s);\n    printf(fmt, ...)             -> printf(fmt, ...);\n    snformat(buf, cap, fmt, ...) -> snprintf(buf, cap, fmt, ...);\n}\nEOF\ncat > io/io.shim.h <<'EOF'\n#include <stdio.h>\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport io::io;\nint main(void)\n{\n    char buf[16];\n    io::Io.puts(\"shim-puts\");\n    io::Io.printf(\"shim-printf %d\\n\", 9);\n    io::Io.snformat(buf, (int)sizeof(buf), \"n=%d\", 9);\n    printf(\"%s\\n\", buf);\n    return 0;\n}\nEOF\n/tmp/ci2v/bin/ct build --emit-c main.ct -o out; echo \"ct_rc=$?\"\ngrep -n '#include' out/main.c\ngrep -n 'puts\\|printf\\|snprintf' out/main.c\ncc -Wall -Wextra -std=c99 -I io -I out out/main.c -o out/main && ./out/main; echo \"run_rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I ./io -I out out/main.c -o a.out\nct_rc=0\n3:#include \"io.shim.h\"\n7:#include <stdio.h>\n11:    puts((\"shim-puts\"));\n12:    printf((\"shim-printf %d\\n\"), (9));\n13:    snprintf((buf), ((int)(sizeof(buf))), (\"n=%d\"), (9));\n14:    printf(\"%s\\n\", buf);\nshim-puts\nshim-printf 9\nn=9\nrun_rc=0",
+      "reproduced": true,
+      "note": "counter 的 P2 独立复现：.m.ct 零 include、只有一行 `#include <stdio.h>` 的 shim 即可承载 puts/printf/snprintf 的全部变参映射，`ct build --emit-c` rc=0、cc -Wall -Wextra 零警告、运行正确。shim 是充分手段。"
+    },
+    {
+      "id": "V10",
+      "side": "both",
+      "ref": "counter.md#E4（shim.c）/ question.md#5",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nrm -rf /tmp/ci2v/shim && mkdir -p /tmp/ci2v/shim\n/tmp/ci2v/bin/ct build test/modules/map_unit_shim/main.ct -o /tmp/ci2v/shim/prog 2>&1; echo \"rc=$?\"\n/tmp/ci2v/shim/prog; echo \"run_rc=$?\"\ncat test/modules/map_unit_shim/expected.out\ncat test/modules/map_unit_shim/lib/lib.shim.h",
+      "exit": 0,
+      "output": "'cc' -std=c99 -I 'test/modules/map_unit_shim/lib' -I '.ctbuild' '.ctbuild/main.c' 'test/modules/map_unit_shim/lib/lib.shim.c' '-o' '/tmp/ci2v/shim/prog'\nrc=0\n1 1 2\nrun_rc=0\n1 1 2\n/* The C shim beside `lib.m.ct`: its declarations are invisible to a recipe,\n   so shapes a recipe cannot spell (a global such as `errno`) live here. */\n#include <errno.h>\n\nstatic inline int ct_shim_errno(void)\n{\n    return errno;\n}\n\n/* `errno` is not guaranteed 0 at `main` entry, so the fixture clears it first:\n   the same accessor then proves the read of the global, not the C runtime. */\nstatic inline void ct_shim_clear(void)\n{\n    errno = 0;\n}\n\nint ct_shim_next(void);",
+      "reproduced": true,
+      "note": "shim 还能承载 recipe 写不出的全局量（errno）与需要 .shim.c 的实现：lib.shim.c 作为源文件直接进 cc 行（不复制、不进产物目录），-I 到 shim 目录；运行 1 1 2 与 expected 一致。即 B 的『shim-only』对系统头/变参/全局/跨文件实现都有现成机制。"
+    },
+    {
+      "id": "V11",
+      "side": "counter",
+      "ref": "counter.md#E1-2 / E4 / F3",
+      "command": "cd /tmp/ci2v && rm -rf e6 && mkdir -p e6/out e6/p1/a/lib e6/p2/b/lib && cd e6\ncat > p1/a/lib/lib.m.ct <<'EOF'\n#include <stdlib.h>\nnamespace a::lib;\npub trait L { int n(char *s); }\nmap trait L for namespace a::lib { n(s) -> atoi(s); }\nEOF\ncat > p1/a/lib/lib.shim.h <<'EOF'\n#include <stdlib.h>\nEOF\ncat > p2/b/lib/lib.m.ct <<'EOF'\n#include <stdlib.h>\nnamespace b::lib;\npub trait L { int n(char *s); }\nmap trait L for namespace b::lib { n(s) -> atoi(s); }\nEOF\ncat > p2/b/lib/lib.shim.h <<'EOF'\n#include <stdlib.h>\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport a::lib::lib;\nimport b::lib::lib;\nint main(void) { printf(\"%d\\n\", a::lib::L.n(\"3\") + b::lib::L.n(\"4\")); return 0; }\nEOF\n/tmp/ci2v/bin/ct build --emit-c main.ct -I p1 -I p2 -o out 2>&1; echo \"both_shims_rc=$?\"\nrm -f p1/a/lib/lib.shim.h p2/b/lib/lib.shim.h\n/tmp/ci2v/bin/ct build --emit-c main.ct -I p1 -I p2 -o out 2>&1; echo \"no_shims_rc=$?\"\n",
+      "exit": 0,
+      "output": "ctc: shim base name 'lib' is ambiguous: p1/a/lib and p2/b/lib\nboth_shims_rc=1\ncc -std=c99 -I out out/main.c -o a.out\nno_shims_rc=0",
+      "reproduced": true,
+      "note": "counter 的基名歧义逐字复现（Module.h.ct:1955）：两个不同目录的 `lib.m.ct` 各自带 lib.shim.h -> rc=1；把 shim 删掉（改回直连系统头）同布局 rc=0。若 B 强制每单元 shim，同名单元在真实多包集合里必须改命名或换 shim 路径；HEAD 无改名机制。"
+    },
+    {
+      "id": "V12",
+      "side": "verify",
+      "ref": "question.md#1/#2（『任意 include』的边界）",
+      "command": "cd /tmp/ci2v && rm -rf e11 && mkdir -p e11/out e11/m && cd e11\ncat > m/m.m.ct <<'EOF'\n#include \"local.h\"\nnamespace m;\npub trait M { int v(); }\nmap trait M for namespace m { v() -> local_fn(); }\nEOF\ncat > m/local.h <<'EOF'\nstatic inline int local_fn(void) { return 7; }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport m::m;\nint main(void) { printf(\"%d\\n\", m::M.v()); return 0; }\nEOF\n/tmp/ci2v/bin/ct build main.ct -o out/prog 2>&1; echo \"build_rc=$?\"\n/tmp/ci2v/bin/ct build --cflags \"-I $PWD/m\" main.ct -o out/prog2 2>&1; echo \"cflags_rc=$?\"\n./out/prog2",
+      "exit": 0,
+      "output": "'cc' -std=c99 -I '.ctbuild' '.ctbuild/main.c' '-o' 'out/prog'\n.ctbuild/main.c:3:10: fatal error: 'local.h' file not found\n    3 | #include \"local.h\"\n      |          ^~~~~~~~~\n1 error generated.\nbuild_rc=1\n'cc' -std=c99 -I /tmp/ci2v/e11/m -I '.ctbuild' '.ctbuild/main.c' '-o' 'out/prog2'\ncflags_rc=0\n7",
+      "reproduced": true,
+      "note": ".m.ct 的『任意 #include』实质是『系统 include path 可达的头』：.m.ct 旁的本地头默认不部署也不加 -I（同样 rc=1），必须用 --cflags -I 或改用 <base>.shim.h。这既限定了 A 的便利性，也说明 B 的『只许自有 shim』检查必须按 include 路径名做语义判断（否则 `#include \"anything.h\"` + --cflags 照样通过）。"
+    },
+    {
+      "id": "V13",
+      "side": "verify",
+      "ref": "spec.md:727-730（双方 E2 共同引用）/ SH-71 A-1",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nsed -n '725,733p' docs/language-spec.md\nrm -rf /tmp/ci2v/sh71 && mkdir -p /tmp/ci2v/sh71\n/tmp/ci2v/bin/ct build test/modules/sh71_map_import_hdr/main.ct -o /tmp/ci2v/sh71/prog 2>&1 | head -2; echo \"sh71_rc=$?\"\n/tmp/ci2v/sh71/prog; echo \"run_rc=$?\"\ncat test/modules/sh71_map_import_hdr/host.m.ct | head -6\nhead -6 test/modules/map_unit_cross/parse.h.ct\ngrep -n 'SH-71 A-1' selfhost/ct-ast/frontend/module/Module.h.ct selfhost/check-ast.sh | head\n# 反方向：.h.ct import .m.ct\ncd /tmp/ci2v && rm -rf e2h2 && mkdir -p e2h2/out e2h2/s && cd e2h2\ncat > s/s.m.ct <<'EOF'\n#include <unistd.h>\nnamespace s;\npub type FD = int;\npub trait Dup { int dup2(FD fd); }\nmap trait Dup for namespace s { dup2(fd) -> dup(fd); }\nEOF\ncat > h.h.ct <<'EOF'\nimport s::s;\npub FD getfd(void) { FD x = 3; return x; }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport h;\nint main(void) { printf(\"%d\\n\", (int)getfd()); return 0; }\nEOF\n/tmp/ci2v/bin/ct build --emit-c main.ct -o out; echo \"h_imports_m_rc=$?\"\ncat -n out/h.h | sed -n '8,10p'; sed -n '1,6p' out/h.c",
+      "exit": 0,
+      "output": "- **第 2 段不成立（语言限制）**：能放类型宿主的单元看不见接口，能看见接口的单元不许放类型宿主。\n  - `map trait … for type char *` 写进 `.h.ct` → `error: a type host is only allowed in a .m.ct unit`（rc=1）。\n  - 改写在 `.m.ct` 并 `import` 接口所在的 `.h.ct`：未给 `-I` 时\n    `ctc: cannot resolve import 'http/http'`；给了 `-I` 时\n    `error: a .m.ct unit can only import another .m.ct unit`（rc=1）。反方向 `.h.ct` import `.m.ct`\n    同样报 `ctc: cannot resolve import`。\n  - `.m.ct` 自身也不能承载接口：`error: a .m.ct unit cannot declare a type` /\n    `error: a .m.ct unit cannot contain an impl`。三个位置都试过，**没有**同时满足两个约束的位置。\n  - 因此字符串 factory 只能接到 C shim 函数（静态宿主），或把 factory 写成 `.h.ct` 的自由函数\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/main.c' '.ctbuild/entry.c' '-o' '/tmp/ci2v/sh71/prog'\nsh71_rc=0\n200 201\nrun_rc=0\n/* SH-71 A-1: a mapping unit imports the .h.ct that owns the interface type the\n   field host method returns. Before A-1 this import was refused by the unit\n   matrix (`a .m.ct unit can only import another .m.ct unit`). */\nimport entry;\n\nmap trait Entry for type char * {\nimport text::text;\n\npub int parse(char *s);\nint parse(char *s)\n{\n    return s.toInt();\nselfhost/ct-ast/frontend/module/Module.h.ct:732:            /* SH-71 A-1: a mapping unit may also import a header unit. The\nselfhost/check-ast.sh:2102:# SH-71 A-1: a mapping unit may import the `.h.ct` that owns the interface type\nselfhost/check-ast.sh:3312:# SH-71 A-1: a `.m.ct` unit may import a `.h.ct` unit. The header's `pub`\nselfhost/check-ast.sh:3371:# SH-71 A-1 makes `m.ct -> h.ct` legal, so a cycle can now close through the\ncc -std=c99 -I out out/main.c out/h.c -o a.out\nh_imports_m_rc=0\n     8\t\n     9\tint getfd(void);\n    10\t\n/* Generated by ct v0.63.2 from ./h.h.ct -- do not edit; change the .ct and re-run ct. */\n/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n#include <unistd.h>\n\n#include \"h.h\"",
+      "reproduced": true,
+      "note": "HEAD 两个方向都合法：.m.ct -> .h.ct 由 test/modules/sh71_map_import_hdr 钉住（rc=0、200 201，注释明写『Before A-1 this import was refused』），.h.ct -> .m.ct 由 test/modules/map_unit_cross 钉住（parse.h.ct:1 import text::text）；我另建 h.h.ct import s::s 也 rc=0，且 h.c 顶部带 s.m.ct 的 `#include <unistd.h>`（证明 .m.ct 真的被加载）。spec:727-730 仍是旧文本，claim E2 与 counter E2 都据此断言『.m.ct 不能 import .h.ct』——该事实在 HEAD 已过期（文档漂移，不是本 battle 的胜负点）。"
+    },
+    {
+      "id": "V14",
+      "side": "both",
+      "ref": "claim.md#E1-5 / counter.md#B5 / question.md#4/#6",
+      "command": "rm -rf /tmp/ci2v/e5 && cp -R /Users/samxx/dsh-ws/ct-lang/test/modules/map_unit /tmp/ci2v/e5 && cd /tmp/ci2v/e5\nprintf 'name = p\\nversion = 0.1.0\\nnamespace = libc\\npublisher = p\\nns-root = libc\\nc-boundary = strict\\n' > ct.pkg\nmkdir -p out\n/tmp/ci2v/bin/ct build --emit-c main.ct -o out 2>&1; echo \"build_rc=$?\"\ngrep -n '#include' out/main.c | head -5\ngrep -n 'Env\\|vtable\\|vtbl\\|iface' out/main.c || echo '(no static-trait symbols in consumer .c)'\n/tmp/ci2v/bin/ct build main.ct -o out/prog 2>&1 | head -2; ./out/prog\n/tmp/ci2v/bin/ct pkg 2>&1; echo \"pkg_rc=$?\"\n/tmp/ci2v/bin/ct pkg check 2>&1; echo \"pkg_check_rc=$?\"\n/tmp/ci2v/bin/ct build --allow-c-boundary main.ct -o out/prog2 2>&1; echo \"flag_rc=$?\"\ncd /Users/samxx/dsh-ws/ct-lang\ngrep -rn 'c-boundary\\|c_boundary' . --exclude-dir=battle --exclude-dir=.git | wc -l\nsed -n '2313,2316p;2374p;2460p' selfhost/ct-ast/frontend/module/Module.h.ct\nsed -n '420,436p' selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/main.c -o a.out\nbuild_rc=0\n3:#include <stdio.h>\n4:#include <stdlib.h>\n5:#include <string.h>\n9:#include <stdio.h>\n10:#include <string.h>\n(no static-trait symbols in consumer .c)\n'cc' -std=c99 -I '.ctbuild' '.ctbuild/main.c' '-o' 'out/prog'\n42 2 0 1 zzz env-ok\nctc: warning: './ct.pkg' has unknown key 'c-boundary'\nctc: no './ct.lock'; run `ct get` first\npkg_rc=1\nctc: unexpected argument 'check'\npkg_check_rc=1\nctc: unknown option '--allow-c-boundary'\nflag_rc=1\n       0\nstatic int ct_pkg_key(const char *root, const char *key, char *out, int cap)\n{\n    char path[MAX_PATH];\n    char line[320];\n    if (!ct_pkg_key(root, \"namespace\", ns, sizeof ns)) return 1;\n        if (!ct_pkg_key(m->incdirs[i], \"namespace\", ns, sizeof ns)) continue;\n                if (*ndeps >= MAX_PKG_DEPS || vl >= MAX_PKG_PATH) { ok = 0; break; }\n                memcpy(deps[*ndeps], v, vl);\n                deps[*ndeps][vl] = 0;\n                (*ndeps)++;\n            } else if (!((kl == 9 && strncmp(ls, \"publisher\", 9) == 0)\n                         || (kl == 7 && strncmp(ls, \"ns-root\", 7) == 0)\n                         || (kl == 6 && strncmp(ls, \"cflags\", 6) == 0)\n                         || (kl == 7 && strncmp(ls, \"ldflags\", 7) == 0)\n                         || (kl == 8 && strncmp(ls, \"requires\", 8) == 0)\n                         || (kl == 7 && (strncmp(ls, \"licence\", 7) == 0\n                                         || strncmp(ls, \"license\", 7) == 0))\n                         || (kl == 9 && strncmp(ls, \"namespace\", 9) == 0)\n                         || (kl == 6 && strncmp(ls, \"source\", 6) == 0)\n                         || (kl == 7 && strncmp(ls, \"website\", 7) == 0)\n                         || (kl == 4 && strncmp(ls, \"type\", 4) == 0))) {\n                fprintf(stderr, \"ctc: warning: '%s/ct.pkg' has unknown key '%.*s'\\n\",\n                        dir, (int)kl, ls);",
+      "reproduced": true,
+      "note": "`c-boundary = strict` 在 HEAD 完全无效：ct build rc=0、生成物仍带全部系统 include、运行通过；只有 tool::pkg 的清单解析对未知键告警，而 ct build 读 ct.pkg 只走 ct_pkg_key(root/incdirs, \"namespace\")，不读 c-boundary。全仓（除 battle）`c-boundary|c_boundary` 0 命中。`--allow-c-boundary` 未知选项（rc=1），`ct pkg check` 不存在（ct pkg = install 别名，rc=1 'unexpected argument check'）。Pkg.h.ct:424-435 的键白名单（publisher/ns-root/cflags/ldflags/requires/licence/license/namespace/source/website/type）也没有 c-boundary。"
+    },
+    {
+      "id": "V15",
+      "side": "both",
+      "ref": "question.md#6（#ct-raw）/ cinclude-1 J-3",
+      "command": "cd /tmp/ci2v && rm -rf e7 && mkdir -p e7/out && cd e7\ncat > raw.ct <<'EOF'\n#ct-raw\n#include <stdlib.h>\nstatic void ct_raw_pwn(void) { system(\"echo raw-pwn\"); }\n#ct-endraw\n#include <stdio.h>\nint main(void) { ct_raw_pwn(); printf(\"raw-ok\\n\"); return 0; }\nEOF\n/tmp/ci2v/bin/ct raw.ct -o out/raw.c; echo \"ct_rc=$?\"\ngrep -n 'include\\|system\\|ct_raw_pwn' out/raw.c | head\ncc -Wall -Wextra -std=c99 out/raw.c -o out/raw && ./out/raw; echo \"run_rc=$?\"\n",
+      "exit": 0,
+      "output": "ct_rc=0\n3:#include <stdio.h>\n4:#include <stdlib.h>\n5:static void ct_raw_pwn(void) { system(\"echo raw-pwn\"); }\n8:    ct_raw_pwn();\nraw-pwn\nraw-ok\nrun_rc=0",
+      "reproduced": true,
+      "note": "#ct-raw 在 .ct 里是完整的任意 C 通道：include、函数定义、system() 全部原样进生成物，ct rc=0、cc 零警告、运行。A/B 都把 raw 列入 strict 管辖是必要的；但『只禁 include』的规则完全拦不住它（cinclude-1 已判）。"
+    },
+    {
+      "id": "V16",
+      "side": "both",
+      "ref": "question.md#6（extern）",
+      "command": "cd /tmp/ci2v/e7\ncat > ext.ct <<'EOF'\n#include <stdio.h>\nextern int puts(const char *s);\nint main(void) { puts(\"extern-ok\"); return 0; }\nEOF\n/tmp/ci2v/bin/ct ext.ct -o out/ext.c; echo \"ct_rc=$?\"\ncc -Wall -Wextra -std=c99 out/ext.c -o out/ext && ./out/ext; echo \"run_rc=$?\"\n",
+      "exit": 0,
+      "output": "ct_rc=0\nextern-ok\nrun_rc=0",
+      "reproduced": true,
+      "note": ".ct 里的 extern 声明可替代 include 声明任意 C 符号（这里连 <stdio.h> 都不需要，puts 由 extern 自声明）。strict 若只查 include，extern 直接绕过；A/B 都要求覆盖 extern，但编译器自身 4 处 extern（cinclude-1 计数）与 errno 官方写法会受影响。"
+    },
+    {
+      "id": "V17",
+      "side": "both",
+      "ref": "question.md#6（函数式 #define）",
+      "command": "cd /tmp/ci2v/e7\ncat > def.ct <<'EOF'\n#include <stdio.h>\n#define CT_TWICE(x) ((x) * 2)\nint main(void) { printf(\"%d\\n\", CT_TWICE(21)); return 0; }\nEOF\n/tmp/ci2v/bin/ct def.ct -o out/def.c; echo \"ct_rc=$?\"\ngrep -n 'define CT_TWICE' out/def.c\ncc -Wall -Wextra -std=c99 out/def.c -o out/def && ./out/def",
+      "exit": 0,
+      "output": "ct_rc=0\n4:#define CT_TWICE(x) ((x) * 2)\n42",
+      "reproduced": true,
+      "note": "函数式 #define 在 .ct 里原样进生成物并在 C 侧展开（42）。它也是把 include/调用藏进宏体的通道；A 若只禁 #include 而不禁 define，strict 无意义。"
+    },
+    {
+      "id": "V18",
+      "side": "verify",
+      "ref": "question.md#6（strict 对 .m.ct prologue 的放行是否 sound）/ claim.md#A.3",
+      "command": "cd /tmp/ci2v/e7 && rm -rf out3 && mkdir -p out3 m\ncat > m/m.m.ct <<'EOF'\n#include <stdlib.h>\n#define CT_SYS(cmd) system(cmd)\nnamespace m;\npub trait M { int noop(); }\nmap trait M for namespace m { noop() -> atoi(\"0\"); }\nEOF\ncat > mdef.ct <<'EOF'\n#include <stdio.h>\nimport m::m;\nint main(void) { CT_SYS(\"echo mct-define-pwn\"); printf(\"define-ok\\n\"); return 0; }\nEOF\n/tmp/ci2v/bin/ct build --emit-c mdef.ct -o out3; echo \"ct_rc=$?\"\ngrep -n 'include\\|CT_SYS' out3/mdef.c | head\ncc -Wall -Wextra -std=c99 out3/mdef.c -o out3/mdef > out3/cc.log 2>&1; echo \"cc_rc=$?\"; cat out3/cc.log\n./out3/mdef; echo \"run_rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out3 out3/mdef.c -o a.out\nct_rc=0\n3:#include <stdlib.h>\n4:#define CT_SYS(cmd) system(cmd)\n8:#include <stdio.h>\n11:    CT_SYS(\"echo mct-define-pwn\");\ncc_rc=0\nmct-define-pwn\ndefine-ok\nrun_rc=0",
+      "reproduced": true,
+      "note": "A 允许的 .m.ct prologue（#include + #define）整体进入**消费者** .c（spec:671 即这条契约）：消费者 .ct 自己没有任何 include，却可以调用 system()。这证明 strict 若只禁 .ct/.h.ct，A 自己的合法出口就是完整绕过；把 .m.ct 的 #define 也禁掉（B 的 B4）只关掉宏这一半，include 仍把任意声明带进消费者。"
+    },
+    {
+      "id": "V19",
+      "side": "verify",
+      "ref": "question.md#6（『只禁 .ct/.h.ct 是否 sound』的最强反例）",
+      "command": "cd /tmp/ci2v/e9 && rm -rf out2 && mkdir -p out2\ncat > r/r.m.ct <<'EOF'\n#include <stdlib.h>\n#define CT_EVIL(a) (system(\"echo recipe-macro-pwn\"), (a))\nnamespace r;\npub trait R { int v(int a); }\nmap trait R for namespace r { v(a) -> CT_EVIL(a); }\nEOF\nrm -f r/r.shim.h\ncat > m.ct <<'EOF'\n#include <stdio.h>\nimport r::r;\nint main(void) { int n = r::R.v(41); printf(\"n=%d\\n\", n + 1); return 0; }\nEOF\n/tmp/ci2v/bin/ct build --emit-c m.ct -o out2; echo \"ct_rc=$?\"\ngrep -n 'CT_EVIL\\|system' out2/m.c\ncc -Wall -Wextra -std=c99 out2/m.c -o out2/m && ./out2/m; echo \"run_rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I out2 out2/m.c -o a.out\nct_rc=0\n4:#define CT_EVIL(a) (system(\"echo recipe-macro-pwn\"), (a))\n11:    int n = CT_EVIL((41));\nrecipe-macro-pwn\nn=42\nrun_rc=0",
+      "reproduced": true,
+      "note": "决定性反例：recipe 校验只要求『单次调用』，而宏调用满足该形状；.m.ct prologue 定义 `CT_EVIL(a)` 后 `v(a) -> CT_EVIL(a)` 合法（ct rc=0），生成物展开成 system() 并运行。因此 .m.ct 不是『只有声明、没有实现』的边界——通过宏它可以携带任意实现；A 的『唯一合法出口是 .m.ct prologue + shim』在语义上等于『任意 C』。"
+    },
+    {
+      "id": "V20",
+      "side": "both",
+      "ref": "question.md#6（shim 内容）/ counter.md#E5 / cinclude-1 §2.6",
+      "command": "cd /tmp/ci2v && rm -rf e8 && mkdir -p e8/out e8/x && cd e8\ncat > x/x.m.ct <<'EOF'\nnamespace x;\npub trait X { int run(); }\nmap trait X for namespace x { run() -> ct_shim_run(); }\nEOF\ncat > x/x.shim.h <<'EOF'\n#include <stdlib.h>\n#define CT_SHIM_SYS(cmd) system(cmd)\nstatic inline int ct_shim_run(void) { return system(\"echo shim-inline-pwn\"); }\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\nimport x::x;\nint main(void) { int r = x::X.run(); CT_SHIM_SYS(\"echo shim-macro-pwn\"); printf(\"r=%d\\n\", r); return 0; }\nEOF\n/tmp/ci2v/bin/ct build --emit-c main.ct -o out; echo \"ct_rc=$?\"\ngrep -n 'shim\\|system' out/main.c | head\ncc -Wall -Wextra -std=c99 -I x -I out out/main.c -o out/main && ./out/main; echo \"run_rc=$?\"\n",
+      "exit": 0,
+      "output": "cc -std=c99 -I ./x -I out out/main.c -o a.out\nct_rc=0\n3:#include \"x.shim.h\"\n10:    int r = ct_shim_run();\n11:    CT_SHIM_SYS(\"echo shim-macro-pwn\");\nshim-inline-pwn\nshim-macro-pwn\nr=0\nrun_rc=0",
+      "reproduced": true,
+      "note": "B 的 shim 内容同样是任意 C：这里 shim 既放 static inline（system），也放函数式宏 CT_SHIM_SYS，消费者 .ct 直接使用该宏（自己没有任何 include）。所以『把 C 挪进 shim』不减少执行面，只改变文件类别；A 的 R1『B 搬得更远』在机制上成立，B 也自认不是沙箱（cinclude-1 §2.6）。"
+    },
+    {
+      "id": "V21",
+      "side": "both",
+      "ref": "question.md#6（外部 .c 链接）",
+      "command": "cd /tmp/ci2v/e8\ncat > extimpl.c <<'EOF'\nint ext_answer(void) { return 41; }\nEOF\ncat > extm.ct <<'EOF'\n#include <stdio.h>\nextern int ext_answer(void);\nint main(void) { printf(\"%d\\n\", ext_answer() + 1); return 0; }\nEOF\n/tmp/ci2v/bin/ct build extm.ct -o out/extm --ldflags \"$PWD/extimpl.c\" 2>&1; echo \"build_rc=$?\"\n./out/extm; echo \"run_rc=$?\"\n",
+      "exit": 0,
+      "output": "'cc' -std=c99 -I '.ctbuild' '.ctbuild/extm.c' /tmp/ci2v/e8/extimpl.c '-o' 'out/extm'\nbuild_rc=0\n42\nrun_rc=0",
+      "reproduced": true,
+      "note": "即使所有 include/extern/define 都被 strict 封死，`ct build --ldflags <外部.c>` 仍可把任意 C 源文件加入同一条 cc 行（这里 rc=0、运行 42）；手工 cc 更是无法拦。链接面在 A/B 之外（双方都承认）。"
+    },
+    {
+      "id": "V22",
+      "side": "verify",
+      "ref": "question.md#6（行前缀规则的 soundness）/ cinclude-1 V20",
+      "command": "cd /tmp/ci2v && rm -rf e12 && mkdir -p e12/out && cd e12\nprintf '# include <stdlib.h>\\n#include <stdio.h>\\nint main(void){ printf(\"%%d\\\\n\", (int)sizeof(int)); return 0; }\\n' > v1.ct\n/tmp/ci2v/bin/ct v1.ct -o out/v1.c; echo \"v1_rc=$?\"; grep -n 'include' out/v1.c\nprintf 'int main(void);\\n  #include <stdio.h>\\nint main(void){ printf(\"mid\\\\n\"); return 0; }\\n' > v2.ct\n/tmp/ci2v/bin/ct v2.ct -o out/v2.c; echo \"v2_rc=$?\"; grep -n 'include' out/v2.c\ncc -std=c99 out/v1.c -o out/v1 && ./out/v1\ncc -std=c99 out/v2.c -o out/v2 && ./out/v2\n# .m.ct 的同类写法\nmkdir -p mm && printf '# include <stdio.h>\\nnamespace mm;\\npub trait M { int v(); }\\nmap trait M for namespace mm { v() -> atoi(\"1\"); }\\n' > mm/mm.m.ct\nprintf 'import mm::mm;\\nint main(void){ return mm::M.v(); }\\n' > mmain.ct\n/tmp/ci2v/bin/ct build --emit-c mmain.ct -o out 2>&1; echo \"m_spelling_rc=$?\"\n",
+      "exit": 0,
+      "output": "v1_rc=0\n3:# include <stdlib.h>\n4:#include <stdio.h>\nv2_rc=0\n3:#include <stdio.h>\n4\nmid\n./mm/mm.m.ct:1:1: error: a .m.ct unit allows only #include and #define in its prologue; put the C implementation in <base>.shim.h\nctc: 1 error(s) generated\nm_spelling_rc=1",
+      "reproduced": true,
+      "note": ".ct 侧的写法变体（`# include`、缩进、mid-file）全部 rc=0 且 include 原样进生成物——任何『行首 #include 前缀』规则都会漏。.m.ct 侧因为走 lexer token（Parser.h.ct:1347 的 strncmp(toktext, \"#include\", 8)）反而拒绝 `# include`。这给出实现口径：strict 必须在 prologue token 层判定，不能做行前缀匹配。"
+    },
+    {
+      "id": "V23",
+      "side": "both",
+      "ref": "claim.md#E1-4 / counter.md#E4 / question.md#4/#5",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\nfor d in selfhost lib/std test examples; do\n  printf '%-8s .ct_total=%s with_include=%s include_lines=%s\\n' \"$d\" \\\n    \"$(find \"$d\" -name '*.ct' | wc -l | tr -d ' ')\" \\\n    \"$(grep -rl --include='*.ct' -E '^\\s*#\\s*include' \"$d\" | wc -l | tr -d ' ')\" \\\n    \"$(grep -rh --include='*.ct' -E '^\\s*#\\s*include' \"$d\" | wc -l | tr -d ' ')\"\ndone\nprintf 'all .ct with_include=%s include_lines=%s\\n' \"$(grep -rl --include='*.ct' -E '^\\s*#\\s*include' . | grep -v '^./battle' | wc -l | tr -d ' ')\" \"$(grep -rh --include='*.ct' -E '^\\s*#\\s*include' . | wc -l | tr -d ' ')\"\nprintf 'outside four classes=%s\\n' \"$(grep -rl --include='*.ct' -E '^\\s*#\\s*include' . | grep -v '^./battle' | grep -vE '^\\./(selfhost|lib|test|examples)/' | wc -l | tr -d ' ')\"\nprintf 'm.ct total=%s include_any=%s sys_angle=%s own_shim_quote=%s none=%s\\n' \\\n  \"$(find . -name '*.m.ct' -not -path './battle/*' | wc -l | tr -d ' ')\" \\\n  \"$(grep -rl --include='*.m.ct' -E '^\\s*#\\s*include' . | grep -v '^./battle' | wc -l | tr -d ' ')\" \\\n  \"$(grep -rl --include='*.m.ct' -E '^\\s*#\\s*include\\s*<' . | grep -v '^./battle' | wc -l | tr -d ' ')\" \\\n  \"$(grep -rl --include='*.m.ct' -E '^\\s*#\\s*include\\s*\"' . | grep -v '^./battle' | wc -l | tr -d ' ')\" \"15\"\nprintf 'h.ct total=%s include=%s lines=%s\\n' \\\n  \"$(find . -name '*.h.ct' -not -path './battle/*' | wc -l | tr -d ' ')\" \\\n  \"$(grep -rl --include='*.h.ct' -E '^\\s*#\\s*include' . | grep -v '^./battle' | wc -l | tr -d ' ')\" \\\n  \"$(grep -rh --include='*.h.ct' -E '^\\s*#\\s*include' . | wc -l | tr -d ' ')\"\n# .m.ct 系统头清单（17）\ngrep -rl --include='*.m.ct' -E '^\\s*#\\s*include\\s*<' . | grep -v '^./battle' | sort\n# .h.ct 含 include 的目录分布\ngrep -rl --include='*.h.ct' -E '^\\s*#\\s*include' . | grep -v '^./battle' | sed -E 's#^\\./(selfhost|lib|test|examples)/.*#\\1#; s#^\\..*#other#' | sort | uniq -c",
+      "exit": 0,
+      "output": "selfhost .ct_total=24 with_include=22 include_lines=74\nlib/std  .ct_total=4 with_include=4 include_lines=8\ntest     .ct_total=1045 with_include=490 include_lines=559\nexamples .ct_total=216 with_include=172 include_lines=210\nall .ct with_include=688 include_lines=851\noutside four classes=0\nm.ct total=43 include_any=28 sys_angle=17 own_shim_quote=11 none=15\nh.ct total=136 include=32 lines=73\n./examples/17_static_map_closure/src/seq/seq.m.ct\n./test/ast/120_map_each_closure/arr/arr.m.ct\n./test/ast/121_map_each_closure_var/arr/arr.m.ct\n./test/ast/122_map_each_tier1/arr/arr.m.ct\n./test/ast/156_into_scalar/lib/lib.m.ct\n./test/ast/67_type_alias/lib/lib.m.ct\n./test/modules/map_unit/libc/libc.m.ct\n./test/modules/map_unit_chain/lib/base.m.ct\n./test/modules/map_unit_chain/lib/lib.m.ct\n./test/modules/map_unit_cross/text/text.m.ct\n./test/modules/map_unit_type/ctypes/ctypes.m.ct\n./test/modules/map_unit_varargs/std/io/io.m.ct\n./test/modules/p20_qual_arity/a/A.m.ct\n./test/modules/p20_two_pkg_same_method/a/A.m.ct\n./test/modules/p20_two_pkg_same_method/b/B.m.ct\n./test/modules/p25_static_closure/probe/probe.m.ct\n./test/modules/p28_bound_static/lib/lib.m.ct\n   4 lib\n  18 selfhost\n  10 test",
+      "reproduced": true,
+      "note": "claim E1-4 的 22/4/490/172、43、17 全部复现（它没有 17 个数？claim 给了 17）。counter E4 的『16 直接系统头、12 已 include 自有 shim』与实测 17/11 差 1（两组无交集，总和 28；seq.m.ct 的 <stddef.h> 属系统头）。关键：17 个系统头 .m.ct 全在 test（16）/examples（1），32 个含 include 的 .h.ct 全在 selfhost(18)/lib(4)/test(10)——按双方共同的『四处豁免』范围，仓内迁移面是 0，不是 counter E4 的 16+32。"
+    },
+    {
+      "id": "V24",
+      "side": "verify",
+      "ref": "question.md#4/#5（外部包迁移面）",
+      "command": "cd ~/.ct/pkg\nfind . -name ct.pkg | head\nfor p in ct/token/0.1.0 ct/sse/0.11.0 ct/fsguard/0.1.0 ct/http/0.2.0 std/std/0.3.2; do\n  printf '%-22s ct=%-4s inc=%-4s m.ct=%-3s m_inc=%-3s h.ct=%-3s h_inc=%-3s shim=%-3s\\n' \"$p\" \\\n    \"$(find $p -name '*.ct' | wc -l | tr -d ' ')\" \\\n    \"$(grep -rl --include='*.ct' -E '^\\s*#\\s*include' $p | wc -l | tr -d ' ')\" \\\n    \"$(find $p -name '*.m.ct' | wc -l | tr -d ' ')\" \\\n    \"$(grep -rl --include='*.m.ct' -E '^\\s*#\\s*include' $p | wc -l | tr -d ' ')\" \\\n    \"$(find $p -name '*.h.ct' | wc -l | tr -d ' ')\" \\\n    \"$(grep -rl --include='*.h.ct' -E '^\\s*#\\s*include' $p | wc -l | tr -d ' ')\" \\\n    \"$(find $p -name '*.shim.*' | wc -l | tr -d ' ')\"\ndone\nprintf 'ALL ct=%s inc=%s m.ct=%s m_inc=%s h.ct=%s h_inc=%s\\n' \\\n  \"$(find . -name '*.ct' | wc -l | tr -d ' ')\" \"$(grep -rl --include='*.ct' -E '^\\s*#\\s*include' . | wc -l | tr -d ' ')\" \\\n  \"$(find . -name '*.m.ct' | wc -l | tr -d ' ')\" \"$(grep -rl --include='*.m.ct' -E '^\\s*#\\s*include\\s*<' . | wc -l | tr -d ' ')\" \\\n  \"$(find . -name '*.h.ct' | wc -l | tr -d ' ')\" \"$(grep -rl --include='*.h.ct' -E '^\\s*#\\s*include' . | wc -l | tr -d ' ')\"\ngrep -rn 'c-boundary' . | wc -l\nfor f in $(find std/std/0.3.2 -name '*.m.ct'); do echo \"## $f\"; grep -nE '^\\s*#\\s*include' \"$f\"; done",
+      "exit": 0,
+      "output": "./ct/token/0.1.0/ct.pkg\n./ct/sse/0.11.0/ct.pkg\n./ct/fsguard/0.1.0/ct.pkg\n./ct/http/0.2.0/ct.pkg\n./std/std/0.3.2/ct.pkg\nct/token/0.1.0         ct=0    inc=0    m.ct=0   m_inc=0   h.ct=0   h_inc=0   shim=0  \nct/sse/0.11.0          ct=26   inc=26   m.ct=0   m_inc=0   h.ct=1   h_inc=1   shim=0  \nct/fsguard/0.1.0       ct=16   inc=16   m.ct=1   m_inc=1   h.ct=1   h_inc=1   shim=1  \nct/http/0.2.0          ct=17   inc=13   m.ct=1   m_inc=1   h.ct=1   h_inc=0   shim=2  \nstd/std/0.3.2          ct=38   inc=13   m.ct=8   m_inc=5   h.ct=3   h_inc=3   shim=7  \nALL ct=97 inc=68 m.ct=10 m_inc=5 h.ct=6 h_inc=5\n       0\n## std/std/0.3.2/std/utf8/Utf8Ops.m.ct\n## std/std/0.3.2/std/io/File.m.ct\n## std/std/0.3.2/std/io/Stdout.m.ct\n1:#include <stdio.h>\n## std/std/0.3.2/std/num/Num.m.ct\n25:#include <ctype.h>\n26:#include <stdlib.h>\n## std/std/0.3.2/std/math/Math.m.ct\n14:#include <math.h>\n## std/std/0.3.2/std/math/Real.m.ct\n15:#include <math.h>\n## std/std/0.3.2/std/fs/Fs.m.ct\n## std/std/0.3.2/std/str/String.m.ct\n45:#include <stdlib.h>",
+      "reproduced": true,
+      "note": "外部已装包（~/.ct/pkg，DB-2 白名单内只读）是 strict 的真实迁移面：5 个包、97 .ct（68 含 include）、10 .m.ct（5 含系统头）、6 .h.ct（5 含 include）；所有 ct.pkg 都没有 c-boundary 键。std 0.3.2 已有 7 个 shim，但其 Stdout/Num/Math/Real/String.m.ct 仍直连系统头 -> 按 B 的『.m.ct 只许自有 shim』必须改（A 的『旧包缺省 allow』可不动）。fsguard/http 的 .m.ct 已 include 自有 shim（B 合规）。"
+    },
+    {
+      "id": "V25",
+      "side": "both",
+      "ref": "claim.md#§1（核心豁免机制）/ counter.md#B5 / question.md#4",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngrep -n 'lib/std/' selfhost/ct-ast/frontend/parse/Parser.h.ct\ngrep -n 'find_builtin\\|CT_STD_DIR' selfhost/ct-ast/frontend/module/Module.h.ct | head -5\ngrep -rn 'allow-c-boundary\\|allow_c_boundary' selfhost/ test/ tools/ | wc -l\nsed -n '6112,6126p' selfhost/check-ast.sh\ngrep -rn 'strstr(.*self->mem->path' selfhost/ct-ast/ | head",
+      "exit": 0,
+      "output": "2164:            if (strstr(self->mem->path, \"lib/std/\") == 0\n91:    int  find_builtin(const char *in, const char *base, char *out, int cap);\n592:       and is found the same way compile mode finds it -- `CT_STD_DIR`, then the\n596:    int find_builtin(const char *in, const char *base, char *out, int cap)\n606:        env = getenv(\"CT_STD_DIR\");\n1742:                if (self->find_builtin(inputs[0], base, bpath, sizeof bpath) != 0) continue;\n       0\n\necho\necho \"== self-hosting (9.6) ==\"\n# The AST compiler builds its own source; the result must compile warning-free,\n# and the rebuilt compiler must reproduce the same output byte for byte (a\n# fixpoint: the compiler agrees with itself on its own subset). The source is a\n# multi-unit tree now, so the build mode drives both halves and the whole output\n# directory is compared.\nmkdir -p \"$work/self1\" \"$work/self2\"\nif \"$work/ct-ast\" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o \"$work/self1\" \\\n        >\"$work/self1.out\" 2>\"$work/self1.err\" \\\n   && \"$CC\" -Wall -Wextra -std=c99 \"$work/self1\"/*.c -o \"$work/ct-ast2\" 2>\"$work/selfcc.log\" \\\n   && \"$work/ct-ast2\" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o \"$work/self2\" \\\n        >\"$work/self2.out\" 2>\"$work/self2.err\" \\\n   && diff -r -q -x .ctcache \"$work/self1\" \"$work/self2\" >/dev/null 2>&1; then\nselfhost/ct-ast/frontend/parse/Parser.h.ct:2164:            if (strstr(self->mem->path, \"lib/std/\") == 0",
+      "reproduced": true,
+      "note": "路径类豁免有先例但只有一处：Parser.h-ct:2164 用 `strstr(self->mem->path, \"lib/std/\")` 给内置层放行（容器名重声明检查），Module.h.ct:596 的 find_builtin 用 CT_STD_DIR。`allow-c-boundary` 全仓 0 命中；check-ast.sh:6121 只是自编构建行，没有 flag -> claim 的『自举入口显式 --allow-c-boundary』是待实现方案，不是现状。test/examples 的路径豁免没有任何先例。"
+    },
+    {
+      "id": "V26",
+      "side": "both",
+      "ref": "claim.md#E2 第 3 条（hdr_prologue 门禁）/ counter.md#B3",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngrep -n 'hdr_prologue' selfhost/check-ast.sh\nsed -n '2453,2468p' selfhost/check-ast.sh\nsed -n '1553,1575p' selfhost/ct-ast/backend/emit/Emitter.h.ct\ncat test/modules/hdr_prologue/main.h.ct",
+      "exit": 0,
+      "output": "2456:if \"$work/ct-ast\" build --emit-c test/modules/hdr_prologue/main.h.ct -o \"$mod-pro\" \\\n2463:   && cmp -s \"$work/mpro.stdout\" test/modules/hdr_prologue/expected.out; then\n2464:    ok \"hdr_prologue (#include yes, #define no)\"\n2466:    bad \"hdr_prologue\" \"$(cat \"$work/mpro.err\" \"$work/mpro.cc\" \"$work/mpro.stdout\")\"\necho \"== header prologue (build mode copies the source's #include lines) ==\"\nrm -rf \"$mod-pro\"\nmkdir -p \"$mod-pro\"\nif \"$work/ct-ast\" build --emit-c test/modules/hdr_prologue/main.h.ct -o \"$mod-pro\" \\\n        >\"$work/mpro.out\" 2>\"$work/mpro.err\" \\\n   && grep -q '^#include <stdio.h>$' \"$mod-pro/main.h\" \\\n   && ! grep -q 'PROLOGUE_MACRO' \"$mod-pro/main.h\" \\\n   && [ -z \"$(hdr_instances \"$mod-pro/main.h\")\" ] \\\n   && \"$CC\" -Wall -Wextra -std=c99 \"$mod-pro\"/*.c -o \"$work/mpro.bin\" 2>\"$work/mpro.cc\" \\\n   && \"$work/mpro.bin\" >\"$work/mpro.stdout\" 2>&1 \\\n   && cmp -s \"$work/mpro.stdout\" test/modules/hdr_prologue/expected.out; then\n    ok \"hdr_prologue (#include yes, #define no)\"\nelse\n    bad \"hdr_prologue\" \"$(cat \"$work/mpro.err\" \"$work/mpro.cc\" \"$work/mpro.stdout\")\"\nfi\n\nstatic int write_unit_header_body(struct Emitter *self, int u, const char *guard)\n{\n    int n, i, pp;\n\n    fprintf(self->out, \"#ifndef %s\\n\", guard);\n    fprintf(self->out, \"#define %s\\n\\n\", guard);\n    fprintf(self->out, \"/* Generated by ct v%s from %s (multi-file mode: exported types; the matching .c\\n\"\n                   \"   includes this header).\\n\"\n                   \"   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\\n\\n\",\n            self->version, self->path);\n    /* The exported types may name types from the source's own C includes,\n       so those lines lead the header. Only `#include` is copied: other `#`\n       lines belong to the implementation and would be duplicated. */\n    pp = 0;\n    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {\n        if (self->arena->nodes[n].kind != N_PP) continue;\n        if (strncmp(self->arena->nodes[n].text, \"#include\", 8) != 0) continue;\n        fprintf(self->out, \"%s\\n\", self->arena->nodes[n].text);\n        pp++;\n    }\n    if (pp > 0) fputs(\"\\n\", self->out);\n    for (i = 0; i < self->units[u].ndep; i++) {\n        if (self->units[self->units[u].depu[i]].is_map) continue;\n#include <stdio.h>\n#define PROLOGUE_MACRO 7\n\n// The header prologue copies `#include` lines but never other `#` lines: a\n// macro is implementation detail, and repeating it in the header could\n// collide with a consumer's own definition.\n\npub int answer(void) {\n    return PROLOGUE_MACRO;\n}\n\nint main(void) {\n    printf(\"%d\\n\", answer());\n    return 0;\n}",
+      "reproduced": true,
+      "note": "公开 .h 的 include 不是偶然：Emitter.h.ct:1569 专门只复制 .h.ct prologue 的 #include 行；check-ast.sh:2456-2464 的门禁断言公开 .h 必须含 `#include <stdio.h>` 且不得含 PROLOGUE_MACRO。B 若要求『公开 .h 不出现系统 include』，必须同时改这条门禁与 test/modules/hdr_prologue（claim E2 已指出），这不是删一行。"
+    },
+    {
+      "id": "V27",
+      "side": "verify",
+      "ref": "question.md#6（源级禁 include 能否去掉 C 边界）/ cinclude-1 V21",
+      "command": "cd /tmp/ci2v && rm -rf e14 && mkdir -p e14 && cd e14\nprintf '#include <stdio.h>\\nint main(void) { Vec<int> v; v.h = 0; v.push(1); printf(\"%%d\\\\n\", v.len()); return 0; }\\n' > main.ct\nCT_STD_DIR=/Users/samxx/dsh-ws/ct-lang/lib/std /tmp/ci2v/bin/ct main.ct -o v.c; echo \"rc=$?\"\ngrep -n '#include' v.c\nprintf 'int main(void) { return 0; }\\n' > bare.ct\n/tmp/ci2v/bin/ct bare.ct -o bare.c; echo \"bare_rc=$?\"; grep -n '#include' bare.c || echo '(bare: no includes)'",
+      "exit": 0,
+      "output": "rc=0\n3:#include <stdio.h>\n4:#include <stdlib.h>\n5:#include <string.h>\n6:#include <stdio.h>\n7:#include <stdlib.h>\n8:#include <stdio.h>\n9:#include <stdlib.h>\n10:#include <stdlib.h>\n11:#include <stdio.h>\nbare_rc=0\n(bare: no includes)",
+      "reproduced": true,
+      "note": "只要用到内置层（Vec/Map/Str），生成物就会被注入 stdio/stdlib/string 等 include（与源级写法无关）；纯裸程序不注入。也就是说『把 C 头从源码里禁掉』并不能去掉产物里的 C 边界，strict 只能是源码/策略层 guardrail（cinclude-1 的同一结论）。"
+    },
+    {
+      "id": "V28",
+      "side": "both",
+      "ref": "claim.md#A.6 / counter.md#E2 / question.md#2/#3",
+      "command": "cd /tmp/ci2v && rm -rf e10 && mkdir -p e10/out e10/s && cd e10\ncat > s/s.m.ct <<'EOF'\n#include <sys/stat.h>\nnamespace s;\npub type Stat = struct stat;\npub trait StatOps { int get(int fd, Stat *st); }\nmap trait StatOps for namespace s { get(fd, st) -> fstat(fd, st); }\nEOF\ncat > h.h.ct <<'EOF'\nimport s::s;\npub Stat getstat(void);\nEOF\ncat > main.ct <<'EOF'\n#include <stdio.h>\n#include <sys/stat.h>\nimport h;\nint main(void) { Stat st; getstat(); printf(\"%d\\n\", (int)st.st_nlink >= 0); return 0; }\nEOF\n/tmp/ci2v/bin/ct build --emit-c main.ct -o out; echo \"ct_rc=$?\"\ncat -n out/h.h\nprintf '#include \"h.h\"\\nint main(void) { return (int)sizeof(struct stat); }\\n' > consumer.c\ncc -Wall -Wextra -std=c99 -I out -c consumer.c -o out/consumer.o 2>&1; echo \"consumer_cc_rc=$?\"\n# 对照：.h.ct 自己保留 include + 别名（公开头自包含）\nrm -rf out2 && mkdir out2\ncat > g.h.ct <<'EOF'\n#include <sys/stat.h>\npub type Stat = struct stat;\npub int nlink(Stat *st) { return (int)st->st_nlink; }\nEOF\ncat > gmain.ct <<'EOF'\n#include <stdio.h>\n#include <sys/stat.h>\nimport g;\nint main(void) { struct stat st; st.st_nlink = 2; printf(\"%d\\n\", nlink(&st)); return 0; }\nEOF\n/tmp/ci2v/bin/ct build --emit-c gmain.ct -o out2; echo \"g_rc=$?\"\ncat -n out2/g.h | sed -n '7,12p'\ncc -Wall -Wextra -std=c99 -I out2 out2/gmain.c out2/g.c -o out2/gmain && ./out2/gmain",
+      "exit": 0,
+      "output": "cc -std=c99 -I out out/main.c out/h.c -o a.out\nct_rc=0\n     1\t#ifndef H_H\n     2\t#define H_H\n     3\t\n     4\t/* Generated by ct v0.63.2 from ./h.h.ct (multi-file mode: exported types; the matching .c\n     5\t   includes this header).\n     6\t   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n     7\t\n     8\t\n     9\tstruct stat getstat(void);\n    10\t\n    11\t#endif\nconsumer.c:2:30: error: invalid application of 'sizeof' to an incomplete type 'struct stat'\n    2 | int main(void) { return (int)sizeof(struct stat); }\n      |                              ^     ~~~~~~~~~~~~~\nout/h.h:9:8: note: forward declaration of 'struct stat'\n    9 | struct stat getstat(void);\n      |        ^\n1 error generated.\nconsumer_cc_rc=1\ncc -std=c99 -I out2 out2/gmain.c out2/g.c -o a.out\ng_rc=0\n     7\t\n     8\t#include <sys/stat.h>\n     9\t\n    10\tint nlink(struct stat *);\n    11\t\n    12\t#endif\n2",
+      "reproduced": true,
+      "note": "A.6『.h.ct 公开 C 类型经 .m.ct 别名』只对 int/不透明名字成立：h.h 变成 `struct stat getstat(void);`，别名被展开，但 .m.ct 的 <sys/stat.h> 不会进公开 .h，下游只得到不完整类型（consumer sizeof(struct stat) 编译失败）。对照 g.h.ct 自己保留 include：公开 .h 第 8 行带 <sys/stat.h>、第 10 行展开成 `int nlink(struct stat *)`，自包含且可编译。所以『不直接 include』与『公开头自包含』对 struct 类型不可兼得；B 的 .h.ct shim 也必须解决同一件事（把 shim 的声明带进公开 .h 并让下游 -I 可达）。"
+    }
+  ],
+  "findings": {
+    "counting": "688 个含 include 的 .ct / 851 行，全部落在四类：selfhost 22 文件/74 行、lib/std 4/8、test 490/559、examples 172/210；四类外 0 个。43 个 .m.ct：28 含 include，其中 17 直接系统头（<...>）、11 已 include 自有 shim（\"...\"）、15 无 include（两组无交集）。136 个 .h.ct：32 含 include（selfhost 18 / lib 4 / test 10），全部在豁免类内。counter E4 的 16/12 与实测 17/11 差 1，且 counter 把 43 个 .m.ct 与 32 个 .h.ct 算作 strict 迁移面；按双方共同的四处豁免范围（test/examples 豁免），仓内迁移面是 0。",
+    "mct_direct": "A 的核心机制在 HEAD 成立：.m.ct prologue 直连系统头后可直接 map printf/getenv/puts/socketpair/write/read/feof/fstat，ct build --emit-c rc=0，消费者 .c 顶部带这些 include，无 shim 参与，cc -Wall -Wextra 零警告并运行（V1/V2/V3/V5）。限制：recipe 必须是单次调用——errno 全局量与 s->field 都报 `a map recipe must be a single call`；.m.ct 旁的本地/第三方头默认不部署、不加 -I（rc=1），要 --cflags -I 或改用 shim（V12）。所以『任意 include』实质是『系统 include path 可达的头 + 显式 -I』。",
+    "mct_boundary": "A 的『.m.ct 就是封装边界』只在结构上成立：不能声明 struct/enum/union、全局、impl、函数、extern，pub type 只别名不发射 typedef，静态 trait 无 vtable、零产物（V4/V1）。它不构成 confinement：.m.ct prologue 的 #include/#define 整行进消费者 .c，消费者无需任何 include 就能用 system()（V18）；recipe 可以写成宏调用并通过 prologue 宏展开成任意 C——实测 system() 并运行（V19）。B 的 shim 内容同样是任意 C（inline + 宏改写消费者，V20），所以 A/B 都不强制封装，差别只是文件类别与可枚举性。",
+    "hct": "`.h.ct` prologue 的 #include 会被复制进公开 .h（Emitter.h.ct:1569），姊妹 `<base>.shim.h` 被忽略（Module.h.ct:679 只对 is_map 探测；grep shim 0 命中、shim 内符号从不被引用、cc 行无该目录 -I，V6）；ct build 不为 .h.ct 的 include 部署头或加 -I（mock-hal: ct build rc=1，.ctbuild 无 mock_hal.h，门禁 check-ast.sh:879 手工 -I，V7）。`.h.ct` 自己的 pub type 别名会展开进公开 .h，且同单元 #include 会带入声明（自包含，V28 对照）；从 .m.ct import 的别名会展开类型名，但 .m.ct 的 include 不进公开 .h，struct 类型对下游只剩不完整类型（V28：sizeof(struct stat) 编译失败）。要公开真实 C struct，仍须 .h.ct 保留 include，或新建 .h.ct shim 机制 + -I 传播（当前两者都没有；hdr_prologue 门禁还要求公开 .h 带系统 include，V26）。",
+    "policy": "HEAD 没有任何 c-boundary/strict 机制：全仓（除 battle）`c-boundary|c_boundary` 0 命中；ct build 读 ct.pkg 只取 namespace（Module.h.ct:2313/2374/2460），c-boundary=strict 被静默忽略（build rc=0、include 照旧、运行通过）；只有 tool::pkg 的清单解析对未知键告警（Pkg.h.ct:424-435）。`--allow-c-boundary` 是未知选项（rc=1）；`ct pkg check` 不存在（ct pkg 是 install 别名，rc=1 'unexpected argument check'）；selfhost/check-ast.sh:6121 的自编入口没有 allow flag。A/B 的 strict 都需新写策略层、诊断与开关。",
+    "migration": "按双方共同范围，仓内迁移面为 0（688 个含 include 的 .ct、17 个系统头 .m.ct、32 个含 include 的 .h.ct 全在 selfhost/lib/std/test/examples 内）。真实迁移面在外部包：~/.ct/pkg 现有 5 个包、97 个 .ct（68 含 include）、10 个 .m.ct（5 含系统头）、6 个 .h.ct（5 含 include）；std 0.3.2 的 Stdout/Num/Math/Real/String.m.ct 仍直连系统头（同时已有 7 个 shim）；所有 ct.pkg 都没有 c-boundary 键。A 的『旧包缺省 allow』需要判新旧包的机械依据（现无）；B 的 strict 缺省会要求这些已发布包迁移或显式 opt-in。",
+    "doc_drift": "spec:727-730 说 .m.ct 不能 import .h.ct、.h.ct 不能 import .m.ct，但 HEAD 两个方向都合法：check-ast.sh:2102 与 test/modules/sh71_map_import_hdr 把 .m.ct -> .h.ct 钉住（实测 rc=0、输出 200 201，注释 'Before A-1 this import was refused'），test/modules/map_unit_cross 把 .h.ct -> .m.ct 钉住；Module.h.ct:732 注释即 'SH-71 A-1'。claim E2 与 counter E2 都引这段旧文本，counter 的『A 自己的路也没走通』因此不成立于 HEAD。claim 引的 check-ast.sh:6121 是自编构建行，不是已存在的 --allow-c-boundary（文档/源码 0 命中）。",
+    "side_observations": [
+      "claim E1-1/E1-2/E1-3/E1-4/E1-5 的命令与输出均可复现；细节出入：map_unit 生成物 include 在第 3-5 与 9-10 行（claim 只引 3-4），其余锚点准确。",
+      "counter E1-1/E1-2/E1-3/E1-4 可复现；基名歧义消息、foo.h:8、shim 0 引用逐字一致。",
+      "counter 的 .m.ct 分类 16 系统/12 shim 与实测 17/11 差 1；claim 的 43/17 精确。",
+      "双方都没提 .m.ct prologue 宏/recipe 宏进入消费者是 strict 的直接绕过面（V18/V19），也没提 ct build 对 .h.ct include 不部署/-I（V7）。",
+      "A 的『新旧包默认区分』与 B 的『ct pkg check』在 HEAD 都没有落点；A 的 repo-0 迁移只在仓内成立，外部已装包不适用。"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "J-1",
+      "criterion": "范围与豁免：CT 核心/1.0 前代码不破坏；外部库/用户默认 strict 可机械启用",
+      "verdict": "unresolved",
+      "facts": "范围分类完备：688 个含 include 的 .ct 全在 selfhost/lib/std/test/examples 内，四类外 0；17 个系统头 .m.ct 与 32 个含 include 的 .h.ct 也全在豁免类内。但『外部默认 strict』与『核心豁免』都没有机械落点：无 --allow-c-boundary、无 c-boundary 读取、无 test/examples 路径豁免先例（只有 Parser.h.ct:2164 的 lib/std 字符串与 Module.h.ct:596 的 CT_STD_DIR）。",
+      "note": "A 的『先例可复用、新机制 2 处』是方案而非现状；B 的『包/CLI 决定』同样未实现。HEAD 无限制，所以『不破坏』目前是空真。"
+    },
+    {
+      "id": "J-2",
+      "criterion": ".m.ct include：任意 C 头 vs 仅自有 shim；是否仍能表达真实 C 库",
+      "verdict": "pass",
+      "facts": "A：直连系统头并 map printf/getenv/puts/socketpair/write/read/feof/fstat 均 rc=0、运行正确（V1/V2/V3/V5）。B：0 include + 自有 shim 同样能表达 POSIX（V8）、变参（V9）、errno 全局与 .shim.c（V10）。即两种模型都能接真实 C 库；shim 是充分但非必要。",
+      "note": "A 的『封装边界』不被 V19 支持：recipe 可以是宏调用，prologue 宏可携带任意实现；B 的 shim 同样任意（V20）。『边界』是文件类别，不是内容限制。"
+    },
+    {
+      "id": "J-3",
+      "criterion": ".h.ct/公开 C 类型：默认 strict 下是否可用，shim 探测/部署是否足够",
+      "verdict": "fail",
+      "facts": "公开 C 类型现状只有 .h.ct 直通 include 一条可用路径（V6，mock-hal/V7）；.shim.h 被忽略（V6）；ct build 不部署被 include 的头也不加 -I（V7，mock-hal rc=1，门禁手工 -I）；header prologue 门禁还要求公开 .h 带系统 include（V26）。A.6 的 .m.ct 别名路径只对 int/不透明名字有效（V5/V13）；struct 类型退化成不完整类型、下游 sizeof 失败（V28）。A 自认这是欠账，B 的 .h.ct shim 机制不存在。",
+      "note": "B 的 .h.ct shim 与 A 的别名方案都需要新建探测（Module.h.ct:683 只 is_map）+ 公开头发射 + -I/部署，并改 hdr_prologue 门禁；A 的『经 .m.ct 别名』不能省掉公开 .h 对 C 头的依赖（除非类型是标量/不透明）。"
+    },
+    {
+      "id": "J-4",
+      "criterion": "绕过面：raw/extern/define/shim 内容/链接；strict 能否 sound",
+      "verdict": "fail",
+      "facts": "5 类指定绕过全部 rc=0：raw 内 include+system()（V15）、自写 extern（V16）、函数式 #define（V17）、shim 任意 C/宏改写消费者（V20）、--ldflags 外链 .c（V21）。额外通道：.m.ct prologue 宏注入消费者（V18）、recipe 写成宏并展开成 system()（V19）；.ct 的 `# include`/缩进/mid-file 写法也 rc=0（V22）。即使只禁 .ct/.h.ct，A 允许的 .m.ct prologue 就是完整通道；B 的 shim 也是。",
+      "note": "『sound』不成立；作为 guardrail，只有在 .m.ct prologue 只许 include、shim 内容与链接面另加审计/白名单时才有意义——两者都不在 A/B 内（双方均承认 shim 内容与链接面不声称 sound）。"
+    },
+    {
+      "id": "J-5",
+      "criterion": "迁移：外部包/用户代码/旧代码；grandfather/opt-in 成本",
+      "verdict": "unresolved",
+      "facts": "仓内 0 迁移（688/17/32 全在豁免类）。外部已装包 97 .ct/68 含 include、10 .m.ct/5 含系统头、6 .h.ct/5 含 include，且无 c-boundary 键；std 0.3.2 仍直连系统头（已有 7 shim）。A 的 repo-0 成立，但『旧包缺省 allow』无新旧判别机制；B 的 strict 缺省会把 sse/fsguard/http/std 直接置为需迁移，B 的 repo 迁移表（16 .m.ct/32 .h.ct）在共同豁免范围下不成立。",
+      "note": "grandfather/opt-in 成本落在外部包与用户代码；HEAD 无实现，无法演练回退。"
+    },
+    {
+      "id": "J-6",
+      "criterion": "默认层级与回退：parser 默认 vs 包/CLI；诊断与关闭开关",
+      "verdict": "unresolved",
+      "facts": "HEAD 没有任何策略层：无 c-boundary 读取、无 CLI flag、无诊断、无 kill switch（V14）。ct.pkg 的 c-boundary 只被 tool::pkg 当未知键告警，不影响 build；ct build 只读 namespace。parser 现有唯一 C 面限制是 .m.ct prologue 白名单（Parser.h.ct:1347），.ct/.h.ct 的 include 无任何检查。parser 默认禁止会命中 688 个仓内文件（除非先做路径豁免）并重蹈 cinclude-1 否决的语言默认；J-5 的 68 个外部 .ct 与 C 超集承诺支持把默认放在包/CLI（双方在这一点一致）。",
+      "note": "B 的 ct.pkg/ct pkg check 读取点与 A 的清单只减不增都需新代码；回退在 HEAD 是无操作（本来就没执行）。诊断要求（文件:行:列 + 允许路径）目前不存在。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "criterion": "范围与豁免：CT 核心/1.0 前代码不破坏；外部库/用户默认 strict 可机械启用",
+      "verdict": "unresolved",
+      "fact": "范围分类完备：688 个含 include 的 .ct 全在 selfhost/lib/std/test/examples 内，四类外 0；17 个系统头 .m.ct 与 32 个含 include 的 .h.ct 也全在豁免类内。但『外部默认 strict』与『核心豁免』都没有机械落点：无 --allow-c-boundary、无 c-boundary 读取、无 test/examples 路径豁免先例（只有 Parser.h.ct:2164 的 lib/std 字符串与 Module.h.ct:596 的 CT_STD_DIR）。"
+    },
+    {
+      "id": "J-2",
+      "criterion": ".m.ct include：任意 C 头 vs 仅自有 shim；是否仍能表达真实 C 库",
+      "verdict": "pass",
+      "fact": "A：直连系统头并 map printf/getenv/puts/socketpair/write/read/feof/fstat 均 rc=0、运行正确（V1/V2/V3/V5）。B：0 include + 自有 shim 同样能表达 POSIX（V8）、变参（V9）、errno 全局与 .shim.c（V10）。即两种模型都能接真实 C 库；shim 是充分但非必要。"
+    },
+    {
+      "id": "J-3",
+      "criterion": ".h.ct/公开 C 类型：默认 strict 下是否可用，shim 探测/部署是否足够",
+      "verdict": "fail",
+      "fact": "公开 C 类型现状只有 .h.ct 直通 include 一条可用路径（V6，mock-hal/V7）；.shim.h 被忽略（V6）；ct build 不部署被 include 的头也不加 -I（V7，mock-hal rc=1，门禁手工 -I）；header prologue 门禁还要求公开 .h 带系统 include（V26）。A.6 的 .m.ct 别名路径只对 int/不透明名字有效（V5/V13）；struct 类型退化成不完整类型、下游 sizeof 失败（V28）。A 自认这是欠账，B 的 .h.ct shim 机制不存在。"
+    },
+    {
+      "id": "J-4",
+      "criterion": "绕过面：raw/extern/define/shim 内容/链接；strict 能否 sound",
+      "verdict": "fail",
+      "fact": "5 类指定绕过全部 rc=0：raw 内 include+system()（V15）、自写 extern（V16）、函数式 #define（V17）、shim 任意 C/宏改写消费者（V20）、--ldflags 外链 .c（V21）。额外通道：.m.ct prologue 宏注入消费者（V18）、recipe 写成宏并展开成 system()（V19）；.ct 的 `# include`/缩进/mid-file 写法也 rc=0（V22）。即使只禁 .ct/.h.ct，A 允许的 .m.ct prologue 就是完整通道；B 的 shim 也是。"
+    },
+    {
+      "id": "J-5",
+      "criterion": "迁移：外部包/用户代码/旧代码；grandfather/opt-in 成本",
+      "verdict": "unresolved",
+      "fact": "仓内 0 迁移（688/17/32 全在豁免类）。外部已装包 97 .ct/68 含 include、10 .m.ct/5 含系统头、6 .h.ct/5 含 include，且无 c-boundary 键；std 0.3.2 仍直连系统头（已有 7 shim）。A 的 repo-0 成立，但『旧包缺省 allow』无新旧判别机制；B 的 strict 缺省会把 sse/fsguard/http/std 直接置为需迁移，B 的 repo 迁移表（16 .m.ct/32 .h.ct）在共同豁免范围下不成立。"
+    },
+    {
+      "id": "J-6",
+      "criterion": "默认层级与回退：parser 默认 vs 包/CLI；诊断与关闭开关",
+      "verdict": "unresolved",
+      "fact": "HEAD 没有任何策略层：无 c-boundary 读取、无 CLI flag、无诊断、无 kill switch（V14）。ct.pkg 的 c-boundary 只被 tool::pkg 当未知键告警，不影响 build；ct build 只读 namespace。parser 现有唯一 C 面限制是 .m.ct prologue 白名单（Parser.h.ct:1347），.ct/.h.ct 的 include 无任何检查。parser 默认禁止会命中 688 个仓内文件（除非先做路径豁免）并重蹈 cinclude-1 否决的语言默认；J-5 的 68 个外部 .ct 与 C 超集承诺支持把默认放在包/CLI（双方在这一点一致）。"
+    }
+  ]
+}
