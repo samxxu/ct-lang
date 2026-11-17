@@ -37,6 +37,13 @@ $ grep -n 'malloc' /tmp/p.c | head -2
 `--freestanding` 下 compile 模式也不隐式加载内置层；用到容器/`Str` 时给明确诊断
 （提示用 `ct build` 或不用 freestanding）。
 
+## 处置（v0.63.5）
+
+- 提交 `506039e8`（红证 `be24fd4f`，baseline `22500ad5`）。
+- `Driver::load_builtin` 在 `m->freestanding` 时返回 -1：compile 模式不再加载内置层。
+- 验证：`p64_freestanding` 新增 compile 模式断言后 `OK p64free`；`check-all` 11/11、
+  `check-ast` 1465/0。
+
 ## 关联
 
 - 发现于 [TEST-20](../../issues/testing/test20-baremetal-qemu-smoke.md) 的 QEMU 冒烟（该冒烟走 build 模式，故不受影响）；
