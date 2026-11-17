@@ -437,6 +437,26 @@ static int c_manifest_boundary(const char *dir)
     return r;
 }
 
+/* PH-65 R5: two units with the same base both publishing a shim make the
+   `#include "<base>.shim.h"` (and the `-I` set) ambiguous. */
+static int ct_shim_ambiguity(struct Module *m, const struct Unit *units, int n)
+{
+    int i, j;
+
+    for (i = 0; i < n; i++) {
+        if (!units[i].has_shim) continue;
+        for (j = i + 1; j < n; j++) {
+            if (!units[j].has_shim) continue;
+            if (strcmp(units[i].base, units[j].base) != 0) continue;
+            fprintf(stderr, "ctc: shim base name '%s' is ambiguous: %s, %s\n",
+                    units[i].base, units[i].path, units[j].path);
+            return 1;
+        }
+    }
+    (void)m;
+    return 0;
+}
+
 impl ModuleOps for Module {
     /* Module failures are about the build itself -- an unreadable input, an
        import that does not resolve, a path that does not fit, a limit. None of
@@ -763,7 +783,7 @@ impl ModuleOps for Module {
         self->p->unit_is_map = is_map;
         self->p->c_strict = (!is_map && self->c_boundary_for(path)) ? 1 : 0;
         snprintf(self->p->c_base, sizeof self->p->c_base, "%s", self->units[u].base);
-        /* A shim belongs to a mapping unit only (batch 39): `<base>.shim.h` is
+        /* A shim belongs to a mapping/header unit (batch 39, PH-65 R5): `<base>.shim.h` is
            an include root for the consumer, `<base>.shim.c` joins the program.
            Header-only shims are the normal case; a source without its header
            cannot declare anything for a recipe, so it is rejected by name. */
@@ -771,7 +791,7 @@ impl ModuleOps for Module {
         self->units[u].shim_dir[0] = 0;
         self->units[u].shim_h[0] = 0;
         self->units[u].shim_c[0] = 0;
-        if (is_map) {
+        if (is_map || is_hdr) {
             char dir[MAX_PATH];
             char h[MAX_PATH];
             char c[MAX_PATH];
@@ -799,7 +819,7 @@ impl ModuleOps for Module {
                 }
                 snprintf(self->units[u].shim_c, MAX_PATH, "%s", c);
             }
-            if (self->units[u].shim_c[0] && !self->units[u].shim_h[0]) {
+            if (is_map && self->units[u].shim_c[0] && !self->units[u].shim_h[0]) {
                 snprintf(msg, sizeof msg, "a shim source needs a matching .shim.h: %s", h);
                 return tool::diag::ct_sem_error(1, 1, msg, path);
             }
@@ -1956,8 +1976,19 @@ impl ModuleOps for Module {
                                         cstd) != 0
                         || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-fvisibility=hidden") != 0
                         || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-I") != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->outdir) != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-c") != 0
+                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->outdir) != 0)
+                        return 1;
+                    {
+                        int kk;
+                        for (kk = 0; kk < self->nunits; kk++) {
+                            if (!self->units[kk].has_shim) continue;
+                            if (ct_cmd_token(cmd, MAX_CMD, &ncmd, "-I") != 0
+                                || ct_cmd_token(cmd, MAX_CMD, &ncmd,
+                                                self->units[kk].shim_dir) != 0)
+                                return 1;
+                        }
+                    }
+                    if (ct_cmd_token(cmd, MAX_CMD, &ncmd, "-c") != 0
                         || ct_cmd_token(cmd, MAX_CMD, &ncmd, src) != 0
                         || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-o") != 0
                         || ct_cmd_token(cmd, MAX_CMD, &ncmd, obj) != 0) {
@@ -2129,6 +2160,7 @@ impl ModuleOps for Module {
             self->builtin_live[o] = self->builtin_live_for(self->builtin_units[o]);
         self->computed_live = 1;
         backend::emit::ct_emit_bind_builtin_live(self->builtin_live);
+        if (ct_shim_ambiguity(self, self->units, self->nunits)) return 1;
         for (o = 0; o < cn; o++) {
             char outc[MAX_PATH];
             char key[MAX_KEY];

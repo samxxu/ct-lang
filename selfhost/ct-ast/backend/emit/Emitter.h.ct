@@ -1570,6 +1570,22 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
         fprintf(self->out, "%s\n", self->arena->nodes[n].text);
         pp++;
     }
+    /* PH-65 R5: a `.h.ct` that owns a shim publishes it, so a consumer that
+       only sees the generated header still gets the C surface. Avoid the
+       duplicate when the author already wrote the include. */
+    if (self->units[u].has_shim) {
+        char line[256];
+        int dup = 0;
+        snprintf(line, sizeof line, "#include \"%s.shim.h\"", self->units[u].base);
+        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind != N_PP) continue;
+            if (strcmp(self->arena->nodes[n].text, line) == 0) {
+                dup = 1;
+                break;
+            }
+        }
+        if (!dup) fprintf(self->out, "%s\n", line);
+    }
     if (pp > 0) fputs("\n", self->out);
     for (i = 0; i < self->units[u].ndep; i++) {
         if (self->units[self->units[u].depu[i]].is_map) continue;
