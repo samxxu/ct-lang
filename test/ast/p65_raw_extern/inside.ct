@@ -1,0 +1,10 @@
+#ct-raw
+static int ct_shim_side_effect(void) { return 1; }
+#ct-endraw
+
+extern int ct_some_libc_flag;
+
+int main(void)
+{
+    return ct_shim_side_effect() + ct_some_libc_flag;
+}
