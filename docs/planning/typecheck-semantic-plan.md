@@ -6,8 +6,9 @@
 | 日期 | 2026-11-18 |
 | 基线 | `ed172075`（`v0.65.1`；Phase 66 已收口） |
 | 依据 | [battle typecheck-1](../../battle/typecheck-1/verdict.md)（B′）、[verify](../../battle/typecheck-1/verify.json) |
-| 结论 | **不全量进编译路径**；分 4 相 opt-in：类型核心 → 跨单元/泛型 → CFG → own/borrow；B1 先修 `char s[]` 误报 |
+| 结论 | **不全量进编译路径**；分 4 相 opt-in：类型核心 → 跨单元/泛型 → CFG → own/borrow；B1 先修 `char s[]` 误报。A 放到 v1.1，见 [v1-release-plan](v1-release-plan.md) |
 | 版本位 | PH-67 → v0.66.0；PH-68 → v0.67.0；PH-69 → v0.68.0；PH-70 → v0.69.0（`d=1`，见 AGENTS §0.3） |
+| A 目标 | v1.0 之后、v1.1 release train；不是本文件的 B 相 |
 
 ## 0. 一句话
 
@@ -111,6 +112,13 @@ A 的“一次清零”不可行：234 类 FP 未修、123 个 import 单元未�
 
 开卡条件：B1 先出 `char s[]` 红夹具与 FP 统计脚本；`check-all` 基线与 234 白名单锁定。
 编译路径切换另立决策，不在本方案承诺。
+
+## 7. v1.0 / v1.1 位置
+
+- v1.0 之前：完成 B1–B4，保持 opt-in；v1.0 只做 AST-only 收口，不把 A 塞进 v1.0。
+- v1.1：PH-72 现代语法重写 ct-ast（行为保持）→ PH-73 A strict 编译路径。
+- A 的进入条件、seed/旧管线移除、版本 train 见 [v1-release-plan](v1-release-plan.md)。
+- v1.0/v1.1 与 `MINOR == PH-n` 的冲突需开卡前登记 deviation，不在本方案里绕过。
 
 ## 7. 风险
 
