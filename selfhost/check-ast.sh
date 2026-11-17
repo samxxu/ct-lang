@@ -675,6 +675,14 @@ else
     bad "p64_freestanding" "$(cat "$work/p64fs.out" "$work/p64fs.err")"
 fi
 
+# PH-65 R1: the C boundary policy must resolve to the documented side for
+# external code, the CT tree, package manifests and the command line.
+if bash test/ast/p65_policy.sh "$work/ct-ast" >"$work/p65pol.out" 2>"$work/p65pol.err"; then
+    ok "p65/policy"
+else
+    bad "p65/policy" "$(cat "$work/p65pol.out" "$work/p65pol.err" | head -4)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.

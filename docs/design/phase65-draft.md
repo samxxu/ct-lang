@@ -115,6 +115,9 @@ S0 在 `0e541f32` 上冷构建 `ct`（`ct -v` = `v0.63.2`），记录 `check-ast
 - `ct build --c-boundary=strict|allow`；`--allow-c-boundary` 作为内部/兼容别名；
 - `ct pkg check` 读取；未知键仍 warning/ignore 规则保持，但 `c-boundary` 必须识别；
 - 旧外部包：缺省 allow 窗口 + 迁移清单；新包默认 strict。
+- 可观测（R1 验收用）：`--show-c-boundary` 打印对给定输入解析出的策略后退出；
+  它是内部调试入口，不是公开 API，探针 `test/ast/p65_policy.sh` 用它机械核对
+  E65-1 的四条口径（外部 / 仓内 / 包 / CLI）。
 
 ### 3.5 诊断（L65-n）
 
