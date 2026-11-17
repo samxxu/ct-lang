@@ -1,6 +1,6 @@
 # Phase 65 — 严格 C 边界（外部库/用户默认 strict）
 
-> **状态：实施中**（2026-11-17 立项；卡已冻结；S0 已完成，R1 已完成（87aaad4e），R2 已完成（6f7ec245），R3 待做）。
+> **状态：实施中**（2026-11-17 立项；卡已冻结；S0 已完成，R1 已完成（87aaad4e），R2 已完成（6f7ec245），R3 已完成（03e3b81e），R4 待做）。
 > **基线**：当前 `HEAD 0e541f32`（`v0.63.2`）；S0 记录实际 sha 与门禁数字。
 > **文档形态**：`phase65-draft.md`；design window 7/12。
 > **依据**：[battle cinclude-2 判决](../../battle/cinclude-2/verdict.md)、[cinclude-1 判决](../../battle/cinclude-1/verdict.md)、[硬件需求](../planning/hardware-readiness-requirements.md) 的 C 边界部分。

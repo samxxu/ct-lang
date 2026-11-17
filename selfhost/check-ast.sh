@@ -694,6 +694,13 @@ else
     bad "p65/include" "$(cat "$work/p65inc.out" "$work/p65inc.err" | head -4)"
 fi
 
+# PH-65 R3: strict also closes #ct-raw, extern and function-like macros.
+if env -u CT_C_BOUNDARY bash test/ast/p65_raw_extern.sh "$work/ct-ast" >"$work/p65raw.out" 2>"$work/p65raw.err"; then
+    ok "p65/raw-extern"
+else
+    bad "p65/raw-extern" "$(cat "$work/p65raw.out" "$work/p65raw.err" | head -4)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
