@@ -233,6 +233,10 @@ bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 # 77; it is reported, counted, and never silently green.
 skip() { skipped=$((skipped + 1)); printf '  skip  %s: %s\n' "$1" "$2"; }
 
+# PH-65 R2: the probes below generate fixtures in a temp dir and (pre-PH-65)
+# wrote `#include` freely; they are not the thing under test here. The p65
+# probes clear this variable themselves (they test the default).
+export CT_C_BOUNDARY=allow
 echo "cc: $CC"
 echo
 echo "== unit names (a unit file is named after its main type) =="
@@ -677,10 +681,17 @@ fi
 
 # PH-65 R1: the C boundary policy must resolve to the documented side for
 # external code, the CT tree, package manifests and the command line.
-if bash test/ast/p65_policy.sh "$work/ct-ast" >"$work/p65pol.out" 2>"$work/p65pol.err"; then
+if env -u CT_C_BOUNDARY bash test/ast/p65_policy.sh "$work/ct-ast" >"$work/p65pol.out" 2>"$work/p65pol.err"; then
     ok "p65/policy"
 else
     bad "p65/policy" "$(cat "$work/p65pol.out" "$work/p65pol.err" | head -4)"
+fi
+
+# PH-65 R2: strict units may not include a system header; only their own shim.
+if env -u CT_C_BOUNDARY bash test/ast/p65_include.sh "$work/ct-ast" >"$work/p65inc.out" 2>"$work/p65inc.err"; then
+    ok "p65/include"
+else
+    bad "p65/include" "$(cat "$work/p65inc.out" "$work/p65inc.err" | head -4)"
 fi
 
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
