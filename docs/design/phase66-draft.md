@@ -122,3 +122,19 @@
 
 附带变化：`--emit-c` 的 `<stdio.h>` 位置移到 banner 之后（p39 R8 基线已重生成）；
 `MAX_CALLS` 1024→2048（全构建共享调用表，ct-ast 自编需要）。
+
+## 10 收口补正（REV 复核 batch2，2026-11-18）
+
+REV 指出 §9 的 `baseline:` 用了 tag/文字描述而不是 sha（T-7 最小字段要求完整 sha）。
+历史提交不重写，按实际构建点补正：
+
+| 任务 | test 提交 | impl 提交 | 实际 baseline |
+| --- | --- | --- | --- |
+| R1 | `c3f382c0` | `663546cb` | `c2aa952`（v0.64.0） |
+| R2 | `3fc6b51a` | `d9c00a1c` | `c2aa952`（v0.64.0 构建） |
+| R3 | `d4080bf6` | `f022ffc3` | `c2aa952`（v0.64.0 构建） |
+| R4 | `79eccf5f` | `c5c357f1` | `f022ffc3`（R3 实现） |
+| R5 | `ac55c523` | `d5e0fa80` | `c5c357f`（R4 实现） |
+
+`git rev-parse <impl>^` 与 test 提交的对应关系经 REV 核对均成立；冻结（§4/§5）亦成立。
+复核记录：[2026-11-18-fix-rev-verdict-batch2.md](../reviews/2026-11-18-fix-rev-verdict-batch2.md)。

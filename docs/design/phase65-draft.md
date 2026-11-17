@@ -202,3 +202,15 @@ S0 在 `0e541f32` 上冷构建 `ct`（`ct -v` = `v0.63.2`），记录 `check-ast
 | 版本 | 五处 `CTC_VERSION` | `v0.64.0`；tag `v0.64.0`（annotated，V-7 四项校验后推送） |
 
 任务级红证：R1 `3cfe6772`、R2 `9164e46c`、R3 `6c539422`、R4 `abe45eb4`、R5 `604340ef`、R6 `64fc41db`（相位前基线）、R7 `64fc41db`。
+
+## 10 收口补正（REV 复核 batch2，2026-11-18）
+
+REV 对 §9 的任务级红证逐条核对后指出两处不合规；历史提交不重写，这里补正字段与事实。
+
+| 任务 | test 提交 | impl 提交 | 实际 baseline | 说明 |
+| --- | --- | --- | --- | --- |
+| R6 | `d044860a` | 无（characterization：交付物就是探针，产品无改动） | `72ed6dc6`（相位前 v0.63.4 冷构建） | §9 曾把 R6 误写成 `64fc41db`（那是 R7 的红提交） |
+| R7 | `64fc41db` | `ef121c6c` | `983ecf33`（`64fc41db^`） | 红提交正文缺 `baseline:` 字段，此处补正 |
+
+复核记录：[2026-11-18-fix-rev-verdict-batch2.md](../reviews/2026-11-18-fix-rev-verdict-batch2.md)。
+后续新任务的 `baseline:` 一律写完整 sha（T-7）。
