@@ -153,6 +153,11 @@ pub struct Parser {
     /* Set while the unit being parsed is a `.m.ct` mapping unit: the content
        whitelist and the static-trait rules key off it. */
     int  unit_is_map;
+    /* PH-65 R2: the C boundary policy for this unit (1 = strict) and the base
+       name that may legitimately appear as `<base>.shim.h`. Set by the loader
+       per unit; Parser must not reach back into Module. */
+    int  c_strict;
+    char c_base[160];
     /* Set while the unit being parsed is a `.h.ct` interface unit. A type
        alias may live in a `.h.ct` (a public signature may use it) but not in
        a plain `.ct`, which no unit can import. */
@@ -1344,6 +1349,18 @@ impl ParseOps for Parser {
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {
+                if (self->c_strict && !self->unit_is_map
+                    && strncmp(self->lex->toktext, "#include", 8) == 0) {
+                    const char *t = self->lex->toktext + 8;
+                    char want[200];
+                    while (*t == ' ' || *t == '\t') t++;
+                    snprintf(want, sizeof want, "\"%s.shim.h\"", self->c_base);
+                    if (strcmp(t, want) != 0)
+                        return tool::diag::ct_sem_error(self->lex->tokline, 1,
+                            "a strict C boundary forbids '#include';"
+                            " use .m.ct or <base>.shim.h",
+                            self->mem->path);
+                }
                 if (self->unit_is_map
                     && !(strncmp(self->lex->toktext, "#include", 8) == 0
                          || strncmp(self->lex->toktext, "#define", 7) == 0))
