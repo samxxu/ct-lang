@@ -13,7 +13,7 @@ esac
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/p66emp.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 fail=0
-mkdir -p "$tmp/o"
+mkdir -p "$tmp/o" "$tmp/ob"
 
 cat >"$tmp/empty.ct" <<'CT'
 int main(void)
@@ -40,10 +40,17 @@ n=$(n_sys "$tmp/o/empty.c")
 [ "$n" = "0" ] || { echo "FAIL p66/io-empty: compile mode empty program has $n system header(s)" >&2; grep -n '#include *<' "$tmp/o/empty.c" >&2; fail=1; }
 
 # build mode: already pruned before PH-66; keep it from regressing.
-( cd "$root" && env -u CT_C_BOUNDARY "$CT" build --emit-c "$tmp/empty.ct" -o "$tmp/o" ) >"$tmp/b.log" 2>"$tmp/b.err" || {
+( cd "$root" && env -u CT_C_BOUNDARY "$CT" build --emit-c "$tmp/empty.ct" -o "$tmp/ob" ) >"$tmp/b.log" 2>"$tmp/b.err" || {
     echo "FAIL p66/io-empty: build mode failed" >&2; sed 's/^/  /' "$tmp/b.err" | head -3 >&2; exit 1; }
-n=$(n_sys "$tmp/o/empty.c")
+n=$(n_sys "$tmp/ob/empty.c")
 [ "$n" = "0" ] || { echo "FAIL p66/io-empty: build mode empty program has $n system header(s)" >&2; fail=1; }
+
+# SH-91: an unused layer unit must not even be parsed -- its symbols would be
+# declared (never defined) and GCC warns `-Wunused-function`.
+if grep -q 'Str_Drop_drop' "$tmp/o/empty.c"; then
+    echo "FAIL p66/io-empty: the product carries an unused layer symbol (Str_Drop_drop)" >&2
+    fail=1
+fi
 
 # A program that uses a container must still get the layer.
 CT_STD_DIR="$root/lib/std" "$CT" "$tmp/vec.ct" -o "$tmp/o/vec.c" >"$tmp/v.log" 2>"$tmp/v.err" || {
