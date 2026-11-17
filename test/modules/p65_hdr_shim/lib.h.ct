@@ -1,0 +1,4 @@
+/* PH-65 R5: a header unit that owns a shim publishes it. */
+struct Point { int x; int y; }
+
+pub int point_x(struct Point *p) { return p->x; }
