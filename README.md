@@ -507,3 +507,5 @@ For commercial licensing or exceptions, contact: samxxu@gmail.com
 
 作者 Sam X. Xu · samxxu@gmail.com · 问题与建议优先开 [Issue](https://github.com/samxxu/ct-lang/issues)。
 - **C 边界**（Phase 65）：外部代码默认 strict——`.ct/.h.ct` 禁直接 `#include`、`#ct-raw`、`extern` 与函数式宏，出口是 `<base>.shim.h` 或 `.m.ct`；包用 `ct.pkg` 的 `c-boundary`、命令用 `--c-boundary=strict|allow`。
+- **libc I/O 例外**（Phase 66）：`printf`/`scanf`/`puts` 族按调用补头（`<stdio.h>`），宽字符组补 `<wchar.h>`；没有调用不带系统头，`--freestanding` 下不补。
+

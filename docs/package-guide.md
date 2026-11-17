@@ -86,6 +86,9 @@ S1 起 `publisher` + `ns-root` 是 store 与 lock v2 的必填身份；写 `ns-r
 **S7 后**：`publisher` / `ns-root` 是必填身份；缺失直接失败，不再退回 `vendor/`；
 只缺一个、或 `publisher = local`、`ns-root` 为绝对路径/含 `..`/目录不存在时硬错。
 
+包的 `.ct` 不写 `#include <stdio.h>`：`printf` 族由编译器**按直接调用补头**（语言规范 §4.67）；
+需要 `syslog`/`open` 这类集合外的符号时，用 `.m.ct` 映射或在 shim 里声明。
+
 `c-boundary` 由 `ct build` / `ct pkg check` 读取：`strict` 时包内 `.ct/.h.ct` 不得直接
 `#include`、不得 `#ct-raw`/`extern`/函数式宏，唯一出口是 `<base>.shim.h`；`allow` 保持旧行为。
 未写该键的旧包按 `allow` 处理，新包建议显式写 `strict`（见语言规范 §4.66）。

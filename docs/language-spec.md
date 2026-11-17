@@ -2755,6 +2755,27 @@ Result<long, char *> twice(int n)
 
 strict 是**护栏**不是沙箱：shim 的内容、`--ldflags` 外链的 `.c` 仍能绕过文件边界（D65-8）。
 
+### 4.67 libc I/O 内置例外：按直接调用补头（Phase 66，仅 ct-ast）
+
+`printf` 这一族**不需要 `#include`，也不需要 `import`**：编译器按**直接调用**补头，
+没有调用就不补（D-008）。
+
+| 组 | 名字 | 补的头 |
+| --- | --- | --- |
+| 格式化/标准 I/O | `printf`、`fprintf`、`sprintf`、`snprintf`、`scanf`、`fscanf`、`sscanf`、`puts`、`putchar`、`fputs`、`fputc`、`fflush`、`perror` | `<stdio.h>` |
+| 宽字符 | `wprintf`、`fwprintf`、`swprintf`、`wscanf`、`fwscanf`、`swscanf` | `<wchar.h>` |
+
+边界：
+
+- 只认**直接调用**；名字出现在字符串/注释里不算。取地址不是调用（但 CT 目前不允许引用未声明函数）。
+- 用户自己定义了同名函数（或宏）时**不抢**：按用户的声明处理，不补头。
+- 集合外的名字（`syslog`、`open`、`fcntl`、`exec*`、`ioctl` …）**不补头**：走 `.m.ct`/shim 或显式声明。
+- `vprintf`/`vsnprintf` 等接收 `va_list`，不是可变参数函数，不因前缀补头。
+- 每个头只补一次，位置在 banner 之后、内置层 prologue 之前。
+- `--freestanding` 下**不补头**；调用未由 shim 声明时报错（`'printf' is not declared in a freestanding build`）。
+
+这是**显式 libc 例外**，不是"C 库已被封装"：格式串与实参类型不检查，与 C 一致。
+
 ## 11 文档与实现一致性（缺口登记，2026-11-15）
 
 **现状**：仓库门禁里没有防止本文与实现漂移的自动机制。`check-docs` 只校验相对链接、版本串、
