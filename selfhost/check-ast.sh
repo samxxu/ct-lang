@@ -249,6 +249,17 @@ else
     bad "unit names" "$name_bad"
 fi
 
+# TEST-19: C leaves argument evaluation order unspecified, so a fixture that
+# prints `m.remove(k)` and `m.len()` in one call reads differently on GCC/x86-64
+# (right to left) and clang/arm64 -- that was the ubuntu-gcc failure at v0.63.0.
+# The scanner's self-test is the negative example: it must flag the old line.
+if python3 test/ast/check_eval_order.py --self-test >"$work/evalorder.st" 2>&1 \
+   && python3 test/ast/check_eval_order.py >"$work/evalorder.out" 2>"$work/evalorder.err"; then
+    ok "eval-order lint ($(tail -1 "$work/evalorder.out"))"
+else
+    bad "eval-order lint" "$(cat "$work/evalorder.st" "$work/evalorder.err" | head -3)"
+fi
+
 echo
 echo "== the AST compiler's own sources carry no raw blocks (17.3) =="
 # ct-ast is built by L2, which does not know `#ct-raw`; a marker line here
