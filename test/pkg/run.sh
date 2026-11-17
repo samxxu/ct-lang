@@ -1,4 +1,8 @@
 #!/bin/sh
+
+# PH-65: these harnesses predate the C boundary and generate fixtures in temp
+# directories with free `#include`s; the p65 probes clear this themselves.
+export CT_C_BOUNDARY=allow
 #
 # test/pkg/run.sh - Phase 8.1 + 8.2 + 8.3: the local, git and install halves of ct-pkg.
 #

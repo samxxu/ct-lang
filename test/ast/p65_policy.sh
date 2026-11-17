@@ -7,6 +7,10 @@
 # Usage: bash test/ast/p65_policy.sh <ct-ast>
 set -u
 CT=${1:?usage: p65_policy.sh <ct-ast>}
+case "$CT" in
+    /*) ;;
+    *) CT=$(cd -- "$(dirname -- "$CT")" && pwd)/$(basename -- "$CT") ;;
+esac
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/p65pol.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
@@ -31,8 +35,17 @@ check() {   # check <label> <want> <cmd...>
     fi
 }
 
-check "external default" strict "$CT" --show-c-boundary "$tmp/ext/x.ct"
-check "CLI allow"        allow  "$CT" --c-boundary=allow --show-c-boundary "$tmp/ext/x.ct"
+check_in() {   # check <label> <want> <dir> <cmd...>
+    local label=$1 want=$2 dir=$3 got
+    shift 3
+    got=$( cd "$dir" && "$@" 2>"$tmp/err" )
+    if [ "$got" != "$want" ]; then
+        echo "FAIL p65/policy: $label: want '$want', got '$got' ($(head -1 "$tmp/err"))" >&2
+        fail=1
+    fi
+}
+check_in "external default" strict "$tmp" "$CT" --show-c-boundary "$tmp/ext/x.ct"
+check_in "CLI allow"        allow  "$tmp" "$CT" --c-boundary=allow --show-c-boundary "$tmp/ext/x.ct"
 check "CT tree default"  allow  "$CT" --show-c-boundary test/ast/p65_policy/inside.ct
 check "CLI strict wins"  strict "$CT" --c-boundary=strict --show-c-boundary test/ast/p65_policy/inside.ct
 check "package allow"    allow  "$CT" build -I "$tmp/allow" --show-c-boundary "$tmp/allow/u.ct"

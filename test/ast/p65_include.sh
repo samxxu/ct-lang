@@ -5,6 +5,10 @@
 # Usage: bash test/ast/p65_include.sh <ct-ast>
 set -u
 CT=${1:?usage: p65_include.sh <ct-ast>}
+case "$CT" in
+    /*) ;;
+    *) CT=$(cd -- "$(dirname -- "$CT")" && pwd)/$(basename -- "$CT") ;;
+esac
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/p65inc.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
@@ -39,7 +43,7 @@ CT
 expect_err() {   # expect_err <label> <want-line> <file> [extra args...]
     local label=$1 want=$2 file=$3 out rc
     shift 3
-    ( cd "$root" && "$CT" "$@" "$file" -o "$tmp/out/x.c" ) >"$tmp/out/o.log" 2>"$tmp/out/e.log"
+    ( cd "$tmp" && "$CT" "$@" "$file" -o "$tmp/out/x.c" ) >"$tmp/out/o.log" 2>"$tmp/out/e.log"
     rc=$?
     if [ "$rc" -ne 1 ]; then
         echo "FAIL p65/include: $label: rc=$rc (want 1)" >&2
@@ -62,7 +66,7 @@ expect_err() {   # expect_err <label> <want-line> <file> [extra args...]
 expect_ok() {    # expect_ok <label> <file> [extra args...]
     local label=$1 file=$2
     shift 2
-    if ! ( cd "$root" && "$CT" "$@" "$file" -o "$tmp/out/x.c" ) >"$tmp/out/o.log" 2>"$tmp/out/e.log"; then
+    if ! ( cd "$tmp" && "$CT" "$@" "$file" -o "$tmp/out/x.c" ) >"$tmp/out/o.log" 2>"$tmp/out/e.log"; then
         echo "FAIL p65/include: $label: expected success" >&2
         sed 's/^/  /' "$tmp/out/e.log" | head -3 >&2
         fail=1
@@ -74,7 +78,8 @@ expect_err "strict .h.ct system include" 1 "$tmp/hdr/h.h.ct"
 expect_err "foreign shim name" 1 "$tmp/other/o.ct"
 expect_ok  "own shim allowed" "$tmp/own/good.ct"
 expect_ok  "allow keeps old behaviour" "$tmp/allow/a.ct" --c-boundary=allow
-expect_ok  "CT tree keeps old behaviour" test/ast/p65_include/inside.ct
+( cd "$root" && "$CT" test/ast/p65_include/inside.ct -o "$tmp/out/core.c" ) >"$tmp/out/o.log" 2>"$tmp/out/e.log" \
+    || { echo "FAIL p65/include: CT tree keeps old behaviour" >&2; sed 's/^/  /' "$tmp/out/e.log" | head -3 >&2; fail=1; }
 
 [ "$fail" -eq 0 ] && echo "OK p65/include"
 exit "$fail"

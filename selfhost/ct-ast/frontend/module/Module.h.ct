@@ -357,6 +357,14 @@ static int file_uses_str(struct Symbols *sym, const char *path, int fn_start, in
 /* PH-65 R1: the CT tree keeps the pre-1.0 behaviour; every in-repo include
    lives in one of these four directories. An absolute path or a `..` escape is
    not "inside" the tree. */
+/* Inside the CT tree itself every path is grandfathered: the project's own
+   development and probe runs happen here, and 688 in-repo includes must keep
+   working (D65-1). A user project never has this marker. */
+static int c_cwd_in_tree(void)
+{
+    return access("selfhost/ct-ast/main.ct", R_OK) == 0 ? 1 : 0;
+}
+
 static int c_path_is_core(const char *path)
 {
     static const char *const core[4] = { "selfhost/", "lib/std/", "test/", "examples/" };
@@ -2320,15 +2328,14 @@ cmd_too_long:
         int i, r;
 
         if (self->c_boundary >= 0) return self->c_boundary;
-        /* The project's own probe harness runs generated fixtures from a temp
-           directory; `CT_C_BOUNDARY` keeps those legacy fixtures on the old
-           side without each probe spelling the flag. */
         {
             const char *e = getenv("CT_C_BOUNDARY");
             if (e != 0 && strcmp(e, "allow") == 0) return 0;
             if (e != 0 && strcmp(e, "strict") == 0) return 1;
         }
-        if (c_path_is_core(path)) return 0;
+        /* A package manifest is the most specific statement about a unit that
+           lives inside that package: it wins over the tree/cwd convenience, so
+           a package's own strict setting is testable from the repo root. */
         for (i = 0; i < self->ninc; i++) {
             if (strncmp(path, self->incdirs[i], strlen(self->incdirs[i])) != 0)
                 continue;
@@ -2338,6 +2345,8 @@ cmd_too_long:
                keeps the allow window instead of breaking on upgrade (D65-7). */
             if (c_has_manifest(self->incdirs[i])) return 0;
         }
+        if (c_cwd_in_tree()) return 0;
+        if (c_path_is_core(path)) return 0;
         return 1;
     }
 
