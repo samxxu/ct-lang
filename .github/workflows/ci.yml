@@ -19,6 +19,13 @@ jobs:
       CC: gcc
     steps:
       - uses: actions/checkout@v4
+      # TEST-20: the bare-metal smoke needs a cross toolchain and QEMU; without
+      # them the probe reports `skip`, which would leave the contract unproven
+      # on the one job that is supposed to prove it.
+      - name: bare-metal smoke tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi qemu-system-arm
       - name: hard gates
         run: |
           set -o pipefail
