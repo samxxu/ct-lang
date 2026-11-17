@@ -13,6 +13,9 @@
 
 ### 1. 一个包长什么样
 
+> 包仓的发布、tag、release dispatch、digest 与索引接入规则（提案，待目标组受理）：
+> [ct-pkg-package-maintainer-rules.md](proposals/ct-pkg-package-maintainer-rules.md)。
+
 包仓库的**根目录是包根**：`ct.pkg` 放在根，源码单元放在清单
 `ns-root` 指定的子目录（`ns-root = .` 时单元与 `ct.pkg` 并列）。消费者拿到的 `-I` 是
 `<store>/<publisher>/<name>/<version>/<ns-root>`，不再假设「包根 = 单元根」。
