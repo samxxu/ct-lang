@@ -737,6 +737,13 @@ else
     bad "p66/io-detect" "$(cat "$work/p66det.out" "$work/p66det.err" | head -4)"
 fi
 
+# PH-66 R2: the detected headers reach the product exactly once.
+if env -u CT_C_BOUNDARY bash test/ast/p66_io_emit.sh "$work/ct-ast" >"$work/p66emi.out" 2>"$work/p66emi.err"; then
+    ok "p66/io-emit"
+else
+    bad "p66/io-emit" "$(cat "$work/p66emi.out" "$work/p66emi.err" | head -4)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
