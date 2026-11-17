@@ -96,7 +96,8 @@ S1 起 `publisher` + `ns-root` 是 store 与 lock v2 的必填身份；写 `ns-r
 - 包内源码命名遵循 [language-spec §5.1](language-spec.md)：函数 / 方法 `snake_case` 且动作动词开头，
   类型 `PascalCase`，任何位置不用小驼峰；libc 直映射（`printf` 等）保留原名。
 - `dep` 的范围沿用 Phase 8 子集：`^x.y.z`、`~x.y.z`、`>=` / `>` / `<` / `<=` / `=`、裸版本（精确）
-  或 `*`，多个条件用空格表示 AND。解析用 MVS（取满足范围的最低版本）。
+  或 `*`，多个条件用空格表示 AND。省略 range 或写 `*` 时取最新版本；显式范围用
+MVS（取满足范围的最低版本）。
 
 ### 4. 消费
 

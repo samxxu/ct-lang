@@ -358,6 +358,7 @@
 | PKG-7 | Medium | `ct build` 不读 `ct.lock`，不自动补 `-I`（**已修**，PH-54 S2 / SP-008） | [pkg-7-build-does-not-read-lock.md](packages/pkg-7-build-does-not-read-lock.md) |
 | PKG-8 | Medium | 本地目录覆盖共享库时构建期无留痕（**已修**，PH-54 S2/S3 / SP-015） | [pkg-8-local-override-no-trace.md](packages/pkg-8-local-override-no-trace.md) |
 | PKG-9 | **High**（静默） | 清单缺 `publisher` / `ns-root` 时 `ct get` 不报错、rc=0，静默退回 v1 单行 lock；只有 `ct pkg check` 才报（**open**，建议 v0.58.2） | [pkg-9-missing-identity-fields-silent-v1-lock.md](packages/pkg-9-missing-identity-fields-silent-v1-lock.md) |
+| PKG-10 | **High**（静默） | `ct get <git>` 无 range / `*` 落到最旧 tag；应取最新，显式范围仍 MVS | [pkg-10-default-git-tag-oldest.md](packages/pkg-10-default-git-tag-oldest.md) |
 
 ### `lang/` —— 语言 / 编译器缺陷（2026-11-15 登记）
 

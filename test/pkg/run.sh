@@ -538,6 +538,33 @@ else
     fi
 
     echo
+    echo "== no range / * picks the newest tag =="
+    mkdir -p "$work/latest"
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/latest/ct.pkg"
+    if ( cd "$work/latest" && HOME="$work/home" CT_REGISTRY="file://$reg" \
+            "$work/ct-ast" get "gutil" >"$work/latest.out" 2>"$work/latest.err" ); then
+        if grep -Eq "^ct/gutil 0\.2\.0 git file://.* [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/latest/ct.lock"; then
+            ok "ct get <git> with no range picks the newest tag"
+        else
+            bad "ct.lock <git> latest" "expected gutil 0.2.0, got: $(grep gutil "$work/latest/ct.lock")"
+        fi
+    else
+        bad "ct get <git> latest" "non-zero exit: $(cat "$work/latest.err")"
+    fi
+    rm -f "$work/latest/ct.lock" "$work/latest/ct.pkg"
+    printf 'name = demo\nversion = 0.1.0\n' >"$work/latest/ct.pkg"
+    if ( cd "$work/latest" && HOME="$work/home" CT_REGISTRY="file://$reg" \
+            "$work/ct-ast" get "gutil@*" >"$work/star.out" 2>"$work/star.err" ); then
+        if grep -Eq "^ct/gutil 0\.2\.0 git file://.* [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/latest/ct.lock"; then
+            ok "ct get <git>@* picks the newest tag"
+        else
+            bad "ct.lock <git> *" "expected gutil 0.2.0, got: $(grep gutil "$work/latest/ct.lock")"
+        fi
+    else
+        bad "ct get <git> *" "non-zero exit: $(cat "$work/star.err")"
+    fi
+
+    echo
     echo "== a git repo with no tags falls back to the default branch =="
     mkdir -p "$reg/notags"
     ( cd "$reg/notags" \

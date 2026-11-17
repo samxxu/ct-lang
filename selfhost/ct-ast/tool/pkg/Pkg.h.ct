@@ -765,7 +765,8 @@ impl PkgOps for Pkg {
         return 0;
     }
 
-    /* Pick the lowest tag satisfying `range` (minimal version selection).
+    /* Omitted range / `*` selects the newest tag; an explicit range uses
+       minimal version selection (the lowest tag satisfying it).
        `0` = a tag was chosen, `-2` = no tags and any version is acceptable
        (fall back to the default branch), `-1` = no tag fits. */
     int git_pick_tag(const char *cache, const char *range, char *tag, size_t tcap)
@@ -774,13 +775,14 @@ impl PkgOps for Pkg {
         char line[MAX_PKG_CMD];
         const char *home;
         FILE *f;
-        int have, v[3], best[3], w;
+        int have, v[3], best[3], w, want_latest;
 
         home = getenv("HOME");
         if (!home || !home[0]) return -1;
         if (snprintf(root, sizeof root, "%s/.cache/ct-pkg", home) >= (int)sizeof root) return -1;
         if (snprintf(out, sizeof out, "%s/.ct-pkg.tags", root) >= (int)sizeof out) return -1;
         tag[0] = 0;
+        want_latest = (!range || !range[0] || strcmp(range, "*") == 0);
         if (self->sh_quote(cache, q1, sizeof q1) != 0) return -1;
         w = snprintf(cmd, sizeof cmd, "git -C %s tag -l", q1);
         if (w < 0 || (size_t)w >= sizeof cmd) return -1;
@@ -816,7 +818,9 @@ impl PkgOps for Pkg {
             if (!self->range_match(range, tmp)) continue;
             tl = (size_t)(le - ls);
             if (tl == 0 || tl >= tcap) continue;
-            if (!have || self->version_cmp(v, best) < 0) {
+            if (!have
+                || (want_latest ? self->version_cmp(v, best) > 0
+                                : self->version_cmp(v, best) < 0)) {
                 memcpy(tag, ls, tl);
                 tag[tl] = 0;
                 best[0] = v[0];
@@ -2038,8 +2042,9 @@ static int pkg_read_meta(const char *dir, char *cflags, size_t ccap,
 }
 
 /* Look `name` up in the plain-text index: one entry per line as
-   `name version git-url tag sha256:<hex>`. The lowest version satisfying
-   `range` wins (the same minimal-version rule as `git_pick_tag`).
+   `name version git-url tag sha256:<hex>`. Omitted range / `*` selects the
+   newest row; an explicit range uses minimal version selection (the lowest
+   satisfying row), the same rule as `git_pick_tag`.
    Returns 0 on a hit, 1 when no index is configured, 2 when the name (or
    range) has no entry, and -1 when a configured index cannot be read. */
 static int pkg_index_lookup(const char *name, const char *range, char *url, size_t ucap,
@@ -2051,7 +2056,7 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
     const char *ip;
     const char *slash;
     FILE *f;
-    int best[3], bestset, found, bad, amb;
+    int best[3], bestset, found, bad, amb, want_latest;
     size_t ll, plen;
 
     ip = g_pkg.have_index ? g_pkg.index : getenv("CT_INDEX");
@@ -2066,6 +2071,7 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
     slash = strrchr(name, '/');
     plen = slash ? (size_t)(slash - name) : 0;
     bestset = 0;
+    want_latest = (!range || !range[0] || strcmp(range, "*") == 0);
     found = 0;
     bestpub[0] = 0;
     bad = 0;
@@ -2144,7 +2150,9 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
         {
             int v[3];
             if (g_pkg.version_parse(tok[1], v) != 0) continue;
-            if (!bestset || g_pkg.version_cmp(v, best) < 0) {
+            if (!bestset
+                || (want_latest ? g_pkg.version_cmp(v, best) > 0
+                                : g_pkg.version_cmp(v, best) < 0)) {
                 if (strlen(rurl) >= ucap || strlen(rtag) >= tcap
                     || strlen(rsha) >= scap) {
                     bad = 1;
