@@ -5,7 +5,7 @@ trigger: B-5
 proposer: REQ
 opposition: REVIEW
 judge: EDITOR
-forbidden: selfhost/**, test/**, docs/design/phase41-draft.md, docs/decisions/**
+forbidden: selfhost/**, test/**, docs/history/design/phase41.md, docs/decisions/**
 ---
 
 # battle/p41-1 — PH-41 原子能力的命名与 C 标准边界
@@ -33,7 +33,7 @@ Phase 41 草案把 `atomic` 变成关键字，并把 `atomic_load` / `atomic_sto
 
 - 触发：用户要求对 PH-41 评审后直接修改，并用 battle 解决无法机械决定的名字/标准争议。
 - 独立评审：P0 1 条（保留名/关键字破坏面），P1 6 条（C99/C11、`atomic_load(p)`、pthread 门禁、类型诊断、TSan CI、编辑器）。
-- 现有文档 [bindings-and-patterns.md](../../docs/bindings-and-patterns.md) 的 §7 正例使用 `atomic_int` + `atomic_load/store`；[phase41-draft.md](../../docs/design/phase41-draft.md) 当前 D41-2/D41-3 与本争点直接相关。
+- 现有文档 [bindings-and-patterns.md](../../docs/bindings-and-patterns.md) 的 §7 正例使用 `atomic_int` + `atomic_load/store`；[phase41-draft.md](../../docs/history/design/phase41.md) 当前 D41-2/D41-3 与本争点直接相关。
 
 ## 席位与边界
 
@@ -42,4 +42,4 @@ Phase 41 草案把 `atomic` 变成关键字，并把 `atomic_load` / `atomic_sto
 | proposer | REQ（主张 B） |
 | opposition | REVIEW（主张 A，兼评 C/D） |
 | judge | EDITOR |
-| 禁止触碰 | `selfhost/**`、`test/**`、`docs/design/phase41-draft.md`、`docs/decisions/**`；只写 `battle/p41-1/` 与 `/tmp` |
+| 禁止触碰 | `selfhost/**`、`test/**`、`docs/history/design/phase41.md`、`docs/decisions/**`；只写 `battle/p41-1/` 与 `/tmp` |

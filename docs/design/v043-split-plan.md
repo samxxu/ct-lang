@@ -60,7 +60,7 @@
 
 ### 2.3 工量是否落在单相可交付区间
 
-以已收口相的实测/卡面估算校准（`docs/design/phase38-draft.md:9` 合计 410–790；
+以已收口相的实测/卡面估算校准（`docs/history/design/phase38.md:9` 合计 410–790；
 `phase40-draft.md:8` 合计 460–750；`phase42-draft.md:8` 合计 590–1030；PH-40 实际编译器改动
 `git diff --stat v0.39.0 v0.40.0 -- selfhost/ct-ast/` = 3 文件 +271/−14）：
 

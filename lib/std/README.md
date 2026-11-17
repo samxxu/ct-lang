@@ -8,7 +8,7 @@
 不是整个 `std` 的新家。
 `io` / `math` 等其余模块仍由 ct-pkg 包 `std` 提供，本目录不复制、不镜像；`Str` 的
 `char *` 映射层 `std::str::String` 仍在 ct-pkg `std`（Phase 36 的 S0 实测该包没有
-`std/string` / `CStr`，故按 `docs/design/phase36-draft.md` §14/§15 把 `Str` 值类型放回内建层）。
+`std/string` / `CStr`，故按 `docs/history/design/phase36.md` §14/§15 把 `Str` 值类型放回内建层）。
 
 内置层由四个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）、
 `Str.h.ct`（Phase 36）。

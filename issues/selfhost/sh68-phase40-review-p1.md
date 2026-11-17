@@ -32,4 +32,4 @@
 
 ## 处置
 
-见 v0.40.1 修复提交与 `docs/design/phase40-draft.md` §8.1。
+见 v0.40.1 修复提交与 `docs/history/design/phase40.md` §8.1。

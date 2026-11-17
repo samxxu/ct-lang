@@ -5,7 +5,7 @@
 > **红证**：红证提交必须是**实现提交的父提交**；S0 在 Phase 31 收口提交上重建二进制、复跑 §2.2 探针，并把脚本与基线清单随红证提交入库。
 > **文档形态**：`phase32-draft.md`。转正按「每次转正归档当时最老的一张」：32 转正时归档 `phase20`，33 转正时归档 `phase21`，依此类推；本卡不抢跑。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载判定内核、三处挂点、精确覆盖率集合与判据/负例台账，约 446 行。按自裁 **waiver** 保留单卡（判定内核、矩阵、判据、负例必须同卡才能互相对照），不再寻求需求提出方签字。
-> 关联：[phase31.md](../history/design/phase31.md)（容器能力，O3 前置）、[phase29.md](../history/design/phase29.md)（泛型 struct / 内置容器）、[phase30.md](../history/design/phase30.md)（`into` 赋值形态）、[modern-oo-gap.md](../modern-oo-gap.md) §6.1/§7
+> 关联：[phase31.md](../../history/design/phase31.md)（容器能力，O3 前置）、[phase29.md](../../history/design/phase29.md)（泛型 struct / 内置容器）、[phase30.md](../../history/design/phase30.md)（`into` 赋值形态）、[modern-oo-gap.md](../../modern-oo-gap.md) §6.1/§7
 
 ## 1 目标与范围
 

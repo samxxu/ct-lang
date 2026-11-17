@@ -3,8 +3,8 @@
 > **状态：✅ 完成**（2026-11-13；v0.40.0 收口，v0.40.1 为 SH-68 review fix；R1–R7 落地，E40-1–E40-9 全绿；收口记录见 §8.1）。
 > **基线**：PH-39 收口提交（`v0.39.0`）；S0 在该提交上重建并记录实际 sha 与门禁数字。
 > **文档形态**：`phase40-draft.md`；design window 7/12，不触发归档。
-> **前置**：[phase38-draft.md](phase38-draft.md)（`defer` 已落地）、[phase39-draft.md](phase39-draft.md)（收口基线）。
-> **关联**：[language-spec §4.9.1](../language-spec.md)、[phase38 T38-1](phase38-draft.md)、[modern-oo-gap.md](../modern-oo-gap.md) §6.2。
+> **前置**：[phase38-draft.md](phase38.md)（`defer` 已落地）、[phase39-draft.md](phase39.md)（收口基线）。
+> **关联**：[language-spec §4.9.1](../../language-spec.md)、[phase38 T38-1](phase38.md)、[modern-oo-gap.md](../../modern-oo-gap.md) §6.2。
 > **规模**：解析/发射 250–400；夹具 150–250；文档 60–100；合计 **460–750**（±40%）。
 > **纪律**：收口时 bump `v0.40.0`；tag/push 按 `AGENTS.md` 0.3 `phase-tag-requires-user-approval` 等用户批准。
 

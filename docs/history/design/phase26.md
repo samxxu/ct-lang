@@ -201,7 +201,7 @@ struct Point q = id<struct Point>(p0);
 > **P34 覆盖（Phase 34，未发版）**：L26-2 已解禁——`pub T name<T>(...)` 合法，模板体必须写在 `.h.ct` 中，
 > 消费方为每个 `(模板, 具体类型)` 发 `static` 实例（实例名沿用 `<name>__ct<N>`，按 owner 各自从 1 编号）。
 > §2.5 的表格行保留 P26 当时的状态作为历史；L26-1 / L26-3–L26-5 不变。变更面与回滚方式见
-> [phase34-draft.md](../../design/phase34-draft.md) §1.4；`generic_pub` 夹具已转正为 `test/ast/228_pub_generic_fn/`。
+> [phase34-draft.md](phase34.md) §1.4；`generic_pub` 夹具已转正为 `test/ast/228_pub_generic_fn/`。
 
 ### 2.6 类型操作数的解析分支（v0.26.2 根因修复，D26-14）
 
@@ -544,7 +544,7 @@ TEST-18 ×2）；文件数仍 173，阶段状态仍 10，硬门禁仍 11。
 | `generic_void_arg` | `2:5: error: unexpected token` | `9:19: error: 'void' cannot be a generic type argument` |
 | `generic_recursive` | `3:8: error: unexpected token` | `10:17: error: recursive generic calls are not supported` |
 
-[^p34-l26-2]: 该行是 v0.26.0 的历史对照。Phase 34 已解禁 L26-2（`pub` 泛型函数），见 §2.5 的「P34 覆盖」与 [phase34-draft.md](../../design/phase34-draft.md) §1.4。
+[^p34-l26-2]: 该行是 v0.26.0 的历史对照。Phase 34 已解禁 L26-2（`pub` 泛型函数），见 §2.5 的「P34 覆盖」与 [phase34-draft.md](phase34.md) §1.4。
 
 旧编译器在**声明处**就失败，新断言要求的行、列与文案全部不同，说明断言不是空转。
 

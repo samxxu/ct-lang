@@ -157,7 +157,7 @@ CT 侧可独立交付、不阻塞包的顺序建议：① schema 字段集 → �
 | 8 | `borrow` 阶段一 | **成立（有边界）** | `borrow` + 内建 `Handback`，明写「阶段一：参数注解，代码生成零变化」（`docs/language-spec.md:1530-1544`）。边界：`impl Handback` 必须与借用点同单元（`issues/selfhost/sh38-borrow-cross-unit.md`） |
 | 9 | 闭包档① / 档② | **成立** | 档① 手写 `(fn, env)`、档② `=>` 栈闭包（`docs/closure-conventions.md`、`examples/09_callback/callback_tier2.ct`）。档② 是**绑定不是值**，不可拷贝/存字段/逃逸（同文档约定 #3） |
 | 10 | `set_on_*` 回调约定 | **从未存在** | 全仓 `set_on_` 零命中；示例只有 `ring_each` 这类命名 |
-| 11 | 不透明句柄 + `Type_method(self,…)` | **部分有** | `ct build --lib` 实测产出 `Lib.abi.h`：`struct Lib_Conn;` + `int Lib_conn_open(struct Lib_Conn *, char *);`。导出面**仅根单元 `pub` 自由函数**（`docs/design/phase39-draft.md:37-48`、`docs/language-spec.md:2366`）；固有方法不进导出面，trait impl 符号是 `static` |
+| 11 | 不透明句柄 + `Type_method(self,…)` | **部分有** | `ct build --lib` 实测产出 `Lib.abi.h`：`struct Lib_Conn;` + `int Lib_conn_open(struct Lib_Conn *, char *);`。导出面**仅根单元 `pub` 自由函数**（`docs/history/design/phase39.md:37-48`、`docs/language-spec.md:2366`）；固有方法不进导出面，trait impl 符号是 `static` |
 
 ### 1.1 顺带撞到的语法漂移（实测报错）
 
@@ -209,7 +209,7 @@ CT 侧可独立交付、不阻塞包的顺序建议：① schema 字段集 → �
 | 环节 | 靠什么固定 |
 |---|---|
 | CT → 视图 | 视图字段 `models[].fields[{name, type, kind}]`；`type` 是规范化拼写（见 §5.3），`kind` 区分标量 / 指针 / 数组 / 函数指针 |
-| CT → C | `ct build --lib` 的 `<base>.abi.h`；导出面只允许标量与指针（`docs/design/phase39-draft.md:60`），**按值 struct 不可导出** |
+| CT → C | `ct build --lib` 的 `<base>.abi.h`；导出面只允许标量与指针（`docs/history/design/phase39.md:60`），**按值 struct 不可导出** |
 | C → Swift | 包内的固定类型表（`char *` → `UnsafeMutablePointer<CChar>?`，`T *` → `OpaquePointer?`）。**必须由包维护**，CT 不提供 |
 | holder | 包模板：holder 只存 `OpaquePointer`，不存 struct 值 |
 

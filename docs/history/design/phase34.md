@@ -3,7 +3,7 @@
 > **状态：规划中**（2026-11-11 立项草案；**不写实现**）。
 > **基线**：**Phase 33 落地并推送后确定**（P33 是硬前置；不预钉 `v0.30.0` 或 `bd91bfe`）；S0 在**实现提交的父提交**上重建二进制并复跑 §2.2 探针，红证必须记录 `baseline: <sha>`，复跑结果与父提交不一致时不得开工。
 > **文档形态**：`phase34-draft.md`；design window 12/12，**每次转正归档当时最老的一张**（32 → phase20，33 → phase21，34 → phase22，35 → phase23，36 → phase24）。
-> **前置**：[phase31.md](../history/design/phase31.md)（容器）、[phase33.md](phase33-draft.md)（泛型 struct 与跨单元实例归属）、[phase26.md](../history/design/phase26.md)（L26-2 的来源）。**P33 是硬前置**：P33 未落地则本相暂停，不提供降级分支。
+> **前置**：[phase31.md](../../history/design/phase31.md)（容器）、[phase33.md](phase33.md)（泛型 struct 与跨单元实例归属）、[phase26.md](../../history/design/phase26.md)（L26-2 的来源）。**P33 是硬前置**：P33 未落地则本相暂停，不提供降级分支。
 > **排序理由**：没有 `pub` 泛型函数与非泛型固有方法，`Option`/`Result` 只能停留在模板所属单元，Phase 31/33 的成果无法被包复用。
 
 ## 1 目标与范围
@@ -22,7 +22,7 @@
 
 ### 1.3 非目标（本相明确不做）
 
-- 不做泛型 enum/union（承接项见 [phase35-draft.md](phase35-draft.md) 的 T35-6）；`Option`/`Result` 用泛型 struct + 标签实现。
+- 不做泛型 enum/union（承接项见 [phase35-draft.md](phase35.md) 的 T35-6）；`Option`/`Result` 用泛型 struct + 标签实现。
 - 不做 `Option` 的 pattern matching、`?`、异常、`match` 语法糖。
 - 不做泛型 trait、supertrait、关联类型（Phase 35）。
 - 不做泛型 `Drop`、拥有式 payload 的自动释放（Phase 36）；本相 `Option`/`Result` 对 payload 只提供显式 `release`。
@@ -33,7 +33,7 @@
 
 ### 1.4 L26-2 变更（独立提交、独立评审、可回滚）
 
-当前判据（[phase26.md](../history/design/phase26.md)）：**L26-2** `pub` 泛型函数 → `generic functions cannot be pub`。
+当前判据（[phase26.md](../../history/design/phase26.md)）：**L26-2** `pub` 泛型函数 → `generic functions cannot be pub`。
 
 变更内容：允许 `pub T name<T>(...)`；模板体必须写在 `.h.ct`（源码头）中；消费方为每个 `(模板, 具体类型)` 发 `static` 实例，实例名沿用 `<name>__ct<N>`；生成 `.h` 仍只放类型；定义单元与消费方各发同名 `static` 副本不产生重复全局符号；其他 L26 规则不变。
 
@@ -200,7 +200,7 @@
 | --- | --- | --- | --- | --- |
 | E34-1 | `.h.ct` 的 `pub T id<T>(T)` 在消费方 `id<int>(3)` 编译运行；实例为消费方 `static` | `test/modules/p34_pub_generic` | `check-ast` modules 段 | 当前 `generic functions cannot be pub` |
 | E34-2a | L26-2 主提交：`check-ast.sh` 三处断言改向、两个 `errors/` 夹具转正、**TEST-18 接线**（modules 段，`mod="$work/mod"` 之后、与其他 `$mod-*` 构建块并列）：为 `p34_pub_generic`/`p34_pub_bound` 各建 `$mod-p34g`/`$mod-p34b`；build 成功后**显式绑定目录**并守卫——`d="$mod-p34g"; if ( set -- "$d"/*.c && [ -f "$1" ] ); then tp="$(for f in "$d"/*.c; do tparam_residue "$f" $(fixture_sources test/modules/p34_pub_generic); done)"; [ -z "$tp" ] || bad p34_pub_generic "$tp"; else bad p34_pub_generic "no product"; fi`（bound 夹具同形、同样用 `( … )`，目录 `$mod-p34b`）。`check-ast.sh` 只有 `set -u`、无 `set -e`，守卫必须包进 `if`；`set --` 必须放**子 shell**（`( set -- … )`）或函数内，否则会覆盖顶层位置参数。**脏例**：`test/probes/p34_residue_dirty.c`（`__ct1` 体内故意残留 `T`；目录由 P33 S0 创建），`tp="$(tparam_residue test/probes/p34_residue_dirty.c $(fixture_sources test/modules/p34_pub_generic))"`，断言 `[ -n "$tp" ]` 且 `case "$tp" in *"T(1)"*) ;; *) bad p34_residue_dirty "$tp";; esac`（实测实际串是 `T(1)` 后跟尾空格；**必须有 `*)` 失败分支**，否则空串/异串假通过）。反向保证：脏产物被清理则 `[ -n ]` 失败；正常产物若残留则 `[ -z ]` 失败。`p34_pub_bound` 夹具须另含无 bound 的 `pub T id<T>(T)`。`phase26.md` 的 `262-265` 改写理由并接钩子、`537` 只加脚注；language-spec 两处与 gap 更新（文档部分见 S3b/E34-14，`check-ast` 不验文档） | 上述夹具 + `check-ast.sh` + 提交记录 | `check-ast` | 当前三处断言逐字匹配旧文案；TEST-18 不扫 modules |
-| E34-2b | Phase 29 纯增量说明（**人工审查项，非门禁**）：Phase 34 卡内含且仅含一条 `P34 覆盖`；`phase29.md:912`/`:920`/`:987` 一字不动；若必须改 phase29 则标 blocked 并删除该改动 | `docs/design/phase34-draft.md` | 人工审查 | 当前无覆盖说明 |
+| E34-2b | Phase 29 纯增量说明（**人工审查项，非门禁**）：Phase 34 卡内含且仅含一条 `P34 覆盖`；`phase29.md:912`/`:920`/`:987` 一字不动；若必须改 phase29 则标 blocked 并删除该改动 | `docs/phase34.md` | 人工审查 | 当前无覆盖说明 |
 | E34-3 | `pub` 泛型带 bound `T: Show` 跨单元实例化；`test/modules/errors/p34_bound_hidden/`（`main.ct` + `dep.h.ct`）触发既有 `unknown trait '<x>' in a generic bound` | `test/modules/p34_pub_bound` + `test/modules/errors/p34_bound_hidden/` | `check-ast` modules 段（正例与错误段） | 当前无法声明 `pub` |
 | E34-4 | `pub struct Counter` 的非泛型固有方法从另一单元调用并运行。**主判据**：`nm -g --defined-only` 在属主 `.c` 恰 1 个 `T Counter_get`，`nm -g --undefined-only` 在消费方 `.c` 恰 1 个 `U Counter_get`；**辅助**：消费方原型 `grep -c '^int Counter_get(struct Counter \*);$' == 1`、属主定义 `grep -c '^int Counter_get(struct Counter \*.*) {' == 1`（重复定义先链接失败） | `test/modules/p34_inherent` + `nm` + 产物 grep | `check-ast` modules 段 | 当前 `impl of an unknown trait` |
 | E34-5 | `Option<int>` 的 some/none/is_some/unwrap_or/release 输出逐字节正确 | `ast/215_option_basic` | `check-ast` | 当前无 `Option` |
@@ -261,7 +261,7 @@
 | T34-1 | `Option`/`Result` 的 `?`/pattern | 有值 pattern 语法设计卡 |
 | T34-2 | payload 自动释放 | Phase 36 |
 | T34-3 | 非泛型固有方法的生成 `.h` 原型 | 若硬边界调整，另立评审 |
-| T34-4 | 泛型 enum | 由 [phase35-draft.md](phase35-draft.md) 的 T35-6 承接 |
+| T34-4 | 泛型 enum | 由 [phase35-draft.md](phase35.md) 的 T35-6 承接 |
 
 ## 12 交付物清单
 

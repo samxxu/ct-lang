@@ -1,6 +1,6 @@
 # Phase 36 · `4e02f31` 复核（对上一轮 2 High + 4 Medium）
 
-> 范围：`4e02f31` 的 `docs/design/phase36-draft.md`（+53/−33 实为 84 行改动）与 `docs/roadmap.md`（+2/−2）。只读；未改卡片/roadmap/golden/版本号/门禁脚本，未碰 `stash@{0}`、`AGENTS.md`、`selfhost/`。
+> 范围：`4e02f31` 的 `docs/history/design/phase36.md`（+53/−33 实为 84 行改动）与 `docs/roadmap.md`（+2/−2）。只读；未改卡片/roadmap/golden/版本号/门禁脚本，未碰 `stash@{0}`、`AGENTS.md`、`selfhost/`。
 
 ## 总判定：**NO-GO**（1 High + 3 Medium + 2 Low）
 
@@ -21,7 +21,7 @@
 
 ## 1 High：T-7 仍要求提交红灯提交，违反新的工程规范
 
-- [phase36-draft.md:327](file:///Users/samxx/trae-ws/ct-lang/docs/design/phase36-draft.md#L327)：「S0 在实现提交的父提交上复跑探针并**提交 `test(ownership): P36 红`**（含 `baseline: <sha>` 与原始输出）」。
+- [phase36-draft.md:327](file:///Users/samxx/trae-ws/ct-lang/docs/history/design/phase36.md#L327)：「S0 在实现提交的父提交上复跑探针并**提交 `test(ownership): P36 红`**（含 `baseline: <sha>` 与原始输出）」。
 - `AGENTS.md` §6（本轮新增）：「**失败状态不提交**。实现落地后，夹具与实现**同一次提交**成绿，主干在每个提交上都必须是绿的」「提交正文必须带一行 `red: rc=<N>, "<失败文案>"`」。
 
 照 T-7 执行会：(a) 在 `main` 上留下红灯提交；(b) 与「不许用一次全局回放代替逐片红证」同源的旧 Phase 31 做法（先红提交、后统一转绿）复活。这不是措辞问题，是判据与硬规范冲突。
@@ -59,7 +59,7 @@
 
 ## 4 M-3 未闭合（Medium × 2）
 
-**M-3a：E36-3 / E36-8 / E36-10 的「红证」列是假红**。三行仍写「当前无 `Str`」（[L252](file:///Users/samxx/trae-ws/ct-lang/docs/design/phase36-draft.md#L252)、[L257](file:///Users/samxx/trae-ws/ct-lang/docs/design/phase36-draft.md#L257)、[L259](file:///Users/samxx/trae-ws/ct-lang/docs/design/phase36-draft.md#L259)）。但夹具自带本地 `Str`（S4a 的 `test/modules/p36_str_shim`、E36-8 的 `ast/232` 内联），`Vec` 元素协议（P31）、非泛型固有方法（P34）、`own`/`delete`（既有）都不依赖 P36 → 父提交上一旦把夹具写出来就是绿的。这与 E36-6/E36-7 已标「库行为回归、非红证」的处理自相矛盾。
+**M-3a：E36-3 / E36-8 / E36-10 的「红证」列是假红**。三行仍写「当前无 `Str`」（[L252](file:///Users/samxx/trae-ws/ct-lang/docs/history/design/phase36.md#L252)、[L257](file:///Users/samxx/trae-ws/ct-lang/docs/history/design/phase36.md#L257)、[L259](file:///Users/samxx/trae-ws/ct-lang/docs/history/design/phase36.md#L259)）。但夹具自带本地 `Str`（S4a 的 `test/modules/p36_str_shim`、E36-8 的 `ast/232` 内联），`Vec` 元素协议（P31）、非泛型固有方法（P34）、`own`/`delete`（既有）都不依赖 P36 → 父提交上一旦把夹具写出来就是绿的。这与 E36-6/E36-7 已标「库行为回归、非红证」的处理自相矛盾。
 
 修法：把 E36-3/E36-8/E36-10 的红证列改为「机制/库回归，**非红证**（父提交上绿；夹具自带 `Str`）」；或者给 E36-3 改成依赖 P36 机制的形态（如 `Vec<Box<Str>>` 的级联释放，但那已属 S3），二选一，不能继续写「当前无 `Str`」。
 
@@ -79,7 +79,7 @@
 | 4 | ⚠️ 需点名 | 「P34 跨单元固有方法」没有夹具编号；改成 P34 卡里的具体 E34-n 或 `test/modules/**` 路径，才算可证伪 |
 | 5 | ✅ 可执行 | 最小 `import std::string;` 程序；失败则 O2 不能验收，标准明确 |
 
-**§14 回退规则**：可照做——`b7f384e` 的旧卡可 `git show` 取回（`:docs/design/phase36-draft.md` 的 L20 O2 内联 `lib/std/Str.h.ct`、L205-207 S4a1/S4a2/S4b、L258 库 240–420），旧 roadmap 两行也在（中文 L51、英文 L1036）。但有一处**后果冲突**（Medium-3）：
+**§14 回退规则**：可照做——`b7f384e` 的旧卡可 `git show` 取回（`:docs/history/design/phase36.md` 的 L20 O2 内联 `lib/std/Str.h.ct`、L205-207 S4a1/S4a2/S4b、L258 库 240–420），旧 roadmap 两行也在（中文 L51、英文 L1036）。但有一处**后果冲突**（Medium-3）：
 
 - §14 写「5 项**任一**不成立 → 自动回退」，S4b 又写「未落地则 E36-6/E36-7/E36-10 **不得标记完成**」。对第 5 项（真实 `Str` 取不到）给出两种不同处置：回退 vs 挂起等待。
 - 第 5 项失败通常只是**时序**（ct-pkg 还没发版），自动回退会把一个刚 GO 的设计整体推翻，且要改 roadmap。
@@ -110,7 +110,7 @@ grep -n '由 ct-pkg|ct-pkg.*提供|supplied by'  → 8 处，均带「拟/intend
 grep -n '已提供|已存在的 shim|shim 所在包'      → 无命中
 grep -n '剩余引用数' 卡片                       → 无命中（提案 L94/L108 仍有）
 grep -n '^| 36 |' docs/roadmap.md               → 1036；^| 37 | → 1037
-git show b7f384e:docs/design/phase36-draft.md   → L20 O2 内联 Str、L205-207 S4a1/S4a2/S4b、L258 240–420
+git show b7f384e:docs/history/design/phase36.md   → L20 O2 内联 Str、L205-207 S4a1/S4a2/S4b、L258 240–420
 git show b7f384e:docs/roadmap.md                → 中文 L51、英文 L1036 旧行均在
 Memory.h.ct:102                                 → own 的 use Drop 校验（E36-4 红点）
 check-ast.sh:1886-1892                          → shim 的 #include 与 -I 实际断言

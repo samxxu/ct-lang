@@ -1,6 +1,6 @@
 # Phase 34–36 第五轮复核（`56268e2`）
 
-> 范围：`docs/design/phase34-draft.md`、`phase35-draft.md`、`phase36-draft.md`、`docs/roadmap.md` 第 49–51 行。
+> 范围：`docs/history/design/phase34.md`、`phase35-draft.md`、`phase36-draft.md`、`docs/roadmap.md` 第 49–51 行。
 > 约束：未跑 `check-all.sh`；未改卡片/golden/版本号/门禁；未 commit；未触碰 `phase32-draft.md` 的未提交改动与 `2026-11-11/` 的其他内容。实测只在 `/tmp` 下用 `/tmp/ct-ast`、`cc`、`nm`、`grep`。
 > 结论：**Phase 34 = GO（附 M-1 条件）；Phase 35 = GO；Phase 36 = NO-GO**。
 
@@ -139,4 +139,4 @@ void drop()      -> ct check rc=0
 现有源码体使用 self->n（check-ast.sh:5034、issues/selfhost/sh28-...md:28）
 ```
 
-**未做**：未跑 `bash selfhost/check-all.sh`；未改卡片、golden、版本号、门禁；未 commit；未触碰 `docs/design/phase32-draft.md` 与 `2026-11-11/` 的其他内容。
+**未做**：未跑 `bash selfhost/check-all.sh`；未改卡片、golden、版本号、门禁；未 commit；未触碰 `docs/history/design/phase32.md` 与 `2026-11-11/` 的其他内容。

@@ -53,7 +53,7 @@ $ nm -g --defined-only greet2.o
 0000000000000030 T _run_it
 ```
 
-`_Person_Greeter_vtable` 是 **D（已定义、全局）**，不是 `t`/`d`；它不在 `<base>.abi.h` 的发射集合里（`docs/design/phase39-draft.md:118` 明文「不出现 `_iface` / `_vtbl`」）。
+`_Person_Greeter_vtable` 是 **D（已定义、全局）**，不是 `t`/`d`；它不在 `<base>.abi.h` 的发射集合里（`docs/history/design/phase39.md:118` 明文「不出现 `_iface` / `_vtbl`」）。
 
 ### E1-2 消费者直接链接「非 ABI」vtable 并运行（F-1）
 
@@ -88,7 +88,7 @@ $ ar rcs libhid.a greet2.hid.o && cc -std=c99 misuse2.c libhid.a -o hid_misuse
 hidden-misuse link rc=0
 ```
 
-`hidden` 只影响动态导出，对静态归档的全局符号表与解析**没有任何作用**；A 在 `docs/design/phase39-draft.md:126` 记的「不加 attribute → hidden」不构成隔离，不能拿它当 A 的补偿。
+`hidden` 只影响动态导出，对静态归档的全局符号表与解析**没有任何作用**；A 在 `docs/history/design/phase39.md:126` 记的「不加 attribute → hidden」不构成隔离，不能拿它当 A 的补偿。
 
 ### E1-4 std 的 `pub` 函数是同一类全局（F-3）
 
@@ -197,12 +197,12 @@ rc=1
 
 | # | 锚点 | 内容 | 方向 |
 | --- | --- | --- | --- |
-| E2-1 | `docs/design/phase39-draft.md:118` | `.abi.h`「**不出现** `_iface` / `_vtbl` / `Vec_` / `Map_`」 | 利于己方：ABI 头承诺与归档符号面不一致 |
-| E2-2 | `docs/design/phase39-draft.md:40` | 「visibility 不改变静态归档的全局符号表……`nm -g` 里仍会看到 trait vtable，它不属于 ABI 承诺」 | 利于己方：卡自己承认符号面 ≠ 导出面，却把「ABI 洁净」留作目标 |
-| E2-3 | `docs/design/phase39-draft.md:126` | 「trait vtable 仍 external……由 `expected.nm` 快照锁定」 | 利于己方：锁的是 `test/` 夹具，不是消费者契约 |
-| E2-4 | `docs/design/phase39-draft.md:181` | E39-6 判据「原型集合 = 导出集合；`_iface`/`_vtbl` 命中 0」 | 利于己方：门禁只查头，不查 `nm`；J-1 的「ABI 洁净」无门禁承担 |
+| E2-1 | `docs/history/design/phase39.md:118` | `.abi.h`「**不出现** `_iface` / `_vtbl` / `Vec_` / `Map_`」 | 利于己方：ABI 头承诺与归档符号面不一致 |
+| E2-2 | `docs/history/design/phase39.md:40` | 「visibility 不改变静态归档的全局符号表……`nm -g` 里仍会看到 trait vtable，它不属于 ABI 承诺」 | 利于己方：卡自己承认符号面 ≠ 导出面，却把「ABI 洁净」留作目标 |
+| E2-3 | `docs/history/design/phase39.md:126` | 「trait vtable 仍 external……由 `expected.nm` 快照锁定」 | 利于己方：锁的是 `test/` 夹具，不是消费者契约 |
+| E2-4 | `docs/history/design/phase39.md:181` | E39-6 判据「原型集合 = 导出集合；`_iface`/`_vtbl` 命中 0」 | 利于己方：门禁只查头，不查 `nm`；J-1 的「ABI 洁净」无门禁承担 |
 | E2-5 | `lib/std/Str.h.ct:33`、`:51` | `pub Str str_from_len(...)`、`pub Str str_from(...)` | 利于己方：std 增函数 = 归档符号面扩张源（E1-4） |
-| E2-6 | `docs/design/phase39-draft.md:46` | 「v1 只覆盖 macOS/Linux 的 `cc` + `ar`」 | **不利于己方**：B 要多用 `ld`/`nmedit`/`objcopy`，超出 cc+ar 的承诺 |
+| E2-6 | `docs/history/design/phase39.md:46` | 「v1 只覆盖 macOS/Linux 的 `cc` + `ar`」 | **不利于己方**：B 要多用 `ld`/`nmedit`/`objcopy`，超出 cc+ar 的承诺 |
 | E2-7 | `AGENTS.md:391` | 「不引入任何第三方库、构建系统、代码生成脚本」 | **不利于己方**：主张席会据此判 B 越界 |
 
 **为什么仍反对 A**：E2-6/E2-7 约束的是「依赖类别」，不是「符号面欺骗」。`ld`/`nmedit`/`objcopy` 都是 OS 自带工具，既不是第三方库也不是构建系统；而 A 的代价是把「ABI 面 = `.abi.h`」改成「ABI 面 = `.abi.h` + 一串靠测试夹具看着的 vtable/std 符号」，承诺降级发生在**消费者契约**上，不能靠 `expected.nm` 抵。若裁判认为 `.abi.h` 之外的符号完全不算承诺，那 A 就应当**把这句话写进 `.abi.h` 与文档**，而不是用快照暗示「已锁定」——A 现在两头都占：宣称锁定，实际只锁门禁。
@@ -226,7 +226,7 @@ rc=1
 | 文件 | 2 个：`selfhost/ct-ast/tool/driver/Driver.h.ct`（`--lib` 分支末尾加一步后处理）+ `selfhost/ct-ast/backend/emit/Emitter.h.ct`（导出表/等价的符号清单输出）；落点按 PH-39 实际单元名可 ±1 |
 | 行数 | 约 35–45 行：拼 `ld -r` 参数、生成清单、`nmedit`/`objcopy` 调用、`nm` 自校验；≤120 行预算内 |
 | 平台分支 | 1 个（macOS `nmedit -s <exports>`；Linux `objcopy --keep-global-symbol=<name>` 逐项或 `--localize-hidden` 配合 hidden attribute）。合并步骤两平台同名：`ld -r`；LOCALIZE 命令不同——**J-2 的「同一套命令」不成立**，只能主张「两平台默认工具链各自可用」 |
-| 产物形态变更 | 归档只含 1 个合并 `.o`，**与 O1 的「逐单元 `.o`」（`docs/design/phase39-draft.md:36`）冲突**；要么改 O1，要么每单元再存一份未合并副本（成本翻倍且符号面回到 A） |
+| 产物形态变更 | 归档只含 1 个合并 `.o`，**与 O1 的「逐单元 `.o`」（`docs/history/design/phase39.md:36`）冲突**；要么改 O1，要么每单元再存一份未合并副本（成本翻倍且符号面回到 A） |
 | 工具缺失回退 | 工具缺失时**不静默**：`nm -g` 断言失败 → 该平台 `skip` 并打印原因（J-5 语义），或退回 A 并在 `deviation:` 登记「该平台不承诺 ABI 洁净」；不得默认绿 |
 | 校验 | 构建末尾跑 `nm -g --defined-only` 断言集合 == 导出集合（不依赖 `ld` 退出码，见 E1-7 的静默成功） |
 | 回退 | 删这一个后处理步骤即可回到 A 形态；`git revert` 单提交，不触碰 emitter 的 `.abi.h` 与 `.h` 产物 |
@@ -235,11 +235,11 @@ rc=1
 
 ## 6. E5：预判主张席最强论点（**预判**，非原文）
 
-> **预判**主张席会说：「B 引入平台专用工具，违反 `AGENTS.md:391` 的最小依赖与 `docs/design/phase39-draft.md:46` 的 `cc`+`ar` 承诺；且 J-2 要求同一套命令跨平台，B 做不到；`expected.nm` 已足以锁住回归。」
+> **预判**主张席会说：「B 引入平台专用工具，违反 `AGENTS.md:391` 的最小依赖与 `docs/history/design/phase39.md:46` 的 `cc`+`ar` 承诺；且 J-2 要求同一套命令跨平台，B 做不到；`expected.nm` 已足以锁住回归。」
 
 回应（据实）：
 
-1. **不违反 `AGENTS.md:391`**：该条禁的是「第三方库、构建系统、代码生成脚本」。`ld`（链接器）、`nmedit`（Apple 自带）、`objcopy`（binutils）都是 OS 自带二进制工具，不新增任何需下载/版本钉住的依赖，也不把编译路径改成构建系统。**但**确实超出 `docs/design/phase39-draft.md:46` 的 cc+ar 承诺，这一点我承认，应作为 B 的成本登记，而不是当作 B 的否决理由。
+1. **不违反 `AGENTS.md:391`**：该条禁的是「第三方库、构建系统、代码生成脚本」。`ld`（链接器）、`nmedit`（Apple 自带）、`objcopy`（binutils）都是 OS 自带二进制工具，不新增任何需下载/版本钉住的依赖，也不把编译路径改成构建系统。**但**确实超出 `docs/history/design/phase39.md:46` 的 cc+ar 承诺，这一点我承认，应作为 B 的成本登记，而不是当作 B 的否决理由。
 2. **「快照已锁住」是把门禁当契约**：E1-4 证明新增 std `pub` 函数时，只需改 `test/` 夹具即绿，`.abi.h`、`ABI_VERSION`、消费者可见契约全不动。消费者看不到 `expected.nm`——它锁的是仓库回归，不是 ABI 面。
 3. **J-2 的严格形态 B 确实不满足**（同一套命令），但 J-2 的通过方式写的是「`command -v` + 两平台命令」，即允许两平台命令名不同只要默认工具链可用；这一点应由裁判解释，不由本席裁。若裁判按最严解释，B 的 J-2 不成立——但**那也不使 A 的 J-1 成立**：E1-2/E1-3 已证 A 无法满足「`nm -g` 只剩导出函数」，A 的 J-1 直接不成立。
 4. **两败时按 §7.10 出 C**：可考虑「`.abi.h` 显式声明 `nm -g` 允许集合 + `ABI_VERSION` 随集合变化 + 门禁从 `expected.nm` 升级为导出集合断言」的折中；本席不越权提完整 C 方案。

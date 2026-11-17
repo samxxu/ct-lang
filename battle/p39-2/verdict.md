@@ -37,7 +37,7 @@
 
 **A：不成立。**
 
-- V1：HEAD 产物上 `nm -g --defined-only` 得 12 个 defined global——9 个 `Str_*`、`D _Dog_Speak_vtable`、`_dog_get`、`_main`；`Str_*` 与 vtable 都不在 `.abi.h`。注意 V1 的归档含 `main.o`，按 L39-3（`docs/design/phase39-draft.md:136`）不是合法 `--lib` 产物；但**合法形态同样含 vtable**（V6 的 `D _Dog_Speak_vtable`、V10 的 `impl_dog.o`），所以「7→1 成员」这个数字不能用于论证归档形态（`verify.json` 的 unreproduced 第 5 条）。
+- V1：HEAD 产物上 `nm -g --defined-only` 得 12 个 defined global——9 个 `Str_*`、`D _Dog_Speak_vtable`、`_dog_get`、`_main`；`Str_*` 与 vtable 都不在 `.abi.h`。注意 V1 的归档含 `main.o`，按 L39-3（`docs/history/design/phase39.md:136`）不是合法 `--lib` 产物；但**合法形态同样含 vtable**（V6 的 `D _Dog_Speak_vtable`、V10 的 `impl_dog.o`），所以「7→1 成员」这个数字不能用于论证归档形态（`verify.json` 的 unreproduced 第 5 条）。
 - V3：消费者不 include 任何头、手抄 `struct Dog` / `Speak_vtbl` 布局并 `extern Dog_Speak_vtable`，链接 `rc=0`、运行 `woof 42`；`-fvisibility=hidden` 的归档同样 `rc=0`。
 - V4：消费者手抄 `Str` 布局并直接链接内部 `str_len`，运行 `str_len=4`。
 - V5：消费者只定义同名 `helper` 就把库内部调用替换为 999（`api=999`），归档字节与 `nm -g` **完全不变**——A 的 `expected.nm` 快照对此恒绿。
@@ -59,7 +59,7 @@
 
 **A：成立**（macOS 实测；Linux 半边只作推断，不作胜证）。
 
-- A 的命令集是 `ct build --emit-c`、`cc -c`、`ar rcs`、`nm -g --defined-only`（`claim.md:68`）。平台前提由冻结卡给出：v1 只覆盖 macOS/Linux 的 `cc` + `ar`（`docs/design/phase39-draft.md:46`），A 不需要这之外的任何工具。
+- A 的命令集是 `ct build --emit-c`、`cc -c`、`ar rcs`、`nm -g --defined-only`（`claim.md:68`）。平台前提由冻结卡给出：v1 只覆盖 macOS/Linux 的 `cc` + `ar`（`docs/history/design/phase39.md:46`），A 不需要这之外的任何工具。
 - V11：macOS 上 `cc`、`ar`、`nm`、`ld` 都在；`objcopy`/`llvm-objcopy` MISSING。A 不需要它们。
 - Linux 未实测（`verify.json` 的 unreproduced 第 3 条）；「GNU nm/GNU ar 也认同一命令」是标准工具链推断，本席不把它当 A 的胜证。
 
@@ -99,7 +99,7 @@
 **B：不成立**（不是行数超限，而是成本/范围口径不满足）。
 
 - 行数本身无法测（V12）；`counter.md:224-234` 估 2 文件 35–45 行，`claim.md:320-324` 估 ≥3 文件 150–220 行，两方数字都无法由 HEAD 复现。
-- 但 B 的**唯一实测形态**（V6/V7/V8）使归档从 N 个逐单元成员变成 1 个成员（`ar t` 1 行），直接改动冻结的 O1（`docs/design/phase39-draft.md:36`「逐单元 `.o`」）与 §3.2 的产物形态；`counter-r2.md:122,229` 自认这一点，且其 35–45 行估算**未计入**卡片改写、p39 夹具重写与 `nmedit` 每成员清单（`counter.md:194`）。
+- 但 B 的**唯一实测形态**（V6/V7/V8）使归档从 N 个逐单元成员变成 1 个成员（`ar t` 1 行），直接改动冻结的 O1（`docs/history/design/phase39.md:36`「逐单元 `.o`」）与 §3.2 的产物形态；`counter-r2.md:122,229` 自认这一点，且其 35–45 行估算**未计入**卡片改写、p39 夹具重写与 `nmedit` 每成员清单（`counter.md:194`）。
 - 因此 B 不满足 J-4 的「成本」口径：不是「超 120 行」这一条的实测结论，而是「冻结卡交付物形态要改、成本被低估」这一条的证据成立。若只问行数，本项对双方都是无法判定；本席在 J-4 上判 B 不成立，依据是 O1 冲突，不是行数。
 
 **原文索引（节号）**：`claim.md §6`（:303-326）；`claim-r2.md §0`（:12）、`§4`（:126）；`counter.md §5 E4`（:220-234）；`counter-r2.md §5`（:122-123）。
@@ -167,7 +167,7 @@ C 的核心（详见 C-proposal.md）：`--lib` 仍逐单元 `cc -c` 出 `<unit>
 
 本判决**只**约束 PH-39 的归档内部符号处理：
 
-- 受影响：O1（`docs/design/phase39-draft.md:36`）、§3.2 产物形态、§3.3 符号与可见性、D39-5（`:59`）、O3 边界（`:40`）、E39-2（`:177`）、E39-5（`:180`），以及 `test/modules/p39_lib/**` 与 `selfhost/check-ast.sh` 的 p39 段。
+- 受影响：O1（`docs/history/design/phase39.md:36`）、§3.2 产物形态、§3.3 符号与可见性、D39-5（`:59`）、O3 边界（`:40`）、E39-2（`:177`）、E39-5（`:180`），以及 `test/modules/p39_lib/**` 与 `selfhost/check-ast.sh` 的 p39 段。
 - 不受影响：导出集合本身（B39-1、D39-2）、`--lib` 命名与确定性（D39-3、D39-4）、`--lib` 的 L39-* 负例语义、主规范、其他 phase、其他门禁编号。
 - 本判决**不授权**修改任何源码、PH-39 卡或主规范；C 的落地须另走单方案评审与用户批准。
 - 范围外引用本判决（例如拿它去裁 `--lib` 导出集合或别的仓库）无效。

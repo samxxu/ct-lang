@@ -3,8 +3,8 @@
 > **状态：✅ 完成（2026-11-14；v0.42.0；battle p42-1 C；R1–R8、E42-1–E42-8 全绿）。**
 > **基线**：PH-41 收口提交 `de9ce1ab` / `v0.41.0`；S0 在该提交上冷构建并记录 `baseline: de9ce1ab`。
 > **文档形态**：`phase42-draft.md`；design window 7/12（门禁只数 `phaseN.md`，草案不计数）。
-> **前置**：[phase34-draft.md](phase34-draft.md)（`pub struct` / 固有方法）、[phase39-draft.md](phase39-draft.md)（导出面与 `ABI_HASH`）、[phase41-draft.md](phase41-draft.md)（收口基线）。
-> **关联**：[language-spec.md](../language-spec.md) 的 `pub` 节、[bindings-and-patterns.md](../bindings-and-patterns.md)、[modern-oo-gap.md](../modern-oo-gap.md)、[battle/p42-1](../../battle/p42-1/verdict.md)。
+> **前置**：[phase34-draft.md](phase34.md)（`pub struct` / 固有方法）、[phase39-draft.md](phase39.md)（导出面与 `ABI_HASH`）、[phase41-draft.md](phase41.md)（收口基线）。
+> **关联**：[language-spec.md](../../language-spec.md) 的 `pub` 节、[bindings-and-patterns.md](../../bindings-and-patterns.md)、[modern-oo-gap.md](../../modern-oo-gap.md)、[battle/p42-1](../../../battle/p42-1/verdict.md)。
 > **规模**：编译器 320–560；迁移 80–150；夹具 140–230；文档 50–90；合计 **590–1030**（±40%）。
 > **纪律**：收口 bump `v0.42.0`；phase tag 按 6.7 V-7 随收口自动创建并推送；分支推送按 6.5 等用户指令。
 

@@ -8,7 +8,7 @@
 | 编译器 | `/tmp/p39head/ct`，`ct v0.37.0`，sha256 `080650f62e4fa894efc672c10a14a615bdaa531bdef5f24470e99fb37e59dd10`（由 HEAD `ac040d1` 干净归档构建） |
 | 干净源码 | `/tmp/p39head/src`（HEAD 归档，无 `.git`；只在此树取输入与生成物） |
 | 环境 | `Darwin arm64`；`Apple clang version 21.0.0 (clang-2100.4.1.1)` |
-| 证据可复现性 | 下列每条命令只读 `/tmp/p39head/**` 与 `/tmp/p39claim/**`，不读工作树；工作树对 `lib/std`、`test/modules`、`docs/design/phase39-draft.md`、`AGENTS.md` 的 `git status --porcelain` 为空（锚点行号与 HEAD 一致） |
+| 证据可复现性 | 下列每条命令只读 `/tmp/p39head/**` 与 `/tmp/p39claim/**`，不读工作树；工作树对 `lib/std`、`test/modules`、`docs/history/design/phase39.md`、`AGENTS.md` 的 `git status --porcelain` 为空（锚点行号与 HEAD 一致） |
 
 > 本席只写 `battle/p39-1/claim.md` 与 `/tmp/p39claim/**`，未改动任何源码或文档。
 
@@ -24,13 +24,13 @@
 
 ### 1.2 与 PH-39 §3.1 的逐条对应
 
-| A 的规则 | §3.1 条款（`docs/design/phase39-draft.md`） | 判据 | 落点 |
+| A 的规则 | §3.1 条款（`docs/history/design/phase39.md`） | 判据 | 落点 |
 | --- | --- | --- | --- |
-| 范围：非内建 `.h.ct` 单元 | §3.1 规则 1「声明在**非内建** `.h.ct` 单元」 | 内建 std 单元不进导出面 | `docs/design/phase39-draft.md:100` |
+| 范围：非内建 `.h.ct` 单元 | §3.1 规则 1「声明在**非内建** `.h.ct` 单元」 | 内建 std 单元不进导出面 | `docs/history/design/phase39.md:100` |
 | 资格：`pub` 且有定义 | §3.1 规则 1「带 `pub`，且本构建内有定义（`Func.body >= 0`）」 | 排除 `pub extern`（D39-2）与仅原型 | 同上 |
-| 类型白名单 | §3.1 规则 2「内建标量、`void`、指针（含指向具名 struct 的指针、函数指针）、数组参数（decay 成指针）」 | 只有这四类可进 `.abi.h` | `docs/design/phase39-draft.md:101` |
-| 类型黑名单 → L39-1 | §3.1 规则 3「按值 struct/union、trait/接口值（`*_iface`）、泛型参数、`Vec`/`Map`/`Option`/`Result`/`Str` 等 std 类型、`own`」 | 命中即 L39-1，不写产物 | `docs/design/phase39-draft.md:102`、`:134` |
-| 诊断 | §3.4 L39-1 `'<name>' cannot be exported: <reason>` | `file:line:col` + 原因 | `docs/design/phase39-draft.md:134` |
+| 类型白名单 | §3.1 规则 2「内建标量、`void`、指针（含指向具名 struct 的指针、函数指针）、数组参数（decay 成指针）」 | 只有这四类可进 `.abi.h` | `docs/history/design/phase39.md:101` |
+| 类型黑名单 → L39-1 | §3.1 规则 3「按值 struct/union、trait/接口值（`*_iface`）、泛型参数、`Vec`/`Map`/`Option`/`Result`/`Str` 等 std 类型、`own`」 | 命中即 L39-1，不写产物 | `docs/history/design/phase39.md:102`、`:134` |
+| 诊断 | §3.4 L39-1 `'<name>' cannot be exported: <reason>` | `file:line:col` + 原因 | `docs/history/design/phase39.md:134` |
 
 结论：**A 不是新提案，而是 PH-39 §3.1 的直接读法**；本庭要裁的是「A 的硬错 vs B 的标记」这一处，不是重写 §3.1。
 
@@ -47,7 +47,7 @@
 | --- | --- | --- | --- |
 | J-1 | 意图一致：`.abi.h` 导出集合 = 作者明确要导出的集合；三个夹具不被误杀 | **成立，但须按 C-ABI 语义读**：f1 导出 2/2；f2/f3 的 `pub` 不是 C 可表达者，A 判死是 §3.1 的显式设计；若裁判采用「任何 `pub` 都不得判死」的字面读法，J-1 对 f2/f3 不成立——本席不隐瞒 | §3.1 规则 3；f2/f3 的 `--emit-c` 今天已把泛型/trait 从生成头里静默剔除（E1-2、E1-4） |
 | J-2 | 既有 `.h.ct` 零语法改动即可构成 `--lib` 库 | **成立**（零 `.ct` 语法改动）；但 69 个 `.h.ct` 中 5 个单元含 12 个 A 会拒绝的 `pub` 函数，它们做不了 `--lib` 根——这也是字面口径下的漏洞，见 E2 不利锚点 | E1-3 统计：53 个 `pub` 函数声明，12 个非 C 兼容，3 个待定 |
-| J-3 | 语言面最小：不新增关键字/语法 | **成立**：A 只新增 `--lib` 一个 CLI 选项（PH-39 已立项、用户已批准冻卡），不加关键字、不加语法 | `docs/design/phase39-draft.md:16`；`AGENTS.md:469`（新增语法/CLI 须用户确认） |
+| J-3 | 语言面最小：不新增关键字/语法 | **成立**：A 只新增 `--lib` 一个 CLI 选项（PH-39 已立项、用户已批准冻卡），不加关键字、不加语法 | `docs/history/design/phase39.md:16`；`AGENTS.md:469`（新增语法/CLI 须用户确认） |
 | J-4 | 实现成本 ≤2 文件 / ≤80 行；不改 G1/G3/G4 判据 | **成立（限「选择机制」切片）**：`Module.h.ct`（扫描 + 类型判定 + L39-1 + `.abi.h` 原型集合）与 `Driver.h.ct`（`--lib` 解析/分派/互斥）两个文件，机制增量 ≤80 行；`.a`/ar/visibility 属 O1/O3，另计 | §1.3、E4 |
 | J-5 | 可诊断：被拒签名必须 `file:line:col` + 原因，不得静默丢弃 | **成立**：A 的失败路径是硬错并带位置；编译器已有该格式（E1-5） | E1-5 |
 
@@ -308,8 +308,8 @@ const char * lib_name(void);
 
 | # | 锚点 | 内容 | 为何支持 A |
 | --- | --- | --- | --- |
-| S-1 | `docs/design/phase39-draft.md:16` | 「给 `ct build` 增加 `--lib`：…`.h.ct` 的 `pub` 函数即为 C ABI 导出面」 | PH-39 的目标本身把 `pub` 定义为 ABI 面；A 是唯一不需要第二套声明的读法 |
-| S-2 | `docs/design/phase39-draft.md:98` + `:101` + `:102` | 「一个函数进入导出面，当且仅当…」三条件 | A 就是 §3.1，硬错是规则 3 的执行 |
+| S-1 | `docs/history/design/phase39.md:16` | 「给 `ct build` 增加 `--lib`：…`.h.ct` 的 `pub` 函数即为 C ABI 导出面」 | PH-39 的目标本身把 `pub` 定义为 ABI 面；A 是唯一不需要第二套声明的读法 |
+| S-2 | `docs/history/design/phase39.md:98` + `:101` + `:102` | 「一个函数进入导出面，当且仅当…」三条件 | A 就是 §3.1，硬错是规则 3 的执行 |
 | S-3 | `AGENTS.md:469` | 「涉及行为变更（新增语法、改变命名、改变 CLI）必须先向用户说明方案并获得确认」 | B 的 `pub export` 是新语法；没有用户批准证据 → J-3 对 B 不成立 |
 
 ### 4.2 不利于 A 的锚点（必须披露）

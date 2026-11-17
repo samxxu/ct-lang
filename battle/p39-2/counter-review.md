@@ -32,7 +32,7 @@
 | --- | --- | --- |
 | 机制 | **名字白名单**（列出保留者，其余 private-external） | **可见性本地化**（对 hidden 符号本地化） |
 | 前置 | 导出名带前导 `_`（`:59` 生成 `.exports`） | 导出定义必须**已有 `visibility("default")`**，否则导出也会被本地化 |
-| 依赖 | 名字拼写必须与 Mach-O 一致 | 依赖 D39-5（`docs/design/phase39-draft.md:59`）的「导出定义注入 `visibility("default")`」已实现——HEAD 尚未实现（verdict §3 的 V12） |
+| 依赖 | 名字拼写必须与 Mach-O 一致 | 依赖 D39-5（`docs/history/design/phase39.md:59`）的「导出定义注入 `visibility("default")`」已实现——HEAD 尚未实现（verdict §3 的 V12） |
 
 C 的 `:48` 明写每个单元以 `-fvisibility=hidden` 编译，而 `:145-153` 的 §8「未验证项」**没有一项**是「导出定义是否真的带 default 可见性」。本席 E1-r3-a 证明这个缺口是实的：在 HEAD 的发射器下（无 attribute 注入），`-fvisibility=hidden` + 名字白名单会**把导出也本地化**，`ld` 仍 `rc=0`。
 
@@ -84,7 +84,7 @@ seal run rc=0
 | --- | --- | --- | --- |
 | E2-r3-1 | `C-proposal.md:48` | 「逐单元 `.c` → `cc -std=c99 -fvisibility=hidden …… -c`」 | 对 C 不利：把 hidden 当默认，导出可见性前置被隐去；E1-r3-a 即其后果 |
 | E2-r3-2 | `C-proposal.md:145-153` | §8 七项未验证清单 | 对 C 不利：**不含**「导出定义是否带 `visibility("default")`」与「未使用单元 constructor 是否被多链」，而这两项是 J-1/J-3 的承重项 |
-| E2-r3-3 | `docs/design/phase39-draft.md:59`（D39-5） | 「导出定义注入 `visibility("default")`，中间对象加 `-fvisibility=hidden`」 | 对 C 有利：前置确有卡面依据；但属未实现项（V12），C 不能在评审中当作已成立的机制 |
+| E2-r3-3 | `docs/history/design/phase39.md:59`（D39-5） | 「导出定义注入 `visibility("default")`，中间对象加 `-fvisibility=hidden`」 | 对 C 有利：前置确有卡面依据；但属未实现项（V12），C 不能在评审中当作已成立的机制 |
 
 ## 6 C 是否满足 J-1…J-5（逐条）
 

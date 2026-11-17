@@ -3,9 +3,9 @@
 > **状态：✅ 完成**（2026-11-13；v0.37.0，本地 tag v0.37.0）。
 > **基线**：`c6a276b`（Phase 36 收口后的文档治理提交；全量 11 道门禁绿）。S0 在实现提交的父提交上重建二进制并复跑 §2.2，红证记录 `baseline: <sha>`。
 > **文档形态**：`phase37-draft.md`；design window 7/12，不触发归档。
-> **前置**：[phase36-draft.md](phase36-draft.md)；签名检查独立，不依赖 P31–P36 的语义。
+> **前置**：[phase36-draft.md](phase36.md)；签名检查独立，不依赖 P31–P36 的语义。
 > **红证**：§2.2 为 2026-11-12 历史探针；S0 在基线 `c6a276b` 上重跑并替换。
-> **关联**：[phase32-draft.md](phase32-draft.md)、[SH-67](../../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md)、[modern-oo-gap.md](../modern-oo-gap.md) §6.1。
+> **关联**：[phase32-draft.md](phase32.md)、[SH-67](../../../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md)、[modern-oo-gap.md](../../modern-oo-gap.md) §6.1。
 > **规模**：编译器 100–220；夹具 60–120；文档 30–60；合计 190–400（±40%）。
 > **纪律**：不 bump、不打 tag、不 push；tag/push 按 `AGENTS.md` 0.3 `phase-tag-requires-user-approval` 等用户批准。
 
@@ -79,9 +79,9 @@
 
 | 主题 | 位置 |
 | --- | --- |
-| 签名比较（返回/个数/逐位参数） | [Parser.h.ct:2547-2590](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L2547-L2590) |
-| warning 记录 | [Diag.h.ct:386](../../selfhost/ct-ast/tool/diag/Diag.h.ct#L386)（`ct_sig_warn`） |
-| 缺方法硬错 | [Parser.h.ct:2657](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L2657) |
+| 签名比较（返回/个数/逐位参数） | [Parser.h.ct:2547-2590](../../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L2547-L2590) |
+| warning 记录 | [Diag.h.ct:386](../../../selfhost/ct-ast/tool/diag/Diag.h.ct#L386)（`ct_sig_warn`） |
+| 缺方法硬错 | [Parser.h.ct:2657](../../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L2657) |
 | `ct check` 通道 | `selfhost/ct-ast/main.ct` 的 check 子命令；与 build 共用诊断 |
 | 接口派发发射 | `Emitter.h.ct` 的 `_iface` 改写点 |
 

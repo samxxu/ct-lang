@@ -3,9 +3,9 @@
 > **状态：✅ 完成（2026-11-13；v0.41.0；B′；R1–R9、E41-1–E41-10 全绿）。**
 > **基线**：PH-40 收口提交（`v0.40.1`；含 SH-68 review fix）；S0 在 `v0.40.1` 上重建 `ct`。
 > **文档形态**：`phase41-draft.md`；design window 7/12（门禁只数 `phaseN.md`，草案不计数）。
-> **前置**：[phase40-draft.md](phase40-draft.md)（收口基线）、[phase32-draft.md](phase32-draft.md)（表达式静态类型求值）、[phase39-draft.md](phase39-draft.md)（导出面与产物）。
-> **关联**：[language-spec.md](../language-spec.md) §4、[bindings-and-patterns.md](../bindings-and-patterns.md) 的「C11 原子」节、[modern-oo-gap.md](../modern-oo-gap.md)。
-> **评审**：battle p41-1（2026-11-13）判定 A/C/D rejected、B′ accepted：`atomic` 改为上下文修饰、内建名改为 `ct_atomic_*`、显式 C11、补 pthread/TSan/编辑器；见 [D-004](../decisions/D-004.md)。
+> **前置**：[phase40-draft.md](phase40.md)（收口基线）、[phase32-draft.md](phase32.md)（表达式静态类型求值）、[phase39-draft.md](phase39.md)（导出面与产物）。
+> **关联**：[language-spec.md](../../language-spec.md) §4、[bindings-and-patterns.md](../../bindings-and-patterns.md) 的「C11 原子」节、[modern-oo-gap.md](../../modern-oo-gap.md)。
+> **评审**：battle p41-1（2026-11-13）判定 A/C/D rejected、B′ accepted：`atomic` 改为上下文修饰、内建名改为 `ct_atomic_*`、显式 C11、补 pthread/TSan/编辑器；见 [D-004](../../decisions/D-004.md)。
 > **规模**：编译器 340–610；夹具 160–260；门禁脚本 40–80；文档 60–100；合计 **600–1050**（±40%）。
 > **纪律**：收口时 bump `v0.41.0`；tag/push 按当前 `AGENTS.md` 自动执行（2026-11-13 用户授权）。
 

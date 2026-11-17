@@ -3,7 +3,7 @@
 - **评审对象**：`docs/history/design/phase31.md`（提交 `37b710a`，980 行；工作区与 `37b710a` 逐字节一致，`git diff 37b710a -- docs/history/design/phase31.md` 为空）
 - **评审范围**：仅这张卡及其与 `docs/roadmap.md` Phase 31 行的对应关系。Phase 32–36 卡片不在范围内，未评审、未改动。
 - **评审性质**：只读。未修改卡片、golden、版本号、门禁脚本；未执行 `bash selfhost/check-all.sh`；所有实测产物写在 `/tmp/p31base`、`/tmp/p31bd`，未写入仓库。
-- **工作区纪律**：`docs/design/phase32-draft.md` 的他人在途改动未触碰、未 `git add`、未提交。
+- **工作区纪律**：`docs/history/design/phase32.md` 的他人在途改动未触碰、未 `git add`、未提交。
 - **结论：NO-GO**（5 High / 5 Medium / 8 Low）
 
 > 本轮核心任务不是重读全文找新问题，而是把第二轮五条 High 逐条压到代码事实上验证。结论是：**H-A、H-B 的代码事实成立，H-C、H-D、H-E 的文字修订到位**；但压到代码后发现三类新问题——基线提交本身不绿、链式访问方案会发射非法 C、E31-28 与 L31-21 直接互斥——外加判据计数公式与扫描器实际行为不符。

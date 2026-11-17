@@ -1,6 +1,6 @@
 # Phase 34 / 36 第七轮（r8）窄范围复核
 
-- 复核对象：`fa10455`（只含 `docs/design/phase34-draft.md`、`phase36-draft.md`）
+- 复核对象：`fa10455`（只含 `docs/history/design/phase34.md`、`phase36-draft.md`）
 - 范围：只验上一轮 2 High + 3 Medium + 1 Low（P36）与 1 Medium + 3 Low（P34）是否闭合；重点验新写 shell 片段在 `check-ast.sh` 实际 shell（`#!/bin/sh`）下的可执行性。
 - 方法：读 diff → 对照源码 → 在 `/tmp` 用**本轮源码重建的 `ct-ast`（v0.30.0）**实测；未运行 `bash selfhost/check-all.sh`。
 - 约束：`2026-11-11/` 未跟踪目录未提交；未改卡片/commit/golden/版本号/门禁。

@@ -1,7 +1,7 @@
 # Phase 36 · `c735ff6` delta 独立复核
 
-> 范围：`c735ff6`（`docs/design/phase36-draft.md` 88 行 + `docs/proposals/ct-pkg-agent-runtime.md` 54 行）及配套 `a72e4ff`（roadmap 两行）。只读；未改卡片、golden、版本号、门禁脚本，未碰 `stash@{0}` 与 `AGENTS.md`。
-> 对照：`git show c735ff6`、`git diff b7f384e..HEAD -- docs/design/phase36-draft.md`（`b7f384e` 之前该卡已 GO 冻结）。
+> 范围：`c735ff6`（`docs/history/design/phase36.md` 88 行 + `docs/proposals/ct-pkg-agent-runtime.md` 54 行）及配套 `a72e4ff`（roadmap 两行）。只读；未改卡片、golden、版本号、门禁脚本，未碰 `stash@{0}` 与 `AGENTS.md`。
+> 对照：`git show c735ff6`、`git diff b7f384e..HEAD -- docs/history/design/phase36.md`（`b7f384e` 之前该卡已 GO 冻结）。
 
 ## 总判定：**NO-GO**
 

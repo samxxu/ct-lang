@@ -5,7 +5,7 @@
 | 来源 | §7.10 出口 1（A 被否，B 不满足 J-2/J-4） |
 | 状态 | **提案**，待单方案评审（主张=ARCH、反对=REVIEW、证据=VERIFY） |
 | 适用 | 只约束 PH-39 的归档内部符号处理；不改导出集合（B39-1/D39-2）、不改 `--lib` 命名与确定性（D39-3/D39-4） |
-| 依据 | `battle/p39-2/verdict.md`、`battle/p39-2/verify.json`、`docs/design/phase39-draft.md` |
+| 依据 | `battle/p39-2/verdict.md`、`battle/p39-2/verify.json`、`docs/history/design/phase39.md` |
 
 ## 0 一句话
 
@@ -15,7 +15,7 @@
 
 | 约束 | 来源 | C 如何满足 |
 | --- | --- | --- |
-| A：逐单元 `.o` | `docs/design/phase39-draft.md:36`（O1）、`claim.md:78` | 每个单元仍产出 `<outdir>/<unit>.o`，保留、可调试、可单独复用；不删除、不改名 |
+| A：逐单元 `.o` | `docs/history/design/phase39.md:36`（O1）、`claim.md:78` | 每个单元仍产出 `<outdir>/<unit>.o`，保留、可调试、可单独复用；不删除、不改名 |
 | A：macOS/Linux 同一套 `cc`/`ar` | `question.md:19`（J-2）、`claim.md:68` | 工具只有 `cc`、`ar`、`nm`；合并与本地化都走 `cc -r`，两平台只差一个 `-Wl` 参数（见 §3） |
 | B：`nm -g` 只剩导出 | `question.md:18`（J-1）、V6/V7/V8 | 归档只含 `<base>.sealed.o`；`nm -g --defined-only` 集合 = `.abi.h` 原型集合；门禁断言集合相等 |
 | B：抗抢占（B 的真实收益） | `counter-r2.md:31-81`（E1-r2）、V5 | 密封对象内 `Str_*`、内部 `helper`、vtable 均为 local；消费者同名定义不再替换库内部调用 |
@@ -158,7 +158,7 @@ cc -r -Wl,-exported_symbols_list,<outdir>/<base>.exports \
 | --- | --- |
 | 实现 | `selfhost/ct-ast/frontend/module/Module.h.ct`（`cc -r` 调用、临时文件、平台参数、清理、`nm` 自校验）+ `selfhost/ct-ast/tool/driver/Driver.h.ct`（`--no-seal` 解析、导出清单落盘）：**2 文件，约 60–90 行** |
 | 夹具/门禁 | `selfhost/check-ast.sh` p39 段改集合断言 + `test/modules/p39_lib/expected.nm` 改为导出集合 + 1 条密封失败负例：**2 文件，约 40–60 行** |
-| 文档/卡面 | `docs/design/phase39-draft.md`、`docs/package-guide.md`、`docs/language-spec.md`、`README.md` 若干行 |
+| 文档/卡面 | `docs/history/design/phase39.md`、`docs/package-guide.md`、`docs/language-spec.md`、`README.md` 若干行 |
 | 平台分支 | 1 处（`-Wl` 参数） |
 | 失败模式 | 4 条（§6） |
 | 回退 | 删除密封步骤，单提交 revert |

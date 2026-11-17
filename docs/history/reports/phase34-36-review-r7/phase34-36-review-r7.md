@@ -1,6 +1,6 @@
 # Phase 34 / 36 第六轮（r7）窄范围复核
 
-- 复核对象：`bd1df0a`（`docs/design/phase34-draft.md`、`docs/design/phase36-draft.md`）
+- 复核对象：`bd1df0a`（`docs/history/design/phase34.md`、`docs/history/design/phase36.md`）
 - 范围：只验上一轮两处修改是否真落地、是否引入新的“不存在的代码事实”。不重读全文，不评 35/roadmap。
 - 方法：读 `bd1df0a` 的卡片文本 → 对照 `selfhost/ct-ast/**` 与 `selfhost/check-ast.sh` 源码 → 在 `/tmp` 用**本轮源码重建的 `ct-ast`（v0.30.0，Build: L0→L1→`selfhost/ct-ast/main.ct`）**实测发射形态。未运行 `bash selfhost/check-all.sh`。
 - 工作区约束：`2026-11-11/` 未跟踪目录未提交；未改卡片、未 commit、未动 golden/版本号/门禁。
@@ -97,9 +97,9 @@ clean -> []
 
 **（3）`test/probes/` 今天不存在；归属应写清。**
 `ls test/probes` → `No such file or directory`。仓库里也没有任何脚本遍历它（`grep -rn 'test/probes' selfhost/*.sh test/run.sh` 无命中）。而：
-- `docs/design/phase33-draft.md:76`：`test/probes/` 当前不存在，**由 P33 S0 交付**（`p33_check_baseline.sh`）；
-- `docs/design/phase33-draft.md:254`：S0 提交 `test/probes/**`；
-- `docs/design/phase35-draft.md:204`：S9c 复用 `test/probes/p35_capacity.sh`。
+- `docs/history/design/phase33.md:76`：`test/probes/` 当前不存在，**由 P33 S0 交付**（`p33_check_baseline.sh`）；
+- `docs/history/design/phase33.md:254`：S0 提交 `test/probes/**`；
+- `docs/history/design/phase35.md:204`：S9c 复用 `test/probes/p35_capacity.sh`。
 
 P33 是 P34 的硬前置，所以 P34 落地时目录已存在；P34 S3a 只是“新增一个文件”。但卡片 L179 只写“新增手写 C 脏产物”，**没有写归属**。不阻塞，但应补一句“目录由 P33 S0 创建，P34 S3a 只加文件”。
 

@@ -157,7 +157,7 @@ else
 | # | 锚点 | 原文 | 用途 |
 | --- | --- | --- | --- |
 | N-1 | `examples/38_ecosystem_reuse/src/eco.h.ct:24` | `pub T twice<T>(T x) {` | **新的不利实例（T2 未覆盖 `examples/`）**：第三个「可复用库 + 泛型 helper」；A′ 的跳过规则把它从判死转为可成库 |
-| N-2 | `docs/design/phase39-draft.md:60` | `\| D39-6 \| v1 只收标量 / 指针 / 函数指针 / 数组参数 / 指向具名 struct 的指针；按值 struct、trait 值、泛型、std 容器类型一律 L39-1 \|` | **对 A′ 不利**：用户批准的黑名单逐字含「泛型」；A′ 缩窄它，需裁判/用户确认（Q2 已披露） |
+| N-2 | `docs/history/design/phase39.md:60` | `\| D39-6 \| v1 只收标量 / 指针 / 函数指针 / 数组参数 / 指向具名 struct 的指针；按值 struct、trait 值、泛型、std 容器类型一律 L39-1 \|` | **对 A′ 不利**：用户批准的黑名单逐字含「泛型」；A′ 缩窄它，需裁判/用户确认（Q2 已披露） |
 | N-3 | `selfhost/ct-ast/tool/diag/Diag.h.ct:26` | `/* One collected warning (10.2 signature mismatch, 10.3 leak, 19.1 arity,` | J-4/J-5：警告存储已存在，不需要新机制 |
 | N-4 | `selfhost/ct-ast/tool/diag/Diag.h.ct:44` | `int  record_sig_warn(int line, int col, const char *method, const char *trait,` | 列号已记录，`--lib` 可直接输出 `file:line:col` |
 

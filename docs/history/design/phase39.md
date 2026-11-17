@@ -3,8 +3,8 @@
 > **状态：✅ 完成**（2026-11-13；v0.39.0；battle B39-1 C 路径 / B39-2 默认 A；收口记录见 §8.1）。
 > **基线**：PH-38 收口提交（`v0.38.0`）；S0 在该提交上重建并记录实际 sha 与门禁数字。
 > **文档形态**：`phase39-draft.md`；design window 7/12，不触发归档。
-> **前置**：[phase34-draft.md](phase34-draft.md)（`pub` 语义）、[phase36-draft.md](phase36-draft.md)（`Str` 的 ABI 边界）、[phase38-draft.md](phase38-draft.md)（收口基线）。
-> **关联**：[modern-oo-gap.md](../modern-oo-gap.md) §3.8、[D-001](../decisions/D-001.md)、[D-002](../decisions/D-002.md)。
+> **前置**：[phase34-draft.md](phase34.md)（`pub` 语义）、[phase36-draft.md](phase36.md)（`Str` 的 ABI 边界）、[phase38-draft.md](phase38.md)（收口基线）。
+> **关联**：[modern-oo-gap.md](../../modern-oo-gap.md) §3.8、[D-001](../../decisions/D-001.md)、[D-002](../../decisions/D-002.md)。
 > **规模**：编译器/驱动 220–500；夹具 100–180；文档 50–90；合计 **370–770**（±40%）。
 > **纪律**：收口时 bump `v0.39.0`；tag/push 按 `AGENTS.md` 0.3 `phase-tag-requires-user-approval` 等用户批准。
 
@@ -37,7 +37,7 @@
 | O2 | 导出面 = **根单元**中有定义、C 兼容的 `pub` 函数；泛型模板跳过并给 `file:line:col` 警告；非模板的不兼容签名报 L39-1 | 无导出面概念 |
 | O3 | 导出定义带 `visibility("default")`，中间对象以 `-fvisibility=hidden` 编译；非 `pub` 函数/全局发射 `static` | impl 符号今天已是 `static`（实测 `nm`） |
 
-> O3 的边界：**visibility 不改变静态归档的全局符号表**。v1 接受 `nm -g` 里出现 trait vtable 与内建 `Str_*`，并在 `<base>.abi.h` 与文档中明写「只有 `.abi.h` 的声明是 ABI」；不承诺 `nm` 只剩导出（这是 [D-002](../decisions/D-002.md) 的默认 A）。
+> O3 的边界：**visibility 不改变静态归档的全局符号表**。v1 接受 `nm -g` 里出现 trait vtable 与内建 `Str_*`，并在 `<base>.abi.h` 与文档中明写「只有 `.abi.h` 的声明是 ABI」；不承诺 `nm` 只剩导出（这是 [D-002](../../decisions/D-002.md) 的默认 A）。
 
 ### 1.3 非目标
 
@@ -45,7 +45,7 @@
 - 不导出 `pub` 全局变量；不导出 `pub extern`（定义在库外的 C 符号）；两者都不写进 `.abi.h`，由 L39-6 汇总提示。
 - 泛型模板不导出：跳过并给 L39-1w 警告，不再整库硬错（D39-10，B1）。
 - 不做 Windows/MSVC、`.dll` / `.dylib` / `.so`、ABI 版本协商运行时；v1 只覆盖 macOS/Linux 的 `cc` + `ar`。
-- 不做 C++ 头、`extern "C"` 块；不做链接期本地化/密封归档（[D-002](../decisions/D-002.md) 默认 A）。
+- 不做 C++ 头、`extern "C"` 块；不做链接期本地化/密封归档（[D-002](../../decisions/D-002.md) 默认 A）。
 - 不改既有 `ct build`（可执行）与模块 `.h` 的「只放类型」契约（D39-1）。
 
 ### 1.4 关键决策
@@ -228,7 +228,7 @@ R1–R7 每项先提 `test(abi): <task-id> 红`（只含夹具与断言），实
 | R39-3 | trait vtable 留在 `nm -g`，被误读为 ABI | §3.3 + `.abi.h` banner + 文档三处明写「非 ABI」；`expected.internal` 注明 |
 | R39-4 | `ar` 平台差异导致归档不确定 | R7 双路径；S0 实测 `ar -D`；两条都失败即硬错 |
 | R39-5 | 用户要求导出按值 struct 或数据 | 转 T39-1 另立卡；v1 不放开 L39-1 |
-| R39-6 | C 路径残留：同根 C 兼容 helper 仍全导出、不能逐函数选 | 作者用「根单元 / 内部单元」文件组织控制；若需要函数级控制，回到 [D-001](../decisions/D-001.md) 的 B 案（需 1 次语法批准） |
+| R39-6 | C 路径残留：同根 C 兼容 helper 仍全导出、不能逐函数选 | 作者用「根单元 / 内部单元」文件组织控制；若需要函数级控制，回到 [D-001](../../decisions/D-001.md) 的 B 案（需 1 次语法批准） |
 
 开放项：
 
@@ -260,7 +260,7 @@ R1–R7 每项先提 `test(abi): <task-id> 红`（只含夹具与断言），实
 
 ## 9 battle 裁定与冻结变更（2026-11-13，用户已批准）
 
-两处争议按主规范 §7 立案、三轮收口；记录见 [`battle/p39-1/`](../../battle/p39-1/)、[`battle/p39-2/`](../../battle/p39-2/)，ADR 见 [D-001](../decisions/D-001.md)、[D-002](../decisions/D-002.md)。
+两处争议按主规范 §7 立案、三轮收口；记录见 [`battle/p39-1/`](../../../battle/p39-1/)、[`battle/p39-2/`](../../../battle/p39-2/)，ADR 见 [D-001](../../decisions/D-001.md)、[D-002](../../decisions/D-002.md)。
 
 | 争议 | 判决 | 用户裁定 | 本卡落地 |
 | --- | --- | --- | --- |

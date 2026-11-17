@@ -3,9 +3,9 @@
 > **状态：✅ 完成**（2026-11-13；v0.38.0，本地 tag v0.38.0）。
 > **基线**：`5e395e9`（Phase 37 收口 + runtime-checks 样例；S0 复跑全量门禁并记录实际 baseline）。
 > **文档形态**：`phase38-draft.md`；design window 7/12，转正时归档当时最老的一张。
-> **前置**：[phase36-draft.md](phase36-draft.md)（`own`/Drop 的顺序）、[phase34-draft.md](phase34-draft.md)（`Result` 只作对照，本相不做 `errdefer`）。
+> **前置**：[phase36-draft.md](phase36.md)（`own`/Drop 的顺序）、[phase34-draft.md](phase34.md)（`Result` 只作对照，本相不做 `errdefer`）。
 > **红证**：§2.2（2026-11-12，HEAD `bd91bfe`，`v0.30.0` 重建的 `ct-ast`）。
-> **关联**：[modern-oo-gap.md](../modern-oo-gap.md) §6.2。
+> **关联**：[modern-oo-gap.md](../../modern-oo-gap.md) §6.2。
 > **规模**：编译器 260–520；夹具 100–180；文档 50–90；合计 **410–790**（±40%）。
 > **纪律**：收口时 bump `v0.38.0`；tag/push 按 `AGENTS.md` 0.3 `phase-tag-requires-user-approval` 等用户批准。
 
@@ -41,7 +41,7 @@
 ### 1.3 非目标
 
 - 不做 `errdefer`：它需要错误协议（`Result` 的 `?` 尚未落地，Phase 34 只做类型）；本相不猜语义。
-- 不做 `try` / `?` / 异常（见 [phase34-draft.md](phase34-draft.md) T34-1）。
+- 不做 `try` / `?` / 异常（见 [phase34-draft.md](phase34.md) T34-1）。
 - 不做单语句形态 `defer free(p);`：只收块形态，避免 `defer` 与同名函数调用的歧义（D38-1）。
 - 不做全局/文件作用域 defer，不做 `.h.ct` 内的 defer（头单元只放声明）。
 - 不改 `own`/AutoDrop 的既有释放点，只定义二者的先后。

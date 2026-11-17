@@ -103,7 +103,7 @@ use-after-free / double-free；泄漏用「显式释放计数器」断言（§10
 | --- | --- | --- |
 | E46-1 | 「输出与单文件模式一致」没有命令 | `"$work/ct-ast" main.ct -o a.c && cc -std=c99 a.c -o a && ./a > a.out`；`"$work/ct-ast" build main.ct -o out && cc out/*.c -o b && ./b > b.out`；`cmp a.out b.out` |
 | E46-2 | `check-goldens 82/82` 是魔法数，且该脚本只覆盖 L1（§1.2） | 按 §1.2 的 `/tmp/p46-base` 快照 `cmp` 四种形态产物；再用 `bash selfhost/check-ast.sh \| tail -1` = `0 failed` |
-| E46-3 | 「`nm -g` 面与第 39 相口径一致」不是命令；且 PH-46 §8.2 「新增 `MapEntry_*` 符号」说法错误 | 用 [phase39-draft.md](../design/phase39-draft.md):142 的归一化符号集（导出集合 ∪ `expected.internal`）做 diff；**不**允许新增符号（C 的 struct 定义不产生符号，见 §9 F2） |
+| E46-3 | 「`nm -g` 面与第 39 相口径一致」不是命令；且 PH-46 §8.2 「新增 `MapEntry_*` 符号」说法错误 | 用 [phase39-draft.md](../history/design/phase39.md):142 的归一化符号集（导出集合 ∪ `expected.internal`）做 diff；**不**允许新增符号（C 的 struct 定义不产生符号，见 §9 F2） |
 | E46-4 | `grep -c 'struct MapEntry_'` 没写目标文件；多实例下 `= 1` 不成立 | 对示例实例断言：`grep -c 'struct MapEntry_char_p_JsonRef {' out/Vec.h` = 0；`grep -l 'struct MapEntry_char_p_JsonRef {' out/*.c \| wc -l` = 1 |
 | E46-5 | 「无新增告警」没有基线数字 | `bash selfhost/check-warnings.sh \| tail -1` = `0 failed`，并把编译总数写成「基线 N + 本相新增数」 |
 | E46-6 | 可执行 | 保留 |

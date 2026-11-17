@@ -193,11 +193,11 @@ rc=1
 
 | 主题 | 位置 | 事实 |
 | --- | --- | --- |
-| E37-3 原文 | `docs/design/phase37-draft.md:156` | 「`--runtime-checks` 下空接口值派发 abort，stderr 含 `prog.ct:<行>` 与 `null vtable`」——**没有**「接收者不得有副作用」的排除句 |
+| E37-3 原文 | `docs/history/design/phase37.md:156` | 「`--runtime-checks` 下空接口值派发 abort，stderr 含 `prog.ct:<行>` 与 `null vtable`」——**没有**「接收者不得有副作用」的排除句 |
 | 运行期契约 | `docs/language-spec.md:2005-2006` | 「在接口派发前检查 vtable；空则带 `<file>:<line>: runtime check…` abort」——**没有**排除句 |
 | 教程 | `docs/tutorial.md:1409` | 同上，仍未排除 |
 | README | `README.md:39` | 同上，仍未排除 |
-| PH-38 收口记录 | `docs/design/phase38-draft.md:248` | 「guard 下非 hoist 副作用接收者仍按既有两次求值（不新增第三次，但可绕过 guard）；均记录为 v1 边界」——这是**收口记录文字**，不是规范条款，且措辞把它当作既有两次求值的延续，未明确「不得有副作用」 |
+| PH-38 收口记录 | `docs/history/design/phase38.md:248` | 「guard 下非 hoist 副作用接收者仍按既有两次求值（不新增第三次，但可绕过 guard）；均记录为 v1 边界」——这是**收口记录文字**，不是规范条款，且措辞把它当作既有两次求值的延续，未明确「不得有副作用」 |
 | guard 双求值实现 | `selfhost/ct-ast/backend/emit/Emitter.h.ct:4620-4631`（aux 4）、`:4639-4650`（aux 3）、`:4658-4669`（aux 2）、`:4676-4687`（else） | 四个分支各自 `emit_expr(receiver)` 两次；因此 A 的排除不能只写「无副作用」，还要写「两次求值一致/稳定左值」 |
 | B 的列号 | `selfhost/ct-ast/backend/emit/Emitter.h.ct:5133-5138`；`frontend/parse/ParseSupport.h.ct:125-136` | `fail_from` 只存 line；`fail_at` 写死 `errcol=1`；J-5 的「col」在现状下是假列号 |
 
@@ -240,8 +240,8 @@ rc=1
 | --- | --- | --- |
 | 规范正文 | `docs/language-spec.md:2005-2006` 增加前置条件：接收者必须**无副作用且两次求值结果相同**；说明 guard 是**调试断言，不是安全边界** | 1–2 行 |
 | 教程/README | `docs/tutorial.md:1409`、`README.md:39` 同一措辞 | 2 行 |
-| 历史判据 | `docs/design/phase37-draft.md:156` 的 E37-3 需勘误或由 `docs/decisions/D-38-*.md` 说明「接受集 = 满足前置条件的程序」；不能悄悄扩解释已发布 tag 的退出判据 | 1 条决策记录（~20–40 行） |
-| PH-38 收口记录 | `docs/design/phase38-draft.md:248` 的「v1 边界」升级为指向规范的明确条款（现在只是记录） | 2–4 行 |
+| 历史判据 | `docs/history/design/phase37.md:156` 的 E37-3 需勘误或由 `docs/decisions/D-38-*.md` 说明「接受集 = 满足前置条件的程序」；不能悄悄扩解释已发布 tag 的退出判据 | 1 条决策记录（~20–40 行） |
+| PH-38 收口记录 | `docs/history/design/phase38.md:248` 的「v1 边界」升级为指向规范的明确条款（现在只是记录） | 2–4 行 |
 | 测试缺口 1 | `switch` 嵌套块负例（现有 `test/ast/errors/p38_defer_switch.ct` 只有直接 case；E1-7 已证明嵌套被拒，但无 fixture 锁定） | 1 文件 + `p38_probe.sh` 1 行 |
 | 测试缺口 2 | side-effect 接收者的**特征化**测试（记录 rc=139、stderr 空；放 known-limitations 或新 probe），防止行为无声变化 | 1 文件 + 1 断言 |
 | 测试缺口 3 | 安全回归：`arr[0].area()` 在 `--runtime-checks` 下仍 rc=7（防止将来修 C 时误伤） | 1 文件/1 断言 |
@@ -297,7 +297,7 @@ rc=1
 1. `docs/language-spec.md:2005-2006` 写清：guard 只在接收者**无副作用且两次求值结果相同**时有效；它是**调试断言，不是安全/并发保证**；带副作用接收者必须先绑定局部。
 2. `docs/tutorial.md:1409`、`README.md:39` 同步同一句，避免三处口径不一。
 3. 用 `docs/decisions/D-38-*.md`（或 phase37 勘误）处理 E37-3 的「任何被接受」：明确「被接受」= 满足前置条件；不静默扩解释已发布 `v0.37.0` 的退出判据。
-4. `docs/design/phase38-draft.md:248` 的「v1 边界」改为指向上述规范条款，而不是只在收口记录里提一句。
+4. `docs/history/design/phase38.md:248` 的「v1 边界」改为指向上述规范条款，而不是只在收口记录里提一句。
 5. 补 3 个测试缺口（见 §6.1）：嵌套 switch defer 负例、side-effect 接收者特征化、`arr[0]` 安全回归。
 6. 在收口报告里明说：**A 接受一次已知静默段错误**；若用户要求「开关即安全」，A 不成立，转 B/C。
 

@@ -68,7 +68,7 @@ $ grep -rhE --include='*.ct' "$P" . | sed 's/.*#include//' | sort | uniq -c | so
 不利 A：
 - `selfhost/ct-ast/backend/emit/Emitter.h.ct:1563-1572`：`.h.ct` 的 `#include` 被复制进**公开** `.h`（实测 `main.h:8`）；两条门禁钉住此契约：`selfhost/check-ast.sh:2029`、`:2458`。A 要让 shim include 替它进头，或给 shim 探测扩到 `.h.ct`——不是纯删行。
 - `test/bindings/mock-hal/uart.h.ct:16`：binding 契约第一步就是直通 include（`test/bindings/README.md:19-20`）；有状态 binding 改 `.m.ct`+shim 需把实例/状态搬进 C shim。
-- `lib/std/Vec.h.ct:17-19` + `docs/design/phase36-draft.md:206`：内建层 include libc，且已否决“内建层 include 外部 shim”（零外部依赖 Z2）。
+- `lib/std/Vec.h.ct:17-19` + `docs/history/design/phase36.md:206`：内建层 include libc，且已否决“内建层 include 外部 shim”（零外部依赖 Z2）。
 - `docs/language-spec.md:912-913`：`offsetof` 要求源文件自己写 `#include <stddef.h>`；A 下 `stddef` 也只能走 shim。
 
 `.m.ct`/shim 现有契约（A 只改“谁能 include”，不改机制）：`.m.ct` prologue 白名单 `#include`/`#define`（`language-spec.md:605-610`；实现 `selfhost/ct-ast/frontend/parse/Parser.h.ct:1346-1353`）；prologue 去重后展开进消费者 `.c`（671-673）；编译器**只为 `.m.ct`** 探测 `<base>.shim.h/.c`（680-690；`Emitter.h.ct:604-611`）；`.shim.c` 必须有 `.shim.h`，cc 行加 `-I <shim 目录>`、`.shim.c` 直接列源文件，两文件进缓存 key。仓内 31 个 `.shim.h`、5 个 `.shim.c`、500 行，shim 内只有 12 行 include——**“只有 shim 可 include”在 shim 侧已成立**，缺的正是 `.ct/.h.ct` 侧。

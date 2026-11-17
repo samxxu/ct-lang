@@ -29,7 +29,7 @@
 | S3 | 唯一语义出口是 `--emit-map`，输出 `compiler/file/traits/structs/impls/functions/calls/maps`；struct 只有 `name/cname/file/line/uses`，方法只有 `ret` 与形参**个数**，函数同理 | 实测输出见 §附录 P1 |
 | S4 | 前端符号表**已持有** `Field{name,type,dims}`、`StructDef.fields[]`，多个记录已有 `line`/`col`；缺的是「序列化」而不是「数据」 | `selfhost/ct-ast/frontend/sym/Symbols.h.ct:232-238`、`246-247`、`351-352` |
 | S5 | `Field` 自身**没有** `line`/`col`（只有 name/type/dims） | 同上 `232-238` |
-| S6 | `ct build --lib` 产出 `.abi.h`：不透明前置声明 + 导出自由函数 + `ABI_VERSION` + `ABI_HASH`；导出面**只含根单元 `pub` 自由函数**，固有方法与 trait impl 不进 | 实测 P2；`docs/design/phase39-draft.md:37-48`、`60` |
+| S6 | `ct build --lib` 产出 `.abi.h`：不透明前置声明 + 导出自由函数 + `ABI_VERSION` + `ABI_HASH`；导出面**只含根单元 `pub` 自由函数**，固有方法与 trait impl 不进 | 实测 P2；`docs/history/design/phase39.md:37-48`、`60` |
 | S7 | 回调函数指针**可以**出现在导出签名里，但不会生成 `typedef` | 实测 P2：`void UI_login_set_on_login(struct UI_Login *, void (*)(void *, int), void *);` |
 | S8 | `ABI_HASH` 只哈希**导出名**：把回调参数 `int` 改 `long`，头变了、哈希不变 | 实测 P3：`0x3b8d1c83` → `0x3b8d1c83` |
 | S9 | 包分发走「整树复制」，非 `.ct` 文件会一起进 `vendor/`；但 `ct install` 打印编译单元时只收 `.ct` | `selfhost/ct-ast/tool/pkg/Pkg.h.ct:533`、`1404` |

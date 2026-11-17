@@ -9,7 +9,7 @@
 | proposer | REQ（主张 C） |
 | opposition | REVIEW（主张 B） |
 | judge | EDITOR |
-| 禁止触碰 | `selfhost/**`、`test/**`、`docs/design/phase42-draft.md`、`docs/decisions/**`；只写 `battle/p42-1/` 与 `/tmp` |
+| 禁止触碰 | `selfhost/**`、`test/**`、`docs/history/design/phase42.md`、`docs/decisions/**`；只写 `battle/p42-1/` 与 `/tmp` |
 
 ## 逐条判据
 

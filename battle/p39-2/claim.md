@@ -24,14 +24,14 @@ A 就是**按冻结卡原样执行 D39-5**，不追加任何链接期步骤：
 
 ### 1.2 与 D39-5 的逐字对应
 
-`docs/design/phase39-draft.md:59`：
+`docs/history/design/phase39.md:59`：
 
 > `D39-5 | 导出定义注入 visibility("default")，中间对象加 -fvisibility=hidden；符号面用 nm 快照锁定 | 静态归档无法靠 visibility 藏符号，只能锁快照`
 
 - 第 1 句（visibility 注入）→ A 的第 1 条；
 - 第 2 句（**nm 快照锁定**）→ A 的第 3 条；
 - 「理由」列（静态归档无法靠 visibility 藏符号）→ 这正是 A 的立论：既然 visibility 藏不住，要么接受并锁定，要么引入新的链接期工具；D39-5 明确选了前者。
-- 冻结卡 `docs/design/phase39-draft.md:37`（O3 边界）已写明「visibility 不改变静态归档的全局符号表……`nm -g` 里仍会看到 trait vtable，它不属于 ABI 承诺（§3.3、E39-2）」。**A 不是新方案，是卡上已有的裁决。**
+- 冻结卡 `docs/history/design/phase39.md:37`（O3 边界）已写明「visibility 不改变静态归档的全局符号表……`nm -g` 里仍会看到 trait vtable，它不属于 ABI 承诺（§3.3、E39-2）」。**A 不是新方案，是卡上已有的裁决。**
 
 ### 1.3 B 对冻结卡意味着什么
 
@@ -342,7 +342,7 @@ P2/P3 是可被反证的具体断言；P1 是可被门禁直接执行的断言�
 1. **B 的保证只到名字解析层，且以整档重链为代价。** `nm -m` 里被本地化的符号仍以 `non-external (was a private external)` 留在归档里，调试者/`nm` 仍看得见；真正的 ABI 面是 `<base>.abi.h`，消费者只该 include 它。B 把「开发者可见」与「可链接」混为一谈。
 2. **A 的承诺不是纸面的，是可红的。** `expected.nm` 把 12 个 defined global 逐个钉死；内部符号改名 → p39 红 → 发布前暴露。B 的硬隔离并不阻止「导出集合本身」变化（那由 B39-1/§3.1 管），所以 B 多买的只有「误链」这一种情况，而 A 用快照 + 文档买到了「误链可发现 + 改名不静默」两种。
 3. **B 在 J-2/J-3/J-4 上都付了可见代价**：跨平台不是同一套命令、macOS 默认无 `objcopy`、`main.o` 的 `U _Dog_Speak_vtable` 要求整档 `ld -r` 从而毁掉「逐单元 `.o`」、改动 ≥3 文件 >120 行。
-4. **冻结卡已裁决过这个权衡**：`docs/design/phase39-draft.md:37` 明说「`nm -g` 里仍会看到 trait vtable，它不属于 ABI 承诺」，D39-5 的理由列明说「只能锁快照」。B 要赢，不只是赢 J-1，还要说明**为什么现在推翻冻结理由**——本庭的举证里没有这个说明。
+4. **冻结卡已裁决过这个权衡**：`docs/history/design/phase39.md:37` 明说「`nm -g` 里仍会看到 trait vtable，它不属于 ABI 承诺」，D39-5 的理由列明说「只能锁快照」。B 要赢，不只是赢 J-1，还要说明**为什么现在推翻冻结理由**——本庭的举证里没有这个说明。
 
 ---
 

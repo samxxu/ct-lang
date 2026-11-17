@@ -5,7 +5,7 @@
 > **红证**：红证提交必须是**实现提交的父提交**；S0 在 Phase 31 收口提交上重建二进制、复跑 §2.2 探针，并把脚本与原始输出随红证提交入库。
 > **文档形态**：`phase33-draft.md`。转正按「每次转正归档当时最老的一张」：32→phase20、33→phase21，依此类推；本卡不抢跑。
 > **deviation:** G4 `g4-size` 要求单份文档 ≤ 300 行；本卡承载两块语义、T31 处置、跨单元与判据/负例台账，约 412 行。按自裁 **waiver** 保留单卡（两块语义与跨单元判据必须同卡对照），不再寻求需求提出方签字。
-> 关联：[phase31.md](../history/design/phase31.md)（T31/ D31-5 来源）、[phase28.md](../history/design/phase28.md)（泛型函数 bound）、[phase29.md](../history/design/phase29.md)（泛型 struct / 容器）、[phase35-draft.md](phase35-draft.md)（泛型 trait，B 块已拆出）、[phase32-draft.md](phase32-draft.md)
+> 关联：[phase31.md](../../history/design/phase31.md)（T31/ D31-5 来源）、[phase28.md](../../history/design/phase28.md)（泛型函数 bound）、[phase29.md](../../history/design/phase29.md)（泛型 struct / 容器）、[phase35-draft.md](phase35.md)（泛型 trait，B 块已拆出）、[phase32-draft.md](phase32.md)
 
 ## 1 目标与范围
 

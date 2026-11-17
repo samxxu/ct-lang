@@ -1,6 +1,6 @@
 # Phase 32 / 33 立项卡第七轮窄范围复核
 
-- 对象：`docs/design/phase32-draft.md`、`docs/design/phase33-draft.md`（提交 `aa78952`，只含两张卡）
+- 对象：`docs/history/design/phase32.md`、`docs/history/design/phase33.md`（提交 `aa78952`，只含两张卡）
 - 范围：Phase 32 只验 R6 的 6 Medium + 2 Low 是否落地且未改坏；Phase 33 只验 R6 的 1 High + 2 Medium
 - 方式：只读 + 单条 `ct-ast` / `cc` / `grep`，产物在 `/tmp/r7/**`；未跑 `check-all.sh`；未改卡片、未 commit
 - 探针：`/tmp/ct-ast`（v0.26.4）

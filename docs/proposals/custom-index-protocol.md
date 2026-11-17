@@ -9,7 +9,7 @@
 > **基线**：若立项，以立项时的 `HEAD` 为基线；S0 记录 `baseline: <sha>` 并复跑 §2.2。
 > **文档形态**：`docs/proposals/custom-index-protocol.md`；转正时由 EDITOR 新建 phase 卡。
 > **前置**：[phase31.md](../history/design/phase31.md)（`v[i]` / `m[k]` 的既有降级路径与 L31-3/L31-4 写保护）、
-> [phase34-draft.md](../design/phase34-draft.md)（非泛型固有 `impl Name`）。
+> [phase34-draft.md](../history/design/phase34.md)（非泛型固有 `impl Name`）。
 > **关联**：[requirements-pool.md](../planning/requirements-pool.md) 的 `REQ-L1`、
 > [modern-oo-gap.md](../modern-oo-gap.md) §6.2（`C1 下标糖`）。
 > **编号**：不认领 phase 编号；PH-40 已由 errdefer 占用，本提案通过 AN 后按 roadmap 空位排期。

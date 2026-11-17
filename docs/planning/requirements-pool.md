@@ -254,7 +254,7 @@ PH-52 的 D52-6 指向本条。
 | --- | --- |
 | `id` | `REQ-CI-1` |
 | **现象** | `check-tsan.sh` 与 PH-41 卡都写「nightly Linux job 会跑」，但 `nightly.yml` 只有 `sanitizers` 与 `fuzz` 两个 job，没有 tsan。二者必须择一对齐：补 job，或改脚本 / 卡措辞。 |
-| **证据锚点** | [nightly.yml:12-33](../../.github/workflows/nightly.yml#L12-L33)（仅 sanitizers + fuzz）；[check-tsan.sh:6-7](../../selfhost/check-tsan.sh#L6-L7)（「The nightly workflow runs it on Linux」）；[phase41-draft.md:240](../design/phase41-draft.md#L240)、[phase41-draft.md:324](../design/phase41-draft.md#L324)（R7「nightly Linux job」）。 |
+| **证据锚点** | [nightly.yml:12-33](../../.github/workflows/nightly.yml#L12-L33)（仅 sanitizers + fuzz）；[check-tsan.sh:6-7](../../selfhost/check-tsan.sh#L6-L7)（「The nightly workflow runs it on Linux」）；[phase41-draft.md:240](../history/design/phase41.md#L240)、[phase41-draft.md:324](../history/design/phase41.md#L324)（R7「nightly Linux job」）。 |
 | **影响** | TSan 实际未在 CI 执行；文档与 CI 事实不一致，读者会误以为并发回归有人守。 |
 | **建议做法** | 二选一：① 在 `nightly.yml` 增加 ubuntu + `-fsanitize=thread` 的 tsan job；② 把脚本与 PH-41 卡改成「TSan 仅本地手动跑」。**本轮只记录，不动 CI / 不动脚本 / 不改卡。** |
 | **当前判定** | **待定**（口径一致性修复，P1；需用户就「补 job 还是改口径」二选一）。 |

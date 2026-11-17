@@ -31,11 +31,11 @@
 
 ### 1.2 「`ld -r` 单对象方案」——**J-3 归 B，我接受；但它拿走了 O1**
 
-> counter.md:149-172（E1-6）：「归档只含 1 个成员……」；counter.md:172：「vtable 变 `d`（本地），导出面只剩两个 `T`……**J-1 与 J-3 同时满足**」；counter.md:229（E4）：「归档只含 1 个合并 `.o`，**与 O1 的「逐单元 `.o`」（`docs/design/phase39-draft.md:36`）冲突**；要么改 O1，要么每单元再存一份未合并副本（成本翻倍且符号面回到 A）」
+> counter.md:149-172（E1-6）：「归档只含 1 个成员……」；counter.md:172：「vtable 变 `d`（本地），导出面只剩两个 `T`……**J-1 与 J-3 同时满足**」；counter.md:229（E4）：「归档只含 1 个合并 `.o`，**与 O1 的「逐单元 `.o`」（`docs/history/design/phase39.md:36`）冲突**；要么改 O1，要么每单元再存一份未合并副本（成本翻倍且符号面回到 A）」
 
 **回应**：
 1. **J-3 归 B，我接受。** 而且我本轮新测了 counter 没测的一项：`ld -r -exported_symbols_list` 会不会把 constructor 一起藏掉。结果是**不会**（见 §2 E1-r2-b，`__mod_init_func` 两条都在，运行输出 `A-init`/`B-init`）。所以 B 的合并形态不破坏 `__ct_init`，J-3 不再是我的论据。
-2. **但 counter 自己写明 B 与 O1 冲突。** 这不是「B 的实现细节」，而是**改冻结卡的交付物形态**（`docs/design/phase39-draft.md:36` 的 O1 明文「逐单元 `.o`」）。按 6.2/6.6 T-6，这属于冻结判据变更，需要重开卡或本庭明确裁决生效范围；J-4 的「35–45 行」估算没有把「改 O1 + 重写 p39 夹具 + counter 自述的每成员清单（E1-7，counter.md:194）」计入。
+2. **但 counter 自己写明 B 与 O1 冲突。** 这不是「B 的实现细节」，而是**改冻结卡的交付物形态**（`docs/history/design/phase39.md:36` 的 O1 明文「逐单元 `.o`」）。按 6.2/6.6 T-6，这属于冻结判据变更，需要重开卡或本庭明确裁决生效范围；J-4 的「35–45 行」估算没有把「改 O1 + 重写 p39 夹具 + counter 自述的每成员清单（E1-7，counter.md:194）」计入。
 3. **B 的「硬保证」仍然依赖 `nm` 断言。** counter 自认 `ld -r` 对清单里不存在的符号**静默成功**（counter.md:194），所以 B 末尾必须再跑一次 `nm -g --defined-only` 自校验（counter.md:231）。也就是说，B 的最终验收与 A 用的是**同一个 `nm` 面**，区别只在「本地化后再断言」还是「不本地化直接断言」。这削弱了 B「物理上不可能误链」的收益叙事：它对**归档成员**成立，对**归档外的消费者声明**不成立（消费者仍可自己 `extern` 一个已被本地化的名字吗？不能——但 counter 的 F-1 反例正是 A 不本地化才成立；B 靠本地化消除它，这点我承认）。
 4. **结论**：J-3 是 B 的胜项，不是 A 的；A 不再用 J-3 抗辩。
 
@@ -58,7 +58,7 @@
 
 > counter.md:218（P-5）：「`expected.nm` 在 macOS 与 Linux 不能是同一份字节：Mach-O 带 `_` 前缀、排序与 `llvm-nm`/GNU nm 不同。」
 
-**回应（新 E2 锚点，见 §3）**：`docs/design/phase39-draft.md:127` 已经写死「`nm -g --defined-only` **归一化（去前导 `_`）**后的集合必须逐行等于 `test/modules/p39_lib/expected.nm`」。P-5 比的是「同一份字节」，而卡要求的是「归一化后的集合」——两者不是同一命题。本条应撤回或降级为「归一化脚本需覆盖排序差异」，那是 2–3 行 `sort`，不是 J-5 的失败。
+**回应（新 E2 锚点，见 §3）**：`docs/history/design/phase39.md:127` 已经写死「`nm -g --defined-only` **归一化（去前导 `_`）**后的集合必须逐行等于 `test/modules/p39_lib/expected.nm`」。P-5 比的是「同一份字节」，而卡要求的是「归一化后的集合」——两者不是同一命题。本条应撤回或降级为「归一化脚本需覆盖排序差异」，那是 2–3 行 `sort`，不是 J-5 的失败。
 
 ### 1.6 counter 的 F-6 与我 T2 的「macOS 无 objcopy」
 
@@ -110,9 +110,9 @@ $ nm -g --defined-only merged2.o
 
 | # | 锚点 | 内容 | 方向 |
 | --- | --- | --- | --- |
-| E2-r2-1 | `docs/design/phase39-draft.md:127` | 「`nm -g --defined-only` **归一化（去前导 `_`）**后的集合必须逐行等于 `test/modules/p39_lib/expected.nm`」 | 利于 A：卡已规定归一化，counter 的 P-5「同一份字节」是稻草人；跨平台单快照可行 |
-| E2-r2-2 | `docs/design/phase39-draft.md:126` | 「trait vtable 仍 external（跨单元装箱要用），不加 attribute → hidden；它**不是** ABI，由 `expected.nm` 快照锁定」 | 利于 A：A 是冻结卡上的既定方案；B 必须改这一行与 O1（:36），属冻结条款变更，不是实现细节 |
-| E2-r2-3 | `docs/design/phase39-draft.md:184` | E39-9 / E39-6 只查 `.abi.h` 与 `_iface`/`_vtbl` 命中 0，**不查 `nm` 面** | 不利于 A：J-1 的字面要求没有任何既有门禁承担，A′ 必须新增 nm 门禁（我接受） |
+| E2-r2-1 | `docs/history/design/phase39.md:127` | 「`nm -g --defined-only` **归一化（去前导 `_`）**后的集合必须逐行等于 `test/modules/p39_lib/expected.nm`」 | 利于 A：卡已规定归一化，counter 的 P-5「同一份字节」是稻草人；跨平台单快照可行 |
+| E2-r2-2 | `docs/history/design/phase39.md:126` | 「trait vtable 仍 external（跨单元装箱要用），不加 attribute → hidden；它**不是** ABI，由 `expected.nm` 快照锁定」 | 利于 A：A 是冻结卡上的既定方案；B 必须改这一行与 O1（:36），属冻结条款变更，不是实现细节 |
+| E2-r2-3 | `docs/history/design/phase39.md:184` | E39-9 / E39-6 只查 `.abi.h` 与 `_iface`/`_vtbl` 命中 0，**不查 `nm` 面** | 不利于 A：J-1 的字面要求没有任何既有门禁承担，A′ 必须新增 nm 门禁（我接受） |
 
 （T2 的 A1/A2/A3/A4 仍有效；本轮不重复。）
 
@@ -131,7 +131,7 @@ $ nm -g --defined-only merged2.o
 ## 5 请求裁判（§7.10）
 
 1. **先裁定 J-1 的读法**（字面 / 目标），并写入 `verdict.md`；这决定本庭是「B 成立」还是「出 C」。
-2. 若 A 被判 `rejected`，请按 §7.9 原文「`rejected` 不等于反对席方案成立」写明 **B 的生效范围**：B 需改 `docs/design/phase39-draft.md:36` 的 O1（逐单元 `.o`）、:126 的 vtable 锁定条款，并把 Linux 分支标 `skip`（counter 自认，counter.md:234）。
+2. 若 A 被判 `rejected`，请按 §7.9 原文「`rejected` 不等于反对席方案成立」写明 **B 的生效范围**：B 需改 `docs/history/design/phase39.md:36` 的 O1（逐单元 `.o`）、:126 的 vtable 锁定条款，并把 Linux 分支标 `skip`（counter 自认，counter.md:234）。
 3. 若裁判认为 A′（发布 `<base>.nm` + `ABI_VERSION` 绑定 + 归一化 nm 门禁）成立，则 A 可在**目标读**下 `upheld`；请把 A′ 的三项作为 A 的生效条件写进判决，而不是按 T1 原样记录。
 4. 若两案都不满足全部判据，请按 §7.10 出 C：**A′ 的已声明允许集合 + B 的条件化本地化**（mac `nmedit`/`ld -r`，Linux `objcopy`；保留逐单元副本或改 O1），并写明「ABI 洁净」在 `.abi.h`、`<base>.nm`、`nm` 三处的定义。
 

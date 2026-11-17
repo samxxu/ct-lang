@@ -90,7 +90,7 @@ $ nm /tmp/p39e1/lib.o | grep -E 'id__ct1|from_lib'
 ### E1-c A 的规则原文（照抄 grid，file:line）
 
 ```console
-$ cd /tmp/p39head/src && grep -n "不导出泛型\|泛型\|L39-1\|导出面 = " docs/design/phase39-draft.md | sed -n '1,12p'
+$ cd /tmp/p39head/src && grep -n "不导出泛型\|泛型\|L39-1\|导出面 = " docs/history/design/phase39.md | sed -n '1,12p'
 6:> **前置**：[phase34-draft.md](phase34-draft.md)（`pub` 语义；本相只导出非泛型 `pub`）、[phase36-draft.md](phase36-draft.md)（`Str` 的 ABI 边界）、[phase38-draft.md](phase38-draft.md)（收口基线）。
 17:| 范围 | O1/O2/O3；不导出按值 struct / `pub` 全局 / 泛型 / `pub extern`；不做 dylib、MSVC、版本协商 |
 37:| O2 | 导出面 = 本次构建所有非内建 `.h.ct` 单元的有定义 `pub` 函数；签名不 C 兼容即 L39-1 | 无导出面概念 |
@@ -158,11 +158,11 @@ lib/std/Str.h.ct:117: [std:Str] pub char *str_c_str(Str s)
 | # | 锚点 | 原文要点 | 对哪方有利 |
 | --- | --- | --- | --- |
 | E2-1 | `test/modules/p34_pub_generic/lib.h.ct:3` | `pub T id<T>(T x)` —— 仓库自带的"可复用库"夹具里就有泛型 `pub` helper，且消费方依赖它 | 利于己方 |
-| E2-2 | `docs/design/phase39-draft.md:102` + `:104` + `:134` | 泛型进导出面 → L39-1 → 不写任何产物（硬错中止） | 利于己方 |
-| E2-3 | `docs/design/phase39-draft.md:45` | "不导出泛型函数……三者都不写进 `.abi.h`"（跳过，与 E2-2 互斥） | 利于己方（可预测性反证） |
+| E2-2 | `docs/history/design/phase39.md:102` + `:104` + `:134` | 泛型进导出面 → L39-1 → 不写任何产物（硬错中止） | 利于己方 |
+| E2-3 | `docs/history/design/phase39.md:45` | "不导出泛型函数……三者都不写进 `.abi.h`"（跳过，与 E2-2 互斥） | 利于己方（可预测性反证） |
 | E2-4 | `docs/language-spec.md:617` | "其它单元 `import` 后即可按名引用。`pub` 只表示导出：未标 `pub` 的全局仍只属于本单元" —— `pub` 是单元间可见，不是对外 ABI | 利于己方 |
 | E2-5 | `selfhost/ct-ast/frontend/sym/Symbols.h.ct:423` | `pub int ct_impl_add(…)` —— 编译器自己的跨单元内部访问器，A 会把它写进 ABI（72 个之一） | 利于己方 |
-| **E2-6（不利于己方）** | `docs/design/phase39-draft.md:5` | "2026-11-13，用户批准三项决策均取 A：导出面只收指针、禁用构造硬错、现在冻卡" —— 用户已在方向上选过 A 味的三项 | **不利于己方** |
+| **E2-6（不利于己方）** | `docs/history/design/phase39.md:5` | "2026-11-13，用户批准三项决策均取 A：导出面只收指针、禁用构造硬错、现在冻卡" —— 用户已在方向上选过 A 味的三项 | **不利于己方** |
 | **E2-7（不利于己方）** | `AGENTS.md:469` | "涉及行为变更（新增语法、改变命名、改变 CLI）必须先向用户说明方案并获得确认" —— B 的语法/清单方案天然要过一次用户批准 | **不利于己方** |
 
 **为何 E2-6 仍不足以判 A 成立**：用户批准的是"**导出面里能放什么签名**"（D39-6 的按值 struct / trait 值 / 泛型 / std 类型一律拒绝）与"禁用构造硬错"。这回答的是 J-1 的后半句"不把其余判死"里的**签名合规性**；它没有回答 J-1 的前半句"**能否只导出作者要的子集**"。本庭争点恰恰是选择机制，而 `question.md:7` 自己写明该机制是"代决结论，未过庭"。且"硬错"的对象是否包含"作者根本没打算导出的 helper"，卡面本身在 `:45` 与 `:102/:134` 之间没有定论（C3）。所以用户签字不能补上 J-1 的缺口。
@@ -197,7 +197,7 @@ lib/std/Str.h.ct:117: [std:Str] pub char *str_c_str(Str s)
 | 对既有夹具 | `p34_pub_generic` 用 `--export from_lib` 即可成库，源码 0 改动（J-2 成立） | 需要给 `from_lib` 标 `pub export`，`id` 不动 → 源码 1 行/库；J-2 的"零改动"字面不成立 |
 | 卡面代价 | 只需改 `phase39-draft.md` §1.3 / §3.1 / D39-6 / L39-1 / R2 / 夹具表（约 20–30 行文档） | 同左 + 语言规范一节 |
 
-**回退 A 的具体步骤**：A 未落地 → 删 `phase39-draft.md` 中 §1.3/§3.1 的"全量 pub"与 L39-1 的"泛型"项、把 R2 的 `p39_export_generic` 夹具改为"跳过不导出"或删除；`git diff` 只涉及 `docs/design/phase39-draft.md` + `test/modules/p39_lib/**` + `selfhost/check-ast.sh` 的 p39 段，不改任何既有 golden。
+**回退 A 的具体步骤**：A 未落地 → 删 `phase39-draft.md` 中 §1.3/§3.1 的"全量 pub"与 L39-1 的"泛型"项、把 R2 的 `p39_export_generic` 夹具改为"跳过不导出"或删除；`git diff` 只涉及 `docs/history/design/phase39.md` + `test/modules/p39_lib/**` + `selfhost/check-ast.sh` 的 p39 段，不改任何既有 golden。
 
 ---
 

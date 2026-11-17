@@ -2547,7 +2547,7 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 - **泛型 trait × 泛型 struct**：只支持参数一一对应的 `impl<T> MyVec<T> use Iter<T>`，其它形态报 `unsupported generic trait implementation shape`。
 - **跨单元边界**：泛型 trait 实例只能在模板属主单元创建；消费方可以命名该类型，但创建实例即报 `a generic trait instance must be created in its owner unit`（L35-4）。
 - **冲突与容量**：编码名与已声明的 trait、`struct <I>_vtbl` 或 `struct <I>_iface` 撞名时报 `trait instance name '<I>' collides with a declared type`；模板行与实例行共用 `MAX_TRAITS = 64`，第 65 条报 `too many traits`。
-- **不做**：supertrait / 接口组合（开放项与触发条件见 [phase35 卡](design/phase35-draft.md) §10.2 / §10.3）、默认方法体、多 bound、关联类型、`Self`、方法级泛型与泛型 enum。
+- **不做**：supertrait / 接口组合（开放项与触发条件见 [phase35 卡](history/design/phase35.md) §10.2 / §10.3）、默认方法体、多 bound、关联类型、`Self`、方法级泛型与泛型 enum。
 
 ### 4.56 `Drop` 与长度前缀字符串 `Str`（Phase 36，仅 ct-ast）
 
