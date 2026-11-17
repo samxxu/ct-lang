@@ -701,6 +701,13 @@ else
     bad "p65/raw-extern" "$(cat "$work/p65raw.out" "$work/p65raw.err" | head -4)"
 fi
 
+# PH-65 R4: a `.m.ct` is the boundary: include and object-like macros only.
+if env -u CT_C_BOUNDARY bash test/ast/p65_map.sh "$work/ct-ast" >"$work/p65map.out" 2>"$work/p65map.err"; then
+    ok "p65/map"
+else
+    bad "p65/map" "$(cat "$work/p65map.out" "$work/p65map.err" | head -4)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
