@@ -67,5 +67,78 @@ else
     fi
 fi
 
+# SH-87 (battle hw-2): `Str` is not a template, so its liveness has three
+# traps the first implementation fell into -- a layer helper contains no `Str`
+# (false negative), `struct Struct` contains it (false positive), and a single
+# `fread` dropped the tail of a large source (false negative). One case each.
+mkdir -p "$tmp/strfn" "$tmp/structname" "$tmp/bigs"
+
+cat >"$tmp/strfn/s.ct" <<'CT'
+#include <stdio.h>
+
+int main(void)
+{
+    printf("%d\n", str_len(str_from("hi")));
+    return 0;
+}
+CT
+( cd "$root" && "$CT" build --emit-c "$tmp/strfn/s.ct" -o "$tmp/strfn" ) >"$tmp/strfn.log" 2>"$tmp/strfn.err"
+if [ $? -ne 0 ]; then
+    echo "FAIL p64ond: the layer-helper program did not build: $(head -2 "$tmp/strfn.err")" >&2
+    fail=1
+elif [ ! -e "$tmp/strfn/Str.c" ]; then
+    echo "FAIL p64ond: str_from/str_len did not pull Str.c" >&2
+    fail=1
+elif ! "$CC" -Wall -Wextra -std=c99 "$tmp/strfn"/*.c -o "$tmp/strfn.bin" 2>"$tmp/strfn.cc"; then
+    echo "FAIL p64ond: the layer-helper product did not link: $(head -3 "$tmp/strfn.cc")" >&2
+    fail=1
+elif [ "$("$tmp/strfn.bin" 2>&1)" != "2" ]; then
+    echo "FAIL p64ond: the layer-helper program printed '$( "$tmp/strfn.bin" 2>&1 )'" >&2
+    fail=1
+fi
+
+cat >"$tmp/structname/s.ct" <<'CT'
+#include <stdio.h>
+
+struct Struct {
+    int x;
+};
+
+int main(void)
+{
+    struct Struct v;
+    v.x = 1;
+    printf("%d\n", v.x);
+    return 0;
+}
+CT
+( cd "$root" && "$CT" build --emit-c "$tmp/structname/s.ct" -o "$tmp/structname" ) >"$tmp/structname.log" 2>"$tmp/structname.err"
+if [ $? -ne 0 ]; then
+    echo "FAIL p64ond: the struct-Struct program did not build: $(head -2 "$tmp/structname.err")" >&2
+    fail=1
+elif [ -e "$tmp/structname/Str.c" ]; then
+    echo "FAIL p64ond: a user struct named Struct pulled Str.c" >&2
+    fail=1
+fi
+
+{
+    echo '#include <stdio.h>'
+    i=0
+    while [ "$i" -lt 6500 ]; do
+        echo '/* filler line to grow the source past 262143 bytes */'
+        i=$((i + 1))
+    done
+    echo 'Str s = str_from("x");'
+    echo 'int main(void) { printf("%d\n", s.len); return 0; }'
+} >"$tmp/bigs/b.ct"
+( cd "$root" && "$CT" build --emit-c "$tmp/bigs/b.ct" -o "$tmp/bigs" ) >"$tmp/bigs.log" 2>"$tmp/bigs.err"
+if [ $? -ne 0 ]; then
+    echo "FAIL p64ond: the large-source program did not build: $(head -2 "$tmp/bigs.err")" >&2
+    fail=1
+elif [ ! -e "$tmp/bigs/Str.c" ]; then
+    echo "FAIL p64ond: a Str mention past 262143 bytes was missed" >&2
+    fail=1
+fi
+
 [ "$fail" -eq 0 ] && echo "OK p64ond"
 exit "$fail"
