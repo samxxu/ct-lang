@@ -1,0 +1,541 @@
+{
+  "battle": "index-install-1",
+  "head": "792d5bc1",
+  "environment": {
+    "os": "Darwin arm64 / macOS 27.2",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "git": "git version 2.54.0 (Apple Git-157)",
+    "binary": "/tmp/idx-v/bin/ct (ct v0.65.1, sha256 54d89bfeaba7a38c9b16b9887bf744d5bc6ba860039264a25695ef21b30ae6f7)",
+    "source_baseline": "HEAD 792d5bc12c419cb97cf8520952ecd1d153265b18；工作树只多 battle/index-install-1/ 与未跟踪 test/baremetal-renode/，源码/规范/测试未改",
+    "external_index": "https://github.com/ct-pkg/index main f7fb1d85aca7b5bcca4823d6931b8919c314f120；index sha256=7ed5b97dbb84e150d8393636996ee6be3dc648089578204d6e2d71b4c6c222f1；12 行全部 5 字段；git ls-remote --tags 0 行；无 .sig；commit 未签名（%G? = N）",
+    "date": "2026-11-18T06:57:13+08:00 (Asia/Shanghai)",
+    "note": "行为实验一律用 /tmp/idx-v/bin/ct（HEAD 源码经 install.sh CT_SOURCE_DIR 离线自举）；外部索引只读 clone 到 /tmp/idx-v/official。所有测试 HOME/CT_HOME/夹具在 /tmp/idx-v，仓库只新增本文件。"
+  },
+  "rounds": 1,
+  "method": "只读复核 + 黑盒探针：从 HEAD 源码离线自举 ct v0.65.1；用本地 git 包与本地索引复现六字段/五字段、摘要替换、失败关闭、索引过期；用 git 包装器记录 ct 实际 spawn 的 git 命令；外部 ct-pkg/index 只读 clone 到 /tmp 核对字段数、commit/sha、tag/签名与发布脚本权限。未实现 A/B 任何方案，A1/A4/A5 与 B 的 ct index update 均按“提案未实现”标注，只用现状命令与等价探针评估。",
+  "evidence": [
+    {
+      "id": "V1",
+      "side": "both",
+      "ref": "counter.md#E1-1 / claim.md#E2（install.sh 无索引、无 git）",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && grep -nE 'git clone|CT_INDEX|index' install.sh | wc -l; grep -nE 'git clone|CT_INDEX|\\.ct/index' install.sh; echo rc=$?; wc -l install.sh",
+      "exit": 0,
+      "output": "       0\nrc=1\n     191 install.sh",
+      "reproduced": true,
+      "note": "counter 的 `grep -nE 'git clone|CT_INDEX|index' install.sh | wc -l` = 0 逐字成立：install.sh 不 clone 索引、没有 CT_INDEX、不写 ~/.ct。install.sh:59-61 是唯一离线入口 CT_SOURCE_DIR；:18,:72-74 默认下载 GitHub 归档；:172,:187 的 Next steps 让用户手工 `ct get ct/std`。AGENTS.md:528-532：只用 cc/tar/curl（或 wget）、不需要 git；新增选项/安装位置/下载来源属行为变更需用户确认。"
+    },
+    {
+      "id": "V2",
+      "side": "counter",
+      "ref": "counter.md#E1-1（离线安装 rc=0、不写 index）",
+      "command": "rm -rf /tmp/idx-v/h1 && mkdir -p /tmp/idx-v/h1; env https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 HOME=/tmp/idx-v/h1 CT_SOURCE_DIR=/Users/samxx/dsh-ws/ct-lang sh install.sh --prefix /tmp/idx-v/bin2 >/tmp/idx-v/install-offline2.log 2>&1; echo install_rc=$?; grep -E 'using local|installed /tmp' /tmp/idx-v/install-offline2.log; ls /tmp/idx-v/h1/.ct 2>/dev/null || echo '(no ~/.ct)'",
+      "exit": 0,
+      "output": "install_rc=0\n==> using local source tree /Users/samxx/dsh-ws/ct-lang\n==> installed /tmp/idx-v/bin2/ct (ct v0.65.1) and /tmp/idx-v/bin2/ctc\n(no ~/.ct)",
+      "reproduced": true,
+      "note": "断网代理 + CT_SOURCE_DIR 下 rc=0；$HOME/.ct 完全没被创建，更没有 ~/.ct/index。与 claim E1-5 的 install_rc=0 一致。"
+    },
+    {
+      "id": "V3",
+      "side": "verify",
+      "ref": "重复安装（J-1 矩阵）",
+      "command": "env https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 HOME=/tmp/idx-v/h1 CT_SOURCE_DIR=/Users/samxx/dsh-ws/ct-lang sh install.sh --prefix /tmp/idx-v/bin2 >/tmp/idx-v/install-repeat.log 2>&1; echo install2_rc=$?; shasum -a 256 /tmp/idx-v/bin/ct /tmp/idx-v/bin2/ct",
+      "exit": 0,
+      "output": "install2_rc=0\n54d89bfeaba7a38c9b16b9887bf744d5bc6ba860039264a25695ef21b30ae6f7  /tmp/idx-v/bin/ct\n54d89bfeaba7a38c9b16b9887bf744d5bc6ba860039264a25695ef21b30ae6f7  /tmp/idx-v/bin2/ct",
+      "reproduced": true,
+      "note": "同一前缀、同一 HOME 重复安装 rc=0；两次产物 sha256 相同（可复现）。A1 若把 clone 放在安装里，重复安装会撞非空目录（V5），这是新增失败面。"
+    },
+    {
+      "id": "V4",
+      "side": "counter",
+      "ref": "AGENTS.md:528-532（install.sh 不需要 git）",
+      "command": "mkdir -p /tmp/idx-v/failgit && printf '#!/bin/sh\\necho \"git is broken\" >&2\\nexit 127\\n' > /tmp/idx-v/failgit/git && chmod +x /tmp/idx-v/failgit/git; rm -rf /tmp/idx-v/h-nogit && mkdir -p /tmp/idx-v/h-nogit; env PATH=/tmp/idx-v/failgit:$PATH HOME=/tmp/idx-v/h-nogit CT_SOURCE_DIR=/Users/samxx/dsh-ws/ct-lang sh install.sh --prefix /tmp/idx-v/bin-nogit >/tmp/idx-v/install-nogit.log 2>&1; echo install_rc=$?; tail -1 /tmp/idx-v/install-nogit.log; ls /tmp/idx-v/h-nogit/.ct 2>/dev/null || echo '(no ~/.ct)'",
+      "exit": 0,
+      "output": "install_rc=0\nTutorial: https://github.com/samxxu/ct-lang/blob/main/docs/tutorial.md\n(no ~/.ct)",
+      "reproduced": true,
+      "note": "把 `git` 放在 PATH 最前且恒退出 127，install.sh 仍 rc=0：安装路径确实不调用 git，不新增 git 依赖。"
+    },
+    {
+      "id": "V5",
+      "side": "both",
+      "ref": "claim.md#E1-5 / J-1（默认 clone 的离线与重复行为）",
+      "command": "rm -rf /tmp/idx-v/a1-ok /tmp/idx-v/a1-target; mkdir -p /tmp/idx-v/a1-ok\nenv https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 git clone --depth 1 https://github.com/ct-pkg/index /tmp/idx-v/a1-ok/index; echo clone_rc=$?\ngit clone --depth 1 file:///tmp/idx-v/repo/hello /tmp/idx-v/a1-target; echo first_rc=$?\ngit clone --depth 1 file:///tmp/idx-v/repo/hello /tmp/idx-v/a1-target; echo second_rc=$?",
+      "exit": 0,
+      "output": "clone_rc=128\nfatal: unable to access 'https://github.com/ct-pkg/index/': Failed to connect to 127.0.0.1 port 9 after 0 ms: Couldn't connect to server\nfirst_rc=0\nsecond_rc=128\nfatal: destination path '/tmp/idx-v/a1-target' already exists and is not an empty directory.",
+      "reproduced": true,
+      "note": "A1 原样的 `git clone ... ~/.ct/index`：离线 rc=128；目标已存在（含中断留下的非空目录）再 clone rc=128。git 只接受空目录（若中断只留下空目录，重试可成功；只要有 .git/任何文件就 rc=128），所以 A1 必须自己实现原子落盘（临时目录+rename）或 fetch/checkout，否则重复安装/断网安装就是默认失败。现状 install.sh 的重复安装是 rc=0（V3）。"
+    },
+    {
+      "id": "V6",
+      "side": "both",
+      "ref": "A1+A2（安装克隆后 ct get 是否自动用它）",
+      "command": "mkdir -p /tmp/idx-v/h-a1/.ct; cp -r /tmp/idx-v/official /tmp/idx-v/h-a1/.ct/index\nHOME=/tmp/idx-v/h-a1 CT_HOME=/tmp/idx-v/h-a1/.ct /tmp/idx-v/bin/ct get std/std; echo rc=$?\nHOME=/tmp/idx-v/h-a1 CT_HOME=/tmp/idx-v/h-a1/.ct CT_INDEX=/tmp/idx-v/h-a1/.ct/index/index /tmp/idx-v/bin/ct get std/std; echo rc=$?",
+      "exit": 0,
+      "output": "# CT_INDEX unset（~/.ct/index/index 已存在）\nctc: no index resolver for 'std/std'\n  'std/std' is a publisher-qualified package name; without an index\n  ...\nrc=1\n# CT_INDEX 指向该文件（模拟 A1 的消费端默认）\nctc: git clone of 'https://std/std' failed\nrc=1",
+      "reproduced": true,
+      "note": "HEAD 没有隐式默认索引：索引只认 `--index` 或 CT_INDEX（Pkg.h.ct:132-134,2167）。A1 要在安装时 clone，A2 还要改消费端默认值；仅把文件放到 ~/.ct/index/index 今天不会被读到。"
+    },
+    {
+      "id": "V7",
+      "side": "both",
+      "ref": "claim.md#E1-1 / Pkg.h.ct:1129-1150（无索引硬错）",
+      "command": "rm -rf /tmp/idx-v/h-none; mkdir -p /tmp/idx-v/h-none\nenv -u CT_INDEX HOME=/tmp/idx-v/h-none CT_HOME=/tmp/idx-v/h-none/.ct /tmp/idx-v/bin/ct get acme/hello > /tmp/idx-v/noidx.out 2>&1; echo rc=$?\ncat /tmp/idx-v/noidx.out | head -3; wc -l < /tmp/idx-v/noidx.out; ls /tmp/idx-v/h-none/.ct 2>/dev/null || echo '(no .ct)'",
+      "exit": 0,
+      "output": "ctc: no index resolver for 'acme/hello'\n  'acme/hello' is a publisher-qualified package name; without an index\n  ...\nrc=1\n18\n(no .ct)",
+      "reproduced": true,
+      "note": "限定名无索引是硬错（rc=1，18 行指引），且不改写任何 store。指引第 2 条正是 `--index`/`CT_INDEX`；第 1 条裸名走 CT_REGISTRY。"
+    },
+    {
+      "id": "V8",
+      "side": "both",
+      "ref": "claim.md#E1-3/E1-4 / 外部 ct-pkg/index 只读抓取",
+      "command": "cd /tmp/idx-v && git ls-remote https://github.com/ct-pkg/index; rm -rf official && git clone -q --depth 1 https://github.com/ct-pkg/index official; git -C official rev-parse HEAD; wc -l official/index; awk '{print NF}' official/index | sort | uniq -c; shasum -a 256 official/index; git -C official ls-remote --tags origin | wc -l; git -C official log -1 --format='%G?'; ls -a official | grep -iE 'sig|asc|gpg' || true",
+      "exit": 0,
+      "output": "f7fb1d85aca7b5bcca4823d6931b8919c314f120\tHEAD\nf7fb1d85aca7b5bcca4823d6931b8919c314f120\trefs/heads/main\nf7fb1d85aca7b5bcca4823d6931b8919c314f120\n      12 official/index\n  12 5\n7ed5b97dbb84e150d8393636996ee6be3dc648089578204d6e2d71b4c6c222f1  official/index\n       0\nN\n(no signature files)",
+      "reproduced": true,
+      "note": "官方 index 12 行、每行恰好 5 字段（name version url tag sha256），与 docs/package-guide.md:112-116 的六字段消费契约（name version publisher git-url tag sha256）不符；无 tag、无分离签名、commit 未签名。claim 的 f7fb1d85 与 sha256 7ed5b97d… 完全一致。"
+    },
+    {
+      "id": "V9",
+      "side": "both",
+      "ref": "claim.md#E1-3（官方 index 经默认路径解析 std/std）",
+      "command": "mkdir -p /tmp/idx-v/h-official /tmp/idx-v/proj-official; cd /tmp/idx-v/proj-official\nHOME=/tmp/idx-v/h-official CT_HOME=/tmp/idx-v/h-official/.ct CT_INDEX=/tmp/idx-v/official/index timeout 90 /tmp/idx-v/bin/ct get std/std; echo rc=$?",
+      "exit": 0,
+      "output": "ctc: git clone of 'https://std/std' failed\nrc=1",
+      "reproduced": true,
+      "note": "claim E1-3 的输出逐字复现。原因：五字段行没有 publisher，限定名分支匹配不到，落到 get_git 把 `std/std` 当 host/path → https://std/std。A1 把这份文件设成默认后，文档主推的 `ct/std` 不是“能用”，而是从明确报错退化为错误 URL clone。"
+    },
+    {
+      "id": "V10",
+      "side": "both",
+      "ref": "docs/package-guide.md:112-116 vs 官方 index:1-12 / install.sh:187",
+      "command": "mkdir -p /tmp/idx-v/h-off /tmp/idx-v/proj-off; cd /tmp/idx-v/proj-off\nHOME=/tmp/idx-v/h-off CT_HOME=/tmp/idx-v/h-off/.ct CT_INDEX=/tmp/idx-v/official/index timeout 60 /tmp/idx-v/bin/ct get ct/std; echo rc=$?\nenv -u CT_INDEX HOME=/tmp/idx-v/h-off CT_HOME=/tmp/idx-v/h-off/.ct /tmp/idx-v/bin/ct get ct/std 2>&1 | head -3; echo rc=${PIPESTATUS[0]}",
+      "exit": 0,
+      "output": "ctc: git clone of 'https://ct/std' failed\nrc=1\nctc: no index resolver for 'ct/std'\n  'ct/std' is a publisher-qualified package name; without an index\n  ...\nrc=1",
+      "reproduced": true,
+      "note": "install.sh:187 的 Next steps 推荐 `ct get ct/std`；官方五字段索引解析不了它（错误 URL），无索引时是硬错。A1 的默认索引不能修复 install.sh 自己推荐的命令，除非索引生产端先补 publisher 列。"
+    },
+    {
+      "id": "V11",
+      "side": "both",
+      "ref": "官方五字段索引的裸名路径（claim E1-3 的边界）",
+      "command": "mkdir -p /tmp/idx-v/h-std2 /tmp/idx-v/proj-std2; cd /tmp/idx-v/proj-std2\nPATH=/tmp/idx-v/wrap:$PATH HOME=/tmp/idx-v/h-std2 CT_HOME=/tmp/idx-v/h-std2/.ct CT_INDEX=/tmp/idx-v/official/index timeout 120 /tmp/idx-v/bin/ct get std; echo rc=$?",
+      "exit": 0,
+      "output": "requested  std\nresolved   std/std 0.3.2\n  source   git https://github.com/ct-pkg/std\n  tag      v0.3.2\n  commit   a3f12172e03a9247ef47dec1dca66309d3111ac2\n  store    /tmp/idx-v/h-std2/.ct/pkg/std/std/0.3.2\n  digest   sha256:95fc010f704d67e8718574d2419fab48063029c0f9e6cd18961f4e423088ce6d\n  action   installed\n1 package(s): 1 installed, 0 reused\nrc=0",
+      "reproduced": true,
+      "note": "裸名 `std` 能命中五字段行并安装（publisher 从包内 ct.pkg 读成 std），但必须联网 git clone；index 行 digest 与官方 index 第 3 行一致。注意同一命令在 30s 超时下曾 rc=124（网络慢），120s 下成功——裸名路径依赖网络。PATH 前缀的 /tmp/idx-v/wrap/git 只是记录 argv 后 exec /usr/bin/git 的包装器。"
+    },
+    {
+      "id": "V12",
+      "side": "both",
+      "ref": "显式六字段索引可用（J-4 的 A′ 条件）",
+      "command": "rm -rf /tmp/idx-v/h6 /tmp/idx-v/proj-six; mkdir -p /tmp/idx-v/h6 /tmp/idx-v/proj-six\nprintf 'hello 0.1.0 acme file:///tmp/idx-v/repo/hello v0.1.0 sha256:3a08526e57ee90b17acda14a513472b618d87927467709469607c22d9619b56a\\n' > /tmp/idx-v/index-six\ncd /tmp/idx-v/proj-six && HOME=/tmp/idx-v/h6 CT_HOME=/tmp/idx-v/h6/.ct CT_INDEX=/tmp/idx-v/index-six /tmp/idx-v/bin/ct get acme/hello; echo rc=$?; cat ct.lock",
+      "exit": 0,
+      "output": "requested  acme/hello\nresolved   acme/hello 0.1.0\n  source   git file:///tmp/idx-v/repo/hello\n  tag      v0.1.0\n  commit   6118f79be9f554800203784862376c3620576cb4\n  store    /tmp/idx-v/h6/.ct/pkg/acme/hello/0.1.0\n  digest   sha256:3a08526e57ee90b17acda14a513472b618d87927467709469607c22d9619b56a\n  action   installed\nrc=0\n# ct-lock 2\nacme/hello 0.1.0 git file:///tmp/idx-v/repo/hello 6118f79be9f554800203784862376c3620576cb4 . sha256:3a08526e57ee90b17acda14a513472b618d87927467709469607c22d9619b56a",
+      "reproduced": true,
+      "note": "六字段（含 publisher）索引可解析限定名，安装成功并写 ct.lock（v2 七字段行，含 digest）。这是 A′ 的可行路径，但今天官方索引不是这个格式。"
+    },
+    {
+      "id": "V13",
+      "side": "counter",
+      "ref": "counter.md#1 / main.ct:121-122（ct pkg 是 ct install 别名）",
+      "command": "cd /tmp/idx-v/proj-lock; /tmp/idx-v/bin/ct pkg > /tmp/idx-v/pkg.out 2>&1; echo pkg_rc=$?; /tmp/idx-v/bin/ct install > /tmp/idx-v/install.out 2>&1; echo install_rc=$?; diff -u /tmp/idx-v/install.out /tmp/idx-v/pkg.out && echo OUTPUT_IDENTICAL\ncd /tmp/idx-v/proj-pkg; /tmp/idx-v/bin/ct pkg; /tmp/idx-v/bin/ct install; /tmp/idx-v/bin/ct pkg -h",
+      "exit": 0,
+      "output": "pkg_rc=0\ninstall_rc=0\nOUTPUT_IDENTICAL\n# 空目录：\nctc: cannot open './ct.pkg'\nctc: cannot open './ct.pkg'\n# ct pkg -h：\nusage: ct install [--force]\n  verify the store against ct.lock and print the suggested build command",
+      "reproduced": true,
+      "note": "`ct pkg` 与 `ct install` 输出逐字相同（rc=0）；空目录下两者都报 cannot open './ct.pkg'；`ct pkg -h` 直接打印 install 的 usage。main.ct:121-122 把 pkg 整体交给 ct_pkg_install，确为别名。`ct pkg check` 是 install_main 里的只读审计分支（Pkg.h.ct:1741-1744）。 proj-lock 是带 ct.pkg+ct.lock 的夹具（由 V12/V19 的流程建立），proj-pkg 是空目录夹具。"
+    },
+    {
+      "id": "V14",
+      "side": "counter",
+      "ref": "counter.md#1 / J-5（ct pkg index update/publish 不存在）",
+      "command": "cd /tmp/idx-v/proj-pkg\n/tmp/idx-v/bin/ct pkg index update; echo rc=$?\n/tmp/idx-v/bin/ct pkg publish acme/hello v0.1.0; echo rc=$?\n/tmp/idx-v/bin/ct pkg index publish; echo rc=$?\n/tmp/idx-v/bin/ct index update; echo rc=$?",
+      "exit": 0,
+      "output": "ctc: unexpected argument 'index'\nrc=1\nctc: unexpected argument 'publish'\nrc=1\nctc: unexpected argument 'index'\nrc=1\nctc: compile mode takes one input; 'update' is extra\nrc=1",
+      "reproduced": true,
+      "note": "`ct pkg index update`、`ct pkg publish`、`ct pkg index publish` 全部不存在（rc=1）；`ct index update` 也没有子命令，落进 compile 模式报参数错误。A3/A4 是从零新增，不是接线现有能力；B 的 `ct index update --ref` 同样尚未实现。"
+    },
+    {
+      "id": "V15",
+      "side": "counter",
+      "ref": "counter.md#1 / Pkg.h.ct:1741-1748（ct pkg check 只读）",
+      "command": "find /tmp/idx-v/repo/hello -type f -exec shasum -a 256 {} \\; | sort > /tmp/idx-v/before.sha\n/tmp/idx-v/bin/ct pkg check /tmp/idx-v/repo/hello; echo check_rc=$?\nfind /tmp/idx-v/repo/hello -type f -exec shasum -a 256 {} \\; | sort > /tmp/idx-v/after.sha\ndiff -q /tmp/idx-v/before.sha /tmp/idx-v/after.sha && echo NO_WRITES",
+      "exit": 0,
+      "output": "ok: 4 criteria\ncheck_rc=0\nNO_WRITES",
+      "reproduced": true,
+      "note": "`ct pkg check <dir>` 只读审计 rc=0（PK-1/PK-2/PK-5/PK-8），对包目录零写入；代码注释明确它是 read-only audit。B 的“ct pkg 只读”在 check 子命令与“无发布/凭据”意义上成立；但 `ct pkg` 本体是 install 别名，不是独立只读命令。"
+    },
+    {
+      "id": "V16",
+      "side": "counter",
+      "ref": "counter.md#1 / J-5（发布脚本 credentials 与写权限）",
+      "command": "mkdir -p /tmp/idx-v/staging/index /tmp/idx-v/staging/hal; git -C /tmp/idx-v/staging/index init -q; git -C /tmp/idx-v/staging/hal init -q; cd /tmp/idx-v/official && env -u GITHUB_TOKEN -u GH_TOKEN STAGING=/tmp/idx-v/staging sh tools/release-package.sh hal v0.1.0; echo rc=$?; grep -n 'printf' tools/gen-index.sh | tail -2; sed -n '11,12p' .github/workflows/index.yml; wc -l tools/release-package.sh tools/refresh-index.sh tools/publish-package.sh tools/gen-index.sh .github/workflows/index.yml index | tail -1",
+      "exit": 0,
+      "output": "\nERROR: set GITHUB_TOKEN (or GH_TOKEN) to a token that may push to ct-pkg\nrc=1\n63:printf '%s %s %s %s sha256:%s\\n' \"$name\" \"$version\" \"$url\" \"$tag\" \"$digest\" >>\"$tmp\"\npermissions:\n  contents: write\n     755 total",
+      "reproduced": true,
+      "note": "claim E1-6 的报错逐字复现。release-package.sh 要求 repo+workflow PAT，并把 token 内联进 credential.helper 推 package main/tag 与 index main；index.yml 用 contents:write 的 CI 提交索引。gen-index.sh 的 printf 只写 5 字段（无 publisher），证实官方索引五字段是生产端脚本决定的，不是抓取时丢列。外部工具合计 755 行（147+275+218+66+37+12）。"
+    },
+    {
+      "id": "V17",
+      "side": "both",
+      "ref": "claim.md#E1-4 / J-2（替换索引行即换内容）",
+      "command": "rm -rf /tmp/idx-v/h-evil2 /tmp/idx-v/proj-evil2; mkdir -p /tmp/idx-v/h-evil2 /tmp/idx-v/proj-evil2\nprintf 'hello 0.1.0 acme file:///tmp/idx-v/repo-evil/hello v0.1.0 sha256:6c09a129b180eb8c471928ee26bab6d748bc9661aaea08a18a841adc13faca7b\\n' > /tmp/idx-v/index-evil\ncd /tmp/idx-v/proj-evil2 && HOME=/tmp/idx-v/h-evil2 CT_HOME=/tmp/idx-v/h-evil2/.ct CT_INDEX=/tmp/idx-v/index-evil /tmp/idx-v/bin/ct get acme/hello > /tmp/idx-v/evil.out 2>&1; echo rc=$?\ngrep -E 'resolved|source|digest' /tmp/idx-v/evil.out; cat /tmp/idx-v/h-evil2/.ct/pkg/acme/hello/0.1.0/hello.h.ct; awk 'NF' ct.lock",
+      "exit": 0,
+      "output": "requested  acme/hello\nresolved   acme/hello 0.1.0\n  source   git file:///tmp/idx-v/repo-evil/hello\n  digest   sha256:6c09a129b180eb8c471928ee26bab6d748bc9661aaea08a18a841adc13faca7b\npub fn hi() -> int { return 666; }\n# ct-lock 2\nacme/hello 0.1.0 git file:///tmp/idx-v/repo-evil/hello 7793f80e1dd389f5ee25b82c0c1b0531477bf62f . sha256:6c09a129b180eb8c471928ee26bab6d748bc9661aaea08a18a841adc13faca7b",
+      "reproduced": true,
+      "note": "同一个 acme/hello@0.1.0，仅索引行不同（URL/tag/digest 一起变）就装成另一份内容；本席的 evil 夹具与 claim E1-4 的 digest 6c09a129… 逐字一致（内容都是 return 666）。digest 由同一索引行给出，客户端在 checkout 后按该行校验（Pkg.h.ct:1036-1041）——没有独立签名时它是自证信任根，替换索引行即可换内容。"
+    },
+    {
+      "id": "V18",
+      "side": "both",
+      "ref": "claim.md#E3-8 / Pkg.h.ct:1036-1041（摘要不符即失败关闭）",
+      "command": "rm -rf /tmp/idx-v/h-bad /tmp/idx-v/proj-bad; mkdir -p /tmp/idx-v/h-bad /tmp/idx-v/proj-bad\nsed 's/6c09a129b180eb8c471928ee26bab6d748bc9661aaea08a18a841adc13faca7b/0000000000000000000000000000000000000000000000000000000000000000/' /tmp/idx-v/index-evil > /tmp/idx-v/index-bad\ncd /tmp/idx-v/proj-bad && HOME=/tmp/idx-v/h-bad CT_HOME=/tmp/idx-v/h-bad/.ct CT_INDEX=/tmp/idx-v/index-bad /tmp/idx-v/bin/ct get acme/hello; echo rc=$?\nls ct.lock 2>/dev/null || echo '(no ct.lock)'; ls /tmp/idx-v/h-bad/.ct/pkg/acme/hello/0.1.0 2>/dev/null || echo '(no store entry)'",
+      "exit": 0,
+      "output": "ctc: 'hello' does not match the index (source sha256:6c09a129b180eb8c471928ee26bab6d748bc9661aaea08a18a841adc13faca7b, index sha256:0000000000000000000000000000000000000000000000000000000000000000)\nrc=1\n(no ct.lock)\n(no store entry)",
+      "reproduced": true,
+      "note": "摘要不符时 rc=1，ct.lock 与 store 都不落（失败关闭）。counter E1-4 的同一输出逐字复现。"
+    },
+    {
+      "id": "V19",
+      "side": "both",
+      "ref": "claim.md#E1-7 / J-1（索引不可读不伤构建、ct.lock 不变）",
+      "command": "cd /tmp/idx-v/proj-six; shasum -a 256 ct.lock\nHOME=/tmp/idx-v/h6 CT_HOME=/tmp/idx-v/h6/.ct CT_INDEX=/tmp/idx-v/nope /tmp/idx-v/bin/ct get acme/hello; echo rc=$?\nshasum -a 256 ct.lock\nenv https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 HOME=/tmp/idx-v/h6 CT_HOME=/tmp/idx-v/h6/.ct /tmp/idx-v/bin/ct verify; echo verify_rc=$?\ncd /tmp/idx-v/proj-lock; for c in install update verify; do env https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 HOME=/tmp/idx-v/h-lock CT_HOME=/tmp/idx-v/h-lock/.ct /tmp/idx-v/bin/ct $c >/dev/null; echo \"$c rc=$?\"; done",
+      "exit": 0,
+      "output": "ca79753d23f95192eea9d8eee5233f8aa0cb911c610507a4a00a7f44e81e1f1f  ct.lock\nctc: cannot read the package index '/tmp/idx-v/nope'\nrc=1\nca79753d23f95192eea9d8eee5233f8aa0cb911c610507a4a00a7f44e81e1f1f  ct.lock\nverified 1 package(s)\nverify_rc=0\ninstall rc=0\nupdate rc=0\nverify rc=0",
+      "reproduced": true,
+      "note": "索引不可读只让 `ct get` 失败（rc=1），已装项目的 ct.lock 字节不变；断网下 verify/install/update 都 rc=0（install/update/verify 零网络）。A5 的“失败降级”在消费侧现状已成立，但与 A1 安装期 clone 的降级是两件事。 proj-six 由 V12 建立；proj-lock 是 V12 夹具 + 手写 ct.pkg（name/publisher/ns-root/version）。"
+    },
+    {
+      "id": "V20",
+      "side": "both",
+      "ref": "counter.md#E1-3 / J-6（索引过期）",
+      "command": "rm -rf /tmp/idx-v/repo-stale /tmp/idx-v/h-stale /tmp/idx-v/proj-stale /tmp/idx-v/proj-stale2 /tmp/idx-v/h-stale2\nmkdir -p /tmp/idx-v/repo-stale/hello /tmp/idx-v/h-stale /tmp/idx-v/proj-stale\ncd /tmp/idx-v/repo-stale/hello\nprintf 'name = hello\\npublisher = acme\\nns-root = .\\nversion = 1.0.0\\n' > ct.pkg\nprintf 'pub fn v() -> int { return 1; }\\n' > hello.h.ct\ngit init -q; git add -A; git -c user.email=a@b -c user.name=a commit -qm v1; git tag v1.0.0\ncd /tmp/idx-v/proj-stale\nHOME=/tmp/idx-v/h-stale CT_HOME=/tmp/idx-v/h-stale/.ct /tmp/idx-v/bin/ct get /tmp/idx-v/repo-stale/hello >/dev/null 2>&1\nD=$(awk '/hello/{print $NF}' ct.lock)\nprintf 'hello 1.0.0 acme file:///tmp/idx-v/repo-stale/hello v1.0.0 %s\\n' \"$D\" > /tmp/idx-v/index-stale\ncd /tmp/idx-v/repo-stale/hello; printf 'pub fn v() -> int { return 2; }\\n' > hello.h.ct; sed -i '' 's/version = 1.0.0/version = 1.1.0/' ct.pkg\ngit add -A; git -c user.email=a@b -c user.name=a commit -qm v2; git tag v1.1.0\nmkdir -p /tmp/idx-v/proj-stale2 /tmp/idx-v/h-stale2; cd /tmp/idx-v/proj-stale2\nHOME=/tmp/idx-v/h-stale2 CT_HOME=/tmp/idx-v/h-stale2/.ct CT_INDEX=/tmp/idx-v/index-stale /tmp/idx-v/bin/ct get 'hello@^1.1.0'; echo rc=$?\nmkdir -p /tmp/idx-v/h-src; D2=$(cd /tmp/idx-v/repo-stale/hello && HOME=/tmp/idx-v/h-src CT_HOME=/tmp/idx-v/h-src/.ct /tmp/idx-v/bin/ct get . 2>/dev/null | awk '/digest/{print $2}')\nprintf 'hello 1.1.0 acme file:///tmp/idx-v/repo-stale/hello v1.1.0 %s\\n' \"$D2\" >> /tmp/idx-v/index-stale\nHOME=/tmp/idx-v/h-stale2 CT_HOME=/tmp/idx-v/h-stale2/.ct CT_INDEX=/tmp/idx-v/index-stale /tmp/idx-v/bin/ct get 'hello@^1.1.0'; echo rc=$?",
+      "exit": 0,
+      "output": "ctc: package 'hello' is not in the index\nrc=1\n--- 追加 1.1.0 行后 ---\nrequested  hello@^1.1.0\nresolved   acme/hello 1.1.0\n  tag      v1.1.0\n  digest   sha256:73301a479f983a45bc3c4953694abdea20e0b8dc1733e00f4d54ff2c284c7b8a\n1 package(s): 1 installed, 0 reused\nrc=0",
+      "reproduced": true,
+      "note": "静态索引不会自动看到上游新 tag：未更新索引前 ^1.1.0 硬错，追加行后立刻 rc=0。这正是 counter E1-3 的失败面，也是 A3 想解的；但 A1 的匿名 main 自动刷新会把它变成静默变化（J-2）。"
+    },
+    {
+      "id": "V21",
+      "side": "both",
+      "ref": "claim.md#E2 / Pkg.h.ct:746-760（子进程调用点与数量）",
+      "command": "cd /tmp/idx-v/proj-trace && PATH=/tmp/idx-v/wrap:$PATH HOME=/tmp/idx-v/h-trace CT_HOME=/tmp/idx-v/h-trace/.ct CT_INDEX=/tmp/idx-v/index-six ct get acme/hello; cat /tmp/idx-v/gitcalls-six.log; cd /tmp/idx-v/proj-local2 && PATH=/tmp/idx-v/wrap:$PATH GITLOG=/tmp/idx-v/gitcalls-local.log HOME=/tmp/idx-v/h-local2 CT_HOME=/tmp/idx-v/h-local2/.ct ct get ../repo/hello; cat /tmp/idx-v/gitcalls-local.log; echo '(end)'",
+      "exit": 0,
+      "output": "--version\nclone --quiet file:///tmp/idx-v/repo/hello /tmp/idx-v/h-trace/.cache/ct-pkg/acme/hello\n-C /tmp/idx-v/h-trace/.cache/ct-pkg/acme/hello checkout --quiet --detach v0.1.0\n-C /tmp/idx-v/h-trace/.cache/ct-pkg/acme/hello rev-parse --verify HEAD\n--- local dir source ---\n(end)",
+      "reproduced": true,
+      "note": "代码层面只有一个调用点（PkgOps::git_run，Pkg.h.ct:746-760；另有 git_avail 的 `git --version`，:734），但一次全新的 `ct get <index 行>` 实测 spawn 4 个 git 进程（--version/clone/checkout/rev-parse）；需要选 tag 时再加 `git tag -l`（5 个）。本地目录源 0 个子进程。问题里“ct get 单子进程”的措辞不准确：是单调用点，不是单进程。 记录用的 /tmp/idx-v/wrap/git 是包装器：把 argv 追加到 GITLOG 后 exec /usr/bin/git。 proj-trace 用 index-six，proj-local2 用本地 repo/hello；两者均由 V12 夹具派生。"
+    },
+    {
+      "id": "V22",
+      "side": "both",
+      "ref": "Pkg.h.ct:707-708 / J-3（CT_REGISTRY 隐式联网）",
+      "command": "mkdir -p /tmp/idx-v/h-reg /tmp/idx-v/proj-reg; cd /tmp/idx-v/proj-reg\nenv -u CT_INDEX https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 HOME=/tmp/idx-v/h-reg CT_HOME=/tmp/idx-v/h-reg/.ct timeout 60 /tmp/idx-v/bin/ct get std; echo rc=$?; ls ct.lock 2>/dev/null || echo '(no ct.lock)'",
+      "exit": 0,
+      "output": "ctc: git clone of 'https://github.com/ct-pkg/std' failed\nrc=1\n(no ct.lock)",
+      "reproduced": true,
+      "note": "无索引时裸名默认走 CT_REGISTRY=https://github.com/ct-pkg（Pkg.h.ct:707-708）；断网下它确实发起网络并失败，rc=1 不落 lock。即“客户端已有隐式网络默认”成立，B 的“零隐式网络”只在索引消费路径成立，不是全局事实；A1 是扩大而非首创隐式网络。"
+    },
+    {
+      "id": "V23",
+      "side": "verify",
+      "ref": "claim.md#E4 / Pkg.h.ct:1954-1970（CT_HOME 与索引位置的错配）",
+      "command": "mkdir -p /tmp/idx-v/h-cth /tmp/idx-v/proj-cth; cd /tmp/idx-v/proj-cth\nHOME=/tmp/idx-v/h-cth CT_HOME=/tmp/idx-v/custom-ct CT_INDEX=/tmp/idx-v/index-six /tmp/idx-v/bin/ct get acme/hello > /tmp/idx-v/cth.out 2>&1; echo rc=$?\ngrep -E 'store|action' /tmp/idx-v/cth.out; ls -d /tmp/idx-v/custom-ct/pkg/acme/hello/0.1.0; ls /tmp/idx-v/h-cth/.ct 2>/dev/null || echo '(no HOME/.ct)'",
+      "exit": 0,
+      "output": "  store    /tmp/idx-v/custom-ct/pkg/acme/hello/0.1.0\n  action   installed\n/tmp/idx-v/custom-ct/pkg/acme/hello/0.1.0\n(no HOME/.ct)",
+      "reproduced": true,
+      "note": "store 根遵循 CT_HOME（默认 $HOME/.ct）；A1 固定写 $HOME/.ct/index，而包 store 可能在自定义 CT_HOME 下——索引与 store 不同根，A1 需要决定索引是否也跟 CT_HOME。claim E4 指出的这个错配成立。"
+    },
+    {
+      "id": "V24",
+      "side": "both",
+      "ref": "install.sh:18,72-74 / B 的“安装不默认联网”边界",
+      "command": "env https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 HOME=/tmp/idx-v/h-def sh install.sh --prefix /tmp/idx-v/bin-def; echo default_install_rc=$?; tail -3 /tmp/idx-v/install-default.log; ls /tmp/idx-v/h-def/.ct 2>/dev/null || echo '(no ~/.ct)'",
+      "exit": 0,
+      "output": "default_install_rc=1\n==> downloading https://github.com/samxxu/ct-lang/archive/main.tar.gz\ncurl: (7) Failed to connect to 127.0.0.1 port 9 after 0 ms: Couldn't connect to server\ninstall.sh: error: download failed: https://github.com/samxxu/ct-lang/archive/main.tar.gz\n(no ~/.ct)",
+      "reproduced": true,
+      "note": "默认安装本来就要网络（下载源码归档），断网 rc=1；B 的“安装不默认联网”作为绝对陈述不成立，准确说法是“不默认 clone 索引、不新增 git 依赖，离线走 CT_SOURCE_DIR”。A1 的联网不是新原则，但索引是可选物、源码归档是必需输入，这个区别仍成立。"
+    },
+    {
+      "id": "V25",
+      "side": "both",
+      "ref": "claim.md#E2 / counter.md#E2 行号锚点核对",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && nl -ba selfhost/ct-ast/main.ct | sed -n '121,122p'; nl -ba selfhost/ct-ast/tool/pkg/Pkg.h.ct | sed -n '31,32p;96,98p;132,134p;707,708p;746p;1129,1131p;1741,1744p;2149,2154p;2167p;2213,2216p;2507,2509p'; nl -ba AGENTS.md | sed -n '519p;528,532p'; nl -ba docs/package-guide.md | sed -n '112,116p;140,142p;224,225p'",
+      "exit": 0,
+      "output": "121    if (argc > 1 && strcmp(argv[1], \"pkg\") == 0)\n122        return tool::pkg::ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);\n31 /* ... `get`/`install` never reach the\n32    compile core: only `get` may run `git`, and `install` is offline (D42). */\n98    `install()` because this unit sits exactly on the 256-function limit. */\n132    /* The optional index: `--index <path>` wins over `CT_INDEX`. Nothing is\n133       built in -- a package name only resolves through an index the user named. */\n707        reg = getenv(\"CT_REGISTRY\");\n708        if (!reg || !reg[0]) reg = \"https://github.com/ct-pkg\";\n746    /* The one subprocess call site. */\n1129            if (strchr(path, '/') != NULL && strstr(path, \"://\") == NULL\n1130                && !self->have_index && getenv(\"CT_INDEX\") == NULL) {\n1741        /* S0: `ct pkg check <dir>` shares this entry point. The AST compiler's\n1742           256-function budget is fully spent, so the read-only audit lives here\n1743           instead of in a unit of its own (see phase54.md §7). */\n2149 /* Look `name` up in the plain-text index: one entry per line as\n2154    range) has no entry, and -1 when a configured index cannot be read. */\n2167    ip = g_pkg.have_index ? g_pkg.index : getenv(\"CT_INDEX\");\n2214        /* S1 index row: `name version publisher url tag sha256:...`; the old\n2215           five-field row has no publisher and stays valid. */\n2216        if (ntok >= 6) {\n2507 /* S3: the v2 update is an offline pin audit. The store is verified, every\n2509    back unchanged (no new version can appear without a network fetch). */\n519 | `install.sh` | 源码：**唯一的安装脚本**——下载 GitHub 源码归档 → 本地四级自举 → 安装 `ct` 与 `ctc` 软链 | ...\n528 - 不引入任何第三方库、构建系统、代码生成脚本。**例外（安装脚本）**：...\n529   它把 README 第 2 节的手工自举步骤串起来（下载源码归档 → L0→L1→L2→ct-ast → 安装），只用系统\n530   `cc` / `tar` / `curl`（或 `wget`），不需要 `git`；...\n531   `gcc selfhost/l0/ctc.c` 与全部门禁不得依赖它。它的行为变更（新增选项、改变安装位置、改变下载来源）\n532   按「行为变更」走用户确认。\n112 索引由 `ct get` 读取，是纯文本、空白分隔的六字段行：\n115 name version publisher git-url tag sha256:<64 hex>\n140 `ct get` 可用 git——它是**包管理路径**里唯一的子进程调用点；`ct update` / `ct verify` / `ct install`\n141 零网络、零子进程。编译器侧 `ct compile` / `ct build --emit-c` 零网络、零子进程，但 `ct build`\n142 的默认形态会经 `$CC` 派生子进程去链接（`--cc` > `$CC` > `cc`）。\n224 - `ct update` 对 v2 是**离线 pin 审计**：校验 store、要求 `ct.pkg` 的每个直接依赖都被 lock 覆盖，\n225   把钉住的 v2 行原样写回；不会在无网络时凭空选择新版本。缺依赖报 `is not satisfied by ct.lock`。",
+      "reproduced": true,
+      "note": "双方引用的关键锚点全部对得上：main.ct:121-122（pkg 别名）、Pkg.h.ct:31-32/98/132-134/707-708/746/1129-1131/1741-1744/2149-2154/2167/2213-2216/2507-2509、AGENTS.md:519/528-532、package-guide.md:112-116/140-142/224-225。claim 说 main.ct:109-122 把 pkg 交给 ct_pkg_install，实际分派在 121-122（109-120 是注释与其它子命令）。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "install.sh",
+      "line": 59,
+      "text": "if [ -n \"${CT_SOURCE_DIR:-}\" ]; then src=$(cd \"$CT_SOURCE_DIR\" && pwd) ... say \"using local source tree $src\"",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "install.sh",
+      "line": 72,
+      "text": "url=\"https://github.com/$repo/archive/$ref.tar.gz\"；fetch ... || die \"download failed\"（默认安装要网络）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "install.sh",
+      "line": 187,
+      "text": "ct get ct/std（Next steps 推荐限定名，但官方五字段索引解析不了）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 528,
+      "text": "安装脚本例外：只用 cc / tar / curl（或 wget），不需要 git；行为变更（新增选项、安装位置、下载来源）走用户确认",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/main.ct",
+      "line": 121,
+      "text": "if (argc > 1 && strcmp(argv[1], \"pkg\") == 0) return ct_pkg_install(...)",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 31,
+      "text": "get/install never reach the compile core: only `get` may run `git`, and `install` is offline (D42)",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 98,
+      "text": "this unit sits exactly on the 256-function limit",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 132,
+      "text": "The optional index: --index wins over CT_INDEX; nothing is built in -- a name only resolves through an index the user named",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 707,
+      "text": "reg = getenv(\"CT_REGISTRY\"); default https://github.com/ct-pkg（裸名隐式联网）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 746,
+      "text": "The one subprocess call site. int git_run(...) { ... return system(full); }",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 1129,
+      "text": "publisher-qualified name without have_index/CT_INDEX -> no index resolver 硬错",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 1741,
+      "text": "ct pkg check <dir> is the read-only audit; 256-function budget fully spent",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 2149,
+      "text": "index row is name version git-url tag sha256:<hex>; returns 1 no index, 2 no entry, -1 unreadable",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 2167,
+      "text": "ip = g_pkg.have_index ? g_pkg.index : getenv(\"CT_INDEX\")；无隐式默认路径",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 2216,
+      "text": "if (ntok >= 6) publisher=tok[2] ... else publisher=\"\"（五字段仍可读）",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+      "line": 2507,
+      "text": "S3: the v2 update is an offline pin audit; no new version can appear without a network fetch",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/package-guide.md",
+      "line": 112,
+      "text": "索引是六字段：name version publisher git-url tag sha256:<64 hex>",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/package-guide.md",
+      "line": 140,
+      "text": "ct get 可用 git——包管理路径里唯一的子进程调用点；update/verify/install 零网络、零子进程",
+      "supports": "both",
+      "checked": true
+    },
+    {
+      "file": "docs/package-guide.md",
+      "line": 224,
+      "text": "ct update 对 v2 是离线 pin 审计",
+      "supports": "both",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "question": "安装离线/可复现：默认联网是否可接受，失败如何降级",
+      "claim": "A1 安装后默认 git clone ct-pkg/index 到 ~/.ct/index；A5 索引失败只告警、不阻断 ct 安装",
+      "counter": "B1 install.sh 只装编译器，不 clone 索引、不新增 git 依赖；离线走 CT_SOURCE_DIR",
+      "evidence": [
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V24"
+      ],
+      "verdict": "B=pass（现状事实）；A1=fail as written；A5=unresolved（未实现，不可测）",
+      "fact": "现状：离线 CT_SOURCE_DIR 安装 rc=0，$HOME/.ct 不创建，重复安装 rc=0 且二进制 sha256 相同；即使 PATH 里有坏 git 也 rc=0（install.sh 无 git 调用）。默认安装本来就要网络（下载源码归档，断网 rc=1），所以 B 的“安装不默认联网”作为绝对陈述不成立，准确边界是“不 clone 索引/不新增 git 依赖”。A1 原样新增一条 install 期 clone：离线 rc=128、目标已存在（含中断留下的非空目录）再 clone rc=128，且 A1 没写原子落盘/可重入；A5 只说“不阻断”，没有实现也没有可验证的超时/清理语义。A′ 若改为临时目录 + rename + 显式 --with-index，并保证索引失败不影响 rc，J-1 才可能成立。"
+    },
+    {
+      "id": "J-2",
+      "question": "供应链安全：匿名 main、索引可变、签名/pin",
+      "claim": "A1 默认 clone main；A2 默认使用；A5 要求记录/校验 ~/.ct/index 的 commit（否则便利变成默认可变信任根）",
+      "counter": "B3 索引更新必须 pin commit/签名，不能匿名拉 main；B5 网络失败不污染 ~/.ct",
+      "evidence": [
+        "V8",
+        "V11",
+        "V17",
+        "V18",
+        "V19",
+        "V20"
+      ],
+      "verdict": "B=pass（要求成立）；A1=fail as written（匿名 main、无签名、无 pin）；A′=unresolved（pin 方案未实现）",
+      "fact": "官方 index main=f7fb1d85，12 行纯文本五字段，无 tag、无 .sig、commit 未签名；替换同一 acme/hello@0.1.0 的索引行即可装成另一份内容（digest 6c09a129…，内容 return 666），客户端只在 checkout 后按同一行给的 digest 校验（Pkg.h.ct:1036-1041），digest 与被校验内容同源，没有独立签名。A1 的默认 main 会把这个自证行变成安装期信任根；A5 的“pin”是条件句，HEAD 无任何实现。B 的 pin/签名是正确前置，但 B 的 `ct index update --ref` 也还没有实现（V14）。现状的失败关闭是好的：摘要不符 rc=1 且不落 lock/store；索引不可读 rc=1 且 ct.lock 字节不变。"
+    },
+    {
+      "id": "J-3",
+      "question": "架构边界：编译器零网络/零子进程是否被破坏",
+      "claim": "A4 让 ct pkg publish / ct pkg index publish 直接执行 index 仓发布脚本；A1/A2 只读本地索引文件",
+      "counter": "B2 发布留 CI；B4 发布脚本带 credentials/写权限，不能进编译器二进制；ct pkg 只读",
+      "evidence": [
+        "V13",
+        "V14",
+        "V15",
+        "V16",
+        "V21",
+        "V22"
+      ],
+      "verdict": "B=pass；A4=fail；A1/A2=pass（本地文件读取，不新增网络）",
+      "fact": "编译器核：`ct compile`/`ct build --emit-c` 零网络零子进程（文档 :140-142）；`ct build` 默认派 cc 是既有受控例外。包管理路径唯一 git 调用点是 PkgOps::git_run（:746-760）加 git_avail（:734）；一次 `ct get` 实测 4 个 git 进程（单调用点≠单进程，V21）。本地目录源 0 子进程。`ct get` 是唯一联网路径（裸名另有 CT_REGISTRY 隐式网络，V22）。`ct pkg` 是 `ct install` 别名（main.ct:121-122），`ct pkg check` 才是只读审计；源码与二进制里没有 token/credential/release-package 代码（grep 0）。A4 会把 repo+workflow PAT 与发布脚本执行带进每个用户的 ct 进程，直接破坏这条边界，故 fail。A1/A2 只是读本地文件，本身不破坏零网络（但 A2 需要新增默认路径）。"
+    },
+    {
+      "id": "J-4",
+      "question": "UX：安装即用 vs 手动一步；发布命令是否真的更方便",
+      "claim": "A1/A2 让 ct get 开箱可用；A4 一条命令发布",
+      "counter": "B1 索引显式更新即可；B 的“手动一步”是一行 CT_INDEX；发布走 CI 更简单",
+      "evidence": [
+        "V6",
+        "V7",
+        "V9",
+        "V10",
+        "V11",
+        "V12"
+      ],
+      "verdict": "A=conditional（今天 fail，A′ 才成立）；B=pass（手动一步成本=一行 CT_INDEX）",
+      "fact": "无索引：限定名 rc=1，18 行指引后用户仍要 `CT_INDEX=<file>` 或 URL/本地路径（V7）。官方五字段索引：`std/std` 与 `ct/std` 都失败（错误 URL），只有裸名 `std` 成功且仍要网络 git clone（V9/V10/V11）。显式六字段索引：限定名立刻可用（V12）。因此 A1 的默认索引今天不能把 install.sh:187 推荐的 `ct get ct/std` 变成可用，反而把明确报错换成错误 URL；A′ 的成立条件是索引生产端先产出六字段（含 publisher）且包身份齐备。`ct pkg publish` 今天 rc=1（V14），A4 的“一条命令”等于把 CI 的 gh workflow run 搬进二进制，便利性未兑现。B 的手动成本确实只有一行环境变量，但需要用户知道索引文件路径。"
+    },
+    {
+      "id": "J-5",
+      "question": "发布工作流：credentials、CI、审计、回滚",
+      "claim": "A4 ct pkg publish 调 index 仓 release-package.sh 完成校验/签名/提交",
+      "counter": "B2 发布留在 index 仓 CI；B4 credentials 不进二进制",
+      "evidence": [
+        "V13",
+        "V14",
+        "V16",
+        "V17"
+      ],
+      "verdict": "B=pass；A4=fail",
+      "fact": "release-package.sh（147 行）要求 GITHUB_TOKEN/GH_TOKEN（repo+workflow scope），把 token 内联进 credential.helper，推 package main/tag 与 index main；无 token 时 rc=1 且报错逐字复现（V16）。index.yml 用 permissions: contents: write 的 CI 作业提交索引（审计链=commit/日志）。ct 二进制无发布/token 代码（V13/V14）。A4 把写权限与外部脚本执行分发给每个开发者机器，回滚还要轮换 token、回滚已推索引并通知已拉取用户；B 的 CI 路径回滚只需 revert 索引提交，权限面小。"
+    },
+    {
+      "id": "J-6",
+      "question": "实现/维护成本：install.sh、ct pkg、索引仓 CI",
+      "claim": "A 约 +12–18 行 install.sh、+120–200 行 Pkg.h +6–10 行 main.ct；外部仓 755 行依赖",
+      "counter": "B 约 install.sh 0 行、Pkg.h +30–70 行；无新增全局状态",
+      "evidence": [
+        "V1",
+        "V2",
+        "V3",
+        "V5",
+        "V14",
+        "V16",
+        "V20",
+        "V21"
+      ],
+      "verdict": "B=pass（0 行 install.sh 改动）；A=unresolved（估算未实现，不能实测；方向与失败模式成立）",
+      "fact": "现状规模：install.sh 191 行、main.ct 124 行、Pkg.h.ct 3041 行，且 Pkg.h.ct:98 注释明确该单元“exactly on the 256-function limit”，A 的 +120–200 行很可能要拆单元/改自举（counter 估 +80–150 或新单元 150–300 行）；claim 与 counter 的数字都是提案估算，HEAD 无法实测。外部索引仓工具合计 755 行（147+275+218+66+37+12），A 还依赖它。失败模式已实测：A1 的 clone 离线/重复 rc=128、无原子落盘；匿名 main 的索引过期/静默变化（V20 证明静态索引会过期，V17 证明替换行即换内容）；B 的 install.sh 0 行、无 ~/.ct 全局状态（V2/V3）。"
+    }
+  ],
+  "findings": {
+    "install_boundary": "install.sh 无 git、无 CT_INDEX、无 ~/.ct/index；离线唯一入口 CT_SOURCE_DIR（:59-61），默认安装下载源码归档（:18,:72-74）。离线安装 rc=0、不创建 $HOME/.ct、重复安装 rc=0 且产物 sha256 一致；坏 git 在 PATH 上也 rc=0。A1 原样新增的 clone 在离线/重复场景 rc=128，且没有原子落盘；A5 的降级未实现。",
+    "consumer_boundary": "索引只认 --index/CT_INDEX（Pkg.h.ct:132-134,2167），HEAD 不会自动读 ~/.ct/index/index；A1 要生效必须同时改 A2。限定名无索引硬错 rc=1（18 行指引）；显式六字段索引可用并写 ct.lock；索引不可读 rc=1 且 ct.lock 不变；摘要不符 rc=1 且不落 lock/store。",
+    "official_index": "ct-pkg/index main f7fb1d85，12 行全部 5 字段，sha256 7ed5b97d…，无 tag、无 .sig、commit 未签名。生产端 gen-index.sh 的 printf 就是 5 字段，不是抓取丢列。裸名 std 可用（装 std/std 0.3.2，digest 95fc…），但 std/std 与 ct/std 都解析成错误 URL（https://std/std、https://ct/std）后 clone 失败；install.sh:187 推荐的正是 ct/std，所以 A1 的默认索引今天反而把明确报错变成错误 URL。",
+    "pkg_cli": "main.ct:121-122 把 pkg 整体交给 ct_pkg_install，`ct pkg` 与 `ct install` 输出逐字相同；`ct pkg index update`/`publish`/`index publish` 均 rc=1 unexpected argument；`ct pkg check <dir>` 是只读审计 rc=0 且零写入。二进制/源码无 token/credential/release-package 代码。",
+    "supply_chain": "同一 acme/hello@0.1.0 仅替换索引行即可装成另一份内容（42 vs 666；digest 3a08… vs 6c09…，后者与 claim E1-4 逐字一致）；digest 由同一行给出并在 checkout 后校验，没有独立签名。ct.lock 成功时写（含 digest），失败时不写。官方索引匿名 main、无 tag/签名；没有 pin 机制。",
+    "network_subprocess": "编译器核零网络/零子进程；`ct get` 是唯一 git 路径，代码单调用点（git_run，:746-760；另有 :734 的 git --version），但一次全新 get 实测 4 个 git 进程（需要选 tag 时 5 个）；本地目录源 0 个。无索引的裸名默认走 CT_REGISTRY=https://github.com/ct-pkg，断网时会发起网络并失败——隐式网络已存在，B 的“零隐式网络”只对索引消费成立。",
+    "cost": "现状 install.sh 191 行 / main.ct 124 行 / Pkg.h.ct 3041 行；Pkg.h.ct:98 明确 256 函数预算已满。外部索引仓脚本合计 755 行（147+275+218+66+37+12）。A/B 的行数都是提案估算，HEAD 不可实测；A1 的失败模式（离线/重复 clone rc=128、无原子落盘）已实测。",
+    "side_observations": [
+      "claim 的 E1-1/E1-3/E1-4/E1-5/E1-6/E1-7 输出全部复现；E1-4 的 digest 6c09a129… 与 fixtures 逐字一致；E2 的锚点全部有效（唯一偏差：main.ct 的 pkg 分派在 121-122，109-120 是注释/其它子命令）。",
+      "claim 的“只有一个子进程调用点”是代码调用点，不等于单进程：实测 4 个 git 进程/次（有 tag 选择时 5 个）。问题文本里的“ct get 单子进程”应按“单调用点”读。",
+      "counter 的 E1-1（install.sh 0 处索引/git clone）、E1-2、E1-3（索引过期）、E1-4（摘要不符）全部复现；E2 锚点有效。",
+      "counter 的“安装不默认联网”作为绝对陈述不成立：默认安装下载源码归档，断网 rc=1；准确边界是“不默认 clone 索引、不新增 git 依赖、离线走 CT_SOURCE_DIR”。",
+      "双方都承认官方索引五字段与消费端六字段不一致；本席确认生产端 gen-index.sh 只写五字段，修复点在外部索引仓，不在消费端解析器（五字段仍被刻意兼容，Pkg.h.ct:2213-2222）。",
+      "HEAD 没有任何索引 pin/验签/默认索引路径的代码（Pkg.h.ct:132-134,2167）；A1–A5 与 B1–B5 都是提案，不能把提案行为当作现状事实。"
+    ]
+  },
+  "unreproduced": [
+    {
+      "ref": "A1/A5（install.sh 安装期 clone index + 失败降级）",
+      "reason": "HEAD 未实现；只能用等价 git clone 探针证明离线/重复 rc=128，无法实测 A5 的“warn 后继续、不污染 ~/.ct”是否成立（没有实现可跑）。"
+    },
+    {
+      "ref": "A4（ct pkg publish / ct pkg index publish 调 release-package.sh）",
+      "reason": "HEAD 未实现；`ct pkg publish` rc=1 unexpected argument，无法实测“一条命令发布”的成功路径、回滚与 token 泄漏面，只能测外部脚本的 token 前置条件。"
+    },
+    {
+      "ref": "B2（ct index update --ref <commit>）",
+      "reason": "HEAD 未实现；`ct index update` 报 compile mode takes one input，无法实测 pin/验签/原子替换，只能测现状没有默认索引更新。"
+    },
+    {
+      "ref": "官方索引的签名/验签",
+      "reason": "外部仓 main 无 tag、无 .sig、commit 未签名；只能证其不存在，无法测“验签失败即拒绝”的行为。"
+    },
+    {
+      "ref": "ct get std 经官方索引的稳定耗时",
+      "reason": "同一命令 30s 超时一次（rc=124，网络慢），120s 下成功 rc=0；这是网络波动，不作为 A/B 结论，只记录裸名路径依赖网络。"
+    }
+  ]
+}
