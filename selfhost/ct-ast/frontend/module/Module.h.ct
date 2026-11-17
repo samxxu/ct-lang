@@ -94,6 +94,8 @@ pub trait ModuleOps {
     int  builtin_live_for(int u);
     int  c_boundary_for(const char *path);
     int  io_header_mask(int unit);
+    int  io_header_mask_tail(int from);
+    int  io_call_count(void);
     int  unit_reaches(int from, int to);
     int  register_visible_type_aliases(int u);
     int  scan_forward_type_aliases(const char *path, int owner);
@@ -2442,6 +2444,30 @@ cmd_too_long:
             else mask |= 2;
         }
         return mask;
+    }
+
+    /* Compile mode: the layer units are parsed first but only the ones the
+       input uses are spliced, so only calls recorded after `from` belong to
+       the product. */
+    int io_header_mask_tail(int from)
+    {
+        const char *h;
+        int i, mask = 0;
+
+        (void)self;
+        for (i = from; i < frontend::parse::ct_parse_io_call_count(); i++) {
+            h = io_header_for(frontend::parse::ct_parse_io_call_name(i));
+            if (h == 0) continue;
+            if (strcmp(h, "stdio.h") == 0) mask |= 1;
+            else mask |= 2;
+        }
+        return mask;
+    }
+
+    int io_call_count(void)
+    {
+        (void)self;
+        return frontend::parse::ct_parse_io_call_count();
     }
 
     int builtin_slot(int u)

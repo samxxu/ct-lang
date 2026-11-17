@@ -61,6 +61,48 @@ struct Driver {
     const char *version;
 } use DriverOps;
 
+/* PH-66 R3: whole-identifier search over the input source. The layer is
+   spliced per unit, so an unused unit must stay out of the product entirely
+   (its prologue includes were what put <stdio.h> into an empty program). */
+static int src_has_word(const char *s, const char *w)
+{
+    size_t wn = strlen(w);
+    const char *p = s;
+
+    while (*p) {
+        const char *q;
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+              || (*p >= '0' && *p <= '9') || *p == '_')) {
+            p++;
+            continue;
+        }
+        q = p;
+        while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
+               || (*q >= '0' && *q <= '9') || *q == '_') q++;
+        if ((size_t)(q - p) == wn && strncmp(p, w, wn) == 0) return 1;
+        p = q;
+    }
+    return 0;
+}
+
+/* The unit is used when the source names its type or calls one of the
+   functions the unit itself declared (ranges are known after parsing it). */
+static int layer_used(const char *src, int bi, int fstart, int fend, struct Symbols *sym)
+{
+    static const char *const types[4] = { "Vec", "Map", "Option", "Result" };
+    int i, n;
+
+    if (bi == 3) {
+        if (src_has_word(src, "Str")) return 1;
+    } else {
+        for (i = 0; i < 2; i++)
+            if (src_has_word(src, types[bi == 0 ? i : bi + 1])) return 1;
+    }
+    for (n = fstart; n < fend; n++)
+        if (src_has_word(src, sym->funcs[n].name)) return 1;
+    return 0;
+}
+
 impl DriverOps for Driver {
     /* The token cursor and the error store live in frontend::parse; the driver
        forwards so the store stays single. */
@@ -98,7 +140,8 @@ impl DriverOps for Driver {
         const char *env;
         const char *slash;
         const char *savepath;
-        int bi, i, prog, n, head;
+        int bi, i, prog, n, head, fstart, fend;
+        char *insrc = 0;
         FILE *probe;
 
         /* SH-90: `--freestanding` means no implicit layer. Splicing it anyway
@@ -108,6 +151,25 @@ impl DriverOps for Driver {
         if (self->m->freestanding) return -1;
         env = getenv("CT_STD_DIR");
         head = -1;
+        {
+            FILE *fi = fopen(in, "r");
+            if (fi) {
+                long sz;
+                if (fseek(fi, 0, SEEK_END) == 0) {
+                    sz = ftell(fi);
+                    if (sz > 0 && sz < (long)(4 << 20)) {
+                        insrc = (char *)malloc((size_t)sz + 1);
+                        if (insrc) {
+                            size_t rd;
+                            rewind(fi);
+                            rd = fread(insrc, 1, (size_t)sz, fi);
+                            insrc[rd] = 0;
+                        }
+                    }
+                }
+                fclose(fi);
+            }
+        }
         /* P34 S9a: the layer spans `Vec.h.ct`, `Option.h.ct` and
            `Result.h.ct`; P36 S4a1 adds `Str.h.ct`. Compile mode is one C
            translation unit, so the parsed declaration chains are spliced into
@@ -155,7 +217,9 @@ impl DriverOps for Driver {
                 self->lex->tokstart = 0;
                 self->p->unit_is_hdr = 1;
                 self->p->unit_is_map = 0;
+                fstart = self->sym->nfunc;
                 prog = frontend::parse::ct_parse_program();
+                fend = self->sym->nfunc;
                 self->m->path = savepath;
                 self->mem->path = savepath;
                 self->sym->path = savepath;
@@ -166,6 +230,7 @@ impl DriverOps for Driver {
                 break;
             }
             if (prog < 0) continue;
+            if (insrc && !layer_used(insrc, bi, fstart, fend, self->sym)) continue;
             if (head < 0) {
                 head = prog;
             } else {
@@ -179,6 +244,7 @@ impl DriverOps for Driver {
                 }
             }
         }
+        if (insrc) free(insrc);
         return head;
     }
 
@@ -187,7 +253,7 @@ impl DriverOps for Driver {
         const char *in;
         const char *out;
         char outbuf[MAX_PATH];
-        int i, prog, stdprog;
+        int i, prog, stdprog, io_from;
         FILE *f;
 
         in = NULL;
@@ -564,6 +630,9 @@ impl DriverOps for Driver {
         /* P36 S4a2: the built-in layer's functions do not count against the
            user program's `MAX_FUNCS` budget. */
         self->sym->nfunc_base = self->sym->nfunc;
+        /* PH-66 R3: calls recorded from here on belong to the product (the
+           layer may be parsed but not spliced). */
+        io_from = self->m->io_call_count();
         /* L29-W1: a project-local `vendor/std` is never read; the built-in
            layer wins, but the shadowing is not silent. */
         if (stdprog >= 0) {
@@ -625,7 +694,7 @@ impl DriverOps for Driver {
         {
             prog = frontend::parse::ct_parse_program();
             if (prog >= 0 && self->m->show_io_headers) {
-                int mask = frontend::module::ct_module_io_mask(-1);
+                int mask = self->m->io_header_mask_tail(io_from);
                 if (mask & 1) printf("stdio.h\n");
                 if (mask & 2) printf("wchar.h\n");
                 return 0;
@@ -673,7 +742,7 @@ impl DriverOps for Driver {
         fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
               self->out);
         {
-            int mask = self->m->io_header_mask(-1);
+            int mask = self->m->io_header_mask_tail(io_from);
             backend::emit::ct_emit_bind_io_mask(mask);
             if (mask & 1) fputs("#include <stdio.h>\n", self->out);
             if (mask & 2) fputs("#include <wchar.h>\n", self->out);

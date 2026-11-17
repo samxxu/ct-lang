@@ -3819,7 +3819,9 @@ static struct Parser g_parse;
    arrays stay here and `g_parse` points at them. `g_maps` is a heap block
    (SH-42): one `struct MapTable` carries 64 `MapBind` rows, so 64 of them inline
    put ~14 MB of zeroes into __DATA and shipped a 21 MB compiler. */
-static struct Call g_calls[1024];
+/* Keep in step with MAX_CALLS in Expr.h.ct: macros do not cross a unit
+   boundary, and a smaller array here would be an overflow, not a diagnostic. */
+static struct Call g_calls[2048];
 static struct MapTable  *g_maps;
 static struct Field   g_pend_fields[64];
 
