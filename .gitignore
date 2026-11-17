@@ -32,6 +32,10 @@ editors/**/node_modules/
 .trae/
 .trae-html-share-packages/
 
+# Python bytecode from the gate scripts.
+__pycache__/
+*.pyc
+
 # Session scratch (DB-4): temporary products live in .temp/ and never ship.
 .temp/
 
