@@ -5,7 +5,7 @@
 | 模块 | selfhost（`frontend/module`：`Module::builtin_live_for` 的 `Str` 判据） |
 | 类型 | 生成缺陷（漏判导致链接失败；不是静默错值） |
 | 严重度 | **P1**（`ct` 退 0，`cc` 退 1；影响所有只调用层函数而不写类型名的程序） |
-| 状态 | `open`（DEV 已处置，待复核） |
+| 状态 | verified |
 | 锚点 | `v0.63.0`（`369a2606`） |
 | 承诺出处 | [REQ-HW-011](../../docs/planning/hardware-readiness-requirements.md)；[battle/hw-2 判决](../../battle/hw-2/verdict.md)、[D-007](../../docs/decisions/D-007.md) |
 
@@ -69,3 +69,23 @@ out/d.c:7:12: error: call to undeclared function 'str_len'; ISO C99 and later do
 - [battle/hw-2](../../battle/hw-2/verdict.md)：J-1/J-2 均不成立，判决 `rejected`；
 - [D-007](../../docs/decisions/D-007.md)：决策记录（含失效条件）；
 - [PH-64 卡 §5](../../docs/design/phase64-draft.md)：T2 的证据行需在 fix 收口时追加注记。
+
+## 复核（REV，2026-11-17）
+
+| 项 | 值 |
+| --- | --- |
+| 复核人 | REV |
+| HEAD | `72ed6dc`（`ct-ast v0.63.4`；macOS 27.2 arm64 / Apple clang 21） |
+| 结论 | `verified` |
+
+命令与原始输出：
+
+```console
+$ bash test/ast/p64_on_demand.sh /tmp/rev/ct-ast ; echo rc=$?
+OK p64ond
+rc=0
+```
+
+探针三例齐备：层函数 `str_from`/`str_len` 直调拉 `Str.c`、用户 `struct Struct` 不拉、大于 262143 B 的源不截断
+（[p64_on_demand.sh](../../test/ast/p64_on_demand.sh) 的三段夹具）。逐条对照见
+[复核结论](../../docs/reviews/2026-11-17-fix-closeout-rev-verdict.md) §2.2。

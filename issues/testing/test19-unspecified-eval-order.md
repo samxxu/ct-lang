@@ -5,7 +5,7 @@
 | 模块 | test（`test/ast/**` 的行为夹具） |
 | 类型 | 测试夹具缺陷（依赖未指定行为，导致 CI 只在 x86-64 上红） |
 | 严重度 | Medium（CI 假失败；不涉及编译器产物） |
-| 状态 | `open`（DEV 已处置，待复核） |
+| 状态 | verified |
 | 锚点 | `v0.63.0`（`369a2606`） |
 | 承诺出处 | [AGENTS §6 验证](../../AGENTS.md)；[ci.yml](../../.github/workflows/ci.yml) 的 `ubuntu-gcc` 权威 job |
 
@@ -47,3 +47,32 @@ remove=1 len=2          # 期望 remove=1 len=1
 
 - [p47 探针](../../test/ast/p47_map.sh)：直接复用该夹具，故同一条根因；
 - [SH-87](sh87-builtin-str-live-false-negative.md)：另一条未决 P1。
+
+## 复核（REV，2026-11-17）
+
+| 项 | 值 |
+| --- | --- |
+| 复核人 | REV |
+| HEAD | `72ed6dc`（`ct-ast v0.63.4`；macOS 27.2 arm64 / Apple clang 21） |
+| 结论 | `verified` |
+
+命令与原始输出：
+
+```console
+$ python3 test/ast/check_eval_order.py ; echo rc=$?
+eval-order: 1265 sources, 0 order-dependent print calls
+rc=0
+$ python3 test/ast/check_eval_order.py --self-test ; echo rc=$?
+rc=0                # 脏行必报、干净行不误报
+$ CT_STD_DIR="$PWD/lib/std" /tmp/rev/ct-ast test/ast/241_map_str_key/prog.ct -o .temp/r241/241.c ; echo rc=$?
+rc=0
+$ podman run --rm --arch amd64 -v "$PWD/.temp/r241":/w docker.io/library/gcc:13 \
+    bash -c 'cd /w && gcc -std=c99 241.c -o a && ./a > out.txt' ; echo rc=$?
+rc=0
+$ diff -u test/ast/241_map_str_key/prog.expected.out .temp/r241/out.txt ; echo rc=$?
+rc=0                # x86-64 上 remove=1 len=1，与 arm64 一致
+```
+
+复核包把 lint 命令写成 `bash test/ast/check_eval_order.py`，脚本实为 Python（`bash` 会退 2），
+本轮按 `python3` 执行。逐条对照见
+[复核结论](../../docs/reviews/2026-11-17-fix-closeout-rev-verdict.md) §2.4。
