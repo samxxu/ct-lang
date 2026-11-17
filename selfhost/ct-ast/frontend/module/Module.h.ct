@@ -93,6 +93,7 @@ pub trait ModuleOps {
     int  builtin_slot(int u);
     int  builtin_live_for(int u);
     int  c_boundary_for(const char *path);
+    int  io_header_mask(int from, int to);
     int  unit_reaches(int from, int to);
     int  register_visible_type_aliases(int u);
     int  scan_forward_type_aliases(const char *path, int owner);
@@ -187,6 +188,8 @@ pub struct Module {
        1 = strict. */
     int  c_boundary;
     int  show_c_boundary;
+    /* PH-66 R1: print the libc I/O headers the program's direct calls need. */
+    int  show_io_headers;
     char alloc_map[256];
     const char *exe;
     const char *outdir_opt;
@@ -352,6 +355,28 @@ static int file_uses_str(struct Symbols *sym, const char *path, int fn_start, in
     }
     free(b);
     return hit;
+}
+
+/* PH-66 R1: the libc I/O set and the header each name needs (D-008 §1/§2).
+   Membership is by exact name -- no prefix matching -- and only a direct call
+   reaches this table (the call list is built by the expression parser). */
+static const char *io_header_for(const char *name)
+{
+    static const char *const stdio_fns[13] = {
+        "printf", "fprintf", "sprintf", "snprintf",
+        "scanf", "fscanf", "sscanf",
+        "puts", "putchar", "fputs", "fputc", "fflush", "perror",
+    };
+    static const char *const wchar_fns[6] = {
+        "wprintf", "fwprintf", "swprintf", "wscanf", "fwscanf", "swscanf",
+    };
+    int i;
+
+    for (i = 0; i < 13; i++)
+        if (strcmp(name, stdio_fns[i]) == 0) return "stdio.h";
+    for (i = 0; i < 6; i++)
+        if (strcmp(name, wchar_fns[i]) == 0) return "wchar.h";
+    return 0;
 }
 
 /* PH-65 R1: the CT tree keeps the pre-1.0 behaviour; every in-repo include
@@ -1545,6 +1570,7 @@ impl ModuleOps for Module {
         self->freestanding = 0;
         self->c_boundary = -1;
         self->show_c_boundary = 0;
+        self->show_io_headers = 0;
         self->alloc_map[0] = 0;
         self->exe = NULL;
         self->outdir_opt = NULL;
@@ -1588,6 +1614,10 @@ impl ModuleOps for Module {
             }
             if (strcmp(argv[i], "--show-c-boundary") == 0) {
                 self->show_c_boundary = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--show-io-headers") == 0) {
+                self->show_io_headers = 1;
                 continue;
             }
             if (strncmp(argv[i], "--c-boundary=", 13) == 0) {
@@ -1761,6 +1791,20 @@ impl ModuleOps for Module {
         if (ninput == 0) {
             fprintf(stderr, "usage: %s build <input.ct>... [-o <exe>]\n", self->prog);
             return 1;
+        }
+        if (self->show_io_headers) {
+            int mask = 0;
+            for (i = 0; i < self->nunits; i++) {
+                int bu = 0, k;
+                for (k = 0; k < self->nbuiltin; k++)
+                    if (self->builtin_units[k] == i) bu = 1;
+                if (bu) continue;
+                mask |= self->io_header_mask(self->units[i].call_start,
+                                            self->units[i].call_end);
+            }
+            if (mask & 1) printf("stdio.h\n");
+            if (mask & 2) printf("wchar.h\n");
+            return 0;
         }
         /* PH-65 R1 observability: print the resolved policy and stop. */
         if (self->show_c_boundary) {
@@ -2382,6 +2426,24 @@ cmd_too_long:
         return 1;
     }
 
+    /* PH-66 R1: bit0 = <stdio.h>, bit1 = <wchar.h>; `to` is exclusive. */
+    int io_header_mask(int from, int to)
+    {
+        const char *h;
+        int i, mask = 0;
+
+        (void)self;
+        (void)from;
+        (void)to;
+        for (i = 0; i < frontend::parse::ct_parse_io_call_count(); i++) {
+            h = io_header_for(frontend::parse::ct_parse_io_call_name(i));
+            if (h == 0) continue;
+            if (strcmp(h, "stdio.h") == 0) mask |= 1;
+            else mask |= 2;
+        }
+        return mask;
+    }
+
     int builtin_slot(int u)
     {
         int i;
@@ -2705,6 +2767,15 @@ struct Module *module_get(void)
 /* The driver wires the collaborators and the shared table once, before it
    dispatches; the name and the version it sets through the object itself. */
 pub void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *p, void *cache);
+/* PH-66 R1: the driver and the build path both need the header mask. */
+pub int ct_module_io_mask(int from, int to);
+int ct_module_io_mask(int from, int to)
+{
+    if (from < 0) from = 0;
+    if (to > g_module.p->ncalls) to = g_module.p->ncalls;
+    return g_module.io_header_mask(from, to);
+}
+
 void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *p, void *cache)
 {
     g_module.arena = (struct Arena *)arena;
@@ -2726,4 +2797,5 @@ void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void
        driver may override it from the command line. */
     g_module.c_boundary = -1;
     g_module.show_c_boundary = 0;
+    g_module.show_io_headers = 0;
 }

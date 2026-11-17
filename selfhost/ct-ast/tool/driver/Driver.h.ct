@@ -291,6 +291,7 @@ impl DriverOps for Driver {
                        "                 [--line|--no-line] [--emit-map <file|->]\n"
                        "                 [--diagnostics=text|json] [--std=c99|gnu99|c11]\n"
                        "                 [--freestanding] [--alloc <m,f[,r,c]>] [--c-boundary=strict|allow]\n"
+                       "                 [--show-io-headers]\n"
                        "       %s get <spec>[@<range>]\n"
                        "       %s install\n"
                        "       %s verify [--strict]\n"
@@ -353,6 +354,10 @@ impl DriverOps for Driver {
             }
             if (strcmp(argv[i], "--show-c-boundary") == 0) {
                 self->m->show_c_boundary = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--show-io-headers") == 0) {
+                self->m->show_io_headers = 1;
                 continue;
             }
             if (strncmp(argv[i], "--c-boundary=", 13) == 0) {
@@ -617,7 +622,16 @@ impl DriverOps for Driver {
            declaration is reported instead of becoming an opaque C type. */
         if (self->m->scan_forward_type_aliases(in, self->p->cur_unit) != 0)
             return frontend::parse::ct_parse_report();
-        prog = frontend::parse::ct_parse_program();
+        {
+            int call_base = self->p->ncalls;
+            prog = frontend::parse::ct_parse_program();
+            if (prog >= 0 && self->m->show_io_headers) {
+                int mask = frontend::module::ct_module_io_mask(call_base, self->p->ncalls);
+                if (mask & 1) printf("stdio.h\n");
+                if (mask & 2) printf("wchar.h\n");
+                return 0;
+            }
+        }
         if (prog < 0) {
             if (tool::diag::ct_diag_nsem()) {
                 fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
