@@ -344,7 +344,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 
 | 项 | 值 |
 | --- | --- |
-| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-65 |
+| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-66 |
 | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
 | 门禁入口 | `tools/check.sh g0`；其余为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（链接 + G9） |
 | 文档 snippet | 缺失 |

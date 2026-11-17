@@ -19,3 +19,4 @@
 | PH-65 严格 C 边界（R1–R7 / E65-1–E65-8） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.64.0 |
 
 > 本仓库当前为单会话工作，三类常驻对话未建；见 `AGENTS.md` 的 `deviation: single-session-workflow`。
+| PH-66 libc I/O 内置例外（R1–R5 / E66-1–E66-6） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | PH-66 🚧 |
