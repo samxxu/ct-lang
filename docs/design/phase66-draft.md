@@ -1,6 +1,6 @@
 # Phase 66 — libc I/O 内置例外（按调用补头）
 
-> **状态：实施中**（2026-11-18 立项；卡已冻结；R1 已完成（663546cb），R2 已完成（d9c00a1c），R3 已完成（f022ffc3），R4 已完成（c5c357f1），R5 已完成）。
+> **状态：完成**（2026-11-18 收口；`v0.65.0`；R1–R5 全部交付，E66-1…6 全绿）。
 > **依据**：[D-008](../decisions/D-008.md)（accepted，2026-11-17）、[SH-89](../../issues/selfhost/sh89-libc-io-auto-include.md)。
 > **前置**：PH-65 收口（`v0.64.0`）。
 > **纪律**：不收口不 bump；tag/push 按 6.7 V-7 / 6.5。
@@ -105,3 +105,20 @@
 - 编译器 120–220；夹具 80–140；文档 30–50；合计 230–410（±40%）。
 - 收口：E66-1…6 全绿、11 道门禁、五处 `CTC_VERSION` 到 `v0.65.0`、流水账/对照表；
   tag 与分支推送按 6.7 V-7 / 6.5。
+
+## 9 收口对照表（2026-11-18，v0.65.0）
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E66-1 | `bash test/ast/p66_io_detect.sh <ct-ast>` | `OK p66/io-detect`（六例：printf / puts+fprintf / wprintf / 无调用 / syslog / 文本） |
+| E66-2 | `bash test/ast/p66_io_emit.sh <ct-ast>` | `OK p66/io-emit`（build 与 compile 各恰好一次） |
+| E66-3 | `bash test/ast/p66_io_empty.sh <ct-ast>` | `OK p66/io-empty`（两种模式空程序 0 系统头；Vec 程序仍含层） |
+| E66-4 | `bash test/ast/p66_io_boundary.sh <ct-ast>` | `OK p66/io-boundary`（同名不抢 / syslog 不补 / freestanding 硬错且无产物） |
+| E66-5 | `bash test/ast/p66_io_docs.sh`；`python3 test/docs/check-docs.py` | `OK p66/docs`；check-docs OK |
+| E66-6 | `bash selfhost/check-ast.sh`；`bash selfhost/check-all.sh` | `1477 passed / 0 failed / 0 skipped`；`check-all: OK (11 hard gates green)` |
+| 版本 | 五处 `CTC_VERSION` | `v0.65.0`；tag `v0.65.0`（annotated，V-7 四项校验后推送） |
+
+任务级红证：R1 `c3f382c0`、R2 `3fc6b51a`、R3 `d4080bf6`、R4 `79eccf5f`、R5 `ac55c523`。
+
+附带变化：`--emit-c` 的 `<stdio.h>` 位置移到 banner 之后（p39 R8 基线已重生成）；
+`MAX_CALLS` 1024→2048（全构建共享调用表，ct-ast 自编需要）。

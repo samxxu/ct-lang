@@ -76,7 +76,7 @@
 
 | Phase 64 | 裸机生成契约（`--freestanding` / 按需单元 / `--alloc` / const vtable） | ✅ 完成 | v0.63.0 | [卡](design/phase64-draft.md) · [需求](planning/hardware-readiness-requirements.md) |
 | Phase 65 | 严格 C 边界（外部库/用户默认 strict；`.m.ct` 映射例外；CT 仓内 1.0 前代码豁免） | ✅ 完成 | v0.64.0 | [卡](design/phase65-draft.md) · [battle](../battle/cinclude-2/verdict.md) |
-| Phase 66 | libc I/O 内置例外（按调用补头；空程序零系统头） | 🚧 实施中 | — | [卡](design/phase66-draft.md) · [D-008](decisions/D-008.md) · [SH-89](../issues/selfhost/sh89-libc-io-auto-include.md) |
+| Phase 66 | libc I/O 内置例外（按调用补头；空程序零系统头） | ✅ 完成 | v0.65.0 | [卡](design/phase66-draft.md) · [D-008](decisions/D-008.md) · [SH-89](../issues/selfhost/sh89-libc-io-auto-include.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
