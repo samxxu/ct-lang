@@ -56,6 +56,14 @@ out/d.c:7:12: error: call to undeclared function 'str_len'; ISO C99 and later do
 3. 保留 `Vec` 活 → `Str` 活；
 4. 探针 `test/ast/p64_on_demand.sh` 增加两条夹具（P1 小写助手直调、P2 `struct Struct` 不拉 `Str`）。
 
+## 处置（v0.63.2）
+
+- 提交 `8a7069b7`；`Module::builtin_live_for` 改为：层函数名从 `fn_start..fn_end`
+  派生、整词且后随 `(` 才算调用；`Str` 与实例参数按整词匹配；源码扫描跳过注释与
+  字面量并读整个文件（去掉 262144 B 截断）。
+- 验证：`bash test/ast/p64_on_demand.sh` → `OK p64ond`（红证 `47f7c339`）；
+  ubuntu 24.04 / gcc 13 `check-all` 11/11。
+
 ## 关联
 
 - [battle/hw-2](../../battle/hw-2/verdict.md)：J-1/J-2 均不成立，判决 `rejected`；
