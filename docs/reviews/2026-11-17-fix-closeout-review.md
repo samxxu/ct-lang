@@ -6,6 +6,7 @@
 | 范围 | `v0.62.1`（SH-86）、`v0.63.1`（SH-88）、`v0.63.2`（SH-87）、TEST-19 与其 lint |
 | 基线 | `cbff2209`（v0.63.2 收口）+ `447cb0dd`（lint） |
 | 复核者 | REV（单会话 deviation 下仍按 5.4 分权：DEV 只写在处置段） |
+| 复核结论 | [2026-11-17-fix-closeout-rev-verdict.md](2026-11-17-fix-closeout-rev-verdict.md)（REV，4/4 通过） |
 
 ## 1 复核前置：构建一次 ct-ast
 
@@ -19,7 +20,7 @@ cc -Wall -Wextra -std=c99 "$W/l1.c" -o "$W/l1"
 cc -Wall -Wextra -std=c99 "$W/l2src"/*.c -o "$W/l2"
 "$W/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$W/astsrc"
 cc -Wall -Wextra -std=c99 "$W/astsrc"/*.c -o "$W/ct-ast"
-"$W/ct-ast" --version    # 期望 ct-ast v0.63.2
+"$W/ct-ast" --version    # 期望等于 HEAD 的 CTC_VERSION
 ```
 
 ## 2 逐条复核
@@ -29,8 +30,8 @@ cc -Wall -Wextra -std=c99 "$W/astsrc"/*.c -o "$W/ct-ast"
 | SH-86 | 数组/const 的 vptr 静态写入、无 constructor、多维硬错 | `"$W/ct-ast" test/ast/287_trait_array_vptr_init/prog.ct -o /tmp/r287.c && cc -std=c99 -Wall -Wextra -c /tmp/r287.c && grep -c 'constructor' /tmp/r287.c` | `cc` 退 0；`grep` 计数 `0` |
 | SH-86 | 多维 trait 数组在 `ct` 阶段硬错 | `"$W/ct-ast" test/ast/errors/trait_array_multidim.ct -o /tmp/r.c; echo $?` | 退 1，stderr 含 `a multi-dimensional array cannot hold trait-carrying values` |
 | SH-87 | 层函数直调拉 `Str`、`struct Struct` 不拉、>262143 B 不截断 | `bash test/ast/p64_on_demand.sh "$W/ct-ast"` | `OK p64ond` |
-| SH-88 | 20 位字面量不触发 UBSAN | `CC=gcc bash selfhost/check-sanitizers.sh` | `check-sanitizers: OK (580 checks, no sanitizer report)`（约 10 分钟） |
-| TEST-19 | x86-64 与 arm64 输出一致 | `bash test/ast/check_eval_order.py` | `eval-order: 1265 sources, 0 order-dependent print calls` |
+| SH-88 | 20 位字面量不触发 UBSAN | `CC=gcc bash selfhost/check-sanitizers.sh` | `check-sanitizers: OK (<N> checks, no sanitizer report)`（约 10 分钟；`N` 随语料变） |
+| TEST-19 | x86-64 与 arm64 输出一致 | `python3 test/ast/check_eval_order.py` | `eval-order: … 0 order-dependent print calls`（计数随语料变） |
 | 全量 | 11 道硬门禁 | `bash selfhost/check-all.sh` | `check-all: OK (11 hard gates green)`；`check-ast` 1463/0 |
 
 x86-64 对照（TEST-19 的正例；需要 podman 与 amd64 模拟）：
