@@ -2735,6 +2735,26 @@ Result<long, char *> twice(int n)
 - **范围外**：`T?` / `Maybe<T>`、struct 值接收者、可选方法调用、`p?.b = 1` / `&p?.b`、
   用户类型 `get` 的指针接收者协议；`struct X *p` 的 `p?.f` 之外的 `.` 规则仍按 PH-51。
 
+### 4.66 C 边界：`c-boundary` 与 shim（Phase 65，仅 ct-ast）
+
+默认只有 CT 树（`selfhost/**`、`lib/std/**`、`test/**`、`examples/**`）与 `--c-boundary=allow`
+的构建可以直接和 C 打交道；**外部代码默认 strict**。
+
+| 形态 | strict 下 | 出口 |
+| --- | --- | --- |
+| `.ct` / `.h.ct` 的 `#include` | 硬错 | `#include "<base>.shim.h"`（本单元的 shim） |
+| `#ct-raw` | 硬错 | 放进 `.shim.c` 或 `.m.ct` |
+| `extern` 原型 / 裸 C 声明 | 硬错 | `<base>.shim.h` 声明、`.m.ct` 映射 |
+| 函数式 `#define` | 硬错 | 对象式常量宏，或 shim |
+| `.m.ct` | 允许 `#include` 与对象式宏；函数式宏硬错 | `.shim.h` |
+
+开关：`ct build --c-boundary=strict|allow` / `ct --c-boundary=...`；
+包在 `ct.pkg` 写 `c-boundary = strict|allow`（缺省按外部 strict；**有 manifest 但没这个键**
+的旧包保留 allow 窗口）。`.h.ct` 的姊妹 `<base>.shim.h` 会自动进公开头并加入 `ct build` 的 `-I`；
+两个同名 shim 同时入构建是硬错。
+
+strict 是**护栏**不是沙箱：shim 的内容、`--ldflags` 外链的 `.c` 仍能绕过文件边界（D65-8）。
+
 ## 11 文档与实现一致性（缺口登记，2026-11-15）
 
 **现状**：仓库门禁里没有防止本文与实现漂移的自动机制。`check-docs` 只校验相对链接、版本串、

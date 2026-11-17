@@ -506,3 +506,4 @@ For commercial licensing or exceptions, contact: samxxu@gmail.com
 ### 7. 联系
 
 作者 Sam X. Xu · samxxu@gmail.com · 问题与建议优先开 [Issue](https://github.com/samxxu/ct-lang/issues)。
+- **C 边界**（Phase 65）：外部代码默认 strict——`.ct/.h.ct` 禁直接 `#include`、`#ct-raw`、`extern` 与函数式宏，出口是 `<base>.shim.h` 或 `.m.ct`；包用 `ct.pkg` 的 `c-boundary`、命令用 `--c-boundary=strict|allow`。
