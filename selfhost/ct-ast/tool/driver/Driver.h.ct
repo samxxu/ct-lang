@@ -290,7 +290,7 @@ impl DriverOps for Driver {
                        "                 [--cflags <s>] [--ldflags <s>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->]\n"
                        "                 [--diagnostics=text|json] [--std=c99|gnu99|c11]\n"
-                       "                 [--freestanding] [--alloc <m,f[,r,c]>]\n"
+                       "                 [--freestanding] [--alloc <m,f[,r,c]>] [--c-boundary=strict|allow]\n"
                        "       %s get <spec>[@<range>]\n"
                        "       %s install\n"
                        "       %s verify [--strict]\n"
@@ -346,6 +346,27 @@ impl DriverOps for Driver {
             if (strcmp(argv[i], "--freestanding") == 0) {
                 self->m->freestanding = 1;
                 continue;
+            }
+            if (strcmp(argv[i], "--allow-c-boundary") == 0) {
+                self->m->c_boundary = 0;
+                continue;
+            }
+            if (strcmp(argv[i], "--show-c-boundary") == 0) {
+                self->m->show_c_boundary = 1;
+                continue;
+            }
+            if (strncmp(argv[i], "--c-boundary=", 13) == 0) {
+                const char *v = argv[i] + 13;
+                if (strcmp(v, "strict") == 0) {
+                    self->m->c_boundary = 1;
+                    continue;
+                }
+                if (strcmp(v, "allow") == 0) {
+                    self->m->c_boundary = 0;
+                    continue;
+                }
+                fprintf(stderr, "ctc: --c-boundary takes strict or allow, not '%s'\n", v);
+                return 1;
             }
             if (strcmp(argv[i], "--alloc") == 0) {
                 if (i + 1 >= argc) {
@@ -494,6 +515,10 @@ impl DriverOps for Driver {
             out = outbuf;
         }
 
+        if (self->m->show_c_boundary) {
+            printf("%s\n", self->m->c_boundary_for(in) ? "strict" : "allow");
+            return 0;
+        }
         self->m->path = in;
         self->mem->path = self->m->path;
         self->sym->path = self->mem->path;
