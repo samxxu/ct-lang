@@ -708,6 +708,14 @@ else
     bad "p65/map" "$(cat "$work/p65map.out" "$work/p65map.err" | head -4)"
 fi
 
+# PH-65 R5: a `.h.ct` shim is published and put on the `-I` set; a duplicate
+# base name is a hard error.
+if bash test/ast/p65_hdr_shim.sh "$work/ct-ast" >"$work/p65hdr.out" 2>"$work/p65hdr.err"; then
+    ok "p65/hdr-shim"
+else
+    bad "p65/hdr-shim" "$(cat "$work/p65hdr.out" "$work/p65hdr.err" | head -4)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
