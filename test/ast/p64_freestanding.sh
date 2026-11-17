@@ -128,5 +128,33 @@ else
     check_units "$tmp/heap" "pvPortMalloc vPortFree"
 fi
 
+# SH-90: `--freestanding` must also drop the implicit container layer in single-
+# file (compile) mode. The layer used to be spliced unconditionally, so a
+# freestanding product still carried `<stdio.h>`/`<stdlib.h>` and the `Str`
+# unit's `malloc` calls -- fatal under `-nostdlib`.
+mkdir -p "$tmp/cmode" "$tmp/cmode/out"
+cat >"$tmp/cmode/c.ct" <<'CT'
+int main(void)
+{
+    return 0;
+}
+CT
+( cd "$root" && CT_STD_DIR="$root/lib/std" "$CT" --freestanding "$tmp/cmode/c.ct" -o "$tmp/cmode/c.c" ) >"$tmp/cmode.log" 2>"$tmp/cmode.err"
+if [ $? -ne 0 ]; then
+    echo "FAIL p64free: the compile-mode freestanding program failed: $(head -2 "$tmp/cmode.err")" >&2
+    fail=1
+else
+    if grep -q '#include *<' "$tmp/cmode/c.c"; then
+        echo "FAIL p64free: compile-mode --freestanding kept system headers:" >&2
+        grep -n '#include *<' "$tmp/cmode/c.c" | head -3 >&2
+        fail=1
+    fi
+    if grep -q 'malloc(' "$tmp/cmode/c.c"; then
+        echo "FAIL p64free: compile-mode --freestanding kept the builtin layer (malloc)" >&2
+        grep -n 'malloc(' "$tmp/cmode/c.c" | head -3 >&2
+        fail=1
+    fi
+fi
+
 [ "$fail" -eq 0 ] && echo "OK p64free"
 exit "$fail"
