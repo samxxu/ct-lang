@@ -913,6 +913,12 @@ impl ParseDeclOps for Parser {
                layer owns the grammar and the constant check */
             n = self->st->parse_stmt();
         } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "extern") == 0) {
+            if (self->c_strict && !self->unit_is_map)
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "a strict C boundary forbids direct C declarations;"
+                    " use <base>.shim.h or a .m.ct mapping",
+                    self->mem->path);
             /* A declaration only, for a symbol the C library owns. Both forms
                are accepted: `extern int flag;` (a variable) and
                `extern int fn(int);` (a prototype); neither defines anything.
@@ -1349,6 +1355,25 @@ impl ParseOps for Parser {
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {
+                if (self->c_strict && !self->unit_is_map
+                    && pp_is(self->lex->toktext, "#ct-raw"))
+                    return tool::diag::ct_sem_error(self->lex->tokline, 1,
+                        "a strict C boundary forbids #ct-raw", self->mem->path);
+                if (self->c_strict && !self->unit_is_map
+                    && strncmp(self->lex->toktext, "#define", 7) == 0) {
+                    /* A function-like macro (`#define F(x) ...`) can drag
+                       arbitrary C in through its expansion; only object-like
+                       constants stay. C requires `(` right after the name. */
+                    const char *d = self->lex->toktext + 7;
+                    while (*d == ' ' || *d == '\t') d++;
+                    while ((*d >= 'a' && *d <= 'z') || (*d >= 'A' && *d <= 'Z')
+                           || (*d >= '0' && *d <= '9') || *d == '_') d++;
+                    if (*d == '(')
+                        return tool::diag::ct_sem_error(self->lex->tokline, 1,
+                            "a strict C boundary forbids function-like '#define';"
+                            " use an object-like macro or <base>.shim.h",
+                            self->mem->path);
+                }
                 if (self->c_strict && !self->unit_is_map
                     && strncmp(self->lex->toktext, "#include", 8) == 0) {
                     const char *t = self->lex->toktext + 8;
