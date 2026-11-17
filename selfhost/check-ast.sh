@@ -723,6 +723,13 @@ else
     bad "p65/regression" "$(cat "$work/p65reg.out" "$work/p65reg.err" | head -4)"
 fi
 
+# PH-65 R7: the boundary is documented in the spec, the package guide and README.
+if bash test/ast/p65_docs.sh >"$work/p65doc.out" 2>"$work/p65doc.err"; then
+    ok "p65/docs"
+else
+    bad "p65/docs" "$(cat "$work/p65doc.out" "$work/p65doc.err" | head -4)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
