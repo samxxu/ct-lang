@@ -81,9 +81,8 @@
 | Phase 68 | 跨单元/泛型/trait 类型检查 | 🗺️ 规划中（未开卡） | v0.67.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
 | Phase 69 | CFG/定值/控制流语义检查 | 🗺️ 规划中（未开卡） | v0.68.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
 | Phase 70 | own/borrow/Drop + 包级 strict | 🗺️ 规划中（未开卡） | v0.69.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
-| Phase 71 | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；B 检查器 opt-in） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [类型方案](planning/typecheck-semantic-plan.md) |
-| Phase 72 | ct-ast 现代语法重写（行为保持；v1.1 train S1） | 🗺️ 规划中（未开卡） | v1.1 train（拟） | [v1 路线](planning/v1-release-plan.md) |
-| Phase 73 | A：strict 类型/语义编译路径（v1.1 train S2） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线](planning/v1-release-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
+| `v1-PH-0` | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；B 检查器 opt-in） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
+| `v1-PH-1` | v1.1 语法现代化（S1）+ A strict 编译路径（S2） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线](planning/v1-release-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。

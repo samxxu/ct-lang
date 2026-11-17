@@ -44,7 +44,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 | 代码 | L1/L2 移到 `history/` 或删除；归档 tag 保留；`docs/agents` 同步 |
 | 语言 | 冻结；B 的检查器 opt-in，不强制 |
 | 迁移 | 旧工程仍用 v0.x 编译器；v1.0 不承诺接受所有旧内部语法 |
-| 版本 | `v1.0.0` 是 MAJOR；需登记 major release deviation（当前 phase→MINOR 规则） |
+| 版本 | `v1.0.0` 是 MAJOR；按 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md) 用 `v1-PH-0`，`MINOR=0`；提案未生效前仍按旧规则登记 deviation |
 
 ### 1.4 退出条件
 
@@ -59,12 +59,14 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 ### 2.1 为什么拆成两段
 
 “全面用最新语法重写 ct-ast”是**大范围行为保持重构**；“A 全量类型/语义进编译路径”是**产品契约变更**。
-两者都很大，混在一个 phase 里无法独立验收/回退。建议作为 **v1.1 release train**：
+两者都很大，不能塞进一个普通 task，但按新编号规则它们属于**同一个 phase 的两个 stage**：
 
-- PH-72：ct-ast 语法现代化（行为保持）；
-- PH-73：A strict 编译路径（依赖 B + PH-72）。
+- `v1-PH-1 / S1`：ct-ast 语法现代化（行为保持）；
+- `v1-PH-1 / S2`：A strict 编译路径（依赖 B + S1）。
 
-### 2.2 PH-72：ct-ast 语法现代化
+S1/S2 不是两个 phase，不分别 bump；v1.1.0 在 S2 收口时只 bump 一次 MINOR。
+
+### 2.2 S1：ct-ast 语法现代化
 
 - 只改 `selfhost/ct-ast/**` 源码，不改用户可见语义/生成 C 行为；
 - 用 v1.0 已冻结的语法：`defer`/`?`/`foreach`/模式/`own`/`borrow`/泛型/trait 等，按适用性逐项采用；
@@ -72,7 +74,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 - 每批任务保持：自举不动点、全量语料生成 C 不变、行为等价；
 - 出口：源码可读性/重复度指标改善；无用户可见变化；独立回退。
 
-### 2.3 PH-73：A（strict 编译路径）
+### 2.3 S2：A（strict 编译路径）
 
 - 以 B1–B4 已完成为前提；A 不是从零重写，而是把 B 的 checker 接到 `ct build --strict`；
 - 先 opt-in：`ct build --strict`、新包默认 strict；普通 C 兼容模式保留；
@@ -82,7 +84,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
   3. CFG/定值/return/控制流可用；
   4. 编译时间预算达标（建议 ≤ +10%，H0 冻结）；
   5. 诊断码稳定、迁移说明；
-  6. PH-72 已完成，源码不被旧写法拖累。
+  6. S1 已完成，源码不被旧写法拖累。
 - 出口：strict 模式编译路径强制；C 兼容模式不强制；默认全局 strict 留到 v2.0 决策。
 
 ### 2.4 A 的“工业级”定位
@@ -101,12 +103,13 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | B 跨单元 | PH-68 | v0.67.0 | opt-in |
 | B CFG | PH-69 | v0.68.0 | opt-in |
 | B own/borrow | PH-70 | v0.69.0 | opt-in |
-| v1.0 AST-only | PH-71 | **v1.0.0** | MAJOR；需 major deviation |
-| v1.1 语法现代化 | PH-72 | v1.1 train | 行为保持，不单独 bump |
-| v1.1 A strict | PH-73 | **v1.1.0** | release train 收口；一次 MINOR |
+| v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0` |
+| v1.1 语法现代化 | `v1-PH-1 / S1` | v1.1 train | 行为保持，不单独 bump |
+| v1.1 A strict | `v1-PH-1 / S2` | **v1.1.0** | 同一 phase 的 S2；一次 MINOR |
 
-> v1.0/v1.1 的版本位与现有 `MINOR == PH-n` 规则冲突，需要在开卡前登记
-> `deviation: major-release`/`release-train`，并由用户签字；不在本规划里擅自改规则。
+> 该编号依赖 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md)
+> 被主规范受理。未受理前，v1.0/v1.1 仍按旧规则登记 `major-release`/`release-train` deviation；
+> 不手改 AGENTS 生成块。
 
 ## 4. 风险
 
@@ -116,15 +119,15 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | 删 L1/L2 丢 oracle | 用 seed 重建 + AST-only 行为等价；历史 tag 保留 |
 | 语法现代化改变生成 C | 每批任务固定“用户可见输出不变”；自举不动点 |
 | A 在 v1.1 被误当 sound | strict profile 文档写清边界；C 兼容模式保留 |
-| v1.1 同时做重构和 A 太大 | release train 拆 PH-72/PH-73，独立回退 |
-| 版本规则冲突 | 开卡前登记 deviation；不绕过 `g1-version`/`g8-version` |
+| v1.1 同时做重构和 A 太大 | 同一 `v1-PH-1` 的 S1/S2，独立任务/回退 |
+| 版本规则冲突 | 先走 major-reset CR；未受理前登记 deviation，不绕过 `g1-version`/`g8-version` |
 
 ## 5. 建议顺序
 
 1. 完成 B（PH-67–70），保持 opt-in；
-2. 开 PH-71（v1.0），先定 seed，再退 L1/L2；
-3. 开 PH-72（v1.1 S1），现代语法重写 ct-ast，行为保持；
-4. 开 PH-73（v1.1 S2），A strict 编译路径；
+2. 开 `v1-PH-0`（v1.0），先定 seed，再退 L1/L2；
+3. 开 `v1-PH-1 / S1`，现代语法重写 ct-ast，行为保持；
+4. 开 `v1-PH-1 / S2`，A strict 编译路径；
 5. v2.0 再讨论全局默认 strict。
 
 不建议把“去旧代码”“语法重写”“A 全量检查”塞进同一个 phase。

@@ -35,6 +35,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [roadmap.md](roadmap.md) | 简要阶段表：阶段 / 主题 / 状态 / 收口版本 / 详情入口 |
+| [proposals/phase-numbering-major-reset.md](proposals/phase-numbering-major-reset.md) | 主规范 CR 提案：每个 MAJOR 从 `PH-0` 重编号，`MINOR == 本 major 内 n`；`v1-PH-0`/`v1-PH-1`，历史 `PH-*` 不复用 | 查看大版本 phase 编号提案 |
 | [planning/v1-release-plan.md](planning/v1-release-plan.md) | v1.0/v1.1 发布路线（**规划中**）：v1.0 AST-only 去旧管线（保留 seed）、B 检查器 opt-in；v1.1 语法现代化 → A strict 编译路径 | 查看 v1 发布路线 |
 | [planning/typecheck-semantic-plan.md](planning/typecheck-semantic-plan.md) | 类型/语义检查规划（**未开卡**）：PH-67 类型核心 → PH-68 跨单元/泛型 → PH-69 CFG → PH-70 own/borrow；全部 opt-in，不进编译路径 | 查看类型检查方案 |
 | [planning/post-58-plan.md](planning/post-58-plan.md) | 58 之后的重排评估：在册项矩阵、依赖、顺序与并行、放弃/合并清单、编号断裂与待裁定 | 决定 58 之后先做什么、哪些不做 |

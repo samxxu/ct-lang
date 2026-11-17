@@ -116,7 +116,7 @@ A 的“一次清零”不可行：234 类 FP 未修、123 个 import 单元未�
 ## 7. v1.0 / v1.1 位置
 
 - v1.0 之前：完成 B1–B4，保持 opt-in；v1.0 只做 AST-only 收口，不把 A 塞进 v1.0。
-- v1.1：PH-72 现代语法重写 ct-ast（行为保持）→ PH-73 A strict 编译路径。
+- v1.1：`v1-PH-1 / S1` 现代语法重写 ct-ast（行为保持）→ `v1-PH-1 / S2` A strict 编译路径。
 - A 的进入条件、seed/旧管线移除、版本 train 见 [v1-release-plan](v1-release-plan.md)。
 - v1.0/v1.1 与 `MINOR == PH-n` 的冲突需开卡前登记 deviation，不在本方案里绕过。
 
