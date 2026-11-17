@@ -32,6 +32,11 @@ GCC 报 `-Wunused-function`（clang 不报，所以本机 macOS 绿）。
 判据：不引用层的产物不再出现 `Str_Drop_drop`；`test/cases/**` 在 GCC 下 `-Wall -Wextra`
 零警告。
 
+## 处置记录
+
+- 修复提交见本轮 `fix(ct-ast): SH-91 …（v0.65.1）`；红证父提交 `aa7213ad`。
+- 验证：`p66/io-empty` OK；`check-warnings` 493/0；`check-all` 11/11。
+
 ## 关联
 
 - 红证：[p66_io_empty 的 `Str_Drop_drop` 断言](../../test/ast/p66_io_empty.sh)；
