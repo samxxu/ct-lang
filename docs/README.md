@@ -55,6 +55,8 @@
 | [design/phase50.md](history/design/phase50.md) · [design/phase51.md](history/design/phase51.md) · [design/phase52.md](design/phase52.md) | 已完成（Phase 50–52，0.50.0 至 0.53.0）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
 | [design/phase53.md](design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
 | [proposals/ct-bare-metal-proposal.md](proposals/ct-bare-metal-proposal.md) | 裸机生成契约提案（**待 CT 组评估**）：数组/const vptr 静默坏 C、constructor、按需 std 单元、`--alloc`、const vtable；建议 P0 patch + PH-64 | 查看裸机生成契约提案 |
+| [proposals/ct-pkg-index-proposal.md](proposals/ct-pkg-index-proposal.md) | 索引仓提案（**待目标组评估**）：release dispatch + 定时扫描生成、签名/pin、digest 复用、allowlist；不在客户端扫描组织 | 查看包索引维护提案 |
+| [proposals/ct-pkg-package-maintainer-rules.md](proposals/ct-pkg-package-maintainer-rules.md) | 包仓维护者规则：`ct.pkg`、semver tag、release dispatch、digest、撤回与安全；配套索引提案 | 查看包仓发布规则 |
 | [proposals/ct-hardware-pilot-proposal.md](proposals/ct-hardware-pilot-proposal.md) | 工程试点提案（**待 CT 组评估**）：不新增语法，用真实 MCU 验证 CT 生成 C 的上层业务/驱动封装、交叉编译、volatile/ISR/DMA/ABI/实时性/调试；底层保留 C/汇编 | 查看硬件参考工程提案 |
 | [proposals/ct-model-export-proposal.md](proposals/ct-model-export-proposal.md) | 模型导出 `--emit-model` 提案（Phase 59 依据） | 查看编译器模型导出设计 |
 | [proposals/ct-str-char-conversion-proposal.md](proposals/ct-str-char-conversion-proposal.md) | 语言侧使用反馈提案（**待项目组评估**）：`Str` → `char *` 借用视图、`char *` → `Str` 三处隐式深拷贝、目标类型决定产出与归属；实现口径与排期由项目组裁定 | 查看字符串接口互操作提案 |
