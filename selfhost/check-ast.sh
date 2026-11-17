@@ -675,6 +675,26 @@ else
     bad "p64_freestanding" "$(cat "$work/p64fs.out" "$work/p64fs.err")"
 fi
 
+# TEST-20: the generated C must not only be symbol-clean, it must boot on a
+# Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
+# tools: without them the probe says `skip`, it never pretends to pass.
+bash test/baremetal-qemu/run.sh "$work/ct-ast" >"$work/bmq.out" 2>"$work/bmq.err"
+bmq=$?
+case "$bmq" in
+    0) ok "baremetal_qemu (boot ok, SysTick ISR fires, clean exit)" ;;
+    77) skip "baremetal_qemu" "$(sed -n '1p' "$work/bmq.err")" ;;
+    *) bad "baremetal_qemu" "$(grep -m1 'FAIL' "$work/bmq.out" "$work/bmq.err" 2>/dev/null || sed -n '1,3p' "$work/bmq.err")" ;;
+esac
+if [ "$bmq" -ne 77 ]; then
+    # Self-test: a compiler that cannot build must make the probe red, not green.
+    sh test/baremetal-qemu/run.sh "$(command -v false)" >/dev/null 2>&1
+    if [ $? -eq 1 ]; then
+        ok "baremetal_qemu self-test (a broken compiler is red)"
+    else
+        bad "baremetal_qemu self-test" "run.sh accepted a failing compiler"
+    fi
+fi
+
 # PH-64 T3: --alloc maps the compiler's own heap calls and the source's
 # malloc/free onto the target's allocator, so a -nostdlib link needs no libc.
 if bash test/ast/p64_alloc.sh "$work/ct-ast" >"$work/p64al.out" 2>"$work/p64al.err"; then
