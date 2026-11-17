@@ -240,6 +240,9 @@ struct Emitter {
     /* PH-64 T2: slot-parallel liveness; a dead layer unit is not included and
        not emitted, so the product set follows what the program can reach. */
     int *builtin_live;
+    /* PH-66 R2: bit0 <stdio.h>, bit1 <wchar.h> -- headers the unit's direct
+       libc I/O calls need. Bound by the module layer before each unit. */
+    int  io_mask;
     struct MapTable  *maps;   int *nmaps;
     struct Call *calls;  int *ncalls;
     int  *build_mode;
@@ -622,6 +625,10 @@ static int emit_map_prologues(struct Emitter *e, int u)
         }
         for (n = e->arena->nodes[e->units[d].prog].a; n >= 0; n = e->arena->nodes[n].next) {
             if (e->arena->nodes[n].kind != N_PP) continue;
+            if ((e->io_mask & 1)
+                && strcmp(e->arena->nodes[n].text, "#include <stdio.h>") == 0) continue;
+            if ((e->io_mask & 2)
+                && strcmp(e->arena->nodes[n].text, "#include <wchar.h>") == 0) continue;
             dup = 0;
             for (i = 0; i < nseen; i++)
                 if (strcmp(seen[i], e->arena->nodes[n].text) == 0) dup = 1;
@@ -1387,6 +1394,10 @@ static int emit_unit_body(struct Emitter *self, int u)
             self->version, self->path);
     fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
           self->out);
+    /* PH-66 R2: the headers the unit's own direct calls need, before anything
+       that may repeat them (the layer prologues below). */
+    if (self->io_mask & 1) fputs("#include <stdio.h>\n", self->out);
+    if (self->io_mask & 2) fputs("#include <wchar.h>\n", self->out);
     /* PH-64: with --alloc the target's allocator is declared here, so the
        mapped calls below have a prototype without pulling <stdlib.h>. */
     if (self->alloc_map && self->alloc_map[0]) {
@@ -1431,7 +1442,13 @@ static int emit_unit_body(struct Emitter *self, int u)
     if ((*self->line_mode)) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
 
     for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
-        if (self->arena->nodes[n].kind == N_PP) fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+        if (self->arena->nodes[n].kind == N_PP) {
+            if ((self->io_mask & 1)
+                && strcmp(self->arena->nodes[n].text, "#include <stdio.h>") == 0) continue;
+            if ((self->io_mask & 2)
+                && strcmp(self->arena->nodes[n].text, "#include <wchar.h>") == 0) continue;
+            fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+        }
     if (self->sym->atomic_used) {
         fputs(
 "static inline __attribute__((unused)) int __ct_atomic_load_int(_Atomic(int) *p)\n"
@@ -2619,7 +2636,13 @@ impl EmitOps for Emitter {
         /* compile mode is one file: the parser's prefix is this file's */
         self->gprefix = self->sym->ns;
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
-            if (self->arena->nodes[n].kind == N_PP) fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+            if (self->arena->nodes[n].kind == N_PP) {
+            if ((self->io_mask & 1)
+                && strcmp(self->arena->nodes[n].text, "#include <stdio.h>") == 0) continue;
+            if ((self->io_mask & 2)
+                && strcmp(self->arena->nodes[n].text, "#include <wchar.h>") == 0) continue;
+            fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+        }
         if (self->alloc_map && self->alloc_map[0]) {
             fprintf(self->out, "extern void *%s(__SIZE_TYPE__);\n", self->alloc_m);
             fprintf(self->out, "extern void %s(void *);\n", self->alloc_f);
@@ -6419,6 +6442,7 @@ void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
     g_emit.build_mode = build_mode;
     g_emit.line_mode = line_mode;
     g_emit.runtime_checks = runtime_checks;
+    g_emit.io_mask = 0;
     g_emit.abi_mode = abi_mode;
     g_emit.abi_root = abi_root;
     g_emit.abi_exports = abi_exports;
@@ -6435,6 +6459,7 @@ void ct_emit_bind_flags(int *freestanding, char *alloc_map)
 }
 
 pub void ct_emit_bind_builtin_live(int *live);
+pub void ct_emit_bind_io_mask(int mask);
 void ct_emit_bind_builtin_live(int *live)
 {
     g_emit.builtin_live = live;
@@ -6560,4 +6585,9 @@ pub int ct_emit_error_line(void);
 int ct_emit_error_line(void)
 {
     return g_emit.failline;
+}
+
+void ct_emit_bind_io_mask(int mask)
+{
+    g_emit.io_mask = mask;
 }

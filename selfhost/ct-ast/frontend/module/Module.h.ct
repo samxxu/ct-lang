@@ -93,7 +93,7 @@ pub trait ModuleOps {
     int  builtin_slot(int u);
     int  builtin_live_for(int u);
     int  c_boundary_for(const char *path);
-    int  io_header_mask(int from, int to);
+    int  io_header_mask(int unit);
     int  unit_reaches(int from, int to);
     int  register_visible_type_aliases(int u);
     int  scan_forward_type_aliases(const char *path, int owner);
@@ -1799,8 +1799,7 @@ impl ModuleOps for Module {
                 for (k = 0; k < self->nbuiltin; k++)
                     if (self->builtin_units[k] == i) bu = 1;
                 if (bu) continue;
-                mask |= self->io_header_mask(self->units[i].call_start,
-                                            self->units[i].call_end);
+                mask |= self->io_header_mask(i);
             }
             if (mask & 1) printf("stdio.h\n");
             if (mask & 2) printf("wchar.h\n");
@@ -2427,15 +2426,16 @@ cmd_too_long:
     }
 
     /* PH-66 R1: bit0 = <stdio.h>, bit1 = <wchar.h>; `to` is exclusive. */
-    int io_header_mask(int from, int to)
+    /* PH-66 R1/R2: bit0 = <stdio.h>, bit1 = <wchar.h>. `unit < 0` covers every
+       call (compile mode merges the layer and the input into one unit). */
+    int io_header_mask(int unit)
     {
         const char *h;
         int i, mask = 0;
 
         (void)self;
-        (void)from;
-        (void)to;
         for (i = 0; i < frontend::parse::ct_parse_io_call_count(); i++) {
+            if (unit >= 0 && frontend::parse::ct_parse_io_call_unit(i) != unit) continue;
             h = io_header_for(frontend::parse::ct_parse_io_call_name(i));
             if (h == 0) continue;
             if (strcmp(h, "stdio.h") == 0) mask |= 1;
@@ -2464,6 +2464,7 @@ cmd_too_long:
         self->path = self->units[u].path;
         self->mem->path = self->path;
         self->sym->path = self->mem->path;
+        backend::emit::ct_emit_bind_io_mask(self->io_header_mask(u));
         if (backend::emit::ct_emit_unit(u) != 0) {
             why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail_emit(why);
@@ -2768,12 +2769,10 @@ struct Module *module_get(void)
    dispatches; the name and the version it sets through the object itself. */
 pub void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *p, void *cache);
 /* PH-66 R1: the driver and the build path both need the header mask. */
-pub int ct_module_io_mask(int from, int to);
-int ct_module_io_mask(int from, int to)
+pub int ct_module_io_mask(int unit);
+int ct_module_io_mask(int unit)
 {
-    if (from < 0) from = 0;
-    if (to > g_module.p->ncalls) to = g_module.p->ncalls;
-    return g_module.io_header_mask(from, to);
+    return g_module.io_header_mask(unit);
 }
 
 void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void *p, void *cache)
