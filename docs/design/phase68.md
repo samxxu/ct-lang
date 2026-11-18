@@ -79,3 +79,5 @@
   438 含 import 多单元，跨单元可检属 PH-69）；
 - `loop_count_type` 的 L22-5 报告是有意行为，列入 skip 表；
 - 内建容器（`Vec<T>.push`）的实参类型仍不检查，属 PH-69 的跨单元/泛型范围。
+
+复核记录：[2026-11-19-phase68-rev-verdict.md](../reviews/2026-11-19-phase68-rev-verdict.md)（REV: 通过）。
