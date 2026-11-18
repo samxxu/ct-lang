@@ -39,6 +39,8 @@ HOME="$work/out" timeout 240 "$renode" --disable-gui --plain -P -1 \
 diff -u "$here/prog.expected.out" "$work/out/uart.txt" >"$work/diff" || {
     echo "FAIL: nRF52840 UART output differs" >&2
     head -10 "$work/diff" >&2
+    echo "--- renode log (tail) ---" >&2
+    tail -8 "$work/renode.log" >&2
     od -c "$work/out/uart.txt" 2>/dev/null | head -5 >&2
     exit 1
 }
