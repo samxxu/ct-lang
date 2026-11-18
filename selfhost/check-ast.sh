@@ -887,6 +887,13 @@ else
     bad "PH-69-R4 containers" "$(sed -n '1,8p' "$work/p69ct.out")"
 fi
 
+sh test/ast/p70_flow.sh "$work/ct-ast" >"$work/p70f.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-70-R1 flow (break/continue context)"
+else
+    bad "PH-70-R1 flow" "$(sed -n '1,8p' "$work/p70f.out")"
+fi
+
 sh test/ast/p69_fp.sh "$work/ct-ast" >"$work/p69fp.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-69-E69-2 fp (import units clean)"

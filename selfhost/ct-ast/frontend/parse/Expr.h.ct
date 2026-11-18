@@ -398,6 +398,9 @@ pub struct Expr {
        --types`. Every phase-32 judgement reads this flag and stays silent
        when it is 0. */
     int *types_mode;
+    /* PH-70-R1: points at the parser's `check_mode` so statement-level flow
+       checks (break/continue context) can be gated on `ct check`. */
+    int *check_mode;
     /* Phase 32: the source position of the expression under judgement and the
        argument index L32-6 names. The caller sets them just before calling
        `chk_assignable`; an AST node carries only its line. */

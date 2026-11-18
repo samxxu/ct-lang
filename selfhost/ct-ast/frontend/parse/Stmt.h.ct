@@ -2205,6 +2205,10 @@ impl StmtOps for Stmt {
                     return tool::diag::ct_sem_error(self->lex->tokline, bcol,
                         "err: break is not allowed in a switch", self->mem->path);
             }
+            if (!is_err && self->ex->check_mode && *self->ex->check_mode
+                && self->nbreak == 0)
+                return tool::diag::ct_sem_error(self->lex->tokline, bcol,
+                    "break is only allowed in a loop or switch", self->mem->path);
             if (self->sup->expect(";") != 0) return -1;
             if (self->nbreak > 0
                 && retire_before_jump(self, s, self->break_base[self->nbreak - 1]) < 0) return -1;
@@ -2232,6 +2236,10 @@ impl StmtOps for Stmt {
                     return tool::diag::ct_sem_error(self->lex->tokline, ccol,
                         "err: break/continue is only allowed in a loop", self->mem->path);
             }
+            if (!is_err && self->ex->check_mode && *self->ex->check_mode
+                && self->ncont == 0)
+                return tool::diag::ct_sem_error(self->lex->tokline, ccol,
+                    "continue is only allowed in a loop", self->mem->path);
             if (self->sup->expect(";") != 0) return -1;
             if (self->ncont > 0
                 && retire_before_jump(self, s, self->cont_base[self->ncont - 1]) < 0) return -1;
