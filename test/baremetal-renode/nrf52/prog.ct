@@ -1,0 +1,9 @@
+/* PH-67-R2: the same CT shape as the STM32F4 probe, but on nRF52840. */
+#include "board.h"
+
+int main(void)
+{
+    uart_puts("boot ok\n");
+    uart_puts("mcu=nrf52\n");
+    return 0;
+}
