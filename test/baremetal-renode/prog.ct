@@ -3,6 +3,7 @@
    freestanding product runs on a real MCU memory map, not just a generic
    Cortex-M one. */
 #include "board.h"
+#include "clock.h"
 
 struct Counter {
     int on;
@@ -14,7 +15,11 @@ int main(void)
     struct Counter c;
     c.on = 0;
     c.seen = 0;
+    clock_init_168();
     uart_puts("boot ok\n");
+    uart_puts("clk=");
+    uart_putu(clock_hz() / 1000000u);
+    uart_puts("\n");
     uart_puts(button_pressed() ? "btn=1\n" : "btn=0\n");
     systick_start(500000);
     c.on = 1;

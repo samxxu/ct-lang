@@ -796,6 +796,13 @@ case "$bmr" in
     *) bad "baremetal_renode" "$(grep -m1 'FAIL' "$work/bmr.out" "$work/bmr.err" 2>/dev/null || sed -n '1,3p' "$work/bmr.err")" ;;
 esac
 
+sh test/ast/p67_clock.sh "$work/ct-ast" >"$work/p67clock.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-67-R1 clock (PLL 168MHz, BRR derived)"
+else
+    bad "PH-67-R1 clock" "$(sed -n '1,3p' "$work/p67clock.out")"
+fi
+
 # PH-64 T3: --alloc maps the compiler's own heap calls and the source's
 # malloc/free onto the target's allocator, so a -nostdlib link needs no libc.
 if bash test/ast/p64_alloc.sh "$work/ct-ast" >"$work/p64al.out" 2>"$work/p64al.err"; then

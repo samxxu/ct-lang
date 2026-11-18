@@ -1,6 +1,7 @@
 /* STM32F407 register glue. Addresses are the reference-manual ones Renode's
    STM32F4 platform maps: RCC, GPIOA, USART2 and the ARM SysTick block. */
 typedef unsigned int u32;
+#include "clock.h"
 
 #define RCC         ((volatile u32 *)0x40023800)
 #define RCC_AHB1ENR (RCC[0x30 / 4])
@@ -30,7 +31,8 @@ static void usart2_init(void)
     GPIOA_MODER = (GPIOA_MODER & ~((3u << 4) | (3u << 6))) | (2u << 4) | (2u << 6);
     GPIOA_AFR0 = (GPIOA_AFR0 & ~((0xFu << 8) | (0xFu << 12)))
                | (7u << 8) | (7u << 12);
-    USART_BRR = 0x008B;
+    /* APB1 is 42 MHz after clock_init_168(); the divider follows from it. */
+    USART_BRR = uart_brr(42000000u);
     USART_CR1 = (1u << 13) | (1u << 3) | (1u << 2);
 }
 
@@ -38,6 +40,21 @@ void uart_putc(char c)
 {
     while ((USART_SR & (1u << 7)) == 0) { }
     USART_DR = (u32)(unsigned char)c;
+}
+
+void uart_putu(unsigned int v)
+{
+    char buf[12];
+    int i = 0;
+    if (v == 0) {
+        uart_putc('0');
+        return;
+    }
+    while (v > 0 && i < (int)sizeof(buf)) {
+        buf[i++] = (char)('0' + (v % 10u));
+        v = v / 10u;
+    }
+    while (i > 0) uart_putc(buf[--i]);
 }
 
 void uart_puts(const char *s)
