@@ -21,7 +21,12 @@ for f in "$root"/test/ast/*/prog.ct "$root"/examples/*/prog.ct "$root"/examples/
     [ -f "$f" ] || continue
     name=$(basename "$(dirname "$f")")
     case "$f" in
-        *neg_*|*_bad*|*err_*) continue ;;
+        *neg_*|*_bad*) continue ;;
+    esac
+    # Error fixtures live in fixed directories; 234_err_return_contract is a
+    # *legal* fixture (the FP this phase fixed), so it must stay in the corpus.
+    case "$f" in
+        */errors/*|*/check_errors/*|*/p48_errors/*|*/p40_return_err/*) continue ;;
     esac
     case " $SKIP " in *" $name "*) continue ;; esac
     out=$tmp/out
