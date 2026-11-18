@@ -3782,10 +3782,20 @@ impl StmtOps for Stmt {
                         char out[MAX_TEXT];
                         int is_zero = 0;
                         if (self->ex->chk_type(e, out, sizeof out, &is_zero) == 0) {
+                            int array_lit_ok;
                             self->ex->chk_line = eline;
                             self->ex->chk_col = ecol;
                             self->ex->chk_arg = 0;
-                            if (self->ex->chk_assignable(typebuf, out, is_zero, 1) != 0)
+                            /* PH-68-R1: an array declarator keeps its dimension
+                               in text3, not in typebuf, so `char s[] = "x"` used
+                               to compare `char` against `char *`. Accept a
+                               string literal for a char array. */
+                            array_lit_ok = self->arena->nodes[n].text3[0] != 0
+                                && strcmp(typebuf, "char") == 0
+                                && (strcmp(out, "char *") == 0
+                                    || strcmp(out, "const char *") == 0);
+                            if (!array_lit_ok
+                                && self->ex->chk_assignable(typebuf, out, is_zero, 1) != 0)
                                 return -1;
                         }
                     }
