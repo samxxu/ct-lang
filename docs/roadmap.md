@@ -78,13 +78,22 @@
 | Phase 65 | 严格 C 边界（外部库/用户默认 strict；`.m.ct` 映射例外；CT 仓内 1.0 前代码豁免） | ✅ 完成 | v0.64.0 | [卡](design/phase65.md) · [battle](../battle/cinclude-2/verdict.md) |
 | Phase 66 | libc I/O 内置例外（按调用补头；空程序零系统头） | ✅ 完成 | v0.65.0 | [卡](design/phase66.md) · [D-008](decisions/D-008.md) · [SH-89](../issues/selfhost/sh89-libc-io-auto-include.md) |
 | Phase 67 | 无真机硬件能力扩展（PLL / nRF52840 / FreeRTOS / DMA / GDB） | ✅ 完成 | v0.66.0 | [卡](design/phase67.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
-| Phase 67 | v0-PH-67 phase ID 迁移与文档漂移审查（规划卡；不执行） | ⬜ 规划中（未开卡） | v0.66.0（拟） | [卡](design/phase67.md) · [blockers](planning/phase-migration-blockers.md) |
 | `v0-PH-68` | 类型核心（`ct check --types`；修 234 误报） | 🗺️ 规划中（未开卡） | v0.67.0（拟） | [方案](planning/typecheck-semantic-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
 | `v0-PH-69` | 跨单元/泛型/trait 类型检查 | 🗺️ 规划中（未开卡） | v0.68.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
 | `v0-PH-70` | CFG/定值/控制流语义检查 | 🗺️ 规划中（未开卡） | v0.69.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
 | `v0-PH-71` | own/borrow/Drop + 包级 strict | 🗺️ 规划中（未开卡） | v0.70.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
+| `v0-PH-72` | 静默错误与诊断批（LANG-3 MAX_CALLS / LANG-4 下标类型 / LANG-11 产物冲突 / LANG-16 诊断列 / DF-1 预处理截断 / SH-76 内置层误诊 / SH-18+LANG-15 限定名） | 🗺️ 规划中（未开卡） | v0.71.0（拟） | [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
+| `v0-PH-73` | 字段可见性与 ABI（LANG-9：`pub` 决定头文件导出面） | 🗺️ 规划中（未开卡） | v0.72.0（拟） | [LANG-9](../issues/lang/lang-9-struct-field-visibility-abi.md) |
+| `v0-PH-74` | 模型导出（PH-59 M1/M2；依赖 J11 行列与 SH-79 两 facet） | 🗺️ 规划中（未开卡） | v0.73.0（拟） | [PH-59 卡](design/phase59.md) · [SH-79](../issues/selfhost/sh79-build-lib-emit-map-silent.md) |
+| `v0-PH-75` | 闭包作方法实参（SH-65 / SH-67 同族） | 🗺️ 规划中（未开卡） | v0.74.0（拟） | [SH-65](../issues/selfhost/sh65-closure-as-method-arg.md) · [SH-67](../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
 | `v1-PH-0` | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；B 检查器 opt-in） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
 | `v1-PH-1` | v1.1 语法现代化（S1）+ A strict 编译路径（S2） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线](planning/v1-release-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
+| `HW-1` | **真板 pilot**（REQ-HW-020：真实板卡 + 厂商 HAL + RTOS；含 [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) DMA 真实搬运） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [需求](planning/hardware-readiness-requirements.md) · [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) |
+| `HW-2` | **第二厂商真板**（nRF52840 / RP2040 的烧录、调试与电气验证） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [PH-67 卡](design/phase67.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
+
+> 硬件类工作统一排在最后（`HW-*`）：无真机时不阻塞、不伪造；模拟器侧能力已在
+> PH-64 / PH-67 交付。TEST-22 归入 `HW-1`。phase-ID 迁移（`v0-PH-*`）是横切任务，
+> 不占 phase 号，见 [blockers](planning/phase-migration-blockers.md)。
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。
