@@ -36,6 +36,11 @@ jobs:
           # runner, so prove startup with a GUI-less empty machine instead.
           .temp/renode-linux/renode --disable-gui --plain -P -1 \
             -e "mach create" -e "quit"
+          # TEST-21/PH-67-R3: FreeRTOS kernel source is fetched, never vendored.
+          mkdir -p .temp/FreeRTOS-Kernel
+          curl -fsSL -o /tmp/freertos.tar.gz \
+            https://codeload.github.com/FreeRTOS/FreeRTOS-Kernel/tar.gz/refs/tags/V11.1.0
+          tar -xzf /tmp/freertos.tar.gz -C .temp/FreeRTOS-Kernel --strip-components=1
       - name: hard gates
         run: |
           set -o pipefail

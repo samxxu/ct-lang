@@ -1,0 +1,10 @@
+/* PH-67-R3: CT main hands control to FreeRTOS (tasks + queue). */
+#include "board.h"
+#include "rtos.h"
+
+int main(void)
+{
+    uart_puts("boot ok\n");
+    rtos_start();
+    return 0;
+}
