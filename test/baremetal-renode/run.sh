@@ -97,7 +97,6 @@ if [ -n "$undef" ]; then
     exit 1
 fi
 
-rescript="mach create \"stm32f4\"; machine LoadPlatformDescription @platforms/boards/stm32f4_discovery-kit.repl; sysbus LoadELF @/w/fw.elf; sysbus.usart2 CreateFileBackend @/w/uart.txt; start; emulation RunFor \"00:00:00.02\"; quit"
 if [ "$mode" = local ]; then
     HOME="$work/home" timeout 300 "$root/.temp/renode-linux/renode" --disable-gui --plain -P -1 \
         -e "mach create \"stm32f4\"" \
@@ -135,7 +134,7 @@ fi
 # Renode's quit may not terminate promptly on slow hosts; the UART file is the
 # judged artefact, so only a run without output is a failure.
 if [ "$rc" -eq 124 ] && [ ! -s "$work/out/uart.txt" ]; then
-    echo "FAIL: Renode produced no output within 300s" >&2
+    echo "FAIL: Renode produced no output within the 8s window" >&2
     sed 's/^/  /' "$work/renode.log" | tail -6 >&2
     exit 1
 fi
