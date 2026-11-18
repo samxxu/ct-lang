@@ -22,19 +22,19 @@ rm -rf "$work"; mkdir -p "$work/c" "$work/out"
 # Kernel sources are third-party: build them without -Wall/-Wextra. The app
 # (startup/board/rtos/prog) stays warning-free.
 "$armcc" -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -O1 -w \
-    -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
+    -I "$here" -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
     -c "$kernel/tasks.c" -o "$work/tasks.o" || exit 1
 "$armcc" -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -O1 -w \
-    -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
+    -I "$here" -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
     -c "$kernel/queue.c" -o "$work/queue.o" || exit 1
 "$armcc" -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -O1 -w \
-    -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
+    -I "$here" -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
     -c "$kernel/list.c" -o "$work/list.o" || exit 1
 "$armcc" -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -O1 -w \
-    -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
+    -I "$here" -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
     -c "$kernel/portable/GCC/ARM_CM3/port.c" -o "$work/port.o" || exit 1
 "$armcc" -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -O1 -w \
-    -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
+    -I "$here" -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
     -c "$kernel/portable/MemMang/heap_4.c" -o "$work/heap.o" || exit 1
 
 "$armcc" -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -nostdlib -O1 \
