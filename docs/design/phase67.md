@@ -47,7 +47,7 @@
 | R2 | `tools/phase_version.py` 适配层 + W1 双认 | 旧/新形态都过 g1/g4/g8；旧形态负例在 W2 红 | M |
 | R3 | ID 文本迁移 + 路径策略（保留/stub） | `check-docs` 零 dead；外链 stub 可打开 | M |
 | R4 | W2 关窗 + 旧形态负例 | 旧 `PH-*` 在 W2 必红 | S |
-| R5 | 文档漂移审查 | roadmap/卡/版本/状态/链接/空号报告；发现立 `DOC-*` | M |
+| R5 | 文档漂移审查（[DOC-66](../../issues/docs/doc-66-spec-audit-followup.md)） | roadmap/卡/版本/状态/链接/空号报告；审计项逐条勾掉 | M |
 | R6 | AGENTS/phase 指针/文档同步 | 实例化行、session-map、README 一致 | S |
 
 ## 4 退出判据
@@ -58,7 +58,7 @@
 | E67-2 | W1 旧/新形态都过 g1/g4/g8；W2 旧形态负例红 |
 | E67-3 | 活跃文档无裸 `PH-*`（账本/battle/别名/历史 tag 除外） |
 | E67-4 | 旧路径可用：stub 或保留路径能打开；`check-docs` 零 dead |
-| E67-5 | 文档漂移报告逐项有去向；不与迁移提交混提 |
+| E67-5 | 文档漂移报告逐项有去向；DOC-66 逐项勾掉；不与迁移提交混提 |
 | E67-6 | 任务清单每项可独立验收（6.6 T-6） |
 
 ## 5 不做什么
