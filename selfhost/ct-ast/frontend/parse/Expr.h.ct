@@ -6947,6 +6947,69 @@ impl ExprTypes for Expr {
             if (snprintf(out, (size_t)cap, "%s", oval) >= cap) return -1;
             return 0;
         }
+        case N_CAST:
+            /* PH-68-R2: a cast's type is its target spelling. */
+            snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text);
+            return 0;
+        case N_TERN: {
+            /* Both arms must agree; the node's value type is that type. */
+            char t1[MAX_TEXT];
+            char t2[MAX_TEXT];
+            int z1 = 0;
+            int z2 = 0;
+            if (self->chk_type(self->arena->nodes[n].b, t1, sizeof t1, &z1) != 0)
+                return -1;
+            if (self->chk_type(self->arena->nodes[n].c, t2, sizeof t2, &z2) != 0)
+                return -1;
+            if (strcmp(t1, t2) != 0) return -1;
+            snprintf(out, (size_t)cap, "%s", t1);
+            return 0;
+        }
+        case N_UNARY: {
+            int op = (int)self->arena->nodes[n].aux;
+            if (op == U_NOT || op == U_BNOT) {
+                snprintf(out, (size_t)cap, "%s", "int");
+                return 0;
+            }
+            if (op == U_NEG) {
+                char t[MAX_TEXT];
+                int z = 0;
+                if (self->chk_type(self->arena->nodes[n].a, t, sizeof t, &z) != 0)
+                    return -1;
+                if (strcmp(t, "int") != 0 && strcmp(t, "double") != 0) return -1;
+                snprintf(out, (size_t)cap, "%s", t);
+                return 0;
+            }
+            return -1;
+        }
+        case N_BIN: {
+            int op = (int)self->arena->nodes[n].aux;
+            if ((op >= B_LT && op <= B_NE) || op == B_AND || op == B_OR) {
+                snprintf(out, (size_t)cap, "%s", "int");
+                return 0;
+            }
+            if ((op >= B_ADD && op <= B_MOD) || op == B_XOR
+                || op == B_BAND || op == B_BOR || op == B_SHL || op == B_SHR) {
+                char l[MAX_TEXT];
+                char r[MAX_TEXT];
+                int zl = 0;
+                int zr = 0;
+                if (self->chk_type(self->arena->nodes[n].a, l, sizeof l, &zl) != 0)
+                    return -1;
+                if (self->chk_type(self->arena->nodes[n].b, r, sizeof r, &zr) != 0)
+                    return -1;
+                if (strcmp(l, "double") == 0 || strcmp(r, "double") == 0) {
+                    snprintf(out, (size_t)cap, "%s", "double");
+                    return 0;
+                }
+                if (strcmp(l, "int") == 0 && strcmp(r, "int") == 0) {
+                    snprintf(out, (size_t)cap, "%s", "int");
+                    return 0;
+                }
+                return -1;
+            }
+            return -1;
+        }
         case N_VAR:
         case N_MEMBER:
         case N_ARROW:
