@@ -44,7 +44,7 @@ while [ $i -lt 100 ]; do
     sleep 0.2; i=$((i+1))
 done
 
-timeout 60 "$gdb" -q -batch \
+timeout 60 "$gdb" -q -batch "$work/fw.elf" \
     -ex "set confirm off" \
     -ex "target remote :3333" \
     -ex "break main" \
