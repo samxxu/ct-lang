@@ -560,9 +560,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.65.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.66.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.65.1；Phase 66 已收口（libc I/O 按调用补头）；Phase 43–53 已收口，Phase 54 S0–S7 全部完成（S4 包仓对齐属包外）。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.66.0；Phase 67 已收口（无真机硬件扩展：PLL/nRF52840/FreeRTOS/DMA/GDB）；Phase 43–53 已收口，Phase 54 S0–S7 全部完成（S4 包仓对齐属包外）。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界

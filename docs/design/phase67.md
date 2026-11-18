@@ -1,6 +1,6 @@
 # Phase 67 — 无真机硬件能力扩展（时钟 / 第二厂商 / RTOS / DMA / GDB）
 
-> **状态：实施中**（2026-11-18 立项；夜间自主执行）。
+> **状态：完成**（2026-11-18 收口；`v0.66.0`；R1–R5 全绿，R6 收口）。
 > **依据**：[TEST-21](../../issues/testing/test21-baremetal-renode-stm32f4.md)、
 > [hardware-readiness-requirements](../planning/hardware-readiness-requirements.md)（REQ-HW-010/011）。
 > **前置**：PH-66 收口（`v0.65.1`）；TEST-21 已在 CI 绿。
@@ -91,3 +91,23 @@
 phase-ID 迁移（主规范 1.16/1.17 的 `v0-PH-*`）尚未开始（见
 [phase-migration-blockers](../planning/phase-migration-blockers.md)）。本卡沿用现有
 legacy 布局 `docs/design/phase67.md`；迁移启动时按 PN-5 机械改名，不单独预迁移。
+
+## 8 收口对照表（2026-11-18，v0.66.0）
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E67-1 | `bash test/ast/p67_clock.sh <ct-ast>`；CI `baremetal_renode` | `OK p67/clock (168MHz, BRR derived from PCLK)`；CI `ok PH-67-R1 clock` |
+| E67-2 | `bash test/ast/p67_nrf52.sh <ct-ast>` | CI `ok PH-67-R2 nRF52840 (second vendor: flash 0x0, UART0)` |
+| E67-3 | `bash test/ast/p67_freertos.sh <ct-ast>` | CI `ok PH-67-R3 FreeRTOS (2 tasks, queue, SysTick/PendSV/SVC)` |
+| E67-4 | `bash test/ast/p67_dma.sh <ct-ast>` | CI `ok PH-67-R4 DMA (Stream6 descriptor registers)`；真实搬运见 [TEST-22](../../issues/testing/test22-dma-real-transfer-hardware-gated.md) |
+| E67-5 | `bash test/ast/p67_gdb.sh <ct-ast>` | CI `ok PH-67-R5 GDB (breakpoint main)` |
+| E67-6 | `bash selfhost/check-all.sh` | 11/11；版本 `v0.66.0` + annotated tag |
+
+任务级红证：R1 `8b165d03`、R2 `91aacb1f`、R3 `345e6c01`、R4 `ccb2778d`、R5 `cb88daa1`（均为对应实现提交的父提交）。
+
+实现提交：R1 `da40abf7`、R2 `f95883b0`、R3 `c2cf8cc1`、R4 `cc2de5ce`、R5 `ee830378`。
+
+CI 证据：run `44335562103`（三 job 全绿），逐项 `ok PH-67-R1…R5`。
+
+边界：Linux CI 的 Renode 是唯一运行点（macOS 沙箱内不可用，夜/日间代理不改权限）；
+DMA 真实搬运、烧录、电气特性均未验证。

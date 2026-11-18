@@ -20,4 +20,4 @@
 
 > 本仓库当前为单会话工作，三类常驻对话未建；见 `AGENTS.md` 的 `deviation: single-session-workflow`。
 | PH-66 libc I/O 内置例外（R1–R5 / E66-1–E66-6） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.65.0 |
-| PH-67 无真机硬件能力扩展（R1–R6 / E67-1–E67-6） | 当前 DSH 会话（lead）+ 夜间调度会话 | EDITOR / DEV / VERIFY | PH-67 🚧 |
+| PH-67 无真机硬件能力扩展（R1–R6 / E67-1–E67-6） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.66.0 |
