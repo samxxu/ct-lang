@@ -32,7 +32,7 @@ undef=$("$nm" -u "$work/fw.elf" 2>/dev/null)
 
 HOME="$work/out" timeout 240 "$renode" --disable-gui --plain -P -1 \
     -e "mach create \"nrf52\"" \
-    -e "machine LoadPlatformDescription @platforms/cpus/nrf52840.repl" \
+    -e "machine LoadPlatformDescription @$here/nrf52.repl" \
     -e "sysbus LoadELF @$work/fw.elf" \
     -e "sysbus.uart0 CreateFileBackend @$work/out/uart.txt" \
     -e "start" -e "sleep 2" -e "sysbus.cpu" -e "sleep 6" -e "quit" >"$work/renode.log" 2>&1
