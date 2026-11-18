@@ -1,0 +1,28 @@
+/* PH-66/TEST-21: the same state-machine probe as the QEMU smoke, but on an
+   STM32F4 Discovery model (USART2 + SysTick + the user button). It proves the
+   freestanding product runs on a real MCU memory map, not just a generic
+   Cortex-M one. */
+#include "board.h"
+
+struct Counter {
+    int on;
+    int seen;
+};
+
+int main(void)
+{
+    struct Counter c;
+    c.on = 0;
+    c.seen = 0;
+    uart_puts("boot ok\n");
+    uart_puts(button_pressed() ? "btn=1\n" : "btn=0\n");
+    systick_start(500000);
+    c.on = 1;
+    while (c.seen < 3) {
+        if (c.on != 0) {
+            c.seen = (int)tick_count();
+        }
+    }
+    uart_puts("tick=3\n");
+    return 0;
+}
