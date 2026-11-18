@@ -2669,11 +2669,46 @@ impl StmtOps for Stmt {
         self->ndefer_blocks = self->ndefer_blocks + 1;
         self->switch_depth = self->switch_depth + 1;
         tail = -1;
+        {
+        long case_lo[64];
+        long case_hi[64];
+        int ncase = 0;
         while (self->lex->tok != T_EOF
                && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             if (self->lex->tok == T_ID
-                && (strcmp(self->lex->toktext, "case") == 0 || strcmp(self->lex->toktext, "default") == 0))
+                && (strcmp(self->lex->toktext, "case") == 0 || strcmp(self->lex->toktext, "default") == 0)) {
+                {
+                int lab_line = self->lex->tokline;
+                int lab_col = self->lex->tokstart - self->lex->lstart + 1;
                 s = self->parse_label();
+                /* PH-70-R3: duplicate `case` values/overlapping ranges are an
+                   error under `ct check` (only foldable constants are judged). */
+                if (s >= 0 && self->ex->check_mode && *self->ex->check_mode
+                    && self->arena->nodes[s].aux == 0) {
+                    long lo = 0;
+                    long hi = 0;
+                    if (map_fold_num(self, self->arena->nodes[s].b, &lo)) {
+                        hi = lo;
+                        if (self->arena->nodes[s].c >= 0
+                            && !map_fold_num(self, self->arena->nodes[s].c, &hi))
+                            lo = hi + 1;
+                        if (lo <= hi) {
+                            int ci;
+                            for (ci = 0; ci < ncase; ci++)
+                                if (lo <= case_hi[ci] && hi >= case_lo[ci])
+                                    return tool::diag::ct_sem_error(
+                                        lab_line, lab_col,
+                                        "duplicate case value", self->mem->path);
+                            if (ncase < 64) {
+                                case_lo[ncase] = lo;
+                                case_hi[ncase] = hi;
+                                ncase++;
+                            }
+                        }
+                    }
+                }
+                }
+            }
             else
                 s = self->parse_stmt();
             if (s < 0) {
@@ -2685,6 +2720,7 @@ impl StmtOps for Stmt {
             if (tail < 0) self->arena->nodes[blk].a = s;
             else self->arena->nodes[tail].next = s;
             tail = s;
+        }
         }
         if (self->defer_flush_block(blk, &tail) != 0) {
             self->switch_depth = self->switch_depth - 1;

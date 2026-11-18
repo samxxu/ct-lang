@@ -894,6 +894,13 @@ else
     bad "PH-70-R1 flow" "$(sed -n '1,8p' "$work/p70f.out")"
 fi
 
+sh test/ast/p70_switch.sh "$work/ct-ast" >"$work/p70s.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-70-R3 switch (duplicate case)"
+else
+    bad "PH-70-R3 switch" "$(sed -n '1,8p' "$work/p70s.out")"
+fi
+
 sh test/ast/p69_fp.sh "$work/ct-ast" >"$work/p69fp.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-69-E69-2 fp (import units clean)"
