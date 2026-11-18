@@ -34,8 +34,7 @@ rm -rf "$work"; mkdir -p "$work/c" "$work/out"
     -e "mach create \"stm32f4\"" \
     -e "machine LoadPlatformDescription @platforms/boards/stm32f4_discovery-kit.repl" \
     -e "sysbus LoadELF @$work/fw.elf" \
-    -e "machine StartGdbServer 3333" \
-    -e "start" >"$work/renode.log" 2>&1 &
+    -e "machine StartGdbServer 3333" >"$work/renode.log" 2>&1 &
 rpid=$!
 trap 'kill $rpid 2>/dev/null' EXIT HUP INT TERM
 i=0
