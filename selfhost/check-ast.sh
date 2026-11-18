@@ -866,6 +866,20 @@ else
     bad "PH-69-R1 unitgraph" "$(sed -n '1,10p' "$work/p69ug.out")"
 fi
 
+sh test/ast/p69_traits.sh "$work/ct-ast" >"$work/p69tr.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-69-R3 traits (single + ambiguous dispatch)"
+else
+    bad "PH-69-R3 traits" "$(sed -n '1,8p' "$work/p69tr.out")"
+fi
+
+sh test/ast/p69_fp.sh "$work/ct-ast" >"$work/p69fp.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-69-E69-2 fp (import units clean)"
+else
+    bad "PH-69-E69-2 fp" "$(sed -n '1,8p' "$work/p69fp.out")"
+fi
+
 # PH-64 T3: --alloc maps the compiler's own heap calls and the source's
 # malloc/free onto the target's allocator, so a -nostdlib link needs no libc.
 if bash test/ast/p64_alloc.sh "$work/ct-ast" >"$work/p64al.out" 2>"$work/p64al.err"; then
