@@ -84,9 +84,9 @@ test/ast/114_range_init_single/prog.ct	0
 test/ast/115_range_init_explicit_dim/prog.ct	0	
 test/ast/117_range_init_multi_declarator/prog.ct	0	
 test/ast/12_rvalue_iface/prog.ct	0	
-test/ast/120_map_each_closure/prog.ct	1	test/ast/120_map_each_closure/prog.ct:8:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
-test/ast/121_map_each_closure_var/prog.ct	1	test/ast/121_map_each_closure_var/prog.ct:6:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
-test/ast/122_map_each_tier1/prog.ct	1	test/ast/122_map_each_tier1/prog.ct:6:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/120_map_each_closure/prog.ct	0	
+test/ast/121_map_each_closure_var/prog.ct	0	
+test/ast/122_map_each_tier1/prog.ct	0	
 test/ast/123_generic_identity/prog.ct	0	
 test/ast/124_generic_struct/prog.ct	0	
 test/ast/125_generic_type_positions/prog.ct	0	
@@ -95,8 +95,8 @@ test/ast/127_generic_name_retry/prog.ct	0
 test/ast/128_generic_type_operands/prog.ct	0	
 test/ast/129_generic_tparam_value_false_positive/prog.ct	0	
 test/ast/13_map_instance/prog.ct	0	
-test/ast/130_generic_build_mode/prog.ct	1	test/ast/130_generic_build_mode/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
-test/ast/131_generic_cross_unit/prog.ct	1	test/ast/131_generic_cross_unit/prog.ct:3:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/130_generic_build_mode/prog.ct	0	
+test/ast/131_generic_cross_unit/prog.ct	0	
 test/ast/132_foreach_array_values/prog.ct	0	
 test/ast/133_foreach_control_flow/prog.ct	0	
 test/ast/134_foreach_nested_pointer/prog.ct	1	test/ast/134_foreach_nested_pointer/prog.ct:14:9: error: foreach shadows the outer 'item'; use a native for to name the binding
@@ -120,18 +120,18 @@ test/ast/15_map_args/prog.ct	0
 test/ast/150_into_rvalue/prog.ct	0	
 test/ast/151_into_methods/prog.ct	0	
 test/ast/152_into_trait_method/prog.ct	0	
-test/ast/153_into_type_host/prog.ct	1	test/ast/153_into_type_host/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
-test/ast/154_into_shim/prog.ct	1	test/ast/154_into_shim/prog.ct:3:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
-test/ast/155_into_value_host/prog.ct	1	test/ast/155_into_value_host/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
-test/ast/156_into_scalar/prog.ct	1	test/ast/156_into_scalar/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/153_into_type_host/prog.ct	0	
+test/ast/154_into_shim/prog.ct	0	
+test/ast/155_into_value_host/prog.ct	0	
+test/ast/156_into_scalar/prog.ct	0	
 test/ast/157_into_chain/prog.ct	0	
 test/ast/158_into_control/prog.ct	0	
 test/ast/159_into_once/prog.ct	0	
 test/ast/16_iface_field_box/prog.ct	0	
 test/ast/160_group_a/prog.ct	0	
-test/ast/161_group_b/prog.ct	1	test/ast/161_group_b/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/161_group_b/prog.ct	0	
 test/ast/162_group_c/prog.ct	0	
-test/ast/163_group_d/prog.ct	1	test/ast/163_group_d/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/163_group_d/prog.ct	0	
 test/ast/164_into_index/prog.ct	0	
 test/ast/165_vec_subscript/prog.ct	0	
 test/ast/166_map_subscript/prog.ct	0	
@@ -217,8 +217,8 @@ test/ast/62_borrow_handback/prog.ct	0
 test/ast/63_own_return_field/prog.ct	0	
 test/ast/64_borrow_return_field/prog.ct	0	
 test/ast/65_raw/prog.ct	0	
-test/ast/66_type_host_literals/prog.ct	1	test/ast/66_type_host_literals/prog.ct:5:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
-test/ast/67_type_alias/prog.ct	1	test/ast/67_type_alias/prog.ct:5:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/66_type_host_literals/prog.ct	0	
+test/ast/67_type_alias/prog.ct	0	
 test/ast/68_ns_static_init/prog.ct	0	
 test/ast/69_ns_static_fn/prog.ct	0	
 test/ast/70_closure_basic/prog.ct	0	
@@ -229,7 +229,7 @@ test/ast/74_closure_capture_own_borrow/prog.ct	0
 test/ast/75_closure_param_pair/prog.ct	0	
 test/ast/76_closure_opaque_hole/prog.ct	0	
 test/ast/77_closure_goto/prog.ct	0	
-test/ast/81_closure_no_typehost/prog.ct	1	test/ast/81_closure_no_typehost/prog.ct:5:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/ast/81_closure_no_typehost/prog.ct	0	
 test/ast/84_closure_capture_rules/prog.ct	0	
 test/ast/86_closure_impl_method/prog.ct	0	
 test/ast/87_closure_ns_fn/prog.ct	0	
@@ -270,8 +270,8 @@ test/modules/map/prog.ct	0
 test/modules/multi_err_build/prog.ct	1	test/modules/multi_err_build/prog.ct:3:20: error: impl for undefined struct 'Missing'\ntest/modules/multi_err_build/prog.ct:6:10: error: struct 'B' uses undefined trait 'NoSuch'\ntest/modules/multi_err_build/prog.ct:8:24: error: impl for undefined struct 'AlsoMissing'\nctc: 3 error(s) generated
 test/modules/multi_err/prog.ct	1	test/modules/multi_err/prog.ct:3:20: error: impl for undefined struct 'Missing'\ntest/modules/multi_err/prog.ct:6:10: error: struct 'B' uses undefined trait 'NoSuch'\ntest/modules/multi_err/prog.ct:8:24: error: impl for undefined struct 'AlsoMissing'\nctc: 3 error(s) generated
 test/modules/noline/prog.ct	0	
-test/modules/p28_bound_cross_unit/prog.ct	1	test/modules/p28_bound_cross_unit/prog.ct:3:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
-test/modules/p28_bound_static/prog.ct	1	test/modules/p28_bound_static/prog.ct:4:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)
+test/modules/p28_bound_cross_unit/prog.ct	0	
+test/modules/p28_bound_static/prog.ct	1	test/modules/p28_bound_static/prog.ct:6:11: error: trait 'Fac' cannot bound a type parameter\nctc: 1 error(s) generated
 test/modules/sig_mismatch_json/prog.ct	1	test/modules/sig_mismatch_json/prog.ct:4:10: error: signature mismatch: 'f' in impl of 'T' for 'S': return type 'void' does not match the trait's 'int'
 test/modules/sig_mismatch/prog.ct	1	test/modules/sig_mismatch/prog.ct:4:10: error: signature mismatch: 'f' in impl of 'T' for 'S': return type 'void' does not match the trait's 'int'
 test/modules/std_bad/prog.ct	0	

@@ -3836,8 +3836,9 @@ fi
 
 # E32-15: the legal corpus is an explicit list. Each row records what the
 # baseline `ct check` produced; `--types` must reproduce it exactly, so a new
-# diagnostic on any listed file fails here. Error tours and import-only units
-# keep their baseline exit code and text instead of being forced to rc=0.
+# diagnostic on any listed file fails here. PH-69-R1 made import-bearing units
+# checkable through the build graph, so their rows now record the real result
+# instead of the old "requires multi-file mode" rejection.
 p32_manifest_bad=0
 p32_manifest_n=0
 while IFS="$p32_tab" read -r p32_mp p32_mr p32_me; do
