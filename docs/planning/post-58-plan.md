@@ -4,7 +4,7 @@
 | --- | --- |
 | 状态 | **评估完成，按本文件执行；不改实现代码** |
 | 基线 | `aa7aece3`（v0.58.0 + 文档分离 6 笔），与 `origin/main` 一致 |
-| 核对面 | `docs/roadmap.md`、`docs/history/design/phase54.md`、`docs/design/phase59.md`、`docs/planning/open-items-routing.md`、`docs/planning/requirements-pool.md`、`issues/**`、`docs/proposals/**` |
+| 核对面 | `docs/roadmap.md`、`docs/history/design/phase54.md`、`docs/history/design/phase59.md`、`docs/planning/open-items-routing.md`、`docs/planning/requirements-pool.md`、`issues/**`、`docs/proposals/**` |
 | 方法 | 逐份读仓库实际内容；条目状态以 issue 文件 + 代码现状交叉核对。**本轮未运行任何夹具或门禁**，凡标「读码」的结论只表示代码路径成立，不表示已复现 |
 | 说明 | 本仓没有 `docs/phases/` 目录；phase 卡在 `docs/design/`，归档在 `docs/history/design/` |
 
@@ -21,7 +21,7 @@
 | # | 现象 | 证据 | 处理建议 |
 | --- | --- | --- | --- |
 | N-1 | Phase 55–58 在 roadmap 中**没有卡**，却被 `open-items-routing.md` 当作已分配编号使用 | roadmap 原只有 Phase 54、59 两行；routing `:105-142` | 55/56/58 按 §6 放弃或拆解；57 保留为「未开工、无卡」的候选，本轮已补其版本位行 |
-| N-2 | `PH-58` 被 phase59 卡与两份提案当作**硬前置**引用，但仓库里没有这张卡 | `docs/design/phase59.md:9`、`:115`；`docs/proposals/ct-model-export-proposal.md:8`；`docs/proposals/ct-view-annotation-proposal.md:8` | 把引用改成真实缺陷号（LANG-10 7c），见 §7 |
+| N-2 | `PH-58` 被 phase59 卡与两份提案当作**硬前置**引用，但仓库里没有这张卡 | `docs/history/design/phase59.md:9`、`:115`；`docs/proposals/ct-model-export-proposal.md:8`；`docs/proposals/ct-view-annotation-proposal.md:8` | 把引用改成真实缺陷号（LANG-10 7c），见 §7 |
 | N-3 | PH-54 的切片序列缺 S4 | `phase54.md:3`、`:129`；S4 已移出本相 | 这是**定义性删除**，不是漏项；不得当作待办补回 |
 | N-4 | PH-61 已被 PH-62 吸收 | `docs/proposals/ct-append-subscript-proposal.md:5` | 61 成为永久空号；不重排、不回收 |
 | N-5 | 版本位与 phase 号已脱钩：PH-54 吃掉 v0.54.0–v0.58.0 五个 MINOR，而 AGENTS `deviation: version-minor-offset` 只登记到 PH-44 | `AGENTS.md:320-341`；roadmap Phase 54 行 | **已裁定（2026-11-15）**：认偏移、不重打 tag，后续按相位表连续分配；见 AGENTS §0.3 |

@@ -204,7 +204,7 @@ ctc: '<home>/.cache/ct-pkg/std/ct.pkg' is missing 'publisher'
 
 ### 3.3 `vendor/` 删除
 
-PH-63 / S7（v0.62.0）删除了 `vendor/` 的读写：`get` 不创建 `vendor/`，build/install/verify/update 不再读 vendor，v1 lock 只报错，`ct migrate` 作为一次性桥保留（[phase63.md:24-38](../design/phase63.md#L24-L38)）。因此：
+PH-63 / S7（v0.62.0）删除了 `vendor/` 的读写：`get` 不创建 `vendor/`，build/install/verify/update 不再读 vendor，v1 lock 只报错，`ct migrate` 作为一次性桥保留（[phase63.md:24-38](../history/design/phase63.md#L24-L38)）。因此：
 
 - 新工程：只可能走 store + v2 lock。
 - 旧工程：必须先 `ct migrate`；而 migrate 要把 vendor 树写进 store，同样要求清单有 `publisher`/`ns-root`，老官方包无法直接迁移。
@@ -594,13 +594,13 @@ FSG-02 的根因在当前代码仍在：`ct install` 的 import 校验只试 `%s
 | Phase 20 P20-05 | 已交付后续 | 索引生成器移出本仓；消费端范围查询后补 | [phase-log.md:31](../history/phase-log.md#L31) |
 | PH-54 S1（v0.55.0） | 已交付 | 六字段、`publisher`/`ns-root`、限定名、歧义硬错、多版本 store | [phase54.md:93-102](../history/design/phase54.md#L93-L102) |
 | PH-54 S2/S3/S5/S6 | 已交付 | build 读 lock、verify/migrate/update、双 HOME 复现 | [phase54.md:106-137](../history/design/phase54.md#L106-L137) |
-| PH-63 S7（v0.62.0） | 已交付 | 删 `vendor/`；缺身份字段在 store 提交处硬错 | [phase63.md:24-38](../design/phase63.md#L24-L38) |
+| PH-63 S7（v0.62.0） | 已交付 | 删 `vendor/`；缺身份字段在 store 提交处硬错 | [phase63.md:24-38](../history/design/phase63.md#L24-L38) |
 | SH-81（v0.61.1） | 已修 | 无索引时限定名不再被当成 URL，给出解析指引 | [issues/README.md:343](../../issues/README.md#L343)、[phase-log.md:183](../history/phase-log.md#L183) |
 | SH-83（v0.61.1） | 已修 | `ct install` v2 不再打印 `-I` | [issues/README.md:345](../../issues/README.md#L345) |
 | PKG-2/4/5/7/8 | 已修 | 包根/同名/缓存键/lock 读取/override 留痕 | [issues/README.md:353-359](../../issues/README.md#L353-L359) |
 | PKG-3 | 已修（issue 内） | 未知键告警，v0.58.3 | issue 状态行 `:10`；[phase-log.md:180](../history/phase-log.md#L180) |
 | PKG-6 | 已修（issue 内） | install 试解析 import，v0.58.2 | issue 状态行 `:10`；[phase-log.md:179](../history/phase-log.md#L179) |
-| PKG-9 | 实际已修 | S7 后缺身份字段直接失败，不再静默退 v1 | [phase63.md:36](../design/phase63.md#L36) |
+| PKG-9 | 实际已修 | S7 后缺身份字段直接失败，不再静默退 v1 | [phase63.md:36](../history/design/phase63.md#L36) |
 
 ### 6.2 仍 open / 待决策
 

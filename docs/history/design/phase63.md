@@ -5,7 +5,7 @@
 | 项 | 值 |
 | --- | --- |
 | 状态 | **完成**（v0.62.0） |
-| 依据 | [PH-54 S7](../roadmap.md#ct-pkg-共享库包体系phase-54s0s7)；[提案 §10 S7](../proposals/ct-pkg-shared-store.md)；[需求 SP-029](../planning/ct-pkg-shared-store-requirements.md) |
+| 依据 | [PH-54 S7](../../roadmap.md#ct-pkg-共享库包体系phase-54s0s7)；[提案 §10 S7](../../proposals/ct-pkg-shared-store.md)；[需求 SP-029](../../planning/ct-pkg-shared-store-requirements.md) |
 | 版本位 | `version-minor: 62`；收口 **v0.62.0**（PH-63，d=1） |
 | 只动 | `selfhost/ct-ast/tool/pkg/Pkg.h.ct`、`test/pkg/**`、`docs/**` |
 

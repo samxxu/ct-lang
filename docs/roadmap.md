@@ -68,24 +68,24 @@
 | Phase 52 | 自定义类型下标 `[]`（方案 A，只主张单层字符串键） | ✅ 完成 | v0.52.0 | [卡](history/design/phase52.md) |
 | Phase 53 | 可选链 `?.`（指针 / map；值上取到的指针或 map 跳） | ✅ 完成 | v0.53.0 | [卡](history/design/phase53.md) · [记录](proposals/phase53-optional-chain-draft.md) |
 | Phase 54 | ct-pkg 共享库包体系（工具侧：store / lock v2 / `ns-root`） | ✅ 完成（S0–S7） | v0.54.0–v0.58.0（S0–S3、S5/S6 各一个 MINOR；偏移见 AGENTS §0.3） | [卡](history/design/phase54.md) · [提案](proposals/ct-pkg-shared-store.md) · [需求](planning/ct-pkg-shared-store-requirements.md) |
-| Phase 57 | 限定名与 namespace 常量（类型位置 `A::B`、值位置 `Type::Member`；SH-18 + LANG-15） | ✅ 完成 | v0.59.0 | [卡](design/phase57.md) · [重排](planning/post-58-plan.md) |
-| Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ✅ 完成 | v0.60.0 | [卡](design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) · [重排](planning/post-58-plan.md) |
+| Phase 57 | 限定名与 namespace 常量（类型位置 `A::B`、值位置 `Type::Member`；SH-18 + LANG-15） | ✅ 完成 | v0.59.0 | [卡](history/design/phase57.md) · [重排](planning/post-58-plan.md) |
+| Phase 59 | 模型导出 `--emit-model`（S0：无 import 单单元端到端） | ✅ 完成 | v0.60.0 | [卡](history/design/phase59.md) · [提案](proposals/ct-model-export-proposal.md) · [决策](design/static-mapping-feasibility.md) · [重排](planning/post-58-plan.md) |
 | Phase 60 | 视图节点注记（`view` 子句） | ⏭️ 跳过（无消费者，[D-006](decisions/D-006.md)） | 不占位 | [提案](proposals/ct-view-annotation-proposal.md) · [决策](decisions/D-006.md) |
-| Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | ✅ 完成 | v0.61.0 | [卡](design/phase62.md) · [提案](proposals/ct-writable-subscript-proposal.md) · [研判](review/ct-writable-subscript-proposal-review.md) |
-| Phase 63 | 删除 `vendor/` 支持（PH-54 S7） | ✅ 完成 | v0.62.0 | [卡](design/phase63.md) · [提案](proposals/ct-pkg-shared-store.md) |
+| Phase 62 | 容器下标可写与嵌套链（吸收 PH-61） | ✅ 完成 | v0.61.0 | [卡](history/design/phase62.md) · [提案](proposals/ct-writable-subscript-proposal.md) · [研判](review/ct-writable-subscript-proposal-review.md) |
+| Phase 63 | 删除 `vendor/` 支持（PH-54 S7） | ✅ 完成 | v0.62.0 | [卡](history/design/phase63.md) · [提案](proposals/ct-pkg-shared-store.md) |
 
 | Phase 64 | 裸机生成契约（`--freestanding` / 按需单元 / `--alloc` / const vtable） | ✅ 完成 | v0.63.0 | [卡](design/phase64.md) · [需求](planning/hardware-readiness-requirements.md) |
 | Phase 65 | 严格 C 边界（外部库/用户默认 strict；`.m.ct` 映射例外；CT 仓内 1.0 前代码豁免） | ✅ 完成 | v0.64.0 | [卡](design/phase65.md) · [battle](../battle/cinclude-2/verdict.md) |
 | Phase 66 | libc I/O 内置例外（按调用补头；空程序零系统头） | ✅ 完成 | v0.65.0 | [卡](design/phase66.md) · [D-008](decisions/D-008.md) · [SH-89](../issues/selfhost/sh89-libc-io-auto-include.md) |
 | Phase 67 | 无真机硬件能力扩展（PLL / nRF52840 / FreeRTOS / DMA / GDB） | ✅ 完成 | v0.66.0 | [卡](design/phase67.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
 | Phase 68 | 类型核心（`ct check --types`；修 234 误报） | 🟨 实施中 | v0.67.0（拟） | [卡](design/phase68.md) · [方案](planning/typecheck-semantic-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
-| Phase 69 | 跨单元/泛型/trait 类型检查 | 🗺️ 规划中（未开卡） | v0.68.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
-| Phase 70 | CFG/定值/控制流语义检查 | 🗺️ 规划中（未开卡） | v0.69.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
-| Phase 71 | own/borrow/Drop + 包级 strict | 🗺️ 规划中（未开卡） | v0.70.0（拟） | [方案](planning/typecheck-semantic-plan.md) |
-| Phase 72 | 静默错误与诊断批（LANG-3 MAX_CALLS / LANG-4 下标类型 / LANG-11 产物冲突 / LANG-16 诊断列 / DF-1 预处理截断 / SH-76 内置层误诊 / SH-18+LANG-15 限定名） | 🗺️ 规划中（未开卡） | v0.71.0（拟） | [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
-| Phase 73 | 字段可见性与 ABI（LANG-9：`pub` 决定头文件导出面） | 🗺️ 规划中（未开卡） | v0.72.0（拟） | [LANG-9](../issues/lang/lang-9-struct-field-visibility-abi.md) |
-| Phase 74 | 模型导出（PH-59 M1/M2；依赖 J11 行列与 SH-79 两 facet） | 🗺️ 规划中（未开卡） | v0.73.0（拟） | [PH-59 卡](design/phase59.md) · [SH-79](../issues/selfhost/sh79-build-lib-emit-map-silent.md) |
-| Phase 75 | 闭包作方法实参（SH-65 / SH-67 同族） | 🗺️ 规划中（未开卡） | v0.74.0（拟） | [SH-65](../issues/selfhost/sh65-closure-as-method-arg.md) · [SH-67](../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
+| Phase 69 | 跨单元/泛型/trait 类型检查 | 🟨 实施中（已开卡，排队） | v0.68.0（拟） | [卡](design/phase69.md) · [方案](planning/typecheck-semantic-plan.md) |
+| Phase 70 | CFG/定值/控制流语义检查 | 🟨 实施中（已开卡，排队） | v0.69.0（拟） | [卡](design/phase70.md) · [方案](planning/typecheck-semantic-plan.md) |
+| Phase 71 | own/borrow/Drop + 包级 strict | 🟨 实施中（已开卡，排队） | v0.70.0（拟） | [卡](design/phase71.md) · [方案](planning/typecheck-semantic-plan.md) |
+| Phase 72 | 静默错误与诊断批（LANG-3 MAX_CALLS / LANG-4 下标类型 / LANG-11 产物冲突 / LANG-16 诊断列 / DF-1 预处理截断 / SH-76 内置层误诊 / SH-18+LANG-15 限定名） | 🟨 实施中（已开卡，排队） | v0.71.0（拟） | [卡](design/phase72.md) · [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
+| Phase 73 | 字段可见性与 ABI（LANG-9：`pub` 决定头文件导出面） | 🟨 实施中（已开卡，排队） | v0.72.0（拟） | [卡](design/phase73.md) · [LANG-9](../issues/lang/lang-9-struct-field-visibility-abi.md) |
+| Phase 74 | 模型导出（PH-59 M1/M2；依赖 J11 行列与 SH-79 两 facet） | 🟨 实施中（已开卡，排队） | v0.73.0（拟） | [卡](design/phase74.md) · [PH-59 卡](history/design/phase59.md) · [SH-79](../issues/selfhost/sh79-build-lib-emit-map-silent.md) |
+| Phase 75 | 闭包作方法实参（SH-65 / SH-67 同族） | 🟨 实施中（已开卡，排队） | v0.74.0（拟） | [卡](design/phase75.md) · [SH-65](../issues/selfhost/sh65-closure-as-method-arg.md) · [SH-67](../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
 | `v1-PH-0` | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；B 检查器 opt-in） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
 | `v1-PH-1` | v1.1 语法现代化（S1）+ A strict 编译路径（S2） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线](planning/v1-release-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
 | `HW-1` | **真板 pilot**（REQ-HW-020：真实板卡 + 厂商 HAL + RTOS；含 [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) DMA 真实搬运） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [需求](planning/hardware-readiness-requirements.md) · [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) |

@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 状态 | **方案依据（已开卡）**：PH-59 [M1](../design/phase59.md)；本文不再单列「待研判」 |
+| 状态 | **方案依据（已开卡）**：PH-59 [M1](../history/design/phase59.md)；本文不再单列「待研判」 |
 | 来源 | SwiftCT 静态映射评估（2026-11-15） |
 | 拟占 | `PH-59`（提案通过并完成需求定稿后再占号） |
 | 关联 | [SH-79](../../issues/selfhost/sh79-build-lib-emit-map-silent.md)、[LANG-9](../../issues/lang/lang-9-struct-field-visibility-abi.md)、[LANG-10](../../issues/lang/lang-10-machine-readable-diagnostics.md)、PH-58 |

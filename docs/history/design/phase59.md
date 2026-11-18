@@ -4,8 +4,8 @@
 
 | 项 | 值 |
 | --- | --- |
-| 依据 | [模型导出提案](../proposals/ct-model-export-proposal.md) §3 方案 B、§4 格式、§9 M1–M7；[静态映射可行性与决策](static-mapping-feasibility.md) §2（六条，含 §2.6 字段级回指）；[研判 §4](../review/swiftct-mapping-proposal-review.md) |
-| 版本位 | **v0.60.0**（`version-minor: 60`；PH-54 偏移按 [AGENTS §0.3](../../AGENTS.md#03-偏离项) 的相位表，不再「不提前钉号」） |
+| 依据 | [模型导出提案](../../proposals/ct-model-export-proposal.md) §3 方案 B、§4 格式、§9 M1–M7；[静态映射可行性与决策](../../design/static-mapping-feasibility.md) §2（六条，含 §2.6 字段级回指）；[研判 §4](../../review/swiftct-mapping-proposal-review.md) |
+| 版本位 | **v0.60.0**（`version-minor: 60`；PH-54 偏移按 [AGENTS §0.3](../../../AGENTS.md#03-偏离项) 的相位表，不再「不提前钉号」） |
 | 前置 | **LANG-10 7c（字段级位置）**：`Field` 补 `loc` 是 J11 的前提；该任务滑期则按 §8 降级为「只带 `line`」。LANG-9（字段可见性）不阻塞 M1：未落地前 `visibility` 写 `unknown`（已定）。原卡写的「PH-58」是 `open-items-routing.md` 的草案号，未在 roadmap 立项 |
 | 只动 | `selfhost/ct-ast/tool/driver/Driver.h.ct`、`selfhost/ct-ast/backend/emit/Emitter.h.ct`、`selfhost/ct-ast/frontend/sym/Symbols.h.ct`、`selfhost/ct-ast/main.ct`、`test/model/**`、`docs/**` |
 | 不碰 | `selfhost/ct-ast/frontend/TypeCheck.h.ct`、`selfhost/l2/**`、`golden/**`、`.ai-engineering` |

@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 依据 | [重排](../planning/post-58-plan.md) §4；[SH-18](../../issues/selfhost/ct-ast-qualified-type-name-rejected.md)；[LANG-15](../../issues/lang/lang-15-qualified-enum-member-value.md) |
+| 依据 | [重排](../../planning/post-58-plan.md) §4；[SH-18](../../../issues/selfhost/ct-ast-qualified-type-name-rejected.md)；[LANG-15](../../../issues/lang/lang-15-qualified-enum-member-value.md) |
 | 版本位 | `version-minor: 59`；收口版本 **v0.59.0**（AGENTS §0.3 相位表：PH-57 → v0.59.0） |
 | 只动 | `selfhost/ct-ast/frontend/parse/Expr.h.ct`、`selfhost/ct-ast/frontend/parse/Parser.h.ct`、`selfhost/ct-ast/frontend/sym/Symbols.h.ct`、`selfhost/ct-ast/frontend/module/Module.h.ct`、`test/ast/**` |
 | 不碰 | `selfhost/l0/**`、`selfhost/l1/**`、`selfhost/l2/**`、`golden/**`、外部包仓 |

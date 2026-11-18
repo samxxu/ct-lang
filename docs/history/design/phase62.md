@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 依据 | [研判](../review/ct-writable-subscript-proposal-review.md) §3 裁定（A1–A7 / W1–W22）；[提案](../proposals/ct-writable-subscript-proposal.md)；[序列](../planning/post-58-phase-sequence.md) |
+| 依据 | [研判](../../review/ct-writable-subscript-proposal-review.md) §3 裁定（A1–A7 / W1–W22）；[提案](../../proposals/ct-writable-subscript-proposal.md)；[序列](../../planning/post-58-phase-sequence.md) |
 | 版本位 | `version-minor: 61`；收口 **v0.61.0**（PH-60 跳过，d=1，按 AGENTS §0.3 相位表实算） |
 | 只动 | `selfhost/ct-ast/frontend/parse/Expr.h.ct`、`TypeCheck.h.ct`、`frontend/sym/Symbols.h.ct`、`backend/emit/Emitter.h.ct`、`test/ast/**`、`docs/**` |
 | 不碰 | `selfhost/l0/**`、`selfhost/l1/**`、`selfhost/l2/**`、`golden/**`、外部包仓 |

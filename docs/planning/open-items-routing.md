@@ -3,7 +3,7 @@
 > **作废口径（v0.58.0 之后）**：本文基线是 `v0.53.1`。表内的 `0.53.x` PATCH 位、以及
 > `PH-55`–`PH-62` 的草案号，在 v0.58.0 之后**不再执行**；正文保留作研判证据，不改写实测记录。
 > 现行顺序与取舍见 [post-58-plan.md](post-58-plan.md)。其中 `PH-58` 从未在 roadmap 立项，
-> 凡把它当前置的引用（`design/phase59.md`、两份提案）一律按「LANG-10 7c：`Field` 补行列」处理。
+> 凡把它当前置的引用（`history/design/phase59.md`、两份提案）一律按「LANG-10 7c：`Field` 补行列」处理。
 
 | 项 | 值 |
 | --- | --- |
@@ -283,7 +283,7 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
 研判记录：[swiftct-mapping-proposal-review](../review/swiftct-mapping-proposal-review.md)；
 决策记录：[static-mapping-feasibility](../design/static-mapping-feasibility.md)。
 
-**PH-59 已开卡（2026-11-15）**：[phase59.md](../design/phase59.md)，范围 = 无 `import` 单单元端到端（M1）；
+**PH-59 已开卡（2026-11-15）**：[phase59.md](../history/design/phase59.md)，范围 = 无 `import` 单单元端到端（M1）；
 多单元/多根列为 M2，**依赖本文件 §8.1 的 SH-79 两项 facet 落地**。已定三条：bridging header 判为构建产物、
 模型导出全字段（`visibility` 在 LANG-9 前为 `unknown`）、首版不做多单元且不自己拼模型图。
 PH-60 仍未开卡，等 PH-59 schema 冻结。
