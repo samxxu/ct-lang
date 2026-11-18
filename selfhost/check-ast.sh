@@ -785,6 +785,17 @@ if [ "$bmq" -ne 77 ]; then
     fi
 fi
 
+# TEST-21: the same firmware contract on the STM32F4 memory map (Renode).
+# Skipped unless a usable Renode is present (CI downloads the Linux portable
+# build; macOS skips by default because it is known-slow here).
+sh test/baremetal-renode/run.sh "$work/ct-ast" >"$work/bmr.out" 2>"$work/bmr.err"
+bmr=$?
+case "$bmr" in
+    0) ok "baremetal_renode (STM32F4: boot, button, SysTick, UART)" ;;
+    77) skip "baremetal_renode" "$(sed -n '1p' "$work/bmr.err")" ;;
+    *) bad "baremetal_renode" "$(grep -m1 'FAIL' "$work/bmr.out" "$work/bmr.err" 2>/dev/null || sed -n '1,3p' "$work/bmr.err")" ;;
+esac
+
 # PH-64 T3: --alloc maps the compiler's own heap calls and the source's
 # malloc/free onto the target's allocator, so a -nostdlib link needs no libc.
 if bash test/ast/p64_alloc.sh "$work/ct-ast" >"$work/p64al.out" 2>"$work/p64al.err"; then
