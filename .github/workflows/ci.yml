@@ -30,7 +30,7 @@ jobs:
           # bundles its .NET runtime, so nothing system-wide is installed.
           mkdir -p .temp/renode-linux
           curl -fsSL -o /tmp/renode.tar.gz \
-            https://github.com/renode/renode/releases/download/v1.17.0/renode-1.17.0.linux-x64-portable.tar.gz
+            https://github.com/renode/renode/releases/download/v1.17.0/renode-1.17.0.linux-portable.tar.gz
           tar -xzf /tmp/renode.tar.gz -C .temp/renode-linux --strip-components=1
           .temp/renode-linux/renode --version
       - name: hard gates
