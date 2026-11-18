@@ -845,6 +845,20 @@ else
     bad "PH-68-R2 exprtypes" "$(sed -n '1,8p' "$work/p68expr.out")"
 fi
 
+sh test/ast/p68_positions.sh "$work/ct-ast" >"$work/p68pos.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-68-R3 positions (init/assign/return/container arg)"
+else
+    bad "PH-68-R3 positions" "$(sed -n '1,8p' "$work/p68pos.out")"
+fi
+
+sh test/ast/p68_fp.sh "$work/ct-ast" >"$work/p68fp.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-68-R4 fp (0 false positives, skip table)"
+else
+    bad "PH-68-R4 fp" "$(sed -n '1,8p' "$work/p68fp.out")"
+fi
+
 # PH-64 T3: --alloc maps the compiler's own heap calls and the source's
 # malloc/free onto the target's allocator, so a -nostdlib link needs no libc.
 if bash test/ast/p64_alloc.sh "$work/ct-ast" >"$work/p64al.out" 2>"$work/p64al.err"; then
