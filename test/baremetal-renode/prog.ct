@@ -22,6 +22,9 @@ int main(void)
         if (c.on != 0) {
             c.seen = (int)tick_count();
         }
+        if (c.seen < 3) {
+            board_idle();
+        }
     }
     uart_puts("tick=3\n");
     return 0;

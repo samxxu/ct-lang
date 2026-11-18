@@ -64,6 +64,13 @@ void SysTick_Handler(void)
     g_ticks = g_ticks + 1;
 }
 
+/* Wait for the next interrupt. The idle loop would otherwise burn millions of
+   instructions in the emulator (Renode's TCG is slow on some hosts). */
+void board_idle(void)
+{
+    __asm__ volatile ("wfi");
+}
+
 /* The Discovery kit's user button is PA0: high when pressed (external
    pull-down). Renode's Button model starts released, so the probe sees 0. */
 int button_pressed(void)

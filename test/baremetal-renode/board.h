@@ -4,3 +4,4 @@ void uart_puts(const char *s);
 void systick_start(unsigned int reload);
 unsigned int tick_count(void);
 int button_pressed(void);
+void board_idle(void);
