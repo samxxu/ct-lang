@@ -32,7 +32,10 @@ jobs:
           curl -fsSL -o /tmp/renode.tar.gz \
             https://github.com/renode/renode/releases/download/v1.17.0/renode-1.17.0.linux-portable.tar.gz
           tar -xzf /tmp/renode.tar.gz -C .temp/renode-linux --strip-components=1
-          .temp/renode-linux/renode --version
+          # Headless: `--version` alone can wait for a display on a bare
+          # runner, so prove startup with a GUI-less empty machine instead.
+          .temp/renode-linux/renode --disable-gui --plain -P -1 \
+            -e "mach create" -e "quit"
       - name: hard gates
         run: |
           set -o pipefail
