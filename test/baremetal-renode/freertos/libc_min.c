@@ -1,5 +1,5 @@
-/* Minimal freestanding mem*/string routines: the firmware links -nostdlib, so
-   FreeRTOS's memset/memcpy references must resolve here. */
+/* Minimal freestanding memory/string routines: the firmware links -nostdlib,
+   so FreeRTOS references to memset/memcpy must resolve here. */
 #include <stddef.h>
 void *memset(void *d, int c, size_t n) { unsigned char *p = d; while (n--) *p++ = (unsigned char)c; return d; }
 void *memcpy(void *d, const void *s, size_t n) { unsigned char *p = d; const unsigned char *q = s; while (n--) *p++ = *q++; return d; }
