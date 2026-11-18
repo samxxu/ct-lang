@@ -5774,6 +5774,80 @@ impl ExprOps for Expr {
                 }
                 args = self->parse_args();
                 if (args < 0) return -1;
+                /* PH-69-R2 (LANG-19): a call through a function-pointer
+                   variable has no symbol row, so its prototype is parsed from
+                   the variable's type (`int (*)(int, char *)`) and the same
+                   arity/type kernel is applied. A `...` tail accepts extras. */
+                if (self->types_mode && *self->types_mode
+                    && self->sym->find_func(self->arena->nodes[n].text2) < 0) {
+                    char ft[MAX_TEXT];
+                    char ps[MAX_TEXT];
+                    const char *an0 = self->arena->nodes[n].text2;
+                    if (self->sym->var_type(an0, ft, sizeof ft) == 0
+                        && strstr(ft, "(*)") != 0) {
+                        const char *last = strrchr(ft, ')');
+                        const char *lp = last;
+                        if (last) {
+                            while (lp > ft && *lp != '(') lp--;
+                        }
+                        if (last && *lp == '(' && last > lp + 1) {
+                            int plen = (int)(last - lp - 1);
+                            int ai = args;
+                            int k = 0;
+                            int variadic = 0;
+                            if (plen >= (int)sizeof ps) plen = (int)sizeof ps - 1;
+                            memcpy(ps, lp + 1, (size_t)plen);
+                            ps[plen] = 0;
+                            while (ps[0]) {
+                                char pt[MAX_TEXT];
+                                int n = 0;
+                                char *pp = ps;
+                                while (*pp == ' ') pp++;
+                                if (strncmp(pp, "...", 3) == 0) { variadic = 1; break; }
+                                while (*pp && *pp != ',') {
+                                    if (n < (int)sizeof pt - 1) pt[n++] = *pp;
+                                    pp++;
+                                }
+                                pt[n] = 0;
+                                while (n > 0 && pt[n - 1] == ' ') pt[--n] = 0;
+                                if (*pp == ',') pp++;
+                                memmove(ps, pp, strlen(pp) + 1);
+                                if (strcmp(pt, "void") == 0 && ai < 0) break;
+                                if (ai < 0) {
+                                    char amsg[MAX_TEXT];
+                                    snprintf(amsg, sizeof amsg, "takes more arguments, %d given", k);
+                                    if (args >= 0
+                                        && self->sup->arity_warn(self->arena->nodes[args].line,
+                                                         (int)self->arena->nodes[args].num,
+                                                         an0, amsg) != 0) return -1;
+                                    break;
+                                }
+                                if (pt[0]) {
+                                    char out[MAX_TEXT];
+                                    int z = 0;
+                                    if (self->chk_type(ai, out, sizeof out, &z) == 0) {
+                                        if (self->arg_base + k < MAX_ARG_POS) {
+                                            self->chk_line = self->arg_line[self->arg_base + k];
+                                            self->chk_col = self->arg_col[self->arg_base + k];
+                                        }
+                                        self->chk_arg = k + 1;
+                                        if (self->chk_assignable(pt, out, z, 6) != 0) return -1;
+                                    }
+                                }
+                                k++;
+                                ai = self->arena->nodes[ai].next;
+                            }
+                            if (!variadic && ai >= 0) {
+                                char amsg[MAX_TEXT];
+                                snprintf(amsg, sizeof amsg, "takes fewer arguments, %d given", k + 1);
+                                if (args >= 0
+                                    && self->sup->arity_warn(self->arena->nodes[args].line,
+                                                     (int)self->arena->nodes[args].num,
+                                                     an0, amsg) != 0) return -1;
+                            }
+                        }
+                    }
+                }
                 {
                     const char *an = self->arena->nodes[n].text2;
                     if (strcmp(an, "ct_atomic_load") == 0

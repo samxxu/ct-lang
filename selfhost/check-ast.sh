@@ -873,6 +873,13 @@ else
     bad "PH-69-R3 traits" "$(sed -n '1,8p' "$work/p69tr.out")"
 fi
 
+sh test/ast/p69_calls.sh "$work/ct-ast" >"$work/p69calls.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-69-R2 calls (fnptr prototype)"
+else
+    bad "PH-69-R2 calls" "$(sed -n '1,8p' "$work/p69calls.out")"
+fi
+
 sh test/ast/p69_fp.sh "$work/ct-ast" >"$work/p69fp.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-69-E69-2 fp (import units clean)"
