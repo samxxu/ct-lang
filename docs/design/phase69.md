@@ -35,7 +35,7 @@
 | R1 单元图复用 | `ct check` 读取 import 单元图，不写产物 | ``bash test/ast/p69_unitgraph.sh` → `OK p69/unitgraph`` | M |
 | R2 调用签名 | 原型/变参/函数指针调用的实参个数与类型 | ``bash test/ast/p69_calls.sh` → `OK p69/calls`` | M |
 | R3 trait 选择 | trait 方法选择与歧义诊断 | ``bash test/ast/p69_traits.sh` → `OK p69/traits`` | M |
-| R4 泛型替换 | 泛型实例替换与容器方法签名 | ``bash test/ast/p69_generics.sh` → `OK p69/generics`` | M |
+| R4 泛型替换 | 泛型实例替换与容器方法签名 | ``bash test/ast/p69_containers.sh` → `OK p69/containers`` | M |
 
 ## 4 退出判据
 
@@ -73,7 +73,7 @@
 | --- | --- | --- |
 | E69-1 | 对 `test/ast`+`test/modules` 的 import 单元跑 `ct check` | 119/119 可检（0 个 "requires multi-file mode"） |
 | E69-2 | `bash test/ast/p69_fp.sh <ct-ast>`；`p69_unitgraph.sh`；`p69_calls.sh`；`p69_traits.sh`；`p69_containers.sh` | 全绿（合法 import 件 0 诊断；跨单元错配/函数指针原型/歧义/容器实参均报） |
-| E69-3 | `bash selfhost/check-all.sh` | 11/11；`check-ast 1489 passed`（本机 4 skip） |
+| E69-3 | `bash selfhost/check-all.sh` | 11/11；`check-ast 1488 passed`（本机 4 skip） |
 
 任务状态：R1 ✅（`49565323`）、R2 ✅（含零实参补丁）、R3 ✅、R4 ✅（LANG-20 复测为误报）。
 
