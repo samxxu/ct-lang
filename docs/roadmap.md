@@ -78,7 +78,7 @@
 | Phase 65 | 严格 C 边界（外部库/用户默认 strict；`.m.ct` 映射例外；CT 仓内 1.0 前代码豁免） | ✅ 完成 | v0.64.0 | [卡](design/phase65.md) · [battle](../battle/cinclude-2/verdict.md) |
 | Phase 66 | libc I/O 内置例外（按调用补头；空程序零系统头） | ✅ 完成 | v0.65.0 | [卡](design/phase66.md) · [D-008](decisions/D-008.md) · [SH-89](../issues/selfhost/sh89-libc-io-auto-include.md) |
 | Phase 67 | 无真机硬件能力扩展（PLL / nRF52840 / FreeRTOS / DMA / GDB） | ✅ 完成 | v0.66.0 | [卡](design/phase67.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
-| Phase 68 | 类型核心（`ct check --types`；修 234 误报） | 🟨 实施中 | v0.67.0（拟） | [卡](design/phase68.md) · [方案](planning/typecheck-semantic-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
+| Phase 68 | 类型核心（`ct check --types`；修 234 误报） | ✅ 完成 | v0.67.0 | [卡](design/phase68.md) · [方案](planning/typecheck-semantic-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
 | Phase 69 | 跨单元/泛型/trait 类型检查 | 🟨 实施中（已开卡，排队） | v0.68.0（拟） | [卡](design/phase69.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 70 | CFG/定值/控制流语义检查 | 🟨 实施中（已开卡，排队） | v0.69.0（拟） | [卡](design/phase70.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 71 | own/borrow/Drop + 包级 strict | 🟨 实施中（已开卡，排队） | v0.70.0（拟） | [卡](design/phase71.md) · [方案](planning/typecheck-semantic-plan.md) |

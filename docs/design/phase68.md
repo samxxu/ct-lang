@@ -1,6 +1,6 @@
 # Phase 68 — 类型核心（`ct check --types`）
 
-> **状态：实施中**（2026-11-19 立项；`v0.67.0` 拟）。
+> **状态：完成**（2026-11-19 收口；`v0.67.0`；R1–R4 全绿）。
 > **依据**：[typecheck-semantic-plan](../planning/typecheck-semantic-plan.md) §3、
 > [battle typecheck-1](../../battle/typecheck-1/verdict.md)（B′）。
 > **前置**：PH-67 收口（`v0.66.0`）。
@@ -59,3 +59,22 @@
 | R68-1 | 类型表扩张引入新误报 | 先跑合法语料统计，再收紧；每项带正负例 |
 | R68-2 | 与 PH-69 跨单元工作重叠 | 本相只做单单元；跨单元留接口 |
 | R68-3 | 与模板化/闭包交互复杂 | 闭包入口只做最小形状，深水留 PH-75 |
+
+## 6 收口对照表（2026-11-19，v0.67.0）
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E68-1 | `bash test/ast/p68_typebuf.sh <ct-ast>` | `OK p68/typebuf (234 green)`；234 的 `initializer:` 误报消失 |
+| E68-2 | `bash test/ast/p68_exprtypes.sh <ct-ast>` | `OK p68/exprtypes`（bin/unary/tern/cast 均有类型） |
+| E68-3 | `bash test/ast/p68_positions.sh <ct-ast>` | `OK p68/positions (init/assign/return/container arg)` |
+| E68-4 | `bash test/ast/p68_fp.sh <ct-ast>`；`bash selfhost/check-all.sh` | `OK p68/fp (FP=0/301 legal fixtures; 1 documented skip)`；11/11；`check-ast 1483 passed` |
+
+任务级红证：R1 为 `42a1932d` 的父提交（`test(ast): PH-68-R1 红…`），R2 为
+`p68_exprtypes 红` 提交；R3/R4 是对既有判定的验收任务（无实现提交，探针本身
+即交付物），不适用 T-7 红绿。
+实现提交：R1 `42a1932d`、R2 `0a8438a4`。
+
+边界与偏差：
+- 语料基线为 301 个单单元合法件（规划里的 438 含 import 多单元，属 PH-69 范围）；
+- `loop_count_type` 的 L22-5 报告是有意行为，列入 skip 表；
+- 内建容器（`Vec<T>.push`）的实参类型仍不检查，属 PH-69 的跨单元/泛型范围。

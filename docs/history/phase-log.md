@@ -183,6 +183,7 @@
 | v0.61.1 | 新 issue 批处理（2026-11-16） | LANG-18 泛型指针字段夹具；SH-81 限定名无索引报错；SH-82 复核已返回非零；SH-83 v2 install 不再打印 -I；SH-85 PK-8 跳过 docs/issues/test 与 .md；tag `v0.61.1`。 |
 | v0.62.0 | Phase 63 删除 vendor 支持（PH-54 S7，2026-11-16） | build/get/install/verify/update 去 vendor 读写；v1 lock 只报错；migrate 保留；test/pkg 141/0；tag `v0.62.0`。 |
 | v0.62.1 | P0 数组/const 的 vptr 静态初始化（REQ-HW-001/002，2026-11-16） | 带 trait 的数组元素与 const 标量/const 数组的 vptr 改由 C 初值本身写（`emit_elem_vptrs` 注入到元素花括号内），数组外层不再出现顶层设计式；带初值数组不再发 constructor，无初值数组保持原路径；多维 trait 数组在 `ct` 阶段硬错并给位置；`unqual` 让 `const struct X` 也能解析到结构体；25 个 case 的 `.c`/`.h` golden 各变 1 行 banner；check-ast 1457/0；tag `v0.62.1`。 |
+| v0.67.0 | PH-68 类型核心（2026-11-19） | R1 数组维度初值（234 转绿）、R2 表达式类型表（bin/unary/tern/cast）、R3 四位置探针、R4 合法语料 FP=0/301（1 条 L22-5 skip）；全部经 CI。 |
 | v0.66.0 | PH-67 无真机硬件能力扩展（2026-11-18） | R1 时钟树（PLL 168MHz/BRR 推导）、R2 nRF52840（自建 plain-UART 平台）、R3 FreeRTOS（两任务+队列）、R4 DMA1 Stream6 寄存器面、R5 GDB 断点；全部在 Linux CI 的 Renode 上验证，真机项（DMA 真实搬运等）登记为 TEST-22。 |
 | v0.65.1 | SH-91 未用层单元不再解析（2026-11-18） | R3 的按需决策从"解析后"前移到"解析前"，未引用层的产物不再出现 `Str_Drop_drop` 等静态声明；`check-warnings` 在 GCC 下恢复 493/0。 |
 | v0.65.0 | PH-66 libc I/O 内置例外收口（2026-11-18） | `printf`/`scanf`/`puts` 族按直接调用补 `<stdio.h>`、宽字符补 `<wchar.h>`；空程序零系统头（compile 模式也按需拼接内置层）；用户同名不抢、集合外不补、`--freestanding` 硬错；五支探针 5/5、`check-ast` 1477/0、`check-all` 11/11。 |
