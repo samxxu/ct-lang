@@ -490,6 +490,23 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 新增/更新 phase | roadmap 加行；详情写流水账；同步不重复 |
 | 判据 | roadmap 单元格不得多段叙述；`docs/README.md` 与 `docs/history/README.md` 均有入口 |
 
+#### 0.6 反馈受理与分流（项目执行口径，D-009）
+
+任何人提出的意见/提案，先经评审会确认，再决定流向；提出者不排 phase。
+
+| 规则 | 判据 |
+| --- | --- |
+| 任何人可提出；外部观察方按 CF-1 只提交提案 | 目标仓台账只由 REQ/REV 写 |
+| 评审会先分类：bug/问题、新需求、两者都有、重复、证据不足 | 评审记录含 date/attendees/classification/decision |
+| bug/问题 → `issues/`；不要求 phase | issue 有 `confirmed-by: 评审会` + `review-meeting` |
+| 新需求/设计 → `REQ-*` 池 → 分析 → roadmap → phase | 不建 issue，除非同时有缺陷 |
+| 两者都有 → issue + REQ 拆分互链 | 两条记录互相链接 |
+| 重复 → 合并；证据不足 → 待复现 | 保留最早/最完整 ID；不建空 issue |
+| 排期是评审会之后的 REQ/EDITOR 动作 | issue/REQ 均不要求 phase 字段；G6 不因未排期失败 |
+
+> 主规范 CR 见 [feedback-intake-policy](docs/proposals/feedback-intake-policy.md)，待主规范仓受理；
+> 本节的 CT 执行口径不替代主规范。
+
 ### 1. 项目画像
 
 | 项 | 值 |
