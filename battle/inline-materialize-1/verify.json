@@ -1,0 +1,428 @@
+{
+  "battle": "inline-materialize-1",
+  "seat": "VERIFY",
+  "scope": "独立复核 question.md / claim.md / counter.md；不写 A/B 最终判决，只给 J-1..J-6 判定与证据。只读源码，写入仅 /tmp 与 battle/inline-materialize-1/verify.json。",
+  "evidence_exit_semantics": "evidence.exit 记录该条要判定的探针退出码（负例=1，正例=0）；复合命令末尾的 echo/grep/sed 可能使 shell 返回 0，逐条 rc 见 output。",
+  "head": {
+    "declared_baseline": "0c449d2e",
+    "baseline_sha": "0c449d2e2581907ef507ffd688fceea82e3d37ee",
+    "baseline_describe": "v0.65.1-32-g0c449d2e",
+    "baseline_ctc_version": "0.65.1",
+    "observed_head": "373ea27c",
+    "observed_head_sha": "373ea27ce7c9566f3ca8cea0af6f7e6784097f6d",
+    "observed_head_describe": "v0.67.0-9-g373ea27c",
+    "observed_head_ctc_version": "0.67.0",
+    "claim_head": "claim.md:6 记 1cbc5f53（v0.67.0-7）；会话末实际 HEAD 为 373ea27c（v0.67.0-9），中间经 b09ddc14；探针输出逐字一致（编译器源码未变）",
+    "probe_parity": "10/10 parse probes、4/4 run probes、2/2 error probes 在 0c449d2e 与 b09ddc14 二进制上逐字相同",
+    "worktree_note": "git status 显示他人未提交改动 selfhost/ct-ast/frontend/parse/Expr.h.ct（+71 行，PH-69-R2）与未跟踪 battle/ 目录；HEAD 在会话期间从 1cbc5f53→b09ddc14→373ea27c 推进。本席只读工作树，所有源/二进制探针均取自 git archive 快照，不受未提交改动影响；未改源码/规范/测试。",
+    "head_build_snapshot": "HEAD 二进制构建自 b09ddc14；b09ddc14..373ea27c 只改 docs/issues/check-ast.sh/test（git diff --name-only -- selfhost/ct-ast selfhost/l0 为空），编译器源码未变，故探针一致性对 373ea27c 仍成立"
+  },
+  "environment": {
+    "os": "Darwin 27.2.0 arm64 (macOS 27.2)",
+    "cc": "Apple clang 21.0.0 (clang-2100.4.1.1)",
+    "python": "3.15.2",
+    "shell": "/bin/sh",
+    "baseline_workdir": "/tmp/verify-im1（git archive 0c449d2e，独立自举构建）",
+    "head_workdir": "/tmp/verify-im1-head（git archive b09ddc14，独立自举构建）",
+    "build_chain": "cc selfhost/l0/ctc.c -> l1.c -> l1 -> l2src -> l2 -> astsrc -> ct-ast（-Wall -Wextra -std=c99 零警告）",
+    "baseline_binary": "ct-ast v0.65.1",
+    "head_binary": "ct-ast v0.67.0",
+    "gate_runner": "bash selfhost/check-ast.sh（在 /tmp/verify-im1 的基线副本内运行）"
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "focus": "版本锚定与独立构建",
+      "actions": "核对 0c449d2e 的 CTC_VERSION=0.65.1 与实际 HEAD 的 0.67.0；用 git archive 分别构建 baseline 与 HEAD，不依赖他人 /tmp 产物",
+      "result": "两套二进制可用；版本/提交锚点见 E01/E02"
+    },
+    {
+      "round": 2,
+      "focus": "$ 现状：词法、parser、range/into/errdefer 上下文",
+      "actions": "对 `.m()$name`、链尾、`int $x`、range/into/trailing/errdefer 的 `$` 与 `$x` 各跑正负探针；读 Lexer/Expr/Stmt 源码",
+      "result": "`$` 是单字符 T_PUNCT 且不是标识符；`$x` 在三个上下文均按 `$`+ID 解析后在 ID 处报错；见 E03-E08"
+    },
+    {
+      "round": 3,
+      "focus": "两行拆链/多跳等价、into 覆盖边界",
+      "actions": "跑 238、152、155、examples/29、47 与自建 5 跳 split/chain；测 into 的类型改变、接口/own 接收者、子表达式/嵌套限制",
+      "result": "两行与链式输出等价；into 覆盖兄弟方法与字段赋值，但不能改类型、不能接接口/own 接收者；见 E09-E13"
+    },
+    {
+      "round": 4,
+      "focus": "SH-73、?.m()、A 的语义缺口",
+      "actions": "复现动态临时接收者拒绝、optional method 拒绝；测已声明变量赋值、重复物化、未初始化、own、if/while/return 位置",
+      "result": "SH-73 仍拒 N_MCALL 接收者；A 的每跳落变量是既有绕法而非修复；无未初始化检查；见 E14-E21"
+    },
+    {
+      "round": 5,
+      "focus": "语料度量、成本、兼容与全量门禁",
+      "actions": "扫描 examples/test/ast/selfhost 的 935 个 .ct（67,771 行）；度量 A 形态站点；跑基线 check-ast.sh；对失败节单独复跑",
+      "result": "A 形态仅 4 处且各只省 1 行；门禁 1473 通过/4 失败/1 跳过，4 个失败节单独复跑全绿（环境/共享 scratch 所致）；见 E22-E24"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E01",
+      "command": "mkdir -p /tmp/verify-im1 && cd /tmp/verify-im1 && git -C /Users/samxx/dsh-ws/ct-lang archive 0c449d2e | tar -x && cc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc && ./ctc selfhost/l1/ctc.ct -o l1.c && cc -Wall -Wextra -std=c99 l1.c -o l1 && mkdir -p l2src && ./l1 build selfhost/l2/driver.ct -o l2src && cc -Wall -Wextra -std=c99 l2src/*.c -o l2 && mkdir -p astsrc && ./l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o astsrc && cc -Wall -Wextra -std=c99 astsrc/*.c -o ct-ast && ./ct-ast --version",
+      "exit": 0,
+      "output": "ct-ast v0.65.1\nBUILD_OK\n# 同命令对 HEAD：ct-ast v0.67.0\nHEAD_BUILD_OK",
+      "reproduced": true,
+      "note": "两套二进制均为本席从 git archive 独立构建；未使用 claim/counter 的 /tmp/ct-battle-* 产物"
+    },
+    {
+      "id": "E02",
+      "command": "git rev-parse 0c449d2e HEAD; git describe --tags 0c449d2e HEAD; git show 0c449d2e:selfhost/l0/ctc.c | grep -n CTC_VERSION | head -1; grep -n CTC_VERSION selfhost/l0/ctc.c | head -1; uname -m; sw_vers -productVersion; cc --version | head -2; python3 --version",
+      "exit": 0,
+      "output": "0c449d2e2581907ef507ffd688fceea82e3d37ee\nb09ddc14c4c5dc5a4e1797254f4aa04920788f76\nv0.65.1-32-g0c449d2e\nv0.67.0-8-gb09ddc14\n61:#define CTC_VERSION \"0.65.1\"\n61:#define CTC_VERSION \"0.67.0\"\narm64\n27.2\nApple clang version 21.0.0 (clang-2100.4.1.1)\nPython 3.15.2",
+      "reproduced": true,
+      "note": "题面/claim 的 HEAD 1cbc5f53 已推进；采样时 HEAD=b09ddc14，会话末为 373ea27c（v0.67.0-9，编译器源码未变）。版本与题面描述一致（基线 0.65.1、HEAD 0.67.0）"
+    },
+    {
+      "id": "E03",
+      "command": "cd /tmp/verify-im1 && ./ct-ast check cases/p1_chain_dollar.ct; echo rc=$?; ./ct-ast check cases/p1b_tail_dollar.ct; echo rc=$?",
+      "exit": 1,
+      "output": "cases/p1_chain_dollar.ct:9:13: error: unexpected token\nrc=1\ncases/p1b_tail_dollar.ct:8:13: error: unexpected token\nrc=1",
+      "reproduced": true,
+      "note": "`s.add(1)$r.get()` 与链尾 `s.add(1)$r` 均在第 13 列的 `$` 报 unexpected token；A 需新增诊断区分链尾/非方法调用"
+    },
+    {
+      "id": "E04",
+      "command": "cd /tmp/verify-im1 && ./ct-ast check cases/p2_decl_dollar.ct; ./ct-ast check cases/p3_range_bare.ct; ./ct-ast check cases/p3_array_dim.ct",
+      "exit": 1,
+      "output": "cases/p2_decl_dollar.ct:1:22: error: expected a variable name\ncases/p3_range_bare.ct:1:26: error: unexpected token\ncases/p3_array_dim.ct:1:23: error: '$' cannot be used in an array dimension\nctc: 1 error(s) generated",
+      "reproduced": true,
+      "note": "`int $x`、普通表达式 `$`、数组维度 `$` 均拒绝；`$` 不进符号表，不是标识符（spec §4.47:2131）"
+    },
+    {
+      "id": "E05",
+      "command": "cd /tmp/verify-im1 && ./ct-ast build cases/p3_range_ok.ct -o cases/p3_range_ok.bin && cases/p3_range_ok.bin; echo rc=$?; ./ct-ast check cases/p3_range_name.ct; echo rc=$?",
+      "exit": 1,
+      "output": "rc=5\ncases/p3_range_name.ct:1:34: error: unexpected token\nrc=1",
+      "reproduced": true,
+      "note": "range 元素里 `$` 合法（下标，运行得 5）；`0..3($x)` 的报错列 34 是 ID `x`（$ 在 33），说明解析器已把 `$` 当 range 下标消费，`$name` 在该上下文不是词法歧义而是上下文冲突"
+    },
+    {
+      "id": "E06",
+      "command": "cd /tmp/verify-im1 && ./ct-ast build cases/p4_into_ok.ct -o cases/p4_into_ok.bin && cases/p4_into_ok.bin; echo rc=$?; ./ct-ast check cases/p4_into_name.ct; echo rc=$?",
+      "exit": 1,
+      "output": "rc=7\ncases/p4_into_name.ct:5:15: error: unexpected token\nrc=1",
+      "reproduced": true,
+      "note": "into 里 `$` 是接收者（`.n=7` 运行返回 7）；`$n` 在 ID `n`（列 15）报错，`$` 在列 14"
+    },
+    {
+      "id": "E07",
+      "command": "cd /tmp/verify-im1 && ./ct-ast build cases/p5_trailing_ok.ct -o cases/p5_trailing_ok.bin && cases/p5_trailing_ok.bin; echo rc=$?; ./ct-ast build cases/p5_errdefer_ok.ct -o cases/p5_errdefer_ok.bin && cases/p5_errdefer_ok.bin; echo rc=$?; ./ct-ast check cases/p5_trailing_name.ct; ./ct-ast check cases/p5_errdefer_name.ct",
+      "exit": 1,
+      "output": "rc=3\nrc=0\ncases/p5_trailing_name.ct:2:47: error: unexpected token\ncases/p5_errdefer_name.ct:2:50: error: unexpected token",
+      "reproduced": true,
+      "note": "尾随声明与 errdefer 块里 `$` 是声明名只读别名（分别运行得 3/0）；`$x` 在 ID 处报错"
+    },
+    {
+      "id": "E08",
+      "command": "cd /tmp/verify-im1 && sed -n '112,126p;355,372p' selfhost/ct-ast/frontend/lex/Lexer.h.ct; grep -n 'dollar_ok\\|into_node' selfhost/ct-ast/frontend/parse/Expr.h.ct | head; grep -rn '\\$[A-Za-z_]' --include='*.ct' selfhost examples test | wc -l; grep -rn '\\$[A-Za-z_]' --include='*.ct' test/ast | wc -l; grep -rl '\\$' --include='*.ct' test/ast | wc -l",
+      "exit": 0,
+      "output": "标识符只从 a-z/A-Z/_ 起（Lexer.h.ct:112-126）；其余字符走 toktext[0]=c; tok=T_PUNCT; pos++（:369-372）\n`$` 的 parser 分支只在 Expr.h.ct:5354-5367（into_node / dollar_ok）\n7\n0\n44",
+      "reproduced": true,
+      "note": "仓库 7 行 `$ident` 全在注释/shell 变量（$PWD/$CT_HOME/$WORK）；test/ast 代码 0 处；44 个 test/ast 文件使用 `$`（range/into/trailing 既有义项与对应负例）。`$` 不是标识符（spec §4.47:2131）"
+    },
+    {
+      "id": "E09",
+      "command": "cd /tmp/verify-im1 && ./ct-ast build test/ast/238_iface_ret_value/prog.ct -o cases/t238.bin && cases/t238.bin; ./ct-ast build cases/p17_iface_assign.ct -o cases/p17.bin && cases/p17.bin; ./ct-ast build -I examples/47_chain_factory/src --c-boundary=allow cases/multihop_split.ct -o cases/mh_split.bin && cases/mh_split.bin; ./ct-ast build -I examples/47_chain_factory/src --c-boundary=allow cases/multihop_chain.ct -o cases/mh_chain.bin && cases/mh_chain.bin; ./ct-ast build -I examples/47_chain_factory/src --c-boundary=allow examples/47_chain_factory/src/main.ct -o cases/t47.bin && cases/t47.bin",
+      "exit": 0,
+      "output": "1\n200\n200\n200\n200\n200 {\"users\":3}",
+      "reproduced": true,
+      "note": "238 两行写法（r2/res 声明初始化）输出 1/200；p17 预声明 r2/res 后赋值同样输出 200；5 跳 split（12 行，req 出现 6 次）与 chain（200）等价；examples/47 静态宿主一条链输出 200"
+    },
+    {
+      "id": "E10",
+      "command": "python3 /tmp/verify-im1/corpus_scan3.py",
+      "exit": 0,
+      "output": "{\"files\":935,\"lines\":67771,\"decl_then_mcall\":6,\"reassign_then_mcall\":9,\"reassign_method_rhs_A_shaped\":4,\"A_shaped_sites\":[[\"examples/24_vec_ops/vec_ops.ct\",49,\"w = v.retain();\",\"w.push(9);\"],[\"test/ast/142_vec_api/prog.ct\",29,\"w = v.retain();\",\"w.push(7);\"],[\"test/ast/143_map_api/prog.ct\",43,\"shared = m.retain();\",\"shared.put(\\\"dee\\\", 4);\"],[\"test/ast/errors/L31_14_assign.ct\",11,\"y = g.get(0);\",\"y.release();\"]],\"chain_lines_ge2\":19,\"chain_hops_hist\":{\"2\":12,\"4\":6,\"5\":1},\"dollar_ident_lines\":7}",
+      "reproduced": true,
+      "note": "输出为关键字段摘录（完整 JSON 为该脚本 stdout）；指标定义：decl_then_mcall=`T v = <expr>;` 下一行 `v.m(...)`；reassign_then_mcall=`v = <expr>;` 下一行 `v.m(...)`；A 形态=后者的 RHS 是方法调用（可写成 `<expr>$v.m(...)`）；扫描 examples+test/ast+selfhost 全部 .ct。claim 的“声明后紧邻调用”指标为 6（与 claim 一致）；但把“预声明变量被再次赋值后复用”算作 A 形态，则有 4 处（1 个 example、2 个 test、1 个 error fixture），claim 的“repo 0”只对前一指标成立。按单行正则捕获 19 条 ≥2 跳链，最长 5 跳（test/66）；examples/47 另有跨行 5 跳静态链，两者都已是单条表达式"
+    },
+    {
+      "id": "E11",
+      "command": "python3 /tmp/verify-im1/measure.py",
+      "exit": 0,
+      "output": "examples/24_vec_ops/vec_ops.ct: 2 lines -> 1 line, 33 -> 25 chars\ntest/ast/142_vec_api/prog.ct: 2 -> 1, 33 -> 25\ntest/ast/143_map_api/prog.ct: 2 -> 1, 49 -> 36\ntest/ast/errors/L31_14_assign.ct: 2 -> 1, 33 -> 25\n238 total A vs B: 3 lines -> 3 lines, 108 -> 104 chars",
+      "reproduced": true,
+      "note": "4 处 A 形态各只省 1 行、8-13 字符；238 的 A 形态需要两个未初始化声明，行数与 B 相同、只少 4 字符"
+    },
+    {
+      "id": "E12",
+      "command": "cd /tmp/verify-im1 && ./ct-ast build test/ast/152_into_trait_method/prog.ct -o cases/t152.bin && cases/t152.bin; ./ct-ast build test/ast/155_into_value_host/prog.ct -o cases/t155.bin && cases/t155.bin; ./ct-ast build examples/29_into_block/into.ct -o cases/t29.bin && cases/t29.bin; ./ct-ast build cases/p4_into_ok.ct -o cases/p4_into_ok.bin && cases/p4_into_ok.bin; echo rc=$?",
+      "exit": 0,
+      "output": "Tom says hi to Ann\nmid 16\ndone 16 3\nv 6\nidentifier 1\nreport 0.0.0.0:8080/16\ncfg 0.0.0.0:8080/16\nlive 9090 / copy 9090\nsuffix 9090 / backlog 64\nrc=7",
+      "reproduced": true,
+      "note": "into 覆盖：块内方法调用（152 .hello）、字段赋值（p4 .n=7）、同类型重绑（155 $ = .add）、块后后缀（155 .value()、29）"
+    },
+    {
+      "id": "E13",
+      "command": "cd /tmp/verify-im1 && ./ct-ast check cases/p8_iface_into.ct; ./ct-ast check cases/p7_own_into.ct; ./ct-ast build cases/p4b_into_typechange.ct -o cases/p4b.bin; ./ct-ast check cases/p15_into_expr.ct; ./ct-ast check cases/p16_into_nested.ct; grep -n \"into' cannot take\" selfhost/ct-ast/frontend/parse/Expr.h.ct",
+      "exit": 1,
+      "output": "cases/p8_iface_into.ct:7:8: error: 'into' cannot take an interface or 'own' receiver\ncases/p7_own_into.ct:7:7: error: 'into' cannot take an interface or 'own' receiver\n'cc' ... cases/p4b_into_typechange.ct:24:19: error: assigning to 'struct A' from incompatible type 'struct B'\n   24 |     (*__ct_recv0) = A_toB(__ct_recv0);\ncases/p15_into_expr.ct:5:16: error: 'into' block is not allowed here\ncases/p16_into_nested.ct:4:16: error: nested 'into' blocks are not supported\n3240:                        \"'into' cannot take an interface or 'own' receiver\",",
+      "reproduced": true,
+      "note": "into 不能：接口值/own 接收者（L30-4，Expr.h.ct:3240）、改变接收者类型（p4b：ct 生成 A=B 的 C，cc 才报错）、任意子表达式（L30-1）、嵌套（L30-7）。spec §4.52:2465"
+    },
+    {
+      "id": "E14",
+      "command": "cd /tmp/verify-im1 && ./ct-ast build test/ast/errors/temp_receiver_trait_chain.ct -o cases/tr.bin; echo rc=$?; ./ct-ast build -I examples/47_chain_factory/src --c-boundary=allow examples/47_chain_factory/src/main.ct -o cases/t47.bin && cases/t47.bin; sed -n '60,66p' issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md",
+      "exit": 1,
+      "output": "test/ast/errors/temp_receiver_trait_chain.ct:17:1: error: method receiver must be a variable, an element, a call or a field chain\nrc=1\n200 {\"users\":3}\n- 动态派发要求接收者静态类型已知；... 接收者本身是一次 **方法调用** 的形态（`a.m().n()`，AST 里是 `N_MCALL`）**当前一律拒绝**\n- 允许的接收者形态固定为变量 / 元素 / 调用 / 字段链；**类型宿主不受这四种形态限制**",
+      "reproduced": true,
+      "note": "SH-73 仍是动态派发的有意限制；同一链在 examples/47 静态宿主上成立（200）"
+    },
+    {
+      "id": "E15",
+      "command": "cd /tmp/verify-im1 && ./ct-ast build cases/p20_novar.ct -o cases/p20_novar.bin; echo rc=$?; ./ct-ast build cases/p21_var_terminal.ct -o cases/p21_var_terminal.bin && cases/p21_var_terminal.bin; echo rc=$?; grep -n \"rk != N_VAR\" selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "exit": 1,
+      "output": "cases/p20_novar.ct:17:1: error: method receiver must be a variable, an element, a call or a field chain\nrc=1\nrc=0 (p21_var_terminal 运行输出 200)\n5510:            if (rk != N_VAR && rk != N_INDEX && rk != N_CALL",
+      "reproduced": true,
+      "note": "`req.send().status()`（无变量）仍被 SH-73 拒；`res = req.send(); res.status()`（变量）通过。A 的 `$res.status()` 只是把后者写成一行，不放开 N_MCALL 接收者，因此独立于 SH-73，但不是修复"
+    },
+    {
+      "id": "E16",
+      "command": "cd /tmp/verify-im1 && ./ct-ast check test/ast/errors/p53_method.ct",
+      "exit": 1,
+      "output": "test/ast/errors/p53_method.ct:18:13: error: optional method calls are not supported; assign the receiver to a variable first\nctc: 1 error(s) generated",
+      "reproduced": true,
+      "note": "`?.m()` 在 PH-53 L53-7 被硬拒（Expr.h.ct:4503-4508）；题面 A.5 的 `?.m()$x` 无落点，claim 已将其删除"
+    },
+    {
+      "id": "E17",
+      "command": "cd /tmp/verify-im1 && ./ct-ast build cases/p6_uninit.ct -o cases/p6.bin && cases/p6.bin; echo run=$?; ./ct-ast check cases/p6_uninit.ct; echo check=$?; ./ct-ast check cases/p18_iface_uninit.ct; echo check=$?; ./ct-ast build cases/p18_iface_uninit.ct -o cases/p18.bin && cases/p18.bin; echo run=$?; grep -rn 'uninitialized\\|未初始化\\|definite assignment' selfhost/ct-ast docs/language-spec.md issues | head",
+      "exit": 0,
+      "output": "build_rc=0\nrun=44\ncheck=0\ncheck=0\nbuild_rc=0\nBus error: 10\nrun=138\n# grep 只命中 Emitter 的 LICENSE 注释与 SH-26 的未初始化栈变量问题，无 definite-assignment 检查",
+      "reproduced": true,
+      "note": "`int x; return x;` 与接口 `HttpResponse res; res.status();` 均零诊断编译，运行读到垃圾（44 / 总线错误 138）。“未初始化使用按既有检查报错”不存在"
+    },
+    {
+      "id": "E18",
+      "command": "cd /tmp/verify-im1 && ./ct-ast check cases/p13_types.ct; echo rc=$?; ./ct-ast check --types cases/p13_types.ct; echo rc=$?; ./ct-ast build cases/p13_types.ct -o cases/p13.bin; echo rc=$?; sed -n '2478,2483p' docs/language-spec.md",
+      "exit": 1,
+      "output": "rc=0\ncases/p13_types.ct:3:13: error: initializer: expected 'int', got 'char *'\ncases/p13_types.ct:4:18: error: initializer: expected 'struct P', got 'int'\nrc=1\nbuild 仅在 cc 阶段报 incompatible type（ct 自身不报）\nspec §4.53:2480-2482：`ct check --types` 只在三处校验；`ct build`/`ct compile` 与 golden 逐字节不变",
+      "reproduced": true,
+      "note": "A.2“类型匹配”只能在 `ct check --types` 兑现；build 由 cc 兜底。若要求 build 强制，需另加代码"
+    },
+    {
+      "id": "E19",
+      "command": "cd /tmp/verify-im1 && ./ct-ast build cases/p11_hoist_pos.ct -o cases/p11.bin; echo rc=$?; ./ct-ast build cases/p19_pos_return.ct -o cases/p19r.bin && cases/p19r.bin; echo rc=$?; ./ct-ast build cases/p19_pos_init.ct -o cases/p19i.bin && cases/p19i.bin; echo rc=$?; ./ct-ast build cases/p19_pos_if.ct -o cases/p19f.bin; echo rc=$?; sed -n '19,26p' .ctbuild/p19_pos_return.c; sed -n '320,326p' docs/language-spec.md",
+      "exit": 1,
+      "output": "cases/p11_hoist_pos.ct:5:1: error: a method call on a temporary is only allowed at the start of a statement or of an assignment\nrc=1\np19_pos_return: build_rc=0; run_rc=1（程序返回 1）\np19_pos_init: build_rc=0; run_rc=1（程序返回 1）\n... cases/p19_pos_if.ct:21:15: error: cannot take the address of an rvalue of type 'struct S'\n   21 |     if (S_get(&mk())) {\nrc=1\n生成的 return：struct S __ct_tmp0 = mk(); return S_get(&__ct_tmp0);\n说明 hoist 只覆盖语句/赋值初始化式/return，不覆盖 if/while 条件",
+      "reproduced": true,
+      "note": "A 声称允许 return/if/while/初始化式；return 与初始化式已有 hoist，if/while 目前不 hoist，直接生成 `&mk()` 由 cc 报错。`f(...)` 实参位置则被 ct 直接拒。位置规则不是零成本"
+    },
+    {
+      "id": "E20",
+      "command": "cd /tmp/verify-im1 && ./ct-ast check cases/p14_own_expr.ct; echo rc=$?; ./ct-ast check cases/p7_own_into.ct; echo rc=$?; sed -n '1444,1448p' docs/language-spec.md",
+      "exit": 1,
+      "output": "cases/p14_own_expr.ct:7:8: error: an 'own' variable can only be assigned in a statement\nrc=1\ncases/p7_own_into.ct:7:7: error: 'into' cannot take an interface or 'own' receiver\nrc=1\nspec §4.9:1446：目标是 own 变量时拒绝（值位置赋值绕过 AutoDrop）",
+      "reproduced": true,
+      "note": "own 的值位置赋值已被拒；A 的 `$name` 若在表达式里赋值给 own，必须显式复用/新增这条检查，不能自动继承（desugar 的赋值是 emitter 生成，不经过 parser 的赋值目标检查）"
+    },
+    {
+      "id": "E21",
+      "command": "sed -n '29,37p' battle/inline-materialize-1/question.md; sed -n '17,20p' battle/inline-materialize-1/claim.md",
+      "exit": 0,
+      "output": "question.md:32  name 必须已声明、类型匹配；不引入新声明/类型推断。\nquestion.md:36  纯 desugar：`T x = <call>; x.next()`；不自动释放/不接管所有权。\nclaim.md:19    题面修正：题面 A.6 写 `T x = <call>;`，与 A.2“name 已声明”矛盾；按 A.2，desugar 必须是 `name = <call>; name.next()`。",
+      "reproduced": true,
+      "note": "题面 A 自相矛盾；claim 已把它改成赋值形态。若按题面（声明+初始化），A 就是 B 的第一行且不需要 `$`；若按 claim（赋值），就继承赋值语义、需要未初始化与所有权分析"
+    },
+    {
+      "id": "E22",
+      "command": "cd /tmp/verify-im1 && wc -l selfhost/ct-ast/frontend/lex/Lexer.h.ct selfhost/ct-ast/frontend/parse/Expr.h.ct selfhost/ct-ast/frontend/parse/Stmt.h.ct selfhost/ct-ast/backend/emit/Emitter.h.ct; ls test/ast | wc -l; ls test/ast/errors/*.ct | wc -l; ls test/ast | grep -c into; grep -n 'hoist_scan\\|__ct_tmp\\|method receiver must be' selfhost/ct-ast/backend/emit/Emitter.h.ct | head",
+      "exit": 0,
+      "output": "383 Lexer.h.ct\n7217 Expr.h.ct\n4144 Stmt.h.ct\n6593 Emitter.h.ct\n合计 18337（HEAD 为 383/7280/4154/6613，合计 18430）\n345 test/ast 目录\n295 error fixtures\n13 into fixtures\nEmitter: 2429 hoist_scan / 2521 __ct_tmp / 5511 receiver whitelist",
+      "reproduced": true,
+      "note": "输出为行数/计数的摘要；A 至少触及 4 个源文件：lexer 可 0 改（$ 已是 punct），核心在 Expr/Stmt/Emitter 与位置/诊断/测试。claim 估 150-290 行、counter 估 150-400 行 +10-20 夹具，本席认为量级成立；B 为 0 行源码改动"
+    },
+    {
+      "id": "E23",
+      "command": "cd /tmp/verify-im1 && for f in cases/p1_chain_dollar.ct cases/p2_decl_dollar.ct cases/p3_range_name.ct cases/p4_into_name.ct cases/p5_trailing_name.ct; do ./ct-ast check $f >/tmp/b.out 2>&1; b=$?; /tmp/verify-im1-head/ct-ast check $f >/tmp/h.out 2>&1; h=$?; cmp -s /tmp/b.out /tmp/h.out && echo \"SAME $f rc=$b/$h\" || echo \"DIFF $f\"; done; grep -rn '\\$[A-Za-z_]' --include='*.ct' test/ast | wc -l",
+      "exit": 0,
+      "output": "SAME p1 rc=1/1\nSAME p2 rc=1/1\nSAME p3_range_name rc=1/1\nSAME p4_into_name rc=1/1\nSAME p5_trailing_name rc=1/1\n0",
+      "reproduced": true,
+      "note": "基线与 HEAD 的 `$` 探针逐字相同；test/ast 无 `$ident` 代码。A 的兼容风险主要来自 `$` 第 4 义项与 range/into/trailing 的上下文诊断，而非现有合法程序"
+    },
+    {
+      "id": "E24",
+      "command": "cd /tmp/verify-im1 && bash selfhost/check-ast.sh > gate.log 2>&1; echo gate_rc=$?; tail -1 gate.log; bash test/ast/p41_errors.sh ./ct-ast; bash test/ast/p44_try_syntax.sh ./ct-ast; bash test/ast/p44_try_errors.sh ./ct-ast; bash test/ast/p45_contract.sh ./ct-ast",
+      "exit": 1,
+      "output": "gate_rc=1\n== summary: 1473 passed, 4 failed, 1 skipped ==\n失败节：p41/errors、p44/syntax、p44/errors、p45/contract\n单独复跑：\np41/errors: 9 passed, 0 failed (rc=0)\np44/syntax: 22 passed, 0 failed (rc=0)\np44/errors: 11 passed, 0 failed (rc=0)\np45/contract: 6/6 negative + legal skip + closure (rc=0)\nskip: baremetal_renode（sandbox 无 Renode）",
+      "reproduced": true,
+      "note": "输出为门禁摘要与失败节复跑摘要（完整日志 /tmp/verify-im1/gate.log）；全量门禁 1473 通过；4 个失败节在单独复跑时全绿，输出中可见互相串台的 fixture 文本，而 p41_errors.sh 等脚本使用固定 /tmp/p41e.err scratch 名；结合单独复跑全绿，本席判为环境/并发噪声（无法完全排除），不是基线代码或 A/B 探针导致；仍不能据此宣称“全量门禁零失败”"
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "criterion": "真实价值：inline 物化是否解决链式可读性/复用，而非仅少写一行（真实样例/字符数/维护性）",
+      "verdict": "fail",
+      "a_position": "claim 说 A 解决“预声明复用/每跳少一行”，C1 要求外部语料 ≥3 处预声明复用站点",
+      "b_position": "counter 说两行/into 已覆盖，repo 无真实需求",
+      "reason": "935 个 .ct / 67,771 行里，A 形态只有 4 处（1 example + 2 test + 1 error fixture），每处只省 1 行、8-13 字符；claim 的“repo 0”只对“声明后紧邻调用”指标成立，对“预声明后重新赋值并调用”指标是 4。238 的 A 形态与 B 同为 3 行（还需 2 个未初始化声明），只少 4 字符。没有多跳复用或可读性收益的真实站点；外部语料未提供（DB-3 不访问其他项目工作树）。",
+      "evidence": [
+        "E09",
+        "E10",
+        "E11"
+      ],
+      "independent_correction": "claim 的 repo 计数需按指标区分：decl+call=6（A 不可省声明），reassign+call=9 其中 A 形态=4；不是简单的 0"
+    },
+    {
+      "id": "J-2",
+      "criterion": "语法歧义：`$` 不是标识符，`$name` 在 range/into/errdefer/普通表达式中是否可区分（lexer/parser 夹具）",
+      "verdict": "pass",
+      "a_position": "A 说 `$` 是单字符 token，`$name` 可与三个既有义项区分",
+      "b_position": "B 说 `$` 不是标识符，新增 `$name` 要改 lexer/parser/上下文",
+      "reason": "`$` 只从 T_PUNCT 回退产生，标识符分支不接受 `$`，符号表也从不含 `$`（spec §4.47:2131）。`$name` 在 token 层是 `$`+ID；range/into/errdefer 中 `$` 已先被消费，随后 ID 报错（列号在 ID 上），普通表达式 `$` 直接报错。现有合法程序 0 处 `$ident`（test/ast 0 行），所以没有合法程序歧义；需要 parser 做上下文/相邻性判定并在三处显式拒绝，但这是成本不是歧义。",
+      "evidence": [
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07",
+        "E08",
+        "E23"
+      ],
+      "caveat": "lexer 可 0 改的判断成立；但 `$ name`（带空格）与 `$name` 在 token 流相同，A 需定义相邻性规则，且三处上下文的报错位置会变化"
+    },
+    {
+      "id": "J-3",
+      "criterion": "类型/所有权：已声明变量、接口复制、`?.` 短路、多次物化、未初始化（语义矩阵）",
+      "verdict": "fail",
+      "a_position": "A 说 name 已声明且类型匹配、不新增 uninit 分析、不改所有权、`?.` 短路不赋值",
+      "b_position": "B 说 A 的“纯 desugar”实际是赋值语义，未初始化/接口/own/`?.` 都未定义",
+      "reason": "多个硬缺口：① 无 definite-assignment 检查：`int x; return x;` 与接口未初始化调用均零诊断，运行读垃圾（44 / 总线错误 138）；② `?.m()` 被 L53-7 硬拒，A.5 的短路无法实现；③ 类型匹配只在 `ct check --types`，build 由 cc 兜底（spec §4.53:2480-2482）；④ own 目标需显式新增检查，值位置赋值已被 §4.9:1446 拒；⑤ 多次物化只是重复赋值（p20/p21 证明可行），但同名覆盖的旧值处置（接口/容器/own）没有定义；若声称纯 desugar 则继承 B 的赋值语义，需在 spec 写明；⑥ if/while 位置的 temp 接收者当前直接生成 `&mk()`（cc 报错），A 声称的位置支持需新增 hoist。",
+      "evidence": [
+        "E13",
+        "E16",
+        "E17",
+        "E18",
+        "E19",
+        "E20"
+      ],
+      "independent_correction": "claim 已承认 `?.` 需删除；但“未初始化按既有检查报错”不是“需额外定义”，而是根本不存在该检查"
+    },
+    {
+      "id": "J-4",
+      "criterion": "SH-73 关系：是否真的独立；是否会误导为“修了链式”（探针/文档）",
+      "verdict": "pass",
+      "a_position": "A 不要求先修 SH-73，SH-73 仍是有意限制",
+      "b_position": "B 说 A 不修 SH-73，且容易让读者误以为链式已修",
+      "reason": "机制上独立：A 的每一跳都把结果赋给变量，下一跳接收者是 N_VAR；SH-73 仍只拒 N_MCALL 接收者。`req.send().status()` 无变量仍报错，`res = req.send(); res.status()` 通过；A 的 `$res.status()` 只是后者的单行拼写，不放开 N_MCALL。它确实不能修 `a.m().n()` 的普通链。误导风险真实，但 question.md:27 已明写“不要求 SH-73 先修、SH-73 仍是有意限制”，实现时须把 C4 文档 caveat 落地；这是文档义务，不是语义失败。",
+      "evidence": [
+        "E14",
+        "E15",
+        "E16"
+      ],
+      "condition": "若采纳 A，spec/文档必须逐字写明“每跳仍是一次显式落变量，A 不修 SH-73”（claim C4）；否则本项应降为 unresolved"
+    },
+    {
+      "id": "J-5",
+      "criterion": "实现成本：lexer/parser/type/emit/诊断/测试（文件/行数/阶段）",
+      "verdict": "pass",
+      "a_position": "A 估 4 个源文件、核心 150-290 行、3 阶段",
+      "b_position": "B 估 150-400 行 + 10-20 夹具，B 为 0",
+      "reason": "成本量级成立：lexer 383 行且 `$` 已是 punct（可 0 改），parser/Expr 7217 + Stmt 4144（N_MCALL 后缀、三上下文排除、位置/诊断），Emitter 6593（hoist 与用户变量赋值、if/while 扩展），type 复用 chk_assignable 但只 --types。测试需新增链尾/自由函数/?. /own/类型不匹配/三上下文/重复物化等夹具（现 345 目录、295 error、13 into 可作参照）。B 零源码改动；基线 1473 个门禁用例通过（另有 4 个失败节单独复跑全绿，属环境噪声）。结论是“可实施但非零”，不是“便宜”。",
+      "evidence": [
+        "E19",
+        "E20",
+        "E22",
+        "E24"
+      ],
+      "caveat": "if/while 条件不属现有 hoist 白名单（spec §4.5:323-326 只写语句行首/赋值初始化式；return 被特殊照顾），A 的位置承诺会把成本推向 400 行上限"
+    },
+    {
+      "id": "J-6",
+      "criterion": "兼容/回退：现有代码、golden、`into`、两行写法（全量门禁）",
+      "verdict": "unresolved",
+      "a_position": "A 说是纯加法语法，旧 golden 不变，可逐阶段 revert",
+      "b_position": "B 说零改动，不动 golden/生成物",
+      "reason": "A 未实现，无法对 `$name` 跑全量门禁，因此“新语法不破坏 golden”只能做静态推断：test/ast 代码 0 处 `$ident`，44 个测试文件使用 `$`，均为 range/into 等既有义项；现有合法程序不会因新增后缀被破坏，但 `$` 第 4 义项会增加 spec/诊断/上下文判定。基线全量门禁 1473 通过、4 失败、1 跳过；4 个失败节单独复跑全绿，是并发/共享 scratch 噪声，不能据此判 A 或 B 有缺陷，但也不能宣称“全量门禁零失败”。B 的零改动路径由 1473 用例与 238/152/155/29/47/split 实测支持；A 的兼容性仍属未验证。",
+      "evidence": [
+        "E09",
+        "E12",
+        "E23",
+        "E24"
+      ],
+      "unresolved_reason": "需要 A 的实现与一次干净的全量门禁；当前只能验证 B 侧兼容与 A 的静态不冲突"
+    }
+  ],
+  "coverage": [
+    {
+      "required": "1. `$name` 现状：`.m()$name`、`int $x`、range/into/errdefer 的 `$` 上下文；`$` 是否标识符",
+      "evidence": [
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07",
+        "E08"
+      ]
+    },
+    {
+      "required": "2. 两行拆链/多跳是否等价；真实语料预声明复用站点；字符/行数显著性",
+      "evidence": [
+        "E09",
+        "E10",
+        "E11"
+      ]
+    },
+    {
+      "required": "3. into 覆盖：方法调用、字段赋值、接口/own 接收者、类型改变；into 不能做什么",
+      "evidence": [
+        "E12",
+        "E13"
+      ]
+    },
+    {
+      "required": "4. SH-73 现状：临时接收者、`$name` 独立性、`?.m()`",
+      "evidence": [
+        "E14",
+        "E15",
+        "E16"
+      ]
+    },
+    {
+      "required": "5. A 的语义缺口：已声明 vs `T x =`、未初始化、多次物化、所有权、尾随/语句位置",
+      "evidence": [
+        "E17",
+        "E18",
+        "E19",
+        "E20",
+        "E21"
+      ]
+    },
+    {
+      "required": "6. 成本：lexer/parser/type/emit/诊断/测试；B 0 行",
+      "evidence": [
+        "E22",
+        "E24"
+      ]
+    },
+    {
+      "required": "7. J-1..J-6 判定",
+      "evidence": [
+        "checks"
+      ]
+    }
+  ],
+  "findings": [
+    "claim 的“repo 0 个预声明复用站点”只对 decl_then_mcall 指标成立；按 A 的真实形态（预声明变量被重新赋值后继续调用）repo 有 4 处，但每处只省 1 行，仍不足以证明 J-1 的“显著负担”。",
+    "238 的 A 形态不是“少一行”：r2/res 必须预声明，总行数与 B 的声明初始化写法相同（3 行），且引入两个未初始化变量；A 只少 4 字符。",
+    "“未初始化使用按既有检查报错”不成立：仓库没有 definite-assignment 分析，`int x; return x;` 与未初始化接口调用都零诊断，后者运行总线错误。",
+    "`?.m()` 被 PH-53 L53-7 硬拒，题面 A.5 无法实现；claim 已把 A.5 删除，若按题面原文评估 A，A.5 是硬缺口。",
+    "SH-73 未被 A 修复也未被绕过：A 的每跳接收者是变量；`req.send().status()` 无变量仍拒，`res = req.send(); res.status()` 通过。A 的单行 `$res.status()` 只是后者拼写。",
+    "全量门禁 1473 通过/4 失败/1 跳过；4 个失败节单独复跑全绿，失败输出互相串台，而相关脚本使用固定 /tmp scratch 名；判为环境/并发噪声而非基线缺陷；仍应视为“未得到干净全绿”。",
+    "HEAD 在会话期间从 claim 记载的 1cbc5f53 经 b09ddc14 推进到 373ea27c；b09ddc14..373ea27c 不改编译器源码，基线与 HEAD 的 10 个 `$`/位置探针逐字一致，不影响本轮结论。"
+  ],
+  "final_verdict": null,
+  "final_verdict_note": "本席只给 J-1..J-6 的 pass/fail/unresolved 与证据；A/B 最终判决由 EDITOR 依 question.md 判据作出。",
+  "limitations": [
+    "外部 ct-http 语料未扫描：按 AGENTS.md §9.8 DB-3，不访问其他项目工作树；claim/counter 所述外部消费方数据未提供，无法独立复核。",
+    "A 未实现，J-5 成本为源码估计而非原型实测；J-6 的全量门禁只能覆盖 B/基线。",
+    "全量门禁有 4 个节失败且单独复跑全绿；未获得一次干净的全绿运行（并发环境无法排除其他 check-ast 实例）。"
+  ]
+}
