@@ -817,6 +817,13 @@ case $? in
     *) bad "PH-67-R3 FreeRTOS" "$(sed -n '1,30p' "$work/p67rtos.out")" ;;
 esac
 
+sh test/ast/p67_dma.sh "$work/ct-ast" >"$work/p67dma.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-67-R4 DMA (Stream6 descriptor registers)"
+else
+    bad "PH-67-R4 DMA" "$(sed -n '1,6p' "$work/p67dma.out")"
+fi
+
 # PH-64 T3: --alloc maps the compiler's own heap calls and the source's
 # malloc/free onto the target's allocator, so a -nostdlib link needs no libc.
 if bash test/ast/p64_alloc.sh "$work/ct-ast" >"$work/p64al.out" 2>"$work/p64al.err"; then

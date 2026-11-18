@@ -79,7 +79,7 @@ fi
 if ! "$armcc" -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard \
         -ffreestanding -nostdlib -O1 -Wall -Wextra \
         -I "$here" -T "$here/link.ld" \
-        "$here/startup.c" "$here/clock.c" "$here/board.c" "$work/c/prog.c" \
+        "$here/startup.c" "$here/clock.c" "$here/dma.c" "$here/board.c" "$work/c/prog.c" \
         -o "$work/fw.elf" 2>"$work/cc.log"; then
     echo "FAIL: the cross build failed" >&2
     sed 's/^/  /' "$work/cc.log" >&2

@@ -21,7 +21,7 @@ fail=0
 ( cd "$root" && "$ctast" build --freestanding --emit-c test/baremetal-renode/prog.ct -o "$tmp" ) >"$tmp/build.log" 2>&1 || {
     echo "FAIL p67/dma: ct build failed" >&2; sed 's/^/  /' "$tmp/build.log" >&2; exit 1; }
 grep -q 'dma_setup_tx' "$tmp/prog.c" || { echo "FAIL p67/dma: firmware never calls dma_setup_tx()" >&2; fail=1; }
-grep -q 'dma_setup_tx' "$d/run.sh" || { echo "FAIL p67/dma: run.sh does not link dma.c" >&2; fail=1; }
+grep -q 'dma\.c' "$d/run.sh" || { echo "FAIL p67/dma: run.sh does not link dma.c" >&2; fail=1; }
 
 [ "$fail" -eq 0 ] || exit 1
 echo "OK p67/dma (DMA1 Stream6 descriptor registers)"

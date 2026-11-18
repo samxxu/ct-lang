@@ -4,6 +4,7 @@
    Cortex-M one. */
 #include "board.h"
 #include "clock.h"
+#include "dma.h"
 
 struct Counter {
     int on;
@@ -21,6 +22,9 @@ int main(void)
     uart_putu(clock_hz() / 1000000u);
     uart_puts("\n");
     uart_puts(button_pressed() ? "btn=1\n" : "btn=0\n");
+    uart_puts("dma=");
+    uart_putu((unsigned int)dma_setup_tx("dma", 3));
+    uart_puts("\n");
     systick_start(500000);
     c.on = 1;
     while (c.seen < 3) {
