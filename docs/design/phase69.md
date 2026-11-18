@@ -51,3 +51,18 @@
 | --- | --- | --- |
 | R69-1 | Module 2,858 行，单元图耦合深 | 先只读复用，不改 build 路径 |
 | R69-2 | 泛型替换与 trait 选择交互 | 分两条探针，互不依赖 |
+
+## 6 进展（2026-11-19，R1 已交付）
+
+| 任务 | 状态 | 证据 |
+| --- | --- | --- |
+| R1 单元图复用 | ✅ 完成 | `p69/unitgraph`：合法双单元 rc=0、无产物；跨单元错配 rc=1（`argument 1`）；examples/08 可检；CI run `44418184968` 绿 |
+| R2 调用签名 | 🚧 部分 | 跨单元 arity 已生效（`p69_unitgraph` 负例）；**函数指针调用**仍静默（`int (*fp)(int); fp("x")` 无诊断），待做 |
+| R3 trait 选择 | ⬜ 未开始 | 待探针定义 |
+| R4 泛型/容器 | ⬜ 未开始 | 内建容器 `Vec<T>.push` 实参类型仍不检查（PH-68 §6 已记录） |
+
+实现要点（R1）：`Emitter.no_write` + `ct_emit_set_no_write` 使 build 管线不落盘；
+`Module.build_main` 在 `check_mode` 下用 strict=1 报告；`Driver` 对含 `import` 的
+输入路由到 `build <file> --emit-c -o /tmp -I <dir>` 并开 no_write，findings 一律非零退出。
+既有门禁（`check-semantics` 的 import guard、`p32_legal_manifest.tsv` 16 行、README）
+已按新语义同步。
