@@ -1,4 +1,4 @@
-# DOC-67 · LLM 生态入口：std / ct-pkg / index
+# DOC-73 · LLM 生态入口：std / ct-pkg / index
 
 | 项 | 值 |
 | --- | --- |

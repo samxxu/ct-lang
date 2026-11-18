@@ -223,6 +223,8 @@
 | DOC-69 | Low | Phase 26 出口判据 E1–E8 未覆盖 v0.26.4 补丁交付物（TEST-18 / CI-8 / DOC-66 / DOC-68） | [doc69-phase26-exit-criteria-patch-gap.md](docs/doc69-phase26-exit-criteria-patch-gap.md) |
 | DOC-70 | Low | ~~语句级 `foreach (container) { … item … }` 未实现、未排期~~ **已关闭**：Phase 27 在 ct-ast 实现数组形态，容器协议按 D27-4 延后；命名见 phase25 D25-12（旧名 `each` 已作废） | [doc70-each-statement-form-unimplemented.md](docs/doc70-each-statement-form-unimplemented.md) |
 | DOC-71 | Low | range 初值的 `$` 被写成「下标」，实现绑定的是当前成员值（`1..6($ * $)` = 1 4 9 16 25；纯文档） | [doc71-range-dollar-is-member-not-index.md](docs/doc71-range-dollar-is-member-not-index.md) |
+| DOC-72 | High | spec/外围文档审计反馈：版本标签、L0/L2 插叙、architecture 过时、spec-cases；挂 v0-PH-67 R5，不占 phase | [doc-72-spec-audit-followup.md](docs/doc-72-spec-audit-followup.md) |
+| DOC-73 | High | LLM 生态入口：std / ct-pkg / index；先复用，不重写标准库/包 | [doc-73-llm-ecosystem.md](docs/doc-73-llm-ecosystem.md) |
 
 ### `testing/` —— 测试覆盖度
 
