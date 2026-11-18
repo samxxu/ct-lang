@@ -1,70 +1,93 @@
-# v0-PH-67 — phase ID 迁移与文档漂移审查（规划卡，不执行）
+# Phase 67 — 无真机硬件能力扩展（时钟 / 第二厂商 / RTOS / DMA / GDB）
 
-> **状态：规划中，未实施。** 2026-11-18 立项占位；等主规范裁定 blocker A/B、用户确认路径策略后才开工。
-> **不是**类型检查 PH-67；类型检查顺延为 v0-PH-68…71。
-> 本卡只冻结范围与任务，不改任何 phase 文件/ID。
+> **状态：实施中**（2026-11-18 立项；夜间自主执行）。
+> **依据**：[TEST-21](../../issues/testing/test21-baremetal-renode-stm32f4.md)、
+> [hardware-readiness-requirements](../planning/hardware-readiness-requirements.md)（REQ-HW-010/011）。
+> **前置**：PH-66 收口（`v0.65.1`）；TEST-21 已在 CI 绿。
+> **纪律**：不收口不 bump；tag 按 6.7 V-7；真机项只登记、不代做。
 
-## 0 卡片字段
+## 0 卡片字段（冻结）
 
 | 项 | 值 |
 | --- | --- |
-| phase-id | `v0-PH-67` |
-| 目标 | 把历史 `PH-1…PH-73` 机械迁移为 `v0-PH-*`，完成账本/双认/负例；文档漂移审查另列任务 |
-| 版本 | 拟 `v0.66.0`（旧 major `d=1`；待主规范裁定） |
-| 状态 | 规划中（未实施） |
-| 依赖 | 主规范 1.16.0 PN-1…PN-11；blocker A/B 裁定；用户路径策略 |
-| 禁止 | 本卡未实施前不得 rename 文件、不得改 ID、不得改 `AGENTS.md` 生成块 |
+| 编号 | PH-67 |
+| 目标 | 在没有真实板卡的条件下，把裸机能力从"能启动/打 UART"扩到：正确时钟树、第二家厂商、RTOS、DMA 代码面、GDB 联调 |
+| 范围 | 仅模拟器（Renode，CI Linux）与仓库内夹具；不碰真实板卡、不伪造 pilot 证据 |
+| 交付物 | `test/baremetal-renode/**` 扩展、CI job、`test/ast/p67_*.sh`、docs |
+| 任务清单 | §4（R1–R6，共 6 项） |
+| 退出判据 | E67-1…E67-6（§5） |
+| 依赖 | Renode 1.17（CI 下载 portable）、arm-none-eabi-gcc、FreeRTOS-Kernel（CI 下载到 `.temp`） |
+| version-minor | 66（PH-67，`d=1`，见 AGENTS §0.3） |
+| 已知风险 | R67-1…R67-4（§7） |
 
-## 1 范围
+## 1 需求与边界
 
-- 历史 ID 文本与卡片：`PH-n` → `v0-PH-n`；
-- 文件/目录：按用户方案保留旧路径或加 stub，见 blocker B；
-- 账本 `docs/planning/phase-id-ledger.md`：W0→W1→W2；
-- 旧形态负例；
-- 文档漂移审查：roadmap/卡/版本/状态/链接/空号；
-- 不改 tag、历史提交、`battle/**` 原始证据、代码/测试字符串。
+### 1.1 一句话
 
-**非目标**
+在**没有真机**的前提下，把"CT 生成的裸机固件"从 Hello-UART 推进到
+"配时钟、跑 RTOS、动 DMA、能 GDB 调试、还能换一家 MCU"。
 
-- 不迁移类型检查 PH-68…71；
-- 不改版本规则；
-- 不批量改外链；
-- 不在本卡内实施 `ct pkg`/defer。
+### 1.2 非目标
 
-## 2 待裁定（开工前置）
+- 不做真实板卡验证（REQ-HW-020 的 pilot 仍属外部依赖）；
+- 不把 FreeRTOS/Zephyr 纳入仓库构建路径：只在 CI 里下载到 `.temp/`，产物不入库；
+- 不声称 DMA 的真实搬运已验证（寄存器级配置绿不等于硅片行为）；
+- 不改 `--freestanding` 的产物契约（无系统头、无 libc）。
 
-1. 旧 `v0-PH-66` 的 `version-minor` 是否允许 `n-d`；
-2. 卡路径选扁平 `docs/design/v0-phaseNN.md` 还是 `docs/phases/<id>/card.md`；
-3. 用户已同意“ID 文本统一、旧路径保留/stub”，需落 `deviation: phase-path-stability` 或主规范例外。
+### 1.3 关键决策
 
-三项未定，本卡不进入实施。
+| 编号 | 决策 | 理由 |
+| --- | --- | --- |
+| D67-1 | 所有模拟器验证跑 CI 的 Linux x86_64 | 本机 macOS 的 Renode 只能由用户在沙箱外运行，夜间代理不能依赖它 |
+| D67-2 | FreeRTOS 源码 CI 现取到 `.temp/`，不入库 | 第三方依赖不进仓库、不进构建路径 |
+| D67-3 | DMA 只验寄存器序列与编译面，真实搬运登记为 hardware-gated | Renode 的 DMA 模型覆盖有限，不能冒充真机 |
+| D67-4 | 第二厂商选 nRF52840（Renode 官方平台） | 无需硬件，能验证不同内存图/UART 基址 |
 
-## 3 任务清单
+## 2 环境约束（夜间执行必须遵守）
 
-| 任务 | 交付物 | 验收 | effort |
-| --- | --- | --- | --- |
-| R1 | 迁移账本（旧/新 ID、路径、版本、状态） | 集合断言 1–73 不增不减、无空洞 | M |
-| R2 | `tools/phase_version.py` 适配层 + W1 双认 | 旧/新形态都过 g1/g4/g8；旧形态负例在 W2 红 | M |
-| R3 | ID 文本迁移 + 路径策略（保留/stub） | `check-docs` 零 dead；外链 stub 可打开 | M |
-| R4 | W2 关窗 + 旧形态负例 | 旧 `PH-*` 在 W2 必红 | S |
-| R5 | 文档漂移审查（[DOC-72](../../issues/docs/doc-72-spec-audit-followup.md) + [DOC-73](../../issues/docs/doc-73-llm-ecosystem.md)） | roadmap/卡/版本/状态/链接/空号报告；审计/生态项逐条勾掉 | M |
-| R6 | AGENTS/phase 指针/文档同步 | 实例化行、session-map、README 一致 | S |
+1. **不得请求沙箱外权限**；本机 `renode` 只在用户终端可用，代理不调用它。
+2. 所有 Renode 运行走 CI：push 后 `gh run watch`，失败读原始日志。
+3. 下载只落 `.temp/`（已 gitignore）；不得 vendored 进 `test/**`。
+4. 真机相关项（DMA 真实搬运、烧录、电气特性）只登记 issue，不写"已验证"。
 
-## 4 退出判据
+## 3 验收与证据
 
-| ID | 断言 |
+每个 R 任务按 T-7：先 `test(...) 红`（含 `baseline: <sha>` 与原始输出），再实现。
+红证以 CI 原始日志或本地可复跑命令为准；本地不能跑 Renode 时，红证用 CI 失败日志。
+
+## 4 任务清单（冻结）
+
+| 任务 | 交付物 | verify | effort | 备注 |
+| --- | --- | --- | --- | --- |
+| R1 时钟树 | `test/baremetal-renode/clock.c/.h`；board 用 PLL 168MHz 并重算 BRR | `bash test/ast/p67_clock.sh` → `OK p67/clock (168MHz, BRR consistent)` | M | 读回 RCC 寄存器算频率 |
+| R2 nRF52840 | `test/baremetal-renode/nrf52/**`（linker/startup/UART@0x40002000） | `bash test/ast/p67_nrf52.sh` → `OK p67/nrf52` | M | Renode `nrf52840` 平台 |
+| R3 FreeRTOS | `test/baremetal-renode/freertos/**` + CI 取源码 | `bash test/ast/p67_freertos.sh` → `OK p67/freertos (2 tasks, queue)` | M | `.temp/FreeRTOS-Kernel` |
+| R4 DMA | `test/baremetal-renode/dma.c/.h`（DMA1 Stream6 USART2_TX 描述符） | `bash test/ast/p67_dma.sh` → `OK p67/dma (registers)` | M | 真实搬运登记 issue |
+| R5 GDB | `test/baremetal-renode/gdb.sh`（Renode GDB server + `arm-none-eabi-gdb` 断点） | `bash test/ast/p67_gdb.sh` → `OK p67/gdb (breakpoint main)` | S | 需 CI 装 gdb |
+| R6 收口 | 卡内 §9、docs、版本 v0.66.0、tag | `no-test: 收口文档与版本移动` | S | REV 签字后收口 |
+
+## 5 退出判据
+
+| 编号 | 判据 |
 | --- | --- |
-| E67-1 | 账本集合相等：1–73 无增无减、无空洞；旧/新路径映射完整 |
-| E67-2 | W1 旧/新形态都过 g1/g4/g8；W2 旧形态负例红 |
-| E67-3 | 活跃文档无裸 `PH-*`（账本/battle/别名/历史 tag 除外） |
-| E67-4 | 旧路径可用：stub 或保留路径能打开；`check-docs` 零 dead |
-| E67-5 | 文档漂移报告逐项有去向；DOC-72 / DOC-73 逐项勾掉；不与迁移提交混提 |
-| E67-6 | 任务清单每项可独立验收（6.6 T-6） |
+| E67-1 | `p67/clock` 绿：读回 PLL 配置得 168MHz，BRR 与 UART 时钟一致 |
+| E67-2 | `p67/nrf52` 绿：nRF52840 内存图上启动并输出 `boot ok` |
+| E67-3 | `p67/freertos` 绿：两个任务经队列交替输出，顺序确定 |
+| E67-4 | `p67/dma` 绿：DMA 寄存器序列符合参考手册；真实搬运不在本相声称 |
+| E67-5 | `p67/gdb` 绿：GDB 在 `main` 断点命中并读回 PC |
+| E67-6 | `check-all` 11/11、`check-ast` 全绿；版本 `v0.66.0` + annotated tag；真机项全部登记 issue |
 
-## 5 不做什么
+## 6 风险
 
-- 不重命名 tag、不重写历史提交；
-- 不改 `battle/**` 原始证据；
-- 不改代码/测试字符串；
-- 不借迁移改版本位/退出判据；
-- 不把文档漂移修复混进机械迁移提交。
+| 编号 | 风险 | 缓解 |
+| --- | --- | --- |
+| R67-1 | Renode 的 DMA 模型缺失/不全 | 只验寄存器，不声称搬运；必要时降级为编译面 + 单测 |
+| R67-2 | FreeRTOS 端口在 Renode 上时序不稳 | 用队列与信号量而非裸延时，输出顺序确定化 |
+| R67-3 | CI 时长增长 | 每个 job 只加一个探针；必要时拆成独立 workflow |
+| R67-4 | 夜间无人值守卡住 | 每步有超时；失败即停并留原始日志，不重试到天荒地老 |
+
+## 7 迁移备注
+
+phase-ID 迁移（主规范 1.16/1.17 的 `v0-PH-*`）尚未开始（见
+[phase-migration-blockers](../planning/phase-migration-blockers.md)）。本卡沿用现有
+legacy 布局 `docs/design/phase67.md`；迁移启动时按 PN-5 机械改名，不单独预迁移。
