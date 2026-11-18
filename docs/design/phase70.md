@@ -49,3 +49,15 @@ CFG/定值/控制流语义检查：CFG/基本块；definite assignment；所有�
 | 编号 | 风险 | 缓解 |
 | --- | --- | --- |
 | R70-1 | 合法 C 写法多，易误报 | 只做可判定子集，skip 表入账 |
+
+## 6 进展（2026-11-19，R1 部分）
+
+| 任务 | 状态 | 证据 |
+| --- | --- | --- |
+| R1 CFG 构建 | 🚧 部分 | 暂无 CFG/基本块；先落了语句级流上下文 |
+| R2 定值/return | ⬜ 未开始 | `int x; return x;` 仍静默 |
+| R3 跳转/switch | 🚧 部分 | `ct check --semantics` 下循环外的 `break`/`continue` 报错；循环/switch 内合法；`p70/flow` 绿；**重复 case、不可达**未做 |
+
+实现：`Expr.check_mode` 指针 + `Stmt` 的 `nbreak`/`ncont` 判定；Driver 接受
+`--semantics`（与 `--types` 同入口）。CFG/definite assignment 需要新的分析层，
+留待后续轮次。
