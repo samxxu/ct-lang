@@ -57,9 +57,9 @@
 | 任务 | 状态 | 证据 |
 | --- | --- | --- |
 | R1 单元图复用 | ✅ 完成 | `p69/unitgraph`：合法双单元 rc=0、无产物；跨单元错配 rc=1（`argument 1`）；examples/08 可检；CI run `44418184968` 绿 |
-| R2 调用签名 | 🚧 部分 | 跨单元 arity 已生效（`p69_unitgraph` 负例）；**函数指针调用**仍静默 → [LANG-19](../../issues/lang/lang-19-function-pointer-call-args-unchecked.md) |
+| R2 调用签名 | ✅ 完成 | 跨单元 arity + 函数指针原型（类型/多余/零实参）；`p69/calls` 绿；残余：函数指针字段调用另记 [LANG-19](../../issues/lang/lang-19-function-pointer-call-args-unchecked.md) |
 | R3 trait 选择 | ✅ 完成 | `p69/traits`：单 trait 分派 rc=0，双 trait 歧义 rc=1（`ambiguous method`） |
-| R4 泛型/容器 | 🚧 部分 | 跨单元签名已生效；内建容器方法实参仍不检查 → [LANG-20](../../issues/lang/lang-20-container-method-args-unchecked.md) |
+| R4 泛型/容器 | ✅ 完成 | 内建容器 `Vec<int>.push("x")` 报 `argument 1`（`p69/containers`）；LANG-20 复测为误报 |
 
 实现要点（R1）：`Emitter.no_write` + `ct_emit_set_no_write` 使 build 管线不落盘；
 `Module.build_main` 在 `check_mode` 下用 strict=1 报告；`Driver` 对含 `import` 的

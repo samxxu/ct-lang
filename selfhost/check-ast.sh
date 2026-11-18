@@ -880,6 +880,13 @@ else
     bad "PH-69-R2 calls" "$(sed -n '1,8p' "$work/p69calls.out")"
 fi
 
+sh test/ast/p69_containers.sh "$work/ct-ast" >"$work/p69ct.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-69-R4 containers (builtin container args)"
+else
+    bad "PH-69-R4 containers" "$(sed -n '1,8p' "$work/p69ct.out")"
+fi
+
 sh test/ast/p69_fp.sh "$work/ct-ast" >"$work/p69fp.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-69-E69-2 fp (import units clean)"

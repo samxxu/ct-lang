@@ -342,6 +342,8 @@ pub struct Expr {
        from here instead of expecting an identifier of its own. 160 is MAX_TEXT
        here: the generated header carries no macros. (D-7) */
     char fnptr_name[160];
+    int  call_line;
+    int  call_col;
     /* The array dimensions of a function pointer live inside its declarator
        (`int (*tbl[2])(int)`), so `parse_type` collects them here and the four
        declaration entries copy them into the node's `text3` (D-5). */
@@ -5772,8 +5774,14 @@ impl ExprOps for Expr {
                         return self->sup->fail(gmsg);
                     }
                 }
-                args = self->parse_args();
-                if (args < 0) return -1;
+                {
+                    int cl_line = self->lex->tokline;
+                    int cl_col = self->lex->tokstart - self->lex->lstart + 1;
+                    args = self->parse_args();
+                    if (args < 0) return -1;
+                    self->call_line = cl_line;
+                    self->call_col = cl_col;
+                }
                 /* PH-69-R2 (LANG-19): a call through a function-pointer
                    variable has no symbol row, so its prototype is parsed from
                    the variable's type (`int (*)(int, char *)`) and the same
@@ -5792,7 +5800,7 @@ impl ExprOps for Expr {
                         }
                         if (last && *lp == '(' && last > lp + 1) {
                             int plen = (int)(last - lp - 1);
-                            int ai = args;
+                            int ai = (args == 0) ? -1 : args;
                             int k = 0;
                             int variadic = 0;
                             if (plen >= (int)sizeof ps) plen = (int)sizeof ps - 1;
@@ -5816,9 +5824,8 @@ impl ExprOps for Expr {
                                 if (ai < 0) {
                                     char amsg[MAX_TEXT];
                                     snprintf(amsg, sizeof amsg, "takes more arguments, %d given", k);
-                                    if (args >= 0
-                                        && self->sup->arity_warn(self->arena->nodes[args].line,
-                                                         (int)self->arena->nodes[args].num,
+                                    if (self->sup->arity_warn(self->call_line,
+                                                         self->call_col,
                                                          an0, amsg) != 0) return -1;
                                     break;
                                 }
@@ -5840,9 +5847,8 @@ impl ExprOps for Expr {
                             if (!variadic && ai >= 0) {
                                 char amsg[MAX_TEXT];
                                 snprintf(amsg, sizeof amsg, "takes fewer arguments, %d given", k + 1);
-                                if (args >= 0
-                                    && self->sup->arity_warn(self->arena->nodes[args].line,
-                                                     (int)self->arena->nodes[args].num,
+                                if (self->sup->arity_warn(self->call_line,
+                                                     self->call_col,
                                                      an0, amsg) != 0) return -1;
                             }
                         }

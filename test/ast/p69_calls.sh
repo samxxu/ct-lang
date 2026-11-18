@@ -37,6 +37,9 @@ CT
 cat > "$work/neg_extra.ct" <<'CT'
 int main(void) { int (*fp)(int) = 0; return fp(1, 2); }
 CT
+cat > "$work/neg_zero.ct" <<'CT'
+int main(void) { int (*fp)(int) = 0; return fp(); }
+CT
 cat > "$work/pos.ct" <<'CT'
 int main(void) { int (*fp)(int) = 0; return fp(1); }
 CT
@@ -46,6 +49,7 @@ CT
 
 check neg_type "argument 1" "$work/neg_type.ct"
 check neg_extra "arity mismatch" "$work/neg_extra.ct"
+check neg_zero "arity mismatch" "$work/neg_zero.ct"
 check pos ok "$work/pos.ct"
 check vararg ok "$work/vararg.ct"
 
