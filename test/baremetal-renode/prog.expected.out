@@ -1,4 +1,5 @@
 boot ok
 clk=168
 btn=0
+dma=1
 tick=3
