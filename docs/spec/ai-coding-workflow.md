@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| spec-version | `1.16.0` |
+| spec-version | `1.17.0` |
 | 状态 | 草稿（待用户评审，未落入任何项目） |
 | 适用范围 | `/Users/samxx/trae-ws` 下全部项目；新项目按第 12 节纳管 |
 | 主规范落点 | `.ai-engineering/methodology/ai-coding-workflow.md`（v1 建议落点，见第 11 节） |
@@ -173,7 +173,7 @@
 
 **为什么模板不改成 `0.1T` 之类的异号。** 改号不会破坏 `g0-block`（块由主规范生成，改号后块与主规范仍逐字一致），真正的代价是：①编号与实参不再同名，读者要多做一次映射；②`0.1/0.2/0.3` 被 11.5 L-2、G0、12 节以「同名小节」引用，改号要连带改这些引用；③模板的用途是照抄填空，同号能直接对位。因此只在判据侧区分，不改号。
 
-**块里放什么（1.9.0 起）。** 块内只放"每轮都要照做"的部分：§5.4 状态词、§6.4 G0–G9 判据、§6.6 T-1…T-7、§6.7 V-1…V-7、§6.7.1 PN-1…PN-11、§8.3 提交纪律、§9.8 DB-1…DB-5、§9.10 CF-1…CF-5、§11.5 L-1…L-7，加一张章节索引。原理章、角色交底、历史与附录不进块。全文副本在 `docs/spec/ai-coding-workflow.md`，块头 sha 与它绑定。**块里没有不等于没规定**（11.5 L-2 的边界）。
+**块里放什么（1.9.0 起）。** 块内只放"每轮都要照做"的部分：§5.4 状态词、§6.4 G0–G9 判据、§6.6 T-1…T-7、§6.7 V-1…V-7、§6.7.1 PN-1…PN-17、§8.3 提交纪律、§9.8 DB-1…DB-5、§9.10 CF-1…CF-5、§11.5 L-1…L-7，加一张章节索引。原理章、角色交底、历史与附录不进块。全文副本在 `docs/spec/ai-coding-workflow.md`，块头 sha 与它绑定。**块里没有不等于没规定**（11.5 L-2 的边界）。
 
 **CT 包另有专用规范。** `methodology/ct-package-coding-general.md`（CG-1…CG-7）收编对任何 CT 包都成立的编码条款；它只适用于 CT 包，不进生成块的判据摘录，也不改变主规范对其他项目的要求。
 
@@ -185,7 +185,7 @@
 - 本项目只能加严；放宽必须写 `deviation:` 并由用户签字（日期 + 理由）。
 - 生成块由 `<规范来源>/bin/sync-agents.sh --write AGENTS.md` 维护，不得手改块内任何字符。
 
-<!-- spec:begin version=1.16.0 sha256=<主规范实算摘要> -->
+<!-- spec:begin version=1.17.0 sha256=<主规范实算摘要> -->
 （此块由 sync-agents.sh 生成：块头 + 章节索引 + 必做判据摘录（5.4 / 6.4 / 6.6 / 6.7 / 6.7.1 / 8.3 / 9.8 / 9.10 / 11.5），**不是规范全文**。全文副本写到 `docs/spec/ai-coding-workflow.md`，其 sha256 必须等于块头。）
 <!-- spec:end -->
 
@@ -530,6 +530,8 @@ claim 块之外的一切（措辞、排版、示例位置、链接修复）DEV �
 
 同一 phase 内有多个 stage 时，卡片必须用 `## S1` / `## S2` 分段，每段各自贴红证与验收输出；单 stage 不要求分段（6.7.1 PN-10）。
 
+**草案卡与正式卡（6.7.1 PN-12…PN-17）。** 未定稿的 phase 用 `docs/phases/draft-<slug>/card.md`，卡头写 `phase-id: draft-<slug>` 与 `status: draft`；草案卡只需目标、范围、依赖、已知风险，不得使用 `v<M>-PH-<n>`，不得排期、派工、开工。定稿提交必须一次完成：目录改名为 `v<M>-PH-<n>`、卡头改正式编号并去掉 `status: draft`、补齐本表全部必填字段、在编号账本追加一行；缺一即未定稿。授权必须来自 decision（`target: v<M>-PH-<n>` 且有 `signer`、`date`）或 roadmap 中同时含草案标号与正式编号且带 `authorized` 的行，作者自己去掉 `draft` 不算。
+
 **硬规则：退出判据必须在开工前写死。** 中途只能新增下一个 phase，不能修改当前 phase 的退出判据。判据：`card.md` 的 `exit-criteria` 字段在本 phase 首个实现提交后不可变，由 G8 `g8-phase-freeze` 检查 diff；确需变更时关闭当前 phase 并新开一个。反例：Phase 20 立项时写"收口 v0.20.0"，P0 四项却是后来才识别的，结果 phase 变成"做到哪算哪"。
 
 **退出判据的固定一条**：每个 phase 的 `exit-criteria` 必须显式包含「任务清单每项可独立验收（6.6 T-6）」；缺此条按 G1 `g1-phase-card` 失败。该条只对本次变更之后新立的 phase 生效，已在途 phase 的退出判据不追溯（仍受上一段的冻结规则保护）。
@@ -598,17 +600,17 @@ claim 块之外的一切（措辞、排版、示例位置、链接修复）DEV �
 | 门禁 | 名称 | 命令（项目实现） | 通过判据 | 负责 | 失败处置 |
 | --- | --- | --- | --- | --- | --- |
 | G0 | 规约纳管 | `tools/check.sh g0` | `g0-block` 三项：①块头 `version`/`sha256` 等于主规范头部与实算值；②块体与 `sync-agents.sh --print` 逐字相同；③`docs/spec/ai-coding-workflow.md` 存在且 sha256 等于块头。另加块外三段齐全：实例化 8 行（含三类常驻对话名与 phase 对话命名规则）、话术路由、偏离登记位（`g0-landing`；只认 `spec:end` 之后与 `spec:begin` 之前，块内同名节忽略）；`docs/session-map.md` 存在；`版本落点` 非空（6.7） | REQ | 刷新生成块（11.5）或补块外缺段；未落库的后果见 11.5 L-3 |
-| G1 | 主张完整 | `tools/check.sh g1` | 每条要求有 ID；每条验收判据有命令与阈值；无 `TBD`；phase 卡片必填项齐全（含任务清单与 `version-minor`，`g1-version` 按 6.7.1 PN-8 的窗口解析编号，校验 `version-minor == n`、ID 合法且未被撤号复用）且退出判据可核对、含「任务清单每项可独立验收」（`g1-phase-card`） | REQ | 退回立项/设计环节，不得进入实现 |
+| G1 | 主张完整 | `tools/check.sh g1` | 每条要求有 ID；每条验收判据有命令与阈值；无 `TBD`；phase 卡片必填项齐全（含任务清单与 `version-minor`，`g1-version` 按 6.7.1 PN-8 的窗口解析编号，校验 `version-minor == n`、ID 合法且未被撤号复用）且退出判据可核对、含「任务清单每项可独立验收」（`g1-phase-card`）；草案标识、正式编号占用与定稿授权按 6.7.1 PN-12/PN-15 校验（`g1-draft`） | REQ | 退回立项/设计环节，不得进入实现 |
 | G2 | 设计可验收 | `tools/check.sh g2` | 每个接口/协议承诺映射到 `ACC-*` 条目 | REQ | 补映射表 |
 | G3 | 构建与单测 | `tools/check.sh g3` | 构建零警告；单元测试全绿；退出码 0 | DEV | 修复后重跑，贴原始输出 |
 | G4 | 文档可执行与时效 | `tools/check.sh g4` | 文档中每个可执行代码块来自 `docs/snippets/`；渲染结果与文件一致；snippet 编译/运行通过；引用锚点存在；`applies-to` 与当前发布锚点一致；单份文档 ≤ 300 行（`g4-size`；`AGENTS.md` 先剔除生成块再计数，DOC-S8）；README 结构与模块类型匹配（`g4-readme`）；发版前与 phase 收口时版本字段核对通过（`g4-version`，6.7 V-6、6.7.1 PN-1/PN-2/PN-8） | DEV | 生成 snippet、补锚点、更新 `applies-to` 或按 8.4 分拆；无法同步则删除伪造代码块 |
 | G5 | 测试自证 | `tools/check.sh g5` | 每条判据至少 1 个用例；每个门禁断言至少有 1 个负例曾变红，红证按 6.6 T-7 带 `baseline: <sha>` 与原始输出（用当前代码复跑不算） | VERIFY | 补负例或补红证；无负例的断言不计入覆盖 |
 | G6 | 台账闭合 | `tools/check.sh g6` | 每个 Issue 的 `status` 合法且证据非空；无"无结论关闭"；池条目状态合法且无超窗未处理（`g6-pool`）；phase 收口每个 issue 只有一个去向；`g4-version` 报出的版本不一致有一条对应 Issue（未立案即失败，6.7 V-6） | REV | 退回对应条目 |
 | G7 | 安全机械项 | `tools/check.sh g7` | 密钥扫描 0 命中；锁文件与依赖清单一致；sanitizer 全绿 | SEC | 命中即 P0，阻断 |
-| G8 | 提交粒度与范围 | `tools/check.sh g8` | 一提交一事；路径在角色权限内；claim 变更带 CR；门禁变更带负例；当前 phase 退出判据未被修改（`g8-phase-freeze`）；同一 `task-id` 的 `test(...) 红` 提交是实现提交的父提交（6.6 T-7）；小循环/热修的改动范围与记录合规；版本号每次只 +1、MINOR 与 phase 对应（`v<M>-PH-<n>` 的本地 `n`）、PATCH 只记 fix、纯文档提交不动版本号（`g8-version`，6.7 V-1…V-5、6.7.1 PN-9/PN-10）；新 MAJOR 首次收口必须有签字 decision（`g8-version`，6.7.1 PN-9）；phase 收口 tag 名、annotated 属性与指向提交（`g8-version`，6.7 V-7） | DEV | 拆分提交、补红证或补 CR |
+| G8 | 提交粒度与范围 | `tools/check.sh g8` | 一提交一事；路径在角色权限内；claim 变更带 CR；门禁变更带负例；当前 phase 退出判据未被修改（`g8-phase-freeze`）；同一 `task-id` 的 `test(...) 红` 提交是实现提交的父提交（6.6 T-7）；小循环/热修的改动范围与记录合规；版本号每次只 +1、MINOR 与 phase 对应（`v<M>-PH-<n>` 的本地 `n`）、PATCH 只记 fix、纯文档提交不动版本号（`g8-version`，6.7 V-1…V-5、6.7.1 PN-9/PN-10）；新 MAJOR 首次收口必须有签字 decision（`g8-version`，6.7.1 PN-9）；phase 收口 tag 名、annotated 属性与指向提交（`g8-version`，6.7 V-7）；草案不得有执行/收口证据、定稿提交必须同时完成改名/去 draft/写账本（`g8-draft`，6.7.1 PN-13/PN-14/PN-16） | DEV | 拆分提交、补红证或补 CR |
 | G9 | 规范锚定 | `tools/check.sh g9` | `AGENTS.md` 的 `spec-sha256` 与主规范一致；`spec-version` 不落后 | REQ | 更新 pin（单独提交） |
 
-本章新增的检查全部挂在既有门禁下，不新增门禁编号：`g1-phase-card`、`g1-version`、`g4-version`、`g6-pool`、`g8-phase-freeze`、`g8-version`。
+本章新增的检查全部挂在既有门禁下，不新增门禁编号：`g1-phase-card`、`g1-version`、`g1-draft`、`g4-version`、`g6-pool`、`g8-phase-freeze`、`g8-version`、`g8-draft`。
 
 ### 6.5 交接与回退
 
@@ -741,7 +743,7 @@ $ git log --oneline -2
 
 **冲突的处置纪律。** 条款之间冲突时只有两种合法处置：**改掉**（把改后条款与位置写进表，状态 `已消解`），或**登记为未消解**（写理由与收敛条件，进「未消解清单」，状态 `未消解`）。不得以"照录备查""另行讨论""已知问题"代替处置；发现冲突而不登记，视为隐藏冲突，G6 按「无结论关闭」处理。未消解清单每次 phase 收口清点一次，条数写进收口记录。
 
-### 6.7.1 phase 编号：MAJOR 作用域、迁移与双认（PN-1…PN-11）
+### 6.7.1 phase 编号：MAJOR 作用域、迁移与双认（PN-1…PN-17）
 
 > 本节只管 **phase ID 的语法、迁移与它和 MINOR 的对应**；版本三位的其余规则仍在 6.7。两处表述冲突时，编号形态以本节为准，版本位何时移动仍按 V-1…V-7。
 
@@ -798,8 +800,52 @@ $ git log --oneline -2
 | `g8-version` | G8 | PN-1、PN-2、PN-8、PN-9、PN-10；V-1…V-5、V-7 |
 | `g4-version` | G4 | PN-1、PN-2、PN-8；V-6 的版本落点核对 |
 | `g8-phase-freeze` | G8 | PN-10：stage 不换 phase 号、不改退出判据 |
+| `g1-draft` | G1 `g1-phase-card` | PN-12、PN-13、PN-15：草案标识、正式号占用、定稿授权与账本行 |
+| `g8-draft` | G8 | PN-13、PN-14、PN-16、PN-17：定稿原子性、草案禁执行、三条负例、既存草案迁移 |
 
-**适用边界。** PN-1…PN-11 自 1.16.0 起生效：只对 1.16.0 之后新开的 phase、本次历史号段迁移、以及从 W0 起的窗口推进生效。迁移前已收口的 phase 只按 PN-5 改名，版本、tag 与退出判据不回改；在途 phase 按其卡片开卡时的规范版本收口，卡名在迁移中按 PN-6 改，但不得借迁移修改其版本位或验收判据。
+**PN-12 草案标识。** 未定稿的 phase 目录必须是 `docs/phases/draft-<slug>/`，卡头必须同时写 `phase-id: draft-<slug>` 与 `status: draft`；`<slug>` 由项目自定，但**不得匹配 `v<M>-PH-<n>`，也不得写成 `v` + 数字**。草案自身不得占用或预留正式编号；roadmap 里给草案写的号只是候选，只有定稿提交写入账本才算分配。
+
+判据（`g1-draft`）：目录名等于卡头 `phase-id`；草案卡有 `status: draft`；草案卡 `phase-id` 不匹配 PN-1 的正式式；草案卡不得出现 `version-minor`；正式卡不得出现 `status: draft`。反例：`v1-PH-2` 的目录里放着 `status: draft` 的卡，按本条红。
+
+**PN-13 定稿是一次原子动作。** 定稿提交必须同时完成三件事，缺一即视为未定稿：
+
+1. 目录由 `docs/phases/draft-<slug>/` 改名为 `docs/phases/v<M>-PH-<n>/`；
+2. 卡头 `phase-id` 改为正式编号、删除 `status: draft`、补齐 §6.2 全部开卡必填字段；
+3. 编号账本追加一行：旧 ID = `draft-<slug>`，新 ID = `v<M>-PH-<n>`，旧路径/新路径、版本 `v<M>.<n>.0`、状态 `migrated`。
+
+禁止拆成多次提交，禁止先占号后补卡，禁止只改目录不改卡头。判据（`g8-draft`）：对定稿提交跑 `git show --name-status`，必须同时出现正式目录、账本、草案目录的删除或改名；HEAD 上三件必须一致；任一缺失即红。
+
+**PN-14 草案禁止执行（硬禁止）。** `status: draft` 的 phase **不得排期、不得派工、不得开工**，不得写入 `docs/session-map.md`，不得产生实现提交或收口记录，不得 bump MINOR，不得打 tag。这是硬禁止，不是建议；违反即回退到草案状态并按 G8 红处理。
+
+判据（`g8-draft`）：草案 ID 出现在 `docs/session-map.md`、`docs/version-log.txt`、`reviews/closeout-<draft-id>*.md`，或提交标题含 `[<draft-id>]`，任一命中即红。反例：卡片仍 `status: draft`，但版本日志已有该草案的收口行，按本条红。
+
+**PN-15 定稿授权。** 定稿必须有 decision 或 roadmap 条目授权，只有作者自己去掉 `draft` 不算：
+
+- decision：`docs/decisions/*.md` 中 `target: v<M>-PH-<n>`，且有非空 `signer` 与 `date`；或
+- roadmap：`docs/planning/roadmap.md` 的**同一行**同时含 `draft-<slug>` 与 `v<M>-PH-<n>`，并带 `authorized` 标记。
+
+判据（`g1-draft`）：每个正式卡都能找到上述任一授权；记录必须已入库；缺授权或只有卡头改名即红。
+
+**PN-16 门禁负例（至少三条）。**
+
+| # | 构造 | 期望 |
+| --- | --- | --- |
+| 1 | 卡头仍是 `status: draft`，但已有实施提交或收口记录 | `g8-draft` 红，引 PN-14 |
+| 2 | 账本已有正式编号，但对应目录/卡头仍带 `draft` | `g8-draft` 红，引 PN-13 |
+| 3 | 草案阶段使用了 `v<M>-PH-<n>`（目录或卡头），但未定稿 | `g1-draft` 红，引 PN-12 |
+
+三条负例必须在 `bin/gates/phase_version.py selftest` 中可运行；改动门禁时把实跑输出贴进提交正文（8.3 门禁变更带负例）。
+
+**PN-17 既存草案迁移。** 已有草案命名一次性迁移，不允许只写"后续遵守"：
+
+1. 把 `docs/phases/<slug>/`、`docs/phases/<slug>-draft/` 等草案目录统一改为 `docs/phases/draft-<slug>/`，卡头补 `phase-id: draft-<slug>` 与 `status: draft`。
+2. 草案若已占用正式编号，去掉正式号；账本记一行「旧 ID = 原正式号、新 ID = `draft-<slug>`、状态 `planned`」，原号回到可用池。若该号已被合法分配，迁移中止并由用户裁定，不得覆盖。
+3. 已开工草案立即停止新派工；已有实现提交保留，但不得收口；由用户在 decision 中二选一——补授权转正（走 PN-15 定稿）或关闭草案（保留提交、不出收口记录）。不得静默继续。
+4. 迁移提交只改目录、卡头与账本，不改代码、tag、历史提交；附迁移前后草案清单与一一对应断言。
+
+判据（`g8-draft`）：迁移后不存在「草案但目录/卡头缺 `draft`」；账本对每个被释放的正式号有 `planned` 行；`git tag` 前后逐字相同；草案集合一一对应；`g1-draft` 与 `g8-draft` 全绿。
+
+**适用边界。** PN-1…PN-17 自 1.17.0 起生效（其中 PN-1…PN-11 自 1.16.0 起）：PN-1…PN-11 只对 1.16.0 之后新开的 phase、本次历史号段迁移、以及从 W0 起的窗口推进生效；PN-12…PN-17 对 1.17.0 之后新开的草案与本次既存草案迁移生效。迁移前已收口的 phase 只按 PN-5 改名，版本、tag 与退出判据不回改；在途 phase 按其卡片开卡时的规范版本收口，卡名在迁移中按 PN-6 改，但不得借迁移修改其版本位或验收判据。已开工草案按 PN-17 处理，不追溯其历史提交，但不得继续执行。
 
 ---
 
@@ -1452,6 +1498,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 红证（red proof） | 由任务基线提交的产物产生的失败输出，含 `baseline: <sha>`、命令、原始输出与退出码；必须在实现前采集，用当前代码复跑的不算（6.6 T-7） |
 | 小循环 / 热修 | 无独立交付边界的两种轻量通道（6.3） |
 | phase ID | phase 的稳定标识 `v<M>-PH-<n>`：`M` 是 MAJOR，`n` 是该 MAJOR 内的序号，从 0 起；目录、卡片、tag message 与文档引用同形（6.7.1 PN-1） |
+| 草案 phase | 未定稿的 phase：目录 `docs/phases/draft-<slug>/`，卡头 `phase-id: draft-<slug>` + `status: draft`，不占正式编号，不得排期/派工/开工（6.7.1 PN-12、PN-14） |
 | 双认窗口 | 项目在账本头部声明的 phase ID 解析集合 W0–W3；窗口内允许旧形态，窗口结束后旧形态必须红（6.7.1 PN-8） |
 | 产品版本 | 项目对外的 `MAJOR.MINOR.PATCH`：MINOR 与 phase 的本地 `n` 一一对应、PATCH 与 fix 一一对应，与主规范自己的 `spec-version` 是两套数（6.7、6.7.1、11.4） |
 | fix | 版本意义上的修复单位：一处被立案的缺陷的一次处置，PATCH +1 一次；纯文档、注释、测试自身的修正不算（6.7 V-3、V-4） |
