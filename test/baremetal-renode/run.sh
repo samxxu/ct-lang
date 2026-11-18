@@ -104,7 +104,7 @@ if [ "$mode" = local ]; then
         -e "machine LoadPlatformDescription @platforms/boards/stm32f4_discovery-kit.repl" \
         -e "sysbus LoadELF @$work/fw.elf" \
         -e "sysbus.usart2 CreateFileBackend @$work/out/uart.txt" \
-        -e "start" -e "emulation RunFor \"00:00:00.02\"" -e "quit" \
+        -e "start" -e "sleep 8" -e "quit" \
         >"$work/renode.log" 2>&1
     rc=$?
 elif [ "$mode" = podman ]; then
@@ -118,7 +118,7 @@ elif [ "$mode" = podman ]; then
         -e "machine LoadPlatformDescription @platforms/boards/stm32f4_discovery-kit.repl" \
         -e "sysbus LoadELF @/w/fw.elf" \
         -e "sysbus.usart2 CreateFileBackend @/w/uart.txt" \
-        -e "start" -e "emulation RunFor \"00:00:00.02\"" -e "quit" \
+        -e "start" -e "sleep 8" -e "quit" \
         >"$work/renode.log" 2>&1
     rc=$?
 else
@@ -128,7 +128,7 @@ else
         -e "machine LoadPlatformDescription @platforms/boards/stm32f4_discovery-kit.repl" \
         -e "sysbus LoadELF @$work/fw.elf" \
         -e "sysbus.usart2 CreateFileBackend @$work/out/uart.txt" \
-        -e "start" -e "emulation RunFor \"00:00:00.02\"" -e "quit" \
+        -e "start" -e "sleep 8" -e "quit" \
         >"$work/renode.log" 2>&1
     rc=$?
 fi
