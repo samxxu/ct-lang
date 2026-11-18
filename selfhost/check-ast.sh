@@ -807,7 +807,7 @@ sh test/ast/p67_nrf52.sh "$work/ct-ast" >"$work/p67nrf.out" 2>&1
 case $? in
     0) ok "PH-67-R2 nRF52840 (second vendor: flash 0x0, UART0)" ;;
     77) skip "PH-67-R2 nRF52840" "$(sed -n '1p' "$work/p67nrf.out")" ;;
-    *) bad "PH-67-R2 nRF52840" "$(sed -n '1,6p' "$work/p67nrf.out")" ;;
+    *) bad "PH-67-R2 nRF52840" "$(sed -n '1,30p' "$work/p67nrf.out")" ;;
 esac
 
 # PH-64 T3: --alloc maps the compiler's own heap calls and the source's

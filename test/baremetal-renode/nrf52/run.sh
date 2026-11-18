@@ -35,12 +35,12 @@ HOME="$work/out" timeout 240 "$renode" --disable-gui --plain -P -1 \
     -e "machine LoadPlatformDescription @platforms/cpus/nrf52840.repl" \
     -e "sysbus LoadELF @$work/fw.elf" \
     -e "sysbus.uart0 CreateFileBackend @$work/out/uart.txt" \
-    -e "start" -e "sleep 8" -e "quit" >"$work/renode.log" 2>&1
+    -e "start" -e "sleep 2" -e "sysbus.cpu" -e "sleep 6" -e "quit" >"$work/renode.log" 2>&1
 diff -u "$here/prog.expected.out" "$work/out/uart.txt" >"$work/diff" || {
     echo "FAIL: nRF52840 UART output differs" >&2
     head -10 "$work/diff" >&2
-    echo "--- renode log (tail) ---" >&2
-    tail -8 "$work/renode.log" >&2
+    echo "--- renode log ---" >&2
+    sed 's/^/  /' "$work/renode.log" | tail -20 >&2
     od -c "$work/out/uart.txt" 2>/dev/null | head -5 >&2
     exit 1
 }
