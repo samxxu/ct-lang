@@ -1,6 +1,6 @@
 # Phase 69 — 跨单元/泛型/trait 类型检查
 
-> **状态：实施中（已开卡，排队实施）**（2026-11-19 立项；`v0.68.0` 拟）。
+> **状态：完成**（2026-11-19 收口；`v0.68.0`；R1–R4 全绿）。（2026-11-19 立项；`v0.68.0` 拟）。
 > **前置**：上一相收口；本卡在轮到时才开始实现。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径
 > `docs/design/phase69.md`，迁移时统一改名。
@@ -66,3 +66,16 @@
 输入路由到 `build <file> --emit-c -o /tmp -I <dir>` 并开 no_write，findings 一律非零退出。
 既有门禁（`check-semantics` 的 import guard、`p32_legal_manifest.tsv` 16 行、README）
 已按新语义同步。
+
+## 7 收口对照表（2026-11-19，v0.68.0）
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E69-1 | 对 `test/ast`+`test/modules` 的 import 单元跑 `ct check` | 119/119 可检（0 个 "requires multi-file mode"） |
+| E69-2 | `bash test/ast/p69_fp.sh <ct-ast>`；`p69_unitgraph.sh`；`p69_calls.sh`；`p69_traits.sh`；`p69_containers.sh` | 全绿（合法 import 件 0 诊断；跨单元错配/函数指针原型/歧义/容器实参均报） |
+| E69-3 | `bash selfhost/check-all.sh` | 11/11；`check-ast 1489 passed`（本机 4 skip） |
+
+任务状态：R1 ✅（`49565323`）、R2 ✅（含零实参补丁）、R3 ✅、R4 ✅（LANG-20 复测为误报）。
+
+残余：函数指针**字段**调用（`o.add(2,3)`）未覆盖，记录在 LANG-19；pkg-rooted
+import 件需 `-I`/`ct.lock`，由 CLI 参数提供（不在 check 语义内）。
