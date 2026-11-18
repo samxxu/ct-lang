@@ -147,6 +147,8 @@ fi
 if ! diff -u "$here/prog.expected.out" "$work/out/uart.txt" >"$work/diff"; then
     echo "FAIL: the guest UART output differs ($mode mode)" >&2
     head -20 "$work/diff" >&2
+    echo "--- uart bytes ---" >&2
+    od -c "$work/out/uart.txt" 2>/dev/null | head -10 >&2
     exit 1
 fi
 echo "OK baremetal-renode ($mode)"

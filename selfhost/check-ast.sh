@@ -793,7 +793,7 @@ bmr=$?
 case "$bmr" in
     0) ok "baremetal_renode (STM32F4: boot, button, SysTick, UART)" ;;
     77) skip "baremetal_renode" "$(sed -n '1p' "$work/bmr.err")" ;;
-    *) bad "baremetal_renode" "$(grep -m1 'FAIL' "$work/bmr.out" "$work/bmr.err" 2>/dev/null || sed -n '1,3p' "$work/bmr.err")" ;;
+    *) bad "baremetal_renode" "$(sed -n '1,14p' "$work/bmr.err")" ;;
 esac
 
 sh test/ast/p67_clock.sh "$work/ct-ast" >"$work/p67clock.out" 2>&1
