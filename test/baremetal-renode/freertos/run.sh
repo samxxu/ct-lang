@@ -40,7 +40,7 @@ rm -rf "$work"; mkdir -p "$work/c" "$work/out"
 "$armcc" -mcpu=cortex-m4 -mthumb -mfloat-abi=soft -ffreestanding -nostdlib -O1 \
     -Wall -Wextra -I "$here" -I "$kernel/include" -I "$kernel/portable/GCC/ARM_CM3" \
     -T "$here/link.ld" \
-    "$here/startup.c" "$here/board.c" "$here/rtos.c" "$work/c/prog.c" \
+    "$here/startup.c" "$here/board.c" "$here/rtos.c" "$here/libc_min.c" "$work/c/prog.c" \
     "$work/tasks.o" "$work/queue.o" "$work/list.o" "$work/port.o" "$work/heap.o" \
     -o "$work/fw.elf" 2>"$work/cc.log" || {
     echo "FAIL: the cross build failed" >&2; sed 's/^/  /' "$work/cc.log" >&2; exit 1
