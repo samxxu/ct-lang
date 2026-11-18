@@ -1899,7 +1899,9 @@ impl ModuleOps for Module {
         self->lex->tokstart = 0;
         self->p->ncalls = 0;
         tool::diag::ct_diag_reset();
-        tool::diag::ct_diag_set_strict(2);
+        /* PH-69-R1: `ct check` routed through the build graph keeps check
+           severity (all findings are errors), not build's signature-only 2. */
+        tool::diag::ct_diag_set_strict(self->check_mode ? 1 : 2);
         self->diag_emitted = 0;
         self->p->cur_func[0] = 0;
         frontend::parse::ct_parse_clear_error();
@@ -2245,6 +2247,9 @@ impl ModuleOps for Module {
         }
         if (!self->diag_emitted && tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;
         if (self->emit_c) {
+            /* PH-69-R1: `ct check` reuses this path only for the unit graph;
+               the suggested cc line is not part of check output. */
+            if (backend::emit::ct_emit_no_write()) return 0;
             /* The old shape, unchanged: print the suggested line, run nothing.
                The target C standard (Phase 6.4) is the only option it carries. */
             printf("cc %s", self->std_flag);

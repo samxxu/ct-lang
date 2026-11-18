@@ -243,6 +243,8 @@ struct Emitter {
     /* PH-66 R2: bit0 <stdio.h>, bit1 <wchar.h> -- headers the unit's direct
        libc I/O calls need. Bound by the module layer before each unit. */
     int  io_mask;
+    /* PH-69-R1: `ct check` reuses the build pipeline but must not write. */
+    int  no_write;
     struct MapTable  *maps;   int *nmaps;
     struct Call *calls;  int *ncalls;
     int  *build_mode;
@@ -2627,6 +2629,7 @@ impl EmitOps for Emitter {
        definitions. Prototypes come after the type declarations they may use. */
     int emit_program(int prog)
     {
+        if (self->no_write) return 0;
         int n, i;
         (void)self;
 
@@ -5716,6 +5719,7 @@ impl EmitOps for Emitter {
        is dropped, so the unlink does not strand the buffer in a dead inode. */
     int emit_unit(int u)
     {
+        if (self->no_write) return 0;
         char path[MAX_PATH];
         FILE *f;
         int rc;
@@ -5740,6 +5744,7 @@ impl EmitOps for Emitter {
        the wording of the header). */
     int write_unit_header(int u)
     {
+        if (self->no_write) return 0;
         char path[MAX_PATH];
         char guard[MAX_PATH];
         FILE *f;
@@ -5789,6 +5794,7 @@ impl EmitOps for Emitter {
        (LANG-10 7c's column is the documented degradation). */
     int write_model(const char *dest, int prog)
     {
+        if (self->no_write) return 0;
         FILE *f;
         const char *path;
         int n, i, j, first;
@@ -5917,6 +5923,7 @@ impl EmitOps for Emitter {
 
     int write_map(const char *dest, int prog, int u)
     {
+        if (self->no_write) return 0;
         FILE *f;
         const char *path;
         int trs, tre, fns, fne, cls, cle;
@@ -6227,6 +6234,7 @@ impl EmitOps for Emitter {
 
     int write_header(const char *outc)
     {
+        if (self->no_write) return 0;
         char path[MAX_PATH];
         if (self->abi_mode && *self->abi_mode)
             return self->write_abi_header(outc);
@@ -6590,4 +6598,16 @@ int ct_emit_error_line(void)
 void ct_emit_bind_io_mask(int mask)
 {
     g_emit.io_mask = mask;
+}
+
+pub void ct_emit_set_no_write(int on);
+void ct_emit_set_no_write(int on)
+{
+    g_emit.no_write = on;
+}
+
+pub int ct_emit_no_write(void);
+int ct_emit_no_write(void)
+{
+    return g_emit.no_write;
 }

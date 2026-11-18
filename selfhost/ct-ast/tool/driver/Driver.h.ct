@@ -64,6 +64,25 @@ struct Driver {
 /* PH-66 R3: whole-identifier search over the input source. The layer is
    spliced per unit, so an unused unit must stay out of the product entirely
    (its prologue includes were what put <stdio.h> into an empty program). */
+/* PH-69-R1: `ct check` routes import-bearing units through the build graph. */
+static int file_has_import(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    char line[1024];
+
+    if (!f) return 0;
+    while (fgets(line, sizeof line, f)) {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "import ", 7) == 0 || strncmp(p, "import::", 8) == 0) {
+            fclose(f);
+            return 1;
+        }
+    }
+    fclose(f);
+    return 0;
+}
+
 static int src_has_word(const char *s, const char *w)
 {
     size_t wn = strlen(w);
@@ -350,8 +369,38 @@ impl DriverOps for Driver {
         if (argc > 1 && (strcmp(argv[1], "compile") == 0
                          || strcmp(argv[1], "check") == 0)) {
             if (strcmp(argv[1], "check") == 0) {
+                int ai = 2;
+                const char *inp = NULL;
                 self->m->check_mode = 1;
                 tool::diag::ct_diag_set_strict(1);
+                while (ai < argc && argv[ai][0] == '-') ai++;
+                if (ai < argc) inp = argv[ai];
+                if (inp && file_has_import(inp)) {
+                    char dir[MAX_PATH];
+                    char *barg[10];
+                    int bi = 0;
+                    if (self->m->path_dir(inp, dir, sizeof dir) != 0) dir[0] = 0;
+                    barg[bi++] = (char *)"build";
+                    barg[bi++] = (char *)inp;
+                    barg[bi++] = (char *)"--emit-c";
+                    barg[bi++] = (char *)"-o";
+                    barg[bi++] = (char *)"/tmp";
+                    if (dir[0]) {
+                        barg[bi++] = (char *)"-I";
+                        barg[bi++] = dir;
+                    }
+                    barg[bi] = 0;
+                    backend::emit::ct_emit_set_no_write(1);
+                    {
+                        int rc = self->m->build_main(bi, barg);
+                        /* `ct check`: every finding is a failure, even when the
+                           build path only counted it as a warning. */
+                        if (rc == 0 && (tool::diag::ct_diag_nsem() > 0
+                                        || tool::diag::ct_diag_nwarn() > 0))
+                            return 1;
+                        return rc;
+                    }
+                }
             }
             argv++;
             argc--;
