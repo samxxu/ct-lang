@@ -1,0 +1,482 @@
+{
+  "schema": "battle-verify/1",
+  "battle": "inline-materialize-2",
+  "seat": "VERIFY",
+  "generated_at_utc": "2026-11-18T23:54:28Z",
+  "generated_at_local": "2026-11-19T07:54:28+08:00",
+  "head": {
+    "question_stated_baseline": "0c449d2e",
+    "question_stated_version": "v0.67.0 (incorrect)",
+    "baseline_commit": "0c449d2e2581907ef507ffd688fceea82e3d37ee",
+    "baseline_version": "0.65.1",
+    "baseline_describe": "v0.65.1-32-g0c449d2e (no tag points at it; v0.65.1 tag = 78728ebe)",
+    "head_at_start": "de261b42 (v0.68.0)",
+    "head_at_end": "fe0e4d21 (v0.68.0-4-gfe0e4d21)",
+    "head_note": "HEAD moved during the session because of concurrent commits; the battle is evaluated at 0c449d2e/v0.65.1 as requested. v0.68.0 was used only for cross-checks.",
+    "worktree": "no source/spec/test modifications by VERIFY; only untracked battle/inline-materialize-2/ and battle/static-dispatch-1/ from the battle seats."
+  },
+  "environment": {
+    "os": "macOS 27.2 (Darwin 27.2.0, arm64)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "python": "Python 3.15.2",
+    "tmp_workspace": "/tmp/vi2",
+    "baseline_snapshot": "/tmp/vi2/baseline (git archive 0c449d2e; byte-identical to /tmp/ct-battle-baseline/src)",
+    "binary": "/tmp/vi2/build/ct (ct v0.65.1; independently bootstrapped L0->L1->L2->ct-ast)",
+    "cross_check_binary": "/tmp/b2/ct (counter's v0.68.0 build; used only in E26)",
+    "probe_dir": "/tmp/vi2/p"
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "goal": "Pin the baseline and build an independent evidence binary",
+      "actions": [
+        "Read question.md, claim.md, counter.md.",
+        "Resolve 0c449d2e: 32 commits after tag v0.65.1; source declares 0.65.1.",
+        "git archive 0c449d2e to /tmp/vi2/baseline; diff against the claim snapshot (identical).",
+        "Four-stage bootstrap to /tmp/vi2/build/ct (ct v0.65.1).",
+        "Read the spec sections and the lexer/parser/emitter/symbol/type anchors."
+      ],
+      "result": "Baseline pinned; independent ct v0.65.1 available; HEAD drift noted."
+    },
+    {
+      "round": 2,
+      "goal": "Probe A's semantics/type/SH-73 claims on baseline",
+      "actions": [
+        "Three existing `$` meanings; `$NAME` syntax error; dollar boundary errors.",
+        "No definite assignment / syntactic-init false positive and false negative.",
+        "SH-73 reject messages, split workaround, --types blindness.",
+        "Same-unit trait/interface type checking; host-map --types hole; static_ctype aux6 gap; Var init-bit absence.",
+        "Emit-C ownership matrix (interface/struct/boxed/own)."
+      ],
+      "result": "Single-hop lowering shape verified; host --types class fails; SH-73 not fixed; ownership is ordinary assignment."
+    },
+    {
+      "round": 3,
+      "goal": "Verify B equivalence, cost, docs/golden/rollback, and cross-check v0.68",
+      "actions": [
+        "Split example 47 and dynamic chain; short-circuit and ternary counterexamples.",
+        "into coverage/limits (157/152, interface/own/type).",
+        "Grammar test 169 checks; corpus 1297/75072 and `$NAME` count.",
+        "Diff-size calibration (`into`, SH-72, hoist) and docs sections that must change.",
+        "v0.68.0 cross-check for `$NAME`, SH-73, --types host/dynamic."
+      ],
+      "result": "B equivalence is position-limited; cost line estimate optimistic; J statuses assigned without a final verdict."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E01",
+      "command": "git -C /Users/samxx/dsh-ws/ct-lang rev-parse 0c449d2e^{tree}\ngit -C /Users/samxx/dsh-ws/ct-lang show 0c449d2e:selfhost/ct-ast/main.ct | grep CTC_VERSION\ngit -C /Users/samxx/dsh-ws/ct-lang describe --tags 0c449d2e\ngit -C /Users/samxx/dsh-ws/ct-lang tag --points-at 0c449d2e",
+      "exit": 0,
+      "output": "7618a10217eec434eca30828892a7c1b84bcb27e\n#define CTC_VERSION \"0.65.1\"\nv0.65.1-32-g0c449d2e\n<no output: no tag points at 0c449d2e; tag v0.65.1 points at 78728ebe>",
+      "reproduced": true,
+      "note": "question.md:5 labels 0c449d2e as v0.67.0; it is 32 commits after the v0.65.1 tag and its own source says 0.65.1. claim.md/counter.md's version note (v0.65.1) is correct; the question's HEAD label is stale/wrong."
+    },
+    {
+      "id": "E02",
+      "command": "mkdir -p /tmp/vi2/baseline && git -C /Users/samxx/dsh-ws/ct-lang archive 0c449d2e | tar -x -C /tmp/vi2/baseline\ndiff -rq /tmp/vi2/baseline /tmp/ct-battle-baseline/src\nshasum -a 256 /tmp/vi2/baseline/selfhost/ct-ast/main.ct /tmp/ct-battle-baseline/src/selfhost/ct-ast/main.ct",
+      "exit": 0,
+      "output": "diff: no output (trees identical)\nac27b9b7d00d20fb58b8d89a7224a5226ba4fa383f4329dc7329fd102829d524  /tmp/vi2/baseline/selfhost/ct-ast/main.ct\nac27b9b7d00d20fb58b8d89a7224a5226ba4fa383f4329dc7329fd102829d524  /tmp/ct-battle-baseline/src/selfhost/ct-ast/main.ct",
+      "reproduced": true,
+      "note": "Independently extracted baseline snapshot is byte-identical to the claim's read-only snapshot. All behavioural probes below use /tmp/vi2/baseline + /tmp/vi2/build/ct, never the working tree."
+    },
+    {
+      "id": "E03",
+      "command": "cd /tmp/vi2/baseline\ngcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o /tmp/vi2/build/ctc\n/tmp/vi2/build/ctc selfhost/l1/ctc.ct -o /tmp/vi2/build/l1.c\ngcc -Wall -Wextra -std=c99 /tmp/vi2/build/l1.c -o /tmp/vi2/build/l1\n/tmp/vi2/build/l1 build selfhost/l2/driver.ct -o /tmp/vi2/build/l2src\ngcc -Wall -Wextra -std=c99 /tmp/vi2/build/l2src/*.c -o /tmp/vi2/build/l2\n/tmp/vi2/build/l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/vi2/build/astsrc\ngcc -Wall -Wextra -std=c99 /tmp/vi2/build/astsrc/*.c -o /tmp/vi2/build/ct\n/tmp/vi2/build/ct --version",
+      "exit": 0,
+      "output": "ct v0.65.1",
+      "reproduced": true,
+      "note": "Four-stage bootstrap from the baseline snapshot succeeded (L0 -> L1 -> L2 -> ct-ast). The evidence binary is independent of the claim's /tmp/ct-battle-baseline/build/ct-ast (same version, separately built)."
+    },
+    {
+      "id": "E04",
+      "command": "git -C /Users/samxx/dsh-ws/ct-lang log -1 --format='%H %ci %s'   # sampled at start and at end\ngit -C /Users/samxx/dsh-ws/ct-lang describe --tags\ngit -C /Users/samxx/dsh-ws/ct-lang status --porcelain",
+      "exit": 0,
+      "output": "start 07:43: de261b42 feat(ast): PH-69 ... (v0.68.0)\nend   07:54: fe0e4d21 feat(ast): PH-70-R1 break/continue 上下文检查（--semantics） (v0.68.0-4-gfe0e4d21)\nworktree: only ?? battle/inline-materialize-2/ and ?? battle/static-dispatch-1/ (no source modifications by VERIFY)",
+      "reproduced": true,
+      "note": "HEAD moved to v0.68.0 and then +4 commits while this battle ran (concurrent sessions). The battle baseline remains 0c449d2e/v0.65.1 and all behaviour probes are pinned there; v0.68.0 was used only for cross-checks (E26)."
+    },
+    {
+      "id": "E05",
+      "command": "cat > /tmp/vi2/p/dollar3.ct <<'EOF'\n#include <stdio.h>\nstruct S { int n; };\nvoid take(int v) { printf(\"%d\\n\", v); }\nint main(void)\n{\n    int a[] = 0..3($ * 2 + 1);\n    printf(\"%d %d %d\\n\", a[0], a[1], a[2]);\n    struct S s = { .n = 7 };\n    s into { take(($).n); };\n    int x = 1 defer { printf(\"defer %d\\n\", $); };\n    return 0;\n}\nEOF\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check /tmp/vi2/p/dollar3.ct; echo \"check-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/p/dollar3.ct -o /tmp/vi2/p/dollar3.bin && /tmp/vi2/p/dollar3.bin; echo \"run-rc=$?\"",
+      "exit": 0,
+      "output": "check-rc=0\n1 3 5\n7\ndefer 1\nrun-rc=0",
+      "reproduced": true,
+      "note": "Independently reproduced the three existing meanings: range index ($4.47), into receiver ($4.52), trailing-declaration alias ($4.58). A fourth meaning would be additive, not a replacement."
+    },
+    {
+      "id": "E06",
+      "command": "cat > /tmp/vi2/p/dollar_name.ct <<'EOF'\ntrait G { int get(void); }\nstruct S { int n; } use G;\nimpl G for S { int get(void) { return self->n; } }\nint main(void)\n{\n    struct S s = { .n = 1 };\n    int x = 0;\n    int r = s.get()$x;\n    return r;\n}\nEOF\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check /tmp/vi2/p/dollar_name.ct; echo \"check-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/p/dollar_name.ct -o /tmp/vi2/p/dollar_name.bin; echo \"build-rc=$?\"",
+      "exit": 0,
+      "output": "dollar_name.ct:13:20: error: unexpected token\ncheck-rc=1\ndollar_name.ct:13:20: error: unexpected token\nbuild-rc=1",
+      "reproduced": true,
+      "note": "`$NAME` after a method call is a plain syntax error today; no .c is produced. Claim E1(2) reproduced."
+    },
+    {
+      "id": "E07",
+      "command": "nl -ba selfhost/ct-ast/frontend/lex/Lexer.h.ct | sed -n '365,372p'\nnl -ba selfhost/ct-ast/frontend/parse/Expr.h.ct | sed -n '5348,5369p'\nnl -ba selfhost/ct-ast/frontend/parse/Expr.h.ct | sed -n '4500,4516p'",
+      "exit": 0,
+      "output": "Lexer.h.ct:365-371: generic single-char fallback sets toktext[0]=c; toktext[1]=0; tok=T_PUNCT; pos++\nExpr.h.ct:5348-5369: primary `$` branch\n  if (into_node >= 0) -> N_INTO_SELF\n  if (!dollar_ok) return fail(\"unexpected token\")\n  N_VAR text2=\"$\"; if (range_ctx) text3=\"range\"\nExpr.h.ct:4500-4516: postfix loop handles '.'/'->' + '(' -> N_MCALL; there is no '$' branch in the postfix loop",
+      "reproduced": true,
+      "note": "`$` is already T_PUNCT (claim anchor Lexer:371 correct). The parser has exactly one `$` primary branch; after `)` the postfix loop does not consume `$`, so A must add one postfix branch, not a token."
+    },
+    {
+      "id": "E08",
+      "command": "for src in 'int main(void){ int x=1; $ = 2; return x; }' \\\n           'int main(void){ int a[$]; return 0; }' \\\n           'int main(void){ int b[] = 0..3(&$); return 0; }' \\\n           'int main(void){ int x=1; int y=x$z; return y; }'; do\n  printf '%s\\n' \"$src\" > /tmp/vi2/p/tmp_probe.ct\n  CT_C_BOUNDARY=allow /tmp/vi2/build/ct check /tmp/vi2/p/tmp_probe.ct 2>&1 | head -2\ndone\nnl -ba selfhost/ct-ast/frontend/parse/Expr.h.ct | sed -n '425,443p'\nnl -ba selfhost/ct-ast/frontend/parse/Stmt.h.ct | sed -n '1505,1516p'\nnl -ba selfhost/ct-ast/frontend/parse/Stmt.h.ct | sed -n '3366,3374p'",
+      "exit": 0,
+      "output": "tmp_probe.ct:1:28: error: '$' is read-only and only valid in the trailing block\ntmp_probe.ct:1:22: error: '$' cannot be used in an array dimension\ntmp_probe.ct:1:34: error: the range index '$' is not a variable\ntmp_probe.ct:1:37: error: unexpected token\nExpr.h.ct:425-443: int assign_ok; int dollar_ok; int range_ctx; int into_ok; int into_node;\nStmt.h.ct:1505-1516: defer/trailing block sets dollar_ok=1 while parsing the block\nStmt.h.ct:3366-3374: range element sets dollar_ok=1 and range_ctx=1, then restores",
+      "reproduced": true,
+      "note": "Boundary errors are unchanged by A. Existing flags are enough to keep the three current meanings: into_node>=0 (into), range_ctx=1 (range element), dollar_ok=1 && range_ctx=0 (trailing/defer). A still needs a new statement-head flag for its 4th meaning (return/condition/args must stay errors)."
+    },
+    {
+      "id": "E09",
+      "command": "cat > /tmp/vi2/p/uninit.ct <<'EOF'\nint f(void) { int x; return x; }\nint main(void) { int y; y = 3; int z = y; return z; }\nEOF\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check /tmp/vi2/p/uninit.ct; echo \"check-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check --types /tmp/vi2/p/uninit.ct; echo \"types-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct --emit-c /tmp/vi2/p/uninit.ct -o /tmp/vi2/p/uninit.c >/dev/null 2>&1; grep -n \"int x\" /tmp/vi2/p/uninit.c\ncat > /tmp/vi2/p/init_false_neg.ct <<'EOF'\nint main(void) { int y; int x = y; return x; }\nEOF\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check /tmp/vi2/p/init_false_neg.ct; echo \"fn-check-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct --emit-c /tmp/vi2/p/init_false_neg.ct -o /tmp/vi2/p/init_false_neg.c >/dev/null 2>&1; sed -n '3,8p' /tmp/vi2/p/init_false_neg.c",
+      "exit": 0,
+      "output": "check-rc=0\ntypes-rc=0\n6:    int x;\nfn-check-rc=0\nint main(void) {\n    int y;\n    int x = y;\n    return x;\n}",
+      "reproduced": true,
+      "note": "There is no definite-assignment analysis: `int x; return x;` is accepted by both check and --types. A's syntactic rule would reject `T x; x=...` (the false positive the claim admits, C2) AND would accept `int x = y;` where y is uninitialized (a false negative the claim does not mention). The 'initialized' premise is a syntactic marker, not a safety proof."
+    },
+    {
+      "id": "E10",
+      "command": "cat > /tmp/vi2/p/preinit_flow.ct <<'EOF'\ntrait M { M next(void); int val(void); }\nstruct S { int n; } use M;\nstatic struct S g;\nimpl M for S { M next(void) { g.n = 2; return g; } int val(void) { return self->n; } }\nint main(void) { g.n = 1; M i = g; M j; j = i.next(); return j.val(); }\nEOF\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check --types /tmp/vi2/p/preinit_flow.ct; echo \"types-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/p/preinit_flow.ct -o /tmp/vi2/p/preinit_flow.bin && /tmp/vi2/p/preinit_flow.bin; echo \"run-rc=$?\"",
+      "exit": 0,
+      "output": "types-rc=0\nrun-rc=2",
+      "reproduced": true,
+      "note": "The flow-initialized shape `M j; j = i.next();` is legal and type-checks today, but A's syntactic rule sees no initializer on `j` and would reject `$j`. This is the C2 false positive in a very common form, not an exotic one."
+    },
+    {
+      "id": "E11",
+      "command": "CT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/p/sh73_stmt.ct -o /tmp/vi2/p/sh73_stmt.bin; echo \"stmt-build-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check --types /tmp/vi2/p/sh73_stmt.ct; echo \"stmt-types-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/p/sh73_assign.ct -o /tmp/vi2/p/sh73_assign.bin; echo \"assign-build-rc=$?\"",
+      "exit": 0,
+      "output": "sh73_stmt.ct:15:1: error: method receiver must be a variable, an element, a call or a field chain\nstmt-build-rc=1\nstmt-types-rc=0\nsh73_assign.ct:15:1: error: method receiver must be a variable, an element, a call or a field chain\nassign-build-rc=1",
+      "reproduced": true,
+      "note": "SH-73 remains a hard reject in both statement-root and assignment positions, and `ct check --types` does not flag it (emitter-only check). No evidence of a fix. Spec §4.5:316-318 states the boundary explicitly."
+    },
+    {
+      "id": "E12",
+      "command": "CT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/p/dyn_split.ct -o /tmp/vi2/p/dyn_split.bin && /tmp/vi2/p/dyn_split.bin; echo \"split-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct --emit-c /tmp/vi2/p/dyn_split.ct -o /tmp/vi2/p/dyn_split_decl.c >/dev/null 2>&1; grep -n \"iface j\\|j.vt\" /tmp/vi2/p/dyn_split_decl.c\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct --emit-c /tmp/vi2/p/dyn_assign_form.ct -o /tmp/vi2/p/dyn_assign_form.c >/dev/null 2>&1; grep -n \"iface j\\|j =\" /tmp/vi2/p/dyn_assign_form.c",
+      "exit": 0,
+      "output": "split-rc=0 (program printed 2)\n48:    struct M_iface j = i.vt->next(i.self);\n49:    printf(\"%d\\n\", j.vt->val(j.self));\n(dyn_assign_form)\n48:    struct M_iface j = i;\n49:    j = i.vt->next(i.self);\n50:    printf(\"%d\\n\", j.vt->val(j.self));",
+      "reproduced": true,
+      "note": "A's proposed lowering `j = i.next();` is exactly the assignment statement the existing emitter already produces for a pre-declared variable; the RHS is byte-identical to the declaration split. This is the strongest feasibility evidence for the single-hop dynamic case."
+    },
+    {
+      "id": "E13",
+      "command": "CT_C_BOUNDARY=allow /tmp/vi2/build/ct check --types /tmp/vi2/p/dyn_badtype.ct; echo \"bad-types-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check --types /tmp/vi2/p/dyn_goodtype.ct; echo \"good-types-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check --types /tmp/vi2/p/iface_v3_bad2.ct; echo \"iface-mismatch-rc=$?\"",
+      "exit": 0,
+      "output": "dyn_badtype.ct:15:15: error: initializer: expected 'int', got 'struct M_iface'\nbad-types-rc=1\ngood-types-rc=0\niface_v3_bad2.ct:46:24: error: interface type mismatch\niface-mismatch-rc=1",
+      "reproduced": true,
+      "note": "For a same-unit trait/interface chain, the existing --types kernel already computes the method's return type and reports initializer/assignment mismatch. A's `$` check could reuse this kernel, but that is a new call site, not a current `$` check (no `$` exists)."
+    },
+    {
+      "id": "E14",
+      "command": "# baseline v0.65.1\ncd /tmp/vi2/p/ex47d && CT_C_BOUNDARY=allow /tmp/vi2/build/ct check --types src/main.ct; echo \"baseline-types-rc=$?\"\n# build: the same wrong-type host chain\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build -I src src/main.ct -o /tmp/vi2/p/ex47d/bad.bin; echo \"baseline-build-rc=$?\"\n# current v0.68.0 cross-check\nCT_C_BOUNDARY=allow /tmp/b2/ct check --types src/main.ct; echo \"v068-types-rc=$?\"\"",
+      "exit": 0,
+      "output": "ctc: warning: -I is ignored by check mode; imports require 'ct build'\nsrc/main.ct:2:1: error: 'import' requires multi-file mode: use 'ct build' (ct check is single-unit)\nbaseline-types-rc=1\nsrc/main.ct:3:9: error: initializing 'int' with an expression of incompatible type 'struct HttpRequest'\nbaseline-build-rc=1   (C compiler diagnostic after ct emitted C)\nv068-types-rc=0       (no diagnostic at all)",
+      "reproduced": true,
+      "note": "The host-map class is a direct J-2 failure: at baseline `ct check --types` cannot even parse an import; at v0.68.0 it accepts imports but silently skips the host-map result type (the wrong `int bad = 'url'.method('GET')` exits 0). The mismatch then surfaces only as a C compiler error in build mode, exactly the degradation rule 3 forbids."
+    },
+    {
+      "id": "E15",
+      "command": "nl -ba selfhost/ct-ast/frontend/parse/Expr.h.ct | sed -n '3998,4036p'\nnl -ba selfhost/ct-ast/frontend/parse/Expr.h.ct | sed -n '4766,4775p'\nnl -ba selfhost/ct-ast/frontend/type/TypeCheck.h.ct | sed -n '385,420p'",
+      "exit": 0,
+      "output": "Expr.h.ct:3998 case N_MCALL:\n  3998-4006: aux 9/10 -> inst_inherent_method, else i = -1\n  4027: si = self->sym->find_trait(self->arena->nodes[n].text);\n  4028: if (si < 0) return 0;\nExpr.h.ct:4773-4774: type host: nodes[m].aux = 6; nodes[m].text = <receiver static type>\nTypeCheck.h.ct:385-420: expr_type's aux==6 branch matches maps[i].type_host and returns trait ret",
+      "reproduced": true,
+      "note": "static_ctype (parser) has no aux==6 branch: it treats every non-9/10 N_MCALL as a trait call and looks up `text` as a trait name, but aux==6 stores the receiver type there. `{\"...\".method(\"GET\")}$x` therefore cannot get a result type without the +15-30 line branch the claim itself lists (C5). TypeCheck's expr_type has the aux6 branch but is the box/--types path, not the parser path."
+    },
+    {
+      "id": "E16",
+      "command": "nl -ba selfhost/ct-ast/frontend/sym/Symbols.h.ct | sed -n '120,140p'\nnl -ba selfhost/ct-ast/frontend/sym/Symbols.h.ct | sed -n '621,665p'\ngrep -rn \"declare_var(\\\"self\\\"\\|declare_var(\\\"item\\\"\\|declare_var(\\\"i\\\"\" selfhost/ct-ast/frontend/parse/*.h.ct",
+      "exit": 0,
+      "output": "Var fields: name, type, is_array, dims, st, owned, own_line, autodrop, path_warned, borrowed, cview, is_param, is_fnparam, is_const, is_closure, closure_id -- no has_initializer / initialized bit\ndeclare_var initializes every field; no init marker\nDeclaration sites: Parser.h.ct:238/258/282, 1883, 3114, 3321, 3688; Stmt.h.ct:2919 (for i), 3138 (foreach item), 3151 (foreach i), 3660",
+      "reproduced": true,
+      "note": "Adding a syntactic init bit is feasible but touches Symbols.h.ct plus every declaration site (params, self, globals, locals, for/foreach, static locals). This is why the counter's 3-4 file list undercounts; the claim's inclusion of Symbols.h.ct is correct."
+    },
+    {
+      "id": "E17",
+      "command": "CT_C_BOUNDARY=allow /tmp/vi2/build/ct --emit-c /tmp/vi2/p/assign_iface.ct -o /tmp/vi2/p/assign_iface.c >/dev/null 2>&1; grep -n \"T_iface x\\|T_iface y\\|x = y\" /tmp/vi2/p/assign_iface.c\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct --emit-c /tmp/vi2/p/assign_iface2.ct -o /tmp/vi2/p/assign_iface2.c >/dev/null 2>&1; grep -n \"malloc\\|x = make\\|free(\" /tmp/vi2/p/assign_iface2.c\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct --emit-c /tmp/vi2/p/own_assign2.ct -o /tmp/vi2/p/own_assign2.c >/dev/null 2>&1; grep -n \"P_Drop_drop\\|free(\\|p =\" /tmp/vi2/p/own_assign2.c\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct --emit-c /tmp/vi2/p/own_simple.ct -o /tmp/vi2/p/own_simple.c >/dev/null 2>&1; grep -n \"P_Drop_drop\\|free(\" /tmp/vi2/p/own_simple.c",
+      "exit": 0,
+      "output": "assign_iface.c:34-36\n  struct T_iface x = (struct T_iface){ (void *)&a, &S_T_vtable };\n  struct T_iface y = (struct T_iface){ (void *)&b, &S_T_vtable };\n  x = y;\nassign_iface2.c:37 malloc box; 46 x = make(30); grep free( -> 0 matches\nown_assign2.c: no P_Drop_drop call, no free; compiler warning: potential leak: 'p' allocated but never deleted\nown_simple.c: if (p) { P_Drop_drop(p); free(p); p = 0; }",
+      "reproduced": true,
+      "note": "Interface assignment copies the two-word fat pointer (self+vt), no deep copy/dangling; boxed returns copy the malloc'd box pointer; no free is emitted on overwrite. AutoDrop is not changed by A because A refuses own targets -- and refusal is necessary: ordinary own reassignment currently suppresses the drop entirely. The forced pre-init value can therefore be a discarded box/allocation (not covered by the claim)."
+    },
+    {
+      "id": "E18",
+      "command": "# original example 47\ncd /tmp/vi2/p/ex47 && CT_C_BOUNDARY=allow /tmp/vi2/build/ct build -I src src/main.ct -o orig.bin && ./orig.bin\n# split into type-boundary variables\ncd /tmp/vi2/p/ex47b && CT_C_BOUNDARY=allow /tmp/vi2/build/ct build -I src src/main.ct -o split.bin && ./split.bin\n# a host-chain one-liner (no SH-73 involvement)\ncd /tmp/vi2/p/hst && CT_C_BOUNDARY=allow /tmp/vi2/build/ct build -I . main.ct -o hst.bin && ./hst.bin\n# host map result vs a same-named trait\ncd /tmp/vi2/p/mix && CT_C_BOUNDARY=allow /tmp/vi2/build/ct build -I . main.ct -o mix.bin; echo \"mix-rc=$?\"",
+      "exit": 0,
+      "output": "orig:  200 {\"users\":3}\nsplit: 200 {\"users\":3}\nhst:   200\nmix:   main.ct:11:1: error: no method 'status' for type 'struct HttpRequest'\nmix-rc=1",
+      "reproduced": true,
+      "note": "At statement/assignment positions B's split is output-identical (200 {\"users\":3}). But the type-host chain is already a legal one-liner -- `req.timeout(3000).send().status()` builds and prints 200 -- so A adds nothing on that path. The string-start host returns a concrete `struct HttpRequest`, not the trait `HttpRequest`; mixing the two in one unit fails, so the question's illustrative `HttpRequest req = init(); \"...\".method(...)$req...` is not a trait-interface chain as written."
+    },
+    {
+      "id": "E19",
+      "command": "cd /tmp/vi2/p/sc\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build -I . one.ct -o one.bin && ./one.bin\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build -I . split.ct -o split.bin && ./split.bin\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build -I . tern_one.ct -o tern_one.bin && ./tern_one.bin\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build -I . tern_split.ct -o tern_split.bin && ./tern_split.bin",
+      "exit": 0,
+      "output": "one:       0 0\nsplit:     0 2\ntern_one:  0 0\ntern_split:0 2",
+      "reproduced": true,
+      "note": "Two independent expression-position counterexamples to unconditional split equivalence: `c && chain` and `c ? chain : 0`. Both compile; splitting moves the side effect out of the short-circuit/conditional path. B's own counter (counter.md §1/E1-c) correctly limits its equivalence claim to statement/assignment positions; A also excludes those positions, so A and B cover the same site set there."
+    },
+    {
+      "id": "E20",
+      "command": "CT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/baseline/test/ast/157_into_chain/prog.ct -o /tmp/vi2/p/157.bin && /tmp/vi2/p/157.bin\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/baseline/test/ast/152_into_trait_method/prog.ct -o /tmp/vi2/p/152.bin && /tmp/vi2/p/152.bin\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/p/into_iface.ct -o /tmp/vi2/p/into_iface.bin; echo \"iface-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/p/into_own.ct -o /tmp/vi2/p/into_own.bin; echo \"own-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct build /tmp/vi2/p/into_type.ct -o /tmp/vi2/p/into_type.bin; echo \"type-rc=$?\"",
+      "exit": 0,
+      "output": "157: 1 2 3 / 5 7 3 / 3 / 7 7\n152: Tom says hi to Ann\ninto_iface.ct:14:7: error: 'into' cannot take an interface or 'own' receiver\niface-rc=1\ninto_own.ct:9:7: error: 'into' cannot take an interface or 'own' receiver\nown-rc=1\ninto_type.ct:12:9: error: initializing 'int' with an expression of incompatible type 'struct S' (C compiler)\ntype-rc=1",
+      "reproduced": true,
+      "note": "`into` covers only sibling methods on the same receiver: it cannot change type and rejects interface/own receivers (spec:2465). It is not a replacement for a type-changing chain; B's split is the actual substitute, with `into` only an extra for siblings."
+    },
+    {
+      "id": "E21",
+      "command": "cat > /tmp/vi2/p/opt_chain.ct <<'EOF'\nstruct S { int n; };\ntrait G { int get(void); }\nimpl G for S { int get(void) { return self->n; } }\nint main(void) { struct S s = { .n = 1 }; int x = s?.get(); return x; }\nEOF\nCT_C_BOUNDARY=allow /tmp/vi2/build/ct check /tmp/vi2/p/opt_chain.ct; echo \"opt-rc=$?\"\nnl -ba selfhost/ct-ast/frontend/parse/Expr.h.ct | sed -n '4502,4508p'\nnl -ba selfhost/ct-ast/frontend/parse/Expr.h.ct | sed -n '5415,5422p'",
+      "exit": 0,
+      "output": "opt_chain.ct:10:14: error: optional method calls are not supported; assign the receiver to a variable first\nopt-rc=1\nExpr.h.ct:4503-4508: L53-7 rejection of N_OPT receiver\nExpr.h.ct:5415-5422: static call node is N_MCALL with a=-1, aux=11",
+      "reproduced": true,
+      "note": "A's `?.m()` exclusion matches existing L53-7. Static calls are N_MCALL with no receiver (a=-1, aux=11); a postfix `$` branch must reject them and plain free calls (N_CALL), which is a small explicit check. Chain-tail rejection still needs a lookahead after `$NAME`."
+    },
+    {
+      "id": "E22",
+      "command": "cd /tmp/vi2/baseline && python3 editors/vscode/test/check-grammar.py\ngrep -n \"ct-range-index\" editors/vscode/syntaxes/ct.tmLanguage.json editors/vscode/test/check-grammar.py\ngrep -c \"check(\" editors/vscode/test/check-grammar.py",
+      "exit": 0,
+      "output": "== 169 checks, 0 failed ==\nsyntaxes: 500-502 ct-range-index { \"match\": \"\\\\$\", \"name\": \"variable.language.range-index.ct\" }\ntests: 464/587/611/701 assert `$` -> ct-range-index\n171 check( occurrences",
+      "reproduced": true,
+      "note": "`$` is globally highlighted as a range index today; a `$NAME` fourth meaning needs a new grammar pattern (or precedence change) plus test updates. The gate is 169 checks, not the 40 the docs claim; this file/test is not in the claim's 6-8 source-file list."
+    },
+    {
+      "id": "E23",
+      "command": "cd /tmp/vi2/baseline\nfind . -name '*.ct' | wc -l\nfind . -name '*.ct' | xargs wc -l | tail -1\ngrep -rn '\\$[A-Za-z_]' --include='*.ct' . | wc -l\ngrep -rn '\\$[A-Za-z_]' --include='*.ct' .",
+      "exit": 0,
+      "output": "1297\n75072 total\n7\n./selfhost/ct-ast/frontend/module/Module.h.ct:407: (`$PWD/lib/std/Vec.h.ct`); ...\n./selfhost/ct-ast/tool/pkg/Pkg.h.ct:85: ... $CT_HOME ...\n./selfhost/ct-ast/tool/pkg/Pkg.h.ct:1954: ... $CT_HOME ... $HOME ...\n./examples/tour/17_cli/mode_build_import/main.ct:3-4: ... $WORK ...\n./examples/tour/17_cli/ns_root_skip/tree/app/net/bad.ct:5: ... $WORK ...\n./examples/tour/17_cli/ns_root_ok/tree/app/sys/mod.ct:4: ... $WORK ...",
+      "reproduced": true,
+      "note": "Claim P2's corpus numbers reproduce exactly (1297 files / 75072 lines) and all 7 `$ident` hits are comments/strings, zero code sites. Therefore no migration and old goldens should not contain `$NAME`; rollback is additive. This does not prove A's other changes (static_ctype aux6) leave every existing diagnostic/golden unchanged."
+    },
+    {
+      "id": "E24",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang\ngit show --shortstat --format='%h %s' 1ef37e23 -- selfhost/ct-ast\ngit show --shortstat --format='%h %s' 5ff69ac3 -- selfhost/ct-ast\ngit show --shortstat --format='%h %s' 93985ce7 -- selfhost/ct-ast\ngrep -n \"#define N_INTO\" selfhost/ct-ast/frontend/parse/Expr.h.ct selfhost/ct-ast/frontend/parse/Stmt.h.ct selfhost/ct-ast/frontend/type/TypeCheck.h.ct selfhost/ct-ast/backend/emit/Emitter.h.ct\nwc -l selfhost/check-ast.sh",
+      "exit": 0,
+      "output": "1ef37e23 feat(ct-ast): parse, check and emit the `into` receiver block\n 4 files changed, 342 insertions(+), 4 deletions(-)\n5ff69ac3 fix(type): SH-72 ...\n 1 file changed, 19 insertions(+)\n93985ce7 fix(emit): receiver chain materialisation\n 1 file changed, 35 insertions(+), 18 deletions(-)\nN_INTO is defined in Expr.h.ct:102, Stmt.h.ct:98, TypeCheck.h.ct:51, Emitter.h.ct:39\n7947 selfhost/check-ast.sh",
+      "reproduced": true,
+      "note": "Calibration: `into` (a comparable postfix feature) is 4 files/342 lines; SH-72 is 19 lines; the receiver hoist is 35 lines. A adds a node kind duplicated in four units, so the counter's 3-4 files is low and the claim's 6-8 is defensible. A structural estimate for A is ~180-320 source lines (parser 70-120, static_ctype aux6 +20-35, emitter 60-100, symbols 20-40, grammar 5-10); 150-250 is optimistic, and tests/docs are extra."
+    },
+    {
+      "id": "E25",
+      "command": "cd /tmp/vi2/baseline\nnl -ba docs/language-spec.md | sed -n '2127,2132p'\nnl -ba docs/language-spec.md | sed -n '2580p'\nnl -ba docs/language-spec.md | sed -n '313,325p'\nnl -ba docs/language-spec.md | sed -n '2462,2466p'\nnl -ba docs/language-spec.md | sed -n '2484,2490p'",
+      "exit": 0,
+      "output": "§4.47 line 2129-2130: \"在 range/into 之外的表达式位置 ... 仍走既有的 unexpected token\"\n§4.58 line 2580: \"range/into 之外的其它表达式位置仍沿用既有 unexpected token\"\n§4.5 line 316: method-call receiver `a.m().n()` is rejected; line 318 type host is exempt\n§4.52 line 2465: into forbids interface/own receiver\n§4.53 line 2488-2490: --types skips undecidable positions and does not check cross-unit/import",
+      "reproduced": true,
+      "note": "Adding A falsifies the two explicit 'unexpected token' sentences in §4.47 and §4.58, so the spec change is not just a new §4.5/§4.10.1 subsection (claim's 20-35 lines): at minimum §4.47, §4.58, §4.5, §4.10.1 and §4.53 need edits, plus diagnostics/tutorial. Docs/golden cost is understated. The `--types` limitations at 2488-2490 directly contradict J-2's '--types 报错' for the host/import class."
+    },
+    {
+      "id": "E26",
+      "command": "# current v0.68.0 binary built by the counter (/tmp/b2/ct), only as a cross-check\nCT_C_BOUNDARY=allow /tmp/b2/ct check /tmp/vi2/p/dollar_name.ct; echo \"rc=$?\"\nCT_C_BOUNDARY=allow /tmp/b2/ct build /tmp/vi2/p/sh73_stmt.ct -o /tmp/vi2/p/sh73_68.bin; echo \"rc=$?\"\ncd /tmp/vi2/p/ex47d && CT_C_BOUNDARY=allow /tmp/b2/ct check --types src/main.ct; echo \"host-types-rc=$?\"\nCT_C_BOUNDARY=allow /tmp/b2/ct check --types /tmp/vi2/p/dyn_badtype.ct; echo \"dyn-types-rc=$?\"",
+      "exit": 0,
+      "output": "dollar_name.ct:13:20: error: unexpected token\nrc=1\nsh73_stmt.ct:15:1: error: method receiver must be a variable, an element, a call or a field chain\nrc=1\nhost-types-rc=0\ndyn_badtype.ct:15:15: error: initializer: expected 'int', got 'struct M_iface'\ndyn-types-rc=1",
+      "reproduced": true,
+      "note": "Cross-check on v0.68.0: `$NAME` and SH-73 are unchanged. PH-69 makes `ct check` accept imports, but its --types still returns 0 for a wrong-type host chain (silent skip), while it does catch the same-unit trait/interface mismatch. The J-2 host hole is therefore not a v0.65.1 artefact."
+    },
+    {
+      "id": "E27",
+      "command": "cd /tmp/vi2/baseline\nnl -ba selfhost/ct-ast/backend/emit/Emitter.h.ct | sed -n '5505,5512p'\nnl -ba selfhost/ct-ast/backend/emit/Emitter.h.ct | sed -n '2515,2520p'\nnl -ba selfhost/ct-ast/frontend/parse/Expr.h.ct | sed -n '3873p'\nnl -ba selfhost/ct-ast/frontend/type/TypeCheck.h.ct | sed -n '364,368p'",
+      "exit": 0,
+      "output": "Emitter 5508-5511: whitelist is N_VAR/N_INDEX/N_CALL/N_MEMBER/N_ARROW/N_INTO_SELF/N_INTO; N_MCALL is absent -> 'method receiver must be ...'\nEmitter 2518: 'a method call on a temporary is only allowed at the start of a statement or of an assignment'\nExpr 3873: static_ctype lives in Expr.h.ct\nTypeCheck 364-420: expr_type's N_MCALL branches (aux 5/6/3-4/9-10)",
+      "reproduced": true,
+      "note": "Anchor audit: Lexer:371, Expr:5348-5365/4500, Emitter:2518/5511/2464-2526, Symbols:120-133, spec:316/318/323-324/736-740/2465/2488-2490 all check out. Two attribution corrections: the parser's static type function is Expr.h.ct:3873 (`static_ctype`), while TypeCheck.h.ct:364-420 is `expr_type`; counter's Emitter:5514 points at the runtime-check block, the whitelist is 5508-5511. Neither correction changes the arguments."
+    }
+  ],
+  "checks": {
+    "topics": [
+      {
+        "id": "T1",
+        "title": "A 语法/语义：$ 现状、三义项、链尾/条件/实参限制、已初始化判定",
+        "result": "baseline-reproduced + design-feasible for one hop; unresolved at the edges",
+        "evidence": [
+          "E05",
+          "E06",
+          "E07",
+          "E08",
+          "E09",
+          "E10",
+          "E12"
+        ],
+        "summary": "`$` is T_PUNCT with one primary branch and no postfix branch; adding `$NAME` is a single postfix branch, gated by into_node/range_ctx/dollar_ok. A's lowering on a pre-declared target is exactly the assignment form the emitter already emits. The syntactic 'initialized' predicate is implementable but rejects the common flow-init shape and accepts `T x = y;` with uninitialized y. The claim's 'prefix is the first evaluated part' is not true for an assignment with a side-effectful LHS; A does not exclude that shape. Chain-tail/multiple/own/?. rejections are feasible but unprototyped."
+      },
+      {
+        "id": "T2",
+        "title": "类型：已声明/类型相等、--types 在 $ 处报错、返回类型不可求、泛型/trait/for instance、静态方法",
+        "result": "same-unit trait/interface class feasible; type-host class fails the --types criterion",
+        "evidence": [
+          "E09",
+          "E13",
+          "E14",
+          "E15",
+          "E16",
+          "E20",
+          "E21"
+        ],
+        "summary": "The existing --types kernel computes trait/interface returns and reports initializer/assignment mismatch; generic inherent returns have inst_method_ret; for-instance is a trait signature. But `static_ctype` lacks the aux==6 host branch (claim C5), and `ct check --types` cannot check the host/import class: baseline rejects imports, v0.68 accepts them but exits 0 on a wrong-type host call, leaving the failure to the C compiler. Rule 3 is therefore not met for A's main host example. No `$` site exists yet, so a `$`-position diagnostic is unproven."
+      },
+      {
+        "id": "T3",
+        "title": "所有权：接口/结构体/指针赋值、own/borrow/const、AutoDrop/vtable/装箱",
+        "result": "ordinary-assignment semantics confirmed; own refusal necessary; pre-init dummy not covered",
+        "evidence": [
+          "E17"
+        ],
+        "summary": "Interface assignment copies the fat pointer, struct assignment copies the value, boxed returns copy the box pointer; no free is emitted on overwrite. A refuses own/borrow/const/array/self targets; own reassignment today already suppresses the drop, so refusal is necessary. A does not alter vtable/boxing code. Caveat: forcing an initial value can discard a box/allocation, and no ASan matrix was run."
+      },
+      {
+        "id": "T4",
+        "title": "SH-73：仍拒、variable receiver 绕过、不能宣称修复",
+        "result": "still rejected; bypass is real; claim does not overclaim",
+        "evidence": [
+          "E11",
+          "E12"
+        ],
+        "summary": "`i.next().val()` exits 1 in both statement and assignment positions; --types does not catch it; `M j = i.next(); j.val()` compiles and runs. A's `$` is the assignment+variable-receiver form, so it bypasses the hop but does not fix SH-73; the claim explicitly says it does not and limits itself to one-hop materialization."
+      },
+      {
+        "id": "T5",
+        "title": "B 等价性：两行拆链/into 是否总能等价",
+        "result": "not unconditional: short-circuit/ternary counterexamples reproduced",
+        "evidence": [
+          "E18",
+          "E19",
+          "E20"
+        ],
+        "summary": "At statement/assignment positions the split is output-identical for example 47 and is the only way for a dynamic chain. In `c && chain` and `c ? chain : 0`, the one-line forms print `0 0` while the split forms print `0 2`; B's equivalence only holds at statement/assignment positions, which is exactly where B claims it. `into` cannot change type and rejects interface/own, so it only adds sibling-method coverage."
+      },
+      {
+        "id": "T6",
+        "title": "成本：6–8 文件、150–250 行、测试/golden/回退",
+        "result": "file count plausible; line/docs/test estimate optimistic; rollback clean",
+        "evidence": [
+          "E22",
+          "E23",
+          "E24",
+          "E25"
+        ],
+        "summary": "A needs a node kind duplicated in Expr/Stmt/TypeCheck/Emitter, plus Symbols, grammar JSON and tests: 6-8 source files is defensible (counter's 3-4 underestimates). A structural estimate is ~180-320 source lines; `into` is 4 files/342, SH-72 19, hoist 35. Docs must change §4.47:2130 and §4.58:2580 (not just add a §4.5/§4.10.1 subsection), and grammar has 169 checks. The corpus has zero `$NAME` code sites, so old goldens should be unaffected and `git revert` is clean."
+      }
+    ],
+    "J": [
+      {
+        "id": "J-1",
+        "criterion": "语义闭合：单次求值、赋值、链续、多次、链尾、无 ?.、无 own",
+        "status": "unresolved",
+        "evidence": [
+          "E05",
+          "E07",
+          "E08",
+          "E11",
+          "E12",
+          "E21"
+        ],
+        "summary": "The single-hop lowering works on the existing emitter (assignment form byte-identical to the split RHS), and chain-tail/multiple/own/?./static exclusions are implementable with existing flags or with parser rejection that already exists. But A is unimplemented, and two semantic boundaries are not closed: (a) assignment RHS with a side-effectful LHS (`a[i++] = chain$...`) is moved before the LHS, contradicting 'the prefix is the first evaluated part' (the existing hoist shares the assumption, but A does not exclude the shape); (b) a `for`-init declaration is claimed as a non-static local declaration initializer, but its emitter path is the for-header hoist, not the statement prelude. No multi-materialize/order/chain-tail prototype exists.",
+        "gaps": [
+          "No A prototype: every semantic claim is a design inference, not an executed result.",
+          "Assignment LHS evaluation order is not addressed; a side-effectful LHS can observe a different order than the single-line expression.",
+          "`for`-init declaration context is not separated from statement-level preludes.",
+          "Multi-materialize overwrite of boxed values can leak (see J-4)."
+        ]
+      },
+      {
+        "id": "J-2",
+        "criterion": "类型闭合：已声明/已初始化、返回类型匹配、--types 负例、无推断",
+        "status": "fail",
+        "evidence": [
+          "E09",
+          "E13",
+          "E14",
+          "E15",
+          "E16"
+        ],
+        "summary": "The same-unit trait/interface class is feasible: --types already catches `int bad = i.next()` as `initializer: expected 'int', got 'struct M_iface'`, and generic inherent returns have inst_method_ret. But A explicitly allows type-host methods (`map ... for type`) and its main example uses one, and that class fails the stated --types requirement. At baseline `ct check --types` rejects any import outright; at v0.68.0 it accepts imports but exits 0 for `int bad = \"...\".method(\"GET\")`, so the mismatch only becomes a C compiler error in build mode. `static_ctype` also has no aux==6 branch, so the `$` parser path cannot type the host result without new code. 'Initialized' is only a syntactic marker: it rejects the legal `M j; j = i.next();` and accepts `int x = y;` with uninitialized y.",
+        "scope": "Fail is for the criterion as written, which includes the host-method class. Restricting A to same-unit trait/interface methods would move this to largely-pass; extending --types/build-mode checking or adding the static_ctype aux6 branch is the missing work.",
+        "gaps": [
+          "No `$`-position type check exists, so the negative case cannot be executed.",
+          "--types host-map silent skip (v0.68) / import rejection (v0.65.1).",
+          "Syntactic init is unsound for `T x = y;` and over-strict for flow-init."
+        ]
+      },
+      {
+        "id": "J-3",
+        "criterion": "语法闭合：$ 第 4 义项与 range/into/errdefer/标识符的边界；lexer/parser 分支",
+        "status": "pass",
+        "evidence": [
+          "E05",
+          "E06",
+          "E07",
+          "E08",
+          "E21"
+        ],
+        "summary": "`$` is already T_PUNCT, so no lexer change is needed. The parser has exactly one primary `$` branch (into/range) and no postfix `$` branch, so `$NAME` is a clean new postfix branch rather than an ambiguity. Existing flags separate the three current meanings: into_node>=0, range_ctx=1 (only range elements), dollar_ok=1 && range_ctx=0 (trailing/defer). `?.m()` is already rejected; static calls are N_MCALL with a=-1/aux=11 and free calls are N_CALL, so the new branch can require a receiver-bearing method call. Chain-tail handling needs one lookahead after `$NAME`.",
+        "gaps": [
+          "A new statement/assignment-head context flag is still needed; existing flags alone do not distinguish return/condition/args from the allowed positions.",
+          "No parser prototype was built, so the branch is validated only by code inspection and boundary probes."
+        ]
+      },
+      {
+        "id": "J-4",
+        "criterion": "所有权/生命周期：接口值/结构体/指针赋值，是否复制/悬挂；不自动释放",
+        "status": "pass",
+        "evidence": [
+          "E09",
+          "E17"
+        ],
+        "summary": "The lowering is ordinary assignment: interface fat pointers copy (self+vt, no deep copy), structs copy by value, boxed returns copy the box pointer; no free is emitted, so there is no new auto-release and no new dangling. A refuses own/borrow/const/array/self targets; that refusal is necessary because ordinary own reassignment currently suppresses the drop. A does not change vtable construction or boxing decisions. Caveats: the mandatory pre-initial value can be a discarded box/allocation, and multiple materializations overwrite boxes without freeing; no ASan/ownership matrix was run.",
+        "gaps": [
+          "Forced pre-init/discarded value and repeated materialization leaks are not accounted for.",
+          "No ASan run (not required to answer the copy/dangle/auto-release question, but the counter asked for a matrix)."
+        ]
+      },
+      {
+        "id": "J-5",
+        "criterion": "SH-73 关系：是否误称修复；variable receiver 是否可绕过；文档必须写清",
+        "status": "pass",
+        "evidence": [
+          "E11",
+          "E12"
+        ],
+        "summary": "SH-73 is unchanged: `i.next().val()` still exits 1 with the same message in both statement and assignment positions, and --types does not catch it. The split variable form compiles and runs, so a variable receiver bypasses that hop; A's `$` is exactly that assignment+variable-receiver form. The claim explicitly says it does not fix SH-73 and requires the docs to call it one-hop materialization, not chain capability; it does not overclaim. The docs themselves are not written yet (A is unimplemented), so the documentation obligation remains an implementation condition.",
+        "gaps": [
+          "No A docs exist; the 'one-hop, not a chain fix' wording is a claim commitment, not a shipped doc."
+        ]
+      },
+      {
+        "id": "J-6",
+        "criterion": "成本/回归：6–8 文件、150–250 行、测试/golden/回退",
+        "status": "unresolved",
+        "evidence": [
+          "E22",
+          "E23",
+          "E24",
+          "E25"
+        ],
+        "summary": "The 6-8 source-file claim is defensible: a new node kind is duplicated in Expr/Stmt/TypeCheck/Emitter, plus Symbols and the grammar JSON (tests/docs on top); the counter's 3-4 files omits these. The 150-250 source-line claim is tight: a structural estimate is ~180-320 lines (parser 70-120, static_ctype aux6 20-35, emitter 60-100, symbols 20-40, grammar 5-10), and `into` -- the closest comparable feature -- is 4 files/342 lines. Tests and docs are understated: at least §4.47:2130 and §4.58:2580 must be edited (they explicitly say `$` outside range/into is `unexpected token`), plus §4.5/§4.10.1/§4.53, and the grammar gate has 169 checks, not 40. What does hold: 1297 .ct files/75072 lines contain zero `$NAME` code sites, so no migration and old goldens should be unaffected; revert is additive and clean.",
+        "gaps": [
+          "No prototype to measure actual source lines.",
+          "`static_ctype` aux6 changes could alter existing host-chain diagnostics even without `$` sites; 'old goldens unchanged' is a prediction, not proven."
+        ]
+      }
+    ],
+    "status_legend": {
+      "pass": "the criterion is supported by executed evidence; residual gaps are listed and do not overturn it",
+      "fail": "a concrete counterexample or unavailable prerequisite defeats the criterion as written",
+      "unresolved": "the design is plausible but no prototype/executed evidence closes the criterion, or a boundary remains underspecified"
+    }
+  },
+  "key_findings": [
+    "The baseline label is wrong: 0c449d2e is v0.65.1 (32 commits after tag v0.65.1), not v0.67.0. The claim/counter version note is correct.",
+    "A's single-hop lowering is real: `j = i.next(); j.val()` emits exactly the assignment form of the split C (assignment RHS byte-identical to the declaration split).",
+    "A's 'initialized' predicate is syntactic only: it rejects `M j; j = i.next();` (common, legal) and accepts `int x = y;` with uninitialized y.",
+    "The host-method class defeats J-2's --types requirement: baseline --types rejects imports; v0.68.0 accepts them but silently returns 0 for a wrong-type host call, leaving the error to cc. static_ctype also lacks the aux==6 branch (claim C5).",
+    "SH-73 is not fixed: the reject is unchanged and --types is blind to it; the split/variable-receiver bypass works, and A is that bypass in one line.",
+    "B's two-line equivalence is position-limited: `c && chain` / `c ? chain : 0` print 0 0 one-line vs 0 2 split. into cannot change type and rejects interface/own.",
+    "Cost: 6-8 source files is defensible (four duplicated node-kind units + Symbols + grammar); 150-250 source lines is optimistic (~180-320 structural estimate); docs/tests are understated. Zero `$NAME` sites make old goldens/revert clean."
+  ],
+  "limitations": [
+    "A is a proposal, not an implementation: no parser/emitter/type-check prototype was built in this seat (the battle forbids touching selfhost/** beyond /tmp copies). All A-behaviour statements are design inferences plus emitted-C equivalence for the manual lowering.",
+    "No ASan/ownership matrix was run; the J-4 answer is based on generated C (no free, fat-pointer copy) and the own-reassignment probe.",
+    "HEAD was moving during the session (v0.68.0 -> v0.68.0-4); all baseline evidence is pinned to the immutable 0c449d2e snapshot. The v0.68.0 cross-check is labelled separately.",
+    "The question's `HttpRequest req = init(); \"...\".method(\"GET\")$req...` mixes a type-host first hop with a trait interface; in the current unit matrix the type-host result is a concrete `struct HttpRequest`, and a same-named trait is shadowed (E18). This does not affect the lowering mechanics but affects which class of site A actually serves."
+  ],
+  "verdict_note": "No final A/B verdict is written by VERIFY. The J-1..J-6 statuses are evidence judgments: J-2 fail is scoped to the host-method/--types class; J-1/J-6 are unresolved without a prototype; J-3/J-4/J-5 pass on the executed/inspected evidence with the stated gaps."
+}
