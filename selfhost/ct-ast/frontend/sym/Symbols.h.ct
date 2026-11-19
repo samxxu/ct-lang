@@ -240,6 +240,7 @@ pub struct Field {
     /* array dims (`[2]`, `[N]`): a designated initialiser cannot reach an
        element, so such a field's vptrs are written by a loop instead */
     char dims[160];
+    int  is_pub;                /* PH-73: only `pub` fields enter the public header */
 }
 
 pub struct StructDef {

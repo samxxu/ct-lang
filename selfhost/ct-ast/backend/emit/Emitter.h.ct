@@ -1424,8 +1424,17 @@ static int emit_unit_body(struct Emitter *self, int u)
     /* Only a `.h.ct` unit publishes a header, so only it includes one of
        its own; an implementation unit's `.c` carries every declaration it
        needs (the types are emitted below, no longer skipped as `pub`). */
-    if (self->units[u].is_hdr)
+    if (self->units[u].is_hdr) {
+        int priv = 0;
+        int si2, fi2;
+        for (si2 = 0; si2 < self->sym->nstructs; si2++) {
+            if (self->sym->structs[si2].owner != u) continue;
+            for (fi2 = 0; fi2 < self->sym->structs[si2].nfields; fi2++)
+                if (!self->sym->structs[si2].fields[fi2].is_pub) priv = 1;
+        }
+        if (priv) fputs("#define CT_UNIT_PRIVATE 1\n", self->out);
         fprintf(self->out, "#include \"%s.h\"\n", self->units[u].base);
+    }
     for (i = 0; i < self->units[u].ndep; i++) {
         if (self->units[self->units[u].depu[i]].is_map) continue;
         fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
@@ -3635,10 +3644,35 @@ impl EmitOps for Emitter {
             } else {
                 fprintf(self->out, "struct %s {\n", self->arena->nodes[n].text2);
             }
-            for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
-                self->emit_indent(ind + 1);
-                if (self->emit_field(m, ind + 1) != 0) return -1;
-                fputs(";\n", self->out);
+            {
+                int si_p = self->sym->find_struct(self->arena->nodes[n].text2);
+                int privp = 0;
+                int m2;
+                if (si_p >= 0 && self->sym->structs[si_p].nuse == 0) {
+                    int has_pub = 0, has_priv = 0;
+                    for (m2 = 0; m2 < self->sym->structs[si_p].nfields; m2++) {
+                        if (self->sym->structs[si_p].fields[m2].is_pub) has_pub = 1;
+                        else has_priv = 1;
+                    }
+                    privp = has_pub && has_priv;
+                }
+                if (privp) fputs("#ifdef CT_UNIT_PRIVATE\n", self->out);
+                for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+                    self->emit_indent(ind + 1);
+                    if (self->emit_field(m, ind + 1) != 0) return -1;
+                    fputs(";\n", self->out);
+                }
+                if (privp) {
+                    fputs("#else\n", self->out);
+                    for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+                        if (self->arena->nodes[m].kind == N_FIELD
+                            && !self->arena->nodes[m].d) continue;
+                        self->emit_indent(ind + 1);
+                        if (self->emit_field(m, ind + 1) != 0) return -1;
+                        fputs(";\n", self->out);
+                    }
+                }
+                if (privp) fputs("#endif\n", self->out);
             }
             si = self->sym->find_struct(self->arena->nodes[n].text2);
             if (si >= 0) {

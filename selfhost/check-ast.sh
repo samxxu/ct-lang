@@ -929,6 +929,13 @@ else
     bad "PH-70-R2 uninit" "$(sed -n '1,8p' "$work/p70i.out")"
 fi
 
+sh test/ast/p73_export.sh "$work/ct-ast" >"$work/p73ex.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-73-R1 export (pub field surface)"
+else
+    bad "PH-73-R1 export" "$(sed -n '1,8p' "$work/p73ex.out")"
+fi
+
 sh test/ast/p72_qualified.sh "$work/ct-ast" >"$work/p72q.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-72-R6 qualified (type + value positions)"
