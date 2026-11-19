@@ -3830,7 +3830,7 @@ static struct Parser g_parse;
    put ~14 MB of zeroes into __DATA and shipped a 21 MB compiler. */
 /* Keep in step with MAX_CALLS in Expr.h.ct: macros do not cross a unit
    boundary, and a smaller array here would be an overflow, not a diagnostic. */
-static struct Call g_calls[2048];
+static struct Call g_calls[8192];
 static struct MapTable  *g_maps;
 static struct Field   g_pend_fields[64];
 

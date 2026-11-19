@@ -57,7 +57,7 @@ import tool::diag::Diag;
    budget started failing on ct-ast's own source; 2048 keeps the growth room.
    The table is `MAX_CALLS * sizeof(struct Call)`, so this costs ~320 KiB in
    BSS, not a product change. */
-#define MAX_CALLS 2048
+#define MAX_CALLS 8192
 /* Mirror of Symbols.h.ct's whole-program budget; macros do not cross units. */
 #define MAX_FUNCS 512
 /* Phase 32 S7: the argument start positions of the call being parsed. The
@@ -6524,7 +6524,13 @@ impl ExprOps for Expr {
     {
         (void)self;
         if (!self->cur_func[0]) return 0;
-        if (*self->ncalls >= MAX_CALLS) return self->sup->fail("too many calls");
+        if (*self->ncalls >= MAX_CALLS) {
+            char cmsg[MAX_TEXT];
+            snprintf(cmsg, sizeof cmsg,
+                     "too many calls (MAX_CALLS=%d; split into library builds or use indirection)",
+                     MAX_CALLS);
+            return self->sup->fail(cmsg);
+        }
         snprintf(self->calls[*self->ncalls].caller, MAX_TEXT, "%s", self->cur_func);
         snprintf(self->calls[*self->ncalls].callee, MAX_TEXT, "%s", callee);
         self->calls[*self->ncalls].line = line;
