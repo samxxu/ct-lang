@@ -1600,6 +1600,108 @@ else
 fi
 
 echo
+echo "== PKG-9: a manifest must declare publisher + ns-root before ct get =="
+# The pre-PH-63 code treated a missing identity as "old manifest" and silently
+# fell back to a v1 lock row (no `# ct-lock 2`, no store). `ct get` must now be
+# a hard error that names the field, writes no lock and commits nothing to the
+# store; the lock a previous successful get wrote must stay byte-identical.
+P9="$work/p9"
+mkdir -p "$P9/pub/ns" "$P9/ns" "$P9/ok/ns" "$P9/both" "$P9/proj"
+printf 'name = demo\nversion = 0.2.0\nns-root = ns\n' >"$P9/pub/ct.pkg"
+printf 'name = demo\npublisher = ct\nversion = 0.2.0\n' >"$P9/ns/ct.pkg"
+printf 'name = demo\npublisher = ct\nversion = 0.2.0\nns-root = ns\n' >"$P9/ok/ct.pkg"
+printf 'name = demo\nversion = 0.2.0\n' >"$P9/both/ct.pkg"
+printf 'name = app\nversion = 0.1.0\n' >"$P9/proj/ct.pkg"
+
+# A1: missing publisher. A2: missing ns-root. Neither may write a lock or a
+# store entry, and neither may degrade to a v1 row.
+p9_reject() { # <home> <src> <field> <label>
+    rm -rf "$P9/$1" "$P9/proj/ct.lock"
+    mkdir -p "$P9/$1"
+    ( cd "$P9/proj" && HOME="$P9/$1" CT_HOME="$P9/$1" \
+        "$work/ct-ast" get "$2" >"$P9/$1.out" 2>"$P9/$1.err" )
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+        bad "$4" "ct get exited 0 (a v1 fallback would look like this)"
+    elif ! grep -Fq "is missing '$3'" "$P9/$1.err"; then
+        bad "$4" "missing the field name in stderr: $(head -2 "$P9/$1.err")"
+    elif [ -f "$P9/proj/ct.lock" ]; then
+        bad "$4" "a refused get wrote ct.lock: $(head -1 "$P9/proj/ct.lock")"
+    elif [ -d "$P9/proj/vendor" ]; then
+        bad "$4" "a refused get wrote vendor/"
+    elif [ -d "$P9/$1/pkg/ct/demo" ]; then
+        bad "$4" "a refused get committed to the store"
+    else
+        ok "$4"
+    fi
+}
+p9_reject p9h_pub ../pub publisher "ct get refuses a manifest without publisher"
+p9_reject p9h_ns ../ns ns-root "ct get refuses a manifest without ns-root"
+
+# A1b: the refusal must come before the dependency traversal. `deppkg` lacks a
+# publisher but depends on a complete package; a refused get may not leave that
+# dependency in the shared store (PKG-9: no lock *and* no store write).
+P9DEP="$P9/deppkg"
+mkdir -p "$P9DEP" "$P9/h_dep"
+printf 'name = bad\nversion = 0.1.0\nns-root = .\ndep = ../ok@^0.2.0\n' >"$P9DEP/ct.pkg"
+rm -f "$P9/proj/ct.lock"
+( cd "$P9/proj" && HOME="$P9/h_dep" CT_HOME="$P9/h_dep" \
+    "$work/ct-ast" get ../deppkg >"$P9/dep.out" 2>"$P9/dep.err" )
+rc=$?
+if [ "$rc" -eq 0 ]; then
+    bad "PKG-9 dependency store write" "ct get exited 0"
+elif ! grep -Fq "is missing 'publisher'" "$P9/dep.err"; then
+    bad "PKG-9 dependency store write" "missing the field name: $(head -2 "$P9/dep.err")"
+elif [ -d "$P9/h_dep/pkg/ct/demo" ]; then
+    bad "PKG-9 dependency store write" \
+        "a refused get committed its dependency 'ct/demo' to the store"
+elif [ -f "$P9/proj/ct.lock" ]; then
+    bad "PKG-9 dependency store write" "a refused get wrote ct.lock"
+else
+    ok "a refused get commits no dependency to the store"
+fi
+
+# A6: a previous lock survives the refused get byte for byte.
+P9OK="$P9/okproj"
+mkdir -p "$P9OK" "$P9/h_ok"
+printf 'name = app\nversion = 0.1.0\n' >"$P9OK/ct.pkg"
+( cd "$P9OK" && HOME="$P9/h_ok" CT_HOME="$P9/h_ok" \
+    "$work/ct-ast" get ../ok >/dev/null 2>&1 )
+cp "$P9OK/ct.lock" "$P9/lock.before"
+( cd "$P9OK" && HOME="$P9/h_ok" CT_HOME="$P9/h_ok" \
+    "$work/ct-ast" get ../pub >/dev/null 2>"$P9/lock.err" )
+if cmp -s "$P9OK/ct.lock" "$P9/lock.before"; then
+    ok "a refused get leaves the previous ct.lock byte-identical"
+else
+    bad "PKG-9 lock survival" "$(diff "$P9/lock.before" "$P9OK/ct.lock" | head -4)"
+fi
+
+# A3: the complete manifest still locks as v2 with publisher/ns-root.
+P9GOOD="$P9/goodproj"
+mkdir -p "$P9GOOD" "$P9/h_good"
+printf 'name = app\nversion = 0.1.0\n' >"$P9GOOD/ct.pkg"
+if ( cd "$P9GOOD" && HOME="$P9/h_good" CT_HOME="$P9/h_good" \
+        "$work/ct-ast" get ../ok >/dev/null 2>"$P9/good.err" ) \
+   && [ "$(head -1 "$P9GOOD/ct.lock")" = "# ct-lock 2" ] \
+   && grep -q '^ct/demo 0\.2\.0 dir ' "$P9GOOD/ct.lock" \
+   && grep -q ' - ns ' "$P9GOOD/ct.lock" \
+   && [ -f "$P9/h_good/pkg/ct/demo/0.2.0/ct.pkg" ]; then
+    ok "a complete manifest writes a v2 lock and lands in the store"
+else
+    bad "PKG-9 complete manifest" "$(cat "$P9/good.err"; head -2 "$P9GOOD/ct.lock" 2>/dev/null)"
+fi
+
+# A7: `ct pkg check` keeps its two exact messages and rc=1.
+( cd "$P9/proj" && "$work/ct-ast" pkg check ../both >"$P9/check.out" 2>"$P9/check.err" )
+if [ $? -ne 0 ] \
+   && grep -Fq "is missing 'publisher'" "$P9/check.err" \
+   && grep -Fq "is missing 'ns-root'" "$P9/check.err"; then
+    ok "ct pkg check still reports both missing fields"
+else
+    bad "PKG-9 pkg check" "$(cat "$P9/check.err")"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]
