@@ -109,3 +109,15 @@ rc=0
   `lstart` 未重置导致的负列。
 - 验证：`sh test/ast/p74_map.sh <ct-ast>` → `OK p74/map`；`p74_model.sh` 同样绿。
 
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：PH-74 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 命令/输出：
+
+```console
+$ bash test/ast/p74_map.sh /tmp/ci9-sh93-build/ct-ast
+OK p74/map (lib facet + entry file)
+$ bash test/ast/p74_model.sh /tmp/ci9-sh93-build/ct-ast
+OK p74/model (J11 loc + entry unit)
+```

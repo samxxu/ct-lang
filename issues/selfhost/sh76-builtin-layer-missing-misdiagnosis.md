@@ -100,3 +100,13 @@ $ ctc h.ct -o h.c          # struct H { Str s; };
 - 提交：`4280ed7e`
 - 改动：类型位置未知 `Name<` 与裸内建泛型的明确诊断
 - 验证：`sh test/ast/p72_stdmissing.sh <ct-ast>` → `OK p72/stdmissing`
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：PH-72 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 命令/输出：
+
+```console
+$ bash test/ast/p72_stdmissing.sh /tmp/ci9-sh93-build/ct-ast
+OK p72/stdmissing (builtin layer diagnostics)
+```

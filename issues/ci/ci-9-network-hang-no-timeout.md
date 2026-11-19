@@ -40,3 +40,32 @@ confirmed-by: REQ-review-v077-1
 ## 范围
 
 P1；fix/task，不占 phase。DEV 负责；CI 入口与 Pkg 同改。
+
+## 处置（2026-11-20，DEV）
+
+**结论：fixed（待 REV 复核）。** 红证提交 `5e9e53ce`，实现提交 `1fa773a8`。
+
+已核实（基线 `5b13fef4`）：`git_run` 只有裸 `system("... 2>/dev/null")`；本地
+“accept 后不响应”的 HTTP git 服务让 `ct get` 越过 40s 仍不返回。
+
+改法（`selfhost/ct-ast/tool/pkg/Pkg.h.ct`）：
+
+- `GIT_TERMINAL_PROMPT=0` + `GIT_ASKPASS=true` 关闭凭据提示；
+- 每条 git 命令插入 `-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60`，
+  无 `timeout` 的平台（macOS）也能中止停滞传输；
+- 有 `timeout` 时包一层 `timeout ${CT_GIT_TIMEOUT:-180}`（只接受数字），
+  无 `timeout` 时退化为 git 自身配置；
+- 插入点固定在 `git ` 之后，所有 caller 的 `-C`/子命令参数不变。
+
+探针：`test/ast/p77_net_timeout.sh`（python3 起 accept-不响应 server；
+无 `timeout` 平台 `exit 77` skip），已接入 `selfhost/check-ast.sh`。
+
+验证（实现后，本轮重建的 ct-ast）：
+
+```console
+$ bash test/ast/p77_net_timeout.sh /tmp/ci9-sh93-build/ct-ast
+OK p77/net-timeout (ct get failed in 5s, rc=1)
+```
+
+正例不回归：`test/pkg/run.sh` 的本地 `file://` 与本地 git 仓取包仍 147/0
+（见 `selfhost/check-all.sh` 门 7，2026-11-20 本轮复跑）。

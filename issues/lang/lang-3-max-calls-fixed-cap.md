@@ -80,3 +80,13 @@ calls.ct:1024:8: error: too many calls
 - 提交：`43cf9251`
 - 改动：MAX_CALLS 2048→8192，溢出文案含上限与绕法
 - 验证：`sh test/ast/p72_maxcalls.sh <ct-ast>` → `OK p72/maxcalls`（3000 条通过；9000 条报 `too many calls (MAX_CALLS=8192; ...)`）
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：PH-72 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 命令/输出：
+
+```console
+$ bash test/ast/p72_maxcalls.sh /tmp/ci9-sh93-build/ct-ast
+OK p72/maxcalls (4096+ calls, named limit)
+```

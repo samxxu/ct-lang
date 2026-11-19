@@ -150,3 +150,17 @@ int lib_conn_secret(struct lib_Conn *);
 - 验证：`sh test/ast/p73_export.sh <ct-ast>` → `OK p73/export`；`p73_abi`/`p73_docs`
   同样绿；消费者读私有字段在构建期失败。
 
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：PH-73 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 命令/输出：
+
+```console
+$ bash test/ast/p73_export.sh /tmp/ci9-sh93-build/ct-ast
+OK p73/export (pub field surface)
+$ bash test/ast/p73_abi.sh /tmp/ci9-sh93-build/ct-ast
+OK p73/abi (duplicate struct refused)
+$ bash test/ast/p73_docs.sh /tmp/ci9-sh93-build/ct-ast
+OK p73/docs (field visibility documented)
+```

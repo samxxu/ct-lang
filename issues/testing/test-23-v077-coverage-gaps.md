@@ -45,3 +45,43 @@ confirmed-by: REQ-review-v077-1
 ## 范围
 
 P2；不阻塞 1.0；可分批。
+
+## 处置（2026-11-20，DEV）
+
+**结论：deferred（可分批；本批不做）。**
+
+已核实现状（2026-11-20，HEAD 含 DOC-75 `aa1b0d3b`）：
+
+```console
+$ ls -d examples/*/ | wc -l
+51
+$ find test/ast -mindepth 1 -maxdepth 1 -type d | wc -l
+299
+$ ls test/ast/errors/*.ct | wc -l
+295
+$ find test/ast/errors -name '*.ct' | wc -l
+337        # 含 errors/ 子目录内的 42 个；README 的 295 指顶层裸 .ct
+$ command -v llvm-cov lcov
+（无输出；仅 /usr/bin/gcov 存在，Apple LLVM 21 的 gcov 兼容层）
+$ ls -d test/unit
+test/unit  # 这是 L0 C 辅助函数的白盒测试，不是 ct-ast 单测
+```
+
+缺口 6/10（计数与 README 不一致）已由 DOC-75 的 D-3/D-4 对齐：README 的
+299 目录 / 295 顶层 error 夹具 / 51 example 与实测一致。剩余 1–5、7–9 未做。
+
+为什么本批不做：覆盖率（nightly 报告）、ct-ast 白盒单测、3–5 个容量夹具、
+4 个 near-phase example 是四个独立交付物，每个都要自己的命令与输出
+（T-1/T-2），不是一次 fix。
+
+下一最小动作（成本从低到高）：
+
+1. nightly 加 `gcov` 报告（只报告不设阈值）：`CC="cc --coverage"` 重建
+   ct-ast，跑 `check-ast.sh` 后 `gcov`；文件 `.github/workflows/nightly.yml`；
+2. `test/ast/p72_limits.sh`：`MAX_GENERIC_INSTS`/`MAX_CLOSURES`/`MAX_PARAMS`/
+   `MAX_STRUCT_TPARAMS` 各一条越界硬错负例，接入 `check-ast.sh`；
+3. 4 个 near-phase example：`examples/77_*`（freestanding/alloc、
+   c-boundary/shim、emit-model、check --types），每个 20–40 行 +
+   `expected.out`；
+4. 计数脚本：`ls test/ast/errors/*.ct | wc -l` 与 `find test/ast -mindepth 1
+   -maxdepth 1 -type d | wc -l` 回填 `test/README.md:6/19`。

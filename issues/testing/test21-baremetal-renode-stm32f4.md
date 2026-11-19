@@ -41,3 +41,17 @@ GPIO 的寄存器面。
 
 - [TEST-20](test20-baremetal-qemu-smoke.md)：通用 Cortex-M 冒烟；
 - [PH-64 卡 §5](../../docs/design/phase64.md)：符号面证据。
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：本机（macOS 沙箱）无法给出 Renode 证据；探针按设计 skip，CI Linux
+  仍是权威运行点。只记录证据，不改 `status`。
+- 命令/输出：
+
+```console
+$ sh test/baremetal-renode/run.sh /tmp/ci9-sh93-build/ct-ast
+rc=77
+skip: container Renode is known-slow here; set RENODE_ALLOW_SLOW=1 to try
+```
+
+（未声称已验证；`RENODE_ALLOW_SLOW=1` 会拖垮本机门禁速度，未尝试。）

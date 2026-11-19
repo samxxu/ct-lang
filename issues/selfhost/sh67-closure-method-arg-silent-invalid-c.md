@@ -135,3 +135,14 @@ cc rc=1
 - 改动：单 fp 形态继续硬错（不再静默坏 C）；pair 形态走 SH-65 支持
 - 验证：`p75_closure_neg.sh` → `OK p75/closure-neg`
 
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：单函数指针形仍硬错、pair 形归 SH-65；修复仍在 HEAD；只记录证据，
+  不改 `status`。
+- 命令/输出：
+
+```console
+$ bash test/ast/p75_closure_neg.sh /tmp/ci9-sh93-build/ct-ast
+OK p75/closure-neg (literal + bound variable)
+```

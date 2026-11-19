@@ -61,3 +61,19 @@ ct/gutil 0.1.0 git file:///tmp/reg/gutil ... sha256:...
 - 测试：`test/pkg/run.sh` 增“no range / * picks newest”段；
 - 实现：`git_pick_tag` / `pkg_index_lookup` 的默认选择改为最大版本，显式范围保持最小；
 - 版本：`v0.63.3`（fix，+PATCH）；`test/pkg` 144/0。
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：v0.63.3 的修复仍在 HEAD（提交 `6879f85d`，`git merge-base
+  --is-ancestor 6879f85d HEAD` 为真）；fix tag `v0.63.3` 缺失见 CI-12。
+  只记录证据，不改 `status`。
+- 命令/输出（`test/pkg/run.sh` 由 `check-all` 门 7 构建完整引导链后运行）：
+
+```console
+$ bash test/pkg/run.sh
+== no range / * picks the newest tag ==
+  ok    ct get <git> with no range picks the newest tag
+  ok    ct get <git>@* picks the newest tag
+...
+== summary: 147 passed, 0 failed ==
+```

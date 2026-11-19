@@ -104,3 +104,13 @@ rc=1
 - 提交：`c45e41fb`
 - 改动：`load_unit` 按 basename 查重，同 base 的 `.h.ct`/`.ct` 硬错
 - 验证：`sh test/ast/p72_outputcollision.sh <ct-ast>` → `OK p72/collision`（报 `both emit 'cfg.c'`）
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：PH-72 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 命令/输出：
+
+```console
+$ bash test/ast/p72_outputcollision.sh /tmp/ci9-sh93-build/ct-ast
+OK p72/collision (same-base refused)
+```

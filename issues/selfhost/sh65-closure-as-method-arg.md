@@ -125,3 +125,14 @@ return ring_each(&r, (int x) => x + base);  /* 自由函数闭包：compile rc=0
 - 改动：pair 形方法收闭包并绑定返回类型；N_MCALL 按 (tramp,&env) 发射
 - 验证：`p75_closure.sh` → `OK p75/closure`
 
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：PH-75 的修复仍在 HEAD（本轮重建的 ct-ast，HEAD `1be81be9`）；只记录
+  证据，不改 `status`（5.4）。
+- 命令/输出：
+
+```console
+$ bash test/ast/p75_closure.sh /tmp/ci9-sh93-build/ct-ast
+OK p75/closure (pair-form method argument)
+```

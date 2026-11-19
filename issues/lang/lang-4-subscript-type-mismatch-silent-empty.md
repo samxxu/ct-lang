@@ -73,3 +73,13 @@ error: type 'J' has no subscript matching 'get(int)': candidates are 'char *get(
 - 提交：`d5906bd8`
 - 改动：`custom_index_method` 增加下标类型判定（chk_type + chk_assignable）
 - 验证：`sh test/ast/p72_subscript.sh <ct-ast>` → `OK p72/subscript`（`j[0]` 对 `char *get(char *)` 报 `argument 1: expected ...`）
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：PH-72 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 命令/输出：
+
+```console
+$ bash test/ast/p72_subscript.sh /tmp/ci9-sh93-build/ct-ast
+OK p72/subscript (key type)
+```

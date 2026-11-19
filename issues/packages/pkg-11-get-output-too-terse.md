@@ -41,3 +41,18 @@ installed 1 package(s)
 - `Pkg` 保存本次解析记录（name/version/publisher/source/url/tag/commit/store/digest/action）；
 - `get` 按 quiet/json/default 输出；
 - 版本 `v0.63.4`；`test/pkg` 147/0。
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：v0.63.4 的修复仍在 HEAD（提交 `fbb63562`）；fix tag `v0.63.4`
+  缺失见 CI-12。只记录证据，不改 `status`。
+- 命令/输出（`test/pkg/run.sh` 由 `check-all` 门 7 运行）：
+
+```console
+$ bash test/pkg/run.sh
+  ok    default get reports resolved package, source and action
+  ok    quiet get reports name, version and url
+  ok    json get reports the resolved package
+...
+== summary: 147 passed, 0 failed ==
+```

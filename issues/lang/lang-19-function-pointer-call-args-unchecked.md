@@ -43,3 +43,13 @@ arity 与变参（`...`）分开处理。
   `...` 尾）；
 - 残余：函数指针**字段**（`o.add(2,3)`）走的是另一条 N_CALL 转换，未覆盖，
   如需再开一条。
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：PH-69-R2 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 命令/输出：
+
+```console
+$ bash test/ast/p69_calls.sh /tmp/ci9-sh93-build/ct-ast
+OK p69/calls (fnptr prototype)
+```

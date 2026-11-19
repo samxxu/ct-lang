@@ -40,3 +40,41 @@ confirmed-by: REQ-review-v077-1
 ## 范围
 
 P1；与 CI-10 的 G6 同批；REV 负责复核，DEV 负责格式迁移。
+
+## 处置（2026-11-20，DEV）
+
+**结论：deferred（规模 + 5.4 分权；本批只写处置，不改状态）。**
+
+已核实现状（扫描口径：`issues/**/*.md` 的 `| 状态 |` 单元格首词比对 §5.4 八词）：
+
+```console
+$ find issues -name '*.md' ! -name README.md | wc -l
+230
+$ grep -rl '^| 状态 |' issues --include='*.md' | wc -l
+220
+# 扫描结果（本会话）：
+| 状态 | rows: 220
+{'non-closed-set': 168, 'fixed-in-status': 6}
+files with no status at all: 0
+```
+
+- 6 个把 `fixed` 写进 `| 状态 |`：`SH-68`、`SH-69`、`SH-70`、`SH-72`、
+  `SH-74`、`SH-75`；
+- 168 行非闭集（“已修”“待复核”“无结论”等自然语言）；
+- 7 个“已修仍 open”的探针本轮已复跑，证据写进各自处置段
+  （LANG-3/4/9/11/16/17、SH-76）。
+
+为什么本批不做：
+
+- 5.4 分权：`fixed`/`verified` 只能由 REV 写；DEV 只写正文处置段，
+  不得批量改状态；
+- 220 行跨 168 处自然语言改写需逐条对照证据；批量 sed 会制造
+  “无结论关闭”，正是 CI-11 要防的；
+- 验收要求“G6 能对负例报红”，而 G6 入口尚不存在（见 CI-10）。
+
+下一最小动作：
+
+1. 先落 `tools/gates/issue_ledger.py` + 负例（同 CI-10 第 1 项）；
+2. 用该脚本生成清单（file / 旧状态 / 建议状态 / 证据锚点），交 REV 签字；
+3. 按 area 分 4 批机械迁移，每批单独提交；6 个 `fixed`-in-status 由 REV
+   改成合法状态词。

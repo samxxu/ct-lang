@@ -43,3 +43,13 @@
 - 提交：`2a4c632f`
 - 改动：超长 `#` 行记 `toktrunc` 并在 Parser 硬错
 - 验证：`sh test/ast/p72_diagpos.sh <ct-ast>` → `preprocessor line exceeds 159 bytes`
+
+## 处置（2026-11-20，DEV · 复跑）
+
+- 结论：PH-72 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 命令/输出：
+
+```console
+$ bash test/ast/p72_diagpos.sh /tmp/ci9-sh93-build/ct-ast
+OK p72/diagpos (pp length + comment column)
+```

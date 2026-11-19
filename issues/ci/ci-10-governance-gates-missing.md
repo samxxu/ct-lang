@@ -55,3 +55,38 @@ g0 | g8 | battle-selftest
 ## 范围
 
 P1/P2 拆分；不占 phase。
+
+## 处置（2026-11-20，DEV）
+
+**结论：deferred（本批不做；不阻塞 CI-9/SH-93）。**
+
+已核实现状：
+
+```console
+$ for g in g1 g2 g4 g5 g6 g7 g9; do bash tools/check.sh "$g" >/dev/null 2>/tmp/e; printf '%s: exit=%s %s\n' "$g" "$?" "$(head -1 /tmp/e)"; done
+g1: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g2: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g4: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g5: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g6: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g7: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g9: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+```
+
+`tools/check.sh` 的分派仍只有 `g0 | g8 | battle-selftest`。
+
+为什么不本批做：
+
+- G6 依赖 CI-11 的 220 行台账迁移；先落门禁会把当前台账直接判红；
+- G1/G4 依赖 DOC-74 的 A/B/C 裁定；PN-11 禁止项目侧自改判定逻辑；
+- G5 需要“判据 ↔ 用例/负例”的机械映射，前置是 phase 卡任务清单字段；
+- G2/G7/G9 属 P2，且 G9 的 pin 部分已由 `test/docs/check-docs.py` 覆盖。
+
+下一最小动作（按序）：
+
+1. `tools/gates/issue_ledger.py`：按 §5.4 八词校验 `issues/**/*.md` 的
+   `| 状态 |` 与 front-matter `status`，在 `test/gates/ledger/` 配 3 条负例，
+   于 `tools/check.sh` 增加 `g6)`；
+2. CI-11 迁移后跑 `bash tools/check.sh g6`；
+3. G1/G4 等 DOC-74 裁定；未裁定前在 `AGENTS.md` 0.3 登记
+   `deviation: g1-g4-missing`（需用户签字，DEV 不代签）。

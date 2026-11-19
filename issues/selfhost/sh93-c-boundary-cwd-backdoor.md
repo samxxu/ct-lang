@@ -33,3 +33,47 @@ confirmed-by: REQ-review-v077-1
 ## 范围
 
 P2；可与 PH-65 C 边界修复同批。
+
+## 处置（2026-11-20，DEV）
+
+**结论：fixed（待 REV 复核）。** 红证提交 `fd509b06`，实现提交 `1be81be9`，
+探针适配提交 `4553ec15`。
+
+已核实：`c_boundary_for` 先看 `c_cwd_in_tree()`，为真则全量 allow；同一个
+`/tmp/…/x.ct` 从 CT 仓根看是 `allow`，从 `/tmp` 看是 `strict`。依据
+`docs/language-spec.md` §4.66：默认只有 `selfhost/**`、`lib/std/**`、
+`test/**`、`examples/**` 四个目录豁免，没有 cwd 规则。
+
+改法：删除 `c_cwd_in_tree()` 及其调用；策略只由输入路径（外加 CLI 与包
+manifest）决定。负例：`test/ast/p65_policy.sh` 增加“仓根 cwd + 仓外 `.ct`
+→ strict”。
+
+验证（实现后，本轮重建的 ct-ast）：
+
+```console
+$ env -u CT_C_BOUNDARY bash test/ast/p65_policy.sh /tmp/ci9-sh93-build/ct-ast
+OK p65/policy
+$ env -u CT_C_BOUNDARY bash test/ast/p65_regression.sh /tmp/ci9-sh93-build/ct-ast
+OK p65/regression (1299 grandfathered .ct sources)
+$ env -u CT_C_BOUNDARY bash test/ast/p65_include.sh /tmp/ci9-sh93-build/ct-ast
+OK p65/include
+$ env -u CT_C_BOUNDARY bash test/ast/p65_raw_extern.sh /tmp/ci9-sh93-build/ct-ast
+OK p65/raw-extern
+$ env -u CT_C_BOUNDARY bash test/ast/p65_map.sh /tmp/ci9-sh93-build/ct-ast
+OK p65/map
+$ env -u CT_C_BOUNDARY bash test/ast/p66_io_empty.sh /tmp/ci9-sh93-build/ct-ast
+OK p66/io-empty
+$ env -u CT_C_BOUNDARY bash test/ast/p66_io_boundary.sh /tmp/ci9-sh93-build/ct-ast
+OK p66/io-boundary
+```
+
+既有 strict/豁免用例全部保留并通过（上列均 `env -u CT_C_BOUNDARY`）。
+
+附带：12 支早于 PH-65 的探针（p44_try_drop、p46/p47/p48、p64_alloc/
+const_vtable/no_init_array/on_demand、p71_drop/own、p72_outputcollision/
+subscript）fixture 自由 `#include`，以前靠 cwd 后门单独运行也会得到 allow；
+现改为显式 `export CT_C_BOUNDARY=allow`（它们不是边界探针），提交
+`4553ec15`。12/12 单独运行 rc=0。
+
+整门禁：`bash selfhost/check-all.sh` → `check-all: OK (11 hard gates green)`，
+`check-ast` 1519 passed / 0 failed / 4 skipped（本会话 2026-11-20）。
