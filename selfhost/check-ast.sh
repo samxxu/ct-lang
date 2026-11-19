@@ -950,6 +950,13 @@ else
     bad "PH-74-R1/R2 model" "$(sed -n '1,8p' "$work/p74m.out")"
 fi
 
+sh test/ast/p75_closure_neg.sh "$work/ct-ast" >"$work/p75n.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-75-R2 closure-neg (literal + bound variable)"
+else
+    bad "PH-75-R2 closure-neg" "$(sed -n '1,8p' "$work/p75n.out")"
+fi
+
 sh test/ast/p74_map.sh "$work/ct-ast" >"$work/p74map.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-74-R3 map (lib facet + entry file)"

@@ -1542,6 +1542,21 @@ impl ExprOps for Expr {
         char full[MAX_TEXT];
         int r;
 
+        {
+            int ca;
+            for (ca = args; ca >= 0; ca = self->arena->nodes[ca].next) {
+                int is_cl = 0;
+                if (self->arena->nodes[ca].kind == N_CLOSURE) is_cl = 1;
+                else if (self->arena->nodes[ca].kind == N_VAR) {
+                    int cv = self->sym->find_var(self->arena->nodes[ca].text2);
+                    if (cv >= 0 && self->sym->vars[cv].is_closure) is_cl = 1;
+                }
+                if (is_cl)
+                    return tool::diag::ct_sem_error(line, col,
+                        "a closure cannot be passed to a method argument yet (SH-65); pass '(fn, env)' explicitly",
+                        self->sup->mem->path);
+            }
+        }
         r = self->argtype_mismatch(args, fi, ti, mi, msg, sizeof msg);
         if (r == 2) {
             /* LANG-14: a struct on either side cannot be converted by C, so
@@ -7212,6 +7227,26 @@ impl ExprTypes for Expr {
         int ii, nimpls, inst, m, found, foundm, ai, k;
         struct StructImpl *im;
 
+        /* SH-65/SH-67: a closure is a (trampoline, env) pair, but a method
+           call emits one C argument per source argument. Until that path is
+           implemented, refuse it instead of emitting invalid C (the literal
+           used to reach an internal "unknown expression node", and a bound
+           variable produced an undeclared identifier). */
+        {
+            int ca;
+            for (ca = args; ca >= 0; ca = self->arena->nodes[ca].next) {
+                int is_cl = 0;
+                if (self->arena->nodes[ca].kind == N_CLOSURE) is_cl = 1;
+                else if (self->arena->nodes[ca].kind == N_VAR) {
+                    int cv = self->sym->find_var(self->arena->nodes[ca].text2);
+                    if (cv >= 0 && self->sym->vars[cv].is_closure) is_cl = 1;
+                }
+                if (is_cl)
+                    return tool::diag::ct_sem_error(self->chk_line, self->chk_col,
+                        "a closure cannot be passed to a method argument yet (SH-65); pass '(fn, env)' explicitly",
+                        self->sup->mem->path);
+            }
+        }
         if (strncmp(ibase, "struct ", 7) != 0) return 0;
         snprintf(base, sizeof base, "%s", ibase + 7);
         inst = frontend::sym::ct_inst_find(base);
