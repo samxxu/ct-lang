@@ -4343,6 +4343,11 @@ impl ExprOps for Expr {
                     return tool::diag::ct_sem_error(dl, dc,
                         "'$name' must follow a method call (PH-76)",
                         self->sup->mem->path);
+                if (self->arena->nodes[n].kind == N_MCALL
+                    && (self->arena->nodes[n].aux == 5 || self->arena->nodes[n].aux == 6))
+                    return tool::diag::ct_sem_error(dl, dc,
+                        "'$name' does not support type-host / .m.ct recipes in v1 (PH-76)",
+                        self->sup->mem->path);
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID)
                     return self->sup->fail("expected a variable name after '$'");

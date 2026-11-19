@@ -1,7 +1,8 @@
 # Phase 76 — 链中 inline 物化 `$name`
 
-> **状态：规划中（未开卡，排队）**（2026-11-19 立项；`v0.75.0` 拟）。
-> **前置**：Phase 70–75 先按现队列收口；本卡不插队。
+> **状态：完成**（2026-11-19 收口；`v0.76.0`；S1–S4 全绿）。
+> **前置**：Phase 70–75 已收口；本卡为当前卡，PH-77 排队。
+> **顺序说明**：2026-11-19 起恢复 `phase = MINOR`（PN-2）；不做版本位偏移。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/design/phase76.md`，迁移时统一改名。
 > **依据**：[battle inline-materialize-2](../../battle/inline-materialize-2/verdict.md)、[battle inline-materialize-1](../../battle/inline-materialize-1/verdict.md)。
 
@@ -16,7 +17,7 @@
 | 交付物 | 编译器改动、`test/ast/p76_*`、spec §4.x、tutorial/README 的 into 入口 |
 | 任务清单 | §3（S1–S3） |
 | 退出判据 | E76-1…E76-5（§4） |
-| version-minor | 75（PH-76，`d=1`） |
+| version-minor | 76（PH-76，`d=0`） |
 | 已知风险 | R76-1…R76-4（§5） |
 
 ## 1 语法与语义
@@ -104,3 +105,23 @@ a.m()$x?.n()$y.l()     /* 拒绝：$y 位于可选链之后，可能未赋值 */
 - 不做条件/实参/下标/loop 初始化；
 - 不把 `$name` 当 `into` 的替代；
 - 不宣称修复 SH-73。
+
+## 7 收口对照表（2026-11-19，v0.76.0）
+
+| 任务 | 状态 | 证据 |
+| --- | --- | --- |
+| S1 语法 | ✅ | `p76/chain`：`$NAME` only after a call；`x$x` 报 `must follow a method call`；实参位置报 `only allowed in a statement expression` |
+| S2 类型 | ✅ | 目标类型不符报 `'$' target: expected 'int', got 'struct B'`；const 目标拒绝；own/borrow 同路 |
+| S3 降级/发射 | ✅ | `p76/chain` 的 tail（返回值）与多跳（`x = make; y = x.n()`）构建并运行；单次求值；无 golden 变化 |
+| S4 文档 | ✅ | 语言规范 §4.11.3；tutorial §13.1–13.4 更新；SH-73 caveat 保留 |
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E76-1 | `p76_chain.sh` multi | 绿（`x.w==7 && y==7`） |
+| E76-2 | `p76_chain.sh` tail | 绿（链尾 `s.m()$x` 返回 1） |
+| E76-3 | 类型/const/非调用/实参负例 | 全部硬错；type-host/recipe 由 `$` 分支显式拒绝 |
+| E76-4 | `ct check --types` | 在 `$` 处报类型错误；具体 struct 已覆盖；type-host 明确拒绝（v1） |
+| E76-5 | `check-all.sh` | 11/11（+G0/G8）；ASan 由既有 sanitizer 门禁覆盖；tutorial 入口已补 |
+
+v1 边界（诚实记录）：`$name` 只支持**语句表达式**；声明初始化式/`return`/条件/实参/下标、
+`?.m()$x`、type-host/recipe、泛型实例均未开放（见卡 §6）。
