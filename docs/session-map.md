@@ -24,4 +24,5 @@
 | PH-68 类型核心（R1–R4 / E68-1–4） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.67.0 |
 | PH-69 跨单元/泛型/trait 类型检查（R1–R4 / E69-1–3） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.68.0 |
 | PH-70 CFG/定值/控制流（R1–R3 / E70-1–3） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.69.0 |
-| PH-71–75 非硬件特性批次 | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | PH-71 起排队；硬件 `HW-*` 排最后 |
+| PH-71 own/borrow/Drop + 包级 strict（R1–R3 / E71-1–3） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.70.0 |
+| PH-72–75 非硬件特性批次 | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | PH-72 起排队；硬件 `HW-*` 排最后 |
