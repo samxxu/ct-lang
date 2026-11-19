@@ -106,5 +106,18 @@ if [ $? -eq 0 ] || ! grep -q "only allowed in a statement expression" "$work/arg
     fail=1
 fi
 
+cat > "$work/void.ct" <<'CT'
+trait V { void v(void); }
+struct S { int n; } use V;
+impl V for S { void v(void) { } }
+int main(void) { struct S s = {}; int x; s.v()$x; return 0; }
+CT
+( cd "$work" && "$ctast" check --types void.ct ) >"$work/void.log" 2>&1
+if [ $? -eq 0 ] || ! grep -q "void" "$work/void.log"; then
+    echo "FAIL p76/chain: void-returning hop accepted" >&2
+    sed 's/^/  /' "$work/void.log" | head -4 >&2
+    fail=1
+fi
+
 [ "$fail" -eq 0 ] || exit 1
 echo "OK p76/chain (tail, multi-hop, type/const/non-call/argument negatives)"
