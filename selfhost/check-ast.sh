@@ -922,6 +922,13 @@ else
     bad "PH-70-R2 uninit" "$(sed -n '1,8p' "$work/p70i.out")"
 fi
 
+sh test/ast/p70_cfg.sh "$work/ct-ast" >"$work/p70c.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-70-R1 cfg (structured termination)"
+else
+    bad "PH-70-R1 cfg" "$(sed -n '1,8p' "$work/p70c.out")"
+fi
+
 sh test/ast/p69_fp.sh "$work/ct-ast" >"$work/p69fp.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-69-E69-2 fp (import units clean)"

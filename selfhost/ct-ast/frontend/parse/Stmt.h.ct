@@ -108,6 +108,7 @@ pub trait StmtOps {
     int  is_decl_start(void);
     int  parse_block(void);
     int  missing_return_check(int body, const char *ret, int line);
+    int  stmt_terminates(int n);
     int  u_reset(void);
     int  u_add(int which, const char *s);
     int  u_mark_lvalue(int n);
@@ -1922,6 +1923,33 @@ impl StmtOps for Stmt {
         return 0;
     }
 
+    /* PH-70-R1: a small structured control-flow judgement. A statement
+       `terminates` when control cannot reach the statement after it: a jump,
+       a block whose last reachable statement terminates, or an if/else whose
+       both arms terminate. Loops stay conservative (a `while (1)` is not
+       treated as terminating, so code after it stays reachable). */
+    int stmt_terminates(int n)
+    {
+        int k, m;
+
+        if (n < 0) return 0;
+        k = self->arena->nodes[n].kind;
+        if (k == N_RET || k == N_BREAK || k == N_CONT) return 1;
+        if (k == N_BLOCK) {
+            m = self->arena->nodes[n].a;
+            if (m < 0) return 0;
+            while (self->arena->nodes[m].next >= 0) m = self->arena->nodes[m].next;
+            return self->stmt_terminates(m);
+        }
+        if (k == N_IF) {
+            int e = self->arena->nodes[n].c;
+            if (e < 0) return 0;
+            return self->stmt_terminates(self->arena->nodes[n].b)
+                && self->stmt_terminates(e);
+        }
+        return 0;
+    }
+
     /* PH-70-R2: a non-void function whose body has neither `return` nor a loop
        falls off the end (UB). Loops are exempt because `while (1)` may never
        fall through; the check is deliberately conservative. */
@@ -1992,9 +2020,7 @@ impl StmtOps for Stmt {
             if (tail < 0) self->arena->nodes[blk].a = s;
             else self->arena->nodes[tail].next = s;
             tail = s;
-            prev_jump = self->arena->nodes[s].kind == N_RET
-                     || self->arena->nodes[s].kind == N_BREAK
-                     || self->arena->nodes[s].kind == N_CONT;
+            prev_jump = self->stmt_terminates(s);
         }
         }
         /* Phase 38: a block's defers run (reverse source order) before its
