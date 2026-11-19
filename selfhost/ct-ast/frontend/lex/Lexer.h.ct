@@ -86,7 +86,13 @@ impl LexOps for Lexer {
             if (c == '/' && self->src[self->pos + 1] == '*') {
                 self->pos += 2;
                 while (self->src[self->pos] && !(self->src[self->pos] == '*' && self->src[self->pos + 1] == '/')) {
-                    if (self->src[self->pos] == '\n') self->line++;
+                    if (self->src[self->pos] == '\n') {
+                        self->line++;
+                        /* LANG-16: the next line starts here, so a token after
+                           the comment must not inherit the old line's column. */
+                        self->lstart = self->pos + 1;
+                        self->bol = 1;
+                    }
                     self->pos++;
                 }
                 if (self->src[self->pos]) self->pos += 2;
@@ -99,8 +105,10 @@ impl LexOps for Lexer {
         self->toktrunc = 0;
         if (self->bol && c == '#') {
             n = 0;
+            self->toktrunc = 0;
             while (self->src[self->pos] && self->src[self->pos] != '\n') {
                 if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+                else self->toktrunc = 1;
                 self->pos++;
             }
             self->toktext[n] = 0;

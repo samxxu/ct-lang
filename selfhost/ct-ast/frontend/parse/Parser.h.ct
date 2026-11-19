@@ -1356,6 +1356,10 @@ impl ParseOps for Parser {
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {
+                if (self->lex->toktrunc)
+                    return tool::diag::ct_sem_error(self->lex->tokline, 1,
+                        "preprocessor line exceeds 159 bytes; split it or move it to a header",
+                        self->mem->path);
                 if (self->c_strict && !self->unit_is_map
                     && pp_is(self->lex->toktext, "#ct-raw"))
                     return tool::diag::ct_sem_error(self->lex->tokline, 1,
