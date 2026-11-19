@@ -806,6 +806,19 @@ recipe 替换（逐出现点）：
 - 单元内私有 helper 既可以写成 `impl` 里不带 `pub` 的方法，也可以沿用 `.ct` 文件里的 `static`
   自由函数。
 
+#### 4.11.2 字段级可见性（LANG-9 / PH-73）
+
+- `.h.ct` 的 `pub struct` 允许给字段加 `pub`。**只要该 struct 至少有一个字段标了 `pub`**，公开头
+  只发射这些 `pub` 字段；未标 `pub` 的字段只出现在实现单元自己的视图里（`.c` 先
+  `#define CT_UNIT_PRIVATE 1` 再包含头，头内用 `#ifdef CT_UNIT_PRIVATE` 给全量布局）。
+- 没有任何字段标 `pub` 的 struct 保持旧行为（全部字段进头），以免一次性打断既有代码；迁移时可以
+  逐字段加 `pub`。
+- 带 `use Trait` 的 struct 暂不切分公开/私有布局（vtable 字段与实现耦合），整份布局进入头文件。
+- 消费者读私有字段会在构建期失败（公开头没有该字段）；确实需要隐藏布局时，用不透明句柄：
+  `pub struct Conn;`（只前置声明）+ 返回 `Conn *` 的 API。
+- ABI：增删/改序 `pub` 字段是破坏性变更；未标 `pub` 的字段可以自由调整。`ct build --lib` 的
+  `.abi.h` 同理只反映公开面。
+
 #### 4.12 函数指针（ct-ast）
 
 声明位置支持 `ret (*name)(params)`：参数、struct 字段、全局与局部。生成 C 与源码同形，名字留在类型内部。
