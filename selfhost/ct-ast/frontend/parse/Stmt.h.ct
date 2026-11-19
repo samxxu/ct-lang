@@ -4174,23 +4174,24 @@ impl StmtOps for Stmt {
 
         scol = self->lex->tokstart - self->lex->lstart + 1;
         self->ex->into_ok = 1;
-        self->ex->mat_allow = 1;
-        self->ex->mat_head = -1;
-        self->ex->mat_tail = -1;
+        self->ex->mat_state = (1L << 62);
         e = self->ex->parse_expr();
         self->ex->into_ok = 0;
-        self->ex->mat_allow = 0;
-        if (e < 0) return -1;
-        if (self->ex->mat_head >= 0) {
-            /* PH-76: `a.m()$x.n()` becomes `{ x = a.m(); x.n(); }`. The block
-               keeps a single statement where the grammar expects one. */
-            int mw = self->sup->new_node(N_MATSEQ);
-            if (mw < 0) return -1;
-            self->arena->nodes[mw].a = self->ex->mat_head;
-            self->arena->nodes[mw].b = e;
-            self->arena->nodes[mw].line = self->arena->nodes[e].line;
-            self->arena->nodes[mw].num = self->arena->nodes[e].num;
-            e = mw;
+        {
+            long ms = self->ex->mat_state;
+            self->ex->mat_state = 0;
+            if (e < 0) return -1;
+            if ((ms & 0x1FFFFFL) != 0) {
+                /* PH-76: `a.m()$x.n()` becomes `{ x = a.m(); x.n(); }`. A block
+                   keeps a single statement where the grammar expects one. */
+                int mw = self->sup->new_node(N_MATSEQ);
+                if (mw < 0) return -1;
+                self->arena->nodes[mw].a = (int)((ms & 0x1FFFFFL) - 1);
+                self->arena->nodes[mw].b = e;
+                self->arena->nodes[mw].line = self->arena->nodes[e].line;
+                self->arena->nodes[mw].num = self->arena->nodes[e].num;
+                e = mw;
+            }
         }
         /* L30-6: a bare `expr into { … };` statement writes into the receiver,
            so a right-value receiver would silently lose the writes. A suffix

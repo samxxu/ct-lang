@@ -448,9 +448,7 @@ pub struct Expr {
     /* PH-76: `expr$name` materialisation. Allowed only in a statement
        expression; the parser records the pending `name = call` nodes here and
        the statement layer wraps them in one N_MATSEQ. */
-    int  mat_allow;
-    int  mat_head;
-    int  mat_tail;
+    long mat_state;   /* PH-76: bit62 allow, bits0..20 head+1, bits21..41 tail+1 */
     /* The `N_INTO` whose block is being parsed, or -1. `$` and a leading
        `.name` bind to it, and a second `into` inside the same block is L30-7. */
     int  into_node;
@@ -4336,7 +4334,7 @@ impl ExprOps for Expr {
                 int dc = self->lex->tokstart - self->lex->lstart + 1;
                 char mname[MAX_TEXT];
                 int mvi, mv, mas;
-                if (!self->mat_allow)
+                if (!(self->mat_state & (1L << 62)))
                     return tool::diag::ct_sem_error(dl, dc,
                         "'$name' is only allowed in a statement expression (PH-76)",
                         self->sup->mem->path);
@@ -4385,9 +4383,19 @@ impl ExprOps for Expr {
                 self->arena->nodes[mas].aux = 0;
                 self->arena->nodes[mas].line = dl;
                 self->arena->nodes[mas].num = dc;
-                if (self->mat_head < 0) self->mat_head = mas;
-                else self->arena->nodes[self->mat_tail].next = mas;
-                self->mat_tail = mas;
+                {
+                    long mh = self->mat_state & 0x1FFFFFL;
+                    long mt = (self->mat_state >> 21) & 0x1FFFFFL;
+                    if (mh == 0) {
+                        self->mat_state = (self->mat_state & (1L << 62))
+                                          | ((long)(mas + 1))
+                                          | ((long)(mas + 1) << 21);
+                    } else {
+                        self->arena->nodes[(int)(mt - 1)].next = mas;
+                        self->mat_state = (self->mat_state & (1L << 62))
+                                          | mh | ((long)(mas + 1) << 21);
+                    }
+                }
                 self->sup->lex_next();
                 n = mv;
                 continue;
