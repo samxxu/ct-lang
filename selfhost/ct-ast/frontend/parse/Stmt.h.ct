@@ -1813,7 +1813,17 @@ impl StmtOps for Stmt {
             return -1;
         }
         tail = -1;
+        {
+        int prev_jump = 0;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            /* PH-70-R3: a statement after return/break/continue cannot execute;
+               labels and empty statements are exempt (`goto` targets are legal). */
+            if (prev_jump && self->ex->check_mode && *self->ex->check_mode
+                && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0)
+                && !self->label_ahead())
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "unreachable code after a jump", self->mem->path);
             s = self->parse_stmt();
             if (s < 0) {
                 self->sup->pop_scope();
@@ -1822,6 +1832,10 @@ impl StmtOps for Stmt {
             if (tail < 0) self->arena->nodes[blk].a = s;
             else self->arena->nodes[tail].next = s;
             tail = s;
+            prev_jump = self->arena->nodes[s].kind == N_RET
+                     || self->arena->nodes[s].kind == N_BREAK
+                     || self->arena->nodes[s].kind == N_CONT;
+        }
         }
         /* Phase 38: a block's defers run (reverse source order) before its
            implicit `own` releases; both groups keep their own LIFO order. */

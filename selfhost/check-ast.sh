@@ -901,6 +901,13 @@ else
     bad "PH-70-R3 switch" "$(sed -n '1,8p' "$work/p70s.out")"
 fi
 
+sh test/ast/p70_unreach.sh "$work/ct-ast" >"$work/p70u.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-70-R3 unreachable (after jump)"
+else
+    bad "PH-70-R3 unreachable" "$(sed -n '1,8p' "$work/p70u.out")"
+fi
+
 sh test/ast/p69_fp.sh "$work/ct-ast" >"$work/p69fp.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-69-E69-2 fp (import units clean)"
