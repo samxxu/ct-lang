@@ -36,6 +36,7 @@ import runtime::arena::Arena;
 #define MAX_PATH   1024
 #define MAX_HOISTS 4
 /* Phase 30: the receiver block and its `$` / `.name` reference. */
+#define N_MATSEQ 73
 #define N_INTO 63
 #define N_INTO_SELF 64
 #define MAX_INTOS 4
@@ -4076,6 +4077,32 @@ impl EmitOps for Emitter {
             fputs("}\n", self->out);
             return 0;
         }
+        if (self->arena->nodes[n].kind == N_MATSEQ) {
+            /* PH-76: materialise each `$name` once, then run the final
+               expression. A block keeps a single-statement context valid. */
+            int ms, last_ms = -1;
+            fputs("{\n", self->out);
+            ind++;
+            for (ms = self->arena->nodes[n].a; ms >= 0; ms = self->arena->nodes[ms].next) {
+                last_ms = ms;
+                self->emit_indent(ind);
+                if (self->emit_expr(self->arena->nodes[ms].a) != 0) return -1;
+                fputs(" = ", self->out);
+                if (self->emit_expr(self->arena->nodes[ms].b) != 0) return -1;
+                fputs(";\n", self->out);
+            }
+            if (self->arena->nodes[n].b >= 0
+                && !(last_ms >= 0
+                     && self->arena->nodes[last_ms].a == self->arena->nodes[n].b)) {
+                self->emit_indent(ind);
+                if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+                fputs(";\n", self->out);
+            }
+            ind--;
+            self->emit_indent(ind);
+            fputs("}\n", self->out);
+            return 0;
+        }
         if (self->arena->nodes[n].kind == N_RET) {
             char tmp[MAX_TEXT];
             int r, rtv, wrap;
@@ -4380,6 +4407,9 @@ impl EmitOps for Emitter {
                 return self->init->emit_vptr_stmts(recv, tp, ind);
             }
         }
+        if (self->arena->nodes[n].kind == N_EXPR
+            && self->arena->nodes[self->arena->nodes[n].a].kind == N_MATSEQ)
+            return self->emit_node(self->arena->nodes[n].a, ind);
         if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_ASSIGN
             || self->arena->nodes[n].kind == N_EXPR || self->arena->nodes[n].kind == N_POST
             || (self->arena->nodes[n].kind == N_BIN && self->arena->nodes[n].aux == B_COMMA)) {

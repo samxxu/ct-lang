@@ -68,6 +68,7 @@ import tool::diag::Diag;
 /* Phase 31 S11a: `Vec<T> v = {…}` on a local declaration. `text` is the
    element's C type, `text2` the encoded instance name, `aux` the element count
    and `a` the first element expression (the rest hang off `next`). */
+#define N_MATSEQ 73
 #define N_INIT_BRACE 65
 /* Phase 31 S14a: one `key: value` pair of a `Map` brace initializer. `a` is the
    key expression, `b` the value expression, and pairs chain through `next`. */
@@ -4173,9 +4174,24 @@ impl StmtOps for Stmt {
 
         scol = self->lex->tokstart - self->lex->lstart + 1;
         self->ex->into_ok = 1;
+        self->ex->mat_allow = 1;
+        self->ex->mat_head = -1;
+        self->ex->mat_tail = -1;
         e = self->ex->parse_expr();
         self->ex->into_ok = 0;
+        self->ex->mat_allow = 0;
         if (e < 0) return -1;
+        if (self->ex->mat_head >= 0) {
+            /* PH-76: `a.m()$x.n()` becomes `{ x = a.m(); x.n(); }`. The block
+               keeps a single statement where the grammar expects one. */
+            int mw = self->sup->new_node(N_MATSEQ);
+            if (mw < 0) return -1;
+            self->arena->nodes[mw].a = self->ex->mat_head;
+            self->arena->nodes[mw].b = e;
+            self->arena->nodes[mw].line = self->arena->nodes[e].line;
+            self->arena->nodes[mw].num = self->arena->nodes[e].num;
+            e = mw;
+        }
         /* L30-6: a bare `expr into { … };` statement writes into the receiver,
            so a right-value receiver would silently lose the writes. A suffix
            turns it back into a value expression and the restriction lifts. */
