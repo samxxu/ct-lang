@@ -4363,10 +4363,19 @@ impl ExprOps for Expr {
                     return tool::diag::ct_sem_error(dl, dc,
                         "a const value cannot be a '$' target (PH-76)",
                         self->sup->mem->path);
-                if (self->types_mode && *self->types_mode) {
+                {
                     char rty[MAX_TEXT];
-                    int mz = 0, mad = 0;
-                    if (self->static_ctype(n, rty, sizeof rty, &mad, 0) != 0 && rty[0]) {
+                    int mz = 0, mad = 0, trc;
+                    rty[0] = 0;
+                    trc = self->static_ctype(n, rty, sizeof rty, &mad, 0);
+                    /* A void hop has no value to assign; an unresolvable call
+                       has no type to check either, so v1 refuses both at `$`
+                       instead of emitting `x = ...void...` for the host cc. */
+                    if (trc == 0 || !rty[0])
+                        return tool::diag::ct_sem_error(dl, dc,
+                            "'$' needs a non-void result; this hop has none (PH-76)",
+                            self->sup->mem->path);
+                    if (self->types_mode && *self->types_mode) {
                         self->chk_line = dl;
                         self->chk_col = dc;
                         self->chk_arg = 0;

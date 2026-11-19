@@ -1,0 +1,353 @@
+{
+  "battle": "static-dispatch-1",
+  "role": "VERIFY",
+  "seat": "evidence-static-dispatch-1",
+  "generated_at": "2026-11-18T18:55:00+08:00",
+  "head": "c5d42b91",
+  "environment": {
+    "os": "macOS (Darwin), arm64",
+    "cc": "Apple clang (system default)",
+    "ct_source": "HEAD c5d42b91 (v0.65.1)",
+    "ct_binary": "/tmp/ctbattle/ct (L0->L1->L2->ct-ast bootstrap from HEAD; `ct v0.65.1`)",
+    "proposal": "/tmp/battle-static-dispatch-1/proposal.md (user-supplied copy; sha256 5e74d15bbb1b0f738ceb913e043b72b3815e41d92a4f63a8a51cd6eae29f5977)",
+    "fixtures": "/tmp/ctbattle/{r1.ct,chain1.ct,mchain.ct,inherent.ct,split/}",
+    "isolation": "probes write only /tmp/ctbattle; repo change limited to battle/static-dispatch-1/",
+    "not_reproduced": [
+      "README §0.1 的完整链代码块未逐字搬进夹具：断点 1（.m.ct 不能 import .h.ct）仍在，block 不能原样 build",
+      "R2b 的 100-300 行改造未实现，只验证现状拒绝形态",
+      "包仓索引页未读取外部仓；只按 AGENTS §9.8/§9.10 的边界判范围"
+    ]
+  },
+  "rounds": 1,
+  "evidence": [
+    {
+      "id": "E-00-head",
+      "side": "both",
+      "ref": "question.md#基线",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && git rev-parse --short HEAD && /tmp/ctbattle/ct -v && shasum -a 256 /tmp/battle-static-dispatch-1/proposal.md",
+      "exit": 0,
+      "output": "c5d42b91\nct v0.65.1\n5e74d15bbb1b0f738ceb913e043b72b3815e41d92a4f63a8a51cd6eae29f5977  /tmp/battle-static-dispatch-1/proposal.md\n",
+      "reproduced": true,
+      "note": "基线核对：HEAD v0.65.1；提案副本与用户转交件同 sha256。"
+    },
+    {
+      "id": "E-01-r1-single",
+      "side": "claim",
+      "ref": "claim.md#E1 / verdict.md J-1",
+      "command": "cd /tmp/ctbattle && ./ct r1.ct -o r1.c && grep -n '__greeter_vptr' r1.c | tail -2",
+      "exit": 0,
+      "output": "30:    struct Person p = { .name = \"A\" , .__greeter_vptr = &Person_Greeter_vtable};\n31:    p.__greeter_vptr->greet(&p);\n",
+      "reproduced": true,
+      "note": "同单元具体接收者仍走 vptr：R1 的事实前提成立。"
+    },
+    {
+      "id": "E-02-r1-split",
+      "side": "counter",
+      "ref": "counter.md#E1 / verdict.md J-2",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && rm -rf /tmp/ctbattle/split && mkdir -p /tmp/ctbattle/split && /tmp/ctbattle/ct build test/modules/split/main.ct -I test/modules/split --emit-c -o /tmp/ctbattle/split >/dev/null 2>&1 && grep -n 'vptr->hi\\|static void Dog_Speak_hi' /tmp/ctbattle/split/main.c /tmp/ctbattle/split/impl_dog.c",
+      "exit": 0,
+      "output": "/tmp/ctbattle/split/main.c:15:    __ct_tmp0->__speak_vptr->hi(__ct_tmp0);\n/tmp/ctbattle/split/impl_dog.c:16:static void Dog_Speak_hi(void *self) {\n",
+      "reproduced": true,
+      "note": "跨单元具体接收者仍走 vptr；方法符号是 static，故“纯发射端直呼”在跨单元不成立。"
+    },
+    {
+      "id": "E-03-r2a-sh75",
+      "side": "counter",
+      "ref": "counter.md#E1 / verdict.md J-4",
+      "command": "cd /tmp/ctbattle && ./ct /Users/samxx/dsh-ws/ct-lang/test/ast/239_local_iface_return/prog.ct -o iface.c && cc -Wall -Wextra iface.c -o iface && ./iface && grep -n 'malloc' iface.c",
+      "exit": 0,
+      "output": "0 201\n36:        struct Res *__ct_box = (struct Res *)malloc(sizeof *__ct_box);\n",
+      "reproduced": true,
+      "note": "SH-75 已修：不再悬垂（0 表示 res.self != 局部地址）；残留是 malloc 物化。提案写的 200 是旧 README 句。"
+    },
+    {
+      "id": "E-04-r2b-free",
+      "side": "counter",
+      "ref": "counter.md#E1 / verdict.md J-5",
+      "command": "cd /tmp/ctbattle && ./ct chain1.ct -o chain1.c && cc chain1.c -o chain1 && ./chain1; echo \"chain1_rc=$?\"",
+      "exit": 0,
+      "output": "201\nchain1_rc=0\n",
+      "reproduced": true,
+      "note": "自由函数结果作接收者（make().status()）已可用，生成 __ct_tmp0；R2b 的 f().m() 例不成立。"
+    },
+    {
+      "id": "E-05-r2b-method",
+      "side": "claim",
+      "ref": "counter.md#E1 / verdict.md J-5",
+      "command": "cd /tmp/ctbattle && ./ct mchain.ct -o mchain.c; echo \"mchain_rc=$?\"",
+      "exit": 0,
+      "output": "mchain.ct:9:1: error: method receiver must be a variable, an element, a call or a field chain\nmchain_rc=1\n",
+      "reproduced": true,
+      "note": "方法结果作接收者（n.next()->value()）仍被拒：SH-73 的限制对“方法结果”成立，对“自由函数结果”不成立。"
+    },
+    {
+      "id": "E-06-r2b-inherent",
+      "side": "counter",
+      "ref": "counter.md#E1 / verdict.md J-5",
+      "command": "cd /tmp/ctbattle && ./ct inherent.ct -o inherent.c && grep -n 'Counter_get' inherent.c",
+      "exit": 0,
+      "output": "21:    return Counter_get(&__ct_tmp0);\n",
+      "reproduced": true,
+      "note": "固有 impl 结果作接收者已可用；R2b 的“方法结果全被拒”过度概括。"
+    },
+    {
+      "id": "E-07-r3b-supersede",
+      "side": "counter",
+      "ref": "counter.md#E2 / verdict.md J-8",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && grep -n 'spec:begin version=1.16.0' AGENTS.md && grep -n 'v1-PH-0' docs/planning/v1-release-plan.md && grep -n 'phase ID 迁移' docs/design/phase67.md",
+      "exit": 0,
+      "output": "33:<!-- spec:begin version=1.16.0 sha256=c11b2cbd1bd80addd8eed87392af03992eb88c733e5e755f968c05ae13542184 -->\n47:| 版本 | `v1.0.0` 是 MAJOR；按 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md) 用 `v1-PH-0`，`MINOR=0`；提案未生效前仍按旧规则登记 deviation |\n1:# v0-PH-67 — phase ID 迁移与文档漂移审查（规划卡，不执行）\n",
+      "reproduced": true,
+      "note": "1.16.0 + v1-PH-0 + PH-67 已取代提案的旧偏移模型。"
+    },
+    {
+      "id": "E-08-r3a-gap",
+      "side": "claim",
+      "ref": "counter.md#E2 / verdict.md J-7",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && grep -n '稳定子集清单' docs/roadmap.md",
+      "exit": 0,
+      "output": "147:- **稳定子集清单**：Z6 的 1.0 冻结原则已有，补 trait / Drop / arena 的具体清单，属文档治理，不占 Phase 编号。\n",
+      "reproduced": true,
+      "note": "稳定子集清单仍是未排期治理项：R3a 的缺口真实。"
+    },
+    {
+      "id": "E-09-r3c-boundary",
+      "side": "counter",
+      "ref": "counter.md#E3 / verdict.md J-8",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && grep -n 'DB-5\\|9.10\\|跨项目反馈' AGENTS.md | head -4",
+      "exit": 0,
+      "output": "45:| 跨项目反馈：只提提案、提案六项、受理与编号归项目组 | 本块 §9.10（摘录）；与 §9.8 DB-5 同源 |\n286:### 9.8 目录边界（DB-1…DB-5）\n296:| DB-5 | 发现其他项目存在问题，只登记、不代改，交该项目自己的会话处理 |\n310:### 9.10 跨项目反馈只走提案制（CF-1…CF-5）\n",
+      "reproduced": true,
+      "note": "包仓索引页属外部仓；CT 本仓不能创建，最多加外部链接。输出为条目摘要，原文见 AGENTS §9.8/§9.10。"
+    },
+    {
+      "id": "E-10-readme-stale",
+      "side": "claim",
+      "ref": "counter.md#E2 / verdict.md J-4",
+      "command": "cd /Users/samxx/dsh-ws/ct-lang && sed -n '57,65p' README.md",
+      "exit": 0,
+      "output": "\n| 断点 | 实测报错 | 性质 |\n| --- | --- | --- |\n| 字符串 factory 只能写 `.m.ct`，trait 对象只能写 `.h.ct`，而 `.m.ct` 不能 import `.h.ct` | `error: a type host is only allowed in a .m.ct unit` / `ctc: cannot resolve import 'http/http'`（rc=1） | 语言限制 |\n| 方法调用的结果不能作下一跳接收者 | `error: method receiver must be a variable, an element, a call or a field chain`（rc=1） | 本版实现限制（SH-73） |\n| impl / 自由函数返回**局部**接口值，装箱取的是局部地址 | 可编译、可执行，但结果为悬垂读（实测 `200`，期望 `201`） | 本版实现缺陷 |\n\nSH-72（调用点返回类型推断）与 SH-74（`return self` 发射 `(void *)_self`）已修：接口值**落变量后\n逐跳调用**现在能跑（实测 `status=201`，rc=0）。但「一条表达式连跳」与「字符串直接产出接口对象」\n",
+      "reproduced": true,
+      "note": "README 第 62 行仍是旧句（悬垂读 200），提案据此立论；SH-75 已修。"
+    }
+  ],
+  "anchors": [
+    {
+      "file": "README.md",
+      "line": 62,
+      "text": "impl / 自由函数返回局部接口值……实测 200，期望 201",
+      "supports": "提案 R2a 的旧现状句（不利于己方：已过时）",
+      "checked": true
+    },
+    {
+      "file": "issues/selfhost/sh75-local-iface-return-dangling.md",
+      "line": 9,
+      "text": "状态 | fixed（b5797cbf，2026-11-15）",
+      "supports": "R2a 已修（反驳提案）",
+      "checked": true
+    },
+    {
+      "file": "issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md",
+      "line": 8,
+      "text": "状态 | 保持（有意限制）",
+      "supports": "R2b 是设计拒绝",
+      "checked": true
+    },
+    {
+      "file": "test/modules/split/main.expected.c",
+      "line": 16,
+      "text": "__ct_tmp0->__speak_vptr->hi(__ct_tmp0);",
+      "supports": "跨单元具体接收者仍走 vptr（R1 现状真、纯发射端假）",
+      "checked": true
+    },
+    {
+      "file": "test/modules/split/impl_dog.expected.c",
+      "line": 13,
+      "text": "Dog_Speak_hi itself stays static here",
+      "supports": "跨单元方法符号不可见",
+      "checked": true
+    },
+    {
+      "file": "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+      "line": 2407,
+      "text": "int hoist_rvalue(int n)",
+      "supports": "R2b 的机制已存在",
+      "checked": true
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 33,
+      "text": "spec:begin version=1.16.0",
+      "supports": "R3b 旧偏移模型被取代",
+      "checked": true
+    },
+    {
+      "file": "docs/design/phase67.md",
+      "line": 1,
+      "text": "v0-PH-67 — phase ID 迁移与文档漂移审查（规划卡，不执行）",
+      "supports": "版本/ID 收敛已有承接",
+      "checked": true
+    },
+    {
+      "file": "docs/planning/v1-release-plan.md",
+      "line": 47,
+      "text": "v1.0.0 是 MAJOR；用 v1-PH-0，MINOR=0",
+      "supports": "新 MAJOR 不用旧偏移",
+      "checked": true
+    },
+    {
+      "file": "docs/roadmap.md",
+      "line": 147,
+      "text": "稳定子集清单……属文档治理",
+      "supports": "R3a 仍是真缺口",
+      "checked": true
+    },
+    {
+      "file": "docs/planning/post-58-plan.md",
+      "line": 190,
+      "text": "## 8. 待裁定（不自行决定）",
+      "supports": "提案的“待裁定”出处",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 323,
+      "text": "提升只允许在语句行首 / 赋值初始化式右值行首",
+      "supports": "R2b 的规约依据",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 739,
+      "text": "方法调用的结果不能直接作下一跳接收者（SH-73，未修）",
+      "supports": "R2b 的方法结果限制仍成立",
+      "checked": true
+    },
+    {
+      "file": "docs/language-spec.md",
+      "line": 742,
+      "text": "已修（SH-75，v0.44.2 起）：先 malloc 一份副本再装箱……实测 0 201",
+      "supports": "R2a 已修，残留是 malloc 物化",
+      "checked": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "J-1",
+      "question": "R1 事实前提：非泛型 trait 的具体接收者今天是否仍经 vptr",
+      "claim": "R1：具体 struct 接收者的 trait 调用一律经 vptr",
+      "counter": "双方无分歧：确实是 vptr",
+      "evidence": [
+        "E-01-r1-single"
+      ],
+      "verdict": "claim=pass（事实成立）",
+      "fact": "r1.c 生成 p.__greeter_vptr->greet(&p)。",
+      "result": "pass",
+      "result_semantics": "pass = 提案在该判据上的事实成立；fail = 被反证；unresolved = 无法判定",
+      "facts_side": "A（R1 事实句成立）",
+      "note": "仅事实句成立；可行性与判据见 J-2/J-3。"
+    },
+    {
+      "id": "J-2",
+      "question": "R1“纯发射端、不改符号表”是否覆盖跨单元具体接收者",
+      "claim": "R1：纯发射端改动即可覆盖所有具体 struct 接收者",
+      "counter": "跨单元 impl 的方法是 static，消费者只能经 vptr；静态直呼需导出方法（ABI 变更）",
+      "evidence": [
+        "E-02-r1-split"
+      ],
+      "verdict": "counter=pass；claim=fail as written",
+      "fact": "split/main.c 对具体 struct Dog * 仍发 __speak_vptr->hi；impl_dog.c 的 Dog_Speak_hi 是 static。",
+      "result": "fail",
+      "facts_side": "B（仅同单元成立）",
+      "note": "同单元子集可做；跨单元需单独 ABI 决策。"
+    },
+    {
+      "id": "J-3",
+      "question": "R1 判据 J1 是否可机械执行（全部 golden 无 __.*_vptr->）",
+      "claim": "R1-J1：现有全部 golden 中具体接收者不再出现 __.*_vptr->，其余字节不变",
+      "counter": "全 golden regex 无法区分接口值与具体接收者；split/main 是具体接收者 + 必须 vptr 的反例",
+      "evidence": [
+        "E-02-r1-split"
+      ],
+      "verdict": "claim=fail（判据不可执行）",
+      "fact": "split/main 的接收者是具体 struct Dog *，但必须走 vptr；按 J1 会被误判为“应静态化”。",
+      "result": "fail",
+      "facts_side": "B",
+      "note": "应改成夹具级断言，不得做全语料 regex。"
+    },
+    {
+      "id": "J-4",
+      "question": "R2a：局部接口返回是否仍悬垂；若已修，剩余问题是什么",
+      "claim": "R2a：当前仍静默悬垂，实测 200 ≠ 201，应硬错",
+      "counter": "SH-75 已修（0 201）；残留是 malloc 物化 + 进程寿命盒子，属既有取舍",
+      "evidence": [
+        "E-03-r2a-sh75",
+        "E-10-readme-stale"
+      ],
+      "verdict": "counter=pass；claim=fail（症状已修）",
+      "fact": "夹具输出 0 201；生成物用 malloc 装箱；README 第 62 行仍是旧句。",
+      "result": "fail",
+      "facts_side": "B（症状已修；隐藏分配问题成立但性质是设计决策）",
+      "note": "若要做硬错，另立设计决策与迁移；--freestanding 已在无 --alloc 时硬错。"
+    },
+    {
+      "id": "J-5",
+      "question": "R2b：方法结果作接收者是否仍被拒；f().m() 与 a.m().n() 是否同一条限制",
+      "claim": "R2b：方法结果不能作下一跳接收者，是待补的实现限制",
+      "counter": "方法结果仍被拒（SH-73，设计拒绝）；自由函数结果与固有方法结果已可用；提案过度概括",
+      "evidence": [
+        "E-04-r2b-free",
+        "E-05-r2b-method",
+        "E-06-r2b-inherent"
+      ],
+      "verdict": "claim=half（方法结果真、f()/固有假）；定性=fail（不是漏实现）",
+      "fact": "make().status() 输出 201；n.next()->value() 报 SH-73；make().get() 生成 Counter_get(&__ct_tmp0)。",
+      "result": "unresolved",
+      "facts_side": "A 的方法结果限制成立 + B 的“设计拒绝/已可用部分”成立",
+      "note": "要重开必须 superseding decision；J1 见 J-6。"
+    },
+    {
+      "id": "J-6",
+      "question": "R2b-J1：只做 R2b 后 README §0.1 完整路径代码块能否原样 build",
+      "claim": "R2b-J1：README 代码块原样 ct build 通过且输出 201",
+      "counter": "断点 1（.m.ct 不能 import .h.ct）仍在；提案自己写“只剩断点 1”，与 J1 矛盾",
+      "evidence": [
+        "E-10-readme-stale"
+      ],
+      "verdict": "claim=fail（自相矛盾）",
+      "fact": "README 第 61 行断点 1 仍是语言限制；只做 R2b 不能使代码块 build。",
+      "result": "fail",
+      "facts_side": "B",
+      "note": "J1 必须改成“断点 1 也解决后”，或删掉。"
+    },
+    {
+      "id": "J-7",
+      "question": "R3a：稳定子集清单是否仍是缺口；授权级别是否与既有门禁冲突",
+      "claim": "R3a：起草三档稳定子集清单，每档附授权级别，进 check-docs 门禁",
+      "counter": "缺口真实；但授权级别与 phase 冻结/G8/deviation 重复，应映射而非另造",
+      "evidence": [
+        "E-08-r3a-gap"
+      ],
+      "verdict": "claim=partial（清单真、授权体系需改）",
+      "fact": "roadmap:147 仍是未排期治理项；AGENTS 已有 phase 冻结、G8、deviation。",
+      "result": "pass",
+      "facts_side": "A 的缺口成立 + B 的授权体系意见成立",
+      "note": "接受为文档任务，不占 phase。"
+    },
+    {
+      "id": "J-8",
+      "question": "R3b/R3c：版本规整是否已被 1.16.0/PH-67 取代；索引页是否属本仓",
+      "claim": "R3b：接受偏移并机器化或 1.0 重对齐；R3c：CT 建包仓索引页",
+      "counter": "1.16.0 的 v<M>-PH-<n> + PH-67 已取代旧模型；索引页属外部仓，CT 只登记不代改",
+      "evidence": [
+        "E-07-r3b-supersede",
+        "E-09-r3c-boundary"
+      ],
+      "verdict": "counter=pass；claim=fail/out-of-scope",
+      "fact": "AGENTS:33 为 1.16.0；v1 plan 用 v1-PH-0；phase67 规划迁移；包仓索引属外部。",
+      "result": "fail",
+      "facts_side": "B",
+      "note": "R3b 撤回，改为对 PH-67 的输入；R3c 转交包仓会话。"
+    }
+  ]
+}

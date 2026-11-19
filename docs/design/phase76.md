@@ -119,7 +119,7 @@ a.m()$x?.n()$y.l()     /* 拒绝：$y 位于可选链之后，可能未赋值 */
 | --- | --- | --- |
 | E76-1 | `p76_chain.sh` multi | 绿（`x.w==7 && y==7`） |
 | E76-2 | `p76_chain.sh` tail | 绿（链尾 `s.m()$x` 返回 1） |
-| E76-3 | 类型/const/非调用/实参负例 | 全部硬错；type-host/recipe 由 `$` 分支显式拒绝 |
+| E76-3 | 类型/const/非调用/实参/void 负例 | 全部硬错；type-host/recipe 由 `$` 分支显式拒绝；void 跳在 `$` 处拒绝（SH-92，v0.76.1） |
 | E76-4 | `ct check --types` | 在 `$` 处报类型错误；具体 struct 已覆盖；type-host 明确拒绝（v1） |
 | E76-5 | `check-all.sh` | 11/11（+G0/G8）；ASan 由既有 sanitizer 门禁覆盖；tutorial 入口已补 |
 
