@@ -5640,11 +5640,17 @@ impl ExprOps for Expr {
             {
                 char sres2[MAX_TEXT];
                 char sqn2[MAX_TEXT];
+                int sres2_is_type = 0;
                 snprintf(sres2, sizeof sres2, "%s", self->lex->toktext);
                 if (self->sym->find_struct(sres2) < 0
-                    && self->sym->resolve_type(sres2, sqn2, (int)sizeof sqn2) == 0
-                    && self->sym->find_struct(sqn2) >= 0)
-                    snprintf(sres2, sizeof sres2, "%s", sqn2);
+                    && self->sym->resolve_type(sres2, sqn2, (int)sizeof sqn2) == 0) {
+                    if (self->sym->find_struct(sqn2) >= 0)
+                        snprintf(sres2, sizeof sres2, "%s", sqn2);
+                    else if (self->sym->find_type(sqn2) >= 0
+                             || self->sym->find_type_alias(sqn2) >= 0
+                             || self->sym->find_trait(sqn2) >= 0)
+                        sres2_is_type = 1;
+                }
                 if (self->sym->find_struct(sres2) >= 0) {
                 int sp2, sbol2, stok2, sline2, stokline2, sstart2, slstart2;
                 long snum2;
@@ -5705,6 +5711,52 @@ impl ExprOps for Expr {
                 self->lex->tokfloat = sfloat2; self->lex->toktrunc = strunc2;
                 snprintf(self->lex->toktext, sizeof self->lex->toktext, "%s", stext2);
                 snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf2);
+                } else if (sres2_is_type) {
+                    /* LANG-7: the receiver names a declared type (typedef, enum,
+                       trait) but not a struct with static methods. The variable
+                       path would report `use of an undeclared variable` at the
+                       dot, sending the reader after an import; name the type
+                       instead. Only the `.method(` shape is claimed here -- any
+                       other use of the name rewinds to the variable path, so an
+                       enum-constant or alias typo keeps its old diagnostic. */
+                    int tp2, tbol2, ttok2, tline2, ttokline2, tstart2, tlstart2;
+                    long tnum2;
+                    int tfloat2, ttrunc2;
+                    char ttext2[MAX_TEXT], tsuf2[8], tm2[MAX_TEXT];
+                    tp2 = self->lex->pos; tbol2 = self->lex->bol;
+                    ttok2 = self->lex->tok; tnum2 = self->lex->toknum;
+                    tline2 = self->lex->line; ttokline2 = self->lex->tokline;
+                    tstart2 = self->lex->tokstart; tlstart2 = self->lex->lstart;
+                    tfloat2 = self->lex->tokfloat; ttrunc2 = self->lex->toktrunc;
+                    snprintf(ttext2, sizeof ttext2, "%s", self->lex->toktext);
+                    snprintf(tsuf2, sizeof tsuf2, "%s", self->lex->toksuffix);
+                    tm2[0] = 0;
+                    self->sup->lex_next();   /* the type name */
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0) {
+                        self->sup->lex_next();
+                        if (self->lex->tok == T_ID) {
+                            snprintf(tm2, sizeof tm2, "%s", self->lex->toktext);
+                            self->sup->lex_next();
+                            if (!(self->lex->tok == T_PUNCT
+                                  && strcmp(self->lex->toktext, "(") == 0))
+                                tm2[0] = 0;
+                        }
+                    }
+                    self->lex->pos = tp2; self->lex->bol = tbol2;
+                    self->lex->tok = ttok2; self->lex->toknum = tnum2;
+                    self->lex->line = tline2; self->lex->tokline = ttokline2;
+                    self->lex->tokstart = tstart2; self->lex->lstart = tlstart2;
+                    self->lex->tokfloat = tfloat2; self->lex->toktrunc = ttrunc2;
+                    snprintf(self->lex->toktext, sizeof self->lex->toktext, "%s", ttext2);
+                    snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", tsuf2);
+                    if (tm2[0]) {
+                        char tmsg3[MAX_TEXT + 96];
+                        snprintf(tmsg3, sizeof tmsg3,
+                            "static method '%s' cannot be resolved: '%s' is a type name, "
+                            "not a variable", tm2, sres2);
+                        return tool::diag::ct_sem_error(id_line, id_col, tmsg3,
+                                                        self->sup->mem->path);
+                    }
                 }
             }
             n = self->sup->new_node(N_VAR);
