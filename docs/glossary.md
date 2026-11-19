@@ -66,6 +66,7 @@
 | 计数循环（loop） | `loop(3) { … }` | 展开为 `for (int i = 0, __ct_loop_n_K = (3); i < __ct_loop_n_K; i++)` 的语法糖；计数只求值一次，隐式计数器是 `int i`；`loop` 是**上下文关键字**，只在语句位置紧跟 `(` 时生效（Phase 22，仅 ct-ast，见 [language-spec](language-spec.md) §4.45） |
 | 数组遍历（foreach） | `foreach (xs) { … item … }` | 在一维数组上迭代，隐式绑定 `item` 为当前元素的值拷贝；展开为 `{ int __ct_foreach_n_K = (int)(sizeof(xs) / sizeof((xs)[0])); for (int __ct_foreach_i_K = 0; …) { <T> item = xs[__ct_foreach_i_K]; (void)item; … } }`，长度只读一次；`foreach` 是**上下文关键字**；只收一维数组变量，其余形态硬错（Phase 27，仅 ct-ast，见 [language-spec](language-spec.md) §4.49） |
 | 接收者语境块（into） | `cfg into { .port = 8080; }` | 接收者只求值一次并提升为 `__ct_recvN`；块内 `.name` 是接收者的字段/方法、`$` 是接收者本身；语句形态与三个值位置（声明初始化器 / 赋值右值 / `return`）；`into` 是**上下文关键字**（Phase 30，仅 ct-ast，见 [language-spec](language-spec.md) §4.52） |
+| `$`（当前成员 / 自身） | `1..6($ * $)`、`cfg into { $.port }` | **当前语境的自身／当前成员**，不是下标记号、不是标识符、不进符号表。range 初值里绑定为序列成员的值（`2..5($)` → `2 3 4`，不是 `0 1 2`），只读；`into` 块里绑定为接收者本身。诊断 `the range index '$' is not a variable` 是 Phase 24 的历史措辞，`$` 并非标识符（[language-spec](language-spec.md) §4.47、§4.52） |
 | 区间循环（loop range） | `loop(2..5) { … }` | 展开为 `for (int __ct_loop_n_K, __ct_loop_hi_K, i = ((__ct_loop_n_K = (2)), (__ct_loop_hi_K = (5)), __ct_loop_n_K); i < __ct_loop_hi_K; i++)` 的语法糖，半开区间 `[a, b)`；两边界各求值一次、先左后右（由 `i` 初始化器里的逗号运算符定序，C99 §6.5.17）；`loop(0..b)` 等同 `loop(b)`；指针/数组/结构体/函数指针作边界是硬错误（Phase 23，仅 ct-ast，见 [language-spec](language-spec.md) §4.46） |
 | 位置式初始化 | `Person p = { "Tom" };` | 按字段顺序 |
 | 指定初始化 | `Person p = { .name = "Tom" };` | 按字段名 |
@@ -215,17 +216,17 @@
 | 绑定（bindings） | `test/bindings/<库>/` 下的 `.ct` / `#include` + 镜像 trait/struct + `map` | **已实现**：首个 binding 为 `test/bindings/mock-hal/`（Phase 12.1）；跨单元消费已由 Batch 2 解除限制 |
 | 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← CT 定义点；Phase 6.1 已落地（D16） |
 | 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct update` / `ct install` / `ct verify` 子命令，Phase 8 落地（本地目录源 + git 源），Phase 17.5 补齐更新、校验与索引，Phase 18 建组织（`github.com/ct-pkg`）并发布首批官方包 |
-| 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` / `licence` / 可重复的 `dep = <spec>[@<range>]`（D21）；17.5 增可选 `cflags` / `ldflags` / `requires`。**未知键静默忽略**：`ns-root` / `publisher` 当前不存在，写了也不生效（[PKG-3](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)） |
-| 锁文件（lock file） | `ct.lock` | 每个依赖一行 `name ver kind ref digest`；`kind` 为 `dir` 或 `git`，末列是 `sha256:<64 hex>` 的整棵包树摘要（按路径排序后单流哈希；D23 / D27，SH-44）。**没有**发布方、ns-root 与格式头；`ct build` 当前不读它 |
+| 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` 必填；S1 起 `publisher` / `ns-root` 必填；`licence` 仅约定；可重复 `dep = <spec>[@<range>]`；可选 `c-boundary`（`strict` \| `allow`）/ `cflags` / `ldflags` / `requires`。**未知键静默忽略**（向前兼容；`ns-root` / `publisher` 已不再是未知键）。键表与失败行为见 [package-guide](package-guide.md) §2 |
+| 锁文件（lock file） | `ct.lock` | v2 每个依赖一行 `<publisher>/<name> <version> <type> <locator> <commit\|-> <ns-root> <sha256:<64 hex>>`；`ct build` 默认读 `./ct.lock`，`ct verify` / `ct install` / `ct update` 离线校验。v1 旧锁（`name ver kind ref digest`）只由 `ct migrate` 读取后重写。见 [package-guide](package-guide.md) §7.5 |
 | 共享 store | `$CT_HOME/pkg/<publisher>/<name>/<version>/` | `ct get` 写入、`ct build` 按 v2 `ct.lock` 自动读取的包树；`-I` 指向 `<version>/<ns-root>`。S7 后不再读写 `vendor/` |
-| 包根（package root） | 含 `ct.pkg` 的目录 | **现状契约**：包根即单元树根，单元与清单并列、不嵌套；`-I` 恒为包根。`src/<ns>/` 布局在当前机制下不可消费（[package-guide §8](package-guide.md)） |
-| 单元树根（ns-root） | `ct.pkg` 的目标键 | 共享库提案引入的目标形态（[需求 SP-003](planning/ct-pkg-shared-store-requirements.md)）；**当前版本不存在**。与下一条不是同一件事 |
+| 包根（package root） | 含 `ct.pkg` 的目录 | 仓库根；单元树根由 `ns-root` 声明，二者可不同（`ns-root = .` 时相同）。消费端 `-I` 指向 `<版本目录>/<ns-root>`，不再手写 `vendor/` |
+| 单元树根（ns-root） | `ct.pkg` 的必填键 | S1 起必填：相对包根、不含 `..`、目录必须存在；`ct pkg check` 校验，`ct.lock` 自动补 `-I`。不再是「目标形态」 |
 | 命名空间前缀键（`namespace`） | `ct.pkg` 的现状键 | 编译器实际读取的键：命中 import 首段时**剥掉**该段再在 `-I` 根下找文件；与 `ns-root`（给根目录**加**前缀）语义相反。未写入包作者指南，易被误当成 ns-root（[PKG-3](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)） |
 | 最小版本选择（MVS） | `ct get` | 每个依赖取满足所有范围的最低版本；无 tag 的 git 源回退默认分支 HEAD（D23） |
 | 契约包（contract package） | `ct-pkg/hal` | 只有 `pub trait` 声明的纯 `.h.ct` 包（`Uart` / `Gpio` / `Clock` / `Log`），不含实现；平台包按它提供实现（Phase 18.3，`hal 0.1.0`） |
 | 平台包（platform package） | `ct-pkg/hal-posix` | binding 形式（`#include` 直通 + 镜像 trait/struct + 全局实例 + `map`）实现契约包；一份源码覆盖 macOS / Linux，`ct.pkg` 带 `cflags = -D_POSIX_C_SOURCE=200809L`（glibc 在 `-std=c99` 下隐藏 POSIX 声明；生成头先于源码 PP 行输出，故只能走 cc 命令行）。一个 `posix_hal` 实例可装箱成四个 trait（Phase 18.4） |
-| C 映射包（C-mapping package） | `ct-pkg/std` | `.m.ct` 零成本静态映射到 libc（`std::str` / `std::io` / `std::math`）：调用点展开为普通 C 调用，无 wrapper / `_iface` / vtable；变参 `printf` 走 `std::io::printf`（`.h.ct` 里用 `va_list` 转发），`ldflags = -lm` 由 `ct install` 拼进命令 |
-| 索引仓库（index repository） | `ct-pkg/index` | 托管五字段纯文本 `index`；`tools/gen-index.sh` 按 `ct` 的同一摘要算法计算 `sha256`，`tools/refresh-index.sh` 取各包最高 tag 后重建，夜间 workflow 提交差异（Phase 18.2） |
+| C 映射包（C-mapping package） | `ct-pkg/std` | `.m.ct` + 同名 `.shim.h` 零成本映射到 libc（`std::str` / `std::io` / `std::fs` / `std::utf8` / `std::num` / `std::math` … 16 个模块）：调用点展开为普通 C 调用，无 wrapper / `_iface` / vtable；容器不在包里（`Vec` / `Map` 是内置层），`ldflags = -lm` 由 `ct install` 拼进命令 |
+| 索引仓库（index repository） | `ct-pkg/index` | 托管六字段纯文本 `index`（`name version publisher url tag sha256:<hex>`）；五字段旧行（无 `publisher`）只读兼容、不能落 store。生成器、`tools/package.sh` 与 CI 都在索引仓；索引**无签名**，见 [ct-pkg-index](ct-pkg-index.md) |
 
 ### 8. 许可
 

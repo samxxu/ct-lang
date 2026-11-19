@@ -49,3 +49,28 @@ v0.26.0 的泛型实现本体。v0.26.4 补丁新增了四项交付（TEST-18 / 
 - `python3 test/docs/check-docs.py` 通过；
 - `docs/history/design/phase26.md` §9.9 存在且映射到 §9.2 P8；
 - 不涉及代码与门禁改动。
+
+## 处置（2026-11-20，DEV #2）
+
+范围：只改 `docs/history/design/phase26.md` 与本文处置；不改 §1.4 / §1.5 的冻结原文，不改代码、门禁与版本。
+
+| # | 建议收口项 | 结论 | 落点 / 证据 |
+| --- | --- | --- | --- |
+| 1 | 在 §9.9 写明 E6 的补丁口径与 §9.2 P8 的现行判定，冻结原文不动 | **fixed（已在 `d73e3fb2` 落地，本次复核）** | [phase26.md §9.9](../../docs/history/design/phase26.md#99-判据映射与冻结边界2026-11-10-核对)：E6 冻结原文 `0.26.3` 保留，现行判定以 §9.2 P8 为准；§7 版本号按 v0.26.4 同步 |
+| 2 | 下一相冻结 §1.5 时显式写「补丁判据自动计入本相出口」 | **fixed（要求已写入 §9.9）；deferred（卡面执行）** | 本次在 §9.9 增加「下一相的卡面要求（待下一相开卡时执行）」；当前没有新开 phase 卡，实际写入下一相退出判据须等该卡冻结时执行，不追溯修改已冻结判据 |
+| 3 | 不为让结论好看而回溯扩写 E1–E8 | **fixed（核对无扩写）** | 见下方实测：D 仍 22 行、无 D23 及以后、E 仍 8 行；§9.9 只登记缺口与映射 |
+
+实测命令与原始输出：
+
+```console
+$ awk '/^### 1.4/,/^### 1.5/' docs/history/design/phase26.md | grep -c '^| D[0-9]'
+22
+$ awk '/^### 1.4/,/^### 1.5/' docs/history/design/phase26.md | grep -c '^| D2[3-9]'
+0
+$ awk '/^### 1.5/,/^### 1.6/' docs/history/design/phase26.md | grep -c '^| E[0-9]'
+8
+$ git log --format='%h %s' -S'判据映射与冻结边界' -- docs/history/design/phase26.md
+d73e3fb2 fix(docs): map the Phase 26 patch criteria and backfill DOC-63
+```
+
+验证：`python3 test/docs/check-docs.py` → OK；`bash tools/check.sh g0` → OK（原始输出见 [DOC-72 处置](doc-72-spec-audit-followup.md#处置2026-11-20dev-2)）。

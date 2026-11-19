@@ -11,6 +11,16 @@
 
 ## 中文
 
+### 0. 三个角色：消费者 / 发布者 / 索引
+
+| 角色 | 你是谁 | 入口 | 不该做的事 |
+| --- | --- | --- | --- |
+| 消费者 | 用别人的包 | `ct get` + `ct build`（`ct install` / `ct verify` / `ct update` / `ct migrate` 辅助） | 不把包源码复制进项目；不假设裸名能解析第三方 |
+| 发布者 | 发布自己的包 | 本文件：`ct.pkg` + `ns-root` + 目录布局；发布脚本在 `ct-pkg/index` 仓的 `tools/package.sh` | 不自造清单键；不把 token 带进 `ct` |
+| 索引维护者 | 让包可被 `ct get <pub>/<name>` 解析 | `ct-pkg/index` 仓的索引生成器与 CI | 不在客户端扫描组织；不手改生成物 |
+
+三者职责与当前可解析范围见 [ct-pkg](ct-pkg.md)；索引字段与信任边界见 [ct-pkg-index](ct-pkg-index.md)。
+
 ### 1. 一个包长什么样
 
 > 包仓的发布、tag、release dispatch、digest 与索引接入规则（提案，待目标组受理）：
@@ -128,6 +138,9 @@ MVS（取满足范围的最低版本）。
 ```
 name version publisher git-url tag sha256:<64 hex>
 ```
+
+五字段旧行（`name version git-url tag sha256:<hex>`，无 `publisher`）仍能被解析，但**不能落 store**，
+属只读兼容、不可安装；生成端已停止产出。字段与信任模型见 [ct-pkg-index](ct-pkg-index.md)。
 
 摘要按 `ct.lock` 的同一算法计算（按路径排序后把每个文件的相对路径与内容汇入单流 SHA-256）。
 本地可用 `CT_INDEX=<file>` 或 `--index <file>` 指向任意纯文本索引。消费端与发布端（`package.sh`）

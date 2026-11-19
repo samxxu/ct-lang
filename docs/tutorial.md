@@ -244,14 +244,14 @@ curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 → 用符号链接补上 `ctc` 别名。只下载源码，**不下载预编译二进制**，也不需要 `git`。
 
 ```sh
-ct -v            # ct v0.16.0        （安装入口，能力最全）
-ctc -v           # ctc v0.16.0       （兼容别名，同一个二进制）
+ct -v            # ct v<版本>        （安装入口，能力最全；版本以实际输出为准）
+ctc -v           # ctc v<版本>       （兼容别名，同一个二进制）
 ```
 
 | 需求 | 做法 |
 | --- | --- |
 | 装到别处 | `install.sh --prefix "$HOME/bin"` |
-| 装指定版本 | `install.sh --version v0.16.0`（默认装 `main`） |
+| 装指定版本 | `install.sh --version <tag>`（默认装 `main`；`<tag>` 形如 `v<major>.<minor>.<patch>`，以 release 页为准） |
 | 从本地 clone 装（离线） | `CT_SOURCE_DIR=. sh install.sh` |
 | 换编译器 | `CC=gcc sh install.sh` |
 | 只想试一下，不安装 | `gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc`（L0 只支持单文件核心语法） |
@@ -514,7 +514,7 @@ ct build --emit-c -I . main.ct -o build   # 只发 C：每单元 .c/.h，并打�
 ## 8. 内存：Drop、delete、own、泄漏告警
 
 三种释放手段，按需要选（`test/modules/autodrop`、`test/modules/leak`）。
-完整的所有权、工厂与池化实践见 [memory-guide](memory-guide.md)（其中记录了 AutoDrop 缺陷 SH-33 已于 v0.16.0 修复）。
+完整的所有权、工厂与池化实践见 [memory-guide](memory-guide.md)（其中记录了 AutoDrop 缺陷 SH-33 已于 0.16.0 修复）。
 
 ```c
 #include <stdio.h>
@@ -716,9 +716,12 @@ ct build main.ct -o main
 只解析官方包，第三方包必须写 `<publisher>/<name>` 并配 `--index` / `CT_INDEX`。`ct get` 的输出
 把来源写成 `url@<包版本>`，tag 单列；旧工程的 `std/std` 锁由 `ct update` 自动迁移。
 
+模块清单、入口 `import` 与完整 API 入口见 [std-catalog](std-catalog.md)；`Vec<T>` / `Map<K,V>` 是
+编译器内置层，不在包里，也不需要 import。本节只讲 `std` 的用法与坑，不重复模块清单。
+
 namespace 固定为 `std::<mod>`，调用只有一种形态：方法。宿主是 C 已有类型的模块（`str` / `fs` /
-`utf8`）用 `<Trait>.m.ct` + 同基名 `<Trait>.shim.h` 的静态映射；CT 自有类型（`vec` / `map` /
-`arena` / `test`）在 `.h.ct` 里直接写 `pub trait` + `struct ... use Trait` + `impl`：
+`utf8`）用 `<Trait>.m.ct` + 同基名 `<Trait>.shim.h` 的静态映射；CT 自有类型（`arena` / `test`）
+在 `.h.ct` 里直接写 `pub trait` + `struct ... use Trait` + `impl`：
 
 ```ct
 import std::str::String;
@@ -737,17 +740,9 @@ int main(void)
 }
 ```
 
-下表路径相对包的 `ns-root`（本机安装后是 `$CT_HOME/pkg/ct/std/<version>/<ns-root>/`）：
-
-| 单元 | namespace | 方法 |
-| --- | --- | --- |
-| `std/str/String.m.ct` + `String.shim.h` | `std::str` | `len` / `find` / `findChar` / `startsWith` / `endsWith` / `copy` / `slice` / `concat` / `toLower` / `toUpper` / `compare` |
-| `std/fs/Fs.m.ct` + `Fs.shim.h` | `std::fs` | `exists` / `readFile` / `writeFile` / `list` |
-| `std/utf8/Utf8Ops.m.ct` + `Utf8Ops.shim.h` | `std::utf8` | `decode` / `codepointCount` / `encode` |
-| `std/vec/Vec.h.ct` | `std::vec` | `VecIntOps` / `VecStrOps`：`init` / `len` / `push` / `pop` / `at` / `free` |
-| `std/map/Map.h.ct` | `std::map` | `MapStrIntOps` / `MapIntPtrOps`：`init` / `put` / `get` / `len` / `clear` / `free` |
-| `std/arena/Arena.h.ct` | `std::arena` | `init` / `alloc` / `reset` / `freeAll` |
-| `std/test/Test.h.ct` | `std::test` | `init` / `checkTrue` / `checkEqInt` / `checkEqStr` / `report` |
+包的 `ns-root` 为本机安装后的 `$CT_HOME/pkg/ct/std/<version>/<ns-root>/`。
+`std::vec` / `std::map` 已在 std 0.3.0 删除，容器改用内置 `Vec` / `Map`；其余模块的入口
+统一在 [std-catalog §2](std-catalog.md#2-std-包模块)。
 
 容器、arena、test 走原生 OO：每个 struct 带 `use ...Ops`，方法经 vtable 分派。库里统一写
 `p->method()`（栈上值和堆对象都成立）；声明出来的值也接受 `v.method()`，编译器会在声明处补上
@@ -808,18 +803,10 @@ buf.encode(233, 16);
 `free()` / `reset()` / `clear()`；`Map` 固定容量、满载拒绝新键，不自动 rehash。详见包内
 `std/README.md`（`ct get` 后位于 `$CT_HOME/pkg/ct/std/<version>/<ns-root>/README.md`）。
 
-每个模块有一对文档：`README.md` 是参考（方法全集、参数、返回值、内存归属、本模块的坑），
-`tutorial.md` 是从零写到能用的过程。这里的总览不重复它们的内容；两文件都在包内同一目录
-（`$CT_HOME/pkg/ct/std/<version>/<ns-root>/<mod>/`）：
-
-| 模块 | 参考 | 教程 |
-| --- | --- | --- |
-| `std::str` / `std::vec` | `<ns-root>/str/README.md` · `<ns-root>/vec/README.md` | `<ns-root>/str/tutorial.md` · `<ns-root>/vec/tutorial.md` |
-| `std::fs` | `<ns-root>/fs/README.md` | `<ns-root>/fs/tutorial.md` |
-| `std::utf8` | `<ns-root>/utf8/README.md` | `<ns-root>/utf8/tutorial.md` |
-| `std::map` | `<ns-root>/map/README.md` | `<ns-root>/map/tutorial.md` |
-| `std::arena` | `<ns-root>/arena/README.md` | `<ns-root>/arena/tutorial.md` |
-| `std::test` | `<ns-root>/test/README.md` | `<ns-root>/test/tutorial.md` |
+每个模块的参考（方法全集、参数、返回值、内存归属、本模块的坑）在包内
+`std/<mod>/README.md`，路径是 `$CT_HOME/pkg/ct/std/<version>/<ns-root>/<mod>/README.md`；
+包内**不再有独立 `tutorial.md`**，各模块的用法示例已并入 README。本文不复制这些内容；
+模块与入口 import 的索引见 [std-catalog](std-catalog.md)。
 
 ### 10.1 闭包：把上下文带进回调
 

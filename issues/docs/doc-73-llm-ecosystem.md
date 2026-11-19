@@ -103,3 +103,75 @@
 
 - **不占 phase**；挂 `v0-PH-67` R5，与 DOC-72 同批。
 - 可先做 P0 三份短文档，不等 ID 迁移。
+
+## 处置（2026-11-20，DEV #2）
+
+范围：只新增/修订文档与本文处置；**不新开 phase、不 bump 版本、不改 ct-pkg 仓、不把发布脚本写进 `ct`**。
+计数与字段形态全部按 2026-11-20 实测回填，不照抄 issue 写作时的旧前提。
+
+### 交付物
+
+| # | 结论 | 落点 |
+| --- | --- | --- |
+| P0-1 `docs/llm-guide.md` | **fixed** | 新建 [llm-guide](../../docs/llm-guide.md)：固定决策顺序（language-spec → std → hal → index → 才实现）、H1–H7 硬规则、需求→先查哪张表、最小命令、四个判断示例（含「split → `std::str` 的 `split_into`」）、文档地图 |
+| P0-2 `docs/std-catalog.md` | **fixed** | 新建 [std-catalog](../../docs/std-catalog.md)：内置层（`Vec`/`Map`/`MapEntry`/`Option`/`Result`/`Str`，免 import）+ `std` 16 个模块的用途与入口 `import`；完整 API 指向包内 `std/<mod>/README.md`；含 store 路径与「包内无 tutorial.md」的事实 |
+| P0-3 `docs/ct-pkg.md` | **fixed** | 新建 [ct-pkg](../../docs/ct-pkg.md)：四角色表（编译器 / `ct/std` / `hal` + `hal-posix` / 索引）、本仓不内置 std、消费/发布/索引/preflight 四条边界、当前可解析范围 |
+| P1 `docs/ct-pkg-index.md` | **fixed（并按实测修正前提）** | 新建 [ct-pkg-index](../../docs/ct-pkg-index.md)：六字段现行、五字段旧行只读兼容且不可安装；`--index`/`CT_INDEX` 显式；索引无签名、pin/签名未落地；发布走索引仓 `tools/package.sh` + CI；`proposals/` 标注为目标形态 |
+| P1 tutorial std 段 | **fixed** | [tutorial §10](../../docs/tutorial.md#10-标准库std)：加 std-catalog 指针；删掉过期的 `std::vec` / `std::map` 与「每模块一对 README/tutorial」表（std 0.3.0 已删 vec/map；0.19.0 包内无 tutorial.md） |
+| P1 package-guide | **fixed** | [package-guide §0](../../docs/package-guide.md)：新增「消费者 / 发布者 / 索引」三角色表；§4 索引段补五字段旧行「可解析、不可安装」边界 |
+| P1 glossary | **fixed（并顺带修正相邻过期项）** | [glossary](../../docs/glossary.md)：索引仓库改六字段现行/五字段只读；`ct.pkg` 改 `publisher`/`ns-root`/`c-boundary` 等现行键；`ct.lock` 改 v2 七字段且 `ct build` 默认读取；包根/`ns-root` 去掉「目标形态、当前不存在」；C 映射包改为 16 模块口径；新增 `$` 条目 |
+| P1 docs/README | **fixed** | [docs/README](../../docs/README.md)：新增「生态：先复用，别重写」入口表（llm-guide / std-catalog / ct-pkg / ct-pkg-index / package-guide），并明确 `proposals/` 是提案、不是现状 |
+
+### 验收判据
+
+| # | 结论 | 说明 |
+| --- | --- | --- |
+| A1 | **fixed** | llm-guide §5：问「字符串 split」→ 先看 `std::str` 的 `split_into`（实测存在于 `std/str/String.shim.h`），不要手写 |
+| A2 | **fixed** | llm-guide H1 + std-catalog §1：`Vec`/`Map`（以及 `Option`/`Result`/`Str`）是内置层，免 import，不重写 |
+| A3 | **fixed** | llm-guide H4 + ct-pkg §3：包格式 `ct.pkg` + `publisher` + `ns-root`；发布走索引仓脚本，不复制源码 |
+| A4 | **fixed（前提已按实测更正）** | issue 写作时（2026-11-18，v0.65.1）的「当前五字段、六字段是目标」已被 PH-77 的 S5/E77-8（v0.77.0）取代：实测官方索引 `std` 行是**六字段**，索引里五字段旧行仍可解析但没有 `publisher`、不能落 store。文档按「六字段现行 / 五字段旧行只读兼容」表述，不再写反 |
+| A5 | **fixed** | 五/六字段口径已在 ct-pkg-index / package-guide / glossary 三处统一；`docs/README` 与 ct-pkg-index 都明确 `proposals/` 不是现状 |
+| A6 | **fixed** | llm-guide §6 文档地图从 language-spec → std-catalog → ct-pkg / ct-pkg-index / package-guide / tutorial 可直接走通 |
+
+### 实测命令与原始输出
+
+```console
+$ curl -fsSL --max-time 10 https://raw.githubusercontent.com/ct-pkg/index/master/index -o /tmp/ct-index.txt
+$ awk 'NF{print NF}' /tmp/ct-index.txt | sort | uniq -c
+  10 5
+  10 6
+$ grep '^std ' /tmp/ct-index.txt
+std 0.19.0 ct https://github.com/ct-pkg/std v0.19.0 sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79
+
+$ git clone -q --depth 1 --branch v0.19.0 https://github.com/ct-pkg/std /tmp/std019
+$ grep -c '^| `std::' /tmp/std019/std/README.md
+16
+$ find /tmp/std019/std -mindepth 1 -maxdepth 1 -type d | wc -l
+20          # 16 个有 README 的公开模块 + mmap/poll/posix/thread 四个无 README 的内部单元
+
+$ grep -n 'publisher' /tmp/ctindex/tools/gen-index.sh
+60:publisher=$(manifest_value publisher)
+65:[ -n "$publisher" ] || die "'$dir/ct.pkg' is missing 'publisher' (required since ct v0.54)"
+107:    "$name" "$version" "$publisher" "$url" "$tag" "$digest" >>"$tmp"
+
+$ .temp/p77/ct-ast -v
+ct-ast v0.77.1
+$ cd .temp/ioprobe && ../../.temp/p77/ct-ast build m.ct -I /tmp/std019 -o out   # m.ct: import std::io::Stdout;
+$ echo $?
+0
+# 同法实测 std-catalog 的 16 个入口（io::Stdout / io::File / fs::Fs / utf8::Utf8Ops / num::Num /
+# math::Real / search::Search / arena::Arena / test::Test / env::Env / process::Process /
+# errno::Errno / locale::LocaleHandle / wchar::Wchar / time::Time / net::Socket）逐个 import + build，
+# 全部 rc=0（证明 .m.ct 可被 import，且入口名可解析）
+
+$ HOME=/tmp/halprobe CT_HOME=/tmp/halprobe .temp/p77/ct-ast get ct/hal
+ctc: no index resolver for 'ct/hal'
+  'ct/hal' is a publisher-qualified package name; the built-in
+  pins cover the official packages only (ct/std).
+$ echo $?
+1
+# pin 表只有 std：grep -n 'pnames\[\]' selfhost/ct-ast/tool/pkg/Pkg.h.ct
+# 2015:    static const char *const pnames[] = { "std" };
+```
+
+验证：`python3 test/docs/check-docs.py` → OK；`bash tools/check.sh g0` → OK（原始输出见 [DOC-72 处置](doc-72-spec-audit-followup.md#处置2026-11-20dev-2)）。

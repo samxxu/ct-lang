@@ -64,3 +64,45 @@ range 初值里的 `$` 与将来语境块里的 `$` 是同一个语义，只是�
 ## 处置
 
 未处置。等文档轮统一修订；本条不触碰编译器行为。
+
+## 处置（2026-11-20，DEV #2）
+
+范围：只改叙述与词表，**不改实现、不改诊断文案、不改 `check-ast` 断言**；发射器注释按 issue 的建议
+随下次实现提交，本提交不碰代码。
+
+| # | 建议收口项 | 结论 | 落点 |
+| --- | --- | --- | --- |
+| 1 | `$` 改为「当前成员的占位」 | **fixed** | [language-spec §4.47](../../docs/language-spec.md#447-数组-range-初值-ab-phase-24仅-ct-ast)：`$` 绑定当前序列成员的值 `k`（从 `a` 起，不是 0 起偏移）；给出 `2..5($)` → `2 3 4`、`1..6($ * $)` → `1 4 9 16 25`，并说明只有 `0..b` 时成员值才等于 0 起偏移 |
+| 2 | 英文段同位补澄清 | **n/a（已无英文段）** | 文档语言政策（AGENTS §0.4）已删除 `## English`；`grep -rn '^## English' docs/language-spec.md` 无命中，不需补 |
+| 3 | 诊断文案保留并注明历史措辞 | **fixed** | 同 §4.47：`the range index '$' is not a variable` 保留，注明是 Phase 24 发布时的历史措辞、`$` 并非标识符、文案被精确断言故不改 |
+| 4 | glossary 增加 `$` 条目 | **fixed** | [glossary](../../docs/glossary.md#1-语言构造)：新增「`$`（当前成员 / 自身）」，列 range 初值 / `into` 两个绑定语境，注明 range 中只读 |
+| 5 | `phase24.md` 与发射器注释改「current member」 | **fixed（phase24）/ deferred（代码注释）** | [phase24.md:160](../../docs/history/design/phase24.md#L160) 改为「当前成员值」；`Emitter.h.ct:312` / `:3101` 的 `index` 注释属代码，按 issue 原文「可随下次实现提交，不单独立项」，本次不碰代码，已在本文登记为剩余项 |
+
+实测命令与原始输出（证明实现绑定成员值，不是 0 起下标）：
+
+```console
+$ .temp/p77/ct-ast -v
+ct-ast v0.77.1
+$ cat .temp/doc71/p.ct
+#include <stdio.h>
+int main(void) {
+    int a[] = 2..5($);
+    int b[] = 0..3($);
+    ...
+}
+$ .temp/p77/ct-ast compile .temp/doc71/p.ct --c-boundary=allow -o .temp/doc71/p3.c
+$ sed -n '6,7p' .temp/doc71/p3.c
+    int a[] = { ((int)2), ((int)3), ((int)4) };
+    int b[] = { ((int)0), ((int)1), ((int)2) };
+$ cc .temp/doc71/p3.c -o .temp/doc71/p3 && ./.temp/doc71/p3
+a[0]=2
+a[1]=3
+a[2]=4
+b 0 1 2
+$ grep -n 'squares' examples/15_range_init/range_init.expected.out
+16:squares 1 4 9 16 25
+```
+
+若 `$` 是 0 起下标，`2..5($)` 会得到 `0 1 2`；实测 `2 3 4`，与改后叙述一致。
+
+验证：`python3 test/docs/check-docs.py` → OK；`bash tools/check.sh g0` → OK。

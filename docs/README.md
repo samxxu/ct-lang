@@ -30,6 +30,19 @@
 | [package-guide.md](package-guide.md) | 包作者指南：`ct.pkg` 键、`ns-root`、`ct install` / `ct build` 行为、常见失败 | 编写或消费一个包 |
 | [modern-oo-gap.md](modern-oo-gap.md) | 需求侧评估：以现代化 OO 为参照的差距清单、battle 记录与三档结论 | 判断「还缺哪些语言特性」 |
 
+### 生态：先复用，别重写
+
+| 文档 | 内容 | 何时读 |
+| --- | --- | --- |
+| [llm-guide.md](llm-guide.md) | 面向 LLM / 代理的固定决策顺序与硬规则 | 写任何 CT 代码前 |
+| [std-catalog.md](std-catalog.md) | `std` 16 个模块的用途、入口 `import`、完整 API 在哪 | 要用容器 / 字符串 / 文件 / UTF-8 / arena / test |
+| [ct-pkg.md](ct-pkg.md) | ct-pkg 四个角色：编译器 / std / 平台包 / 索引 | 判断一个能力该由谁提供 |
+| [ct-pkg-index.md](ct-pkg-index.md) | 索引的六字段现行形态、旧五字段兼容、信任边界与发布入口 | 加包、查索引、判断可信度 |
+| [package-guide.md](package-guide.md) | 包作者指南：清单键、`ns-root`、`ct install` | 发布或消费一个包 |
+
+> `proposals/` 下的文档是**提案**，不是现状；现状以本表与 language-spec / package-guide /
+> ct-pkg-index 为准。索引没有签名，pin / 签名未落地前不要声称可信。
+
 ### 计划与台账
 
 | 文档 | 内容 |
