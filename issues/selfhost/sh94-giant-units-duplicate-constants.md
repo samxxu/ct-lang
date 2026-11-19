@@ -46,6 +46,7 @@ $ wc -l selfhost/ct-ast/frontend/parse/Expr.h.ct selfhost/ct-ast/backend/emit/Em
     7575 selfhost/ct-ast/frontend/parse/Expr.h.ct
     6694 selfhost/ct-ast/backend/emit/Emitter.h.ct
     4458 selfhost/ct-ast/frontend/parse/Stmt.h.ct
+   18727 total
 $ grep -rn 'MAX_GENERIC_INSTS' selfhost/ct-ast --include='*.ct'
 selfhost/ct-ast/frontend/sym/Symbols.h.ct:47:#define MAX_GENERIC_INSTS 64
 selfhost/ct-ast/frontend/parse/Expr.h.ct:66:#define MAX_GENERIC_INSTS 64
@@ -66,3 +67,21 @@ TEST-23 的 ct-ast 单测/覆盖率是同批前置。本批是 P1/P2 缺陷处�
    `MAX_STRUCT_TPARAMS`，删除重复 `#define`；验证生成物逐字节不变 +
    `check-ast` fixpoint；
 2. 拆分按“纯函数/子对象”各开一个 phase 任务，每任务独立 golden 与回滚。
+
+## 复核（2026-11-20，REV）
+
+**结论：REV 认可 defer 理由；`deferred` 属 REQ/USER，status 不动。**
+
+```console
+$ wc -l selfhost/ct-ast/frontend/parse/Expr.h.ct selfhost/ct-ast/backend/emit/Emitter.h.ct selfhost/ct-ast/frontend/parse/Stmt.h.ct
+    7575 selfhost/ct-ast/frontend/parse/Expr.h.ct
+    6694 selfhost/ct-ast/backend/emit/Emitter.h.ct
+    4458 selfhost/ct-ast/frontend/parse/Stmt.h.ct
+$ grep -rn 'MAX_GENERIC_INSTS' selfhost/ct-ast --include='*.ct'
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:47:#define MAX_GENERIC_INSTS 64
+selfhost/ct-ast/frontend/parse/Expr.h.ct:66:#define MAX_GENERIC_INSTS 64
+```
+
+行为保持拆分要逐字节 golden + 自举 fixpoint，且 TEST-23 是前置；defer 理由成立。
+复核发现 `MAX_TEXT` 实测 **14** 处（`grep -rn 'define MAX_TEXT'`），处置段写 10，
+迁移时须以脚本重扫为准；该差异不改变 defer 结论。

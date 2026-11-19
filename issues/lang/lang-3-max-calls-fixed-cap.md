@@ -5,7 +5,7 @@
 | 模块 | lang（编译器容量） |
 | 严重度 | Medium |
 | 优先级 | **P2** —— 目前无人被挡，但属「包长大才突然报错」的悬崖 |
-| 状态 | open |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`c4727787`） |
 | 详情 | [max-calls-limit.md](../../docs/reviews/max-calls-limit.md)（口径、改动面、绕法、余量实测） |
 
@@ -90,3 +90,17 @@ calls.ct:1024:8: error: too many calls
 $ bash test/ast/p72_maxcalls.sh /tmp/ci9-sh93-build/ct-ast
 OK p72/maxcalls (4096+ calls, named limit)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p72_maxcalls.sh /tmp/rev-v0771-build/ct-ast
+OK p72/maxcalls (4096+ calls, named limit)
+$ echo $?
+0
+```
+
+探针同时覆盖 3000 条通过、9000 条报 `too many calls (MAX_CALLS=…)`；修复提交
+`43cf9251` 为 HEAD 祖先。

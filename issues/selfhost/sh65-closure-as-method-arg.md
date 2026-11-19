@@ -6,7 +6,7 @@
 | 严重度 | **Medium**（不误编译；但让 OO 化的回调接口写不出来，且 `ct compile` 落到内部诊断） |
 | 锚点 | commit `e99a5fd`（2026-11-10，`v0.26.4`） |
 | 文件 | [Expr.h.ct:2587-2607](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2587-L2607)（常规 `.method(...)` 的 19.1/19.2，未计闭包）；[Expr.h.ct:3235-3249](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3235-L3249)（自由调用的同一对钩子）；[Emitter.h.ct:3365](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3365)（自由调用的闭包打包）与 [:3378](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3378)（`unknown expression node` 兜底）；[l0/ctc.c:561](../../selfhost/l0/ctc.c#L561)（L0 声明解析尾巴） |
-| 状态 | **open**（本仓语言侧未改；09/10/12 的 OO 化因此搁置） |
+| 状态 | **verified**（2026-11-20，REV） |
 
 ## 现象
 
@@ -136,3 +136,16 @@ return ring_each(&r, (int x) => x + base);  /* 自由函数闭包：compile rc=0
 $ bash test/ast/p75_closure.sh /tmp/ci9-sh93-build/ct-ast
 OK p75/closure (pair-form method argument)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p75_closure.sh /tmp/rev-v0771-build/ct-ast
+OK p75/closure (pair-form method argument)
+$ echo $?
+0
+```
+
+探针断言 pair 形方法实参可检查、可构建、可运行；修复提交 `74e58fe7` 为 HEAD 祖先。

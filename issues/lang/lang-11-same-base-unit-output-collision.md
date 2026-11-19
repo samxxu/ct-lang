@@ -5,7 +5,7 @@
 | 模块 | lang（多单元构建 / 产物命名） |
 | 严重度 | **High**（单元表承诺的配对形态不可用） |
 | 优先级 | **P1** —— 挡住「`.h.ct` 接口 + `.ct` 实现」的包布局；有绕法但要把实现单元改名 |
-| 状态 | open |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`3337ac7a`）；实测二进制 `ct v0.53.0` |
 | 类型 | **实现缺陷**（不是语言设计拒绝） |
 
@@ -114,3 +114,17 @@ rc=1
 $ bash test/ast/p72_outputcollision.sh /tmp/ci9-sh93-build/ct-ast
 OK p72/collision (same-base refused)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p72_outputcollision.sh /tmp/rev-v0771-build/ct-ast
+OK p72/collision (same-base refused)
+$ echo $?
+0
+```
+
+探针断言同 base 的 `.h.ct`/`.ct` 硬错（`both emit 'cfg.c'`）；修复提交 `c45e41fb`
+为 HEAD 祖先。

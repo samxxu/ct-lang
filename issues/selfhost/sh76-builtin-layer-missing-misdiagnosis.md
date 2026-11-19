@@ -5,7 +5,7 @@
 | 模块 | selfhost（compile / build 驱动 + 解析器诊断） |
 | 严重度 | **High**（单文件入口在源码树外无法声明容器字段；裸泛型还会静默落坏 C） |
 | 优先级 | **P1** —— 挡住「随附二进制 + 普通项目目录」下的容器使用；有绕法（设 `CT_STD_DIR`） |
-| 状态 | open |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`3337ac7a`）；实测 `ct v0.53.0` / `ctc v0.53.0`（同一二进制，`ctc -> ct`） |
 | 类型 | **实现缺陷**（不是语言缺口，也不是新特性） |
 
@@ -110,3 +110,16 @@ $ ctc h.ct -o h.c          # struct H { Str s; };
 $ bash test/ast/p72_stdmissing.sh /tmp/ci9-sh93-build/ct-ast
 OK p72/stdmissing (builtin layer diagnostics)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p72_stdmissing.sh /tmp/rev-v0771-build/ct-ast
+OK p72/stdmissing (builtin layer diagnostics)
+$ echo $?
+0
+```
+
+修复提交 `4280ed7e` 为 HEAD 祖先；探针覆盖类型位置的未知 `Name<` 与裸内建泛型诊断。

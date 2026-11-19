@@ -5,7 +5,7 @@
 | 模块 | selfhost（`ct check --types` 调用判定） |
 | 类型 | 静默错误（类型/arity 均不报） |
 | 严重度 | Medium |
-| 状态 | `open`（PH-69-R2 已实现，待复核） |
+| 状态 | **verified**（2026-11-20，REV；PH-69-R2） |
 | 承诺出处 | [PH-69 卡](../../docs/design/phase69.md) R2 |
 
 ## 现象
@@ -53,3 +53,17 @@ arity 与变参（`...`）分开处理。
 $ bash test/ast/p69_calls.sh /tmp/ci9-sh93-build/ct-ast
 OK p69/calls (fnptr prototype)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p69_calls.sh /tmp/rev-v0771-build/ct-ast
+OK p69/calls (fnptr prototype)
+$ echo $?
+0
+```
+
+探针覆盖负例（错类型 / 多余实参 / 零实参均报 `argument 1` 或 `arity mismatch`）与
+正例（合法调用、`...` 尾）；实现属 PH-69-R2，修复在 HEAD。

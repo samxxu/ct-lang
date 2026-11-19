@@ -1,7 +1,7 @@
 ---
 id: CI-9
 title: "check-all 可被 ct get 的 git 子进程无限挂起：无超时、无禁交互"
-status: open
+status: verified
 area: ci
 severity: P1
 opened: 2026-11-20
@@ -69,3 +69,23 @@ OK p77/net-timeout (ct get failed in 5s, rc=1)
 
 正例不回归：`test/pkg/run.sh` 的本地 `file://` 与本地 git 仓取包仍 147/0
 （见 `selfhost/check-all.sh` 门 7，2026-11-20 本轮复跑）。
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举：`git archive v0.77.1` → `/tmp/rev-v0771`，L0→L1→L2→ct-ast
+（`ct-ast v0.77.1`，四段 `cc` 日志 0 字节），未用工作树产物。
+
+```console
+$ bash test/ast/p77_net_timeout.sh /tmp/rev-v0771-build/ct-ast
+OK p77/net-timeout (ct get failed in 5s, rc=1)
+$ echo $?
+0
+```
+
+本机存在 `/usr/bin/timeout`，探针**实跑未 skip**（实测 5.122s）。红/绿对照：v0.77.0
+基线二进制配同一探针 40s 挂起 → `FAIL p77/net-timeout: ct get hung past the 40s bound
+(no internal timeout)`（rc=1）；v0.77.1 通过。逐条对照：`GIT_TERMINAL_PROMPT=0` /
+`GIT_ASKPASS=true`、`-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60`、
+`timeout ${CT_GIT_TIMEOUT:-180}`（只收数字）均在 `git_run`（`1fa773a8`）；红证
+`5e9e53ce` 是 `1fa773a8` 的父提交；探针已接入 `selfhost/check-ast.sh:1004`；正例
+`test/pkg/run.sh` 147/0。

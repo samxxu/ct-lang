@@ -5,7 +5,7 @@
 | 模块 | lang（可见性 / ABI） |
 | 严重度 | **High**（ABI 锁死 + 静默坏产物） |
 | 优先级 | **P1** —— 负责人指定「按下游 ABI 被锁死定，不要排低」 |
-| 状态 | open |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`2fd55841`） |
 
 ## 精确触发条件
@@ -164,3 +164,18 @@ OK p73/abi (duplicate struct refused)
 $ bash test/ast/p73_docs.sh /tmp/ci9-sh93-build/ct-ast
 OK p73/docs (field visibility documented)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p73_export.sh /tmp/rev-v0771-build/ct-ast
+OK p73/export (pub field surface)
+$ sh test/ast/p73_abi.sh /tmp/rev-v0771-build/ct-ast
+OK p73/abi (duplicate struct refused)
+$ sh test/ast/p73_docs.sh /tmp/rev-v0771-build/ct-ast
+OK p73/docs (field visibility documented)
+```
+
+三支探针 rc 均为 0；修复提交 `1e08d0c9`（R1）与 `92e3e3be`（R2/R3）为 HEAD 祖先。

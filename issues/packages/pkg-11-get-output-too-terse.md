@@ -6,7 +6,7 @@
 | 定性 | **可用性缺陷**：结果没有请求、版本、来源、store、digest、动作与依赖 |
 | 严重度 | **Medium** |
 | 优先级 | **P1**（包线 patch） |
-| 状态 | **open** |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.63.3`；修复在 `v0.63.4` |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)：`get`、`fetch_git`、`get_one` |
 
@@ -56,3 +56,20 @@ $ bash test/pkg/run.sh
 ...
 == summary: 147 passed, 0 failed ==
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举后跑 `test/pkg/run.sh`：
+
+```console
+$ bash test/pkg/run.sh
+  ok    default get reports resolved package, source and action
+  ok    quiet get reports name, version and url
+  ok    json get reports the resolved package
+...
+== summary: 147 passed, 0 failed ==
+$ echo $?
+0
+```
+
+修复提交 `fbb63562` 为 HEAD 祖先；fix tag `v0.63.4` 已回补（见 CI-12 复核段）。

@@ -55,3 +55,17 @@ skip: container Renode is known-slow here; set RENODE_ALLOW_SLOW=1 to try
 ```
 
 （未声称已验证；`RENODE_ALLOW_SLOW=1` 会拖垮本机门禁速度，未尝试。）
+
+## 复核（2026-11-20，REV）
+
+**结论：skip，不判绿；status 不动。**
+
+```console
+$ sh test/baremetal-renode/run.sh /tmp/rev-v0771-build/ct-ast
+skip: host Renode cannot use its user directory/JIT (run it outside the agent sandbox)
+$ echo $?
+77
+```
+
+宿主 Renode 需写工作树外目录且 JIT 不可用，按探针设计 `exit 77`；CI Linux 仍是权威
+运行点，本条不因本机 skip 转 verified。

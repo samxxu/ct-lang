@@ -74,3 +74,25 @@ B（`docs/design` vs `docs/phases`）、C（旧卡字段）三项待裁定。
 2. 写 `tools/migrate-phase-ids.py`：建 `docs/planning/phase-id-ledger.md`
    （`window: W1`）、机械重命名、跑 PN-6 五条断言、任一失败整体回滚；
 3. 迁移提交只改文档/目录；迁移前后 `git tag` 列表逐字相同（PN-5）。
+
+## 复核（2026-11-20，REV）
+
+**结论：REV 认可 blocked 理由；status 不动（外部裁定未落地）。**
+
+```console
+$ test -f docs/planning/phase-id-ledger.md && echo yes || echo no
+no
+$ test -d docs/phases && echo yes || echo no
+no
+$ ls docs/design/phase[0-9]*.md | wc -l
+16
+$ grep -l '^phase-id:' docs/design/phase[0-9]*.md | wc -l
+0
+$ grep -l '^| version-minor |' docs/design/phase[0-9]*.md | wc -l
+12
+```
+
+`docs/planning/phase-migration-blockers.md` 的 A（旧 `version-minor` 偏移）、B
+（`docs/design` vs `docs/phases`）、C（旧卡字段）三项均在案且未裁定。PN-11 禁止项目侧
+自改判定逻辑、PN-6 要求脚本 + 五条集合断言，blocked 理由成立；下一步确需用户
+在 `docs/decisions/D-0xx.md` 写三行裁定。

@@ -6,7 +6,7 @@
 | 定性 | **行为缺陷**：省略 range（以及 `*`）时按 MVS 取最低 tag；裸名经索引/默认 registry 与 URL 入口不一致 |
 | 严重度 | **High**（默认安装旧版本，静默） |
 | 优先级 | **P1**（包线 patch） |
-| 状态 | **open** |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | 复现于 `v0.63.2`（`0e541f32`）；修复在 `v0.63.3` |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)：`git_pick_tag`、`pkg_index_lookup` |
 
@@ -77,3 +77,20 @@ $ bash test/pkg/run.sh
 ...
 == summary: 147 passed, 0 failed ==
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举后跑 `test/pkg/run.sh`（由脚本自行重建引导链）：
+
+```console
+$ bash test/pkg/run.sh
+== no range / * picks the newest tag ==
+  ok    ct get <git> with no range picks the newest tag
+  ok    ct get <git>@* picks the newest tag
+...
+== summary: 147 passed, 0 failed ==
+$ echo $?
+0
+```
+
+修复提交 `6879f85d` 为 HEAD 祖先；fix tag `v0.63.3` 已回补（见 CI-12 复核段）。

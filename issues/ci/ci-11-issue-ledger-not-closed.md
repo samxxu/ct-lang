@@ -78,3 +78,24 @@ files with no status at all: 0
 2. 用该脚本生成清单（file / 旧状态 / 建议状态 / 证据锚点），交 REV 签字；
 3. 按 area 分 4 批机械迁移，每批单独提交；6 个 `fixed`-in-status 由 REV
    改成合法状态词。
+
+## 复核（2026-11-20，REV）
+
+**结论：REV 认可 defer 理由；`deferred` 属 REQ/USER，status 不动。**
+
+复算（`issues/**/*.md`，跳过代码块，归一化去 `**`/反引号、按全角 `（` 截首词）：
+
+```console
+files: 230
+status rows: 220
+open: 24 verified: 17 fixed: 6 rejected: 4 superseded: 1
+outside closed set: 168
+fixed-in-status files: sh68 sh69 sh70 sh72 sh74 sh75
+front-matter status files: 10
+```
+
+220 / 24 / 168 与处置段一致；6 个 `status=fixed` 为 SH-68/69/70/72/74/75；只有
+front-matter 状态的有 10 个（本批处置新增 9 个 + SH-92）。168 行非闭集 + 6 行 `fixed`
+的规模与“批量 sed 会制造无结论
+关闭”的风险都成立，5.4 分权也成立。本轮只复核，不做全量迁移；CI-11 的验收仍待
+`tools/gates/issue_ledger.py` + G6。

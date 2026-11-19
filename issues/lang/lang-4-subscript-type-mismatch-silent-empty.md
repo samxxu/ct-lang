@@ -5,7 +5,7 @@
 | 模块 | lang（自定义下标协议 / 类型匹配） |
 | 严重度 | **High（静默错误）** |
 | 优先级 | **P0** —— 唯一一条「编译通过、运行给错值且无诊断」的条，下游最痛 |
-| 状态 | open |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`c4727787`） |
 
 ## 精确触发条件
@@ -83,3 +83,17 @@ error: type 'J' has no subscript matching 'get(int)': candidates are 'char *get(
 $ bash test/ast/p72_subscript.sh /tmp/ci9-sh93-build/ct-ast
 OK p72/subscript (key type)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p72_subscript.sh /tmp/rev-v0771-build/ct-ast
+OK p72/subscript (key type)
+$ echo $?
+0
+```
+
+探针断言 `j[0]` 对 `char *get(char *)` 报 `argument 1: expected 'char *', got 'int'`，
+`j["k"]` 与 `int get(int)` 正例通过；修复提交 `d5906bd8` 为 HEAD 祖先。

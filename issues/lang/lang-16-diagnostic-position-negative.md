@@ -6,7 +6,7 @@
 | 类型 | **实现缺陷**（已有 `line`/`lstart` 跟踪，块注释分支漏更新；诊断未校验） |
 | 严重度 | Medium（不挡编译，挡编辑器跳转 / CI 解析；位置可越界读） |
 | 优先级 | **P2** —— 与 PH-58 的字段位置同向，可独立修 |
-| 状态 | open |
+| 状态 | **verified**（2026-11-20，REV） |
 | 落点 | patch **0.53.16** |
 | 锚点 | `v0.53.0`（`~/.local/bin/ct`）与 `v0.53.1`（HEAD 重建 `ctc`） |
 | 关联 | LANG-10（机读诊断）、PH-58（字段位置）；与 **PH-62 无依赖** |
@@ -159,3 +159,17 @@ if (c == '/' && self->src[self->pos + 1] == '*') {
 $ bash test/ast/p72_diagpos.sh /tmp/ci9-sh93-build/ct-ast
 OK p72/diagpos (pp length + comment column)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p72_diagpos.sh /tmp/rev-v0771-build/ct-ast
+OK p72/diagpos (pp length + comment column)
+$ echo $?
+0
+```
+
+探针断言块注释后的列号为 `cmt.ct:5:17`（修复前 `5:29`）；修复提交 `2a4c632f`
+为 HEAD 祖先。

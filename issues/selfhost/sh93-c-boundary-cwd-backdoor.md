@@ -1,7 +1,7 @@
 ---
 id: SH-93
 title: "c-boundary 的 cwd 后门：从 CT 仓根看外部输入也被 allow"
-status: open
+status: verified
 area: selfhost
 severity: P2
 opened: 2026-11-20
@@ -77,3 +77,21 @@ subscript）fixture 自由 `#include`，以前靠 cwd 后门单独运行也会�
 
 整门禁：`bash selfhost/check-all.sh` → `check-all: OK (11 hard gates green)`，
 `check-ast` 1519 passed / 0 failed / 4 skipped（本会话 2026-11-20）。
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后运行：
+
+```console
+$ cd /tmp/rev-v0771 && env -u CT_C_BOUNDARY bash test/ast/p65_policy.sh /tmp/rev-v0771-build/ct-ast
+OK p65/policy
+$ echo $?
+0
+```
+
+探针含仓根 cwd 负例：`check "external from repo root" strict ...`。红/绿对照：v0.77.0
+基线二进制配同一探针 → `FAIL p65/policy: external from repo root: want 'strict', got
+'allow' ()`（rc=1）；v0.77.1 通过。`grep -rn c_cwd_in_tree selfhost/ct-ast` 0 命中；
+四目录豁免未回归：`p65_regression`（1299 源）、`p65_include`、`p65_raw_extern`、
+`p65_map`、`p66_io_empty`、`p66_io_boundary` 全 `OK`。红证 `fd509b06` 是 `1be81be9`
+父提交，适配提交 `4553ec15` 可达。

@@ -90,3 +90,25 @@ g9: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
 2. CI-11 迁移后跑 `bash tools/check.sh g6`；
 3. G1/G4 等 DOC-74 裁定；未裁定前在 `AGENTS.md` 0.3 登记
    `deviation: g1-g4-missing`（需用户签字，DEV 不代签）。
+
+## 复核（2026-11-20，REV）
+
+**结论：REV 认可 defer 理由；`deferred` 属 REQ/USER，status 不动。**
+
+```console
+$ for g in g1 g2 g4 g5 g6 g7 g9; do
+    bash tools/check.sh "$g" >/dev/null 2>/tmp/e
+    printf '%s: exit=%s %s\n' "$g" "$?" "$(head -1 /tmp/e)"
+  done
+g1: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g2: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g4: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g5: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g6: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g7: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+g9: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
+```
+
+`tools/check.sh:66` 只分派 `g0 | g8 | battle-selftest`，与处置段一致。G6 依赖 CI-11、
+G1/G4 依赖 DOC-74、G5 依赖 phase 卡字段、G2/G7/G9 属 P2，理由成立；缺的
+`deviation: g1-g4-missing` 需用户签字，DEV 无权代签。

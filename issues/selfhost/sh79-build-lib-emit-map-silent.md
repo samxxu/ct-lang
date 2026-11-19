@@ -5,7 +5,7 @@
 | 模块 | selfhost（build 驱动 / map 序列化） |
 | 严重度 | **High**（多单元工程拿不到自己的模型图；`--lib` 静默丢产物） |
 | 优先级 | **P2** —— 不挡编译，但让「构建产物可审计」的承诺落空 |
-| 状态 | open |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`a8f9a113`）；实测 `ct-ast v0.53.1`（HEAD 重建） |
 | 类型 | **实现缺陷**（usage 宣称的开关不生效 / 生效到错的对象） |
 
@@ -121,3 +121,20 @@ OK p74/map (lib facet + entry file)
 $ bash test/ast/p74_model.sh /tmp/ci9-sh93-build/ct-ast
 OK p74/model (J11 loc + entry unit)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p74_map.sh /tmp/rev-v0771-build/ct-ast
+OK p74/map (lib facet + entry file)
+$ sh test/ast/p74_model.sh /tmp/rev-v0771-build/ct-ast
+OK p74/model (J11 loc + entry unit)
+$ echo $?
+0
+```
+
+处置段引用的 `a0f2e2c` 不是可解析 sha（`git rev-parse` 报 unknown）；实际 PH-74
+提交为 `ffc08538`（模型行列与 SH-79 两 facet）和 `5d271142`（收口），均在 HEAD 祖先。
+探针绿，结论不受引用瑕疵影响。

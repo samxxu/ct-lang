@@ -58,3 +58,18 @@ bad.ct:4:12: error: argument 1: expected 'int', got 'char *'
 $ bash test/ast/p69_containers.sh /tmp/ci9-sh93-build/ct-ast
 OK p69/containers (builtin container args)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：误报成立；`rejected` 属 REQ/USER，REV 不代写，保持 `open`。**
+
+```console
+$ sh test/ast/p69_containers.sh /tmp/rev-v0771-build/ct-ast
+OK p69/containers (builtin container args)
+$ echo $?
+0
+```
+
+原报例子 `g: Vec<Vec<int>>`、`row: Vec<int>`、`g.push(row)` 是合法调用；真正的错配
+`Vec<int> v; v.push("x")` 当前报 `argument 1: expected 'int', got 'char *'`。5.4 把
+`rejected` 分给 REQ/USER，故本轮只记录复核结论，请 REQ 改判。

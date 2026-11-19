@@ -1,7 +1,7 @@
 ---
 id: DOC-75
 title: "v0.77 文档漂移批：typecheck/test README/tutorial/AGENTS/session-map"
-status: open
+status: verified
 area: docs
 severity: P1
 opened: 2026-11-20
@@ -83,3 +83,46 @@ P1 批，不占 phase；纯 docs，除计数脚本外不 bump。
 
 验证：`python3 test/docs/check-docs.py` → OK；`bash tools/check.sh g0` → OK。
 
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举后逐项核对：
+
+```console
+$ ls test/ast/errors/*.ct | wc -l
+295
+$ find test/ast -mindepth 1 -maxdepth 1 -type d | wc -l
+299
+$ find examples -mindepth 1 -maxdepth 1 -type d | wc -l
+51
+$ python3 editors/vscode/test/check-grammar.py
+== 169 checks, 0 failed ==
+$ python3 test/docs/check-docs.py
+check-docs: OK (1945 relative links in 324 files, v0.77.1, 11 hard gates, 12 phase status, 3 适用版本 header(s))
+design window: ok (12/12)
+$ bash tools/check.sh g0
+g0: OK (block 1.17.0, session-map present)
+```
+
+D-1…D-13 逐项对照：typecheck 计划/README 已改“历史计划、已交付”；test/README 295/299；
+tutorial 51；AGENTS `phase=PH-77`；session-map 表完整；roadmap Phase 76 `v0.76.0`；
+README 0.44.1 标历史基线；`ct check --types` 与 `--emit-model` 在 README §2；
+architecture §0 四代表；selfhost/README 169；bare-metal 提案“已采纳并交付”；§4.64
+按键类型与实测一致（下）。package-guide §4.1 信任模型、README/package-guide 的有界
+网络失败文案均在案。
+
+D-13 行为实测（归档二进制）：
+
+```console
+$ /tmp/rev-v0771-build/ct-ast check --types bad.ct;  echo rc=$?
+bad.ct:4:56: error: argument 1: expected 'char *', got 'int'
+rc=1
+$ /tmp/rev-v0771-build/ct-ast compile bad.ct -o bad.c; echo rc=$?
+bad.ct:4: warning: argument 1: expected 'char *', got 'int'
+rc=0
+$ /tmp/rev-v0771-build/ct-ast build bad.ct -o out; echo rc=$?
+bad.ct:4:56: warning: argument 1: expected 'char *', got 'int'
+rc=0
+```
+
+唯一未执行的是 P2 里的条件项“下次开 phase 前把 phase66 退役”：当前 `design window`
+为 12/12、未开新 phase，触发条件未到，按条件 deferred 记录；其余 P1/P2 全部落实。

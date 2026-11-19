@@ -6,7 +6,7 @@
 | 定性 | **实现缺陷**（静默改行为：编译通过，产物与源码不一致） |
 | 严重度 | **High** |
 | 优先级 | **P0** —— 截断点落在合法边界时 `ct`、`cc`、运行全部 rc=0，宏语义已被改掉 |
-| 状态 | **open**（由 `docs/proposals/ct-build-frontend-defects.md` 的 DF-1 转入台账；58 后重排第 0 批） |
+| 状态 | **verified**（2026-11-20，REV；原 DF-1 转入） |
 | 锚点 | 提案基线 `v0.44.1`（`13db6cad`）；代码注释在 HEAD 仍自认该限制 |
 | 文件 | [Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct)（`:806` 注释）、[Stmt.h.ct](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct)（`:402` 注释） |
 
@@ -53,3 +53,17 @@
 $ bash test/ast/p72_diagpos.sh /tmp/ci9-sh93-build/ct-ast
 OK p72/diagpos (pp length + comment column)
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举（`ct-ast v0.77.1`）后：
+
+```console
+$ sh test/ast/p72_diagpos.sh /tmp/rev-v0771-build/ct-ast
+OK p72/diagpos (pp length + comment column)
+$ echo $?
+0
+```
+
+探针断言超长 `#` 行报 `preprocessor line exceeds 159 bytes`（不静默截断）；修复提交
+`2a4c632f` 为 HEAD 祖先。

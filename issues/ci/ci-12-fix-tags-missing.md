@@ -1,7 +1,7 @@
 ---
 id: CI-12
 title: "fix-tags deviation 与本地 tag 不一致：v0.63.3/.4/.5 缺失"
-status: open
+status: verified
 area: ci
 severity: P2
 opened: 2026-11-20
@@ -77,3 +77,32 @@ $ git tag -l --format='%(refname:short) %(objecttype)' 'v0.63.*'
 
 之后可把 fix-tag 一致性并入 `tools/gates/version_coherence.py`（当前只查
 message 含 `PH-<n> closeout` 的 phase tag）。
+
+## 复核（2026-11-20，REV）
+
+**结论：verified（处置段的 deferred 已被后续回补取代）。**
+
+```console
+$ git tag --list 'v0.63.*'
+v0.63.0
+v0.63.1
+v0.63.2
+v0.63.3
+v0.63.4
+v0.63.5
+$ for t in v0.63.3 v0.63.4 v0.63.5; do
+    printf '%s type=%s peeled=%s\n' "$t" "$(git cat-file -t "$t")" "$(git rev-parse "$t^{commit}")"
+  done
+v0.63.3 type=tag peeled=6879f85d9eea956b6baa9c142e682ea69ead4870
+v0.63.4 type=tag peeled=fbb635629fc4e59b0db8cf44ee4880ed80e94147
+v0.63.5 type=tag peeled=506039e815acc525f2a3a0de00bacd67f8696212
+$ git ls-remote --tags origin v0.63.3 v0.63.4 v0.63.5
+b899da2e8d51679727e3615e1855ba2905de78f8  refs/tags/v0.63.3
+799dd4a201a591184f1c7606567fca73b10f4a5c  refs/tags/v0.63.4
+595213e96db684c6a1e53735c2209b29f661ecb1  refs/tags/v0.63.5
+```
+
+三个 tag 均为 annotated；peeled 提交与 `docs/history/phase-log.md:201–203` 的
+v0.63.5（SH-90）/v0.63.4（PKG-11）/v0.63.3（PKG-10）一一对应；远端 tag 对象 sha
+与本地一致，已在 origin。处置段“按本轮不 push、不打 tag”的 deferred 文字是回补前的
+历史陈述，不影响本条闭合。`g8` 自动查 fix tag 仍未实现（验收写“若纳入”，不阻断）。

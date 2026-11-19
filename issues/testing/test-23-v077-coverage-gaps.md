@@ -85,3 +85,23 @@ test/unit  # 这是 L0 C 辅助函数的白盒测试，不是 ct-ast 单测
    `expected.out`；
 4. 计数脚本：`ls test/ast/errors/*.ct | wc -l` 与 `find test/ast -mindepth 1
    -maxdepth 1 -type d | wc -l` 回填 `test/README.md:6/19`。
+
+## 复核（2026-11-20，REV）
+
+**结论：REV 认可 defer 理由；`deferred` 属 REQ/USER，status 不动。**
+
+```console
+$ ls -d examples/*/ | wc -l
+51
+$ find test/ast -mindepth 1 -maxdepth 1 -type d | wc -l
+299
+$ ls test/ast/errors/*.ct | wc -l
+295
+$ find test/ast/errors -name '*.ct' | wc -l
+337
+$ command -v llvm-cov lcov gcov
+/usr/bin/gcov
+```
+
+计数与处置段一致；覆盖率、ct-ast 白盒单测、容量夹具、near-phase example 是四项
+独立交付物，各需自己的命令与输出（T-1/T-2），defer 理由成立。
