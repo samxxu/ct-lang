@@ -90,3 +90,57 @@ int n = b.as_int();
   trait 动态派发的同一句文案与 SH-73 同族（`a.m().n()`），保持；
 - 字段形态无守卫：`[` 后缀在 [Expr.h.ct:4230-4286](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4230-L4286)
   产出 `N_MCALL`，随后 `.v` 直接按成员处理，未做「接收者是否临时值」的检查。
+
+## 处置（2026-11-20，DEV #2）
+
+**结论：fixed**（`.v` 字段形态在 ct 阶段拒绝指针/接口返回值；值形态与方法形态不回归）。
+
+复现结论比原单更精确：issue 里的值返回夹具（`Inner get(...)`）在 HEAD 产出的
+`Box_get(&b,"k").v` 是**合法 C**（`struct Inner` 返回值取字段，cc 通过、rc=0），
+原单「cc 报 member reference base type 不是结构体」在 HEAD 不成立。真正的静默坏 C
+出现在 `get` 返回**指针**（`Inner *`）或**接口值**（`struct T_iface`）时：ct rc=0，
+`Box_get(...).v` 到宿主 cc 才报错。三例在 baseline 全部静默通过。
+
+- 红证（baseline `fa89d727`，`.temp/b/ct-ast` 由该提交重建）：
+  ```console
+  $ sh test/ast/p77_lang5_field.sh .temp/b/ct-ast   # rc=1
+  ok   b["k"]->v compiles and runs
+  ok   b["k"].v with a value result compiles and runs
+  ok   b["k"].m() still materialises and runs
+  ok   f().m() still materialises and runs
+  ok   f().v on a value compiles and runs
+  ok   b["k"].m() pointer receiver keeps its diagnostic
+  FAIL p77/lang5: b["k"].v with a pointer result is refused
+    exit 0; expected a compile-time refusal (the emitted C is not checked by ct)
+  FAIL p77/lang5: b["k"].v with an interface result is refused
+    exit 0; expected a compile-time refusal (the emitted C is not checked by ct)
+  FAIL p77/lang5: p.v on a pointer variable is refused
+    exit 0; expected a compile-time refusal (the emitted C is not checked by ct)
+  ```
+- 修法：`Expr.h.ct` 的 `.` 非调用字段分支读取接收者静态类型后硬错
+  - 指针：`'.' cannot access field 'v' through a pointer receiver; use '->v'`
+  - 接口：`'.' cannot access field 'v': 'T' is an interface value; it has methods, not fields`
+  豁免 `self.n`（发射器已拼 `_self->n`）、接口的 `.self` 载荷字段、以及
+  `Vec_Show__iface` 这类名字碰巧以 `_iface` 结尾的容器/实例类型（再用 `find_trait`
+  确认）。值返回值无需临时变量（`f().v` 合法）；方法形态仍由发射器物化成
+  `struct Inner __ct_tmp0 = ...; Inner_twice(&__ct_tmp0)`，未回归。
+- 绿：
+  ```console
+  $ sh test/ast/p77_lang5_field.sh .temp/b/ct-ast   # rc=0
+  ok   b["k"].v with a pointer result is refused
+  ok   b["k"].v with an interface result is refused
+  ok   b["k"]->v compiles and runs
+  ok   b["k"].v with a value result compiles and runs
+  ok   b["k"].m() still materialises and runs
+  ok   f().m() still materialises and runs
+  ok   f().v on a value compiles and runs
+  ok   p.v on a pointer variable is refused
+  ok   b["k"].m() pointer receiver keeps its diagnostic
+  OK p77/lang5 (field receiver: pointer/interface refused, value forms kept)
+  ```
+- 提交：
+  - `7627a43d` `test(ct-ast): LANG-5 红 — 下标结果的字段形态`
+  - `7b8e8c9b` `fix(ct-ast): LANG-5 拒绝指针/接口返回值的 '.' 字段访问`
+- 探针：`test/ast/p77_lang5_field.sh`，已接入 `selfhost/check-ast.sh`。
+- 回归扫描：289 个 `test/ast` 夹具 + `test/cases` + `examples` 无新增拒绝
+  （`181_iface_vec` 等 multi-file 夹具仍走 build 模式；errors/ 与 corpus 与基线一致）。

@@ -52,3 +52,45 @@ error: static method 'make' of type 'Box' cannot be resolved; namespace-qualifie
 
 这只是 LANG-2 的次生问题，单独登记是为了「修完 LANG-2 后还要检查文案」不被漏掉；
 若 LANG-2 修好后该路径不再可达，本单随之关闭。
+
+## 处置（2026-11-20，DEV #2）
+
+**结论：fixed**（类型名接收者的静态调用改报准确诊断，带 `file:line:col`）。
+
+LANG-2 修复后，原单的 namespace 场景已不再可达；但静态调用分支的根因仍在：
+它只查 `find_struct`，未命中就落到变量兜底。触发面收窄为**已声明但不是 struct**
+的类型名——typedef（`MyInt.make(1)`）与 enum（`Color.make(1)`），baseline 仍报
+`use of an undeclared variable`，位置在点号上。
+
+- 红证（baseline `38248747`，即 test 提交的父提交；该提交只改 docs，`selfhost/`
+  与 `test/` 与 `7b8e8c9b` 逐字相同，红证用 `fa89d727` 重建的 ct-ast 复跑）：
+  ```console
+  $ sh test/ast/p77_lang7_static_type.sh /tmp/headbase/ct-ast   # rc=1
+  ok   struct static call still works
+  ok   declared struct with no such method keeps its message
+  ok   an undeclared name still reports an undeclared variable
+  FAIL p77/lang7: typedef receiver names the type
+    missing diagnostic: .../typealias.ct:2:30: error: use of an undeclared variable
+  FAIL p77/lang7: enum receiver names the type
+    missing diagnostic: .../enum.ct:2:30: error: use of an undeclared variable
+  ```
+- 修法：`Expr.h.ct` 静态调用分支在 `find_struct` 未命中后，用
+  `find_type` / `find_type_alias` / `find_trait` 确认接收者是否为已声明类型；
+  是则前看 `.name(`，命中即报
+  `static method 'make' cannot be resolved: 'MyInt' is a type name, not a variable`
+  （位置取接收者 token）。非 `.name(` 形状原样回退；未知名仍是未声明变量，不越界。
+- 绿：
+  ```console
+  $ sh test/ast/p77_lang7_static_type.sh .temp/b/ct-ast   # rc=0
+  ok   typedef receiver names the type
+  ok   enum receiver names the type
+  ok   struct static call still works
+  ok   declared struct with no such method keeps its message
+  ok   an undeclared name still reports an undeclared variable
+  OK p77/lang7 (type-name static call diagnostic)
+  ```
+- 提交：
+  - `d0cb10c4` `test(ct-ast): LANG-7 红 — 类型名接收者的静态调用诊断`
+  - `eed1cbcd` `fix(ct-ast): LANG-7 类型名接收者的静态调用报准确诊断`
+- 探针：`test/ast/p77_lang7_static_type.sh`，已接入 `selfhost/check-ast.sh`。
+- 回归扫描：289 个 `test/ast` 夹具、`test/cases` 与 `examples` 无新增拒绝。

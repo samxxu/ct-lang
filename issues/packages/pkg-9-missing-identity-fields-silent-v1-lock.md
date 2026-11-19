@@ -97,3 +97,68 @@ $ echo $?
 **建议 v0.58.2**。PKG-5 已于 v0.58.1（`fb82420c`）交付，本条因此成为**包线第一个待修项**；
 版本位不变（v0.58.2 仍是 0.58.1 之后的第一个 patch），PKG-6 顺延至 v0.58.3、PKG-3 至 v0.58.4。
 位次前移指执行顺序，不另占新号。
+
+## 处置（2026-11-20，DEV #2）
+
+**结论：fixed**。原单描述的「rc=0 + 静默退 v1 lock」在 HEAD 已不存在（PH-63
+移除 vendor、`pkg_store_commit` 强制身份），但**失败路径不写 store** 仍不成立：
+身份检查发生在 `get_spec` 遍历依赖之后，被拒的 get 会先把依赖提交到共享 store。
+本次把校验前移，并补回归探针。
+
+- 历史红证（issue 锚点 `v0.58.0`，`git archive` 到 /tmp 后按项目方式重建 ct-ast）：
+  ```console
+  $ cd .../m/p && HOME=../h CT_HOME=../h ../../ct-ast get ../a2
+  vendored 1 package(s)
+  rc=0
+  $ head -1 ct.lock
+  demo 0.2.0 dir ./../a2 sha256:5d96823d...
+  $ ls vendor
+  demo
+  # 共享 store 为空；没有 '# ct-lock 2'
+  ```
+- HEAD 残余缺陷红证（baseline `eed1cbcd`，`Pkg.h.ct` 与 `fa89d727` 相同）：
+  ```console
+  $ # 坏包 bad（缺 publisher，dep = ../good），good 完整
+  $ HOME=../home CT_HOME=../home ../../b/ct-ast get ../bad
+  ctc: './../bad/ct.pkg' is missing 'publisher'
+  rc=1
+  $ find ../home -maxdepth 4 -type d
+  ../home
+  ../home/pkg
+  ../home/pkg/ct
+  ../home/pkg/ct/good
+  ../home/pkg/ct/good/0.1.0        # 依赖已被写入 store
+  ```
+  ```console
+  $ bash test/pkg/run.sh   # rc=1
+  == PKG-9: a manifest must declare publisher + ns-root before ct get ==
+    ok    ct get refuses a manifest without publisher
+    ok    ct get refuses a manifest without ns-root
+    FAIL  PKG-9 dependency store write: a refused get committed its dependency 'ct/demo' to the store
+    ok    a refused get leaves the previous ct.lock byte-identical
+    ok    a complete manifest writes a v2 lock and lands in the store
+    ok    ct pkg check still reports both missing fields
+    == summary: 152 passed, 1 failed ==
+  ```
+- 修法：`Pkg.h.ct` 抽出 `pkg_identity_check`（publisher / ns-root 必填、publisher
+  不是 `local`、身份无 `/` 与 `..`、ns-root 为相对路径且是目录），`get_one` 与
+  `fetch_git` 读完身份后立刻调用（早于 range / requires / 任何 `get_spec`）；
+  `pkg_store_commit` 改调同一函数，文案逐字不变。`ct migrate` 行为不变。
+- 绿：
+  ```console
+  $ bash test/pkg/run.sh   # rc=0
+  == PKG-9: a manifest must declare publisher + ns-root before ct get ==
+    ok    ct get refuses a manifest without publisher
+    ok    ct get refuses a manifest without ns-root
+    ok    a refused get commits no dependency to the store
+    ok    a refused get leaves the previous ct.lock byte-identical
+    ok    a complete manifest writes a v2 lock and lands in the store
+    ok    ct pkg check still reports both missing fields
+    == summary: 153 passed, 0 failed ==
+  ```
+- 关于 A4（显式 v1 开关）：仓库没有、也不再需要 v1 兼容标记（vendor 读取路径已在
+  PH-63 移除，v1 行无法被 build 消费）。按「没有标记就拒绝」处理，未新增开关。
+- 提交：
+  - `527dcb66` `test(pkg): PKG-9 红 — 被拒的 get 仍把依赖写进 store`
+  - `35757b08` `fix(pkg): PKG-9 身份校验前移，被拒的 get 不写 store`
+- 探针：`test/pkg/run.sh` 的 `PKG-9` 段（A1/A2/A1b/A3/A6/A7）。
