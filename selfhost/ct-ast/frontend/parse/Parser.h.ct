@@ -1818,6 +1818,10 @@ impl ParseOps for Parser {
         self->arena->nodes[f].a = params;
         self->arena->nodes[f].b = b;
         self->arena->nodes[f].c = self->variadic;
+        if (self->st->missing_return_check(b, ret, func_line) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
         self->sup->pop_scope();
         return f;
     }

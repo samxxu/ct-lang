@@ -107,6 +107,8 @@ namespace frontend::parse;
 pub trait StmtOps {
     int  is_decl_start(void);
     int  parse_block(void);
+    int  missing_return_check(int body, const char *ret, int line);
+    int  body_has_jump(int n);
     int  defer_ahead(void);
     int  err_ahead(void);
     int  errdefer_ahead(void);
@@ -1787,6 +1789,33 @@ impl StmtOps for Stmt {
         self->lex->pos = save_pos;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
         return look;
+    }
+
+    /* PH-70-R2: a non-void function whose body has neither `return` nor a loop
+       falls off the end (UB). Loops are exempt because `while (1)` may never
+       fall through; the check is deliberately conservative. */
+    int body_has_jump(int n)
+    {
+        if (n < 0) return 0;
+        {
+            int k = self->arena->nodes[n].kind;
+            if (k == N_RET || k == N_WHILE || k == N_FOR || k == N_DOWHILE)
+                return 1;
+        }
+        if (self->body_has_jump(self->arena->nodes[n].a)) return 1;
+        if (self->body_has_jump(self->arena->nodes[n].b)) return 1;
+        if (self->body_has_jump(self->arena->nodes[n].c)) return 1;
+        if (self->body_has_jump(self->arena->nodes[n].d)) return 1;
+        return self->body_has_jump(self->arena->nodes[n].next);
+    }
+
+    int missing_return_check(int body, const char *ret, int line)
+    {
+        if (!self->ex->check_mode || !*self->ex->check_mode) return 0;
+        if (!ret || !ret[0] || strcmp(ret, "void") == 0 || body < 0) return 0;
+        if (self->body_has_jump(body)) return 0;
+        return tool::diag::ct_sem_error(line, 0,
+            "non-void function may not return a value", self->mem->path);
     }
 
     int parse_block(void)

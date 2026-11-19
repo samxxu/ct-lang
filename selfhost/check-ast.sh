@@ -908,6 +908,13 @@ else
     bad "PH-70-R3 unreachable" "$(sed -n '1,8p' "$work/p70u.out")"
 fi
 
+sh test/ast/p70_return.sh "$work/ct-ast" >"$work/p70r.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-70-R2 return (missing return)"
+else
+    bad "PH-70-R2 return" "$(sed -n '1,8p' "$work/p70r.out")"
+fi
+
 sh test/ast/p69_fp.sh "$work/ct-ast" >"$work/p69fp.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-69-E69-2 fp (import units clean)"
