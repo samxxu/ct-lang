@@ -1,0 +1,538 @@
+{
+  "seat": "VERIFY",
+  "battle": "battle/review-v077-1",
+  "head": {
+    "commit": "5b13fef4eafcf3bd73a8b5b6ffd996e49ca7c644",
+    "short": "5b13fef4",
+    "describe": "v0.77.0-1-g5b13fef4",
+    "release_commit": "1aff4deb708a44d8dfd61b0667ce4168502c7ce2",
+    "tag": "v0.77.0",
+    "inputs_read": [
+      "battle/review-v077-1/question.md",
+      "battle/review-v077-1/claim.md",
+      "battle/review-v077-1/counter.md"
+    ],
+    "statement": "Independent evidence pass over the five P1 items in docs/reviews/full-review-v0.77.0.md and over claim.md/counter.md. No source, spec, test, issue, or docs change; only this file and /tmp were written."
+  },
+  "environment": {
+    "cwd": "/Users/samxx/dsh-ws/ct-lang",
+    "os": "Darwin arm64 (macOS); Apple clang; python3 available; GNU-style timeout available",
+    "time_utc": "2026-11-19T19:46:29Z",
+    "worktree": "dirty: M docs/README.md (adds one review-index row only), untracked battle/review-v077-1/, battle/static-dispatch-1/, docs/reviews/full-review-v0.77.0.md. selfhost/, test/, issues/ and docs/spec/ unchanged; HEAD is 5b13fef4. Counts below are from HEAD/worktree as noted.",
+    "binary_used": "/tmp/rev-ph77-build/ct-ast (built 2026-11-19 20:29; self-reports ct-ast v0.77.0; source paths unchanged since v0.77.0)",
+    "prior_full_gate_log": "/tmp/ct-full-review-check-all-offline.log exists (from the review session, not produced by this pass): line 2269 'skip: cannot reach ... (curl: (7) Failed to connect ...)', line 3584 '== summary: 1517 passed, 0 failed, 5 skipped ==', line 4186 'check-all: OK (11 hard gates green)'.",
+    "network": "raw.githubusercontent.com was unreachable during this pass (curl timeout). A blackhole address 10.255.255.1 and a deliberately connected-but-stalled local TCP server (127.0.0.1:39417) were used for the timeout tests.",
+    "exit_field_semantics": "evidence[].exit is the exit code of the tested gate/command (timeout, grep, ls, ct-ast, etc.), not the surrounding shell that appends 'echo rc=$?'. Where a loop is used, the note gives the per-item codes.",
+    "limitations": [
+      "Full selfhost/check-all.sh was not re-run (11-gate suite is long); only g0, g8, battle-selftest, check-docs, selected p72/p75/p77 probes were run. The 11/11 claim is therefore cited from the existing offline log, not independently re-executed.",
+      "The real-network green path of p77_external.sh (curl-OK + git-OK) was not reproduced because the index host was unreachable; a stub curl+git fixture was used for the missing-outer-timeout test.",
+      "git tag checks are local only; remote tag state was not queried (network unavailable).",
+      "Process inspection (ps) was blocked by the file sandbox; elapsed times are wall-clock around the foreground/background command.",
+      "This seat did not adjudicate whether a spec whose header says 草稿 is normatively in force; it only records the header text and the project pin.",
+      "check-docs was run on the dirty worktree (untracked review report plus its docs/README.md index row), so its 1938-links/323-files count may be one higher than a HEAD-only run; the design-window/status results are unaffected.",
+      "Of the 13 listed fixed-but-open entries, 7 have green probes (LANG-3/4/11/16/17/SH-76/LANG-9), PKG-10/11 have fix commits, PKG-9 is a hard error at HEAD, TEST-21 is explicitly pending review, and SH-65/SH-67 are ambiguous (pair form works, single-fp form still hard-errors). No full REV triage of all 24 open issues was performed."
+    ]
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "focus": "Read the three positions and establish HEAD/worktree/binary",
+      "result": "HEAD 5b13fef4; v0.77.0 tag at 1aff4deb; git status shows only docs/README.md modified plus untracked review/battle files; source selfhost/ct-ast unchanged by HEAD."
+    },
+    {
+      "round": 2,
+      "focus": "tools/check.sh subcommands and static subprocess code",
+      "result": "g0/g8/battle-selftest exist and exit 0; g1..g7 and g9 exit 2. git_run is a bare system(full); no timeout/GIT_TERMINAL_PROMPT anywhere in Pkg.h.ct, p77_external.sh, check-ast.sh; check-ast.sh:994 calls the probe with no outer timeout."
+    },
+    {
+      "round": 3,
+      "focus": "Runtime network/hang behaviour",
+      "result": "Blackhole 12s test killed at 12s (rc=124); same blackhole with 150s cap failed at 75s (OS/git TCP bound) so pure blackhole is not literally infinite. A connected server that accepts and never writes held ct get past 20s and past 90s (rc=124 at both caps), reproducing an unbounded wait with no intrinsic timeout. p77_external.sh without reachable index exits 77 after ~32s (curl 3x10s), so offline is bounded; stub curl+git reproduces p77 hanging past 20s."
+    },
+    {
+      "round": 4,
+      "focus": "Issue ledger counts and fixed-but-open examples",
+      "result": "221 files, 220 status rows, 1 file with no status row; claim's 220/24/168 reproduced exactly. Counter's 204 is reproducible only as raw-cell exact match plus the missing row; its 'open 25' only as a substring count (lang-5 says '仍 open' in a partly-fixed cell). At least 6 fixed-but-open examples verified; 6 issues put the forbidden word 'fixed' in the status field; only 1/221 has front-matter status."
+    },
+    {
+      "round": 5,
+      "focus": "phase-ID ledger, blockers, spec draft, doc drift, counts",
+      "result": "Ledger and docs/phases absent; blockers file says migration not started; cards lack phase-id/version-minor; master spec and copy both say 草稿 at line 6 while AGENTS pins 1.17.0. Most D items reproduce; D-4's '52 examples' is false (51). test/README 141/119 vs actual 295/299. Phase impact: report 66/142/51 not reproducible; counter 73/138/58 reproducible under stated commands."
+    },
+    {
+      "round": 6,
+      "focus": "J-1..J-6 matrix",
+      "result": "No A/B winner declared; per-criterion pass/fail/unresolved recorded in checks.j_matrix."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E01",
+      "command": "bash tools/check.sh g0; echo g0=$?; bash tools/check.sh g8 2>&1 | tail -1; bash tools/check.sh battle-selftest 2>&1 | tail -1",
+      "exit": 0,
+      "output": "g0: OK (block 1.17.0, session-map present)\ng0=0\ng8: OK (PN-2 version coherence; 9 legacy offsets)\nbattle self-test: 17 passed, 0 failed",
+      "reproduced": true,
+      "note": "Three real subcommands exist. The report P1 summary says '只有 g0/g8'; its §5.2 correctly lists g0/g8/battle-selftest, so the summary is imprecise by one extra (non-governance) subcommand. g0 checks the landing block/deviations, not the stale phase=PH-66 value."
+    },
+    {
+      "id": "E02",
+      "command": "bash tools/check.sh g6; echo rc=$?",
+      "exit": 2,
+      "output": "usage: tools/check.sh g0 | g8 | battle-selftest\nrc=2",
+      "reproduced": true,
+      "note": "Missing g6 is the direct mechanical gap behind P1-3."
+    },
+    {
+      "id": "E03",
+      "command": "for g in g1 g2 g3 g4 g5 g6 g7 g9; do bash tools/check.sh \"$g\" >/dev/null 2>&1; printf '%s=%s ' \"$g\" \"$?\"; done; echo",
+      "exit": 0,
+      "output": "g1=2 g2=2 g3=2 g4=2 g5=2 g6=2 g7=2 g9=2",
+      "reproduced": true,
+      "note": "All eight governance gates are absent (loop itself exits 0; each subcommand exits 2). No matching deviation is registered: only version-minor-offset, fix-tags, single-session-workflow exist in AGENTS.md 0.3."
+    },
+    {
+      "id": "E04",
+      "command": "grep -n 'timeout\\|GIT_TERMINAL_PROMPT' selfhost/ct-ast/tool/pkg/Pkg.h.ct test/ast/p77_external.sh selfhost/check-ast.sh; echo rc=$?",
+      "exit": 1,
+      "output": "rc=1 (no matches)",
+      "reproduced": true,
+      "note": "No intrinsic or outer timeout, and no prompt suppression, in the three files. The probe's only bound is curl --max-time 10 on the index fetch (p77_external.sh:32)."
+    },
+    {
+      "id": "E05",
+      "command": "nl -ba selfhost/ct-ast/tool/pkg/Pkg.h.ct | sed -n '757,770p'; nl -ba selfhost/ct-ast/tool/pkg/Pkg.h.ct | sed -n '938,955p'",
+      "exit": 0,
+      "output": "757 int git_run(...)\n...\n770         return system(full);\n...\n944             w = snprintf(cmd, ..., \"git clone --quiet %s %s\", q1, q2);\n946             if (self->git_run(cmd, NULL) != 0) {\n951             w = snprintf(cmd, ..., \"git -C %s fetch --quiet --tags --force\", q2);\n953             if (self->git_run(cmd, NULL) != 0) {",
+      "reproduced": true,
+      "note": "The single subprocess call site is system(full); clone and fetch both go through it."
+    },
+    {
+      "id": "E06",
+      "command": "nl -ba test/ast/p77_external.sh | sed -n '61,71p'; nl -ba selfhost/check-ast.sh | sed -n '994,1000p'",
+      "exit": 0,
+      "output": "61 get_pkg() { # <proj> <home> <spec>\n62     ( cd \"$1\" && HOME=\"$2\" CT_HOME=\"$2\" \"$ctast\" get \"$3\" \\\n63         >\"$work/get.out\" 2>\"$work/get.err\" )\n...\n994 sh test/ast/p77_external.sh \"$work/ct-ast\" >\"$work/p77ext.out\" 2>\"$work/p77ext.err\"\n995 p77ext=$?",
+      "reproduced": true,
+      "note": "Neither the probe nor the hard gate wraps ct get / p77_external in timeout or a process-group deadline; check-all.sh also calls check-ast.sh directly (line 119)."
+    },
+    {
+      "id": "E07",
+      "command": "HOME=/tmp/vfy-cgh CT_HOME=/tmp/vfy-cgh timeout 12 /tmp/rev-ph77-build/ct-ast get https://10.255.255.1/ct-pkg/std.git; echo rc=$?",
+      "exit": 124,
+      "output": "rc=124 elapsed=12s (no output)",
+      "reproduced": true,
+      "note": "Confirms no answer within 12s for a blackhole peer."
+    },
+    {
+      "id": "E08",
+      "command": "HOME=/tmp/vfy-cgh3 CT_HOME=/tmp/vfy-cgh3 timeout 150 /tmp/rev-ph77-build/ct-ast get https://10.255.255.1/ct-pkg/std.git; echo rc=$?",
+      "exit": 1,
+      "output": "rc=1 elapsed=75s\nctc: git clone of 'https://10.255.255.1/ct-pkg/std.git' failed",
+      "reproduced": true,
+      "note": "Pure blackhole is bounded by the OS/git TCP timeout (~75s here), so the report's literal '无限等待' is not reproduced for this shape; the defect is 'no intrinsic upper bound', not 'always infinite'."
+    },
+    {
+      "id": "E09",
+      "command": "python3 accept-and-never-write server on 127.0.0.1:39417; HOME=/tmp/vfy-stall-home CT_HOME=/tmp/vfy-stall-home timeout 20 /tmp/rev-ph77-build/ct-ast get http://127.0.0.1:39417/x.git; echo rc=$?",
+      "exit": 124,
+      "output": "server: listening / accepted\nrc=124 elapsed=20s",
+      "reproduced": true,
+      "note": "Connected peer that never sends bytes; git/curl waits with no low-speed/deadline bound. This is the conditional shape ('curl reachable, git transfer stalls') under which the gate is genuinely unbounded."
+    },
+    {
+      "id": "E10",
+      "command": "same stalled server; HOME=/tmp/vfy-stall-home2 CT_HOME=/tmp/vfy-stall-home2 timeout 90 /tmp/rev-ph77-build/ct-ast get http://127.0.0.1:39417/y.git; echo rc=$?",
+      "exit": 124,
+      "output": "rc=124 elapsed=90s (no output)",
+      "reproduced": true,
+      "note": "No return at 90s; with a peer that holds the connection this is effectively unbounded. Together with E08 this makes P1-1's 'no intrinsic timeout' true and its 'infinite' claim conditional, not universal."
+    },
+    {
+      "id": "E11",
+      "command": "s=$(date +%s); timeout 120 sh test/ast/p77_external.sh /tmp/rev-ph77-build/ct-ast; echo rc=$? elapsed=$(( $(date +%s)-s ))s",
+      "exit": 77,
+      "output": "skip: cannot reach https://raw.githubusercontent.com/ct-pkg/index/master/index (curl: (28) Operation timed out after 10004 milliseconds with 0 bytes received)\nrc=77 elapsed=32s",
+      "reproduced": true,
+      "note": "Offline/blackholed index is bounded by curl's 3 attempts x 10s, then exits 77 (skip); this matches the existing offline log (line 2269) where the gate skipped rather than hung."
+    },
+    {
+      "id": "E12",
+      "command": "PATH=/tmp/vfy-stub:$PATH timeout 20 sh test/ast/p77_external.sh /tmp/rev-ph77-build/ct-ast; echo rc=$?",
+      "exit": 124,
+      "output": "rc=124 elapsed=20s\nTerminated: 15\nFAIL p77/external: ct get std\n...",
+      "reproduced": true,
+      "note": "Synthetic fixture: stub curl returns a valid index row, stub git sleeps on clone. The probe itself does not return within 20s; only the external timeout ended it. This isolates the missing outer bound from real-network timing."
+    },
+    {
+      "id": "E13",
+      "command": "python3 -c 'import re,glob;C=...;S=[... for p in glob.glob(\"issues/**/*.md\") ...];T=[...];print(len(S),sum(t==\"open\" ...),sum(t not in C ...))'",
+      "exit": 0,
+      "output": "220 24 168",
+      "reproduced": true,
+      "note": "Exact reproduction of claim.md's 220/24/168 using the claim's own normalization (strip bold/backticks, split on full-width '（', lowercase)."
+    },
+    {
+      "id": "E14",
+      "command": "find issues -name '*.md' ! -name README.md | wc -l; grep -rh '^| *状态 *|' issues --include='*.md' | wc -l; grep -rl '^status:' issues --include='*.md' | wc -l",
+      "exit": 0,
+      "output": "issue md total:      221\nstatus rows:      220\nfront-matter status:        1",
+      "reproduced": true,
+      "note": "221 total, 220 with a table status row, 1 (issues/selfhost/sh92-void-dollar-materialize.md) with front-matter status: verified and no table row. So report's 221 denominator and claim's 220 row count are both correct under their respective units."
+    },
+    {
+      "id": "E15",
+      "command": "python3 status-variant counter (normalized, raw-cell, substring) over 221 issue files",
+      "exit": 0,
+      "output": "normalized: open 24, outside closed set 168\nraw cell exact: outside closed set 203 (+1 missing row = 204), exact open 9\nsubstring 'open': 25 (lang-5: '方法形态已修（...）；字段形态仍 open')\nclosed-set tokens: open 24, verified 17, fixed 6, rejected 4, superseded 1",
+      "reproduced": true,
+      "note": "Report/claim 168 is reproducible. In our variants, counter's 204 reproduces as raw-cell exact matching plus counting the missing row as outside; counter's 25 reproduces only as a substring test, not an exact first-cell test. The two counter numbers therefore did not come from one stated method. Also, the 6 status=fixed are inside the 8-word set but forbidden by §5.4 ('fixed 只能出现在正文处置段')."
+    },
+    {
+      "id": "E16",
+      "command": "for t in p72_subscript p72_maxcalls p72_outputcollision p72_diagpos p72_stdmissing p73_abi p75_closure p75_closure_neg; do sh test/ast/$t.sh /tmp/rev-ph77-build/ct-ast; done",
+      "exit": 0,
+      "output": "OK p72/subscript (key type)\nOK p72/maxcalls (4096+ calls, named limit)\nOK p72/collision (same-base refused)\nOK p72/diagpos (pp length + comment column)\nOK p72/stdmissing (builtin layer diagnostics)\nOK p73/abi (duplicate struct refused)\nOK p75/closure (pair-form method argument)\nOK p75/closure-neg (literal + bound variable)",
+      "reproduced": true,
+      "note": "Seven report-listed issues are mechanically fixed but remain status open: LANG-3/4/11/16/17/SH-76/LANG-9 (p72/p73 probes green). PKG-10 and PKG-11 have fix commits 6879f85d / fbb63562 that set CTC_VERSION 0.63.3 / 0.63.4 and phase-log rows at lines 202-203. Per §5.4, open + DEV disposition is the allowed intermediate state pending REV 'verified'; it is not by itself a §5.4 violation."
+    },
+    {
+      "id": "E17",
+      "command": "for f in issues/lang/lang-3...md issues/lang/lang-4...md ...; do grep -m1 '^| 状态' $f; done; git show 6879f85d:selfhost/ct-ast/main.ct | grep CTC_VERSION; git show fbb63562:selfhost/ct-ast/main.ct | grep CTC_VERSION",
+      "exit": 0,
+      "output": "| 状态 | open | ... (LANG-3/4/11/16/17, SH-76, LANG-9)\n#define CTC_VERSION \"0.63.3\"\n#define CTC_VERSION \"0.63.4\"",
+      "reproduced": true,
+      "note": "The issue status lines do stay open while the fix commits bump the version. These are verification backlog entries, not missing implementations."
+    },
+    {
+      "id": "E18",
+      "command": "git tag -l 'v0.63.*'; for v in v0.63.3 v0.63.4 v0.63.5; do git rev-parse -q --verify refs/tags/$v || echo \"$v MISSING\"; done",
+      "exit": 0,
+      "output": "v0.63.0\nv0.63.1\nv0.63.2\nv0.63.3 MISSING\nv0.63.4 MISSING\nv0.63.5 MISSING",
+      "reproduced": true,
+      "note": "Independent finding not raised by either side: the AGENTS.md deviation 'fix-tags' says every fix since v0.44.1 gets an annotated tag, but the v0.63.3/.4/.5 tags are absent locally even though the fix commits and phase-log rows exist. g8 does not check fix tags. (Remote tag state not queried.)"
+    },
+    {
+      "id": "E19",
+      "command": "mkdir p2 with only name/version; HOME=/tmp/vfy-pkg9/h CT_HOME=/tmp/vfy-pkg9/h /tmp/rev-ph77-build/ct-ast get /tmp/vfy-pkg9/p2; echo rc=$?",
+      "exit": 1,
+      "output": "rc=1\nctc: '/tmp/vfy-pkg9/p2/ct.pkg' is missing 'publisher'",
+      "reproduced": true,
+      "note": "PKG-9 is behaviorally fixed at HEAD (hard error, no silent v1 lock), but its own '版本位' section says only '建议 v0.58.2'; phase-log v0.58.2 (line 179) is PKG-6, not PKG-9. The report's 'PKG-9 fixed at v0.58.2' is therefore a wrong version attribution, not proof that the issue is still broken."
+    },
+    {
+      "id": "E20",
+      "command": "ls docs/planning/phase-id-ledger.md; ls -d docs/phases; grep -n '迁移未开始' docs/planning/phase-migration-blockers.md; grep -rn '^window:' docs",
+      "exit": 1,
+      "output": "ls: docs/planning/phase-id-ledger.md: No such file or directory\nls: docs/phases: No such file or directory\n6:| 状态 | **迁移未开始**；先解决 blocker |\n16:## 1. Blocker A ... 23:**需要裁定** ...\n26:## 2. Blocker B ... 33:**需要裁定** ...\n41:## 3. Blocker C ... 47:**需要裁定** ...\n(no window: line)",
+      "reproduced": true,
+      "note": "No ledger, no docs/phases, no window; blocker A (legacy version-minor offset, line 23), B (card layout, line 33) and C (missing phase-id/version-minor, line 47) all still say 需要裁定. Cards still use docs/design/phaseNN.md and the '编号' row (0 cards have top-level phase-id:, 0 have version-minor:)."
+    },
+    {
+      "id": "E21",
+      "command": "head -8 docs/spec/ai-coding-workflow.md; head -8 /Users/samxx/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md; python3 test/docs/check-docs.py",
+      "exit": 0,
+      "output": "| spec-version | `1.17.0` |\n| 状态 | 草稿（待用户评审，未落入任何项目） |\n(same in master and copy)\nspec pin: skipped (master spec draft 1.17.0)\ncheck-docs: OK (1938 relative links in 323 files, v0.77.0, 11 hard gates, 12 phase status, 3 适用版本 header(s))\ndesign window: ok (12/12)",
+      "reproduced": true,
+      "note": "The report's '主规范 1.17.0 已生效' is not supported by the spec's own header; AGENTS.md does pin 1.17.0 and the copy hash matches, so the landing is green while the spec self-labels draft. G9's pin check is skipped for that reason."
+    },
+    {
+      "id": "E22",
+      "command": "find test/ast -mindepth 1 -maxdepth 1 -type d | wc -l; find test/ast/errors -maxdepth 1 -name '*.ct' | wc -l; find test/ast -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' | wc -l; find examples -mindepth 1 -maxdepth 1 -type d | wc -l; grep -n '16 个可运行示例' docs/tutorial.md",
+      "exit": 0,
+      "output": "299\n295\n255\n51\n1903:- `examples/**` —— 16 个可运行示例；...",
+      "reproduced": true,
+      "note": "test/README.md:6 says 141 (actual 295) and :18 says 119 (actual 299 total, 255 numbered). examples are 51, not the report's 52; tutorial says 16. The 299 figure is defensible as 'all first-level dirs'; the README's 119 is stale under either unit."
+    },
+    {
+      "id": "E23",
+      "command": "nl -ba docs/planning/typecheck-semantic-plan.md | sed -n '1,6p;106,111p'; nl -ba docs/README.md | sed -n '41p'; grep -n 'PH-68\\|PH-69\\|PH-70\\|PH-71\\|v0.67.0\\|v0.68.0\\|v0.69.0\\|v0.70.0' docs/history/phase-log.md",
+      "exit": 0,
+      "output": "1:# 类型检查与语义检查方案（规划中）\n5:| 性质 | 规划/施工序列；**未开卡**，不占 phase、不 bump |\n108:| v0-PH-68 | 类型核心 ... | v0.67.0 | 规划中（未开卡） |\n...\n41:| ... 类型/语义检查规划（**未开卡**）：PH-67 类型核心 → PH-68 ... |\n193:| v0.70.0 | PH-71 own/borrow/Drop ... |\n194:| v0.69.0 | PH-70 CFG/定值/控制流 ... |\n195:| v0.68.0 | PH-69 跨单元/泛型/trait ... |\n196:| v0.67.0 | PH-68 类型核心 ... |",
+      "reproduced": true,
+      "note": "D-1 and D-2 are true: the plan says 未开卡 while PH-68..71 were closed at v0.67.0..v0.70.0; docs/README:41 also misnumbers them PH-67..70."
+    },
+    {
+      "id": "E24",
+      "command": "nl -ba AGENTS.md | sed -n '452p'; nl -ba docs/session-map.md | sed -n '20,23p'; nl -ba docs/roadmap.md | sed -n '89p'; grep -n 'v0.76' docs/history/phase-log.md",
+      "exit": 0,
+      "output": "452:| 对话清单 | ... phase=PH-66 |\n20:\n21:> 本仓库当前为单会话工作，三类常驻对话未建...\n22:| PH-66 ... |\n89:| Phase 76 | ... | ✅ 完成 | v0.76.1 |\n187:| v0.76.1 | SH-92 修复 ... |\n188:| v0.76.0 | PH-76 链中物化 ... |",
+      "reproduced": true,
+      "note": "D-5 true (phase=PH-66 vs current PH-77; g0 does not validate this value). D-6 true (blockquote at line 21 splits the table; rows 22-34 no longer render under the header). D-7 true (roadmap says v0.76.1; v0.76.0 is the phase close, v0.76.1 is the SH-92 fix)."
+    },
+    {
+      "id": "E25",
+      "command": "grep -cE '^\\| *Phase [0-9]+' docs/roadmap.md; grep -rlE 'PH-[0-9]+' --include='*.md' . | grep -v '^./battle/' | wc -l; grep -rhoE 'PH-[0-9]+' --include='*.md' docs issues AGENTS.md README.md | sort -u | wc -l",
+      "exit": 0,
+      "output": "73\n138\n58",
+      "reproduced": true,
+      "note": "Counter's 73/138/58 are reproducible under these definitions (roadmap Phase rows; md files with a bare PH outside battle; unique bare IDs in docs+issues+AGENTS+README). Report's 66/142/51 had no command and did not reproduce in the natural variants tried (137/138 files, 56/58 IDs, 70/73 Phase rows)."
+    },
+    {
+      "id": "E26",
+      "command": "sed -n '24,28p' README.md; grep -n -- '--emit-model\\|check --types' README.md; sed -n '1,8p' docs/architecture.md; sed -n '1,10p' docs/proposals/ct-bare-metal-proposal.md; grep -n 'bare-metal' docs/README.md; python3 editors/vscode/test/check-grammar.py | tail -1",
+      "exit": 0,
+      "output": "README:25-28 still uses 0.44.1 as the blocking baseline\n(no --emit-model / check --types in README)\narchitecture: '面向要修改 ctc.c 的人/代理'\nproposal: '草案；未立项，不占 phase'\ndocs/README:61 '待 CT 组评估'\n== 169 checks, 0 failed ==",
+      "reproduced": true,
+      "note": "D-8/D-9/D-10/D-11/D-12 all factually reproduce (D-11: selfhost/README says 40 assertions, actual 169). D-13: p72_subscript is green (A2 fixed) while docs/language-spec.md:2423 still says parameter-type matching 尚未实现; A1/A3 remain unimplemented, so 'at least one place needs update' is true but '整句都错' is not."
+    },
+    {
+      "id": "E27",
+      "command": "git show --stat --format='%h %s' HEAD; git status --porcelain; git rev-parse HEAD; git rev-parse v0.77.0^{commit}",
+      "exit": 0,
+      "output": "5b13fef4 review: PH-77 收口复核\n docs/reviews/2026-11-19-phase77-rev-verdict.md | 294 +++\n M docs/README.md\n?? battle/review-v077-1/\n?? battle/static-dispatch-1/\n?? docs/reviews/full-review-v0.77.0.md\n5b13fef4eafcf3bd73a8b5b6ffd996e49ca7c644\n1aff4deb708a44d8dfd61b0667ce4168502c7ce2",
+      "reproduced": true,
+      "note": "The reviewed report itself is untracked; the only tracked change is docs/README.md adding its index row. Verification used HEAD contents for all drift claims; the added row does not alter D-1/D-2."
+    },
+    {
+      "id": "E28",
+      "command": "find examples -mindepth 1 -maxdepth 1 -type d | wc -l; grep -n '16 个可运行示例' docs/tutorial.md",
+      "exit": 0,
+      "output": "51\n1903:- `examples/**` —— 16 个可运行示例；...",
+      "reproduced": false,
+      "note": "The report's D-4 says 52 example directories; the actual count is 51. The tutorial's 16 is genuinely stale, so the drift is real but the report's number is wrong by one."
+    },
+    {
+      "id": "E29",
+      "command": "grep -cE '^\\| *Phase [0-9]+' docs/roadmap.md; grep -rlE 'PH-[0-9]+' --include='*.md' . | grep -v '^./battle/' | wc -l; grep -rhoE 'PH-[0-9]+' --include='*.md' docs issues AGENTS.md README.md | sort -u | wc -l",
+      "exit": 0,
+      "output": "73\n138\n58",
+      "reproduced": false,
+      "note": "These are counter's counts, not the report's: 73 Phase rows (70 rows of the form 'Phase <n>'), 138 files with a bare PH outside battle (137 excluding docs/spec), 58 unique IDs (56 excluding docs/spec). No natural variant gave the report/blocker's 66/142/51; those three are unverified estimates, not acceptance thresholds."
+    }
+  ],
+  "checks": {
+    "matrix": [
+      {
+        "id": "C1",
+        "topic": "tools/check.sh subcommands (g0/g8/battle-selftest; g6/g1/g9)",
+        "status": "verified",
+        "evidence": [
+          "E01",
+          "E02",
+          "E03"
+        ],
+        "note": "g0, g8, battle-selftest exist and are green; g1-g7 and g9 all exit 2. No gate-substitution deviation is registered. Fact supports P1-2's formal violation; the report's one-line summary omits battle-selftest but its §5.2 is correct."
+      },
+      {
+        "id": "C2",
+        "topic": "ct get / git subprocess intrinsic timeout; p77_external outer timeout; blackhole reproducibility",
+        "status": "partially_verified",
+        "evidence": [
+          "E04",
+          "E05",
+          "E06",
+          "E07",
+          "E08",
+          "E09",
+          "E10",
+          "E11",
+          "E12"
+        ],
+        "note": "No intrinsic timeout and no outer timeout are verified. A connected-but-stalled peer reproduces an unbounded wait past 90s; a pure blackhole is bounded by the OS/git TCP timeout (~75s here); an unreachable index makes the probe skip (77) after ~32s. Therefore 'no upper bound' is true; 'offline/blackhole always makes the gate wait forever' is false/conditional. Fixing the outer bound plus a stall/slow-peer negative test is executable."
+      },
+      {
+        "id": "C3",
+        "topic": "Issue count/status words: report 221/24/168 vs counter 221/204",
+        "status": "partially_verified",
+        "evidence": [
+          "E13",
+          "E14",
+          "E15",
+          "E16",
+          "E17",
+          "E19"
+        ],
+        "note": "221 files, 220 status rows, 1 missing row; the report's 221 is a file total while its 24/168 are over the 220 rows, a one-row denominator mismatch. 24 open and 168 outside the 8-word set reproduce exactly under the claim's normalization; 204 reproduces only as raw-cell mismatch plus the missing row, and 25 only as an 'open' substring. G6 would fail anyway: 168 non-closed + 6 forbidden status=fixed + 1 missing = 175 non-compliant rows, and only 1/221 has the front-matter status required by §5.4. At least seven 'fixed but open' entries are real (probes green / fix commits), but open+DEV disposition is the §5.4 intermediate state pending REV, not itself a violation; PKG-9's 'v0.58.2' attribution is wrong (v0.58.2 is PKG-6; HEAD behavior is already a hard error)."
+      },
+      {
+        "id": "C4",
+        "topic": "phase-ID ledger, blockers, spec draft",
+        "status": "verified",
+        "evidence": [
+          "E20",
+          "E21",
+          "E25",
+          "E29"
+        ],
+        "note": "No ledger, no docs/phases, no window; blocker file says migration not started and A/B/C await rulings; cards lack phase-id/version-minor. Master spec and project copy both self-label 草稿 at line 6, so the report's '1.17.0 已生效' is not supported by the text even though AGENTS pins it and g0 is green. Report's 66/142/51 counts did not reproduce; counter's 73/138/58 did."
+      },
+      {
+        "id": "C5",
+        "topic": "Document drift: D-1/D-2 vs other D items; test/README; examples; AGENTS phase; session-map",
+        "status": "partially_verified",
+        "evidence": [
+          "E22",
+          "E23",
+          "E24",
+          "E26",
+          "E28"
+        ],
+        "note": "D-1, D-2, D-3, D-5, D-6, D-7, D-8, D-9, D-10, D-11, D-12 all factually reproduce; D-13 is partial (A2 fixed, A1/A3 still open). D-4 contains one false number: the report says 52 examples, actual is 51 (tutorial's 16 is genuinely stale). test/README 141/119 vs 295/299 is real. AGENTS:452 phase=PH-66 and session-map:21 table break are real. Report grades D-1/D-2/D-3/D-5 as P1; D-4/D-6/D-7/D-8..D-13 are below P1 in its own table."
+      },
+      {
+        "id": "C6",
+        "topic": "Additional independent observation: fix tags",
+        "status": "verified",
+        "evidence": [
+          "E18"
+        ],
+        "note": "v0.63.3/.4/.5 tags are locally absent while the fix commits and phase-log rows exist; the fix-tags deviation says every fix gets a tag. Neither claim nor counter mentions this. Remote state unqueried."
+      }
+    ],
+    "fixed_open_examples": [
+      {
+        "id": "PKG-10",
+        "status_line": "issues/packages/pkg-10-default-git-tag-oldest.md:9 `| 状态 | **open** |`",
+        "fix_evidence": "6879f85d 'fix(pkg): default get selects newest tag' sets CTC_VERSION 0.63.3 and phase-log.md:203 records the fix; local tag v0.63.3 is absent (E18).",
+        "verified": true
+      },
+      {
+        "id": "PKG-11",
+        "status_line": "issues/packages/pkg-11-get-output-too-terse.md:9 `| 状态 | **open** |`",
+        "fix_evidence": "fbb63562 'fix(pkg): report ct get details' sets CTC_VERSION 0.63.4 and phase-log.md:202 records the fix; local tag v0.63.4 is absent (E18).",
+        "verified": true
+      },
+      {
+        "id": "LANG-4",
+        "status_line": "issues/lang/lang-4-subscript-type-mismatch-silent-empty.md:8 `| 状态 | open |`",
+        "fix_evidence": "`sh test/ast/p72_subscript.sh /tmp/rev-ph77-build/ct-ast` -> `OK p72/subscript (key type)`; docs/design/phase72.md:61 marks R2 ✅.",
+        "verified": true
+      },
+      {
+        "id": "LANG-3",
+        "status_line": "issues/lang/lang-3-max-calls-fixed-cap.md:8 `| 状态 | open |`",
+        "fix_evidence": "`sh test/ast/p72_maxcalls.sh ...` -> `OK p72/maxcalls (4096+ calls, named limit)`; phase72.md R1 ✅.",
+        "verified": true
+      },
+      {
+        "id": "SH-76",
+        "status_line": "issues/selfhost/sh76-builtin-layer-missing-misdiagnosis.md:8 `| 状态 | open |`",
+        "fix_evidence": "`sh test/ast/p72_stdmissing.sh ...` -> `OK p72/stdmissing (builtin layer diagnostics)`; phase72.md R5 ✅.",
+        "verified": true
+      }
+    ],
+    "doc_drift": [
+      {
+        "item": "D-1",
+        "report_claim": "typecheck plan says 规划中/未开卡 while PH-68..71 closed",
+        "verdict": "verified",
+        "detail": "docs/planning/typecheck-semantic-plan.md:1,5,108-111 says 未开卡; phase-log.md:193-196 closes PH-68..71 at v0.67.0..v0.70.0."
+      },
+      {
+        "item": "D-2",
+        "report_claim": "docs/README:41 says 未开卡",
+        "verdict": "verified",
+        "detail": "Line 41 says 未开卡 and also misnumbers the phases as PH-67..70 (actual v0-PH-68..71)."
+      },
+      {
+        "item": "D-3",
+        "report_claim": "test/README 141 errors / 119 dirs vs 295 / 299",
+        "verdict": "verified",
+        "detail": "Actual: 295 errors/*.ct, 299 first-level dirs, 255 numbered dirs. 119 is stale under either unit."
+      },
+      {
+        "item": "D-4",
+        "report_claim": "tutorial says 16 examples; actual 52",
+        "verdict": "partially_false",
+        "detail": "tutorial.md:1903 says 16 (true drift), but actual examples dirs = 51; the report's 52 is wrong by one."
+      },
+      {
+        "item": "D-5",
+        "report_claim": "AGENTS:452 says phase=PH-66, current PH-77",
+        "verdict": "verified",
+        "detail": "Line 452 still PH-66; g0 only checks the landing sections, not this value."
+      },
+      {
+        "item": "D-6",
+        "report_claim": "session-map blockquote splits the table",
+        "verdict": "verified",
+        "detail": "Line 21 is a blockquote between table rows; rows 22-34 lose the header and do not render as a table."
+      },
+      {
+        "item": "D-7",
+        "report_claim": "roadmap Phase 76 says v0.76.1",
+        "verdict": "verified",
+        "detail": "roadmap.md:89 says v0.76.1; phase-log.md:187-188 assigns v0.76.1 to SH-92 and v0.76.0 to PH-76."
+      },
+      {
+        "item": "D-8",
+        "report_claim": "README still uses 0.44.1 as the blocking baseline",
+        "verdict": "verified",
+        "detail": "README.md:25-28 still frames the full path as blocked at 0.44.1 while the version is 0.77.0."
+      },
+      {
+        "item": "D-9",
+        "report_claim": "README command table lacks --emit-model and ct check --types",
+        "verdict": "verified",
+        "detail": "grep finds neither string in README.md."
+      },
+      {
+        "item": "D-10",
+        "report_claim": "architecture.md is L0-only / ctc.c-oriented",
+        "verdict": "verified",
+        "detail": "architecture.md:5 says it is for people modifying ctc.c; no ct-ast architecture counterpart."
+      },
+      {
+        "item": "D-11",
+        "report_claim": "selfhost README says 40 grammar assertions, actual 169",
+        "verdict": "verified",
+        "detail": "selfhost/README.md:33 says 40; check-grammar.py reports 169 checks, 0 failed. (check-all.sh's own comment says 167/168 and is also stale.)"
+      },
+      {
+        "item": "D-12",
+        "report_claim": "bare-metal proposal still 草案/未立项; docs README says 待评估",
+        "verdict": "verified",
+        "detail": "Proposal line 6 says 草案；未立项; docs/README.md:61 says 待 CT 组评估; PH-64/v0.63.0 is closed."
+      },
+      {
+        "item": "D-13",
+        "report_claim": "language-spec says custom [] parameter-type matching 尚未实现; test already pins it",
+        "verdict": "partially_verified",
+        "detail": "p72_subscript is green (A2 = hard error now), so the blanket '尚未实现' is stale for that case; A1 (coexistence) and A3 (candidate list) remain unfinished, so 'at least one place needs update' is true."
+      }
+    ],
+    "j_matrix": [
+      {
+        "id": "J-1",
+        "criterion": "事实准确性：每条 P1 有可复现证据",
+        "status": "pass",
+        "note": "Each of the five P1s has at least one independently reproduced core fact: P1-1 no intrinsic timeout (E04-E10), P1-2 g1-g7/g9 absent (E02/E03), P1-3 G6 red via 175 non-compliant rows (E15), P1-4 ledger absent / migration not started (E20), P1-5 D-1/D-2/D-3/D-5/D-6 present (E22-E24). The bar 'every P1 has reproducible evidence' is met. Specific sub-claims are still inaccurate: the literal 'infinite wait' is conditional (E08/E09/E10), '52 examples' is false (51, E22), 66/142/51 did not reproduce (E25), PKG-9's v0.58.2 attribution is wrong (E19), and the 13-list mixes a legal pending-verification state with real violations (E16/E17)."
+      },
+      {
+        "id": "J-2",
+        "criterion": "定级合理性：是否真的阻塞 1.0",
+        "status": "unresolved",
+        "note": "P1-1..P1-4 have concrete release/audit impact: gate can lack an answer, G6/G1/G5 absent, ledger unclosed, v1-PH-0 cannot be opened cleanly. P1-5's grading is normative: AGENTS:452 feeds g0-landing/L-3, but the other counts are not read by any gate. Evidence seat does not decide whether that makes the whole DOC batch release-blocking."
+      },
+      {
+        "id": "J-3",
+        "criterion": "可执行性：建议是否可落成 issue/任务",
+        "status": "pass",
+        "note": "All five can be landed: P1-1 defect issue with stall/slow-peer negative; P1-2 governance issue or signed deviation; P1-3 REV issue plus front-matter/status migration; P1-4 blocked issue plus decision; P1-5 DOC batch. P1-2's G1 and P1-4 must wait on A/B/C or spec ratification, so 'immediately executable' is not true for them."
+      },
+      {
+        "id": "J-4",
+        "criterion": "范围：是否把 P2/P3 误升 P1",
+        "status": "fail",
+        "note": "The report's own table puts D-4, D-6, D-7 and D-8..D-13 below P1, so it is not systematically inflated. But claim.md's one-P1 DOC batch includes D-4 and D-6, both P2 in the report, so two items are lifted into a P1 batch. Counter's '9 items dragged into 1.0' overstates this: claim's batch names D-1..D-6, not the other seven."
+      },
+      {
+        "id": "J-5",
+        "criterion": "成本：修复/批处理代价",
+        "status": "pass",
+        "note": "P1-1 is S (one call site + probe bound + negative). P1-2 is M for G6+G5 and blocked for G1. P1-3 is M (221-file format migration + 24 open triage), not '13 edits'. P1-4 is L/blocked (one migration script, 58 IDs / 138 files / 73 roadmap rows, plus A/B/C decisions). P1-5 is S (about six documents + two check-docs assertions)."
+      },
+      {
+        "id": "J-6",
+        "criterion": "台账落法：按 bug/新需求/文档批分别进 issue/REQ",
+        "status": "pass",
+        "note": "The split is workable: P1-1 defect issue (DEV), P1-2 governance issue/decision (REQ), P1-3 REV-owned ledger issue (not DEV), P1-4 blocked issue + decision, P1-5 DOC batch. P1-3 must keep 'fixed' in the disposition body per §5.4 and have REV write 'verified'; P1-4 must remain blocked until the A/B/C ruling."
+      }
+    ],
+    "steelman": {
+      "for_A": "The formal gate gaps are not cosmetic: g1-g7/g9 all exit 2, no deviation is signed, git_run is a bare system() with no bound, and the ledger has 175 non-compliant status rows (168 non-closed + 6 forbidden status=fixed + 1 missing) with only 1/221 front-matter status. Under §5.4/G6 as written, '1.0 gates all green' cannot be asserted for the governance contract, and v1-PH-0 has no ledger/window to open against.",
+      "for_B": "The report's own D table already puts 9 of 13 drift items below P1, its 52/66/142/51 counts do not reproduce, and its '13 fixed-but-open' list mixes the §5.4-mandated intermediate state (DEV writes fixed in the body, REV later writes verified) with real violations; PKG-9's v0.58.2 attribution is wrong and TEST-21 is explicitly pending review. The blackhole test alone returns at 75s, so the literal 'infinite gate wait' is conditional; the spec header calls 1.17.0 a draft, so '1.17.0 已生效' needs a ruling.",
+      "unresolved_between_them": "Whether a wrong AGENTS phase value plus stale planning/index counts are release-blocking (A) or a P2 batch (B) is a policy call, not a mechanical gate output; this seat records the facts on both sides and leaves the grading to EDITOR."
+    }
+  },
+  "conclusion_scope": "This file records reproduced/unreproduced facts and J-1..J-6 statuses only. It does not decide position A vs position B and does not amend any source, spec, test, issue, or the review report."
+}
