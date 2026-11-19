@@ -33,7 +33,10 @@ confirmed-by: REQ-review-v077-1
 - D-10 architecture 只讲 L0；
 - D-11 selfhost/README grammar 40 → 169；
 - D-12 bare-metal 提案状态；
-- D-13 `v[0]` 描述分包重核（A2 已硬错，A1/A3 未实现）。
+- D-13 `v[0]` 描述分包重核（A2 已硬错，A1/A3 未实现）；
+- design window 12/12：下一次开 phase 前必须把 phase66 退役到 `docs/history/design/`；
+- package-guide 补“官方 pin 强校验 / 第三方索引仅便利”的信任模型；
+- README/package-guide 明确 git 网络失败/超时行为（与 CI-9 联动）。
 
 ## 验收
 
