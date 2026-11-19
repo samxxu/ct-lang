@@ -36,6 +36,21 @@ export CT_C_BOUNDARY=allow
 
 set -u
 
+# Governance preconditions (not counted in the eleven product gates): the spec
+# landing gate G0 and the PN-2 version-coherence gate G8 run before anything
+# else, so a phase cannot ship with MINOR != phase or with a drifted block.
+root0="$(cd "$(dirname "$0")/.." && pwd)"
+( cd "$root0" && bash tools/check.sh g0 >/dev/null ) || {
+    echo "check-all: FAIL (G0 governance gate)" >&2
+    ( cd "$root0" && bash tools/check.sh g0 ) >&2 || true
+    exit 1
+}
+( cd "$root0" && bash tools/check.sh g8 >/dev/null ) || {
+    echo "check-all: FAIL (G8 version gate)" >&2
+    ( cd "$root0" && bash tools/check.sh g8 ) >&2 || true
+    exit 1
+}
+
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 

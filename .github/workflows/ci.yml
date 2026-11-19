@@ -41,6 +41,10 @@ jobs:
           curl -fsSL -o /tmp/freertos.tar.gz \
             https://codeload.github.com/FreeRTOS/FreeRTOS-Kernel/tar.gz/refs/tags/V11.1.0
           tar -xzf /tmp/freertos.tar.gz -C .temp/FreeRTOS-Kernel --strip-components=1
+      - name: governance gates (G0 landing + PN-2 version)
+        run: |
+          bash tools/check.sh g0
+          bash tools/check.sh g8
       - name: hard gates
         run: |
           set -o pipefail
@@ -60,6 +64,10 @@ jobs:
       CC: clang
     steps:
       - uses: actions/checkout@v4
+      - name: governance gates (G0 landing + PN-2 version)
+        run: |
+          bash tools/check.sh g0
+          bash tools/check.sh g8
       - name: hard gates
         run: |
           set -o pipefail

@@ -47,12 +47,21 @@ g0() {
   echo "g0: OK (block $block_ver, session-map present)"
 }
 
+# G8 (version coherence, 6.7 PN-2 / V-1 / V-7): every phase tag's MINOR must
+# equal the phase number. Published tags listed in
+# `docs/planning/version-legacy-offsets.tsv` are a frozen exception; a mismatch
+# outside that ledger fails. Open cards must declare `version-minor == n`.
+g8() {
+  python3 "$root/tools/gates/version_coherence.py" "$root"
+}
+
 battle_selftest() {
   bash "$root/test/battle/run.sh"
 }
 
 case "${1:-}" in
   g0) g0 ;;
+  g8) g8 ;;
   battle-selftest) battle_selftest ;;
-  *) echo "usage: tools/check.sh g0 | battle-selftest" >&2; exit 2 ;;
+  *) echo "usage: tools/check.sh g0 | g8 | battle-selftest" >&2; exit 2 ;;
 esac

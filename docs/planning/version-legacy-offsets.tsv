@@ -1,0 +1,17 @@
+# Legacy version offsets frozen on 2026-11-19. A tag listed here may have
+# MINOR != phase; anything not listed must satisfy PN-2 (MINOR == phase).
+# Columns: phase	tag	minor	basis
+67	v0.66.0	66	published tag before the PN-2 restoration (2026-11-19)
+68	v0.67.0	67	published tag before the PN-2 restoration (2026-11-19)
+69	v0.68.0	68	published tag before the PN-2 restoration (2026-11-19)
+70	v0.69.0	69	published tag before the PN-2 restoration (2026-11-19)
+71	v0.70.0	70	published tag before the PN-2 restoration (2026-11-19)
+72	v0.71.0	71	published tag before the PN-2 restoration (2026-11-19)
+73	v0.72.0	72	published tag before the PN-2 restoration (2026-11-19)
+74	v0.73.0	73	published tag before the PN-2 restoration (2026-11-19)
+75	v0.74.0	74	published tag before the PN-2 restoration (2026-11-19)
+62	-	61	legacy offset before PH-63 (no closeout tag message to match)
+63	-	62	legacy offset before PH-64 (no closeout tag message to match)
+64	-	63	legacy offset before PH-65 (no closeout tag message to match)
+65	-	64	legacy offset before PH-66 (no closeout tag message to match)
+66	-	65	legacy offset before PH-67 (no closeout tag message to match)
