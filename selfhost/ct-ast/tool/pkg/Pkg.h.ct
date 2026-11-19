@@ -71,6 +71,15 @@ trait PkgOps {
    static that names it directly reads the same. */
 static int pkg_read_meta(const char *dir, char *cflags, size_t ccap,
                          char *ldflags, size_t lcap, char *req, size_t rcap);
+/* PH-77: the built-in official pin table (compile-time constants, never the
+   network or a mutable index). It is the only resolver a bare name may use. */
+static int pkg_pin_lookup(const char *name, const char *range,
+                          char *ver, size_t vcap, char *url, size_t ucap,
+                          char *tag, size_t tcap, char *sha, size_t scap);
+/* PH-77: resolve an official name to its source, letting an explicit index
+   override a `publisher = ct` row (D-010 #4); the pin is the fallback. */
+static int pkg_official_resolve(const char *name, char *url, size_t ucap,
+                                char *tag, size_t tcap, char *sha, size_t scap);
 static int pkg_index_lookup(const char *name, const char *range, char *url, size_t ucap,
                             char *tag, size_t tcap, char *sha, size_t scap,
                             char *pub, size_t pcap);
@@ -1004,6 +1013,14 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", cache);
             return -1;
         }
+        /* PH-77: the official identity is `ct`, so a `ct/<name>` source that
+           declares a different publisher is a mis-tagged release, not a
+           package we may store under a second identity. */
+        if (cache_pub && strcmp(cache_pub, "ct") == 0 && strcmp(publisher, "ct") != 0) {
+            fprintf(stderr, "ctc: '%s/ct.pkg' declares publisher '%s', but the "
+                            "official identity is 'ct'\n", cache, publisher);
+            return -1;
+        }
         for (i = 0; i < self->nseen; i++)
             if (strcmp(self->seen[i], mname) == 0) return 0;
         if (self->nseen >= MAX_PKG_DEPS) {
@@ -1039,7 +1056,8 @@ impl PkgOps for Pkg {
             return -1;
         }
         if (expect_sha && expect_sha[0] && strcmp(dig, expect_sha) != 0) {
-            fprintf(stderr, "ctc: '%s' does not match the index (source %s, index %s)\n",
+            fprintf(stderr, "ctc: '%s' does not match the pinned digest "
+                            "(source %s, expected %s)\n",
                     mname, dig, expect_sha);
             return -1;
         }
@@ -1100,68 +1118,84 @@ impl PkgOps for Pkg {
     }
 
     /* Every dependency edge takes this: split off the range, then route to
-       `get_git` or, for a filesystem location, to `get_one`. A bare name
-       (`foo`, no slash and no scheme) is looked up in the explicit index first;
-       a spec with a prefix keeps the old registry behaviour. */
+       `get_git` or, for a filesystem location, to `get_one`. PH-77 gives the
+       three name shapes distinct resolvers (D-010 #2):
+         - a bare name resolves the built-in official pin table only, and is a
+           hard error otherwise;
+         - `ct/<name>` prefers an explicit index row with `publisher = ct`,
+           then falls back to the pin;
+         - any other `<publisher>/<name>` needs an explicit index. */
     int get_spec(const char *spec, const char *base, int depth)
     {
         char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
-        char url[MAX_PKG_CMD], tag[MAX_TEXT], sha[80], bare[MAX_TEXT], pub[MAX_TEXT];
-        int ix;
+        char url[MAX_PKG_CMD], tag[MAX_TEXT], sha[80], pub[MAX_TEXT];
+        char pver[32];
+        const char *ix;
+        int rc;
         (void)self;
 
         if (self->split_spec(spec, path, sizeof path, range, sizeof range) != 0) return -1;
+        ix = self->have_index ? self->index : getenv("CT_INDEX");
         if (self->is_git_ref(path)) {
             if (strchr(path, '/') == NULL && strstr(path, "://") == NULL) {
-                ix = pkg_index_lookup(path, range, url, sizeof url,
-                                      tag, sizeof tag, sha, sizeof sha,
-                                      pub, sizeof pub);
-                if (ix == 0)
-                    return self->fetch_git(url, path, pub, range, tag, sha, depth);
-                if (ix == -1) return -1;
-                if (ix == 2) {
-                    fprintf(stderr, "ctc: package '%s' is not in the index\n", path);
-                    return -1;
-                }
-            }
-            /* S1: a publisher-qualified name (`ct/std`) resolves through the
-               same index when one names it; otherwise the registry path below
-               still applies. */
-            if (strchr(path, '/') != NULL && strstr(path, "://") == NULL
-                && !self->have_index && getenv("CT_INDEX") == NULL) {
-                const char *leaf = strrchr(path, '/') + 1;
+                /* Only an official pin may be spelled without a publisher. */
+                rc = pkg_pin_lookup(path, range, pver, sizeof pver,
+                                    url, sizeof url, tag, sizeof tag,
+                                    sha, sizeof sha);
+                if (rc == 0)
+                    return self->fetch_git(url, path, "ct", range, tag, sha, depth);
+                if (rc == -1) return -1;
                 fprintf(stderr,
-                    "ctc: no index resolver for '%s'\n"
-                    "  '%s' is a publisher-qualified package name; without an index\n"
-                    "  there is no mapping from that name to a git URL.\n"
-                    "  Choose the case that matches how the package is published:\n"
-                    "  1) built-in / official library (bare name, no publisher):\n"
-                    "       ct get %s\n"
-                    "     uses CT_REGISTRY (default https://github.com/ct-pkg).\n"
-                    "  2) publisher-qualified package (what you typed):\n"
-                    "       ct get --index <file> %s\n"
-                    "       CT_INDEX=<file> ct get %s\n"
-                    "     the index is a local plain-text file; line format:\n"
-                    "       name version publisher git-url tag sha256:<64 hex>\n"
-                    "  3) known git URL:\n"
-                    "       ct get https://<host>/<publisher>/<repo>\n"
-                    "  4) local checkout:\n"
-                    "       ct get ./path-to-%s\n"
-                    "  Note: CT_REGISTRY only applies to bare names without '/';\n"
-                    "        '%s' requires an index (case 2) or a URL/path (case 3/4).\n",
-                    path, path, leaf, path, path, leaf, path);
+                    "ctc: '%s' is not an official package\n"
+                    "  bare names resolve the built-in official pins only (ct/std);\n"
+                    "  a third-party package always keeps its publisher.\n"
+                    "  write '<publisher>/<name>' with an index:\n"
+                    "       ct get --index <file> <publisher>/%s\n"
+                    "       CT_INDEX=<file> ct get <publisher>/%s\n"
+                    "  or name a git URL / a local directory.\n",
+                    path, path, path);
                 return -1;
             }
-            if (strchr(path, '/') != NULL && strstr(path, "://") == NULL
-                && (self->have_index || getenv("CT_INDEX") != NULL)) {
-                ix = pkg_index_lookup(path, range, url, sizeof url,
-                                      tag, sizeof tag, sha, sizeof sha,
-                                      pub, sizeof pub);
-                if (ix == 0) {
-                    if (self->git_name(path, bare, sizeof bare) != 0) return -1;
-                    return self->fetch_git(url, bare, pub, range, tag, sha, depth);
+            if (strchr(path, '/') != NULL && strstr(path, "://") == NULL) {
+                const char *leaf = strrchr(path, '/') + 1;
+                int is_ct = ((size_t)(leaf - path) == 3
+                             && strncmp(path, "ct/", 3) == 0);
+                rc = 2;
+                if (ix && ix[0]) {
+                    rc = pkg_index_lookup(path, range, url, sizeof url,
+                                          tag, sizeof tag, sha, sizeof sha,
+                                          pub, sizeof pub);
+                    if (rc == 0)
+                        return self->fetch_git(url, leaf, pub, range, tag, sha, depth);
+                    if (rc == -1) return -1;
                 }
-                if (ix == -1) return -1;
+                if (is_ct) {
+                    rc = pkg_pin_lookup(leaf, range, pver, sizeof pver,
+                                        url, sizeof url, tag, sizeof tag,
+                                        sha, sizeof sha);
+                    if (rc == 0)
+                        return self->fetch_git(url, leaf, "ct", range, tag, sha, depth);
+                    if (rc == -1) return -1;
+                }
+                if (!ix || !ix[0]) {
+                    fprintf(stderr,
+                        "ctc: no index resolver for '%s'\n"
+                        "  '%s' is a publisher-qualified package name; the built-in\n"
+                        "  pins cover the official packages only (ct/std).\n"
+                        "  publisher-qualified package:\n"
+                        "       ct get --index <file> %s\n"
+                        "       CT_INDEX=<file> ct get %s\n"
+                        "     the index is a local plain-text file; line format:\n"
+                        "       name version publisher git-url tag sha256:<64 hex>\n"
+                        "  known git URL:\n"
+                        "       ct get https://<host>/<publisher>/<repo>\n"
+                        "  local checkout:\n"
+                        "       ct get ./path-to-%s\n",
+                        path, path, path, path, leaf);
+                    return -1;
+                }
+                fprintf(stderr, "ctc: package '%s' is not in the index\n", path);
+                return -1;
             }
             return self->get_git(path, range, depth);
         }
@@ -1421,6 +1455,27 @@ impl PkgOps for Pkg {
            writing half of a new one. `--force` downgrades the mismatch to a
            warning, exactly as `ct install` does. */
         if (self->get_spec(spec, root, 0) != 0) return 1;
+        /* PH-77: a lock still spelling the legacy `std/std` identity is only
+           rewritten by `ct update`. Merging a fresh `ct/std` row beside it
+           would leave one package under two identities, which the build reader
+           rejects -- so refuse here and point at the migration. */
+        {
+            int legacy = 0, official = 0;
+            for (i = 0; i < self->nrecs; i++)
+                if (strcmp(self->recs[i].name, "ct/std") == 0) official = 1;
+            f = fopen("./ct.lock", "r");
+            if (f != NULL) {
+                char line[MAX_PKG_LINE];
+                while (fgets(line, sizeof line, f) != NULL)
+                    if (strncmp(line, "std/std ", 8) == 0) legacy = 1;
+                fclose(f);
+            }
+            if (legacy && official) {
+                fprintf(stderr, "ctc: ct.lock still pins 'std/std'; run 'ct update' "
+                                "to migrate it to 'ct/std'\n");
+                return 1;
+            }
+        }
         /* `ct get` names one spec; the rows it did not touch stay in the lock,
            so a second get cannot unpin the first package (PKG-2). */
         if (pkg_lock_keep(kept, sizeof kept) != 0) return 1;
@@ -1449,24 +1504,26 @@ impl PkgOps for Pkg {
             for (i = 0; i < self->nrecs; i++) {
                 struct PkgRec *r = &self->recs[i];
                 printf("%s{\"name\":\"%s\",\"version\":\"%s\",\"publisher\":\"%s\","
-                       "\"source\":\"%s\",\"url\":\"%s\",\"tag\":\"%s\","
+                       "\"source\":\"%s\",\"url\":\"%s\",\"spec\":\"%s@%s\","
+                       "\"tag\":\"%s\","
                        "\"commit\":\"%s\",\"store\":\"%s\",\"digest\":\"%s\","
                        "\"action\":\"%s\"}",
                        i ? "," : "", r->name, r->version, r->publisher,
-                       r->kind, r->url, r->tag, r->commit, r->store, r->digest, r->action);
+                       r->kind, r->url, r->url, r->version, r->tag,
+                       r->commit, r->store, r->digest, r->action);
             }
             printf("],\"summary\":{\"packages\":%d,\"installed\":%d,\"reused\":%d}}\n",
                    self->nrecs, ninst, nreuse);
         } else if (self->quiet) {
             for (i = 0; i < self->nrecs; i++)
-                printf("%s %s %s\n", self->recs[i].name, self->recs[i].version,
-                       self->recs[i].url);
+                printf("%s %s %s@%s\n", self->recs[i].name, self->recs[i].version,
+                       self->recs[i].url, self->recs[i].version);
         } else {
             printf("requested  %s\n", spec);
             for (i = 0; i < self->nrecs; i++) {
                 struct PkgRec *r = &self->recs[i];
                 printf("resolved   %s %s\n", r->name, r->version);
-                printf("  source   %s %s\n", r->kind, r->url);
+                printf("  source   %s@%s\n", r->url, r->version);
                 if (strcmp(r->tag, "-") != 0) printf("  tag      %s\n", r->tag);
                 if (strcmp(r->commit, "-") != 0) printf("  commit   %s\n", r->commit);
                 printf("  store    %s\n", r->store);
@@ -1677,7 +1734,8 @@ impl PkgOps for Pkg {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s get [--index <path>] [--force] [-q|--quiet] [--json] <spec>[@<range>]\n", self->prog);
                 printf("  spec: a local directory (. or / or file://) or a git package\n"
-                       "        (name resolved against CT_INDEX, else CT_REGISTRY, else an https URL)\n");
+                       "        (official ct/<name> from the built-in pins, a\n"
+                       "        <publisher>/<name> via CT_INDEX, or an https URL)\n");
                 printf("  --force  get even when a package 'requires' this compiler version\n");
                 printf("  -q, --quiet  one line per package: name version url\n");
                 printf("  --json       machine-readable result on stdout\n");
@@ -1906,6 +1964,71 @@ impl PkgOps for Pkg {
    fixed-size fields need -- so the driver reaches it through the wrappers below
    instead of through a struct accessor. */
 static struct Pkg g_pkg;
+
+/* --- PH-77 official pins -------------------------------------------------- */
+
+/* The official packages this compiler trusts without a network round-trip.
+   These are compile-time constants (D-010 #4): updating one is part of the
+   release checklist, and `test/ast/p77_external.sh` compares the row against
+   the published index when the network is available. `ct get std` and
+   `ct get ct/std` both land on this one row. */
+static int pkg_pin_lookup(const char *name, const char *range,
+                          char *ver, size_t vcap, char *url, size_t ucap,
+                          char *tag, size_t tcap, char *sha, size_t scap)
+{
+    static const char *const pnames[] = { "std" };
+    static const char *const pvers[]  = { "0.19.0" };
+    static const char *const purls[]  = { "https://github.com/ct-pkg/std" };
+    static const char *const ptags[]  = { "v0.19.0" };
+    static const char *const pshas[]  = {
+        "sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79"
+    };
+    int i, n;
+
+    n = (int)(sizeof pnames / sizeof pnames[0]);
+    for (i = 0; i < n; i++) {
+        if (strcmp(name, pnames[i]) != 0) continue;
+        /* The table carries one version per name; a range that excludes it is
+           a hard error, because no network lookup can widen a pin. */
+        if (range && range[0] && !g_pkg.range_match(range, pvers[i])) {
+            fprintf(stderr,
+                    "ctc: no official version of '%s' satisfies '%s' "
+                    "(the built-in pin is %s); use a URL to get another version\n",
+                    name, range, pvers[i]);
+            return -1;
+        }
+        if (strlen(pvers[i]) >= vcap || strlen(purls[i]) >= ucap
+            || strlen(ptags[i]) >= tcap || strlen(pshas[i]) >= scap)
+            return -1;
+        snprintf(ver, vcap, "%s", pvers[i]);
+        snprintf(url, ucap, "%s", purls[i]);
+        snprintf(tag, tcap, "%s", ptags[i]);
+        snprintf(sha, scap, "%s", pshas[i]);
+        return 0;
+    }
+    return 1;                       /* not an official package */
+}
+
+/* Resolve an official name to its source. An explicit index row that names
+   `ct/<name>` wins (D-010 #4); otherwise the built-in pin answers. */
+static int pkg_official_resolve(const char *name, char *url, size_t ucap,
+                                char *tag, size_t tcap, char *sha, size_t scap)
+{
+    char full[MAX_TEXT], ver[32], ipub[MAX_TEXT];
+    const char *ix;
+    int rc;
+
+    ix = g_pkg.have_index ? g_pkg.index : getenv("CT_INDEX");
+    if (ix && ix[0]) {
+        if (snprintf(full, sizeof full, "ct/%s", name) >= (int)sizeof full) return -1;
+        rc = pkg_index_lookup(full, "", url, ucap, tag, tcap, sha, scap,
+                              ipub, sizeof ipub);
+        if (rc == 0) return 0;
+        if (rc == -1) return -1;
+    }
+    return pkg_pin_lookup(name, "", ver, sizeof ver, url, ucap, tag, tcap, sha, scap);
+}
+
 
 /* --- S1 shared store ------------------------------------------------------ */
 
@@ -2413,6 +2536,11 @@ static int pkg_verify_lock(const char *prog, char lname[][MAX_TEXT], char lver[]
         snprintf(lver[*nlock], 32, "%s", tok[1]);
         snprintf(lns[*nlock], MAX_TEXT, "%s", tok[5]);
         snprintf(ldig[*nlock], 80, "%s", tok[6]);
+        /* PH-77: the old official identity is a warning, not a failure -- the
+           old store still satisfies the row, and `ct update` migrates it. */
+        if (strcmp(tok[0], "std/std") == 0)
+            fprintf(stderr, "ctc: warning: ct.lock uses the legacy publisher 'std' "
+                            "('std/std'); run 'ct update' to migrate it to 'ct/std'\n");
         if (!sha_hex_ok(tok[6])) {
             fprintf(stderr, "ctc: '%s' has an unsupported digest '%s' in ct.lock; re-run '%s get' to regenerate\n", tok[0], tok[6], prog);
             rc = 1;
@@ -2505,19 +2633,22 @@ static int pkg_lock_keep(char *dst, size_t cap)
     return 0;
 }
 
-/* S3: the v2 update is an offline pin audit. The store is verified, every
-   direct dependency must be covered by a row, and the pinned rows are written
-   back unchanged (no new version can appear without a network fetch). */
+/* S3: the v2 update is an offline pin audit. The store is verified and every
+   direct dependency must be covered by a row; the pinned rows are written back
+   unchanged. PH-77 adds the one migration this command owns: a legacy
+   `std/std` row is replaced by the official `ct/std` identity at the pinned
+   version, with the old store left in place (D-010 #5). */
 static int pkg_update_v2(const char *prog)
 {
     FILE *f;
-    char buf[MAX_LOCK];
+    char buf[MAX_LOCK], out[MAX_LOCK];
     size_t n;
     long sz;
     char pname[MAX_TEXT], pver[32], pdeps[MAX_PKG_DEPS][MAX_PKG_PATH];
     char lname[MAX_PKG_DEPS][MAX_TEXT], lver[MAX_PKG_DEPS][32];
     char lns[MAX_PKG_DEPS][MAX_TEXT], ldig[MAX_PKG_DEPS][80];
-    int ndeps, nlock, i, j, seen, rc;
+    char url[MAX_PKG_CMD], tag[MAX_TEXT], sha[80], oldver[32], newver[32];
+    int ndeps, nlock, i, j, seen, rc, outlen, legacy, official;
 
     ndeps = 0;
     nlock = 0;
@@ -2565,10 +2696,100 @@ static int pkg_update_v2(const char *prog)
     fclose(f);
     if (n != (size_t)sz) { fprintf(stderr, "ctc: cannot read './ct.lock'\n"); return 1; }
     buf[n] = 0;
+
+    /* PH-77: a legacy `std/std` row (the old publisher) is migrated in place.
+       The old store and its digest are left untouched; only the identity of
+       the pin changes, so a rollback to the old lock still builds. */
+    legacy = 0;
+    official = 0;
+    {
+        char *p = buf;
+        while (*p) {
+            if (strncmp(p, "std/std ", 8) == 0) legacy = 1;
+            else if (strncmp(p, "ct/std ", 7) == 0) official = 1;
+            while (*p && *p != '\n') p++;
+            if (*p == '\n') p++;
+        }
+    }
+    if (!legacy) {
+        f = fopen("./ct.lock", "w");
+        if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+        fputs(buf, f);
+        if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+        printf("updated %d package(s)\n", nlock);
+        return 0;
+    }
+    if (official) {
+        fprintf(stderr, "ctc: ct.lock pins both 'std/std' and 'ct/std'; "
+                        "remove one row before migrating\n");
+        return 1;
+    }
+    oldver[0] = 0;
+    {
+        char *p = buf;
+        while (*p) {
+            if (strncmp(p, "std/std ", 8) == 0) {
+                sscanf(p + 8, "%31s", oldver);
+                break;
+            }
+            while (*p && *p != '\n') p++;
+            if (*p == '\n') p++;
+        }
+    }
+    if (pkg_official_resolve("std", url, sizeof url, tag, sizeof tag,
+                             sha, sizeof sha) != 0) {
+        fprintf(stderr, "ctc: cannot resolve the official pin for 'std'\n");
+        return 1;
+    }
+    g_pkg.locklen = 0;
+    g_pkg.lock[0] = 0;
+    g_pkg.nlocks = 0;
+    g_pkg.nseen = 0;
+    g_pkg.nrecs = 0;
+    if (g_pkg.fetch_git(url, "std", "ct", "", tag, sha, 0) != 0) {
+        fprintf(stderr, "ctc: cannot migrate 'std/std' to the official pin\n");
+        return 1;
+    }
+    if (g_pkg.nrecs == 0) {
+        fprintf(stderr, "ctc: cannot migrate 'std/std': the official pin produced no row\n");
+        return 1;
+    }
+    snprintf(newver, sizeof newver, "%s", g_pkg.recs[g_pkg.nrecs - 1].version);
+    outlen = 0;
+    out[0] = 0;
+    {
+        char *p = buf;
+        while (*p) {
+            char *e = p;
+            size_t ll;
+            while (*e && *e != '\n') e++;
+            ll = (size_t)(e - p) + (*e == '\n' ? 1u : 0u);
+            if (strncmp(p, "std/std ", 8) == 0) {
+                size_t nl2 = strlen(g_pkg.lock);
+                if (outlen + (int)nl2 >= (int)sizeof out) {
+                    fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
+                    return 1;
+                }
+                memcpy(out + outlen, g_pkg.lock, nl2);
+                outlen += (int)nl2;
+            } else {
+                if (outlen + (int)ll >= (int)sizeof out) {
+                    fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
+                    return 1;
+                }
+                memcpy(out + outlen, p, ll);
+                outlen += (int)ll;
+            }
+            out[outlen] = 0;
+            p = e;
+            if (*p == '\n') p++;
+        }
+    }
     f = fopen("./ct.lock", "w");
     if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
-    fputs(buf, f);
+    fputs(out, f);
     if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+    printf("migrate std/std %s -> ct/std %s\n", oldver, newver);
     printf("updated %d package(s)\n", nlock);
     return 0;
 }
@@ -2995,7 +3216,8 @@ int ct_pkg_update(int argc, char **argv, const char *prog, const char *version)
     for (ai = 0; ai < argc; ai++) {
         if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
             printf("usage: %s update\n", prog);
-            printf("  verify the store and every ct.pkg dependency against ct.lock; rewrite the pins\n");
+            printf("  verify the store and every ct.pkg dependency against ct.lock;\n");
+            printf("  migrate a legacy 'std/std' pin to the official 'ct/std' identity\n");
             return 0;
         }
         if (strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0) {
@@ -3022,7 +3244,7 @@ int ct_pkg_verify(int argc, char **argv, const char *prog, const char *version)
     for (ai = 0; ai < argc; ai++) {
         if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
             printf("usage: %s verify [--strict]\n", prog);
-            printf("  check the store against ct.lock (offline)\n");
+            printf("  check the store against ct.lock (offline); a legacy 'std/std' pin only warns\n");
             printf("  --strict  reject dir rows\n");
             return 0;
         }
