@@ -57,8 +57,8 @@ P1 批，不占 phase；纯 docs，除计数脚本外不 bump。
 实测命令与值：
 
 - `sh test/run.sh` → `156 passed, 0 failed`；
-- `bash selfhost/check-ast.sh` → `1518 passed, 0 failed, 4 skipped`；
-- `ls test/ast/errors/*.ct | wc -l` → `295`；`find test/ast -maxdepth 1 -type d | wc -l` → `299`（行为探针 298）；
+- `bash selfhost/check-ast.sh` → `1519 passed, 0 failed, 4 skipped`；
+- `ls test/ast/errors/*.ct | wc -l` → `295`；`find test/ast -mindepth 1 -maxdepth 1 -type d | wc -l` → `299`（含 `errors/`；行为探针 298）；
 - `find examples -mindepth 1 -maxdepth 1 -type d | wc -l` → `51`；
 - `python3 editors/vscode/test/check-grammar.py` → `== 169 checks, 0 failed ==`。
 
@@ -66,7 +66,7 @@ P1 批，不占 phase；纯 docs，除计数脚本外不 bump。
 | --- | --- | --- |
 | D-1 | fixed | [typecheck-semantic-plan](../../docs/planning/typecheck-semantic-plan.md) 标题/性质改为「历史计划，已交付」；基线标注 v0.65.1 起草、收口核对 2026-11-20；§6 状态由「规划中（未开卡）」改为「✅ 已收口」，版本 v0.67.0–v0.70.0 |
 | D-2 | fixed | [docs/README](../../docs/README.md) 类型检查行改为「已交付、历史计划；PH-68–71 已收口（版本 0.67.0–0.70.0）」，不再写「未开卡」 |
-| D-3 | fixed | [test/README](../../test/README.md)：`ast/errors` 141→**295**（含实测命令）；`ast/` 119→**299** 目录（含 `errors/`；行为探针 298）；另补 runner 实测 `156 passed, 0 failed` / `1518 passed, 0 failed, 4 skipped` |
+| D-3 | fixed | [test/README](../../test/README.md)：`ast/errors` 141→**295**（含实测命令）；`ast/` 119→**299** 目录（含 `errors/`；行为探针 298）；另补 runner 实测 `156 passed, 0 failed` / `1519 passed, 0 failed, 4 skipped` |
 | D-4 | fixed | [tutorial](../../docs/tutorial.md)「16 个可运行示例」→「**51 个示例目录**」（`find examples -mindepth 1 -maxdepth 1 -type d \| wc -l` 实测；注明 `49_socket` 为文档型） |
 | D-5 | fixed | [AGENTS](../../AGENTS.md) 实例化节 `phase=PH-66` → `phase=PH-77`（只改该字段，未动生成块） |
 | D-6 | fixed | [session-map](../../docs/session-map.md) 把截断表格的 blockquote 移到表后；PH-38…PH-77 行连成完整表格 |
