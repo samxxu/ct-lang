@@ -80,7 +80,7 @@
 | Phase 67 | 无真机硬件能力扩展（PLL / nRF52840 / FreeRTOS / DMA / GDB） | ✅ 完成 | v0.66.0 | [卡](design/phase67.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
 | Phase 68 | 类型核心（`ct check --types`；修 234 误报） | ✅ 完成 | v0.67.0 | [卡](design/phase68.md) · [方案](planning/typecheck-semantic-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
 | Phase 69 | 跨单元/泛型/trait 类型检查 | ✅ 完成 | v0.68.0 | [卡](design/phase69.md) · [方案](planning/typecheck-semantic-plan.md) |
-| Phase 70 | CFG/定值/控制流语义检查 | 🟨 实施中（已开卡，排队） | v0.69.0（拟） | [卡](design/phase70.md) · [方案](planning/typecheck-semantic-plan.md) |
+| Phase 70 | CFG/定值/控制流语义检查 | ✅ 完成 | v0.69.0 | [卡](design/phase70.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 71 | own/borrow/Drop + 包级 strict | 🟨 实施中（已开卡，排队） | v0.70.0（拟） | [卡](design/phase71.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 72 | 静默错误与诊断批（LANG-3 MAX_CALLS / LANG-4 下标类型 / LANG-11 产物冲突 / LANG-16 诊断列 / DF-1 预处理截断 / SH-76 内置层误诊 / SH-18+LANG-15 限定名） | 🟨 实施中（已开卡，排队） | v0.71.0（拟） | [卡](design/phase72.md) · [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
 | Phase 73 | 字段可见性与 ABI（LANG-9：`pub` 决定头文件导出面） | 🟨 实施中（已开卡，排队） | v0.72.0（拟） | [卡](design/phase73.md) · [LANG-9](../issues/lang/lang-9-struct-field-visibility-abi.md) |

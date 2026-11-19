@@ -915,6 +915,13 @@ else
     bad "PH-70-R2 return" "$(sed -n '1,8p' "$work/p70r.out")"
 fi
 
+sh test/ast/p70_definite.sh "$work/ct-ast" >"$work/p70d.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-70-R2 definite (return + uninit)"
+else
+    bad "PH-70-R2 definite" "$(sed -n '1,8p' "$work/p70d.out")"
+fi
+
 sh test/ast/p70_uninit.sh "$work/ct-ast" >"$work/p70i.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-70-R2 uninit (uninitialized read)"

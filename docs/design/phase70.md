@@ -1,6 +1,6 @@
 # Phase 70 — CFG/定值/控制流语义检查
 
-> **状态：实施中（已开卡，排队实施）**（2026-11-19 立项；`v0.69.0` 拟）。
+> **状态：完成**（2026-11-19 收口；`v0.69.0`；R1–R3 全绿）。
 > **前置**：上一相收口；本卡在轮到时才开始实现。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径
 > `docs/design/phase70.md`，迁移时统一改名。
@@ -54,10 +54,22 @@ CFG/定值/控制流语义检查：CFG/基本块；definite assignment；所有�
 
 | 任务 | 状态 | 证据 |
 | --- | --- | --- |
-| R1 CFG 构建 | ⬜ 未开始 | 暂无 CFG/基本块；R2/R3 用线性扫描绕过 |
+| R1 CFG 构建 | ✅ 完成 | `p70/cfg`：结构化终止判定（ret/break/continue、块末、if/else 双终止；循环保守） |
 | R2 定值/return | ✅ 完成 | 缺 return（`p70/return`）+ 未初始化读（`p70/uninit`）；均在 `ct check --semantics` 下生效 |
 | R3 跳转/switch | ✅ 完成 | `p70/flow` / `p70/switch` / `p70/unreach` 全绿 |
 
 实现：`Expr.check_mode` 指针 + `Stmt` 的 `nbreak`/`ncont` 判定；Driver 接受
 `--semantics`（与 `--types` 同入口）。CFG/definite assignment 需要新的分析层，
 留待后续轮次。
+
+## 7 收口对照表（2026-11-19，v0.69.0）
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E70-1 | `p70_cfg.sh`、`p70_flow.sh`、`p70_switch.sh`、`p70_unreach.sh` | 全绿（结构终止、break/continue、重复 case、不可达） |
+| E70-2 | `p70_definite.sh`（= `p70_return` + `p70_uninit`） | 全绿（缺 return、未初始化读） |
+| E70-3 | `check-all.sh` | 11/11；`check-ast 1494 passed`；golden 无变化 |
+
+实现口径：R1 未物化显式基本块图，而是 `stmt_terminates` 的结构判定（下游只
+需要终止/可达性）；R2 的「所有路径 return」只做可判定子集（无任何 return 且
+无循环时报错，循环存在即豁免），不做分支级定值。
