@@ -1090,6 +1090,16 @@ else
     bad "LANG-5 field (subscript result receiver)" "$(sed -n '1,8p' "$work/p77l5.out")"
 fi
 
+# LANG-7: a static call whose receiver is a type name (typedef / enum) used to
+# report `use of an undeclared variable` at the dot; the probe pins the
+# type-name diagnostic and the boundary (an unseen name is still undeclared).
+sh test/ast/p77_lang7_static_type.sh "$work/ct-ast" >"$work/p77l7.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "LANG-7 static (type-name receiver)"
+else
+    bad "LANG-7 static (type-name receiver)" "$(sed -n '1,8p' "$work/p77l7.out")"
+fi
+
 sh test/ast/p71_own.sh "$work/ct-ast" >"$work/p71own.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-71-R1 own (double delete)"
