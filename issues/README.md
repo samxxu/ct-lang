@@ -225,6 +225,8 @@
 | DOC-71 | Low | range 初值的 `$` 被写成「下标」，实现绑定的是当前成员值（`1..6($ * $)` = 1 4 9 16 25；纯文档） | [doc71-range-dollar-is-member-not-index.md](docs/doc71-range-dollar-is-member-not-index.md) |
 | DOC-72 | High | spec/外围文档审计反馈：版本标签、L0/L2 插叙、architecture 过时、spec-cases；挂 v0-PH-67 R5，不占 phase | [doc-72-spec-audit-followup.md](docs/doc-72-spec-audit-followup.md) |
 | DOC-73 | High | LLM 生态入口：std / ct-pkg / index；先复用，不重写标准库/包 | [doc-73-llm-ecosystem.md](docs/doc-73-llm-ecosystem.md) |
+| DOC-74 | P1 | phase-ID 迁移未执行：无账本/双认，blocker A/B/C 未裁定 | [doc-74-phase-id-migration-blocked.md](docs/doc-74-phase-id-migration-blocked.md) |
+| DOC-75 | P1 | v0.77 文档漂移批：typecheck/test README/tutorial/AGENTS/session-map | [doc-75-v077-doc-drift.md](docs/doc-75-v077-doc-drift.md) |
 
 ### `testing/` —— 测试覆盖度
 
@@ -248,6 +250,7 @@
 | TEST-16 | Medium | `ct check` 的 `import` 拒绝无回归断言 | [test16-check-import-no-guard.md](testing/test16-check-import-no-guard.md) |
 | TEST-17 | High | Phase 26 夹具只覆盖返回/形参替换；`(T)` / `sizeof(T)` / `offsetof` / 去重 / 容量 / 命名回退无断言（已修，`f5f1092`，`v0.26.1`；复核 `reopened`；`v0.26.2` 根因修复 + 128 夹具 + `tparam_residue()` 防线；复核 `verified`，盲区见条目） | [test17-phase26-generic-coverage-gap.md](testing/test17-phase26-generic-coverage-gap.md) |
 | TEST-18 | Medium | `tparam_residue()` 只覆盖编译模式夹具的实例体；`.h`、errors、module 构建产物、语料仍是盲区（已消假阳，覆盖与代价见条目） | [test18-residue-scan-coverage.md](testing/test18-residue-scan-coverage.md) |
+| TEST-23 | P2 | v0.77 覆盖缺口：无行覆盖、ct-ast 无单测、容量上限/近相 example 缺失 | [test-23-v077-coverage-gaps.md](testing/test-23-v077-coverage-gaps.md) |
 
 ### `ci/` —— 门禁与入口
 
@@ -261,6 +264,10 @@
 | CI-6 | Low | CI 两个 job 名仍写 `nine hard gates`（实际 12 道） | [ci-6-gate-label-nine.md](ci/ci-6-gate-label-nine.md) |
 | CI-7 | Medium | `v0.19.0` 没有 git tag，安装与验收口径不可用（**已解决**：2026-11-15 补 annotated tag，归档恢复 200） | [ci-7-v0190-untagged.md](ci/ci-7-v0190-untagged.md) |
 | CI-8 | Medium | 方法论 G9 的 spec pin 缺失，项目无法自证与主规范同版 | [ci-8-g9-spec-pin-missing.md](ci/ci-8-g9-spec-pin-missing.md) |
+| CI-9 | P1 | check-all 可被 ct get 的 git 子进程无限挂起：无超时、无禁交互 | [ci-9-network-hang-no-timeout.md](ci/ci-9-network-hang-no-timeout.md) |
+| CI-10 | P1 | 治理门禁 G1/G2/G4/G5/G6/G7/G9 无同名入口，也未登记 deviation | [ci-10-governance-gates-missing.md](ci/ci-10-governance-gates-missing.md) |
+| CI-11 | P1 | 问题台账未闭合：220 个状态行中 175 行不合规，7+ 已修仍 open | [ci-11-issue-ledger-not-closed.md](ci/ci-11-issue-ledger-not-closed.md) |
+| CI-12 | P2 | fix-tags deviation 与本地 tag 不一致：v0.63.3/.4/.5 缺失 | [ci-12-fix-tags-missing.md](ci/ci-12-fix-tags-missing.md) |
 
 ### `selfhost/` —— 代码结构与容量
 
@@ -335,6 +342,8 @@
 | SH-71 | Info | 类型宿主映射的单元限制：`.h.ct` 不许放 `map`、`.m.ct` 看不见接口（**A-1 已修** `fb55985c`：`.m.ct` 可 import `.h.ct`；A-2 维持拒绝） | [sh71-host-map-unit-boundary.md](selfhost/sh71-host-map-unit-boundary.md) |
 | SH-72 | Medium | 接口方法返回接口值在调用点报 `cannot infer the type to box`，但 vtable 槽已给出返回类型（**已修** `5ff69ac3`，2026-11-15；回归 `test/ast/238_iface_ret_value`） | [sh72-iface-method-return-box.md](selfhost/sh72-iface-method-return-box.md) |
 | SH-73 | Info | 动态派发的临时值接收者被拒：`a.m().n()` 不能作下一跳（保持：有意边界；延后） | [sh73-temp-receiver-dynamic-dispatch.md](selfhost/sh73-temp-receiver-dynamic-dispatch.md) |
+| SH-93 | P2 | c-boundary 的 cwd 后门：从 CT 仓根看外部输入也被 allow | [sh93-c-boundary-cwd-backdoor.md](selfhost/sh93-c-boundary-cwd-backdoor.md) |
+| SH-94 | P2 | ct-ast 巨型单元与重复上限常量：Expr/Emitter 6–7k 行，MAX_GENERIC_INSTS/MAX_TEXT 多份 | [sh94-giant-units-duplicate-constants.md](selfhost/sh94-giant-units-duplicate-constants.md) |
 | SH-74 | **High** | impl 方法返回接口值时生成 `&_self`：指向被调栈帧且多一层间接，`.self` 逃逸后 exit 0 读到错误值（**已修** `d6e82e25`，2026-11-15；回归 `test/ast/237_iface_ret_self`） | [sh74-impl-iface-return-self-codegen.md](selfhost/sh74-impl-iface-return-self-codegen.md) |
 | SH-75 | **High** | 非 `self` 的局部 struct 返回接口值：装箱取局部地址，悬垂栈帧静默读错值（**已修** `b5797cbf`，2026-11-15；回归 `test/ast/239_local_iface_return` + ASAN UAR） | [sh75-local-iface-return-dangling.md](selfhost/sh75-local-iface-return-dangling.md) |
 | SH-76 | **High** | 找不到内置层时泛型字段被误诊为 `expected a field name`：容器字段在源码树外不可用（patch 0.53.7） | [sh76-builtin-layer-missing-misdiagnosis.md](selfhost/sh76-builtin-layer-missing-misdiagnosis.md) |
