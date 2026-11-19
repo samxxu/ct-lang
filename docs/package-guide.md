@@ -109,31 +109,49 @@ MVS（取满足范围的最低版本）。
 
 ### 4. 消费
 
-索引由 `ct get` 读取，是纯文本、空白分隔的六字段行：
+官方包的身份是 `publisher = ct`，规范名 `ct/std`（锁行与 store 路径都是 `ct/<name>`）。`ct` 内置一张
+**官方 pin 表**：编译期常量，含 `name` / `version` / `publisher` / `url` / `tag` / `sha256`，不联网、
+不读可变索引；发布新官方版本时随 `ct` 版本一起更新。因此干净 HOME、没有索引也能 `ct get ct/std`。
+
+解析优先级（[D-010](decisions/D-010.md)）：
+
+| 输入 | 解析 |
+| --- | --- |
+| 裸名 `std` | 只查内置 pin 表；其他裸名**硬错**并提示 `<publisher>/<name>` |
+| `ct/<name>` | pin 表；显式 `--index` / `CT_INDEX` 命中 `publisher = ct` 行时以索引为准 |
+| `<pub>/<name>` | 必须索引 / URL / 本地目录；索引缺失即硬错，提示限定名写法 |
+| 显式 URL / 本地目录 | 直连，行为不变 |
+
+第三方包必须写 `publisher/<name>`，同名也不例外；`CT_REGISTRY` 不再是裸名的回落路径。
+索引是纯文本、空白分隔的六字段行：
 
 ```
 name version publisher git-url tag sha256:<64 hex>
 ```
 
-旧的五字段行（无 publisher）仍可读；裸名同时命中两个 publisher 时 `ct get` 硬错
-`'<name>' is ambiguous; write <publisher>/<name>`。摘要按 `ct.lock` 的同一算法计算（按路径排序后
-把每个文件的相对路径与内容汇入单流 SHA-256）。本地可用 `CT_INDEX=<file>` 或 `--index <file>`
-指向任意纯文本索引。消费端与发布端（`package.sh`）的完整契约见
-[ct-pkg-get-contract](planning/ct-pkg-get-contract.md)。
+摘要按 `ct.lock` 的同一算法计算（按路径排序后把每个文件的相对路径与内容汇入单流 SHA-256）。
+本地可用 `CT_INDEX=<file>` 或 `--index <file>` 指向任意纯文本索引。消费端与发布端（`package.sh`）
+的完整契约见 [ct-pkg-get-contract](planning/ct-pkg-get-contract.md)。
 
 ```sh
-ct get <pub>/<name>@<range>  # 发布方限定；裸名仅在索引唯一时可用（歧义即硬错）
+ct get ct/std@0.19.0         # 官方包：内置 pin 表，无索引可用
+ct get <pub>/<name>@<range>  # 第三方：发布方限定 + --index/CT_INDEX
 ct get ./path                # 本地目录同样按清单的 publisher/ns-root 落 store
 ct verify [--strict]         # 离线：v2 校验 store、v1 校验 vendor；--strict 拒绝 dir/v1
 ct install                   # 离线：校验摘要与依赖覆盖，打印带 store ns-root 的 ct build 命令
 ct migrate                   # 离线：把 vendor/ 搬进 store，重写 v2 lock（保留版本/发布方）
-ct update                    # 离线：v2 校验 store 并保留钉住的版本
+ct update                    # 离线：v2 校验 store 并保留钉住的版本；迁移旧 std/std 身份
 ```
+
+`ct update` 遇到旧官方身份 `std/std` 时解析 pin 目标、改写为 `ct/std <new>`，打印
+`migrate std/std <old> -> ct/std <new>`，旧 store 只读保留；`ct verify` 对旧身份只告警
+`legacy publisher 'std'`，不判失败。`ct install` / `ct build` 永不重写锁。
 
 `ct verify` 只做摘要校验，**不读 `ct.pkg`**；清单里的 `dep` 是否被 `ct.lock` 覆盖由 `ct install` 判定
 （缺依赖时报 `dependency '<spec>' is not satisfied by ct.lock`）。
-`ct get` 默认逐包打印 `requested`、`resolved`、`source`、`tag/commit`、`store`、`digest` 与 `action`；
-`-q` / `--quiet` 每包一行 `name version url`；`--json` 输出 `requested`、`packages[]`、`summary`。
+`ct get` 默认逐包打印 `requested`、`resolved`、`source`（单个 `url@<包版本>`）、`tag`、
+`commit`、`store`、`digest` 与 `action`；`-q` / `--quiet` 每包一行 `name version url@version`；
+`--json` 输出 `requested`、`packages[]`、`summary`，每个包另有 `"spec":"<url>@<version>"`。
 
 `ct get` 一次只解析一个 spec，但会保留 `ct.lock` 中本次没有重解的其它行；重复 get 同一个包只替换
 该包的行，不会重复。这样再 get 一个新包不会把先前钉住的版本弄丢，随后的 `ct update` 仍按锁里的

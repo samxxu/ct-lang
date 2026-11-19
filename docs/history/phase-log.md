@@ -183,6 +183,7 @@
 | v0.61.1 | 新 issue 批处理（2026-11-16） | LANG-18 泛型指针字段夹具；SH-81 限定名无索引报错；SH-82 复核已返回非零；SH-83 v2 install 不再打印 -I；SH-85 PK-8 跳过 docs/issues/test 与 .md；tag `v0.61.1`。 |
 | v0.62.0 | Phase 63 删除 vendor 支持（PH-54 S7，2026-11-16） | build/get/install/verify/update 去 vendor 读写；v1 lock 只报错；migrate 保留；test/pkg 141/0；tag `v0.62.0`。 |
 | v0.62.1 | P0 数组/const 的 vptr 静态初始化（REQ-HW-001/002，2026-11-16） | 带 trait 的数组元素与 const 标量/const 数组的 vptr 改由 C 初值本身写（`emit_elem_vptrs` 注入到元素花括号内），数组外层不再出现顶层设计式；带初值数组不再发 constructor，无初值数组保持原路径；多维 trait 数组在 `ct` 阶段硬错并给位置；`unqual` 让 `const struct X` 也能解析到结构体；25 个 case 的 `.c`/`.h` golden 各变 1 行 banner；check-ast 1457/0；tag `v0.62.1`。 |
+| v0.77.0 | PH-77 官方包身份与解析契约（2026-11-19） | 内置官方 pin 表（`std 0.19.0 ct … v0.19.0 sha256:432086f0…`，编译期常量、不联网）；裸名只解析官方 pin，第三方裸名硬错并提示 `<publisher>/<name>`；`ct/<name>` 以显式索引的 `publisher = ct` 行优先、pin 兜底；`ct get` 三态输出 `url@<包版本>` + tag 单列 + JSON `spec`；`ct update` 自动迁移 `std/std` → `ct/std`（旧 store 保留、`ct verify` 只告警、install/build 不重写锁）；install.sh / tutorial / README / package-guide / AGENTS 同步 `ct get ct/std`；p77_bare/output/migrate/docs/install/external 探针接入 check-ast；`CTC_VERSION` 五处同步，51 个 golden/expected 仅版本 token 变化。 |
 | v0.76.1 | SH-92 修复：void 跳 `$x` 在 `$` 处拒绝（2026-11-19） | REV PH-76 发现；补 void 负例与显式检查。 |
 | v0.76.0 | PH-76 链中物化 `$name`（2026-11-19） | S1 语法、S2 类型、S3 发射（`{x=call; x.next()}`）、S4 文档；v1 限语句表达式，type-host/`?.` 拒绝。 |
 | v0.74.0 | PH-75 闭包作方法实参（2026-11-19） | SH-65 pair 形方法收闭包并正确发射；SH-67 单 fp 形态硬错。 |

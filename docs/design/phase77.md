@@ -1,6 +1,6 @@
 # Phase 77 — 官方包身份与解析契约（`ct/std`）
 
-> **状态：规划中（未开卡，排队）**（2026-11-19 立项；`v0.77.0` 拟）。
+> **状态：完成（S0–S5 / E77-1–E77-8；`v0.77.0`）**（2026-11-19 立项并收口）。
 > **前置**：PH-76 先收口；两卡无技术依赖，但按号顺序执行，不插队。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/design/phase77.md`，迁移时统一改名。
 > **依据**：需求方 2026-11-19 裁定；[D-010](../decisions/D-010.md)；[PKG 索引审计](../reviews/2026-11-17-pkg-index-audit.md)；
@@ -179,3 +179,18 @@ resolved   ct/std 0.4.0
 | 官方索引六字段行（含 publisher） | `ct-pkg/index` 仓 | 行内容与 pin 表一致 |
 | 消费包仓（ct-fsguard 等）旧锁迁移 | 各包仓 | `ct update` 后锁写 `ct/std` |
 | 索引生产端 `std 0.3.2` 旧行退役 | `ct-pkg/index` 仓 | 不再被任何默认路径命中 |
+
+## 8 收口对照（2026-11-19）
+
+| 判据 | 证据 | 结果 |
+| --- | --- | --- |
+| E77-1 | 干净 HOME、无索引：`ct get std` 成功；锁行 `ct/std 0.19.0 git https://github.com/ct-pkg/std …`；store `$CT_HOME/pkg/ct/std/0.19.0` | ✅ p77_external（联网）；干净 HOME 的离线形状由 p77_bare 的 `ct/std@0.19.0` 覆盖 |
+| E77-2 | `ct get std` 与 `ct get ct/std` 写出的 `ct.lock` 逐字节相同；离线解析两者的 pin 诊断逐字节相同 | ✅ p77_external + p77_bare |
+| E77-3 | 索引含 `acme/std` 时裸 `std` 仍走官方 pin；`ct get acme/std` 取第三方；裸 `acme`/`hal` 硬错并提示 `<publisher>/<name>` | ✅ p77_bare |
+| E77-4 | 文本 `source url@version` + `tag` 单列；`--quiet` 每行 `name version url@version`；`--json` 含 `spec` | ✅ p77_output |
+| E77-5 | `ct update` 打印 `migrate std/std 0.3.2 -> ct/std 0.19.0`；旧 store 保留；`ct verify` 对旧身份只告警；install/build 不改锁；双身份硬错 | ✅ p77_migrate |
+| E77-6 | install.sh / tutorial / README / package-guide 统一 `ct get ct/std`；文档推荐命令实测成功并 build+run | ✅ p77_install |
+| E77-7 | `check-all` 与包用例全绿；无新增安装期 git/index 依赖；pin 表与官方索引行（版本/tag/sha）一致 | ✅ p77_external（联网一致性探针）；`test/pkg/run.sh` 147/0 |
+| E77-8 | `ct-pkg/std` `publisher = ct`、`v0.19.0` 摘要 `sha256:432086f0…`；索引六字段行；干净 HOME 上 `ct get ct/std@0.19.0` 成功 | ✅ p77_external |
+
+> 离线门禁中 p77_external 以 `skip` 退出（无网络/无 curl），不判失败；其余 p77 探针全部离线可重复。

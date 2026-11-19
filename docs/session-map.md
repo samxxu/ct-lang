@@ -30,5 +30,5 @@
 | PH-74 模型导出（R1–R3 / E74-1–3） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.73.0 |
 | PH-75 闭包作方法实参（R1–R2 / E75-1–3） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.74.0 |
 | PH-76 链中 inline 物化 `$name`（S1–S4 / E76-1–5） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.76.0 |
-| PH-77 官方包身份与解析契约（规划中，排队） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-77 |
+| PH-77 官方包身份与解析契约（S0–S5 / E77-1–E77-8） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | PH-77 ✅ v0.77.0 |
 | `HW-1`/`HW-2` 硬件批次 | 外部依赖（无硬件） | REQ | 只登记，不阻塞 |

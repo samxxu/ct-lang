@@ -1,6 +1,6 @@
 # ct — C with Traits 编译器
 
-> **v0.76.1** · 中文 · [English](README.en.md)
+> **v0.77.0** · 中文 · [English](README.en.md)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
 编译路径（`ct compile` / `ct build`）不做类型检查、不做优化；可选的 `ct check` 只做受限语义检查
@@ -447,7 +447,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ct build --lib <root.h.ct> [-o <lib.a>]` | C ABI 静态库：根 `.h.ct` 的 C 兼容 `pub` 函数进入 `<base>.abi.h`，产物为 `lib<base>.a`（`-o` 可改；`--outdir` 默认 `.ctbuild`）；泛型模板跳过并警告，不兼容签名/`main`/`pub` 全局/shim 硬错；`nm -g` 面 ⊋ 导出面，只有 `.abi.h` 的声明是 ABI（Phase 39） |
 | `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`（含 `import` 时复用 `ct build` 的单元图）：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移（以及既有的 leak / 借用类发现）一律以 `error:` 报告，有任何发现退出 `1`，干净退出 `0`（`--diagnostics=json` 时对象带 `"severity":"error"`，并带 `"col"`） |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |
-| `ct get` / `ct update` / `ct install` / `ct verify` / `ct migrate` | 包管理：拉包进共享 store（`$CT_HOME/pkg/<publisher>/<name>/<version>/`）、写 v2 `ct.lock`；`ct build` 自动读 lock，离线校验 / 迁移并打印构建命令（裸名可经 `--index` / `CT_INDEX` 查显式索引；包作者见 [docs/package-guide.md](docs/package-guide.md)，包仓发布/索引接入规则见 [提案](docs/proposals/ct-pkg-package-maintainer-rules.md)，待目标组受理）；官方包在 [ct-pkg](https://github.com/ct-pkg)：`hal`（契约）、`hal-posix`（平台）、`std`（标准库，含 C 映射）。S7 后不再读写 `vendor/`；旧工程用 [`ct migrate`](docs/package-guide.md#8-v1-迁移ct-migrate) 一次性迁入 store |
+| `ct get` / `ct update` / `ct install` / `ct verify` / `ct migrate` | 包管理：拉包进共享 store（`$CT_HOME/pkg/<publisher>/<name>/<version>/`）、写 v2 `ct.lock`；`ct build` 自动读 lock，离线校验 / 迁移并打印构建命令（官方包由内置 pin 表解析，裸名只解析官方包；第三方写 `<publisher>/<name>` 并配 `--index` / `CT_INDEX`；包作者见 [docs/package-guide.md](docs/package-guide.md)，包仓发布/索引接入规则见 [提案](docs/proposals/ct-pkg-package-maintainer-rules.md)，待目标组受理）；官方包在 [ct-pkg](https://github.com/ct-pkg)：`hal`（契约）、`hal-posix`（平台）、`std`（标准库，含 C 映射）。S7 后不再读写 `vendor/`；旧工程用 [`ct migrate`](docs/package-guide.md#8-v1-迁移ct-migrate) 一次性迁入 store |
 | `ct -v` / `ct -h` | 版本 / 用法 |
 
 退出码：成功 `0`，语法或 I/O 错误 `1`（`ct check` 有任何语义发现，或 `ct build` 遇到 impl 签名漂移，也是 `1`）。源码诊断格式为 `文件:行:列: error: 描述`；驱动层错误以 `ctc:` 开头
@@ -487,7 +487,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### 4. 仓库结构
 
 `selfhost/` 是自举链：`l0/`（C 种子）→ `l1/`（冻结）→ `l2/`（回归 oracle）→ `ct-ast/`（主线，提供 `ct` 安装入口）；
-`test/` 是测试与 golden；`docs/` 是文档；标准库是独立的 ct-pkg 包 `std`（`ct get std` 获取，不随仓库发布）；`test/bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。
+`test/` 是测试与 golden；`docs/` 是文档；标准库是独立的 ct-pkg 包 `ct/std`（`ct get ct/std` 获取，不随仓库发布）；`test/bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。
 目录级说明见 [selfhost/README.md](selfhost/README.md)、[test/README.md](test/README.md) 与 [docs/architecture.md](docs/architecture.md)。
 
 ### 5. 文档与测试

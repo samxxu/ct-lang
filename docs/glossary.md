@@ -155,7 +155,7 @@
 | 子命令 install | `ct install` | 离线校验 store 与 v2 `ct.lock`（逐包摘要 + 清单依赖覆盖），把各包的 `-I` / `cflags` / `ldflags` 拼成**一条** `ct build` 命令；不修改清单、不联网、不调 `cc`（Phase 8.3，17.5 扩元数据，S7 后） |
 | 子命令 verify | `ct verify` | 离线校验 store 与 v2 `ct.lock` 后报 `verified N package(s)`；只读，不写任何文件（Phase 17.5，S7 后） |
 | 版本范围（range） | `^` / `~` / 精确 / `*` / `>=` `>` `<` `<=` `=` | 空格分隔的子句视为 AND；`^` / `~` 沿用原语义，比较器按三段版本数比较（Phase 17.5，不做完整 SemVer） |
-| 显式索引（index） | `--index <file>` / `CT_INDEX` | 纯文本，每行 `name version git-url tag sha256:<hex>`；仅在 `ct get` 的裸名（无 spec 前缀）时查询，无内建 URL、不走 HTTP（Phase 17.5） |
+| 显式索引（index） | `--index <file>` / `CT_INDEX` | 纯文本，每行 `name version publisher git-url tag sha256:<hex>`；`ct get` 用它解析 `<publisher>/<name>`，并可在命中 `publisher = ct` 行时覆盖官方 pin；裸名只查内置 pin 表，不查索引（PH-77） |
 | 输出选项 | `-o <file\|dir>` | |
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
 | C 标准目标 | `--std=c99`（默认）/ `--std=gnu99` | Phase 6.4：暂无可差异发射点，`build` 把它写进建议的 `cc` 命令；其他值硬报错 |

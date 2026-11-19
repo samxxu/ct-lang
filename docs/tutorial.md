@@ -708,9 +708,13 @@ static int raw_helper(int n) { return n + 1; }
 补 store 的 include root，消费者不再手写 `-I`：
 
 ```sh
-ct get ct/std@^0.1.0
+ct get ct/std@0.19.0        # 官方 pin 表；无索引、无网络索引仓
 ct build main.ct -o main
 ```
+
+`ct/std` 的版本来自编译器内置的官方 pin 表（`publisher = ct`，不联网、不读可变索引）；裸名 `std`
+只解析官方包，第三方包必须写 `<publisher>/<name>` 并配 `--index` / `CT_INDEX`。`ct get` 的输出
+把来源写成 `url@<包版本>`，tag 单列；旧工程的 `std/std` 锁由 `ct update` 自动迁移。
 
 namespace 固定为 `std::<mod>`，调用只有一种形态：方法。宿主是 C 已有类型的模块（`str` / `fs` /
 `utf8`）用 `<Trait>.m.ct` + 同基名 `<Trait>.shim.h` 的静态映射；CT 自有类型（`vec` / `map` /
@@ -1742,7 +1746,7 @@ Result<long, char *> twice(int n)
 | `ct … --diagnostics=json\|text` | 告警格式（默认 `text` 写 stderr）；`ct check` 下同一批记录按错误报告（`file:line:col:`），JSON 对象带 `"severity":"error"` 与 `"col"` |
 | `ct … --line` / `--no-line` | 覆盖 `#line` 默认（`build` 默认开、`compile` 默认关） |
 | `ct … --std=c99\|gnu99` | 写进 C 编译器的命令行，产物暂无异 |
-| `ct get [--force] <spec>[@<range>]` | 拉包进共享 store（`$CT_HOME/pkg/<publisher>/<name>/<version>/`）并写 v2 `ct.lock`（唯一会用系统 `git` 的子命令）；裸名可经 `--index <file>` / `CT_INDEX` 查显式索引；包的 `requires` 不满足则失败且不改动既有 `ct.lock`（`--force` 继续并告警） |
+| `ct get [--force] <spec>[@<range>]` | 拉包进共享 store（`$CT_HOME/pkg/<publisher>/<name>/<version>/`）并写 v2 `ct.lock`（唯一会用系统 `git` 的子命令）；官方包由内置 pin 表解析（`ct get ct/std`，无需索引），裸名只解析官方包，第三方写 `<publisher>/<name>` 并配 `--index <file>` / `CT_INDEX`；`requires` 不满足则失败且不改动既有 `ct.lock`（`--force` 继续并告警） |
 | `ct update` | 离线：v2 校验 store 并保留已钉住的版本；v1 沿用旧 vendor 路径重解 |
 | `ct install` | 离线校验 `ct.lock` 与 store，把各包的 `cflags` / `ldflags` 与 store 的 `-I` 拼成**一条**构建命令 |
 | `ct verify [--strict]` | 离线校验 store 与 v2 `ct.lock`；`--strict` 拒绝 `dir` 行与 v1 lock |
