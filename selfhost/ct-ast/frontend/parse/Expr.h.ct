@@ -1961,6 +1961,32 @@ impl ExprOps for Expr {
                     n = (int)strlen(out);
                     continue;
                 }
+                /* SH-76: when the builtin layer is not found, `Map<...>` used
+                   to fall through as a plain name and the field parser then
+                   reported "expected a field name". Name the real cause, and
+                   refuse a bare builtin generic instead of emitting bad C. */
+                {
+                    const char *qp = self->lex->src + self->lex->tokstart
+                                     + strlen(self->lex->toktext);
+                    while (*qp == ' ' || *qp == '\t') qp++;
+                    if (*qp == '<') {
+                        char gmsg[MAX_TEXT];
+                        snprintf(gmsg, sizeof gmsg,
+                                 "unresolved generic type '%s' (is the builtin layer missing? set CT_STD_DIR)",
+                                 self->lex->toktext);
+                        return self->sup->fail(gmsg);
+                    }
+                    if (strcmp(self->lex->toktext, "Vec") == 0
+                        || strcmp(self->lex->toktext, "Map") == 0
+                        || strcmp(self->lex->toktext, "Option") == 0
+                        || strcmp(self->lex->toktext, "Result") == 0) {
+                        char gmsg[MAX_TEXT];
+                        snprintf(gmsg, sizeof gmsg,
+                                 "generic struct '%s' needs type arguments in a type position",
+                                 self->lex->toktext);
+                        return self->sup->fail(gmsg);
+                    }
+                }
                 /* A visible type alias expands before any name resolution: the
                    alias is a compile-time synonym, so the type spelling (and
                    therefore the host key) is the underlying one. */
