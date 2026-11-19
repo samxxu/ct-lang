@@ -5,6 +5,9 @@
 #
 # Usage: bash test/ast/p64_alloc.sh <ct-ast>
 set -u
+# PH-65: the fixtures write free `#include`s; this probe is not about the C
+# boundary. SH-93 removed the cwd shortcut, so opt into allow explicitly.
+export CT_C_BOUNDARY=allow
 CT=${1:?usage: p64_alloc.sh <ct-ast>}
 CC=${CC:-cc}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/p64alloc.XXXXXX")

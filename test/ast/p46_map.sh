@@ -7,6 +7,9 @@
 # E46-4: the `MapEntry_*` body lands in the unit that names the instance and in
 #        no product header; a cross-unit `--lib` root keeps it internal too.
 set -u
+# PH-65: the fixtures write free `#include`s; this probe is not about the C
+# boundary. SH-93 removed the cwd shortcut, so opt into allow explicitly.
+export CT_C_BOUNDARY=allow
 ctast=${1:?usage: p46_map.sh <ct-ast> [cc]}
 cc=${2:-cc}
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)

@@ -5,6 +5,9 @@
 #
 # Usage: sh test/ast/p72_subscript.sh <ct-ast>
 set -u
+# PH-65: the fixtures write free `#include`s; this probe is not about the C
+# boundary. SH-93 removed the cwd shortcut, so opt into allow explicitly.
+export CT_C_BOUNDARY=allow
 ctast=${1:?usage: p72_subscript.sh <ct-ast>}
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/p72sub.XXXXXX") || exit 1

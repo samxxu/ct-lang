@@ -16,6 +16,9 @@
 #        not be released.
 # The `char *` probe pins that borrowing did not change (E47-3 semantics).
 set -u
+# PH-65: the fixtures write free `#include`s; this probe is not about the C
+# boundary. SH-93 removed the cwd shortcut, so opt into allow explicitly.
+export CT_C_BOUNDARY=allow
 ctast=${1:?usage: p47_map.sh <ct-ast> [cc]}
 cc=${2:-cc}
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
