@@ -118,7 +118,8 @@ name version publisher git-url tag sha256:<64 hex>
 旧的五字段行（无 publisher）仍可读；裸名同时命中两个 publisher 时 `ct get` 硬错
 `'<name>' is ambiguous; write <publisher>/<name>`。摘要按 `ct.lock` 的同一算法计算（按路径排序后
 把每个文件的相对路径与内容汇入单流 SHA-256）。本地可用 `CT_INDEX=<file>` 或 `--index <file>`
-指向任意纯文本索引。
+指向任意纯文本索引。消费端与发布端（`package.sh`）的完整契约见
+[ct-pkg-get-contract](planning/ct-pkg-get-contract.md)。
 
 ```sh
 ct get <pub>/<name>@<range>  # 发布方限定；裸名仅在索引唯一时可用（歧义即硬错）

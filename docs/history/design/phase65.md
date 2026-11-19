@@ -3,7 +3,7 @@
 > **状态：完成**（2026-11-18 收口；`v0.64.0`；R1–R7 全部交付，E65-1…8 全绿）。
 > **基线**：当前 `HEAD 0e541f32`（`v0.63.2`）；S0 记录实际 sha 与门禁数字。
 > **文档形态**：`phase65.md`；design window 7/12。
-> **依据**：[battle cinclude-2 判决](../../battle/cinclude-2/verdict.md)、[cinclude-1 判决](../../battle/cinclude-1/verdict.md)、[硬件需求](../planning/hardware-readiness-requirements.md) 的 C 边界部分。
+> **依据**：[battle cinclude-2 判决](../../../battle/cinclude-2/verdict.md)、[cinclude-1 判决](../../../battle/cinclude-1/verdict.md)、[硬件需求](../../planning/hardware-readiness-requirements.md) 的 C 边界部分。
 > **规模**：编译器/工具 180–320；夹具 120–220；文档 50–90；合计 **350–630**（±40%）。
 > **纪律**：不收口不 bump；tag/push 按 6.7 V-7 / 6.5；不改 CT 仓内 1.0 前代码的既有 include。
 
@@ -212,5 +212,5 @@ REV 对 §9 的任务级红证逐条核对后指出两处不合规；历史提�
 | R6 | `d044860a` | 无（characterization：交付物就是探针，产品无改动） | `72ed6dc6`（相位前 v0.63.4 冷构建） | §9 曾把 R6 误写成 `64fc41db`（那是 R7 的红提交） |
 | R7 | `64fc41db` | `ef121c6c` | `983ecf33`（`64fc41db^`） | 红提交正文缺 `baseline:` 字段，此处补正 |
 
-复核记录：[2026-11-18-fix-rev-verdict-batch2.md](../reviews/2026-11-18-fix-rev-verdict-batch2.md)。
+复核记录：[2026-11-18-fix-rev-verdict-batch2.md](../../reviews/2026-11-18-fix-rev-verdict-batch2.md)。
 后续新任务的 `baseline:` 一律写完整 sha（T-7）。
