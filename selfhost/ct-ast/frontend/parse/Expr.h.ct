@@ -271,7 +271,7 @@ trait ExprTraitInst {
 pub trait ExprSubscript {
     int  custom_index_label(const char *bty, char *out, int cap);
     int  custom_index_method(const char *bty, const char *name, int want,
-                             int line, int col, int writable);
+                             int line, int col, int writable, int idx_node);
 }
 
 /* Phase 53: parser-level optional chain (`?.` / `?[`). Kept out of `ExprOps`
@@ -4435,12 +4435,12 @@ impl ExprOps for Expr {
                     int bc = self->lex->tokstart - self->lex->lstart + 1;
                     int gm, rt, rd2;
                     char rty[MAX_TEXT];
-                    gm = self->custom_index_method(bty, "get", 1, bl, bc, 0);
-                    if (gm < 0) return -1;
                     self->sup->lex_next();
                     idx = self->parse_expr();
                     if (idx < 0) return -1;
                     if (self->sup->expect("]") != 0) return -1;
+                    gm = self->custom_index_method(bty, "get", 1, bl, bc, 0, idx);
+                    if (gm < 0) return -1;
                     m = self->sup->new_node(N_MCALL);
                     if (m < 0) return -1;
                     self->arena->nodes[m].aux = 9;
@@ -6573,7 +6573,7 @@ impl ExprSubscript for Expr {
        fallback. `writable` selects the set-side wording. Returns the method
        node on success; a diagnostic has already been emitted on failure. */
     int custom_index_method(const char *bty, const char *name, int want,
-                            int line, int col, int writable)
+                            int line, int col, int writable, int idx_node)
     {
         int m, p, got = 0;
         char label[MAX_TEXT];
@@ -6621,6 +6621,20 @@ impl ExprSubscript for Expr {
                     "type '%s' has no subscript: 'get' must take 1 parameter",
                     label);
             return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        /* LANG-4: the index must also fit the declared key type. Matching only
+           name+arity let `char *get(char *)` receive an int silently. */
+        if (idx_node >= 0) {
+            char kty[MAX_TEXT];
+            int kz = 0;
+            const char *pt = self->arena->nodes[self->arena->nodes[m].a].text;
+            if (self->chk_type(idx_node, kty, sizeof kty, &kz) == 0
+                && kty[0] && pt[0]) {
+                self->chk_line = line;
+                self->chk_col = col;
+                self->chk_arg = 1;
+                if (self->chk_assignable(pt, kty, 0, 6) != 0) return -1;
+            }
         }
         return m;
     }

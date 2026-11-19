@@ -929,6 +929,13 @@ else
     bad "PH-70-R2 uninit" "$(sed -n '1,8p' "$work/p70i.out")"
 fi
 
+sh test/ast/p72_subscript.sh "$work/ct-ast" >"$work/p72sub.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-72-R2 subscript (key type)"
+else
+    bad "PH-72-R2 subscript" "$(sed -n '1,8p' "$work/p72sub.out")"
+fi
+
 sh test/ast/p72_maxcalls.sh "$work/ct-ast" >"$work/p72mc.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-72-R1 maxcalls (capacity + named limit)"

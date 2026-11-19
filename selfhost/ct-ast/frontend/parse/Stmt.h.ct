@@ -4277,7 +4277,7 @@ impl StmtOps for Stmt {
                         "a custom subscript write needs a statement and an lvalue receiver",
                         self->sup->mem->path);
                 sm = self->ex->custom_index_method(self->arena->nodes[e].text,
-                                                   "set", 2, cl, cc, 1);
+                                                   "set", 2, cl, cc, 1, -1);
                 if (sm < 0) return -1;
                 self->sup->lex_next();
                 self->ex->into_ok = 1;
