@@ -1428,9 +1428,14 @@ static int emit_unit_body(struct Emitter *self, int u)
         int priv = 0;
         int si2, fi2;
         for (si2 = 0; si2 < self->sym->nstructs; si2++) {
+            int hp = 0, hv = 0;
             if (self->sym->structs[si2].owner != u) continue;
-            for (fi2 = 0; fi2 < self->sym->structs[si2].nfields; fi2++)
-                if (!self->sym->structs[si2].fields[fi2].is_pub) priv = 1;
+            if (self->sym->structs[si2].nuse > 0) continue;
+            for (fi2 = 0; fi2 < self->sym->structs[si2].nfields; fi2++) {
+                if (self->sym->structs[si2].fields[fi2].is_pub) hp = 1;
+                else hv = 1;
+            }
+            if (hp && hv) priv = 1;
         }
         if (priv) fputs("#define CT_UNIT_PRIVATE 1\n", self->out);
         fprintf(self->out, "#include \"%s.h\"\n", self->units[u].base);

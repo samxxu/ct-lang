@@ -139,3 +139,14 @@ int lib_conn_secret(struct lib_Conn *);
 
 先做「不静默」：字段文本里出现 `pub` 时硬错。字段级可见性是更大的工程（需要把 struct 体拆成
 头/实现两份并生成两套定义），建议单独立相，不塞进本轮 P1 修复。
+
+## 处置（2026-11-19，PH-73）
+
+- 提交：`1e08d0c9`（R1），`92e3e3be`（R2/R3 验收与文档）
+- 改动：字段前缀 `pub` 进入解析器并登记 `Field.is_pub`；`emit_type_decl` 对
+  「部分 pub」的 struct 发射 `#ifdef CT_UNIT_PRIVATE` 全量 / `#else` 仅 pub 两份；
+  单元 `.c` 先定义 `CT_UNIT_PRIVATE` 再包含头。无字段 `pub` 的 struct 保持旧行为；
+  带 `use` 的 struct 暂不切分。
+- 验证：`sh test/ast/p73_export.sh <ct-ast>` → `OK p73/export`；`p73_abi`/`p73_docs`
+  同样绿；消费者读私有字段在构建期失败。
+
