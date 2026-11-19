@@ -5891,8 +5891,9 @@ impl EmitOps for Emitter {
                     self->emit_json_str(f, self->sym->structs[si].fields[i].type);
                     fputs("\",\"visibility\":\"unknown\",\"loc\":{\"file\":\"", f);
                     self->emit_json_str(f, path);
-                    fprintf(f, "\",\"line\":%d}}",
-                            self->sym->structs[si].fields[i].line);
+                    fprintf(f, "\",\"line\":%d,\"col\":%d}}",
+                            self->sym->structs[si].fields[i].line,
+                            self->sym->structs[si].fields[i].col);
                 }
             }
             fputs("]}", f);

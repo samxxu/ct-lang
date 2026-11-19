@@ -179,6 +179,7 @@ pub struct Module {
     int  emit_c;
     int  lib_mode;              /* Phase 39: ct build --lib */
     int  lib_root;              /* root unit index for --lib */
+    int  model_unit;            /* entry unit for --emit-model/-map */
     int  abi_mode;              /* 1 while Emitter writes the ABI header */
     int  abi_exports[256];      /* root function indices in the export set */
     int  abi_n;
@@ -600,6 +601,7 @@ impl ModuleOps for Module {
         self->lex->pos = 0;
         self->lex->bol = 1;
         self->lex->line = 1;
+        self->lex->lstart = 0;
         self->lex->tokline = 1;
         self->lex->tok = 0;
         frontend::parse::ct_parse_lex_next();
@@ -933,6 +935,7 @@ impl ModuleOps for Module {
         self->lex->pos = 0;
         self->lex->bol = 1;
         self->lex->line = 1;
+        self->lex->lstart = 0;
         self->lex->tokline = 1;
         self->lex->tok = 0;
         self->sym->nvar = 0;
@@ -1186,6 +1189,7 @@ impl ModuleOps for Module {
         self->lex->pos = 0;
         self->lex->bol = 1;
         self->lex->line = 1;
+        self->lex->lstart = 0;
         self->lex->tokline = 1;
         self->lex->tokstart = 0;
         self->lex->lstart = 0;
@@ -2016,6 +2020,14 @@ impl ModuleOps for Module {
                 }
                 self->abi_mode = 1;
                 if (backend::emit::ct_emit_header(hp) != 0) return 1;
+                /* SH-79 facet 1: --lib used to return without writing the map
+                   or the model (the flags were accepted silently). */
+                if (self->have_map
+                    && self->write_map(self->map_path, self->units[root_u].prog, root_u) != 0)
+                    return 1;
+                if (self->have_model
+                    && self->write_model(self->model_path, self->units[root_u].prog) != 0)
+                    return 1;
                 /* R4 intermediate: emit every unit first (headers may
                    reference each other), then compile each object with hidden
                    visibility; R5 folds these objects into the archive. */
@@ -2261,10 +2273,32 @@ impl ModuleOps for Module {
                 && self->cache_key_of(u, key, sizeof key) == 0)
                 self->cache->store(outc, key);
         }
-        if (self->have_map && self->write_map(self->map_path, self->units[0].prog, 0) != 0) {
+        {
+            /* SH-79: the model/map describe the entry unit, not whatever unit
+               happened to load first (the builtin layer) or last (a dependency
+               loaded after the entry). */
+            int entry = (self->lib_root >= 0) ? self->lib_root : -1;
+            int ui;
+            if (entry < 0 && ninput > 0) {
+                const char *want = inputs[ninput - 1];
+                size_t wl = strlen(want);
+                for (ui = 0; ui < self->nunits; ui++) {
+                    size_t ul = strlen(self->units[ui].path);
+                    if (strcmp(self->units[ui].path, want) == 0
+                        || (ul >= wl && strcmp(self->units[ui].path + ul - wl, want) == 0)) {
+                        entry = ui;
+                        break;
+                    }
+                }
+            }
+            if (entry < 0) entry = self->nunits - 1;
+            if (entry < 0 || entry >= self->nunits) entry = 0;
+            self->model_unit = entry;
+        }
+        if (self->have_map && self->write_map(self->map_path, self->units[self->model_unit].prog, self->model_unit) != 0) {
             return frontend::parse::ct_parse_report();
         }
-        if (self->have_model && self->write_model(self->model_path, self->units[0].prog) != 0) {
+        if (self->have_model && self->write_model(self->model_path, self->units[self->model_unit].prog) != 0) {
             return frontend::parse::ct_parse_report();
         }
         if (!self->diag_emitted && tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;

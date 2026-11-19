@@ -943,6 +943,20 @@ else
     bad "PH-73-R3 docs" "$(sed -n '1,8p' "$work/p73docs.out")"
 fi
 
+sh test/ast/p74_model.sh "$work/ct-ast" >"$work/p74m.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-74-R1/R2 model (J11 loc + entry unit)"
+else
+    bad "PH-74-R1/R2 model" "$(sed -n '1,8p' "$work/p74m.out")"
+fi
+
+sh test/ast/p74_map.sh "$work/ct-ast" >"$work/p74map.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-74-R3 map (lib facet + entry file)"
+else
+    bad "PH-74-R3 map" "$(sed -n '1,8p' "$work/p74map.out")"
+fi
+
 sh test/ast/p73_export.sh "$work/ct-ast" >"$work/p73ex.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-73-R1 export (pub field surface)"

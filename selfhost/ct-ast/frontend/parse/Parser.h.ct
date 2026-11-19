@@ -175,6 +175,7 @@ pub struct Parser {
        anonymous member promotes its own fields into this same table. */
     char cur_record[160];
     int  field_pub;
+    int  field_col;
     /* Parse scratch the emitter reads through pointers (`ct_emit_bind_parse`). */
     int  nparams;
     /* Set by `parse_params` when the list ends with `...`; the caller stores it
@@ -2012,6 +2013,8 @@ impl ParseOps for Parser {
                     self->arena->nodes[m].line;
                 self->sym->structs[si].fields[self->sym->structs[si].nfields].is_pub =
                     self->arena->nodes[m].d;
+                self->sym->structs[si].fields[self->sym->structs[si].nfields].col =
+                    (int)self->arena->nodes[m].num;
                 self->sym->structs[si].nfields++;
             } else {
                 /* silently dropping the 65th field would skip its vptr and
@@ -2034,6 +2037,7 @@ impl ParseOps for Parser {
             snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", self->arena->nodes[m].text3);
             self->pend_fields[self->npend].line = self->arena->nodes[m].line;
             self->pend_fields[self->npend].is_pub = self->arena->nodes[m].d;
+            self->pend_fields[self->npend].col = (int)self->arena->nodes[m].num;
             self->npend++;
         } else {
             snprintf(msg, sizeof msg, "too many fields in a record (limit %d)", MAX_FIELDS);
@@ -2154,6 +2158,7 @@ impl ParseOps for Parser {
                 }
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
                 snprintf(name, sizeof name, "%s", self->lex->toktext);
+                self->field_col = self->lex->tokstart - self->lex->lstart + 1;
                 self->sup->lex_next();
             }
             m = self->sup->new_node(N_FIELD);
@@ -2161,6 +2166,7 @@ impl ParseOps for Parser {
             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", typebuf);
             snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", name);
             self->arena->nodes[m].d = self->field_pub;
+            self->arena->nodes[m].num = self->field_col;
             if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
                 snprintf(self->arena->nodes[m].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
             if (self->ex->parse_array_dims(m) != 0) return -1;
@@ -2620,6 +2626,12 @@ impl ParseOps for Parser {
                            compiler accepts */
                         snprintf(self->sym->structs[ai].fields[ui].dims, MAX_TEXT, "%s",
                                  self->sym->structs[tagi].fields[ui].dims);
+                        self->sym->structs[ai].fields[ui].line =
+                            self->sym->structs[tagi].fields[ui].line;
+                        self->sym->structs[ai].fields[ui].col =
+                            self->sym->structs[tagi].fields[ui].col;
+                        self->sym->structs[ai].fields[ui].is_pub =
+                            self->sym->structs[tagi].fields[ui].is_pub;
                     }
                 } else if (ai >= 0 && !self->arena->nodes[t].text[0]) {
                     /* an untagged body: the pending list belongs to this alias */
@@ -2631,6 +2643,9 @@ impl ParseOps for Parser {
                                  self->pend_fields[ui].type);
                         snprintf(self->sym->structs[ai].fields[ui].dims, MAX_TEXT, "%s",
                                  self->pend_fields[ui].dims);
+                        self->sym->structs[ai].fields[ui].line = self->pend_fields[ui].line;
+                        self->sym->structs[ai].fields[ui].col = self->pend_fields[ui].col;
+                        self->sym->structs[ai].fields[ui].is_pub = self->pend_fields[ui].is_pub;
                     }
                 }
             }
