@@ -98,3 +98,9 @@ rc=1
 - `cfg.h` 含 `extern int K;`，实现 `.c` 含 `int K = 5;`；
 - 只 `import lib::cfg` 时，`ct build` 自动带上 `lib/cfg.ct`（若采纳自动配对）；
 - 既有 `.h.ct` 单文件工程产物路径与内容零变化。
+
+## 处置（2026-11-19，PH-72）
+
+- 提交：`c45e41fb`
+- 改动：`load_unit` 按 basename 查重，同 base 的 `.h.ct`/`.ct` 硬错
+- 验证：`sh test/ast/p72_outputcollision.sh <ct-ast>` → `OK p72/collision`（报 `both emit 'cfg.c'`）

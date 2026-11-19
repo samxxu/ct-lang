@@ -74,3 +74,9 @@ calls.ct:1024:8: error: too many calls
 | D4 | 不写 `.c` 产物，rc=1，且诊断走 `--diagnostics=json` 时是结构化对象（与 LANG-10 联动） |
 
 回归夹具：1024 条通过、1025 条命中 D1–D4、两单元 500+600 仍在入口第 524 条命中且位置正确。
+
+## 处置（2026-11-19，PH-72）
+
+- 提交：`43cf9251`
+- 改动：MAX_CALLS 2048→8192，溢出文案含上限与绕法
+- 验证：`sh test/ast/p72_maxcalls.sh <ct-ast>` → `OK p72/maxcalls`（3000 条通过；9000 条报 `too many calls (MAX_CALLS=8192; ...)`）

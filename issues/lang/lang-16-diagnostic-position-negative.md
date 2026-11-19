@@ -143,3 +143,9 @@ if (c == '/' && self->src[self->pos + 1] == '*') {
 
 `frontend/lex/Lexer.h.ct`（主修）+ `tool/diag/Diag.h.ct`（校验/兜底）；
 `frontend/parse/Expr.h.ct` 仅在加 `at < 0` 守卫或位置 helper 时触碰。
+
+## 处置（2026-11-19，PH-72）
+
+- 提交：`2a4c632f`
+- 改动：块注释内换行同步 `lstart`/`bol`
+- 验证：`sh test/ast/p72_diagpos.sh <ct-ast>` → 列号 `5:17`（修复前 `5:29`）

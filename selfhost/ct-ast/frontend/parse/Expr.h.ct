@@ -1969,7 +1969,10 @@ impl ExprOps for Expr {
                     const char *qp = self->lex->src + self->lex->tokstart
                                      + strlen(self->lex->toktext);
                     while (*qp == ' ' || *qp == '\t') qp++;
-                    if (*qp == '<') {
+                    if (*qp == '<' && (strcmp(self->lex->toktext, "Vec") == 0
+                                       || strcmp(self->lex->toktext, "Map") == 0
+                                       || strcmp(self->lex->toktext, "Option") == 0
+                                       || strcmp(self->lex->toktext, "Result") == 0)) {
                         char gmsg[MAX_TEXT];
                         snprintf(gmsg, sizeof gmsg,
                                  "unresolved generic type '%s' (is the builtin layer missing? set CT_STD_DIR)",

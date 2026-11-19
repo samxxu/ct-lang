@@ -1,6 +1,6 @@
 # Phase 72 — 静默错误与诊断批
 
-> **状态：实施中（已开卡，排队实施）**（2026-11-19 立项；`v0.71.0` 拟）。
+> **状态：完成**（2026-11-19 收口；`v0.71.0`；R1–R6 全绿）。
 > **前置**：上一相收口；本卡在轮到时才开始实现。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径
 > `docs/design/phase72.md`，迁移时统一改名。
@@ -52,3 +52,20 @@
 | 编号 | 风险 | 缓解 |
 | --- | --- | --- |
 | R72-1 | 诊断文本变化影响 golden | 只改 error 路径；golden 需逐条说明 |
+
+## 6 进展与收口对照（2026-11-19，v0.71.0）
+
+| 任务 | 状态 | 证据 |
+| --- | --- | --- |
+| R1 LANG-3 | ✅ | `p72/maxcalls`：3000 条通过；9000 条报 `too many calls (MAX_CALLS=8192; ...)` |
+| R2 LANG-4 | ✅ | `p72/subscript`：`char *get(char *)` 收到 `j[0]` 报 `argument 1` |
+| R3 LANG-11 | ✅ | `p72/collision`：同 base 单元报 `both emit 'cfg.c'` |
+| R4 LANG-16+DF-1 | ✅ | `p72/diagpos`：超长 `#` 行硬错；注释后列号 5:17 |
+| R5 SH-76 | ✅ | `p72/stdmissing`：`unresolved generic type ... CT_STD_DIR`；裸 `Map` 报需类型实参 |
+| R6 SH-18+LANG-15 | ✅ | `p72/qualified`：271/272/273 全绿（v0.59.0 已修，验收） |
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E72-1 | 六个 `p72_*` 探针 | 全绿（R1–R5 红→绿，R6 验收） |
+| E72-2 | 六条 issue 的处置段 | 见各 issue「处置（2026-11-19，PH-72）」 |
+| E72-3 | `check-all.sh` | 11/11；`check-ast` 全绿；golden 仅 banner |

@@ -37,3 +37,9 @@
 
 58 后第 0 批（静默错误）。与 LANG-16 / LANG-8 同属词法族，**串行**发版；修复须带
 「510 字节透传」与「162 字节合法边界」两条夹具。
+
+## 处置（2026-11-19，PH-72）
+
+- 提交：`2a4c632f`
+- 改动：超长 `#` 行记 `toktrunc` 并在 Parser 硬错
+- 验证：`sh test/ast/p72_diagpos.sh <ct-ast>` → `preprocessor line exceeds 159 bytes`

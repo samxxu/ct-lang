@@ -67,3 +67,9 @@ error: type 'J' has no subscript matching 'get(int)': candidates are 'char *get(
 ## 修复方向
 
 把「实参静态类型 → 候选签名」的匹配接进 `custom_index_method`，0 命中 / 歧义均硬错。属 `REQ-INDEX-1` 的 S1 切片。
+
+## 处置（2026-11-19，PH-72）
+
+- 提交：`d5906bd8`
+- 改动：`custom_index_method` 增加下标类型判定（chk_type + chk_assignable）
+- 验证：`sh test/ast/p72_subscript.sh <ct-ast>` → `OK p72/subscript`（`j[0]` 对 `char *get(char *)` 报 `argument 1: expected ...`）

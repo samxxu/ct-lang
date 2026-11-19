@@ -814,6 +814,9 @@ impl ModuleOps for Module {
         if (!is_map) {
             for (k = 0; k < u; k++) {
                 if (self->units[k].is_map) continue;
+                /* Two shim headers with one base keep the PH-65 ambiguity
+                   diagnostic (they publish a header, not a `.c` collision). */
+                if (self->units[k].is_hdr && is_hdr) continue;
                 if (strcmp(self->units[k].base, self->units[u].base) == 0) {
                     char cmsg[MAX_TEXT];
                     const char *p1 = strrchr(self->units[k].path, '/');

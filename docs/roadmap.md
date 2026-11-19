@@ -82,7 +82,7 @@
 | Phase 69 | 跨单元/泛型/trait 类型检查 | ✅ 完成 | v0.68.0 | [卡](design/phase69.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 70 | CFG/定值/控制流语义检查 | ✅ 完成 | v0.69.0 | [卡](design/phase70.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 71 | own/borrow/Drop + 包级 strict | ✅ 完成 | v0.70.0 | [卡](design/phase71.md) · [方案](planning/typecheck-semantic-plan.md) |
-| Phase 72 | 静默错误与诊断批（LANG-3 MAX_CALLS / LANG-4 下标类型 / LANG-11 产物冲突 / LANG-16 诊断列 / DF-1 预处理截断 / SH-76 内置层误诊 / SH-18+LANG-15 限定名） | 🟨 实施中（已开卡，排队） | v0.71.0（拟） | [卡](design/phase72.md) · [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
+| Phase 72 | 静默错误与诊断批（LANG-3 / LANG-4 / LANG-11 / LANG-16+DF-1 / SH-76 / SH-18+LANG-15） | ✅ 完成 | v0.71.0 | [卡](design/phase72.md) · [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
 | Phase 73 | 字段可见性与 ABI（LANG-9：`pub` 决定头文件导出面） | 🟨 实施中（已开卡，排队） | v0.72.0（拟） | [卡](design/phase73.md) · [LANG-9](../issues/lang/lang-9-struct-field-visibility-abi.md) |
 | Phase 74 | 模型导出（PH-59 M1/M2；依赖 J11 行列与 SH-79 两 facet） | 🟨 实施中（已开卡，排队） | v0.73.0（拟） | [卡](design/phase74.md) · [PH-59 卡](history/design/phase59.md) · [SH-79](../issues/selfhost/sh79-build-lib-emit-map-silent.md) |
 | Phase 75 | 闭包作方法实参（SH-65 / SH-67 同族） | 🟨 实施中（已开卡，排队） | v0.74.0（拟） | [卡](design/phase75.md) · [SH-65](../issues/selfhost/sh65-closure-as-method-arg.md) · [SH-67](../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md) |

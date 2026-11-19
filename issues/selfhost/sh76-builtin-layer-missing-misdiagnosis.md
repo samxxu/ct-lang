@@ -94,3 +94,9 @@ $ ctc h.ct -o h.c          # struct H { Str s; };
 - **文件族串行**：本条的 `Driver` / `Module` 与 LANG-11 串行；若把 `Expr` 诊断一并做，还要排在
   LANG-5 → LANG-4 → LANG-13 → LANG-14 → SH-65 之后。
 - 与 LANG-12 / PH-56 无关：不是属性访问协议，也不是容器语法糖。
+
+## 处置（2026-11-19，PH-72）
+
+- 提交：`4280ed7e`
+- 改动：类型位置未知 `Name<` 与裸内建泛型的明确诊断
+- 验证：`sh test/ast/p72_stdmissing.sh <ct-ast>` → `OK p72/stdmissing`
