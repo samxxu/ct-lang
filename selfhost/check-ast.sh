@@ -957,6 +957,48 @@ else
     bad "PH-76 chain" "$(sed -n '1,8p' "$work/p76c.out")"
 fi
 
+# PH-77: official package identity. S1 pins + bare-name rule, S2 output shape,
+# S3 legacy-lock migration; S0/S4 are documentation contracts. p77_external is
+# the only network probe: it skips (77) when curl/git or the published index is
+# unreachable, so the offline gate never depends on it.
+sh test/ast/p77_bare.sh "$work/ct-ast" >"$work/p77bare.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-77-S1 bare (pin table, qualified names)"
+else
+    bad "PH-77-S1 bare" "$(sed -n '1,8p' "$work/p77bare.out")"
+fi
+sh test/ast/p77_output.sh "$work/ct-ast" >"$work/p77out.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-77-S2 output (url@version, tag, spec)"
+else
+    bad "PH-77-S2 output" "$(sed -n '1,8p' "$work/p77out.out")"
+fi
+sh test/ast/p77_migrate.sh "$work/ct-ast" >"$work/p77mig.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-77-S3 migrate (std/std -> ct/std)"
+else
+    bad "PH-77-S3 migrate" "$(sed -n '1,8p' "$work/p77mig.out")"
+fi
+sh test/ast/p77_docs.sh >"$work/p77doc.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-77-S0 docs (identity + pin contract)"
+else
+    bad "PH-77-S0 docs" "$(sed -n '1,8p' "$work/p77doc.out")"
+fi
+sh test/ast/p77_install.sh "$work/ct-ast" >"$work/p77inst.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-77-S4 install (documented command runs)"
+else
+    bad "PH-77-S4 install" "$(sed -n '1,8p' "$work/p77inst.out")"
+fi
+sh test/ast/p77_external.sh "$work/ct-ast" >"$work/p77ext.out" 2>"$work/p77ext.err"
+p77ext=$?
+case "$p77ext" in
+    0)  ok "PH-77-S5 external (clean-HOME pin + index row)" ;;
+    77) skip "PH-77-S5 external" "$(sed -n '1p' "$work/p77ext.err")" ;;
+    *)  bad "PH-77-S5 external" "$(sed -n '1,8p' "$work/p77ext.out")" ;;
+esac
+
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-75-R1 closure (pair-form method argument)"

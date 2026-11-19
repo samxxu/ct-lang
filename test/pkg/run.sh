@@ -507,6 +507,12 @@ else
     GIT_COMMITTER_EMAIL=pkg@test GIT_COMMITTER_NAME=pkg
     export GIT_AUTHOR_EMAIL GIT_AUTHOR_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_NAME
     reg="$work/reg"
+    # PH-77: a bare name no longer reaches CT_REGISTRY, so these git cases use
+    # an explicit https URL and let git rewrite it to the local fixture. The
+    # cache origin is still the spelled URL, so the cache checks stay valid.
+    export GIT_CONFIG_COUNT=1
+    export GIT_CONFIG_KEY_0="url.file://$reg/.insteadOf"
+    export GIT_CONFIG_VALUE_0="https://example.invalid/"
     mkdir -p "$reg/gutil"
     ( cd "$reg/gutil" \
         && git init -q \
@@ -516,8 +522,8 @@ else
         && printf 'name = gutil\npublisher = ct\nversion = 0.2.0\nns-root = .\n' >ct.pkg \
         && git add -A && git commit -qm two && git tag v0.2.0 )
     mkdir -p "$work/home"
-    if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/ct-ast" get "gutil@^0.1.0" >"$work/g.out" 2>"$work/g.err" ); then
+    if ( cd "$work/proj" && HOME="$work/home" \
+            "$work/ct-ast" get "https://example.invalid/gutil@^0.1.0" >"$work/g.out" 2>"$work/g.err" ); then
         ok "ct get <git> exits 0"
     else
         bad "ct get <git>" "non-zero exit: $(cat "$work/g.err")"
@@ -530,12 +536,12 @@ else
     fi
     # D24: the manifest records what `get` brought in, so `install` can be run
     # later without re-typing the spec.
-    if grep -Fq 'dep = gutil@^0.1.0' "$work/proj/ct.pkg"; then
+    if grep -Fq 'dep = https://example.invalid/gutil@^0.1.0' "$work/proj/ct.pkg"; then
         ok "get records the git package in ct.pkg"
     else
         bad "ct.pkg <git>" "missing the gutil dep: $(cat "$work/proj/ct.pkg")"
     fi
-    if grep -Eq "^ct/gutil 0\.1\.0 git file://.* [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
+    if grep -Eq "^ct/gutil 0\.1\.0 git https://example\.invalid/gutil [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
         ok "MVS picks the lowest satisfying tag and pins its commit"
     else
         bad "ct.lock <git>" "expected a seven-field v2 gutil row, got: $(grep gutil "$work/proj/ct.lock")"
@@ -545,29 +551,29 @@ else
     echo "== no range / * picks the newest tag =="
     mkdir -p "$work/latest"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/latest/ct.pkg"
-    if ( cd "$work/latest" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/ct-ast" get "gutil" >"$work/latest.out" 2>"$work/latest.err" ); then
-        if grep -Eq "^ct/gutil 0\.2\.0 git file://.* [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/latest/ct.lock"; then
+    if ( cd "$work/latest" && HOME="$work/home" \
+            "$work/ct-ast" get "https://example.invalid/gutil" >"$work/latest.out" 2>"$work/latest.err" ); then
+        if grep -Eq "^ct/gutil 0\.2\.0 git https://example\.invalid/gutil [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/latest/ct.lock"; then
             ok "ct get <git> with no range picks the newest tag"
         else
             bad "ct.lock <git> latest" "expected gutil 0.2.0, got: $(grep gutil "$work/latest/ct.lock")"
         fi
         if grep -Fq "resolved   ct/gutil 0.2.0" "$work/latest.out" \
-           && grep -Fq "source   git file://" "$work/latest.out" \
+           && grep -Fq "source   https://example.invalid/gutil@0.2.0" "$work/latest.out" \
            && grep -Fq "action   installed" "$work/latest.out"; then
             ok "default get reports resolved package, source and action"
         else
             bad "get detail" "unexpected output: $(cat "$work/latest.out")"
         fi
-        if ( cd "$work/latest" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-                "$work/ct-ast" get -q gutil >"$work/lq.out" 2>"$work/lq.err" ) \
-           && grep -Eq "^ct/gutil 0\.2\.0 file://" "$work/lq.out"; then
+        if ( cd "$work/latest" && HOME="$work/home" \
+                "$work/ct-ast" get -q https://example.invalid/gutil >"$work/lq.out" 2>"$work/lq.err" ) \
+           && grep -Eq "^ct/gutil 0\.2\.0 https://example\.invalid/gutil@0\.2\.0$" "$work/lq.out"; then
             ok "quiet get reports name, version and url"
         else
             bad "get quiet" "unexpected output: $(cat "$work/lq.out" "$work/lq.err")"
         fi
-        if ( cd "$work/latest" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-                "$work/ct-ast" get --json gutil >"$work/lj.out" 2>"$work/lj.err" ) \
+        if ( cd "$work/latest" && HOME="$work/home" \
+                "$work/ct-ast" get --json https://example.invalid/gutil >"$work/lj.out" 2>"$work/lj.err" ) \
            && grep -Fq '"version":"0.2.0"' "$work/lj.out" \
            && grep -Fq '"action":"reused"' "$work/lj.out"; then
             ok "json get reports the resolved package"
@@ -579,9 +585,9 @@ else
     fi
     rm -f "$work/latest/ct.lock" "$work/latest/ct.pkg"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/latest/ct.pkg"
-    if ( cd "$work/latest" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/ct-ast" get "gutil@*" >"$work/star.out" 2>"$work/star.err" ); then
-        if grep -Eq "^ct/gutil 0\.2\.0 git file://.* [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/latest/ct.lock"; then
+    if ( cd "$work/latest" && HOME="$work/home" \
+            "$work/ct-ast" get "https://example.invalid/gutil@*" >"$work/star.out" 2>"$work/star.err" ); then
+        if grep -Eq "^ct/gutil 0\.2\.0 git https://example\.invalid/gutil [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/latest/ct.lock"; then
             ok "ct get <git>@* picks the newest tag"
         else
             bad "ct.lock <git> *" "expected gutil 0.2.0, got: $(grep gutil "$work/latest/ct.lock")"
@@ -598,9 +604,9 @@ else
         && printf 'name = notags\npublisher = ct\nversion = 0.0.1\nns-root = .\n' >ct.pkg \
         && printf 'int notags_value(void) { return 9; }\n' >notags.c \
         && git add -A && git commit -qm one )
-    if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/ct-ast" get "notags@*" >"$work/h.out" 2>"$work/h.err" ); then
-        if grep -Eq "^ct/notags 0\.0\.1 git file://.* [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
+    if ( cd "$work/proj" && HOME="$work/home" \
+            "$work/ct-ast" get "https://example.invalid/notags@*" >"$work/h.out" 2>"$work/h.err" ); then
+        if grep -Eq "^ct/notags 0\.0\.1 git https://example\.invalid/notags [0-9a-f]{40} \. sha256:[0-9a-f]{64}$" "$work/proj/ct.lock"; then
             ok "locks the default branch tip when there is no tag"
         else
             bad "ct.lock <HEAD>" "expected a seven-field v2 notags row, got: $(grep notags "$work/proj/ct.lock")"
@@ -612,8 +618,8 @@ else
     echo
     echo "== without git on PATH, a git source fails hard =="
     mkdir -p "$work/nobin"
-    if ( cd "$work/proj" && PATH="$work/nobin" HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/ct-ast" get "gutil@^0.1.0" >"$work/ng.out" 2>"$work/ng.err" ); then
+    if ( cd "$work/proj" && PATH="$work/nobin" HOME="$work/home" \
+            "$work/ct-ast" get "https://example.invalid/gutil@^0.1.0" >"$work/ng.out" 2>"$work/ng.err" ); then
         bad "no-git" "expected a non-zero exit"
     elif grep -Fq "install git" "$work/ng.err"; then
         ok "fails hard with an install hint"
@@ -629,8 +635,8 @@ else
         && printf 'name = other\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >ct.pkg \
         && printf 'int other_value(void) { return 1; }\n' >other.c \
         && git add -A && git commit -qm one && git tag 0.1.0 )
-    if ( cd "$work/proj" && HOME="$work/home" CT_REGISTRY="file://$reg" \
-            "$work/ct-ast" get "mismatch@*" >"$work/mis.out" 2>"$work/mis.err" ); then
+    if ( cd "$work/proj" && HOME="$work/home" \
+            "$work/ct-ast" get "https://example.invalid/mismatch@*" >"$work/mis.out" 2>"$work/mis.err" ); then
         bad "name mismatch" "expected a non-zero exit"
     elif grep -Fq "names 'other'" "$work/mis.err"; then
         ok "rejects a manifest name that disagrees with the source"
@@ -644,10 +650,10 @@ else
     # index entry's fifth field, so the index can vouch for the stored tree.
     mkdir -p "$work/idxseed" "$work/home2"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/idxseed/ct.pkg"
-    if ( cd "$work/idxseed" && HOME="$work/home2" CT_REGISTRY="file://$reg" \
-            "$work/ct-ast" get "gutil@^0.1.0" >"$work/is.out" 2>"$work/is.err" ); then
+    if ( cd "$work/idxseed" && HOME="$work/home2" \
+            "$work/ct-ast" get "https://example.invalid/gutil@^0.1.0" >"$work/is.out" 2>"$work/is.err" ); then
         dig="$(awk '$1 == "ct/gutil" { print $NF }' "$work/idxseed/ct.lock")"
-        printf 'gutil 0.1.0 file://%s/gutil 0.1.0 %s\n' "$reg" "$dig" >"$work/index"
+        printf 'gutil 0.1.0 ct file://%s/gutil 0.1.0 %s\n' "$reg" "$dig" >"$work/index"
         ok "a seeded lock supplies the index digest"
     else
         bad "index seed" "non-zero exit: $(cat "$work/is.err")"
@@ -655,8 +661,8 @@ else
     mkdir -p "$work/idxuse"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/idxuse/ct.pkg"
     if ( cd "$work/idxuse" && HOME="$work/home2" \
-            "$work/ct-ast" get --index "$work/index" gutil >"$work/ix.out" 2>"$work/ix.err" ); then
-        ok "resolves a bare name through --index"
+            "$work/ct-ast" get --index "$work/index" ct/gutil >"$work/ix.out" 2>"$work/ix.err" ); then
+        ok "resolves a qualified name through --index"
     else
         bad "index lookup" "non-zero exit: $(cat "$work/ix.err")"
     fi
@@ -673,7 +679,7 @@ else
     mkdir -p "$work/idxenv"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/idxenv/ct.pkg"
     if ( cd "$work/idxenv" && HOME="$work/home2" CT_INDEX="$work/index" \
-            "$work/ct-ast" get gutil >"$work/ie.out" 2>"$work/ie.err" ); then
+            "$work/ct-ast" get ct/gutil >"$work/ie.out" 2>"$work/ie.err" ); then
         ok "CT_INDEX names the same index as --index"
     else
         bad "CT_INDEX" "non-zero exit: $(cat "$work/ie.err")"
@@ -682,27 +688,23 @@ else
             "$work/ct-ast" get ct/http >"$work/noindex.out" 2>"$work/noindex.err" ); then
         bad "no-index guidance" "expected a non-zero exit"
     elif grep -Fq "no index resolver for 'ct/http'" "$work/noindex.err" \
-         && grep -Fq "publisher-qualified package name" "$work/noindex.err" \
-         && grep -Fq "1) built-in / official library" "$work/noindex.err" \
-         && grep -Fq "ct get http" "$work/noindex.err" \
-         && grep -Fq "2) publisher-qualified package" "$work/noindex.err" \
+         && grep -Fq "built-in" "$work/noindex.err" \
          && grep -Fq "ct get --index <file> ct/http" "$work/noindex.err" \
-         && grep -Fq "name version publisher git-url tag sha256" "$work/noindex.err" \
-         && grep -Fq "CT_REGISTRY only applies to bare names" "$work/noindex.err"; then
+         && grep -Fq "name version publisher git-url tag sha256" "$work/noindex.err"; then
         ok "a qualified name without an index explains the resolver"
     else
         bad "no-index guidance" "wrong diagnostic: $(cat "$work/noindex.err")"
     fi
     if ( cd "$work/idxuse" && HOME="$work/home2" \
-            "$work/ct-ast" get --index "$work/index" absent >"$work/ia.out" 2>"$work/ia.err" ); then
+            "$work/ct-ast" get --index "$work/index" ct/absent >"$work/ia.out" 2>"$work/ia.err" ); then
         bad "index missing-name" "expected a non-zero exit"
-    elif grep -Fq "package 'absent' is not in the index" "$work/ia.err"; then
+    elif grep -Fq "package 'ct/absent' is not in the index" "$work/ia.err"; then
         ok "a name the index does not list is rejected"
     else
         bad "index missing-name" "wrong diagnostic: $(cat "$work/ia.err")"
     fi
     if ( cd "$work/idxuse" && HOME="$work/home2" \
-            "$work/ct-ast" get --index "$work/no-such-index" gutil >"$work/ir.out" 2>"$work/ir.err" ); then
+            "$work/ct-ast" get --index "$work/no-such-index" ct/gutil >"$work/ir.out" 2>"$work/ir.err" ); then
         bad "index unreadable" "expected a non-zero exit"
     elif grep -Fq "cannot read the package index" "$work/ir.err"; then
         ok "an unreadable index fails with its path"
@@ -710,11 +712,11 @@ else
         bad "index unreadable" "wrong diagnostic: $(cat "$work/ir.err")"
     fi
     badsha="sha256:0000000000000000000000000000000000000000000000000000000000000000"
-    printf 'gutil 0.1.0 file://%s/gutil 0.1.0 %s\n' "$reg" "$badsha" >"$work/index-bad"
+    printf 'gutil 0.1.0 ct file://%s/gutil 0.1.0 %s\n' "$reg" "$badsha" >"$work/index-bad"
     if ( cd "$work/idxuse" && HOME="$work/home2" \
-            "$work/ct-ast" get --index "$work/index-bad" gutil >"$work/ib.out" 2>"$work/ib.err" ); then
+            "$work/ct-ast" get --index "$work/index-bad" ct/gutil >"$work/ib.out" 2>"$work/ib.err" ); then
         bad "index digest" "expected a non-zero exit"
-    elif grep -Fq "does not match the index" "$work/ib.err"; then
+    elif grep -Fq "does not match the pinned digest" "$work/ib.err"; then
         ok "the index digest is checked against the fetched source"
     else
         bad "index digest" "wrong diagnostic: $(cat "$work/ib.err")"
@@ -778,17 +780,17 @@ else
     printf 'name = one\npublisher = ct\nversion = 1.0.0\nns-root = .\n' >"$work/pkgs/one/ct.pkg"
     printf 'int one_value(void) { return 1; }\n' >"$work/pkgs/one/one.c"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/pinseed/ct.pkg"
-    if ( cd "$work/pinseed" && HOME="$work/pinhome" CT_REGISTRY="file://$reg" \
-            "$work/ct-ast" get "gutil@>=0.2.0" >"$work/ps.out" 2>"$work/ps.err" ); then
+    if ( cd "$work/pinseed" && HOME="$work/pinhome" \
+            "$work/ct-ast" get "https://example.invalid/gutil@>=0.2.0" >"$work/ps.out" 2>"$work/ps.err" ); then
         pdig="$(awk '$1 == "ct/gutil" { print $NF }' "$work/pinseed/ct.lock")"
-        printf 'gutil 0.2.0 file://%s/gutil v0.2.0 %s\n' "$reg" "$pdig" >"$work/index2"
+        printf 'gutil 0.2.0 ct file://%s/gutil v0.2.0 %s\n' "$reg" "$pdig" >"$work/index2"
         ok "a seed lock supplies the 0.2.0 digest"
     else
         bad "pin seed" "non-zero exit: $(cat "$work/ps.err")"
     fi
     printf 'name = demo\nversion = 0.1.0\n' >"$work/pinproj/ct.pkg"
     if ( cd "$work/pinproj" && HOME="$work/pinhome" \
-            "$work/ct-ast" get --index "$work/index2" gutil >"$work/p1.out" 2>"$work/p1.err" ); then
+            "$work/ct-ast" get --index "$work/index2" ct/gutil >"$work/p1.out" 2>"$work/p1.err" ); then
         ok "the index pins gutil at its tag"
     else
         bad "pin get" "non-zero exit: $(cat "$work/p1.err")"
@@ -809,7 +811,7 @@ else
     else
         bad "lock merge" "unexpected one rows: $(cat "$work/pinproj/ct.lock")"
     fi
-    if ( cd "$work/pinproj" && HOME="$work/pinhome" CT_REGISTRY="file://$reg" \
+    if ( cd "$work/pinproj" && HOME="$work/pinhome" \
             "$work/ct-ast" update >"$work/pu.out" 2>"$work/pu.err" ); then
         if grep -Fq 'ct/gutil 0.2.0 ' "$work/pinproj/ct.lock"; then
             ok "update keeps the pinned 0.2.0 row"
@@ -826,7 +828,7 @@ else
         bad "verify merge" "$(cat "$work/pv.out" "$work/pv.err")"
     fi
     if ( cd "$work/pinproj" && HOME="$work/pinhome" \
-            "$work/ct-ast" get --index "$work/index2" gutil >"$work/p3.out" 2>"$work/p3.err" ); then
+            "$work/ct-ast" get --index "$work/index2" ct/gutil >"$work/p3.out" 2>"$work/p3.err" ); then
         if [ "$(grep -c '^ct/gutil ' "$work/pinproj/ct.lock")" = "1" ] \
            && [ "$(grep -c '^ct/one ' "$work/pinproj/ct.lock")" = "1" ]; then
             ok "re-getting a package replaces its row instead of duplicating it"
@@ -1302,13 +1304,16 @@ else
     bad "S1 tampered store" "wrong diagnostic: $(cat "$S1/t.err")"
 fi
 printf 'dup 0.1.0 pubA file:///tmp/a 0.1.0 sha256:%064d\ndup 0.1.0 pubB file:///tmp/b 0.1.0 sha256:%064d\n' 0 0 >"$S1/index"
+# PH-77: a bare name never reaches the index any more, so two rows named `dup`
+# cannot make a bare lookup ambiguous -- the bare name is refused outright and
+# the caller must spell the publisher.
 if ( cd "$S1/proj" && HOME="$S1/home" CT_HOME="$S1/cthome" \
         "$work/ct-ast" get --index ../index dup >"$S1/amb.out" 2>"$S1/amb.err" ); then
-    bad "S1 ambiguous index" "expected a non-zero exit"
-elif grep -Fq "is ambiguous" "$S1/amb.err"; then
-    ok "S1 bare index name with two publishers is ambiguous"
+    bad "S1 bare name with an index" "expected a non-zero exit"
+elif grep -Fq "is not an official package" "$S1/amb.err"; then
+    ok "S1 a bare name ignores the index and is refused"
 else
-    bad "S1 ambiguous index" "wrong diagnostic: $(cat "$S1/amb.err")"
+    bad "S1 bare name with an index" "wrong diagnostic: $(cat "$S1/amb.err")"
 fi
 
 echo
@@ -1553,12 +1558,15 @@ printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S5/repo/p
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S5/repo/p/src/p.h.ct"
 ( cd "$S5/repo/p" && git init -q && git add -A \
     && git -c user.email=a@b -c user.name=a commit -qm one && git tag 0.1.0 )
+export GIT_CONFIG_COUNT=2
+export GIT_CONFIG_KEY_1="url.file://$S5/repo/.insteadOf"
+export GIT_CONFIG_VALUE_1="https://s5.invalid/"
 for n in 1 2; do
     mkdir -p "$S5/home$n" "$S5/cthome$n" "$S5/c$n"
     printf 'name = demo\nversion = 0.1.0\ndep = ct/p@^0.1.0\n' >"$S5/proj$n/ct.pkg"
     printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$S5/proj$n/main.ct"
     ( cd "$S5/proj$n" && HOME="$S5/home$n" CT_HOME="$S5/cthome$n" \
-        CT_REGISTRY=file://"$S5/repo" "$work/ct-ast" get p@^0.1.0 >/dev/null 2>&1 \
+        "$work/ct-ast" get https://s5.invalid/p@^0.1.0 >/dev/null 2>&1 \
       && HOME="$S5/home$n" CT_HOME="$S5/cthome$n" \
         "$work/ct-ast" build main.ct -o "$S5/app$n" >"$S5/b$n.out" 2>"$S5/b$n.err" \
       && HOME="$S5/home$n" CT_HOME="$S5/cthome$n" \
