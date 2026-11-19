@@ -5016,6 +5016,55 @@ impl ExprOps for Expr {
                 } else {
                     if (self->into_member_check(n, fname, mline, mcol) != 0)
                         return -1;
+                    /* LANG-5: a `.` field access on a call / custom-subscript
+                       result used to be emitted verbatim (`Box_get(...).v`).
+                       For a pointer or an interface answer that C is invalid,
+                       so the host cc -- not ct -- rejected it, with no
+                       `file:line:col` pointing at the source. The receiver's
+                       static type is still resolvable here (locals are gone by
+                       emit time), so refuse the two shapes the emitter cannot
+                       spell. `self.n` is exempt: inside an inherent impl the
+                       emitter already spells it `_self->n` (P34 S5a). A value
+                       answer needs no temporary: `f().v` is valid C. */
+                    if (!arrow) {
+                        char frty[MAX_TEXT];
+                        char ifn[MAX_TEXT];
+                        int ifp = 0;
+                        int self_recv = n >= 0
+                                        && self->arena->nodes[n].kind == N_VAR
+                                        && strcmp(self->arena->nodes[n].text2, "self") == 0;
+                        if (!self_recv
+                            && self->sup->expr_type(n, frty, sizeof frty) == 0) {
+                            /* `struct Vec_Show__iface` also ends in `_iface`
+                               (a container of an interface element), so the
+                               suffix alone is not an interface value; and an
+                               interface value keeps one real field, `.self`. */
+                            if (!frontend::sym::ct_is_container_type(frty)
+                                && strcmp(fname, "self") != 0
+                                && self->sup->iface_ref_type(frty, ifn, sizeof ifn, &ifp)
+                                && self->sym->find_trait(ifn) >= 0) {
+                                char imsg[MAX_TEXT];
+                                snprintf(imsg, sizeof imsg,
+                                    "'.' cannot access field '%s': '%s' is an interface value; "
+                                    "it has methods, not fields", fname, ifn);
+                                return tool::diag::ct_sem_error(mline, mcol, imsg,
+                                                                self->sup->mem->path);
+                            }
+                            {
+                                size_t fl = strlen(frty);
+                                while (fl > 0 && (frty[fl - 1] == ' ' || frty[fl - 1] == '\t'))
+                                    fl--;
+                                if (fl > 0 && frty[fl - 1] == '*') {
+                                    char pmsg[MAX_TEXT];
+                                    snprintf(pmsg, sizeof pmsg,
+                                        "'.' cannot access field '%s' through a pointer receiver; "
+                                        "use '->%s'", fname, fname);
+                                    return tool::diag::ct_sem_error(mline, mcol, pmsg,
+                                                                    self->sup->mem->path);
+                                }
+                            }
+                        }
+                    }
                     m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
                     if (m < 0) return -1;
                     self->arena->nodes[m].a = n;
