@@ -929,6 +929,13 @@ else
     bad "PH-70-R2 uninit" "$(sed -n '1,8p' "$work/p70i.out")"
 fi
 
+sh test/ast/p72_qualified.sh "$work/ct-ast" >"$work/p72q.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-72-R6 qualified (type + value positions)"
+else
+    bad "PH-72-R6 qualified" "$(sed -n '1,8p' "$work/p72q.out")"
+fi
+
 sh test/ast/p72_stdmissing.sh "$work/ct-ast" >"$work/p72sm.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-72-R5 stdmissing (builtin layer diagnostics)"
