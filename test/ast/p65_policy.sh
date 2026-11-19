@@ -2,6 +2,8 @@
 # PH-65 R1 probe: the C boundary policy resolves to the right side.
 #   external code        -> strict (the pre-PH-65 default was "everything goes")
 #   the CT tree          -> allow  (688 in-repo includes; D65-1)
+#   the working dir      -> not an input (SH-93: an external unit stays strict
+#                           even when ct runs from the repo root)
 #   a package manifest   -> its `c-boundary` key; no key keeps the allow window
 #   the command line     -> wins over all of the above
 # Usage: bash test/ast/p65_policy.sh <ct-ast>
@@ -45,6 +47,9 @@ check_in() {   # check <label> <want> <dir> <cmd...>
     fi
 }
 check_in "external default" strict "$tmp" "$CT" --show-c-boundary "$tmp/ext/x.ct"
+# SH-93 negative: running from the CT repo root must not relax an external
+# unit; only the input path decides (§4.66 lists four directories, not a cwd).
+check "external from repo root" strict "$CT" --show-c-boundary "$tmp/ext/x.ct"
 check_in "CLI allow"        allow  "$tmp" "$CT" --c-boundary=allow --show-c-boundary "$tmp/ext/x.ct"
 check "CT tree default"  allow  "$CT" --show-c-boundary test/ast/p65_policy/inside.ct
 check "CLI strict wins"  strict "$CT" --c-boundary=strict --show-c-boundary test/ast/p65_policy/inside.ct
