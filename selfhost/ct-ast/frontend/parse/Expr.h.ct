@@ -4948,21 +4948,36 @@ impl ExprOps for Expr {
                            surplus is only legal when the recipe forwards it */
                         if (mi < self->sym->traits[t].nm
                             && self->map_arity(mline, mcol, self->arena->nodes[m].text,
-                                               fname, arg_count(self->arena, args)) != 0)
+                                               fname, arg_count(self->arena, args)
+                                                     + self->closure_arg_count(args)) != 0)
                             return -1;
                         /* SH-65/SH-67: refuse a closure on a struct/trait method
                            until the pair ABI is emitted; container `each` has
                            its own expansion and is exempt. */
-                        if (!frontend::sym::ct_is_container_type(rtype)) {
+                        {
                             int ca;
+                            int pair_ok = (mi < self->sym->traits[t].nm
+                                           && self->sym->traits[t].m[mi].nparams == 2
+                                           && strstr(self->sym->traits[t].m[mi].ptype[1], "void *"));
                             for (ca = args; ca >= 0; ca = self->arena->nodes[ca].next) {
-                                int is_cl = 0;
-                                if (self->arena->nodes[ca].kind == N_CLOSURE) is_cl = 1;
-                                else if (self->arena->nodes[ca].kind == N_VAR) {
+                                int is_cl = 0, clnode = -1;
+                                if (self->arena->nodes[ca].kind == N_CLOSURE) {
+                                    is_cl = 1;
+                                    clnode = ca;
+                                } else if (self->arena->nodes[ca].kind == N_VAR) {
                                     int cv = self->sym->find_var(self->arena->nodes[ca].text2);
                                     if (cv >= 0 && self->sym->vars[cv].is_closure) is_cl = 1;
                                 }
-                                if (is_cl)
+                                if (!is_cl) continue;
+                                if (clnode >= 0 && pair_ok
+                                    && mi < self->sym->traits[t].nm) {
+                                    if (closure_match(self,
+                                            (int)self->arena->nodes[clnode].num,
+                                            self->sym->traits[t].m[mi].ptype[0], 1, 1) != 0)
+                                        return -1;
+                                    continue;
+                                }
+                                if (!frontend::sym::ct_is_container_type(rtype))
                                     return tool::diag::ct_sem_error(mline, mcol,
                                         "a closure cannot be passed to a method argument yet (SH-65); pass '(fn, env)' explicitly",
                                         self->sup->mem->path);
@@ -7231,24 +7246,6 @@ impl ExprTypes for Expr {
         struct StructImpl *im;
 
         if (strncmp(ibase, "struct ", 7) != 0) return 0;
-        /* SH-65/SH-67: a closure is a (trampoline, env) pair, but a struct/trait
-           method emits one C argument per source argument. Builtin container
-           methods (`each`) have their own expansion and are exempt. */
-        if (!frontend::sym::ct_is_container_type(ibase)) {
-            int ca;
-            for (ca = args; ca >= 0; ca = self->arena->nodes[ca].next) {
-                int is_cl = 0;
-                if (self->arena->nodes[ca].kind == N_CLOSURE) is_cl = 1;
-                else if (self->arena->nodes[ca].kind == N_VAR) {
-                    int cv = self->sym->find_var(self->arena->nodes[ca].text2);
-                    if (cv >= 0 && self->sym->vars[cv].is_closure) is_cl = 1;
-                }
-                if (is_cl)
-                    return tool::diag::ct_sem_error(self->chk_line, self->chk_col,
-                        "a closure cannot be passed to a method argument yet (SH-65); pass '(fn, env)' explicitly",
-                        self->sup->mem->path);
-            }
-        }
         snprintf(base, sizeof base, "%s", ibase + 7);
         inst = frontend::sym::ct_inst_find(base);
         if (inst < 0) return 0;
@@ -7267,6 +7264,43 @@ impl ExprTypes for Expr {
                 }
         }
         if (found < 0) return 0;
+        /* SH-65/SH-67: a closure is a (trampoline, env) pair, but a struct/trait
+           method emits one C argument per source argument. Builtin container
+           methods (`each`) have their own expansion and are exempt. */
+        {
+            int pair_ok = 0;
+            int np = 0, pk2;
+            for (pk2 = self->arena->nodes[foundm].a; pk2 > 0; pk2 = self->arena->nodes[pk2].next) np++;
+            if (np == 2) {
+                pk2 = self->arena->nodes[self->arena->nodes[foundm].a].next;
+                if (pk2 > 0 && strstr(self->arena->nodes[pk2].text, "void *")) pair_ok = 1;
+            }
+            {
+            int ca;
+            for (ca = args; ca >= 0; ca = self->arena->nodes[ca].next) {
+                int is_cl = 0, clnode = -1;
+                if (self->arena->nodes[ca].kind == N_CLOSURE) {
+                    is_cl = 1;
+                    clnode = ca;
+                } else if (self->arena->nodes[ca].kind == N_VAR) {
+                    int cv = self->sym->find_var(self->arena->nodes[ca].text2);
+                    if (cv >= 0 && self->sym->vars[cv].is_closure) is_cl = 1;
+                }
+                if (!is_cl) continue;
+                if (clnode >= 0 && pair_ok) {
+                    const char *host = self->arena->nodes[self->arena->nodes[foundm].a].text;
+                    if (closure_match(self, (int)self->arena->nodes[clnode].num,
+                                      host, 1, 1) != 0)
+                        return -1;
+                    continue;
+                }
+                if (!frontend::sym::ct_is_container_type(ibase))
+                    return tool::diag::ct_sem_error(self->chk_line, self->chk_col,
+                        "a closure cannot be passed to a method argument yet (SH-65); pass '(fn, env)' explicitly",
+                        self->sup->mem->path);
+            }
+            }
+        }
         if (frontend::sym::ct_method_bind(found, inst, n1, v1, n2, v2,
                                           MAX_TEXT) < 0)
             return 0;

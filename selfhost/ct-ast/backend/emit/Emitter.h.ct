@@ -5643,8 +5643,19 @@ impl EmitOps for Emitter {
             }
             c2 = self->arena->nodes[n].b;
             while (c2 >= 0) {
+                int cv2 = -1;
                 fputs(", ", self->out);
-                if (self->emit_expr(c2) != 0) return -1;
+                /* SH-65: a pair-form method (`f(env, x), env`) takes the
+                   closure as two C arguments, exactly like a free call. */
+                if (self->arena->nodes[c2].kind == N_CLOSURE) {
+                    if (emit_closure_arg(self, c2) != 0) return -1;
+                } else {
+                    if (self->arena->nodes[c2].kind == N_VAR)
+                        cv2 = closure_var_lookup(self, self->arena->nodes[c2].text2);
+                    if (cv2 >= 0)
+                        fprintf(self->out, "__ct_cl_tramp_%d, &__ct_cl_env_v_%d", cv2, cv2);
+                    else if (self->emit_expr(c2) != 0) return -1;
+                }
                 c2 = self->arena->nodes[c2].next;
             }
             fputs(")", self->out);

@@ -950,6 +950,13 @@ else
     bad "PH-74-R1/R2 model" "$(sed -n '1,8p' "$work/p74m.out")"
 fi
 
+sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-75-R1 closure (pair-form method argument)"
+else
+    bad "PH-75-R1 closure" "$(sed -n '1,8p' "$work/p75c.out")"
+fi
+
 sh test/ast/p75_closure_neg.sh "$work/ct-ast" >"$work/p75n.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-75-R2 closure-neg (literal + bound variable)"
