@@ -1,8 +1,11 @@
 # PH-76 收口复核（REV）
 
-> **结论：`REV: 不通过`**（1 项阻断，见 §5；2 项非阻断观察，见 §8）
+> **结论（补正后）：`REV: 通过`**（SH-92 已修复并复核；原 `REV: 不通过` 记录保留在 §5/§9，
+> 补正证据见 §10）
 > **复核对象**：`247ade5bd5a2c7e4278d29df9c1ebcd16d302c67`
 > （``feat(ast): PH-76 链中物化 `$name` 收口（v0.76.0）``），tag `v0.76.0`。
+> **补正对象**：`d16d6ffab8661e0ccc87f1b8f2ffbfcbe7e81ce8`（SH-92 fix，tag `v0.76.1`），
+> 红证 `b2aefc6b3117a5b2f4008daadead4159b1e21e36`；补正复核于 2026-11-19 18:42。
 > **复核者**：REV / rev-ph76；日期 2026-11-19。
 > **方法**：只依据 tag 归档与 clean 副本。用
 > `git archive v0.76.0 | tar -x -C /tmp/rev-ph76` 取源码，在 `/tmp/rev-ph76` 重新自举
@@ -136,7 +139,7 @@ rc=1
 `$` 只在语句表达式的链首被接受：条件、声明初始化式、`return`、实参、下标与非方法调用均硬错；
 `?.` 之后、own/borrow/const、type-host 与 `.m.ct` recipe 均硬错。这部分与卡 §4/§7 一致。
 
-## 5 阻断项：`void` 返回不是硬错（E76-3 未满足）
+## 5 阻断项（原）：`void` 返回不是硬错（E76-3 未满足；已在 SH-92 / `d16d6ffa` 修复，见 §10）
 
 卡 §4 的冻结判据 E76-3 明写「类型不匹配、**void**、`?.`、own/borrow/const、type-host、
 条件/实参/下标均硬错」（[phase76.md:86](../design/phase76.md)），tutorial §13.3 也把
@@ -276,10 +279,105 @@ G8=0
    更窄；现行文档没有承诺 `y = …$x;`，故非阻断，建议在 §4.11.3 写清「链必须占满整条
    语句表达式」。
 
-## 9 结论
+## 9 原结论（2026-11-19 首轮，保留）
 
 `p76_chain` 绿、正例/多数负例、红证、版本、tag、G8 均通过；但冻结判据 E76-3 明确要求的
 **void 硬错**没有实现：`ct check --types` 放行，`ct build` 产出把 void 赋给 int 的坏 C，
 直到宿主 `cc` 才失败。按「phase 退出判据未满足不得宣称完成」的口径，本次收口复核不通过。
 
 **`REV: 不通过`**
+
+---
+
+## 10 补正复核（SH-92 / v0.76.1，2026-11-19）
+
+> 首轮阻断项（§5）由 DEV 以 `b2aefc6b`（test 红）→ `d16d6ffa`（fix）修复，tag `v0.76.1`
+> 已推。本节给出独立复核；§1–§9 保留首轮记录，不改写。
+
+### 10.1 提交与红证
+
+```console
+$ git log -1 --format='%H%n%P%n%s' b2aefc6b
+b2aefc6b3117a5b2f4008daadead4159b1e21e36
+6d51276e23ed0251cb406020bdb0bce1f5dbccea
+test(ast): SH-92 红（void 跳 `$x` 未拒绝）
+$ git log -1 --format='%H%n%P%n%s' d16d6ffa
+d16d6ffab8661e0ccc87f1b8f2ffbfcbe7e81ce8
+b2aefc6b3117a5b2f4008daadead4159b1e21e36
+fix(ast): SH-92 void 跳 `$x` 在 `$` 处拒绝（v0.76.1）
+$ git merge-base --is-ancestor 247ade5b HEAD && echo baseline_is_ancestor=yes
+baseline_is_ancestor=yes
+```
+
+红提交只改 `test/ast/p76_chain.sh`（+13 行，void 负例），是 fix 的父提交。
+在 `247ade5b`（v0.76.0）的归档副本上，用它 `ct-ast v0.76.0` 复跑新脚本：
+
+```console
+$ sh test/ast/p76_chain.sh /tmp/rev-ph76-work/ct-ast; echo $?
+FAIL p76/chain: void-returning hop accepted
+1
+```
+
+（T-7 字面要求 baseline 为 test 提交的父提交；这里 baseline `247ade5b` 是 test 提交父提交
+`6d51276e` 的父，二者行为等价——`6d51276e` 只含首轮 verdict 文档。已按 T-7 的意图在
+v0.76.0 归档上复现红，记录为不阻断观察。）
+
+### 10.2 从 v0.76.1 归档自举并跑探针
+
+同一 L0→L1→L2→ct-ast 自举链（命令同 §1，源码取 `git archive v0.76.1`，零警告）：
+
+```console
+$ /tmp/rev-ph76-1-work/ct-ast --version
+ct-ast v0.76.1
+$ cd /tmp/rev-ph76-1 && sh test/ast/p76_chain.sh /tmp/rev-ph76-1-work/ct-ast; echo EXIT=$?
+OK p76/chain (tail, multi-hop, type/const/non-call/argument negatives)
+EXIT=0
+```
+
+新脚本含 void 负例；OK 覆盖原五组 + void。
+
+### 10.3 手工 void 复核
+
+```console
+$ /tmp/rev-ph76-1-work/ct-ast check --types void.ct; echo rc=$?
+void.ct:4:47: error: '$' needs a non-void result; this hop has none (PH-76)
+ctc: 1 error(s) generated
+rc=1
+$ /tmp/rev-ph76-1-work/ct-ast check void.ct; echo rc=$?
+void.ct:4:47: error: '$' needs a non-void result; this hop has none (PH-76)
+ctc: 1 error(s) generated
+rc=1
+$ /tmp/rev-ph76-1-work/ct-ast build -o void.bin void.ct; echo rc=$?
+void.ct:4:47: error: '$' needs a non-void result; this hop has none (PH-76)
+ctc: 1 error(s) generated
+rc=1
+```
+
+`check`、`check --types`、`build` 三条路径都在 `$` 处硬错，不再产出把 void 赋给 int 的 C。
+修复点在 [`Expr.h.ct:4366-4377`](../../selfhost/ct-ast/frontend/parse/Expr.h.ct)：`static_ctype`
+返回 0 或空类型时显式拒绝（void 与不可解析调用），不再以「类型未知」跳过。
+
+### 10.4 回归与其它判据
+
+- 接口接收者 `iface.m()$x`（运行得 7）、指针接收者 `p->m()$x`（运行得 9）、多跳带实参
+  `s.m()$x.n(2)$y`（运行得 0）均 rc=0；类型不符仍报
+  `'$' target: expected 'int', got 'struct B'`——原正例/负例未被新检查误伤。
+- 五处 `CTC_VERSION` 均为 `0.76.1`；tag `v0.76.1` 的本地对象 `9b579c33…`、peeled
+  `d16d6ffa…` 与 `git ls-remote origin 'refs/tags/v0.76.1*'` 两行逐字一致；G8 绿
+  （`g8: OK (PN-2 version coherence; 9 legacy offsets)`）。
+- `issues/selfhost/sh92-void-dollar-materialize.md` 的 `status` 已按 5.4 由 REV 改为
+  `verified`，复核证据见该条。
+
+### 10.5 非阻断观察（补正后）
+
+1. tutorial §13 的标题/状态块仍是「规划……未实现」旧文案（[tutorial.md:1780](../tutorial.md)），
+   与 §13.4 的「v0.76.0 起可用」矛盾；SH-92 未触及，建议另立文档 fix。
+2. `d16d6ffa` 同时落库了 `battle/static-dispatch-1/**`（另一会话的在途材料），超出 SH-92
+   的修复范围；G8 绿，但「一提交一事」的账可在下次提交时留意。
+
+### 10.6 结论
+
+首轮阻断项已消除：void 跳在 `$` 处三路硬错，p76_chain（含 void 负例）绿，红证可复现，
+版本/tag/G8 一致，SH-92 已 `verified`。
+
+**`REV: 通过`**
