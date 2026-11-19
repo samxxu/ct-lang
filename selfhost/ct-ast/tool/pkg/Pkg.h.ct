@@ -100,6 +100,8 @@ static int pkg_store_dir(const char *publisher, const char *name, const char *ve
                          char *out, size_t cap);
 static int pkg_store_pkgdir(const char *full, const char *ver, char *out, size_t cap);
 static int pkg_mkdirs(const char *path);
+static int pkg_identity_check(const char *src, const char *publisher,
+                              const char *name, const char *nsroot);
 static int pkg_store_commit(const char *src, const char *publisher, const char *name,
                             const char *ver, const char *nsroot, const char *dig,
                             char *store, size_t scap);
@@ -1049,6 +1051,9 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", cache);
             return -1;
         }
+        /* PKG-9: same early check as `get_one`; a git source with a missing
+           identity may not fetch/commit its dependencies either. */
+        if (pkg_identity_check(cache, publisher, mname, nsroot) != 0) return -1;
         /* PH-77: the official identity is `ct`, so a `ct/<name>` source that
            declares a different publisher is a mis-tagged release, not a
            package we may store under a second identity. */
@@ -1267,6 +1272,11 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", dir);
             return -1;
         }
+        /* PKG-9: the identity is required before anything is fetched or
+           committed. This used to be checked only inside `pkg_store_commit`,
+           i.e. after `get_spec` had already written every dependency into the
+           shared store, so a refused get left a partial install behind. */
+        if (pkg_identity_check(dir, publisher, name, nsroot) != 0) return -1;
         if (!self->range_match(range, ver)) {
             fprintf(stderr, "ctc: %s %s does not satisfy '%s'\n", name, ver, range);
             return -1;
@@ -2177,18 +2187,15 @@ static int pkg_mkdirs(const char *path)
     return 0;
 }
 
-/* Validate the store identity, commit the tree exactly once and return the
-   version directory. A second install of the same version is a no-op when the
-   digest matches; a different digest is a hard error and never overwrites. */
-static int pkg_store_commit(const char *src, const char *publisher, const char *name,
-                            const char *ver, const char *nsroot, const char *dig,
-                            char *store, size_t scap)
+/* PKG-9: the manifest identity (`publisher` + `ns-root`) must be complete and
+   usable before any tree is fetched or committed. Both `get_one` and
+   `fetch_git` call this right after `pkg_read_identity`; `pkg_store_commit`
+   calls it again as the last line of defence. */
+static int pkg_identity_check(const char *src, const char *publisher,
+                              const char *name, const char *nsroot)
 {
     char nspath[MAX_PKG_PATH];
-    char parent[MAX_PKG_PATH];
-    char existed[80];
     struct stat st;
-    size_t n;
 
     if (!publisher[0]) {
         fprintf(stderr, "ctc: '%s/ct.pkg' is missing 'publisher'\n", src);
@@ -2216,6 +2223,22 @@ static int pkg_store_commit(const char *src, const char *publisher, const char *
                 nspath, publisher, name);
         return -1;
     }
+    return 0;
+}
+
+/* Validate the store identity, commit the tree exactly once and return the
+   version directory. A second install of the same version is a no-op when the
+   digest matches; a different digest is a hard error and never overwrites. */
+static int pkg_store_commit(const char *src, const char *publisher, const char *name,
+                            const char *ver, const char *nsroot, const char *dig,
+                            char *store, size_t scap)
+{
+    char parent[MAX_PKG_PATH];
+    char existed[80];
+    struct stat st;
+    size_t n;
+
+    if (pkg_identity_check(src, publisher, name, nsroot) != 0) return -1;
     if (pkg_store_dir(publisher, name, ver, store, scap) != 0) return -1;
     snprintf(parent, sizeof parent, "%s", store);
     n = strlen(parent);
