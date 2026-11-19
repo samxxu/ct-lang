@@ -5,7 +5,7 @@
 | 模块 | lang（接收者物化 / 下标链） |
 | 严重度 | **High**（字段形态是静默错误；方法形态有诊断） |
 | 优先级 | **P1** —— 挡住 ct-json 的 `doc["k"].x` / 多级链 |
-| 状态 | **方法形态已修**（v0.53.2 工作树，回归 `262_inherent_mcall_receiver`）；字段形态（形态 3）仍 open |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`c4727787`） |
 | 上游 | ct-json JSON-2（仓库外记录，本仓不复制；合并进本条，见「合并关系」） |
 
@@ -144,3 +144,55 @@ int n = b.as_int();
 - 探针：`test/ast/p77_lang5_field.sh`，已接入 `selfhost/check-ast.sh`。
 - 回归扫描：289 个 `test/ast` 夹具 + `test/cases` + `examples` 无新增拒绝
   （`181_iface_vec` 等 multi-file 夹具仍走 build 模式；errors/ 与 corpus 与基线一致）。
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举 `git archive v0.77.2` → L0→L1→L2→ct-ast（`ct-ast v0.77.2`，
+四段 `cc` 均零警告）；红证用 `git archive fa89d727` 重建的基线二进制配同一支探针复跑
+（基线归档尚无 `p77_lang5_field.sh`，探针取自 HEAD）。
+
+```console
+$ sh test/ast/p77_lang5_field.sh /tmp/rev-v0772/ct-ast
+ok   b["k"].v with a pointer result is refused
+ok   b["k"].v with an interface result is refused
+ok   b["k"]->v compiles and runs
+ok   b["k"].v with a value result compiles and runs
+ok   b["k"].m() still materialises and runs
+ok   f().m() still materialises and runs
+ok   f().v on a value compiles and runs
+ok   p.v on a pointer variable is refused
+ok   b["k"].m() pointer receiver keeps its diagnostic
+OK p77/lang5 (field receiver: pointer/interface refused, value forms kept)
+$ echo $?
+0
+```
+
+```console
+$ sh test/ast/p77_lang5_field.sh /tmp/rev-base/ct-ast
+FAIL p77/lang5: b["k"].v with a pointer result is refused
+  exit 0; expected a compile-time refusal (the emitted C is not checked by ct)
+FAIL p77/lang5: b["k"].v with an interface result is refused
+  exit 0; expected a compile-time refusal (the emitted C is not checked by ct)
+ok   b["k"]->v compiles and runs
+ok   b["k"].v with a value result compiles and runs
+ok   b["k"].m() still materialises and runs
+ok   f().m() still materialises and runs
+ok   f().v on a value compiles and runs
+FAIL p77/lang5: p.v on a pointer variable is refused
+  exit 0; expected a compile-time refusal (the emitted C is not checked by ct)
+ok   b["k"].m() pointer receiver keeps its diagnostic
+$ echo $?
+1
+```
+
+逐条对照：指针结果 `.v`、接口值 `.v`、指针变量 `.v` 三例基线 rc=0（静默发射），v0.77.2 均硬错且
+诊断首行带 `file:line:col`；值返回 `.v`、方法形态 `b["k"].m()` / `f().m()`、`f().v`、`b["k"]->v`
+基线绿、v0.77.2 仍绿，未回归。
+
+**与 issue 原文的差异（不打回）**：原文对形态 2/3 的期望是「至少一致：要么都支持，要么都硬错」，
+并未要求值返回也必须硬错。值返回 `f().v` 是合法 C（`struct Inner` 返回值取字段，cc 通过），
+方法形态由发射器物化为 `__ct_tmp`；两者都支持，符合「都支持」分支。真正静默坏 C 的是
+指针/接口返回，`7b8e8c9b` 已拒绝，故不按「值返回未硬错」判 reopened。
+
+T-7：红 `7627a43d`（父 `fa89d727`）→ 修 `7b8e8c9b`；红提交只含探针与 `check-ast.sh` 接入，
+实现提交只改 `Expr.h.ct`。

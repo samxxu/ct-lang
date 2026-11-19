@@ -6,7 +6,7 @@
 | 定性 | 文档补充与口径统一；**不占新 phase** |
 | 严重度 | High（LLM 只读本仓会把 std/包全部重造） |
 | 优先级 | P0 |
-| 状态 | **open** |
+| 状态 | **verified**（2026-11-20，REV） |
 | 落点 | 挂 `v0-PH-67` R5「文档漂移审查」，与 DOC-72 同批；可提前做，不阻塞 ID 迁移 |
 | 来源 | 用户 2026-11-18 指示：LLM 必须知道 CT 有生态，先复用，不要重写 std 和包 |
 
@@ -175,3 +175,40 @@ $ echo $?
 ```
 
 验证：`python3 test/docs/check-docs.py` → OK；`bash tools/check.sh g0` → OK（原始输出见 [DOC-72 处置](doc-72-spec-audit-followup.md#处置2026-11-20dev-2)）。
+
+## 复核（2026-11-20，REV）
+
+**结论：verified**（无 deferred 子项）。
+
+```console
+$ for f in docs/llm-guide.md docs/std-catalog.md docs/ct-pkg.md docs/ct-pkg-index.md; do
+    printf '%s %s lines\n' "$f" "$(wc -l <"$f")"; done
+docs/llm-guide.md 83 lines
+docs/std-catalog.md 85 lines
+docs/ct-pkg.md 55 lines
+docs/ct-pkg-index.md 74 lines
+$ grep -n 'llm-guide\|std-catalog\|ct-pkg-index' docs/README.md | head
+33:### 生态：先复用，别重写
+37:| [llm-guide.md](llm-guide.md) | ...
+38:| [std-catalog.md](std-catalog.md) | ...
+$ grep -n 'std-catalog' docs/tutorial.md
+719:模块清单、入口 `import` 与完整 API 入口见 [std-catalog](std-catalog.md)；...
+$ grep -n '三个角色' docs/package-guide.md
+14:### 0. 三个角色：消费者 / 发布者 / 索引
+```
+
+A4 的前提「六字段现行 / 五字段旧行只读」独立复核（2026-11-20 拉取官方索引）：
+
+```console
+$ curl -fsSL --max-time 12 https://raw.githubusercontent.com/ct-pkg/index/master/index -o /tmp/rev-index.txt
+$ awk 'NF{print NF}' /tmp/rev-index.txt | sort | uniq -c
+  10 5
+  10 6
+$ grep '^std ' /tmp/rev-index.txt
+std 0.19.0 ct https://github.com/ct-pkg/std v0.19.0 sha256:432086f0ec6c…
+```
+
+内置 pin 表与 std 目录也一致：`Pkg.h.ct` 的 `pnames/pvers/ptags` 为 `std / 0.19.0 / v0.19.0`；
+`/tmp/std019/std` 下 20 个目录、README 16 个公开模块，与 std-catalog 的「16 模块」口径一致。
+四份新文档与 tutorial/package-guide/glossary/docs-README 的链接均通过 `check-docs`（1990 条
+相对链接、329 文件）；`docs/README.md` 明确 `proposals/` 不是现状。A1–A6 的入口可走通。

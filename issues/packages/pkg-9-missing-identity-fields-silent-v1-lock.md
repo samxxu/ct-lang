@@ -6,7 +6,7 @@
 | 定性 | **实现缺陷（该报错而沉默）**，不是缺功能；缺必填字段被当成「旧清单」，自动退回 v1 |
 | 严重度 | **High** —— 契约静默降级：不写 store、不写 `# ct-lock 2`、不报错，rc=0 |
 | 优先级 | **P0**（包线 patch 序列第 2 位） |
-| 状态 | **open** |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | 复现于 `v0.58.0`（`45f882a7`）；行号按 `v0.58.1`（`fb82420c`）复核，PKG-5 修复后整体 +46 行 |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)：`:998`、`:1153`、`:1157`、`:1163`、`:1204-1208`、`:1214-1223`、`:1439`、`:1711`、`:1719`、`:1816-1854` |
 
@@ -162,3 +162,66 @@ $ echo $?
   - `527dcb66` `test(pkg): PKG-9 红 — 被拒的 get 仍把依赖写进 store`
   - `35757b08` `fix(pkg): PKG-9 身份校验前移，被拒的 get 不写 store`
 - 探针：`test/pkg/run.sh` 的 `PKG-9` 段（A1/A2/A1b/A3/A6/A7）。
+
+## 复核（2026-11-20，REV）
+
+**结论：verified**（按 HEAD 残余缺陷判；issue 锚点的 v1 静默降级在 HEAD 已不可复现）。
+全量 `test/pkg/run.sh` 在 `git archive v0.77.2` 内自建链后跑；定向红/绿分别用
+`fa89d727` 基线二进制与 v0.77.2 归档二进制。
+
+全量（归档内自建链，未用工作树产物）：
+
+```console
+$ cd /tmp/rev-src-v0772 && bash test/pkg/run.sh
+== PKG-9: a manifest must declare publisher + ns-root before ct get ==
+  ok    ct get refuses a manifest without publisher
+  ok    ct get refuses a manifest without ns-root
+  ok    a refused get commits no dependency to the store
+  ok    a refused get leaves the previous ct.lock byte-identical
+  ok    a complete manifest writes a v2 lock and lands in the store
+  ok    ct pkg check still reports both missing fields
+== summary: 153 passed, 0 failed ==
+$ echo $?
+0
+```
+
+定向红/绿（夹具：`bad` 缺 `publisher`、`dep = ../good@^0.2.0`，`good` 身份完整）：
+
+```console
+# 基线 eed1cbcd（527dcb66 的父；Pkg.h.ct 与 fa89d727 相同）
+$ HOME=B/home CT_HOME=B/home /tmp/rev-base/ct-ast get ../bad
+ctc: './../bad/ct.pkg' is missing 'publisher'
+$ echo $?
+1
+$ find B/home -maxdepth 5 -type d
+B/home
+B/home/pkg
+B/home/pkg/ct
+B/home/pkg/ct/demo
+B/home/pkg/ct/demo/0.2.0
+B/home/pkg/ct/demo/0.2.0/ns      # 被拒的 get 已把依赖写进 store
+$ test -f B/proj/ct.lock; echo $?
+1
+
+# v0.77.2
+$ HOME=H/home CT_HOME=H/home /tmp/rev-v0772/ct-ast get ../bad
+ctc: './../bad/ct.pkg' is missing 'publisher'
+$ echo $?
+1
+$ find H/home -maxdepth 5
+H/home                          # store 为空
+$ test -f H/proj/ct.lock; echo $?
+1
+```
+
+逐条对照：A1/A2（缺 publisher / ns-root 硬错、指名缺字段、不写 lock/vendor/store）绿；
+A1b（拒绝先于依赖遍历，store 无 `ct/demo`）绿；A3（完整清单写 v2 lock + store）绿；
+A6（旧 lock 字节不变）绿；A7（`ct pkg check` 两文案与 rc=1 不变）绿。
+
+**A4/A5 的显式 v1 开关未实现**：处置给出的理由是 PH-63 已移除 vendor 读写，v1 行无法被
+`ct build` 消费，故「没有标记就拒绝」；核对 `Pkg.h.ct` 与 v0.77.2 的失败路径，理由成立，
+不计为漏项。issue 原描述的「rc=0 + 静默退 v1 lock」属历史锚点（v0.58.0），本次不复跑该历史
+二进制，只以 HEAD 残余缺陷（store 写入）做红/绿，避免把历史现象当成 HEAD 缺陷。
+
+T-7：红 `527dcb66`（父 `eed1cbcd`）→ 修 `35757b08`；红提交只加 `test/pkg/run.sh` 的 PKG-9 段，
+实现提交只改 `Pkg.h.ct`。

@@ -6,7 +6,7 @@
 | 严重度 | Low（判据设计缺口；不影响 v0.26.4 的实际交付与门禁结果） |
 | 锚点 | `v0.26.4` / `7c58192`（HEAD = `main`） |
 | 文件 | [phase26.md §1.4](../../docs/history/design/phase26.md#L53-L79)、[phase26.md §1.5](../../docs/history/design/phase26.md#L81-L93)、[phase26.md §9.2](../../docs/history/design/phase26.md#L631-L643) |
-| 状态 | **open**（判据设计缺口，待下一轮判据冻结时收口；不事后扩写冻结判据） |
+| 状态 | **verified**（2026-11-20，REV；deferred 子项见复核段） |
 
 ## 现象
 
@@ -74,3 +74,29 @@ d73e3fb2 fix(docs): map the Phase 26 patch criteria and backfill DOC-63
 ```
 
 验证：`python3 test/docs/check-docs.py` → OK；`bash tools/check.sh g0` → OK（原始输出见 [DOC-72 处置](doc-72-spec-audit-followup.md#处置2026-11-20dev-2)）。
+
+## 复核（2026-11-20，REV）
+
+**结论：verified**（deferred 子项见下，不改其归属）。
+
+```console
+$ awk '/^### 1.4/,/^### 1.5/' docs/history/design/phase26.md | grep -c '^| D[0-9]'
+22
+$ awk '/^### 1.4/,/^### 1.5/' docs/history/design/phase26.md | grep -c '^| D2[3-9]'
+0
+$ awk '/^### 1.5/,/^### 1.6/' docs/history/design/phase26.md | grep -c '^| E[0-9]'
+8
+$ git merge-base --is-ancestor d73e3fb2 HEAD; echo $?
+0
+$ sed -n '723,741p' docs/history/design/phase26.md
+### 9.9 判据映射与冻结边界（2026-11-10 核对）
+... E6 冻结原文 `0.26.3` 保留，现行判定以 §9.2 P8 为准 ...
+... 下一相的卡面要求（待下一相开卡时执行）...
+```
+
+逐条：§9.9 存在且把 E6→P8 的补丁口径写在唯一位置，冻结原文未动；D 仍 22 行、无 D23+，
+E 仍 8 行，未事后扩写；`d73e3fb2` 已在 HEAD 祖先链。§9.9 的链接
+（`doc69...#99-判据映射与冻结边界2026-11-10-核对`）按 GitHub `github-slugger` 可解析。
+
+Deferred：建议项 2 的「下一相卡面要求」只登记、不执行，触发条件是「下一相冻结 §9.5/§5
+退出判据时」，原文已写明；属 REQ/USER 的卡面动作，REV 不改状态。

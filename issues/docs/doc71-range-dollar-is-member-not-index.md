@@ -6,7 +6,7 @@
 | 严重度 | Low（纯文档措辞；实现正确） |
 | 锚点 | `v0.26.4`（Phase 24 实现，未 bump） |
 | 文件 | [language-spec.md:1847-1848](../../docs/language-spec.md#L1847-L1848)、[language-spec.md:1864-1868](../../docs/language-spec.md#L1864-L1868)、[language-spec.md:4248](../../docs/language-spec.md#L4248)、[phase24.md:145-160](../../docs/history/design/phase24.md#L145-L160)、[Emitter.h.ct:2018-2038](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2018-L2038)、[range_init.ct:21](../../examples/15_range_init/range_init.ct#L21) |
-| 状态 | **open**（待改叙述；不改实现、不改诊断文案） |
+| 状态 | **verified**（2026-11-20，REV；deferred 子项见复核段） |
 
 ## 触发场景
 
@@ -106,3 +106,44 @@ $ grep -n 'squares' examples/15_range_init/range_init.expected.out
 若 `$` 是 0 起下标，`2..5($)` 会得到 `0 1 2`；实测 `2 3 4`，与改后叙述一致。
 
 验证：`python3 test/docs/check-docs.py` → OK；`bash tools/check.sh g0` → OK。
+
+## 复核（2026-11-20，REV）
+
+**结论：verified**（内容正确；新增链接有锚点瑕疵，见下，不阻断）。
+
+```console
+$ grep -n '当前成员的占位' docs/language-spec.md
+2154:- **`$` 是当前成员的占位，不是下标**：...
+$ grep -n '当前成员值' docs/history/design/phase24.md
+160:4. **可多次出现**：... 同一个当前成员值 ...
+$ grep -n '`\$`（当前成员 / 自身）' docs/glossary.md
+69:| `$`（当前成员 / 自身） | ... | ... |
+$ grep -n 'current index\|current member' selfhost/ct-ast/backend/emit/Emitter.h.ct
+3101:       `range_k` set to the current index, ...
+```
+
+独立实测（v0.77.2 归档二进制）：
+
+```console
+$ /tmp/rev-v0772/ct-ast compile /tmp/rev-doc71/p.ct --c-boundary=allow -o /tmp/rev-doc71/p.c
+$ sed -n '6,7p' /tmp/rev-doc71/p.c
+    int a[] = { ((int)2), ((int)3), ((int)4) };
+    int b[] = { ((int)0), ((int)1), ((int)2) };
+$ /tmp/rev-doc71/p
+a 2 3 4
+b 0 1 2
+```
+
+逐条：spec §4.47 已改为「当前成员」并注明 `the range index '$' is not a variable` 是历史措辞；
+glossary 新增 `$` 条目（range / `into` 两个绑定语境、range 只读）；phase24 改为「当前成员值」；
+英文段按 §0.4 已不存在，`n/a` 成立；发射器注释未改，处置已登记为 deferred，触发条件
+「随下次实现提交」明确，属代码提交范围，REV 不据此打回。
+
+**锚点瑕疵（不阻断）**：本批新增的两处 `§4.47` 链接写成
+`#447-数组-range-初值-ab-phase-24仅-ct-ast`。按 GitHub `github-slugger` 对标题
+「4.47 数组 range 初值 `a..b($)`（Phase 24，仅 ct-ast）」的计算，实际锚点是
+`#447-数组-range-初值-abphase-24仅-ct-ast`（`ab` 与 `phase` 之间没有连字符）。
+两处分别在 [phase24.md:160-161](../../docs/history/design/phase24.md#L160-L161) 与本文件处置项 1；
+`check-docs` 只校验相对路径存在，不校验 `#fragment`，故门禁未红。全仓同类 fragment
+链接共 89 条，不合规 10 条（本批新增 2 条，其余 8 条为既有），建议下一次文档提交统一修正，
+不影响本条内容结论。

@@ -6,7 +6,7 @@
 | 定性 | 文档漂移与可读性修复；**不占 phase** |
 | 严重度 | High（P0-1/P0-3/P0-4 会误导实现判断） |
 | 优先级 | P1 |
-| 状态 | **open** |
+| 状态 | **verified**（2026-11-20，REV；deferred 子项见复核段） |
 | 来源 | 外部审计反馈（2026-11-18，基线 v0.63.2）；已按当前 v0.65.1 复核 |
 | 落点 | 挂 `v0-PH-67` R5「文档漂移审查」；可独立提前做，不阻塞 ID 迁移 |
 
@@ -144,3 +144,52 @@ g0: OK (block 1.17.0, session-map present)
 $ echo $?
 0
 ```
+
+## 复核（2026-11-20，REV）
+
+**结论：verified**（B1/B2 已完成项属实；B3/B4 等 deferred 子项见下，不据此打回）。
+
+```console
+$ sed -n '5,7p' docs/language-spec.md
+> **适用版本**：安装入口 **ct-ast**（`selfhost/ct-ast/main.ct`），不在此固定版本号——实际版本以
+> `ct -v` 为准。最近一次全文复核是 v0.53.1（2026-11-15），此后正文按 phase 增量修订，
+$ grep -n 'v0.16.0' docs/tutorial.md; echo $?
+1
+$ grep -n '::=' docs/language-spec.md; echo $?
+1
+$ grep -c 'L0' docs/language-spec.md; grep -c 'L2' docs/language-spec.md
+31
+41
+$ sed -n '1p' docs/architecture.md
+# ctc 内部架构（L0 种子；主线 ct-ast 见 §0）
+```
+
+`.m.ct` 可被 import 的失实修正也独立复跑：
+
+```console
+$ /tmp/rev-v0772/ct-ast build --emit-c --emit-map /tmp/rev-doc72-muc/m.map \
+    test/modules/map_unit_cross/main.ct -o /tmp/rev-doc72-muc
+$ echo $?
+0
+$ cc -Wall -Wextra -std=c99 /tmp/rev-doc72-muc/*.c -o /tmp/rev-doc72-muc/bin \
+  && /tmp/rev-doc72-muc/bin | cmp -s - test/modules/map_unit_cross/expected.out; echo $?
+0
+```
+
+逐条：B1-2/B1-3/B1-4、B2-2/B2-3 已落地且可核对；B2-1 的代际表与 31/41 计数与处置一致。
+**B1-1 的字面验收「页首版本 == `ct -v`」没有以钉版本号形式实现**：处置改为「不固定版本号、
+以 `ct -v` 为准」，把相等断言留给 B3-1 门禁，属已声明的 deferred，不是静默漏项。
+`check-docs`/`g0` 均绿。
+
+Deferred 触发条件复核：
+
+| 项 | 处置写的触发条件 | REV 判断 |
+| --- | --- | --- |
+| B1-1 门禁断言 | 并入 B3-1 的独立门禁提交 | 明确（依赖 B3-1） |
+| B2-1 剩余 L0/L2 收敛 | 「单独一轮 spec 结构收敛，不混入本次批」 | 有下一动作，无日期；可跟踪 |
+| B3-1 | 「单开一次门禁改动（脚本 + 负例 + 红证）」 | 明确（动作与产物） |
+| B3-2 | 「需运行器与逐 case 断言……分阶段」 | **无明确触发条件**（无日期 / phase / 前置门禁） |
+| B4 | 「按 issue『后置』执行」 | **无明确触发条件**（仅「后置」） |
+
+B3-2/B4 的 `deferred` 属 REQ/USER 权限，REV 不改状态；但按 5.4「deferred 必备触发条件或日期」，
+建议 REQ 在收口时补上可判定的触发点（例如「spec-cases 运行器落地后」或某个 phase 号）。

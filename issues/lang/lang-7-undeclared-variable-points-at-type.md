@@ -5,7 +5,7 @@
 | 模块 | lang（诊断文案） |
 | 严重度 | Low |
 | 优先级 | **P3** —— 只误导方向，不挡功能；与 LANG-2 同一路径，建议同修 |
-| 状态 | open |
+| 状态 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`c4727787`） |
 
 ## 精确触发条件
@@ -94,3 +94,41 @@ LANG-2 修复后，原单的 namespace 场景已不再可达；但静态调用�
   - `eed1cbcd` `fix(ct-ast): LANG-7 类型名接收者的静态调用报准确诊断`
 - 探针：`test/ast/p77_lang7_static_type.sh`，已接入 `selfhost/check-ast.sh`。
 - 回归扫描：289 个 `test/ast` 夹具、`test/cases` 与 `examples` 无新增拒绝。
+
+## 复核（2026-11-20，REV）
+
+**结论：verified。** 独立自举 `git archive v0.77.2`（`ct-ast v0.77.2`）；红证用
+`git archive fa89d727` 重建的基线二进制配 HEAD 探针复跑。
+
+```console
+$ sh test/ast/p77_lang7_static_type.sh /tmp/rev-v0772/ct-ast
+ok   typedef receiver names the type
+ok   enum receiver names the type
+ok   struct static call still works
+ok   declared struct with no such method keeps its message
+ok   an undeclared name still reports an undeclared variable
+OK p77/lang7 (type-name static call diagnostic)
+$ echo $?
+0
+```
+
+```console
+$ sh test/ast/p77_lang7_static_type.sh /tmp/rev-base/ct-ast
+FAIL p77/lang7: typedef receiver names the type
+  missing diagnostic /static method 'make' cannot be resolved: 'MyInt' is a type name, not a variable/: .../typealias.ct:2:30: error: use of an undeclared variable
+FAIL p77/lang7: enum receiver names the type
+  missing diagnostic /static method 'make' cannot be resolved: 'Color' is a type name, not a variable/: .../enum.ct:2:30: error: use of an undeclared variable
+ok   struct static call still works
+ok   declared struct with no such method keeps its message
+ok   an undeclared name still reports an undeclared variable
+$ echo $?
+1
+```
+
+逐条对照：typedef（`MyInt.make`）与 enum（`Color.make`）接收者在 v0.77.2 报
+`static method 'make' cannot be resolved: '<T>' is a type name, not a variable`，位置在接收者；
+struct 静态调用、struct 无此方法、未知名三例文案不变，未越界。
+
+引用瑕疵（不影响结论）：处置段把 baseline 写作 `38248747`，但红证实际用 `fa89d727` 重建的
+二进制；两者只差 LANG-5 的 `Expr.h.ct` 49 行，LANG-7 路径不受影响，红证仍成立。
+`38248747` 确实是红提交 `d0cb10c4` 的父提交，T-7 链成立。
