@@ -114,6 +114,8 @@ pub trait StmtOps {
     int  u_mark_lvalue(int n);
     int  u_scan(int n);
     int  uninit_check(int body, int line);
+    int  del_base(int n, char *out, int cap);
+    int  del_take(const char *name);
     int  body_has_jump(int n);
     int  defer_ahead(void);
     int  err_ahead(void);
@@ -197,6 +199,8 @@ pub struct Stmt {
     char u_asg[48][160]; int na;
     char u_rd[48][160]; int nr;
     char u_addr[48][160]; int nx;
+    /* PH-71-R1: variables explicitly released by `delete` in this function. */
+    char del_names[64][160]; int ndel;
     /* How many `foreach` bodies enclose the statement being parsed. Only an
        inner `foreach` inside an outer one is diagnosed (D27-10, mirroring
        D22-5): a hand-written `item` stays ordinary C shadowing and is silent. */
@@ -1802,6 +1806,36 @@ impl StmtOps for Stmt {
         return look;
     }
 
+    /* PH-71-R1: the base variable of a `delete` expression (`r`, `p->next`). */
+    int del_base(int n, char *out, int cap)
+    {
+        int k;
+
+        if (n < 0) return -1;
+        k = self->arena->nodes[n].kind;
+        if (k == N_VAR) {
+            snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text2);
+            return 0;
+        }
+        if (k == N_MEMBER || k == N_ARROW || k == N_INDEX || k == N_DEREF)
+            return self->del_base(self->arena->nodes[n].a, out, cap);
+        return -1;
+    }
+
+    /* 1 = this name was already deleted in the function (double release). */
+    int del_take(const char *name)
+    {
+        int i;
+
+        for (i = 0; i < self->ndel; i++)
+            if (strcmp(self->del_names[i], name) == 0) return 1;
+        if (self->ndel < 64) {
+            snprintf(self->del_names[self->ndel], 160, "%s", name);
+            self->ndel = self->ndel + 1;
+        }
+        return 0;
+    }
+
     int u_reset(void)
     {
         self->nu = 0;
@@ -2356,6 +2390,13 @@ impl StmtOps for Stmt {
             /* a borrowed pointer belongs to the lender: freeing it here would
                double-free a pool slot (stage one refuses the spelling) */
             if (check_borrow_delete(self, e) != 0) return -1;
+            if (self->ex->check_mode && *self->ex->check_mode) {
+                char dn[160];
+                if (self->del_base(e, dn, sizeof dn) == 0 && self->del_take(dn))
+                    return tool::diag::ct_sem_error(self->lex->tokline,
+                        self->lex->tokstart - self->lex->lstart + 1,
+                        "double delete of an owned object", self->mem->path);
+            }
             /* the object is released: it can neither leak nor auto-drop */
             if (self->mem->leak_active && self->sup->leak_delete(e) != 0) return -1;
             /* resolve the pointee's struct now (the variable may leave scope
@@ -3782,6 +3823,7 @@ impl StmtOps for Stmt {
         self->nbreak = 0;
         self->ncont = 0;
         self->u_reset();
+        self->ndel = 0;
         self->ndefer_blocks = 0;
         self->ndefer_next_id = 0;
         self->in_defer = 0;

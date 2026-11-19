@@ -929,6 +929,27 @@ else
     bad "PH-70-R2 uninit" "$(sed -n '1,8p' "$work/p70i.out")"
 fi
 
+sh test/ast/p71_own.sh "$work/ct-ast" >"$work/p71own.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-71-R1 own (double delete)"
+else
+    bad "PH-71-R1 own" "$(sed -n '1,8p' "$work/p71own.out")"
+fi
+
+sh test/ast/p71_drop.sh "$work/ct-ast" >"$work/p71drop.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-71-R2 drop (order + single release)"
+else
+    bad "PH-71-R2 drop" "$(sed -n '1,8p' "$work/p71drop.out")"
+fi
+
+sh test/ast/p71_pkgstrict.sh "$work/ct-ast" >"$work/p71pk.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-71-R3 pkgstrict (manifest opt-in)"
+else
+    bad "PH-71-R3 pkgstrict" "$(sed -n '1,8p' "$work/p71pk.out")"
+fi
+
 sh test/ast/p70_cfg.sh "$work/ct-ast" >"$work/p70c.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-70-R1 cfg (structured termination)"

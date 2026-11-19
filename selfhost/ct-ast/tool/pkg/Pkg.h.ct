@@ -448,7 +448,8 @@ impl PkgOps for Pkg {
                          || (kl == 9 && strncmp(ls, "namespace", 9) == 0)
                          || (kl == 6 && strncmp(ls, "source", 6) == 0)
                          || (kl == 7 && strncmp(ls, "website", 7) == 0)
-                         || (kl == 4 && strncmp(ls, "type", 4) == 0))) {
+                         || (kl == 4 && strncmp(ls, "type", 4) == 0)
+                         || (kl == 6 && strncmp(ls, "strict", 6) == 0))) {
                 fprintf(stderr, "ctc: warning: '%s/ct.pkg' has unknown key '%.*s'\n",
                         dir, (int)kl, ls);
             }
@@ -2581,6 +2582,36 @@ static int pkg_update(const char *prog)
     return pkg_update_v2(prog);
 }
 
+/* PH-71-R3: `ct.pkg` may opt into strict verification per package
+   (`strict = on`). The CLI flag still wins; absent/off keeps today's default. */
+static int manifest_strict_default(void)
+{
+    FILE *f;
+    char line[MAX_PKG_LINE];
+
+    f = fopen("./ct.pkg", "r");
+    if (f == NULL) return 0;
+    while (fgets(line, sizeof line, f) != NULL) {
+        char *p = line;
+        char *eq;
+        size_t kl;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == 0 || *p == '#') continue;
+        eq = strchr(p, '=');
+        if (eq == NULL) continue;
+        kl = (size_t)(eq - p);
+        while (kl > 0 && (p[kl - 1] == ' ' || p[kl - 1] == '\t')) kl--;
+        if (kl != 6 || strncmp(p, "strict", 6) != 0) continue;
+        p = eq + 1;
+        while (*p == ' ' || *p == '\t') p++;
+        fclose(f);
+        return (strncmp(p, "on", 2) == 0 || strncmp(p, "true", 4) == 0
+                || strncmp(p, "1", 1) == 0) ? 1 : 0;
+    }
+    fclose(f);
+    return 0;
+}
+
 /* SP-016: `--strict` refuses a lock that still depends on a dev override
    (`dir` row) and a v1 lock (no vendor fallback is left). The store digest
    check follows. */
@@ -3010,6 +3041,7 @@ int ct_pkg_verify(int argc, char **argv, const char *prog, const char *version)
         fprintf(stderr, "ctc: unexpected argument '%s'\n", argv[ai]);
         return 1;
     }
+    if (!strict && manifest_strict_default()) strict = 1;
     return pkg_verify(prog, strict);
 }
 
