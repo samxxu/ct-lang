@@ -809,6 +809,25 @@ impl ModuleOps for Module {
         if (self->base_name(path, self->units[u].base, MAX_TEXT, &is_hdr, &is_map) != 0) return -1;
         self->units[u].is_hdr = is_hdr;
         self->units[u].is_map = is_map;
+        /* LANG-11: `<base>.h.ct` and `<base>.ct` would both emit `<base>.c`
+           (the second silently overwrote the first). Refuse with both paths. */
+        if (!is_map) {
+            for (k = 0; k < u; k++) {
+                if (self->units[k].is_map) continue;
+                if (strcmp(self->units[k].base, self->units[u].base) == 0) {
+                    char cmsg[MAX_TEXT];
+                    const char *p1 = strrchr(self->units[k].path, '/');
+                    const char *p2 = strrchr(path, '/');
+                    if (p1) p1++; else p1 = self->units[k].path;
+                    if (p2) p2++; else p2 = path;
+                    snprintf(cmsg, sizeof cmsg,
+                             "units '%s' and '%s' both emit '%s.c'; rename one",
+                             p1, p2, self->units[u].base);
+                    self->fail(cmsg);
+                    return -1;
+                }
+            }
+        }
         self->p->unit_is_map = is_map;
         self->p->c_strict = (!is_map && self->c_boundary_for(path)) ? 1 : 0;
         snprintf(self->p->c_base, sizeof self->p->c_base, "%s", self->units[u].base);
