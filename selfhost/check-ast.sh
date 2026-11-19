@@ -1079,6 +1079,17 @@ else
     bad "PH-72-R1 maxcalls" "$(sed -n '1,8p' "$work/p72mc.out")"
 fi
 
+# LANG-5: a custom-subscript result as a field receiver. A pointer-returning
+# `get` and an interface value used to emit `Box_get(...).v` for the host cc to
+# reject, while the method form had a diagnostic; the probe pins the hard error
+# and keeps every value form (and its materialisation) working.
+sh test/ast/p77_lang5_field.sh "$work/ct-ast" >"$work/p77l5.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "LANG-5 field (subscript result receiver)"
+else
+    bad "LANG-5 field (subscript result receiver)" "$(sed -n '1,8p' "$work/p77l5.out")"
+fi
+
 sh test/ast/p71_own.sh "$work/ct-ast" >"$work/p71own.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-71-R1 own (double delete)"
