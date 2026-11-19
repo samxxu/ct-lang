@@ -1903,7 +1903,7 @@ impl StmtOps for Stmt {
     {
         int i;
 
-        if (!self->ex->check_mode || !*self->ex->check_mode) return 0;
+        if (!self->ex->check_mode || *self->ex->check_mode != 2) return 0;
         if (body < 0) return 0;
         self->u_scan(body);
         for (i = 0; i < self->nu; i++) {
@@ -1942,7 +1942,7 @@ impl StmtOps for Stmt {
 
     int missing_return_check(int body, const char *ret, int line)
     {
-        if (!self->ex->check_mode || !*self->ex->check_mode) return 0;
+        if (!self->ex->check_mode || *self->ex->check_mode != 2) return 0;
         if (!ret || !ret[0] || strcmp(ret, "void") == 0 || body < 0) return 0;
         if (self->body_has_jump(body)) return 0;
         return tool::diag::ct_sem_error(line, 0,
@@ -1978,7 +1978,7 @@ impl StmtOps for Stmt {
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
             /* PH-70-R3: a statement after return/break/continue cannot execute;
                labels and empty statements are exempt (`goto` targets are legal). */
-            if (prev_jump && self->ex->check_mode && *self->ex->check_mode
+            if (prev_jump && self->ex->check_mode && *self->ex->check_mode == 2
                 && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0)
                 && !self->label_ahead())
                 return tool::diag::ct_sem_error(self->lex->tokline,
@@ -2379,7 +2379,7 @@ impl StmtOps for Stmt {
                     return tool::diag::ct_sem_error(self->lex->tokline, bcol,
                         "err: break is not allowed in a switch", self->mem->path);
             }
-            if (!is_err && self->ex->check_mode && *self->ex->check_mode
+            if (!is_err && self->ex->check_mode && *self->ex->check_mode == 2
                 && self->nbreak == 0)
                 return tool::diag::ct_sem_error(self->lex->tokline, bcol,
                     "break is only allowed in a loop or switch", self->mem->path);
@@ -2410,7 +2410,7 @@ impl StmtOps for Stmt {
                     return tool::diag::ct_sem_error(self->lex->tokline, ccol,
                         "err: break/continue is only allowed in a loop", self->mem->path);
             }
-            if (!is_err && self->ex->check_mode && *self->ex->check_mode
+            if (!is_err && self->ex->check_mode && *self->ex->check_mode == 2
                 && self->ncont == 0)
                 return tool::diag::ct_sem_error(self->lex->tokline, ccol,
                     "continue is only allowed in a loop", self->mem->path);
@@ -2857,7 +2857,7 @@ impl StmtOps for Stmt {
                 s = self->parse_label();
                 /* PH-70-R3: duplicate `case` values/overlapping ranges are an
                    error under `ct check` (only foldable constants are judged). */
-                if (s >= 0 && self->ex->check_mode && *self->ex->check_mode
+                if (s >= 0 && self->ex->check_mode && *self->ex->check_mode == 2
                     && self->arena->nodes[s].aux == 0) {
                     long lo = 0;
                     long hi = 0;

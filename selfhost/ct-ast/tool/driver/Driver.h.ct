@@ -523,7 +523,11 @@ impl DriverOps for Driver {
             }
             /* PH-70: flow/semantic findings share `ct check`; the flag is
                accepted here so `ct check --semantics` is a valid spelling. */
-            if (strcmp(argv[i], "--semantics") == 0) continue;
+            if (strcmp(argv[i], "--semantics") == 0) {
+                /* PH-70: 2 = check + flow/semantic findings; 1 = plain check. */
+                self->m->check_mode = 2;
+                continue;
+            }
             if (strcmp(argv[i], "--outdir") == 0) {
                 if (i + 1 >= argc) {
                     fprintf(stderr, "ctc: --outdir needs an argument\n");

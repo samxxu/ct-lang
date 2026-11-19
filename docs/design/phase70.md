@@ -55,8 +55,8 @@ CFG/定值/控制流语义检查：CFG/基本块；definite assignment；所有�
 | 任务 | 状态 | 证据 |
 | --- | --- | --- |
 | R1 CFG 构建 | ⬜ 未开始 | 暂无 CFG/基本块；R2/R3 用线性扫描绕过 |
-| R2 定值/return | 🚧 部分 | 非 void 函数缺 return 已报（`p70/return`）；**未初始化读**仍静默，待做 |
-| R3 跳转/switch | ✅ 完成 | `p70/flow`（break/continue 上下文）、`p70/switch`（重复 case）、`p70/unreach`（跳转后不可达）全绿；`check-ast 1491 passed` |
+| R2 定值/return | ✅ 完成 | 缺 return（`p70/return`）+ 未初始化读（`p70/uninit`）；均在 `ct check --semantics` 下生效 |
+| R3 跳转/switch | ✅ 完成 | `p70/flow` / `p70/switch` / `p70/unreach` 全绿 |
 
 实现：`Expr.check_mode` 指针 + `Stmt` 的 `nbreak`/`ncont` 判定；Driver 接受
 `--semantics`（与 `--types` 同入口）。CFG/definite assignment 需要新的分析层，
