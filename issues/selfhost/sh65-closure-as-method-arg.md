@@ -121,7 +121,7 @@ return ring_each(&r, (int x) => x + base);  /* 自由函数闭包：compile rc=0
 
 ## 处置（2026-11-19，PH-75）
 
-- 提交：`5f0e1e9?`（实现见 `git log --grep "PH-75-R1"`）
+- 提交：`74e58fe7`（实现见 `git log --grep "PH-75-R1"`）
 - 改动：pair 形方法收闭包并绑定返回类型；N_MCALL 按 (tramp,&env) 发射
 - 验证：`p75_closure.sh` → `OK p75/closure`
 

@@ -131,7 +131,7 @@ cc rc=1
 
 ## 处置（2026-11-19，PH-75）
 
-- 提交：`5f0e1e9?`（实现见 `git log --grep "PH-75-R1"`）
+- 提交：`74e58fe7`（pair 支持）+ `ffe3621d`（容器豁免）（实现见 `git log --grep "PH-75-R1"`）
 - 改动：单 fp 形态继续硬错（不再静默坏 C）；pair 形态走 SH-65 支持
 - 验证：`p75_closure_neg.sh` → `OK p75/closure-neg`
 
