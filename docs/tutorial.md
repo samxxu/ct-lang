@@ -1777,7 +1777,104 @@ Result<long, char *> twice(int n)
 8. **上限是硬报错**：ct-ast 提高到 `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、
    `MAX_FUNCS` 512（整个程序累计，不是单单元配额）、`MAX_VARS` 4096…，越界直接报错，绝不静默截断。[§7](language-spec.md) 有全表。
 
-## 13. 下一步
+## 13. 规划预览：链中物化 `$name`（Phase 76，未实现）
+
+> **状态：Phase 76 规划中，当前 `ct` 不接受 `$name`，本节不是可运行语法。**
+> 现在请用 §13.4 的两行拆链或 `into`；本节只用于评审/预览，避免把规划当成现状。
+> 依据：[Phase 76 卡](design/phase76.md)、[battle inline-materialize-2](../battle/inline-materialize-2/verdict.md)。
+
+### 13.1 目标
+
+CT 鼓励方法链；有些链需要在中间把返回值留下来复用/调试：
+
+```ct
+M x;
+N y;
+
+a.m()$x.n()$y;
+```
+
+规划语义是普通赋值：
+
+```ct
+x = a.m();
+y = x.n();
+```
+
+- 多个 `$name`；
+- 允许链尾 `$name`；
+- `name` 必须已声明，**不要求初始化**；
+- `name` 类型必须等于该跳返回类型；
+- 不接管所有权，不改 vptr/装箱/AutoDrop。
+
+### 13.2 允许的形态
+
+```ct
+/* trait 接口：只能声明，不能 {} 默认值 */
+Trait t;
+a.m()$t.n();
+
+/* 具体 struct：声明或 {} 均可 */
+S s;
+S z = {};
+a.m()$s.n();
+
+/* 普通 struct：声明本身不保证字段零；{} 显式零 */
+P p;
+P q = {};
+a.m()$p.n();
+
+/* 标量：int i; 不是 0；$i 赋值后才安全 */
+int i;
+a.m()$i.n();
+
+/* 指针：空值用 0 */
+M *ptr = 0;
+a.m()$ptr.n();
+```
+
+### 13.3 拒绝的形态
+
+```ct
+Trait t = {};          /* trait 没有具体类型，不能构造 */
+N x;
+a.m()$x.n();           /* 类型不匹配 */
+a.void_method()$x.n(); /* 返回 void，无可赋值结果 */
+a?.m()$x.n();          /* ?.m 未实现 */
+own M x = ...;
+a.m()$x.n();           /* own/borrow/const 目标拒绝 */
+a.m()$M x.n();         /* $ 不是声明 */
+if (a.m()$x.n()) { }   /* 条件位置 */
+f(a.m()$x.n());        /* 实参位置 */
+arr[a.m()$x.n()];      /* 下标位置 */
+"url".method()$x.n();  /* type-host/recipe 不在 v1 */
+```
+
+### 13.4 现在怎么写
+
+```ct
+/* 两行拆链：当前可用 */
+M x = a.m();
+x.n();
+
+/* 同一对象的兄弟方法：当前可用 */
+a into {
+    .m();
+    .n();
+}
+```
+
+### 13.5 与 SH-73 的边界
+
+`$name` **不修复** SH-73。动态派发的临时值接收者仍被拒：
+
+```ct
+a.m().n();      /* 仍报 method receiver must be ... */
+```
+
+`$name` 只是把返回值先赋给变量，再在变量上调用；这是 one-hop 绕法，不是链式通用解禁。
+
+## 14. 下一步
 
 - [language-spec.md](language-spec.md) —— 每一条展开规则的权威定义
 - [polymorphism.md](polymorphism.md) —— 为什么用 vtable 而不是别的写法
@@ -1789,7 +1886,7 @@ Result<long, char *> twice(int n)
 - 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [design/phase8.md](history/design/phase8.md)，
   17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [design/phase17.md](history/design/phase17.md)
 
-### 13.1 可选的类型检查：`ct check --types`
+### 14.1 可选的类型检查：`ct check --types`
 
 默认的 `ct check` 只做语法与既有语义检查；想让它顺手拦下明显的类型错，加 `--types`：
 
