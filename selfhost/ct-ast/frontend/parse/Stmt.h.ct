@@ -108,6 +108,11 @@ pub trait StmtOps {
     int  is_decl_start(void);
     int  parse_block(void);
     int  missing_return_check(int body, const char *ret, int line);
+    int  u_reset(void);
+    int  u_add(int which, const char *s);
+    int  u_mark_lvalue(int n);
+    int  u_scan(int n);
+    int  uninit_check(int body, int line);
     int  body_has_jump(int n);
     int  defer_ahead(void);
     int  err_ahead(void);
@@ -186,6 +191,11 @@ pub struct Stmt {
        `loop` inside an outer `loop` is diagnosed (D22-5): a hand-written `int i`
        or a native `for (int i = …)` is ordinary C shadowing and stays silent. */
     int  loop_depth;
+    /* PH-70-R2: per-function flow facts for the uninitialized-read check. */
+    char u_decl[48][160]; int u_dline[48]; int nu;
+    char u_asg[48][160]; int na;
+    char u_rd[48][160]; int nr;
+    char u_addr[48][160]; int nx;
     /* How many `foreach` bodies enclose the statement being parsed. Only an
        inner `foreach` inside an outer one is diagnosed (D27-10, mirroring
        D22-5): a hand-written `item` stays ordinary C shadowing and is silent. */
@@ -1789,6 +1799,127 @@ impl StmtOps for Stmt {
         self->lex->pos = save_pos;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
         return look;
+    }
+
+    int u_reset(void)
+    {
+        self->nu = 0;
+        self->na = 0;
+        self->nr = 0;
+        self->nx = 0;
+        return 0;
+    }
+
+    /* which: 0 decl, 1 assigned, 2 read, 3 address-taken */
+    int u_add(int which, const char *s)
+    {
+        char *names;
+        int *count;
+        int i;
+
+        if (which == 0) { names = self->u_decl[0]; count = &self->nu; }
+        else if (which == 1) { names = self->u_asg[0]; count = &self->na; }
+        else if (which == 2) { names = self->u_rd[0]; count = &self->nr; }
+        else { names = self->u_addr[0]; count = &self->nx; }
+        if (!s || !s[0]) return 0;
+        for (i = 0; i < *count; i++)
+            if (strcmp(names + i * 160, s) == 0) return 0;
+        if (*count < 48) {
+            snprintf(names + (*count) * 160, 160, "%s", s);
+            *count = *count + 1;
+        }
+        return 0;
+    }
+
+    /* An assignment target (possibly `a.b`, `p->c`, `v[i]`) counts as a
+       definition of the base variable. */
+    int u_mark_lvalue(int n)
+    {
+        if (n < 0) return 0;
+        if (self->arena->nodes[n].kind == N_VAR) {
+            self->u_add(1, self->arena->nodes[n].text2);
+            return 0;
+        }
+        if (self->arena->nodes[n].kind == N_ADDR)
+            return self->u_mark_lvalue(self->arena->nodes[n].a);
+        if (self->arena->nodes[n].kind == N_MEMBER
+            || self->arena->nodes[n].kind == N_ARROW
+            || self->arena->nodes[n].kind == N_INDEX
+            || self->arena->nodes[n].kind == N_DEREF)
+            return self->u_mark_lvalue(self->arena->nodes[n].a);
+        return 0;
+    }
+
+    int u_scan(int n)
+    {
+        int k;
+
+        if (n < 0) return 0;
+        k = self->arena->nodes[n].kind;
+        if (k == N_DECL) {
+            if (self->arena->nodes[n].a < 0) {
+                self->u_add(0, self->arena->nodes[n].text2);
+                self->u_dline[self->nu - 1] = self->arena->nodes[n].line;
+            }
+            self->u_scan(self->arena->nodes[n].a);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_ASSIGN) {
+            self->u_mark_lvalue(self->arena->nodes[n].a);
+            self->u_scan(self->arena->nodes[n].b);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_POST) {
+            self->u_mark_lvalue(self->arena->nodes[n].a);
+            self->u_scan(self->arena->nodes[n].b);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_ADDR) {
+            if (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)
+                self->u_add(3, self->arena->nodes[self->arena->nodes[n].a].text2);
+            self->u_scan(self->arena->nodes[n].a);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_VAR) {
+            self->u_add(2, self->arena->nodes[n].text2);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_MEMBER || k == N_ARROW || k == N_INDEX || k == N_DEREF) {
+            /* A member/subscript access may write through the base (e.g.
+               `strcpy(c.name, ...)`), so treat the base as defined. */
+            self->u_mark_lvalue(self->arena->nodes[n].a);
+            self->u_scan(self->arena->nodes[n].b);
+            self->u_scan(self->arena->nodes[n].c);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (self->u_scan(self->arena->nodes[n].a)) return 1;
+        if (self->u_scan(self->arena->nodes[n].b)) return 1;
+        if (self->u_scan(self->arena->nodes[n].c)) return 1;
+        if (self->u_scan(self->arena->nodes[n].d)) return 1;
+        return self->u_scan(self->arena->nodes[n].next);
+    }
+
+    int uninit_check(int body, int line)
+    {
+        int i;
+
+        if (!self->ex->check_mode || !*self->ex->check_mode) return 0;
+        if (body < 0) return 0;
+        self->u_scan(body);
+        for (i = 0; i < self->nu; i++) {
+            int j, seen = 0, defd = 0;
+            for (j = 0; j < self->nr; j++)
+                if (strcmp(self->u_rd[j], self->u_decl[i]) == 0) { seen = 1; break; }
+            if (!seen) continue;
+            for (j = 0; j < self->na; j++)
+                if (strcmp(self->u_asg[j], self->u_decl[i]) == 0) { defd = 1; break; }
+            for (j = 0; j < self->nx; j++)
+                if (strcmp(self->u_addr[j], self->u_decl[i]) == 0) { defd = 1; break; }
+            if (defd) continue;
+            return tool::diag::ct_sem_error(line, 0,
+                "read of uninitialized variable", self->mem->path);
+        }
+        return 0;
     }
 
     /* PH-70-R2: a non-void function whose body has neither `return` nor a loop
@@ -3624,6 +3755,7 @@ impl StmtOps for Stmt {
         self->ngotos = 0;
         self->nbreak = 0;
         self->ncont = 0;
+        self->u_reset();
         self->ndefer_blocks = 0;
         self->ndefer_next_id = 0;
         self->in_defer = 0;

@@ -915,6 +915,13 @@ else
     bad "PH-70-R2 return" "$(sed -n '1,8p' "$work/p70r.out")"
 fi
 
+sh test/ast/p70_uninit.sh "$work/ct-ast" >"$work/p70i.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-70-R2 uninit (uninitialized read)"
+else
+    bad "PH-70-R2 uninit" "$(sed -n '1,8p' "$work/p70i.out")"
+fi
+
 sh test/ast/p69_fp.sh "$work/ct-ast" >"$work/p69fp.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-69-E69-2 fp (import units clean)"
