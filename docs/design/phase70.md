@@ -68,7 +68,7 @@ CFG/定值/控制流语义检查：CFG/基本块；definite assignment；所有�
 | --- | --- | --- |
 | E70-1 | `p70_cfg.sh`、`p70_flow.sh`、`p70_switch.sh`、`p70_unreach.sh` | 全绿（结构终止、break/continue、重复 case、不可达） |
 | E70-2 | `p70_definite.sh`（= `p70_return` + `p70_uninit`） | 全绿（缺 return、未初始化读） |
-| E70-3 | `check-all.sh` | 11/11；`check-ast 1494 passed`；golden 无变化 |
+| E70-3 | `check-all.sh` | 11/11；`check-ast 1495 passed`；golden 仅 banner 变化 |
 
 实现口径：R1 未物化显式基本块图，而是 `stmt_terminates` 的结构判定（下游只
 需要终止/可达性）；R2 的「所有路径 return」只做可判定子集（无任何 return 且
