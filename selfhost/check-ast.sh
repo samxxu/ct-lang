@@ -999,6 +999,16 @@ case "$p77ext" in
     *)  bad "PH-77-S5 external" "$(sed -n '1,8p' "$work/p77ext.out")" ;;
 esac
 
+# CI-9: a git server that accepts the TCP connection but never answers must not
+# hang `ct get` (and therefore this gate). Skips (77) where `timeout` is absent.
+bash test/ast/p77_net_timeout.sh "$work/ct-ast" >"$work/p77net.out" 2>"$work/p77net.err"
+p77net=$?
+case "$p77net" in
+    0)  ok "CI-9 net-timeout (stalled git server fails bounded)" ;;
+    77) skip "CI-9 net-timeout" "$(sed -n '1p' "$work/p77net.err")" ;;
+    *)  bad "CI-9 net-timeout" "$(sed -n '1,8p' "$work/p77net.out")" ;;
+esac
+
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-75-R1 closure (pair-form method argument)"
