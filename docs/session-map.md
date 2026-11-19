@@ -28,4 +28,5 @@
 | PH-72 静默错误与诊断批（R1–R6 / E72-1–3） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.71.0 |
 | PH-73 字段可见性与 ABI（R1–R3 / E73-1–3） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.72.0 |
 | PH-74 模型导出（R1–R3 / E74-1–3） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.73.0 |
-| PH-75 闭包作方法实参 | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | 排队；硬件 `HW-*` 排最后 |
+| PH-75 闭包作方法实参（R1–R2 / E75-1–3） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.74.0 |
+| `HW-1`/`HW-2` 硬件批次 | 外部依赖（无硬件） | REQ | 只登记，不阻塞 |

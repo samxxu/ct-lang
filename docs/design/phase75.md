@@ -1,6 +1,6 @@
 # Phase 75 — 闭包作方法实参（SH-65/SH-67）
 
-> **状态：实施中（已开卡，排队实施）**（2026-11-19 立项；`v0.74.0` 拟）。
+> **状态：完成**（2026-11-19 收口；`v0.74.0`；R1–R2 全绿）。
 > **前置**：上一相收口；本卡在轮到时才开始实现。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径
 > `docs/design/phase75.md`，迁移时统一改名。
@@ -58,3 +58,19 @@
 
 实现：trait 方法判定路径与 `chk_mcall_args` 在 `ct_is_container_type` 为假时扫描
 `N_CLOSURE`/`is_closure` 变量；`argtype_check` 不扫描（否则误伤容器）。
+
+## 7 收口对照表（2026-11-19，v0.74.0）
+
+| 任务 | 状态 | 证据 |
+| --- | --- | --- |
+| R1 SH-65 | ✅ | `p75/closure`：pair 形方法（`f(env,x), env`）收闭包，`check --types` 通过，构建并运行返回 0 |
+| R2 SH-67 | ✅ | `p75/closure-neg`：单 fp 形方法仍报 `a closure cannot be passed ...`（字面量与绑定变量），不再静默坏 C |
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E75-1 | `p75_closure.sh`、`p75_closure_neg.sh` | 绿 |
+| E75-2 | 构建产物经 `cc` 编译并运行 | 绿（`(int x) => b.total + x` → 10） |
+| E75-3 | `check-all.sh` | 11/11；`check-ast 1511 passed` |
+
+实现口径：只有「2 参且第二参为 `void *`」的 pair 形方法收闭包；单函数指针形
+仍是硬错（ABI 不匹配）。闭包实参在方法调用里按 `(tramp, &env)` 两参发射。

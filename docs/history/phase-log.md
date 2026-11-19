@@ -183,6 +183,7 @@
 | v0.61.1 | 新 issue 批处理（2026-11-16） | LANG-18 泛型指针字段夹具；SH-81 限定名无索引报错；SH-82 复核已返回非零；SH-83 v2 install 不再打印 -I；SH-85 PK-8 跳过 docs/issues/test 与 .md；tag `v0.61.1`。 |
 | v0.62.0 | Phase 63 删除 vendor 支持（PH-54 S7，2026-11-16） | build/get/install/verify/update 去 vendor 读写；v1 lock 只报错；migrate 保留；test/pkg 141/0；tag `v0.62.0`。 |
 | v0.62.1 | P0 数组/const 的 vptr 静态初始化（REQ-HW-001/002，2026-11-16） | 带 trait 的数组元素与 const 标量/const 数组的 vptr 改由 C 初值本身写（`emit_elem_vptrs` 注入到元素花括号内），数组外层不再出现顶层设计式；带初值数组不再发 constructor，无初值数组保持原路径；多维 trait 数组在 `ct` 阶段硬错并给位置；`unqual` 让 `const struct X` 也能解析到结构体；25 个 case 的 `.c`/`.h` golden 各变 1 行 banner；check-ast 1457/0；tag `v0.62.1`。 |
+| v0.74.0 | PH-75 闭包作方法实参（2026-11-19） | SH-65 pair 形方法收闭包并正确发射；SH-67 单 fp 形态硬错。 |
 | v0.73.0 | PH-74 模型导出（2026-11-19） | J11 字段行列；`--emit-model` entry 单元；`--lib --emit-map` 落盘与 build map file 修正（SH-79）。 |
 | v0.72.0 | PH-73 字段可见性与 ABI（2026-11-19） | LANG-9 字段级 `pub`；公开头只导出 pub 字段，`.c` 用 CT_UNIT_PRIVATE 看全量；同名 struct 冲突验收。 |
 | v0.71.0 | PH-72 静默错误与诊断批（2026-11-19） | LANG-3/4/11/16，DF-1，SH-76；SH-18+LANG-15 验收。 |

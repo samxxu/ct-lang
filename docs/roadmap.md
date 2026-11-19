@@ -85,7 +85,7 @@
 | Phase 72 | 静默错误与诊断批（LANG-3 / LANG-4 / LANG-11 / LANG-16+DF-1 / SH-76 / SH-18+LANG-15） | ✅ 完成 | v0.71.0 | [卡](design/phase72.md) · [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
 | Phase 73 | 字段可见性与 ABI（LANG-9：`pub` 决定头文件导出面） | ✅ 完成 | v0.72.0 | [卡](design/phase73.md) · [LANG-9](../issues/lang/lang-9-struct-field-visibility-abi.md) |
 | Phase 74 | 模型导出（PH-59 M1/M2；J11 行列；SH-79 两 facet） | ✅ 完成 | v0.73.0 | [卡](design/phase74.md) · [SH-79](../issues/selfhost/sh79-build-lib-emit-map-silent.md) |
-| Phase 75 | 闭包作方法实参（SH-65 / SH-67 同族） | 🟨 实施中（已开卡，排队） | v0.74.0（拟） | [卡](design/phase75.md) · [SH-65](../issues/selfhost/sh65-closure-as-method-arg.md) · [SH-67](../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
+| Phase 75 | 闭包作方法实参（SH-65 / SH-67 同族） | ✅ 完成 | v0.74.0 | [卡](design/phase75.md) · [SH-65](../issues/selfhost/sh65-closure-as-method-arg.md) · [SH-67](../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
 | Phase 76 | 链中 inline 物化 `$name`（最小 A′：声明即可、多变量、链尾） | ⬜ 规划中（未开卡） | v0.75.0（拟） | [卡](design/phase76.md) · [battle](../battle/inline-materialize-2/verdict.md) |
 | `v1-PH-0` | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；B 检查器 opt-in） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
 | `v1-PH-1` | v1.1 语法现代化（S1）+ A strict 编译路径（S2） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线](planning/v1-release-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
