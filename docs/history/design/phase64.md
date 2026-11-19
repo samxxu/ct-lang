@@ -5,8 +5,8 @@
 | 项 | 值 |
 | --- | --- |
 | 状态 | **完成**（v0.63.0） |
-| 依据 | [REQ-HW-010…013](../planning/hardware-readiness-requirements.md)；[battle hw-1 判决](../../battle/hw-1/verdict.md)（J-3 / J-4）；[裸机提案 §3](../proposals/ct-bare-metal-proposal.md) |
-| 版本位 | `version-minor: 63`（PH-64，`d=1`，见 [AGENTS §0.3](../../AGENTS.md) 换算表） |
+| 依据 | [REQ-HW-010…013](../../planning/hardware-readiness-requirements.md)；[battle hw-1 判决](../../../battle/hw-1/verdict.md)（J-3 / J-4）；[裸机提案 §3](../../proposals/ct-bare-metal-proposal.md) |
+| 版本位 | `version-minor: 63`（PH-64，`d=1`，见 [AGENTS §0.3](../../../AGENTS.md) 换算表） |
 | 规范版本 | `1.15.0` |
 | 只动 | `selfhost/ct-ast/**`、`test/ast/**`、`selfhost/check-ast.sh`、`docs/**` |
 
@@ -79,7 +79,7 @@
 | 项 | 值 |
 | --- | --- |
 | 落点互比 | 五处 `CTC_VERSION` 均 `0.63.0`；`README.md` / `docs/README.md` / `AGENTS.md` / `phase-log.md` 同步 |
-| 与 `PH-<n>` 对应 | `PH-64`、`d=1` → `MINOR = 63`，与 [AGENTS §0.3](../../AGENTS.md) 换算表一致 |
+| 与 `PH-<n>` 对应 | `PH-64`、`d=1` → `MINOR = 63`，与 [AGENTS §0.3](../../../AGENTS.md) 换算表一致 |
 | PATCH 与 fix 数 | `0`：本 phase 窗口内无 fix 条目（SH-86 属 v0.62.1，已在前一相位） |
 | CHANGELOG 与 tag | `phase-log.md` 的 v0.63.0 行与 tag `v0.63.0` 同指收口提交 |
 
