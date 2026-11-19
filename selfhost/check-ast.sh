@@ -929,6 +929,20 @@ else
     bad "PH-70-R2 uninit" "$(sed -n '1,8p' "$work/p70i.out")"
 fi
 
+sh test/ast/p73_abi.sh "$work/ct-ast" >"$work/p73abi.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-73-R2 abi (duplicate struct refused)"
+else
+    bad "PH-73-R2 abi" "$(sed -n '1,8p' "$work/p73abi.out")"
+fi
+
+sh test/ast/p73_docs.sh "$work/ct-ast" >"$work/p73docs.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-73-R3 docs (field visibility)"
+else
+    bad "PH-73-R3 docs" "$(sed -n '1,8p' "$work/p73docs.out")"
+fi
+
 sh test/ast/p73_export.sh "$work/ct-ast" >"$work/p73ex.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-73-R1 export (pub field surface)"
