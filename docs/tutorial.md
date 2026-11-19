@@ -1777,7 +1777,7 @@ Result<long, char *> twice(int n)
 8. **上限是硬报错**：ct-ast 提高到 `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、
    `MAX_FUNCS` 512（整个程序累计，不是单单元配额）、`MAX_VARS` 4096…，越界直接报错，绝不静默截断。[§7](language-spec.md) 有全表。
 
-## 13. 规划预览：链中物化 `$name`（Phase 76，未实现）
+## 13. 链中物化 `$name`（Phase 76，v0.76.0 起可用）
 
 > **状态：Phase 76 规划中，当前 `ct` 不接受 `$name`，本节不是可运行语法。**
 > 现在请用 §13.4 的两行拆链或 `into`；本节只用于评审/预览，避免把规划当成现状。
