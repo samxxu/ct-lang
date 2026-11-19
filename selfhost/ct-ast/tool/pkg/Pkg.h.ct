@@ -753,18 +753,54 @@ impl PkgOps for Pkg {
         return tool::sh::ct_sh_quote(s, out, (int)cap);
     }
 
-    /* The one subprocess call site. */
+    /* The one subprocess call site. CI-9: a network fetch must not hang the
+       caller and must not prompt for credentials. `GIT_TERMINAL_PROMPT=0` and
+       `GIT_ASKPASS=true` close the prompt paths; `-c http.lowSpeedLimit/Time`
+       makes git abort a stalled HTTP transfer even where no `timeout` utility
+       exists (macOS); where `timeout` does exist (Linux CI) it adds a hard
+       wall-clock cap around the whole git process. `CT_GIT_TIMEOUT` overrides
+       the cap in seconds (digits only). */
     int git_run(const char *cmd, const char *outfile)
     {
-        char full[MAX_PKG_CMD], qo[MAX_PKG_CMD];
+        char full[MAX_PKG_CMD], qo[MAX_PKG_CMD], cap[16], pre[32];
+        const char *limit, *rest;
+        size_t i;
         int w;
         (void)self;
 
-        if (outfile) {
-            if (self->sh_quote(outfile, qo, sizeof qo) != 0) return -1;
-            w = snprintf(full, sizeof full, "%s > %s 2>/dev/null", cmd, qo);
+        /* Every caller builds a `git ...` line; inserting the per-invocation
+           config after the binary keeps `-C <dir> <subcommand>` intact. */
+        if (strncmp(cmd, "git ", 4) != 0) return -1;
+        rest = cmd + 4;
+        limit = getenv("CT_GIT_TIMEOUT");
+        if (limit != 0 && limit[0] != 0) {
+            i = 0;
+            while (limit[i] >= '0' && limit[i] <= '9' && i + 1 < sizeof cap) {
+                cap[i] = limit[i];
+                i++;
+            }
+            if (i == 0 || limit[i] != 0) return -1;
+            cap[i] = 0;
+            limit = cap;
         } else {
-            w = snprintf(full, sizeof full, "%s 2>/dev/null", cmd);
+            limit = "180";
+        }
+        if (system("command -v timeout >/dev/null 2>&1") == 0) {
+            if (snprintf(pre, sizeof pre, "timeout %s ", limit) >= (int)sizeof pre) return -1;
+        } else {
+            pre[0] = 0;
+        }
+        if (outfile != 0) {
+            if (self->sh_quote(outfile, qo, sizeof qo) != 0) return -1;
+            w = snprintf(full, sizeof full,
+                         "GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true %s"
+                         "git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 "
+                         "%s > %s 2>/dev/null", pre, rest, qo);
+        } else {
+            w = snprintf(full, sizeof full,
+                         "GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true %s"
+                         "git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 "
+                         "%s 2>/dev/null", pre, rest);
         }
         if (w < 0 || (size_t)w >= sizeof full) return -1;
         return system(full);
