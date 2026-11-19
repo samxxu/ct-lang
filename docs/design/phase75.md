@@ -48,3 +48,13 @@
 | 编号 | 风险 | 缓解 |
 | --- | --- | --- |
 | R75-1 | 与 PH-69 调用检查重叠 | 共用调用表，避免重复实现 |
+
+## 6 进展（2026-11-19，R2 已交付，R1 未做）
+
+| 任务 | 状态 | 证据 |
+| --- | --- | --- |
+| R1 SH-65 正例 | ⬜ 未做 | 闭包作 struct/trait 方法实参仍不支持（pair ABI 未发射） |
+| R2 SH-67 负例 | ✅ 完成 | `p75/closure-neg`：字面量与绑定变量都报 `a closure cannot be passed to a method argument yet (SH-65); pass '(fn, env)' explicitly`；容器 `each` 豁免（examples/18、19 保持可构建） |
+
+实现：trait 方法判定路径与 `chk_mcall_args` 在 `ct_is_container_type` 为假时扫描
+`N_CLOSURE`/`is_closure` 变量；`argtype_check` 不扫描（否则误伤容器）。
