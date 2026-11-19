@@ -2,12 +2,15 @@
 
 | 项 | 值 |
 | --- | --- |
-| 性质 | 使用方提案；供 CT 项目组评估。是否受理、编号、落点与排期由项目组决定 |
-| 状态 | **草案；未立项，不占 phase**。建议先立一条 patch，再评估是否开相 |
+| 性质 | 使用方提案；已由 CT 项目组受理并按 PH-64 交付。本文保留为提案、依据与验收追溯 |
+| 状态 | **已采纳并交付（PH-64，v0.63.0）**；后续变更按 CT 卡与规范走 |
 | 事实基线 | v0.62.0（`485129c9`），L0→L1→L2→ct-ast 全链现编；探针均在 `/tmp`，未改仓库 |
-| 拟占 | **PH-64**；版本位建议 **v0.63.0**（`d=1`）。开卡前需先修正 AGENTS §0.3 的 `d` 表述（见 §8.1） |
+| 落点 | **PH-64 → v0.63.0（已收口）**；交付核对见 [phase64 卡](../history/design/phase64.md)（`--freestanding` / 按需单元 / `--alloc` / const vtable） |
 | 关联 | 新 SH 条目（数组初值坏 C）、[SH-60](../../issues/selfhost/sh60-mct-signature-types-decorative.md)、[SH-75](../../issues/selfhost/sh75-local-iface-return-dangling.md)、[SH-25](../../issues/selfhost/sh25-typedef-alias-drops-dims.md)、[lib/std/Vec.h.ct](../../lib/std/Vec.h.ct) |
 | 定性 | **1 个静默坏 C 补丁 + 3 份生成物契约**；不新增语言特性（`layout(plain)` 列为可裁项） |
+
+> 交付状态（2026-11-20 核对）：PH-64 已按本提案收口（v0.63.0），生成物契约四项均已落地；
+> 真实板卡 pilot 仍属 `HW-1`（外部依赖，无硬件不阻塞，见 roadmap）。
 
 > 本文只从“生成物能不能进 MCU 工程”立论，不评价 CT 的语言表达力。文中所有“实测”都有命令与原始输出；
 > 所有“读码”都给了 `file:line`，未运行的部分明确标注。

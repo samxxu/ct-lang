@@ -1,12 +1,26 @@
-# ctc 内部架构
+# ctc 内部架构（L0 种子；主线 ct-ast 见 §0）
 
 > 中文
 
-面向要修改 `ctc.c` 的人/代理。读完本文应能定位「某个行为由哪个函数负责」以及「加新语法该动哪里」。
+面向要修改 `selfhost/l0/ctc.c` 的人/代理。读完本文应能定位「某个行为由哪个函数负责」以及「加新语法该动哪里」。
+**本文只覆盖 L0**；当前安装入口与开发主线是 ct-ast，L1/L2 的位置见 §0。
 
 ---
 
 ## 中文
+
+### 0. 四代编译器与本文范围
+
+| 代 | 位置 | 身份 | 详细文档 |
+| --- | --- | --- | --- |
+| L0 | `selfhost/l0/ctc.c` | C 种子 / 差分 oracle（只修 bug） | **本文** |
+| L1 | `selfhost/l1/ctc.ct` | 冻结种子，能力停在 Phase 2 | [selfhost/README.md §源码](../selfhost/README.md) |
+| L2 | `selfhost/l2/{core,driver}.ct` | 旧管线多单元版本，回归 oracle（只修 bug） | [selfhost/README.md §源码](../selfhost/README.md) |
+| ct-ast | `selfhost/ct-ast/**` | **当前主线**，提供 `ct` / `ctc` 安装入口 | [selfhost/README.md §源码](../selfhost/README.md)、[AGENTS.md §2](../AGENTS.md)、[roadmap](roadmap.md) |
+
+ct-ast 按 `frontend/{lex,module,parse,sym,type}` / `runtime/arena` / `backend/{mem,emit}` /
+`tool/{pkg,diag,cache,driver}` 分组，每个单元一个主类型；门禁入口是 `selfhost/check-all.sh`。
+改主线行为时看 ct-ast，改 L0 种子行为时才看本文。
 
 ### 1. 设计目标
 

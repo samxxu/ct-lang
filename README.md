@@ -22,14 +22,15 @@
 3. 链式调用挂在接口上，配置方法返回同一接口类型。
 
 这三段只在 [language-spec §4.10.1](docs/language-spec.md) 完整展开一次（唯一权威定义），
-本页只复述定义；两档路径的判断依据、0.44.1 的逐段边界与报错原文也都在那里。**0.44.1 上完整三段
-还不能原样写出来**：第 2 段被单元矩阵挡住（语言限制），第 3 段被「方法结果不能作接收者」与
-「返回局部接口值悬垂」挡住（实现限制；SH-72 / SH-74 已修，但不解除这两条）。下面 HTTP 那条是
-**当前最接近的可跑形态——静态宿主**，不是完整路径的已成立证明。
+本页只复述定义；两档路径的判断依据、0.44.1 的逐段边界与报错原文也都在那里。**0.44.1 是历史
+基线（最近一次完整实测），页首是当前版本**；在该基线上完整三段还不能原样写出来：第 2 段被单元
+矩阵挡住（语言限制），第 3 段被「方法结果不能作接收者」与「返回局部接口值悬垂」挡住（实现限制；
+SH-72 / SH-74 已修，但不解除这两条）。下面 HTTP 那条是**当前最接近的可跑形态——静态宿主**，
+不是完整路径的已成立证明。
 
 | 样例 | 路径 | 机制 | 解决什么问题 |
 | --- | --- | --- | --- |
-| 0.1 HTTP 请求 | 完整路径（目标形态；0.44.1 阻塞，最近可跑为静态宿主） | `char *` factory + 对象方法链 | 构造藏在工厂里，调用点只写一条链 |
+| 0.1 HTTP 请求 | 完整路径（目标形态；历史基线 0.44.1 阻塞，最近可跑为静态宿主） | `char *` factory + 对象方法链 | 构造藏在工厂里，调用点只写一条链 |
 | 0.2 字符串切分 | 轻量 | `char *` 直接映射 | 无状态转换直接挂方法，不引入对象 |
 | 0.3 异构对象 | 接口派发 | `trait` + `Vec<接口值>` | 不同形状一张表，不写 switch |
 | 0.4 词频统计 | 容器 | `Map` + `foreach` | 按插入序出报告，不维护并行数组 |
@@ -52,7 +53,7 @@ int status = "https://api.example.com/users"
                  .status();
 ```
 
-这条链在 0.44.1 上**写不出来**，断点有三处（完整原文、命令与退出码见
+这条链在 0.44.1（历史基线，最近实测）上**写不出来**，断点有三处（完整原文、命令与退出码见
 [§4.10.1](docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)）：
 
 | 断点 | 实测报错 | 性质 |
@@ -446,7 +447,9 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ct build --freestanding [--alloc <m,f[,r,c]>]` | 裸机生成契约（PH-64）：`--freestanding` 不发射构造函数、不隐式拉内置层与 libc/堆；无初值的文件作用域 trait 数组带位置硬错。`--alloc` 把编译器与源码里的 `malloc`/`free`（可扩展 `realloc`/`calloc`）换成目标分配器，并在每个生成单元头部补原型；`--freestanding` 下未映射的堆调用同样硬错 |
 | `ct build --lib <root.h.ct> [-o <lib.a>]` | C ABI 静态库：根 `.h.ct` 的 C 兼容 `pub` 函数进入 `<base>.abi.h`，产物为 `lib<base>.a`（`-o` 可改；`--outdir` 默认 `.ctbuild`）；泛型模板跳过并警告，不兼容签名/`main`/`pub` 全局/shim 硬错；`nm -g` 面 ⊋ 导出面，只有 `.abi.h` 的声明是 ABI（Phase 39） |
 | `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`（含 `import` 时复用 `ct build` 的单元图）：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移（以及既有的 leak / 借用类发现）一律以 `error:` 报告，有任何发现退出 `1`，干净退出 `0`（`--diagnostics=json` 时对象带 `"severity":"error"`，并带 `"col"`） |
+| `ct check --types <in.ct>` | opt-in 类型检查（PH-68/PH-69；PH-70/PH-71 的 CFG/own 走 `ct check --semantics`）：在 §4.53 的粗检（声明初值 / 赋值、`return`、容器与泛型固有方法实参）之外，补跨单元、泛型实例、trait 方法选择与容器方法的调用签名；不写产物。**默认编译路径仍不做类型检查**：`ct build` / `ct compile` 的诊断与 golden 不变 |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |
+| `ct … --emit-model <file\|->` | 模型导出 JSON（PH-74 / PH-59）：入口单元的 struct 与字段（含行列）、函数等声明模型；`ct <in.ct>` 与 `ct build` 都可用，不改变生成的 C |
 | `ct get` / `ct update` / `ct install` / `ct verify` / `ct migrate` | 包管理：拉包进共享 store（`$CT_HOME/pkg/<publisher>/<name>/<version>/`）、写 v2 `ct.lock`；`ct build` 自动读 lock，离线校验 / 迁移并打印构建命令（官方包由内置 pin 表解析，裸名只解析官方包；第三方写 `<publisher>/<name>` 并配 `--index` / `CT_INDEX`；包作者见 [docs/package-guide.md](docs/package-guide.md)，包仓发布/索引接入规则见 [提案](docs/proposals/ct-pkg-package-maintainer-rules.md)，待目标组受理）；官方包在 [ct-pkg](https://github.com/ct-pkg)：`hal`（契约）、`hal-posix`（平台）、`std`（标准库，含 C 映射）。S7 后不再读写 `vendor/`；旧工程用 [`ct migrate`](docs/package-guide.md#8-v1-迁移ct-migrate) 一次性迁入 store |
 | `ct -v` / `ct -h` | 版本 / 用法 |
 
@@ -454,9 +457,13 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 （二进制改名为 `ct` 也不变，以保持日志与断言稳定）。完整开关（`-I` / `--std` / `--line` / `--diagnostics` /
 `--ns-root`）见[教程 §11](docs/tutorial.md#11-命令行速查)。
 
+`ct get` 走系统 `git`，是包管理里唯一联网步骤：clone / fetch 失败或超时在写 `ct.lock` **之前**以非零退出
+（`ctc: git clone of '<url>' failed` / `git fetch of '<url>' failed`），旧锁逐字节不变。git 子进程已有
+有界超时（`CT_GIT_TIMEOUT`，默认 180s）与 `GIT_TERMINAL_PROMPT=0`（CI-9）；在 CI 里仍建议外层再加 `timeout`。
+
 ### 3. 能力一览
 
-- **两档写法：轻量路径 vs 完整路径**：轻量路径把方法直接挂在基本类型上（方法返回自身类型即可链），不引入 trait 对象；完整路径是字符串 → factory → 由 trait 定义的对象类型 → 接口链。判断依据（有没有状态、要不要多实现、调用方是否面向接口）与 0.44.1 的接口链边界见 [language-spec §4.10.1](docs/language-spec.md)
+- **两档写法：轻量路径 vs 完整路径**：轻量路径把方法直接挂在基本类型上（方法返回自身类型即可链），不引入 trait 对象；完整路径是字符串 → factory → 由 trait 定义的对象类型 → 接口链。判断依据（有没有状态、要不要多实现、调用方是否面向接口）与 0.44.1（历史基线）的接口链边界见 [language-spec §4.10.1](docs/language-spec.md)
 - **trait**：`trait` / `impl` / `use`，方法派发，trait 当类型（接口值 / 数组 / 字段 / 装箱），trait 默认方法
 - **内存**：`Drop` / `delete`、`own`（AutoDrop）、块级 `defer`（Phase 38）、路径敏感泄漏告警、`borrow` + `Handback`
 - **模块**：`namespace` / `import` / `pub` / 多文件 `ct build` / 目录 = namespace

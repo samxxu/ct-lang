@@ -1900,7 +1900,7 @@ a.m().n();      /* 仍报 method receiver must be ... */
 - [polymorphism.md](polymorphism.md) —— 为什么用 vtable 而不是别的写法
 - [architecture.md](architecture.md) —— 编译器内部怎么按行改写
 - [roadmap.md](roadmap.md) —— 已落地与后续阶段
-- `examples/**` —— 16 个可运行示例；`test/cases/**` —— 每个语法点的最小快照
+- `examples/**` —— 51 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；其中 `49_socket` 为文档型；完整索引见 [examples/README.md](../examples/README.md)）；`test/cases/**` —— 每个语法点的最小快照
 - 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
 - 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 CT」，编译器对此零感知
 - 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [design/phase8.md](history/design/phase8.md)，

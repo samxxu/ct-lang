@@ -30,7 +30,7 @@
 | 3 | `check-archive.sh` | `test/archive/**` 越位特性 fixture 的对差 ratchet |
 | 4 | `check-m2a.sh` | M2-a 单用例验收（L0 → L1 → 01_trait_basic 与 golden 逐字节一致） |
 | 5 | `ct-tour.sh` | 一条龙演示整条自举链 |
-| 6 | `editors/vscode/test/check-grammar.py` | 编辑器高亮语法（40 项断言） |
+| 6 | `editors/vscode/test/check-grammar.py` | 编辑器高亮语法（169 项断言，`python3 editors/vscode/test/check-grammar.py` 实测） |
 | 7 | `test/pkg/run.sh` | 包管理器 `ct get` / `ct update` / `ct install` / `ct verify`（含比较器范围、显式索引、构建元数据） |
 | 8 | `check-ast.sh` | ct-ast 行为、语料等价、不动点、负例、缓存与诊断 |
 | 9 | `check-warnings.sh` | 全部生成 C 在 `-Wall -Wextra` 下零告警 |

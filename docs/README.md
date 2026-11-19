@@ -38,7 +38,7 @@
 | [proposals/phase-numbering-major-reset.md](proposals/phase-numbering-major-reset.md) | 主规范 CR 提案：每个 MAJOR 从 `PH-0` 重编号，`MINOR == 本 major 内 n`；`v1-PH-0`/`v1-PH-1`，历史 `PH-*` 不复用 | 查看大版本 phase 编号提案 |
 | [planning/phase-migration-blockers.md](planning/phase-migration-blockers.md) | phase ID 迁移 blocker：旧 major 的 `version-minor` 偏移、卡片布局、旧卡字段；裁定前不动文件 | 查看迁移阻塞项 |
 | [planning/v1-release-plan.md](planning/v1-release-plan.md) | v1.0/v1.1 发布路线（**规划中**）：v1.0 AST-only 去旧管线（保留 seed）、B 检查器 opt-in；v1.1 语法现代化 → A strict 编译路径 | 查看 v1 发布路线 |
-| [planning/typecheck-semantic-plan.md](planning/typecheck-semantic-plan.md) | 类型/语义检查规划（**未开卡**）：PH-67 类型核心 → PH-68 跨单元/泛型 → PH-69 CFG → PH-70 own/borrow；全部 opt-in，不进编译路径 | 查看类型检查方案 |
+| [planning/typecheck-semantic-plan.md](planning/typecheck-semantic-plan.md) | 类型/语义检查（**已交付、历史计划**）：PH-68–71 已收口（版本 0.67.0–0.70.0）——类型核心 → 跨单元/泛型 → CFG → own/borrow；全部 opt-in，不进编译路径 | 查看类型检查方案与收口追溯 |
 | [planning/post-58-plan.md](planning/post-58-plan.md) | 58 之后的重排评估：在册项矩阵、依赖、顺序与并行、放弃/合并清单、编号断裂与待裁定 | 决定 58 之后先做什么、哪些不做 |
 | [planning/hardware-readiness-requirements.md](planning/hardware-readiness-requirements.md) | 硬件可用性需求（评估会产出，**未立项**）：P0 数组/const vptr、PH-64 freestanding/alloc/const vtable、硬件 pilot；含采纳/延后/不采纳与顺序 | 查看硬件需求与验收 |
 | [planning/post-58-phase-sequence.md](planning/post-58-phase-sequence.md) | 58 之后的正式 phase 序列：包管理器线先收口、语言线按依赖排序、版本位与并行车道 | 照着走的施工顺序 |
@@ -58,7 +58,7 @@
 | [design/phase48.md](history/design/phase48.md) · [design/phase49.md](history/design/phase49.md) | 已完成（Phase 48–49）：48 Drop 语义闭环 / 49 `own` 所有权转移；收口版本见 [roadmap.md](roadmap.md) |
 | [design/phase50.md](history/design/phase50.md) · [design/phase51.md](history/design/phase51.md) · [history/design/phase52.md](history/design/phase52.md) | 已完成（Phase 50–52，0.50.0 至 0.53.0）：容器 `has`·`at` / 指针接收者 `.` 发射缺陷 / 自定义下标 `[]`（方案 A，只主张单层字符串键；`v[0]` 的参数类型匹配见 [REQ-JSACCESS-1](planning/requirements-pool.md)）；状态以 [roadmap.md](roadmap.md) 为准 |
 | [history/design/phase53.md](history/design/phase53.md) | 已完成（Phase 53，0.53.0）：可选链 `?.` 只收指针 / map 与值上取到的指针/map 跳；struct 值接收者拒绝；切词按 parser 组合识别（`c?.5 : 1.0` 保持三目）；E53-1–E53-16 全绿 |
-| [proposals/ct-bare-metal-proposal.md](proposals/ct-bare-metal-proposal.md) | 裸机生成契约提案（**待 CT 组评估**）：数组/const vptr 静默坏 C、constructor、按需 std 单元、`--alloc`、const vtable；建议 P0 patch + PH-64 | 查看裸机生成契约提案 |
+| [proposals/ct-bare-metal-proposal.md](proposals/ct-bare-metal-proposal.md) | 裸机生成契约提案（**已采纳并交付**）：PH-64 按本提案收口（`--freestanding` / 按需单元 / `--alloc` / const vtable，见 roadmap） | 查看裸机生成契约提案与落地 |
 | [proposals/ct-pkg-index-proposal.md](proposals/ct-pkg-index-proposal.md) | 索引仓提案（**待目标组评估**）：release dispatch + 定时扫描生成、签名/pin、digest 复用、allowlist；不在客户端扫描组织 | 查看包索引维护提案 |
 | [proposals/ct-pkg-package-maintainer-rules.md](proposals/ct-pkg-package-maintainer-rules.md) | 包仓维护者规则：`ct.pkg`、semver tag、release dispatch、digest、撤回与安全；配套索引提案 | 查看包仓发布规则 |
 | [proposals/ct-hardware-pilot-proposal.md](proposals/ct-hardware-pilot-proposal.md) | 工程试点提案（**待 CT 组评估**）：不新增语法，用真实 MCU 验证 CT 生成 C 的上层业务/驱动封装、交叉编译、volatile/ISR/DMA/ABI/实时性/调试；底层保留 C/汇编 | 查看硬件参考工程提案 |

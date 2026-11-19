@@ -133,6 +133,18 @@ name version publisher git-url tag sha256:<64 hex>
 本地可用 `CT_INDEX=<file>` 或 `--index <file>` 指向任意纯文本索引。消费端与发布端（`package.sh`）
 的完整契约见 [ct-pkg-get-contract](planning/ct-pkg-get-contract.md)。
 
+#### 4.1 信任模型：官方 pin 强校验，第三方索引仅便利
+
+| 层 | 信任来源 | 校验 | 失败行为 |
+| --- | --- | --- | --- |
+| 官方 `ct/<name>`、裸名 | 编译期 **pin 表**（`name` / `version` / `publisher` / `url` / `tag` / `sha256`）；显式 `--index` / `CT_INDEX` 的 `publisher = ct` 行可覆盖 pin（用户显式选择） | 按 pin（或覆盖它的索引行）的 tag 取内容，再按 `ct.lock` 同一算法比对 `sha256`；默认不读可变索引 | 摘要或身份不符即硬错，不落 store、不写锁 |
+| 第三方 `<pub>/<name>` | 调用方显式给出的索引 / URL / 本地目录 | 索引行的 `tag` + `sha256` 与拉到的内容比对；索引本身**无签名** | 索引不可读、缺行或摘要不符即硬错；不因缺索引回落到裸名 |
+
+- **pin 是强校验**：官方版本、tag、摘要都编译进 `ct` 二进制。索引被替换或网络被劫持时，摘要不符仍然失败。
+  显式索引命中 `publisher = ct` 时以该索引为准——那是用户主动的信任转移，不是默认回落路径。
+- **第三方索引只是便利**：它集中 `name → url/tag/sha256` 的映射，不提供发布方身份签名。信任边界是
+  「你选择的索引文件 + 你显式写的 `<publisher>/<name>`」；要更强保证，用显式 URL，并让 `ct.lock` 钉住摘要。
+
 ```sh
 ct get ct/std@0.19.0         # 官方包：内置 pin 表，无索引可用
 ct get <pub>/<name>@<range>  # 第三方：发布方限定 + --index/CT_INDEX
@@ -159,6 +171,12 @@ commit 解析。
 `ct get` 可用 git——它是**包管理路径**里唯一的子进程调用点；`ct update` / `ct verify` / `ct install`
 零网络、零子进程。编译器侧 `ct compile` / `ct build --emit-c` 零网络、零子进程，但 `ct build`
 的默认形态会经 `$CC` 派生子进程去链接（`--cc` > `$CC` > `cc`）。
+
+**网络失败/超时是有界失败。** `git clone` / `git fetch` 失败、认证失败或超时，`ct get` 打印
+`ctc: git clone of '<url>' failed` / `git fetch of '<url>' failed` 并以非零退出；失败发生在写
+`ct.lock` 之前，旧锁保持逐字节不变（不会留下半行）。git 子进程已有有界超时（`CT_GIT_TIMEOUT`，
+默认 180s；另有 `http.lowSpeedTime=60`）与 `GIT_TERMINAL_PROMPT=0`（CI-9）；探针外层仍建议再加一层
+`timeout`。
 
 ### 5. C ABI 静态库（`ct build --lib`）
 

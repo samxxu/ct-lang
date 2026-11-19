@@ -2266,9 +2266,11 @@ int main(void) {
 另有三类已知边界，写代码时按此规避：
 
 - **自定义下标只做单层、只按名字 + 参数个数匹配**（§4.64）。多级连写 `v["a"]["b"]` 会被当作
-  C 指针算术，可能静默得错值；数字下标 `v[0]` 在 `get(char *)` 类型上会展开成空指针常量并静默返回空。
-  JSON 数字下标请用包层 `get_idx`，或等 `REQ-JSACCESS-1`（参数类型匹配）与
-  `REQ-INDEX-1`（[设计草案](proposals/user-index-operator.md)）落地；不要写 `v[0]`。
+  C 指针算术，可能静默得错值；数字下标 `v[0]` 在 `get(char *)` 类型上会展开成 `get(0)`（C 里是
+  空指针常量）：`ct compile` / `ct build` 只给 warning（rc=0，产物仍是错调用），`ct check` 给
+  error（rc=1，L32-6 / PH-72）。**按键类型分派仍待 `REQ-JSACCESS-1`**（同类型并存 `get(char *)` /
+  `get(int)` 各选其版）；JSON 数字下标请继续用包层 `get_idx`，或等 `REQ-JSACCESS-1` 与
+  `REQ-INDEX-1`（[设计草案](proposals/user-index-operator.md)）落地。
 - **表达式位置的超长字符串**（>158 字节）在 v0.53.1 起是编译期硬错，拆成相邻字面量或写入初始化器；
   不再静默截断。
 - **`?.` / `?[` 只接受指针接收者**，结果必须有 `0` 表示（struct 值 / 含 Drop 的值拒绝，L53-3/4）；
@@ -2420,8 +2422,10 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `m["k"] = x` 发射为 `m.put("k", x)`；`Map<K,V> m = { "a": 1, "b": 2 };` 发射为
   `Map_<enc>_from((struct MapEntry_<enc>[2]){ … }, 2)`。三者都受上面的容器语义约束；
   不再有「Vec/Map 不可下标」的硬错。
-- **自定义类型的 `[]`**：见 §4.64（PH-52，单层字符串键）；`v[0]` 这种**参数类型匹配**尚未实现，
-  登记为 REQ-JSACCESS-1，不属于本节的容器下标糖。
+- **自定义类型的 `[]`**：见 §4.64（PH-52，单层字符串键）；按键类型分派（同一类型并存
+  `get(char *)` / `get(int)`）**尚未实现**，登记为 REQ-JSACCESS-1，不属于本节的容器下标糖。
+  实参类型与唯一 `get` 不匹配时，`ct check` 已是硬错（PH-72 / LANG-4），`ct build` 仍只告警并
+  发射 `get(0)`，因此不要把 `v[0]` 用在 `char *get(char *)` 上。
 - **内置层**：`Vec<T>`、`Map<K,V>`、`MapEntry<K,V>` 写在 `lib/std/Vec.h.ct`，编译模式在输入前
   自动预解析，`ct build` 也把它作为一个单元自动加载，**两种模式都不需要 `import`、不需要 `-I`**。
   三个拼写是保留名，用户不能再声明同名 struct；旧项目里 `import std::vec` 带来的 `Vec` 定义会与
@@ -2741,9 +2745,11 @@ Result<long, char *> twice(int n)
 - **不进入协议**：`struct X *p` 的 `p[k]` 保持 C 指针算术；C 数组 / `int *` / 指针到 struct 的
   `[]` 逐字节不变；`Vec` / `Map` 的下标糖与 L31-3 / L31-4 写保护不变；trait 提供的 `get` 不算
   （只认固有 `impl`）。
-- **已知洞（D52-6）**：数字下标 `v[0]` 会按方案 A 展开成 `get(0)`；若 `get` 接受 `char *`，
-  这是空指针常量，`cc` 零告警且 `get` 返回空——**静默空值，不诊断**。JSON 数字下标请用
-  `get_idx`，禁止写 `v[0]`；后续由 REQ-JSACCESS-1 完整实现。
+- **已知洞（D52-6）**：数字下标 `v[0]` 会按方案 A 展开成 `get(0)`；若 `get` 只接受
+  `char *`，实参类型不匹配会由 `custom_index_method` 的键类型判定报出——`ct check` 是
+  `error:`（rc=1），`ct compile` / `ct build` 是 `warning:`（rc=0，产物仍发射 `get(0)`）。
+  完整的按键类型分派（同类型并存 `get(char *)` / `get(int)` 各选其版）**尚未实现**，由
+  `REQ-JSACCESS-1` 承接；在此之前 JSON 数字下标请用 `get_idx`，不要写 `v[0]`。
 - **范围外**：`x[k].field = v`、`x[k].m()` 在编译期报错（不落 `cc`）；连写 `v["a"]["b"]`
   会被当成 C 指针算术，可能静默得错值，必须由包层（如 `JsonRef`）提供多级访问。
 

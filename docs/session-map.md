@@ -17,8 +17,6 @@
 | SH-87 内置层 `Str` 判活（battle hw-2 承接） | 当前 DSH 会话（lead） | DEV / VERIFY | — ✅ v0.63.2 |
 | PH-64 裸机生成契约（T1–T5） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | PH-64 ✅ v0.63.0 |
 | PH-65 严格 C 边界（R1–R7 / E65-1–E65-8） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.64.0 |
-
-> 本仓库当前为单会话工作，三类常驻对话未建；见 `AGENTS.md` 的 `deviation: single-session-workflow`。
 | PH-66 libc I/O 内置例外（R1–R5 / E66-1–E66-6） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.65.0 |
 | PH-67 无真机硬件能力扩展（R1–R6 / E67-1–E67-6） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.66.0 |
 | PH-68 类型核心（R1–R4 / E68-1–4） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.67.0 |
@@ -32,3 +30,5 @@
 | PH-76 链中 inline 物化 `$name`（S1–S4 / E76-1–5） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.76.0 |
 | PH-77 官方包身份与解析契约（S0–S5 / E77-1–E77-8） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | PH-77 ✅ v0.77.0 |
 | `HW-1`/`HW-2` 硬件批次 | 外部依赖（无硬件） | REQ | 只登记，不阻塞 |
+
+> 本仓库当前为单会话工作，三类常驻对话未建；见 `AGENTS.md` 的 `deviation: single-session-workflow`。
