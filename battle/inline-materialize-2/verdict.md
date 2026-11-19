@@ -1,7 +1,7 @@
 # battle/inline-materialize-2 判决
 
 > **状态：`closed`**（2026-11-19；裁判 EDITOR；1 轮 claim/counter/evidence）。
-> **结论：A′ 有条件胜出——采用最小 `$name`，但先收缩到“同单元 trait/interface、已声明且带初始化式、语句/声明/return 的链”范围；type-host、`?.`、own、条件/实参位置全部移出 v1。若这些收缩不可接受，则 B 胜。**
+> **结论：A′ 有条件胜出——采用最小 `$name`：已声明即可（不要求初始化）、允许多变量与链尾；trait 只能声明，具体 struct/容器可用 `{}`；type-host、`?.`、own、条件/实参位置移出 v1。若这些收缩不可接受，则 B 胜。**
 
 ## 1 逐项判决
 
@@ -23,11 +23,11 @@ a.m()$x.n();                      /* 仅同单元 trait/interface；x 已声明 
 
 规则：
 
-1. **只允许同单元 trait/interface 方法链**；type-host、`.m.ct` recipe、泛型实例暂不支持。
-2. `name` 必须在同一函数内**声明且带初始化式**；不允许 `T x; x = ...`（避免假阳性）。
+1. **只允许同单元 trait/interface 与具体 struct 方法链**；type-host、`.m.ct` recipe、泛型实例暂不支持。
+2. `name` 必须在同一函数内**已声明**；初始化可选。`M x;`、`M x = {};`、`M *p = 0;` 都可；trait 接口只能 `T t;`，不能 `T t = {};`。
 3. `name` 类型必须精确等于方法返回类型；`ct check --types` 在 `$` 处报错。
 4. 只允许在**语句表达式 / 声明初始化式 / return** 的链中；禁止 `if/while/for` 条件、实参、下标、`into`/range/errdefer 内部。
-5. 链尾禁止；同一链可多次物化；重复变量按顺序覆盖。
+5. **允许多变量与链尾物化**：`M x; N y; a.m()$x.n()$y;` 合法；同链可多次物化；重复变量按顺序覆盖。
 6. 不支持 `?.m()$x`、`own/borrow/const` 目标、声明形态 `T y = ...$x`。
 7. 方法调用只求值一次；LHS 只能是简单变量；不改变所有权/生命周期。
 8. **不依赖 SH-73，也不宣称修复 SH-73**；变量接收者只是绕法，文档写 one-hop caveat。
@@ -36,7 +36,7 @@ a.m()$x.n();                      /* 仅同单元 trait/interface；x 已声明 
 
 | 阶段 | 交付 | 验收 |
 | --- | --- | --- |
-| S1 语法/类型 | `$NAME` postfix、上下文边界、同单元 trait/interface 类型检查、负例 | `--types` 在 `$` 报类型/位置错误；`?.`/type-host/own/条件/链尾负例 |
+| S1 语法/类型 | `$NAME` postfix、上下文边界、多变量/链尾、同单元 trait/interface 与具体 struct 类型检查、负例 | `--types` 在 `$` 报类型/位置错误；`?.`/type-host/own/条件负例；多变量/链尾正例 |
 | S2 降级/发射 | `x = <call>; x.next()` 单次求值；简单变量 LHS；多次物化 | 与拆链生成 C 等价；ASan 无泄漏/悬挂；golden 不变 |
 | S3 文档/边界 | spec 新节、tutorial/README 补 into、SH-73 caveat、迁移说明 | 文档门禁；`into` 可发现；`$` 第 4 义项有边界表 |
 
@@ -51,7 +51,7 @@ a.m()$x.n();                      /* 仅同单元 trait/interface；x 已声明 
 
 ## 5 B 成立条件
 
-若用户/REQ 不接受“同单元 trait/interface + 已声明带初始化式 + 无 `?.`/type-host”的收缩，则 B 胜：两行拆链/into 是当前唯一安全路径，不进入实现。
+若用户/REQ 不接受“同单元 trait/interface + 具体 struct + 已声明（初始化可选）+ 无 `?.`/type-host”的收缩，则 B 胜：两行拆链/into 是当前唯一安全路径，不进入实现。
 
 ## 6 证据限制
 
