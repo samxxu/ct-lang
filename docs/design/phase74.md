@@ -1,6 +1,6 @@
 # Phase 74 — 模型导出（PH-59 M1/M2）
 
-> **状态：实施中（已开卡，排队实施）**（2026-11-19 立项；`v0.73.0` 拟）。
+> **状态：完成**（2026-11-19 收口；`v0.73.0`；R1–R3 全绿）。
 > **前置**：上一相收口；本卡在轮到时才开始实现。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径
 > `docs/design/phase74.md`，迁移时统一改名。
@@ -49,3 +49,19 @@
 | 编号 | 风险 | 缓解 |
 | --- | --- | --- |
 | R74-1 | SH-79 未修则 M2 不可做 | 先修 SH-79，作为 R3 前置 |
+
+## 6 进展与收口对照（2026-11-19，v0.73.0）
+
+| 任务 | 状态 | 证据 |
+| --- | --- | --- |
+| R1 J11 行列 | ✅ | `p74/model`：字段 `loc.line/col`（`int a` → `col:16`） |
+| R2 M1 emit-model | ✅ | 同一探针：model 可解析、structs/fields/functions 齐全，`file` 为 entry |
+| R3 M2 lib map | ✅ | `p74/map`：`--lib --emit-map` 落盘；build map 的 `file` 为 `main.ct` |
+
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| E74-1 | `p74_model.sh` | 绿 |
+| E74-2 | `p74_map.sh`（SH-79 两 facet） | 绿 |
+| E74-3 | `check-all.sh` | 11/11；`check-ast 1509 passed`；golden 仅 banner |
+
+附注：修复过程中一并修正了「新单元解析时 `lstart` 未重置」导致的字段列负值。

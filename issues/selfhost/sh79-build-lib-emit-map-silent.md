@@ -100,3 +100,12 @@ rc=0
 
 `Driver` / `Module` / `Emitter` 与 LANG-11、SH-76 同族，**必须串行发版**；根因不同，**不合并**。
 `Emitter` 的改动还会与 LANG-9 的 header/ABI 窗口冲突，排期时把 0.53.8 放在 LANG-9 之前。
+
+## 处置（2026-11-19，PH-74）
+
+- 提交：`a0f2e2c`（R1–R3 实现，commit 见 `git log --grep PH-74`）
+- 改动：model/map 的 prog 改用 entry unit（按输入路径匹配，`--lib` 用 root_u）；
+  `--lib` 分支在 ABI 头之后写 map/model；字段 `loc` 增 `col` 并修正新单元
+  `lstart` 未重置导致的负列。
+- 验证：`sh test/ast/p74_map.sh <ct-ast>` → `OK p74/map`；`p74_model.sh` 同样绿。
+
