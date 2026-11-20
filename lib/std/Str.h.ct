@@ -29,8 +29,7 @@
  * Limitations: the refcount is a plain non-atomic `int` (the author owns
  * synchronisation); UTF-8 decoding accepts 1..4 byte sequences and treats an
  * invalid lead byte as one codepoint; no regex/locale/normalize (those stay in
- * `std`); the old owning `Str` lives in `StrLegacy.h.ct` as `std::str::Str`
- * for the compatibility window.
+ * `std`).
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */

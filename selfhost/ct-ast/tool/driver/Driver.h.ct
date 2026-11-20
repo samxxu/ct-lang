@@ -140,13 +140,10 @@ static int layer_wanted(const char *src, int bi)
             || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
     if (bi == 1) return src_has_word(src, "Option");
     if (bi == 2) return src_has_word(src, "Result");
-    if (bi == 3)
-        /* PH-80 (D-013): the String owning handle lives in the same layer unit as the
-           borrowed Str, so either name must splice it in. */
-        return src_has_word(src, "Str") || src_has_word(src, "String")
-            || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
-    /* PH-80 (D-013): the compatibility unit, spliced only for a `std::str` spelling. */
-    return strstr(src, "std::str") != 0;
+    /* PH-80 (D-013): the String owning handle lives in the same layer unit as
+       the borrowed Str, so either name must splice it in. */
+    return src_has_word(src, "Str") || src_has_word(src, "String")
+        || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
 }
 
 impl DriverOps for Driver {
@@ -220,12 +217,11 @@ impl DriverOps for Driver {
            `Result.h.ct`; P36 S4a1 adds `Str.h.ct`. Compile mode is one C
            translation unit, so the parsed declaration chains are spliced into
            one program. */
-        for (bi = 0; bi < 5; bi++) {
+        for (bi = 0; bi < 4; bi++) {
             const char *base;
             base = bi == 0 ? "Vec.h.ct"
                  : (bi == 1 ? "Option.h.ct"
-                 : (bi == 2 ? "Result.h.ct"
-                 : (bi == 3 ? "Str.h.ct" : "StrLegacy.h.ct")));
+                 : (bi == 2 ? "Result.h.ct" : "Str.h.ct"));
             if (insrc && !layer_wanted(insrc, bi)) continue;
             prog = -1;
             for (i = 0; i < 3; i++) {
@@ -265,16 +261,7 @@ impl DriverOps for Driver {
                 self->lex->tokstart = 0;
                 self->p->unit_is_hdr = 1;
                 self->p->unit_is_map = 0;
-                {
-                    /* PH-80 (D-013): compile mode merges every unit into one parse
-                       context, but a file-scoped `namespace` is per unit. Save
-                       the caller's prefix so the compatibility unit's
-                       `namespace std::str` cannot leak into the input. */
-                    char save_ns[160];
-                    snprintf(save_ns, sizeof save_ns, "%s", self->sym->ns);
-                    prog = frontend::parse::ct_parse_program();
-                    snprintf(self->sym->ns, sizeof self->sym->ns, "%s", save_ns);
-                }
+                prog = frontend::parse::ct_parse_program();
                 self->m->path = savepath;
                 self->mem->path = savepath;
                 self->sym->path = savepath;

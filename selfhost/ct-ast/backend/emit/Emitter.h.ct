@@ -251,7 +251,7 @@ struct Emitter {
     /* Phase 29 E29-5: the built-in container unit is loaded in `ct build` but is
        not an import edge of any unit (it must not key the cache), so the
        emitter includes its header explicitly. -1 when the layer is absent. */
-    int  builtins[5];   /* P34 S9a: Vec / Option / Result layer units */
+    int  builtins[4];   /* P34 S9a: Vec / Option / Result / Str layer units */
     int  nbuiltin;
     /* PH-64 T2: slot-parallel liveness; a dead layer unit is not included and
        not emitted, so the product set follows what the program can reach. */
@@ -7087,7 +7087,7 @@ void ct_emit_clear_builtins(void)
 pub void ct_emit_add_builtin(int u);
 void ct_emit_add_builtin(int u)
 {
-    if (g_emit.nbuiltin < 5) {
+    if (g_emit.nbuiltin < 4) {
         g_emit.builtins[g_emit.nbuiltin] = u;
         g_emit.nbuiltin += 1;
     }

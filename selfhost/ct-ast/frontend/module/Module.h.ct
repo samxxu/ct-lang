@@ -153,11 +153,11 @@ pub struct Module {
        Phase 34 S9a turns it into a set of files: `Vec.h.ct` keeps the
        containers, `Option.h.ct` / `Result.h.ct` carry the ecosystem types.
        `nbuiltin` is 0 when this installation has no layer. */
-    int  builtin_units[5];
+    int  builtin_units[4];
     int  nbuiltin;
     /* PH-64 T2: a built-in unit is emitted only when the program can reach it.
        Filled once per build, before the emit loop. */
-    int  builtin_live[5];      /* slot order, parallel to builtin_units[] */
+    int  builtin_live[4];      /* slot order, parallel to builtin_units[] */
     int  computed_live;
     int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
     char map_path[1024];
@@ -248,40 +248,6 @@ static int has_word(const char *s, const char *w)
         p = q;
     }
     return 0;
-}
-
-/* PH-80 (D-013): a plain substring test over a whole unit file, used only to decide
-   whether the legacy `std::str` compatibility unit is live. Comments and
-   literals are irrelevant here: the unit is loaded anyway, this only decides
-   whether its declarations are emitted. */
-static int unit_src_has(const char *path, const char *needle)
-{
-    FILE *f;
-    char *b;
-    size_t cap = 65536, n = 0, k, nl;
-    int hit = 0;
-
-    f = fopen(path, "r");
-    if (!f) return 0;
-    b = (char *)malloc(cap);
-    if (!b) { fclose(f); return 0; }
-    for (;;) {
-        if (n + 1 >= cap) {
-            char *nb = (char *)realloc(b, cap * 2);
-            if (!nb) { free(b); fclose(f); return 0; }
-            b = nb;
-            cap *= 2;
-        }
-        k = fread(b + n, 1, cap - n - 1, f);
-        n += k;
-        if (k == 0) break;
-    }
-    fclose(f);
-    b[n] = 0;
-    nl = strlen(needle);
-    if (n >= nl && strstr(b, needle) != 0) hit = 1;
-    free(b);
-    return hit;
 }
 
 /* Does this source use the built-in `Str` layer?
@@ -1978,17 +1944,15 @@ impl ModuleOps for Module {
         self->builtin_live[1] = 0;
         self->builtin_live[2] = 0;
         self->builtin_live[3] = 0;
-        self->builtin_live[4] = 0;
         backend::emit::ct_emit_clear_builtins();
         {
             char bpath[MAX_PATH];
             int bi;
-            for (bi = 0; bi < 5; bi++) {
+            for (bi = 0; bi < 4; bi++) {
                 const char *base;
                 base = bi == 0 ? "Vec.h.ct"
                      : (bi == 1 ? "Option.h.ct"
-                     : (bi == 2 ? "Result.h.ct"
-                     : (bi == 3 ? "Str.h.ct" : "StrLegacy.h.ct")));
+                     : (bi == 2 ? "Result.h.ct" : "Str.h.ct"));
                 if (self->find_builtin(inputs[0], base, bpath, sizeof bpath) != 0) continue;
                 {
                     int bu;
@@ -2501,18 +2465,6 @@ cmd_too_long:
                         && file_uses_str(self->sym, self->units[i].path,
                                          self->units[su].fn_start, self->units[su].fn_end))
                         return 1;
-        }
-        /* PH-80 (D-013): the compatibility unit is loaded only to keep the old
-           owning `Str` reachable as `std::str::Str`; when anything names the
-           qualified spelling it must be emitted, and when nothing does it
-           must not add dead code. Scan the non-builtin units for the
-           `std::str` spelling. */
-        if (strcmp(base, "StrLegacy") == 0) {
-            for (i = 0; i < self->nunits; i++) {
-                if (self->is_builtin_unit(i)) continue;
-                if (unit_src_has(self->units[i].path, "std::str")) return 1;
-            }
-            return 0;
         }
         if (strcmp(base, "Str") == 0) {
             for (i = 0; i < self->nunits; i++)
