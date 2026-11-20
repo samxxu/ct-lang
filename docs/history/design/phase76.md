@@ -3,8 +3,8 @@
 > **状态：完成**（2026-11-19 收口；`v0.76.0`；S1–S4 全绿）。
 > **前置**：Phase 70–75 已收口；本卡为当前卡，PH-77 排队。
 > **顺序说明**：2026-11-19 起恢复 `phase = MINOR`（PN-2）；不做版本位偏移。
-> **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/design/phase76.md`，迁移时统一改名。
-> **依据**：[battle inline-materialize-2](../../battle/inline-materialize-2/verdict.md)、[battle inline-materialize-1](../../battle/inline-materialize-1/verdict.md)。
+> **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/history/design/phase76.md`，迁移时统一改名。
+> **依据**：[battle inline-materialize-2](../../../battle/inline-materialize-2/verdict.md)、[battle inline-materialize-1](../../../battle/inline-materialize-1/verdict.md)。
 
 ## 0 卡片字段（冻结）
 

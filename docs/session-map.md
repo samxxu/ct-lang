@@ -36,7 +36,10 @@
 | PH-82 泄漏防护（S82a–S82d；E82-1…8） | 当前 DSH 会话（DEV `dev-ph82`） | DEV | PH-82 ✅ v0.82.0（E82-1…8 全通过；D-012） |
 | PH-83 包管理契约 v1 与索引校验（S83a–S83d；E83-1…8） | 当前 DSH 会话（DEV `dev-ph83`） | DEV | PH-83 ✅ v0.83.0（契约 v1 / `ct index verify` / conformance / Linux 产物；D-014）；PKG-14 fix v0.83.1；Linux CT_HOME 路径 fix v0.83.2 |
 | PH-84 最小 ADT/match（S84a–S84e；D3；S84e 文档一致性由 battle doc-consistency-1 定范围） | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-84 🟨 准备（v0.84.0；入口 PH-83 收口） |
-| v1-pre 编译器重写（PH-85 inventory+spike/M0 粗切/A 机制 → PH-86 词法 → PH-87 解析+检查 → PH-88 发射器） | 当前 DSH 会话（REQ） | REQ / EDITOR | D1/D-017 已定；逐卡开卡，同一时刻一张 |
+| PH-85 v1-pre 准备（inventory/spike/M0 粗切/A 机制） | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-85 🟨 准备（v0.85.0；入口 PH-84 含 S84e） |
+| PH-86 词法器重写 | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-86 🟨 准备（v0.86.0；入口 PH-85） |
+| PH-87 解析器 + 检查器重写 | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-87 🟨 准备（v0.87.0；入口 PH-86） |
+| PH-88 发射器重写 + 扩展自举回环 | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-88 🟨 准备（v0.88.0；入口 PH-87） |
 | v1.0 发布前清单（已定项：J-6 台账 / goldens 静态化 / 文档与包体系收尾） | 当前 DSH 会话（REQ） | REQ / EDITOR | v1-PH-0 前置；争议项见 v1 路线 §6 |
 | v1.1 M1 精细切分（S1）+ A 默认强制（S2） | 当前 DSH 会话（REQ） | REQ / EDITOR | v1-PH-1；D-017 |
 | `HW-1`/`HW-2` 硬件批次 | 外部依赖（无硬件） | REQ | 只登记，不阻塞 |

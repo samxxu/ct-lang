@@ -1772,7 +1772,7 @@ Result<long, char *> twice(int n)
 
 > **状态：Phase 76 规划中，当前 `ct` 不接受 `$name`，本节不是可运行语法。**
 > 现在请用 §13.4 的两行拆链或 `into`；本节只用于评审/预览，避免把规划当成现状。
-> 依据：[Phase 76 卡](design/phase76.md)、[battle inline-materialize-2](../battle/inline-materialize-2/verdict.md)。
+> 依据：[Phase 76 卡](history/design/phase76.md)、[battle inline-materialize-2](../battle/inline-materialize-2/verdict.md)。
 
 ### 13.1 目标
 

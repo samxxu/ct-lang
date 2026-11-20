@@ -70,7 +70,7 @@ P1 批，不占 phase；纯 docs，除计数脚本外不 bump。
 | D-4 | fixed | [tutorial](../../docs/tutorial.md)「16 个可运行示例」→「**51 个示例目录**」（`find examples -mindepth 1 -maxdepth 1 -type d \| wc -l` 实测；注明 `49_socket` 为文档型） |
 | D-5 | fixed | [AGENTS](../../AGENTS.md) 实例化节 `phase=PH-66` → `phase=PH-77`（只改该字段，未动生成块） |
 | D-6 | fixed | [session-map](../../docs/session-map.md) 把截断表格的 blockquote 移到表后；PH-38…PH-77 行连成完整表格 |
-| D-7 | fixed | [roadmap](../../docs/roadmap.md) Phase 76 收口版本 v0.76.1 → **v0.76.0**（v0.76.1 是 SH-92 fix）；与 [phase76 卡](../../docs/design/phase76.md) 一致 |
+| D-7 | fixed | [roadmap](../../docs/roadmap.md) Phase 76 收口版本 v0.76.1 → **v0.76.0**（v0.76.1 是 SH-92 fix）；与 [phase76 卡](../../docs/history/design/phase76.md) 一致 |
 | D-8 | fixed | [README](../../README.md)：0.44.1 标为「历史基线（最近一次完整实测）」，并在 §0 表、§0.1、§3 四处同口径；未改结论 |
 | D-9 | fixed | [README](../../README.md) §2 常用命令补 `ct check --types` 与 `ct … --emit-model <file\|->` 两行（含 opt-in、默认编译路径不做类型检查的边界） |
 | D-10 | fixed | [architecture](../../docs/architecture.md) 标题改为 L0（主线 ct-ast 见 §0）；新增 §0「四代编译器与本文范围」表，给出 L0 / L1 / L2 / ct-ast 位置与指针（selfhost/README、AGENTS §2、roadmap） |

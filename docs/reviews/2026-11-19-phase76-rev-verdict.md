@@ -142,7 +142,7 @@ rc=1
 ## 5 阻断项（原）：`void` 返回不是硬错（E76-3 未满足；已在 SH-92 / `d16d6ffa` 修复，见 §10）
 
 卡 §4 的冻结判据 E76-3 明写「类型不匹配、**void**、`?.`、own/borrow/const、type-host、
-条件/实参/下标均硬错」（[phase76.md:86](../design/phase76.md)），tutorial §13.3 也把
+条件/实参/下标均硬错」（[phase76.md:86](../history/design/phase76.md)），tutorial §13.3 也把
 `a.void_method()$x.n();  /* 返回 void，无可赋值结果 */` 列在「拒绝的形态」
 （[tutorial.md:1842](../tutorial.md)）。实测**不是**硬错：
 
