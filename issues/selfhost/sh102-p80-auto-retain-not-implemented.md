@@ -511,3 +511,67 @@ $ ./field_goto_struct -> error: a goto cannot cross an owning String scope; …
   作者负责。
 - 循环体里对循环外 struct 的双重赋值（`h.tag = a; h.tag = b;` 同轮两次）按硬错处理（保守）。
 - `goto` 与 local owning String / owning struct 共存为硬错，不做跨作用域精确分析。
+
+## 复核（REV，2026-11-21，v0.80.3）：仍 **reopened**
+
+复核记录见 [PH-80 第四轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §13。C-2/C-3/C-4
+的 11 个夹具、`p80_retain` 39 项与全量门禁均通过，未发现新的 UAF/SEGV；D-015 硬错路线机械项
+齐全（`signer: USER（待追认）` 按用户授权作为不阻断观察）。但 C-1 的硬错语义仍有一个合法反例，
+故不置 `verified`。
+
+### R7 已定义字段在条件更新后被误判为 may-be-undefined（阻断）
+
+```ct
+struct Holder { String tag; }
+int main(void)
+{
+    Str lit = "abc";
+    Holder h = { 0 };             /* D-015 §1.2: all owning fields defined */
+    int cond = 0;
+    if (cond) {
+        h.tag = lit.to_string();  /* conditional update */
+    }
+    h.tag = lit.to_string();      /* legal reassignment: release old, retain new */
+    printf("refs=%d live=%d\n", h.tag.refs(), ct_str_live_count());
+    h.tag.release();
+    return 0;
+}
+```
+
+```console
+$ CT_STD_DIR=lib/std ct-ast --allow-c-boundary field_branch_def.ct -o field_branch_def.c
+field_branch_def.ct:11:1: error: field 'h.tag' may be undefined before this assignment; the compiler cannot release the old owning value safely (initialise the struct with '{ 0 }', or release
+compile_exit=1
+```
+
+字段由 `{ 0 }` 在分支前确定定义，所有路径都有定义值；诊断让用户“initialise the struct with
+'{ 0 }'”，但 `{ 0 }` 已经存在。D-015 §1.2 与卡 §7.9.7 都承诺“聚合初始化器 / 直线赋值后的
+member 重赋 → 自动 release”。
+
+同一误拒也出现在“裸声明 + 先直线赋值 + 条件更新 + 重赋”：
+
+```ct
+Holder h;
+h.tag = lit.to_string();
+if (cond) { h.tag = lit.to_string(); }
+h.tag = lit.to_string();       /* error at this line */
+```
+
+```console
+$ ... field_pre_condassign2.ct -o ...
+field_pre_condassign2.ct:12:1: error: field 'h.tag' may be undefined before this assignment; ...
+compile_exit=1
+```
+
+根因：`sb_field_mark()` 对已存在字段把 `fdepth` 覆盖为分支内深度
+（[`Emitter.h.ct:1003-1019`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1003-L1019)），
+`sb_field_merge()` 在分支关闭时置 `fmaybe=1`（[`Emitter.h.ct:1026-1042`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1026-L1042)），
+没有保留分支前的 known 状态；后续 `sb_field_state()` 看到 `maybe` 即硬错
+（[`Emitter.h.ct:644-650`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L644-L650)、
+[`Emitter.h.ct:1191-1198`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1191-L1198)）。
+
+### 复核结论
+
+C-2/C-3/C-4 的硬错 / 循环 / 边界夹具全部成立，未发现新 UAF/SEGV；但 R7 误拒 D-015 §1.2 已定义的
+字段，C-1 的硬错语义未满足。SH-102 保持 `reopened`；D-015 的 USER 签字占位按用户授权记为不阻断
+观察。

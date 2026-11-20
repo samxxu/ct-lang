@@ -3,16 +3,17 @@
 - 首轮复核：`v0.80.0`（annotated tag `v0.80.0`，tag object `f1730dcb4113fb98f61160065dce096672b60d66`，peeled `60c6a2c00d5037360724849c2e552bce8e14e9d4`）——结论 `REV: 打回`，D-013 §3 自动 retain 未实现；原记录保留在 §0–§10。
 - 次轮复核：`v0.80.1`（`fdcc957c63b2eac61bdcd9cb896ed730d4f717ef`，annotated tag object `752c88a9149f7aa5075cc2d21a0eeab4ce237a07`；远端 tag 一致）——SH-102 修复；三个原 ASan 复现已转绿、`p80_retain` 绿，但嵌套 `break` / `continue` 与字段重赋旧值仍漏 release，故次轮结论仍为 `REV: 打回`，见 §11。
 - 第三轮复核：`v0.80.2`（`9814f951281dc5f616bb567a50c86ac52b16a1bc`，annotated tag object `b36055a5176b042d382410068ecbc033b9942927`；远端 tag 一致）——R1–R5 已修；`p80_retain` 18 项、六探针、p78/p79、check-all/sanitizer 全绿；但字段赋值/重赋在**条件分支与循环**中仍有反例：未执行分支后重赋会 release 未初始化字段（ASan SEGV），循环内重赋不 release 旧值（`final live=2`）。故第三轮结论仍为 `REV: 打回`，见 §12。
-- 复核日期：2026-11-20。
+- 第四轮复核：`v0.80.3`（`04daa2b81d1a37ab6e7181747be154d3b223145a`，annotated tag object `335bb42dec1b0ca484b8d86e5295641e0db99f75`；远端 tag 一致）——battle 判 B 后的 D-015 硬错路线；C-2/C-3/C-4 的 11 个夹具、`p80_retain` 39 项、六探针、p78/p79、check-all/sanitizer 全绿，未发现新 UAF/SEGV。但硬错分析把**已由聚合初始化器 / 直线赋值确定的字段**在条件更新后误判为“may be undefined”，后续合法重赋被拒绝（诊断还建议已经存在的 `{0}`），C-1 的硬错语义仍不满足。故第四轮结论仍为 `REV: 打回`，见 §13。
+- 复核日期：2026-11-21。
 - 环境：macOS arm64；`Apple clang version 21.0.0 (clang-2100.4.1.1)`；`CC=cc`；`python3 3.15.2`。
-- 方法：`git archive v0.80.0` / `v0.80.1` / `v0.80.2` 分别解到 `/tmp`，按 `selfhost/check-ast.sh` 的 L0→L1→L2→ct-ast 自举链独立重建；所有探针与复现只用对应归档构建出的二进制；未改实现代码。
-- 结论：**打回**。v0.80.0 的 E80-1…7 通过；v0.80.1 的三个原 ASan UAF 已修；v0.80.2 又修了嵌套跳转、直线字段重赋、结构体字面量、多声明符与 goto 硬错。但 **D-013 §3 的“字段赋值 / 重新赋值”在控制流下仍有反例**：条件分支内未执行的字段赋值被当成已赋值，后续重赋 release 未初始化字段（ASan SEGV）；循环内的字段重赋不释放旧值（`final live=2`，即使 `Holder h = {0}` 也如此）。这不是卡 §7.9 明列的边界，故不能标为“D-013 §3 满足”。
+- 方法：`git archive v0.80.0` / `v0.80.1` / `v0.80.2` / `v0.80.3` 分别解到 `/tmp`，按 `selfhost/check-ast.sh` 的 L0→L1→L2→ct-ast 自举链独立重建；所有探针与复现只用对应归档构建出的二进制；未改实现代码。
+- 结论：**打回**。v0.80.3 的 C-2/C-3/C-4 机械夹具全部成立（branch/switch/loop_bare/copy/goto 硬错；loop0/pre/long `final live=0`；shadow ASan 通过；ptr `live=2` 登记），无新 UAF/SEGV。但 **C-1 的硬错语义仍有一个合法反例**：`Holder h = { 0 }; if (cond) h.tag = a; h.tag = b;` 及“直线赋值后再条件更新再重赋”的形状被错误拒绝，尽管存储已由 `{0}` / 直线赋值确定；诊断建议的 `{0}` 已存在。故不能标为“D-013 §3 满足”。
 
 ```text
 REV: 打回
 ```
 
-首轮记录保留在 §0–§10；次轮修复与反证在 §11；第三轮 R1–R5 的复核与新反证在 §12。卡 §7.9 的“未覆盖与残留风险”被当作待验事实；本轮未用其中已声明的边界（foreach item / for 初始化器 / 嵌套字面量 / 泛型 T / 字段全局无 Drop）作为打回理由。
+首轮记录保留在 §0–§10；次轮修复与反证在 §11；第三轮 R1–R5 的复核与新反证在 §12；第四轮 D-015/C-1 的复核与新反证在 §13。卡 §7.9 已声明的边界不作为本轮打回理由。
 
 ## 0 首轮结论摘要（v0.80.0）
 
@@ -1037,4 +1038,253 @@ for (i = 0; i < 3; i++) {
 - 但 R6a/R6b 仍违反 D-013 §3 的“字段赋值 / 重新赋值”：条件分支未执行时释放未初始化字段
   （ASan SEGV），循环内重赋泄漏旧 buffer（`final live=2`）。因此第三轮仍不能写
   `REV: 通过`；SH-102 保持 `reopened`，不置 `verified`。
+- 未改实现代码、未 push；只提交本 verdict 与 SH-102 状态。
+
+## 13 第四轮复核（v0.80.3，D-015 / C-1…C-4）
+
+### 13.1 构建与门禁
+
+```console
+$ rm -rf /tmp/rev803/src && mkdir -p /tmp/rev803/src
+$ git archive v0.80.3 | tar -x -C /tmp/rev803/src
+$ cc -Wall -Wextra -std=c99 /tmp/rev803/src/selfhost/l0/ctc.c -o /tmp/rev803/work/ctc
+$ /tmp/rev803/work/ctc /tmp/rev803/src/selfhost/l1/ctc.ct -o /tmp/rev803/work/l1.c
+$ cc -Wall -Wextra -std=c99 /tmp/rev803/work/l1.c -o /tmp/rev803/work/l1
+$ (cd /tmp/rev803/src && /tmp/rev803/work/l1 build selfhost/l2/driver.ct -o /tmp/rev803/work/l2src)
+$ cc -Wall -Wextra -std=c99 /tmp/rev803/work/l2src/*.c -o /tmp/rev803/work/l2
+$ (cd /tmp/rev803/src && /tmp/rev803/work/l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/rev803/work/astsrc)
+$ cc -Wall -Wextra -std=c99 /tmp/rev803/work/astsrc/*.c -o /tmp/rev803/work/ct-ast
+BUILD OK
+$ /tmp/rev803/work/ct-ast -v
+ct-ast v0.80.3
+```
+
+```console
+$ sh test/ast/p80_retain.sh /tmp/rev803/work/ct-ast
+...
+p80_retain: OK
+exit=0
+$ sh test/ast/p80_retain.sh /tmp/rev803/work/ct-ast | grep -c '^ok'
+39
+
+$ for p in p80_layout p80_literal p80_methods p80_cstr p80_migrate p80_docs; do
+    out=$(sh test/ast/$p.sh /tmp/rev803/work/ct-ast 2>&1); rc=$?
+    printf '%-12s exit=%d ok=%d %s\n' "$p" "$rc" \
+      "$(printf '%s\n' "$out" | grep -c '^ok')" "$(printf '%s\n' "$out" | tail -1)"; done
+p80_layout   exit=0 ok=7 p80_layout: OK
+p80_literal  exit=0 ok=3 p80_literal: OK
+p80_methods  exit=0 ok=3 p80_methods: OK
+p80_cstr     exit=0 ok=4 p80_cstr: OK
+p80_migrate  exit=0 ok=9 p80_migrate: OK
+p80_docs     exit=0 ok=27 p80_docs: OK
+```
+
+p78/p79、check-all、sanitizer、版本 / tag / G8：
+
+```console
+p78_basic    exit=0 ok=26
+p78_method   exit=0 ok=14
+p78_types    exit=0 ok=9
+p78_docs     exit=0 ok=9
+p79_basic    exit=0 ok=24
+p79_index    exit=0 ok=10
+p79_migrate  exit=0 ok=7
+p79_places   exit=0 ok=17
+p79_docs     exit=0 ok=15
+
+$ bash selfhost/check-all.sh
+...
+  ok    PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)
+...
+check-warnings: 490 ok, 0 failed
+check-docs: OK (2164 relative links in 358 files, v0.80.3, 11 hard gates, 12 phase status, ...)
+VERDICT
+check-all: OK (11 hard gates green)
+$ bash selfhost/check-sanitizers.sh
+...
+check-sanitizers: OK (583 checks, no sanitizer report)
+```
+
+`check-all` 内 AST 汇总为 `1539 passed, 0 failed, 4 skipped`；`grep -c FAIL` 为 0。与 battle C-7 的基线 `5 skipped` 差 1：v0.80.2 的 `PH-77-S5 external` 条目因网络可用而实际执行，属于环境差异，不是失败（O2）。
+
+```console
+$ git tag -l v0.80.3 --format='%(refname:short) %(objecttype) %(contents)'
+v0.80.3 tag SH-102 R6a/R6b field release (04daa2b)
+$ git rev-parse v0.80.3^{commit}
+04daa2b81d1a37ab6e7181747be154d3b223145a
+$ git ls-remote --tags origin 'refs/tags/v0.80.3*'
+335bb42dec1b0ca484b8d86e5295641e0db99f75	refs/tags/v0.80.3
+04daa2b81d1a37ab6e7181747be154d3b223145a	refs/tags/v0.80.3^{}
+$ bash tools/check.sh g8
+g8: OK (PN-2 version coherence; 9 legacy offsets)
+$ bash tools/check.sh g0
+g0: OK (block 1.17.0, session-map present)
+$ python3 test/docs/check-docs.py
+check-docs: OK (2164 relative links in 358 files, v0.80.3, 11 hard gates, 12 phase status, ...)
+```
+
+### 13.2 C-1（D-015 硬错语义）：机械项满足，签字为占位
+
+```console
+$ test -f docs/decisions/D-015.md
+$ grep -Eq 'target: *v0-PH-80' docs/decisions/D-015.md
+$ grep -Eq 'signer: *USER' docs/decisions/D-015.md
+$ grep -Eq 'date: *2026-' docs/decisions/D-015.md
+$ grep -qE '零初始化|zero-init|硬错|hard error' docs/decisions/D-015.md
+$ git log --oneline -1 -- docs/decisions/D-015.md
+04daa2b8 docs(ph80): v0.80.3 收口（SH-102 R6a/R6b，D-015）
+```
+
+D-015 选硬错路线（C-1(b)），§1.2 明列“聚合初始化器 / 直线赋值 / 全局 struct 零初始化”为
+确定定义来源；§6 写 `signer: USER（待追认）`，并自注“追认前不据此把 SH-102 置 verified”。按本轮
+用户授权（battle 决定已获授权），该占位作为不阻断观察（O1），不作为 C-1 的机械失败。
+
+### 13.3 C-2：R6a 硬错 / 已定义存储
+
+六个负例全部编译拒绝、不生成 C：
+
+```console
+$ for f in field_branch0 field_branch_rt field_switch field_loop_bare field_copy field_goto_struct; do
+    CT_STD_DIR=lib/std /tmp/rev803/work/ct-ast --allow-c-boundary test/ast/p80_retain/$f.ct -o /tmp/rev803/$f.c
+    echo "$f exit=$? c_exists=$([ -e /tmp/rev803/$f.c ] && echo yes || echo no)"; done
+field_branch0 exit=1 c_exists=no
+field_branch_rt exit=1 c_exists=no
+field_switch exit=1 c_exists=no
+field_loop_bare exit=1 c_exists=no
+field_copy exit=1 c_exists=no
+field_goto_struct exit=1 c_exists=no
+```
+
+诊断分别为 `field 'h.tag' may be undefined before this assignment …`（branch0/rt/switch/loop_bare）、
+`whole-struct assignment would shallow-copy its owning String field`（copy）、
+`a goto cannot cross an owning String scope`（goto_struct）。C-2 的命名夹具满足。
+
+**但 C-1 的“确定已定义”语义存在反例**（见 §13.6）：`Holder h = { 0 }; if (cond) h.tag = a;
+h.tag = b;` 被同一诊断错误拒绝；`Holder h; h.tag = a; if (cond) { h.tag = b; } h.tag = c;`
+同样被拒绝。两者的旧值在所有路径上均已定义，D-015 §1.2 与卡 §7.9.7 的“聚合初始化器 / 直线赋值
+后的 member 重赋 → 自动 release”应当允许；诊断还建议已经存在的 `{0}`。
+
+### 13.4 C-3：R6b 循环重赋
+
+正例 `field_loop0` / `field_loop_pre` / `field_loop_long` 在 ASan+UBSan 下各跑 10 次，均无报告、
+`final live=0`；生成 C 的循环体内有旧值 `release`：
+
+```console
+$ ./field_loop0
+iter 0 refs=1 live=1
+iter 1 refs=1 live=1
+iter 2 refs=1 live=1
+final live=0
+$ ./field_loop_pre
+iter 0 refs=1 live=1
+iter 1 refs=1 live=1
+iter 2 refs=1 live=1
+final live=0
+$ ./field_loop_long
+after loop refs=1 live=1
+final live=0
+```
+
+`field_loop_bare` 按硬错路线拒绝（exit=1，诊断 `field 'h.tag' may be undefined …`），符合 C-3 二选一。
+生成 C 的循环体形态：
+
+```c
+for (i = 0; i < 3; i++) {
+    { struct String __ct_sold51 = h.tag; h.tag = Str_to_string(&lit); String_release(&__ct_sold51); }
+    ...
+}
+```
+
+### 13.5 C-4：边界闭合
+
+```console
+$ ./field_shadow
+inner refs=1 live=2
+outer refs=1 live=1
+final live=0
+$ ./field_ptr
+after refs=1 live=2
+```
+
+`field_shadow` / `field_ptr` 在 ASan+UBSan 下各 10 次无报告：shadow 内层不继承外层状态、最终
+`live=0`；ptr 按登记泄漏 `live=2`。`field_copy` / `field_goto_struct` 编译拒绝（见 §13.3）。
+C-4 的四个夹具均满足。
+
+### 13.6 阻断项 R7：硬错分析误拒已定义字段（C-1 语义反例）
+
+```ct
+#include <stdio.h>
+struct Holder { String tag; }
+int main(void)
+{
+    Str lit = "abc";
+    Holder h = { 0 };          /* D-015 §1.2: all owning fields defined */
+    int cond = 0;
+    if (cond) {
+        h.tag = lit.to_string();   /* conditional update, still defined */
+    }
+    h.tag = lit.to_string();       /* legal reassignment: release old, retain new */
+    printf("refs=%d live=%d\n", h.tag.refs(), ct_str_live_count());
+    h.tag.release();
+    return 0;
+}
+```
+
+```console
+$ CT_STD_DIR=lib/std /tmp/rev803/work/ct-ast --allow-c-boundary field_branch_def.ct -o /tmp/rev803/field_branch_def.c
+/tmp/rev803/field_branch_def.ct:11:1: error: field 'h.tag' may be undefined before this assignment; the compiler cannot release the old owning value safely (initialise the struct with '{ 0 }', or release
+compile_exit=1
+```
+
+字段由 `{ 0 }` 在分支前确定定义，所有路径都有定义值；后续重赋应当 `retain` 新值并 `release` 旧值
+（D-015 §1.2、卡 §7.9.7 的“聚合初始化器后的 member 重赋 → 自动 release”）。诊断让用户
+“initialise the struct with '{ 0 }'”，但 `{ 0 }` 已经在第 7 行；这是自相矛盾的误拒。
+
+同一误拒也发生在裸声明的“先直线赋值、再条件更新、再重赋”：
+
+```ct
+Holder h;
+h.tag = lit.to_string();
+if (cond) { h.tag = lit.to_string(); }
+h.tag = lit.to_string();       /* error at this line */
+```
+
+```console
+$ ... field_pre_condassign2.ct -o ...
+/tmp/rev803/edge/field_pre_condassign2.ct:12:1: error: field 'h.tag' may be undefined before this assignment; ...
+compile_exit=1
+```
+
+根因在字段状态的块合并：`sb_field_mark()` 对已存在的字段把 `fdepth` 覆盖为当前（分支内）深度
+（[`Emitter.h.ct:1003-1019`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1003-L1019)），
+`sb_field_merge()` 在分支关闭时只要 `fdepth > keep_depth` 就置 `fmaybe=1`
+（[`Emitter.h.ct:1026-1042`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1026-L1042)），
+没有保留分支前的已知状态；后续 `sb_field_state()` 看到 `maybe` 即硬错
+（[`Emitter.h.ct:644-650`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L644-L650)、
+[`Emitter.h.ct:1191-1198`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1191-L1198)）。
+这是硬错路线的**误报**，不是“无法证明”的合法保守：存储由 `{0}` / 直线赋值确定，并且编译器自己
+在 `sb_mark_aggregate` 中识别了聚合初始化（[`Emitter.h.ct:1045-1072`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1045-L1072)）。
+
+### 13.7 未发现新 UAF/SEGV；观察项
+
+- 11 个 C-2/C-3/C-4 夹具与 `p80_retain` 39 项均无 ASan/UBSan 报告；`field_ptr` 的 `live=2` 是 C-4
+  明列的登记泄漏，不是 UAF。未发现 R6a/R6b 的新 UAF/SEGV。
+- **O1（不阻断）D-015 签字占位。** `signer: USER（待追认）` 未补真实签字；按本轮用户授权
+  （battle 决定已获授权）记录为占位，不据此单独打回；若按 5.4 严格执行，应在追认后再置 `verified`。
+- **O2（不阻断）`check-all` 的 `skipped` 由 5 变 4。** v0.80.2 的 `PH-77-S5 external` 因网络不可用
+  而 skip；本机网络可用，该条实际执行，故为 `1539 passed, 0 failed, 4 skipped`。不是代码回归，
+  但 battle C-7 的“5 skipped 不变”在环境变化下不能机械照抄。
+- **O3（不阻断）C-5 记录。** 当前 `docs/roadmap.md:93` 仍写“SH-102 fixed 待 REV 复核”，
+  `docs/design/phase80.md` 卡头已写“完成”；在 SH-102 仍 `reopened` 时这与 battle C-5 的
+  “未通过分支应撤回完成/修复表述”不完全一致；若本轮最终通过，需同步该行。本轮只改 verdict 与
+  SH-102，不代改 roadmap。
+
+### 13.8 第四轮结论与 issue 状态
+
+- C-2/C-3/C-4 的机械夹具全部成立，未发现新的 UAF/SEGV；D-015 的硬错路线存在且机械字段齐全。
+- 但 C-1 的硬错语义仍有合法反例 R7：已由聚合初始化器 / 直线赋值确定的字段，在条件更新后的
+  重赋被错误拒绝，诊断建议的 `{0}` 已经存在。这不是卡 §7.9 明列的边界，而是 D-015 §1.2 /
+  卡 §7.9.7 明确承诺的“确定定义”形状。
+- 因此第四轮仍不能写 `REV: 通过`；SH-102 保持 `reopened`，不置 `verified`。D-015 的 USER
+  签字占位按用户授权作为不阻断观察（O1）。
 - 未改实现代码、未 push；只提交本 verdict 与 SH-102 状态。
