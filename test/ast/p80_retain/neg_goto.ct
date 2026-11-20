@@ -1,0 +1,17 @@
+/* SH-102 round 2 (B3c): a `goto` cannot be released correctly across a scope
+ * that owns a `String` handle (it may skip the release or enter past the
+ * declaration), so the compiler must refuse it instead of leaking silently. */
+#include <stdio.h>
+
+int main(void)
+{
+    Str lit = "abc";
+    int i = 0;
+    String s = lit.to_string();
+again:
+    i = i + 1;
+    if (i < 2) goto again;
+    s.release();
+    printf("live=%d\n", ct_str_live_count());
+    return 0;
+}

@@ -4,11 +4,15 @@
 #   - the refcount trace at every destination the contract names: a by-value
 #     `String` / `U16String` parameter, a local copy, a field assignment, a
 #     move / non-local return, a reassignment and a scope exit;
+#   - round 2: nested `break` / `continue` release every scope they leave, a
+#     field reassignment releases the old value, a struct literal retains an
+#     owning element, and every declarator of a multi-declarator line retains;
 #   - `refs = -1` (immortal literal / empty) is skipped;
-#   - the same trace under ASan / UBSan, because the failing baseline was a
-#     heap-use-after-free, not a wrong number;
-#   - the two negatives the contract closes: a borrowed view escaping as an
-#     owning handle, and releasing a borrowed container view (a double free).
+#   - the same traces under ASan / UBSan, because the failing baselines were
+#     heap-use-after-free / double free, not wrong numbers;
+#   - the negatives the contract closes: a borrowed view escaping as an owning
+#     handle, releasing a borrowed container view (a double free), and a `goto`
+#     across an owning `String` scope (a hard error, no silent leak).
 #
 # Usage: sh test/ast/p80_retain.sh <ct-ast>
 set -u
@@ -29,34 +33,45 @@ ok()  { printf 'ok   %s\n' "$1"; }
 bad() { echo "FAIL p80/retain: $1" >&2; [ $# -gt 1 ] && printf '  %s\n' "$2" >&2; fail=1; }
 cd "$root" || exit 1
 
-if ! "$ctast" --allow-c-boundary test/ast/p80_retain/retain.ct -o "$work/retain.c" >"$work/retain.log" 2>&1; then
-    bad "retain compile" "$(sed -n '1,4p' "$work/retain.log")"
-elif ! "$cc" -Wall -Wextra -std=c99 "$work/retain.c" -o "$work/retain" 2>"$work/retain.cc.err"; then
-    bad "retain cc" "$(sed -n '1,4p' "$work/retain.cc.err")"
-elif [ -s "$work/retain.cc.err" ]; then
-    bad "retain warning-free cc" "$(head -2 "$work/retain.cc.err")"
-elif ! "$work/retain" >"$work/retain.out" 2>"$work/retain.err"; then
-    bad "retain run" "non-zero exit: $(head -2 "$work/retain.err")"
-elif ! cmp -s "$work/retain.out" test/ast/p80_retain/expected.retain.out; then
-    bad "retain behaviour" "$(diff -u test/ast/p80_retain/expected.retain.out "$work/retain.out" | head -12)"
-else
-    ok "retain (automatic retain / release trace)"
-fi
-
-for san in address undefined; do
-    if ! "$cc" -Wall -Wextra -std=c99 -fsanitize=$san -g "$work/retain.c" \
-            -o "$work/retain.$san" 2>"$work/retain.$san.cc.err"; then
-        bad "retain -fsanitize=$san cc" "$(head -2 "$work/retain.$san.cc.err")"
-    elif ! ASAN_OPTIONS=detect_leaks=0 "$work/retain.$san" >"$work/retain.$san.out" 2>"$work/retain.$san.err"; then
-        bad "retain -fsanitize=$san run" "$(head -3 "$work/retain.$san.err")"
-    elif [ -s "$work/retain.$san.err" ]; then
-        bad "retain -fsanitize=$san clean stderr" "$(head -2 "$work/retain.$san.err")"
-    elif ! cmp -s "$work/retain.$san.out" test/ast/p80_retain/expected.retain.out; then
-        bad "retain -fsanitize=$san behaviour" "stdout differs"
-    else
-        ok "retain -fsanitize=$san"
+run_case() {
+    name=$1
+    if ! "$ctast" --allow-c-boundary "test/ast/p80_retain/$name.ct" -o "$work/$name.c" >"$work/$name.log" 2>&1; then
+        bad "$name compile" "$(sed -n '1,4p' "$work/$name.log")"; return
     fi
-done
+    if ! "$cc" -Wall -Wextra -std=c99 "$work/$name.c" -o "$work/$name" 2>"$work/$name.cc.err"; then
+        bad "$name cc" "$(sed -n '1,4p' "$work/$name.cc.err")"; return
+    fi
+    if [ -s "$work/$name.cc.err" ]; then
+        bad "$name warning-free cc" "$(head -2 "$work/$name.cc.err")"; return
+    fi
+    if ! "$work/$name" >"$work/$name.out" 2>"$work/$name.err"; then
+        bad "$name run" "non-zero exit: $(head -2 "$work/$name.err")"; return
+    fi
+    if ! cmp -s "$work/$name.out" "test/ast/p80_retain/expected.$name.out"; then
+        bad "$name behaviour" "$(diff -u "test/ast/p80_retain/expected.$name.out" "$work/$name.out" | head -12)"; return
+    fi
+    for san in address undefined; do
+        if ! "$cc" -Wall -Wextra -std=c99 -fsanitize=$san -g "$work/$name.c" \
+                -o "$work/$name.$san" 2>"$work/$name.$san.cc.err"; then
+            bad "$name -fsanitize=$san cc" "$(head -2 "$work/$name.$san.cc.err")"
+        elif ! ASAN_OPTIONS=detect_leaks=0 "$work/$name.$san" >"$work/$name.$san.out" 2>"$work/$name.$san.err"; then
+            bad "$name -fsanitize=$san run" "$(head -3 "$work/$name.$san.err")"
+        elif [ -s "$work/$name.$san.err" ]; then
+            bad "$name -fsanitize=$san clean stderr" "$(head -2 "$work/$name.$san.err")"
+        elif ! cmp -s "$work/$name.$san.out" "test/ast/p80_retain/expected.$name.out"; then
+            bad "$name -fsanitize=$san behaviour" "stdout differs"
+        else
+            ok "$name -fsanitize=$san"
+        fi
+    done
+    ok "$name (automatic retain / release trace)"
+}
+
+run_case retain
+run_case jump
+run_case field_reassign
+run_case struct_lit
+run_case multi_decl
 
 neg() {
     name=$1; src=$2; pattern=$3; why=$4
@@ -72,6 +87,8 @@ neg neg_escape test/ast/p80_retain/neg_escape.ct \
     "cannot return a borrowed view as an owning string" "escape of a borrowed view"
 neg neg_double_free test/ast/p80_retain/neg_double_free.ct \
     "cannot release a borrowed container view" "double free of a borrowed element"
+neg neg_goto test/ast/p80_retain/neg_goto.ct \
+    "a goto cannot cross an owning String scope" "goto across an owning String scope"
 
 [ "$fail" -eq 0 ] && echo "p80_retain: OK"
 exit "$fail"

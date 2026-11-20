@@ -1,0 +1,12 @@
+iter 0 refs=1 live=1
+iter 1 refs=1 live=1
+mid refs=1
+iter 2 refs=1 live=1
+deep refs=2 live=1
+iter 3 refs=1 live=1
+after for live=0
+after while live=0
+after loop live=0
+switch 0 live=1
+switch 1 live=1
+final live=0

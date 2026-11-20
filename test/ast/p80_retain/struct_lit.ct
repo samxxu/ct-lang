@@ -1,0 +1,35 @@
+/* SH-102 round 2 (B3a): an owning element of a struct literal is retained, so
+ * releasing the source handle leaves the field valid (no shallow-copy UAF).
+ * Positional and `.field =` forms are both covered. */
+#include <stdio.h>
+
+struct Holder {
+    String tag;
+}
+
+struct Pair {
+    String a;
+    String b;
+}
+
+int main(void)
+{
+    Str lit = "tag";
+    Str alt = "alt";
+    String x = lit.to_string();
+    String y = alt.to_string();
+    Holder h = { x };
+    Pair p = { .a = y, .b = x };
+
+    printf("h.tag=%d x=%d p.a=%d p.b=%d live=%d\n", h.tag.refs(), x.refs(),
+           p.a.refs(), p.b.refs(), ct_str_live_count());
+    x.release();
+    y.release();
+    printf("after sources released h.tag=%d p.a=%d p.b=%d live=%d\n",
+           h.tag.refs(), p.a.refs(), p.b.refs(), ct_str_live_count());
+    h.tag.release();
+    p.a.release();
+    p.b.release();
+    printf("final live=%d\n", ct_str_live_count());
+    return 0;
+}

@@ -1,0 +1,81 @@
+/* SH-102 round 2 (B1): a `break` / `continue` written inside a nested block
+ * must release every owning scope it leaves, not only the innermost block.
+ * The loop body declares one handle per iteration; a leak shows up in the
+ * live count after the loop. */
+#include <stdio.h>
+
+int main(void)
+{
+    Str lit = "abc";
+    int i;
+
+    for (i = 0; i < 5; i++) {
+        String s = lit.to_string();
+        printf("iter %d refs=%d live=%d\n", i, s.refs(), ct_str_live_count());
+        if (i == 0) {
+            if (s.len() == 3) {
+                continue;               /* nested: release s first */
+            }
+        }
+        if (i == 1) {
+            printf("mid refs=%d\n", s.refs());
+        }
+        if (i == 2) {
+            if (s.len() == 3) {
+                String t = s;           /* a deeper block also owns a handle */
+                printf("deep refs=%d live=%d\n", t.refs(), ct_str_live_count());
+                if (t.len() == 3) {
+                    continue;           /* release t and s */
+                }
+            }
+        }
+        if (i == 3) {
+            break;
+        }
+    }
+    printf("after for live=%d\n", ct_str_live_count());
+
+    i = 0;
+    while (i < 3) {
+        String w = lit.to_string();
+        i = i + 1;
+        if (i == 1) {
+            if (w.len() == 3) {
+                continue;
+            }
+        }
+        if (i == 2) {
+            if (w.len() == 3) {
+                break;
+            }
+        }
+    }
+    printf("after while live=%d\n", ct_str_live_count());
+
+    i = 0;
+    loop (2) {
+        String v = lit.to_string();
+        if (i == 0) {
+            i = i + 1;
+            continue;
+        }
+        i = i + 1;
+    }
+    printf("after loop live=%d\n", ct_str_live_count());
+
+    for (i = 0; i < 2; i++) {
+        String u = lit.to_string();
+        switch (i) {
+            case 0:
+                if (u.len() == 3) {
+                    break;              /* leaves the switch, releases u? */
+                }
+            default:
+                break;
+        }
+        /* the switch's break does not leave the loop: u is still owned here */
+        printf("switch %d live=%d\n", i, ct_str_live_count());
+    }
+    printf("final live=%d\n", ct_str_live_count());
+    return 0;
+}

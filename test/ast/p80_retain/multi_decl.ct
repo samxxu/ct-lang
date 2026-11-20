@@ -1,0 +1,27 @@
+/* SH-102 round 2 (B3b): every declarator of a `String` line retains its place
+ * initialiser, so `String y = x, z = y;` ends with three owning references
+ * (plus the source) and releasing each frees the buffer exactly once. */
+#include <stdio.h>
+
+int main(void)
+{
+    Str lit = "abc";
+    String x = lit.to_string();
+    String y = x, z = y;
+    String p, q;
+
+    printf("x=%d y=%d z=%d live=%d\n", x.refs(), y.refs(), z.refs(),
+           ct_str_live_count());
+    x.release();
+    y.release();
+    z.release();
+    printf("after copy release live=%d\n", ct_str_live_count());
+
+    p = lit.to_string();
+    q = p;
+    printf("p=%d q=%d live=%d\n", p.refs(), q.refs(), ct_str_live_count());
+    p.release();
+    q.release();
+    printf("final live=%d\n", ct_str_live_count());
+    return 0;
+}

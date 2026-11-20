@@ -1,0 +1,26 @@
+/* SH-102 round 2 (B2): reassigning a `String` field retains the new value and
+ * releases the old one, exactly like a local reassignment (D-013 §3). */
+#include <stdio.h>
+
+struct Holder {
+    String tag;
+}
+
+int main(void)
+{
+    Str a = "aaa";
+    Str b = "bbb";
+    String x;
+    Holder h;
+
+    x = a.to_string();
+    h.tag = x;                          /* retain x */
+    printf("after1 tag=%d x=%d live=%d\n", h.tag.refs(), x.refs(), ct_str_live_count());
+    h.tag = b.to_string();              /* retain b's new value, release the old */
+    printf("after2 tag=%d x=%d live=%d\n", h.tag.refs(), x.refs(), ct_str_live_count());
+    x.release();
+    printf("after_x_release tag=%d live=%d\n", h.tag.refs(), ct_str_live_count());
+    h.tag.release();
+    printf("final live=%d\n", ct_str_live_count());
+    return 0;
+}
