@@ -125,7 +125,7 @@ for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
         bad "$f CTC_VERSION is not 0.83.3"
     fi
 done
-if grep -q 'v0\.83\.2' README.md && grep -q 'v0\.83\.2' docs/README.md; then
+if grep -q 'v0\.83\.3' README.md && grep -q 'v0\.83\.3' docs/README.md; then
     ok "README / docs/README carry v0.83.3"
 else
     bad "README version"

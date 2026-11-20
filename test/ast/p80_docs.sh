@@ -27,8 +27,8 @@ for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
     fi
 done
 
-if grep -q 'v0\.83\.2' README.md; then ok "README carries v0.83.3"; else bad "README version"; fi
-if grep -q 'v0\.83\.2' docs/README.md; then ok "docs/README carries v0.83.3"; else bad "docs/README version"; fi
+if grep -q 'v0\.83\.3' README.md; then ok "README carries v0.83.3"; else bad "README version"; fi
+if grep -q 'v0\.83\.3' docs/README.md; then ok "docs/README carries v0.83.3"; else bad "docs/README version"; fi
 if grep -q 'Phase 80' docs/roadmap.md && grep -q 'v0\.80\.4' docs/roadmap.md \
    && grep -q 'Phase 81' docs/roadmap.md && grep -q 'v0\.81\.0' docs/roadmap.md; then
     ok "roadmap lists Phase 80 (v0.80.4) and Phase 81 (v0.81.0)"
