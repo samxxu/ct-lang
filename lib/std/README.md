@@ -4,14 +4,15 @@
 
 ## 这是什么
 
-`lib/std/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）、`Option` / `Result` 与 `Str` 及其直接依赖**，
-不是整个 `std` 的新家。
+`lib/std/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）、`Option` / `Result` 与 `String` / `Str`
+（含 UTF-16 对）及其直接依赖**，不是整个 `std` 的新家。
 `io` / `math` 等其余模块仍由 ct-pkg 包 `std` 提供，本目录不复制、不镜像；`Str` 的
 `char *` 映射层 `std::str::String` 仍在 ct-pkg `std`（Phase 36 的 S0 实测该包没有
 `std/string` / `CStr`，故按 `docs/history/design/phase36.md` §14/§15 把 `Str` 值类型放回内建层）。
 
-内置层由四个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）、
-`Str.h.ct`（Phase 36）。
+内置层由五个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）、
+`Str.h.ct`（Phase 80：`String` / `Str` + `U16String` / `U16Str`）、`StrLegacy.h.ct`（Phase 80 兼容窗口：
+旧 owning `Str`，仅当消费者源码出现 `std::str` 时加载）。
 四者都是**编译模式**与 **`ct build`** 两条路径都会自动预解析的单元：`ct file.ct -o file.c`
 把它们 splice 到用户程序之前，`ct build` 则把它们作为独立单元参与发射；两种形态都
 **不需要 import**、不需要 `ct get`。编译模式的产物仍是单个 C TU、根命名空间。
@@ -25,7 +26,9 @@
 | `MapEntry` | `MapEntry<K, V>`，`foreach` 的 `item` 类型（`key` / `value` 字段） |
 | `Option` | `Option<T>`，`has` + `value` 标签结构（Phase 34） |
 | `Result` | `Result<T, E>`，`ok` + `value` + `err` 标签结构（Phase 34） |
-| `Str` | `Str`，`char *data` + `int len` 的带长度字符串（Phase 36） |
+| `String` / `Str` | `String`，16 字节 owning 句柄（`char *ptr` + `int len`）；`Str` 是同布局的借用视图（Phase 80） |
+| `U16String` / `U16Str` | UTF-16 owning / 借用对（`uint16_t *ptr` + `int len`），仅显式工厂（Phase 80） |
+| `std::str::Str` | 兼容窗口：旧 owning `Str`（`char *data` + `int len`），仅限定名可达（Phase 80） |
 
 这六个拼写是编译器的保留名，用户 struct 不得占用；编译器自身的模块表已改名为 `MapTable`
 （`frontend/module/MapTable.h.ct`）。它们没有 `std::vec::Vec` / `std::map::Map` 这样的模块路径别名：
@@ -78,10 +81,17 @@
   `unwrap` / `unwrap_err` 在错误一侧 `abort`，不返回零值。payload 按值拷贝，`release` 是 no-op；
   `?` / pattern matching / payload 自动释放属后续阶段（D34-8）。当实参是消费方单元的 struct 时，
   布局与方法在消费方发射，本目录的头文件只留前向声明。
-- **`Str`（Phase 36）**：拥有 `char *data` 与字节数 `len`；不要求 NUL 结尾，保留内嵌 `\0`。
-  显式 `impl Drop for Str` 释放 `data`（`data == 0` / `len == -1` 为已释放态，`free(0)` 无害）；
-  固有方法 `retain` / `release` 满足 Phase 31 元素协议，`Vec<Str>` 显式 `release()` 时逐元素释放。
-  `own Str *` 走既有 AutoDrop；按值拷贝只复制句柄，要独立句柄必须 `retain()`。
+- **`String` / `Str`（Phase 80 / D-013）**：`String` 拥有 `char *ptr` 与字节数 `len`；8 字节
+  `struct ct_str_hdr { int refs; int aux; }` 位于 `ptr - 8`，`refs = -1` 为 immortal（字面量 / 空串，
+  `release` 是 no-op）。`String` 不可变：`s[i]` 是只读单码点 `Str`，写是硬错；`.data` 是只读原始视图
+  （`const char *`，不保证 NUL，只能下标），`cstr()` 是唯一 C 边界出口。显式协议 `copy` / `retain` /
+  `release`；`Vec` / `Map` 插入由元素 glue 自动 retain；按值传参 / 返回 / 字段赋值的自动 retain 本轮
+  未实现（浅拷贝，需要独立所有权时显式 `retain()`）。`U16String` / `U16Str` 同构，UTF-16 payload 的
+  头按 `char *` 回退 8 字节计算。`Map<String,V>` 的键块在 `put` 深拷贝借用键，`Map<Str,V>` 是存储位置，
+  被类型检查拒绝。
+- **`std::str::Str`（兼容窗口）**：旧 owning `Str` 原样保留在 `StrLegacy.h.ct` 的 `namespace std::str`
+  里（C 名 `std_str_Str`），只有消费者源码出现 `std::str` 时加载；语义与 Phase 36 相同。
+  S5b 删除该单元与外部消费者迁移尚未执行。
 
 ## 版本对齐
 

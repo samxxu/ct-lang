@@ -2882,6 +2882,47 @@ parse("ab", n);  /* 调用点不写 out */
 - **返回**：返回局部数组或局部 owning 视图触发 lint；透传路径由作者负责。
 - **边界**：`Vec.as_slice`、`s.field[i]`、`f().get(i)`、`int[] s; s = a;` 不在首轮范围。
 
+### 4.70 `String` / `Str`：UTF-8 owning 与借用（Phase 80，仅 ct-ast）
+
+- **类型**：`String` 是 owning 句柄（`char *ptr` + `int len`，16 字节 LP64），`Str` 是同一布局的
+  borrowed 视图（无 Drop）；`U16String` / `U16Str` 是 UTF-16 对（`uint16_t *ptr` + `int len`）。
+  五个句柄之前都有 8 字节头 `struct ct_str_hdr { int refs; int aux; }`：`ptr - 8` 即头；
+  `refs = -1` 为 immortal（字面量 / 空串），`release` 首行直接返回。refcount 是普通 `int`，
+  非原子、非线程安全，作者负责同步。
+- **字面量**：`String s = "x"` 绑定编译器发射的 L1 immortal 静态块（只读区，Drop 不释放）；
+  `Str v = "x"` 绑定同一段只读字节的借用视图；文件作用域初始化器与 `return "x"` 同规则。
+  裸字符串字面量的值类型仍是 `char *`；把字面量直接当作工厂实参（如
+  `U16String.from_utf8("abc")`）本轮不做隐式绑定，先绑定到 `Str` 变量再传。
+- **转换**：`String.as_str() -> Str`（借用）；`Str.to_string() -> String`（独立副本）；
+  `String.to_string()` / `String.slice(start,n) -> String`（新 owning）；
+  `Str.slice(start,n) -> Str`（视图）。跨编码只走显式工厂：`U16String.from_utf8(Str)`、
+  `U16String.from_utf16(U16Str)`、`String.from_utf16(U16Str)`、`to_utf8()`、`to_utf16()`；
+  UTF-16 没有隐式字面量（`U16String x = "abc"` 硬错：`a UTF-16 string literal is not implicit`）。
+- **方法**：UTF-8 用码点下标 + 字节 API：`len`（字节数）、`char_len`（码点数）、`byte_at(i)`（O(1)）、
+  `codepoint_at(i)`（O(n)）、`get(i)`、`s[i]`、`char_at(i)`、`byte_slice(start,n)`、
+  `byte_index_of(_from)`、`slice`、`as_str`、`to_string`、`cstr`。UTF-16 只用 JS 核心子集并统一
+  snake_case：`len`（code unit 数）、`char_code_at`、`char_at`、`get` / `at` / `u[i]`、
+  `code_point_at`、`index_of(_from)`、`last_index_of`、`includes`、`starts_with`、`ends_with`、
+  `slice` / `substring`、`concat`、`replace` / `replace_all`、`to_upper_case` / `to_lower_case`、
+  `trim` / `trim_start` / `trim_end`、`repeat`、`pad_start` / `pad_end`、`split`、`to_utf8`、
+  `to_utf16`、`to_string`。`match` / `locale` / `normalize` 不在内建，走包 + shim。
+- **不可变与下标**：`String` 不可变，`s[i] = ...`、`u[i] = ...` 硬错；`s[i]` 是只读单码点 `Str`
+  视图（越界为空视图），`u[i]` 是只读单 code unit `U16Str` 视图。
+- **C 边界**：`.data` 是只读原始视图，静态类型 `const char *`（UTF-8）/ `const uint16_t *`（U16），
+  **不保证 NUL 结尾**；它只能下标（`s.data[i]`），不能作为值传出、不能传给任何被调方
+  （`printf("%s", s.data)` 硬错：`'.data' is a read-only raw view without a NUL guarantee; index it
+  byte by byte or use cstr() at the C boundary`）。`cstr()` 是唯一 C 边界出口，返回独立的
+  NUL 结尾副本，调用方负责 `free`。`.ptr` 是实现字段，用户读写一律硬错。
+- **复制 / retain**：显式协议 `copy()` / `retain()`（共享缓冲、`refs + 1`）与 `release()`
+  （`refs - 1`，归零时释放）；`Vec` / `Map` 插入按容器元素 glue 自动 `retain`。
+  D-013 §3 的“按值传参 / 返回 / 字段赋值自动 retain”本轮未实现：这三处是按值浅拷贝，
+  调用方需要独立所有权时显式 `retain()`。
+- **兼容窗口**：旧 owning `Str`（`char *data` + `int len`）只以 `std::str::Str` 限定名存在
+  （`lib/std/StrLegacy.h.ct`，仅源码出现 `std::str` 时加载）；旧消费者迁移是把类型与函数加上
+  `std::str::` 前缀，或改用新 `String` / `Str` API。删除兼容单元与跨仓 dry-run 属 S5b，尚未执行。
+- **边界**：`box<String>`（PH-81）、`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
+  `Map<String,V>`）、字段/全局位置的 `String`（无自动 Drop）、跨仓 `Str`→`String` 迁移不在本轮。
+
 ## 11 文档与实现一致性（缺口登记，2026-11-15）
 
 **现状**：仓库门禁里没有防止本文与实现漂移的自动机制。`check-docs` 只校验相对链接、版本串、
