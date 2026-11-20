@@ -47,3 +47,17 @@ ctc: index row for 'acme/util 1.0.0' is legacy (five fields); a six-field row is
 
 - [D-014](../../docs/decisions/D-014.md)、[PKG-12](pkg-12-contract-v1-doc-gaps.md)
 - [ct-pkg-index.md](../../docs/ct-pkg-index.md) §2/§3 需同步旧行为描述
+
+## 处置（DEV，PH-83 S83b，2026-11-21）
+
+- 实现：`ct get` 的索引解析在**请求解析命中**五字段行时硬错（`tool/pkg/Pkg.h.ct` 的
+  `pkg_index_lookup`），消息为
+  `ctc: index row for '<spec> <version>' is legacy (five fields); a six-field row is required`；
+  同一文件里的六字段行照常安装；MVS/latest 选中旧行时同样失败；失败不写 store、不写 lock。
+- `ct index verify` 扫描整份索引，逐行报 `legacy-five-field` 与其余坏行（契约 v1 §4.4）。
+- 提交：`d22a5077`（红，探针）+ `b5873c40`（实现）。
+- 证据：`test/ast/p83_legacy.sh` 9 条 ok（旧行命中、六字段不受影响、逐行判定、MVS、
+  latest、verify 全量、lock 不变）；`test/ast/p83_verify.sh` 19 条 ok。
+- 跨仓登记（不代改）：`ct-pkg/index@0cdb132` 的 `tools/verify-index.sh` 仍把五字段行当作
+  `publisher = "-"` 回放（`:70-80`），与本仓“按行硬错”不一致；该脚本需由 index 仓自行
+  更新（先清零旧行，再让回放失败）。本仓只登记，不改对方工作树。

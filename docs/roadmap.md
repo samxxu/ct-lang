@@ -93,7 +93,7 @@
 | Phase 80 | `String` / `Str`（S5；UTF-8/UTF-16 双类型、L1 字面量、std 迁移） | ✅ 完成（v0.80.4；SH-102 verified，D-015） | v0.80.4 | [卡](design/phase80.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 81 | `box<T>` + `new`（S1；共享句柄协议、`new` 仅具名 struct） | ✅ 完成（v0.81.0；P-7.5 + S1a/S1b/S1c，E81-1…6 通过） | v0.81.0 | [卡](design/phase81.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 82 | 泄漏防护（`leaks` 两档 `warn` / `error`；`box` 字段直接环告警；树模式文档） | ✅ 完成（v0.82.1；E82-1…8 通过，D-012；SH-103 Linux 字段表修复） | v0.82.1 | [卡](design/phase82.md) · [提案](proposals/leak-guards.md) · [判决](../battle/leak-guards-1/verdict.md) · [D-012](decisions/D-012.md) |
-| Phase 83 | 包管理契约 v1 与索引校验（只读 `ct index verify`；Linux x64 产物；conformance） | 🟨 实施中（准备；施工入口 PH-82 收口未过） | v0.83.0 | [卡](design/phase83.md) · [评估](reviews/2026-11-20-pkg-contract-proposal-eval.md) · [契约](planning/ct-pkg-get-contract.md) · [D-014](decisions/D-014.md) |
+| Phase 83 | 包管理契约 v1 与索引校验（只读 `ct index verify`；Linux x64 产物；conformance） | ✅ 完成（v0.83.0；E83-1…8 通过，D-014） | v0.83.0 | [卡](design/phase83.md) · [评估](reviews/2026-11-20-pkg-contract-proposal-eval.md) · [契约](planning/ct-pkg-get-contract.md) · [D-014](decisions/D-014.md) |
 | `v1-PH-0` | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；B 检查器 opt-in；在 PH-83 之后顺延） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
 | `v1-PH-1` | v1.1 语法现代化（S1）+ A strict 编译路径（S2） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线](planning/v1-release-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
 | `HW-1` | **真板 pilot**（REQ-HW-020：真实板卡 + 厂商 HAL + RTOS；含 [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) DMA 真实搬运） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [需求](planning/hardware-readiness-requirements.md) · [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) |
@@ -107,14 +107,15 @@
 > → PH-81 S1 `box/new`；S2 ∥ S3 可并行准备，单卡纪律先开 S2；S4 函子延后 v1.1+ Wave 2。
 > PH-78 已收口（v0.78.0 / fix v0.78.1），PH-79 已收口（v0.79.0）；
 > PH-80 已收口（v0.80.4；S5a 内建层 + S5b 删旧 `str` 与消费者迁移，E80-7 通过；SH-102 自动 retain R1–R7 修复，D-015 口径）；
-> PH-82 已收口（v0.82.0；`leaks` 两档、直接环告警、`allow-cycle`、树模式；E82-1…8）；PH-83 包管理契约 v1 待开卡（D-014）。
+> PH-82 已收口（v0.82.0；`leaks` 两档、直接环告警、`allow-cycle`、树模式；E82-1…8）；PH-83 已收口（v0.83.0；契约 v1 / `ct index verify` / conformance / Linux x64 产物，E83-1…8；D-014）。
 > J-6 全量仍未过；v1.0 顺延到 PH-82 之后。
 > PH-82 见 [phase82](design/phase82.md) / [D-012](decisions/D-012.md)。
 > 详见 [pointer-free-phase-plan](planning/pointer-free-phase-plan.md)。
 
-> **包管理契约 v1（PH-83，v0.83.0）**：不属于指针退场，排在 PH-82 与 v1.0 之间；
+> **包管理契约 v1（PH-83，v0.83.0，已收口）**：不属于指针退场，排在 PH-82 与 v1.0 之间；
 > 只做只读 `ct index verify`、Linux x64 产物与 conformance；发布/索引生成仍留在 index CI
-> （[D-014](decisions/D-014.md) · [评估](reviews/2026-11-20-pkg-contract-proposal-eval.md)）。
+> （[D-014](decisions/D-014.md) · [评估](reviews/2026-11-20-pkg-contract-proposal-eval.md) ·
+> [卡](design/phase83.md)）。
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33
 > 未单独 bump）。逐相细节与出口证据见 [流水账](history/phase-log.md#阶段总览详表)。

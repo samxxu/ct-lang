@@ -35,3 +35,14 @@
 ## 关联
 
 - [评估](../../docs/reviews/2026-11-20-pkg-contract-proposal-eval.md)、[D-014](../../docs/decisions/D-014.md)
+
+## 证据（DEV，PH-83，2026-11-21）
+
+- 已取到并可复核的基线：`ct-pkg/index` @ `0cdb132a179a9cfab5e339da9fec856ec4f29fcc`
+  （`main`，2026-11-20）；`tools/` 清单、`package-check.sh`、`gen-index.sh`、
+  `verify-index.sh`、`index` 均可按该 sha 取回。
+- 仍未由 index 仓书面确认：五字段旧行清零时间表、CI 如何钉 `ct` 版本、shell 废弃条件。
+  本仓不替对方排期（DB-5/CF-1）。
+- 本仓可交付的消费方式（待对方确认）：每个 MINOR 的 `ct-linux-x64.tar.gz` + `.sha256`
+  稳定 URL；CI 校验 sha256 后解包取 `ct`（见 [docs/dist.md](../../docs/dist.md)）。
+  本卡不 push/tag，产物只在本地 `dist/` 生成并验证。

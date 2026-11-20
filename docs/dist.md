@@ -1,6 +1,6 @@
 # 分发产物：`ct-linux-x64.tar.gz`
 
-> 中文 · PH-83（v0.83.0）· 契约 [§4.4](../planning/ct-pkg-get-contract.md)、[D-014](../decisions/D-014.md) 第 6 条
+> 中文 · PH-83（v0.83.0）· 契约 [§4.4](planning/ct-pkg-get-contract.md)、[D-014](decisions/D-014.md) 第 6 条
 
 每个 MINOR 发布一份 Linux x64 产物，供 `ct-pkg/index` 的 CI 与不装源码的用户钉版本使用。
 产物**不入 git**（`dist/` 在 `.gitignore`）；发布时上传到 GitHub Release 的稳定 URL。

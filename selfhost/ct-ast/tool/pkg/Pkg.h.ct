@@ -2484,7 +2484,9 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
                 amb = 1;
             }
         }
-        if (!sha_hex_ok(rsha)) {
+        /* A legacy row is rejected for being legacy, not for its digest; the
+           digest check is a six-field requirement (contract §4.4 IV-5). */
+        if (!legacy && !sha_hex_ok(rsha)) {
             bad = 1;
             continue;
         }
