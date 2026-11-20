@@ -1131,34 +1131,89 @@ static int container_sugar_kind(struct Expr *self, int n)
     return 0;
 }
 
+/* Phase 78 fix SH-95: a top-level `const` object is not writable. `const int
+   g` is rejected, while `const int *p` (pointer to const, itself writable) is
+   left to the type check: the star means the qualifier is on the pointee. */
+static int ref_type_is_const_value(const char *t)
+{
+    if (!t || strncmp(t, "const ", 6) != 0) return 0;
+    return strchr(t, '*') == NULL;
+}
+
+/* Phase 78 fix SH-95: the member's own record/field facts. Answers 1 when the
+   field is known, 0 when the base type is opaque (leave it to C). A bit-field
+   has no address; a top-level `const` field is not writable. */
+static int ref_member_flags(struct Expr *self, int n, int *is_bit, int *is_const)
+{
+    char t[MAX_TEXT];
+    char base[MAX_TEXT];
+    size_t bl;
+    int si, fi;
+
+    *is_bit = 0;
+    *is_const = 0;
+    if (self->sup->expr_type(self->arena->nodes[n].a, t, sizeof t) != 0) return 0;
+    bl = strlen(t);
+    while (bl > 0 && (t[bl - 1] == ' ' || t[bl - 1] == '*')) t[--bl] = 0;
+    while (bl > 0 && (t[bl - 1] == ' ' || t[bl - 1] == '\t')) t[--bl] = 0;
+    if (strncmp(t, "struct ", 7) == 0) snprintf(base, sizeof base, "%s", t + 7);
+    else if (strncmp(t, "union ", 6) == 0) snprintf(base, sizeof base, "%s", t + 6);
+    else snprintf(base, sizeof base, "%s", t);
+    si = self->sym->find_struct(base);
+    if (si < 0) return 0;
+    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+        if (strcmp(self->sym->structs[si].fields[fi].name,
+                   self->arena->nodes[n].text2) == 0) {
+            *is_bit = self->sym->structs[si].fields[fi].is_bitfield;
+            *is_const = ref_type_is_const_value(self->sym->structs[si].fields[fi].type);
+            return 1;
+        }
+    return 0;
+}
+
+/* The place is checked down to its base (SH-95). A member is a place only when
+   its base is a place and the member is neither a bit-field nor a top-level
+   `const`; a subscript is a place only when its base is a place (or the Vec/Map
+   subscript sugar, whose own protocol answers the element pointer). A call
+   result or any other rvalue therefore never gets through. */
 static int ref_arg_place(struct Expr *self, int n)
 {
-    int k, vi, root, sk;
+    int k, vi, sk, bit, konst;
 
     if (n < 0) return 0;
     k = self->arena->nodes[n].kind;
     if (k == N_VAR) {
         vi = self->sym->find_var(self->arena->nodes[n].text2);
-        if (vi >= 0) return self->sym->vars[vi].is_const ? 0 : 1;
+        if (vi >= 0) {
+            if (self->sym->vars[vi].is_const) return 0;
+            if (ref_type_is_const_value(self->sym->vars[vi].type)) return 0;
+            return 1;
+        }
         /* an unknown name may be a C library global; a known function is not a
            place */
         if (self->sym->find_func(self->arena->nodes[n].text2) >= 0) return 0;
         return 1;
     }
     if (k == N_MEMBER || k == N_ARROW) {
-        root = n;
-        while (root >= 0
-               && (self->arena->nodes[root].kind == N_MEMBER
-                   || self->arena->nodes[root].kind == N_ARROW))
-            root = self->arena->nodes[root].a;
-        sk = container_sugar_kind(self, root);
+        sk = container_sugar_kind(self, self->arena->nodes[n].a);
         /* a Vec element is a value: `v[i].field` has no address. A Map element
            is a pointer, so `m[k]->field` is an lvalue and is allowed. */
         if (sk == 1) return 0;
-        if (sk == 2) return k == N_ARROW ? 1 : 0;
+        if (sk == 2) {
+            if (k != N_ARROW) return 0;
+        } else if (!ref_arg_place(self, self->arena->nodes[n].a)) {
+            return 0;
+        }
+        if (ref_member_flags(self, n, &bit, &konst) && (bit || konst)) return 0;
         return 1;
     }
-    if (k == N_DEREF || k == N_INDEX) return 1;
+    if (k == N_DEREF) {
+        int b = self->arena->nodes[n].a;
+        /* `*m[k]` is the Map element place; the sugar itself answers a V *. */
+        if (container_sugar_kind(self, b) == 2) return 1;
+        return ref_arg_place(self, b);
+    }
+    if (k == N_INDEX) return ref_arg_place(self, self->arena->nodes[n].a);
     if (k == N_MCALL) return container_sugar_kind(self, n) == 1;
     return 0;
 }

@@ -270,6 +270,9 @@ pub struct Field {
        element, so such a field's vptrs are written by a loop instead */
     char dims[160];
     int  is_pub;                /* PH-73: only `pub` fields enter the public header */
+    /* Phase 78 fix SH-95: a bit-field has no C address, so it can never be a
+       `ref`/`out` place. The parser records the N_FIELD marker here. */
+    int  is_bitfield;
 }
 
 pub struct StructDef {

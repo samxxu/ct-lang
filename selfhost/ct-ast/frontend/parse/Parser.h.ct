@@ -2284,6 +2284,8 @@ impl ParseOps for Parser {
                     self->arena->nodes[m].d;
                 self->sym->structs[si].fields[self->sym->structs[si].nfields].col =
                     (int)self->arena->nodes[m].num;
+                self->sym->structs[si].fields[self->sym->structs[si].nfields].is_bitfield =
+                    self->arena->nodes[m].aux == 1;
                 self->sym->structs[si].nfields++;
             } else {
                 /* silently dropping the 65th field would skip its vptr and
@@ -2307,6 +2309,7 @@ impl ParseOps for Parser {
             self->pend_fields[self->npend].line = self->arena->nodes[m].line;
             self->pend_fields[self->npend].is_pub = self->arena->nodes[m].d;
             self->pend_fields[self->npend].col = (int)self->arena->nodes[m].num;
+            self->pend_fields[self->npend].is_bitfield = self->arena->nodes[m].aux == 1;
             self->npend++;
         } else {
             snprintf(msg, sizeof msg, "too many fields in a record (limit %d)", MAX_FIELDS);
@@ -2901,6 +2904,8 @@ impl ParseOps for Parser {
                             self->sym->structs[tagi].fields[ui].col;
                         self->sym->structs[ai].fields[ui].is_pub =
                             self->sym->structs[tagi].fields[ui].is_pub;
+                        self->sym->structs[ai].fields[ui].is_bitfield =
+                            self->sym->structs[tagi].fields[ui].is_bitfield;
                     }
                 } else if (ai >= 0 && !self->arena->nodes[t].text[0]) {
                     /* an untagged body: the pending list belongs to this alias */
@@ -2915,6 +2920,8 @@ impl ParseOps for Parser {
                         self->sym->structs[ai].fields[ui].line = self->pend_fields[ui].line;
                         self->sym->structs[ai].fields[ui].col = self->pend_fields[ui].col;
                         self->sym->structs[ai].fields[ui].is_pub = self->pend_fields[ui].is_pub;
+                        self->sym->structs[ai].fields[ui].is_bitfield =
+                            self->pend_fields[ui].is_bitfield;
                     }
                 }
             }

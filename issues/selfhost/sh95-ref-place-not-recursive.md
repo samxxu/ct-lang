@@ -79,3 +79,28 @@ exit=1
 ## 处置
 
 （待实现提交回填：`fixed` 主张、提交 sha、绿输出。）
+
+## 处置（DEV，2026-11-20）
+
+`fixed` 主张：`ref_arg_place()` 现在递归到基址：
+
+- `N_MEMBER` / `N_ARROW`：基址必须是 place（Map 元素指针 `m[k]->field` 例外），
+  字段若是 bit-field 或顶层 `const` 则拒绝；
+- `N_INDEX`：基址必须是 place；`N_DEREF`：基址是 place，或 Map 下标糖
+  `*m[k]`；
+- `N_VAR`：拒绝枚举常量与顶层 `const` 变量（`const int g`），保留
+  `const int *p`（指针本身可写）；
+- 调用结果/表达式不再被当作基址。
+
+绿输出（v0.78.1 前的修复编译器）：
+
+```console
+$ CC=cc sh test/ast/p78_basic.sh build/ct-ast
+ok   SH-95 call-result member rejected
+ok   SH-95 bit-field member rejected
+ok   SH-95 const variable rejected
+p78_basic: OK
+exit=0
+```
+
+提交：`git log --grep "SH-95"`。
