@@ -2570,7 +2570,7 @@ impl ParseOps for Parser {
        no `use` clause (there is no vptr to append). */
     int parse_record_def(int is_union)
     {
-        int s, struct_line, brace_line, brace_col, kind, ar, ao;
+        int s, struct_line, struct_col, brace_line, brace_col, kind, ar, ao;
         int nt, templ;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
@@ -2585,6 +2585,7 @@ impl ParseOps for Parser {
         bound[0][0] = 0;
         bound[1][0] = 0;
         struct_line = self->lex->tokline;
+        struct_col = self->lex->tokstart - self->lex->lstart + 1;
         brace_line = 0;
         brace_col = 1;
         kind = is_union ? N_UNION : N_STRUCT;
@@ -2736,6 +2737,8 @@ impl ParseOps for Parser {
             if (di >= 0) {
                 self->sym->structs[di].defined = 1;
                 self->sym->structs[di].is_pub = self->decl_pub;
+                self->sym->structs[di].line = struct_line;
+                self->sym->structs[di].col = struct_col;
             }
             /* Phase 33 O3: remember the declaring unit, so a container named by
                another unit can tell whether the element's definition is visible

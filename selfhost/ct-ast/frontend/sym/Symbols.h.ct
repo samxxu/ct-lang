@@ -293,6 +293,10 @@ pub struct StructDef {
     struct Field fields[64];
     int  nfields;
     int  defined;               /* a body was parsed; a forward declaration is not */
+    /* PH-82: the definition's `struct` keyword position, so a direct-cycle
+       finding names its declaration (Module::cycle_check). */
+    int  line;
+    int  col;
     int  uses_drop;             /* built-in `Drop`: no vptr, no vtable, `delete` calls it */
     int  uses_handback;         /* built-in `Handback`: no vptr, no vtable, `borrow` calls it */
     int  has_handback_impl;     /* this unit parsed `impl Handback for S` */
@@ -1063,6 +1067,8 @@ impl SymbolOps for Symbols {
         self->structs[self->nstructs].nuse = 0;
         self->structs[self->nstructs].nfields = 0;
         self->structs[self->nstructs].defined = 0;
+        self->structs[self->nstructs].line = 0;
+        self->structs[self->nstructs].col = 0;
         self->structs[self->nstructs].uses_drop = 0;
         self->structs[self->nstructs].uses_handback = 0;
         self->structs[self->nstructs].has_handback_impl = 0;

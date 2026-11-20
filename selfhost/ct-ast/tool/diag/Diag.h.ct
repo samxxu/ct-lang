@@ -55,6 +55,9 @@ trait DiagStore {
     int  record_std_shadow(int line, int col, const char *msg, const char *path);
     int  record_leak(int kind, int line, int path_line, const char *file,
                      const char *var, const char *tname);
+    /* PH-82: a direct `box<X>` field cycle (kind 10); `msg` carries the whole
+       sentence and the chain, because the record has no variable/type slot. */
+    int  record_cycle(int line, int col, const char *msg, const char *path);
     int  emit(int json, int to_stderr);
     void put_json(FILE *f, const char *s);
     int  nsem(void);
@@ -279,6 +282,28 @@ impl DiagStore for Diag {
         return 0;
     }
 
+    /* PH-82: the direct-cycle finding (kind 10). The record carries the whole
+       sentence so text and JSON share one wording; `col` is the declared
+       struct's column, which `ct check` prints with the location contract. */
+    int record_cycle(int line, int col, const char *msg, const char *path)
+    {
+        struct Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = 10;
+        w->line = line;
+        w->col = col;
+        w->path_line = 0;
+        snprintf(w->file, sizeof w->file, "%s", path);
+        w->var[0] = 0;
+        w->tname[0] = 0;
+        w->stype[0] = 0;
+        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        self->nwarns++;
+        return 0;
+    }
+
     /* The emitter's `emit_json_str` is an EmitOps method, so this unit keeps a
        local copy; the escaping must match it byte for byte (the JSON documents
        are compared against L2's). */
@@ -312,8 +337,9 @@ impl DiagStore for Diag {
         /* `ct check` turns these into findings; compile and build keep `warning` */
         const char *sev = self->strict == 1 ? "error" : "warning";
         const char *sigsev = (self->strict == 1 || self->strict == 2) ? "error" : "warning";
-        /* PH-82: the leak records (kinds 0/2) follow `leaks = error` in every
-           mode; the other classes do not. */
+        /* PH-82: the leak records (kinds 0/2) and the direct-cycle record
+           (kind 10) follow `leaks = error` in every mode; other classes do
+           not. */
         const char *leaksev = (self->strict == 1 || self->leaks_error) ? "error" : "warning";
         int leak_errs = 0;
         (void)self;
@@ -323,7 +349,7 @@ impl DiagStore for Diag {
         if (self->leaks_error) {
             for (i = 0; i < self->nwarns; i++) {
                 int k = self->warns[i].kind;
-                if (k == 0 || k == 2) leak_errs++;
+                if (k == 0 || k == 2 || k == 10) leak_errs++;
             }
         }
         if (json) {
@@ -333,7 +359,8 @@ impl DiagStore for Diag {
                 if (i) fputc(',', jf);
                 fputc('{', jf);
                 if (self->strict == 1 || (w->kind == 1 && self->strict == 2)
-                    || (self->leaks_error && (w->kind == 0 || w->kind == 2)))
+                    || (self->leaks_error
+                        && (w->kind == 0 || w->kind == 2 || w->kind == 10)))
                     fputs("\"severity\":\"error\",", jf);
                 if (w->kind == 1) {
                     fputs("\"type\":\"signature_mismatch\",\"file\":\"", jf);
@@ -418,6 +445,16 @@ impl DiagStore for Diag {
                     fputs("\"message\":\"", jf);
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
+                } else if (w->kind == 10) {
+                    /* PH-82: a direct `box<X>` field cycle; `message` already
+                       names the chain, so JSON carries no separate field. */
+                    fputs("\"type\":\"potential_cycle\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,", w->line);
+                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                    fputs("\"message\":\"", jf);
+                    self->put_json(jf, w->msg);
+                    fputs("\"}", jf);
                 } else {
                     fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
@@ -471,6 +508,8 @@ impl DiagStore for Diag {
                     fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
                 else if (w->kind == 9)
                     fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                else if (w->kind == 10)
+                    fprintf(tf, "%s %s: %s\n", loc, leaksev, w->msg);
                 else
                     fprintf(tf, "%s %s: potential leak: '%s' (%s*) allocated but never deleted\n",
                             loc, leaksev, w->var, w->tname);
@@ -636,9 +675,16 @@ int ct_diag_leaks_failed(void)
     if (!g_diag.leaks_error) return 0;
     for (i = 0; i < g_diag.nwarns; i++) {
         int k = g_diag.warns[i].kind;
-        if (k == 0 || k == 2) return 1;
+        if (k == 0 || k == 2 || k == 10) return 1;
     }
     return 0;
+}
+
+/* PH-82: a direct `box<X>` field cycle (kind 10). */
+pub int ct_cycle_warn(int line, int col, const char *msg, const char *path);
+int ct_cycle_warn(int line, int col, const char *msg, const char *path)
+{
+    return g_diag.record_cycle(line, col, msg, path);
 }
 
 pub void ct_diag_set_strict(int on);

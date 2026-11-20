@@ -98,6 +98,8 @@ pub trait ModuleOps {
        input's package root: an `-I` root with a manifest first, then the
        unit's own directory, so compile mode reads it without `-I` too. */
     int  leaks_for(const char *path);
+    /* PH-82: the direct-cycle warning over the `box<X>` field graph (depth 3). */
+    int  cycle_check(void);
     int  io_header_mask(int unit);
     int  io_header_mask_tail(int from);
     int  io_call_count(void);
@@ -490,6 +492,96 @@ static int ct_shim_ambiguity(struct Module *m, const struct Unit *units, int n)
     }
     (void)m;
     return 0;
+}
+
+/* PH-82: the box-field graph the direct-cycle warning walks. The symbol
+   table's own caps bound it (`Symbols` lists MAX_STRUCTS 128 +
+   MAX_STRUCT_INSTS 128 rows and MAX_FIELDS 64), so the adjacency lives in
+   fixed arrays instead of a per-run allocation. */
+#define CYCLE_ROWS 256
+#define CYCLE_DEGREE 64
+static int g_cycle_adj[CYCLE_ROWS][CYCLE_DEGREE];
+static int g_cycle_nout[CYCLE_ROWS];
+
+/* The unit that declared `si`, so a finding (and a suppression point) names the
+   right file after the build walked every unit; `path` is the fallback for a
+   compile-mode row whose owner index is not in `units[]`. */
+static const char *cycle_file(struct Module *m, int si)
+{
+    int o = m->sym->structs[si].owner;
+
+    if (o >= 0 && o < m->nunits && m->units[o].path[0]) return m->units[o].path;
+    return m->path;
+}
+
+/* One `box<X>` edge: the field's spelling is `struct box_<enc>`, and the
+   instance's `ptr` payload slot names the target (`struct T *`). Anything the
+   payload slot cannot name -- a typedef alias, a generic instance, a forward
+   declaration -- is not an edge: D-012 keeps typedef/container/generic
+   indirection out of the graph instead of guessing through it. */
+static int cycle_box_target(struct Module *m, int si, int fi)
+{
+    const char *t;
+    char ptype[MAX_TEXT];
+    int bx, pi, n, ti;
+
+    t = m->sym->structs[si].fields[fi].type;
+    if (strncmp(t, "struct box_", 11) == 0) t += 7;
+    else if (strncmp(t, "box_", 4) != 0) return -1;
+    bx = m->sym->find_struct(t);
+    if (bx < 0 || !m->sym->structs[bx].is_inst) return -1;
+    for (pi = 0; pi < m->sym->structs[bx].nfields; pi++)
+        if (strcmp(m->sym->structs[bx].fields[pi].name, "ptr") == 0) break;
+    if (pi >= m->sym->structs[bx].nfields) return -1;
+    snprintf(ptype, sizeof ptype, "%s", m->sym->structs[bx].fields[pi].type);
+    n = (int)strlen(ptype);
+    while (n > 0 && (ptype[n - 1] == ' ' || ptype[n - 1] == '\t')) ptype[--n] = 0;
+    if (n == 0 || ptype[n - 1] != '*') return -1;
+    ptype[--n] = 0;
+    while (n > 0 && (ptype[n - 1] == ' ' || ptype[n - 1] == '\t')) ptype[--n] = 0;
+    t = ptype;
+    if (strncmp(t, "struct ", 7) == 0) t += 7;
+    else if (strncmp(t, "union ", 6) == 0) t += 6;
+    ti = m->sym->find_struct(t);
+    if (ti < 0) return -1;
+    if (!m->sym->structs[ti].defined) return -1;
+    if (m->sym->structs[ti].is_template || m->sym->structs[ti].is_inst) return -1;
+    return ti;
+}
+
+/* Report one cycle once; `b`/`c` are -1 for a self loop / a two-edge cycle.
+   The wording says "may leak ... unless the cycle is broken by hand", never
+   "will leak" (D-012). */
+static int cycle_emit(struct Module *m, int a, int b, int c)
+{
+    char chain[MAX_TEXT];
+    char msg[MAX_TEXT];
+    const char *file;
+    int nodes[3], n, i, w, k;
+
+    nodes[0] = a;
+    n = 1;
+    if (b >= 0) nodes[n++] = b;
+    if (c >= 0) nodes[n++] = c;
+    chain[0] = 0;
+    w = 0;
+    for (i = 0; i < n; i++) {
+        k = snprintf(chain + w, sizeof chain - (size_t)w, "%s%s",
+                     w ? " -> " : "", m->sym->structs[nodes[i]].name);
+        if (k < 0 || w + k >= (int)sizeof chain) { w = (int)sizeof chain - 1; break; }
+        w += k;
+    }
+    if (w < (int)sizeof chain - 1) {
+        k = snprintf(chain + w, sizeof chain - (size_t)w, " -> %s",
+                     m->sym->structs[a].name);
+        if (k > 0 && w + k < (int)sizeof chain) w += k;
+    }
+    snprintf(msg, sizeof msg,
+             "potential reference cycle: %s; instances may leak unless the cycle is broken by hand",
+             chain);
+    file = cycle_file(m, a);
+    return tool::diag::ct_cycle_warn(m->sym->structs[a].line,
+                                     m->sym->structs[a].col, msg, file);
 }
 
 impl ModuleOps for Module {
@@ -2075,6 +2167,11 @@ impl ModuleOps for Module {
                through the type's header before any product is written. */
             if (self->check_drop_visibility() != 0)
                 return frontend::parse::ct_parse_report();
+            /* PH-82: the direct-cycle warning is a whole-build property (the
+               field graph spans units), so it runs once after every unit is
+               in the symbol table and before the cache/emit walk. */
+            if (self->cycle_check() != 0)
+                return frontend::parse::ct_parse_report();
             /* `leaks = error` fails the run here, before any `.c`/`.h`/archive
                is written, and covers `--lib` too (that branch returns before
                the later diagnostics flush). */
@@ -2618,6 +2715,60 @@ cmd_too_long:
         n = self->path_dir(path, dir, sizeof dir);
         if (n != 0) return 0;
         if (ct_pkg_key(dir, "leaks", v, sizeof v) && strcmp(v, "error") == 0) return 1;
+        return 0;
+    }
+
+    /* PH-82 (D-012): the direct-cycle warning. Nodes are plain, defined structs
+       (generic templates/instances stay out, so generics never report); an edge
+       is a `box<X>` field and adjacent edges count one. The walk stops at three
+       edges, a repeated payload field is one edge, and a cycle is emitted from
+       its smallest row, so A -> B -> A and B -> A -> B are one finding. */
+    int cycle_check(void)
+    {
+        int nrows, i, fi, a, b, c, j, k, n;
+
+        nrows = self->sym->nstructs;
+        if (nrows > CYCLE_ROWS) nrows = CYCLE_ROWS;
+        for (i = 0; i < nrows; i++) g_cycle_nout[i] = 0;
+        for (i = 0; i < nrows; i++) {
+            if (!self->sym->structs[i].defined) continue;
+            if (self->sym->structs[i].is_template) continue;
+            if (self->sym->structs[i].is_inst) continue;
+            for (fi = 0; fi < self->sym->structs[i].nfields; fi++) {
+                k = cycle_box_target(self, i, fi);
+                if (k < 0) continue;
+                for (j = 0; j < g_cycle_nout[i]; j++)
+                    if (g_cycle_adj[i][j] == k) break;
+                if (j < g_cycle_nout[i]) continue;
+                if (g_cycle_nout[i] >= CYCLE_DEGREE) continue;
+                g_cycle_adj[i][g_cycle_nout[i]++] = k;
+            }
+        }
+        for (a = 0; a < nrows; a++) {
+            if (!self->sym->structs[a].defined) continue;
+            if (self->sym->structs[a].is_template) continue;
+            if (self->sym->structs[a].is_inst) continue;
+            for (j = 0; j < g_cycle_nout[a]; j++) {
+                b = g_cycle_adj[a][j];
+                if (b == a) {
+                    if (cycle_emit(self, a, -1, -1) != 0) return 1;
+                    continue;
+                }
+                for (k = 0; k < g_cycle_nout[b]; k++) {
+                    c = g_cycle_adj[b][k];
+                    if (c == a) {
+                        if (a < b && cycle_emit(self, a, b, -1) != 0) return 1;
+                        continue;
+                    }
+                    if (c == b) continue;
+                    for (n = 0; n < g_cycle_nout[c]; n++)
+                        if (g_cycle_adj[c][n] == a) break;
+                    if (n < g_cycle_nout[c] && a < b && a < c
+                        && cycle_emit(self, a, b, c) != 0)
+                        return 1;
+                }
+            }
+        }
         return 0;
     }
 

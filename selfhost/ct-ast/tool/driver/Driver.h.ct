@@ -914,8 +914,12 @@ impl DriverOps for Driver {
                 prog = stdprog;
             }
         }
-        /* PH-82: `leaks = error` fails compile before any artifact is opened;
-           the warn form leaves the records to the closing flush. */
+        /* PH-82: the direct-cycle warning runs over the unit's whole struct
+           table before any artifact is opened; `leaks = error` then fails the
+           run here, while the warn form leaves the records to the closing
+           flush. */
+        if (self->m->cycle_check() != 0)
+            return frontend::parse::ct_parse_report();
         if (!self->m->check_mode && tool::diag::ct_diag_leaks_failed()) {
             tool::diag::ct_diag_emit(self->m->diag_json, 0);
             return 1;
