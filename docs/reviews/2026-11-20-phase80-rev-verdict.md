@@ -2,16 +2,17 @@
 
 - 首轮复核：`v0.80.0`（annotated tag `v0.80.0`，tag object `f1730dcb4113fb98f61160065dce096672b60d66`，peeled `60c6a2c00d5037360724849c2e552bce8e14e9d4`）——结论 `REV: 打回`，D-013 §3 自动 retain 未实现；原记录保留在 §0–§10。
 - 次轮复核：`v0.80.1`（`fdcc957c63b2eac61bdcd9cb896ed730d4f717ef`，annotated tag object `752c88a9149f7aa5075cc2d21a0eeab4ce237a07`；远端 tag 一致）——SH-102 修复；三个原 ASan 复现已转绿、`p80_retain` 绿，但嵌套 `break` / `continue` 与字段重赋旧值仍漏 release，故次轮结论仍为 `REV: 打回`，见 §11。
+- 第三轮复核：`v0.80.2`（`9814f951281dc5f616bb567a50c86ac52b16a1bc`，annotated tag object `b36055a5176b042d382410068ecbc033b9942927`；远端 tag 一致）——R1–R5 已修；`p80_retain` 18 项、六探针、p78/p79、check-all/sanitizer 全绿；但字段赋值/重赋在**条件分支与循环**中仍有反例：未执行分支后重赋会 release 未初始化字段（ASan SEGV），循环内重赋不 release 旧值（`final live=2`）。故第三轮结论仍为 `REV: 打回`，见 §12。
 - 复核日期：2026-11-20。
 - 环境：macOS arm64；`Apple clang version 21.0.0 (clang-2100.4.1.1)`；`CC=cc`；`python3 3.15.2`。
-- 方法：`git archive v0.80.0` / `v0.80.1` 分别解到 `/tmp`，按 `selfhost/check-ast.sh` 的 L0→L1→L2→ct-ast 自举链独立重建；所有探针与复现只用对应归档构建出的二进制；未改实现代码。
-- 结论：**打回**。v0.80.0 的 E80-1…7 通过；v0.80.1 的三个原 ASan UAF 已修、六探针 + `p80_retain` 与 check-all/sanitizer 全绿。但 **D-013 §3 的自动 retain 仍有漏 release 的出口**：嵌套 `if` 里的 `break` / `continue` 不释放作用域句柄（`live=2`），字段重赋旧值也不释放（`final live=1`）；另有结构体字面量 / 多声明符局部的 UAF 边界。故不能把 v0.80.1 标为“D-013 §3 满足”。
+- 方法：`git archive v0.80.0` / `v0.80.1` / `v0.80.2` 分别解到 `/tmp`，按 `selfhost/check-ast.sh` 的 L0→L1→L2→ct-ast 自举链独立重建；所有探针与复现只用对应归档构建出的二进制；未改实现代码。
+- 结论：**打回**。v0.80.0 的 E80-1…7 通过；v0.80.1 的三个原 ASan UAF 已修；v0.80.2 又修了嵌套跳转、直线字段重赋、结构体字面量、多声明符与 goto 硬错。但 **D-013 §3 的“字段赋值 / 重新赋值”在控制流下仍有反例**：条件分支内未执行的字段赋值被当成已赋值，后续重赋 release 未初始化字段（ASan SEGV）；循环内的字段重赋不释放旧值（`final live=2`，即使 `Holder h = {0}` 也如此）。这不是卡 §7.9 明列的边界，故不能标为“D-013 §3 满足”。
 
 ```text
 REV: 打回
 ```
 
-首轮记录保留在 §0–§10；次轮修复与反证在 §11。卡 §7.9 的“未覆盖与残留风险”在本报告中被当作待验事实，而不是结论。
+首轮记录保留在 §0–§10；次轮修复与反证在 §11；第三轮 R1–R5 的复核与新反证在 §12。卡 §7.9 的“未覆盖与残留风险”被当作待验事实；本轮未用其中已声明的边界（foreach item / for 初始化器 / 嵌套字面量 / 泛型 T / 字段全局无 Drop）作为打回理由。
 
 ## 0 首轮结论摘要（v0.80.0）
 
@@ -791,4 +792,249 @@ after goto live=1
 - 三个原 ASan UAF 已修复，`p80_retain` 绿，p80 六探针、p78/p79、check-all、sanitizer、G0/G8/tag 全部通过；这些修复证据保留。
 - 但 B1（嵌套 break/continue 漏 release）直接违反 SH-102 处置段与卡 §7.9.1 的“所有出口 release”，B2（字段重赋旧值泄漏）违反 D-013 §3 “重新赋值”的字面要求；B3 的结构体字面量 / 多声明符局部仍是 UAF / 双重释放。
 - 因此 D-013 §3 **未完全满足**，本轮不写 `REV: 通过`，SH-102 置 `reopened`（含新失败复现），不置 `verified`。
+- 未改实现代码、未 push；只提交本 verdict 与 SH-102 状态。
+
+## 12 第三轮复核（v0.80.2，SH-102 R1–R5）
+
+### 12.1 构建与门禁
+
+```console
+$ rm -rf /tmp/rev802/src && mkdir -p /tmp/rev802/src
+$ git archive v0.80.2 | tar -x -C /tmp/rev802/src
+$ cc -Wall -Wextra -std=c99 /tmp/rev802/src/selfhost/l0/ctc.c -o /tmp/rev802/work/ctc
+$ /tmp/rev802/work/ctc /tmp/rev802/src/selfhost/l1/ctc.ct -o /tmp/rev802/work/l1.c
+$ cc -Wall -Wextra -std=c99 /tmp/rev802/work/l1.c -o /tmp/rev802/work/l1
+$ (cd /tmp/rev802/src && /tmp/rev802/work/l1 build selfhost/l2/driver.ct -o /tmp/rev802/work/l2src)
+$ cc -Wall -Wextra -std=c99 /tmp/rev802/work/l2src/*.c -o /tmp/rev802/work/l2
+$ (cd /tmp/rev802/src && /tmp/rev802/work/l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/rev802/work/astsrc)
+$ cc -Wall -Wextra -std=c99 /tmp/rev802/work/astsrc/*.c -o /tmp/rev802/work/ct-ast
+BUILD OK
+$ /tmp/rev802/work/ct-ast -v
+ct-ast v0.80.2
+```
+
+```console
+$ sh test/ast/p80_retain.sh /tmp/rev802/work/ct-ast
+ok   retain -fsanitize=address
+ok   retain -fsanitize=undefined
+ok   retain (automatic retain / release trace)
+ok   jump -fsanitize=address
+ok   jump -fsanitize=undefined
+ok   jump (automatic retain / release trace)
+ok   field_reassign -fsanitize=address
+ok   field_reassign -fsanitize=undefined
+ok   field_reassign (automatic retain / release trace)
+ok   struct_lit -fsanitize=address
+ok   struct_lit -fsanitize=undefined
+ok   struct_lit (automatic retain / release trace)
+ok   multi_decl -fsanitize=address
+ok   multi_decl -fsanitize=undefined
+ok   multi_decl (automatic retain / release trace)
+ok   neg_escape (rejected: escape of a borrowed view)
+ok   neg_double_free (rejected: double free of a borrowed element)
+ok   neg_goto (rejected: goto across an owning String scope)
+p80_retain: OK
+exit=0
+
+$ for p in p80_layout p80_literal p80_methods p80_cstr p80_migrate p80_docs; do
+    out=$(sh test/ast/$p.sh /tmp/rev802/work/ct-ast 2>&1); rc=$?
+    printf '%-12s exit=%d ok=%d %s\n' "$p" "$rc" \
+      "$(printf '%s\n' "$out" | grep -c '^ok')" "$(printf '%s\n' "$out" | tail -1)"; done
+p80_layout   exit=0 ok=7 p80_layout: OK
+p80_literal  exit=0 ok=3 p80_literal: OK
+p80_methods  exit=0 ok=3 p80_methods: OK
+p80_cstr     exit=0 ok=4 p80_cstr: OK
+p80_migrate  exit=0 ok=9 p80_migrate: OK
+p80_docs     exit=0 ok=27 p80_docs: OK
+```
+
+p78/p79 不回归：
+
+```console
+p78_basic    exit=0 ok=26
+p78_method   exit=0 ok=14
+p78_types    exit=0 ok=9
+p78_docs     exit=0 ok=9
+p79_basic    exit=0 ok=24
+p79_index    exit=0 ok=10
+p79_migrate  exit=0 ok=7
+p79_places   exit=0 ok=17
+p79_docs     exit=0 ok=15
+```
+
+```console
+$ bash selfhost/check-all.sh
+...
+  ok    PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)
+...
+check-warnings: 490 ok, 0 failed
+check-docs: OK (2158 relative links in 357 files, v0.80.2, 11 hard gates, 12 phase status, ...)
+VERDICT
+check-all: OK (11 hard gates green)
+$ bash selfhost/check-sanitizers.sh
+...
+check-sanitizers: OK (583 checks, no sanitizer report)
+```
+
+`check-all` 内 AST 汇总为 `1538 passed, 0 failed, 5 skipped`；`grep -c FAIL` 为 0。版本 / tag / G8：
+
+```console
+$ git tag -l v0.80.2 --format='%(refname:short) %(objecttype) %(contents)'
+v0.80.2 tag SH-102 R1-R5 fix (9814f95)
+$ git rev-parse v0.80.2^{commit}
+9814f951281dc5f616bb567a50c86ac52b16a1bc
+$ git ls-remote --tags origin 'refs/tags/v0.80.2*'
+b36055a5176b042d382410068ecbc033b9942927	refs/tags/v0.80.2
+9814f951281dc5f616bb567a50c86ac52b16a1bc	refs/tags/v0.80.2^{}
+$ bash tools/check.sh g8
+g8: OK (PN-2 version coherence; 9 legacy offsets)
+$ bash tools/check.sh g0
+g0: OK (block 1.17.0, session-map present)
+$ python3 test/docs/check-docs.py
+check-docs: OK (2158 relative links in 357 files, v0.80.2, 11 hard gates, 12 phase status, ...)
+```
+
+### 12.2 R1–R5：已修
+
+同一组上轮反证在 v0.80.2 上重跑：
+
+```console
+$ ./jump2; echo exit=$?          # 嵌套 if 的 continue/break
+iter 0 refs=1 live=1
+iter 1 refs=1 live=1
+after loop live=0
+exit=0
+
+$ ./field_reassign; echo exit=$? # 直线字段重赋
+after1 tag=2 x=2 live=1
+after2 tag=1 x=1 live=2
+after_x_release tag=1 live=1
+final live=0
+exit=0
+
+$ ./struct_lit; echo exit=$?     # Holder h = { x }
+before release tag=2 x=2 live=1
+after release tag=1 live=1 data0=97
+final live=0
+exit=0
+
+$ ./multi_decl; echo exit=$?     # String y = x, z = y;
+x=3 y=3 z=3 live=1
+after y/z release x=1 live=1 data0=97
+final live=0
+exit=0
+
+$ ./goto_scope                  # goto 跨 owning 作用域
+/tmp/rev802/edge/goto_scope.ct:8:1: error: a goto cannot cross an owning String scope; restructure the code or release() explicitly
+compile_exit=1
+```
+
+R1（嵌套跳转释放到循环基线）、R2（直线字段重赋 release 旧值）、R3a（结构体字面量 place 元素 retain）、R3b（多声明符逐个 retain/登记）、R3c（goto 硬错）均已按要求工作；三例原 ASan UAF 仍无回归（`gap` / `field` / `ret` 的 stderr 均 0 字节，`param refs=2`、`field refs=2`、`after return s=2 r=2`）。
+
+### 12.3 R6（阻断）字段赋值 / 重赋在条件分支与循环中仍错
+
+#### R6a 条件分支未执行 → release 未初始化字段（ASan SEGV）
+
+```ct
+struct Holder { String tag; }
+int main(int argc, char **argv)
+{
+    Str lit = "abc";
+    Holder h;
+    int cond = (argc > 100);       /* runtime false */
+    if (cond) {
+        h.tag = lit.to_string();   /* not executed */
+    }
+    h.tag = lit.to_string();       /* source-safe: writes before any read */
+    printf("after branch refs=%d live=%d\n", h.tag.refs(), ct_str_live_count());
+    h.tag.release();
+    return 0;
+}
+```
+
+```console
+$ ./field_branch_rt; echo exit=$?
+exit=134
+AddressSanitizer:DEADLYSIGNAL
+ERROR: AddressSanitizer: SEGV on unknown address 0x00000001eac8
+The signal is caused by a READ memory access.
+    #0 String_release field_branch_rt.c:557
+    #1 main field_branch_rt.c:1813
+```
+
+生成的 C 把未执行的 `if` 分支当成“字段已赋值”，在后面的赋值里无条件 release 旧值：
+
+```c
+if (cond) {
+    { h.tag = Str_to_string(&lit); }
+}
+{ struct String __ct_sold51 = h.tag; h.tag = Str_to_string(&lit); String_release(&__ct_sold51); }
+```
+
+根因是字段记账是**词法/静态**的：`sb_field_mark()` 在 `if` 体内赋值后就把 `h.tag` 标成 known
+（[`Emitter.h.ct:962-975`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L962-L975)），后续
+`release_old` 由 `sb_field_known()` 决定（[`Emitter.h.ct:1104-1137`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1104-L1137)），
+不区分该分支是否执行。这正是 SH-102 “未赋过值的字段不 release”声明的反例；也违反 D-013 §3
+“字段赋值 / 重新赋值”的安全性。`cond` 用编译期常量 `0` 同样复现（`field_branch` 为 ASan BUS）。
+
+#### R6b 循环内字段重赋不 release 旧值（泄漏）
+
+```ct
+struct Holder { String tag; }
+int main(void)
+{
+    Str lit = "abc";
+    Holder h = { 0 };              /* zero-initialised: safe old value */
+    int i;
+    for (i = 0; i < 3; i++) {
+        h.tag = lit.to_string();
+        printf("iter %d refs=%d live=%d\n", i, h.tag.refs(), ct_str_live_count());
+    }
+    h.tag.release();
+    printf("final live=%d\n", ct_str_live_count());
+    return 0;
+}
+```
+
+```console
+$ ./field_loop0; echo exit=$?
+iter 0 refs=1 live=1
+iter 1 refs=1 live=2
+iter 2 refs=1 live=3
+final live=2
+exit=0
+```
+
+生成的 C 在循环体内只有 `h.tag = Str_to_string(&lit);`，没有旧值 release：
+
+```c
+for (i = 0; i < 3; i++) {
+    h.tag = Str_to_string(&lit);
+    printf("iter %d refs=%d live=%d\n", i, String_refs(&h.tag), ct_str_live_count());
+}
+```
+
+即“重新赋值先 release 旧值”只在直线代码里成立；循环体内的字段重赋每次覆盖旧值，泄漏
+`2` 个 buffer（即使 `Holder h = {0}` 也一样）。这不是卡 §7.9 明列的“for 初始化器”边界
+（这里是循环体赋值），也不属于 `foreach item` / 嵌套字面量 / 泛型 `T` / 字段无 Drop，
+而是 D-013 §3 “字段赋值 / 重新赋值”的字面反例。
+
+### 12.4 过度 retain / `refs=-1` / 已声明边界
+
+- 覆盖到的位置没有过度 retain：`p80_retain` 的 `copy refs=2 keep=2`→`keep=1`、
+  `field refs=2 keep=2`→`refs=1`、`stolen refs=3 field=3`、`pass refs=2 keep=2`、
+  `after reassign keep=2 other=2 live=1`、`final live=0`；`struct_lit` / `multi_decl`
+  各只 retain 一次（`tag=2 x=2`、`x=3 y=3 z=3`），未发现双 retain。
+- `refs=-1` 的 literal / empty / copy 在 `p80_retain` 中仍为 `-1`，retain / release 两侧跳过。
+- 本轮没有用卡 §7.9 已声明的边界（`foreach` item、`for` 初始化器、嵌套结构体字面量、
+  泛型 `T` 位置、字段/全局无自动 Drop）作为打回理由；R6a/R6b 是未列出的字段控制流反例。
+
+### 12.5 第三轮结论与 issue 状态
+
+- R1–R5 的修复真实有效：嵌套跳转 `live=0`、直线字段重赋 `final live=0`、结构体字面量 /
+  多声明符不再 UAF、goto 跨 owning 作用域硬错；`p80_retain` 18 项、六探针、p78/p79、
+  check-all、sanitizer、G0/G8/tag 全绿。
+- 但 R6a/R6b 仍违反 D-013 §3 的“字段赋值 / 重新赋值”：条件分支未执行时释放未初始化字段
+  （ASan SEGV），循环内重赋泄漏旧 buffer（`final live=2`）。因此第三轮仍不能写
+  `REV: 通过`；SH-102 保持 `reopened`，不置 `verified`。
 - 未改实现代码、未 push；只提交本 verdict 与 SH-102 状态。

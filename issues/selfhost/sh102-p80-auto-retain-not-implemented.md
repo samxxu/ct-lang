@@ -369,3 +369,78 @@ $ ./neg_goto       -> error: a goto cannot cross an owning String scope; restruc
 - 泛型实例里 `T` 位置的局部只按容器 glue 的显式协议处理。
 - 字段 / 全局 `String` 仍无自动 Drop（卡 §7.9.4）。
 - `goto` 与 local owning `String` 共存现在是硬错（按本次要求），不做精确的跨作用域分析。
+
+## 复核（REV，2026-11-20，v0.80.2）：仍 **reopened**
+
+复核记录见 [PH-80 第三轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §12。R1–R5
+（嵌套跳转、直线字段重赋、结构体字面量、多声明符、goto 硬错）均已修；三例原 ASan UAF、
+`p80_retain` 18 项、六探针、check-all/sanitizer 全绿。但字段赋值/重赋在控制流下仍有反例，
+不置 `verified`。
+
+### R6a 条件分支未执行 → release 未初始化字段（阻断）
+
+```ct
+struct Holder { String tag; }
+int main(int argc, char **argv)
+{
+    Str lit = "abc";
+    Holder h;
+    int cond = (argc > 100);
+    if (cond) {
+        h.tag = lit.to_string();   /* not executed */
+    }
+    h.tag = lit.to_string();       /* source-safe */
+    h.tag.release();
+}
+```
+
+```console
+$ ./field_branch_rt; echo exit=$?
+exit=134
+AddressSanitizer:DEADLYSIGNAL
+ERROR: AddressSanitizer: SEGV ...
+    #0 String_release field_branch_rt.c:557
+    #1 main field_branch_rt.c:1813
+```
+
+生成的 C 把 `if` 体内未执行的赋值当成“字段已赋值”，后续赋值无条件 release 旧值：
+
+```c
+if (cond) {
+    { h.tag = Str_to_string(&lit); }
+}
+{ struct String __ct_sold51 = h.tag; h.tag = Str_to_string(&lit); String_release(&__ct_sold51); }
+```
+
+根因：`sb_field_mark()` 是静态标记（[`Emitter.h.ct:962-975`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L962-L975)），
+`release_old` 由 `sb_field_known()` 决定（[`Emitter.h.ct:1104-1137`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1104-L1137)），
+不区分分支是否执行。这是 SH-102 “未赋过值的字段不 release”的反例。
+
+### R6b 循环内字段重赋不 release 旧值（泄漏）
+
+```ct
+Holder h = { 0 };
+for (i = 0; i < 3; i++) {
+    h.tag = lit.to_string();
+}
+h.tag.release();
+```
+
+```console
+$ ./field_loop0; echo exit=$?
+iter 0 refs=1 live=1
+iter 1 refs=1 live=2
+iter 2 refs=1 live=3
+final live=2
+exit=0
+```
+
+循环体内没有旧值 release（`h.tag = Str_to_string(&lit);`），每次覆盖泄漏一个 buffer；即使
+`Holder h = { 0 }` 也一样。这不是卡 §7.9 明列的“for 初始化器”边界，而是循环体内的字段重赋，
+属于 D-013 §3 “重新赋值”的字面反例。
+
+### 复核结论
+
+R1–R5 修复有效，但 R6a/R6b 证明 D-013 §3 的“字段赋值 / 重新赋值”仍未闭合；本轮不置
+`verified`，`status` 保持 `reopened`。未用卡 §7.9 已声明的边界（foreach item / for 初始化器 /
+嵌套字面量 / 泛型 T / 字段全局无 Drop）作为打回理由。
