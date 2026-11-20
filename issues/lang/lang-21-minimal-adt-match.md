@@ -7,7 +7,7 @@
 | 严重度 | High（重写 42.8k 行前需要） |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §2.3](../../docs/planning/v1-release-plan.md)、[D3 裁定](../../docs/reviews/2026-11-21-v1-campaign-eval.md) |
-| 状态 | **需求已定（PH-84 待开卡；入口 PH-83 收口）** |
+| 状态 | **已开卡（PH-84，v0.84.0；入口 PH-83 收口）** |
 
 ## 背景与目标
 

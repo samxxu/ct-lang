@@ -82,7 +82,7 @@
 | Phase 69 | 跨单元/泛型/trait 类型检查 | ✅ 完成 | v0.68.0 | [卡](history/design/phase69.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 70 | CFG/定值/控制流语义检查 | ✅ 完成 | v0.69.0 | [卡](history/design/phase70.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 71 | own/borrow/Drop + 包级 strict | ✅ 完成 | v0.70.0 | [卡](history/design/phase71.md) · [方案](planning/typecheck-semantic-plan.md) |
-| Phase 72 | 静默错误与诊断批（LANG-3 / LANG-4 / LANG-11 / LANG-16+DF-1 / SH-76 / SH-18+LANG-15） | ✅ 完成 | v0.71.0 | [卡](design/phase72.md) · [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
+| Phase 72 | 静默错误与诊断批（LANG-3 / LANG-4 / LANG-11 / LANG-16+DF-1 / SH-76 / SH-18+LANG-15） | ✅ 完成 | v0.71.0 | [卡](history/design/phase72.md) · [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
 | Phase 73 | 字段可见性与 ABI（LANG-9：`pub` 决定头文件导出面） | ✅ 完成 | v0.72.0 | [卡](design/phase73.md) · [LANG-9](../issues/lang/lang-9-struct-field-visibility-abi.md) |
 | Phase 74 | 模型导出（PH-59 M1/M2；J11 行列；SH-79 两 facet） | ✅ 完成 | v0.73.0 | [卡](design/phase74.md) · [SH-79](../issues/selfhost/sh79-build-lib-emit-map-silent.md) |
 | Phase 75 | 闭包作方法实参（SH-65 / SH-67 同族） | ✅ 完成 | v0.74.0 | [卡](design/phase75.md) · [SH-65](../issues/selfhost/sh65-closure-as-method-arg.md) · [SH-67](../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
@@ -94,7 +94,7 @@
 | Phase 81 | `box<T>` + `new`（S1；共享句柄协议、`new` 仅具名 struct） | ✅ 完成（v0.81.0；P-7.5 + S1a/S1b/S1c，E81-1…6 通过） | v0.81.0 | [卡](design/phase81.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 82 | 泄漏防护（`leaks` 两档 `warn` / `error`；`box` 字段直接环告警；树模式文档） | ✅ 完成（v0.82.1；E82-1…8 通过，D-012；SH-103 Linux 字段表修复） | v0.82.1 | [卡](design/phase82.md) · [提案](proposals/leak-guards.md) · [判决](../battle/leak-guards-1/verdict.md) · [D-012](decisions/D-012.md) |
 | Phase 83 | 包管理契约 v1 与索引校验（只读 `ct index verify`；Linux x64 产物；conformance） | ✅ 完成（v0.83.0；E83-1…8 通过，D-014；PKG-14 fixed v0.83.1；Linux 默认索引路径 fix v0.83.2） | v0.83.0（fix v0.83.1 / v0.83.2） | [卡](design/phase83.md) · [评估](reviews/2026-11-20-pkg-contract-proposal-eval.md) · [契约](planning/ct-pkg-get-contract.md) · [D-014](decisions/D-014.md) |
-| Phase 84 | 最小 ADT / `match`（名义和类型 + 负载 + 穷尽检查 + 变量绑定；D3） | 🗺️ 规划中（需求已定；入口 PH-83 收口） | v0.84.0 | [v1 路线 §2.3](planning/v1-release-plan.md) · [LANG-21](../issues/lang/lang-21-minimal-adt-match.md) |
+| Phase 84 | 最小 ADT / `match`（名义和类型 + 负载 + 穷尽检查 + 变量绑定；D3） | 🟨 实施中（准备；2026-11-21 开卡） | v0.84.0 | [卡](design/phase84.md) · [v1 路线 §2.3](planning/v1-release-plan.md) · [LANG-21](../issues/lang/lang-21-minimal-adt-match.md) |
 | Phase 85 | v1-pre：重写 inventory + 单切片 spike（门）+ A 机制接线（`off/warn/error`） | 🗺️ 规划中（未开卡；入口 PH-84） | v0.85.0 | [v1 路线 §2.3/§2.4](planning/v1-release-plan.md) · [评估](reviews/2026-11-21-v1-campaign-eval.md) |
 | Phase 86 | v1-pre：词法器重写（零拷贝 `Str` 切片；NUL/长度契约） | 🗺️ 规划中（未开卡；入口 PH-85） | v0.86.0 | [v1 路线 §2.3](planning/v1-release-plan.md) |
 | Phase 87 | v1-pre：解析器 + 检查器重写 | 🗺️ 规划中（未开卡；入口 PH-86） | v0.87.0 | [v1 路线 §2.3](planning/v1-release-plan.md) |
