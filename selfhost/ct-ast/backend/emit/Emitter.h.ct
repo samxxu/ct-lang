@@ -650,15 +650,6 @@ static int sb_field_state(struct Emitter *self, int owner, const char *base, con
     return i;
 }
 
-/* 1 when the field holds an owning handle: a definite assignment, or any field
-   of a global (globals are zero-initialised, so releasing the old value is a
-   no-op before the first assignment). */
-static int sb_field_known(struct Emitter *self, const char *base, const char *field, int owner)
-{
-    int maybe = 0;
-    if (owner < 0) return 1;
-    return sb_field_state(self, owner, base, field, &maybe) >= 0 && !maybe;
-}
 
 /* 1 when the field assignment sits inside a loop body and the base local was
    declared outside that loop: the first iteration would release an undefined
@@ -666,6 +657,7 @@ static int sb_field_known(struct Emitter *self, const char *base, const char *fi
 static int sb_field_loop_unsafe(struct Emitter *self, int owner)
 {
     int i;
+    (void)self;
     if (owner < 0) return 0;
     for (i = g_sb.nblk - 1; i >= 0; i--) {
         if (g_sb.bkind[i] != 1) continue;

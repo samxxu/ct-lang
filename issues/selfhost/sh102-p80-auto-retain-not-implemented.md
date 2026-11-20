@@ -444,3 +444,70 @@ exit=0
 R1–R5 修复有效，但 R6a/R6b 证明 D-013 §3 的“字段赋值 / 重新赋值”仍未闭合；本轮不置
 `verified`，`status` 保持 `reopened`。未用卡 §7.9 已声明的边界（foreach item / for 初始化器 /
 嵌套字面量 / 泛型 T / 字段全局无 Drop）作为打回理由。
+
+## 处置（DEV，2026-11-21，第三轮 R6）：**fixed**
+
+`status` 保持 REV 写的 `reopened`（5.4：DEV 只写正文处置段，由 REV 复核后改 `verified`）。
+battle `phase80-retain-scope-1` 判 B 的 R6a / R6b 与 C-4 边界已在 v0.80.3 按 **D-015 硬错路线**
+实现；不改 `refs` 布局 / ABI。
+
+### 逐项
+
+- **R6a（release 只作用于已定义存储）**：字段记账改为 (owner 绑定下标, `<base>.<field>`) +
+  定义块深度 + `maybe` 位；分支 / switch / 循环体内定义在块关闭时并入外层为 `maybe`。重赋时
+  旧值非确定定义 → 硬错
+  `field 'h.tag' may be undefined before this assignment; the compiler cannot release the old owning
+  value safely (initialise the struct with '{ 0 }', or release it explicitly)`，不再生成对未初始化
+  存储的读。聚合初始化器（`{ … }`，含 `{ 0 }`）按 C 零填充语义视为全部字段已定义。
+- **R6b（同一存储位置重赋 release 旧值）**：确定定义的 member 重赋先 hold 旧值、retain / 移动
+  新值、再 release 旧值；循环内（定义在循环之前）每轮执行，`field_loop0` / `field_loop_pre` /
+  `field_loop_long` 均 `final live=0`。循环体里对循环外 struct 的首赋（第一轮旧值未定义）→ 硬错
+  （`field_loop_bare`）；循环内新声明的 struct 每轮新建，不受影响。
+- **C-4 边界**：整结构体赋值 `h = other`（place 源）→ 硬错 `whole-struct assignment would
+  shallow-copy its owning String field`；`goto` 越过含 owning 字段的 struct 局部 → 与裸句柄同一条
+  硬错；`p->tag` / `(&h).tag` / 索引目标不自动 release（别名不可精确，泄漏登记在卡 §7.9.7）；
+  同名遮蔽按 owner 化键区分，不再误配外层。
+- **语义记录**：[D-015](../../docs/decisions/D-015.md)（硬错路线 C-1(b)，字段 release 的
+  “确定定义”来源、循环 / 整赋值 / goto / 别名 / 既有边界的逐条口径）；C-1 的 USER 签字位仍为
+  pending，DEV 不代替 USER 签字。
+
+### 提交
+
+- `d2859193` `test(ct-ast): SH-102 红（第三轮 R6a/R6b）`（只含夹具与红证，baseline `953c19e0`）
+- `82d661ad` `fix(ct-ast): SH-102 第三轮 R6a/R6b 字段 release 结构性精确`
+- 收口提交：本提交（v0.80.3 版本、D-015、文档、golden）
+
+### 红 → 绿（原始输出，baseline `953c19e0` → v0.80.3）
+
+```console
+# baseline v0.80.2（红）
+$ CT_C_BOUNDARY=allow sh test/ast/p80_retain.sh <v0.80.2>/ct-ast
+FAIL field_loop0 behaviour        iter 1 live=2 … final live=2
+FAIL field_loop_long behaviour    after loop refs=1 live=100 / final live=99
+FAIL field_shadow -fsanitize=address run
+  ERROR: AddressSanitizer: SEGV on unknown address 0x00000001ea68
+FAIL field_branch0 / field_branch_rt / field_switch / field_loop_bare /
+     field_copy / field_goto_struct          accepted a negative
+
+# v0.80.3（绿）
+$ CT_C_BOUNDARY=allow sh test/ast/p80_retain.sh <ct-ast>
+39 ok … p80_retain: OK
+$ ./field_loop0     -> iter 0..2 live=1 / final live=0
+$ ./field_loop_pre  -> iter 0..2 live=1 / final live=0
+$ ./field_loop_long -> after loop refs=1 live=1 / final live=0
+$ ./field_shadow    -> inner live=2 / outer live=1 / final live=0（ASan 通过）
+$ ./field_ptr       -> after refs=1 live=2（ASan 通过，登记泄漏）
+$ ./field_branch0   -> error: field 'h.tag' may be undefined before this assignment; …
+$ ./field_branch_rt / ./field_switch / ./field_loop_bare -> 同一诊断
+$ ./field_copy      -> error: whole-struct assignment would shallow-copy its owning String field; …
+$ ./field_goto_struct -> error: a goto cannot cross an owning String scope; …
+```
+
+### 仍未覆盖（v0.80.3 后）
+
+- `foreach` 的 `item`、`for` 初始化器里的句柄不登记；嵌套结构体字面量只按外层字段类型处理；
+  泛型实例里 `T` 位置的局部只按容器 glue 的显式协议处理；字段 / 全局 `String` 仍无自动 Drop。
+- `p->tag` / `(&h).tag` / 索引目标不自动 release（登记泄漏，卡 §7.9.7）；跨函数写 / 并发写由
+  作者负责。
+- 循环体里对循环外 struct 的双重赋值（`h.tag = a; h.tag = b;` 同轮两次）按硬错处理（保守）。
+- `goto` 与 local owning String / owning struct 共存为硬错，不做跨作用域精确分析。

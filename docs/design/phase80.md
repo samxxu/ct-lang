@@ -361,8 +361,9 @@ exit=0
 
 ### 7.9 未覆盖与残留风险
 
-1. **自动 retain（D-013 §3）已在 v0.80.2 修复（SH-102 R1–R5）**：按值传参 / 返回 / 字段赋值 /
-   重新赋值 / 作用域释放的自动半部落地，见 §7.9.1 的对照表与 `test/ast/p80_retain.sh`；
+1. **自动 retain（D-013 §3）已在 v0.80.3 修复（SH-102 R1–R6，字段口径见 D-015）**：按值传参 /
+   返回 / 字段赋值 / 重新赋值 / 作用域释放的自动半部落地；字段 `release` 只作用于确定定义的
+   存储，无法证明的形状硬错（见 §7.9.7）。证据为 §7.9.1 的对照表与 `test/ast/p80_retain.sh`；
    `p80_layout` 的 `gap` 行改为 `param refs=2`（入口 retain 后）。显式 `copy`/`retain`/`release`
    与容器插入（`Vec`/`Map` 元素 glue）不变。
 2. **字面量实参绑定只覆盖自由函数**：`str_dup("x")` 可用；`U16String.from_utf8("abc")`（静态方法
@@ -373,11 +374,11 @@ exit=0
    到 v0.79.2 需同时回滚 `test` 与 `feat` 两个提交。
 6. **跨仓只有 dry-run**：`/tmp/p80-ext` 是本机独立目录，不是真外部仓（§7.8）；仓内 12 个消费者
    已全部迁移，但真实第三方工程的迁移仍以外部 CI 为准。
-7. **自动 retain 的剩余边界（v0.80.2 后）**：`foreach` 的 `item`、`for` 初始化器里的句柄不会
-   被登记（多声明符局部已修）；`goto` 与 local owning `String` 共存改为硬错，不再静默漏释放；
-   泛型实例里 `T` 位置的局部只按容器 glue 的显式协议处理；字段 / 全局 `String` 仍无自动 Drop
-   （第 4 条）；嵌套结构体字面量（字段本身是含 `String` 的结构体）只按外层字段类型处理。
-   这些位置沿用既有“作者负责”口径，`p80_retain` 的 5 个正例 + 3 个负例覆盖命名位置。
+7. **自动 retain 的剩余边界（v0.80.3 后）**：`foreach` 的 `item`、`for` 初始化器里的句柄不会
+   被登记（多声明符局部已修）；`goto` 与 local owning `String` / 含 owning 字段的 struct 共存
+   改为硬错；泛型实例里 `T` 位置的局部只按容器 glue 的显式协议处理；字段 / 全局 `String` 仍无
+   自动 Drop（第 4 条）；嵌套结构体字面量只按外层字段类型处理。字段位置的逐条去向见 §7.9.7，
+   `p80_retain` 的 10 个正例 + 9 个负例覆盖命名位置。
 
 ### 7.9.1 自动 retain 对照（SH-102，v0.80.2）
 
@@ -401,6 +402,11 @@ exit=0
 | 结构体字面量（次轮 R3a） | 浅拷贝，源 release 后字段 UAF | place 元素按字段类型 retain（位置 / `.field =`） | `struct_lit`：`h.tag=3 x=3 p.a=2 p.b=3` / `final live=0` |
 | 多声明符（次轮 R3b） | 浅拷贝，两个句柄共一个 ref | 每个声明符 retain 并登记 | `multi_decl`：`x=3 y=3 z=3` / `p=2 q=2` |
 | `goto` 跨 owning 作用域（次轮 R3c） | 静默漏释放 / 可能释放未初始化句柄 | 硬错（`f_string_local` + `ngotos`） | `neg_goto`：`a goto cannot cross an owning String scope` |
+| 分支 / switch 定义的字段重赋（R6a） | 无条件读旧字段再 release（ASan SEGV，随栈布局） | 旧值非确定定义 → 硬错；聚合 `{ 0 }` 视为已定义 | `field_branch0` / `field_branch_rt` / `field_switch` 编译拒绝 |
+| 循环内字段重赋（R6b） | 旧值不 release，N 轮泄漏 N−1 | 确定定义后每轮 release 旧值 | `field_loop0` / `field_loop_pre` / `field_loop_long`：`final live=0` |
+| 裸 struct 循环首赋（R6b） | 首轮 release 未定义存储 | 硬错（循环外声明、循环内首赋） | `field_loop_bare` 编译拒绝 |
+| 整结构体赋值 / goto 越过 owning 字段（C-4） | 浅拷贝 / 跳过定义，UAF 或 BUS | 硬错 | `field_copy` / `field_goto_struct` |
+| 同名遮蔽 / `p->tag` 别名（C-4） | 误配外层标记 / 按旧标记 release | owner 化键；箭头目标不自动 release（登记泄漏） | `field_shadow` ASan 通过；`field_ptr` ASan 通过、`live=2` |
 
 三例 ASan 复现（修复前后，同一 `cc -fsanitize=address -g`）：
 
@@ -414,3 +420,23 @@ $ ./gap   -> before refs=1 len=5 live=1 / param refs=2 / after refs=1 len=5 live
 $ ./field -> field refs=2 s=2 / field after s.release data0=116                      exit=3
 $ ./ret   -> after return s=2 r=2 / r after caller release data0=114                 exit=3
 ```
+
+#### 7.9.7 字段 release 的登记边界（D-015，v0.80.3）
+
+按 [D-015](../decisions/D-015.md) 的硬错路线，字段位置分三类：**自动 release**（确定定义）、
+**硬错**（无法证明）、**登记泄漏**（不可精确的别名形状）。逐条：
+
+| 形状 | 处置 | 去向 / 证据 |
+| --- | --- | --- |
+| 聚合初始化器 `{ … }` / `{ 0 }` 后的 member 重赋 | 自动 release 旧值 | `field_loop0` / `field_loop_long`：`final live=0` |
+| 直线赋值（含循环之前）后的 member 重赋 | 自动 release 旧值 | `field_loop_pre`：`final live=0` |
+| 分支 / `switch` / 循环体内条件定义的字段重赋 | **硬错** `field 'x.y' may be undefined before this assignment` | `field_branch0` / `field_branch_rt` / `field_switch` / `field_loop_bare` |
+| 整结构体赋值 `h = other`（place 源） | **硬错** `whole-struct assignment … owning String field` | `field_copy` |
+| `goto` 越过含 owning 字段的 struct 局部 | **硬错** `a goto cannot cross an owning String scope` | `field_goto_struct` |
+| 同名遮蔽 `field_shadow` | owner 化键，内层不继承外层状态；不自动 release 内层 | `field_shadow`：ASan 通过、`final live=0` |
+| `p->tag` / `(&h).tag` / 索引目标 | 不自动 release（别名不可精确）；旧值泄漏 | `field_ptr`：ASan 通过、`live=2` |
+| 跨函数写 / 并发写 | 不自动 release；作者负责 | 本节登记，无夹具 |
+| `foreach item` / `for` 初始化器 / 嵌套结构体字面量 / 泛型 `T` | 沿用既有边界（不登记 / 按外层字段）；作者负责 | 本节登记 |
+
+硬错路线的出口写在诊断里：显式聚合零初始化器（`Holder h = { 0 };`）或显式 `release()`；
+两者都不改变合法程序的生成 C（C-2/C-3 的机械检查因此以“编译拒绝”形态成立）。
