@@ -1,6 +1,6 @@
 # Phase 78 — `ref` / `out` 参数（S2）
 
-> **状态：实施中（S2a–S2c / E78-1–E78-6；2026-11-20 开卡）**（2026-11-20 立项；`v0.78.0`）。
+> **状态：完成（S2a–S2c / E78-1–E78-6；`v0.78.0`）**（2026-11-20 开卡并收口）。
 > **前置（口径写死）**：本卡入口只要求 **P-7.1a 自由函数 + P-7.1b 方法/trait 原型**，
 > 二者已由 `docs/planning/j6-evidence/ref_out/` 覆盖（基线 `2c87179a`，7 文件 369 行）。
 > **P-7.2（S3 切片）/ P-7.3（S5 最小垂直切片）不在本卡入口，J-6 也未全量通过**；
@@ -135,3 +135,54 @@ FAIL p78/docs: tutorial does not show ref/out spelling
 ```
 
 红证断言的判据：baseline 上四个探针均非零；实现后四个探针全绿（见 §7 收口对照表）。
+
+## 6 未完成 / 简化 / 边界（诚实清单）
+
+- `out` 的**调用方 owning 初始化**只检查直接变量实参；字段、数组元素、Vec/Map 元素作为
+  owning 实参时按"已初始化"处理（L1 不做逐字段/逐元素定值）。
+- 把 `out` owning 形参在赋值前**转发**给另一个 `out` 形参会被保守拒绝；不做跨过程/形参数据流。
+- `out` L1 只建模语句位置与 if/else（含条件内赋值）；直接三元分支取交集；短路表达式内部、
+  `into` 块内部和跨过程调用不建模；循环/switch 保守；`goto` 要求跳转时已赋值。
+- `Map` 元素在语言里的静态类型是 `V *`，可写 place 的拼写是 `*m[k]`；裸 `m[k]` 不是
+  `ref V` 的 place。自定义下标（Phase 52 的 `get/set` 协议）不是 place。
+- 数组与函数指针形态的 ref/out 形参硬错；`ref` 不做借用检查，存储/透传风险仍由契约与
+  直接 lint 承担（J-4b）。
+- 泛型自由函数的 ref/out、跨单元高阶形态与闭包实参不在本卡验收范围；本卡验收的是
+  自由函数、trait/默认体/impl、固有方法与泛型 impl（含静态固有方法）。
+- L2 的 `--emit-map` 直接调用边上限 1024→4096 是容量修正（ct-ast 源码在加本卡代码后
+  超过旧上限）；不改 L2 的语义或产物。
+
+## 7 收口对照（E78-1…E78-6）
+
+- 编译器：`ct-ast v0.78.0`（`bash selfhost/check-all.sh` 自建链）。
+- 探针：`test/ast/p78_basic.sh` / `p78_method.sh` / `p78_types.sh` / `p78_docs.sh`
+  （已接入 `selfhost/check-ast.sh` 的 PH-78-S2a/S2b/S2c 四项）。
+- 红证：`07693e47`，见 §5 与 [test/ast/p78_red.log](../../test/ast/p78_red.log)。
+
+| ID | 命令 | 结果（原始输出） |
+| --- | --- | --- |
+| E78-1 | `CC=cc sh test/ast/p78_basic.sh <ct-ast>` | `ok   E78-1 contextual keyword (int out; time_t *ref; parameter named out)`；`p78_basic: OK`，exit 0 |
+| E78-2 | 同上 | `ok   E78-2 ref/out free function (run)`；`ok   E78-2 signature T *, body (*name), call &`；`ok   E78-2 hand-written pointer C behaves the same`；`ok   E78-2 ABI header spells T *` |
+| E78-3 | 同上 | `ok   E78-3 places: variable/field/*p/array/Vec/Map element`；literal / expression / call result / cast 四条 `ref/out argument must be an assignable place` 负例全绿 |
+| E78-4 | 同上 | trivial 未初始化、owning 已初始化、owning 后续赋值、owning 未初始化硬错、非 owning 指针未初始化五条全绿 |
+| E78-5 | 同上 | if/else、赋值后 return、单边 if 硬错、提前 return 硬错、循环保守、switch 保守、goto 保守、`ct check` 同规则八条全绿 |
+| E78-6 | `CC=cc sh test/ast/p78_method.sh <ct-ast>` | 12 条 `ok`：trait 方法、vtable/定义/体/调用点、泛型 impl、默认体、固有、泛型固有、静态固有，以及 4 条负例；`p78_method: OK`，exit 0 |
+| S2c | `CC=cc sh test/ast/p78_types.sh <ct-ast>`；`CC=cc sh test/ast/p78_docs.sh` | types：9 条 `ok`（基类型/数组/函数指针/重声明/指针/defer/own 语义），`p78_types: OK`；docs：8 条 `ok`，`p78_docs: OK` |
+| 全量 | `bash selfhost/check-all.sh` | `check-all: OK (11 hard gates green)`，exit 0；G0 `g0: OK`、G8 `g8: OK`；`python3 test/docs/check-docs.py` → `check-docs: OK (..., v0.78.0, 11 hard gates, ...)` |
+| ASan | `bash selfhost/check-sanitizers.sh` | 见 §7.1（本机实测结果） |
+
+### 7.1 ASan / UBSan
+
+```console
+$ bash selfhost/check-sanitizers.sh
+...
+check-sanitizers: OK (581 checks, no sanitizer report)
+```
+
+覆盖：ASan/UBSan 重建 L0→L1→L2→ct-ast，跑 `test/run.sh`、全部 `test/ast/*/prog.ct`
+与 `test/ast/errors/*.ct`；`detect_leaks=0`（编译器 arena 常驻，泄漏语义由编译期
+`check-warnings.sh` 负责），退出码 0。注意：该门禁覆盖既有语料，p78 的四个探针不在
+其 fixture 循环内（它们是独立 shell 探针，生成的新 C 同样只是普通指针/`(*name)`）。
+
+红证基线之上、跑本卡前，`ref/out` 的 C 签名不成立，p78 探针全部红；实现后四个探针
+全绿，且全量 `check-all` 11/11。
