@@ -106,6 +106,9 @@ pub trait ModuleOps {
        `<S>_Drop_drop` body from the unit that declares it; an impl written in
        another unit has no prototype in the type's header. */
     int  check_drop_visibility(void);
+    /* PH-81: load the Box unit only when an input names it. */
+    int  module_src_wants_box(const char *path);
+    int  module_inputs_want_box(const char **ins, int n);
     int  cache_order(int u, int *state, int *order, int *n);
     int  cache_key_of(int u, char *out, int cap);
     int  lib_scan(int root_u);
@@ -153,11 +156,11 @@ pub struct Module {
        Phase 34 S9a turns it into a set of files: `Vec.h.ct` keeps the
        containers, `Option.h.ct` / `Result.h.ct` carry the ecosystem types.
        `nbuiltin` is 0 when this installation has no layer. */
-    int  builtin_units[4];
+    int  builtin_units[5];
     int  nbuiltin;
     /* PH-64 T2: a built-in unit is emitted only when the program can reach it.
        Filled once per build, before the emit loop. */
-    int  builtin_live[4];      /* slot order, parallel to builtin_units[] */
+    int  builtin_live[5];      /* slot order, parallel to builtin_units[] */
     int  computed_live;
     int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
     char map_path[1024];
@@ -1563,6 +1566,63 @@ impl ModuleOps for Module {
         return 0;
     }
 
+    /* PH-81: the `Box.h.ct` unit is loaded only when a build input names a
+       `box<...>` type or a `new T { ... }` construction in code (comments and
+       strings are skipped). An unused fifth unit would add `struct ct_box_hdr;`
+       to every product and change the `--emit-c` bytes of unrelated programs. */
+    int module_src_wants_box(const char *path)
+    {
+        FILE *f;
+        char line[1024];
+        (void)self;
+
+        f = fopen(path, "r");
+        if (!f) return 0;
+        while (fgets(line, sizeof line, f)) {
+            const char *p = line;
+            while (*p) {
+                if (p[0] == '/' && p[1] == '/') break;
+                if (p[0] == '/' && p[1] == '*') {
+                    p += 2;
+                    while (*p && !(p[0] == '*' && p[1] == '/')) p++;
+                    if (*p) p += 2;
+                    continue;
+                }
+                if (*p == '"' || *p == '\'') {
+                    char q = *p;
+                    p++;
+                    while (*p && *p != q) { if (*p == '\\' && p[1]) p++; p++; }
+                    if (*p) p++;
+                    continue;
+                }
+                if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                      || (*p >= '0' && *p <= '9') || *p == '_')) { p++; continue; }
+                {
+                    const char *q = p;
+                    while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
+                           || (*q >= '0' && *q <= '9') || *q == '_') q++;
+                    if ((size_t)(q - p) == 3 && strncmp(p, "box", 3) == 0) {
+                        const char *t = q;
+                        while (*t == ' ' || *t == '\t') t++;
+                        if (*t == '<') { fclose(f); return 1; }
+                    }
+                    p = q;
+                }
+            }
+        }
+        fclose(f);
+        return 0;
+    }
+
+    int module_inputs_want_box(const char **ins, int n)
+    {
+        int i;
+        (void)self;
+        for (i = 0; i < n; i++)
+            if (self->module_src_wants_box(ins[i])) return 1;
+        return 0;
+    }
+
     int build_main(int argc, char **argv)
     {
         const char *inputs[MAX_UNITS];
@@ -1944,15 +2004,19 @@ impl ModuleOps for Module {
         self->builtin_live[1] = 0;
         self->builtin_live[2] = 0;
         self->builtin_live[3] = 0;
+        self->builtin_live[4] = 0;
         backend::emit::ct_emit_clear_builtins();
         {
             char bpath[MAX_PATH];
             int bi;
-            for (bi = 0; bi < 4; bi++) {
+            for (bi = 0; bi < 5; bi++) {
                 const char *base;
+                if (bi == 4 && !self->module_inputs_want_box(inputs, ninput))
+                    continue;
                 base = bi == 0 ? "Vec.h.ct"
                      : (bi == 1 ? "Option.h.ct"
-                     : (bi == 2 ? "Result.h.ct" : "Str.h.ct"));
+                     : (bi == 2 ? "Result.h.ct"
+                     : (bi == 3 ? "Str.h.ct" : "Box.h.ct")));
                 if (self->find_builtin(inputs[0], base, bpath, sizeof bpath) != 0) continue;
                 {
                     int bu;

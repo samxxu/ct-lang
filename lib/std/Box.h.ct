@@ -1,0 +1,130 @@
+/*
+ * Box.h.ct - the built-in single-object owning handle `box<T>` (PH-81 / v0.81.0).
+ *
+ *   struct ct_box_hdr { int refs; int aux; };   (8 bytes, before the payload)
+ *   struct box<T>     { struct ct_box_hdr *h; T *ptr; };  (16 bytes on LP64)
+ *
+ * The header sits at `round_up(8, _Alignof(T))` bytes before `ptr`, so the
+ * payload stays aligned. The handle keeps both the allocation base and the
+ * payload pointer; release dispatches on the static type, because the compiler
+ * writes one `box_X__payload_release(T *)` helper per instance (a `String`
+ * field releases through its Drop, a container / box field through its
+ * `release`, a plain struct recurses into its own fields). There is no
+ * `drop_fn`; `new T { ... }` starts at refs = 1 and never uses the immortal
+ * `refs = -1` form.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdlib.h>
+
+/* ---- PH-81 / S1: `box<T>` (single-object owning handle) ------------------ */
+
+/* The shared 8-byte header sits immediately before the payload, exactly like
+   `String`'s `ct_str_hdr`; the handle keeps the payload pointer and the header
+   pointer, so it is two machine words. `header_size(T)` rounds 8 up to T's
+   alignment, so the payload stays correctly aligned. `release` is dispatched
+   by the static type: the compiler emits the payload-release helper for each
+   `box<T>` instance (a borrowed view of `T[]` would need a length and a byte
+   offset, so it is not the shared header here). */
+pub struct ct_box_hdr {
+    int refs;
+    int aux;
+}
+
+pub struct box<T> {
+    struct ct_box_hdr *h;
+    T *ptr;
+} use Drop
+
+impl<T> box<T> {
+    /* Box a value with a retained payload: a scalar / plain struct is copied,
+       an owning field takes its own reference (the callee's by-value `String`
+       parameter is retained at entry and released at exit, so the box needs a
+       second reference). `new T { ... }` is the move form for a fresh value. */
+    pub static box<T> of(T v)
+    {
+        return __ct_box_copy(&v);
+    }
+
+    /* A retained alias sharing the same payload; the increment is skipped for
+       the immortal form (never used by `new`, which always starts at 1). */
+    pub box<T> retain()
+    {
+        box<T> r;
+        r.h = self->h;
+        r.ptr = self->ptr;
+        if (r.h != 0 && r.h->refs >= 0) r.h->refs = r.h->refs + 1;
+        return r;
+    }
+
+    pub int refs()
+    {
+        if (self->h == 0) return 0;
+        return self->h->refs;
+    }
+
+    /* Release one reference; at zero the compiler-generated helper releases
+       the payload's owning fields, then the header and payload block is freed.
+       Releasing a released handle is a no-op, like the built-in containers. */
+    pub void release()
+    {
+        if (self->h == 0) return;
+        if (self->h->refs < 0) return;
+        self->h->refs = self->h->refs - 1;
+        if (self->h->refs == 0) {
+            __ct_box_payload_release(self->ptr);
+            free(self->h);
+        }
+        self->h = 0;
+        self->ptr = 0;
+    }
+
+    pub void drop()
+    {
+        if (self->h == 0) return;
+        if (self->h->refs < 0) return;
+        self->h->refs = self->h->refs - 1;
+        if (self->h->refs == 0) {
+            __ct_box_payload_release(self->ptr);
+            free(self->h);
+        }
+        self->h = 0;
+        self->ptr = 0;
+    }
+
+    /* The borrowed view: a pointer into the payload, never retained and never
+       released by the caller. It is invalidated by this handle's `release()`
+       (the same lifetime `Vec.at` gives its slot). */
+    pub T *at()
+    {
+        return self->ptr;
+    }
+
+    /* The byte offset of the payload behind the allocation base; the layout
+       assertion in the PH-81 probe reads it (`header_size(T)`). */
+    pub int payload_offset()
+    {
+        if (self->h == 0) return 0;
+        return (int)((char *)self->ptr - (char *)self->h);
+    }
+}
+
+impl<T> Drop for box<T> {
+    /* The Drop receiver is the erased `void *` form, so the body casts it back
+       and repeats the release sequence instead of calling a sibling method
+       (a generic body cannot dispatch on a symbolic `box<T>` receiver). */
+    void drop()
+    {
+        struct box<T> *b;
+        b = (struct box<T> *)self;
+        if (b->h == 0) return;
+        if (b->h->refs < 0) return;
+        b->h->refs = b->h->refs - 1;
+        if (b->h->refs == 0) {
+            __ct_box_payload_release(b->ptr);
+            free(b->h);
+        }
+        b->h = 0;
+        b->ptr = 0;
+    }
+}

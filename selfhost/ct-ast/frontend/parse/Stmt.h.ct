@@ -1735,8 +1735,8 @@ impl StmtOps for Stmt {
         /* P-7.2: `box<T> name` is a declaration shape even though `box` is not
            a registered type; `parse_type` turns it into the placement error
            (or the PH-81 "not implemented" error) instead of an expression. */
-        if (strcmp(self->lex->toktext, "box") == 0
-            && self->ex->tok_is_type_name()) return 1;
+        if (strcmp(self->lex->toktext, "box") == 0)
+            return self->ex->tok_is_type_name();
         /* an alignment or atomic specifier may open a block-scope declaration */
         if (strcmp(self->lex->toktext, "_Alignas") == 0) return 1;
         if (strcmp(self->lex->toktext, "_Atomic") == 0) return 1;

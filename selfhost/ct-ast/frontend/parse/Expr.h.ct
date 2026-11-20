@@ -298,6 +298,14 @@ pub trait ExprOptional {
 /* Phase 32: the opt-in `--types` gate. Its own trait because `ExprOps` already
    sits at MAX_METHODS, and both grammars that need the gate -- the expression
    layer and the statement layer -- hold this object. */
+/* PH-81 / S1: `new` and the `box<T>` member sugar. `ExprOps` is at
+   MAX_METHODS, so the construction parser and the auto-deref helper live in
+   their own small trait like the optional / subscript grammars. */
+pub trait ExprNew {
+    int  box_member_deref(int recv, int arrow, const char *fname,
+                          int line, int col, int *out);
+}
+
 pub trait ExprTypes {
     /* The judged type of one expression. 0 when `out` names a value type,
        non-zero when the tables cannot pin it (D32-4: the caller then stays
@@ -515,7 +523,7 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry;
+} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew;
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -2040,7 +2048,6 @@ impl ExprOps for Expr {
     int parse_type(char *out, int cap)
     {
         int n;
-        char abuf[MAX_TEXT];
         (void)self;
 
         n = 0;
@@ -2056,30 +2063,6 @@ impl ExprOps for Expr {
         self->fnptr_name[0] = 0;
         self->fnptr_dims[0] = 0;
         self->last_bare_tag[0] = 0;
-        /* P-7.2 (P-4.1): `box<T>` is a future S1 type (PH-81). The type is not
-           implemented here, but its slice placement is refused now so
-           `box<int[]>` is a named hard error at the `[`, not an unrelated
-           "undeclared variable" from the C compiler. */
-        if (n == 0 && self->lex->tok == T_ID
-            && strcmp(self->lex->toktext, "box") == 0) {
-            int bp = self->lex->pos;
-            int boxline = self->lex->tokline;
-            int boxcol = self->lex->tokstart - self->lex->lstart + 1;
-            while (self->lex->src[bp] == ' ' || self->lex->src[bp] == '\t') bp++;
-            if (self->lex->src[bp] == '<') {
-                int sl, sc;
-                self->sup->lex_next();          /* box */
-                self->sup->lex_next();          /* < */
-                if (self->parse_type(abuf, sizeof abuf) != 0) return -1;
-                if (self->sup->slice_brackets_ahead(&sl, &sc))
-                    return tool::diag::ct_sem_error(sl, sc,
-                        "a slice 'T[]' cannot be stored in box<T>; it is a non-owning view",
-                        self->sup->mem->path);
-                return tool::diag::ct_sem_error(boxline, boxcol,
-                    "box<T> is not implemented in this prototype (PH-81); only the slice placement guard is present",
-                    self->sup->mem->path);
-            }
-        }
         for (;;) {
             /* Phase 41 B′: `atomic` is a contextual modifier, not a reserved
                keyword. It only enters the type when one of the four supported
@@ -2268,6 +2251,26 @@ impl ExprOps for Expr {
                     if (self->type_append(out, cap, &n, self->in_generic_tparam2) != 0) return -1;
                     self->sup->lex_next();
                     continue;
+                }
+                /* PH-81: `box` is a common identifier (`Box box;`). It is a
+                   type only when a balanced `<...>` follows; otherwise this is
+                   the declarator name and the type reader must stop here. */
+                if (strcmp(self->lex->toktext, "box") == 0) {
+                    const char *bp = self->lex->src + self->lex->tokstart + 3;
+                    int bd = 0, bclosed = 0;
+                    while (*bp == ' ' || *bp == '\t') bp++;
+                    if (*bp == '<') {
+                        bp++;
+                        while (*bp && *bp != '\n') {
+                            if (*bp == '<') bd++;
+                            else if (*bp == '>') {
+                                if (bd == 0) { bclosed = 1; break; }
+                                bd--;
+                            }
+                            bp++;
+                        }
+                    }
+                    if (!bclosed) break;
                 }
                 /* Phase 29: `Name<arg[, arg]>` names one monomorphised instance
                    of a generic struct; the reader lives in `parse_inst_type`. */
@@ -2584,7 +2587,9 @@ impl ExprOps for Expr {
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0)
                     return tool::diag::ct_sem_error(gl, gc,
-                        "a slice 'T[]' cannot be a generic type argument; it is a non-owning view",
+                        strcmp(tname, "box") == 0
+                            ? "a slice 'T[]' cannot be stored in box<T>; it is a non-owning view"
+                            : "a slice 'T[]' cannot be a generic type argument; it is a non-owning view",
                         self->sup->mem->path);
                 return self->sup->fail("expected '>' after the type arguments");
             }
@@ -3197,25 +3202,27 @@ impl ExprOps for Expr {
                guard can name the fault. Recognise only the shape
                `box <balanced> name`, so `box < 3` stays a comparison. */
             if (strcmp(self->lex->toktext, "box") == 0) {
-                size_t p2 = self->lex->pos;
-                int d2 = 0;
-                int closed = 0;
-                while (self->lex->src[p2] == ' ' || self->lex->src[p2] == '\t') p2++;
-                if (self->lex->src[p2] == '<') {
-                    p2++;
-                    while (self->lex->src[p2] && self->lex->src[p2] != '\n') {
-                        if (self->lex->src[p2] == '<') d2++;
-                        else if (self->lex->src[p2] == '>') {
-                            if (d2 == 0) { p2++; closed = 1; break; }
-                            d2--;
-                        }
-                        p2++;
-                    }
+                /* PH-81: `box` is a real template now, so `box<T>` is a type
+                   in every type position (`sizeof(box<T>)`, a cast, a field).
+                   Before S1 it was only a diagnostic shape, which required a
+                   declarator name after the closing `>`. */
+                if (frontend::sym::ct_tmpl_find("box") >= 0) {
+                    size_t p2 = self->lex->pos;
+                    int d2 = 0;
+                    int closed = 0;
                     while (self->lex->src[p2] == ' ' || self->lex->src[p2] == '\t') p2++;
-                    if (closed && ((self->lex->src[p2] >= 'a' && self->lex->src[p2] <= 'z')
-                                   || (self->lex->src[p2] >= 'A' && self->lex->src[p2] <= 'Z')
-                                   || self->lex->src[p2] == '_'))
-                        res = 1;
+                    if (self->lex->src[p2] == '<') {
+                        p2++;
+                        while (self->lex->src[p2] && self->lex->src[p2] != '\n') {
+                            if (self->lex->src[p2] == '<') d2++;
+                            else if (self->lex->src[p2] == '>') {
+                                if (d2 == 0) { p2++; closed = 1; break; }
+                                d2--;
+                            }
+                            p2++;
+                        }
+                    }
+                    if (closed) res = 1;
                 }
             } else
             /* `T` inside its own template body is a type, even though the
@@ -5737,10 +5744,16 @@ impl ExprOps for Expr {
                             }
                         }
                     }
-                    m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
-                    if (m < 0) return -1;
-                    self->arena->nodes[m].a = n;
-                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
+                    {
+                        int bm = self->box_member_deref(n, arrow, fname, mline, mcol, &m);
+                        if (bm < 0) return -1;
+                        if (!bm) {
+                            m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
+                            if (m < 0) return -1;
+                            self->arena->nodes[m].a = n;
+                            snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
+                        }
+                    }
                 }
                 /* 19.1: a resolved trait method is compared against the call's
                    argument count. A static trait (a `.m.ct` recipe), a `map`
@@ -7557,6 +7570,61 @@ impl ExprOps for Expr {
         (*self->ncalls)++;
         return 0;
     }
+}
+
+impl ExprNew for Expr {
+    /* PH-81 S1a: `box<T>` auto-dereferences for field access. `b.f` becomes
+       `b.ptr->f` (and `p->f` on a `box<T> *` becomes `p->ptr->f`), so the
+       payload's fields are read and assigned without spelling `at()` or `->`.
+       The two handle fields are private: `.h` / `.ptr` are refused outside the
+       built-in layer, exactly like `String.ptr`. Returns 1 when the final node
+       was built, 0 when the receiver is not a box, -1 on a diagnostic. */
+    int box_member_deref(int recv, int arrow, const char *fname, int line, int col, int *out)
+    {
+        char ty[MAX_TEXT];
+        char *p;
+        size_t bl;
+        int stars, pn, mn, in_layer;
+        (void)arrow;
+
+        if (self->sup->expr_type(recv, ty, sizeof ty) != 0) return 0;
+        p = ty;
+        while (*p == ' ' || *p == '\t') p++;
+        bl = strlen(p);
+        while (bl > 0 && (p[bl - 1] == ' ' || p[bl - 1] == '\t')) bl--;
+        p[bl] = 0;
+        stars = 0;
+        while (bl > 0 && p[bl - 1] == '*') {
+            stars++;
+            bl--;
+            while (bl > 0 && (p[bl - 1] == ' ' || p[bl - 1] == '\t')) bl--;
+            p[bl] = 0;
+        }
+        if (strncmp(p, "struct box_", 11) != 0 || strchr(p, '<') != 0) return 0;
+        in_layer = self->sup->mem->path != 0
+                   && strstr(self->sup->mem->path, "lib/std/Vec.h.ct") != 0;
+        if (strcmp(fname, "h") == 0 || strcmp(fname, "ptr") == 0) {
+            if (in_layer) return 0;         /* the built-in layer's own bodies */
+            return tool::diag::ct_sem_error(line, col,
+                "'.h' / '.ptr' are raw implementation fields; use the box's methods or at()",
+                self->sup->mem->path);
+        }
+        pn = self->sup->new_node(stars > 0 ? N_ARROW : N_MEMBER);
+        if (pn < 0) return -1;
+        self->arena->nodes[pn].a = recv;
+        snprintf(self->arena->nodes[pn].text2, MAX_TEXT, "ptr");
+        snprintf(self->arena->nodes[pn].text, MAX_TEXT, "%s", ty);
+        mn = self->sup->new_node(N_ARROW);
+        if (mn < 0) return -1;
+        self->arena->nodes[mn].a = pn;
+        snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", fname);
+        self->arena->nodes[mn].line = line;
+        self->arena->nodes[mn].num = col;
+        *out = mn;
+        return 1;
+    }
+
+
 }
 
 impl ExprSubscript for Expr {

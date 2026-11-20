@@ -126,9 +126,47 @@ static int src_has_prefix(const char *s, const char *pre)
     return 0;
 }
 
-/* PH-66 R3: decide BEFORE parsing. Parsing an unused unit would leave its
-   symbols in the tables, and the emitter would then declare (never define)
-   things like `Str_Drop_drop` -- a `-Wunused-function` warning on GCC. */
+/* PH-81: the built-in layer must load for `box<T>` / `new T { ... }`, but a
+   comment or a string that merely contains the word must not pull it in (that
+   changed the `--emit-c` bytes of module fixtures whose prose says "a new X").
+   This scan skips comments and literals and requires `new` to be followed by a
+   type name or a brace. */
+static int src_has_box_type(const char *s)
+{
+    const char *p = s;
+
+    while (*p) {
+        if (p[0] == '/' && p[1] == '/') { while (*p && *p != '\n') p++; continue; }
+        if (p[0] == '/' && p[1] == '*') {
+            p += 2;
+            while (*p && !(p[0] == '*' && p[1] == '/')) p++;
+            if (*p) p += 2;
+            continue;
+        }
+        if (*p == '"' || *p == '\'') {
+            char q = *p;
+            p++;
+            while (*p && *p != q) { if (*p == '\\' && p[1]) p++; p++; }
+            if (*p) p++;
+            continue;
+        }
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+              || (*p >= '0' && *p <= '9') || *p == '_')) { p++; continue; }
+        {
+            const char *q = p;
+            while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
+                   || (*q >= '0' && *q <= '9') || *q == '_') q++;
+            if ((size_t)(q - p) == 3 && strncmp(p, "box", 3) == 0) {
+                const char *t = q;
+                while (*t == ' ' || *t == '\t') t++;
+                if (*t == '<') return 1;
+            }
+            p = q;
+        }
+    }
+    return 0;
+}
+
 static int layer_wanted(const char *src, int bi)
 {
     if (src == 0) return 1;
@@ -140,10 +178,14 @@ static int layer_wanted(const char *src, int bi)
             || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
     if (bi == 1) return src_has_word(src, "Option");
     if (bi == 2) return src_has_word(src, "Result");
-    /* PH-80 (D-013): the String owning handle lives in the same layer unit as
-       the borrowed Str, so either name must splice it in. */
-    return src_has_word(src, "Str") || src_has_word(src, "String")
-        || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
+    if (bi == 3)
+        /* PH-80 (D-013): the String owning handle lives in the same layer unit
+           as the borrowed Str, so either name must splice it in. */
+        return src_has_word(src, "Str") || src_has_word(src, "String")
+            || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
+    /* PH-81: the box template has its own unit, so programs that never name a
+       box are byte-identical to the pre-S1 output. */
+    return src_has_box_type(src);
 }
 
 impl DriverOps for Driver {
@@ -217,11 +259,12 @@ impl DriverOps for Driver {
            `Result.h.ct`; P36 S4a1 adds `Str.h.ct`. Compile mode is one C
            translation unit, so the parsed declaration chains are spliced into
            one program. */
-        for (bi = 0; bi < 4; bi++) {
+        for (bi = 0; bi < 5; bi++) {
             const char *base;
             base = bi == 0 ? "Vec.h.ct"
                  : (bi == 1 ? "Option.h.ct"
-                 : (bi == 2 ? "Result.h.ct" : "Str.h.ct"));
+                 : (bi == 2 ? "Result.h.ct"
+                 : (bi == 3 ? "Str.h.ct" : "Box.h.ct")));
             if (insrc && !layer_wanted(insrc, bi)) continue;
             prog = -1;
             for (i = 0; i < 3; i++) {
