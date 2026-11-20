@@ -500,9 +500,13 @@ impl TypeOps for TypeCheck {
         }
         if (self->arena->nodes[n].kind == N_STR) {
             /* a C string literal is `char[N]` in an object context and `char *`
-               in a value context; a character literal is an `int` */
-            const char *t = self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
-                            ? "int" : "char *";
+               in a value context; a character literal is an `int`. PH-80: a
+               literal already bound to String/Str keeps that type. */
+            const char *t;
+            if (self->arena->nodes[n].aux == 1) t = "String";
+            else if (self->arena->nodes[n].aux == 2) t = "Str";
+            else t = self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
+                     ? "int" : "char *";
             if (snprintf(out, (size_t)cap, "%s", t) >= cap) return -1;
             return 0;
         }

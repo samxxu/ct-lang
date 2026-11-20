@@ -320,6 +320,11 @@ pub trait ExprTypes {
        already a slice, is not an array, or is a `T a[]` parameter (decayed to
        a pointer, so no length is available). */
     int  slice_view_from_array(int n);
+    /* PH-80 (D-013): bind a bare string literal to the expected `String` /
+       `Str` type. `String` becomes an immortal compiler-emitted literal handle
+       (N_STR aux 1); `Str` becomes a borrowed view (aux 2). An implicit
+       `U16String` literal is refused here. Returns -1 after a diagnostic. */
+    int  lit_coerce(const char *type, int e);
 }
 
 /* Phase 44: the postfix `?` helpers. Their own small trait because `ExprOps`
@@ -1487,6 +1492,28 @@ static int record_io_call(struct Expr *e, const char *callee, int known, int lin
     return 0;
 }
 
+/* PH-80 (D-013): choose the most specific matching inherent block for an
+   instance method. The generic `impl<K,V> Map<K,V>` is declared first in
+   the layer, so a concrete key block (`Map<char *,V>`, `Map<Str,V>`,
+   `Map<String,V>`) declared later must win; the count of concrete pattern
+   positions is that specificity. */
+static int inst_impl_score(int ii)
+{
+    int i, s, tp;
+    struct StructImpl *im;
+    int nimpls;
+    im = frontend::sym::ct_impls(&nimpls);
+    if (!im || ii < 0 || ii >= nimpls) return 0;
+    s = 0;
+    for (i = 0; i < im[ii].nargs; i++) {
+        tp = 0;
+        if (im[ii].ntparams > 0 && strcmp(im[ii].pat[i], im[ii].tparam[0]) == 0) tp = 1;
+        if (im[ii].ntparams > 1 && strcmp(im[ii].pat[i], im[ii].tparam[1]) == 0) tp = 1;
+        if (!tp) s++;
+    }
+    return s;
+}
+
 impl ExprOps for Expr {
     int arity_check(int line, int col, const char *callee, int got, int want)
     {
@@ -2645,12 +2672,20 @@ impl ExprOps for Expr {
            canonicalized as `struct Str`, so that spelling is what the check
            sees; the message lists all four key types so a rejected spelling
            names its alternatives. */
+        /* PH-80 (D-013): the owning key type is `String`. The borrowed `Str` is a
+           storage position and is refused before the generic check so the
+           message names the migration, not a generic whitelist. */
+        if (strcmp(tname, "Map") == 0 && nargs >= 1
+            && strcmp(carg[0], "struct Str") == 0) {
+            return self->sup->fail(
+                "Map key type 'Str' is a borrowed view; use 'String' (owning) or the legacy 'std::str::Str'");
+        }
         if (strcmp(tname, "Map") == 0 && nargs >= 1
             && strcmp(carg[0], "int") != 0 && strcmp(carg[0], "long") != 0
-            && strcmp(carg[0], "char*") != 0 && strcmp(carg[0], "struct Str") != 0) {
+            && strcmp(carg[0], "char*") != 0 && strcmp(carg[0], "struct String") != 0) {
             char kmsg[MAX_TEXT * 2];
             snprintf(kmsg, sizeof kmsg,
-                     "Map does not support key type '%s' (key types: int, long, char *, Str)",
+                     "Map does not support key type '%s' (key types: int, long, char *, String)",
                      carg[0]);
             return self->sup->fail(kmsg);
         }
@@ -4082,10 +4117,13 @@ impl ExprOps for Expr {
         snprintf(base, sizeof base, "%s", ibase + 7);
         inst = frontend::sym::ct_inst_find(base);
         if (inst >= 0) {
+            int best = -1, bestscore = -1;
             im = frontend::sym::ct_impls(&nimpls);
             for (ii = 0; im && ii < nimpls; ii++) {
+                int score;
                 if (im[ii].use[0]) continue;
                 if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+                score = inst_impl_score(ii);
                 for (m = self->arena->nodes[im[ii].node].a; m >= 0;
                      m = self->arena->nodes[m].next)
                     if (strcmp(self->arena->nodes[m].text2, fname) == 0) {
@@ -4093,9 +4131,14 @@ impl ExprOps for Expr {
                             && strcmp(self->arena->nodes[im[ii].node].text3,
                                       self->sup->mem->path) != 0)
                             return -2;
-                        return m;
+                        if (score > bestscore) {
+                            bestscore = score;
+                            best = m;
+                        }
+                        break;
                     }
             }
+            if (best >= 0) return best;
         }
         /* P34 S5a: a non-generic inherent impl `impl Name { … }` (S4) is an
            N_IMPL node whose trait name is empty and whose receiver type is
@@ -4133,10 +4176,13 @@ impl ExprOps for Expr {
         snprintf(base, sizeof base, "%s", ibase + 7);
         inst = frontend::sym::ct_inst_find(base);
         if (inst >= 0) {
+            int best = -1, bestscore = -1;
             im = frontend::sym::ct_impls(&nimpls);
             for (ii = 0; im && ii < nimpls; ii++) {
+                int score;
                 if (im[ii].use[0]) continue;
                 if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+                score = inst_impl_score(ii);
                 for (m = self->arena->nodes[im[ii].node].a; m >= 0;
                      m = self->arena->nodes[m].next)
                     if (self->arena->nodes[m].c
@@ -4145,9 +4191,14 @@ impl ExprOps for Expr {
                             && strcmp(self->arena->nodes[im[ii].node].text3,
                                       self->sup->mem->path) != 0)
                             return -2;
-                        return m;
+                        if (score > bestscore) {
+                            bestscore = score;
+                            best = m;
+                        }
+                        break;
                     }
             }
+            if (best >= 0) return best;
         }
         /* P34 S5a: non-generic inherent static method (S4 `static` marker in
            `c`). Same arena scan as `inst_inherent_method`, but a `static`
@@ -4325,6 +4376,20 @@ impl ExprOps for Expr {
             return 1;
         case N_MEMBER:
         case N_ARROW:
+            /* PH-80 (D-013 §2): the synthesised `.data` view keeps the handle's
+               raw pointer but reports a read-only static type, so no `char *`
+               consumer can take it without a cast. `aux` 9 is the UTF-8 pair,
+               11 the UTF-16 pair (see the member-access synthesis). */
+            if (self->arena->nodes[n].aux == 9) {
+                if (snprintf(out, cap, "%s", "const char *") >= cap) return 0;
+                *array_depth = 0;
+                return 1;
+            }
+            if (self->arena->nodes[n].aux == 11) {
+                if (snprintf(out, cap, "%s", "const uint16_t *") >= cap) return 0;
+                *array_depth = 0;
+                return 1;
+            }
             if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad, depth + 1))
                 return 0;
             if (ad != 0) return 0;
@@ -4876,6 +4941,18 @@ impl ExprOps for Expr {
                 int bd = 0;
                 int known = self->static_ctype(n, bty, sizeof bty, &bd, 0);
                 int sugar = 0;
+                /* PH-80: a built-in struct reached through a bare name can
+                   still be spelled `String` / `Str` at this point (the
+                   canonical `struct ` prefix is added by `parse_type` only
+                   once the tag is known in this order). Normalise it so the
+                   user-type subscript protocol below sees the struct. */
+                if (known && bd == 0 && strchr(bty, '*') == 0
+                    && strncmp(bty, "struct ", 7) != 0
+                    && self->sym->find_struct(bty) >= 0) {
+                    char nb[MAX_TEXT];
+                    snprintf(nb, sizeof nb, "struct %s", bty);
+                    snprintf(bty, sizeof bty, "%s", nb);
+                }
                 if (known && bd == 0 && strchr(bty, '*') == 0) {
                     if (strncmp(bty, "struct Vec_", 11) == 0
                         || strncmp(bty, "struct Map_", 11) == 0)
@@ -5573,6 +5650,89 @@ impl ExprOps for Expr {
                                         "use '->%s'", fname, fname);
                                     return tool::diag::ct_sem_error(mline, mcol, pmsg,
                                                                     self->sup->mem->path);
+                                }
+                            }
+                        }
+                    }
+                    /* PH-80 (D-013 §2): the handle's `ptr` is the raw
+                       implementation field. Reading it would bypass the
+                       read-only `.data` view and `cstr()`, so only the built-in
+                       layer may name it; every other unit gets a positioned
+                       diagnostic instead of a silent escape hatch. */
+                    if (strcmp(fname, "ptr") == 0
+                        && !(self->sup->mem->path
+                             && strstr(self->sup->mem->path, "lib/std/Str.h.ct") != 0)) {
+                        char rty[MAX_TEXT];
+                        if (self->sup->expr_type(n, rty, sizeof rty) == 0) {
+                            const char *rp = rty;
+                            size_t rn;
+                            char rb[64];
+                            while (*rp == ' ' || *rp == '\t') rp++;
+                            if (strncmp(rp, "struct ", 7) == 0) rp += 7;
+                            rn = strlen(rp);
+                            while (rn > 0 && (rp[rn - 1] == ' ' || rp[rn - 1] == '\t'))
+                                rn--;
+                            if (rn > 0 && rn < sizeof rb
+                                && memchr(rp, '*', rn) == 0) {
+                                memcpy(rb, rp, rn);
+                                rb[rn] = 0;
+                                if (strcmp(rb, "String") == 0 || strcmp(rb, "Str") == 0
+                                    || strcmp(rb, "U16String") == 0
+                                    || strcmp(rb, "U16Str") == 0)
+                                    return tool::diag::ct_sem_error(mline, mcol,
+                                        "'.ptr' is a raw implementation field; use s[i] / .data[i] or cstr()",
+                                        self->sup->mem->path);
+                            }
+                        }
+                    }
+                    /* PH-80 (D-013 §2): `.data` is the read-only raw view, not
+                       a field. Its static type is `const char *` (UTF-8) or
+                       `const uint16_t *` (UTF-16); the emitter spells it as
+                       the handle's `ptr`, so `String` / `Str` keep their
+                       16-byte layout. It has no NUL guarantee and no implicit
+                       `char *` conversion, so `cstr()` is the only C-boundary
+                       exit: the value may only be indexed (`s.data[i]`), never
+                       handed to a callee (`printf("%s", s.data)` is a hard
+                       error). */
+                    {
+                        char dty[MAX_TEXT];
+                        char dbase[MAX_TEXT];
+                        const char *dp;
+                        size_t dn;
+                        if (strcmp(fname, "data") == 0
+                            && self->sup->expr_type(n, dty, sizeof dty) == 0) {
+                            dp = dty;
+                            while (*dp == ' ' || *dp == '\t') dp++;
+                            if (strncmp(dp, "struct ", 7) == 0) dp += 7;
+                            dn = strlen(dp);
+                            while (dn > 0 && (dp[dn - 1] == ' ' || dp[dn - 1] == '\t'))
+                                dn--;
+                            if (dn < sizeof dbase) {
+                                int aux = 0;
+                                memcpy(dbase, dp, dn);
+                                dbase[dn] = 0;
+                                if (strchr(dbase, '*') == 0) {
+                                    if (strcmp(dbase, "String") == 0
+                                        || strcmp(dbase, "Str") == 0) aux = 9;
+                                    else if (strcmp(dbase, "U16String") == 0
+                                             || strcmp(dbase, "U16Str") == 0) aux = 11;
+                                }
+                                if (aux != 0) {
+                                    if (!(self->lex->tok == T_PUNCT
+                                          && strcmp(self->lex->toktext, "[") == 0))
+                                        return tool::diag::ct_sem_error(mline, mcol,
+                                            "'.data' is a read-only raw view without a NUL guarantee; index it byte by byte or use cstr() at the C boundary",
+                                            self->sup->mem->path);
+                                    m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
+                                    if (m < 0) return -1;
+                                    self->arena->nodes[m].aux = aux;
+                                    self->arena->nodes[m].line = mline;
+                                    self->arena->nodes[m].num = mcol;
+                                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "ptr");
+                                    self->arena->nodes[m].a = n;
+                                    self->arena->nodes[m].b = -1;
+                                    n = m;
+                                    continue;
                                 }
                             }
                         }
@@ -6852,6 +7012,22 @@ impl ExprOps for Expr {
                                                       got, want) != 0)
                         return -1;
                 }
+                /* PH-80 (E80-2): an expected-type-directed literal binds at a
+                   call argument too, so `str_dup("x")` reaches a `Str` formal
+                   and `String.from_utf16(...)`-style helpers stay usable. It
+                   runs before the argument-type pass, which would otherwise
+                   reject the `char *` spelling against a by-value struct. */
+                if (fi >= 0 && args > 0) {
+                    int lc = args, lk = 0;
+                    while (lc > 0 && lk < self->sym->funcs[fi].nparams) {
+                        int lcl = self->arg_is_closure(lc);
+                        if (!lcl
+                            && self->lit_coerce(self->sym->funcs[fi].ptype[lk], lc) != 0)
+                            return -1;
+                        lc = self->arena->nodes[lc].next;
+                        lk += lcl ? 2 : 1;
+                    }
+                }
                 /* 19.2: the argument types against the same signature, before
                    the boxing pass rewrites interface arguments (an interface
                    formal is skipped here, boxing owns it). */
@@ -7848,10 +8024,16 @@ impl ExprTypes for Expr {
             return 0;
         case N_STR:
             /* a string literal is `char *` in a value context; a character
-               literal stays the arithmetic class (`int`) */
-            snprintf(out, (size_t)cap, "%s",
-                     self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
-                     ? "int" : "char *");
+               literal stays the arithmetic class (`int`). PH-80: a literal
+               already bound to String/Str answers that type. */
+            if (self->arena->nodes[n].aux == 1)
+                snprintf(out, (size_t)cap, "%s", "String");
+            else if (self->arena->nodes[n].aux == 2)
+                snprintf(out, (size_t)cap, "%s", "Str");
+            else
+                snprintf(out, (size_t)cap, "%s",
+                         self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
+                         ? "int" : "char *");
             return 0;
         case N_TRY: {
             /* Phase 44 (D44-2 / D44-5, L44-1..3): the operand must be a
@@ -8082,16 +8264,29 @@ impl ExprTypes for Expr {
         im = frontend::sym::ct_impls(&nimpls);
         found = -1;
         foundm = -1;
-        for (ii = 0; im && ii < nimpls && found < 0; ii++) {
-            if (im[ii].use[0]) continue;
-            if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
-            for (m = self->arena->nodes[im[ii].node].a; m >= 0;
-                 m = self->arena->nodes[m].next)
-                if (strcmp(self->arena->nodes[m].text2, fname) == 0) {
-                    found = ii;
-                    foundm = m;
-                    break;
-                }
+        {
+            /* PH-80: the most specific matching block owns the signature, the
+               same rule the emitter applies. Without it a concrete
+               `Map<String, V>` key block loses to the generic `Map<K, V>` and
+               the checker compares the borrowed `Str` argument against the
+               instance's `String` key type. */
+            int bestscore = -1;
+            for (ii = 0; im && ii < nimpls; ii++) {
+                int score;
+                if (im[ii].use[0]) continue;
+                if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+                score = inst_impl_score(ii);
+                for (m = self->arena->nodes[im[ii].node].a; m >= 0;
+                     m = self->arena->nodes[m].next)
+                    if (strcmp(self->arena->nodes[m].text2, fname) == 0) {
+                        if (score > bestscore) {
+                            bestscore = score;
+                            found = ii;
+                            foundm = m;
+                        }
+                        break;
+                    }
+            }
         }
         if (found < 0) return 0;
         /* SH-65/SH-67: a closure is a (trampoline, env) pair, but a struct/trait
@@ -8154,6 +8349,47 @@ impl ExprTypes for Expr {
                 pi = self->arena->nodes[pi].next;
                 k++;
             }
+        }
+        return 0;
+    }
+
+    /* PH-80 (D-013): expected-type-directed literal binding. `String` gets
+       an immortal handle (`aux = 1`, the emitter writes the static header),
+       `Str` gets a borrowed view (`aux = 2`); a UTF-16 literal is refused
+       because there is no implicit conversion. The type spelling may carry
+       `struct `, spaces or a trailing star; only an exact value type matches,
+       so a `String *` initializer is never silently rewritten. */
+    int lit_coerce(const char *type, int e)
+    {
+        char base[MAX_TEXT];
+        const char *p;
+        size_t n;
+
+        if (e < 0 || self->arena->nodes[e].kind != N_STR) return 0;
+        if (self->arena->str_at((int)self->arena->nodes[e].num)[0] == '\'')
+            return 0;                          /* a character literal */
+        p = type;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "struct ", 7) == 0) p += 7;
+        n = strlen(p);
+        while (n > 0 && (p[n - 1] == ' ' || p[n - 1] == '\t')) n--;
+        if (n >= (size_t)MAX_TEXT) return 0;
+        memcpy(base, p, n);
+        base[n] = 0;
+        if (strchr(base, '*') != 0) return 0;
+        if (strcmp(base, "String") == 0) {
+            self->arena->nodes[e].aux = 1;
+            return 0;
+        }
+        if (strcmp(base, "Str") == 0) {
+            self->arena->nodes[e].aux = 2;
+            return 0;
+        }
+        if (strcmp(base, "U16String") == 0 || strcmp(base, "U16Str") == 0) {
+            tool::diag::ct_sem_error(self->arena->nodes[e].line, 1,
+                "a UTF-16 string literal is not implicit; use U16String.from_utf8()",
+                self->sup->mem->path);
+            return -1;
         }
         return 0;
     }

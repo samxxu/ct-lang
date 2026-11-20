@@ -1769,6 +1769,9 @@ impl ParseOps for Parser {
                 } else {
                     e = self->ex->parse_expr();
                     if (e < 0) return -1;
+                    /* PH-80: a file-scope `String g = "x"` / `Str g = "x"` is
+                       the same literal binding as a local declaration. */
+                    if (self->ex->lit_coerce(ret, e) != 0) return -1;
                 }
                 self->arena->nodes[g].a = e;
             }

@@ -144,6 +144,8 @@ pub trait StmtOps {
     int  parse_stmt(void);
     int  parse_branch(void);
     int  parse_decl_node(void);
+    /* PH-80: refuse a raw `String.ptr` / `Str.ptr` write (immutability). */
+    int  string_raw_write_check(int e);
     int  parse_expr_stmt_node(void);
     int  parse_switch_body(void);
     int  parse_label(void);
@@ -2299,6 +2301,8 @@ impl StmtOps for Stmt {
             e = self->ex->parse_expr();
             self->ex->into_ok = 0;
             if (e < 0) return -1;
+            /* PH-80: `return "x"` in a String/Str function binds the literal. */
+            if (self->ex->lit_coerce(self->sym->ret_type, e) != 0) return -1;
             /* P-7.2 (P-4.3): a direct `return` of a slice that views a local
                array hands back a view whose storage dies with the frame. The
                lint names only the direct forms; pass-through paths are the
@@ -2351,6 +2355,9 @@ impl StmtOps for Stmt {
                 e = self->ex->slice_view_from_array(e);
                 if (e < 0) return -1;
             }
+            /* Phase 32 S5 (L32-3/L32-5): the returned expression against the
+               function's return type. A void function may not return a value,
+               and the judged value is compared through the shared kernel. */
             /* Phase 43: an `err:` payload is judged on every path, not only
                under `--types`. The `is_err` branch uses the hard-error diag
                channel (7), so `ct compile` also refuses to write bad C; the
@@ -4284,6 +4291,9 @@ impl StmtOps for Stmt {
                     self->ex->into_ok = 0;
                     self->ex->fnval_ok = 0;
                     if (e < 0) return -1;
+                    /* PH-80: bind a bare literal to String / Str (and refuse an
+                       implicit UTF-16 literal) before the optional type pass. */
+                    if (self->ex->lit_coerce(typebuf, e) != 0) return -1;
                     /* Phase 32 S3 (L32-1): the declared type against the
                        initialiser. The position is the initialiser's own
                        start, and the whole check stays behind `--types`. */
@@ -4395,6 +4405,59 @@ impl StmtOps for Stmt {
         return head;
     }
 
+    /* PH-80: a raw field write would bypass the read-only `s[i]` / `.data`
+       contract. The fields are public for the ABI probe, so the write forms are
+       refused here; a `char *p = s.ptr` escape remains author responsibility
+       (the same contract watermark as the borrow views). */
+    int string_raw_write_check(int e)
+    {
+        int b, k;
+        char ty[MAX_TEXT];
+        const char *p;
+        size_t n;
+
+        if (e < 0) return 0;
+        /* The built-in layer initialises `ptr`/`len` itself; the user-facing
+           immutability rule applies only to callers. */
+        if (self->sup->mem->path
+            && strstr(self->sup->mem->path, "lib/std/Str.h.ct") != 0)
+            return 0;
+        k = self->arena->nodes[e].kind;
+        if (k == N_MEMBER) {
+            if (strcmp(self->arena->nodes[e].text2, "ptr") != 0) return 0;
+            b = self->arena->nodes[e].a;
+        } else if (k == N_INDEX) {
+            b = self->arena->nodes[e].a;
+            if (b < 0 || self->arena->nodes[b].kind != N_MEMBER) return 0;
+            if (strcmp(self->arena->nodes[b].text2, "ptr") != 0) return 0;
+            b = self->arena->nodes[b].a;
+        } else {
+            return 0;
+        }
+        {
+            int z = 0;
+            if (b < 0 || self->ex->chk_type(b, ty, sizeof ty, &z) != 0) return 0;
+        }
+        p = ty;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "struct ", 7) == 0) p += 7;
+        n = strlen(p);
+        while (n > 0 && (p[n - 1] == ' ' || p[n - 1] == '\t')) n--;
+        if (n >= (size_t)MAX_TEXT) return 0;
+        {
+            char base[MAX_TEXT];
+            memcpy(base, p, n);
+            base[n] = 0;
+            if (strchr(base, '*') == 0
+                && (strcmp(base, "String") == 0 || strcmp(base, "Str") == 0))
+                return tool::diag::ct_sem_error(self->arena->nodes[e].line,
+                    self->arena->nodes[e].num,
+                    "String/Str is immutable: '.ptr' is a raw implementation field; use s[i] (read-only Str) or cstr()",
+                    self->sup->mem->path);
+        }
+        return 0;
+    }
+
     int parse_expr_stmt_node(void)
     {
         int e, rhs, n, w;
@@ -4403,6 +4466,12 @@ impl StmtOps for Stmt {
 
         scol = self->lex->tokstart - self->lex->lstart + 1;
         self->ex->into_ok = 1;
+        /* A statement's own assignment is the statement layer's job (it owns
+           the AutoDrop/leak bookkeeping); a value-position assignment is only
+           for parentheses and conditions. Leaving this bit set made a write to
+           a custom subscript (`s.data[0] = x`) take the expression path and
+           report the wrong diagnostic. */
+        self->ex->assign_ok = 0;
         self->ex->mat_state = (1L << 62);
         e = self->ex->parse_expr();
         self->ex->into_ok = 0;
@@ -4452,6 +4521,7 @@ impl StmtOps for Stmt {
                 return -1;
             /* Phase 31 O3 (L31-3/L31-4): `v[i] += 1` writes the value. */
             if (self->ex->container_write_check(e) != 0) return -1;
+            if (self->string_raw_write_check(e) != 0) return -1;
             if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX
                 && k2 != N_SLICE_INDEX
                 && k2 != N_DEREF && k2 != N_INTO_SELF)
@@ -4526,7 +4596,16 @@ impl StmtOps for Stmt {
                 int sm, vi, widx;
                 while (recv >= 0
                        && (self->arena->nodes[recv].kind == N_MEMBER
-                           || self->arena->nodes[recv].kind == N_ARROW))
+                           || self->arena->nodes[recv].kind == N_ARROW
+                           /* PH-80: `.data` / `s[i]` are computed read-only
+                              views; look through them so the write is reported
+                              by the subscript protocol (no `set`) instead of
+                              the lvalue-root check. */
+                           || (self->arena->nodes[recv].kind == N_MCALL
+                               && (strcmp(self->arena->nodes[recv].text2, "data") == 0
+                                   || strcmp(self->arena->nodes[recv].text2, "get") == 0)
+                               && (strncmp(self->arena->nodes[recv].text, "struct String", 13) == 0
+                                   || strncmp(self->arena->nodes[recv].text, "struct Str", 10) == 0))))
                     recv = self->arena->nodes[recv].a;
                 if (recv < 0 || self->arena->nodes[recv].kind != N_VAR)
                     return tool::diag::ct_sem_error(cl, cc,
@@ -4564,6 +4643,7 @@ impl StmtOps for Stmt {
                     "cannot write to an element of a const slice", self->mem->path);
             /* Phase 31 O3 (L31-3/L31-4): `v[i] = x` / `m[k] = x`. */
             if (self->ex->container_write_check(e) != 0) return -1;
+            if (self->string_raw_write_check(e) != 0) return -1;
             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX
                 && k != N_SLICE_INDEX
                 && k != N_DEREF && k != N_INTO_SELF)
@@ -4595,6 +4675,8 @@ impl StmtOps for Stmt {
             self->ex->into_ok = 0;
             self->ex->fnval_ok = 0;
             if (rhs < 0) return -1;
+            /* PH-80: the same expected-type binding on a plain assignment. */
+            if (tt[0] && self->ex->lit_coerce(tt, rhs) != 0) return -1;
             /* Phase 32 S4 (L32-2): the target's declared type against the
                right-hand side, before an interface slot boxes it. This same
                branch carries an `into` block's `.field = expr`, whose type

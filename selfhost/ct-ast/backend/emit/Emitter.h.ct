@@ -251,7 +251,7 @@ struct Emitter {
     /* Phase 29 E29-5: the built-in container unit is loaded in `ct build` but is
        not an import edge of any unit (it must not key the cache), so the
        emitter includes its header explicitly. -1 when the layer is absent. */
-    int  builtins[4];   /* P34 S9a: Vec / Option / Result layer units */
+    int  builtins[5];   /* P34 S9a: Vec / Option / Result layer units */
     int  nbuiltin;
     /* PH-64 T2: slot-parallel liveness; a dead layer unit is not included and
        not emitted, so the product set follows what the program can reach. */
@@ -1420,6 +1420,32 @@ static int *g_slice_used;
    before it in the translation unit. */
 static void emit_slice_helpers(struct Emitter *self);
 
+/* PH-80: one static block per `String` literal. The header sits immediately
+   before the payload, so `String.ptr - 8` always names `ct_str_hdr`; `refs` is
+   -1, which makes `release()` a no-op and never frees read-only literal data.
+   `__attribute__((unused))` keeps `-Wall -Wextra` quiet when the scan sees a
+   literal whose unit is not the one currently being written. */
+static int emit_string_literals(struct Emitter *self, int prog)
+{
+    int n, any = 0;
+    (void)prog;
+
+    for (n = 0; n < self->arena->nnode; n++) {
+        const char *lit;
+        if (self->arena->nodes[n].kind != N_STR) continue;
+        if (self->arena->nodes[n].aux != 1) continue;
+        lit = self->arena->str_at((int)self->arena->nodes[n].num);
+        if (!any) fputs("\n/* PH-80: immortal String literal headers */\n", self->out);
+        fprintf(self->out,
+                "static struct { struct ct_str_hdr h; char d[sizeof(%s)]; }"
+                " ct_str_lit_%d __attribute__((unused)) = { { -1, 0 }, %s };\n",
+                lit, n, lit);
+        any = 1;
+    }
+    if (any) fputs("\n", self->out);
+    return 0;
+}
+
 /* The per-unit emission proper: everything from the banner to the last
    function, run with `self->out` already pointing at an open file. Every
    failure is a bare `return -1`; the method that opened the file closes it and
@@ -1585,6 +1611,8 @@ static int emit_unit_body(struct Emitter *self, int u)
        plain type and before the prototypes that name them. */
     if (emit_struct_insts(self, u, 0) != 0) return -1;
     if (emit_struct_impls(self, u, 0) != 0) return -1;
+    /* PH-80: literal blocks (the built-in layer header is already included). */
+    if (emit_string_literals(self, self->units[u].prog) != 0) return -1;
 
     for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++)
         if (self->emit_proto(i) != 0) return -1;
@@ -1875,6 +1903,23 @@ static void impl_inst_bind(struct Emitter *self, int ki, int ii)
    Resolution takes the first block in declaration order that declares the name
    (`inst_inherent_method`), so the emitter must not emit the later duplicate:
    1 when an earlier matching block already owns `fname` for this instance. */
+/* PH-80 (D-013): how many of a block's pattern positions are concrete rather than
+   type parameters. The generic `impl<K,V> Map<K,V>` scores 0; a key block
+   `impl<V> Map<String,V>` scores 1. A concrete block may be declared after the
+   generic one and still own the method. */
+static int emit_impl_score(struct StructImpl *im, int ki)
+{
+    int i, s, tp;
+    s = 0;
+    for (i = 0; i < im[ki].nargs; i++) {
+        tp = 0;
+        if (im[ki].ntparams > 0 && strcmp(im[ki].pat[i], im[ki].tparam[0]) == 0) tp = 1;
+        if (im[ki].ntparams > 1 && strcmp(im[ki].pat[i], im[ki].tparam[1]) == 0) tp = 1;
+        if (!tp) s++;
+    }
+    return s;
+}
+
 static int impl_method_shadowed(struct Emitter *self, int ki, int ii, const char *fname)
 {
     int k, m, nimpls;
@@ -1882,9 +1927,19 @@ static int impl_method_shadowed(struct Emitter *self, int ki, int ii, const char
 
     im = frontend::sym::ct_impls(&nimpls);
     if (!im) return 0;
-    for (k = 0; k < ki; k++) {
+    for (k = 0; k < nimpls; k++) {
+        if (k == ki) continue;
         if (im[k].use[0]) continue;
         if (!frontend::sym::ct_impl_matches(k, ii)) continue;
+        /* Earlier blocks shadow only when they are at least as specific; a
+           later block shadows only when it is strictly more specific. This
+           lets the concrete `Map<String,V>` key block own the name no matter
+           which side of the generic block it is declared on. */
+        if (k < ki) {
+            if (emit_impl_score(im, k) < emit_impl_score(im, ki)) continue;
+        } else {
+            if (emit_impl_score(im, k) <= emit_impl_score(im, ki)) continue;
+        }
         for (m = self->arena->nodes[im[k].node].a; m >= 0; m = self->arena->nodes[m].next)
             if (strcmp(self->arena->nodes[m].text2, fname) == 0) return 1;
     }
@@ -2830,6 +2885,9 @@ impl EmitOps for Emitter {
         /* Phase 29: compile mode is one unit, so every instance is its own. */
         if (emit_struct_insts(self, -1, 0) != 0) return -1;
         if (emit_struct_impls(self, -1, 0) != 0) return -1;
+        /* PH-80: the literal blocks need `struct ct_str_hdr` / `struct String`
+           to be visible, which the two calls above guarantee. */
+        if (emit_string_literals(self, prog) != 0) return -1;
 
         /* Prototypes come before the impl bodies: an impl method may call a
            free function declared earlier in the unit, and C needs the prototype
@@ -5090,7 +5148,23 @@ impl EmitOps for Emitter {
             return 0;
         }
         if (self->arena->nodes[n].kind == N_STR) {
-            fputs(self->arena->str_at(self->arena->nodes[n].num), self->out);
+            const char *lit = self->arena->str_at(self->arena->nodes[n].num);
+            /* PH-80: a literal bound to String / Str becomes the matching
+               handle. The String form names the static block above; the Str
+               form is a borrowed view over the C literal itself. */
+            if (self->arena->nodes[n].aux == 1) {
+                fprintf(self->out,
+                        "((struct String){ (char *)ct_str_lit_%d.d,"
+                        " (int)(sizeof(ct_str_lit_%d.d) - 1) })", n, n);
+                return 0;
+            }
+            if (self->arena->nodes[n].aux == 2) {
+                fprintf(self->out,
+                        "((struct Str){ (char *)%s, (int)(sizeof(%s) - 1) })",
+                        lit, lit);
+                return 0;
+            }
+            fputs(lit, self->out);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_RAW) {
@@ -7013,7 +7087,7 @@ void ct_emit_clear_builtins(void)
 pub void ct_emit_add_builtin(int u);
 void ct_emit_add_builtin(int u)
 {
-    if (g_emit.nbuiltin < 4) {
+    if (g_emit.nbuiltin < 5) {
         g_emit.builtins[g_emit.nbuiltin] = u;
         g_emit.nbuiltin += 1;
     }
