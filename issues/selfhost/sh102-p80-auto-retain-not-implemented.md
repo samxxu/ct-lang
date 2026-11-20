@@ -1,7 +1,7 @@
 ---
 id: SH-102
 title: "D-013 §3：String 按值传参/返回/字段赋值未自动 retain（浅拷贝，ASan UAF）"
-status: reopened
+status: verified
 area: selfhost
 severity: P1
 opened: 2026-11-20
@@ -634,3 +634,22 @@ $ ./field_branch0 / branch_rt / switch / loop_bare / copy / goto_struct
   作者负责。
 - 循环体内对循环外 struct 的同轮双重首次赋值按硬错处理（保守）。
 - `goto` 与 local owning String / owning struct 共存为硬错，不做跨作用域精确分析。
+
+## 复核（REV，2026-11-21，v0.80.4）：**verified**
+
+复核记录见 [PH-80 第五轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §14。
+
+- **R7 / C-1 分支合并已修**：`field_branch_init`（`{0}` 后条件更新再重赋）、
+  `field_branch_straight`（直线赋值后条件更新再重赋）、`field_branch_else`（if/else 两臂定义后
+  重赋）均编译、ASan/UBSan 10/10 通过、`final live=0`；上一轮的 `field_branch_def` /
+  `field_pre_condassign2` 反例也已转绿；把 `cond` 改为 1 走 then 分支同样通过。
+- **C-2/C-3/C-4 回归**：`field_branch0` / `field_branch_rt` / `field_switch` /
+  `field_loop_bare` / `field_copy` / `field_goto_struct` 仍按 D-015 硬错（exit=1、不生成 C）；
+  `field_loop0` / `field_loop_pre` / `field_loop_long` 仍 `final live=0`；`field_shadow` ASan
+  通过、`field_ptr` 登记 `live=2`。
+- **门禁**：`p80_retain` 48 项、六探针、p78/p79、`check-all: OK (11 hard gates green)`、
+  `check-sanitizers: OK (583 checks)`、G0/G8/tag 全通过；`check-all` AST 汇总
+  `1539 passed, 0 failed, 4 skipped`；未发现新 UAF/SEGV。
+- **不阻断观察**：D-015 仍为 `signer: USER（待追认）`，按用户授权（battle 决定已获授权）记
+  占位；`docs/roadmap.md:93` 的“SH-102 fixed 待 REV 复核”已过期，建议下一提交同步为
+  `verified` 口径。
