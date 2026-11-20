@@ -504,6 +504,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 2026-11-21：PH-81 → v0.81.0（`d=0`）；P-7.5 证据、S1a/S1b/S1c 红绿、E81-1…6 全通过。
 > 2026-11-21：PH-82 → v0.82.0（`d=0`）；`leaks` 两档、直接环告警、allow-cycle、树模式，E82-1…8 全通过。
 > 2026-11-21：PH-83 → v0.83.0（`d=0`）；契约 v1、`ct index verify`、conformance、Linux x64 产物，E83-1…8 全通过。
+> 2026-11-21：PKG-14 → v0.83.1（fix）；索引校验非普通文件 exit 2、FIFO 不挂起、ferror/JSON 失败。
 
 `deviation: fix-tags`
 
@@ -588,9 +589,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.83.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.83.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.83.0（PH-83 包管理契约 v1 已收口：契约 v1（digest 三向量、spec/MVS/单索引、判据矩阵无待补）、只读 `ct index verify`、五字段按行硬错、conformance 数据+runner、Linux x64 静态产物；E83-1…8 通过；D-014）。Phase 82 泄漏防护已收口：`ct.pkg` 窄键 `leaks = warn|error`（`error` 升级现有 leak 诊断与 `box<X>` 字段直接环告警并让 build/compile 失败）、直接环检测（限深 3、去重、`ct check` 报被抑制点）、`/* ct: allow-cycle */` 同行豁免、patterns §5 树模式；E82-1…8 通过；D-012 / battle leak-guards-1；Phase 81 已收口（v0.81.0；`box<T>` + `new`）；Phase 80 已收口（v0.80.4）；Phase 79/78/77/76 已收口；Phase 43–53 已收口。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.83.1（PH-83 包管理契约 v1 已收口；v0.83.1 为 PKG-14 修复：目录/设备/FIFO/目录 symlink 等非普通索引文件 exit 2、FIFO 不打开挂起、ferror 与 --json 同为失败；契约 v1（digest 三向量、spec/MVS/单索引、判据矩阵无待补）、只读 `ct index verify`、五字段按行硬错、conformance 数据+runner、Linux x64 静态产物；E83-1…8 通过；D-014）。Phase 82 泄漏防护已收口：`ct.pkg` 窄键 `leaks = warn|error`（`error` 升级现有 leak 诊断与 `box<X>` 字段直接环告警并让 build/compile 失败）、直接环检测（限深 3、去重、`ct check` 报被抑制点）、`/* ct: allow-cycle */` 同行豁免、patterns §5 树模式；E82-1…8 通过；D-012 / battle leak-guards-1；Phase 81 已收口（v0.81.0；`box<T>` + `new`）；Phase 80 已收口（v0.80.4）；Phase 79/78/77/76 已收口；Phase 43–53 已收口。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界

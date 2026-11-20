@@ -249,6 +249,12 @@ ct index verify [<file>] [--json] [-q]
 
 - **索引解析**与 I13 同一顺序：`<file>` > `CT_INDEX` > `$CT_HOME/index/index`；都没有 → 退出码 2；
 - **只读边界**：只 `fopen` 索引文件；不联网、不起子进程、不写 store、不写 `ct.lock`、不改索引；
+- **输入必须是普通文件**（PKG-14）：打开前 `stat` + `S_ISREG`；目录、字符/块设备（如 `/dev/null`）、
+  FIFO、socket、指向目录的 symlink → 退出码 2；FIFO 不会被打开（不挂起）。指向**普通文件**的
+  symlink 按普通文件读取。三种来源（显式路径 / `CT_INDEX` / `$CT_HOME/index/index`）同规则；
+- **读取错误**：`ferror` 非零 → 退出码 2；
+- **`--json` 在退出 2 时同样是失败**：输出 `ok:false`，`errors` 含一条 `line:0`、`kind:"io"` 的
+  记录；任何非普通文件/读错误都不会出现 `ok:true`；
 - **逐行校验**（空行与 `#` 注释跳过；行号为 1 起算）：
 
 | ID | 判据 | 失败类别 |
@@ -386,6 +392,8 @@ index verify: FAIL (2 invalid of 9 rows)
 | `ct index verify`：索引全部合法 | — | 退出码 0，默认 `index verify: OK (<n> rows)` |
 | `ct index verify`：存在坏行/五字段旧行 | — | 退出码 1，逐行给行号与类别（§4.4） |
 | `ct index verify`：用法错误/索引不可读 | — | 退出码 2；不写任何文件 |
+| `ct index verify`：目录/设备/FIFO/socket/目录 symlink | — | 退出码 2；`--json` 为 `ok:false` + `line:0 kind:"io"`；FIFO 不打开 |
+| `ct index verify`：读取中 `ferror` | — | 退出码 2；`--json` 同上（追加一条 io 错误） |
 
 ## 8. 兼容与迁移
 
@@ -408,6 +416,7 @@ index verify: FAIL (2 invalid of 9 rows)
 5. 隔离 `HOME` / `CT_HOME`、空 store：仍成功；
 6. 失败后既有 lock 逐字节不变；
 7. `ct index verify` 对合法索引退出 0、坏行退出 1 并给行号、不可读退出 2；`--json` 单行可解析且字段稳定；
+   非普通文件（目录/`/dev/null`/目录 symlink/FIFO）与读取错误退出 2，`--json` 不得为 `ok:true`；
 8. `ct index verify` 与 `ct get` 对五字段旧行同判；零网络/零子进程/零 store/lock 写入（隔离 `HOME` 前后无新文件）。
 
 **index 侧**
@@ -456,3 +465,4 @@ index verify: FAIL (2 invalid of 9 rows)
 | --- | --- | --- |
 | v1 | 2026-11-20 | 按 [D-014](../decisions/D-014.md) 七项裁定：维持 B′、判据归属矩阵、契约并入本文、单索引（I13）、五字段按行硬错（改 I12）、最小 CI 产物、PH-83 排期；新增 §3.3 digest 伪代码与 3 组向量、§4.1.1 spec/版本选择、§6.1 判据归属矩阵、Q6–Q8 |
 | v1.1 | 2026-11-21 | PH-83 S83a：§3.3 三组向量补全字节并重新实测（v1 的向量 2/3 缺输入、不可复现）；§4.1.1 补 MVS 实例；新增 §4.4 `ct index verify`（IV-1…IV-7、输出/JSON/退出码）；§6.1 按 index@0cdb132 基线定稿（缺原文编号显式标为未分配）；§7 退出码与 §10 Q8 同步 |
+| v1.2 | 2026-11-21 | PKG-14 修复：§4.4 补“输入必须是普通文件（stat+S_ISREG）、ferror、`--json` 退出 2 也为失败”；§7/§9 同步；FIFO 在 open 前拒绝 |

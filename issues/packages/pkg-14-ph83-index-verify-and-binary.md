@@ -73,3 +73,21 @@ $ echo $?
 
 证据：[REV verdict](../../docs/reviews/2026-11-21-phase83-rev-verdict.md) §5.2。修复前
 PH-83 不写 `REV: 通过`。
+
+## 处置（DEV，v0.83.1，2026-11-21）：fixed
+
+- **修复**：`pkg_index_verify` 在 `fopen` 前 `stat` + `S_ISREG`；非普通文件（目录、`/dev/null`
+  等字符/块设备、FIFO、socket、指向目录的 symlink）exit 2，FIFO 不打开（不挂起）；指向普通
+  文件的 symlink 仍按普通文件读取。读取后 `ferror` 非零同样 exit 2。`--json` 在 exit 2 时输出
+  `ok:false` 与一条 `line:0`、`kind:"io"` 的错误，不再 `ok:true`；显式路径 / `CT_INDEX` /
+  `$CT_HOME/index/index` 三种来源同规则。
+- **测试**：`test/ast/p83_verify.sh` 增加目录、`/dev/null`、目录 symlink、`CT_INDEX` 目录
+  （文本 + JSON）、`$CT_HOME/index/index` 目录、FIFO（python3 5s 看门狗，超时即失败）、
+  Linux `/proc/self/mem` ferror 负例。
+- **提交**：`c72349fe`（红，baseline `8014739e`）+ 本提交（fix，v0.83.1）。
+- **红证**：8 条 FAIL（目录/`/dev/null`/symlink/CT_INDEX/HOME 均 exit 0；FIFO TIMEOUT）。
+- **绿证**：`p83_verify: OK`（26）；Linux 交叉产物在 QEMU Alpine 内：
+  `/proc/self/mem` → `ct: error reading the package index '/proc/self/mem'` rc=2；
+  `/proc --json` → `{"ok":false,...,"kind":"io"}` rc=2。
+- **契约**：§4.4/§7/§9 同步，§12 记 v1.2。
+- **状态**：字段仍为 `reopened`（REV 所有）；DEV 主张 `fixed`，等待 REV 复核。

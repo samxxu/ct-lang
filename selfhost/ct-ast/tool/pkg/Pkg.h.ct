@@ -2602,9 +2602,51 @@ static void index_json_str(const char *s)
     putchar('"');
 }
 
+/* Emit the accumulated row errors as a JSON array body (no brackets). */
+static void index_json_err_list(const char *errs, int nerr)
+{
+    int i;
+
+    for (i = 0; i < nerr; i++) {
+        const char *rec = errs + (size_t)i * (size_t)INDEX_ERR_STRIDE;
+        int eline;
+        memcpy(&eline, rec, sizeof eline);
+        if (i) putchar(',');
+        printf("{\"line\":%d,\"kind\":", eline);
+        index_json_str(rec + INDEX_ERR_KIND_OFF);
+        printf(",\"message\":");
+        index_json_str(rec + INDEX_ERR_MSG_OFF);
+        putchar('}');
+    }
+}
+
+/* A fatal input error: the path is not a regular file, cannot be opened, or
+   could not be read. Exit 2 (contract §4.4). `--json` must still be a failure
+   object -- never `ok:true` for a directory/device/FIFO (PKG-14). */
+static int index_io_fail(const char *prog, const char *path, int json,
+                         const char *kind, const char *msg)
+{
+    if (json) {
+        printf("{\"index\":");
+        index_json_str(path);
+        printf(",\"ok\":false,\"rows\":0,\"valid\":0,\"invalid\":1,"
+               "\"errors\":[{\"line\":0,\"kind\":");
+        index_json_str(kind);
+        printf(",\"message\":");
+        index_json_str(msg);
+        printf("}]}\n");
+    } else {
+        fprintf(stderr, "%s: %s\n", prog, msg);
+    }
+    return 2;
+}
+
 /* `ct index verify [<file>] [--json] [-q]`: read-only replay of the index's
    structural contract. It never fetches, never spawns, never writes store or
-   lock (contract §4.4). Exit 0 valid, 1 bad rows, 2 usage/unreadable. */
+   lock (contract §4.4). Exit 0 valid, 1 bad rows, 2 usage/unreadable.
+   PKG-14: the path must be a *regular file*; `stat` runs before `fopen`, so a
+   FIFO is never opened (opening it would block), and a read error (`ferror`)
+   is exit 2 as well. */
 static int pkg_index_verify(int argc, char **argv, const char *prog, const char *version)
 {
     char path[MAX_PKG_PATH], line[MAX_PKG_LINE], key[MAX_PKG_LINE];
@@ -2671,10 +2713,24 @@ static int pkg_index_verify(int argc, char **argv, const char *prog, const char 
         return 2;
     }
     snprintf(path, sizeof path, "%s", ip);
+    {
+        struct stat st;
+        if (stat(path, &st) != 0) {
+            char msg[MAX_PKG_LINE];
+            snprintf(msg, sizeof msg, "cannot read the package index '%s'", path);
+            return index_io_fail(prog, path, json, "io", msg);
+        }
+        if (!S_ISREG(st.st_mode)) {
+            char msg[MAX_PKG_LINE];
+            snprintf(msg, sizeof msg, "not a regular file: '%s'", path);
+            return index_io_fail(prog, path, json, "io", msg);
+        }
+    }
     f = fopen(path, "r");
     if (f == NULL) {
-        fprintf(stderr, "%s: cannot read the package index '%s'\n", prog, path);
-        return 2;
+        char msg[MAX_PKG_LINE];
+        snprintf(msg, sizeof msg, "cannot read the package index '%s'", path);
+        return index_io_fail(prog, path, json, "io", msg);
     }
     errs = NULL;
     seen = NULL;
@@ -2800,23 +2856,31 @@ static int pkg_index_verify(int argc, char **argv, const char *prog, const char 
         nseen++;
         valid++;
     }
+    if (ferror(f)) {
+        fclose(f);
+        if (json) {
+            printf("{\"index\":");
+            index_json_str(path);
+            printf(",\"ok\":false,\"rows\":%d,\"valid\":%d,\"invalid\":%d,"
+                   "\"errors\":[", rows, valid, nerr + 1);
+            index_json_err_list(errs, nerr);
+            if (nerr) putchar(',');
+            printf("{\"line\":0,\"kind\":\"io\","
+                   "\"message\":\"error reading the package index\"}]}\n");
+        } else {
+            fprintf(stderr, "%s: error reading the package index '%s'\n", prog, path);
+        }
+        free(errs);
+        free(seen);
+        return 2;
+    }
     fclose(f);
     if (json) {
         printf("{\"index\":");
         index_json_str(path);
         printf(",\"ok\":%s,\"rows\":%d,\"valid\":%d,\"invalid\":%d,\"errors\":[",
                nerr ? "false" : "true", rows, valid, nerr);
-        for (i = 0; i < nerr; i++) {
-            char *rec = errs + (size_t)i * (size_t)INDEX_ERR_STRIDE;
-            int eline;
-            memcpy(&eline, rec, sizeof eline);
-            if (i) putchar(',');
-            printf("{\"line\":%d,\"kind\":", eline);
-            index_json_str(rec + INDEX_ERR_KIND_OFF);
-            printf(",\"message\":");
-            index_json_str(rec + INDEX_ERR_MSG_OFF);
-            putchar('}');
-        }
+        index_json_err_list(errs, nerr);
         printf("]}\n");
     } else {
         if (!quiet) printf("index: %s\n", path);

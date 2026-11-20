@@ -1,6 +1,6 @@
 # Phase 83 — 包管理契约 v1 与索引校验
 
-> **状态：完成（v0.83.0）**（2026-11-20 立项并开卡；2026-11-21 S83a–S83d 完成，E83-1…8 通过）。
+> **状态：完成（v0.83.1；PKG-14 fixed）**（2026-11-20 立项并开卡；2026-11-21 S83a–S83d 完成，E83-1…8 通过）。
 > **签收：EDITOR 2026-11-20**（主编统一签收；卡作者 REQ）；S83a 契约/矩阵另需 REVIEW 签收（§5）。
 > **施工闸门**：PH-82 已收口（v0.82.0）；PKG-12 判据矩阵已按 index 基线定稿；index 仓消费方式见 §7.4。
 > **前置**：PH-82 收口；[PKG-12](../../issues/packages/pkg-12-contract-v1-doc-gaps.md) 判据矩阵；
@@ -101,6 +101,7 @@ S83a 为纯文档任务，写 `no-test:` 并由 REVIEW 签字。
 | S83b 只读校验 | `d22a5077`（baseline `1764b4d6`） | `b5873c40` | `sh test/ast/p83_verify.sh` / `p83_legacy.sh` | `p83_verify: OK`（26）/ `p83_legacy: OK`（9） |
 | S83c conformance | `7cbd5792`（baseline `1764b4d6`） | `f1a1146a` | `sh test/ast/p83_conformance.sh` | `p83_conformance: OK`（19 passed） |
 | S83d 分发 | `23c00b0b`（baseline `1764b4d6`） | `2a0a0d38` | `sh test/ast/p83_dist.sh --require` | `p83_dist: OK`（8，产物 v0.83.0，sha256 `b04afe2e…`） |
+| PKG-14 修复（v0.83.1） | `c72349fe`（baseline `8014739e`） | 本提交 | `sh test/ast/p83_verify.sh` | `p83_verify: OK`（26，含目录/设备/symlink/CT_INDEX/HOME/FIFO/ferror 负例） |
 
 S83a 的 REVIEW 签收位：本卡 §5 记录“契约/矩阵已按 index@0cdb132 定稿、无待补、与 conformance
 类别对齐”，由 REVIEW 席位在收口复核时签字；DEV 不自签。
@@ -270,7 +271,7 @@ $ [ -f selfhost/make-dist.sh ] || echo absent  # absent（产物脚本随 S83d �
 | E83-1 | digest 伪代码 + 3 向量 + spec/MVS/单索引/矩阵，无待补 | §7.1 第 1 段；契约 §3.3/§4.1.1/§4.4/§6.1；conformance 三向量 | ✅ |
 | E83-2 | 五字段按行硬错、与 `ct get` 一致、六字段不受影响 | `p83_legacy` 9 条；`p83_verify` legacy 行 | ✅ |
 | E83-3 | 零网络/零子进程/零 store/lock 写；坏行给行号 | `p83_verify` 的 read-only 三条（HOME 前后一致、无 ct.lock、PATH shim 未调用）+ 代码只用 `fopen/fgets` | ✅ |
-| E83-4 | `--json` 稳定；退出码 0/1/2 | `p83_verify` JSON 键序/计数/单行 + 退出码三条 | ✅ |
+| E83-4 | `--json` 稳定；退出码 0/1/2 | `p83_verify` JSON 键序/计数/单行 + 退出码三条；PKG-14 后含非普通文件/FIFO/ferror（§7.5） | ✅（v0.83.1 修复） |
 | E83-5 | 数据覆盖清单/索引/三向量；shell 与 CT 共用、差异登记 | `p83_conformance` 19 passed；`differences.md` 8 条 | ✅ |
 | E83-6 | 产物 sha256 匹配、解包 `ct -v`、版本与 tag 一致 | `make-dist` + `p83_dist --require`（§7.3） | ✅（见 §7.4 上传边界） |
 | E83-7 | 旧 golden/门禁不变；check-all；五处版本同步 | §7.3 门禁原文 | ✅ |
@@ -305,7 +306,7 @@ g0: OK (block 1.17.0, session-map present)
 $ bash tools/check.sh g8
 g8: OK (PN-2 version coherence; 9 legacy offsets)
 $ python3 test/docs/check-docs.py
-check-docs: OK (2189 relative links in 363 files, v0.83.0, 11 hard gates, 12 phase status, 5 适用版本 header(s), 2 superseded link(s), 6 signoff(s))
+check-docs: OK (2195 relative links in 364 files, v0.83.1, 11 hard gates, 12 phase status, 5 适用版本 header(s), 2 superseded link(s), 6 signoff(s))
 ```
 
 五处版本落点与 51 个 golden/ABI banner：
@@ -313,13 +314,76 @@ check-docs: OK (2189 relative links in 363 files, v0.83.0, 11 hard gates, 12 pha
 ```console
 $ grep -h '#define CTC_VERSION' selfhost/l0/ctc.c selfhost/l1/ctc.ct \
       selfhost/l2/core.ct selfhost/l2/driver.ct selfhost/ct-ast/main.ct
-#define CTC_VERSION "0.83.0"   (五处)
-$ grep -l 'v0\.83\.0' test/cases/*.expected.c | wc -l
+#define CTC_VERSION "0.83.1"   (五处)
+$ grep -l 'v0\.83\.1' test/cases/*.expected.c | wc -l
 25
-$ grep -c 'v0\.83\.0' test/modules/p39_lib/lib.expected.abi.h
+$ grep -c 'v0\.83\.1' test/modules/p39_lib/lib.expected.abi.h
 1
 ```
 
+
+### 7.5 PKG-14 修复（v0.83.1）
+
+REV verdict `8014739e` 将 PKG-14 置 reopened：`ct index verify` 对目录、`/dev/null`、目录
+symlink、`CT_INDEX`/`$CT_HOME` 目录均 `OK (0 rows)` exit 0，`--json` 为 `ok:true`；FIFO 挂起。
+修复（[Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct) `pkg_index_verify`）：
+
+- 打开前 `stat` + `S_ISREG`：非普通文件 exit 2，FIFO 不 `fopen`（不挂起）；指向普通文件的
+  symlink 仍按普通文件读取；三种来源同规则；
+- 读取后 `ferror` → exit 2；
+- `--json` 在 exit 2 时输出 `ok:false` + `errors` 一条 `line:0`、`kind:"io"`；不再 `ok:true`；
+- `p83_verify` 增加目录、`/dev/null`、目录 symlink、`CT_INDEX` 目录（文本+JSON）、
+  `$CT_HOME/index/index` 目录、FIFO（python3 5s 看门狗）、Linux `/proc/self/mem` ferror 负例。
+
+红证（baseline `8014739e`）：
+
+```console
+$ sh test/ast/p83_verify.sh .temp/pkg14/base-host/ct-ast
+FAIL p83/verify: directory input          (exit 0 + OK (0 rows))
+FAIL p83/verify: directory JSON           (ok:true)
+FAIL p83/verify: /dev/null input          (exit 0)
+FAIL p83/verify: directory symlink        (exit 0)
+FAIL p83/verify: CT_INDEX directory       (exit 0)
+FAIL p83/verify: CT_INDEX directory JSON  (ok:true)
+FAIL p83/verify: CT_HOME directory        (exit 0)
+FAIL p83/verify: FIFO input               (TIMEOUT，open 挂起)
+exit: 1
+```
+
+绿证（v0.83.1）：
+
+```console
+$ sh test/ast/p83_verify.sh .temp/pkg14/host0831/ct-ast
+ok   a directory is rejected with exit 2 before open
+ok   a directory is a JSON failure (ok=false, line 0, kind io)
+ok   /dev/null (a character device) is rejected with exit 2
+ok   a symlink to a directory is rejected with exit 2
+ok   CT_INDEX pointing at a directory exits 2
+ok   CT_INDEX directory is a JSON failure too
+ok   $CT_HOME/index/index being a directory exits 2
+ok   a FIFO is rejected without opening it (no hang)
+skip ferror (no /proc/self/mem on this host)
+...（其余 26 条）...
+p83_verify: OK
+exit: 0
+```
+
+Linux（QEMU Alpine 内实跑同一源码交叉产物）：
+
+```console
+$ run-linux-binary.sh ct index verify /proc/self/mem
+ct: error reading the package index '/proc/self/mem'
+rc=2
+$ run-linux-binary.sh ct index verify /proc --json
+{"index":"/proc","ok":false,"rows":0,"valid":0,"invalid":1,"errors":[{"line":0,"kind":"io","message":"not a regular file: '/proc'"}]}
+rc=2
+```
+
+v0.83.1 产物：`dist/ct-linux-x64.tar.gz`（static musl，zig 交叉 + QEMU Alpine）sha256
+`7265d00a9d0e93aabeb5a91ee06212c8ff8853430da8db9a595c13aa79749c35`，解包 `ct -v` = `ct v0.83.1`
+（`p83_dist --require` 全绿；产物按 `.gitignore` 不入库）。
+
+契约 §4.4/§7/§9 与 §12 v1.2 同步；PKG-14 处置段见该 issue（DEV 主张 fixed，状态仍由 REV 复核）。
 
 ### 7.4 未覆盖与简化
 
