@@ -12,8 +12,9 @@
 #     sanitizer catches the post-release read;
 #   - E81-5: a reference cycle is the author's responsibility (the probe shows
 #     the refs the compiler leaves behind) and no cycle detection is claimed;
-#   - E81-6: the same generated code passes ASan/UBSan warning-free; the old
-#     goldens and the doc checks are covered by `check-all` / `p81_docs`.
+#   - E81-6: the same generated code passes ASan/UBSan warning-free, and the
+#     five CTC_VERSION sites / README / spec 4.71 / tutorial 17 / package-guide
+#     / roadmap / D-016 agree with v0.81.0.
 #
 # `new` is contextual: `int new;`, `r.new`, a parameter named `new` and
 # `new = ...` stay identifiers (ctx.ct); the construction form is refused in a
@@ -114,6 +115,46 @@ neg neg_field_str "cannot be a struct field" "borrowed Str field"
 neg neg_raw_field "raw implementation fields" "raw .ptr on a box"
 neg neg_new_global "only supported in a local initializer" "new at file scope"
 neg neg_new_static "cannot initialize a static object" "new in a static local"
+
+# E81-6: the written contract and the version落点 stay in step.
+for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
+         selfhost/l2/driver.ct selfhost/ct-ast/main.ct; do
+    if grep -q '#define CTC_VERSION "0.81.0"' "$f"; then
+        ok "$f CTC_VERSION 0.81.0"
+    else
+        bad "$f CTC_VERSION is not 0.81.0"
+    fi
+done
+if grep -q 'v0\.81\.0' README.md && grep -q 'v0\.81\.0' docs/README.md; then
+    ok "README / docs/README carry v0.81.0"
+else
+    bad "README version"
+fi
+if grep -q '^### 4\.71 .*box<T>' docs/language-spec.md; then
+    ok "spec has the box<T>/new section (4.71)"
+else
+    bad "spec section 4.71 missing"
+fi
+if grep -q '^## 17\. .*box<T>' docs/tutorial.md; then
+    ok "tutorial has the box<T>/new section (17)"
+else
+    bad "tutorial section 17 missing"
+fi
+if grep -q '`box<T>`' docs/package-guide.md && grep -q '不是 C ABI' docs/package-guide.md; then
+    ok "package-guide records the box C ABI boundary"
+else
+    bad "package-guide box C ABI note"
+fi
+if grep -q 'Phase 81' docs/roadmap.md && grep -q 'v0\.81\.0' docs/roadmap.md; then
+    ok "roadmap lists Phase 81 with v0.81.0"
+else
+    bad "roadmap Phase 81 row"
+fi
+if [ -f docs/decisions/D-016.md ] && grep -q '^## 8' docs/decisions/D-016.md; then
+    ok "D-016 records the PH-81 design decision"
+else
+    bad "D-016 missing"
+fi
 
 [ "$fail" -eq 0 ] && echo "p81_box: OK"
 exit "$fail"

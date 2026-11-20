@@ -10,8 +10,9 @@
 `char *` 映射层 `std::str::String` 仍在 ct-pkg `std`（Phase 36 的 S0 实测该包没有
 `std/string` / `CStr`，故按 `docs/history/design/phase36.md` §14/§15 把 `Str` 值类型放回内建层）。
 
-内置层由四个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）、
-`Str.h.ct`（Phase 80：`String` / `Str` + `U16String` / `U16Str`）。
+内置层由五个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）、
+`Str.h.ct`（Phase 80：`String` / `Str` + `U16String` / `U16Str`）、`Box.h.ct`（Phase 81：
+`box<T>` 单对象 owning 句柄 + `new` / `of`）。
 四者都是**编译模式**与 **`ct build`** 两条路径都会自动预解析的单元：`ct file.ct -o file.c`
 把它们 splice 到用户程序之前，`ct build` 则把它们作为独立单元参与发射；两种形态都
 **不需要 import**、不需要 `ct get`。编译模式的产物仍是单个 C TU、根命名空间。

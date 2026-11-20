@@ -79,9 +79,9 @@ run_section() {
 }
 
 say "== evidence sections =="
-run_section p81 CT_STD_DIR="$work/lib/std" sh test/ast/p81_box.sh "$b/ct-ast"
-run_section p80_layout CT_STD_DIR="$work/lib/std" sh test/ast/p80_layout.sh "$b/ct-ast"
-run_section p80_retain CT_STD_DIR="$work/lib/std" sh test/ast/p80_retain.sh "$b/ct-ast"
+run_section p81 env CT_STD_DIR="$work/lib/std" sh test/ast/p81_box.sh "$b/ct-ast"
+run_section p80_layout env CT_STD_DIR="$work/lib/std" sh test/ast/p80_layout.sh "$b/ct-ast"
+run_section p80_retain env CT_STD_DIR="$work/lib/std" sh test/ast/p80_retain.sh "$b/ct-ast"
 
 if [ "$fail" -ne 0 ]; then
     say "summary: P-7.5 evidence FAILED (see $logs)"

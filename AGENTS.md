@@ -449,7 +449,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 
 | 项 | 值 |
 | --- | --- |
-| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-80 |
+| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-81 |
 | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
 | 门禁入口 | `tools/check.sh g0`；其余为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（链接 + G9） |
 | 文档 snippet | 缺失 |
@@ -501,6 +501,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 2026-11-20：PH-78 → v0.78.0（`d=0`）；v0.78.1 为 PH-78 REV 打回修复（SH-95/96/97）。
 > 2026-11-20：PH-79 → v0.79.0（`d=0`）；v0.79.2 为 PH-79 REV 打回修复（SH-99/100/101、TEST-24）。
 > 2026-11-20：指针退场排期 PH-78 → v0.78.0（S2）、PH-79 → v0.79.0（S3）、PH-80 → v0.80.0（S5）、PH-81 → v0.81.0（S1）、PH-82 → v0.82.0（泄漏防护）；v1.0 顺延。均 `d=0`，见 [phase 安排](docs/planning/pointer-free-phase-plan.md)。
+> 2026-11-21：PH-81 → v0.81.0（`d=0`）；P-7.5 证据、S1a/S1b/S1c 红绿、E81-1…6 全通过。
 
 `deviation: fix-tags`
 
@@ -585,9 +586,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.80.4（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.81.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.80.4（PH-80 第四轮修复：SH-102 C-1 分支合并）；Phase 80 已收口（S5a `String`/`Str` 内建：16 字节句柄 + 8 字节 refcount 头、L1 immortal 字面量、UTF-8 码点/字节方法、只读 `s[i]`、`.data` 只读、`cstr()`、U16 工厂 + JS 核心子集；S5b 删旧 owning `Str` 与 `std::str` 兼容单元、12 个仓内消费者迁移、外部 dry-run；E80-1…8 全通过）；Phase 79 已收口（S3 切片 `T[]`；REV 打回的 SH-99/100/101、TEST-24 已修）；PH-81/82 未开工（入口 = P-7.5 + PH-80 收口，PH-82 另需 PH-81 收口）；Phase 78 已收口；Phase 77 已收口；Phase 76 已收口；Phase 43–53 已收口，Phase 54 S0–S7 全部完成（S4 包仓对齐属包外）。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.81.0（PH-81 S1 `box<T>` + `new` 已收口：`Box.h.ct` 第五个内建单元、16 字节句柄 + 8 字节 `{refs,aux}` 头、`new T { ... }` 上下文关键字、`b.f` 自动解引用、静态类型 payload release、`box<String>::of`、借用字段/`box<Str>`/切片硬错、环作者责任；E81-1…6 通过；P-7.5 证据在 `docs/planning/j6-evidence/p75/`）；Phase 80 已收口（v0.80.4；S5a `String`/`Str` + S5b 迁移）；PH-82 未开工（入口 = PH-81 收口 + D-012）；Phase 79/78/77/76 已收口；Phase 43–53 已收口。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界

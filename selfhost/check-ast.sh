@@ -1106,6 +1106,15 @@ p80_probe docs "PH-80-S5b-2 docs (E80-8: spec 4.70, README, roadmap, card 7)" \
 p80_probe retain "PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)" \
     test/ast/p80_retain.sh "$work/ct-ast"
 
+# Phase 81: `box<T>` / `new` (S1). The probe covers E81-1…6: layout/header,
+# new's named-struct boundary, static-type release, the borrowed at() view,
+# the author-owned cycle, the negatives and the doc/version sync.
+if sh test/ast/p81_box.sh "$work/ct-ast" >"$work/p81box.out" 2>&1; then
+    ok "PH-81-S1 box<T>/new (E81-1…6: layout, new, release, at(), cycle, docs)"
+else
+    bad "PH-81-S1 box<T>/new" "$(sed -n '1,14p' "$work/p81box.out")"
+fi
+
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-75-R1 closure (pair-form method argument)"

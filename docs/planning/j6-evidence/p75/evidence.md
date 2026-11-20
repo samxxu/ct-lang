@@ -18,7 +18,7 @@ baseline: a18e7323
 | -4 Drop、借用视图 / 失效检测与 Vec 同构 | **通过**：`at()` 借用、release 后 ASan 报 `heap-use-after-free`；`use Drop` 宿主字段 glue 调 box Drop；ASan/UBSan 正例全绿 | §4.5、§4.6 |
 | -5 `T` 含借用字段在 struct 声明层硬错 | **通过**：`struct Bad { Str tag; }` 硬错；`box<Str>` 在类型实参层硬错 | §4.4 |
 | -6 引用环作者责任；`--debug-leaks` 只报计数 | **通过（契约）**：环保留 `refs=1`、无编译期告警、无环检测；`--debug-leaks` 在 ct-ast 仍未实现（非本轮引入），证据不称其为环检测 | §4.7 |
-| -7 旧 golden 不变；ASan 无泄漏 / 悬挂 | **通过**：`check-ast` 全量 `1537 passed, 0 failed`（§4.8），正例 ASan/UBSan stderr 0 字节 | §4.6、§4.8 |
+| -7 旧 golden 不变；ASan 无泄漏 / 悬挂 | **通过**：`check-ast` 全量 `1539 passed, 0 failed, 4 skipped`（§4.8），正例 ASan/UBSan stderr 0 字节 | §4.6、§4.8 |
 
 一句话：句柄布局、静态 release、`new` 的语法/类型边界、Drop/借用失效、借用字段硬错、环泄漏契约都有原始输出；
 **未覆盖**：`ct build` 跨单元 `box`（本原型仅单文件 compile 模式）、`--debug-leaks` 本身、自动 retain 插入
@@ -269,7 +269,7 @@ $ echo $?
 ```console
 $ bash selfhost/check-ast.sh
 ...
-== summary: 1537 passed, 0 failed, 5 skipped ==
+== summary: 1539 passed, 0 failed, 4 skipped ==
 $ echo $?
 0
 ```
@@ -293,7 +293,7 @@ $ echo $?
 | P-7.5-4 | `vecbox.ct`、`uaf.ct`、ASan | Drop glue 生效；UAF 被抓 |
 | P-7.5-5 | `neg_field_str.ct`、`neg_box_str.ct` | 声明层 / 类型实参层硬错 |
 | P-7.5-6 | `cycle.ct` + `--debug-leaks` 探测 | 环保留 refs=1；flag 未实现 |
-| P-7.5-7 | `check-ast`、`p39 r8`、ASan/UBSan | 1537/0；r8 OK；stderr 0 |
+| P-7.5-7 | `check-ast`、`p39 r8`、ASan/UBSan | 1539/0；r8 OK；stderr 0 |
 
 ## 6. 限制与未覆盖（诚实）
 
@@ -323,7 +323,7 @@ $ echo $?
   `new String` / `new int` / `new Vec<int>` 被接受、`box<Str>` 被接受、release 后 `at()` 读取未被
   ASan 抓到、`check-ast` 或 `p39 r8` 变红。
 - **E4 代价**：patch 32 文件、1325 insertions / 65 deletions；新增 fixture 17 个；ABI 增量 =
-  句柄 16 字节 + 头 8 字节 + `Box.h.ct` 一个内建单元；`check-ast` 1537 项无回归。
+  句柄 16 字节 + 头 8 字节 + `Box.h.ct` 一个内建单元；`check-ast` 1539 项无回归。
 - **E5 失败时的替代解释 / 收缩**：若布局断言失败，先核对 `_Alignof(T)` 与 `header_size(T)`，
   再把 handle 收缩为 `{T *ptr}`（放弃 16 字节对齐目标）；若跨单元需求提前，改为把 box 实例写进
   命名单元的头（工作量更大）；若 `of` 的 retain 语义无法证明，删掉 `box<String>::of` 并把
