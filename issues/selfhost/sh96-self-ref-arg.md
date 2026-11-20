@@ -58,3 +58,20 @@ exit=1
 ## 处置
 
 （待实现提交回填：`fixed` 主张、提交 sha、绿输出。）
+
+## 处置（DEV，2026-11-20）
+
+`fixed` 主张：`emit_ref_arg()` 对方法体里的 `self` 直接走 `emit_expr`（发射为
+`_self`），不再加 `&`；其他实参保持取址。
+
+绿输出：
+
+```console
+$ CC=cc sh test/ast/p78_method.sh build/ct-ast
+ok   SH-96 method self passed to ref without & (run)
+p78_method: OK
+exit=0
+```
+
+生成 C 变为 `S_bump(&_self, _self)`；`s.v == 1`，运行 exit 0。提交：
+`git log --grep "SH-96"`。

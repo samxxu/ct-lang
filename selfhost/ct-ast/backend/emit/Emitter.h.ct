@@ -4944,6 +4944,12 @@ impl EmitOps for Emitter {
             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", "at");
             return self->emit_expr(n);
         }
+        /* Phase 78 fix SH-96: `self` is already the receiver pointer in the
+           emitted C (`_self`), so `self.bump(self)` must pass `_self`, not
+           `&_self` (which would be `S **`). */
+        if (k == N_VAR && self->sym->self_mode
+            && strcmp(self->arena->nodes[n].text2, "self") == 0)
+            return self->emit_expr(n);
         fputs("&", self->out);
         return self->emit_expr(n);
     }
