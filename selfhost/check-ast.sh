@@ -1161,6 +1161,8 @@ p83_probe legacy "PH-83-S83b legacy (E83-2: five-field hard error, per-row, six-
     test/ast/p83_legacy.sh "$work/ct-ast"
 p83_probe conformance "PH-83-S83c conformance (E83-5: shared data, CT vs shell, 3 digest vectors)" \
     test/ast/p83_conformance.sh "$work/ct-ast"
+p83_probe dist "PH-83-S83d dist (E83-6: sha256, ELF x86-64, unpacked ct -v; 77 without dist)" \
+    test/ast/p83_dist.sh "$work/ct-ast"
 
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then

@@ -38,6 +38,9 @@ __pycache__/
 
 # Session scratch (DB-4): temporary products live in .temp/ and never ship.
 .temp/
+# Distribution artefacts (PH-83 S83d): built by selfhost/make-dist.sh and
+# uploaded to a release; the tarball is not committed.
+dist/
 
 # One-off evaluation outputs at the repo root (dated scratch dirs). Reports
 # belong under docs/history/reports/; a root `YYYY-MM-DD/` is working material,
