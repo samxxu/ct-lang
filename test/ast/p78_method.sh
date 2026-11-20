@@ -189,6 +189,15 @@ impl S {
 int main(void) { struct S s = { 0 }; s.go(); return (s.v == 1) ? 0 : 1; }
 CT
 run_ok self_ref "SH-96 method self passed to ref without & (run)"
+# SH-98: the *receiver* side of `self.bump(self)` must also pass `_self`,
+# not the address of the local slot (`&_self` would be `struct S **`).
+if build self_ref && grep -Fq 'S_bump(&_self' "$work/.ctbuild/self_ref.c"; then
+    bad "SH-98 method self receiver is not addressed" "$(grep -F 'S_bump' "$work/.ctbuild/self_ref.c" | head -1)"
+elif grep -Fq 'S_bump(_self, _self)' "$work/.ctbuild/self_ref.c"; then
+    ok "SH-98 method self receiver is not addressed"
+else
+    bad "SH-98 method self receiver is not addressed" "expected S_bump(_self, _self)"
+fi
 
 # --------------------------------------------------------- negatives
 cat >"$work/bad_out.ct" <<'CT'
