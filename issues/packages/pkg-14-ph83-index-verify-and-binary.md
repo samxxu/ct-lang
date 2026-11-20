@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.79.0（2026-11-20） |
 | 文件 | [契约 v1](../../docs/planning/ct-pkg-get-contract.md)、[D-014](../../docs/decisions/D-014.md)、[评估](../../docs/reviews/2026-11-20-pkg-contract-proposal-eval.md) |
-| 状态 | **reopened**（2026-11-21，REV；契约 §9 验收项 7「不可读退出 2」未过，对应 PH-83 卡 E83-4；见下方复核段） |
+| 状态 | **verified**（2026-11-21，REV 第二轮；PKG-14 修复经独立复核，见下方复核段） |
 
 ## 背景
 
@@ -91,3 +91,43 @@ PH-83 不写 `REV: 通过`。
   `/proc --json` → `{"ok":false,...,"kind":"io"}` rc=2。
 - **契约**：§4.4/§7/§9 同步，§12 记 v1.2。
 - **状态**：字段仍为 `reopened`（REV 所有）；DEV 主张 `fixed`，等待 REV 复核。
+
+## 复核（REV，2026-11-21，第二轮）：**verified**
+
+第二轮复核对象 `f7db9a72`（v0.83.1，tag `v0.83.1`）。从 `git archive v0.83.1` 独立自举
+（`ct-ast v0.83.1`），重跑第一轮全部反例：
+
+```console
+$ ct index verify /tmp/rev831/indep/adir
+ct-ast: not a regular file: '/tmp/rev831/indep/adir'      # rc=2
+$ ct index verify /dev/null
+ct-ast: not a regular file: '/dev/null'                   # rc=2
+$ ct index verify /tmp/rev831/indep/dirlink               # symlink -> dir
+ct-ast: not a regular file: '/tmp/rev831/indep/dirlink'   # rc=2
+$ CT_INDEX=/tmp/rev831/indep/adir ct index verify
+ct-ast: not a regular file: '/tmp/rev831/indep/adir'      # rc=2
+$ HOME=/tmp/rev831/indep/badhome CT_HOME=/tmp/rev831/indep/badhome ct index verify
+ct-ast: not a regular file: '/tmp/rev831/indep/badhome/index/index'  # rc=2
+$ mkfifo /tmp/rev831/indep/fifo.index && ct index verify /tmp/rev831/indep/fifo.index
+ct-ast: not a regular file: '/tmp/rev831/indep/fifo.index' # rc=2，5s 内返回，不挂起
+```
+
+`--json` 对上述输入均为 `ok:false`、`errors[0].line=0`、`kind="io"`；Unix socket 与
+`/dev/zero` 同样 exit 2。普通文件 symlink 仍可读（`OK (3 rows)`，JSON `ok:true`）；
+六字段行 `ct index verify` = `OK (1 rows)` 且 `ct get --index` 成功；五字段旧行仍与
+`ct get` 同模板硬错。
+
+ferror：v0.83.1 Release 的 Linux 产物在 QEMU Alpine 内实跑
+`ct index verify /proc/self/mem` → `ct: error reading the package index '/proc/self/mem'`，
+rc=2；`--json` → `{"ok":false,...,"errors":[{"line":0,"kind":"io",...}]}`，rc=2。
+
+T-7：红提交 `c72349fe`（baseline `8014739e`）用 v0.83.0 构建复跑，8 条 FAIL、exit 1；
+fix `f7db9a72` 后 `p83_verify` 34 ok + 1 skip（macOS skip ferror），`p83_verify: OK`。
+E83-1/3/5/6/7 回归：p83_legacy 9 ok、p83_conformance 19 passed、p83_dist 8 ok；
+check-all 11 门绿（156/153/169/1549 + 490 warnings）、sanitizer 583、g0/g8/check-docs 绿；
+五处版本 0.83.1，51 golden 仅版本 token。
+
+Release：`ct-linux-x64.tar.gz` sha256 `7265d00a9d0e93aabeb5a91ee06212c8ff8853430da8db9a595c13aa79749c35`，
+解包 `ct -v` = `ct v0.83.1`；tag/Release/版本一致。
+
+证据：[REV verdict](../../docs/reviews/2026-11-21-phase83-rev-verdict.md) §14。
