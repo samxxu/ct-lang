@@ -1,0 +1,1852 @@
+diff --git a/lib/std/Box.h.ct b/lib/std/Box.h.ct
+new file mode 100644
+index 0000000..35f09c2
+--- /dev/null
++++ b/lib/std/Box.h.ct
+@@ -0,0 +1,130 @@
++/*
++ * Box.h.ct - the built-in single-object owning handle `box<T>` (PH-81 / v0.81.0).
++ *
++ *   struct ct_box_hdr { int refs; int aux; };   (8 bytes, before the payload)
++ *   struct box<T>     { struct ct_box_hdr *h; T *ptr; };  (16 bytes on LP64)
++ *
++ * The header sits at `round_up(8, _Alignof(T))` bytes before `ptr`, so the
++ * payload stays aligned. The handle keeps both the allocation base and the
++ * payload pointer; release dispatches on the static type, because the compiler
++ * writes one `box_X__payload_release(T *)` helper per instance (a `String`
++ * field releases through its Drop, a container / box field through its
++ * `release`, a plain struct recurses into its own fields). There is no
++ * `drop_fn`; `new T { ... }` starts at refs = 1 and never uses the immortal
++ * `refs = -1` form.
++ *
++ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
++ */
++#include <stdlib.h>
++
++/* ---- PH-81 / S1: `box<T>` (single-object owning handle) ------------------ */
++
++/* The shared 8-byte header sits immediately before the payload, exactly like
++   `String`'s `ct_str_hdr`; the handle keeps the payload pointer and the header
++   pointer, so it is two machine words. `header_size(T)` rounds 8 up to T's
++   alignment, so the payload stays correctly aligned. `release` is dispatched
++   by the static type: the compiler emits the payload-release helper for each
++   `box<T>` instance (a borrowed view of `T[]` would need a length and a byte
++   offset, so it is not the shared header here). */
++pub struct ct_box_hdr {
++    int refs;
++    int aux;
++}
++
++pub struct box<T> {
++    struct ct_box_hdr *h;
++    T *ptr;
++} use Drop
++
++impl<T> box<T> {
++    /* Box a value with a retained payload: a scalar / plain struct is copied,
++       an owning field takes its own reference (the callee's by-value `String`
++       parameter is retained at entry and released at exit, so the box needs a
++       second reference). `new T { ... }` is the move form for a fresh value. */
++    pub static box<T> of(T v)
++    {
++        return __ct_box_copy(&v);
++    }
++
++    /* A retained alias sharing the same payload; the increment is skipped for
++       the immortal form (never used by `new`, which always starts at 1). */
++    pub box<T> retain()
++    {
++        box<T> r;
++        r.h = self->h;
++        r.ptr = self->ptr;
++        if (r.h != 0 && r.h->refs >= 0) r.h->refs = r.h->refs + 1;
++        return r;
++    }
++
++    pub int refs()
++    {
++        if (self->h == 0) return 0;
++        return self->h->refs;
++    }
++
++    /* Release one reference; at zero the compiler-generated helper releases
++       the payload's owning fields, then the header and payload block is freed.
++       Releasing a released handle is a no-op, like the built-in containers. */
++    pub void release()
++    {
++        if (self->h == 0) return;
++        if (self->h->refs < 0) return;
++        self->h->refs = self->h->refs - 1;
++        if (self->h->refs == 0) {
++            __ct_box_payload_release(self->ptr);
++            free(self->h);
++        }
++        self->h = 0;
++        self->ptr = 0;
++    }
++
++    pub void drop()
++    {
++        if (self->h == 0) return;
++        if (self->h->refs < 0) return;
++        self->h->refs = self->h->refs - 1;
++        if (self->h->refs == 0) {
++            __ct_box_payload_release(self->ptr);
++            free(self->h);
++        }
++        self->h = 0;
++        self->ptr = 0;
++    }
++
++    /* The borrowed view: a pointer into the payload, never retained and never
++       released by the caller. It is invalidated by this handle's `release()`
++       (the same lifetime `Vec.at` gives its slot). */
++    pub T *at()
++    {
++        return self->ptr;
++    }
++
++    /* The byte offset of the payload behind the allocation base; the layout
++       assertion in the PH-81 probe reads it (`header_size(T)`). */
++    pub int payload_offset()
++    {
++        if (self->h == 0) return 0;
++        return (int)((char *)self->ptr - (char *)self->h);
++    }
++}
++
++impl<T> Drop for box<T> {
++    /* The Drop receiver is the erased `void *` form, so the body casts it back
++       and repeats the release sequence instead of calling a sibling method
++       (a generic body cannot dispatch on a symbolic `box<T>` receiver). */
++    void drop()
++    {
++        struct box<T> *b;
++        b = (struct box<T> *)self;
++        if (b->h == 0) return;
++        if (b->h->refs < 0) return;
++        b->h->refs = b->h->refs - 1;
++        if (b->h->refs == 0) {
++            __ct_box_payload_release(b->ptr);
++            free(b->h);
++        }
++        b->h = 0;
++        b->ptr = 0;
++    }
++}
+diff --git a/selfhost/ct-ast/backend/emit/Emitter.h.ct b/selfhost/ct-ast/backend/emit/Emitter.h.ct
+index 3933005..7478dc3 100644
+--- a/selfhost/ct-ast/backend/emit/Emitter.h.ct
++++ b/selfhost/ct-ast/backend/emit/Emitter.h.ct
+@@ -78,6 +78,7 @@ import runtime::arena::Arena;
+ #define N_SIZEOF  36
+ #define N_TERN    37
+ #define N_OPT     72
++#define N_NEWOBJ  77
+ #define N_BREAK   38
+ #define N_CONT    39
+ #define N_DECLS   40
+@@ -304,7 +305,7 @@ struct Emitter {
+     /* Phase 29 E29-5: the built-in container unit is loaded in `ct build` but is
+        not an import edge of any unit (it must not key the cache), so the
+        emitter includes its header explicitly. -1 when the layer is absent. */
+-    int  builtins[4];   /* P34 S9a: Vec / Option / Result / Str layer units */
++    int  builtins[5];   /* P34 S9a: Vec / Option / Result / Str / Box layer units */
+     int  nbuiltin;
+     /* PH-64 T2: slot-parallel liveness; a dead layer unit is not included and
+        not emitted, so the product set follows what the program can reach. */
+@@ -751,7 +752,7 @@ static int sb_text_place_p(const char *e)
+    vptr suffix path appends), 0 when nothing needed rewriting. */
+ static int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
+ {
+-    int starts[64], ends[64], epos[64], fields[64], nitem, i, depth, p, q;
++    int starts[64], ends[64], epos[64], fields[64], litmode[64], nitem, i, depth, p, q;
+     int changed, count;
+     char expr[MAX_TEXT];
+ 
+@@ -805,6 +806,7 @@ static int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
+     changed = 0;
+     for (i = 0; i < nitem; i++) {
+         int s0 = starts[i], e0 = ends[i], fs, fi, kind;
++        litmode[i] = 0;
+         while (s0 < e0 && (t[s0] == ' ' || t[s0] == '\t' || t[s0] == '\n' || t[s0] == '\r')) s0++;
+         while (e0 > s0 && (t[e0 - 1] == ' ' || t[e0 - 1] == '\t'
+                            || t[e0 - 1] == '\n' || t[e0 - 1] == '\r')) e0--;
+@@ -839,7 +841,21 @@ static int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
+         if (!kind) continue;
+         if (e0 - fs >= MAX_TEXT) continue;
+         snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
+-        if (!sb_text_place_p(expr)) continue;
++        if (!sb_text_place_p(expr)) {
++            /* PH-81: a bare string literal in a `String` field is an owning
++               value, not a `char *`; rewrite it to a heap copy so the box /
++               struct release cannot free a literal. Only a local initializer
++               may call at run time (a file-scope one stays unchanged). */
++            size_t el = strlen(expr);
++            if (el >= 2 && expr[0] == '"' && expr[el - 1] == '"'
++                && self->cur_ret[0]) {
++                litmode[i] = 1;
++                starts[i] = s0;
++                ends[i] = e0;
++                changed = 1;
++            }
++            continue;
++        }
+         starts[i] = s0;
+         ends[i] = e0;
+         changed = 1;
+@@ -853,6 +869,13 @@ static int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
+         if (fs > s0) fwrite(t + s0, 1, (size_t)(fs - s0), self->out);   /* designator */
+         kind = self->sym->structs[si].fields[fi].dims[0] ? 0
+                : frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
++        if (litmode[i]) {
++            fputs("str_dup_len(", self->out);
++            fwrite(t + fs, 1, (size_t)(e0 - fs), self->out);
++            fprintf(self->out, ", (int)(sizeof(%.*s) - 1))",
++                    (int)(e0 - fs), t + fs);
++            continue;
++        }
+         if (kind && e0 - fs < MAX_TEXT) {
+             snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
+             if (sb_text_place_p(expr))
+@@ -2478,6 +2501,259 @@ static int emit_string_literals(struct Emitter *self, int prog)
+     return 0;
+ }
+ 
++/* ---- PH-81 / S1: `box<T>` per-instance helpers -------------------------
++   The template lives in `lib/std/Vec.h.ct`; the compiler writes two static
++   functions per instance because both need the concrete payload spelling:
++     - `box_X__new(T *v)` allocates the shared `ct_box_hdr` plus payload and
++       copies the captured initializer into it (refs = 1);
++     - `box_X__payload_release(T *p)` releases the payload's owning fields when
++       the last handle goes away. This is the "release by static type" half:
++       a `String` field calls `String_Drop_drop`, a container / box field calls
++       its `release`, and a plain struct recurses into its own fields. */
++static int box_type_owns(struct Emitter *self, const char *ctype, int depth)
++{
++    char base[MAX_TEXT];
++    const char *b;
++    size_t bl;
++    int si, fi;
++
++    if (!ctype || !ctype[0] || depth > 16) return 0;
++    if (strchr(ctype, '*')) return 0;
++    b = ctype;
++    if (strncmp(b, "struct ", 7) == 0) b += 7;
++    else if (strncmp(b, "union ", 6) == 0) return 0;
++    else if (strncmp(b, "enum ", 5) == 0) return 0;
++    snprintf(base, sizeof base, "%s", b);
++    bl = strlen(base);
++    while (bl > 0 && (base[bl - 1] == ' ' || base[bl - 1] == '\t')) base[--bl] = 0;
++    if (strcmp(base, "String") == 0 || strcmp(base, "U16String") == 0) return 1;
++    if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
++        || strncmp(base, "box_", 4) == 0 || strncmp(base, "Option_", 7) == 0
++        || strncmp(base, "Result_", 7) == 0)
++        return 1;
++    si = self->sym->find_struct(base);
++    if (si < 0) return 0;
++    if (self->sym->structs[si].is_inst) {
++        /* a user generic instance: judge its concrete fields */
++    } else if (self->sym->structs[si].has_drop_impl) {
++        return 1;
++    }
++    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
++        const char *ft = self->sym->structs[si].fields[fi].type;
++        const char *dims = self->sym->structs[si].fields[fi].dims;
++        if (dims[0]) {
++            if (box_type_owns(self, ft, depth + 1)) return 1;
++        } else if (box_type_owns(self, ft, depth + 1)) {
++            return 1;
++        }
++    }
++    return 0;
++}
++
++/* Release the payload field at `expr` (a pointer expression of type T *). */
++static int box_emit_release_at(struct Emitter *self, const char *ctype, const char *expr, int depth)
++{
++    char base[MAX_TEXT];
++    const char *b;
++    size_t bl;
++    int si, fi;
++
++    if (!box_type_owns(self, ctype, depth) || depth > 16) return 0;
++    b = ctype;
++    if (strncmp(b, "struct ", 7) == 0) b += 7;
++    snprintf(base, sizeof base, "%s", b);
++    bl = strlen(base);
++    while (bl > 0 && (base[bl - 1] == ' ' || base[bl - 1] == '\t')) base[--bl] = 0;
++    if (strcmp(base, "String") == 0 || strcmp(base, "U16String") == 0) {
++        fprintf(self->out, "    %s_Drop_drop(%s);\n", base, expr);
++        return 0;
++    }
++    if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
++        || strncmp(base, "box_", 4) == 0 || strncmp(base, "Option_", 7) == 0
++        || strncmp(base, "Result_", 7) == 0) {
++        fprintf(self->out, "    %s_release(%s);\n", base, expr);
++        return 0;
++    }
++    si = self->sym->find_struct(base);
++    if (si < 0) return 0;
++    if (!self->sym->structs[si].is_inst && self->sym->structs[si].has_drop_impl) {
++        fprintf(self->out, "    %s_Drop_drop(%s);\n", base, expr);
++        return 0;
++    }
++    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
++        const char *ft = self->sym->structs[si].fields[fi].type;
++        const char *dims = self->sym->structs[si].fields[fi].dims;
++        const char *fn = self->sym->structs[si].fields[fi].name;
++        if (dims[0]) {
++            /* one dimension of owning elements; a multi-dimensional array is
++               left to the explicit Drop body (the same rule the Drop glue
++               follows for pointer arrays). */
++            if (strchr(dims + 1, '[')) continue;
++            if (!box_type_owns(self, ft, depth + 1)) continue;
++            char at[MAX_TEXT * 2];
++            fprintf(self->out,
++                    "    { int __ct_i; for (__ct_i = 0; __ct_i < "
++                    "(int)(sizeof((%s)->%s) / sizeof((%s)->%s[0])); __ct_i++)\n",
++                    expr, fn, expr, fn);
++            snprintf(at, sizeof at, "&((%s)->%s[__ct_i])", expr, fn);
++            if (box_emit_release_at(self, ft, at, depth + 1) != 0) return -1;
++            fputs("    }\n", self->out);
++        } else if (box_type_owns(self, ft, depth + 1)) {
++            char at[MAX_TEXT * 2];
++            snprintf(at, sizeof at, "&((%s)->%s)", expr, fn);
++            if (box_emit_release_at(self, ft, at, depth + 1) != 0) return -1;
++        }
++    }
++    return 0;
++}
++
++/* Copy one payload value into `*dst`, retaining the owning leaves. `dst` and
++   `src` are pointer expressions of type T *. Scalar / pointer payloads are a
++   plain assignment; a `String` / `U16String` bumps the shared header inline
++   (its `retain` method is written later than these helpers); a container or
++   box takes its own reference through `retain`; a plain struct copies every
++   field and then fixes up the owning ones. */
++static int box_emit_copy_at(struct Emitter *self, const char *ctype, const char *dst, const char *src, int depth)
++{
++    char base[MAX_TEXT];
++    const char *b;
++    size_t bl;
++    int si, fi;
++
++    if (!ctype || !ctype[0] || depth > 16) return 0;
++    if (strchr(ctype, '*')) {
++        fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
++        return 0;
++    }
++    b = ctype;
++    if (strncmp(b, "struct ", 7) == 0) b += 7;
++    else if (strncmp(b, "union ", 6) == 0 || strncmp(b, "enum ", 5) == 0) {
++        fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
++        return 0;
++    }
++    snprintf(base, sizeof base, "%s", b);
++    bl = strlen(base);
++    while (bl > 0 && (base[bl - 1] == ' ' || base[bl - 1] == '\t')) base[--bl] = 0;
++    if (strcmp(base, "String") == 0 || strcmp(base, "U16String") == 0) {
++        fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
++        fprintf(self->out,
++                "    if ((*(%s)).ptr != 0) {\n"
++                "        struct ct_str_hdr *__ct_h = (struct ct_str_hdr *)"
++                "((char *)(*(%s)).ptr - sizeof(struct ct_str_hdr));\n"
++                "        if (__ct_h->refs >= 0) __ct_h->refs = __ct_h->refs + 1;\n"
++                "    }\n", src, src);
++        return 0;
++    }
++    if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
++        || strncmp(base, "box_", 4) == 0 || strncmp(base, "Option_", 7) == 0
++        || strncmp(base, "Result_", 7) == 0) {
++        fprintf(self->out, "    *(%s) = %s_retain(%s);\n", dst, base, src);
++        return 0;
++    }
++    si = self->sym->find_struct(base);
++    if (si < 0) {
++        fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
++        return 0;
++    }
++    fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
++    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
++        const char *ft = self->sym->structs[si].fields[fi].type;
++        const char *dims = self->sym->structs[si].fields[fi].dims;
++        const char *fn = self->sym->structs[si].fields[fi].name;
++        char nd[MAX_TEXT * 2];
++        char ns[MAX_TEXT * 2];
++        if (dims[0]) continue;          /* arrays are the explicit Drop body's */
++        if (!box_type_owns(self, ft, depth + 1)) continue;
++        snprintf(nd, sizeof nd, "&((%s)->%s)", dst, fn);
++        snprintf(ns, sizeof ns, "&((%s)->%s)", src, fn);
++        if (box_emit_copy_at(self, ft, nd, ns, depth + 1) != 0) return -1;
++    }
++    return 0;
++}
++
++static int emit_box_protos(struct Emitter *self, int u)
++{
++    int i, n;
++    struct StructInst *ins;
++    (void)u;
++
++    ins = frontend::sym::ct_insts(&n);
++    for (i = 0; ins && i < n; i++) {
++        if (strcmp(ins[i].tmpl, "box") != 0) continue;
++        if (u >= 0 && ins[i].owner != u) continue;
++        fprintf(self->out,
++                "static __attribute__((unused)) struct %s %s__new(%s *);\n",
++                ins[i].name, ins[i].name, ins[i].ctype[0]);
++        fprintf(self->out,
++                "static __attribute__((unused)) struct %s %s__copy(%s *);\n",
++                ins[i].name, ins[i].name, ins[i].ctype[0]);
++        fprintf(self->out,
++                "static void __attribute__((unused)) %s__payload_release(%s *);\n",
++                ins[i].name, ins[i].ctype[0]);
++    }
++    return 0;
++}
++
++static int emit_box_helpers(struct Emitter *self, int u)
++{
++    int i, n;
++    struct StructInst *ins;
++
++    ins = frontend::sym::ct_insts(&n);
++    for (i = 0; ins && i < n; i++) {
++        const char *ctype;
++        if (strcmp(ins[i].tmpl, "box") != 0) continue;
++        if (u >= 0 && ins[i].owner != u) continue;
++        ctype = ins[i].ctype[0];
++        fprintf(self->out,
++                "static void __attribute__((unused)) %s__payload_release(%s *p)\n{\n",
++                ins[i].name, ctype);
++        if (!box_type_owns(self, ctype, 0)) {
++            fputs("    (void)p;\n", self->out);
++        } else if (box_emit_release_at(self, ctype, "p", 0) != 0) {
++            return -1;
++        }
++        fputs("}\n\n", self->out);
++        fprintf(self->out,
++                "static __attribute__((unused)) struct %s %s__new(%s *v)\n{\n",
++                ins[i].name, ins[i].name, ctype);
++        fputs("    struct ct_box_hdr *h;\n", self->out);
++        fprintf(self->out, "    struct %s b;\n", ins[i].name);
++        fputs("    size_t off;\n", self->out);
++        fprintf(self->out,
++                "    off = ((sizeof(struct ct_box_hdr) + _Alignof(%s) - 1)"
++                " / _Alignof(%s)) * _Alignof(%s);\n", ctype, ctype, ctype);
++        fputs("    h = (struct ct_box_hdr *)malloc(off + sizeof(*v));\n"
++              "    if (h == 0) abort();\n"
++              "    h->refs = 1;\n"
++              "    h->aux = 0;\n"
++              "    b.h = h;\n", self->out);
++        fprintf(self->out, "    b.ptr = (%s *)((char *)h + off);\n", ctype);
++        fputs("    *b.ptr = *v;\n"
++              "    return b;\n"
++              "}\n\n", self->out);
++        fprintf(self->out,
++                "static __attribute__((unused)) struct %s %s__copy(%s *v)\n{\n",
++                ins[i].name, ins[i].name, ctype);
++        fputs("    struct ct_box_hdr *h;\n", self->out);
++        fprintf(self->out, "    struct %s b;\n", ins[i].name);
++        fputs("    size_t off;\n", self->out);
++        fprintf(self->out,
++                "    off = ((sizeof(struct ct_box_hdr) + _Alignof(%s) - 1)"
++                " / _Alignof(%s)) * _Alignof(%s);\n", ctype, ctype, ctype);
++        fputs("    h = (struct ct_box_hdr *)malloc(off + sizeof(*v));\n"
++              "    if (h == 0) abort();\n"
++              "    h->refs = 1;\n"
++              "    h->aux = 0;\n"
++              "    b.h = h;\n", self->out);
++        fprintf(self->out, "    b.ptr = (%s *)((char *)h + off);\n", ctype);
++        if (box_emit_copy_at(self, ctype, "b.ptr", "v", 0) != 0) return -1;
++        fputs("    return b;\n"
++              "}\n\n", self->out);
++    }
++    return 0;
++}
++
+ /* The per-unit emission proper: everything from the banner to the last
+    function, run with `self->out` already pointing at an open file. Every
+    failure is a bare `return -1`; the method that opened the file closes it and
+@@ -2642,7 +2918,11 @@ static int emit_unit_body(struct Emitter *self, int u)
+     /* Phase 29: the monomorphised structs this unit must define, after every
+        plain type and before the prototypes that name them. */
+     if (emit_struct_insts(self, u, 0) != 0) return -1;
++    /* PH-81: the box helpers are defined after the instance methods (which
++       call the payload-release helper), so their prototypes lead them. */
++    if (emit_box_protos(self, u) != 0) return -1;
+     if (emit_struct_impls(self, u, 0) != 0) return -1;
++    if (emit_box_helpers(self, u) != 0) return -1;
+     /* PH-80: literal blocks (the built-in layer header is already included). */
+     if (emit_string_literals(self, self->units[u].prog) != 0) return -1;
+ 
+@@ -3299,8 +3579,12 @@ static int inst_elem_foreign(struct Emitter *self, int ii)
+        Phase 33 rule. */
+     if (strcmp(ins[ii].tmpl, "Vec") != 0 && strcmp(ins[ii].tmpl, "Map") != 0
+         && strcmp(ins[ii].tmpl, "MapEntry") != 0
+-        && strcmp(ins[ii].tmpl, "Option") != 0 && strcmp(ins[ii].tmpl, "Result") != 0)
++        && strcmp(ins[ii].tmpl, "Option") != 0 && strcmp(ins[ii].tmpl, "Result") != 0
++        && strcmp(ins[ii].tmpl, "box") != 0)
+         return 0;
++    /* PH-81: a box instance carries per-instance helpers that need the payload
++       spelling, so it is always written by the unit that named it. */
++    if (strcmp(ins[ii].tmpl, "box") == 0) return 1;
+     tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
+     if (tmpl < 0 || tps[tmpl].owner < 0) return 0;
+     e1 = ins[ii].ctype[0];
+@@ -3936,7 +4220,9 @@ impl EmitOps for Emitter {
+ 
+         /* Phase 29: compile mode is one unit, so every instance is its own. */
+         if (emit_struct_insts(self, -1, 0) != 0) return -1;
++        if (emit_box_protos(self, -1) != 0) return -1;
+         if (emit_struct_impls(self, -1, 0) != 0) return -1;
++        if (emit_box_helpers(self, -1) != 0) return -1;
+         /* PH-80: the literal blocks need `struct ct_str_hdr` / `struct String`
+            to be visible, which the two calls above guarantee. */
+         if (emit_string_literals(self, prog) != 0) return -1;
+@@ -7005,6 +7291,29 @@ impl EmitOps for Emitter {
+             fputs(")", self->out);
+             return 0;
+         }
++        if (self->arena->nodes[n].kind == N_NEWOBJ) {
++            /* PH-81 S1b: `new T { ... }` becomes a statement expression that
++               calls the instance constructor with the compound literal. The
++               payload is copied by move; the literal's owning place
++               initialisers were already retained by `emit_raw_init`. */
++            char tmp[MAX_TEXT];
++            char ctype[MAX_TEXT];
++            int k;
++            if (!self->cur_ret[0])
++                return self->fail_from(n,
++                    "'new' is only supported in a local initializer; a file-scope or static object cannot allocate at run time");
++            k = self->ntmp;
++            self->ntmp++;
++            snprintf(tmp, sizeof tmp, "__ct_new%d", k);
++            snprintf(ctype, sizeof ctype, "struct %s", self->arena->nodes[n].text2);
++            fprintf(self->out, "({ %s %s = %s__new(&(%s)", ctype, tmp,
++                    self->arena->nodes[n].text2, self->arena->nodes[n].text);
++            if (self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text,
++                                    "", 0) != 0)
++                return -1;
++            fprintf(self->out, "); %s; })", tmp);
++            return 0;
++        }
+         if (self->arena->nodes[n].kind == N_BOX) {
+             /* aux: bit 0 = the source operand is a pointer, bit 1 = take the
+                address of the literal (a pointer-to-interface target),
+@@ -7506,6 +7815,14 @@ impl EmitOps for Emitter {
+             } else if (strcmp(self->arena->nodes[n].text2, "__ct_elem_release") == 0
+                        && self->ginst[0]) {
+                 fprintf(self->out, "%s__elem_release(", self->ginst);
++            } else if (strcmp(self->arena->nodes[n].text2, "__ct_box_payload_release") == 0
++                       && self->ginst[0]) {
++                /* PH-81: the box template's `release` binds to the instance's
++                   compiler-generated payload helper. */
++                fprintf(self->out, "%s__payload_release(", self->ginst);
++            } else if (strcmp(self->arena->nodes[n].text2, "__ct_box_copy") == 0
++                       && self->ginst[0]) {
++                fprintf(self->out, "%s__copy(", self->ginst);
+             } else if (self->alloc_map && self->alloc_map[0]
+                        && strcmp(self->arena->nodes[n].text2, "malloc") == 0) {
+                 /* PH-64: `--alloc` renames the allocation calls the source
+diff --git a/selfhost/ct-ast/frontend/module/Module.h.ct b/selfhost/ct-ast/frontend/module/Module.h.ct
+index 0789878..6f05a27 100644
+--- a/selfhost/ct-ast/frontend/module/Module.h.ct
++++ b/selfhost/ct-ast/frontend/module/Module.h.ct
+@@ -106,6 +106,9 @@ pub trait ModuleOps {
+        `<S>_Drop_drop` body from the unit that declares it; an impl written in
+        another unit has no prototype in the type's header. */
+     int  check_drop_visibility(void);
++    /* PH-81: load the Box unit only when an input names it. */
++    int  module_src_wants_box(const char *path);
++    int  module_inputs_want_box(const char **ins, int n);
+     int  cache_order(int u, int *state, int *order, int *n);
+     int  cache_key_of(int u, char *out, int cap);
+     int  lib_scan(int root_u);
+@@ -153,11 +156,11 @@ pub struct Module {
+        Phase 34 S9a turns it into a set of files: `Vec.h.ct` keeps the
+        containers, `Option.h.ct` / `Result.h.ct` carry the ecosystem types.
+        `nbuiltin` is 0 when this installation has no layer. */
+-    int  builtin_units[4];
++    int  builtin_units[5];
+     int  nbuiltin;
+     /* PH-64 T2: a built-in unit is emitted only when the program can reach it.
+        Filled once per build, before the emit loop. */
+-    int  builtin_live[4];      /* slot order, parallel to builtin_units[] */
++    int  builtin_live[5];      /* slot order, parallel to builtin_units[] */
+     int  computed_live;
+     int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
+     char map_path[1024];
+@@ -1563,6 +1566,69 @@ impl ModuleOps for Module {
+         return 0;
+     }
+ 
++    /* PH-81: the `Box.h.ct` unit is loaded only when a build input names a
++       `box<...>` type or a `new T { ... }` construction in code (comments and
++       strings are skipped). An unused fifth unit would add `struct ct_box_hdr;`
++       to every product and change the `--emit-c` bytes of unrelated programs. */
++    int module_src_wants_box(const char *path)
++    {
++        FILE *f;
++        char line[1024];
++        (void)self;
++
++        f = fopen(path, "r");
++        if (!f) return 0;
++        while (fgets(line, sizeof line, f)) {
++            const char *p = line;
++            while (*p) {
++                if (p[0] == '/' && p[1] == '/') break;
++                if (p[0] == '/' && p[1] == '*') {
++                    p += 2;
++                    while (*p && !(p[0] == '*' && p[1] == '/')) p++;
++                    if (*p) p += 2;
++                    continue;
++                }
++                if (*p == '"' || *p == '\'') {
++                    char q = *p;
++                    p++;
++                    while (*p && *p != q) { if (*p == '\\' && p[1]) p++; p++; }
++                    if (*p) p++;
++                    continue;
++                }
++                if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
++                      || (*p >= '0' && *p <= '9') || *p == '_')) { p++; continue; }
++                {
++                    const char *q = p;
++                    while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
++                           || (*q >= '0' && *q <= '9') || *q == '_') q++;
++                    if ((size_t)(q - p) == 3 && strncmp(p, "box", 3) == 0) {
++                        const char *t = q;
++                        while (*t == ' ' || *t == '\t') t++;
++                        if (*t == '<') { fclose(f); return 1; }
++                    }
++                    if ((size_t)(q - p) == 3 && strncmp(p, "new", 3) == 0) {
++                        const char *t = q;
++                        while (*t == ' ' || *t == '\t') t++;
++                        if ((*t >= 'a' && *t <= 'z') || (*t >= 'A' && *t <= 'Z')
++                            || *t == '_' || *t == '{') { fclose(f); return 1; }
++                    }
++                    p = q;
++                }
++            }
++        }
++        fclose(f);
++        return 0;
++    }
++
++    int module_inputs_want_box(const char **ins, int n)
++    {
++        int i;
++        (void)self;
++        for (i = 0; i < n; i++)
++            if (self->module_src_wants_box(ins[i])) return 1;
++        return 0;
++    }
++
+     int build_main(int argc, char **argv)
+     {
+         const char *inputs[MAX_UNITS];
+@@ -1944,15 +2010,19 @@ impl ModuleOps for Module {
+         self->builtin_live[1] = 0;
+         self->builtin_live[2] = 0;
+         self->builtin_live[3] = 0;
++        self->builtin_live[4] = 0;
+         backend::emit::ct_emit_clear_builtins();
+         {
+             char bpath[MAX_PATH];
+             int bi;
+-            for (bi = 0; bi < 4; bi++) {
++            for (bi = 0; bi < 5; bi++) {
+                 const char *base;
++                if (bi == 4 && !self->module_inputs_want_box(inputs, ninput))
++                    continue;
+                 base = bi == 0 ? "Vec.h.ct"
+                      : (bi == 1 ? "Option.h.ct"
+-                     : (bi == 2 ? "Result.h.ct" : "Str.h.ct"));
++                     : (bi == 2 ? "Result.h.ct"
++                     : (bi == 3 ? "Str.h.ct" : "Box.h.ct")));
+                 if (self->find_builtin(inputs[0], base, bpath, sizeof bpath) != 0) continue;
+                 {
+                     int bu;
+diff --git a/selfhost/ct-ast/frontend/parse/Expr.h.ct b/selfhost/ct-ast/frontend/parse/Expr.h.ct
+index 88bd7db..a77d7e1 100644
+--- a/selfhost/ct-ast/frontend/parse/Expr.h.ct
++++ b/selfhost/ct-ast/frontend/parse/Expr.h.ct
+@@ -100,6 +100,10 @@ import tool::diag::Diag;
+    in `b`, the value category in `aux` and the receiver's static type in
+    `text`; the emitter names the promoted variable in `text3`. */
+ #define N_MATSEQ 73
++/* PH-81 S1b: `new T { ... }` -- a `box<T>` construction. `text` is the
++   payload C type, `text2` the box instance name, `text3` the box C type and
++   `a` the captured brace initialiser (N_RAW). */
++#define N_NEWOBJ 77
+ #define N_INTO 63
+ #define N_INTO_SELF 64
+ /* Phase 44: the postfix `?` error-propagation node. `a` is the operand (a
+@@ -298,6 +302,16 @@ pub trait ExprOptional {
+ /* Phase 32: the opt-in `--types` gate. Its own trait because `ExprOps` already
+    sits at MAX_METHODS, and both grammars that need the gate -- the expression
+    layer and the statement layer -- hold this object. */
++/* PH-81 / S1: `new` and the `box<T>` member sugar. `ExprOps` is at
++   MAX_METHODS, so the construction parser and the auto-deref helper live in
++   their own small trait like the optional / subscript grammars. */
++pub trait ExprNew {
++    int  new_ahead(void);
++    int  parse_new_expr(void);
++    int  box_member_deref(int recv, int arrow, const char *fname,
++                          int line, int col, int *out);
++}
++
+ pub trait ExprTypes {
+     /* The judged type of one expression. 0 when `out` names a value type,
+        non-zero when the tables cannot pin it (D32-4: the caller then stays
+@@ -421,6 +435,9 @@ pub struct Expr {
+     /* PH-70-R1: points at the parser's `check_mode` so statement-level flow
+        checks (break/continue context) can be gated on `ct check`. */
+     int *check_mode;
++    /* PH-81: set while a `static` local's initializer is parsed, so `new`
++       (a run-time allocation) is refused before it reaches C. */
++    int  static_init;
+     /* Phase 32: the source position of the expression under judgement and the
+        argument index L32-6 names. The caller sets them just before calling
+        `chk_assignable`; an AST node carries only its line. */
+@@ -515,7 +532,7 @@ pub struct Expr {
+     int  ntry_cleanup;
+     int  try_cleanup_node[512];
+     int  try_cleanup_head[512];
+-} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry;
++} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew;
+ 
+ /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
+    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
+@@ -2040,7 +2057,6 @@ impl ExprOps for Expr {
+     int parse_type(char *out, int cap)
+     {
+         int n;
+-        char abuf[MAX_TEXT];
+         (void)self;
+ 
+         n = 0;
+@@ -2056,30 +2072,6 @@ impl ExprOps for Expr {
+         self->fnptr_name[0] = 0;
+         self->fnptr_dims[0] = 0;
+         self->last_bare_tag[0] = 0;
+-        /* P-7.2 (P-4.1): `box<T>` is a future S1 type (PH-81). The type is not
+-           implemented here, but its slice placement is refused now so
+-           `box<int[]>` is a named hard error at the `[`, not an unrelated
+-           "undeclared variable" from the C compiler. */
+-        if (n == 0 && self->lex->tok == T_ID
+-            && strcmp(self->lex->toktext, "box") == 0) {
+-            int bp = self->lex->pos;
+-            int boxline = self->lex->tokline;
+-            int boxcol = self->lex->tokstart - self->lex->lstart + 1;
+-            while (self->lex->src[bp] == ' ' || self->lex->src[bp] == '\t') bp++;
+-            if (self->lex->src[bp] == '<') {
+-                int sl, sc;
+-                self->sup->lex_next();          /* box */
+-                self->sup->lex_next();          /* < */
+-                if (self->parse_type(abuf, sizeof abuf) != 0) return -1;
+-                if (self->sup->slice_brackets_ahead(&sl, &sc))
+-                    return tool::diag::ct_sem_error(sl, sc,
+-                        "a slice 'T[]' cannot be stored in box<T>; it is a non-owning view",
+-                        self->sup->mem->path);
+-                return tool::diag::ct_sem_error(boxline, boxcol,
+-                    "box<T> is not implemented in this prototype (PH-81); only the slice placement guard is present",
+-                    self->sup->mem->path);
+-            }
+-        }
+         for (;;) {
+             /* Phase 41 B′: `atomic` is a contextual modifier, not a reserved
+                keyword. It only enters the type when one of the four supported
+@@ -2269,6 +2261,26 @@ impl ExprOps for Expr {
+                     self->sup->lex_next();
+                     continue;
+                 }
++                /* PH-81: `box` is a common identifier (`Box box;`). It is a
++                   type only when a balanced `<...>` follows; otherwise this is
++                   the declarator name and the type reader must stop here. */
++                if (strcmp(self->lex->toktext, "box") == 0) {
++                    const char *bp = self->lex->src + self->lex->tokstart + 3;
++                    int bd = 0, bclosed = 0;
++                    while (*bp == ' ' || *bp == '\t') bp++;
++                    if (*bp == '<') {
++                        bp++;
++                        while (*bp && *bp != '\n') {
++                            if (*bp == '<') bd++;
++                            else if (*bp == '>') {
++                                if (bd == 0) { bclosed = 1; break; }
++                                bd--;
++                            }
++                            bp++;
++                        }
++                    }
++                    if (!bclosed) break;
++                }
+                 /* Phase 29: `Name<arg[, arg]>` names one monomorphised instance
+                    of a generic struct; the reader lives in `parse_inst_type`. */
+                 if (frontend::sym::ct_tmpl_find(self->lex->toktext) >= 0) {
+@@ -2584,7 +2596,9 @@ impl ExprOps for Expr {
+                 self->sup->lex_next();
+                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0)
+                     return tool::diag::ct_sem_error(gl, gc,
+-                        "a slice 'T[]' cannot be a generic type argument; it is a non-owning view",
++                        strcmp(tname, "box") == 0
++                            ? "a slice 'T[]' cannot be stored in box<T>; it is a non-owning view"
++                            : "a slice 'T[]' cannot be a generic type argument; it is a non-owning view",
+                         self->sup->mem->path);
+                 return self->sup->fail("expected '>' after the type arguments");
+             }
+@@ -2863,6 +2877,18 @@ impl ExprOps for Expr {
+                      tname, nt2, nargs);
+             return self->sup->fail(msg);
+         }
++        /* PH-81 S1a: `box<T>` is an owning slot, so T may not be a borrowed
++           view (`Str` / `U16Str` / a slice). The struct-declaration layer
++           refuses the same shape for a field; this check catches the type
++           argument form, which never reaches that layer. */
++        if (strcmp(tname, "box") == 0 && nargs > 0) {
++            if (strcmp(c1, "struct Str") == 0 || strcmp(c1, "Str") == 0
++                || strcmp(c1, "struct U16Str") == 0 || strcmp(c1, "U16Str") == 0
++                || strcmp(c1, "struct __ct_slice") == 0
++                || strstr(c1, "[]") != 0)
++                return self->sup->fail(
++                    "a borrowed view cannot be boxed; box<T> owns its payload (use String for an owning string)");
++        }
+         /* L29-13 (Phase 31 O1 partial unfreeze): interface values
+            (`struct X_iface`) are stored as a two-word non-owning copy, so only
+            vptr-bearing concrete structs are refused here. */
+@@ -3197,25 +3223,27 @@ impl ExprOps for Expr {
+                guard can name the fault. Recognise only the shape
+                `box <balanced> name`, so `box < 3` stays a comparison. */
+             if (strcmp(self->lex->toktext, "box") == 0) {
+-                size_t p2 = self->lex->pos;
+-                int d2 = 0;
+-                int closed = 0;
+-                while (self->lex->src[p2] == ' ' || self->lex->src[p2] == '\t') p2++;
+-                if (self->lex->src[p2] == '<') {
+-                    p2++;
+-                    while (self->lex->src[p2] && self->lex->src[p2] != '\n') {
+-                        if (self->lex->src[p2] == '<') d2++;
+-                        else if (self->lex->src[p2] == '>') {
+-                            if (d2 == 0) { p2++; closed = 1; break; }
+-                            d2--;
+-                        }
++                /* PH-81: `box` is a real template now, so `box<T>` is a type
++                   in every type position (`sizeof(box<T>)`, a cast, a field).
++                   Before S1 it was only a diagnostic shape, which required a
++                   declarator name after the closing `>`. */
++                if (frontend::sym::ct_tmpl_find("box") >= 0) {
++                    size_t p2 = self->lex->pos;
++                    int d2 = 0;
++                    int closed = 0;
++                    while (self->lex->src[p2] == ' ' || self->lex->src[p2] == '\t') p2++;
++                    if (self->lex->src[p2] == '<') {
+                         p2++;
++                        while (self->lex->src[p2] && self->lex->src[p2] != '\n') {
++                            if (self->lex->src[p2] == '<') d2++;
++                            else if (self->lex->src[p2] == '>') {
++                                if (d2 == 0) { p2++; closed = 1; break; }
++                                d2--;
++                            }
++                            p2++;
++                        }
+                     }
+-                    while (self->lex->src[p2] == ' ' || self->lex->src[p2] == '\t') p2++;
+-                    if (closed && ((self->lex->src[p2] >= 'a' && self->lex->src[p2] <= 'z')
+-                                   || (self->lex->src[p2] >= 'A' && self->lex->src[p2] <= 'Z')
+-                                   || self->lex->src[p2] == '_'))
+-                        res = 1;
++                    if (closed) res = 1;
+                 }
+             } else
+             /* `T` inside its own template body is a type, even though the
+@@ -5737,10 +5765,16 @@ impl ExprOps for Expr {
+                             }
+                         }
+                     }
+-                    m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
+-                    if (m < 0) return -1;
+-                    self->arena->nodes[m].a = n;
+-                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
++                    {
++                        int bm = self->box_member_deref(n, arrow, fname, mline, mcol, &m);
++                        if (bm < 0) return -1;
++                        if (!bm) {
++                            m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
++                            if (m < 0) return -1;
++                            self->arena->nodes[m].a = n;
++                            snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
++                        }
++                    }
+                 }
+                 /* 19.1: a resolved trait method is compared against the call's
+                    argument count. A static trait (a `.m.ct` recipe), a `map`
+@@ -6042,6 +6076,9 @@ impl ExprOps for Expr {
+ 
+         qc[0] = 0;
+         qv[0] = 0;
++        /* PH-81 S1b: `new T { ... }` builds a `box<T>`; `new` stays an ordinary
++           identifier everywhere else (contextual keyword). */
++        if (self->new_ahead()) return self->parse_new_expr();
+         /* C11 `_Generic(…)` is a pass-through: the whole selection is copied
+            into the string pool (`N_RAW`, `aux = 1`, `num` = offset) and handed
+            to the C compiler, which owns the arm choice. ct does not read the
+@@ -7559,6 +7596,219 @@ impl ExprOps for Expr {
+     }
+ }
+ 
++impl ExprNew for Expr {
++    /* PH-81 S1a: `box<T>` auto-dereferences for field access. `b.f` becomes
++       `b.ptr->f` (and `p->f` on a `box<T> *` becomes `p->ptr->f`), so the
++       payload's fields are read and assigned without spelling `at()` or `->`.
++       The two handle fields are private: `.h` / `.ptr` are refused outside the
++       built-in layer, exactly like `String.ptr`. Returns 1 when the final node
++       was built, 0 when the receiver is not a box, -1 on a diagnostic. */
++    int box_member_deref(int recv, int arrow, const char *fname, int line, int col, int *out)
++    {
++        char ty[MAX_TEXT];
++        char *p;
++        size_t bl;
++        int stars, pn, mn, in_layer;
++        (void)arrow;
++
++        if (self->sup->expr_type(recv, ty, sizeof ty) != 0) return 0;
++        p = ty;
++        while (*p == ' ' || *p == '\t') p++;
++        bl = strlen(p);
++        while (bl > 0 && (p[bl - 1] == ' ' || p[bl - 1] == '\t')) bl--;
++        p[bl] = 0;
++        stars = 0;
++        while (bl > 0 && p[bl - 1] == '*') {
++            stars++;
++            bl--;
++            while (bl > 0 && (p[bl - 1] == ' ' || p[bl - 1] == '\t')) bl--;
++            p[bl] = 0;
++        }
++        if (strncmp(p, "struct box_", 11) != 0 || strchr(p, '<') != 0) return 0;
++        in_layer = self->sup->mem->path != 0
++                   && strstr(self->sup->mem->path, "lib/std/Vec.h.ct") != 0;
++        if (strcmp(fname, "h") == 0 || strcmp(fname, "ptr") == 0) {
++            if (in_layer) return 0;         /* the built-in layer's own bodies */
++            return tool::diag::ct_sem_error(line, col,
++                "'.h' / '.ptr' are raw implementation fields; use the box's methods or at()",
++                self->sup->mem->path);
++        }
++        pn = self->sup->new_node(stars > 0 ? N_ARROW : N_MEMBER);
++        if (pn < 0) return -1;
++        self->arena->nodes[pn].a = recv;
++        snprintf(self->arena->nodes[pn].text2, MAX_TEXT, "ptr");
++        snprintf(self->arena->nodes[pn].text, MAX_TEXT, "%s", ty);
++        mn = self->sup->new_node(N_ARROW);
++        if (mn < 0) return -1;
++        self->arena->nodes[mn].a = pn;
++        snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", fname);
++        self->arena->nodes[mn].line = line;
++        self->arena->nodes[mn].num = col;
++        *out = mn;
++        return 1;
++    }
++
++    /* PH-81 S1b: is the current `new` an operator rather than an identifier?
++       `new` is a contextual keyword: it starts a construction only when the
++       next token begins a type name. `int new;`, `r.new`, `new = 5` and
++       `new + 1` therefore keep their old meaning; only `new T { ... }` (and
++       the malformed `new { ... }`) enters the construction path. */
++    int new_ahead(void)
++    {
++        int save_tok, save_line, save_bol, save_srcline, res, save_start, save_lstart;
++        long save_num;
++        size_t save_pos;
++        char save_text[MAX_TEXT];
++        (void)self;
++
++        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "new") == 0))
++            return 0;
++        save_tok = self->lex->tok;
++        save_num = self->lex->toknum;
++        save_line = self->lex->tokline;
++        save_pos = self->lex->pos;
++        save_srcline = self->lex->line;
++        save_bol = self->lex->bol;
++        save_start = self->lex->tokstart;
++        save_lstart = self->lex->lstart;
++        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
++        self->sup->lex_next();
++        res = 0;
++        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
++            res = 1;                        /* malformed, but still `new` */
++        } else if (self->lex->tok != T_ID) {
++            res = 0;
++        } else if (strcmp(self->lex->toktext, "struct") == 0
++                   || strcmp(self->lex->toktext, "union") == 0
++                   || strcmp(self->lex->toktext, "enum") == 0) {
++            res = 1;
++        } else if (self->is_type_word(self->lex->toktext)) {
++            res = 1;
++        } else if (strcmp(self->lex->toktext, "box") == 0) {
++            res = 1;
++        } else if (frontend::sym::ct_tmpl_find(self->lex->toktext) >= 0) {
++            res = 1;
++        } else if (self->sym->find_type_alias(self->lex->toktext) >= 0) {
++            res = 1;
++        } else {
++            char rn[MAX_TEXT];
++            if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) == 0
++                && self->sym->find_type(rn) >= 0)
++                res = 1;
++        }
++        self->lex->tok = save_tok;
++        self->lex->toknum = save_num;
++        self->lex->tokline = save_line;
++        self->lex->pos = save_pos;
++        self->lex->line = save_srcline;
++        self->lex->bol = save_bol;
++        self->lex->tokstart = save_start;
++        self->lex->lstart = save_lstart;
++        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
++        return res;
++    }
++
++    /* PH-81 S1b: `new T { ... }`. Only a named (non-template, non-instance)
++    struct is accepted; the brace list is the same captured initializer
++    `T x = { ... };` uses. The result is a `box<T>` handle whose refs count
++    starts at one. `new` never lands in a static/global initializer: the
++    emitter refuses it there because the construction is a call. */
++    int parse_new_expr(void)
++    {
++        char tbuf[MAX_TEXT];
++        char base[MAX_TEXT];
++        char raw[MAX_RAW_INIT];
++        char fixed[4096];
++        char enc[MAX_TEXT];
++        int nline, ncol, off, k, si;
++
++        nline = self->lex->tokline;
++        ncol = self->lex->tokstart - self->lex->lstart + 1;
++        if (self->static_init)
++            return tool::diag::ct_sem_error(nline, ncol,
++                "'new' cannot initialize a static object; it allocates at run time, so assign it in the function body",
++                self->sup->mem->path);
++        self->sup->lex_next();              /* new */
++        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
++            return tool::diag::ct_sem_error(nline, ncol,
++                "'new' needs a named struct type before its initializer, as in 'new Point { 1, 2 }'",
++                self->sup->mem->path);
++        if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
++        if (strncmp(tbuf, "struct ", 7) != 0)
++            return tool::diag::ct_sem_error(nline, ncol,
++                "'new' only accepts a named struct type; scalars, pointers, arrays, unions, enums and built-in handles are not boxed",
++                self->sup->mem->path);
++        snprintf(base, sizeof base, "%s", tbuf + 7);
++        if (strchr(base, '*') || strchr(base, '[') || strchr(base, '<'))
++            return tool::diag::ct_sem_error(nline, ncol,
++                "'new' only accepts a plain named struct type; pointers, arrays and generic instances are not boxed",
++                self->sup->mem->path);
++        si = self->sym->find_struct(base);
++        if (si < 0)
++            return tool::diag::ct_sem_error(nline, ncol,
++                "'new' only accepts a named struct type declared in this program",
++                self->sup->mem->path);
++        if (self->sym->structs[si].is_template || self->sym->structs[si].is_inst)
++            return tool::diag::ct_sem_error(nline, ncol,
++                "'new' only accepts a named non-generic struct type; instantiate the generic first and box the value",
++                self->sup->mem->path);
++        if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
++            || strncmp(base, "MapEntry_", 9) == 0
++            || strncmp(base, "Option_", 7) == 0 || strncmp(base, "Result_", 7) == 0
++            || strncmp(base, "U16String", 9) == 0 || strncmp(base, "U16Str", 6) == 0)
++            return tool::diag::ct_sem_error(nline, ncol,
++                "'new' does not box built-in handles, containers or borrowed views",
++                self->sup->mem->path);
++        if (strcmp(base, "String") == 0 || strcmp(base, "Str") == 0)
++            return tool::diag::ct_sem_error(nline, ncol,
++                "'new String' / 'new Str' is not supported; use the literal, 'to_string()' or 'as_str()'",
++                self->sup->mem->path);
++        if (frontend::sym::ct_tmpl_find("box") < 0)
++            return self->sup->fail("the built-in `box` layer is missing (set CT_STD_DIR)");
++        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)) {
++            char nmsg[MAX_TEXT * 2];
++            snprintf(nmsg, sizeof nmsg,
++                     "'new %s' needs a brace initializer; only 'new T { ... }' is supported", base);
++            return tool::diag::ct_sem_error(nline, ncol, nmsg, self->sup->mem->path);
++        }
++        if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
++        if (self->sup->rewrite_init_text(tbuf, raw, fixed, sizeof fixed) != 0) return -1;
++        /* register the box<T> instance (the type parser would do the same for
++           a `box<T>` spelling); the template's fields substitute T -> base */
++        if (self->inst_make("box", 1, tbuf, "", tbuf, "", enc, sizeof enc, 0,
++                            nline, ncol) != 0)
++            return -1;
++        /* the payload-release helper and the constructor need the payload
++           spelling, so the node keeps both the box instance and the payload */
++        {
++            int n, r;
++            n = self->sup->new_node(N_NEWOBJ);
++            if (n < 0) return -1;
++            r = self->sup->new_node(N_RAW);
++            if (r < 0) return -1;
++            off = self->arena->str_begin();
++            for (k = 0; fixed[k]; k++)
++                if (self->arena->str_put(fixed[k]) != 0)
++                    return self->sup->fail("initializer is too long");
++            self->arena->str_end();
++            self->arena->nodes[r].num = off;
++            self->arena->nodes[r].aux = 1;
++            self->arena->nodes[n].a = r;
++            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
++            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", enc);
++            {
++                char ctype[MAX_TEXT];
++                snprintf(ctype, sizeof ctype, "struct %s", enc);
++                snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", ctype);
++            }
++            self->arena->nodes[n].line = nline;
++            self->arena->nodes[n].num = ncol;
++            return n;
++        }
++    }
++
++}
++
+ impl ExprSubscript for Expr {
+     /* PH-52 D52-2: the diagnostics name the user's spelling, not the encoded
+        instance tag. `Box<int>` comes from the instance row; a plain struct
+diff --git a/selfhost/ct-ast/frontend/parse/Parser.h.ct b/selfhost/ct-ast/frontend/parse/Parser.h.ct
+index d17ac84..40c51bd 100644
+--- a/selfhost/ct-ast/frontend/parse/Parser.h.ct
++++ b/selfhost/ct-ast/frontend/parse/Parser.h.ct
+@@ -2452,10 +2452,21 @@ impl ParseOps for Parser {
+                so `T[]` is a hard error here rather than a silent C struct. */
+             {
+                 int sl, sc;
++                const char *fb = typebuf;
+                 if (self->sup->slice_brackets_ahead(&sl, &sc))
+                     return tool::diag::ct_sem_error(sl, sc,
+                         "a slice 'T[]' cannot be a struct field; it is a non-owning view",
+                         self->mem->path);
++                /* PH-81 S1a: a borrowed `Str` / `U16Str` is a view, so a field
++                   would outlive the bytes it borrows; this is the struct
++                   declaration layer `box<Bad>` relies on. */
++                if (strncmp(fb, "struct ", 7) == 0) fb += 7;
++                while (*fb == ' ' || *fb == '\t') fb++;
++                if (strcmp(fb, "Str") == 0 || strcmp(fb, "U16Str") == 0)
++                    return tool::diag::ct_sem_error(self->lex->tokline,
++                        self->lex->tokstart - self->lex->lstart + 1,
++                        "a borrowed 'Str' view cannot be a struct field; store an owning 'String' and call as_str() at the use site",
++                        self->mem->path);
+             }
+         }
+         /* the first declarator's stars are part of `typebuf`; later ones bring
+diff --git a/selfhost/ct-ast/frontend/parse/Stmt.h.ct b/selfhost/ct-ast/frontend/parse/Stmt.h.ct
+index 7ad6256..d9ee191 100644
+--- a/selfhost/ct-ast/frontend/parse/Stmt.h.ct
++++ b/selfhost/ct-ast/frontend/parse/Stmt.h.ct
+@@ -1735,8 +1735,8 @@ impl StmtOps for Stmt {
+         /* P-7.2: `box<T> name` is a declaration shape even though `box` is not
+            a registered type; `parse_type` turns it into the placement error
+            (or the PH-81 "not implemented" error) instead of an expression. */
+-        if (strcmp(self->lex->toktext, "box") == 0
+-            && self->ex->tok_is_type_name()) return 1;
++        if (strcmp(self->lex->toktext, "box") == 0)
++            return self->ex->tok_is_type_name();
+         /* an alignment or atomic specifier may open a block-scope declaration */
+         if (strcmp(self->lex->toktext, "_Alignas") == 0) return 1;
+         if (strcmp(self->lex->toktext, "_Atomic") == 0) return 1;
+@@ -4325,7 +4325,12 @@ impl StmtOps for Stmt {
+                     ecol = self->lex->tokstart - self->lex->lstart + 1;
+                     iline = eline;
+                     icol = ecol;
+-                    e = self->ex->parse_expr();
++                    {
++                        int save_sinit = self->ex->static_init;
++                        self->ex->static_init = self->static_decl;
++                        e = self->ex->parse_expr();
++                        self->ex->static_init = save_sinit;
++                    }
+                     self->ex->into_ok = 0;
+                     self->ex->fnval_ok = 0;
+                     if (e < 0) return -1;
+diff --git a/selfhost/ct-ast/frontend/type/TypeCheck.h.ct b/selfhost/ct-ast/frontend/type/TypeCheck.h.ct
+index c452700..77d52d3 100644
+--- a/selfhost/ct-ast/frontend/type/TypeCheck.h.ct
++++ b/selfhost/ct-ast/frontend/type/TypeCheck.h.ct
+@@ -41,6 +41,7 @@ import runtime::arena::Arena;
+ #define N_ADDR   27
+ #define N_DEREF  28
+ #define N_BOX    34
++#define N_NEWOBJ 77
+ #define N_CAST   35
+ #define N_SIZEOF 36
+ #define N_OFFSETOF 47
+@@ -475,6 +476,12 @@ impl TypeOps for TypeCheck {
+                          (self->arena->nodes[n].aux & 2) ? " *" : "") >= cap) return -1;
+             return 0;
+         }
++        /* PH-81 S1b: `new T { ... }` has the `box<T>` type the parser recorded
++           on the node, so the declaration / assignment checks see it. */
++        if (self->arena->nodes[n].kind == N_NEWOBJ) {
++            if (snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text3) >= cap) return -1;
++            return 0;
++        }
+         if (self->arena->nodes[n].kind == N_NUM) {
+             /* `text` holds the normalised suffix; the type host that claims a
+                literal has to be the one matching that suffix, not always `int` */
+diff --git a/selfhost/ct-ast/tool/driver/Driver.h.ct b/selfhost/ct-ast/tool/driver/Driver.h.ct
+index c02e15c..8730e97 100644
+--- a/selfhost/ct-ast/tool/driver/Driver.h.ct
++++ b/selfhost/ct-ast/tool/driver/Driver.h.ct
+@@ -126,9 +126,99 @@ static int src_has_prefix(const char *s, const char *pre)
+     return 0;
+ }
+ 
++/* PH-81: the built-in layer must load for `box<T>` / `new T { ... }`, but a
++   comment or a string that merely contains the word must not pull it in (that
++   changed the `--emit-c` bytes of module fixtures whose prose says "a new X").
++   This scan skips comments and literals and requires `new` to be followed by a
++   type name or a brace. */
++static int src_has_new_expr(const char *s)
++{
++    const char *p = s;
++
++    while (*p) {
++        if (p[0] == '/' && p[1] == '/') {
++            while (*p && *p != '\n') p++;
++            continue;
++        }
++        if (p[0] == '/' && p[1] == '*') {
++            p += 2;
++            while (*p && !(p[0] == '*' && p[1] == '/')) p++;
++            if (*p) p += 2;
++            continue;
++        }
++        if (*p == '"' || *p == '\'') {
++            char q = *p;
++            p++;
++            while (*p && *p != q) {
++                if (*p == '\\' && p[1]) p++;
++                p++;
++            }
++            if (*p) p++;
++            continue;
++        }
++        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
++              || (*p >= '0' && *p <= '9') || *p == '_')) {
++            p++;
++            continue;
++        }
++        {
++            const char *q = p;
++            while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
++                   || (*q >= '0' && *q <= '9') || *q == '_') q++;
++            if ((size_t)(q - p) == 3 && strncmp(p, "new", 3) == 0) {
++                const char *t = q;
++                while (*t == ' ' || *t == '\t') t++;
++                if ((*t >= 'a' && *t <= 'z') || (*t >= 'A' && *t <= 'Z')
++                    || *t == '_' || *t == '{')
++                    return 1;
++            }
++            p = q;
++        }
++    }
++    return 0;
++}
++
+ /* PH-66 R3: decide BEFORE parsing. Parsing an unused unit would leave its
+    symbols in the tables, and the emitter would then declare (never define)
+    things like `Str_Drop_drop` -- a `-Wunused-function` warning on GCC. */
++/* PH-81: `box<T>` in code (not a comment/string, and not a variable merely
++   named `box`). */
++static int src_has_box_type(const char *s)
++{
++    const char *p = s;
++
++    while (*p) {
++        if (p[0] == '/' && p[1] == '/') { while (*p && *p != '\n') p++; continue; }
++        if (p[0] == '/' && p[1] == '*') {
++            p += 2;
++            while (*p && !(p[0] == '*' && p[1] == '/')) p++;
++            if (*p) p += 2;
++            continue;
++        }
++        if (*p == '"' || *p == '\'') {
++            char q = *p;
++            p++;
++            while (*p && *p != q) { if (*p == '\\' && p[1]) p++; p++; }
++            if (*p) p++;
++            continue;
++        }
++        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
++              || (*p >= '0' && *p <= '9') || *p == '_')) { p++; continue; }
++        {
++            const char *q = p;
++            while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
++                   || (*q >= '0' && *q <= '9') || *q == '_') q++;
++            if ((size_t)(q - p) == 3 && strncmp(p, "box", 3) == 0) {
++                const char *t = q;
++                while (*t == ' ' || *t == '\t') t++;
++                if (*t == '<') return 1;
++            }
++            p = q;
++        }
++    }
++    return 0;
++}
++
+ static int layer_wanted(const char *src, int bi)
+ {
+     if (src == 0) return 1;
+@@ -140,10 +230,14 @@ static int layer_wanted(const char *src, int bi)
+             || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
+     if (bi == 1) return src_has_word(src, "Option");
+     if (bi == 2) return src_has_word(src, "Result");
+-    /* PH-80 (D-013): the String owning handle lives in the same layer unit as
+-       the borrowed Str, so either name must splice it in. */
+-    return src_has_word(src, "Str") || src_has_word(src, "String")
+-        || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
++    if (bi == 3)
++        /* PH-80 (D-013): the String owning handle lives in the same layer unit
++           as the borrowed Str, so either name must splice it in. */
++        return src_has_word(src, "Str") || src_has_word(src, "String")
++            || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
++    /* PH-81: the box template has its own unit, so programs that never name a
++       box are byte-identical to the pre-S1 output. */
++    return src_has_box_type(src) || src_has_new_expr(src);
+ }
+ 
+ impl DriverOps for Driver {
+@@ -217,11 +311,12 @@ impl DriverOps for Driver {
+            `Result.h.ct`; P36 S4a1 adds `Str.h.ct`. Compile mode is one C
+            translation unit, so the parsed declaration chains are spliced into
+            one program. */
+-        for (bi = 0; bi < 4; bi++) {
++        for (bi = 0; bi < 5; bi++) {
+             const char *base;
+             base = bi == 0 ? "Vec.h.ct"
+                  : (bi == 1 ? "Option.h.ct"
+-                 : (bi == 2 ? "Result.h.ct" : "Str.h.ct"));
++                 : (bi == 2 ? "Result.h.ct"
++                 : (bi == 3 ? "Str.h.ct" : "Box.h.ct")));
+             if (insrc && !layer_wanted(insrc, bi)) continue;
+             prog = -1;
+             for (i = 0; i < 3; i++) {
+diff --git a/test/ast/p81_box.sh b/test/ast/p81_box.sh
+new file mode 100755
+index 0000000..e671712
+--- /dev/null
++++ b/test/ast/p81_box.sh
+@@ -0,0 +1,119 @@
++#!/bin/sh
++# PH-81 / S1: `box<T>` + `new` (E81-1…E81-6).
++#
++#   - E81-1: the box handle is two machine words, the shared `{refs, aux}`
++#     header is 8 bytes immediately before the payload, and release runs the
++#     payload's owning fields by static type;
++#   - E81-2: `new T { ... }` accepts a named struct only, shares the brace
++#     initializer with `T x = { ... }` (positional, designated and nested);
++#   - E81-3: `new String` / arrays / containers / built-in handles and a
++#     borrowed `Str` payload / field are hard errors;
++#   - E81-4: `at()` is the borrowed view and a release invalidates it; the
++#     sanitizer catches the post-release read;
++#   - E81-5: a reference cycle is the author's responsibility (the probe shows
++#     the refs the compiler leaves behind) and no cycle detection is claimed;
++#   - E81-6: the same generated code passes ASan/UBSan warning-free; the old
++#     goldens and the doc checks are covered by `check-all` / `p81_docs`.
++#
++# `new` is contextual: `int new;`, `r.new`, a parameter named `new` and
++# `new = ...` stay identifiers (ctx.ct); the construction form is refused in a
++# global / static initializer because it allocates at run time.
++#
++# Usage: sh test/ast/p81_box.sh <ct-ast>
++set -u
++export CT_C_BOUNDARY=allow
++ctast=${1:?usage: p81_box.sh <ct-ast>}
++case "$ctast" in
++    /*) ;;
++    *) ctast=$(cd "$(dirname "$ctast")" && pwd)/$(basename "$ctast") ;;
++esac
++root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
++work=$(mktemp -d "${TMPDIR:-/tmp}/p81box.XXXXXX") || exit 1
++trap 'rm -rf "$work"' EXIT HUP INT TERM
++CT_STD_DIR="$root/lib/std"
++export CT_STD_DIR
++cc=${CC:-cc}
++fail=0
++ok()  { printf 'ok   %s\n' "$1"; }
++bad() { echo "FAIL p81/box: $1" >&2; [ $# -gt 1 ] && printf '  %s\n' "$2" >&2; fail=1; }
++cd "$root" || exit 1
++
++run_case() {
++    name=$1
++    if ! "$ctast" --allow-c-boundary "test/ast/p81_box/$name.ct" -o "$work/$name.c" >"$work/$name.log" 2>&1; then
++        bad "$name compile" "$(sed -n '1,4p' "$work/$name.log")"; return
++    fi
++    if ! "$cc" -Wall -Wextra -std=c99 "$work/$name.c" -o "$work/$name" 2>"$work/$name.cc.err"; then
++        bad "$name cc" "$(sed -n '1,4p' "$work/$name.cc.err")"; return
++    fi
++    if [ -s "$work/$name.cc.err" ]; then
++        bad "$name warning-free cc" "$(head -2 "$work/$name.cc.err")"; return
++    fi
++    if ! "$work/$name" >"$work/$name.out" 2>"$work/$name.err"; then
++        bad "$name run" "non-zero exit: $(head -2 "$work/$name.err")"; return
++    fi
++    if ! cmp -s "$work/$name.out" "test/ast/p81_box/expected.$name.out"; then
++        bad "$name behaviour" "$(diff -u "test/ast/p81_box/expected.$name.out" "$work/$name.out" | head -12)"; return
++    fi
++    for san in address undefined; do
++        if ! "$cc" -Wall -Wextra -std=c99 -fsanitize=$san -g "$work/$name.c" \
++                -o "$work/$name.$san" 2>"$work/$name.$san.cc.err"; then
++            bad "$name -fsanitize=$san cc" "$(head -2 "$work/$name.$san.cc.err")"
++        elif ! ASAN_OPTIONS=detect_leaks=0 "$work/$name.$san" >"$work/$name.$san.out" 2>"$work/$name.$san.err"; then
++            bad "$name -fsanitize=$san run" "$(head -3 "$work/$name.$san.err")"
++        elif [ -s "$work/$name.$san.err" ]; then
++            bad "$name -fsanitize=$san clean stderr" "$(head -2 "$work/$name.$san.err")"
++        elif ! cmp -s "$work/$name.$san.out" "test/ast/p81_box/expected.$name.out"; then
++            bad "$name -fsanitize=$san behaviour" "stdout differs"
++        else
++            ok "$name -fsanitize=$san"
++        fi
++    done
++    ok "$name (behaviour + sanitizers)"
++}
++
++run_case layout
++run_case record
++run_case vecbox
++run_case boxstr
++run_case cycle
++run_case ctx
++
++# E81-4: the borrowed view is invalidated by release; ASan must catch it.
++if "$ctast" --allow-c-boundary test/ast/p81_box/uaf.ct -o "$work/uaf.c" >"$work/uaf.log" 2>&1 \
++   && "$cc" -Wall -Wextra -std=c99 -fsanitize=address -g "$work/uaf.c" -o "$work/uaf" 2>"$work/uaf.cc.err"; then
++    if ASAN_OPTIONS=detect_leaks=0 "$work/uaf" >"$work/uaf.out" 2>"$work/uaf.err"; then
++        bad "asan sensitivity" "the post-release read was not caught"
++    elif grep -Fq "heap-use-after-free" "$work/uaf.err"; then
++        ok "asan sensitivity (at() view after release -> heap-use-after-free)"
++    else
++        bad "asan sensitivity" "ASan did not report heap-use-after-free"
++    fi
++else
++    bad "asan sensitivity build" "$(head -2 "$work/uaf.log" "$work/uaf.cc.err" 2>/dev/null)"
++fi
++
++neg() {
++    name=$1; pattern=$2; why=$3
++    if "$ctast" --allow-c-boundary "test/ast/p81_box/$name.ct" -o "$work/$name.c" >"$work/$name.log" 2>&1; then
++        bad "$name" "accepted a negative ($why)"
++    elif grep -Fq "$pattern" "$work/$name.log"; then
++        ok "$name (rejected: $why)"
++    else
++        bad "$name" "missing diagnostic '$pattern': $(head -2 "$work/$name.log")"
++    fi
++}
++
++neg neg_new_string "'new String' / 'new Str' is not supported" "new of a built-in handle"
++neg neg_new_int "'new' only accepts a named struct type" "new of a scalar"
++neg neg_new_vec "instantiate the generic first and box the value" "new of a container"
++neg neg_new_no_brace "needs a brace initializer" "new without a brace list"
++neg neg_box_slice "cannot be stored in box<T>" "slice payload"
++neg neg_box_str "a borrowed view cannot be boxed" "Str payload"
++neg neg_field_str "cannot be a struct field" "borrowed Str field"
++neg neg_raw_field "raw implementation fields" "raw .ptr on a box"
++neg neg_new_global "only supported in a local initializer" "new at file scope"
++neg neg_new_static "cannot initialize a static object" "new in a static local"
++
++[ "$fail" -eq 0 ] && echo "p81_box: OK"
++exit "$fail"
+diff --git a/test/ast/p81_box/boxstr.ct b/test/ast/p81_box/boxstr.ct
+new file mode 100644
+index 0000000..281a752
+--- /dev/null
++++ b/test/ast/p81_box/boxstr.ct
+@@ -0,0 +1,20 @@
++/* PH-81 / D-013 backfill: `box<String>` shares the payload header protocol.
++ * The `box<String>::of` factory takes its own retain, so the box and the
++ * caller each own one reference; `at()` is the borrowed view. */
++#include <stdio.h>
++
++int main(void)
++{
++    String lit = "hi";
++    String s = lit.to_string();
++    box<String> b = box<String>::of(s);
++    String *sp = b.at();
++    printf("len=%d box_refs=%d s_refs=%d live=%d\n",
++           sp->len(), b.refs(), s.refs(), ct_str_live_count());
++    s.release();
++    printf("after s release len=%d live=%d\n", sp->len(), ct_str_live_count());
++    printf("borrowed len=%d\n", sp->len());
++    b.release();
++    printf("after b release refs=%d live=%d\n", b.refs(), ct_str_live_count());
++    return 0;
++}
+diff --git a/test/ast/p81_box/ctx.ct b/test/ast/p81_box/ctx.ct
+new file mode 100644
+index 0000000..083b862
+--- /dev/null
++++ b/test/ast/p81_box/ctx.ct
+@@ -0,0 +1,17 @@
++/* PH-81 S1b: `new` is contextual. It introduces a construction only in front
++ * of a named type; `int new;`, a field named `new`, a parameter named `new`
++ * and `new = ...` keep their identifier meaning. */
++#include <stdio.h>
++
++struct R { int new; }
++
++int pick(int new) { return new + 1; }
++
++int main(void)
++{
++    int new = 3;
++    new = new + 1;
++    struct R r = { 7 };
++    printf("var=%d field=%d param=%d\n", new, r.new, pick(new));
++    return 0;
++}
+diff --git a/test/ast/p81_box/cycle.ct b/test/ast/p81_box/cycle.ct
+new file mode 100644
+index 0000000..8701e06
+--- /dev/null
++++ b/test/ast/p81_box/cycle.ct
+@@ -0,0 +1,20 @@
++/* PH-81 E81-5: a reference cycle is the author's responsibility. `retain()`
++ * makes the two nodes own each other; releasing both handles leaves each
++ * payload at refs=1, with no compiler warning and no run-time cycle check. */
++#include <stdio.h>
++struct Node { int id; box<Node> next; }
++int main(void) {
++    box<Node> a = new Node { .id = 1 };
++    box<Node> b = new Node { .id = 2 };
++    a.next = b.retain();
++    b.next = a.retain();
++    printf("before: a_refs=%d b_refs=%d\n", a.refs(), b.refs());
++    Node *pa = a.at();
++    Node *pb = b.at();
++    a.release();
++    b.release();
++    printf("after handles: a_refs=%d b_refs=%d (cycle is author-owned)\n",
++           pa->next.refs(), pb->next.refs());
++    printf("ids still live: a=%d b=%d\n", pa->next.at()->id, pb->next.at()->id);
++    return 0;
++}
+diff --git a/test/ast/p81_box/expected.boxstr.out b/test/ast/p81_box/expected.boxstr.out
+new file mode 100644
+index 0000000..a819be7
+--- /dev/null
++++ b/test/ast/p81_box/expected.boxstr.out
+@@ -0,0 +1,4 @@
++len=2 box_refs=1 s_refs=2 live=1
++after s release len=2 live=1
++borrowed len=2
++after b release refs=0 live=0
+diff --git a/test/ast/p81_box/expected.ctx.out b/test/ast/p81_box/expected.ctx.out
+new file mode 100644
+index 0000000..994c451
+--- /dev/null
++++ b/test/ast/p81_box/expected.ctx.out
+@@ -0,0 +1 @@
++var=4 field=7 param=5
+diff --git a/test/ast/p81_box/expected.cycle.out b/test/ast/p81_box/expected.cycle.out
+new file mode 100644
+index 0000000..e8dac9a
+--- /dev/null
++++ b/test/ast/p81_box/expected.cycle.out
+@@ -0,0 +1,3 @@
++before: a_refs=2 b_refs=2
++after handles: a_refs=1 b_refs=1 (cycle is author-owned)
++ids still live: a=2 b=1
+diff --git a/test/ast/p81_box/expected.layout.out b/test/ast/p81_box/expected.layout.out
+new file mode 100644
+index 0000000..1d0bac8
+--- /dev/null
++++ b/test/ast/p81_box/expected.layout.out
+@@ -0,0 +1,4 @@
++sizeof(box)=16 sizeof(header)=8 alignof(box)=8
++payload_offset=8 expected=8
++refs=1 tag_refs=1 tag_len=1
++after release refs=0
+diff --git a/test/ast/p81_box/expected.record.out b/test/ast/p81_box/expected.record.out
+new file mode 100644
+index 0000000..741d6b2
+--- /dev/null
++++ b/test/ast/p81_box/expected.record.out
+@@ -0,0 +1,8 @@
++id=7 tag=5 refs=1 tag_refs=2
++after source release tag_refs=1 live=1
++id_after_set=8
++point=1,2
++point_after_set=5,2
++designated id=9 tag=7 tag_refs=1
++before release refs=1 live=2
++after release refs=0 live=0
+diff --git a/test/ast/p81_box/expected.vecbox.out b/test/ast/p81_box/expected.vecbox.out
+new file mode 100644
+index 0000000..023fa4d
+--- /dev/null
++++ b/test/ast/p81_box/expected.vecbox.out
+@@ -0,0 +1,7 @@
++after push a_refs=2 len=1
++got id=1 refs=2 name=3
++after got release len=1
++after v release len=0
++holder before delete refs=2
++holder after delete refs=1 id=2
++keep released refs=0 live=0
+diff --git a/test/ast/p81_box/layout.ct b/test/ast/p81_box/layout.ct
+new file mode 100644
+index 0000000..05e45f4
+--- /dev/null
++++ b/test/ast/p81_box/layout.ct
+@@ -0,0 +1,25 @@
++/* PH-81 E81-1 / P-7.5-1: the `box<T>` handle is two machine words and the
++ * shared `{refs, aux}` header is 8 bytes immediately before the payload. The
++ * assertions are emitted into the C and compiled by `cc`, so a layout drift
++ * fails the probe at compile time. */
++#include <stdio.h>
++
++struct Record { int id; String tag; }
++
++int main(void)
++{
++    box<Record> r = new Record { 7, "x" };
++    _Static_assert(sizeof(box<Record>) == 2 * sizeof(void *), "box handle is two words");
++    _Static_assert(sizeof(struct ct_box_hdr) == 8, "the shared header is 8 bytes");
++    _Static_assert(sizeof(box<Record>) == 16, "on LP64 the box handle is 16 bytes");
++    printf("sizeof(box)=%d sizeof(header)=%d alignof(box)=%d\n",
++           (int)sizeof(box<Record>), (int)sizeof(struct ct_box_hdr),
++           (int)_Alignof(box<Record>));
++    printf("payload_offset=%d expected=%d\n", r.payload_offset(),
++           (int)(((8 + _Alignof(struct Record) - 1) / _Alignof(struct Record))
++                 * _Alignof(struct Record)));
++    printf("refs=%d tag_refs=%d tag_len=%d\n", r.refs(), r.tag.refs(), r.tag.len());
++    r.release();
++    printf("after release refs=%d\n", r.refs());
++    return 0;
++}
+diff --git a/test/ast/p81_box/neg_box_slice.ct b/test/ast/p81_box/neg_box_slice.ct
+new file mode 100644
+index 0000000..92c6787
+--- /dev/null
++++ b/test/ast/p81_box/neg_box_slice.ct
+@@ -0,0 +1,6 @@
++/* E81-3 negative: a slice is a borrowed view and cannot be a box payload. */
++int main(void)
++{
++    box<int[]> b;
++    return 0;
++}
+diff --git a/test/ast/p81_box/neg_box_str.ct b/test/ast/p81_box/neg_box_str.ct
+new file mode 100644
+index 0000000..a715548
+--- /dev/null
++++ b/test/ast/p81_box/neg_box_str.ct
+@@ -0,0 +1,6 @@
++/* E81-3 negative: the borrowed `Str` cannot be a box payload. */
++int main(void)
++{
++    box<Str> b;
++    return 0;
++}
+diff --git a/test/ast/p81_box/neg_field_str.ct b/test/ast/p81_box/neg_field_str.ct
+new file mode 100644
+index 0000000..9515188
+--- /dev/null
++++ b/test/ast/p81_box/neg_field_str.ct
+@@ -0,0 +1,4 @@
++/* E81-3 negative: a borrowed `Str` cannot be a struct field, which is the
++ * declaration-layer refusal `box<Bad>` relies on. */
++struct Bad { Str tag; }
++int main(void) { return 0; }
+diff --git a/test/ast/p81_box/neg_new_global.ct b/test/ast/p81_box/neg_new_global.ct
+new file mode 100644
+index 0000000..8bbe381
+--- /dev/null
++++ b/test/ast/p81_box/neg_new_global.ct
+@@ -0,0 +1,4 @@
++/* E81-2 negative: a file-scope object cannot allocate at run time. */
++struct R { int id; }
++box<R> g = new R { 1 };
++int main(void) { return 0; }
+diff --git a/test/ast/p81_box/neg_new_int.ct b/test/ast/p81_box/neg_new_int.ct
+new file mode 100644
+index 0000000..a07f8fc
+--- /dev/null
++++ b/test/ast/p81_box/neg_new_int.ct
+@@ -0,0 +1,6 @@
++/* E81-3 negative: `new` only accepts a named struct. */
++int main(void)
++{
++    box<int> b = new int { 3 };
++    return 0;
++}
+diff --git a/test/ast/p81_box/neg_new_no_brace.ct b/test/ast/p81_box/neg_new_no_brace.ct
+new file mode 100644
+index 0000000..f288845
+--- /dev/null
++++ b/test/ast/p81_box/neg_new_no_brace.ct
+@@ -0,0 +1,7 @@
++/* E81-2 negative: `new T` without a brace list is not a construction. */
++struct R { int id; }
++int main(void)
++{
++    box<R> b = new R;
++    return 0;
++}
+diff --git a/test/ast/p81_box/neg_new_static.ct b/test/ast/p81_box/neg_new_static.ct
+new file mode 100644
+index 0000000..4b924e1
+--- /dev/null
++++ b/test/ast/p81_box/neg_new_static.ct
+@@ -0,0 +1,7 @@
++/* E81-2 negative: a static local initializer is not a run-time expression. */
++struct R { int id; }
++int main(void)
++{
++    static box<R> s = new R { 1 };
++    return 0;
++}
+diff --git a/test/ast/p81_box/neg_new_string.ct b/test/ast/p81_box/neg_new_string.ct
+new file mode 100644
+index 0000000..544148e
+--- /dev/null
++++ b/test/ast/p81_box/neg_new_string.ct
+@@ -0,0 +1,6 @@
++/* E81-3 negative: `new String` is not a box construction. */
++int main(void)
++{
++    box<int> b = new String { };
++    return 0;
++}
+diff --git a/test/ast/p81_box/neg_new_vec.ct b/test/ast/p81_box/neg_new_vec.ct
+new file mode 100644
+index 0000000..2596e5b
+--- /dev/null
++++ b/test/ast/p81_box/neg_new_vec.ct
+@@ -0,0 +1,6 @@
++/* E81-3 negative: a container / built-in handle is not boxed. */
++int main(void)
++{
++    box<int> b = new Vec<int> { 3 };
++    return 0;
++}
+diff --git a/test/ast/p81_box/neg_raw_field.ct b/test/ast/p81_box/neg_raw_field.ct
+new file mode 100644
+index 0000000..5c845d3
+--- /dev/null
++++ b/test/ast/p81_box/neg_raw_field.ct
+@@ -0,0 +1,9 @@
++/* E81-1 negative: the handle fields are private, so a caller cannot forge a
++ * borrow that bypasses `at()` / `release()`. */
++struct R { int id; }
++int main(void)
++{
++    box<R> b = new R { 1 };
++    R *p = b.ptr;
++    return 0;
++}
+diff --git a/test/ast/p81_box/record.ct b/test/ast/p81_box/record.ct
+new file mode 100644
+index 0000000..5da1ab2
+--- /dev/null
++++ b/test/ast/p81_box/record.ct
+@@ -0,0 +1,38 @@
++/* PH-81 E81-1/E81-2: `new T { ... }` is the only construction form, the brace
++ * list is the same one `T x = { ... }` uses (positional and designated), and
++ * `b.f` / `b.f = ...` auto-dereference the handle. `box<T>` shares the
++ * `{refs, aux}` header: releasing the last handle releases the payload's
++ * owning fields. */
++#include <stdio.h>
++
++struct Record { int id; String tag; }
++struct Point { int x; int y; }
++
++int main(void)
++{
++    String lit = "owned";
++    String owned = lit.to_string();
++    box<Record> r = new Record { 7, owned };
++    printf("id=%d tag=%d refs=%d tag_refs=%d\n",
++           r.id, r.tag.len(), r.refs(), r.tag.refs());
++    owned.release();
++    printf("after source release tag_refs=%d live=%d\n",
++           r.tag.refs(), ct_str_live_count());
++    r.id = 8;
++    printf("id_after_set=%d\n", r.id);
++
++    box<Point> p = new Point { .y = 2, .x = 1 };
++    printf("point=%d,%d\n", p.x, p.y);
++    p.x = 5;
++    printf("point_after_set=%d,%d\n", p.x, p.y);
++
++    box<Record> q = new Record { .tag = "literal", .id = 9 };
++    printf("designated id=%d tag=%d tag_refs=%d\n", q.id, q.tag.len(), q.tag.refs());
++
++    printf("before release refs=%d live=%d\n", r.refs(), ct_str_live_count());
++    r.release();
++    p.release();
++    q.release();
++    printf("after release refs=%d live=%d\n", r.refs(), ct_str_live_count());
++    return 0;
++}
+diff --git a/test/ast/p81_box/uaf.ct b/test/ast/p81_box/uaf.ct
+new file mode 100644
+index 0000000..ff5cbba
+--- /dev/null
++++ b/test/ast/p81_box/uaf.ct
+@@ -0,0 +1,12 @@
++/* PH-81 E81-4: `at()` borrows the payload; `release()` invalidates it. The
++ * probe is only useful under ASan, where the post-release read is a
++ * heap-use-after-free. */
++#include <stdio.h>
++struct R { int id; String tag; }
++int main(void) {
++    box<R> b = new R { 1, "x" };
++    R *p = b.at();
++    b.release();
++    printf("%d\n", p->id);
++    return 0;
++}
+diff --git a/test/ast/p81_box/vecbox.ct b/test/ast/p81_box/vecbox.ct
+new file mode 100644
+index 0000000..84b6833
+--- /dev/null
++++ b/test/ast/p81_box/vecbox.ct
+@@ -0,0 +1,36 @@
++/* PH-81 E81-1/E81-4: `box<T>` is a first-class element and field. The element
++ * glue retains on insertion and releases on container release; a `get` copy is
++ * a second handle, so the caller retains it explicitly (the `Vec.get` contract
++ * for every owning element). */
++#include <stdio.h>
++
++struct Item { int id; String name; }
++struct Holder { box<Item> child; int n; } use Drop
++
++int main(void)
++{
++    Vec<box<Item> > v;
++    v.h = 0;
++    box<Item> a = new Item { 1, "one" };
++    v.push(a);
++    printf("after push a_refs=%d len=%d\n", a.refs(), v.len());
++    a.release();
++
++    box<Item> got = v.get(0).retain();
++    printf("got id=%d refs=%d name=%d\n", got.id, got.refs(), got.name.len());
++    got.release();
++    printf("after got release len=%d\n", v.len());
++    v.release();
++    printf("after v release len=%d\n", v.len());
++
++    box<Item> keep = new Item { 2, "two" };
++    own Holder *h = malloc(sizeof(struct Holder));
++    h->child = keep.retain();
++    h->n = 3;
++    printf("holder before delete refs=%d\n", keep.refs());
++    delete h;
++    printf("holder after delete refs=%d id=%d\n", keep.refs(), keep.id);
++    keep.release();
++    printf("keep released refs=%d live=%d\n", keep.refs(), ct_str_live_count());
++    return 0;
++}
