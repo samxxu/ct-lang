@@ -90,7 +90,7 @@
 | Phase 77 | 官方包身份与解析契约（`ct/std`；裸名限官方；`ct get` 展示 `url@version`；旧锁自动迁移） | ✅ 完成 | v0.77.0 | [卡](design/phase77.md) · [D-010](decisions/D-010.md) · [契约](planning/ct-pkg-get-contract.md) |
 | Phase 78 | `ref` / `out` 参数（S2；上下文关键字、调用点 lvalue、`out` 定值） | ✅ 完成（S2a–S2c / E78-1–E78-6；REV fix v0.78.1） | v0.78.0（fix v0.78.1） | [卡](design/phase78.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 79 | 切片 `T[]`（S3；`T[]` 唯一、带检查 place、`const T[]`） | ✅ 完成（S3a–S3e / E79-1–E79-6） | v0.79.0 | [卡](design/phase79.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
-| Phase 80 | `String` / `Str`（S5；UTF-8/UTF-16 双类型、L1 字面量、std 迁移） | ✅ 完成（v0.80.3；R6 字段 release 修复，SH-102 fixed 待 REV 复核） | v0.80.3 | [卡](design/phase80.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
+| Phase 80 | `String` / `Str`（S5；UTF-8/UTF-16 双类型、L1 字面量、std 迁移） | ✅ 完成（v0.80.4；R6/C-1 字段 release 修复，SH-102 fixed 待 REV 复核） | v0.80.4 | [卡](design/phase80.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 81 | `box<T>` + `new`（S1；共享句柄协议、`new` 仅具名 struct） | 🟨 实施中（准备；施工入口 P-7.5 + PH-80 收口未过） | v0.81.0 | [卡](design/phase81.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 82 | 泄漏防护（`leaks` 两档 `warn` / `error`；`box` 字段直接环告警；树模式文档） | 🟨 实施中（准备；施工入口 PH-81 收口未过） | v0.82.0 | [卡](design/phase82.md) · [提案](proposals/leak-guards.md) · [判决](../battle/leak-guards-1/verdict.md) · [D-012](decisions/D-012.md) |
 | Phase 83 | 包管理契约 v1 与索引校验（只读 `ct index verify`；Linux x64 产物；conformance） | 🟨 实施中（准备；施工入口 PH-82 收口未过） | v0.83.0 | [卡](design/phase83.md) · [评估](reviews/2026-11-20-pkg-contract-proposal-eval.md) · [契约](planning/ct-pkg-get-contract.md) · [D-014](decisions/D-014.md) |
@@ -106,7 +106,7 @@
 > **指针退场（v0.78–v0.82）**：PH-78 S2 `ref/out` → PH-79 S3 切片 → PH-80 S5 `String/Str`
 > → PH-81 S1 `box/new`；S2 ∥ S3 可并行准备，单卡纪律先开 S2；S4 函子延后 v1.1+ Wave 2。
 > PH-78 已收口（v0.78.0 / fix v0.78.1），PH-79 已收口（v0.79.0）；
-> PH-80 已收口（v0.80.3；S5a 内建层 + S5b 删旧 `str` 与消费者迁移，E80-7 通过；SH-102 自动 retain R1–R6 修复，D-015 口径）；
+> PH-80 已收口（v0.80.4；S5a 内建层 + S5b 删旧 `str` 与消费者迁移，E80-7 通过；SH-102 自动 retain R1–R7 修复，D-015 口径）；
 > PH-81 等 P-7.5，PH-82 等 PH-81 收口。
 > J-6 全量仍未过；v1.0 顺延到 PH-82 之后。
 > PH-82 见 [phase82](design/phase82.md) / [D-012](decisions/D-012.md)。

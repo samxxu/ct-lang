@@ -31,7 +31,7 @@
 | PH-77 官方包身份与解析契约（S0–S5 / E77-1–E77-8） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | PH-77 ✅ v0.77.0 |
 | PH-78 `ref` / `out` 参数（S2a–S2c / E78-1–E78-6） | 当前 DSH 会话（DEV `dev-ph78`） | DEV | PH-78 ✅ v0.78.0（fix v0.78.1） |
 | PH-79 切片 `T[]`（S3a–S3e / E79-1–E79-6） | 当前 DSH 会话（DEV `dev-ph79`） | DEV | PH-79 ✅ v0.79.0 |
-| PH-80 `String`/`Str`（S5a + S5b；D-013 入口闭合） | 当前 DSH 会话（DEV `dev-ph80`） | DEV | PH-80 ✅ v0.80.3（E80-1…8 全通过；SH-102 自动 retain R1–R6，D-015 字段 release 口径） |
+| PH-80 `String`/`Str`（S5a + S5b；D-013 入口闭合） | 当前 DSH 会话（DEV `dev-ph80`） | DEV | PH-80 ✅ v0.80.4（E80-1…8 全通过；SH-102 自动 retain R1–R7，D-015 字段 release + 分支合并） |
 | PH-81 `box`/`new`（S1；准备，施工入口 P-7.5 + PH-80 收口） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-81 🟨 准备 |
 | PH-82 泄漏防护（准备，施工入口 PH-81 未过；D-012） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-82 🟨 准备 |
 | PH-83 包管理契约 v1 与索引校验（准备，施工入口 PH-82 未过；D-014） | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-83 🟨 准备（v0.83.0） |

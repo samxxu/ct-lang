@@ -575,3 +575,62 @@ compile_exit=1
 C-2/C-3/C-4 的硬错 / 循环 / 边界夹具全部成立，未发现新 UAF/SEGV；但 R7 误拒 D-015 §1.2 已定义的
 字段，C-1 的硬错语义未满足。SH-102 保持 `reopened`；D-015 的 USER 签字占位按用户授权记为不阻断
 观察。
+
+## 处置（DEV，2026-11-21，第四轮 R7）：**fixed**
+
+`status` 保持 REV 写的 `reopened`（5.4：DEV 只写正文处置段，由 REV 复核后改 `verified`）。
+REV 第四轮 R7 的 C-1 误拒已在 v0.80.4 修正；不改 `refs` 布局 / ABI。
+
+### 逐项
+
+- **分支合并**：字段“确定定义”按
+  `defined_after = defined_before || (then_defined && else_defined)` 计算（无 `else` 时
+  `else_defined = defined_before`）。`N_IF` 先快照，分别发射两个 arm（`else` 前恢复 pre 状态，
+  使 `else` 内的重赋也 release 旧值），最后按公式合并；arm 块用绝对深度标记，嵌套 `if`
+  不会吞掉外层 arm 的状态。
+- **分支内重赋**：字段在分支前已确定定义时，分支内的赋值保留其定义状态并 release 旧值
+  （不再降级为 “maybe”）；只有“分支内首次定义、且另一 arm 没有定义”才在分支后视为未定义。
+- **两个正例**：`field_branch_init`（`Holder h = { 0 }; if (cond) h.tag = a; h.tag = b;`）与
+  `field_branch_straight`（`Holder h; h.tag = a; if (cond) { h.tag = b; } h.tag = c;`）均
+  `final live=0`；另加 `field_branch_else`（两个 arm 都定义）验证公式的 `then && else` 分支。
+- **负例不变**：`field_branch0` / `field_branch_rt`（只有 then 定义、无 else）、
+  `field_switch`（单 case）、`field_loop_bare`（循环内首次）、`field_copy`、`field_goto_struct`
+  仍以既有诊断拒绝。
+- D-015 §1.2 增补分支合并语义（§1.3），卡 §7.9.1 / §7.9.7 同步。
+
+### 提交
+
+- `bd589804` `test(ct-ast): SH-102 红（第四轮 C-1 误拒）`（只含夹具与红证，baseline `fc652f06`）
+- `2addbdda` `fix(ct-ast): SH-102 第四轮 C-1 分支合并修正`
+- 收口提交：本提交（v0.80.4 版本、D-015、文档、golden）
+
+### 红 → 绿（原始输出，baseline v0.80.3 → v0.80.4）
+
+```console
+# baseline v0.80.3（红）
+$ CT_C_BOUNDARY=allow sh test/ast/p80_retain.sh <v0.80.3>/ct-ast
+FAIL p80/retain: field_branch_init compile
+  field_branch_init.ct:16:1: error: field 'h.tag' may be undefined before this assignment; …
+FAIL p80/retain: field_branch_straight compile
+  field_branch_straight.ct:16:1: error: field 'h.tag' may be undefined before this assignment; …
+FAIL p80/retain: field_branch_else compile
+  field_branch_else.ct:15:1: error: field 'h.tag' may be undefined before this assignment; …
+
+# v0.80.4（绿）
+$ CT_C_BOUNDARY=allow sh test/ast/p80_retain.sh <ct-ast>
+48 ok … p80_retain: OK
+$ ./field_branch_init     -> after branch refs=1 live=1 / final live=0
+$ ./field_branch_straight -> after branch refs=1 live=1 / final live=0
+$ ./field_branch_else     -> after ifelse refs=1 live=1 / final live=0
+$ ./field_branch0 / branch_rt / switch / loop_bare / copy / goto_struct
+  -> 既有硬错诊断不变（exit≠0）
+```
+
+### 仍未覆盖（v0.80.4 后）
+
+- `foreach` 的 `item`、`for` 初始化器里的句柄不登记；嵌套结构体字面量只按外层字段类型处理；
+  泛型实例里 `T` 位置的局部只按容器 glue 的显式协议处理；字段 / 全局 `String` 仍无自动 Drop。
+- `p->tag` / `(&h).tag` / 索引目标不自动 release（登记泄漏，卡 §7.9.7）；跨函数写 / 并发写由
+  作者负责。
+- 循环体内对循环外 struct 的同轮双重首次赋值按硬错处理（保守）。
+- `goto` 与 local owning String / owning struct 共存为硬错，不做跨作用域精确分析。

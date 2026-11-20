@@ -407,6 +407,7 @@ exit=0
 | 裸 struct 循环首赋（R6b） | 首轮 release 未定义存储 | 硬错（循环外声明、循环内首赋） | `field_loop_bare` 编译拒绝 |
 | 整结构体赋值 / goto 越过 owning 字段（C-4） | 浅拷贝 / 跳过定义，UAF 或 BUS | 硬错 | `field_copy` / `field_goto_struct` |
 | 同名遮蔽 / `p->tag` 别名（C-4） | 误配外层标记 / 按旧标记 release | owner 化键；箭头目标不自动 release（登记泄漏） | `field_shadow` ASan 通过；`field_ptr` ASan 通过、`live=2` |
+| 已定义字段的条件更新（R7） | `{ 0 }` / 直线赋值已定义，条件更新后被误判为未定义并拒绝后续重赋 | 分支合并 `defined_after = defined_before \|\| (then && else)` | `field_branch_init` / `field_branch_straight` / `field_branch_else`：`final live=0` |
 
 三例 ASan 复现（修复前后，同一 `cc -fsanitize=address -g`）：
 
@@ -430,7 +431,8 @@ $ ./ret   -> after return s=2 r=2 / r after caller release data0=114            
 | --- | --- | --- |
 | 聚合初始化器 `{ … }` / `{ 0 }` 后的 member 重赋 | 自动 release 旧值 | `field_loop0` / `field_loop_long`：`final live=0` |
 | 直线赋值（含循环之前）后的 member 重赋 | 自动 release 旧值 | `field_loop_pre`：`final live=0` |
-| 分支 / `switch` / 循环体内条件定义的字段重赋 | **硬错** `field 'x.y' may be undefined before this assignment` | `field_branch0` / `field_branch_rt` / `field_switch` / `field_loop_bare` |
+| 分支 / `switch` / 循环体内**首次**条件定义的字段重赋 | **硬错** `field 'x.y' may be undefined before this assignment` | `field_branch0` / `field_branch_rt` / `field_switch` / `field_loop_bare` |
+| 分支前已定义（`{ … }` / 直线赋值）的字段在条件更新后重赋 | 自动 release 旧值（分支合并 `defined_before \|\| (then && else)`） | `field_branch_init` / `field_branch_straight` / `field_branch_else` |
 | 整结构体赋值 `h = other`（place 源） | **硬错** `whole-struct assignment … owning String field` | `field_copy` |
 | `goto` 越过含 owning 字段的 struct 局部 | **硬错** `a goto cannot cross an owning String scope` | `field_goto_struct` |
 | 同名遮蔽 `field_shadow` | owner 化键，内层不继承外层状态；不自动 release 内层 | `field_shadow`：ASan 通过、`final live=0` |
