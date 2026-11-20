@@ -2923,8 +2923,40 @@ parse("ab", n);  /* 调用点不写 out */
 - **旧类型已删除（S5b）**：`lib/std/StrLegacy.h.ct` 与 `namespace std::str` 兼容单元已移除，
   `std::str::Str` 不再解析；仓内消费者已迁到 `String` / `Str` 新 API，外部消费者的 dry-run
   见 phase80 卡 §7。
-- **边界**：`box<String>`（PH-81）、`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
+- **边界**：`box<String>` 已由 PH-81 的 `box<String>::of` 回填；`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
   `Map<String,V>`）、字段/全局位置的 `String`（无自动 Drop）、跨仓外部工程迁移只做 dry-run。
+
+### 4.71 `box<T>` / `new`：单对象句柄（Phase 81，仅 ct-ast）
+
+- **类型**：`box<T>` 是单元素 owning 句柄，布局 `{ struct ct_box_hdr *h; T *ptr; }`
+  （LP64 16 字节）；8 字节头 `struct ct_box_hdr { int refs; int aux; }` 在 payload 前，
+  偏移 `header_size(T) = round_up(8, _Alignof(T))`。`refs` 从 1 起；box 不使用
+  `refs = -1` immortal（那是 `String` 字面量 / 空串专用）。refcount 非原子、非线程安全。
+- **构造**：`new T { ... }` 是 move 构造，`T` 只能是**具名、非泛型 struct**；花括号与
+  `T x = { ... }` 共享解析（位置式、指定式 `.f = e`、嵌套）。`box<T>::of(v)` 是复制构造：
+  payload 的 owning 叶各自 `retain`，`String` 参数在调用侧按值 retain、被调方出口 release，
+  因此 `box<String>` 由 `box<String>::of(s)` 得到。`new String` / `new Str` / 标量 / 指针 /
+  数组 / 容器 / 其他内建句柄一律硬错；`new` 不能出现在文件作用域或 `static` 局部的初始化器
+  （运行时分配，直接报错）。
+- **上下文关键字**：`new` 只在后接类型名（或错误形态 `new {`）时才是构造；`int new;`、
+  `r.new`、形参 `new`、`new = ...`、`new + 1` 继续是标识符。
+- **解引用**：`b.f` / `b.f = ...` 自动改写为 `b.ptr->f`（`box<T> *p` 时为 `p->ptr->f`）；
+  `.h` / `.ptr` 是实现字段，用户读写硬错。
+- **生命周期**：`retain()` 共享并 `refs + 1`，`release()` 归零时按静态类型释放 payload：
+  `String` / `U16String` 字段走其 Drop，容器 / 嵌套 box 字段走 `release`，普通 struct 递归
+  其 owning 字段；`use Drop` 宿主 struct 的字段 glue 调 box Drop。采用 `Vec` 的显式协议：
+  按值传参、字段赋值、容器插入不会自动 retain；容器元素 glue 会 retain。locally owned
+  `box<T>` 的 `release()` 由作者显式调用。
+- **借用视图 / 失效**：`b.at()` 返回 `T *` 借用视图，不 retain；`release()` 使该视图失效
+  （与 `Vec.at` 的失效契约同构）。失效后的读取由 ASan 抓，不做运行期检查。
+- **边界**：`box<Str>` / `box<U16Str>` / `box<T[]>` 硬错；`struct Bad { Str tag; }` 在声明层
+  硬错（借用字段会活过其底层数据）。引用环是作者责任：`retain()` 成环后释放句柄仍保留
+  `refs >= 1`，编译器不做环检测；`--debug-leaks`（若将来实现）只报未配对 alloc/release
+  计数，不叫环检测。`ct build` 跨单元 `box<T>` 在 v0.81.0 不支持（实例/助手写在命名它的
+  单元里，导出签名只有前向声明）；单文件 compile 模式与单单元 build 可用。
+- **C 边界 / ABI**：`box<T>` 是编译器生成的 nominal 句柄，不是 C ABI 导出类型；C 侧只用
+  `T *` / 普通 struct / `void *`。句柄 16 字节、头 8 字节是 golden 断言，不是跨编译器 ABI
+  承诺。
 
 ## 11 文档与实现一致性（缺口登记，2026-11-15）
 

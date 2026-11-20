@@ -1981,3 +1981,40 @@ v.push("s");            // argument 1: expected 'int', got 'char *'
 判定是粗粒度的：两侧都是指针时不比较基类型与层数，算术类之间一律放行，裸 `0` 可填任何指针；
 数组、闭包、函数指针、`void` 实际值等判不出的位置保持沉默。不带 `--types` 的 `ct check` 与
 `ct build` / `ct compile` 的输出完全不变。
+
+## 17. `box<T>` 与 `new`（Phase 81，v0.81.0 起可用）
+
+单个堆对象现在有 owning 句柄，不再手写 `malloc` / `free` / `T *`：
+
+```ct
+struct Record { int id; String tag; }
+
+int main(void) {
+    box<Record> r = new Record { 7, "x" };
+    r.id = 8;                            // b.f / b.f = 自动解引用
+    printf("%d %s\n", r.id, r.tag.cstr());
+    r.release();                         // 显式释放（同 Vec 的协议）
+    return 0;
+}
+```
+
+`box<T>` 是 16 字节句柄（`ct_box_hdr *h` + `T *ptr`），8 字节 `{refs, aux}` 头在 payload
+前；`release()` 归零时按静态类型释放 payload 的 owning 字段，`retain()` 共享。`at()` 返回
+`T *` 借用视图，`release()` 后失效（ASan 可抓，编译器不做运行期检查）。
+
+`new` 是上下文关键字：只有 `new T { ... }` 才是构造；`int new;`、`r.new` 仍是标识符。
+它只接受具名、非泛型 struct，`new String` / 数组 / 容器 / 内建句柄硬错；全局/`static`
+初始化器也不能用 `new`（运行时分配）。
+
+复制已有值用工厂，而不是 `new`：
+
+```ct
+struct Point { int x; int y; }
+Point p = { 1, 2 };
+box<Point> b = box<Point>::of(p);       // 复制构造；owning 叶 retain
+```
+
+`box<String>` 只走 `box<String>::of(s)`；`new String` 仍是硬错。`box<Str>` 与
+`struct Bad { Str tag; }` 在类型/声明层硬错。引用环是作者责任：互持 `retain()` 后释放
+句柄仍泄漏，编译器不报环；`--debug-leaks` 若实现也只报未配对 alloc/release 计数。
+`ct build` 跨单元 `box<T>` 在 v0.81.0 不支持，单文件编译可用。
