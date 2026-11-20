@@ -5745,7 +5745,14 @@ impl EmitOps for Emitter {
                 }
                 fprintf(self->out, "%s_%s_vtable.%s(", self->sym->structs[si].name,
                         self->arena->nodes[n].text, self->arena->nodes[n].text2);
-                if (self->arena->nodes[n].aux == 7) fputs("&", self->out);
+                /* SH-98: inside an impl body `self` is already the receiver
+                   pointer (`_self`), so a method call on it must not take the
+                   address of the local slot (`&_self` would be `T **`). */
+                if (self->arena->nodes[n].aux == 7
+                    && !(self->sym->self_mode
+                         && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR
+                         && strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0))
+                    fputs("&", self->out);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 {
                     int bt2 = self->sym->find_trait(self->arena->nodes[n].text);
@@ -5800,7 +5807,11 @@ impl EmitOps for Emitter {
                 }
                 fprintf(self->out, "%s_%s(", self->sym->structs[si].name,
                         self->arena->nodes[n].text2);
-                if (self->arena->nodes[n].aux == 9) fputs("&", self->out);
+                if (self->arena->nodes[n].aux == 9
+                    && !(self->sym->self_mode
+                         && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR
+                         && strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0))
+                    fputs("&", self->out);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 {
                     int pann[16], pai = 0, has;
