@@ -1,0 +1,22 @@
+/* PH-81 E81-5: a reference cycle is the author's responsibility. This S1a
+ * fixture builds through `box<T>::of`; `retain()` makes the two nodes own
+ * each other, so releasing both handles leaves each payload at refs=1. */
+#include <stdio.h>
+struct Node { int id; box<Node> next; }
+int main(void) {
+    Node na = { .id = 1 };
+    Node nb = { .id = 2 };
+    box<Node> a = box<Node>::of(na);
+    box<Node> b = box<Node>::of(nb);
+    a.next = b.retain();
+    b.next = a.retain();
+    printf("before: a_refs=%d b_refs=%d\n", a.refs(), b.refs());
+    Node *pa = a.at();
+    Node *pb = b.at();
+    a.release();
+    b.release();
+    printf("after handles: a_refs=%d b_refs=%d (cycle is author-owned)\n",
+           pa->next.refs(), pb->next.refs());
+    printf("ids still live: a=%d b=%d\n", pa->next.at()->id, pb->next.at()->id);
+    return 0;
+}

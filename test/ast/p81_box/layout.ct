@@ -1,0 +1,28 @@
+/* PH-81 E81-1 / P-7.5-1: the `box<T>` handle is two machine words and the
+ * shared `{refs, aux}` header is 8 bytes immediately before the payload. The
+ * assertions are emitted into the C and compiled by `cc`, so a layout drift
+ * fails the probe at compile time. This S1a fixture builds through the
+ * `box<T>::of` factory; the `new` spelling follows in S1b. */
+#include <stdio.h>
+
+struct Record { int id; String tag; }
+
+int main(void)
+{
+    Record rv = { 7, "x" };
+    box<Record> r = box<Record>::of(rv);
+    _Static_assert(sizeof(box<Record>) == 2 * sizeof(void *), "box handle is two words");
+    _Static_assert(sizeof(struct ct_box_hdr) == 8, "the shared header is 8 bytes");
+    _Static_assert(sizeof(box<Record>) == 16, "on LP64 the box handle is 16 bytes");
+    printf("sizeof(box)=%d sizeof(header)=%d alignof(box)=%d\n",
+           (int)sizeof(box<Record>), (int)sizeof(struct ct_box_hdr),
+           (int)_Alignof(box<Record>));
+    printf("payload_offset=%d expected=%d\n", r.payload_offset(),
+           (int)(((8 + _Alignof(struct Record) - 1) / _Alignof(struct Record))
+                 * _Alignof(struct Record)));
+    printf("refs=%d tag_refs=%d tag_len=%d\n", r.refs(), r.tag.refs(), r.tag.len());
+    r.release();
+    rv.tag.release();
+    printf("after release refs=%d live=%d\n", r.refs(), ct_str_live_count());
+    return 0;
+}

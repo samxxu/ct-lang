@@ -1,0 +1,20 @@
+/* PH-81 / D-013 backfill: `box<String>` shares the payload header protocol.
+ * The `box<String>::of` factory takes its own retain, so the box and the
+ * caller each own one reference; `at()` is the borrowed view. */
+#include <stdio.h>
+
+int main(void)
+{
+    String lit = "hi";
+    String s = lit.to_string();
+    box<String> b = box<String>::of(s);
+    String *sp = b.at();
+    printf("len=%d box_refs=%d s_refs=%d live=%d\n",
+           sp->len(), b.refs(), s.refs(), ct_str_live_count());
+    s.release();
+    printf("after s release len=%d live=%d\n", sp->len(), ct_str_live_count());
+    printf("borrowed len=%d\n", sp->len());
+    b.release();
+    printf("after b release refs=%d live=%d\n", b.refs(), ct_str_live_count());
+    return 0;
+}

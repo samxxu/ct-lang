@@ -1,0 +1,36 @@
+/* PH-81 E81-1/E81-4: `box<T>` is a first-class element and field. This S1a
+ * fixture builds through `box<T>::of`; the `new` spelling follows in S1b. */
+#include <stdio.h>
+
+struct Item { int id; }
+struct Holder { box<Item> child; int n; } use Drop
+
+int main(void)
+{
+    Vec<box<Item> > v;
+    v.h = 0;
+    Item iv = { 1 };
+    box<Item> a = box<Item>::of(iv);
+    v.push(a);
+    printf("after push a_refs=%d len=%d\n", a.refs(), v.len());
+    a.release();
+
+    box<Item> got = v.get(0).retain();
+    printf("got id=%d refs=%d\n", got.id, got.refs());
+    got.release();
+    printf("after got release len=%d\n", v.len());
+    v.release();
+    printf("after v release len=%d\n", v.len());
+
+    Item kv = { 2 };
+    box<Item> keep = box<Item>::of(kv);
+    own Holder *h = malloc(sizeof(struct Holder));
+    h->child = keep.retain();
+    h->n = 3;
+    printf("holder before delete refs=%d\n", keep.refs());
+    delete h;
+    printf("holder after delete refs=%d id=%d\n", keep.refs(), keep.id);
+    keep.release();
+    printf("keep released refs=%d\n", keep.refs());
+    return 0;
+}

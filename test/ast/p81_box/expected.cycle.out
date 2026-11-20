@@ -1,0 +1,3 @@
+before: a_refs=2 b_refs=2
+after handles: a_refs=1 b_refs=1 (cycle is author-owned)
+ids still live: a=2 b=1
