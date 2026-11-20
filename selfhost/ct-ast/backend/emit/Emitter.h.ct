@@ -267,6 +267,8 @@ pub struct StrRetain {
     int  nfield;
     char fpath[128][160];
     int  fowner[128];   /* binding index of the base local; -1 = global */
+    int  fdepth[128];   /* block depth where the field was defined */
+    int  fmaybe[128];   /* 1 = only conditionally defined (branch / loop body) */
     int  ln;
     char lname[512][160];
     char ltype[512][160];
@@ -601,7 +603,7 @@ static int sb_is_place(struct Emitter *self, int n)
 }
 
 /* defined below; the field bookkeeping helpers call each other */
-static int sb_field_find(struct Emitter *self, const char *base, const char *field);
+static int sb_field_find(struct Emitter *self, int owner, const char *base, const char *field);
 static void sb_field_mark(struct Emitter *self, const char *base, const char *field, int owner);
 
 /* The captured text of an N_RAW initialiser. */
@@ -637,13 +639,58 @@ static int sb_field_key(struct Emitter *self, int lhs, char *base, char *field, 
     return 0;
 }
 
-/* 1 when the field holds an owning handle: a tracked assignment, or any field
+/* The field's mark, or -1. `*maybe` reports a conditional definition (a branch
+   or a loop body), which must not drive a release. */
+static int sb_field_state(struct Emitter *self, int owner, const char *base, const char *field, int *maybe)
+{
+    int i = sb_field_find(self, owner, base, field);
+    *maybe = 0;
+    if (i < 0) return -1;
+    *maybe = g_sb.fmaybe[i] || g_sb.fdepth[i] > g_sb.nblk;
+    return i;
+}
+
+/* 1 when the field holds an owning handle: a definite assignment, or any field
    of a global (globals are zero-initialised, so releasing the old value is a
    no-op before the first assignment). */
 static int sb_field_known(struct Emitter *self, const char *base, const char *field, int owner)
 {
-    if (sb_field_find(self, base, field) >= 0) return 1;
-    return owner < 0;
+    int maybe = 0;
+    if (owner < 0) return 1;
+    return sb_field_state(self, owner, base, field, &maybe) >= 0 && !maybe;
+}
+
+/* 1 when the field assignment sits inside a loop body and the base local was
+   declared outside that loop: the first iteration would release an undefined
+   old value, so this is refused unless the field was defined before the loop. */
+static int sb_field_loop_unsafe(struct Emitter *self, int owner)
+{
+    int i;
+    if (owner < 0) return 0;
+    for (i = g_sb.nblk - 1; i >= 0; i--) {
+        if (g_sb.bkind[i] != 1) continue;
+        if (owner < g_sb.lblk[i]) return 1;
+    }
+    return 0;
+}
+
+/* 1 when `type` is a by-value struct carrying an owning String-typed field. */
+static int sb_owning_struct_type(struct Emitter *self, const char *type)
+{
+    char t[MAX_TEXT], sname[MAX_TEXT];
+    int is_ptr, si, fi;
+    if (!type || !type[0]) return 0;
+    if (strchr(type, '*') || strchr(type, '[')) return 0;
+    sb_norm(self, type, t, sizeof t);
+    if (!self->ty->concrete_struct(t, sname, sizeof sname, &is_ptr)) return 0;
+    if (is_ptr) return 0;
+    si = self->sym->find_struct(sname);
+    if (si < 0) return 0;
+    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+        if (!self->sym->structs[si].fields[fi].dims[0]
+            && frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type))
+            return 1;
+    return 0;
 }
 
 /* 1 when the text is a C place (so `&(text)` is legal): an optional `*`, an
@@ -945,17 +992,19 @@ static int sb_jump_release(struct Emitter *self, int ind, int is_cont)
     return sb_release_from(self, sb_jump_base(self, is_cont), -1, ind);
 }
 
-/* field-path bookkeeping: the key is `<base>.<field>`; a global base is known
-   zero-initialised, a local base is known only after a tracked assignment. */
-static int sb_field_find(struct Emitter *self, const char *base, const char *field)
+/* field-path bookkeeping: the key is (owner binding, `<base>.<field>`); a
+   global base is known zero-initialised, a local base is known only after a
+   definitely executed assignment. `fdepth` is the block depth of that
+   assignment and `fmaybe` marks one made inside a branch / loop body, so a
+   release never touches an undefined field. */
+static int sb_field_find(struct Emitter *self, int owner, const char *base, const char *field)
 {
     int i;
+    char want[MAX_TEXT];
     (void)self;
-    for (i = g_sb.nfield - 1; i >= 0; i--) {
-        char want[MAX_TEXT];
-        snprintf(want, sizeof want, "%s.%s", base, field);
-        if (strcmp(g_sb.fpath[i], want) == 0) return i;
-    }
+    snprintf(want, sizeof want, "%s.%s", base, field);
+    for (i = g_sb.nfield - 1; i >= 0; i--)
+        if (g_sb.fowner[i] == owner && strcmp(g_sb.fpath[i], want) == 0) return i;
     return -1;
 }
 
@@ -964,26 +1013,38 @@ static void sb_field_mark(struct Emitter *self, const char *base, const char *fi
     int i;
     char want[MAX_TEXT];
     if (g_sb.nfield >= 128) return;
-    snprintf(want, sizeof want, "%s.%s", base, field);
-    i = sb_field_find(self, base, field);
+    i = sb_field_find(self, owner, base, field);
     if (i >= 0) {
-        g_sb.fowner[i] = owner;
+        g_sb.fdepth[i] = g_sb.nblk;
+        g_sb.fmaybe[i] = 0;
         return;
     }
+    snprintf(want, sizeof want, "%s.%s", base, field);
     snprintf(g_sb.fpath[g_sb.nfield], MAX_TEXT, "%s", want);
     g_sb.fowner[g_sb.nfield] = owner;
+    g_sb.fdepth[g_sb.nfield] = g_sb.nblk;
+    g_sb.fmaybe[g_sb.nfield] = 0;
     g_sb.nfield++;
 }
 
-/* Drop the tracked fields of locals whose block just closed. */
-static void sb_field_prune(struct Emitter *self, int keep_ln)
+/* A block is closing: drop the fields of locals declared inside it, and turn
+   the fields only defined inside it into "maybe defined" at the enclosing
+   depth. `keep_depth` is the surviving block depth, `keep_ln` the binding
+   depth of the surviving locals. */
+static void sb_field_merge(struct Emitter *self, int keep_depth, int keep_ln)
 {
     int i, j = 0;
     (void)self;
     for (i = 0; i < g_sb.nfield; i++) {
         if (g_sb.fowner[i] >= keep_ln && g_sb.fowner[i] >= 0) continue;
+        if (g_sb.fdepth[i] > keep_depth) {
+            g_sb.fdepth[i] = keep_depth;
+            g_sb.fmaybe[i] = 1;
+        }
         snprintf(g_sb.fpath[j], MAX_TEXT, "%s", g_sb.fpath[i]);
         g_sb.fowner[j] = g_sb.fowner[i];
+        g_sb.fdepth[j] = g_sb.fdepth[i];
+        g_sb.fmaybe[j] = g_sb.fmaybe[i];
         j++;
     }
     g_sb.nfield = j;
@@ -1019,6 +1080,31 @@ static void sb_mark_aggregate(struct Emitter *self, int decl)
     }
 }
 
+/* Refuse a whole-struct assignment when the type owns a string field: a plain
+   `h = other` would shallow-copy the handle and the field release would then
+   free a buffer the source still owns. Assign the field explicitly instead. */
+static int sb_struct_assign_check(struct Emitter *self, int n)
+{
+    char t[MAX_TEXT];
+    int lhs, rhs, rk;
+    if (self->arena->nodes[n].kind != N_ASSIGN || self->arena->nodes[n].aux != 0) return 0;
+    lhs = self->arena->nodes[n].a;
+    if (lhs < 0 || self->arena->nodes[lhs].kind != N_VAR) return 0;
+    if (sb_expr_type(self, lhs, t, sizeof t) != 0) return 0;
+    if (!sb_owning_struct_type(self, t)) return 0;
+    /* a call result is a view / freshly handed-over aggregate (the documented
+       `Map.entry` copy, a returned Result payload); only copying a stored
+       place aliases an owning handle the source still owns */
+    rhs = self->arena->nodes[n].b;
+    if (rhs < 0) return 0;
+    rk = self->arena->nodes[rhs].kind;
+    if (rk != N_VAR && rk != N_MEMBER && rk != N_ARROW && rk != N_INDEX
+        && rk != N_DEREF && rk != N_SLICE_INDEX) return 0;
+    return self->fail_from(n,
+        "whole-struct assignment would shallow-copy its owning String field;"
+        " assign the field individually or use an explicit protocol");
+}
+
 /* The `String` / `U16String` declaration statement: retain the initialiser when
    it is another owner's place, zero-initialise a bare declaration so the scope
    release is always safe, and record the binding. 0 = not ours. */
@@ -1034,16 +1120,18 @@ static int sb_decl(struct Emitter *self, int n, int ind)
     if (self->arena->nodes[n].text3[0] || self->arena->nodes[n].aux == 1
         || self->arena->nodes[n].aux == 2) return 0;
     init = self->arena->nodes[n].a;
+    if (!kind) {
+        /* a plain local still records its declared type: `h.tag = s` needs it,
+           and an aggregate initialiser defines every owning field (C zero-fills
+           the omitted members) */
+        sb_lpush(self, self->arena->nodes[n].text2, tp);
+        sb_mark_aggregate(self, n);
+        return 0;
+    }
     if (init >= 0) {
         int k = self->arena->nodes[init].kind;
         if (k == N_INIT_RANGE || k == N_INIT_BRACE || k == N_INIT_MBRACE
             || k == N_RAW || k == N_CLOSURE) return 0;
-    }
-    if (!kind) {
-        /* a plain local still records its declared type: `h.tag = s` needs it */
-        sb_lpush(self, self->arena->nodes[n].text2, tp);
-        sb_mark_aggregate(self, n);
-        return 0;
     }
     if (self->hoist_rvalue(n) != 0) return -1;
     if (self->emit_hoists(ind) != 0) return -1;
@@ -1105,9 +1193,22 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     fbase[0] = 0;
     ffield[0] = 0;
     fowner = -1;
-    if ((k == N_MEMBER || k == N_ARROW) && sb_field_key(self, lhs, fbase, ffield, &fowner)
-        && !borrowed && sb_field_known(self, fbase, ffield, fowner))
-        release_old = 1;
+    /* Only a `member` target of a plain variable base is tracked. An arrow
+       (`p->tag`) may alias any object, so its old value is not released (the
+       leak is registered); an index target is the container glue's job. */
+    if (!borrowed && k == N_MEMBER && sb_field_key(self, lhs, fbase, ffield, &fowner)) {
+        int maybe = 0, st = sb_field_state(self, fowner, fbase, ffield, &maybe);
+        if (fowner >= 0 && (maybe || (st < 0 && sb_field_loop_unsafe(self, fowner)))) {
+            char msg[MAX_TEXT * 2];
+            snprintf(msg, sizeof msg,
+                     "field '%s.%s' may be undefined before this assignment;"
+                     " the compiler cannot release the old owning value safely"
+                     " (initialise the struct with '{ 0 }', or release it explicitly)",
+                     fbase, ffield);
+            return self->fail_from(n, msg);
+        }
+        if (st >= 0 && !maybe) release_old = 1;
+    }
     self->emit_indent(ind);
     fputs("{ ", self->out);
     if (release_old) {
@@ -5173,7 +5274,7 @@ impl EmitOps for Emitter {
             if (g_sb.nblk > 0) g_sb.nblk--;
             g_sb.n = save_sb;
             g_sb.ln = save_l;
-            sb_field_prune(self, save_l);
+            sb_field_merge(self, g_sb.nblk, save_l);
             self->nclvar = save_nclvar;
             self->emit_indent(ind);
             fputs("}\n", self->out);
@@ -5619,6 +5720,7 @@ impl EmitOps for Emitter {
                old-value release here, in statement position only. */
             {
                 int sh;
+                if (sb_struct_assign_check(self, n) != 0) return -1;
                 sh = sb_decl(self, n, ind);
                 if (sh < 0) return -1;
                 if (sh > 0) return 0;
@@ -5864,8 +5966,8 @@ impl EmitOps for Emitter {
                 sb_release_from(self, sbase, -1, ind + 2);
                 g_sb.n = sbase;
                 g_sb.ln = lbase;
-                sb_field_prune(self, lbase);
                 if (g_sb.nblk > 0) g_sb.nblk--;
+                sb_field_merge(self, g_sb.nblk, lbase);
             }
             self->emit_indent(ind + 1);
             fputs("}\n", self->out);
@@ -5919,8 +6021,8 @@ impl EmitOps for Emitter {
                 sb_release_from(self, sbase, -1, ind + 1);
                 g_sb.n = sbase;
                 g_sb.ln = lbase;
-                sb_field_prune(self, lbase);
                 if (g_sb.nblk > 0) g_sb.nblk--;
+                sb_field_merge(self, g_sb.nblk, lbase);
             }
             return 0;
         }
@@ -5946,8 +6048,8 @@ impl EmitOps for Emitter {
                 sb_release_from(self, sbase, -1, ind + 1);
                 g_sb.n = sbase;
                 g_sb.ln = lbase;
-                sb_field_prune(self, lbase);
                 if (g_sb.nblk > 0) g_sb.nblk--;
+                sb_field_merge(self, g_sb.nblk, lbase);
             }
             self->emit_indent(ind);
             fputs("} while (", self->out);

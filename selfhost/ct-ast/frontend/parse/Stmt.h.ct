@@ -1404,6 +1404,27 @@ static int kw_paren_ahead(struct Stmt *self, const char *kw)
     return r;
 }
 
+/* 1 when `typebuf` is a by-value struct carrying an owning String-typed field
+   (one level). A `goto` over such a local skips its zero initialisation, so it
+   is refused exactly like a `goto` over a bare owning handle. */
+static int stmt_owning_struct(struct Stmt *self, const char *typebuf)
+{
+    const char *b;
+    int si, fi;
+    if (typebuf == 0 || typebuf[0] == 0) return 0;
+    if (strchr(typebuf, '*') || strchr(typebuf, '[')) return 0;
+    b = typebuf;
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    while (*b == ' ') b++;
+    si = self->sym->find_struct(b);
+    if (si < 0) return 0;
+    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+        if (!self->sym->structs[si].fields[fi].dims[0]
+            && frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type))
+            return 1;
+    return 0;
+}
+
 impl StmtOps for Stmt {
     /* Phase 38: `defer` is only the keyword when the next non-space source
        character is `{`; otherwise it stays an ordinary identifier (D38-7). */
@@ -4370,7 +4391,8 @@ impl StmtOps for Stmt {
                remember the declaration and refuse at `func_end`. */
             if (!self->static_decl
                 && self->arena->nodes[n].text3[0] == 0
-                && frontend::sym::ct_is_string_value_type(typebuf))
+                && (frontend::sym::ct_is_string_value_type(typebuf)
+                    || stmt_owning_struct(self, typebuf)))
                 self->f_string_local = 1;
             /* PH-80 SH-102 (D-013 §3): a `String` / `U16String` local bound to a
                borrowed view stays a view (no retain, no scope release); the
