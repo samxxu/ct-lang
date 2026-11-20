@@ -1,7 +1,10 @@
 # Phase 78 — `ref` / `out` 参数（S2）
 
-> **状态：规划中（未开卡；J-6 门槛）**（2026-11-20 立项；`v0.78.0` 拟）。
-> **前置**：J-6 证据通过（P-7.1a 自由函数 + P-7.1b 方法/trait 原型）；PH-77 已收口。
+> **状态：实施中（S2a–S2c / E78-1–E78-6；2026-11-20 开卡）**（2026-11-20 立项；`v0.78.0`）。
+> **前置（口径写死）**：本卡入口只要求 **P-7.1a 自由函数 + P-7.1b 方法/trait 原型**，
+> 二者已由 `docs/planning/j6-evidence/ref_out/` 覆盖（基线 `2c87179a`，7 文件 369 行）。
+> **P-7.2（S3 切片）/ P-7.3（S5 最小垂直切片）不在本卡入口，J-6 也未全量通过**；
+> 卡内不据此声称 J-6 已过（J-6 见 [phase 安排](../planning/pointer-free-phase-plan.md) §3）。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/design/phase78.md`。
 > **依据**：[提案 v2](../proposals/pointer-free-v2.md)、[D-011](../decisions/D-011.md)、
 > [phase 安排](../planning/pointer-free-phase-plan.md)、[battle s2-scope-1](../../battle/s2-scope-1/verdict.md)。
