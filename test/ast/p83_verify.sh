@@ -154,6 +154,108 @@ fi
 [ "$?" -eq 0 ] && grep -Fq 'index verify' "$work/h.out" && ok "'ct index -h' prints usage and exits 0" \
     || bad "ct index -h" "$(cat "$work/h.out")"
 
+# --- non-regular inputs: exit 2 before open (PKG-14) --------------------
+mkdir -p "$work/adir"
+runv "$work/proj" "$work/dir.out" "$work/dir.err" "$work/adir"; rc=$?
+if [ "$rc" -eq 2 ] && [ ! -s "$work/dir.out" ] && grep -Fq 'not a regular file' "$work/dir.err"; then
+    ok "a directory is rejected with exit 2 before open"
+else
+    bad "directory input" "rc=$rc stdout=$(cat "$work/dir.out") stderr=$(cat "$work/dir.err")"
+fi
+runv "$work/proj" "$work/dirj.out" "$work/dirj.err" "$work/adir" --json; rc=$?
+if [ "$rc" -eq 2 ] && python3 - "$work/dirj.out" <<'PYJSON'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["ok"] is False and d["invalid"] >= 1
+assert d["errors"][0]["line"] == 0 and d["errors"][0]["kind"] == "io"
+PYJSON
+then
+    ok "a directory is a JSON failure (ok=false, line 0, kind io)"
+else
+    bad "directory JSON" "rc=$rc stdout=$(cat "$work/dirj.out")"
+fi
+
+if [ -e /dev/null ]; then
+    runv "$work/proj" "$work/null.out" "$work/null.err" /dev/null; rc=$?
+    if [ "$rc" -eq 2 ] && [ ! -s "$work/null.out" ] && grep -Fq 'not a regular file' "$work/null.err"; then
+        ok "/dev/null (a character device) is rejected with exit 2"
+    else
+        bad "/dev/null input" "rc=$rc stderr=$(cat "$work/null.err")"
+    fi
+fi
+
+ln -sfn "$work/adir" "$work/dirlink"
+runv "$work/proj" "$work/link.out" "$work/link.err" "$work/dirlink"; rc=$?
+if [ "$rc" -eq 2 ] && grep -Fq 'not a regular file' "$work/link.err"; then
+    ok "a symlink to a directory is rejected with exit 2"
+else
+    bad "directory symlink" "rc=$rc stderr=$(cat "$work/link.err")"
+fi
+
+( cd "$work/proj" && HOME="$work/home" CT_HOME="$work/home/.ct" CT_INDEX="$work/adir" \
+    "$ctast" index verify ) >"$work/ixd.out" 2>"$work/ixd.err"; rc=$?
+if [ "$rc" -eq 2 ] && grep -Fq 'not a regular file' "$work/ixd.err"; then
+    ok "CT_INDEX pointing at a directory exits 2"
+else
+    bad "CT_INDEX directory" "rc=$rc stderr=$(cat "$work/ixd.err")"
+fi
+( cd "$work/proj" && HOME="$work/home" CT_HOME="$work/home/.ct" CT_INDEX="$work/adir" \
+    "$ctast" index verify --json ) >"$work/ixdj.out" 2>"$work/ixdj.err"; rc=$?
+if [ "$rc" -eq 2 ] && python3 - "$work/ixdj.out" <<'PYJSON'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["ok"] is False and d["errors"] and d["errors"][0]["kind"] == "io"
+PYJSON
+then
+    ok "CT_INDEX directory is a JSON failure too"
+else
+    bad "CT_INDEX directory JSON" "rc=$rc stdout=$(cat "$work/ixdj.out")"
+fi
+
+mkdir -p "$work/badhome/index/index"
+( cd "$work/proj" && HOME="$work/badhome" CT_HOME="$work/badhome" \
+    env -u CT_INDEX "$ctast" index verify ) >"$work/home.out" 2>"$work/home.err"; rc=$?
+if [ "$rc" -eq 2 ] && grep -Fq 'not a regular file' "$work/home.err"; then
+    ok "\$CT_HOME/index/index being a directory exits 2"
+else
+    bad "CT_HOME directory" "rc=$rc stderr=$(cat "$work/home.err")"
+fi
+
+# A FIFO must be rejected by stat, not opened: the watchdog turns a hang into
+# a failure instead of stalling check-all.
+if command -v mkfifo >/dev/null 2>&1; then
+    rm -f "$work/fifo"
+    mkfifo "$work/fifo"
+    fifo_rc=$(python3 - "$ctast" "$work/fifo" "$work/fifo.err" <<'PYFIFO'
+import subprocess, sys
+try:
+    r = subprocess.run([sys.argv[1], "index", "verify", sys.argv[2]],
+                       timeout=5, capture_output=True, text=True)
+    open(sys.argv[3], "w").write(r.stderr)
+    print(r.returncode)
+except subprocess.TimeoutExpired:
+    print("TIMEOUT")
+PYFIFO
+)
+    if [ "$fifo_rc" = "2" ] && grep -Fq 'not a regular file' "$work/fifo.err"; then
+        ok "a FIFO is rejected without opening it (no hang)"
+    else
+        bad "FIFO input" "rc=$fifo_rc stderr=$(cat "$work/fifo.err" 2>/dev/null)"
+    fi
+fi
+
+# ferror: /proc/self/mem is a regular file whose read fails; only Linux has it.
+if [ -f /proc/self/mem ] && [ -r /proc/self/mem ]; then
+    runv "$work/proj" "$work/mem.out" "$work/mem.err" /proc/self/mem; rc=$?
+    if [ "$rc" -eq 2 ] && grep -Fq 'error reading the package index' "$work/mem.err"; then
+        ok "a read error (ferror) exits 2"
+    else
+        bad "ferror" "rc=$rc stderr=$(cat "$work/mem.err")"
+    fi
+else
+    echo "skip ferror (no /proc/self/mem on this host)"
+fi
+
 # --- single-index precedence ---------------------------------------------
 cp "$work/legal.index" "$work/env.index"
 cp "$work/legal.index" "$work/home/.ct-index-not-used"
