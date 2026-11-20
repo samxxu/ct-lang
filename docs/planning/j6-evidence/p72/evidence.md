@@ -9,7 +9,7 @@
 | 环境 | Darwin arm64；Apple clang 21.0.0（`arm64-apple-darwin27.2.0`）；`ct-ast v0.77.2` |
 | 复现入口 | `bash evidence/p72/run.sh`（自举链 + 25 项断言 + 自举不动点） |
 | 结果 | **25 passed, 0 failed**（退出码 0）；A.4 P-4.1 **10/10 放置类** |
-| patch | `p72.patch`（相对 `dff5a0df`，含源码、夹具、runner、完整 `raw.log`） |
+| patch | `p72.patch`（相对 `dff5a0df`，含源码、夹具、runner、完整 `raw.log`）；当前基线重放见 §7 |
 
 ## 0. 判定摘要
 
@@ -160,3 +160,12 @@ $ echo $?
 - **A.4 P-4.1**：10/10 放置类有硬错负例；**P-4.2** 嵌套泛型/Map 通过；**P-4.3** 直接返回 lint 通过；**P-4.4/P-4.5** 部分/文档化。
 - **P-7.2**：可按“A.4 放置矩阵 + get + 构造边界 + 返回 lint”判过；唯一限定是 box 存储语义未实现（放置拒绝已实现）。
 - **J-6**：仍需 P-7.1a/P-7.1b、P-7.3（含 `as_str()`/字面量视图）才能整体升 A；P-7.2 本身可判通过。
+
+## 7. rebase 到当前 HEAD（2026-11-20）
+
+- 基线：`ca3354a5`（PH-78 收口复核，`v0.78.0`）。
+- 方法：在 `dff5a0df` 上应用原 `p72.patch` 并提交，再 rebase 到 `ca3354a5`；唯一冲突是 `Parser.h.ct` 的 `parse_params`（PH-78 的 `ref/out` 与 P-7.2 的 slice 标注），已合并保留两者。
+- 复现：`bash evidence/p72/run.sh` → **25 passed, 0 failed**（自举链 + 25 项断言 + A.4 放置 10/10）。
+- 产物：[`p72-rebased-ca3354a5.patch`](p72-rebased-ca3354a5.patch)（仅 `selfhost/**`，8 文件，878+/14-）。
+- 回归：`examples/01_greeter`、`05_body_dispatch`、`24_vec_ops`、`48_string_steps` 均编译通过，greeter 运行输出正常。
+- 结论：P-7.2 可直接移植到 PH-79 当前基线；`evidence/` 目录不随主仓入库。

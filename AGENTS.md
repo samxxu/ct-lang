@@ -499,7 +499,8 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 2026-11-17：v0.63.4（PKG-11 get 输出详情；Phase 65 期内 fix，MINOR 仍 63）。
 > 2026-11-19：恢复 PN-2 `phase = MINOR`；PH-76 → v0.76.0、PH-77 → v0.77.0（`d=0`）。`v0.75.0` 因历史偏移（PH-75 = v0.74.0）不再补发，登记为历史空位。
 > 2026-11-20：PH-78 → v0.78.0（`d=0`）；v0.78.1 为 PH-78 REV 打回修复（SH-95/96/97）。
-> 2026-11-20：指针退场排期 PH-78 → v0.78.0（S2）、PH-79 → v0.79.0（S3）、PH-80 → v0.80.0（S5）、PH-81 → v0.81.0（S1）；v1.0 顺延。均 `d=0`，见 [phase 安排](docs/planning/pointer-free-phase-plan.md)。
+> 2026-11-20：PH-79 → v0.79.0（`d=0`）。
+> 2026-11-20：指针退场排期 PH-78 → v0.78.0（S2）、PH-79 → v0.79.0（S3）、PH-80 → v0.80.0（S5）、PH-81 → v0.81.0（S1）、PH-82 → v0.82.0（泄漏防护）；v1.0 顺延。均 `d=0`，见 [phase 安排](docs/planning/pointer-free-phase-plan.md)。
 
 `deviation: fix-tags`
 
@@ -554,6 +555,27 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 主规范 CR 见 [feedback-intake-policy](docs/proposals/feedback-intake-policy.md)，待主规范仓受理；
 > 本节的 CT 执行口径不替代主规范。
 
+#### 0.7 主编签收（项目加严，T-8）
+
+> 主规范尚未收录；本项目按更严口径执行，冲突取本节。自 2026-11-20 起对新产物生效，
+> 不追溯已收口 phase 与既有 ADR。
+
+| 产物 | 作者 | 默认签收 |
+| --- | --- | --- |
+| 需求 / 提案 / phase 卡 | REQ | EDITOR |
+| 评审报告 / 状态词 | REVIEW | EDITOR |
+| ADR / battle 判决 | EDITOR | REQ 或 REVIEW（不得自签） |
+| 实现 / 测试夹具 | DEV | VERIFY（红证）+ EDITOR（范围与证据齐全） |
+| 发布 | DEV / EDITOR | EDITOR + 用户 |
+
+- 签收 = 范围、判据、证据齐全且无未决异议；**签收不等于同意**。
+- 有异议不得拒签了事：转 `battle` 或 `CR-*`；仍不一致由用户裁决。
+- EDITOR 不写实现代码，也不替代 VERIFY 的红证签字（T-7）；涉及 EDITOR 自身产物的 battle，
+  judge 换为用户或独立席位。
+- 记录写在产物头部：`签收: <role> <YYYY-MM-DD>`；`test/docs/check-docs.py` 对「实施中」phase 卡
+  与 2026-11-20 起的新 ADR 做机器校验。
+- 单会话偏离下，签收是**角色席位**记录，不是第二个真人；同一席位不得自签。
+
 ### 1. 项目画像
 
 | 项 | 值 |
@@ -563,9 +585,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.78.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.79.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.78.1；Phase 78 已收口（含 REV 打回修复 v0.78.1）（`ref`/`out` 参数：上下文关键字、调用点 place、`out` 定值 L1、方法/trait）；Phase 77 已收口（官方包身份 `ct/std`、内置 pin 表、裸名限官方、旧锁迁移）；Phase 76 已收口（`$name` 链中物化）；Phase 43–53 已收口，Phase 54 S0–S7 全部完成（S4 包仓对齐属包外）。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.79.0；Phase 79 已收口（S3 切片 `T[]`：唯一拼写、带检查 place、`get`、`const T[]`、`T a[]` 迁移告警）；PH-80–82 已开卡准备（施工入口未过，不落实现代码）；Phase 78 已收口（`ref`/`out` 参数：上下文关键字、调用点 place、`out` 定值 L1、方法/trait）；Phase 77 已收口（官方包身份 `ct/std`、内置 pin 表、裸名限官方、旧锁迁移）；Phase 76 已收口（`$name` 链中物化）；Phase 43–53 已收口，Phase 54 S0–S7 全部完成（S4 包仓对齐属包外）。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界

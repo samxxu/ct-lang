@@ -1,6 +1,8 @@
 # Phase 81 — `box<T>` + `new`（S1）
 
-> **状态：规划中（未开卡；J-6 门槛）**（2026-11-20 立项；`v0.81.0` 拟）。
+> **状态：实施中（准备；施工入口未过）**（2026-11-20 立项并开卡；`v0.81.0`）。
+> **签收：EDITOR 2026-11-20**（主编统一签收；卡作者 REQ）。
+> **施工闸门**：P-7.5 未做、PH-80 未收口；未过前只做证据、设计与夹具，不落实现代码。
 > **前置**：P-7.5；PH-80 句柄协议收口。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/design/phase81.md`。
 > **依据**：[提案 v2](../proposals/pointer-free-v2.md)、[D-011](../decisions/D-011.md)、
@@ -45,13 +47,27 @@ box<Bad> b = new Bad { "x" };            /* error */
 | S1b `new` 语法 | 关键字、`new T {...}`、与 `T x = {...}` 共享解析 | S1a |
 | S1c 文档/门禁 | spec/tutorial、ASan、旧 golden | S1b |
 
+### 1.2 P-7.5 入口证据清单（施工前补齐）
+
+| # | 项 | 通过方式 |
+| --- | --- | --- |
+| P-7.5-1 | `box<T>` 布局与 `{refs,aux}` 头对齐 | `_Static_assert` + golden |
+| P-7.5-2 | release 按静态类型；`box` 不适用 `refs=-1` immortal | 正例/负例 + ASan |
+| P-7.5-3 | `new T { ... }` 仅具名 struct；`new String`/数组/容器硬错 | 逐类负例 |
+| P-7.5-4 | Drop、借用视图/失效检测与 Vec 同构 | 与 Vec 对照的探针 |
+| P-7.5-5 | `T` 含借用字段在 struct 声明层硬错 | 声明负例 |
+| P-7.5-6 | 引用环作者责任；`--debug-leaks` 只报计数 | 文档 + 计数输出不变 |
+| P-7.5-7 | 旧 golden 不变；ASan 无泄漏/悬挂 | `check-all` + ASan 原始输出 |
+
 ## 2 任务
 
-| 任务 | 交付 | 验收 |
-| --- | --- | --- |
-| S1a 句柄 | `box<T>` 类型、refs/release、Drop、视图 | `p81_box` |
-| S1b `new` | 关键字、具名 struct、指定式/位置式 | `p81_new` |
-| S1c 负例/文档 | `new String`/数组/容器、借用字段、环泄漏说明 | `p81_errors` / `p81_docs` |
+| 任务 | 交付 | 验收 | effort |
+| --- | --- | --- | --- |
+| S1a 句柄 | `box<T>` 类型、refs/release、Drop、视图 | `p81_box` | M |
+| S1b `new` | 关键字、具名 struct、指定式/位置式 | `p81_new` | M |
+| S1c 负例/文档 | `new String`/数组/容器、借用字段、环泄漏说明 | `p81_errors` / `p81_docs` | S |
+
+每项任务先提 `test(<scope>): <task-id> 红`（含 `baseline: <sha>`），实现提交随后转绿；S1c 的文档部分写 `no-test:` 并由 REVIEW 签字。
 
 ## 3 退出判据
 

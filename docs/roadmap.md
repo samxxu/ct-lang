@@ -80,7 +80,7 @@
 | Phase 67 | 无真机硬件能力扩展（PLL / nRF52840 / FreeRTOS / DMA / GDB） | ✅ 完成 | v0.66.0 | [卡](history/design/phase67.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
 | Phase 68 | 类型核心（`ct check --types`；修 234 误报） | ✅ 完成 | v0.67.0 | [卡](history/design/phase68.md) · [方案](planning/typecheck-semantic-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
 | Phase 69 | 跨单元/泛型/trait 类型检查 | ✅ 完成 | v0.68.0 | [卡](history/design/phase69.md) · [方案](planning/typecheck-semantic-plan.md) |
-| Phase 70 | CFG/定值/控制流语义检查 | ✅ 完成 | v0.69.0 | [卡](design/phase70.md) · [方案](planning/typecheck-semantic-plan.md) |
+| Phase 70 | CFG/定值/控制流语义检查 | ✅ 完成 | v0.69.0 | [卡](history/design/phase70.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 71 | own/borrow/Drop + 包级 strict | ✅ 完成 | v0.70.0 | [卡](design/phase71.md) · [方案](planning/typecheck-semantic-plan.md) |
 | Phase 72 | 静默错误与诊断批（LANG-3 / LANG-4 / LANG-11 / LANG-16+DF-1 / SH-76 / SH-18+LANG-15） | ✅ 完成 | v0.71.0 | [卡](design/phase72.md) · [post-58 评估](planning/post-58-plan.md) · [issues](../issues/) |
 | Phase 73 | 字段可见性与 ABI（LANG-9：`pub` 决定头文件导出面） | ✅ 完成 | v0.72.0 | [卡](design/phase73.md) · [LANG-9](../issues/lang/lang-9-struct-field-visibility-abi.md) |
@@ -89,10 +89,11 @@
 | Phase 76 | 链中 inline 物化 `$name`（最小 A′：声明即可、多变量、链尾） | ✅ 完成 | v0.76.0 | [卡](design/phase76.md) · [battle](../battle/inline-materialize-2/verdict.md) |
 | Phase 77 | 官方包身份与解析契约（`ct/std`；裸名限官方；`ct get` 展示 `url@version`；旧锁自动迁移） | ✅ 完成 | v0.77.0 | [卡](design/phase77.md) · [D-010](decisions/D-010.md) · [契约](planning/ct-pkg-get-contract.md) |
 | Phase 78 | `ref` / `out` 参数（S2；上下文关键字、调用点 lvalue、`out` 定值） | ✅ 完成（S2a–S2c / E78-1–E78-6；REV fix v0.78.1） | v0.78.0（fix v0.78.1） | [卡](design/phase78.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
-| Phase 79 | 切片 `T[]`（S3；`T[]` 唯一、带检查 place、`const T[]`） | ⬜ 规划中（未开卡；J-6 门槛） | v0.79.0（拟） | [卡](design/phase79.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
-| Phase 80 | `String` / `Str`（S5；UTF-8/UTF-16 双类型、L1 字面量、std 迁移） | ⬜ 规划中（未开卡；J-6 门槛） | v0.80.0（拟） | [卡](design/phase80.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
-| Phase 81 | `box<T>` + `new`（S1；共享句柄协议、`new` 仅具名 struct） | ⬜ 规划中（未开卡；J-6 门槛） | v0.81.0（拟） | [卡](design/phase81.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
-| `v1-PH-0` | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；B 检查器 opt-in；在 PH-81 之后顺延） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
+| Phase 79 | 切片 `T[]`（S3；`T[]` 唯一、带检查 place、`const T[]`） | ✅ 完成（S3a–S3e / E79-1–E79-6） | v0.79.0 | [卡](design/phase79.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
+| Phase 80 | `String` / `Str`（S5；UTF-8/UTF-16 双类型、L1 字面量、std 迁移） | 🟨 实施中（准备；施工入口 P-7.4 未补齐） | v0.80.0 | [卡](design/phase80.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
+| Phase 81 | `box<T>` + `new`（S1；共享句柄协议、`new` 仅具名 struct） | 🟨 实施中（准备；施工入口 P-7.5 + PH-80 收口未过） | v0.81.0 | [卡](design/phase81.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
+| Phase 82 | 泄漏防护（`leaks` 两档 `warn` / `error`；`box` 字段直接环告警；树模式文档） | 🟨 实施中（准备；施工入口 PH-81 收口未过） | v0.82.0 | [卡](design/phase82.md) · [提案](proposals/leak-guards.md) · [判决](../battle/leak-guards-1/verdict.md) · [D-012](decisions/D-012.md) |
+| `v1-PH-0` | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；B 检查器 opt-in；在 PH-82 之后顺延） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
 | `v1-PH-1` | v1.1 语法现代化（S1）+ A strict 编译路径（S2） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线](planning/v1-release-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
 | `HW-1` | **真板 pilot**（REQ-HW-020：真实板卡 + 厂商 HAL + RTOS；含 [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) DMA 真实搬运） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [需求](planning/hardware-readiness-requirements.md) · [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) |
 | `HW-2` | **第二厂商真板**（nRF52840 / RP2040 的烧录、调试与电气验证） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [PH-67 卡](history/design/phase67.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
@@ -101,10 +102,12 @@
 > PH-64 / PH-67 交付。TEST-22 归入 `HW-1`。phase-ID 迁移（`v0-PH-*`）是横切任务，
 > 不占 phase 号，见 [blockers](planning/phase-migration-blockers.md)。
 
-> **指针退场（v0.78–v0.81）**：PH-78 S2 `ref/out` → PH-79 S3 切片 → PH-80 S5 `String/Str`
+> **指针退场（v0.78–v0.82）**：PH-78 S2 `ref/out` → PH-79 S3 切片 → PH-80 S5 `String/Str`
 > → PH-81 S1 `box/new`；S2 ∥ S3 可并行准备，单卡纪律先开 S2；S4 函子延后 v1.1+ Wave 2。
-> PH-78 已收口（v0.78.0），入口只要求 P-7.1a/P-7.1b（`ref_out` 证据）；P-7.2/P-7.3 与
-> J-6 全量仍未过，PH-79–81 按各自入口等待；v1.0 顺延到 PH-81 之后。
+> PH-78 已收口（v0.78.0 / fix v0.78.1），PH-79 已收口（v0.79.0）；PH-80–82 已开卡（准备），
+> 施工入口分别等 P-7.4、P-7.5 + PH-80 收口、PH-81 收口。
+> J-6 全量仍未过；v1.0 顺延到 PH-82 之后。
+> PH-82 见 [phase82](design/phase82.md) / [D-012](decisions/D-012.md)。
 > 详见 [pointer-free-phase-plan](planning/pointer-free-phase-plan.md)。
 
 > Phase 13–16 未使用；Phase 27–30 合并为 v0.30.0 发布，Phase 31–33 合并为 v0.33.0 发布（Phase 31 / 33

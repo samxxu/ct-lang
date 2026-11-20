@@ -1,7 +1,10 @@
 # Phase 80 — `String` / `Str`（S5）
 
-> **状态：规划中（未开卡；J-6 门槛）**（2026-11-20 立项；`v0.80.0` 拟）。
-> **前置**：P-7.3 最小垂直切片 + P-7.4 全量；PH-79 切片表示收口。
+> **状态：实施中（准备；施工入口未过）**（2026-11-20 立项并开卡；`v0.80.0`）。
+> **签收：EDITOR 2026-11-20**（主编统一签收；卡作者 REQ）。
+> **施工闸门**：P-7.3 最小切片已过、**PH-79 已收口（v0.79.0）**；**P-7.4 全量未补**。
+> 未过前只做证据、设计与夹具，不落实现代码。
+> **前置**：P-7.3 最小垂直切片 + P-7.4 全量；PH-79 切片表示收口 ✅。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/design/phase80.md`。
 > **依据**：[提案 v2 §3/附录 C](../proposals/pointer-free-v2.md)、[D-011](../decisions/D-011.md)、
 > [phase 安排](../planning/pointer-free-phase-plan.md)。
@@ -50,16 +53,32 @@ U16Str jc = js[0];                 /* UTF-16 code unit 视图，只读 */
 | S5a 内建层 | `String/Str` + `U16String/U16Str` 类型、L1 字面量、核心方法、旧 `Str` 限定名并存 | P-7.3；PH-79 收口 |
 | S5b 删旧/迁移 | 删旧 `Str`、std 消费者迁移、索引/包版本、README/spec/roadmap 三处同步 | P-7.4；S5a 收口 |
 
+### 1.2 P-7.4 入口证据清单（施工前补齐）
+
+P-7.3 最小切片已 rebase 到 `5736f0d5` 并重放 **16/16**，产物 [`j6-evidence/p73/p73-rebased-5736f0d5.patch`](../planning/j6-evidence/p73/p73-rebased-5736f0d5.patch)；它替换了旧 `lib/std/Str.h.ct`，只作 S5a 参考，不直接合并。
+
+| # | 项 | 通过方式 |
+| --- | --- | --- |
+| P-7.4-1 | `.data` 最终类型裁定（`const char *` + lint 或保留 `Str` 视图） | 证据里固定一种，负例覆盖 `printf("%s", s.data)` |
+| P-7.4-2 | 旧 owning `Str` 仅 `std::str::Str` 限定名；裸名 `Str` 是借用 | 同单元并存、限定名解析、迁移正例 |
+| P-7.4-3 | 既有测试套件全绿，或列出经批准的迁移清单 | `test/ast` / `examples` / std 消费者逐项记录 |
+| P-7.4-4 | `Map<Str,V>` key 块、`str_slice`/`str_dup` 命名迁移 | 编译 + 运行 + 行为等价 |
+| P-7.4-5 | UTF-8 码点/`byte_*` API 与 U16 核心 JS 方法全量清单 | 方法逐个正例/负例 |
+| P-7.4-6 | 外部消费者 `Str`→`String` dry-run | 至少一个跨仓/外部工程可编译、行为等价 |
+| P-7.4-7 | A.3.1–A.3.3 全绿 + ASan/UBSan | 原始输出与退出码 |
+
 ## 2 任务
 
-| 任务 | 交付 | 验收 |
-| --- | --- | --- |
-| S5a-1 类型/布局 | 16 字节句柄 + 8 字节头；immortal 空串/字面量 | `p80_layout` |
-| S5a-2 字面量/转换 | L1 字面量；`to_string`/`as_str`；UTF-16 工厂 | `p80_literal` |
-| S5a-3 方法/下标 | UTF-8 码点/字节 API；U16 核心 JS 方法；只读 `s[i]` | `p80_methods` |
-| S5a-4 C 边界 | `.data` 只读、`cstr()`、printf 负例 | `p80_cstr` |
-| S5b-1 迁移 | 删旧 `Str`、std 消费者、包版本/索引 | `p80_migrate` |
-| S5b-2 文档 | README/spec/roadmap 三处同步 | `p80_docs` |
+| 任务 | 交付 | 验收 | effort |
+| --- | --- | --- | --- |
+| S5a-1 类型/布局 | 16 字节句柄 + 8 字节头；immortal 空串/字面量 | `p80_layout` | M |
+| S5a-2 字面量/转换 | L1 字面量；`to_string`/`as_str`；UTF-16 工厂 | `p80_literal` | M |
+| S5a-3 方法/下标 | UTF-8 码点/字节 API；U16 核心 JS 方法；只读 `s[i]` | `p80_methods` | M |
+| S5a-4 C 边界 | `.data` 只读、`cstr()`、printf 负例 | `p80_cstr` | S |
+| S5b-1 迁移 | 删旧 `Str`、std 消费者、包版本/索引 | `p80_migrate` | M |
+| S5b-2 文档 | README/spec/roadmap 三处同步 | `p80_docs` | S |
+
+每项任务先提 `test(<scope>): <task-id> 红`（含 `baseline: <sha>`），实现提交随后转绿；S5b-2 为纯文档任务，写 `no-test:` 并由 REVIEW 签字。
 
 ## 3 退出判据
 

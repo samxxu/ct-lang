@@ -25,9 +25,11 @@ Standard library only. It asserts eight invariants:
   7. docs/design/ keeps the newest DESIGN_WINDOW phases, older phase docs live
      in docs/history/design/ and may not be duplicated (DOC-66);
   8. every battle question's `superseded-by:` pointer and the ADR's
-     `superseded-battles:` list agree in both directions.
+     `superseded-battles:` list agree in both directions;
+  9. T-8 (AGENTS §0.7): an "实施中" phase card and every ADR dated on or
+     after SIGNOFF_FROM carry a `签收:` line by a non-author role.
 
-Exit code 0 when all eight hold, 1 otherwise.
+Exit code 0 when all nine hold, 1 otherwise.
 """
 
 import hashlib
@@ -40,6 +42,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 SPEC = os.path.expanduser("~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md")
 DESIGN_WINDOW = 12
+SIGNOFF_FROM = "2026-11-20"
 
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 FENCE = re.compile(r"```.*?```", re.S)
@@ -380,6 +383,60 @@ def check_superseded_links(errors):
     return len(pointers) + sum(len(v) for v in listed.values())
 
 
+def check_signoffs(errors):
+    """T-8 (AGENTS §0.7): new artifacts carry a non-author signoff.
+
+    Phase cards are authored by REQ, so their `签收:` must name EDITOR,
+    REVIEW or USER. ADRs are authored by EDITOR (verdict section), so their
+    signoff must name REQ, REVIEW or USER. Only "实施中" cards and ADRs dated
+    on/after SIGNOFF_FROM are checked, so closed phases and older ADRs are not
+    retroactively red.
+    """
+    checked = 0
+    design = os.path.join(ROOT, "docs", "design")
+    for name in sorted(os.listdir(design)):
+        if not re.fullmatch(r"phase\d+\.md", name):
+            continue
+        text = read(os.path.join(design, name))
+        head = "\n".join(text.splitlines()[:25])
+        if not re.search(r"\*\*状态：\s*实施中", head):
+            continue
+        dates = re.findall(r"20\d\d-\d\d-\d\d", head)
+        if not dates or max(dates) < SIGNOFF_FROM:
+            continue
+        checked += 1
+        m = re.search(r"(?m)^>\s*.*签收\s*[:：]\s*(EDITOR|REVIEW|REQ|USER)\b", head)
+        if not m:
+            errors.append(
+                f"docs/design/{name}: no 签收 line (T-8; expected EDITOR/REVIEW/USER)"
+            )
+        elif m.group(1) == "REQ":
+            errors.append(
+                f"docs/design/{name}: REQ authors the card; 签收 must be EDITOR/REVIEW/USER (T-8)"
+            )
+
+    adr = os.path.join(ROOT, "docs", "decisions")
+    for name in sorted(os.listdir(adr)):
+        if not re.fullmatch(r"D-\d+.*\.md", name):
+            continue
+        text = read(os.path.join(adr, name))
+        head = "\n".join(text.splitlines()[:25])
+        dates = re.findall(r"20\d\d-\d\d-\d\d", head)
+        if not dates or max(dates) < SIGNOFF_FROM:
+            continue
+        checked += 1
+        m = re.search(r"(?m)^\s*[-*]?\s*签收\s*[:：]\s*(EDITOR|REVIEW|REQ|USER)\b", head)
+        if not m:
+            errors.append(
+                f"docs/decisions/{name}: no 签收 line (T-8; expected REQ/REVIEW/USER)"
+            )
+        elif m.group(1) == "EDITOR":
+            errors.append(
+                f"docs/decisions/{name}: EDITOR authors the verdict; 签收 must be REQ/REVIEW/USER (T-8)"
+            )
+    return checked
+
+
 def main():
     errors = []
     links, scanned = check_links(errors)
@@ -390,6 +447,7 @@ def main():
     spec = check_spec_pin(errors)
     design, window = check_design_window(errors)
     superseded = check_superseded_links(errors)
+    signoffs = check_signoffs(errors)
     for error in errors:
         print(f"FAIL: {error}")
     # The two status lines print on both paths: on a red run the first one names
@@ -402,7 +460,8 @@ def main():
     print(
         f"check-docs: OK ({links} relative links in {scanned} files, "
         f"v{version}, {gates} hard gates, {phases} phase status, "
-        f"{applies} 适用版本 header(s), {superseded} superseded link(s))"
+        f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
+        f"{signoffs} signoff(s))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0

@@ -1,0 +1,85 @@
+{
+  "schema": "battle-verify/1",
+  "battle": "leak-guards-1",
+  "seat": "VERIFY",
+  "generated_at_local": "2026-11-20T13:30:00+08:00",
+  "head": {"baseline": "cec61c22", "version": "0.77.2"},
+  "environment": {
+    "os": "macOS (Darwin arm64)",
+    "date": "2026-11-20",
+    "scope": "read-only: manifest 文档、D-011、phase81、diag/parser 源码"
+  },
+  "evidence": [
+    {
+      "id": "E-01",
+      "command": "grep -n \"c-boundary\" docs/package-guide.md | head -3",
+      "output": "89:| `c-boundary` | 否 | `strict` \\| `allow`：本包单元的 C 边界策略。缺省按外部 `strict`；**有 manifest 但缺这个键**的旧包保留 `allow` 窗口 |\n102:`c-boundary` 由 `ct build` / `ct pkg check` 读取：`strict` 时包内 `.ct/.h.ct` 不得直接",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-02",
+      "command": "sed -n '33p' docs/decisions/D-011.md",
+      "output": "| J-4c box 环 | **A** | 作者责任 + 文档契约；`--debug-leaks` 只报未配对 alloc/release，不叫环检测 |",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-03",
+      "command": "sed -n '64p' docs/design/phase81.md",
+      "output": "| E81-5 | 引用环作者责任；`--debug-leaks` 只报计数，不宣称环检测 |",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-04",
+      "command": "grep -rn \"box<\" selfhost lib --include='*.ct'",
+      "output": "selfhost/ct-ast/frontend/parse/Expr.h.ct:1161:   `String` / `Str`, `box<T>`, `Vec<T>`, `Map<K,V>` and any struct with a\nselfhost/ct-ast/frontend/parse/Expr.h.ct:1172:    if (strncmp(type, \"box<\", 4) == 0 || strncmp(type, \"Box<\", 4) == 0) return 1;",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-05",
+      "command": "sed -n '6p' test/modules/leak/prog.ct",
+      "output": "    S *p = malloc(sizeof(struct S));",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-06",
+      "command": "sed -n '281p' selfhost/ct-ast/tool/diag/Diag.h.ct",
+      "output": "        const char *sev = self->strict == 1 ? \"error\" : \"warning\";",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-07",
+      "command": "sed -n '2540p' docs/language-spec.md",
+      "output": "- **严格模式**：新诊断经 `ct_type_warn` 记录，`ct check` 的 strict 模式把 warning 升级为",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-08",
+      "command": "grep -n \"debug-leaks\" docs/design/phase81.md",
+      "output": "37:- 引用环泄漏作者责任；`--debug-leaks` 只报未配对 alloc/release 计数，不做环检测。\n64:| E81-5 | 引用环作者责任；`--debug-leaks` 只报计数，不宣称环检测 |",
+      "exit": 0,
+      "reproduced": true
+    }
+  ],
+  "anchors": [
+    {"file": "docs/package-guide.md", "line": 89},
+    {"file": "docs/decisions/D-011.md", "line": 33},
+    {"file": "docs/design/phase81.md", "line": 64},
+    {"file": "selfhost/ct-ast/frontend/parse/Expr.h.ct", "line": 1172},
+    {"file": "test/modules/leak/prog.ct", "line": 6},
+    {"file": "selfhost/ct-ast/tool/diag/Diag.h.ct", "line": 281},
+    {"file": "docs/language-spec.md", "line": 2540}
+  ],
+  "checks": [
+    {"id": "J-1", "result": "A", "evidence": ["E-01"]},
+    {"id": "J-2", "result": "A", "evidence": ["E-02", "E-03", "E-08"]},
+    {"id": "J-3", "result": "A", "evidence": ["E-07", "E-06"]},
+    {"id": "J-4", "result": "A", "evidence": ["E-04", "E-05"]}
+  ]
+}

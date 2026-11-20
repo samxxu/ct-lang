@@ -30,7 +30,10 @@
 | PH-76 链中 inline 物化 `$name`（S1–S4 / E76-1–5） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | — ✅ v0.76.0 |
 | PH-77 官方包身份与解析契约（S0–S5 / E77-1–E77-8） | 当前 DSH 会话（lead） | EDITOR / DEV / VERIFY | PH-77 ✅ v0.77.0 |
 | PH-78 `ref` / `out` 参数（S2a–S2c / E78-1–E78-6） | 当前 DSH 会话（DEV `dev-ph78`） | DEV | PH-78 ✅ v0.78.0（fix v0.78.1） |
-| 指针退场 PH-79–81 排期（规划中，未开卡） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-79–PH-81 |
+| PH-79 切片 `T[]`（S3a–S3e / E79-1–E79-6） | 当前 DSH 会话（DEV `dev-ph79`） | DEV | PH-79 ✅ v0.79.0 |
+| PH-80 `String`/`Str`（S5；准备，施工入口 P-7.4 未补齐） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-80 🟨 准备 |
+| PH-81 `box`/`new`（S1；准备，施工入口 P-7.5 + PH-80 未过） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-81 🟨 准备 |
+| PH-82 泄漏防护（准备，施工入口 PH-81 未过；D-012） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-82 🟨 准备 |
 | `HW-1`/`HW-2` 硬件批次 | 外部依赖（无硬件） | REQ | 只登记，不阻塞 |
 
 > 本仓库当前为单会话工作，三类常驻对话未建；见 `AGENTS.md` 的 `deviation: single-session-workflow`。
