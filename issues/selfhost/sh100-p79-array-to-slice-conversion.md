@@ -73,3 +73,65 @@ E79-2 写的是“数组→切片自动补 len”。至少以下位置应与局�
 
 切片形参无法直接接收数组；这是切片作为“借用视图”在函数边界上的主用法。
 `int[] s = a; sum(s);` 可用，说明缺的是调用点/返回点的 coercion，而不是底层表示。
+
+## 处置（DEV，2026-11-20，v0.79.2）
+
+`fixed` 主张：新增“整数组→视图”节点（`N_SLICE_RANGE` aux 3）与
+`ExprTypes.slice_view_from_array()`（`selfhost/ct-ast/frontend/parse/Expr.h.ct`）。
+自由函数实参在 arity/类型/ref-out/boxing 检查之后转换；`return` 在 escape lint 之后转换
+（`Stmt.h.ct`）。emitter 对 aux 3 发与局部声明相同的
+`(struct __ct_slice){ (void *)(a), (int)(sizeof(a) / sizeof((a)[0])) }`；
+`static_ctype` 把三种切片节点统一读成 `struct __ct_slice`。
+
+覆盖：
+
+- `sum(a)`（`int[]` 形参）与 `sum(o.xs)`（结构体数组字段）；
+- `return g_arr;` / `return p->xs;`（`int[]` 返回）；
+- `return a;`（局部数组）：转换后同时触发 `slice escape` lint（E79-6 的直接数组形式）；
+- 静态/全局数组的视图不 lint。
+
+边界（不改）：
+
+- 多维数组→切片、`T a[]` 形参（已退化为指针）→切片不做长度推断；
+- inherent/static 方法的形参类型不在 `MethAnn`，方法实参的本地数组→切片未扩
+  （自由函数与 trait 方法、全局数组已覆盖）。见卡 §6 B-4/B-7。
+
+红证（baseline `2a2f3933`；完整输出见
+[test/ast/p79_red_rev.log](../../test/ast/p79_red_rev.log)）：
+
+```console
+$ sh test/ast/p79_basic.sh <baseline>/build/ct-ast ; echo exit=$?
+FAIL p79/basic: E79-2/SH-100: an array actual fills a T[] parameter
+  arr_arg.ct:44:17: error: passing 'int[2]' to parameter of incompatible type 'struct __ct_slice'
+FAIL p79/basic: E79-2/SH-100: an array return fills a T[] result
+  arr_ret.ct:41:12: error: returning 'int[2]' from a function with incompatible result type 'struct __ct_slice'
+FAIL p79/basic: E79-2/SH-100: a struct's array field fills a T[] parameter
+  field_arg.ct:48:17: error: passing 'int[2]' to parameter of incompatible type 'struct __ct_slice'
+FAIL p79/basic: E79-6/SH-100: a converted local-array return lints
+  the warning fixture did not build
+exit=1
+```
+
+绿输出（v0.79.2）：
+
+```console
+$ sh test/ast/p79_basic.sh <ct-ast> ; echo exit=$?
+ok   E79-2/SH-100: an array actual fills a T[] parameter
+ok   E79-2/SH-100: an array return fills a T[] result
+ok   E79-6/SH-100: a converted local-array return lints
+ok   E79-2/SH-100: a struct's array field fills a T[] parameter
+exit=0
+$ sh test/ast/p79_places.sh <ct-ast> ; echo exit=$?
+ok   E79-6: returning a local array (converted) lints
+ok   E79-6: a view of a global array does not lint
+ok   E79-6: a view of a static array does not lint
+exit=0
+```
+
+生成 C 例：
+
+```c
+return (struct __ct_slice){ (void *)(o.xs), (int)(sizeof(o.xs) / sizeof((o.xs)[0])) };
+```
+
+红提交 `f9294448`；修复提交见 `git log --grep 'SH-100'`。

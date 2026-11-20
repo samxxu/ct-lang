@@ -56,3 +56,41 @@ struct __ct_slice t = __ct_slice_range((void *)(a),
 
 数组基座的省略上界子切片完全不可用；调用方拿到的是 C 编译错误而不是 CT 诊断。
 `a[lo..hi]` 与 `s[lo..]` 不受影响。
+
+## 处置（DEV，2026-11-20，v0.79.2）
+
+`fixed` 主张：数组基座省略上界的子切片分支补齐了 `(int)(` 的右括号：
+`selfhost/ct-ast/backend/emit/Emitter.h.ct` 的 `c < 0 && aux == 1` 分支由
+`fputs(")[0])", ...)` 改为 `fputs(")[0]))", ...)`，与同函数显式上界分支一致。
+半开语义不变：`a[1..]` 生成 `__ct_slice_range((void *)(a), len, 1, len, sizeof(int), ...)`，
+即 `{a + 1, len - 1}`。
+
+红证（baseline `2a2f3933`，独立自举构建；完整输出见
+[test/ast/p79_red_rev.log](../../test/ast/p79_red_rev.log)）：
+
+```console
+$ sh test/ast/p79_basic.sh <baseline>/build/ct-ast ; echo exit=$?
+FAIL p79/basic: E79-2/SH-99: array-base open subslice a[1..] is half-open and valid C
+  a1open.ct:40:95: warning: cast to smaller integer type 'int' from 'char *' [-Wpointer-to-int-cast]
+    struct __ct_slice t = __ct_slice_range((void *)(a), (int)(sizeof(a) / sizeof((a)[0])), 1, (int)(sizeof(a) / sizeof((a)[0]), sizeof(int), "a1open.ct:4");
+exit=1
+```
+
+绿输出（v0.79.2）：
+
+```console
+$ sh test/ast/p79_basic.sh <ct-ast> ; echo exit=$?
+ok   E79-2/SH-99: array-base open subslice a[1..] is half-open and valid C
+ok   E79-2: array-base bounded subslice a[1..3] stays half-open
+exit=0
+```
+
+生成 C：
+
+```c
+struct __ct_slice t = __ct_slice_range((void *)(a), (int)(sizeof(a) / sizeof((a)[0])), 1,
+    (int)(sizeof(a) / sizeof((a)[0])), sizeof(int), "a1open.ct:4");
+```
+
+回归：`p79_basic` 的 `s[1..]`、`a[1..3]` 与既有 goldens 不变。
+红提交 `f9294448`；修复提交见 `git log --grep 'SH-99'`。

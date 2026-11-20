@@ -77,3 +77,46 @@ PN-10 也要求每个 stage 有独立红/绿提交；实际只有一个红提交
 
 卡面“S3a–S3e 已落”和“实现红证 VERIFY 见 §5”与仓库证据不符；G1/G5/T-7 的机械检查抓不到
 “验收脚本不存在”与“红证为空”。这是流程/证据缺口，不改变 SH-99/100/101 的代码缺口性质。
+
+## 处置（DEV，2026-11-20，v0.79.2）
+
+`fixed` 主张：按期望的第 1 方案补齐四个脚本，并让卡面与仓库一致：
+
+- 新增 `test/ast/p79_index.sh`（E79-3/4：读写、元素类型、参数、越界上/下/runtime trap、
+  `get` 软访问、`const T[]` 写与借用、C 数组不检查）；
+- 新增 `test/ast/p79_places.sh`（E79-5 十类 + `box`/`Map`，E79-6 三条 lint 与全局/静态不 lint）；
+- 新增 `test/ast/p79_migrate.sh`（E79-1：形参/字段/无初始化器告警、`T a[] = {...}` 静默、
+  `T[]` 与 `T a[N]` 静默）；
+- 新增 `test/ast/p79_docs.sh`（S3e：spec §4.69 + package-guide §7.6 的关键承诺）；
+- 四个脚本与 `p79_basic` 一起接入 `selfhost/check-ast.sh`（PH-79-S3/S3b/S3c/S3d/S3e 五项）；
+- `p79_basic` 增加 `a[1..]`、`sum(a)`、`return a`、结构体数组字段、`bump(s[1])` 等九条断言，
+  并在卡 §2.1 去掉 `Vec.as_slice`、在 §5/§8 更新计数。
+
+红证：baseline `2a2f3933` 下四个脚本不存在（原始输出）：
+
+```console
+$ git archive 2a2f3933 | tar -x -C /tmp/p79base
+$ ls /tmp/p79base/test/ast/p79_*.sh
+test/ast/p79_basic.sh
+present p79_basic
+MISSING p79_index
+MISSING p79_places
+MISSING p79_migrate
+MISSING p79_docs
+```
+
+同一基线跑最终探针的逐字输出（含退出码）见
+[test/ast/p79_red_rev.log](../../test/ast/p79_red_rev.log)；`p79_basic` 九条新断言全红，
+`p79_index`/`p79_places`/`p79_migrate` 因 SH-99/100/101 部分红。
+
+绿输出（v0.79.2）：
+
+```console
+$ sh test/ast/p79_basic.sh   <ct-ast> ; echo exit=$?   # 24 ok, exit=0
+$ sh test/ast/p79_index.sh   <ct-ast> ; echo exit=$?   # 10 ok, exit=0
+$ sh test/ast/p79_places.sh  <ct-ast> ; echo exit=$?   # 17 ok, exit=0
+$ sh test/ast/p79_migrate.sh <ct-ast> ; echo exit=$?   #  7 ok, exit=0
+$ sh test/ast/p79_docs.sh ; echo exit=$?               # 15 ok, exit=0
+```
+
+红提交 `f9294448`；修复提交见 `git log --grep 'TEST-24'`。

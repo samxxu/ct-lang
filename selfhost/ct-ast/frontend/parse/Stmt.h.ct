@@ -2318,6 +2318,20 @@ impl StmtOps for Stmt {
                             "slice escape: 'return' hands back a view of a local array",
                             self->sup->mem->path) != 0)
                         return -1;
+                } else if (lvi >= 0 && self->arena->nodes[e].kind == N_VAR
+                           && self->sym->ret_type[0]
+                           && strcmp(self->sym->ret_type, "struct __ct_slice") == 0
+                           && self->sym->vars[lvi].is_array
+                           && !self->sym->vars[lvi].is_fnparam
+                           && !self->sym->vars[lvi].is_global
+                           && !self->sym->vars[lvi].is_static) {
+                    /* SH-100: `return a;` on a local array is converted to a
+                       slice view too, so it hands back dead storage exactly
+                       like `return s;` above. */
+                    if (tool::diag::ct_slice_warn(eline, ecol,
+                            "slice escape: 'return' hands back a view of a local array",
+                            self->sup->mem->path) != 0)
+                        return -1;
                 } else if (lvi >= 0 && self->arena->nodes[e].kind == N_SLICE_RANGE
                            && self->arena->nodes[e].aux == 1
                            && !self->sym->vars[lvi].is_global
@@ -2327,6 +2341,15 @@ impl StmtOps for Stmt {
                             self->sup->mem->path) != 0)
                         return -1;
                 }
+            }
+            /* PH-79 fix SH-100: `return a;` in a function whose result is
+               `T[]` hands back a view, exactly like `int[] s = a;` does. The
+               conversion is a node, so the emitter spells the `{ptr,len}`
+               compound literal from the array lvalue. */
+            if (self->sym->ret_type[0]
+                && strcmp(self->sym->ret_type, "struct __ct_slice") == 0) {
+                e = self->ex->slice_view_from_array(e);
+                if (e < 0) return -1;
             }
             /* Phase 43: an `err:` payload is judged on every path, not only
                under `--types`. The `is_err` branch uses the hard-error diag

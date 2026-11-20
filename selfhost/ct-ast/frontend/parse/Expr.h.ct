@@ -315,6 +315,11 @@ pub trait ExprTypes {
        arguments, each formal is substituted, and each actual is judged with
        L32-6 at its own start position. */
     int  chk_mcall_args(const char *ibase, const char *fname, int args);
+    /* PH-79 fix SH-100: an array value where a `T[]` is expected becomes a
+       view node (`N_SLICE_RANGE` aux 3). `n` is returned unchanged when it is
+       already a slice, is not an array, or is a `T a[]` parameter (decayed to
+       a pointer, so no length is available). */
+    int  slice_view_from_array(int n);
 }
 
 /* Phase 44: the postfix `?` helpers. Their own small trait because `ExprOps`
@@ -1292,6 +1297,15 @@ static int ref_arg_place(struct Expr *self, int n)
         return ref_arg_place(self, b);
     }
     if (k == N_INDEX) return ref_arg_place(self, self->arena->nodes[n].a);
+    /* PH-79 fix SH-101: `s[i]` is a checked place (spec §4.69), so a slice
+       element may be a `ref`/`out` actual exactly like a C array element: the
+       element lives in the underlying array and `__ct_slice_at` keeps the
+       run-time bounds check in the emitted C. A `const T[]` view stays
+       read-only, so its element is not a writable place. */
+    if (k == N_SLICE_INDEX) {
+        if (self->arena->nodes[n].aux == 1) return 0;
+        return ref_arg_place(self, self->arena->nodes[n].a);
+    }
     if (k == N_MCALL) return container_sugar_kind(self, n) == 1;
     return 0;
 }
@@ -4408,6 +4422,21 @@ impl ExprOps for Expr {
                 return self->ctype_expand(self->sym->traits[si].m[i].ret, out, cap, 0);
             }
             return 0;
+        /* PH-79 fix SH-100: the element spelling travels on the node, so the
+           value/pointer/storage types are all recoverable. `s[i]` is the
+           element value, `s.get(i)` its pointer, and a subslice (including
+           the whole-array view aux 3) the erased slice struct. */
+        case N_SLICE_INDEX:
+            if (!self->arena->nodes[n].text[0]) return 0;
+            if (snprintf(out, cap, "%s", self->arena->nodes[n].text) >= cap) return 0;
+            return 1;
+        case N_SLICE_GET:
+            if (!self->arena->nodes[n].text[0]) return 0;
+            if (snprintf(out, cap, "%s *", self->arena->nodes[n].text) >= cap) return 0;
+            return 1;
+        case N_SLICE_RANGE:
+            if (snprintf(out, cap, "%s", "struct __ct_slice") >= cap) return 0;
+            return 1;
         default:
             return 0;
         }
@@ -6873,6 +6902,31 @@ impl ExprOps for Expr {
                     }
                     args = first_arg;
                 }
+                /* PH-79 fix SH-100: an array actual for a `T[]` formal is a
+                   view, exactly like the local-declaration initialiser. Done
+                   after the checks above, which judge the source spelling. */
+                if (fi >= 0 && args > 0) {
+                    int cur = args, prev = -1, k = 0, first_arg = args;
+                    while (cur > 0 && k < self->sym->funcs[fi].nparams) {
+                        int is_cl = self->arg_is_closure(cur);
+                        if (!is_cl
+                            && strcmp(self->sym->funcs[fi].ptype[k], "struct __ct_slice") == 0) {
+                            int view = self->slice_view_from_array(cur);
+                            if (view < 0) return -1;
+                            if (view != cur) {
+                                if (prev < 0) first_arg = view;
+                                else self->arena->nodes[prev].next = view;
+                                self->arena->nodes[view].next = self->arena->nodes[cur].next;
+                                cur = view;
+                            }
+                        }
+                        prev = cur;
+                        cur = self->arena->nodes[cur].next;
+                        /* a closure fills the host's `(fn, env)` pair */
+                        k += is_cl ? 2 : 1;
+                    }
+                    args = first_arg;
+                }
                 self->arena->nodes[n].kind = N_CALL;
                 self->arena->nodes[n].a = (args == 0) ? -1 : args;
             } else if (self->sym->find_var(self->arena->nodes[n].text2) >= 0) {
@@ -7974,6 +8028,41 @@ impl ExprTypes for Expr {
                                             self->sup->mem->path);
         return tool::diag::ct_type_warn(self->chk_line, self->chk_col, "", msg,
                                         self->sup->mem->path);
+    }
+
+    /* PH-79 fix SH-100: an array value where a `T[]` is expected is a view.
+       The same `{ptr,len}` conversion the local declaration performs becomes
+       an explicit AST node here, so a call actual and a return value can use
+       it after their own checks have run. `N_SLICE_RANGE` aux 3 means "whole
+       array, no bounds": the emitter spells the compound literal and repeats
+       the lvalue for the two `sizeof`s. A function parameter written `T a[]`
+       has decayed to a pointer and carries no length, so it is left to C. */
+    int slice_view_from_array(int n)
+    {
+        char t[MAX_TEXT];
+        int d = 0, vi, m;
+
+        if (n < 0) return n;
+        if (self->arena->nodes[n].kind == N_SLICE_RANGE
+            || self->arena->nodes[n].kind == N_SLICE_INDEX
+            || self->arena->nodes[n].kind == N_SLICE_GET)
+            return n;
+        if (!self->static_ctype(n, t, sizeof t, &d, 0)) return n;
+        if (d != 1) return n;
+        if (self->arena->nodes[n].kind == N_VAR) {
+            vi = self->sym->find_var(self->arena->nodes[n].text2);
+            if (vi >= 0 && self->sym->vars[vi].is_fnparam) return n;
+        }
+        m = self->sup->new_node(N_SLICE_RANGE);
+        if (m < 0) return -1;
+        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", t);
+        self->arena->nodes[m].aux = 3;
+        self->arena->nodes[m].a = n;
+        self->arena->nodes[m].b = -1;
+        self->arena->nodes[m].c = -1;
+        self->arena->nodes[m].line = self->arena->nodes[n].line;
+        self->arena->nodes[m].num = self->arena->nodes[n].num;
+        return m;
     }
 
     /* Phase 32 S7: bind, substitute, judge. The impl block is found the same

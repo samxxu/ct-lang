@@ -185,6 +185,9 @@ trait EmitOps {
        a Vec/Map subscript sugar already answers a pointer (`at`) and must not
        be addressed again. */
     int  emit_ref_arg(int n);
+    /* PH-79 fix SH-100: one value against an expected C type. An array where a
+       slice (`struct __ct_slice`) is expected becomes a `{ptr,len}` view. */
+    int  emit_value_for(const char *want, int n);
     int  expr_unstable(int n);
     int  hoist_rvalue(int n);
     int  hoist_scan(int n, int top);
@@ -4257,7 +4260,8 @@ impl EmitOps for Emitter {
                 self->emit_indent(ind);
                 snprintf(tmp, sizeof tmp, "%s __ct_ret%d = ", self->arena->nodes[n].text, rtv);
                 fputs(tmp, self->out);
-                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                if (self->emit_value_for(self->arena->nodes[n].text,
+                                         self->arena->nodes[n].a) != 0) return -1;
                 fputs(";\n", self->out);
             }
             /* the parser hangs the scope's releases off `b`; they run at the
@@ -4318,7 +4322,8 @@ impl EmitOps for Emitter {
                 return 0;
             }
             fputs("return ", self->out);
-            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            if (self->emit_value_for(self->cur_ret, self->arena->nodes[n].a) != 0)
+                return -1;
             fputs(";\n", self->out);
             if (wrap) {
                 ind--;
@@ -5035,6 +5040,39 @@ impl EmitOps for Emitter {
         return self->emit_expr(n);
     }
 
+    /* PH-79 fix SH-100: an array expression where a `T[]` is expected is a
+       view. The C storage is the erased `struct __ct_slice`, so the element
+       type is not in `want`; the array's own `sizeof` still gives the inferred
+       length. The lvalue is repeated for the two `sizeof`s exactly as the
+       local-declaration conversion does. A parameter written `T a[]` has
+       already decayed to a pointer and carries no length, so it is left to C;
+       a slice value (depth 0) passes through untouched. */
+    int emit_value_for(const char *want, int n)
+    {
+        char t[MAX_TEXT];
+        int d = 0;
+        int vi;
+
+        if (want && strcmp(want, "struct __ct_slice") == 0 && n >= 0) {
+            if (self->arena->nodes[n].kind == N_VAR) {
+                vi = self->sym->find_var(self->arena->nodes[n].text2);
+                if (vi >= 0 && self->sym->vars[vi].is_fnparam)
+                    return self->emit_expr(n);
+            }
+            if (hoist_ctype(n, t, sizeof t, &d) && d == 1) {
+                fputs("(struct __ct_slice){ (void *)(", self->out);
+                if (self->emit_expr(n) != 0) return -1;
+                fputs("), (int)(sizeof(", self->out);
+                if (self->emit_expr(n) != 0) return -1;
+                fputs(") / sizeof((", self->out);
+                if (self->emit_expr(n) != 0) return -1;
+                fputs(")[0])) }", self->out);
+                return 0;
+            }
+        }
+        return self->emit_expr(n);
+    }
+
     int emit_expr(int n)
     {
         int c;
@@ -5185,6 +5223,19 @@ impl EmitOps for Emitter {
            form passes `sizeof` as its length and the slice form `.len`. */
         if (self->arena->nodes[n].kind == N_SLICE_RANGE) {
             const char *et = self->arena->nodes[n].text;
+            /* SH-100: a whole-array view (`return a;`, `sum(a)`) is a plain
+               `{ptr,len}` pair with no bounds to check; the array's own
+               `sizeof` gives the inferred length. */
+            if (self->arena->nodes[n].aux == 3) {
+                fputs("(struct __ct_slice){ (void *)(", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs("), (int)(sizeof(", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(") / sizeof((", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(")[0])) }", self->out);
+                return 0;
+            }
             fputs("__ct_slice_range((void *)(", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(self->arena->nodes[n].aux == 1 ? "), " : ").ptr, ", self->out);
@@ -5209,7 +5260,9 @@ impl EmitOps for Emitter {
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
                 fputs(") / sizeof((", self->out);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-                fputs(")[0])", self->out);
+                /* SH-99: the whole `(int)(` cast must close here. The `len`
+                   branch above spells the identical `[0]))`. */
+                fputs(")[0]))", self->out);
             } else {
                 fputs("(", self->out);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
@@ -5771,6 +5824,10 @@ impl EmitOps for Emitter {
                             && (self->sym->traits[bt2].m[bm2].pann[ai] == 2
                                 || self->sym->traits[bt2].m[bm2].pann[ai] == 3)) {
                             if (self->emit_ref_arg(c2) != 0) return -1;
+                        } else if (bm2 >= 0 && ai < self->sym->traits[bt2].m[bm2].nparams) {
+                            if (self->emit_value_for(
+                                    self->sym->traits[bt2].m[bm2].ptype[ai], c2) != 0)
+                                return -1;
                         } else if (self->emit_expr(c2) != 0) {
                             return -1;
                         }
@@ -6002,6 +6059,10 @@ impl EmitOps for Emitter {
                                && (self->sym->traits[tm2].m[mm2].pann[ai2] == 2
                                    || self->sym->traits[tm2].m[mm2].pann[ai2] == 3)) {
                         if (self->emit_ref_arg(c2) != 0) return -1;
+                    } else if (mm2 >= 0 && ai2 < self->sym->traits[tm2].m[mm2].nparams) {
+                        if (self->emit_value_for(
+                                self->sym->traits[tm2].m[mm2].ptype[ai2], c2) != 0)
+                            return -1;
                     } else if (self->emit_expr(c2) != 0) {
                         return -1;
                     }
@@ -6081,6 +6142,9 @@ impl EmitOps for Emitter {
                            && (self->sym->funcs[fi].pann[ai] == 2
                                || self->sym->funcs[fi].pann[ai] == 3)) {
                     if (self->emit_ref_arg(c) != 0) return -1;
+                } else if (fi >= 0 && ai < self->sym->funcs[fi].nparams) {
+                    if (self->emit_value_for(self->sym->funcs[fi].ptype[ai], c) != 0)
+                        return -1;
                 } else if (self->emit_expr(c) != 0) {
                     return -1;
                 }

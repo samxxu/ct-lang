@@ -68,3 +68,53 @@ borrow_member.ct:7:1: error: ref/out argument must be an assignable place
 ## 影响
 
 slice 元素只能读写、不能作 `ref`/`out` 实参；借用视图的“借用”语义不完整。
+
+## 处置（DEV，2026-11-20，v0.79.2）
+
+`fixed` 主张：`ref_arg_place()`（`selfhost/ct-ast/frontend/parse/Expr.h.ct`）增加
+`N_SLICE_INDEX` 分支——切片元素是带检查 place，基址仍是 place 时接受；`const T[]`
+（节点 aux 1）的元素保持只读，拒绝作可写 place。emitter 已有的
+`&(*(T *)__ct_slice_at(&(s), i, sizeof(T)))` 让调用点取到元素地址，`__ct_slice_at`
+的越界检查原样保留。
+
+覆盖：
+
+- `bump(s[1])` 写回底层数组；
+- `bump(s[0].x)`（切片元素的成员）；
+- `bump(s[2])` 越界仍在运行期 trap（stderr + 非零退出）；
+- `const int[] ro; bump(ro[1]);` 仍报 `ref/out argument must be an assignable place`。
+
+红证（baseline `2a2f3933`；完整输出见
+[test/ast/p79_red_rev.log](../../test/ast/p79_red_rev.log)）：
+
+```console
+$ sh test/ast/p79_basic.sh <baseline>/build/ct-ast ; echo exit=$?
+FAIL p79/basic: E79-3/SH-101: a slice element is a ref/out actual
+  borrow_elem.ct:6:1: error: ref/out argument must be an assignable place
+FAIL p79/basic: E79-3/SH-101: a slice element's member is a ref/out actual
+  borrow_member.ct:7:1: error: ref/out argument must be an assignable place
+FAIL p79/basic: E79-3/SH-101: a borrow keeps the bounds trap
+  the trap fixture did not compile
+exit=1
+```
+
+绿输出（v0.79.2）：
+
+```console
+$ sh test/ast/p79_basic.sh <ct-ast> ; echo exit=$?
+ok   E79-3/SH-101: a slice element is a ref/out actual
+ok   E79-3/SH-101: a slice element's member is a ref/out actual
+ok   E79-3/SH-101: a borrow keeps the bounds trap
+exit=0
+$ sh test/ast/p79_index.sh <ct-ast> ; echo exit=$?
+ok   E79-4: const T[] element is not a writable place
+exit=0
+```
+
+生成 C：
+
+```c
+bump(&(*(int *)__ct_slice_at(&(s), 1, sizeof(int))));
+```
+
+红提交 `f9294448`；修复提交见 `git log --grep 'SH-101'`。

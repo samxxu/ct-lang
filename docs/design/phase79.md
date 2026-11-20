@@ -2,6 +2,7 @@
 
 > **状态：完成（S3a–S3e / E79-1–E79-6；2026-11-20 收口，`v0.79.0`）**（2026-11-20 立项）。
 > **签收：EDITOR 2026-11-20**（主编统一签收；卡作者 REQ）；实现红证 VERIFY 见 §5。
+> **REV 打回修复：v0.79.2（2026-11-20，SH-99/100/101、TEST-24）**，对照见 §8，红证见 §7。
 > **前置（口径写死）**：本卡入口只要求 **P-7.2 切片原型**（`docs/planning/j6-evidence/p72/`，
 > 25/25 通过、A.4 放置矩阵 10/10）+ **PH-78 收口**（`v0.78.0`）。
 > **J-6 全量不在本卡入口**（P-1…P-6 证据包未齐）；卡内不据此声称 J-6 已过。
@@ -78,15 +79,16 @@ P-7.2 已证（见 [证据](../planning/j6-evidence/p72/evidence.md)）：`T[] =
 
 | 夹具 | 断言 |
 | --- | --- |
-| `p79_basic` | `int[] s = a;`、`s[i]` 读写、`a[1..]` 子切片、`foreach`、`Vec.as_slice` |
+| `p79_basic` | `int[] s = a;`、`s[i]` 读写、`a[1..]` 子切片、`foreach`（`Vec.as_slice` 按 §1.1 延期） |
 | `p79_index` | 越界 `s[i]` trap；`get` 越界返回 0 指针；`const int[]` 写硬错 |
 | `p79_places` | 字段/全局/接口/box/Option/Result/Vec/Map/数组元素/泛型实参/闭包捕获 10 类硬错 |
 | `p79_migrate` | `T a[]` 形参/无初始化器告警；`T a[] = {...}` 仍是推断长度数组 |
 | `p79_docs` | `no-test:`，spec/package-guide/golden 同步 |
 
 > **实现进度（2026-11-20 收口）**：S3a–S3e 已落（P-7.2 rebase + `T a[]` 告警 + spec §4.69）；
-> `test/ast/p79_basic.sh` 15/15，已接入 `selfhost/check-ast.sh`；全量门禁见 §5。
-> `Vec.as_slice` 按 §1.1 延期（需要 pointer+len 构造器），不属于 E79。
+> `test/ast/p79_basic.sh` 24/24（v0.79.0 时 15/15，v0.79.2 增 SH-99/100/101 九条），
+> `p79_index` / `p79_places` / `p79_migrate` / `p79_docs` 已补齐并接入 `selfhost/check-ast.sh`；
+> 全量门禁见 §5 与 §8。`Vec.as_slice` 按 §1.1 延期（需要 pointer+len 构造器），不属于 E79。
 
 ## 3 退出判据
 
@@ -122,7 +124,10 @@ P-7.2 已证（见 [证据](../planning/j6-evidence/p72/evidence.md)）：`T[] =
 | E79-5 | `p79_basic` 的 `field` / `global` / `generic` / `container` / `option` / `result` / `arrelem` / `iface` / `closure` 九类硬错 |
 | E79-6 | `ret` 返回局部视图 lint；全量门禁见下 |
 
-- `sh test/ast/p79_basic.sh <ct-ast>` → **15 passed, 0 failed**。
+- `sh test/ast/p79_basic.sh <ct-ast>` → **24 passed, 0 failed**（v0.79.0 收口时为 15/15；
+  v0.79.2 补 SH-99/100/101 与 `a[1..3]` 共九条，并修掉下文 §7/§8 的缺口）。
+- `sh test/ast/p79_index.sh` / `p79_places.sh` / `p79_migrate.sh` / `p79_docs.sh` → 全绿
+  （v0.79.2 补齐，见 §8）。
 - `sh selfhost/check-ast.sh` → `1526 passed, 1 failed, 3 skipped`；唯一失败是
   `baremetal_renode`（podman 未产出 `uart.txt`，环境缺失，与本卡无关）。
 - `sh selfhost/check-sanitizers.sh` → `check-sanitizers: OK (581 checks, no sanitizer report)`。
@@ -132,3 +137,81 @@ P-7.2 已证（见 [证据](../planning/j6-evidence/p72/evidence.md)）：`T[] =
   的 `T a[]` 形参改为 `T *`，`ct check`/`ct build` 与运行输出不变。
 - 版本：五处 `CTC_VERSION` + 51 个 golden/expected + p39 ABI banner 仅版本 token 变化。
 - 延期（不影响 E79）：`Vec.as_slice`、`s.field[i]`、`f().get(i)`、`int[] s; s = a;`。
+
+## 6 未完成 / 简化 / 边界（诚实清单）
+
+| # | 边界 | 处置 |
+| --- | --- | --- |
+| B-1 | `Vec.as_slice`（需要 pointer+len 构造器） | 按 §1.1 延期，不属于 E79；`p79_basic` 不再声称覆盖 |
+| B-2 | `s.field[i]`、`f().get(i)`、`f()[i]` 的链式 place | §1.1 明确不在首轮；本次未扩 |
+| B-3 | `int[] s; s = a;` 后置赋值 | §1.1 明确不在首轮；本次未扩 |
+| B-4 | 多维数组→切片、`T a[]` 形参（已退化为指针）→切片 | 不做长度推断：`sizeof` 只对完整一维数组成立；`T a[]` 形参继续走 E79-1 告警与迁移 |
+| B-5 | 函数内 `static int[] s;` | 被接受（零初始化 `{0,0}` 依赖静态存储）；REV §7.2 的观察项，spec §4.69 未列静态位置，维持现状并记录 |
+| B-6 | 无初始化器 `int xs[];` | E79-1 只要求告警；`ct check` 升 error，`ct build` 仍会落到 cc 的 “needs an explicit size”；未改硬错（REV §7.1 观察项） |
+| B-7 | inherent/static 方法实参的本地数组→切片 | 调用点转换覆盖自由函数（`sum(a)`/`sum(o.xs)`）与返回值；inherent 方法的形参类型不在 `MethAnn` 里，未扩。trait 方法签名当前不接受 `T[]` 形参（解析层拒绝），不在本项 |
+| B-8 | 切片元素的值接收者方法（`s[0].m()`） | 未扩；`ref`/`out`（SH-101）与成员读写已覆盖 |
+
+## 7 T-7 红证（REV 打回，baseline `2a2f3933`）
+
+- 基线：`2a2f3933`（v0.79.1，REV 打回对象）；用 `git archive 2a2f3933 | tar -x` 后按项目
+  自举链独立构建 `ct-ast`，红证只用该二进制。
+- 原始输出（逐字、含退出码）：[test/ast/p79_red_rev.log](../../test/ast/p79_red_rev.log)。
+- 红提交：`f9294448 test(ct-ast): SH-99/100/101/TEST-24 红`（新增四个探针 + `p79_basic`
+  九条断言 + 红证日志；由 DEV 提）。
+
+```console
+$ sh test/ast/p79_basic.sh <baseline>/build/ct-ast ; echo exit=$?
+FAIL p79/basic: E79-2/SH-99: array-base open subslice a[1..] is half-open and valid C
+FAIL p79/basic: E79-2/SH-100: an array actual fills a T[] parameter
+FAIL p79/basic: E79-2/SH-100: an array return fills a T[] result
+FAIL p79/basic: E79-6/SH-100: a converted local-array return lints
+FAIL p79/basic: E79-2/SH-100: a struct's array field fills a T[] parameter
+FAIL p79/basic: E79-3/SH-101: a slice element is a ref/out actual
+FAIL p79/basic: E79-3/SH-101: a slice element's member is a ref/out actual
+FAIL p79/basic: E79-3/SH-101: a borrow keeps the bounds trap
+exit=1
+
+$ sh test/ast/p79_index.sh    <baseline>/build/ct-ast ; echo exit=$?   # 1
+$ sh test/ast/p79_places.sh   <baseline>/build/ct-ast ; echo exit=$?   # 1
+$ sh test/ast/p79_migrate.sh  <baseline>/build/ct-ast ; echo exit=$?   # 1
+$ sh test/ast/p79_docs.sh ; echo exit=$?                                # 0（文档已在；缺口是脚本缺失）
+```
+
+TEST-24 的基线证据是四个脚本不存在：
+
+```console
+$ git archive 2a2f3933 | tar -x -C /tmp/p79base
+$ ls /tmp/p79base/test/ast/p79_*.sh
+test/ast/p79_basic.sh
+present p79_basic
+MISSING p79_index
+MISSING p79_places
+MISSING p79_migrate
+MISSING p79_docs
+```
+
+## 8 REV 打回修复对照（v0.79.2，2026-11-20）
+
+| Issue | 判据 | 修复 | 红（`2a2f3933`） | 绿（v0.79.2） |
+| --- | --- | --- | --- | --- |
+| SH-99 | E79-2 子切片半开区间 | `Emitter.h.ct` 的数组基座省略上界分支补一个 `)`（`)[0])` → `)[0]))`） | `a1open.ct:40:95: warning: cast to smaller integer type 'int' from 'char *'`（缺右括号） | `a[1..]` 生成 `__ct_slice_range(..., 1, (int)(sizeof(a)/sizeof((a)[0])), ...)`；`p79_basic` 的 `a1open` 运行 exit 0 |
+| SH-100 | E79-2 数组→切片自动补 len | 新增 `N_SLICE_RANGE` aux 3 视图节点：`ExprOps.slice_view_from_array`；自由函数实参与 `return` 调用它；emitter 与局部声明同样发 `{ptr,len}` | `sum(a)`/`return a` 落到 cc 的 `incompatible type 'struct __ct_slice'`；`ret_array` 连 lint 都到不了 | `sum(a)`、`return a`、结构体数组字段 `sum(o.xs)`、`return p->xs` 均运行 exit 0；直接返回局部数组触发 `slice escape` lint |
+| SH-101 | E79-3 `s[i]` 读/写/借用 | `ref_arg_place()` 增加 `N_SLICE_INDEX` 分支；`const T[]` 元素不是可写 place | `borrow_elem.ct:6:1: error: ref/out argument must be an assignable place` | `bump(s[1])` / `bump(s[0].x)` 生成 `bump(&(*(T *)__ct_slice_at(...)))`，运行 exit 0；越界仍 trap；`const int[]` 仍硬错 |
+| TEST-24 | G1/G5/T-7 | 补 `p79_index` / `p79_places` / `p79_migrate` / `p79_docs`，接入 `selfhost/check-ast.sh`；`p79_basic` 增 SH-99/100/101 九条；`p79_places` 补 `box`/`Map` | 四个脚本 `MISSING`；`p79_basic` 15/15 不含 `a[1..]`/`sum(a)`/`return a`/`bump(s[1])` | 五个探针全绿：`p79_basic` 24/24、`p79_index` 10/10、`p79_places` 17/17、`p79_migrate` 7/7、`p79_docs` 15/15 |
+
+```console
+$ sh test/ast/p79_basic.sh <ct-ast> && echo exit=$?
+...
+ok   E79-2/SH-99: array-base open subslice a[1..] is half-open and valid C
+ok   E79-2/SH-100: an array actual fills a T[] parameter
+ok   E79-2/SH-100: an array return fills a T[] result
+ok   E79-2/SH-100: a struct's array field fills a T[] parameter
+ok   E79-3/SH-101: a slice element is a ref/out actual
+ok   E79-3/SH-101: a slice element's member is a ref/out actual
+ok   E79-3/SH-101: a borrow keeps the bounds trap
+exit=0
+```
+
+- 版本：`CTC_VERSION` 五处 → `0.79.2`；51 个 golden/expected 与 p39 ABI banner 仅版本 token 变化；
+  `README.md` / `docs/README.md` / `AGENTS.md` / `docs/history/phase-log.md` 同步。
+- 未 push、未打 tag（按本轮用户指令）。
