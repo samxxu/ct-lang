@@ -303,3 +303,69 @@ lint 或另立 issue，不能作为“D-013 §3 满足”的依据。
 `p80_retain` 的 copy / field / stolen / pass / reassign / U16 / immortal 轨迹与额外全局 / 解引用 /
 自赋值 / 提前 return / U16 split 复现均未出现双 retain；`refs=-1` 在 retain / release 两侧跳过。
 问题集中在漏 release（R1/R2）与未登记的 UAF 边界（R3），不是过度 retain。
+
+## 处置（DEV，2026-11-20，次轮）：**fixed**
+
+`status` 保持 REV 写的 `reopened`（5.4：DEV 只写正文处置段，由 REV 复核后改
+`verified`）。REV 次轮 `5c40faa1` 的 R1–R5 已在 v0.80.2 修复；不改 `refs` 布局 / ABI。
+
+### 逐项
+
+- **R1 嵌套 `break` / `continue`**：块栈为每个块记类别（循环体 / switch 体）；`break`
+  释放到最近的循环体或 switch 体基线，`continue` 只释放到最近的循环体基线，所以跳转
+  会释放它离开的**所有** owning 作用域。`for` / `while` / `loop` / `foreach` /
+  `do-while` 以及 switch 体全部入栈；`case` 体的 `break` 只落到 switch 基线，不越过循环。
+- **R2 字段重赋旧值**：新增 `<base>.<field>` 记账（member / arrow，基址为普通变量）。
+  直线代码里赋过值的字段在下次赋值时 hold 旧值、retain / 移动新值、再 release 旧值；
+  未赋过值的字段不 release（可能未初始化）；全局 struct 字段按零初始化视为已知；块关闭
+  按绑定深度回收记账。
+- **R3a 结构体字面量**：`emit_raw_init` 对含 `String` / `U16String` 字段的结构体初始化器
+  按位置 / `.field =` 设计符匹配字段，把 place 元素改写成 `String_retain(&(expr))`；
+  构造结果仍 move。返回聚合时不再整体跳过 release——字面量已为 place 元素 retain，局部
+  按正常规则释放。
+- **R3b 多声明符局部**：语句级 `N_DECLS` 的每个声明符都走声明路径，`String y = x, z = y;`
+  逐个 retain 并登记，后一个声明符能看到前一个。
+- **R3c `goto`**：函数内出现 local owning `String` / `U16String` 且有任何 `goto` 时硬错
+  `a goto cannot cross an owning String scope`（位置在该 `goto`），不再静默漏释放或释放
+  未初始化句柄；`goto` 仍可与形参 / 无句柄作用域共存。
+
+### 提交
+
+- `fc27aa96` `test(ct-ast): SH-102 红（次轮）`（只含夹具与红证，baseline `fdcc957c`）
+- `d3165c41` `fix(ct-ast): SH-102 次轮修复（R1–R5）`
+- 收口提交：本提交（v0.80.2 版本与文档）
+
+### 红 → 绿（原始输出，baseline `fdcc957c` → v0.80.2）
+
+```console
+# baseline v0.80.1（红）
+$ CT_C_BOUNDARY=allow sh test/ast/p80_retain.sh <v0.80.1>/ct-ast
+FAIL p80/retain: jump behaviour          iter 1 live=2 / after for live=2
+FAIL p80/retain: field_reassign          after2 x=2 / final live=1
+FAIL p80/retain: struct_lit              h.tag=1 x=1 …（浅拷贝）
+FAIL p80/retain: multi_decl              x=1 y=1 z=1
+FAIL p80/retain: neg_goto                accepted a negative
+$ ./struct_lit_old  -> AddressSanitizer: heap-use-after-free … String_refs
+$ ./multi_decl_old  -> AddressSanitizer: heap-use-after-free … String_release
+
+# v0.80.2（绿）
+$ CT_C_BOUNDARY=allow sh test/ast/p80_retain.sh <ct-ast>
+ok   retain / jump / field_reassign / struct_lit / multi_decl (trace)
+ok   … -fsanitize=address / -fsanitize=undefined（各 5 例）
+ok   neg_escape / neg_double_free / neg_goto
+p80_retain: OK
+
+$ ./jump           -> iter 0..3 live=1 / after for live=0 / after while live=0 / after loop live=0 / final live=0
+$ ./field_reassign -> after2 tag=1 x=1 live=2 / final live=0
+$ ./struct_lit     -> h.tag=3 x=3 p.a=2 p.b=3 live=2 / final live=0
+$ ./multi_decl     -> x=3 y=3 z=3 live=1 / p=2 q=2 live=1 / final live=0
+$ ./neg_goto       -> error: a goto cannot cross an owning String scope; restructure the code or release() explicitly
+```
+
+### 仍未覆盖（v0.80.2 后）
+
+- `foreach` 的 `item`、`for` 初始化器里的句柄不登记（多声明符已修）。
+- 嵌套结构体字面量（字段本身是含 `String` 的结构体）只按外层字段类型处理。
+- 泛型实例里 `T` 位置的局部只按容器 glue 的显式协议处理。
+- 字段 / 全局 `String` 仍无自动 Drop（卡 §7.9.4）。
+- `goto` 与 local owning `String` 共存现在是硬错（按本次要求），不做精确的跨作用域分析。

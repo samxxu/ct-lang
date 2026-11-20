@@ -361,10 +361,10 @@ exit=0
 
 ### 7.9 未覆盖与残留风险
 
-1. **自动 retain（D-013 §3）已在 v0.80.1 修复（SH-102）**：按值传参 / 返回 / 字段赋值的自动
-   半部落地，见 §7.9.1 的对照表与 `test/ast/p80_retain.sh`；`p80_layout` 的 `gap` 行改为
-   `param refs=2`（入口 retain 后）。显式 `copy`/`retain`/`release` 与容器插入
-   （`Vec`/`Map` 元素 glue）不变。
+1. **自动 retain（D-013 §3）已在 v0.80.2 修复（SH-102 R1–R5）**：按值传参 / 返回 / 字段赋值 /
+   重新赋值 / 作用域释放的自动半部落地，见 §7.9.1 的对照表与 `test/ast/p80_retain.sh`；
+   `p80_layout` 的 `gap` 行改为 `param refs=2`（入口 retain 后）。显式 `copy`/`retain`/`release`
+   与容器插入（`Vec`/`Map` 元素 glue）不变。
 2. **字面量实参绑定只覆盖自由函数**：`str_dup("x")` 可用；`U16String.from_utf8("abc")`（静态方法
    实参）仍报 C 层错误，需先绑定到 `Str` 变量。卡 §1 的示例按此改写。
 3. **`Map<Str,V>` 是存储位置**：借用类型不能作容器键；`Map<String,V>` 键块深拷贝借用键。
@@ -373,13 +373,13 @@ exit=0
    到 v0.79.2 需同时回滚 `test` 与 `feat` 两个提交。
 6. **跨仓只有 dry-run**：`/tmp/p80-ext` 是本机独立目录，不是真外部仓（§7.8）；仓内 12 个消费者
    已全部迁移，但真实第三方工程的迁移仍以外部 CI 为准。
-7. **自动 retain 的剩余边界（SH-102 修复后）**：结构体字面量 / 复合字面量里的 `String` 字段
-   仍是浅拷贝（返回聚合时按 move 处理，不先释放局部）；`foreach` 的 `item`、多声明符局部、
-   `for` 初始化器里的句柄不会被登记；`goto` 跨块不释放；泛型实例里 `T` 位置的局部只按容器
-   glue 的显式协议处理；字段 / 全局 `String` 仍无自动 Drop（第 4 条）。这些位置沿用既有
-   “作者负责”口径，ASan 三例与 `p80_retain` 的正例均已覆盖命名位置。
+7. **自动 retain 的剩余边界（v0.80.2 后）**：`foreach` 的 `item`、`for` 初始化器里的句柄不会
+   被登记（多声明符局部已修）；`goto` 与 local owning `String` 共存改为硬错，不再静默漏释放；
+   泛型实例里 `T` 位置的局部只按容器 glue 的显式协议处理；字段 / 全局 `String` 仍无自动 Drop
+   （第 4 条）；嵌套结构体字面量（字段本身是含 `String` 的结构体）只按外层字段类型处理。
+   这些位置沿用既有“作者负责”口径，`p80_retain` 的 5 个正例 + 3 个负例覆盖命名位置。
 
-### 7.9.1 自动 retain 对照（SH-102，v0.80.1）
+### 7.9.1 自动 retain 对照（SH-102，v0.80.2）
 
 修复前后同一组位置的行为对照；证据为 `test/ast/p80_retain/expected.retain.out` 与
 `test/ast/p80_layout/expected.trace.out`。
@@ -396,6 +396,11 @@ exit=0
 | `refs = -1` immortal | release 是 no-op | retain / release 两侧都跳过 | `immortal refs=-1 empty=-1 copy=-1` |
 | 借用视图（`Vec.get`） | 浅拷贝，`.release()` 被拒 | 不 retain 也不 release（view 语义保持） | `vec push keep=2` / `vec elem len=2` |
 | 逃逸 / 双重释放 | 借用视图可逃逸成 owning `String`（C 层类型错误） | 返回借用视图硬错；释放借用视图硬错 | `neg_escape` / `neg_double_free` |
+| 嵌套 `break` / `continue`（次轮 R1） | 只释放最内层 block，外层循环体的句柄泄漏 | 块栈记循环体 / switch 体，跳转释放到对应基线 | `jump`：`after for/while/loop live=0` |
+| 字段重赋（次轮 R2） | 旧字段不 release（`final live=1`） | 先 retain 新值再 release 旧值；未赋值字段不 release | `field_reassign`：`after2 tag=1 x=1 live=2` / `final live=0` |
+| 结构体字面量（次轮 R3a） | 浅拷贝，源 release 后字段 UAF | place 元素按字段类型 retain（位置 / `.field =`） | `struct_lit`：`h.tag=3 x=3 p.a=2 p.b=3` / `final live=0` |
+| 多声明符（次轮 R3b） | 浅拷贝，两个句柄共一个 ref | 每个声明符 retain 并登记 | `multi_decl`：`x=3 y=3 z=3` / `p=2 q=2` |
+| `goto` 跨 owning 作用域（次轮 R3c） | 静默漏释放 / 可能释放未初始化句柄 | 硬错（`f_string_local` + `ngotos`） | `neg_goto`：`a goto cannot cross an owning String scope` |
 
 三例 ASan 复现（修复前后，同一 `cc -fsanitize=address -g`）：
 
