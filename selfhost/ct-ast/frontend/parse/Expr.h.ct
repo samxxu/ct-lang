@@ -2877,6 +2877,18 @@ impl ExprOps for Expr {
                      tname, nt2, nargs);
             return self->sup->fail(msg);
         }
+        /* PH-81 S1a: `box<T>` is an owning slot, so T may not be a borrowed
+           view (`Str` / `U16Str` / a slice). The struct-declaration layer
+           refuses the same shape for a field; this check catches the type
+           argument form, which never reaches that layer. */
+        if (strcmp(tname, "box") == 0 && nargs > 0) {
+            if (strcmp(c1, "struct Str") == 0 || strcmp(c1, "Str") == 0
+                || strcmp(c1, "struct U16Str") == 0 || strcmp(c1, "U16Str") == 0
+                || strcmp(c1, "struct __ct_slice") == 0
+                || strstr(c1, "[]") != 0)
+                return self->sup->fail(
+                    "a borrowed view cannot be boxed; box<T> owns its payload (use String for an owning string)");
+        }
         /* L29-13 (Phase 31 O1 partial unfreeze): interface values
            (`struct X_iface`) are stored as a two-word non-owning copy, so only
            vptr-bearing concrete structs are refused here. */

@@ -2452,9 +2452,20 @@ impl ParseOps for Parser {
                so `T[]` is a hard error here rather than a silent C struct. */
             {
                 int sl, sc;
+                const char *fb = typebuf;
                 if (self->sup->slice_brackets_ahead(&sl, &sc))
                     return tool::diag::ct_sem_error(sl, sc,
                         "a slice 'T[]' cannot be a struct field; it is a non-owning view",
+                        self->mem->path);
+                /* PH-81 S1a: a borrowed `Str` / `U16Str` is a view, so a field
+                   would outlive the bytes it borrows; this is the struct
+                   declaration layer `box<Bad>` relies on. */
+                if (strncmp(fb, "struct ", 7) == 0) fb += 7;
+                while (*fb == ' ' || *fb == '\t') fb++;
+                if (strcmp(fb, "Str") == 0 || strcmp(fb, "U16Str") == 0)
+                    return tool::diag::ct_sem_error(self->lex->tokline,
+                        self->lex->tokstart - self->lex->lstart + 1,
+                        "a borrowed 'Str' view cannot be a struct field; store an owning 'String' and call as_str() at the use site",
                         self->mem->path);
             }
         }
