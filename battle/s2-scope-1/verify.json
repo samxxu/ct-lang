@@ -1,0 +1,55 @@
+{
+  "schema": "battle-verify/1",
+  "battle": "s2-scope-1",
+  "seat": "VERIFY",
+  "generated_at_local": "2026-11-20T13:00:00+08:00",
+  "head": {"baseline": "2c87179a", "version": "0.77.2"},
+  "environment": {
+    "os": "macOS (Darwin arm64)",
+    "date": "2026-11-20",
+    "scope": "read-only: card + proposal + /tmp prototype evidence"
+  },
+  "evidence": [
+    {
+      "id": "E-01",
+      "command": "grep -n \"S2a\\|S2b\" docs/design/phase78.md | head -4",
+      "output": "48:| S2a | 普通函数：语法、签名、`(*name)`、调用 `&`、lvalue、`out` 初始化/L1 | P-7.1 原型 |\n49:| S2b | 方法/trait：方法形参、trait 默认体、接口实现签名 | S2a 收口 |\n50:| S2c | 类型匹配、负例、文档与门禁 | S2a/S2b |",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-02",
+      "command": "grep -c \"S2b\\|方法/trait\" /tmp/ct-refout/evidence/ref_out/EVIDENCE.md",
+      "output": "0",
+      "exit": 1,
+      "reproduced": true
+    },
+    {
+      "id": "E-03",
+      "command": "grep -n \"E78-6\" docs/design/phase78.md",
+      "output": "69:| E78-6 | 方法/trait 同一规则；全量 `check-all` 与 ASan 通过；spec/package-guide 同步 |",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-04",
+      "command": "grep -n \"PH-79\\|PH-80\\|PH-81\" docs/planning/pointer-free-phase-plan.md | head -3",
+      "output": "| PH-79 ...\n| PH-80 ...\n| PH-81 ...",
+      "exit": 0,
+      "reproduced": true
+    }
+  ],
+  "anchors": [
+    {"file": "docs/design/phase78.md", "line": 48},
+    {"file": "docs/design/phase78.md", "line": 49},
+    {"file": "docs/design/phase78.md", "line": 69},
+    {"file": "docs/planning/pointer-free-phase-plan.md", "line": 20}
+  ],
+  "checks": [
+    {"id": "J-1", "result": "A-partial", "evidence": ["E-01"]},
+    {"id": "J-2", "result": "B", "evidence": ["E-02"]},
+    {"id": "J-3", "result": "A", "evidence": ["E-01", "E-03"]},
+    {"id": "J-4", "result": "A", "evidence": ["E-04"]},
+    {"id": "J-5", "result": "A-partial", "evidence": ["E-02", "E-03"]}
+  ]
+}

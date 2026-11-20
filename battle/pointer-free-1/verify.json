@@ -1,0 +1,110 @@
+{
+  "schema": "battle-verify/1",
+  "battle": "pointer-free-1",
+  "seat": "VERIFY",
+  "generated_at_local": "2026-11-20T00:00:00+08:00",
+  "head": {
+    "baseline": "fa89d727",
+    "version": "0.77.1"
+  },
+  "environment": {
+    "os": "macOS (Darwin arm64)",
+    "cc": "Apple clang",
+    "date": "2026-11-20",
+    "scope": "read-only: grep/sed on current worktree; no source/test/spec edits"
+  },
+  "evidence": [
+    {
+      "id": "E-01",
+      "command": "grep -n \"语言在 v1.0 冻结\" docs/planning/v1-release-plan.md",
+      "output": "23:- 语言在 v1.0 冻结，后续只做兼容性修复/明确版本化变更。",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-02",
+      "command": "grep -n \"行为保持\" docs/planning/v1-release-plan.md | head -3",
+      "output": "61:“全面用最新语法重写 ct-ast”是**大范围行为保持重构**；“A 全量类型/语义进编译路径”是**产品契约变更**。\n64:- `v1-PH-1 / S1`：ct-ast 语法现代化（行为保持）；\n107:| v1.1 语法现代化 | `v1-PH-1 / S1` | v1.1 train | 行为保持，不单独 bump |",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-03",
+      "command": "grep -n \"pub struct Str\" lib/std/Str.h.ct",
+      "output": "18:pub struct Str {",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-04",
+      "command": "grep -n \"\\\\bout\\\\b\" examples/c-superset/s01_switch/exprs.ct | head -2",
+      "output": "13:    int out;\n15:    out = -1;",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-05",
+      "command": "grep -n \"ref\" examples/c-superset/s19_header_typenames/time_t.ct | head -3",
+      "output": "26:    time_t *ref;\n29:    ref = &now;\n30:    g_base = *ref;",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-06",
+      "command": "grep -n \"int a\\\\[\\\\]\" test/ast/132_foreach_array_values/prog.ct | head -1",
+      "output": "3:   explicit length, a local `int a[] = {…}` whose length only the initialiser",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-07",
+      "command": "sed -n '1695,1697p' selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+      "output": "            \"else\", \"extern\", \"for\", \"goto\", \"if\", \"impl\", \"import\", \"inline\",\n            \"map\", \"namespace\", \"own\", \"pub\", \"return\", \"sizeof\", \"static\",\n            \"switch\", \"trait\", \"typedef\", \"while\", NULL",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-08",
+      "command": "grep -rl '\"' --include='*.ct' examples test | wc -l; grep -rn \"char \\*\" --include='*.ct' examples test | wc -l",
+      "output": "     649\n     494",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-09",
+      "command": "sed -n '127,128p;141p' battle/pointer-free-1/proposal.md",
+      "output": "- J1：`test/spec-cases/` 新增对照组：同一场景「现行指针写法」与「句柄写法」产物行为\n  逐字节一致（除命名外）。\n| 引用计数循环泄漏**静默发生**，无任何报警 | README/教程显式契约：「引用环 = 泄漏，责任在作者」；与 Rust 的编译期拒泄漏明确区分 |",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-10",
+      "command": "grep -n \"refs\\|retain\\|release\" lib/std/Vec.h.ct | head -4",
+      "output": "29:   `release` frees the data and the header once the count reaches zero; a second\n30:   release on the same handle is a hard error, not a silent no-op (D29-12). */\n32:    int refs;\n50:   `put` and released with its entry (D47-3'). */",
+      "exit": 0,
+      "reproduced": true
+    }
+  ],
+  "anchors": [
+    {"file": "docs/planning/v1-release-plan.md", "line": 23},
+    {"file": "docs/planning/v1-release-plan.md", "line": 61},
+    {"file": "lib/std/Str.h.ct", "line": 18},
+    {"file": "lib/std/Vec.h.ct", "line": 29},
+    {"file": "examples/c-superset/s01_switch/exprs.ct", "line": 13},
+    {"file": "examples/c-superset/s19_header_typenames/time_t.ct", "line": 26},
+    {"file": "test/ast/132_foreach_array_values/prog.ct", "line": 3},
+    {"file": "selfhost/ct-ast/frontend/parse/Stmt.h.ct", "line": 1695},
+    {"file": "battle/pointer-free-1/proposal.md", "line": 127},
+    {"file": "battle/pointer-free-1/proposal.md", "line": 141}
+  ],
+  "checks": [
+    {"id": "J-1", "result": "B", "evidence": ["E-01", "E-02"]},
+    {"id": "J-2", "result": "B", "evidence": ["E-04", "E-05", "E-06", "E-07"]},
+    {"id": "J-3", "result": "B", "evidence": ["E-03", "E-08", "E-09"]},
+    {"id": "J-4", "result": "B", "evidence": ["E-09"]},
+    {"id": "J-5", "result": "B", "evidence": ["E-09"]},
+    {"id": "J-6", "result": "B", "evidence": ["E-09"]},
+    {"id": "J-7", "result": "B", "evidence": ["E-08"]},
+    {"id": "J-8", "result": "A-partial", "evidence": ["E-09"]}
+  ]
+}
