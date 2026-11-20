@@ -12,6 +12,9 @@
 #     hard error), a loop reassignment releases the previous value, and the
 #     shapes that cannot be modelled (`h = other`, a goto over an owning
 #     struct, `p->tag` aliasing) are refused or registered;
+#   - round 4: the branch merge keeps a field defined when it was defined
+#     before the `if` (or in both arms), so `{ 0 }` / straight-line definitions
+#     are not rejected by a later conditional assignment;
 #   - `refs = -1` (immortal literal / empty) is skipped;
 #   - the same traces under ASan / UBSan, because the failing baselines were
 #     heap-use-after-free / double free, not wrong numbers;
@@ -82,6 +85,9 @@ run_case field_loop_pre
 run_case field_loop_long
 run_case field_shadow
 run_case field_ptr
+run_case field_branch_init
+run_case field_branch_straight
+run_case field_branch_else
 
 neg() {
     name=$1; src=$2; pattern=$3; why=$4
