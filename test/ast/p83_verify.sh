@@ -215,8 +215,9 @@ fi
 mkdir -p "$work/badhome/index/index"
 ( cd "$work/proj" && HOME="$work/badhome" CT_HOME="$work/badhome" \
     env -u CT_INDEX "$ctast" index verify ) >"$work/home.out" 2>"$work/home.err"; rc=$?
-if [ "$rc" -eq 2 ] && grep -Fq 'not a regular file' "$work/home.err"; then
-    ok "\$CT_HOME/index/index being a directory exits 2"
+if [ "$rc" -eq 2 ] && grep -Fq 'not a regular file' "$work/home.err" \
+        && grep -Fq "$work/badhome/index/index" "$work/home.err"; then
+    ok "\$CT_HOME/index/index being a directory exits 2 (with the resolved path)"
 else
     bad "CT_HOME directory" "rc=$rc stderr=$(cat "$work/home.err")"
 fi
@@ -271,6 +272,22 @@ cp "$work/bad.index" "$work/envb.index"
 ( cd "$work/proj" && HOME="$work/home" CT_HOME="$work/home/.ct" \
     env -u CT_INDEX "$ctast" index verify ) >/dev/null 2>&1
 [ "$?" -eq 0 ] && ok "\$CT_HOME/index/index is the last resort" || bad "CT_HOME default" "expected 0"
+# The default path must survive the copy into the work buffer: a glibc
+# `snprintf(dst, n, "%s", dst)` self-copy yields an empty string (PKG-14
+# follow-up found by the Linux CI), so JSON must name the resolved path.
+( cd "$work/proj" && HOME="$work/home" CT_HOME="$work/home/.ct" \
+    env -u CT_INDEX "$ctast" index verify --json ) >"$work/homej.out" 2>"$work/homej.err"; rc=$?
+if [ "$rc" -eq 0 ] && python3 - "$work/homej.out" "$work/home/.ct/index/index" <<'PYHOME'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["ok"] is True, d
+assert d["index"] == sys.argv[2], (d["index"], sys.argv[2])
+PYHOME
+then
+    ok "\$CT_HOME default JSON carries the full resolved path"
+else
+    bad "CT_HOME default path" "rc=$rc stdout=$(cat "$work/homej.out") stderr=$(cat "$work/homej.err")"
+fi
 
 # --- quiet ----------------------------------------------------------------
 runv "$work/proj" "$work/q.out" "$work/q.err" "$work/legal.index" -q
