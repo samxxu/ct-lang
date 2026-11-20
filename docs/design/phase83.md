@@ -105,6 +105,9 @@ S83a 为纯文档任务，写 `no-test:` 并由 REVIEW 签字。
 S83a 的 REVIEW 签收位：本卡 §5 记录“契约/矩阵已按 index@0cdb132 定稿、无待补、与 conformance
 类别对齐”，由 REVIEW 席位在收口复核时签字；DEV 不自签。
 
+> 签收: REVIEW 2026-11-21（S83a 契约/矩阵：digest 三向量已独立复算，§4.1.1/§4.4/§6.1 无 TBD，
+> 与 conformance v1 类别对齐；本次整卡 verdict 见 [REV 复核](../reviews/2026-11-21-phase83-rev-verdict.md)）
+
 ## 6 T-7 提交对照
 
 | 任务 | `test(...) 红` | 实现 | 父提交关系 |

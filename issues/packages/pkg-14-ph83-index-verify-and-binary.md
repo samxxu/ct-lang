@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.79.0（2026-11-20） |
 | 文件 | [契约 v1](../../docs/planning/ct-pkg-get-contract.md)、[D-014](../../docs/decisions/D-014.md)、[评估](../../docs/reviews/2026-11-20-pkg-contract-proposal-eval.md) |
-| 状态 | **待开卡（需求定稿；施工入口 = PH-82 收口）** |
+| 状态 | **reopened**（2026-11-21，REV；契约 §9 验收项 7「不可读退出 2」未过，对应 PH-83 卡 E83-4；见下方复核段） |
 
 ## 背景
 
@@ -49,3 +49,27 @@
 ## 关联
 
 - [PH-83 roadmap 条目](../../docs/roadmap.md)、[D-014](../../docs/decisions/D-014.md)
+
+## 复核（REV，2026-11-21）：**reopened**
+
+PKG-14 的 E83-6（契约 §9 CT 侧验收项；对应 PH-83 卡 E83-4）未过：PH-83 收口复核
+（`5378850e`）发现 `ct index verify` 对非普通文件输入不返回契约要求的
+退出码 2：目录、`/dev/null`、指向目录的 symlink、`CT_INDEX` 指向目录、
+`$CT_HOME/index/index` 为目录时均输出 `index verify: OK (0 rows)` 并 exit 0，`--json`
+输出 `"ok":true`；FIFO 阻塞；GitHub Release 的 Linux 产物对 `/` 同判。最小复现：
+
+```console
+$ mkdir -p /tmp/p83-dir.index
+$ ct index verify /tmp/p83-dir.index
+index: /tmp/p83-dir.index
+index verify: OK (0 rows)
+$ echo $?
+0
+```
+
+契约 §4.4 要求“用法错误/索引不可读 → 退出码 2”。代码 `selfhost/ct-ast/tool/pkg/Pkg.h.ct:2674`
+只 `fopen`，`:2803` 直接 `fclose`，无 `stat`/`S_ISREG`、无 `ferror` 检查。期望：非普通文件
+与读错误均 exit 2；`--json` 不得在 exit 2 时给 `ok:true`；`p83_verify` 补目录/FIFO 负例。
+
+证据：[REV verdict](../../docs/reviews/2026-11-21-phase83-rev-verdict.md) §5.2。修复前
+PH-83 不写 `REV: 通过`。
