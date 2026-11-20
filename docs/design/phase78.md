@@ -82,3 +82,56 @@ parse("ab", n);  /* 调用点不写 out */
 | R78-5 | 调用点 `&` 对非 place 生成坏 C | E78-3 硬错在 CT 层 |
 
 回滚：单卡回滚，去掉关键字、`T *` 发射与调用 `&`；旧 golden 不变。
+
+## 5 T-7 红证（S2a–S2c）
+
+- **baseline**：`07693e47`（v0.77.2；PH-78 任何源码改动之前）。
+- **编译器**：由 baseline 源码构建的 ct-ast（`v0.77.2`）；完整原始输出见
+  [test/ast/p78_red.log](../../test/ast/p78_red.log)。
+- **命令与退出码**：
+
+```console
+$ CC=cc sh test/ast/p78_basic.sh  /tmp/p78/ct-ast   # exit 1
+$ CC=cc sh test/ast/p78_method.sh /tmp/p78/ct-ast   # exit 1
+$ CC=cc sh test/ast/p78_types.sh  /tmp/p78/ct-ast   # exit 1
+$ CC=cc sh test/ast/p78_docs.sh                      # exit 1
+```
+
+原始输出（节选，逐字）：
+
+```text
+FAIL p78/basic: E78-2 ref/out free function (run)
+prog.ct:5:10: error: unknown type name 'ref'
+    5 | void inc(ref int);
+FAIL p78/basic: E78-2 emission shape
+void inc(ref int x) {
+    x = (x + 1);
+}
+...
+FAIL p78/basic: E78-5 loop is conservative
+  wrong diagnostic: ... bad_loop.c ...
+bad_loop.ct:5:10: error: unknown type name 'out'
+FAIL p78/basic: E78-5 ct check uses the same rule
+  accepted (expected a hard error)
+
+FAIL p78/method: E78-6 trait method ref/out (dispatch, run)
+methods.ct:3:26: error: unknown type name 'ref'
+    3 |     void (*bump)(void *, ref int, out int);
+FAIL p78/method: E78-6 method out must be assigned on every path
+  wrong diagnostic: ... bad_out.c ...
+bad_out.ct:3:26: error: unknown type name 'ref'
+    3 |     void (*bump)(void *, ref int, out int);
+
+FAIL p78/types: ref base type mismatch
+  wrong diagnostic: ... ref_type.c ...
+ref_type.ct:6:10: error: unknown type name 'ref'
+    6 | void inc(ref int);
+FAIL p78/types: out does not disturb own/AutoDrop
+own_sem.ct:8:10: error: unknown type name 'out'
+
+FAIL p78/docs: spec section 4.68 (ref/out) missing
+FAIL p78/docs: tutorial section 15 (ref/out) missing
+FAIL p78/docs: tutorial does not show ref/out spelling
+```
+
+红证断言的判据：baseline 上四个探针均非零；实现后四个探针全绿（见 §7 收口对照表）。

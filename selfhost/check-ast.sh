@@ -1009,6 +1009,37 @@ case "$p77net" in
     *)  bad "CI-9 net-timeout" "$(sed -n '1,8p' "$work/p77net.out")" ;;
 esac
 
+# Phase 78: ref / out parameters (S2a free functions, S2b methods/traits,
+# S2c types and docs). The probes build their own fixtures; they run from a temp
+# dir and link the repo's lib/std so the built-in Vec/Map shapes resolve.
+sh test/ast/p78_basic.sh "$work/ct-ast" >"$work/p78basic.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-78-S2a basic (E78-1…5 ref/out free functions)"
+else
+    bad "PH-78-S2a basic" "$(sed -n '1,10p' "$work/p78basic.out")"
+fi
+
+sh test/ast/p78_method.sh "$work/ct-ast" >"$work/p78method.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-78-S2b method (E78-6 methods/trait/default/inherent)"
+else
+    bad "PH-78-S2b method" "$(sed -n '1,10p' "$work/p78method.out")"
+fi
+
+sh test/ast/p78_types.sh "$work/ct-ast" >"$work/p78types.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-78-S2c types (base-type negatives, shapes, semantics)"
+else
+    bad "PH-78-S2c types" "$(sed -n '1,10p' "$work/p78types.out")"
+fi
+
+sh test/ast/p78_docs.sh >"$work/p78docs.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-78-S2c docs (spec + tutorial)"
+else
+    bad "PH-78-S2c docs" "$(sed -n '1,10p' "$work/p78docs.out")"
+fi
+
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-75-R1 closure (pair-form method argument)"
