@@ -2712,7 +2712,10 @@ static int pkg_index_verify(int argc, char **argv, const char *prog, const char 
         fprintf(stderr, "%s: index path is too long\n", prog);
         return 2;
     }
-    snprintf(path, sizeof path, "%s", ip);
+    /* The default branch points `ip` at `path`; copying it onto itself is
+       undefined (glibc returns an empty string), so only copy when the two
+       differ. This is the Linux CI difference PKG-14 exposed. */
+    if (ip != path) snprintf(path, sizeof path, "%s", ip);
     {
         struct stat st;
         if (stat(path, &st) != 0) {

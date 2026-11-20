@@ -1,6 +1,6 @@
 # Phase 83 — 包管理契约 v1 与索引校验
 
-> **状态：完成（v0.83.1；PKG-14 fixed）**（2026-11-20 立项并开卡；2026-11-21 S83a–S83d 完成，E83-1…8 通过）。
+> **状态：完成（v0.83.2；PKG-14 fixed）**（2026-11-20 立项并开卡；2026-11-21 S83a–S83d 完成，E83-1…8 通过）。
 > **签收：EDITOR 2026-11-20**（主编统一签收；卡作者 REQ）；S83a 契约/矩阵另需 REVIEW 签收（§5）。
 > **施工闸门**：PH-82 已收口（v0.82.0）；PKG-12 判据矩阵已按 index 基线定稿；index 仓消费方式见 §7.4。
 > **前置**：PH-82 收口；[PKG-12](../../issues/packages/pkg-12-contract-v1-doc-gaps.md) 判据矩阵；
@@ -102,6 +102,7 @@ S83a 为纯文档任务，写 `no-test:` 并由 REVIEW 签字。
 | S83c conformance | `7cbd5792`（baseline `1764b4d6`） | `f1a1146a` | `sh test/ast/p83_conformance.sh` | `p83_conformance: OK`（19 passed） |
 | S83d 分发 | `23c00b0b`（baseline `1764b4d6`） | `2a0a0d38` | `sh test/ast/p83_dist.sh --require` | `p83_dist: OK`（8，产物 v0.83.0，sha256 `b04afe2e…`） |
 | PKG-14 修复（v0.83.1） | `c72349fe`（baseline `8014739e`） | 本提交 | `sh test/ast/p83_verify.sh` | `p83_verify: OK`（34 ok + 1 skip，含目录/设备/symlink/CT_INDEX/HOME/FIFO/ferror 负例） |
+| PKG-14 Linux 追加（v0.83.2） | `d49982c6`（baseline `fa6f8fba`） | 本提交 | `sh test/ast/p83_verify.sh`（Linux 容器） | Linux 36 ok / macOS 35 ok + 1 skip；`p83_verify: OK` |
 
 S83a 的 REVIEW 签收位：本卡 §5 记录“契约/矩阵已按 index@0cdb132 定稿、无待补、与 conformance
 类别对齐”，由 REVIEW 席位在收口复核时签字；DEV 不自签。
@@ -306,7 +307,7 @@ g0: OK (block 1.17.0, session-map present)
 $ bash tools/check.sh g8
 g8: OK (PN-2 version coherence; 9 legacy offsets)
 $ python3 test/docs/check-docs.py
-check-docs: OK (2195 relative links in 364 files, v0.83.1, 11 hard gates, 12 phase status, 5 适用版本 header(s), 2 superseded link(s), 6 signoff(s))
+check-docs: OK (2196 relative links in 364 files, v0.83.2, 11 hard gates, 12 phase status, 5 适用版本 header(s), 2 superseded link(s), 6 signoff(s))
 ```
 
 五处版本落点与 51 个 golden/ABI banner：
@@ -314,10 +315,10 @@ check-docs: OK (2195 relative links in 364 files, v0.83.1, 11 hard gates, 12 pha
 ```console
 $ grep -h '#define CTC_VERSION' selfhost/l0/ctc.c selfhost/l1/ctc.ct \
       selfhost/l2/core.ct selfhost/l2/driver.ct selfhost/ct-ast/main.ct
-#define CTC_VERSION "0.83.1"   (五处)
-$ grep -l 'v0\.83\.1' test/cases/*.expected.c | wc -l
+#define CTC_VERSION "0.83.2"   (五处)
+$ grep -l 'v0\.83\.2' test/cases/*.expected.c | wc -l
 25
-$ grep -c 'v0\.83\.1' test/modules/p39_lib/lib.expected.abi.h
+$ grep -c 'v0\.83\.2' test/modules/p39_lib/lib.expected.abi.h
 1
 ```
 
@@ -383,7 +384,49 @@ v0.83.1 产物：`dist/ct-linux-x64.tar.gz`（static musl，zig 交叉 + QEMU Al
 `7265d00a9d0e93aabeb5a91ee06212c8ff8853430da8db9a595c13aa79749c35`，解包 `ct -v` = `ct v0.83.1`
 （`p83_dist --require` 全绿；产物按 `.gitignore` 不入库）。
 
+v0.83.2 产物：`dist/ct-linux-x64.tar.gz` sha256
+`63e6c1e666c67d708fe05955eed4ea1c6c045a6867319f3b43d512b5b88e15ca`，解包 `ct -v` =
+`ct v0.83.2`（`p83_dist --require` 全绿；产物按 `.gitignore` 不入库）。
+
 契约 §4.4/§7/§9 与 §12 v1.2 同步；PKG-14 处置段见该 issue（DEV 主张 fixed，状态仍由 REV 复核）。
+
+### 7.6 CI Linux glibc 追加修复（v0.83.2）
+
+CI v0.83.1 在 ubuntu-clang/gcc 的 `PH-83-S83b verify` 红，macOS 绿。Linux 容器
+（Fedora/aarch64，clang）复现后判定为**产品差异**，不是夹具：
+
+- `pkg_index_verify` 的默认索引分支先令 `ip = path`，随后
+  `snprintf(path, sizeof path, "%s", ip)` 把 `path` 拷到自己身上；这是重叠对象上的
+  `snprintf`（C 未定义），glibc 返回空串，`stat('')` 失败。macOS libc 恰好原地复制，
+  所以 macOS 绿（与 SH-103 的字段表自拷贝同一类问题）。
+- 修复：`if (ip != path) snprintf(path, sizeof path, "%s", ip);` —— 默认分支
+  `ip` 已指向 `path`，跳过自拷贝。
+- 测试：`p83_verify` 增两条 Linux 可捕获的断言（`CT_HOME` 目录的 stderr 必须带完整
+  路径；默认 `CT_HOME` 的 `--json.index` 必须等于 `$CT_HOME/index/index`）。
+
+红证（v0.83.1，Linux 容器，baseline `fa6f8fba`）：
+
+```console
+$ podman ... exec -w /src ctlinux sh -c 'CC=clang sh test/ast/p83_verify.sh /tmp/ct-ast'
+FAIL p83/verify: CT_HOME directory          (stderr: cannot read the package index '')
+FAIL p83/verify: CT_HOME default            (expected 0)
+FAIL p83/verify: CT_HOME default path       (index empty / rc=2)
+PROBE_RC=1
+```
+
+绿证（v0.83.2，Linux 容器）：
+
+```console
+$ podman ... exec -w /src ctlinux sh -c 'CC=clang sh test/ast/p83_verify.sh /tmp/ct-ast-fixed'
+ok   $CT_HOME/index/index being a directory exits 2 (with the resolved path)
+ok   a read error (ferror) exits 2
+ok   $CT_HOME default JSON carries the full resolved path
+...（Linux 36 ok）...
+p83_verify: OK
+PROBE_RC=0
+```
+
+macOS v0.83.2：35 ok + 1 skip（无 `/proc/self/mem`），`p83_verify: OK`。
 
 ### 7.4 未覆盖与简化
 

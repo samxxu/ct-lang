@@ -131,3 +131,21 @@ Release：`ct-linux-x64.tar.gz` sha256 `7265d00a9d0e93aabeb5a91ee06212c8ff885343
 解包 `ct -v` = `ct v0.83.1`；tag/Release/版本一致。
 
 证据：[REV verdict](../../docs/reviews/2026-11-21-phase83-rev-verdict.md) §14。
+
+## CI 追加（v0.83.2，DEV，2026-11-21）
+
+REV 第二轮 verified 后，CI v0.83.1 在 ubuntu-clang/gcc 上 `PH-83-S83b verify` 红、macOS 绿。
+Linux 容器（Fedora/aarch64，clang）复现并定位为**产品差异**：
+
+- `pkg_index_verify` 的默认索引分支先令 `ip = path`，随后
+  `snprintf(path, sizeof path, "%s", ip)` 把 `path` 自拷贝进 `path`；重叠对象上的 `snprintf`
+  是 C 未定义，glibc 返回空串，`stat('')` 失败。macOS libc 恰好原地复制，所以 macOS 绿
+  （与 SH-103 的字段表自拷贝同类）。
+- 修复：`if (ip != path) snprintf(path, sizeof path, "%s", ip);`。
+- 测试：`p83_verify` 增两条 Linux 可捕获断言（`CT_HOME` 目录 stderr 带完整路径；默认
+  `CT_HOME` 的 `--json.index` 等于 `$CT_HOME/index/index`），红提交 `d49982c6`
+  （baseline `fa6f8fba`）。
+- 绿证：Linux 容器 `p83_verify: OK`（36 ok）；macOS 35 ok + 1 skip（ferror）；`v0.83.2`。
+- 提交：本提交（fix，v0.83.2）；产物 sha256
+  `63e6c1e666c67d708fe05955eed4ea1c6c045a6867319f3b43d512b5b88e15ca`。
+- 状态字段仍为 `verified`（REV 所有）；DEV 主张本轮追加 fixed，是否 reopen/复核由 REV 裁定。

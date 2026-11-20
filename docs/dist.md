@@ -1,6 +1,6 @@
 # 分发产物：`ct-linux-x64.tar.gz`
 
-> 中文 · PH-83（v0.83.1）· 契约 [§4.4](planning/ct-pkg-get-contract.md)、[D-014](decisions/D-014.md) 第 6 条
+> 中文 · PH-83（v0.83.2）· 契约 [§4.4](planning/ct-pkg-get-contract.md)、[D-014](decisions/D-014.md) 第 6 条
 
 每个 MINOR 发布一份 Linux x64 产物，供 `ct-pkg/index` 的 CI 与不装源码的用户钉版本使用。
 产物**不入 git**（`dist/` 在 `.gitignore`）；发布时上传到 GitHub Release 的稳定 URL。
@@ -18,7 +18,7 @@ ct
 ctc
 $ tar -xzf dist/ct-linux-x64.tar.gz -C /tmp/ct-dist
 $ /tmp/ct-dist/ct -v
-ct v0.83.1
+ct v0.83.2
 ```
 
 安装形态沿用单入口约定：把 `ct` 放进 `~/.local/bin`，`ctc` 是同一二进制的兼容别名
@@ -66,7 +66,7 @@ $ curl -fsSL https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/bus
     -o .temp/ph83/linux/busybox
 
 $ sh selfhost/run-linux-binary.sh dist-ct/ct -v
-ct v0.83.1
+ct v0.83.2
 ```
 
 需要 `qemu-system-x86_64`、`cpio`、`gzip`；缺任一项时脚本退出 77（skip），不伪装成功。
@@ -82,7 +82,7 @@ ok   the tarball contains ct and ctc only
 ok   unpacked ct is executable
 ok   unpacked ctc is the ct symlink
 ok   ELF 64-bit x86-64 (...)
-ok   unpacked ct -v prints 'ct v0.83.1'
+ok   unpacked ct -v prints 'ct v0.83.2'
 p83_dist: OK
 ```
 
