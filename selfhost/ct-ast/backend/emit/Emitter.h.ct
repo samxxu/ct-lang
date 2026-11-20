@@ -256,8 +256,17 @@ pub struct StrRetain {
     char type[256][160];
     int  own[256];
     int  blk[256];
+    int  bkind[256];    /* 1 = loop body, 2 = switch body, 0 = plain block */
     int  nblk;
     int  pending;       /* the next N_BLOCK is a function body: retain params */
+    int  loop_pending;  /* the next N_BLOCK is a loop body */
+    int  switch_pending;/* the next N_BLOCK is a switch body */
+    /* field reassignment: the string fields of a local / global struct that
+       are known to hold an owning handle, so a later assignment releases the
+       old value. Only straight-line member / arrow targets are tracked. */
+    int  nfield;
+    char fpath[128][160];
+    int  fowner[128];   /* binding index of the base local; -1 = global */
     int  ln;
     char lname[512][160];
     char ltype[512][160];
@@ -591,6 +600,226 @@ static int sb_is_place(struct Emitter *self, int n)
            || k == N_DEREF || k == N_SLICE_INDEX;
 }
 
+/* defined below; the field bookkeeping helpers call each other */
+static int sb_field_find(struct Emitter *self, const char *base, const char *field);
+static void sb_field_mark(struct Emitter *self, const char *base, const char *field, int owner);
+
+/* The captured text of an N_RAW initialiser. */
+static const char *sb_raw_text(struct Emitter *self, int n)
+{
+    if (n < 0 || self->arena->nodes[n].kind != N_RAW) return 0;
+    if (self->arena->nodes[n].aux) return self->arena->str_at((int)self->arena->nodes[n].num);
+    return self->arena->nodes[n].text;
+}
+
+/* The `<base>.<field>` key of a member / arrow target whose base is a plain
+   variable. 0 when the target is indexed or otherwise dynamic. */
+static int sb_field_key(struct Emitter *self, int lhs, char *base, char *field, int *owner)
+{
+    int b, vi;
+    if (lhs < 0) return 0;
+    if (self->arena->nodes[lhs].kind != N_MEMBER && self->arena->nodes[lhs].kind != N_ARROW)
+        return 0;
+    b = self->arena->nodes[lhs].a;
+    if (b < 0 || self->arena->nodes[b].kind != N_VAR) return 0;
+    snprintf(base, MAX_TEXT, "%s", self->arena->nodes[b].text2);
+    snprintf(field, MAX_TEXT, "%s", self->arena->nodes[lhs].text2);
+    vi = sb_lfind(self, base);
+    if (vi >= 0) {
+        *owner = vi;
+        return 1;
+    }
+    vi = self->sym->find_var(base);
+    if (vi >= 0 && self->sym->vars[vi].is_global) {
+        *owner = -1;
+        return 1;
+    }
+    return 0;
+}
+
+/* 1 when the field holds an owning handle: a tracked assignment, or any field
+   of a global (globals are zero-initialised, so releasing the old value is a
+   no-op before the first assignment). */
+static int sb_field_known(struct Emitter *self, const char *base, const char *field, int owner)
+{
+    if (sb_field_find(self, base, field) >= 0) return 1;
+    return owner < 0;
+}
+
+/* 1 when the text is a C place (so `&(text)` is legal): an optional `*`, an
+   identifier, then `.field` / `->field` / `[index]` suffixes. */
+static int sb_text_place_p(const char *e)
+{
+    const char *p = e;
+    int n;
+    if (!p) return 0;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p == '*') {
+        p++;
+        while (*p == ' ' || *p == '\t') p++;
+    }
+    if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || *p == '_')) return 0;
+    while ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z')
+           || (*p >= '0' && *p <= '9') || *p == '_') p++;
+    for (;;) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '.') {
+            p++;
+            if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || *p == '_')) return 0;
+            while ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z')
+                   || (*p >= '0' && *p <= '9') || *p == '_') p++;
+            continue;
+        }
+        if (*p == '-' && p[1] == '>') {
+            p += 2;
+            if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || *p == '_')) return 0;
+            while ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z')
+                   || (*p >= '0' && *p <= '9') || *p == '_') p++;
+            continue;
+        }
+        if (*p == '[') {
+            n = 1;
+            p++;
+            while (*p && n > 0) {
+                if (*p == '[') n++;
+                else if (*p == ']') n--;
+                p++;
+            }
+            if (n != 0) return 0;
+            continue;
+        }
+        break;
+    }
+    while (*p == ' ' || *p == '\t') p++;
+    return *p == 0;
+}
+
+/* Rewrite a captured struct initialiser so an owning string field's place
+   initialiser is retained, exactly like `h.tag = x`. Positional and
+   `.field = expr` items are matched against the struct's fields; a field whose
+   initialiser is a call result moves (no retain). Returns 1 when it printed
+   the rewritten `{ … }` text (without the closing brace, which the caller's
+   vptr suffix path appends), 0 when nothing needed rewriting. */
+static int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
+{
+    int starts[64], ends[64], epos[64], fields[64], nitem, i, depth, p, q;
+    int changed, count;
+    char expr[MAX_TEXT];
+
+    if (len < 2 || t[0] != '{' || t[len - 1] != '}') return 0;
+    if (si < 0 || self->sym->structs[si].nfields <= 0
+        || self->sym->structs[si].nfields > 64) return 0;
+    nitem = 0;
+    depth = 0;
+    p = 1;
+    q = 1;
+    count = 0;
+    while (p < len - 1) {
+        char c = t[p];
+        if (c == '"' || c == '\'') {
+            char quote = c;
+            p++;
+            while (p < len - 1 && t[p] != quote) {
+                if (t[p] == '\\' && p + 1 < len - 1) p++;
+                p++;
+            }
+            p++;
+            continue;
+        }
+        if (c == '/' && p + 1 < len - 1 && t[p + 1] == '/') {
+            while (p < len - 1 && t[p] != '\n') p++;
+            continue;
+        }
+        if (c == '/' && p + 1 < len - 1 && t[p + 1] == '*') {
+            p += 2;
+            while (p + 1 < len - 1 && !(t[p] == '*' && t[p + 1] == '/')) p++;
+            p += 2;
+            continue;
+        }
+        if (c == '{' || c == '(' || c == '[') depth++;
+        else if (c == '}' || c == ')' || c == ']') depth--;
+        else if (c == ',' && depth == 0) {
+            if (nitem >= 64) return 0;
+            starts[nitem] = q;
+            ends[nitem] = p;
+            nitem++;
+            q = p + 1;
+        }
+        p++;
+    }
+    if (nitem >= 64) return 0;
+    starts[nitem] = q;
+    ends[nitem] = len - 1;
+    nitem++;
+    if (self->sym->structs[si].nfields < nitem) return 0;
+
+    changed = 0;
+    for (i = 0; i < nitem; i++) {
+        int s0 = starts[i], e0 = ends[i], fs, fi, kind;
+        while (s0 < e0 && (t[s0] == ' ' || t[s0] == '\t' || t[s0] == '\n' || t[s0] == '\r')) s0++;
+        while (e0 > s0 && (t[e0 - 1] == ' ' || t[e0 - 1] == '\t'
+                           || t[e0 - 1] == '\n' || t[e0 - 1] == '\r')) e0--;
+        fs = s0;
+        fi = -1;
+        if (s0 < e0 && t[s0] == '.') {
+            int ne = s0 + 1;
+            char nm[MAX_TEXT];
+            while (ne < e0 && ((t[ne] >= 'A' && t[ne] <= 'Z') || (t[ne] >= 'a' && t[ne] <= 'z')
+                               || (t[ne] >= '0' && t[ne] <= '9') || t[ne] == '_')) ne++;
+            snprintf(nm, sizeof nm, "%.*s", ne - (s0 + 1), t + s0 + 1);
+            while (ne < e0 && (t[ne] == ' ' || t[ne] == '\t')) ne++;
+            if (ne >= e0 || t[ne] != '=') return 0;   /* unexpected designator */
+            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+                if (strcmp(self->sym->structs[si].fields[fi].name, nm) == 0) break;
+            if (fi >= self->sym->structs[si].nfields) return 0;
+            ne++;
+            while (ne < e0 && (t[ne] == ' ' || t[ne] == '\t')) ne++;
+            fs = ne;
+            count = fi + 1;
+        } else if (s0 < e0 && t[s0] == '[') {
+            return 0;   /* array designator: leave the initialiser alone */
+        } else {
+            fi = count;
+            count++;
+            if (fi >= self->sym->structs[si].nfields) return 0;
+        }
+        fields[i] = fi;
+        epos[i] = fs;
+        if (self->sym->structs[si].fields[fi].dims[0]) continue;
+        kind = frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
+        if (!kind) continue;
+        if (e0 - fs >= MAX_TEXT) continue;
+        snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
+        if (!sb_text_place_p(expr)) continue;
+        starts[i] = s0;
+        ends[i] = e0;
+        changed = 1;
+    }
+    if (!changed) return 0;
+    fputs("{ ", self->out);
+    for (i = 0; i < nitem; i++) {
+        int s0 = starts[i], e0 = ends[i], fs = epos[i];
+        int kind, fi = fields[i];
+        if (i > 0) fputs(", ", self->out);
+        if (fs > s0) fwrite(t + s0, 1, (size_t)(fs - s0), self->out);   /* designator */
+        kind = self->sym->structs[si].fields[fi].dims[0] ? 0
+               : frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
+        if (kind && e0 - fs < MAX_TEXT) {
+            snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
+            if (sb_text_place_p(expr))
+                fprintf(self->out, "%s_retain(&(", sb_prefix(kind));
+            else
+                kind = 0;
+        } else {
+            kind = 0;
+        }
+        fwrite(t + fs, 1, (size_t)(e0 - fs), self->out);
+        if (kind) fputs("))", self->out);
+    }
+    fputs(" ", self->out);
+    return 1;
+}
+
 /* Release the tracked bindings [base, sb_n) in reverse declaration order,
    skipping `skip` (a handle that a `return` moves out). */
 static int sb_release_from(struct Emitter *self, int base, int skip, int ind)
@@ -633,27 +862,6 @@ static int sb_view_ret(const char *t)
     return 0;
 }
 
-/* 1 when a return type can carry a string handle inside it (`Result<String, E>`,
-   `Option<String>`, `Vec_String`, or a named struct with such a field). The
-   aggregate is copied by value, so returning a local handle's value moves it
-   into the aggregate; releasing the local first would dangle it. Not applied
-   when the return type is the handle itself -- that path retains and releases
-   under the ordinary rule. */
-static int sb_type_has_string(struct Emitter *self, const char *t, int depth)
-{
-    char sname[MAX_TEXT];
-    int is_ptr, si, fi;
-    if (t == 0 || depth > 2) return 0;
-    if (frontend::sym::ct_is_string_value_type(t)) return 1;
-    if (strstr(t, "String")) return 1;
-    if (!self->ty->concrete_struct(t, sname, sizeof sname, &is_ptr)) return 0;
-    si = self->sym->find_struct(sname);
-    if (si < 0) return 0;
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-        if (sb_type_has_string(self, self->sym->structs[si].fields[fi].type, depth + 1))
-            return 1;
-    return 0;
-}
 
 /* A whole identifier in a captured raw initialiser. */
 static int sb_text_has_word(const char *txt, const char *w)
@@ -714,12 +922,101 @@ static int sb_ret_move(struct Emitter *self, int e)
 
 /* A `break` / `continue` leaves at least the innermost statement block, whose
    closing brace the jump skips: release that block's bindings first. */
-static int sb_jump_release(struct Emitter *self, int ind)
+/* The binding depth a `break` / `continue` must unwind to: the enclosing loop
+   body (a `continue`) or the enclosing loop / switch body (a `break`), so a
+   jump from a nested `if` releases every owning scope it leaves. */
+static int sb_jump_base(struct Emitter *self, int is_cont)
 {
-    int base;
-    if (g_sb.nblk <= 0) return 0;
-    base = g_sb.blk[g_sb.nblk - 1];
-    return sb_release_from(self, base, -1, ind);
+    int i;
+    (void)self;
+    for (i = g_sb.nblk - 1; i >= 0; i--) {
+        if (is_cont) {
+            if (g_sb.bkind[i] == 1) return g_sb.blk[i];
+        } else {
+            if (g_sb.bkind[i] == 1 || g_sb.bkind[i] == 2) return g_sb.blk[i];
+        }
+    }
+    if (g_sb.nblk > 0) return g_sb.blk[g_sb.nblk - 1];
+    return 0;
+}
+
+static int sb_jump_release(struct Emitter *self, int ind, int is_cont)
+{
+    return sb_release_from(self, sb_jump_base(self, is_cont), -1, ind);
+}
+
+/* field-path bookkeeping: the key is `<base>.<field>`; a global base is known
+   zero-initialised, a local base is known only after a tracked assignment. */
+static int sb_field_find(struct Emitter *self, const char *base, const char *field)
+{
+    int i;
+    (void)self;
+    for (i = g_sb.nfield - 1; i >= 0; i--) {
+        char want[MAX_TEXT];
+        snprintf(want, sizeof want, "%s.%s", base, field);
+        if (strcmp(g_sb.fpath[i], want) == 0) return i;
+    }
+    return -1;
+}
+
+static void sb_field_mark(struct Emitter *self, const char *base, const char *field, int owner)
+{
+    int i;
+    char want[MAX_TEXT];
+    if (g_sb.nfield >= 128) return;
+    snprintf(want, sizeof want, "%s.%s", base, field);
+    i = sb_field_find(self, base, field);
+    if (i >= 0) {
+        g_sb.fowner[i] = owner;
+        return;
+    }
+    snprintf(g_sb.fpath[g_sb.nfield], MAX_TEXT, "%s", want);
+    g_sb.fowner[g_sb.nfield] = owner;
+    g_sb.nfield++;
+}
+
+/* Drop the tracked fields of locals whose block just closed. */
+static void sb_field_prune(struct Emitter *self, int keep_ln)
+{
+    int i, j = 0;
+    (void)self;
+    for (i = 0; i < g_sb.nfield; i++) {
+        if (g_sb.fowner[i] >= keep_ln && g_sb.fowner[i] >= 0) continue;
+        snprintf(g_sb.fpath[j], MAX_TEXT, "%s", g_sb.fpath[i]);
+        g_sb.fowner[j] = g_sb.fowner[i];
+        j++;
+    }
+    g_sb.nfield = j;
+}
+
+/* Mark the string fields of a struct local initialised by an aggregate
+   literal: C zero-fills the omitted members, so every string field holds a
+   valid (null or retained) handle after the initialiser. */
+static void sb_mark_aggregate(struct Emitter *self, int decl)
+{
+    const char *tp = self->arena->nodes[decl].text;
+    const char *txt;
+    char base[MAX_TEXT];
+    int si, fi, owner;
+    if (self->arena->nodes[decl].a < 0) return;
+    txt = sb_raw_text(self, self->arena->nodes[decl].a);
+    if (!txt) return;
+    while (*txt == ' ' || *txt == '\t' || *txt == '\n' || *txt == '\r') txt++;
+    if (*txt != '{') return;
+    snprintf(base, sizeof base, "%s", tp);
+    txt = base;
+    if (strncmp(txt, "struct ", 7) == 0) txt += 7;
+    while (*txt == ' ') txt++;
+    si = self->sym->find_struct(txt);
+    if (si < 0) return;
+    owner = g_sb.ln - 1;
+    if (owner < 0) return;
+    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+        if (self->sym->structs[si].fields[fi].dims[0]) continue;
+        if (!frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type))
+            continue;
+        sb_field_mark(self, g_sb.lname[owner], self->sym->structs[si].fields[fi].name, owner);
+    }
 }
 
 /* The `String` / `U16String` declaration statement: retain the initialiser when
@@ -745,6 +1042,7 @@ static int sb_decl(struct Emitter *self, int n, int ind)
     if (!kind) {
         /* a plain local still records its declared type: `h.tag = s` needs it */
         sb_lpush(self, self->arena->nodes[n].text2, tp);
+        sb_mark_aggregate(self, n);
         return 0;
     }
     if (self->hoist_rvalue(n) != 0) return -1;
@@ -778,7 +1076,8 @@ static int sb_decl(struct Emitter *self, int n, int ind)
 static int sb_assign(struct Emitter *self, int n, int ind)
 {
     char t[MAX_TEXT];
-    int kind, lhs, rhs, idx, borrowed, wrap, release_old, needsrc, k;
+    char fbase[MAX_TEXT], ffield[MAX_TEXT];
+    int kind, lhs, rhs, idx, borrowed, wrap, release_old, needsrc, k, fowner;
 
     if (self->arena->nodes[n].kind != N_ASSIGN || self->arena->nodes[n].aux != 0)
         return 0;
@@ -803,6 +1102,12 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     else wrap = (!borrowed && sb_is_place(self, rhs));
     needsrc = wrap && !sb_is_place(self, rhs);
     release_old = (idx >= 0 && g_sb.own[idx] && !borrowed);
+    fbase[0] = 0;
+    ffield[0] = 0;
+    fowner = -1;
+    if ((k == N_MEMBER || k == N_ARROW) && sb_field_key(self, lhs, fbase, ffield, &fowner)
+        && !borrowed && sb_field_known(self, fbase, ffield, fowner))
+        release_old = 1;
     self->emit_indent(ind);
     fputs("{ ", self->out);
     if (release_old) {
@@ -828,6 +1133,8 @@ static int sb_assign(struct Emitter *self, int n, int ind)
         fprintf(self->out, "%s_release(&__ct_sold%d); ", sb_prefix(kind), self->ntmp - 1);
     fputs("}\n", self->out);
     if (idx >= 0) g_sb.own[idx] = borrowed ? 0 : 1;
+    if ((k == N_MEMBER || k == N_ARROW) && fbase[0])
+        sb_field_mark(self, fbase, ffield, fowner);
     return 1;
 }
 /* Register a body's by-value string parameters (the retain is written by
@@ -3796,7 +4103,8 @@ impl EmitOps for Emitter {
             fputs(" }", self->out);
             return 0;
         }
-        fwrite(t, 1, (size_t)(len - 1), self->out);
+        if (!(si >= 0 && sb_rewrite_init(self, t, len, si)))
+            fwrite(t, 1, (size_t)(len - 1), self->out);
         if (self->init->type_has_vptr(type)) {
             fputs(", ", self->out);
             if (self->init->emit_vptr_items("", type) != 0) return -1;
@@ -4844,10 +5152,16 @@ impl EmitOps for Emitter {
             /* a function body's closing brace ends the parameters' lives too */
             save_sb = funcbody ? 0 : g_sb.n;
             save_l = g_sb.ln;
-            if (g_sb.nblk < 256) {
-                g_sb.blk[g_sb.nblk] = save_sb;
-                g_sb.lblk[g_sb.nblk] = save_l;
-                g_sb.nblk++;
+            {
+                int bk = 0;
+                if (g_sb.loop_pending) { bk = 1; g_sb.loop_pending = 0; }
+                else if (g_sb.switch_pending) { bk = 2; g_sb.switch_pending = 0; }
+                if (g_sb.nblk < 256) {
+                    g_sb.blk[g_sb.nblk] = save_sb;
+                    g_sb.lblk[g_sb.nblk] = save_l;
+                    g_sb.bkind[g_sb.nblk] = bk;
+                    g_sb.nblk++;
+                }
             }
             fputs("{\n", self->out);
             if (funcbody) sb_retain_params(self, ind + 1);
@@ -4859,6 +5173,7 @@ impl EmitOps for Emitter {
             if (g_sb.nblk > 0) g_sb.nblk--;
             g_sb.n = save_sb;
             g_sb.ln = save_l;
+            sb_field_prune(self, save_l);
             self->nclvar = save_nclvar;
             self->emit_indent(ind);
             fputs("}\n", self->out);
@@ -5027,9 +5342,7 @@ impl EmitOps for Emitter {
                view return leaves the handles it still names alive. */
             if (g_sb.n > 0)
                 sb_ret_release(self, self->arena->nodes[n].a,
-                               (!srk && (sb_view_ret(self->cur_ret)
-                                         || sb_type_has_string(self, self->cur_ret, 0))),
-                               smove, ind);
+                               (!srk && sb_view_ret(self->cur_ret)), smove, ind);
             self->emit_indent(ind);
             if (self->arena->nodes[n].a < 0) {
                 fputs("return;\n", self->out);
@@ -5167,7 +5480,7 @@ impl EmitOps for Emitter {
                 if (self->emit_node(r, ind) != 0) return -1;
             /* SH-102: the jump skips the current block's closing brace, so its
                owning string handles are released here instead. */
-            if (sb_jump_release(self, ind) != 0) return -1;
+            if (sb_jump_release(self, ind, 0) != 0) return -1;
             self->emit_indent(ind);
             fputs("break;\n", self->out);
             return 0;
@@ -5176,7 +5489,7 @@ impl EmitOps for Emitter {
             int r;
             for (r = self->arena->nodes[n].b; r >= 0; r = self->arena->nodes[r].next)
                 if (self->emit_node(r, ind) != 0) return -1;
-            if (sb_jump_release(self, ind) != 0) return -1;
+            if (sb_jump_release(self, ind, 1) != 0) return -1;
             self->emit_indent(ind);
             fputs("continue;\n", self->out);
             return 0;
@@ -5215,13 +5528,20 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_DECLS) {
             int c = self->arena->nodes[n].a;
             while (c >= 0) {
-                /* PH-53: each declarator's initialiser may carry an optional
-                   chain; its temporary declaration goes before that line. */
-                if (self->hoist_rvalue(c) != 0) return -1;
-                if (self->emit_hoists(ind) != 0) return -1;
-                self->emit_indent(ind);
-                if (self->emit_inline(c) != 0) return -1;
-                fputs(";\n", self->out);
+                /* SH-102: `String y = x, z = y;` is two declarations here; each
+                   one retains its place initialiser and registers its own
+                   binding, so the later declarator sees the earlier one. */
+                int sh = sb_decl(self, c, ind);
+                if (sh < 0) return -1;
+                if (sh == 0) {
+                    /* PH-53: each declarator's initialiser may carry an optional
+                       chain; its temporary declaration goes before that line. */
+                    if (self->hoist_rvalue(c) != 0) return -1;
+                    if (self->emit_hoists(ind) != 0) return -1;
+                    self->emit_indent(ind);
+                    if (self->emit_inline(c) != 0) return -1;
+                    fputs(";\n", self->out);
+                }
                 c = self->arena->nodes[c].next;
             }
             return 0;
@@ -5338,7 +5658,12 @@ impl EmitOps for Emitter {
             fputs("while (", self->out);
             if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
             fputs(") ", self->out);
-            return self->emit_node(self->arena->nodes[n].b, ind);
+            g_sb.loop_pending = 1;
+            {
+                int r = self->emit_node(self->arena->nodes[n].b, ind);
+                g_sb.loop_pending = 0;
+                return r;
+            }
         }
         if (self->arena->nodes[n].kind == N_FOR) {
             int init = self->arena->nodes[n].a;
@@ -5365,7 +5690,12 @@ impl EmitOps for Emitter {
                 if (self->arena->nodes[n].c >= 0
                     && self->emit_inline(self->arena->nodes[n].c) != 0) return -1;
                 fputs(") ", self->out);
-                if (self->emit_node(self->arena->nodes[n].d, ind + 1) != 0) return -1;
+                g_sb.loop_pending = 1;
+                {
+                    int r = self->emit_node(self->arena->nodes[n].d, ind + 1);
+                    g_sb.loop_pending = 0;
+                    if (r != 0) return -1;
+                }
                 self->emit_indent(ind);
                 fputs("}\n", self->out);
                 return 0;
@@ -5378,7 +5708,12 @@ impl EmitOps for Emitter {
             fputs("; ", self->out);
             if (self->arena->nodes[n].c >= 0 && self->emit_inline(self->arena->nodes[n].c) != 0) return -1;
             fputs(") ", self->out);
-            return self->emit_node(self->arena->nodes[n].d, ind);
+            g_sb.loop_pending = 1;
+            {
+                int r = self->emit_node(self->arena->nodes[n].d, ind);
+                g_sb.loop_pending = 0;
+                return r;
+            }
         }
         /* `loop(<count>) { … }` and `loop(<start>..<stop>) { … }` print as a
            single-line `for` header:
@@ -5418,7 +5753,12 @@ impl EmitOps for Emitter {
                 if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
                 fprintf(self->out, ")), __ct_loop_n_%d); i < __ct_loop_hi_%d; i++) ", k, k);
             }
-            return self->emit_node(self->arena->nodes[n].d, ind);
+            g_sb.loop_pending = 1;
+            {
+                int r = self->emit_node(self->arena->nodes[n].d, ind);
+                g_sb.loop_pending = 0;
+                return r;
+            }
         }
         /* Phase 27: `foreach` expands to one plain `for`. The length is
            `sizeof(x) / sizeof((x)[0])`, read once into `__ct_foreach_n_K`
@@ -5515,6 +5855,7 @@ impl EmitOps for Emitter {
                 if (g_sb.nblk < 256) {
                     g_sb.blk[g_sb.nblk] = sbase;
                     g_sb.lblk[g_sb.nblk] = lbase;
+                    g_sb.bkind[g_sb.nblk] = 1;
                     g_sb.nblk++;
                 }
                 for (c = self->arena->nodes[self->arena->nodes[n].d].a; c >= 0;
@@ -5523,6 +5864,7 @@ impl EmitOps for Emitter {
                 sb_release_from(self, sbase, -1, ind + 2);
                 g_sb.n = sbase;
                 g_sb.ln = lbase;
+                sb_field_prune(self, lbase);
                 if (g_sb.nblk > 0) g_sb.nblk--;
             }
             self->emit_indent(ind + 1);
@@ -5537,7 +5879,12 @@ impl EmitOps for Emitter {
             fputs("switch (", self->out);
             if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
             fputs(") ", self->out);
-            return self->emit_node(self->arena->nodes[n].b, ind);
+            g_sb.switch_pending = 1;
+            {
+                int r = self->emit_node(self->arena->nodes[n].b, ind);
+                g_sb.switch_pending = 0;
+                return r;
+            }
         }
         if (self->arena->nodes[n].kind == N_CASE) {
             int c;
@@ -5564,6 +5911,7 @@ impl EmitOps for Emitter {
                 if (g_sb.nblk < 256) {
                     g_sb.blk[g_sb.nblk] = sbase;
                     g_sb.lblk[g_sb.nblk] = lbase;
+                    g_sb.bkind[g_sb.nblk] = 0;
                     g_sb.nblk++;
                 }
                 for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next)
@@ -5571,6 +5919,7 @@ impl EmitOps for Emitter {
                 sb_release_from(self, sbase, -1, ind + 1);
                 g_sb.n = sbase;
                 g_sb.ln = lbase;
+                sb_field_prune(self, lbase);
                 if (g_sb.nblk > 0) g_sb.nblk--;
             }
             return 0;
@@ -5589,6 +5938,7 @@ impl EmitOps for Emitter {
                 if (g_sb.nblk < 256) {
                     g_sb.blk[g_sb.nblk] = sbase;
                     g_sb.lblk[g_sb.nblk] = lbase;
+                    g_sb.bkind[g_sb.nblk] = 1;
                     g_sb.nblk++;
                 }
                 for (c = self->arena->nodes[b].a; c >= 0; c = self->arena->nodes[c].next)
@@ -5596,6 +5946,7 @@ impl EmitOps for Emitter {
                 sb_release_from(self, sbase, -1, ind + 1);
                 g_sb.n = sbase;
                 g_sb.ln = lbase;
+                sb_field_prune(self, lbase);
                 if (g_sb.nblk > 0) g_sb.nblk--;
             }
             self->emit_indent(ind);

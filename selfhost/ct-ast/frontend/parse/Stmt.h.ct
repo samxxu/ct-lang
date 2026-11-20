@@ -194,6 +194,10 @@ pub struct Stmt {
        lengths are literals because a `pub struct` lands in the generated
        header, which carries no macros (`MAX_LABELS` is the value used here). */
     int  nlabels;
+    /* SH-102: a local owning `String` / `U16String` binding makes any `goto`
+       in the same function unsafe (a jump can skip a scope's release or enter
+       it past the declaration), so the body is refused at `func_end`. */
+    int  f_string_local;
     char label_names[64][160];
     int  label_lines[64];
     int  ngotos;
@@ -3904,6 +3908,7 @@ impl StmtOps for Stmt {
         (void)self;
         self->nlabels = 0;
         self->ngotos = 0;
+        self->f_string_local = 0;
         self->nbreak = 0;
         self->ncont = 0;
         self->u_reset();
@@ -3923,6 +3928,12 @@ impl StmtOps for Stmt {
         char msg[MAX_TEXT];
         (void)self;
 
+        /* SH-102: a `goto` cannot be released correctly across a scope that
+           owns a `String` / `U16String` local, so it is a hard error rather
+           than a silent leak or a release of an uninitialised handle. */
+        if (self->f_string_local && self->ngotos > 0)
+            return self->sup->fail_at(self->goto_lines[0],
+                "a goto cannot cross an owning String scope; restructure the code or release() explicitly");
         for (i = 0; i < self->ngotos; i++) {
             int li = self->label_find(self->goto_names[i]);
             if (li < 0) {
@@ -4354,6 +4365,13 @@ impl StmtOps for Stmt {
                         frontend::parse::expr_borrow_root(self->ex,
                                                           self->arena->nodes[n].a);
             }
+            /* PH-80 SH-102: a `goto` and a local owning handle cannot be mixed
+               safely (the jump can skip the release or the initialisation), so
+               remember the declaration and refuse at `func_end`. */
+            if (!self->static_decl
+                && self->arena->nodes[n].text3[0] == 0
+                && frontend::sym::ct_is_string_value_type(typebuf))
+                self->f_string_local = 1;
             /* PH-80 SH-102 (D-013 §3): a `String` / `U16String` local bound to a
                borrowed view stays a view (no retain, no scope release); the
                emitter reads this bit instead of re-deriving the provenance from
