@@ -95,12 +95,12 @@
 | Phase 82 | 泄漏防护（`leaks` 两档 `warn` / `error`；`box` 字段直接环告警；树模式文档） | ✅ 完成（v0.82.1；E82-1…8 通过，D-012；SH-103 Linux 字段表修复） | v0.82.1 | [卡](design/phase82.md) · [提案](proposals/leak-guards.md) · [判决](../battle/leak-guards-1/verdict.md) · [D-012](decisions/D-012.md) |
 | Phase 83 | 包管理契约 v1 与索引校验（只读 `ct index verify`；Linux x64 产物；conformance） | ✅ 完成（v0.83.0；E83-1…8 通过，D-014；PKG-14 fixed v0.83.1；Linux 默认索引路径 fix v0.83.2） | v0.83.0（fix v0.83.1 / v0.83.2） | [卡](design/phase83.md) · [评估](reviews/2026-11-20-pkg-contract-proposal-eval.md) · [契约](planning/ct-pkg-get-contract.md) · [D-014](decisions/D-014.md) |
 | Phase 84 | 最小 ADT / `match`（名义和类型 + 负载 + 穷尽检查 + 变量绑定；D3） | 🟨 实施中（准备；2026-11-21 开卡） | v0.84.0 | [卡](design/phase84.md) · [v1 路线 §2.3](planning/v1-release-plan.md) · [LANG-21](../issues/lang/lang-21-minimal-adt-match.md) |
-| Phase 85 | v1-pre：重写 inventory + 单切片 spike（门）+ A 机制接线（`off/warn/error`） | 🗺️ 规划中（未开卡；入口 PH-84） | v0.85.0 | [v1 路线 §2.3/§2.4](planning/v1-release-plan.md) · [评估](reviews/2026-11-21-v1-campaign-eval.md) |
+| Phase 85 | v1-pre：inventory + 单切片 spike（门）+ M0 粗切 + A 机制接线（`off/warn/error`） | 🗺️ 规划中（未开卡；入口 PH-84） | v0.85.0 | [v1 路线 §2.3/§2.4/§2.7](planning/v1-release-plan.md) · [D-017](decisions/D-017.md) |
 | Phase 86 | v1-pre：词法器重写（零拷贝 `Str` 切片；NUL/长度契约） | 🗺️ 规划中（未开卡；入口 PH-85） | v0.86.0 | [v1 路线 §2.3](planning/v1-release-plan.md) |
 | Phase 87 | v1-pre：解析器 + 检查器重写 | 🗺️ 规划中（未开卡；入口 PH-86） | v0.87.0 | [v1 路线 §2.3](planning/v1-release-plan.md) |
 | Phase 88 | v1-pre：发射器重写 + 三轮自举回环 | 🗺️ 规划中（未开卡；入口 PH-87） | v0.88.0 | [v1 路线 §2.3](planning/v1-release-plan.md) |
 | `v1-PH-0` | v1.0 AST-only 收口（去 L1/L2 旧管线；保留 seed；**A 证据 FP=0 硬门禁**；前置 goldens 静态化 + J-6 台账；在 PH-88 之后） | 🗺️ 规划中（未开卡） | v1.0.0（拟，MAJOR） | [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
-| `v1-PH-1` | v1.1 A 默认强制（S2；机制已在 PH-85，证据达标才翻转，未达标回退“可用不默认”） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线 §2.4](planning/v1-release-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
+| `v1-PH-1` | v1.1 S1 M1 精细切分（纯搬移）→ S2 A 默认强制（机制已在 PH-85，证据达标才翻转） | 🗺️ 规划中（未开卡） | v1.1.0（拟） | [v1 路线 §2.4/§2.7](planning/v1-release-plan.md) · [D-017](decisions/D-017.md) · [battle](../battle/typecheck-1/verdict.md) |
 | `HW-1` | **真板 pilot**（REQ-HW-020：真实板卡 + 厂商 HAL + RTOS；含 [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) DMA 真实搬运） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [需求](planning/hardware-readiness-requirements.md) · [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) |
 | `HW-2` | **第二厂商真板**（nRF52840 / RP2040 的烧录、调试与电气验证） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [PH-67 卡](history/design/phase67.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
 
@@ -127,6 +127,8 @@
 > → PH-86 词法 → PH-87 解析+检查 → PH-88 发射器+三轮自举；随后才发 v1.0。
 > 每张卡独立合入/回滚，同一时刻只开一张。泛型 ADT/or/嵌套模式留 v1.1+。
 > PH-85–88 期间主线**只收 bugfix**，新特性暂停（D6）；不设 hard deadline（D5）。
+> 源码单元切分：M0 粗切并入 PH-85，M1 精细切分落 v1.1 S1；判据两级制与集合基线见
+> [D-017](decisions/D-017.md) · [评估](reviews/2026-11-21-unit-split-eval.md)。
 > **A 的证据**（全量 FP=0）是 v1.0 硬门禁；**默认强制**由 v1-pre 证据决定，未达标回退“可用不默认”（D2 = B+）。
 
 > **v1.0 发布前清单（2026-11-21 已定项）**：J-6 证据台账、goldens 静态化、SH-73、冻结清单、
