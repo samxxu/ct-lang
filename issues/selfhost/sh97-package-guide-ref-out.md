@@ -1,7 +1,7 @@
 ---
 id: SH-97
 title: "package-guide 未记录 ref/out 的 C 边界与 ABI 形态"
-status: open
+status: verified
 area: selfhost
 severity: P2
 opened: 2026-11-20

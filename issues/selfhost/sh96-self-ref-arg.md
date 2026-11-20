@@ -1,7 +1,7 @@
 ---
 id: SH-96
 title: "方法内 self 作 ref 实参发射成 &_self（S **），构建仅警告、运行错误"
-status: open
+status: verified
 area: selfhost
 severity: P1
 opened: 2026-11-20

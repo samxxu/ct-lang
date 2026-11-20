@@ -1,7 +1,7 @@
 ---
 id: SH-95
 title: "ref/out place 检查只看节点种类，f().x / bit-field / const 被放行"
-status: open
+status: verified
 area: selfhost
 severity: P1
 opened: 2026-11-20
