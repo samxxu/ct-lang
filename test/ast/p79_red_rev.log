@@ -1,0 +1,144 @@
+# PH-79 REV 打回 T-7 红证 — baseline 2a2f3933 (v0.79.1)
+# 编译器：由 'git archive 2a2f3933' 独立构建的 .temp/dev79fix/baseline/build/ct-ast。
+# 运行日期：2026-11-20；主机：macOS arm64，cc = Apple clang。
+# 下列探针是最终测试文件；每段是逐字原始输出（含退出码）。
+
+===== command: ls .temp/dev79fix/baseline/test/ast/p79_*.sh =====
+.temp/dev79fix/baseline/test/ast/p79_basic.sh
+
+===== command: for f in p79_basic p79_index p79_places p79_migrate p79_docs; do ...; done =====
+present p79_basic
+MISSING p79_index
+MISSING p79_places
+MISSING p79_migrate
+MISSING p79_docs
+
+===== command: sh test/ast/p79_basic.sh .temp/dev79fix/baseline/build/ct-ast =====
+ok   E79-2/3: array->slice, write, subslice, foreach, get, const read, struct element
+ok   E79-4: const T[] write is a hard error
+ok   E79-3: s[i] out of range traps at run time
+ok   E79-5: slice as a struct field is a hard error
+ok   E79-5: slice as a global is a hard error
+ok   E79-5: slice as a generic argument is a hard error
+ok   E79-1: T a[] parameter warns
+ok   E79-1: T a[] = {...} stays an inferred-length array
+ok   E79-5: slice as a container element is a hard error
+ok   E79-5: slice in Option is a hard error
+ok   E79-5: slice in Result is a hard error
+ok   E79-5: slice as an array element is a hard error
+ok   E79-5: slice as an interface value is a hard error
+ok   E79-5: a closure cannot capture a slice
+ok   E79-6: returning a view of a local array lints
+FAIL p79/basic: E79-2/SH-99: array-base open subslice a[1..] is half-open and valid C
+  'cc' -std=c99 -I '.ctbuild' '.ctbuild/a1open.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79basic.pWjP8y/a1open.bin'
+a1open.ct:40:95: warning: cast to smaller integer type 'int' from 'char *' [-Wpointer-to-int-cast]
+   40 |     struct __ct_slice t = __ct_slice_range((void *)(a), (int)(sizeof(a) / sizeof((a)[0])), 1, (int)(sizeof(a) / sizeof((a)[0]), sizeof(int), "a1open.ct:4");
+      |                                                                                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ok   E79-2: array-base bounded subslice a[1..3] stays half-open
+FAIL p79/basic: E79-2/SH-100: an array actual fills a T[] parameter
+  'cc' -std=c99 -I '.ctbuild' '.ctbuild/arr_arg.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79basic.pWjP8y/arr_arg.bin'
+arr_arg.ct:44:17: error: passing 'int[2]' to parameter of incompatible type 'struct __ct_slice'
+   44 |     return (sum(a) - 7);
+      |                 ^
+FAIL p79/basic: E79-2/SH-100: an array return fills a T[] result
+  'cc' -std=c99 -I '.ctbuild' '.ctbuild/arr_ret.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79basic.pWjP8y/arr_ret.bin'
+arr_ret.ct:41:12: error: returning 'int[2]' from a function with incompatible result type 'struct __ct_slice'
+   41 |     return g_arr;
+      |            ^~~~~
+FAIL p79/basic: E79-6/SH-100: a converted local-array return lints
+  the warning fixture did not build
+FAIL p79/basic: E79-2/SH-100: a struct's array field fills a T[] parameter
+  'cc' -std=c99 -I '.ctbuild' '.ctbuild/field_arg.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79basic.pWjP8y/field_arg.bin'
+field_arg.ct:48:17: error: passing 'int[2]' to parameter of incompatible type 'struct __ct_slice'
+   48 |     return (sum(o.xs) - 7);
+      |                 ^~~~
+FAIL p79/basic: E79-3/SH-101: a slice element is a ref/out actual
+  borrow_elem.ct:6:1: error: ref/out argument must be an assignable place
+ctc: 1 error(s) generated
+FAIL p79/basic: E79-3/SH-101: a slice element's member is a ref/out actual
+  borrow_member.ct:7:1: error: ref/out argument must be an assignable place
+ctc: 1 error(s) generated
+FAIL p79/basic: E79-3/SH-101: a borrow keeps the bounds trap
+  the trap fixture did not compile
+exit=1
+
+===== command: sh test/ast/p79_index.sh .temp/dev79fix/baseline/build/ct-ast =====
+ok   E79-3: s[i] reads and writes the underlying element
+ok   E79-3: s[i] carries the element type (struct member)
+FAIL p79/index: E79-3: a slice parameter is indexed through the same checked place
+  'cc' -std=c99 -I '.ctbuild' '.ctbuild/param.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79index.pQndwB/param.bin'
+param.ct:44:20: error: passing 'int[3]' to parameter of incompatible type 'struct __ct_slice'
+   44 |     return (second(a) - 5);
+      |                    ^
+ok   E79-3: s[i] above the length traps at run time
+ok   E79-3: s[i] below zero traps at run time
+ok   E79-3: a run-time index is checked too (no constant folding)
+ok   E79-3: s.get(i) is the soft access (0 outside the range)
+ok   E79-4: const T[] element write is a hard error
+ok   E79-4: const T[] element is not a writable place
+ok   E79-4: a C array keeps C's unchecked subscript
+exit=1
+
+===== command: sh test/ast/p79_places.sh .temp/dev79fix/baseline/build/ct-ast =====
+ok   E79-5: slice as parameter/local/temporary/return is allowed
+ok   E79-5: slice as a struct field is a hard error
+ok   E79-5: slice as a global is a hard error
+ok   E79-5: slice as an interface value is a hard error
+ok   E79-5: slice in box<T> is a hard error
+ok   E79-5: slice in Option is a hard error
+ok   E79-5: slice in Result is a hard error
+ok   E79-5: slice as a Vec element is a hard error
+ok   E79-5: slice as a Map value is a hard error
+ok   E79-5: slice as an array element is a hard error
+ok   E79-5: slice as a generic argument is a hard error
+ok   E79-5: a closure cannot capture a slice
+ok   E79-6: returning a local slice view lints
+FAIL p79/places: E79-6: returning a subslice of a local array lints
+  the warning fixture did not build: ret_sub.ct:4:12: warning: slice escape: 'return' hands back a subslice of a local array
+'cc' -std=c99 -I '.ctbuild' '.ctbuild/ret_sub.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79places.LxmrLu/ret_sub.bin'
+ret_sub.ct:41:80: warning: cast to smaller integer type 'int' from 'char *' [-Wpointer-to-int-cast]
+FAIL p79/places: E79-6: returning a local array (converted) lints
+  the warning fixture did not build: 'cc' -std=c99 -I '.ctbuild' '.ctbuild/ret_array.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79places.LxmrLu/ret_array.bin'
+ret_array.ct:41:12: error: returning 'int[2]' from a function with incompatible result type 'struct __ct_slice'
+   41 |     return a;
+FAIL p79/places: E79-6: a view of a global array does not lint
+  the fixture did not build: 'cc' -std=c99 -I '.ctbuild' '.ctbuild/ret_global.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79places.LxmrLu/ret_global.bin'
+ret_global.ct:41:12: error: returning 'int[2]' from a function with incompatible result type 'struct __ct_slice'
+   41 |     return g_arr;
+FAIL p79/places: E79-6: a view of a static array does not lint
+  the fixture did not build: 'cc' -std=c99 -I '.ctbuild' '.ctbuild/ret_static.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79places.LxmrLu/ret_static.bin'
+ret_static.ct:41:12: error: returning 'int[2]' from a function with incompatible result type 'struct __ct_slice'
+   41 |     return a;
+exit=1
+
+===== command: sh test/ast/p79_migrate.sh .temp/dev79fix/baseline/build/ct-ast =====
+ok   E79-1: a T a[] parameter warns
+ok   E79-1: a T a[] field warns
+ok   E79-1: ct check escalates the T a[] no-initializer warning
+ok   E79-1: ct build still shows the T a[] no-initializer warning
+ok   E79-1: T a[] = {...} stays an inferred-length array
+ok   E79-1: T a[N] is a plain C array (silent)
+FAIL p79/migrate: E79-1: the T[] spelling is silent for parameter and return
+  the fixture did not build: 'cc' -std=c99 -I '.ctbuild' '.ctbuild/slice_spelling.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p79migrate.V9wh3D/slice_spelling.bin'
+slice_spelling.ct:48:30: error: passing 'int[1]' to parameter of incompatible type 'struct __ct_slice'
+   48 |     struct __ct_slice s = id(a);
+exit=1
+
+===== command: sh test/ast/p79_docs.sh .temp/dev79fix/baseline/build/ct-ast =====
+ok   spec has the slice section (4.69)
+ok   spec mentions 拼写
+ok   spec mentions 表示
+ok   spec mentions 下标
+ok   spec mentions 只读
+ok   spec mentions 位置白名单
+ok   spec mentions 返回
+ok   spec mentions 边界
+ok   spec records the T a[] migration warning
+ok   spec records the checked place and the half-open subslice
+ok   spec records the soft access
+ok   spec records the subslice spellings
+ok   package-guide has the slice boundary section (7.6)
+ok   package-guide records the non-owning view and the ABI boundary
+ok   package-guide names both slice and array spellings
+p79_docs: OK
+exit=0

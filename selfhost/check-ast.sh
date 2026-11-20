@@ -1040,13 +1040,43 @@ else
     bad "PH-78-S2c docs" "$(sed -n '1,10p' "$work/p78docs.out")"
 fi
 
-# Phase 79: slices (S3). `test/ast/p79_basic.sh` covers T[] construction,
-# checked places, get, const, placement negatives and the T a[] warning.
+# Phase 79: slices (S3). `p79_basic` covers construction, the checked place,
+# get, const, placement negatives, the T a[] warning, and the SH-99/100/101
+# regression probes; the four stage probes keep S3b–S3e independently
+# verifiable (TEST-24).
 sh test/ast/p79_basic.sh "$work/ct-ast" >"$work/p79basic.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-79-S3 slices (E79-1…5 T[], place, get, const, migration)"
 else
     bad "PH-79-S3 slices" "$(sed -n '1,10p' "$work/p79basic.out")"
+fi
+
+sh test/ast/p79_index.sh "$work/ct-ast" >"$work/p79index.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-79-S3b index (E79-3/4 checked place, trap, get, const)"
+else
+    bad "PH-79-S3b index" "$(sed -n '1,10p' "$work/p79index.out")"
+fi
+
+sh test/ast/p79_places.sh "$work/ct-ast" >"$work/p79places.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-79-S3c places (E79-5 whitelist, E79-6 escape lint)"
+else
+    bad "PH-79-S3c places" "$(sed -n '1,10p' "$work/p79places.out")"
+fi
+
+sh test/ast/p79_migrate.sh "$work/ct-ast" >"$work/p79migrate.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-79-S3d migrate (E79-1 T a[] warnings, inferred array)"
+else
+    bad "PH-79-S3d migrate" "$(sed -n '1,10p' "$work/p79migrate.out")"
+fi
+
+sh test/ast/p79_docs.sh >"$work/p79docs.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-79-S3e docs (spec 4.69 + package-guide 7.6)"
+else
+    bad "PH-79-S3e docs" "$(sed -n '1,10p' "$work/p79docs.out")"
 fi
 
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
