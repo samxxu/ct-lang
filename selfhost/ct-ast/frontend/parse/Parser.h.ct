@@ -113,6 +113,8 @@ pub trait ParseOps {
     int  out_scan_chain(int n, int *mask);
     int  out_check_body(int body, int params, int line);
     int  parse_record_def(int is_union);
+    /* PH-82: does the source line carry the `ct: allow-cycle` marker? */
+    int  record_line_allows_cycle(int line);
     int  parse_enum_def(int is_pub, int tag_required);
     int  parse_typedef(int is_pub);
     int  parse_field_def(void);
@@ -2563,6 +2565,36 @@ impl ParseOps for Parser {
         return w;
     }
 
+    /* PH-82 (D-012): the only suppression form for the direct-cycle warning is
+       the `ct: allow-cycle` marker on the struct declaration's own line. The
+       lexer drops comments, so the check reads the source line back; anything
+       else (a marker above the struct, or on a field's line) does not count. */
+    int record_line_allows_cycle(int line)
+    {
+        const char *p = self->lex->src;
+        const char *e;
+        const char *m;
+        int ln = 1;
+
+        if (p == 0) return 0;
+        while (*p) {
+            e = p;
+            while (*e && *e != '\n') e++;
+            if (ln == line) {
+                m = p;
+                while (m + 15 <= e) {
+                    if (strncmp(m, "ct: allow-cycle", 15) == 0) return 1;
+                    m++;
+                }
+                return 0;
+            }
+            if (*e == 0) break;
+            p = e + 1;
+            ln++;
+        }
+        return 0;
+    }
+
     /* `struct Name { ... }` (the trailing `;` is the caller's business). A
        `union` is the same record shape: the tags share the `structs` table so
        field chains and `offsetof` keep resolving, and they differ only in the
@@ -2570,7 +2602,7 @@ impl ParseOps for Parser {
        no `use` clause (there is no vptr to append). */
     int parse_record_def(int is_union)
     {
-        int s, struct_line, struct_col, brace_line, brace_col, kind, ar, ao;
+        int s, struct_line, struct_col, allow_cycle, brace_line, brace_col, kind, ar, ao;
         int nt, templ;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
@@ -2586,6 +2618,7 @@ impl ParseOps for Parser {
         bound[1][0] = 0;
         struct_line = self->lex->tokline;
         struct_col = self->lex->tokstart - self->lex->lstart + 1;
+        allow_cycle = self->record_line_allows_cycle(struct_line);
         brace_line = 0;
         brace_col = 1;
         kind = is_union ? N_UNION : N_STRUCT;
@@ -2739,6 +2772,7 @@ impl ParseOps for Parser {
                 self->sym->structs[di].is_pub = self->decl_pub;
                 self->sym->structs[di].line = struct_line;
                 self->sym->structs[di].col = struct_col;
+                self->sym->structs[di].allow_cycle = allow_cycle;
             }
             /* Phase 33 O3: remember the declaring unit, so a container named by
                another unit can tell whether the element's definition is visible

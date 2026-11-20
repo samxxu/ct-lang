@@ -551,13 +551,15 @@ static int cycle_box_target(struct Module *m, int si, int fi)
 
 /* Report one cycle once; `b`/`c` are -1 for a self loop / a two-edge cycle.
    The wording says "may leak ... unless the cycle is broken by hand", never
-   "will leak" (D-012). */
+   "will leak" (D-012). A participant whose declaration line carries the
+   ct: allow-cycle marker suppresses the finding; `ct check` still names the
+   suppression point so the exemption is auditable. */
 static int cycle_emit(struct Module *m, int a, int b, int c)
 {
     char chain[MAX_TEXT];
     char msg[MAX_TEXT];
     const char *file;
-    int nodes[3], n, i, w, k;
+    int nodes[3], n, i, w, k, mark;
 
     nodes[0] = a;
     n = 1;
@@ -575,6 +577,17 @@ static int cycle_emit(struct Module *m, int a, int b, int c)
         k = snprintf(chain + w, sizeof chain - (size_t)w, " -> %s",
                      m->sym->structs[a].name);
         if (k > 0 && w + k < (int)sizeof chain) w += k;
+    }
+    mark = -1;
+    for (i = 0; i < n; i++)
+        if (m->sym->structs[nodes[i]].allow_cycle) { mark = nodes[i]; break; }
+    if (mark >= 0) {
+        if (!m->check_mode) return 0;
+        snprintf(msg, sizeof msg,
+                 "reference cycle suppressed by 'ct: allow-cycle': %s", chain);
+        return tool::diag::ct_sem_note(m->sym->structs[mark].line,
+                                       m->sym->structs[mark].col, msg,
+                                       cycle_file(m, mark));
     }
     snprintf(msg, sizeof msg,
              "potential reference cycle: %s; instances may leak unless the cycle is broken by hand",
