@@ -20,10 +20,11 @@
 | 形态 | 字段 | 当前地位 |
 | --- | --- | --- |
 | **六字段**（现行） | `name version publisher git-url tag sha256:<hex>` | 能落共享 store；官方 `std` 行已是六字段 |
-| **五字段**（旧行） | `name version git-url tag sha256:<hex>` | 解析器仍接受，但**没有 `publisher`，不能落 store**，属只读兼容、不可安装 |
+| **五字段**（旧行） | `name version git-url tag sha256:<hex>` | **按行硬错**（[D-014](decisions/D-014.md) 第 5 条）：请求命中即失败，提示六字段；其余六字段行不受影响 |
 
-解析器对两者都接受（`tool/pkg` 的索引查找：`ntok >= 6` 走六字段，否则按五字段），但落 store 需要
-`publisher`，所以五字段行只能被读到、不能被装上。生成端已停止产出五字段新行。
+实现现状（v0.80.0）：`tool/pkg` 的索引查找仍是 `ntok >= 6` 走六字段、否则按五字段读取；
+契约 v1 已要求“命中五字段行按行硬错”，落地由 [PKG-13](../issues/packages/pkg-13-legacy-five-field-row-hard-error.md)
+跟踪。生成端已停止产出五字段新行。
 
 实测当前官方索引的字段分布（网络可用时）：
 
@@ -64,7 +65,7 @@ std 0.19.0 ct https://github.com/ct-pkg/std v0.19.0 sha256:432086f0ec6c9ef3cdce5
 
 | 项 | 现状 | 提案（待目标组受理） |
 | --- | --- | --- |
-| 字段 | 六字段现行；五字段旧行只读兼容 | 六字段 + 撤回规则 + schema |
+| 字段 | 六字段现行；五字段旧行按行硬错（契约 v1；落地见 PKG-13） | 六字段 + 撤回规则 + schema |
 | 签名 / pin | **未落地**；只有官方 pin 表的 sha256 强校验 | `index.sig` / 签名 tag / 受保护提交 |
 | 生成 | 索引仓 `tools/package.sh` + CI | 定时扫描 + allowlist + 可重放生成 |
 | 客户端 | 显式 `--index` / `CT_INDEX`；不联网 | 不改变「客户端不扫描组织」 |

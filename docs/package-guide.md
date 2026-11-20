@@ -139,8 +139,9 @@ MVS（取满足范围的最低版本）。
 name version publisher git-url tag sha256:<64 hex>
 ```
 
-五字段旧行（`name version git-url tag sha256:<hex>`，无 `publisher`）仍能被解析，但**不能落 store**，
-属只读兼容、不可安装；生成端已停止产出。字段与信任模型见 [ct-pkg-index](ct-pkg-index.md)。
+五字段旧行（`name version git-url tag sha256:<hex>`，无 `publisher`）**按行硬错**：请求命中即失败并
+提示六字段，索引里其余六字段行不受影响（契约 v1，[D-014](decisions/D-014.md) 第 5 条）；
+生成端已停止产出。字段与信任模型见 [ct-pkg-index](ct-pkg-index.md)。
 
 摘要按 `ct.lock` 的同一算法计算（按路径排序后把每个文件的相对路径与内容汇入单流 SHA-256）。
 本地可用 `CT_INDEX=<file>` 或 `--index <file>` 指向任意纯文本索引。消费端与发布端（`package.sh`）

@@ -34,6 +34,7 @@
 | PH-80 `String`/`Str`（S5a + S5b；D-013 入口闭合） | 当前 DSH 会话（DEV `dev-ph80`） | DEV | PH-80 ✅ v0.80.0（E80-1…8 全通过） |
 | PH-81 `box`/`new`（S1；准备，施工入口 P-7.5 + PH-80 收口） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-81 🟨 准备 |
 | PH-82 泄漏防护（准备，施工入口 PH-81 未过；D-012） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-82 🟨 准备 |
+| PH-83 包管理契约 v1 与索引校验（准备，施工入口 PH-82 未过；D-014） | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-83 🟨 准备（v0.83.0） |
 | `HW-1`/`HW-2` 硬件批次 | 外部依赖（无硬件） | REQ | 只登记，不阻塞 |
 
 > 本仓库当前为单会话工作，三类常驻对话未建；见 `AGENTS.md` 的 `deviation: single-session-workflow`。

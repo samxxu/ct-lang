@@ -41,9 +41,9 @@
 
 - **官方 pin 表只有 `ct/std`**（`std 0.19.0`，url / tag / sha256 编译进 `ct`）：
   `ct get ct/std` 与 `ct get std` 都是无索引可用的官方路径。
-- **`ct/hal` 目前不在 pin 表**：仓库在 `ct-pkg/hal`，但官方索引行仍是五字段旧行（无 `publisher`），
-  按现行解析器可读、不能落 store。要用它必须给六字段索引行（`--index` / `CT_INDEX`）或显式 URL，
-  直到包仓补 `publisher = ct` 并刷新索引。
+- **`ct/hal` 目前不在 pin 表**：仓库在 `ct-pkg/hal`，但官方索引行仍是五字段旧行（无 `publisher`）。
+  按契约 v1（[D-014](decisions/D-014.md) 第 5 条），请求命中五字段行**按行硬错**；要用它必须给
+  六字段索引行（`--index` / `CT_INDEX`）或显式 URL，直到包仓补 `publisher = ct` 并刷新索引。
 - 第三方包必须写 `<publisher>/<name>`；裸名只解析官方包，不查索引。
 - 索引当前没有签名；pin 表只对官方包提供强校验，第三方索引只是便利，见 [ct-pkg-index](ct-pkg-index.md)。
 
