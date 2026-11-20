@@ -54,6 +54,29 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 - B1–B4 的检查器已可用，但默认不阻断 `ct build`；
 - 版本/安装/文档/迁移说明齐全。
 
+### 1.5 v1.0 发布前清单（2026-11-21 已定项）
+
+> 来源：外部《v1.0 收口战役》提案评估（[2026-11-21 评估](../reviews/2026-11-21-v1-campaign-eval.md)）。
+> 只收录**无争议**项；重写时序、A-strict 门禁、ADT 等见 §6，未定前不落计划。
+
+| # | 事项 | 验收 | 跟踪 |
+| --- | --- | --- | --- |
+| V1-C1 | J-6 全量证据台账（P-1…P-6）+ J-3/J-4/J-5 逐张核对 | 台账零未决；“已实施未验证”清零 | [SH-104](../../issues/selfhost/sh104-j6-evidence-ledger.md) |
+| V1-C2 | goldens 静态化（去 L1/L2 的前置） | 静态期望文件覆盖全部语料；`ct-ast vs 静态 golden` 可独立跑 | [SH-105](../../issues/selfhost/sh105-goldens-static-freeze.md) |
+| V1-C3 | SH-73 解除 + README §0.1 三断点闭环 | 完整路径可原样书写并钉入 `test/ast` | [SH-73](../../issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md) |
+| V1-C4 | 稳定子集冻结清单成文（三档 + 改动授权级别） | 成文且进 check-docs 断言 | [DOC-79](../../issues/docs/doc-79-stable-subset-freeze-list.md) |
+| V1-C5 | 兼容承诺重述“不再是 C 超集” | README / spec / roadmap 三处同步 | [DOC-76](../../issues/docs/doc-76-no-longer-c-superset.md) |
+| V1-C6 | 能力标签→spec 节号一致性断言 | check-docs 可机器判；版本只注入生成物/README，**不钉 spec 页首**（DOC-63） | [DOC-77](../../issues/docs/doc-77-capability-spec-section-assertions.md) |
+| V1-C7 | 新特性文档核对（String/Str/切片/ref-out/box/new） | spec §4.68–§4.70 已存在；补 box/new/patterns 与一致性断言 | [DOC-78](../../issues/docs/doc-78-new-feature-docs-audit.md) |
+| V1-C8 | 包体系收尾：第三方真实包 fixture + `ct index verify` 进 CI | 固定 fixture 可重放；CI 常规跑 | [PKG-17](../../issues/packages/pkg-17-third-party-fixture-ci.md) |
+
+### 1.6 v1.0 不包含（已定）
+
+- 不在 v1.0 内重写 ct-ast（仍归 v1.1 S1，见 §2）；
+- 不把 A strict 作为 v1.0 门禁（仍归 v1.1 S2）；
+- 不在本线内做 ADT/match；
+- 不改语言语义、发射格式、命名契约。
+
 ## 2. v1.1：现代语法重写 + A
 
 ### 2.1 为什么拆成两段
@@ -95,6 +118,20 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 - 所有历史 C 代码零迁移；
 - 全局默认 strict。
 
+### 2.5 重写前置（2026-11-21 已定项）
+
+> 重写**是否仍在 v1.1**是无争议的（§1.6）；“是否提前到 v1.0”见 §6，未定前不改变本节。
+
+1. **inventory 先行**：按子系统列出“旧写法 → 新特性 → 预计行数 → 风险”，不直接开写；
+2. **单切片 spike**：先选一个子系统（建议词法器或发射器）做完整等价重写，产出：
+   - 行数前后对比、编译耗时前后对比；
+   - 全量 golden 逐字节一致的原始输出；
+   - 暴露的 sharp edge 清单（如 `Str` 非 NUL 结尾与 `strcmp`/`%s` 的冲突）；
+3. **spike 通过后才排后续切片**；不通过则退化为“按 inventory 逐项替换”，不承诺整体重写；
+4. **自举回环复用现有门禁**：`check-ast` 已有“自编译 + 重建逐字节一致”的不动点段，
+   扩展它，不另造第三套自举脚本；
+5. **依赖边界**：重写不得依赖未落地的语言特性（如 S4 函子）；确需依赖时先立特性卡。
+
 ## 3. 版本与 release train
 
 | 里程碑 | phase | 版本 | 说明 |
@@ -131,3 +168,24 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 5. v2.0 再讨论全局默认 strict。
 
 不建议把“去旧代码”“语法重写”“A 全量检查”塞进同一个 phase。
+
+## 6. 争议项（讨论中，未落计划）
+
+> 来源：外部《v1.0 收口战役》提案（2026-11-21）。以下各项**尚未裁定**，不改变
+> §1.3/§1.5/§1.6/§2 的现行安排；讨论记录见
+> [2026-11-21 评估](../reviews/2026-11-21-v1-campaign-eval.md)。
+
+| # | 争议 | 提案方主张 | 现行计划 | 需要决定 |
+| --- | --- | --- | --- | --- |
+| D1 | 重写是否提前到 v1.0 | 提前，v1.0 发布“两级自举 + 自证语法” | 重写归 v1.1 S1 | 是否重排 major 里程碑 |
+| D2 | A strict 是否作为 v1.0 门禁 | 是（G4） | 归 v1.1 S2 | v1.0 的“产品契约”是否扩大到 A |
+| D3 | ADT/match 是否插入战役 | 可选先行，不阻塞 | 无 phase，未排期 | 是否单独立项、何时 |
+| D4 | 重写是否可用函子签名 | 检查器用“闭包 + 函子” | S4 函子延后 v1.1+ Wave 2 | 是否先落函子特性卡 |
+| D5 | hard deadline ≤6 phase | 建议 6 | 项目不承诺时间 | 是否设 deadline、砍范围顺序 |
+| D6 | 重写期主线是否冻结 | 倾向不冻结 + 切片 rebase | 未定义 | 冻结策略与合入门禁 |
+| D7 | G7 页首版本注入 | 页首注入版本 | DOC-63：spec 页首不钉版本 | 注入范围（建议仅生成物/README） |
+| D8 | 三轮自举是否新建 | 新建三轮回环 | 现有 fixpoint 已覆盖自编译等价 | 扩展现有门禁还是另建 |
+| D9 | 收益预估（-20~30%） | 按子系统估算 | 无实测 | 先做 §2.5 单切片 spike 再评估 |
+
+> 争议项收敛方式：先在 `battle` 或 CR 中出结论，再改本文件与 roadmap；
+> 未收敛前不得在 phase 卡里提前落实现代码。

@@ -35,6 +35,7 @@
 | PH-81 `box`/`new`（S1；P-7.5 + S1a/S1b/S1c） | 当前 DSH 会话（DEV `dev-ph81`） | DEV | PH-81 ✅ v0.81.0（E81-1…6；P-7.5 证据；D-016） |
 | PH-82 泄漏防护（S82a–S82d；E82-1…8） | 当前 DSH 会话（DEV `dev-ph82`） | DEV | PH-82 ✅ v0.82.0（E82-1…8 全通过；D-012） |
 | PH-83 包管理契约 v1 与索引校验（S83a–S83d；E83-1…8） | 当前 DSH 会话（DEV `dev-ph83`） | DEV | PH-83 ✅ v0.83.0（契约 v1 / `ct index verify` / conformance / Linux 产物；D-014）；PKG-14 fix v0.83.1；Linux CT_HOME 路径 fix v0.83.2 |
+| v1.0 发布前清单（已定项：J-6 台账 / goldens 静态化 / 文档与包体系收尾） | 当前 DSH 会话（REQ） | REQ / EDITOR | v1-PH-0 前置；争议项见 v1 路线 §6 |
 | `HW-1`/`HW-2` 硬件批次 | 外部依赖（无硬件） | REQ | 只登记，不阻塞 |
 
 > 本仓库当前为单会话工作，三类常驻对话未建；见 `AGENTS.md` 的 `deviation: single-session-workflow`。
