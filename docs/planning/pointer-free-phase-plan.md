@@ -24,7 +24,7 @@
 | --- | --- | --- | --- | --- | --- |
 | **PH-78** | S2 `ref` / `out` 参数（[卡](../design/phase78.md)） | v0.78.0 | P-7.1a + P-7.1b 原型（`j6-evidence/ref_out`）；不要求 P-7.2/P-7.3 | 附录 A.5 全绿；调用点 lvalue 硬错；`out` 每条路径赋值（L1）在 `ct build` 默认硬错；类型负例；S2b 方法/trait；ASan 无泄漏 | 单卡回滚，去掉标注与指针发射 |
 | **PH-79** | S3 切片 `T[]`（[卡](../design/phase79.md)） | v0.79.0 | P-7.2 原型（25/25、10/10 放置；已在 `ca3354a5` 重放）；不要求 J-6 全量；PH-78 收口 | 附录 A.4 全绿；`T[]` 唯一拼写；`T a[]` 迁移；`s[i]` 带检查 place、越界 trap；`get` 软访问；`const T[]` 只读 | 单卡回滚；数组仍走 C |
-| **PH-80** | S5 `String` / `Str`（[卡](../design/phase80.md)） | v0.80.0 | P-7.3 最小垂直切片 + P-7.4 全量；S3 收口 | 附录 A.3/A.6 全绿；UTF-8/UTF-16 双类型；L1 字面量；`.data`/`cstr`；U16 核心方法；std 消费者迁移 dry-run | S5a 内建层 + 旧 `Str` 并存；S5b 删旧 + 外部迁移；S5b 前不可整体回滚 |
+| **PH-80** | S5 `String` / `Str`（[卡](../design/phase80.md)） | v0.80.0 | P-7.3 最小切片 + D-013 修订后的 P-7.4 子集；S3 收口 | 附录 A.3/A.6 全绿；UTF-8/UTF-16 双类型；L1 字面量；`.data`/`cstr`；U16 核心方法；std 消费者迁移 dry-run | S5a 内建层 + 旧 `Str` 并存；S5b 删旧 + 外部迁移；S5b 前不可整体回滚 |
 | **PH-81** | S1 `box<T>` + `new`（[卡](../design/phase81.md)） | v0.81.0 | P-7.5；S5 句柄协议收口 | 附录 A.2/A.3 相关项；`new` 仅具名 struct；共享 refs 头；借用视图/失效检测；旧 golden 不变 | 单卡回滚；`new` 与 box 同退 |
 | **PH-82** | 泄漏防护（[卡](../design/phase82.md)，非指针退场本体） | v0.82.0 | PH-81 收口 + [D-012](../decisions/D-012.md)；`box<T>` 已落地 | `leaks` 两档；`box` 字段直接环告警；树模式文档；E82-1…8 | 单卡回滚；`--debug-leaks` 语义不变 |
 
