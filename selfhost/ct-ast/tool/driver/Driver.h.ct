@@ -775,6 +775,9 @@ impl DriverOps for Driver {
         self->lex->lstart = 0;
         self->lex->tokstart = 0;
         tool::diag::ct_diag_reset();
+        /* PH-82: `ct compile`/`ct check` ignore `-I`, so the policy resolves
+           from the input's own package directory here. */
+        tool::diag::ct_diag_set_leaks_error(self->m->leaks_for(in));
         self->arena->reset();
         self->sym->nfunc = 0;
         self->sym->nvar = 0;
@@ -910,6 +913,12 @@ impl DriverOps for Driver {
             } else {
                 prog = stdprog;
             }
+        }
+        /* PH-82: `leaks = error` fails compile before any artifact is opened;
+           the warn form leaves the records to the closing flush. */
+        if (!self->m->check_mode && tool::diag::ct_diag_leaks_failed()) {
+            tool::diag::ct_diag_emit(self->m->diag_json, 0);
+            return 1;
         }
         /* `ct check` (19.4): the semantic findings are this entry's output and
            its exit code -- 1 when any was reported, 0 when clean. Nothing is

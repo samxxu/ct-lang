@@ -456,6 +456,7 @@ impl PkgOps for Pkg {
                          || (kl == 8 && strncmp(ls, "requires", 8) == 0)
                          || (kl == 7 && (strncmp(ls, "licence", 7) == 0
                                          || strncmp(ls, "license", 7) == 0))
+                         || (kl == 5 && strncmp(ls, "leaks", 5) == 0)
                          || (kl == 9 && strncmp(ls, "namespace", 9) == 0)
                          || (kl == 6 && strncmp(ls, "source", 6) == 0)
                          || (kl == 7 && strncmp(ls, "website", 7) == 0)

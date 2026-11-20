@@ -93,6 +93,11 @@ pub trait ModuleOps {
     int  builtin_slot(int u);
     int  builtin_live_for(int u);
     int  c_boundary_for(const char *path);
+    /* PH-82: the package's `leaks = warn|error` key (D-012). 0 = warn (also
+       the default and every old package), 1 = error. It resolves from the
+       input's package root: an `-I` root with a manifest first, then the
+       unit's own directory, so compile mode reads it without `-I` too. */
+    int  leaks_for(const char *path);
     int  io_header_mask(int unit);
     int  io_header_mask_tail(int from);
     int  io_call_count(void);
@@ -1991,6 +1996,9 @@ impl ModuleOps for Module {
         /* PH-69-R1: `ct check` routed through the build graph keeps check
            severity (all findings are errors), not build's signature-only 2. */
         tool::diag::ct_diag_set_strict(self->check_mode ? 1 : 2);
+        /* PH-82: one package per run, so the build's first input decides the
+           leak policy for every unit in it (D-012's "本包"). */
+        tool::diag::ct_diag_set_leaks_error(self->leaks_for(ninput > 0 ? inputs[0] : ""));
         self->diag_emitted = 0;
         self->p->cur_func[0] = 0;
         frontend::parse::ct_parse_clear_error();
@@ -2067,6 +2075,13 @@ impl ModuleOps for Module {
                through the type's header before any product is written. */
             if (self->check_drop_visibility() != 0)
                 return frontend::parse::ct_parse_report();
+            /* `leaks = error` fails the run here, before any `.c`/`.h`/archive
+               is written, and covers `--lib` too (that branch returns before
+               the later diagnostics flush). */
+            if (tool::diag::ct_diag_leaks_failed()) {
+                tool::diag::ct_diag_emit(self->diag_json, 1);
+                return 1;
+            }
             if (self->lib_mode) {
                 const char *od = self->outdir_opt ? self->outdir_opt : ".ctbuild";
                 char hp[MAX_PATH];
@@ -2575,6 +2590,35 @@ cmd_too_long:
         }
         if (c_path_is_core(path)) return 0;
         return 1;
+    }
+
+    /* PH-82 (D-012): the package's leak policy. `leaks = error` escalates the
+       existing leak diagnostics and the direct-cycle warning, nothing else;
+       `c-boundary` and `--debug-leaks` keep their own contracts. An `-I` root
+       with a manifest is the package statement; without one the unit's own
+       directory is read, so `ct compile`/`ct check` (which ignore `-I`) still
+       see the package they live in. A missing key or any other value keeps the
+       pre-PH-82 `warn` behaviour, so old packages do not change. */
+    int leaks_for(const char *path)
+    {
+        char v[MAX_TEXT];
+        char dir[MAX_PATH];
+        int i, n;
+        size_t l;
+
+        if (path != 0)
+            for (i = 0; i < self->ninc; i++) {
+                l = strlen(self->incdirs[i]);
+                if (l == 0 || strncmp(path, self->incdirs[i], l) != 0) continue;
+                if (ct_pkg_key(self->incdirs[i], "leaks", v, sizeof v))
+                    return strcmp(v, "error") == 0 ? 1 : 0;
+                return 0;
+            }
+        if (path == 0 || path[0] == 0) return 0;
+        n = self->path_dir(path, dir, sizeof dir);
+        if (n != 0) return 0;
+        if (ct_pkg_key(dir, "leaks", v, sizeof v) && strcmp(v, "error") == 0) return 1;
+        return 0;
     }
 
     /* PH-66 R1: bit0 = <stdio.h>, bit1 = <wchar.h>; `to` is exclusive. */
