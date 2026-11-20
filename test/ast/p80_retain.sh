@@ -88,6 +88,7 @@ run_case field_ptr
 run_case field_branch_init
 run_case field_branch_straight
 run_case field_branch_else
+run_case field_branch_two
 
 neg() {
     name=$1; src=$2; pattern=$3; why=$4

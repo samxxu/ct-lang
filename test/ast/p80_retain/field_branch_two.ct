@@ -1,0 +1,29 @@
+/* SH-103 platform regression: two owning fields defined in both arms of an
+ * `if`. Compacting the field-definition table must survive a no-op move:
+ * `snprintf(dst, n, "%s", dst)` returns an empty string on glibc, so a
+ * self-copy would lose both field paths, the merge would insert nameless
+ * entries and the later reassignments would not release the old values. */
+#include <stdio.h>
+
+struct Pair { String a; String b; }
+
+int main(void)
+{
+    Str lit = "ab";
+    Pair p;
+    int cond = 0;
+    if (cond) {
+        p.a = lit.to_string();
+        p.b = lit.to_string();
+    } else {
+        p.a = lit.to_string();
+        p.b = lit.to_string();
+    }
+    p.a = lit.to_string();
+    p.b = lit.to_string();
+    printf("after ifelse a=%d b=%d live=%d\n", p.a.refs(), p.b.refs(), ct_str_live_count());
+    p.a.release();
+    p.b.release();
+    printf("final live=%d\n", ct_str_live_count());
+    return 0;
+}
