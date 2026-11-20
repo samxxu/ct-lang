@@ -1,6 +1,6 @@
 # Phase 78 — `ref` / `out` 参数（S2）
 
-> **状态：完成（S2a–S2c / E78-1–E78-6；`v0.78.0`）**（2026-11-20 开卡并收口）。
+> **状态：完成（S2a–S2c / E78-1–E78-6；`v0.78.0` + REV 打回修复 `v0.78.1`）**（2026-11-20 开卡并收口）。
 > **前置（口径写死）**：本卡入口只要求 **P-7.1a 自由函数 + P-7.1b 方法/trait 原型**，
 > 二者已由 `docs/planning/j6-evidence/ref_out/` 覆盖（基线 `2c87179a`，7 文件 369 行）。
 > **P-7.2（S3 切片）/ P-7.3（S5 最小垂直切片）不在本卡入口，J-6 也未全量通过**；
@@ -186,3 +186,22 @@ check-sanitizers: OK (581 checks, no sanitizer report)
 
 红证基线之上、跑本卡前，`ref/out` 的 C 签名不成立，p78 探针全部红；实现后四个探针
 全绿，且全量 `check-all` 11/11。
+
+### 7.2 REV 打回修复（v0.78.1）
+
+[REV 收口复核](../reviews/2026-11-20-phase78-rev-verdict.md)（`ca3354a5`）打回三条，
+`v0.78.1` 修复；红证 baseline `ca3354a5`，逐字输出见
+[test/ast/p78_red_rev.log](../../test/ast/p78_red_rev.log)。
+
+| Issue | 判据 | 红（`ca3354a5`） | 绿（`v0.78.1`） |
+| --- | --- | --- | --- |
+| SH-95 | place 递归到基址；`f().x`、bit-field、顶层 `const` 硬错；数组/Vec/Map 元素保留 | `p78_basic` 三条 `FAIL`：前两者 cc 报地址错误，const 构建成功并 Bus error | `ok SH-95 call-result member rejected` / `bit-field member rejected` / `const variable rejected`；`p78_basic: OK` |
+| SH-96 | 方法内 `self` 作 ref 实参不取址 | `p78_method`：`SH-96 method self passed to ref without & (run)` 红（`&_self`） | `ok SH-96 method self passed to ref without & (run)`；`p78_method: OK`，生成 `S_bump(&_self, _self)` |
+| SH-97 | package-guide 记录 ref/out 的 C 边界/ABI | `p78_docs`：`package-guide does not document ...` | `ok package-guide documents ref/out at the C ABI boundary`；`p78_docs: OK` |
+
+```console
+$ CC=cc sh test/ast/p78_basic.sh  <ct-ast>   # p78_basic: OK, exit 0
+$ CC=cc sh test/ast/p78_method.sh <ct-ast>   # p78_method: OK, exit 0
+$ CC=cc sh test/ast/p78_docs.sh              # p78_docs: OK, exit 0
+$ bash selfhost/check-all.sh                 # check-all: OK (11 hard gates green)
+```

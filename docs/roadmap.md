@@ -88,7 +88,7 @@
 | Phase 75 | 闭包作方法实参（SH-65 / SH-67 同族） | ✅ 完成 | v0.74.0 | [卡](design/phase75.md) · [SH-65](../issues/selfhost/sh65-closure-as-method-arg.md) · [SH-67](../issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md) |
 | Phase 76 | 链中 inline 物化 `$name`（最小 A′：声明即可、多变量、链尾） | ✅ 完成 | v0.76.0 | [卡](design/phase76.md) · [battle](../battle/inline-materialize-2/verdict.md) |
 | Phase 77 | 官方包身份与解析契约（`ct/std`；裸名限官方；`ct get` 展示 `url@version`；旧锁自动迁移） | ✅ 完成 | v0.77.0 | [卡](design/phase77.md) · [D-010](decisions/D-010.md) · [契约](planning/ct-pkg-get-contract.md) |
-| Phase 78 | `ref` / `out` 参数（S2；上下文关键字、调用点 lvalue、`out` 定值） | ✅ 完成（S2a–S2c / E78-1–E78-6） | v0.78.0 | [卡](design/phase78.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
+| Phase 78 | `ref` / `out` 参数（S2；上下文关键字、调用点 lvalue、`out` 定值） | ✅ 完成（S2a–S2c / E78-1–E78-6；REV fix v0.78.1） | v0.78.0（fix v0.78.1） | [卡](design/phase78.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 79 | 切片 `T[]`（S3；`T[]` 唯一、带检查 place、`const T[]`） | ⬜ 规划中（未开卡；J-6 门槛） | v0.79.0（拟） | [卡](design/phase79.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 80 | `String` / `Str`（S5；UTF-8/UTF-16 双类型、L1 字面量、std 迁移） | ⬜ 规划中（未开卡；J-6 门槛） | v0.80.0（拟） | [卡](design/phase80.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 81 | `box<T>` + `new`（S1；共享句柄协议、`new` 仅具名 struct） | ⬜ 规划中（未开卡；J-6 门槛） | v0.81.0（拟） | [卡](design/phase81.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |

@@ -55,10 +55,6 @@ FAIL p78/method: SH-96 method self passed to ref without & (run)
 exit=1
 ```
 
-## 处置
-
-（待实现提交回填：`fixed` 主张、提交 sha、绿输出。）
-
 ## 处置（DEV，2026-11-20）
 
 `fixed` 主张：`emit_ref_arg()` 对方法体里的 `self` 直接走 `emit_expr`（发射为

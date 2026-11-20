@@ -2759,6 +2759,10 @@ impl ExprOps for Expr {
                          "%s", sub2);
                 snprintf(self->sym->structs[si2].fields[fi2].dims, MAX_TEXT,
                          "%s", tp[ti2].fields[fi2].dims);
+                self->sym->structs[si2].fields[fi2].is_bitfield =
+                    tp[ti2].fields[fi2].is_bitfield;
+                self->sym->structs[si2].fields[fi2].is_pub =
+                    tp[ti2].fields[fi2].is_pub;
                 if (self->inst_register_nested(sub2, depth + 1) != 0) return -1;
             }
             self->sym->structs[si2].nfields = tp[ti2].nfields;

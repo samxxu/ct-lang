@@ -76,10 +76,6 @@ FAIL p78/basic: SH-95 const variable rejected
 exit=1
 ```
 
-## 处置
-
-（待实现提交回填：`fixed` 主张、提交 sha、绿输出。）
-
 ## 处置（DEV，2026-11-20）
 
 `fixed` 主张：`ref_arg_place()` 现在递归到基址：

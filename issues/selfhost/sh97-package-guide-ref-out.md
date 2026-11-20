@@ -35,10 +35,6 @@ FAIL p78/docs: package-guide does not document ref/out at the C ABI boundary
 exit=1
 ```
 
-## 处置
-
-（待实现提交回填：`fixed` 主张、提交 sha、绿输出。）
-
 ## 处置（DEV，2026-11-20）
 
 `fixed` 主张：`docs/package-guide.md` §5「C ABI 静态库」新增一条，写明
