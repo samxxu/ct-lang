@@ -1,6 +1,6 @@
 # ct — C with Traits 编译器
 
-> **v0.82.0** · 中文 · [English](README.en.md)
+> **v0.82.1** · 中文 · [English](README.en.md)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
 编译路径（`ct compile` / `ct build`）不做类型检查、不做优化；可选的 `ct check` 只做受限语义检查
@@ -427,6 +427,12 @@ curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
 # 1b) 或者不安装，只用 L0 种子（单文件、核心语法；没有 ct，下面用 ./ctc）
 gcc selfhost/l0/ctc.c -o ctc
 
+# 1c) 预编译 Linux x64（每个 MINOR 一份，稳定 URL + sha256；本地也可生成）
+#     https://github.com/samxxu/ct-lang/releases/download/v<版本>/ct-linux-x64.tar.gz
+#     sha256 校验后 tar -xzf，得到 ct 与 ctc -> ct；构建与验收见 docs/dist.md
+#     $ bash selfhost/make-dist.sh         # Linux 主机
+#     $ ZIG=<zig> bash selfhost/make-dist.sh --cross <zig>   # macOS 交叉构建
+
 # 2) 编译 .ct 到 .c（只有 .h.ct 输入才同时写同名 .h）
 ct compile examples/01_greeter/greeter.ct -o /tmp/greeter.c      # 走了 1a
 ./ctc examples/01_greeter/greeter.ct -o /tmp/greeter.c           # 走了 1b
@@ -450,6 +456,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ct check --types <in.ct>` | opt-in 类型检查（PH-68/PH-69；PH-70/PH-71 的 CFG/own 走 `ct check --semantics`）：在 §4.53 的粗检（声明初值 / 赋值、`return`、容器与泛型固有方法实参）之外，补跨单元、泛型实例、trait 方法选择与容器方法的调用签名；不写产物。**默认编译路径仍不做类型检查**：`ct build` / `ct compile` 的诊断与 golden 不变 |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |
 | `ct … --emit-model <file\|->` | 模型导出 JSON（PH-74 / PH-59）：入口单元的 struct 与字段（含行列）、函数等声明模型；`ct <in.ct>` 与 `ct build` 都可用，不改变生成的 C |
+| `ct index verify [<file>] [--json] [-q]` | 只读校验索引：六字段、name/publisher/version、`tag == v<version>`、`sha256` 小写 64 位、重复行；五字段旧行按行硬错。单索引 `<file>` > `CT_INDEX` > `$CT_HOME/index/index`；退出码 0/1/2，`--json` 单行稳定（契约 v1 §4.4，PH-83） |
 | `ct get` / `ct update` / `ct install` / `ct verify` / `ct migrate` | 包管理：拉包进共享 store（`$CT_HOME/pkg/<publisher>/<name>/<version>/`）、写 v2 `ct.lock`；`ct build` 自动读 lock，离线校验 / 迁移并打印构建命令（官方包由内置 pin 表解析，裸名只解析官方包；第三方写 `<publisher>/<name>` 并配 `--index` / `CT_INDEX`；包作者见 [docs/package-guide.md](docs/package-guide.md)，包仓发布/索引接入规则见 [提案](docs/proposals/ct-pkg-package-maintainer-rules.md)，待目标组受理）；官方包在 [ct-pkg](https://github.com/ct-pkg)：`hal`（契约）、`hal-posix`（平台）、`std`（标准库，含 C 映射）。S7 后不再读写 `vendor/`；旧工程用 [`ct migrate`](docs/package-guide.md#8-v1-迁移ct-migrate) 一次性迁入 store |
 | `ct -v` / `ct -h` | 版本 / 用法 |
 

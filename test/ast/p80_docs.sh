@@ -1,7 +1,7 @@
 #!/bin/sh
 # PH-80 S5b-2 (E80-8): the written `String` / `Str` contract does not drift.
 #
-#   - the five `CTC_VERSION` sites agree on 0.82.0;
+#   - the five `CTC_VERSION` sites agree on 0.82.1;
 #   - README / docs/README carry the release;
 #   - docs/roadmap.md lists Phase 80 with its version;
 #   - the language reference has the §4.70 contract (layout, literal, `.data`,
@@ -20,15 +20,15 @@ cd "$root" || exit 1
 
 for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
          selfhost/l2/driver.ct selfhost/ct-ast/main.ct; do
-    if grep -q '#define CTC_VERSION "0.82.0"' "$f"; then
-        ok "$f CTC_VERSION 0.82.0"
+    if grep -q '#define CTC_VERSION "0.82.1"' "$f"; then
+        ok "$f CTC_VERSION 0.82.1"
     else
-        bad "$f CTC_VERSION is not 0.82.0"
+        bad "$f CTC_VERSION is not 0.82.1"
     fi
 done
 
-if grep -q 'v0\.82\.0' README.md; then ok "README carries v0.82.0"; else bad "README version"; fi
-if grep -q 'v0\.82\.0' docs/README.md; then ok "docs/README carries v0.82.0"; else bad "docs/README version"; fi
+if grep -q 'v0\.82\.1' README.md; then ok "README carries v0.82.1"; else bad "README version"; fi
+if grep -q 'v0\.82\.1' docs/README.md; then ok "docs/README carries v0.82.1"; else bad "docs/README version"; fi
 if grep -q 'Phase 80' docs/roadmap.md && grep -q 'v0\.80\.4' docs/roadmap.md \
    && grep -q 'Phase 81' docs/roadmap.md && grep -q 'v0\.81\.0' docs/roadmap.md; then
     ok "roadmap lists Phase 80 (v0.80.4) and Phase 81 (v0.81.0)"

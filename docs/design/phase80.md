@@ -408,6 +408,7 @@ exit=0
 | 整结构体赋值 / goto 越过 owning 字段（C-4） | 浅拷贝 / 跳过定义，UAF 或 BUS | 硬错 | `field_copy` / `field_goto_struct` |
 | 同名遮蔽 / `p->tag` 别名（C-4） | 误配外层标记 / 按旧标记 release | owner 化键；箭头目标不自动 release（登记泄漏） | `field_shadow` ASan 通过；`field_ptr` ASan 通过、`live=2` |
 | 已定义字段的条件更新（R7） | `{ 0 }` / 直线赋值已定义，条件更新后被误判为未定义并拒绝后续重赋 | 分支合并 `defined_after = defined_before \|\| (then && else)` | `field_branch_init` / `field_branch_straight` / `field_branch_else`：`final live=0` |
+| 字段表压缩（SH-103） | 压缩时用 `snprintf(dst, n, "%s", dst)` 原地自拷贝（C 未定义）；macOS 恰好正确，glibc 返回空串 → 字段路径丢失，R6a/泄漏检查在 Linux 失效 | 仅 `j != i` 时复制；新增两字段夹具 | `field_branch_two`：`after ifelse a=1 b=1 live=2` / `final live=0`（Linux 容器 + macOS 均绿） |
 
 三例 ASan 复现（修复前后，同一 `cc -fsanitize=address -g`）：
 
@@ -442,3 +443,17 @@ $ ./ret   -> after return s=2 r=2 / r after caller release data0=114            
 
 硬错路线的出口写在诊断里：显式聚合零初始化器（`Holder h = { 0 };`）或显式 `release()`；
 两者都不改变合法程序的生成 C（C-2/C-3 的机械检查因此以“编译拒绝”形态成立）。
+
+#### 7.9.8 跨平台字段表（SH-103，v0.82.1）
+
+字段定义表（`StrRetain.fpath/fowner/fdepth/fmaybe`）在块关闭与 if-arm 合并时**原地压缩**。
+旧实现无论是否发生移动都调用 `snprintf(g_sb.fpath[j], MAX_TEXT, "%s", g_sb.fpath[i])`；
+当 `i == j` 时是**重叠对象上的 `snprintf`**，C 标准未定义。macOS libc 原地复制；
+Linux aarch64 glibc 返回空串，压缩后字段路径为空，`sb_field_if_merge` 插入无名条目：
+
+- `field_branch_else` 的重赋查不到已定义字段 → 不 release 旧值（`final live=1`）；
+- `field_branch0` / `field_branch_rt` / `field_switch` 查不到 `maybe` 条目 → 负例被接受。
+
+修复：仅 `j != i` / `j2 != i2` 时复制，原地条目保持不变；同一份生成的 ct-ast C 在 macOS
+与 Linux 容器各自编译后行为一致。回归夹具 `field_branch_two`（两个 owning 字段在 if/else
+两臂分别定义后重赋）在普通 / ASan / UBSan 下钉住 `final live=0`；`p80_retain` 共 51 条 ok。
