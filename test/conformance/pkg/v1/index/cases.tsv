@@ -1,0 +1,11 @@
+# line	expect	kind	note
+2	ok		valid six-field row
+3	err	legacy-five-field	five fields; D-014 #5
+4	err	field-count	four fields
+5	err	digest	uppercase/short digest
+6	err	tag-version	tag is not v<version>
+7	err	identity	name is not [a-z0-9][a-z0-9-]*
+8	err	identity	publisher = local
+9	err	identity	version is not x.y.z
+10	err	duplicate	same publisher/name version twice
+13	ok		valid six-field row after blanks/comments

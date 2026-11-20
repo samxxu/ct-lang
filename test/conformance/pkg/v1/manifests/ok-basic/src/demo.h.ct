@@ -1,0 +1,1 @@
+pub int f(void) { return 1; }

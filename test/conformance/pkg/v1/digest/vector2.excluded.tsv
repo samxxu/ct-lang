@@ -1,0 +1,4 @@
+# excluded paths materialised by the runner (git cannot track .git/)
+.git/y	ignored\n
+vendor/x	ignored\n
+.ctcache/z	ignored\n

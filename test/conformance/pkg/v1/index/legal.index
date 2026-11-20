@@ -1,0 +1,4 @@
+# A legal v1 six-field index (real official rows, 2026-11-20).
+std 0.19.0 ct https://github.com/ct-pkg/std v0.19.0 sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79
+http 0.2.1 ct https://github.com/ct-pkg/http v0.2.1 sha256:28a95b4e840d397dd6c45cc264b37c58dade479dc5920d6a92818b1e43299e8c
+sse 0.13.0 ct https://github.com/ct-pkg/sse v0.13.0 sha256:f49de7442896f81d5f9ae40670f8b064398ff5113cb97c2796c09b91e687ca48

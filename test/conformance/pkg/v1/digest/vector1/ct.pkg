@@ -1,0 +1,4 @@
+name = demo
+publisher = acme
+version = 0.1.0
+ns-root = src

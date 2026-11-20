@@ -1,0 +1,13 @@
+# id	expect	category
+ok-basic	ok	ok
+ok-dot-root	ok	ok
+err-missing-manifest	err	missing-manifest
+err-missing-name	err	missing-name
+err-missing-publisher	err	missing-publisher
+err-local-publisher	err	local-publisher
+err-missing-version	err	missing-version
+err-missing-nsroot	err	missing-nsroot
+err-nsroot-absolute	err	nsroot-absolute
+err-nsroot-dotdot	err	nsroot-dotdot
+err-nsroot-not-dir	err	nsroot-not-dir
+err-absolute-I	err	absolute-I

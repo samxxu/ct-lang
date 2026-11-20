@@ -1,0 +1,13 @@
+# line 1 is legal; 2-9 are one bad row each; 10-11 are blank/comment; 12 is legal
+util 1.0.0 acme https://example.invalid/acme/util v1.0.0 sha256:4da5a4052a2a0afc6c9bbc7cc33cb153755f6f9e77a6efcb46f664aa17d00000
+old 1.0.0 https://example.invalid/acme/old v1.0.0 sha256:4da5a4052a2a0afc6c9bbc7cc33cb153755f6f9e77a6efcb46f664aa17d00000
+short 1.0.0 acme https://example.invalid/x
+dig 1.0.0 acme https://example.invalid/x v1.0.0 sha256:ABCDEF
+tag 1.0.0 acme https://example.invalid/x v2.0.0 sha256:4da5a4052a2a0afc6c9bbc7cc33cb153755f6f9e77a6efcb46f664aa17d00000
+Bad 1.0.0 acme https://example.invalid/x v1.0.0 sha256:4da5a4052a2a0afc6c9bbc7cc33cb153755f6f9e77a6efcb46f664aa17d00000
+pub 1.0.0 local https://example.invalid/x v1.0.0 sha256:4da5a4052a2a0afc6c9bbc7cc33cb153755f6f9e77a6efcb46f664aa17d00000
+ver 1.0 acme https://example.invalid/x v1.0 sha256:4da5a4052a2a0afc6c9bbc7cc33cb153755f6f9e77a6efcb46f664aa17d00000
+util 1.0.0 acme https://example.invalid/acme/util v1.0.0 sha256:4da5a4052a2a0afc6c9bbc7cc33cb153755f6f9e77a6efcb46f664aa17d00000
+
+# a comment is not a row
+util 1.1.0 acme https://example.invalid/acme/util v1.1.0 sha256:4da5a4052a2a0afc6c9bbc7cc33cb153755f6f9e77a6efcb46f664aa17d00000

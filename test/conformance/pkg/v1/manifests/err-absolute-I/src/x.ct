@@ -1,0 +1,2 @@
+// build: -I /usr/local/include
+int x;
