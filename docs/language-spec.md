@@ -2813,6 +2813,58 @@ strict 是**护栏**不是沙箱：shim 的内容、`--ldflags` 外链的 `.c` �
 
 这是**显式 libc 例外**，不是"C 库已被封装"：格式串与实参类型不检查，与 C 一致。
 
+### 4.68 `ref` / `out` 参数（Phase 78，仅 ct-ast）
+
+```ct
+void inc(ref int x) { x = x + 1; }
+bool parse(Str s, out int len) { len = s.len; return len != 0; }
+
+int v = 1;
+int n;
+inc(v);          /* 调用点不写 & */
+parse("ab", n);  /* 调用点不写 out */
+```
+
+- **上下文关键字**：`ref` / `out` 只在**形参表的第一 token** 是注解；出了形参表仍是普通标识符，
+  `int out;`、`time_t *ref;`、`void f(int out)` 全部合法。`ref` / `out` 不能与 `borrow` 同时写。
+- **发射**：形参声明、原型、trait vtable 槽、实现定义、`--lib` 的 ABI 头一律发射 `T *`；
+  函数体里对 ref/out 参数的读写发射 `(*name)`；调用点自动取地址 `&place`（Vec 元素见下）。
+- **类型**：`ref int` / `out int` 的形参基类型仍是 `int`；调用点的实际实参按基类型比较，
+  因此 `ref int` 接到 `struct P` 报 `type mismatch`，不靠 C 的隐式转换蒙混。
+- **调用点 lvalue 白名单**：
+  - 变量（不是常量、不是函数名）、字段 `s.f`、`*p`、数组元素 `a[i]`（`N_INDEX`）；
+  - `Vec<T>` 元素 `v[i]`：发射为 `Vec_*_at(&v, i)`（`get` 改 `at`），不再加一层 `&`；
+  - `Map<K,V>` 元素在语言里的静态类型是 `V *`（`get` 返回元素指针），因此可写的书写是
+    `*m[k]`（`N_DEREF`）；裸 `m[k]` 是**指针值**，不是 `ref V` 的 place，会被拒绝；
+  - 字面量、算术/比较表达式、调用结果、cast、自定义下标（`Phase 52` 的 `get/set` 协议）
+    一律硬错：`ref/out argument must be an assignable place`。
+- **`out` 调用方初始化**：trivial（标量、无 `Drop` 的 struct、指针）可以未初始化；owning
+  （`String` / `Str`、`box<T>`、`Vec<T>`、`Map<K,V>`、任何 `use Drop` 的 struct）必须已有值——
+  声明初始化式、后续赋值、普通/`ref` 形参、文件作用域变量与 `static` 局部都算已初始化；
+  未初始化的 owning 实参报 `out owning argument must be initialized`。字段/数组/容器元素作为
+  实参时按"已初始化"处理（L1 不做逐字段定值，见边界）。
+- **`out` 定值（L1）**：`ct build` 与 `ct check` 默认硬错，`ct check --types` 不改变这条规则。
+  - 顺序语句精确；`if` / `if/else` 精确（条件里的赋值也算，因为条件一定求值）；
+    两边都 `return` 时后续语句不再检查；
+  - 每个 `return` 在求值返回表达式后检查；函数末尾也检查；
+  - `while` / `for` / `do-while` / `loop` / `foreach` 保守：循环体内的赋值**不**证明循环之后有值，
+    但循环体内的 `return` 仍按进入集合检查；
+  - `switch` 保守：每个 `case` 是独立入口，`break` 不掩盖后续 case 的 `return`，但 case 内的赋值
+    不流到 switch 之后；
+  - `goto` 保守：跳到该语句时所有 out 参数必须已赋值（线性分析看不到跳转之后再做赋值的路径）；
+  - 赋值一个同名 **shadow** 局部不算给形参赋值（按符号表身份，不按名字）。
+- **方法 / trait（S2b）**：trait 方法、trait 默认体、trait impl、固有方法、泛型 impl 与静态
+  固有方法走同一规则；vtable 槽与 impl 定义发射 `T *`，调用点取地址。impl 的 ref/out 注解必须
+  与 trait 声明一致（`ref/out annotation does not match the trait's`），否则 vtable 槽与实现
+  的函数指针类型不同；调用点的 lvalue/owning 规则与自由函数一致。
+- **既有语义不变**：`ref` / `out` 不改变指针、`own`、`borrow`、`defer` / `errdefer` 与 AutoDrop
+  的规则；生成的只是普通 C 指针和 `(*name)`。`ref` 可以被存储或传给更长寿命的位置，语言不做
+  借用检查（契约 + 直接 lint，J-4b）。
+- **边界**：数组与函数指针形态的 ref/out 参数报
+  `ref/out parameters cannot be arrays or function pointers`；闭包、`ref` 的跨单元高阶形态、
+  Map 的自定义下标协议不作为 place；`out` 的 L1 不建模短路表达式、三元分支之外的控制流与
+  跨过程定值；owning 实参是字段/元素时按已初始化处理。
+
 ## 11 文档与实现一致性（缺口登记，2026-11-15）
 
 **现状**：仓库门禁里没有防止本文与实现漂移的自动机制。`check-docs` 只校验相对链接、版本串、

@@ -232,7 +232,7 @@ impl SupportOps for ParseSupport {
     {
         char cname[MAX_TEXT];
         char msg[MAX_TEXT];
-        int i, k, p, pub_now, fresh;
+        int i, k, p, pub_now, fresh, prev_nparams;
 
         /* `__ct_` names the compiler's own locals and closure products; a user
            declaration could otherwise collide with them in the generated C. */
@@ -281,12 +281,25 @@ impl SupportOps for ParseSupport {
            the signature as `void f(void) {}`. */
         if (fresh) snprintf(self->sym->funcs[i].ret, MAX_TEXT, "%s", ret);
         self->sym->funcs[i].is_static = is_static;
+        prev_nparams = self->sym->funcs[i].nparams;
         self->sym->funcs[i].nparams = 0;
         p = first_param;
         k = 0;
         while (p > 0 && k < MAX_PARAMS) {
             snprintf(self->sym->funcs[i].ptype[k], MAX_TEXT, "%s", self->arena->nodes[p].text);
             snprintf(self->sym->funcs[i].pdim[k], MAX_TEXT, "%s", self->arena->nodes[p].text3);
+            /* Phase 78 S2a: `ref` / `out` is part of the C signature (the
+               emitter spells `T *`), so a prototype and its definition must
+               agree; silently taking the last one would emit two conflicting
+               C declarations. */
+            if (!fresh && k < prev_nparams
+                && self->sym->funcs[i].pann[k] != (char)self->arena->nodes[p].aux) {
+                snprintf(msg, sizeof msg,
+                         "redeclaration of '%s' changes the ref/out annotation of parameter %d",
+                         name, k + 1);
+                return self->fail(msg);
+            }
+            self->sym->funcs[i].pann[k] = (char)self->arena->nodes[p].aux;
             /* a parameter's trailing `__attribute__` rides with its name/dims,
                so the prototype and the definition spell it the same way */
             if (self->arena->nodes[p].attr >= 0) {

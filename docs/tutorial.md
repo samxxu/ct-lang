@@ -1881,7 +1881,72 @@ a.m().n();      /* 仍报 method receiver must be ... */
 
 `$name` 只是把返回值先赋给变量，再在变量上调用；这是 one-hop 绕法，不是链式通用解禁。
 
-## 14. 下一步
+## 15. `ref` / `out` 参数（Phase 78，v0.78.0 起可用）
+
+源码里不再写 `&` / `*`：`ref` 表示可读写的借用参数，`out` 表示由被调方写出的参数。
+两者只在**形参表**里是关键字，`int out;`、`time_t *ref;` 仍然是普通声明。
+
+```ct
+void inc(ref int x)
+{
+    x = x + 1;          /* 发射 (*x) = ((*x) + 1); */
+}
+
+bool parse_length(Str s, out int len)
+{
+    len = s.len;        /* out 必须在每条退出路径赋值 */
+    return len != 0;
+}
+
+int main(void)
+{
+    int v = 1;
+    int n;
+    inc(v);             /* 发射 inc(&v); */
+    if (parse_length("ab", n)) {
+        return (v == 2 && n == 2) ? 0 : 1;
+    }
+    return 1;
+}
+```
+
+签名发射成普通 C 指针（`void inc(int *);`），函数体读写发射 `(*name)`，调用点自动取 `&`：
+
+```c
+void inc(int * x) {
+    (*x) = ((*x) + 1);
+}
+int main(void) {
+    int v = 1;
+    inc(&v);
+    ...
+}
+```
+
+### 15.1 能传什么
+
+`ref` / `out` 的实参必须是**可赋值 place**：变量、字段、`*p`、数组元素、`Vec` 元素
+（`v[i]`，发射为 `at()`）；`Map` 元素在语言里是 `V *`，可写位置写成 `*m[k]`。
+字面量、表达式、调用结果、cast 与自定义下标一律硬错
+（`ref/out argument must be an assignable place`）。
+
+### 15.2 `out` 的两条约束
+
+- **调用方初始化**：标量、无 `Drop` 的 struct、指针可以未初始化；owning 类型
+  （`String` / `Str`、`box<T>`、`Vec<T>`、`Map<K,V>`、`use Drop` 的 struct）必须已有值，
+  否则报 `out owning argument must be initialized`。
+- **每条退出路径赋值**：`ct build` 与 `ct check` 默认硬错。顺序与 `if/else` 是精确的；
+  循环、`switch`、`goto` 保守（循环/`switch` 内的赋值不算循环之后有值；`goto` 跳转时
+  必须已赋值）。函数体里每条 `return` 和函数末尾都会检查。
+
+### 15.3 方法、trait 与边界
+
+trait 方法、trait 默认体、`impl` 方法、固有方法与泛型 impl 使用同一规则；vtable 槽与
+实现定义都发射 `T *`，impl 的 `ref`/`out` 注解必须与 trait 一致。数组/函数指针形态的
+ref/out 参数、`ref` 的借用检查、跨过程定值不在本阶段；`ref` 被存储的透传风险仍由契约与
+直接 lint 承担（J-4b）。
+
+## 16. 下一步
 
 - [language-spec.md](language-spec.md) —— 每一条展开规则的权威定义
 - [polymorphism.md](polymorphism.md) —— 为什么用 vtable 而不是别的写法
@@ -1893,7 +1958,7 @@ a.m().n();      /* 仍报 method receiver must be ... */
 - 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [design/phase8.md](history/design/phase8.md)，
   17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [design/phase17.md](history/design/phase17.md)
 
-### 14.1 可选的类型检查：`ct check --types`
+### 16.1 可选的类型检查：`ct check --types`
 
 默认的 `ct check` 只做语法与既有语义检查；想让它顺手拦下明显的类型错，加 `--types`：
 

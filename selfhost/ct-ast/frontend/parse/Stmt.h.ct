@@ -3948,7 +3948,11 @@ impl StmtOps for Stmt {
             if (self->sup->declare_var(name, typebuf) != 0) return -1;
             if (self->static_decl) {
                 int vi = self->sym->find_var(name);
-                if (vi >= 0) self->sym->vars[vi].is_static = 1;
+                if (vi >= 0) {
+                    self->sym->vars[vi].is_static = 1;
+                    /* static storage is zero-initialised before `main` */
+                    self->sym->vars[vi].initialized = 1;
+                }
             }
             /* `int (*tbl[2])(int)`: the dimensions came with the declarator, and
                `parse_array_dims` only appends what follows the name (D-5) */
@@ -3986,6 +3990,10 @@ impl StmtOps for Stmt {
                 }
             }
             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
+                /* Phase 78 S2a: a local with an initialiser holds a value, so
+                   an owning value may be passed as an `out` actual later. */
+                int dvi = self->sym->find_var(name);
+                if (dvi >= 0) self->sym->vars[dvi].initialized = 1;
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
                     /* local `static` tables can be long, so the text goes to the
@@ -4242,6 +4250,11 @@ impl StmtOps for Stmt {
             self->arena->nodes[n].a = e;
             self->arena->nodes[n].b = rhs;
             self->arena->nodes[n].aux = op;
+            /* a compound write leaves a value in the variable */
+            if (k2 == N_VAR) {
+                int cvi = self->sym->find_var(self->arena->nodes[e].text2);
+                if (cvi >= 0) self->sym->vars[cvi].initialized = 1;
+            }
             if (check_closure_assign(self, n, scol) != 0) return -1;
             if (check_borrow_store(self, n) != 0) return -1;
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
@@ -4382,6 +4395,10 @@ impl StmtOps for Stmt {
                owning value (`from`, `retain`, `pop`, a call) clears the bit. */
             if (k == N_VAR) {
                 int vi = self->sym->find_var(self->arena->nodes[e].text2);
+                /* Phase 78 S2a: a plain assignment initialises the variable
+                   for the `out` owning-actual rule (declaration is not the
+                   only way to hold a value). */
+                if (vi >= 0) self->sym->vars[vi].initialized = 1;
                 if (vi >= 0
                     && frontend::sym::ct_is_container_type(self->sym->vars[vi].type))
                     self->sym->vars[vi].cview =

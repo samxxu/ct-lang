@@ -49,6 +49,10 @@
 #define MAX_STRUCT_INSTS 128
 #define MAX_STRUCT_TPARAMS 2
 #define MAX_STRUCT_IMPLS 64
+/* Phase 78 S2b: one row per inherent method carrying ref/out annotations.
+   Trait methods use their existing MethodSig row; this table only covers an
+   implementation block that has no trait. */
+#define MAX_METH_ANN 256
 
 namespace frontend::sym;
 /* A compile-time synonym for a type spelling. It never reaches the generated C;
@@ -92,6 +96,10 @@ pub struct Fn {
        (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the
        call side still compares bare types for boxing */
     char pdim[16][160];
+    /* Phase 78 (S2): 0 = plain, 2 = `ref`, 3 = `out`. The stored type stays
+       the caller's base type (type checking compares it), and the emitter adds
+       the C pointer at the declaration/call boundary. */
+    char pann[16];
     int  nparams;
     int  is_static;
     int  is_pub;
@@ -138,6 +146,13 @@ pub struct Var {
        parameter (whose lifetime the caller owns) apart from a local
        declaration, which a `return` may hand back (D5). */
     int  borrowed;
+    /* Phase 78 (S2): the parameter is `ref` / `out`; reads and writes emit
+       `(*name)` because the C signature carries a pointer. `initialized` is
+       the caller-side fact `out` needs: an owning actual must already hold a
+       value (globals, parameters and `=`-initialised locals do). */
+    int  ref_param;
+    int  out_param;
+    int  initialized;
     /* Phase 31 S23a: 1 when a container local holds a borrowed view (`get` /
        `entry` / `foreach item`, or a copy of one). The view does not own the
        buffer, so `release` on it is refused (L31-13/L31-14). It is set and
@@ -188,10 +203,23 @@ pub struct Closure {
     int  col;
 }
 
+/* Phase 78 (S2b): the ref/out annotation of one inherent method's parameters.
+   Trait methods keep theirs on `MethodSig`; an inherent method has no trait
+   row, so the parser records it here and the emitter reads it at the call site
+   to take addresses. `host` is normalised (see `meth_host_key`). */
+pub struct MethAnn {
+    char host[160];
+    char name[160];
+    char pann[16];
+    int  nparams;
+}
+
 pub struct MethodSig {
     char name[160];
     char ret[160];
     char ptype[16][160];
+    /* Phase 78 (S2b): 0 = plain, 2 = `ref`, 3 = `out`. */
+    int  pann[16];
     int  nparams;
     /* A `.m.ct` trait has no vtable slot, so its signature may end in `...`:
        the map recipe forwards the rest of the call verbatim. A real trait keeps
@@ -288,6 +316,11 @@ pub trait SymbolOps {
     int  find_var(const char *name);
     int  var_type(const char *name, char *out, int cap);
     int  find_func(const char *cname);
+    /* Phase 78 S2b: remember / look up an inherent method's ref/out
+       annotations. Both sides normalise the host spelling (struct/union tag
+       prefix and generic arguments are dropped). */
+    int  add_meth_ann(const char *host, const char *name, const int *pann, int nparams);
+    int  find_meth_ann(const char *host, const char *name, int *pann, int cap);
     /* The row a plain call names: the unit's own namespace first, then the
        root. Fails when the name is exported only from another namespace, which
        an unqualified call cannot reach. */
@@ -491,6 +524,13 @@ pub struct Symbols {
     int  nstruct_inst;              /* the instance half of `structs` */
     struct Closure *closures;
     int  nclosure;
+    /* Phase 78 S2b: inherent-method parameter annotations, filled while the
+       impl block is parsed. A template impl stores its template host, so an
+       instance call (`Box<int>`) finds it after normalisation. */
+    /* 256 = MAX_METH_ANN, spelled literally: macros do not cross the unit
+       boundary, so the generated header must see the number. */
+    struct MethAnn meth[256];
+    int  nmeth;
     /* An exported type declared in a namespace is also reachable by its bare
        name, so a consumer need not alias-import it. A second unit exporting the
        same bare name from another namespace marks it ambiguous: the alias
@@ -541,6 +581,26 @@ pub struct Symbols *symbols_get(void);
    -1 when `out` would not fit. A word is bounded by non-identifier characters,
    so `T2` and `struct T` are left alone. */
 pub int ct_generic_subst(const char *in, const char *word, const char *repl, char *out, int cap);
+
+/* Phase 78 S2b: the key an inherent method's annotation is stored under. The
+   tag prefix (`struct` / `union`) and the generic argument list are dropped,
+   so `Box`, `struct Box` and `struct Box<int>` name the same template host. */
+static void meth_host_key(const char *host, char *out, int cap)
+{
+    const char *p;
+    int i;
+
+    p = host;
+    if (strncmp(p, "struct ", 7) == 0) p += 7;
+    else if (strncmp(p, "union ", 6) == 0) p += 6;
+    i = 0;
+    while (*p && *p != '<' && *p != ' ' && *p != '*' && i + 1 < cap) {
+        out[i] = *p;
+        i++;
+        p++;
+    }
+    out[i] = 0;
+}
 
 impl SymbolOps for Symbols {
     /* The tables report the bare reason; the position belongs to the parser
@@ -651,6 +711,9 @@ impl SymbolOps for Symbols {
         self->vars[i].autodrop = 0;
         self->vars[i].path_warned = 0;
         self->vars[i].borrowed = 0;
+        self->vars[i].ref_param = 0;
+        self->vars[i].out_param = 0;
+        self->vars[i].initialized = 0;
         self->vars[i].cview = 0;
         self->vars[i].is_param = 0;
         self->vars[i].is_fnparam = 0;
@@ -697,6 +760,11 @@ impl SymbolOps for Symbols {
         self->vars[i].autodrop = 0;
         self->vars[i].path_warned = 0;
         self->vars[i].borrowed = 0;
+        self->vars[i].ref_param = 0;
+        self->vars[i].out_param = 0;
+        /* A file-scope object exists (zero- or explicitly initialised) from
+           program start, so it satisfies the `out` owning-actual rule. */
+        self->vars[i].initialized = 1;
         self->vars[i].cview = 0;
         self->vars[i].is_param = 0;
         self->vars[i].is_fnparam = 0;
@@ -792,6 +860,66 @@ impl SymbolOps for Symbols {
         (void)self;
         for (i = 0; i < self->nfunc; i++)
             if (strcmp(self->funcs[i].cname, cname) == 0) return i;
+        return -1;
+    }
+
+    /* Phase 78 S2b: record an inherent method's parameter annotations. A
+       second definition of the same (host, method) overwrites the first, which
+       matches the language's single-impl rule. */
+    int add_meth_ann(const char *host, const char *name, const int *pann, int nparams)
+    {
+        char key[160];
+        int i, k;
+        (void)self;
+
+        meth_host_key(host, key, sizeof key);
+        if (!key[0] || !name[0]) return 0;
+        i = -1;
+        for (k = 0; k < self->nmeth; k++)
+            if (strcmp(self->meth[k].host, key) == 0
+                && strcmp(self->meth[k].name, name) == 0) {
+                i = k;
+                break;
+            }
+        if (i < 0) {
+            if (self->nmeth >= MAX_METH_ANN)
+                return self->fail("too many inherent methods for the ref/out table");
+            i = self->nmeth;
+            self->nmeth++;
+        }
+        snprintf(self->meth[i].host, sizeof self->meth[i].host, "%s", key);
+        snprintf(self->meth[i].name, sizeof self->meth[i].name, "%s", name);
+        self->meth[i].nparams = nparams;
+        for (k = 0; k < 16; k++)
+            self->meth[i].pann[k] = (k < nparams && pann) ? (char)pann[k] : 0;
+        return 0;
+    }
+
+    /* Answer the annotations stored for `host::name`; the copy is capped at
+       `cap` positions. 0 = found, -1 = no row. */
+    int find_meth_ann(const char *host, const char *name, int *pann, int cap)
+    {
+        char key[160];
+        int i, k;
+        (void)self;
+
+        meth_host_key(host, key, sizeof key);
+        for (i = 0; i < self->nmeth; i++) {
+            size_t hl = strlen(self->meth[i].host);
+            int hit = strcmp(self->meth[i].host, key) == 0;
+            /* A generic template's row is keyed by the template (`Box`), while
+               the emitter sees the encoded instance (`Box_int`). A `<row>_`
+               prefix names the same template; no pair of templates can collide
+               on this because the underscore is the encoding separator. */
+            if (!hit && hl > 0 && strncmp(key, self->meth[i].host, hl) == 0
+                && key[hl] == '_')
+                hit = 1;
+            if (!hit || strcmp(self->meth[i].name, name) != 0) continue;
+            for (k = 0; k < cap; k++)
+                pann[k] = (k < self->meth[i].nparams)
+                              ? (int)(unsigned char)self->meth[i].pann[k] : 0;
+            return 0;
+        }
         return -1;
     }
 
