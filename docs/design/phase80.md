@@ -253,7 +253,7 @@ $ bash selfhost/check-all.sh
   ok    PH-80-S5a-2 literal (E80-2: L1 immortal, Str borrow, UTF-16 factories)
   ok    PH-80-S5a-3 methods (E80-3/4/6: codepoint/byte API, U16 JS core, read-only s[i])
   ok    PH-80-S5a-4 cstr (E80-5: .data read-only, cstr() NUL, printf negative)
-  ok    PH-80-S5a/S5b migrate (E80-7: std::str::Str coexistence, std consumers)
+  ok    PH-80-S5a/S5b migrate (E80-7: legacy deletion, consumer migration)
   ok    PH-80-S5b-2 docs (E80-8: spec 4.70, README, roadmap, card 7)
   ok    p39 r5
   ok    p39 r8
