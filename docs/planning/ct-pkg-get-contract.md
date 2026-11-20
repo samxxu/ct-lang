@@ -71,7 +71,8 @@ name version publisher git-url tag sha256:<64 lowercase hex>
 - 同一 `name version` 的摘要不可变；tag 移动必须报错而不是静默换行；
 - 同一包跨版本不得混用 publisher；最新 tag 的身份定义该包的 publisher；
 - **五字段旧行按行硬错**（D-014 第 5 条）：请求的 spec 命中五字段行时直接失败，并提示
-  `six-field index row required`；索引中其余六字段行不受影响；
+  `six-field index row required`；索引中其余六字段行不受影响；`ct index verify` 则扫描整份索引，
+  逐行报出所有旧行（§4.4）；
 - **发布前置**：index 仓必须先把五字段行清零，再发布带硬错的 `ct` 版本；否则 `ct/hal`
   等存量包会立即不可安装。
 
@@ -98,9 +99,9 @@ collect(root):
 - 文件之间没有额外分隔符：`路径 + 换行 + 内容` 连续写入同一 SHA-256 流；
 - 嵌入式 `\0` 按普通字节参与摘要。
 
-**测试向量**（2026-11-20 用 `ct get <local-dir>` 实测，并用独立 Python 实现复核一致）
+**测试向量**（2026-11-21 用 `ct get <local-dir>` 与独立 Python 实现实测，两者逐字节一致）
 
-向量 1（基础）：
+向量 1（基础）。文件字节：`ct.pkg` 四行、`src/demo.h.ct` 一行，均以单个 LF 结尾。
 
 ```text
 ct.pkg:
@@ -115,26 +116,40 @@ pub int f(void) { return 1; }
 digest = sha256:4da5a4052a2a0afc6c9bbc7cc33cb153755f6f9e77a6efcb46f664aa17d00000
 ```
 
-向量 2（递归 + 排除项）：
+向量 2（递归 + 排除项）。`ct.pkg` 与向量 1 逐字节相同；两个源文件各一行、以 LF 结尾；
+`.git/y`、`vendor/x`、`.ctcache/z` 内容任意，均不参与摘要。
 
 ```text
-参与摘要：ct.pkg, src/a/b.ct, src/z.h.ct
-不参与：  .git/y, vendor/x, .ctcache/z
+ct.pkg:                 同向量 1
+src/a/b.ct:             pub int b(void) { return 2; }
+src/z.h.ct:             pub int z(void) { return 3; }
+不参与：                .git/y, vendor/x, .ctcache/z
 
-digest = sha256:c010aea1e3c8aa2586b320399096045b72008fea97a75bb067ca2e27aaae68c5
+digest = sha256:96c10e74b90d104fb9e789aec2d05189dd090ae1a96a1f739aa74aeaf83986a1
 ```
 
-向量 3（字节序排序 + 嵌入 NUL）：
+向量 3（字节序排序 + 嵌入 NUL）。`ct.pkg` 的 `ns-root = .`（其余三行同向量 1，以 LF 结尾）；
+`nul.bin` 是 4 个字节、**不带**结尾 LF，嵌入一个 `\0`。
 
 ```text
-参与摘要（排序后）：a-file, a/file, ct.pkg, nul.bin
-内容：a-file = "abc\n"; a/file = "XYZ\n"; nul.bin = "nu\0l"
+ct.pkg:
+name = demo
+publisher = acme
+version = 0.1.0
+ns-root = .
 
-digest = sha256:f2cb28a15090666966a4963fd2822487861eec7d7884e0bcdcddf2aa40358cff
+a-file   = "abc\n"                  (4 bytes)
+a/file   = "XYZ\n"                  (4 bytes)
+nul.bin  = "nu\0l"                  (4 bytes, no trailing LF)
+
+参与摘要（字节序排序后）：a-file, a/file, ct.pkg, nul.bin
+digest = sha256:41743c2b7ecea992d7c1135e3fc78d2c0e020731a1199c85c0ef6308a2b7e888
 ```
 
-> 三个向量同时充当 conformance 的摘要基准；改动算法必须同时更新本节与
-> [PKG-15](../../issues/packages/pkg-15-conformance-suite.md)。
+> 三个向量同时充当 conformance 的摘要基准（[PKG-15](../../issues/packages/pkg-15-conformance-suite.md)，
+> 数据在 `test/conformance/pkg/v1/digest/`）；改动算法必须同时更新本节与 conformance 数据。
+> **v1.1 变更**：v1 文本只写了向量 2/3 的部分输入，无法复现，故本轮补全字节并重新实测；
+> 向量 1 与原值一致。
 
 ### 3.4 `ct.lock` v2
 
@@ -187,6 +202,17 @@ digest = sha256:f2cb28a15090666966a4963fd2822487861eec7d7884e0bcdcddf2aa40358cff
 - **索引唯一性**：同一时刻只有一个索引（I13）。若需要多来源，调用方自行把行合并成一个文件；
   `ct` 不定义“多个索引之间的优先顺序”。
 
+**MVS 实例**（同一包在索引里有 `0.1.0`、`0.2.0`、`0.3.0`）：
+
+| spec | 选中 | 理由 |
+| --- | --- | --- |
+| `acme/util` 或 `acme/util@*` | `0.3.0` | 省略范围 / `*` 取最高 |
+| `acme/util@>=0.1.0` | `0.1.0` | 显式范围取**最低**满足版本，不是最高 |
+| `acme/util@^0.2.0` | `0.2.0` | `0.2.x` 的最低满足版本 |
+| `acme/util@~0.2.0` | `0.2.0` | `0.2.x` 的最低满足版本 |
+| `acme/util@=0.2.0` | `0.2.0` | 精确版本 |
+| `acme/util@>=0.4.0` | 硬错 | 无匹配；不回退到 `0.3.0` |
+
 ### 4.2 `package.sh`（发布端，ct-pkg/index 负责）
 
 | 项 | 契约 |
@@ -214,6 +240,53 @@ digest = sha256:f2cb28a15090666966a4963fd2822487861eec7d7884e0bcdcddf2aa40358cff
 - 发布端只通过命令行调用 `ct get`；不链接、不读 `ct` 内部文件；
 - 消费端只读 `index` 与包树；不调用 `package.sh`、不读 `repos.txt`；
 - 唯一共享可变物是 `index` 文件（发布端写、消费端读）；store 归消费者本机。
+
+### 4.4 `ct index verify`（只读，ct-lang 负责）
+
+```text
+ct index verify [<file>] [--json] [-q]
+```
+
+- **索引解析**与 I13 同一顺序：`<file>` > `CT_INDEX` > `$CT_HOME/index/index`；都没有 → 退出码 2；
+- **只读边界**：只 `fopen` 索引文件；不联网、不起子进程、不写 store、不写 `ct.lock`、不改索引；
+- **逐行校验**（空行与 `#` 注释跳过；行号为 1 起算）：
+
+| ID | 判据 | 失败类别 |
+| --- | --- | --- |
+| IV-1 | 六字段：`name version publisher git-url tag sha256:<64 lowercase hex>` | `field-count` |
+| IV-2 | 恰好五字段 → 旧行，按行硬错（D-014 第 5 条） | `legacy-five-field` |
+| IV-3 | `name` 匹配 `[a-z0-9][a-z0-9-]*`；`publisher` 非空、不为 `local`、不含 `/`；`version` 为 `x.y.z` | `identity` |
+| IV-4 | `tag` 必须等于 `v<version>` | `tag-version` |
+| IV-5 | 摘要必须是 `sha256:` + 64 位**小写**十六进制 | `digest` |
+| IV-6 | 同一 `<publisher>/<name> <version>` 不得出现两次（后出现行报错） | `duplicate` |
+| IV-7 | 通过 IV-1…IV-6 的行视为“可回放”：`ct get --index <file> <publisher>/<name>@<version>` 会走到取回阶段。verify **不**取回、**不**比对包树摘要（那需要网络/包树，属 §9 index 侧） | — |
+
+- **与 `ct get` 一致**：命中五字段行时两者用同一模板
+  `index row for '<spec> <version>' is legacy (five fields); a six-field row is required`。
+  `ct get` 的 `<spec>` 是请求写法（限定名带 publisher，例 `acme/old`）；`ct index verify` 只能看到
+  索引行，旧行没有 publisher 字段，故 `<spec>` 为裸 `name`（例 `old`），且扫描整个文件逐行报出
+  所有旧行与坏行；`ct get` 只在**请求解析命中**该行时失败（其余六字段行照常）。
+- **文本输出**（默认；按行号升序，一行一个坏行）：
+
+```text
+index: ./index
+line 3: legacy-five-field: index row for 'acme/old 1.0.0' is legacy (five fields); a six-field row is required
+line 7: digest: index digest must be sha256:<64 lowercase hex>
+index verify: FAIL (2 invalid of 9 rows)
+```
+
+  成功时最后一行是 `index verify: OK (9 rows)`；`-q` 省略 `index:` 头（成功时无输出）。
+- **`--json` 输出**：单行、键序固定、无时间戳/绝对化；`line` 为 1 起算的行号，
+  `kind` 取上表左列，`errors` 按行号升序：
+
+```json
+{"index":"./index","ok":false,"rows":9,"valid":7,"invalid":2,"errors":[{"line":3,"kind":"legacy-five-field","message":"index row for 'acme/old 1.0.0' is legacy (five fields); a six-field row is required"},{"line":7,"kind":"digest","message":"index digest must be sha256:<64 lowercase hex>"}]}
+```
+
+- **退出码**：`0` 全部合法；`1` 存在坏行（含五字段旧行）；`2` 用法错误、索引不存在或不可读。
+  JSON 模式不改变退出码；`ok` 字段只是退出码的镜像。
+- **不可判定项**（明确不在本命令内）：包树摘要与 tag 内容一致性、tag 是否已推、发布凭据；
+  这些由 §4.2 的发布端回放与 §9 index 侧验收负责。
 
 ## 5. `ct pkg` 命令边界（定稿：B′）
 
@@ -256,27 +329,49 @@ digest = sha256:f2cb28a15090666966a4963fd2822487861eec7d7884e0bcdcddf2aa40358cff
 | `requires` 满足 | ✅（预检） | ✅（写 lock 前） | ✅ | — |
 | lock 覆盖 `dep` | — | — | ✅ | — |
 
-### 6.1 判据归属矩阵（v1 草案）
+### 6.1 判据归属矩阵（v1.1 定稿）
 
 > 编号体系是 **PK-1…PK-13 + R1–R3 + S1–S5**（原文归 index 仓，本契约只引用、不重定义）。
+> **原文基线**：`ct-pkg/index` @ `0cdb132a179a9cfab5e339da9fec856ec4f29fcc`（2026-11-20，`main`）。
 > 本仓只接收“离线、只读、仅需包树与清单”的判据；需要网络、仓库历史或发布凭据的判据
-> 留在 index CI / 包仓。标 **TBD** 的条目原文尚未入库，由
-> [PKG-12](../../issues/packages/pkg-12-contract-v1-doc-gaps.md) 补齐后定归属。
+> 留在 index CI / 包仓。
+>
+> **基线审计（PKG-12 处置）**：在该基线的 `tools/*.sh` 与全部 `*.md` 中检索 `PK-`，只有
+> `tools/package-check.sh:15-18` 给出 PK-1/2/5/8 的原文，`:22-32` 给出 R1–R3 与 S1–S5；
+> **PK-3 / 4 / 6 / 7 / 9 / 10 / 11 / 12 / 13 没有原文**。这些编号保留在编号体系里，本版
+> **不分配归属、不作为任何一方的验收判据**，也不再在矩阵里复述未经原文支持的摘要。
+> 后续由 index 仓补原文后另开契约定版（不回到“待补”状态）。
 
-| 判据 | 内容（摘要） | 归属 | 现状 |
+| 判据 | 内容（原文摘要） | 原文位置（index@0cdb132） | 归属 | 本仓状态（PH-83） |
+| --- | --- | --- | --- | --- |
+| PK-1 | `ct.pkg` 存在且可读 | `tools/package-check.sh:15` | CT（`ct pkg check`） | 已实现 |
+| PK-2 | `name` / `publisher` / `version` / `ns-root` 必填；`publisher != local` | `tools/package-check.sh:16` | CT（`ct pkg check`） | 已实现 |
+| PK-5 | `ns-root` 相对、无 `..`、是已存在目录 | `tools/package-check.sh:17` | CT（`ct pkg check`） | 已实现 |
+| PK-8 | 包树内无绝对 `-I` | `tools/package-check.sh:18-19` | CT（`ct pkg check`） | 已实现 |
+| PK-3 / 4 / 6 / 7 / 9 / 10 / 11 / 12 / 13 | 无原文（编号保留） | — | 未分配 | 不在 CT |
+| R1 | `name` / `publisher` 字符集 | `tools/package-check.sh:22` | index CI / 包仓 | 不在 CT |
+| R2 | `version` 为 `x.y.z` | `tools/package-check.sh:23` | index CI / 包仓 | 不在 CT |
+| R3 | tag ↔ version（git 检出时；缺仓库/缺 tag 只告警） | `tools/package-check.sh:24-25` | index CI / 包仓 | 不在 CT |
+| S1 | 每个命名空间单元位于 `<ns-root>/<namespace path>/` | `tools/package-check.sh:28` | index CI（`--strict`） | 不在 CT |
+| S2 | `dep` 可解析且不重复同一包 | `tools/package-check.sh:29` | index CI（`--strict`） | 不在 CT |
+| S3 | `requires` 解析为 `ct` + 版本范围 | `tools/package-check.sh:30` | index CI（`--strict`） | 不在 CT |
+| S4 | `c-boundary` 为 `strict` / `allow` | `tools/package-check.sh:31` | index CI（`--strict`） | 不在 CT |
+| S5 | 包树无构建产物、缓存、`vendor/` | `tools/package-check.sh:32` | index CI（`--strict`） | 不在 CT |
+
+**PH-83 新增的 CT 判据（`ct index verify`，§4.4）**：
+
+| 判据 | 内容 | 归属 | 状态 |
 | --- | --- | --- | --- |
-| PK-1 | `ct.pkg` 可解析、键合法 | CT（`ct pkg check`） | 已实现 |
-| PK-2 | `name` / `publisher` / `version` / `ns-root` 必填且合法 | CT | 已实现 |
-| PK-3 | publisher 命名空间一致性、不得 `local` | 包仓 + index CI | 不在 CT |
-| PK-5 | `ns-root` 形状：相对、存在、无 `..` | CT | 已实现 |
-| PK-6 / PK-12 | 迁移与离线解析相关 | 包仓 | 不在 CT |
-| PK-8 | 包树内无绝对 `-I` / 生成物 | CT | 已实现 |
-| PK-4 / 7 / 9 / 10 / 11 / 13 | TBD：原文待补 | TBD | 待补 |
-| R1–R3 | 发布前置（tag、工作树、回放） | index CI | 不在 CT |
-| S1–S5 | `--strict` 布局/工件检查 | index CI；离线子集可在 PH-83 后评估迁入 | 不在 CT |
+| IV-1 | 六字段行、字段数正确 | CT（`ct index verify`） | PH-83 已实现 |
+| IV-2 | 五字段旧行按行硬错（D-014 第 5 条） | CT（`ct index verify` + `ct get`） | PH-83 已实现 |
+| IV-3 | `name` / `publisher` / `version` 形状 | CT | PH-83 已实现 |
+| IV-4 | `tag == v<version>` | CT | PH-83 已实现 |
+| IV-5 | `sha256:` + 64 位小写十六进制 | CT | PH-83 已实现 |
+| IV-6 | 同一 `publisher/name version` 不重复 | CT | PH-83 已实现 |
+| IV-7 | “可回放”判定，不取回、不比包树摘要 | CT | PH-83 已实现 |
 
-**本仓在 PH-83 的候选增量**（不改变现有 1/2/5/8 承诺）：`dep` 全名、`requires` 可满足性、
-`version`/tag 一致性中**离线可判定**的部分。是否迁入由归属矩阵定稿后另开需求。
+**不再列入本仓候选**：`dep` 全名、`requires` 可满足性、tag 一致性的离线子集——R2/R3/S2/S3
+仍归 index CI / 包仓；PH-83 不扩 `ct pkg check` 的 1/2/5/8 承诺（D-014 第 2 条）。
 
 ## 7. 失败与退出码
 
@@ -288,6 +383,9 @@ digest = sha256:f2cb28a15090666966a4963fd2822487861eec7d7884e0bcdcddf2aa40358cff
 | 包不可安装 | 回放失败，索引不推送 | 不产生 lock 行 |
 | `requires` 不满足 | 预检失败 | `ct get` 失败且不改 lock；`--force` 告警继续 |
 | 网络/凭据失败 | 中止，索引原样 | `ct get` 失败；其余子命令不受影响 |
+| `ct index verify`：索引全部合法 | — | 退出码 0，默认 `index verify: OK (<n> rows)` |
+| `ct index verify`：存在坏行/五字段旧行 | — | 退出码 1，逐行给行号与类别（§4.4） |
+| `ct index verify`：用法错误/索引不可读 | — | 退出码 2；不写任何文件 |
 
 ## 8. 兼容与迁移
 
@@ -308,7 +406,9 @@ digest = sha256:f2cb28a15090666966a4963fd2822487861eec7d7884e0bcdcddf2aa40358cff
 3. 缺 `publisher` 的行：硬错，错误信息指向清单身份；
 4. 五字段行：请求命中即硬错，提示六字段（其余六字段行仍可安装）；
 5. 隔离 `HOME` / `CT_HOME`、空 store：仍成功；
-6. 失败后既有 lock 逐字节不变。
+6. 失败后既有 lock 逐字节不变；
+7. `ct index verify` 对合法索引退出 0、坏行退出 1 并给行号、不可读退出 2；`--json` 单行可解析且字段稳定；
+8. `ct index verify` 与 `ct get` 对五字段旧行同判；零网络/零子进程/零 store/lock 写入（隔离 `HOME` 前后无新文件）。
 
 **index 侧**
 
@@ -334,7 +434,7 @@ digest = sha256:f2cb28a15090666966a4963fd2822487861eec7d7884e0bcdcddf2aa40358cff
 | Q5 | `ct get` 输出规范串（PH-77 S2）是否成为脚本接口 | 不作为脚本解析接口；脚本只读 `ct.lock` 与退出码 |
 | Q6 | 五字段旧行的发布顺序 | **已定（D-014 第 5 条）**：按行硬错；index 仓先清零旧行再发硬错版本 |
 | Q7 | 多索引并存 | **已定（D-014 第 4 条）**：单索引；多源由调用方合并索引文件 |
-| Q8 | PK/R/S 全量原文与逐条归属 | 归属矩阵 v1 草案见 §6.1；TBD 项由 [PKG-12](../../issues/packages/pkg-12-contract-v1-doc-gaps.md) 补齐后定稿 |
+| Q8 | PK/R/S 全量原文与逐条归属 | **已定（2026-11-21，PH-83）**：§6.1 按 index@0cdb132 基线定稿；PK-1/2/5/8 归 CT，R/S 归 index CI，缺原文的 PK-3/4/6/7/9–13 编号保留但不作判据（PKG-12） |
 
 ## 11. 变更与归属
 
@@ -355,3 +455,4 @@ digest = sha256:f2cb28a15090666966a4963fd2822487861eec7d7884e0bcdcddf2aa40358cff
 | 版本 | 日期 | 内容 |
 | --- | --- | --- |
 | v1 | 2026-11-20 | 按 [D-014](../decisions/D-014.md) 七项裁定：维持 B′、判据归属矩阵、契约并入本文、单索引（I13）、五字段按行硬错（改 I12）、最小 CI 产物、PH-83 排期；新增 §3.3 digest 伪代码与 3 组向量、§4.1.1 spec/版本选择、§6.1 判据归属矩阵、Q6–Q8 |
+| v1.1 | 2026-11-21 | PH-83 S83a：§3.3 三组向量补全字节并重新实测（v1 的向量 2/3 缺输入、不可复现）；§4.1.1 补 MVS 实例；新增 §4.4 `ct index verify`（IV-1…IV-7、输出/JSON/退出码）；§6.1 按 index@0cdb132 基线定稿（缺原文编号显式标为未分配）；§7 退出码与 §10 Q8 同步 |

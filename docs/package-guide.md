@@ -172,7 +172,16 @@ ct verify [--strict]         # 离线：v2 校验 store、v1 校验 vendor；--s
 ct install                   # 离线：校验摘要与依赖覆盖，打印带 store ns-root 的 ct build 命令
 ct migrate                   # 离线：把 vendor/ 搬进 store，重写 v2 lock（保留版本/发布方）
 ct update                    # 离线：v2 校验 store 并保留钉住的版本；迁移旧 std/std 身份
+ct index verify ./index      # 只读：逐行校验索引；不联网、不写 store/lock
+ct index verify ./index --json   # 同一判定，CI 可解析（退出码 0/1/2）
 ```
+
+索引行是 **六字段** `name version publisher git-url tag sha256:<64 lowercase hex>`。
+**五字段旧行按行硬错**（[D-014](decisions/D-014.md) 第 5 条）：`ct get` 的请求解析命中旧行即失败
+（`index row for '<spec> <version>' is legacy (five fields); a six-field row is required`），
+同一文件里的六字段行照常可用；`ct index verify` 扫描整份索引，逐行给出行号与类别
+（`legacy-five-field` / `field-count` / `identity` / `tag-version` / `digest` / `duplicate`）。
+发布前置：index 仓先清零旧行，再发带硬错的 `ct`。
 
 `ct update` 遇到旧官方身份 `std/std` 时解析 pin 目标、改写为 `ct/std <new>`，打印
 `migrate std/std <old> -> ct/std <new>`，旧 store 只读保留；`ct verify` 对旧身份只告警

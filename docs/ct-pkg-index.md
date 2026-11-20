@@ -22,9 +22,9 @@
 | **六字段**（现行） | `name version publisher git-url tag sha256:<hex>` | 能落共享 store；官方 `std` 行已是六字段 |
 | **五字段**（旧行） | `name version git-url tag sha256:<hex>` | **按行硬错**（[D-014](decisions/D-014.md) 第 5 条）：请求命中即失败，提示六字段；其余六字段行不受影响 |
 
-实现现状（v0.80.0）：`tool/pkg` 的索引查找仍是 `ntok >= 6` 走六字段、否则按五字段读取；
-契约 v1 已要求“命中五字段行按行硬错”，落地由 [PKG-13](../issues/packages/pkg-13-legacy-five-field-row-hard-error.md)
-跟踪。生成端已停止产出五字段新行。
+实现现状（v0.83.0）：`ct get` 的索引查找命中五字段旧行即硬错（[D-014](decisions/D-014.md)
+第 5 条）；`ct index verify` 只读扫描整份索引，逐行报出旧行与坏行（契约 v1 §4.4，
+[PH-83](design/phase83.md)）。生成端已停止产出五字段新行；index 仓清零旧行是发布前置。
 
 实测当前官方索引的字段分布（网络可用时）：
 
@@ -47,7 +47,7 @@ std 0.19.0 ct https://github.com/ct-pkg/std v0.19.0 sha256:432086f0ec6c9ef3cdce5
 | 层 | 信任来源 | 校验 | 失败行为 |
 | --- | --- | --- | --- |
 | 官方 `ct/<name>`、裸名 | 编译期 **pin 表**（`name` / `version` / `publisher` / `url` / `tag` / `sha256`） | 按 pin 的 tag 取内容，再按 `ct.lock` 同一算法比对 `sha256`；默认不读可变索引 | 摘要或身份不符即硬错，不落 store、不写锁 |
-| 第三方 `<pub>/<name>` | 调用方显式给出的索引 / URL / 本地目录 | 索引行的 `tag` + `sha256` 与拉到的内容比对；索引本身**无签名** | 索引不可读、缺行或摘要不符即硬错 |
+| 第三方 `<pub>/<name>` | 调用方显式给出的索引 / URL / 本地目录 | 索引行的 `tag` + `sha256` 与拉到的内容比对；索引本身**无签名**；`ct index verify` 可先做只读结构校验 | 索引不可读、缺行或摘要不符即硬错 |
 
 - `--index <file>` / `CT_INDEX=<file>` 都是**显式**输入；`ct` 不默认联网、不自动 clone 索引。
 - 裸名只查内置 pin 表；第三方必须写 `<publisher>/<name>`。
@@ -60,6 +60,9 @@ std 0.19.0 ct https://github.com/ct-pkg/std v0.19.0 sha256:432086f0ec6c9ef3cdce5
 - 发布脚本**不进 `ct` 二进制**：`ct pkg check <dir>` 只是原生只读 preflight（B′，见
   [ct-pkg](ct-pkg.md)），不是发布命令。
 - 消费者只读索引，不在客户端扫描组织或自动 trust 新包。
+- `ct index verify [<file>] [--json]` 是本地只读审计：不联网、不写 store/lock；退出码
+  0 合法 / 1 有坏行（逐行给行号）/ 2 用法或不可读。单索引 `<file>` > `CT_INDEX` >
+  `$CT_HOME/index/index`。
 
 ## 5. 现状 vs 提案
 
