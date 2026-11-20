@@ -83,6 +83,10 @@ static int pkg_official_resolve(const char *name, char *url, size_t ucap,
 static int pkg_index_lookup(const char *name, const char *range, char *url, size_t ucap,
                             char *tag, size_t tcap, char *sha, size_t scap,
                             char *pub, size_t pcap);
+/* PH-83: the legacy-row text is shared with `ct get` so both commands give the
+   same diagnostic (contract §4.4). */
+static int index_legacy_msg(char *out, size_t cap, const char *spec, const char *ver);
+static int pkg_index_verify(int argc, char **argv, const char *prog, const char *version);
 static int pkg_append_words(char *dst, size_t cap, const char *src);
 static int pkg_check_requires(const char *pkg, const char *req);
 static int pkg_verify_lock(const char *prog, char lname[][MAX_TEXT], char lver[][32],
@@ -185,6 +189,36 @@ struct Sha256 {
     unsigned long total;
     unsigned char buf[64];
 };
+
+/* PH-83 `ct index verify`: one invalid row, encoded in a flat char buffer.
+   A struct pointer cannot cross this file-static boundary: the compiler mangles
+   a namespaced struct tag, but a `struct X **` parameter keeps the short name.
+   Layout per record: int line, kind[32], msg[512]. */
+#define INDEX_ERR_STRIDE   560
+#define INDEX_ERR_KIND_OFF 4
+#define INDEX_ERR_MSG_OFF  36
+
+static int index_err_add(char **errs, int *nerr, int *cerr,
+                         int line, const char *kind, const char *msg)
+{
+    char *p;
+    int nc;
+
+    if (*nerr >= *cerr) {
+        nc = *cerr ? *cerr * 2 : 16;
+        p = (char *)realloc(*errs, (size_t)nc * (size_t)INDEX_ERR_STRIDE);
+        if (p == NULL) return -1;
+        *errs = p;
+        *cerr = nc;
+    }
+    p = *errs + (size_t)(*nerr) * (size_t)INDEX_ERR_STRIDE;
+    memcpy(p, &line, sizeof line);
+    snprintf(p + INDEX_ERR_KIND_OFF, 32, "%s", kind);
+    snprintf(p + INDEX_ERR_MSG_OFF, 512, "%s", msg);
+    *nerr = *nerr + 1;
+    return 0;
+}
+
 
 #define CT_ROR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
 
@@ -2330,22 +2364,34 @@ static int pkg_read_meta(const char *dir, char *cflags, size_t ccap,
     return ok ? 0 : -1;
 }
 
+/* The legacy-row diagnostic (D-014 #5, contract §3.2/§4.4). `ct get` and
+   `ct index verify` both call this so the wording cannot drift. */
+static int index_legacy_msg(char *out, size_t cap, const char *spec, const char *ver)
+{
+    int w = snprintf(out, cap,
+                     "index row for '%s %s' is legacy (five fields); "
+                     "a six-field row is required", spec, ver);
+    return (w < 0 || (size_t)w >= cap) ? -1 : 0;
+}
+
 /* Look `name` up in the plain-text index: one entry per line as
    `name version git-url tag sha256:<hex>`. Omitted range / `*` selects the
    newest row; an explicit range uses minimal version selection (the lowest
    satisfying row), the same rule as `git_pick_tag`.
    Returns 0 on a hit, 1 when no index is configured, 2 when the name (or
-   range) has no entry, and -1 when a configured index cannot be read. */
+   range) has no entry, and -1 when a configured index cannot be read.
+   PH-83: a resolved five-field (legacy) row is a hard error -- the requested
+   spec hit it, so the resolver refuses before any network work (D-014 #5). */
 static int pkg_index_lookup(const char *name, const char *range, char *url, size_t ucap,
                             char *tag, size_t tcap, char *sha, size_t scap,
                             char *pub, size_t pcap)
 {
     char path[MAX_PKG_PATH], line[MAX_PKG_LINE];
-    char ambb[MAX_TEXT], bestpub[MAX_TEXT];
+    char ambb[MAX_TEXT], bestpub[MAX_TEXT], bestver[MAX_TEXT];
     const char *ip;
     const char *slash;
     FILE *f;
-    int best[3], bestset, found, bad, amb, want_latest;
+    int best[3], bestset, found, bad, amb, want_latest, best_legacy;
     size_t ll, plen;
 
     ip = g_pkg.have_index ? g_pkg.index : getenv("CT_INDEX");
@@ -2363,6 +2409,8 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
     want_latest = (!range || !range[0] || strcmp(range, "*") == 0);
     found = 0;
     bestpub[0] = 0;
+    bestver[0] = 0;
+    best_legacy = 0;
     bad = 0;
     amb = 0;
     ambb[0] = 0;
@@ -2370,7 +2418,7 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
         char *tok[8];
         char *p;
         const char *publisher, *rurl, *rtag, *rsha;
-        int ntok, match;
+        int ntok, match, legacy;
         ll = strlen(line);
         while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r'
                           || line[ll - 1] == ' ' || line[ll - 1] == '\t')) {
@@ -2395,9 +2443,10 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
             }
         }
         if (ntok < 5) continue;
-        /* S1 index row: `name version publisher url tag sha256:...`; the old
-           five-field row has no publisher and stays valid. */
-        if (ntok >= 6) {
+        /* S1 index row: `name version publisher url tag sha256:...`; a row with
+           only five fields is the legacy shape and is rejected when selected. */
+        legacy = (ntok < 6);
+        if (!legacy) {
             publisher = tok[2];
             rurl = tok[3];
             rtag = tok[4];
@@ -2409,7 +2458,11 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
             rsha = tok[4];
         }
         if (slash) {
+            /* A legacy row has no publisher field, so a qualified request can
+               only match its bare name; the row is then rejected as legacy
+               (D-014 #5). A six-field row matches on publisher + name. */
             match = (strcmp(tok[0], name) == 0
+                     || (!publisher[0] && strcmp(tok[0], slash + 1) == 0)
                      || (publisher[0]
                          && strlen(publisher) == plen
                          && strncmp(publisher, name, plen) == 0
@@ -2442,29 +2495,353 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
             if (!bestset
                 || (want_latest ? g_pkg.version_cmp(v, best) > 0
                                 : g_pkg.version_cmp(v, best) < 0)) {
-                if (strlen(rurl) >= ucap || strlen(rtag) >= tcap
-                    || strlen(rsha) >= scap) {
+                if (!legacy
+                    && (strlen(rurl) >= ucap || strlen(rtag) >= tcap
+                        || strlen(rsha) >= scap)) {
                     bad = 1;
                     continue;
                 }
-                snprintf(url, ucap, "%s", rurl);
-                snprintf(tag, tcap, "%s", rtag);
-                snprintf(sha, scap, "%s", rsha);
                 best[0] = v[0];
                 best[1] = v[1];
                 best[2] = v[2];
                 snprintf(bestpub, sizeof bestpub, "%s", publisher);
+                snprintf(bestver, sizeof bestver, "%s", tok[1]);
                 bestset = 1;
                 found = 1;
+                best_legacy = legacy;
+                if (!legacy) {
+                    snprintf(url, ucap, "%s", rurl);
+                    snprintf(tag, tcap, "%s", rtag);
+                    snprintf(sha, scap, "%s", rsha);
+                }
             }
         }
     }
     fclose(f);
     if (found) {
+        if (best_legacy) {
+            char msg[MAX_PKG_LINE];
+            index_legacy_msg(msg, sizeof msg, name, bestver);
+            fprintf(stderr, "ctc: %s\n", msg);
+            return -1;
+        }
         if (pub && pcap) snprintf(pub, pcap, "%s", bestpub);
         return 0;
     }
     return bad ? -1 : 2;
+}
+
+static int index_name_ok(const char *s)
+{
+    const char *p;
+
+    if (!s[0]) return 0;
+    if (!((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= '0' && s[0] <= '9'))) return 0;
+    for (p = s + 1; *p; p++) {
+        if ((*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') || *p == '-') continue;
+        return 0;
+    }
+    return 1;
+}
+
+/* `x.y.z`: three non-empty digit runs of at most nine digits, no sign. The
+   resolver's `version_parse` is looser (it accepts a bare major); verify is
+   the strict contract check. */
+static int index_version_ok(const char *s)
+{
+    const char *p;
+    int parts, digits;
+
+    p = s;
+    parts = 0;
+    digits = 0;
+    while (*p) {
+        if (*p >= '0' && *p <= '9') {
+            digits++;
+            if (digits > 9) return 0;
+            p++;
+            continue;
+        }
+        if (*p == '.') {
+            if (digits == 0 || parts >= 2) return 0;
+            parts++;
+            digits = 0;
+            p++;
+            continue;
+        }
+        return 0;
+    }
+    return (digits > 0 && parts == 2);
+}
+
+
+static void index_json_str(const char *s)
+{
+    const unsigned char *p = (const unsigned char *)s;
+
+    putchar('"');
+    while (*p) {
+        unsigned char c = *p++;
+        if (c == '"' || c == '\\') {
+            putchar('\\');
+            putchar((int)c);
+        } else if (c == '\n') {
+            printf("\\n");
+        } else if (c == '\r') {
+            printf("\\r");
+        } else if (c == '\t') {
+            printf("\\t");
+        } else if (c < 0x20) {
+            printf("\\u%04x", (int)c);
+        } else {
+            putchar((int)c);
+        }
+    }
+    putchar('"');
+}
+
+/* `ct index verify [<file>] [--json] [-q]`: read-only replay of the index's
+   structural contract. It never fetches, never spawns, never writes store or
+   lock (contract §4.4). Exit 0 valid, 1 bad rows, 2 usage/unreadable. */
+static int pkg_index_verify(int argc, char **argv, const char *prog, const char *version)
+{
+    char path[MAX_PKG_PATH], line[MAX_PKG_LINE], key[MAX_PKG_LINE];
+    char *errs;
+    char *seen;
+    const char *positional, *ip, *home;
+    FILE *f;
+    int ai, json, quiet, nerr, cerr, nseen, cseen, rows, valid, lineno, i, rc;
+
+    positional = NULL;
+    json = 0;
+    quiet = 0;
+    for (ai = 0; ai < argc; ai++) {
+        if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
+            printf("usage: %s index verify [<file>] [--json] [-q]\n", prog);
+            printf("  read-only: check field count, identity, tag, digest and duplicates\n");
+            printf("  file: <file> > CT_INDEX > $CT_HOME/index/index (single index)\n");
+            printf("  exit: 0 valid, 1 bad rows (with line numbers), 2 usage/unreadable\n");
+            return 0;
+        }
+        if (strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0) {
+            printf("%s v%s\n", prog, version);
+            return 0;
+        }
+        if (strcmp(argv[ai], "--json") == 0) {
+            json = 1;
+            continue;
+        }
+        if (strcmp(argv[ai], "-q") == 0 || strcmp(argv[ai], "--quiet") == 0) {
+            quiet = 1;
+            continue;
+        }
+        if (argv[ai][0] == '-' && argv[ai][1]) {
+            fprintf(stderr, "%s: unknown option '%s'\n", prog, argv[ai]);
+            return 2;
+        }
+        if (positional != NULL) {
+            fprintf(stderr, "usage: %s index verify [<file>] [--json] [-q]\n", prog);
+            return 2;
+        }
+        positional = argv[ai];
+    }
+    /* Single-index resolution, same order as I13. */
+    if (positional != NULL) {
+        ip = positional;
+    } else {
+        ip = getenv("CT_INDEX");
+        if (ip == NULL || !ip[0]) {
+            home = getenv("CT_HOME");
+            if (home == NULL || !home[0]) home = getenv("HOME");
+            if (home == NULL || !home[0]) {
+                fprintf(stderr, "%s: no index file and no CT_INDEX/CT_HOME/HOME\n", prog);
+                return 2;
+            }
+            if (snprintf(path, sizeof path, "%s/index/index", home) >= (int)sizeof path) {
+                fprintf(stderr, "%s: index path is too long\n", prog);
+                return 2;
+            }
+            ip = path;
+        }
+    }
+    if (strlen(ip) >= sizeof path) {
+        fprintf(stderr, "%s: index path is too long\n", prog);
+        return 2;
+    }
+    snprintf(path, sizeof path, "%s", ip);
+    f = fopen(path, "r");
+    if (f == NULL) {
+        fprintf(stderr, "%s: cannot read the package index '%s'\n", prog, path);
+        return 2;
+    }
+    errs = NULL;
+    seen = NULL;
+    nerr = 0;
+    cerr = 0;
+    nseen = 0;
+    cseen = 0;
+    rows = 0;
+    valid = 0;
+    lineno = 0;
+    while (fgets(line, sizeof line, f) != NULL) {
+        char *tok[8];
+        char *p;
+        const char *publisher;
+        int ntok, dup, bad;
+        size_t ll;
+
+        lineno++;
+        ll = strlen(line);
+        if (ll == sizeof line - 1 && line[ll - 1] != '\n') {
+            int c;
+            while ((c = fgetc(f)) != EOF && c != '\n') { }
+            rows++;
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "field-count",
+                              "index line is longer than 1023 bytes") != 0) goto oom;
+            continue;
+        }
+        while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r'
+                          || line[ll - 1] == ' ' || line[ll - 1] == '\t')) {
+            ll = ll - 1;
+            line[ll] = 0;
+        }
+        p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == 0 || *p == '#') continue;
+        rows++;
+        ntok = 0;
+        while (*p) {
+            while (*p == ' ' || *p == '\t') p++;
+            if (!*p) break;
+            if (ntok < 8) {
+                tok[ntok] = p;
+                ntok++;
+            }
+            while (*p && *p != ' ' && *p != '\t') p++;
+            if (*p) {
+                *p = 0;
+                p++;
+            }
+        }
+        if (ntok == 5) {
+            char msg[MAX_PKG_LINE];
+            index_legacy_msg(msg, sizeof msg, tok[0], tok[1]);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "legacy-five-field", msg) != 0)
+                goto oom;
+            continue;
+        }
+        if (ntok != 6) {
+            char msg[128];
+            snprintf(msg, sizeof msg, "index row has %d fields; six are required", ntok);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "field-count", msg) != 0)
+                goto oom;
+            continue;
+        }
+        publisher = tok[2];
+        bad = 0;
+        if (!index_name_ok(tok[0])) {
+            char msg[256];
+            snprintf(msg, sizeof msg,
+                     "index package name '%s' must match [a-z0-9][a-z0-9-]*", tok[0]);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "identity", msg) != 0) goto oom;
+            bad = 1;
+        } else if (!publisher[0] || strcmp(publisher, "local") == 0
+                   || strchr(publisher, '/') != NULL) {
+            char msg[256];
+            snprintf(msg, sizeof msg,
+                     "index publisher '%s' must be non-empty, not 'local', without '/'",
+                     publisher);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "identity", msg) != 0) goto oom;
+            bad = 1;
+        } else if (!index_version_ok(tok[1])) {
+            char msg[256];
+            snprintf(msg, sizeof msg,
+                     "index version '%s' must be x.y.z", tok[1]);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "identity", msg) != 0) goto oom;
+            bad = 1;
+        }
+        if (bad) continue;
+        if (tok[4][0] != 'v' || strcmp(tok[4] + 1, tok[1]) != 0) {
+            char msg[256];
+            snprintf(msg, sizeof msg, "index tag '%s' must be 'v%s'", tok[4], tok[1]);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "tag-version", msg) != 0) goto oom;
+            continue;
+        }
+        if (!sha_hex_ok(tok[5])) {
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "digest",
+                              "index digest must be sha256:<64 lowercase hex>") != 0)
+                goto oom;
+            continue;
+        }
+        snprintf(key, sizeof key, "%s/%s %s", publisher, tok[0], tok[1]);
+        dup = 0;
+        for (i = 0; i < nseen; i++) {
+            if (strcmp(seen + (size_t)i * MAX_PKG_LINE, key) == 0) {
+                dup = 1;
+                break;
+            }
+        }
+        if (dup) {
+            char msg[512];
+            snprintf(msg, sizeof msg, "index row '%s' appears more than once", key);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "duplicate", msg) != 0) goto oom;
+            continue;
+        }
+        if (nseen >= cseen) {
+            int nc = cseen ? cseen * 2 : 16;
+            char *np = (char *)realloc(seen, (size_t)nc * MAX_PKG_LINE);
+            if (np == NULL) goto oom;
+            seen = np;
+            cseen = nc;
+        }
+        snprintf(seen + (size_t)nseen * MAX_PKG_LINE, MAX_PKG_LINE, "%s", key);
+        nseen++;
+        valid++;
+    }
+    fclose(f);
+    if (json) {
+        printf("{\"index\":");
+        index_json_str(path);
+        printf(",\"ok\":%s,\"rows\":%d,\"valid\":%d,\"invalid\":%d,\"errors\":[",
+               nerr ? "false" : "true", rows, valid, nerr);
+        for (i = 0; i < nerr; i++) {
+            char *rec = errs + (size_t)i * (size_t)INDEX_ERR_STRIDE;
+            int eline;
+            memcpy(&eline, rec, sizeof eline);
+            if (i) putchar(',');
+            printf("{\"line\":%d,\"kind\":", eline);
+            index_json_str(rec + INDEX_ERR_KIND_OFF);
+            printf(",\"message\":");
+            index_json_str(rec + INDEX_ERR_MSG_OFF);
+            putchar('}');
+        }
+        printf("]}\n");
+    } else {
+        if (!quiet) printf("index: %s\n", path);
+        for (i = 0; i < nerr; i++) {
+            char *rec = errs + (size_t)i * (size_t)INDEX_ERR_STRIDE;
+            int eline;
+            memcpy(&eline, rec, sizeof eline);
+            printf("line %d: %s: %s\n", eline, rec + INDEX_ERR_KIND_OFF,
+                   rec + INDEX_ERR_MSG_OFF);
+        }
+        if (nerr == 0) {
+            if (!quiet) printf("index verify: OK (%d rows)\n", rows);
+        } else {
+            printf("index verify: FAIL (%d invalid of %d rows)\n", nerr, rows);
+        }
+    }
+    free(errs);
+    free(seen);
+    rc = nerr ? 1 : 0;
+    return rc;
+
+oom:
+    fclose(f);
+    free(errs);
+    free(seen);
+    fprintf(stderr, "%s: out of memory while verifying '%s'\n", prog, path);
+    return 2;
 }
 
 /* Append `src` to `dst` with one separating space; an empty `src` is a no-op. */
@@ -3352,4 +3729,10 @@ int ct_pkg_migrate(int argc, char **argv, const char *prog, const char *version)
         return 1;
     }
     return pkg_migrate(prog);
+}
+
+pub int ct_index_verify(int argc, char **argv, const char *prog, const char *version);
+int ct_index_verify(int argc, char **argv, const char *prog, const char *version)
+{
+    return pkg_index_verify(argc, argv, prog, version);
 }

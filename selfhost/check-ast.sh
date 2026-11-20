@@ -1138,6 +1138,28 @@ p82_probe errors "PH-82-S82c negatives (E82-4: Vec/generic/iface/typedef/indirec
 p82_probe docs "PH-82-S82d docs (E82-6/7/8: spec 4.72, package-guide, patterns 5, v0.82.0)" \
     test/ast/p82_docs.sh "$work/ct-ast"
 
+# Phase 83: the package contract v1. `ct index verify` is read-only (zero
+# network, zero subprocess, zero store/lock writes) and the legacy five-field
+# row is a per-row hard error. The conformance and distribution probes join
+# with their own stages.
+p83_probe() {
+    tag=$1; label=$2
+    shift 2
+    sh "$@" >"$work/p83$tag.out" 2>&1
+    st=$?
+    if [ "$st" -eq 0 ]; then
+        ok "$label"
+    elif [ "$st" -eq 77 ]; then
+        skip "$label" "$(tail -1 "$work/p83$tag.out")"
+    else
+        bad "$label" "$(sed -n '1,12p' "$work/p83$tag.out")"
+    fi
+}
+p83_probe verify "PH-83-S83b verify (E83-3/4: read-only, line numbers, JSON, 0/1/2)" \
+    test/ast/p83_verify.sh "$work/ct-ast"
+p83_probe legacy "PH-83-S83b legacy (E83-2: five-field hard error, per-row, six-field unaffected)" \
+    test/ast/p83_legacy.sh "$work/ct-ast"
+
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-75-R1 closure (pair-form method argument)"

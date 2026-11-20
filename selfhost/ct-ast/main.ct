@@ -33,7 +33,7 @@ import tool::pkg::Pkg;
 #include <stdlib.h>
 #include <string.h>
 
-#define CTC_VERSION "0.82.0"
+#define CTC_VERSION "0.82.1"
 
 /* Caps, node kinds and token/operator codes are declared by the unit that uses
    them: a macro spans one translation unit only, and every unit here compiles
@@ -108,6 +108,21 @@ int main(int argc, char **argv)
     tool::driver::ct_driver_bind(arena, lex, sym, mem, m, p, CTC_VERSION);
     /* Phase 8 (ported in 10.6): the package subcommands live in their own unit
        and never reach the compile core; only primitives cross the boundary */
+    /* PH-83: `ct index` is read-only and has exactly one subcommand. Any other
+       spelling is a usage error (contract v1 §4.4), never a compile run. */
+    if (argc > 1 && strcmp(argv[1], "index") == 0) {
+        if (argc > 2 && strcmp(argv[2], "verify") == 0)
+            return tool::pkg::ct_index_verify(argc - 3, argv + 3, m->prog, CTC_VERSION);
+        if (argc == 2 || (argc == 3 && (strcmp(argv[2], "-h") == 0
+                                        || strcmp(argv[2], "--help") == 0))) {
+            printf("usage: %s index verify [<file>] [--json] [-q]\n", m->prog);
+            printf("  the only index subcommand is read-only verification\n");
+            return argc == 2 ? 2 : 0;
+        }
+        fprintf(stderr, "%s: unknown index subcommand '%s'\n", m->prog, argv[2]);
+        fprintf(stderr, "usage: %s index verify [<file>] [--json] [-q]\n", m->prog);
+        return 2;
+    }
     if (argc > 1 && strcmp(argv[1], "get") == 0)
         return tool::pkg::ct_pkg_get(argc - 2, argv + 2, m->prog, CTC_VERSION);
     if (argc > 1 && strcmp(argv[1], "install") == 0)
