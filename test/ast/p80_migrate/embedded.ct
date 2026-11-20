@@ -15,7 +15,9 @@ int main(void)
     int removed;
     MapEntry<String, int> e;
     m.h = 0;
-    printf("put a=%d b=%d\n", m.put(a, 1), m.put(b, 2));
+    int pa = m.put(a, 1);
+    int pb = m.put(b, 2);
+    printf("put a=%d b=%d\n", pa, pb);
     printf("len=%d v1=%d v2=%d\n", m.len(), *m.get(a), *m.get(b));
     printf("has a2=%d missing=%d\n", m.has(a2), m.has(plain));
     e = m.entry(0);
