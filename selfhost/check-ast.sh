@@ -1099,7 +1099,7 @@ p80_probe methods "PH-80-S5a-3 methods (E80-3/4/6: codepoint/byte API, U16 JS co
     test/ast/p80_methods.sh "$work/ct-ast"
 p80_probe cstr "PH-80-S5a-4 cstr (E80-5: .data read-only, cstr() NUL, printf negative)" \
     test/ast/p80_cstr.sh "$work/ct-ast"
-p80_probe migrate "PH-80-S5a/S5b migrate (E80-7: std::str::Str coexistence, std consumers)" \
+p80_probe migrate "PH-80-S5a/S5b migrate (E80-7: legacy deletion, consumer migration)" \
     test/ast/p80_migrate.sh "$work/ct-ast"
 p80_probe docs "PH-80-S5b-2 docs (E80-8: spec 4.70, README, roadmap, card 7)" \
     test/ast/p80_docs.sh

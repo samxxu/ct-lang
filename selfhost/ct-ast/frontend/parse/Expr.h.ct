@@ -2678,7 +2678,7 @@ impl ExprOps for Expr {
         if (strcmp(tname, "Map") == 0 && nargs >= 1
             && strcmp(carg[0], "struct Str") == 0) {
             return self->sup->fail(
-                "Map key type 'Str' is a borrowed view; use 'String' (owning) or the legacy 'std::str::Str'");
+                "Map key type 'Str' is a borrowed view; use 'String' (owning)");
         }
         if (strcmp(tname, "Map") == 0 && nargs >= 1
             && strcmp(carg[0], "int") != 0 && strcmp(carg[0], "long") != 0
