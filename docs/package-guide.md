@@ -281,6 +281,14 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
   S7 已删除 vendor 路径；缓存键仍按裸包名（PKG-5）。
 - 逐条缺陷见 [PKG-3 … PKG-8](../issues/packages/pkg-3-unknown-keys-silently-ignored.md)。
 
+#### 7.6 切片 `T[]` 不进包边界（PH-79）
+
+切片是 `{ptr,len}` 借用视图，只允许出现在参数、局部变量、表达式临时量与返回值；**不能**作
+struct 字段、全局、接口值、`box<T>`、`Option`/`Result`、容器元素、泛型实参或闭包捕获，
+因此也不会出现在 `--lib` 的 ABI 头里。跨包传只读数据请传 `String`/`Str`（PH-80）或：
+C 边界用 `(const T *data, size_t len)`；包内调用直接传 `T[]`，由调用方保证底层存活。
+`T a[]` 形参/无初始化器声明已告警（v1 硬错），新代码写 `T[]`（视图）或 `T a[N]`（数组）。
+
 ### 8. v1 迁移：`ct migrate`
 
 S7 已删除 `vendor/` 读写；v1 lock 与无 lock 的 vendor 工程不再构建。唯一保留的桥是

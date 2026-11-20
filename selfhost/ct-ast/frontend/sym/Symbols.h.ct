@@ -183,6 +183,15 @@ pub struct Var {
        `Symbols.closures` and stays -1 on a plain variable. */
     int  is_closure;
     int  closure_id;
+    /* P-7.2 (S3 slice prototype): a variable whose declared type is `T[]`.
+       The C storage is `struct __ct_slice`; the element spelling and the
+       `const` flag stay here because the erased C type cannot carry them.
+       `slice_escape` is set on a local view built from a local array, so a
+       direct `return` of it can be linted (P-4.3). */
+    int  is_slice;
+    char slice_elem[160];
+    int  slice_const;
+    int  slice_escape;
 }
 
 /* One non-escaping closure literal. The parser fills this table; the emitter
@@ -723,6 +732,10 @@ impl SymbolOps for Symbols {
         self->vars[i].is_const = 0;
         self->vars[i].is_closure = 0;
         self->vars[i].closure_id = -1;
+        self->vars[i].is_slice = 0;
+        self->vars[i].slice_elem[0] = 0;
+        self->vars[i].slice_const = 0;
+        self->vars[i].slice_escape = 0;
         self->nvar++;
         return 0;
     }
@@ -772,6 +785,10 @@ impl SymbolOps for Symbols {
         self->vars[i].is_param = 0;
         self->vars[i].is_fnparam = 0;
         self->vars[i].is_const = 0;
+        self->vars[i].is_slice = 0;
+        self->vars[i].slice_elem[0] = 0;
+        self->vars[i].slice_const = 0;
+        self->vars[i].slice_escape = 0;
         if (imported)
             for (k = 0; k < i; k++)
                 if (self->vars[k].is_global && self->vars[k].imported

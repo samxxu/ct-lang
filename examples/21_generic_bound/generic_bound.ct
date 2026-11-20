@@ -39,7 +39,7 @@ impl Compare for Word {
     }
 }
 
-void sort<T: Compare>(T arr[], int n)
+void sort<T: Compare>(T *arr, int n)
 {
     int i;
     int j;

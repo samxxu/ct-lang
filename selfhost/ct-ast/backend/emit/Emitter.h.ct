@@ -123,6 +123,14 @@ import runtime::arena::Arena;
 #define N_DEFER 69
 /* Phase 44: the postfix `?` error-propagation node (`a` = operand). */
 #define N_TRY 71
+/* P-7.2: slice nodes. `N_SLICE_INDEX` (`a` base, `b` index, `text` element
+   including `const` when read-only) prints as a checked place;
+   `N_SLICE_RANGE` (`a` base, `b` lo, `c` hi or -1, `aux` 1 array / 2 slice)
+   prints a `{ptr,len}` construction; `N_SLICE_GET` (`a` base, `b` index)
+   prints the soft access returning 0 when out of range. */
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET   76
 
 /* binary operators (stored in `aux`) */
 #define B_SUB 2
@@ -1398,6 +1406,17 @@ static int emit_generic_defs(struct Emitter *self, int u)
    the block is therefore absent from every non-atomic product. */
 
 
+/* P-7.2: the parser's slice-use flag. It lives as a file-scope pointer rather
+   than in `struct Emitter` (that struct is at the build's 64-field cap), and
+   is declared up here because `emit_unit_body` runs before the bind at the end
+   of the unit. */
+static int *g_slice_used;
+
+/* P-7.2: emitted only when the parser noted a slice use; defined below with
+   the other emission helpers, declared here because `emit_unit_body` runs
+   before it in the translation unit. */
+static void emit_slice_helpers(struct Emitter *self);
+
 /* The per-unit emission proper: everything from the banner to the last
    function, run with `self->out` already pointing at an open file. Every
    failure is a bare `return -1`; the method that opened the file closes it and
@@ -1536,6 +1555,8 @@ static int emit_unit_body(struct Emitter *self, int u)
 "}\n"
         , self->out);
     }
+
+    if (g_slice_used && *g_slice_used) emit_slice_helpers(self);
 
     if (self->emit_struct_fwd() != 0) return -1;
     if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 2) != 0) return -1;
@@ -2401,6 +2422,48 @@ static int hoist_ctype(int n, char *out, int cap, int *depth)
     return ex->static_ctype(n, out, cap, depth, 0);
 }
 
+/* P-7.2: the erased slice representation and its helpers. A slice is
+   `{ptr,len}`; the element type is erased here and restored by the cast at
+   each use, so one struct serves every `T[]` and no per-element name is
+   registered. `__ct_slice_at` is the checked place (`s[i]`), `__ct_slice_get`
+   the soft access (`s.get(i)`), `__ct_slice_range` the subslice constructor
+   (the bounds a literal array length already proved are checked again here
+   for the forms only a length at run time can judge). All three are `static`
+   and marked unused, so a program that never calls one stays warning-free. */
+static void emit_slice_helpers(struct Emitter *self)
+{
+    fputs("#include <stdio.h>\n#include <stdlib.h>\n", self->out);
+    fputs("struct __ct_slice { void *ptr; int len; };\n", self->out);
+    fputs("static void __attribute__((unused)) __ct_slice_check(struct __ct_slice *s, int i)\n"
+          "{\n"
+          "    if (i < 0 || i >= s->len) {\n"
+          "        fprintf(stderr, \"ct: slice index %d out of bounds (length %d)\\n\", i, s->len);\n"
+          "        exit(1);\n"
+          "    }\n"
+          "}\n"
+          "static void *__attribute__((unused)) __ct_slice_at(struct __ct_slice *s, int i, unsigned long esz)\n"
+          "{\n"
+          "    __ct_slice_check(s, i);\n"
+          "    return (char *)s->ptr + (unsigned long)i * esz;\n"
+          "}\n"
+          "static void *__attribute__((unused)) __ct_slice_get(struct __ct_slice s, int i, unsigned long esz)\n"
+          "{\n"
+          "    if (i < 0 || i >= s.len) return 0;\n"
+          "    return (char *)s.ptr + (unsigned long)i * esz;\n"
+          "}\n"
+          "static struct __ct_slice __attribute__((unused)) __ct_slice_range(void *p, int len, int lo, int hi, unsigned long esz, const char *where)\n"
+          "{\n"
+          "    struct __ct_slice s;\n"
+          "    if (lo < 0 || hi < lo || hi > len) {\n"
+          "        fprintf(stderr, \"%s: slice construction out of bounds: [%d,%d) for length %d\\n\", where, lo, hi, len);\n"
+          "        exit(1);\n"
+          "    }\n"
+          "    s.ptr = (char *)p + (unsigned long)lo * esz;\n"
+          "    s.len = hi - lo;\n"
+          "    return s;\n"
+          "}\n\n", self->out);
+}
+
 impl EmitOps for Emitter {
     /* Phase 38 battle p38-1: a receiver is unstable when evaluating it twice
        can observe a different value. Calls are stable once the hoist pass has
@@ -2740,6 +2803,8 @@ impl EmitOps for Emitter {
 "}\n"
         , self->out);
     }
+
+    if (g_slice_used && *g_slice_used) emit_slice_helpers(self);
 
         if (self->emit_struct_fwd() != 0) return -1;
         if (self->emit_trait_decls() != 0) return -1;
@@ -4609,7 +4674,18 @@ impl EmitOps for Emitter {
             self->ntmp++;
             self->emit_indent(ind);
             fputs("{\n", self->out);
-            if (faux == 1 || faux == 2) {
+            if (faux == 3) {
+                /* P-7.2: a slice carries its own length; the view is
+                   address-taken once and every element read goes through the
+                   checked helper, so the loop cannot run past the view. */
+                self->emit_indent(ind + 1);
+                fprintf(self->out, "struct __ct_slice *__ct_foreach_c_%d = &(", k);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(");\n", self->out);
+                self->emit_indent(ind + 1);
+                fprintf(self->out, "int __ct_foreach_n_%d = __ct_foreach_c_%d->len;\n",
+                        k, k);
+            } else if (faux == 1 || faux == 2) {
                 /* Phase 29 (D29-13): a built-in container snapshots its length
                    once and reads each element through the inherent `get` /
                    `entry`, so modifying the container in the body cannot run
@@ -4648,6 +4724,11 @@ impl EmitOps for Emitter {
                 fprintf(self->out,
                         "%s item = %s_entry(__ct_foreach_c_%d, __ct_foreach_i_%d);\n",
                         self->arena->nodes[n].text, fname, k, k);
+            else if (faux == 3)
+                fprintf(self->out,
+                        "%s item = (*(%s *)__ct_slice_at(__ct_foreach_c_%d, __ct_foreach_i_%d, sizeof(%s)));\n",
+                        self->arena->nodes[n].text, self->arena->nodes[n].text,
+                        k, k, self->arena->nodes[n].text);
             else {
                 fprintf(self->out, "%s item = (", self->arena->nodes[n].text);
                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
@@ -5066,6 +5147,76 @@ impl EmitOps for Emitter {
             fputs("[", self->out);
             if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
             fputs("]", self->out);
+            return 0;
+        }
+        /* P-7.2: `s[i]` is a checked place. The cast spells the element type
+           the erased struct does not carry, and the dereference keeps the
+           result an lvalue, so reads and writes share one emission. */
+        if (self->arena->nodes[n].kind == N_SLICE_INDEX) {
+            const char *et = self->arena->nodes[n].text;
+            fputs("(*(", self->out);
+            fputs(et, self->out);
+            fputs(" *)__ct_slice_at(&(", self->out);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fputs("), ", self->out);
+            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+            fputs(", sizeof(", self->out);
+            fputs(et, self->out);
+            fputs(")))", self->out);
+            return 0;
+        }
+        /* P-7.2: `s.get(i)` returns 0 when out of range; the caller owns the
+           null check (the soft-access contract). */
+        if (self->arena->nodes[n].kind == N_SLICE_GET) {
+            const char *et = self->arena->nodes[n].text;
+            fputs("((", self->out);
+            fputs(et, self->out);
+            fputs(" *)__ct_slice_get(", self->out);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fputs(", ", self->out);
+            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+            fputs(", sizeof(", self->out);
+            fputs(et, self->out);
+            fputs(")))", self->out);
+            return 0;
+        }
+        /* P-7.2: `a[lo..hi]` / `a[lo..]` builds the `{ptr,len}` pair through
+           the range helper, which owns the run-time bound check. The array
+           form passes `sizeof` as its length and the slice form `.len`. */
+        if (self->arena->nodes[n].kind == N_SLICE_RANGE) {
+            const char *et = self->arena->nodes[n].text;
+            fputs("__ct_slice_range((void *)(", self->out);
+            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+            fputs(self->arena->nodes[n].aux == 1 ? "), " : ").ptr, ", self->out);
+            if (self->arena->nodes[n].aux == 1) {
+                fputs("(int)(sizeof(", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(") / sizeof((", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(")[0]))", self->out);
+            } else {
+                fputs("(", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(").len", self->out);
+            }
+            fputs(", ", self->out);
+            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
+            fputs(", ", self->out);
+            if (self->arena->nodes[n].c >= 0) {
+                if (self->emit_expr(self->arena->nodes[n].c) != 0) return -1;
+            } else if (self->arena->nodes[n].aux == 1) {
+                fputs("(int)(sizeof(", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(") / sizeof((", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(")[0])", self->out);
+            } else {
+                fputs("(", self->out);
+                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                fputs(").len", self->out);
+            }
+            fprintf(self->out, ", sizeof(%s), \"%s:%d\")", et, self->path,
+                    self->arena->nodes[n].line);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_ADDR) {
@@ -6712,11 +6863,12 @@ void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
 
 /* PH-64: the bare-metal flags live in their own bind, so the long table
    signature above does not grow for two scalars. */
-pub void ct_emit_bind_flags(int *freestanding, char *alloc_map);
-void ct_emit_bind_flags(int *freestanding, char *alloc_map)
+pub void ct_emit_bind_flags(int *freestanding, char *alloc_map, int *slice_used);
+void ct_emit_bind_flags(int *freestanding, char *alloc_map, int *slice_used)
 {
     g_emit.freestanding = freestanding;
     g_emit.alloc_map = alloc_map;
+    g_slice_used = slice_used;
 }
 
 pub void ct_emit_bind_builtin_live(int *live);
@@ -6725,6 +6877,7 @@ void ct_emit_bind_builtin_live(int *live)
 {
     g_emit.builtin_live = live;
 }
+
 
 /* `--alloc A[,B[,C[,D]]]` is parsed at emission time, not at bind time: the
    bind runs before the driver has read the command line. Defaults keep libc, so

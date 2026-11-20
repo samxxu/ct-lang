@@ -29,6 +29,9 @@ import tool::diag::Diag;
 #define MAX_TEXT 160
 #define T_EOF 0
 #define T_ID 1
+#define N_CALL 7
+#define N_VAR 10
+#define N_SLICE_RANGE 75
 #define T_NUM 2
 #define T_PUNCT 4
 
@@ -74,7 +77,20 @@ pub trait SupportOps {
     int  leak_return(int ret, int conditional, int line);
     int  leak_delete(int e);
     int  skip_body(void);
+    /* P-7.2: note that the unit uses a slice, so the emitter writes the
+       `{ptr,len}` struct and its helpers. The flag lives on `Parser`; the
+       pointer is bound by `ct_parse_bind`. */
+    void note_slice(void);
+    /* P-7.2: is the expression a slice view (a slice variable, a subslice or
+       a call returning `T[]`)? Used by the placement checks that must refuse
+       storing a view in an interface / closure environment. */
+    int  expr_is_slice(int n);
     int  init_raw(char *out, int cap);
+    /* P-7.2: `[` `]` lookahead used by every declaration position, so a slice
+       spelling can be accepted (local / parameter) or refused (field / global)
+       with the placement named. It sits here rather than on the expression
+       object because that trait is at its method cap. */
+    int  slice_brackets_ahead(int *line, int *col);
     int  skip_after_error(void);
     const char *last_error(void);
 }
@@ -92,6 +108,8 @@ pub struct ParseSupport {
     char errfile[1024];         /* the input the message was recorded against */
     int  errline;               /* 0 = a driver-level message, no source position */
     int  errcol;
+    /* P-7.2: points at the parser's slice-use flag. */
+    int *slice_used;
 } use SupportOps;
 
 pub struct ParseSupport *parse_support_get(void);
@@ -102,6 +120,66 @@ impl SupportOps for ParseSupport {
         int n = self->arena->alloc(kind, self->lex->tokline);
         if (n < 0) return self->fail("too many AST nodes");
         return n;
+    }
+
+    void note_slice(void)
+    {
+        if (self->slice_used) *self->slice_used = 1;
+    }
+
+    int expr_is_slice(int n)
+    {
+        int vi;
+        char rt[MAX_TEXT];
+        if (n < 0) return 0;
+        if (self->arena->nodes[n].kind == N_VAR) {
+            vi = self->sym->find_var(self->arena->nodes[n].text2);
+            return vi >= 0 && self->sym->vars[vi].is_slice;
+        }
+        if (self->arena->nodes[n].kind == N_SLICE_RANGE) return 1;
+        if (self->arena->nodes[n].kind == N_CALL) {
+            rt[0] = 0;
+            if (self->ty->expr_type(n, rt, (int)sizeof rt) == 0
+                && strcmp(rt, "struct __ct_slice") == 0)
+                return 1;
+        }
+        return 0;
+    }
+
+    /* P-7.2: `[` `]` lookahead without consuming. The lexer has no peek, so
+       the whole cursor state is saved and restored the way the parser's
+       `record_body_ahead` does. */
+    int slice_brackets_ahead(int *line, int *col)
+    {
+        int sp, sbol, stok, sline, stokline, sstart, slstart, r;
+        long snum;
+        char stext[MAX_TEXT];
+
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0))
+            return 0;
+        if (line) *line = self->lex->tokline;
+        if (col) *col = self->lex->tokstart - self->lex->lstart + 1;
+        sp = self->lex->pos;
+        sbol = self->lex->bol;
+        stok = self->lex->tok;
+        snum = self->lex->toknum;
+        sline = self->lex->line;
+        stokline = self->lex->tokline;
+        sstart = self->lex->tokstart;
+        slstart = self->lex->lstart;
+        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        self->lex_next();
+        r = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0);
+        self->lex->pos = sp;
+        self->lex->bol = sbol;
+        self->lex->tok = stok;
+        self->lex->toknum = snum;
+        self->lex->line = sline;
+        self->lex->tokline = stokline;
+        self->lex->tokstart = sstart;
+        self->lex->lstart = slstart;
+        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        return r;
     }
 
     /* A source diagnostic: the position is the token the parser stopped at, and
@@ -499,6 +577,21 @@ impl SupportOps for ParseSupport {
     {
         const char *why;
         int box;
+        char msg[MAX_TEXT * 2];
+        /* P-7.2 (P-4.1): an interface slot owns the concrete value it boxes;
+           a slice is a non-owning view and cannot be stored there. The
+           declaration / assignment sites also check with their own accurate
+           positions; this central guard covers the remaining boxing paths
+           (arguments, returns, container elements). */
+        if (self->expr_is_slice(n)) {
+            snprintf(msg, sizeof msg,
+                     "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view",
+                     trait);
+            return tool::diag::ct_sem_error(self->arena->nodes[n].line,
+                                            self->arena->nodes[n].num > 0
+                                                ? self->arena->nodes[n].num : 1,
+                                            msg, self->mem->path);
+        }
         self->ty->errmsg[0] = 0;
         box = self->ty->maybe_box(n, trait, addr);
         if (box < 0) {

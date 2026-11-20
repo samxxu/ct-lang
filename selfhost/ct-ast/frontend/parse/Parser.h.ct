@@ -232,6 +232,9 @@ pub struct Parser {
        struct template registers itself with the build-wide registry before the
        caller sees the node, so it needs the flag here. */
     int  decl_pub;
+    /* P-7.2: set when the unit uses a slice; `main` binds the emitter to this
+       flag so the slice struct and helpers are emitted only for such a run. */
+    int  slice_used;
 } use ParseOps, ParseDeclOps;
 
 /* The struct a `borrow`-able type points to, or -1 when the type is not a
@@ -1550,7 +1553,7 @@ impl ParseOps for Parser {
         char gns[MAX_TEXT];
         char tparam[MAX_TEXT];
         char bound[MAX_TEXT];
-        int is_generic;
+        int is_generic, ret_slice;
         (void)self;
 
         /* a leading attribute was captured by `top_decl`; it is this
@@ -1565,6 +1568,22 @@ impl ParseOps for Parser {
         func_col = self->lex->tokstart - self->lex->lstart + 1;
         self->ex->saw_atomic = 0;
         if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+        /* P-7.2: `T[] name(` is a function returning a slice (a view the
+           caller must not outlive); `T[] name =` / `T[] name;` is a
+           file-scope variable, refused below. The return position is legal
+           because P-4.3 judges it through the return lint, not the placement
+           matrix. */
+        ret_slice = 0;
+        {
+            int sl, sc;
+            if (self->sup->slice_brackets_ahead(&sl, &sc)) {
+                self->sup->lex_next();
+                if (self->sup->expect("]") != 0) return -1;
+                ret_slice = 1;
+                self->sup->note_slice();
+                snprintf(ret, sizeof ret, "struct __ct_slice");
+            }
+        }
         if (self->ex->fnptr_state) {
             snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
         } else {
@@ -1656,6 +1675,12 @@ impl ParseOps for Parser {
         }
         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
             int g, e;
+            /* P-7.2 (P-4.1): a file-scope variable would outlive the view it
+               stores. A function return type is judged by the return lint. */
+            if (ret_slice)
+                return tool::diag::ct_sem_error(func_line, func_col,
+                    "a slice 'T[]' cannot be a file-scope variable; keep it a local or a parameter",
+                    self->mem->path);
             /* A namespaced global is emitted under a prefixed C name, the same
                rule `pub` functions follow; `extern` is exempt because the symbol
                belongs to the C library and keeps its own spelling. `gns` is the
@@ -2079,6 +2104,8 @@ impl ParseOps for Parser {
     {
         int first, tail, p, ar, ao;
         int seen_borrow, seen_ref, seen_out, bline, bcol;
+        int is_slice, slice_const, slice_line, slice_col;
+        char slice_elem[MAX_TEXT];
         char typebuf[MAX_TEXT];
         char name[MAX_TEXT];
         (void)self;
@@ -2123,6 +2150,26 @@ impl ParseOps for Parser {
                 self->sup->lex_next();
             }
             if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+            /* P-7.2: `T[] name` is a slice parameter. Its C storage is the
+               erased `struct __ct_slice`; the element spelling travels in the
+               symbol row. Parameters are allowed placements (A.4). */
+            is_slice = 0;
+            slice_const = 0;
+            slice_elem[0] = 0;
+            slice_line = self->lex->tokline;
+            slice_col = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->sup->slice_brackets_ahead(&slice_line, &slice_col)) {
+                self->sup->lex_next();
+                if (self->sup->expect("]") != 0) return -1;
+                is_slice = 1;
+                self->sup->note_slice();
+                snprintf(slice_elem, sizeof slice_elem, "%s", typebuf);
+                if (strncmp(slice_elem, "const ", 6) == 0) {
+                    slice_const = 1;
+                    memmove(slice_elem, slice_elem + 6, strlen(slice_elem + 6) + 1);
+                }
+                snprintf(typebuf, sizeof typebuf, "struct __ct_slice");
+            }
             if (self->ex->fnptr_state) {
                 /* the declarator name came with the type (`int (*cb)(void *)`) */
                 snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
@@ -2167,6 +2214,11 @@ impl ParseOps for Parser {
                     /* `out` starts without a value; a normal or `ref`
                        parameter is bound by the caller. */
                     self->sym->vars[vi].initialized = seen_out ? 0 : 1;
+                    if (is_slice) {
+                        self->sym->vars[vi].is_slice = 1;
+                        snprintf(self->sym->vars[vi].slice_elem, MAX_TEXT, "%s", slice_elem);
+                        self->sym->vars[vi].slice_const = slice_const;
+                    }
                 }
             }
             if (self->arena->nodes[p].text3[0]) {
@@ -2393,6 +2445,15 @@ impl ParseOps for Parser {
             }
             if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
             self->field_pub = fpub;
+            /* P-7.2 (P-4.1): a struct field would outlive the view it stores,
+               so `T[]` is a hard error here rather than a silent C struct. */
+            {
+                int sl, sc;
+                if (self->sup->slice_brackets_ahead(&sl, &sc))
+                    return tool::diag::ct_sem_error(sl, sc,
+                        "a slice 'T[]' cannot be a struct field; it is a non-owning view",
+                        self->mem->path);
+            }
         }
         /* the first declarator's stars are part of `typebuf`; later ones bring
            their own, so the base type is kept once (`int *a, b;` makes `b` an
@@ -4276,6 +4337,9 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
     ct_stmt_bind(arena, lex, sym, g_parse.mem, g_parse.sup, g_parse.ex);
     g_parse.st = stmt_get();
     g_parse.ex->st_hook = parser_st_hook;
+    /* P-7.2: the expression / statement layers note a slice through
+       `ParseSupport`, which is the one collaborator all three share. */
+    g_parse.sup->slice_used = &g_parse.slice_used;
 }
 
 pub struct Parser *parse_get(void);

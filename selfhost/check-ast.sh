@@ -1040,6 +1040,15 @@ else
     bad "PH-78-S2c docs" "$(sed -n '1,10p' "$work/p78docs.out")"
 fi
 
+# Phase 79: slices (S3). `test/ast/p79_basic.sh` covers T[] construction,
+# checked places, get, const, placement negatives and the T a[] warning.
+sh test/ast/p79_basic.sh "$work/ct-ast" >"$work/p79basic.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PH-79-S3 slices (E79-1…5 T[], place, get, const, migration)"
+else
+    bad "PH-79-S3 slices" "$(sed -n '1,10p' "$work/p79basic.out")"
+fi
+
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-75-R1 closure (pair-form method argument)"
