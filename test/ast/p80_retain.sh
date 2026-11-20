@@ -63,9 +63,9 @@ run_case() {
                 -o "$work/$name.$san" 2>"$work/$name.$san.cc.err"; then
             bad "$name -fsanitize=$san cc" "$(head -2 "$work/$name.$san.cc.err")"
         elif ! ASAN_OPTIONS=detect_leaks=0 "$work/$name.$san" >"$work/$name.$san.out" 2>"$work/$name.$san.err"; then
-            bad "$name -fsanitize=$san run" "$(head -3 "$work/$name.$san.err")"
+            bad "$name -fsanitize=$san run" "$(cat "$work/$name.$san.err")"
         elif [ -s "$work/$name.$san.err" ]; then
-            bad "$name -fsanitize=$san clean stderr" "$(head -2 "$work/$name.$san.err")"
+            bad "$name -fsanitize=$san clean stderr" "$(cat "$work/$name.$san.err")"
         elif ! cmp -s "$work/$name.$san.out" "test/ast/p80_retain/expected.$name.out"; then
             bad "$name -fsanitize=$san behaviour" "stdout differs"
         else
