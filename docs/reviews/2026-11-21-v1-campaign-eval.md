@@ -51,11 +51,21 @@
 - 自举复用现有 fixpoint；
 - 不依赖未落地特性（含 S4 函子）。
 
-## 5. 争议项（未落计划）
+## 5. 争议项
 
-见 [v1-release-plan §6](../planning/v1-release-plan.md#L172-L188)：D1 重写是否提前、D2 A-strict 门禁、
-D3 ADT 时序、D4 函子依赖、D5 deadline、D6 冻结策略、D7 页首版本注入、D8 三轮自举、
-D9 收益预估。
+| # | 状态 |
+| --- | --- |
+| D1 重写时序 | **已定（2026-11-21）**：独立 v1-pre（PH-84 inventory+spike → PH-85 词法 → PH-86 解析+检查 → PH-87 发射器），不进 v1.0、不推 v1.1 |
+| D2 A-strict 门禁 | 讨论中 |
+| D3 ADT/match 时序 | 讨论中 |
+| D4 函子依赖 | 讨论中 |
+| D5 deadline | 讨论中 |
+| D6 重写期冻结 | 讨论中 |
+| D7 页首版本注入 | 讨论中（与 DOC-63） |
+| D8 三轮自举 | 讨论中（与现有 fixpoint 重叠） |
+| D9 收益预估 | 讨论中（先做 PH-84 spike） |
+
+详见 [v1-release-plan §6](../planning/v1-release-plan.md)。
 
 ## 6. 风险提示
 
