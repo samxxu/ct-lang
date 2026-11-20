@@ -1,0 +1,65 @@
+# PH-78 REV 打回修复 T-7 红证 — baseline ca3354a5 (v0.78.0)
+# ct-ast built from git archive ca3354a5 (v0.78.0), before this fix round.
+# Run date: 2026-11-20; CC=cc (Apple clang).
+
+===== command: CC=cc sh test/ast/p78_basic.sh build/ct-ast ; exit=1 =====
+ok   E78-1 contextual keyword (int out; time_t *ref; parameter named out)
+ok   E78-2 ref/out free function (run)
+ok   E78-2 signature T *, body (*name), call &
+ok   E78-2 hand-written pointer C behaves the same
+ok   E78-2 ABI header spells T *
+ok   E78-3 places: variable/field/*p/array/Vec/Map element
+ok   E78-3 literal rejected
+ok   E78-3 expression rejected
+ok   E78-3 call result rejected
+ok   E78-3 cast rejected
+FAIL p78/basic: SH-95 call-result member rejected
+  wrong diagnostic: 'cc' -std=c99 -I '.ctbuild' '.ctbuild/bad_member_rvalue.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p78basic.fJD9iP/bad_member_rvalue.bin'
+bad_member_rvalue.ct:20:9: error: cannot take the address of an rvalue of type 'int'
+   20 |     inc(&mk().x);
+FAIL p78/basic: SH-95 bit-field member rejected
+  wrong diagnostic: 'cc' -std=c99 -I '.ctbuild' '.ctbuild/bad_bitfield.c' '-o' '/var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p78basic.fJD9iP/bad_bitfield.bin'
+bad_bitfield.ct:16:9: error: address of bit-field requested
+   16 |     inc(&s.x);
+FAIL p78/basic: SH-95 const variable rejected
+  accepted (expected a hard error)
+ok   E78-4 trivial out actual may be uninitialised
+ok   E78-4 owning out actual initialised
+ok   E78-4 owning actual initialised by assignment
+ok   E78-4 owning actual uninitialised rejected
+ok   E78-4 non-owning pointer actual may be uninitialised
+ok   E78-5 if/else assigns on both paths
+ok   E78-5 assignment before return
+ok   E78-5 one if path leaves out unset
+ok   E78-5 early return before assignment
+ok   E78-5 loop is conservative
+ok   E78-5 switch is conservative
+ok   E78-5 goto is conservative
+ok   E78-5 ct check uses the same rule
+
+===== command: CC=cc sh test/ast/p78_method.sh build/ct-ast ; exit=1 =====
+ok   E78-6 trait method ref/out (dispatch, run)
+ok   E78-6 vtable slot, definition, body and call site
+ok   E78-6 generic trait impl ref/out (run)
+ok   E78-6 trait default body ref/out (run)
+ok   E78-6 inherent method ref/out (run)
+ok   E78-6 generic inherent method ref/out (run)
+ok   E78-6 static inherent method ref/out (run)
+FAIL p78/method: SH-96 method self passed to ref without & (run)
+  the built program exited non-zero
+ok   E78-6 method out must be assigned on every path
+ok   E78-6 method actual must be a place
+ok   E78-6 method actual base type is checked
+ok   E78-6 impl annotation must match the trait
+ok   E78-6 default body obeys out L1
+
+===== command: CC=cc sh test/ast/p78_docs.sh ; exit=1 =====
+ok   spec has the ref/out section (4.68)
+ok   spec mentions 上下文关键字
+ok   spec mentions lvalue
+ok   spec mentions 定值
+ok   spec mentions 边界
+ok   spec records the array/function-pointer boundary
+ok   tutorial has the ref/out section (15)
+ok   tutorial shows the ref/out spelling and the emitted pointer form
+FAIL p78/docs: package-guide does not document ref/out at the C ABI boundary

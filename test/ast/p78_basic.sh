@@ -198,6 +198,27 @@ int main(void) { inc((int)3); return 0; }
 CT
 expect_err bad_cast "E78-3 cast rejected" "ref/out argument must be an assignable place"
 
+# SH-95: the place check must reach the base, a bit-field and top-level const.
+cat >"$work/bad_member_rvalue.ct" <<'CT'
+struct P { int x; }
+struct P mk(void) { struct P p = { 1 }; return p; }
+void inc(ref int x) { x = x + 1; }
+int main(void) { inc(mk().x); return 0; }
+CT
+expect_err bad_member_rvalue "SH-95 call-result member rejected" "ref/out argument must be an assignable place"
+cat >"$work/bad_bitfield.ct" <<'CT'
+struct S { int x : 3; }
+void inc(ref int x) { x = x + 1; }
+int main(void) { struct S s = { 0 }; inc(s.x); return 0; }
+CT
+expect_err bad_bitfield "SH-95 bit-field member rejected" "ref/out argument must be an assignable place"
+cat >"$work/bad_const_var.ct" <<'CT'
+const int g = 1;
+void inc(ref int x) { x = x + 1; }
+int main(void) { inc(g); return 0; }
+CT
+expect_err bad_const_var "SH-95 const variable rejected" "ref/out argument must be an assignable place"
+
 # ---------------------------------------------------------------- E78-4
 cat >"$work/out_trivial.ct" <<'CT'
 struct P { int x; }

@@ -11,6 +11,7 @@ set -u
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 spec=$root/docs/language-spec.md
 tut=$root/docs/tutorial.md
+guide=$root/docs/package-guide.md
 fail=0
 
 ok()  { printf 'ok   %s\n' "$1"; }
@@ -18,6 +19,7 @@ bad() { echo "FAIL p78/docs: $1" >&2; fail=1; }
 
 [ -f "$spec" ] || { bad "docs/language-spec.md missing"; exit 1; }
 [ -f "$tut" ] || { bad "docs/tutorial.md missing"; exit 1; }
+[ -f "$guide" ] || { bad "docs/package-guide.md missing"; exit 1; }
 
 if grep -q '^### 4\.68 .*`ref`.*`out`' "$spec"; then
     ok "spec has the ref/out section (4.68)"
@@ -46,6 +48,13 @@ if grep -q 'ref int' "$tut" && grep -q 'out int' "$tut" && grep -q '(\*name)' "$
     ok "tutorial shows the ref/out spelling and the emitted pointer form"
 else
     bad "tutorial does not show ref/out spelling"
+fi
+
+# SH-97: the package guide must carry the C-boundary/ABI contract.
+if grep -q 'ref' "$guide" && grep -q 'out' "$guide" && grep -q 'int bump(int \*)' "$guide"; then
+    ok "package-guide documents ref/out at the C ABI boundary"
+else
+    bad "package-guide does not document ref/out at the C ABI boundary"
 fi
 
 [ "$fail" -eq 0 ] && echo "p78_docs: OK"

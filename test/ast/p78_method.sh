@@ -179,6 +179,17 @@ int main(void)
 CT
 run_ok inherent_static "E78-6 static inherent method ref/out (run)"
 
+# SH-96: `self` is already the receiver pointer; it must not be addressed.
+cat >"$work/self_ref.ct" <<'CT'
+struct S { int v; }
+impl S {
+    void bump(ref S s) { s.v = 1; }
+    void go(void) { self.bump(self); }
+}
+int main(void) { struct S s = { 0 }; s.go(); return (s.v == 1) ? 0 : 1; }
+CT
+run_ok self_ref "SH-96 method self passed to ref without & (run)"
+
 # --------------------------------------------------------- negatives
 cat >"$work/bad_out.ct" <<'CT'
 trait Touch { void bump(ref int x, out int y); }
