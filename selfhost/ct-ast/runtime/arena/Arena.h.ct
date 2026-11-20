@@ -38,6 +38,12 @@ pub struct Node {
     /* Phase 53: the receiver type of an optional-chain node, kept beside the
        result type so the emitter can declare its `__ct_optN` temporary. */
     char text4[160];
+    /* PH-80 SH-102: the ownership facts the parser learned about a declaration,
+       assignment or return that feeds an owning `String` / `U16String` handle.
+       Bit 1 (2) = the value comes from a borrowed view, so a binding must not
+       claim a reference. The emitter's automatic retain/release reads it; the
+       node kinds that carry no such meaning leave it zero. */
+    int  sflags;
 }
 
 pub trait ArenaOps {

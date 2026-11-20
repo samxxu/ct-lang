@@ -8536,10 +8536,18 @@ int expr_borrow_root(struct Expr *self, int n)
             && (strcmp(self->arena->nodes[n].text2, "get") == 0
                 || strcmp(self->arena->nodes[n].text2, "entry") == 0)) {
             const char *ty = self->arena->nodes[n].text;
+            /* SH-102: the receiver is spelled as the template (`Vec<String>`)
+               while the method body still sees the type, and as the encoded
+               instance (`Vec_String`) once the row exists; either spelling is
+               the same container. */
             if (strncmp(ty, "struct Vec_", 11) == 0
                 || strncmp(ty, "Vec_", 4) == 0
+                || strncmp(ty, "struct Vec<", 10) == 0
+                || strncmp(ty, "Vec<", 4) == 0
                 || strncmp(ty, "struct Map_", 11) == 0
-                || strncmp(ty, "Map_", 4) == 0)
+                || strncmp(ty, "Map_", 4) == 0
+                || strncmp(ty, "struct Map<", 10) == 0
+                || strncmp(ty, "Map<", 4) == 0)
                 return 1;
         }
         return 0;

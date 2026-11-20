@@ -235,6 +235,38 @@ trait EmitOps {
     int  fail_from(int n, const char *msg);
 }
 
+/* PH-80 SH-102 (D-013 §3): the automatic retain / release bookkeeping for the
+   two owning built-in string handles. It is a nested value rather than a dozen
+   more fields on `Emitter`, whose `pub struct` field budget is 64:
+     - `name` / `type` / `own`: the owning bindings in the body being written
+       (`own` 0 marks a borrowed view, which is never retained or released);
+     - `blk`: the binding depth at each statement block, so a `break` /
+       `continue` can release what the skipped closing brace would;
+     - `ln` / `lname` / `ltype`: every local and parameter in scope, so a field
+       target such as `h.tag = s` resolves the struct's field type after the
+       parser's symbol table has popped the block;
+     - `hitparam`: the assignment target is the enclosing template's type
+       parameter, whose lifecycle the container glue already manages;
+     - `method` / `recv`: the body being written, so the built-in borrow / move
+       protocols (`Vec.get`, `Vec.pop`, `Map.entry`) keep their semantics.
+   The array lengths are the documented caps. */
+pub struct StrRetain {
+    int  n;
+    char name[256][160];
+    char type[256][160];
+    int  own[256];
+    int  blk[256];
+    int  nblk;
+    int  pending;       /* the next N_BLOCK is a function body: retain params */
+    int  ln;
+    char lname[512][160];
+    char ltype[512][160];
+    int  lblk[256];
+    int  hitparam;
+    char method[160];
+    char recv[160];
+}
+
 /* The driver points the collaborators, the module tables, the options and the
    output sink at one run's state. The emission scratch (hoisted temporaries)
    lives here too; the parser's signature/field scratch is only *pointed at*
@@ -347,7 +379,506 @@ struct Emitter {
        per-instance helper, so no AST copy is needed. Empty outside an instance
        method. */
     char ginst[160];
+    /* PH-80 SH-102 (D-013 §3): the owning by-value `String` / `U16String`
+       bindings in the body being written. A by-value parameter is retained at
+       entry, every owning local is released at scope exit, and an assignment
+       retains the right-hand side before releasing the old value. `sb_own` is 0
+       for a borrowed view (a `Vec.get` / `Map.get` result), which must neither
+       be retained nor released. `sb_blk` holds the binding depth at each
+       statement block so a `break` / `continue` can release what the skipped
+       closing brace would have. The literals are the documented caps. */
 } use EmitOps;
+
+/* SH-102: one bookkeeping block for the whole emitter (the instance itself is
+   private to this unit and single-threaded), so the `pub struct Emitter`
+   field budget is untouched. */
+static struct StrRetain g_sb;
+
+/* defined further down; `sb_norm` needs it to substitute a template spelling */
+static int emit_gsub_type(struct Emitter *self, const char *type, char *buf, int cap);
+
+/* SH-102: the method prefix for a kind from `ct_is_string_value_type`. */
+static const char *sb_prefix(int kind)
+{
+    return kind == 2 ? "U16String" : "String";
+}
+
+/* The innermost tracked binding named `name`, or -1. */
+static int sb_find(struct Emitter *self, const char *name)
+{
+    int i;
+    for (i = g_sb.n - 1; i >= 0; i--)
+        if (strcmp(g_sb.name[i], name) == 0) return i;
+    return -1;
+}
+
+static void sb_push(struct Emitter *self, const char *name, const char *type, int own)
+{
+    int i;
+    if (g_sb.n >= 256) return;
+    i = g_sb.n;
+    snprintf(g_sb.name[i], MAX_TEXT, "%s", name);
+    snprintf(g_sb.type[i], MAX_TEXT, "%s", type);
+    g_sb.own[i] = own;
+    g_sb.n++;
+}
+
+/* The innermost local / parameter of `name`, or -1. */
+static int sb_lfind(struct Emitter *self, const char *name)
+{
+    int i;
+    for (i = g_sb.ln - 1; i >= 0; i--)
+        if (strcmp(g_sb.lname[i], name) == 0) return i;
+    return -1;
+}
+
+static void sb_lpush(struct Emitter *self, const char *name, const char *type)
+{
+    int i;
+    if (g_sb.ln >= 512) return;
+    i = g_sb.ln;
+    snprintf(g_sb.lname[i], MAX_TEXT, "%s", name);
+    snprintf(g_sb.ltype[i], MAX_TEXT, "%s", type);
+    g_sb.ln++;
+}
+
+/* The concrete C spelling of a type that may still be template-shaped. */
+static void sb_norm(struct Emitter *self, const char *in, char *out, int cap)
+{
+    char mid[MAX_TEXT];
+    const char *t = in;
+    if (emit_gsub_type(self, in, mid, sizeof mid) == 0) t = mid;
+    if (strchr(t, '<')) {
+        char res[MAX_TEXT];
+        if (frontend::sym::ct_inst_resolve(t, res, sizeof res) == 0) t = res;
+    }
+    snprintf(out, (size_t)cap, "%s", t);
+}
+
+/* 1 when the declared (pre-substitution) spelling is one of the template
+   parameters in scope, i.e. the place is a container element the templates
+   already retain/release themselves. */
+static int sb_is_tparam(struct Emitter *self, const char *raw)
+{
+    char t[MAX_TEXT];
+    size_t n;
+    snprintf(t, sizeof t, "%s", raw ? raw : "");
+    n = strlen(t);
+    while (n > 0 && (t[n - 1] == ' ' || t[n - 1] == '\t' || t[n - 1] == '*')) n--;
+    t[n] = 0;
+    if (n == 0) return 0;
+    if (self->gtparam[0] && strcmp(t, self->gtparam) == 0) return 1;
+    if (self->gtparam2[0] && strcmp(t, self->gtparam2) == 0) return 1;
+    return 0;
+}
+
+/* The static C type of a place-shaped expression (a variable, a field, a
+   deref or a subscript), or -1 when it cannot be resolved. Only the destination
+   of a string assignment needs this; an rvalue is classified by its node kind. */
+static int sb_expr_type(struct Emitter *self, int n, char *out, int cap)
+{
+    char t[MAX_TEXT];
+    int k, i;
+    size_t ln;
+
+    if (n < 0) return -1;
+    k = self->arena->nodes[n].kind;
+    if (k == N_VAR) {
+        i = sb_lfind(self, self->arena->nodes[n].text2);
+        if (i >= 0) {
+            if (sb_is_tparam(self, g_sb.ltype[i])) g_sb.hitparam = 1;
+            sb_norm(self, g_sb.ltype[i], out, cap);
+            return 0;
+        }
+        i = self->sym->find_var(self->arena->nodes[n].text2);
+        if (i >= 0) {
+            if (sb_is_tparam(self, self->sym->vars[i].type)) g_sb.hitparam = 1;
+            sb_norm(self, self->sym->vars[i].type, out, cap);
+            return 0;
+        }
+        return -1;
+    }
+    if (k == N_MEMBER || k == N_ARROW) {
+        char sname[MAX_TEXT];
+        int is_ptr, si, fi;
+        if (sb_expr_type(self, self->arena->nodes[n].a, t, sizeof t) != 0) return -1;
+        is_ptr = (k == N_ARROW);
+        if (!self->ty->concrete_struct(t, sname, sizeof sname, &is_ptr)) return -1;
+        si = self->sym->find_struct(sname);
+        if (si < 0) return -1;
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+            if (strcmp(self->sym->structs[si].fields[fi].name,
+                       self->arena->nodes[n].text2) == 0) {
+                if (self->sym->structs[si].fields[fi].dims[0]) return -1;
+                /* an instance row carries substituted field types; the
+                   template row keeps `T` / `V`, which is how a container
+                   element assignment is recognised */
+                if (self->sym->structs[si].is_inst) {
+                    int i2, nt;
+                    struct StructInst *ins2 = frontend::sym::ct_insts(&nt);
+                    int k2 = ins2 ? frontend::sym::ct_inst_find(self->sym->structs[si].name) : -1;
+                    if (k2 >= 0) {
+                        int tm = frontend::sym::ct_tmpl_find(ins2[k2].tmpl);
+                        int ntm, tf;
+                        struct StructTmpl *tps2 = frontend::sym::ct_tmpls(&ntm);
+                        if (tm >= 0 && tps2) {
+                            for (tf = 0; tf < tps2[tm].nfields; tf++)
+                                if (strcmp(tps2[tm].fields[tf].name, self->arena->nodes[n].text2) == 0)
+                                    if (sb_is_tparam(self, tps2[tm].fields[tf].type))
+                                        g_sb.hitparam = 1;
+                        }
+                        (void)i2;
+                    }
+                }
+                sb_norm(self, self->sym->structs[si].fields[fi].type, out, cap);
+                return 0;
+            }
+        return -1;
+    }
+    if (k == N_DEREF) {
+        if (sb_expr_type(self, self->arena->nodes[n].a, out, cap) != 0) return -1;
+        ln = strlen(out);
+        while (ln > 0 && out[ln - 1] == ' ') ln--;
+        if (ln == 0 || out[ln - 1] != '*') return -1;
+        ln--;
+        while (ln > 0 && out[ln - 1] == ' ') ln--;
+        out[ln] = 0;
+        return 0;
+    }
+    if (k == N_INDEX) {
+        if (sb_expr_type(self, self->arena->nodes[n].a, out, cap) != 0) return -1;
+        /* an array declarator's type carries no star, so only a pointer base
+           loses one; an array base already names the element */
+        ln = strlen(out);
+        while (ln > 0 && out[ln - 1] == ' ') ln--;
+        if (ln > 0 && out[ln - 1] == '*') {
+            ln--;
+            while (ln > 0 && out[ln - 1] == ' ') ln--;
+            out[ln] = 0;
+        }
+        return 0;
+    }
+    return -1;
+}
+
+/* 1 when the expression hands over a fresh owning reference (a call result, a
+   literal or a null handle); 0 when it is a place that still owns its own
+   reference and must be retained by the destination. */
+static int sb_rhs_fresh(struct Emitter *self, int n)
+{
+    int k;
+    if (n < 0) return 1;
+    k = self->arena->nodes[n].kind;
+    if (k == N_CALL || k == N_MCALL || k == N_STR || k == N_NUM) return 1;
+    /* the postfix `?` hands its payload over (it clears the carrier) */
+    if (k == N_TRY) return 1;
+    if (k == N_CAST) return sb_rhs_fresh(self, self->arena->nodes[n].a);
+    return 0;
+}
+
+/* 1 when the expression is a C place, so `&(expr)` is legal. Anything else is
+   read into a temporary before it is retained. */
+static int sb_is_place(struct Emitter *self, int n)
+{
+    int k;
+    if (n < 0) return 0;
+    k = self->arena->nodes[n].kind;
+    return k == N_VAR || k == N_MEMBER || k == N_ARROW || k == N_INDEX
+           || k == N_DEREF || k == N_SLICE_INDEX;
+}
+
+/* Release the tracked bindings [base, sb_n) in reverse declaration order,
+   skipping `skip` (a handle that a `return` moves out). */
+static int sb_release_from(struct Emitter *self, int base, int skip, int ind)
+{
+    int i, kind;
+    if (base < 0) base = 0;
+    for (i = g_sb.n - 1; i >= base; i--) {
+        if (i == skip || !g_sb.own[i]) continue;
+        kind = frontend::sym::ct_is_string_value_type(g_sb.type[i]);
+        if (!kind) continue;
+        self->emit_indent(ind);
+        fprintf(self->out, "%s_release(&%s);\n", sb_prefix(kind), g_sb.name[i]);
+    }
+    return 0;
+}
+
+/* 1 when the method being written is one of the built-in container protocols
+   whose by-value return is a borrow (`get`, `entry`) or a move (`pop`). The
+   element glue already carries the reference, so the automatic retain must not
+   add a second one. */
+static int sb_container_view(struct Emitter *self, const char *method, int move_ok)
+{
+    if (!g_sb.recv[0]) return 0;
+    if (strncmp(g_sb.recv, "Vec_", 4) != 0 && strncmp(g_sb.recv, "Map_", 4) != 0)
+        return 0;
+    if (strcmp(g_sb.method, method) != 0) return 0;
+    (void)move_ok;
+    return 1;
+}
+
+/* 1 when a return type can hand back a view of a local owning handle: a
+   borrowed `Str` / `U16Str`, a slice, or any pointer. Releasing that local
+   would dangle the view, so the escape is left to the author (the P-4.5
+   pass-through rule) and the binding is not released on that path. */
+static int sb_view_ret(const char *t)
+{
+    if (t == 0) return 0;
+    if (strncmp(t, "struct ", 7) == 0) t += 7;
+    if (strcmp(t, "Str") == 0 || strcmp(t, "U16Str") == 0
+        || strcmp(t, "__ct_slice") == 0) return 1;
+    if (strchr(t, '*')) return 1;
+    return 0;
+}
+
+/* 1 when a return type can carry a string handle inside it (`Result<String, E>`,
+   `Option<String>`, `Vec_String`, or a named struct with such a field). The
+   aggregate is copied by value, so returning a local handle's value moves it
+   into the aggregate; releasing the local first would dangle it. Not applied
+   when the return type is the handle itself -- that path retains and releases
+   under the ordinary rule. */
+static int sb_type_has_string(struct Emitter *self, const char *t, int depth)
+{
+    char sname[MAX_TEXT];
+    int is_ptr, si, fi;
+    if (t == 0 || depth > 2) return 0;
+    if (frontend::sym::ct_is_string_value_type(t)) return 1;
+    if (strstr(t, "String")) return 1;
+    if (!self->ty->concrete_struct(t, sname, sizeof sname, &is_ptr)) return 0;
+    si = self->sym->find_struct(sname);
+    if (si < 0) return 0;
+    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+        if (sb_type_has_string(self, self->sym->structs[si].fields[fi].type, depth + 1))
+            return 1;
+    return 0;
+}
+
+/* A whole identifier in a captured raw initialiser. */
+static int sb_text_has_word(const char *txt, const char *w)
+{
+    size_t n = strlen(w);
+    const char *p = txt;
+    if (n == 0) return 0;
+    while ((p = strstr(p, w)) != 0) {
+        int left = (p == txt) || !(isalnum((unsigned char)p[-1]) || p[-1] == '_');
+        int right = !(isalnum((unsigned char)p[n]) || p[n] == '_');
+        if (left && right) return 1;
+        p++;
+    }
+    return 0;
+}
+
+/* Does the returned expression name `name`? A compound literal's fields are
+   captured as text (`emit_raw_init`), so the node walk alone cannot see them. */
+static int sb_ret_mentions(struct Emitter *self, int expr, const char *name)
+{
+    int r;
+    if (expr < 0) return 0;
+    if (self->node_mentions(expr, name)) return 1;
+    r = expr;
+    if (self->arena->nodes[r].kind == N_COMPOUND) r = self->arena->nodes[r].a;
+    if (r >= 0 && self->arena->nodes[r].kind == N_RAW) {
+        const char *txt = self->arena->str_at((int)self->arena->nodes[r].num);
+        if (txt && sb_text_has_word(txt, name)) return 1;
+    }
+    return 0;
+}
+
+/* The releases before a `return`: everything in scope except the moved handle
+   and, for a view / aggregate return, the handles the returned expression still
+   names. */
+static int sb_ret_release(struct Emitter *self, int expr, int view, int skip, int ind)
+{
+    int i, kind;
+    for (i = g_sb.n - 1; i >= 0; i--) {
+        if (i == skip || !g_sb.own[i]) continue;
+        if (view && sb_ret_mentions(self, expr, g_sb.name[i])) continue;
+        kind = frontend::sym::ct_is_string_value_type(g_sb.type[i]);
+        if (!kind) continue;
+        self->emit_indent(ind);
+        fprintf(self->out, "%s_release(&%s);\n", sb_prefix(kind), g_sb.name[i]);
+    }
+    return 0;
+}
+
+/* A `return` moving a tracked binding out: the handle leaves with the caller,
+   so the callee must not release it. */
+static int sb_ret_move(struct Emitter *self, int e)
+{
+    if (e < 0) return -1;
+    if (self->arena->nodes[e].kind != N_VAR) return -1;
+    return sb_find(self, self->arena->nodes[e].text2);
+}
+
+/* A `break` / `continue` leaves at least the innermost statement block, whose
+   closing brace the jump skips: release that block's bindings first. */
+static int sb_jump_release(struct Emitter *self, int ind)
+{
+    int base;
+    if (g_sb.nblk <= 0) return 0;
+    base = g_sb.blk[g_sb.nblk - 1];
+    return sb_release_from(self, base, -1, ind);
+}
+
+/* The `String` / `U16String` declaration statement: retain the initialiser when
+   it is another owner's place, zero-initialise a bare declaration so the scope
+   release is always safe, and record the binding. 0 = not ours. */
+static int sb_decl(struct Emitter *self, int n, int ind)
+{
+    const char *tp;
+    int kind, init, borrowed;
+    if (self->arena->nodes[n].kind != N_DECL) return 0;
+    tp = self->arena->nodes[n].text;
+    kind = frontend::sym::ct_is_string_value_type(tp);
+    /* a static local outlives the block; a shadowed auto-drop alias is not a
+       plain binding; an array is not a value */
+    if (self->arena->nodes[n].text3[0] || self->arena->nodes[n].aux == 1
+        || self->arena->nodes[n].aux == 2) return 0;
+    init = self->arena->nodes[n].a;
+    if (init >= 0) {
+        int k = self->arena->nodes[init].kind;
+        if (k == N_INIT_RANGE || k == N_INIT_BRACE || k == N_INIT_MBRACE
+            || k == N_RAW || k == N_CLOSURE) return 0;
+    }
+    if (!kind) {
+        /* a plain local still records its declared type: `h.tag = s` needs it */
+        sb_lpush(self, self->arena->nodes[n].text2, tp);
+        return 0;
+    }
+    if (self->hoist_rvalue(n) != 0) return -1;
+    if (self->emit_hoists(ind) != 0) return -1;
+    self->emit_indent(ind);
+    if (self->emit_type_name_dims(tp, self->arena->nodes[n].text2,
+                                  self->arena->nodes[n].text3) != 0) return -1;
+    borrowed = 0;
+    if (init < 0) {
+        fputs(" = { 0 }", self->out);
+    } else {
+        int wrap;
+        borrowed = (self->arena->nodes[n].sflags & 2) ? 1 : 0;
+        wrap = !borrowed && !sb_rhs_fresh(self, init) && sb_is_place(self, init);
+        fputs(" = ", self->out);
+        if (wrap) fprintf(self->out, "%s_retain(&(", sb_prefix(kind));
+        if (self->emit_expr(init) != 0) return -1;
+        if (wrap) fputs("))", self->out);
+    }
+    fputs(";\n", self->out);
+    sb_lpush(self, self->arena->nodes[n].text2, tp);
+    sb_push(self, self->arena->nodes[n].text2, tp, borrowed ? 0 : 1);
+    return 1;
+}
+
+/* The `String` / `U16String` assignment statement. Reassignment keeps the
+   contract order: hold the old handle, retain (or move) the right-hand side,
+   then release the old value. A field / global / deref target is a storage
+   position: a borrowed source is retained there so the view cannot outlive its
+   container. A local bound to a borrowed view stays a view. */
+static int sb_assign(struct Emitter *self, int n, int ind)
+{
+    char t[MAX_TEXT];
+    int kind, lhs, rhs, idx, borrowed, wrap, release_old, needsrc, k;
+
+    if (self->arena->nodes[n].kind != N_ASSIGN || self->arena->nodes[n].aux != 0)
+        return 0;
+    lhs = self->arena->nodes[n].a;
+    rhs = self->arena->nodes[n].b;
+    if (lhs < 0 || rhs < 0) return 0;
+    k = self->arena->nodes[lhs].kind;
+    if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX
+        && k != N_DEREF && k != N_SLICE_INDEX) return 0;
+    g_sb.hitparam = 0;
+    if (sb_expr_type(self, lhs, t, sizeof t) != 0) return 0;
+    kind = frontend::sym::ct_is_string_value_type(t);
+    if (!kind || g_sb.hitparam) return 0;
+    if (self->hoist_rvalue(n) != 0) return -1;
+    if (self->emit_hoists(ind) != 0) return -1;
+    idx = (k == N_VAR) ? sb_find(self, self->arena->nodes[lhs].text2) : -1;
+    borrowed = (self->arena->nodes[n].sflags & 2) ? 1 : 0;
+    /* a storage position owns a reference even for a borrowed source; a local
+       keeps the borrow. Only a place can be address-taken directly, so a
+       borrowed rvalue (`h.tag = v.get(0)`) goes through a temporary. */
+    if (k != N_VAR) wrap = (borrowed || sb_is_place(self, rhs));
+    else wrap = (!borrowed && sb_is_place(self, rhs));
+    needsrc = wrap && !sb_is_place(self, rhs);
+    release_old = (idx >= 0 && g_sb.own[idx] && !borrowed);
+    self->emit_indent(ind);
+    fputs("{ ", self->out);
+    if (release_old) {
+        fprintf(self->out, "%s __ct_sold%d = ", t, self->ntmp);
+        if (self->emit_expr(lhs) != 0) return -1;
+        fputs("; ", self->out);
+        self->ntmp++;
+    }
+    if (needsrc) {
+        fprintf(self->out, "%s __ct_src%d = ", t, self->ntmp);
+        if (self->emit_expr(rhs) != 0) return -1;
+        fputs("; ", self->out);
+        self->ntmp++;
+    }
+    if (self->emit_expr(lhs) != 0) return -1;
+    fputs(" = ", self->out);
+    if (wrap) fprintf(self->out, "%s_retain(&(", sb_prefix(kind));
+    if (needsrc) fprintf(self->out, "__ct_src%d", self->ntmp - 1);
+    else if (self->emit_expr(rhs) != 0) return -1;
+    if (wrap) fputs("))", self->out);
+    fputs("; ", self->out);
+    if (release_old)
+        fprintf(self->out, "%s_release(&__ct_sold%d); ", sb_prefix(kind), self->ntmp - 1);
+    fputs("}\n", self->out);
+    if (idx >= 0) g_sb.own[idx] = borrowed ? 0 : 1;
+    return 1;
+}
+/* Register a body's by-value string parameters (the retain is written by
+   `sb_retain_params` once the opening brace exists). */
+static int sb_push_params(struct Emitter *self, int first, int anon)
+{
+    int p, ai, kind;
+    char uname[32];
+    g_sb.n = 0;
+    g_sb.ln = 0;
+    g_sb.nblk = 0;
+    ai = 0;
+    for (p = first; p >= 0; p = self->arena->nodes[p].next) {
+        const char *nm = self->arena->nodes[p].text2;
+        if (!nm[0] && anon) {
+            snprintf(uname, sizeof uname, "__arg%d", ai);
+            nm = uname;
+        }
+        if (nm[0] && self->arena->nodes[p].aux != 2 && self->arena->nodes[p].aux != 3
+            && self->arena->nodes[p].text3[0] == 0) {
+            sb_lpush(self, nm, self->arena->nodes[p].text);
+            kind = frontend::sym::ct_is_string_value_type(self->arena->nodes[p].text);
+            if (kind) sb_push(self, nm, self->arena->nodes[p].text, 1);
+        }
+        ai++;
+    }
+    return 0;
+}
+
+/* The entry retain of every registered by-value string parameter. */
+static int sb_retain_params(struct Emitter *self, int ind)
+{
+    int i, kind;
+    for (i = 0; i < g_sb.n; i++) {
+        kind = frontend::sym::ct_is_string_value_type(g_sb.type[i]);
+        if (!kind || !g_sb.own[i]) continue;
+        self->emit_indent(ind);
+        fprintf(self->out, "%s = %s_retain(&%s);\n", g_sb.name[i],
+                sb_prefix(kind), g_sb.name[i]);
+    }
+    return 0;
+}
+
+/* Release every binding in scope before a `return` (or at the body's end). */
+static int sb_end_body(struct Emitter *self, int ind)
+{
+    int r;
+    r = sb_release_from(self, 0, -1, ind);
+    g_sb.n = 0;
+    g_sb.ln = 0;
+    g_sb.nblk = 0;
+    return r;
+}
 
 /* Does the impl node `node` write `name`? */
 /* Number of array dimensions in a declarator suffix (`[2][3]` is 2). A trait
@@ -550,6 +1081,11 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
     }
     fputs(") {\n", e->out);
     fprintf(e->out, "    %s *_self = (%s *)self;\n", stype, stype);
+    /* SH-102: retain the method's by-value string parameters at entry. */
+    snprintf(g_sb.method, sizeof g_sb.method, "%s", sig->name);
+    snprintf(g_sb.recv, sizeof g_sb.recv, "%s", stype);
+    sb_push_params(e, sig->pnode, 1);
+    sb_retain_params(e, 1);
     e->sym->self_mode = 1;
     ai = 0;
     for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
@@ -574,6 +1110,7 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
         }
         k = e->arena->nodes[k].next;
     }
+    sb_end_body(e, 1);
     e->sym->self_mode = 0;
     fputs("}\n\n", e->out);
     return 0;
@@ -1999,6 +2536,9 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     else
         snprintf(cname, sizeof cname, "%s_%s", iname, self->arena->nodes[m].text2);
     impl_inst_bind(self, ki, ii);
+    snprintf(g_sb.method, sizeof g_sb.method, "%s",
+             self->arena->nodes[m].text2);
+    snprintf(g_sb.recv, sizeof g_sb.recv, "%s", iname);
     /* Phase 44: a postfix `?` in the body propagates the (instance-bound)
        return type of the method. */
     {
@@ -2048,6 +2588,10 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
         snprintf(one, sizeof one, "struct %s", iname);
         fprintf(self->out, "    %s *_self = (%s *)self;\n", one, one);
     }
+    /* SH-102: a by-value `String` / `U16String` parameter owns its reference
+       for the body; the same list is released before the closing brace. */
+    sb_push_params(self, self->arena->nodes[m].a, 0);
+    sb_retain_params(self, 1);
     self->sym->self_mode = statik ? 0 : 1;
     body = self->arena->nodes[m].b;
     for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next)
@@ -2059,6 +2603,7 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
             self->sym->self_mode = 0;
             return -1;
         }
+    sb_end_body(self, 1);
     self->sym->self_mode = 0;
     fputs("}\n\n", self->out);
     return 0;
@@ -2423,6 +2968,18 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
     (void)ntmpls;
     if (!im || !tps) return 0;
     if (!header) {
+        /* SH-102 (compile mode): one merged program emits a container impl
+           (`Result<String, …>`) before the String layer's own prototypes, so a
+           call the automatic retain added had no declaration. Every struct is
+           complete by now (types are written before the impls), so declare the
+           four entry points here; an identical later prototype is harmless. */
+        if (self->cur_unit < 0
+            && self->sym->find_struct("String") >= 0
+            && self->sym->find_struct("U16String") >= 0)
+            fputs("struct String String_retain(struct String *);\n"
+                  "void String_release(struct String *);\n"
+                  "struct U16String U16String_retain(struct U16String *);\n"
+                  "void U16String_release(struct U16String *);\n", self->out);
         for (i = 0; i < ninsts; i++) {
             if (!inst_writes_helpers(self, u, i)) continue;
             if (inst_emit_elem_protos(self, i) != 0) return -1;
@@ -3418,6 +3975,12 @@ impl EmitOps for Emitter {
                 }
                 fputs(") {\n", self->out);
                 fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
+                /* SH-102: retain the by-value string parameters at entry. */
+                snprintf(g_sb.method, sizeof g_sb.method, "%s",
+                         self->arena->nodes[m].text2);
+                snprintf(g_sb.recv, sizeof g_sb.recv, "%s", sname);
+                sb_push_params(self, self->arena->nodes[m].a, 0);
+                sb_retain_params(self, 1);
                 self->sym->self_mode = 1;
                 /* Phase 44: a postfix `?` in an impl body propagates the
                    method's declared return type. */
@@ -3438,6 +4001,7 @@ impl EmitOps for Emitter {
                     }
                     k = self->arena->nodes[k].next;
                 }
+                sb_end_body(self, 1);
                 self->sym->self_mode = 0;
                 fputs("}\n\n", self->out);
             }
@@ -3531,6 +4095,12 @@ impl EmitOps for Emitter {
                 fputs(") {\n", self->out);
                 if (!is_static)
                     fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
+                /* SH-102: retain the by-value string parameters at entry. */
+                snprintf(g_sb.method, sizeof g_sb.method, "%s",
+                         self->arena->nodes[m].text2);
+                snprintf(g_sb.recv, sizeof g_sb.recv, "%s", sname);
+                sb_push_params(self, self->arena->nodes[m].a, 0);
+                sb_retain_params(self, 1);
                 self->sym->self_mode = is_static ? 0 : 1;
                 /* Phase 44: a postfix `?` in an inherent method body
                    propagates the method's declared return type. */
@@ -3548,6 +4118,7 @@ impl EmitOps for Emitter {
                     }
                     k = self->arena->nodes[k].next;
                 }
+                sb_end_body(self, 1);
                 self->sym->self_mode = 0;
                 fputs("}\n\n", self->out);
             }
@@ -4251,17 +4822,41 @@ impl EmitOps for Emitter {
             /* Phase 44: remember the (substituted) return type for a postfix
                `?` in the body. */
             snprintf(self->cur_ret, sizeof self->cur_ret, "%s", rname);
+            /* SH-102: the by-value string parameters own a reference for the
+               duration of the body; the opening block writes the retains. */
+            snprintf(g_sb.method, sizeof g_sb.method, "%s",
+                     self->arena->nodes[n].text2);
+            g_sb.recv[0] = 0;
+            sb_push_params(self, self->arena->nodes[n].a, 0);
+            g_sb.pending = 1;
             return self->emit_node(self->arena->nodes[n].b, ind);
         }
         if (self->arena->nodes[n].kind == N_DEFER_RUN)
             return self->emit_node(self->arena->nodes[n].a, ind);
         if (self->arena->nodes[n].kind == N_DEFER) return 0;
         if (self->arena->nodes[n].kind == N_BLOCK) {
-            int save_nclvar;
+            int save_nclvar, save_sb, save_l, funcbody;
             save_nclvar = self->nclvar;   /* a closure bound here dies with the block */
+            funcbody = g_sb.pending;
+            g_sb.pending = 0;
+            /* a function body's closing brace ends the parameters' lives too */
+            save_sb = funcbody ? 0 : g_sb.n;
+            save_l = g_sb.ln;
+            if (g_sb.nblk < 256) {
+                g_sb.blk[g_sb.nblk] = save_sb;
+                g_sb.lblk[g_sb.nblk] = save_l;
+                g_sb.nblk++;
+            }
             fputs("{\n", self->out);
+            if (funcbody) sb_retain_params(self, ind + 1);
             for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next)
                 if (self->emit_node(c, ind + 1) != 0) return -1;
+            /* SH-102: release the owning string handles declared in this block
+               unless a return already moved them out (that path has left) */
+            sb_release_from(self, save_sb, -1, ind + 1);
+            if (g_sb.nblk > 0) g_sb.nblk--;
+            g_sb.n = save_sb;
+            g_sb.ln = save_l;
             self->nclvar = save_nclvar;
             self->emit_indent(ind);
             fputs("}\n", self->out);
@@ -4296,9 +4891,51 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_RET) {
             char tmp[MAX_TEXT];
             int r, rtv, wrap;
+            /* SH-102 (D-013 §3): the string handle this return hands back. A
+               local / parameter handle is moved (its scope release is skipped);
+               a place (a field, a global, a deref) is retained so the caller
+               gets its own reference; a call result or literal moves. `sret` is
+               materialised before the releases so a release cannot run under
+               the value it feeds. */
+            int srk, smove, sretain, sret;
+            srk = frontend::sym::ct_is_string_value_type(self->cur_ret);
+            smove = srk ? sb_ret_move(self, self->arena->nodes[n].a) : -1;
+            /* an escape: a borrowed-string function hands back a `Str` view
+               where the caller expects an owning `String` */
+            if (srk && self->arena->nodes[n].a >= 0
+                && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
+                char et[MAX_TEXT];
+                if (sb_expr_type(self, self->arena->nodes[n].a, et, sizeof et) == 0
+                    && sb_view_ret(et) && !strchr(et, '*')
+                    && frontend::sym::ct_is_string_value_type(et) == 0)
+                    return self->fail_from(n,
+                        "cannot return a borrowed view as an owning string; call to_string()");
+            }
+            /* moving a borrowed local out still needs a reference for the
+               caller, so it is retained instead of moved */
+            if (smove >= 0 && !g_sb.own[smove]) smove = -1;
+            sretain = (srk && self->arena->nodes[n].a >= 0 && smove < 0
+                       && (((self->arena->nodes[n].sflags & 2) != 0)
+                           || !sb_rhs_fresh(self, self->arena->nodes[n].a)));
+            if (sretain && (sb_container_view(self, "get", 0)
+                            || sb_container_view(self, "entry", 0)
+                            || sb_container_view(self, "pop", 1)))
+                sretain = 0;
+            sret = -1;
+            /* any value a release could invalidate is materialised first: a
+               `String` handle, or a scalar read out of one (`a.len()`). */
+            if (self->arena->nodes[n].a >= 0
+                && (sretain || g_sb.n > 0
+                    || (self->arena->nodes[n].aux != 1
+                        && self->arena->nodes[n].text[0])))
+                sret = self->ntmp;
+            if (sret >= 0) self->ntmp++;
             rtv = -1;
             wrap = (self->arena->nodes[n].aux == 1 && self->arena->nodes[n].a >= 0
                     && self->arena->nodes[n].text[0]);
+            if (sret >= 0 && !wrap) {
+                wrap = 1;
+            }
             if (self->hoist_rvalue(n) != 0) return -1;
             if (self->emit_hoists(ind) != 0) return -1;
             /* A label (case/default) may not be followed by a declaration.
@@ -4321,6 +4958,25 @@ impl EmitOps for Emitter {
                 if (self->emit_value_for(self->arena->nodes[n].text,
                                          self->arena->nodes[n].a) != 0) return -1;
                 fputs(";\n", self->out);
+            }
+            /* SH-102: the value first, then its own reference, then the other
+               handles' releases below. A parser materialisation (`rtv`) already
+               read the value above, so only its retain is left. */
+            if (sret >= 0 && rtv < 0) {
+                self->emit_indent(ind);
+                fprintf(self->out, "%s __ct_sret%d = ", self->cur_ret, sret);
+                if (self->emit_value_for(self->cur_ret, self->arena->nodes[n].a) != 0)
+                    return -1;
+                fputs(";\n", self->out);
+                if (sretain) {
+                    self->emit_indent(ind);
+                    fprintf(self->out, "__ct_sret%d = %s_retain(&__ct_sret%d);\n",
+                            sret, sb_prefix(srk), sret);
+                }
+            } else if (sretain && rtv >= 0) {
+                self->emit_indent(ind);
+                fprintf(self->out, "__ct_ret%d = %s_retain(&__ct_ret%d);\n",
+                        rtv, sb_prefix(srk), rtv);
             }
             /* the parser hangs the scope's releases off `b`; they run at the
                return's own indentation, before the value leaves (SH-33) */
@@ -4364,9 +5020,37 @@ impl EmitOps for Emitter {
                     return 0;
                 }
             }
+            /* SH-102: every other owning string handle in scope is released
+               before the frame dies; the moved one left with the value, and a
+               view return leaves the handles it still names alive. */
+            if (g_sb.n > 0)
+                sb_ret_release(self, self->arena->nodes[n].a,
+                               (!srk && (sb_view_ret(self->cur_ret)
+                                         || sb_type_has_string(self, self->cur_ret, 0))),
+                               smove, ind);
             self->emit_indent(ind);
             if (self->arena->nodes[n].a < 0) {
                 fputs("return;\n", self->out);
+                return 0;
+            }
+            if (rtv >= 0) {
+                snprintf(tmp, sizeof tmp, "return __ct_ret%d;\n", rtv);
+                fputs(tmp, self->out);
+                if (wrap) {
+                    ind--;
+                    self->emit_indent(ind);
+                    fputs("}\n", self->out);
+                }
+                return 0;
+            }
+            if (sret >= 0) {
+                snprintf(tmp, sizeof tmp, "return __ct_sret%d;\n", sret);
+                fputs(tmp, self->out);
+                if (wrap) {
+                    ind--;
+                    self->emit_indent(ind);
+                    fputs("}\n", self->out);
+                }
                 return 0;
             }
             if (rtv >= 0) {
@@ -4479,6 +5163,9 @@ impl EmitOps for Emitter {
                jump leaves the loop (same shape as `return`, SH-33) */
             for (r = self->arena->nodes[n].b; r >= 0; r = self->arena->nodes[r].next)
                 if (self->emit_node(r, ind) != 0) return -1;
+            /* SH-102: the jump skips the current block's closing brace, so its
+               owning string handles are released here instead. */
+            if (sb_jump_release(self, ind) != 0) return -1;
             self->emit_indent(ind);
             fputs("break;\n", self->out);
             return 0;
@@ -4487,6 +5174,7 @@ impl EmitOps for Emitter {
             int r;
             for (r = self->arena->nodes[n].b; r >= 0; r = self->arena->nodes[r].next)
                 if (self->emit_node(r, ind) != 0) return -1;
+            if (sb_jump_release(self, ind) != 0) return -1;
             self->emit_indent(ind);
             fputs("continue;\n", self->out);
             return 0;
@@ -4605,6 +5293,17 @@ impl EmitOps for Emitter {
         if (self->arena->nodes[n].kind == N_DECL || self->arena->nodes[n].kind == N_ASSIGN
             || self->arena->nodes[n].kind == N_EXPR || self->arena->nodes[n].kind == N_POST
             || (self->arena->nodes[n].kind == N_BIN && self->arena->nodes[n].aux == B_COMMA)) {
+            /* SH-102: the owning string handles get their retain / zero-init /
+               old-value release here, in statement position only. */
+            {
+                int sh;
+                sh = sb_decl(self, n, ind);
+                if (sh < 0) return -1;
+                if (sh > 0) return 0;
+                sh = sb_assign(self, n, ind);
+                if (sh < 0) return -1;
+                if (sh > 0) return 0;
+            }
             if (self->hoist_rvalue(n) != 0) return -1;
             if (self->emit_hoists(ind) != 0) return -1;
             /* a bare `expr into { … };` statement is the block alone: the
@@ -4806,9 +5505,24 @@ impl EmitOps for Emitter {
                 self->emit_indent(ind + 2);
                 fputs("(void)i;\n", self->out);
             }
-            for (c = self->arena->nodes[self->arena->nodes[n].d].a; c >= 0;
-                 c = self->arena->nodes[c].next)
-                if (self->emit_node(c, ind + 2) != 0) return -1;
+            /* SH-102: this body is written without an N_BLOCK, so the break /
+               continue baseline is pushed (and released) here. `item` is not a
+               tracked binding: for a `Vec` / `Map` it is a borrowed view. */
+            {
+                int sbase = g_sb.n, lbase = g_sb.ln;
+                if (g_sb.nblk < 256) {
+                    g_sb.blk[g_sb.nblk] = sbase;
+                    g_sb.lblk[g_sb.nblk] = lbase;
+                    g_sb.nblk++;
+                }
+                for (c = self->arena->nodes[self->arena->nodes[n].d].a; c >= 0;
+                     c = self->arena->nodes[c].next)
+                    if (self->emit_node(c, ind + 2) != 0) return -1;
+                sb_release_from(self, sbase, -1, ind + 2);
+                g_sb.n = sbase;
+                g_sb.ln = lbase;
+                if (g_sb.nblk > 0) g_sb.nblk--;
+            }
             self->emit_indent(ind + 1);
             fputs("}\n", self->out);
             self->emit_indent(ind);
@@ -4841,8 +5555,22 @@ impl EmitOps for Emitter {
                 fputs(":", self->out);
             }
             fputs("\n", self->out);
-            for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next)
-                if (self->emit_node(c, ind + 1) != 0) return -1;
+            /* SH-102: a case body has no N_BLOCK of its own; a `break` here must
+               not release the enclosing scope's handles. */
+            {
+                int sbase = g_sb.n, lbase = g_sb.ln;
+                if (g_sb.nblk < 256) {
+                    g_sb.blk[g_sb.nblk] = sbase;
+                    g_sb.lblk[g_sb.nblk] = lbase;
+                    g_sb.nblk++;
+                }
+                for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next)
+                    if (self->emit_node(c, ind + 1) != 0) return -1;
+                sb_release_from(self, sbase, -1, ind + 1);
+                g_sb.n = sbase;
+                g_sb.ln = lbase;
+                if (g_sb.nblk > 0) g_sb.nblk--;
+            }
             return 0;
         }
         if (self->arena->nodes[n].kind == N_DOWHILE) {
@@ -4854,8 +5582,20 @@ impl EmitOps for Emitter {
                the body always walks here instead of going through
                `emit_node`, which would put the closing brace on its own line */
             b = self->arena->nodes[n].b;
-            for (c = self->arena->nodes[b].a; c >= 0; c = self->arena->nodes[c].next)
-                if (self->emit_node(c, ind + 1) != 0) return -1;
+            {
+                int sbase = g_sb.n, lbase = g_sb.ln;
+                if (g_sb.nblk < 256) {
+                    g_sb.blk[g_sb.nblk] = sbase;
+                    g_sb.lblk[g_sb.nblk] = lbase;
+                    g_sb.nblk++;
+                }
+                for (c = self->arena->nodes[b].a; c >= 0; c = self->arena->nodes[c].next)
+                    if (self->emit_node(c, ind + 1) != 0) return -1;
+                sb_release_from(self, sbase, -1, ind + 1);
+                g_sb.n = sbase;
+                g_sb.ln = lbase;
+                if (g_sb.nblk > 0) g_sb.nblk--;
+            }
             self->emit_indent(ind);
             fputs("} while (", self->out);
             if (self->emit_cond(self->arena->nodes[n].a) != 0) return -1;
@@ -4987,6 +5727,13 @@ impl EmitOps for Emitter {
                 } else if (self->arena->nodes[n].a >= 0) {
                     fputs(" = ", self->out);
                     if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                } else if (frontend::sym::ct_is_string_value_type(self->arena->nodes[n].text)
+                           && !self->arena->nodes[n].text3[0]
+                           && self->arena->nodes[n].aux != 1) {
+                    /* SH-102: a bare handle is a null handle, so a scope release
+                       of a declaration this writer does not track (a multiple
+                       declarator or a `for` initialiser) is still safe. */
+                    fputs(" = { 0 }", self->out);
                 } else if (self->init->type_needs_init(self->arena->nodes[n].text) && !self->arena->nodes[n].text3[0]) {
                     fputs(" = { ", self->out);
                     if (self->init->emit_vptr_items("", self->arena->nodes[n].text) != 0) return -1;

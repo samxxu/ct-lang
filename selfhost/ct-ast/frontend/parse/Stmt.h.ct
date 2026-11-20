@@ -2419,6 +2419,12 @@ impl StmtOps for Stmt {
                 }
             }
             self->arena->nodes[s].a = e;
+            /* PH-80 SH-102 (D-013 §3): handing back a borrowed string view as
+               an owning handle needs a retain; the emitter reads this bit. */
+            if (e >= 0
+                && frontend::sym::ct_is_string_value_type(self->sym->ret_type)
+                && frontend::parse::expr_borrow_root(self->ex, e))
+                self->arena->nodes[s].sflags |= 2;
             if (self->mem->leak_active && borrow_escape(self, e, rline) != 0)
                 return -1;
             if (self->mem->leak_active && self->sup->leak_return(e, cond, rline) != 0)
@@ -4340,13 +4346,23 @@ impl StmtOps for Stmt {
                that provenance, so its later `release` is refused. An owning
                initialiser (`from`, `{}`, `retain`, `pop`, a call result) leaves
                the bit clear. */
-            if (frontend::sym::ct_is_container_type(typebuf)) {
+            if (frontend::sym::ct_is_container_type(typebuf)
+                || frontend::sym::ct_is_string_value_type(typebuf)) {
                 int vi = self->sym->find_var(name);
                 if (vi >= 0)
                     self->sym->vars[vi].cview =
                         frontend::parse::expr_borrow_root(self->ex,
                                                           self->arena->nodes[n].a);
             }
+            /* PH-80 SH-102 (D-013 §3): a `String` / `U16String` local bound to a
+               borrowed view stays a view (no retain, no scope release); the
+               emitter reads this bit instead of re-deriving the provenance from
+               an initialiser whose variables are gone by then. */
+            if (self->arena->nodes[n].text3[0] == 0
+                && frontend::sym::ct_is_string_value_type(typebuf)
+                && frontend::parse::expr_borrow_root(self->ex,
+                                                     self->arena->nodes[n].a))
+                self->arena->nodes[n].sflags |= 2;
             /* Phase 31 S23b (L31-23): a view binding (a container, a `V *` or a
                `MapEntry` copy) is invalidated by a later mutation of its
                container; the table lives in the expression layer. */
@@ -4721,13 +4737,19 @@ impl StmtOps for Stmt {
                    only way to hold a value). */
                 if (vi >= 0) self->sym->vars[vi].initialized = 1;
                 if (vi >= 0
-                    && frontend::sym::ct_is_container_type(self->sym->vars[vi].type))
+                    && (frontend::sym::ct_is_container_type(self->sym->vars[vi].type)
+                        || frontend::sym::ct_is_string_value_type(self->sym->vars[vi].type)))
                     self->sym->vars[vi].cview =
                         frontend::parse::expr_borrow_root(self->ex, rhs);
                 /* Phase 31 S23b (L31-23): rebinding a view follows the source. */
                 frontend::parse::expr_view_bind(self->ex,
                                                 self->arena->nodes[e].text2, rhs);
             }
+            /* PH-80 SH-102 (D-013 §3): the same provenance fact for a string
+               handle assignment, whichever place the target names. */
+            if (frontend::sym::ct_is_string_value_type(tt)
+                && frontend::parse::expr_borrow_root(self->ex, rhs))
+                self->arena->nodes[n].sflags |= 2;
             }
         } else if (self->arena->nodes[e].kind == N_POST) {
             n = e;

@@ -491,6 +491,11 @@ pub int ct_type_canon(const char *in, char *out, int cap);
    (`struct Vec_*` / `struct Map_*`). A pointer to one is not a container
    value, so `Vec<int> *p` answers 0. */
 pub int ct_is_container_type(const char *type);
+/* PH-80 SH-102 (D-013 §3): 0 when `type` is not one of the two by-value owning
+   built-in string handles, 1 for `String`, 2 for `U16String`. A pointer, an
+   array or a `const` view (`Str` / `U16Str`) is 0: those borrow and must not be
+   retained or released. */
+pub int ct_is_string_value_type(const char *type);
 pub int ct_inst_encode(const char *tmpl, int nargs, const char *a1, const char *a2, char *out, int cap);
 /* Phase 29: rewrite a spelling that still names an instance (`Vec<int>`,
    optionally prefixed by `struct`) to `struct <encoded>`. -1 when it is not an
@@ -2190,6 +2195,26 @@ int ct_is_container_type(const char *type)
     if (n > 0 && type[n - 1] == '*') return 0;
     if (strncmp(type, "struct Vec_", 11) == 0) return 1;
     if (strncmp(type, "struct Map_", 11) == 0) return 1;
+    return 0;
+}
+
+/* PH-80 SH-102: the two owning string handles whose by-value copies carry a
+   reference. The spelling is the parser's canonical `struct <Name>`; the bare
+   name is accepted too so a pre-canonical caller cannot silently miss it. */
+int ct_is_string_value_type(const char *type)
+{
+    const char *b;
+    size_t n;
+
+    if (type == 0) return 0;
+    b = type;
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    while (*b == ' ' || *b == '\t') b++;
+    n = strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) n--;
+    if (n == 0 || b[n - 1] == '*' || b[n - 1] == ']') return 0;
+    if (n == 6 && strncmp(b, "String", 6) == 0) return 1;
+    if (n == 9 && strncmp(b, "U16String", 9) == 0) return 2;
     return 0;
 }
 
