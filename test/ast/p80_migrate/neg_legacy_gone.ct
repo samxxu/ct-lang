@@ -1,0 +1,8 @@
+/* PH-80 S5b negative: the old owning `Str` is deleted, not merely renamed;
+ * the qualified spelling must not resolve anywhere. */
+int main(void)
+{
+    std::str::Str old;
+    old = std::str::str_from("x");
+    return old.len;
+}

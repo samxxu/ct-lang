@@ -1,0 +1,3 @@
+view len=5 cp=101
+own len=5 borrow len=5
+sub len=3 first=e

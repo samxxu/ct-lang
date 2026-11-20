@@ -7,7 +7,8 @@
 #   - the language reference has the §4.70 contract (layout, literal, `.data`,
 #     `cstr()`, UTF-16 factories, the explicit copy protocol);
 #   - lib/std/README.md names the layer units and the compatibility window;
-#   - the phase card carries the §7 closeout table with every E80 row.
+#   - the phase card carries the §7 closeout table with every E80 row, the
+#     S5b deletion (E80-7 ✅) and the C-7 / external dry-run sections.
 #
 # Usage: sh test/ast/p80_docs.sh
 set -u
@@ -41,15 +42,15 @@ if grep -q '^### 4\.70 .*`String` / `Str`' "$spec"; then
 else
     bad "spec section 4.70 missing"
 fi
-for needle in 'const char \*' 'cstr()' 'immortal' 'U16String' 'std::str::Str' '不保证 NUL'; do
+for needle in 'const char \*' 'cstr()' 'immortal' 'U16String' '旧类型已删除' '不保证 NUL'; do
     if grep -q "$needle" "$spec"; then ok "spec mentions $needle"; else bad "spec does not mention $needle"; fi
 done
 
 std=lib/std/README.md
-if grep -q 'StrLegacy' "$std" && grep -q 'S5b' "$std"; then
-    ok "lib/std README names the compatibility unit and the S5b gap"
+if grep -q 'S5b' "$std" && grep -q '旧 owning `Str` 已删除' "$std"; then
+    ok "lib/std README records the S5b deletion"
 else
-    bad "lib/std README compat window"
+    bad "lib/std README deletion note"
 fi
 if grep -q 'U16String' "$std"; then ok "lib/std README names the UTF-16 pair"; else bad "lib/std README UTF-16"; fi
 
@@ -59,10 +60,11 @@ if grep -q '^## 7 ' "$card"; then ok "phase card has the §7 closeout"; else bad
 for id in E80-1 E80-2 E80-3 E80-4 E80-5 E80-6 E80-7 E80-8; do
     if grep -q "| $id |" "$card"; then ok "card rule row $id"; else bad "card missing $id"; fi
 done
-if grep -q 'S5b' "$card" && grep -q '未通过' "$card"; then
-    ok "card records the S5b / E80-7 gap"
+if grep -q 'E80-7 ✅ 通过' "$card" && grep -q '7.7 C-7 回滚演练' "$card" \
+   && grep -q '7.8 外部消费者 dry-run' "$card"; then
+    ok "card records E80-7 pass, the C-7 drill and the external dry-run"
 else
-    bad "card does not record the unfinished S5b"
+    bad "card does not record the completed S5b (E80-7 / C-7 / dry-run)"
 fi
 
 [ "$fail" -eq 0 ] && echo "p80_docs: OK"

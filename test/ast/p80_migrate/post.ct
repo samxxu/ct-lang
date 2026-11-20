@@ -1,0 +1,22 @@
+/* PH-80 S5b after the deletion: the built-in `String` / `Str` pair is the
+ * only string layer. A program that uses both compiles and runs; the old
+ * owning type has no spelling left (see the negative fixture). */
+#include <stdio.h>
+
+int borrow_len(Str v)
+{
+    return v.len();
+}
+
+int main(void)
+{
+    Str view = "hello";
+    String owned = str_dup("hello");
+    String piece = owned.slice(1, 3);
+    printf("view len=%d cp=%d\n", view.len(), view.codepoint_at(1));
+    printf("own len=%d borrow len=%d\n", owned.len(), borrow_len(view));
+    printf("sub len=%d first=%c\n", piece.len(), piece.data[0]);
+    piece.release();
+    owned.release();
+    return 0;
+}

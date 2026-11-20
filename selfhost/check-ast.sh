@@ -8232,26 +8232,27 @@ else
     fi
 fi
 
-# Phase 36 S4a1 (E36-8): `own Str *` + `delete` reuses the existing AutoDrop
-# path. The explicit `impl Drop for Str` frees the buffer; `delete` frees the
-# struct and nulls the pointer. The drop must not free the struct handle itself.
+# Phase 36 S4a1 (E36-8, migrated to String by PH-80 S5b): `own String *` +
+# `delete` reuses the existing AutoDrop path. The explicit `impl Drop for
+# String` releases the refcounted buffer; `delete` frees the struct and nulls
+# the pointer. The drop must not free the struct handle itself.
 if ! "$work/ct-ast" test/ast/232_str_own_pointer/prog.ct -o "$work/p36s4a1.c" \
         >"$work/p36s4a1.log" 2>&1; then
     bad "p36 E36-8 (own Str product)" "ct-ast failed: $(head -3 "$work/p36s4a1.log")"
 else
-    body="$(sed -n '/^static .*std_str_Str_Drop_drop(void \*self) {/,/^}/p' "$work/p36s4a1.c")"
-    if printf '%s\n' "$body" | grep -q 'free(_self->data);' \
-       && printf '%s\n' "$body" | grep -q '_self->data = 0;' \
-       && printf '%s\n' "$body" | grep -q '_self->len = (-1);' \
+    body="$(sed -n '/^static .*String_Drop_drop(void \*self) {/,/^}/p' "$work/p36s4a1.c")"
+    if printf '%s\n' "$body" | grep -q 'free(h);' \
+       && printf '%s\n' "$body" | grep -q '_self->ptr = 0;' \
+       && printf '%s\n' "$body" | grep -q '_self->len = 0;' \
        && ! printf '%s\n' "$body" | grep -q 'free(_self);'; then
-        ok "p36 E36-8 (std_str_Str_Drop_drop frees data, not the struct)"
+        ok "p36 E36-8 (String_Drop_drop releases the buffer, not the struct)"
     else
-        bad "p36 E36-8 (std_str_Str_Drop_drop body)" "$(printf '%s\n' "$body" | head -6)"
+        bad "p36 E36-8 (String_Drop_drop body)" "$(printf '%s\n' "$body" | head -6)"
     fi
-    if grep -q 'std_str_Str_Drop_drop(p); free(p); p = 0;' "$work/p36s4a1.c"; then
+    if grep -q 'String_Drop_drop(p); free(p); p = 0;' "$work/p36s4a1.c"; then
         ok "p36 E36-8 (delete runs the drop, frees the struct, nulls the pointer)"
     else
-        bad "p36 E36-8 (delete shape)" "$(grep 'std_str_Str_Drop_drop' "$work/p36s4a1.c" | head -3)"
+        bad "p36 E36-8 (delete shape)" "$(grep 'String_Drop_drop' "$work/p36s4a1.c" | head -3)"
     fi
 fi
 
@@ -8286,11 +8287,11 @@ else
         else
             bad "p36 E36-1 (Box_int_Drop_drop count)" "got $n"
         fi
-        n="$(nm "$work/p36s1a.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_std__str__Str_Drop_drop$/ { c++ } END { print c + 0 }')"
+        n="$(nm "$work/p36s1a.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_String_Drop_drop$/ { c++ } END { print c + 0 }')"
         if [ "$n" = "1" ]; then
-            ok "p36 E36-1 (Box_std__str__Str_Drop_drop: one definition)"
+            ok "p36 E36-1 (Box_String_Drop_drop: one definition)"
         else
-            bad "p36 E36-1 (Box_std__str__Str_Drop_drop count)" "got $n"
+            bad "p36 E36-1 (Box_String_Drop_drop count)" "got $n"
         fi
         n="$(nm "$work/p36s1a.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_Drop_drop$/ { c++ } END { print c + 0 }')"
         if [ "$n" = "0" ]; then
@@ -8340,9 +8341,9 @@ if ! "$work/ct-ast" test/ast/227_vec_element_release/prog.ct -o "$work/p36s1a3.c
         >"$work/p36s1a3.log" 2>&1; then
     bad "p36 E36-3 (element release product)" "ct-ast failed: $(head -3 "$work/p36s1a3.log")"
 else
-    if grep -q 'Vec_std__str__Str__elem_release' "$work/p36s1a3.c" \
-       && grep -q 'std_str_Str_release' "$work/p36s1a3.c"; then
-        ok "p36 E36-3 (Vec<std::str::Str> element helper calls std_str_Str_release)"
+    if grep -q 'Vec_String__elem_release' "$work/p36s1a3.c" \
+       && grep -q 'String_release' "$work/p36s1a3.c"; then
+        ok "p36 E36-3 (Vec<String> element helper calls String_release)"
     else
         bad "p36 E36-3 (Vec<Str> element helper shape)" \
             "$(grep 'elem_release' "$work/p36s1a3.c" | head -3)"

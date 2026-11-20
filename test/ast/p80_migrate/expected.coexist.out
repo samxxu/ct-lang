@@ -1,7 +1,0 @@
-view len=5 cp=101
-legacy len=5 byte=e
-legacy same=0
-legacy slice len=3 first=e
-legacy concat len=8
-migrated sum=5 borrow sum=5
-view char_len=5 view as_str len=5

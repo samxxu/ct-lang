@@ -1,46 +1,50 @@
 //@ct-requires: ct-ast
-// Phase 36 S7: `Str` ownership -- the handle owns a heap buffer, `release`
-// hands it back, `retain` deep-copies, and `delete` on an `own Str *` runs the
-// drop. `Option<Str>` and `Vec<Str>` propagate the lifecycle to their payload.
+// Phase 80: `String` / `Str` ownership -- the handle owns a refcounted buffer,
+// `release` drops one reference, `retain` shares it, and `delete` on an
+// `own String *` runs the Drop. `Option<String>` and `Vec<String>` propagate
+// the lifecycle to their payload.
 #include <stdio.h>
 #include <stdlib.h>
 
 int main(void)
 {
-    // 1. A `Str` owns its buffer; `release` frees it and marks the handle.
-    std::str::Str s = std::str::str_from("hello");
-    printf("s len=%d\n", s.len);
+    // 1. A `String` owns its buffer; `release` marks the handle released.
+    String s = str_dup("hello");
+    printf("s len=%d\n", s.len());
     s.release();
-    printf("s after release: len=%d\n", s.len);
+    printf("s after release: len=%d\n", s.len());
 
-    // 2. `retain` returns an independent copy: freeing the source leaves the
-    //    copy usable.
-    std::str::Str t = std::str::str_from("world");
-    std::str::Str u = t.retain();
+    // 2. `retain` shares the buffer: the source may be released and the copy
+    //    stays usable while a reference remains.
+    String t = str_dup("world");
+    String u = t.retain();
+    char *uc;
     t.release();
-    printf("u len=%d (source released)\n", u.len);
+    uc = u.cstr();
+    printf("u len=%d (source released)\n", u.len());
+    free(uc);
     u.release();
 
-    // 3. `own Str *` + `delete`: Drop frees the buffer, then the struct, then
-    //    nulls the pointer.
-    own std::str::Str *p = malloc(sizeof(struct std_str_Str));
-    *p = std::str::str_from("heap");
+    // 3. `own String *` + `delete`: Drop releases the buffer, frees the struct,
+    //    then nulls the pointer.
+    own String *p = malloc(sizeof(struct String));
+    *p = str_dup("heap");
     delete p;
     printf("deleted p is null: %d\n", p == 0);
 
-    // 4. `Option<Str>`: a present value drops the Str buffer; `none` carries a
-    //    zero Str whose drop is a safe `free(0)`.
-    own Option<std::str::Str> *o = malloc(sizeof(struct Option_std__str__Str));
+    // 4. `Option<String>`: a present value drops the String payload; `none`
+    //    carries a zero handle whose drop is safe.
+    own Option<String> *o = malloc(sizeof(struct Option_String));
     o->has = 1;
-    o->value = std::str::str_from("opt");
+    o->value = str_dup("opt");
     delete o;
 
-    own Option<std::str::Str> *n = malloc(sizeof(struct Option_std__str__Str));
-    *n = Option<std::str::Str>::none();
+    own Option<String> *n = malloc(sizeof(struct Option_String));
+    *n = Option<String>::none();
     delete n;
 
-    // 5. `Vec<Str>` releases every element on `release()`.
-    Vec<std::str::Str> v = { std::str::str_from("a"), std::str::str_from("b") };
+    // 5. `Vec<String>` releases every element on `release()`.
+    Vec<String> v = { str_dup("a"), str_dup("b") };
     v.release();
 
     printf("done\n");

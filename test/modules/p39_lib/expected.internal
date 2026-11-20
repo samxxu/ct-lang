@@ -78,15 +78,6 @@ U16String_trim_start
 U16String_trim_tail
 ct_str_live_count
 ct_u16_live_count
-std_str_Str_release
-std_str_Str_retain
-std_str_str_c_str
-std_str_str_compare
-std_str_str_concat
-std_str_str_from
-std_str_str_from_len
-std_str_str_len
-std_str_str_slice
 str_compare
 str_concat
 str_dup
