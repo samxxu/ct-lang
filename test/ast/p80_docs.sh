@@ -1,0 +1,69 @@
+#!/bin/sh
+# PH-80 S5b-2 (E80-8): the written `String` / `Str` contract does not drift.
+#
+#   - the five `CTC_VERSION` sites agree on 0.80.0;
+#   - README / docs/README carry the release;
+#   - docs/roadmap.md lists Phase 80 with its version;
+#   - the language reference has the §4.70 contract (layout, literal, `.data`,
+#     `cstr()`, UTF-16 factories, the explicit copy protocol);
+#   - lib/std/README.md names the layer units and the compatibility window;
+#   - the phase card carries the §7 closeout table with every E80 row.
+#
+# Usage: sh test/ast/p80_docs.sh
+set -u
+root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
+fail=0
+ok()  { printf 'ok   %s\n' "$1"; }
+bad() { echo "FAIL p80/docs: $1" >&2; fail=1; }
+cd "$root" || exit 1
+
+for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
+         selfhost/l2/driver.ct selfhost/ct-ast/main.ct; do
+    if grep -q '#define CTC_VERSION "0.80.0"' "$f"; then
+        ok "$f CTC_VERSION 0.80.0"
+    else
+        bad "$f CTC_VERSION is not 0.80.0"
+    fi
+done
+
+if grep -q 'v0\.80\.0' README.md; then ok "README carries v0.80.0"; else bad "README version"; fi
+if grep -q 'v0\.80\.0' docs/README.md; then ok "docs/README carries v0.80.0"; else bad "docs/README version"; fi
+if grep -q 'Phase 80' docs/roadmap.md && grep -q 'v0\.80\.0' docs/roadmap.md; then
+    ok "roadmap lists Phase 80 with v0.80.0"
+else
+    bad "roadmap Phase 80 row"
+fi
+
+spec=docs/language-spec.md
+[ -f "$spec" ] || { bad "docs/language-spec.md missing"; exit 1; }
+if grep -q '^### 4\.70 .*`String` / `Str`' "$spec"; then
+    ok "spec has the String/Str section (4.70)"
+else
+    bad "spec section 4.70 missing"
+fi
+for needle in 'const char \*' 'cstr()' 'immortal' 'U16String' 'std::str::Str' '不保证 NUL'; do
+    if grep -q "$needle" "$spec"; then ok "spec mentions $needle"; else bad "spec does not mention $needle"; fi
+done
+
+std=lib/std/README.md
+if grep -q 'StrLegacy' "$std" && grep -q 'S5b' "$std"; then
+    ok "lib/std README names the compatibility unit and the S5b gap"
+else
+    bad "lib/std README compat window"
+fi
+if grep -q 'U16String' "$std"; then ok "lib/std README names the UTF-16 pair"; else bad "lib/std README UTF-16"; fi
+
+card=docs/design/phase80.md
+[ -f "$card" ] || { bad "docs/design/phase80.md missing"; exit 1; }
+if grep -q '^## 7 ' "$card"; then ok "phase card has the §7 closeout"; else bad "phase card §7 missing"; fi
+for id in E80-1 E80-2 E80-3 E80-4 E80-5 E80-6 E80-7 E80-8; do
+    if grep -q "| $id |" "$card"; then ok "card rule row $id"; else bad "card missing $id"; fi
+done
+if grep -q 'S5b' "$card" && grep -q '未通过' "$card"; then
+    ok "card records the S5b / E80-7 gap"
+else
+    bad "card does not record the unfinished S5b"
+fi
+
+[ "$fail" -eq 0 ] && echo "p80_docs: OK"
+exit "$fail"

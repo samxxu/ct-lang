@@ -5,23 +5,23 @@
 
 int main(void)
 {
-    Str a = str_from_len("a\0b", 3);
-    Str b = str_from_len("a\0c", 3);
-    Str longer = str_from_len("a\0bX", 4);
-    Str prefix = str_from_len("a\0", 2);
-    Str plain = str_from("a");
-    Map<Str, int> m;
+    String a = str_dup_len("a\0b", 3);
+    String b = str_dup_len("a\0c", 3);
+    String longer = str_dup_len("a\0bX", 4);
+    String prefix = str_dup_len("a\0", 2);
+    String plain = str_dup("a");
+    Map<String, int> m;
     int *p;
 
     m.h = 0;
-    m.put(a, 0);
-    m.put(b, 2);
-    p = m.get(a);
-    printf("nul-a has=%d hit=%d val=%d\n", m.has(a), p != 0, p ? *p : -1);
-    p = m.get(b);
-    printf("nul-b has=%d hit=%d val=%d\n", m.has(b), p != 0, p ? *p : -1);
-    printf("longer=%d prefix=%d plain=%d\n", m.has(longer), m.has(prefix), m.has(plain));
-    p = m.get(longer);
+    m.put(a.as_str(), 0);
+    m.put(b.as_str(), 2);
+    p = m.get(a.as_str());
+    printf("nul-a has=%d hit=%d val=%d\n", m.has(a.as_str()), p != 0, p ? *p : -1);
+    p = m.get(b.as_str());
+    printf("nul-b has=%d hit=%d val=%d\n", m.has(b.as_str()), p != 0, p ? *p : -1);
+    printf("longer=%d prefix=%d plain=%d\n", m.has(longer.as_str()), m.has(prefix.as_str()), m.has(plain.as_str()));
+    p = m.get(longer.as_str());
     printf("miss get=%d\n", p == 0);
     m.release();
     a.release();

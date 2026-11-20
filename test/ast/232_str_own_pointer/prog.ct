@@ -6,7 +6,7 @@
 
 int main(void)
 {
-    own Str *p = malloc(sizeof(struct Str));
+    own std::str::Str *p = malloc(sizeof(struct std_str_Str));
 
     p->data = malloc(2);
     p->data[0] = 'h';

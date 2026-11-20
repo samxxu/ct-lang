@@ -1,0 +1,6 @@
+/* PH-80 E80-2 negative: the same rule for the borrowed UTF-16 view. */
+int main(void)
+{
+    U16Str x = "abc";
+    return x.len();
+}

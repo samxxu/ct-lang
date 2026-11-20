@@ -1,0 +1,110 @@
+/* PH-80 S5a-1 / D-013 §3: the refcount trace at every position the retain
+ * contract names - literal (immortal), explicit copy/retain/release, a
+ * by-value parameter, a return, a struct field, a `Vec` element and
+ * `own`/`delete`.
+ *
+ * The protocol this phase ships is explicit: `copy()` / `retain()` share the
+ * buffer and bump `refs`, `release()` drops one reference. A `Vec` insertion
+ * is the one automatic position (the container element glue calls `retain`);
+ * a plain by-value parameter, return or field assignment is a shallow struct
+ * copy and is NOT auto-retained yet - the `gap` lines below pin that fact
+ * until D-013 §3's automatic half lands. */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Holder {
+    String tag;
+}
+
+int take_len(String a)
+{
+    return a.len();
+}
+
+/* A parameter observed without retaining it: the shallow copy does not bump
+   `refs`, which is the documented gap. */
+int take_refs(String a)
+{
+    return a.refs();
+}
+
+String keep_param(String a)
+{
+    return a.retain();
+}
+
+String make_local(void)
+{
+    Str lit = "mk";
+    return lit.to_string();
+}
+
+String nonlocal_ret(String src)
+{
+    String r = src.retain();
+    return r;
+}
+
+int main(void)
+{
+    Str lit = "keep";
+    Str mak = "mk";
+    String keep = lit.to_string();
+    String got;
+    String made;
+    Holder h;
+    Vec<String> v;
+    String elem;
+    own String *p = malloc(sizeof(struct String));
+
+    v.h = 0;
+    printf("keep refs=%d live=%d\n", keep.refs(), ct_str_live_count());
+    printf("param take_len=%d refs_after=%d\n", take_len(keep), keep.refs());
+    printf("gap param_refs=%d (no automatic retain on a by-value parameter)\n",
+           take_refs(keep));
+    got = keep_param(keep);
+    printf("keep_param refs=%d live=%d\n", got.refs(), ct_str_live_count());
+    got.release();
+    printf("after_param_copy_release keep=%d\n", keep.refs());
+
+    made = make_local();
+    printf("make_local len=%d refs=%d live=%d\n", made.len(), made.refs(), ct_str_live_count());
+    made.release();
+    printf("after_local_release live=%d\n", ct_str_live_count());
+
+    got = nonlocal_ret(keep);
+    printf("nonlocal refs=%d keep=%d\n", got.refs(), keep.refs());
+    keep.release();
+    printf("after_src_release got=%d\n", got.refs());
+    got.release();
+
+    keep = mak.to_string();
+    h.tag = keep.retain();
+    printf("field refs=%d keep=%d live=%d\n", h.tag.refs(), keep.refs(), ct_str_live_count());
+    h.tag.release();
+    printf("field_after_release keep=%d\n", keep.refs());
+
+    v.push(keep);
+    printf("vec push keep=%d vec_len=%d\n", keep.refs(), v.len());
+    elem = v.get(0);
+    printf("vec elem len=%d\n", elem.len());
+    v.release();
+    printf("vec_release keep=%d\n", keep.refs());
+    keep.release();
+    printf("after_keep_release live=%d\n", ct_str_live_count());
+
+    *p = lit.to_string();
+    printf("ptr before_delete refs=%d live=%d\n", p->refs(), ct_str_live_count());
+    delete p;
+    printf("ptr after_delete p_null=%d live=%d\n", p == 0, ct_str_live_count());
+
+    {
+        String literal = "immortal";
+        String empty = "";
+        printf("literal refs=%d empty refs=%d\n", literal.refs(), empty.refs());
+        literal.release();
+        empty.release();
+        printf("literal after release=%d empty=%d\n", literal.refs(), empty.refs());
+    }
+    return 0;
+}

@@ -1,0 +1,42 @@
+/* P-7.4-4: `Map<Str, V>` migrated to owning `String` keys with borrowed `Str`
+ * lookups; `str_slice` is the view form and `str_dup` the deep copy. */
+#include <stdio.h>
+#include <string.h>
+
+int main(void)
+{
+    Str a = "a\0b";
+    Str a2 = "a\0b";
+    Str b = "a\0c";
+    Str plain = "a";
+    Str key = "key";
+    Map<String, int> m;
+    int *v;
+    int removed;
+    MapEntry<String, int> e;
+    m.h = 0;
+    printf("put a=%d b=%d\n", m.put(a, 1), m.put(b, 2));
+    printf("len=%d v1=%d v2=%d\n", m.len(), *m.get(a), *m.get(b));
+    printf("has a2=%d missing=%d\n", m.has(a2), m.has(plain));
+    e = m.entry(0);
+    printf("entry0 key len=%d starts=%d value=%d\n", e.key.len(), e.key.byte_at(0), e.value);
+    /* Split: C argument evaluation order is unspecified (TEST-19). */
+    {
+        int overwritten = m.put(a2, 7);
+        printf("overwrite=%d v1=%d len=%d\n", overwritten, *m.get(a2), m.len());
+    }
+    removed = m.remove(b);
+    printf("remove=%d len=%d\n", removed, m.len());
+    v = m.get(a2);
+    printf("get after remove=%d\n", v == 0 ? -1 : *v);
+    printf("release=%d\n", m.release());
+
+    /* naming migration: slice borrows, dup owns */
+    Str s = "hello";
+    Str view = str_slice(s, 1, 3);
+    String keep = str_dup(view);
+    printf("view=%d own=%d ownrefs=%d\n", view.len(), keep.len(), keep.refs());
+    keep.release();
+    printf("key len=%d\n", key.len());
+    return 0;
+}

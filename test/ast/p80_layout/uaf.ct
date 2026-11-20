@@ -1,0 +1,16 @@
+/* Sanitizer sensitivity probe: NOT a supported program. It frees the
+ * NUL-terminated copy `cstr()` returned and then reads it; ASan must report a
+ * heap-use-after-free, proving the sanitizer covers this handle. */
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void)
+{
+    Str lit = "uaf";
+    String a = lit.to_string();
+    char *raw = a.cstr();
+    a.release();
+    free(raw);
+    printf("read after free=%d\n", raw[0]);
+    return 0;
+}

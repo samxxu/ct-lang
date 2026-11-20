@@ -1,0 +1,8 @@
+/* PH-80 E80-3 negative: `String` is immutable; `s[i]` is a read-only view and
+ * there is no `set`, so a subscript write is a hard error. */
+int main(void)
+{
+    String s = "abc";
+    s[0] = 'x';
+    return s.len();
+}

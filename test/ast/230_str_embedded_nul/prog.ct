@@ -4,10 +4,10 @@
 
 int main(void)
 {
-    Str a = str_from_len("a\0b", 3);
-    Str b = str_from_len("", 0);
+    String a = str_dup_len("a\0b", 3);
+    String b = str_dup_len("", 0);
 
-    printf("%d %d %d\n", str_len(a), a.data[1], str_len(b));
+    printf("%d %d %d\n", a.len(), a.data[1], b.len());
     a.release();
     b.release();
     return 0;

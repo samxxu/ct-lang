@@ -1,0 +1,22 @@
+/* PH-80 S5a-4 / E80-5 / D-013 §2: `.data` is the read-only raw view with no
+ * NUL guarantee, `cstr()` is the C-boundary exit that supplies the
+ * terminator, and a sub-view's `.data` never becomes a C string. */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void)
+{
+    String s = "abcd";
+    Str v = s.as_str();
+    Str sub = v.slice(1, 2);
+    char *p = s.cstr();
+
+    printf("data0=%d data3=%d\n", s.data[0], s.data[3]);
+    /* The sub-view is "bc": its own two bytes are followed by the parent's
+       next byte ('d'), never an inserted '\0'. */
+    printf("subview=%d,%d,%d\n", sub.data[0], sub.data[1], sub.data[2]);
+    printf("cstr=%s len=%d term=%d\n", p, (int)strlen(p), p[4] == 0);
+    free(p);
+    return 0;
+}

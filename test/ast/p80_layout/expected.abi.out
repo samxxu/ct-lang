@@ -1,0 +1,9 @@
+sizeof(String)=16
+sizeof(Str)=16
+sizeof(header)=8
+alignof(String)=8 alignof(header)=4
+literal_refs=-1 empty_refs=-1
+literal_len=3 empty_len=0 borrow_len=3
+owned_len=3 owned_refs=1
+literal_after_release=-1 empty_after=-1 live=1
+owned_after_release=0 live=0

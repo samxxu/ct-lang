@@ -1,0 +1,7 @@
+/* PH-80 E80-5 positive-side negative: the raw view is read-only. */
+int main(void)
+{
+    String s = "abc";
+    s.data[0] = 'x';
+    return s.len();
+}

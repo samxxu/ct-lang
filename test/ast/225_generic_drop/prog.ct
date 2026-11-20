@@ -17,7 +17,7 @@ int main(void)
 {
     own Box<int> *a = malloc(sizeof(struct Box_int));
     a->value = 42;
-    own Box<Str> *b = malloc(sizeof(struct Box_Str));
+    own Box<std::str::Str> *b = malloc(sizeof(struct Box_std__str__Str));
     b->value.data = malloc(1);
     b->value.data[0] = 0;
     b->value.len = 0;

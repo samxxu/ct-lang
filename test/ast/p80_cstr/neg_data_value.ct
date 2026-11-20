@@ -1,0 +1,8 @@
+/* PH-80 E80-5 negative: the raw view is indexable only; it never escapes as a
+ * value, so no `char *` consumer can take it by accident. */
+int main(void)
+{
+    String s = "abc";
+    const char *p = s.data;
+    return p[0];
+}

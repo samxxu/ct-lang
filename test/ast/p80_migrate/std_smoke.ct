@@ -1,0 +1,25 @@
+/* P-7.4-3 std consumer smoke: Vec / Option / Result and the migrated
+ * Map<String,V> key block still compile and behave. */
+#include <stdio.h>
+
+int main(void)
+{
+    Str key = "k";
+    Vec<int> v = {1, 2, 3};
+    Option<int> o = { 1, 7 };
+    Result<int, int> r = { 1, 9, 0 };
+    Map<String, int> m;
+    String k = str_dup(key);
+    int *p;
+
+    m.h = 0;
+    m.put(key, 1);
+    p = m.get(key);
+    printf("vec=%d option=%d result=%d map=%d\n", v.len(), o.unwrap(), r.unwrap(), *p);
+    v.release();
+    o.release();
+    r.release();
+    printf("map_release=%d\n", m.release());
+    k.release();
+    return 0;
+}

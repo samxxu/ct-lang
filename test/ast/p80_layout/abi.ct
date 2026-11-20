@@ -1,0 +1,32 @@
+/* PH-80 E80-1 / D-013 §3: the 16-byte handle and the 8-byte refcount header.
+ * The three `_Static_assert`s are emitted into the C and compiled by `cc`, so
+ * a layout drift fails the probe at compile time, not only at run time. */
+#include <stdio.h>
+
+int main(void)
+{
+    String lit = "abc";
+    String empty = "";
+    String owned;
+    Str borrow = "abc";
+    _Static_assert(sizeof(String) == 16, "String is 16 bytes");
+    _Static_assert(sizeof(Str) == 16, "Str is 16 bytes");
+    _Static_assert(sizeof(struct ct_str_hdr) == 8, "header is 8 bytes");
+
+    printf("sizeof(String)=%d\n", (int)sizeof(String));
+    printf("sizeof(Str)=%d\n", (int)sizeof(Str));
+    printf("sizeof(header)=%d\n", (int)sizeof(struct ct_str_hdr));
+    printf("alignof(String)=%d alignof(header)=%d\n",
+           (int)_Alignof(String), (int)_Alignof(struct ct_str_hdr));
+    printf("literal_refs=%d empty_refs=%d\n", lit.refs(), empty.refs());
+    printf("literal_len=%d empty_len=%d borrow_len=%d\n", lit.len(), empty.len(), borrow.len());
+    owned = borrow.to_string();
+    printf("owned_len=%d owned_refs=%d\n", owned.len(), owned.refs());
+    lit.release();
+    empty.release();
+    printf("literal_after_release=%d empty_after=%d live=%d\n",
+           lit.refs(), empty.refs(), ct_str_live_count());
+    owned.release();
+    printf("owned_after_release=%d live=%d\n", owned.refs(), ct_str_live_count());
+    return 0;
+}

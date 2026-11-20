@@ -1,0 +1,10 @@
+/* PH-80 E80-5 / D-013 §2 negative: `.data` has no NUL guarantee, so handing
+ * it to a C string consumer is a hard error; `cstr()` is the only exit. */
+#include <stdio.h>
+
+int main(void)
+{
+    String s = "abc";
+    printf("%s\n", s.data);
+    return s.len();
+}

@@ -1,0 +1,10 @@
+/* PH-80 E80-1 / A.3.3 negative: the borrowed `Str` owns nothing, so `delete`
+ * on it cannot be formed (there is no `impl Drop for Str`). */
+#include <stdlib.h>
+
+int main(void)
+{
+    own Str *p = malloc(sizeof(struct Str));
+    delete p;
+    return 0;
+}

@@ -68,19 +68,23 @@ build_and_run() {
 
 cat >"$work/str_ptr.ct" <<'EOF'
 #include <stdio.h>
-Result<Str, char *> f(int n)
+String hello_lit(void)
 {
-    if (n < 0) return err: (Result<Str, char *>){ 0, { 0, 0 }, "neg" };
-    return (Result<Str, char *>){ 1, str_from("hello"), 0 };
+    return str_dup("hello");
 }
-Result<Str, char *> moved(int n)
+Result<String, char *> f(int n)
 {
-    Str s = f(n)?;
-    return (Result<Str, char *>){ 1, s, 0 };
+    if (n < 0) return err: (Result<String, char *>){ 0, { 0, 0 }, "neg" };
+    return (Result<String, char *>){ 1, hello_lit(), 0 };
+}
+Result<String, char *> moved(int n)
+{
+    String s = f(n)?;
+    return (Result<String, char *>){ 1, s, 0 };
 }
 Result<long, char *> used(int n)
 {
-    Str s = f(n)?;
+    String s = f(n)?;
     long len = s.len;
     s.release();
     return (Result<long, char *>){ 1, len, 0 };
@@ -91,34 +95,38 @@ void discarded(int n)
 }
 int main(void)
 {
-    Result<Str, char *> a = moved(1);
+    Result<String, char *> a = moved(1);
     Result<long, char *> b = used(1);
     discarded(1);
-    Result<Str, char *> c = moved(-1);
+    Result<String, char *> c = moved(-1);
     printf("%d %d %d %s\n", a.ok, b.ok, c.ok, c.err);
     a.value.release();
     return 0;
 }
 EOF
 if build_and_run str_ptr '1 1 0 neg'; then
-    if grep -Fq 'Str_release(&__ct_q' "$work/str_ptr.c"; then
-        ok "str_ptr (discarded success releases its Str once)"
+    if grep -Fq 'String_release(&__ct_q' "$work/str_ptr.c"; then
+        ok "str_ptr (discarded success releases its String once)"
     else
-        bad "str_ptr discard" "no Str_release on a discarded payload"
+        bad "str_ptr discard" "no String_release on a discarded payload"
     fi
 fi
 
 cat >"$work/str_err.ct" <<'EOF'
 #include <stdio.h>
-Result<int, Str> f(int n)
+String boom_lit(void)
 {
-    if (n < 0) return err: (Result<int, Str>){ 0, 0, str_from("boom") };
-    return (Result<int, Str>){ 1, n, { 0, 0 } };
+    return str_dup("boom");
 }
-Result<long, Str> g(int n)
+Result<int, String> f(int n)
+{
+    if (n < 0) return err: (Result<int, String>){ 0, 0, boom_lit() };
+    return (Result<int, String>){ 1, n, { 0, 0 } };
+}
+Result<long, String> g(int n)
 {
     int v = f(n)?;
-    return (Result<long, Str>){ 1, v + 1, { 0, 0 } };
+    return (Result<long, String>){ 1, v + 1, { 0, 0 } };
 }
 void discarded(void)
 {
@@ -126,8 +134,8 @@ void discarded(void)
 }
 int main(void)
 {
-    Result<long, Str> a = g(1);
-    Result<long, Str> b = g(-1);
+    Result<long, String> a = g(1);
+    Result<long, String> b = g(-1);
     discarded();
     printf("%d %ld %d %d\n", a.ok, a.value, b.ok, b.err.len);
     a.err.release();
@@ -136,10 +144,10 @@ int main(void)
 }
 EOF
 if build_and_run str_err '1 2 0 4'; then
-    if grep -Fq 'Str_release(&__ct_q' "$work/str_err.c"; then
-        ok "str_err (void failure releases its Str err once)"
+    if grep -Fq 'String_release(&__ct_q' "$work/str_err.c"; then
+        ok "str_err (void failure releases its String err once)"
     else
-        bad "str_err discard" "no Str_release on a discarded error payload"
+        bad "str_err discard" "no String_release on a discarded error payload"
     fi
 fi
 
@@ -172,15 +180,23 @@ int main(void)
 EOF
 cat >"$work/str_both.ct" <<'EOF'
 #include <stdio.h>
-Result<Str, Str> f(int n)
+String bad_lit(void)
 {
-    if (n < 0) return err: (Result<Str, Str>){ 0, { 0, 0 }, str_from("bad") };
-    return (Result<Str, Str>){ 1, str_from("good"), { 0, 0 } };
+    return str_dup("bad");
 }
-Result<Str, Str> g(int n)
+String good_lit(void)
 {
-    Str s = f(n)?;
-    return (Result<Str, Str>){ 1, s, { 0, 0 } };
+    return str_dup("good");
+}
+Result<String, String> f(int n)
+{
+    if (n < 0) return err: (Result<String, String>){ 0, { 0, 0 }, bad_lit() };
+    return (Result<String, String>){ 1, good_lit(), { 0, 0 } };
+}
+Result<String, String> g(int n)
+{
+    String s = f(n)?;
+    return (Result<String, String>){ 1, s, { 0, 0 } };
 }
 void discarded(int n)
 {
@@ -188,8 +204,8 @@ void discarded(int n)
 }
 int main(void)
 {
-    Result<Str, Str> a = g(1);
-    Result<Str, Str> b = g(-1);
+    Result<String, String> a = g(1);
+    Result<String, String> b = g(-1);
     discarded(1);
     discarded(-1);
     printf("%d %d %d %d\n", a.ok, a.value.len, b.ok, b.err.len);

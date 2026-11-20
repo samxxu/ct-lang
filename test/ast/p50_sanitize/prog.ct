@@ -5,15 +5,15 @@
 
 int main(void)
 {
-    Vec<Str> v;
-    Str *s;
-    Map<Str, int> m;
-    Str k;
+    Vec<String> v;
+    String *s;
+    Map<String, int> m;
+    String k;
     int *vp;
 
     v.h = 0;
-    v.push(str_from("alpha"));
-    v.push(str_from(""));
+    v.push(str_dup("alpha"));
+    v.push(str_dup(""));
     s = v.at(0);
     printf("vec has=%d len=%d zero=%d\n", v.has(0), s ? s->len : -1, v.has(1));
     s = v.at(1);
@@ -22,11 +22,11 @@ int main(void)
     printf("vec miss=%d at=%d\n", v.has(9), s == 0);
     v.release();
 
-    k = str_from_len("k\0x", 3);
+    k = str_dup_len("k\0x", 3);
     m.h = 0;
-    m.put(k, 7);
-    vp = m.get(k);
-    printf("map has=%d val=%d\n", m.has(k), vp ? *vp : -1);
+    m.put(k.as_str(), 7);
+    vp = m.get(k.as_str());
+    printf("map has=%d val=%d\n", m.has(k.as_str()), vp ? *vp : -1);
     m.release();
     k.release();
     return 0;

@@ -47,31 +47,31 @@ static int __ct_frees(void)
 
 int main(void)
 {
-    Str k1 = str_from_len("one", 3);
-    Str k2 = str_from_len("two", 3);
-    Str k3 = str_from_len("three", 5);
-    Map<Str, int> m;
+    String k1 = str_dup_len("one", 3);
+    String k2 = str_dup_len("two", 3);
+    String k3 = str_dup_len("three", 5);
+    Map<String, int> m;
     int a, f;
     m.h = 0;
 
     a = __ct_allocs(); f = __ct_frees();
-    m.put(k1, 1);
+    m.put(k1.as_str(), 1);
     printf("put-new alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
 
     a = __ct_allocs(); f = __ct_frees();
-    m.put(k2, 2);
+    m.put(k2.as_str(), 2);
     printf("put-new alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
 
     a = __ct_allocs(); f = __ct_frees();
-    m.put(k1, 11);
+    m.put(k1.as_str(), 11);
     printf("put-over alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
 
     a = __ct_allocs(); f = __ct_frees();
-    m.put(k3, 3);
+    m.put(k3.as_str(), 3);
     printf("put-new alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
 
     a = __ct_allocs(); f = __ct_frees();
-    m.remove(k2);
+    m.remove(k2.as_str());
     printf("remove alloc=%d free=%d\n", __ct_allocs() - a, __ct_frees() - f);
 
     k1.release();

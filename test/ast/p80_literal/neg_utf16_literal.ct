@@ -1,0 +1,7 @@
+/* PH-80 E80-2 negative: a UTF-16 value only comes from an explicit factory;
+ * an implicit string literal is refused. */
+int main(void)
+{
+    U16String x = "abc";
+    return x.len();
+}

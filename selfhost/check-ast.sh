@@ -1079,6 +1079,31 @@ else
     bad "PH-79-S3e docs" "$(sed -n '1,10p' "$work/p79docs.out")"
 fi
 
+# Phase 80: `String` / `Str` (S5a, D-013). Four behavioural probes keep the
+# stage tasks independently verifiable (layout/refcount, literals, methods,
+# C boundary), plus the migration/coexistence probe and the docs probe.
+p80_probe() {
+    tag=$1; label=$2
+    shift 2
+    if sh "$@" >"$work/p80$tag.out" 2>&1; then
+        ok "$label"
+    else
+        bad "$label" "$(sed -n '1,10p' "$work/p80$tag.out")"
+    fi
+}
+p80_probe layout "PH-80-S5a-1 layout (E80-1: 16-byte handle, 8-byte header, immortal, refcount trace)" \
+    test/ast/p80_layout.sh "$work/ct-ast"
+p80_probe literal "PH-80-S5a-2 literal (E80-2: L1 immortal, Str borrow, UTF-16 factories)" \
+    test/ast/p80_literal.sh "$work/ct-ast"
+p80_probe methods "PH-80-S5a-3 methods (E80-3/4/6: codepoint/byte API, U16 JS core, read-only s[i])" \
+    test/ast/p80_methods.sh "$work/ct-ast"
+p80_probe cstr "PH-80-S5a-4 cstr (E80-5: .data read-only, cstr() NUL, printf negative)" \
+    test/ast/p80_cstr.sh "$work/ct-ast"
+p80_probe migrate "PH-80-S5a/S5b migrate (E80-7: std::str::Str coexistence, std consumers)" \
+    test/ast/p80_migrate.sh "$work/ct-ast"
+p80_probe docs "PH-80-S5b-2 docs (E80-8: spec 4.70, README, roadmap, card 7)" \
+    test/ast/p80_docs.sh
+
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-75-R1 closure (pair-form method argument)"
@@ -7636,7 +7661,7 @@ p29_neg L31_5_vec_addr "cannot take the address of a container subscript; bind i
 # S20b review: the instance tag is a C struct name, and a nested key is
 # reported by that tag.
 p29_neg L31_inst_tag_collision "the instance name 'Vec_int' collides with a declared struct" 11:14
-p29_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (key types: int, long, char *, Str)" 7:24
+p29_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (key types: int, long, char *, String)" 7:24
 # ---- Phase 31 S23a: a borrowed view carries no ownership ----
 # The bit lives on the local symbol and is set from `get` / `entry` / `foreach
 # item` (and propagated through an assignment), so every release form below is
@@ -7800,7 +7825,7 @@ elif ! diff -u examples/27_map_keys/map_keys.expected.out "$work/p29mk.run" \
 else
     ok "p29 V29-1 (int / long / char * keys: one definition each, expected output)"
 fi
-p29_neg map_key_bad "Map does not support key type 'char' (key types: int, long, char *, Str)" 6:20
+p29_neg map_key_bad "Map does not support key type 'char' (key types: int, long, char *, String)" 6:20
 
 # ---- Phase 29 V29-2: a released handle cannot be released twice ----
 # `v.retain()` makes a second handle; releasing `v` twice must not decrement the
@@ -8214,19 +8239,19 @@ if ! "$work/ct-ast" test/ast/232_str_own_pointer/prog.ct -o "$work/p36s4a1.c" \
         >"$work/p36s4a1.log" 2>&1; then
     bad "p36 E36-8 (own Str product)" "ct-ast failed: $(head -3 "$work/p36s4a1.log")"
 else
-    body="$(sed -n '/^static .*Str_Drop_drop(void \*self) {/,/^}/p' "$work/p36s4a1.c")"
+    body="$(sed -n '/^static .*std_str_Str_Drop_drop(void \*self) {/,/^}/p' "$work/p36s4a1.c")"
     if printf '%s\n' "$body" | grep -q 'free(_self->data);' \
        && printf '%s\n' "$body" | grep -q '_self->data = 0;' \
        && printf '%s\n' "$body" | grep -q '_self->len = (-1);' \
        && ! printf '%s\n' "$body" | grep -q 'free(_self);'; then
-        ok "p36 E36-8 (Str_Drop_drop frees data, not the struct)"
+        ok "p36 E36-8 (std_str_Str_Drop_drop frees data, not the struct)"
     else
-        bad "p36 E36-8 (Str_Drop_drop body)" "$(printf '%s\n' "$body" | head -6)"
+        bad "p36 E36-8 (std_str_Str_Drop_drop body)" "$(printf '%s\n' "$body" | head -6)"
     fi
-    if grep -q 'Str_Drop_drop(p); free(p); p = 0;' "$work/p36s4a1.c"; then
+    if grep -q 'std_str_Str_Drop_drop(p); free(p); p = 0;' "$work/p36s4a1.c"; then
         ok "p36 E36-8 (delete runs the drop, frees the struct, nulls the pointer)"
     else
-        bad "p36 E36-8 (delete shape)" "$(grep 'Str_Drop_drop' "$work/p36s4a1.c" | head -3)"
+        bad "p36 E36-8 (delete shape)" "$(grep 'std_str_Str_Drop_drop' "$work/p36s4a1.c" | head -3)"
     fi
 fi
 
@@ -8261,11 +8286,11 @@ else
         else
             bad "p36 E36-1 (Box_int_Drop_drop count)" "got $n"
         fi
-        n="$(nm "$work/p36s1a.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_Str_Drop_drop$/ { c++ } END { print c + 0 }')"
+        n="$(nm "$work/p36s1a.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_std__str__Str_Drop_drop$/ { c++ } END { print c + 0 }')"
         if [ "$n" = "1" ]; then
-            ok "p36 E36-1 (Box_Str_Drop_drop: one definition)"
+            ok "p36 E36-1 (Box_std__str__Str_Drop_drop: one definition)"
         else
-            bad "p36 E36-1 (Box_Str_Drop_drop count)" "got $n"
+            bad "p36 E36-1 (Box_std__str__Str_Drop_drop count)" "got $n"
         fi
         n="$(nm "$work/p36s1a.bin" 2>/dev/null | awk '$0 ~ /^[0-9a-fA-F]+ [Tt] _?Box_Drop_drop$/ { c++ } END { print c + 0 }')"
         if [ "$n" = "0" ]; then
@@ -8315,9 +8340,9 @@ if ! "$work/ct-ast" test/ast/227_vec_element_release/prog.ct -o "$work/p36s1a3.c
         >"$work/p36s1a3.log" 2>&1; then
     bad "p36 E36-3 (element release product)" "ct-ast failed: $(head -3 "$work/p36s1a3.log")"
 else
-    if grep -q 'Vec_Str__elem_release' "$work/p36s1a3.c" \
-       && grep -q 'Str_release' "$work/p36s1a3.c"; then
-        ok "p36 E36-3 (Vec<Str> element helper calls Str_release)"
+    if grep -q 'Vec_std__str__Str__elem_release' "$work/p36s1a3.c" \
+       && grep -q 'std_str_Str_release' "$work/p36s1a3.c"; then
+        ok "p36 E36-3 (Vec<std::str::Str> element helper calls std_str_Str_release)"
     else
         bad "p36 E36-3 (Vec<Str> element helper shape)" \
             "$(grep 'elem_release' "$work/p36s1a3.c" | head -3)"

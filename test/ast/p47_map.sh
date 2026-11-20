@@ -60,11 +60,11 @@ fi
 
 # The key block is the one that runs: the entry spells `Str` by value and the
 # comparison reads `len` plus `memcmp`, never a NUL-terminated `strcmp`.
-if grep -Fq 'Map_Str_int_put(void *self, struct Str k' "$tmp/c.c" \
-   && grep -Fq 'memcmp(es[i].key.data, k.data' "$tmp/c.c"; then
-    ok_msg "E47-1 the Str key block owns put (len + memcmp)"
+if grep -Fq 'Map_String_int_put(void *self, struct Str k' "$tmp/c.c" \
+   && grep -Fq 'memcmp(es[i].key.ptr, k.ptr' "$tmp/c.c"; then
+    ok_msg "E47-1 the String key block owns put (len + memcmp)"
 else
-    fail_msg "the Str key block is missing from the product"
+    fail_msg "the String key block is missing from the product"
 fi
 
 # --- E47-2: one key copy per put, one release per entry ---------------------
@@ -136,9 +136,9 @@ p47_neg() {
         ok_msg "L47-1 $name ($wpos)"
     fi
 }
-p47_neg p47_map_struct_key "Map does not support key type 'struct Key' (key types: int, long, char *, Str)" 9:26
-p47_neg map_key_bad "Map does not support key type 'char' (key types: int, long, char *, Str)" 6:20
-p47_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (key types: int, long, char *, Str)" 7:24
+p47_neg p47_map_struct_key "Map does not support key type 'struct Key' (key types: int, long, char *, String)" 9:26
+p47_neg map_key_bad "Map does not support key type 'char' (key types: int, long, char *, String)" 6:20
+p47_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (key types: int, long, char *, String)" 7:24
 
 # --- E47-5: the documentation states the borrowed-key rule ------------------
 if ( cd "$root" && grep -Fq '不得 release 键' lib/std/README.md ); then

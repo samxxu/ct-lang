@@ -18,8 +18,8 @@ int main(void)
     Vec<Probe> v = {a, b, c};
     v.release();
 
-    Str s = str_from("hi");
-    Vec<Str> vs = {s};
+    std::str::Str s = std::str::str_from("hi");
+    Vec<std::str::Str> vs = {s};
     vs.release();
     printf("done\n");
     return 0;

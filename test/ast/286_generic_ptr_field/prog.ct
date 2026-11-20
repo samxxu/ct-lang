@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 struct Doc {
-    Map<Str, int> *index;
+    Map<String, int> *index;
     int n;
 }
 

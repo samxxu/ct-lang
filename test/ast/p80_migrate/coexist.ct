@@ -1,0 +1,43 @@
+/* P-7.4-2 coexistence: in one unit the bare `Str` is the new borrowed view
+ * and the old owning handle is reachable only as `std::str::Str`; the
+ * qualified spelling resolves the legacy free functions and methods. */
+#include <stdio.h>
+
+/* A legacy consumer signature after the mechanical migration: the body and
+   the semantics are unchanged, only the spelling gained `std::str::`. */
+int legacy_len(std::str::Str s)
+{
+    return std::str::str_len(s);
+}
+
+/* The new borrow API next to it in the same unit. */
+int borrow_len(Str v)
+{
+    return v.len();
+}
+
+int main(void)
+{
+    Str view = "hello";                        /* new borrow */
+    std::str::Str owned;                       /* legacy owning */
+    std::str::Str sub;
+    std::str::Str joined;
+
+    owned = std::str::str_from("hello");       /* legacy API, qualified */
+    printf("view len=%d cp=%d\n", view.len(), view.codepoint_at(1));
+    printf("legacy len=%d byte=%c\n", std::str::str_len(owned), owned.data[1]);
+    printf("legacy same=%d\n", std::str::str_compare(owned, owned));
+    sub = std::str::str_slice(owned, 1, 3);
+    printf("legacy slice len=%d first=%c\n", sub.len, sub.data[0]);
+    joined = std::str::str_concat(owned, sub);
+    printf("legacy concat len=%d\n", std::str::str_len(joined));
+    printf("migrated sum=%d borrow sum=%d\n", legacy_len(owned), borrow_len(view));
+    {
+        Str whole = view.as_str();
+        printf("view char_len=%d view as_str len=%d\n", view.char_len(), whole.len());
+    }
+    sub.release();
+    joined.release();
+    owned.release();
+    return 0;
+}

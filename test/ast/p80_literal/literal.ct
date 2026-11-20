@@ -1,0 +1,60 @@
+/* PH-80 S5a-2 / E80-2: L1 immortal literals, the `String` / `Str` split, the
+ * `as_str` / `to_string` conversions and the explicit UTF-16 factories. */
+#include <stdio.h>
+
+String g = "global";
+Str gv = "gview";
+
+String make(void)
+{
+    return "returned";
+}
+
+Str make_view(void)
+{
+    return "viewed";
+}
+
+int main(void)
+{
+    String s = "abc";
+    Str v = "abc";
+    String e = "";
+    String owned;
+    Str back;
+    U16String u;
+    U16String u2;
+    String u3;
+    Str enc8;
+    int made;
+    int made_view;
+
+    owned = v.to_string();
+    back = owned.as_str();
+    {
+        /* A literal binds through a declared `Str`; a literal *argument* to a
+           factory is not coerced in this phase (documented gap). */
+        Str src = "ab";
+        u = U16String.from_utf8(src);
+    }
+    u2 = u.to_utf16();
+    u3 = String.from_utf16(u.as_str());
+    enc8 = u.to_utf8();
+    {
+        String made_s = make();
+        Str made_v = make_view();
+        made = made_s.len();
+        made_view = made_v.len();
+        made_s.release();
+    }
+    printf("glen=%d gv=%d gl_imm=%d\n", g.len(), gv.len(), g.refs());
+    printf("s=%d v=%d e_imm=%d\n", s.len(), v.len(), e.refs());
+    printf("make=%d make_view=%d\n", made, made_view);
+    printf("own=%d refs=%d back=%d\n", owned.len(), owned.refs(), back.len());
+    printf("u=%d u2=%d u3=%d u8=%d\n", u.len(), u2.len(), u3.len(), enc8.len());
+    owned.release();
+    u.release();
+    u2.release();
+    u3.release();
+    return 0;
+}

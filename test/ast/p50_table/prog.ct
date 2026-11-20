@@ -9,22 +9,22 @@ int main(void)
 {
     Vec<int> v;
     Vec<int> e;
-    Vec<Str> sv;
+    Vec<String> sv;
     Map<char *, int> mc;
     Map<int, int> mi;
     Map<long, int> ml;
-    Map<Str, int> ms;
+    Map<String, int> ms;
     Map<char *, int> ec;
-    Map<Str, int> es;
+    Map<String, int> es;
     Map<int, int> ei;
-    Str s1 = str_from_len("a\0b", 3);
-    Str s2 = str_from_len("a\0c", 3);
-    Str longer = str_from_len("a\0bX", 4);
-    Str prefix = str_from_len("a\0", 2);
-    Str plain = str_from("a");
-    Str empty = str_from_len("", 0);
+    String s1 = str_dup_len("a\0b", 3);
+    String s2 = str_dup_len("a\0c", 3);
+    String longer = str_dup_len("a\0bX", 4);
+    String prefix = str_dup_len("a\0", 2);
+    String plain = str_dup("a");
+    String empty = str_dup_len("", 0);
     int *p;
-    Str *sp;
+    String *sp;
 
     v.h = 0;
     v.push(0);
@@ -51,8 +51,8 @@ int main(void)
     printf("8,%d,%d,%d\n", e.has(-1), p != 0, p ? *p : -1);
 
     sv.h = 0;
-    sv.push(str_from_len("a\0b", 3));
-    sv.push(str_from(""));
+    sv.push(str_dup_len("a\0b", 3));
+    sv.push(str_dup(""));
     sp = sv.at(0);
     printf("9,%d,%d,%d\n", sv.has(0), sp != 0, sp ? sp->len : -1);
     sp = sv.at(1);
@@ -97,28 +97,28 @@ int main(void)
     printf("23,%d,%d,%d\n", ml.has(9L), p != 0, p ? *p : -1);
 
     ms.h = 0;
-    ms.put(s1, 1);
-    ms.put(s2, 2);
-    p = ms.get(s1);
-    printf("24,%d,%d,%d\n", ms.has(s1), p != 0, p ? *p : -1);
-    p = ms.get(s2);
-    printf("25,%d,%d,%d\n", ms.has(s2), p != 0, p ? *p : -1);
-    p = ms.get(longer);
-    printf("26,%d,%d,%d\n", ms.has(longer), p != 0, p ? *p : -1);
-    p = ms.get(prefix);
-    printf("27,%d,%d,%d\n", ms.has(prefix), p != 0, p ? *p : -1);
-    p = ms.get(plain);
-    printf("28,%d,%d,%d\n", ms.has(plain), p != 0, p ? *p : -1);
-    p = ms.get(empty);
-    printf("29,%d,%d,%d\n", ms.has(empty), p != 0, p ? *p : -1);
+    ms.put(s1.as_str(), 1);
+    ms.put(s2.as_str(), 2);
+    p = ms.get(s1.as_str());
+    printf("24,%d,%d,%d\n", ms.has(s1.as_str()), p != 0, p ? *p : -1);
+    p = ms.get(s2.as_str());
+    printf("25,%d,%d,%d\n", ms.has(s2.as_str()), p != 0, p ? *p : -1);
+    p = ms.get(longer.as_str());
+    printf("26,%d,%d,%d\n", ms.has(longer.as_str()), p != 0, p ? *p : -1);
+    p = ms.get(prefix.as_str());
+    printf("27,%d,%d,%d\n", ms.has(prefix.as_str()), p != 0, p ? *p : -1);
+    p = ms.get(plain.as_str());
+    printf("28,%d,%d,%d\n", ms.has(plain.as_str()), p != 0, p ? *p : -1);
+    p = ms.get(empty.as_str());
+    printf("29,%d,%d,%d\n", ms.has(empty.as_str()), p != 0, p ? *p : -1);
 
     ec.h = 0;
     p = ec.get("a");
     printf("30,%d,%d,%d\n", ec.has("a"), p != 0, p ? *p : -1);
 
     es.h = 0;
-    p = es.get(s1);
-    printf("31,%d,%d,%d\n", es.has(s1), p != 0, p ? *p : -1);
+    p = es.get(s1.as_str());
+    printf("31,%d,%d,%d\n", es.has(s1.as_str()), p != 0, p ? *p : -1);
 
     ei.h = 0;
     p = ei.get(0);

@@ -1,0 +1,10 @@
+put a=1 b=1
+len=2 v1=1 v2=2
+has a2=1 missing=0
+entry0 key len=3 starts=97 value=1
+overwrite=1 v1=7 len=2
+remove=1 len=1
+get after remove=7
+release=0
+view=3 own=3 ownrefs=1
+key len=3

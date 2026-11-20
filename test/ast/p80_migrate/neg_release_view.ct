@@ -1,0 +1,7 @@
+/* P-7.4-2 negative: the new borrowed `Str` has no release (it owns nothing). */
+int main(void)
+{
+    Str v = "x";
+    v.release();
+    return 0;
+}

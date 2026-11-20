@@ -8,32 +8,32 @@
 
 int main(void)
 {
-    Str a = str_from_len("a\0b", 3);
-    Str b = str_from_len("a\0c", 3);
-    Str a2 = str_from_len("a\0b", 3);
-    Str plain = str_from("a");
-    Map<Str, int> m;
+    String a = str_dup_len("a\0b", 3);
+    String b = str_dup_len("a\0c", 3);
+    String a2 = str_dup_len("a\0b", 3);
+    String plain = str_dup("a");
+    Map<String, int> m;
     int *v;
     int removed;
     m.h = 0;
-    m.put(a, 1);
-    m.put(b, 2);
-    printf("len=%d v1=%d v2=%d\n", m.len(), *m.get(a), *m.get(b));
+    m.put(a.as_str(), 1);
+    m.put(b.as_str(), 2);
+    printf("len=%d v1=%d v2=%d\n", m.len(), *m.get(a.as_str()), *m.get(b.as_str()));
     a.release();
-    printf("source released: len=%d v1=%d\n", m.len(), *m.get(a2));
-    printf("get missing: %d\n", m.get(plain) == 0);
+    printf("source released: len=%d v1=%d\n", m.len(), *m.get(a2.as_str()));
+    printf("get missing: %d\n", m.get(plain.as_str()) == 0);
     foreach (m) {
-        printf("key len=%d starts-a=%d second=%d value=%d\n", item.key.len,
+        printf("key len=%d starts-a=%d second=%d value=%d\n", item.key.len(),
                item.key.data[0] == 'a', item.key.data[1], item.value);
     }
-    printf("overwrite=%d\n", m.put(a2, 7));
-    printf("v1=%d len=%d\n", *m.get(a2), m.len());
+    printf("overwrite=%d\n", m.put(a2.as_str(), 7));
+    printf("v1=%d len=%d\n", *m.get(a2.as_str()), m.len());
     /* Two statements: `printf`'s argument evaluation order is unspecified, and
        GCC/x86-64 reads them right to left (the CI failure: `len` was sampled
        before the removal). */
-    removed = m.remove(b);
+    removed = m.remove(b.as_str());
     printf("remove=%d len=%d\n", removed, m.len());
-    v = m.get(a2);
+    v = m.get(a2.as_str());
     printf("get after remove: %d\n", v == 0 ? -1 : *v);
     printf("release=%d\n", m.release());
     b.release();

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # R5 probe: lib<base>.a exists; nm -g --defined-only normalised equals the
 # export set plus expected.internal (D-002 default A). PH-48 U-2 A adds the
-# Drop body to the exported surface (`Str_Drop_drop`), by design.
+# Drop body to the exported surface, by design; PH-80 has three owning handles
+# (`String`, `U16String` and the `std::str::Str` compatibility unit), so the
+# three Drop bodies are the fixed part and the rest sits in expected.internal.
 set -u
 CT=${1:?usage: r5_probe.sh <ct-ast>}
 root=$(cd -- "$(dirname -- "$0")/../../.." && pwd)
@@ -19,7 +21,7 @@ fi
 "${NM:-nm}" -g --defined-only "$tmp/libtest.a" 2>"$tmp/nm.err" \
     | awk 'NF >= 3 && $2 ~ /^[TDBR]$/ { print $3 }' \
     | sed 's/^_//' | sort -u > "$tmp/actual"
-{ printf 'add\nname\npoint_x\n'; printf '%s\n' 'Str_Drop_drop'; cat "$root/test/modules/p39_lib/expected.internal"; } | sort -u > "$tmp/want"
+{ printf 'add\nname\npoint_x\n'; printf '%s\n' 'String_Drop_drop' 'U16String_Drop_drop' 'std_str_Str_Drop_drop'; cat "$root/test/modules/p39_lib/expected.internal"; } | sort -u > "$tmp/want"
 if ! diff -u "$tmp/want" "$tmp/actual" > "$tmp/diff"; then
     echo "FAIL r5: symbol surface differs" >&2
     head -30 "$tmp/diff" >&2

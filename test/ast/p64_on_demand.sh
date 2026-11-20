@@ -81,7 +81,8 @@ cat >"$tmp/strfn/s.ct" <<'CT'
 
 int main(void)
 {
-    printf("%d\n", str_len(str_from("hi")));
+    String s = "hi";
+    printf("%d\n", s.len());
     return 0;
 }
 CT
@@ -131,8 +132,8 @@ fi
         echo '/* filler line to grow the source past 262143 bytes */'
         i=$((i + 1))
     done
-    echo 'Str s = str_from("x");'
-    echo 'int main(void) { printf("%d\n", s.len); return 0; }'
+    echo 'String s = "x";'
+    echo 'int main(void) { printf("%d\n", s.len()); return 0; }'
 } >"$tmp/bigs/b.ct"
 ( cd "$root" && "$CT" build --emit-c "$tmp/bigs/b.ct" -o "$tmp/bigs" ) >"$tmp/bigs.log" 2>"$tmp/bigs.err"
 if [ $? -ne 0 ]; then

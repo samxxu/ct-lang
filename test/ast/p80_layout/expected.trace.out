@@ -1,0 +1,19 @@
+keep refs=1 live=1
+param take_len=4 refs_after=1
+gap param_refs=1 (no automatic retain on a by-value parameter)
+keep_param refs=2 live=1
+after_param_copy_release keep=1
+make_local len=2 refs=1 live=2
+after_local_release live=1
+nonlocal refs=2 keep=2
+after_src_release got=1
+field refs=2 keep=2 live=1
+field_after_release keep=1
+vec push keep=2 vec_len=1
+vec elem len=2
+vec_release keep=1
+after_keep_release live=0
+ptr before_delete refs=1 live=1
+ptr after_delete p_null=1 live=0
+literal refs=-1 empty refs=-1
+literal after release=-1 empty=-1
