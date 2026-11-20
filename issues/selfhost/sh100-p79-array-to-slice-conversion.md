@@ -1,7 +1,7 @@
 ---
 id: SH-100
 title: "E79-2：数组→切片转换只在局部声明生效，实参/返回值发射非法 C"
-status: open
+status: verified
 area: selfhost
 severity: P1
 opened: 2026-11-20
@@ -135,3 +135,44 @@ return (struct __ct_slice){ (void *)(o.xs), (int)(sizeof(o.xs) / sizeof((o.xs)[0
 ```
 
 红提交 `f9294448`；修复提交见 `git log --grep 'SH-100'`。
+
+
+## REV 复核（2026-11-20，v0.79.2 `13dcb594`）
+
+`git archive v0.79.2` 独立自举（`ct-ast v0.79.2`，零构建警告）后复跑：
+
+```console
+$ /tmp/rev-ph79v2/ct-ast check arr_arg.ct; echo check=$?
+check=0
+$ /tmp/rev-ph79v2/ct-ast build arr_arg.ct -o arr_arg.bin; echo build=$?
+build=0
+$ ./arr_arg.bin; echo run=$?
+run=0
+$ /tmp/rev-ph79v2/ct-ast build arr_field_arg.ct -o arr_field_arg.bin && ./arr_field_arg.bin; echo field_run=$?
+field_run=0
+$ /tmp/rev-ph79v2/ct-ast build arr_ret_global.ct -o arr_ret_global.bin && ./arr_ret_global.bin; echo ret_global_run=$?
+ret_global_run=0
+```
+
+生成 C 采用与局部声明相同的 `{ptr,len}` compound literal：
+
+```c
+return (sum((struct __ct_slice){ (void *)(a), (int)(sizeof(a) / sizeof((a)[0])) }) - 7);
+...
+return (struct __ct_slice){ (void *)(g), (int)(sizeof(g) / sizeof((g)[0])) };
+```
+
+直接返回局部数组 `return a;` 现在先转换再触发 lint：
+
+```console
+$ /tmp/rev-ph79v2/ct-ast check arr_ret_local.ct; echo check=$?
+arr_ret_local.ct:4:12: error: slice escape: 'return' hands back a view of a local array
+check=1
+$ /tmp/rev-ph79v2/ct-ast build arr_ret_local.ct -o arr_ret_local.bin; echo build=$?
+arr_ret_local.ct:4:12: warning: slice escape: 'return' hands back a view of a local array
+build=0
+```
+
+自由函数实参/返回值与结构体数组字段均通过。卡面 §6 B-7 明确记录 inherent/static 方法实参
+的本地数组→切片未扩（trait 方法签名当前拒绝 `T[]` 形参），不属本轮声称覆盖的范围。
+SH-100 已修，REV 置 `verified`。

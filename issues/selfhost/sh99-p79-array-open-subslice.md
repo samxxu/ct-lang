@@ -1,7 +1,7 @@
 ---
 id: SH-99
 title: "E79-2：数组开区间子切片 `a[1..]` 发射非法 C（Emitter.h.ct:5212 缺右括号）"
-status: open
+status: verified
 area: selfhost
 severity: P1
 opened: 2026-11-20
@@ -94,3 +94,27 @@ struct __ct_slice t = __ct_slice_range((void *)(a), (int)(sizeof(a) / sizeof((a)
 
 回归：`p79_basic` 的 `s[1..]`、`a[1..3]` 与既有 goldens 不变。
 红提交 `f9294448`；修复提交见 `git log --grep 'SH-99'`。
+
+
+## REV 复核（2026-11-20，v0.79.2 `13dcb594`）
+
+`git archive v0.79.2` 独立自举（`ct-ast v0.79.2`，零构建警告）后复跑：
+
+```console
+$ /tmp/rev-ph79v2/ct-ast check a1open.ct; echo check=$?
+check=0
+$ /tmp/rev-ph79v2/ct-ast build a1open.ct -o a1open.bin; echo build=$?
+build=0
+```
+
+生成 C 已是合法半开区间：
+
+```c
+struct __ct_slice t = __ct_slice_range((void *)(a),
+    (int)(sizeof(a) / sizeof((a)[0])), 1,
+    (int)(sizeof(a) / sizeof((a)[0])), sizeof(int), "a1open.ct:4");
+```
+
+探针 `t[0]=2`、`t[1]=3`、`t[2]` 越界 trap（`ct: slice index 2 out of bounds (length 2)`，
+exit 1），证明长度恰为 2；`p79_basic` 的无 trap 版本 `a1open`/`a1range` 均 exit 0。
+SH-99 已修，REV 置 `verified`。

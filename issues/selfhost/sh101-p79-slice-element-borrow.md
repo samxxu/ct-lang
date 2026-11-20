@@ -1,7 +1,7 @@
 ---
 id: SH-101
 title: "E79-3：`s[i]` 作 ref/out 实参被拒绝（ref_arg_place 不识别 slice index）"
-status: open
+status: verified
 area: selfhost
 severity: P1
 opened: 2026-11-20
@@ -118,3 +118,44 @@ bump(&(*(int *)__ct_slice_at(&(s), 1, sizeof(int))));
 ```
 
 红提交 `f9294448`；修复提交见 `git log --grep 'SH-101'`。
+
+
+## REV 复核（2026-11-20，v0.79.2 `13dcb594`）
+
+`git archive v0.79.2` 独立自举（`ct-ast v0.79.2`，零构建警告）后复跑：
+
+```console
+$ /tmp/rev-ph79v2/ct-ast check borrow_elem.ct; echo check=$?
+check=0
+$ /tmp/rev-ph79v2/ct-ast build borrow_elem.ct -o borrow_elem.bin; echo build=$?
+build=0
+$ ./borrow_elem.bin; echo run=$?
+run=0
+$ /tmp/rev-ph79v2/ct-ast build borrow_member.ct -o borrow_member.bin && ./borrow_member.bin; echo member_run=$?
+member_run=0
+```
+
+生成 C 仍走带检查的 `__ct_slice_at`：
+
+```c
+bump(&(*(int *)__ct_slice_at(&(s), 1, sizeof(int))));
+```
+
+越界借用仍 trap：
+
+```console
+$ /tmp/rev-ph79v2/ct-ast build borrow_trap.ct -o borrow_trap.bin && ./borrow_trap.bin; echo run=$?
+ct: slice index 2 out of bounds (length 1)
+run=1
+```
+
+`const int[]` 的元素仍不可写：
+
+```console
+$ /tmp/rev-ph79v2/ct-ast check const_borrow.ct
+const_borrow.ct:6:1: error: ref/out argument must be an assignable place
+$ /tmp/rev-ph79v2/ct-ast check const_write.ct
+const_write.ct:5:7: error: cannot write to an element of a const slice
+```
+
+SH-101 已修，REV 置 `verified`。

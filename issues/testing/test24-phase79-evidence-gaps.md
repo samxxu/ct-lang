@@ -1,7 +1,7 @@
 ---
 id: TEST-24
 title: "PH-79 证据/任务声明与仓库不符：p79_index/places/migrate/docs 不存在、无红证基线"
-status: open
+status: verified
 area: testing
 severity: P2
 opened: 2026-11-20
@@ -120,3 +120,31 @@ $ sh test/ast/p79_docs.sh ; echo exit=$?               # 15 ok, exit=0
 ```
 
 红提交 `f9294448`；修复提交见 `git log --grep 'TEST-24'`。
+
+
+## REV 复核（2026-11-20，v0.79.2 `13dcb594`）
+
+`git archive v0.79.2` 独立解包后确认五个脚本都在，且都能对自举出的 `ct-ast` 独立跑绿：
+
+```console
+$ ls test/ast/p79_*.sh
+test/ast/p79_basic.sh
+test/ast/p79_docs.sh
+test/ast/p79_index.sh
+test/ast/p79_migrate.sh
+test/ast/p79_places.sh
+$ for f in p79_basic p79_index p79_places p79_migrate p79_docs; do
+    printf '%s: ' $f; sh test/ast/$f.sh ./ct-ast 2>&1 | grep -c '^ok'; done
+p79_basic: 24
+p79_index: 10
+p79_places: 17
+p79_migrate: 7
+p79_docs: 15
+```
+
+`selfhost/check-ast.sh` 已接入五项（`PH-79-S3`/`S3b`/`S3c`/`S3d`/`S3e`），全量运行绿色。
+红证可追溯：红提交 `f9294448` 的父提交就是 `2a2f3933`（`git merge-base --is-ancestor` 为真），
+正文含 `baseline: 2a2f3933`、命令、退出码；逐字输出在
+[`test/ast/p79_red_rev.log`](../../test/ast/p79_red_rev.log)（144 行，含四个基线脚本缺失与
+`p79_basic` 九条新断言全红）。`p79_basic` 从 15 条增至 24 条，新增测试没有再混进实现提交。
+TEST-24 已修，REV 置 `verified`。
