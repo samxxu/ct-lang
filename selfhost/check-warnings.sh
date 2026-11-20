@@ -35,6 +35,11 @@
 
 set -u
 
+# This gate compiles generated C, so the source-level c-boundary policy is not
+# what it exercises; SH-93 removed the cwd-based allow, and a dialect example
+# copied to a temp path would otherwise be refused before it can be compiled.
+export CT_C_BOUNDARY=allow
+
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 
