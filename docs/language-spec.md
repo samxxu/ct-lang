@@ -2915,8 +2915,11 @@ parse("ab", n);  /* 调用点不写 out */
   NUL 结尾副本，调用方负责 `free`。`.ptr` 是实现字段，用户读写一律硬错。
 - **复制 / retain**：显式协议 `copy()` / `retain()`（共享缓冲、`refs + 1`）与 `release()`
   （`refs - 1`，归零时释放）；`Vec` / `Map` 插入按容器元素 glue 自动 `retain`。
-  D-013 §3 的“按值传参 / 返回 / 字段赋值自动 retain”本轮未实现：这三处是按值浅拷贝，
-  调用方需要独立所有权时显式 `retain()`。
+  D-013 §3 的自动半部自 v0.80.1（SH-102）起生效：按值传参在入口 `retain`、由被调方在所有
+  出口 `release`；字段赋值与非局部 owning `return` `retain`；局部句柄 `return` 按 move；
+  重新赋值先 `retain` 右值再 `release` 旧值；作用域结束释放 owning 局部。局部绑定若是借用
+  视图（`Vec.get` / `Map.get` 结果）则不 `retain` 也不 `release`；`refs = -1` 的 immortal
+  字面量 / 空串在所有位置都跳过。
 - **旧类型已删除（S5b）**：`lib/std/StrLegacy.h.ct` 与 `namespace std::str` 兼容单元已移除，
   `std::str::Str` 不再解析；仓内消费者已迁到 `String` / `Str` 新 API，外部消费者的 dry-run
   见 phase80 卡 §7。

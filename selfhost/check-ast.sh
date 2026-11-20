@@ -1103,6 +1103,8 @@ p80_probe migrate "PH-80-S5a/S5b migrate (E80-7: legacy deletion, consumer migra
     test/ast/p80_migrate.sh "$work/ct-ast"
 p80_probe docs "PH-80-S5b-2 docs (E80-8: spec 4.70, README, roadmap, card 7)" \
     test/ast/p80_docs.sh
+p80_probe retain "PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)" \
+    test/ast/p80_retain.sh "$work/ct-ast"
 
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then

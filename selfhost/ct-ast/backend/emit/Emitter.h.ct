@@ -406,6 +406,7 @@ static const char *sb_prefix(int kind)
 /* The innermost tracked binding named `name`, or -1. */
 static int sb_find(struct Emitter *self, const char *name)
 {
+    (void)self;
     int i;
     for (i = g_sb.n - 1; i >= 0; i--)
         if (strcmp(g_sb.name[i], name) == 0) return i;
@@ -414,6 +415,7 @@ static int sb_find(struct Emitter *self, const char *name)
 
 static void sb_push(struct Emitter *self, const char *name, const char *type, int own)
 {
+    (void)self;
     int i;
     if (g_sb.n >= 256) return;
     i = g_sb.n;
@@ -426,6 +428,7 @@ static void sb_push(struct Emitter *self, const char *name, const char *type, in
 /* The innermost local / parameter of `name`, or -1. */
 static int sb_lfind(struct Emitter *self, const char *name)
 {
+    (void)self;
     int i;
     for (i = g_sb.ln - 1; i >= 0; i--)
         if (strcmp(g_sb.lname[i], name) == 0) return i;
@@ -434,6 +437,7 @@ static int sb_lfind(struct Emitter *self, const char *name)
 
 static void sb_lpush(struct Emitter *self, const char *name, const char *type)
 {
+    (void)self;
     int i;
     if (g_sb.ln >= 512) return;
     i = g_sb.ln;
@@ -607,14 +611,12 @@ static int sb_release_from(struct Emitter *self, int base, int skip, int ind)
    whose by-value return is a borrow (`get`, `entry`) or a move (`pop`). The
    element glue already carries the reference, so the automatic retain must not
    add a second one. */
-static int sb_container_view(struct Emitter *self, const char *method, int move_ok)
+static int sb_container_view(const char *method)
 {
     if (!g_sb.recv[0]) return 0;
     if (strncmp(g_sb.recv, "Vec_", 4) != 0 && strncmp(g_sb.recv, "Map_", 4) != 0)
         return 0;
-    if (strcmp(g_sb.method, method) != 0) return 0;
-    (void)move_ok;
-    return 1;
+    return strcmp(g_sb.method, method) == 0;
 }
 
 /* 1 when a return type can hand back a view of a local owning handle: a
@@ -4917,9 +4919,9 @@ impl EmitOps for Emitter {
             sretain = (srk && self->arena->nodes[n].a >= 0 && smove < 0
                        && (((self->arena->nodes[n].sflags & 2) != 0)
                            || !sb_rhs_fresh(self, self->arena->nodes[n].a)));
-            if (sretain && (sb_container_view(self, "get", 0)
-                            || sb_container_view(self, "entry", 0)
-                            || sb_container_view(self, "pop", 1)))
+            if (sretain && (sb_container_view("get")
+                            || sb_container_view("entry")
+                            || sb_container_view("pop")))
                 sretain = 0;
             sret = -1;
             /* any value a release could invalidate is materialised first: a

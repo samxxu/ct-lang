@@ -83,8 +83,10 @@
   `struct ct_str_hdr { int refs; int aux; }` 位于 `ptr - 8`，`refs = -1` 为 immortal（字面量 / 空串，
   `release` 是 no-op）。`String` 不可变：`s[i]` 是只读单码点 `Str`，写是硬错；`.data` 是只读原始视图
   （`const char *`，不保证 NUL，只能下标），`cstr()` 是唯一 C 边界出口。显式协议 `copy` / `retain` /
-  `release`；`Vec` / `Map` 插入由元素 glue 自动 retain；按值传参 / 返回 / 字段赋值的自动 retain 本轮
-  未实现（浅拷贝，需要独立所有权时显式 `retain()`）。`U16String` / `U16Str` 同构，UTF-16 payload 的
+  `release`；`Vec` / `Map` 插入由元素 glue 自动 retain；D-013 §3 的自动半部（SH-102，v0.80.1）：
+  按值传参入口 retain、被调方出口 release，字段赋值 / 非局部 owning return retain，局部句柄 return
+  按 move，重新赋值先 retain 后 release 旧值，作用域释放 owning 局部；借用视图（`Vec.get` /
+  `Map.get` 结果）不 retain 也不 release。`U16String` / `U16Str` 同构，UTF-16 payload 的
   头按 `char *` 回退 8 字节计算。`Map<String,V>` 的键块在 `put` 深拷贝借用键，`Map<Str,V>` 是存储位置，
   被类型检查拒绝。
 - **旧 owning `Str` 已删除（Phase 80 S5b）**：`lib/std/StrLegacy.h.ct` 与 `namespace std::str`

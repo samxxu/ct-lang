@@ -20,11 +20,17 @@
  * (`const char *` / `const uint16_t *`, no NUL guarantee, indexable only);
  * `cstr()` is the only C-boundary exit and supplies the terminator.
  *
- * Copying follows D-013 §3: the explicit protocol is `copy()` / `retain()`
- * (share the buffer, bump `refs`) and `release()` (drop one reference). A
- * `Vec`/`Map` insertion retains through the container element glue; a plain
- * by-value parameter, return or field assignment is a shallow struct copy and
- * is not retained automatically in this phase.
+ * Copying follows D-013 §3 (SH-102): `copy()` / `retain()` share the buffer and
+ * bump `refs`; `release()` drops one reference. The compiler also retains
+ * automatically at the positions the contract names -- a by-value parameter is
+ * retained at entry and released by the callee, a field assignment retains the
+ * right-hand side, a non-local owning return retains, and a local handle
+ * returns by move. A local copy of another owner's handle retains, a
+ * reassignment retains the new value before releasing the old one, and a scope
+ * releases its owning locals. A `Vec`/`Map` insertion retains through the
+ * container element glue; a borrowed view (`Vec.get` / `Map.get` result) is
+ * neither retained nor released. `refs = -1` (literal / empty) is skipped
+ * everywhere.
  *
  * Limitations: the refcount is a plain non-atomic `int` (the author owns
  * synchronisation); UTF-8 decoding accepts 1..4 byte sequences and treats an

@@ -162,3 +162,81 @@ READ of size 1 at 0x602000000978 thread T0
 3. 更新 `p80_layout` 的 `expected.trace.out`：把 `gap param_refs=1` 改为 retain 后的期望值，并删除
    `trace.ct` 顶部“NOT auto-retained yet”的说明。
 4. 同步 spec §4.70、lib/std README、phase80 卡 §7.9；实现前不得把 E80 / D-013 §3 标为满足。
+
+## 处置（DEV，2026-11-20）：**fixed**
+
+`status` 保持 `open`（5.4：`fixed` 只写正文，由 REV 复核后改 `verified`）。D-013 §3 的自动半部
+已在 v0.80.1 实现，三处 ASan 复现全部转绿，ABI 未变。
+
+### 实现
+
+- **按值传参**：`String` / `U16String` 形参在函数入口 `a = String_retain(&a)`，所有出口
+  （`return` / `break` / `continue` / 末尾 `}`）`release`；被 move / return 的那一份不释放。
+  显式 `a.release()` 会把形参 `ptr` 置空，出口释放因此是空操作，不会双重释放。
+- **按值返回**：局部句柄 = move；非局部 owning（字段 / 全局 / 解引用）= retain；返回聚合
+  （`Result<String,E>` 等）时表达式命中的局部按 move 处理，不先释放。借用视图作为 owning
+  返回值硬错（`cannot return a borrowed view as an owning string; call to_string()`）。
+- **字段赋值**：右值是 place 时 retain（借用视图也 retain，存储位置要自己持有一份）；构造结果
+  （call / `retain()` / 字面量）直接 move。旧值不自动 release（字段无自动 Drop，沿用 §7.9.4
+  的既有边界；容器模板自己的 `__ct_elem_release` 仍生效）。
+- **重新赋值**：先 retain 右值、再 release 旧值；无初始化器的句柄补 `= { 0 }`，因此旧值 release
+  与作用域释放恒安全。
+- **作用域**：释放 owning 局部；借用视图（`Vec.get` / `Map.get` 结果）既不 retain 也不 release，
+  cview 语义不变。
+- `refs = -1` immortal 在 retain / release 两侧都跳过；`refs` 布局、8 字节头、`_Static_assert`
+  均未改。
+
+设计取舍（D-013 未逐字规定、按 §3 与提案 Q5 决定）：
+
+1. 局部初始化 / 局部副本按“**复制即 retain**”处理（`String b = a;` 共享缓冲、双方各自 release），
+   重新赋值先 retain 后 release 旧值；D-013 只对“重新赋值”写了顺序，这里把它同样用于局部
+   初始化。
+2. 字段赋值的旧值不自动 release——D-013 的第一条只要求“字段赋值 retain”，把“先 retain 再
+   release 旧值”限定在变量重新赋值，避免对未初始化字段 release。
+3. 容器模板（`Vec` / `Map`）的 `T` 位置仍由 `__ct_elem_retain` / `__ct_elem_release` 显式管理，
+   发射器在模板形参位置不重复 retain；`Vec.get` / `Vec.pop` / `Map.entry` 保持借用 / move。
+
+### 提交
+
+- `3841cedf` `test(ct-ast): SH-102 红`（只含夹具与红证，baseline `02cf32d5`）
+- `07cafee1` `fix(ct-ast): SH-102 自动 retain（D-013 §3）`
+- 收口提交：本提交（v0.80.1 版本与文档）
+
+### 验证（原始输出）
+
+```console
+$ bash selfhost/check-ast.sh
+== summary: 1538 passed, 0 failed, 4 skipped ==
+
+$ CT_C_BOUNDARY=allow sh test/ast/p80_retain.sh <ct-ast>
+ok   retain (automatic retain / release trace)
+ok   retain -fsanitize=address
+ok   retain -fsanitize=undefined
+ok   neg_escape (rejected: escape of a borrowed view)
+ok   neg_double_free (rejected: double free of a borrowed element)
+p80_retain: OK
+```
+
+三个 ASan 复现（`cc -std=c99 -fsanitize=address -g`，`ASAN_OPTIONS=detect_leaks=0`）：
+
+```console
+# 修复前（baseline 02cf32d5）
+$ ./gap   -> before refs=1 len=5 live=1 / param refs=1
+             exit=134 ERROR: AddressSanitizer: heap-use-after-free … String_refs … main
+$ ./field -> field refs=1 s=1
+             exit=134 ERROR: AddressSanitizer: heap-use-after-free … READ of size 1
+$ ./ret   -> after return s=1 r=1
+             exit=134 ERROR: AddressSanitizer: heap-use-after-free … READ of size 1
+# 修复后（v0.80.1）
+$ ./gap   -> before refs=1 len=5 live=1 / param refs=2 / after refs=1 len=5 live=1  exit=5
+$ ./field -> field refs=2 s=2 / field after s.release data0=116                      exit=3
+$ ./ret   -> after return s=2 r=2 / r after caller release data0=114                 exit=3
+```
+
+### 仍未覆盖（沿用作者负责口径，不阻断本条）
+
+- 结构体字面量 / 复合字面量里的 `String` 字段仍是浅拷贝；返回这类聚合时按 move 处理，不先释放
+  命中的局部，但作为普通局部初始化器时源句柄仍需作者 `retain()`。
+- `foreach` 的 `item`、多声明符局部、`for` 初始化器里的句柄不登记；`goto` 跨块不释放。
+- 泛型实例里 `T` 位置的局部只按容器 glue 的显式协议处理。
+- 字段 / 全局 `String` 仍无自动 Drop（卡 §7.9.4）。

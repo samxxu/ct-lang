@@ -361,9 +361,10 @@ exit=0
 
 ### 7.9 未覆盖与残留风险
 
-1. **自动 retain（D-013 §3）未实现**：按值传参 / 返回 / 字段赋值仍是浅拷贝；`p80_layout` 的
-   `gap param_refs=1` 行把该事实钉成回归用例。显式 `copy`/`retain`/`release` 与容器插入
-   （`Vec`/`Map` 元素 glue）已通过。因此 D-013 §3 的自动半部**不满足**。
+1. **自动 retain（D-013 §3）已在 v0.80.1 修复（SH-102）**：按值传参 / 返回 / 字段赋值的自动
+   半部落地，见 §7.9.1 的对照表与 `test/ast/p80_retain.sh`；`p80_layout` 的 `gap` 行改为
+   `param refs=2`（入口 retain 后）。显式 `copy`/`retain`/`release` 与容器插入
+   （`Vec`/`Map` 元素 glue）不变。
 2. **字面量实参绑定只覆盖自由函数**：`str_dup("x")` 可用；`U16String.from_utf8("abc")`（静态方法
    实参）仍报 C 层错误，需先绑定到 `Str` 变量。卡 §1 的示例按此改写。
 3. **`Map<Str,V>` 是存储位置**：借用类型不能作容器键；`Map<String,V>` 键块深拷贝借用键。
@@ -372,3 +373,39 @@ exit=0
    到 v0.79.2 需同时回滚 `test` 与 `feat` 两个提交。
 6. **跨仓只有 dry-run**：`/tmp/p80-ext` 是本机独立目录，不是真外部仓（§7.8）；仓内 12 个消费者
    已全部迁移，但真实第三方工程的迁移仍以外部 CI 为准。
+7. **自动 retain 的剩余边界（SH-102 修复后）**：结构体字面量 / 复合字面量里的 `String` 字段
+   仍是浅拷贝（返回聚合时按 move 处理，不先释放局部）；`foreach` 的 `item`、多声明符局部、
+   `for` 初始化器里的句柄不会被登记；`goto` 跨块不释放；泛型实例里 `T` 位置的局部只按容器
+   glue 的显式协议处理；字段 / 全局 `String` 仍无自动 Drop（第 4 条）。这些位置沿用既有
+   “作者负责”口径，ASan 三例与 `p80_retain` 的正例均已覆盖命名位置。
+
+### 7.9.1 自动 retain 对照（SH-102，v0.80.1）
+
+修复前后同一组位置的行为对照；证据为 `test/ast/p80_retain/expected.retain.out` 与
+`test/ast/p80_layout/expected.trace.out`。
+
+| 位置 | v0.80.0（修复前） | v0.80.1（修复后） | 轨迹证据 |
+| --- | --- | --- | --- |
+| 按值传参 `String a` | 浅拷贝，`refs` 不变；被调方 `release()` 后调用方 UAF | 入口 `a = String_retain(&a)`，全部出口 `release`；被调方 `release()` 只释放自己那份 | `drop_param in=2` / `after drop_param refs=1 len=4` |
+| 字段赋值 `h.tag = s` | 浅拷贝，`refs` 不变 | 右值为 place 时 retain（借用视图也 retain）；构造结果直接 move | `field refs=2 keep=2` / `field after keep release refs=1` |
+| 非局部 owning return | 浅拷贝，调用方 release 后字段悬空 | retain 后再返回 | `stolen refs=3 field=3` |
+| 局部句柄 return | 浅拷贝 | move（不 retain，作用域不释放该句柄） | `moved len=2 refs=1` / `pass refs=2 keep=2` |
+| 局部副本 `String b = a` | 浅拷贝，双方 release 即双重释放 | retain + 作用域释放 | `copy refs=2 keep=2` / `after copy release keep=1` |
+| 重新赋值 | 覆盖旧值，旧 buffer 泄漏 | 先 retain 右值再 release 旧值 | `after reassign keep=2 other=2 live=1` |
+| 作用域结束 | 不释放 | 释放 owning 局部（无初始化器补 `= { 0 }`） | `scoped refs=1 live=2` / `after scope live=1` |
+| `refs = -1` immortal | release 是 no-op | retain / release 两侧都跳过 | `immortal refs=-1 empty=-1 copy=-1` |
+| 借用视图（`Vec.get`） | 浅拷贝，`.release()` 被拒 | 不 retain 也不 release（view 语义保持） | `vec push keep=2` / `vec elem len=2` |
+| 逃逸 / 双重释放 | 借用视图可逃逸成 owning `String`（C 层类型错误） | 返回借用视图硬错；释放借用视图硬错 | `neg_escape` / `neg_double_free` |
+
+三例 ASan 复现（修复前后，同一 `cc -fsanitize=address -g`）：
+
+```console
+# 修复前（baseline 02cf32d5）
+$ ./gap   -> exit=134  ERROR: AddressSanitizer: heap-use-after-free … String_refs … main
+$ ./field -> exit=134  ERROR: AddressSanitizer: heap-use-after-free … READ of size 1
+$ ./ret   -> exit=134  ERROR: AddressSanitizer: heap-use-after-free … READ of size 1
+# 修复后（v0.80.1）
+$ ./gap   -> before refs=1 len=5 live=1 / param refs=2 / after refs=1 len=5 live=1  exit=5
+$ ./field -> field refs=2 s=2 / field after s.release data0=116                      exit=3
+$ ./ret   -> after return s=2 r=2 / r after caller release data0=114                 exit=3
+```
