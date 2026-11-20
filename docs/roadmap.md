@@ -94,8 +94,8 @@
 | Phase 81 | `box<T>` + `new`（S1；共享句柄协议、`new` 仅具名 struct） | ✅ 完成（v0.81.0；P-7.5 + S1a/S1b/S1c，E81-1…6 通过） | v0.81.0 | [卡](design/phase81.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 82 | 泄漏防护（`leaks` 两档 `warn` / `error`；`box` 字段直接环告警；树模式文档） | ✅ 完成（v0.82.1；E82-1…8 通过，D-012；SH-103 Linux 字段表修复） | v0.82.1 | [卡](design/phase82.md) · [提案](proposals/leak-guards.md) · [判决](../battle/leak-guards-1/verdict.md) · [D-012](decisions/D-012.md) |
 | Phase 83 | 包管理契约 v1 与索引校验（只读 `ct index verify`；Linux x64 产物；conformance） | ✅ 完成（v0.83.0；E83-1…8 通过，D-014；PKG-14 fixed v0.83.1；Linux 默认索引路径 fix v0.83.2） | v0.83.0（fix v0.83.1 / v0.83.2） | [卡](design/phase83.md) · [评估](reviews/2026-11-20-pkg-contract-proposal-eval.md) · [契约](planning/ct-pkg-get-contract.md) · [D-014](decisions/D-014.md) |
-| Phase 84 | 最小 ADT / `match`（名义和类型 + 负载 + 穷尽检查 + 变量绑定；D3） | 🟨 实施中（准备；2026-11-21 开卡） | v0.84.0 | [卡](design/phase84.md) · [v1 路线 §2.3](planning/v1-release-plan.md) · [LANG-21](../issues/lang/lang-21-minimal-adt-match.md) |
-| Phase 85 | v1-pre：inventory + 单切片 spike（门）+ M0 粗切 + A 机制接线（`off/warn/error`） | 🗺️ 规划中（未开卡；入口 PH-84） | v0.85.0 | [v1 路线 §2.3/§2.4/§2.7](planning/v1-release-plan.md) · [D-017](decisions/D-017.md) |
+| Phase 84 | 最小 ADT / `match`（名义和类型 + 负载 + 穷尽检查 + 变量绑定；D3）+ **S84e 文档一致性** | 🟨 实施中（准备；2026-11-21 开卡） | v0.84.0 | [卡](design/phase84.md) · [battle doc-consistency-1](../battle/doc-consistency-1/question.md) · [LANG-21](../issues/lang/lang-21-minimal-adt-match.md) |
+| Phase 85 | v1-pre：inventory + 单切片 spike（门）+ M0 粗切 + A 机制接线（`off/warn/error`） | 🗺️ 规划中（未开卡；入口 PH-84 含 S84e） | v0.85.0 | [v1 路线 §2.3/§2.4/§2.7](planning/v1-release-plan.md) · [D-017](decisions/D-017.md) |
 | Phase 86 | v1-pre：词法器重写（零拷贝 `Str` 切片；NUL/长度契约） | 🗺️ 规划中（未开卡；入口 PH-85） | v0.86.0 | [v1 路线 §2.3](planning/v1-release-plan.md) |
 | Phase 87 | v1-pre：解析器 + 检查器重写 | 🗺️ 规划中（未开卡；入口 PH-86） | v0.87.0 | [v1 路线 §2.3](planning/v1-release-plan.md) |
 | Phase 88 | v1-pre：发射器重写 + 三轮自举回环 | 🗺️ 规划中（未开卡；入口 PH-87） | v0.88.0 | [v1 路线 §2.3](planning/v1-release-plan.md) |

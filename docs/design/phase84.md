@@ -14,13 +14,13 @@
 | --- | --- |
 | 编号 | v0-PH-84（legacy 文件 `phase84.md`） |
 | 目标 | 为 ct-ast 重写提供穷尽判别：名义和类型 + 构造器负载 + 穷尽 `match` + 变量绑定 |
-| 范围 | `enum` 负载变体、构造 `Type.Variant(...)`、`match` 语句、穷尽检查、payload 绑定、确定性布局 |
+| 范围 | `enum` 负载变体、构造 `Type.Variant(...)`、`match` 语句、穷尽检查、payload 绑定、确定性布局；**v1-pre 前文档一致性审计与优化**（范围由 battle doc-consistency-1 定） |
 | 非目标 | 泛型 ADT；or/守卫/字面量/嵌套/结构体模式；表达式形式的 `match`；`Option`/`Result` 替代；借用模式 |
-| 交付物 | 编译器改动、`test/ast/p84_*`、spec/tutorial、冻结清单登记 |
-| 任务清单 | §2（S84a–S84d） |
-| 退出判据 | E84-1…E84-8（§3） |
+| 交付物 | 编译器改动、`test/ast/p84_*`、spec/tutorial、冻结清单登记、文档一致性清单 |
+| 任务清单 | §2（S84a–S84e） |
+| 退出判据 | E84-1…E84-9（§3） |
 | version-minor | 84（PH-84，`d=0`） |
-| 已知风险 | R84-1…R84-5（§4） |
+| 已知风险 | R84-1…R84-6（§4） |
 
 ## 1 需求与边界
 
@@ -67,6 +67,17 @@ struct Shape {
 - 自动把 `Option`/`Result` 改成 ADT；
 - 借用/`ref` 模式与穷尽之外的流分析。
 
+### 1.4 文档一致性（v1-pre 前）
+
+用户 2026-11-21 指令：v1-pre 前必须处理文档落伍，重点是新语法特性。**具体范围与重写深度由
+[battle doc-consistency-1](../../battle/doc-consistency-1/question.md) 决定**；本卡只固定：
+
+- 审计对象至少覆盖 README、language-spec、tutorial、patterns、llm-guide、glossary、architecture、package-guide；
+- 逐特性核对：String/Str、切片 `T[]`、`ref`/`out`、`box`/`new`、ADT/match（随本卡实现补齐）；
+- 过期段落允许重写，但必须保持“能力与实现一致”，不得写未实现能力；
+- 文档改动不改代码/ABI/语言语义，可单卡回滚；
+- battle 结论落地后，S84e 的文档清单与深度即冻结，未列入项不得顺手扩写。
+
 ## 2 任务
 
 | 任务 | 交付 | 验收 | effort |
@@ -74,10 +85,12 @@ struct Shape {
 | S84a 语法/类型 | `enum` 负载变体、`Type.Variant(...)`、类型检查 | `p84_syntax` | M |
 | S84b 穷尽/诊断 | `match` 语句、穷尽检查、重复/未知变体/arity 错误 | `p84_match` / `p84_errors` | M |
 | S84c 布局/发射 | tag+union 布局、绑定与 move、`_Static_assert` | `p84_layout` | M |
-| S84d 文档/迁移 | spec/tutorial/patterns、冻结清单、C enum 不变说明 | `p84_docs` | S |
+| S84d ADT 文档/迁移 | ADT/match 的 spec/tutorial/patterns、冻结清单、C enum 不变说明 | `p84_docs` | S |
+| S84e 文档一致性 | 按 battle 结论审计/重写落伍文档（新语法特性优先） | `p84_docs_audit`（清单 + 抽查） | M |
 
 每项任务先提 `test(<scope>): <task-id> 红`（含 `baseline: <sha>`），实现提交随后转绿；
-S84d 为纯文档任务，写 `no-test:` 并由 REVIEW 签字。
+S84d/S84e 为纯文档任务，写 `no-test:` 并由 REVIEW 签字。S84e 的范围以
+[battle doc-consistency-1](../../battle/doc-consistency-1/question.md) 的判决为准。
 
 ## 3 退出判据
 
@@ -91,6 +104,7 @@ S84d 为纯文档任务，写 `no-test:` 并由 REVIEW 签字。
 | E84-6 | 重写切片中的 `node->kind` 判别可机械替换为穷尽 `match`（以词法/AST 判别样例验证） |
 | E84-7 | 既有测试/示例全绿；`check-all` 与 ASan 通过；无新增警告 |
 | E84-8 | spec/tutorial/patterns 成文；冻结清单登记；单卡回滚不影响 `enum`/`switch` 旧代码 |
+| E84-9 | 文档一致性：battle 结论落地；审计清单内的文档与实现一致；新特性在 spec/tutorial/patterns 可定位；示例可编译或为明确负例；check-docs 通过 |
 
 ## 4 风险与回滚
 
@@ -101,5 +115,6 @@ S84d 为纯文档任务，写 `no-test:` 并由 REVIEW 签字。
 | R84-3 | 布局/ABI 不稳定 | tag+union 写死；`_Static_assert` 进 golden；不承诺跨版本 ABI |
 | R84-4 | payload 所有权/move 语义不清 | 本轮按值/move；借用模式留后续；文档与负例 |
 | R84-5 | 范围蔓延到泛型/全模式 | 非目标写死；需要时另立提案，不在本卡加 |
+| R84-6 | 文档重写范围蔓延、写成未实现能力 | battle 冻结清单与深度；只写已验证行为；示例进门禁；越界打回 |
 
 回滚：单卡回滚；`enum`（无负载）与 `switch` 行为不变。
