@@ -39,15 +39,15 @@
 - 冻结清单（DOC-79）、兼容承诺（DOC-76）、能力→节号断言（DOC-77）、新特性文档核对（DOC-78）；
 - 包体系收尾（PKG-17）。
 
-同时明确 **v1.0 不包含**重写、A-strict、ADT（§1.6）。
+同时明确 **v1.0 不包含**重写、A 默认强制；ADT 由 PH-84 独立完成（§1.6）。
 
-## 4. 重写部分（v1.1，已定前置）
+## 4. 重写部分（v1-pre，D1/D3 已定）
 
-见 [v1-release-plan §2.5](../planning/v1-release-plan.md#L121-L133)：
+见 [v1-release-plan §2.3/§2.6](../planning/v1-release-plan.md)：
 
-- inventory 先行；
-- 单切片 spike，量出行数/编译耗时/golden 逐字节/Sharp edge；
-- spike 通过才排后续切片；
+- PH-84 先做最小 ADT/match，为重写提供穷尽判别；
+- PH-85 inventory 先行 + 单切片 spike，量出行数/编译耗时/golden 逐字节/Sharp edge；
+- spike 通过才排后续切片（PH-86–88）；
 - 自举复用现有 fixpoint；
 - 不依赖未落地特性（含 S4 函子）。
 
@@ -55,15 +55,15 @@
 
 | # | 状态 |
 | --- | --- |
-| D1 重写时序 | **已定（2026-11-21）**：独立 v1-pre（PH-84 inventory+spike → PH-85 词法 → PH-86 解析+检查 → PH-87 发射器），不进 v1.0、不推 v1.1 |
-| D2 A-strict 门禁 | **已定（2026-11-21，B+）**：机制 PH-84 接线；证据 FP=0 为 v1.0 硬门禁；默认值由 v1-pre 证据决定，不足则回退“可用不默认” |
-| D3 ADT/match 时序 | 讨论中 |
+| D1 重写时序 | **已定（2026-11-21）**：独立 v1-pre（PH-85 inventory+spike → PH-86 词法 → PH-87 解析+检查 → PH-88 发射器），不进 v1.0、不推 v1.1 |
+| D2 A-strict 门禁 | **已定（2026-11-21，B+）**：机制 PH-85 接线；证据 FP=0 为 v1.0 硬门禁；默认值由 v1-pre 证据决定，不足则回退“可用不默认” |
+| D3 ADT/match 时序 | **已定（2026-11-21，B + A 范围）**：PH-84 先做最小 ADT/match（名义和类型 + 负载 + 穷尽 + 绑定）；泛型/or/嵌套留 v1.1+；验收见 [LANG-21](../../issues/lang/lang-21-minimal-adt-match.md) |
 | D4 函子依赖 | 讨论中 |
 | D5 deadline | 讨论中 |
 | D6 重写期冻结 | 讨论中 |
 | D7 页首版本注入 | 讨论中（与 DOC-63） |
 | D8 三轮自举 | 讨论中（与现有 fixpoint 重叠） |
-| D9 收益预估 | 讨论中（先做 PH-84 spike） |
+| D9 收益预估 | 讨论中（先做 PH-85 spike） |
 
 详见 [v1-release-plan §6](../planning/v1-release-plan.md)。
 
