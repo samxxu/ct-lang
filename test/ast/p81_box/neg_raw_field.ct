@@ -1,0 +1,9 @@
+/* E81-1 negative: the handle fields are private, so a caller cannot forge a
+ * borrow that bypasses `at()` / `release()`. */
+struct R { int id; }
+int main(void)
+{
+    box<R> b = new R { 1 };
+    R *p = b.ptr;
+    return 0;
+}

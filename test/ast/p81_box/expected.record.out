@@ -1,0 +1,8 @@
+id=7 tag=5 refs=1 tag_refs=2
+after source release tag_refs=1 live=1
+id_after_set=8
+point=1,2
+point_after_set=5,2
+designated id=9 tag=7 tag_refs=1
+before release refs=1 live=2
+after release refs=0 live=0

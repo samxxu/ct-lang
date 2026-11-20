@@ -1,0 +1,7 @@
+/* E81-2 negative: `new T` without a brace list is not a construction. */
+struct R { int id; }
+int main(void)
+{
+    box<R> b = new R;
+    return 0;
+}

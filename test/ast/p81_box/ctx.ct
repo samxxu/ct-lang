@@ -1,0 +1,17 @@
+/* PH-81 S1b: `new` is contextual. It introduces a construction only in front
+ * of a named type; `int new;`, a field named `new`, a parameter named `new`
+ * and `new = ...` keep their identifier meaning. */
+#include <stdio.h>
+
+struct R { int new; }
+
+int pick(int new) { return new + 1; }
+
+int main(void)
+{
+    int new = 3;
+    new = new + 1;
+    struct R r = { 7 };
+    printf("var=%d field=%d param=%d\n", new, r.new, pick(new));
+    return 0;
+}

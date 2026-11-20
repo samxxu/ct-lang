@@ -1,0 +1,6 @@
+/* E81-3 negative: `new` only accepts a named struct. */
+int main(void)
+{
+    box<int> b = new int { 3 };
+    return 0;
+}

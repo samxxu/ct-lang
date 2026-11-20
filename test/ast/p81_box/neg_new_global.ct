@@ -1,0 +1,4 @@
+/* E81-2 negative: a file-scope object cannot allocate at run time. */
+struct R { int id; }
+box<R> g = new R { 1 };
+int main(void) { return 0; }

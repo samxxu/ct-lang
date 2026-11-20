@@ -1,0 +1,6 @@
+/* E81-3 negative: `new String` is not a box construction. */
+int main(void)
+{
+    box<int> b = new String { };
+    return 0;
+}

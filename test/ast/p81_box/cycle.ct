@@ -1,13 +1,11 @@
-/* PH-81 E81-5: a reference cycle is the author's responsibility. This S1a
- * fixture builds through `box<T>::of`; `retain()` makes the two nodes own
- * each other, so releasing both handles leaves each payload at refs=1. */
+/* PH-81 E81-5: a reference cycle is the author's responsibility. `retain()`
+ * makes the two nodes own each other; releasing both handles leaves each
+ * payload at refs=1, with no compiler warning and no run-time cycle check. */
 #include <stdio.h>
 struct Node { int id; box<Node> next; }
 int main(void) {
-    Node na = { .id = 1 };
-    Node nb = { .id = 2 };
-    box<Node> a = box<Node>::of(na);
-    box<Node> b = box<Node>::of(nb);
+    box<Node> a = new Node { .id = 1 };
+    box<Node> b = new Node { .id = 2 };
     a.next = b.retain();
     b.next = a.retain();
     printf("before: a_refs=%d b_refs=%d\n", a.refs(), b.refs());

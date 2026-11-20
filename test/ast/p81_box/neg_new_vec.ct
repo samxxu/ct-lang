@@ -1,0 +1,6 @@
+/* E81-3 negative: a container / built-in handle is not boxed. */
+int main(void)
+{
+    box<int> b = new Vec<int> { 3 };
+    return 0;
+}

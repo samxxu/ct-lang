@@ -1,7 +1,7 @@
 after push a_refs=2 len=1
-got id=1 refs=2
+got id=1 refs=2 name=3
 after got release len=1
 after v release len=0
 holder before delete refs=2
 holder after delete refs=1 id=2
-keep released refs=0
+keep released refs=0 live=0

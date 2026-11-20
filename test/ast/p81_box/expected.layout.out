@@ -1,4 +1,4 @@
 sizeof(box)=16 sizeof(header)=8 alignof(box)=8
 payload_offset=8 expected=8
-refs=1 tag_refs=2 tag_len=1
-after release refs=0 live=0
+refs=1 tag_refs=1 tag_len=1
+after release refs=0

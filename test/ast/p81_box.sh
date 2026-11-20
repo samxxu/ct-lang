@@ -1,15 +1,25 @@
 #!/bin/sh
-# PH-81 / S1a: `box<T>` (E81-1, E81-4, E81-5; no `new` yet).
+# PH-81 / S1: `box<T>` + `new` (E81-1…E81-6).
 #
 #   - E81-1: the box handle is two machine words, the shared `{refs, aux}`
 #     header is 8 bytes immediately before the payload, and release runs the
 #     payload's owning fields by static type;
+#   - E81-2: `new T { ... }` accepts a named struct only, shares the brace
+#     initializer with `T x = { ... }` (positional, designated and nested);
+#   - E81-3: `new String` / arrays / containers / built-in handles and a
+#     borrowed `Str` payload / field are hard errors;
 #   - E81-4: `at()` is the borrowed view and a release invalidates it; the
-#     sanitizer catches the post-release read (S1b fixture);
-#   - E81-5: a reference cycle is the author's responsibility.
+#     sanitizer catches the post-release read;
+#   - E81-5: a reference cycle is the author's responsibility (the probe shows
+#     the refs the compiler leaves behind) and no cycle detection is claimed;
+#   - E81-6: the same generated code passes ASan/UBSan warning-free; the old
+#     goldens and the doc checks are covered by `check-all` / `p81_docs`.
 #
-# This S1a probe builds through `box<T>::of`; S1b adds `new T { ... }` and its
-# negatives. Usage: sh test/ast/p81_box.sh <ct-ast>
+# `new` is contextual: `int new;`, `r.new`, a parameter named `new` and
+# `new = ...` stay identifiers (ctx.ct); the construction form is refused in a
+# global / static initializer because it allocates at run time.
+#
+# Usage: sh test/ast/p81_box.sh <ct-ast>
 set -u
 export CT_C_BOUNDARY=allow
 ctast=${1:?usage: p81_box.sh <ct-ast>}
@@ -63,9 +73,45 @@ run_case() {
 }
 
 run_case layout
+run_case record
 run_case vecbox
 run_case boxstr
 run_case cycle
+run_case ctx
+
+# E81-4: the borrowed view is invalidated by release; ASan must catch it.
+if "$ctast" --allow-c-boundary test/ast/p81_box/uaf.ct -o "$work/uaf.c" >"$work/uaf.log" 2>&1 \
+   && "$cc" -Wall -Wextra -std=c99 -fsanitize=address -g "$work/uaf.c" -o "$work/uaf" 2>"$work/uaf.cc.err"; then
+    if ASAN_OPTIONS=detect_leaks=0 "$work/uaf" >"$work/uaf.out" 2>"$work/uaf.err"; then
+        bad "asan sensitivity" "the post-release read was not caught"
+    elif grep -Fq "heap-use-after-free" "$work/uaf.err"; then
+        ok "asan sensitivity (at() view after release -> heap-use-after-free)"
+    else
+        bad "asan sensitivity" "ASan did not report heap-use-after-free"
+    fi
+else
+    bad "asan sensitivity build" "$(head -2 "$work/uaf.log" "$work/uaf.cc.err" 2>/dev/null)"
+fi
+
+neg() {
+    name=$1; pattern=$2; why=$3
+    if "$ctast" --allow-c-boundary "test/ast/p81_box/$name.ct" -o "$work/$name.c" >"$work/$name.log" 2>&1; then
+        bad "$name" "accepted a negative ($why)"
+    elif grep -Fq "$pattern" "$work/$name.log"; then
+        ok "$name (rejected: $why)"
+    else
+        bad "$name" "missing diagnostic '$pattern': $(head -2 "$work/$name.log")"
+    fi
+}
+
+neg neg_new_string "'new String' / 'new Str' is not supported" "new of a built-in handle"
+neg neg_new_int "'new' only accepts a named struct type" "new of a scalar"
+neg neg_new_vec "instantiate the generic first and box the value" "new of a container"
+neg neg_new_no_brace "needs a brace initializer" "new without a brace list"
+neg neg_box_slice "cannot be stored in box<T>" "slice payload"
+neg neg_raw_field "raw implementation fields" "raw .ptr on a box"
+neg neg_new_global "only supported in a local initializer" "new at file scope"
+neg neg_new_static "cannot initialize a static object" "new in a static local"
 
 [ "$fail" -eq 0 ] && echo "p81_box: OK"
 exit "$fail"
