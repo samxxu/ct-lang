@@ -10,9 +10,8 @@
 `char *` 映射层 `std::str::String` 仍在 ct-pkg `std`（Phase 36 的 S0 实测该包没有
 `std/string` / `CStr`，故按 `docs/history/design/phase36.md` §14/§15 把 `Str` 值类型放回内建层）。
 
-内置层由五个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）、
-`Str.h.ct`（Phase 80：`String` / `Str` + `U16String` / `U16Str`）、`StrLegacy.h.ct`（Phase 80 兼容窗口：
-旧 owning `Str`，仅当消费者源码出现 `std::str` 时加载）。
+内置层由四个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）、
+`Str.h.ct`（Phase 80：`String` / `Str` + `U16String` / `U16Str`）。
 四者都是**编译模式**与 **`ct build`** 两条路径都会自动预解析的单元：`ct file.ct -o file.c`
 把它们 splice 到用户程序之前，`ct build` 则把它们作为独立单元参与发射；两种形态都
 **不需要 import**、不需要 `ct get`。编译模式的产物仍是单个 C TU、根命名空间。
@@ -28,7 +27,6 @@
 | `Result` | `Result<T, E>`，`ok` + `value` + `err` 标签结构（Phase 34） |
 | `String` / `Str` | `String`，16 字节 owning 句柄（`char *ptr` + `int len`）；`Str` 是同布局的借用视图（Phase 80） |
 | `U16String` / `U16Str` | UTF-16 owning / 借用对（`uint16_t *ptr` + `int len`），仅显式工厂（Phase 80） |
-| `std::str::Str` | 兼容窗口：旧 owning `Str`（`char *data` + `int len`），仅限定名可达（Phase 80） |
 
 这六个拼写是编译器的保留名，用户 struct 不得占用；编译器自身的模块表已改名为 `MapTable`
 （`frontend/module/MapTable.h.ct`）。它们没有 `std::vec::Vec` / `std::map::Map` 这样的模块路径别名：
@@ -89,9 +87,8 @@
   未实现（浅拷贝，需要独立所有权时显式 `retain()`）。`U16String` / `U16Str` 同构，UTF-16 payload 的
   头按 `char *` 回退 8 字节计算。`Map<String,V>` 的键块在 `put` 深拷贝借用键，`Map<Str,V>` 是存储位置，
   被类型检查拒绝。
-- **`std::str::Str`（兼容窗口）**：旧 owning `Str` 原样保留在 `StrLegacy.h.ct` 的 `namespace std::str`
-  里（C 名 `std_str_Str`），只有消费者源码出现 `std::str` 时加载；语义与 Phase 36 相同。
-  S5b 删除该单元与外部消费者迁移尚未执行。
+- **旧 owning `Str` 已删除（Phase 80 S5b）**：`lib/std/StrLegacy.h.ct` 与 `namespace std::str`
+  兼容单元已移除，旧拼写不再解析；仓内消费者已迁到 `String` / `Str`。
 
 ## 版本对齐
 

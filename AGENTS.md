@@ -587,7 +587,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
 | 当前版本 | v0.80.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.80.0；Phase 80 S5a 已落（`String`/`Str` 内建：16 字节句柄 + 8 字节 refcount 头、L1 immortal 字面量、UTF-8 码点/字节方法、只读 `s[i]`、`.data` 只读、`cstr()`、U16 工厂 + JS 核心子集；旧 owning `Str` 以 `std::str::Str` 限定名并存；S5b 删旧与外部迁移未做，E80-7 未通过）；Phase 79 已收口（S3 切片 `T[]`；REV 打回的 SH-99/100/101、TEST-24 已修）；PH-81/82 未开工（入口 = P-7.5 + PH-80 收口，PH-82 另需 PH-81 收口）；Phase 78 已收口；Phase 77 已收口；Phase 76 已收口；Phase 43–53 已收口，Phase 54 S0–S7 全部完成（S4 包仓对齐属包外）。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.80.0；Phase 80 已收口（S5a `String`/`Str` 内建：16 字节句柄 + 8 字节 refcount 头、L1 immortal 字面量、UTF-8 码点/字节方法、只读 `s[i]`、`.data` 只读、`cstr()`、U16 工厂 + JS 核心子集；S5b 删旧 owning `Str` 与 `std::str` 兼容单元、12 个仓内消费者迁移、外部 dry-run；E80-1…8 全通过）；Phase 79 已收口（S3 切片 `T[]`；REV 打回的 SH-99/100/101、TEST-24 已修）；PH-81/82 未开工（入口 = P-7.5 + PH-80 收口，PH-82 另需 PH-81 收口）；Phase 78 已收口；Phase 77 已收口；Phase 76 已收口；Phase 43–53 已收口，Phase 54 S0–S7 全部完成（S4 包仓对齐属包外）。后续顺序见 [post-58-plan](docs/planning/post-58-plan.md)。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界

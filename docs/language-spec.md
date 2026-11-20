@@ -2917,11 +2917,11 @@ parse("ab", n);  /* 调用点不写 out */
   （`refs - 1`，归零时释放）；`Vec` / `Map` 插入按容器元素 glue 自动 `retain`。
   D-013 §3 的“按值传参 / 返回 / 字段赋值自动 retain”本轮未实现：这三处是按值浅拷贝，
   调用方需要独立所有权时显式 `retain()`。
-- **兼容窗口**：旧 owning `Str`（`char *data` + `int len`）只以 `std::str::Str` 限定名存在
-  （`lib/std/StrLegacy.h.ct`，仅源码出现 `std::str` 时加载）；旧消费者迁移是把类型与函数加上
-  `std::str::` 前缀，或改用新 `String` / `Str` API。删除兼容单元与跨仓 dry-run 属 S5b，尚未执行。
+- **旧类型已删除（S5b）**：`lib/std/StrLegacy.h.ct` 与 `namespace std::str` 兼容单元已移除，
+  `std::str::Str` 不再解析；仓内消费者已迁到 `String` / `Str` 新 API，外部消费者的 dry-run
+  见 phase80 卡 §7。
 - **边界**：`box<String>`（PH-81）、`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
-  `Map<String,V>`）、字段/全局位置的 `String`（无自动 Drop）、跨仓 `Str`→`String` 迁移不在本轮。
+  `Map<String,V>`）、字段/全局位置的 `String`（无自动 Drop）、跨仓外部工程迁移只做 dry-run。
 
 ## 11 文档与实现一致性（缺口登记，2026-11-15）
 
