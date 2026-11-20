@@ -106,5 +106,7 @@
    的简要阶段表一致（✅ / 🟨 / ⬜）；详细证据见 [history/phase-log.md](history/phase-log.md)。
 6. **路线图与流水账**：[roadmap.md](roadmap.md) 只做简要索引，不写逐相叙述；逐相细节、版本记录与决策全文在
    [history/phase-log.md](history/phase-log.md)。
+7. **ADR 与 battle 的取代关系**：battle 卡头的 `superseded-by` 与 ADR 的 `superseded-battles`
+   必须双向一致；缺一边即红（结构化校验，不做自由文本比对）。
 
 校验脚本是 [../test/docs/check-docs.py](../test/docs/check-docs.py)，已接入 `check-all.sh`。

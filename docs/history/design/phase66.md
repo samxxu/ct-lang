@@ -1,7 +1,7 @@
 # Phase 66 — libc I/O 内置例外（按调用补头）
 
 > **状态：完成**（2026-11-18 收口；`v0.65.0`；R1–R5 全部交付，E66-1…6 全绿）。
-> **依据**：[D-008](../decisions/D-008.md)（accepted，2026-11-17）、[SH-89](../../issues/selfhost/sh89-libc-io-auto-include.md)。
+> **依据**：[D-008](../../decisions/D-008.md)（accepted，2026-11-17）、[SH-89](../../../issues/selfhost/sh89-libc-io-auto-include.md)。
 > **前置**：PH-65 收口（`v0.64.0`）。
 > **纪律**：不收口不 bump；tag/push 按 6.7 V-7 / 6.5。
 
@@ -137,4 +137,4 @@ REV 指出 §9 的 `baseline:` 用了 tag/文字描述而不是 sha（T-7 最小
 | R5 | `ac55c523` | `d5e0fa80` | `c5c357f`（R4 实现） |
 
 `git rev-parse <impl>^` 与 test 提交的对应关系经 REV 核对均成立；冻结（§4/§5）亦成立。
-复核记录：[2026-11-18-fix-rev-verdict-batch2.md](../reviews/2026-11-18-fix-rev-verdict-batch2.md)。
+复核记录：[2026-11-18-fix-rev-verdict-batch2.md](../../reviews/2026-11-18-fix-rev-verdict-batch2.md)。

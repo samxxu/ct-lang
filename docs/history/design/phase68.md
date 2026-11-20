@@ -1,11 +1,11 @@
 # Phase 68 — 类型核心（`ct check --types`）
 
 > **状态：完成**（2026-11-19 收口；`v0.67.0`；R1–R4 全绿）。
-> **依据**：[typecheck-semantic-plan](../planning/typecheck-semantic-plan.md) §3、
-> [battle typecheck-1](../../battle/typecheck-1/verdict.md)（B′）。
+> **依据**：[typecheck-semantic-plan](../../planning/typecheck-semantic-plan.md) §3、
+> [battle typecheck-1](../../../battle/typecheck-1/verdict.md)（B′）。
 > **前置**：PH-67 收口（`v0.66.0`）。
 > **布局说明**：phase-ID 迁移（`v0-PH-*`）仍被 blocker 挡住，本卡暂用 legacy 路径
-> `docs/design/phase68.md`，迁移时统一改名。
+> `docs/history/design/phase68.md`，迁移时统一改名。
 
 ## 0 卡片字段（冻结）
 
@@ -80,4 +80,4 @@
 - `loop_count_type` 的 L22-5 报告是有意行为，列入 skip 表；
 - 内建容器（`Vec<T>.push`）的实参类型仍不检查，属 PH-69 的跨单元/泛型范围。
 
-复核记录：[2026-11-19-phase68-rev-verdict.md](../reviews/2026-11-19-phase68-rev-verdict.md)（REV: 通过）。
+复核记录：[2026-11-19-phase68-rev-verdict.md](../../reviews/2026-11-19-phase68-rev-verdict.md)（REV: 通过）。

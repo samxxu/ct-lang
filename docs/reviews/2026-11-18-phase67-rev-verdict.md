@@ -36,7 +36,7 @@ ct-ast v0.66.0
 
 ```console
 $ git diff --name-only 709d3a7..HEAD
-docs/design/phase67.md
+docs/history/design/phase67.md
 docs/reviews/2026-11-18-phase67-rev-verdict.md
 ```
 
@@ -239,7 +239,7 @@ TEST-22 仍 `open`（hardware-gated），是本次的登记项，不是本次缺
 | 3 | `v0.66.0` tag message 截断/缺 sha | tag 已重建：message `PH-67 closeout (709d3a7)`，合法 UTF-8，含 phase-id 与 sha；仍指向 `709d3a7`，远端已同步 | 已消解 |
 
 三项均已按证据修正，无未消解项。补正提交 `e78a0cdb` 只改
-`docs/design/phase67.md`（`git show --stat` = 1 file, 3 insertions/2 deletions），
+`docs/history/design/phase67.md`（`git show --stat` = 1 file, 3 insertions/2 deletions），
 未改实现/测试。
 
 ## 9 未覆盖声明

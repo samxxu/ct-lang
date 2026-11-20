@@ -307,3 +307,19 @@ PH-52 的 D52-6 指向本条。
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-14 |
 | `block` | 需先测噪声；本轮只记录，不动 CI |
+
+## REQ-POINTERFREE-1 — 日常代码的指针退场
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-POINTERFREE-1` |
+| `what` | 让日常 `.ct` 代码不再直接写指针：堆单对象、多返回、数组传递、字符串、回调五类场景各有值类型/句柄入口；指针、`own`、`defer`、`errdefer` 保留为逃生通道，不被禁止。 |
+| `why` | 五类日常用途仍要求用户直接管指针与生命周期，和 CT 的句柄/值类型方向不一致；希望把悬垂与泄漏路径收窄到可文档化、可机检的借用视图契约。 |
+| `priority` | P1 |
+| `status` | `planned`（方向已评审；J-6 证据未过，未开 phase 卡） |
+| `owner` | REQ（待指派） |
+| `last-touched` | 2026-11-20 |
+| `block` | J-6 证据（P-7.1 S2 全量、P-7.2 S3 全量、P-7.3 S5 最小垂直切片）；J-7 成本；J-8 依赖 |
+
+> 方向与契约见 [pointer-free-v2](../proposals/pointer-free-v2.md)，裁定见 [D-011](../decisions/D-011.md)，
+> phase 排期见 [pointer-free-phase-plan](pointer-free-phase-plan.md)。实现方案不在本池展开。

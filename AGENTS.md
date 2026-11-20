@@ -498,6 +498,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 2026-11-17：v0.63.3（PKG-10 默认取最新 tag；Phase 65 期内 fix，MINOR 仍 63）。
 > 2026-11-17：v0.63.4（PKG-11 get 输出详情；Phase 65 期内 fix，MINOR 仍 63）。
 > 2026-11-19：恢复 PN-2 `phase = MINOR`；PH-76 → v0.76.0、PH-77 → v0.77.0（`d=0`）。`v0.75.0` 因历史偏移（PH-75 = v0.74.0）不再补发，登记为历史空位。
+> 2026-11-20：指针退场排期 PH-78 → v0.78.0（S2）、PH-79 → v0.79.0（S3）、PH-80 → v0.80.0（S5）、PH-81 → v0.81.0（S1）；v1.0 顺延。均 `d=0`，见 [phase 安排](docs/planning/pointer-free-phase-plan.md)。
 
 `deviation: fix-tags`
 

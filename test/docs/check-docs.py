@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts seven invariants:
+Standard library only. It asserts eight invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -23,9 +23,11 @@ Standard library only. It asserts seven invariants:
   6. G9: AGENTS.md pins the methodology's `spec-version` and `spec-sha256`
      (CI-8); a missing spec file is an explicit skip, a mismatch is red;
   7. docs/design/ keeps the newest DESIGN_WINDOW phases, older phase docs live
-     in docs/history/design/ and may not be duplicated (DOC-66).
+     in docs/history/design/ and may not be duplicated (DOC-66);
+  8. every battle question's `superseded-by:` pointer and the ADR's
+     `superseded-battles:` list agree in both directions.
 
-Exit code 0 when all seven hold, 1 otherwise.
+Exit code 0 when all eight hold, 1 otherwise.
 """
 
 import hashlib
@@ -322,6 +324,62 @@ def check_design_window(errors):
     return len(kept), DESIGN_WINDOW
 
 
+def check_superseded_links(errors):
+    """Every battle's `superseded-by` and the ADR's `superseded-battles` agree.
+
+    The battle card keeps the historical verdict; the ADR is the current
+    ruling. A one-way pointer is not enough: readers must be able to walk from
+    either side. Missing either half is red, and a battle pointing at an ADR
+    that does not list it back is red too.
+    """
+    battle_root = os.path.join(ROOT, "battle")
+    adr_root = os.path.join(ROOT, "docs", "decisions")
+    pointers = {}
+    listed = {}
+    if os.path.isdir(battle_root):
+        for name in sorted(os.listdir(battle_root)):
+            q = os.path.join(battle_root, name, "question.md")
+            if not os.path.isfile(q):
+                continue
+            match = re.search(r"(?m)^superseded-by:\s*(D-\d+)\s*$", read(q))
+            if match:
+                pointers[name] = match.group(1)
+    if os.path.isdir(adr_root):
+        for name in sorted(os.listdir(adr_root)):
+            if not re.fullmatch(r"D-\d+.*\.md", name):
+                continue
+            match = re.search(
+                r"(?m)^\s*[-*]?\s*superseded-battles:\s*(.+)$",
+                read(os.path.join(adr_root, name)),
+            )
+            if not match:
+                continue
+            ids = [part for part in re.split(r"[,\s]+", match.group(1).strip()) if part]
+            listed[name.rsplit(".", 1)[0]] = ids
+    for battle, adr in pointers.items():
+        if adr not in listed:
+            errors.append(
+                f"battle/{battle}: superseded-by {adr} has no matching ADR file"
+            )
+        elif battle not in listed[adr]:
+            errors.append(
+                f"battle/{battle}: superseded-by {adr} is not listed in {adr}'s superseded-battles"
+            )
+    for adr, battles in listed.items():
+        for battle in battles:
+            if battle not in pointers:
+                errors.append(
+                    f"docs/decisions/{adr}.md: superseded-battles names '{battle}' "
+                    f"but battle/{battle}/question.md has no superseded-by"
+                )
+            elif pointers[battle] != adr:
+                errors.append(
+                    f"docs/decisions/{adr}.md: superseded-battles names '{battle}' "
+                    f"but its question.md points at {pointers[battle]}"
+                )
+    return len(pointers) + sum(len(v) for v in listed.values())
+
+
 def main():
     errors = []
     links, scanned = check_links(errors)
@@ -331,6 +389,7 @@ def main():
     applies = check_applies_to(errors)
     spec = check_spec_pin(errors)
     design, window = check_design_window(errors)
+    superseded = check_superseded_links(errors)
     for error in errors:
         print(f"FAIL: {error}")
     # The two status lines print on both paths: on a red run the first one names
@@ -343,7 +402,7 @@ def main():
     print(
         f"check-docs: OK ({links} relative links in {scanned} files, "
         f"v{version}, {gates} hard gates, {phases} phase status, "
-        f"{applies} 适用版本 header(s))"
+        f"{applies} 适用版本 header(s), {superseded} superseded link(s))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0

@@ -245,7 +245,7 @@ $ git show bf8190b -- test/cases | grep -E '^[+-]' | grep -v '^[+-][+-]' | grep 
    建议在脚本注释或卡里把这条排除与 `loop_count_type` 并列写明，避免读者误以为
    234 也在 301 中。
 3. **R1 红提交混入了卡与 roadmap。** `067413f8` 除 `p68_typebuf.sh` 外还新增
-   `docs/design/phase68.md` 与改 `docs/roadmap.md`。按 6.6 T-7 的“只含测试、夹具与红证”
+   `docs/history/design/phase68.md` 与改 `docs/roadmap.md`。按 6.6 T-7 的“只含测试、夹具与红证”
    字面，这是范围混合；红证本身与实现配对不受影响。建议后续红提交只带测试与证据。
 
 另：tag message 用 legacy `PH-68`，而卡 §0 的编号是 `v0-PH-68`；因 phase-ID 迁移仍被

@@ -4,7 +4,7 @@
 - 角色：REV（独立复核）
 - 复核对象：`de261b42452e8b2eff13822938d7e489499edc39`（复核时 HEAD；
   `feat(ast): PH-69 跨单元/函数指针/容器检查收口（v0.68.0）`）
-- 对象：`docs/design/phase69.md` §7 收口对照表（E69-1…E69-3）与 R1–R4
+- 对象：`docs/history/design/phase69.md` §7 收口对照表（E69-1…E69-3）与 R1–R4
 - 结论：**REV: 通过**
 
 依据只有仓库提交、按 README 自举出的 `ct-ast`、以及本提交的 CI run。下文“非阻断更正项”
