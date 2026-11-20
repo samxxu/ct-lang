@@ -1,0 +1,30 @@
+/* S2b 正例：trait 方法上的 ref/out（J-6 / P-7.1b）
+ *
+ *   - ref int：方法内可读写，调用点不写 &
+ *   - out int：方法内每条路径必须赋值，调用点不写 &
+ * 预期：n==4，r==8。
+ */
+trait Touch {
+    void bump(ref int x, out int y);
+}
+
+struct Box {
+    int v;
+} use Touch;
+
+impl Touch for Box {
+    void bump(ref int x, out int y) {
+        x = x + self->v;
+        y = x * 2;
+    }
+}
+
+int main(void)
+{
+    Box b = { 3 };
+    int n = 1;
+    int r;
+
+    b.bump(n, r);
+    return (n == 4 && r == 8) ? 0 : 1;
+}

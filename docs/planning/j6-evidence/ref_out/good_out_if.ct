@@ -1,0 +1,15 @@
+int read(out int y)
+{
+    if (1) {
+        y = 7;
+    } else {
+        y = 8;
+    }
+    return y;
+}
+
+int main(void)
+{
+    int n;
+    return (read(n) == 7 || read(n) == 8) ? 0 : 1;
+}

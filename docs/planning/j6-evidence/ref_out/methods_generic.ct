@@ -1,0 +1,25 @@
+/* S2b 扩展：泛型 impl 上的 ref/out（原型探测） */
+trait Touch {
+    void bump(ref int x, out int y);
+}
+
+struct Box<T> {
+    T v;
+}
+
+impl<T> Box<T> use Touch {
+    void bump(ref int x, out int y) {
+        x = x + self->v;
+        y = x * 2;
+    }
+}
+
+int main(void)
+{
+    Box<int> b = { 3 };
+    int n = 1;
+    int r;
+
+    b.bump(n, r);
+    return (n == 4 && r == 8) ? 0 : 1;
+}

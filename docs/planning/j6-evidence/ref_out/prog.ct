@@ -1,0 +1,28 @@
+/* S2 ref/out 最小原型（J-6 / P-7.1）
+ *
+ * 只覆盖标量参数：
+ *   - ref int：调用者变量可读写，源码不写 &
+ *   - out int：callee 必须赋值，调用者不写 &
+ * 预期：inc 后 v==2；read 写出 n==7 并返回 7。
+ */
+void inc(ref int x)
+{
+    x = x + 1;
+}
+
+int read(out int y)
+{
+    y = 7;
+    return y;
+}
+
+int main(void)
+{
+    int v = 1;
+    int n;
+    int r;
+
+    inc(v);
+    r = read(n);
+    return (v == 2 && n == 7 && r == 7) ? 0 : 1;
+}

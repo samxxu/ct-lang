@@ -1,0 +1,15 @@
+struct R { int x; } use Drop;
+
+R g = { 1 };
+
+void set(out R r)
+{
+    r = g;
+}
+
+int main(void)
+{
+    R r = { 0 };
+    set(r);
+    return 0;
+}

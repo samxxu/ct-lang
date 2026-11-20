@@ -1,0 +1,18 @@
+/* S2 正例：变量、字段、数组元素都是 place。 */
+struct P { int x; }
+
+void inc(ref int x)
+{
+    x = x + 1;
+}
+
+int main(void)
+{
+    P p = { 1 };
+    int a[2] = { 1, 2 };
+
+    inc(p.x);
+    inc(a[0]);
+
+    return (p.x == 2 && a[0] == 2) ? 0 : 1;
+}

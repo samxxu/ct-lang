@@ -1,0 +1,11 @@
+/* S2 反例：ref/out 实参必须是 place，字面量/表达式必须在 CT 调用点硬错。 */
+void inc(ref int x)
+{
+    x = x + 1;
+}
+
+int main(void)
+{
+    inc(1 + 2);   /* error: ref/out argument must be an assignable place */
+    return 0;
+}

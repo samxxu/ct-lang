@@ -1,0 +1,14 @@
+int read(out int y)
+{
+    if (1) {
+        y = 7;
+    }
+    return 0;
+}
+
+int main(void)
+{
+    int n;
+    read(n);
+    return 0;
+}

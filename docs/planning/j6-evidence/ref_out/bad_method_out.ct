@@ -1,0 +1,27 @@
+/* S2b 反例：trait 方法的 out 参数在一条路径上未赋值，必须硬错。 */
+trait Touch {
+    void bump(ref int x, out int y);
+}
+
+struct Box {
+    int v;
+} use Touch;
+
+impl Touch for Box {
+    void bump(ref int x, out int y) {
+        x = x + self->v;
+        if (x > 0) {
+            y = 1;
+        }
+    }
+}
+
+int main(void)
+{
+    Box b = { 3 };
+    int n = 1;
+    int r;
+
+    b.bump(n, r);
+    return 0;
+}

@@ -1,0 +1,751 @@
+diff --git a/selfhost/ct-ast/backend/emit/Emitter.h.ct b/selfhost/ct-ast/backend/emit/Emitter.h.ct
+index 2812b9cb..8578d401 100644
+--- a/selfhost/ct-ast/backend/emit/Emitter.h.ct
++++ b/selfhost/ct-ast/backend/emit/Emitter.h.ct
+@@ -514,8 +514,13 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
+     for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
+         fputs(", ", e->out);
+         if (e->arena->nodes[p].text2[0]) {
+-            if (e->emit_type_name_dims(e->arena->nodes[p].text, e->arena->nodes[p].text2,
+-                                       e->arena->nodes[p].text3) != 0) return -1;
++            if (e->arena->nodes[p].aux == 2 || e->arena->nodes[p].aux == 3) {
++                char pbuf[200];
++                snprintf(pbuf, sizeof pbuf, "%s *", e->arena->nodes[p].text);
++                if (e->emit_type_name_dims(pbuf, e->arena->nodes[p].text2,
++                                           e->arena->nodes[p].text3) != 0) return -1;
++            } else if (e->emit_type_name_dims(e->arena->nodes[p].text, e->arena->nodes[p].text2,
++                                              e->arena->nodes[p].text3) != 0) return -1;
+         } else {
+             snprintf(uname, sizeof uname, "__arg%d", ai);
+             if (e->emit_type_name_dims(e->arena->nodes[p].text, uname,
+@@ -1925,9 +1930,14 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
+         else fputs("(void *self", self->out);
+         for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
+             fputs(statik ? (k == self->arena->nodes[m].a ? "" : ", ") : ", ", self->out);
+-            if (self->emit_type_name_dims(self->arena->nodes[k].text,
+-                                          self->arena->nodes[k].text2,
+-                                          self->arena->nodes[k].text3) != 0) return -1;
++            if (self->arena->nodes[k].aux == 2 || self->arena->nodes[k].aux == 3) {
++                char pbuf[200];
++                snprintf(pbuf, sizeof pbuf, "%s *", self->arena->nodes[k].text);
++                if (self->emit_type_name_dims(pbuf, self->arena->nodes[k].text2,
++                                              self->arena->nodes[k].text3) != 0) return -1;
++            } else if (self->emit_type_name_dims(self->arena->nodes[k].text,
++                                                 self->arena->nodes[k].text2,
++                                                 self->arena->nodes[k].text3) != 0) return -1;
+         }
+         fputs(");\n", self->out);
+         return 0;
+@@ -1941,9 +1951,14 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
+     else fputs("(void *self", self->out);
+     for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
+         fputs(statik ? (k == self->arena->nodes[m].a ? "" : ", ") : ", ", self->out);
+-        if (self->emit_type_name_dims(self->arena->nodes[k].text,
+-                                      self->arena->nodes[k].text2,
+-                                      self->arena->nodes[k].text3) != 0) return -1;
++        if (self->arena->nodes[k].aux == 2 || self->arena->nodes[k].aux == 3) {
++            char pbuf[200];
++            snprintf(pbuf, sizeof pbuf, "%s *", self->arena->nodes[k].text);
++            if (self->emit_type_name_dims(pbuf, self->arena->nodes[k].text2,
++                                          self->arena->nodes[k].text3) != 0) return -1;
++        } else if (self->emit_type_name_dims(self->arena->nodes[k].text,
++                                             self->arena->nodes[k].text2,
++                                             self->arena->nodes[k].text3) != 0) return -1;
+     }
+     fputs(") {\n", self->out);
+     if (!statik) {
+@@ -2801,6 +2816,8 @@ impl EmitOps for Emitter {
+             for (k = 0; k < self->sym->funcs[i].nparams; k++) {
+                 if (k > 0) fputs(", ", self->out);
+                 fputs(self->sym->funcs[i].ptype[k], self->out);
++                if (self->sym->funcs[i].pann[k] == 2 || self->sym->funcs[i].pann[k] == 3)
++                    fputs(" *", self->out);
+                 fputs(self->sym->funcs[i].pdim[k], self->out);
+             }
+             if (self->sym->funcs[i].variadic) fputs(", ...", self->out);
+@@ -2977,8 +2994,12 @@ impl EmitOps for Emitter {
+             for (m = 0; m < self->sym->traits[t].nm; m++) {
+                 fprintf(self->out, "    %s (*%s)(void *", self->sym->traits[t].m[m].ret,
+                         self->sym->traits[t].m[m].name);
+-                for (k = 0; k < self->sym->traits[t].m[m].nparams; k++)
++                for (k = 0; k < self->sym->traits[t].m[m].nparams; k++) {
+                     fprintf(self->out, ", %s", self->sym->traits[t].m[m].ptype[k]);
++                    if (self->sym->traits[t].m[m].pann[k] == 2
++                        || self->sym->traits[t].m[m].pann[k] == 3)
++                        fputs(" *", self->out);
++                }
+                 fputs(");\n", self->out);
+             }
+             fputs("};\n", self->out);
+@@ -3251,9 +3272,14 @@ impl EmitOps for Emitter {
+                 k = self->arena->nodes[m].a;
+                 while (k > 0) {
+                     fputs(", ", self->out);
+-                    if (self->emit_type_name_dims(self->arena->nodes[k].text,
+-                                                  self->arena->nodes[k].text2,
+-                                                  self->arena->nodes[k].text3) != 0) return -1;
++                    if (self->arena->nodes[k].aux == 2 || self->arena->nodes[k].aux == 3) {
++                        char pbuf[200];
++                        snprintf(pbuf, sizeof pbuf, "%s *", self->arena->nodes[k].text);
++                        if (self->emit_type_name_dims(pbuf, self->arena->nodes[k].text2,
++                                                      self->arena->nodes[k].text3) != 0) return -1;
++                    } else if (self->emit_type_name_dims(self->arena->nodes[k].text,
++                                                         self->arena->nodes[k].text2,
++                                                         self->arena->nodes[k].text3) != 0) return -1;
+                     k = self->arena->nodes[k].next;
+                 }
+                 fputs(") {\n", self->out);
+@@ -4044,9 +4070,14 @@ impl EmitOps for Emitter {
+                 first = 1;
+                 while (c > 0) {
+                     if (!first) fputs(", ", self->out);
+-                    if (self->emit_type_name_dims(self->arena->nodes[c].text,
+-                                                  self->arena->nodes[c].text2,
+-                                                  self->arena->nodes[c].text3) != 0) return -1;
++                    if (self->arena->nodes[c].aux == 2 || self->arena->nodes[c].aux == 3) {
++                        char pbuf[200];
++                        snprintf(pbuf, sizeof pbuf, "%s *", self->arena->nodes[c].text);
++                        if (self->emit_type_name_dims(pbuf, self->arena->nodes[c].text2,
++                                                      self->arena->nodes[c].text3) != 0) return -1;
++                    } else if (self->emit_type_name_dims(self->arena->nodes[c].text,
++                                                         self->arena->nodes[c].text2,
++                                                         self->arena->nodes[c].text3) != 0) return -1;
+                     if (self->arena->nodes[c].attr >= 0)
+                         fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[c].attr));
+                     first = 0;
+@@ -4912,7 +4943,10 @@ impl EmitOps for Emitter {
+                 /* a namespaced global: `text3` carries the mangled C spelling */
+                 fputs(self->arena->nodes[n].text3, self->out);
+             } else {
+-                fputs(self->arena->nodes[n].text2, self->out);
++                if (self->arena->nodes[n].aux == 2 || self->arena->nodes[n].aux == 3)
++                    fprintf(self->out, "(*%s)", self->arena->nodes[n].text2);
++                else
++                    fputs(self->arena->nodes[n].text2, self->out);
+             }
+             return 0;
+         }
+@@ -5373,7 +5407,7 @@ impl EmitOps for Emitter {
+         if (self->arena->nodes[n].kind == N_MCALL) {
+             char tname[MAX_TEXT];
+             char low[MAX_TEXT];
+-            int i, c2, rk;
++            int i, c2, rk, tm2, mm2, ai2;
+             /* Static mapping calls: no iface, no vtable, the recipe is expanded
+                at the call site (spec §6.1 / §6.2). */
+             if (self->arena->nodes[n].aux == 5) {
+@@ -5671,10 +5705,26 @@ impl EmitOps for Emitter {
+                     if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+                 }
+             }
++            /* S2 prototype: a trait method's `ref`/`out` parameter is a
++               pointer in C, so the call site takes the address of the place. */
++            tm2 = self->sym->find_trait(tname);
++            mm2 = -1;
++            ai2 = 0;
++            if (tm2 >= 0)
++                for (i = 0; i < self->sym->traits[tm2].nm; i++)
++                    if (strcmp(self->sym->traits[tm2].m[i].name,
++                               self->arena->nodes[n].text2) == 0) {
++                        mm2 = i;
++                        break;
++                    }
+             c2 = self->arena->nodes[n].b;
+             while (c2 >= 0) {
+                 int cv2 = -1;
+                 fputs(", ", self->out);
++                if (mm2 >= 0 && ai2 < self->sym->traits[tm2].m[mm2].nparams
++                    && (self->sym->traits[tm2].m[mm2].pann[ai2] == 2
++                        || self->sym->traits[tm2].m[mm2].pann[ai2] == 3))
++                    fputs("&", self->out);
+                 /* SH-65: a pair-form method (`f(env, x), env`) takes the
+                    closure as two C arguments, exactly like a free call. */
+                 if (self->arena->nodes[c2].kind == N_CLOSURE) {
+@@ -5686,6 +5736,7 @@ impl EmitOps for Emitter {
+                         fprintf(self->out, "__ct_cl_tramp_%d, &__ct_cl_env_v_%d", cv2, cv2);
+                     else if (self->emit_expr(c2) != 0) return -1;
+                 }
++                ai2++;
+                 c2 = self->arena->nodes[c2].next;
+             }
+             fputs(")", self->out);
+@@ -5693,6 +5744,8 @@ impl EmitOps for Emitter {
+         }
+         if (self->arena->nodes[n].kind == N_CALL) {
+             int cl;
++            int fi;
++            int ai;
+             /* A call through a closure variable expands to the trampoline with
+                that variable's environment: `f(a)` becomes
+                `__ct_cl_tramp_<ci>(&__ct_cl_env_v_<ci>, a)` (D21-14). */
+@@ -5741,6 +5794,9 @@ impl EmitOps for Emitter {
+                 fprintf(self->out, "%s(", self->arena->nodes[n].text2);
+             }
+             c = self->arena->nodes[n].a;
++            fi = self->arena->nodes[n].aux == 0
++                     ? self->sym->find_func(self->arena->nodes[n].text2) : -1;
++            ai = 0;
+             while (c >= 0) {
+                 int cv;
+                 /* S5: an inline literal is two C arguments, the trampoline and
+@@ -5753,10 +5809,16 @@ impl EmitOps for Emitter {
+                     if (emit_closure_arg(self, c) != 0) return -1;
+                 } else if (cv >= 0) {
+                     fprintf(self->out, "__ct_cl_tramp_%d, &__ct_cl_env_v_%d", cv, cv);
+-                } else if (self->emit_expr(c) != 0) {
+-                    return -1;
++                } else {
++                    if (fi >= 0 && ai < self->sym->funcs[fi].nparams
++                        && (self->sym->funcs[fi].pann[ai] == 2
++                            || self->sym->funcs[fi].pann[ai] == 3))
++                        fputs("&", self->out);
++                    if (self->emit_expr(c) != 0)
++                        return -1;
+                 }
+                 c = self->arena->nodes[c].next;
++                ai++;
+                 if (c >= 0) fputs(", ", self->out);
+             }
+             fputs(")", self->out);
+@@ -6305,6 +6367,8 @@ impl EmitOps for Emitter {
+             for (j = 0; j < self->sym->funcs[fi].nparams; j++) {
+                 if (j > 0) fputs(", ", f);
+                 fputs(self->sym->funcs[fi].ptype[j], f);
++                if (self->sym->funcs[fi].pann[j] == 2 || self->sym->funcs[fi].pann[j] == 3)
++                    fputs(" *", f);
+             }
+             fputs(");\n", f);
+         }
+diff --git a/selfhost/ct-ast/frontend/parse/Expr.h.ct b/selfhost/ct-ast/frontend/parse/Expr.h.ct
+index 64133402..ca4666fa 100644
+--- a/selfhost/ct-ast/frontend/parse/Expr.h.ct
++++ b/selfhost/ct-ast/frontend/parse/Expr.h.ct
+@@ -1105,6 +1105,32 @@ static int closure_match(struct Expr *self, int ci, const char *host, int skip_e
+    literal its own trampoline already exists with the return type its
+    declaration took, so the comparison is read-only (`set_ret` 0). */
+ 
++/* S2 prototype: a `ref`/`out` actual must be an assignable place. The set is
++   deliberately the common one: variables, fields, `*p`, and index places
++   (arrays, slices, Vec/Map). Literals, calls, casts and arithmetic are out. */
++static int ref_arg_place(struct Expr *self, int n)
++{
++    int k = self->arena->nodes[n].kind;
++    return k == N_VAR || k == N_MEMBER || k == N_ARROW
++        || k == N_DEREF || k == N_INDEX;
++}
++
++/* S2 prototype: an `out` owning actual must already be initialized. Owning is
++   `String` / `box<…>` / `Vec<…>` / `Map<…>` or a struct declared `use Drop`. */
++static int type_is_owning(struct Expr *self, const char *type)
++{
++    int si;
++    if (strcmp(type, "String") == 0) return 1;
++    if (strncmp(type, "box<", 4) == 0) return 1;
++    if (strncmp(type, "Vec<", 4) == 0) return 1;
++    if (strncmp(type, "Map<", 4) == 0) return 1;
++    if (strncmp(type, "struct ", 7) == 0) {
++        si = self->sym->find_struct(type + 7);
++        return si >= 0 && self->sym->structs[si].uses_drop;
++    }
++    return 0;
++}
++
+ /* Phase 31 S23b (L31-23): the container a borrowed initialiser came from.
+    Answers its variable index in `*cvi`; 0 when `init` is not a view. */
+ static int view_source(struct Expr *self, int init, int *cvi)
+@@ -5128,6 +5154,37 @@ impl ExprOps for Expr {
+                             && mi < self->sym->traits[t].nm
+                             && self->argtype_check(mline, mcol, fname, args, -1, t, mi) != 0)
+                             return -1;
++                        /* S2 prototype: method `ref`/`out` actuals are places
++                           too; `out` owning actuals must already hold a value. */
++                        if (!self->sym->traits[t].is_static
++                            && mi < self->sym->traits[t].nm) {
++                            int a2 = args;
++                            int ai2 = 0;
++                            while (a2 > 0
++                                   && ai2 < self->sym->traits[t].m[mi].nparams) {
++                                if ((self->sym->traits[t].m[mi].pann[ai2] == 2
++                                     || self->sym->traits[t].m[mi].pann[ai2] == 3)
++                                    && !ref_arg_place(self, a2))
++                                    return tool::diag::ct_sem_error(
++                                        self->arena->nodes[a2].line, 1,
++                                        "ref/out argument must be an assignable place",
++                                        self->sup->mem->path);
++                                if (self->sym->traits[t].m[mi].pann[ai2] == 3
++                                    && type_is_owning(self,
++                                           self->sym->traits[t].m[mi].ptype[ai2])
++                                    && self->arena->nodes[a2].kind == N_VAR) {
++                                    int vi = self->sym->find_var(
++                                        self->arena->nodes[a2].text2);
++                                    if (vi < 0 || !self->sym->vars[vi].initialized)
++                                        return tool::diag::ct_sem_error(
++                                            self->arena->nodes[a2].line, 1,
++                                            "out owning argument must be initialized",
++                                            self->sup->mem->path);
++                                }
++                                a2 = self->arena->nodes[a2].next;
++                                ai2++;
++                            }
++                        }
+                     }
+                 }
+                 n = m;
+@@ -5762,6 +5819,13 @@ impl ExprOps for Expr {
+             n = self->sup->new_node(N_VAR);
+             if (n < 0) return -1;
+             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->lex->toktext);
++            {
++                int vi = self->sym->find_var(self->arena->nodes[n].text2);
++                if (vi >= 0 && self->sym->vars[vi].ref_param)
++                    self->arena->nodes[n].aux = 2;
++                else if (vi >= 0 && self->sym->vars[vi].out_param)
++                    self->arena->nodes[n].aux = 3;
++            }
+             self->sup->lex_next();
+             /* Phase 31 S23b (L31-23): a view whose container was mutated after
+                it was taken is stale. A name followed by `=` is being rebound,
+@@ -6301,6 +6365,32 @@ impl ExprOps for Expr {
+                                                       got, want) != 0)
+                         return -1;
+                 }
++                /* S2: ref/out actuals are places, not values. */
++                if (fi >= 0) {
++                    int a = args;
++                    int ai = 0;
++                    while (a > 0 && ai < self->sym->funcs[fi].nparams) {
++                        if ((self->sym->funcs[fi].pann[ai] == 2
++                             || self->sym->funcs[fi].pann[ai] == 3)
++                            && !ref_arg_place(self, a))
++                            return tool::diag::ct_sem_error(
++                                self->arena->nodes[a].line, 1,
++                                "ref/out argument must be an assignable place",
++                                self->sup->mem->path);
++                        if (self->sym->funcs[fi].pann[ai] == 3
++                            && type_is_owning(self, self->sym->funcs[fi].ptype[ai])
++                            && self->arena->nodes[a].kind == N_VAR) {
++                            int vi = self->sym->find_var(self->arena->nodes[a].text2);
++                            if (vi < 0 || !self->sym->vars[vi].initialized)
++                                return tool::diag::ct_sem_error(
++                                    self->arena->nodes[a].line, 1,
++                                    "out owning argument must be initialized",
++                                    self->sup->mem->path);
++                        }
++                        a = self->arena->nodes[a].next;
++                        ai++;
++                    }
++                }
+                 /* 19.2: the argument types against the same signature, before
+                    the boxing pass rewrites interface arguments (an interface
+                    formal is skipped here, boxing owns it). */
+diff --git a/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct b/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct
+index 87d73946..33f6d881 100644
+--- a/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct
++++ b/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct
+@@ -287,6 +287,7 @@ impl SupportOps for ParseSupport {
+         while (p > 0 && k < MAX_PARAMS) {
+             snprintf(self->sym->funcs[i].ptype[k], MAX_TEXT, "%s", self->arena->nodes[p].text);
+             snprintf(self->sym->funcs[i].pdim[k], MAX_TEXT, "%s", self->arena->nodes[p].text3);
++            self->sym->funcs[i].pann[k] = (char)self->arena->nodes[p].aux;
+             /* a parameter's trailing `__attribute__` rides with its name/dims,
+                so the prototype and the definition spell it the same way */
+             if (self->arena->nodes[p].attr >= 0) {
+diff --git a/selfhost/ct-ast/frontend/parse/Parser.h.ct b/selfhost/ct-ast/frontend/parse/Parser.h.ct
+index e72acc5d..7eec9bac 100644
+--- a/selfhost/ct-ast/frontend/parse/Parser.h.ct
++++ b/selfhost/ct-ast/frontend/parse/Parser.h.ct
+@@ -81,6 +81,9 @@ pub trait ParseOps {
+     int  parse_program(void);
+     int  parse_func(int is_static, int is_pub, int is_extern);
+     int  parse_params(void);
++    int  out_index(const char *nm);
++    int  out_scan(int n, int *mask);
++    int  out_check_body(int body, int params, int line);
+     int  parse_record_def(int is_union);
+     int  parse_enum_def(int is_pub, int tag_required);
+     int  parse_typedef(int is_pub);
+@@ -178,6 +181,9 @@ pub struct Parser {
+     int  field_col;
+     /* Parse scratch the emitter reads through pointers (`ct_emit_bind_parse`). */
+     int  nparams;
++    /* S2 prototype: out parameter names for the L1 definite-assignment walk. */
++    char out_names[16][160];
++    int  nout;
+     /* Set by `parse_params` when the list ends with `...`; the caller stores it
+        on the symbol row (for the prototype) and on the function node. */
+     int  variadic;
+@@ -275,7 +281,7 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
+         }
+         /* the annotation rides on the N_PARAM node (`aux`): the default body
+            is the only place where that parameter becomes a variable */
+-        if (self->arena->nodes[p].aux
++        if (self->arena->nodes[p].aux == 1
+             && check_borrow_param(self, p, self->arena->nodes[p].line, 1) != 0) {
+             self->sup->pop_scope();
+             return -1;
+@@ -302,6 +308,8 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
+     snprintf(self->sym->trait_default, sizeof self->sym->trait_default, "%s", save_trait);
+     self->sup->pop_scope();
+     if (body < 0) return -1;
++    if (self->out_check_body(body, self->sym->traits[ti].m[mi].pnode,
++                             self->sym->traits[ti].m[mi].line) != 0) return -1;
+     if (self->st->func_end() != 0) return -1;
+     self->sym->traits[ti].m[mi].body = body;
+     return 0;
+@@ -1783,6 +1791,10 @@ impl ParseOps for Parser {
+             self->sup->pop_scope();
+             return -1;
+         }
++        if (self->out_check_body( b, params, func_line) != 0) {
++            self->sup->pop_scope();
++            return -1;
++        }
+         /* labels are function-scoped: the goto table is judged once the whole
+            body has been seen (a label may follow its `goto`) */
+         if (self->st->func_end() != 0) {
+@@ -1836,10 +1848,123 @@ impl ParseOps for Parser {
+         return f;
+     }
+ 
++    /* S2 prototype: L1 definite-assignment walk for `out` parameters.
++       Straight-line statements and if/else are exact; loops/switch/goto are
++       conservative (their body may not run, so assignments do not flow out). */
++    int out_index(const char *nm)
++    {
++        int i;
++        for (i = 0; i < self->nout; i++)
++            if (strcmp(self->out_names[i], nm) == 0) return i;
++        return -1;
++    }
++
++    int out_scan(int n, int *mask)
++    {
++        int k, i, m0, tm, em, tr, er, all;
++
++        if (n < 0) return 0;
++        all = (1 << self->nout) - 1;
++        k = self->arena->nodes[n].kind;
++        if (k == 5) {
++            if (*mask != all) {
++                for (i = 0; i < self->nout; i++)
++                    if ((*mask & (1 << i)) == 0) {
++                        char msg[320];
++                        snprintf(msg, sizeof msg,
++                                 "out parameter '%s' is not assigned on every path",
++                                 self->out_names[i]);
++                        return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1,
++                                                        msg, self->mem->path);
++                    }
++            }
++            return 1;
++        }
++        if (k == 4) {
++            int c = self->arena->nodes[n].a;
++            while (c >= 0) {
++                int r = self->out_scan(c, mask);
++                if (r != 0) return r;
++                c = self->arena->nodes[c].next;
++            }
++            return 0;
++        }
++        if (k == 14) {
++            m0 = *mask;
++            if (self->out_scan(self->arena->nodes[n].a, mask) < 0) return -1;
++            tm = *mask;
++            tr = self->out_scan(self->arena->nodes[n].b, &tm);
++            if (tr < 0) return -1;
++            if (self->arena->nodes[n].c >= 0) {
++                em = m0;
++                er = self->out_scan(self->arena->nodes[n].c, &em);
++                if (er < 0) return -1;
++                *mask = tm & em;
++                return (tr == 1 && er == 1) ? 1 : 0;
++            }
++            *mask = m0;
++            return 0;
++        }
++        if (k == 13) {
++            int l = self->arena->nodes[n].a;
++            if (l >= 0 && self->arena->nodes[l].kind == 10) {
++                i = self->out_index( self->arena->nodes[l].text2);
++                if (i >= 0) *mask |= (1 << i);
++            }
++            return self->out_scan(self->arena->nodes[n].b, mask);
++        }
++        if (k == 38 || k == 39 || k == 50) return 1;
++        if (k == 15 || k == 16 || k == 44 || k == 60
++            || k == 62 || k == 42) {
++            int m = *mask;
++            /* check returns inside the body with the incoming set, but do not
++               assume the body runs: assignments do not flow out of the loop */
++            if (self->out_scan(self->arena->nodes[n].a, &m) < 0) return -1;
++            if (self->out_scan(self->arena->nodes[n].b, &m) < 0) return -1;
++            if (self->out_scan(self->arena->nodes[n].c, &m) < 0) return -1;
++            if (self->out_scan(self->arena->nodes[n].d, &m) < 0) return -1;
++            *mask = m;
++            return 0;
++        }
++        if (self->out_scan(self->arena->nodes[n].a, mask) < 0) return -1;
++        if (self->out_scan(self->arena->nodes[n].b, mask) < 0) return -1;
++        if (self->out_scan(self->arena->nodes[n].c, mask) < 0) return -1;
++        if (self->out_scan(self->arena->nodes[n].d, mask) < 0) return -1;
++        return 0;
++    }
++
++    int out_check_body(int body, int params, int line)
++    {
++        int p, mask, r, all;
++
++        self->nout = 0;
++        for (p = params; p > 0; p = self->arena->nodes[p].next)
++            if (self->arena->nodes[p].aux == 3 && self->nout < 16)
++                snprintf(self->out_names[self->nout++], 160, "%s",
++                         self->arena->nodes[p].text2);
++        if (self->nout == 0 || body < 0) return 0;
++        all = (1 << self->nout) - 1;
++        mask = 0;
++        r = self->out_scan(body, &mask);
++        if (r < 0) return -1;
++        if (mask != all) {
++            int i;
++            for (i = 0; i < self->nout; i++)
++                if ((mask & (1 << i)) == 0) {
++                    char msg[320];
++                    snprintf(msg, sizeof msg,
++                             "out parameter '%s' is not assigned on every path",
++                             self->out_names[i]);
++                    return tool::diag::ct_sem_error(line, 1, msg, self->mem->path);
++                }
++        }
++        return 0;
++    }
++
+     int parse_params(void)
+     {
+         int first, tail, p, ar, ao;
+-        int seen_borrow, bline, bcol;
++        int seen_borrow, seen_ref, seen_out, bline, bcol;
+         char typebuf[MAX_TEXT];
+         char name[MAX_TEXT];
+         (void)self;
+@@ -1866,11 +1991,19 @@ impl ParseOps for Parser {
+             /* `borrow` is a contextual keyword: as the first token of a
+                parameter it can only be the annotation, never a type name */
+             seen_borrow = 0;
++            seen_ref = 0;
++            seen_out = 0;
+             bline = self->lex->tokline;
+             bcol = self->lex->tokstart - self->lex->lstart + 1;
+             if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "borrow") == 0) {
+                 seen_borrow = 1;
+                 self->sup->lex_next();
++            } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "ref") == 0) {
++                seen_ref = 1;
++                self->sup->lex_next();
++            } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "out") == 0) {
++                seen_out = 1;
++                self->sup->lex_next();
+             }
+             if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+             if (self->ex->fnptr_state) {
+@@ -1894,11 +2027,23 @@ impl ParseOps for Parser {
+             if (p < 0) return -1;
+             snprintf(self->arena->nodes[p].text, MAX_TEXT, "%s", typebuf);
+             snprintf(self->arena->nodes[p].text2, MAX_TEXT, "%s", name);
++            if (seen_ref) self->arena->nodes[p].aux = 2;
++            else if (seen_out) self->arena->nodes[p].aux = 3;
+             if (self->ex->parse_array_dims(p) != 0) return -1;
++            if ((seen_ref || seen_out)
++                && (self->arena->nodes[p].text3[0] || self->ex->fnptr_state))
++                return self->sup->fail("ref/out parameters cannot be arrays or function pointers");
+             if (self->sup->declare_var(name, typebuf) != 0) return -1;
+             {
+                 int vi = self->sym->find_var(name);
+-                if (vi >= 0) self->sym->vars[vi].is_fnparam = 1;
++                if (vi >= 0) {
++                    self->sym->vars[vi].is_fnparam = 1;
++                    self->sym->vars[vi].ref_param = 0;
++                    self->sym->vars[vi].out_param = 0;
++                    if (seen_ref) self->sym->vars[vi].ref_param = 1;
++                    if (seen_out) self->sym->vars[vi].out_param = 1;
++                    self->sym->vars[vi].initialized = seen_out ? 0 : 1;
++                }
+             }
+             if (self->arena->nodes[p].text3[0]) {
+                 int vi = self->sym->find_var(name);
+@@ -2737,7 +2882,7 @@ impl ParseOps for Parser {
+     int parse_trait(int is_pub)
+     {
+         int ti, mi, np, trait_line, mline, pfirst, ptail, dm, di, dj, dk, dcycle;
+-        int seen_borrow, bline;
++        int seen_borrow, seen_ref, seen_out, bline;
+         int ntp, pi;
+         char tparam[2][MAX_TEXT];
+         char tbound[2][MAX_TEXT];
+@@ -2917,10 +3062,18 @@ impl ParseOps for Parser {
+                        signature: it only marks the parameter in `vars[]` when
+                        the default body declares it (parse_trait_body) */
+                     seen_borrow = 0;
++                    seen_ref = 0;
++                    seen_out = 0;
+                     bline = self->lex->tokline;
+                     if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "borrow") == 0) {
+                         seen_borrow = 1;
+                         self->sup->lex_next();
++                    } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "ref") == 0) {
++                        seen_ref = 1;
++                        self->sup->lex_next();
++                    } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "out") == 0) {
++                        seen_out = 1;
++                        self->sup->lex_next();
+                     }
+                     if (self->ex->parse_type(ptype, sizeof ptype) != 0) return -1;
+                     pname[0] = 0;
+@@ -2946,14 +3099,19 @@ impl ParseOps for Parser {
+                         /* `aux` carries the annotation to the default body,
+                            which is where the parameter becomes a variable;
+                            `line` keeps the position for its diagnostic */
+-                        self->arena->nodes[sp].aux = seen_borrow;
++                        self->arena->nodes[sp].aux = seen_borrow ? 1
++                                                    : (seen_ref ? 2 : (seen_out ? 3 : 0));
+                         if (seen_borrow) self->arena->nodes[sp].line = bline;
++                        if ((seen_ref || seen_out)
++                            && (self->arena->nodes[sp].text3[0] || self->ex->fnptr_state))
++                            return self->sup->fail("ref/out parameters cannot be arrays or function pointers");
+                         if (pfirst < 0) pfirst = sp;
+                         else self->arena->nodes[ptail].next = sp;
+                         ptail = sp;
+                     }
+                     if (np >= MAX_PARAMS) return self->sup->fail("too many method parameters");
+                     snprintf(self->sym->traits[ti].m[mi].ptype[np], MAX_TEXT, "%s", ptype);
++                    self->sym->traits[ti].m[mi].pann[np] = seen_ref ? 2 : (seen_out ? 3 : 0);
+                     np++;
+                     if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                         self->sup->lex_next();
+@@ -3237,6 +3395,10 @@ impl ParseOps for Parser {
+                 self->sup->pop_scope();
+                 return -1;
+             }
++            if (self->out_check_body(body, params, mline) != 0) {
++                self->sup->pop_scope();
++                return -1;
++            }
+             if (self->st->func_end() != 0) {
+                 self->sup->pop_scope();
+                 return -1;
+@@ -3388,12 +3550,15 @@ impl ParseOps for Parser {
+                 self->sup->pop_scope();
+                 return -1;
+             }
++            if (self->out_check_body(body, params, mline) != 0) {
++                self->sup->pop_scope();
++                return -1;
++            }
+             if (self->st->func_end() != 0) {
+                 self->sup->pop_scope();
+                 return -1;
+             }
+             self->sup->pop_scope();
+-            (void)mline;
+             mnode = self->sup->new_node(N_METHOD);
+             if (mnode < 0) return -1;
+             snprintf(self->arena->nodes[mnode].text, MAX_TEXT, "%s", ret);
+@@ -3755,12 +3920,15 @@ impl ParseOps for Parser {
+                 self->sup->pop_scope();
+                 return -1;
+             }
++            if (self->out_check_body(body, params, mline) != 0) {
++                self->sup->pop_scope();
++                return -1;
++            }
+             if (self->st->func_end() != 0) {
+                 self->sup->pop_scope();
+                 return -1;
+             }
+             self->sup->pop_scope();
+-            (void)mline;
+             mnode = self->sup->new_node(N_METHOD);
+             if (mnode < 0) return -1;
+             snprintf(self->arena->nodes[mnode].text, MAX_TEXT, "%s", ret);
+diff --git a/selfhost/ct-ast/frontend/parse/Stmt.h.ct b/selfhost/ct-ast/frontend/parse/Stmt.h.ct
+index 9f9832f0..2c1cb8da 100644
+--- a/selfhost/ct-ast/frontend/parse/Stmt.h.ct
++++ b/selfhost/ct-ast/frontend/parse/Stmt.h.ct
+@@ -3986,6 +3986,8 @@ impl StmtOps for Stmt {
+                 }
+             }
+             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
++                int dvi = self->sym->find_var(name);
++                if (dvi >= 0) self->sym->vars[dvi].initialized = 1;
+                 self->sup->lex_next();
+                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+                     /* local `static` tables can be long, so the text goes to the
+diff --git a/selfhost/ct-ast/frontend/sym/Symbols.h.ct b/selfhost/ct-ast/frontend/sym/Symbols.h.ct
+index 0bb632db..1961dbd0 100644
+--- a/selfhost/ct-ast/frontend/sym/Symbols.h.ct
++++ b/selfhost/ct-ast/frontend/sym/Symbols.h.ct
+@@ -92,6 +92,9 @@ pub struct Fn {
+        (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the
+        call side still compares bare types for boxing */
+     char pdim[16][160];
++    /* S2 prototype: 0 = plain, 2 = ref, 3 = out. The type stays the caller's
++       base type for checking; the emitter adds the C pointer at the boundary. */
++    char pann[16];
+     int  nparams;
+     int  is_static;
+     int  is_pub;
+@@ -138,6 +141,13 @@ pub struct Var {
+        parameter (whose lifetime the caller owns) apart from a local
+        declaration, which a `return` may hand back (D5). */
+     int  borrowed;
++    /* S2 prototype: the parameter is `ref`/`out`; reads and writes emit
++       `(*name)` because the C signature carries a pointer. */
++    int  ref_param;
++    int  out_param;
++    /* S2: a local with an initialiser (or a normal parameter) counts as
++       initialized; an `out` owning actual must be initialized. */
++    int  initialized;
+     /* Phase 31 S23a: 1 when a container local holds a borrowed view (`get` /
+        `entry` / `foreach item`, or a copy of one). The view does not own the
+        buffer, so `release` on it is refused (L31-13/L31-14). It is set and
+@@ -192,6 +202,7 @@ pub struct MethodSig {
+     char name[160];
+     char ret[160];
+     char ptype[16][160];
++    int  pann[16];              /* S2 prototype: 0 plain, 2 `ref`, 3 `out` */
+     int  nparams;
+     /* A `.m.ct` trait has no vtable slot, so its signature may end in `...`:
+        the map recipe forwards the rest of the call verbatim. A real trait keeps
+@@ -651,6 +662,9 @@ impl SymbolOps for Symbols {
+         self->vars[i].autodrop = 0;
+         self->vars[i].path_warned = 0;
+         self->vars[i].borrowed = 0;
++        self->vars[i].ref_param = 0;
++        self->vars[i].out_param = 0;
++        self->vars[i].initialized = 0;
+         self->vars[i].cview = 0;
+         self->vars[i].is_param = 0;
+         self->vars[i].is_fnparam = 0;
+@@ -697,6 +711,9 @@ impl SymbolOps for Symbols {
+         self->vars[i].autodrop = 0;
+         self->vars[i].path_warned = 0;
+         self->vars[i].borrowed = 0;
++        self->vars[i].ref_param = 0;
++        self->vars[i].out_param = 0;
++        self->vars[i].initialized = 0;
+         self->vars[i].cview = 0;
+         self->vars[i].is_param = 0;
+         self->vars[i].is_fnparam = 0;
+diff --git a/selfhost/l2/core.ct b/selfhost/l2/core.ct
+index 5d7a1727..6fdf2ca4 100644
+--- a/selfhost/l2/core.ct
++++ b/selfhost/l2/core.ct
+@@ -50,7 +50,7 @@
+ #define MAX_WARNS  64                     /* collected leak warnings per run */
+ #define MAX_ERRORS 20                     /* recovery cap: past this the compiler stops */
+ #define MAX_MAP_IMPLS 512                 /* impl methods listed in `--emit-map` */
+-#define MAX_CALLS  1024                   /* direct call edges listed in `--emit-map` */
++#define MAX_CALLS  4096                   /* direct call edges listed in `--emit-map` */
+ 
+ #define CTC_VERSION "0.77.2"
+ 

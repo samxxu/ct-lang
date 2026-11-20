@@ -1,0 +1,24 @@
+/* S2b 反例：方法调用的 ref 实参必须是可赋值 place，字面量必须硬错。 */
+trait Touch {
+    void bump(ref int x, out int y);
+}
+
+struct Box {
+    int v;
+} use Touch;
+
+impl Touch for Box {
+    void bump(ref int x, out int y) {
+        x = x + self->v;
+        y = x * 2;
+    }
+}
+
+int main(void)
+{
+    Box b = { 3 };
+    int r;
+
+    b.bump(1, r);
+    return 0;
+}
