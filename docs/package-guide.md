@@ -204,6 +204,10 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 
 - 只有**根 `.h.ct`** 内有定义、且签名只含 C 标量 / `void` / 指针 / 数组参数（decay）/ 函数指针的 `pub` 函数进入导出面；按值 struct、trait 值、`Vec`/`Map`/`Option`/`Result`/`Str`、`own` 一律硬错。
 - 泛型模板不导出，给 `L39-1w`；根单元内的 `main`、`pub` 全局、带 C shim 的 `.m.ct` 分别 `L39-3/4/5`；被 import 单元的 `pub` 只给 `L39-6` 汇总，不进 ABI。
+- `ref` / `out` 形参在 C ABI 里就是普通指针：`pub int bump(ref int x)` 发射为
+  `int bump(int *);`，C 消费者直接传 `&value`。`out` 的“调用方初始化 / 每条路径赋值”
+  是 CT 源层检查，C 侧只能看到 `T *`，无法从 ABI 头区分 `ref` 与 `out`；契约由包文档
+  与函数注释承担。
 - 归档里还会出现 `Str_*`、vtable 等**内部符号**；`nm -g` 面 ⊋ 导出面，**只有 `.abi.h` 的声明是 ABI**。不要把 `nm` 输出当公开契约。
 - 非 `pub` 顶层函数/全局在 `--lib` 下是 `static`；导出定义是 `visibility("default")`，其余以 `-fvisibility=hidden` 编译。
 - 不做按值 struct / `pub` 全局 / 泛型函数 / dylib / MSVC；这些是 T39-1–T39-3 的开放项（见 [phase39 卡](history/design/phase39.md) §7）。

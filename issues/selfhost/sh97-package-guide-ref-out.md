@@ -38,3 +38,21 @@ exit=1
 ## 处置
 
 （待实现提交回填：`fixed` 主张、提交 sha、绿输出。）
+
+## 处置（DEV，2026-11-20）
+
+`fixed` 主张：`docs/package-guide.md` §5「C ABI 静态库」新增一条，写明
+`pub int bump(ref int x)` 在 ABI 头发射为 `int bump(int *);`，C 消费者传
+`&value`；`out` 的初始化/定值只在 CT 源层检查；ABI 头无法区分 `ref` 与
+`out`。`p78_docs.sh` 增加 package-guide 断言。
+
+绿输出：
+
+```console
+$ CC=cc sh test/ast/p78_docs.sh
+ok   package-guide documents ref/out at the C ABI boundary
+p78_docs: OK
+exit=0
+```
+
+提交：`git log --grep "SH-97"`。
