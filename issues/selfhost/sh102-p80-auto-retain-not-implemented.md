@@ -1,7 +1,7 @@
 ---
 id: SH-102
 title: "D-013 §3：String 按值传参/返回/字段赋值未自动 retain（浅拷贝，ASan UAF）"
-status: open
+status: reopened
 area: selfhost
 severity: P1
 opened: 2026-11-20
@@ -240,3 +240,66 @@ $ ./ret   -> after return s=2 r=2 / r after caller release data0=114            
 - `foreach` 的 `item`、多声明符局部、`for` 初始化器里的句柄不登记；`goto` 跨块不释放。
 - 泛型实例里 `T` 位置的局部只按容器 glue 的显式协议处理。
 - 字段 / 全局 `String` 仍无自动 Drop（卡 §7.9.4）。
+
+## 复核（REV，2026-11-20，v0.80.1）：**reopened**
+
+复核记录见 [PH-80 次轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §11。三个原 ASan
+复现（参数 / 字段赋值 / 非局部返回）与 `p80_retain` 已在 v0.80.1 转绿；但该修复仍有新的漏 release /
+UAF，故不置 `verified`，SH-102 置 `reopened`。
+
+### R1 嵌套 `break` / `continue` 漏 release（阻断）
+
+```ct
+for (i = 0; i < 2; i++) {
+    String s = lit.to_string();
+    if (i == 0) { continue; }
+    if (i == 1) { break; }
+}
+```
+
+```console
+$ ./jump2; echo exit=$?
+iter 0 refs=1 live=1
+iter 1 refs=1 live=2
+after loop live=2
+exit=0
+```
+
+生成的 C 在嵌套分支里直接 `continue;` / `break;`，没有 `String_release(&s)`；`sb_jump_release()`
+只释放最内层 block（[`Emitter.h.ct:717-723`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L717-L723)），
+与 SH-102 处置段和卡 §7.9.1 的“所有出口（return / break / continue / 末尾 `}`）release”不符。
+直接写在循环体顶层的 `continue` 会正确释放，故这是嵌套 block 的路径覆盖缺口。
+
+### R2 字段重赋旧值不 release（泄漏）
+
+```ct
+h.tag = x;                 /* retain x */
+h.tag = b.to_string();     /* 旧值没有 release */
+```
+
+```console
+$ ./field_reassign
+after1 tag=2 x=2 live=1
+after2 tag=1 x=2 live=2
+after_x_release tag=1 live=2
+final live=1
+```
+
+`sb_assign` 只对局部绑定计算 `release_old`（[`Emitter.h.ct:805`](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L805)），
+字段 / 全局 / 解引用目标不释放旧值。D-013 §3 “重新赋值：先 retain 右值，再 release 旧值”未限定
+“仅局部变量”；若按 DEV 的窄解释，应在 D-013/卡上补明，否则未满足。
+
+### R3 已登记边界仍含 UAF / 双重释放
+
+- `Holder h = { x };`（结构体字面量字段）→ 浅拷贝，`x.release()` 后读 `h.tag` 报 ASan heap-use-after-free；
+- `String y = x, z = y;`（多声明符局部）→ 浅拷贝，`y.release(); z.release();` 报 ASan UAF / double free；
+- `goto` 跨块 → `after goto live=1`（泄漏）。
+
+卡 §7.9.7 已登记这些位置为“作者负责”，但其中两项是 UAF/双重释放而非普通泄漏；建议至少加硬错 /
+lint 或另立 issue，不能作为“D-013 §3 满足”的依据。
+
+### R4 未发现过度 retain
+
+`p80_retain` 的 copy / field / stolen / pass / reassign / U16 / immortal 轨迹与额外全局 / 解引用 /
+自赋值 / 提前 return / U16 split 复现均未出现双 retain；`refs=-1` 在 retain / release 两侧跳过。
+问题集中在漏 release（R1/R2）与未登记的 UAF 边界（R3），不是过度 retain。
