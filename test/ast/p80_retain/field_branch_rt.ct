@@ -1,0 +1,20 @@
+/* SH-102 round 3 R6a: the same shape with a run-time condition
+ * (`argc > 100`). The refusal is structural, not value-dependent. */
+#include <stdio.h>
+
+struct Holder { String tag; }
+
+int main(int argc, char **argv)
+{
+    Str lit = "abc";
+    Holder h;
+    int cond = (argc > 100);
+    (void)argv;
+    if (cond) {
+        h.tag = lit.to_string();
+    }
+    h.tag = lit.to_string();
+    printf("after branch live=%d\n", ct_str_live_count());
+    h.tag.release();
+    return 0;
+}

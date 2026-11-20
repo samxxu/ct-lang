@@ -1,0 +1,23 @@
+/* SH-102 round 3 R6a: a field assigned in one `case` and reassigned after the
+ * switch is only conditionally defined; the compiler must refuse it. */
+#include <stdio.h>
+
+struct Holder { String tag; }
+
+int main(void)
+{
+    Str lit = "abc";
+    Holder h;
+    int c = 0;
+    switch (c) {
+    case 0:
+        h.tag = lit.to_string();
+        break;
+    default:
+        break;
+    }
+    h.tag = lit.to_string();
+    printf("after switch live=%d\n", ct_str_live_count());
+    h.tag.release();
+    return 0;
+}

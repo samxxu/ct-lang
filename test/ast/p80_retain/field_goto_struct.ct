@@ -1,0 +1,20 @@
+/* SH-102 round 3 C-4: a `goto` can skip the definition of a struct local that
+ * owns a String field, so it must be refused like a goto over a bare handle. */
+#include <stdio.h>
+
+struct Holder { String tag; }
+
+int main(int argc, char **argv)
+{
+    Str lit = "abc";
+    Holder h = { 0 };
+    int c = (argc > 100);
+    (void)argv;
+    if (c) { goto L; }
+    h.tag = lit.to_string();
+L:
+    h.tag = lit.to_string();
+    printf("after goto live=%d\n", ct_str_live_count());
+    h.tag.release();
+    return 0;
+}

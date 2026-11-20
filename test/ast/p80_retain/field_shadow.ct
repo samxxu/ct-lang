@@ -1,0 +1,22 @@
+/* SH-102 round 3 C-4: a shadowed struct local must not inherit the outer
+ * record's field state; both releases affect their own object only. */
+#include <stdio.h>
+
+struct Holder { String tag; }
+
+int main(void)
+{
+    Str lit = "abc";
+    Holder h;
+    h.tag = lit.to_string();
+    {
+        Holder h;
+        h.tag = lit.to_string();
+        printf("inner refs=%d live=%d\n", h.tag.refs(), ct_str_live_count());
+        h.tag.release();
+    }
+    printf("outer refs=%d live=%d\n", h.tag.refs(), ct_str_live_count());
+    h.tag.release();
+    printf("final live=%d\n", ct_str_live_count());
+    return 0;
+}

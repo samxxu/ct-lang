@@ -1,0 +1,19 @@
+/* SH-102 round 3 C-4: `p->tag` may alias any object, so the old value is not
+ * released automatically; the one leaked buffer is a registered limitation. */
+#include <stdio.h>
+
+struct Holder { String tag; }
+
+int main(void)
+{
+    Str lit = "abc";
+    Holder a;
+    Holder b;
+    Holder *p = &a;
+    p->tag = lit.to_string();
+    p = &b;
+    p->tag = lit.to_string();
+    printf("after refs=%d live=%d\n", p->tag.refs(), ct_str_live_count());
+    p->tag.release();
+    return 0;
+}

@@ -1,0 +1,21 @@
+/* SH-102 round 3 R6a (hard-error route): the field is assigned inside an
+ * `if` that may not run, then reassigned outside. The old value is not
+ * definitely defined, so releasing it would read uninitialised storage; the
+ * compiler must refuse the reassignment instead. */
+#include <stdio.h>
+
+struct Holder { String tag; }
+
+int main(void)
+{
+    Str lit = "abc";
+    Holder h;
+    int cond = 0;
+    if (cond) {
+        h.tag = lit.to_string();
+    }
+    h.tag = lit.to_string();
+    printf("after branch live=%d\n", ct_str_live_count());
+    h.tag.release();
+    return 0;
+}

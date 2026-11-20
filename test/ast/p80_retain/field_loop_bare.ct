@@ -1,0 +1,19 @@
+/* SH-102 round 3 R6b (hard-error route): a bare struct declaration inside a
+ * loop has no defined old value on the first iteration, so the compiler must
+ * refuse the loop-body reassignment. */
+#include <stdio.h>
+
+struct Holder { String tag; }
+
+int main(void)
+{
+    Str lit = "abc";
+    Holder h;
+    int i;
+    for (i = 0; i < 3; i++) {
+        h.tag = lit.to_string();
+        printf("iter %d refs=%d live=%d\n", i, h.tag.refs(), ct_str_live_count());
+    }
+    h.tag.release();
+    return 0;
+}

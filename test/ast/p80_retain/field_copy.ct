@@ -1,0 +1,17 @@
+/* SH-102 round 3 C-4: a whole-struct assignment would shallow-copy the owning
+ * field; the compiler must refuse it as a `whole-struct` assignment. */
+#include <stdio.h>
+
+struct Holder { String tag; }
+
+int main(void)
+{
+    Str lit = "abc";
+    Holder a;
+    Holder b;
+    a.tag = lit.to_string();
+    b = a;
+    printf("b.tag=%d live=%d\n", b.tag.refs(), ct_str_live_count());
+    b.tag.release();
+    return 0;
+}

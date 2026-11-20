@@ -1,0 +1,20 @@
+/* SH-102 round 3 R6b: a struct defined by an aggregate zero initialiser owns
+ * defined storage, so the loop's reassignment releases the old value and the
+ * live count stays flat. */
+#include <stdio.h>
+
+struct Holder { String tag; }
+
+int main(void)
+{
+    Str lit = "abc";
+    Holder h = { 0 };
+    int i;
+    for (i = 0; i < 3; i++) {
+        h.tag = lit.to_string();
+        printf("iter %d refs=%d live=%d\n", i, h.tag.refs(), ct_str_live_count());
+    }
+    h.tag.release();
+    printf("final live=%d\n", ct_str_live_count());
+    return 0;
+}

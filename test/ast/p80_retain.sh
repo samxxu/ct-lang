@@ -7,6 +7,11 @@
 #   - round 2: nested `break` / `continue` release every scope they leave, a
 #     field reassignment releases the old value, a struct literal retains an
 #     owning element, and every declarator of a multi-declarator line retains;
+#   - round 3 (R6a/R6b): a field release only ever touches definitely defined
+#     storage (a branch / loop / switch definition that cannot be proven is a
+#     hard error), a loop reassignment releases the previous value, and the
+#     shapes that cannot be modelled (`h = other`, a goto over an owning
+#     struct, `p->tag` aliasing) are refused or registered;
 #   - `refs = -1` (immortal literal / empty) is skipped;
 #   - the same traces under ASan / UBSan, because the failing baselines were
 #     heap-use-after-free / double free, not wrong numbers;
@@ -72,6 +77,11 @@ run_case jump
 run_case field_reassign
 run_case struct_lit
 run_case multi_decl
+run_case field_loop0
+run_case field_loop_pre
+run_case field_loop_long
+run_case field_shadow
+run_case field_ptr
 
 neg() {
     name=$1; src=$2; pattern=$3; why=$4
@@ -89,6 +99,18 @@ neg neg_double_free test/ast/p80_retain/neg_double_free.ct \
     "cannot release a borrowed container view" "double free of a borrowed element"
 neg neg_goto test/ast/p80_retain/neg_goto.ct \
     "a goto cannot cross an owning String scope" "goto across an owning String scope"
+neg field_branch0 test/ast/p80_retain/field_branch0.ct \
+    "may be undefined before this assignment" "R6a: branch-defined field reassigned"
+neg field_branch_rt test/ast/p80_retain/field_branch_rt.ct \
+    "may be undefined before this assignment" "R6a: run-time branch-defined field reassigned"
+neg field_switch test/ast/p80_retain/field_switch.ct \
+    "may be undefined before this assignment" "R6a: switch-defined field reassigned"
+neg field_loop_bare test/ast/p80_retain/field_loop_bare.ct \
+    "may be undefined before this assignment" "R6b: bare struct loop reassignment"
+neg field_copy test/ast/p80_retain/field_copy.ct \
+    "whole-struct assignment" "C-4: whole-struct copy of an owning field"
+neg field_goto_struct test/ast/p80_retain/field_goto_struct.ct \
+    "a goto cannot cross an owning String scope" "C-4: goto over a struct with an owning field"
 
 [ "$fail" -eq 0 ] && echo "p80_retain: OK"
 exit "$fail"
