@@ -1115,6 +1115,29 @@ else
     bad "PH-81-S1 box<T>/new" "$(sed -n '1,14p' "$work/p81box.out")"
 fi
 
+# Phase 82: leak guards (S82a–S82d, D-012). `leaks` warn/error, the direct
+# `box<X>` field cycle (depth 3, dedup), its allow-cycle suppression/negatives,
+# and the written contract + version sync.
+p82_probe() {
+    tag=$1; label=$2
+    shift 2
+    if sh "$@" >"$work/p82$tag.out" 2>&1; then
+        ok "$label"
+    else
+        bad "$label" "$(sed -n '1,12p' "$work/p82$tag.out")"
+    fi
+}
+p82_probe config "PH-82-S82a leaks config (E82-1/2: warn/error, compile/build, JSON, c-boundary)" \
+    test/ast/p82_config.sh "$work/ct-ast"
+p82_probe cycle "PH-82-S82b direct cycle (E82-3/6: self/2/3-edge, depth 3, dedup, wording)" \
+    test/ast/p82_cycle.sh "$work/ct-ast"
+p82_probe allow "PH-82-S82c allow-cycle (E82-5: same-line marker, check note, error build)" \
+    test/ast/p82_allow.sh "$work/ct-ast"
+p82_probe errors "PH-82-S82c negatives (E82-4: Vec/generic/iface/typedef/indirect, corpus clean)" \
+    test/ast/p82_errors.sh "$work/ct-ast"
+p82_probe docs "PH-82-S82d docs (E82-6/7/8: spec 4.72, package-guide, patterns 5, v0.82.0)" \
+    test/ast/p82_docs.sh "$work/ct-ast"
+
 sh test/ast/p75_closure.sh "$work/ct-ast" >"$work/p75c.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-75-R1 closure (pair-form method argument)"

@@ -33,8 +33,8 @@
 | PH-79 切片 `T[]`（S3a–S3e / E79-1–E79-6） | 当前 DSH 会话（DEV `dev-ph79`） | DEV | PH-79 ✅ v0.79.0 |
 | PH-80 `String`/`Str`（S5a + S5b；D-013 入口闭合） | 当前 DSH 会话（DEV `dev-ph80`） | DEV | PH-80 ✅ v0.80.4（E80-1…8 全通过；SH-102 自动 retain R1–R7，D-015 字段 release + 分支合并） |
 | PH-81 `box`/`new`（S1；P-7.5 + S1a/S1b/S1c） | 当前 DSH 会话（DEV `dev-ph81`） | DEV | PH-81 ✅ v0.81.0（E81-1…6；P-7.5 证据；D-016） |
-| PH-82 泄漏防护（准备，入口 PH-81 已收口 + D-012） | 当前 DSH 会话（需求方沟通） | REQ / EDITOR | PH-82 🟨 准备（入口已满足，未开工） |
-| PH-83 包管理契约 v1 与索引校验（准备，施工入口 PH-82 未过；D-014） | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-83 🟨 准备（v0.83.0） |
+| PH-82 泄漏防护（S82a–S82d；E82-1…8） | 当前 DSH 会话（DEV `dev-ph82`） | DEV | PH-82 ✅ v0.82.0（E82-1…8 全通过；D-012） |
+| PH-83 包管理契约 v1 与索引校验（准备，施工入口 PH-82 已过；D-014） | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-83 🟨 准备（v0.83.0） |
 | `HW-1`/`HW-2` 硬件批次 | 外部依赖（无硬件） | REQ | 只登记，不阻塞 |
 
 > 本仓库当前为单会话工作，三类常驻对话未建；见 `AGENTS.md` 的 `deviation: single-session-workflow`。
