@@ -62,7 +62,7 @@
 | D5 deadline | **已定（2026-11-21，A）**：不设 hard deadline；失败就地停，不用时间/phase 数倒逼范围 |
 | D6 重写期冻结 | **已定（2026-11-21，A）**：PH-85–88 主线只收 bugfix，新特性暂停；每张重写卡独占合入 |
 | D7 页首版本注入 | **已定（2026-11-21，A）**：版本只注入 README/生成物，spec 页首保持 DOC-63；能力→节号断言进 check-docs |
-| D8 三轮自举 | 讨论中（与现有 fixpoint 重叠） |
+| D8 三轮自举 | **已定（2026-11-21，A）**：扩展现有 fixpoint，轮数参数化（日常/切片 2 轮、tag 前 3 轮），不新建脚本 |
 | D9 收益预估 | 讨论中（先做 PH-85 spike） |
 
 详见 [v1-release-plan §6](../planning/v1-release-plan.md)。
