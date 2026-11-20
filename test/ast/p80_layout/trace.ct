@@ -1,14 +1,16 @@
-/* PH-80 S5a-1 / D-013 §3: the refcount trace at every position the retain
- * contract names - literal (immortal), explicit copy/retain/release, a
+/* PH-80 S5a-1 / D-013 §3 (SH-102): the refcount trace at every position the
+ * retain contract names - literal (immortal), explicit copy/retain/release, a
  * by-value parameter, a return, a struct field, a `Vec` element and
  * `own`/`delete`.
  *
- * The protocol this phase ships is explicit: `copy()` / `retain()` share the
- * buffer and bump `refs`, `release()` drops one reference. A `Vec` insertion
- * is the one automatic position (the container element glue calls `retain`);
- * a plain by-value parameter, return or field assignment is a shallow struct
- * copy and is NOT auto-retained yet - the `gap` lines below pin that fact
- * until D-013 §3's automatic half lands. */
+ * The protocol D-013 §3 ships is automatic: `copy()` / `retain()` share the
+ * buffer and bump `refs`, `release()` drops one reference, and the compiler
+ * itself retains a by-value `String` / `U16String` parameter at entry and
+ * releases it on every exit path; a field assignment and an owning return
+ * retain; a local handle returns by move; a reassignment retains the value and
+ * releases the old one; a scope releases its owning locals. A `Vec` insertion
+ * retains through the container element glue. `refs = -1` (literal / empty) is
+ * immortal and every automatic position skips it. */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -21,8 +23,8 @@ int take_len(String a)
     return a.len();
 }
 
-/* A parameter observed without retaining it: the shallow copy does not bump
-   `refs`, which is the documented gap. */
+/* A parameter observed inside the callee: the automatic entry retain has
+   already bumped `refs`, so the callee sees 2 for a caller's single handle. */
 int take_refs(String a)
 {
     return a.refs();
@@ -60,7 +62,7 @@ int main(void)
     v.h = 0;
     printf("keep refs=%d live=%d\n", keep.refs(), ct_str_live_count());
     printf("param take_len=%d refs_after=%d\n", take_len(keep), keep.refs());
-    printf("gap param_refs=%d (no automatic retain on a by-value parameter)\n",
+    printf("param refs=%d (by-value parameter retained at entry)\n",
            take_refs(keep));
     got = keep_param(keep);
     printf("keep_param refs=%d live=%d\n", got.refs(), ct_str_live_count());

@@ -1,0 +1,23 @@
+start refs=1 live=1
+drop_param in=2
+after drop_param refs=1 live=1 len=4
+peek=2 refs_after=1
+copy refs=2 keep=2
+after copy release keep=1
+scoped refs=1 live=2
+after scope live=1
+field refs=2 keep=2
+field after keep release refs=1 first=107
+moved len=2 refs=1 live=1
+after moved release live=0
+stolen refs=3 field=3
+stolen after field release refs=2 first=97
+before reassign keep=1 other=1 live=2
+after reassign keep=2 other=2 live=1
+after other release keep=1 first=97
+pass refs=2 keep=2
+pass after keep release refs=1 first=107
+immortal refs=-1 empty=-1 copy=-1
+u16 field refs=2 src=2 len=3
+u16 field after src release refs=1 len=3
+final live=0

@@ -1,6 +1,6 @@
 keep refs=1 live=1
 param take_len=4 refs_after=1
-gap param_refs=1 (no automatic retain on a by-value parameter)
+param refs=2 (by-value parameter retained at entry)
 keep_param refs=2 live=1
 after_param_copy_release keep=1
 make_local len=2 refs=1 live=2

@@ -1,0 +1,158 @@
+/* PH-80 SH-102 (D-013 §3): the automatic retain / release trace. Every
+ * position the contract names is observed through `refs()` / the live count:
+ *
+ *   - a by-value `String` parameter is retained at entry and released by the
+ *     callee, so the caller's handle survives a `release()` inside the callee;
+ *   - a local copy of a handle (`String b = a;`) retains, and the scope
+ *     releases it;
+ *   - a field assignment retains the right-hand side;
+ *   - a local handle returns by move; a non-local owning return retains;
+ *   - a reassignment retains the right-hand side before releasing the old one;
+ *   - `refs = -1` (immortal literal / empty) is skipped everywhere;
+ *   - a `U16String` parameter and field follow the same protocol.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Holder {
+    String tag;
+    U16String utag;
+}
+
+/* The callee releases its own reference: the caller must still own one. */
+void drop_param(String a)
+{
+    printf("drop_param in=%d\n", a.refs());
+    a.release();
+}
+
+/* The callee only reads: its entry retain is released on the way out. */
+int peek_param(String a)
+{
+    return a.refs();
+}
+
+/* A local handle returns by move. */
+String make_local(void)
+{
+    Str lit = "mk";
+    return lit.to_string();
+}
+
+/* A non-local owning return retains the field for the caller. */
+String steal_field(Holder *h)
+{
+    return h->tag;
+}
+
+String pass_through(String a)
+{
+    return a;
+}
+
+int main(void)
+{
+    Str lit = "keep";
+    Str alt = "alt";
+    String keep;
+    String other;
+    String moved;
+    String stolen;
+    U16String u;
+    Holder h;
+
+    /* 1. by-value parameter: entry retain, callee release, caller survives */
+    keep = lit.to_string();
+    printf("start refs=%d live=%d\n", keep.refs(), ct_str_live_count());
+    drop_param(keep);
+    printf("after drop_param refs=%d live=%d len=%d\n", keep.refs(),
+           ct_str_live_count(), keep.len());
+    printf("peek=%d refs_after=%d\n", peek_param(keep), keep.refs());
+
+    /* 2. local copy of a handle: retain + scope release */
+    {
+        String copy = keep;
+        printf("copy refs=%d keep=%d\n", copy.refs(), keep.refs());
+        copy.release();
+        printf("after copy release keep=%d\n", keep.refs());
+    }
+    {
+        String scoped = alt.to_string();
+        printf("scoped refs=%d live=%d\n", scoped.refs(), ct_str_live_count());
+    }
+    printf("after scope live=%d\n", ct_str_live_count());
+
+    /* 3. field assignment retains; the source can be released */
+    h.tag = keep;
+    printf("field refs=%d keep=%d\n", h.tag.refs(), keep.refs());
+    keep.release();
+    printf("field after keep release refs=%d first=%d\n", h.tag.refs(),
+           h.tag.data[0]);
+    h.tag.release();
+
+    /* 4. return: move of a local, retain of a field, pass-through of a param */
+    moved = make_local();
+    printf("moved len=%d refs=%d live=%d\n", moved.len(), moved.refs(),
+           ct_str_live_count());
+    moved.release();
+    printf("after moved release live=%d\n", ct_str_live_count());
+
+    keep = alt.to_string();
+    h.tag = keep.retain();
+    stolen = steal_field(&h);
+    printf("stolen refs=%d field=%d\n", stolen.refs(), h.tag.refs());
+    h.tag.release();
+    printf("stolen after field release refs=%d first=%d\n", stolen.refs(),
+           stolen.data[0]);
+    stolen.release();
+    keep.release();
+
+    /* 5. reassignment: retain the right-hand side, release the old value */
+    keep = lit.to_string();
+    other = alt.to_string();
+    printf("before reassign keep=%d other=%d live=%d\n", keep.refs(),
+           other.refs(), ct_str_live_count());
+    keep = other;
+    printf("after reassign keep=%d other=%d live=%d\n", keep.refs(),
+           other.refs(), ct_str_live_count());
+    other.release();
+    printf("after other release keep=%d first=%d\n", keep.refs(),
+           keep.data[0]);
+    keep.release();
+
+    /* 6. pass-through: parameter move, no extra retain */
+    keep = lit.to_string();
+    stolen = pass_through(keep);
+    printf("pass refs=%d keep=%d\n", stolen.refs(), keep.refs());
+    keep.release();
+    printf("pass after keep release refs=%d first=%d\n", stolen.refs(),
+           stolen.data[0]);
+    stolen.release();
+
+    /* 7. immortal literal / empty: retain and release are no-ops */
+    {
+        String literal = "immortal";
+        String empty = "";
+        String copy = literal;
+        printf("immortal refs=%d empty=%d copy=%d\n", literal.refs(),
+               empty.refs(), copy.refs());
+        copy.release();
+        literal.release();
+        empty.release();
+    }
+
+    /* 8. U16String: by-value parameter and field assignment */
+    {
+        Str utf = "u16";
+        u = U16String.from_utf8(utf);
+        h.utag = u;
+        printf("u16 field refs=%d src=%d len=%d\n", h.utag.refs(), u.refs(),
+               h.utag.len());
+        u.release();
+        printf("u16 field after src release refs=%d len=%d\n", h.utag.refs(),
+               h.utag.len());
+        h.utag.release();
+    }
+    printf("final live=%d\n", ct_str_live_count());
+    return 0;
+}

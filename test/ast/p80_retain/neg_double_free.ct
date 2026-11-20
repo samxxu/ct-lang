@@ -1,0 +1,17 @@
+/* SH-102 negative (double free): a `Vec.get` result is a borrowed view -- the
+ * container owns the reference. Releasing it frees the element while the
+ * container still points at it, and the container's own release would free it
+ * a second time. The compiler must refuse the release and point at `retain()`. */
+#include <stdio.h>
+
+int main(void)
+{
+    Str lit = "keep";
+    String s = lit.to_string();
+    Vec<String> v;
+    v.h = 0;
+    v.push(s);
+    v.get(0).release();
+    v.release();
+    return 0;
+}
