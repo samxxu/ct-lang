@@ -2,13 +2,13 @@
 
 | 项 | 值 |
 | --- | --- |
-| 复核对象 | 第一轮：`5378850e`（v0.83.0；tag `v0.83.0` → `958cede3`）；第二轮：`f7db9a72`（v0.83.1；tag `v0.83.1` → `f7db9a72`） |
-| 范围 | 契约 v1（digest 三向量、spec/MVS/单索引、判据矩阵）、只读 `ct index verify`、五字段按行硬错、conformance、Linux x64 产物；E83-1…8、版本/tag/G8/check-all/sanitizer、merge 后 `v0.82.1` 自洽；第二轮另复核 PKG-14 修复（非普通文件/ferror/JSON） |
-| 方法 | 第一轮：`git archive 5378850e` → 独立自举；跑 p83 四探针；独立 Python 复算三向量；REV 自建 verify 反例；`gh release download v0.83.0`；T-7 红基线复跑；`g0`/`g8`/`check-docs`/`check-all`/`check-sanitizers`。第二轮：`git archive v0.83.1` 自举；重跑全部反例；QEMU Linux 产物验 ferror；`gh release download v0.83.1`；回归 E83-1/3/5/6/7 |
-| 结论 | 第一轮 **REV: 不通过**（E83-4 未过：`ct index verify` 对目录/设备/FIFO 等非普通文件不返回契约要求的退出码 2，目录甚至输出 `OK (0 rows)`；E83-1/3/5/6/7 通过，E83-2 行为通过但跨仓前置未确认，E83-8 未重跑完整 revert）。第二轮 **REV: 通过**（v0.83.1 PKG-14 已修复并独立复核，见 §14） |
-| 交付 | 第一轮：本文件；`docs/design/phase83.md` 的 S83a REVIEW 签收；`issues/packages/pkg-14-…` 置 `reopened`；不改代码、不 push。第二轮：本文件 §14；`pkg-14-…` 置 `verified`；不改代码、不 push |
+| 复核对象 | 第一轮：`5378850e`（v0.83.0；tag `v0.83.0` → `958cede3`）；第二轮：`f7db9a72`（v0.83.1；tag `v0.83.1` → `f7db9a72`）；第三轮：`612fa65d`（v0.83.2；tag `v0.83.2` → `612fa65d`） |
+| 范围 | 契约 v1（digest 三向量、spec/MVS/单索引、判据矩阵）、只读 `ct index verify`、五字段按行硬错、conformance、Linux x64 产物；E83-1…8、版本/tag/G8/check-all/sanitizer、merge 后 `v0.82.1` 自洽；第二轮另复核 PKG-14 修复（非普通文件/ferror/JSON）；第三轮复核 v0.83.2 的 Linux glibc 默认索引路径自拷贝修复 |
+| 方法 | 第一轮：`git archive 5378850e` → 独立自举；跑 p83 四探针；独立 Python 复算三向量；REV 自建 verify 反例；`gh release download v0.83.0`；T-7 红基线复跑；`g0`/`g8`/`check-docs`/`check-all`/`check-sanitizers`。第二轮：`git archive v0.83.1` 自举；重跑全部反例；QEMU Linux 产物验 ferror；`gh release download v0.83.1`；回归 E83-1/3/5/6/7。第三轮：`git archive v0.83.2`；AlmaLinux 9 glibc 容器复现 v0.83.1 红、v0.83.2 绿；x86_64 Linux 容器跑 p83_dist；macOS 35 ok + 1 skip |
+| 结论 | 第一轮 **REV: 不通过**（E83-4 未过：`ct index verify` 对目录/设备/FIFO 等非普通文件不返回契约要求的退出码 2，目录甚至输出 `OK (0 rows)`；E83-1/3/5/6/7 通过，E83-2 行为通过但跨仓前置未确认，E83-8 未重跑完整 revert）。第二轮 **REV: 通过**（v0.83.1 PKG-14 已修复并独立复核，见 §14）；第三轮 **v0.83.2 CI 回归复核：通过**（Linux glibc 默认索引路径自拷贝已修复，见 §15） |
+| 交付 | 第一轮：本文件；`docs/design/phase83.md` 的 S83a REVIEW 签收；`issues/packages/pkg-14-…` 置 `reopened`；不改代码、不 push。第二轮：本文件 §14；`pkg-14-…` 置 `verified`；不改代码、不 push。第三轮：本文件 §15；PKG-14 保持 `verified`；不改代码、不 push |
 
-> 第二轮（v0.83.1）见 §14；第一轮的不通过记录保留在 §5.2/§13，历史不覆盖。
+> 第二轮（v0.83.1）见 §14、第三轮（v0.83.2）见 §15；第一轮的不通过记录保留在 §5.2/§13，历史不覆盖。
 
 ## 1 独立自举（archive，不依赖工作树产物）
 
@@ -785,4 +785,176 @@ $ echo $?
 `line:0 kind:"io"`；FIFO 不挂起；普通文件 symlink 仍可读；ferror 在 QEMU Linux 产物上
 exit 2；六字段与 legacy 行为不变；Release sha256 `7265d00a…`、`ct -v` = v0.83.1；E83-1/3/5/6/7
 回归通过；check-all 11 门、sanitizer 583、g0/g8/check-docs 全绿。PKG-14 置 `verified`。
+本轮不改代码、不 push。
+
+## 15 v0.83.2 CI 回归复核（2026-11-21）
+
+> **v0.83.2 CI 回归复核：通过**（PKG-14 保持 `verified`；第一/二轮记录保留在 §13/§14）
+
+### 15.1 问题与修复
+
+v0.83.1 的 `pkg_index_verify` 默认索引分支先令 `ip = path`（`$CT_HOME/index/index`），随后
+`snprintf(path, sizeof path, "%s", ip)` 把 `path` 自拷贝进自身。重叠对象上的 `snprintf` 是
+C 未定义行为：glibc 返回空串，`stat('')` 失败 → `CT_HOME` 默认用例 exit 2；macOS libc
+恰好原地复制，故 macOS 绿（与 SH-103 字段表自拷贝同类）。v0.83.2 改为
+`if (ip != path) snprintf(path, sizeof path, "%s", ip);`；`p83_verify` 增/强化两条断言：
+`$CT_HOME/index/index` 目录的 stderr 必须带完整解析路径；默认 `CT_HOME` 的
+`--json.index` 必须等于 `$CT_HOME/index/index`。
+
+### 15.2 Linux glibc 容器（AlmaLinux 9.1 aarch64，glibc 2.34，gcc 11.5）
+
+从 `git archive` 分别构建 v0.83.1 与 v0.83.2，同一容器、同一工作目录：
+
+```console
+# v0.83.1 二进制 + v0.83.2 的 p83_verify
+$ sh test/ast/p83_verify.sh /root/ct-ast831
+FAIL p83/verify: CT_HOME directory
+FAIL p83/verify: CT_HOME default
+FAIL p83/verify: CT_HOME default path
+# 33 ok + 3 FAIL，exit 1
+
+# v0.83.2 二进制
+$ sh test/ast/p83_verify.sh /root/ct-ast832
+...
+ok   $CT_HOME/index/index being a directory exits 2 (with the resolved path)
+ok   $CT_HOME default JSON carries the full resolved path
+...
+p83_verify: OK
+# 36 ok，exit 0
+```
+
+默认路径的最小对照（合法 `$CT_HOME/index/index`）：
+
+```console
+$ HOME=/root/indep/home CT_HOME=/root/indep/home /root/ct-ast831 index verify --json
+{"index":"","ok":false,"rows":0,"valid":0,"invalid":1,
+ "errors":[{"line":0,"kind":"io","message":"cannot read the package index ''"}]}
+$ echo $?
+2
+$ HOME=/root/indep/home CT_HOME=/root/indep/home /root/ct-ast832 index verify --json
+{"index":"/root/indep/home/index/index","ok":true,"rows":1,"valid":1,"invalid":0,"errors":[]}
+$ echo $?
+0
+```
+
+三种来源路径（v0.83.2）：
+
+```console
+$ # 默认 $CT_HOME/index/index
+{"index":"/root/indep/home/index/index","ok":true,...}          # rc=0
+$ # CT_INDEX
+{"index":"/root/indep/custom.index","ok":true,...}              # rc=0
+$ # 显式文件
+{"index":"/root/indep/explicit.index","ok":true,...}            # rc=0
+$ # $CT_HOME/index/index 为目录
+{"index":"/root/indep/badhome/index/index","ok":false,
+ "errors":[{"line":0,"kind":"io","message":"not a regular file: '...'"}]}  # rc=2
+$ # FIFO
+ct-ast: not a regular file: '/root/indep/fifo'                  # rc=2，5s 内返回
+```
+
+`p83_legacy` 9 ok；`p83_conformance` 19 passed（最小 AlmaLinux 镜像需先装 `diffutils`，
+否则 runner 的 `diff` 不存在会报空原因；装上后全绿，属环境前置，不是产品缺陷）。
+
+### 15.3 Linux x86_64 容器 / macOS
+
+x86_64 Alpine 容器（Linux，binfmt 运行 x86_64 Release 产物）：
+
+```console
+$ sh test/ast/p83_verify.sh /root/ct-release
+p83_verify: OK          # 36 ok
+$ sh test/ast/p83_dist.sh /root/ct-release --require
+ok   sha256 matches 63e6c1e666c67d708fe05955eed4ea1c6c045a6867319f3b43d512b5b88e15ca
+ok   the tarball contains ct and ctc only
+ok   ELF 64-bit x86-64 ...
+ok   unpacked ct -v prints 'ct v0.83.2'
+ok   host compiler agrees on v0.83.2
+p83_dist: OK             # 8 ok
+```
+
+macOS（archive 构建 v0.83.2）：`p83_verify: OK`，**35 ok + 1 skip**（`skip ferror (no
+/proc/self/mem on this host)`）；`p83_dist` 的 `ct -v` 由 QEMU 验证为 `ct v0.83.2`。
+
+### 15.4 Release v0.83.2
+
+```console
+$ gh release download v0.83.2 --pattern 'ct-linux-x64.tar.gz*'
+$ shasum -a 256 ct-linux-x64.tar.gz
+63e6c1e666c67d708fe05955eed4ea1c6c045a6867319f3b43d512b5b88e15ca  ct-linux-x64.tar.gz
+$ cat ct-linux-x64.tar.gz.sha256
+63e6c1e666c67d708fe05955eed4ea1c6c045a6867319f3b43d512b5b88e15ca  ct-linux-x64.tar.gz
+$ tar -tzf ct-linux-x64.tar.gz
+ct
+ctc
+$ run-linux-binary.sh unpack/ct -v
+ct v0.83.2
+```
+
+tag / Release / 版本：
+
+```console
+$ git cat-file -t v0.83.2
+tag
+$ git rev-parse v0.83.2^{commit}
+612fa65dea7ce6642f9eee5cb167cbc63bee9ff0
+$ git for-each-ref refs/tags/v0.83.2 --format='%(contents:subject)'
+PKG-14 Linux CT_HOME fix (612fa65d)
+$ git ls-remote origin 'refs/tags/v0.83.2*'
+d70c48ca... refs/tags/v0.83.2
+612fa65d... refs/tags/v0.83.2^{}
+$ gh release view v0.83.2 --json tagName,isDraft,isPrerelease
+tagName=v0.83.2, isDraft=false, isPrerelease=false
+```
+
+Release 资产 digest 与下载文件 sha256 相同；五处 `CTC_VERSION` 均为 `0.83.2`；
+`git diff v0.83.2 HEAD` 为空。
+
+### 15.5 T-7 与 E83 回归 / 门禁
+
+T-7：`d49982c6^ = fa6f8fba`、`612fa65d^ = d49982c6`；红提交只改
+`test/ast/p83_verify.sh`，fix 提交的代码改动只落在 `Pkg.h.ct`/`main.ct`（`p83_verify` 在 fix 上 0 行 diff）。
+红证在 glibc 容器复跑为 33 ok + 3 FAIL（`CT_HOME directory`/`CT_HOME default`/
+`CT_HOME default path`），与卡 §7.6 一致。
+
+E83-1/3/5/6/7 回归：
+
+```console
+$ p83_legacy: OK (9)             # Linux glibc 容器
+$ p83_conformance: OK (19 passed) # Linux glibc 容器（装 diffutils 后）
+$ p83_dist: OK (8)                # Linux x86_64 容器
+$ bash tools/check.sh g0          -> g0: OK (block 1.17.0, session-map present)
+$ bash tools/check.sh g8          -> g8: OK (PN-2 version coherence; 9 legacy offsets)
+$ python3 test/docs/check-docs.py -> OK (2196 links / 364 files, v0.83.2, ...)
+$ TMPDIR=$PWD/.temp/rev832/all bash selfhost/check-all.sh
+  == summary: 156 passed, 0 failed ==          # L0
+  == 169 checks, 0 failed ==                   # package manager
+  == summary: 153 passed, 0 failed ==          # archive
+  == summary: 1548 passed, 0 failed, 5 skipped ==  # AST
+  == summary: 20 pass, 0 new, 0 pending, 0 regression ==  # acceptance（仅报告）
+  check-warnings: 490 ok, 0 failed
+  check-all: OK (11 hard gates green)
+$ TMPDIR=$PWD/.temp/rev832/san bash selfhost/check-sanitizers.sh
+  check-sanitizers: OK (583 checks, no sanitizer report)
+```
+
+51 个 golden/ABI banner 仍只变版本 token；E83-1 三向量/契约无 TBD；E83-5 数据未变。
+
+### 15.6 不阻断观察
+
+1. `p83_conformance` 在最小 AlmaLinux 容器里需要 `diff`（diffutils）；未装时 runner 报
+   `FAIL index CT:` 空原因，装上后 19 passed。属容器环境前置，不是产品缺陷；CI 镜像已有
+   `diff`。
+2. E83-2 的跨仓前置仍未由 index 仓书面确认（PKG-16 仍开放）；行为判定通过，未阻断。
+3. `ct get` 对畸形 digest 仍静默 exit 1（第一轮 §12 第 2 条），非 PKG-14 范围。
+4. 卡 §7.6 的 Linux 红证用 v0.83.2 的测试脚本跑 v0.83.1 二进制（3 FAIL，含新增的
+   `CT_HOME default path`）；若只用 v0.83.1 自带脚本则是 2 FAIL。两种口径都指向同一
+   自拷贝缺陷，本复核两种都复现过。
+
+### 15.7 结论
+
+**v0.83.2 CI 回归复核：通过。** Linux glibc 容器上 v0.83.1 的 `CT_HOME` 默认路径自拷贝
+（`index:""`、exit 2）在 v0.83.2 消失：默认/`CT_INDEX`/显式三种来源的 `--json.index`
+均为完整解析路径，目录/FIFO 仍 exit 2；Linux glibc 36 ok、Linux x86_64 容器 36 ok、
+macOS 35 ok + 1 skip；`p83_dist` 8 ok、`ct -v` = v0.83.2；Release sha256 `63e6c1e6…`；
+E83-1/3/5/6/7 与 check-all/sanitizer/g0/g8/check-docs 全绿。PKG-14 保持 `verified`。
 本轮不改代码、不 push。
