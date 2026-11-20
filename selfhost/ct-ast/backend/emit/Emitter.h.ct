@@ -78,6 +78,7 @@ import runtime::arena::Arena;
 #define N_SIZEOF  36
 #define N_TERN    37
 #define N_OPT     72
+#define N_NEWOBJ  77
 #define N_BREAK   38
 #define N_CONT    39
 #define N_DECLS   40
@@ -7288,6 +7289,29 @@ impl EmitOps for Emitter {
             else fputs("(!", self->out);
             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
             fputs(")", self->out);
+            return 0;
+        }
+        if (self->arena->nodes[n].kind == N_NEWOBJ) {
+            /* PH-81 S1b: `new T { ... }` becomes a statement expression that
+               calls the instance constructor with the compound literal. The
+               payload is copied by move; the literal's owning place
+               initialisers were already retained by `emit_raw_init`. */
+            char tmp[MAX_TEXT];
+            char ctype[MAX_TEXT];
+            int k;
+            if (!self->cur_ret[0])
+                return self->fail_from(n,
+                    "'new' is only supported in a local initializer; a file-scope or static object cannot allocate at run time");
+            k = self->ntmp;
+            self->ntmp++;
+            snprintf(tmp, sizeof tmp, "__ct_new%d", k);
+            snprintf(ctype, sizeof ctype, "struct %s", self->arena->nodes[n].text2);
+            fprintf(self->out, "({ %s %s = %s__new(&(%s)", ctype, tmp,
+                    self->arena->nodes[n].text2, self->arena->nodes[n].text);
+            if (self->emit_raw_init(self->arena->nodes[n].a, self->arena->nodes[n].text,
+                                    "", 0) != 0)
+                return -1;
+            fprintf(self->out, "); %s; })", tmp);
             return 0;
         }
         if (self->arena->nodes[n].kind == N_BOX) {

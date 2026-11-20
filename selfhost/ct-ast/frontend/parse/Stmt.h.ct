@@ -4325,7 +4325,12 @@ impl StmtOps for Stmt {
                     ecol = self->lex->tokstart - self->lex->lstart + 1;
                     iline = eline;
                     icol = ecol;
-                    e = self->ex->parse_expr();
+                    {
+                        int save_sinit = self->ex->static_init;
+                        self->ex->static_init = self->static_decl;
+                        e = self->ex->parse_expr();
+                        self->ex->static_init = save_sinit;
+                    }
                     self->ex->into_ok = 0;
                     self->ex->fnval_ok = 0;
                     if (e < 0) return -1;
