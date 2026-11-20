@@ -101,7 +101,7 @@ S83a 为纯文档任务，写 `no-test:` 并由 REVIEW 签字。
 | S83b 只读校验 | `d22a5077`（baseline `1764b4d6`） | `b5873c40` | `sh test/ast/p83_verify.sh` / `p83_legacy.sh` | `p83_verify: OK`（26）/ `p83_legacy: OK`（9） |
 | S83c conformance | `7cbd5792`（baseline `1764b4d6`） | `f1a1146a` | `sh test/ast/p83_conformance.sh` | `p83_conformance: OK`（19 passed） |
 | S83d 分发 | `23c00b0b`（baseline `1764b4d6`） | `2a0a0d38` | `sh test/ast/p83_dist.sh --require` | `p83_dist: OK`（8，产物 v0.83.0，sha256 `b04afe2e…`） |
-| PKG-14 修复（v0.83.1） | `c72349fe`（baseline `8014739e`） | 本提交 | `sh test/ast/p83_verify.sh` | `p83_verify: OK`（26，含目录/设备/symlink/CT_INDEX/HOME/FIFO/ferror 负例） |
+| PKG-14 修复（v0.83.1） | `c72349fe`（baseline `8014739e`） | 本提交 | `sh test/ast/p83_verify.sh` | `p83_verify: OK`（34 ok + 1 skip，含目录/设备/symlink/CT_INDEX/HOME/FIFO/ferror 负例） |
 
 S83a 的 REVIEW 签收位：本卡 §5 记录“契约/矩阵已按 index@0cdb132 定稿、无待补、与 conformance
 类别对齐”，由 REVIEW 席位在收口复核时签字；DEV 不自签。
