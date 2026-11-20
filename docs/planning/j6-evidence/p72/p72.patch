@@ -1,0 +1,1689 @@
+diff --git a/evidence/p72/cases/neg_arrelem.ct b/evidence/p72/cases/neg_arrelem.ct
+new file mode 100644
+index 00000000..a23ca3be
+--- /dev/null
++++ b/evidence/p72/cases/neg_arrelem.ct
+@@ -0,0 +1,7 @@
++/* P-7.2 negative: a slice cannot be an array element (A.4 placement). */
++int main(void)
++{
++    int a[] = {1, 2, 3};
++    int[] rows[2] = a;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_bad_init.ct b/evidence/p72/cases/neg_bad_init.ct
+new file mode 100644
+index 00000000..f7928459
+--- /dev/null
++++ b/evidence/p72/cases/neg_bad_init.ct
+@@ -0,0 +1,8 @@
++/* P-7.2 negative: a slice can only be initialized from an array, a slice or a
++   slice-returning call. */
++int main(void)
++{
++    int x = 1;
++    int[] s = x;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_const_write.ct b/evidence/p72/cases/neg_const_write.ct
+new file mode 100644
+index 00000000..3e1e943a
+--- /dev/null
++++ b/evidence/p72/cases/neg_const_write.ct
+@@ -0,0 +1,8 @@
++/* P-7.2 negative: writing through a const slice is a hard error. */
++int main(void)
++{
++    int a[] = {1, 2, 3};
++    const int[] ro = a;
++    ro[0] = 9;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_field.ct b/evidence/p72/cases/neg_field.ct
+new file mode 100644
+index 00000000..c0429ba5
+--- /dev/null
++++ b/evidence/p72/cases/neg_field.ct
+@@ -0,0 +1,4 @@
++/* P-7.2 negative: a slice cannot be a struct field (A.4 placement). */
++struct S { int[] s; };
++
++int main(void) { return 0; }
+diff --git a/evidence/p72/cases/neg_generic.ct b/evidence/p72/cases/neg_generic.ct
+new file mode 100644
+index 00000000..a41111c9
+--- /dev/null
++++ b/evidence/p72/cases/neg_generic.ct
+@@ -0,0 +1,6 @@
++/* P-7.2 negative: a slice cannot be a generic type argument (A.4 placement). */
++int main(void)
++{
++    Vec<int[]> v;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_global.ct b/evidence/p72/cases/neg_global.ct
+new file mode 100644
+index 00000000..19b5f8dd
+--- /dev/null
++++ b/evidence/p72/cases/neg_global.ct
+@@ -0,0 +1,5 @@
++/* P-7.2 negative: a slice cannot be a global (A.4 placement). */
++int a[] = {1, 2, 3};
++int[] g = a;
++
++int main(void) { return 0; }
+diff --git a/evidence/p72/cases/neg_return_lint.ct b/evidence/p72/cases/neg_return_lint.ct
+new file mode 100644
+index 00000000..794763c9
+--- /dev/null
++++ b/evidence/p72/cases/neg_return_lint.ct
+@@ -0,0 +1,10 @@
++/* P-7.2 negative: returning a view of a local array is a lint in compile mode
++   (exit 0, diagnostic on stderr). */
++int[] make(void)
++{
++    int a[] = {1, 2, 3};
++    int[] s = a;
++    return s;
++}
++
++int main(void) { return 0; }
+diff --git a/evidence/p72/cases/neg_subslice_oob.ct b/evidence/p72/cases/neg_subslice_oob.ct
+new file mode 100644
+index 00000000..8d1709bf
+--- /dev/null
++++ b/evidence/p72/cases/neg_subslice_oob.ct
+@@ -0,0 +1,8 @@
++/* P-7.2 negative: a statically known subslice beyond the array is a hard
++   error at construction. */
++int main(void)
++{
++    int a[3] = {1, 2, 3};
++    int[] s = a[1..4];
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_trap.ct b/evidence/p72/cases/neg_trap.ct
+new file mode 100644
+index 00000000..f6493752
+--- /dev/null
++++ b/evidence/p72/cases/neg_trap.ct
+@@ -0,0 +1,12 @@
++/* P-7.2 negative: a checked place traps at run time. Compiles, then exits
++   non-zero with the bounds message before printing the "unreachable" line. */
++#include <stdio.h>
++
++int main(void)
++{
++    int a[] = {1, 2, 3};
++    int[] s = a;
++    int x = s[5];             /* out of range: trap */
++    printf("unreachable %d\n", x);
++    return 0;
++}
+diff --git a/evidence/p72/cases/pos_arrays_unchanged.ct b/evidence/p72/cases/pos_arrays_unchanged.ct
+new file mode 100644
+index 00000000..a147ae45
+--- /dev/null
++++ b/evidence/p72/cases/pos_arrays_unchanged.ct
+@@ -0,0 +1,16 @@
++/* P-7.2 positive control: C arrays keep their old behaviour when no slice is
++   introduced (fixed length, inferred length, unchecked subscript). */
++#include <stdio.h>
++
++int main(void)
++{
++    int a[3] = {1, 2, 3};     /* fixed length */
++    int b[] = {4, 5};         /* inferred length */
++    int i;
++    int k = 0;
++
++    a[2] = 9;                 /* C subscript, no check */
++    for (i = 0; i < 3; i++) k = k + a[i];
++    printf("%d %d %d\n", k, b[1], (int)(sizeof(b) / sizeof(b[0])));
++    return 0;
++}
+diff --git a/evidence/p72/cases/pos_basic.ct b/evidence/p72/cases/pos_basic.ct
+new file mode 100644
+index 00000000..461685e2
+--- /dev/null
++++ b/evidence/p72/cases/pos_basic.ct
+@@ -0,0 +1,15 @@
++/* P-7.2 positive: array -> slice, checked read/write, foreach, get. */
++#include <stdio.h>
++
++int main(void)
++{
++    int a[] = {1, 2, 3};      /* inferred-length C array, unchanged */
++    int[] s = a;              /* view: {ptr,len} */
++    int k = 0;
++
++    s[0] = 9;                 /* checked write through to the array */
++    foreach (s) { k = k + item; }
++    printf("s0=%d s2=%d k=%d get1=%d get9=%d\n",
++           a[0], s[2], k, *s.get(1), s.get(9) == 0 ? -1 : *s.get(9));
++    return 0;
++}
+diff --git a/evidence/p72/cases/pos_const.ct b/evidence/p72/cases/pos_const.ct
+new file mode 100644
+index 00000000..0efa36b8
+--- /dev/null
++++ b/evidence/p72/cases/pos_const.ct
+@@ -0,0 +1,13 @@
++/* P-7.2 positive: a const slice is readable (index, foreach, get). */
++#include <stdio.h>
++
++int main(void)
++{
++    int a[] = {4, 5, 6};
++    const int[] ro = a;
++    int k = 0;
++
++    foreach (ro) { k = k + item; }
++    printf("%d %d %d\n", ro[0], *ro.get(2), k);
++    return 0;
++}
+diff --git a/evidence/p72/cases/pos_param.ct b/evidence/p72/cases/pos_param.ct
+new file mode 100644
+index 00000000..014b8c09
+--- /dev/null
++++ b/evidence/p72/cases/pos_param.ct
+@@ -0,0 +1,32 @@
++/* P-7.2 positive: a slice parameter, a subslice of a parameter, and a
++   slice-returning function whose result feeds another slice local. */
++#include <stdio.h>
++
++int sum(int[] s)
++{
++    int k = 0;
++    foreach (s) { k = k + item; }
++    if (s.get(0) != 0) s[0] = 100;
++    return k;
++}
++
++int[] tail(int[] s)
++{
++    int[] r = s[1..];
++    return r;                 /* a parameter view, not a local array: no lint */
++}
++
++int main(void)
++{
++    int a[] = {1, 2, 3, 4};
++    int[] s = a;
++    int[] t;
++    int z;
++
++    z = sum(s);
++    t = tail(s);
++    printf("sum=%d a0=%d t0=%d t2=%d\n", z, a[0], t[0], t[2]);
++    t[0] = 20;
++    printf("a1=%d\n", a[1]);
++    return 0;
++}
+diff --git a/evidence/p72/cases/pos_struct.ct b/evidence/p72/cases/pos_struct.ct
+new file mode 100644
+index 00000000..1ac0b20c
+--- /dev/null
++++ b/evidence/p72/cases/pos_struct.ct
+@@ -0,0 +1,16 @@
++/* P-7.2 positive: a slice of a named struct element type. */
++#include <stdio.h>
++
++struct P { int x; int y; };
++
++int main(void)
++{
++    struct P a[3];
++    struct P[] ps = a;
++    int i;
++
++    for (i = 0; i < 3; i++) { a[i].x = i; a[i].y = i * 10; }
++    ps[1].x = 7;              /* write through the view */
++    printf("%d %d %d\n", a[1].x, ps[2].y, ps.get(1)->x);
++    return 0;
++}
+diff --git a/evidence/p72/cases/pos_subslice.ct b/evidence/p72/cases/pos_subslice.ct
+new file mode 100644
+index 00000000..938210ed
+--- /dev/null
++++ b/evidence/p72/cases/pos_subslice.ct
+@@ -0,0 +1,19 @@
++/* P-7.2 positive: half-open subslice of an array, open-ended form, and a
++   subslice of a slice. */
++#include <stdio.h>
++
++int main(void)
++{
++    int a[5];
++    int[] s;
++    int[] t;
++    int i;
++
++    for (i = 0; i < 5; i++) a[i] = i + 1;
++    s = a[1..4];              /* elements 1..3 */
++    t = s[1..3];              /* elements 2..4 of the array */
++    printf("%d %d %d %d\n", s[0], s[2], t[0], t[1]);
++    s[0] = 20;
++    printf("a1=%d\n", a[1]);  /* the view writes the underlying array */
++    return 0;
++}
+diff --git a/evidence/p72/expected/pos_arrays_unchanged.out b/evidence/p72/expected/pos_arrays_unchanged.out
+new file mode 100644
+index 00000000..35c54f03
+--- /dev/null
++++ b/evidence/p72/expected/pos_arrays_unchanged.out
+@@ -0,0 +1 @@
++12 5 2
+diff --git a/evidence/p72/expected/pos_basic.out b/evidence/p72/expected/pos_basic.out
+new file mode 100644
+index 00000000..7bb59634
+--- /dev/null
++++ b/evidence/p72/expected/pos_basic.out
+@@ -0,0 +1 @@
++s0=9 s2=3 k=14 get1=2 get9=-1
+diff --git a/evidence/p72/expected/pos_const.out b/evidence/p72/expected/pos_const.out
+new file mode 100644
+index 00000000..a2f11cb5
+--- /dev/null
++++ b/evidence/p72/expected/pos_const.out
+@@ -0,0 +1 @@
++4 6 15
+diff --git a/evidence/p72/expected/pos_param.out b/evidence/p72/expected/pos_param.out
+new file mode 100644
+index 00000000..4eb52ee7
+--- /dev/null
++++ b/evidence/p72/expected/pos_param.out
+@@ -0,0 +1,2 @@
++sum=10 a0=100 t0=2 t2=4
++a1=20
+diff --git a/evidence/p72/expected/pos_struct.out b/evidence/p72/expected/pos_struct.out
+new file mode 100644
+index 00000000..83e4793b
+--- /dev/null
++++ b/evidence/p72/expected/pos_struct.out
+@@ -0,0 +1 @@
++7 20 7
+diff --git a/evidence/p72/expected/pos_subslice.out b/evidence/p72/expected/pos_subslice.out
+new file mode 100644
+index 00000000..738a2023
+--- /dev/null
++++ b/evidence/p72/expected/pos_subslice.out
+@@ -0,0 +1,2 @@
++2 4 3 4
++a1=20
+diff --git a/evidence/p72/run.sh b/evidence/p72/run.sh
+new file mode 100755
+index 00000000..9680ba8d
+--- /dev/null
++++ b/evidence/p72/run.sh
+@@ -0,0 +1,167 @@
++#!/usr/bin/env bash
++# P-7.2 (S3 slice prototype) reproduction script.
++#
++# Builds the bootstrap chain the way selfhost/check-ast.sh does
++# (L0 -> L1 -> L2 -> ct-ast), then runs every fixture in cases/.
++# Prints every command and its raw output; exits non-zero if any case
++# disagrees with its expected result.
++set -u
++
++root="$(cd "$(dirname "$0")/../.." && pwd)"
++cd "$root" || exit 1
++CC="${CC:-cc}"
++work="${TMPDIR:-/tmp}/p72-evidence.$$"
++rm -rf "$work"
++mkdir -p "$work" || exit 1
++trap 'rm -rf "$work"' EXIT HUP INT TERM
++
++pass=0
++fail=0
++ok()  { pass=$((pass + 1)); printf 'PASS  %s\n' "$1"; }
++bad() { fail=$((fail + 1)); printf 'FAIL  %s: %s\n' "$1" "$2"; }
++show() { printf '  $ %s\n' "$*"; }
++
++echo "== bootstrap: L0 -> L1 -> L2 -> ct-ast =="
++show "$CC -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o $work/ctc"
++"$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" || { echo "L0 build failed"; exit 1; }
++show "$work/ctc selfhost/l1/ctc.ct -o $work/l1.c"
++"$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" || { echo "L0 -> L1 failed"; exit 1; }
++show "$CC -Wall -Wextra -std=c99 $work/l1.c -o $work/l1"
++"$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" || { echo "L1 build failed"; exit 1; }
++mkdir -p "$work/l2src"
++show "$work/l1 build selfhost/l2/driver.ct -o $work/l2src"
++"$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" || { echo "L1 -> L2 failed"; exit 1; }
++show "$CC -Wall -Wextra -std=c99 $work/l2src/*.c -o $work/l2"
++"$CC" -Wall -Wextra -std=c99 "$work"/l2src/*.c -o "$work/l2" || { echo "L2 build failed"; exit 1; }
++mkdir -p "$work/astsrc"
++show "$work/l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o $work/astsrc"
++"$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" || { echo "L2 -> ct-ast failed"; exit 1; }
++show "$CC -Wall -Wextra -std=c99 $work/astsrc/*.c -o $work/ct-ast"
++"$CC" -Wall -Wextra -std=c99 "$work"/astsrc/*.c -o "$work/ct-ast" || { echo "ct-ast build failed"; exit 1; }
++echo "ct-ast: $("$work/ct-ast" --version 2>&1 | head -1)"
++echo
++
++echo "== self-host fixpoint (the compiler's own sources carry no slice syntax) =="
++mkdir -p "$work/self1" "$work/self2"
++show "$work/ct-ast build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o $work/self1"
++"$work/ct-ast" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self1" \
++    >"$work/self1.out" 2>"$work/self1.err"
++e1=$?
++show "$CC -Wall -Wextra -std=c99 $work/self1/*.c -o $work/ct-ast2"
++"$CC" -Wall -Wextra -std=c99 "$work"/self1/*.c -o "$work/ct-ast2" >"$work/selfcc.log" 2>&1
++e2=$?
++show "$work/ct-ast2 build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o $work/self2"
++"$work/ct-ast2" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self2" \
++    >"$work/self2.out" 2>"$work/self2.err"
++e3=$?
++echo "  exits: gen1=$e1 cc=$e2 gen2=$e3"
++sed 's/^/  /' "$work/self1.err" "$work/selfcc.log" "$work/self2.err"
++if [ "$e1" -ne 0 ] || [ "$e2" -ne 0 ] || [ "$e3" -ne 0 ]; then
++    bad selfhost "the chain did not rebuild the compiler"
++elif diff -r -q -x .ctcache "$work/self1" "$work/self2" >"$work/fix.diff" 2>&1; then
++    ok selfhost
++else
++    bad selfhost "$(head -3 "$work/fix.diff")"
++fi
++echo
++
++# run_pos <name> <expected file>
++run_pos() {
++    n="$1"
++    echo "== positive: $n =="
++    show "CT_C_BOUNDARY=allow $work/ct-ast evidence/p72/cases/$n.ct -o $work/$n.c"
++    CT_C_BOUNDARY=allow "$work/ct-ast" "evidence/p72/cases/$n.ct" -o "$work/$n.c" \
++        >"$work/$n.log" 2>&1
++    e=$?
++    echo "  exit=$e"
++    sed 's/^/  /' "$work/$n.log"
++    if [ "$e" -ne 0 ]; then bad "$n compile" "exit $e"; return; fi
++    show "$CC -std=c99 -Wall -Wextra $work/$n.c -o $work/$n.bin"
++    "$CC" -std=c99 -Wall -Wextra "$work/$n.c" -o "$work/$n.bin" >"$work/$n.cc.log" 2>&1
++    c=$?
++    echo "  exit=$c"
++    sed 's/^/  /' "$work/$n.cc.log"
++    if [ "$c" -ne 0 ]; then bad "$n host-cc" "exit $c"; return; fi
++    show "$work/$n.bin"
++    "$work/$n.bin" >"$work/$n.out" 2>"$work/$n.run.log"
++    r=$?
++    echo "  exit=$r"
++    sed 's/^/  /' "$work/$n.out"
++    sed 's/^/  stderr: /' "$work/$n.run.log"
++    if [ "$r" -ne 0 ]; then bad "$n run" "exit $r"; return; fi
++    if ! diff -u "evidence/p72/expected/$n.out" "$work/$n.out" >"$work/$n.diff" 2>&1; then
++        bad "$n stdout" "$(head -3 "$work/$n.diff")"; return
++    fi
++    ok "$n"
++    echo
++}
++
++# run_compile_err <name> <expected substring>
++run_compile_err() {
++    n="$1"; pat="$2"
++    echo "== negative: $n (expect hard error containing: $pat) =="
++    show "CT_C_BOUNDARY=allow $work/ct-ast evidence/p72/cases/$n.ct -o $work/$n.c"
++    CT_C_BOUNDARY=allow "$work/ct-ast" "evidence/p72/cases/$n.ct" -o "$work/$n.c" \
++        >"$work/$n.log" 2>&1
++    e=$?
++    echo "  exit=$e"
++    sed 's/^/  /' "$work/$n.log"
++    if [ "$e" -eq 0 ]; then bad "$n" "expected a hard error, got exit 0"; return; fi
++    if ! grep -qF "$pat" "$work/$n.log"; then bad "$n" "diagnostic did not contain: $pat"; return; fi
++    ok "$n"
++    echo
++}
++
++echo "== negative: neg_trap (compile, then trap at run time) =="
++show "CT_C_BOUNDARY=allow $work/ct-ast evidence/p72/cases/neg_trap.ct -o $work/neg_trap.c"
++CT_C_BOUNDARY=allow "$work/ct-ast" evidence/p72/cases/neg_trap.ct -o "$work/neg_trap.c" >"$work/neg_trap.log" 2>&1
++e=$?
++echo "  compile exit=$e"
++sed 's/^/  /' "$work/neg_trap.log"
++if [ "$e" -ne 0 ]; then bad neg_trap "compile exit $e"; else
++    "$CC" -std=c99 -Wall -Wextra "$work/neg_trap.c" -o "$work/neg_trap.bin" >"$work/neg_trap.cc.log" 2>&1
++    c=$?
++    echo "  host-cc exit=$c"
++    if [ "$c" -ne 0 ]; then bad neg_trap "host-cc exit $c"; else
++        show "$work/neg_trap.bin"
++        "$work/neg_trap.bin" >"$work/neg_trap.out" 2>"$work/neg_trap.run.log"
++        r=$?
++        echo "  run exit=$r"
++        sed 's/^/  stdout: /' "$work/neg_trap.out"
++        sed 's/^/  stderr: /' "$work/neg_trap.run.log"
++        if [ "$r" -eq 0 ]; then bad neg_trap "expected a trap, got exit 0"
++        elif ! grep -qF "out of bounds" "$work/neg_trap.run.log"; then bad neg_trap "trap message missing"
++        else ok neg_trap; fi
++    fi
++fi
++echo
++
++echo "== negative: neg_return_lint (compile succeeds, lint on stderr) =="
++show "CT_C_BOUNDARY=allow $work/ct-ast evidence/p72/cases/neg_return_lint.ct -o $work/neg_return_lint.c"
++CT_C_BOUNDARY=allow "$work/ct-ast" evidence/p72/cases/neg_return_lint.ct -o "$work/neg_return_lint.c" >"$work/neg_return_lint.log" 2>&1
++e=$?
++echo "  exit=$e"
++sed 's/^/  /' "$work/neg_return_lint.log"
++if [ "$e" -ne 0 ]; then bad neg_return_lint "expected exit 0 with a lint, got $e"
++elif ! grep -qF "slice escape" "$work/neg_return_lint.log"; then bad neg_return_lint "lint message missing"
++else ok neg_return_lint; fi
++echo
++
++run_pos pos_basic
++run_pos pos_struct
++run_pos pos_param
++run_pos pos_subslice
++run_pos pos_const
++run_pos pos_arrays_unchanged
++
++run_compile_err neg_const_write "cannot write to an element of a const slice"
++run_compile_err neg_field "cannot be a struct field"
++run_compile_err neg_global "cannot be a file-scope variable"
++run_compile_err neg_generic "cannot be a generic type argument"
++run_compile_err neg_arrelem "cannot be an array element"
++run_compile_err neg_subslice_oob "slice construction out of bounds"
++run_compile_err neg_bad_init "can only be initialized from an array"
++
++echo "============================================================="
++printf 'P-7.2 evidence: %d passed, %d failed\n' "$pass" "$fail"
++[ "$fail" -eq 0 ]
+diff --git a/selfhost/ct-ast/backend/emit/Emitter.h.ct b/selfhost/ct-ast/backend/emit/Emitter.h.ct
+index 2812b9cb..d9326337 100644
+--- a/selfhost/ct-ast/backend/emit/Emitter.h.ct
++++ b/selfhost/ct-ast/backend/emit/Emitter.h.ct
+@@ -123,6 +123,14 @@ import runtime::arena::Arena;
+ #define N_DEFER 69
+ /* Phase 44: the postfix `?` error-propagation node (`a` = operand). */
+ #define N_TRY 71
++/* P-7.2: slice nodes. `N_SLICE_INDEX` (`a` base, `b` index, `text` element
++   including `const` when read-only) prints as a checked place;
++   `N_SLICE_RANGE` (`a` base, `b` lo, `c` hi or -1, `aux` 1 array / 2 slice)
++   prints a `{ptr,len}` construction; `N_SLICE_GET` (`a` base, `b` index)
++   prints the soft access returning 0 when out of range. */
++#define N_SLICE_INDEX 74
++#define N_SLICE_RANGE 75
++#define N_SLICE_GET   76
+ 
+ /* binary operators (stored in `aux`) */
+ #define B_SUB 2
+@@ -1384,6 +1392,17 @@ static int emit_generic_defs(struct Emitter *self, int u)
+    the block is therefore absent from every non-atomic product. */
+ 
+ 
++/* P-7.2: the parser's slice-use flag. It lives as a file-scope pointer rather
++   than in `struct Emitter` (that struct is at the build's 64-field cap), and
++   is declared up here because `emit_unit_body` runs before the bind at the end
++   of the unit. */
++static int *g_slice_used;
++
++/* P-7.2: emitted only when the parser noted a slice use; defined below with
++   the other emission helpers, declared here because `emit_unit_body` runs
++   before it in the translation unit. */
++static void emit_slice_helpers(struct Emitter *self);
++
+ /* The per-unit emission proper: everything from the banner to the last
+    function, run with `self->out` already pointing at an open file. Every
+    failure is a bare `return -1`; the method that opened the file closes it and
+@@ -1523,6 +1542,8 @@ static int emit_unit_body(struct Emitter *self, int u)
+         , self->out);
+     }
+ 
++    if (g_slice_used && *g_slice_used) emit_slice_helpers(self);
++
+     if (self->emit_struct_fwd() != 0) return -1;
+     if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 2) != 0) return -1;
+     if (self->emit_vtable_fwd(self->units[u].prog) != 0) return -1;
+@@ -2382,6 +2403,48 @@ static int hoist_ctype(int n, char *out, int cap, int *depth)
+     return ex->static_ctype(n, out, cap, depth, 0);
+ }
+ 
++/* P-7.2: the erased slice representation and its helpers. A slice is
++   `{ptr,len}`; the element type is erased here and restored by the cast at
++   each use, so one struct serves every `T[]` and no per-element name is
++   registered. `__ct_slice_at` is the checked place (`s[i]`), `__ct_slice_get`
++   the soft access (`s.get(i)`), `__ct_slice_range` the subslice constructor
++   (the bounds a literal array length already proved are checked again here
++   for the forms only a length at run time can judge). All three are `static`
++   and marked unused, so a program that never calls one stays warning-free. */
++static void emit_slice_helpers(struct Emitter *self)
++{
++    fputs("#include <stdio.h>\n#include <stdlib.h>\n", self->out);
++    fputs("struct __ct_slice { void *ptr; int len; };\n", self->out);
++    fputs("static void __attribute__((unused)) __ct_slice_check(struct __ct_slice *s, int i)\n"
++          "{\n"
++          "    if (i < 0 || i >= s->len) {\n"
++          "        fprintf(stderr, \"ct: slice index %d out of bounds (length %d)\\n\", i, s->len);\n"
++          "        exit(1);\n"
++          "    }\n"
++          "}\n"
++          "static void *__attribute__((unused)) __ct_slice_at(struct __ct_slice *s, int i, unsigned long esz)\n"
++          "{\n"
++          "    __ct_slice_check(s, i);\n"
++          "    return (char *)s->ptr + (unsigned long)i * esz;\n"
++          "}\n"
++          "static void *__attribute__((unused)) __ct_slice_get(struct __ct_slice s, int i, unsigned long esz)\n"
++          "{\n"
++          "    if (i < 0 || i >= s.len) return 0;\n"
++          "    return (char *)s.ptr + (unsigned long)i * esz;\n"
++          "}\n"
++          "static struct __ct_slice __attribute__((unused)) __ct_slice_range(void *p, int len, int lo, int hi, unsigned long esz, const char *where)\n"
++          "{\n"
++          "    struct __ct_slice s;\n"
++          "    if (lo < 0 || hi < lo || hi > len) {\n"
++          "        fprintf(stderr, \"%s: slice construction out of bounds: [%d,%d) for length %d\\n\", where, lo, hi, len);\n"
++          "        exit(1);\n"
++          "    }\n"
++          "    s.ptr = (char *)p + (unsigned long)lo * esz;\n"
++          "    s.len = hi - lo;\n"
++          "    return s;\n"
++          "}\n\n", self->out);
++}
++
+ impl EmitOps for Emitter {
+     /* Phase 38 battle p38-1: a receiver is unstable when evaluating it twice
+        can observe a different value. Calls are stable once the hoist pass has
+@@ -2722,6 +2785,8 @@ impl EmitOps for Emitter {
+         , self->out);
+     }
+ 
++    if (g_slice_used && *g_slice_used) emit_slice_helpers(self);
++
+         if (self->emit_struct_fwd() != 0) return -1;
+         if (self->emit_trait_decls() != 0) return -1;
+         if (self->emit_vtable_fwd(prog) != 0) return -1;
+@@ -4545,7 +4610,18 @@ impl EmitOps for Emitter {
+             self->ntmp++;
+             self->emit_indent(ind);
+             fputs("{\n", self->out);
+-            if (faux == 1 || faux == 2) {
++            if (faux == 3) {
++                /* P-7.2: a slice carries its own length; the view is
++                   address-taken once and every element read goes through the
++                   checked helper, so the loop cannot run past the view. */
++                self->emit_indent(ind + 1);
++                fprintf(self->out, "struct __ct_slice *__ct_foreach_c_%d = &(", k);
++                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++                fputs(");\n", self->out);
++                self->emit_indent(ind + 1);
++                fprintf(self->out, "int __ct_foreach_n_%d = __ct_foreach_c_%d->len;\n",
++                        k, k);
++            } else if (faux == 1 || faux == 2) {
+                 /* Phase 29 (D29-13): a built-in container snapshots its length
+                    once and reads each element through the inherent `get` /
+                    `entry`, so modifying the container in the body cannot run
+@@ -4584,6 +4660,11 @@ impl EmitOps for Emitter {
+                 fprintf(self->out,
+                         "%s item = %s_entry(__ct_foreach_c_%d, __ct_foreach_i_%d);\n",
+                         self->arena->nodes[n].text, fname, k, k);
++            else if (faux == 3)
++                fprintf(self->out,
++                        "%s item = (*(%s *)__ct_slice_at(__ct_foreach_c_%d, __ct_foreach_i_%d, sizeof(%s)));\n",
++                        self->arena->nodes[n].text, self->arena->nodes[n].text,
++                        k, k, self->arena->nodes[n].text);
+             else {
+                 fprintf(self->out, "%s item = (", self->arena->nodes[n].text);
+                 if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+@@ -4968,6 +5049,76 @@ impl EmitOps for Emitter {
+             fputs("]", self->out);
+             return 0;
+         }
++        /* P-7.2: `s[i]` is a checked place. The cast spells the element type
++           the erased struct does not carry, and the dereference keeps the
++           result an lvalue, so reads and writes share one emission. */
++        if (self->arena->nodes[n].kind == N_SLICE_INDEX) {
++            const char *et = self->arena->nodes[n].text;
++            fputs("(*(", self->out);
++            fputs(et, self->out);
++            fputs(" *)__ct_slice_at(&(", self->out);
++            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++            fputs("), ", self->out);
++            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
++            fputs(", sizeof(", self->out);
++            fputs(et, self->out);
++            fputs(")))", self->out);
++            return 0;
++        }
++        /* P-7.2: `s.get(i)` returns 0 when out of range; the caller owns the
++           null check (the soft-access contract). */
++        if (self->arena->nodes[n].kind == N_SLICE_GET) {
++            const char *et = self->arena->nodes[n].text;
++            fputs("((", self->out);
++            fputs(et, self->out);
++            fputs(" *)__ct_slice_get(", self->out);
++            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++            fputs(", ", self->out);
++            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
++            fputs(", sizeof(", self->out);
++            fputs(et, self->out);
++            fputs(")))", self->out);
++            return 0;
++        }
++        /* P-7.2: `a[lo..hi]` / `a[lo..]` builds the `{ptr,len}` pair through
++           the range helper, which owns the run-time bound check. The array
++           form passes `sizeof` as its length and the slice form `.len`. */
++        if (self->arena->nodes[n].kind == N_SLICE_RANGE) {
++            const char *et = self->arena->nodes[n].text;
++            fputs("__ct_slice_range((void *)(", self->out);
++            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++            fputs(self->arena->nodes[n].aux == 1 ? "), " : ").ptr, ", self->out);
++            if (self->arena->nodes[n].aux == 1) {
++                fputs("(int)(sizeof(", self->out);
++                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++                fputs(") / sizeof((", self->out);
++                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++                fputs(")[0]))", self->out);
++            } else {
++                fputs("(", self->out);
++                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++                fputs(").len", self->out);
++            }
++            fputs(", ", self->out);
++            if (self->emit_expr(self->arena->nodes[n].b) != 0) return -1;
++            fputs(", ", self->out);
++            if (self->arena->nodes[n].c >= 0) {
++                if (self->emit_expr(self->arena->nodes[n].c) != 0) return -1;
++            } else if (self->arena->nodes[n].aux == 1) {
++                fputs("(int)(sizeof(", self->out);
++                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++                fputs(") / sizeof((", self->out);
++                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++                fputs(")[0])", self->out);
++            } else {
++                fputs("(", self->out);
++                if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
++                fputs(").len", self->out);
++            }
++            fprintf(self->out, ", sizeof(%s), \"%s:%d\")", et, self->path,
++                    self->arena->nodes[n].line);
++            return 0;
++        }
+         if (self->arena->nodes[n].kind == N_ADDR) {
+             fputs("(&", self->out);
+             if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+@@ -6540,11 +6691,12 @@ void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
+ 
+ /* PH-64: the bare-metal flags live in their own bind, so the long table
+    signature above does not grow for two scalars. */
+-pub void ct_emit_bind_flags(int *freestanding, char *alloc_map);
+-void ct_emit_bind_flags(int *freestanding, char *alloc_map)
++pub void ct_emit_bind_flags(int *freestanding, char *alloc_map, int *slice_used);
++void ct_emit_bind_flags(int *freestanding, char *alloc_map, int *slice_used)
+ {
+     g_emit.freestanding = freestanding;
+     g_emit.alloc_map = alloc_map;
++    g_slice_used = slice_used;
+ }
+ 
+ pub void ct_emit_bind_builtin_live(int *live);
+@@ -6554,6 +6706,7 @@ void ct_emit_bind_builtin_live(int *live)
+     g_emit.builtin_live = live;
+ }
+ 
++
+ /* `--alloc A[,B[,C[,D]]]` is parsed at emission time, not at bind time: the
+    bind runs before the driver has read the command line. Defaults keep libc, so
+    a build without --alloc is byte-identical to before. */
+diff --git a/selfhost/ct-ast/frontend/parse/Expr.h.ct b/selfhost/ct-ast/frontend/parse/Expr.h.ct
+index 64133402..1f33eec8 100644
+--- a/selfhost/ct-ast/frontend/parse/Expr.h.ct
++++ b/selfhost/ct-ast/frontend/parse/Expr.h.ct
+@@ -106,6 +106,15 @@ import tool::diag::Diag;
+    `Result<T, E>` value); the `?` position is kept in `line` / `num` for the
+    diagnostics. */
+ #define N_TRY 71
++/* P-7.2 (S3 slice prototype): `s[i]` (checked place), `s.get(i)` (soft
++   access) and `a[lo..hi]` / `a[lo..]` (subslice construction). All three keep
++   the element spelling in `text`; the C storage of a slice is the erased
++   `struct __ct_slice`, so the element type only exists here and in the
++   emitted cast. `aux` on N_SLICE_INDEX / N_SLICE_GET is the `const` flag;
++   on N_SLICE_RANGE it is 1 for an array base and 2 for a slice base. */
++#define N_SLICE_INDEX 74
++#define N_SLICE_RANGE 75
++#define N_SLICE_GET   76
+ /* Phase 53: the optional-chain node. `a` is the receiver, `aux` selects field
+    (1), pointer subscript (2) or map-pointer subscript (3); `text` is the
+    field / map-instance name, `text2` the result type, `text3` the emitter
+@@ -523,6 +532,67 @@ static int arg_count(struct Arena *a, int first)
+     return c;
+ }
+ 
++/* P-7.2: does the subscript the cursor sits on (`[`) carry a top-level `..`
++   before its closing `]`? The scan is textual, so the caller does not have to
++   parse an expression and then rewind the arena. Strings, character literals
++   and comments are skipped; nested brackets only close their own depth. */
++static int slice_range_ahead(struct Lexer *lex)
++{
++    int p = lex->tokstart + 1;
++    int depth = 0;
++    while (lex->src[p]) {
++        char c = lex->src[p];
++        if (c == '"' || c == '\'') {
++            char q = c;
++            p++;
++            while (lex->src[p] && lex->src[p] != q) {
++                if (lex->src[p] == '\\' && lex->src[p + 1]) p++;
++                p++;
++            }
++            if (lex->src[p]) p++;
++        } else if (c == '/' && lex->src[p + 1] == '*') {
++            p += 2;
++            while (lex->src[p] && !(lex->src[p] == '*' && lex->src[p + 1] == '/')) p++;
++            if (lex->src[p]) p += 2;
++        } else if (c == '/' && lex->src[p + 1] == '/') {
++            while (lex->src[p] && lex->src[p] != '\n') p++;
++        } else if (c == '(' || c == '[' || c == '{') {
++            depth++;
++            p++;
++        } else if (c == ')' || c == '}') {
++            if (depth > 0) depth--;
++            p++;
++        } else if (c == ']') {
++            if (depth == 0) return 0;
++            depth--;
++            p++;
++        } else if (c == '.' && lex->src[p + 1] == '.' && depth == 0) {
++            return 1;
++        } else {
++            p++;
++        }
++    }
++    return 0;
++}
++
++/* P-7.2: the literal length of a one-dimensional `[N]` spelling, or -1 when
++   the dimension is `[]`, an expression or multi-dimensional. The compile-time
++   subslice check only fires on the unambiguous case. */
++static int slice_array_len(const char *dims)
++{
++    int v = 0;
++    int i = 0;
++    if (!dims || dims[0] != '[') return -1;
++    i = 1;
++    if (dims[i] < '0' || dims[i] > '9') return -1;
++    while (dims[i] >= '0' && dims[i] <= '9') {
++        v = v * 10 + (dims[i] - '0');
++        i++;
++    }
++    if (dims[i] != ']' || dims[i + 1] != 0) return -1;
++    return v;
++}
++
+ /* Phase 24: is `n` the range index `$`? It is the only `N_VAR` whose `text2` is
+    the placeholder, and it is built only inside a range initialiser's element
+    expression. `&$`, `$++` and `++$` are rejected through this predicate: `$` is
+@@ -2263,6 +2333,21 @@ impl ExprOps for Expr {
+                 return -1;
+             }
+             self->type_depth--;
++            /* P-7.2 (P-4.1): a slice is a non-owning view and may not be a
++               generic type argument (`Vec<int[]>`); the container stores
++               elements by value and would outlive the view. Recognise the
++               spelling before the generic-argument check so the diagnostic
++               names the placement instead of "expected '>'". */
++            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
++                int gl = self->lex->tokline;
++                int gc = self->lex->tokstart - self->lex->lstart + 1;
++                self->sup->lex_next();
++                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0)
++                    return tool::diag::ct_sem_error(gl, gc,
++                        "a slice 'T[]' cannot be a generic type argument; it is a non-owning view",
++                        self->sup->mem->path);
++                return self->sup->fail("expected '>' after the type arguments");
++            }
+             if (!abuf[0] || strcmp(abuf, "void") == 0 || strchr(abuf, '[')
+                 || strchr(abuf, '(') || strchr(abuf, ')')
+                 || strncmp(abuf, "const ", 6) == 0
+@@ -3137,6 +3222,12 @@ impl ExprOps for Expr {
+             int aline = self->lex->tokline;
+             int acol = self->lex->tokstart - self->lex->lstart + 1;
+             k2 = self->arena->nodes[left].kind;
++            /* P-7.2: a `const T[]` view is read-only; the check is here, not
++               left to cc, so the diagnostic names the slice rule. */
++            if (k2 == N_SLICE_INDEX && self->arena->nodes[left].aux == 1)
++                return tool::diag::ct_sem_error(self->arena->nodes[left].line,
++                    self->arena->nodes[left].num,
++                    "cannot write to an element of a const slice", self->sup->mem->path);
+             /* PH-53 L53-6. */
+             if (self->opt_lvalue_check(left, self->arena->nodes[left].line,
+                                        self->arena->nodes[left].num) != 0)
+@@ -3162,6 +3253,7 @@ impl ExprOps for Expr {
+             /* Phase 30 S11: inside an `into` block `$` is a writable lvalue
+                (an `own` receiver never reaches here -- L30-4 refuses it). */
+             if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX
++                && k2 != N_SLICE_INDEX
+                 && k2 != N_DEREF && k2 != N_INTO_SELF)
+                 return self->sup->fail("assignment target is not assignable");
+             /* An `own` variable is tracked by statement-level assignments; an
+@@ -4415,6 +4507,94 @@ impl ExprOps for Expr {
+                 continue;
+             }
+             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
++                /* P-7.2: a slice is its own type, so `s[i]` / `s[lo..hi]` and
++                   an array's `a[lo..hi]` are recognised before the container
++                   sugar. A plain `a[i]` on an array keeps C's unchecked
++                   subscript (phase79 E79-4). */
++                int svi = -1;
++                int s_slice = 0;
++                int s_array = 0;
++                if (n >= 0 && self->arena->nodes[n].kind == N_VAR) {
++                    svi = self->sym->find_var(self->arena->nodes[n].text2);
++                    if (svi >= 0) {
++                        s_slice = self->sym->vars[svi].is_slice;
++                        s_array = self->sym->vars[svi].is_array && !s_slice
++                                  && !self->sym->vars[svi].is_fnparam;
++                    }
++                }
++                if (s_slice || (s_array && slice_range_ahead(self->lex))) {
++                    int bl = self->lex->tokline;
++                    self->sup->note_slice();
++                    int bc = self->lex->tokstart - self->lex->lstart + 1;
++                    char selem[MAX_TEXT];
++                    int sc = s_slice ? self->sym->vars[svi].slice_const : 0;
++                    int hi = -1;
++                    snprintf(selem, sizeof selem, "%s",
++                             s_slice ? self->sym->vars[svi].slice_elem
++                                     : self->sym->vars[svi].type);
++                    self->sup->lex_next();          /* `[` */
++                    idx = self->parse_expr();
++                    if (idx < 0) return -1;
++                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "..") == 0) {
++                        self->sup->lex_next();
++                        if (!(self->lex->tok == T_PUNCT
++                              && strcmp(self->lex->toktext, "]") == 0)) {
++                            hi = self->parse_expr();
++                            if (hi < 0) return -1;
++                        }
++                        if (self->sup->expect("]") != 0) return -1;
++                        /* P-4.1/P-7.2: a statically known array length makes
++                           an out-of-range construction a hard error. An
++                           inferred `[]` length and a slice base are checked at
++                           run time by `__ct_slice_range` instead. */
++                        if (s_array) {
++                            int an = slice_array_len(self->sym->vars[svi].dims);
++                            if (an >= 0 && self->arena->nodes[idx].kind == N_NUM) {
++                                int lo = (int)self->arena->nodes[idx].num;
++                                int hv = (hi < 0) ? an
++                                         : (self->arena->nodes[hi].kind == N_NUM
++                                            ? (int)self->arena->nodes[hi].num : -1);
++                                if (hv >= 0 && (lo < 0 || hv < lo || hv > an)) {
++                                    char semsg[MAX_TEXT + 96];
++                                    snprintf(semsg, sizeof semsg,
++                                             "slice construction out of bounds: [%d,%d) for length %d",
++                                             lo, hv, an);
++                                    return tool::diag::ct_sem_error(bl, bc, semsg,
++                                                                    self->sup->mem->path);
++                                }
++                            }
++                        }
++                        m = self->sup->new_node(N_SLICE_RANGE);
++                        if (m < 0) return -1;
++                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", selem);
++                        snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s",
++                                 self->sym->vars[svi].cname);
++                        self->arena->nodes[m].aux = s_array ? 1 : 2;
++                        self->arena->nodes[m].a = n;
++                        self->arena->nodes[m].b = idx;
++                        self->arena->nodes[m].c = hi;
++                        self->arena->nodes[m].line = bl;
++                        self->arena->nodes[m].num = bc;
++                        n = m;
++                        continue;
++                    }
++                    if (!s_slice)
++                        return self->sup->fail("expected '..' in a subslice");
++                    if (self->sup->expect("]") != 0) return -1;
++                    m = self->sup->new_node(N_SLICE_INDEX);
++                    if (m < 0) return -1;
++                    if (sc)
++                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "const %s", selem);
++                    else
++                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", selem);
++                    self->arena->nodes[m].aux = sc;
++                    self->arena->nodes[m].a = n;
++                    self->arena->nodes[m].b = idx;
++                    self->arena->nodes[m].line = bl;
++                    self->arena->nodes[m].num = bc;
++                    n = m;
++                    continue;
++                }
+                 /* Phase 31 O3: `v[i]` is `v.get(i)` and `m[k]` is `m.get(k)`.
+                    The base's static type names the container instance, so the
+                    node is built exactly as an inherent method call would be
+@@ -4624,6 +4804,38 @@ impl ExprOps for Expr {
+                 mcol = self->lex->tokstart - self->lex->lstart + 1;
+                 self->sup->lex_next();
+                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
++                    /* P-7.2: `s.get(i)` is the slice's soft access (out of
++                       range answers 0) and is resolved before trait-method
++                       dispatch; a slice has no vtable. */
++                    if (!arrow && strcmp(fname, "get") == 0
++                        && n >= 0 && self->arena->nodes[n].kind == N_VAR) {
++                        int gvi = self->sym->find_var(self->arena->nodes[n].text2);
++                        if (gvi >= 0 && self->sym->vars[gvi].is_slice) {
++                            char gelem[MAX_TEXT];
++                            self->sup->note_slice();
++                            args = self->parse_args();
++                            if (args < 0) return -1;
++                            if (arg_count(self->arena, args) != 1)
++                                return self->sup->fail("slice get() takes exactly one index");
++                            m = self->sup->new_node(N_SLICE_GET);
++                            if (m < 0) return -1;
++                            snprintf(gelem, sizeof gelem, "%s",
++                                     self->sym->vars[gvi].slice_elem);
++                            if (self->sym->vars[gvi].slice_const)
++                                snprintf(self->arena->nodes[m].text, MAX_TEXT,
++                                         "const %s", gelem);
++                            else
++                                snprintf(self->arena->nodes[m].text, MAX_TEXT,
++                                         "%s", gelem);
++                            self->arena->nodes[m].aux = self->sym->vars[gvi].slice_const;
++                            self->arena->nodes[m].a = n;
++                            self->arena->nodes[m].b = args;
++                            self->arena->nodes[m].line = mline;
++                            self->arena->nodes[m].num = mcol;
++                            n = m;
++                            continue;
++                        }
++                    }
+                     /* PH-53 L53-7: a method call whose receiver is an optional
+                        chain is not supported (evaluation count undefined). */
+                     if (self->arena->nodes[n].kind == N_OPT)
+@@ -7146,6 +7358,16 @@ impl ExprTraitInst for Expr {
+                 return -1;
+             }
+             self->type_depth--;
++            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
++                int gl = self->lex->tokline;
++                int gc = self->lex->tokstart - self->lex->lstart + 1;
++                self->sup->lex_next();
++                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0)
++                    return tool::diag::ct_sem_error(gl, gc,
++                        "a slice 'T[]' cannot be a generic type argument; it is a non-owning view",
++                        self->sup->mem->path);
++                return self->sup->fail("expected '>' after the type arguments");
++            }
+             if (!abuf[0] || strcmp(abuf, "void") == 0 || strchr(abuf, '[')
+                 || strchr(abuf, '(') || strchr(abuf, ')')
+                 || strncmp(abuf, "const ", 6) == 0
+diff --git a/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct b/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct
+index 87d73946..b1c90d7a 100644
+--- a/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct
++++ b/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct
+@@ -74,7 +74,16 @@ pub trait SupportOps {
+     int  leak_return(int ret, int conditional, int line);
+     int  leak_delete(int e);
+     int  skip_body(void);
++    /* P-7.2: note that the unit uses a slice, so the emitter writes the
++       `{ptr,len}` struct and its helpers. The flag lives on `Parser`; the
++       pointer is bound by `ct_parse_bind`. */
++    void note_slice(void);
+     int  init_raw(char *out, int cap);
++    /* P-7.2: `[` `]` lookahead used by every declaration position, so a slice
++       spelling can be accepted (local / parameter) or refused (field / global)
++       with the placement named. It sits here rather than on the expression
++       object because that trait is at its method cap. */
++    int  slice_brackets_ahead(int *line, int *col);
+     int  skip_after_error(void);
+     const char *last_error(void);
+ }
+@@ -92,6 +101,8 @@ pub struct ParseSupport {
+     char errfile[1024];         /* the input the message was recorded against */
+     int  errline;               /* 0 = a driver-level message, no source position */
+     int  errcol;
++    /* P-7.2: points at the parser's slice-use flag. */
++    int *slice_used;
+ } use SupportOps;
+ 
+ pub struct ParseSupport *parse_support_get(void);
+@@ -104,6 +115,47 @@ impl SupportOps for ParseSupport {
+         return n;
+     }
+ 
++    void note_slice(void)
++    {
++        if (self->slice_used) *self->slice_used = 1;
++    }
++
++    /* P-7.2: `[` `]` lookahead without consuming. The lexer has no peek, so
++       the whole cursor state is saved and restored the way the parser's
++       `record_body_ahead` does. */
++    int slice_brackets_ahead(int *line, int *col)
++    {
++        int sp, sbol, stok, sline, stokline, sstart, slstart, r;
++        long snum;
++        char stext[MAX_TEXT];
++
++        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0))
++            return 0;
++        if (line) *line = self->lex->tokline;
++        if (col) *col = self->lex->tokstart - self->lex->lstart + 1;
++        sp = self->lex->pos;
++        sbol = self->lex->bol;
++        stok = self->lex->tok;
++        snum = self->lex->toknum;
++        sline = self->lex->line;
++        stokline = self->lex->tokline;
++        sstart = self->lex->tokstart;
++        slstart = self->lex->lstart;
++        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
++        self->lex_next();
++        r = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0);
++        self->lex->pos = sp;
++        self->lex->bol = sbol;
++        self->lex->tok = stok;
++        self->lex->toknum = snum;
++        self->lex->line = sline;
++        self->lex->tokline = stokline;
++        self->lex->tokstart = sstart;
++        self->lex->lstart = slstart;
++        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
++        return r;
++    }
++
+     /* A source diagnostic: the position is the token the parser stopped at, and
+        the shape is L2's (`file:line:col: error: ...`). Recorded, not printed, so
+        the driver can decide when to flush it (and so recovery can drop it). */
+diff --git a/selfhost/ct-ast/frontend/parse/Parser.h.ct b/selfhost/ct-ast/frontend/parse/Parser.h.ct
+index e72acc5d..bda53243 100644
+--- a/selfhost/ct-ast/frontend/parse/Parser.h.ct
++++ b/selfhost/ct-ast/frontend/parse/Parser.h.ct
+@@ -197,6 +197,9 @@ pub struct Parser {
+        struct template registers itself with the build-wide registry before the
+        caller sees the node, so it needs the flag here. */
+     int  decl_pub;
++    /* P-7.2: set when the unit uses a slice; `main` binds the emitter to this
++       flag so the slice struct and helpers are emitted only for such a run. */
++    int  slice_used;
+ } use ParseOps, ParseDeclOps;
+ 
+ /* The struct a `borrow`-able type points to, or -1 when the type is not a
+@@ -1495,7 +1498,7 @@ impl ParseOps for Parser {
+         char gns[MAX_TEXT];
+         char tparam[MAX_TEXT];
+         char bound[MAX_TEXT];
+-        int is_generic;
++        int is_generic, ret_slice;
+         (void)self;
+ 
+         /* a leading attribute was captured by `top_decl`; it is this
+@@ -1510,6 +1513,22 @@ impl ParseOps for Parser {
+         func_col = self->lex->tokstart - self->lex->lstart + 1;
+         self->ex->saw_atomic = 0;
+         if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
++        /* P-7.2: `T[] name(` is a function returning a slice (a view the
++           caller must not outlive); `T[] name =` / `T[] name;` is a
++           file-scope variable, refused below. The return position is legal
++           because P-4.3 judges it through the return lint, not the placement
++           matrix. */
++        ret_slice = 0;
++        {
++            int sl, sc;
++            if (self->sup->slice_brackets_ahead(&sl, &sc)) {
++                self->sup->lex_next();
++                if (self->sup->expect("]") != 0) return -1;
++                ret_slice = 1;
++                self->sup->note_slice();
++                snprintf(ret, sizeof ret, "struct __ct_slice");
++            }
++        }
+         if (self->ex->fnptr_state) {
+             snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+         } else {
+@@ -1601,6 +1620,12 @@ impl ParseOps for Parser {
+         }
+         if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
+             int g, e;
++            /* P-7.2 (P-4.1): a file-scope variable would outlive the view it
++               stores. A function return type is judged by the return lint. */
++            if (ret_slice)
++                return tool::diag::ct_sem_error(func_line, func_col,
++                    "a slice 'T[]' cannot be a file-scope variable; keep it a local or a parameter",
++                    self->mem->path);
+             /* A namespaced global is emitted under a prefixed C name, the same
+                rule `pub` functions follow; `extern` is exempt because the symbol
+                belongs to the C library and keeps its own spelling. `gns` is the
+@@ -1840,6 +1865,8 @@ impl ParseOps for Parser {
+     {
+         int first, tail, p, ar, ao;
+         int seen_borrow, bline, bcol;
++        int is_slice, slice_const, slice_line, slice_col;
++        char slice_elem[MAX_TEXT];
+         char typebuf[MAX_TEXT];
+         char name[MAX_TEXT];
+         (void)self;
+@@ -1873,6 +1900,26 @@ impl ParseOps for Parser {
+                 self->sup->lex_next();
+             }
+             if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
++            /* P-7.2: `T[] name` is a slice parameter. Its C storage is the
++               erased `struct __ct_slice`; the element spelling travels in the
++               symbol row. Parameters are allowed placements (A.4). */
++            is_slice = 0;
++            slice_const = 0;
++            slice_elem[0] = 0;
++            slice_line = self->lex->tokline;
++            slice_col = self->lex->tokstart - self->lex->lstart + 1;
++            if (self->sup->slice_brackets_ahead(&slice_line, &slice_col)) {
++                self->sup->lex_next();
++                if (self->sup->expect("]") != 0) return -1;
++                is_slice = 1;
++                self->sup->note_slice();
++                snprintf(slice_elem, sizeof slice_elem, "%s", typebuf);
++                if (strncmp(slice_elem, "const ", 6) == 0) {
++                    slice_const = 1;
++                    memmove(slice_elem, slice_elem + 6, strlen(slice_elem + 6) + 1);
++                }
++                snprintf(typebuf, sizeof typebuf, "struct __ct_slice");
++            }
+             if (self->ex->fnptr_state) {
+                 /* the declarator name came with the type (`int (*cb)(void *)`) */
+                 snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+@@ -1899,6 +1946,11 @@ impl ParseOps for Parser {
+             {
+                 int vi = self->sym->find_var(name);
+                 if (vi >= 0) self->sym->vars[vi].is_fnparam = 1;
++                if (vi >= 0 && is_slice) {
++                    self->sym->vars[vi].is_slice = 1;
++                    snprintf(self->sym->vars[vi].slice_elem, MAX_TEXT, "%s", slice_elem);
++                    self->sym->vars[vi].slice_const = slice_const;
++                }
+             }
+             if (self->arena->nodes[p].text3[0]) {
+                 int vi = self->sym->find_var(name);
+@@ -2121,6 +2173,15 @@ impl ParseOps for Parser {
+             }
+             if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+             self->field_pub = fpub;
++            /* P-7.2 (P-4.1): a struct field would outlive the view it stores,
++               so `T[]` is a hard error here rather than a silent C struct. */
++            {
++                int sl, sc;
++                if (self->sup->slice_brackets_ahead(&sl, &sc))
++                    return tool::diag::ct_sem_error(sl, sc,
++                        "a slice 'T[]' cannot be a struct field; it is a non-owning view",
++                        self->mem->path);
++            }
+         }
+         /* the first declarator's stars are part of `typebuf`; later ones bring
+            their own, so the base type is kept once (`int *a, b;` makes `b` an
+@@ -3917,6 +3978,9 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void
+     ct_stmt_bind(arena, lex, sym, g_parse.mem, g_parse.sup, g_parse.ex);
+     g_parse.st = stmt_get();
+     g_parse.ex->st_hook = parser_st_hook;
++    /* P-7.2: the expression / statement layers note a slice through
++       `ParseSupport`, which is the one collaborator all three share. */
++    g_parse.sup->slice_used = &g_parse.slice_used;
+ }
+ 
+ pub struct Parser *parse_get(void);
+diff --git a/selfhost/ct-ast/frontend/parse/Stmt.h.ct b/selfhost/ct-ast/frontend/parse/Stmt.h.ct
+index 9f9832f0..4d98509e 100644
+--- a/selfhost/ct-ast/frontend/parse/Stmt.h.ct
++++ b/selfhost/ct-ast/frontend/parse/Stmt.h.ct
+@@ -44,6 +44,7 @@ import tool::diag::Diag;
+ #define B_BOR 16
+ #define B_XOR 14
+ #define N_INDEX 26
++#define N_CALL 7
+ #define N_MCALL 30
+ #define N_ARROW 25
+ #define N_ASSIGN 13
+@@ -93,6 +94,11 @@ import tool::diag::Diag;
+ #define N_ADDR 27
+ #define N_RAW 31
+ #define N_RET 5
++/* P-7.2: the slice nodes the expression layer builds (the macros do not cross
++   units, so the statement layer repeats the kinds it inspects). */
++#define N_SLICE_INDEX 74
++#define N_SLICE_RANGE 75
++#define N_SLICE_GET   76
+ #define N_SWITCH 42
+ #define N_VAR 10
+ #define N_WHILE 15
+@@ -2288,9 +2294,35 @@ impl StmtOps for Stmt {
+             e = self->ex->parse_expr();
+             self->ex->into_ok = 0;
+             if (e < 0) return -1;
+-            /* Phase 32 S5 (L32-3/L32-5): the returned expression against the
+-               function's return type. A void function may not return a value,
+-               and the judged value is compared through the shared kernel. */
++            /* P-7.2 (P-4.3): a direct `return` of a slice that views a local
++               array hands back a view whose storage dies with the frame. The
++               lint names only the direct forms; pass-through paths are the
++               documented author responsibility (A.4 P-4.5). */
++            {
++                int lvi = -1;
++                if (self->arena->nodes[e].kind == N_VAR)
++                    lvi = self->sym->find_var(self->arena->nodes[e].text2);
++                else if (self->arena->nodes[e].kind == N_SLICE_RANGE
++                         && self->arena->nodes[e].a >= 0)
++                    lvi = self->sym->find_var(
++                        self->arena->nodes[self->arena->nodes[e].a].text2);
++                if (lvi >= 0 && self->arena->nodes[e].kind == N_VAR
++                    && self->sym->vars[lvi].is_slice
++                    && self->sym->vars[lvi].slice_escape) {
++                    if (tool::diag::ct_slice_warn(eline, ecol,
++                            "slice escape: 'return' hands back a view of a local array",
++                            self->sup->mem->path) != 0)
++                        return -1;
++                } else if (lvi >= 0 && self->arena->nodes[e].kind == N_SLICE_RANGE
++                           && self->arena->nodes[e].aux == 1
++                           && !self->sym->vars[lvi].is_global
++                           && !self->sym->vars[lvi].is_static) {
++                    if (tool::diag::ct_slice_warn(eline, ecol,
++                            "slice escape: 'return' hands back a subslice of a local array",
++                            self->sup->mem->path) != 0)
++                        return -1;
++                }
++            }
+             /* Phase 43: an `err:` payload is judged on every path, not only
+                under `--types`. The `is_err` branch uses the hard-error diag
+                channel (7), so `ct compile` also refuses to write bad C; the
+@@ -3306,6 +3338,12 @@ impl StmtOps for Stmt {
+         snprintf(iname, sizeof iname, "%s", self->sym->vars[vi].type);
+         if (strncmp(iname, "struct ", 7) == 0)
+             memmove(iname, iname + 7, strlen(iname + 7) + 1);
++        /* P-7.2: a slice iterates through its `{ptr,len}` view. `item` is a
++           by-value copy of the element, like the array path. */
++        if (self->sym->vars[vi].is_slice) {
++            aux = 3;
++            snprintf(elem, sizeof elem, "%s", self->sym->vars[vi].slice_elem);
++        }
+         inst = frontend::sym::ct_inst_find(iname);
+         if (inst >= 0) {
+             struct StructInst *ins = frontend::sym::ct_insts(&nargs);
+@@ -3316,7 +3354,7 @@ impl StmtOps for Stmt {
+                 aux = 2;
+             }
+         }
+-        if (aux != 0) {
++        if (aux == 1 || aux == 2) {
+             /* L29-15: a container element would be a second owner of the same
+                buffer, and an interface value would lose its vptr on the copy.
+                Both are the same "the element cannot be copied by value" rule. */
+@@ -3500,7 +3538,11 @@ impl StmtOps for Stmt {
+         /* aux: 0 = array, 1 = Vec, 2 = Map; text2 names the container instance
+            the emitter calls `len` / `get` / `entry` on. */
+         self->arena->nodes[s].aux = aux;
+-        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", aux ? iname : "");
++        if (aux == 3)
++            snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s",
++                     self->sym->vars[vi].cname);
++        else
++            snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", aux ? iname : "");
+         self->arena->nodes[s].a = c;
+         self->arena->nodes[s].d = body;
+         return s;
+@@ -3885,6 +3927,8 @@ impl StmtOps for Stmt {
+     {
+         int n, e, head, tail, base_stars, first_decl, is_fnptr, ap;
+         int dcol, dline;
++        int is_slice, slice_const, slice_line, slice_col;
++        char slice_elem[MAX_TEXT];
+         char typebuf[MAX_TEXT];
+         char name[MAX_TEXT];
+         (void)self;
+@@ -3896,6 +3940,27 @@ impl StmtOps for Stmt {
+         dcol = self->lex->tokstart - self->lex->lstart + 1;
+         dline = self->lex->tokline;
+         if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
++        /* P-7.2: `T[] name` declares a slice local. The `[]` sits between the
++           element type and the name, so it is consumed here; the C storage is
++           the erased `struct __ct_slice` and the element spelling lives in
++           the symbol row. */
++        is_slice = 0;
++        slice_const = 0;
++        slice_elem[0] = 0;
++        slice_line = self->lex->tokline;
++        slice_col = self->lex->tokstart - self->lex->lstart + 1;
++        if (self->sup->slice_brackets_ahead(&slice_line, &slice_col)) {
++            self->sup->lex_next();
++            if (self->sup->expect("]") != 0) return -1;
++            is_slice = 1;
++            self->sup->note_slice();
++            snprintf(slice_elem, sizeof slice_elem, "%s", typebuf);
++            if (strncmp(slice_elem, "const ", 6) == 0) {
++                slice_const = 1;
++                memmove(slice_elem, slice_elem + 6, strlen(slice_elem + 6) + 1);
++            }
++            snprintf(typebuf, sizeof typebuf, "struct __ct_slice");
++        }
+         head = -1;
+         tail = -1;
+         base_stars = 0;
+@@ -3929,7 +3994,10 @@ impl StmtOps for Stmt {
+             }
+             typebuf[tl] = 0;
+             if (first_decl) {
+-                stars = base_stars;
++                /* P-7.2: `int[] *p` puts the star after the slice brackets,
++                   so `parse_type` never folded it and `stars` already holds
++                   it; overwriting with `base_stars` would drop it. */
++                if (!is_slice) stars = base_stars;
+                 first_decl = 0;
+             }
+             for (si = 0; si < stars; si++) {
+@@ -3940,12 +4008,26 @@ impl StmtOps for Stmt {
+             snprintf(name, sizeof name, "%s", self->lex->toktext);
+             self->sup->lex_next();
+             }
++            /* P-7.2 (P-4.1): a pointer-to-slice or slice array is the same
++               "the view escapes its scope" placement error. */
++            if (is_slice && strchr(typebuf, '*'))
++                return tool::diag::ct_sem_error(slice_line, slice_col,
++                    "a slice 'T[]' cannot be a pointer or a container element",
++                    self->mem->path);
+             n = self->sup->new_node(N_DECL);
+             if (n < 0) return -1;
+             if (self->static_decl) self->arena->nodes[n].aux = 1;
+             snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", typebuf);
+             snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
+             if (self->sup->declare_var(name, typebuf) != 0) return -1;
++            if (is_slice) {
++                int svi0 = self->sym->find_var(name);
++                if (svi0 >= 0) {
++                    self->sym->vars[svi0].is_slice = 1;
++                    snprintf(self->sym->vars[svi0].slice_elem, MAX_TEXT, "%s", slice_elem);
++                    self->sym->vars[svi0].slice_const = slice_const;
++                }
++            }
+             if (self->static_decl) {
+                 int vi = self->sym->find_var(name);
+                 if (vi >= 0) self->sym->vars[vi].is_static = 1;
+@@ -3966,6 +4048,11 @@ impl StmtOps for Stmt {
+                     return tool::diag::ct_sem_error(dim_line, dim_col,
+                                                     "'$' cannot be used in an array dimension",
+                                                     self->mem->path);
++                /* P-7.2 (P-4.1): `int[] a[2]` would be an array of views. */
++                if (is_slice && self->arena->nodes[n].text3[0])
++                    return tool::diag::ct_sem_error(slice_line, slice_col,
++                        "a slice 'T[]' cannot be an array element",
++                        self->mem->path);
+             }
+             {
+                 /* A trailing attribute on a local (`int x __attribute__((unused));`)
+@@ -3987,7 +4074,100 @@ impl StmtOps for Stmt {
+             }
+             if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
+                 self->sup->lex_next();
+-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
++                if (is_slice) {
++                    /* P-7.2: a slice is a view, so its initialiser is an array
++                       or another slice (never a brace list). The array case
++                       becomes a `{ptr,len}` compound literal; `sizeof` answers
++                       the inferred length for `T a[] = {…}` too. */
++                    int svi, off2, k2, sroot;
++                    char raw2[MAX_TEXT * 4];
++                    char cname2[MAX_TEXT];
++                    if (self->lex->tok == T_PUNCT
++                        && strcmp(self->lex->toktext, "{") == 0)
++                        return tool::diag::ct_sem_error(self->lex->tokline,
++                            self->lex->tokstart - self->lex->lstart + 1,
++                            "a slice 'T[]' has no initializer list; initialize it from an array or another slice",
++                            self->mem->path);
++                    e = self->ex->parse_expr();
++                    if (e < 0) return -1;
++                    sroot = 0;
++                    if (self->arena->nodes[e].kind == N_VAR) {
++                        svi = self->sym->find_var(self->arena->nodes[e].text2);
++                        if (svi < 0)
++                            return self->sup->fail("slice initializer is not a declared value");
++                        if (self->sym->vars[svi].is_slice) {
++                            if (strcmp(self->sym->vars[svi].slice_elem, slice_elem) != 0)
++                                return tool::diag::ct_sem_error(dline, dcol,
++                                    "slice element type does not match the declaration",
++                                    self->mem->path);
++                            sroot = self->sym->vars[svi].slice_escape;
++                        } else if (self->sym->vars[svi].is_array
++                                   && !self->sym->vars[svi].is_fnparam) {
++                            if (strcmp(self->sym->vars[svi].type, slice_elem) != 0)
++                                return tool::diag::ct_sem_error(dline, dcol,
++                                    "slice element type does not match the array",
++                                    self->mem->path);
++                            if (strchr(self->sym->vars[svi].dims, '('))
++                                return tool::diag::ct_sem_error(dline, dcol,
++                                    "slice element type does not match the array declarator",
++                                    self->mem->path);
++                            snprintf(cname2, sizeof cname2, "%s",
++                                     self->sym->vars[svi].cname);
++                            snprintf(raw2, sizeof raw2,
++                                     "(struct __ct_slice){ (void *)(%s), (int)(sizeof(%s) / sizeof((%s)[0])) }",
++                                     cname2, cname2, cname2);
++                            e = self->sup->new_node(N_RAW);
++                            if (e < 0) return -1;
++                            off2 = self->arena->str_begin();
++                            for (k2 = 0; raw2[k2]; k2++)
++                                if (self->arena->str_put(raw2[k2]) != 0)
++                                    return self->sup->fail("initializer is too long");
++                            self->arena->str_end();
++                            self->arena->nodes[e].num = off2;
++                            self->arena->nodes[e].aux = 1;
++                            sroot = !self->sym->vars[svi].is_global
++                                    && !self->sym->vars[svi].is_static;
++                        } else {
++                            return tool::diag::ct_sem_error(dline, dcol,
++                                "a slice can only be initialized from an array or another slice",
++                                self->mem->path);
++                        }
++                    } else if (self->arena->nodes[e].kind == N_CALL) {
++                        /* A callee that returns a slice is a view it owns the
++                           contract for; the direct local-array lint does not
++                           follow through a call (P-4.5 pass-through). */
++                        char rt[MAX_TEXT];
++                        rt[0] = 0;
++                        if (self->sup->expr_type(e, rt, sizeof rt) != 0
++                            || strcmp(rt, "struct __ct_slice") != 0)
++                            return tool::diag::ct_sem_error(dline, dcol,
++                                "a slice can only be initialized from an array, a slice or a slice-returning call",
++                                self->mem->path);
++                        sroot = 0;
++                    } else if (self->arena->nodes[e].kind == N_SLICE_RANGE) {
++                        if (strcmp(self->arena->nodes[e].text, slice_elem) != 0)
++                            return tool::diag::ct_sem_error(dline, dcol,
++                                "subslice element type does not match the declaration",
++                                self->mem->path);
++                        svi = -1;
++                        if (self->arena->nodes[e].a >= 0)
++                            svi = self->sym->find_var(
++                                self->arena->nodes[self->arena->nodes[e].a].text2);
++                        if (self->arena->nodes[e].aux == 1 && svi >= 0)
++                            sroot = !self->sym->vars[svi].is_global
++                                    && !self->sym->vars[svi].is_static;
++                        else if (svi >= 0)
++                            sroot = self->sym->vars[svi].slice_escape;
++                    } else {
++                        return tool::diag::ct_sem_error(dline, dcol,
++                            "a slice can only be initialized from an array or another slice",
++                            self->mem->path);
++                    }
++                    if (is_slice) {
++                        int svi2 = self->sym->find_var(name);
++                        if (svi2 >= 0) self->sym->vars[svi2].slice_escape = sroot;
++                    }
++                } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+                     /* local `static` tables can be long, so the text goes to the
+                        arena string pool (`aux = 1`, `num` = offset) */
+                     char elemtype[MAX_TEXT];
+@@ -4213,6 +4393,10 @@ impl StmtOps for Stmt {
+             int op = 0, k2;
+             char oc = self->lex->toktext[0];
+             k2 = self->arena->nodes[e].kind;
++            if (k2 == N_SLICE_INDEX && self->arena->nodes[e].aux == 1)
++                return tool::diag::ct_sem_error(self->arena->nodes[e].line,
++                    self->arena->nodes[e].num,
++                    "cannot write to an element of a const slice", self->mem->path);
+             /* PH-53 L53-6: an optional chain is a value. */
+             if (self->ex->opt_lvalue_check(e, self->arena->nodes[e].line,
+                                            self->arena->nodes[e].num) != 0)
+@@ -4220,6 +4404,7 @@ impl StmtOps for Stmt {
+             /* Phase 31 O3 (L31-3/L31-4): `v[i] += 1` writes the value. */
+             if (self->ex->container_write_check(e) != 0) return -1;
+             if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX
++                && k2 != N_SLICE_INDEX
+                 && k2 != N_DEREF && k2 != N_INTO_SELF)
+                 return self->sup->fail("assignment target is not assignable");
+             if (oc == '+') op = 1;
+@@ -4319,9 +4504,14 @@ impl StmtOps for Stmt {
+                 self->arena->nodes[n].a = e;
+             } else {
+             k = self->arena->nodes[e].kind;
++            if (k == N_SLICE_INDEX && self->arena->nodes[e].aux == 1)
++                return tool::diag::ct_sem_error(self->arena->nodes[e].line,
++                    self->arena->nodes[e].num,
++                    "cannot write to an element of a const slice", self->mem->path);
+             /* Phase 31 O3 (L31-3/L31-4): `v[i] = x` / `m[k] = x`. */
+             if (self->ex->container_write_check(e) != 0) return -1;
+             if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX
++                && k != N_SLICE_INDEX
+                 && k != N_DEREF && k != N_INTO_SELF)
+                 return self->sup->fail("assignment target is not assignable");
+             self->sup->lex_next();
+diff --git a/selfhost/ct-ast/frontend/sym/Symbols.h.ct b/selfhost/ct-ast/frontend/sym/Symbols.h.ct
+index 0bb632db..467c3342 100644
+--- a/selfhost/ct-ast/frontend/sym/Symbols.h.ct
++++ b/selfhost/ct-ast/frontend/sym/Symbols.h.ct
+@@ -168,6 +168,15 @@ pub struct Var {
+        `Symbols.closures` and stays -1 on a plain variable. */
+     int  is_closure;
+     int  closure_id;
++    /* P-7.2 (S3 slice prototype): a variable whose declared type is `T[]`.
++       The C storage is `struct __ct_slice`; the element spelling and the
++       `const` flag stay here because the erased C type cannot carry them.
++       `slice_escape` is set on a local view built from a local array, so a
++       direct `return` of it can be linted (P-4.3). */
++    int  is_slice;
++    char slice_elem[160];
++    int  slice_const;
++    int  slice_escape;
+ }
+ 
+ /* One non-escaping closure literal. The parser fills this table; the emitter
+@@ -657,6 +666,10 @@ impl SymbolOps for Symbols {
+         self->vars[i].is_const = 0;
+         self->vars[i].is_closure = 0;
+         self->vars[i].closure_id = -1;
++        self->vars[i].is_slice = 0;
++        self->vars[i].slice_elem[0] = 0;
++        self->vars[i].slice_const = 0;
++        self->vars[i].slice_escape = 0;
+         self->nvar++;
+         return 0;
+     }
+@@ -701,6 +714,10 @@ impl SymbolOps for Symbols {
+         self->vars[i].is_param = 0;
+         self->vars[i].is_fnparam = 0;
+         self->vars[i].is_const = 0;
++        self->vars[i].is_slice = 0;
++        self->vars[i].slice_elem[0] = 0;
++        self->vars[i].slice_const = 0;
++        self->vars[i].slice_escape = 0;
+         if (imported)
+             for (k = 0; k < i; k++)
+                 if (self->vars[k].is_global && self->vars[k].imported
+diff --git a/selfhost/ct-ast/main.ct b/selfhost/ct-ast/main.ct
+index 47aff7af..e47bff1b 100644
+--- a/selfhost/ct-ast/main.ct
++++ b/selfhost/ct-ast/main.ct
+@@ -101,7 +101,7 @@ int main(int argc, char **argv)
+        because `prog` is part of the wired state. */
+     backend::emit::ct_emit_bind(arena, sym, ty, lex, CTC_VERSION, m->outdir, m->prog);
+     backend::emit::ct_emit_bind_tables(m->units, &m->nunits, p->maps, &p->nmaps, p->calls, &p->ncalls, &m->build_mode, &m->line_mode, &m->runtime_checks, &m->abi_mode, &m->lib_root, m->abi_exports, &m->abi_n);
+-    backend::emit::ct_emit_bind_flags(&m->freestanding, m->alloc_map);
++    backend::emit::ct_emit_bind_flags(&m->freestanding, m->alloc_map, &p->slice_used);
+     backend::emit::ct_emit_bind_parse(&p->nparams, p->pend_fields, &p->npend);
+     /* the compile-mode driver (tool::driver) holds the output sink and the
+        collaborators of one run; bind it once they are all in place. */
+diff --git a/selfhost/ct-ast/tool/diag/Diag.h.ct b/selfhost/ct-ast/tool/diag/Diag.h.ct
+index 300e43a3..42d832af 100644
+--- a/selfhost/ct-ast/tool/diag/Diag.h.ct
++++ b/selfhost/ct-ast/tool/diag/Diag.h.ct
+@@ -50,6 +50,8 @@ trait DiagStore {
+     int  record_amb_warn(int line, int col, const char *method, const char *msg,
+                          const char *path);
+     int  record_loop_warn(int line, int col, const char *msg, const char *path);
++    /* P-7.2: a direct `return` of a slice that views a local array. */
++    int  record_slice_warn(int line, int col, const char *msg, const char *path);
+     int  record_std_shadow(int line, int col, const char *msg, const char *path);
+     int  record_leak(int kind, int line, int path_line, const char *file,
+                      const char *var, const char *tname);
+@@ -207,9 +209,30 @@ impl DiagStore for Diag {
+         return 0;
+     }
+ 
++    /* P-7.2 (P-4.3): a direct `return` of a slice that views a local array.
++       A lint in compile mode, an error under `ct check`, matching the other
++       record-and-report warnings. */
++    int record_slice_warn(int line, int col, const char *msg, const char *path)
++    {
++        struct Warn *w;
++        (void)self;
++        if (self->nwarns >= MAX_WARNINGS) return -1;
++        w = &self->warns[self->nwarns];
++        w->kind = 9;
++        w->line = line;
++        w->col = col;
++        w->path_line = 0;
++        snprintf(w->file, sizeof w->file, "%s", path);
++        w->var[0] = 0;
++        w->tname[0] = 0;
++        w->stype[0] = 0;
++        snprintf(w->msg, sizeof w->msg, "%s", msg);
++        self->nwarns++;
++        return 0;
++    }
++
+     /* L29-W1: the built-in container layer wins over a project-local
+-       `vendor/std`; the warning names the shadowed path. */
+-    int record_std_shadow(int line, int col, const char *msg, const char *path)
++       `vendor/std`; the warning names the shadowed path. */    int record_std_shadow(int line, int col, const char *msg, const char *path)
+     {
+         struct Warn *w;
+         (void)self;
+@@ -367,6 +390,14 @@ impl DiagStore for Diag {
+                     fputs("\"message\":\"", jf);
+                     self->put_json(jf, w->msg);
+                     fputs("\"}", jf);
++                } else if (w->kind == 9) {
++                    fputs("\"type\":\"slice_escape\",\"file\":\"", jf);
++                    self->put_json(jf, w->file);
++                    fprintf(jf, "\",\"line\":%d,", w->line);
++                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
++                    fputs("\"message\":\"", jf);
++                    self->put_json(jf, w->msg);
++                    fputs("\"}", jf);
+                 } else {
+                     fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
+                     self->put_json(jf, w->file);
+@@ -418,6 +449,8 @@ impl DiagStore for Diag {
+                     fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                 else if (w->kind == 8)
+                     fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
++                else if (w->kind == 9)
++                    fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                 else
+                     fprintf(tf, "%s %s: potential leak: '%s' (%s*) allocated but never deleted\n",
+                             loc, sev, w->var, w->tname);
+@@ -507,6 +540,13 @@ int ct_loop_warn(int line, int col, const char *msg, const char *path)
+     return g_diag.record_loop_warn(line, col, msg, path);
+ }
+ 
++/* P-7.2: a slice that views a local array escaping through `return`. */
++pub int ct_slice_warn(int line, int col, const char *msg, const char *path);
++int ct_slice_warn(int line, int col, const char *msg, const char *path)
++{
++    return g_diag.record_slice_warn(line, col, msg, path);
++}
++
+ pub int ct_std_shadow_warn(int line, int col, const char *msg, const char *path);
+ int ct_std_shadow_warn(int line, int col, const char *msg, const char *path)
+ {
+diff --git a/selfhost/l2/core.ct b/selfhost/l2/core.ct
+index 5d7a1727..6fdf2ca4 100644
+--- a/selfhost/l2/core.ct
++++ b/selfhost/l2/core.ct
+@@ -50,7 +50,7 @@
+ #define MAX_WARNS  64                     /* collected leak warnings per run */
+ #define MAX_ERRORS 20                     /* recovery cap: past this the compiler stops */
+ #define MAX_MAP_IMPLS 512                 /* impl methods listed in `--emit-map` */
+-#define MAX_CALLS  1024                   /* direct call edges listed in `--emit-map` */
++#define MAX_CALLS  4096                   /* direct call edges listed in `--emit-map` */
+ 
+ #define CTC_VERSION "0.77.2"
+ 
