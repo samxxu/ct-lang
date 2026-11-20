@@ -1,0 +1,70 @@
+{
+  "schema": "battle-verify/1",
+  "battle": "phase80-gate-1",
+  "seat": "VERIFY",
+  "generated_at_local": "2026-11-20T20:00:00+08:00",
+  "head": {
+    "baseline": "6665f01a",
+    "version": "0.79.2"
+  },
+  "environment": {
+    "os": "macOS (Darwin arm64)",
+    "cc": "Apple clang",
+    "date": "2026-11-20",
+    "scope": "read-only worktree checks"
+  },
+  "evidence": [
+    {
+      "id": "E-01",
+      "command": "grep -n \"施工闸门\\|P-7.4\" docs/design/phase80.md | head -5",
+      "output": "5:> **施工闸门**：P-7.3 最小切片已过、**PH-79 已收口（v0.79.0）**；**P-7.4 全量未补**。\n7:> **前置**：P-7.3 最小垂直切片 + P-7.4 全量；PH-79 切片表示收口 ✅。\n54:| S5b 删旧/迁移 | 删旧 `Str`、std 消费者迁移、索引/包版本、README/spec/roadmap 三处同步 | P-7.4；S5a 收口 |\n56:### 1.2 P-7.4 入口证据清单（施工前补齐）\n62:| P-7.4-1 | `.data` 最终类型裁定（`const char *` + lint 或保留 `Str` 视图） | 证据里固定一种，负例覆盖 `printf(\"%s\", s.data)` |",
+      "exit": 0,
+      "reproduced": true,
+      "anchors": [
+        "docs/design/phase80.md:5"
+      ]
+    },
+    {
+      "id": "E-02",
+      "command": "grep -n \"P-7.4\\|P-7.3\" docs/planning/pointer-free-phase-plan.md | head -5",
+      "output": "8:| 门槛 | J-6 证据（P-7.1a/P-7.1b/P-7.2/P-7.3）、J-7 成本、J-8 依赖；各卡按自己的入口收窄/等待 |\n25:| **PH-78** | S2 `ref` / `out` 参数（[卡](../design/phase78.md)） | v0.78.0 | P-7.1a + P-7.1b 原型（`j6-evidence/ref_out`）；不要求 P-7.2/P-7.3 | 附录 A.5 全绿；调用点 lvalue 硬错；`out` 每条路径赋值（L1）在 `ct build` 默认硬错；类型负例；S2b 方法/trait；ASan 无泄漏 | 单卡回滚，去掉标注与指针发射 |\n27:| **PH-80** | S5 `String` / `Str`（[卡](../design/phase80.md)） | v0.80.0 | P-7.3 最小垂直切片 + P-7.4 全量；S3 收口 | 附录 A.3/A.6 全绿；UTF-8/UTF-16 双类型；L1 字面量；`.data`/`cstr`；U16 核心方法；std 消费者迁移 dry-run",
+      "exit": 0,
+      "reproduced": true,
+      "anchors": [
+        "docs/planning/pointer-free-phase-plan.md:27"
+      ]
+    },
+    {
+      "id": "E-03",
+      "command": "grep -n \"J-6\\|证据门槛\" docs/decisions/D-011.md | head -5",
+      "output": "1:# D-011 · 「指针退场」提案：预 v1.0 方向，证据门槛未过\n6:  J-4b/J-6/J-7/J-8 仍未过）\n21:该判决的事实基础是 v1.0 语言冻结与 v1.1 行为保持；证据门槛未过。\n36:| J-6 证据 | **B** | 无原型、无逐类语料迁移数据、无 ABI 实测；任务见提案附录 A |\n44:3. **证据门槛仍是硬门**：J-6/J-7/J-8 未过前不开施工卡；P-1…P-7 见",
+      "exit": 0,
+      "reproduced": true,
+      "anchors": [
+        "docs/decisions/D-011.md:44"
+      ]
+    },
+    {
+      "id": "E-04",
+      "command": "ls docs/planning/j6-evidence/p73/",
+      "output": "evidence.md\np73-rebased-5736f0d5.patch\np73.patch",
+      "exit": 0,
+      "reproduced": true,
+      "anchors": [
+        "docs/planning/j6-evidence/p73/evidence.md:1"
+      ]
+    }
+  ],
+  "checks": {
+    "J-1": "B",
+    "J-2": "B",
+    "J-3": "A",
+    "J-4": "A",
+    "J-5": "B",
+    "J-6": "B",
+    "J-7": "B",
+    "J-8": "A",
+    "J-9": "B"
+  },
+  "verdict": "B"
+}
