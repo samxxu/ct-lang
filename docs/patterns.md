@@ -71,3 +71,25 @@
 
 如果某个模式确实写不出来，正确的顺序是：先记录**具体卡点**（哪里写不出、
 最小复现），再评估是否值得动语言；而不是先加特性再找用途。
+
+## 5 父子结构（树）
+
+`box<T>`（[language-spec §4.71](language-spec.md)）是唯一 owning 的单对象句柄；一棵树的
+标准写法是**向下 owning、向上逃生**：
+
+```ct
+struct Node {                 /* ct: allow-cycle */
+    box<Node> first_child;    /* owning：向下 */
+    Node *parent;             /* 逃生层裸指针：向上，不参与计数，天然破环 */
+}
+```
+
+- `first_child` 是 `box<Node>`：父节点释放时按静态类型递归 release 子节点，深度由树结构决定；
+- `parent` 用裸指针：向上不拥有，不会与子节点的 refs 互相咬住；
+- `struct` 这一行要带 `/* ct: allow-cycle */`，否则 v0.82.0 起会报
+  `potential reference cycle: Node -> Node`（PH-82 / D-012）。检测只展开 `box<X>` 字段，
+  所以把 `parent` 写成裸指针本身已经「手工破环」；标记是把作者意图写进代码，并让
+  `ct check` 留一条 `note:` 供审计。
+- 需要强制时在 `ct.pkg` 写 `leaks = error`：漏掉标记的直接环会让构建失败，带 `allow-cycle`
+  的树不受影响。
+- 兄弟链、多叉树同理：ownership 只沿 `box<>` 向下的边，向上的边一律裸指针或下标。

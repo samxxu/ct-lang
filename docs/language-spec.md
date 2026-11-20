@@ -2951,12 +2951,39 @@ parse("ab", n);  /* 调用点不写 out */
   （与 `Vec.at` 的失效契约同构）。失效后的读取由 ASan 抓，不做运行期检查。
 - **边界**：`box<Str>` / `box<U16Str>` / `box<T[]>` 硬错；`struct Bad { Str tag; }` 在声明层
   硬错（借用字段会活过其底层数据）。引用环是作者责任：`retain()` 成环后释放句柄仍保留
-  `refs >= 1`，编译器不做环检测；`--debug-leaks`（若将来实现）只报未配对 alloc/release
-  计数，不叫环检测。`ct build` 跨单元 `box<T>` 在 v0.81.0 不支持（实例/助手写在命名它的
-  单元里，导出签名只有前向声明）；单文件 compile 模式与单单元 build 可用。
+  `refs >= 1`；v0.82.0 起对 `box<X>` 字段的直接环做**编译期告警**（§4.72），运行期仍不做
+  环检测/回收；`--debug-leaks`（若将来实现）只报未配对 alloc/release 计数，不叫环检测。
+  `ct build` 跨单元 `box<T>` 在 v0.81.0 不支持（实例/助手写在命名它的单元里，导出签名只有
+  前向声明）；单文件 compile 模式与单单元 build 可用。
 - **C 边界 / ABI**：`box<T>` 是编译器生成的 nominal 句柄，不是 C ABI 导出类型；C 侧只用
   `T *` / 普通 struct / `void *`。句柄 16 字节、头 8 字节是 golden 断言，不是跨编译器 ABI
   承诺。
+
+### 4.72 泄漏防护：`leaks` 与直接环检测（Phase 82，仅 ct-ast）
+
+`box<T>` 的引用环是作者责任（§4.71）；本节把**直接环**从无声事故变成可见风险，不引入 GC /
+weak / 跨过程分析（D-012）。
+
+- **配置**：`ct.pkg` 新增窄键 `leaks = warn|error`，缺省 `warn`。`error` 把现有的
+  `potential leak` 诊断与本节的直接环告警升为 **error**，并让 `ct build` / `ct compile`
+  在写任何产物之前失败；`ct check` 仍按既有策略把所有 finding 当 error。键从输入所属包读取：
+  `ct build` 取 `-I` 根的 manifest（无则入口单元目录），`ct compile` / `ct check` 取单元
+  自身目录（这两种模式忽略 `-I`）。缺键、未知值与旧包一律 `warn`，存量包行为不变。`leaks`
+  与 `c-boundary = strict`（§4.66）互不影响，也不改 `--debug-leaks` 的计数契约（D-011 J-4c）。
+- **检测范围**：只展开 struct 的 **`box<X>` 字段**（相邻边计 1），限深 **3 条边**：自环
+  `A -> A`、`A -> B -> A`、`A -> B -> C -> A` 命中；同一环只报一次（重复的载荷字段算一条边）。
+  4 条边以上的环、经 `Vec<box<T>>` / 泛型参数 / 接口字段 / typedef 别名的间接环、泛型 struct
+  与其实例、跨过程转手**不在检测范围**——不报不代表没有泄漏（R82-2）。
+- **文案**：`file:line: warning: potential reference cycle: A -> B -> A; instances may leak
+  unless the cycle is broken by hand`。写「可能泄漏，除非手工破环」，不写「会泄漏」；位置指向
+  环里行号最小的那个 struct 声明。
+- **豁免**：`/* ct: allow-cycle */` 必须与 `struct` 声明**同一行**；标记在环的任一参与者上即
+  抑制该环。`ct check` 仍以 `note: reference cycle suppressed by 'ct: allow-cycle': …` 报出
+  被抑制点（审计用），`ct compile` / `ct build` 静默。标记在上一行或字段行不生效；注释被
+  refactor 删掉后告警重新出现是可接受代价。
+- **树模式**：标准的父子结构见 [patterns §5](patterns.md#5-父子结构树)。
+- **非目标**：运行期环检测/回收、`weak` 引用、句柄运行期泄漏分析；`--debug-leaks` 仍只报
+  未配对 alloc/release 计数，不叫环检测。
 
 ## 11 文档与实现一致性（缺口登记，2026-11-15）
 

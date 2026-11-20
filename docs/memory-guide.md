@@ -496,6 +496,13 @@ $ ct --diagnostics=json leak.ct -o leak.c    # 机器可读，写 stdout
 - **只报普通 `malloc` 指针**：`own` 变量登记了 autodrop，**不在泄漏分析的报告范围内**
   （所以顶层 `own` 的静默泄漏连告警都没有）
 - **保守**：宁可漏报不可误报——没告警不等于绝对没泄漏
+- **包级强制**：`ct.pkg` 写 `leaks = error`（v0.82.0，语言规范 §4.72）把本包的
+  `potential leak` 与直接环告警升为构建失败；缺省 `warn`，旧包不变
+- **`box<T>` 字段的直接环**：限深 3 条边，自环 / A→B→A / A→B→C→A 报
+  `potential reference cycle`，文案是「可能泄漏，除非手工破环」；树/父子结构用
+  `/* ct: allow-cycle */` 加向上裸指针（[patterns §5](patterns.md)）
+- **不覆盖**：运行期环、经 `Vec<box<T>>` / 泛型 / typedef 的间接环；`--debug-leaks` 仍只报
+  未配对 alloc/release 计数，不叫环检测
 
 正确态度：**把告警当成提示去检查，别当成保证去放心。**
 
