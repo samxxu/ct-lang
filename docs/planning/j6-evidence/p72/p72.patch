@@ -25,6 +25,36 @@ index 00000000..f7928459
 +    int[] s = x;
 +    return 0;
 +}
+diff --git a/evidence/p72/cases/neg_box.ct b/evidence/p72/cases/neg_box.ct
+new file mode 100644
+index 00000000..aa9c5bae
+--- /dev/null
++++ b/evidence/p72/cases/neg_box.ct
+@@ -0,0 +1,9 @@
++/* P-7.2 negative (A.4 box): `box<T>` is a future PH-81 type; the prototype
++   implements its slice placement guard, so `box<int[]>` is a named error. */
++int main(void)
++{
++    int a[] = {1, 2, 3};
++    int[] s = a;
++    box<int[]> b;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_closure_capture.ct b/evidence/p72/cases/neg_closure_capture.ct
+new file mode 100644
+index 00000000..173d5d33
+--- /dev/null
++++ b/evidence/p72/cases/neg_closure_capture.ct
+@@ -0,0 +1,9 @@
++/* P-7.2 negative (A.4 closure capture): a closure environment copies a
++   captured name by value, so a slice view cannot be captured. */
++int main(void)
++{
++    int a[] = {1, 2, 3};
++    int[] s = a;
++    int (*f)(void) = () => s[0];
++    return f();
++}
 diff --git a/evidence/p72/cases/neg_const_write.ct b/evidence/p72/cases/neg_const_write.ct
 new file mode 100644
 index 00000000..3e1e943a
@@ -39,6 +69,30 @@ index 00000000..3e1e943a
 +    ro[0] = 9;
 +    return 0;
 +}
+diff --git a/evidence/p72/cases/neg_container_map.ct b/evidence/p72/cases/neg_container_map.ct
+new file mode 100644
+index 00000000..8f61785b
+--- /dev/null
++++ b/evidence/p72/cases/neg_container_map.ct
+@@ -0,0 +1,6 @@
++/* P-7.2 negative (A.4 container): a Map value is copied by value. */
++int main(void)
++{
++    Map<char *, int[]> m;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_container_vec.ct b/evidence/p72/cases/neg_container_vec.ct
+new file mode 100644
+index 00000000..19e8b86e
+--- /dev/null
++++ b/evidence/p72/cases/neg_container_vec.ct
+@@ -0,0 +1,6 @@
++/* P-7.2 negative (A.4 container): a Vec element is copied by value. */
++int main(void)
++{
++    Vec<int[]> v;
++    return 0;
++}
 diff --git a/evidence/p72/cases/neg_field.ct b/evidence/p72/cases/neg_field.ct
 new file mode 100644
 index 00000000..c0429ba5
@@ -51,14 +105,17 @@ index 00000000..c0429ba5
 +int main(void) { return 0; }
 diff --git a/evidence/p72/cases/neg_generic.ct b/evidence/p72/cases/neg_generic.ct
 new file mode 100644
-index 00000000..a41111c9
+index 00000000..d30bec17
 --- /dev/null
 +++ b/evidence/p72/cases/neg_generic.ct
-@@ -0,0 +1,6 @@
-+/* P-7.2 negative: a slice cannot be a generic type argument (A.4 placement). */
+@@ -0,0 +1,9 @@
++/* P-7.2 negative (A.4 generic actual): a user-defined generic instantiated
++   with a slice is refused at the type argument. */
++struct Holder<T> { T v; }
++
 +int main(void)
 +{
-+    Vec<int[]> v;
++    Holder<int[]> h;
 +    return 0;
 +}
 diff --git a/evidence/p72/cases/neg_global.ct b/evidence/p72/cases/neg_global.ct
@@ -72,6 +129,77 @@ index 00000000..19b5f8dd
 +int[] g = a;
 +
 +int main(void) { return 0; }
+diff --git a/evidence/p72/cases/neg_interface.ct b/evidence/p72/cases/neg_interface.ct
+new file mode 100644
+index 00000000..1383568b
+--- /dev/null
++++ b/evidence/p72/cases/neg_interface.ct
+@@ -0,0 +1,15 @@
++/* P-7.2 negative (A.4 interface value): a slice cannot be boxed into an
++   interface slot, because the slot stores an owned concrete value. */
++trait Show { int show(); }
++
++struct Circle { int r; } use Show;
++
++impl Show for Circle { int show() { return self->r; } }
++
++int main(void)
++{
++    int a[] = {1, 2, 3};
++    int[] s = a;
++    Show x = s;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_nested_generic.ct b/evidence/p72/cases/neg_nested_generic.ct
+new file mode 100644
+index 00000000..f9ea3f8e
+--- /dev/null
++++ b/evidence/p72/cases/neg_nested_generic.ct
+@@ -0,0 +1,7 @@
++/* P-7.2 negative (A.4 P-4.2 nested): a slice reaches a nested generic
++   argument through the recursive type parser. */
++int main(void)
++{
++    Option<Option<int[]>> o;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_nested_map.ct b/evidence/p72/cases/neg_nested_map.ct
+new file mode 100644
+index 00000000..dabd2ec7
+--- /dev/null
++++ b/evidence/p72/cases/neg_nested_map.ct
+@@ -0,0 +1,7 @@
++/* P-7.2 negative (A.4 P-4.2 Map nesting): the inner Vec argument is checked
++   recursively even when it is itself a generic argument. */
++int main(void)
++{
++    Map<char *, Vec<int[]>> m;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_option.ct b/evidence/p72/cases/neg_option.ct
+new file mode 100644
+index 00000000..171451e7
+--- /dev/null
++++ b/evidence/p72/cases/neg_option.ct
+@@ -0,0 +1,6 @@
++/* P-7.2 negative (A.4 Option): an Option payload is stored by value. */
++int main(void)
++{
++    Option<int[]> o;
++    return 0;
++}
+diff --git a/evidence/p72/cases/neg_result.ct b/evidence/p72/cases/neg_result.ct
+new file mode 100644
+index 00000000..1753b854
+--- /dev/null
++++ b/evidence/p72/cases/neg_result.ct
+@@ -0,0 +1,6 @@
++/* P-7.2 negative (A.4 Result): a Result payload is stored by value. */
++int main(void)
++{
++    Result<int[], char *> r;
++    return 0;
++}
 diff --git a/evidence/p72/cases/neg_return_lint.ct b/evidence/p72/cases/neg_return_lint.ct
 new file mode 100644
 index 00000000..794763c9
@@ -311,12 +439,242 @@ index 00000000..738a2023
 @@ -0,0 +1,2 @@
 +2 4 3 4
 +a1=20
+diff --git a/evidence/p72/raw.log b/evidence/p72/raw.log
+new file mode 100644
+index 00000000..9dad8f45
+--- /dev/null
++++ b/evidence/p72/raw.log
+@@ -0,0 +1,224 @@
++== bootstrap: L0 -> L1 -> L2 -> ct-ast ==
++  $ cc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ctc
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ctc selfhost/l1/ctc.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l1.c
++  $ cc -Wall -Wextra -std=c99 /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l1.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l1
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l1 build selfhost/l2/driver.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l2src
++cc /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l2src/core.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l2src/driver.c -o a.out
++  $ cc -Wall -Wextra -std=c99 /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l2src/*.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l2
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc
++cc -std=c99 /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Symbols.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Init.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Lexer.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/MapTable.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Unit.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Arena.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Diag.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Memory.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/TypeCheck.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/ParseSupport.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Expr.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Emitter.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/MapBuild.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Stmt.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Parser.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Cache.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Sh.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Module.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Pkg.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/Driver.c /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/main.c -o a.out
++  $ cc -Wall -Wextra -std=c99 /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/astsrc/*.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast
++ct-ast: ct-ast v0.77.2
++
++== self-host fixpoint (the compiler's own sources carry no slice syntax) ==
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/self1
++  $ cc -Wall -Wextra -std=c99 /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/self1/*.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast2
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast2 build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/self2
++  exits: gen1=0 cc=0 gen2=0
++PASS  selfhost
++
++== negative: neg_trap (compile, then trap at run time) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_trap.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_trap.c
++  compile exit=0
++  host-cc exit=0
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_trap.bin
++  run exit=1
++  stderr: ct: slice index 5 out of bounds (length 3)
++PASS  neg_trap
++
++== negative: neg_return_lint (compile succeeds, lint on stderr) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_return_lint.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_return_lint.c
++  exit=0
++  evidence/p72/cases/neg_return_lint.ct:7: warning: slice escape: 'return' hands back a view of a local array
++PASS  neg_return_lint
++
++== positive: pos_basic ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/pos_basic.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_basic.c
++  exit=0
++  $ cc -std=c99 -Wall -Wextra /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_basic.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_basic.bin
++  exit=0
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_basic.bin
++  exit=0
++  s0=9 s2=3 k=14 get1=2 get9=-1
++PASS  pos_basic
++
++== positive: pos_struct ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/pos_struct.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_struct.c
++  exit=0
++  $ cc -std=c99 -Wall -Wextra /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_struct.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_struct.bin
++  exit=0
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_struct.bin
++  exit=0
++  7 20 7
++PASS  pos_struct
++
++== positive: pos_param ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/pos_param.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_param.c
++  exit=0
++  $ cc -std=c99 -Wall -Wextra /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_param.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_param.bin
++  exit=0
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_param.bin
++  exit=0
++  sum=10 a0=100 t0=2 t2=4
++  a1=20
++PASS  pos_param
++
++== positive: pos_subslice ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/pos_subslice.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_subslice.c
++  exit=0
++  $ cc -std=c99 -Wall -Wextra /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_subslice.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_subslice.bin
++  exit=0
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_subslice.bin
++  exit=0
++  2 4 3 4
++  a1=20
++PASS  pos_subslice
++
++== positive: pos_const ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/pos_const.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_const.c
++  exit=0
++  $ cc -std=c99 -Wall -Wextra /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_const.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_const.bin
++  exit=0
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_const.bin
++  exit=0
++  4 6 15
++PASS  pos_const
++
++== positive: pos_arrays_unchanged ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/pos_arrays_unchanged.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_arrays_unchanged.c
++  exit=0
++  $ cc -std=c99 -Wall -Wextra /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_arrays_unchanged.c -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_arrays_unchanged.bin
++  exit=0
++  $ /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/pos_arrays_unchanged.bin
++  exit=0
++  12 5 2
++PASS  pos_arrays_unchanged
++
++== negative: neg_const_write (expect hard error containing: cannot write to an element of a const slice) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_const_write.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_const_write.c
++  exit=1
++  evidence/p72/cases/neg_const_write.ct:6:7: error: cannot write to an element of a const slice
++  ctc: 1 error(s) generated
++PASS  neg_const_write
++
++== negative: neg_subslice_oob (expect hard error containing: slice construction out of bounds) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_subslice_oob.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_subslice_oob.c
++  exit=1
++  evidence/p72/cases/neg_subslice_oob.ct:6:16: error: slice construction out of bounds: [1,4) for length 3
++  ctc: 1 error(s) generated
++PASS  neg_subslice_oob
++
++== negative: neg_bad_init (expect hard error containing: can only be initialized from an array) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_bad_init.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_bad_init.c
++  exit=1
++  evidence/p72/cases/neg_bad_init.ct:6:5: error: a slice can only be initialized from an array or another slice
++  ctc: 1 error(s) generated
++PASS  neg_bad_init
++
++== negative: neg_field (expect hard error containing: cannot be a struct field) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_field.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_field.c
++  exit=1
++  evidence/p72/cases/neg_field.ct:2:15: error: a slice 'T[]' cannot be a struct field; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_field
++
++== negative: neg_global (expect hard error containing: cannot be a file-scope variable) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_global.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_global.c
++  exit=1
++  evidence/p72/cases/neg_global.ct:3:1: error: a slice 'T[]' cannot be a file-scope variable; keep it a local or a parameter
++  ctc: 1 error(s) generated
++PASS  neg_global
++
++== negative: neg_interface (expect hard error containing: cannot be stored in interface 'Show') ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_interface.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_interface.c
++  exit=1
++  evidence/p72/cases/neg_interface.ct:13:14: error: a slice 'T[]' cannot be stored in interface 'Show'; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_interface
++
++== negative: neg_box (expect hard error containing: cannot be stored in box<T>) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_box.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_box.c
++  exit=1
++  evidence/p72/cases/neg_box.ct:7:12: error: a slice 'T[]' cannot be stored in box<T>; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_box
++
++== negative: neg_option (expect hard error containing: cannot be a generic type argument) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_option.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_option.c
++  exit=1
++  evidence/p72/cases/neg_option.ct:4:15: error: a slice 'T[]' cannot be a generic type argument; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_option
++
++== negative: neg_result (expect hard error containing: cannot be a generic type argument) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_result.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_result.c
++  exit=1
++  evidence/p72/cases/neg_result.ct:4:15: error: a slice 'T[]' cannot be a generic type argument; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_result
++
++== negative: neg_container_vec (expect hard error containing: cannot be a generic type argument) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_container_vec.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_container_vec.c
++  exit=1
++  evidence/p72/cases/neg_container_vec.ct:4:12: error: a slice 'T[]' cannot be a generic type argument; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_container_vec
++
++== negative: neg_container_map (expect hard error containing: cannot be a generic type argument) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_container_map.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_container_map.c
++  exit=1
++  evidence/p72/cases/neg_container_map.ct:4:20: error: a slice 'T[]' cannot be a generic type argument; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_container_map
++
++== negative: neg_arrelem (expect hard error containing: cannot be an array element) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_arrelem.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_arrelem.c
++  exit=1
++  evidence/p72/cases/neg_arrelem.ct:5:8: error: a slice 'T[]' cannot be an array element
++  ctc: 1 error(s) generated
++PASS  neg_arrelem
++
++== negative: neg_generic (expect hard error containing: cannot be a generic type argument) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_generic.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_generic.c
++  exit=1
++  evidence/p72/cases/neg_generic.ct:7:15: error: a slice 'T[]' cannot be a generic type argument; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_generic
++
++== negative: neg_closure_capture (expect hard error containing: cannot capture the slice 's') ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_closure_capture.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_closure_capture.c
++  exit=1
++  evidence/p72/cases/neg_closure_capture.ct:7:1: error: a closure cannot capture the slice 's' (a view cannot outlive its array)
++  evidence/p72/cases/neg_closure_capture.ct:7:1: note: tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }
++  ctc: 1 error(s) generated
++PASS  neg_closure_capture
++
++== negative: neg_nested_generic (expect hard error containing: cannot be a generic type argument) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_nested_generic.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_nested_generic.c
++  exit=1
++  evidence/p72/cases/neg_nested_generic.ct:5:22: error: a slice 'T[]' cannot be a generic type argument; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_nested_generic
++
++== negative: neg_nested_map (expect hard error containing: cannot be a generic type argument) ==
++  $ CT_C_BOUNDARY=allow /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/ct-ast evidence/p72/cases/neg_nested_map.ct -o /var/folders/dm/hftq00ms7sb5_67xhdgbw92r0000gn/T//p72-evidence.23832/neg_nested_map.c
++  exit=1
++  evidence/p72/cases/neg_nested_map.ct:5:24: error: a slice 'T[]' cannot be a generic type argument; it is a non-owning view
++  ctc: 1 error(s) generated
++PASS  neg_nested_map
++
++== A.4 P-4.1 placement classes (10/10) ==
++  field              neg_field
++  global             neg_global
++  interface          neg_interface
++  box                neg_box
++  Option             neg_option
++  Result             neg_result
++  container          neg_container_vec + neg_container_map
++  array element      neg_arrelem
++  generic actual     neg_generic
++  closure capture    neg_closure_capture
++  10/10 classes exercised; every one has a hard-error negative.
++
++=============================================================
++P-7.2 evidence: 25 passed, 0 failed
 diff --git a/evidence/p72/run.sh b/evidence/p72/run.sh
 new file mode 100755
-index 00000000..9680ba8d
+index 00000000..68b7438c
 --- /dev/null
 +++ b/evidence/p72/run.sh
-@@ -0,0 +1,167 @@
+@@ -0,0 +1,196 @@
 +#!/usr/bin/env bash
 +# P-7.2 (S3 slice prototype) reproduction script.
 +#
@@ -474,12 +832,41 @@ index 00000000..9680ba8d
 +run_pos pos_arrays_unchanged
 +
 +run_compile_err neg_const_write "cannot write to an element of a const slice"
-+run_compile_err neg_field "cannot be a struct field"
-+run_compile_err neg_global "cannot be a file-scope variable"
-+run_compile_err neg_generic "cannot be a generic type argument"
-+run_compile_err neg_arrelem "cannot be an array element"
 +run_compile_err neg_subslice_oob "slice construction out of bounds"
 +run_compile_err neg_bad_init "can only be initialized from an array"
++
++# A.4 P-4.1: the ten storage positions. Each has at least one hard-error
++# negative; `neg_container_vec` / `neg_container_map` are the two container
++# spellings (Vec and Map), so the class count stays ten.
++run_compile_err neg_field "cannot be a struct field"
++run_compile_err neg_global "cannot be a file-scope variable"
++run_compile_err neg_interface "cannot be stored in interface 'Show'"
++run_compile_err neg_box "cannot be stored in box<T>"
++run_compile_err neg_option "cannot be a generic type argument"
++run_compile_err neg_result "cannot be a generic type argument"
++run_compile_err neg_container_vec "cannot be a generic type argument"
++run_compile_err neg_container_map "cannot be a generic type argument"
++run_compile_err neg_arrelem "cannot be an array element"
++run_compile_err neg_generic "cannot be a generic type argument"
++run_compile_err neg_closure_capture "cannot capture the slice 's'"
++
++# A.4 P-4.2: the recursive type parser sees a slice inside nested arguments.
++run_compile_err neg_nested_generic "cannot be a generic type argument"
++run_compile_err neg_nested_map "cannot be a generic type argument"
++
++echo "== A.4 P-4.1 placement classes (10/10) =="
++printf '  %-18s %s\n' "field" "neg_field"
++printf '  %-18s %s\n' "global" "neg_global"
++printf '  %-18s %s\n' "interface" "neg_interface"
++printf '  %-18s %s\n' "box" "neg_box"
++printf '  %-18s %s\n' "Option" "neg_option"
++printf '  %-18s %s\n' "Result" "neg_result"
++printf '  %-18s %s\n' "container" "neg_container_vec + neg_container_map"
++printf '  %-18s %s\n' "array element" "neg_arrelem"
++printf '  %-18s %s\n' "generic actual" "neg_generic"
++printf '  %-18s %s\n' "closure capture" "neg_closure_capture"
++echo "  10/10 classes exercised; every one has a hard-error negative."
++echo
 +
 +echo "============================================================="
 +printf 'P-7.2 evidence: %d passed, %d failed\n' "$pass" "$fail"
@@ -721,7 +1108,7 @@ index 2812b9cb..d9326337 100644
     bind runs before the driver has read the command line. Defaults keep libc, so
     a build without --alloc is byte-identical to before. */
 diff --git a/selfhost/ct-ast/frontend/parse/Expr.h.ct b/selfhost/ct-ast/frontend/parse/Expr.h.ct
-index 64133402..1f33eec8 100644
+index 64133402..e903162e 100644
 --- a/selfhost/ct-ast/frontend/parse/Expr.h.ct
 +++ b/selfhost/ct-ast/frontend/parse/Expr.h.ct
 @@ -106,6 +106,15 @@ import tool::diag::Diag;
@@ -808,7 +1195,61 @@ index 64133402..1f33eec8 100644
  /* Phase 24: is `n` the range index `$`? It is the only `N_VAR` whose `text2` is
     the placeholder, and it is built only inside a range initialiser's element
     expression. `&$`, `$++` and `++$` are rejected through this predicate: `$` is
-@@ -2263,6 +2333,21 @@ impl ExprOps for Expr {
+@@ -879,6 +949,14 @@ static int closure_capture_add(struct Expr *self, int ci, int vi, int line)
+                  "a closure cannot capture the array '%s' (capture a pointer to it instead)", name);
+         return closure_capture_error(self, line, msg);
+     }
++    /* P-7.2 (P-4.1): the environment copies captured names by value; a slice
++       is a view whose storage the closure would outlive, so it is refused at
++       the capture (the array/parameter is the thing to pass instead). */
++    if (self->sym->vars[vi].is_slice) {
++        snprintf(msg, sizeof msg,
++                 "a closure cannot capture the slice '%s' (a view cannot outlive its array)", name);
++        return closure_capture_error(self, line, msg);
++    }
+     if (closure_capture_index(c, name) >= 0) return 0;
+     if (c->ncap >= 16)
+         return self->sup->fail("a closure takes too many captures (limit 16)");
+@@ -1755,6 +1833,7 @@ impl ExprOps for Expr {
+     int parse_type(char *out, int cap)
+     {
+         int n;
++        char abuf[MAX_TEXT];
+         (void)self;
+ 
+         n = 0;
+@@ -1770,6 +1849,30 @@ impl ExprOps for Expr {
+         self->fnptr_name[0] = 0;
+         self->fnptr_dims[0] = 0;
+         self->last_bare_tag[0] = 0;
++        /* P-7.2 (P-4.1): `box<T>` is a future S1 type (PH-81). The type is not
++           implemented here, but its slice placement is refused now so
++           `box<int[]>` is a named hard error at the `[`, not an unrelated
++           "undeclared variable" from the C compiler. */
++        if (n == 0 && self->lex->tok == T_ID
++            && strcmp(self->lex->toktext, "box") == 0) {
++            int bp = self->lex->pos;
++            int boxline = self->lex->tokline;
++            int boxcol = self->lex->tokstart - self->lex->lstart + 1;
++            while (self->lex->src[bp] == ' ' || self->lex->src[bp] == '\t') bp++;
++            if (self->lex->src[bp] == '<') {
++                int sl, sc;
++                self->sup->lex_next();          /* box */
++                self->sup->lex_next();          /* < */
++                if (self->parse_type(abuf, sizeof abuf) != 0) return -1;
++                if (self->sup->slice_brackets_ahead(&sl, &sc))
++                    return tool::diag::ct_sem_error(sl, sc,
++                        "a slice 'T[]' cannot be stored in box<T>; it is a non-owning view",
++                        self->sup->mem->path);
++                return tool::diag::ct_sem_error(boxline, boxcol,
++                    "box<T> is not implemented in this prototype (PH-81); only the slice placement guard is present",
++                    self->sup->mem->path);
++            }
++        }
+         for (;;) {
+             /* Phase 41 B′: `atomic` is a contextual modifier, not a reserved
+                keyword. It only enters the type when one of the four supported
+@@ -2263,6 +2366,21 @@ impl ExprOps for Expr {
                  return -1;
              }
              self->type_depth--;
@@ -830,7 +1271,40 @@ index 64133402..1f33eec8 100644
              if (!abuf[0] || strcmp(abuf, "void") == 0 || strchr(abuf, '[')
                  || strchr(abuf, '(') || strchr(abuf, ')')
                  || strncmp(abuf, "const ", 6) == 0
-@@ -3137,6 +3222,12 @@ impl ExprOps for Expr {
+@@ -2841,6 +2959,32 @@ impl ExprOps for Expr {
+         res = 0;
+         if (self->lex->tok == T_ID) {
+             char rn[MAX_TEXT];
++            /* P-7.2: `box<T>` is not an implemented type yet, but a statement
++               starting with it must reach `parse_type` so the slice placement
++               guard can name the fault. Recognise only the shape
++               `box <balanced> name`, so `box < 3` stays a comparison. */
++            if (strcmp(self->lex->toktext, "box") == 0) {
++                size_t p2 = self->lex->pos;
++                int d2 = 0;
++                int closed = 0;
++                while (self->lex->src[p2] == ' ' || self->lex->src[p2] == '\t') p2++;
++                if (self->lex->src[p2] == '<') {
++                    p2++;
++                    while (self->lex->src[p2] && self->lex->src[p2] != '\n') {
++                        if (self->lex->src[p2] == '<') d2++;
++                        else if (self->lex->src[p2] == '>') {
++                            if (d2 == 0) { p2++; closed = 1; break; }
++                            d2--;
++                        }
++                        p2++;
++                    }
++                    while (self->lex->src[p2] == ' ' || self->lex->src[p2] == '\t') p2++;
++                    if (closed && ((self->lex->src[p2] >= 'a' && self->lex->src[p2] <= 'z')
++                                   || (self->lex->src[p2] >= 'A' && self->lex->src[p2] <= 'Z')
++                                   || self->lex->src[p2] == '_'))
++                        res = 1;
++                }
++            } else
+             /* `T` inside its own template body is a type, even though the
+                ALL_CAPS rule below would read it as a macro constant. */
+             if (self->in_generic && self->in_generic_tparam[0]
+@@ -3137,6 +3281,12 @@ impl ExprOps for Expr {
              int aline = self->lex->tokline;
              int acol = self->lex->tokstart - self->lex->lstart + 1;
              k2 = self->arena->nodes[left].kind;
@@ -843,7 +1317,7 @@ index 64133402..1f33eec8 100644
              /* PH-53 L53-6. */
              if (self->opt_lvalue_check(left, self->arena->nodes[left].line,
                                         self->arena->nodes[left].num) != 0)
-@@ -3162,6 +3253,7 @@ impl ExprOps for Expr {
+@@ -3162,6 +3312,7 @@ impl ExprOps for Expr {
              /* Phase 30 S11: inside an `into` block `$` is a writable lvalue
                 (an `own` receiver never reaches here -- L30-4 refuses it). */
              if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX
@@ -851,7 +1325,7 @@ index 64133402..1f33eec8 100644
                  && k2 != N_DEREF && k2 != N_INTO_SELF)
                  return self->sup->fail("assignment target is not assignable");
              /* An `own` variable is tracked by statement-level assignments; an
-@@ -4415,6 +4507,94 @@ impl ExprOps for Expr {
+@@ -4415,6 +4566,94 @@ impl ExprOps for Expr {
                  continue;
              }
              if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
@@ -946,7 +1420,7 @@ index 64133402..1f33eec8 100644
                  /* Phase 31 O3: `v[i]` is `v.get(i)` and `m[k]` is `m.get(k)`.
                     The base's static type names the container instance, so the
                     node is built exactly as an inherent method call would be
-@@ -4624,6 +4804,38 @@ impl ExprOps for Expr {
+@@ -4624,6 +4863,38 @@ impl ExprOps for Expr {
                  mcol = self->lex->tokstart - self->lex->lstart + 1;
                  self->sup->lex_next();
                  if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
@@ -985,7 +1459,7 @@ index 64133402..1f33eec8 100644
                      /* PH-53 L53-7: a method call whose receiver is an optional
                         chain is not supported (evaluation count undefined). */
                      if (self->arena->nodes[n].kind == N_OPT)
-@@ -7146,6 +7358,16 @@ impl ExprTraitInst for Expr {
+@@ -7146,6 +7417,16 @@ impl ExprTraitInst for Expr {
                  return -1;
              }
              self->type_depth--;
@@ -1003,10 +1477,20 @@ index 64133402..1f33eec8 100644
                  || strchr(abuf, '(') || strchr(abuf, ')')
                  || strncmp(abuf, "const ", 6) == 0
 diff --git a/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct b/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct
-index 87d73946..b1c90d7a 100644
+index 87d73946..6980eb33 100644
 --- a/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct
 +++ b/selfhost/ct-ast/frontend/parse/ParseSupport.h.ct
-@@ -74,7 +74,16 @@ pub trait SupportOps {
+@@ -29,6 +29,9 @@ import tool::diag::Diag;
+ #define MAX_TEXT 160
+ #define T_EOF 0
+ #define T_ID 1
++#define N_CALL 7
++#define N_VAR 10
++#define N_SLICE_RANGE 75
+ #define T_NUM 2
+ #define T_PUNCT 4
+ 
+@@ -74,7 +77,20 @@ pub trait SupportOps {
      int  leak_return(int ret, int conditional, int line);
      int  leak_delete(int e);
      int  skip_body(void);
@@ -1014,6 +1498,10 @@ index 87d73946..b1c90d7a 100644
 +       `{ptr,len}` struct and its helpers. The flag lives on `Parser`; the
 +       pointer is bound by `ct_parse_bind`. */
 +    void note_slice(void);
++    /* P-7.2: is the expression a slice view (a slice variable, a subslice or
++       a call returning `T[]`)? Used by the placement checks that must refuse
++       storing a view in an interface / closure environment. */
++    int  expr_is_slice(int n);
      int  init_raw(char *out, int cap);
 +    /* P-7.2: `[` `]` lookahead used by every declaration position, so a slice
 +       spelling can be accepted (local / parameter) or refused (field / global)
@@ -1023,7 +1511,7 @@ index 87d73946..b1c90d7a 100644
      int  skip_after_error(void);
      const char *last_error(void);
  }
-@@ -92,6 +101,8 @@ pub struct ParseSupport {
+@@ -92,6 +108,8 @@ pub struct ParseSupport {
      char errfile[1024];         /* the input the message was recorded against */
      int  errline;               /* 0 = a driver-level message, no source position */
      int  errcol;
@@ -1032,13 +1520,32 @@ index 87d73946..b1c90d7a 100644
  } use SupportOps;
  
  pub struct ParseSupport *parse_support_get(void);
-@@ -104,6 +115,47 @@ impl SupportOps for ParseSupport {
+@@ -104,6 +122,66 @@ impl SupportOps for ParseSupport {
          return n;
      }
  
 +    void note_slice(void)
 +    {
 +        if (self->slice_used) *self->slice_used = 1;
++    }
++
++    int expr_is_slice(int n)
++    {
++        int vi;
++        char rt[MAX_TEXT];
++        if (n < 0) return 0;
++        if (self->arena->nodes[n].kind == N_VAR) {
++            vi = self->sym->find_var(self->arena->nodes[n].text2);
++            return vi >= 0 && self->sym->vars[vi].is_slice;
++        }
++        if (self->arena->nodes[n].kind == N_SLICE_RANGE) return 1;
++        if (self->arena->nodes[n].kind == N_CALL) {
++            rt[0] = 0;
++            if (self->ty->expr_type(n, rt, (int)sizeof rt) == 0
++                && strcmp(rt, "struct __ct_slice") == 0)
++                return 1;
++        }
++        return 0;
 +    }
 +
 +    /* P-7.2: `[` `]` lookahead without consuming. The lexer has no peek, so
@@ -1080,6 +1587,28 @@ index 87d73946..b1c90d7a 100644
      /* A source diagnostic: the position is the token the parser stopped at, and
         the shape is L2's (`file:line:col: error: ...`). Recorded, not printed, so
         the driver can decide when to flush it (and so recovery can drop it). */
+@@ -486,6 +564,21 @@ impl SupportOps for ParseSupport {
+     {
+         const char *why;
+         int box;
++        char msg[MAX_TEXT * 2];
++        /* P-7.2 (P-4.1): an interface slot owns the concrete value it boxes;
++           a slice is a non-owning view and cannot be stored there. The
++           declaration / assignment sites also check with their own accurate
++           positions; this central guard covers the remaining boxing paths
++           (arguments, returns, container elements). */
++        if (self->expr_is_slice(n)) {
++            snprintf(msg, sizeof msg,
++                     "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view",
++                     trait);
++            return tool::diag::ct_sem_error(self->arena->nodes[n].line,
++                                            self->arena->nodes[n].num > 0
++                                                ? self->arena->nodes[n].num : 1,
++                                            msg, self->mem->path);
++        }
+         self->ty->errmsg[0] = 0;
+         box = self->ty->maybe_box(n, trait, addr);
+         if (box < 0) {
 diff --git a/selfhost/ct-ast/frontend/parse/Parser.h.ct b/selfhost/ct-ast/frontend/parse/Parser.h.ct
 index e72acc5d..bda53243 100644
 --- a/selfhost/ct-ast/frontend/parse/Parser.h.ct
@@ -1214,7 +1743,7 @@ index e72acc5d..bda53243 100644
  
  pub struct Parser *parse_get(void);
 diff --git a/selfhost/ct-ast/frontend/parse/Stmt.h.ct b/selfhost/ct-ast/frontend/parse/Stmt.h.ct
-index 9f9832f0..4d98509e 100644
+index 9f9832f0..63189d88 100644
 --- a/selfhost/ct-ast/frontend/parse/Stmt.h.ct
 +++ b/selfhost/ct-ast/frontend/parse/Stmt.h.ct
 @@ -44,6 +44,7 @@ import tool::diag::Diag;
@@ -1237,7 +1766,19 @@ index 9f9832f0..4d98509e 100644
  #define N_SWITCH 42
  #define N_VAR 10
  #define N_WHILE 15
-@@ -2288,9 +2294,35 @@ impl StmtOps for Stmt {
+@@ -1699,6 +1705,11 @@ impl StmtOps for Stmt {
+         (void)self;
+ 
+         if (self->lex->tok != T_ID) return 0;
++        /* P-7.2: `box<T> name` is a declaration shape even though `box` is not
++           a registered type; `parse_type` turns it into the placement error
++           (or the PH-81 "not implemented" error) instead of an expression. */
++        if (strcmp(self->lex->toktext, "box") == 0
++            && self->ex->tok_is_type_name()) return 1;
+         /* an alignment or atomic specifier may open a block-scope declaration */
+         if (strcmp(self->lex->toktext, "_Alignas") == 0) return 1;
+         if (strcmp(self->lex->toktext, "_Atomic") == 0) return 1;
+@@ -2288,9 +2299,35 @@ impl StmtOps for Stmt {
              e = self->ex->parse_expr();
              self->ex->into_ok = 0;
              if (e < 0) return -1;
@@ -1276,7 +1817,7 @@ index 9f9832f0..4d98509e 100644
              /* Phase 43: an `err:` payload is judged on every path, not only
                 under `--types`. The `is_err` branch uses the hard-error diag
                 channel (7), so `ct compile` also refuses to write bad C; the
-@@ -3306,6 +3338,12 @@ impl StmtOps for Stmt {
+@@ -3306,6 +3343,12 @@ impl StmtOps for Stmt {
          snprintf(iname, sizeof iname, "%s", self->sym->vars[vi].type);
          if (strncmp(iname, "struct ", 7) == 0)
              memmove(iname, iname + 7, strlen(iname + 7) + 1);
@@ -1289,7 +1830,7 @@ index 9f9832f0..4d98509e 100644
          inst = frontend::sym::ct_inst_find(iname);
          if (inst >= 0) {
              struct StructInst *ins = frontend::sym::ct_insts(&nargs);
-@@ -3316,7 +3354,7 @@ impl StmtOps for Stmt {
+@@ -3316,7 +3359,7 @@ impl StmtOps for Stmt {
                  aux = 2;
              }
          }
@@ -1298,7 +1839,7 @@ index 9f9832f0..4d98509e 100644
              /* L29-15: a container element would be a second owner of the same
                 buffer, and an interface value would lose its vptr on the copy.
                 Both are the same "the element cannot be copied by value" rule. */
-@@ -3500,7 +3538,11 @@ impl StmtOps for Stmt {
+@@ -3500,7 +3543,11 @@ impl StmtOps for Stmt {
          /* aux: 0 = array, 1 = Vec, 2 = Map; text2 names the container instance
             the emitter calls `len` / `get` / `entry` on. */
          self->arena->nodes[s].aux = aux;
@@ -1311,18 +1852,22 @@ index 9f9832f0..4d98509e 100644
          self->arena->nodes[s].a = c;
          self->arena->nodes[s].d = body;
          return s;
-@@ -3885,6 +3927,8 @@ impl StmtOps for Stmt {
+@@ -3885,6 +3932,9 @@ impl StmtOps for Stmt {
      {
          int n, e, head, tail, base_stars, first_decl, is_fnptr, ap;
          int dcol, dline;
++        int iline, icol;
 +        int is_slice, slice_const, slice_line, slice_col;
 +        char slice_elem[MAX_TEXT];
          char typebuf[MAX_TEXT];
          char name[MAX_TEXT];
          (void)self;
-@@ -3896,6 +3940,27 @@ impl StmtOps for Stmt {
+@@ -3895,7 +3945,30 @@ impl StmtOps for Stmt {
+         self->decl_attr = 0;
          dcol = self->lex->tokstart - self->lex->lstart + 1;
          dline = self->lex->tokline;
++        iline = dline;
++        icol = dcol;
          if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
 +        /* P-7.2: `T[] name` declares a slice local. The `[]` sits between the
 +           element type and the name, so it is consumed here; the C storage is
@@ -1348,7 +1893,7 @@ index 9f9832f0..4d98509e 100644
          head = -1;
          tail = -1;
          base_stars = 0;
-@@ -3929,7 +3994,10 @@ impl StmtOps for Stmt {
+@@ -3929,7 +4002,10 @@ impl StmtOps for Stmt {
              }
              typebuf[tl] = 0;
              if (first_decl) {
@@ -1360,7 +1905,7 @@ index 9f9832f0..4d98509e 100644
                  first_decl = 0;
              }
              for (si = 0; si < stars; si++) {
-@@ -3940,12 +4008,26 @@ impl StmtOps for Stmt {
+@@ -3940,12 +4016,26 @@ impl StmtOps for Stmt {
              snprintf(name, sizeof name, "%s", self->lex->toktext);
              self->sup->lex_next();
              }
@@ -1387,7 +1932,7 @@ index 9f9832f0..4d98509e 100644
              if (self->static_decl) {
                  int vi = self->sym->find_var(name);
                  if (vi >= 0) self->sym->vars[vi].is_static = 1;
-@@ -3966,6 +4048,11 @@ impl StmtOps for Stmt {
+@@ -3966,6 +4056,11 @@ impl StmtOps for Stmt {
                      return tool::diag::ct_sem_error(dim_line, dim_col,
                                                      "'$' cannot be used in an array dimension",
                                                      self->mem->path);
@@ -1399,7 +1944,7 @@ index 9f9832f0..4d98509e 100644
              }
              {
                  /* A trailing attribute on a local (`int x __attribute__((unused));`)
-@@ -3987,7 +4074,100 @@ impl StmtOps for Stmt {
+@@ -3987,7 +4082,100 @@ impl StmtOps for Stmt {
              }
              if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
                  self->sup->lex_next();
@@ -1501,7 +2046,31 @@ index 9f9832f0..4d98509e 100644
                      /* local `static` tables can be long, so the text goes to the
                         arena string pool (`aux = 1`, `num` = offset) */
                      char elemtype[MAX_TEXT];
-@@ -4213,6 +4393,10 @@ impl StmtOps for Stmt {
+@@ -4059,6 +4247,8 @@ impl StmtOps for Stmt {
+                     self->ex->into_ok = 1;
+                     eline = self->lex->tokline;
+                     ecol = self->lex->tokstart - self->lex->lstart + 1;
++                    iline = eline;
++                    icol = ecol;
+                     e = self->ex->parse_expr();
+                     self->ex->into_ok = 0;
+                     self->ex->fnval_ok = 0;
+@@ -4144,6 +4334,14 @@ impl StmtOps for Stmt {
+                    so the name has to be a declared trait. */
+                 if (self->sup->iface_ref_type(typebuf, tr, sizeof tr, &ip)
+                     && self->sym->find_trait(tr) >= 0) {
++                    char imsg[MAX_TEXT * 2];
++                    if (self->sup->expr_is_slice(self->arena->nodes[n].a)) {
++                        snprintf(imsg, sizeof imsg,
++                                 "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view",
++                                 tr);
++                        return tool::diag::ct_sem_error(iline, icol, imsg,
++                                                        self->mem->path);
++                    }
+                     e = self->sup->maybe_box(self->arena->nodes[n].a, tr, ip);
+                     if (e < 0) return -1;
+                     self->arena->nodes[n].a = e;
+@@ -4213,6 +4411,10 @@ impl StmtOps for Stmt {
              int op = 0, k2;
              char oc = self->lex->toktext[0];
              k2 = self->arena->nodes[e].kind;
@@ -1512,7 +2081,7 @@ index 9f9832f0..4d98509e 100644
              /* PH-53 L53-6: an optional chain is a value. */
              if (self->ex->opt_lvalue_check(e, self->arena->nodes[e].line,
                                             self->arena->nodes[e].num) != 0)
-@@ -4220,6 +4404,7 @@ impl StmtOps for Stmt {
+@@ -4220,6 +4422,7 @@ impl StmtOps for Stmt {
              /* Phase 31 O3 (L31-3/L31-4): `v[i] += 1` writes the value. */
              if (self->ex->container_write_check(e) != 0) return -1;
              if (k2 != N_VAR && k2 != N_MEMBER && k2 != N_ARROW && k2 != N_INDEX
@@ -1520,7 +2089,7 @@ index 9f9832f0..4d98509e 100644
                  && k2 != N_DEREF && k2 != N_INTO_SELF)
                  return self->sup->fail("assignment target is not assignable");
              if (oc == '+') op = 1;
-@@ -4319,9 +4504,14 @@ impl StmtOps for Stmt {
+@@ -4319,9 +4522,14 @@ impl StmtOps for Stmt {
                  self->arena->nodes[n].a = e;
              } else {
              k = self->arena->nodes[e].kind;
@@ -1535,6 +2104,21 @@ index 9f9832f0..4d98509e 100644
                  && k != N_DEREF && k != N_INTO_SELF)
                  return self->sup->fail("assignment target is not assignable");
              self->sup->lex_next();
+@@ -4367,6 +4575,14 @@ impl StmtOps for Stmt {
+             }
+             if (self->sup->iface_ref_type(tt, tr, sizeof tr, &ip)
+                 && self->sym->find_trait(tr) >= 0) {
++                char imsg[MAX_TEXT * 2];
++                if (self->sup->expr_is_slice(rhs)) {
++                    snprintf(imsg, sizeof imsg,
++                             "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view",
++                             tr);
++                    return tool::diag::ct_sem_error(rline, rcol, imsg,
++                                                    self->mem->path);
++                }
+                 rhs = self->sup->maybe_box(rhs, tr, ip);
+                 if (rhs < 0) return -1;
+             }
 diff --git a/selfhost/ct-ast/frontend/sym/Symbols.h.ct b/selfhost/ct-ast/frontend/sym/Symbols.h.ct
 index 0bb632db..467c3342 100644
 --- a/selfhost/ct-ast/frontend/sym/Symbols.h.ct
