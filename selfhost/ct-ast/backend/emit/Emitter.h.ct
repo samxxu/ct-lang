@@ -1072,7 +1072,7 @@ static void sb_field_merge(struct Emitter *self, int keep_depth, int keep_ln)
         }
         /* compact in place: `snprintf(dst, n, "%s", dst)` is undefined
            (glibc returns an empty string), so only copy on a real move */
-        if (j != i) snprintf(g_sb.fpath[j], MAX_TEXT, "%s", g_sb.fpath[i]);
+        if (j != i) memmove(g_sb.fpath[j], g_sb.fpath[i], MAX_TEXT);
         g_sb.fowner[j] = g_sb.fowner[i];
         g_sb.fdepth[j] = g_sb.fdepth[i];
         g_sb.fmaybe[j] = g_sb.fmaybe[i];
@@ -5660,7 +5660,7 @@ impl EmitOps for Emitter {
                     if (g_sb.fowner[i2] >= save_l && g_sb.fowner[i2] >= 0) continue;
                     /* skip the self-copy: `snprintf(d, n, "%s", d)` is
                        undefined and glibc returns an empty string */
-                    if (j2 != i2) snprintf(g_sb.fpath[j2], MAX_TEXT, "%s", g_sb.fpath[i2]);
+                    if (j2 != i2) memmove(g_sb.fpath[j2], g_sb.fpath[i2], MAX_TEXT);
                     g_sb.fowner[j2] = g_sb.fowner[i2];
                     g_sb.fdepth[j2] = g_sb.fdepth[i2];
                     g_sb.fmaybe[j2] = g_sb.fmaybe[i2];
