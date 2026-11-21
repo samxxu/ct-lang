@@ -67,3 +67,25 @@ PH-85 卡 §7.4 记的是 `check-docs: OK (2295 relative links in 377 files, v0.
 
 - [PH-85 卡](../../docs/design/phase85.md) §7.4、E85-7
 - [REV 复核](../../docs/reviews/2026-11-21-phase85-rev-verdict.md) §4.1
+
+## DEV 处置（2026-11-21）
+
+已修，且按 REV 允许的方式**重写本地未推历史**（不新增 PATCH：v0.85.0 从未 push/tag，
+收口提交本身被重写，6.7 V-3 的 fix/PATCH 路径不适用；版本仍 0.85.0，五处一致）。
+
+修法：从 `docs/README.md` 移除指向未入库 `guide-for-c-programmers.md` 的一行；**未触碰**
+另一席位的未跟踪 guide 与其 SH-106 链接。
+
+验证（干净归档，判据树 = `git archive HEAD`）：
+
+```console
+$ R=$(mktemp -d /tmp/ph85docs.XXXXXX); git archive HEAD | tar -x -C "$R"
+$ (cd "$R" && python3 test/docs/check-docs.py); echo rc=$?
+check-docs: OK (2317 relative links in 378 files, v0.85.0, 11 hard gates,
+             12 phase status, 5 适用版本 header(s), 2 superseded link(s),
+             10 signoff(s))
+design window: ok (12/12)
+rc=0
+```
+
+`bash selfhost/check-all.sh` 的 11 门见卡 §7.4/§7.7；`bash tools/check.sh g8` 绿。

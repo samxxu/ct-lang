@@ -1,6 +1,6 @@
 # Phase 85 — v1-pre 准备：inventory / spike / M0 粗切 / A 机制
 
-> **状态：完成**（2026-11-21 收口；`v0.85.0`；S85a–S85d 交付，E85-1…8 见 §7）。
+> **状态：完成**（2026-11-21 收口；`v0.85.0`；S85a–S85d 交付；E85-2 **有条件通过（D-018）**；REV 打回 F1–F4 修复见 §7.7）。
 > **签收：EDITOR 2026-11-21**（主编统一签收；卡作者 REQ）。
 > **施工闸门**：PH-84 已收口（含 S84e 文档一致性，`10c23c77`），闸门已过。
 > **前置**：PH-84（ADT/match + 文档一致性）；[D-017](../decisions/D-017.md)、D1–D9。
@@ -145,13 +145,13 @@ battle 文档提交，路径只在 `battle/`，不含编译器改动），因此
 | ID | 断言 | 证据 | 结论 |
 | --- | --- | --- | --- |
 | E85-1 | inventory 覆盖全部子系统；函数集/状态/import 环清单可复核 | `p85_inventory`：27 单元逐行比对、17 个单例状态、138 边、0 环 | ✅ |
-| E85-2 | spike 含行数/耗时/逐字节/ sharp edge；门通过 | [p85_spike.md](p85_spike.md)：391→425 行、`next` 309→39、构建 1053→994 ms、66 文件逐字节、10 条 sharp edge | ⚠️ 结构等价通过；整子系统新语法重写门**不通过**（未覆盖），按 R85-1 退化，见 §8 |
+| E85-2 | spike 含行数/耗时/逐字节/ sharp edge；门结论明确 | [p85_spike.md](p85_spike.md)：391→425 行、`next` 309→39、构建 1053→994 ms、66 文件逐字节、10 条 sharp edge；**整子系统新语法重写门不通过**，按 R85-1 移交 PH-86 per-function（§8） | **有条件通过（D-018）**：spike 已执行 + 度量/逐字节/sharp edge + 明确门结论；不把“门不通过”记成“通过” |
 | E85-3 | M0 纯搬移（body-hash + 机械行白名单）；不新增 import 环 | `p85_m0`：827 个基线 body 全在；6 单元只含自由函数、不 import 宿主；0→0 环 | ✅ |
 | E85-4 | 期望集合基线 + 旧→新映射入库；集合比对在自举段可跑 | `p85_m0_baseline.json`（20 产物）+ `p85_m0_mapping.tsv`（6 行）+ `p85_m0` 产物比对 26 | ✅ |
 | E85-5 | A 机制 `off/warn/error` 可用，默认 `off`，行为零变化 | `p85_a_wire` 9/9；default ≡ off（产物逐字节 diff 空）；`error` 无产物、退出非 0 | ✅ |
 | E85-6 | 测试语料发射逐字节不变；编译器自身差异按两级制 | `p85_m0`/`p85_spike` 的 66 文件清单一致（banner token 归一化）；自举不动点 `diff -r` 空 | ✅ |
-| E85-7 | 既有测试/示例全绿；`check-all` 与 ASan 通过；无新增警告 | 见 §7.4 | （见 §7.4） |
-| E85-8 | 文档/证据入库；单卡回滚不影响 `enum`/`switch`/C enum 旧代码 | 卡 §7/§8 + 3 份 design 文档 + 探针；回滚演练见 §7.5 | ✅ |
+| E85-7 | 既有测试/示例全绿；`check-all` 与 ASan 通过；无新增警告 | 见 §7.4（**干净归档** `git archive HEAD` 重跑；F1 已修） | ✅ |
+| E85-8 | 文档/证据入库；单卡回滚不影响 `enum`/`switch`/C enum 旧代码 | 卡 §7/§8 + 3 份 design 文档 + 探针；**实跑回滚**（先 revert S85d 再 M0）见 §7.5，`enum`/`switch` 样例输出一致 | ✅ |
 
 ### 7.4 总门禁（收口实跑）
 
@@ -207,17 +207,44 @@ check-sanitizers: OK (586 checks, no sanitizer report)          rc=0
 
 另：`p80_retain` 的 ASan/UBSan 轨迹在 check-ast 内为 `ok`（E85-7 的“既有测试/示例全绿”）。
 
-### 7.5 回滚（演练）
+### 7.5 回滚（演练，逆序实跑）
+
+演练在临时 worktree 上做（`git worktree add --detach`），从 HEAD 先 revert S85d、再 revert
+M0，然后构建并跑 `enum`/`switch` 样例。逆序是必须的：S85d 的实现调用 M0 搬出的函数，先
+ret 掉 M0 会让 S85d 的调用悬空。
+
+```console
+$ git worktree add --detach /tmp/p85roll HEAD
+$ cd /tmp/p85roll && git revert --no-edit f377315a      # S85d（A 机制）
+[detached HEAD 1f71c4e7] Revert "feat(ct-ast): p85_a_wire（S85d，B 检查器接进 build，off/warn/error）"
+ 8 files changed, 6 insertions(+), 118 deletions(-)
+$ git revert --no-edit 104dfc54                          # S85c（M0 粗切）
+[detached HEAD ...] Revert "feat(ct-ast): p85_m0（S85c，6 单元纯搬移）"
+ delete mode 100644 selfhost/ct-ast/backend/emit/EmitterText.h.ct
+ ...（其余 5 个新单元 + 映射表删除）
+$ cp .temp/build-ct-ast.sh . && sh build-ct-ast.sh . .temp/b   # 全链
+built .temp/b/ct-ast                                     rc=0（-Wall -Wextra -std=c99 零警告）
+$ for fx in 28_switch 30_enum 271_qualified_enum; do
+>   ./.temp/b/ct-ast test/ast/$fx/prog.ct -o /tmp/$fx.c && cc -std=c99 /tmp/$fx.c -o /tmp/$fx.bin \
+>     && /tmp/$fx.bin | diff -q test/ast/$fx/prog.expected.out -; done
+28_switch: output matches expected
+30_enum: output matches expected
+271_qualified_enum: output matches expected
+$ # 语料回归：test/cases 25/25（compile-only 计入），0 失败
+```
+
+逐项：
 
 - **S85a**：删 `tools/p85_inventory.py` / `docs/design/p85_inventory.md` / 探针即可；
-  无源码影响。
-- **S85b**：spike 不在主线（patch 只在 `test/probes/`），不应用即回滚；主的 66 语料
-  清单不变。
-- **S85c**：`git revert` M0 提交 → 6 个新单元删除、宿主恢复原函数与 `import`；
-  body-hash 基线说明“原文件边界”仍可用；产物集合回到 20。`enum`/`switch`/C enum
-  旧代码不受影响（M0 未触及这些发射路径）。
-- **S85d**：`git revert` A 提交 → `--check-level` 消失、Diag 回到无 `types_level`；
-  默认 `off` 的构建路径本来就不经过新代码，回滚不影响任何既有产物。
+  无源码影响（只与文档/工具相关）。
+- **S85b**：spike 不在主线（patch 只在 `test/probes/`），不应用即回滚；66 语料清单不变。
+- **S85c**：revert M0 → 6 个新单元删除、宿主恢复原函数与 `import`、产物集合回到 20；
+  `enum`/`switch`/C enum 旧代码的发射路径未被 M0 触及，样例输出逐字节一致（上）。
+- **S85d**：revert A → `--check-level` 消失、Diag 回到无 `types_level`；默认 `off` 的构建
+  路径本来就不经过新代码，回滚不影响任何既有产物（上：全链构建 + 样例通过）。
+- 逆序回滚的依赖：S85d 的 `Module.build_main`/`Expr` 内核调用 M0 搬出的
+  `SymbolsTypeText`/`ModuleBoundary` 函数，故必须先 ret S85d；顺序写进本卡，避免“单卡
+  回滚”被误解为任意顺序。
 
 ### 7.6 流程说明
 
@@ -228,10 +255,87 @@ check-sanitizers: OK (586 checks, no sanitizer report)          rc=0
 
 | # | 项 | 现状 | 去向 |
 | --- | --- | --- | --- |
-| 1 | spike 的“整子系统新语法等价重写” | **未覆盖**：只重写了结构（方法拆分），没有迁移 `Str` token 视图、没有 `?`/`errdefer`（词法器无错误通道/无资源）；按 R85-1 记为**门不通过** | PH-86 按 per-function 拆（punct → number → quoted/pp_line → Str 视图），每段独立红绿 |
+| 1 | spike 的“整子系统新语法等价重写” | **未覆盖**：只重写了结构（方法拆分），没有迁移 `Str` token 视图、没有 `?`/`errdefer`（词法器无错误通道/无资源）；按 R85-1 记为**门不通过**，E85-2 按 [D-018](../decisions/D-018.md) 记**有条件通过** | PH-86 按 per-function 拆（punct → number → quoted/pp_line → Str 视图），每段独立红绿；不承诺整体重写 |
 | 2 | M0 只搬“不依赖宿主类型”的自由函数 | 方法、带 `struct X *` 参数的函数、`size_t` 参数的 SHA 组都留在宿主（`p85_m0.md` §2 表）；80 个单元级函数只搬了 63 个 | PH-86–88 的切片逐项处理；`Sha256` 组可单列一个小任务 |
 | 3 | A 机制只接 B 的 `--types` 判定 | `--semantics`（CFG/own）不在本卡；`warn` 的发现走 stderr 文本，不进 `--diagnostics=json` | v1.1 S2（A 默认强制）时扩展 JSON 与语义层 |
 | 4 | A 的默认强制 | 本卡只交付机制，默认 `off`（卡 §1.5） | v1.1 S2；v1.0 只要求 FP=0 证据 |
 | 5 | 导入图仍偏重 | parse 7 单元互依；M0 只保证“不新增环” | 破环单独成案（D-017 A4） |
 | 6 | 单元数上限/4K 阈值 | 卡 §1.4 允许“不设上限、阈值仅告警”；最大单元 `Emitter` 8876 行、`Expr` 8750 行 | M1（v1.1 S1）再校准 |
 | 7 | `p85_spike` 无法在 check-ast 内重建 spike | 归档 patch + 证据；探针只校验 patch 可应用、证据自洽、当前语料一致 | 不需要：spike 是实验，产物是报告 |
+
+### 7.7 REV 打回修复（2026-11-21，verdict `5c2acb26`）
+
+REV 判不通过，四条阻断/判据项 F1–F4；本地未推历史按 T-4 重写（`git rebase -i`），
+**版本仍 `0.85.0`**（未发布；不是 fix，不占 PATCH）。
+
+#### F1 干净归档 dead link（DOC-81）
+
+`docs/README.md` 曾链到未入库的 `guide-for-c-programmers.md`（另一席位的未跟踪文档）。
+修法：从 `docs/README.md` 移除该行（不动对方的未跟踪文件），并把该链接的“入口”留给
+对方文档入库时再加。修后：
+
+```console
+$ R=$(mktemp -d /tmp/ph85docs.XXXXXX); git archive HEAD | tar -x -C "$R"
+$ (cd "$R" && python3 test/docs/check-docs.py); echo rc=$?
+check-docs: OK (2317 relative links in 378 files, v0.85.0, 11 hard gates,
+             12 phase status, 5 适用版本 header(s), 2 superseded link(s),
+             10 signoff(s))
+design window: ok (12/12)
+rc=0
+```
+
+（工作树与归档的差异只剩对方的未跟踪 guide；归档是判据，工作树删除该行后不再依赖它。）
+
+#### F2 M0 提交独立可构建（SH-107）
+
+`e88561af`（旧）缺 3 条调用方 import，`Driver`/`Parser`/`TypeCheck` 调用的搬移函数
+没有原型。重写历史把三条 import 移进 M0 提交，并顺带把 `ct_norm_path` 的
+`extern char *realpath(...)` 声明也放进 M0（随函数走，Linux musl 交叉构建才暴露）：
+
+```console
+$ git archive 104dfc54 | tar -x -C /tmp/p85f2 && cd /tmp/p85f2
+$ cp .temp/build-ct-ast.sh . && sh build-ct-ast.sh . .temp/b
+built .temp/b/ct-ast                                 rc=0（全链，零警告）
+$ ./.temp/b/ct-ast -v
+ct-ast v0.84.1                                       # 该提交未到收口，版本仍是旧值
+$ CT_C_BOUNDARY=allow ./.temp/b/ct-ast test/cases/01_trait_basic.ct -o /tmp/m0x.c \
+>   && cc /tmp/m0x.c -o /tmp/m0x && /tmp/m0x
+Hello, I'm Tom, age 36
+Hello Jerry, I'm Tom
+```
+
+HEAD 上 `p85_m0` 仍绿（见 §7.4 的 check-ast）。`p85_m0_s85d_edits.tsv` 是 S85d 的夹具，
+在 M0 提交处尚不存在，因此 M0 提交的验收是“**可独立构建 + 行为不变**”；探针的全套
+断言在 HEAD 上跑。
+
+#### F3 E85-2 口径（DOC-82）
+
+新增 [D-018](../decisions/D-018.md)（REVIEW 签收、EDITOR 批准；T-8 要求 decision 由非作者签收）：E85-2 = spike 已执行 + 度量 +
+逐字节 + sharp edge + **明确门结论**；整子系统新语法重写按 R85-1 移交 PH-86 的
+per-function 切片。卡 §3（E85-2 行）、§8、`AGENTS.md`、`docs/history/phase-log.md`、
+`docs/roadmap.md`、`docs/session-map.md` 六处统一为“**E85-2 有条件通过（D-018）**”，
+不再有“E85-1…8 全部无条件通过”。
+
+#### F4 回滚（E85-8）
+
+见 §7.5：逆序 revert S85d → M0，临时 worktree 构建 rc=0，`enum`/`switch`/限定枚举
+三个样例输出与 `prog.expected.out` 一致，`test/cases` 25/25。
+HEAD 提交链（重写后）：
+
+```console
+$ git log --oneline 10c23c77..HEAD
+8d7a1241 review: PH-85 复核（v0.85.0，打回）      # REV
+bb10b284 docs(pkg): ct-pkg index 消费侧…           # 另一席位
+a9b0693d chore(ph85): v0.85.0 收口（S85a–S85d，E85-1…8）
+f377315a feat(ct-ast): p85_a_wire（S85d）
+80527418 test(ct-ast): p85_a_wire 红
+104dfc54 feat(ct-ast): p85_m0（S85c，6 单元纯搬移）   # F2：3 imports + realpath
+a319b62e test(ct-ast): p85_m0 红
+d9dcc0b8 feat(ct-ast): p85_spike（S85b）
+4345d08c test(ct-ast): p85_spike 红
+b6dacb3c feat(ct-ast): p85_inventory（S85a）
+89766116 test(ct-ast): p85_inventory 红
+32e3e482 battle(ct-guide-1): ……                    # 另一席位
+```
+
+（上面的 sha 是重写后的本地历史；未 push、未 tag。）

@@ -85,3 +85,25 @@ error: could not revert e88561af...
 
 - [PH-85 卡](../../docs/design/phase85.md) §7.1/S85c、§7.2、§7.5、E85-3/E85-8
 - [REV 复核](../../docs/reviews/2026-11-21-phase85-rev-verdict.md) §4.2
+
+## DEV 处置（2026-11-21）
+
+已修，重写本地未推历史：三条 import 移入 M0 提交本身，并把 `ct_norm_path` 依赖的
+`extern char *realpath(...)` 一并放进 `ModuleBoundary.h.ct`（随函数走；musl `-std=c99`
+不暴露该原型，所以此前只有 Linux 交叉构建会红）。
+
+```console
+$ git archive 104dfc54 | tar -x -C /tmp/p85f2 && cd /tmp/p85f2
+$ cp .temp/build-ct-ast.sh . && sh build-ct-ast.sh . .temp/b
+built .temp/b/ct-ast                                rc=0（全链，零警告）
+$ ./.temp/b/ct-ast -v
+ct-ast v0.84.1                                      # 该提交在收口之前，版本是旧值
+$ CT_C_BOUNDARY=allow ./.temp/b/ct-ast test/cases/01_trait_basic.ct -o /tmp/m0x.c \
+>   && cc /tmp/m0x.c -o /tmp/m0x && /tmp/m0x
+Hello, I'm Tom, age 36
+Hello Jerry, I'm Tom
+```
+
+`bash test/ast/p85_m0.sh <HEAD 的 ct-ast>` 在 HEAD 上 4/4（allowlist 属 S85d 夹具，
+M0 提交处尚不存在；M0 提交的验收是“可独立构建 + 行为不变”）。
+回滚演练（先 S85d 再 M0）见卡 §7.5；版本仍 0.85.0（未发布，重写未推历史）。

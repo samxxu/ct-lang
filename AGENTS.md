@@ -505,7 +505,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 2026-11-21：PH-82 → v0.82.0（`d=0`）；`leaks` 两档、直接环告警、allow-cycle、树模式，E82-1…8 全通过。
 > 2026-11-21：PH-83 → v0.83.0（`d=0`）；契约 v1、`ct index verify`、conformance、Linux x64 产物，E83-1…8 全通过。
 > 2026-11-21：PH-84 → v0.84.0（`d=0`）；最小 ADT/`match`（S84a–S84d），E84-1…8 通过；S84e（文档一致性）按 battle doc-consistency-1 判决 B（最小集）完成，E84-9 通过，A 的全量审计归 DOC-77/78/79。
-> 2026-11-21：PH-85 → v0.85.0（`d=0`）；inventory + 词法器 spike（结构等价通过、整子系统重写门不通过，见卡 §8）+ M0 粗切 6 单元 + A 机制 `--check-level=off|warn|error`（默认 off）；E85-1…8 通过。
+> 2026-11-21：PH-85 → v0.85.0（`d=0`）；inventory + 词法器 spike + M0 粗切 6 单元 + A 机制 `--check-level=off|warn|error`（默认 off）；**E85-2 有条件通过（D-018）**：spike 已执行、度量/逐字节/sharp edge 齐，整子系统新语法重写门不通过、移交 PH-86 per-function；REV 打回 F1–F4 已修（干净归档、M0 提交独立可构建、D-018、逆序回滚演练）。
 > 2026-11-21：PH-84 F1/F2 修复 → v0.84.1（PATCH，LANG-21 fixed）；typedef 别名可作 match 主语、`pub typedef` 跨单元发射 `struct lib_Shape`/`lib_Alias`。
 > 2026-11-21：PKG-14 → v0.83.1（fix）；索引校验非普通文件 exit 2、FIFO 不挂起、ferror/JSON 失败。
 > 2026-11-21：PKG-14 CI 追加 → v0.83.3（fix）；`CT_HOME` 默认索引路径在 glibc 上被自拷贝清空，已修。
@@ -595,7 +595,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
 | 当前版本 | v0.85.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.85.0（PH-85 v1-pre 准备已交付：S85a inventory（27 单元 / 44474 行 / 842 函数 / 138 导入边 / 0 环，`p85_inventory` 逐格校验）、S85b 词法器结构等价 spike（`next` 309→39 行、66 语料逐字节一致、不动点；整子系统新语法重写门**不通过**，PH-86 按 per-function 拆）、S85c M0 粗切（6 个新单元纯搬移，body-hash 全保留、产物 20→26、0 新环）、S85d `ct build --check-level=off|warn|error`（默认 off，行为零变化）；E85-1…8 通过；v1-pre 顺序见 [v1 路线](docs/planning/v1-release-plan.md)（PH-86…88 → v1.0） |
+| 当前阶段 | v0.85.0（PH-85 v1-pre 准备已交付：S85a inventory（27 单元 / 44478 行 / 842 函数 / 138 导入边 / 0 环，`p85_inventory` 逐格校验）、S85b 词法器结构等价 spike（`next` 309→39 行、66 语料逐字节一致、不动点；整子系统新语法重写门**不通过**，PH-86 按 per-function 拆）、S85c M0 粗切（6 个新单元纯搬移，body-hash 全保留、产物 20→26、0 新环）、S85d `ct build --check-level=off|warn|error`（默认 off，行为零变化）；E85-2 有条件通过（D-018）、其余 E85 通过；v1-pre 顺序见 [v1 路线](docs/planning/v1-release-plan.md)（PH-86…88 → v1.0） |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界

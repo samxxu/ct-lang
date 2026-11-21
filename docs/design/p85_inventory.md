@@ -15,7 +15,7 @@
   不计入；方法按 `impl <Trait> for <Type>` 归属。
 - 状态：文件作用域变量（`static`/`pub`），按“主要使用方”归属（B1 规则）。
 - 环：导入图的**基本环**枚举；基线为 0 条，M0 之后仍为 0（J4 只要求“不新增”）。
-- 本次汇总：**27 units, 44474 lines, 842 functions**；导入边 138 条；环 0 条。
+- 本次汇总：**27 units, 44478 lines, 842 functions**；导入边 138 条；环 0 条。
 - 抽查：`test/ast/p85_inventory.sh` 对每个单元重算“行数 / 自由函数 / trait 方法 /
   import 数 / 文件级状态名”，与下表逐格比对；另抽查 3 个跨单元事实
   （`Emitter::emit_node` 的 37 个 `N_*` 判别、`Symbols::symbols_get` 的唯一使用方、
@@ -29,15 +29,15 @@
 | --- | --- | --- | --- | --- |
 | entry | 1 | 139 | 1 | `main`：绑定各单例、按 argv 分派 `build`/`compile`/`check`/`run` |
 | frontend::lex | 1 | 391 | 3 | 源缓冲游标、一对一 token 前瞻（`tok/toktext/toknum`、行/列、数字后缀） |
-| frontend::parse | 7 | 20709 | 329 | 声明/语句/表达式解析、`map` 构建、ADT/match、类型判定的门（`types_mode`） |
+| frontend::parse | 7 | 20710 | 329 | 声明/语句/表达式解析、`map` 构建、ADT/match、类型判定的门（`types_mode`） |
 | frontend::sym | 2 | 2727 | 84 | 符号表、类型/实例/impl/ADT 注册表、类型拼写工具 |
-| frontend::type | 1 | 1081 | 17 | 表达式静态类型推导、boxing 决策（`TypeOps`） |
-| frontend::module | 4 | 3402 | 61 | 单元装载、import 解析、C 边界、循环检测、构建入口 |
+| frontend::type | 1 | 1082 | 17 | 表达式静态类型推导、boxing 决策（`TypeOps`） |
+| frontend::module | 4 | 3403 | 61 | 单元装载、import 解析、C 边界、循环检测、构建入口 |
 | backend::emit | 3 | 9518 | 192 | 节点→C 发射、vtable/初始化器、头文件与 ABI 头、map/model 导出 |
 | backend::mem | 1 | 481 | 15 | 所有权/泄漏分析（`own`/borrow/AutoDrop） |
 | runtime::arena | 1 | 163 | 9 | 节点池与字符串池 |
 | tool::diag | 1 | 758 | 40 | 警告存储、`nsem` 计数、`check` 的严重级、PH-85 的 `types_level` |
-| tool::driver | 1 | 1042 | 12 | 命令行、模式分派、`--check-level` 预扫描 |
+| tool::driver | 1 | 1043 | 12 | 命令行、模式分派、`--check-level` 预扫描 |
 | tool::pkg | 2 | 3847 | 72 | 包管理（`get/install/verify/index`）与索引行校验 |
 | tool::cache | 1 | 168 | 6 | 构建缓存键与依赖折叠 |
 | tool::sh | 1 | 48 | 1 | shell 单引号转义 |
@@ -54,22 +54,22 @@
 | `selfhost/ct-ast/frontend/lex/Lexer.h.ct` | frontend::lex | 391 | LexOps, Lexer, Lexer | 2 | 1 | g_lexer | 0 |
 | `selfhost/ct-ast/frontend/module/MapTable.h.ct` | frontend::module | 56 | Call, MapBind, MapTable | 0 | 0 | - | 0 |
 | `selfhost/ct-ast/frontend/module/Module.h.ct` | frontend::module | 2934 | ModuleOps, Module, Module | 10 | 37 | g_cycle_adj, g_cycle_nout, g_module, g_units | 13 |
-| `selfhost/ct-ast/frontend/module/ModuleBoundary.h.ct` | frontend::module | 378 | ModuleBoundary | 14 | 0 | - | 12 |
+| `selfhost/ct-ast/frontend/module/ModuleBoundary.h.ct` | frontend::module | 379 | ModuleBoundary | 14 | 0 | - | 12 |
 | `selfhost/ct-ast/frontend/module/Unit.h.ct` | frontend::module | 34 | Unit | 0 | 0 | - | 0 |
 | `selfhost/ct-ast/frontend/parse/Expr.h.ct` | frontend::parse | 8703 | ExprOps, ExprTraitInst, ExprSubscript, ExprOptional, ExprNew, ExprAdt, ExprTypes, ExprTry, Expr, Expr | 28 | 85 | g_expr | 17 |
 | `selfhost/ct-ast/frontend/parse/ExprTypeText.h.ct` | frontend::parse | 325 | ExprTypeText | 14 | 0 | - | 15 |
 | `selfhost/ct-ast/frontend/parse/MapBuild.h.ct` | frontend::parse | 897 | MapBuildOps, MapBuild, MapBuild | 7 | 3 | g_mapbuild | 8 |
 | `selfhost/ct-ast/frontend/parse/ParseSupport.h.ct` | frontend::parse | 759 | SupportOps, ParseSupport, ParseSupport | 1 | 44 | g_support | 6 |
-| `selfhost/ct-ast/frontend/parse/Parser.h.ct` | frontend::parse | 4784 | ParseOps, ParseDeclOps, Parser, Parser | 29 | 32 | g_parse, g_calls, g_maps, g_pend_fields | 18 |
+| `selfhost/ct-ast/frontend/parse/Parser.h.ct` | frontend::parse | 4785 | ParseOps, ParseDeclOps, Parser, Parser | 29 | 32 | g_parse, g_calls, g_maps, g_pend_fields | 19 |
 | `selfhost/ct-ast/frontend/parse/Stmt.h.ct` | frontend::parse | 5055 | StmtOps, Stmt, Stmt | 31 | 48 | g_stmt | 12 |
 | `selfhost/ct-ast/frontend/parse/StmtRangeText.h.ct` | frontend::parse | 186 | StmtRangeText | 7 | 0 | - | 10 |
 | `selfhost/ct-ast/frontend/sym/Symbols.h.ct` | frontend::sym | 2310 | TypeAliasOps, SymbolOps, TypeAlias, Fn, Var, Closure, MethAnn, MethodSig, Trait, Field, StructDef, GenericInst, StructTmpl, StructInst, StructImpl, AdtVariant, Adt, Symbols, Symbols, StructTmpl, StructInst, StructImpl, Adt | 24 | 47 | g_symbols, g_tmpls, g_ntmpls, g_insts, g_ninsts, g_impls, g_nimpls, g_adts, g_nadts | 1 |
 | `selfhost/ct-ast/frontend/sym/SymbolsTypeText.h.ct` | frontend::sym | 417 | SymbolsTypeText | 13 | 0 | - | 0 |
-| `selfhost/ct-ast/frontend/type/TypeCheck.h.ct` | frontend::type | 1081 | TypeOps, TypeCheck, TypeCheck | 2 | 15 | g_type | 8 |
+| `selfhost/ct-ast/frontend/type/TypeCheck.h.ct` | frontend::type | 1082 | TypeOps, TypeCheck, TypeCheck | 2 | 15 | g_type | 9 |
 | `selfhost/ct-ast/runtime/arena/Arena.h.ct` | runtime::arena | 163 | ArenaOps, Node, Arena, Arena | 3 | 6 | g_arena | 0 |
 | `selfhost/ct-ast/tool/cache/Cache.h.ct` | tool::cache | 168 | CacheOps, Cache, Cache | 1 | 5 | g_cache | 0 |
 | `selfhost/ct-ast/tool/diag/Diag.h.ct` | tool::diag | 758 | DiagStore, Warn, Diag | 21 | 19 | g_diag | 0 |
-| `selfhost/ct-ast/tool/driver/Driver.h.ct` | tool::driver | 1042 | DriverOps, Driver | 8 | 4 | g_driver | 11 |
+| `selfhost/ct-ast/tool/driver/Driver.h.ct` | tool::driver | 1043 | DriverOps, Driver | 8 | 4 | g_driver | 12 |
 | `selfhost/ct-ast/tool/pkg/Pkg.h.ct` | tool::pkg | 3686 | PkgOps, PkgRec, Pkg, Sha256 | 39 | 27 | g_hexd, g_sha_k, g_pkg | 2 |
 | `selfhost/ct-ast/tool/pkg/PkgIndex.h.ct` | tool::pkg | 161 | PkgIndex | 6 | 0 | - | 1 |
 | `selfhost/ct-ast/tool/sh/Sh.h.ct` | tool::sh | 48 | Sh | 1 | 0 | - | 0 |

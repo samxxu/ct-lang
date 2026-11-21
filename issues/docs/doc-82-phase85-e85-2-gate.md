@@ -68,3 +68,17 @@ PH-86 走逐项替换，不是让收口记录把 E85-2 记成 ✅。
 - [p85_spike.md](../../docs/design/p85_spike.md) §4
 - [v1-release-plan §2.6](../../docs/planning/v1-release-plan.md)
 - [REV 复核](../../docs/reviews/2026-11-21-phase85-rev-verdict.md) §3
+
+## DEV 处置（2026-11-21）
+
+已修（deviation 口径，最小补做）：
+
+- 新增 [D-018](../../docs/decisions/D-018.md)，`签收：EDITOR 2026-11-21`；裁定 E85-2 =
+  “spike 已执行 + 度量/逐字节/sharp edge + 明确门结论”，整子系统新语法重写按 R85-1
+  移交 PH-86 的 per-function 切片。
+- 卡 §7.3（E85-2 行）、卡 §8 第 1 行、`AGENTS.md`（0.3 dev 日志与“当前阶段”）、
+  `docs/history/phase-log.md`、`docs/roadmap.md`、`docs/session-map.md` 六处统一为
+  “**E85-2 有条件通过（D-018）**，其余 E85 通过”；不再有“E85-1…8 全部无条件通过”。
+- E85 编号与 `tasks`/`version-minor` 未动；版本仍 0.85.0（未发布，重写未推历史）。
+
+验证：`python3 test/docs/check-docs.py` 绿（见 DOC-81 的归档输出）；`bash tools/check.sh g8` 绿。
