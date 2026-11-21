@@ -25,8 +25,8 @@
 
 | 项 | 落点 |
 | --- | --- |
-| P2-9 新特性 example（ref/out、slice、box/new、match） | 建议另立 examples issue；本轮不新增代码 |
-| P2-10 覆盖率/容量边界测试 | 并入 [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md) 的容量负例；覆盖率 nightly 报告另立 |
+| P2-9 新特性 example（ref/out、slice、box/new、match） | [DOC-84](../../issues/docs/doc-84-new-feature-examples.md) |
+| P2-10 覆盖率/容量边界测试 | [TEST-25](../../issues/testing/test25-coverage-and-unit.md)；容量负例并入 [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md) |
 | P2-11 包契约 v1 收尾 | 现有 PKG-12/13/15/16/17/19/20 |
 | P2-8 退役 phase77 | `v1-PH-0` 开卡前归档；本轮不动（避免设计窗口漂移） |
 
