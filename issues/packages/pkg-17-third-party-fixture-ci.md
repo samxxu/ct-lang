@@ -7,8 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [ct-pkg-get-contract.md](../../docs/planning/ct-pkg-get-contract.md)、[D-014](../../docs/decisions/D-014.md)、[PKG-14](pkg-14-ph83-index-verify-and-binary.md) |
-| 状态 | open |
-| 处置证据 | **实施中（REQ fixture 规格已出；DEV 建 fixture + 接 CI）** |
+| 状态 | deferred |
+| 处置证据 | **deferred（REQ，2026-11-22；触发：DEV 建 fixture 并接入常规 CI）** |
 
 ## REQ 规格（2026-11-21，方案 A：仓库内 vendored 快照）
 
@@ -97,3 +97,30 @@ test/pkg/fixtures/thirdparty/
 ## 关联
 
 - [D-014](../../docs/decisions/D-014.md)、[PKG-13](pkg-13-legacy-five-field-row-hard-error.md)、[v1 路线 §1.5](../../docs/planning/v1-release-plan.md#L57-L71)
+
+## §复核与处置（REV，2026-11-22，HEAD `38cd4ae4`）
+
+REQ 规格已出，但 fixture 与 CI 段在 HEAD 都还不存在：
+
+```console
+$ ls test/pkg/
+run.sh
+$ ls test/pkg/fixtures
+ls: test/pkg/fixtures: No such file or directory
+$ grep -rn 'pkg17\|PKG-17' test/ .github/ | wc -l
+       0
+$ grep -n 'if: false' .github/workflows/packages.yml
+50:    if: false
+95:    if: false
+```
+
+- 现有 CI 路径：`selfhost/check-all.sh:118` 的第 7 道硬门禁跑 `bash test/pkg/run.sh`，
+  该文件 1707 行里没有 PKG-17 段；`packages.yml` 的 `host` / `target-aarch64` 作业仍是
+  `if: false`，因此“第三方包可安装 + verify/get/build 三步”没有常规断言。
+- 验收缺口：fixture 目录、README（来源/版本/sha256/重生成命令/离线边界）、
+  `pkg17-index` / `pkg17-get` / `pkg17-build` 三步独立失败定位、D-010 三断言，均未落地。
+
+处置：`deferred`。触发条件：DEV 按本卡 §1–§5 建 `test/pkg/fixtures/thirdparty/` 并在
+`test/pkg/run.sh` 增 PKG-17 段（三步独立输出）；若要进 GitHub Actions，需同时解除
+`packages.yml` 的 `if: false` 或新增独立 job。owner：DEV；P2；登记日期 2026-11-22。
+不做原因不是“不必做”，而是当前冻结窗口内未排到该实现；规格已就绪，可直接开工。

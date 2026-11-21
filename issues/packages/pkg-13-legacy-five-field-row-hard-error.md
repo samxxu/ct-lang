@@ -7,8 +7,8 @@
 | 严重度 | High（存量包会立即不可安装） |
 | 锚点 | v0.79.0（2026-11-20） |
 | 文件 | [ct-pkg-get-contract.md](../../docs/planning/ct-pkg-get-contract.md) §3.2/§8、[ct-pkg-index.md](../../docs/ct-pkg-index.md) |
-| 状态 | open |
-| 处置证据 | **待办（DEV 实现；发布顺序由 REQ 协调）** |
+| 状态 | verified |
+| 处置证据 | **verified（REV 复核，2026-11-22，HEAD `38cd4ae4`；`ct-ast` v0.88.2）** |
 
 ## 裁定
 
@@ -62,3 +62,54 @@ ctc: index row for 'acme/util 1.0.0' is legacy (five fields); a six-field row is
 - 跨仓登记（不代改）：`ct-pkg/index@0cdb132` 的 `tools/verify-index.sh` 仍把五字段行当作
   `publisher = "-"` 回放（`:70-80`），与本仓“按行硬错”不一致；该脚本需由 index 仓自行
   更新（先清零旧行，再让回放失败）。本仓只登记，不改对方工作树。
+
+## §复核（REV，2026-11-22，HEAD `38cd4ae4`）
+
+在 HEAD 重新构建 `ct-ast`（`sh .temp/build-ct-ast.sh . .temp/rev-pkg-head`），二进制自报
+`v0.88.2`；以下输出均来自该二进制。
+
+```console
+$ .temp/rev-pkg-head/ct-ast --version
+ct-ast v0.88.2
+$ sh test/ast/p83_legacy.sh .temp/rev-pkg-head/ct-ast
+ok   a requested legacy row exits 1 with the contract message
+ok   the legacy failure writes neither ct.lock nor store
+ok   a six-field row installs even when the file has legacy rows
+ok   the same package rejects @1.0.0 (legacy) while accepting @1.1.0
+ok   MVS skips the lower legacy row for a range that excludes it
+ok   MVS selects the lowest satisfying row and rejects it when legacy
+ok   no range selects the highest row and rejects it when legacy
+ok   verify reports every legacy row by line and skips the six-field row
+ok   a failed legacy request leaves ct.lock byte-identical
+p83_legacy: OK
+$ sh test/ast/p83_verify.sh .temp/rev-pkg-head/ct-ast | tail -2
+ok   comments and blank lines are not rows
+p83_verify: OK
+```
+
+手工夹具（隔离 `HOME` / `CT_HOME`，`five.index` 恰为五字段；`six.index` 为同内容六字段）：
+
+```console
+$ ct index verify five.index
+line 1: legacy-five-field: index row for 'oldutil 1.0.0' is legacy (five fields); a six-field row is required
+index verify: FAIL (1 invalid of 1 rows)          # exit 1
+$ ct index verify six.index
+index verify: OK (1 rows)                          # exit 0
+$ ct get --index five.index acme/oldutil@1.0.0
+ctc: index row for 'acme/oldutil 1.0.0' is legacy (five fields); a six-field row is required
+# exit 1；临时 cwd 内无 ct.lock，$HOME/.ct 下无 store
+```
+
+发布前置（旧行清零）的现状核对：2026-11-22 取到的官方索引 5 行全部为六字段
+（`awk 'NF{print NF}' | sort | uniq -c` → `5 6`），本仓 `ct index verify` 对该索引退出 0
+（`index verify: OK (5 rows)`）。**index 仓的书面时间表/确认**仍由
+[PKG-16](pkg-16-external-baseline-and-schedule.md)（`deferred`）跟踪，不阻塞本卡的行为验收。
+
+逐条对照验收：
+
+- 旧行命中硬错、六字段行正常、混合索引按行判定：`p83_legacy` 9/9；
+- 契约 §9 验收第 4 条（五字段命中即硬错、其余六字段仍可安装）：同上第 1/3 条；
+- 发布说明/迁移口径：`docs/package-guide.md` §4 与 `docs/ct-pkg-index.md` §2 已写硬错与
+  “index 仓先清零”的前置，`docs/history/phase-log.md` v0.83.0 条记录该行为。
+
+结论：`verified`。

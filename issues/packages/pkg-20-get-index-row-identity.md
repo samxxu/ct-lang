@@ -8,7 +8,7 @@
 | 锚点 | v0.84.1（2026-11-21） |
 | 依据 | [对齐清单 A2](../planning/ct-pkg-index-alignment.md)、[契约 §4.4](../planning/ct-pkg-get-contract.md#44-ct-index-verify只读ct-lang-负责)、[D-014](../decisions/D-014.md) |
 | 状态 | open |
-| 处置证据 | **待办（DEV；冻结期 bugfix 切片）** |
+| 处置证据 | **open（REV 复核仍复现，2026-11-22，HEAD `38cd4ae4`；A2 未实现）** |
 
 ## 现象
 
@@ -84,3 +84,40 @@ ctc: git clone of 'file:///tmp/nope' failed       # 没有先报 publisher 错
 - [PKG-21](pkg-21-ct-pkg-index-refactor-ruling.md)（总跟踪）
 - [对齐清单](../planning/ct-pkg-index-alignment.md)
 - [PKG-19](pkg-19-get-index-field-count.md)（A1，独立提交）
+
+## §复核（REV，2026-11-22，HEAD `38cd4ae4`）
+
+A2 在 HEAD **未实现**，仍按卡内现象复现。源码现状：
+
+- `pkg_index_lookup`（`Pkg.h.ct:2630-2780`）只做 `name` / `publisher` 匹配与 digest 拼写检查
+  （`sha_hex_ok`），返回前没有 `index_name_ok`、publisher 字符集、`index_version_ok` 或
+  `tag == 'v' + version` 校验；
+- 这些 helper 仍是 `PkgIndex.h.ct` 的 `pub` 函数（声明 `:32-33`，定义 `:120`/`:136`），可直接复用。
+
+复现（HEAD 构建的 `ct-ast v0.88.2`；隔离 `HOME`/`CT_HOME`）：
+
+```console
+$ ct index verify badtag.index
+line 1: tag-version: index tag 'v9.9.9' must be 'v0.1.0'
+index verify: FAIL (1 invalid of 1 rows)             # exit 1
+$ ct get --index badtag.index pub/foo@0.1.0
+ctc: git clone of 'file:///tmp/nope' failed           # 没有先报 tag 错
+                                                      # exit 1
+
+$ ct index verify badpub.index
+line 1: identity: index publisher 'local' must be non-empty, not 'local', without '/'
+index verify: FAIL (1 invalid of 1 rows)             # exit 1
+$ ct get --index badpub.index local/foo@0.1.0
+ctc: git clone of 'file:///tmp/nope' failed           # 没有先报 publisher 错
+                                                      # exit 1
+```
+
+最小下一步（DEV，P2，冻结期允许的 bugfix）：
+
+1. 先提 `test(pkg): PKG-20 A2 红`（baseline = 本卡复核时的 `38cd4ae4`），覆盖 name /
+   publisher=`local` / version 形状 / tag 四类负例；
+2. 在 `pkg_index_lookup` 返回成功前，对**被选中**的六字段行执行与 verify 相同的校验：
+   `index_name_ok(tok[0])`、publisher 非空/非 `local`/无 `/`、`index_version_ok(tok[1])`、
+   `tag == 'v' + version`；失败在 clone / store / lock 之前；
+3. 不做全文件扫描（未选中坏行不阻塞），不夹带 A1；跑 `p83_legacy` / `p83_verify` /
+   conformance 三件套并同步 `differences.md`（D1 措辞、D2 字段数边界）。

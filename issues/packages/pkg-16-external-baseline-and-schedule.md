@@ -7,8 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.79.0（2026-11-20） |
 | 文件 | [评估](../../docs/reviews/2026-11-20-pkg-contract-proposal-eval.md) §5/§7 |
-| 状态 | open |
-| 处置证据 | **待办（REQ 向提案方索取）** |
+| 状态 | deferred |
+| 处置证据 | **deferred（REQ，2026-11-22；触发：index 仓书面确认）** |
 
 ## 现象
 
@@ -47,3 +47,29 @@
 - 本仓可交付的消费方式（待对方确认）：每个 MINOR 的 `ct-linux-x64.tar.gz` + `.sha256`
   稳定 URL；CI 校验 sha256 后解包取 `ct`（见 [docs/dist.md](../../docs/dist.md)）。
   本卡不 push/tag，产物只在本地 `dist/` 生成并验证。
+
+## §复核与处置（REV，2026-11-22，HEAD `38cd4ae4`）
+
+已核部分：
+
+```console
+$ curl -fsSL https://raw.githubusercontent.com/ct-pkg/index/main/index -o .temp/rev-pkg-head/index
+$ awk 'NF{print NF}' .temp/rev-pkg-head/index | sort | uniq -c
+   5 6
+$ .temp/rev-pkg-head/ct-ast index verify .temp/rev-pkg-head/index
+index verify: OK (5 rows)                            # exit 0
+```
+
+即 2026-11-22 的官方索引 5 行**全部六字段**，五字段清零在事实上已满足；基线 sha、
+`tools/` 清单与 `ct-linux-x64` 消费方式也已能在本仓复核（见上节 DEV 证据）。
+
+仍未满足（本仓不能代做）：
+
+- index 仓**书面**确认五字段清零时间表；
+- CI 如何钉 `ct` 版本（产物 URL/摘要的稳定性承诺）；
+- shell 侧（`package-check.sh` 等）由谁、在哪个版本废弃；
+- `ct index verify` / `ct-linux-x64` 产物消费方式由 index 仓确认。
+
+处置：`deferred`。触发条件：index 仓给出上述书面确认（工单/链接 + 日期）。到时本仓把结论
+写进契约 §11 归属与修订记录，再转 `verified`。owner：REQ（对外索取），P2；登记日期
+2026-11-22。本仓不替对方排期（DB-5 / CF-1）。

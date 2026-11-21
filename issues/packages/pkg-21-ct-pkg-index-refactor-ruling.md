@@ -7,8 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.84.1（2026-11-21） |
 | 依据 | 用户 2026-11-21 裁决；[D-014](../decisions/D-014.md)；[契约 v1](../planning/ct-pkg-get-contract.md)；[消费侧对齐清单](../planning/ct-pkg-index-alignment.md) |
-| 状态 | open |
-| 处置证据 | **accepted（2026-11-21 用户裁定）** |
+| 状态 | deferred |
+| 处置证据 | **deferred（REQ，2026-11-22；触发：PKG-19/20 合入 + index 仓工单可定位）** |
 
 ## 裁决
 
@@ -46,3 +46,28 @@
 - [PKG-19](pkg-19-get-index-field-count.md)（A1）
 - [PKG-20](pkg-20-get-index-row-identity.md)（A2）
 - [消费侧对齐清单](../planning/ct-pkg-index-alignment.md)
+
+## §复核与处置（REV，2026-11-22，HEAD `38cd4ae4`）
+
+逐条对照本卡验收：
+
+| ID | 断言 | 复核结果 |
+| --- | --- | --- |
+| PKG21-1 | ① 的外部修复单可定位，本仓无残留改动 | **未满足**：仓内只有“已另派单”的口径（对齐清单 §0），没有 index 仓工单链接/编号；本仓无 ① 的代码改动（正确） |
+| PKG21-2 | ② PKG-18 已登记 v1.1，冻结窗口内零实现提交 | **满足**：PKG-18 `deferred`（目标 v1.1）；`grep -rn 'index refresh' selfhost/ct-ast` 命中 0 |
+| PKG21-3 | ③ A1/A2 各一提交，双 job 门禁绿；B/C 兼容断言绿 | **未满足**：PKG-19/PKG-20 仍 `open`，`git log --grep=PKG-19/20` 只有立项文档提交，无 `test` 红 + 实现提交 |
+| PKG21-4 | 三项可独立回滚、互不夹带 | 不适用（前置未落地） |
+
+```console
+$ grep -rn 'index refresh\|index_refresh' selfhost/ct-ast | wc -l
+       0
+$ git log --oneline --all --grep='PKG-19' | wc -l
+       2      # 均为 8e81762d / 996fdddd 立项文档，无实现
+$ git log --oneline --all --grep='PKG-20' | wc -l
+       2      # 同上
+```
+
+处置：`deferred`。①③ 的验收都依赖外部工单与 A1/A2 两个 bugfix 落地，本卡不重开裁决。
+触发条件：PKG-19、PKG-20 各以 `test(...) 红` + 实现提交合入，且 index 仓工单/链接可定位后，
+本卡按 PKG21-1…4 逐条复核转 `verified`。owner：REQ（协调 + 总复核）；P2；登记日期
+2026-11-22。冻结纪律不变：不实现 `ct index refresh`，不改六字段/摘要/`ct.lock` v2。

@@ -8,7 +8,7 @@
 | 锚点 | `std 0.19.0`（2026-11-21；同日所有者更新目标名） |
 | 依据 | [language-spec §5.1](../../docs/language-spec.md#L1978-L1989)；[DOC-85](../../issues/docs/doc-85-idiom-priority-card.md) |
 | 状态 | open |
-| 处置证据 | **待办（ct-pkg/std 包；本仓只同步消费文档）** |
+| 处置证据 | **open（REV 复核，2026-11-22：std 0.20.0 已发布 CharStr；本仓消费侧仍用旧名，包侧未留兼容别名）** |
 
 ## 现象
 
@@ -66,3 +66,49 @@
 - [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)
 - [language-spec §5.1](../../docs/language-spec.md#L1978-L1989)
 - [DOC-87](../../issues/docs/doc-87-lib-core-rename.md)（内置层 `namespace core`，另一条线）
+
+## §复核（REV，2026-11-22，HEAD `38cd4ae4`）
+
+包侧（`ct-pkg/std`，只读核对，不代改）：
+
+```console
+$ grep -E '^std ' .temp/rev-pkg-head/index | head -1
+std 0.20.0 ct https://github.com/ct-pkg/std v0.20.0 sha256:60d2e7dd157facc775e80d45e6769c4f2bfe7273feed6af7ccba9676d8ae42a7
+$ .temp/rev-pkg-head/ct-ast index verify .temp/rev-pkg-head/index
+index verify: OK (5 rows)                              # exit 0
+$ git clone --depth 1 --branch v0.20.0 https://github.com/ct-pkg/std std20
+$ git -C std20 log -1 --format='%H %s'
+9949543b0260de6d19223473186b7b873cd90571 release: std 0.20.0
+$ ls std20/std/str/
+CharStr.m.ct   CharStr.shim.h   README.md
+```
+
+- `String.m.ct` 与 `CStrOps.m.ct` 都不在 0.20.0 的 `std/str/`；`CharStr` 已是唯一单元名。
+- 用 HEAD 构建的 `ct-ast` 编译 std 自带消费者：
+  `ct-ast build -I std20 std20/tests/utf8/guide.ct` → `build exit=0`，运行
+  `35 checks, 0 failures`，`exit 0`。
+- 旧导入 `import std::str::String;` 对 0.20.0 直接失败：
+  `ctc: cannot resolve import 'std/str/String'`（exit 1）。std 的 `CHANGELOG.md` 0.20.0
+  明写“不留兼容别名（项目未正式发布）”——与本卡“旧 `String.m.ct` 保留一个 MINOR”的决策
+  **不一致**，需 REQ 书面确认以包侧决定为准，还是要求补兼容单元。
+
+本仓侧（未完成）：
+
+- `examples/wave1-demo/src/main.ct:7` 仍写 `import std::str::String;`；内置 pin 仍是
+  `std 0.19.0`（`selfhost/ct-ast/tool/pkg/Pkg.h.ct:2306`），因此示例现在仍能编译；
+- 生效文档仍有“下一 MINOR 改名”的旧口径：`docs/std-catalog.md:39`、`docs/tutorial.md:739`、
+  `docs/language-spec.md:146`（另 `docs/idioms.md` / `docs/guide-for-c-programmers.md` 已按
+  CharStr 写，口径不齐）；
+- 因为 pin 未升级，把示例改成 `CharStr` 会与 0.19.0 的包内容不一致；0.20.0 又没有旧名别名，
+  所以必须和 pin 升级同一次做。
+
+处置：保持 `open`，不标 `verified`——验收 2（旧导入在兼容窗内可用）被包侧决定推翻且未获
+REQ 确认，验收 5（`examples/wave1-demo` 等消费者迁移）未做。最小下一步：
+
+1. REQ 书面确认：接受 std 0.20.0 “无兼容别名”，并据此改写本卡验收 2/7；或要求 std 包补
+   `String.m.ct` 薄兼容单元（一个 MINOR）；
+2. DEV 在“内置 pin 升到 0.20.0”的同一提交里迁移 `examples/wave1-demo` 与上述三处文档，
+   跑 `ct build` + `ct index verify` + conformance；
+3. 迁移后旧名不再出现在可运行示例与推荐写法中，再转 `verified`。
+
+owner：REQ（兼容裁决）+ DEV（pin/示例/文档）；P2。
