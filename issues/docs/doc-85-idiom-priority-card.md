@@ -16,7 +16,7 @@
 | 原稿 | 问题 | 修正 |
 | --- | --- | --- |
 | “CT 是 C 的超集” | 与 DOC-76 冲突 | 改为下方“开头叙事修正版” |
-| “指针只出现在 shim/MMIO/extern” | 指针在任何 `.ct` 合法 | “主要在 shim/硬件/逃生层；应用层先想 Str/切片/box” |
+| “指针只出现在 shim/MMIO/extern” | 指针在任何 `.ct` 合法 | 改为“指针主要留在 shim/MMIO/extern 与逃生层；应用代码优先 Str/切片/box；指针仍合法” |
 | `"42".to_int()` | 需 `import std::str::String;` | 补 import 前提；内置层不自动带 |
 | “借用类型不能存（字段/容器/全局 = 硬错）” | `Vec<Str>` / `Option<Str>` / ADT 负载可编译；全局 `Str g = "x"` 也可编译 | struct 字段 / `Map` 键硬错；全局/容器/ADT 是借用视图风险 |
 | “返回局部视图 = 硬错” | `Str` 逃逸无 lint（SH-106）；`T[]` 是 warning | 改为“T[] 有 `slice escape` warning；Str 无 lint” |
