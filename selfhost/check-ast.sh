@@ -866,6 +866,24 @@ else
     bad "p86/capi" "$(cat "$work/p86capi.out" "$work/p86capi.err" | head -8)"
 fi
 
+# PH-86 S86c (E86-4): the token-view migration changes no diagnostic. Every
+# fixture under test/ast/errors/ plus the eight lexical-boundary negatives is
+# re-run and compared with the manifest frozen at baseline 1e2c30f7; the S86c
+# scope decision and its L2 pass-through evidence are checked on disk too.
+if bash test/ast/p86_errors.sh "$work/ct-ast" >"$work/p86err.out" 2>"$work/p86err.err"; then
+    ok "p86/errors (E86-4: 345 diagnostics byte-identical, scope evidence)"
+else
+    bad "p86/errors" "$(cat "$work/p86err.out" "$work/p86err.err" | head -8)"
+fi
+
+# PH-86 S86d (E86-6/7): the spec/tutorial lexical boundary and the line/time
+# report. The tutorial §19 snippet is compiled and run, not just grepped.
+if bash test/ast/p86_docs.sh "$work/ct-ast" >"$work/p86doc.out" 2>"$work/p86doc.err"; then
+    ok "p86/docs (E86-6/7: spec/tutorial boundary, metrics, runnable snippet)"
+else
+    bad "p86/docs" "$(cat "$work/p86doc.out" "$work/p86doc.err" | head -8)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
