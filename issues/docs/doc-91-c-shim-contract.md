@@ -28,6 +28,18 @@ C Shim 已经是事实上的架构模式（examples、test/baremetal-renode、�
 5. **ABI**：固定宽度整数、opaque handle、对齐与调用约定、版本兼容；
 6. **测试**：host mock + Renode 冒烟各一例；shim 变更的回归清单。
 
+## DMA / 异步（硬条款）
+
+- **提交即转移**：`board_dma_submit(buf, len, cb)` 返回后，buffer 归驱动所有；CT 侧不得
+  `release`、重分配、写入或移动，直到完成回调返回。
+- **完成即归还**：回调返回后所有权回到 CT；只有此时才允许释放或复用 buffer。
+- **上下文**：回调必须声明运行在 ISR 还是任务上下文；ISR 上下文禁止分配、阻塞、Drop 与
+  引用计数释放；需要延后处理时只投递事件。
+- **借用视图**：不得把 `Str`/切片/句柄的借用视图跨过提交点保存；需要跨异步的数据必须是
+  owning 句柄，且其寿命覆盖到完成回调。
+- **证据**：真搬运仍归 [TEST-22](../../issues/testing/test22-dma-real-transfer-hardware-gated.md)
+  （hardware-gated）；契约只约束 API 责任，不把模拟器寄存器测试当作真板证明。
+
 ## 非目标
 
 - 不设计 C ABI 导出选择（P39 C 方案待评审）；

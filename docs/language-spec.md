@@ -2992,6 +2992,10 @@ parse("ab", n);  /* 调用点不写 out */
   owner 必须先于容器/值/全局的初始化源存活；字面量/immortal 来源安全。
   非 immortal 来源的 warning 归 v1.1（[LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md)），
   本版不做硬错。
+- **异步 / ISR / DMA 边界（非语言保证）**：编译器不追踪 `Str`/切片/句柄在回调、ISR 或 DMA
+  提交后的生命周期；这些由 C Shim 契约（DOC-91）约束——提交后 buffer 归谁、完成后何时归还、
+  ISR 可调用集与回调上下文。v1 冻结期不新增 `isr_safe` / `no_alloc` 关键字；
+  违约由 ASan / 真板证据兜底，不由类型系统证明。
 
 ### 4.71 `box<T>` / `new`：单对象句柄（Phase 81，仅 ct-ast）
 
