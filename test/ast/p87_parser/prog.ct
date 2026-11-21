@@ -1,0 +1,35 @@
+/* PH-87 S87a: the expression shapes whose static C type the parser's
+   `static_ctype` slices answer -- member, call, index, address, deref,
+   sizeof, ternary, unary, cast and the arithmetic operators. The probe also
+   runs `ct check` on this file, so the slices are exercised. */
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+};
+
+int add(int a, int b)
+{
+    return a + b;
+}
+
+int main(void)
+{
+    struct Point p;
+    int arr[3];
+    int *q;
+
+    p.x = 4;
+    p.y = 5;
+    arr[0] = 1;
+    arr[1] = 2;
+    arr[2] = 3;
+    q = &arr[1];
+    printf("%d\n", add(p.x, p.y));
+    printf("%d\n", *q + arr[2]);
+    printf("%d\n", sizeof(struct Point) > 0);
+    printf("%d\n", (p.x > 2) ? p.y : 0);
+    printf("%d\n", -p.x + (int)3.5);
+    return 0;
+}
