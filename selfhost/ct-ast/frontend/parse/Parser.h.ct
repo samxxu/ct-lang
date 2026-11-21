@@ -36,6 +36,7 @@ import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import tool::diag::Diag;
+import frontend::sym::SymbolsTypeText;
 
 #define MAX_FIELDS 64
 #define MAX_IMPORTS 32

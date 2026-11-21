@@ -1,0 +1,417 @@
+/*
+ * SymbolsTypeText.h.ct - moved out of Symbols.h.ct (PH-85 S85c M0, pure move).
+ *
+ * Bodies are byte-identical to the ones this unit used to hold;
+ * the declaration line only loses `static` and gains a `pub`
+ * prototype, the interface change the M0 card allows. See
+ * docs/design/p85_m0.md for the baseline and the old->new map.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+
+#define MAX_TEXT    160
+#define MAX_STRUCT_TPARAMS 2
+
+namespace frontend::sym;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct SymbolsTypeText {
+    int unused;
+}
+
+pub void adt_strip_type(const char *in, char *out, int cap);
+pub int ct_generic_subst(const char *in, const char *word, const char *repl, char *out, int cap);
+pub int ct_inst_encode(const char *tmpl, int nargs, const char *a1, const char *a2, char *out, int cap);
+pub int ct_inst_split(const char *in, char *name, int *nargs, char *a1, char *a2, char *tail, int cap);
+pub int ct_is_container_type(const char *type);
+pub int ct_is_string_value_type(const char *type);
+pub int ct_type_canon(const char *in, char *out, int cap);
+pub int generic_tag_prefix(const char *in, const char *p);
+pub int generic_word_char(int c);
+pub void impl_arg_canon(const char *arg, char *out, int cap);
+pub int impl_pat_split(const char *pat, char *name, char *a1, char *a2, int *na);
+pub int inst_enc_one(const char *arg, char *out, int cap);
+pub void meth_host_key(const char *host, char *out, int cap);
+
+/* The bare C name behind a type spelling: whitespace, `*`, `const` / `volatile`
+   and the `struct` / `union` keyword are dropped. `Alias *` and
+   `const struct lib_Shape *` both answer `Alias` / `lib_Shape`. */
+void adt_strip_type(const char *in, char *out, int cap)
+{
+    const char *b;
+    size_t n;
+
+    b = in ? in : "";
+    while (*b == ' ' || *b == '\t' || *b == '\n' || *b == '\r') b++;
+    n = strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t' || b[n - 1] == '\n'
+                     || b[n - 1] == '\r' || b[n - 1] == '*'))
+        n--;
+    if (n >= (size_t)cap) n = (size_t)cap - 1;
+    memcpy(out, b, n);
+    out[n] = 0;
+    b = out;
+    for (;;) {
+        if (strncmp(b, "const ", 6) == 0) b += 6;
+        else if (strncmp(b, "volatile ", 9) == 0) b += 9;
+        else if (strncmp(b, "struct ", 7) == 0) b += 7;
+        else if (strncmp(b, "union ", 6) == 0) b += 6;
+        else break;
+        while (*b == ' ' || *b == '\t') b++;
+    }
+    if (b != out) memmove(out, b, strlen(b) + 1);
+}
+
+int ct_generic_subst(const char *in, const char *word, const char *repl, char *out, int cap)
+{
+    int n, wl, rl;
+    const char *p;
+
+    wl = (int)strlen(word);
+    rl = (int)strlen(repl);
+    n = 0;
+    p = in;
+    if (wl == 0) {
+        if ((int)strlen(in) + 1 > cap) return -1;
+        snprintf(out, (size_t)cap, "%s", in);
+        return 0;
+    }
+    while (*p) {
+        if ((p == in || !generic_word_char((unsigned char)p[-1]))
+            && strncmp(p, word, (size_t)wl) == 0
+            && !generic_word_char((unsigned char)p[wl])
+            && !generic_tag_prefix(in, p)) {
+            if (n + rl + 1 > cap) return -1;
+            memcpy(out + n, repl, (size_t)rl);
+            n += rl;
+            p += wl;
+        } else {
+            if (n + 2 > cap) return -1;
+            out[n] = *p;
+            n++;
+            p++;
+        }
+    }
+    out[n] = 0;
+    return 0;
+}
+
+int ct_inst_encode(const char *tmpl, int nargs, const char *a1, const char *a2,
+                   char *out, int cap)
+{
+    char buf[MAX_TEXT * 2];
+    char enc[MAX_TEXT];
+    int n, i, r, k;
+    int h;
+
+    if (nargs > MAX_STRUCT_TPARAMS) return -1;
+    r = snprintf(buf, sizeof buf, "%s", tmpl);
+    if (r < 0 || r >= (int)sizeof buf) return -1;
+    n = r;
+    for (i = 0; i < nargs; i++) {
+        if (inst_enc_one(i == 0 ? a1 : a2, enc, MAX_TEXT) < 0) return -1;
+        r = snprintf(buf + n, sizeof buf - (size_t)n, "_%s", enc);
+        if (r < 0 || n + r >= (int)sizeof buf) return -1;
+        n += r;
+    }
+    /* Beyond 63 characters the spelling stops being readable in C, so keep a
+       prefix and a digest of the whole thing (§2.2 step 5). */
+    if (n >= 64) {
+        h = 0;
+        for (k = 0; k < n; k++) h = (h * 31 + (unsigned char)buf[k]) & 0x7fffffff;
+        r = snprintf(out, (size_t)cap, "%.40s_h%08x", buf, (unsigned int)h);
+        if (r < 0 || r >= cap) return -1;
+        return 0;
+    }
+    if (n + 1 > cap) return -1;
+    snprintf(out, (size_t)cap, "%s", buf);
+    return 0;
+}
+
+/* Split `[struct ]Name<a[, b]>` into the template name, the canonical argument
+   spellings and the suffix after `>` (stars, dims). The argument list honours
+   nesting (`Vec<Vec<int> >` has one argument) and either arity of the frozen
+   cap. Both the emitter (resolve) and the parser (register a nested instance)
+   read the same shape through this one scanner. */
+int ct_inst_split(const char *in, char *name, int *nargs, char *a1, char *a2, char *tail, int cap)
+{
+    const char *p, *lt, *gt, *base;
+    int r, depth, i;
+
+    *nargs = 0;
+    a1[0] = 0;
+    a2[0] = 0;
+    tail[0] = 0;
+    p = in;
+    while (*p == ' ') p++;
+    if (strncmp(p, "struct ", 7) == 0) p += 7;
+    lt = strchr(p, '<');
+    if (!lt) return -1;
+    base = p;
+    r = (int)(lt - base);
+    while (r > 0 && base[r - 1] == ' ') r--;
+    if (r <= 0 || r >= cap) return -1;
+    memcpy(name, base, (size_t)r);
+    name[r] = 0;
+    gt = lt;
+    depth = 0;
+    for (; *gt; gt++) {
+        if (*gt == '<') depth++;
+        else if (*gt == '>') {
+            depth--;
+            if (depth == 0) break;
+        }
+    }
+    if (!*gt) return -1;
+    {
+        const char *a = lt + 1;
+        const char *b = a;
+        depth = 0;
+        for (;;) {
+            if (*b == 0 || (*b == ',' && depth == 0) || (b == gt)) {
+                int len = (int)(b - a);
+                char raw[MAX_TEXT];
+                char canon[MAX_TEXT];
+                if (*nargs >= MAX_STRUCT_TPARAMS || len <= 0 || len >= MAX_TEXT) return -1;
+                memcpy(raw, a, (size_t)len);
+                raw[len] = 0;
+                if (ct_type_canon(raw, canon, sizeof canon) != 0) return -1;
+                if (*nargs == 0) snprintf(a1, (size_t)cap, "%s", canon);
+                else snprintf(a2, (size_t)cap, "%s", canon);
+                *nargs = *nargs + 1;
+                if (b == gt) break;
+                a = b + 1;
+                b = a;
+                continue;
+            }
+            if (*b == '<') depth++;
+            else if (*b == '>') depth--;
+            b++;
+        }
+    }
+    i = snprintf(tail, (size_t)cap, "%s", gt + 1);
+    if (i < 0 || i >= cap) return -1;
+    return 0;
+}
+
+/* Phase 29: a by-value built-in container. Trailing blanks are ignored; a
+   trailing `*` means the value is a pointer and therefore not a container. */
+int ct_is_container_type(const char *type)
+{
+    size_t n;
+
+    if (type == 0) return 0;
+    n = strlen(type);
+    while (n > 0 && (type[n - 1] == ' ' || type[n - 1] == '\t')) n--;
+    if (n > 0 && type[n - 1] == '*') return 0;
+    if (strncmp(type, "struct Vec_", 11) == 0) return 1;
+    if (strncmp(type, "struct Map_", 11) == 0) return 1;
+    return 0;
+}
+
+/* PH-80 SH-102: the two owning string handles whose by-value copies carry a
+   reference. The spelling is the parser's canonical `struct <Name>`; the bare
+   name is accepted too so a pre-canonical caller cannot silently miss it. */
+int ct_is_string_value_type(const char *type)
+{
+    const char *b;
+    size_t n;
+
+    if (type == 0) return 0;
+    b = type;
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    while (*b == ' ' || *b == '\t') b++;
+    n = strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) n--;
+    if (n == 0 || b[n - 1] == '*' || b[n - 1] == ']') return 0;
+    if (n == 6 && strncmp(b, "String", 6) == 0) return 1;
+    if (n == 9 && strncmp(b, "U16String", 9) == 0) return 2;
+    return 0;
+}
+
+/* `char *` -> `char*`, `unsigned   int` -> `unsigned int`, leading and trailing
+   blanks dropped. Nothing else is normalized, so the spelling stays readable
+   and two spellings that mean the same type still need the same spelling. */
+int ct_type_canon(const char *in, char *out, int cap)
+{
+    int n = 0, sp = 0;
+    const char *p = in;
+
+    while (*p == ' ' || *p == '\t') p++;
+    while (*p) {
+        if (*p == ' ' || *p == '\t') {
+            sp = 1;
+            p++;
+            continue;
+        }
+        if (*p == '*') {
+            sp = 0;
+            if (n + 2 > cap) return -1;
+            out[n] = '*';
+            n++;
+            p++;
+            continue;
+        }
+        if (sp && n > 0) {
+            if (n + 2 > cap) return -1;
+            out[n] = ' ';
+            n++;
+        }
+        sp = 0;
+        if (n + 2 > cap) return -1;
+        out[n] = *p;
+        n++;
+        p++;
+    }
+    out[n] = 0;
+    return 0;
+}
+
+/* Phase 26 fix (SH-63): `struct T` names a tag, not the type parameter. If the
+   word is preceded (ignoring spaces) by struct/union/enum, leave it alone. */
+int generic_tag_prefix(const char *in, const char *p)
+{
+    const char *e, *s;
+    int n;
+
+    e = p;
+    while (e > in && (e[-1] == ' ' || e[-1] == '\t')) e--;
+    s = e;
+    while (s > in && generic_word_char((unsigned char)s[-1])) s--;
+    n = (int)(e - s);
+    return (n == 6 && strncmp(s, "struct", 6) == 0)
+        || (n == 5 && strncmp(s, "union", 5) == 0)
+        || (n == 4 && strncmp(s, "enum", 4) == 0);
+}
+
+int generic_word_char(int c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+        || (c >= '0' && c <= '9') || c == '_';
+}
+
+/* Strip the C `struct ` prefix and every blank, so `struct Box_int`, `Box_int`
+   and the pattern's `Box_int` compare equal. */
+void impl_arg_canon(const char *arg, char *out, int cap)
+{
+    const char *s = arg;
+    int n = 0;
+
+    if (strncmp(s, "struct ", 7) == 0) s += 7;
+    while (*s && n < cap - 1) {
+        if (*s != ' ' && *s != '\t') out[n++] = *s;
+        s++;
+    }
+    out[n] = 0;
+}
+
+/* `Name<a, b>` -> name plus the two top-level argument spellings. 0 when the
+   spelling is not a template application. */
+int impl_pat_split(const char *pat, char *name, char *a1, char *a2, int *na)
+{
+    const char *lt = strchr(pat, '<');
+    const char *end, *p, *seg;
+    int depth = 0, n = 0, len;
+
+    if (!lt) return 0;
+    len = (int)strlen(pat);
+    if (len == 0 || pat[len - 1] != '>') return 0;
+    if ((int)(lt - pat) >= MAX_TEXT) return 0;
+    memcpy(name, pat, (size_t)(lt - pat));
+    name[(size_t)(lt - pat)] = 0;
+    end = pat + len - 1;
+    a1[0] = 0;
+    a2[0] = 0;
+    seg = lt + 1;
+    for (p = lt + 1; p <= end; p++) {
+        if (p == end || (*p == ',' && depth == 0)) {
+            char *dst = n == 0 ? a1 : a2;
+            int sl = (int)(p - seg), i = 0;
+            while (sl > 0 && (*seg == ' ' || *seg == '\t')) {
+                seg++;
+                sl--;
+            }
+            while (sl > 0 && (seg[sl - 1] == ' ' || seg[sl - 1] == '\t')) sl--;
+            if (sl >= MAX_TEXT) sl = MAX_TEXT - 1;
+            for (i = 0; i < sl; i++) dst[i] = seg[i];
+            dst[sl] = 0;
+            n++;
+            seg = p + 1;
+            continue;
+        }
+        if (*p == '<') depth++;
+        else if (*p == '>') depth--;
+    }
+    *na = n;
+    return n > 0;
+}
+
+/* One encoded type argument: `struct Point` -> `Point`, `char*` -> `char_p`,
+   `Vec<int>` -> `Vec_l_int_r` (§2.2 step 3). */
+int inst_enc_one(const char *arg, char *out, int cap)
+{
+    int n = 0, rl;
+    const char *p = arg;
+    const char *rep;
+
+    if (strncmp(p, "struct ", 7) == 0) {
+        p += 7;
+    } else if (strncmp(p, "union ", 6) == 0) {
+        if (n + 3 > cap) return -1;
+        out[n] = 'u';
+        out[n + 1] = '_';
+        n += 2;
+        p += 6;
+    } else if (strncmp(p, "enum ", 5) == 0) {
+        if (n + 3 > cap) return -1;
+        out[n] = 'e';
+        out[n + 1] = '_';
+        n += 2;
+        p += 5;
+    }
+    while (*p) {
+        rep = "";
+        if (*p == '*') rep = "_p";
+        else if (*p == ' ') rep = "_";
+        else if (*p == '_') rep = "__";
+        else if (*p == '<') rep = "_l";
+        else if (*p == '>') rep = "_r";
+        else if (*p == ',') rep = "_c";
+        rl = (int)strlen(rep);
+        if (rl > 0) {
+            if (n + rl + 1 > cap) return -1;
+            memcpy(out + n, rep, (size_t)rl);
+            n += rl;
+        } else {
+            if (n + 2 > cap) return -1;
+            out[n] = *p;
+            n++;
+        }
+        p++;
+    }
+    out[n] = 0;
+    return n;
+}
+
+/* Phase 78 S2b: the key an inherent method's annotation is stored under. The
+   tag prefix (`struct` / `union`) and the generic argument list are dropped,
+   so `Box`, `struct Box` and `struct Box<int>` name the same template host. */
+void meth_host_key(const char *host, char *out, int cap)
+{
+    const char *p;
+    int i;
+
+    p = host;
+    if (strncmp(p, "struct ", 7) == 0) p += 7;
+    else if (strncmp(p, "union ", 6) == 0) p += 6;
+    i = 0;
+    while (*p && *p != '<' && *p != ' ' && *p != '*' && i + 1 < cap) {
+        out[i] = *p;
+        i++;
+        p++;
+    }
+    out[i] = 0;
+}

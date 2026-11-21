@@ -1,0 +1,161 @@
+/*
+ * PkgIndex.h.ct - moved out of Pkg.h.ct (PH-85 S85c M0, pure move).
+ *
+ * Bodies are byte-identical to the ones this unit used to hold;
+ * the declaration line only loses `static` and gains a `pub`
+ * prototype, the interface change the M0 card allows. See
+ * docs/design/p85_m0.md for the baseline and the old->new map.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <dirent.h>
+
+import tool::sh::Sh;
+
+#define INDEX_ERR_STRIDE   560
+#define INDEX_ERR_KIND_OFF 4
+#define INDEX_ERR_MSG_OFF  36
+
+namespace tool::pkg;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct PkgIndex {
+    int unused;
+}
+
+pub int index_err_add(char **errs, int *nerr, int *cerr, int line, const char *kind, const char *msg);
+pub void index_json_str(const char *s);
+pub void index_json_err_list(const char *errs, int nerr);
+pub int index_io_fail(const char *prog, const char *path, int json, const char *kind, const char *msg);
+pub int index_name_ok(const char *s);
+pub int index_version_ok(const char *s);
+
+int index_err_add(char **errs, int *nerr, int *cerr,
+                         int line, const char *kind, const char *msg)
+{
+    char *p;
+    int nc;
+
+    if (*nerr >= *cerr) {
+        nc = *cerr ? *cerr * 2 : 16;
+        p = (char *)realloc(*errs, (size_t)nc * (size_t)INDEX_ERR_STRIDE);
+        if (p == NULL) return -1;
+        *errs = p;
+        *cerr = nc;
+    }
+    p = *errs + (size_t)(*nerr) * (size_t)INDEX_ERR_STRIDE;
+    memcpy(p, &line, sizeof line);
+    snprintf(p + INDEX_ERR_KIND_OFF, 32, "%s", kind);
+    snprintf(p + INDEX_ERR_MSG_OFF, 512, "%s", msg);
+    *nerr = *nerr + 1;
+    return 0;
+}
+
+void index_json_str(const char *s)
+{
+    const unsigned char *p = (const unsigned char *)s;
+
+    putchar('"');
+    while (*p) {
+        unsigned char c = *p++;
+        if (c == '"' || c == '\\') {
+            putchar('\\');
+            putchar((int)c);
+        } else if (c == '\n') {
+            printf("\\n");
+        } else if (c == '\r') {
+            printf("\\r");
+        } else if (c == '\t') {
+            printf("\\t");
+        } else if (c < 0x20) {
+            printf("\\u%04x", (int)c);
+        } else {
+            putchar((int)c);
+        }
+    }
+    putchar('"');
+}
+
+/* Emit the accumulated row errors as a JSON array body (no brackets). */
+void index_json_err_list(const char *errs, int nerr)
+{
+    int i;
+
+    for (i = 0; i < nerr; i++) {
+        const char *rec = errs + (size_t)i * (size_t)INDEX_ERR_STRIDE;
+        int eline;
+        memcpy(&eline, rec, sizeof eline);
+        if (i) putchar(',');
+        printf("{\"line\":%d,\"kind\":", eline);
+        index_json_str(rec + INDEX_ERR_KIND_OFF);
+        printf(",\"message\":");
+        index_json_str(rec + INDEX_ERR_MSG_OFF);
+        putchar('}');
+    }
+}
+
+/* A fatal input error: the path is not a regular file, cannot be opened, or
+   could not be read. Exit 2 (contract §4.4). `--json` must still be a failure
+   object -- never `ok:true` for a directory/device/FIFO (PKG-14). */
+int index_io_fail(const char *prog, const char *path, int json,
+                         const char *kind, const char *msg)
+{
+    if (json) {
+        printf("{\"index\":");
+        index_json_str(path);
+        printf(",\"ok\":false,\"rows\":0,\"valid\":0,\"invalid\":1,"
+               "\"errors\":[{\"line\":0,\"kind\":");
+        index_json_str(kind);
+        printf(",\"message\":");
+        index_json_str(msg);
+        printf("}]}\n");
+    } else {
+        fprintf(stderr, "%s: %s\n", prog, msg);
+    }
+    return 2;
+}
+
+int index_name_ok(const char *s)
+{
+    const char *p;
+
+    if (!s[0]) return 0;
+    if (!((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= '0' && s[0] <= '9'))) return 0;
+    for (p = s + 1; *p; p++) {
+        if ((*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') || *p == '-') continue;
+        return 0;
+    }
+    return 1;
+}
+
+/* `x.y.z`: three non-empty digit runs of at most nine digits, no sign. The
+   resolver's `version_parse` is looser (it accepts a bare major); verify is
+   the strict contract check. */
+int index_version_ok(const char *s)
+{
+    const char *p;
+    int parts, digits;
+
+    p = s;
+    parts = 0;
+    digits = 0;
+    while (*p) {
+        if (*p >= '0' && *p <= '9') {
+            digits++;
+            if (digits > 9) return 0;
+            p++;
+            continue;
+        }
+        if (*p == '.') {
+            if (digits == 0 || parts >= 2) return 0;
+            parts++;
+            digits = 0;
+            p++;
+            continue;
+        }
+        return 0;
+    }
+    return (digits > 0 && parts == 2);
+}

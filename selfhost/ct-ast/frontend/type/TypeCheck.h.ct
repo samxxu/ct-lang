@@ -21,6 +21,7 @@ import frontend::sym::Symbols::StructTmpl as StructTmpl;
 import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::sym::Symbols::StructImpl as StructImpl;
 import runtime::arena::Arena;
+import frontend::sym::SymbolsTypeText;
 
 #define MAX_TEXT 160
 /* one item of a `{ … }` list, and the text it rewrites to (boxing a struct

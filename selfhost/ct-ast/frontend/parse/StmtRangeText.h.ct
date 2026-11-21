@@ -1,0 +1,186 @@
+/*
+ * StmtRangeText.h.ct - moved out of Stmt.h.ct (PH-85 S85c M0, pure move).
+ *
+ * Bodies are byte-identical to the ones this unit used to hold;
+ * the declaration line only loses `static` and gains a `pub`
+ * prototype, the interface change the M0 card allows. See
+ * docs/design/p85_m0.md for the baseline and the old->new map.
+ */
+#include <limits.h>
+#include <stdio.h>
+#include <string.h>
+
+import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
+import frontend::lex::Lexer;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::sym::Symbols::StructInst as StructInst;
+import backend::mem::Memory;
+import frontend::parse::ParseSupport;
+import frontend::parse::Expr;
+import tool::diag::Diag;
+
+#define MAX_TEXT 160
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct StmtRangeText {
+    int unused;
+}
+
+pub int loop_count_class(const char *t);
+pub int map_brace_target(const char *type, char *entry, int ecap, char *iname, int icap, char *ktype, int kcap, char *vtype, int vcap);
+pub int range_digit(int c, int base);
+pub int range_dim_value(const char *dims, long *out);
+pub void range_element_spelling(const char *type, char *out, int cap);
+pub int range_vec_target(const char *type, char *elem, int ecap, char *iname, int icap);
+pub int vbrace_type_same(const char *a, const char *b);
+
+/* Classify the static type of a `loop` count: 1 = an integer type, 0 = a type
+   that is confidently not one (L22-5), -1 = unknown, which is never diagnosed
+   (a false positive is worse than a miss). Pointers, arrays and function types
+   are not integers; `enum` and `_Bool` are. */
+int loop_count_class(const char *t)
+{
+    char w[MAX_TEXT];
+    int n, words;
+
+    if (strchr(t, '*') || strchr(t, '[') || strchr(t, '(')) return 0;
+    if (strncmp(t, "struct ", 7) == 0 || strncmp(t, "union ", 6) == 0) return 0;
+    if (strncmp(t, "enum ", 5) == 0) return 1;
+    words = 0;
+    while (*t) {
+        while (*t == ' ' || *t == '\t') t++;
+        if (!*t) break;
+        n = 0;
+        while (*t && *t != ' ' && *t != '\t') {
+            if (n < MAX_TEXT - 1) w[n++] = *t;
+            t++;
+        }
+        w[n] = 0;
+        if (strcmp(w, "const") == 0 || strcmp(w, "volatile") == 0) continue;
+        words = 1;
+        if (strcmp(w, "char") == 0 || strcmp(w, "short") == 0 || strcmp(w, "int") == 0
+            || strcmp(w, "long") == 0 || strcmp(w, "signed") == 0
+            || strcmp(w, "unsigned") == 0 || strcmp(w, "_Bool") == 0)
+            continue;
+        if (strcmp(w, "float") == 0 || strcmp(w, "double") == 0 || strcmp(w, "void") == 0)
+            return 0;
+        /* an unresolved alias or a spelling this layer cannot classify */
+        return -1;
+    }
+    return words ? 1 : -1;
+}
+
+/* Phase 31 S14a: the row lookup for a by-value `Map`. Its constructor takes the
+   nested `MapEntry` instance: `MapEntry_` plus the `Map_` suffix (P14). */
+int map_brace_target(const char *type, char *entry, int ecap, char *iname, int icap, char *ktype, int kcap, char *vtype, int vcap)
+{
+    const char *base;
+    int ii;
+    struct StructInst *ins;
+
+    if (strncmp(type, "struct ", 7) != 0) return 0;
+    base = type + 7;
+    if (strpbrk(base, " *[(")) return 0;
+    ins = frontend::sym::ct_insts(0);
+    ii = frontend::sym::ct_inst_find(base);
+    if (!ins || ii < 0) return 0;
+    if (strcmp(ins[ii].tmpl, "Map") != 0 || ins[ii].nargs != 2) return 0;
+    if (strncmp(ins[ii].name, "Map_", 4) != 0) return 0;
+    snprintf(entry, (size_t)ecap, "struct MapEntry_%s", ins[ii].name + 4);
+    snprintf(iname, (size_t)icap, "%s", ins[ii].name);
+    snprintf(ktype, (size_t)kcap, "%s", ins[ii].ctype[0]);
+    snprintf(vtype, (size_t)vcap, "%s", ins[ii].ctype[1]);
+    return 1;
+}
+
+int range_digit(int c, int base)
+{
+    if (c >= '0' && c <= '9') return (c - '0' < base) ? c - '0' : -1;
+    if (base == 16) {
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    }
+    return -1;
+}
+
+/* A numeric dimension as `parse_array_dims` normalises it: `[13]` -> 13.
+   Anything else (`[]`, `[N]`, `[BASE + 1]`) is left to C. */
+int range_dim_value(const char *dims, long *out)
+{
+    long v = 0;
+    int i = 1, nd = 0;
+
+    if (dims[0] != '[') return 0;
+    while (dims[i] >= '0' && dims[i] <= '9') {
+        if (v > 1000000) return 0;
+        v = v * 10 + (dims[i] - '0');
+        i++;
+        nd++;
+    }
+    if (!nd || dims[i] != ']') return 0;
+    *out = v;
+    return 1;
+}
+
+/* The element spelling used in the L24-6 message, without the storage class. */
+void range_element_spelling(const char *type, char *out, int cap)
+{
+    const char *p = type;
+    for (;;) {
+        if (strncmp(p, "static ", 7) == 0) p += 7;
+        else if (strncmp(p, "const ", 6) == 0) p += 6;
+        else if (strncmp(p, "extern ", 7) == 0) p += 7;
+        else if (strncmp(p, "volatile ", 9) == 0) p += 9;
+        else if (strncmp(p, "register ", 9) == 0) p += 9;
+        else break;
+    }
+    snprintf(out, (size_t)cap, "%s", p);
+}
+
+/* Phase 29 P29-1: `Vec<T>` as a declaration type. `type` is the C spelling the
+   type parser produced (`struct Vec_int`), so the instance row already holds the
+   element's C type and the encoded name. 0 when the spelling is not a by-value
+   `Vec` instance: a pointer (`struct Vec_int *`) or a `Map` stays on the array
+   path, and the caller keeps the frozen L24-5 text. The compiler reads the
+   row's *type arguments*, never the container's layout (B29-3). */
+int range_vec_target(const char *type, char *elem, int ecap,
+                            char *iname, int icap)
+{
+    const char *base;
+    int ii;
+    struct StructInst *ins;
+
+    if (strncmp(type, "struct ", 7) != 0) return 0;
+    base = type + 7;
+    if (strpbrk(base, " *[(")) return 0;
+    ins = frontend::sym::ct_insts(0);
+    ii = frontend::sym::ct_inst_find(base);
+    if (!ins || ii < 0) return 0;
+    if (strcmp(ins[ii].tmpl, "Vec") != 0 || ins[ii].nargs != 1) return 0;
+    snprintf(elem, (size_t)ecap, "%s", ins[ii].ctype[0]);
+    snprintf(iname, (size_t)icap, "%s", ins[ii].name);
+    return 1;
+}
+
+/* Phase 31 S11b: two C type spellings name the same type when they only differ
+   in blanks. The instance row and the expression tables spell a pointer as
+   `int *` in one place and `int*` in the other, so the comparison normalises
+   whitespace instead of requiring one spelling. */
+int vbrace_type_same(const char *a, const char *b)
+{
+    char x[MAX_TEXT];
+    char y[MAX_TEXT];
+    int i = 0, j = 0;
+
+    for (; *a && i < MAX_TEXT - 1; a++)
+        if (*a != ' ' && *a != '\t') x[i++] = *a;
+    x[i] = 0;
+    for (; *b && j < MAX_TEXT - 1; b++)
+        if (*b != ' ' && *b != '\t') y[j++] = *b;
+    y[j] = 0;
+    return strcmp(x, y) == 0;
+}

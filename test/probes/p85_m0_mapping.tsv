@@ -1,0 +1,10 @@
+# PH-85 S85c M0: old file -> new coarse unit. The new unit holds only free
+# functions moved out of the host, bodies byte-identical; the host keeps the
+# types, traits, methods and everything else and imports the new unit.
+# Columns: old host (still present) \t new unit (product set grows by its base).
+selfhost/ct-ast/backend/emit/Emitter.h.ct	selfhost/ct-ast/backend/emit/EmitterText.h.ct
+selfhost/ct-ast/frontend/module/Module.h.ct	selfhost/ct-ast/frontend/module/ModuleBoundary.h.ct
+selfhost/ct-ast/frontend/parse/Expr.h.ct	selfhost/ct-ast/frontend/parse/ExprTypeText.h.ct
+selfhost/ct-ast/frontend/sym/Symbols.h.ct	selfhost/ct-ast/frontend/sym/SymbolsTypeText.h.ct
+selfhost/ct-ast/frontend/parse/Stmt.h.ct	selfhost/ct-ast/frontend/parse/StmtRangeText.h.ct
+selfhost/ct-ast/tool/pkg/Pkg.h.ct	selfhost/ct-ast/tool/pkg/PkgIndex.h.ct

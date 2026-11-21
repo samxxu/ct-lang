@@ -1,0 +1,325 @@
+/*
+ * ExprTypeText.h.ct - moved out of Expr.h.ct (PH-85 S85c M0, pure move).
+ *
+ * Bodies are byte-identical to the ones this unit used to hold;
+ * the declaration line only loses `static` and gains a `pub`
+ * prototype, the interface change the M0 card allows. See
+ * docs/design/p85_m0.md for the baseline and the old->new map.
+ */
+#include <stdio.h>
+#include <string.h>
+
+import frontend::lex::Lexer;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable;
+import backend::mem::Memory;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::sym::Symbols::Closure as Closure;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
+import tool::diag::Diag;
+
+#define MAX_TEXT 160
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct ExprTypeText {
+    int unused;
+}
+
+pub int arg_class(const char *formal, const char *actual, char *fb, int fcap, char *ab, int acap);
+pub int id_char(int c);
+pub int inst_impl_score(int ii);
+pub int plist_next(const char *p, int *pos, char *out, int cap);
+pub int qual_at(const char *p, int prev_id);
+pub int ref_type_is_const_value(const char *t);
+pub int slice_array_len(const char *dims);
+pub int subst_tparam(const char *spell, const char *n1, const char *v1, const char *n2, const char *v2, char *out, int cap);
+pub void tbase(const char *k, char *out, int cap);
+pub int tclass(const char *raw, const char *base);
+pub void tnorm(const char *in, char *out, int cap);
+pub int tnumeric(const char *in);
+pub int tscalar(const char *w);
+pub int tstars(const char *k);
+
+/* Compare one formal against one actual: 0 compatible, 1 a confident
+   mismatch, -1 undecidable, 2 a struct-against-struct pair the caller must
+   resolve through its own struct table (the normalised bases are handed back
+   in `fb` / `ab`, tag included). */
+int arg_class(const char *formal, const char *actual,
+                     char *fb, int fcap, char *ab, int acap)
+{
+    char fk[MAX_TEXT], ak[MAX_TEXT];
+    int fd, ad, cf, ca;
+
+    tnorm(formal, fk, sizeof fk);
+    tnorm(actual, ak, sizeof ak);
+    if (!fk[0] || !ak[0]) return -1;
+    if (strcmp(fk, ak) == 0) return 0;
+    if (strchr(fk, '(') || strchr(ak, '(')) return -1;    /* a function pointer */
+    tbase(fk, fb, fcap);
+    tbase(ak, ab, acap);
+    if (!fb[0] || !ab[0]) return -1;
+    cf = tclass(formal, fb);
+    ca = tclass(actual, ab);
+    if (cf < 0 || ca < 0) return -1;
+    if (cf == 2 || ca == 2) return -1;                    /* unions: no table */
+    fd = tstars(fk);
+    ad = tstars(ak);
+    if (fd != ad) {
+        /* `void *` converts to and from any object pointer */
+        if (cf == 3 && fd > 0 && ad > 0) return 0;
+        if (ca == 3 && ad > 0 && fd > 0) return 0;
+        return 1;
+    }
+    if (cf == 3 || ca == 3) return fd > 0 ? 0 : -1;
+    if (cf == 0 && ca == 0) return 0;
+    if (cf != ca) return 1;
+    return 2;
+}
+
+int id_char(int c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+        || (c >= '0' && c <= '9') || c == '_';
+}
+
+/* PH-80 (D-013): choose the most specific matching inherent block for an
+   instance method. The generic `impl<K,V> Map<K,V>` is declared first in
+   the layer, so a concrete key block (`Map<char *,V>`, `Map<Str,V>`,
+   `Map<String,V>`) declared later must win; the count of concrete pattern
+   positions is that specificity. */
+int inst_impl_score(int ii)
+{
+    int i, s, tp;
+    struct StructImpl *im;
+    int nimpls;
+    im = frontend::sym::ct_impls(&nimpls);
+    if (!im || ii < 0 || ii >= nimpls) return 0;
+    s = 0;
+    for (i = 0; i < im[ii].nargs; i++) {
+        tp = 0;
+        if (im[ii].ntparams > 0 && strcmp(im[ii].pat[i], im[ii].tparam[0]) == 0) tp = 1;
+        if (im[ii].ntparams > 1 && strcmp(im[ii].pat[i], im[ii].tparam[1]) == 0) tp = 1;
+        if (!tp) s++;
+    }
+    return s;
+}
+
+/* Read the next comma-separated item of a function pointer's parameter text
+   (`parse_type` writes the list without parameter names) into `out`, trimming
+   its surrounding spaces. Returns 0 once the list is exhausted. */
+int plist_next(const char *p, int *pos, char *out, int cap)
+{
+    int i, n;
+
+    i = *pos;
+    while (p[i] == ' ' || p[i] == '\t') i++;
+    if (!p[i]) return 0;
+    n = 0;
+    while (p[i] && p[i] != ',') {
+        if (n + 1 < cap) out[n++] = p[i];
+        i++;
+    }
+    out[n] = 0;
+    while (n > 0 && (out[n - 1] == ' ' || out[n - 1] == '\t')) out[--n] = 0;
+    if (p[i] == ',') i++;
+    *pos = i;
+    return 1;
+}
+
+/* The qualifier word at `p`, or 0. A qualifier is recognised only at a word
+   boundary, so a tag such as `constable` keeps its first five letters. */
+int qual_at(const char *p, int prev_id)
+{
+    if (prev_id) return 0;
+    if (strncmp(p, "__restrict__", 12) == 0 && !id_char(p[12])) return 12;
+    if (strncmp(p, "__restrict", 10) == 0 && !id_char(p[10])) return 10;
+    if (strncmp(p, "volatile", 8) == 0 && !id_char(p[8])) return 8;
+    if (strncmp(p, "restrict", 8) == 0 && !id_char(p[8])) return 8;
+    if (strncmp(p, "const", 5) == 0 && !id_char(p[5])) return 5;
+    return 0;
+}
+
+/* Phase 78 fix SH-95: a top-level `const` object is not writable. `const int
+   g` is rejected, while `const int *p` (pointer to const, itself writable) is
+   left to the type check: the star means the qualifier is on the pointee. */
+int ref_type_is_const_value(const char *t)
+{
+    if (!t || strncmp(t, "const ", 6) != 0) return 0;
+    return strchr(t, '*') == NULL;
+}
+
+/* P-7.2: the literal length of a one-dimensional `[N]` spelling, or -1 when
+   the dimension is `[]`, an expression or multi-dimensional. The compile-time
+   subslice check only fires on the unambiguous case. */
+int slice_array_len(const char *dims)
+{
+    int v = 0;
+    int i = 0;
+    if (!dims || dims[0] != '[') return -1;
+    i = 1;
+    if (dims[i] < '0' || dims[i] > '9') return -1;
+    while (dims[i] >= '0' && dims[i] <= '9') {
+        v = v * 10 + (dims[i] - '0');
+        i++;
+    }
+    if (dims[i] != ']' || dims[i + 1] != 0) return -1;
+    return v;
+}
+
+/* Phase 32 S7: a formal spelled exactly `T` / `U` (or `T *` / `U *`) takes
+   the instance's concrete spelling. Any other shape that mentions a type
+   parameter is undecidable here, so the caller skips it (the card's
+   restricted substitution); a formal that mentions no parameter passes
+   through unchanged. */
+int subst_tparam(const char *spell, const char *n1, const char *v1,
+                        const char *n2, const char *v2, char *out, int cap)
+{
+    char k[MAX_TEXT];
+    char p[MAX_TEXT];
+    int i, j = 0;
+
+    for (i = 0; spell[i] && j + 1 < (int)sizeof k; i++)
+        if (spell[i] != ' ' && spell[i] != '\t') k[j++] = spell[i];
+    k[j] = 0;
+    if (n1 && n1[0]) {
+        if (strcmp(k, n1) == 0) { snprintf(out, (size_t)cap, "%s", v1); return 0; }
+        snprintf(p, sizeof p, "%s*", n1);
+        if (strcmp(k, p) == 0) { snprintf(out, (size_t)cap, "%s *", v1); return 0; }
+    }
+    if (n2 && n2[0]) {
+        if (strcmp(k, n2) == 0) { snprintf(out, (size_t)cap, "%s", v2); return 0; }
+        snprintf(p, sizeof p, "%s*", n2);
+        if (strcmp(k, p) == 0) { snprintf(out, (size_t)cap, "%s *", v2); return 0; }
+    }
+    if ((n1 && n1[0] && strstr(k, n1)) || (n2 && n2[0] && strstr(k, n2)))
+        return -1;
+    snprintf(out, (size_t)cap, "%s", spell);
+    return 0;
+}
+
+/* The normalised spelling without its stars: `struct S *` -> `struct S`. */
+void tbase(const char *k, char *out, int cap)
+{
+    int n = 0;
+    while (*k) {
+        if (*k != '*') {
+            if (n + 2 >= cap) {
+                out[0] = 0;
+                return;
+            }
+            out[n] = *k;
+            n++;
+        }
+        k++;
+    }
+    out[n] = 0;
+}
+
+/* 0 numeric, 1 struct, 2 union, 3 void, -1 anything else (a typedef name
+   stays unknown). `base` is the normalised star-less spelling, `raw` the
+   spelling as written -- the tag prefix is read from `raw` so a typedef
+   called `structor` is not mistaken for a struct. */
+int tclass(const char *raw, const char *base)
+{
+    if (strcmp(base, "void") == 0) return 3;
+    while (*raw == ' ') raw++;
+    if (strncmp(raw, "struct ", 7) == 0) return 1;
+    if (strncmp(raw, "union ", 6) == 0) return 2;
+    if (strncmp(raw, "enum ", 5) == 0) return 0;
+    if (tnumeric(raw)) return 0;
+    return -1;
+}
+
+/* Normalise a type spelling: drop the qualifier words and every whitespace
+   character. `const char *` and `char *` then compare equal, while
+   `const char *` and `char **` still differ. */
+void tnorm(const char *in, char *out, int cap)
+{
+    int n, prev, q;
+    n = 0;
+    prev = 0;
+    while (*in) {
+        q = qual_at(in, prev);
+        if (q) {
+            in += q;
+            continue;                       /* the boundary stands */
+        }
+        if (*in != ' ' && *in != '\t' && *in != '\n' && *in != '\r') {
+            if (n + 2 >= cap) {
+                out[0] = 0;
+                return;
+            }
+            out[n] = *in;
+            n++;
+        }
+        prev = id_char((unsigned char)*in);
+        in++;
+    }
+    out[n] = 0;
+}
+
+/* Every whitespace-or-star separated word of the raw spelling is a scalar
+   keyword (`unsigned long`, `const char *`). */
+int tnumeric(const char *in)
+{
+    char tok[MAX_TEXT];
+    int n, any;
+    n = 0;
+    any = 0;
+    for (;;) {
+        while (*in == ' ' || *in == '\t' || *in == '*') in++;
+        if (!*in) break;
+        n = 0;
+        while (*in && *in != ' ' && *in != '\t' && *in != '*') {
+            if (n + 2 >= MAX_TEXT) return 0;
+            tok[n] = *in;
+            n++;
+            in++;
+        }
+        tok[n] = 0;
+        if (!tscalar(tok)) return 0;
+        any = 1;
+    }
+    return any;
+}
+
+/* One word of the numeric class: a C scalar keyword or a qualifier (the
+   tokeniser sees the raw spelling, where qualifiers still appear). */
+int tscalar(const char *w)
+{
+    return strcmp(w, "void") == 0 || strcmp(w, "char") == 0
+        || strcmp(w, "short") == 0 || strcmp(w, "int") == 0
+        || strcmp(w, "long") == 0 || strcmp(w, "float") == 0
+        || strcmp(w, "double") == 0 || strcmp(w, "signed") == 0
+        || strcmp(w, "unsigned") == 0 || strcmp(w, "_Bool") == 0
+        || strcmp(w, "bool") == 0 || strcmp(w, "size_t") == 0
+        || strcmp(w, "ssize_t") == 0 || strcmp(w, "ptrdiff_t") == 0
+        || strcmp(w, "wchar_t") == 0 || strcmp(w, "va_list") == 0
+        || strcmp(w, "int8_t") == 0 || strcmp(w, "int16_t") == 0
+        || strcmp(w, "int32_t") == 0 || strcmp(w, "int64_t") == 0
+        || strcmp(w, "uint8_t") == 0 || strcmp(w, "uint16_t") == 0
+        || strcmp(w, "uint32_t") == 0 || strcmp(w, "uint64_t") == 0
+        || strcmp(w, "FILE") == 0 || strcmp(w, "DIR") == 0
+        || strcmp(w, "const") == 0 || strcmp(w, "volatile") == 0
+        || strcmp(w, "restrict") == 0 || strcmp(w, "__restrict") == 0
+        || strcmp(w, "__restrict__") == 0;
+}
+
+int tstars(const char *k)
+{
+    int n = 0;
+    while (*k) {
+        if (*k == '*') n++;
+        k++;
+    }
+    return n;
+}
