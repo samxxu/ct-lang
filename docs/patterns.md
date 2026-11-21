@@ -61,8 +61,9 @@
   返回类型不符要到 C 编译器才报（`ct build` 会转述 cc 的错误）。需要更早发现时用可选的
   `ct check --types`（**受限子集**，Phase 32 / [language-spec §4.53](language-spec.md#453-可选类型检查-ct-check---typesphase-32)），
   它不是全量类型系统，也不改变编译路径。CT 的定位是「把 CT 翻译成可读的 C」，不改变这个性质。
-- **接口数组是固定容量**：语言没有动态容器；需要可变数量时用 `malloc` 或
-  自行约定容量（Observer / Composite 的 fixture 用固定上限演示结构）。
+- **接口数组仍是固定容量**：`Vec<T>` / `Map<K,V>` 是内建动态容器，但接口值数组
+  （`Iface a[N]`）仍是固定容量；需要可变数量时用 `Vec<Iface>`。Observer / Composite 的
+  fixture 用固定上限演示结构，不是语言不能动态增长。
 - **没有继承**：需要「is-a」时用 trait + 组合；需要复用实现时把实现提成
   自由函数或另一个 trait。
 - **泛型函数 / struct / trait 已落地，但不做参数推导**：泛型函数、泛型 struct、泛型 trait 分别在

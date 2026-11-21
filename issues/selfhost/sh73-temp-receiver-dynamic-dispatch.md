@@ -99,3 +99,18 @@ $ echo $?
 - [examples/47_chain_factory](../../examples/47_chain_factory/src/main.ct)：当前可运行的一行链形态
 - [docs/language-spec.md §4.5 / §4.10.1 / §4.21](../../docs/language-spec.md#L251-L267)
 - 外部来源：`ct-http/docs/review/ct-http-0.1.0-blockers.md` §4（2026-11-15 独立复核）
+
+## 2026-11-21 所有者裁定冲突（待拍板）
+
+外部 v0.88.0 评审（§4-A3）指出：所有者曾裁定“SH-73 定性 bug、fix 流水线优先解决”，
+但本 issue 正文仍为“有意的实现边界（Info）”，两者冲突。仓库内没有所有者签字的
+新裁定记录，因此**状态暂不变**。
+
+二选一（需所有者最终拍板）：
+
+| 路径 | 前置 | 落点 |
+| --- | --- | --- |
+| 维持 bug | 先做“求值顺序 / 临时值生命周期”判据卡，再动 `Emitter` | `v1-PH-0` 或独立 bugfix 卡；golden 全量重跑 |
+| 采纳工程评估 | README §0.1 改述为“动态派发链式为 1.0 后特性”；多行/静态宿主为标准落法 | [DOC-86](../../issues/docs/doc-86-readme-v088-rewrite.md)；本 issue 销项 |
+
+在拍板前：README 不得承诺“一行链”；examples/47 的静态宿主形态可继续作为可跑示例。

@@ -2,7 +2,7 @@
 
 > 中文
 >
-> 状态：v1（Phase 18.1，2026-11-02）。工具实现见
+> 状态：v1（Phase 18.1 初稿，2026-11-02；2026-11-21 按 v0.88.0 复核）。工具实现见
 > [`selfhost/ct-ast/tool/pkg/`](../selfhost/ct-ast/tool/pkg/)；binding 写法见
 > [test/bindings/README.md](../test/bindings/README.md)；首批官方包见
 > [phase18.md](history/design/phase18.md) 的 18.3–18.5。
@@ -244,7 +244,7 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 
 ### 7. 现状契约与陷阱（改契约前必读）
 
-> 本节记录 **`ct v0.58.0` 的真实行为**。机制来源见
+> 本节记录 **`ct v0.88.0` 的真实行为**（2026-11-21 复核）。机制来源见
 > [提案](proposals/ct-pkg-shared-store.md) 与 [需求定稿](planning/ct-pkg-shared-store-requirements.md)；
 > 早期版本的差异只在 §8 的兼容期成立。
 

@@ -91,6 +91,7 @@
 | [reviews/max-calls-limit.md](reviews/max-calls-limit.md) | 只读核对：`MAX_CALLS` 1024 的计数口径（按已解析自由函数调用表达式）、固定表成因（无「禁止动态分配」证据）、按需增长的改动面与外部包余量实测 |
 | [reviews/full-review-v0.88.0.md](reviews/full-review-v0.88.0.md) | 最新全面评审（v0.88.0 / v1-pre 收口后）：11 门禁离线 11/11、check-ast 1575/0/5；P1 五项（SH-104/105、phase-ID、G1/G6、MAX_FUNCS 余量、E88-1 承接）与 v1.0 就绪 4/10 | 发布前总检 |
 | [reviews/2026-11-21-full-review-v0.88.0-disposition.md](reviews/2026-11-21-full-review-v0.88.0-disposition.md) | v0.88.0 评审处置：接受项落库、争议项 [battle/v1-readiness-1](../battle/v1-readiness-1/verdict.md) 判决、Tier 1/Tier 2 门禁 | 查看处置 |
+| [reviews/2026-11-21-v088-external-review-eval.md](reviews/2026-11-21-v088-external-review-eval.md) | 外部 v0.88 评审与惯用卡评估：MAX_FUNCS/SH-104-105 勘误、lib/core 待核实、SH-73 冲突、惯用卡逐条修正 | 查看外部评估 |
 | [reviews/](reviews/) | 历史全面评审（v0.77）：网络挂起、治理门禁缺位、台账未闭合、phase-ID 迁移、文档漂移；其中网络挂起与 C 边界 cwd 已在 v0.88 前修复 | 追溯 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
