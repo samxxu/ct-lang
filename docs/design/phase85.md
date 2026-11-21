@@ -160,7 +160,8 @@ $ bash tools/check.sh g0
 g0: OK (block 1.17.0, session-map present)                       rc=0
 $ bash tools/check.sh g8
 g8: OK (PN-2 version coherence; 9 legacy offsets)                rc=0
-$ bash selfhost/check-all.sh
+$ git archive b2a85409 | tar -x -C /tmp/ph85final2   # 干净归档（F1 的判据树）
+$ cd /tmp/ph85final2 && TMPDIR=$PWD/tmp bash selfhost/check-all.sh
 ...
 VERDICT
 check-all: OK (11 hard gates green)                              rc=0
@@ -177,10 +178,10 @@ check-all: OK (11 hard gates green)                              rc=0
 | 5 `ct-tour.sh` | 9 步全 ok（含 `ct-ast` 以 `ct` 身份运行） |
 | 6 编辑器语法 | `ok`（167 断言） |
 | 7 包管理 | `test/pkg/run.sh` 全绿 |
-| 8 `check-ast.sh` | `summary: 1562 passed, 0 failed, 4 skipped`（含 `p85/inventory`、`p85/spike`、`p85/m0`、`p85/a-wire` 四行 ok；4 skip 是 host 工具缺失的可选探针） |
+| 8 `check-ast.sh` | `summary: 1561 passed, 0 failed, 5 skipped`（含 `p85/inventory`、`p85/spike`、`p85/m0`、`p85/a-wire` 四行 ok；归档里多出 1 个 skip 是 `p83/dist`——`dist/` 不入库，本地无产物时按设计 skip） |
 | 9 `check-warnings.sh` | `check-warnings: 500 ok, 0 failed` |
 | 10 `check-semantics.sh` | `check-semantics: OK (23 assertions)` |
-| 11 `check-docs.py` | `check-docs: OK (2295 relative links in 377 files, v0.85.0, 11 hard gates, 12 phase status, 6 适用版本 header(s), 2 superseded link(s), 10 signoff(s))` |
+| 11 `check-docs.py` | `check-docs: OK (2328 relative links in 379 files, v0.85.0, 11 hard gates, 12 phase status, 5 适用版本 header(s), 2 superseded link(s), 11 signoff(s))`（**干净归档** `git archive b2a85409`；F1 后归档与工作树只差另一席位的未跟踪 guide） |
 
 补充：
 
@@ -277,9 +278,9 @@ REV 判不通过，四条阻断/判据项 F1–F4；本地未推历史按 T-4 �
 ```console
 $ R=$(mktemp -d /tmp/ph85docs.XXXXXX); git archive HEAD | tar -x -C "$R"
 $ (cd "$R" && python3 test/docs/check-docs.py); echo rc=$?
-check-docs: OK (2317 relative links in 378 files, v0.85.0, 11 hard gates,
+check-docs: OK (2328 relative links in 379 files, v0.85.0, 11 hard gates,
              12 phase status, 5 适用版本 header(s), 2 superseded link(s),
-             10 signoff(s))
+             11 signoff(s))
 design window: ok (12/12)
 rc=0
 ```
@@ -324,9 +325,10 @@ HEAD 提交链（重写后）：
 
 ```console
 $ git log --oneline 10c23c77..HEAD
-8d7a1241 review: PH-85 复核（v0.85.0，打回）      # REV
-bb10b284 docs(pkg): ct-pkg index 消费侧…           # 另一席位
-a9b0693d chore(ph85): v0.85.0 收口（S85a–S85d，E85-1…8）
+b2a85409 fix(ph85): REV 打回 F1–F4（D-018、干净归档、M0 可独立构建、回滚演练）  # 本次修复
+7e5159a4 review: PH-85 复核（v0.85.0，打回）      # REV（被重写的原 5c2acb26）
+7a847a21 docs(pkg): ct-pkg index 消费侧…           # 另一席位
+cfe2952a chore(ph85): v0.85.0 收口（S85a–S85d，E85-1…8）
 f377315a feat(ct-ast): p85_a_wire（S85d）
 80527418 test(ct-ast): p85_a_wire 红
 104dfc54 feat(ct-ast): p85_m0（S85c，6 单元纯搬移）   # F2：3 imports + realpath
