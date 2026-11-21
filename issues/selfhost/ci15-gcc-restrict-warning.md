@@ -28,3 +28,10 @@ Emitter.h.ct:5663: warning: 'snprintf' argument 4 overlaps destination object 'g
 ## 处置
 
 把两处 `snprintf(dst, MAX_TEXT, "%s", src)` 改为 `memmove(..., MAX_TEXT)`（同对象、允许重叠、完整复制 NUL）；补跑 p80_retain/p83_verify 与 check-all。
+
+## 处理（REQ，2026-11-21）
+
+- 状态：`open`（P1，CI 红）
+- owner：DEV
+- next：按处置段改 `memmove`，补跑 p80_retain/p83_verify/check-all
+- 不能关闭：v0.83.2 ubuntu-gcc 仍红

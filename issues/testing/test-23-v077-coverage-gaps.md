@@ -1,7 +1,7 @@
 ---
 id: TEST-23
 title: "v0.77 覆盖缺口：无行覆盖、ct-ast 无单测、容量上限/近相 example 缺失"
-status: open
+status: deferred
 area: testing
 severity: P2
 opened: 2026-11-20
@@ -105,3 +105,9 @@ $ command -v llvm-cov lcov gcov
 
 计数与处置段一致；覆盖率、ct-ast 白盒单测、容量夹具、near-phase example 是四项
 独立交付物，各需自己的命令与输出（T-1/T-2），defer 理由成立。
+
+## 处理（REQ，2026-11-21）
+
+- 状态：`deferred`（P2，1.0 后质量批）
+- 触发：v1.0 发布后，或 nightly 覆盖率任务启动时
+- 不能关闭：覆盖率/单测/示例尚未交付；不在 1.0 硬门禁内

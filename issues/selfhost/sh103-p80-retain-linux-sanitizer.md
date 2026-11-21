@@ -112,3 +112,10 @@ $ sh test/ast/p80_retain.sh <ct-ast>
 - `docs/dist.md` 的 `../planning/ct-pkg-get-contract.md` / `../decisions/D-014.md` 是
   PH-83 提交 `2a0a0d38` 引入的链接写法（从 `docs/dist.md` 出发多了一级 `../`），
   `check-docs` 因此报 2 个 dead link；不属 SH-103，留给 PH-83 收口处理。
+
+## 处理（REQ，2026-11-21）
+
+- 状态：`open`（P1，等待 REV 复核）
+- owner：REV
+- next：在 Linux CI/容器复跑 `p80_retain`，贴完整 stderr；DEV 已写 fixed，不改 status
+- 不能关闭：尚未独立复核

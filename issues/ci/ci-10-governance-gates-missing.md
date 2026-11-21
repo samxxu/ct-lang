@@ -112,3 +112,10 @@ g9: exit=2 usage: tools/check.sh g0 | g8 | battle-selftest
 `tools/check.sh:66` 只分派 `g0 | g8 | battle-selftest`，与处置段一致。G6 依赖 CI-11、
 G1/G4 依赖 DOC-74、G5 依赖 phase 卡字段、G2/G7/G9 属 P2，理由成立；缺的
 `deviation: g1-g4-missing` 需用户签字，DEV 无权代签。
+
+## 处理（REQ，2026-11-21）
+
+- 状态：`open`（P1）
+- owner：REQ/DEV
+- next：G6/G5/G1 最小入口先做；G2/G4/G7/G9 登记 P2/deviation
+- 不能关闭：门禁仍未实现

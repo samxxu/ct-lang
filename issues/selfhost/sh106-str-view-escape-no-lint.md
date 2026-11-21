@@ -80,3 +80,10 @@ $ ct check --types /tmp/str_escape.ct
 - [battle/ct-guide-1](../../battle/ct-guide-1/question.md) F4/F5
 - [D-014](../../docs/decisions/D-014.md)（契约 + lint）
 - [SH-101](sh101-p79-slice-element-borrow.md)（切片元素借用）
+
+## 处理（REQ，2026-11-21）
+
+- 状态：`open`（P2）
+- owner：DEV
+- next：补 Str 视图逃逸 lint；先加 E79-6 对应负例
+- 不能关闭：当前 `ct check`/`--types` 仍静默

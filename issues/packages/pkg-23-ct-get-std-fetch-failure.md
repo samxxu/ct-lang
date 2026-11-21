@@ -47,3 +47,10 @@ ctc: git fetch of 'https://github.com/ct-pkg/std' failed
 ## 范围
 
 P1；`ct get` 引导命令。修法在 Pkg/Driver；本 issue 只落库，不改代码。
+
+## 处理（REQ，2026-11-21）
+
+- 状态：`open`（P1）
+- owner：DEV
+- next：保留 git stderr/分类网络/缓存，提供 refresh；不先改 pin
+- 不能关闭：`ct get std` 仍只报通用 fetch failed

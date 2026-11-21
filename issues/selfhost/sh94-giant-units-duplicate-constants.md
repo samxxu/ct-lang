@@ -1,7 +1,7 @@
 ---
 id: SH-94
 title: "ct-ast 巨型单元与重复上限常量：Expr/Emitter 6–7k 行，MAX_GENERIC_INSTS/MAX_TEXT 多份"
-status: open
+status: deferred
 area: selfhost
 severity: P2
 opened: 2026-11-20
@@ -85,3 +85,9 @@ selfhost/ct-ast/frontend/parse/Expr.h.ct:66:#define MAX_GENERIC_INSTS 64
 行为保持拆分要逐字节 golden + 自举 fixpoint，且 TEST-23 是前置；defer 理由成立。
 复核发现 `MAX_TEXT` 实测 **14** 处（`grep -rn 'define MAX_TEXT'`），处置段写 10，
 迁移时须以脚本重扫为准；该差异不改变 defer 结论。
+
+## 处理（REQ，2026-11-21）
+
+- 状态：`deferred`（P2，1.0 后行为保持重构）
+- 触发：v1.0 冻结后
+- 不能关闭：Expr/Emitter 拆分与常量集中未做；不影响当前正确性

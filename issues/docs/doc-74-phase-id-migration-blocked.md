@@ -96,3 +96,10 @@ $ grep -l '^| version-minor |' docs/design/phase[0-9]*.md | wc -l
 （`docs/design` vs `docs/phases`）、C（旧卡字段）三项均在案且未裁定。PN-11 禁止项目侧
 自改判定逻辑、PN-6 要求脚本 + 五条集合断言，blocked 理由成立；下一步确需用户
 在 `docs/decisions/D-0xx.md` 写三行裁定。
+
+## 处理（REQ，2026-11-21）
+
+- 状态：`open`（P1，blocked）
+- owner：REQ/EDITOR
+- next：主规范/用户裁定 A/B/C；裁定前禁止新增裸 `PH-*`
+- 不能关闭：迁移未开始，`v1-PH-0` 不能干净开卡
