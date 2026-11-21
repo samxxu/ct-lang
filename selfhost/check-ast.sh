@@ -773,6 +773,20 @@ else
     bad "p84/syntax" "$(cat "$work/p84syn.out" "$work/p84syn.err" | head -5)"
 fi
 
+# PH-84 S84b (E84-3 / E84-4): the `match` statement -- exhaustive arms pass,
+# a written `_` is the only fallback, and `ct check --types` lints a redundant
+# one. The rejection half is p84_errors.
+if bash test/ast/p84_match.sh "$work/ct-ast" >"$work/p84mat.out" 2>"$work/p84mat.err"; then
+    ok "p84/match"
+else
+    bad "p84/match" "$(cat "$work/p84mat.out" "$work/p84mat.err" | head -5)"
+fi
+if bash test/ast/p84_errors.sh "$work/ct-ast" >"$work/p84err.out" 2>"$work/p84err.err"; then
+    ok "p84/errors"
+else
+    bad "p84/errors" "$(cat "$work/p84err.out" "$work/p84err.err" | head -5)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
