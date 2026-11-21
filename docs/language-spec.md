@@ -72,6 +72,9 @@ ct check --types hello.ct               # 可选类型检查
 `error:` 打印并在写任何 `.c`/`.h` 之前退出。**默认强制**留 v1.1（S2），本阶段只交付机制；
 `ct check --types` 的默认与严重级不变。
 
+**两个“默认”分开**：CLI/`ct build` 的默认级别在 v1.0 前保持 `off`；v1-pre 的 CI/发布门禁以
+`--check-level=warn` 运行；v1.1 S2 才把 CLI 默认升 `error`（未达标则回退“可用不默认”）。
+
 **单元类型**：`.h.ct` 发布接口；`.m.ct` 可被 `.h.ct` / `.ct` 单元 import（`map` 单元与 shim
 依赖它，夹具 `map_unit_cross` 钉住这个方向）；普通 `.ct` 单元不能被 import（`resolve_import`
 明确拒绝，提示改名 `.h.ct`）。`import a::b;` 由 `-I` 根目录解析到对应单元。
