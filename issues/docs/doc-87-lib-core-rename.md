@@ -1,47 +1,81 @@
-# DOC-87 · `lib/std` → `lib/core` 改名（待所有者书面确认）
+# DOC-87 · `lib/std` 与外部 `std` 包同名（bugfix：改名 `lib/core` + `CT_CORE_DIR`）
 
 | 项 | 值 |
 | --- | --- |
 | 模块 | docs / 工具链命名 |
-| 定性 | 改名（跨仓兼容） |
+| 定性 | **bug**（命名/身份混淆；不是新特性） |
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
-| 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1 |
-| 状态 | **待确认（仓库未找到所有者签字/ADR）** |
+| 依据 | 所有者 2026-11-21 裁定“改名，作为 bug 去 fix”；[外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1；[同名核查](../../docs/review/builtin-layer-vs-std-package-name-check.md) |
+| 状态 | **accepted（bugfix；v1.0 前，不占 phase）** |
 
 ## 现象
 
-外部报告称“所有者已定：`lib/std` → `lib/core` + `namespace core`”。本仓复核：
+内置层目录叫 `lib/std`，与 ct-pkg 的外部包 `std` 同名；编译器的 `CT_STD_DIR`
+也带同一个名字。仓库不得不在 `lib/std/README.md` 里解释“这不是整个 std 的新家”，
+用户和外部包仍容易把两者混为一谈。
 
-- 只有 2026-11-15 的 [同名核查](../../docs/review/builtin-layer-vs-std-package-name-check.md)
-  提出兼容方案（`CT_CORE_DIR` 优先、`CT_STD_DIR` 回退）；
-- 没有 ADR、phase 卡或 owner 签字记录；
-- `lib/` 下目前只有 `std/`；`lib/std/README.md` 明确“不是整个 std 的新家”。
+2026-11-15 的 [同名核查](../../docs/review/builtin-layer-vs-std-package-name-check.md)
+结论是“符号表不冲突（内置根命名空间 vs `std::*`）”，但名称层面的混淆仍在；
+所有者 2026-11-21 裁定按 **bug** 修复。
 
-因此**不能按“已定”直接改名**；需所有者书面确认后再执行。
+## 决策
 
-## 若确认，执行口径（建议）
+| 项 | 决定 |
+| --- | --- |
+| 目录 | `lib/std` → **`lib/core`** |
+| 环境变量 | `CT_STD_DIR` → **`CT_CORE_DIR`**（优先）；`CT_STD_DIR` 保留一个 MINOR 回退窗 |
+| 命名空间 | **不改**：内置层保持根命名空间（`Vec`/`Map`/`String` 等拼写不变），不引入 `namespace core` |
+| 外部 `std` 包 | 不动；`import std::str::String` 等继续有效 |
+| 版本 | v1.0 前 bugfix；不占 phase，不 bump（随最近一次收口/补丁） |
 
-1. `git mv lib/std lib/core`；同步 `CT_STD_DIR` → `CT_CORE_DIR` 优先，保留一个 MINOR 回退窗；
-2. 机械替换：`selfhost/**`、`docs/**`、`test/**`、`examples/**` 的 `lib/std` 引用；
-3. `namespace core` 只用于**新增**单元；内置层保持根命名空间（D29-3），避免 `Vec`/`Map` 拼写变化；
-4. 一次 commit；`grep -rn 'lib/std'` 清零；`check-all` 绿；
-5. 回滚：单 commit revert；保留 `CT_STD_DIR` 兼容期。
+## 改动面
+
+| 位置 | 改动 |
+| --- | --- |
+| `lib/std/` | `git mv lib/std lib/core`；`lib/core/README.md` 改标题/说明 |
+| `selfhost/ct-ast/frontend/module/Module.h.ct` | 查找顺序：`CT_CORE_DIR` → `CT_STD_DIR`（回退）→ `./lib/core` → `./lib/std`（回退） |
+| `selfhost/ct-ast/tool/driver/Driver.h.ct` | 同上 |
+| `selfhost/ct-ast/frontend/module/ModuleBoundary.h.ct` | 仓内路径白名单 `lib/std/` → 同时接受 `lib/core/` 与回退 |
+| `selfhost/ct-ast/frontend/parse/{Stmt,Expr,Parser}.h.ct`、`backend/emit/Emitter.h.ct` | 路径字符串比较改为“`lib/core/` 或 `lib/std/`”；错误文案优先提示 `CT_CORE_DIR` |
+| `selfhost/check-ast.sh`、`test/ast/*.sh`、`test/probes/*` | `CT_STD_DIR` → `CT_CORE_DIR`；保留一个回退测试 |
+| `docs/**`、`README.md`、`README.en.md`、`examples/**` | 活跃引用改 `lib/core`；历史文档（`docs/history/**`、`battle/**`）不动 |
+| `install.sh` / 分发脚本 | 内置层路径与 `CT_CORE_DIR` 同步 |
+
+兼容窗：
+
+- 新代码设置 `CT_CORE_DIR`；旧的 `CT_STD_DIR` 仍被读取；
+- 目录查找先 `lib/core`，找不到再 `lib/std`；
+- 一个 MINOR 后移除 `CT_STD_DIR` / `lib/std` 回退，另立清理 issue。
 
 ## 验收
 
-- 所有者确认（ADR 或签字）在案；
-- `ct build` 与 `ct build -I lib/core` 均可用；旧 `lib/std` 引用在兼容窗内仍可解析；
-- 文档/脚本无残留；`check-alls` 绿；
-- 单提交回滚。
+1. `CT_CORE_DIR=<repo>/lib/core` 下 `ct build` / `ct check` 正常；
+2. `CT_STD_DIR=<repo>/lib/core` 在兼容窗内仍可用；
+3. `grep -rn 'lib/std'` 在活跃代码/脚本/文档中清零（`docs/history/**`、`battle/**` 历史除外）；
+4. 外部 `std` 包仍可 `import std::str::String`，与内置 `String`/`Str` 共存；
+5. `check-all` 11 门绿；L0→L1→L2→ct-ast 自举不变；
+6. ≤501 函数程序生成 C 逐字节不变；
+7. 单提交回滚（目录 + 路径查找 + 脚本一起退）。
 
 ## 非目标
 
-- 不把外部 `std` 包的 `namespace std::*` 改名；
-- 不改内置层的根命名空间（`Vec`/`Map`/`String` 等拼写不变）；
-- 不在确认前动任何文件。
+- 不改内置层根命名空间，不引入 `namespace core`；
+- 不改外部 `std` 包/`std::*`；
+- 不改语言语义、发射格式、`ct.lock`/索引；
+- 不批量改 `battle/**` 与 `docs/history/**` 的历史记录。
+
+## 风险
+
+| 风险 | 缓解 |
+| --- | --- |
+| 755 处引用（含历史） | 只改活跃路径；历史文档加“当时叫 lib/std”的说明，不批量替换 |
+| 外部消费者写死 `CT_STD_DIR` | 保留一个 MINOR 回退窗；错误文案提示 `CT_CORE_DIR` |
+| 路径字符串比较漏改 | `grep 'lib/std/'` + `test/ast/p72_stdmissing` 回退测试 |
+| 与 v1.0 收口抢窗口 | 单提交、独立回滚；不夹带其他改动 |
 
 ## 关联
 
+- [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md)
 - [同名核查](../../docs/review/builtin-layer-vs-std-package-name-check.md)
-- [D-014](../../docs/decisions/D-014.md)、[DOC-86](doc-86-readme-v088-rewrite.md)
+- [D-014](../../docs/decisions/D-014.md)、[v1 路线](../../docs/planning/v1-release-plan.md)

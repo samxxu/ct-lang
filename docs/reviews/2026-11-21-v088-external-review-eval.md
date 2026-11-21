@@ -18,7 +18,7 @@
 | §2 D5 package-guide 标签 | **接受** | 两处标签滞后；本轮已修 |
 | §2 D6 memory-guide 缺范围声明 | **已解决** | 本轮已在 [memory-guide.md:5-7](../memory-guide.md#L5-L7) 加“新代码先读 guide / 本文是逃生层”声明 |
 | §2 D7 spec 拆分 | **接受为 v1.1 决策** | 转 [DOC-88](../../issues/docs/doc-88-spec-split-decision.md)，不在 v1-PH-0 内做 |
-| §2/§4 A1 `lib/std → lib/core` “所有者已定” | **待核实** | 仓库只有 2026-11-15 的 [同名核查](../review/builtin-layer-vs-std-package-name-check.md)（兼容方案），没有 ADR/所有者签字；转 [DOC-87](../../issues/docs/doc-87-lib-core-rename.md)，签字前不动 |
+| §2/§4 A1 `lib/std → lib/core` | **接受为 bugfix（2026-11-21 所有者裁定）** | 改名 `lib/core` + `CT_CORE_DIR`，保留一个 MINOR 回退；**不改根命名空间/不引入 `namespace core`**；[DOC-87](../../issues/docs/doc-87-lib-core-rename.md) |
 | §4 A3 SH-73 裁定冲突 | **接受为冲突事实** | issue 仍写 Info/有意边界；报告称所有者裁定 bug；需所有者最终拍板；已在 [SH-73](../../issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md) 加待裁注记 |
 | §5 “SH-104 goldens 静态化、SH-105 J-6 台账” | **修正（对调）** | 实际 V1-C1 = SH-104 J-6 台账，V1-C2 = SH-105 goldens 静态化（[v1-release-plan:64-65](../planning/v1-release-plan.md#L64-L65)） |
 | §5 v1-PH-0 就绪度 | **接受** | 与 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) 的 Tier 1/Tier 2 一致 |
