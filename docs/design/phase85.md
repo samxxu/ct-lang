@@ -160,8 +160,8 @@ $ bash tools/check.sh g0
 g0: OK (block 1.17.0, session-map present)                       rc=0
 $ bash tools/check.sh g8
 g8: OK (PN-2 version coherence; 9 legacy offsets)                rc=0
-$ git archive b2a85409 | tar -x -C /tmp/ph85final2   # 干净归档（F1 的判据树）
-$ cd /tmp/ph85final2 && TMPDIR=$PWD/tmp bash selfhost/check-all.sh
+$ git archive 80ed3744 | tar -x -C /tmp/p85fin3   # 干净归档（F1 的判据树；第二次打回后）
+$ cd /tmp/p85fin3 && TMPDIR=$PWD/tmp bash selfhost/check-all.sh
 ...
 VERDICT
 check-all: OK (11 hard gates green)                              rc=0
@@ -181,7 +181,7 @@ check-all: OK (11 hard gates green)                              rc=0
 | 8 `check-ast.sh` | `summary: 1561 passed, 0 failed, 5 skipped`（含 `p85/inventory`、`p85/spike`、`p85/m0`、`p85/a-wire` 四行 ok；归档里多出 1 个 skip 是 `p83/dist`——`dist/` 不入库，本地无产物时按设计 skip） |
 | 9 `check-warnings.sh` | `check-warnings: 500 ok, 0 failed` |
 | 10 `check-semantics.sh` | `check-semantics: OK (23 assertions)` |
-| 11 `check-docs.py` | `check-docs: OK (2328 relative links in 379 files, v0.85.0, 11 hard gates, 12 phase status, 5 适用版本 header(s), 2 superseded link(s), 11 signoff(s))`（**干净归档** `git archive b2a85409`；F1 后归档与工作树只差另一席位的未跟踪 guide） |
+| 11 `check-docs.py` | `check-docs: OK (2331 relative links in 379 files, v0.85.0, 11 hard gates, 12 phase status, 5 适用版本 header(s), 2 superseded link(s), 11 signoff(s))`（**干净归档** `git archive 80ed3744`；F1 后归档与工作树只差另一席位的未跟踪 guide） |
 
 补充：
 
@@ -285,7 +285,7 @@ REV 判不通过，四条阻断/判据项 F1–F4；本地未推历史按 T-4 �
 ```console
 $ R=$(mktemp -d /tmp/ph85docs.XXXXXX); git archive HEAD | tar -x -C "$R"
 $ (cd "$R" && python3 test/docs/check-docs.py); echo rc=$?
-check-docs: OK (2328 relative links in 379 files, v0.85.0, 11 hard gates,
+check-docs: OK (2331 relative links in 379 files, v0.85.0, 11 hard gates,
              12 phase status, 5 适用版本 header(s), 2 superseded link(s),
              11 signoff(s))
 design window: ok (12/12)
