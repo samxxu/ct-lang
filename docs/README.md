@@ -36,6 +36,7 @@
 
 | 文档 | 内容 | 何时读 |
 | --- | --- | --- |
+| [idioms.md](idioms.md) | CT 惯用优先级：所有权分层、String/Str、切片、ref/out、ADT、遍历、泄漏；附录 briefing 带 spec 节号 | 写代码前定选型；给编码助手喂压缩事实 |
 | [llm-guide.md](llm-guide.md) | 面向 LLM / 代理的固定决策顺序与硬规则 | 写任何 CT 代码前 |
 | [std-catalog.md](std-catalog.md) | `std` 16 个模块的用途、入口 `import`、完整 API 在哪 | 要用容器 / 字符串 / 文件 / UTF-8 / arena / test |
 | [ct-pkg.md](ct-pkg.md) | ct-pkg 四个角色：编译器 / std / 平台包 / 索引 | 判断一个能力该由谁提供 |

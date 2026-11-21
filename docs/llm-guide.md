@@ -72,6 +72,7 @@ ct install                           # 打印带 -I / cflags / ldflags 的构建
 
 | 文档 | 内容 |
 | --- | --- |
+| [idioms](idioms.md) | 惯用优先级与选型（所有权分层、String/Str、切片、ref/out、ADT、遍历、泄漏）；附录 briefing 带 spec 节号 |
 | [language-spec](language-spec.md) | 语法、展开、容量、明确不支持 |
 | [std-catalog](std-catalog.md) | `std` 16 个模块的用途、入口 import、API 在哪 |
 | [ct-pkg](ct-pkg.md) | 编译器 / std / 平台包 / 索引四个角色 |

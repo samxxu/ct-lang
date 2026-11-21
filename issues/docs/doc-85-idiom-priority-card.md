@@ -7,7 +7,21 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §2 |
-| 状态 | **待办（先修事实，再与 D1 同批入库）** |
+| 状态 | **已完成（2026-11-21：`docs/idioms.md` 入库；briefing 10 条带 §N；门禁激活）** |
+
+## 进展（2026-11-21）
+
+- 成文 [docs/idioms.md](../../docs/idioms.md)：C 之上 + 四类偏离、所有权分层、`String`/`Str`、
+  切片、`ref`/`out`、错误、ADT、`foreach`、堆与指针、泄漏、首选/避免速查；附录 briefing 10 条。
+- **briefing 同步门禁已激活**：`check-docs` 输出 `10 briefing item(s)`，每条断言的 `§N`
+  都能在规范解析到标题；缺节号或节号不存在即红。
+- **抽查 3 条（至少含 `foreach`）**：
+  - `foreach` → §4.49：数组/Vec 绑定只读 `i`，`Map` 只给 `item.key` / `item.value`（spec:2513）；
+  - `String`/`Str` 存放位置 → §4.70：字段 / `Map` 键硬错，`Vec<Str>` 等存视图（spec:2975-2976）；
+  - `new` 上下文关键字 → §4.71：`int new;` 仍合法（spec:2993）。
+- 入口已加：`docs/README.md` 生态表、`llm-guide.md` 文档地图、README §3「先读」路径。
+- 评审台账销项：[外部评审评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md)
+  §2 结论与 §3 落点已改为“已按修正稿入库”。
 
 ## 现象
 

@@ -26,7 +26,7 @@
 
 ## 2. 惯用优先级卡：逐条事实核查
 
-**结论：方向正确，但不能按原稿入 `docs/idioms.md`；需先修以下硬伤。**
+**结论：方向正确，但不能按原稿入 `docs/idioms.md`；需先修以下硬伤。**（2026-11-21 已按修正稿入库 [docs/idioms.md](../idioms.md)，附录 briefing 的 10 条断言全部带 §N 并通过 `check-docs`。）
 
 | 卡片位置 | 原文 | 判定 | 依据 |
 | --- | --- | --- | --- |
@@ -49,9 +49,9 @@
 
 1. **先修 SH-73**：所有者二选一（修流水线 vs 记为 1.0 后特性）；README §0.1 的措辞依赖它。
 2. **D4/D5 已落**；D6 已由本轮 guide 入库解决；D7/D8 转 v1.1/待核实 issue。
-3. **惯用卡**：按 §2 修正后作为 `docs/idioms.md`，与 D1 README 大改同批；从
-   `docs/README.md` 与 `llm-guide.md` 的读者路径引入。修正清单见
-   [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)。
+3. **惯用卡**：**已完成**——按 §2 修正后作为 [docs/idioms.md](../idioms.md) 入库；已从
+   `docs/README.md`、`llm-guide.md` 与 README 的“先读”路径引入；briefing 10 条带 §N，
+   `check-docs` 门禁已激活。修正清单见 [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)。
 4. **编辑器**：已补 v0.88 语法（ref/out、box/new、String/Str、切片、ADT/match、`?`、`$name`），
    版本 `0.6.1`，`check-grammar` 179/0。
 

@@ -587,6 +587,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **明确不做**：继承、默认编译路径的类型检查（`ct check` 只做受限检查）、优化（语言在 `1.0.0` 才定稿）
 
 每条语法的展开规则以 [docs/language-spec.md](docs/language-spec.md) 为准（ADT/`match` 见 §4.73）；
+惯用优先级与选型见 [docs/idioms.md](docs/idioms.md)；
 写法范例见 [docs/patterns.md](docs/patterns.md)（`kind` 判别改写见 §6），教程见
 [docs/tutorial.md](docs/tutorial.md)（ADT 见 §18），
 内存约定见 [docs/memory-guide.md](docs/memory-guide.md)。
