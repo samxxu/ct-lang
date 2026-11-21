@@ -57,9 +57,11 @@
 
 ## 4. 边界（不是缺口，是取舍）
 
-- **默认路径不做全量类型检查**：`ct compile` / `ct build` 只做既有语义检查，参数错配、
-  返回类型不符要到 C 编译器才报（`ct build` 会转述 cc 的错误）。需要更早发现时用可选的
-  `ct check --types`（**受限子集**，Phase 32 / [language-spec §4.53](language-spec.md#453-可选类型检查-ct-check---typesphase-32)），
+- **默认路径不做全量类型检查**：`ct compile` / `ct build` 不做全量类型检查；多数算术类错配
+  仍要到 C 编译器才报（`ct build` 会转述 cc 的错误），但**按值 struct 的实参/返回不一致**
+  （v0.53.2 起）与 **impl 签名漂移**（v0.45 起）已是硬错，`ct build --check-level=warn|error`
+  还能把 B 的检查接进构建路径。需要更早发现时用可选的 `ct check --types`（**受限子集**，
+  Phase 32 / [language-spec §4.53](language-spec.md#453-可选类型检查-ct-check---typesphase-32)），
   它不是全量类型系统，也不改变编译路径。CT 的定位是「把 CT 翻译成可读的 C」，不改变这个性质。
 - **接口数组仍是固定容量**：`Vec<T>` / `Map<K,V>` 是内建动态容器，但接口值数组
   （`Iface a[N]`）仍是固定容量；需要可变数量时用 `Vec<Iface>`。Observer / Composite 的
@@ -155,8 +157,21 @@ int eval(Node *n)
 
 - 分支体没有 fallthrough：一支结束就离开 `match`，不再需要 `break`；分支里的 `break`
   仍表示**外层循环**的 break（发射是 if/else 链，不是 C `switch`）。
-- `_` 必须显式书写；全部变体覆盖后仍写 `_` 会被 `ct check --types` 提示“多余”，
-  因为 wildcard 会掩盖以后新增的变体。
+- `_` 只是**未穷尽时的兜底**；全部变体覆盖后不必写 `_`，写了会被 `ct check --types`
+  提示“多余”，因为 wildcard 会掩盖以后新增的变体。
 
 可运行的等价样例：[test/ast/291_adt_kind_rewrite/prog.ct](../test/ast/291_adt_kind_rewrite/prog.ct)
 （同一棵树分别用旧 `switch` 与新 `match` 求值，输出一致）。
+
+## 7. 句柄与借用视图选型
+
+判据的单一权威是 `docs/idioms.md`（待入库；修正稿见 [DOC-85](../issues/docs/doc-85-idiom-priority-card.md)）。
+本节只给模式选型时的一行判据；机制细节见 [language-spec](language-spec.md) §4.68–§4.71，不在此重复。
+
+| 场景 | 选择 | 一行判据 | 权威 |
+| --- | --- | --- | --- |
+| 拥有还是借用 | `String` / `Str` | 过了这行还要活着 → `String`；只看一眼 → `Str` | `idioms.md` |
+| 数组 / 容器传参 | `T[]` 切片 | 长度随指针走；不要 `T *a, int n` | `idioms.md` |
+| 写回调用方 | `out T` / `ref T` | 出参用 `out`（定值分析），读写用 `ref`；不要裸出参指针 | `idioms.md` |
+| 单个堆对象 | `box<T>` | 跨函数持有才 box；栈上值够用就别 box | `idioms.md` |
+| 指针 | `T *` | 只在 shim / MMIO / extern 与逃生层；应用层先想 `Str` / 切片 / `box` | `idioms.md` |
