@@ -1964,6 +1964,7 @@ ref/out 参数、`ref` 的借用检查、跨过程定值不在本阶段；`ref` 
 - [polymorphism.md](polymorphism.md) —— 为什么用 vtable 而不是别的写法
 - [architecture.md](architecture.md) —— 编译器内部怎么按行改写
 - [roadmap.md](roadmap.md) —— 已落地与后续阶段
+- 新特性专章：§22 `String` / `Str`、§23 切片 `T[]`（先看顶层「按层阅读」选层）
 - `examples/**` —— 51 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；其中 `49_socket` 为文档型；完整索引见 [examples/README.md](../examples/README.md)）；`test/cases/**` —— 每个语法点的最小快照
 - 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
 - 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 CT」，编译器对此零感知

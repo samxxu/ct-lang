@@ -7,8 +7,9 @@
 | 严重度 | High（收口真实性） |
 | 锚点 | `e0b0c561`（v0.85.0，2026-11-21） |
 | 文件 | `docs/design/phase85.md:39-41`、`:88`、`:148`、`:231`；`AGENTS.md:508`；`docs/history/phase-log.md:187` |
-| 状态 | open |
+| 状态 | verified |
 | 层级 | **Tier 2（`v1.0` 发布）**；须给“修/不修+理由”，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
+| 处置证据 | **复核通过（2026-11-22，REV）**：D-018 落库；卡 §3/§7.3/§8、`AGENTS.md`、phase-log、roadmap、session-map 统一“有条件通过（D-018）”；“E85-1…8 通过”零命中 |
 
 ## 现象
 
@@ -83,3 +84,39 @@ PH-86 走逐项替换，不是让收口记录把 E85-2 记成 ✅。
 - E85 编号与 `tasks`/`version-minor` 未动；版本仍 0.85.0（未发布，重写未推历史）。
 
 验证：`python3 test/docs/check-docs.py` 绿（见 DOC-81 的归档输出）；`bash tools/check.sh g8` 绿。
+
+## 复核（2026-11-22，REV）
+
+**结论：`verified`。** 按期望选项 1（降级口径）：[D-018](../../docs/decisions/D-018.md) 已入库
+（`accepted`；REVIEW 签收 / EDITOR 批准），E85-2 的验收改写为“spike 已执行 + 度量 + 语料
+逐字节 + sharp edge + 明确门结论”，不再要求字面“门通过”。本轮同时把卡 §3 的 E85-2 断言
+从“门通过”改为“门结论明确（D-018 降级口径，见 §7.3）”，消除同一张卡的最后一处旧口径；
+编号与 `tasks` / `version-minor` 未动。
+
+### 复核命令与原始输出
+
+```console
+$ grep -rn 'E85-1…8 通过' AGENTS.md docs/history/phase-log.md docs/design/phase85.md docs/roadmap.md docs/session-map.md; echo rc=$?
+rc=1
+
+$ grep -rln '有条件通过（D-018）' AGENTS.md docs/history/phase-log.md docs/design/phase85.md docs/roadmap.md docs/session-map.md
+AGENTS.md
+docs/history/phase-log.md
+docs/design/phase85.md
+docs/roadmap.md
+docs/session-map.md
+
+$ grep -n 'E85-2 |' docs/design/phase85.md
+76:| E85-2 | spike 报告含行数、编译耗时、测试语料逐字节一致原始输出、sharp edge 清单；门结论明确（D-018 降级口径，见 §7.3） |
+148:| E85-2 | spike 含行数/耗时/逐字节/ sharp edge；门结论明确 | [p85_spike.md](p85_spike.md)：391→425 行、`next` 309→39、构建 1053→994 ms、66 文件逐字节、10 条 sharp edge；**整子系统新语法重写门不通过**，按 R85-1 移交 PH-86 per-function（§8） | **有条件通过（D-018）**：spike 已执行 + 度量/逐字节/sharp edge + 明确门结论；不把“门不通过”记成“通过” |
+
+$ python3 test/docs/check-docs.py; echo rc=$?
+spec pin: skipped (master spec draft 1.17.0)
+check-docs: OK (2601 relative links in 401 files, v0.88.2, 11 hard gates, 12 phase status, 7 适用版本 header(s), 2 superseded link(s), 9 signoff(s), 10 briefing item(s), 34 J-6 row(s), 28 stability row(s), 3 compat marker(s), 20 capability row(s))
+design window: ok (12/12)
+rc=0
+```
+
+`docs/design/phase85.md` §8、`AGENTS.md` 0.3 的 PH-85 行、`docs/history/phase-log.md`
+的 v0.85.0 行、`docs/roadmap.md`、`docs/session-map.md` 五处均写“E85-2 有条件通过（D-018）”，
+并保留“整子系统新语法重写门不通过”的门结论；无“全部无条件通过”的表述。

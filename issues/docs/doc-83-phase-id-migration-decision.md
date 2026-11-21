@@ -7,9 +7,9 @@
 | 严重度 | **P1（v1.0 发布，Tier 2）** |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-3；[phase 迁移 blocker](../../docs/planning/phase-migration-blockers.md)；主规范 1.17.0 PN-1…PN-17 |
-| 状态 | open |
-| 处置证据 | **待裁定（主规范）/ 待执行（本仓）** |
-| blocked-by | 主规范裁定 / 本仓待执行 |
+| 状态 | deferred |
+| 处置证据 | **延后（2026-11-22，REV）**：D-019 已裁定 A/B/C 并冻结执行时点；迁移于 `v1-PH-0` 开卡前一次原子完成，本轮不做 |
+| blocked-by | 执行触发：`v1-PH-0` 开卡前（主规范裁定已由 [D-019](../../docs/decisions/D-019.md) 给出；负责人 REQ/DEV） |
 
 ## 现象
 
@@ -51,3 +51,35 @@
 - [v1-readiness-1 判决](../../battle/v1-readiness-1/verdict.md)（Tier 2）
 - [phase 迁移 blocker](../../docs/planning/phase-migration-blockers.md)
 - [v1 路线](../../docs/planning/v1-release-plan.md) §2.3
+
+## 复核与延后（2026-11-22，REV）
+
+**结论：`deferred`，执行触发 `v1-PH-0` 开卡前。**
+
+[D-019](../../docs/decisions/D-019.md) 已对三个 blocker 给出裁定：
+
+- **A**：`d=0` 继续，PH-76 起 `MINOR = phase`，迁移不改任何已收口版本号；
+- **B**：迁移到 `docs/phases/v0-PH-<n>/card.md`，但在 `v1-PH-0` 开卡前**一次原子迁移**，
+  不逐卡拉锯；
+- **C**：迁移脚本一并补 `phase-id:` / `version-minor:`；迁移前新卡（v1 起）必须写这两个字段。
+
+D-019 §2 把执行窗口钉在 **`v1-PH-0` 开卡提交的前一步**（同一天、同一批次），并规定迁移前
+禁止新增裸 `PH-*` 引用。D-019 §4 明确关闭方式是 `deferred` + 触发条件；本条与
+[DOC-74](doc-74-phase-id-migration-blocked.md) 同源，DOC-74 已按该口径置 `deferred`。
+
+当前状态（故尚未执行）：
+
+```console
+$ ls docs/planning/phase-id-ledger.md
+ls: docs/planning/phase-id-ledger.md: No such file or directory
+
+$ ls -d docs/phases
+ls: docs/phases: No such file or directory
+
+$ grep -n '执行窗口' docs/decisions/D-019.md
+25:执行窗口：**`v1-PH-0` 开卡提交的前一步**（同一天、同一批次）。按 PN-6：
+```
+
+**触发/负责人**：`v1-PH-0` 开卡前由 REQ 建账本（`window: W0` → `W1`），DEV 跑单一迁移脚本
+并贴 PN-6 五条断言；迁移提交只改目录/文档引用/账本，不动 tag、`battle/**`、代码、测试。
+届时应先关闭本 deferred 条目再开卡，否则 G1/G6 拦截。

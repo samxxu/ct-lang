@@ -7,8 +7,9 @@
 | 严重度 | Low |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1 |
-| 状态 | open |
-| 处置证据 | **已决（2026-11-21 所有者：v1.1 按 A+ 定稿）** |
+| 状态 | deferred |
+| 处置证据 | **延后（2026-11-22，REV）**：A+ 决策已定稿（不拆文件；目录双向断言 + 行号锚点冻结/白名单 + DOC-89 另立）；三项执行属 v1.1，不在 v1-PH-0 冻结期做 |
+| blocked-by | 执行触发：v1.1 开卡（或 spec > 4,000 行 / 导航被评审认定不可用 / 多维护者冲突成为常态）；负责人 REQ，DOC-89 承接通用锚点校验 |
 
 ## 现象
 
@@ -99,3 +100,34 @@ C 按特性拆还会把跨节约束（如 §4.69＋§4.70 的位置白名单）�
 - [v1 路线](../../docs/planning/v1-release-plan.md) §2
 - [DOC-86](doc-86-readme-v088-rewrite.md)
 - [DOC-89](doc-89-anchor-validation.md)（通用锚点校验）
+
+## 复核与延后（2026-11-22，REV）
+
+**结论：`deferred`。决策本身已定稿（A+，2026-11-21 所有者），但 A+ 的三项执行属 v1.1，
+本轮不做，且不在 v1-PH-0 冻结期改 spec 结构。**
+
+决策内容已写死在本条：**不拆文件**；用「目录双向断言 + 行号锚点冻结/存量白名单 + DOC-89
+通用锚点校验」三项精修补导航；拆分只在三个触发条件同时/任一满足时启动正式评估。
+
+执行尚未开始（与预期一致）：
+
+```console
+$ wc -l docs/language-spec.md
+    3244 docs/language-spec.md
+
+$ grep -n '^## 目录' docs/language-spec.md; echo rc=$?
+rc=1
+
+$ ls test/docs/line-anchors.txt
+ls: test/docs/line-anchors.txt: No such file or directory
+
+$ grep -n 'target.split("#", 1)\[0\]' test/docs/check-docs.py
+130:            dest = target.split("#", 1)[0]
+```
+
+当前 spec 3,244 行，未过 4,000 行阈；目录节与 `line-anchors.txt` 白名单尚未建立；
+`check-docs` 仍只校路径、不解 `#fragment`（第 130 行），与决策 §为什么不是 B/C 的诊断一致。
+
+**触发/负责人**：v1.1 开卡时由 REQ 排 A+ 三项（每批锚点迁移单独提交、可单批回滚）；
+若 spec 先过 4,000 行或出现多维护者并行冲突，提前启动 B 评估。DOC-89 承接通用锚点校验，
+可在 v1.2 落地，不阻塞本条的 A+。

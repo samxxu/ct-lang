@@ -7,8 +7,9 @@
 | 严重度 | High（E85-7 与 v0.85.0 收口证据不成立） |
 | 锚点 | `e0b0c561`（v0.85.0，2026-11-21） |
 | 文件 | `docs/README.md:21`；`docs/guide-for-c-programmers.md`（未入库）；`issues/selfhost/sh106-str-view-escape-no-lint.md`（未入库） |
-| 状态 | open |
+| 状态 | verified |
 | 层级 | **Tier 2（`v1.0` 发布）**；须给“修/不修+理由”，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
+| 处置证据 | **复核通过（2026-11-22，REV）**：`v0.85.0` tag 干净归档 `check-docs` 退出 0；当前 HEAD 归档亦 0；guide/SH-106 已入库，工作树链接不再悬空 |
 
 ## 现象
 
@@ -90,3 +91,43 @@ rc=0
 ```
 
 `bash selfhost/check-all.sh` 的 11 门见卡 §7.4/§7.7；`bash tools/check.sh g8` 绿。
+
+## 复核（2026-11-22，REV）
+
+**结论：`verified`。** 原验收把锚点钉在 `e0b0c561`，该提交是 2026-11-21 重写本地未推历史
+**之前**的收口对象；重写后已不是 `HEAD` 的祖先（`git merge-base --is-ancestor e0b0c561 HEAD`
+返回 1），对它的归档仍红是旧态，不是当前缺陷。等价收口是 annotated tag `v0.85.0`
+（`1e2c30f7`，含 F1 修复与 REV 复核）。
+
+### 复核命令与原始输出
+
+```console
+$ git rev-parse v0.85.0^{commit}
+1e2c30f76889bc52c3f2fde52106c07c474b1dd0
+
+$ R=$(mktemp -d /tmp/ph85tag.XXXXXX); git archive v0.85.0 | tar -x -C "$R"
+$ (cd "$R" && python3 test/docs/check-docs.py); echo rc=$?
+spec pin: skipped (master spec draft 1.17.0)
+check-docs: OK (2332 relative links in 379 files, v0.85.0, 11 hard gates, 12 phase status, 5 适用版本 header(s), 2 superseded link(s), 11 signoff(s))
+design window: ok (12/12)
+rc=0
+
+$ git merge-base --is-ancestor e0b0c561 HEAD; echo rc=$?
+rc=1
+
+$ git ls-files docs/guide-for-c-programmers.md issues/selfhost/sh106-str-view-escape-no-lint.md
+docs/guide-for-c-programmers.md
+issues/selfhost/sh106-str-view-escape-no-lint.md
+
+$ R2=$(mktemp -d /tmp/ph85head.XXXXXX); git archive HEAD | tar -x -C "$R2"
+$ (cd "$R2" && python3 test/docs/check-docs.py); echo rc=$?
+spec pin: skipped (master spec draft 1.17.0)
+check-docs: OK (2601 relative links in 401 files, v0.88.2, 11 hard gates, 12 phase status, 7 适用版本 header(s), 2 superseded link(s), 9 signoff(s), 10 briefing item(s), 34 J-6 row(s), 28 stability row(s), 3 compat marker(s), 20 capability row(s))
+design window: ok (12/12)
+rc=0
+```
+
+`docs/README.md` 现链接 `guide-for-c-programmers.md`；该文件与它引用的 SH-106 均已入库，
+所以当前工作树与 HEAD 归档都不再是“工作树绿、归档红”。v0.85.0 收口树则已移除该行
+（`git cat-file -e v0.85.0:docs/guide-for-c-programmers.md` 失败，但归档 `check-docs` 绿），
+与 DEV 处置一致。

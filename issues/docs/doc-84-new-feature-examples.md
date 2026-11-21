@@ -7,8 +7,9 @@
 | 严重度 | Low |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) §6、P2-9 |
-| 状态 | open |
-| 处置证据 | **待办（DEV/docs；v1.0 前建议）** |
+| 状态 | deferred |
+| 处置证据 | **延后（2026-11-22，REV）**：文档面已由 tutorial §15/§17/§18/§22/§23 与 README §0.5 覆盖；四条 `examples/5x_*` 需新增 `examples/**` 并接门禁，属 DEV 批次，不在 DOC 席位路径内 |
+| blocked-by | 执行触发：v1.0 发布前示例批（或 v1.1 首批）；负责人 DEV；需同时接 `test/run.sh` / `check-ast.sh` |
 
 ## 现象
 
@@ -44,3 +45,31 @@ leaks、`match`/ADT、`ct index verify` 只有 spec/tutorial/测试，没有可�
 
 - [v1-readiness-1 判决](../../battle/v1-readiness-1/verdict.md)（P2，非门禁）
 - [tutorial.md](../../docs/tutorial.md) §18/§20/§21
+
+## 复核与延后（2026-11-22，REV）
+
+**结论：`deferred`（不改文档代偿；示例目录属 DEV 路径）。**
+
+文档面已覆盖最小可跑写法：tutorial §15 `ref`/`out`、§17 `box<T>`/`new`、§18 ADT/`match`、
+§22 `String`/`Str`、§23 切片；README §0.5 另有三段可直接 `ct build` 的完整程序。因此本条
+缺的不是“说明”，而是 `examples/5x_*` 目录与门禁接线本身；新增 `examples/**` 超出本批
+DOC 的可改路径（只动 `issues/docs/**` 与 `docs/**`），且验收要求“接入既有 example/门禁入口”。
+
+```console
+$ find examples -maxdepth 1 -type d -name '5x_*' | wc -l
+0
+
+$ grep -rl 'match (' examples --include='*.ct' | wc -l
+0
+
+$ grep -rl 'box<' examples --include='*.ct' | wc -l
+0
+
+$ grep -rn 'void .*(ref \|void .*(out ' examples --include='*.ct' | wc -l
+0
+```
+
+**触发/负责人**：v1.0 发布前示例批（或 v1.1 首批），负责人 DEV；四项一次落地
+`examples/5x_ref_out` / `5x_slice` / `5x_box_new` / `5x_match_adt`，每项带 `expected.out`
+并接 `test/run.sh` + `check-ast.sh`（不新建平行 runner）。落地后本条从 `deferred` 转
+`open` 复核；与 [DOC-86](doc-86-readme-v088-rewrite.md) 的 tutorial-cases runner 可同批。

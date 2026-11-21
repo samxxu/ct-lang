@@ -7,8 +7,9 @@
 | 严重度 | Medium（v1.0 前建议） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1 |
-| 状态 | open |
-| 处置证据 | **实施中（D1、§0.5、D3 最小范围已落；D2 待 SH-110；tutorial-cases 待 DEV）** |
+| 状态 | deferred |
+| 处置证据 | **延后（2026-11-22，REV）**：D1 / §0.5 / D3 最小范围已落并复核；D2 仍阻塞于 SH-110（`open`），D3-5 的 runner/TSV 未入库 |
+| blocked-by | ① SH-110 合入后 48 小时内重测 §0.1；② DEV 交付 `test/docs/check-tutorial-cases.sh` + `tutorial-cases.tsv`；负责人 DEV/REV |
 
 ## 进展（2026-11-21）
 
@@ -76,3 +77,49 @@
 - [SH-73](../selfhost/sh73-temp-receiver-dynamic-dispatch.md)
 - [DOC-85](doc-85-idiom-priority-card.md)
 - [v1-readiness-1](../../battle/v1-readiness-1/verdict.md)（非 Tier 1 门禁）
+
+## 复核与延后（2026-11-22，REV）
+
+**结论：`deferred`。D1、§0.5、D3 最小范围已满足；D2 与 D3-5 runner 两项未达验收，不能置
+`verified`。**
+
+### 已满足
+
+| 项 | 证据 |
+| --- | --- |
+| D1 能力清单 | README §3 五行新特性（`cap:params-slices` / `cap:strings` / `cap:box` / `cap:adt`），均带 spec 节号 |
+| §0.5 三个可跑程序 | README §0.5 `String`/`Str`、`box`/`new`、ADT/`match`；教程联动 §22/§23 |
+| D3 最小范围 | tutorial 顶部「按层阅读」与 §16 已指向 §22/§23；tutorial §22/§23 已入库 |
+
+### 未满足（阻塞项）
+
+```console
+$ grep -n '状态' issues/selfhost/sh110-dynamic-dispatch-chain-fix.md | head -3
+10:| 状态 | open |
+
+$ sed -n '32,34p;40p' README.md
+本页只复述定义；两档路径的判断依据、0.44.1 的逐段边界与报错原文也都在那里。**0.44.1 是历史
+基线（最近一次完整实测），页首是当前版本**；在该基线上完整三段还不能原样写出来：第 2 段被单元
+矩阵挡住（语言限制），第 3 段被「方法结果不能作接收者」与「返回局部接口值悬垂」挡住（实现限制；
+| 0.1 HTTP 请求 | 完整路径（目标形态；历史基线 0.44.1 阻塞，最近可跑为静态宿主） | `char *` factory + 对象方法链 | 构造藏在工厂里，调用点只写一条链 |
+
+$ ls test/docs/
+check-docs.py
+tutorial_cases
+
+$ ls test/docs/tutorial-cases.tsv
+ls: test/docs/tutorial-cases.tsv: No such file or directory
+
+$ ls test/docs/tutorial_cases/
+slice_sum.ct
+string_str.ct
+```
+
+- **D2**：§0.1 断点表仍以 0.44.1 为基线；SH-110 仍是 `open`，按本条非目标不得在裁定前
+  改“动态派发链式”的结论。触发：SH-110 合入后 48 小时内用 v1.0 重测 §0.1。
+- **D3-5**：`check-tutorial-cases.sh` 与 `tutorial-cases.tsv` 均不存在，首批 10 条无法执行；
+  目前只有 2 个 `.ct` fixture。该项需 DEV 写 `test/docs/**`，不在本批 DOC 的可改路径内
+  （只动 `issues/docs/**` 与 `docs/**`）。
+
+**触发/负责人**：① DEV 修 SH-110（或裁定不修，改为在 §0.1 写“经裁定不支持”）后，REV 重测
+§0.1 并关闭 D2；② DEV 交付 runner + 10 条 TSV 且全绿后，本条转 `verified`。两项可并行。

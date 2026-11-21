@@ -7,8 +7,8 @@
 | 严重度 | Medium（v1.0 前用户可见） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [tutorial §10.13](../../docs/tutorial.md)（PH-36 旧 `Str`）、[spec §4.69](../../docs/language-spec.md)、[spec §4.70](../../docs/language-spec.md)、[guide §3](../../docs/guide-for-c-programmers.md)、[DOC-86](doc-86-readme-v088-rewrite.md) D3 |
-| 状态 | open |
-| 处置证据 | **实施中（§22/§23 初稿已入库；tutorial-cases runner 待 DEV）** |
+| 状态 | verified |
+| 处置证据 | **复核通过（2026-11-22，REV）**：§22/§23 已入库，两条 fixture 实跑 `hello, ct` / `14 5`；顶部「按层阅读」与 §16 均指向新章；`check-docs` 绿（runner/TSV 归 DOC-86 D3-5） |
 
 ## 进展（2026-11-21）
 
@@ -84,3 +84,57 @@ tutorial 已有 22 个章节，但没有 **PH-79 切片** 与 **PH-80 `String`/`
 - [DOC-86](doc-86-readme-v088-rewrite.md)（D3 与 tutorial-cases 夹具）
 - [DOC-88](doc-88-spec-split-decision.md)（锚点冻结与编号稳定）
 - [guide-for-c-programmers §3](../../docs/guide-for-c-programmers.md)
+
+## 复核（2026-11-22，REV）
+
+**结论：`verified`。** §22/§23 两章、顶部路标、§16 入口与两条可跑 fixture 都已入库；
+本轮补上 §16 的合并指路（原先只在顶部「按层阅读」）。`tutorial-cases` 的 runner/TSV
+属 [DOC-86](doc-86-readme-v088-rewrite.md) D3-5 的 DEV 交付，不在本条验收的“两章 + 两条
+用例”范围内；两个 fixture 已存在且实跑通过。
+
+### 复核命令与原始输出
+
+```console
+$ grep -nE '^## (16|22|23)\.' docs/tutorial.md
+1961:## 16. 下一步
+2274:## 22. `String` / `Str`：拥有还是借用（Phase 80，v0.80.0 起可用）
+2309:## 23. 切片 `T[]`：长度跟着指针走（Phase 79，v0.79.0 起可用）
+
+$ sed -n '11,19p' docs/tutorial.md
+**按层阅读（推荐顺序）**：值 → 借用 → 句柄 → ADT。
+
+1. 值与所有权：§1–§5、§8；
+2. 参数糖 `ref` / `out`：§15；
+3. 借用视图：§22 `String` / `Str`、§23 切片 `T[]`；机制见
+   [spec §4.69](language-spec.md) / [spec §4.70](language-spec.md)；
+4. 句柄：`box<T>` / `new` §17；
+5. ADT 与 `match`：§18；
+6. 模块、`map` 与 std：§7、§9、§10。
+
+$ sed -n '1961,1968p' docs/tutorial.md
+## 16. 下一步
+
+- [language-spec.md](language-spec.md) —— 每一条展开规则的权威定义
+- [polymorphism.md](polymorphism.md) —— 为什么用 vtable 而不是别的写法
+- [architecture.md](architecture.md) —— 编译器内部怎么按行改写
+- [roadmap.md](roadmap.md) —— 已落地与后续阶段
+- 新特性专章：§22 `String` / `Str`、§23 切片 `T[]`（先看顶层「按层阅读」选层）
+- `examples/**` —— 51 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；其中 `49_socket` 为文档型；完整索引见 [examples/README.md](../examples/README.md)）；`test/cases/**` —— 每个语法点的最小快照
+
+$ .temp/verify880/ct-ast -v
+ct-ast v0.88.0
+
+$ .temp/verify880/ct-ast test/docs/tutorial_cases/string_str.ct -o /tmp/doc90rev/string_str.c \
+    && cc -std=c99 /tmp/doc90rev/string_str.c -o /tmp/doc90rev/string_str \
+    && /tmp/doc90rev/string_str
+hello, ct
+
+$ .temp/verify880/ct-ast test/docs/tutorial_cases/slice_sum.ct -o /tmp/doc90rev/slice_sum.c \
+    && cc -std=c99 /tmp/doc90rev/slice_sum.c -o /tmp/doc90rev/slice_sum \
+    && /tmp/doc90rev/slice_sum
+14 5
+```
+
+两章判据与 [idioms §3](../../docs/idioms.md) 同源（`String` 过了这行还要活 / `Str` 只看一眼）；
+切片章保留 `T a[]` 弃用、位置白名单、边界 trap/`get` 与 `const T[]` 写错的出处（spec §4.69）。
+未重抄 spec 语法表，章节篇幅与既有专章相当。

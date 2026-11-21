@@ -7,8 +7,9 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | 所有者 2026-11-21 裁定“改名，作为 bug 去 fix”；[外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1；[同名核查](../../docs/review/builtin-layer-vs-std-package-name-check.md) |
-| 状态 | open |
-| 处置证据 | **accepted（bugfix；v1.0 前，不占 phase）；REQ 迁移卡已细化（2026-11-21），DEV 待窗口** |
+| 状态 | deferred |
+| 处置证据 | **延后（2026-11-22，REV）**：REQ 迁移卡已细化（目录/ENV/回退/引用清单/两条预写验收）；Stage 1 需一次改 9 个代码文件 + 21 个脚本 + 12 个活跃文档，属 DEV 单提交窗口，不在本批 DOC 路径内 |
+| blocked-by | 执行触发：v1.0 收口窗口（README 大改尾部 + STD 配合清单就位）；负责人 DEV；Stage 2 另需 spec 命名空间条款后独立提交 |
 
 ## 现象
 
@@ -223,3 +224,34 @@ Stage 2 验收：
 - [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md)
 - [同名核查](../../docs/review/builtin-layer-vs-std-package-name-check.md)
 - [D-014](../../docs/decisions/D-014.md)、[v1 路线](../../docs/planning/v1-release-plan.md)
+
+## 复核与延后（2026-11-22，REV）
+
+**结论：`deferred`。这是 bug 的修复窗口问题，不是文档措辞问题；本轮不动代码与 21 个脚本。**
+
+已就绪：REQ 迁移卡（本 issue §Stage 1）把目录落点、`CT_CORE_DIR` 五级语义、一个 MINOR
+回退窗、9 个代码文件 / 21 个脚本 / 12 个活跃文档的替换清单、两条预写 grep 验收和单提交
+回滚都写死了。执行面尚未开始：
+
+```console
+$ ls -d lib/std lib/core 2>&1
+ls: lib/core: No such file or directory
+lib/std
+
+$ grep -rn 'CT_CORE_DIR' --include='*.ct' --include='*.sh' selfhost test | wc -l
+0
+
+$ grep -rn 'CT_STD_DIR' selfhost --include='*.ct' --include='*.sh' | wc -l
+7
+
+$ grep -rl 'lib/std' README.md README.en.md docs/*.md | wc -l
+13
+```
+
+文档侧已有前瞻表述（README 第 14 行、spec §1.2 迁移行、stable-subset 的 Stage 1/2 条目），
+但它们描述的是**待执行**契约，不能替代 `git mv lib/std lib/core` 与 loader/脚本迁移。
+
+**触发/负责人**：v1.0 收口窗口（README 大改尾部 + STD 配合清单就位）由 DEV 一次单提交执行
+Stage 1；合入后 48 小时内由 REQ 唤醒外部 STD 项目组。Stage 2（`namespace core`）需先在
+spec §4.51/§4.70/§4.71 补命名空间与兼容窗条款，再独立提交、独立回滚。两条都完成后本条才
+转 `verified`；本轮不改源码，故不以文档修订代偿。
