@@ -8,7 +8,9 @@
 **ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into plain C.
 The compilation path (`ct compile` / `ct build`) performs no type checking and no optimisation; the
 optional `ct check` runs bounded semantic checks only (call-site arity, argument types, trait-method
-ambiguity, impl signature drift). The output is **readable, ordinary C** with no runtime
+ambiguity, impl signature drift). For earlier type feedback use `ct check --types` (an optional
+subset, see [spec §4.53](docs/language-spec.md#453-可选类型检查-ct-check---typesphase-32)); it is not
+part of the default compile path. The output is **readable, ordinary C** with no runtime
 library dependency, and the boilerplate (vtables, `_self` casts) is generated for you.
 See [docs/roadmap.md](docs/roadmap.md) for what is done and what is next, and
 [docs/glossary.md](docs/glossary.md) for the terminology.

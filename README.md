@@ -4,7 +4,8 @@
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
 编译路径（`ct compile` / `ct build`）不做类型检查、不做优化；可选的 `ct check` 只做受限语义检查
-（调用点 arity、实参类型、trait 方法歧义、impl 签名漂移）。生成物是**可读的普通 C**，不依赖任何运行时库，vtable 与 `_self` 强转等样板代码都由编译器生成。
+（调用点 arity、实参类型、trait 方法歧义、impl 签名漂移）。需要更早发现类型问题时用
+`ct check --types`（可选子集，见 [spec §4.53](docs/language-spec.md#453-可选类型检查-ct-check---typesphase-32)），它不是默认编译路径的一部分。生成物是**可读的普通 C**，不依赖任何运行时库，vtable 与 `_self` 强转等样板代码都由编译器生成。
 已完成的能力与后续阶段见 [docs/roadmap.md](docs/roadmap.md)，术语见 [docs/glossary.md](docs/glossary.md)。
 
 ---
