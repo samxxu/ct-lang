@@ -1120,6 +1120,10 @@ impl ModuleOps for Module {
                 size_t cl;
                 int mv;
                 if (self->arena->nodes[gn].kind != N_ENUM || self->arena->nodes[gn].d != 1) continue;
+                /* Phase 84: an ADT introduces no file-scope variant constants
+                   (bare variant names are not a language form), so there is
+                   nothing to re-export here. */
+                if (self->arena->nodes[gn].aux & 2) continue;
                 for (mv = self->arena->nodes[gn].a; mv >= 0; mv = self->arena->nodes[mv].next) {
                     cmn = self->arena->nodes[mv].text2;
                     if (!self->units[dn].nsprefix[0]) {

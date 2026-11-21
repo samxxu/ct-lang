@@ -27,6 +27,7 @@ import frontend::parse::Expr;
 import frontend::parse::MapBuild;
 import frontend::parse::ParseSupport;
 import frontend::parse::Stmt;
+import frontend::sym::Symbols::Adt as Adt;
 import frontend::sym::Symbols::Field as Field;
 import frontend::sym::Symbols::StructTmpl as StructTmpl;
 import frontend::sym::Symbols::StructInst as StructInst;
@@ -76,6 +77,14 @@ import tool::diag::Diag;
 
 #define N_ENUM 45
 #define N_ENUMVAL 46
+/* Phase 84: the ADT reader's temporary rows -- one member (`text` = name,
+   `aux` = 1 when it carries a payload list, `a` = first field or the explicit
+   value, `line`/`num` = member position, `d`/`c` = value position) and one
+   payload field (`text` = type, `text2` = name). They never reach the emitter
+   as AST nodes: the ADT registry keeps the layout. The numbers are the shared
+   contract with the statement/expression/emitter units. */
+#define N_ADTMEM 83
+#define N_ADTFIELD 82
 #define N_FIELD 23
 #define N_FIELDS 56
 #define N_FUNC 3
@@ -1296,6 +1305,95 @@ static int parse_trait_inst_args(struct Parser *self, char *tname, int cap)
     if (snprintf(tname, (size_t)cap, "%s", self->sym->traits[ti].name) >= cap)
         return self->sup->fail("type name is too long");
     return ti;
+}
+
+/* Phase 84 (D84-1): does the `{` at the cursor open an ADT member list? The
+   form of the whole declaration depends on it, and a payload may name the ADT
+   itself (`Add(Node *l, Node *r)`), so the tag has to join the type table
+   before the members are read. The answer is a raw-source scan at brace depth
+   1: a member name directly followed by `(` is a payload list, while an
+   initialiser (`A = f(1)`) is skipped to its `,` / `}` so a call there does not
+   count. Strings, characters and comments are skipped. */
+static int enum_adt_ahead(struct Parser *self)
+{
+    const char *p;
+    int brace, pdepth;
+
+    p = self->lex->src + self->lex->tokstart;
+    if (*p != '{') return 0;
+    brace = 0;
+    for (;;) {
+        if (!*p) return 0;
+        if (*p == '"' || *p == '\'') {
+            char q = *p;
+            p++;
+            while (*p && *p != q) {
+                if (*p == '\\' && p[1]) p++;
+                p++;
+            }
+            if (*p) p++;
+            continue;
+        }
+        if (*p == '/' && p[1] == '*') {
+            p += 2;
+            while (*p && !(*p == '*' && p[1] == '/')) p++;
+            if (*p) p += 2;
+            continue;
+        }
+        if (*p == '/' && p[1] == '/') {
+            while (*p && *p != '\n') p++;
+            continue;
+        }
+        if (*p == '{') { brace++; p++; continue; }
+        if (*p == '}') {
+            brace--;
+            if (brace == 0) return 0;
+            p++;
+            continue;
+        }
+        if (brace != 1) { p++; continue; }
+        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == ',') { p++; continue; }
+        if (*p == '_' || (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')) {
+            while (*p == '_' || (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                   || (*p >= '0' && *p <= '9')) p++;
+            while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+            if (*p == '(') return 1;
+            if (*p != '=') continue;
+            /* skip the initialiser up to the member list's own `,` / `}` */
+            p++;
+            pdepth = 0;
+            while (*p) {
+                if (*p == '"' || *p == '\'') {
+                    char q = *p;
+                    p++;
+                    while (*p && *p != q) {
+                        if (*p == '\\' && p[1]) p++;
+                        p++;
+                    }
+                    if (*p) p++;
+                    continue;
+                }
+                if (*p == '/' && p[1] == '*') {
+                    p += 2;
+                    while (*p && !(*p == '*' && p[1] == '/')) p++;
+                    if (*p) p += 2;
+                    continue;
+                }
+                if (*p == '/') { while (*p && *p != '\n') p++; continue; }
+                if (*p == '(' || *p == '[' || *p == '{') { pdepth++; p++; continue; }
+                if (*p == ')' || *p == ']' || *p == '}') {
+                    if (pdepth == 0) break;
+                    pdepth--;
+                    p++;
+                    continue;
+                }
+                if (pdepth == 0 && *p == ',') break;
+                p++;
+            }
+            continue;
+        }
+        p++;
+    }
 }
 
 impl ParseOps for Parser {
@@ -2830,12 +2928,20 @@ impl ParseOps for Parser {
     }
 
     /* `enum Tag { A, B = <常量>, C };` -- every member becomes a file-scope
-       constant (D-3) and the tag joins the type table under kind 5 (D-2). The
-       `typedef` entry calls the same reader with `tag_required == 0` for an
-       untagged body, then owns the alias half of the node. */
+       constant (D-3) and the tag joins the type table under kind 5 (D-2).
+       Phase 84 (D84-1): a member with a parenthesised payload list makes the
+       whole declaration an ADT -- the tag joins the table under kind 7 (its C
+       spelling is `struct Tag`) and the variants live in the ADT registry. The
+       two forms never mix, and an ADT variant cannot carry an explicit value.
+       The members are read into temporary nodes first, because only the last
+       one tells a C enum from an ADT. The `typedef` entry calls the same reader
+       with `tag_required == 0`, then owns the alias half of the node. */
     int parse_enum_def(int is_pub, int tag_required)
     {
-        int s, m, tail, ti, mline, e, ar, ao;
+        int s, m, tail, ti, e, ar, ao;
+        int mem_first, mem_last, has_payload, has_value, all_payload;
+        int first_nopay_line, first_nopay_col, first_val_line, first_val_col;
+        int adt, tn, tline, tcol, is_adt, pre_adt;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         char mname[MAX_TEXT];
@@ -2846,6 +2952,18 @@ impl ParseOps for Parser {
 
         name[0] = 0;
         qname[0] = 0;
+        adt = -1;
+        has_payload = 0;
+        has_value = 0;
+        all_payload = 1;
+        mem_first = -1;
+        mem_last = -1;
+        first_nopay_line = 0;
+        first_nopay_col = 0;
+        first_val_line = 0;
+        first_val_col = 0;
+        tline = self->lex->tokline;
+        tcol = self->lex->tokstart - self->lex->lstart + 1;
         self->sup->lex_next();                       /* consume `enum` */
         if (self->lex->tok == T_ID) {
             snprintf(name, sizeof name, "%s", self->lex->toktext);
@@ -2857,7 +2975,12 @@ impl ParseOps for Parser {
                 return tool::diag::ct_sem_error(self->lex->tokline,
                     self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
             }
-            if (self->sup->add_type(qname, 5) != 0) return -1;
+            if (ti >= 0 && self->sym->type_kind[ti] == 7) {
+                char msg[MAX_TEXT];
+                snprintf(msg, sizeof msg, "duplicate ADT '%s'", name);
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
+            }
             self->sup->lex_next();
         } else if (tag_required) {
             return self->sup->fail("expected an enum name");
@@ -2865,55 +2988,200 @@ impl ParseOps for Parser {
         /* Phase 34 (L34-3): enums have no monomorphisation axis. */
         if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)
             return self->sup->fail("generic enums are not supported");
+        pre_adt = 0;
+        if (name[0] && self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
+            pre_adt = enum_adt_ahead(self);
         if (self->sup->expect("{") != 0) return -1;
+        /* the tag joins the table before its members are read: a payload may
+           name the ADT itself, and its C spelling differs between the forms */
+        if (name[0] && self->sup->add_type(qname, pre_adt ? 7 : 5) != 0) return -1;
+        /* the member rows are temporary: they become N_ENUMVAL constants (C
+           enum) or ADT registry rows, never emitted AST nodes of their own */
+        while (self->lex->tok != T_EOF
+               && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+            if (self->lex->tok != T_ID) return self->sup->fail("expected an enum member");
+            tn = self->sup->new_node(N_ADTMEM);
+            if (tn < 0) return -1;
+            snprintf(self->arena->nodes[tn].text, MAX_TEXT, "%s", self->lex->toktext);
+            self->arena->nodes[tn].line = self->lex->tokline;
+            self->arena->nodes[tn].num = self->lex->tokstart - self->lex->lstart + 1;
+            self->arena->nodes[tn].aux = 0;         /* 1 = payload list */
+            self->sup->lex_next();
+            if (self->sup->accept("(")) {
+                int ftail = -1;
+                self->arena->nodes[tn].aux = 1;
+                has_payload = 1;
+                while (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
+                    int fld, fline, fcol;
+                    char ftype[MAX_TEXT];
+                    char fname[MAX_TEXT];
+                    fline = self->lex->tokline;
+                    fcol = self->lex->tokstart - self->lex->lstart + 1;
+                    if (self->ex->parse_type(ftype, sizeof ftype) != 0) return -1;
+                    if (self->lex->tok != T_ID)
+                        return self->sup->fail("expected a payload field name");
+                    snprintf(fname, sizeof fname, "%s", self->lex->toktext);
+                    self->sup->lex_next();
+                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0)
+                        return tool::diag::ct_sem_error(fline, fcol,
+                            "an ADT payload field cannot be an array", self->mem->path);
+                    if (strcmp(ftype, "void") == 0)
+                        return tool::diag::ct_sem_error(fline, fcol,
+                            "an ADT payload field cannot have type 'void'", self->mem->path);
+                    fld = self->sup->new_node(N_ADTFIELD);
+                    if (fld < 0) return -1;
+                    snprintf(self->arena->nodes[fld].text, MAX_TEXT, "%s", ftype);
+                    snprintf(self->arena->nodes[fld].text2, MAX_TEXT, "%s", fname);
+                    self->arena->nodes[fld].line = fline;
+                    self->arena->nodes[fld].num = fcol;
+                    if (self->arena->nodes[tn].a < 0) self->arena->nodes[tn].a = fld;
+                    else self->arena->nodes[ftail].next = fld;
+                    ftail = fld;
+                    if (!self->sup->accept(",")) break;
+                }
+                if (self->sup->expect(")") != 0) return -1;
+                /* D84-1: an ADT variant names its tag by position; an explicit
+                   value would be a C-enum form, so it is refused where written */
+                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0)
+                    return tool::diag::ct_sem_error(self->lex->tokline,
+                        self->lex->tokstart - self->lex->lstart + 1,
+                        "an ADT variant cannot carry an explicit value", self->mem->path);
+            } else if (self->sup->accept("=")) {
+                int vline, vcol;
+                vline = self->lex->tokline;
+                vcol = self->lex->tokstart - self->lex->lstart + 1;
+                e = self->ex->parse_expr();
+                if (e < 0) return -1;
+                if (!self->ex->const_ok(e))
+                    return tool::diag::ct_sem_error(vline, vcol,
+                        "an enum value must be an integer constant", self->mem->path);
+                self->arena->nodes[tn].a = e;
+                self->arena->nodes[tn].d = vline;
+                self->arena->nodes[tn].c = vcol;
+                if (!has_value) {
+                    has_value = 1;
+                    first_val_line = vline;
+                    first_val_col = vcol;
+                }
+                all_payload = 0;
+            } else {
+                all_payload = 0;
+                if (first_nopay_line == 0) {
+                    first_nopay_line = self->arena->nodes[tn].line;
+                    first_nopay_col = self->arena->nodes[tn].num;
+                }
+            }
+            if (mem_first < 0) mem_first = tn;
+            else self->arena->nodes[mem_last].next = tn;
+            mem_last = tn;
+            /* a trailing comma before `}` is allowed */
+            if (!self->sup->accept(",")) break;
+        }
+        if (self->sup->expect("}") != 0) return -1;
+        is_adt = has_payload;
+        if (is_adt && !name[0])
+            return tool::diag::ct_sem_error(tline, tcol,
+                "an ADT needs a tag name (write `enum Shape { ... }`)", self->mem->path);
         s = self->sup->new_node(N_ENUM);
         if (s < 0) return -1;
         snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", name);
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", qname);
         snprintf(self->arena->nodes[s].text3, MAX_TEXT, "%s", "");
         self->arena->nodes[s].d = is_pub;
+        if (name[0]) {
+            /* the pre-scan and the real member list must agree; if they ever
+               do not, the parsed form wins and the table follows it */
+            ti = self->sym->find_type(qname);
+            if (ti >= 0 && self->sym->type_kind[ti] != (is_adt ? 7 : 5))
+                self->sym->type_kind[ti] = is_adt ? 7 : 5;
+        }
+        if (is_adt) {
+            if (has_value)
+                return tool::diag::ct_sem_error(first_val_line, first_val_col,
+                    "an ADT variant cannot carry an explicit value", self->mem->path);
+            if (!all_payload)
+                return tool::diag::ct_sem_error(first_nopay_line, first_nopay_col,
+                    "every variant of an ADT must carry a payload list", self->mem->path);
+            adt = frontend::sym::ct_adt_add(name, qname, is_pub, self->cur_unit,
+                                            self->mem->path, tline);
+            if (adt == -2) {
+                char msg[MAX_TEXT];
+                snprintf(msg, sizeof msg, "duplicate ADT '%s'", name);
+                return tool::diag::ct_sem_error(tline, tcol, msg, self->mem->path);
+            }
+            if (adt < 0)
+                return tool::diag::ct_sem_error(tline, tcol,
+                    "too many ADT types in this build (limit 64)", self->mem->path);
+            self->arena->nodes[s].aux = 2;          /* ADT */
+            self->arena->nodes[s].num = adt + 1;    /* registry row + 1 */
+            for (tn = mem_first; tn >= 0; tn = self->arena->nodes[tn].next) {
+                int v, fld, seen;
+                struct Adt *adts;
+                int nadts;
+                v = frontend::sym::ct_adt_add_variant(adt, self->arena->nodes[tn].text,
+                        self->arena->nodes[tn].text, self->arena->nodes[tn].line,
+                        self->arena->nodes[tn].num);
+                if (v < 0) {
+                    char msg[MAX_TEXT];
+                    snprintf(msg, sizeof msg, "too many variants for ADT '%s' (limit 16)", name);
+                    return tool::diag::ct_sem_error(self->arena->nodes[tn].line,
+                        self->arena->nodes[tn].num, msg, self->mem->path);
+                }
+                adts = frontend::sym::ct_adts(&nadts);
+                for (fld = self->arena->nodes[tn].a; fld >= 0;
+                     fld = self->arena->nodes[fld].next) {
+                    for (seen = 0; seen < adts[adt].variants[v].nfields; seen++)
+                        if (strcmp(adts[adt].variants[v].fields[seen].name,
+                                   self->arena->nodes[fld].text2) == 0) {
+                            char msg[MAX_TEXT];
+                            snprintf(msg, sizeof msg, "duplicate payload field '%s'",
+                                     self->arena->nodes[fld].text2);
+                            return tool::diag::ct_sem_error(self->arena->nodes[fld].line,
+                                self->arena->nodes[fld].num, msg, self->mem->path);
+                        }
+                    if (frontend::sym::ct_adt_add_field(adt, v, self->arena->nodes[fld].text2,
+                            self->arena->nodes[fld].text) < 0) {
+                        char msg[MAX_TEXT];
+                        snprintf(msg, sizeof msg,
+                                 "too many payload fields for '%s.%s' (limit 8)",
+                                 name, self->arena->nodes[tn].text);
+                        return tool::diag::ct_sem_error(self->arena->nodes[fld].line,
+                            self->arena->nodes[fld].num, msg, self->mem->path);
+                    }
+                }
+            }
+            ao = -1;
+            ar = self->sup->attr_pool(&ao);
+            if (ar < 0) return -1;
+            if (ao >= 0) self->arena->nodes[s].attr = ao;
+            return s;
+        }
         /* the constants are matched against a namespace path without the
            trailing separator, like every other global */
         snprintf(nsbuf, sizeof nsbuf, "%s", self->sym->ns);
         nl = strlen(nsbuf);
         if (nl > 0) nsbuf[nl - 1] = 0;
         tail = -1;
-        while (self->lex->tok != T_EOF
-               && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
-            if (self->lex->tok != T_ID) return self->sup->fail("expected an enum member");
-            mline = self->lex->tokline;
-            snprintf(mname, sizeof mname, "%s", self->lex->toktext);
+        for (tn = mem_first; tn >= 0; tn = self->arena->nodes[tn].next) {
+            snprintf(mname, sizeof mname, "%s", self->arena->nodes[tn].text);
             if (self->sup->ns_decl_name(mname, cname, sizeof cname) != 0) return -1;
             m = self->sup->new_node(N_ENUMVAL);
             if (m < 0) return -1;
             snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", cname);
             snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", mname);
-            self->arena->nodes[m].line = mline;
+            self->arena->nodes[m].line = self->arena->nodes[tn].line;
             if (self->sym->declare_const(mname, cname, nsbuf, 0) < 0)
                 return self->sup->fail(self->sym->last_error());
             /* PH-57: also key the member by its source enum tag so the value
                form `Type::Member` resolves through find_qualified_global. */
             if (name[0] && self->sym->declare_const(mname, cname, name, 0) < 0)
                 return self->sup->fail(self->sym->last_error());
-            self->sup->lex_next();
-            if (self->sup->accept("=")) {
-                int eline, ecol;
-                eline = self->lex->tokline;
-                ecol = self->lex->tokstart - self->lex->lstart + 1;
-                e = self->ex->parse_expr();
-                if (e < 0) return -1;
-                if (!self->ex->const_ok(e))
-                    return tool::diag::ct_sem_error(eline, ecol,
-                        "an enum value must be an integer constant", self->mem->path);
-                self->arena->nodes[m].a = e;
-            }
+            if (self->arena->nodes[tn].a >= 0)
+                self->arena->nodes[m].a = self->arena->nodes[tn].a;
             if (tail < 0) self->arena->nodes[s].a = m;
             else self->arena->nodes[tail].next = m;
             tail = m;
-            /* a trailing comma before `}` is allowed */
-            if (!self->sup->accept(",")) break;
         }
-        if (self->sup->expect("}") != 0) return -1;
         ao = -1;
         ar = self->sup->attr_pool(&ao);
         if (ar < 0) return -1;

@@ -512,6 +512,54 @@ pub int ct_inst_resolve(const char *in, char *out, int cap);
    instance form, -1 otherwise. */
 pub int ct_inst_split(const char *in, char *name, int *nargs, char *a1, char *a2, char *tail, int cap);
 
+/* ---- Phase 84: minimal ADTs (`enum T { V(payload), … }`) ----
+
+   A payload-bearing `enum` is an ADT: the tag joins the type table under kind 7
+   (its C spelling is `struct <tag>`), and the variants/payloads live in this
+   build-wide registry so the parser, the type pass and the emitter read one
+   copy of the layout. It is global like the template/instance registries: the
+   per-unit symbol tables reset, while a consumer unit must still see the
+   variants of a `pub` header ADT (D84-2).
+
+   Caps are literals: the generated header carries no macros. */
+#define MAX_ADTS 64
+#define MAX_ADT_VARIANTS 16
+#define MAX_ADT_FIELDS 8
+pub struct AdtField {
+    char name[160];
+    char type[160];
+}
+pub struct AdtVariant {
+    char name[160];             /* the source name, `Circle` */
+    char cname[160];            /* the emitted union member, `Circle` */
+    int  nfields;
+    struct AdtField fields[8];
+    int  line;
+    int  col;
+}
+pub struct Adt {
+    char name[160];             /* the source name, `Shape` */
+    char full[160];             /* the namespace-mangled C tag, `lib_Shape` */
+    int  nvariants;
+    struct AdtVariant variants[16];
+    int  is_pub;
+    int  owner;                 /* the unit that declared it; -1 in compile mode */
+    char path[1024];
+    int  line;
+}
+pub struct Adt *ct_adts(int *n);
+/* The row whose C tag (or, as a fallback, source name) is `name`; -1 otherwise. */
+pub int ct_adt_find(const char *name);
+/* Create the row for `full`; returns its index, -1 on a cap overflow, -2 when a
+   row with that spelling already exists (the caller reports the duplicate). */
+pub int ct_adt_add(const char *name, const char *full, int is_pub, int owner, const char *path, int line);
+pub int ct_adt_add_variant(int adt, const char *name, const char *cname, int line, int col);
+pub int ct_adt_add_field(int adt, int v, const char *name, const char *type);
+/* The variant row of `adt` named `name`; -1 when the variant does not exist. */
+pub int ct_adt_variant(int adt, const char *name);
+/* 1 when the ADT has a variant with this name. */
+pub int ct_adt_has_variant(int adt, const char *name);
+
 pub struct Symbols {
     /* The four big tables are heap blocks allocated in `symbols_get` (SH-42):
        as inline arrays in the file-scope instance they put ~21 MB of zeroes
@@ -2459,4 +2507,105 @@ int ct_inst_resolve(const char *in, char *out, int cap)
     k = snprintf(out, (size_t)cap, "struct %s%s", enc, tail);
     if (k < 0 || k >= cap) return -1;
     return 0;
+}
+
+/* ---- Phase 84: the ADT registry ----
+   Allocated on first use and never reset, for the same reason the template
+   registries are build-wide: a consumer unit reads the variants of a `pub`
+   header ADT after the owner's per-unit tables are gone. */
+static struct Adt *g_adts;
+static int g_nadts;
+
+struct Adt *ct_adts(int *n)
+{
+    if (!g_adts) g_adts = calloc(MAX_ADTS, sizeof(*g_adts));
+    if (!g_adts) {
+        if (n) *n = 0;
+        return g_adts;
+    }
+    if (n) *n = g_nadts;
+    return g_adts;
+}
+
+/* The C tag is the row's identity across units; the source name is the
+   fallback for compile mode, where no mangling happened. */
+int ct_adt_find(const char *name)
+{
+    int i, n;
+    struct Adt *a = ct_adts(&n);
+
+    if (!name || !name[0]) return -1;
+    for (i = 0; a && i < n; i++)
+        if (strcmp(a[i].full, name) == 0) return i;
+    for (i = 0; a && i < n; i++)
+        if (strcmp(a[i].name, name) == 0) return i;
+    return -1;
+}
+
+int ct_adt_add(const char *name, const char *full, int is_pub, int owner,
+               const char *path, int line)
+{
+    int i, n;
+    struct Adt *a = ct_adts(&n);
+
+    if (ct_adt_find(full) >= 0) return -2;
+    if (!a || n >= MAX_ADTS) return -1;
+    i = n;
+    snprintf(a[i].name, MAX_TEXT, "%s", name ? name : "");
+    snprintf(a[i].full, MAX_TEXT, "%s", full ? full : "");
+    a[i].nvariants = 0;
+    a[i].is_pub = is_pub;
+    a[i].owner = owner;
+    snprintf(a[i].path, 1024, "%s", path ? path : "");
+    a[i].line = line;
+    g_nadts++;
+    return i;
+}
+
+int ct_adt_variant(int adt, const char *name)
+{
+    int n, v;
+    struct Adt *a = ct_adts(&n);
+
+    if (!a || adt < 0 || adt >= n) return -1;
+    for (v = 0; v < a[adt].nvariants; v++)
+        if (strcmp(a[adt].variants[v].name, name) == 0) return v;
+    return -1;
+}
+
+int ct_adt_has_variant(int adt, const char *name)
+{
+    return ct_adt_variant(adt, name) >= 0 ? 1 : 0;
+}
+
+int ct_adt_add_variant(int adt, const char *name, const char *cname, int line, int col)
+{
+    int n, v;
+    struct Adt *a = ct_adts(&n);
+
+    if (!a || adt < 0 || adt >= n) return -1;
+    if (a[adt].nvariants >= MAX_ADT_VARIANTS) return -1;
+    v = a[adt].nvariants;
+    snprintf(a[adt].variants[v].name, MAX_TEXT, "%s", name ? name : "");
+    snprintf(a[adt].variants[v].cname, MAX_TEXT, "%s", cname ? cname : "");
+    a[adt].variants[v].nfields = 0;
+    a[adt].variants[v].line = line;
+    a[adt].variants[v].col = col;
+    a[adt].nvariants++;
+    return v;
+}
+
+int ct_adt_add_field(int adt, int v, const char *name, const char *type)
+{
+    int n, f;
+    struct Adt *a = ct_adts(&n);
+
+    if (!a || adt < 0 || adt >= n) return -1;
+    if (v < 0 || v >= a[adt].nvariants) return -1;
+    if (a[adt].variants[v].nfields >= MAX_ADT_FIELDS) return -1;
+    f = a[adt].variants[v].nfields;
+    snprintf(a[adt].variants[v].fields[f].name, MAX_TEXT, "%s", name ? name : "");
+    snprintf(a[adt].variants[v].fields[f].type, MAX_TEXT, "%s", type ? type : "");
+    a[adt].variants[v].nfields++;
+    return f;
 }

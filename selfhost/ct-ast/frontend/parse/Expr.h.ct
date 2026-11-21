@@ -24,6 +24,7 @@ import frontend::module::MapTable;
 import backend::mem::Memory;
 import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
 import frontend::sym::Symbols::Closure as Closure;
 import frontend::sym::Symbols::StructTmpl as StructTmpl;
 import frontend::sym::Symbols::StructInst as StructInst;
@@ -110,6 +111,11 @@ import tool::diag::Diag;
    `Result<T, E>` value); the `?` position is kept in `line` / `num` for the
    diagnostics. */
 #define N_TRY 71
+/* Phase 84: `Shape.Circle(args)` builds one ADT variant. `text` is the C struct
+   tag, `text2` the variant's union member, `text3` the source variant name,
+   `num` the variant index and `a` the argument chain. The emit is a compound
+   literal (no helper function, so no unused-static warning). */
+#define N_ADTCTOR 81
 /* P-7.2 (S3 slice prototype): `s[i]` (checked place), `s.get(i)` (soft
    access) and `a[lo..hi]` / `a[lo..]` (subslice construction). All three keep
    the element spelling in `text`; the C storage of a slice is the erased
@@ -310,6 +316,13 @@ pub trait ExprNew {
     int  parse_new_expr(void);
     int  box_member_deref(int recv, int arrow, const char *fname,
                           int line, int col, int *out);
+}
+
+/* Phase 84: `Type.Variant(args)` construction. Its own small trait because
+   `ExprOps` already sits at MAX_METHODS, like the optional / new grammars. */
+pub trait ExprAdt {
+    int  adt_ctor_ahead(void);
+    int  parse_adt_ctor(void);
 }
 
 pub trait ExprTypes {
@@ -532,7 +545,7 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew;
+} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt;
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -2241,6 +2254,9 @@ impl ExprOps for Expr {
                             if (self->type_append(out, cap, &n, "enum") != 0) return -1;
                         } else if (self->sym->type_kind[qti] == 6) {
                             if (self->type_append(out, cap, &n, "union") != 0) return -1;
+                        } else if (self->sym->type_kind[qti] == 7) {
+                            /* Phase 84: an ADT's C spelling is its struct. */
+                            if (self->type_append(out, cap, &n, "struct") != 0) return -1;
                         }
                         if (self->type_append(out, cap, &n, rname) != 0) return -1;
                         self->sup->add_type(rname, self->sym->type_kind[qti]);
@@ -2375,6 +2391,11 @@ impl ExprOps for Expr {
                 } else if (self->sym->type_kind[ti] == 6) {
                     if (self->type_append(out, cap, &n, "union") != 0) return -1;
                     snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "union %s", rname);
+                } else if (self->sym->type_kind[ti] == 7) {
+                    /* Phase 84: an ADT is emitted as `struct <tag>`; the tag is
+                       the same one the ADT registry records. */
+                    if (self->type_append(out, cap, &n, "struct") != 0) return -1;
+                    snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", rname);
                 } else if (self->sym->type_kind[ti] == 3) {
                     int sti = self->sym->find_trait(rname);
                     self->saw_trait = 1;
@@ -4347,6 +4368,12 @@ impl ExprOps for Expr {
         *array_depth = 0;
         if (n < 0 || depth > 8) return 0;
         switch (self->arena->nodes[n].kind) {
+        case N_ADTCTOR:
+            /* Phase 84: a constructor's value has the ADT's C struct spelling;
+               `text` is the struct tag the registry holds. */
+            if (snprintf(out, (size_t)cap, "struct %s", self->arena->nodes[n].text) >= cap)
+                return 0;
+            return 1;
         case N_VAR:
             i = self->sym->find_var(self->arena->nodes[n].text2);
             if (i < 0) return 0;
@@ -4782,6 +4809,9 @@ impl ExprOps for Expr {
         n = self->postfix_seed;
         self->postfix_seed = -1;
         if (n < 0) {
+            /* Phase 84: `Type.Variant(args)` is a constructor, not a member
+               access on a value. The lookahead never consumes. */
+            if (self->adt_ctor_ahead()) return self->parse_adt_ctor();
             n = self->parse_primary();
             if (n < 0) return -1;
         }
@@ -7809,6 +7839,133 @@ impl ExprNew for Expr {
 
 }
 
+
+/* Phase 84 (D84-1/D84-3): `Type.Variant(args)` constructs one ADT variant. The
+   variant's payload fields are typed, so arity and a confident type mismatch are
+   hard errors at the constructor's own position (E84-2). The C form is a
+   compound literal, which needs no helper function and therefore no
+   unused-static allowance; the emitter owns that spelling. */
+impl ExprAdt for Expr {
+    /* 1 when the cursor is `Type.Variant(` and `Type` names an ADT. A visible
+       variable of the same name keeps the ordinary member-access path: a
+       variable wins over a type, as it does everywhere else. The token stream
+       cannot be rewound, so the lookahead scans the raw source. */
+    int adt_ctor_ahead(void)
+    {
+        const char *p;
+        char rn[MAX_TEXT];
+        int i;
+        (void)self;
+
+        if (self->lex->tok != T_ID) return 0;
+        if (self->sym->find_var(self->lex->toktext) >= 0) return 0;
+        if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
+        if (frontend::sym::ct_adt_find(rn) < 0) return 0;
+        p = self->lex->src + self->lex->tokstart + strlen(self->lex->toktext);
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        if (*p != '.') return 0;
+        p++;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        i = 0;
+        while (((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                || (*p >= '0' && *p <= '9') || *p == '_') && i + 1 < MAX_TEXT) {
+            i++;
+            p++;
+        }
+        if (i == 0) return 0;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        return *p == '(';
+    }
+
+    int parse_adt_ctor(void)
+    {
+        int tline, tcol, vline, vcol, args, nargs, adt, v, nfields, n, k, a;
+        char rn[MAX_TEXT];
+        char vname[MAX_TEXT];
+        char msg[3 * MAX_TEXT];
+        struct Adt *adts;
+        int nadts;
+
+        tline = self->lex->tokline;
+        tcol = self->lex->tokstart - self->lex->lstart + 1;
+        if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0)
+            return -1;
+        self->sup->lex_next();                     /* the type name */
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0))
+            return self->sup->fail("expected '.' after an ADT type name");
+        self->sup->lex_next();
+        if (self->lex->tok != T_ID) return self->sup->fail("expected a variant name after '.'");
+        vline = self->lex->tokline;
+        vcol = self->lex->tokstart - self->lex->lstart + 1;
+        snprintf(vname, sizeof vname, "%s", self->lex->toktext);
+        self->sup->lex_next();
+        adt = frontend::sym::ct_adt_find(rn);
+        if (adt < 0) {
+            snprintf(msg, sizeof msg, "'%s' is not an ADT", rn);
+            return tool::diag::ct_sem_error(tline, tcol, msg, self->sup->mem->path);
+        }
+        v = frontend::sym::ct_adt_variant(adt, vname);
+        if (v < 0) {
+            adts = frontend::sym::ct_adts(&nadts);
+            snprintf(msg, sizeof msg, "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
+            return tool::diag::ct_sem_error(vline, vcol, msg, self->sup->mem->path);
+        }
+        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0)) {
+            adts = frontend::sym::ct_adts(&nadts);
+            snprintf(msg, sizeof msg, "expected '(' after '%s.%s'", adts[adt].name, vname);
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                self->lex->tokstart - self->lex->lstart + 1, msg, self->sup->mem->path);
+        }
+        args = self->parse_args();
+        if (args < 0) return -1;
+        if (args == 0) args = -1;              /* an empty list is a real value */
+        adts = frontend::sym::ct_adts(&nadts);
+        nfields = adts[adt].variants[v].nfields;
+        nargs = 0;
+        for (a = args; a > 0; a = self->arena->nodes[a].next) nargs++;
+        if (nargs != nfields) {
+            snprintf(msg, sizeof msg, "'%s.%s' takes %d argument%s, but %d given",
+                     adts[adt].name, vname, nfields, nfields == 1 ? "" : "s", nargs);
+            return tool::diag::ct_sem_error(tline, tcol, msg, self->sup->mem->path);
+        }
+        k = 0;
+        for (a = args; a > 0; a = self->arena->nodes[a].next, k++) {
+            char aty[MAX_TEXT];
+            char fb[MAX_TEXT];
+            char ab[MAX_TEXT];
+            int az, rc, aline, acol;
+            if (k >= nfields) break;
+            az = 0;
+            if (self->chk_type(a, aty, sizeof aty, &az) != 0) continue;
+            if (az && strchr(adts[adt].variants[v].fields[k].type, '*')) continue;
+            rc = arg_class(adts[adt].variants[v].fields[k].type, aty,
+                           fb, sizeof fb, ab, sizeof ab);
+            if (rc == 2) {
+                int fs, as;
+                fs = self->sym->find_struct(fb + 6);
+                as = self->sym->find_struct(ab + 6);
+                if (fs < 0 || as < 0 || fs == as) rc = 0;
+            }
+            if (rc != 1) continue;
+            aline = (self->arg_base + k < MAX_ARG_POS) ? self->arg_line[self->arg_base + k] : tline;
+            acol = (self->arg_base + k < MAX_ARG_POS) ? self->arg_col[self->arg_base + k] : tcol;
+            snprintf(msg, sizeof msg, "argument %d of '%s.%s': expected '%s', got '%s'",
+                     k + 1, adts[adt].name, vname,
+                     adts[adt].variants[v].fields[k].type, aty);
+            return tool::diag::ct_sem_error(aline, acol, msg, self->sup->mem->path);
+        }
+        n = self->sup->new_node(N_ADTCTOR);
+        if (n < 0) return -1;
+        snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", adts[adt].full);
+        snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", adts[adt].variants[v].cname);
+        snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", adts[adt].variants[v].name);
+        self->arena->nodes[n].num = v;
+        self->arena->nodes[n].line = tline;
+        self->arena->nodes[n].a = args;
+        return n;
+    }
+}
+
 impl ExprSubscript for Expr {
     /* PH-52 D52-2: the diagnostics name the user's spelling, not the encoded
        instance tag. `Box<int>` comes from the instance row; a plain struct
@@ -8407,6 +8564,7 @@ impl ExprTypes for Expr {
         case N_INDEX:
         case N_CALL:
         case N_MCALL:
+        case N_ADTCTOR:
             break;
         default:
             return -1;                 /* S2 adds the literal and wrapper shapes */
