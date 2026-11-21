@@ -220,9 +220,13 @@ $ cd /tmp/p85roll && git revert --no-edit f377315a      # S85d（A 机制）
 [detached HEAD 1f71c4e7] Revert "feat(ct-ast): p85_a_wire（S85d，B 检查器接进 build，off/warn/error）"
  8 files changed, 6 insertions(+), 118 deletions(-)
 $ git revert --no-edit 104dfc54                          # S85c（M0 粗切）
-[detached HEAD ...] Revert "feat(ct-ast): p85_m0（S85c，6 单元纯搬移）"
+CONFLICT (modify/delete): docs/design/p85_m0.md deleted in parent of 104dfc54
+  and modified in HEAD.
+# 唯一冲突：M0 之后补写的 F2 说明在同一文件里。按“文档随单元一起删”解：
+$ git rm docs/design/p85_m0.md && git revert --continue
+[detached HEAD c74c4570] Revert "feat(ct-ast): p85_m0（S85c，6 单元纯搬移）"
  delete mode 100644 selfhost/ct-ast/backend/emit/EmitterText.h.ct
- ...（其余 5 个新单元 + 映射表删除）
+ ...（其余 5 个新单元 + 映射表 + design 文档删除）
 $ cp .temp/build-ct-ast.sh . && sh build-ct-ast.sh . .temp/b   # 全链
 built .temp/b/ct-ast                                     rc=0（-Wall -Wextra -std=c99 零警告）
 $ for fx in 28_switch 30_enum 271_qualified_enum; do
@@ -246,6 +250,9 @@ $ # 语料回归：test/cases 25/25（compile-only 计入），0 失败
 - 逆序回滚的依赖：S85d 的 `Module.build_main`/`Expr` 内核调用 M0 搬出的
   `SymbolsTypeText`/`ModuleBoundary` 函数，故必须先 ret S85d；顺序写进本卡，避免“单卡
   回滚”被误解为任意顺序。
+- 源码零冲突；唯一的 modify/delete 冲突在 `docs/design/p85_m0.md`（F2 的说明在 M0 之后
+  补写），按“文档随单元一起删”解决即 rc=0。回滚后 `p85_m0` 探针会红、`p85_m0_mapping.tsv`
+  被删——这是预期的“M0 任务自身消失”，其余任务（inventory/spike/A）的源码不受影响。
 
 ### 7.6 流程说明
 
@@ -340,4 +347,5 @@ b6dacb3c feat(ct-ast): p85_inventory（S85a）
 32e3e482 battle(ct-guide-1): ……                    # 另一席位
 ```
 
-（上面的 sha 是重写后的本地历史；未 push、未 tag。）
+（上面的 sha 是重写后的本地历史；未 push、未 tag。`60340c21` 与本文档更新为
+REV 打回后的证据补写，HEAD 以 `git log -1` 为准。）
