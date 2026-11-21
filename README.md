@@ -14,7 +14,7 @@
 
 ### 0. 真实用法展示
 
-下面四条都是完整程序，按注里的命令就能跑；代码块后面是真实输出。它们各自解决一个具体问题。
+下面几条都是完整程序，按注里的命令就能跑；代码块后面是真实输出。它们各自解决一个具体问题。
 
 **范式定义（三段，顺序固定）：**
 
@@ -35,6 +35,7 @@ SH-72 / SH-74 已修，但不解除这两条）。下面 HTTP 那条是**当前�
 | 0.2 字符串切分 | 轻量 | `char *` 直接映射 | 无状态转换直接挂方法，不引入对象 |
 | 0.3 异构对象 | 接口派发 | `trait` + `Vec<接口值>` | 不同形状一张表，不写 switch |
 | 0.4 词频统计 | 容器 | `Map` + `foreach` | 按插入序出报告，不维护并行数组 |
+| 0.5 句柄速览 | 三个独立小程序 | `String`/`Str`、`box`/`new`、ADT/`match` | 新句柄层的最小可跑形态 |
 
 **两档怎么选**：对象没有状态、只有一种实现、调用方不需要面向接口 → 轻量路径；有状态、要多种实现、
 调用方要面向接口 → 完整路径。轻量路径不是错写法，简单场景套接口只是绕。
@@ -408,6 +409,91 @@ ct compile wordcount.ct -o wordcount.c && cc wordcount.c -o wordcount && ./wordc
 
 **执行边界**：无 stub；`printf` 走 libc，其余都是本机内存操作。
 
+#### 0.5 句柄速览：`String`/`Str`、`box`/`new`、ADT/`match`
+
+三个完整程序，分别覆盖 v0.88 的三条主线；都只依赖内建层，不需要 shim。
+
+**字符串：`String` 拥有，`Str` 借用**
+
+```ct
+String greet(Str name)
+{
+    Str prefix = "hello, ";
+    return str_concat(prefix, name);
+}
+
+int main(void)
+{
+    String who = "ct";
+    String msg = greet(who.as_str());
+    printf("%s\n", msg.cstr());
+    msg.release();
+    return 0;
+}
+```
+
+```sh
+ct build greet.ct -o greet && ./greet
+# hello, ct
+```
+
+判据只有一条：这份数据过了这行还要活着就 `String`，否则 `Str`。`who` 是 owner，
+`who.as_str()` 借出视图；`msg` 是函数内新造的 owner，连所有权一起返回。
+
+**单对象：`box<T>` + `new`**
+
+```ct
+struct Point { int x; int y; }
+
+int main(void)
+{
+    box<Point> p = new Point { 3, 4 };
+    printf("%d\n", p.x + p.y);
+    p.release();
+    return 0;
+}
+```
+
+```sh
+ct build point.ct -o point && ./point
+# 7
+```
+
+`new` 只接受具名 struct；`p.f` 自动解引用到 payload；释放走 `release()`。
+
+**多形态：`enum` 负载 + `match`**
+
+```ct
+enum Shape {
+    Circle(int r),
+    Rect(int w, int h),
+    Empty()
+}
+
+int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+        Shape.Empty() => { return 0; }
+    }
+}
+
+int main(void)
+{
+    printf("%d %d %d\n", area(Shape.Circle(2)), area(Shape.Rect(3, 4)), area(Shape.Empty()));
+    return 0;
+}
+```
+
+```sh
+ct build shape.ct -o shape && ./shape
+# 12 12 0
+```
+
+`match` 是语句，必须覆盖全部变体或写 `_`；绑定是副本，没有 fallthrough。
+完整语义见 spec [§4.70](docs/language-spec.md)、[§4.71](docs/language-spec.md)、[§4.73](docs/language-spec.md)。
+
 ### 1. 快速开始
 
 §0.1 的 HTTP 链就是本仓库的第一个完整样例。先跑它（`ct` 由下面的安装步骤提供；
@@ -475,6 +561,8 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **两档写法：轻量路径 vs 完整路径**：轻量路径把方法直接挂在基本类型上（方法返回自身类型即可链），不引入 trait 对象；完整路径是字符串 → factory → 由 trait 定义的对象类型 → 接口链。判断依据（有没有状态、要不要多实现、调用方是否面向接口）与 0.44.1（历史基线）的接口链边界见 [language-spec §4.10.1](docs/language-spec.md)
 - **trait**：`trait` / `impl` / `use`，方法派发，trait 当类型（接口值 / 数组 / 字段 / 装箱），trait 默认方法
 - **内存**：`Drop` / `delete`、`own`（AutoDrop）、块级 `defer`（Phase 38）、路径敏感泄漏告警、`borrow` + `Handback`
+- **参数糖与切片**：`ref` / `out` 形参（Phase 78；`out` 有定值分析，owning 实参须先初始化）、`T[]` 切片（Phase 79；长度随指针走，越界检查由内建 helper 承担），见 spec §4.68 / §4.69
+- **字符串句柄**：`String` 拥有（引用计数，字面量 immortal）、`Str` 借用视图（`{ptr,len}`，零拷贝）；`String` 可作字段，`Str` 不可作字段或 `Map` 键，见 spec §4.70
 - **模块**：`namespace` / `import` / `pub` / 多文件 `ct build` / 目录 = namespace
 - **映射**：`map trait T for instance …`、`.m.ct` 零成本静态映射、伴生 C shim、`test/bindings/` 声明式 C 库对接
 - **透传**：`#ct-raw` / `#ct-endraw` 原样块（宏与手写 C 逐字节进入生成的 `.c`）
@@ -484,6 +572,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **泛型 trait**：`trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>` 约束，实例按实参编码单态化（Phase 35）
 - **标准结果类型**：`Option<T>` / `Result<T, E>` 内建于 `lib/std`，`is_some` / `is_ok` / `unwrap` 等为固有方法（Phase 34）
 - **单对象句柄**：`box<T>`（16 字节句柄 + 8 字节 `{refs,aux}` 头）、`new T { ... }`（上下文关键字，仅具名 struct）、`b.f` 自动解引用、`retain` / `release` 与 `at()` 借用（Phase 81）
+- **ADT 与 `match`**：`enum` 成员带负载即 ADT，`match` 穷尽所有变体或末位 `_`；值是 `{tag, union}`，无 vtable、无隐藏分配（Phase 84），见 spec §4.73
 - **C ABI 静态库**：`ct build --lib` 把根 `.h.ct` 的 C 兼容 `pub` 函数导出为 `.abi.h` + `lib<base>.a`（Phase 39）
 - **原子并发**：`atomic int` / `atomic long` / `atomic bool` / `atomic void *` + `ct_atomic_load` / `ct_atomic_store` / `ct_atomic_cas`（seq_cst，C11；`ct build` 自动切 `-std=c11`）（Phase 41）
 - **方法级 `pub`**：`impl` 固有方法默认私有（不进 `.h`、`static`）；写 `pub` 才跨单元公开；trait impl / `pub impl` 硬错（Phase 42）

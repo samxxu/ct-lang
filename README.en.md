@@ -55,6 +55,8 @@ stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `
 
 - **traits**: `trait` / `impl` / `use`, dispatch, traits as types (interface values / arrays / fields / boxing), trait default methods
 - **memory**: `Drop` / `delete`, `own` (AutoDrop), block-level `defer` (Phase 38), path-sensitive leak warnings, `borrow` + `Handback`
+- **parameter sugar and slices**: `ref` / `out` parameters (Phase 78; `out` gets a definite-assignment walk, owning arguments must be initialised first) and `T[]` slices (Phase 79; length travels with the pointer, bounds handled by built-in helpers) — spec §4.68 / §4.69
+- **string handles**: `String` owns (refcounted; literals are immortal) and `Str` is a borrowed view (`{ptr,len}`, zero copy); `String` may be a field, `Str` may not be a field or a `Map` key — spec §4.70
 - **modules**: `namespace` / `import` / `pub` / multi-file `ct build` / directory = namespace
 - **mapping**: `map trait T for instance …`, zero-cost `.m.ct` static mapping, companion C shims, `test/bindings/` for C libraries
 - **chained construction (the idiomatic shape)**: a string start → a factory → an object type defined by a trait → method chaining on the interface. The authoritative three-part definition and the light / full two-track guidance live only in [language-spec §4.10.1](docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)
@@ -64,6 +66,8 @@ stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `
 - **generic structs and the built-in containers**: `struct Name<T, U>` + `impl<T> Name<Args>` with static dispatch (Phase 29); `Vec<T>` / `Map<K,V>` need no import, and `foreach` walks a `Map` in insertion order
 - **generic traits**: `trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>` bounds, with instances monomorphised from the type arguments (Phase 35)
 - **standard result types**: `Option<T>` / `Result<T, E>` ship in `lib/std`, with `is_some` / `is_ok` / `unwrap` and friends as inherent methods (Phase 34)
+- **single-object handle**: `box<T>` (16-byte handle plus an 8-byte `{refs,aux}` header), `new T { ... }` (contextual keyword, named structs only), automatic `b.f` dereference, `retain` / `release` and the borrowed `at()` view (Phase 81)
+- **ADTs and `match`**: an `enum` whose members carry payloads is an ADT; `match` covers every variant or ends with `_`; the value is a `{tag, union}` with no vtable and no hidden allocation (Phase 84) — spec §4.73
 - **not done by design**: inheritance, type checking on the default compile path (`ct check` runs bounded checks only), optimisation (the language is not final until `1.0.0`)
 
 The expansion rules live in [docs/language-spec.md](docs/language-spec.md); idioms in
