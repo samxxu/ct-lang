@@ -8,6 +8,7 @@
 | 锚点 | `e88561af`（S85c M0）、`c7f8ed93`（补 import 的 S85d） |
 | 文件 | `selfhost/ct-ast/tool/driver/Driver.h.ct:660`、`selfhost/ct-ast/frontend/parse/Parser.h.ct:1282`、`selfhost/ct-ast/frontend/type/TypeCheck.h.ct:224`、`:230` |
 | 状态 | **open** |
+| 层级 | **Tier 2（`v1.0` 发布）**；须给“修/不修+理由”，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 现象
 

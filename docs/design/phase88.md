@@ -157,7 +157,7 @@ g8: OK (PN-2 version coherence; 9 legacy offsets)
 1. 字面 `match`：L2 引导链前置，承接 `v1-PH-0`（§3.1 / battle）；
 2. `?`/errdefer：L2 不下降 PH-40/PH-44（§3.2，PH-86 battle A），错误路径保留显式 `return -1`/`fail_from`；
 3. `String`/可增长 buffer：发射器流式写 `FILE *`，不适用（度量 §4-6）；
-4. `MAX_FUNCS` 余量 37 个顶层函数：下一批切片前必须复算；
+4. `MAX_FUNCS` 余量 11 个顶层函数（501/512）：下一批切片前必须复算；
 5. 本地 `dist/ct-linux-x64.tar.gz` 是 v0.87.0 的未纳管产物；本机无 zig，
    无法重建 0.88.0 Linux 产物，`p83/dist` 按设计 skip（77）。发布前需在
    有交叉工具链的环境重跑 `selfhost/make-dist.sh --cross <zig>`。

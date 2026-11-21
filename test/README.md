@@ -16,7 +16,7 @@
 | `errors/` | L0 | 负例：扁平文件对 `<name>.ct` + `<name>.expected-err` | `run.sh` 的 errors 层 |
 | `archive/` | L0（历史） | Phase 0.3 移出的越位特性 fixture，Phase 2–5 的对差基线，**不跑** | `selfhost/check-archive.sh` |
 | `modules/` | CT 线 | 特性/多单元探针：一目录一用例（输入 + `.expected.*` + 可选 `<mode>.args` 驱动提示，可含 `src/`） | `selfhost/check-ast.sh`、`selfhost/check-archive.sh` |
-| `ast/` | CT 线 | 行为探针 `01..122`（编号有跳号，另有 `loop_*` / `own_shadow_return` 等具名用例；当前共 299 个目录，含 `errors/`；行为探针 298 个；`find test/ast -mindepth 1 -maxdepth 1 -type d` 实测）：一目录一用例（`prog.ct` + `prog.expected.out`）；`ast/errors/` 为裸负例 | `selfhost/check-ast.sh` |
+| `ast/` | CT 线 | 行为探针 `01..122`（编号有跳号，另有 `loop_*` / `own_shadow_return` 等具名用例；当前共 312 个目录，含 `errors/`；行为探针 311 个；`find test/ast -mindepth 1 -maxdepth 1 -type d` 实测）：一目录一用例（`prog.ct` + `prog.expected.out`）；`ast/errors/` 为裸负例 | `selfhost/check-ast.sh` |
 | `patterns/` | CT 线 | 设计模式用例：一目录一 `prog.ct` + `expected.out`（编译 → 零告警构建 → 运行 → 比对） | `selfhost/check-ast.sh` |
 | `bindings/` | CT 线 | 声明式 C 库 binding 夹具：`mock-hal`（假 HAL，端到端）与 `posix-socket`（shim 演示）；2026-11-13 由顶层 `bindings/` 迁入 | `selfhost/check-ast.sh`、`selfhost/check-warnings.sh` |
 | `acceptance/` | 跨层 | 端到端验收清单（`ast_spike.ct` / `ast_parse_spike.ct`）；`PENDING` 属预期、**不阻断** | `test/acceptance/run.sh` |
@@ -25,8 +25,8 @@
 `run.sh` 只驱动 **L0**（`selfhost/l0/ctc.c`）；CT 线（`selfhost/**`）的关卡由 `selfhost/check-all.sh` 聚合，
 见 [selfhost/README.md](../selfhost/README.md) 的门禁表。
 
-> **当前实测（2026-11-20，v0.77.0 工作树）**：`sh test/run.sh` → `156 passed, 0 failed`；
-> `bash selfhost/check-ast.sh` → `1519 passed, 0 failed, 4 skipped`。上面的目录/用例数是夹具口径，
+> **当前实测（2026-11-21，v0.88.0）**：`sh test/run.sh` → `156 passed, 0 failed`；
+> `bash selfhost/check-ast.sh` → `1575 passed, 0 failed, 5 skipped`。上面的目录/用例数是夹具口径，
 > 与这两条 runner 的 passed/skip 不同；数字随改动变化，以命令输出为准。
 
 > `*.expected.*` 一律由编译器生成后人工核对，**禁止手写**；只有在确认编译器行为变更是有意为之

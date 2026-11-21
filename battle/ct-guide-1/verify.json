@@ -1,0 +1,179 @@
+{
+  "schema": "battle-verify/1",
+  "battle": "ct-guide-1",
+  "seat": "VERIFY",
+  "generated_at_local": "2026-11-21T18:40:00+08:00",
+  "head": {"baseline": "32e3e482", "version": "0.84.1"},
+  "environment": {
+    "os": "macOS (Darwin arm64)",
+    "date": "2026-11-21",
+    "ct": "ct v0.84.1",
+    "scope": "read-only: docs、lib/std、test/ast、battle/**；探针在 /tmp，不入库"
+  },
+  "evidence": [
+    {
+      "id": "E-01",
+      "command": "ct --version",
+      "output": "ct v0.84.1",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-02",
+      "command": "ct build /tmp/ct-guide-probe/t1_literal_method.ct",
+      "output": "/tmp/ct-guide-probe/t1_literal_method.ct:3:1: error: no method 'to_string' for type 'char *'",
+      "exit": 1,
+      "reproduced": true
+    },
+    {
+      "id": "E-03",
+      "command": "ct build /tmp/ct-guide-probe/t2c.ct",
+      "output": "'cc' -std=c99 -I '.ctbuild' '.ctbuild/Vec.c' '.ctbuild/Str.c' '.ctbuild/t2c.c' '-o' 'a.out'",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-04",
+      "command": "ct check /tmp/ct-guide-probe/retlocal2.ct",
+      "output": "(silent)",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-05",
+      "command": "ct check --types /tmp/ct-guide-probe/retlocal2.ct",
+      "output": "(silent)",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-06",
+      "command": "ct build /tmp/ct-guide-probe/vpush.ct",
+      "output": "'cc' -std=c99 -I '.ctbuild' '.ctbuild/Vec.c' '.ctbuild/Str.c' '.ctbuild/vpush.c' '-o' 'a.out'",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-07",
+      "command": "ct build /tmp/ct-guide-probe/fieldstr.ct",
+      "output": "/tmp/ct-guide-probe/fieldstr.ct:1:16: error: a borrowed 'Str' view cannot be a struct field; store an owning 'String' and call as_str() at the use site",
+      "exit": 1,
+      "reproduced": true
+    },
+    {
+      "id": "E-08",
+      "command": "ct build /tmp/ct-guide-probe/mapstr.ct",
+      "output": "/tmp/ct-guide-probe/mapstr.ct:3:19: error: Map key type 'Str' is a borrowed view; use 'String' (owning)",
+      "exit": 1,
+      "reproduced": true
+    },
+    {
+      "id": "E-09",
+      "command": "ct build --debug-leaks /tmp/ct-guide-probe/vstr.ct",
+      "output": "ctc: unknown option '--debug-leaks'",
+      "exit": 1,
+      "reproduced": true
+    },
+    {
+      "id": "E-10",
+      "command": "grep -n 'pub Str slice' lib/std/Str.h.ct",
+      "output": "355:    pub Str slice(int start, int n) {",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-11",
+      "command": "ct build --c-boundary=allow /tmp/ct-guide-probe/adt_refs.ct && ./a.out",
+      "output": "after dup x=1 / after ctor x=1 / binding s=1 / after binding release x=6604",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-12",
+      "command": "ct build /tmp/ct-guide-probe/r2b_toint_only.ct",
+      "output": "/tmp/ct-guide-probe/r2b_toint_only.ct:1:1: error: no method 'to_int' for type 'char *'",
+      "exit": 1,
+      "reproduced": true,
+      "note": "without import std::str::String; this is the trap, not the final verdict"
+    },
+    {
+      "id": "E-13",
+      "command": "ct build /tmp/ct-guide-probe/r2c_free_fn.ct",
+      "output": "'cc' -std=c99 -I '.ctbuild' '.ctbuild/Vec.c' '.ctbuild/Str.c' '.ctbuild/r2c_free_fn.c' '-o' 'a.out'",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-14",
+      "command": "ct build /tmp/ct-guide-probe/r3_out_uninit.ct",
+      "output": "'cc' -std=c99 -I '.ctbuild' '.ctbuild/r3_out_uninit.c' '-o' 'a.out'",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-15",
+      "command": "ct build /tmp/ct-guide-probe/r3_owning_out.ct",
+      "output": "/tmp/ct-guide-probe/r3_owning_out.ct:2:1: error: out owning argument must be initialized",
+      "exit": 1,
+      "reproduced": true
+    },
+    {
+      "id": "E-16",
+      "command": "grep -rn 'name_view' lib selfhost test",
+      "output": "(no hits)",
+      "exit": 1,
+      "reproduced": true
+    },
+    {
+      "id": "E-17",
+      "command": "ct build /tmp/ct-guide-probe/r5_name_as_str.ct",
+      "output": "'cc' -std=c99 -I '.ctbuild' '.ctbuild/Vec.c' '.ctbuild/Str.c' '.ctbuild/r5_name_as_str.c' '-o' 'a.out'",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-18",
+      "command": "ct build /tmp/ct-guide-probe/r2_std_toint.ct -I /Users/samxx/.ct/pkg/ct/std/0.19.0",
+      "output": "'cc' -std=c99 -I '/Users/samxx/.ct/pkg/ct/std/0.19.0/std/str' -I '.ctbuild' '.ctbuild/Vec.c' '.ctbuild/Str.c' '.ctbuild/r2_std_toint.c' '-o' 'a.out'",
+      "exit": 0,
+      "reproduced": true,
+      "note": "with import std::str::String; \"42\".to_int() works"
+    },
+    {
+      "id": "E-19",
+      "command": "grep -n 'map trait CStrOps for type char' /Users/samxx/.ct/pkg/ct/std/0.19.0/std/str/String.m.ct",
+      "output": "86:map trait CStrOps for type char * {",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-20",
+      "command": "grep -n 'to_string' /Users/samxx/.ct/pkg/ct/std/0.19.0/std/str/String.m.ct",
+      "output": "(no hits)",
+      "exit": 1,
+      "reproduced": true,
+      "note": "std CStrOps has no to_string on char*, so literal .to_string() stays invalid"
+    }
+  ],
+  "anchors": [
+    {"file": "docs/language-spec.md", "line": 2848, "note": "out 调用方初始化：trivial 可未初始化，owning 必须先初始化"},
+    {"file": "docs/language-spec.md", "line": 2888, "note": "immortal 字面量 / 空串；refcount 非原子"},
+    {"file": "docs/language-spec.md", "line": 2926, "note": "只明写 Map<Str,V> 键；字段 String 无自动 Drop"},
+    {"file": "docs/language-spec.md", "line": 2950, "note": "box.at() 返回借用 T*，release 后失效"},
+    {"file": "docs/language-spec.md", "line": 2953, "note": "box 引用环作者责任；直接环编译期告警"},
+    {"file": "docs/language-spec.md", "line": 3061, "note": "match 绑定是副本，owning payload 按 move"},
+    {"file": "docs/language-spec.md", "line": 3074, "note": "ADT 不生成 drop glue，owning payload 作者释放"},
+    {"file": "lib/std/Str.h.ct", "line": 355, "note": "Str.slice(start, n) 第二参是长度"},
+    {"file": "test/ast/p79_places.sh", "line": 184, "note": "slice escape 只覆盖 T[]，不覆盖 Str"},
+    {"file": "selfhost/check-tsan.sh", "line": 3, "note": "TSan 是 nightly/Linux 独立门禁"}
+  ],
+  "checks": [
+    {"id": "J-1", "status": "pass", "note": "F1–F9 与 R1–R5 每条都有 spec/lib/test 行或 E-02…E-17 的实测输出"},
+    {"id": "J-2", "status": "pass", "note": "改写只动事实与限定词；口诀、三层图、残余风险诚实清单保留"},
+    {"id": "J-3", "status": "pass", "note": "删除 String.concat / std::arena / 字面量 to_string；改用 str_concat / String s = \"x\""},
+    {"id": "J-4", "status": "pass", "note": "风险表述对齐 spec §4.70/§4.71/§4.73、p79_places、check-tsan；补 Str 视图逃逸与 ADT drop glue"},
+    {"id": "J-5", "status": "pass", "note": "页首改为 v0.84.1，并列 PH-84 新增范围"},
+    {"id": "J-6", "status": "pass", "note": "只改指引文本 + docs 索引/互链；不动 selfhost/test 语义"},
+    {"id": "J-7", "status": "pass", "note": "新增 ADT/match 小节，与 spec §4.73 逐条对照；payload 不自动释放写入 §6"}
+  ]
+}

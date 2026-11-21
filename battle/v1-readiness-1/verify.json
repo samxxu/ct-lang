@@ -1,0 +1,88 @@
+{
+  "schema": "battle-verify/1",
+  "battle": "v1-readiness-1",
+  "seat": "VERIFY",
+  "generated_at_local": "2026-11-21T20:30:00+08:00",
+  "head": {"baseline": "5605eb6c", "version": "0.88.0"},
+  "environment": {
+    "os": "macOS (Darwin arm64)",
+    "date": "2026-11-21",
+    "scope": "read-only: docs/**, issues/**, tools/**, battle/**；不改 selfhost/test"
+  },
+  "evidence": [
+    {
+      "id": "E-01",
+      "command": "grep -n 'V1-C1\\|V1-C2' docs/planning/v1-release-plan.md",
+      "output": "64:| V1-C1 | J-6 全量证据台账 ... [SH-104]\n65:| V1-C2 | goldens 静态化 ... [SH-105]",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-02",
+      "command": "grep -n '状态' issues/selfhost/sh104-j6-evidence-ledger.md issues/selfhost/sh105-goldens-static-freeze.md",
+      "output": "sh104:10:| 状态 | **待办（REQ 建台账；DEV 补证据）** |\nsh105:10:| 状态 | **待办（DEV 实现；REQ 定验收）** |",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-03",
+      "command": "grep -n '在 A/B 裁定前\\|需要裁定' docs/planning/phase-migration-blockers.md",
+      "output": "17:**需要裁定**：旧 `v0-*` 卡是否允许 ...\n34:**需要裁定**：迁移后卡片路径是 ...\n47:**需要裁定**：迁移脚本是否统一补字段 ...\n74:在 A/B 裁定前不动文件；否则会二次迁移。",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-04",
+      "command": "grep -n 'g0)\\|g8)\\|battle-selftest)' tools/check.sh",
+      "output": "63:  g0) g0 ;;\n64:  g8) g8 ;;\n65:  battle-selftest) battle_selftest ;;",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-05",
+      "command": "grep -n '状态' issues/selfhost/sh107-m0-commit-not-buildable.md issues/docs/doc-81-phase85-clean-archive-dead-link.md issues/docs/doc-82-phase85-e85-2-gate.md",
+      "output": "10:| 状态 | **open** | (x3)",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-06",
+      "command": "grep -n '501' docs/history/p88_metrics.md | head -3",
+      "output": "64:| 3 | ... 425 → 501 | 再切一批（>11 个函数）会撞顶 | ... 501/512 |\n103:3. `MAX_FUNCS` 余量 11 个顶层函数（501/512）...",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-07",
+      "command": "grep -n '追签' battle/p88-emit-match/verdict.md",
+      "output": "4:- 状态：**accepted（... REVIEW 2026-11-21 追签；EDITOR 追签待补）**",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-08",
+      "command": "grep -n '不能发布 1.0 的原因' docs/reviews/full-review-v0.88.0.md",
+      "output": "29:**不能发布 1.0 的原因**",
+      "exit": 0,
+      "reproduced": true
+    }
+  ],
+  "anchors": [
+    {"file": "docs/planning/v1-release-plan.md", "line": 64, "note": "V1-C1 SH-104 是 v1-PH-0 前置"},
+    {"file": "docs/planning/v1-release-plan.md", "line": 65, "note": "V1-C2 SH-105 是 v1-PH-0 前置"},
+    {"file": "docs/planning/phase-migration-blockers.md", "line": 67, "note": "blocker A/B 未裁前不动文件（跨主规范）"},
+    {"file": "tools/check.sh", "line": 63, "note": "G1/G6 未实现，只有 g0/g8/battle-selftest"},
+    {"file": "docs/history/v1-pre-evidence.md", "line": 47, "note": "dogfood FP 长期工作树待提交，Tier 2 风险先例"},
+    {"file": "docs/history/p88_metrics.md", "line": 64, "note": "MAX_FUNCS 425→501，余 11"},
+    {"file": "battle/p88-emit-match/verdict.md", "line": 4, "note": "EDITOR 追签待补"},
+    {"file": "docs/reviews/full-review-v0.88.0.md", "line": 31, "note": "评审把 SH-104/105 列为 v1.0 硬闸门"}
+  ],
+  "checks": [
+    {"id": "J-1", "status": "pass", "note": "claim E2 矩阵每项有层级/归属/验收；verdict 逐项落 owner"},
+    {"id": "J-2", "status": "pass", "note": "phase-ID blocker A/B 明确外派主规范，不计入本仓清零"},
+    {"id": "J-3", "status": "pass", "note": "Tier 1 只含本仓可验收项；SH-104/105 在入口清单"},
+    {"id": "J-4", "status": "pass", "note": "SH-107/DOC-81/DOC-82 要求修/不修+理由+里程碑，不得静默 open"},
+    {"id": "J-5", "status": "pass", "note": "MAX_FUNCS 501/512 实测；提上限需 USER 签字，替代方案需数据"},
+    {"id": "J-6", "status": "pass", "note": "逐项独立提交/issue；与 PH-85…88 重写切片分离"}
+  ]
+}

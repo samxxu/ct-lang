@@ -41,10 +41,10 @@ PH-87 §3.3 的两项条件由 PH-88 承接为
 | 1 | 字面 `match` 替换（发射器 76 + `expr_ctype`/`maybe_box`/`chk_type`） | `v1-PH-0` | seed cutover 后 |
 | 2 | `?`/errdefer 在 ct-ast 源码不可用（L2 不下降 PH-40/PH-44；PH-86 battle A） | `v1-PH-0` seed cutover 后复核 | 与字面 `match` 同一解锁点 |
 | 3 | `String`/可增长 buffer 在发射器不适用（流式 `FILE *` + `MAX_TEXT` 契约） | M1/v1.1 复核 | 若引入 std `String` 到引导编译器 |
-| 4 | `MAX_FUNCS` 余量 37 个顶层函数（475/512） | 下一批切片前复算 | 再加 >37 个 free function |
+| 4 | `MAX_FUNCS` 余量 11 个顶层函数（501/512） | 下一批切片前复算 | 再加 >11 个 free function |
 | 5 | `MAX_IO_CALLS` 512→1024（PH-88 容量调整） | 已交付；若继续切片需再评估 | 再增 ~80 个不同 callee 名 |
 | 6 | 检查器/解析器切片互换变异探针不红（PH-87 N-1） | VERIFY 后续 | 有探针预算时 |
-| 7 | dogfood 10 条同一类 FP（`T a[]`） | SH-106 立案（工作树，待提交） | 由 REQ 处理 |
+| 7 | dogfood 10 条同一类 FP（`T a[]`） | SH-108 立案（工作树，待提交） | 由 REQ 处理 |
 | 8 | M1 精细切分（纯移动） | v1.1 S1 | v1.0 发布后 |
 | 9 | A 默认强制（strict 编译路径） | v1.1 S2 | v1.0 发布后 |
 | 10 | 阶段 ID 迁移（legacy `PH-*` → `v0-PH-*`） | 迁移 blocker 解除后 | 见 [phase-migration-blockers](../planning/phase-migration-blockers.md) |

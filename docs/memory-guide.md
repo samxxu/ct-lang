@@ -2,6 +2,10 @@
 
 > 中文
 
+> **新代码先读**：[guide-for-c-programmers.md](guide-for-c-programmers.md)（v0.84 句柄层：
+> `String` / `Str` / `box<T>` / `Vec<T>` / ADT）。本文保留 `own` / `borrow` / `Drop` 的
+> 指针层模型，主要面向逃生层、旧代码与自定义分配器。
+>
 > **适用版本**：当前主线 **ct-ast**（`selfhost/ct-ast/main.ct`，版本号见 `ct -v`，不在此固定）。冻结的 L2 只作回归对照；
 > 凡两者行为不同的地方，下文单独标注。
 > **配套**：[language-spec](language-spec.md) §4.9（AutoDrop）与 §4.40（`borrow`）、[tutorial](tutorial.md) 第 8 节、

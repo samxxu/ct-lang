@@ -18,6 +18,7 @@
 | 文档 | 内容 | 何时读 |
 | --- | --- | --- |
 | [tutorial.md](tutorial.md) | 逐章入门：核心范式（字符串 → factory → trait 对象 → 接口链）→ 安装 → 派发 → 模块 → 内存 → `map`，附命令行速查与常见坑 | 第一次使用 |
+| [guide-for-c-programmers.md](guide-for-c-programmers.md) | 给 C 程序员的内存心智模型：`String`/`Str`、切片、`ref`/`out`、`box`、ADT/`match`、残余风险 | 从 C 迁移到 CT |
 | [language-spec.md §4.10.1](language-spec.md#4101-链式构建器范式权威定义与两档路径) | **链式构建器范式的唯一权威定义**：三段顺序、轻量 / 完整两档的判断依据、0.44.1 逐段边界与报错原文 | 要写或判断一条链式调用时 |
 | [language-spec.md](language-spec.md) | `.ct` 的语法与展开规则、命名契约、容量上限、明确不支持 | 想知道「这条写法展开成什么 C」 |
 | [glossary.md](glossary.md) | 术语表：项目名、语言构造、内部符号 | 读文档遇到生词 |
@@ -88,7 +89,9 @@
 | [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（**已并入 PH-62**）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
 | [proposals/defect-namespaced-static-method.md](proposals/defect-namespaced-static-method.md) | 缺陷请求（待修）：带 `namespace` 的单元里静态固有方法报 `use of an undeclared variable`；含两种最小复现、边界表、名字解析定位、下游绕法与 N1–N5 判据 |
 | [reviews/max-calls-limit.md](reviews/max-calls-limit.md) | 只读核对：`MAX_CALLS` 1024 的计数口径（按已解析自由函数调用表达式）、固定表成因（无「禁止动态分配」证据）、按需增长的改动面与外部包余量实测 |
-| [reviews/](reviews/) | 最新一轮全面评审（针对 0.77.0）：11 道硬门禁离线 11/11、测试/文档/样例/台账覆盖；P1 五项（网络挂起、治理门禁缺位、台账未闭合、phase-ID 迁移、文档漂移）与 v1.0 就绪判断 | 发布前总检 |
+| [reviews/full-review-v0.88.0.md](reviews/full-review-v0.88.0.md) | 最新全面评审（v0.88.0 / v1-pre 收口后）：11 门禁离线 11/11、check-ast 1575/0/5；P1 五项（SH-104/105、phase-ID、G1/G6、MAX_FUNCS 余量、E88-1 承接）与 v1.0 就绪 4/10 | 发布前总检 |
+| [reviews/2026-11-21-full-review-v0.88.0-disposition.md](reviews/2026-11-21-full-review-v0.88.0-disposition.md) | v0.88.0 评审处置：接受项落库、争议项 [battle/v1-readiness-1](../battle/v1-readiness-1/verdict.md) 判决、Tier 1/Tier 2 门禁 | 查看处置 |
+| [reviews/](reviews/) | 历史全面评审（v0.77）：网络挂起、治理门禁缺位、台账未闭合、phase-ID 迁移、文档漂移；其中网络挂起与 C 边界 cwd 已在 v0.88 前修复 | 追溯 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
 

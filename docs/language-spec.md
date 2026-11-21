@@ -3173,7 +3173,7 @@ PH-88 把发射器的五个 kind 判别函数改成与 §4.74 同形的**单一�
 
 切片函数是文件级 `static`（`em_node_*` / `em_expr_*` / `em_decl_*` /
 `em_inline_*` / `em_field_*`），不是 trait 方法：`EmitOps` 的方法数已接近
-`MAX_METHODS`（64），而顶层函数预算 `MAX_FUNCS`（512）仍有余量（399 → 475）。
+`MAX_METHODS`（64），而顶层函数预算 `MAX_FUNCS`（512）仍有余量（425 → 501，余 11）。
 判别式 `self->arena->nodes[n].kind` 只读一次，值以 `nk` 传入切片；切片体内
 不得再读同一结点的 `kind`。`p88_emit` 核对 76 条切片清单、自测“删一条判别 →
 探针变红”，并保持 66 个语料逐字节一致（D-017 A1 第 1 层）。

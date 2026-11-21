@@ -4,7 +4,7 @@
 | --- | --- |
 | 性质 | 产品发布路线；**未开卡**，不占 phase、不 bump |
 | 日期 | 2026-11-18 |
-| 基线 | `ed172075`（`v0.65.1`；Phase 66 已收口） |
+| 基线 | `5605eb6c`（`v0.88.0`；PH-88 已收口） |
 | 依据 | [typecheck-semantic-plan](typecheck-semantic-plan.md)、[battle typecheck-1](../../battle/typecheck-1/verdict.md) |
 | 结论 | **B 在 v1.0 前完成并 opt-in；v1.0 只保留 AST 主线；v1.1 先做 ct-ast 语法现代化，再做 A（strict 编译路径）** |
 

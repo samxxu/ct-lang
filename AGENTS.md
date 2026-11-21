@@ -509,7 +509,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 2026-11-21：PH-84 F1/F2 修复 → v0.84.1（PATCH，LANG-21 fixed）；typedef 别名可作 match 主语、`pub typedef` 跨单元发射 `struct lib_Shape`/`lib_Alias`。
 > 2026-11-21：PH-86 → v0.86.0（`d=0`）；词法器 token 改为源缓冲 `TokView{ptr,len}`、C API 迁移、错误出口清单（S86c `?`/errdefer 不可用，battle/p86-errorpath 采 A）、spec/tutorial 词法边界 + 度量；E86-1…8 通过（E86-8 回滚演练）；PH-85 快照探针改读 `1e2c30f7` 归档。
 > 2026-11-21：PH-87 → v0.87.0（`d=0`）；解析器/检查器按 kind 切片重写（13 + 15 个切片，单判别式）；语料逐字节、345 诊断逐字、自举不动点通过；A dogfood 10 条同一类 FP；`switch→match` 字面项按 battle/p87-kind-match 移交 PH-88（L2 引导链不实现 PH-84）。
-> 2026-11-21：PH-88 → v0.88.0（`d=0`）；发射器五判别函数按 kind 切片（76 个 `em_*`，判别式单读）、`MAX_IO_CALLS` 512→1024（容量，诊断文本不变；`MAX_FUNCS` 475/512）、自举不动点轮数参数化（日常 2 / tag 前 3）、66 语料逐字节 + 345 诊断逐字；字面 `match` 仍不可写入 ct-ast（L2 不实现 PH-84），E88-1 部分通过、承接 `v1-PH-0` seed cutover（battle/p88-emit-match）；v1-pre 收口。
+> 2026-11-21：PH-88 → v0.88.0（`d=0`）；发射器五判别函数按 kind 切片（76 个 `em_*`，判别式单读）、`MAX_IO_CALLS` 512→1024（容量，诊断文本不变；`MAX_FUNCS` 501/512，余 11）、自举不动点轮数参数化（日常 2 / tag 前 3）、66 语料逐字节 + 345 诊断逐字；字面 `match` 仍不可写入 ct-ast（L2 不实现 PH-84），E88-1 部分通过、承接 `v1-PH-0` seed cutover（battle/p88-emit-match）；v1-pre 收口。
 > 2026-11-21：PKG-14 → v0.83.1（fix）；索引校验非普通文件 exit 2、FIFO 不挂起、ferror/JSON 失败。
 > 2026-11-21：PKG-14 CI 追加 → v0.83.3（fix）；`CT_HOME` 默认索引路径在 glibc 上被自拷贝清空，已修。
 

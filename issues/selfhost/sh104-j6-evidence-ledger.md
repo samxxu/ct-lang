@@ -8,6 +8,7 @@
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §1.5](../../docs/planning/v1-release-plan.md#L57-L71)、[D-011](../../docs/decisions/D-011.md) |
 | 状态 | **待办（REQ 建台账；DEV 补证据）** |
+| 层级 | **Tier 1（`v1-PH-0` 入口）**，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 现象
 
