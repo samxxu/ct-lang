@@ -347,3 +347,249 @@ selfhost/ct-ast/main.ct          CTC_VERSION "0.85.0"
   [DOC-81](../../issues/docs/doc-81-phase85-clean-archive-dead-link.md)、
   [DOC-82](../../issues/docs/doc-82-phase85-e85-2-gate.md)、
   [SH-107](../../issues/selfhost/sh107-m0-commit-not-buildable.md)。
+
+---
+
+## v0.85.0 复核（2026-11-21，`fdec679a`）
+
+> 复核席位：REV（`rev-ph85b`） · 2026-11-21 12:2x
+> 对象：`fdec679a99eb3a5ee9b203ffac32f0cd037de0f9`（v0.85.0，未 push、未 tag）
+> 方法：`git archive fdec679a` 解到 `/tmp/rev85b/head`，按项目方式独立自举
+> L0→L1→L2→ct-ast；`git archive 104dfc54` 重建 M0；`git worktree add --detach`
+> 做逆序回滚；四探针只用归档产物 `…/.temp/b/ct-ast`，未用工作树二进制。
+> 结论：**REV: 不通过（F2 残留）**。F1/F3/F4 通过；回归 11/11 + ASan 586 全绿。
+> F2 的“独立构建”已修复，但 M0 提交仍不是纯搬移，且它自己的验收命令 `p85_m0`
+> 在该提交上 3/4（rc=1）；提交正文引用的 `4/4` 与 `842/11` 在该提交不可得。
+
+### R1 F1：干净归档 `check-docs`（通过）
+
+```console
+$ rm -rf /tmp/rev85b/head && mkdir -p /tmp/rev85b/head
+$ git archive fdec679a | tar -x -C /tmp/rev85b/head
+$ cd /tmp/rev85b/head && python3 test/docs/check-docs.py; echo rc=$?
+spec pin: skipped (master spec draft 1.17.0)
+check-docs: OK (2328 relative links in 379 files, v0.85.0, 11 hard gates,
+             12 phase status, 5 适用版本 header(s), 2 superseded link(s), 11 signoff(s))
+design window: ok (12/12)
+rc=0
+$ ls docs/guide-for-c-programmers.md
+ls: docs/guide-for-c-programmers.md: No such file or directory
+```
+
+归档里既没有未提交的 `guide-for-c-programmers.md`，也没有 `sh106-*`；`docs/README.md`
+不再链它。归档不依赖任何未提交文件，`check-docs` 零 dead link。
+
+### R2 F2：M0 提交（不通过）
+
+`git archive 104dfc54` **能独立构建**（F2 的构建半边已修）：
+
+```console
+$ git archive 104dfc54 | tar -x -C /tmp/rev85b/m0 && cd /tmp/rev85b/m0
+$ cp .temp/build-ct-ast.sh . && sh build-ct-ast.sh . .temp/b
+built .temp/b/ct-ast                                rc=0（全链零警告）
+$ ./.temp/b/ct-ast -v
+ct-ast v0.84.1
+$ CT_C_BOUNDARY=allow ./.temp/b/ct-ast test/cases/01_trait_basic.ct -o /tmp/m0x.c \
+>   && cc /tmp/m0x.c -o /tmp/m0x && /tmp/m0x
+Hello, I'm Tom, age 36
+Hello Jerry, I'm Tom
+```
+
+但**该提交自己的验收命令是红的**，且根因不是缺夹具，而是 M0 不是纯搬移：
+
+```console
+$ bash test/ast/p85_m0.sh .temp/b/ct-ast
+FAIL p85m0: m0: missing ./test/probes/p85_m0_s85d_edits.tsv
+p85m0: 3 passed, 1 failed                                rc=1
+$ : > test/probes/p85_m0_s85d_edits.tsv          # 把 S85d 夹具当空集
+$ python3 tools/p85_inventory.py --root . m0
+m0: body changed or vanished: selfhost/ct-ast/frontend/module/Module.h.ct::Module.build_main
+m0: new function body: selfhost/ct-ast/frontend/module/Module.h.ct::Module.build_main
+p85_m0: 2 finding(s)                                     rc=1
+$ cp <HEAD>/test/probes/p85_m0_s85d_edits.tsv test/probes/   # 换成完整 S85d 夹具
+$ python3 tools/p85_inventory.py --root . m0
+m0: function count 838 != baseline 838 + 4                rc=1
+```
+
+根因在 M0 提交本身：`Module.build_main` 里混进了 8 行 S85d（A 机制）代码。该文件在
+M0 的父提交与 `10c23c77` 逐字节相同，所以这 8 行由 M0 引入：
+
+```console
+$ git diff 10c23c77 104dfc54 -- selfhost/ct-ast/frontend/module/Module.h.ct \
+>   | grep -E '^\+' | grep -v '^+++'
++import frontend::module::ModuleBoundary;
++                       "                 [--check-level=off|warn|error]\n"
++            /* PH-85 S85d: `--check-level=error` counts its findings in
++               `nsem` without aborting the parse (a warning-shaped kernel stays
++               on its path), so stop here -- before any product is written. */
++            if (tool::diag::ct_diag_nsem()) {
++                fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
++                return 1;
++            }
+```
+
+9 行插入里只有 `import` 属于搬移；其余 8 行是 S85d 的 help 文本与提前退出守卫，
+不在卡 §1.4 的机械行白名单内。后果两处：
+
+1. **`p85_m0` 的 J1 在 M0 处不成立。** `p85_m0.md` §4 写“J1 在 M0 提交处成立”，
+   但 `Module.build_main` 的 body 在 M0 已变；上文“空夹具”一跑即报 `body changed`。
+   E85-3 的“M0 为纯搬移”在提交层被证伪；HEAD 上 `p85_m0` 4/4 只是因为
+   `p85_m0_s85d_edits.tsv` 把 `Module.build_main` 记成“S85d 改的”，掩盖了
+   M0 已经改过它。
+2. **M0 提交自带一个坏 help。** 该构建的 `ct build --help` 列出
+   `[--check-level=off|warn|error]`，但 flag 在 Driver 里还不存在：
+
+```console
+$ ./.temp/b/ct-ast build --help | grep check-level
+                 [--check-level=off|warn|error]
+$ ./.temp/b/ct-ast build --emit-c --check-level=off x.ct -o out
+ctc: unknown option '--check-level=off'
+```
+
+另，M0 提交正文引用的验收输出在该提交不可得（`842 functions`、`11 S85d edits`、
+`p85m0: 4 passed, 0 failed` 都是 S85d 之后、甚至 HEAD 夹具下的数字）；这正是上一轮
+F2 与 [SH-107](../../issues/selfhost/sh107-m0-commit-not-buildable.md) §期望第 3 条
+要求改写的项，未改。
+
+**最小复现**：上面四条命令即可；**最小修法**（不改编译器行为）：把 8 行 S85d 代码
+移回 `f377315a`，M0 只保留 `import`；在 M0 的测试提交里放一个空的
+`p85_m0_s85d_edits.tsv`（或让工具把缺文件当空集），并把 M0 提交正文的数字改成
+`827 bodies / 838 functions / 0 S85d edits`。本地已按此在 `/tmp/rev85b/m0fix` 验证：
+
+```console
+$ # 104dfc54 归档去掉 8 行 + 空夹具后
+$ sh build-ct-ast.sh . .temp/b          # rc=0
+$ bash test/ast/p85_m0.sh .temp/b/ct-ast
+p85m0: 4 passed, 0 failed               rc=0
+```
+
+### R3 F3：D-018 与口径（通过）
+
+[D-018](../decisions/D-018.md) 存在，字段齐全：
+
+```console
+$ sed -n '1,10p' docs/decisions/D-018.md
+# D-018 · PH-85 E85-2 的降级口径（spike 门）
+- 日期：2026-11-21
+- 状态：**accepted**
+- 目标：`v0-PH-85`（v0.85.0）
+- 签收：REVIEW 2026-11-21（T-8：ADR/decision 由 EDITOR 作者署名、须由 REQ/REVIEW/USER 非作者签收；REVIEW 是本降级口径的提出席位）
+- 批准：EDITOR 2026-11-21（口径批准；按 T-8 由 REVIEW 落签）
+```
+
+按 T-8（ADR 作者 EDITOR、签收 REQ/REVIEW/USER、不得自签），签收席 REVIEW 非作者；
+`check-docs` 的 `11 signoff(s)` 也把 D-018 计入并通过。四处口径一致：
+
+```console
+$ grep -n "E85-2 有条件通过" AGENTS.md docs/history/phase-log.md docs/roadmap.md docs/session-map.md
+AGENTS.md:508: … **E85-2 有条件通过（D-018）** …
+docs/history/phase-log.md:187: … E85-2 **有条件通过（D-018）** …
+docs/roadmap.md:98: … **E85-2 有条件通过（D-018）**，其余 E85 通过 …
+docs/session-map.md:39: … **E85-2 有条件通过（D-018）**，其余 E85 通过 …
+```
+
+卡 §7.3 E85-2 行与 §8 第 1 行同样写“有条件通过（D-018）/ 门不通过”。未再出现
+“E85-1…8 全部无条件通过”（仅 §7.7 以否定句提到“不再有…”）。
+
+### R4 F4：逆序回滚（通过）
+
+```console
+$ git worktree add --detach /tmp/rev85b/roll fdec679a
+$ cd /tmp/rev85b/roll
+$ git revert --no-edit f377315a                  # S85d
+[detached HEAD bdb1cd6b] … 8 files changed, 6 insertions(+), 118 deletions(-)   rc=0
+$ git revert --no-edit 104dfc54                  # M0
+CONFLICT (modify/delete): docs/design/p85_m0.md deleted in parent of 104dfc54
+  and modified in HEAD.                                              rc=1
+$ git rm docs/design/p85_m0.md && git revert --continue
+[detached HEAD 23fee7f3] … 17 files changed, 1391 insertions(+), 1826 deletions(-)  rc=0
+$ cp .temp/build-ct-ast.sh . && sh build-ct-ast.sh . .temp/b
+built .temp/b/ct-ast                                                 rc=0
+$ for fx in 28_switch 30_enum 271_qualified_enum; do …; done
+28_switch: output matches expected
+30_enum: output matches expected
+271_qualified_enum: output matches expected
+```
+
+与卡 §7.5 写的一致：唯一冲突是 `docs/design/p85_m0.md` 的 modify/delete，按“文档随
+单元删”解决后 rc=0；源码零冲突；全链构建零警告。逆序依赖（先 S85d 再 M0）属实。
+
+### R5 回归（通过）
+
+```console
+$ cd /tmp/rev85b/head
+$ bash test/ast/p85_inventory.sh          → p85inventory: 9 passed, 0 failed
+$ bash test/ast/p85_spike.sh .temp/b/ct-ast → p85spike: 14 passed, 0 failed
+$ bash test/ast/p85_m0.sh .temp/b/ct-ast    → p85m0: 4 passed, 0 failed
+$ bash test/ast/p85_a_wire.sh .temp/b/ct-ast → p85a: 9 passed, 0 failed
+$ TMPDIR=/tmp/rev85b/tmp bash selfhost/check-all.sh
+  check-ast: 1561 passed, 0 failed, 5 skipped
+  check-warnings: 500 ok, 0 failed
+  check-semantics: OK (23 assertions)
+  check-docs: OK (2328 relative links in 379 files, v0.85.0, …)
+  check-all: OK (11 hard gates green)                            rc=0
+$ TMPDIR=/tmp/rev85b/tmp bash selfhost/check-sanitizers.sh
+check-sanitizers: OK (586 checks, no sanitizer report)            rc=0
+$ bash tools/check.sh g0
+g0: OK (block 1.17.0, session-map present)
+$ bash tools/check.sh g8
+g8: OK (PN-2 version coherence; 9 legacy offsets)
+$ for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
+>          selfhost/l2/driver.ct selfhost/ct-ast/main.ct; do
+>   printf '%-32s ' "$f"; grep -o 'CTC_VERSION "[0-9.]*"' "$f" | head -1; done
+selfhost/l0/ctc.c                CTC_VERSION "0.85.0"
+selfhost/l1/ctc.ct               CTC_VERSION "0.85.0"
+selfhost/l2/core.ct              CTC_VERSION "0.85.0"
+selfhost/l2/driver.ct            CTC_VERSION "0.85.0"
+selfhost/ct-ast/main.ct          CTC_VERSION "0.85.0"
+```
+
+`check-all` 在**干净归档** `fdec679a` + 私有 `TMPDIR` 上 11/11；`check-ast` 的 5 个 skip
+与上一轮一致（归档无 `dist/` 产物，`p83/dist` 按设计 skip）。版本五处一致，README /
+`docs/README.md` / `AGENTS.md` / phase-log 均为 0.85.0。
+
+### R6 本轮新增反例
+
+1. **`--check-level=error` 在写产物前失败**（预置 sentinel，验证不被覆盖）：
+
+```console
+$ echo SENTINEL > out/src_mismatch.c
+$ $CT build --emit-c --check-level=error mismatch.ct -o out
+mismatch.ct:3:12: error: return: expected 'int', got 'char *'
+ctc: 1 error(s) generated                                 rc=1
+$ cat out/src_mismatch.c
+SENTINEL
+$ find out -type f
+out/src_mismatch.c                       # 无新增/覆盖
+```
+
+编译模式 `-o out/prog` 与默认 `a.out` 也在写产物前退出（后者只留下空的
+`.ctbuild/` 目录）；同一 `error` 档下合法程序正常写产物（rc=0）；`warn` 照常写产物
+且 `off`/`default`/`warn` 三者产物逐字节相同。
+
+2. **M0 跨单元行为一致**：pre-M0（`10c23c77` 归档构建，v0.84.1）vs post（`fdec679a`，
+v0.85.0），用 3 个新输入（非语料）对比发射 C（banner 归一化）与运行输出：
+
+```console
+$ # 逐项：<pre|post> build --emit-c + cc + run；diff 发射 C（banner 归一化）与运行输出
+ok  generic_alias: emitted C identical (banner normalized)
+ok  generic_alias: runtime output identical: box 42 cross-unit
+ok  enum_switch: emitted C identical (banner normalized)
+ok  enum_switch: runtime output identical: mode 1 pick 10 20 30 50 / tri 0 1 3 6 10 15 21 28
+ok  PkgIndex: ct index verify stdout/stderr/rc identical (pre/post)
+ok  ModuleBoundary: ct build with ./deep/../x.ct path, stderr + emitted C identical
+```
+
+3. **M0 的 help/flag 不一致**（本轮新发现，见 R2）：M0 归档构建的
+`ct build --help` 列出 `--check-level`，实际调用报 `unknown option`。
+
+### R7 结论
+
+- F1 通过；F3 通过；F4 通过；回归全绿。
+- **F2 不通过（阻断）**：构建半边已修，但 M0 提交混入 8 行 S85d 代码，不是纯搬移；
+  它自己的 `p85_m0` 在该提交 3/4，提交正文引用的 4/4 与 842/11 不可得。E85-3 在提交
+  层不成立，[SH-107](../../issues/selfhost/sh107-m0-commit-not-buildable.md) 的验收
+  （4/4）未满足。
+- 本轮未改实现、未 push、未 tag；只修改本复核文件。
+
+**REV: 不通过（F2 残留）**
