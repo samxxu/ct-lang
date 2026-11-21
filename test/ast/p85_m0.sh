@@ -20,30 +20,41 @@ fail=0
 ok()  { pass=$((pass + 1)); }
 bad() { fail=$((fail + 1)); echo "FAIL p85m0: $1" >&2; }
 
+# The M0 claim is a PH-85 snapshot: later phases rewrite bodies by design, so
+# re-derive it from the PH-85 closeout commit, not the live tree.
+baseline=${P85_BASELINE:-1e2c30f7}
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/p85m0.XXXXXX") || exit 1
+trap 'rm -rf "$tmp"' EXIT INT TERM
+if ! git archive "$baseline" | tar -x -C "$tmp"; then
+    echo "FAIL p85m0: cannot extract baseline $baseline" >&2
+    exit 1
+fi
+
 # 1) J1 + A2 + J4, against the committed baseline and map
-if python3 tools/p85_inventory.py --root . m0 >/tmp/p85m0.out 2>&1; then
+if python3 tools/p85_inventory.py --root "$tmp" m0 >/tmp/p85m0.out 2>&1; then
     ok
 else
     bad "$(sed -n '1,6p' /tmp/p85m0.out)"
 fi
 
 # 2) the map is a real old -> new table with six rows and both sides exist
-python3 - <<'PY'
+python3 - "$tmp" <<'PY'
 import os, sys
-rows = [l.rstrip("\n").split("\t") for l in open("test/probes/p85_m0_mapping.tsv")
+base = sys.argv[1]
+rows = [l.rstrip("\n").split("\t") for l in open(os.path.join(base, "test/probes/p85_m0_mapping.tsv"))
         if l.strip() and not l.startswith("#")]
 if len(rows) != 6:
     print("map has %d rows, expected 6" % len(rows), file=sys.stderr)
     sys.exit(1)
 for old, new in rows:
     for p in (old, new):
-        if not os.path.exists(p):
+        if not os.path.exists(os.path.join(base, p)):
             print("mapped path is missing: %s" % p, file=sys.stderr)
             sys.exit(1)
     if new.split("/")[-1][:1].islower():
         print("unit name is not PascalCase: %s" % new, file=sys.stderr)
         sys.exit(1)
-if not os.path.exists("test/probes/p85_m0_baseline.json"):
+if not os.path.exists(os.path.join(base, "test/probes/p85_m0_baseline.json")):
     print("baseline json is missing", file=sys.stderr)
     sys.exit(1)
 PY
@@ -60,13 +71,14 @@ fi
 
 # 4) the moved units carry no `use`/trait of their own and no import back to
 #    the host (the "no new cycle" property, asserted at the source level)
-python3 - <<'PY'
-import sys
+python3 - "$tmp" <<'PY'
+import os, sys
 sys.path.insert(0, "tools")
 import p85_inventory as inv
-units = {u["path"]: u for u in inv.scan(".")}
+base = sys.argv[1]
+units = {u["path"]: u for u in inv.scan(base)}
 edges = inv.import_edges(list(units.values()))
-rows = [l.rstrip("\n").split("\t") for l in open("test/probes/p85_m0_mapping.tsv")
+rows = [l.rstrip("\n").split("\t") for l in open(os.path.join(base, "test/probes/p85_m0_mapping.tsv"))
         if l.strip() and not l.startswith("#")]
 bad = 0
 for host, new in rows:

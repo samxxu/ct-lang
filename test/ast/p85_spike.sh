@@ -52,11 +52,16 @@ else
 fi
 
 # 3) the committed patch is exactly the spike's one-file rewrite and still
-#    applies to the current lexer
-if git apply --check "$patch" >/tmp/p85sp.patch.log 2>&1; then
+#    applies to the lexer it was recorded against (PH-85 closeout). PH-86
+#    rewrites that file, so the live tree is not the patch's base.
+baseline=${P85_BASELINE:-1e2c30f7}
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/p85sp.XXXXXX") || exit 1
+trap 'rm -rf "$tmp"' EXIT INT TERM
+if git archive "$baseline" | tar -x -C "$tmp" \
+   && (cd "$tmp" && git apply --check "$root/$patch" >/tmp/p85sp.patch.log 2>&1); then
     ok
 else
-    bad "the spike patch no longer applies: $(head -2 /tmp/p85sp.patch.log)"
+    bad "the spike patch no longer applies to $baseline: $(head -2 /tmp/p85sp.patch.log)"
 fi
 if grep -qE '^\+.*void (pp_line|ident|number|quoted|punct)\(void\)' "$patch"; then
     ok
