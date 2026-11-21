@@ -1,4 +1,4 @@
-# DOC-87 · `lib/std` 与外部 `std` 包同名（bugfix：改名 `lib/core` + `CT_CORE_DIR`）
+# DOC-87 · `lib/std` 与外部 `std` 包同名（bugfix：`lib/core` + `CT_CORE_DIR` + `namespace core`）
 
 | 项 | 值 |
 | --- | --- |
@@ -25,7 +25,7 @@
 | --- | --- |
 | 目录 | `lib/std` → **`lib/core`** |
 | 环境变量 | `CT_STD_DIR` → **`CT_CORE_DIR`**（优先）；`CT_STD_DIR` 保留一个 MINOR 回退窗 |
-| 命名空间 | **不改**：内置层保持根命名空间（`Vec`/`Map`/`String` 等拼写不变），不引入 `namespace core` |
+| 命名空间 | **Stage 2：内置层迁到 `namespace core`**；根拼写 `Vec`/`Map`/`String` 等通过兼容别名/预导入保留一个 MINOR，随后切到 `core::*` |
 | 外部 `std` 包 | 不动；`import std::str::String` 等继续有效 |
 | 版本 | v1.0 前 bugfix；不占 phase，不 bump（随最近一次收口/补丁） |
 
@@ -48,6 +48,28 @@
 - 目录查找先 `lib/core`，找不到再 `lib/std`；
 - 一个 MINOR 后移除 `CT_STD_DIR` / `lib/std` 回退，另立清理 issue。
 
+## Stage 2：`namespace core`（同一 issue，独立切片）
+
+Stage 1 只解决目录/环境变量同名；所有者 2026-11-21 要求把内置层的**命名空间**也改掉，
+不能只做一半。Stage 2 是**语言/生成物可见变更**，必须单独提交、单独回滚：
+
+- 内置层五个单元（`Vec`/`Option`/`Result`/`Str`/`Box`）声明 `namespace core`；
+  编译器内置名解析改为 `core::Vec` / `core::String` / `core::box` 等；
+- **兼容窗**：在根命名空间提供 `Vec`/`Map`/`Option`/`Result`/`String`/`Str`/`box`
+  的别名或预导入（一个 MINOR），保证存量用户代码仍能编译；
+- 生成 C 的符号名会变（`Vec` → `core_Vec` 一类）；golden/ABI/`--emit-model` 需同步，
+  并给出“旧→新”映射；
+- 外部 `std` 包仍占 `std::*`，与 `core::*` 不再有名称重叠；
+- 需先补 spec §4.51/§4.70/§4.71 的命名空间与兼容窗条款，再动代码。
+
+Stage 2 验收：
+
+1. `core::Vec` / `core::String` / `core::box` 可用；根拼写在兼容窗内仍可用；
+2. 外部 `import std::str::String` 与 `core::String` 可共存；
+3. 生成 C 的旧→新符号映射完整；golden/ABI 更新有清单；
+4. 存量语料在兼容窗内逐字节或按映射一致；
+5. Stage 2 单提交回滚，不影响 Stage 1。
+
 ## 验收
 
 1. `CT_CORE_DIR=<repo>/lib/core` 下 `ct build` / `ct check` 正常；
@@ -60,9 +82,9 @@
 
 ## 非目标
 
-- 不改内置层根命名空间，不引入 `namespace core`；
+- Stage 1 不混入 `namespace core` 变更；Stage 2 不混入目录/ENV 回退；
 - 不改外部 `std` 包/`std::*`；
-- 不改语言语义、发射格式、`ct.lock`/索引；
+- 不改语言语义、`ct.lock`/索引；
 - 不批量改 `battle/**` 与 `docs/history/**` 的历史记录。
 
 ## 风险
@@ -72,7 +94,8 @@
 | 755 处引用（含历史） | 只改活跃路径；历史文档加“当时叫 lib/std”的说明，不批量替换 |
 | 外部消费者写死 `CT_STD_DIR` | 保留一个 MINOR 回退窗；错误文案提示 `CT_CORE_DIR` |
 | 路径字符串比较漏改 | `grep 'lib/std/'` + `test/ast/p72_stdmissing` 回退测试 |
-| 与 v1.0 收口抢窗口 | 单提交、独立回滚；不夹带其他改动 |
+| Stage 2 生成物/ABI 变化 | 旧→新符号映射 + golden/ABI 清单；独立提交回滚 |
+| 与 v1.0 收口抢窗口 | Stage 1 单提交；Stage 2 至少一个 MINOR 兼容窗，不阻塞 v1.0 |
 
 ## 关联
 

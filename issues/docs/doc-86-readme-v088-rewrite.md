@@ -7,7 +7,7 @@
 | 严重度 | Medium（v1.0 前建议） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1 |
-| 状态 | **待办（与 SH-73 裁定绑定）** |
+| 状态 | **待办（D1/D2 与 SH-110 修复进度绑定）** |
 
 ## 现象
 
@@ -24,7 +24,8 @@
 
 1. README 能力清单对齐 v0.88（五项新特性各一行，指向 spec 节号）；
 2. §0 示例至少一个用 `String`/`Str`，一个用 `box`/`new`，一个用 ADT/`match`；
-3. §0.1 断点表用 v0.88.0 重测；SH-73 未定前，按“当前可跑静态宿主 + 动态派发链式待定”写；
+3. §0.1 断点表用 v0.88.0 重测；SH-73 已裁定为 bug（[SH-110](../selfhost/sh110-dynamic-dispatch-chain-fix.md)）：
+   修复前写“动态派发链式当前被拒”，修复合入后改为“一行链可用”；静态宿主形态始终可跑；
 4. tutorial 的叙事顺序与 README 同步；不重抄 spec；
 5. 与 [DOC-85](doc-85-idiom-priority-card.md) 同批：README 的“先读”路径加 `idioms.md`。
 
