@@ -1490,8 +1490,9 @@ impl ParseOps for Parser {
                 *bad = 1;
                 if (n + 32 >= cap)
                     return self->sup->fail("an impl pattern is too long");
-                n += snprintf(out + n, (size_t)(cap - n), "%ld%s",
-                              self->lex->toknum, self->lex->toksuffix);
+                n += snprintf(out + n, (size_t)(cap - n), "%ld%.*s",
+                              self->lex->toknum, self->lex->toksuffix.len,
+                              self->lex->toksuffix.ptr);
                 self->sup->lex_next();
             } else {
                 return self->sup->fail("expected a type in the impl pattern");

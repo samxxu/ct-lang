@@ -4454,7 +4454,7 @@ impl ExprOps for Expr {
         int depth, r;
         long snum;
         char stext[MAX_TEXT];
-        char ssuf[8];
+        const char *ssuf_ptr; int ssuf_len;
 
         sp = self->lex->pos;
         sbol = self->lex->bol;
@@ -4467,7 +4467,7 @@ impl ExprOps for Expr {
         sfloat = self->lex->tokfloat;
         strunc = self->lex->toktrunc;
         snprintf(stext, sizeof stext, "%s", self->lex->toktext);
-        snprintf(ssuf, sizeof ssuf, "%s", self->lex->toksuffix);
+        ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
         depth = 0;
         r = 0;
         self->sup->lex_next();          /* the template name */
@@ -4483,7 +4483,7 @@ impl ExprOps for Expr {
             self->lex->tokfloat = sfloat;
             self->lex->toktrunc = strunc;
             snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
-            snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf);
+            self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
             return 0;
         }
         self->sup->lex_next();          /* the `<` */
@@ -4533,7 +4533,7 @@ impl ExprOps for Expr {
         self->lex->tokfloat = sfloat;
         self->lex->toktrunc = strunc;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
-        snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf);
+        self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
         return r;
     }
 
@@ -5920,8 +5920,9 @@ impl ExprOps for Expr {
                    L (`uLL`, `LLu`, `lL` all become `ULL` / `LL`). */
                 nu = 0;
                 nl = 0;
-                for (sl = 0; self->lex->toksuffix[sl]; sl++) {
-                    if (self->lex->toksuffix[sl] == 'u' || self->lex->toksuffix[sl] == 'U') nu++;
+                for (sl = 0; sl < self->lex->toksuffix.len; sl++) {
+                    char sfx = self->lex->toksuffix.ptr[sl];
+                    if (sfx == 'u' || sfx == 'U') nu++;
                     else nl++;
                 }
                 if (nu > 1 || nl > 2 || sl > 3)
@@ -6162,14 +6163,15 @@ impl ExprOps for Expr {
                 int sp2, sbol2, stok2, sline2, stokline2, sstart2, slstart2;
                 long snum2;
                 int sfloat2, strunc2;
-                char stext2[MAX_TEXT], ssuf2[8];
+                char stext2[MAX_TEXT];
+                const char *ssuf2_ptr; int ssuf2_len;
                 sp2 = self->lex->pos; sbol2 = self->lex->bol;
                 stok2 = self->lex->tok; snum2 = self->lex->toknum;
                 sline2 = self->lex->line; stokline2 = self->lex->tokline;
                 sstart2 = self->lex->tokstart; slstart2 = self->lex->lstart;
                 sfloat2 = self->lex->tokfloat; strunc2 = self->lex->toktrunc;
                 snprintf(stext2, sizeof stext2, "%s", self->lex->toktext);
-                snprintf(ssuf2, sizeof ssuf2, "%s", self->lex->toksuffix);
+                ssuf2_ptr = self->lex->toksuffix.ptr; ssuf2_len = self->lex->toksuffix.len;
                 self->sup->lex_next();   /* the struct name */
                 if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0) {
                     self->sup->lex_next();
@@ -6217,7 +6219,7 @@ impl ExprOps for Expr {
                 self->lex->tokstart = sstart2; self->lex->lstart = slstart2;
                 self->lex->tokfloat = sfloat2; self->lex->toktrunc = strunc2;
                 snprintf(self->lex->toktext, sizeof self->lex->toktext, "%s", stext2);
-                snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf2);
+                self->lex->toksuffix.ptr = ssuf2_ptr; self->lex->toksuffix.len = ssuf2_len;
                 } else if (sres2_is_type) {
                     /* LANG-7: the receiver names a declared type (typedef, enum,
                        trait) but not a struct with static methods. The variable
@@ -6229,14 +6231,15 @@ impl ExprOps for Expr {
                     int tp2, tbol2, ttok2, tline2, ttokline2, tstart2, tlstart2;
                     long tnum2;
                     int tfloat2, ttrunc2;
-                    char ttext2[MAX_TEXT], tsuf2[8], tm2[MAX_TEXT];
+                    char ttext2[MAX_TEXT], tm2[MAX_TEXT];
+                    const char *tsuf2_ptr; int tsuf2_len;
                     tp2 = self->lex->pos; tbol2 = self->lex->bol;
                     ttok2 = self->lex->tok; tnum2 = self->lex->toknum;
                     tline2 = self->lex->line; ttokline2 = self->lex->tokline;
                     tstart2 = self->lex->tokstart; tlstart2 = self->lex->lstart;
                     tfloat2 = self->lex->tokfloat; ttrunc2 = self->lex->toktrunc;
                     snprintf(ttext2, sizeof ttext2, "%s", self->lex->toktext);
-                    snprintf(tsuf2, sizeof tsuf2, "%s", self->lex->toksuffix);
+                    tsuf2_ptr = self->lex->toksuffix.ptr; tsuf2_len = self->lex->toksuffix.len;
                     tm2[0] = 0;
                     self->sup->lex_next();   /* the type name */
                     if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0) {
@@ -6255,7 +6258,7 @@ impl ExprOps for Expr {
                     self->lex->tokstart = tstart2; self->lex->lstart = tlstart2;
                     self->lex->tokfloat = tfloat2; self->lex->toktrunc = ttrunc2;
                     snprintf(self->lex->toktext, sizeof self->lex->toktext, "%s", ttext2);
-                    snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", tsuf2);
+                    self->lex->toksuffix.ptr = tsuf2_ptr; self->lex->toksuffix.len = tsuf2_len;
                     if (tm2[0]) {
                         char tmsg3[MAX_TEXT + 96];
                         snprintf(tmsg3, sizeof tmsg3,
@@ -7816,7 +7819,7 @@ impl ExprOptional for Expr {
         int kind = 0;
         long snum;
         char stext[MAX_TEXT];
-        char ssuf[8];
+        const char *ssuf_ptr; int ssuf_len;
 
         sp = self->lex->pos;
         sbol = self->lex->bol;
@@ -7829,7 +7832,7 @@ impl ExprOptional for Expr {
         sfloat = self->lex->tokfloat;
         strunc = self->lex->toktrunc;
         snprintf(stext, sizeof stext, "%s", self->lex->toktext);
-        snprintf(ssuf, sizeof ssuf, "%s", self->lex->toksuffix);
+        ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
         self->sup->lex_next();
         if (self->lex->tok == T_NUM && self->lex->toktext[0] == '.') {
             kind = 0;
@@ -7852,7 +7855,7 @@ impl ExprOptional for Expr {
         self->lex->tokfloat = sfloat;
         self->lex->toktrunc = strunc;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
-        snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf);
+        self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
         return kind;
     }
 
@@ -8548,7 +8551,7 @@ impl ExprTry for Expr {
         int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc;
         long snum;
         char stext[MAX_TEXT];
-        char ssuf[8];
+        const char *ssuf_ptr; int ssuf_len;
         int r;
 
         sp = self->lex->pos;
@@ -8562,7 +8565,7 @@ impl ExprTry for Expr {
         sfloat = self->lex->tokfloat;
         strunc = self->lex->toktrunc;
         snprintf(stext, sizeof stext, "%s", self->lex->toktext);
-        snprintf(ssuf, sizeof ssuf, "%s", self->lex->toksuffix);
+        ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
         self->sup->lex_next();          /* the token after the `?` */
         r = 1;
         if (self->lex->tok == T_ID || self->lex->tok == T_NUM
@@ -8590,7 +8593,7 @@ impl ExprTry for Expr {
         self->lex->tokfloat = sfloat;
         self->lex->toktrunc = strunc;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
-        snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf);
+        self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
         return r;
     }
 

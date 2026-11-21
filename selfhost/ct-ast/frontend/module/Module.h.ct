@@ -516,6 +516,7 @@ impl ModuleOps for Module {
         fclose(f);
         buf[sz] = 0;
         self->lex->src = buf;
+        self->lex->srclen = (int)sz;
         return 0;
     }
 
@@ -768,6 +769,7 @@ impl ModuleOps for Module {
         int  lines[MAX_IMPORTS];
         char dep[MAX_PATH];
         char *mysrc;
+        int mysrclen;
         int u, i, k, d, nrels, is_hdr, is_map, dep_is_map, dup, dn, gn;
         (void)self;
 
@@ -863,6 +865,7 @@ impl ModuleOps for Module {
 
         if (self->read_file(path) != 0) return -1;
         mysrc = (char *)self->lex->src;
+        mysrclen = self->lex->srclen;
         if (self->scan_imports(path) != 0) return -1;
         nrels = self->p->nrels;
         for (i = 0; i < nrels; i++) {
@@ -911,6 +914,7 @@ impl ModuleOps for Module {
         }
 
         self->lex->src = mysrc;
+        self->lex->srclen = mysrclen;
         self->lex->pos = 0;
         self->lex->bol = 1;
         self->lex->line = 1;
@@ -1165,7 +1169,7 @@ impl ModuleOps for Module {
         int pos, bol, line, tokline, tokstart, lstart, tok, tokfloat, toktrunc;
         long num;
         char text[MAX_TEXT];
-        char suffix[8];
+        const char *suffix_ptr; int suffix_len;
         char prev[MAX_TEXT];
         char prev2[MAX_TEXT];
         int prev_line, prev2_line, depth;
@@ -1182,7 +1186,7 @@ impl ModuleOps for Module {
         tokfloat = self->lex->tokfloat;
         toktrunc = self->lex->toktrunc;
         snprintf(text, sizeof text, "%s", self->lex->toktext);
-        snprintf(suffix, sizeof suffix, "%s", self->lex->toksuffix);
+        suffix_ptr = self->lex->toksuffix.ptr; suffix_len = self->lex->toksuffix.len;
 
         self->lex->pos = 0;
         self->lex->bol = 1;
@@ -1257,7 +1261,7 @@ impl ModuleOps for Module {
         self->lex->tokfloat = tokfloat;
         self->lex->toktrunc = toktrunc;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", text);
-        snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", suffix);
+        self->lex->toksuffix.ptr = suffix_ptr; self->lex->toksuffix.len = suffix_len;
         return 0;
     }
 

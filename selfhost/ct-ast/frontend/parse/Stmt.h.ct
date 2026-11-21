@@ -3821,7 +3821,7 @@ impl StmtOps for Stmt {
         int depth = 0;
         long snum;
         char stext[MAX_TEXT];
-        char ssuf[8];
+        const char *ssuf_ptr; int ssuf_len;
 
         sp = self->lex->pos;
         sbol = self->lex->bol;
@@ -3834,7 +3834,7 @@ impl StmtOps for Stmt {
         sfloat = self->lex->tokfloat;
         strunc = self->lex->toktrunc;
         snprintf(stext, sizeof stext, "%s", self->lex->toktext);
-        snprintf(ssuf, sizeof ssuf, "%s", self->lex->toksuffix);
+        ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
         r = 0;
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PUNCT) {
@@ -3865,7 +3865,7 @@ impl StmtOps for Stmt {
         self->lex->tokfloat = sfloat;
         self->lex->toktrunc = strunc;
         snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
-        snprintf(self->lex->toksuffix, sizeof self->lex->toksuffix, "%s", ssuf);
+        self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
         return r;
     }
 

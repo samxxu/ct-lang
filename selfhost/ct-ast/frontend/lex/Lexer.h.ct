@@ -15,6 +15,7 @@
  */
 #include <stdio.h>
 #include <limits.h>
+#include <assert.h>
 
 #define MAX_TEXT   160
 #define T_EOF    0
@@ -25,6 +26,20 @@
 #define T_PP     5
 
 namespace frontend::lex;
+
+/* The text of the current token is a view into the source buffer: `ptr` is
+   its first byte and `len` its byte count. It is deliberately not
+   NUL-terminated; `src` is, so a consumer that wants a C string still has to
+   convert at its own boundary. `TokView` has the same `{ptr,len}` layout as
+   the built-in `Str` borrowed view (lib/std/Str.h.ct); it is spelled locally
+   because the bootstrap compiler (L2) does not know the std layer and CT
+   forbids a `Str` struct field anyway (PH-81), so a `Str` cannot be stored
+   here. The token bytes are still never copied. */
+pub struct TokView {
+    const char *ptr;
+    int len;
+}
+
 pub trait LexOps {
     void next(void);
 }
@@ -34,16 +49,18 @@ pub struct Lexer {
     int  pos;
     int  bol;
     int  tok;
+    TokView tokstr;             /* the token's bytes, a view into `src` */
     char toktext[160];
     long toknum;
     /* the `U` / `L` suffix of an integer literal, as written (`uLL`, `LLu`):
        the parser validates and normalizes it. 8 fits any invalid run too, so a
        suffix that is too long is never silently truncated into a legal one. */
-    char toksuffix[8];
+    TokView toksuffix;          /* the integer suffix, a view into `src` */
     /* 1 when the current identifier did not fit in `toktext`: the parser turns
        it into `identifier is too long` instead of letting a silently truncated
        name collide with another one. */
     int  toktrunc;
+    int  srclen;                /* bytes in `src`, excluding the final NUL */
     int  line;                  /* 1-based */
     int  tokline;               /* line of the current token */
     int  tokstart;
@@ -53,6 +70,43 @@ pub struct Lexer {
        hold the value and re-printing it would lose the spelling */
     int  tokfloat;
 } use LexOps;
+
+/* The view has to stay inside the source buffer. `srclen` is set by
+   `read_file`, so the check is skipped only before a buffer exists. */
+static int lex_view_ok(struct Lexer *l)
+{
+    return l->tokstr.len >= 0
+        && l->tokstr.ptr >= l->src
+        && l->tokstr.ptr + l->tokstr.len <= l->src + l->srclen;
+}
+
+/* Record the token as `[start, start+len)` of `src`. `len` is clamped to what
+   the cursor actually consumed and to MAX_TEXT-1, the old fixed buffer's cap:
+   the long-token diagnostics therefore keep their exact trigger point while
+   the bytes stay in place. */
+static void lex_view(struct Lexer *l, int start, int len)
+{
+    int avail = l->pos - start;
+    if (len < 0) len = 0;
+    if (len > avail) len = avail;
+    if (len > MAX_TEXT - 1) len = MAX_TEXT - 1;
+    l->tokstr.ptr = l->src + start;
+    l->tokstr.len = len;
+    if (l->srclen > 0) assert(lex_view_ok(l));
+}
+
+/* The integer suffix keeps at most 7 bytes, the old `toksuffix[8]` capacity;
+   the parser still rejects more than U + LL from the view length. */
+static void lex_suffix(struct Lexer *l, int start, int len)
+{
+    if (len < 0) len = 0;
+    if (len > 7) len = 7;
+    l->toksuffix.ptr = l->src + start;
+    l->toksuffix.len = len;
+    if (l->srclen > 0)
+        assert(l->toksuffix.ptr >= l->src
+               && l->toksuffix.ptr + l->toksuffix.len <= l->src + l->srclen);
+}
 
 pub struct Lexer *lexer_get(void);
 
@@ -76,7 +130,7 @@ impl LexOps for Lexer {
 
         for (;;) {
             c = (unsigned char)self->src[self->pos];
-            if (c == 0) { self->tok = T_EOF; self->toktext[0] = 0; return; }
+            if (c == 0) { self->tok = T_EOF; self->toktext[0] = 0; lex_view(self, self->pos, 0); return; }
             if (c == '\n') { self->bol = 1; self->line++; self->pos++; self->lstart = self->pos; continue; }
             if (c == ' ' || c == '\t' || c == '\r') { self->pos++; continue; }
             if (c == '/' && self->src[self->pos + 1] == '/') {
@@ -114,6 +168,7 @@ impl LexOps for Lexer {
             self->toktext[n] = 0;
             self->tok = T_PP;
             self->bol = 0;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         self->bol = 0;
@@ -129,13 +184,14 @@ impl LexOps for Lexer {
             }
             self->toktext[n] = 0;
             self->tok = T_ID;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if (c >= '0' && c <= '9') {
             int nstart = self->pos;
             self->toknum = 0;
             self->tokfloat = 0;
-            self->toksuffix[0] = 0;
+            lex_suffix(self, self->pos, 0);
             if (c == '0' && (self->src[self->pos + 1] == 'x' || self->src[self->pos + 1] == 'X')) {
                 self->pos += 2;
                 for (;;) {
@@ -198,18 +254,14 @@ impl LexOps for Lexer {
                in any order). They do not affect the value, so they are collected
                verbatim for the parser; the spelling is what the emitter keeps. */
             if (!self->tokfloat) {
-                int q = 0;
+                int sstart = self->pos;
                 while (self->src[self->pos] == 'u' || self->src[self->pos] == 'U'
-                       || self->src[self->pos] == 'l' || self->src[self->pos] == 'L') {
-                    if (q + 1 < 8) {            /* the toksuffix capacity */
-                        self->toksuffix[q] = self->src[self->pos];
-                        q++;
-                    }
+                       || self->src[self->pos] == 'l' || self->src[self->pos] == 'L')
                     self->pos++;
-                }
-                self->toksuffix[q] = 0;
+                lex_suffix(self, sstart, self->pos - sstart);
             }
             self->tok = T_NUM;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if (c == '"' || c == '\'') {
@@ -237,6 +289,7 @@ impl LexOps for Lexer {
             self->toktext[n] = 0;
             if (toolong) self->toktrunc = 1;
             self->tok = T_STR;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         /* `...` (a variadic parameter list) has to be one token: the parser
@@ -248,6 +301,7 @@ impl LexOps for Lexer {
             self->toktext[3] = 0;
             self->tok = T_PUNCT;
             self->pos += 3;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         /* `..` (a half-open range bound in `loop(a..b)`) has to be one token,
@@ -260,6 +314,7 @@ impl LexOps for Lexer {
             self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         /* `.5` -- a floating literal that starts with the point. The `...` and
@@ -292,6 +347,7 @@ impl LexOps for Lexer {
             }
             self->toktext[q] = 0;
             self->tok = T_NUM;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if (c == '-' && self->src[self->pos + 1] == '>') {
@@ -300,6 +356,7 @@ impl LexOps for Lexer {
             self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if (c == ':' && self->src[self->pos + 1] == ':') {
@@ -308,6 +365,7 @@ impl LexOps for Lexer {
             self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         /* `=>` opens a closure body. It is lexed on its own, before the
@@ -319,6 +377,7 @@ impl LexOps for Lexer {
             self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         /* shifts: `<<=` / `>>=` first, then `<<` / `>>`, then the comparisons
@@ -336,6 +395,7 @@ impl LexOps for Lexer {
                 self->tok = T_PUNCT;
                 self->pos += 2;
             }
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if ((c == '=' || c == '!' || c == '<' || c == '>') && self->src[self->pos + 1] == '=') {
@@ -344,6 +404,7 @@ impl LexOps for Lexer {
             self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if ((c == '+' || c == '-') && self->src[self->pos + 1] == c) {
@@ -352,6 +413,7 @@ impl LexOps for Lexer {
             self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         /* `&&` and `||` are their own tokens; a lone `&` / `|` stays literal */
@@ -361,6 +423,7 @@ impl LexOps for Lexer {
             self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         /* compound assignment: `+=` `-=` `*=` `/=` `%=` `&=` `|=` `^=` */
@@ -372,12 +435,14 @@ impl LexOps for Lexer {
             self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
+            lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         self->toktext[0] = (char)c;
         self->toktext[1] = 0;
         self->tok = T_PUNCT;
         self->pos++;
+        lex_view(self, self->tokstart, self->pos - self->tokstart);
     }
 }
 
