@@ -1,0 +1,12 @@
+/* SH-106 positive: borrowing from a field of a caller-owned object. */
+struct P { String name; }
+Str f(struct P *p) { return p->name.as_str(); }
+int main(void)
+{
+    struct P p;
+    p.name = str_dup("z");
+    Str v = f(&p);
+    int r = v.byte_at(0) == 'z' ? 0 : 1;
+    p.name.release();
+    return r;
+}

@@ -1,0 +1,12 @@
+/* SH-106 negative: a sub-view of a view of a local owner. */
+Str f(void)
+{
+    String s = str_dup("abc");
+    Str v = s.as_str();
+    return v.slice(1, 1);
+}
+int main(void)
+{
+    Str v = f();
+    return v.byte_at(0) == 'b' ? 0 : 1;
+}

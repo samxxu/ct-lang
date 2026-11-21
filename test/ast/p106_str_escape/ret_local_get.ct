@@ -1,0 +1,11 @@
+/* SH-106 negative: `s[i]` / get is a view of the local owner too. */
+Str f(void)
+{
+    String s = str_dup("ab");
+    return s.get(1);
+}
+int main(void)
+{
+    Str v = f();
+    return v.byte_at(0) == 'b' ? 0 : 1;
+}

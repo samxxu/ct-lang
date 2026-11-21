@@ -1322,6 +1322,17 @@ p80_probe docs "PH-80-S5b-2 docs (E80-8: spec 4.70, README, roadmap, card 7)" \
 p80_probe retain "PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)" \
     test/ast/p80_retain.sh "$work/ct-ast"
 
+# SH-106: the borrowed `Str` view escape lint (the E79-6 `slice escape`
+# counterpart for `String` / `Str`). The probe pins the two escape shapes, the
+# local-binding propagation, `ct check`'s error severity and the six silent
+# shapes (immortal literal, owner in scope, parameter, field, immortal owning
+# local, `ct: allow-escape`).
+if sh test/ast/p106_str_escape.sh "$work/ct-ast" >"$work/p106escape.out" 2>&1; then
+    ok "SH-106 Str view escape (local / temporary owner, ct check severity, safe shapes)"
+else
+    bad "SH-106 Str view escape" "$(sed -n '1,14p' "$work/p106escape.out")"
+fi
+
 # Phase 81: `box<T>` / `new` (S1). The probe covers E81-1…6: layout/header,
 # new's named-struct boundary, static-type release, the borrowed at() view,
 # the author-owned cycle, the negatives and the doc/version sync.

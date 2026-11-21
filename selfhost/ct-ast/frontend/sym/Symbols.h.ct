@@ -193,6 +193,17 @@ pub struct Var {
     char slice_elem[160];
     int  slice_const;
     int  slice_escape;
+    /* SH-106: the same lifetime-lite bookkeeping for the borrowed `Str` /
+       `U16Str` views. `str_escape` is 0 when the view's owner outlives the
+       frame (immortal literal, parameter, field, global / static), 1 when it
+       borrows a local owning `String` / `U16String` (released at frame exit)
+       and 2 when it borrows a temporary owner (released at the end of the
+       full expression). `str_immortal` marks a local owning handle bound from
+       a literal: its `release()` is a no-op (`refs = -1`), so a view of it
+       stays valid across the frame boundary. Only the parser reads/writes
+       them; the emitter is unchanged. */
+    int  str_escape;
+    int  str_immortal;
 }
 
 /* One non-escaping closure literal. The parser fills this table; the emitter
@@ -778,6 +789,8 @@ impl SymbolOps for Symbols {
         self->vars[i].slice_elem[0] = 0;
         self->vars[i].slice_const = 0;
         self->vars[i].slice_escape = 0;
+        self->vars[i].str_escape = 0;
+        self->vars[i].str_immortal = 0;
         self->nvar++;
         return 0;
     }
@@ -831,6 +844,8 @@ impl SymbolOps for Symbols {
         self->vars[i].slice_elem[0] = 0;
         self->vars[i].slice_const = 0;
         self->vars[i].slice_escape = 0;
+        self->vars[i].str_escape = 0;
+        self->vars[i].str_immortal = 0;
         if (imported)
             for (k = 0; k < i; k++)
                 if (self->vars[k].is_global && self->vars[k].imported

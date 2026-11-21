@@ -1,0 +1,8 @@
+/* SH-106 negative: `return` of a view of a temporary owning String. */
+String mk(void) { return str_dup("y"); }
+Str f(void) { return mk().as_str(); }
+int main(void)
+{
+    Str v = f();
+    return v.byte_at(0) == 'y' ? 0 : 1;
+}

@@ -1,0 +1,8 @@
+/* SH-106 positive: a file-scope owner outlives every frame. */
+String g_name = "x";
+Str f(void) { return g_name.as_str(); }
+int main(void)
+{
+    Str v = f();
+    return v.byte_at(0) == 'x' ? 0 : 1;
+}

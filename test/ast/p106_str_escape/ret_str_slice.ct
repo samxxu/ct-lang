@@ -1,0 +1,11 @@
+/* SH-106 negative: the free `str_slice` hands back a borrowed view too. */
+Str f(void)
+{
+    String s = str_dup("abc");
+    return str_slice(s.as_str(), 1, 1);
+}
+int main(void)
+{
+    Str v = f();
+    return v.byte_at(0) == 'b' ? 0 : 1;
+}

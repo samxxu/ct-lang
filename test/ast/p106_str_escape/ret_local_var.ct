@@ -1,0 +1,12 @@
+/* SH-106 negative: a local view binding, then `return` of the binding. */
+Str f(void)
+{
+    String s = str_dup("z");
+    Str v = s.as_str();
+    return v;
+}
+int main(void)
+{
+    Str v = f();
+    return v.byte_at(0) == 'z' ? 0 : 1;
+}

@@ -607,7 +607,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.88.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.88.2（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
 | 当前阶段 | v0.88.0（PH-88 发射器重写 + 自举回环已交付：五个判别函数切成 76 个 `em_*` free function、判别式只读一次 kind；`CT_FIXPOINT_ROUNDS` 日常 2 / tag 前 3 轮逐字节一致；66 语料逐字节 + 345 诊断逐字；字面 `match` 按 battle/p88-emit-match 承接 `v1-PH-0`；v1-pre 的 PH-84–88 全部收口，下一步 v1.0（`v1-PH-0`，AST-only + seed cutover）。v1-pre 证据见 [v1-pre-evidence](docs/history/v1-pre-evidence.md)，度量见 [p88_metrics](docs/history/p88_metrics.md) |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |

@@ -1,0 +1,7 @@
+/* SH-106 negative: a declaration binds a view of a temporary owner. */
+String mk(void) { return str_dup("q"); }
+int main(void)
+{
+    Str v = mk().as_str();
+    return v.byte_at(0) == 'q' ? 0 : 1;
+}

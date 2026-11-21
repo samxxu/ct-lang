@@ -1,0 +1,12 @@
+/* SH-106 positive: an owning local bound to a literal is immortal
+   (`refs = -1`), so its release is a no-op and the view stays valid. */
+Str f(void)
+{
+    String s = "x";
+    return s.as_str();
+}
+int main(void)
+{
+    Str v = f();
+    return v.byte_at(0) == 'x' ? 0 : 1;
+}

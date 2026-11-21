@@ -1,0 +1,9 @@
+/* SH-106 positive: an immortal literal view is safe. */
+Str f(void) { return "x"; }
+Str g(void) { Str v = "y"; return v; }
+int main(void)
+{
+    Str a = f();
+    Str b = g();
+    return (a.byte_at(0) == 'x' && b.byte_at(0) == 'y') ? 0 : 1;
+}

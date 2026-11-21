@@ -1,0 +1,11 @@
+/* SH-106 negative: `return` of a view of a local owning String. */
+Str f(void)
+{
+    String s = str_dup("x");
+    return s.as_str();
+}
+int main(void)
+{
+    Str v = f();
+    return v.byte_at(0) == 'x' ? 0 : 1;
+}

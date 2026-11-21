@@ -1,0 +1,8 @@
+/* SH-106 negative: an assignment rebinds a view to a temporary owner. */
+String mk(void) { return str_dup("r"); }
+int main(void)
+{
+    Str v = "x";
+    v = mk().as_str();
+    return v.byte_at(0) == 'r' ? 0 : 1;
+}

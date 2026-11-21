@@ -76,7 +76,7 @@
 | 拷贝 | retain/release（有成本）；局部/参数/字段赋值自动，全局不自动 | 拷 `{ptr,len}` 两个字段（零成本） |
 | 释放 | 引用计数归零自动 Drop（局部/参数）；**字段见下方分层，全局需显式 `release()`** | **不存在释放**——没有一寸自己的内存 |
 | 存进字段/容器 | `String` 字段合法；释放见下方分层；容器元素合法 | struct 字段、`Map` 键是**硬错**；`Vec<Str>`、`Option<Str>`、ADT 负载**可编译**，但存的是借用视图 |
-| 悬垂风险 | 单线程内 owning 不悬垂；跨线程共享 refcount 非原子，需自行同步 | 有（底层死了它瞎指）——**当前没有 Str 逃逸 lint**，见 §7 |
+| 悬垂风险 | 单线程内 owning 不悬垂；跨线程共享 refcount 非原子，需自行同步 | 有（底层死了它瞎指）——**返回局部视图 / 临时接收者视图有 warning**（v0.88.2 起，见 §3.4、§7） |
 
 两点容易误解：
 
@@ -189,8 +189,9 @@ struct Config {
    ```
 
 2. **视图用完前，owner 别死**——`make_person().name.as_str()` 这种「从临时量取视图」
-   **当前可以编译**，返回局部 `String` 的视图也可以编译，而且没有 lint。编译器不兜底，
-   只能靠这条纪律。
+   与返回局部 `String` 的视图从 v0.88.2 起有编译期 **warning**
+   （`borrowed 'Str' view escapes`；`ct check` 下按既有 strict 规则是 error）。
+   编译器只拦这两种直接形态；经函数转手的形态仍靠这条纪律。
 
 3. **owner 死了视图就是废纸**——经函数转手的形态编译器看不到，归契约 + ASan 兜底。
 
@@ -326,7 +327,7 @@ CT 的护栏水位是「比 C 严格得多，比 Rust 松」。以下残余**存
 | 残余 | 后果 | 防线 |
 | --- | --- | --- |
 | 引用环（A 持 B、B 持 A） | 静默泄漏，无告警 | 文档契约「环=作者责任」；直接环有 lint；`--debug-leaks` **当前未实现**，将来也只报未配对计数 |
-| `Str` 视图活到 owner 死后（返回局部视图、临时接收者、经函数转手） | 悬垂读，UB | 契约 + ASan；**当前没有 `Str` 逃逸 lint**（见 [SH-106](../issues/selfhost/sh106-str-view-escape-no-lint.md)）；`T[]` 切片有 `slice escape` warning |
+| `Str` 视图活到 owner 死后（返回局部视图、临时接收者、经函数转手） | 悬垂读，UB | 前两种直接形态有 **warning**（v0.88.2 起，`borrowed 'Str' view escapes`；`ct check` 升 error，见 [SH-106](../issues/selfhost/sh106-str-view-escape-no-lint.md)）；经函数转手仍靠契约 + ASan；`T[]` 切片有 `slice escape` warning |
 | 句柄跨线程共享 | 数据竞争（refcount 非原子） | 契约「句柄非 atomic」+ TSan（nightly/Linux 独立门禁）；需要时用 atomic 自己同步 |
 | ADT 的 owning payload（`String` / `box` / `Vec`） | 不自动释放 → 泄漏；释放绑定后原句柄悬垂 | ADT 无 drop glue，作者显式释放**一次**；把 ADT 当 move 语义 |
 | `String` / `box<T>` 字段（宿主无 `use Drop`，或写了显式 `impl Drop`） | 泄漏 | 宿主 `use Drop` 且无显式 impl → 字段胶水；否则显式 `release()` |

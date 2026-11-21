@@ -1,0 +1,12 @@
+/* SH-106 positive: borrowing from a parameter is caller-owned. */
+Str passthrough(Str s) { return s; }
+Str borrow_param(String s) { return s.as_str(); }
+int main(void)
+{
+    String x = str_dup("w");
+    Str v = passthrough(x.as_str());
+    Str w = borrow_param(x);
+    int r = (v.byte_at(0) == 'w' && w.byte_at(0) == 'w') ? 0 : 1;
+    x.release();
+    return r;
+}

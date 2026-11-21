@@ -2953,6 +2953,13 @@ parse("ab", n);  /* 调用点不写 out */
   `to_utf16`、`to_string`。`match` / `locale` / `normalize` 不在内建，走包 + shim。
 - **不可变与下标**：`String` 不可变，`s[i] = ...`、`u[i] = ...` 硬错；`s[i]` 是只读单码点 `Str`
   视图（越界为空视图），`u[i]` 是只读单 code unit `U16Str` 视图。
+- **视图逃逸 lint（SH-106，v0.88.2）**：沿用 §4.69 的 `slice escape` 结构，对两类 `Str` /
+  `U16Str` 逃逸报 **warning**（`ct check` 按既有 strict 规则升为 error，与 E79-6 同级）：
+  ① 返回局部 owning 句柄的视图（owner 在函数出口释放）；② 从临时接收者取视图并返回或绑定到
+  局部（owner 在整条表达式结束时释放）。文案含 `borrowed 'Str' view escapes`，位置指向被返回 /
+  绑定的表达式。不报的安全形态：immortal 字面量视图、owner 仍在作用域内、从参数 / 字段 /
+  全局 / static 借用、owning 局部绑定 immortal 字面量。豁免：同一行写
+  `/* ct: allow-escape */`。跨过程转手的形态仍归契约 + ASan（不承诺跨过程分析）。
 - **C 边界**：`.data` 是只读原始视图，静态类型 `const char *`（UTF-8）/ `const uint16_t *`（U16），
   **不保证 NUL 结尾**；它只能下标（`s.data[i]`），不能作为值传出、不能传给任何被调方
   （`printf("%s", s.data)` 硬错：`'.data' is a read-only raw view without a NUL guarantee; index it

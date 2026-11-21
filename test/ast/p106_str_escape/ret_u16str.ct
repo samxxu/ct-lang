@@ -1,0 +1,13 @@
+/* SH-106 negative: the UTF-16 pair has the same escape shape. */
+U16Str f(U16String *u)
+{
+    U16String s = U16String.from_utf16(u->as_str());
+    return s.as_str();
+}
+int main(void)
+{
+    Str t = "u";
+    U16String u = U16String.from_utf8(t);
+    U16Str v = f(&u);
+    return v.len() == 1 ? 0 : 1;
+}

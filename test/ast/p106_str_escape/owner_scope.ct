@@ -1,0 +1,9 @@
+/* SH-106 positive: the owning String is still in scope at every use. */
+int main(void)
+{
+    String s = str_dup("m");
+    Str v = s.as_str();
+    int r = v.byte_at(0) == 'm' ? 0 : 1;
+    s.release();
+    return r;
+}
