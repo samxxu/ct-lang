@@ -4,7 +4,7 @@
 
 本文只做**简要罗列**：阶段、主题、状态、收口版本、详情入口。逐相流水账、版本记录与已定决策见
 [history/phase-log.md](history/phase-log.md)。当前已实现能力见 [README](../README.md) 与
-[language-spec](language-spec.md)。
+[language-spec](language-spec.md)。语言稳定性分档与改动授权见 [stable-subset](stable-subset.md)。
 
 ---
 

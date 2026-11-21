@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts eleven invariants:
+Standard library only. It asserts twelve invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -33,9 +33,12 @@ Standard library only. It asserts eleven invariants:
      inactive until idioms.md lands, then it switches on with the file;
  11. SH-104: docs/planning/j6-evidence/ledger.md carries every P-1…P-6 row
      (P-3.7/3.8, P-4.6, P-5.7 included), each with a status from the fixed
-     four, a non-empty 最小可判证据, and a reason on every `阻塞` row.
+     four, a non-empty 最小可判证据, and a reason on every `阻塞` row;
+ 12. DOC-79: the 分档清单 in docs/stable-subset.md has five cells per row,
+     a legal tier, non-empty 授权 and 版本/截止, and at least one row in each
+     of the three tiers.
 
-Exit code 0 when all eleven hold, 1 otherwise.
+Exit code 0 when all twelve hold, 1 otherwise.
 """
 
 import hashlib
@@ -68,6 +71,7 @@ J6_IDS = (
     | {"P-6.%d" % i for i in (1, 2, 3, 4)}
 )
 J6_STATES = {"已过", "部分", "缺失", "阻塞"}
+STABLE_TIERS = ("已冻结", "冻结中", "1.0 前可改")
 
 STATUS_MAP = {
     "完成": "\u2705",
@@ -527,6 +531,47 @@ def check_j6_ledger(errors):
     return len(seen)
 
 
+def check_stable_subset(errors):
+    """DOC-79: the tier table in docs/stable-subset.md is well formed and every
+    tier has at least one row."""
+    path = os.path.join(ROOT, "docs/stable-subset.md")
+    if not os.path.exists(path):
+        errors.append("docs/stable-subset.md: missing (DOC-79)")
+        return 0
+    text = read(path)
+    head = re.search(r"^##\s*2\.\s*分档清单\s*$", text, re.M)
+    if not head:
+        errors.append("docs/stable-subset.md: no '## 2. 分档清单' section (DOC-79)")
+        return 0
+    tail = text[head.end():]
+    nxt = re.search(r"^##\s", tail, re.M)
+    body = tail[: nxt.start()] if nxt else tail
+    tiers = {}
+    rows = 0
+    for line in body.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) != 5:
+            errors.append(f"stable-subset: row has {len(cells)} cells (expected 5): {line[:60]}")
+            continue
+        if cells[0] == "能力面" or not cells[0].strip("-: "):
+            continue
+        rows += 1
+        tier = cells[1]
+        if tier not in STABLE_TIERS:
+            errors.append(f"stable-subset: illegal tier '{tier}' in row: {cells[0][:40]}")
+        tiers[tier] = tiers.get(tier, 0) + 1
+        if not cells[2] or cells[2] in ("—", "-"):
+            errors.append(f"stable-subset: empty 授权 in row: {cells[0][:40]}")
+        if not cells[3] or cells[3] in ("—", "-"):
+            errors.append(f"stable-subset: empty 版本/截止 in row: {cells[0][:40]}")
+    for tier in STABLE_TIERS:
+        if not tiers.get(tier):
+            errors.append(f"stable-subset: no row in tier '{tier}' (DOC-79)")
+    return rows
+
+
 def main():
     errors = []
     links, scanned = check_links(errors)
@@ -540,6 +585,7 @@ def main():
     signoffs = check_signoffs(errors)
     briefing = check_idiom_briefing(errors)
     j6 = check_j6_ledger(errors)
+    stable = check_stable_subset(errors)
     for error in errors:
         print(f"FAIL: {error}")
     # The two status lines print on both paths: on a red run the first one names
@@ -553,7 +599,8 @@ def main():
         f"check-docs: OK ({links} relative links in {scanned} files, "
         f"v{version}, {gates} hard gates, {phases} phase status, "
         f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
-        f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s))"
+        f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s), "
+        f"{stable} stability row(s))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0
