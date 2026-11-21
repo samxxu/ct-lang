@@ -54,3 +54,12 @@
   [CI-13](../../issues/ci/ci-13-g6-ledger-closure.md)。
 - 现有 SH-104/105/107、DOC-81/82 状态不变；在各自 issue 内补“层级 + v1.0 门禁”注记。
 - 本轮不改 `selfhost/**`、`test/**`；所有处置由 DEV/CI 在各自卡内施工。
+
+## 追加注记（2026-11-21 所有者改判）
+
+- `MAX_FUNCS` 容量切片从 **Tier 1（v1-PH-0 入口）** 改为 **`v1-PH-1 / S0`（v1.1）**；
+  决策为 512 → **1024**，见 [提案](../../docs/proposals/ct-max-funcs-1024.md) 与
+  [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)。
+- `v1-PH-0` 仍按 **501/512** 施工，新增顶层函数预算 ≤11；预计超过 11 个 helper 时
+  停止并提前 S0，不得在 `v1-PH-0` 内顺手提上限。
+- 本注记只改 Tier 归属，不推翻 §1 其余四项（SH-104/105、E88-1、phase-ID、G1/G6、历史债）。
