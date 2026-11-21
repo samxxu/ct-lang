@@ -7,8 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.84.1（2026-11-21） |
 | 依据 | [对齐清单 A2](../planning/ct-pkg-index-alignment.md)、[契约 §4.4](../planning/ct-pkg-get-contract.md#44-ct-index-verify只读ct-lang-负责)、[D-014](../decisions/D-014.md) |
-| 状态 | open |
-| 处置证据 | **open（REV 复核仍复现，2026-11-22，HEAD `38cd4ae4`；A2 未实现）** |
+| 状态 | verified |
+| 处置证据 | **verified（REV 独立复核，2026-11-22，HEAD `7061aa22`）：与 PKG-19 同一归档自举，四类身份负例在取回前 exit 1、对应 12 条断言绿，基线 8 条身份红证复跑；见 §复核通过** |
 
 ## 现象
 
@@ -172,3 +172,57 @@ ctc: git clone of 'file:///tmp/nope' failed           # 没有先报 publisher �
 - **未覆盖**：digest 仍沿用既有 `sha_hex_ok`（被选中行在候选阶段即排除坏 digest，
   错误不新增行号）；不做全文件扫描与 duplicate 检测（verify 的职责，全文件预检转 v1.1）。
   PKG-20 与 PKG-19 共用同一次 fix（v0.88.3），未拆两个实现提交（用户本轮口径）。
+
+## §复核通过（REV，2026-11-22，HEAD `7061aa22`）
+
+与 PKG-19 共用同一次归档自举（`git archive 7061aa22` → L0→L1→L2→ct-ast，
+`ct-ast v0.88.3`，产物 sha256 `2aa21806076d58caea22f3ed3a0fb60d2245f3bd488780cd7c612401ed6dcdcd`；
+探针 sha256 `02c1d95e11d2f5580e66bb6441c3eaa4437b3d67b3097a9b24cd502a6fe365c3`）。
+完整自举命令、24 条绿证与回归命令见 [PKG-19](pkg-19-get-index-field-count.md) 的 §复核通过，本节只列 A2 相关断言。
+
+### 绿证（A2 四类选中行）
+
+```console
+$ sh test/ast/pkg19_20_rows.sh /tmp/rev-pkg3/ct-ast
+ok   a tag that is not v<version>: get reports tag-version before fetch
+ok   a tag that is not v<version>: get does not invoke git
+ok   a tag that is not v<version>: get leaves ct.lock and store untouched
+ok   publisher = local: get reports identity before fetch
+ok   publisher = local: get does not invoke git
+ok   publisher = local: get leaves ct.lock and store untouched
+ok   a name outside [a-z0-9][a-z0-9-]*: get reports identity before fetch
+ok   a version that is not x.y.z: get reports identity before fetch
+ok   a legal six-field row still installs with the same lock row and digest
+ok   an unselected seven-field row does not block a legal request
+pkg19_20: OK                                        # exit 0
+```
+
+诊断原文（与 verify 同文案、同 `line 1` 行号）：
+
+```console
+line 1: tag-version: index tag 'v9.9.9' must be 'v0.1.0'
+line 1: identity: index publisher 'local' must be non-empty, not 'local', without '/'
+line 1: identity: index package name 'Foo' must match [a-z0-9][a-z0-9-]*
+line 1: identity: index version '1.0' must be x.y.z
+```
+
+### 红证复跑
+
+基线 `38cd4ae4`（`ct-ast v0.88.2`）上，四类 `ct get` 全部进入 `git clone`、缺对应诊断；
+`pkg19_20` exit 1、10 条断言红（七字段 1 类 + 身份 4 类，各 `get` + `no git`；其中身份 8 条），
+与 DEV 记录一致，证明探针覆盖本次修复而非空转。
+
+### 逐条对照
+
+| 卡内期望 | 复核结果 |
+| --- | --- |
+| `index_name_ok(tok[0])` | 成立：`index_row_check` 统一执行，错误类别 `identity` |
+| publisher 非空 / 非 `local` / 无 `/` | 成立：同一函数，文案与 verify 逐字相同 |
+| `index_version_ok(tok[1])` | 成立：同上 |
+| `tag == 'v' + version` | 成立：类别 `tag-version`，`line 1` 行号来自 lookup 的 `lineno` |
+| digest 保持既有检查 | 成立：`sha_hex_ok(tok[5])` 仍在同一校验点；被选中行坏 digest 仍由候选阶段排除（卡内「未覆盖」） |
+| 失败先于 clone / store / lock | 成立：`best_bad` 在返回前 `return -1`；替身 `git` 无调用标记、lock/store 未写 |
+| 未选中坏行不阻塞 | 成立：`ct get` 只校验选中行，verify 仍全文件扫描 |
+| 合法六字段行不变 | 成立：锁行 `acme/util 1.1.0 git … <digest>` 与基线一致，verify `OK (1 rows)` |
+
+结论：PKG-20 的修复与验收在归档自举上独立复现；`open` → `verified`。

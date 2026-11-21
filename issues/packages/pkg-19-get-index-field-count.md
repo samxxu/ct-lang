@@ -7,8 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.84.1（2026-11-21） |
 | 依据 | [对齐清单 A1](../planning/ct-pkg-index-alignment.md)、[契约 §3.2](../planning/ct-pkg-get-contract.md#32-索引行)、[D-014](../decisions/D-014.md) 第 5 条 |
-| 状态 | open |
-| 处置证据 | **open（REV 复核仍复现，2026-11-22，HEAD `38cd4ae4`；A1 未实现）** |
+| 状态 | verified |
+| 处置证据 | **verified（REV 独立复核，2026-11-22，HEAD `7061aa22`）：归档自举 + 24/24 探针绿 + 基线 `38cd4ae4` 的 10 条红证复跑；见 §复核通过** |
 
 ## 现象
 
@@ -168,3 +168,104 @@ ctc: git clone of 'file:///tmp/nope' failed           # 先进入取回，没有
 - **未覆盖**：字段数 < 5 的行仍由 `ct get` 跳过（缺 url/tag/digest，无法成为候选），
   `ct index verify` 仍按全文件报 `field-count`；不做 `ct get` 全文件预检（非目标，转 v1.1）。
   PKG-19 与 PKG-20 共用同一次 fix（v0.88.3），未拆两个实现提交（用户本轮口径）。
+
+## §复核通过（REV，2026-11-22，HEAD `7061aa22`）
+
+独立复核，不复用工作树产物：从 `git archive 7061aa22` 自举整条链，红绿双向复跑。
+PKG-19 置 `verified`。
+
+### 1. 归档与自举
+
+```console
+$ mkdir -p /tmp/rev-pkg3/src && git archive 7061aa22 | tar -x -C /tmp/rev-pkg3/src
+$ gcc -Wall -Wextra -Wno-format-truncation -Wno-implicit-fallthrough -std=c99 \
+      selfhost/l0/ctc.c -o /tmp/rev-pkg3/ctc-l0
+$ /tmp/rev-pkg3/ctc-l0 selfhost/l1/ctc.ct -o /tmp/rev-pkg3/l1.c
+$ gcc -Wall -Wextra -std=c99 /tmp/rev-pkg3/l1.c -o /tmp/rev-pkg3/ctc-l1
+$ /tmp/rev-pkg3/ctc-l1 build selfhost/l2/driver.ct -o /tmp/rev-pkg3/l2
+$ gcc -Wall -Wextra -std=c99 /tmp/rev-pkg3/l2/*.c -o /tmp/rev-pkg3/ctc-l2
+$ /tmp/rev-pkg3/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/rev-pkg3/ast
+$ gcc -Wall -Wextra -std=c99 /tmp/rev-pkg3/ast/*.c -o /tmp/rev-pkg3/ct-ast
+$ /tmp/rev-pkg3/ct-ast --version
+ct-ast v0.88.3
+```
+
+归档 sha 核对（`shasum -a 256`）：
+
+| 对象 | sha256 |
+| --- | --- |
+| 归档内 `selfhost/ct-ast/tool/pkg/Pkg.h.ct` | `6faa0ef08638fb5e77696cc805f55727fbe74ca027de584f443db6f2f3e4218f` |
+| 归档内 `test/ast/pkg19_20_rows.sh` | `02c1d95e11d2f5580e66bb6441c3eaa4437b3d67b3097a9b24cd502a6fe365c3` |
+| 自举产物 `ct-ast` | `2aa21806076d58caea22f3ed3a0fb60d2245f3bd488780cd7c612401ed6dcdcd` |
+
+### 2. 绿证（HEAD `7061aa22`）
+
+```console
+$ sh test/ast/pkg19_20_rows.sh /tmp/rev-pkg3/ct-ast
+ok   a seven-field row: verify reports field-count
+ok   a seven-field row: get reports field-count before fetch
+ok   a seven-field row: get does not invoke git
+ok   a seven-field row: get leaves ct.lock and store untouched
+ok   a tag that is not v<version>: verify reports tag-version
+ok   a tag that is not v<version>: get reports tag-version before fetch
+ok   a tag that is not v<version>: get does not invoke git
+ok   a tag that is not v<version>: get leaves ct.lock and store untouched
+ok   publisher = local: verify reports identity
+ok   publisher = local: get reports identity before fetch
+ok   publisher = local: get does not invoke git
+ok   publisher = local: get leaves ct.lock and store untouched
+ok   a name outside [a-z0-9][a-z0-9-]*: verify reports identity
+ok   a name outside [a-z0-9][a-z0-9-]*: get reports identity before fetch
+ok   a name outside [a-z0-9][a-z0-9-]*: get does not invoke git
+ok   a name outside [a-z0-9][a-z0-9-]*: get leaves ct.lock and store untouched
+ok   a version that is not x.y.z: verify reports identity
+ok   a version that is not x.y.z: get reports identity before fetch
+ok   a version that is not x.y.z: get does not invoke git
+ok   a version that is not x.y.z: get leaves ct.lock and store untouched
+ok   a legal six-field row still installs with the same lock row and digest
+ok   verify still accepts the legal six-field row
+ok   an unselected seven-field row does not block a legal request
+ok   verify still scans the whole file and reports the unselected bad row
+pkg19_20: OK                                        # exit 0
+```
+
+### 3. 红证复跑（证明探针非空转）
+
+基线 `38cd4ae4` 归档后按同一 L0→L1→L2→ct-ast 链构建（`ct-ast v0.88.2`），把 `8f3d051b` 的探针放到同一路径跑：
+
+```console
+$ sh test/ast/pkg19_20_rows.sh /tmp/rev-pkg3/base/ct-ast
+ok   a seven-field row: verify reports field-count
+FAIL pkg19_20: a seven-field row get
+  rc=1 ctc: git clone of 'file:///…/nope' failed
+  cause: the package cache is corrupt
+FAIL pkg19_20: a seven-field row no git
+  the resolver reached git
+…（badtag / badpub / badname / badver 同形）
+FAIL pkg19_20: a version that is not x.y.z no git
+  the resolver reached git
+                                                     # exit 1（5 类 × 2 条 = 10 条红，未打印 OK）
+```
+
+### 4. 回归三件套（同一归档构建）
+
+```console
+$ sh test/ast/p83_legacy.sh /tmp/rev-pkg3/ct-ast
+p83_legacy: OK                                       # exit 0
+$ sh test/ast/p83_verify.sh /tmp/rev-pkg3/ct-ast
+p83_verify: OK                                       # exit 0
+$ sh test/conformance/pkg/run.sh --ct /tmp/rev-pkg3/ct-ast
+conformance: 19 passed, 0 failed (data: v1)          # exit 0
+```
+
+### 5. 逐条对照
+
+| 卡内期望 | 复核结果 |
+| --- | --- |
+| `ntok != 6`（五字段除外）报 `field-count`，文案同 verify | 成立：`index_row_parse` → `index_row_check` 是唯一判定点，lookup 与 verify 都调用；`line 1: field-count: index row has 7 fields; six are required` 两边逐字一致 |
+| 五字段行仍 legacy、文案不变 | 成立：`index_row_check` 先判 `ntok == 5` 走 `index_legacy_msg`；`p83_legacy` OK |
+| 失败先于 `git clone` / store / lock | 成立：lookup 在 `best_bad` 分支返回前不取回；替身 `git` 未留下调用标记；`ct.lock` 与 `~/.ct/pkg/pub/foo` 均未出现 |
+| 只改 lookup 与测试，不改索引格式 | 成立：`git show 7061aa22` 的 Pkg 改动只在行解析/校验，索引读写格式未变；六字段合法行的锁行与 digest 不变 |
+| 未选中坏行不阻塞 | 成立：`mixed.index` 选合法行成功，verify 仍按全文件报 `line 2: field-count:` |
+
+结论：修复与验收在归档自举上独立复现，无回归、无漏项；`open` → `verified`。
