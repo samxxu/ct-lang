@@ -89,9 +89,10 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 - **ADT 前置（PH-84）**：最小 ADT/match，语言新增；为重写提供穷尽判别；
 - **v1-pre（PH-85…88）**：ct-ast 用最新语法重写，行为保持；大范围重构，必须独立隔离；
 - **v1.0（v1-PH-0）**：AST-only 收口、去 L1/L2、证据台账；在重写之后做快照发布；
-- **v1.1（v1-PH-1 / S2）**：A 默认强制，产品契约变更。
+- **v1.1（v1-PH-1 / S2）**：A 默认强制，产品契约变更；
+- **v1.2（v1-PH-2）**：Typed/Lowered IR 架构议题（先设计，不阻塞 v1.0/v1.1）。
 
-四者不塞进同一个 phase；各 phase 独立 bump MINOR（v0.84–v0.88）。
+这些阶段不塞进同一个 phase；各 phase 独立 bump MINOR（v0.84–v0.88）。
 
 ### 2.2 S1：ct-ast 语法现代化（v1-pre，PH-85…88）
 
@@ -202,12 +203,14 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
 | v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | 机制已在 PH-85；证据达标则翻转默认，未达标回退“可用不默认” |
+| v1.1 lowering 不变量 | `v1-PH-1` | v1.1 train | 临时值/求值顺序/清理边的显式规则 + 发射前检查 + 6 类小 golden；不做完整 IR（[SH-111](../../issues/selfhost/sh111-lowering-invariants.md)） |
 | v1.1 删除 `box` 别名 | `v1-PH-1` | **v1.1.0** | `box<T>` 硬错并提示 `Box<T>`；独立提交、可回滚（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 | v1.1 C Shim Contract | `v1-PH-1` | v1.1 train | 正式契约：命名/头文件/所有权/错误码/ISR 上下文/ABI/测试；不新增语言关键字（[DOC-91](../../issues/docs/doc-91-c-shim-contract.md)） |
 | v1.1 C 互操作语义矩阵 | `v1-PH-1` | v1.1 train | 并入 guide 附录，逐项给 CT 行为、边界与权威节；不新建平行规范（[DOC-92](../../issues/docs/doc-92-c-interop-semantics-matrix.md)） |
+| v1.2 Typed/Lowered IR | `v1-PH-2` | v1.2 train | 完整 IR + 统一清理 CFG；先设计后实施，不进入 v1.0/v1.1 门禁（[SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md)） |
 
 > 该编号依赖 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md)
-> 被主规范受理。未受理前，v1.0/v1.1 仍按旧规则登记 `major-release`/`release-train` deviation；
+> 被主规范受理。未受理前，v1.0/v1.1/v1.2 仍按旧规则登记 `major-release`/`release-train` deviation；
 > 不手改 AGENTS 生成块。
 >
 > **容量顺序（2026-11-21 所有者定）**：`MAX_FUNCS` 动态增长（初始 512、安全阀 65536）

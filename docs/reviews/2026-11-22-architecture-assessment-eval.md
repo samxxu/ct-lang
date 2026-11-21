@@ -79,7 +79,7 @@ C Shim 一等模式）的判断与仓库实际一致；对证据等级（Renode 
 | capability registry 关联 issue/测试/版本 | **已在做，扩展 J-6** | 不新开表；把 issue 状态与回归测试列补进 J-6 |
 | 独立 ABI export 契约 | **已有 P39 C 方案，等待评审** | 不另开新设计；先完成 P39 C 的单方案评审 |
 | 语义引用图替代文本判活 | **hw-2 C 方案内推进** | 文本判活是已知边界；不在 v1.0 重写依赖图 |
-| Typed/Lowered IR + 统一清理 CFG | **v2 方向，不占 v1** | 属于编译器架构重写；v1.0 冻结期不引入 |
+| Typed/Lowered IR + 统一清理 CFG | **v1.2 方向；v1.1 先做轻量不变量** | 完整 IR 属重写，不占 v1.0/v1.1；轻量规则见 [SH-111](../../issues/selfhost/sh111-lowering-invariants.md)，完整 IR 见 [SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md) |
 | JSON 诊断全通道 | **LANG-10 既有 deferred** | parse 7b 补完即可，不新建体系 |
 | 真板 UART/RTOS/DMA | **TEST-22 既有 hardware-gated** | 证据等级已标注；真板属外部条件 |
 | 包 conformance / 离线回放 | **PKG-17 既有** | vendored fixture + 三断言已立项 |
