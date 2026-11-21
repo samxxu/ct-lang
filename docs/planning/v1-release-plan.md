@@ -195,9 +195,11 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1-pre 解析+检查 | PH-87 | v0.87.0 | 行为保持；✅ 2026-11-21（按 kind 切片 + 单判别式；`switch→match` 字面项因 L2 引导链移交 PH-88，见 battle/p87-kind-match） |
 | v1-pre 发射器+回环 | PH-88 | v0.88.0 | ✅ 2026-11-21（76 个发射器切片；fixpoint 日常 2 / tag 前 3 轮逐字节；字面 `match` 承接 `v1-PH-0`，见 battle/p88-emit-match） |
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
+| v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
 | v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | 机制已在 PH-85；证据达标则翻转默认，未达标回退“可用不默认” |
+| v1.1 删除 `box` 别名 | `v1-PH-1` | **v1.1.0** | `box<T>` 硬错并提示 `Box<T>`；独立提交、可回滚（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 
 > 该编号依赖 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md)
 > 被主规范受理。未受理前，v1.0/v1.1 仍按旧规则登记 `major-release`/`release-train` deviation；
@@ -206,6 +208,9 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 > **容量顺序（2026-11-21 所有者定）**：`MAX_FUNCS` 动态增长（初始 512、安全阀 65536）
 > 落 `v1-PH-1 / S0`，不在 `v1-PH-0`。`v1-PH-0` 按 501/512 施工，新增顶层函数 ≤11；
 > 超过即停止并提前 S0。
+>
+> **LANG-24 容量约束**：`Box<T>` 改名（含别名分支）必须复用既有类型读取路径，
+> 不给 `v1-PH-0` 新增顶层函数；若确需新增，先停并走 `S0`。
 
 ## 4. 风险
 

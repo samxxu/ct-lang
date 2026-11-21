@@ -106,6 +106,9 @@
    该门禁已挂进 `docs/README.md` 文档约定第 8 条，并由 `check-docs` 的
    `check_idiom_briefing` 执行：编号断言缺 `§N` 或节号在 `language-spec.md`
    中不存在即红；`idioms.md` 未入库时该检查跳过，文件落地即生效。
+6. **拼写依赖**：briefing 与正文的 `box<T>` 依赖 [LANG-24](../lang/lang-24-box-pascalcase-rename.md)。
+   卡片按目标版本择一：v1.0 起写 `Box<T>`（`box<T>` 只作迁移说明），v1.1 起只写 `Box<T>`；
+   不与 LANG-24 的落地版本冲突。
 
 ## 验收
 

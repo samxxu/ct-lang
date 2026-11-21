@@ -1,0 +1,86 @@
+# LANG-24 · `box<T>` → `Box<T>`（v1.0 规范拼写 + 别名，v1.1 删除 `box`）
+
+| 项 | 值 |
+| --- | --- |
+| 模块 | lang / 内置类型命名 |
+| 定性 | bug（违反 [§5.1](../../docs/language-spec.md#L1962) 命名契约） |
+| 严重度 | Medium（语言表面改名；涉及生成符号与文档） |
+| 锚点 | v0.88.0（2026-11-21） |
+| 依据 | [language-spec §5.1](../../docs/language-spec.md#L1962-L2020)、[§4.71](../../docs/language-spec.md#L2949)、[D-016](../../docs/decisions/D-016.md)、[Box.h.ct](../../lib/std/Box.h.ct#L34)、[Expr.h.ct:2304](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2304-L2311) |
+| 状态 | **已决（2026-11-21 所有者：规范拼写 `Box<T>`；`box<T>` 作别名保留到 v1.1 删除）** |
+
+## 背景
+
+`box<T>` 是内置泛型 struct，不是关键字：
+
+- `lib/std/Box.h.ct` 声明 `pub struct box<T>`（[Box.h.ct:34](../../lib/std/Box.h.ct#L34-L37)）；
+- [§5.1](../../docs/language-spec.md#L1962) 的适用范围明确含「内置类型、`lib/std` 内置层」，
+  判据 2 要求类型名匹配 `^[A-Z][A-Za-z0-9]*$`；`box` 是唯一破例（`String` / `Str` /
+  `U16String` / `Vec` / `Map` / `Option` / `Result` 全部 PascalCase）；
+- 无任何决策记录把 `box` 登记为例外。D-016 只裁定布局、复制协议与边界，未提命名；
+  单元文件名反而已经是 `Box.h.ct`；
+- 小写成因是解析器的上下文规则：`box` 只有后接 `<…>` 才当类型，否则当标识符，以保住
+  `Box box;` 一类变量名（[Expr.h.ct:2304](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2304-L2311)）。
+  这让它按关键字族书写，但它的实现身份是类型，命名规范没有跟上。
+
+## 决定
+
+1. **规范拼写 `Box<T>`**（v1.0 / `v1-PH-0` 起）。类型声明、`new`、`Box<T>::of`、
+   字段/参数/返回/嵌套容器一律用 `Box`。
+2. **`box<T>` 保留为别名**：v1.0 起可用，但每次使用打印一次
+   `warning: 'box<T>' is deprecated; write 'Box<T>'`；其余语义与 `Box<T>` 完全相同。
+3. **v1.1（`v1-PH-1`）删除 `box<T>` 别名**：改为硬错并要求改写为 `Box<T>`。
+4. **裸 `box` 始终是普通标识符**：`int box;`、`r.box`、形参 `box` 不受影响；
+   `box` 不进入关键字表。改名后 `Box` 成为内建模板名，隐式保留（与 `Vec` 同级）。
+5. **生成 C 符号随模板名改为 `Box_*`**（`Box_Record__new`、`Box_Record__payload_release`
+   等，[Emitter.h.ct:2580](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2580) 附近的
+   `tmpl == "box"` / `"box_"` 判断同步）。理由：避免留下「源码 `Box`、产物 `box_`」的
+   永久特例。`ct_box_hdr` 保持原名（头部类型，不随类型拼写）；`box_to_iface` 是接口装箱，
+   与本改名无关，不改。
+
+## 需要改的地方
+
+| 位置 | 改动 |
+| --- | --- |
+| `lib/std/Box.h.ct` | 模板声明 `pub struct box<T>` → `pub struct Box<T>`；`impl<T> box<T>` 同步 |
+| `frontend/parse/Expr.h.ct` | 类型读取处的 `tok_is("box")` 改为 `Box`，并保留 `box` 别名分支（v1.1 删）；`ttmpl`/`inst_make("box", …)` 改用 `Box` |
+| `frontend/parse/Stmt.h.ct` | `new` 路径的 `tok_is("box")` 同步 |
+| `frontend/parse/Parser.h.ct` | `is_decl_start` 的裸 `box` 判据改为 `Box`（仍需「后接 `<`」）；别名拼写同判 |
+| `backend/emit/Emitter.h.ct` | `strcmp(ins[i].tmpl, "box")`、`strncmp(base, "box_", 4)` 改为 `"Box"` / `"Box_"` |
+| `frontend/module/Module.h.ct` | `strncmp(t, "box_", 4)` 与源码词扫描同步；旧别名仍能触发内置层加载 |
+| `tool/driver/Driver.h.ct` | `src_has_box_type` 同时认 `Box<` 与 `box<`（v1.1 只认 `Box`） |
+| `docs/language-spec.md` | §4.71 全部示例与正文改 `Box<T>`，加一句「`box<T>` 为 v1.0 弃用别名，v1.1 删除」；§5.1 不再有破例 |
+| `docs/guide-for-c-programmers.md`、`tutorial.md`、`patterns.md`、`memory-guide.md`、`README.md` | 规范拼写改 `Box<T>`；保留一处旧拼写迁移说明 |
+| `editors/vscode` | `ct-box-type` 规则同时匹配 `Box`/`box`；snippet 默认 `Box`；`check-grammar.py` 加新旧拼写夹具 |
+| `test/ast/p81_box*` | 夹具改 `Box`，新增 `box` 别名正例（v1.0 警告）与 v1.1 负例；预期 C 符号改 `Box_*` |
+| `docs/design/phase81.md`、证据文本 | 作为历史记录保留旧拼写，加「命名已由 LANG-24 修正」注记；不重写历史证据 |
+
+## 容量与窗口约束
+
+- **v1.0（`v1-PH-0`）**：Stage A 作为独立提交，不混进 seed cutover。`v1-PH-0` 只有
+  ≤11 个新增顶层函数的预算；别名分支必须复用既有 `tok_is` / 类型读取路径，**不得新增
+  顶层函数**，否则停止并先走 `v1-PH-1 / S0`。
+- **v1.1（`v1-PH-1`）**：Stage B 删除别名与旧拼写扫描，属独立提交，可单提交回滚。
+- 引入版本必须 ≤ v1.0：v1.1 删除的兼容窗口正好一个 MINOR，与 `lib/core`、`CStrOps`
+  的「旧名一个 MINOR」口径一致。
+
+## 验收
+
+- v1.0：`Box<Record> b = new Record { … };` 编译通过；`box<Record>` 编译通过并打印
+  弃用 warning；`int box;`、`r.box`、`Box box;` 全部合法（无关键字冲突）；
+- `--emit-c` 中出现 `Box_Record__new` / `Box_Record__payload_release`，不再出现 `box_Record`；
+- v1.1：`box<T>` 报硬错并提示 `write 'Box<T>'`；同一程序改 `Box` 后通过；
+- 全量 `check-ast`、`check-goldens`、`check-docs` 绿；编辑器 `check-grammar` 夹具覆盖两种拼写；
+- 活跃文档不再出现 `box<T>` 作为推荐写法（迁移说明与历史记录除外）。
+
+## 非目标
+
+- 不改 `box<T>` 的布局、复制协议、Drop、借用视图与 C 边界（D-016 全部保持）；
+- 不改 `ct_box_hdr`、`box_to_iface`、`maybe_box` 等内部机制名；
+- 不引入泛型类型别名语法（`type Box<T> = …`）；别名只存在于类型名解析层；
+- 不借机改 `Vec` / `Map` / `Option` / `Result` 的任何拼写。
+
+## 回滚
+
+- Stage A：单提交回滚，恢复 `box<T>` 规范拼写；`Box<T>` 随之消失；
+- Stage B：单提交回滚，恢复 `box<T>` 别名（仍为弃用态），不回退 Stage A。
