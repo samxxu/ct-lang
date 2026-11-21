@@ -1,0 +1,52 @@
+# PH-86 S86c bootstrap evidence: why ?/errdefer cannot be used in ct-ast 源码
+# Generated 2026-11-21 from baseline 1e2c30f7 with .temp/p86base/l2
+
+## 1. fixture (uses both constructs)
+$ sed -n "1,16p" .temp/p86ev/q.ct
+Result<int, int> get(int n)
+{
+    if (n < 0) return err: (Result<int, int>){ 0, 0, -1 };
+    return (Result<int, int>){ 1, n, 0 };
+}
+Result<int, int> twice(int n)
+{
+    int v = get(n)?;
+    return (Result<int, int>){ 1, v + v, 0 };
+}
+int main(void)
+{
+    errdefer { return 1; }
+    return 0;
+}
+
+## 2. L2 compile emits the constructs verbatim (pass-through)
+$ .temp/p86base/l2 .temp/p86ev/q.ct -o .temp/p86ev/q.c
+exit=0
+$ grep -n "?;\\|errdefer" .temp/p86ev/q.c
+10:    int v = get(n)?;
+15:    errdefer { return 1; }
+
+## 3. the emitted C is not valid C: the bootstrap did not lower them
+$ cc -std=c99 .temp/p86ev/q.c -o /tmp/q.bin
+.temp/p86ev/q.c:3:1: error: unknown type name 'Result'
+    3 | Result<int, int> get(int n)
+      | ^
+.temp/p86ev/q.c:3:7: error: expected identifier or '('
+    3 | Result<int, int> get(int n)
+      |       ^
+cc exit=1
+
+## 4. ct-ast source uses neither construct as syntax
+$ git grep -n "?;" 1e2c30f7 -- selfhost/ct-ast
+1e2c30f7:selfhost/ct-ast/backend/emit/Emitter.h.ct:7121:             - a discarded value (`f()?;`) releases its payload through
+# (that single hit is a comment in backend/emit/Emitter.h.ct; no parser or
+#  checker function has a postfix ? expression)
+$ grep -rn "errdefer" selfhost/ct-ast --include=*.ct | wc -l
+55
+# (all hits are the parser implementing the user-facing construct -- keyword
+#  comparisons, node kinds, diagnostics -- none is a use in compiler code)
+
+## 5. conclusion
+ct-ast 由 L2 引导编译，L2 没有 PH-40 errdefer / PH-44 `?` 的下降；在源码里写
+这两个构造会让 L2 原样输出、cc 失败。故 S86c 的 `?`/errdefer 改造在本卡不适用，
+改为错误出口清单 + 诊断逐字对照（见 docs/design/p86_errors.md）。
