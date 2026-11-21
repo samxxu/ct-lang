@@ -1,12 +1,12 @@
 ---
 id: DOC-74
 title: "phase-ID 迁移未执行：无账本/双认，blocker A/B/C 未裁定"
-status: open
+status: deferred
 area: docs
 severity: P1
 opened: 2026-11-20
 confirmed-by: REQ-review-v077-1
-blocked-by: "主规范采纳 + A/B/C 裁定"
+blocked-by: "执行触发：v1-PH-0 开卡前（D-019 已裁定 A/B/C）"
 ---
 
 # DOC-74 · phase-ID 迁移仍被 blocker 挂起
@@ -103,3 +103,13 @@ $ grep -l '^| version-minor |' docs/design/phase[0-9]*.md | wc -l
 - owner：REQ/EDITOR
 - next：主规范/用户裁定 A/B/C；裁定前禁止新增裸 `PH-*`
 - 不能关闭：迁移未开始，`v1-PH-0` 不能干净开卡
+
+
+## 处置（REQ，2026-11-21）：deferred
+
+A/B/C 已由 [D-019](../../docs/decisions/D-019.md) 裁定：d=0 继续；迁移到
+`docs/phases/v0-PH-<n>/card.md`；旧卡迁移时补 `phase-id`/`version-minor`。
+执行时点固定为 **`v1-PH-0` 开卡提交的前一步**（PN-6 五条断言 + W2 负例）。
+
+本卡不立即执行的原因与触发条件见 D-019 §2–§3；执行前禁止新增裸 `PH-*` 引用。
+`v1-PH-0` 开卡若未先迁移，按 G1/G6 拦截。
