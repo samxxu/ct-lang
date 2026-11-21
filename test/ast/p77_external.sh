@@ -33,7 +33,7 @@ if ! curl -fsSL --retry 2 --retry-delay 1 --max-time 10 "$index_url" >"$work/ind
     echo "skip: cannot reach $index_url ($(sed -n '1p' "$work/curl.err"))" >&2
     exit 77
 fi
-row=$(grep -E '^std ' "$work/index" | head -1)
+row=$(grep -E '^std 0\.19\.0 ' "$work/index" | head -1)
 if [ -z "$row" ]; then
     echo "skip: the official index has no std row yet" >&2
     exit 77
