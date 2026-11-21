@@ -7,7 +7,8 @@
 | 严重度 | High（存量包会立即不可安装） |
 | 锚点 | v0.79.0（2026-11-20） |
 | 文件 | [ct-pkg-get-contract.md](../../docs/planning/ct-pkg-get-contract.md) §3.2/§8、[ct-pkg-index.md](../../docs/ct-pkg-index.md) |
-| 状态 | **待办（DEV 实现；发布顺序由 REQ 协调）** |
+| 状态 | open |
+| 处置证据 | **待办（DEV 实现；发布顺序由 REQ 协调）** |
 
 ## 裁定
 

@@ -5,7 +5,8 @@
 | 模块 | lang（多单元构建 / 产物命名） |
 | 严重度 | **High**（单元表承诺的配对形态不可用） |
 | 优先级 | **P1** —— 挡住「`.h.ct` 接口 + `.ct` 实现」的包布局；有绕法但要把实现单元改名 |
-| 状态 | **verified**（2026-11-20，REV） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`3337ac7a`）；实测二进制 `ct v0.53.0` |
 | 类型 | **实现缺陷**（不是语言设计拒绝） |
 
@@ -128,3 +129,17 @@ $ echo $?
 
 探针断言同 base 的 `.h.ct`/`.ct` 硬错（`both emit 'cfg.c'`）；修复提交 `c45e41fb`
 为 HEAD 祖先。
+
+## 复核（CI-11 复验，2026-11-21，REV）
+
+**结论：verified（独立复跑）。** 在干净归档 HEAD `600e6595` 上重建 ct-ast v0.88.0，
+重跑本条的回归探针；命令与原始输出如下（退出码 0）。
+
+```console
+$ sh test/ast/p72_outputcollision.sh /tmp/ct-head/b/ct-ast
+OK p72/collision (same-base refused)
+$ echo $?
+0
+```
+
+状态词与证据对齐：正文有修复记录，回归探针存在并本轮通过，故维持 `verified`。

@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `ec97f99`（2026-10-17） |
 | 位置 | [selfhost/src/driver.ct](../../selfhost/src/driver.ct)、[selfhost/src/core.ct](../../selfhost/src/core.ct) |
-| 状态 | ✅ 已修复（2026-10-18 两轮；仅 build 缺参、`--ns-root` 缺参与 `too many units` 受 runner / 成本限制未覆盖） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-18 两轮；仅 build 缺参、`--ns-root` 缺参与 `too many units` 受 runner / 成本限制未覆盖） |
 
 ## 现象
 

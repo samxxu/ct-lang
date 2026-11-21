@@ -54,3 +54,53 @@ P1；`ct get` 引导命令。修法在 Pkg/Driver；本 issue 只落库，不改
 - owner：DEV
 - next：保留 git stderr/分类网络/缓存，提供 refresh；不先改 pin
 - 不能关闭：`ct get std` 仍只报通用 fetch failed
+
+## 处置（DEV，v0.88.1，2026-11-21）：fixed
+
+- **修复**：`git_run` 在 `ct get` 的 git 阶段把 stderr 落到
+  `$HOME/.cache/ct-pkg/.ct-pkg.err`（`umask 077`，读完即删）；失败时读最后 8 行、把 URL
+  userinfo 脱敏为 `***@`，再按 git 原文归类并给动作：
+  `network/proxy unreachable`（重试、查 `https_proxy`/`ALL_PROXY`/DNS）、
+  `authentication/permission denied`（查凭据/SSH key；`GIT_TERMINAL_PROMPT=0` 不交互）、
+  `remote tag/object missing`（核对 pin/tag 或先发布）、
+  `package cache is corrupt`（给 cache 路径、`rm -rf '<cache>'`、`ct get --refresh <spec>`）、
+  未分类兜底。`git checkout` / `rev-parse` 失败同样走这套分类。
+- **`--refresh`**：`ct get --refresh <spec>` 只在该次调用丢弃对应 git 缓存并重新 clone；
+  未带该标志时缓存照旧复用（不破坏正常缓存）。origin 不符/缓存 `.git` 不可读时，错误里同时
+  给 recorded/expected origin、cache 路径与清理/refresh 动作。
+- **不变项**：官方 pin 的版本 `0.19.0`、URL `https://github.com/ct-pkg/std`、tag `v0.19.0`、
+  digest `sha256:432086f0…` 未改；成功路径与 v2 锁行格式未改；失败仍发生在写 `ct.lock` 之前。
+- **测试**：新增 `test/ast/pkg23_git_diag.sh` 并接入 `selfhost/check-ast.sh`。离线覆盖
+  关闭的 loopback 端口、`.git` 损坏缓存、远端缺 pinned tag、认证失败（git 测试替身，含
+  凭据脱敏）、`--refresh` 重建缓存；每类断言新诊断文本。
+- **红证**：`baseline: 4edc70e9`（test 提交 `600e6595` 的父提交），
+  `sh test/ast/pkg23_git_diag.sh /tmp/p23-baseline/ct-ast` → exit 1：
+  ```console
+  FAIL pkg23: network diagnostic
+    ctc: git fetch of 'https://github.com/ct-pkg/std' failed
+  FAIL pkg23: corrupt-cache diagnostic
+    ctc: cache for 'ct/std' has a different origin; remove '.../.cache/ct-pkg/ct/std' and retry
+  FAIL pkg23: missing-tag diagnostic
+    ctc: git checkout of 'v0.19.0' failed
+  FAIL pkg23: authentication diagnostic
+    ctc: git fetch of 'https://github.com/ct-pkg/std' failed
+  FAIL pkg23: --refresh diagnostic
+    ctc: unknown option '--refresh'
+  ```
+- **绿证**（实现后）：
+  ```console
+  $ sh test/ast/pkg23_git_diag.sh <ct-ast>
+  ok   an unreachable remote names network/proxy and gives a retry action
+  ok   a corrupt cache names the cache path, rm -rf and --refresh
+  ok   a missing pinned tag is classified as remote tag/object missing
+  ok   an authentication failure is classified and credentials are redacted
+  ok   --refresh discards the corrupt cache and fetches the pin again
+  OK pkg23 (network, corrupt cache, missing tag, auth, refresh)
+  ```
+- **版本/文档**：`v0.88.1`（PATCH，V-3）；五处 `CTC_VERSION`、51 个
+  `test/cases`/`test/modules` golden banner、`README.md` / `docs/README.md` / `AGENTS.md`
+  当前版本、`docs/package-guide.md` §4/§6、`docs/history/phase-log.md` 同步。
+- **状态**：front-matter 仍为 `open`（状态词归 REV/REQ）；DEV 主张 `fixed`，等待 REV 复核。
+- **未覆盖**：认证分支用 git 测试替身（未起真实 401 HTTP 服务）；`proxy`/TLS 归类按 git
+  原文匹配，未逐一构造真实代理隧道；未 pin 的第三方 range 走 `git_pick_tag` 失败时仍报
+  `no tag ... satisfies`（不在本 issue 的官方 pin 路径内）。

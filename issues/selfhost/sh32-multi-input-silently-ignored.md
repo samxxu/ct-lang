@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [tool/driver/Driver.h.ct:179-188](../../selfhost/ct-ast/tool/driver/Driver.h.ct#L179-L188) |
-| 状态 | 已修（2026-10-31）：compile 模式拒绝第二个位置参数，并显式消费 `compile` 关键字；门禁断言 `compile mode refuses a second input` |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：compile 模式拒绝第二个位置参数，并显式消费 `compile` 关键字；门禁断言 `compile mode refuses a second input` |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | Low（位置可用，但大文件里要自己回推是哪个 struct 触顶） |
 | 锚点 | commit `dab1b71`（`v0.16.2`，2026-11-02） |
 | 文件 | [Parser.h.ct:1109](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1109)、[:1124](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1124) |
-| 状态 | 已修（2026-11-02，`v0.16.3`）：文案改为 `too many fields in struct '<name>' (limit 64)`，`check-ast.sh` 断言同步；行号维持当前字段行（见台账处置记录） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-02，`v0.16.3`）：文案改为 `too many fields in struct '<name>' (limit 64)`，`check-ast.sh` 断言同步；行号维持当前字段行（见台账处置记录） |
 
 ## 现象
 

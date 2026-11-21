@@ -6,7 +6,8 @@
 | 严重度 | Medium（正是 `borrow` 要堵的悬垂场景） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [frontend/parse/Stmt.h.ct:197-207](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L197-L207)（`var_scope`）、[:226-257](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L226-L257)（`check_borrow_store`） |
-| 状态 | 已修（2026-11-01）：`Symbols.h.ct` 的 `Var` 新增 `is_static` 并由 `parse_var` 置位，`check_borrow_store` 拒 `static` / 全局目标；门禁 `bw_neg store_static` |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`Symbols.h.ct` 的 `Var` 新增 `is_static` 并由 `parse_var` 置位，`check_borrow_store` 拒 `static` / 全局目标；门禁 `bw_neg store_static` |
 
 ## 现象
 

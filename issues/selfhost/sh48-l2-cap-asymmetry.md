@@ -6,7 +6,8 @@
 | 严重度 | Info |
 | 锚点 | commit `553d300`（2026-11-02，工作树 `v0.18.0`） |
 | 文件 | [selfhost/l2/core.ct](../../selfhost/l2/core.ct)、[frontend/sym/Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct) |
-| 状态 | 已处置（2026-11-02，`v0.18.0`）：短期项已做——`docs/design/phase18.md` 的 18.0 进展注明「只解除函数 / impl 两类上限」，并列出三项仍低于 ct-ast 的上限；中期抬值归入容量账本，触发条件与 SH-1 / TEST-9 一致 |
+| 状态 | verified |
+| 处置证据 | 已处置（2026-11-02，`v0.18.0`）：短期项已做——`docs/design/phase18.md` 的 18.0 进展注明「只解除函数 / impl 两类上限」，并列出三项仍低于 ct-ast 的上限；中期抬值归入容量账本，触发条件与 SH-1 / TEST-9 一致 |
 
 ## 现象
 

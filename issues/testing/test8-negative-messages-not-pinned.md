@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [selfhost/check-ast.sh:1020-1030](../../selfhost/check-ast.sh#L1020-L1030)、[test/ast/errors](../../test/ast/errors) |
-| 状态 | 已修复（2026-10-31 落地；2026-11-10 复核：12 条消息仍在 check-ast.sh 的 pair 表内） |
+| 状态 | verified |
+| 处置证据 | 已修复（2026-10-31 落地；2026-11-10 复核：12 条消息仍在 check-ast.sh 的 pair 表内） |
 
 ## 现象
 

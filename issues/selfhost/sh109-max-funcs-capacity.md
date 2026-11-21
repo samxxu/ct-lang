@@ -7,7 +7,8 @@
 | 严重度 | **P1（v1.1 `v1-PH-1 / S0`；不阻塞 v1-PH-0）** |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [容量提案](../../docs/proposals/ct-max-funcs-growth.md)；[v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-2；[p88_metrics](../../docs/history/p88_metrics.md) §4 #3；[v1 路线](../../docs/planning/v1-release-plan.md) |
-| 状态 | **已决（动态增长 + 65536 安全阀）；2026-11-21 所有者改落 `v1-PH-1 / S0`** |
+| 状态 | open |
+| 处置证据 | **已决（动态增长 + 65536 安全阀）；2026-11-21 所有者改落 `v1-PH-1 / S0`** |
 
 ## 现象
 

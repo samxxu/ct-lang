@@ -5,7 +5,8 @@
 | 模块 | selfhost（`ct get` 包发布引用 / 限定名解析） |
 | 类型 | 诊断缺陷（承诺的发布引用形态没有解析路径） |
 | 严重度 | Medium |
-| 状态 | 受理（P2，v0.61.x patch） |
+| 状态 | open |
+| 处置证据 | 受理（P2，v0.61.x patch） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [提案 §7 引用方式](../../docs/proposals/ct-pkg-shared-store.md) |
 

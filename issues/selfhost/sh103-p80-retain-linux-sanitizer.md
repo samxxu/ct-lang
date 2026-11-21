@@ -1,7 +1,7 @@
 ---
 id: SH-103
 title: "p80_retain 在 Ubuntu clang/gcc 的 sanitizer 段失败（macOS 绿）"
-status: open
+status: verified
 area: selfhost
 severity: P1
 opened: 2026-11-21
@@ -119,3 +119,32 @@ $ sh test/ast/p80_retain.sh <ct-ast>
 - owner：REV
 - next：在 Linux CI/容器复跑 `p80_retain`，贴完整 stderr；DEV 已写 fixed，不改 status
 - 不能关闭：尚未独立复核
+
+## 复核（CI-11 复验，2026-11-21，REV）
+
+**结论：verified。** 在干净归档 HEAD `600e6595` 上重建 ct-ast v0.88.0
+（`cc -Wall -Wextra -std=c99 /tmp/ct-head/b/astsrc/*.c -o /tmp/ct-head/b/ct-ast`），
+重跑完整 `p80_retain`（含 ASan/UBSan 两档）：
+
+```console
+$ sh test/ast/p80_retain.sh /tmp/ct-head/b/ct-ast
+ok   retain -fsanitize=address
+ok   retain -fsanitize=undefined
+ok   retain (automatic retain / release trace)
+...
+ok   field_branch_else -fsanitize=address
+ok   field_branch_else -fsanitize=undefined
+ok   field_branch_else (automatic retain / release trace)
+...
+ok   neg_escape (rejected: escape of a borrowed view)
+ok   neg_double_free (rejected: double free of a borrowed element)
+ok   neg_goto (rejected: goto across an owning String scope)
+p80_retain: OK
+$ echo $?
+0
+```
+
+51 条 `ok` / 0 条 `FAIL`；`struct_lit` 所在的 ASan/UBSan 段（`field_branch_else`、
+`field_branch_two`）全部通过。源码复核：v0.82.0 为 `snprintf(g_sb.fpath[j], …, g_sb.fpath[i])`
+自拷贝（未定义行为）；v0.82.1 改为 `if (j != i) snprintf(...)`（`1764b4d6`，`git tag --contains`
+含 `v0.82.1`）；HEAD 进一步改为 `if (j != i) memmove(..., MAX_TEXT)`，与 SH-103 的根因修复一致。

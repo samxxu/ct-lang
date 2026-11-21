@@ -6,7 +6,8 @@
 | 严重度 | Medium（`ct install` 的离线校验以此为准；摘要可被构造出碰撞，供应链信任面偏薄） |
 | 锚点 | commit `61e35e4`（`v0.16.1`，2026-11-01） |
 | 文件 | [Pkg.h.ct:249-282](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L249-L282)、[:284-318](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L284-L318)、[:684-690](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L684-L690) |
-| 状态 | 已修（2026-11-01）：`Pkg.h.ct` 改 SHA-256（路径排序 + `路径\n` + 内容），lock 写 `sha256:<64 hex>`，旧格式显式报「unsupported digest」；`test/pkg/run.sh` 夹具同步 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`Pkg.h.ct` 改 SHA-256（路径排序 + `路径\n` + 内容），lock 写 `sha256:<64 hex>`，旧格式显式报「unsupported digest」；`test/pkg/run.sh` 夹具同步 |
 
 ## 现象
 

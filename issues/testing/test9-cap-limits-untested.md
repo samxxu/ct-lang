@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [selfhost/ct-ast/frontend/sym/Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct)、[selfhost/check-ast.sh:829](../../selfhost/check-ast.sh#L829)、[:1771](../../selfhost/check-ast.sh#L1771) |
-| 状态 | 已修（2026-11-07，按「显式约定」处置）：覆盖范围与不补理由写进 `docs/language-spec.md` §7 与 `Symbols.h.ct` 的 `MAX_*` 定义处 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-07，按「显式约定」处置）：覆盖范围与不补理由写进 `docs/language-spec.md` §7 与 `Symbols.h.ct` 的 `MAX_*` 定义处 |
 
 ## 现象
 

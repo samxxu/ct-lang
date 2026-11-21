@@ -6,7 +6,8 @@
 | 定性 | **可用性缺陷**：结果没有请求、版本、来源、store、digest、动作与依赖 |
 | 严重度 | **Medium** |
 | 优先级 | **P1**（包线 patch） |
-| 状态 | **verified**（2026-11-20，REV） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.63.3`；修复在 `v0.63.4` |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)：`get`、`fetch_git`、`get_one` |
 

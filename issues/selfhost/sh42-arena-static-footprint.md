@@ -6,7 +6,8 @@
 | 严重度 | Medium（功能正确、运行内存也低，但分发体积与「编译器很小」的定位不符） |
 | 锚点 | commit `61e35e4`（`v0.16.1`，2026-11-01） |
 | 文件 | [Arena.h.ct:48-56](../../selfhost/ct-ast/runtime/arena/Arena.h.ct#L48-L56)、[:124](../../selfhost/ct-ast/runtime/arena/Arena.h.ct#L124) |
-| 状态 | 已修（2026-11-01）：Arena、`Symbols`、`Parser.g_maps`、`Module.g_units` 四处大表改 `calloc`；`ls -lh ct` **637K**、`__DATA` **589824 B** |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：Arena、`Symbols`、`Parser.g_maps`、`Module.g_units` 四处大表改 `calloc`；`ls -lh ct` **637K**、`__DATA` **589824 B** |
 
 ## 现象
 

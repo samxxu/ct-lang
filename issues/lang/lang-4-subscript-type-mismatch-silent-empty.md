@@ -5,7 +5,8 @@
 | 模块 | lang（自定义下标协议 / 类型匹配） |
 | 严重度 | **High（静默错误）** |
 | 优先级 | **P0** —— 唯一一条「编译通过、运行给错值且无诊断」的条，下游最痛 |
-| 状态 | **verified**（2026-11-20，REV） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`c4727787`） |
 
 ## 精确触发条件
@@ -97,3 +98,17 @@ $ echo $?
 
 探针断言 `j[0]` 对 `char *get(char *)` 报 `argument 1: expected 'char *', got 'int'`，
 `j["k"]` 与 `int get(int)` 正例通过；修复提交 `d5906bd8` 为 HEAD 祖先。
+
+## 复核（CI-11 复验，2026-11-21，REV）
+
+**结论：verified（独立复跑）。** 在干净归档 HEAD `600e6595` 上重建 ct-ast v0.88.0，
+重跑本条的回归探针；命令与原始输出如下（退出码 0）。
+
+```console
+$ sh test/ast/p72_subscript.sh /tmp/ct-head/b/ct-ast
+OK p72/subscript (key type)
+$ echo $?
+0
+```
+
+状态词与证据对齐：正文有修复记录，回归探针存在并本轮通过，故维持 `verified`。

@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `4ef8b68`（2026-10-21） |
 | 文件 | [docs/glossary.md](../../docs/glossary.md#L33)、[:195](../../docs/glossary.md#L195) |
-| 状态 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
 
 ## 现象
 

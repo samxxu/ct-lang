@@ -5,7 +5,8 @@
 | 严重度 | **P2（Medium）**（行为缺陷本体见 SH-62 / SH-63；本条只记文档侧） |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [language-spec.md](../../docs/language-spec.md#L1900-L1914)、[language-spec.md](../../docs/language-spec.md#L4163-L4174)、[phase26.md](../../docs/history/design/phase26.md#L151-L158)、[phase26.md](../../docs/history/design/phase26.md#L181)、[phase26.md](../../docs/history/design/phase26.md#L265)、[roadmap.md](../../docs/roadmap.md#L105)、[check-ast.sh](../../selfhost/check-ast.sh#L1159-L1160)、[AGENTS.md](../../AGENTS.md#L92) |
-| 状态 | **verified**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`；四项逐条核对见「评审复核」） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`；四项逐条核对见「评审复核」） |
 
 ## 1. `language-spec` §4.48 的 S4 承诺不成立（中英同错）
 

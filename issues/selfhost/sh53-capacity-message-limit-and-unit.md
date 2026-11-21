@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `c27da3d`（`v0.19.1` + 1 commit，2026-11-03）；本机 `ct v0.19.1` 复现 |
 | 文件 | [Symbols.h.ct:259](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L259)、[:292](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L292)、[:474](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L474)；[ParseSupport.h.ct:248](../../selfhost/ct-ast/frontend/parse/ParseSupport.h.ct#L248)、[:286](../../selfhost/ct-ast/frontend/parse/ParseSupport.h.ct#L286) |
-| 状态 | 已修复（2026-11-10 复核：四类容量诊断均点名上限，`check-ast.sh` 的 cap 段有断言；函数于 Phase 54 S0 改为全程序口径，见文末更正） |
+| 状态 | verified |
+| 处置证据 | 已修复（2026-11-10 复核：四类容量诊断均点名上限，`check-ast.sh` 的 cap 段有断言；函数于 Phase 54 S0 改为全程序口径，见文末更正） |
 
 ## 现象
 

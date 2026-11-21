@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `a1c523a`（2026-11-07，`v0.20.0`）；裁决 2026-11-09 |
 | 文件 | [TypeCheck.h.ct:75-129](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L75-L129)（`type_key` 丢弃 `const` / `volatile`）；[Emitter.h.ct:424](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L424)（同一张表的副本 `map_type_key`）；[Expr.h.ct:205-231](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L205-L231)（实参比较前的 `tnorm`）；[Expr.h.ct:1109-1122](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1109-L1122)（`argtype_check_static`，静态调用点的硬错）；[Expr.h.ct:2560-2569](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2560-L2569)（`aux == 6` 的多候选判定） |
-| 状态 | **2a 已修复**（2026-11-10，`v0.26.4`）；1a/1b 待 D-60-1，2b 仍 deferred（见「子项去向」） |
+| 状态 | open |
+| 处置证据 | **2a 已修复**（2026-11-10，`v0.26.4`）；1a/1b 待 D-60-1，2b 仍 deferred（见「子项去向」） |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | 仓库根（无 `.github/`、无 `Makefile` / `justfile` / `.gitlab-ci.yml`） |
-| 状态 | 已修（2026-11-02，commit `810e0fc` + `bc1fd52`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-02，commit `810e0fc` + `bc1fd52`） |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `c27da3d`（2026-11-06，`v0.19.1`+1） |
 | 文件 | [README.md:37](../../README.md#L37) / [README.md:118](../../README.md#L118)（中英）、[tutorial.md:506](../../docs/tutorial.md#L506) / [tutorial.md:1064](../../docs/tutorial.md#L1064)（中英） |
-| 状态 | 已修（2026-11-06，commit `82fab61`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-06，commit `82fab61`） |
 
 ## 现象
 

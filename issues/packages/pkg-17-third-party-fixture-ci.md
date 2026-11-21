@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [ct-pkg-get-contract.md](../../docs/planning/ct-pkg-get-contract.md)、[D-014](../../docs/decisions/D-014.md)、[PKG-14](pkg-14-ph83-index-verify-and-binary.md) |
-| 状态 | **实施中（REQ fixture 规格已出；DEV 建 fixture + 接 CI）** |
+| 状态 | open |
+| 处置证据 | **实施中（REQ fixture 规格已出；DEV 建 fixture + 接 CI）** |
 
 ## REQ 规格（2026-11-21，方案 A：仓库内 vendored 快照）
 

@@ -6,7 +6,8 @@
 | 严重度 | **High（所有者 2026-11-21 裁定为 bug）** |
 | 锚点 | `v0.44.1`（`13db6cad`，2026-11-15 复核） |
 | 文件 | [Emitter.h.ct:5021](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5021)、[:2326](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2326) |
-| 状态 | **accepted（bug）；修复跟踪 [SH-110](sh110-dynamic-dispatch-chain-fix.md)** |
+| 状态 | open |
+| 处置证据 | **accepted（bug）；修复跟踪 [SH-110](sh110-dynamic-dispatch-chain-fix.md)** |
 
 > 所有者 2026-11-21 裁定：**按 bug 修复**。下文的“有意的实现边界”保留为当时的工程评估，
 > 不再作为最终定性；实现口径见 [SH-110](sh110-dynamic-dispatch-chain-fix.md)。

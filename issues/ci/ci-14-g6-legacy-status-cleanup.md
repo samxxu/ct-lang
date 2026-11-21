@@ -7,7 +7,8 @@
 | 严重度 | **P1（v1.0 发布，Tier 2）** |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [CI-13](ci-13-g6-ledger-closure.md)、`AGENTS.md` §5.4、[v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-4 |
-| 状态 | **待办（REQ 主责；DEV 提供 `g6 --write-baseline`）** |
+| 状态 | open |
+| 处置证据 | **待办（REQ 主责；DEV 提供 `g6 --write-baseline`）** |
 
 ## 现象
 

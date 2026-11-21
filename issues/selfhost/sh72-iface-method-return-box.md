@@ -6,7 +6,8 @@
 | 严重度 | Medium（编译期响亮报错，无坏产物；但阻断「响应接口」这类合法消费） |
 | 锚点 | `v0.44.1`（`13db6cad`，2026-11-15 复核） |
 | 文件 | [TypeCheck.h.ct:331-382](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L331-L382)、[:610-612](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L610-L612) |
-| 状态 | **fixed**（`5ff69ac3`，2026-11-15；回归 `test/ast/238_iface_ret_value`） |
+| 状态 | verified |
+| 处置证据 | **fixed**（`5ff69ac3`，2026-11-15；回归 `test/ast/238_iface_ret_value`） |
 
 ## 现象
 

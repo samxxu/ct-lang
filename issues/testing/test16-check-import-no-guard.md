@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | [selfhost/check-semantics.sh:167](../../selfhost/check-semantics.sh#L167)；对照用例 [selfhost/check-ast.sh:2670](../../selfhost/check-ast.sh#L2670) |
-| 状态 | 已修复（本轮，2026-11-03） |
+| 状态 | verified |
+| 处置证据 | 已修复（本轮，2026-11-03） |
 
 ## 现象
 

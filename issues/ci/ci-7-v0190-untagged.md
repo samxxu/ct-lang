@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | [install.sh:27](../../install.sh#L27)（`-V/--version REF`）、[L72](../../install.sh#L72)（`archive/$ref.tar.gz`）；验收口径 [docs/roadmap.md:33](../../docs/roadmap.md#L33) |
-| 状态 | **已解决**（2026-11-15：补 annotated tag `v0.19.0`，归档恢复 200；完整 `install.sh` 构建未在本轮执行） |
+| 状态 | verified |
+| 处置证据 | **已解决**（2026-11-15：补 annotated tag `v0.19.0`，归档恢复 200；完整 `install.sh` 构建未在本轮执行） |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | **Medium**（治理门禁不可执行；不影响编译产物，但「规范锚定」只能靠人工声明） |
 | 锚点 | `v0.25.0`（2026-11-09） |
 | 文件 | [AGENTS.md](../../AGENTS.md)、`~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md`、`tools/check.sh`（项目内不存在） |
-| 状态 | **verified**（2026-11-09 v0.26.4 补丁处置并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §1 的 P4） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-09 v0.26.4 补丁处置并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §1 的 P4） |
 
 ## 现象
 

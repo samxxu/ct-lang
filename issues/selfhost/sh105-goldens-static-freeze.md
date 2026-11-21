@@ -7,7 +7,8 @@
 | 严重度 | High |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §1.5](../../docs/planning/v1-release-plan.md#L57-L71)、[check-goldens.sh](../../selfhost/check-goldens.sh) |
-| 状态 | **实施中（REQ 卡已出；DEV 待生成 25 份 golden + 脚本 + gate 12）** |
+| 状态 | open |
+| 处置证据 | **实施中（REQ 卡已出；DEV 待生成 25 份 golden + 脚本 + gate 12）** |
 | 层级 | **Tier 1（`v1-PH-0` 入口）**，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 实施卡（REQ 侧，2026-11-21）

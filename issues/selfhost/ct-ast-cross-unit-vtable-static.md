@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `2ead601`（v0.12.0，2026-10-22） |
 | 文件 | [selfhost/ct-ast/backend/emit/Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)（`emit_vtable_fwd`、impl 的 vtable 定义、`emit_box` 所在的装箱发射、`write_unit_header`） |
-| 状态 | 已修（Batch 2 / 2a.1，`836c2e2` + `329016d`；证据见文末「处理（2026-11-09 回填）」） |
+| 状态 | verified |
+| 处置证据 | 已修（Batch 2 / 2a.1，`836c2e2` + `329016d`；证据见文末「处理（2026-11-09 回填）」） |
 
 ## 现象
 

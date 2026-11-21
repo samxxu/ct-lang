@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [README.md](../../README.md)、[language-spec.md](../../docs/language-spec.md)、[roadmap.md](../../docs/roadmap.md) |
-| 状态 | **已完成（2026-11-21：spec §1.2 权威段 + README/roadmap 同步 + 内容一致性断言）** |
+| 状态 | verified |
+| 处置证据 | **已完成（2026-11-21：spec §1.2 权威段 + README/roadmap 同步 + 内容一致性断言）** |
 
 ## 进展（2026-11-21）
 

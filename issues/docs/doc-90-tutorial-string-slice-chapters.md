@@ -7,7 +7,8 @@
 | 严重度 | Medium（v1.0 前用户可见） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [tutorial §10.13](../../docs/tutorial.md)（PH-36 旧 `Str`）、[spec §4.69](../../docs/language-spec.md)、[spec §4.70](../../docs/language-spec.md)、[guide §3](../../docs/guide-for-c-programmers.md)、[DOC-86](doc-86-readme-v088-rewrite.md) D3 |
-| 状态 | **实施中（§22/§23 初稿已入库；tutorial-cases runner 待 DEV）** |
+| 状态 | open |
+| 处置证据 | **实施中（§22/§23 初稿已入库；tutorial-cases runner 待 DEV）** |
 
 ## 进展（2026-11-21）
 

@@ -5,7 +5,8 @@
 | 严重度 | Low |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [docs/roadmap.md](../../docs/roadmap.md)（全篇无 `borrow` / `Handback`）；规定见 [AGENTS.md:115](../../AGENTS.md#L115) |
-| 状态 | 已修（2026-11-01）：`docs/roadmap.md` 的 v0.16.0 记录（版本表 / 批次记录 / 英文两处）与 `docs/glossary.md` 的 borrow / AutoDrop 措辞已与实现同步 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`docs/roadmap.md` 的 v0.16.0 记录（版本表 / 批次记录 / 英文两处）与 `docs/glossary.md` 的 borrow / AutoDrop 措辞已与实现同步 |
 
 ## 现象
 

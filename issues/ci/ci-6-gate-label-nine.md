@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | [.github/workflows/ci.yml:22](../../.github/workflows/ci.yml#L22)、[L33](../../.github/workflows/ci.yml#L33) |
-| 状态 | 已修复（本轮，2026-11-03） |
+| 状态 | verified |
+| 处置证据 | 已修复（本轮，2026-11-03） |
 
 ## 现象
 

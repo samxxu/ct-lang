@@ -5,7 +5,8 @@
 | 模块 | selfhost（`ct pkg check` / 包清单读取 / 发布前门禁） |
 | 类型 | 能力缺口（包发布前的清单校验未兑现已声明语义） |
 | 严重度 | Medium |
-| 状态 | rejected（已取消，不受理；2026-11-16 用户裁定） |
+| 状态 | rejected |
+| 处置证据 | rejected（已取消，不受理；2026-11-16 用户裁定） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [提案 §7 字段表](../../docs/proposals/ct-pkg-shared-store.md)、[§9 判据范围](../../docs/proposals/ct-pkg-shared-store.md)、[§7 版本与 tag 一致性](../../docs/proposals/ct-pkg-shared-store.md) |
 

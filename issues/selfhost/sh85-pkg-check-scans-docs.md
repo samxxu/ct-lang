@@ -5,7 +5,8 @@
 | 模块 | selfhost（`ct pkg check` / 包清单 / 发布文档扫描） |
 | 类型 | 能力缺口（检查范围超出 CT 已声明的判据） |
 | 严重度 | Medium |
-| 状态 | 受理（P2，v0.61.x patch） |
+| 状态 | open |
+| 处置证据 | 受理（P2，v0.61.x patch） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [提案 §9 判据范围](../../docs/proposals/ct-pkg-shared-store.md)、[需求 SP-024](../../docs/planning/ct-pkg-shared-store-requirements.md) |
 

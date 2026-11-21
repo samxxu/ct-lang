@@ -6,7 +6,8 @@
 | 严重度 | Info |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | [Module.h.ct:1087-1088](../../selfhost/ct-ast/frontend/module/Module.h.ct#L1087-L1088)（cflags）、[L1114](../../selfhost/ct-ast/frontend/module/Module.h.ct#L1114)（ldflags）、[L1120](../../selfhost/ct-ast/frontend/module/Module.h.ct#L1120)（`system(cmd)`）、[L1241](../../selfhost/ct-ast/frontend/module/Module.h.ct#L1241)（`ct_cmd_raw` 定义） |
-| 状态 | 已采纳方案 B（文档标注，本轮，2026-11-03） |
+| 状态 | verified |
+| 处置证据 | 已采纳方案 B（文档标注，本轮，2026-11-03） |
 
 ## 现象
 

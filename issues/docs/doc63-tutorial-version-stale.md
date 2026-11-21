@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `c27da3d`（`v0.19.1` + 1 commit，2026-11-03） |
 | 文件 | [docs/tutorial.md:5](../../docs/tutorial.md#L5)、[docs/memory-guide.md:5](../../docs/memory-guide.md#L5) |
-| 状态 | **已修复**（2026-11-10 复核；`docs/tutorial.md:5` 与 `docs/memory-guide.md:5` 已改为「当前主线 ct-ast，不固定版本号」，`check-docs` 通过） |
+| 状态 | verified |
+| 处置证据 | **已修复**（2026-11-10 复核；`docs/tutorial.md:5` 与 `docs/memory-guide.md:5` 已改为「当前主线 ct-ast，不固定版本号」，`check-docs` 通过） |
 
 ## 现象
 

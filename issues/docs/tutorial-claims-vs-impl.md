@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `dde0dda`（2026-10-21） |
 | 文件 | [docs/tutorial.md:305](../../docs/tutorial.md#L305)（英文 [:705](../../docs/tutorial.md#L705)）、[:401](../../docs/tutorial.md#L401)、[:403](../../docs/tutorial.md#L403)、[:322](../../docs/tutorial.md#L322) 与 [:334](../../docs/tutorial.md#L334) |
-| 状态 | ✅ 已修复（2026-10-21，`docs/tutorial.md` 中英各四处：delete 展开、ctc 建议、数组字段、泄漏行号；`leak.ct:20` 为实测值） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-21，`docs/tutorial.md` 中英各四处：delete 展开、ctc 建议、数组字段、泄漏行号；`leak.ct:20` 为实测值） |
 
 ## 现象
 

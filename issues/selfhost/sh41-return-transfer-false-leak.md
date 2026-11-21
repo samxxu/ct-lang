@@ -6,7 +6,8 @@
 | 严重度 | Medium（误报会训练用户忽略泄漏告警；与 L2 行为分叉） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [backend/mem/Memory.h.ct:299-305](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L299-L305)（`leak_return`）、[:248-256](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L248-L256)（`leak_scope`）、[frontend/parse/Stmt.h.ct:172-195](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L172-L195)（`retire_before_return`） |
-| 状态 | 已修（2026-11-01）：同 SH-36 的 `expr_returns` 判定，`return b;` 不再误报 `potential leak`；门禁正例 `bw_handoff.ct` |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：同 SH-36 的 `expr_returns` 判定，`return b;` 不再误报 `potential leak`；门禁正例 `bw_handoff.ct` |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | Medium（既有可编译输入变为不可编译产物，退出码仍为 0） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [backend/emit/Emitter.h.ct:1935-1980](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1935-L1980)（`N_DELETE` 的两条释放路径） |
-| 状态 | 已修（2026-11-01）：`Emitter.h.ct` 的 `N_DELETE` 只在实参可赋值时追加 ` = 0; `，否则生成 `if (e) { …; }`；门禁正例 `bw_delete.ct` |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`Emitter.h.ct` 的 `N_DELETE` 只在实参可赋值时追加 ` = 0; `，否则生成 `if (e) { …; }`；门禁正例 `bw_delete.ct` |
 
 ## 现象
 

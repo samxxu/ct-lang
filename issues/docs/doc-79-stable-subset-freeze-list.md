@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan](../../docs/planning/v1-release-plan.md)、[language-spec.md](../../docs/language-spec.md) |
-| 状态 | **已完成（2026-11-21：`docs/stable-subset.md` 成文；check-docs 结构断言已加）** |
+| 状态 | verified |
+| 处置证据 | **已完成（2026-11-21：`docs/stable-subset.md` 成文；check-docs 结构断言已加）** |
 
 ## 进展（2026-11-21）
 

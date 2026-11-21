@@ -5,7 +5,8 @@
 | 模块 | selfhost（`ct migrate` / vendor 迁移 / 发布前准备） |
 | 类型 | 能力缺口（迁移结果不可被调用方判断） |
 | 严重度 | **High**（静默失败） |
-| 状态 | 受理（P0，v0.61.x patch） |
+| 状态 | open |
+| 处置证据 | 受理（P0，v0.61.x patch） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [需求 SP-029](../../docs/planning/ct-pkg-shared-store-requirements.md)、[提案 §10 S3 验收](../../docs/proposals/ct-pkg-shared-store.md) |
 

@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `ec97f99`（2026-10-17） |
 | 文件 | [docs/language-spec.md](../../docs/language-spec.md#L4-L14)、[§10](../../docs/language-spec.md#L428-L436) |
-| 状态 | ✅ 已修复（2026-10-18，方案 2：改契约） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-18，方案 2：改契约） |
 
 ## 现象
 

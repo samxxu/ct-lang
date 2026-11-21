@@ -7,7 +7,8 @@
 | 严重度 | High |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`fetch_git`：`%s/.cache/ct-pkg/<name>`，`git fetch` 沿用已有 origin） |
-| 状态 | **已修**（v0.58.1：缓存键带发布方并校验 origin；`test/pkg/run.sh` 133/0） |
+| 状态 | verified |
+| 处置证据 | **已修**（v0.58.1：缓存键带发布方并校验 origin；`test/pkg/run.sh` 133/0） |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [frontend/parse/Parser.h.ct:1016-1023](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1016-L1023)（tag 行）、[:1031-1036](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1031-L1036)（`pend_fields`） |
-| 状态 | 已修（2026-10-31）：`register_field` 两处越界改硬报错 `too many fields in a record`；门禁断言 `fields`（`check-ast.sh` 的 `cap_check`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：`register_field` 两处越界改硬报错 `too many fields in a record`；门禁断言 `fields`（`check-ast.sh` 的 `cap_check`） |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `4176c63`（`v0.19.1`，2026-11-03）；本机 `ct v0.19.1` 复现 |
 | 文件 | [Emitter.h.ct:1742-1744](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1742-L1744)（初始化器走 `emit_expr`）；[L1785-1790](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1785-L1790)（声明名才加前缀） |
-| 状态 | 已修（2026-11-07，commit `2e3fe4a`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-07，commit `2e3fe4a`） |
 
 ## 现象
 

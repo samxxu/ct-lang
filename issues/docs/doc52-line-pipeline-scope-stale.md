@@ -6,7 +6,8 @@
 | 严重度 | Medium（把已不存在的硬约束写成「硬要求」，会误导写法与排障方向） |
 | 锚点 | commit `61e35e4`（`v0.16.1`，2026-11-01） |
 | 文件 | [tutorial.md:463-470](../../docs/tutorial.md#L463-L470)、[:947-951](../../docs/tutorial.md#L947-L951)、[language-spec.md:1467](../../docs/language-spec.md#L1467)、[:1468](../../docs/language-spec.md#L1468)、[:1481](../../docs/language-spec.md#L1481) |
-| 状态 | 已修（2026-11-01）：`docs/tutorial.md` §11 与 `docs/language-spec.md` §6.2 的对应条目标注「仅 L2」，删除「一行一句是硬要求」，并补「ct-ast 不保留源码注释」 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`docs/tutorial.md` §11 与 `docs/language-spec.md` §6.2 的对应条目标注「仅 L2」，删除「一行一句是硬要求」，并补「ct-ast 不保留源码注释」 |
 
 ## 现象
 

@@ -5,7 +5,8 @@
 | 模块 | lang（编译器容量） |
 | 严重度 | Medium |
 | 优先级 | **P2** —— 目前无人被挡，但属「包长大才突然报错」的悬崖 |
-| 状态 | **verified**（2026-11-20，REV） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`c4727787`） |
 | 详情 | [max-calls-limit.md](../../docs/reviews/max-calls-limit.md)（口径、改动面、绕法、余量实测） |
 
@@ -104,3 +105,17 @@ $ echo $?
 
 探针同时覆盖 3000 条通过、9000 条报 `too many calls (MAX_CALLS=…)`；修复提交
 `43cf9251` 为 HEAD 祖先。
+
+## 复核（CI-11 复验，2026-11-21，REV）
+
+**结论：verified（独立复跑）。** 在干净归档 HEAD `600e6595` 上重建 ct-ast v0.88.0，
+重跑本条的回归探针；命令与原始输出如下（退出码 0）。
+
+```console
+$ sh test/ast/p72_maxcalls.sh /tmp/ct-head/b/ct-ast
+OK p72/maxcalls (4096+ calls, named limit)
+$ echo $?
+0
+```
+
+状态词与证据对齐：正文有修复记录，回归探针存在并本轮通过，故维持 `verified`。

@@ -6,7 +6,8 @@
 | 严重度 | Low（纯文档措辞；实现正确） |
 | 锚点 | `v0.26.4`（Phase 24 实现，未 bump） |
 | 文件 | [language-spec.md:1847-1848](../../docs/language-spec.md#L1847-L1848)、[language-spec.md:1864-1868](../../docs/language-spec.md#L1864-L1868)、[language-spec.md:4248](../../docs/language-spec.md#L4248)、[phase24.md:145-160](../../docs/history/design/phase24.md#L145-L160)、[Emitter.h.ct:2018-2038](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2018-L2038)、[range_init.ct:21](../../examples/15_range_init/range_init.ct#L21) |
-| 状态 | **verified**（2026-11-20，REV；deferred 子项见复核段） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV；deferred 子项见复核段） |
 
 ## 触发场景
 

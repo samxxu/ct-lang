@@ -5,7 +5,8 @@
 | 严重度 | **P1（High）**（门禁全绿但放过了 SH-62 的静默坏产物） |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [check-ast.sh](../../selfhost/check-ast.sh#L1159-L1222)、[123/prog.ct](../../test/ast/123_generic_identity/prog.ct)、[124/prog.ct](../../test/ast/124_generic_struct/prog.ct) |
-| 状态 | **verified**（2026-11-09 评审复核，`v0.26.2` / `5b43fac`：128 与产物层 `tparam_residue()` 均属实，817 数字核实；盲区见「评审复核」） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-09 评审复核，`v0.26.2` / `5b43fac`：128 与产物层 `tparam_residue()` 均属实，817 数字核实；盲区见「评审复核」） |
 
 ## 现象
 

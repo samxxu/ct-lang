@@ -6,7 +6,8 @@
 | 严重度 | Info |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [backend/emit/Emitter.h.ct:2147-2167](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2147-L2167) |
-| 状态 | 已修（2026-10-31）：删除 `emit_cond` 的三个不可达分支 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：删除 `emit_cond` 的三个不可达分支 |
 
 ## 现象
 

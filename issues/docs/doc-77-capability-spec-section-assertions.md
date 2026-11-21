@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [check-docs.py](../../test/docs/check-docs.py)、[language-spec.md](../../docs/language-spec.md) |
-| 状态 | **已完成（2026-11-21：`capabilities.tsv` 20 项 + README 标记 + check-docs 断言）** |
+| 状态 | verified |
+| 处置证据 | **已完成（2026-11-21：`capabilities.tsv` 20 项 + README 标记 + check-docs 断言）** |
 
 ## 进展（2026-11-21）
 

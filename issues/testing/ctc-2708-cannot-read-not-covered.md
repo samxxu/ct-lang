@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `8aac450`（2026-10-17） |
 | 站点 | `ctc.c:2708`（`read_file` 中 `sz < 0` 分支） |
-| 状态 | 已修复（commit `1a1ae91`，`cli/cannot-read`） |
+| 状态 | verified |
+| 处置证据 | 已修复（commit `1a1ae91`，`cli/cannot-read`） |
 
 ## 现象
 

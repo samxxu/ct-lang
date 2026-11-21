@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [language-spec.md](../../docs/language-spec.md)、[tutorial.md](../../docs/tutorial.md)、[patterns.md](../../docs/patterns.md) |
-| 状态 | **已完成核对（2026-11-21）；tutorial 两章由 DOC-90 承接** |
+| 状态 | verified |
+| 处置证据 | **已完成核对（2026-11-21）；tutorial 两章由 DOC-90 承接** |
 
 ## 核对矩阵（2026-11-21）
 

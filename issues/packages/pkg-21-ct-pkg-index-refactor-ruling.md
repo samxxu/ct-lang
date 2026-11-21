@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.84.1（2026-11-21） |
 | 依据 | 用户 2026-11-21 裁决；[D-014](../decisions/D-014.md)；[契约 v1](../planning/ct-pkg-get-contract.md)；[消费侧对齐清单](../planning/ct-pkg-index-alignment.md) |
-| 状态 | **accepted（2026-11-21 用户裁定）** |
+| 状态 | open |
+| 处置证据 | **accepted（2026-11-21 用户裁定）** |
 
 ## 裁决
 

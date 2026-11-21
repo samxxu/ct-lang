@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [test/ast](../../test/ast)（56 个探针，仅 compile）、[test/modules](../../test/modules)（67 个目录，仅 build）、[selfhost/check-ast.sh](../../selfhost/check-ast.sh) |
-| 状态 | 已修复（2026-10-31 落地；2026-11-10 复核：`check-ast.sh` 的 build-mode mirrors 段仍在） |
+| 状态 | verified |
+| 处置证据 | 已修复（2026-10-31 落地；2026-11-10 复核：`check-ast.sh` 的 build-mode mirrors 段仍在） |
 
 ## 现象
 

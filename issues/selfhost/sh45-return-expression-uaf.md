@@ -6,7 +6,8 @@
 | 严重度 | **High**（编译器 exit 0，生成物释放后使用 / 解引用空指针，实测 `rc=139`） |
 | 锚点 | commit `dab1b71`（`v0.16.2`，2026-11-02） |
 | 文件 | [Stmt.h.ct:172-192](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L172-L192)、[:616-620](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L616-L620)、[Memory.h.ct:244](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L244) |
-| 状态 | 已修（2026-11-02，`v0.16.3`）：`return` 读取仍待 AutoDrop 的变量时先求值到 `__ct_retN`，再释放，再返回临时变量；新增 `test/ast/63_own_return_field` / `64_borrow_return_field` |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-02，`v0.16.3`）：`return` 读取仍待 AutoDrop 的变量时先求值到 `__ct_retN`，再释放，再返回临时变量；新增 `test/ast/63_own_return_field` / `64_borrow_return_field` |
 
 ## 现象
 

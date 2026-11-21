@@ -7,7 +7,8 @@
 | 严重度 | Medium（语言表面改名；涉及生成符号与文档） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [language-spec §5.1](../../docs/language-spec.md#L1962-L2020)、[§4.71](../../docs/language-spec.md#L2949)、[D-016](../../docs/decisions/D-016.md)、[Box.h.ct](../../lib/std/Box.h.ct#L34)、[Expr.h.ct:2304](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2304-L2311) |
-| 状态 | **已决（2026-11-21 所有者：规范拼写 `Box<T>`；`box<T>` 作别名保留到 v1.1 删除）** |
+| 状态 | open |
+| 处置证据 | **已决（2026-11-21 所有者：规范拼写 `Box<T>`；`box<T>` 作别名保留到 v1.1 删除）** |
 
 ## 背景
 

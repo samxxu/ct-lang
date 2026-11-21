@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | 所有者 2026-11-21 裁定“改名，作为 bug 去 fix”；[外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1；[同名核查](../../docs/review/builtin-layer-vs-std-package-name-check.md) |
-| 状态 | **accepted（bugfix；v1.0 前，不占 phase）；REQ 待细化（排 DOC-90 之后）** |
+| 状态 | open |
+| 处置证据 | **accepted（bugfix；v1.0 前，不占 phase）；REQ 迁移卡已细化（2026-11-21），DEV 待窗口** |
 
 ## 现象
 
@@ -47,6 +48,124 @@
 - 新代码设置 `CT_CORE_DIR`；旧的 `CT_STD_DIR` 仍被读取；
 - 目录查找先 `lib/core`，找不到再 `lib/std`；
 - 一个 MINOR 后移除 `CT_STD_DIR` / `lib/std` 回退，另立清理 issue。
+
+## Stage 1 REQ 迁移卡（2026-11-21 细化）
+
+> 边界：只产出迁移步骤；**不碰代码**。DEV 执行等窗口：README 大改尾部 + STD 配合清单就位后
+> 一次抖动；单提交、可整提交回滚。
+
+### 1. 目录落点
+
+- `git mv lib/std lib/core`；文件名不变（`Vec.h.ct` / `Option.h.ct` / `Result.h.ct` /
+  `Str.h.ct` / `Box.h.ct` / `README.md`）。
+- **不保留 `lib/std` 实体目录**：回退靠 loader 查找旧路径，不靠双目录并存（避免双源漂移）。
+- `lib/core/README.md` 标题改「lib/core — 内置层」；加一句“曾用名 `lib/std`（迁移见 DOC-87）”。
+  这是活跃文档里**唯一**允许保留旧名的位置。
+
+### 2. `CT_CORE_DIR` 语义
+
+| 优先级 | 来源 | 行为 |
+| --- | --- | --- |
+| 1 | `CT_CORE_DIR` 已设且目录存在 | 使用；不再看其他来源 |
+| 2 | `CT_CORE_DIR` 已设但目录不存在 | **硬错**：`CT_CORE_DIR points to a missing directory: <dir>`；不静默回退 |
+| 3 | `CT_CORE_DIR` 未设，`CT_STD_DIR` 已设 | 使用（兼容窗），每次进程打一条 `warning: CT_STD_DIR is deprecated; use CT_CORE_DIR` |
+| 4 | 两者都设且不同 | `CT_CORE_DIR` 胜出 + 同上 warning |
+| 5 | 都未设 | `./lib/core` → 输入的 sibling `../lib/core` → 旧 `./lib/std` / sibling（旧路径命中时打 warning） |
+
+- 变量值指向**包含 `Vec.h.ct` 的目录**；兼容窗内 `CT_STD_DIR=<repo>/lib/core` 仍有效。
+- 找不到时错误文案同时点名两者：`built-in layer not found; set CT_CORE_DIR (legacy CT_STD_DIR)
+  or run from the repo root`。
+- `--freestanding` 不加载内置层，不受影响。
+- 变量只影响**查找根**，不影响文件名、`namespace` 或生成物。
+
+### 3. 一个 MINOR 的回退预案
+
+- **窗口**：随最近 MINOR（v1.0.0 或补丁收口）引入 `lib/core` + `CT_CORE_DIR`；
+  `lib/std` 与 `CT_STD_DIR` 在窗口内仍可解析，活跃文档标 deprecated。
+- **移除**：v1.1 删除旧路径/旧变量，硬错并提示迁移；另立清理 issue（不并入本卡）。
+- **回滚**：Stage 1 是单提交——目录 `git mv`、loader 查找、脚本、活跃文档同进同退；
+  回滚 = revert 该提交，`lib/std` 与旧查找恢复，`CT_CORE_DIR` 随之消失（不做双写/半回退）。
+- 回滚不依赖 tag、不重写历史；外部消费者在窗口内不需要改。
+
+### 4. 引用替换清单（仓内版）
+
+#### 4.1 自托管代码（9 个文件）
+
+| 文件 | 现行点 |
+| --- | --- |
+| `selfhost/ct-ast/frontend/module/Module.h.ct` | `lib/std` 查找候选（713/733/739）、注释 217 |
+| `selfhost/ct-ast/tool/driver/Driver.h.ct` | 查找候选 330/336、`CT_STD_DIR` |
+| `selfhost/ct-ast/frontend/module/ModuleBoundary.h.ct` | 仓内白名单 `core[4]`（118）、注释 126 |
+| `selfhost/ct-ast/frontend/parse/Parser.h.ct` | `lib/std/` 路径判断 2742 |
+| `selfhost/ct-ast/frontend/parse/Expr.h.ct` | `Str.h.ct` / `Vec.h.ct` 判断 5569 / 7513、`CT_STD_DIR` |
+| `selfhost/ct-ast/frontend/parse/Stmt.h.ct` | `Str.h.ct` 判断 4677 |
+| `selfhost/ct-ast/frontend/lex/Lexer.h.ct` | 注释 35 |
+| `selfhost/ct-ast/backend/emit/Emitter.h.ct` | 注释 2403 / 3552 / 3573 |
+| `selfhost/check-ast.sh` | 注释 1219、`CT_STD_DIR` 7658 / 7689 |
+
+#### 4.2 测试脚本（21 个，全部 `CT_STD_DIR`）
+
+`test/ast/` 下：`p47_map`、`p48_drop`、`p49_own`、`p50_has`、`p51_dot`、`p52_subscript`、
+`p53_optional`、`p64_freestanding`、`p66_io_empty`、`p72_stdmissing`、`p80_cstr`、
+`p80_layout`、`p80_literal`、`p80_methods`、`p80_migrate`、`p80_retain`、`p81_box`、
+`p82_allow`、`p82_config`、`p82_cycle`、`p82_errors`。
+
+- 统一改 `CT_CORE_DIR="$root/lib/core"`；
+- **`p72_stdmissing.sh` 是回退测试**：改为断言 `CT_CORE_DIR` 文案 + 新增
+  「`CT_STD_DIR=<repo>/lib/core` 兼容窗可用且打 warning」与「`CT_CORE_DIR` 指向不存在目录硬错」
+  两条；保留 `env -u CT_CORE_DIR` 的缺省路径测试。
+
+#### 4.3 活跃文档（12 个 + `lib/core/README.md`）
+
+`README.md`、`README.en.md`、`docs/README.md`、`docs/llm-guide.md`、`docs/glossary.md`、
+`docs/std-catalog.md`、`docs/guide-for-c-programmers.md`、`docs/tutorial.md`、
+`docs/bindings-and-patterns.md`、`docs/ct-pkg.md`、`docs/stable-subset.md`、
+`docs/language-spec.md`（操作行；§1.2 的迁移行保留旧名并带“迁移”字样）。
+
+- 另：`examples/48_string_steps/src/text/text.shim.h` 的注释 1 行；
+  移动后的 `lib/core/README.md` 自身。
+- 历史性描述（如 `docs/README.md` 的 Phase 29 索引行）改写为“当时目录（现 `lib/core`）”，
+  避免留下裸旧路径。
+
+#### 4.4 明确不动（历史/记录）
+
+`docs/history/**`、`docs/reviews/**`、`docs/review/**`、`docs/proposals/**`、
+`docs/decisions/**`、`docs/design/**`、`docs/planning/j6-evidence/**`、`issues/**`、`battle/**`。
+需要指路的，在 `docs/history/README.md` 加一行“2026-11-21 起内置层目录为 `lib/core`”，
+不批量替换旧文。
+
+### 5. 验收（预写两条 + 既有项）
+
+**A. 活跃面零业务命中**
+
+```sh
+# .ct / .md：排除历史与记录目录；迁移/曾用名说明行不计
+grep -rn 'lib/std' --include='*.ct' --include='*.md' . \
+  | grep -vE '^\./(docs/history|docs/reviews|docs/review|docs/proposals|docs/decisions|docs/design|docs/planning/j6-evidence|issues|battle)/' \
+  | grep -vE '迁移|曾用名'
+
+# .sh / .py：业务脚本零命中；仅允许回退测试显式使用旧变量
+grep -rn 'lib/std\|CT_STD_DIR' --include='*.sh' --include='*.py' . \
+  | grep -vE '^\./(docs/|issues/|battle)/' \
+  | grep -v 'test/ast/p72_stdmissing.sh'
+```
+
+两条命令都必须输出为空。迁移说明行必须带“迁移”或“曾用名”，否则按业务命中处理。
+
+**B. 全量门禁绿**
+
+- `bash selfhost/check-all.sh` → `check-all: OK (11 hard gates green)`；
+- L0→L1→L2→ct-ast 自举不变；≤501 函数程序生成 C 逐字节不变。
+
+**既有验收保留**：`CT_CORE_DIR=<repo>/lib/core` 下 `ct build` / `ct check` 正常；
+`CT_STD_DIR=<repo>/lib/core` 在窗口内可用；外部 `std` 包 `import std::str::CharStr` 与内置
+`String`/`Str` 共存；Stage 1 单提交回滚。
+
+### 6. 执行前置与顺序
+
+1. README 大改尾部（DOC-86）与 STD 配合清单就位；
+2. 同一个提交：`git mv` + 9 个代码文件 + 21 个脚本 + 12 个活跃文档 + 示例注释；
+3. 提交后立即跑 A/B 两条验收，再更新 `docs/history/README.md` 的一行指路。
 
 ## Stage 2：`namespace core`（同一 issue，独立切片）
 

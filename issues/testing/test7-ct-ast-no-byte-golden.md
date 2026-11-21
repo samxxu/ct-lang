@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`）；基线 `check-all: OK (9 hard gates green)` |
 | 文件 | [selfhost/check-ast.sh](../../selfhost/check-ast.sh)、[test/cases](../../test/cases)、[test/ast](../../test/ast) |
-| 状态 | 不采纳（已关闭，2026-10-31） |
+| 状态 | rejected |
+| 处置证据 | 不采纳（已关闭，2026-10-31） |
 
 ## 现象
 

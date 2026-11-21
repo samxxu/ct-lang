@@ -6,7 +6,8 @@
 | 定性 | **行为缺陷**：省略 range（以及 `*`）时按 MVS 取最低 tag；裸名经索引/默认 registry 与 URL 入口不一致 |
 | 严重度 | **High**（默认安装旧版本，静默） |
 | 优先级 | **P1**（包线 patch） |
-| 状态 | **verified**（2026-11-20，REV） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV） |
 | 锚点 | 复现于 `v0.63.2`（`0e541f32`）；修复在 `v0.63.3` |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)：`git_pick_tag`、`pkg_index_lookup` |
 

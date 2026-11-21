@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [DOC-88](doc-88-spec-split-decision.md) 精修 3；[check-docs.py](../../test/docs/check-docs.py) |
-| 状态 | **待办（v1.1 立项；落地可到 v1.2）** |
+| 状态 | deferred |
+| 处置证据 | **待办（v1.1 立项；落地可到 v1.2）** |
 
 ## 现象
 

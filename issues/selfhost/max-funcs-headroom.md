@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `8aac450`（2026-10-17） |
 | 站点 | `selfhost/src/core.ct:37`（`#define MAX_FUNCS 64`）等 |
-| 状态 | 已修复（commit `b6b3dc4`，前置于 roadmap Phase 5） |
+| 状态 | verified |
+| 处置证据 | 已修复（commit `b6b3dc4`，前置于 roadmap Phase 5） |
 
 ## 现象
 

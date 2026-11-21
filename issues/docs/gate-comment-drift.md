@@ -6,7 +6,8 @@
 | 严重度 | **Low** |
 | 锚点 | commit `4ef8b68`（2026-10-21） |
 | 文件 | [selfhost/check-all.sh:16](../../selfhost/check-all.sh#L16)、[:18-19](../../selfhost/check-all.sh#L18-L19)、[:60](../../selfhost/check-all.sh#L60)；[selfhost/check-ast.sh:3-4](../../selfhost/check-ast.sh#L3-L4) |
-| 状态 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
 
 ## 现象
 

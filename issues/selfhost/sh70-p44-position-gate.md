@@ -5,7 +5,8 @@
 | 模块 | selfhost / parser |
 | 严重度 | Medium |
 | 锚点 | `v0.44.0`（`b1f5e9cd`） |
-| 状态 | fixed（DEV，2026-11-14；v0.44.1） |
+| 状态 | verified |
+| 处置证据 | fixed（DEV，2026-11-14；v0.44.1） |
 
 ## 现象
 

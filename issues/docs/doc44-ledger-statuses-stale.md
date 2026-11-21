@@ -5,7 +5,8 @@
 | 严重度 | Medium（台账是「当前还剩什么」的唯一入口，错了会把已修条目当待办） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [issues/README.md:12-14](../README.md#L12-L14)、[sh25](../selfhost/sh25-typedef-alias-drops-dims.md)…[sh32](../selfhost/sh32-multi-input-silently-ignored.md) |
-| 状态 | 已修（2026-11-01）：SH-25…SH-32 与 DOC-31…DOC-43 的状态行已回填，`issues/README.md` 顶部与本轮处置表同步 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：SH-25…SH-32 与 DOC-31…DOC-43 的状态行已回填，`issues/README.md` 顶部与本轮处置表同步 |
 
 ## 现象
 

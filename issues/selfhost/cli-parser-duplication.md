@@ -6,7 +6,8 @@
 | 严重度 | Info |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 站点 | [Driver.h.ct:81-160](../../selfhost/ct-ast/tool/driver/Driver.h.ct#L81-L160)（compile 的 `run`）与 [Module.h.ct:574-720](../../selfhost/ct-ast/frontend/module/Module.h.ct#L574-L720)（build 的 `build_main`） |
-| 状态 | 不采纳（已关闭，2026-10-31） |
+| 状态 | rejected |
+| 处置证据 | 不采纳（已关闭，2026-10-31） |
 
 ## 现象
 

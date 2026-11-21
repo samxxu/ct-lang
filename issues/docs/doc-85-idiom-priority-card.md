@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §2 |
-| 状态 | **已完成（2026-11-21：`docs/idioms.md` 入库；briefing 10 条带 §N；门禁激活）** |
+| 状态 | verified |
+| 处置证据 | **已完成（2026-11-21：`docs/idioms.md` 入库；briefing 10 条带 §N；门禁激活）** |
 
 ## 进展（2026-11-21）
 

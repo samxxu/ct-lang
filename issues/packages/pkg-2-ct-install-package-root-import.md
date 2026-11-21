@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | 本仓库 `eaaeae75`（`v0.53.0` 之后、`v0.53.1` 之前） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（打印入口）；[package-guide.md](../../docs/package-guide.md)（`ct install` 的契约描述） |
-| 状态 | **已解决**（v0.55.0 起 `ns-root` 决定 `-I`；v0.58.0 起 `ct build` 默认读 lock 自动补 `-I`） |
+| 状态 | verified |
+| 处置证据 | **已解决**（v0.55.0 起 `ns-root` 决定 `-I`；v0.58.0 起 `ct build` 默认读 lock 自动补 `-I`） |
 
 ## 现象
 

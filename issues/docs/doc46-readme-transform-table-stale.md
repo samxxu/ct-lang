@@ -5,7 +5,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [README.md:132](../../README.md#L132)、[:133](../../README.md#L133)、[:134](../../README.md#L134)、[:161](../../README.md#L161)、[:603](../../README.md#L603)、[:604](../../README.md#L604)、[:655](../../README.md#L655) |
-| 状态 | 已修（2026-11-01）：`README.md` 中英变换表的 `delete` / `own` / `borrow` 行已同步（含非左值只释放） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`README.md` 中英变换表的 `delete` / `own` / `borrow` 行已同步（含非左值只释放） |
 
 ## 现象
 

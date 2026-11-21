@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `db4cae4`（2026-11-03，`v0.19.0`） |
 | 文件 | [issues/README.md:57](../../issues/README.md#L57) |
-| 状态 | 已修复（本轮，2026-11-03） |
+| 状态 | verified |
+| 处置证据 | 已修复（本轮，2026-11-03） |
 | 关联 | [DOC-56](doc56-issues-readme-gate-count.md)（2026-11-02 已修，本轮再次漂移） |
 
 ## 现象

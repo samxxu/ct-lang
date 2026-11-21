@@ -6,7 +6,8 @@
 | 严重度 | Info |
 | 锚点 | `v0.19.1`（2026-11-06） |
 | 文件 | [frontend/parse/Parser.h.ct:790-796](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L790-L796) |
-| 状态 | 已关闭（有意限制；文案已改进，commit `64f27f3`） |
+| 状态 | rejected |
+| 处置证据 | 已关闭（有意限制；文案已改进，commit `64f27f3`） |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `c27da3d`（2026-11-06，`v0.19.1`+1） |
 | 站点 | [Driver.h.ct:114](../../selfhost/ct-ast/tool/driver/Driver.h.ct#L114)（usage）、[Driver.h.ct:193-199](../../selfhost/ct-ast/tool/driver/Driver.h.ct#L193-L199)（`-I` 分支） |
-| 状态 | 已修（2026-11-06，commit `f612b11`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-06，commit `f612b11`） |
 
 ## 现象
 

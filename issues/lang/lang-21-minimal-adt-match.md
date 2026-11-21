@@ -7,7 +7,8 @@
 | 严重度 | High（重写 42.8k 行前需要） |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §2.3](../../docs/planning/v1-release-plan.md)、[D3 裁定](../../docs/reviews/2026-11-21-v1-campaign-eval.md) |
-| 状态 | **verified**（2026-11-21，REV-PH-84 v0.84.1 复核：F1/F2 已修，独立自举复现见 [REV 复核](../../docs/reviews/2026-11-21-phase84-rev-verdict.md) 文末 §9） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-21，REV-PH-84 v0.84.1 复核：F1/F2 已修，独立自举复现见 [REV 复核](../../docs/reviews/2026-11-21-phase84-rev-verdict.md) 文末 §9） |
 
 ## 背景与目标
 

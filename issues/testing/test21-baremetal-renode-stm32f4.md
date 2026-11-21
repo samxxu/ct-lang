@@ -5,7 +5,8 @@
 | 模块 | test（`test/baremetal-renode/`） |
 | 类型 | 测试缺口（QEMU 冒烟只覆盖通用 Cortex-M，没有厂商内存映射） |
 | 严重度 | Medium |
-| 状态 | `open`（DEV 已处置，待复核） |
+| 状态 | open |
+| 处置证据 | `open`（DEV 已处置，待复核） |
 | 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[PH-64 卡](../../docs/design/phase64.md) |
 
 ## 缺口

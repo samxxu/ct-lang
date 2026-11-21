@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 站点 | [Lexer.h.ct:97-108](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct#L97-L108)（`#define MAX_TEXT 160`，[:18](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct#L18)） |
-| 状态 | 已修（`67da4c3`，2026-11-09 回填） |
+| 状态 | verified |
+| 处置证据 | 已修（`67da4c3`，2026-11-09 回填） |
 
 ## 现象
 

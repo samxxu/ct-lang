@@ -5,7 +5,8 @@
 | 严重度 | Medium（新语法可用但 `Ctrl+Click` / `F12` 静默无结果，可察觉的缺口） |
 | 锚点 | `v0.26.3` / `02999c4`（HEAD = `main`）+ 本轮语法提交（`editors/vscode` 0.5.0） |
 | 文件 | [extension.js](../../editors/vscode/extension.js#L81-L98)、[extension.js](../../editors/vscode/extension.js#L192-L198)、[extension.js](../../editors/vscode/extension.js#L373-L390) |
-| 状态 | **verified**（2026-11-09 v0.26.4 补丁处置并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §1 的 P3） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-09 v0.26.4 补丁处置并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §1 的 P3） |
 
 ## 现象
 

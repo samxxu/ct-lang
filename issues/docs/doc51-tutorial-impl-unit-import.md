@@ -6,7 +6,8 @@
 | 严重度 | **High**（教程主路径示例按字面无法构建，且与 language-spec 的明确规则相反） |
 | 锚点 | commit `61e35e4`（`v0.16.1`，2026-11-01） |
 | 文件 | [tutorial.md:250-266](../../docs/tutorial.md#L250-L266)、[:724-740](../../docs/tutorial.md#L724-L740)、[language-spec.md:20](../../docs/language-spec.md#L20) |
-| 状态 | 已修（2026-11-01）：`docs/tutorial.md` §7 中英改为 `impl_dog.h.ct`，并补「承载 `impl` 的单元要写成 `.h.ct` 才能被 import」 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`docs/tutorial.md` §7 中英改为 `impl_dog.h.ct`，并补「承载 `impl` 的单元要写成 `.h.ct` 才能被 import」 |
 
 ## 现象
 

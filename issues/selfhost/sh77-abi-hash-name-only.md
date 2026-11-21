@@ -5,7 +5,8 @@
 | 模块 | selfhost（`--lib` ABI 头） |
 | 类型 | **已由既有需求承接**（不是新缺陷） |
 | 严重度 | Low（`.abi.h` 原型已逐行变化，签名漂移仍可观测） |
-| 状态 | superseded（并入 [REQ-ABI-2](../../docs/planning/requirements-pool.md#L162)，P2，触发条件 = 下游需要 `#if` 编译期 pin） |
+| 状态 | superseded |
+| 处置证据 | superseded（并入 [REQ-ABI-2](../../docs/planning/requirements-pool.md#L162)，P2，触发条件 = 下游需要 `#if` 编译期 pin） |
 | 锚点 | `v0.53.1`（`55d89e2b`）；实测 `ct-ast v0.53.1`（HEAD 重建） |
 
 ## 现象

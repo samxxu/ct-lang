@@ -5,7 +5,8 @@
 | 严重度 | Medium（违反 AGENTS §6 的强制同步项；高亮缺失与 `own` 的既有处理不一致） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [editors/vscode/syntaxes/ct.tmLanguage.json:218-222](../../editors/vscode/syntaxes/ct.tmLanguage.json#L218-L222)、[editors/vscode/test/check-grammar.py:231-233](../../editors/vscode/test/check-grammar.py#L231-L233)；规定见 [AGENTS.md:178-180](../../AGENTS.md#L178-L180) |
-| 状态 | 已修（2026-11-01）：`ct.tmLanguage.json` 新增 `ct-borrow` / `ct-borrow-param` / `ct-trait-builtin` 并入 `patterns`；`check-grammar.py` 断言 31→33 全绿 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`ct.tmLanguage.json` 新增 `ct-borrow` / `ct-borrow-param` / `ct-trait-builtin` 并入 `patterns`；`check-grammar.py` 断言 31→33 全绿 |
 
 ## 现象
 

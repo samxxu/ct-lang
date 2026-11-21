@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `224c08f`（Batch 2 收尾，2026-10-22） |
 | 文件 | [selfhost/ct-ast/frontend/parse/Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L904-L912)（`parse_primary` 的裸名兜底） |
-| 状态 | 已修（2026-10-22：未声明的裸名原样发射，交给 C 编译器校验） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-22：未声明的裸名原样发射，交给 C 编译器校验） |
 
 ## 现象
 

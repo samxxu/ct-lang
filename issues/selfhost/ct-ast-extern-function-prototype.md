@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `224c08f`（Batch 2 收尾，2026-10-22） |
 | 文件 | [selfhost/ct-ast/frontend/parse/Parser.h.ct](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L292-L303)（`extern` 分支） |
-| 状态 | 已修（2026-10-22：原型只声明；诊断位置回到 `extern` 行） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-22：原型只声明；诊断位置回到 `extern` 行） |
 
 ## 现象
 

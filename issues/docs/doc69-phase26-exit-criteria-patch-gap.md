@@ -6,7 +6,8 @@
 | 严重度 | Low（判据设计缺口；不影响 v0.26.4 的实际交付与门禁结果） |
 | 锚点 | `v0.26.4` / `7c58192`（HEAD = `main`） |
 | 文件 | [phase26.md §1.4](../../docs/history/design/phase26.md#L53-L79)、[phase26.md §1.5](../../docs/history/design/phase26.md#L81-L93)、[phase26.md §9.2](../../docs/history/design/phase26.md#L631-L643) |
-| 状态 | **verified**（2026-11-20，REV；deferred 子项见复核段） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV；deferred 子项见复核段） |
 
 ## 现象
 

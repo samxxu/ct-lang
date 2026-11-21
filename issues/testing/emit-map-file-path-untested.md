@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `ec97f99`（2026-10-17） |
 | 位置 | `test/modules/map*`、[driver.ct](../../selfhost/src/driver.ct#L411-L425) |
-| 状态 | ✅ 已修复（2026-10-18；compile 与 build 两条写盘路径均有用例，`cannot write` 也已钉住） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-18；compile 与 build 两条写盘路径均有用例，`cannot write` 也已钉住） |
 
 ## 现象
 

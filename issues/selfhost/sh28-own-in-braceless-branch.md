@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [frontend/parse/Stmt.h.ct:661-678](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L661-L678)（`parse_branch`）、对照 [:214-264](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L214-L264)（`parse_block`） |
-| 状态 | 已修（2026-10-31）：`parse_branch` 无花括号也建 `N_BLOCK` 并追加 AutoDrop；探针 [test/ast/60_branch_autodrop](../../test/ast/60_branch_autodrop/) |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：`parse_branch` 无花括号也建 `N_BLOCK` 并追加 AutoDrop；探针 [test/ast/60_branch_autodrop](../../test/ast/60_branch_autodrop/) |
 
 ## 现象
 

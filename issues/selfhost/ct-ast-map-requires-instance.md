@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `224c08f`（Batch 2 收尾，2026-10-22） |
 | 文件 | [selfhost/ct-ast/frontend/parse/MapBuild.h.ct](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct)（`parse` 的 instance 段） |
-| 状态 | 已修（2026-10-22，SH-20）：`map trait T for namespace A::B { … }` + `T::A::B` 装箱，`self` 为 NULL；无需占位宿主 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-22，SH-20）：`map trait T for namespace A::B { … }` + `T::A::B` 装箱，`self` 为 NULL；无需占位宿主 |
 
 ## 现象
 

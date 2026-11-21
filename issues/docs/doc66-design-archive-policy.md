@@ -6,7 +6,8 @@
 | 严重度 | **Medium**（不影响编译器，但目录语义与索引声明互相矛盾） |
 | 锚点 | `v0.25.0`（2026-11-09） |
 | 文件 | [docs/README.md](../../docs/README.md)、[docs/design/](../../docs/design/)、[docs/history/README.md](../../docs/history/README.md)、[test/docs/check-docs.py](../../test/docs/check-docs.py) |
-| 状态 | **verified**（2026-11-09 v0.26.4 补丁处置，路线 B，并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §1 的 P5） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-09 v0.26.4 补丁处置，路线 B，并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §1 的 P5） |
 
 ## 现象
 

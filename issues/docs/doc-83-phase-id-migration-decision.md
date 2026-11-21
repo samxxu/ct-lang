@@ -7,7 +7,9 @@
 | 严重度 | **P1（v1.0 发布，Tier 2）** |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-3；[phase 迁移 blocker](../../docs/planning/phase-migration-blockers.md)；主规范 1.17.0 PN-1…PN-17 |
-| 状态 | **待裁定（主规范）/ 待执行（本仓）** |
+| 状态 | open |
+| 处置证据 | **待裁定（主规范）/ 待执行（本仓）** |
+| blocked-by | 主规范裁定 / 本仓待执行 |
 
 ## 现象
 

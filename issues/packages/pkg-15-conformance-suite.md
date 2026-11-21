@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.79.0（2026-11-20） |
 | 文件 | [契约 v1](../../docs/planning/ct-pkg-get-contract.md) §3.3/§9、[D-014](../../docs/decisions/D-014.md) |
-| 状态 | **待办（REQ 定数据，DEV 接 runner）** |
+| 状态 | open |
+| 处置证据 | **待办（REQ 定数据，DEV 接 runner）** |
 
 ## 现象
 

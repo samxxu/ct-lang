@@ -6,7 +6,8 @@
 | 严重度 | Info（已文档化的行为，属工具缺口而非缺陷；是否补能力需维护者决定） |
 | 锚点 | commit `61e35e4`（`v0.16.1`，2026-11-01） |
 | 文件 | [README.md](../../README.md)（`ct build` 条目）、[Driver.h.ct](../../selfhost/ct-ast/tool/driver/Driver.h.ct) |
-| 状态 | **已决（2026-11-02，用户）：纳入 Phase 17 的 17.6**——`ct build` 默认一步产出可执行文件，`--emit-c` 保留只发 C |
+| 状态 | open |
+| 处置证据 | **已决（2026-11-02，用户）：纳入 Phase 17 的 17.6**——`ct build` 默认一步产出可执行文件，`--emit-c` 保留只发 C |
 
 ## 现象
 

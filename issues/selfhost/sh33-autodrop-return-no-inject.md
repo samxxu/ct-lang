@@ -7,7 +7,8 @@
 | 锚点 | commit `524ba99`（2026-10-31，`v0.15.1`） |
 | 文件 | [frontend/parse/Stmt.h.ct:210-253](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L210-L253)（唯一的注入点）、[:313-346](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L313-L346)（`return` 分支，无注入）、[backend/emit/Emitter.h.ct:1798-1819](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1798-L1819)（`N_DELETE` 不置空） |
 | 对照 | `selfhost/l2/core.ct` 的 `autodrop_before`（[:4936-4964](../../selfhost/l2/core.ct#L4936-L4964)）与 `emit_drops`（[:4903-4928](../../selfhost/l2/core.ct#L4903-L4928)） |
-| 状态 | 已修（2026-11-01）：`return` 的两条出口在 `leak_return` 之后注入本作用域仍存活的释放（`retire_before_return`，挂在 `N_RET` 的 `b` 槽、发射在 `return` 之前），`N_DELETE` 两条路径补齐 `p = 0;`。探针 [test/ast/61_autodrop_return](../../test/ast/61_autodrop_return/)，门禁断言在 `check-ast.sh` 的 `sh33` 段 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`return` 的两条出口在 `leak_return` 之后注入本作用域仍存活的释放（`retire_before_return`，挂在 `N_RET` 的 `b` 槽、发射在 `return` 之前），`N_DELETE` 两条路径补齐 `p = 0;`。探针 [test/ast/61_autodrop_return](../../test/ast/61_autodrop_return/)，门禁断言在 `check-ast.sh` 的 `sh33` 段 |
 
 ## 现象
 

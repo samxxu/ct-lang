@@ -1420,3 +1420,76 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 
 
 
+
+## CI-11 台账归一（2026-11-21，REV）
+
+> 本节是该台账最近一次机械闭合的统计与映射规则；上方历史段落是当时的快照，不据此改算。
+> 状态词的唯一来源是每个条目的 front-matter `status:` 或 `| 状态 |` 行（两者都有时必须一致）。
+
+### 统计
+
+- 扫描范围：`issues/**/*.md`（排除本 README），共 **283** 条（282 条既有 + 新立 CI-16）；
+- 状态来源：**259** 条用 `| 状态 |` 行，**24** 条用 front-matter `status:`（CI-10/11/13/14、
+  CI-9/12、DOC-74/75、PKG-23、SH-100…103、SH-93/94/106、TEST-23、CI-15、CI-16 等）；
+- 闭集合规：**283 / 283**，非闭集状态 **0**，`status: fixed` **0**，缺状态 **0**；
+- 分布：`open` 46、`verified` 219、`rejected` 10、`deferred` 7、`superseded` 1
+  （`reopened` / `wontfix` 0）。
+
+### 映射规则（逐条按正文证据，禁止无证据批量改）
+
+| 原状态词/形状 | 新状态 | 证据要求 |
+| --- | --- | --- |
+| `已修` / `已修复` / `已解决` / `✅` / `closed` / `fixed` | `verified`；缺证据则 `open` | 正文有提交 sha、验证命令原始输出，或 `test/`/`check-*` 引用 + 复核语句 |
+| `不采纳` / `用户裁定不修` / `已取消` / `有意限制` | `rejected` | 理由、裁定记录或决策 id |
+| `blocked` / `待前置` | `open` + `blocked-by` 行 | 前置条件写进正文与 `blocked-by` |
+| `受理` / `待修` / `计划` / `排期` / `待办` / `实施中` / `accepted` | `open` | 复现命令或 `file:line` |
+| 明确延后（`deferred`、`待评估（v1.1…）`、`v1.2`） | `deferred` | 触发条件或目标版本 |
+| `superseded` / 并入其他条目 | `superseded` | 新条目 id |
+| `fixed` 写进状态字段 | 禁止；按正文证据改 `verified`/`open` | 原 `fixed` 文本保留在 `处置证据` 行 |
+
+旧状态文本不丢：凡是状态单元格里带日期/提交/验证说明的，迁移时在该行后新增
+`| 处置证据 | <原文> |`，状态行只留八词之一。
+
+### 6 个 `fixed`-in-status
+
+| 条目 | 迁移后 | 依据 |
+| --- | --- | --- |
+| SH-68 | `open` | 正文只有修复前锚点 `b618021b`，无修复提交 sha / 原始输出；已补最小补证要求 |
+| SH-69 | `verified` | 正文有 `check-all: OK (11/11)`（macOS + Ubuntu GCC 9 + Ubuntu clang）与 Podman Alpine 结果 |
+| SH-70 | `verified` | `p44_try_errors.sh` 11 passed / `p44_try_drop.sh` 7 passed |
+| SH-72 | `verified` | `5ff69ac3` + `test/ast/238_iface_ret_value` |
+| SH-74 | `verified` | `d6e82e25` + `test/ast/237_iface_ret_self` |
+| SH-75 | `verified` | `b5797cbf` + `test/ast/239_local_iface_return` + ASAN UAR 用例 |
+
+### 7 个“已修仍 open”探针（本轮独立复跑，干净归档 HEAD `600e6595`，ct-ast v0.88.0）
+
+| 条目 | 命令 | 结果 |
+| --- | --- | --- |
+| LANG-3 | `sh test/ast/p72_maxcalls.sh <ct-ast>` | `OK p72/maxcalls (4096+ calls, named limit)` |
+| LANG-4 | `sh test/ast/p72_subscript.sh <ct-ast>` | `OK p72/subscript (key type)` |
+| LANG-9 | `sh test/ast/p73_export.sh` / `p73_abi.sh` / `p73_docs.sh` | 三条均 `OK` |
+| LANG-11 | `sh test/ast/p72_outputcollision.sh <ct-ast>` | `OK p72/collision (same-base refused)` |
+| LANG-16 | `sh test/ast/p72_diagpos.sh <ct-ast>` | `OK p72/diagpos (pp length + comment column)` |
+| LANG-17 | `sh test/ast/p72_diagpos.sh <ct-ast>` | 同上（pp length 段） |
+| SH-76 | `sh test/ast/p72_stdmissing.sh <ct-ast>` | `OK p72/stdmissing (builtin layer diagnostics)` |
+
+### SH-103 / CI-15 复核
+
+- SH-103：`sh test/ast/p80_retain.sh <ct-ast>` → **51 ok / 0 fail**，含 ASan/UBSan 两档，
+  末行 `p80_retain: OK`；v0.82.1 `1764b4d6` 的 `if (j != i) snprintf(...)` 已在当前 HEAD
+  进一步改为 `memmove`；
+- CI-15：`v0.83.3` 的 `d5cca3b1` 把两处压缩点改为 `if (j != i) memmove(..., MAX_TEXT)`；
+  自拷贝 `snprintf` 扫描 0 命中。本机无 GCC（Apple clang 21），`-Wrestrict` 的最终判据仍由
+  `ubuntu-gcc` CI 承担，复核段已写明证据边界。
+
+### 机械门禁
+
+```console
+$ bash tools/check.sh g6
+g6: OK (283 issues; open=46 verified=219 rejected=10 deferred=7 superseded=1)
+$ sh test/gates/issue_ledger_test.sh
+OK g6/ledger (5 negative cases + 1 positive)
+```
+
+`tools/gates/issue_ledger.py` 校验：闭集、`fixed` 禁入状态、缺状态、双源一致、
+`verified` 必须有 sha/输出/测试引用；负例见 `test/gates/issue_ledger/`。

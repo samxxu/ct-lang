@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `4ef8b68`（2026-10-21）；`main.ct` 以工作树当前内容为准（含未提交改动） |
 | 文件 | [Symbols.h.ct:11-15](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L11-L15) 等 16 处；[main.ct:47-49](../../selfhost/ct-ast/main.ct#L47-L49) vs [:58-61](../../selfhost/ct-ast/main.ct#L58-L61) |
-| 状态 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
 
 ## 现象
 

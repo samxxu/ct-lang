@@ -5,7 +5,8 @@
 | 严重度 | **P1（High）** |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1684-L1694)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2082-L2083)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2095)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2109-L2110)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2767)、[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2995-L3037) |
-| 状态 | **verified**（2026-11-09 评审复核，`v0.26.2` / `5b43fac`：无括号 `sizeof T` / `_Alignof T` / `alignof T` / `sizeof T * 2` / `sizeof(T) + sizeof T` 全部真替换；值位置的同族漏洞另立 [SH-64](sh64-generic-tparam-value-position.md)） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-09 评审复核，`v0.26.2` / `5b43fac`：无括号 `sizeof T` / `_Alignof T` / `alignof T` / `sizeof T * 2` / `sizeof(T) + sizeof T` 全部真替换；值位置的同族漏洞另立 [SH-64](sh64-generic-tparam-value-position.md)） |
 
 ## 现象
 

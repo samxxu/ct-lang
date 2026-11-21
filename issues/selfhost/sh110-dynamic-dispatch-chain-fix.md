@@ -7,7 +7,8 @@
 | 严重度 | High |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [SH-73](sh73-temp-receiver-dynamic-dispatch.md)；[外部评审 §4-A3](../../docs/reviews/2026-11-21-v088-external-review-eval.md) |
-| 状态 | **待办（DEV；v1.0 前 bugfix，独立切片）** |
+| 状态 | open |
+| 处置证据 | **待办（DEV；v1.0 前 bugfix，独立切片）** |
 
 ## 现象
 

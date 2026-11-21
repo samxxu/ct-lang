@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [README.md:294](../../README.md#L294)、[AGENTS.md:179](../../AGENTS.md#L179)、[AGENTS.md:499](../../AGENTS.md#L499)、[selfhost/check-all.sh:16](../../selfhost/check-all.sh#L16)、[selfhost/check-all.sh:79](../../selfhost/check-all.sh#L79) |
-| 状态 | 已修（2026-10-31）：文档已按建议更新（见 [issues/README.md](../README.md) 的 2026-10-31 处置表） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：文档已按建议更新（见 [issues/README.md](../README.md) 的 2026-10-31 处置表） |
 
 ## 现象
 

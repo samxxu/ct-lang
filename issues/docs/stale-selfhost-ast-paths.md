@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `4ef8b68`（2026-10-21） |
 | 文件 | [issues/README.md:156](../README.md#L156)、[:165](../README.md#L165)、[:166](../README.md#L166)；[reports/phase9-review/phase9-review.md](../../docs/history/reports/phase9-review/phase9-review.md) 多处 |
-| 状态 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
 
 ## 现象
 

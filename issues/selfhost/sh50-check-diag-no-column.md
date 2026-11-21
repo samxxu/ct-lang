@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | [Diag.h.ct:304](../../selfhost/ct-ast/tool/diag/Diag.h.ct#L304)（`sem_error` 家族，`307/310/313/316/319/322` 同形）；parser 对照 [L77](../../selfhost/ct-ast/tool/diag/Diag.h.ct#L77) |
-| 状态 | 已修复（本轮，2026-11-03） |
+| 状态 | verified |
+| 处置证据 | 已修复（本轮，2026-11-03） |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | **High**（`borrow` 的核心承诺失效，且无任何告警） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [backend/mem/Memory.h.ct:277-287](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L277-L287)（`leak_assign`）、[frontend/parse/Stmt.h.ct:226-257](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L226-L257)（`check_borrow_store`）、[:1419](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1419) / [:1451](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1451)（两条赋值路径） |
-| 状态 | 已修（2026-11-01）：`leak_assign` / `leak_decl` 跳过 `borrowed`，`check_borrow_store` 拒绝重赋值（`a borrowed pointer cannot be reassigned`）；门禁 `bw_neg borrow_reassign` 与正例 `bw_copy.ct` |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`leak_assign` / `leak_decl` 跳过 `borrowed`，`check_borrow_store` 拒绝重赋值（`a borrowed pointer cannot be reassigned`）；门禁 `bw_neg borrow_reassign` 与正例 `bw_copy.ct` |
 
 ## 现象
 

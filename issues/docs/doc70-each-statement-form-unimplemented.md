@@ -6,7 +6,8 @@
 | 严重度 | Low（需求登记；现有库层 `each` 已可用，缺的是另一套形态） |
 | 锚点 | `v0.26.4`（Phase 27 实现，未 bump） |
 | 文件 | [phase24.md:45](../../docs/history/design/phase24.md#L45)、[phase24.md:462](../../docs/history/design/phase24.md#L462)、[phase25.md:63](../../docs/history/design/phase25.md#L63)、[phase25.md:283](../../docs/history/design/phase25.md#L283)、[phase27.md](../../docs/history/design/phase27.md) |
-| 状态 | **closed**（Phase 27 在 ct-ast 落地数组形态；容器协议经 D27-4 延后） |
+| 状态 | verified |
+| 处置证据 | **closed**（Phase 27 在 ct-ast 落地数组形态；容器协议经 D27-4 延后） |
 
 > **命名现状（2026-11-10 用户确认）**：语句级迭代形态一律写 **`foreach (map) { … item … }`**；
 > 老规划里的 `each(map){…}` **关键字名作废，不得再作为关键字使用**。`each` 这个标识符只保留为

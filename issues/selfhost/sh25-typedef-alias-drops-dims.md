@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [frontend/parse/Parser.h.ct:1445-1473](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L1445-L1473) |
-| 状态 | 已修（2026-10-31）：`Parser.h.ct` 的 tag→别名复制补上 `dims`；探针 [test/ast/59_typedef_alias_array](../../test/ast/59_typedef_alias_array/)，`check-ast.sh` 的语料等价段覆盖 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：`Parser.h.ct` 的 tag→别名复制补上 `dims`；探针 [test/ast/59_typedef_alias_array](../../test/ast/59_typedef_alias_array/)，`check-ast.sh` 的语料等价段覆盖 |
 
 ## 现象
 

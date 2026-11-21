@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [docs/tutorial.md](../../docs/tutorial.md#L78)（中文）、[docs/tutorial.md](../../docs/tutorial.md#L1090)（英文） |
-| 状态 | 已修（`94815d7`，2026-11-09 回填） |
+| 状态 | verified |
+| 处置证据 | 已修（`94815d7`，2026-11-09 回填） |
 
 ## 现象
 

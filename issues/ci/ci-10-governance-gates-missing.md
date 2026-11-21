@@ -1,7 +1,7 @@
 ---
 id: CI-10
 title: "治理门禁 G1/G2/G4/G5/G6/G7/G9 无同名入口，也未登记 deviation"
-status: open
+status: verified
 area: ci
 severity: P1
 opened: 2026-11-20
@@ -119,3 +119,54 @@ G1/G4 依赖 DOC-74、G5 依赖 phase 卡字段、G2/G7/G9 属 P2，理由成立
 - owner：REQ/DEV
 - next：G6/G5/G1 最小入口先做；G2/G4/G7/G9 登记 P2/deviation
 - 不能关闭：门禁仍未实现
+
+## 复核（2026-11-21，REV / CI-10）
+
+**结论：verified。** `tools/check.sh` 的分派已覆盖 `g0|g1|g2|g4|g5|g6|g7|g8|g9`，每个
+门禁都有可运行的入口、负例或明确偏离：
+
+```console
+$ for g in g0 g1 g2 g4 g5 g6 g7 g8 g9; do bash tools/check.sh "$g"; done
+g0: OK (block 1.17.0, session-map present)
+g1: OK (12 phase cards: title/status/tasks/exit-criteria/version-minor)
+g2: SKIP (deviation: g2-acc-mapping; docs/design has no ACC-* map yet, tracked by CI-16)
+check-docs: OK (2577 relative links in 397 files, v0.88.0, ...)   # g4
+g5: OK (91 criteria: each has a definition + acceptance/test reference)
+g6: OK (283 issues; open=46 verified=219 rejected=10 deferred=7 superseded=1)
+g7: OK (secret scan 0 hits; check-warnings green)
+g8: OK (PN-2 version coherence; 9 legacy offsets)
+g9: OK (spec 1.17.0, sha256 c22c85ee08f2…, master spec)
+
+$ sh test/gates/issue_ledger_test.sh
+OK g6/ledger (5 negative cases + 1 positive)
+$ sh test/gates/phase_card_test.sh
+OK g1/g5 (good + 2 negative cases)
+$ sh test/gates/secret_scan_test.sh
+OK g7/secret-scan (clean + 1 negative)
+```
+
+逐项落实：
+
+| 门禁 | 实现 | 负例 |
+| --- | --- | --- |
+| g6 | `tools/gates/issue_ledger.py`（闭集 / `fixed` 禁入 / 缺状态 / 双源一致 / `verified` 证据） | `test/gates/issue_ledger/` 5 条坏台账，全部红 |
+| g5 | `tools/gates/phase_card.py g5`（E-ID 定义 + 验收/测试引用） | `bad_eid` 定义一次且无引用，红 |
+| g1 | `tools/gates/phase_card.py g1`（title/status/tasks/exit-criteria/version-minor） | `bad_missing` 缺冻结字段，红 |
+| g2 | `tools/check.sh g2` 只打印 SKIP；`deviation: g2-acc-mapping` + P2 CI-16 | 偏离有日期/理由/收敛/签字 |
+| g4 | 复用 `test/docs/check-docs.py`（链接、版本、`applies-to`、phase 状态） | check-docs 自带既有负例/断言 |
+| g7 | `secret_scan.py` + `selfhost/check-warnings.sh`；`G7_SANITIZERS=1` 追加 `check-sanitizers.sh` | `test/gates/secret_scan/leak`，红 |
+| g9 | `tools/gates/spec_pin.py`（主规范在场比 sha/版本；不在场比 `docs/spec` 副本） | pin 漂移即红 |
+
+- `g0`/`g8` 未改动；`selfhost/check-all.sh` 保持 11 道硬门禁不变，`tools/check.sh` 是
+  AGENTS §6.4 的治理门禁入口（0.1 `门禁入口` 已同步）。`check-all` 不调用这些入口，避免把
+  `g6` 的台账检查与 `g5` 的 phase 卡检查塞进构建链；
+- **clean-HEAD 与 worktree 的差异**：复核时工作树有并发的 PKG-23 / v0.88.1 未提交改动，
+  `g4` 因 `docs/README.md` 仍是 v0.88.0、`g7` 因 PKG-23 注释里的 `/*` 告警而红；两者在干净
+  归档 HEAD `600e6595` 上分别为 `check-docs: OK` 与 `check-warnings: 502 ok, 0 failed`。
+  并发改动落地后重跑 `bash tools/check.sh g4` / `g7` 即可。
+
+## 处理（REV，2026-11-21）
+
+- 状态：`verified`（P1 三项 + P2/P0 入口；P2 的 G2 以偏离 + CI-16 收敛）
+- owner：REV
+- 证据：`tools/check.sh` 分派、`test/gates/*` 负例、AGENTS 0.3 `deviation: g2-acc-mapping`

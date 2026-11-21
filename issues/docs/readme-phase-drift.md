@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `8aac450`（2026-10-17） |
 | 文件 | [README.md](../../README.md#L6) L6 |
-| 状态 | 已修复（commit `5bde821`） |
+| 状态 | verified |
+| 处置证据 | 已修复（commit `5bde821`） |
 
 ## 现象
 

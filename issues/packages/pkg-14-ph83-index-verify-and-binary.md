@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.79.0（2026-11-20） |
 | 文件 | [契约 v1](../../docs/planning/ct-pkg-get-contract.md)、[D-014](../../docs/decisions/D-014.md)、[评估](../../docs/reviews/2026-11-20-pkg-contract-proposal-eval.md) |
-| 状态 | **verified**（2026-11-21，REV 第二轮；PKG-14 修复经独立复核，见下方复核段） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-21，REV 第二轮；PKG-14 修复经独立复核，见下方复核段） |
 
 ## 背景
 

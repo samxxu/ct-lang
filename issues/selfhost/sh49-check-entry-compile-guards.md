@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `db4cae4`（2026-11-03，`v0.19.0`） |
 | 文件 | [Driver.h.ct:240-262](../../selfhost/ct-ast/tool/driver/Driver.h.ct#L240-L262)；check 早退块在 [L304-L311](../../selfhost/ct-ast/tool/driver/Driver.h.ct#L304-L311) |
-| 状态 | 已修复（本轮，2026-11-03） |
+| 状态 | verified |
+| 处置证据 | 已修复（本轮，2026-11-03） |
 
 ## 现象
 

@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)；[language-spec §4.70](../../docs/language-spec.md#L2885-L2927)；[SH-106](../selfhost/sh106-str-view-escape-no-lint.md) |
-| 状态 | **待评估（v1.1；不进 v1.0/本次文档修正）** |
+| 状态 | deferred |
+| 处置证据 | **待评估（v1.1；不进 v1.0/本次文档修正）** |
 
 ## 背景
 

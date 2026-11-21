@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `f4c77b1`（2026-10-31，`v0.13.0`） |
 | 文件 | [README.md](../../README.md#L60)（中文）、[README.md](../../README.md#L507)（英文） |
-| 状态 | 已修复（2026-10-31 落地；2026-11-10 复核：README 中英均写明 `-I` 只对 build 生效、compile 下提示被忽略） |
+| 状态 | verified |
+| 处置证据 | 已修复（2026-10-31 落地；2026-11-10 复核：README 中英均写明 `-I` 只对 build 生效、compile 下提示被忽略） |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | **High**（对 `borrow` 是静默槽位泄漏；对 `own` 是静默内存泄漏，两侧都无告警） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [backend/mem/Memory.h.ct:299-305](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L299-L305)（`leak_return` 的 `autodrop` 分支）、对照 [:151-169](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L151-L169)（`expr_returns`：成员读取**不**算移交） |
-| 状态 | 已修（2026-11-01）：`leak_return` 的 `autodrop` 分支改用 `expr_returns`（真正移交才取消）并同时清 `owned`；门禁正例 `bw_ret.ct` |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`leak_return` 的 `autodrop` 分支改用 `expr_returns`（真正移交才取消）并同时清 `owned`；门禁正例 `bw_ret.ct` |
 
 ## 现象
 

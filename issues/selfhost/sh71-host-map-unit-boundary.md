@@ -6,7 +6,8 @@
 | 严重度 | Info（有意的语言边界，规约已载；不改编译器） |
 | 锚点 | `v0.44.1`（`13db6cad`，2026-11-15 复核） |
 | 文件 | [MapBuild.h.ct:638](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct#L638)、[Module.h.ct:412](../../selfhost/ct-ast/frontend/module/Module.h.ct#L412)、[Module.h.ct:557-559](../../selfhost/ct-ast/frontend/module/Module.h.ct#L557-L559) |
-| 状态 | **已解决**（A-1 于 `fb55985c` 落地：允许 `.m.ct` import `.h.ct`）；A-2 **拒绝**（维持原判） |
+| 状态 | verified |
+| 处置证据 | **已解决**（A-1 于 `fb55985c` 落地：允许 `.m.ct` import `.h.ct`）；A-2 **拒绝**（维持原判） |
 
 ## 现象
 

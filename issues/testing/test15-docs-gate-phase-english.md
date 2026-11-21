@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | [test/docs/check-docs.py:141-173](../../test/docs/check-docs.py#L141-L173)；gate 计数校验 [L120-138](../../test/docs/check-docs.py#L120-L138) |
-| 状态 | 已修复（本轮，2026-11-03） |
+| 状态 | verified |
+| 处置证据 | 已修复（本轮，2026-11-03） |
 
 ## 现象
 

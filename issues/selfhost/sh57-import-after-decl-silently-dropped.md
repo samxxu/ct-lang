@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | `v0.19.1`（2026-11-06） |
 | 文件 | [frontend/module/Module.h.ct:239-266](../../selfhost/ct-ast/frontend/module/Module.h.ct#L239-L266)（`scan_imports`） |
-| 状态 | 已修（2026-11-07，commit `0fd74c0`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-07，commit `0fd74c0`） |
 
 ## 现象
 

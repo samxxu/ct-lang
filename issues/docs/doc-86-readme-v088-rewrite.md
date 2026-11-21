@@ -7,7 +7,8 @@
 | 严重度 | Medium（v1.0 前建议） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1 |
-| 状态 | **实施中（D1、§0.5、D3 最小范围已落；D2 待 SH-110；tutorial-cases 待 DEV）** |
+| 状态 | open |
+| 处置证据 | **实施中（D1、§0.5、D3 最小范围已落；D2 待 SH-110；tutorial-cases 待 DEV）** |
 
 ## 进展（2026-11-21）
 

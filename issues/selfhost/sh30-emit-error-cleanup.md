@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [backend/emit/Emitter.h.ct:2595-2661](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2595-L2661)（`emit_unit`）、[:2678-2727](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2678-L2727)（`write_unit_header`）、[frontend/module/Module.h.ct:936-946](../../selfhost/ct-ast/frontend/module/Module.h.ct#L936-L946) |
-| 状态 | 已修（2026-10-31）：两个发射函数的正文拆到文件作用域静态 helper，失败路径对称 `fclose`；`.h` 失败时删除半截产物 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：两个发射函数的正文拆到文件作用域静态 helper，失败路径对称 `fclose`；`.h` 失败时删除半截产物 |
 
 ## 现象
 

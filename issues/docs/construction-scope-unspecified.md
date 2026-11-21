@@ -6,7 +6,8 @@
 | 严重度 | **Low** |
 | 锚点 | commit `dde0dda`（2026-10-21） |
 | 文件 | [docs/construction.md:5-8](../../docs/construction.md#L5-L8)、[:16-18](../../docs/construction.md#L16-L18)、[:62](../../docs/construction.md#L62) |
-| 状态 | ✅ 已修复（2026-10-21，`docs/construction.md` 补「适用范围」，字段数组条目标注 L0/L2 与 ct-ast 的分叉） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-21，`docs/construction.md` 补「适用范围」，字段数组条目标注 L0/L2 与 ct-ast 的分叉） |
 
 ## 现象
 

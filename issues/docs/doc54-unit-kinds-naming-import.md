@@ -6,7 +6,8 @@
 | 严重度 | **Medium**（教程与 spec 表面矛盾，影响用户对 `.m.ct` 的判断；命名规则归属不清） |
 | 锚点 | `v0.16.2`，commit `dab1b71`（2026-11-02） |
 | 文件 | [tutorial.md:281](../../docs/tutorial.md#L281)、[:760](../../docs/tutorial.md#L760)、[language-spec.md:489-493](../../docs/language-spec.md#L489-L493)、[:2103-2108](../../docs/language-spec.md#L2103-L2108)、[glossary.md:88](../../docs/glossary.md#L88) |
-| 状态 | 已修（2026-11-02，`v0.16.3`）：教程 §7 中英补 `.m.ct`；spec §4.10 中英加单元种类表、import 搜索顺序与命名约定归属 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-02，`v0.16.3`）：教程 §7 中英补 `.m.ct`；spec §4.10 中英加单元种类表、import 搜索顺序与命名约定归属 |
 | 来源 | `ct-mac-gui-example/docs/ct-naming-and-import-issues.md`，经本仓库逐条复核后收窄 |
 
 ## 现象

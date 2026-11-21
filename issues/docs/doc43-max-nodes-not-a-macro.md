@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [docs/language-spec.md:1419](../../docs/language-spec.md#L1419)、[:3089](../../docs/language-spec.md#L3089)、[runtime/arena/Arena.h.ct:48](../../selfhost/ct-ast/runtime/arena/Arena.h.ct#L48)、[:63](../../selfhost/ct-ast/runtime/arena/Arena.h.ct#L63)、[frontend/parse/Expr.h.ct:1604](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1604) |
-| 状态 | 已修（2026-10-31）：文档已按建议更新（见 [issues/README.md](../README.md) 的 2026-10-31 处置表） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：文档已按建议更新（见 [issues/README.md](../README.md) 的 2026-10-31 处置表） |
 
 ## 现象
 

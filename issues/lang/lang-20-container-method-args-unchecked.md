@@ -5,7 +5,8 @@
 | 模块 | selfhost（`ct check --types` 容器方法） |
 | 类型 | 静默错误 |
 | 严重度 | Medium |
-| 状态 | `open`（复测为误报，待 REV 改判） |
+| 状态 | open |
+| 处置证据 | `open`（复测为误报，待 REV 改判） |
 | 承诺出处 | [PH-69 卡](../../docs/design/phase69.md) R4 |
 
 ## 现象

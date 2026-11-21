@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [frontend/parse/Parser.h.ct:230-254](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L230-L254) |
-| 状态 | 已修（2026-10-31）：`struct_def_ahead` 回滚 `line` / `tokline` / `tokstart` / `lstart`；门禁断言 `struct lookahead line`（`check-ast.sh`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：`struct_def_ahead` 回滚 `line` / `tokline` / `tokstart` / `lstart`；门禁断言 `struct lookahead line`（`check-ast.sh`） |
 
 ## 现象
 

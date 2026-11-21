@@ -7,7 +7,8 @@
 | 严重度 | High（v1-pre 入口前置） |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [PH-84 S84e](../../docs/design/phase84.md)、[battle doc-consistency-1](../../battle/doc-consistency-1/question.md) |
-| 状态 | **待办（范围由 battle 判定；PH-84 内执行）** |
+| 状态 | open |
+| 处置证据 | **待办（范围由 battle 判定；PH-84 内执行）** |
 
 ## 现象
 

@@ -1,7 +1,7 @@
 ---
 id: CI-11
 title: "问题台账未闭合：220 个状态行中 175 行不合规，7+ 已修仍 open"
-status: open
+status: verified
 area: ci
 severity: P1
 opened: 2026-11-20
@@ -106,3 +106,35 @@ front-matter 状态的有 10 个（本批处置新增 9 个 + SH-92）。168 行
 - owner：REV/DEV
 - next：先闭合 7 个已修仍 open，再做状态词格式迁移；不批量 sed 掩盖
 - 不能关闭：175 行仍不合规
+
+## 复核（2026-11-21，REV / CI-11）
+
+**结论：verified。** 台账已按 §5.4 八词归一，机械门禁与负例同时落地：
+
+```console
+$ python3 tools/gates/issue_ledger.py .
+g6: OK (283 issues; open=46 verified=219 rejected=10 deferred=7 superseded=1)
+$ sh test/gates/issue_ledger_test.sh
+OK g6/ledger (5 negative cases + 1 positive)
+```
+
+验收逐条对照：
+
+| 验收项 | 结果 |
+| --- | --- |
+| 0 个非闭集状态 | 283 / 283 合规（`issue_ledger.py` 扫描 `issues/**/*.md`，排除 README） |
+| 0 个 `status: fixed` | 0；`fixed` 只保留在正文/`处置证据` 行 |
+| 0 个缺状态 | 0；259 条用 `| 状态 |`、24 条用 front-matter `status` |
+| 7 个“已修仍 open”探针 | LANG-3/4/9/11/16/17、SH-76 全部独立复跑通过，转 `verified` |
+| 6 个 `fixed`-in-status | SH-68 证据不足留 `open`；SH-69/70/72/74/75 转 `verified` |
+| G6 负例 | 5 条坏台账全部红，正例绿 |
+| README 索引/统计 | 新增「CI-11 台账归一」节：统计、映射规则、6 条、7 探针、SH-103/CI-15 |
+
+迁移规则：旧状态单元格里的日期/提交/验证说明不丢，迁到同表的 `| 处置证据 |` 行；状态行只留
+八词之一。状态与证据的对应见 `issues/README.md` 的同名节。
+
+## 处理（REV，2026-11-21）
+
+- 状态：`verified`（P1）
+- owner：REV
+- 证据：`tools/gates/issue_ledger.py`、`test/gates/issue_ledger/`、`issues/README.md`

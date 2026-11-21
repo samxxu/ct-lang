@@ -5,7 +5,8 @@
 | 模块 | selfhost（compile / build 驱动 + 解析器诊断） |
 | 严重度 | **High**（单文件入口在源码树外无法声明容器字段；裸泛型还会静默落坏 C） |
 | 优先级 | **P1** —— 挡住「随附二进制 + 普通项目目录」下的容器使用；有绕法（设 `CT_STD_DIR`） |
-| 状态 | **verified**（2026-11-20，REV） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV） |
 | 锚点 | `v0.53.1`（`3337ac7a`）；实测 `ct v0.53.0` / `ctc v0.53.0`（同一二进制，`ctc -> ct`） |
 | 类型 | **实现缺陷**（不是语言缺口，也不是新特性） |
 
@@ -123,3 +124,17 @@ $ echo $?
 ```
 
 修复提交 `4280ed7e` 为 HEAD 祖先；探针覆盖类型位置的未知 `Name<` 与裸内建泛型诊断。
+
+## 复核（CI-11 复验，2026-11-21，REV）
+
+**结论：verified（独立复跑）。** 在干净归档 HEAD `600e6595` 上重建 ct-ast v0.88.0，
+重跑本条的回归探针；命令与原始输出如下（退出码 0）。
+
+```console
+$ sh test/ast/p72_stdmissing.sh /tmp/ct-head/b/ct-ast
+OK p72/stdmissing (builtin layer diagnostics)
+$ echo $?
+0
+```
+
+状态词与证据对齐：正文有修复记录，回归探针存在并本轮通过，故维持 `verified`。

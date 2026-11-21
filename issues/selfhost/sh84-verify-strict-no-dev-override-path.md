@@ -5,7 +5,8 @@
 | 模块 | selfhost（`ct verify --strict` / 包 lock / dev override） |
 | 类型 | 能力缺口（不是回归；现有行为符合已写下的判据） |
 | 严重度 | Medium |
-| 状态 | rejected（已取消，不受理；2026-11-16 用户裁定） |
+| 状态 | rejected |
+| 处置证据 | rejected（已取消，不受理；2026-11-16 用户裁定） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [需求 SP-016](../../docs/planning/ct-pkg-shared-store-requirements.md)、[提案 §10 S3](../../docs/proposals/ct-pkg-shared-store.md) |
 

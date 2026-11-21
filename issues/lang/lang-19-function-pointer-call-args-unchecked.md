@@ -5,7 +5,8 @@
 | 模块 | selfhost（`ct check --types` 调用判定） |
 | 类型 | 静默错误（类型/arity 均不报） |
 | 严重度 | Medium |
-| 状态 | **verified**（2026-11-20，REV；PH-69-R2） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV；PH-69-R2） |
 | 承诺出处 | [PH-69 卡](../../docs/design/phase69.md) R2 |
 
 ## 现象

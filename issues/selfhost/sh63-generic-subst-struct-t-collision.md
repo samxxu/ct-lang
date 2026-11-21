@@ -5,7 +5,8 @@
 | 严重度 | **P2（Medium）**（触发条件罕见，但结果同样是退出 0 的坏产物） |
 | 锚点 | `v0.26.0` / `ac1c7cd`（HEAD = `main`） |
 | 文件 | [Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L343-L344)、[Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L1253-L1290) |
-| 状态 | **verified**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`；证据见「评审复核」） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-09 评审复核，`v0.26.1` / `d29de8f`；证据见「评审复核」） |
 
 ## 现象
 

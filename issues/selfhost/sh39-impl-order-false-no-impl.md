@@ -6,7 +6,8 @@
 | 严重度 | Low（有既有约定兜底，但消息误导） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [frontend/parse/Stmt.h.ct:365-372](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L365-L372)；对照 README「Definitions must precede use」 |
-| 状态 | 已修（2026-11-01）：`mark_borrow` 的失败消息改为 `struct '<S>' uses trait 'Handback' but this unit has no impl`（impl 在 borrow 之后也不再误报）；门禁 `bw_neg no_impl` |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`mark_borrow` 的失败消息改为 `struct '<S>' uses trait 'Handback' but this unit has no impl`（impl 在 borrow 之后也不再误报）；门禁 `bw_neg no_impl` |
 
 ## 现象
 

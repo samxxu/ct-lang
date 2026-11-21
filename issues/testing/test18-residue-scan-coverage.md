@@ -5,7 +5,8 @@
 | 严重度 | **Medium** |
 | 锚点 | `v0.26.3` |
 | 文件 | [check-ast.sh](../../selfhost/check-ast.sh) |
-| 状态 | **verified**（2026-11-09 v0.26.4 补丁处置并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §3 与 §1 的 P1/P2） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-09 v0.26.4 补丁处置并经独立评审复核；依据 [review-phase26-v0.26.4.md](../../docs/history/reports/review-phase26-v0.26.4.md) §3 与 §1 的 P1/P2） |
 
 ## 现状（已覆盖）
 

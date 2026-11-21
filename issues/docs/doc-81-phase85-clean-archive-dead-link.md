@@ -7,7 +7,7 @@
 | 严重度 | High（E85-7 与 v0.85.0 收口证据不成立） |
 | 锚点 | `e0b0c561`（v0.85.0，2026-11-21） |
 | 文件 | `docs/README.md:21`；`docs/guide-for-c-programmers.md`（未入库）；`issues/selfhost/sh106-str-view-escape-no-lint.md`（未入库） |
-| 状态 | **open** |
+| 状态 | open |
 | 层级 | **Tier 2（`v1.0` 发布）**；须给“修/不修+理由”，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 现象

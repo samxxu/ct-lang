@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | `v0.19.1`（2026-11-06） |
 | 文件 | [frontend/parse/Expr.h.ct:1562-1586](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1562-L1586) |
-| 状态 | 已修（2026-11-07，commit `aae6c33` + `686211a`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-07，commit `aae6c33` + `686211a`） |
 
 ## 现象
 

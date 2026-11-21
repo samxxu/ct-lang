@@ -8,7 +8,8 @@
 | 目标版本 | v1.1（Wave 2 候选；由 [v1 路线](../planning/v1-release-plan.md) 排期确认） |
 | 锚点 | v0.84.1（2026-11-21） |
 | 依据 | 用户 2026-11-21 裁决；[D-014](../decisions/D-014.md) 第 1 条；[契约 v1](../planning/ct-pkg-get-contract.md)；[对齐清单](../planning/ct-pkg-index-alignment.md) |
-| 状态 | **提案（v1.1；冻结期只登记，不实现）** |
+| 状态 | deferred |
+| 处置证据 | **提案（v1.1；冻结期只登记，不实现）** |
 
 ## 背景
 

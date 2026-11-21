@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `c27da3d`（2026-11-06，`v0.19.1`+1） |
 | 站点 | [Parser.h.ct:811-815](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L811-L815)（守卫）、[Driver.h.ct:92](../../selfhost/ct-ast/tool/driver/Driver.h.ct#L92)（`check_mode`） |
-| 状态 | 已修（2026-11-06，commit `83f3776`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-06，commit `83f3776`） |
 
 ## 现象
 

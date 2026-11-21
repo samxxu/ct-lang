@@ -6,7 +6,8 @@
 | 严重度 | **Low** |
 | 锚点 | commit `ec97f99`（2026-10-17） |
 | 位置 | [driver.ct](../../selfhost/src/driver.ct#L390-L445)（25 处）、[core.ct](../../selfhost/src/core.ct)（12 处） |
-| 状态 | ✅ 已决策（2026-10-18，选 2：保持 `ctc:`）；2026-10-19 复核修复 ct-ast 的回退（`ct-ast:` → `ctc:`） |
+| 状态 | verified |
+| 处置证据 | ✅ 已决策（2026-10-18，选 2：保持 `ctc:`）；2026-10-19 复核修复 ct-ast 的回退（`ct-ast:` → `ctc:`） |
 
 ## 现象
 

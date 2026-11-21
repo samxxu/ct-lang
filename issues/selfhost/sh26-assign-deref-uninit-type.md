@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [frontend/parse/Stmt.h.ct:1119-1141](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1119-L1141) |
-| 状态 | 已修（2026-10-31）：`Stmt.h.ct` 的 `=` 分支初始化 `tt`，`iface_ref_type` 增空串短路 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：`Stmt.h.ct` 的 `=` 分支初始化 `tt`，`iface_ref_type` 增空串短路 |
 
 ## 现象
 

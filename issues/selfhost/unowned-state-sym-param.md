@@ -6,7 +6,8 @@
 | 严重度 | **Info**（设计观察，非本轮要修项） |
 | 锚点 | commit `8aac450`（2026-10-17） |
 | 文件 | `selfhost/src/core.ct`、`selfhost/src/driver.ct` |
-| 状态 | 已修复（`54c3713` + `fefbec6` / `5b9faad` / `71fed69` / `65d0696` / `fe6c29f`；static 52 → 11，后续 Phase 7/8 各加一个单例、现为 13，剩余均属设施层/单例，见下方「进展」） |
+| 状态 | verified |
+| 处置证据 | 已修复（`54c3713` + `fefbec6` / `5b9faad` / `71fed69` / `65d0696` / `fe6c29f`；static 52 → 11，后续 Phase 7/8 各加一个单例、现为 13，剩余均属设施层/单例，见下方「进展」） |
 
 ## 现象
 

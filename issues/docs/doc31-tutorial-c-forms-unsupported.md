@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `524ba99`（2026-10-31） |
 | 文件 | [docs/tutorial.md:468-470](../../docs/tutorial.md#L468-L470)（中文）、[docs/tutorial.md:944-947](../../docs/tutorial.md#L944-L947)（英文） |
-| 状态 | 已修（2026-10-31）：文档已按建议更新（见 [issues/README.md](../README.md) 的 2026-10-31 处置表） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-31）：文档已按建议更新（见 [issues/README.md](../README.md) 的 2026-10-31 处置表） |
 
 ## 现象
 

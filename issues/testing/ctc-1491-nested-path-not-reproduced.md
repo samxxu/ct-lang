@@ -6,7 +6,8 @@
 | 严重度 | **Low** |
 | 锚点 | commit `8aac450`（2026-10-17） |
 | 站点 | `ctc.c:1463` / `ctc.c:1491`（nested field path too long） |
-| 状态 | 已修复（commit `b6b3dc4`，改记为「探针未复现」） |
+| 状态 | verified |
+| 处置证据 | 已修复（commit `b6b3dc4`，改记为「探针未复现」） |
 
 ## 现象
 

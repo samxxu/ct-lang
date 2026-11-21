@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `4b9946b`（2026-11-03，`v0.19.0` + 1 commit） |
 | 文件 | [README.md:39](../../README.md#L39)（英文 [L118](../../README.md#L118)）；[docs/tutorial.md:508](../../docs/tutorial.md#L508)、[L1066](../../docs/tutorial.md#L1066) |
-| 状态 | 文档已修；代码侧建议不采纳（本轮，2026-11-03） |
+| 状态 | rejected |
+| 处置证据 | 文档已修；代码侧建议不采纳（本轮，2026-11-03） |
 
 ## 现象
 

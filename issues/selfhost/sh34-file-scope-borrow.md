@@ -6,7 +6,8 @@
 | 严重度 | **High**（接受非法输入，退出码 0，产物不可编译） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [frontend/parse/Stmt.h.ct:826-843](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L826-L843)（`borrow` 只在 `parse_stmt` 里识别）、对照 [frontend/parse/Parser.h.ct:556-558](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L556-L558)（`own` 的文件作用域拒绝） |
-| 状态 | 已修（2026-11-01）：`Parser.h.ct` 的顶层声明入口拒绝 `borrow`（`'borrow' is only allowed inside a function body`）；门禁 `bw_neg borrow_file_scope` |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`Parser.h.ct` 的顶层声明入口拒绝 `borrow`（`'borrow' is only allowed inside a function body`）；门禁 `bw_neg borrow_file_scope` |
 
 ## 现象
 

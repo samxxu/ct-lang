@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`read_manifest` 只认固定键）、[package-guide.md §8.4](../../docs/package-guide.md)（现状说明） |
-| 状态 | **已修**（v0.58.3：`read_manifest` 对未知键发 `has unknown key` 告警；`test/pkg/run.sh` 135/0） |
+| 状态 | verified |
+| 处置证据 | **已修**（v0.58.3：`read_manifest` 对未知键发 `has unknown key` 告警；`test/pkg/run.sh` 135/0） |
 
 ## 现象
 

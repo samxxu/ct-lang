@@ -7,7 +7,8 @@
 | 严重度 | Low–Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | Kimi 2026-11-21 说明；[language-spec §4.9](../../docs/language-spec.md#L455)、[§4.40](../../docs/language-spec.md#L1646)、[§4.71](../../docs/language-spec.md#L2950) |
-| 状态 | **待评估（v1.1；依赖 DOC-87 Stage 1 的 `lib/core`）** |
+| 状态 | deferred |
+| 处置证据 | **待评估（v1.1；依赖 DOC-87 Stage 1 的 `lib/core`）** |
 
 ## 背景
 

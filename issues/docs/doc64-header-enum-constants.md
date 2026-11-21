@@ -6,7 +6,8 @@
 | 严重度 | Medium |
 | 锚点 | commit `c27da3d`（`v0.19.1` + 1 commit，2026-11-03）；本机 `ct v0.19.1` 复现 |
 | 文件 | [docs/language-spec.md:1191](../../docs/language-spec.md#L1191)（只写「不展开 `#include`」）；[L1193-1200](../../docs/language-spec.md#L1193-L1200)（大写宏的放行规则） |
-| 状态 | 已修（2026-11-07，commit `a1c523a`） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-07，commit `a1c523a`） |
 
 ## 现象
 

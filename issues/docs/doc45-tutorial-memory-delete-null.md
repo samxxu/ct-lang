@@ -5,7 +5,8 @@
 | 严重度 | **High**（入门文档对最常用的两个释放语义给出错误结论，且同页自相矛盾） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [tutorial.md:303](../../docs/tutorial.md#L303)、[:326-329](../../docs/tutorial.md#L326-L329)、[:775](../../docs/tutorial.md#L775)、[:799-803](../../docs/tutorial.md#L799-L803) |
-| 状态 | 已修（2026-11-01）：`docs/tutorial.md` §8 中英的 `delete` 置空与 `own` 的 `}` / `return` 位置规则已改正 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`docs/tutorial.md` §8 中英的 `delete` 置空与 `own` 的 `}` / `return` 位置规则已改正 |
 
 ## 现象
 

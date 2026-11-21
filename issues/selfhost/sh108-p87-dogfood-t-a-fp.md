@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.87.0（2026-11-21）；A dogfood `--check-level=warn` |
 | 文件 | [p87_dogfood.md](../../docs/design/p87_dogfood.md)、[PH-87 N-4](../../docs/reviews/2026-11-21-phase87-rev-verdict.md#L273) |
-| 状态 | **待办（DEV；A 机制误报收敛）** |
+| 状态 | open |
+| 处置证据 | **待办（DEV；A 机制误报收敛）** |
 
 ## 现象
 

@@ -5,7 +5,8 @@
 | 模块 | test（PH-67-R4） |
 | 类型 | 测试缺口：只验了寄存器面 |
 | 严重度 | Medium |
-| 状态 | `open`（hardware-gated，等真板） |
+| 状态 | open |
+| 处置证据 | `open`（hardware-gated，等真板） |
 | 承诺出处 | [PH-67 卡](../../docs/design/phase67.md) R4 / E67-4 |
 
 ## 现状

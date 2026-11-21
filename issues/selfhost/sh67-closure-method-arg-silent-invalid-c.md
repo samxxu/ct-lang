@@ -6,7 +6,8 @@
 | 严重度 | **High**（`ct` 退出 0 并写出 `cc` 必拒的 C，违反「生成物必须可编译」的产物契约） |
 | 锚点 | `v0.30.0`（HEAD `bd91bfe`，2026-11-11；`ct-ast` 由 HEAD 重建，只读复现） |
 | 文件 | [Expr.h.ct:3745-3764](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3745-L3764)（方法调用的 arity / 实参类型后处理，未计闭包）；[Emitter.h.ct:3372-3378](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3372-L3378)（闭包绑定故意不声明 C 变量）；[Emitter.h.ct:3997-4002](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3997-L4002)（`N_MCALL` 实参逐个 `emit_expr`）；[Emitter.h.ct:4008-4023](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4008-L4023)（只有自由调用 `N_CALL` 才展开 trampoline）；[language-spec.md:2016](../../docs/language-spec.md#L2016)（§4.49「绝不发射坏 C」）；[AGENTS.md:59](../../AGENTS.md#L59)（生成的 `.c` 必须自包含、可单独编译） |
-| 状态 | **verified**（2026-11-20，REV） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-20，REV） |
 
 ## 现象
 

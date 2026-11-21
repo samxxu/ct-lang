@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.84.1（2026-11-21） |
 | 依据 | [对齐清单 A2](../planning/ct-pkg-index-alignment.md)、[契约 §4.4](../planning/ct-pkg-get-contract.md#44-ct-index-verify只读ct-lang-负责)、[D-014](../decisions/D-014.md) |
-| 状态 | **待办（DEV；冻结期 bugfix 切片）** |
+| 状态 | open |
+| 处置证据 | **待办（DEV；冻结期 bugfix 切片）** |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `4ef8b68`（2026-10-21） |
 | 文件 | [README.md:115](../../README.md#L115)（英文 [:513](../../README.md#L513)） |
-| 状态 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
 
 ## 现象
 

@@ -5,7 +5,8 @@
 | 严重度 | Medium（该文档正是写给用户照做的操作指南，错误结论会直接导致错误写法） |
 | 锚点 | commit `8b047f5`（2026-11-01）+ 工作树在途改动 |
 | 文件 | [memory-guide.md:63-76](../../docs/memory-guide.md#L63-L76)、[:107](../../docs/memory-guide.md#L107)、[:457](../../docs/memory-guide.md#L457)、[:646-652](../../docs/memory-guide.md#L646-L652)、[:692](../../docs/memory-guide.md#L692)、[:1048](../../docs/memory-guide.md#L1048) |
-| 状态 | 已修（2026-11-01）：`docs/memory-guide.md` 中英 10 处基于旧 AutoDrop 行为的表述已改正，并标注 v0.16.0 现状 |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-01）：`docs/memory-guide.md` 中英 10 处基于旧 AutoDrop 行为的表述已改正，并标注 v0.16.0 现状 |
 
 ## 现象
 

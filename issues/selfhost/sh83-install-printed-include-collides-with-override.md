@@ -5,7 +5,8 @@
 | 模块 | selfhost（`ct install` 输出指引 / 包 lock / import 根去重） |
 | 类型 | 能力缺口（发布产物给出的构建指引不可直接使用） |
 | 严重度 | Medium |
-| 状态 | 受理（P1，v0.61.x patch） |
+| 状态 | open |
+| 处置证据 | 受理（P1，v0.61.x patch） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [需求 SP-008](../../docs/planning/ct-pkg-shared-store-requirements.md)、[需求 SP-015](../../docs/planning/ct-pkg-shared-store-requirements.md) |
 

@@ -6,7 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `224c08f`（Batch 2 收尾，2026-10-22） |
 | 文件 | [selfhost/ct-ast/frontend/parse/Parser.h.ct](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L869-L875)（`parse_trait` 的参数循环） |
-| 状态 | 已修（2026-10-22，`parse_trait` 前瞻一个 token） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-10-22，`parse_trait` 前瞻一个 token） |
 
 ## 现象
 

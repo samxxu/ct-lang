@@ -6,7 +6,8 @@
 | 严重度 | **High**（静默 UB：exit 0，指针指向已返回栈帧；实测解引用读到错误值） |
 | 锚点 | `v0.44.1`（`13db6cad`，2026-11-15 复核） |
 | 文件 | [Parser.h.ct:2939-2944](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L2939-L2944)、[TypeCheck.h.ct:266-290](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L266-L290)、[TypeCheck.h.ct:610-612](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L610-L612)、[Emitter.h.ct:4800-4808](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4800-L4808) |
-| 状态 | **fixed**（`d6e82e25`，2026-11-15；回归 `test/ast/237_iface_ret_self`）。同族残留「返回非 `self` 的局部」已由 [SH-75](sh75-local-iface-return-dangling.md) 修复（`b5797cbf`） |
+| 状态 | verified |
+| 处置证据 | **fixed**（`d6e82e25`，2026-11-15；回归 `test/ast/237_iface_ret_self`）。同族残留「返回非 `self` 的局部」已由 [SH-75](sh75-local-iface-return-dangling.md) 修复（`b5797cbf`） |
 
 ## 现象
 

@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `553d300`（2026-11-02，工作树 `v0.18.0`） |
 | 文件 | [.github/workflows/packages.yml](../../.github/workflows/packages.yml#L1-L20) |
-| 状态 | 已修（2026-11-02，`v0.18.0`）：push / PR 过滤补上 `selfhost/ct-ast/tool/pkg/**` 与 `test/pkg/**`（采纳方案 1；外部仓库仍由 nightly 覆盖） |
+| 状态 | verified |
+| 处置证据 | 已修（2026-11-02，`v0.18.0`）：push / PR 过滤补上 `selfhost/ct-ast/tool/pkg/**` 与 `test/pkg/**`（采纳方案 1；外部仓库仍由 nightly 覆盖） |
 
 ## 现象
 

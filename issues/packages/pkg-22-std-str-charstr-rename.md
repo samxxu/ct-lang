@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | `std 0.19.0`（2026-11-21；同日所有者更新目标名） |
 | 依据 | [language-spec §5.1](../../docs/language-spec.md#L1978-L1989)；[DOC-85](../../issues/docs/doc-85-idiom-priority-card.md) |
-| 状态 | **待办（ct-pkg/std 包；本仓只同步消费文档）** |
+| 状态 | open |
+| 处置证据 | **待办（ct-pkg/std 包；本仓只同步消费文档）** |
 
 ## 现象
 

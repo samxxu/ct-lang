@@ -6,7 +6,8 @@
 | 严重度 | **Medium** |
 | 锚点 | commit `4ef8b68`（2026-10-21）；`main.ct` 以工作树当前内容为准 |
 | 文件 | [Parser.h.ct:33-42](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L33-L42)、[Emitter.h.ct](../../selfhost/ct-ast/backend/emit/Emitter.h.ct)、[Memory.h.ct:21](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L21)、[pkg.ct:20](../../selfhost/ct-ast/tool/pkg/pkg.ct#L20) |
-| 状态 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
 
 ## 现象
 

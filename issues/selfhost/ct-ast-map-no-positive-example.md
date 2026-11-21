@@ -5,7 +5,8 @@
 | 模块 | selfhost（ct-ast 测试覆盖） |
 | 严重度 | **Medium** |
 | 锚点 | commit `dde0dda`（2026-10-21） |
-| 状态 | ✅ 已修复（2026-10-21，方案 A）：新增 `examples/08_map_binding/`（`map` + 实例级 vtable 派发，两个实例）；`test/run.sh` 支持首行 `//@ct-requires: ct-ast` 标记（L0 驱动器标 `skip`），实际由 `check-ast.sh` 的语料等价层编译比对；tutorial §9 已指向该例子。`test/cases` 仍不收录（同受 L0 驱动限制，且与 examples 重复） |
+| 状态 | verified |
+| 处置证据 | ✅ 已修复（2026-10-21，方案 A）：新增 `examples/08_map_binding/`（`map` + 实例级 vtable 派发，两个实例）；`test/run.sh` 支持首行 `//@ct-requires: ct-ast` 标记（L0 驱动器标 `skip`），实际由 `check-ast.sh` 的语料等价层编译比对；tutorial §9 已指向该例子。`test/cases` 仍不收录（同受 L0 驱动限制，且与 examples 重复） |
 
 ## 现象
 

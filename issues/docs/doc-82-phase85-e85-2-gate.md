@@ -7,7 +7,7 @@
 | 严重度 | High（收口真实性） |
 | 锚点 | `e0b0c561`（v0.85.0，2026-11-21） |
 | 文件 | `docs/design/phase85.md:39-41`、`:88`、`:148`、`:231`；`AGENTS.md:508`；`docs/history/phase-log.md:187` |
-| 状态 | **open** |
+| 状态 | open |
 | 层级 | **Tier 2（`v1.0` 发布）**；须给“修/不修+理由”，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 现象

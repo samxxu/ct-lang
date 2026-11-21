@@ -6,7 +6,8 @@
 | 严重度 | Low |
 | 锚点 | commit `db4cae4`（2026-11-03，`v0.19.0`） |
 | 文件 | [check-semantics.sh:76-81](../../selfhost/check-semantics.sh#L76-L81)、头部声明 [L8-L14](../../selfhost/check-semantics.sh#L8-L14)、compile 探针 [L171-L179](../../selfhost/check-semantics.sh#L171-L179) |
-| 状态 | 已修复（本轮，2026-11-03） |
+| 状态 | verified |
+| 处置证据 | 已修复（本轮，2026-11-03） |
 
 ## 现象
 

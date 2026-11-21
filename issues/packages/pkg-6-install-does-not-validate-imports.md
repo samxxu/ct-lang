@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`install()` 只校验摘要与 dep 覆盖） |
-| 状态 | **已修**（v0.58.2：install 按 lock 的 `-I` 试解析项目 import，解析不到硬错；`test/pkg/run.sh` 134/0） |
+| 状态 | verified |
+| 处置证据 | **已修**（v0.58.2：install 按 lock 的 `-I` 试解析项目 import，解析不到硬错；`test/pkg/run.sh` 134/0） |
 
 ## 现象
 

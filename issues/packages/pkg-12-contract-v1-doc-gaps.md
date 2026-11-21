@@ -7,7 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.79.0（2026-11-20） |
 | 文件 | [ct-pkg-get-contract.md](../../docs/planning/ct-pkg-get-contract.md) §6.1、[D-014](../../docs/decisions/D-014.md) |
-| 状态 | **待办（REQ）** |
+| 状态 | open |
+| 处置证据 | **待办（REQ）** |
 
 ## 现象
 
