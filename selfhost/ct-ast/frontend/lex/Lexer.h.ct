@@ -46,7 +46,7 @@ pub trait LexOps {
     /* Compare the token with a NUL-terminated C string by length, never by
        `strcmp` on the view (the view is not terminated). */
     int  tok_is(const char *s);
-    /* The same, for a prefix of the given length. */
+    /* The same, as a prefix of the token. */
     int  tok_prefix(const char *s);
     /* Copy the view into a caller-owned C buffer; 1 when it did not fit. */
     int  tok_copy(char *out, int cap);
