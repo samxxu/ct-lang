@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 优先级 | **P2** —— 不挡功能，但三处消费方都在靠字符串匹配，属「门禁可能静默变绿」的系统性风险 |
 | 状态 | deferred |
-| 处置证据 | **deferred**（2026-11-22，REV/REQ：警告通道 JSON 已实现；解析错误 JSON（7b）仍回退纯文本；字段级 `line`/`col` 已随 PH-59/PH-74 落地（`Symbols.h.ct:288-289`）。触发：下一次 Driver/Diag 批次或 v1.1 前；负责人 DEV；P2） |
+| 处置证据 | **deferred → 已排期 v1.1**（2026-11-22：警告/type 通道 JSON 已实现；解析错误 JSON（7b）仍回退纯文本；字段级 `line`/`col` 已落地。**v1.1 补 parse JSON**；稳定诊断码 registry 归 v1.2 [LANG-25](lang-25-diagnostic-code-registry.md)；负责人 DEV） |
 | 锚点 | `v0.53.1`（`2fd55841`） |
 
 ## 现状
