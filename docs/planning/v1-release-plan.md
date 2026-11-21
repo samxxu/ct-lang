@@ -201,6 +201,8 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
 | v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | 机制已在 PH-85；证据达标则翻转默认，未达标回退“可用不默认” |
 | v1.1 删除 `box` 别名 | `v1-PH-1` | **v1.1.0** | `box<T>` 硬错并提示 `Box<T>`；独立提交、可回滚（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
+| v1.1 C Shim Contract | `v1-PH-1` | v1.1 train | 正式契约：命名/头文件/所有权/错误码/ISR 上下文/ABI/测试；不新增语言关键字（[DOC-91](../../issues/docs/doc-91-c-shim-contract.md)） |
+| v1.1 C 互操作语义矩阵 | `v1-PH-1` | v1.1 train | 并入 guide 附录，逐项给 CT 行为、边界与权威节；不新建平行规范（[DOC-92](../../issues/docs/doc-92-c-interop-semantics-matrix.md)） |
 
 > 该编号依赖 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md)
 > 被主规范受理。未受理前，v1.0/v1.1 仍按旧规则登记 `major-release`/`release-train` deviation；
