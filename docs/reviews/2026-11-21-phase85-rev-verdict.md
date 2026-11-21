@@ -593,3 +593,111 @@ ok  ModuleBoundary: ct build with ./deep/../x.ct path, stderr + emitted C identi
 - 本轮未改实现、未 push、未 tag；只修改本复核文件。
 
 **REV: 不通过（F2 残留）**
+
+---
+
+## 第三次复核（2026-11-21，F2 残留修复后，`ae414ce8` / `80ed3744`）
+
+> 复核席位：REV（`rev-ph85c`） · 2026-11-21
+> 对象：`ae414ce8`（HEAD，v0.85.0，未 push/tag）；源码与 `80ed3744` 相同，后者只多
+> 卡 §7.4 的归档数字。M0 = `33f06d17`，S85d = `602d3a25`。
+> 方法：`git archive 33f06d17`、`git archive 80ed3744` 分别解到 `.temp/rev/`，用与
+> check-ast 构建段相同的 `build-ct-ast.sh` 独立自举 L0→L1→L2→ct-ast；四探针只用
+> 归档产物；check-all 在 `80ed3744` 干净归档 + 私有 `TMPDIR` 上跑。未改实现、
+> 未 push、未 tag。
+
+### T1 F2：M0 独立构建、纯搬移、8 行归位（通过）
+
+`git archive 33f06d17` 全链构建 rc=0，产物 `ct-ast v0.84.1`（M0 在版本 bump 之前，
+故版本号不是 0.85.0）；M0 自己的 `p85_m0` 4/4，`--help` 不含 `--check-level`，
+探针数字与提交正文的 827/838/0 一致：
+
+```console
+$ sh build-ct-ast.sh <33f06d17 归档> <work>
+built .../ct-ast                                      rc=0
+$ .temp/rev/m0-build/ct-ast build --help | grep -c check-level
+0
+$ bash .temp/rev/m0/test/ast/p85_m0.sh "$(pwd)/.temp/rev/m0-build/ct-ast"
+p85m0: 4 passed, 0 failed                             rc=0
+$ (cd .temp/rev/m0 && python3 tools/p85_inventory.py --root . m0)
+p85_m0: body hashes preserved (827 bodies, 838 functions, 6 moved units,
+        0 declared S85d edits), 26 products, 0 cycles  rc=0
+$ git show bfad7c37:test/probes/p85_m0_s85d_edits.tsv | wc -l
+0
+```
+
+M0 提交正文写“827 个全部仍在，函数总数 838，0 个 S85d 改动”，与上述探针逐项一致；
+M0 测试提交的允许清单为空文件（0 行）。M0 的独立构建、纯搬移与提交正文三者互洽。
+
+8 行 S85d 代码不在 M0、只在 `602d3a25`：
+
+```console
+$ git diff 33f06d17^ 33f06d17 -- selfhost/ct-ast/frontend/module/Module.h.ct \
+>   | grep -E '^\+.*(check-level|ct_diag_nsem\(\) \{)' | wc -l
+0
+$ git show 602d3a25:selfhost/ct-ast/frontend/module/Module.h.ct \
+>   | grep -nF '[--check-level=off|warn|error]'
+1676:                       "                 [--check-level=off|warn|error]\n"
+$ git show 602d3a25:selfhost/ct-ast/frontend/module/Module.h.ct \
+>   | grep -nF 'if (tool::diag::ct_diag_nsem()) {'
+2060:            if (tool::diag::ct_diag_nsem()) {
+```
+
+辅助核对：修改前的 M0 对象 `0ef7c959` 与新 M0 `33f06d17` 的 diff 正好是 8 行删除，
+即 help 文本 1 行 + `nsem` 守卫 7 行；主证据仍是上面 M0/S85d 两棵树的逐行结果。
+
+HEAD（`80ed3744`）的 `p85_m0` 为 827 bodies / 842 functions / 11 S85d edits /
+26 products / 0 cycles，探针 4/4；与卡 §7.7 和
+[SH-107](../../issues/selfhost/sh107-m0-commit-not-buildable.md) 的数字一致。
+
+### T2 回归（通过）
+
+四探针（`80ed3744` 归档产物）：
+
+```console
+$ bash test/ast/p85_inventory.sh            → p85inventory: 9 passed, 0 failed
+$ bash test/ast/p85_spike.sh $CT            → p85spike: 14 passed, 0 failed
+$ bash test/ast/p85_m0.sh $CT               → p85m0: 4 passed, 0 failed
+$ bash test/ast/p85_a_wire.sh $CT           → p85a: 9 passed, 0 failed
+```
+
+`git archive 80ed3744` + 私有 `TMPDIR` 的 check-all / sanitizer：
+
+```console
+$ TMPDIR=... bash selfhost/check-all.sh
+== summary: 1561 passed, 0 failed, 5 skipped ==
+check-warnings: 500 ok, 0 failed
+check-semantics: OK (23 assertions)
+check-docs: OK (2331 relative links in 379 files, v0.85.0, 11 hard gates,
+             12 phase status, 5 适用版本 header(s), 2 superseded link(s), 11 signoff(s))
+check-all: OK (11 hard gates green)                           rc=0
+$ TMPDIR=... bash selfhost/check-sanitizers.sh
+check-sanitizers: OK (586 checks, no sanitizer report)        rc=0
+$ bash tools/check.sh g0
+g0: OK (block 1.17.0, session-map present)
+$ bash tools/check.sh g8
+g8: OK (PN-2 version coherence; 9 legacy offsets)
+```
+
+HEAD `ae414ce8` 干净归档的 `check-docs` 同为 OK（2331/379）。版本五处：
+
+```console
+selfhost/l0/ctc.c                CTC_VERSION "0.85.0"
+selfhost/l1/ctc.ct               CTC_VERSION "0.85.0"
+selfhost/l2/core.ct              CTC_VERSION "0.85.0"
+selfhost/l2/driver.ct            CTC_VERSION "0.85.0"
+selfhost/ct-ast/main.ct          CTC_VERSION "0.85.0"
+```
+
+### T3 结论
+
+F2 残留已消：M0 提交独立构建、纯搬移（827 body 全保留、838 函数、0 S85d 改动）、
+自己的探针 4/4、`--help` 不列出未实现的 `--check-level`；8 行 S85d 代码只在
+`602d3a25`；HEAD 的 `p85_m0` 为 827/842/11。回归全绿，[SH-107] 的验收条件满足。
+
+非阻断观察：`Parser.h.ct:21/40`、`TypeCheck.h.ct:16/25`、`Driver.h.ct:23/35` 各有
+两份相同的 `import`；该重复在旧 HEAD `fdec679a` 已存在（旧 M0 已带一份，旧 S85d
+又添一份），不是本轮修复新增，故不列入 F2 判据；建议后续清理 S85d 中的三行重复
+import，不阻塞 v0.85.0 收口。
+
+**REV: 通过**
