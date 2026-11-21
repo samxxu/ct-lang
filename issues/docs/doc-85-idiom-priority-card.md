@@ -20,7 +20,7 @@
 | `"42".to_int()` | 需 `import std::str::CStrOps;`（0.19.0 及以前叫 `std::str::String`，旧名一个 MINOR 回退） | 补 import 前提；内置层不自动带 |
 | “借用类型不能存（字段/容器/全局 = 硬错）” | `Vec<Str>` / `Option<Str>` / ADT 负载可编译；全局 `Str g = "x"` 也可编译 | struct 字段 / `Map` 键硬错；全局/容器/ADT 是借用视图风险；常量表安全，非 immortal 视图 lint 另立 [LANG-22](../lang/lang-22-nonimmortal-view-store-lint.md) |
 | “返回局部视图 = 硬错” | `Str` 逃逸当前无 lint（SH-106）；`T[]` 是 warning | 改为“返回局部 `Str` 视图当前无 lint；返回局部 `T[]` 是 `slice escape` warning；两者归契约 + ASan” |
-| “owning 自动释放” | 字段/全局/ADT payload 无自动 Drop；环泄漏 | 补边界 |
+| “owning 自动释放” | 局部/参数自动；`String`/`box` 字段在宿主 `use Drop` 且无显式 impl 时有字段胶水；`Vec`/`Map` 字段无胶水；全局/ADT payload 显式；环泄漏 | 按类型 + 位置分层（下方） |
 | “泄漏 = 告警（strict 包内 error）” | 实际是 `ct.pkg` 的 `leaks = warn\|error`，与 `c-boundary=strict` 无关 | 改为“`leaks=error` 可让 build 失败” |
 | `foreach (v) { i, item }` | `i` / `item` 是**块内隐式绑定**，不是头列表；`{ i, item; }` 只是逗号表达式 | 正确写法 `foreach (v) { … i … item … }`；v0.84.1 数组与 Vec/Map 都绑定只读 `i` |
 | 附录 briefing | 重复上述错误 | 同步修 |
@@ -56,6 +56,18 @@
   永远安全，不禁止；
 - **非 immortal 视图**（如 `v.push(local_string.as_str())`）→ 规划中的 **warn 级 lint**
   （[LANG-22](../lang/lang-22-nonimmortal-view-store-lint.md)，v1.1），不做硬错。
+
+## owning 释放分层（v0.88 实测）
+
+- **局部/参数**：自动 retain/release；
+- **`String` / `box<T>` 字段**：宿主 struct `use Drop` 且**没有显式 `impl Drop`** →
+  编译器生成字段胶水；写了显式 `impl Drop` 就由作者负责；
+- **`Vec<T>` / `Map<K,V>` 字段**：自动胶水为空；即使宿主 `use Drop`，也要显式 `release()`；
+- **全局**：没有作用域出口，必须显式 `release()`；
+- **ADT payload**：本轮不生成 Drop glue（PH-84 简化项，v1.1 可能变）；
+- **引用环**：仍泄漏。
+
+字段不是“一律不释放”，而是“释放挂在宿主的 Drop 上”；宿主没有 Drop 路径才是泄漏。
 
 ## 期望
 

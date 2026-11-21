@@ -2937,7 +2937,9 @@ parse("ab", n);  /* 调用点不写 out */
   `std::str::Str` 不再解析；仓内消费者已迁到 `String` / `Str` 新 API，外部消费者的 dry-run
   见 phase80 卡 §7。
 - **边界**：`box<String>` 已由 PH-81 的 `box<String>::of` 回填；`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
-  `Map<String,V>`）、字段/全局位置的 `String`（无自动 Drop）、跨仓外部工程迁移只做 dry-run。
+  `Map<String,V>`）、跨仓外部工程迁移只做 dry-run。字段位置的 `String` 释放取决于宿主：
+  宿主 `use Drop` 且无显式 `impl Drop` → 生成 `String` 字段胶水；`Vec`/`Map` 字段无自动胶水；
+  全局位置无作用域出口，需显式 `release()`。
 - **`Str` 存放位置（按实测）**：`Str` 不能作 struct 字段或 `Map` 键（硬错）；
   `Vec<Str>`、`Option<Str>`、ADT 负载、全局 `Str` 可编译，但存的是借用视图，
   owner 必须先于容器/值/全局的初始化源存活；字面量/immortal 来源安全。

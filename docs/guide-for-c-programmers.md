@@ -73,18 +73,27 @@
 | --- | --- | --- |
 | 角色 | 数据的主人 | 数据的访客（一张写着地址的纸条） |
 | 数据住哪 | 字面量/空串是只读区 immortal；其余是自有堆块 | 来源决定：字面量区 / 某个 `String` 的堆 / 栈数组——哪都有 |
-| 拷贝 | retain/release（有成本）；局部与参数自动，字段/全局不自动 | 拷 `{ptr,len}` 两个字段（零成本） |
-| 释放 | 引用计数归零自动 Drop（局部/参数）；**字段/全局位置无自动 Drop，需显式 `release()`** | **不存在释放**——没有一寸自己的内存 |
-| 存进字段/容器 | `String` 字段合法（但无自动 Drop）；容器元素合法 | struct 字段、`Map` 键是**硬错**；`Vec<Str>`、`Option<Str>`、ADT 负载**可编译**，但存的是借用视图 |
+| 拷贝 | retain/release（有成本）；局部/参数/字段赋值自动，全局不自动 | 拷 `{ptr,len}` 两个字段（零成本） |
+| 释放 | 引用计数归零自动 Drop（局部/参数）；**字段见下方分层，全局需显式 `release()`** | **不存在释放**——没有一寸自己的内存 |
+| 存进字段/容器 | `String` 字段合法；释放见下方分层；容器元素合法 | struct 字段、`Map` 键是**硬错**；`Vec<Str>`、`Option<Str>`、ADT 负载**可编译**，但存的是借用视图 |
 | 悬垂风险 | 单线程内 owning 不悬垂；跨线程共享 refcount 非原子，需自行同步 | 有（底层死了它瞎指）——**当前没有 Str 逃逸 lint**，见 §7 |
 
 两点容易误解：
 
 - **`String` 不是「数据永远在堆上」**：`String s = "x"` 绑定的是只读区里的 immortal 块，
-  `release` 直接返回；把它存进 struct 字段时，编译器也不会在作用域出口替你 `release`。
+  `release` 直接返回；字段赋值的 retain 与字段释放见下方分层。
 - **`Str` 不是「所有容器都禁止」**：`Map<Str,V>` 的键是硬错，`Str` 也不能作 struct 字段；
   但 `Vec<Str>`、`Option<Str>`、ADT 负载都能编译。能编译不等于安全——容器里存的是视图，
   owner 必须先于容器死亡。
+
+**字段释放分层（v0.88 实测）**：
+
+- `String` / `box<T>` 字段：宿主 struct `use Drop` 且**没有显式 `impl Drop`** → 编译器生成字段胶水
+  （`String_Drop_drop` / `box_*_Drop_drop`）；一旦写显式 `impl Drop`，胶水不再生成，作者自己释放。
+- `Vec<T>` / `Map<K,V>` 字段：自动胶水为空；即使宿主 `use Drop`，也要在 Drop/协议里显式 `release()`。
+- 全局：没有作用域出口，必须显式 `release()`。
+- ADT payload：本轮不生成 Drop glue（PH-84 简化项，v1.1 可能变）。
+- 引用环：仍泄漏。
 
 常量表是安全的例外：`Vec<Str> names = { "uart0", "uart1", "i2c0" };` 全是 immortal 字面量，
 不涉及任何 owner。只有非 immortal 来源（如 `v.push(local_string.as_str())`）才有悬垂风险；
@@ -161,8 +170,12 @@ struct Config {
 }
 ```
 
-字段 `String` 合法，但**没有自动 Drop**：`Config` 离开作用域不会释放 `name`，
+字段 `String` 合法；`Config` 没有 `use Drop`，离开作用域不会释放 `name`，
 需要显式 `c.name.release()`，或由明确的协议/析构路径处理。
+
+如果 `Config` 声明 `use Drop` 且**不写显式 `impl Drop`**，编译器会生成 `String` 字段胶水；
+一旦写显式 `impl Drop`，胶水不再生成，字段释放由作者负责。`Vec` / `Map` 字段即使
+宿主 `use Drop` 也没有自动胶水，仍需显式 `release()`（见 §3.2 的字段释放分层）。
 
 ### 3.4 生命周期纪律（Str 的全部要求就这三条）
 
@@ -315,7 +328,8 @@ CT 的护栏水位是「比 C 严格得多，比 Rust 松」。以下残余**存
 | `Str` 视图活到 owner 死后（返回局部视图、临时接收者、经函数转手） | 悬垂读，UB | 契约 + ASan；**当前没有 `Str` 逃逸 lint**（见 [SH-106](../issues/selfhost/sh106-str-view-escape-no-lint.md)）；`T[]` 切片有 `slice escape` warning |
 | 句柄跨线程共享 | 数据竞争（refcount 非原子） | 契约「句柄非 atomic」+ TSan（nightly/Linux 独立门禁）；需要时用 atomic 自己同步 |
 | ADT 的 owning payload（`String` / `box` / `Vec`） | 不自动释放 → 泄漏；释放绑定后原句柄悬垂 | ADT 无 drop glue，作者显式释放**一次**；把 ADT 当 move 语义 |
-| `String` 字段 / 全局位置 | 无自动 Drop → 泄漏 | 显式 `release()` 或由协议/析构路径处理 |
+| `String` / `box<T>` 字段（宿主无 `use Drop`，或写了显式 `impl Drop`） | 泄漏 | 宿主 `use Drop` 且无显式 impl → 字段胶水；否则显式 `release()` |
+| `Vec<T>` / `Map<K,V>` 字段、全局位置 | 无自动胶水 / 无作用域出口 → 泄漏 | 显式 `release()` 或由协议/析构路径处理 |
 | 逃生层 own 指针的一切经典错误 | 泄漏/悬垂/double free | 泄漏告警（保守、不保证）；ASan |
 
 **记住这份清单不是缺陷披露，是价格标签**——这些就是「不做 GC、不做借用检查器」省下来的
