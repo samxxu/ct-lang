@@ -237,6 +237,69 @@ skip() { skipped=$((skipped + 1)); printf '  skip  %s: %s\n' "$1" "$2"; }
 # wrote `#include` freely; they are not the thing under test here. The p65
 # probes clear this variable themselves (they test the default).
 export CT_C_BOUNDARY=allow
+
+# PH-88 S88b (D-017 A1 / D88): the self-hosting fixpoint is parameterised by
+# its round count. A daily run uses 2 rounds; a tag candidate uses 3. The
+# count is the only parameter: round 1 emits the tree, every later round
+# re-emits it with the compiler built from the previous round, and each round
+# is compared with round 1 by the same `diff -r` -- one loop, one comparison,
+# zero code fork. Returns non-zero on the first divergence; the reason goes to
+# stderr.
+FIXPOINT_ROUNDS="${CT_FIXPOINT_ROUNDS:-2}"
+case "$FIXPOINT_ROUNDS" in
+    2|3) ;;
+    *) echo "check-ast: CT_FIXPOINT_ROUNDS must be 2 or 3 (got '$FIXPOINT_ROUNDS')" >&2; exit 2 ;;
+esac
+
+fixpoint_stage() {
+    ct_in="$1"
+    rounds="$2"
+    r=1
+    prev="$ct_in"
+    while [ "$r" -le "$rounds" ]; do
+        out="$work/self$r"
+        rm -rf "$out"
+        mkdir -p "$out" || return 1
+        if ! "$prev" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$out" \
+                >"$work/self$r.out" 2>"$work/self$r.err"; then
+            echo "round $r: the compiler could not emit its own tree" >&2
+            return 1
+        fi
+        if [ "$r" -gt 1 ] \
+           && ! diff -r -q -x .ctcache "$work/self1" "$out" >/dev/null 2>&1; then
+            echo "round $r: the emitted tree differs from round 1" >&2
+            return 1
+        fi
+        if [ "$r" -lt "$rounds" ]; then
+            if ! "$CC" -Wall -Wextra -std=c99 "$out"/*.c \
+                    -o "$work/ct-ast-round$((r + 1))" 2>"$work/self$r.cc"; then
+                echo "round $r: the emitted C did not build" >&2
+                return 1
+            fi
+            prev="$work/ct-ast-round$((r + 1))"
+        fi
+        r=$((r + 1))
+    done
+    return 0
+}
+
+# Probe entry point (p88_fixpoint): run only the 9.6 stage against an existing
+# compiler. It is the same function the ordinary gate calls; the probe does not
+# re-implement the comparison.
+if [ "${1:-}" = "--fixpoint-only" ]; then
+    ct_only="${2:-}"
+    if [ ! -x "$ct_only" ]; then
+        echo "check-ast: --fixpoint-only needs an executable ct-ast" >&2
+        exit 2
+    fi
+    if fixpoint_stage "$ct_only" "$FIXPOINT_ROUNDS" 2>"$work/fixpoint.err"; then
+        echo "fixpoint: $FIXPOINT_ROUNDS rounds byte-identical"
+        exit 0
+    fi
+    echo "fixpoint: FAILED" >&2
+    cat "$work/fixpoint.err" >&2
+    exit 1
+fi
 echo "cc: $CC"
 echo
 echo "== unit names (a unit file is named after its main type) =="
@@ -6862,17 +6925,13 @@ echo "== self-hosting (9.6) =="
 # and the rebuilt compiler must reproduce the same output byte for byte (a
 # fixpoint: the compiler agrees with itself on its own subset). The source is a
 # multi-unit tree now, so the build mode drives both halves and the whole output
-# directory is compared.
-mkdir -p "$work/self1" "$work/self2"
-if "$work/ct-ast" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self1" \
-        >"$work/self1.out" 2>"$work/self1.err" \
-   && "$CC" -Wall -Wextra -std=c99 "$work/self1"/*.c -o "$work/ct-ast2" 2>"$work/selfcc.log" \
-   && "$work/ct-ast2" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/self2" \
-        >"$work/self2.out" 2>"$work/self2.err" \
-   && diff -r -q -x .ctcache "$work/self1" "$work/self2" >/dev/null 2>&1; then
-    ok "self-compile (fixpoint: ct-ast2 reproduces ct-ast's output)"
+# directory is compared. PH-88 S88b: the round count comes from
+# CT_FIXPOINT_ROUNDS (daily 2, tag candidate 3); `fixpoint_stage` is the one
+# implementation both use.
+if fixpoint_stage "$work/ct-ast" "$FIXPOINT_ROUNDS" 2>"$work/selfhost.err"; then
+    ok "self-compile (fixpoint: $FIXPOINT_ROUNDS rounds byte-identical)"
 else
-    bad "self-compile" "$(cat "$work/self1.err" "$work/selfcc.log" "$work/self2.err" 2>/dev/null | head -5)"
+    bad "self-compile" "$(cat "$work/selfhost.err" "$work/self1.err" "$work/self1.cc" "$work/self2.err" "$work/self2.cc" 2>/dev/null | head -5)"
 fi
 
 echo
