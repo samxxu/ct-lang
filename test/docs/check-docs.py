@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts ten invariants:
+Standard library only. It asserts eleven invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -30,9 +30,12 @@ Standard library only. It asserts ten invariants:
      after SIGNOFF_FROM carry a `签收:` line by a non-author role;
  10. DOC-85: every numbered claim in the briefing appendix of docs/idioms.md
      cites a `§N` section that exists in docs/language-spec.md. The rule is
-     inactive until idioms.md lands, then it switches on with the file.
+     inactive until idioms.md lands, then it switches on with the file;
+ 11. SH-104: docs/planning/j6-evidence/ledger.md carries every P-1…P-6 row
+     (P-3.7/3.8, P-4.6, P-5.7 included), each with a status from the fixed
+     four, a non-empty 最小可判证据, and a reason on every `阻塞` row.
 
-Exit code 0 when all ten hold, 1 otherwise.
+Exit code 0 when all eleven hold, 1 otherwise.
 """
 
 import hashlib
@@ -53,6 +56,18 @@ INLINE = re.compile(r"`[^`\n]*`")
 BRIEFING_ITEM = re.compile(r"^(\d+)\.\s+(.*)$")
 SECTION_HEAD = re.compile(r"^#{3,4}\s+(\d+(?:\.\d+)*)\.?\s", re.M)
 SPEC_REF = re.compile(r"§(\d+(?:\.\d+)*)")
+J6_ROW = re.compile(
+    r"^\|\s*(P-\d+\.\d+)\b[^|]*\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|", re.M
+)
+J6_IDS = (
+    {"P-1.%d" % i for i in (1, 2, 3, 4)}
+    | {"P-2.%d" % i for i in range(1, 6)}
+    | {"P-3.%d" % i for i in range(1, 9)}
+    | {"P-4.%d" % i for i in range(1, 7)}
+    | {"P-5.%d" % i for i in range(1, 8)}
+    | {"P-6.%d" % i for i in (1, 2, 3, 4)}
+)
+J6_STATES = {"已过", "部分", "缺失", "阻塞"}
 
 STATUS_MAP = {
     "完成": "\u2705",
@@ -483,6 +498,35 @@ def check_idiom_briefing(errors):
     return checked
 
 
+def check_j6_ledger(errors):
+    """SH-104: the J-6 evidence ledger must carry every P-1…P-6 row with a
+    legal state, a non-empty minimal criterion, and a reason on 阻塞 rows."""
+    path = os.path.join(ROOT, "docs/planning/j6-evidence/ledger.md")
+    if not os.path.exists(path):
+        errors.append("docs/planning/j6-evidence/ledger.md: missing (SH-104)")
+        return 0
+    text = read(path)
+    seen = {}
+    for m in J6_ROW.finditer(text):
+        rid = m.group(1)
+        cri, ev, state, owner = (m.group(2).strip(), m.group(3).strip(),
+                                 m.group(4).strip(), m.group(5).strip())
+        seen[rid] = state
+        if state not in J6_STATES:
+            errors.append(f"j6-ledger: {rid} has status '{state}' (expected 已过/部分/缺失/阻塞)")
+        if not cri or cri in ("—", "-"):
+            errors.append(f"j6-ledger: {rid} has no 最小可判证据")
+        if not owner or owner in ("—", "-"):
+            errors.append(f"j6-ledger: {rid} has no 负责人")
+        if state == "阻塞" and "阻塞" not in ev:
+            errors.append(f"j6-ledger: {rid} is 阻塞 without a reason in 现有证据")
+        if state == "已过" and (not ev or ev in ("—", "-")):
+            errors.append(f"j6-ledger: {rid} is 已过 without an evidence pointer")
+    for rid in sorted(J6_IDS - set(seen)):
+        errors.append(f"j6-ledger: {rid} row is missing (SH-104)")
+    return len(seen)
+
+
 def main():
     errors = []
     links, scanned = check_links(errors)
@@ -495,6 +539,7 @@ def main():
     superseded = check_superseded_links(errors)
     signoffs = check_signoffs(errors)
     briefing = check_idiom_briefing(errors)
+    j6 = check_j6_ledger(errors)
     for error in errors:
         print(f"FAIL: {error}")
     # The two status lines print on both paths: on a red run the first one names
@@ -508,7 +553,7 @@ def main():
         f"check-docs: OK ({links} relative links in {scanned} files, "
         f"v{version}, {gates} hard gates, {phases} phase status, "
         f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
-        f"{signoffs} signoff(s), {briefing} briefing item(s))"
+        f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0
