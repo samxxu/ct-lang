@@ -36,6 +36,7 @@
 | §2 借用存储 | “借用类型不能存（字段/容器/全局 = 硬错）” | **改** | struct 字段 / `Map` 键硬错；`Vec<Str>`、`Option<Str>`、ADT 负载、全局 `Str` 字面量可编译（存的是视图） |
 | §3 借用 | “返回局部视图 = 硬错” | **改** | `Str` 逃逸当前无 lint（SH-106）；`T[]` 切片是 `slice escape` warning，不是硬错 |
 | §3 释放 | “String/box/Vec/Map = owning，自动释放” | **改** | 局部/参数自动；字段/全局/ADT payload 无自动 Drop；环仍泄漏 |
+| §3 泄漏 | “泄漏 = 告警（strict 包内 error）” | **改** | 实际是 `ct.pkg` 的 `leaks = warn\|error`，与 `c-boundary=strict` 无关 |
 | §2 遍历 | `foreach (v) { i, item }` | **改（语法）** | `i` / `item` 是块内隐式绑定，不是头列表；正确写法 `foreach (v) { … i … item … }`；v0.84.1 数组与 Vec/Map 都绑定只读 `i` |
 | §2 `$name` | “物化中间值用 `$name`” | **保留** | spec §4.11.3；`a.m()$x.n()` 正确 |
 | §2 SH-73 | “动态派发路径暂不支持一行链” | **保留但补例** | 静态宿主链（examples/47）可跑；只有接口值动态派发链被拒 |

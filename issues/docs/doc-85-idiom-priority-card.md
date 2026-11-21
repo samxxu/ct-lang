@@ -21,6 +21,7 @@
 | “借用类型不能存（字段/容器/全局 = 硬错）” | `Vec<Str>` / `Option<Str>` / ADT 负载可编译；全局 `Str g = "x"` 也可编译 | struct 字段 / `Map` 键硬错；全局/容器/ADT 是借用视图风险 |
 | “返回局部视图 = 硬错” | `Str` 逃逸无 lint（SH-106）；`T[]` 是 warning | 改为“T[] 有 `slice escape` warning；Str 无 lint” |
 | “owning 自动释放” | 字段/全局/ADT payload 无自动 Drop；环泄漏 | 补边界 |
+| “泄漏 = 告警（strict 包内 error）” | 实际是 `ct.pkg` 的 `leaks = warn\|error`，与 `c-boundary=strict` 无关 | 改为“`leaks=error` 可让 build 失败” |
 | `foreach (v) { i, item }` | `i` / `item` 是**块内隐式绑定**，不是头列表；`{ i, item; }` 只是逗号表达式 | 正确写法 `foreach (v) { … i … item … }`；v0.84.1 数组与 Vec/Map 都绑定只读 `i` |
 | 附录 briefing | 重复上述错误 | 同步修 |
 
