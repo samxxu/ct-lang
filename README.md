@@ -8,6 +8,12 @@
 `ct check --types`（可选子集，见 [spec §4.53](docs/language-spec.md#453-可选类型检查-ct-check---typesphase-32)），它不是默认编译路径的一部分。生成物是**可读的普通 C**，不依赖任何运行时库，vtable 与 `_self` 强转等样板代码都由编译器生成。
 已完成的能力与后续阶段见 [docs/roadmap.md](docs/roadmap.md)，术语见 [docs/glossary.md](docs/glossary.md)。
 
+**兼容承诺（v1.0 起）**：CT 不再自称 C 超集。C 的表达式、语句与类型核心仍按原语法透传，
+但不再承诺 C 全集（函数式宏、strict 边界下的 `#include`、旧 L1/L2 管线语法），也不以
+“C 代码原样全收”为目标。旧工程用 v0.x 编译器或 `ct migrate`；`T a[]`、`Box`、`CharStr`、
+`lib/core` 的弃用窗口见 [spec §1.2](docs/language-spec.md)。
+<!-- ct-compat: not-c-superset claim=v1.0-not-c-superset spec=1.2 -->
+
 ---
 
 ## 中文

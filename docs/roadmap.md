@@ -6,6 +6,9 @@
 [history/phase-log.md](history/phase-log.md)。当前已实现能力见 [README](../README.md) 与
 [language-spec](language-spec.md)。语言稳定性分档与改动授权见 [stable-subset](stable-subset.md)。
 
+**兼容承诺**：v1.0 起不再自称 C 超集；仍接受 C 核心，不承诺全集。弃用窗口见 [spec §1.2](language-spec.md)。
+<!-- ct-compat: not-c-superset claim=v1.0-not-c-superset spec=1.2 -->
+
 ---
 
 ## 中文

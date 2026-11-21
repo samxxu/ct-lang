@@ -117,6 +117,35 @@ L0 命中不认识的构造时直接报错（`'namespace' is not supported by th
 > 出处：本表按 [DOC-72](../issues/docs/doc-72-spec-audit-followup.md) 的 B2-1 收敛；DOC-72 仍保留
 > 「正文零散提及收敛」的剩余项。
 
+#### 1.2 兼容承诺（v1.0 起不再自称 C 超集）
+
+> 生效版本：v1.0.0。v0.x 用户按本节窗口迁移。
+<!-- ct-compat: not-c-superset claim=v1.0-not-c-superset spec=1.2 -->
+
+| 维度 | 承诺 |
+| --- | --- |
+| 仍接受 | C 的表达式、语句、类型核心按原语法透传；`struct` / `union` / `enum`、指针、`#ct-raw` 等 C 机制可用 |
+| 不再承诺 | C 全集：函数式宏、strict C 边界下的 `#include`、旧 L1/L2 管线语法；不以「C 代码原样全收」为兼容目标 |
+| 旧工程迁移 | 用 v0.x 编译器或 `ct migrate`；弃用窗口内旧拼写仍可用，窗口结束即硬错 |
+
+**四类常见偏离**（v1.0 起；细节见各节）：
+
+| 偏离 | v1.0 写法 | 依据 |
+| --- | --- | --- |
+| `new` 是上下文关键字 | `new T { … }`；`int new;`、`r.new` 仍是标识符 | D-016、§4.71 |
+| `T a[]` 作形参 / 字段 / 无初值声明 | `T[]`（切片）或 `T a[N]`；v0.x 警告，v1 起硬错 | §4.69 |
+| 字符串字面量的裸类型 | 仍是 `char *`；要 owning 写 `String s = "x";` 或 `Str v = "x";` | §4.70 |
+| `String` / `Str` 传给 `printf` | 先 `cstr()`；`%s` 直接吃 `.data` 不保证 NUL | §4.70 |
+
+**弃用窗口**（窗口结束即硬错，不自动续期）：
+
+| 旧名 / 旧拼写 | 新名 / 新拼写 | 窗口 |
+| --- | --- | --- |
+| `T a[]`（形参 / 字段 / 无初值） | `T[]` 或 `T a[N]` | v0.x 警告；v1.0 起硬错 |
+| `box<T>` | `Box<T>` | v1.0 起弃用并告警；v1.1 删除（LANG-24） |
+| `std::str::String` | `std::str::CharStr` | std 发布后一个 MINOR（PKG-22） |
+| `lib/std` 根拼写 | `lib/core` | 一个 MINOR（DOC-87 Stage 1） |
+
 ### 2. 词法与书写要求（ct-ast）
 
 - 关键字按**独立单词**识别；`traitx`、`my_struct` 不会被误判。`into`、`foreach` 是上下文关键字，

@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts twelve invariants:
+Standard library only. It asserts thirteen invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -36,9 +36,12 @@ Standard library only. It asserts twelve invariants:
      four, a non-empty 最小可判证据, and a reason on every `阻塞` row;
  12. DOC-79: the 分档清单 in docs/stable-subset.md has five cells per row,
      a legal tier, non-empty 授权 and 版本/截止, and at least one row in each
-     of the three tiers.
+     of the three tiers;
+ 13. DOC-76: README.md, docs/language-spec.md and docs/roadmap.md carry the
+     same ct-compat marker (claim and spec section), all state 不再自称 C 超集,
+     and the spec= value resolves to a real heading.
 
-Exit code 0 when all twelve hold, 1 otherwise.
+Exit code 0 when all thirteen hold, 1 otherwise.
 """
 
 import hashlib
@@ -72,6 +75,7 @@ J6_IDS = (
 )
 J6_STATES = {"已过", "部分", "缺失", "阻塞"}
 STABLE_TIERS = ("已冻结", "冻结中", "1.0 前可改")
+COMPAT_MARKER = re.compile(r"<!--\s*ct-compat:\s*([^>]*)-->")
 
 STATUS_MAP = {
     "完成": "\u2705",
@@ -572,6 +576,40 @@ def check_stable_subset(errors):
     return rows
 
 
+def check_compat_claim(errors):
+    """DOC-76: the 'no longer a C superset' claim is identical in README, the
+    spec and the roadmap, and its spec= pointer resolves to a heading."""
+    files = ("README.md", "docs/language-spec.md", "docs/roadmap.md")
+    claims, specs, seen = set(), set(), 0
+    for rel in files:
+        text = read(os.path.join(ROOT, rel))
+        m = COMPAT_MARKER.search(text)
+        if not m:
+            errors.append(f"{rel}: missing ct-compat marker (DOC-76)")
+            continue
+        kv = dict(re.findall(r"(\w+)=([^\s]+)", m.group(1)))
+        if kv.get("claim") != "v1.0-not-c-superset":
+            errors.append(f"{rel}: ct-compat claim '{kv.get('claim')}' (expected v1.0-not-c-superset)")
+        if not kv.get("spec"):
+            errors.append(f"{rel}: ct-compat marker has no spec= section")
+        if "不再自称 C 超集" not in text:
+            errors.append(f"{rel}: missing phrase '不再自称 C 超集' (DOC-76)")
+        claims.add(kv.get("claim"))
+        specs.add(kv.get("spec"))
+        seen += 1
+    if len(claims) > 1:
+        errors.append(f"ct-compat: claim differs across files: {sorted(claims)}")
+    if len(specs) > 1:
+        errors.append(f"ct-compat: spec= differs across files: {sorted(specs)}")
+    elif specs:
+        spec_no = next(iter(specs))
+        if spec_no:
+            spec_text = read(os.path.join(ROOT, "docs/language-spec.md"))
+            if not re.search(r"^#{3,4}\s+" + re.escape(spec_no) + r"(?:\.|\s|$)", spec_text, re.M):
+                errors.append(f"ct-compat: spec={spec_no} is not a heading in docs/language-spec.md")
+    return seen
+
+
 def main():
     errors = []
     links, scanned = check_links(errors)
@@ -586,6 +624,7 @@ def main():
     briefing = check_idiom_briefing(errors)
     j6 = check_j6_ledger(errors)
     stable = check_stable_subset(errors)
+    compat = check_compat_claim(errors)
     for error in errors:
         print(f"FAIL: {error}")
     # The two status lines print on both paths: on a red run the first one names
@@ -600,7 +639,7 @@ def main():
         f"v{version}, {gates} hard gates, {phases} phase status, "
         f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
         f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s), "
-        f"{stable} stability row(s))"
+        f"{stable} stability row(s), {compat} compat marker(s))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0
