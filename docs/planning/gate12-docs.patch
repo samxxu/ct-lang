@@ -1,0 +1,66 @@
+--- a/README.md
++++ b/README.md
+@@ -608,7 +608,7 @@
+ ### 5. 文档与测试
+ 
+ - 文档导航：[docs/README.md](docs/README.md)
+-- 测试：`bash selfhost/check-all.sh` 跑 11 道硬门禁；分层地图见 [test/README.md](test/README.md)
++- 测试：`bash selfhost/check-all.sh` 跑 12 道硬门禁；分层地图见 [test/README.md](test/README.md)
+ - 改动代码前先读 [AGENTS.md](AGENTS.md)
+ 
+ ### 6. 许可
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -110,7 +110,7 @@
+ 3. **版本标记**：`README.md` 与本文出现的 `vX.Y.Z` 必须是当前版本（取自 `selfhost/l0/ctc.c` 的 `CTC_VERSION`）。
+    历史版本只出现在 [history/phase-log.md](history/phase-log.md) 的版本记录与 [history/](history/README.md)。
+ 4. **门禁条数**：`README.md`、本文与 [glossary.md](glossary.md) 写出的硬门禁条数必须等于
+-   `selfhost/check-all.sh` 实际运行的条数（当前共 11 道硬门禁）。
++   `selfhost/check-all.sh` 实际运行的条数（当前共 12 道硬门禁）。
+ 5. **阶段状态**：`docs/design/phase*.md` 的状态行（完成 / 实施中 / 规划中）必须与 [roadmap.md](roadmap.md)
+    的简要阶段表一致（✅ / 🟨 / ⬜）；详细证据见 [history/phase-log.md](history/phase-log.md)。
+ 6. **路线图与流水账**：[roadmap.md](roadmap.md) 只做简要索引，不写逐相叙述；逐相细节、版本记录与决策全文在
+--- a/docs/glossary.md
++++ b/docs/glossary.md
+@@ -182,8 +182,8 @@
+ | 重新生成基线（regeneration） | `./ctc <case>.ct -o <case>.expected.c` | 行为变更后重生成并**人工核对 diff** |
+ | 语法冒烟测试 | `python3 editors/vscode/test/check-grammar.py` | 校验插件高亮，**不进** run.sh |
+ | 端到端（end-to-end） | examples 层 | 生成→构建→运行→比对 |
+-| 硬关卡（hard gate） | `selfhost/check-all.sh` 的 11 个条目 | 任一失败即整体失败；当前 11 关：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、`ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、`check-semantics`、`test/docs/check-docs.py` |
+-| 聚合入口（aggregate entry） | `bash selfhost/check-all.sh` | 唯一能一次跑全部门禁的命令；输出 `check-all: OK (11 hard gates green)` |
++| 硬关卡（hard gate） | `selfhost/check-all.sh` 的 12 个条目 | 任一失败即整体失败；当前 12 关：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、`ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、`check-semantics`、`test/docs/check-docs.py`、`check-goldens-ast` |
++| 聚合入口（aggregate entry） | `bash selfhost/check-all.sh` | 唯一能一次跑全部门禁的命令；输出 `check-all: OK (12 hard gates green)` |
+ | 棘轮（ratchet） | `check-archive.sh` 的 PASS / PENDING 四态 | 只允许 PENDING → PASS，不允许 PASS → PENDING |
+ | 差分 oracle（differential oracle） | L2 / 归档 golden | 新主线与旧实现逐字节或逐行为对照的基准 |
+ | 归档 oracle（archive oracle） | `test/archive/**`、tag `overreach-oracle` | Phase 2–4 恢复期的历史编译器产物，作为对差基准 |
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -451,7 +451,7 @@
+ | --- | --- |
+ | 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-88 |
+ | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
+-| 门禁入口 | `tools/check.sh g0`…`g9`（治理门禁；g2 见偏离）；`selfhost/check-all.sh`（11 道硬门禁，保持不变） |
++| 门禁入口 | `tools/check.sh g0`…`g9`（治理门禁；g2 见偏离）；`selfhost/check-all.sh`（12 道硬门禁，保持不变） |
+ | 文档 snippet | 缺失 |
+ | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
+ | 决策记录 | `docs/decisions/D-<n>.md`；phase 决策写 `docs/design/*.md`（`D<phase>-<n>`） |
+--- a/issues/README.md
++++ b/issues/README.md
+@@ -138,12 +138,12 @@
+   与 SH-65 同入口族，但 SH-65 是字面量传入的响亮失败，本条是退出 0 的静默坏产物；建议先硬错，
+   codegen 修复并入 SH-65 / F3。见 [SH-67](selfhost/sh67-closure-method-arg-silent-invalid-c.md)。
+ - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
+-<!-- gates:11 -->
+-- **硬关卡计数随阶段演进（当前 11 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
+-  `ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、
+-  `check-semantics`、`test/docs/check-docs.py`；构成以 [check-all.sh](../selfhost/check-all.sh) 的
++<!-- gates:12 -->
++- **硬关卡计数随阶段演进（当前 12 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
++  `ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、
++  `check-semantics`、`test/docs/check-docs.py`、`check-goldens-ast`；构成以 [check-all.sh](../selfhost/check-all.sh) 的
+   `run_gate` 行为准。下文各**带日期的验证记录**里出现的旧关口数（六道 / 七道 / 八道 / 九道 / 十道 / 十二道）是该记录
+-  当时的口径，非现状；现状以 `check-all.sh` 的「11 hard gates green」为准。本文件的现状计数由
++  当时的口径，非现状；现状以 `check-all.sh` 的「12 hard gates green」为准。本文件的现状计数由
+   上方 `<!-- gates:N -->` 标记声明，`test/docs/check-docs.py` 只校验该标记（历史记录里的旧口径不参与）。
+ 
+ ## 模块索引

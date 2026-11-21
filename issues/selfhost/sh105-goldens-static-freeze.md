@@ -69,6 +69,10 @@ done
 `selfhost/check-all.sh` 增加第 12 道（`run_gate "12) CT: ct-ast static goldens" bash selfhost/check-goldens-ast.sh <ct-ast>`）。
 以下位置的「11 道」必须同步为「12 道」，否则 `check-docs` 的 gate 计数断言会红：
 
+> **文案补丁已备**：[docs/planning/gate12-docs.patch](../../docs/planning/gate12-docs.patch)
+> （说明见 [gate12-docs.md](../../docs/planning/gate12-docs.md)）；必须与门禁接线同一次提交，
+> 不独立 commit。
+
 - [README.md](../../README.md)（测试段）
 - [docs/README.md](../../docs/README.md) 文档约定第 4 条
 - [docs/glossary.md](../../docs/glossary.md) 聚合入口行

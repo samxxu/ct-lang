@@ -8,7 +8,7 @@
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-4；`AGENTS.md` §5.4；`tools/check.sh` |
 | 状态 | open |
-| 处置证据 | **已决 A（2026-11-21 所有者）；REQ 规格已出，DEV 实现 `g6`** |
+| 处置证据 | **已落地（CI-10 `48533f23`：`tools/check.sh g1/g5/g6`）；G6 旧债由 [CI-14](ci-14-g6-legacy-status-cleanup.md) 跟踪；DEV 队首建议已兑现** |
 
 ## 实施规格（方案 A：ratchet 版 G6，2026-11-21）
 

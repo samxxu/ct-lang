@@ -165,7 +165,9 @@ grep -rn 'lib/std\|CT_STD_DIR' --include='*.sh' --include='*.py' . \
 
 1. README 大改尾部（DOC-86）与 STD 配合清单就位；
 2. 同一个提交：`git mv` + 9 个代码文件 + 21 个脚本 + 12 个活跃文档 + 示例注释；
-3. 提交后立即跑 A/B 两条验收，再更新 `docs/history/README.md` 的一行指路。
+3. 提交后立即跑 A/B 两条验收，再更新 `docs/history/README.md` 的一行指路；
+4. **合入后唤醒（外部）**：Stage 1 合入即触发 STD 项目组配合清单（`lib/std` 路径替换）；
+   外部配合不随 DEV 批次自动发生，由 REQ 在合入后 48 小时内启动。
 
 ## Stage 2：`namespace core`（同一 issue，独立切片）
 

@@ -196,6 +196,7 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1-pre 发射器+回环 | PH-88 | v0.88.0 | ✅ 2026-11-21（76 个发射器切片；fixpoint 日常 2 / tag 前 3 轮逐字节；字面 `match` 承接 `v1-PH-0`，见 battle/p88-emit-match） |
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
 | v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
+| v1.0 内置层目录 `lib/core` | `v1-PH-0` 前 | v1.0.0 | **REQ 就绪，待 DEV**；`CT_CORE_DIR` + 一个 MINOR 回退；迁移卡见 [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
 | v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | 机制已在 PH-85；证据达标则翻转默认，未达标回退“可用不默认” |
@@ -214,6 +215,9 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 >
 > **D2 唤醒条件（2026-11-21）**：SH-110 合入后 **48 小时内**启动 README §0.1 重测；
 > 完成前保持“动态派发一行链当前被拒”。被阻塞项一律把唤醒条件写在本节，防止落地后遗忘。
+>
+> **DOC-87 Stage 1 唤醒（外部，2026-11-21）**：Stage 1 合入后启动 **STD 项目组配合清单**
+> （`lib/std` 路径替换）；外部配合不随 DEV 批次自动发生，必须由 REQ 在合入后触发。
 
 ## 4. 风险
 

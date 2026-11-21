@@ -63,6 +63,11 @@ README、std-catalog、planning、reviews 的结论行）全部改为 `Box<T>`�
 
 ## 容量与窗口约束
 
+- **入口判据 1（2026-11-21 追加）**：开工前先测顶层函数计数（v0.88 实测 **501/512，余 11**；
+  口径为整程序 plain-C 签名预算，`static` helper 与 `pub` 包装器都算，`impl` 方法不算），
+  并估算 Stage A 的预计增量；**预计增量必须 ≤ 当前余量**。不满足则先走
+  [`v1-PH-1 / S0`](../../docs/proposals/ct-max-funcs-growth.md)（MAX_FUNCS 动态增长）复核，
+  **不得先写别名分支**。
 - **v1.0（`v1-PH-0`）**：Stage A 作为独立提交，不混进 seed cutover。`v1-PH-0` 只有
   ≤11 个新增顶层函数的预算；别名分支必须复用既有 `tok_is` / 类型读取路径，**不得新增
   顶层函数**，否则停止并先走 `v1-PH-1 / S0`。
