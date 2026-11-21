@@ -5,6 +5,8 @@
 > 环境：macOS arm64；Apple clang 21.0.0；Python 3.15.2
 > 方法：`git archive d863fedb` 解到 `/tmp/rev84.pqwAG8/src`，按 L0→L1→L2→ct-ast 自举链独立重建；所有探针只用该归档产物 `/tmp/rev84.pqwAG8/work/ct-ast`，未用工作树二进制；未改实现。
 > 结论：**REV: 不通过（打回）**。E84-1/2/4/6/7/8 的核心行为通过；E84-3、E84-5、E84-9 在 **typedef ADT** 形态上不满足（F1/F2）。
+>
+> **v0.84.1 复核（2026-11-21）：`REV: 通过`**，见文末 §9；§0–§8 为首轮记录，保留不改写。
 
 ## 0. 结论摘要
 
@@ -285,3 +287,304 @@ README / docs/README / AGENTS / phase-log / roadmap / session-map 均为 v0.84.0
 - 未把 F2 扩大为 C enum/switch 回归；无负载 enum 的 5 个对照全部 `same:`。
 - 未修改实现、phase 卡、roadmap；只提交本报告与 LANG-21 的 `reopened` 状态。
 - A 的全量文档审计仍归 DOC-77/78/79；本报告只按 battle B 的最小集判定 E84-9。
+
+---
+
+## 9. v0.84.1 复核（2026-11-21，REV `rev-ph84b`）
+
+> 对象：`1cc20c25b30fdfc990c426ac74a6f68398deaa9a`（HEAD；工作树 clean；未 push、未 tag）
+> 环境：macOS arm64；Apple clang 21.0.0；Python 3.15.2
+> 方法：`git archive 1cc20c25` 解到 `/tmp/rev84b.2eABF0/src`，按 L0→L1→L2→ct-ast
+> 自举链独立重建；以下 `$CT` 指 `/tmp/rev84b.2eABF0/work/ct-ast`，所有探针只用该归档
+> 产物，未用工作树二进制；未改实现。
+
+**REV: 通过。** F1/F2 的直接形态、红/绿证、跨单元产物与总门禁均独立复现；§3 的两项
+阻断不再成立。
+
+### 9.1 自举（`1cc20c25` 归档）
+
+```console
+$ R=/tmp/rev84b.2eABF0; mkdir -p "$R/src" "$R/work/l2src" "$R/work/astsrc"
+$ git archive 1cc20c25 | tar -x -C "$R/src"
+$ cc -Wall -Wextra -std=c99 "$R/src/selfhost/l0/ctc.c" -o "$R/work/ctc"
+$ "$R/work/ctc" "$R/src/selfhost/l1/ctc.ct" -o "$R/work/l1.c"
+$ cc -Wall -Wextra -std=c99 "$R/work/l1.c" -o "$R/work/l1"
+$ (cd "$R/src" && "$R/work/l1" build selfhost/l2/driver.ct -o "$R/work/l2src")
+$ cc -Wall -Wextra -std=c99 "$R/work/l2src"/*.c -o "$R/work/l2"
+$ (cd "$R/src" && "$R/work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$R/work/astsrc")
+$ cc -Wall -Wextra -std=c99 "$R/work/astsrc"/*.c -o "$R/work/ct-ast"
+$ "$R/work/ct-ast" -v
+ct-ast v0.84.1
+```
+
+各 `cc` 零警告、退出码 0。
+
+### 9.2 F1 重跑：typedef 别名作 `match` 主语
+
+`alias_match.ct` 同 §3.1；`alias_ptr.ct` 把主语改为 `Alias *`；`alias_ctor.ct` 的分支
+与构造都用别名限定：
+
+```ct
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int area(Alias a)
+{
+    match (a) {
+        Alias.Circle(r) => { return 3 * r * r; }
+        Alias.Rect(w, h) => { return w * h; }
+    }
+    return 0;
+}
+
+int main(void)
+{
+    Alias c = Alias.Circle(2);
+    Alias r = Alias.Rect(3, 4);
+    return area(c) + area(r);
+}
+```
+
+```console
+$ CT_C_BOUNDARY=allow $CT check alias_match.ct; echo exit=$?
+exit=0
+$ CT_C_BOUNDARY=allow $CT check alias_ptr.ct; echo exit=$?
+exit=0
+$ CT_C_BOUNDARY=allow $CT check alias_ctor.ct; echo exit=$?
+exit=0
+$ CT_C_BOUNDARY=allow $CT alias_match.ct -o alias_match.c \
+  && cc -Wall -Wextra -std=c99 alias_match.c -o alias_match.bin && ./alias_match.bin
+12 12
+$ CT_C_BOUNDARY=allow $CT check notadt_alias.ct
+notadt_alias.ct:5:5: error: match needs an ADT value, but 'Num' is not an ADT
+exit=1
+$ CT_C_BOUNDARY=allow $CT check missing_alias.ct
+missing_alias.ct:5:5: error: match does not cover variant 'Shape.Rect' (add the arm or write '_ => { … }')
+exit=1
+```
+
+非 ADT 别名（`typedef int Num`）仍拒绝；别名主语的漏变体仍带 `file:line:col`。
+
+### 9.3 F2 重跑：`pub typedef` 跨单元，tag + 别名两路
+
+`lib/lib.h.ct` 同 §3.2；消费者 `by_tag(Shape)` 与 `by_alias(Alias)` 并存，构造分别用
+`Shape.Circle` 与 `Alias.Rect`：
+
+```console
+$ (cd f2 && CT_C_BOUNDARY=allow $CT build --emit-c prog.ct -o out); echo exit=$?
+cc -std=c99 -I out out/prog.c out/lib.c -o a.out
+exit=0
+$ grep -n 'Shape\|Alias' out/prog.c out/lib.h
+out/prog.c:7:int by_tag(struct lib_Shape);
+out/prog.c:8:int by_alias(lib_Alias);
+out/prog.c:10:int by_tag(struct lib_Shape s) {
+out/prog.c:11:    struct lib_Shape __ct_match0 __attribute__((unused)) = (s);
+out/prog.c:23:int by_alias(lib_Alias a) {
+out/prog.c:24:    struct lib_Shape __ct_match1 __attribute__((unused)) = (a);
+out/prog.c:37:    struct lib_Shape c = ((struct lib_Shape){ .tag = 0, .u = { .Circle = { .r = (2) } } });
+out/prog.c:38:    lib_Alias r = ((struct lib_Shape){ .tag = 1, .u = { .Rect = { .w = (3), .h = (4) } } });
+out/lib.h:9:typedef struct lib_Shape {
+out/lib.h:20:} lib_Alias;
+$ cc -Wall -Wextra -std=c99 out/*.c -o out/prog.bin; echo cc_exit=$?
+cc_exit=0
+$ ./out/prog.bin
+12 2 7
+```
+
+消费者产物只写 `struct lib_Shape` / `lib_Alias`，不再出现未声明的 `Shape`；头文件仍只有
+`typedef struct lib_Shape { … } lib_Alias;` 与四条 `_Static_assert`。
+
+### 9.4 红/绿证（T-7 对照）
+
+红证按 `4f5b2cd2`（test 提交；实现前源码 = `bf88f4d9`）归档重建，`ct-ast v0.84.0`；
+绿证用 §9.1 的 `1cc20c25` 产物：
+
+```console
+$ git log --format='%h %p %s' -4
+1cc20c25 53e0019f chore(ph84): v0.84.1——REV F1/F2 修复收口（LANG-21 fixed）
+53e0019f 4f5b2cd2 fix(ct-ast): PH-84 F1/F2 修复（typedef ADT 的 match 与跨单元命名）
+4f5b2cd2 bf88f4d9 test(ct-ast): PH-84 F1/F2 红（typedef ADT match / pub typedef 跨单元）
+$ git merge-base --is-ancestor bf88f4d9 HEAD; echo ancestor=$?
+ancestor=0
+
+# 红（4f5b2cd2 源码，p84 新探针）
+p84match:  10 passed, 3 failed (exit 1)
+p84errors: 12 passed, 1 failed (exit 1)
+p84layout: 21 passed, 2 failed (exit 1)
+# 绿（1cc20c25）
+p84match:  13 passed, 0 failed
+p84errors: 13 passed, 0 failed
+p84layout: 26 passed, 0 failed
+```
+
+红证与 DEV 处置段、卡 §7.6 的数字逐项一致。
+
+### 9.5 六探针与总门禁（归档树，私有 TMPDIR）
+
+```console
+$ bash test/ast/p84_syntax.sh     $CT   → p84syntax: 14 passed, 0 failed (exit 0)
+$ bash test/ast/p84_match.sh      $CT   → p84match: 13 passed, 0 failed  (exit 0)
+$ bash test/ast/p84_errors.sh     $CT   → p84errors: 13 passed, 0 failed (exit 0)
+$ bash test/ast/p84_layout.sh     $CT   → p84layout: 26 passed, 0 failed (exit 0)
+$ bash test/ast/p84_docs.sh       $CT   → OK p84docs                   (exit 0)
+$ bash test/ast/p84_docs_audit.sh $CT   → OK p84docs_audit             (exit 0)
+
+$ TMPDIR=$R/tmp/checkall bash selfhost/check-all.sh
+L1 golden coverage: 25 pass, 0 new, 0 pending, 0 regression (of 25 cases)
+check-archive: OK (no regression)
+ct-tour: OK - you compiled CT with C, then CT with CT, and the outputs matched.
+  ok    p84/syntax
+  ok    p84/match
+  ok    p84/errors
+  ok    p84/layout
+  ok    p84/docs
+  ok    p84/docs-audit
+== summary: 1557 passed, 0 failed, 5 skipped ==
+check-warnings: 494 ok, 0 failed
+check-docs: OK (2267 relative links in 373 files, v0.84.1, 11 hard gates, 12 phase status, 5 适用版本 header(s), 2 superseded link(s), 11 signoff(s))
+check-all: OK (11 hard gates green)
+exit 0
+
+$ env -u CT_C_BOUNDARY bash selfhost/check-warnings.sh
+check-warnings: 494 ok, 0 failed (exit 0)
+$ bash selfhost/check-sanitizers.sh
+check-sanitizers: OK (586 checks, no sanitizer report) (exit 0)
+$ bash tools/check.sh g0
+g0: OK (block 1.17.0, session-map present) (exit 0)
+$ bash tools/check.sh g8
+g8: OK (PN-2 version coherence; 9 legacy offsets) (exit 0)
+$ python3 tools/check-docs.py
+check-docs: OK (2267 relative links in 373 files, v0.84.1, …) (exit 0)
+$ python3 tools/check-battle.py doc-consistency-1 --strict
+PASS (0 errors, 0 warnings)
+```
+
+本机 check-all 的 gate 8 为 `1557 passed, 0 failed, 5 skipped`；卡 §7.4 的 v0.84.1
+记录为 `1556 passed, 0 failed, 6 skipped`。差异是 Renode 用例在两种环境下的
+可用性（O5 已登记），两边的失败数均为 0，不是产品回归。
+
+### 9.6 新增反例（独立于仓库探针）
+
+**A. 别名与 tag 混用分支 + 混用构造**：分支一半写 `Shape.Circle`、一半写
+`Alias.Rect`，构造同理；ASan/UBSan 重建运行。
+
+```ct
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int area(Alias a)
+{
+    match (a) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Alias.Rect(w, h) => { return w * h; }
+    }
+    return 0;
+}
+
+int main(void)
+{
+    Alias c = Shape.Circle(2);
+    Shape s = Alias.Rect(3, 4);
+    printf("%d %d\n", area(c), area(s));
+    return 0;
+}
+```
+
+```console
+$ $CT check mixed.ct                       → exit 0
+$ $CT mixed.ct -o mixed.c && cc -Wall -Wextra -std=c99 -fsanitize=address,undefined mixed.c -o mixed.bin
+$ ./mixed.bin
+12 12                                      # 零警告、无 sanitizer 报告
+```
+
+**B. 别名 payload 的 move/副本**：`Alias b = a` 复制；`match` 绑定按值改 `r` 不回写；
+`q = Alias.Rect(5, 6)` 不影响 `p`；`Alias *` 主语与直接 `a.u.Circle.r` 对照。
+
+```ct
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int peek(Alias a)
+{
+    match (a) {
+        Alias.Circle(r) => { r = r + 100; return r; }
+        Alias.Rect(w, h) => { return w * h; }
+    }
+    return 0;
+}
+
+int peekp(Alias *p)
+{
+    match (p) {
+        Shape.Circle(r) => { return r; }
+        _ => { return 0; }
+    }
+}
+
+int main(void)
+{
+    Alias a = Shape.Circle(2);
+    Alias b = a;
+    int x = peek(a);              /* 102，a 仍为 2 */
+    int y = peek(b);              /* 102 */
+    int z = peekp(&a);            /* 2 */
+    Alias p = Shape.Rect(3, 4);
+    Alias q = p;
+    q = Alias.Rect(5, 6);         /* p 仍为 3×4 */
+    int w = peek(p);              /* 12 */
+    int v = peek(q);              /* 30 */
+    printf("%d %d %d %d %d %d\n", x, y, z, w, v, a.u.Circle.r);
+    return 0;
+}
+```
+
+```console
+$ $CT copy.ct -o copy.c && cc -Wall -Wextra -std=c99 -fsanitize=address,undefined copy.c -o copy.bin
+$ ./copy.bin
+102 102 2 12 30 2              # 零警告、无 sanitizer 报告
+```
+
+**C. `pub typedef` 跨单元按别名构造**：消费者只用 `Alias.Circle` / `Alias.Rect`
+构造，再与 tag 构造的 `Shape` 混用：
+
+```console
+$ (cd xt && $CT build --emit-c prog.ct -o out)   → exit 0
+$ cc -Wall -Wextra -std=c99 -fsanitize=address,undefined out/*.c -o out/prog.bin
+$ ./out/prog.bin
+12 12 30
+```
+
+**D. 负例（防过度接受）**：
+
+```console
+$ $CT check badstruct.ct   → badstruct.ct:5:5: error: match needs an ADT value, but 'struct Pair' is not an ADT (exit 1)
+$ $CT check badptr.ct      → badptr.ct:5:5: error: match needs an ADT value, but 'IntPtr' is not an ADT (exit 1)
+$ $CT check crossadt.ct    → crossadt.ct:8:9: error: match arm names ADT 'B', but the subject is 'A' (exit 1)
+$ $CT check badctor.ct     → badctor.ct:5:21: error: unknown variant 'Triangle' of ADT 'Shape' (exit 1)
+$ $CT check arity.ct       → arity.ct:5:15: error: 'Shape.Circle' takes 1 argument, but 2 given (exit 1)
+```
+
+另测 `typedef enum Shape { … } Shape;`（tag 与别名同名）：同单元编译运行 `12 12`；
+`pub` 跨单元 `ct build --emit-c`、`cc -Wall -Wextra`、运行（输出 `0`，即 `c.tag`）
+均通过，F2 的 bare 名导出未因重名而报错；`const Alias *` 主语亦通过。
+
+### 9.7 版本 / 记录一致性
+
+```console
+$ grep -c 'CTC_VERSION "0.84.1"' selfhost/l0/ctc.c selfhost/l1/ctc.ct \
+    selfhost/l2/core.ct selfhost/l2/driver.ct selfhost/ct-ast/main.ct
+1 1 1 1 1
+$ grep -n 'v0.84.1' README.md docs/README.md AGENTS.md docs/history/phase-log.md docs/roadmap.md docs/session-map.md
+（六处均含 v0.84.1；0.84.0 只出现在历史条目与“fix v0.84.1”说明中）
+```
+
+`LANG-21` 状态原为 `reopened`，DEV 处置段主张 `fixed`（附红/绿证与提交 sha）；本轮复核
+通过后由 REV 改为 `verified`。`git status` 在复核前后均为 clean；本次只改本报告与
+`LANG-21` 状态，不 push、不打 tag。
+
+### 9.8 非阻断观察（新增 O7）
+
+- **O7（别名链）**：`typedef Alias Alias2;` 后 `match (Alias2)` 仍报
+  `match needs an ADT value, but 'Alias2' is not an ADT`。spec §4.73 的 typedef 形态只
+  冻结 `typedef enum Tag { … } Alias;` 一层，本轮 F1 判据也不含别名链；不影响本次通过。
+  若后续要求任意 typedef 链可达，建议另立条目，在 `ct_adt_from_type()` 里递归解析
+  `type_target`，而不是在本次修复中扩大范围。
+
+**`REV: 通过`**；PH-84 可按 v0.84.1 收口，F1/F2 不再阻断 E84-3/E84-5/E84-9。

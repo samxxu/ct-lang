@@ -7,7 +7,7 @@
 | 严重度 | High（重写 42.8k 行前需要） |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §2.3](../../docs/planning/v1-release-plan.md)、[D3 裁定](../../docs/reviews/2026-11-21-v1-campaign-eval.md) |
-| 状态 | **reopened**（2026-11-21，REV-PH-84：typedef ADT 的别名不能作 `match` 主语；`pub typedef` 跨单元 tag 名发射非法 C。最小复现见 [REV 复核](../../docs/reviews/2026-11-21-phase84-rev-verdict.md) §3） |
+| 状态 | **verified**（2026-11-21，REV-PH-84 v0.84.1 复核：F1/F2 已修，独立自举复现见 [REV 复核](../../docs/reviews/2026-11-21-phase84-rev-verdict.md) 文末 §9） |
 
 ## 背景与目标
 
@@ -124,6 +124,31 @@ $ bash test/ast/p84_layout.sh <fix>   → p84layout: 26 passed, 0 failed
 ```
 
 **提交**：`4f5b2cd2`（test 红）→ `53e0019f`（fix）；版本 `v0.84.1` 的收口提交随后。
+
+## REV 复核（2026-11-21，v0.84.1）
+
+**结论：verified。** 独立自举（`git archive 1cc20c25` → L0/L1/L2/ct-ast，
+`ct-ast v0.84.1`）后：
+
+- **F1**：`Alias`、`Alias *`、`Alias.Circle(r)` 作主语/分支均 `ct check` 退出 0；别名
+  匹配编译运行 `12 12`；`typedef int Num` 仍报 `not an ADT`；别名主语的漏变体仍给
+  `file:line:col`。
+- **F2**：`pub typedef` 跨单元，消费者用 tag `Shape` 与别名 `Alias` 两路；`ct build
+  --emit-c` 退出 0，产物只写 `struct lib_Shape` / `lib_Alias`，`cc -Wall -Wextra`
+  退出 0，运行 `12 2 7`。
+- **红/绿**：以 `4f5b2cd2`（实现前源码）复跑 `10/3`、`12/1`、`21/2`（均 exit 1）；
+  `1cc20c25` 为 `13/0`、`13/0`、`26/0`。
+- **门禁**：p84 syntax/match/errors/layout/docs/docs_audit 全绿；check-all 11 门禁
+  （gate 8 `1557 passed, 0 failed, 5 skipped`）、warnings `494 ok, 0 failed`、
+  sanitizer `586 checks, no report`、`g0`/`g8`/`check-docs`（2267 links, v0.84.1）
+  全绿。
+- **新增反例**：别名/tag 混用分支与构造 `12 12`；payload 副本/按值绑定
+  `102 102 2 12 30 2`；`pub typedef` 别名构造 `12 12 30`；非 ADT / 跨 ADT / 未知
+  变体 / arity 负例均带位置拒绝。ASan/UBSan 无报告。
+- **版本**：五处 `CTC_VERSION` 均 `0.84.1`；提交 `4f5b2cd2`（test 红）→
+  `53e0019f`（fix）→ `1cc20c25`（收口）。
+
+完整命令与原始输出见 [PH-84 REV 复核 §9](../../docs/reviews/2026-11-21-phase84-rev-verdict.md)。
 
 ## 关联
 
