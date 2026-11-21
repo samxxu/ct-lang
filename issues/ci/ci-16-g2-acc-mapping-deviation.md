@@ -1,7 +1,7 @@
 ---
 id: CI-16
 title: "G2 的 ACC-* 映射缺失：先登记 deviation，v1.1 前补机械校验"
-status: open
+status: deferred
 area: ci
 severity: P2
 opened: 2026-11-21
@@ -42,3 +42,9 @@ ACC-07        # 仅出现在主规范副本 docs/spec/ai-coding-workflow.md 的�
 - `grep -rl 'ACC-[0-9]' docs/design --include='*.md'` 覆盖所有接口/协议文档；
 - `bash tools/check.sh g2` 对缺映射的负例返回非 0；
 - `AGENTS.md` 0.3 不再有该偏离。
+
+
+## 状态（REQ，2026-11-21）
+
+`deferred`，触发条件：**v1.1 开工前**（ACC-* 映射属需求侧重构，P2，不阻塞 v1.0）。
+偏离 `g2-acc-mapping` 已生效，`tools/check.sh g2` 当前 SKIP；触发时按本卡「收敛」三步执行并转 `verified`。
