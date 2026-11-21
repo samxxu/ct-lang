@@ -1,0 +1,11 @@
+/* 292 (PH-84 E84-5): a `pub` ADT lives in a header unit. Its layout and its
+   `_Static_assert`s travel in `lib.h`; `lib.c` includes that header instead of
+   repeating the definition, and a consumer constructs and matches the variants
+   through the imported name. */
+namespace lib;
+
+pub enum Shape {
+    Circle(int r),
+    Rect(int w, int h),
+    Empty(),
+}

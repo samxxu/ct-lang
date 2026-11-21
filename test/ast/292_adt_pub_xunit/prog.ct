@@ -1,0 +1,24 @@
+/* 292: the consumer half of a `pub` ADT (PH-84 S84c). `Shape` reaches this unit
+   from `lib.h`, so construction and an exhaustive match work exactly as they do
+   inside the declaring unit, and the pattern is a qualified name. */
+#include <stdio.h>
+
+import lib::lib;
+
+int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+        Shape.Empty() => { return 0; }
+    }
+}
+
+int main(void)
+{
+    Shape c = Shape.Circle(2);
+    Shape r = Shape.Rect(3, 4);
+    Shape e = Shape.Empty();
+    printf("%d %d %d\n", area(c), area(r), area(e));
+    return 0;
+}

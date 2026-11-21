@@ -1,0 +1,59 @@
+/* 291: the `node->kind` rewrite (PH-84 E84-6) -- one shape, two spellings.
+
+   `struct OldNode { int kind; ... }` with a `switch` is what the ct-ast tree
+   carries today: the discriminator is a hand-numbered C enum, the payload is a
+   flat bag of fields, and the switch has no exhaustiveness check. The ADT form
+   below keeps the same tree and the same evaluation, but every arm names one
+   variant and binds its own payload, and the compiler refuses a missing one.
+   Both evaluators are run over the same trees and must agree.
+
+   This is the mechanical replacement the rewrite train will apply: one
+   `case K_X:` per `Type.X(...)`, the tag field gone (the variant *is* the
+   tag), and the payload fields scoped to their arm. */
+#include <stdio.h>
+
+enum OldKind { K_NUM, K_ADD };
+
+struct OldNode {
+    int kind;
+    int v;
+    struct OldNode *l;
+    struct OldNode *r;
+};
+
+int old_eval(struct OldNode *n)
+{
+    switch (n->kind) {
+    case K_NUM:
+        return n->v;
+    case K_ADD:
+        return old_eval(n->l) + old_eval(n->r);
+    }
+    return 0;
+}
+
+enum Node {
+    Num(int v),
+    Add(Node *l, Node *r),
+}
+
+int eval(Node *n)
+{
+    match (n) {
+        Node.Num(v) => { return v; }
+        Node.Add(l, r) => { return eval(l) + eval(r); }
+    }
+}
+
+int main(void)
+{
+    struct OldNode on = { K_NUM, 3, 0, 0 };
+    struct OldNode oa = { K_ADD, 0, &on, &on };
+
+    Node an = Node.Num(3);
+    Node aa = Node.Add(&an, &an);
+
+    printf("%d %d\n", old_eval(&on), eval(&an));
+    printf("%d %d\n", old_eval(&oa), eval(&aa));
+    return 0;
+}

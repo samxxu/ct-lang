@@ -1,0 +1,73 @@
+/* 290: the minimal ADT (PH-84 S84c) -- a payload-bearing `enum` is a named
+   sum type, `Shape.Circle(args)` builds one variant, and `match` reads it with
+   exhaustive, no-fallthrough arms that bind the payload by value.
+
+   The program also pins the emission promises a reader can observe:
+     - the binding is a copy (`r = r + 100` inside the arm does not change the
+       matched value), and a value whose arm falls through continues after the
+       match;
+     - a pointer subject is read through the same variants;
+     - a zero-field variant needs no payload binding;
+     - `break` inside an arm still leaves the enclosing loop, because the match
+       is not a C `switch`;
+     - the wildcard `_` is an explicitly written fallback. */
+#include <stdio.h>
+
+enum Shape {
+    Circle(int r),
+    Rect(int w, int h),
+    Empty(),
+}
+
+int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) => { r = r + 100; return r; }
+        Shape.Rect(w, h) => { return w * h; }
+        Shape.Empty() => { return -1; }
+    }
+}
+
+int peek(Shape *p)
+{
+    match (p) {
+        Shape.Circle(r) => { return r; }
+        _ => { return 0; }
+    }
+}
+
+int falls(Shape s)
+{
+    int n = 0;
+    match (s) {
+        Shape.Circle(r) => { n = n + r; }
+        Shape.Rect(w, h) => { n = n + w; }
+        Shape.Empty() => { n = n + 9; }
+    }
+    return n;
+}
+
+int loopbreak(void)
+{
+    int total = 0;
+    int i;
+    for (i = 0; i < 5; i++) {
+        Shape s = Shape.Circle(i);
+        match (s) {
+            Shape.Circle(r) => { if (r == 3) { break; } total = total + r; }
+            _ => { total = total + 100; }
+        }
+    }
+    return total;
+}
+
+int main(void)
+{
+    Shape c = Shape.Circle(2);
+    Shape r = Shape.Rect(3, 4);
+    Shape e = Shape.Empty();
+    printf("%d %d %d\n", area(c), area(r), area(e));
+    printf("%d %d\n", peek(&c), area(c));
+    printf("%d %d\n", falls(c), loopbreak());
+    return 0;
+}
