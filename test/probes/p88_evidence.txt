@@ -1,0 +1,65 @@
+# PH-88 (v0.88.0) 原始输出
+
+> 采集环境：macOS arm64；Apple clang 21.0.0；ct-ast 由 L0→L1→L2 自举链构建。
+> 基线：`47a8f786`（v0.87.0）。二进制：`/tmp/p88dev/ct-ast-sliced`（当前树）。
+
+## S88a — p88_emit
+```console
+$ bash test/ast/p88_emit.sh /tmp/p88dev/ct-ast-sliced
+  p88emit: slices=76
+  p88emit: missing-arm negative is red
+  p88emit: 66 corpus files are byte-identical
+p88emit: 3 passed, 0 failed
+exit=0
+```
+
+## S88b — p88_fixpoint
+```console
+$ bash test/ast/p88_fixpoint.sh /tmp/p88dev/ct-ast-sliced
+  p88fixpoint: one fixpoint_stage, one diff -r
+FAIL p88fixpoint: 2 rounds failed: fixpoint: FAILED round 2: the emitted tree differs from round 1 
+FAIL p88fixpoint: 3 rounds failed: fixpoint: FAILED round 2: the emitted tree differs from round 1 
+  p88fixpoint: 4 rounds is rejected
+p88fixpoint: 4 passed, 2 failed
+exit=1
+```
+
+## S88c — p88_metrics
+```console
+$ bash test/ast/p88_metrics.sh /tmp/p88dev/ct-ast-sliced
+  p88metrics: Emitter.h.ct 8876 -> 9371
+  p88metrics: 76 slices (34/26/6/8/2)
+  p88metrics: emitted C 48223 -> 48646
+  p88metrics: distinct-callee capacity is 1024
+p88metrics: 9 passed, 0 failed
+exit=0
+```
+
+## S88d — p88_docs
+```console
+$ bash test/ast/p88_docs.sh /tmp/p88dev/ct-ast-sliced
+  p88docs: tutorial §21 snippet runs (7/5/8)
+p88docs: 26 passed, 0 failed
+exit=0
+```
+
+## 等价（D-017 A1）
+```console
+$ python3 tools/p85_inventory.py --root . corpus-manifest --ct /tmp/p88dev/ct-ast-sliced | diff test/probes/p85_corpus_sha.tsv -
+CORPUS-OK (66 files)
+```
+
+```console
+$ bash test/ast/p86_errors.sh /tmp/p88dev/ct-ast-sliced
+p86errors: 23 passed, 0 failed
+```
+
+```console
+$ bash test/ast/p84_match.sh /tmp/p88dev/ct-ast-sliced && bash test/ast/p84_layout.sh /tmp/p88dev/ct-ast-sliced && bash test/ast/p84_syntax.sh /tmp/p88dev/ct-ast-sliced
+p84match: 13 passed, 0 failed
+OK p84match
+p84layout: 26 passed, 0 failed
+OK p84layout
+p84syntax: 14 passed, 0 failed
+OK p84syntax
+```

@@ -19,6 +19,8 @@
 | 记录 | 内容 |
 | --- | --- |
 | [phase-log.md](phase-log.md) | Phase 0–36 的逐相详细记录、版本记录、已定设计决策与待定项；[../roadmap.md](../roadmap.md) 只做简要索引 |
+| [p88_metrics.md](p88_metrics.md) | PH-88（v0.88.0）发射器切片度量与 sharp edge：76 个 kind 切片、行数/耗时/发射 C、fixpoint 2/3 轮、PH-85 spike 对照 |
+| [v1-pre-evidence.md](v1-pre-evidence.md) | v1-pre（PH-84…PH-88）逐相结论、承接目标与遗留清单；v1.0 入口前的证据摘要 |
 
 ### design/ —— 已关闭阶段的设计记录
 

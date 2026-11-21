@@ -3155,3 +3155,42 @@ exit+stderr 逐字不变；自举不动点（ct-ast 与自编译 ct-ast2 的 `--
 “删掉一条切片 → 探针必须变红”；语言级负例
 `test/ast/p87_checker/missing_arm.ct` 钉住
 `error: match does not cover variant 'Shape.Rect'`。
+
+### 4.75 发射器的判别式切片与自举不动点轮数（PH-88，实现内部）
+
+> 本节与 §4.74 同类：描述 ct-ast 自身的组织约束与门禁，**不是**用户可见语法；
+> 发射格式、命名契约与 ABI 均不变。
+
+PH-88 把发射器的五个 kind 判别函数改成与 §4.74 同形的**单一判别 + 按 kind 切片**：
+
+| 判别函数 | 切片前 | 切片后 | 切片数 |
+| --- | --- | --- | --- |
+| `emit_node`（语句） | 980 行 | 40 行 | 26 |
+| `emit_expr`（表达式） | 1162 行 | 41 行 | 34 |
+| `emit_type_decl`（顶层声明） | 199 行 | 13 行 | 6 |
+| `emit_inline`（语句形表达式） | 154 行 | 15 行 | 8 |
+| `emit_field`（字段） | 46 行 | 9 行 | 2 |
+
+切片函数是文件级 `static`（`em_node_*` / `em_expr_*` / `em_decl_*` /
+`em_inline_*` / `em_field_*`），不是 trait 方法：`EmitOps` 的方法数已接近
+`MAX_METHODS`（64），而顶层函数预算 `MAX_FUNCS`（512）仍有余量（399 → 475）。
+判别式 `self->arena->nodes[n].kind` 只读一次，值以 `nk` 传入切片；切片体内
+不得再读同一结点的 `kind`。`p88_emit` 核对 76 条切片清单、自测“删一条判别 →
+探针变红”，并保持 66 个语料逐字节一致（D-017 A1 第 1 层）。
+
+**一个例外形状。** `emit_node` 的 `N_DECL` 前处理在未处理时原本会落回后面的
+“表达式语句”分支（`N_DECL` 也在该分支的条件里）。该切片用三态返回：`2` 表示
+“继续判别”，`0`/`-1` 原样透传；除此之外所有切片都是单一 kind 的完整分支体。
+
+**自举不动点轮数（D-017 / S88b）。** §9.6 的不动点段改为**轮数参数化**：
+日常 `CT_FIXPOINT_ROUNDS=2`，v1.0 tag 候选 `CT_FIXPOINT_ROUNDS=3`。轮数是唯一
+参数——`check-ast.sh` 只有一个 `fixpoint_stage`（一次 `diff -r`），第 1 轮发射，
+之后每轮用上一轮产物编出的编译器重发，逐轮与第 1 轮比较；不新建脚本、不分叉
+比对逻辑。轮数不在 {2,3} 内直接报错退出，不静默钳位。
+
+**为什么仍不是字面 `match`（诚实登记）。** ct-ast 由 L2 引导编译，L2 不实现
+PH-84 的 ADT/`match`；写 `pub enum NodeKind` 会被 L2 原样发射成非法 C 而断链
+（§4.74 同因）。76 个切片与将来的 `match` 变体一一对应，但“一 kind 一臂、共用体
+调同一 helper”的机械替换只能在引导链支持后做。承接目标已写死为 **v1.0 的 seed
+cutover（`v1-PH-0`）**，并纳入 `expr_ctype` / `maybe_box` / `chk_type` 等剩余
+kind 判别；见 [battle/p88-emit-match](../battle/p88-emit-match/verdict.md)。

@@ -2197,3 +2197,63 @@ match (s) {
 自举不动点”验收；等 PH-88 把引导链搬开，再把每个 `tc_expr_*` / `ctype_*` 换成
 `Shape.Variant(binding) => { … }` 即可。误报情况见
 [PH-87 dogfood 报告](design/p87_dogfood.md)。
+
+## 21. 发射器切片与自举不动点：日常 2 轮，tag 前 3 轮（PH-88，v0.88.0）
+
+PH-87 把解析器和检查器的 kind 判别切成一张函数表；PH-88 对发射器做同一件事：
+`emit_node` / `emit_expr` / `emit_type_decl` / `emit_inline` / `emit_field`
+不再各自背一条 1000 行的 `if` 链，而是**读一次 kind、调用一个切片函数**。
+判别式只出现一次，新增 kind 忘了写切片时，探针会把它当“清单外的一支”报红。
+
+切片形状（示意，ct-ast 自己暂时还不能写 `match`，原因同 §20）：
+
+```ct
+#include <stdio.h>
+
+enum NodeKind {
+    Num(int v),
+    Add(int l, int r),
+    Mul(int l, int r),
+}
+
+int eval(NodeKind n)
+{
+    match (n) {
+        NodeKind.Num(v) => { return v; }
+        NodeKind.Add(l, r) => { return l + r; }
+        NodeKind.Mul(l, r) => { return l * r; }
+    }
+}
+
+int main(void)
+{
+    printf("%d\n", eval(NodeKind.Num(7)));
+    printf("%d\n", eval(NodeKind.Add(2, 3)));
+    printf("%d\n", eval(NodeKind.Mul(2, 4)));
+    return 0;
+}
+```
+
+输出：
+
+```text
+7
+5
+8
+```
+
+自举不动点也顺带升级成“轮数参数化”：**日常 2 轮**（第 1 轮发射、第 2 轮用
+编出的编译器重发，逐字节比较），**v1.0 tag 候选 3 轮**。轮数是唯一参数，
+`check-ast.sh` 里只有一个 `fixpoint_stage`、一次 `diff -r`：
+
+```console
+$ CT_FIXPOINT_ROUNDS=2 bash selfhost/check-ast.sh --fixpoint-only .temp/ct-ast
+fixpoint: 2 rounds byte-identical
+$ CT_FIXPOINT_ROUNDS=3 bash selfhost/check-ast.sh --fixpoint-only .temp/ct-ast
+fixpoint: 3 rounds byte-identical
+```
+
+为什么不是 `match`：ct-ast 源码由 L2 引导编译，L2 不实现 ADT/`match`，写进去会
+断链。切片与 `match` 的臂一一对应，等 v1.0 seed cutover（`v1-PH-0`）后机械替换；
+承接范围与判据见 [battle/p88-emit-match](../battle/p88-emit-match/verdict.md)。
+度量与 sharp edge 见 [p88_metrics](history/p88_metrics.md)。
