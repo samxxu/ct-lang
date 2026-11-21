@@ -812,6 +812,41 @@ else
     bad "p84/docs-audit" "$(cat "$work/p84aud.out" "$work/p84aud.err" | head -5)"
 fi
 
+# PH-85 S85a (E85-1): the inventory document still matches the tree. The probe
+# re-derives every unit row (lines / free functions / methods / imports /
+# file-level state) and the import cycles with tools/p85_inventory.py.
+if bash test/ast/p85_inventory.sh >"$work/p85inv.out" 2>"$work/p85inv.err"; then
+    ok "p85/inventory (E85-1: units, state, imports, 0 cycles)"
+else
+    bad "p85/inventory" "$(cat "$work/p85inv.out" "$work/p85inv.err" | head -5)"
+fi
+
+# PH-85 S85b (E85-2): the lexer spike's evidence, its committed patch and the
+# honest scope are on disk, and the level-1 corpus still matches the pinned
+# pre-M0 sha256 manifest.
+if bash test/ast/p85_spike.sh "$work/ct-ast" >"$work/p85spk.out" 2>"$work/p85spk.err"; then
+    ok "p85/spike (E85-2: evidence, patch, corpus bytes)"
+else
+    bad "p85/spike" "$(cat "$work/p85spk.out" "$work/p85spk.err" | head -5)"
+fi
+
+# PH-85 S85c (E85-3/4/6): M0 is a pure move -- body-hash set preserved, product
+# set = baseline + the six mapped units, no new import cycle, and the pinned
+# test corpus still emits the same bytes.
+if bash test/ast/p85_m0.sh "$work/ct-ast" >"$work/p85m0.out" 2>"$work/p85m0.err"; then
+    ok "p85/m0 (E85-3/4: pure move, products, no cycle)"
+else
+    bad "p85/m0" "$(cat "$work/p85m0.out" "$work/p85m0.err" | head -5)"
+fi
+
+# PH-85 S85d (E85-5): the B checker on the build path with off / warn / error;
+# off is the default and is byte-for-byte the pre-PH-85 build.
+if bash test/ast/p85_a_wire.sh "$work/ct-ast" >"$work/p85a.out" 2>"$work/p85a.err"; then
+    ok "p85/a-wire (E85-5: off/warn/error, default off)"
+else
+    bad "p85/a-wire" "$(cat "$work/p85a.out" "$work/p85a.err" | head -5)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.

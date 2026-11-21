@@ -1,8 +1,8 @@
 # Phase 85 — v1-pre 准备：inventory / spike / M0 粗切 / A 机制
 
-> **状态：实施中（准备；施工入口未过）**（2026-11-21 立项并开卡；`v0.85.0`）。
+> **状态：完成**（2026-11-21 收口；`v0.85.0`；S85a–S85d 交付，E85-1…8 见 §7）。
 > **签收：EDITOR 2026-11-21**（主编统一签收；卡作者 REQ）。
-> **施工闸门**：PH-84 未收口（含 S84e 文档一致性）；未过前只做证据、设计与夹具，不落实现代码。
+> **施工闸门**：PH-84 已收口（含 S84e 文档一致性，`10c23c77`），闸门已过。
 > **前置**：PH-84（ADT/match + 文档一致性）；[D-017](../decisions/D-017.md)、D1–D9。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/design/phase85.md`。
 
@@ -92,3 +92,146 @@ S85a 可为 `no-test:`，由 REVIEW 签字。
 | R85-5 | 范围蔓延到精细切分/重写 | 非目标写死；M1 留 v1.1 |
 
 回滚：单卡回滚；M0 回退到原文件边界；A 机制默认 `off`，可单独撤。
+
+## 5 决策记录（本卡内，`D85-*`）
+
+| ID | 内容 |
+| --- | --- |
+| D85-1 | M0 只搬“不依赖宿主类型、也不被宿主类型签名约束”的自由函数；方法搬移必然让宿主与新单元互相 import（成环），归 PH-86–88 的切片 |
+| D85-2 | 新增单元的命名/形状照 `Sh.h.ct` 先例：无状态 marker 类型 + `pub` 自由函数 + 同命名空间；宿主单向 import 新单元 |
+| D85-3 | A 机制用 `ct build --check-level=off|warn|error`（默认 `off`）；`ct check --types` 不变；`error` 在写产物前失败 |
+| D85-4 | 语料 sha256 清单把生成物 banner 的版本 token 归一化：本卡有意 bump 版本，banner 以下的字节才是“发射不变”的判据 |
+| D85-5 | spike 只证结构等价；整子系统“新语法等价重写”记为**不通过（未覆盖）**，按 R85-1 退化（见 §8） |
+
+## 7 收口对照表（2026-11-21，v0.85.0）
+
+### 7.1 任务逐项
+
+| 任务 | 交付 | 验收命令 | 原始输出 | effort |
+| --- | --- | --- | --- | --- |
+| S85a inventory | `tools/p85_inventory.py` + [p85_inventory.md](p85_inventory.md) + 探针 | `bash test/ast/p85_inventory.sh` | `p85inventory: 9 passed, 0 failed` | M |
+| S85b spike | [p85_spike.md](p85_spike.md) + 证据 + patch + 探针 | `bash test/ast/p85_spike.sh <ct-ast>` | `p85spike: 14 passed, 0 failed` | M |
+| S85c M0 粗切 | 6 个新单元 + [p85_m0.md](p85_m0.md) + 基线/映射 + 探针 | `bash test/ast/p85_m0.sh <ct-ast>` | `p85m0: 4 passed, 0 failed` | M |
+| S85d A 机制 | `--check-level` + Diag `type_fail` + 探针 | `bash test/ast/p85_a_wire.sh <ct-ast>` | `p85a: 9 passed, 0 failed` | S |
+
+`no-test:` 例外：无。S85a 的验收是“文档 + 抽查”，探针已把抽查机械化（不再是纯文档任务）；
+四个任务都先有 `test(<scope>): p85<X> 红` 提交（§7.2），随后实现转绿。
+
+### 7.2 红证（T-7；baseline `10c23c77`，实现前；归档重建）
+
+```console
+$ git archive 10c23c77 | tar -x -C /tmp/p85red && sh .temp/build-ct-ast.sh . /tmp/p85red/.temp/b
+built /tmp/p85red/.temp/b/ct-ast
+$ cd /tmp/p85red && bash test/ast/p85_inventory.sh .temp/b/ct-ast
+p85inventory: 0 passed, 9 failed                     exit=1
+$ bash test/ast/p85_spike.sh .temp/b/ct-ast
+p85spike: 1 passed, 13 failed                        exit=1
+$ bash test/ast/p85_m0.sh .temp/b/ct-ast
+p85m0: 1 passed, 3 failed                            exit=1
+$ bash test/ast/p85_a_wire.sh .temp/b/ct-ast
+p85a: 3 passed, 6 failed                             exit=1
+```
+
+红的原因逐条：inventory 的文档/函数集合尚不存在；spike 的 report/patch/证据尚不存在；
+M0 的映射与新单元尚不存在；A 的 `--check-level` 在 baseline 上是 unknown option。
+
+注（提交拓扑）：四项红证都在 PH-85 基线 `10c23c77` 上复跑（`git merge-base --is-ancestor
+10c23c77 HEAD` 为真）。首个 `test(...) 红` 提交的直接父提交是 `32e3e482`（同期另一席位的
+battle 文档提交，路径只在 `battle/`，不含编译器改动），因此“实现前”的判据仍由 `10c23c77`
+承载——本卡没有用实现后的工作树复跑红证。
+
+### 7.3 退出判据（E85-1…8）
+
+| ID | 断言 | 证据 | 结论 |
+| --- | --- | --- | --- |
+| E85-1 | inventory 覆盖全部子系统；函数集/状态/import 环清单可复核 | `p85_inventory`：27 单元逐行比对、17 个单例状态、138 边、0 环 | ✅ |
+| E85-2 | spike 含行数/耗时/逐字节/ sharp edge；门通过 | [p85_spike.md](p85_spike.md)：391→425 行、`next` 309→39、构建 1053→994 ms、66 文件逐字节、10 条 sharp edge | ⚠️ 结构等价通过；整子系统新语法重写门**不通过**（未覆盖），按 R85-1 退化，见 §8 |
+| E85-3 | M0 纯搬移（body-hash + 机械行白名单）；不新增 import 环 | `p85_m0`：827 个基线 body 全在；6 单元只含自由函数、不 import 宿主；0→0 环 | ✅ |
+| E85-4 | 期望集合基线 + 旧→新映射入库；集合比对在自举段可跑 | `p85_m0_baseline.json`（20 产物）+ `p85_m0_mapping.tsv`（6 行）+ `p85_m0` 产物比对 26 | ✅ |
+| E85-5 | A 机制 `off/warn/error` 可用，默认 `off`，行为零变化 | `p85_a_wire` 9/9；default ≡ off（产物逐字节 diff 空）；`error` 无产物、退出非 0 | ✅ |
+| E85-6 | 测试语料发射逐字节不变；编译器自身差异按两级制 | `p85_m0`/`p85_spike` 的 66 文件清单一致（banner token 归一化）；自举不动点 `diff -r` 空 | ✅ |
+| E85-7 | 既有测试/示例全绿；`check-all` 与 ASan 通过；无新增警告 | 见 §7.4 | （见 §7.4） |
+| E85-8 | 文档/证据入库；单卡回滚不影响 `enum`/`switch`/C enum 旧代码 | 卡 §7/§8 + 3 份 design 文档 + 探针；回滚演练见 §7.5 | ✅ |
+
+### 7.4 总门禁（收口实跑）
+
+```console
+$ bash tools/check.sh g0
+g0: OK (block 1.17.0, session-map present)                       rc=0
+$ bash tools/check.sh g8
+g8: OK (PN-2 version coherence; 9 legacy offsets)                rc=0
+$ bash selfhost/check-all.sh
+...
+VERDICT
+check-all: OK (11 hard gates green)                              rc=0
+```
+
+逐门：
+
+| 门 | 结果 |
+| --- | --- |
+| 1 `test/run.sh` | L0 八层全绿（ASan/UBSan 层含在 `test/run.sh`；另跑 `check-sanitizers.sh`，见下） |
+| 2 `check-goldens.sh` | `L1 golden coverage: 25 pass, 0 new, 0 pending, 0 regression`；`L1': 25 passed`；`L2: 25 passed`；`OK` |
+| 3 `check-archive.sh` | `single-unit 3 / diagnostics 10 / multi-unit 4 / designed 47 pass, 0 regression`；`OK` |
+| 4 `check-m2a.sh` | `L1 vs L2 on the split tree: 2 unit(s) identical, 0 differing` |
+| 5 `ct-tour.sh` | 9 步全 ok（含 `ct-ast` 以 `ct` 身份运行） |
+| 6 编辑器语法 | `ok`（167 断言） |
+| 7 包管理 | `test/pkg/run.sh` 全绿 |
+| 8 `check-ast.sh` | `summary: 1562 passed, 0 failed, 4 skipped`（含 `p85/inventory`、`p85/spike`、`p85/m0`、`p85/a-wire` 四行 ok；4 skip 是 host 工具缺失的可选探针） |
+| 9 `check-warnings.sh` | `check-warnings: 500 ok, 0 failed` |
+| 10 `check-semantics.sh` | `check-semantics: OK (23 assertions)` |
+| 11 `check-docs.py` | `check-docs: OK (2295 relative links in 377 files, v0.85.0, 11 hard gates, 12 phase status, 6 适用版本 header(s), 2 superseded link(s), 10 signoff(s))` |
+
+补充：
+
+- **ASan/UBSan**：`bash selfhost/check-sanitizers.sh` → `check-sanitizers: OK (586 checks, no sanitizer report)`，`rc=0`（见 §7.4.1）。
+- **dist 产物**：`ZIG=.temp/ph83/zig/zig bash selfhost/make-dist.sh`
+  → `sha256: 6a1acf74…; smoke: ct v0.85.0`（Linux x64 static musl，QEMU 实跑 `ct -v`）。
+  重建时发现并修复一处 M0 的跨 host 声明遗漏：`ct_norm_path` 依赖的
+  `extern char *realpath(...)` 原在 `Module.h.ct`，随函数搬进 `ModuleBoundary.h.ct`；
+  macOS 的 libc 头默认暴露它、musl `-std=c99` 不暴露，故只有 Linux 交叉构建会红。
+  该声明行已补进新单元（机械行白名单内，函数体未变）。
+
+#### 7.4.1 ASan/UBSan 原始输出
+
+```console
+$ bash selfhost/check-sanitizers.sh
+== build the bootstrap chain and the AST compiler (sanitized) ==
+...
+  ok    vararg_fnptr_void
+  ok    variadic_impl
+  ok    variadic_no_named
+
+check-sanitizers: OK (586 checks, no sanitizer report)          rc=0
+```
+
+另：`p80_retain` 的 ASan/UBSan 轨迹在 check-ast 内为 `ok`（E85-7 的“既有测试/示例全绿”）。
+
+### 7.5 回滚（演练）
+
+- **S85a**：删 `tools/p85_inventory.py` / `docs/design/p85_inventory.md` / 探针即可；
+  无源码影响。
+- **S85b**：spike 不在主线（patch 只在 `test/probes/`），不应用即回滚；主的 66 语料
+  清单不变。
+- **S85c**：`git revert` M0 提交 → 6 个新单元删除、宿主恢复原函数与 `import`；
+  body-hash 基线说明“原文件边界”仍可用；产物集合回到 20。`enum`/`switch`/C enum
+  旧代码不受影响（M0 未触及这些发射路径）。
+- **S85d**：`git revert` A 提交 → `--check-level` 消失、Diag 回到无 `types_level`；
+  默认 `off` 的构建路径本来就不经过新代码，回滚不影响任何既有产物。
+
+### 7.6 流程说明
+
+- 单会话 + 单写者：M0 在一条工作分支内一次搬完；合入窗口要求 `check-all` 全绿（§7.4）。
+- 红证按 T-7 在实现前用基线归档复跑；VERIFY 签字为角色席位（单会话偏离，见 AGENTS 0.3）。
+
+## 8 未覆盖 / 简化（诚实登记）
+
+| # | 项 | 现状 | 去向 |
+| --- | --- | --- | --- |
+| 1 | spike 的“整子系统新语法等价重写” | **未覆盖**：只重写了结构（方法拆分），没有迁移 `Str` token 视图、没有 `?`/`errdefer`（词法器无错误通道/无资源）；按 R85-1 记为**门不通过** | PH-86 按 per-function 拆（punct → number → quoted/pp_line → Str 视图），每段独立红绿 |
+| 2 | M0 只搬“不依赖宿主类型”的自由函数 | 方法、带 `struct X *` 参数的函数、`size_t` 参数的 SHA 组都留在宿主（`p85_m0.md` §2 表）；80 个单元级函数只搬了 63 个 | PH-86–88 的切片逐项处理；`Sha256` 组可单列一个小任务 |
+| 3 | A 机制只接 B 的 `--types` 判定 | `--semantics`（CFG/own）不在本卡；`warn` 的发现走 stderr 文本，不进 `--diagnostics=json` | v1.1 S2（A 默认强制）时扩展 JSON 与语义层 |
+| 4 | A 的默认强制 | 本卡只交付机制，默认 `off`（卡 §1.5） | v1.1 S2；v1.0 只要求 FP=0 证据 |
+| 5 | 导入图仍偏重 | parse 7 单元互依；M0 只保证“不新增环” | 破环单独成案（D-017 A4） |
+| 6 | 单元数上限/4K 阈值 | 卡 §1.4 允许“不设上限、阈值仅告警”；最大单元 `Emitter` 8876 行、`Expr` 8750 行 | M1（v1.1 S1）再校准 |
+| 7 | `p85_spike` 无法在 check-ast 内重建 spike | 归档 patch + 证据；探针只校验 patch 可应用、证据自洽、当前语料一致 | 不需要：spike 是实验，产物是报告 |

@@ -14,7 +14,7 @@
 #     the refs the compiler leaves behind) and no cycle detection is claimed;
 #   - E81-6: the same generated code passes ASan/UBSan warning-free, and the
 #     five CTC_VERSION sites / README / spec 4.71 / tutorial 17 / package-guide
-#     / roadmap / D-016 agree with v0.84.1.
+#     / roadmap / D-016 agree with v0.85.0.
 #
 # `new` is contextual: `int new;`, `r.new`, a parameter named `new` and
 # `new = ...` stay identifiers (ctx.ct); the construction form is refused in a
@@ -119,14 +119,14 @@ neg neg_new_static "cannot initialize a static object" "new in a static local"
 # E81-6: the written contract and the version落点 stay in step.
 for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
          selfhost/l2/driver.ct selfhost/ct-ast/main.ct; do
-    if grep -q '#define CTC_VERSION "0.84.1"' "$f"; then
-        ok "$f CTC_VERSION 0.84.1"
+    if grep -q '#define CTC_VERSION "0.85.0"' "$f"; then
+        ok "$f CTC_VERSION 0.85.0"
     else
-        bad "$f CTC_VERSION is not 0.84.1"
+        bad "$f CTC_VERSION is not 0.85.0"
     fi
 done
-if grep -q 'v0\.84\.1' README.md && grep -q 'v0\.84\.1' docs/README.md; then
-    ok "README / docs/README carry v0.84.1"
+if grep -q 'v0\.85\.0' README.md && grep -q 'v0\.85\.0' docs/README.md; then
+    ok "README / docs/README carry v0.85.0"
 else
     bad "README version"
 fi

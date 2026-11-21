@@ -2,7 +2,7 @@
 
 > 中文
 >
-> **当前版本 v0.84.1。** 本目录的 `design/` 保留**最近 12 个已完成阶段**的设计文档（当前在研
+> **当前版本 v0.85.0。** 本目录的 `design/` 保留**最近 12 个已完成阶段**的设计文档（当前在研
 > 阶段计入），更早的 `design/phase*.md` 必须退役到 [history/design/](history/design/)；评审报告
 > 与其余历史记录在 [history/](history/README.md)。仓库入口见 [../README.md](../README.md)，改动
 > 规约见 [../AGENTS.md](../AGENTS.md)。
@@ -26,7 +26,7 @@
 | [polymorphism.md](polymorphism.md) | 接口多态与派发 | 设计对象协作 |
 | [construction.md](construction.md) | 对象构造语义（vptr 由谁、何时写入） | 排查构造期问题 |
 | [patterns.md](patterns.md) | 设计模式在现有特性下的写法 | 判断「要不要新增语言特性」 |
-| [memory-guide.md](memory-guide.md) | 内存实践：`own` / `borrow` / 工厂 / 池 / arena | 写持有资源的代码 |
+| [memory-guide.md](memory-guide.md) | 指针层内存实践：`own` / `borrow` / 工厂 / 池 / arena | 写逃生层或维护旧代码 |
 | [package-guide.md](package-guide.md) | 包作者指南：`ct.pkg` 键、`ns-root`、`ct install` / `ct build` 行为、常见失败 | 编写或消费一个包 |
 | [modern-oo-gap.md](modern-oo-gap.md) | 需求侧评估：以现代化 OO 为参照的差距清单、battle 记录与三档结论 | 判断「还缺哪些语言特性」 |
 

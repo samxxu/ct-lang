@@ -449,7 +449,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 
 | 项 | 值 |
 | --- | --- |
-| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-84 |
+| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-85 |
 | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
 | 门禁入口 | `tools/check.sh g0`；其余为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（链接 + G9） |
 | 文档 snippet | 缺失 |
@@ -505,6 +505,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 2026-11-21：PH-82 → v0.82.0（`d=0`）；`leaks` 两档、直接环告警、allow-cycle、树模式，E82-1…8 全通过。
 > 2026-11-21：PH-83 → v0.83.0（`d=0`）；契约 v1、`ct index verify`、conformance、Linux x64 产物，E83-1…8 全通过。
 > 2026-11-21：PH-84 → v0.84.0（`d=0`）；最小 ADT/`match`（S84a–S84d），E84-1…8 通过；S84e（文档一致性）按 battle doc-consistency-1 判决 B（最小集）完成，E84-9 通过，A 的全量审计归 DOC-77/78/79。
+> 2026-11-21：PH-85 → v0.85.0（`d=0`）；inventory + 词法器 spike（结构等价通过、整子系统重写门不通过，见卡 §8）+ M0 粗切 6 单元 + A 机制 `--check-level=off|warn|error`（默认 off）；E85-1…8 通过。
 > 2026-11-21：PH-84 F1/F2 修复 → v0.84.1（PATCH，LANG-21 fixed）；typedef 别名可作 match 主语、`pub typedef` 跨单元发射 `struct lib_Shape`/`lib_Alias`。
 > 2026-11-21：PKG-14 → v0.83.1（fix）；索引校验非普通文件 exit 2、FIFO 不挂起、ferror/JSON 失败。
 > 2026-11-21：PKG-14 CI 追加 → v0.83.3（fix）；`CT_HOME` 默认索引路径在 glibc 上被自拷贝清空，已修。
@@ -592,9 +593,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.84.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.85.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.84.1（PH-84 最小 ADT / `match` 已交付：带负载 `enum` = ADT、`Type.Variant(args)` 构造、穷尽 `match`（漏/重/未知变体硬错、`_` 必须显式且 `--types` lint 多余兜底）、tag+union 布局与四条 `_Static_assert`、绑定按值/无 fallthrough、`pub` ADT 的 `.h` 布局进入 golden；E84-1…8 通过；spec §4.73 / tutorial §18 / patterns §6；S84e 文档一致性按 battle doc-consistency-1 判决 B 的最小集完成，E84-9 通过；A 的全量审计归 DOC-77/78/79；v0.84.1 为 REV 打回修复 F1/F2：typedef 别名作 match 主语、`pub typedef` 跨单元命名）。Phase 83 包管理契约 v1 已收口（v0.83.3，PKG-14 fix）；Phase 82/81/80/79/78/77/76 及 43–53 已收口。后续顺序见 [v1 路线](docs/planning/v1-release-plan.md)（PH-85…88 → v1.0）。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.85.0（PH-85 v1-pre 准备已交付：S85a inventory（27 单元 / 44474 行 / 842 函数 / 138 导入边 / 0 环，`p85_inventory` 逐格校验）、S85b 词法器结构等价 spike（`next` 309→39 行、66 语料逐字节一致、不动点；整子系统新语法重写门**不通过**，PH-86 按 per-function 拆）、S85c M0 粗切（6 个新单元纯搬移，body-hash 全保留、产物 20→26、0 新环）、S85d `ct build --check-level=off|warn|error`（默认 off，行为零变化）；E85-1…8 通过；v1-pre 顺序见 [v1 路线](docs/planning/v1-release-plan.md)（PH-86…88 → v1.0） |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界

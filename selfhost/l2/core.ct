@@ -52,7 +52,7 @@
 #define MAX_MAP_IMPLS 512                 /* impl methods listed in `--emit-map` */
 #define MAX_CALLS  4096                   /* direct call edges listed in `--emit-map` */
 
-#define CTC_VERSION "0.84.1"
+#define CTC_VERSION "0.85.0"
 
 /* ---------------------------------------------------------------- data */
 
