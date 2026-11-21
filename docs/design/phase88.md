@@ -1,8 +1,8 @@
 # Phase 88 — v1-pre：发射器重写 + 自举回环
 
-> **状态：实施中（准备；施工入口未过）**（2026-11-21 立项并开卡；`v0.88.0`）。
-> **签收：EDITOR 2026-11-21**（主编统一签收；卡作者 REQ）。
-> **施工闸门**：PH-87 未收口；未过前只做设计与夹具。
+> **状态：完成**（2026-11-21 收口；`v0.88.0`；E88-1 部分通过，承接见 §3.1）。
+> **签收：EDITOR 2026-11-21**（主编统一签收；卡作者 REQ）；收口复核待 REVIEW（§7）。
+> **施工闸门**：PH-87 已收口（`47a8f786`，REV PASS）；S88a–S88d 已施工。
 > **前置**：PH-87；[D-017](../decisions/D-017.md)（两级判据、自举轮数参数化）。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/design/phase88.md`。
 
@@ -77,3 +77,19 @@ S88c/S88d 可写 `no-test:`，由 REVIEW 签字。
 | R88-5 | 顺手改发射格式/ABI | 非目标写死；diff 审阅 |
 
 回滚：单卡回滚；PH-85–88 的 R 切片可独立退回。
+
+### 3.1 E88-1 承接裁定（PH-87 复核 §3.3 的落实）
+
+E88-1 的“tag 判别换穷尽 `match`”在 v0.88.0 的引导链下**不能字面完成**：ct-ast
+源码由 L2 编译，L2 不实现 PH-84，ADT/`match` 会被原样发射成非法 C（原始输出见
+[battle/p88-emit-match](../../battle/p88-emit-match/question.md)）。按 PH-87 先例
+（battle/p87-kind-match）开 [battle/p88-emit-match](../../battle/p88-emit-match/verdict.md)，
+把承接写死为：
+
+| 项 | 裁定 |
+| --- | --- |
+| 承接目标 | **v1.0 seed cutover（`v1-PH-0`）**，不在 PH-88 内换 seed |
+| 承接范围 | 本卡 76 个发射器切片 + PH-87 §3.3 点名的 `expr_ctype`、`maybe_box`、`chk_type` |
+| 本卡交付 | 按 kind 切片（单一判别）+ `p88_emit` 清单/变异自测 + 66 语料逐字节 + 345 诊断 + fixpoint 2/3 轮 |
+| E88-1 记录 | **部分通过**（切片/等价完成；字面 `match` 未做，承接见上） |
+| 非作者追签 | battle 判决待 REVIEW/EDITOR 追签；DEV 不自签（0.7/T-8） |
