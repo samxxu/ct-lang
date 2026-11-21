@@ -18,10 +18,10 @@
 | “CT 是 C 的超集” | 与 DOC-76 冲突 | 改为“C 风格，但兼容承诺已收窄” |
 | “指针只出现在 shim/MMIO/extern” | 指针在任何 `.ct` 合法 | “主要在 shim/硬件/逃生层；应用层先想 Str/切片/box” |
 | `"42".to_int()` | 需 `import std::str::String;` | 补 import 前提；内置层不自动带 |
-| “借用类型不能存（字段/容器/全局 = 硬错）” | `Vec<Str>` / `Option<Str>` / ADT 负载可编译 | struct 字段 / `Map` 键硬错；其余是借用视图风险 |
+| “借用类型不能存（字段/容器/全局 = 硬错）” | `Vec<Str>` / `Option<Str>` / ADT 负载可编译；全局 `Str g = "x"` 也可编译 | struct 字段 / `Map` 键硬错；全局/容器/ADT 是借用视图风险 |
 | “返回局部视图 = 硬错” | `Str` 逃逸无 lint（SH-106）；`T[]` 是 warning | 改为“T[] 有 `slice escape` warning；Str 无 lint” |
 | “owning 自动释放” | 字段/全局/ADT payload 无自动 Drop；环泄漏 | 补边界 |
-| `foreach (v) { i, item }` | 语法是 `foreach (v) { … item … }` | `Vec`/`Map` 额外有只读 `i`；数组没有 |
+| `foreach (v) { i, item }` | `i` / `item` 是**块内隐式绑定**，不是头列表；`{ i, item; }` 只是逗号表达式 | 正确写法 `foreach (v) { … i … item … }`；v0.84.1 数组与 Vec/Map 都绑定只读 `i` |
 | 附录 briefing | 重复上述错误 | 同步修 |
 
 ## 期望

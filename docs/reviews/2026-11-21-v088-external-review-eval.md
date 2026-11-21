@@ -33,10 +33,10 @@
 | 开头 | “CT 是 C 的超集” | **删/改** | DOC-76：v1.0 起不再是 C 超集；应写“CT 是 C 风格的语言，但兼容承诺已收窄” |
 | §1 指针 | “指针只出现在 shim、MMIO、extern 边界” | **改** | 指针在任何 `.ct` 都合法；应写“主要在 shim/硬件/逃生层，应用层先想 Str/切片/box” |
 | §2 字符串字面量 | `"42".to_int()` | **补前提** | 需 `import std::str::String;`（std 包 `map trait CStrOps for type char *`）；内置层不自动带 |
-| §2 借用存储 | “借用类型不能存（字段/容器/全局 = 硬错）” | **改** | struct 字段 / `Map` 键硬错；`Vec<Str>`、`Option<Str>`、ADT 负载可编译（存的是视图） |
+| §2 借用存储 | “借用类型不能存（字段/容器/全局 = 硬错）” | **改** | struct 字段 / `Map` 键硬错；`Vec<Str>`、`Option<Str>`、ADT 负载、全局 `Str` 字面量可编译（存的是视图） |
 | §3 借用 | “返回局部视图 = 硬错” | **改** | `Str` 逃逸当前无 lint（SH-106）；`T[]` 切片是 `slice escape` warning，不是硬错 |
 | §3 释放 | “String/box/Vec/Map = owning，自动释放” | **改** | 局部/参数自动；字段/全局/ADT payload 无自动 Drop；环仍泄漏 |
-| §2 遍历 | `foreach (v) { i, item }` | **改** | 语法是 `foreach (v) { … item … }`；`Vec`/`Map` 额外有只读 `i`；数组没有 `i` |
+| §2 遍历 | `foreach (v) { i, item }` | **改（语法）** | `i` / `item` 是块内隐式绑定，不是头列表；正确写法 `foreach (v) { … i … item … }`；v0.84.1 数组与 Vec/Map 都绑定只读 `i` |
 | §2 `$name` | “物化中间值用 `$name`” | **保留** | spec §4.11.3；`a.m()$x.n()` 正确 |
 | §2 SH-73 | “动态派发路径暂不支持一行链” | **保留但补例** | 静态宿主链（examples/47）可跑；只有接口值动态派发链被拒 |
 | 附录 briefing | 重复上述错误 | **同步修** | 尤其 “不能存”“硬错”“超集”“to_int 无 import” |
