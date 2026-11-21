@@ -7,8 +7,8 @@
 | 严重度 | Medium（语言表面改名；涉及生成符号与文档） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [language-spec §5.1](../../docs/language-spec.md#L1962-L2020)、[§4.71](../../docs/language-spec.md#L2949)、[D-016](../../docs/decisions/D-016.md)、[Box.h.ct](../../lib/std/Box.h.ct#L34)、[Expr.h.ct:2304](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2304-L2311) |
-| 状态 | open |
-| 处置证据 | **已决（2026-11-21 所有者：规范拼写 `Box<T>`；`box<T>` 作别名保留到 v1.1 删除）** |
+| 状态 | deferred |
+| 处置证据 | **deferred**（2026-11-22，REV/REQ：所有者 2026-11-21 已定「v1.0 规范拼写 `Box<T>` + `box<T>` 弃用别名，v1.1 删除」；当前 `lib/std/Box.h.ct:34` 仍 `pub struct box<T>`。触发 `v1-PH-0` Stage A / `v1-PH-1` Stage B；负责人 DEV；v1.0 命名清理） |
 
 ## 背景
 
@@ -97,3 +97,29 @@ README、std-catalog、planning、reviews 的结论行）全部改为 `Box<T>`�
 
 - Stage A：单提交回滚，恢复 `box<T>` 规范拼写；`Box<T>` 随之消失；
 - Stage B：单提交回滚，恢复 `box<T>` 别名（仍为弃用态），不回退 Stage A。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`deferred`，不是 `rejected`。** 本条不是「决定不改」：2026-11-21 所有者已裁定规范拼写
+改为 `Box<T>`，`box<T>` 作为弃用别名保留到 v1.1 删除；D-016 只裁定布局 / 复制协议 / C 边界，
+命名由本条决定承接。落地窗口已在 [v1-release-plan](../../docs/planning/v1-release-plan.md) 钉死：
+
+- `v1-PH-0` Stage A：规范拼写 `Box<T>` + `box<T>` 弃用告警（独立提交，不混入 seed cutover）；
+- `v1-PH-1` Stage B：删除 `box<T>` 别名，改为硬错并提示 `write 'Box<T>'`。
+
+当前 HEAD（`38cd4ae4`）仍是旧拼写，代码与文档均未开始 Stage A：
+
+```console
+$ grep -n 'pub struct box' lib/std/Box.h.ct
+34:pub struct box<T> {
+$ grep -rn 'pub struct Box' lib/std/ | wc -l
+0
+```
+
+**入口判据（已写入 v1-release-plan）**：开工前先测顶层函数计数（v0.88 实测 `501/512`，余 11），
+Stage A 预计增量必须 ≤ 当前余量；别名分支必须复用既有 `tok_is` / 类型读取路径，不得新增顶层
+函数，否则先走 `v1-PH-1 / S0`（[SH-109](../selfhost/sh109-max-funcs-capacity.md)）。
+
+**触发/负责人/优先级**：`v1-PH-0`（Stage A）与 `v1-PH-1`（Stage B）；负责人 DEV，REQ 复核入口
+判据；优先级为 v1.0 命名清理（Medium）。本批不实现，因为它是语言表面改名，必须与 seed cutover
+和容量窗口一起排。

@@ -6,8 +6,8 @@
 | 严重度 | Info（已文档化的行为，属工具缺口而非缺陷；是否补能力需维护者决定） |
 | 锚点 | commit `61e35e4`（`v0.16.1`，2026-11-01） |
 | 文件 | [README.md](../../README.md)（`ct build` 条目）、[Driver.h.ct](../../selfhost/ct-ast/tool/driver/Driver.h.ct) |
-| 状态 | open |
-| 处置证据 | **已决（2026-11-02，用户）：纳入 Phase 17 的 17.6**——`ct build` 默认一步产出可执行文件，`--emit-c` 保留只发 C |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-22，REV：Phase 17.6 已落地，`21a8da08`；HEAD `38cd4ae4` 重建 ct-ast v0.88.2 复跑，默认产出可执行文件，`--emit-c` 在 `CC=/nonexistent/cc` 下仍 rc=0） |
 
 ## 现象
 
@@ -64,3 +64,30 @@ README 已写明 `ctc install` 校验后「打印建议的 `ct build …`（不�
 
 - [CI-4](../ci/ci-4-no-ci-config.md)：同一轮第三方评估的 P0-1（CI 仍缺 workflow）
 - [SH-24](cli-parser-duplication.md)：两套 CLI 解析器——新增开关需要同时改两处（或先合并）
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`verified`。** 用户 2026-11-02 的决定已由 Phase 17.6 实现，提交
+`21a8da08`（`feat(build): produce an executable by default and keep --emit-c`）为 HEAD `38cd4ae4`
+的祖先。在干净归档 HEAD 重建 ct-ast v0.88.2，按本条验收复跑：
+
+```console
+$ /tmp/ct-head-rev/.temp/b/ct-ast build m.ct -o m.exe
+'cc' -std=c99 -I '.ctbuild' '.ctbuild/m.c' '-o' 'm.exe'
+$ echo $?
+0
+$ ./m.exe
+hi
+$ echo $?
+0
+$ CC=/nonexistent/cc /tmp/ct-head-rev/.temp/b/ct-ast build --emit-c m.ct -o out
+$ echo $?
+0
+$ ls out
+m.c
+```
+
+- 默认形态：不是只发 `.c` + 打印 `cc` 行，而是真的调用编译器并产出 `m.exe`；退出码透传；
+- `--emit-c`：`CC` 指向不存在的路径仍 rc=0，证明**没有调用**外部编译器；只写 `.c`；
+- `-o`、`--outdir`、`--cc`、`--cflags`、`--ldflags` 已在 `build --help` 中（见本条上方 usage）。
+  本条原「只发 C 不代为编译」的工具缺口关闭；README 的旧描述已随 Phase 17 迁移到 `--emit-c`。

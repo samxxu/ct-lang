@@ -7,7 +7,8 @@
 | 严重度 | High（实现提交的验收证据不成立） |
 | 锚点 | `e88561af`（S85c M0）、`c7f8ed93`（补 import 的 S85d） |
 | 文件 | `selfhost/ct-ast/tool/driver/Driver.h.ct:660`、`selfhost/ct-ast/frontend/parse/Parser.h.ct:1282`、`selfhost/ct-ast/frontend/type/TypeCheck.h.ct:224`、`:230` |
-| 状态 | open |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-22，REV：当前历史的 M0 提交为 `33f06d17`；`git archive 33f06d17` 后完整自举 rc=0，`p85_m0` 4/4。`104dfc54` 是更早一次重写、已不在 HEAD 历史中） |
 | 层级 | **Tier 2（`v1.0` 发布）**；须给“修/不修+理由”，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 现象
@@ -136,3 +137,39 @@ p85m0: 4 passed, 0 failed
 
 HEAD（`827 bodies / 842 functions / 11 edits`）四探针与 check-all 仍绿；版本仍
 0.85.0（未发布，重写未推历史）。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`verified`。** 本条要求的「M0 实现提交独立可构建」在当前历史的重写提交
+`33f06d17`（`feat(ct-ast): p85_m0（S85c，6 单元纯搬移）`）上成立。该提交是 HEAD `38cd4ae4`
+的祖先，并被 `v0.85.0`…`v0.88.0` 包含（`git tag --contains 33f06d17`）。
+
+**独立复现（干净归档，不用工作树产物）：**
+
+```console
+$ rm -rf /tmp/p85-m0-rev && mkdir -p /tmp/p85-m0-rev
+$ git archive 33f06d17 | tar -x -C /tmp/p85-m0-rev
+$ cp .temp/build-ct-ast.sh /tmp/p85-m0-rev/ && cd /tmp/p85-m0-rev
+$ sh build-ct-ast.sh . .temp/b
+…（L0→L1→L2→ct-ast 全链编译，零警告）
+built .temp/b/ct-ast
+$ echo $?
+0
+$ ./.temp/b/ct-ast -v
+ct-ast v0.84.1
+$ bash test/ast/p85_m0.sh ./.temp/b/ct-ast
+p85m0: 4 passed, 0 failed
+$ echo $?
+0
+```
+
+**提交内容核对**（`git show 33f06d17`）：提交正文写明三条调用方 import 已在本提交内补齐
+（`Driver.h.ct` 的 `import frontend::module::ModuleBoundary;` 等），`ct_norm_path` 的
+`realpath` 原型随函数进 `ModuleBoundary.h.ct`；8 行 S85d 代码（`--check-level` help 与 `nsem`
+守卫）已移回 `602d3a25`，M0 只保留 import 与 `realpath` 机械行；函数计数为
+**827 bodies / 838 functions / 0 declared S85d edits**。这正是本条期望的三个修正。
+
+**关于 `104dfc54`**：它是同一标题的更早一次历史重写，`git merge-base --is-ancestor
+104dfc54 HEAD` 为假、`git tag --contains` 为空，已不在当前历史。当前历史的等价 M0 是
+`33f06d17`，本复核以它为准。DEV 的两次处置段（第一次 `104dfc54`、第二次 `33f06d17`）
+记录的重写过程与当前历史一致。

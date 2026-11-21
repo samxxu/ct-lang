@@ -6,7 +6,8 @@
 | 类型 | **feature request**（能力缺口，不是缺陷） |
 | 严重度 | Medium |
 | 优先级 | **P2** —— 不挡功能，但三处消费方都在靠字符串匹配，属「门禁可能静默变绿」的系统性风险 |
-| 状态 | open |
+| 状态 | deferred |
+| 处置证据 | **deferred**（2026-11-22，REV/REQ：警告通道 JSON 已实现；解析错误 JSON（7b）仍回退纯文本；字段级 `line`/`col` 已随 PH-59/PH-74 落地（`Symbols.h.ct:288-289`）。触发：下一次 Driver/Diag 批次或 v1.1 前；负责人 DEV；P2） |
 | 锚点 | `v0.53.1`（`2fd55841`） |
 
 ## 现状
@@ -88,3 +89,28 @@ HEAD `v0.53.1` 重建 `ct-ast` 实测：
 
 因此本条不再整体按 feature 排期：解析错误 JSON 进 patch（与 LANG-3 的诊断判据共用夹具），
 字段位置进 PH-58，警告 JSON 只补夹具复验。原「请求」与「验收判据」保留作为能力全量目标。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`deferred`（7b 仍未落地；7a / 7c 已完成）。** 在干净归档 HEAD（`38cd4ae4`）重建
+ct-ast v0.88.2，复跑两条通道：
+
+```console
+$ /tmp/ct-head-rev/.temp/b/ct-ast check --diagnostics=json parse.ct
+parse.ct:1:26: error: expected an expression          # stderr，纯文本
+rc=1
+$ /tmp/ct-head-rev/.temp/b/ct-ast check --types --diagnostics=json types.ct
+{"warnings":[{"severity":"error","type":"type_mismatch","file":"types.ct","line":1,"col":45,"callee":"","message":"argument 1: expected 'int', got 'char *'"}]}
+rc=1
+```
+
+| 子项 | 2026-11-22 实测 | 去向 |
+| --- | --- | --- |
+| 7a 警告通道 JSON | 已实现；`check-semantics.sh` 断言 JSON 可解析且含 `severity`/`type` | 完成 |
+| 7b 解析错误 JSON | `--diagnostics=json` 下仍走 stderr 纯文本，与 usage 的 `--diagnostics=text\|json` 不一致 | **本条唯一剩余实现项** |
+| 7c 字段级位置 | `Symbols.h.ct:288-289` 的 `Field` 已有 `line`/`col`（PH-59 / PH-74 J11） | 完成 |
+
+**为什么不现在修**：7b 是 Driver/Diag 族的小改，但本批只做台账复核；`0.53.14` 的原排期已过期。
+**触发/下一步**：下一次 Driver/Diag 批次（v1.1 前）；负责人 DEV；P2。最小补丁方向：解析错误在
+json 模式下输出与警告同形的可解析对象（`{"errors":[…]}` 或逐行对象），默认文本逐字节不变；
+在 `test/semantics` 补负例，断言 `severity`/`file`/`line`/`col` 齐全且条数与人读通道相等。

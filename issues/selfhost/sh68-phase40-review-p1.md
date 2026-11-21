@@ -5,8 +5,8 @@
 | 模块 | selfhost（ct-ast 清理语义 / 测试收口） |
 | 严重度 | High（P1 共 10 条；P0=0） |
 | 锚点 | `v0.40.0`（`b618021b`） |
-| 状态 | open |
-| 处置证据 | fixed（DEV，2026-11-13；v0.40.1） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-22，REV：补证 `bd8b74f3`（v0.40.1 review fixes）+ HEAD `38cd4ae4` 复跑 `p40_err_syntax` / `p40_errdefer_scope` / `p40_order_own` / `p40_trailing` 四探针全 OK） |
 
 ## P1（代码）
 
@@ -37,10 +37,47 @@
 
 ## 复核（2026-11-21，REV / CI-11）
 
-**结论：open（证据不足）。** 状态行原写 `fixed（DEV，2026-11-13；v0.40.1）`，但正文
+**结论：open（证据不足）。**（2026-11-22 已补证并转 `verified`，见文末处置段；本段保留为当时的
+复核记录。）状态行原写 `fixed（DEV，2026-11-13；v0.40.1）`，但正文
 只有锚点 `v0.40.0` 的 `b618021b`（修复前基线），没有修复提交 sha，也没有独立验证命令的
 原始输出；处置段只指向 `docs/history/design/phase40.md` §8.1。按 CI-11 映射规则
 （`已修` 且正文有提交 sha/验证输出才可 `verified`），本条保留 `open`，不据 DEV 自述关闭。
 
 最小补证要求（任一）：①v0.40.1 的修复提交 sha + `git show` 关键 diff；②对应
 `test/ast` 探针或 `check-ast.sh` 段落的原始输出（含退出码）。补齐后由 REV 复核转 `verified`。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`verified`。** 补上 2026-11-21 REV 要求的两类证据。
+
+**① 修复提交（v0.40.1）与关键 diff：**
+
+```console
+$ git show -s --format='%h %ad %s' --date=short bd8b74f3
+bd8b74f3 2026-11-13 fix(cleanup): v0.40.1 review fixes
+$ git merge-base --is-ancestor bd8b74f3 HEAD && echo ancestor
+ancestor
+```
+
+提交正文逐项对应 P1 代码项：尾随清理嵌套守卫与标志 restore、range `$` 不被尾随别名改写、
+`case` 后 `return err` 临时量包块、`$` shadow 明确报错、`own` shadow 改 `find_var`；
+文档项：spec §4.13/§4.58 的 `$` 三语境改为按上下文区分，tutorial §10.14 的
+`close_db(fd)` 双执行改成先 `open_db()`、`defer { if (fd) close_db(fd); }`（diff 已核对）。
+
+**② HEAD `38cd4ae4` 重建 ct-ast v0.88.2，p40 探针原始输出：**
+
+```console
+$ sh test/ast/p40_err_syntax.sh /tmp/ct-head-rev/.temp/b/ct-ast
+p40_r1: OK                                                     rc=0
+$ sh test/ast/p40_errdefer_scope.sh /tmp/ct-head-rev/.temp/b/ct-ast
+p40_r2: OK                                                     rc=0
+$ sh test/ast/p40_order_own.sh /tmp/ct-head-rev/.temp/b/ct-ast
+p40_r4: OK                                                     rc=0
+$ sh test/ast/p40_trailing.sh /tmp/ct-head-rev/.temp/b/ct-ast
+p40_r5: OK                                                     rc=0
+```
+
+**P1 文档项的现状**：E40-7 已从「`p40/regression`」改为「`bash selfhost/check-all.sh` 11/11」
+（`docs/history/design/phase40.md:184`），因此该路径不存在不再算缺项；E40-9 的 §8.1 逐行对照表
+已在同文件补齐。注：v0.40.1 当时未单独打 tag（tag 列表只有 `v0.40.0`/`v0.41.0`），修复提交
+`bd8b74f3` 在 `v0.41.0` 之前的连续历史中，`git tag --contains bd8b74f3` 含 `v0.41.0` 及后续。

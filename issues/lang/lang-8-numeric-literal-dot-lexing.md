@@ -5,8 +5,8 @@
 | 模块 | lang（词法） |
 | 严重度 | Low |
 | 优先级 | **P3** —— 加空格即可绕；但与 C 的同一歧义同源，登记备查 |
-| 状态 | open |
-| 处置证据 | open（已实测确认存在） |
+| 状态 | deferred |
+| 处置证据 | **deferred**（2026-11-22，REV/REQ：§4.24 按 C 词法把 `5.` 读成浮点字面量是既有设计；待语言侧裁定「方法调用语法是否优先于浮点字面量」。触发：该裁定或下一次 Lexer 批次（`LANG-16 → LANG-8`，post-58-plan.md:115）；负责人 REQ/EDITOR 裁定后交 DEV；P3 Low） |
 | 锚点 | `v0.53.1`（`c4727787`） |
 
 ## 精确触发条件
@@ -56,3 +56,30 @@ a8b.ct:3:1: error: no method 'foo' for type 'int'
 ## 定位
 
 词法器的数字分支把 `.` 计入浮点（`Lexer.h.ct` 的数字扫描），parser 的后缀 `.` 永远看不到它。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`deferred`。** 在干净归档 HEAD（`38cd4ae4`）重建 ct-ast v0.88.2，按本条「最小复现」
+复跑，行为与原报告一致（`a8.ct` 用 `5.foo()`；`a8b.ct` 用 `5 . foo()`）：
+
+```console
+$ /tmp/ct-head-rev/.temp/b/ct-ast a8.ct -o a8.c
+a8.ct:3:16: error: unexpected token
+rc=1
+$ /tmp/ct-head-rev/.temp/b/ct-ast a8b.ct -o a8b.c
+a8b.ct:3:1: error: no method 'foo' for type 'int'
+rc=1
+```
+
+**为什么不现在修**：`docs/language-spec.md` §4.24 已把浮点字面量定为按 C 拼写读取
+（`<digits>.<digits>`、`.5`、指数与后缀），词法器把 `5.` 收成浮点字面量是既有设计。
+本条真正要定的是「方法调用语法是否优先于浮点字面量」，属语言表面裁定，不是词法器漏扫。
+`docs/planning/open-items-routing.md:199` 曾把它排进 `0.53.9`，但该批已过期且没有裁定记录；
+当前可用绕法是加空格（`5 . foo()`）。
+
+**触发/下一步**：
+
+1. REQ/EDITOR 在 §4.24 或 §4.5 明确数字字面量后直接 `.` 的归属；若坚持 C 口径，把本条改
+   `rejected` 并在 spec 写明「`5.foo()` 不是方法调用」；
+2. 若裁定方法调用优先，按 `LANG-16 → LANG-8` 的 Lexer 批次改数字扫描（`5.` 后紧跟标识符或
+   `(` 时不吞 `.`），补 `5.method()`、`5.0`、`5..6` 三组夹具。

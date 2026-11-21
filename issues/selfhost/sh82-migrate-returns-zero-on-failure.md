@@ -5,8 +5,8 @@
 | 模块 | selfhost（`ct migrate` / vendor 迁移 / 发布前准备） |
 | 类型 | 能力缺口（迁移结果不可被调用方判断） |
 | 严重度 | **High**（静默失败） |
-| 状态 | open |
-| 处置证据 | 受理（P0，v0.61.x patch） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-22，REV：修复 `7b332432`（v0.61.1）；HEAD `38cd4ae4` 重建 ct-ast v0.88.2 复跑：无 lock → rc=1；缺 `publisher` 的 v1 lock 迁移 → rc=1，不再静默 0） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [需求 SP-029](../../docs/planning/ct-pkg-shared-store-requirements.md)、[提案 §10 S3 验收](../../docs/proposals/ct-pkg-shared-store.md) |
 
@@ -70,3 +70,25 @@ $ echo $?
 
 - 复核：缺 `publisher` 的 v1 lock 迁移返回 1，并打印 `is missing 'publisher'`；
 - 提交 `7b332432`（复核项，无额外代码改动）。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`verified`。** 修复提交 `7b332432`（v0.61.1）为 HEAD `38cd4ae4` 的祖先。在干净归档 HEAD
+重建 ct-ast v0.88.2，复跑两条失败路径：
+
+```console
+$ mkdir -p vendor/pkg-a && printf 'name = pkg-a\nversion = 0.1.0\n' > vendor/pkg-a/ct.pkg
+$ ct-ast migrate                       # 无 ct.lock
+ctc: no './ct.lock'; nothing to migrate
+$ echo $?
+1
+$ printf 'pkg-a 0.1.0 dir ./vendor/pkg-a sha256:%064d\n' 0 > ct.lock
+$ ct-ast migrate                       # 清单缺 publisher
+ctc: 'pkg-a' does not match ct.lock
+$ echo $?
+1
+```
+
+- 两种失败都返回非零，不再「打印错误但 rc=0」；调用方（脚本/CI）可以据此停止；
+- 失败项在前，未把整体标成成功；成功路径的汇总/`# ct-lock 2` 由 `test/pkg/run.sh` 的 S3 段覆盖
+  （同提交加入）。

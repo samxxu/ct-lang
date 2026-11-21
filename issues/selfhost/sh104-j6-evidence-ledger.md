@@ -7,8 +7,8 @@
 | 严重度 | High |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §1.5](../../docs/planning/v1-release-plan.md#L57-L71)、[D-011](../../docs/decisions/D-011.md) |
-| 状态 | open |
-| 处置证据 | **实施中（台账已建；15 已过 / 9 部分 / 5 缺失 / 5 阻塞）** |
+| 状态 | deferred |
+| 处置证据 | **deferred**（2026-11-22，REV/REQ：台账已建（34 行，15 已过 / 9 部分 / 5 缺失 / 5 阻塞），`check_j6_ledger` 已入 `check-docs`；剩余项未清零。触发 `v1-PH-0` 入口（V1-C1）；负责人 REQ/DEV；High） |
 | 层级 | **Tier 1（`v1-PH-0` 入口）**，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 进展（2026-11-21）
@@ -50,3 +50,28 @@ roadmap 自标“J-6 未过”；J-3/J-4/J-5 也缺逐张核对。
 ## 关联
 
 - [2026-11-21 评估](../../docs/reviews/2026-11-21-v1-campaign-eval.md)、[v1 路线](../../docs/planning/v1-release-plan.md)
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`deferred`，不是 `verified`。** 台账与机判断言已落地，但 J-6 本身仍未过；本条是 v1.0
+硬闸门（V1-C1），触发点是 `v1-PH-0` 入口。
+
+**已落地（HEAD `38cd4ae4`）**：
+
+- [docs/planning/j6-evidence/ledger.md](../../docs/planning/j6-evidence/ledger.md) 34 行
+  （P-1.1…P-6.4，含 §C.5 追加项），状态枚举四态、最小可判证据非空、`阻塞` 必须写依据；
+- `test/docs/check-docs.py:514` 的 `check_j6_ledger` 对 34 个 ID 做机校，并在 `:678` 接入；
+- 平台结论仍为 **15 已过 / 9 部分 / 5 缺失 / 5 阻塞**（台账头部原文）。
+
+**仍未清零（承接项）**：
+
+| 缺口 | 现状 | 承接 |
+| --- | --- | --- |
+| P-1.2 逐文件 CSV | 只有全局计数 | 台账 §P-1.2 |
+| P-1.3 lint dry-run | 迁移 lint 未实现，无法 dry-run | 阻塞于 lint |
+| P-4.3 `Str` 逃逸 lint | 未实现 | [SH-106](sh106-str-view-escape-no-lint.md)（已修）后复审 |
+| P-5.2/P-5.3/P-5.5 `ref/out` 所有权夹具 | 缺 | 台账 §P-5 |
+| P-6 跨仓迁移 | 阻塞于 std 发版（PKG-22） | 包侧 |
+
+**触发/负责人/优先级**：`v1-PH-0` 入口（V1-C1），负责人 REQ（台账）/DEV（夹具与 lint）；
+High。本批不改台账内容，只把状态从笼统 `open` 收敛到 `deferred`，避免与「零未决」的完成态混淆。

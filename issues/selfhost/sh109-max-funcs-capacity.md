@@ -7,8 +7,8 @@
 | 严重度 | **P1（v1.1 `v1-PH-1 / S0`；不阻塞 v1-PH-0）** |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [容量提案](../../docs/proposals/ct-max-funcs-growth.md)；[v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-2；[p88_metrics](../../docs/history/p88_metrics.md) §4 #3；[v1 路线](../../docs/planning/v1-release-plan.md) |
-| 状态 | open |
-| 处置证据 | **已决（动态增长 + 65536 安全阀）；2026-11-21 所有者改落 `v1-PH-1 / S0`** |
+| 状态 | deferred |
+| 处置证据 | **deferred**（2026-11-22，REV/REQ：`MAX_FUNCS` 仍为 512（`Symbols.h.ct:36`），未实现动态增长/65536 安全阀；所有者 2026-11-21 已定落 `v1-PH-1 / S0`。触发 `v1-PH-1 / S0`；负责人 DEV；P1） |
 
 ## 现象
 
@@ -49,3 +49,27 @@
 - [PH-88 卡](../../docs/design/phase88.md) §7.5
 - [p88_metrics](../../docs/history/p88_metrics.md) §4 #3、§5
 - [v1 路线](../../docs/planning/v1-release-plan.md) §1.5 / §2.3
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`deferred`（方向已决，实现未落；触发 `v1-PH-1 / S0`）。** 不是「维持 512 不动」：
+所有者 2026-11-21 已定「按需增长（初始 512、安全阀 65536）」，但明确落到 `v1-PH-1`，
+`v1-PH-0` 仍按 501/512 施工、新增顶层函数预算 ≤11。
+
+**HEAD `38cd4ae4` 实查**：容量仍固定，没有增长分支或安全阀：
+
+```console
+$ grep -n '#define MAX_FUNCS' selfhost/ct-ast/frontend/sym/Symbols.h.ct
+36:#define MAX_FUNCS   512
+$ grep -rn 'MAX_FUNCS_CAP\|65536' selfhost/ct-ast/frontend/sym/Symbols.h.ct selfhost/l2/core.ct
+（无命中）
+```
+
+**口径说明**：D-017 是 v1-pre 的单元切分裁定（M0/M1），不裁 `MAX_FUNCS` 容量；容量结论在
+[ct-max-funcs-growth.md](../../docs/proposals/ct-max-funcs-growth.md) 与本条「决策」段，二者一致。
+PH-88 只把 `MAX_IO_CALLS` 512→1024，并把 `MAX_FUNCS` 用量推到 501/512（余 11），不等于本条
+要求的动态增长。
+
+**触发/下一步**：`v1-PH-1 / S0`；负责人 DEV；P1。落法见提案：初值 512、翻倍增长、65536 安全阀，
+L2 冻结层例外、门禁与回滚同提案；补 512→1024→2048 与 65536/65537 负例。`v1-PH-0` 开工前先按
+本条入口判据复算余量，预计新增 >11 则提前本切片，不得在 `v1-PH-0` 内顺手提上限。

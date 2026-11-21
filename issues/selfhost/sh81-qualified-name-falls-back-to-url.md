@@ -5,8 +5,8 @@
 | 模块 | selfhost（`ct get` 包发布引用 / 限定名解析） |
 | 类型 | 诊断缺陷（承诺的发布引用形态没有解析路径） |
 | 严重度 | Medium |
-| 状态 | open |
-| 处置证据 | 受理（P2，v0.61.x patch） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-22，REV：修复 `7b332432`（v0.61.1）；HEAD `38cd4ae4` 重建 ct-ast v0.88.2 复跑 `ct get pub-a/pkg-a@^0.2.0` → `no index resolver for 'pub-a/pkg-a'`，不再拼 URL，rc=1） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [提案 §7 引用方式](../../docs/proposals/ct-pkg-shared-store.md) |
 
@@ -70,3 +70,30 @@ $ echo $?
 
 - 未配置索引时，`ct get ct/http@^0.2.0` 直接报 `no index resolver for 'ct/http'`，不再拼 URL；
 - 提交 `7b332432`。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`verified`。** 修复提交 `7b332432`（v0.61.1）为 HEAD `38cd4ae4` 的祖先。在干净归档 HEAD
+重建 ct-ast v0.88.2，在空目录、隔离 `CT_HOME` 下复跑：
+
+```console
+$ CT_HOME=$PWD/cthome ct-ast get pub-a/pkg-a@^0.2.0
+ctc: no index resolver for 'pub-a/pkg-a'
+  'pub-a/pkg-a' is a publisher-qualified package name; the built-in
+  pins cover the official packages only (ct/std).
+  publisher-qualified package:
+       ct get --index <file> pub-a/pkg-a
+       CT_INDEX=<file> ct get pub-a/pkg-a
+     the index is a local plain-text file; line format:
+       name version publisher git-url tag sha256:<64 hex>
+  known git URL:
+       ct get https://<host>/<publisher>/<repo>
+  local checkout:
+       ct get ./path-to-pkg-a
+$ echo $?
+1
+```
+
+- 不再把 `pub-a/pkg-a` 拼成 `https://pub-a/pkg-a` 去 clone；
+- 文案点名「无索引解析器」，并给出三条下一步（`--index` / `CT_INDEX` / 本地目录）；
+- 退出码 1，不创建 lock/vendor。

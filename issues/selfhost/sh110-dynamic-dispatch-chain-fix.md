@@ -7,8 +7,8 @@
 | 严重度 | High |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [SH-73](sh73-temp-receiver-dynamic-dispatch.md)；[外部评审 §4-A3](../../docs/reviews/2026-11-21-v088-external-review-eval.md) |
-| 状态 | open |
-| 处置证据 | **待办（DEV；v1.0 前 bugfix，独立切片）** |
+| 状态 | deferred |
+| 处置证据 | **deferred**（2026-11-22，REV/REQ：HEAD `38cd4ae4` 重建 ct-ast v0.88.2，单跳/两跳动态派发链仍硬错；PH-87/88 发射器切片重写未覆盖本条。落 `v1-PH-0` 独立 bugfix（V1-C3）；负责人 DEV；High） |
 
 ## 现象
 
@@ -71,3 +71,47 @@ return x.tuned(1).status();         /* 固有 impl 返回接口后直接接调�
 - [examples/47_chain_factory](../../examples/47_chain_factory/src/main.ct)
 - [language-spec §4.10.1](../../docs/language-spec.md#L251-L267)
 - [DOC-86](../../issues/docs/doc-86-readme-v088-rewrite.md)：README §0.1 等本修复后再改述
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`deferred`（bug 确认，PH-87/88 未覆盖；落 `v1-PH-0`）。** 用干净归档 HEAD `38cd4ae4`
+重建 ct-ast v0.88.2，按本条前两种形态复跑（第三种 `x.tuned(1).status()` 同属 `N_MCALL` 接收者，
+由同一拒绝点覆盖），仍硬错：
+
+```ct
+trait HttpRequest {
+    int status();
+    HttpRequest tap(int n);
+}
+struct Req { int s; } use HttpRequest;
+impl HttpRequest for Req {
+    int status() { return self->s; }
+    HttpRequest tap(int n) { self->s = self->s + n; return self; }
+}
+int main(void) {
+    Req x; x.s = 1;
+    HttpRequest h = x;
+    return h.tap(1)->status();
+}
+```
+
+```console
+$ ct-ast build chain.ct -o out            # h.tap(1)->status()
+chain.ct:27:1: error: method receiver must be a variable, an element, a call or a field chain
+$ echo $?
+1
+$ ct-ast build chain2.ct -o out2          # h.tap(1)->tap(2)->status()
+chain2.ct:27:1: error: method receiver must be a variable, an element, a call or a field chain
+$ echo $?
+1
+```
+
+**是否已由 PH-87/88 覆盖：否。** PH-87（解析器/检查器按 kind 切片）与 PH-88（发射器 76 个
+`em_*` 切片、`MAX_IO_CALLS` 扩容）都没有改变「`N_MCALL` 结果作接收者一律拒绝」的形态规则；
+本条在 v0.88.0（`verify880` 二进制）与 v0.88.2（HEAD 重建）上同样复现。`examples/47` 的静态宿主
+链仍可跑，被拒的只是动态派发路径。
+
+**去向/触发**：独立 bugfix 切片，落 `v1-PH-0`（`v1-release-plan.md` V1-C3：SH-73 解除 +
+README §0.1 三断点闭环）；负责人 DEV；High。开工前先按本条「修复前置：判据卡」写清求值顺序、
+临时值生命周期、可物化形态三项，再改发射器；补 ASan 用例与「不含该形态语料逐字节不变」断言。
+本批只改台账，不动 `Emitter.h.ct`。

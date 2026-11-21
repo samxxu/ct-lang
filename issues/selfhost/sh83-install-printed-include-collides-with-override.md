@@ -5,8 +5,8 @@
 | 模块 | selfhost（`ct install` 输出指引 / 包 lock / import 根去重） |
 | 类型 | 能力缺口（发布产物给出的构建指引不可直接使用） |
 | 严重度 | Medium |
-| 状态 | open |
-| 处置证据 | 受理（P1，v0.61.x patch） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-22，REV：修复 `7b332432`（v0.61.1）；HEAD `38cd4ae4` 重建 ct-ast v0.88.2，v2 lock 的 `ct install` 只打印 `ct-ast build main.ct -o build`，不再输出 `-I`） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [需求 SP-008](../../docs/planning/ct-pkg-shared-store-requirements.md)、[需求 SP-015](../../docs/planning/ct-pkg-shared-store-requirements.md) |
 
@@ -71,3 +71,21 @@ $ echo $?
 
 - v2 lock 的 `ct install` 不再打印 `-I`；`ct build` 自行读 lock 加根，避免 dev override 双根；
 - 提交 `7b332432`；`test/pkg` 135/0。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`verified`。** 修复提交 `7b332432`（v0.61.1）为 HEAD `38cd4ae4` 的祖先。在干净归档 HEAD
+重建 ct-ast v0.88.2，用 `dir` 源包 + v2 lock 复跑：
+
+```console
+$ ct-ast get ../pkg          # 写入 v2 lock + store
+$ ct-ast install
+ct-ast build main.ct -o build
+# lock-format: v2
+$ echo $?
+0
+```
+
+- 输出里没有 `-I`；`ct build` 从 `ct.lock` 自行补根，照抄该命令不会与 dev override 形成双根；
+- 冲突诊断（两个根来源）不再被触发；`test/pkg/run.sh:171-174` 的
+  「the v2 build command needs no explicit -I」即该行为的回归断言。

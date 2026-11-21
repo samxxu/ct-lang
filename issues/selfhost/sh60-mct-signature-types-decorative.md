@@ -6,8 +6,8 @@
 | 严重度 | **High** |
 | 锚点 | commit `a1c523a`（2026-11-07，`v0.20.0`）；裁决 2026-11-09 |
 | 文件 | [TypeCheck.h.ct:75-129](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L75-L129)（`type_key` 丢弃 `const` / `volatile`）；[Emitter.h.ct:424](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L424)（同一张表的副本 `map_type_key`）；[Expr.h.ct:205-231](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L205-L231)（实参比较前的 `tnorm`）；[Expr.h.ct:1109-1122](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1109-L1122)（`argtype_check_static`，静态调用点的硬错）；[Expr.h.ct:2560-2569](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2560-L2569)（`aux == 6` 的多候选判定） |
-| 状态 | open |
-| 处置证据 | **2a 已修复**（2026-11-10，`v0.26.4`）；1a/1b 待 D-60-1，2b 仍 deferred（见「子项去向」） |
+| 状态 | deferred |
+| 处置证据 | **deferred（2a 已 verified；1a/1b 待 D-60-1，2b 待 D-60-2）**（2026-11-22，REV/REQ：四个静态形态在 HEAD 全部硬错；`"abc".toUpper()` / `const char *s; s.toUpper()` 仍 rc=0，未知类型 `TotallyBogus *` 仍编译；两个决策点无 decision 记录。负责人 REQ/EDITOR 裁定后交 DEV；P2） |
 
 ## 现象
 
@@ -243,3 +243,64 @@ rc=1
   `test/modules/p25_static_argtype/ok.ct` 四种形态零诊断；
 - `check-ast.sh` 的 `p25_static_argtype_{aux6,q3,q4,q5}` 断言非零退出 + `error:`；删掉强校验即变红；
   `bash selfhost/check-all.sh` 保持 11 道全绿。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`deferred`（按子项；2a 已 `verified`）。** 在干净归档 HEAD（`38cd4ae4`）重建
+ct-ast v0.88.2，逐子项复跑。
+
+**2a（静态映射调用点实参类型）——已修复，硬错：**
+
+```console
+$ ct-ast build --emit-c -I test/modules/p25_static_argtype …/aux6.ct -o /tmp/p25_aux6
+test/modules/p25_static_argtype/aux6.ct:6:11: error: type mismatch: 'find' argument 1: expected 'char *', got 'int'
+rc=1
+$ … q3.ct
+…: error: type mismatch: 'g' argument 1: expected 'char *', got 'int'          rc=1
+$ … q4.ct
+…: error: type mismatch: 'f' argument 1: expected 'char *', got 'int'          rc=1
+$ … q5.ct
+…: error: type mismatch: 'find' argument 1: expected 'char *', got 'int'       rc=1
+$ … ok.ct
+'cc' -std=c99 … ok.c -o a.out                                                  rc=0
+```
+
+四个静态形态（`aux==6`、`qf==3/4/5`）都走强校验；正例 `ok.ct` 零诊断。
+
+**1a / 1b（顶层 `const` 接收者被就地写）——仍复现，静默 rc=0：**
+
+```console
+$ printf 'int main() { "abc".toUpper(); return 0; }' > 1a.ct
+$ ct-ast check --types 1a.ct ; echo $?
+0
+$ printf 'int main() { const char *s = "abc"; s.toUpper(); return 0; }' > 1b.ct
+$ ct-ast check --types 1b.ct ; echo $?
+0
+```
+
+**2b（声明点未知参数类型）——仍复现：**
+
+```ct
+namespace probe;
+pub trait Totally { int f(TotallyBogus *p); }
+map trait Totally for type char * { f(recv, p) -> strlen(recv); }
+```
+
+```console
+$ ct-ast build -I . main.ct -o out
+'cc' -std=c99 … -o out
+$ echo $?
+0
+```
+
+**去向与触发**：
+
+| 子项 | 状态 | 触发 / 负责人 |
+| --- | --- | --- |
+| 2a 实参类型 | verified（`v0.26.4`，`argtype_check_static`） | 无 |
+| 1a/1b 接收者可变性 | deferred | **D-60-1**（`mut self` 方向的拼写裁定）尚未在 `docs/decisions/` 落记录；REQ/EDITOR 裁定后 DEV 实现；P2 |
+| 2b 声明点未知类型 | deferred | **D-60-2**（C 头 typedef 透传的豁免口径）未落；REQ/EDITOR 裁定后 DEV 实现；P2 |
+
+本轮不实现：1a/1b 要改语言表面（trait 方法接收者可变性标注），2b 依赖头文件 typedef 设计，
+都不是本批可落的小修；不伪造 `verified`。两个决策点若长期不裁，应转 `REQ-*` 池条目，
+避免再以 issue 挂起。

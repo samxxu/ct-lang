@@ -5,8 +5,8 @@
 | 模块 | lang（parser / 结构体字段解析） |
 | 定性 | 编译回归：同一文件普通字段正常，泛型指针字段报字段名错误 |
 | 严重度 | **High**（阻断真实工程编译） |
-| 状态 | open |
-| 处置证据 | 受理（P0，v0.61.x patch） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-22，REV：修复 `7b332432`（v0.61.1）+ `test/ast/286_generic_ptr_field` 在 HEAD `38cd4ae4` 复跑 rc=0；原拼写 `Map<Str,int>` 现按 J-4a 拒绝，改用 `Map<String,int>` 验证字段解析） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 实测版本 | v0.60.0 |
 | 承诺出处 | [语言规范 §4.51](../../docs/language-spec.md)（泛型 struct 已落地；`Map<K,V>` 是泛型 struct） |
@@ -76,3 +76,38 @@ $ echo $?
 
 - 复核：当前 `HEAD` 已能编译 `Map<Str, int> *index;`，新增 `test/ast/286_generic_ptr_field` 固化；
 - 提交 `7b332432`；`check-ast` 1451/0。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`verified`。** 修复提交 `7b332432`（`fix: process new toolchain and lang issues (v0.61.1)`）
+已含 LANG-18 夹具，且是 HEAD `38cd4ae4` 的祖先。在干净归档 HEAD 重建 ct-ast v0.88.2 复跑：
+
+```console
+$ /tmp/ct-head-rev/.temp/b/ct-ast test/ast/286_generic_ptr_field/prog.ct -o /tmp/286.c
+$ cc /tmp/286.c -o /tmp/286 && /tmp/286
+1
+$ echo $?
+0
+```
+
+另写最小探针确认字段解析本身：
+
+```ct
+struct Doc {
+    Map<String, int> *index;
+    Vec<int> *v;
+}
+```
+
+```console
+$ ct-ast t2.ct -o t2.c ; echo $?
+0
+$ grep -n 'index\|v;' t2.c | head -2
+58:    struct Map_String_int * index;
+59:    struct Vec_int * v;
+```
+
+**口径说明**：原报告的 `Map<Str, int>` 现在会被 J-4a（`Map` 键必须是 owning `String`）拒绝，
+报 `Map key type 'Str' is a borrowed view; use 'String' (owning)`；这是后续 phase 的独立语义收紧，
+不是本条解析回归复现。用 `Map<String,int>` / `Vec<int>` 指针字段验证，解析与发射均正常。
+`test/ast/286_generic_ptr_field` 即该回归的固化夹具。

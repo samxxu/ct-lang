@@ -5,8 +5,8 @@
 | 模块 | selfhost（`ct pkg check` / 包清单 / 发布文档扫描） |
 | 类型 | 能力缺口（检查范围超出 CT 已声明的判据） |
 | 严重度 | Medium |
-| 状态 | open |
-| 处置证据 | 受理（P2，v0.61.x patch） |
+| 状态 | verified |
+| 处置证据 | **verified**（2026-11-22，REV：修复 `7b332432`（v0.61.1）；HEAD `38cd4ae4` 重建 ct-ast v0.88.2，含绝对 `-I` 的 README 下 `ct pkg check .` → `ok: 4 criteria`，rc=0） |
 | 锚点 | v0.60.0（`14a99b27`） |
 | 承诺出处 | [提案 §9 判据范围](../../docs/proposals/ct-pkg-shared-store.md)、[需求 SP-024](../../docs/planning/ct-pkg-shared-store-requirements.md) |
 
@@ -71,3 +71,21 @@ $ echo $?
 
 - PK-8 扫描跳过 `docs/`、`issues/`、`battle/`、`test/` 与 `.md`；
 - 提交 `7b332432`；含绝对 `-I` 的 README 下 `ct pkg check` 返回 `ok: 4 criteria`。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`verified`。** 修复提交 `7b332432`（v0.61.1）为 HEAD `38cd4ae4` 的祖先。在干净归档 HEAD
+重建 ct-ast v0.88.2，按本条最小复现复跑：
+
+```console
+$ mkdir -p src && printf 'name = pkg-a\nversion = 0.2.0\npublisher = pub-a\nns-root = src\n' > ct.pkg
+$ printf '示例：ct build -I /opt/ct/include\n' > README.md
+$ ct-ast pkg check .
+ok: 4 criteria
+$ echo $?
+0
+```
+
+- `README.md` 里的示例绝对 `-I` 不再让整包判红；
+- 扫描范围限定在构建输入（`ct.pkg`/`ct.lock`/`*.ct`/`*.h.ct`/构建脚本），并跳过
+  `docs/`、`issues/`、`battle/`、`test/` 与 `.md`（`Pkg.h.ct`，`7b332432`）。

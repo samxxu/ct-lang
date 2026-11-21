@@ -6,8 +6,8 @@
 | 严重度 | **High（所有者 2026-11-21 裁定为 bug）** |
 | 锚点 | `v0.44.1`（`13db6cad`，2026-11-15 复核） |
 | 文件 | [Emitter.h.ct:5021](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5021)、[:2326](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2326) |
-| 状态 | open |
-| 处置证据 | **accepted（bug）；修复跟踪 [SH-110](sh110-dynamic-dispatch-chain-fix.md)** |
+| 状态 | deferred |
+| 处置证据 | **deferred**（2026-11-22，REV/REQ：所有者已裁定为 bug；HEAD `38cd4ae4` 复现「接收者形态」一级与两跳链仍硬错；修复跟踪 [SH-110](sh110-dynamic-dispatch-chain-fix.md)，落 `v1-PH-0`（V1-C3）；负责人 DEV；High） |
 
 > 所有者 2026-11-21 裁定：**按 bug 修复**。下文的“有意的实现边界”保留为当时的工程评估，
 > 不再作为最终定性；实现口径见 [SH-110](sh110-dynamic-dispatch-chain-fix.md)。
@@ -110,3 +110,44 @@ $ echo $?
 实现口径、判据与门禁见 [SH-110](sh110-dynamic-dispatch-chain-fix.md)。
 
 修复前仍不得在 README 承诺“一行链”；examples/47 的静态宿主形态可继续作为可跑示例。
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`deferred`（bug 已确认，修复未落地；跟踪 SH-110）。** 所有者 2026-11-21 已把本条从
+「有意的实现边界」改判为 bug；2026-11-22 在干净归档 HEAD（`38cd4ae4`）重建 ct-ast v0.88.2，
+按本条最小形态复跑，仍硬错：
+
+```ct
+trait HttpRequest {
+    int status();
+    HttpRequest tap(int n);
+}
+struct Req { int s; } use HttpRequest;
+impl HttpRequest for Req {
+    int status() { return self->s; }
+    HttpRequest tap(int n) { self->s = self->s + n; return self; }
+}
+int main(void) {
+    Req x; x.s = 1;
+    HttpRequest h = x;
+    return h.tap(1)->status();
+}
+```
+
+```console
+$ ct-ast build chain.ct -o out
+chain.ct:27:1: error: method receiver must be a variable, an element, a call or a field chain
+$ echo $?
+1
+$ ct-ast build chain2.ct -o out2        # h.tap(1)->tap(2)->status()
+chain2.ct:27:1: error: method receiver must be a variable, an element, a call or a field chain
+$ echo $?
+1
+```
+
+**判定**：词法器 / 解析器不是根因；拒绝点在发射器的接收者形态判定
+（`Emitter.h.ct` 的 `N_MCALL` 分支），与 SH-110 的实现范围一致。PH-87/PH-88 的发射器切片重写
+没有改变这条形态规则（本条在 v0.88.0/v0.88.2 上同样复现）。
+
+**去向/触发**：修复由 [SH-110](sh110-dynamic-dispatch-chain-fix.md) 承接，排 `v1-PH-0`
+（`v1-release-plan.md` V1-C3）；负责人 DEV；优先级 High。本批只改台账，不动 `Emitter.h.ct`。

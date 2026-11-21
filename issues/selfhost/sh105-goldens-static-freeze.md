@@ -7,8 +7,8 @@
 | 严重度 | High |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §1.5](../../docs/planning/v1-release-plan.md#L57-L71)、[check-goldens.sh](../../selfhost/check-goldens.sh) |
-| 状态 | open |
-| 处置证据 | **实施中（REQ 卡已出；DEV 待生成 25 份 golden + 脚本 + gate 12）** |
+| 状态 | deferred |
+| 处置证据 | **deferred**（2026-11-22，REV/REQ：REQ 卡与 gate12 文案补丁已在库；`test/goldens/ast/`、`selfhost/check-goldens-ast.sh`、gate 12 均未落地。触发 `v1-PH-0` 入口（V1-C2）；负责人 DEV；High） |
 | 层级 | **Tier 1（`v1-PH-0` 入口）**，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 实施卡（REQ 侧，2026-11-21）
@@ -107,3 +107,32 @@ done
 ## 关联
 
 - [v1 路线](../../docs/planning/v1-release-plan.md) §1.3/§1.5、[2026-11-21 评估](../../docs/reviews/2026-11-21-v1-campaign-eval.md)
+
+## 处置（REV/REQ，2026-11-22）
+
+**结论：`deferred`，不是 `verified`。** REQ 侧的产物已在库，DEV 侧实体全部未落地；本条是
+v1.0 去 L1/L2 的前置，触发点是 `v1-PH-0` 入口（V1-C2）。
+
+**在库（HEAD `38cd4ae4`）**：
+
+- 本卡（含产物布局、生成命令、新门禁判据三节）；
+- [gate12-docs.patch](../../docs/planning/gate12-docs.patch) 与
+  [gate12-docs.md](../../docs/planning/gate12-docs.md)（文案补丁，要求与门禁接线同提交）。
+
+**未落地（实查）**：
+
+```console
+$ test -d test/goldens/ast && echo has-goldens || echo no-goldens
+no-goldens
+$ test -f selfhost/check-goldens-ast.sh && echo has-script || echo no-script
+no-script
+$ grep -c 'run_gate "12' selfhost/check-all.sh
+0
+```
+
+即：25 份 `<case>.c` 静态期望、独立门禁脚本、`check-all.sh` 第 12 道都还没有；L1/L2 仍不能退役。
+本批不改产品/门禁代码，因此不制造「已实施未验证」的假象。
+
+**触发/下一步**：`v1-PH-0` 入口（V1-C2）；负责人 DEV；High。下一步按本卡「生成命令」用 v1.0
+ct-ast 生成 25 份 `.c`（banner 版本归一化），接线 `run_gate "12) CT: ct-ast static goldens"`，
+同提交应用 gate12 文案补丁并跑「无 L1/L2 树」独立性断言。
