@@ -93,3 +93,69 @@ struct Node {                 /* ct: allow-cycle */
 - 需要强制时在 `ct.pkg` 写 `leaks = error`：漏掉标记的直接环会让构建失败，带 `allow-cycle`
   的树不受影响。
 - 兄弟链、多叉树同理：ownership 只沿 `box<>` 向下的边，向上的边一律裸指针或下标。
+
+## 6. `kind` 判别改写成穷尽 `match`
+
+树的 tag 判别有两种写法。旧写法把 `kind` 做成手编号的 C `enum`，负载摊平在同一个
+struct 里，`switch` 靠人保证覆盖：
+
+```ct
+enum OldKind { K_NUM, K_ADD };
+
+struct OldNode {
+    int kind;
+    int v;
+    struct OldNode *l;
+    struct OldNode *r;
+};
+
+int old_eval(struct OldNode *n)
+{
+    switch (n->kind) {
+    case K_NUM:
+        return n->v;
+    case K_ADD:
+        return old_eval(n->l) + old_eval(n->r);
+    }
+    return 0;                       /* 漏一个 kind 时这里静默兜底 */
+}
+```
+
+新写法用最小 ADT（[language-spec §4.73](language-spec.md)）：tag 由变体本身承担，
+负载按变体分组，`match` 漏一支就是编译错：
+
+```ct
+enum Node {
+    Num(int v),
+    Add(Node *l, Node *r),
+}
+
+int eval(Node *n)
+{
+    match (n) {
+        Node.Num(v) => { return v; }
+        Node.Add(l, r) => { return eval(l) + eval(r); }
+    }
+}
+```
+
+机械替换的对应关系：
+
+| 旧写法 | 新写法 |
+| --- | --- |
+| `int kind;` 字段 | 删掉；tag 由变体决定 |
+| `enum OldKind { K_NUM, K_ADD }` | `enum Node { Num(...), Add(...) }` |
+| 摊平的 payload 字段（`v` / `l` / `r`） | 各变体自己的负载（`Num(int v)`、`Add(Node *l, Node *r)`） |
+| `case K_NUM:` + `n->v` | `Node.Num(v) => { … v … }` |
+| `default:` / 函数尾 `return 0` | 补一支变体，或显式 `_ => { … }` |
+| `n->kind` 读 tag | `match (n)`（值 `n` 时为 `match (n)` 直接读 `.tag`） |
+
+两条工程约束：
+
+- 分支体没有 fallthrough：一支结束就离开 `match`，不再需要 `break`；分支里的 `break`
+  仍表示**外层循环**的 break（发射是 if/else 链，不是 C `switch`）。
+- `_` 必须显式书写；全部变体覆盖后仍写 `_` 会被 `ct check --types` 提示“多余”，
+  因为 wildcard 会掩盖以后新增的变体。
+
+可运行的等价样例：[test/ast/291_adt_kind_rewrite/prog.ct](../test/ast/291_adt_kind_rewrite/prog.ct)
+（同一棵树分别用旧 `switch` 与新 `match` 求值，输出一致）。

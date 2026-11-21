@@ -796,6 +796,14 @@ else
     bad "p84/layout" "$(cat "$work/p84lay.out" "$work/p84lay.err" | head -5)"
 fi
 
+# PH-84 S84d (E84-8): the ADT / `match` documentation is in the spec, the
+# tutorial and the patterns rewrite sample, and the freeze list is registered.
+if bash test/ast/p84_docs.sh >"$work/p84doc.out" 2>"$work/p84doc.err"; then
+    ok "p84/docs"
+else
+    bad "p84/docs" "$(cat "$work/p84doc.out" "$work/p84doc.err" | head -5)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.

@@ -2985,6 +2985,116 @@ weak / 跨过程分析（D-012）。
 - **非目标**：运行期环检测/回收、`weak` 引用、句柄运行期泄漏分析；`--debug-leaks` 仍只报
   未配对 alloc/release 计数，不叫环检测。
 
+### 4.73 最小 ADT 与 `match`（Phase 84，仅 ct-ast）
+
+最小名义和类型，为 ct-ast 重写提供穷尽判别（D3 / LANG-21）。本轮只做名义和类型、
+构造器负载、穷尽 `match` 与变量绑定；泛型 ADT、or / 守卫 / 字面量 / 嵌套 / 结构体模式、
+表达式形式的 `match` 都是**非目标**（v1.1+ 增量提案，R84-5）。
+
+#### 语法（冻结）
+
+```ct
+enum Shape {
+    Circle(int r),
+    Rect(int w, int h),
+    Empty(),
+}
+
+int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+        Shape.Empty() => { return 0; }
+    }
+}
+```
+
+- **判据（D84-1）**：`enum` 的**任一**成员带括号负载即为 ADT；所有成员都不带负载时
+  保持现行 C `enum` 语义（成员是文件作用域整型常量、产物是 `enum Tag { … }`）。
+  两种形态不能混用：有负载后，无负载成员或显式 `= <常量>` 都是硬错。
+- **构造（D84-3）**：`Type.Variant(args)`。裸变体名（`Circle(1)`）不引入，避免与 C 枚举
+  常量/宏冲突；零负载变体写作 `Type.Unit()`（括号必须有）。实参数量与负载字段数不符、
+  或类型与字段不符（可判定的冲突）都是**硬错**（E84-2）。
+- **`match`**：语句形式（本轮无表达式形式）。每个分支是
+  `Type.Variant(bindings) => { … }`；绑定是**裸名**，类型取自负载字段，payload 按值绑定
+  （owning 负载视作 move 进绑定，见下）。分支体必须有花括号，无 fallthrough。
+- **穷尽（E84-3）**：必须覆盖全部变体，或显式写一个 `_ => { … }`；缺分支、重复分支、
+  未知变体、跨 ADT 的变体、绑定数与负载不符、绑定重名都编译错并给位置。`_` 必须写在
+  最后一支，且只能有一个。
+- **上下文关键字**：`match` 仍是普通标识符；只有 `match (...) {` 是语句，`match(x);`、
+  `int match(int)`、`n.match(...)` 行为不变。
+- **`ct check --types` lint（R84-2）**：全部变体已覆盖且仍写 `_` 时给出
+  `match covers every variant of '<T>'; the wildcard arm is unnecessary`（opt-in，普通
+  `ct check` 不报）。
+
+#### 布局与 ABI（冻结）
+
+```c
+struct Shape {
+    int tag;
+    union {
+        struct { int r; } Circle;
+        struct { int w; int h; } Rect;
+    } u;
+};
+```
+
+- **标签**：`int tag` 在偏移 0，值为变体在声明中的序号（`0..n-1`）；无变体常量名进入
+  用户命名空间。
+- **负载 union**：每个**有负载**的变体对应一个匿名 struct 成员；零负载变体不占 union
+  成员（只有 tag）。C 的规则给出 union 的最大成员对齐与 struct 的最大成员对齐，因此
+  `tag`/union 的顺序与对齐是确定的，不引入 padding 逻辑。
+- **`_Static_assert`**：编译器在定义所在产物写四条断言——tag 在 0、payload union 在 tag
+  之后、tag 结束于 union 之前、`sizeof` 至少容下 union；`pub` ADT 的断言随布局一起进
+  `.h`（E84-5）。断言用 `offsetof`，需要 `<stddef.h>`，由产物在需要时补 include。
+- **不引入 vtable**：ADT 是值类型，不是 trait 接口；没有 vptr、没有 vtable、没有分配。
+- **构造的 C 形态**：复合字面量，例如
+  `((struct Shape){ .tag = 0, .u = { .Circle = { .r = (expr) } } })`；零负载变体为
+  `((struct Shape){ .tag = 2 })`。不生成辅助函数（避免未使用 static 告警）。
+- **`match` 的 C 形态**：主语求值一次存进 `__ct_matchN` 临时量，分支发射为
+  `if (…tag == k) … else if … else …`（最后一支是 `else`，穷尽已由解析期证明）。不用 C
+  `switch`：分支里的 `break` 必须仍表示**外层循环**的 break，且 if/else 链天然无
+  fallthrough（E84-4）。
+- **绑定语义**：arm 绑定是该臂块内的普通局部量，初值取自 `__ct_matchN.u.<Variant>.<field>`；
+  绑定是**副本**（值语义），修改绑定不改变被 match 的值。owning 负载按 move 处理：绑定
+  取得该值的使用权，ADT 本身不自动释放 payload（本阶段不生成 ADT 的 drop glue，见 R84-4
+  与“简化”条）。
+- **主语**：ADT 值或 `ADT *` 指针都接受；指针主语用 `->` 读 tag/payload。
+
+#### 实现上限与边界
+
+- 每个 build 最多 **64** 个 ADT，每个 ADT 最多 **16** 个变体，每个变体最多 **8** 个负载
+  字段；负载字段不能是数组或 `void`（错误带位置）。超限是硬错。
+- ADT 必须**先声明后使用**（与 struct 一致）：`match`/构造时 tag 必须已在类型表中。
+- 跨单元：`pub` ADT 经 `.h.ct` 的生成头发布布局，消费者可构造/匹配；变体表在 build 内
+  全局登记，故同一 ADT 只读一次。`--emit-model` 的 `enums` 列表本轮不含 ADT。
+- **简化（诚实登记）**：本轮不为 ADT 生成 Drop glue，owning payload 的释放由作者显式处理；
+  ADT 不能带显式枚举值；无泛型 ADT；`match` 不能作为表达式；没有 or / 守卫 / 嵌套 / 结构体
+  模式；`offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器产物负责）。
+
+#### 冻结清单登记（PH-84 范围）
+
+| 项 | 冻结内容 | 改动授权 |
+| --- | --- | --- |
+| `enum` 两形态判据 | 有负载 = ADT，无负载 = C enum；不得混用 | 语言变更提案 + 新 phase |
+| 构造与 `match` 拼写 | `Type.Variant(args)`、`Type.Variant(bindings) => { … }`、`_` 末位 | 同上 |
+| 穷尽判据 | 全部变体或显式 `_`；漏/重/未知均硬错 | 同上 |
+| 布局 | `int tag` 在 0，payload union 紧随，C 对齐规则 | ABI 变更提案（R84-3 不承诺跨版本 ABI） |
+| 静态断言 | 四条 `_Static_assert` 随 `pub` 布局进 `.h` | 同上 |
+| 诊断文本 | §4.73 与 `test/ast/p84_*` 钉住的文案与位置 | 同 T-7/门禁变更流程 |
+| `ct check --types` lint | “可穷尽却用 `_`” 的文案与 opt-in 属性 | 同上 |
+
+> 本表是 PH-84 自己的冻结面；v1.0 的**全局**稳定子集清单仍归 DOC-79（REQ），本阶段不代写。
+
+#### C enum 不变（E84-1 / E84-8）
+
+无负载 `enum` 的语法、成员常量、`enum Tag` / `typedef enum … Alias` 形态、`case` 取值、
+生成产物（`enum Tag { … }`）与既有行为全部不变；ADT 只走 payload 分支。既有
+`test/ast/30_enum`、`examples/c-superset/s04_enum`、`examples/c-superset/s01_switch`
+的产物与运行输出在 PH-84 前后一致（版本 banner 除外）。
+
+
 ## 11 文档与实现一致性（缺口登记，2026-11-15）
 
 **现状**：仓库门禁里没有防止本文与实现漂移的自动机制。`check-docs` 只校验相对链接、版本串、

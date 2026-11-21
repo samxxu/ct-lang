@@ -2018,3 +2018,94 @@ box<Point> b = box<Point>::of(p);       // 复制构造；owning 叶 retain
 `struct Bad { Str tag; }` 在类型/声明层硬错。引用环是作者责任：互持 `retain()` 后释放
 句柄仍泄漏，编译器不报环；`--debug-leaks` 若实现也只报未配对 alloc/release 计数。
 `ct build` 跨单元 `box<T>` 在 v0.81.0 不支持，单文件编译可用。
+
+## 18. 最小 ADT 与 `match`（Phase 84，v0.84.0 起可用）
+
+一个成员的负载列表把 `enum` 变成**名义和类型**；`match` 用穷尽分支把它拆开。
+这一轮只覆盖重写需要的最小集合：名义和类型、负载、穷尽检查、变量绑定。
+
+```ct
+enum Shape {
+    Circle(int r),
+    Rect(int w, int h),
+    Empty(),
+}
+
+int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+        Shape.Empty() => { return 0; }
+    }
+}
+```
+
+**两形态判据**：成员带括号负载 = ADT；所有成员都不带负载 = 现行 C `enum`
+（成员仍是文件作用域整型常量）。两种形态不能混用：有负载后，显式 `= 1` 或无负载
+成员都是硬错。
+
+**构造**：`Shape.Circle(2)`；零负载变体写 `Shape.Empty()`（括号不能省）。裸变体名
+（`Circle(2)`）不引入。实参个数/类型与负载字段不符是编译错：
+
+```ct
+Shape bad = Shape.Circle(1, 2);   // error: 'Shape.Circle' takes 1 argument, but 2 given
+Shape also = Shape.Circle("x");   // error: argument 1 of 'Shape.Circle': expected 'int', got 'char *'
+```
+
+**穷尽**：必须写全变体，或显式写一个 `_` 兜底；漏一个就编译错并给位置：
+
+```ct
+match (s) {
+    Shape.Circle(r) => { return r; }
+}                                  // error: match does not cover variant 'Shape.Rect'
+
+match (s) {
+    Shape.Circle(r) => { return r; }
+    _ => { return 0; }             // 显式兜底；不写就是漏分支
+}
+```
+
+`ct check --types` 会提示“全部变体已覆盖却仍写 `_`”（wildcard 会掩盖以后新增的变体）。
+`match` 仍是普通标识符：`match(x);`、`int match(int)`、`n.match(...)` 都不变。
+
+**绑定是副本**：每支绑定的是负载值的一份拷贝，改它不会改被 match 的值；分支体没有
+fallthrough，一支结束就离开 `match`。所以“先算再落出”的写法是自然的：
+
+```ct
+int n = 0;
+match (s) {
+    Shape.Circle(r) => { n = r; }
+    Shape.Rect(w, h) => { n = w * h; }
+    Shape.Empty() => { n = 0; }
+}
+// 这里 n 已被赋值
+```
+
+**主语可以是指针**：`match (node) { Node.Num(v) => …, Node.Add(l, r) => … }`
+（`node` 为 `Node *`）与值主语同形；`break` 在分支里仍表示外层循环的 break。
+
+**布局**：ADT 是值类型——
+
+```c
+struct Shape {
+    int tag;
+    union {
+        struct { int r; } Circle;
+        struct { int w; int h; } Rect;
+    } u;
+};
+```
+
+`int tag` 在偏移 0，payload union 紧随其后；`pub` ADT 的这一定义连四条
+`_Static_assert` 一起进生成头。ADT 没有 vtable、没有分配、不是 trait 接口值。
+`pub enum` 放进 `.h.ct` 后，其他单元可直接 `import` 并构造/匹配。
+
+**边界**：泛型 ADT、or / 守卫 / 字面量 / 嵌套 / 结构体模式、表达式形式的 `match`
+都留到 v1.1+；`match` 只接受 ADT 主语（普通 `int` 会报
+`match needs an ADT value, but 'int' is not an ADT`）；owning payload 视为 move 进绑定，
+ADT 本身不自动释放 payload（作者显式处理）。上限：64 个 ADT / 每 ADT 16 个变体 /
+每变体 8 个负载字段。C enum 与 `switch` 的行为完全不变。
+
+把 `node->kind` 判别机械改写成穷尽 `match` 的做法见
+[patterns §6](patterns.md#6-kind-判别改写成穷尽-match)。
