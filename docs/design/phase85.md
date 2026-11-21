@@ -216,11 +216,11 @@ ret 掉 M0 会让 S85d 的调用悬空。
 
 ```console
 $ git worktree add --detach /tmp/p85roll HEAD
-$ cd /tmp/p85roll && git revert --no-edit f377315a      # S85d（A 机制）
+$ cd /tmp/p85roll && git revert --no-edit 602d3a25      # S85d（A 机制）
 [detached HEAD 1f71c4e7] Revert "feat(ct-ast): p85_a_wire（S85d，B 检查器接进 build，off/warn/error）"
  8 files changed, 6 insertions(+), 118 deletions(-)
-$ git revert --no-edit 104dfc54                          # S85c（M0 粗切）
-CONFLICT (modify/delete): docs/design/p85_m0.md deleted in parent of 104dfc54
+$ git revert --no-edit 33f06d17                          # S85c（M0 粗切）
+CONFLICT (modify/delete): docs/design/p85_m0.md deleted in parent of 33f06d17
   and modified in HEAD.
 # 唯一冲突：M0 之后补写的 F2 说明在同一文件里。按“文档随单元一起删”解：
 $ git rm docs/design/p85_m0.md && git revert --continue
@@ -316,6 +316,34 @@ HEAD 上 `p85_m0` 仍绿（见 §7.4 的 check-ast）。`p85_m0_s85d_edits.tsv` 
 在 M0 提交处尚不存在，因此 M0 提交的验收是“**可独立构建 + 行为不变**”；探针的全套
 断言在 HEAD 上跑。
 
+#### F2 残留（二次打回，SH-107 续）
+
+第一次修 F2 时，M0 提交仍带 8 行 S85d 代码——`Module.h.ct` 的 `--check-level`
+help 文本（1 行）与 `nsem` 提前退出守卫（7 行），来自“按最终工作树暂存整个文件”。
+后果：M0 提交的 `p85_m0` 因允许清单缺失/为空而红，`ct build --help` 列出未实现的
+选项。修法（REV 指定的最小修）：重写未推历史，把这 8 行移回 S85d 实现提交
+`602d3a25`，M0 提交 `33f06d17` 只保留 import/realpath 机械行；M0 测试提交
+`bfad7c37` 的 `p85_m0_s85d_edits.tsv` 置为空文件（0 条 S85d 改动），S85d 测试提交
+再写入 11 条。
+
+```console
+$ git archive 33f06d17 | tar -x -C /tmp/p85m0v && cd /tmp/p85m0v
+$ cp .temp/build-ct-ast.sh . && sh build-ct-ast.sh . .temp/b
+built .temp/b/ct-ast                                   rc=0（全链，零警告）
+$ ./.temp/b/ct-ast -v
+ct-ast v0.84.1
+$ ./.temp/b/ct-ast build --help | grep -c check-level
+0                                                       # 不再列出未实现的选项
+$ python3 tools/p85_inventory.py m0
+p85_m0: body hashes preserved (827 bodies, 838 functions, 6 moved units,
+        0 declared S85d edits), 26 products, 0 cycles
+$ bash test/ast/p85_m0.sh ./.temp/b/ct-ast
+p85m0: 4 passed, 0 failed
+```
+
+HEAD 上仍是 `827 bodies, 842 functions, 11 declared S85d edits`（4 个 S85d 新函数 +
+11 条 allowlist），`p85_m0` 4/4。
+
 #### F3 E85-2 口径（DOC-82）
 
 新增 [D-018](../decisions/D-018.md)（REVIEW 签收、EDITOR 批准；T-8 要求 decision 由非作者签收）：E85-2 = spike 已执行 + 度量 +
@@ -332,14 +360,18 @@ HEAD 提交链（重写后）：
 
 ```console
 $ git log --oneline 10c23c77..HEAD
-b2a85409 fix(ph85): REV 打回 F1–F4（D-018、干净归档、M0 可独立构建、回滚演练）  # 本次修复
-7e5159a4 review: PH-85 复核（v0.85.0，打回）      # REV（被重写的原 5c2acb26）
-7a847a21 docs(pkg): ct-pkg index 消费侧…           # 另一席位
-cfe2952a chore(ph85): v0.85.0 收口（S85a–S85d，E85-1…8）
-f377315a feat(ct-ast): p85_a_wire（S85d）
-80527418 test(ct-ast): p85_a_wire 红
-104dfc54 feat(ct-ast): p85_m0（S85c，6 单元纯搬移）   # F2：3 imports + realpath
-a319b62e test(ct-ast): p85_m0 红
+5865d6e2 docs(ph85): F2 残留修复后的数字与证据（M0 838/827/0）
+a5a1c762 review: PH-85 复核（v0.85.0，打回 F2 残留）   # REV 第二次打回
+4d1ada1c docs(ph85): 回滚演练按最终 HEAD 复核（源码零冲突，文档随单元删）
+41221fea docs(ph85): 记录干净归档 11/11 与 ASan 586（REV 打回后复跑）
+6395cc2f fix(ph85): REV 打回 F1–F4（D-018、干净归档、M0 可独立构建、回滚演练）
+6997a841 review: PH-85 复核（v0.85.0，打回）      # REV 第一次打回（原 5c2acb26）
+8e81762d docs(pkg): ct-pkg index 消费侧…           # 另一席位
+59b8b164 chore(ph85): v0.85.0 收口（S85a–S85d，E85-1…8）
+602d3a25 feat(ct-ast): p85_a_wire（S85d）
+c34cdf93 test(ct-ast): p85_a_wire 红
+33f06d17 feat(ct-ast): p85_m0（S85c，6 单元纯搬移）   # F2：3 imports + realpath；0 行 S85d
+bfad7c37 test(ct-ast): p85_m0 红                        # 空允许清单
 d9dcc0b8 feat(ct-ast): p85_spike（S85b）
 4345d08c test(ct-ast): p85_spike 红
 b6dacb3c feat(ct-ast): p85_inventory（S85a）
@@ -347,5 +379,5 @@ b6dacb3c feat(ct-ast): p85_inventory（S85a）
 32e3e482 battle(ct-guide-1): ……                    # 另一席位
 ```
 
-（上面的 sha 是重写后的本地历史；未 push、未 tag。`60340c21` 与本文档更新为
-REV 打回后的证据补写，HEAD 以 `git log -1` 为准。）
+（上面的 sha 是重写后的本地历史；未 push、未 tag。第二次打回只改了 M0/S85d 两个
+提交及其下游 sha，`6395cc2f` 之后为证据补写，HEAD 以 `git log -1` 为准。）

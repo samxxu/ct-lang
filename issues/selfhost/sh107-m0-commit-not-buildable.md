@@ -107,3 +107,31 @@ Hello Jerry, I'm Tom
 `bash test/ast/p85_m0.sh <HEAD 的 ct-ast>` 在 HEAD 上 4/4（allowlist 属 S85d 夹具，
 M0 提交处尚不存在；M0 提交的验收是“可独立构建 + 行为不变”）。
 回滚演练（先 S85d 再 M0）见卡 §7.5；版本仍 0.85.0（未发布，重写未推历史）。
+
+## DEV 处置（第二次，2026-11-21，REV 二次打回 F2 残留）
+
+第一次修 F2 后 M0 提交仍混入 8 行 S85d 代码（`Module.h.ct` 的 `--check-level` help
+1 行 + `nsem` 提前退出守卫 7 行），导致该提交 `p85_m0` 红、`ct build --help` 列出
+未实现的选项。已重写本地未推历史：
+
+- 8 行移回 S85d 实现提交 `602d3a25`；M0 提交 `33f06d17` 只保留 import 与
+  `realpath` 机械行；
+- M0 测试提交 `bfad7c37` 的 `test/probes/p85_m0_s85d_edits.tsv` 为空文件（0 条
+  S85d 改动），S85d 测试提交 `c34cdf93` 再写入 11 条；
+- M0 提交正文改为 `827 bodies / 838 functions / 0 S85d edits`。
+
+```console
+$ git archive 33f06d17 | tar -x -C /tmp/p85m0v && cd /tmp/p85m0v
+$ cp .temp/build-ct-ast.sh . && sh build-ct-ast.sh . .temp/b
+built .temp/b/ct-ast                                  rc=0（全链，零警告）
+$ ./.temp/b/ct-ast build --help | grep -c check-level
+0
+$ python3 tools/p85_inventory.py m0
+p85_m0: body hashes preserved (827 bodies, 838 functions, 6 moved units,
+        0 declared S85d edits), 26 products, 0 cycles
+$ bash test/ast/p85_m0.sh ./.temp/b/ct-ast
+p85m0: 4 passed, 0 failed
+```
+
+HEAD（`827 bodies / 842 functions / 11 edits`）四探针与 check-all 仍绿；版本仍
+0.85.0（未发布，重写未推历史）。
