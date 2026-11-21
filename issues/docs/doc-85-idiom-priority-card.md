@@ -102,8 +102,10 @@
 2. 从 `docs/README.md` 与 `llm-guide.md` 的读者路径引入，避免“仓库一套、外部一套”；
 3. 与 [DOC-86](doc-86-readme-v088-rewrite.md)（README 大改）同批施工；
 4. 不把原稿直接复制入库；修正稿逐条对照本 issue；
-5. **同步门禁**：`idioms.md` 入库时，briefing 每条关键断言标 spec 节号，并在
-   `docs/README.md` 的机器校验约定加一条（至少检查节号存在与关键短语），并入 `check-docs`。
+5. **同步门禁**：`docs/idioms.md` 入库时，briefing 每条关键断言标 spec 节号。
+   该门禁已挂进 `docs/README.md` 文档约定第 8 条，并由 `check-docs` 的
+   `check_idiom_briefing` 执行：编号断言缺 `§N` 或节号在 `language-spec.md`
+   中不存在即红；`idioms.md` 未入库时该检查跳过，文件落地即生效。
 
 ## 验收
 

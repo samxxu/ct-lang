@@ -115,5 +115,8 @@
    [history/phase-log.md](history/phase-log.md)。
 7. **ADR 与 battle 的取代关系**：battle 卡头的 `superseded-by` 与 ADR 的 `superseded-battles`
    必须双向一致；缺一边即红（结构化校验，不做自由文本比对）。
+8. **briefing 与 spec 同步**：`docs/idioms.md` 附录里的 briefing 是压缩过的二手事实，
+   每条编号断言必须标注 `language-spec.md` 的 `§N`，且该节号必须存在于规范正文；
+   节号过时或缺失即红。`idioms.md` 尚未入库时本条由校验脚本跳过，文件落地即自动生效。
 
 校验脚本是 [../test/docs/check-docs.py](../test/docs/check-docs.py)，已接入 `check-all.sh`。

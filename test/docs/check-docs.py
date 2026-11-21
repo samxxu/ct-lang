@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts eight invariants:
+Standard library only. It asserts ten invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -27,9 +27,12 @@ Standard library only. It asserts eight invariants:
   8. every battle question's `superseded-by:` pointer and the ADR's
      `superseded-battles:` list agree in both directions;
   9. T-8 (AGENTS §0.7): an "实施中" phase card and every ADR dated on or
-     after SIGNOFF_FROM carry a `签收:` line by a non-author role.
+     after SIGNOFF_FROM carry a `签收:` line by a non-author role;
+ 10. DOC-85: every numbered claim in the briefing appendix of docs/idioms.md
+     cites a `§N` section that exists in docs/language-spec.md. The rule is
+     inactive until idioms.md lands, then it switches on with the file.
 
-Exit code 0 when all nine hold, 1 otherwise.
+Exit code 0 when all ten hold, 1 otherwise.
 """
 
 import hashlib
@@ -47,6 +50,9 @@ SIGNOFF_FROM = "2026-11-20"
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 FENCE = re.compile(r"```.*?```", re.S)
 INLINE = re.compile(r"`[^`\n]*`")
+BRIEFING_ITEM = re.compile(r"^(\d+)\.\s+(.*)$")
+SECTION_HEAD = re.compile(r"^#{3,4}\s+(\d+(?:\.\d+)*)\.?\s", re.M)
+SPEC_REF = re.compile(r"§(\d+(?:\.\d+)*)")
 
 STATUS_MAP = {
     "完成": "\u2705",
@@ -437,6 +443,46 @@ def check_signoffs(errors):
     return checked
 
 
+def check_idiom_briefing(errors):
+    """DOC-85: every numbered claim in the briefing appendix of docs/idioms.md
+    cites a language-spec section that exists. Inactive while the file is
+    absent; the gate switches on with the file."""
+    path = os.path.join(ROOT, "docs/idioms.md")
+    if not os.path.exists(path):
+        return 0
+    text = read(path)
+    heading = re.search(r"^#{1,6}[^\n]*briefing[^\n]*$", text, re.M | re.I)
+    if not heading:
+        errors.append("docs/idioms.md: no briefing appendix heading (DOC-85)")
+        return 0
+    tail = text[heading.end():]
+    nxt = re.search(r"^#{1,6}\s", tail, re.M)
+    body = tail[: nxt.start()] if nxt else tail
+    block = re.search(r"```[a-zA-Z]*\n(.*?)```", body, re.S)
+    body = block.group(1) if block else body
+    spec = read(os.path.join(ROOT, "docs/language-spec.md"))
+    sections = set(SECTION_HEAD.findall(spec))
+    checked = 0
+    for line in body.splitlines():
+        item = BRIEFING_ITEM.match(line)
+        if not item:
+            continue
+        checked += 1
+        refs = SPEC_REF.findall(item.group(2))
+        if not refs:
+            errors.append(
+                f"docs/idioms.md: briefing item {item.group(1)} cites no §spec section (DOC-85)"
+            )
+            continue
+        for ref in refs:
+            if ref not in sections:
+                errors.append(
+                    f"docs/idioms.md: briefing item {item.group(1)} cites §{ref}, "
+                    "absent from docs/language-spec.md"
+                )
+    return checked
+
+
 def main():
     errors = []
     links, scanned = check_links(errors)
@@ -448,6 +494,7 @@ def main():
     design, window = check_design_window(errors)
     superseded = check_superseded_links(errors)
     signoffs = check_signoffs(errors)
+    briefing = check_idiom_briefing(errors)
     for error in errors:
         print(f"FAIL: {error}")
     # The two status lines print on both paths: on a red run the first one names
@@ -461,7 +508,7 @@ def main():
         f"check-docs: OK ({links} relative links in {scanned} files, "
         f"v{version}, {gates} hard gates, {phases} phase status, "
         f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
-        f"{signoffs} signoff(s))"
+        f"{signoffs} signoff(s), {briefing} briefing item(s))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0
