@@ -7860,7 +7860,7 @@ impl ExprAdt for Expr {
         if (self->lex->tok != T_ID) return 0;
         if (self->sym->find_var(self->lex->toktext) >= 0) return 0;
         if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
-        if (frontend::sym::ct_adt_find(rn) < 0) return 0;
+        if (frontend::sym::ct_adt_from_type(rn) < 0) return 0;
         p = self->lex->src + self->lex->tokstart + strlen(self->lex->toktext);
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
         if (*p != '.') return 0;
@@ -7899,7 +7899,7 @@ impl ExprAdt for Expr {
         vcol = self->lex->tokstart - self->lex->lstart + 1;
         snprintf(vname, sizeof vname, "%s", self->lex->toktext);
         self->sup->lex_next();
-        adt = frontend::sym::ct_adt_find(rn);
+        adt = frontend::sym::ct_adt_from_type(rn);
         if (adt < 0) {
             snprintf(msg, sizeof msg, "'%s' is not an ADT", rn);
             return tool::diag::ct_sem_error(tline, tcol, msg, self->sup->mem->path);

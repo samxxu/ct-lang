@@ -550,6 +550,11 @@ pub struct Adt {
 pub struct Adt *ct_adts(int *n);
 /* The row whose C tag (or, as a fallback, source name) is `name`; -1 otherwise. */
 pub int ct_adt_find(const char *name);
+/* Phase 84 fix (F1): the ADT row behind a *type spelling* -- `struct T`,
+   `T *`, a typedef alias (`Alias`, `lib_Alias`) or a namespaced tag. The
+   alias row records its target (`struct <tag>`) in the type table, so one
+   spelling rule serves the parser, the type pass and the emitter. */
+pub int ct_adt_from_type(const char *spelling);
 /* Create the row for `full`; returns its index, -1 on a cap overflow, -2 when a
    row with that spelling already exists (the caller reports the duplicate). */
 pub int ct_adt_add(const char *name, const char *full, int is_pub, int owner, const char *path, int line);
@@ -2610,4 +2615,68 @@ int ct_adt_add_field(int adt, int v, const char *name, const char *type)
     snprintf(a[adt].variants[v].fields[f].type, MAX_TEXT, "%s", type ? type : "");
     a[adt].variants[v].nfields++;
     return f;
+}
+
+/* The bare C name behind a type spelling: whitespace, `*`, `const` / `volatile`
+   and the `struct` / `union` keyword are dropped. `Alias *` and
+   `const struct lib_Shape *` both answer `Alias` / `lib_Shape`. */
+static void adt_strip_type(const char *in, char *out, int cap)
+{
+    const char *b;
+    size_t n;
+
+    b = in ? in : "";
+    while (*b == ' ' || *b == '\t' || *b == '\n' || *b == '\r') b++;
+    n = strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t' || b[n - 1] == '\n'
+                     || b[n - 1] == '\r' || b[n - 1] == '*'))
+        n--;
+    if (n >= (size_t)cap) n = (size_t)cap - 1;
+    memcpy(out, b, n);
+    out[n] = 0;
+    b = out;
+    for (;;) {
+        if (strncmp(b, "const ", 6) == 0) b += 6;
+        else if (strncmp(b, "volatile ", 9) == 0) b += 9;
+        else if (strncmp(b, "struct ", 7) == 0) b += 7;
+        else if (strncmp(b, "union ", 6) == 0) b += 6;
+        else break;
+        while (*b == ' ' || *b == '\t') b++;
+    }
+    if (b != out) memmove(out, b, strlen(b) + 1);
+}
+
+int ct_adt_from_type(const char *spelling)
+{
+    char raw[MAX_TEXT];
+    char base[MAX_TEXT];
+    char rn[MAX_TEXT];
+    char tgt[MAX_TEXT];
+    struct Symbols *sym;
+    int a;
+
+    if (!spelling || !spelling[0]) return -1;
+    adt_strip_type(spelling, raw, sizeof raw);
+    if (!raw[0]) return -1;
+    a = ct_adt_find(raw);
+    if (a >= 0) return a;
+    sym = symbols_get();
+    rn[0] = 0;
+    if (sym->resolve_type(raw, rn, sizeof rn) == 0 && rn[0] && strcmp(rn, raw) != 0) {
+        adt_strip_type(rn, base, sizeof base);
+        a = ct_adt_find(base);
+        if (a >= 0) return a;
+    }
+    /* a typedef alias records `struct <tag>` as its target (F1) */
+    if (sym->type_target_of(raw, tgt, sizeof tgt)) {
+        adt_strip_type(tgt, base, sizeof base);
+        a = ct_adt_find(base);
+        if (a >= 0) return a;
+    }
+    if (rn[0] && strcmp(rn, raw) != 0 && sym->type_target_of(rn, tgt, sizeof tgt)) {
+        adt_strip_type(tgt, base, sizeof base);
+        a = ct_adt_find(base);
+        if (a >= 0) return a;
+    }
+    return -1;
 }

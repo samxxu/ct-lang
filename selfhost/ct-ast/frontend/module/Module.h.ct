@@ -28,6 +28,7 @@ import frontend::lex::Lexer;
 import frontend::module::Unit;
 import frontend::parse::Parser;
 import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import tool::cache::Cache;
@@ -1163,6 +1164,21 @@ impl ModuleOps for Module {
                 if (pl > 0 && strncmp(full, self->units[dn].nsprefix, pl) == 0) bare = full + pl;
                 if (self->sym->add_bare_type(bare, full) != 0)
                     return self->fail(self->sym->last_error());
+                /* Phase 84 fix (F2): a `pub typedef enum Tag { … } Alias;`
+                   publishes `lib_Alias` as the declaration's name, but the
+                   source tag `Shape` must also resolve — otherwise the
+                   consumer emits the undeclared `Shape`. */
+                if (self->arena->nodes[gn].kind == N_ENUM
+                    && (self->arena->nodes[gn].aux & 3) == 3
+                    && self->arena->nodes[gn].num > 0) {
+                    struct Adt *adts;
+                    int nadts, adi;
+                    adts = frontend::sym::ct_adts(&nadts);
+                    adi = (int)self->arena->nodes[gn].num - 1;
+                    if (adts && adi >= 0 && adi < nadts
+                        && self->sym->add_bare_type(adts[adi].name, adts[adi].full) != 0)
+                        return self->fail(self->sym->last_error());
+                }
             }
             for (gn = self->units[dn].tr_start; gn < self->units[dn].tr_end; gn++) {
                 const char *full;

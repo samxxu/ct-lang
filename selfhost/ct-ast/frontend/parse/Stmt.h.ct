@@ -3208,7 +3208,7 @@ impl StmtOps for Stmt {
             if (strncmp(w, "struct ", 7) == 0) w += 7;
             if (w != tname) memmove(tname, w, strlen(w) + 1);
         }
-        adt = frontend::sym::ct_adt_find(tname);
+        adt = frontend::sym::ct_adt_from_type(tname);
         if (adt < 0) {
             snprintf(msg, sizeof msg, "match needs an ADT value, but '%s' is not an ADT",
                      tybuf);
@@ -3265,7 +3265,7 @@ impl StmtOps for Stmt {
                 acol = self->lex->tokstart - self->lex->lstart + 1;
                 if (self->sup->resolve_type(aname, rn, sizeof rn) != 0)
                     return self->sup->fail("unknown ADT type in a match arm");
-                a2 = frontend::sym::ct_adt_find(rn);
+                a2 = frontend::sym::ct_adt_from_type(rn);
                 if (a2 < 0) {
                     snprintf(msg, sizeof msg,
                              "match arm names '%s', which is not an ADT", aname);
