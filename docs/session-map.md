@@ -38,7 +38,7 @@
 | PH-84 最小 ADT/match（S84a–S84e；D3；S84e = battle doc-consistency-1 判决 B 的最小集） | 当前 DSH 会话（DEV `dev-ph84`） | DEV / VERIFY（角色席位） | PH-84 ✅ v0.84.1（E84-1…9；REV F1/F2 fixed） |
 | PH-85 v1-pre 准备（inventory/spike/M0 粗切/A 机制） | 当前 DSH 会话（DEV `dev-ph85`） | DEV / VERIFY（角色席位） | PH-85 ✅ v0.85.0（**E85-2 有条件通过（D-018）**，其余 E85 通过；spike 结构等价、整子系统重写门不通过，见卡 §8；REV F1–F4 已修） |
 | PH-86 词法器重写（S86a–S86d） | 当前 DSH 会话（DEV `dev-ph86`） | DEV / VERIFY（角色席位） | PH-86 ✅ v0.86.0（E86-1…8 通过；S86c `?`/errdefer 按 battle/p86-errorpath 采 A，待 REVIEW 签字） |
-| PH-87 解析器 + 检查器重写 | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-87 🟨 准备（v0.87.0；入口 PH-86） |
+| PH-87 解析器 + 检查器重写（S87a–S87d） | 当前 DSH 会话（DEV `dev-ph87`） | DEV / VERIFY（角色席位） | PH-87 ✅ v0.87.0（E87-1…8；S87a/S87b 切片 + 红证；E87-2 字面 `match` 按 battle/p87-kind-match 移交 PH-88） |
 | PH-88 发射器重写 + 扩展自举回环 | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-88 🟨 准备（v0.88.0；入口 PH-87） |
 | v1.0 发布前清单（已定项：J-6 台账 / goldens 静态化 / 文档与包体系收尾） | 当前 DSH 会话（REQ） | REQ / EDITOR | v1-PH-0 前置；争议项见 v1 路线 §6 |
 | v1.1 M1 精细切分（S1）+ A 默认强制（S2） | 当前 DSH 会话（REQ） | REQ / EDITOR | v1-PH-1；D-017 |

@@ -3143,8 +3143,8 @@ ct-ast 的节点池是扁平 `struct Node { int kind; … }`，`kind` 是手编�
 `int`，要把它变成 ADT 主语就得改整棵节点树，属 PH-88（发射器 + 自举）范围。
 更硬的前置：ct-ast 源码由 L2 引导编译，L2 不实现 PH-84，把 `pub enum NodeKind`
 写进源码会让 L2 发射非法 C 而断链（原始输出见
-[battle/p87-kind-match](../../battle/p87-kind-match/verdict.md) 与
-[证据](../../test/probes/p87_l2_adt_evidence.txt)）。因此本版只落地可验证的切片，
+[battle/p87-kind-match](../battle/p87-kind-match/verdict.md) 与
+[证据](../test/probes/p87_l2_adt_evidence.txt)）。因此本版只落地可验证的切片，
 `switch → match` 的字面拼写移交 PH-88；切片与变体 1:1，届时是机械替换。
 
 **等价判据（D-017 A1）。** 测试语料发射 66 个文件逐字节不变；345 条诊断
