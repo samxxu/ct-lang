@@ -21,7 +21,7 @@
 | “借用类型不能存（字段/容器/全局 = 硬错）” | `Vec<Str>` / `Option<Str>` / ADT 负载可编译；全局 `Str g = "x"` 也可编译 | struct 字段 / `Map` 键硬错；全局/容器/ADT 是借用视图风险；常量表安全，非 immortal 视图 lint 另立 [LANG-22](../lang/lang-22-nonimmortal-view-store-lint.md) |
 | “返回局部视图 = 硬错” | `Str` 逃逸当前无 lint（SH-106）；`T[]` 是 warning | 改为“返回局部 `Str` 视图当前无 lint；返回局部 `T[]` 是 `slice escape` warning；两者归契约 + ASan” |
 | “owning 自动释放” | 局部/参数自动；`String`/`box` 字段在宿主 `use Drop` 且无显式 impl 时有字段胶水；`Vec`/`Map` 字段无胶水；全局/ADT payload 显式；环泄漏 | 按类型 + 位置分层（下方） |
-| “泄漏 = 告警（strict 包内 error）” | 实际是 `ct.pkg` 的 `leaks = warn\|error`，与 `c-boundary=strict` 无关 | 改为“`leaks=error` 可让 build 失败” |
+| “泄漏 = 告警（strict 包内 error）” | 实际是 `ct.pkg` 的 `leaks = warn\|error`，与 `c-boundary=strict` 无关 | 改为“泄漏默认 warning；`leaks=error` 才升级；strict 是另一条边界” |
 | `foreach (v) { i, item }` | `i` / `item` 是**块内隐式绑定**，不是头列表；`{ i, item; }` 只是逗号表达式 | 正确写法 `foreach (v) { … i … item … }`；v0.84.1 数组与 Vec/Map 都绑定只读 `i` |
 | 附录 briefing | 重复上述错误 | 同步修 |
 
