@@ -1,7 +1,7 @@
-# battle/p87-kind-match 判决（DEV 自决，待 REVIEW 追签）
+# battle/p87-kind-match 判决（DEV 自决，REVIEW 2026-11-21 已追签）
 
 - 日期：2026-11-21
-- 状态：**accepted（DEV 2026-11-21 按卡授权自决；REVIEW 可追签/推翻）**
+- 状态：**accepted（DEV 2026-11-21 建议；REVIEW 2026-11-21 追签，条件见文末「REVIEW 追签」）**
 - 判据来源：[question.md](question.md)
 
 ## 判决
@@ -37,3 +37,21 @@ PH-86 battle 已裁定 `?`/errdefer 不在 ct-ast 源码使用（错误路径按
 诊断对照”交付）。本判决对 `match` 采用同一口径：**语法新特性在引导链支持前
 不得写进 ct-ast 源码**；差别是 `match` 的阻塞点是 L2 未实现 PH-84，而
 `?`/errdefer 是 ct 语言本身未实现。
+
+## REVIEW 追签（2026-11-21）
+
+**A 成立，本复核追签。** 已在归档自举上独立复现 L2 前置（`enum NodeKind` 被 L2
+原样发射成非法 C，20 errors；同一源码 ct-ast 可编），L1/L2 中 ADT/match 下降
+命中 0。E87-2 记**部分通过**，不得记全部通过。
+
+追签附两项条件，REQ/EDITOR 须在 PH-88 开卡前落实（详见
+[PH-87 复核 §3.3](../../docs/reviews/2026-11-21-phase87-rev-verdict.md)）：
+
+1. **承接目标写死**：PH-88 卡现只写发射器 + 轮数参数化，引导链仍由 L2 起步，
+   编不了含 `match` 的源码；字面项只能由 v1.0 的 seed cutover（`v1-PH-0`）或
+   PH-88 内显式新增的「换 seed」任务承接。二选一写进退出判据，否则欠账会丢。
+2. **承接范围含全部剩余 kind 判别**：`expr_ctype`、`maybe_box`，以及本卡 §7.6
+   漏列的 `chk_type`（`--types` 通路的 `switch (kind)`）。
+
+另：本判决「切片与变体 1:1」的措辞需修正为「一 kind 一臂，共用体调同一 helper」
+（13 函数/14 kind、15/20；PH-84 无 or 模式）。本复核不推翻 A，也不改实现。
