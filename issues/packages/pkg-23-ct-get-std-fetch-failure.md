@@ -1,7 +1,7 @@
 ---
 id: PKG-23
 title: "ct get std 官方 pin 的 git fetch 失败只报通用错误，无法区分网络/认证/tag/缓存"
-status: reopened
+status: verified
 area: packages
 severity: P1
 opened: 2026-11-21
@@ -133,3 +133,131 @@ push/tag，无外部影响。另 `--refresh` 的 `.`/`..` 目标依赖 `rm` 兜�
 
 `status` 置 `reopened`；功能修复本身无需改动，重写历史后按新 sha 重跑
 `pkg23_git_diag.sh` 与 `check-ast` 即可转 `verified`。
+
+## 复核二（REV，2026-11-22，历史修复后）：**verified**
+
+> 只复核上轮唯一阻断（T-4：`00eb6df1` 混入 SH-106 钩子）与 PKG-23 功能回归；
+> SH-106 内容未改。方法：clean `git archive` + 私有 `TMPDIR`，不用工作树产物；
+> 不 push、不改实现、不打 tag。工作树里他人未提交的
+> [2026-11-21-full-review-v0.88.0-disposition.md](../../docs/reviews/2026-11-21-full-review-v0.88.0-disposition.md)
+> 未纳入。
+
+**新 sha**：PKG-23 = `caf27bf25522f36745b353f3d488204f18056592`（v0.88.1，原
+`00eb6df1`）；SH-106 = `de6498fe517441feee9bc0b18ec35f79fc17a476`（v0.88.2，原
+`c1b54d2f`）。重写是一次纯移动，两棵树可逐字核对：
+
+```console
+$ git diff --stat 00eb6df1 caf27bf2
+ selfhost/check-ast.sh | 11 -----------
+$ git diff --stat c1b54d2f de6498fe
+(无输出)
+```
+
+### 1 T-4 阻断已消除（`git archive caf27bf2`）
+
+```console
+$ git archive caf27bf2 | tar -x -C /tmp/rev-pkg23/pkg/src
+$ grep -n p106_str_escape selfhost/check-ast.sh; echo $?
+1
+$ git cat-file -e caf27bf2:test/ast/p106_str_escape.sh; echo $?
+128
+```
+
+同链自举（`cc l0/ctc.c` → `l1` → `l2` → `ct-ast`，产物
+`/tmp/rev-pkg23/pkg/build`；`ct-ast -v` → `ct-ast v0.88.1`）后跑完整门禁：
+
+```console
+$ TMPDIR=/tmp/rev-pkg23/tmp bash selfhost/check-ast.sh
+...
+== summary: 1570 passed, 5 failed, 6 skipped ==
+CHECKAST_EXIT=1
+$ grep -c p106 /tmp/rev-pkg23/checkast-pkg.log
+0
+```
+
+5 条失败均为 **archive 环境项**（探针要读 git 历史，归档没有 `.git`）：逐条核对命令，
+`p85/inventory`、`p85/spike`、`p85/m0`、`p87/docs`、`p88/metrics` 全部走
+`git archive` / `git show`；6 条 skip 为 Renode ×4、PH-77 external（curl 超时）、
+PH-83 dist（无产物）。上轮同一归档是 `1570 passed, 7 failed, 5 skipped`，多出的失败
+正是 `FAIL SH-106 ... test/ast/p106_str_escape.sh: No such file or directory`；本轮该行
+消失，且日志里 `p106` 零命中。
+
+### 2 SH-106 钩子完整落在 `de6498fe`
+
+```console
+$ git archive de6498fe | tar -x -C /tmp/rev-pkg23/sh106/src
+$ grep -n p106_str_escape selfhost/check-ast.sh
+1330:if sh test/ast/p106_str_escape.sh "$work/ct-ast" >"$work/p106escape.out" 2>&1; then
+$ ls test/ast/p106_str_escape.sh
+test/ast/p106_str_escape.sh
+$ ls test/ast/p106_str_escape/ | wc -l
+16
+$ sh test/ast/p106_str_escape.sh /tmp/rev-pkg23/sh106/build/ct-ast
+ok   ... (28 条断言)
+p106_str_escape: OK
+EXIT=0
+```
+
+`c1b54d2f` → `de6498fe` 树逐字相同（见上），SH-106 本身无需重验。
+
+### 3 PKG-23 功能回归
+
+`pkg23_git_diag.sh` 5/5（离线）：
+
+```console
+$ sh test/ast/pkg23_git_diag.sh /tmp/rev-pkg23/pkg/build/ct-ast
+ok   an unreachable remote names network/proxy and gives a retry action
+ok   a corrupt cache names the cache path, rm -rf and --refresh
+ok   a missing pinned tag is classified as remote tag/object missing
+ok   an authentication failure is classified and credentials are redacted
+ok   --refresh discards the corrupt cache and fetches the pin again
+OK pkg23 (network, corrupt cache, missing tag, auth, refresh)   EXIT=0
+```
+
+成功路径 / 锁行（干净 HOME，真实网络；tag `v0.19.0` peeled 到
+`ae8dd94f205b8350114c8d827c1ce3b9fb8e314c`）：
+
+```console
+$ HOME=/tmp/rev-pkg23/home-get2 ct-ast get std
+resolved   ct/std 0.19.0
+  source   https://github.com/ct-pkg/std@0.19.0
+  tag      v0.19.0
+  commit   ae8dd94f205b8350114c8d827c1ce3b9fb8e314c
+  store    /tmp/rev-pkg23/home-get2/.ct/pkg/ct/std/0.19.0
+  digest   sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79
+  action   installed
+$ cat ct.lock
+# ct-lock 2
+ct/std 0.19.0 git https://github.com/ct-pkg/std ae8dd94f205b8350114c8d827c1ce3b9fb8e314c . sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79
+$ ct-ast get std | tail -1
+1 package(s): 0 installed, 1 reused
+```
+
+锁行与上轮记录逐字相同，digest 不变；失败路径（关闭 loopback）exit 1、不写
+`ct.lock`、无 `.ct-pkg.err` 残留。
+
+`--refresh` 不越界：
+
+```console
+$ # 正常目标：损坏的 ct/std 重建，同根 sibling 保留
+$ ct-ast get --refresh std
+ctc: 'std' does not match the pinned digest (...)                   EXIT=1
+TARGET_GIT_OK; origin=https://github.com/ct-pkg/std; sibling marker=keep
+$ # 注入 '..' / '.' 目标：cache 解析到 ~/.cache/ct-pkg/.. 与 ~/.cache/ct-pkg/.
+$ ct-ast get --refresh 'https://127.0.0.1:1/..'
+rm: "." and ".." may not be removed
+ctc: cannot refresh the package cache '/tmp/rev-pkg23/reg/h_oob/.cache/ct-pkg/..'   EXIT=1
+$ cat "$HOME/.cache/sentinel"; cat "$HOME/.cache/ct-pkg/other/marker"
+parent-sentinel
+root-marker
+```
+
+两种点目标均被 `rm` 拒绝并 exit 1，父目录 sentinel 与同根 sibling 都存活，未观察到
+越界删除；正常 `--refresh` 只重建目标包，且 digest 不符时在写锁前失败。（代码仍只
+依赖 `rm` 对 `.`/`..` 的兜底，建议同 §2.5 补 name 校验；本轮不作为阻断。）
+
+### 4 判定
+
+T-4 阻断已消除：`caf27bf2` 归档不再引用 `p106_str_escape.sh`，SH-106 钩子与夹具
+完整落在 `de6498fe` 且 28/28 绿；功能回归 5/5、锁行不变、`--refresh` 无越界。
+`status` → `verified`。
