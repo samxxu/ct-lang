@@ -66,7 +66,7 @@ if [ -n "$EMITTED" ]; then
         need "$EMITTED/Lexer.c" "toksuffix.ptr = l->src + start"
         need "$EMITTED/Lexer.c" "lex_view_ok"
         # a token copy would need a copy call into the view
-        reject "$EMITTED/Lexer.c" 'memcpy\([^)]*tokstr'
+        reject "$EMITTED/Lexer.c" 'memcpy\(\s*&?(self->|l->)?tokstr'
     else
         bad "emitted tree has no Lexer.c / Lexer.h under '$EMITTED'"
     fi

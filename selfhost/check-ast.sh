@@ -857,6 +857,15 @@ else
     bad "p86/tokens" "$(cat "$work/p86tok.out" "$work/p86tok.err" | head -8)"
 fi
 
+# PH-86 S86b (E86-2): the NUL-related C API is migrated out of the token
+# path -- length comparison, a caller-owned `tok_copy`, `tok_cstr` only as an
+# immediate C-boundary argument, and `%.*s` in diagnostics.
+if bash test/ast/p86_capi.sh "$work/ct-ast" "$work/astsrc" >"$work/p86capi.out" 2>"$work/p86capi.err"; then
+    ok "p86/capi (E86-2: no toktext/strcmp/printf/strdup on token text)"
+else
+    bad "p86/capi" "$(cat "$work/p86capi.out" "$work/p86capi.err" | head -8)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
