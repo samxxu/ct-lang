@@ -61,7 +61,7 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
 | --- | --- | --- | --- |
 | 1 | **不同 callee 名上限 512**：`Expr` 的 `io_names[512]` 记录全程序直接调用的源名，76 个切片把 ct-ast 自己的树推过上限（`too many distinct calls`，落在 `Pkg.h.ct`） | `ct-ast` 编译自己失败，自举链断 | 容量按 PH-88 提到 1024（`io_names`/`io_owner`/`io_known`/`io_line` 与检查式），**只在 ct-ast 内部**；诊断文本不变，只是触发点后移 |
 | 2 | 宏不跨单元：`io_names` 的维度写进 `Expr.h`，`#define` 只进 `Expr.c` | 用 `MAX_IO_CALLS` 宏时生成 C 报 `undeclared identifier` | 维度写死字面量 1024，检查式同数；注释说明原因 |
-| 3 | `MAX_FUNCS` 是整程序顶层函数预算（512）；76 个新 free function 后 399 → 475 | 再切一批（>37 个函数）会撞顶 | 实测定量；下一相先复算 475/512；已登记为遗留约束 |
+| 3 | `MAX_FUNCS` 是整程序顶层函数预算（512）；76 个新 free function 后 425 → 501 | 再切一批（>11 个函数）会撞顶 | 实测定量；下一相先复算 501/512；已登记为遗留约束 |
 | 4 | `emit_node` 的 `N_DECL` 前处理**不返回**：它处理完后落回表达式语句支（`N_DECL` 也在该支的条件里） | 直接搬成函数会把原本的 fall-through 变成"已处理"，语义改变 | 该切片用三态：返回 `2` = 继续判别，其余返回值原样透传；判别处 `if (r != 2) return r;`。这是唯一一个 fall-through 支（脚本与探针均核对） |
 | 5 | 方法体里的 `self` 在发射 C 中拼作 `_self`；切片是自由函数，`self` 是普通参数 | 如果切片签名写成方法会撞 `MAX_METHODS` 且改 vtable | 自由函数 + 显式 `struct Emitter *self` 参数；ABI/命名契约不变 |
 | 6 | `String` 拼接/可增长 buffer **在本切片不适用** | 发射器是流式的：`self->out` 是 `FILE *`，逐 token `fputs/fprintf`，没有"先拼整行再写"的路径；剩余固定缓冲都受 `MAX_TEXT`=160 与 `header_guard(cap)` 的契约约束 | 不改：引入 `lib/std` 的 `String` 会给引导编译器增加一次分配器依赖与第二份 String 实现，收益为零（R88-3 的"必要时局部保留 buffer"）；登记为未覆盖项，供 M1/v1.1 复核 |
