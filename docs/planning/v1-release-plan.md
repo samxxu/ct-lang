@@ -62,7 +62,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 | # | 事项 | 验收 | 跟踪 |
 | --- | --- | --- | --- |
 | V1-C1 | J-6 全量证据台账（P-1…P-6）+ J-3/J-4/J-5 逐张核对 | 台账零未决；“已实施未验证”清零 | [SH-104](../../issues/selfhost/sh104-j6-evidence-ledger.md) |
-| V1-C2 | goldens 静态化（去 L1/L2 的前置） | 静态期望文件覆盖全部语料；`ct-ast vs 静态 golden` 可独立跑 | [SH-105](../../issues/selfhost/sh105-goldens-static-freeze.md) |
+| V1-C2 | goldens 静态化（去 L1/L2 的前置） | 静态期望文件覆盖全部语料；`ct-ast vs 静态 golden` 可独立跑（ct-ast 只钉 `.c`；新增 gate 12） | [SH-105](../../issues/selfhost/sh105-goldens-static-freeze.md) |
 | V1-C3 | SH-73 解除 + README §0.1 三断点闭环 | 完整路径可原样书写并钉入 `test/ast` | [SH-73](../../issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md) |
 | V1-C4 | 稳定子集冻结清单成文（三档 + 改动授权级别） | 成文且进 check-docs 断言 | [DOC-79](../../issues/docs/doc-79-stable-subset-freeze-list.md) |
 | V1-C5 | 兼容承诺重述“不再是 C 超集” | README / spec / roadmap 三处同步 | [DOC-76](../../issues/docs/doc-76-no-longer-c-superset.md) |
