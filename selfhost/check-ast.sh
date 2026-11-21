@@ -847,6 +847,16 @@ else
     bad "p85/a-wire" "$(cat "$work/p85a.out" "$work/p85a.err" | head -5)"
 fi
 
+# PH-86 S86a (E86-1): the current token is a zero-copy view of the source
+# buffer (`TokView { ptr, len }`), not a 160-byte copy; the view is bounded by
+# the buffer length, and the old buffer boundaries still produce the frozen
+# long-token diagnostics.
+if bash test/ast/p86_tokens.sh "$work/ct-ast" "$work/astsrc" >"$work/p86tok.out" 2>"$work/p86tok.err"; then
+    ok "p86/tokens (E86-1: TokView, src view, boundaries, lifetime)"
+else
+    bad "p86/tokens" "$(cat "$work/p86tok.out" "$work/p86tok.err" | head -8)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
