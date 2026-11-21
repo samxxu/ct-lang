@@ -1214,6 +1214,17 @@ case "$p77net" in
     *)  bad "CI-9 net-timeout" "$(sed -n '1,8p' "$work/p77net.out")" ;;
 esac
 
+# PKG-23: `ct get` git failures are diagnosable (network/proxy, auth, remote
+# tag/object, corrupt cache) and `--refresh` rebuilds a damaged checkout. The
+# probe is offline: local repositories, a closed loopback port and a git test
+# double.
+sh test/ast/pkg23_git_diag.sh "$work/ct-ast" >"$work/pkg23.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "PKG-23 git diagnostics (fetch/checkout/refresh)"
+else
+    bad "PKG-23 git diagnostics" "$(sed -n '1,10p' "$work/pkg23.out")"
+fi
+
 # Phase 78: ref / out parameters (S2a free functions, S2b methods/traits,
 # S2c types and docs). The probes build their own fixtures; they run from a temp
 # dir and link the repo's lib/std so the built-in Vec/Map shapes resolve.

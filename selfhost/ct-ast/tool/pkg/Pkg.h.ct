@@ -27,6 +27,7 @@ import tool::pkg::PkgIndex;
 #define MAX_PKG_CMD    2048
 #define MAX_PKG_DEPTH  8
 #define MAX_PKG_LINE   1024             /* MAX_PKG_PATH * 2, spelled out */
+#define MAX_PKG_GITERR 8                /* PKG-23: trailing git stderr lines */
 
 namespace tool::pkg;
 /* The package manager (Phase 8, ported in 10.6). `get`/`install` never reach the
@@ -142,6 +143,13 @@ struct Pkg {
     /* `ct install --force` downgrades a `requires` mismatch to a warning; the
        default is to refuse, so an incompatible package cannot be wired in. */
     int  force;
+    /* PKG-23: `ct get --refresh` discards the cached git checkout before the
+       clone, so a damaged `.git` is recoverable without hand-editing $HOME. */
+    int  refresh;
+    /* PKG-23: where git_run sends stderr for the current operation. Empty
+       keeps the old `2>/dev/null`; fetch_git sets it so a failure can be
+       classified. The file is removed after it has been read. */
+    char giterr[MAX_PKG_CMD];
     /* `ct get` enforces `requires` while it walks the spec (M2); this stays a
        `get` mode rather than a property of `get_one` itself. */
     int  check_requires;
@@ -407,6 +415,164 @@ static int sha_hex_ok(const char *s)
         return 0;
     }
     return 1;
+}
+
+/* PKG-23: redact a URL userinfo (the part before `@`) before a git message or
+   a URL reaches stderr. The rewrite is one-way; the caller passes a separate
+   output buffer. */
+static void pkg_scrub(const char *in, char *out, size_t cap)
+{
+    const char *p, *q, *at;
+    size_t o;
+
+    o = 0;
+    p = in;
+    while (*p && o + 1 < cap) {
+        if (p[0] == ':' && p[1] == '/' && p[2] == '/') {
+            q = p + 3;
+            at = 0;
+            while (*q && *q != '/' && *q != '?' && *q != '#'
+                   && *q != ' ' && *q != '\'' && *q != '"') {
+                if (*q == '@') { at = q; break; }
+                q++;
+            }
+            if (at != 0) {
+                if (o + 7 >= cap) break;
+                memcpy(out + o, "://***@", 7);
+                o += 7;
+                p = at + 1;
+                continue;
+            }
+        }
+        out[o] = *p;
+        o++;
+        p++;
+    }
+    out[o] = 0;
+}
+
+/* PKG-23: turn the captured git stderr into a cause and an action. The
+   last MAX_PKG_GITERR non-empty lines are printed redacted; the classes are
+   ordered most-specific first so "Authentication failed" is not reported
+   as a generic network error. `spec` is the explicit spelling to retry
+   (`ct/std@0.19.0` for the official pin), `cache` is the checkout path. */
+static void pkg_git_diag(const char *errfile, const char *cache,
+                         const char *spec)
+{
+    FILE *f;
+    char line[MAX_PKG_LINE], ring[MAX_PKG_GITERR][MAX_PKG_LINE];
+    char scrubbed[MAX_PKG_CMD], all[MAX_PKG_CMD];
+    size_t ll, al;
+    int n, i, shown, start;
+    int cache_bad, auth_bad, tag_bad, net_bad;
+
+    n = 0;
+    all[0] = 0;
+    f = fopen(errfile, "r");
+    if (f != 0) {
+        while (fgets(line, sizeof line, f) != 0) {
+            ll = strlen(line);
+            while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) {
+                ll--;
+                line[ll] = 0;
+            }
+            if (line[0] == 0) continue;
+            snprintf(ring[n % MAX_PKG_GITERR], MAX_PKG_LINE, "%s", line);
+            pkg_scrub(line, scrubbed, sizeof scrubbed);
+            al = strlen(all);
+            if (al + strlen(scrubbed) + 2 < sizeof all) {
+                strcat(all, scrubbed);
+                strcat(all, "\n");
+            }
+            n++;
+        }
+        fclose(f);
+    }
+    shown = n < MAX_PKG_GITERR ? n : MAX_PKG_GITERR;
+    start = n - shown;
+    if (shown > 0) {
+        fprintf(stderr, "  git said (last %d line(s); credentials redacted):\n", shown);
+        for (i = start; i < n; i++) {
+            pkg_scrub(ring[i % MAX_PKG_GITERR], scrubbed, sizeof scrubbed);
+            fprintf(stderr, "    %s\n", scrubbed);
+        }
+    }
+    /* No stderr at all from `git config`/`fetch`/`checkout` means git refused
+       before it could describe the failure; the cache is the only party left
+       to blame, and the caller names its path. */
+    cache_bad = n == 0
+                || strstr(all, "not a git repository") != 0
+                || strstr(all, "not a git repo") != 0
+                || strstr(all, "corrupt") != 0
+                || strstr(all, "Corrupt") != 0
+                || strstr(all, "bad config") != 0
+                || strstr(all, "index file corrupt") != 0
+                || strstr(all, "loose object") != 0;
+    auth_bad = strstr(all, "Authentication failed") != 0
+               || strstr(all, "authentication failed") != 0
+               || strstr(all, "could not read Username") != 0
+               || strstr(all, "could not read Password") != 0
+               || strstr(all, "Permission denied") != 0
+               || strstr(all, "publickey") != 0
+               || strstr(all, "returned error: 401") != 0
+               || strstr(all, "returned error: 403") != 0
+               || strstr(all, "Repository not found") != 0
+               || strstr(all, "terminal prompts disabled") != 0
+               || strstr(all, "Invalid username or password") != 0;
+    tag_bad = strstr(all, "did not match any file") != 0
+              || strstr(all, "does not take a path argument") != 0
+              || strstr(all, "pathspec") != 0
+              || strstr(all, "couldn't find remote ref") != 0
+              || strstr(all, "remote ref does not exist") != 0
+              || strstr(all, "not our ref") != 0
+              || strstr(all, "no such remote ref") != 0
+              || strstr(all, "bad object") != 0
+              || strstr(all, "missing object") != 0
+              || strstr(all, "reference is not a tree") != 0
+              || strstr(all, "invalid reference") != 0;
+    net_bad = strstr(all, "Could not resolve host") != 0
+              || strstr(all, "unable to access") != 0
+              || strstr(all, "Failed to connect") != 0
+              || strstr(all, "Couldn't connect") != 0
+              || strstr(all, "Connection refused") != 0
+              || strstr(all, "Connection timed out") != 0
+              || strstr(all, "Operation timed out") != 0
+              || strstr(all, "Network is unreachable") != 0
+              || strstr(all, "No route to host") != 0
+              || strstr(all, "CONNECT tunnel failed") != 0
+              || strstr(all, "proxy") != 0
+              || strstr(all, "Proxy") != 0
+              || strstr(all, "SSL") != 0
+              || strstr(all, "TLS") != 0
+              || strstr(all, "RPC failed") != 0
+              || strstr(all, "early EOF") != 0
+              || strstr(all, "remote end hung up") != 0;
+    if (cache_bad) {
+        fprintf(stderr, "  cause: the package cache is corrupt\n");
+        fprintf(stderr, "  cache: %s\n", cache);
+        fprintf(stderr, "  next: rm -rf '%s' and retry, "
+                        "or run 'ct get --refresh %s'\n", cache, spec);
+    } else if (auth_bad) {
+        fprintf(stderr, "  cause: authentication/permission denied\n");
+        fprintf(stderr, "  next: check the credentials or SSH key for the "
+                        "remote; git runs non-interactively "
+                        "(GIT_TERMINAL_PROMPT=0), then retry\n");
+    } else if (tag_bad) {
+        fprintf(stderr, "  cause: remote tag/object missing\n");
+        fprintf(stderr, "  next: the pinned tag is not present on the "
+                        "remote; check the pin/tag or publish it, then "
+                        "retry with 'ct get %s'\n", spec);
+    } else if (net_bad) {
+        fprintf(stderr, "  cause: network/proxy unreachable\n");
+        fprintf(stderr, "  next: retry; check https_proxy/ALL_PROXY and DNS, "
+                        "or pin explicitly with 'ct get %s'\n", spec);
+    } else {
+        fprintf(stderr, "  cause: unclassified git failure\n");
+        fprintf(stderr, "  next: retry; if it persists run "
+                        "'ct get --refresh %s' or remove the cache '%s'\n",
+                spec, cache);
+    }
+    remove(errfile);
 }
 
 impl PkgOps for Pkg {
@@ -780,8 +946,8 @@ impl PkgOps for Pkg {
        the cap in seconds (digits only). */
     int git_run(const char *cmd, const char *outfile)
     {
-        char full[MAX_PKG_CMD], qo[MAX_PKG_CMD], cap[16], pre[32];
-        const char *limit, *rest;
+        char full[MAX_PKG_CMD], qo[MAX_PKG_CMD], qe[MAX_PKG_CMD], cap[16], pre[32];
+        const char *limit, *rest, *ef;
         size_t i;
         int w;
         (void)self;
@@ -808,12 +974,33 @@ impl PkgOps for Pkg {
         } else {
             pre[0] = 0;
         }
+        /* PKG-23: fetch_git asks for the git stderr. `umask 077` keeps the
+           temporary capture private (it can contain a rewritten URL), and the
+           caller removes it after reading. No capture keeps the old shape. */
+        ef = self->giterr;
+        if (ef != 0 && ef[0] != 0) {
+            if (self->sh_quote(ef, qe, sizeof qe) != 0) return -1;
+        } else {
+            qe[0] = 0;
+        }
         if (outfile != 0) {
             if (self->sh_quote(outfile, qo, sizeof qo) != 0) return -1;
+            if (qe[0] != 0) {
+                w = snprintf(full, sizeof full,
+                             "umask 077; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true %s"
+                             "git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 "
+                             "%s > %s 2> %s", pre, rest, qo, qe);
+            } else {
+                w = snprintf(full, sizeof full,
+                             "GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true %s"
+                             "git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 "
+                             "%s > %s 2>/dev/null", pre, rest, qo);
+            }
+        } else if (qe[0] != 0) {
             w = snprintf(full, sizeof full,
-                         "GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true %s"
+                         "umask 077; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true %s"
                          "git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 "
-                         "%s > %s 2>/dev/null", pre, rest, qo);
+                         "%s 2> %s", pre, rest, qe);
         } else {
             w = snprintf(full, sizeof full,
                          "GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true %s"
@@ -925,13 +1112,17 @@ impl PkgOps for Pkg {
     {
         char hdir[MAX_PKG_CMD], root[MAX_PKG_CMD], cache[MAX_PKG_CMD], gitdir[MAX_PKG_CMD];
         char out[MAX_PKG_CMD], q1[MAX_PKG_CMD], q2[MAX_PKG_CMD], cmd[MAX_PKG_CMD];
+        char diag_spec[MAX_PKG_CMD], sdiag[MAX_PKG_CMD], surl[MAX_PKG_CMD];
         char mname[MAX_TEXT], mver[32], deps[MAX_PKG_DEPS][MAX_PKG_PATH];
         char tag[MAX_TEXT], commit[64], dig[80];
         char publisher[MAX_TEXT], nsroot[MAX_PKG_PATH], store[MAX_PKG_PATH];
         const char *home;
         struct stat st;
-        int ndeps, i, w, rc, fresh, existed;
+        int ndeps, i, w, rc, fresh, existed, orc;
         struct PkgRec *rec;
+
+        self->giterr[0] = 0;
+        pkg_scrub(url, surl, sizeof surl);
 
         ndeps = 0;
         if (depth > MAX_PKG_DEPTH) {
@@ -974,21 +1165,80 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: cannot create the package cache '%s'\n", root);
             return -1;
         }
+        /* PKG-23: capture stderr under the shared cache root. The capture is
+           discarded on success and read+removed on failure, so a credential
+           that git echoed never survives in the cache directory. */
+        if (snprintf(self->giterr, sizeof self->giterr, "%s/.ct-pkg.err", root)
+            >= (int)sizeof self->giterr) return -1;
+        /* The explicit spelling the failure advice points at: official pins
+           are most useful as `ct/std@0.19.0`; a URL or a publisher-qualified
+           name stays in the shape the user typed. */
+        if (cache_pub && cache_pub[0]) {
+            const char *vt;
+            vt = (pin_tag && pin_tag[0]) ? pin_tag : "";
+            if (vt[0] == 'v') vt = vt + 1;
+            if (vt[0] != 0) {
+                if (snprintf(diag_spec, sizeof diag_spec, "%s/%s@%s",
+                             cache_pub, name, vt) >= (int)sizeof diag_spec)
+                    return -1;
+            } else if (snprintf(diag_spec, sizeof diag_spec, "%s/%s",
+                                cache_pub, name) >= (int)sizeof diag_spec) {
+                return -1;
+            }
+        } else if (snprintf(diag_spec, sizeof diag_spec, "%s", url)
+                   >= (int)sizeof diag_spec) {
+            return -1;
+        }
+        pkg_scrub(diag_spec, sdiag, sizeof sdiag);
 
         fresh = 0;
         if (stat(gitdir, &st) != 0) fresh = 1;
         else if (!S_ISDIR(st.st_mode)) fresh = 1;
+        if (self->refresh) {
+            /* Remove the whole checkout, not just a valid `.git`: a partial
+               clone leaves a non-empty directory that a fresh clone refuses. */
+            if (stat(cache, &st) == 0) {
+                if (self->sh_quote(cache, q2, sizeof q2) != 0) return -1;
+                w = snprintf(cmd, sizeof cmd, "rm -rf %s", q2);
+                if (w < 0 || (size_t)w >= sizeof cmd) return -1;
+                if (system(cmd) != 0) {
+                    fprintf(stderr, "ctc: cannot refresh the package cache '%s'\n", cache);
+                    return -1;
+                }
+            }
+            fresh = 1;
+        }
         if (!fresh) {
             char origin[MAX_PKG_CMD];
             if (self->sh_quote(cache, q2, sizeof q2) != 0) return -1;
             w = snprintf(cmd, sizeof cmd, "git -C %s config --get remote.origin.url", q2);
             if (w < 0 || (size_t)w >= sizeof cmd) return -1;
-            if (self->git_run(cmd, out) != 0
-                || self->read_line_of(out, origin, sizeof origin) != 0
-                || strcmp(origin, url) != 0) {
-                fprintf(stderr, "ctc: cache for '%s/%s' has a different origin; "
-                                "remove '%s' and retry\n",
-                        cache_pub && cache_pub[0] ? cache_pub : "?", name, cache);
+            orc = self->git_run(cmd, out);
+            if (orc != 0) {
+                fprintf(stderr, "ctc: cannot inspect the package cache '%s' "
+                                "(its .git is unreadable)\n", cache);
+                pkg_git_diag(self->giterr, cache, sdiag);
+                return -1;
+            }
+            remove(self->giterr);
+            if (self->read_line_of(out, origin, sizeof origin) != 0) {
+                fprintf(stderr, "ctc: the package cache '%s' has no origin\n", cache);
+                fprintf(stderr, "  cause: the package cache is incomplete\n");
+                fprintf(stderr, "  cache: %s\n", cache);
+                fprintf(stderr, "  next: rm -rf '%s' and retry, "
+                                "or run 'ct get --refresh %s'\n", cache, sdiag);
+                return -1;
+            }
+            if (strcmp(origin, url) != 0) {
+                char os[MAX_PKG_CMD];
+                pkg_scrub(origin, os, sizeof os);
+                fprintf(stderr, "ctc: cache for '%s/%s' has a different origin\n",
+                        cache_pub && cache_pub[0] ? cache_pub : "?", name);
+                fprintf(stderr, "  expected: %s\n", surl);
+                fprintf(stderr, "  recorded: %s\n", os);
+                fprintf(stderr, "  cache: %s\n", cache);
+                fprintf(stderr, "  next: rm -rf '%s' and retry, "
+                                "or run 'ct get --refresh %s'\n", cache, sdiag);
                 return -1;
             }
         }
@@ -998,17 +1248,20 @@ impl PkgOps for Pkg {
             w = snprintf(cmd, sizeof cmd, "git clone --quiet %s %s", q1, q2);
             if (w < 0 || (size_t)w >= sizeof cmd) return -1;
             if (self->git_run(cmd, NULL) != 0) {
-                fprintf(stderr, "ctc: git clone of '%s' failed\n", url);
+                fprintf(stderr, "ctc: git clone of '%s' failed\n", surl);
+                pkg_git_diag(self->giterr, cache, sdiag);
                 return -1;
             }
         } else {
             w = snprintf(cmd, sizeof cmd, "git -C %s fetch --quiet --tags --force", q2);
             if (w < 0 || (size_t)w >= sizeof cmd) return -1;
             if (self->git_run(cmd, NULL) != 0) {
-                fprintf(stderr, "ctc: git fetch of '%s' failed\n", url);
+                fprintf(stderr, "ctc: git fetch of '%s' failed\n", surl);
+                pkg_git_diag(self->giterr, cache, sdiag);
                 return -1;
             }
         }
+        remove(self->giterr);
 
         tag[0] = 0;
         if (pin_tag && pin_tag[0]) {
@@ -1025,15 +1278,19 @@ impl PkgOps for Pkg {
             if (w < 0 || (size_t)w >= sizeof cmd) return -1;
             if (self->git_run(cmd, NULL) != 0) {
                 fprintf(stderr, "ctc: git checkout of '%s' failed\n", tag);
+                pkg_git_diag(self->giterr, cache, sdiag);
                 return -1;
             }
+            remove(self->giterr);
         } else if (rc == -2) {
             if (!fresh) {
                 if (self->sh_quote(cache, q2, sizeof q2) != 0) return -1;
                 w = snprintf(cmd, sizeof cmd, "git -C %s reset --hard --quiet origin/HEAD", q2);
                 if (w >= 0 && (size_t)w < sizeof cmd) self->git_run(cmd, NULL);
+                remove(self->giterr);
             }
         } else {
+            remove(self->giterr);
             fprintf(stderr, "ctc: no tag of '%s' satisfies '%s'\n", name, range);
             return -1;
         }
@@ -1043,8 +1300,10 @@ impl PkgOps for Pkg {
         if (w < 0 || (size_t)w >= sizeof cmd) return -1;
         if (self->git_run(cmd, out) != 0) {
             fprintf(stderr, "ctc: git cannot resolve a commit for '%s'\n", name);
+            pkg_git_diag(self->giterr, cache, sdiag);
             return -1;
         }
+        remove(self->giterr);
         if (self->read_line_of(out, commit, sizeof commit) != 0 || commit[0] == 0) {
             fprintf(stderr, "ctc: git returned no commit for '%s'\n", name);
             return -1;
@@ -1794,11 +2053,12 @@ impl PkgOps for Pkg {
         spec = NULL;
         for (i = 0; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-                printf("usage: %s get [--index <path>] [--force] [-q|--quiet] [--json] <spec>[@<range>]\n", self->prog);
+                printf("usage: %s get [--index <path>] [--force] [--refresh] [-q|--quiet] [--json] <spec>[@<range>]\n", self->prog);
                 printf("  spec: a local directory (. or / or file://) or a git package\n"
                        "        (official ct/<name> from the built-in pins, a\n"
                        "        <publisher>/<name> via CT_INDEX, or an https URL)\n");
                 printf("  --force  get even when a package 'requires' this compiler version\n");
+                printf("  --refresh  discard the cached git checkout and fetch it again\n");
                 printf("  -q, --quiet  one line per package: name version url\n");
                 printf("  --json       machine-readable result on stdout\n");
                 return 0;
@@ -1822,6 +2082,10 @@ impl PkgOps for Pkg {
             }
             if (strcmp(argv[i], "--force") == 0) {
                 self->force = 1;
+                continue;
+            }
+            if (strcmp(argv[i], "--refresh") == 0) {
+                self->refresh = 1;
                 continue;
             }
             if (strcmp(argv[i], "-q") == 0 || strcmp(argv[i], "--quiet") == 0) {

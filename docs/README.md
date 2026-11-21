@@ -2,7 +2,7 @@
 
 > 中文
 >
-> **当前版本 v0.88.0。** 本目录的 `design/` 保留**最近 12 个已完成阶段**的设计文档（当前在研
+> **当前版本 v0.88.1。** 本目录的 `design/` 保留**最近 12 个已完成阶段**的设计文档（当前在研
 > 阶段计入），更早的 `design/phase*.md` 必须退役到 [history/design/](history/design/)；评审报告
 > 与其余历史记录在 [history/](history/README.md)。仓库入口见 [../README.md](../README.md)，改动
 > 规约见 [../AGENTS.md](../AGENTS.md)。
@@ -92,8 +92,8 @@
 | [proposals/user-index-operator.md](proposals/user-index-operator.md) | `REQ-INDEX-1` 设计草案（**已并入 PH-62**）：用户类型下标运算符补完——参数类型匹配、借用视图、缺失语义、复合赋值拒绝清单；含四组两席打与施工切片 |
 | [proposals/defect-namespaced-static-method.md](proposals/defect-namespaced-static-method.md) | 缺陷请求（待修）：带 `namespace` 的单元里静态固有方法报 `use of an undeclared variable`；含两种最小复现、边界表、名字解析定位、下游绕法与 N1–N5 判据 |
 | [reviews/max-calls-limit.md](reviews/max-calls-limit.md) | 只读核对：`MAX_CALLS` 1024 的计数口径（按已解析自由函数调用表达式）、固定表成因（无「禁止动态分配」证据）、按需增长的改动面与外部包余量实测 |
-| [reviews/full-review-v0.88.0.md](reviews/full-review-v0.88.0.md) | 最新全面评审（v0.88.0 / v1-pre 收口后）：11 门禁离线 11/11、check-ast 1575/0/5；P1 五项（SH-104/105、phase-ID、G1/G6、MAX_FUNCS 余量、E88-1 承接）与 v1.0 就绪 4/10 | 发布前总检 |
-| [reviews/2026-11-21-full-review-v0.88.0-disposition.md](reviews/2026-11-21-full-review-v0.88.0-disposition.md) | v0.88.0 评审处置：接受项落库、争议项 [battle/v1-readiness-1](../battle/v1-readiness-1/verdict.md) 判决、Tier 1/Tier 2 门禁 | 查看处置 |
+| [reviews/full-review-latest.md](reviews/full-review-latest.md) | 最新全面评审（v1-pre 收口后）：11 门禁离线 11/11、check-ast 1575/0/5；P1 五项（SH-104/105、phase-ID、G1/G6、MAX_FUNCS 余量、E88-1 承接）与 v1.0 就绪 4/10 | 发布前总检 |
+| [reviews/full-review-latest-disposition.md](reviews/full-review-latest-disposition.md) | 该评审处置：接受项落库、争议项 [battle/v1-readiness-1](../battle/v1-readiness-1/verdict.md) 判决、Tier 1/Tier 2 门禁 | 查看处置 |
 | [reviews/2026-11-21-v088-external-review-eval.md](reviews/2026-11-21-v088-external-review-eval.md) | 外部 v0.88 评审与惯用卡评估：MAX_FUNCS/SH-104-105 勘误、lib/core 已定 bugfix、SH-73 已裁定 bug、惯用卡逐条修正 | 查看外部评估 |
 | [reviews/](reviews/) | 历史全面评审（v0.77）：网络挂起、治理门禁缺位、台账未闭合、phase-ID 迁移、文档漂移；其中网络挂起与 C 边界 cwd 已在 v0.88 前修复 | 追溯 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |

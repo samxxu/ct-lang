@@ -8,7 +8,8 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=9371 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=48646 io_cap=1024 -->
+     emitted_before=48223 emitted_after=48870 io_cap=1024
+     (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变) -->
 
 ## 1 切片清单
 
@@ -36,7 +37,7 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
 | --- | --- | --- | --- |
 | `ct-ast build --emit-c` 墙钟（5 次中位，同一台机） | 0.74 s | 0.76 s | +2.7%（噪声内） |
 | `cc -Wall -Wextra -std=c99` 全产物（27 个 `.c`，5 次中位） | 0.62 s | 0.62 s | 0 |
-| 发射 C 总行数（本版 ct-ast 对两棵树 `--emit-c`） | 48,223 | 48,646 | +423（+0.88%） |
+| 发射 C 总行数（本版 ct-ast 对两棵树 `--emit-c`；实验组为 v0.88.1 复测） | 48,223 | 48,870 | +647（+1.34%） |
 | 编译告警（`-Wall -Wextra -std=c99`） | 0 | 0 | 0 |
 | 自举不动点 | 2 轮一致 | 2/3 轮一致 | — |
 

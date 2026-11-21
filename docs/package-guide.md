@@ -2,7 +2,7 @@
 
 > 中文
 >
-> 状态：v1（Phase 18.1 初稿，2026-11-02；2026-11-21 按 v0.88.0 复核）。工具实现见
+> 状态：v1（Phase 18.1 初稿，2026-11-02；2026-11-21 按 v0.88.1 复核）。工具实现见
 > [`selfhost/ct-ast/tool/pkg/`](../selfhost/ct-ast/tool/pkg/)；binding 写法见
 > [test/bindings/README.md](../test/bindings/README.md)；首批官方包见
 > [phase18.md](history/design/phase18.md) 的 18.3–18.5。
@@ -166,6 +166,7 @@ name version publisher git-url tag sha256:<64 hex>
 
 ```sh
 ct get ct/std@0.19.0         # 官方包：内置 pin 表，无索引可用
+ct get --refresh std          # 丢弃 git 缓存并重新 fetch（缓存损坏时）
 ct get <pub>/<name>@<range>  # 第三方：发布方限定 + --index/CT_INDEX
 ct get ./path                # 本地目录同样按清单的 publisher/ns-root 落 store
 ct verify [--strict]         # 离线：v2 校验 store、v1 校验 vendor；--strict 拒绝 dir/v1
@@ -200,11 +201,17 @@ commit 解析。
 零网络、零子进程。编译器侧 `ct compile` / `ct build --emit-c` 零网络、零子进程，但 `ct build`
 的默认形态会经 `$CC` 派生子进程去链接（`--cc` > `$CC` > `cc`）。
 
-**网络失败/超时是有界失败。** `git clone` / `git fetch` 失败、认证失败或超时，`ct get` 打印
-`ctc: git clone of '<url>' failed` / `git fetch of '<url>' failed` 并以非零退出；失败发生在写
-`ct.lock` 之前，旧锁保持逐字节不变（不会留下半行）。git 子进程已有有界超时（`CT_GIT_TIMEOUT`，
-默认 180s；另有 `http.lowSpeedTime=60`）与 `GIT_TERMINAL_PROMPT=0`（CI-9）；探针外层仍建议再加一层
-`timeout`。
+**git 失败可诊断、可恢复（PKG-23）。** `git clone` / `git fetch` / `git checkout` 失败时，
+`ct get` 先打印 `ctc: git fetch of '<url>' failed`（clone/checkout 同理），再给最后 8 行 git
+stderr（脱敏：URL 的 userinfo 换成 `***`），然后归类并给动作：
+`network/proxy unreachable`（重试、查 `https_proxy`/`ALL_PROXY` 与 DNS）、
+`authentication/permission denied`（查凭据/SSH key；git 不交互，`GIT_TERMINAL_PROMPT=0`）、
+`remote tag/object missing`（pin/tag 不在远端，核对 pin/tag 或发布它）、
+`package cache is corrupt`（给缓存路径与 `rm -rf '<cache>'`，或 `ct get --refresh <spec>`）、
+未分类兜底。`--refresh` 只在该次调用里丢弃缓存并重新 clone，正常缓存不受影响；成功路径与 v2
+锁行不变。失败仍发生在写 `ct.lock` 之前，旧锁保持逐字节不变（不会留下半行）。git 子进程已有
+有界超时（`CT_GIT_TIMEOUT`，默认 180s；另有 `http.lowSpeedTime=60`）与 `GIT_TERMINAL_PROMPT=0`
+（CI-9）；探针外层仍建议再加一层 `timeout`。
 
 ### 5. C ABI 静态库（`ct build --lib`）
 
@@ -241,10 +248,14 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 | `digest ... does not match ct.lock` | `vendor/` 被改动或锁过期 | 重新 `ct get` / `ct update` |
 | `requires 'ct >= …'` 报错 | 编译器版本偏旧 | 升级编译器；确需继续时用 `ct get --force` / `ct install --force` |
 | 索引读不到 | `--index` / `CT_INDEX` 路径错 | 检查路径；无索引时裸名无法解析 |
+| `git fetch ... failed` + `network/proxy unreachable` | 网络、DNS 或代理不可达 | 重试；检查 `https_proxy` / `ALL_PROXY` / DNS；`CT_GIT_TIMEOUT` 可调超时 |
+| `... authentication/permission denied` | 凭据、token 或 SSH key 不可用 | 换有效凭据；git 以 `GIT_TERMINAL_PROMPT=0` 运行，不会弹窗 |
+| `... remote tag/object missing` | 远端没有 pin 的 tag/对象 | 核对 pin/tag 或先发布该 tag；显式版本用 `ct get ct/std@0.19.0` |
+| `... package cache is corrupt` | 缓存 `.git` 损坏或 origin 不符 | `rm -rf '<cache>'` 后重试，或 `ct get --refresh <spec>` |
 
 ### 7. 现状契约与陷阱（改契约前必读）
 
-> 本节记录 **`ct v0.88.0` 的真实行为**（2026-11-21 复核）。机制来源见
+> 本节记录 **`ct v0.88.1` 的真实行为**（2026-11-21 复核）。机制来源见
 > [提案](proposals/ct-pkg-shared-store.md) 与 [需求定稿](planning/ct-pkg-shared-store-requirements.md)；
 > 早期版本的差异只在 §8 的兼容期成立。
 

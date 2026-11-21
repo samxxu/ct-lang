@@ -27,6 +27,11 @@ if ! command -v git >/dev/null 2>&1; then
     exit 77
 fi
 
+# Bound the real-git probes and keep the closed loopback port off any proxy.
+export CT_GIT_TIMEOUT=10
+export NO_PROXY=127.0.0.1,localhost
+export no_proxy=127.0.0.1,localhost
+
 pin_url="https://github.com/ct-pkg/std"
 pin_tag="v0.19.0"
 pin_digest="sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79"

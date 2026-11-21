@@ -100,6 +100,8 @@ P1；`ct get` 引导命令。修法在 Pkg/Driver；本 issue 只落库，不改
 - **版本/文档**：`v0.88.1`（PATCH，V-3）；五处 `CTC_VERSION`、51 个
   `test/cases`/`test/modules` golden banner、`README.md` / `docs/README.md` / `AGENTS.md`
   当前版本、`docs/package-guide.md` §4/§6、`docs/history/phase-log.md` 同步。
+- **夹具跟进**：`test/probes/p87_dogfood.tsv` 的 10 条 warning 行号随 `Pkg.h.ct` 增行重算；
+  `docs/history/p88_metrics.md` 的 `emitted_after` 按 v0.88.1 复测（48870）。
 - **状态**：front-matter 仍为 `open`（状态词归 REV/REQ）；DEV 主张 `fixed`，等待 REV 复核。
 - **未覆盖**：认证分支用 git 测试替身（未起真实 401 HTTP 服务）；`proxy`/TLS 归类按 git
   原文匹配，未逐一构造真实代理隧道；未 pin 的第三方 range 走 `git_pick_tag` 失败时仍报
