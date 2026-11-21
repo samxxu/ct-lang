@@ -765,6 +765,14 @@ else
     bad "p66/docs" "$(cat "$work/p66doc.out" "$work/p66doc.err" | head -4)"
 fi
 
+# PH-84 S84a (E84-1 / E84-2): a payload-bearing `enum` is an ADT, the
+# constructor is typed, and the C-enum form stays a C enum.
+if bash test/ast/p84_syntax.sh "$work/ct-ast" >"$work/p84syn.out" 2>"$work/p84syn.err"; then
+    ok "p84/syntax"
+else
+    bad "p84/syntax" "$(cat "$work/p84syn.out" "$work/p84syn.err" | head -5)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
