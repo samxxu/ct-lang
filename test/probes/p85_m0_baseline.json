@@ -1,0 +1,2544 @@
+{
+  "body_hashes": {
+    "0088603c605fa98b4ffa7601a55faecb41fd54814887dbd5d1353e6d6906ee21": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::sha256_file"
+    ],
+    "008f4104149c3ee3aaaaed1572009204754fba0f5e99ecb41d15ab485543e4ca": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.io_first_line"
+    ],
+    "010c3f6c932c764a3130749341f48d2efedc123ddeb703ba28911456a3a1e997": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::elem_ret_ctype"
+    ],
+    "0179f8f609a18ee331c107d8940bad97ad75084a870cd21688a501bcca8ac154": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.ns_decl_name"
+    ],
+    "01976e886d0909287e2b0c50bce2877a8e0d151e460b5839055e2d0d0c115a02": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.defer_prepend"
+    ],
+    "01fd5da3224a1d83a64478744f13b2bbb04b2fd49d17310bc7e1f450e0266626": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.unit_reaches"
+    ],
+    "02274675b236f44ea4fc38c06242bb72fc0fe85bb169d25edb721bcbfc650c91": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_append_flags"
+    ],
+    "0231902c67d4e70989862ebd9ff25d729f4da50c46396da84e1a7d7c5d528e2d": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::view_use"
+    ],
+    "0269d0fb2711869581ef4293740a3250ad30760af4ff1017a83063d68c36a52f": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::impl_tparam"
+    ],
+    "032bb48278b77913c7305317e552ea573efaf2eac1ba873f3c1a8de7b4a15a25": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_identity_check"
+    ],
+    "036bc79fedcce103144e7bbdaff10d5466aaf8e8062308164072e86f0df39903": [
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::MapBuild.rewrite_globals"
+    ],
+    "03c7bf0e4feafda67c1b6a8a17b627ab71bfac78b473b637ed5d7b45707db6de": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_field_mark"
+    ],
+    "04f621bc713aabba596843dc7b5ebddbc95ac825935a4ee1e07a292bc451d8eb": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_maps"
+    ],
+    "04f7f3b683c13d3f9f400a0fab7ca6003e49e3714cbf6035f07c1c4719a80a96": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_map_prologues"
+    ],
+    "06811fde6f7ea8acbf2a72e330d01f23468d7003c0f898aae53d96ffab61cac4": [
+      "selfhost/ct-ast/frontend/lex/Lexer.h.ct::num_accumulate"
+    ],
+    "06a6521120835713bb580f4f2d8ad329a3d73b56742548d6fb666c8bf67a5126": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_impl_matches"
+    ],
+    "07d67009bbc681b7e2c4c81274f818ed7d45df73bf7a57251c398bdfa2800f3f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_closures"
+    ],
+    "08098c0e96205ea4b9fdc571527fd899c74309730d6dc04c97397591d96e5594": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_field_restore"
+    ],
+    "088fdbb868b3a35a900bc08ae0bacfdca3451d9cb959c60f41d809d84ab685ff": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::unit_has_adt"
+    ],
+    "08d77bb4199ed288f4e83fe589776ffe27a66e7a0c28f80943baf96b24730403": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::arg_class"
+    ],
+    "08dffdaa7adaae86f6facf559e60549ff09153a09709b094f010e3689245b44c": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_stmt"
+    ],
+    "08ec1ac95b3bd739150edcde0dd18ba8eda0c5291753c60757d443a76de81e05": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.read_manifest"
+    ],
+    "09b05bb714c136e09147c4da8193747677cab1d75f69dd76f0578a784f8e5721": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::closure_capture_add"
+    ],
+    "09b22c1670c0fc7fd730adae5a5d1b86943977abfd3342ed4a92a410f57cf985": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.finish_type_alias"
+    ],
+    "09c0b327632bf59bef84f749f9b4b499204da8f24fea7b6ec9ee383f3e2942d3": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.closure_arg_count"
+    ],
+    "09e9a2c7743ef2af0d3a52fe803afac74012796b4c8aec5b64078b6bf4978eea": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.add_type"
+    ],
+    "09f2ddffff9899f11ff5ee0c8d086f65c2482e388e25229e4ec7d1d730ab2f50": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_update_v2"
+    ],
+    "0a0c491f5355f00a9041396d985df4ac60c6e74f9257ba0e63d51bcc41ed9a90": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.opt_result_ok"
+    ],
+    "0ac6359ab61cbaf2a7e0b0b12c2b4ab61484c7dd464b2b5c60f57537329ea31c": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::check_refout_arg"
+    ],
+    "0b359d686215df21a6a4f52efbc90b94ea28bfa340c8d55926f0805ecd4523f9": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::tstars"
+    ],
+    "0b3fb96f6ae7b7b55642c5b40f19bd25be4947a4f818eea8f46998e66661bf32": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.declare_var"
+    ],
+    "0bc9dec943ed592775ae7df7ec5e7e775c02192afc31fc00124b5f773a25e69b": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::sha256_hex"
+    ],
+    "0c51283542098508db66444274292b7e87e626abded924c626a00cf8c0e5fb40": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.record_line_allows_cycle"
+    ],
+    "0c76046429dc51e1de5998c2863ed9b0f5b319120f2ebdb4b3d84f60ffc38822": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.ensure_dir"
+    ],
+    "0c95b7ad4259718d4d83e9673be7a3c44a39961fa498f4e04f764d112f9194ea": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.cache_key_of"
+    ],
+    "0d3854f012891adbc8f98ca6d3b57f90d957eeca2da2c9053bd9c3d97fd20bbc": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_model"
+    ],
+    "0d78ad0819db10b09b33cf9ece07cf443e25f43bc20f87b25f06bceaecd0cae9": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::range_element_spelling"
+    ],
+    "0d8c02ef7cb6569a206dfc5241614b3c1aa8311f3539e67dd3bd9fd3b8c2bc0e": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.abort_type_alias"
+    ],
+    "0e45c099f0bc04567cd24f117be9c348d7748b091b0d0d6582edfd7f3a0e0bb8": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.last_error",
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.last_error",
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.last_error"
+    ],
+    "0ee5d1284ea7483cc0e44d9ca6c51927cbca46c69a6e1f9b564dad1ab5e71142": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.label_ahead"
+    ],
+    "0ff7f4fb5ad160c562c60406bd64f4c4927a286c74e961416382866337be992a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.type_is_fnptr"
+    ],
+    "100ce91e45c34ade3f6497b28f06d0753964da2023aed52a348865c0bf0b3129": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.var_type"
+    ],
+    "106b68389d6ef6a13da68fc6c473d6237a018daff32dccaace652c03747a0b05": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.add_forward_type_alias"
+    ],
+    "10d30f6945f1e4e0030d15a13815a8826386667491b6be006dcf8646907b5c46": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.ns_decl_name"
+    ],
+    "1137bd345a45b6571708edd03d60f8121d1c83465fb6ade12708787341f3dc21": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_read_meta"
+    ],
+    "11496972518213ec595978710cb80e8dce5dd6a42c53420726d36e21ed1deea3": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::file_has_import"
+    ],
+    "119bc59d1d2fb195509d41a7e4465f2df06b8c96bc6f906541bc1e9c3e81dcec": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_retain_params"
+    ],
+    "121fbd75f03283e33ad0f34834f9ba1ec05e19edaa1b040a74bd78cf3c374d33": [
+      "selfhost/ct-ast/runtime/arena/Arena.h.ct::Arena.str_begin"
+    ],
+    "129ee25533826ce0e39a151f7ce2097e7266c3c12d4ee50d6926b8b9b37b90e9": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::adt_strip_type"
+    ],
+    "12cb995507863c9f48aa63a0d5d52f2cac505b1df3e0ded0d32e4ab5fa50d73a": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.is_const_name"
+    ],
+    "12dc5fe3eed7dbd3002739bba4e57f6c216d2e7a975b4c41b66294d1a03f226c": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::sha256_final"
+    ],
+    "12f0b9c88639c0d95613cd412c4571d8517906b3b3c41b9d8623193e57f6449c": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::raw_text_node"
+    ],
+    "130f10e0711a38e5a2e1d0f401b0e816eaa8798fa9da82cd2695271d3a37ff5d": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.defer_run_node"
+    ],
+    "132c28ea76f662e8e8ed69651f0015b80025cf488ef5086900c4e00fc8556659": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::src_has_new_expr"
+    ],
+    "1368079b26a44ca16fac0745d8060e97b359ae5e9b6be8c38c82743a825502c9": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::closure_walk_shadow"
+    ],
+    "142bdbc4fe06db28d84a7d16f61f048e6d09941331edf5d28e88fbce11c7de68": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_recipe_callee"
+    ],
+    "148cc5617ecfc68ba784441365737f6e5fa0c21d974d883b8cbd360f0a6d90d8": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_named_label"
+    ],
+    "153d745b954665feae894703a0e2d9335f981f9fefdf69102fc0b1d038546e4a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::closure_walk_mutate"
+    ],
+    "15a3c7d6a010b524995dac6eaa45cd12e055cc7e449ca1291eed82714a364a32": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.fail_from"
+    ],
+    "15c486ef5efc9c03199c15f578be4d389dee7e28d1a6e686d60db654acca22a3": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::id_char",
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::generic_word_char"
+    ],
+    "1614542b32f0b34aa948d1156c87b369f7726d9f5c2110a763f868d24013d0f9": [
+      "selfhost/ct-ast/runtime/arena/Arena.h.ct::arena_grow_nodes"
+    ],
+    "16b6d3851874ef271ac7e4e6a1039bad8e0e622a91a5fbefa0b502846ce33c2c": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_param_index",
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::mapb_param_index"
+    ],
+    "16e471f22569af8adcac8c6ab0893e1770c903f4d2907ea55f97bcdcbf4dc91f": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.method_trait"
+    ],
+    "173ece853012a22b81bf7accaa57d217264da1aa6a8c2df530117c49010494ac": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.defer_ahead"
+    ],
+    "173fbadcff42227afcbe70d21f4237bc4cc1776ecc798a21378135f2816683d5": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_set_out"
+    ],
+    "1821e144719a931c66b47c8290610aa5d1704dadf21e3d4c9a770e932fe1acbf": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_global_decl"
+    ],
+    "185d1528a90b756e834315ed3dbdc4d3c48632eb1c35a25e739395802aa408b8": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.module_src_wants_box"
+    ],
+    "186afa5418856a33dd0915cc986cc7d7ecfa3f40c5f8863a9ab443769b5bca94": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.find_struct"
+    ],
+    "190eb7ee94e237721510934a678e131eb7d650ad5907889cdf4c7cf0b2ebdda4": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::Init.strip_quals"
+    ],
+    "19cfdba2577963ae221ab9dea66d0f1c9785f0a8cfade4a873b992de8f020184": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_arity_warn"
+    ],
+    "1a36f50e676413962b9508215c38ce003416d780201aceae4fb899ff1e3b324f": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.find_global_type_alias"
+    ],
+    "1a59d5d7f1086bff8149635a6fad103ff2d52f94ad2e406090129d0599573953": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::range_element_bad"
+    ],
+    "1a9e4de3c7908a4f927d5cf54645a7e4c9c757cf4560141f8325755419be0452": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::slice_range_ahead"
+    ],
+    "1ae4872bf266b5e371a075403310e64bd7103bb9db14496213d8d36aa39840e0": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_type_name_dims"
+    ],
+    "1b5940fe3bac4ef46e5f3ad2dc00950663d92afaf28384628865223cfec0e403": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_clear_error"
+    ],
+    "1ba7ccddfa63526c239b55c680d9c062a5f3f98e15cd98caa10a1169c4cf2749": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::ct_pkg_migrate"
+    ],
+    "1c5ea86cd1c783ca07b58ea28881b060c8bb157e8e167cdf8e5caefc5caff546": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.resolve_exported_type_aliases"
+    ],
+    "1c8f3b828cfd8a8e27d67f77b4ab8b480fded6709350cb212b422d7a4103f599": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_closure"
+    ],
+    "1cb69788876a5cc54ee4d005e13f8b9e2579c31a4b986244d568c71d886e33b1": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_method_bind"
+    ],
+    "1cda18e98cca67842176754101997ab5b11987265134fd197f1ce4bac99c8334": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::subst_tparam"
+    ],
+    "1d02e3dbc6d8ac91eab809ade30d805d62588d3f9bc35ba7994b34b320afd907": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_params"
+    ],
+    "1d40ff705463252ba713566a0bcc9ffde4841946d4e9c0bdb8fe7392cbd69ec6": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_rhs_fresh"
+    ],
+    "1d651584006e5e9d94ba74c6b359def4d792e92ab0d302b6a5af3f4a2f52dbdf": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.unit_has_drop_impl"
+    ],
+    "1d742cdd59c49825ad3bb77af6389b0eb9039ed583b1223e80737367d7c53016": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::Init.emit_elem_vptrs"
+    ],
+    "1db221186c651ad311967fe930d9a2b0279aaa66c6ff42ea523ff20c4a89faf7": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.expect"
+    ],
+    "1db7d0007c88e6e423b0b89ee45622209a46a03e36f64bee50791b80791e69c2": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.opt_lvalue_check"
+    ],
+    "1dd08b82a0832f79e2d8c38255cd03005f7949e733fc5fb9a4ab069ca590cd4c": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::var_scope"
+    ],
+    "1dd2240b8c1b1b6af513938c0fd9e22f4c663eded39d6fa95092acec90773e57": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_expr_type"
+    ],
+    "1eb6e421b66bbc3f3eacd97f38e92aa5f034caba383d2dafa52dfa0dd16e5785": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_assign"
+    ],
+    "1efda1b1f031d693fc8eab86b5360f4bb805bbf35bce32304d04f6912d63b666": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::check_generic_bounds"
+    ],
+    "1f279c72ad414f68fd505623ec121aface70f80bf3fbe5662e6e25118d3b5414": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_struct_fwd"
+    ],
+    "1f354d3861fb481e0c2c2dd0524efd5ecaec3e8dddda292125064b0a5aee88af": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::parse_trait_inst_args"
+    ],
+    "1f5ee8a0572733ff74553ad99e542ee31b009cf097da229a99a6d36ee9344502": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.leak_decl"
+    ],
+    "1f6fd5a39501526d8db6d50550fad39ec91d0d6958a27db70a67eff121dc730a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::closure_ahead"
+    ],
+    "1f7a687c41cb0f83db84820b59560d8887bf4e2514b9163b4b57b1cde87fe00f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_jump_release"
+    ],
+    "1fe34072c5cf924ae7a984dcbdf3c5b53608e2edd1107b4aea938aca8024348f": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.lex_next"
+    ],
+    "2026a65405a6880e9f4588a156712373d7798aec8b725b88ec5aeb5c148a83b6": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_container_view"
+    ],
+    "20408a703ac1639de58d503476e91b87994a5ecb29121c88bf1aece1a6d4ae2f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_field_find"
+    ],
+    "20542dce6d3b7dc95de7d8148b0ba1e355352124e219604937cf0227e1c7d552": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_diag_nwarn"
+    ],
+    "205b13723deb0567a8a8eee58924a926c92edd9c99d1d659017338081fea80c4": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_copy_brackets"
+    ],
+    "2148c3c9951407623d4ca7cc656a3f83301ad549c19ee4c8d9ccd1e16ea54e3a": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.install"
+    ],
+    "2152fc7d5b6710d98331175fd250209a055f0a43e811d61187e38263705219a7": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_closure_fn"
+    ],
+    "21a030e0692d608682b9b40da01911225635e4915d05aff17a3f53ec6bdc4016": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::ct_pkg_get"
+    ],
+    "22268cfadb52436a3023a4eb1766088467d90a5ec4bc828127881841668384a8": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_verify_strict"
+    ],
+    "22c3642695475e2f67e4f029d9fedea5f913e8ac8a15c5fdfe603f52e8b9bb72": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_store_commit"
+    ],
+    "22dfbbd70d4ab8e01e0d0f6524102f9c984c545b53640089b1c27c181ecb1d81": [
+      "selfhost/ct-ast/runtime/arena/Arena.h.ct::Arena.str_at"
+    ],
+    "233a97568d600aed71a1f8a49cee60452323dfb295d446a91a47a101aa48ad5a": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_adt_variant"
+    ],
+    "23c107d646fd19af18a33c4ac91c9dd9621e55182327f224b1c932181079a32a": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::map_decode_str"
+    ],
+    "2404fa85a87a8be7b0b8bf1da40cb4be21092b9d23d6b15a14d5618c2ee09166": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_bitor"
+    ],
+    "24074ed7045e3387dbbb3d212099bc46a3c9a4338038a5db63354793bcc86418": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_set_path"
+    ],
+    "24807c779032a493917c8582dd9f89e7e4c3d43d4cfdf1e7a30ccf8adf349733": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::index_json_str"
+    ],
+    "248ed96026ad6b5c7040fd17afc082bcbbe998f7c484bbb693b93a97df892f65": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.write_header"
+    ],
+    "2496bd815145e2a0e498ec3713e6a710599b947e2970493fd28c297d8b7123fe": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.closure_arg_bind"
+    ],
+    "24b179e62f4d3aef0463a9e4997877f3d170d41f50074d779092827739717823": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.dep_name"
+    ],
+    "24bea4282c65a93cd6b57dfc87b862f1fbcf83c09398a97c60b660959f382fd2": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_no_write"
+    ],
+    "250206d29b387f5c18428783049269a98e9b63545903bf338504826ac6264c6b": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_diag_nsem"
+    ],
+    "25b98fc5d610399ed5c5667b7b76f117ce21cc015a39e66ac52fccc2e53e1534": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_visible"
+    ],
+    "2614c93058558ef63c7516cdd3b282cac86eb3977f2d8338a7dfa9c005b5b4b9": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::box_emit_copy_at"
+    ],
+    "2625cd1e060c5b7bd5f8cc60632ad12c2294b47683d37ae26c172238f07f403d": [
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::mapb_type_word"
+    ],
+    "262d7c056c5cc56fc47ba184cb1972334022ba6ec0e08ad458e9adb84c3d9d0b": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.fetch_git"
+    ],
+    "2635c013a508c9bd324d72e9e8173c1fd4e1103956a000367162f84da9326756": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_io_call_unit"
+    ],
+    "2668d41d22d4a0a1b866a452550cadcac6773da2b71f54f4a0c1d4ef8bf84f10": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.declare_const"
+    ],
+    "26903b81f9b80d84cea07db08ae30865944a1d4e003ebbdcee7923af68abeb87": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_bind_flags"
+    ],
+    "26ede1f4e14cae21d1b6aeeaeafb7c732b0ec4f3aa662b354e4a665468fcaa75": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_impl_inst"
+    ],
+    "26f1057a5d67c29acdc520e72d3da09c6fe1c31d2a82479744512d381cd50d71": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.inst_make"
+    ],
+    "2745e6ff313b946e6928ab6d1321614104cc7c93f3bd615a5db7ec8e64871e7b": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_emit_actual"
+    ],
+    "27810230a505c304cb19611ddd8a456f9a611079601aaf7b484af058873a81a1": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.record_call"
+    ],
+    "27939675853d90d86baa95d1d989896621e7d1762edd563f6ac2817e742e7f5e": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::inst_emit_elem_helpers"
+    ],
+    "27cef08bfe0c5812143ef93044f67c9092ae8dbd35c4f7bab6dbeac3084428fd": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.write_unit_header"
+    ],
+    "281dad5722423148cee63dcdd9ac408f241bd81d033fdf4c480579eab53fce4b": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.map_vtable_exported"
+    ],
+    "28719289f60ba1461af511fa41413701ff04155a73307419d2999df9f9b51ac8": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::parse_trait_body"
+    ],
+    "28c9d28f725c963c65f2f7abe65ce6a088550faf301fe226cf7e8a8b612e322f": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.expr_returns"
+    ],
+    "28e1a5b4c60e99b6174801a59626194cb6286559728ed403b2ba1096c9adc3e9": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_impls"
+    ],
+    "2967e4e6ee017026dad46f2b8f87c3d9e94e06dba754098eb9cf1dbd72929d74": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.fail"
+    ],
+    "2a2b50a39634c78d16ef9ffaec9f257b8ef1dd7633ae50c2017db73b553c247d": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::layer_wanted"
+    ],
+    "2a49692ca927433189a928b345928c346a8cf877f5cf6077cbdc31017604e44d": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.read_line_of"
+    ],
+    "2a51995182666dd2c7676c65efcc9577c186771ecb8d7a4a2777c9d795b8ed80": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_use_list"
+    ],
+    "2a5a7d0fa9e9567dc0af907eeba694ae3498ae5d3b73af31ba78b0f31b629388": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.err_ahead"
+    ],
+    "2ab70d7fc5494a9a6d994c3b60c791388bb1cb8f939e7faec8e43e61453c71d0": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_end_body"
+    ],
+    "2abfdac3b25c8141da0fffb0838f2964f5c07c708afcddf8f307010984ce8e1a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.fnptr_field"
+    ],
+    "2b04b5123798a1e301d9cc68a13ea05fc6544649105c84402a297d0c130797d2": [
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::check_static_call"
+    ],
+    "2c05b2a8b71194835364009175e232f138711f67c7b3d27b0c18c59e9fa4df55": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::inst_emit_elem_method_protos"
+    ],
+    "2c2d72b30791acc9498749150490147847f100d9a7891516453d03c581cce42b": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::Driver.fail"
+    ],
+    "2cb0c2fb4819c4469589723f3cc3a0e011c2814b46cd3b40f320d87fd7f78d20": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_is_container_type"
+    ],
+    "2ccc163443d1ce51bf082af813f6ec8bb7e20e5732bd3cd6b6d53a92c3482b86": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_insts"
+    ],
+    "2cdab4ebbe4c05b9fc90369a6639250eaf0a115f0dab06d1d76c8fb22a562994": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.accept"
+    ],
+    "2d27ac2240b7bbd6f8cc5f0e8a35974c260f379213a4d58a2322ff48b03809f9": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_root_find"
+    ],
+    "2d40244637fd5b3d845ae2557794500f136bf9fad29e0279ef9215dfc1e851a9": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_trait_range"
+    ],
+    "2d8f9ca84a906e048f4d18e7f4393de34a61b0f6b1de09c16a4a4fa5bced0fc8": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.container_elem_foreign"
+    ],
+    "2dd3e2df411e82c82fa19c619011bacb5c155ffee88a60b35d9c55637ca9c6aa": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_switch_body"
+    ],
+    "2de9e8d55bd1483cb3e858d97bc8e73cb4a776d6c6f07191f9f8cf4f34c8c22c": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_pkg_key"
+    ],
+    "2df9542be0a3b011ab1648b07d6a9ad3f57a69ef2468a60d5f0cf13dd7273543": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_program"
+    ],
+    "2e17314b86e2a536dc7d685fbcf55074ee221ccab58cca4b11e03ced4a8fe606": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.add_type"
+    ],
+    "2e30c9f4fc31c7f77d6c252d8d86f1b0f102bf0ef62563b0292868ce23a458a7": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.hoist_scan"
+    ],
+    "2e726cc3af40c004987d6402714a05a857932ddeb91e26777e1d8e122185d836": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_slice_warn"
+    ],
+    "2ea4c86e26da670b90ad9106ad4e87e5cc6bea177a68ebfa02c9ec9a0f683b66": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.is_iface_type"
+    ],
+    "2fbca9832bc95d2af670faac8334303e7d5cf6960f616feba0d7306097d43453": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.try_result_tag",
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.result_tag"
+    ],
+    "306d6a5eba97c6b276d33047b6af4894cf346fd2c9e7907a691e117a3ce87135": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::index_io_fail"
+    ],
+    "3139fd3af49a414ef225cc5ccff8c2d5ffeabd8ae770037b3cb710539ccb22f2": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.version_cmp"
+    ],
+    "31c74540d879f70e9bcf5cfd3f95fc2518c642e986254bd051c0a4d447627634": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_sem_note"
+    ],
+    "326290de5f391a4a857f8e8c3ef4c900fedb38c05bd7635cbe1e8617cc3637b2": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::ct_init_bind"
+    ],
+    "3273543369c89986e2852fae7a45acee095a030e982289ea7a8eabf52df37b94": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::retire_before_jump"
+    ],
+    "327ed3eb92969ca73d69718c6884fe444eccff3f768c4cebca67718d9853b92a": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_find"
+    ],
+    "3371a001265e29103cf1b6306f2f3b73a548de456517fcb7ee3f07e1b59a40cb": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.builtin_slot"
+    ],
+    "33e9853342b8890e602cb7232c112aa30e688b6ce7b4f9c75ebc4ae6924088d8": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::outlives"
+    ],
+    "347897433248ccd763f89728bd2d6f7ed237263ae2934fdb7af523c02a7ad4fd": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_struct_assign_check"
+    ],
+    "348911c3c6a47438574e2eb3718483768adef463cbeecc6d89ff3d026e24c49b": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_foreach"
+    ],
+    "3506531f568e42c8a88831c2757d913804dcb424cb76b06b78bda97b28dabeb4": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_ret_release"
+    ],
+    "3507341b81e9e9997214ec5a384f3be8cbb48bd4b1a0aeb9c7332804d5715677": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.container_init_check"
+    ],
+    "35409b61fbf59df53edf07d0cc5a8d2050574d269cce47338eac2374f01352a6": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.ret_same_struct"
+    ],
+    "36225b488b7ebdd255eb6eda1877ced0df268dde2caa23e45d717684c5b08c5a": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.write_header"
+    ],
+    "36324721b43193157dabebd5c52fdd33e15bb192338104479e5dcfee6cb33f04": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::range_spelling"
+    ],
+    "3648fe3b66599e288b38fcffafc175572daf63d7d86551f537b7d86c25b9f273": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_generic_defs"
+    ],
+    "3652e6e0bfd28cd88e60548f7a20eb423549f23aea4575db83e2ee9738301f08": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.lib_scan"
+    ],
+    "368816229099c80c58dde92f2711dd975167a6b30ad628a416da55f6f9a6651e": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.declare_var"
+    ],
+    "370162402aa644894b0e73f356ca63d05d0d198a51f77e5e9e90c5a6d041122a": [
+      "selfhost/ct-ast/tool/cache/Cache.h.ct::Cache.hit"
+    ],
+    "371305f7a1a2168735d6b3a50271be769d9e1398df7dfdaf53b7c36f9041dea4": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_adt_ctor"
+    ],
+    "379cdfaa8afb77f812c1dab5cb65dbfeb18bc3eb1a9d07fbdee28beb545791f7": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_amb_warn"
+    ],
+    "37af5becc80f2d51c4843fc8724917a5dfaac2ba11ea739b2a2b70e5cb0ebae3": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_field_loop_unsafe"
+    ],
+    "37d46133c4a05aa8a8202caf4c54a7ca45daa78d159a9c7aa8a2f21cc24e02ae": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.drop_visible"
+    ],
+    "37f7118734ad408284ce7f002d503b97101b9942e27baa49c6814590d527cb35": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::Init.emit_field_vptrs"
+    ],
+    "38a36f41f0fc4257652a5169bf0f678b6662d3fc39d6818d9599604d9d26052e": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.lit_coerce"
+    ],
+    "39476d93b9bdd747374bf197378c9ad115cd0f522daea5947b00073c5570a68e": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_unit"
+    ],
+    "39614b5cff84222df30db22a50d4853e38591ac9bbf138144386bf82e10db7fa": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_fail_driver"
+    ],
+    "398e4beecc21d9f0b80e7a674682c0a5f29531cddfcf5a6a1d523739a28d4596": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::expr_view_bind"
+    ],
+    "3aa5d1fe02bdd4188d59d40ae0c35e0cd5464d03b22871cad03f3f1bcbf5eac6": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.inst_inherent_method"
+    ],
+    "3b48f54ad79d3a5ceb83595f8617c1c212aa0750c349b88562224478e22ee750": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.leak_delete"
+    ],
+    "3b62d40f399a416f70a4a2ba89e9125ee89b3a2b76f4c7fc23c1044182492295": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_type_warn"
+    ],
+    "3bc48d90aa58319581bfb5dfc52040ae9a0595a7e6418499cedb5bd9abfd9665": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.resolve_type"
+    ],
+    "3c0acf5c4b6d82671cf9fb3984f0e6c348d755b24efa43f6a3fc6874d30f6f5f": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.static_ctype"
+    ],
+    "3c254e64d2595a93008ba62425c877bd105e08411da3e8c180e36e6e2ae2a409": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_box_helpers"
+    ],
+    "3c899c945abe60733a341e3b57badfdb31abb78753e06a80d1dbf69bc1244eda": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_array_dims"
+    ],
+    "3ca765e130fb80d67f65baec6bdc7dfb93914b2816aaffbfc8720959aac35371": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.write_model"
+    ],
+    "3cb62d0ce1e80af01cb59dd64c3c5e46dd3ea987dbef5f6a672ab9005023aace": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_unary"
+    ],
+    "3cea54d0a4b2aa4f179f1b35cc47f478b01506aece28b5b8a3c443e80aee3128": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.out_scan_chain"
+    ],
+    "3cf5158bb5559e34f57cb26f2ac571f8d6ce46b467efd864cd03a029ce37e3ba": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.out_check_body"
+    ],
+    "3d23216fd07daa571c92fcc1611152bd75e4dae85e550a17c15b04a9325f25d9": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_ret_mentions"
+    ],
+    "3d36329354b5e5635d1cdf1ab8d06129ea986129360089aafd8a1e65868b4866": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.var_cname"
+    ],
+    "3d5dcfae6a2454d4555e81c998069b12283b66bc425d4adf135d60196cbb0d64": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.resolve_import"
+    ],
+    "3d6345170ab53319cf4908bb3b853e8d86c10b785045570baa2f541b3f071667": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_slice_helpers"
+    ],
+    "3d6d72f7ffdfda7dc22e1029ffbd3239e1e05370823b2dd210f887e7f4cf2d46": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.formal_is_env_fn"
+    ],
+    "3e04e673e6ee61fb74e4c6c504f257fa401d53143193c892198c59ddff7fe52f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_repeatable"
+    ],
+    "3e1f4204f57c6ce9eb0661b1b7cfc251cc98ad518ae61ca8a476e6fd6d46ab59": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_diag_leaks_failed"
+    ],
+    "3e942e5c72b161d88b98ed0b8885b7be1a0ff325153ad2d908e39c81977093b5": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.expr_unstable"
+    ],
+    "3efb0d50cb2e6420e06222599a0e94ff7cc573db796ac840e50729dc37be18f7": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.find_qualified_global"
+    ],
+    "3efc40ecc22a4c44619cac3fa37157e6e51b0c39fe41c3ceb0ad1d87608b5a49": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::parse_map_brace_init"
+    ],
+    "3f0d3d0ea90ba634a20f0dc0a543b647d61f3dfe8f87f5fa561ef3347a25dbdd": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_inst_resolve"
+    ],
+    "3f7959f8836ed7ad7425495350ea732129d94237f957296c9cf695b3a9b83b84": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_bind_io_mask"
+    ],
+    "3fc3daa0eda0491abb98ab582e1dc99529193c8dd78d93d984cbe8dc6bc74186": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.remember_dep"
+    ],
+    "405e8acb504481c21cbf0c9c3528cca7005d06ba07566a13b41e11dfb37de488": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::check_borrow_store"
+    ],
+    "407dc1453e80bef5067877ba60a7d94a48222779fa25bf97262e9d17c095eb8f": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::ct_pkg_update"
+    ],
+    "40810b41b7f0c2b2892b1bab04786622e40a0ada037125374280fd16b2109206": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.mark_owned"
+    ],
+    "40ae836b764bb0259c711d84449771f31ef84d0225f9d1235f4e8eea815d69f5": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::loop_count_class"
+    ],
+    "40fece8a6be1b960816cfb1186db3c8c80e4589c90e904eb7133ef1a41d24417": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.find_meth_ann"
+    ],
+    "410616adb70cda8a9534634f94ddff0b0e6f15af4e04d30c10343127724dd9e4": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_type_warn"
+    ],
+    "415457de7c033b17128772ded045fd45699bf5dda806ec1cf01ca2cd3a76ca6e": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_cond"
+    ],
+    "418446f938f9671be5a0c254c0d325275039452a78221271e27d015d2e03c903": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.dir_digest"
+    ],
+    "41eda650b572c078ec835930853f8d9a030ee82a82c4de3bfede79a9958b87b8": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.leak_return"
+    ],
+    "426ef6908daaae8d13274394fb480cade4c5d5d8ad045795cb2a9ae027819238": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_default_method"
+    ],
+    "42a9a57f07b25a587635a3d3e51737267f718b12b43c1748641b3d9968b02f0c": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.find_builtin"
+    ],
+    "430ddc3093e378bbd1fd824ff7d1b4281ce3777469d9e3fe13efa21207af0c24": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::closure_walk"
+    ],
+    "431d16e0573239dc350d3628b93445738f6c8cda8639e0af9bc132e539965dbc": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.module_inputs_want_box"
+    ],
+    "43a03bf314598d8acbdf21a0ff146def54f00219f1c123a9022093ef9bf69f6f": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.iface_ref_type"
+    ],
+    "43c27333f2f532044f0dfae5b2993c7a082d85edb280c51814295822417e272d": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_slice_warn"
+    ],
+    "441d965dda52948537a059f73596c9ff9e957d5621df880341fa1013ae8b1e86": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::tclass"
+    ],
+    "4489cd896b68a1ec31bbd96a00851c63efb5dd5a8ecc43f6f11b0262c18bbb30": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.opt_field"
+    ],
+    "448f9404c5e0ce353f468c63c65adab01a6614be610bfc7cb4dd51fca69090eb": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.top_decl"
+    ],
+    "44a04235dcf99b6976a61b0197eb6cf8c48e7318eb6d762f5b4e7f460b46f0f7": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_args"
+    ],
+    "44eaf80b57cf452b52907dcefea42a55d750489d07243cb531a0e40a972f2675": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::ct_stmt_bind"
+    ],
+    "459d4ab482ae90612016c74e2323639c41a49de69543e05db9e85fc94d267694": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::closure_capture_error"
+    ],
+    "45a98eb3771f080f9779021df5eb77beef049525559d511d8c208a3f33cf6644": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_actual_span"
+    ],
+    "47a5ac5c8be31d1b36a1358ea39da84648f21fb5d66d5a8517a7127905b85e8b": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.closure_global_init"
+    ],
+    "47da8b0f31675a4621a25f69ad5946cfa6386e2151ebc27e6dd7af6b4b73eff6": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::sha256_block"
+    ],
+    "482a0bb573f5293cce8ccd7c7c05cb7870c91c305687416242d6b10be53b1b1a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::inst_impl_score"
+    ],
+    "485e63b64eed6b41822c0ae870079293cdb61f70df2faef6f28a45f02408553d": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.emit_unit"
+    ],
+    "49196c215c88bf0cf359b5881b1294b76f30f1086ba58d45e26a7c9496183a56": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::borrow_decl_ahead"
+    ],
+    "4956aeb5f47b3f6ca3a7f464874ffd7fcba5fc4b07c365c9fd41ffd2cb12726b": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.try_cleanup"
+    ],
+    "49779563e88d5efbb58ac9b994cf7cb0179d0ce5cc3c05ad3e7fedde93f90397": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::sha256_init"
+    ],
+    "49ffcd18ac2cda05f1b8ebb054fe71fdf8a806f7601874f2e8d49d81642867c2": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.declare_global"
+    ],
+    "4a710f663f861882a6c638b4220045c281d2b11676ae2c71fd5ccc8946c768ed": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_field"
+    ],
+    "4a8f74a8c2fee294692976b281e333fb5de6bccf9d65600209bbeba068e3b110": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::expr_get"
+    ],
+    "4b044afb45a9015afaa670068f7ddf37db2b2f63f7824627597c4d82ba400f53": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.git_url"
+    ],
+    "4b27fd5b44a033f9dd82729c40e76b31e7d79a4bcb96fe378b56e057a4be15ad": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::Init.type_has_vptr"
+    ],
+    "4b58cab51120e97965f3d11f3470955c658583184afb5f003ded665ecc9f853b": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.out_scan"
+    ],
+    "4c7c7c45408dd06c5dad0488fec009058fac8cb0149eda76c0073567a82aa0bf": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.impl_use_concrete"
+    ],
+    "4d7b2ec8cfc11d44ca093ed4e091bf64a2dbdf79b5de669c11108dfdf7257f0f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::inst_emit_one"
+    ],
+    "4da93829ae905d9b834bddc8baee56ce39fbaf4710253128c12a6db46b157bc1": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.next_is_type_name"
+    ],
+    "4dede701502bcd38babd7045a04238f11eb70300bc8007a5b9137c5c2a1dbe44": [
+      "selfhost/ct-ast/tool/cache/Cache.h.ct::Cache.digest"
+    ],
+    "4e0752788380b0512c17e1579a60efeff4d0acb8cc1191ca8fce9c4da0a1887d": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_expr"
+    ],
+    "4e145d49208f7944ea29d0ec230ceb54fe8b6ae0dfb7b20482079e2c52d9af3b": [
+      "selfhost/ct-ast/tool/cache/Cache.h.ct::Cache.paths"
+    ],
+    "4e48dd10fca06b1957dd9031e13095f6b408a4775941e11a6f3a259e6bb08a01": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_adt_has_variant"
+    ],
+    "4e97fdf81462cacf1c1664d0eb64500902cd93baac28669fa791a6e89f95954d": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.io_header_mask"
+    ],
+    "4ea47a9226376a22494891116db5be3d4e38d4fb2c584a7a9312a882a9578a3a": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.method_trait"
+    ],
+    "4ec0996949fc86d26dd967f36c3d73fbaac2b850e3711f6fee8f575ee08dc1af": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::init_get"
+    ],
+    "4efbd9639a9fb2f36f50effaf4158e90449f9418ed19dfb9fdd3c0adb87812a1": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::map_brace_target"
+    ],
+    "4f0748bd0f4f64331f59f47158c862174e7feda226d3b478e7496d4c7229e849": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.defer_add"
+    ],
+    "4f3e7b6d8f2ffa2da8b12628deb94c22011e5c57016b54fe14a18a558a07b42b": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.install_main"
+    ],
+    "4f60861125b13d9380cfc9f465685ac9fe186ca605bff22bbd9f5cad342788cc": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_migrate"
+    ],
+    "4f72285b310e01278a7ae27e646ae8c119bc210a27d4216e91fa952debf32c25": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_raw_init"
+    ],
+    "4f8c315562d56f8d079f43e7678e185e7fac914799b6d3c215681121b0ed4b3d": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.node_mentions"
+    ],
+    "4fddeddb99db459b4108888778dab2721d695875365c885c156587eb202793c5": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_inherent_protos"
+    ],
+    "5027ba2edef1039d462d3d6bf030090744b51c1f8bf6fcce036772c443e09181": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.u_add"
+    ],
+    "50a946c5013d6e817c8de8b99d188b530993cf9b5f2067de3291fd2a13a3301c": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.expand_type_text"
+    ],
+    "514fbfede8a63af546e95f56852685c1b963e20223333b1379ecfb3fd9fcf9f6": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::impl_emit_one"
+    ],
+    "51a292745cfa751bef4bc692c65c72fe70ad5bf1e2e5482c71ce69add3b74e66": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::is_layer_fn"
+    ],
+    "51a7e2931570886c351ee3e65ad126877e10cc3a7cd1b7e98e877a45853514af": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::ct_pkg_lock_roots"
+    ],
+    "51a8fac1b52839a9659db31aa4e402731b5d80908c501ce77a8c1fa9f47b5246": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_new_expr"
+    ],
+    "520f34ec35f4660341b37ea95c6cc491a2f83881ef85305d52bb189868305ac0": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::meth_host_key"
+    ],
+    "524e7296e84ebf2eb9b90a0b4c9a4c88d70ac4f73a2e3765f28d96b63fbe8336": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_official_resolve"
+    ],
+    "52930db4237b79a95a1e089d43914a7dc8f0793a0feb554eaa5fb9d2a4df1280": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_link_externs"
+    ],
+    "52b83bc1e8a2ede2b44b67d5afe3acfd74d795dd6b7bec5610ca443412261123": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::manifest_strict_default"
+    ],
+    "52f6c4418c53e69a01a3a600dbd0537c48c83ccd2cb8f5f38b03b1310d3d07b8": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_impl_score"
+    ],
+    "53761ba2329be62227bef95abb7adbde76b011faf5690efaff164795c2e7af85": [
+      "selfhost/ct-ast/main.ct::main"
+    ],
+    "53a965588ba19ebd05327269f028cf1ede4311af5370edd0296826b2022fbcd3": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.begin_type_alias"
+    ],
+    "54210fe58a0feeb44edfb0e7af3040f2136a404bdfa1365c42ca19f2a3226359": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_is_string_value_type"
+    ],
+    "5486c4efcf3633b06319054385fe5a2faa1302ba537306aa0fc50690fd1228c6": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_anon_member"
+    ],
+    "55515ac679d9befc05cc1c49620a2a07442f80ce389067cc46e1836b2b21b982": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_fail_at"
+    ],
+    "5566e5d0cfe943911965699d3d2cf6856d0fc959e9c5c507da93f34cb4737b27": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_prefix"
+    ],
+    "55782ba187189484747013aaca8cd43fbb4cc716628502767f9e742caedeec0c": [
+      "selfhost/ct-ast/runtime/arena/Arena.h.ct::Arena.str_end"
+    ],
+    "564cbd6c6082673e1c9ff3b6142087c3ff5048399457be0afffb82b1ea5265d0": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.arg_is_closure"
+    ],
+    "5658240d534815210cc7fd727019074c4fc24ac475627dd6f3d60ccf4b2d18cb": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::jump_pop"
+    ],
+    "568aa40c7f3dba1af15c3104b867a9430ebee39f3d8d17c8b32ed8d17b4e33a6": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.trait_inst"
+    ],
+    "56cb020ee37e6b734da6d21aa05dfd006595944c04a69cff662af29ed7dfd8fe": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::impl_writes"
+    ],
+    "56e994115918138a467da60871c3bf964841d2262073245f03c3a18c0914a059": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_unit_body"
+    ],
+    "57ddec57589b69a9679acc602cc023718caf3049c4bd340700b43db4d5e2c233": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.container_global_init_check"
+    ],
+    "586af94d0ef983ef59873a7335f35db5288b80c910376e5e22b73913a519b87a": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_sig_warn"
+    ],
+    "58b4d3cc775e51b611b12175811e15dc3d8844f84da5345457a729c0a83d86bb": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_inst_find"
+    ],
+    "58c8b238129281891258816e08b4c0328fce8e34016f9ecb32e39f599b5a84e4": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.try_attach"
+    ],
+    "58fbc9f6f71c3cb5a8321172cd04e726a16f3364ce197803092b94ee646cc88f": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.argtype_check"
+    ],
+    "5929eeabf16c628faf8ae892ac00b67a7b978fadc28d3d98538e09e208f2f23e": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.find_type"
+    ],
+    "594b8bbd3b2bb11b21c18ca716de6970e4582c0c417305ee2495a03d1832b729": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.nsem"
+    ],
+    "5962a740730986a65c3b1f1d3b290cfc131b3df7c56e7d01d90a7380a54893d7": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_field_def"
+    ],
+    "59e4ec04766b02bb6f5dcc1b9d63e417eff8a8f737a2c2af46e01f863de60012": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.slice_view_from_array"
+    ],
+    "5a4d02a554b11d66570f3ccae1062e7614d87ca5f802c6b7eb41b748934b248a": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::autodrop_append"
+    ],
+    "5a8d8e548800606fb13a2d6623071a578e14e26ce8f2ebec16a401b61b84a81a": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::preemit_insts_for"
+    ],
+    "5afe3c8911fecffb49bd8f259bed9dbd3f7d210d142a397e4c000bcc2f2b8767": [
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::MapBuild.parse"
+    ],
+    "5b3eb111922ce325a7e403cca65948bf2e9d58f4470b5690e34805f317274642": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.type_target_of"
+    ],
+    "5bb16eab53e724ab8e2c7f719b4847b71c11043d490d32bf16236e949058ddee": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.is_builtin_unit"
+    ],
+    "5bbddfa5c59c54b47fd8fc79c44eacae378823a8681d598aec4eedd06a263a0a": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_range_init"
+    ],
+    "5bd0f32ba3f7ca873816d6a9d720f28a5337b6309dfa7c79fd26a66eb7b537d3": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.expr_ctype"
+    ],
+    "5bf4f5f4aebaac61da56991537d7916a75ee4cf607d3af2f0c81b098af6df672": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_read_identity"
+    ],
+    "5c0e8da79a935b398c85fe0798d06b06013eda353f968ac61258479d7900e119": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_field_if_merge"
+    ],
+    "5c49cb89fb86677b1afabf70f544fa807d61e9eb47abc6571d78bc636dc26008": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_bxor"
+    ],
+    "5c7b609679c0c009296c1e7f4c41bcd30684bda0ed13eb118facf72e67d9ba1b": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_diag_emit"
+    ],
+    "5c7f7406277bf01589fdd5588613366eb614b9fc114a1e1fba726195451c0f91": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.base_name"
+    ],
+    "5cb6230e9c8d290467e59f4ad858cf0ad99478d1efc53c186da2b8a7639f3784": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_field_snap"
+    ],
+    "5d0d9bfa6a117fb663c9ca2414101940295098366a5994d22de3e2d847b5ad87": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_update"
+    ],
+    "5d79b747be5300758efb46ec5c286d434c522a41acbb360b9f746d7c554305f4": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::jump_push"
+    ],
+    "5d7d0924a90d77801a9bbad36363a810eeee1a6a5876cde45610cf05477afb41": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.stmt_terminates"
+    ],
+    "5dbae82f1c7e8505d715c9643fbb5fdfd53b98f14dcb0847846a1e52d3c97b51": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.brace_arg_ok"
+    ],
+    "5dd70e2b4cb5bf9db40129d56603ff914ab5be775c411b29f1e20367afb24055": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::Init.emit_vptr_items"
+    ],
+    "5e85dd85a12a0c4076423a1f3ac1275e5e572f7d27127a5267ce42290cf724cb": [
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::ct_mapbuild_bind"
+    ],
+    "5e871e0288b684255748412f63867a23ee49eefb968c03574136397fdc3b5cf3": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::inst_emit_elem_protos"
+    ],
+    "5ec5ad3cf956ab933f2cd819770b5a794c3040ad79e61a145afab99155000c7e": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.resolve_func"
+    ],
+    "5efdca3adf466796cf359d5286bd2138e08da6c34e5d5dacf16fa4be3d5f6d0e": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_decl_node"
+    ],
+    "5f6851624b262648a0ddbcef5047277b916c73ba61fb45f87ffa970f3b1b0386": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::memory_get"
+    ],
+    "5ff91ad2b275397d1a84593612a15e048f20b0a736c01a79a5a902144f9f3f53": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.u_reset"
+    ],
+    "600015fcec74b839ceb6b9219a29f56528c4d11dd75b7c04d5bcc934a4c54cd9": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.expr_is_slice"
+    ],
+    "6017d50124a670a28f5f6571451842d260b135a4a908b97f159afe4b8b8fb993": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_impl_add"
+    ],
+    "601d32198069bf7f5bb41089336ef4cb0722408296c3c6e094c86b224b6585aa": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_namespace"
+    ],
+    "601f2054222aff458872ac0ee057c778bad1b2ac3e7c44c3de5012de2aa3b03d": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.find_func"
+    ],
+    "605fc8adfeec0bba2913a7a1e5accabd7c6bc4c45a77df986b63400844324eda": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.own_factory_ok"
+    ],
+    "6102f928a7937efc6048a060b459203637bc85502180edbf894d089a65c2a378": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_adt_add"
+    ],
+    "616d3d81becb0539b2f6eae59c19286d59c59c4d1736f77f0b319270dd6b6b2c": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.push_scope"
+    ],
+    "6174f5c27083dee1d3a058ca4bd1eea9ee842448c655b41cdb9ed08e2caf27d2": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.loop_ahead"
+    ],
+    "61d3bcf0dadb323e9a8dc8ead14aef070999f9d5f99d555abb1a6f6872c15657": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_std_shadow"
+    ],
+    "623a5168fa50651a1edfeff682102297d09ca7a97839ef6690c9d281f41dd299": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.write_model"
+    ],
+    "62ed778fa68b90da803e28c8229acaa6939ab27f9bc594bfa74c8b9263648c67": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.get_spec"
+    ],
+    "633198b32ebbfb21632b5dd94134f47e4d2235474b50edb13ca3e2bd42457a85": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_clean_type"
+    ],
+    "636f0c1f5da3a6773a53fba26e49a50422906d712758939bc409e2a2895af326": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.offsetof_ahead"
+    ],
+    "637259ac741aba66828eed91ed2c5e22824a8d1d5956dc3ce607a602beb83088": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::tnorm"
+    ],
+    "6386f1348062d1084c4bd8a6ce77e8c56916153d81cb57fb2a1538edda1a7b1b": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.chk_assignable"
+    ],
+    "63ecab3266f190780b51b04e47e143485bce9e7429b656204d12c00d567f081d": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.nwarn"
+    ],
+    "63f4c3c268c58d601c209b6367a35a433994d8878339072a7cd324f8956fcf8a": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.write_map"
+    ],
+    "644d098880d729e7fe1451ff2707731c355155ce748190a70b95c5feeae8443f": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.const_ok"
+    ],
+    "64630134ce490f4e9b2ff323bd818ed3039ef38155f72b3485b5a5e9bf835e1f": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::plist_next"
+    ],
+    "6503c924de43798ae669356b59ebde5dcf77cb3f29107a9e4ce01627644c8671": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.fail"
+    ],
+    "65ba19cb24023f9cfb73056e2a484e8553e7285aa5229368304f8aabfd933002": [
+      "selfhost/ct-ast/tool/cache/Cache.h.ct::cache_get"
+    ],
+    "66a8cc819554ee060300b8676a26f6b81b761f29ea669b4d5fe80a1551900a19": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::cycle_file"
+    ],
+    "680934453a8352a2ca8a4bbedaac1a7053035c6cc75e61df6dd2dfc86f0104d3": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::inst_touched_by_unit"
+    ],
+    "689bc904259b0b029118a4aaefd7eca544b1e7e31834985369e1d28b6e67dafe": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_leak"
+    ],
+    "691c4b58e39034e33ff3e9c9db62237d10e9ff5a0f28165a09306d9edcd91650": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_adt_add_variant"
+    ],
+    "69750a841610d0bf1fc1ebfdf5b462c6151969cc9ab259fdcb20841719bc85e3": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.argtype_check_static"
+    ],
+    "69afe6e617a316ed5f140d5e59f8c33ee7c72450e75c4abb45167bf811539076": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_io_call_line"
+    ],
+    "6a4fdae2d525f057b681292911984aa188f3ce389bd6f480bc97eb8794b1f71b": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.read_file"
+    ],
+    "6b0dc6bda95c4f49b2e9757fe3ea0dfb9245859cd1985d28dfe6bf73941bde46": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_index_lookup"
+    ],
+    "6b1ba7f2301b038d3a8582bd36ea1d2c19494fdf0b49026cd38e6d18a47d5b09": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.func_begin"
+    ],
+    "6c2d3f8b6f7d2a613922f08bc45c6163d5f9c60b02e9cb04d0a35d2c117fb2c4": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::type_get"
+    ],
+    "6cdad510bd43b9a0e7c031a4fd3ece8a106abbf0b21b60a610be9f249fe1d3ba": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::Init.type_needs_init"
+    ],
+    "6ce4b8abb556c6087b1339ca976a0ca460d89849a608a37b82703154bea503b0": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_trait_inst_type"
+    ],
+    "6d1acb8fa9413eddfa7316ff2969ab485117d9ed15a2b5036004c53fb9d024c7": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_trait"
+    ],
+    "6d44d42d99bed1b7df8cafc56dac87eb4fd8e0e23393ae535abd709c3a6aa95d": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::range_dim_value"
+    ],
+    "6d678f3a83322e9be8fa0b8f0be89e477a269bc2858a27003e9c24c7bf5d0ff7": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_type_canon"
+    ],
+    "6e3638341bac65ed28c7080348ab42ae842b5cae089d43e3c2e59327cc8140ed": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::ct_expr_bind"
+    ],
+    "6e3fa6f1caa4b61277c517f233c9498ae54dd98a14dfb6659d2a4bb37729ca9c": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.tok_is_type_name"
+    ],
+    "6ef743060d6bc94d010afb16628fa9993f1f2a91c69542f60a74f5d09a0d8783": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.pop_scope"
+    ],
+    "6efa9ea7c9b023f5e13f9fe33731944a18a521f461962dc1fa3326764fe8323a": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.expr_alloc"
+    ],
+    "6fbe90f318da82be8828979584b02282d7c118fa8c36fbd195906651222dd001": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.io_call_count"
+    ],
+    "7008341663d8aae11afa59abfd007b29efe6d2793c4a502bd5a1a18e4de582fc": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::check_trait_bounds"
+    ],
+    "7016d1a32586f720479a273c2e5249ca97ac00ca217689fc5a7649c9c40d0604": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.range_match"
+    ],
+    "704df84f9a2060e64ee96373b960ef2ce062a9753d57ae89201c9e75e04dacc5": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::expr_borrow_root"
+    ],
+    "710323f49e31ce02302af7bf61fe45bdc84ef31980405c8b0136ad855a5bae77": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.pop_scope"
+    ],
+    "712339da3d815038d424e9dc3a96ab4843a69ba45cf6ad7b31737def859ec93e": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::index_err_add"
+    ],
+    "717315bd55c4b22e90df2acaf705fce45c884e773662323750e538e4a88f2bb5": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::unqual"
+    ],
+    "7239c1a46b19497301aa2c5873854817fd315192addac9a2953f305464dbd7c9": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_cmd_raw"
+    ],
+    "72804645ed18c94520dd09755fb5ac5bfb1326c44659ba4e6f204f5ca22e9cf8": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.unit_name"
+    ],
+    "7349e7d59908f4d87ce9809a67d66c9038424c7ef487c1b226a06ef6294ed2b4": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_expr"
+    ],
+    "7360842563b6ce835329a477fb2d89b0cdbfdfcc1e5c516c337c491eeab4599a": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.expand_type_alias"
+    ],
+    "73bb53b152305964562466b235e7992265ed6d5558533c842518904870868a91": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.get"
+    ],
+    "73fc45dbb31f7456694042dea1671aa7c368b9d5d7f9a34f3d1fbd01f5f76d43": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::check_closure_decl_init"
+    ],
+    "74197cc58a5f134138386653c38621cbad818d62b85469c4e9d6642588db9d14": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::container_sugar_kind"
+    ],
+    "74314ebf0dd493f68fa71d62cb7d86e545622cfc42c42e9054afdc8e7f801413": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.expr_type"
+    ],
+    "757e1802e929b26249fa6aaf5608a747eb422a203455b1d1c7f20289b8bfd5b3": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_proto"
+    ],
+    "75fbbf544dd705e45ef6db003a0bded24048f550932a9896b60c602f413f19f6": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_set_no_write"
+    ],
+    "7604ab348e236a18e0066bb476ce8a52e7d694229f91442de3c559ae521913b6": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::elem_has_life"
+    ],
+    "761d6d990f37bcfbfb425dd692d104427785c7e0306039fb53b8be38d1efaabe": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::check_struct_bounds"
+    ],
+    "7626e6d3a71d84e20995271eefae912681cc6f13986d7a28e1ba062648f58495": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::vbrace_type_same"
+    ],
+    "7698612b100669d2ac6c3c7331b6c76560159d4d2fda4ce8a2d4a1672a952d65": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::inst_writes_helpers"
+    ],
+    "769fac695ca87b740931286c59b7d22035b5690af3543191a64f3134939eecbd": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_lex_next"
+    ],
+    "7704b50e8700d18d9da2da0dd2fa1699a5cc56bf79d4490cde5b7fc489215959": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.mark_owned"
+    ],
+    "77bab57c398ccb1cf40405fc2ccb8df054953714d298ac3f7a0d94e81da2ebb6": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.drop_release_scan"
+    ],
+    "77e5790f1521bbff3b68d9bf79541485000c37ed18d4be89f8c2901e2c66eed8": [
+      "selfhost/ct-ast/runtime/arena/Arena.h.ct::Arena.reset"
+    ],
+    "782ef07e9968bd1e5fdf28d040c0849a6b0788090e148c509fa2358dc2692e5b": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.type_is_void_ptr"
+    ],
+    "7896e44ae1e6dd7b5c91b2cb5d52f86cabef6b43fa767b7182be025411ab064b": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_release_from"
+    ],
+    "78b02d29581c2780b6931c107813aa9d060f61c09b2c956113cbe1ddd3203667": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_skip_import"
+    ],
+    "79447ab7fa20707849acc3b1965629e289ab02972edd6e0004ca856f42ddd533": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.arity_warn"
+    ],
+    "797ec8fb1edccda3c5c25987da0a41e7bde985e6bde85beab2a7236c20e6d2ce": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_program"
+    ],
+    "799c8eba508fac8c760ed7203b87f58caa4031176ca7854306c9f689da76b89f": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::map_dup_key"
+    ],
+    "79cdb1159ee1a025b936e9d4db0213737cd02af17f3d3241ccb2d704d9a5141a": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_owning_struct_type"
+    ],
+    "7a0ae327859b94904b950d970d5cf0792278ba129307bc8ea95c115da9382053": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.leak_scope"
+    ],
+    "7a3c8a24ee8df60f8ea02546845819f6913c96743aaa781912948d59a58d6b54": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::borrow_struct_of"
+    ],
+    "7a759fde06b95af63665ef7a1283cd855fc610c770d8a175d65ed272e3593334": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::unit_init_needed"
+    ],
+    "7b6bb39a5bd55fa2f44eab7118d83111b0671b518c7d55e0ee8b0a01b833fc7b": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.static_call_ahead"
+    ],
+    "7bfb3c56c97a5e8d164d00fee471cbf044dfb0396d40e9856871fcaea30f053e": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.try_result_cols",
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.result_cols"
+    ],
+    "7c0a969a519a5ef297090356a21a648bf57da3dc09c95e752c51cdadf8ed849a": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_func"
+    ],
+    "7c215d5c63fc217f7d10ce6e5978b242793244e05f959e602e0f136262406e32": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.maybe_box"
+    ],
+    "7c21b835282b8c7899f3559a312c151e704288c1e841c7ab6e1e89e3e76e7d6f": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.type_warn"
+    ],
+    "7c3988aca5fd36beb6598f51f33b836f59e8d3e8b80c705c7d789e747de1dded": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::Driver.load_builtin"
+    ],
+    "7cacab0d9fd2fda19fd6e89a9aeb6643a22aaf2cef0da2d7fa68732b79ce2f70": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.generic_instance"
+    ],
+    "7ccdd4154dd9cf07f764b144a8ee1701ce976ecb18c15b91449cf8579f9d5579": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_primary"
+    ],
+    "7ce104d1af9b1f3717f3406be778f6377661691f3c54c26ab42e7b1af941f96a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_inst_type"
+    ],
+    "7cf83fcefb40ae89e5e7c17205da90fe47b7583b64d65536be1964681cde65fc": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.new_ahead"
+    ],
+    "7d3b69289371f3beaaa4bb7379079be7e44730491e7392398573732872f3a4be": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.var_ambiguous"
+    ],
+    "7d5cbc17bc40fa4573fbeaf77549775ea3a148c88f3bb995ab23d0e2ce14d6cc": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.q_suffix_ahead"
+    ],
+    "7de8a47594f5dac6e9a86be840b26ddacc299db516fca01ed417a9c52be46dde": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_subst_arg"
+    ],
+    "7e207619345be85011b7955bc39d4313ed98d0d606433117611a279d8cf1de76": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_inst_encode"
+    ],
+    "7ea8911164f3c9ea4624e28faf0ae6d5a8cc1ddce6f9ec7e506a4fe63207f5ab": [
+      "selfhost/ct-ast/tool/sh/Sh.h.ct::ct_sh_quote"
+    ],
+    "7fd5dd3dddbfd0660f2584b982f9fafdd2da0b133778139d9d0ca09e69bceea5": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.last_error"
+    ],
+    "8077043eef56206ff43e5e71991327ce336114fcb12b1ff5e21e1f2cce0ba53d": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::impl_method_shadowed"
+    ],
+    "8094f4af3c96b8b9c64b54aa4f0cb0b61ebe1f0ff196f40107671a6734d86167": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_qual_path"
+    ],
+    "817cfe17e1ff5d0494f0f5bcdd7d4995748ffaad8b259eb648d71bf80b05b4fc": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_match_arm"
+    ],
+    "818b16906a90e24ccd36a406557c82f84863b582533940f66bfbfd771acfa06e": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::closure_var_index"
+    ],
+    "81beb8dc3269b92919cffb41fe7263a474cfc22b88d8ccfb0cbf93fc82c14d5b": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::range_vec_target"
+    ],
+    "81e3b9f702306754525d85453a9966606a51a12fe3842a6b56009ebfa9ff3dd5": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_raw_text"
+    ],
+    "82d965ec15635d379aa4360bce9a0d78678d60694c236bb37c67e511e8d8149a": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::map_fold_num"
+    ],
+    "837158c57d1b343a1712f263b9a7818fa7419917c3273020f3c56bfd9ce498b8": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.is_git_ref"
+    ],
+    "83f7e6065f54f0bcbcbd2f1d667fb5391a1969327e29186d79a91c4a413b10d8": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.put_json"
+    ],
+    "84461336ad5eecaaea83c53780744f6a9b090d1946b54348e03d7b179af8e7e2": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.add_struct"
+    ],
+    "844c94a978078b1cb26bb81826ee319b0b8045186c64d662f689958b2fd4c640": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::retire_before_return"
+    ],
+    "84d0148833f8029839a690846faf8016b7f711a571c772626696fe520d31004f": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.defer_mark_block"
+    ],
+    "84e466c4d946c142558f5ff0fe425da391de63d8d405c2b502c83802759921db": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.try_release_payload"
+    ],
+    "850bd065c42608111862fee4923fa555ae074f6beaa878a79926e6b5c12709da": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_fail"
+    ],
+    "85b1103406d87c4ca6861592c309e3cc50c5634ac25a03abff6ce9aac28d4738": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.del_base"
+    ],
+    "85be5e000af0b9db7f745145d936c7c8b85b55107dbfabc78c01f47f4cbf46a2": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_adt_find"
+    ],
+    "86005dd428e69f0401c77b6b4f81d7f0307a32943504d49cbfd46f12e4313269": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_cmd_token"
+    ],
+    "8656651849edee159322f50f4f8e61d68910e25e9542b40ba2b4857e48162533": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.add_trait"
+    ],
+    "86a588a8abefe240a9b177bd0f1f3a8eef6e1ba7189c3a56819f196f60a0d725": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_shift"
+    ],
+    "86bf5a60dbb83b8af8561e65e3e780392b704ca3222199fd1d4d77a28acbb659": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::tnumeric"
+    ],
+    "8723e23a3c6bf6ada417952c4948f10d91c154566954b10b8234e40ff0a70f4a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::closure_capture_index"
+    ],
+    "872877a7ef4f511684c6be75806c9b2b5d4b203e0586cbda0091a03383327150": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.io_header_mask_tail"
+    ],
+    "87e470ec71f924d29765953917bf03cb2c3b43d1140e2f444abc6ae79c11cf2e": [
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::MapBuild.check_call"
+    ],
+    "88b2e996912eca12cda5fcdc64ae7176a6016a5d536a8bb170b9a3acae5cf77e": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::stmt_owning_struct"
+    ],
+    "88e3bfa070a3601cf83c3ec68bdc2458b49ebe549656c4a4f9f995d8f2d4035f": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.struct_def_ahead"
+    ],
+    "8918bfdc59373c16454f661d416504fcdd28dd61c798c706d3d14369f23a44cb": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_brace_init"
+    ],
+    "89541881ed3454c01f8c359d4a0af313a5feeb3f6209432d6ffa5cebcc168baf": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.find_var"
+    ],
+    "8956d2566e91d10ef6e660dd460221ab5d1a176506631d9213c49448d939a768": [
+      "selfhost/ct-ast/frontend/lex/Lexer.h.ct::lexer_get"
+    ],
+    "895dc82ae2cc496920181315189377f2375194e71bad0376560052cbdf9d24ed": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::module_get"
+    ],
+    "89835a4909a9f4861b45109a1fc586c351c3f5d3612ff2f5d45b6014412ef372": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::parse_support_get"
+    ],
+    "8ae671555814a804a16a5b639fa847c69f17fff58f6049f1ae7e86b79c1743d0": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_ensure_dir"
+    ],
+    "8b30be5b8a84d808c69559a53106a095a7717b1b87820c236f7a1c4d0c431750": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.inst_static_method"
+    ],
+    "8b8d5e1de8978ac7d981bf99d9129f1fba970a77acc1fc573a7e061dcefccc07": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::src_has_prefix"
+    ],
+    "8bc74bc458c4e155f5d21a8ff4725cdf3339a6c1eca7f004d9d4e0757ba7c0e0": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_trait_decls"
+    ],
+    "8bc92105f08b65c04c8d47a66e4a05fe55e3c925d78a4e57abb6635d97c5fe87": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::Init.type_needs_nested_init"
+    ],
+    "8bde968bbb4014432d20ac6456356ff269ccca729b7d50a96eb53e3f50e8ab4b": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::impl_match"
+    ],
+    "8c33b5c138dee4f0055a7b447551a2f74cb3ac9723e874d63bc066bc8a0267d6": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::inst_elem_foreign"
+    ],
+    "8c7f8d76fb22bb9e073b7001f0e83d537c6ebc7d0d8c0964e863fd418c383e18": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_param_type"
+    ],
+    "8c8ad463d059541be4c7d10a9873bd8e3a12b90278ec36b58318b0b0174bd667": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_map"
+    ],
+    "8d9ab8eacff5a0a2f37a5873657d8ff06261b139473fa59eb59cc4daeb0986b5": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.container_write_check"
+    ],
+    "8e582c155df9ca52f305566d4e36835029de19c270dc2266ab8163c9d18c1219": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_mark_aggregate"
+    ],
+    "8ea9b5692c19f7ba2710dbe96cdc01e3720080989c5eddff35c3dd2133d06e11": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::closure_copy"
+    ],
+    "8f169e6e6c25c48aeaf112bba0931be428376f021187e0957d268dbec0de50ef": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::trait_qual_name"
+    ],
+    "8f2effb7b7467f33adba10b76b13aab075137643fac8be8bf49e3b5224c63496": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_jump_base"
+    ],
+    "8f6f092e3a9501bf77754c89939d3e7ef0493d1e70e70be5f7c5d9bbdc0d4841": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::symbols_grow"
+    ],
+    "8f7498f4525d6af4b2867ce0532550d8daf082cae712a526d705d76fb1950ece": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_last_error"
+    ],
+    "8f812e87eee291d76cde399f7b2a4a73cd5750867c98aaa731ff25a4ea53184a": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::impl_inst_bind"
+    ],
+    "8ff33ecbf737fe48e8da626184bb665545ba3c547b029a0d743860808d4a06a6": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.add_meth_ann"
+    ],
+    "8ffc64329c8395a4789c7de830d82ecfa113ce630c3838869be4c9970c77eea3": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_inst_split"
+    ],
+    "9035f7a3475c786e14d9d0a8ef2f7dfd489a7fd15770365b6be6401bfeedef62": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.note_slice"
+    ],
+    "9089dd0c166c65ec45fa20ad0d8f8d28ec9c0008cc8b86ecec2845dafedde756": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::sha_hex_ok"
+    ],
+    "90b7be5c2503e6f707243b40b1138f5bf223d4f2325f384f469710febf0d1f7c": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_leak_warn"
+    ],
+    "910f1718d09bcea4cd4784a28e74fb22ecc9ffe4f86a45b9c09afb219536f58d": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.inst_subst_type"
+    ],
+    "915fd7a55b51cc028bed6896c0495a143063581a59d6e659492fb9b5ce44ef5b": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.add_visible_type_alias"
+    ],
+    "9169dde0f5ef58f332209e848da31930d225626b9b381c708d58efe6c76ac02c": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::adoption_default_only"
+    ],
+    "925b76052b619c3169c41b1c5d113c0f1752d8c123452d3bdc51cb1000bd9c58": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.vtable_exported"
+    ],
+    "9273c361bd366e4f20629ef709b25918c7578cbd1c716cd260e9ac7313e43660": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::dims_depth"
+    ],
+    "92fcad6c6e54b8104400391269febf0fcaf260f6423d0c117e082391d1fc8db4": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_trailing_defer"
+    ],
+    "93932c14d69d8e952e97180172a9584dfad687678961175eb38ae17ff2bc9efb": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.fail"
+    ],
+    "93a1dbe10bbb69c6038bf2b5e4f84d4cc8d04e6f832df239df17c632ab0b146e": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::sha_collect"
+    ],
+    "93cc6339c60faa17d785bc02391e843d9e98174fb35553cd4f2a761d2b117f53": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_impls"
+    ],
+    "93dff91f9c03bfeff5b862a90e3a913044aca6a9787b9a0015b409edfd32fa86": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_label"
+    ],
+    "942912740f00f9c1ff1faeb17963ec094959955836320186e1b17d27560d9b16": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.fnptr_ret"
+    ],
+    "949921a6625926252c15f25da389dcc220531837f44b1cea280e4b870863227f": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.get_one"
+    ],
+    "94c2248e8864ea9cbabea409b0f5300683423d903a4fefb18ac2736abd641f0c": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.rewrite_init_text"
+    ],
+    "94d24efd321644050aa95b8278ccfa618c1483ce28fdb86e870a4568f034c2a5": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::check_borrow_param"
+    ],
+    "95447fdade97583a340d4f2f64bba532398c2275562c22585b2dc9fd5a1bc4df": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::word_is"
+    ],
+    "9569c9e5bb922273c2d0e490e6b455ed5579639fd7d5bfb745c48391a63450bf": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_bind_tables"
+    ],
+    "95b297672cf9213dd8a4c964d8e74765009b7d39c5e666e2ef79638c83e62314": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_cycle_warn"
+    ],
+    "96b8f9550861079485fd7b9770f372490b7a8cb3067d863bd43b05123fd90e9c": [
+      "selfhost/ct-ast/tool/cache/Cache.h.ct::Cache.key"
+    ],
+    "96d1a78d8f09fa6502c5473d1ca4d54840d7849d6646caaaedcf50d6e0f9bca3": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.maybe_box"
+    ],
+    "974b63ca2e4b7fce20afe032976aaa53467f1606fc1ee02ad187823af85c47b3": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_diag_set_leaks_error"
+    ],
+    "97837b90a8f1d0721ebbdea7b6b20d872fe5503f268e685620df20d9382d129e": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.box_member_deref"
+    ],
+    "986b2f4ca1912fa439ec7984ea597e96acc64fa695b6c951e7d95e27067f6d8f": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::borrow_escape"
+    ],
+    "98827dd436951c9b19c6860ee153e6860df4a1561bcd4cb08ed631e6ad3b91e6": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_decl"
+    ],
+    "9893c6a18c8699384737ad5ea79e461bb4ef74cce18a180ac4ce7be7912a1320": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.reserved_name"
+    ],
+    "98bdb92778fa074919a4f9884c14c1fd50a12cf5edb5c3e3beff4cc7cc9619ee": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::enum_adt_ahead"
+    ],
+    "98f9e7b131c1f808b41c92e81aba7cc2a264bf55d504c6e69364dcd94a0464cf": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.argtype_mismatch"
+    ],
+    "98ff0216d72dac5f22d082f3cd3e439d16a84d90fac8136dfcb043421196654e": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::record_io_call"
+    ],
+    "994fdfe093701c23ffb512c5b957a068cdb6f71c1a7abd39a3651cfebc7ddd67": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.fail_emit"
+    ],
+    "9991f59d3279a493133c7284cf1f450166baf4d21abc1d108d075e32b05154fe": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_type_name"
+    ],
+    "99dd58fb5910e47877646c83dc66838c6d60d066818aa28c1f2bfa51f4c15d3a": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.io_first_name"
+    ],
+    "99e9027dcd2094886b39f1b25d038586b7476131daacdc9f65a919842293de50": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.leak_assign"
+    ],
+    "99ee728bec4c84d3ec2c828558a411f2ee864e06e236359f7f458333b3a00a9d": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.uninit_check"
+    ],
+    "9a0d34891f8b1b39982455f709968f02c833720e1ea70a5bb039226ab89f4060": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_borrow_warn"
+    ],
+    "9a165968221cba53d3921225cc4ad3555938f6d4ee5d1c03d90f6efa4b41c738": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_lpush"
+    ],
+    "9a73117f853d46fc475d81813cd756e059256cb0d180d4cb841a8f93e9c0f1b2": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.custom_index_method"
+    ],
+    "9ad41c48364b8567db99172916225f9364321a23e41a4b03720578e05d986452": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_bind_parse"
+    ],
+    "9b01a2cb9026ba667c1c7bcb2088ce7d2992daa1c297c7a38c89a46bec8ec81b": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_verify"
+    ],
+    "9b7aa65cbb7411e369709fcc654578256c1d48dd07780974e658cecd9a6f990d": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.fail_driver"
+    ],
+    "9b7cfbc1d4f971ee3f64cb5654c6fdf9c0faa542c6a8d42d91a4cb55a2c59e89": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::impl_emit_method"
+    ],
+    "9badba2affc57223a13da267f6d45210861811d180cd2a07ded6971ed65b066b": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::ct_pkg_install"
+    ],
+    "9bb9945917d659522212914b8e55ebe0b094fdc938013ccc178144fe63c84781": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_closure_decl"
+    ],
+    "9bd24f0ed61ee344e476d1d8de8c4245de4cc0f18aed3382b9a03874ced1fc8c": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.slice_brackets_ahead"
+    ],
+    "9c8a13709c93b733357017a2bcfe56e9733865ff12dbcaed60b5638bcfeeb0c1": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_amb_warn"
+    ],
+    "9cc01e07dc1000cff882210634fc8301b997f3312d21bef693075e2f2d8adc2b": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::view_mark"
+    ],
+    "9d089b592441138d6a78c370f4d88972f50d523af3ecd89e7380dbc221355a9e": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.foreach_ahead"
+    ],
+    "9d64c731b9eb2075999895b63c242b141f6b904ade47fb883592e3ff282afb09": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::stmt_get"
+    ],
+    "9dd3d0c400634e52ae9c84c95d03fdedccddf083775b9875ef3a1624dea49131": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::box_emit_release_at"
+    ],
+    "9e25887bcfa57572d3d7c117ea97d5b5a1679a1468387352333a10d2b2c70de5": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_error_line"
+    ],
+    "9e3098ac18839391a3025c436737be4176670347674af59d237e51520590634d": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_cycle"
+    ],
+    "9e35f887d1140a0e47fcc8e4daa2ce72f9dec2f3964ece711dbfe4c76e1aa86d": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::index_json_err_list"
+    ],
+    "9ea260d96e780e3b444a56fcaa07809d4a4a676eed94cb58154c5e21f1151a3a": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_arity_warn"
+    ],
+    "9f3462622bfb22af913c452fcda30a0caf024f1e7519620940c1db633b5552ae": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.needs_init"
+    ],
+    "9f84e870f2cefa026c0904861278b111b3a25907d3a46eac020405423de581e7": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.write_abi_header"
+    ],
+    "a080dab2d7b2f563751adae559d5da16dc09016ba4e6df45661580e9f651b3dd": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.concrete_struct"
+    ],
+    "a1038bb8256ee684b9c45bbabe8f6ea409a5794500050ad371bd384911eab529": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::range_bound_value"
+    ],
+    "a10e69d7a78c4a39647fa0883011de335a5f1e62c15a244ce9d47b573a00efb7": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_program"
+    ],
+    "a174960c5bbd92e35d9eed5be027872f71abe473d2bbb6154403c744f96d6c28": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.u_mark_lvalue"
+    ],
+    "a2d4ef1dbb9bd853f77929a24b647a9f5ac74d8604f5fc0528a114c045977b35": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_mkdirs"
+    ],
+    "a314913a5a3dba1043bedf21ff0d50e4f6a461969d449c3bf9e81ac4cd03db7d": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_unit_init"
+    ],
+    "a391cf95507c64ab82374c6ece4d89531b5abb5e902125ef72fef580852a90dd": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_push_params"
+    ],
+    "a3b0e5e84eff9ff655746862fdf73ca8fff2a923cf2d5efab4716138d476ff4f": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.attr_pool"
+    ],
+    "a522fe327b6c1be7b721daab45eca7f14d02078d4c5fd8df3602cf2c6cafa8ec": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_type_decl"
+    ],
+    "a556b772e6c70831d2da6405d48b52c480bc82f559719251357fc6c1c009333c": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::iter_hit"
+    ],
+    "a55cf95ed2b4eb3c75de1893d3c17cfd05414cf9cc82ed7ed07eaebc67f00f73": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.scan_imports"
+    ],
+    "a6480ae53c352af4268353d3d0d1a4c26c50e4629a2cd8a8123c7df354feff32": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_text_has_word"
+    ],
+    "a680f2aea95288554955d6bc72e3c6e46d7d933c39a618c7c11ca197b3486f67": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::closure_var_lookup"
+    ],
+    "a6c3ae0f184f00bb2a37823baa96620862f984efb49c9f98ebc265237f0e7a0a": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_verify_lock"
+    ],
+    "a6d99164d1ef111ea02ffc87d2e9891f465aba9137780828a028b803c2fb0402": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.resolve_type"
+    ],
+    "a6e3341a7364b9b645ce08f5964d5c11a7ecc95a8810a8b57c84b33b3e73cc84": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_is_ident",
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::mapb_ident"
+    ],
+    "a6f7167a77becdd5cab6b1b78a13d593a6a5c53107a8c73961b54b153b2040a2": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.builtin_live_for"
+    ],
+    "a70f88fd3e27c55fe7757980e713ce1faf3baa6f8dde0fcbc25664fc24e5f0d2": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.string_raw_write_check"
+    ],
+    "a745d340e2402174e449379dc5ed414bc751f92c8878c3c08276edbf9bf48c8c": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.leak_scope"
+    ],
+    "a74c5ab872afde987ceedf1a95a703452c1c92ccf29195a62882c40f5b1e87a8": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_adts"
+    ],
+    "a78690ca2ef047253c1cfc6d3a330cf7cdabda35854d5b788dd3ff454d46faa7": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.defer_flush_block"
+    ],
+    "a79c38b286cf74aaaedf561f3d93935e9332e15dea4117ab8fdb64d2013a5fd3": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.cache_order"
+    ],
+    "a7fadd221e68c4489dad77ce47bb67bfa6e908c0d91489920cfb438f165d6147": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.inst_method_ret"
+    ],
+    "a803499b15e50cce6a68ba832da3fe2a6ae09f22c7b433f9c2151e6ee5fe46a8": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::has_word",
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::src_has_word"
+    ],
+    "a837f9c3bc9b8e2cb07cf5f3203429b91007bd55c7b07ad33ca13fbe47da5fd7": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::sha_sort"
+    ],
+    "a8d36268a8d0e98e608ccce35fd2455b7afa36d01d3a596fb5cae1fbc0fc9695": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_check_requires"
+    ],
+    "a9143082b1461eb50087906e6b4f2fae600d31247614579ce77b3009b9889842": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_struct_impls"
+    ],
+    "a91906860741b16a7c8acfce216a18ab261907a17623ac450edb5c0ae3a51cc4": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_tmpls"
+    ],
+    "a92001e4f5dd9295a32fbc23f90219fb25da044414081cc9006173e2ab9adc31": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::range_bound"
+    ],
+    "a931842860034143a3dd592590eac59cdf2564a282b5a41236ee019a6ece0e72": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_block"
+    ],
+    "a9695843c5a0a8de84b2072e0af58e2fee79f995afdb56a80994e4a4f7cb1955": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_rewrite_init"
+    ],
+    "a98be7e75a57717bbfd648cf6d6e9f16342349230f2c3d72ffddb71c0546a502": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.find_trait"
+    ],
+    "a9ef6aa067d79f1322899c5d77dae9a53e942e0e4d1985a45250b65f0d4ebb79": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.version_parse"
+    ],
+    "aa300809583ec9810d6d25b10f6daba04410863407d6473604ac9a6736e30f95": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_norm"
+    ],
+    "aa8ad7ff1bd27348804119f9a5f62528244772f694cb15a192df1b1402c47ed5": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.ctype_expand"
+    ],
+    "aad0c8534e97b2cd82f8b8e2433e810282f02f8d95f3f6a3d1d38a47b6a4d464": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.missing_return_check"
+    ],
+    "aaef1a996115e11299e69a3552fa15487efbc5e22999861e252e0d2f03783bb6": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_io_call_count"
+    ],
+    "ab5bb888b75bcbfa7f01cab9b7dcc1acf85d5fe29fc1f93219cb7fe226d4f44a": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_enum_def"
+    ],
+    "abc0f29919484e74250f3f13feac5cb3e1ad252c96c61130423bb06b7042aa73": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::tbase"
+    ],
+    "abcd2cf575b0f316c9a51a615a4870f0de9ce8dca375e70b8732d4d2814ba586": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::ct_driver_bind"
+    ],
+    "abe1811b7a531906d58844a93c0753f78aa87a3e52d689247a1a94b16e97b761": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_sem_error"
+    ],
+    "acfa8c639e3c0504587d7e6ad6e2569c4ac003bd87c401539741b9d8547f3145": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_index_verify"
+    ],
+    "ad097c343c9a41a1a089cc124ccff10f15bf7e393fd61c1efcfa63e912eafc5b": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.errdefer_ahead"
+    ],
+    "ad471012f3ef04bac867e314a536bde1c90134b9e81466b00bea0e2bb2bf4daf": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.report"
+    ],
+    "ada295bcbb9e9a19cc4a9fc4b89d5ba17472501e133fed1eff8ef16405a03a53": [
+      "selfhost/ct-ast/runtime/arena/Arena.h.ct::arena_get"
+    ],
+    "ae1a763a721faf8c3157b5aa117d019f3e0a98e1c4568a5dfa178885eeb795e8": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.out_index"
+    ],
+    "aec7df3128e9c959dc881b299b80319e92fbc6b5571fc4fcf60f98835c6ec268": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_lock_keep"
+    ],
+    "af2e1d3085133900183b899df3ab7768fb735fd4185c9805973c7912a355883b": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::closure_is_returned"
+    ],
+    "af67d4fa23f4a608da6ae9a58ddd86e804f30e3d71121d5e2251cfcf74e25427": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.write_map"
+    ],
+    "afce2e587de4f25ab018f691a812e58b322a14c2e79cd8b9913fd0cd1a12a025": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::mark_borrow"
+    ],
+    "b04e42a11c25154df2f8be0805793fc8a3eb95292aaa73e071939004ad1c4a31": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_diag_set_strict"
+    ],
+    "b1179125afaaba180636aa8893124238368986e4f79d21d0f145b89e0d434938": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::init_has_elem_groups"
+    ],
+    "b13918b03fa45ff8a05cdff7db51f14e513a1fd3130cd8c6cb705a0c24d7594f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_node"
+    ],
+    "b1b1f8ce222253e40e716a00c3cf09bbed69473d10f773898e942f892c485ae5": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.arity_check"
+    ],
+    "b27a95d116da6894c9e685f71e96af0ab750bbb00daa600aeb4b9b412aa8de30": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.new_node",
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.new_node"
+    ],
+    "b2b591b277edc9047dd80028892ff76b762db63cc5eb7796c2d59d98c774cfcd": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.leak_decl"
+    ],
+    "b2faf727de2541b6839a494d73d151759188d2f53f03693964cdbc8bbffba92b": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.get_git"
+    ],
+    "b38800c96daa6a64f05ee6d4604f7bc9503e6ca953526a5d5b7b7b5ee29be439": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.rewrite_init_text"
+    ],
+    "b3aa91dba32da9a39e8f18dd73d075034f7791b64d0da61281c452161adc98eb": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.rewrite_init_names"
+    ],
+    "b3fbb3275a3d919d9084d600e4d24e7e601a0a098405feb35ad0ff5c366046b3": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.skip_import"
+    ],
+    "b4535f631373642526637babd34c470cc6f996504dd2748b3aa8b071f87b38c6": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.adt_ctor_ahead"
+    ],
+    "b45a87920f7db37bd2978b08d79436b0b293141036b6641c195f90f8c57c294d": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_tmpl_find"
+    ],
+    "b47404e270f803f7878fa9c7ae6070f4b06bf69a61397e1b38b41bac5332cd36": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_type_alias"
+    ],
+    "b4d89e91a490ded6435d96e8ada2c5dc95d50a399c2e32ab3f8a91bda848d728": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::trait_default_edges"
+    ],
+    "b52be996ad2cdde349139105ce3835d62d4dba768fc0c7f30d1d1304ee015e7d": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_tmpl_add"
+    ],
+    "b59752f77ed1123d9e8135c529d2fcf179eaefd42ebe8ccc84725d4823d9f5da": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.expr_type"
+    ],
+    "b6d9a4680fab2317fc26c51b6a68470be26f03c071254adf881634d97411fb07": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_clear_builtins"
+    ],
+    "b6dbcd4d0d78d49aba1bbe3514ff9c50624fd7a0b4fdbb0fbb0228e0af74137d": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_module_io_mask"
+    ],
+    "b78fb398b552da94c0a0844a2c5b0f9e81b41702a83172bd36fccea4a0e7ac45": [
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::mapb_all_caps"
+    ],
+    "b79e379f6e7240b5b241f2637e735d1d32c97051fafe36ca9f1997655f452ed8": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::range_digit"
+    ],
+    "b7db806ad3f17cbeccd2bb507feee7b3ab0f02cc57fd0fb741d5b07e3650836d": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.is_iface_type"
+    ],
+    "b7f3b488318129d978829a9f6b6da8e878f67b7732a95ce4874b69f019ee6cf7": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_is_tparam"
+    ],
+    "b844470a5ab673680fc240cfbe0a4fe67ba60cfd5965e576700c007c1405bfcf": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_closure_arg"
+    ],
+    "b85d9e5c5c4c6fa97c4aa8168354230abfe5bc60de6813597ed8897d18e5e586": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::closure_error"
+    ],
+    "b86717dc6ada0e86672de93b9bc22085e836f9328e43f039ea049eacffb610d7": [
+      "selfhost/ct-ast/runtime/arena/Arena.h.ct::Arena.str_put"
+    ],
+    "b86f2a2033db12d865f68d99c9d8d40b9d2b3129d87e088c65ff006a828a18ec": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.decl_type_compat"
+    ],
+    "b87bf39d2015e990fe631f821cb5b24f856745414a47297b81704b05b433671c": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.copy_file"
+    ],
+    "b91d8dd032f4fd0c218106c18683860c0ce3384df1a13e924e02ae72f268f1f2": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::sha256_update"
+    ],
+    "b92437ad0795944c6609509f59298109d84cddbd4ab90d724881c7e3c9cc48c7": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_shim_ambiguity"
+    ],
+    "b9252719ae430fcaa2ef3fff66ac2e9c0a3e1582b42ae14f89ca3e493f5814d9": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_bitand"
+    ],
+    "b957f555b48446b1ef76b2a105581aab8b0c8d2c18b49d98022e7c2c9527388a": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.leak_delete"
+    ],
+    "b9854165157315bff8c295e8167b3e121c0762ae966a020777fa9ea839d71e0b": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.body_has_jump"
+    ],
+    "b9e0e46456578ef4db53e919b3f0cbc6e472a9dd81a97a6bdfb68aceef2f5e9c": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.method_trait_amb"
+    ],
+    "ba04c8ddb46d5e9807e038f70bcc25397e3450695fa5167fc47b1d0cae010f96": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::parse_get"
+    ],
+    "bb653486b4c2697ea9e3c1a28e215c22bf6976bf9e7d341733ac640c4e28b797": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.type_alias_ahead"
+    ],
+    "bc18e3efdd2a21b0d225fc5786d957beecd2831af960fe51cd7ce03fbd08ddfd": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_closure_env"
+    ],
+    "bc3507f6cc29458d11826cc8d432abad7e7d008c8132c3089d54d428ff552403": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::parse_vec_brace_init"
+    ],
+    "bce02cacd3df41aa2b75e62bd80cf86d03276fd6ba29aac29bf1b458ada4e687": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.decl_is_pub"
+    ],
+    "bcf0b016a92d4314ec589225edb2b6d84713f9170271d16972c890d328668df8": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_global_extern"
+    ],
+    "bd0438bb5da3001c6b0e8b3c6af51176a9161632d03b7c382ff7aeece2f7b012": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.closure_arg_check"
+    ],
+    "bd2b00ddba8620fd570c1031612f1fe5aa0322d035f7b5453951b929ac6ebef2": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_bind"
+    ],
+    "bdf08d7b388ba379575ca43d8b2c22ae33f94ed6a3637235bf7a831fa0eb9ffa": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.errdefer_own_refs"
+    ],
+    "be07828dbe1b51b45e9c19e87b4f59f573029db32cbdb4111415e9c67fbede54": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_vtable_fwd"
+    ],
+    "be0c2c0ddb5d42ee27df89c88ee57a600acd226319cc3b0e8196fc9e69593745": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.closure_bind"
+    ],
+    "be59ad2bd11c3967420e43258a723f0c30ad714b1639893479ee43875be0a8e1": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.into_member_check"
+    ],
+    "be7cd31e74e06fb0515416259c57dc770bc6ba0cf3fcd641580ae10f09dc1241": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::impl_pat_split"
+    ],
+    "bed06c70dcabe4751538c65101fa899c3c9fb0f428cc8ad782de84499b8b9a35": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_impl_find"
+    ],
+    "bf8cda5285d0bbc963c54a27079a4a45723279cd547359027353167940767766": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_case_value"
+    ],
+    "c013ca367ae46f461677b5439d85d55231eff76bff5a394c07f5c63c41292307": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_struct_insts"
+    ],
+    "c0359ddc43721d82e7cb7d60784c41caf5353a43ef408fe236dfb2e2baf8a6cc": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_norm_path"
+    ],
+    "c0426be81b6516c4acad611593baf477662664ecc7451ff23b3727e791cedfec": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::ref_member_flags"
+    ],
+    "c075ea7af11274cdbaa2a4625fa5e7e8decaf56c74225a590aa062c2041b922a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.custom_index_label"
+    ],
+    "c07f1e64253966be41aee12e3e6b1dbc3464cd513919296a320390415c775d5f": [
+      "selfhost/ct-ast/runtime/arena/Arena.h.ct::arena_grow_strpool"
+    ],
+    "c0ac4adc90fb4a74e8efcec8b9eaa0a9df99557eccc8502922fe6c80d848a361": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_pat_arg"
+    ],
+    "c0ec830fc75fa622945a07819e7bc5273071b9fb08c35ef2c9b5b05d88c9d215": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_impl"
+    ],
+    "c13e5e745573084658d8fad4d99da35578f64217de1ebfe2f3dedd87a1f09c6f": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::Driver.run"
+    ],
+    "c145429a642c07f32e26e17bd8a0ea60887421e699e7dbd3221104dc7b4da74a": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.leak_return"
+    ],
+    "c14b20504c4cc49e732011fe0733af1584b7712c78fd1df9e5caf1ae2b05a801": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::write_unit_header_body"
+    ],
+    "c23bd9a7acd42975f8bc70ae307bee8c9d9473690eafa3d576b5f80c687df2be": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::closure_match"
+    ],
+    "c25ea64491128932efef791d94e4be65df3b9247b0a9b47caf22d344be1e1c14": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::is_range_index"
+    ],
+    "c2ae7212b7354affcbcec91961b2c6d18ccc7bf41b5aad45a24cf2701684de93": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_snap_find"
+    ],
+    "c382e3729f421b87c1a70b114f6d68d8a387bd582561ab65d1371efedb531f92": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_match"
+    ],
+    "c3b2c90c8cbc86328e5223d3505394a371c3377a09c38fff6c2a8ebc1e7fe051": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_raw_text"
+    ],
+    "c40bb43726ee982df68807bb2ba065baaa6d0a4ec5a5b8323df5a9c0ea35ec3f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::map_actual_slots"
+    ],
+    "c429de5bff32123d1227d0dde7a4a98ac99d917f19db886af10d779662008bae": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.c_boundary_for"
+    ],
+    "c4436fd8594ebd2c8a0235be99c8cb667d877c919a99fd80a047ca66e40912db": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_unit"
+    ],
+    "c4861ce4bd4d5341cffb557619775b9b9847d02fc05dfdabe04651c8d941e405": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.leak_assign"
+    ],
+    "c4a52788a40db4c3d28d0de99f0e73eacaa2abb56c2070cdcfa6bbea93904d35": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.git_avail"
+    ],
+    "c4d29fc70fa92fd2cd8d1b78ffb128c7e5a3cab8a8b13aeb9c843b9fdd02a570": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::box_type_owns"
+    ],
+    "c628036bfceb905cc0cee8dd275dd864c32dae4edcdf49368fe7cd3bdd5b22e5": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_view_ret"
+    ],
+    "c6c6063ab016c86108b444f64448d44835190e856bf0da991350d7ab7dad178d": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_indent"
+    ],
+    "c6e9cdf146124fd29a49ac3eac85be87d204e9f4c0e11570bbea12d3fc3470ed": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_generic_subst"
+    ],
+    "c729564780d255af78ba1ff4626001cf734eedc750f1c25249e1ee27bf7e5e0b": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.git_name"
+    ],
+    "c7533ec8b2931160c0f226c543136d3aad37482302adf772a2c16388a809890d": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_header"
+    ],
+    "c79170a0dc8382a9fef645876f90836f465997edb696a45a426ee6fe84653d0b": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_push"
+    ],
+    "c7c22727c7baa2a5c59719fe0a33400cb63fdb29100b5d67c50fc8f28151c2df": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::Init.emit_vptr_stmts"
+    ],
+    "c84b29dbae93580f508100f3ad8bf895433a06602076228632839d0b34baa150": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_field_merge"
+    ],
+    "c867f2fcedb745e76707dc746ab87f8954bccfc29f2c64601c3ace8658e34c4a": [
+      "selfhost/ct-ast/runtime/arena/Arena.h.ct::Arena.alloc"
+    ],
+    "c8dee643011e8be6566add27c0784d56c6384a2b5efb9317a37f58230a51757a": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.amb_warn"
+    ],
+    "c8fe83baa05fc8b55b9ecc8b669c950f5ee5422f652c4356ad9a3db27f6f95c5": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.is_type_word"
+    ],
+    "c9fbe70a0c5ebb61933acb4ea04021048775668f549ed030a89780b9c551f38b": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.opt_subscript"
+    ],
+    "ca18131e0ca96088a23c90c5b85defae3cc6494fc76769abda69270dd68fc406": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_string_literals"
+    ],
+    "ca34bbf48fcaf26815aedea912dc674b9d0e272d1abb86d2aab293f42f02f7cf": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.build_main"
+    ],
+    "cad09a37d692803419788fd6181cf5c550bc627d3861c4182921cbcd971e09fd": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.container_index_check"
+    ],
+    "cb75faada79fed361746592159d9bddf65907a7892fd1552e1f0b0ceef017fc8": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sync_alloc"
+    ],
+    "cb8c6572d2b6b7c209cf8704cba83710fa126001a88a3ca83bcce3f34810659e": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.func_end"
+    ],
+    "cc16b405b2b4360198589fc745f34849e46c964cdd2176ee927d14c670b2d3f6": [
+      "selfhost/ct-ast/frontend/lex/Lexer.h.ct::Lexer.next"
+    ],
+    "cca19555e47e3392063da2649d83314eba842cf1aa81a61a380c5092ffc3e59e": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_append_words"
+    ],
+    "ccf121279e6725e6cf1b3546bfc1467630ad40f98c926e99409ea32c3aff0020": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.init_raw"
+    ],
+    "cd32d3958da919df5c87416febc6a17a4be8aa37d9bfc598447b7c5c86f6d93f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_inline"
+    ],
+    "cdab93c3146656afab05cfe222e8e9831f17895f0660aa84569b499916ca1c34": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.hoist_rvalue"
+    ],
+    "cdd0e346397d61ec07c1db5f97bde1f4d3bd58fb142fc33eddb4cf572b76a958": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::impl_arg_canon"
+    ],
+    "ce2246de5b110455edd8912ec1461d4871b73e6b2396be0f428b9443bb6087f1": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::parser_st_hook"
+    ],
+    "ce261334e0abc02f4bbca5c68b2c5a8ad66be87a8cc0ded9f9cfc3817eee0846": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_sig_warn"
+    ],
+    "ce52c0b368576693e57f09cb233f96f15254e81aa5741bb6eef60aaa34346f91": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.map_arity"
+    ],
+    "ce7ca047ec2303d6ee641e4f99408ca14b1d74ef9a81bedeb0fd3c53e62cd414": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_type"
+    ],
+    "cf41c230dd439a57b34496972949c20fe1694ed37f1899688615b4f2c2bcf410": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::view_source"
+    ],
+    "cf64fbe5c5a0406a608b0f18acc2f8d091361c51d75c8d4b8fa4500423136f48": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_json_str"
+    ],
+    "cf73361bb9ed315872209b539fb70b061ecf8217484c30587db7bf7f5d082dd3": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.get_main"
+    ],
+    "cf8278d30b4e7e630bb689e8de3ab75482572237c4efb75bcbc9105e8425786c": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_branch"
+    ],
+    "cfe94e1dadecf3a0ecbd55baabb707c40c00b82657e78c0410ecfa53406e8ef1": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.record_body_ahead"
+    ],
+    "cff5e34956a164552ac317779e0e6d62890b08a603cc3124ff94f089ad8edcb9": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::c_has_manifest"
+    ],
+    "d003dee3182817110e59ba769e0590feb78d6d344de9fb8c4ed11807299ba62a": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_adt_from_type"
+    ],
+    "d0590f08084b0c6c9451fe78fde8fd4f0314a1426a19531195985d0cd092c059": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::Driver.default_output"
+    ],
+    "d0880a3bdd47ccbb293b3563c7b869da62bbae228a1fc64a4aca2c317dbed1da": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.path_dir"
+    ],
+    "d0f980ad003867b37b3a393aad93e2128cbb0f0fe8df09bd05918d738356a316": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_record_def"
+    ],
+    "d100acc7c10b04fbc39f73f7683f8fd57d09e865710ad3284adea925feeb979c": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::expr_iter_pop"
+    ],
+    "d14b30b1fa1864a77a75cb6a8fbf8159ab550213e4a9add48ca7e72db21fc9f0": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_lfind"
+    ],
+    "d15914c360f3a7f88c03646f5d118d5d22756601fe1e1afdac67a9e99d704547": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.skip_body"
+    ],
+    "d193d315204f82fed70e708d34b91d80a524286bbf494617ccd7ea1db9dba5e2": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_value_for"
+    ],
+    "d1cc98844916703adf1256503527868634d670bfbdc8eb46df5b282f19a8062c": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_ref_arg"
+    ],
+    "d1e9bfbe0d03f554dbf64e0acd8de10b116c431268e3bf40f5c6ca160142fb6f": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::ct_pkg_verify"
+    ],
+    "d1f58ad6f6b6d7dcc98cc4eeba94d2b247aaef43615761fe97e7c35ad8a3e379": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.emit_program"
+    ],
+    "d2593094cb0a0a11ef113432e169a9b95827607370c59ad6dd19b29f6c1b7dc9": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.type_append"
+    ],
+    "d2822c57850f5c9d5f30cdce0faee6a12280a895fa496393fadf2cf5f783fc6b": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.is_decl_start"
+    ],
+    "d2fb098054e0bba1b37080528168d12de6cceef141d56f45e1ee90ac066025c5": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.split_spec"
+    ],
+    "d33ae4d4e562adac2841a6e381eea535eb3dfcb4a68b89aa733bb1cc60eba3b4": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_recipe"
+    ],
+    "d33d8971e9a1446f00027e27da24ffe88bd7aa8557219fd28fc2a4aa91e94ab6": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.add_bare_type"
+    ],
+    "d3eeaf85493eade74e4d848b52fc01310da6f3c8c9cdd1aafec73429663ea34d": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::inst_enc_one"
+    ],
+    "d41b30522469c0764a1a40726353bc44f039618b944e4ea41d97ec0586860f0d": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::cycle_box_target"
+    ],
+    "d42f7335855d3ae87d124131e108ce0fbc8f91151dcca1c274a0ed643eeedf4b": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_report"
+    ],
+    "d47f852cafd417daff42aaef22c7ae317e0730b4493cffb947dd2a9227c548e6": [
+      "selfhost/ct-ast/tool/cache/Cache.h.ct::Cache.store"
+    ],
+    "d49a832d41ae7b16924153f1e4d5fcc61d07e5b7187f617abf05af4cabdc448b": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.add_struct_inst"
+    ],
+    "d4b6a855c93a0f7a11cbee466bd10948ec3c6f73040da971577b4b920e83eb3b": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.emit"
+    ],
+    "d5199177b36654cf4f7fb8b4287a3241fe077b66ff442b76e7b36ef6fb00ade4": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.sem_error"
+    ],
+    "d51bb6b2cdbee728251b8de933b8e00f6f1956ee7c01139ff5016aeee10c3b7a": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_diag_reset"
+    ],
+    "d52693597ec9e18b6acfee6f32a08c2af21738d91e72b16af7092bee3122d7b4": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.set_leaks_error"
+    ],
+    "d53eacd305149ccfe8f6e0a670e9c68a2b195d943eb709ce609c2853a7799965": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::impl_declares"
+    ],
+    "d56b0dd4dbc244ef77bd73433891749edd75e1b54abe2daadad08eb981ae5134": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_expr_stmt_node"
+    ],
+    "d6570c6513658582d24368ff58e16dea34254ad07ea4c912e917a41c84802043": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.add_trait"
+    ],
+    "d697ce8ec97348a74ecefcaaee42b2c5402cad3908737d84aa78b69bc86a5401": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_last_error"
+    ],
+    "d6bca53b63bd51e801d705c508934170d997188288bcf47f2328b6d60c393b59": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.peel_ptr"
+    ],
+    "d723d2acf998f2afec6ac8afd261495763fa50da7f9e8e17a8ef49a7919bb3e9": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.leaks_for"
+    ],
+    "d75e39cdc5f7e4103f0d8498a0ea3e4b2324b4a8d951afc183ebf6224102c508": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::index_name_ok"
+    ],
+    "d76f7b3b9c353cfcbb56e5322323ef461b4e2eb83f5b269d8f78acdd55442523": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_postfix"
+    ],
+    "d7a83e4091b7d78fc53d052ffc86ebdb55714dd23d96b88a7aff5fc5afde69bc": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::src_has_box_type"
+    ],
+    "d80c5fd2747aa0ae5d2059e2d12f8b7b9ff8ca274db3288dc4db641eb8c4304b": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_loop_warn"
+    ],
+    "d8351dc4b641f69efbd9c126153abbb2ada9e40a159853a0696a8e4f88dd58eb": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_loop"
+    ],
+    "d8372500c39b569b33d6b154a910637d2bf9ee01fe0b4afd0d70c6db29b3df63": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_range_init"
+    ],
+    "d8450da82cbfed7ad66793329399b3962ff65532644e70445a6c8aedcd495561": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.add_struct"
+    ],
+    "d86b4f13ccf800163cc84f2b21e70f8d16598017d089e22ef943bba8c4c806f1": [
+      "selfhost/ct-ast/tool/driver/Driver.h.ct::ct_driver_run"
+    ],
+    "d89f004fd857f1321379f6f40eb026f53a45eba7c4c5b5500ea2d99e609a7b85": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.fail_at"
+    ],
+    "d8df2ce14cb0b389e7a0804214796c02b504f87ed62c226b17fad9c9262378ee": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::hoist_ctype"
+    ],
+    "d8f79dae0155f2f6a9222b8de26d2ee71a1a67397a3c88185710c7ad3757e6c0": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.check_ns_dir"
+    ],
+    "d907a0bb8562be0f09b877ec4b0f27579daf44b1ea4464f3e80700f2bef5e3a8": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_store_root"
+    ],
+    "da5c369c2848d3a7ce8601d12ee668517a0313ae7819f871c925958cfd63ec5c": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::check_closure_assign"
+    ],
+    "dacc39f30eedb0b5bdc4f6cc8d9e171416cd03a1c2c66db48479c79dd1789355": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_cmp"
+    ],
+    "daf86d0419d9152f8f821032cff651fff92c333c6f02b73b2ae8be651e18f2b4": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.u_scan"
+    ],
+    "db14377928e04d3fdee0d308bbdae6aba0fe556cf720485471b2aa58fd2e5a9e": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::cycle_emit"
+    ],
+    "db77014c1edc944dde602afbbf6f4c623600f398066ed9570654b95d2e5120a0": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.skip_after_error"
+    ],
+    "dc23008329fc0ecc484bd6395743371358510c7585e8d2a3f7ab96ea02769d28": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.scan_forward_type_aliases"
+    ],
+    "dca9f07db66ee095a5b9f608ebb21ba4128b9edd7449becc2e492a8c27628295": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_module_bind"
+    ],
+    "dcb2e16c25e4663997078d4b7d5194abaf5152541d8bffa94f4f08ee4b26b5fe": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.warn_leak"
+    ],
+    "dcdc84476415f16d3042e05c67e9e1bcaf4feeb8740169cdc92751ecfb9c0e4c": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.find_type_alias"
+    ],
+    "dd1775c18eb611d52fb565882c616454be5a93eccb8c37e99073524da5810334": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::kw_paren_ahead"
+    ],
+    "dd58b8912ec39ee9a07f67c0509427225e020f12d1eb0ec27022d68f05af064a": [
+      "selfhost/ct-ast/frontend/parse/MapBuild.h.ct::mapbuild_get"
+    ],
+    "dd906f5e02445f779f8fa6ce7bb8693fcdf48916692e0f55e4b57688d38a4776": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::arg_count"
+    ],
+    "de08519e20f1a062059b4c731308042dcc1d4a4362dec17dabc721ac977aa419": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_box_protos"
+    ],
+    "de630fffd1e68c86106b343b7708ee85fe34d4215c474489b855deea00c685d4": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.set_type_target"
+    ],
+    "de746d7fe8f0c2c72cc75f6357d4c36bac80388ada5e04ba90a24dcbe43e64ce": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.into_tail"
+    ],
+    "debe6020a7edd547c880bfd5806a5b9b05e65770651bb4a61c65fd8476e65f7f": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_io_call_name"
+    ],
+    "deecb15907a8327844f1a052c0547bb2712f3d16d35ff617d026d61f44f335ac": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::index_legacy_msg"
+    ],
+    "df0787e531c44a492dd9194245b68f4d0f1e4b33353512906c4ccc31e3144180": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.out_report"
+    ],
+    "e01414fa0f469742b5d8bd0700e0de0a2f38c00f28b26f20239be189ea2cfc6c": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::pp_is"
+    ],
+    "e03494aeb788b3e5de3ca140161f6d5750a2890c21ecedb6883a5542759c6f4e": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::file_uses_str"
+    ],
+    "e060402b8a202f3439284bfb1b542dbd75b402ff12caec6aac0a05641a7b390c": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_field_state"
+    ],
+    "e082f9c04d07b379cf5d9251b12a84b195eb75f0f926059cdf8ae86832c07523": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::closure_owned"
+    ],
+    "e0db72ff017fb4320f07672b4a19edef16c2662ee2e89f82ec3900927b4aac3d": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::elem_plain_owner"
+    ],
+    "e1222463720137c29ac2bb411016f21583c395c48d68817167b998d23b80f0be": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.add_alias"
+    ],
+    "e161304b1616d6ef0935f7d66fd817eba8df5394344888c91890b82759192c3e": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::c_path_is_core"
+    ],
+    "e20297a079537dcc2dc60fe7fca3ff5712c0d0754ad8f884fd220ea976d70e9b": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::ref_type_is_const_value"
+    ],
+    "e2352e320eb5059efed9a80c451f1d42109e36c1ed45ee7f55e7cbb3812e98cf": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.chk_mcall_args"
+    ],
+    "e2a02c64dcb013a28bec90e7c3c0c6c39f3401ee1da8d2e2b45d85f3e44950c1": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_store_dir"
+    ],
+    "e325ee89bfcdd40789459b13202a6fc8196663bad4536bc7e9594ba90c3ca83f": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_rel_cands"
+    ],
+    "e32691ff02a657facd5eb64328c1935631b451ab34bc5e90f2e739ec7fc7c5d6": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_closure_values"
+    ],
+    "e343dd464e855e22f4cd479baf6ae0da4530d3cfe2086ab260d02ef64f4fec9a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.inst_register_nested"
+    ],
+    "e39f86899aa2043d307c0ac7a340043dfda29dbd8522ace38ee7bd36616aa81a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_mul"
+    ],
+    "e3f0a8756c3c10a00381703c4ca14e0cdf0c4228bfdcc1ec5e79b3ab723d152f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_field_key"
+    ],
+    "e408d71afad38e82b984f3b4062b2c9f238a2321e9d77bf392f6654ace840c29": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::return_reads_autodrop"
+    ],
+    "e4642a26f0c2b9f94cd4c4a873fba7db4882fe5c2dd7755006946c558d83eb10": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::symbols_get"
+    ],
+    "e4aabfbdb1b397430e59e4518da5be9dba3e2142241a197a1f70353735d8ef64": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.into_block"
+    ],
+    "e54759d71ccab3f1dfd4b7cf948fd9798dcff3340ae4580caddac4e0a735aa17": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.defer_active_depth"
+    ],
+    "e582a4cd989b45e3618f4cd7419afb0d499fcaa67e9003ba6efe834188f19171": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.reset"
+    ],
+    "e60f997008684c106233c41ee50e68053884b817b139262cf6f100cbe85dd8dd": [
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.expr_mentions"
+    ],
+    "e69baa4a7a680f18b331fa73b5ddd20ee9f0712f3489d9886f0769b801e338b3": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::default_missing_field"
+    ],
+    "e6f799f31459ce7cf6efd928dc8e32ba0bb914867cf26b6a1d429df5290b44cc": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_bind"
+    ],
+    "e73be3cabf5b19035073dd4474b7dacdecf85b708c71669df50293257e8f138b": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.var_type"
+    ],
+    "e750b5dc29e3b84f32612d919ff88d541602473183e707faf97da5e06b085d63": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_record_body"
+    ],
+    "e781337f458f5f57ac97da68fa9d4e2c0fac92b8419bdad1e9246d8a8a8d7d9a": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::ct_pkg_ns_clash"
+    ],
+    "e79ed7c29f033d3ad6065d0d47598847658dad725dcddadb836c87ce3fb72f3f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_is_place"
+    ],
+    "e7efb11da5657a728a5225f0027949ed1e285afc1613b1bf964c4a3bfd8a04cb": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.push_scope"
+    ],
+    "e805f3e90052f060e566ea166e84203f5da4b06361ae4471409309b8fbe60d9a": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.container_addr_check"
+    ],
+    "e84a9e25ace32e9a6448f70487f460bbe2867d99a273b9fc2d1b682b321ab0a4": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_adt_decl"
+    ],
+    "e85b41da44d2b9e91ab4e4e3b8ae4b5f650bf24bd075ed666cf216b7cb94a17b": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_io_call_known"
+    ],
+    "e881d82e62b9923e1abe7bec88659f8c418da422035b4ea409620c2773e28f7f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_hoists"
+    ],
+    "e88840b554464994ed9f4cfaffecbd2c6cf827d443fc841ded2e137e0480dba4": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::ct_std_shadow_warn"
+    ],
+    "e93e4a32ab60cb6e43e1edd412119aff5b053f4638b61ab2d246c801dd2a6ffc": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.trailing_alias"
+    ],
+    "e9631a5e68cb240d1984394763464b4df577eccf77e0019e1a49a8f1a48fe9af": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::type_is_owning"
+    ],
+    "e9b85153b294cb98995cb1717338815df41ada62f45479f82b6d31430ee25b6b": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_store_pkgdir"
+    ],
+    "e9fe0809464915f92324a674943b6c2466df841537cdad22628ae6a66ce9fcca": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_typedef"
+    ],
+    "eb93011cc8cca3ba7eb2a72588548d996846e723ff57318db209bbc9fd6bc357": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.del_take"
+    ],
+    "ebff87c75138ceb15e0d9faf5753e1f0dc8aed99a07690de608f28175a9c31a9": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.fail",
+      "selfhost/ct-ast/backend/mem/Memory.h.ct::Memory.fail",
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.fail"
+    ],
+    "ed348ddadb16e998b47fa6293bf386ada0cbe19ebbf38d4fc54160858dae9f3c": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.check_drop_visibility"
+    ],
+    "ed3cfcce977c7020b88281d44ff83e3c720b9069cf2d8081f03ccf171d3efd75": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_ret_move"
+    ],
+    "ed9da0057508a3eb652bb2f61aac9ff2a613c7800a835a825e487ceb54bbc3d2": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.load_unit"
+    ],
+    "edaec0b5f620de66f338f04fee153a5edceb2a0fd335a3de6d930e9bce1bb5ad": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.register_field"
+    ],
+    "ee0380a2dcae5f5037114753d97366f8ba2de5837a7f6c2a179c755c5afd4f3f": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_unit_header"
+    ],
+    "ee13711dad5eebe80e32df5282ee26f634e0a56be69358c0d1f0ec36496986a5": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.write_unit_header"
+    ],
+    "ee1ce238b8f55760628908e2a47309e7c82f186e722e6374c82989ee9cb09118": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_inst_add"
+    ],
+    "ee67db1f06fdf078cc25eea4f8def7fb8dcd15ff2b13aeb0275dd780ccb7ddef": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.set_strict"
+    ],
+    "eec3cf4f9b7b47dd9cd9d107c63fa5e4484f968fa0b3d73d61cfbb3ef1f63fa9": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.type_has_array_init"
+    ],
+    "eee45712d514845f1eb765b6ea82cd4770e8f289b5974ba6183ab2c6cf762d93": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.hoist_expr"
+    ],
+    "eee8fdc394355f8e186b7f52745f3b4bf72ec2932e8e50f1686e8e8faa215db6": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.adopt_use"
+    ],
+    "ef07ff5321a6fd2d914b3070c33f433f0039985a84509e5bccd059a3f78514ff": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::ct_index_verify"
+    ],
+    "ef5ef5043c34271b49706b0bbf8f57930a605e42b55d3bf1c585fada9ce1811f": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.container_subscript_kind"
+    ],
+    "efb78a55bdac29535b1f27a8dff4553bdbeea2a62d301692d25e9fcaa2935bb5": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.label_find"
+    ],
+    "f02ff75d78469f9e4c2a8f2c27d47fe31701c17686bd5dfe427416148510c526": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.append_node"
+    ],
+    "f0335cb02345e9cb2bc07d08eb27e635fe846850322576a252145306c935c8a3": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::slice_array_len"
+    ],
+    "f07882f77111d411539a99dc07cf8c27e52f72dd92e890cb647e35ac229d3756": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_bind_builtin_live"
+    ],
+    "f085b82928d6c43fcd8782a3ecd99183a98411ff4d4268b09fd5084ba6d196f7": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.add_func"
+    ],
+    "f0e0fd2aceed61abe667e1cb22f11e60a0e8d4e0bc36c629b6946f6bd367c2dd": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::ct_parse_program"
+    ],
+    "f16a4b27a1c5cd552be20e7a1d3b6266b9ee70653f0e12e166d0254d6e65d5e3": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.register_visible_type_aliases"
+    ],
+    "f23464c98de4a59d0b434b9b686c49f9b1a7cd576338e060aa7cb0101858c1dc": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.chk_type"
+    ],
+    "f27af19bc9cbecdd3a66abc7badca91d2ba9439c9a441e5c01590eb416c6d50a": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::check_borrow_delete"
+    ],
+    "f3316b719885fcaea61a97f513e04367e0daa538a74290b8517bc86080e8646b": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.parse_add"
+    ],
+    "f33b8e384c9520a73b59e3f1da0cca1d3ff896f7fc9ae8acafd51f406d9f4f09": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::ref_arg_place"
+    ],
+    "f35e8d83de3369a40b26f0da0debe907ebd6a28cf1d73d270b67ab46029820f1": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::generic_tag_prefix"
+    ],
+    "f3dcd9b4ee95dbc9cb01c6b5b016ff65e0017159dcd4efd00192a337b63ff0d6": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.range_init_ahead"
+    ],
+    "f427ce3c8917c7e204fb47b3649151c2f64c562b282a5fd926271f846a596c93": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::tscalar"
+    ],
+    "f479aea1b503f097f2a0e25d8d5c7370a08f43dbd5800008908565baca462460": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.header_guard"
+    ],
+    "f51076d8233b73404b542d266aeea271adf4ebbdb4bd492b34c2c64622d1a308": [
+      "selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_loop_warn"
+    ],
+    "f56a93fec02693070fcf575bf8a831ba3942b2510cb033a93339e77c5ffa0a78": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.git_pick_tag"
+    ],
+    "f5e77bae08f51708f9fd0c3aab4daebba384809ef95941d0b671024d822f214b": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::emit_gsub_type"
+    ],
+    "f5e7de7c19392ced04fd647f79c8bc52cd145abd6f5dd87aa7315248f438806d": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.iface_ref_type"
+    ],
+    "f61e73be09b1882571492397515ef787989ca9369c63942d0c6d04ac4ac1f7d9": [
+      "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct::ParseSupport.method_trait_amb"
+    ],
+    "f63ca3b3b8caf7c6249634222ebc3c981bb624a85cc017c0e63174e4421f08b3": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::ct_emit_add_builtin"
+    ],
+    "f687a0126d22f7f948528949da1740e00ab4513e8b49bd7db098269aa6232df1": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.init_item_text"
+    ],
+    "f70ec746caee744fb6de5963d403442bd1f042fdb643dae8903941374d3485c7": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::type_key"
+    ],
+    "f7a2a62b6df41521254d04149f046aeb498e3987aa9ae71869415a0115513d1c": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.container_iface_ptr"
+    ],
+    "f8337a4eed67822041d99fcb0ae73b83625ee3ef533e037d1711b1425322e64b": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::Emitter.emit_map_brace_init"
+    ],
+    "f8532d3f71a66fcaaaf8322dc616b5bfcd94980667115433f3ed212c9ed851e3": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.match_ahead"
+    ],
+    "f88a4b3b290fb61eb7e801ae99b2ffc0772e4989eaeb19b950e739fe3f7c94ad": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.sh_quote"
+    ],
+    "f9388aab8d17d85b65b4819bd29d8c7b080a8e7e3e168116c045faa499d61208": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::c_manifest_boundary"
+    ],
+    "f95e166291722957686df501d0e980168db3d185134f6fff7401f02709e99770": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.opt_suffix_kind"
+    ],
+    "f98bf5f882249639f12278d3c3e159d17b1b763a6bb29db25e7905e97c2c4d6c": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::ct_adt_add_field"
+    ],
+    "f99f5293040b5a6a2d01a9b4c2fd9f9ace0e2f67bac81519c46395020e288044": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.drop_release_walk"
+    ],
+    "fa066c07358d3ed88664df210c411318dd98176d1278cebbea950224bc61534e": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::pkg_pin_lookup"
+    ],
+    "fa2133e002639b87bb845ddf1ef3176ddacdbe1a842eb969d742ab0fa6453d8e": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.container_vptr_type"
+    ],
+    "fa41a9fd56e25d09f104ee882df57a4f11585aa56d4d4d9656e03f8e9fb88b0a": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.git_run"
+    ],
+    "fb25862161331359ed30f8f5ce7e29c4f409521569745a6b6fd90958adf0dbe0": [
+      "selfhost/ct-ast/frontend/sym/Symbols.h.ct::Symbols.closure_new"
+    ],
+    "fbaa692df0c32dae1bc80b76b2245a74306398120896e75ffaa13c51625473dd": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::sb_text_place_p"
+    ],
+    "fbad88331c95be632353828320406dd1212d37d17370bf9b97b44bd5c6435bae": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::put_indent"
+    ],
+    "fbdbd7dfc8f0b0726ef93e3cd09e87421c360e0c9c5bfd9295e3e6341b462298": [
+      "selfhost/ct-ast/frontend/parse/Parser.h.ct::Parser.parse_impl_inherent"
+    ],
+    "fc4335e3229891f58f0a4355e5ea2b2462aab2e869e5ddb273690181dcee1109": [
+      "selfhost/ct-ast/frontend/type/TypeCheck.h.ct::TypeCheck.expr_ctype"
+    ],
+    "fc8e38cd909415cb408a493fa9716cc5e892765a49e9a77cd755238806f5e091": [
+      "selfhost/ct-ast/backend/emit/Init.h.ct::Init.emit_array_field_vptrs"
+    ],
+    "fcb0976a8120403c7e9717b49ef2752beaca1707b4833f2cca0ce7347f35bcfd": [
+      "selfhost/ct-ast/backend/emit/Emitter.h.ct::impl_exists_anywhere"
+    ],
+    "fd0f284dd55a1e3bef657cf7b830d11083aca558e1683142b927d05802495cd6": [
+      "selfhost/ct-ast/frontend/parse/Stmt.h.ct::Stmt.parse_goto"
+    ],
+    "fdc13a0f1a5564b5a7d33e72b773fbb265bff4f272743b22d2924c70f035e775": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.map_closure_check"
+    ],
+    "fdffe2acdda452d70a4e151f50fe141cba58a41725377a60130a972534f01a91": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::qual_at"
+    ],
+    "fed111d5511ce705bf4d29d2505520d2fe56195bb0fa1c493c1b24e27858282b": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::Module.cycle_check"
+    ],
+    "feea02afe7d5e3ba1da60ca07601a6264a6dc92ac506f5f5a8e59b690954b683": [
+      "selfhost/ct-ast/frontend/parse/Expr.h.ct::expr_iter_push"
+    ],
+    "ff37fa8d7d237dce903c051adb2a8df74d34a29dad403df282c911ea4b06c965": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::Pkg.copy_tree"
+    ],
+    "ffb1f5e22daeb3fbc7637764c55cc9b0336cfe4490ba6bda61ac78e04454bf6f": [
+      "selfhost/ct-ast/frontend/module/Module.h.ct::io_header_for"
+    ],
+    "ffd6bdc4287e306d7bf9387903a5d6f5ef7dc02eb4fb900c3df61cb8e6844085": [
+      "selfhost/ct-ast/tool/pkg/Pkg.h.ct::index_version_ok"
+    ]
+  },
+  "cycles": [],
+  "functions": 838,
+  "lines": 44043,
+  "products": [
+    "Arena.h",
+    "Cache.h",
+    "Diag.h",
+    "Driver.h",
+    "Emitter.h",
+    "Expr.h",
+    "Init.h",
+    "Lexer.h",
+    "MapBuild.h",
+    "MapTable.h",
+    "Memory.h",
+    "Module.h",
+    "ParseSupport.h",
+    "Parser.h",
+    "Pkg.h",
+    "Sh.h",
+    "Stmt.h",
+    "Symbols.h",
+    "TypeCheck.h",
+    "Unit.h"
+  ],
+  "units": [
+    "selfhost/ct-ast/main.ct",
+    "selfhost/ct-ast/backend/emit/Emitter.h.ct",
+    "selfhost/ct-ast/backend/emit/Init.h.ct",
+    "selfhost/ct-ast/backend/mem/Memory.h.ct",
+    "selfhost/ct-ast/frontend/lex/Lexer.h.ct",
+    "selfhost/ct-ast/frontend/module/MapTable.h.ct",
+    "selfhost/ct-ast/frontend/module/Module.h.ct",
+    "selfhost/ct-ast/frontend/module/Unit.h.ct",
+    "selfhost/ct-ast/frontend/parse/Expr.h.ct",
+    "selfhost/ct-ast/frontend/parse/MapBuild.h.ct",
+    "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct",
+    "selfhost/ct-ast/frontend/parse/Parser.h.ct",
+    "selfhost/ct-ast/frontend/parse/Stmt.h.ct",
+    "selfhost/ct-ast/frontend/sym/Symbols.h.ct",
+    "selfhost/ct-ast/frontend/type/TypeCheck.h.ct",
+    "selfhost/ct-ast/runtime/arena/Arena.h.ct",
+    "selfhost/ct-ast/tool/cache/Cache.h.ct",
+    "selfhost/ct-ast/tool/diag/Diag.h.ct",
+    "selfhost/ct-ast/tool/driver/Driver.h.ct",
+    "selfhost/ct-ast/tool/pkg/Pkg.h.ct",
+    "selfhost/ct-ast/tool/sh/Sh.h.ct"
+  ]
+}
