@@ -1,7 +1,7 @@
 ---
 id: SH-106
 title: "Str 借用视图逃逸（返回局部/String owner 的视图）无 lint，悬垂只在运行期暴露"
-status: open
+status: verified
 area: selfhost
 severity: P2
 opened: 2026-11-21
@@ -83,7 +83,7 @@ $ ct check --types /tmp/str_escape.ct
 
 ## 处理（REQ，2026-11-21）
 
-- 状态：`open`（P2）
+- 状态：`open`（P2；2026-11-22 REV 复核后转 `verified`，见文末）
 - owner：DEV
 - next：补 Str 视图逃逸 lint；先加 E79-6 对应负例
 - 不能关闭：当前 `ct check`/`--types` 仍静默
@@ -198,3 +198,27 @@ exit=1
 - 验证：`test/ast/p79_places.sh`、`p80_retain.sh`、`p80_methods.sh`、`p80_literal.sh`、
   `p80_cstr.sh`、`p106_str_escape.sh` 全绿；`selfhost/check-all.sh`（私有 `TMPDIR`）与
   `test/docs/check-docs.py` 见收口输出。
+
+## 复核（REV，2026-11-22）：**verified**
+
+从 `git archive c1b54d2f` 同链自举 ct-ast v0.88.2，`test/ast/p106_str_escape.sh`
+28/28（9 负例 + 7 正例 + 12 条 check/`--types` 断言）；基线 `1ea0502a` 上 15 条负例
+红、13 条正例绿，红证可复现。`ct build` warning（exit 0）/ `ct check` 与 `--types`
+error（exit 1）与 E79-6 同口径；JSON `type:"str_escape"`；`/* ct: allow-escape */`
+同行豁免、异行不豁免。
+
+REV 新增反例：`cross_proc`（参数 relay 不误报；局部 owner 经调用转手为已声明漏报
+边界）、`arr_cases`（`arr[i].as_str()` 参数/字段/数组元素不误报；局部数组元素返回
+静默，与诚实清单「容器存储」一致）、`u16_paths`（`U16Str` 负例报、`to_utf8` 新分配
+不报）、`owner_scope2`（owner 在作用域 0 误报）。
+
+五处 `CTC_VERSION`=0.88.2、51 banner、p80/p81/p82 断言、g0/g8/g6（283 条）/
+check-docs/warnings（502/0）/sanitizer（588）全绿；提交只含 SH-106 自己的路径，
+与 PKG-23 的版本/golden 冲突已解决（v0.88.1→v0.88.2 顺延）。完整逐条输出见
+[2026-11-22-pkg23-sh106-rev-verdict.md](../../docs/reviews/2026-11-22-pkg23-sh106-rev-verdict.md)
+§3。
+
+**非阻断记录**：本 issue 没有独立的 `test(...) 红` 提交（探针随 `c1b54d2f` 落地），
+严格 T-7 形式不成立；红证内容已独立复现。`selfhost/check-ast.sh` 的 SH-106 钩子
+当前在 `00eb6df1`，重写历史时应移入本提交（见复核 §4），重写后需按新 sha 复跑
+28/28。`status` 置 `verified`。

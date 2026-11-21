@@ -1,7 +1,7 @@
 ---
 id: PKG-23
 title: "ct get std 官方 pin 的 git fetch 失败只报通用错误，无法区分网络/认证/tag/缓存"
-status: open
+status: reopened
 area: packages
 severity: P1
 opened: 2026-11-21
@@ -50,7 +50,7 @@ P1；`ct get` 引导命令。修法在 Pkg/Driver；本 issue 只落库，不改
 
 ## 处理（REQ，2026-11-21）
 
-- 状态：`open`（P1）
+- 状态：`open`（P1；2026-11-22 REV 复核后转 `reopened`，见文末）
 - owner：DEV
 - next：保留 git stderr/分类网络/缓存，提供 refresh；不先改 pin
 - 不能关闭：`ct get std` 仍只报通用 fetch failed
@@ -106,3 +106,30 @@ P1；`ct get` 引导命令。修法在 Pkg/Driver；本 issue 只落库，不改
 - **未覆盖**：认证分支用 git 测试替身（未起真实 401 HTTP 服务）；`proxy`/TLS 归类按 git
   原文匹配，未逐一构造真实代理隧道；未 pin 的第三方 range 走 `git_pick_tag` 失败时仍报
   `no tag ... satisfies`（不在本 issue 的官方 pin 路径内）。
+
+## 复核（REV，2026-11-22）：**reopened**
+
+功能面通过。`git archive 00eb6df1` 同链自举 ct-ast v0.88.1，
+`test/ast/pkg23_git_diag.sh` 5/5（network / corrupt cache / missing tag / auth /
+refresh）；基线 `4edc70e9` 上 5 类全红；干净 HOME 成功路径 `ct/std 0.19.0`、
+digest `sha256:432086f0…`、`ct.lock` 与 v0.88.0 基线逐字相同；失败不写锁、无
+`.ct-pkg.err` 残留；`--refresh` 只删目标包并保留同根 sibling。
+
+**但提交独立性不成立（T-4，blocking）**：`00eb6df1` 的 `selfhost/check-ast.sh:1330`
+把 SH-106 的钩子一起带进了本提交，而 `test/ast/p106_str_escape.sh` 到 `c1b54d2f`
+才存在。`git archive 00eb6df1` 跑 `selfhost/check-ast.sh`：
+
+```console
+  FAIL  SH-106 Str view escape: sh: test/ast/p106_str_escape.sh: No such file or directory
+== summary: 1570 passed, 7 failed, 5 skipped ==
+EXIT=1
+```
+
+`git revert c1b54d2f` 后同一行仍指向已删除文件（exit 127）。最小复现与最小修法见
+[2026-11-22-pkg23-sh106-rev-verdict.md](../../docs/reviews/2026-11-22-pkg23-sh106-rev-verdict.md)
+§2.4/§4：一次本地 rebase，把该 11 行钩子从 `00eb6df1` 移到 `c1b54d2f`；两提交均未
+push/tag，无外部影响。另 `--refresh` 的 `.`/`..` 目标依赖 `rm` 兜底（未观察到越界
+删除，建议补 name 校验，见复核 §2.5）。
+
+`status` 置 `reopened`；功能修复本身无需改动，重写历史后按新 sha 重跑
+`pkg23_git_diag.sh` 与 `check-ast` 即可转 `verified`。
