@@ -884,6 +884,17 @@ else
     bad "p86/docs" "$(cat "$work/p86doc.out" "$work/p86doc.err" | head -8)"
 fi
 
+# PH-87 S87a/S87b/S87c/S87d: the parser/checker dispatch slices, the typed-view
+# feasibility + missing-arm negative, the A dogfood on the compiler's own tree,
+# and the spec/tutorial/metrics sections.
+for pr in parser checker dogfood docs; do
+    if bash "test/ast/p87_${pr}.sh" "$work/ct-ast" >"$work/p87$pr.out" 2>"$work/p87$pr.err"; then
+        ok "p87/${pr}"
+    else
+        bad "p87/${pr}" "$(cat "$work/p87$pr.out" "$work/p87$pr.err" | head -8)"
+    fi
+done
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
