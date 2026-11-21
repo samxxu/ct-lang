@@ -82,7 +82,7 @@ C Shim 一等模式）的判断与仓库实际一致；对证据等级（Renode 
 | Typed/Lowered IR + 统一清理 CFG | **v1.2 方向；v1.1 先做轻量不变量** | 完整 IR 属重写，不占 v1.0/v1.1；轻量规则见 [SH-111](../../issues/selfhost/sh111-lowering-invariants.md)，完整 IR 见 [SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md) |
 | 所有权 / 异步 / DMA 生命周期 | **并入 DOC-91 + TEST-22** | shim 契约硬条款（提交即转移、完成即归还、ISR 上下文）；语言层不新增关键字 |
 | JSON 诊断全通道 | **v1.1 补 parse JSON；v1.2 code registry** | parse 7b 归 v1.1；稳定 code 归 v1.2（[LANG-10](../../issues/lang/lang-10-machine-readable-diagnostics.md) / [LANG-25](../../issues/lang/lang-25-diagnostic-code-registry.md)） |
-| 真板 UART/RTOS/DMA | **TEST-22 既有 hardware-gated** | 证据等级已标注；真板属外部条件 |
+| 真板 UART/RTOS/DMA | **维持 hardware-gated，不作发布门禁** | Renode ≠ 真板；真板属外部里程碑，如启动按附件（日志/哈希）挂 v1.1 |
 | 包 conformance / 离线回放 | **PKG-17 既有** | vendored fixture + 三断言已立项 |
 | formatter / LSP / debugger mapping | **v1 之后** | 不进入 v1.0 范围 |
 

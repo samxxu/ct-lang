@@ -2874,6 +2874,10 @@ strict 是**护栏**不是沙箱：shim 的内容、`--ldflags` 外链的 `.c` �
 
 这是**显式 libc 例外**，不是"C 库已被封装"：格式串与实参类型不检查，与 C 一致。
 
+**裸机证据等级（非语言契约）**：`test/baremetal-renode` 的 STM32F407 冒烟（UART/SysTick/GDB）
+与 DMA 描述符读回**不能**等同于真板验证；DMA 真搬运仍 hardware-gated（TEST-22）。
+真板验证是外部里程碑，不是 v1.0/v1.1 的发布门禁；契约与证据等级见 DOC-91 / DOC-92。
+
 ### 4.68 `ref` / `out` 参数（Phase 78，仅 ct-ast）
 
 ```ct
