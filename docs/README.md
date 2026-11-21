@@ -2,7 +2,7 @@
 
 > 中文
 >
-> **当前版本 v0.87.0。** 本目录的 `design/` 保留**最近 12 个已完成阶段**的设计文档（当前在研
+> **当前版本 v0.88.0。** 本目录的 `design/` 保留**最近 12 个已完成阶段**的设计文档（当前在研
 > 阶段计入），更早的 `design/phase*.md` 必须退役到 [history/design/](history/design/)；评审报告
 > 与其余历史记录在 [history/](history/README.md)。仓库入口见 [../README.md](../README.md)，改动
 > 规约见 [../AGENTS.md](../AGENTS.md)。
@@ -56,6 +56,8 @@
 | [planning/hardware-readiness-requirements.md](planning/hardware-readiness-requirements.md) | 硬件可用性需求（评估会产出，**未立项**）：P0 数组/const vptr、PH-64 freestanding/alloc/const vtable、硬件 pilot；含采纳/延后/不采纳与顺序 | 查看硬件需求与验收 |
 | [planning/post-58-phase-sequence.md](planning/post-58-phase-sequence.md) | 58 之后的正式 phase 序列：包管理器线先收口、语言线按依赖排序、版本位与并行车道 | 照着走的施工顺序 |
 | [history/phase-log.md](history/phase-log.md) | 逐相流水账：Phase 0–42 的详细记录、版本记录、已定决策与待定项 |
+| [history/p88_metrics.md](history/p88_metrics.md) | PH-88 度量与 sharp edge：发射器 76 个 kind 切片、行数/耗时/发射 C 行数、fixpoint 2/3 轮、与 PH-85 spike 对照 | 复核 PH-88 或下一批切片 |
+| [history/v1-pre-evidence.md](history/v1-pre-evidence.md) | v1-pre 证据摘要：PH-84…PH-88 逐相结论、字面 `match` 的承接目标（`v1-PH-0`）与遗留清单 | 进入 v1.0 前 |
 | [history/design/phase20.md](history/design/phase20.md) · [history/design/phase21.md](history/design/phase21.md) · [history/design/phase24.md](history/design/phase24.md) · [history/design/phase25.md](history/design/phase25.md) · [history/design/phase26.md](history/design/phase26.md) | 已完成的阶段计划（Phase 20–26）：包支持 / 非逃逸栈闭包 / `loop` 语法糖 / `loop(a..b)` 范围 / 数组 range 初值 / 静态映射调用的闭包实参 / 泛型函数；phase17、phase18、phase19、phase22、phase23 与 phase25–phase31 已按 DOC-66 归档到 [history/design/](history/design/) |
 | [history/design/phase27.md](history/design/phase27.md) | 已完成的阶段记录（Phase 27）：`foreach` 语句形态（数组形态已实现，容器协议由 Phase 29 解冻；语法、展开规则与决策见正文） |
 | [history/design/phase28.md](history/design/phase28.md) | 已完成的阶段记录（Phase 28，泛型两阶段第一相）：trait 约束的泛型函数与静态派发（语法、落码、E28-1–E28-9 收口核对与 D28-1–D28-11 见正文；未 bump） |

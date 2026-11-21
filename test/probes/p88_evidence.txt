@@ -63,3 +63,35 @@ OK p84layout
 p84syntax: 14 passed, 0 failed
 OK p84syntax
 ```
+
+## 总门禁（v0.88.0 收口）
+```console
+$ TMPDIR=... bash selfhost/check-all.sh
+== summary: 1575 passed, 0 failed, 5 skipped ==
+check-warnings: 502 ok, 0 failed
+check-docs: OK (2417 relative links in 388 files, v0.88.0, 11 hard gates, 12 phase status, 6 适用版本 header(s), 2 superseded link(s), 8 signoff(s))
+check-all: OK (11 hard gates green)
+```
+
+```console
+$ bash selfhost/check-sanitizers.sh
+check-sanitizers: OK (588 checks, no sanitizer report)
+```
+
+```console
+$ bash tools/check.sh g0 && bash tools/check.sh g8
+g0: OK (block 1.17.0, session-map present)
+g8: OK (PN-2 version coherence; 9 legacy offsets)
+```
+
+## 回滚演练（E88-8）
+```console
+$ git archive HEAD | tar -x -C /tmp/p88dev/roll
+$ # 把 Emitter.h.ct / Expr.h.ct 换回 26986463^（v0.87 发射器），重走 L0→L1→L2→ct-ast
+$ work/ct-ast --version
+ct-ast v0.87.0
+$ python3 tools/p85_inventory.py --root . corpus-manifest --ct work/ct-ast | diff test/probes/p85_corpus_sha.tsv -
+ROLLBACK-CORPUS-OK（66 文件，diff 空）
+$ # test/cases + examples：回滚产物与 HEAD 逐字节相同
+ROLLBACK-VS-HEAD-OK / ROLLBACK-EXAMPLES-OK
+```

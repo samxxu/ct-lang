@@ -93,3 +93,70 @@ E88-1 的“tag 判别换穷尽 `match`”在 v0.88.0 的引导链下**不能字
 | 本卡交付 | 按 kind 切片（单一判别）+ `p88_emit` 清单/变异自测 + 66 语料逐字节 + 345 诊断 + fixpoint 2/3 轮 |
 | E88-1 记录 | **部分通过**（切片/等价完成；字面 `match` 未做，承接见上） |
 | 非作者追签 | battle 判决待 REVIEW/EDITOR 追签；DEV 不自签（0.7/T-8） |
+
+## 7 收口记录（v0.88.0，2026-11-21）
+
+### 7.1 任务、红证与实现
+
+| 任务 | 交付 | 红证（baseline `47a8f786`） | 实现提交 | 验收 |
+| --- | --- | --- | --- | --- |
+| S88a 发射器重写 | 五个判别函数 76 个 `em_*` 切片 + 判别式单读 + `MAX_IO_CALLS` 容量 | `test(ct-ast): PH-88-S88a 红` = `a516db47`；`p88_emit` exit 1（`emit_expr: ... exactly once, found 34`） | `feat(ct-ast): PH-88-S88a 发射器按 kind 切片` = `26986463` | `p88/emit` ok；66 语料逐字节；345 诊断逐字；`p84`/`p87` 探针全绿 |
+| S88b 自举回环 | `CT_FIXPOINT_ROUNDS`（日常 2 / tag 前 3）、唯一 `fixpoint_stage`、`--fixpoint-only` | `96006f57`；`p88_fixpoint` exit 1（`the daily default is not 2`…） | `50703784` | `p88/fixpoint` ok；2/3 轮逐字节 |
+| S88c 度量/证据 | `docs/history/p88_metrics.md`（行数/耗时/sharp edge/PH-85 对照） | `1729dec8`；`p88_metrics` exit 1（文档缺失） | `6d457365` | `p88/metrics` ok（9/0） |
+| S88d 文档/收口 | spec §4.75、tutorial §21、`v1-pre-evidence.md`、原始输出 | `733be810`；`p88_docs` exit 1（`2 passed, 24 failed`） | `9cfabef0` | `p88/docs` ok（26/0） |
+
+四条探针由 `e08b4b2b`（`test(check-ast): 接入 p88_* 探针`）接入门禁；每个
+`test 红` 都是对应实现提交的父提交。`p87_docs` 的快照核对由 `4879f7f9`
+改为读 `11961895`（v0.87.0）的 Expr 行数，历史报告不因 PH-88 容量注释漂移。
+
+### 7.2 E88 逐条结论
+
+| ID | 结论 | 依据 |
+| --- | --- | --- |
+| E88-1 | **部分通过**（切片完成；字面 `match` 承接，见 §3.1） | `p88_emit` 76 切片/单读/变异自测；[battle/p88-emit-match](../../battle/p88-emit-match/verdict.md) |
+| E88-2 | **通过** | 66 语料逐字节（[p88_evidence](../../test/probes/p88_evidence.txt)）；自身产物按 D-017 A1 第 2 层 = fixpoint + ASan + 行为测试 |
+| E88-3 | **通过** | 2/3 轮同一 `fixpoint_stage`/一次 `diff -r`；`p88_fixpoint` 6/0；越界轮数 exit 2 |
+| E88-4 | **通过** | [p88_metrics](../history/p88_metrics.md) 行数/耗时/sharp edge/PH-85 spike 对照；`p88_metrics` 复算 9/0 |
+| E88-5 | **通过** | `check-all: OK (11 hard gates green)`；`check-sanitizers: OK (588 checks)`；`check-warnings: 502 ok, 0 failed` |
+| E88-6 | **通过** | 集合基线/映射未变：`p85_m0`、66 语料清单 `diff` 空；无产物集合变更 |
+| E88-7 | **通过** | spec §4.75、tutorial §21（片段编译运行 7/5/8）、[v1-pre 证据](../history/v1-pre-evidence.md) |
+| E88-8 | **通过** | 回滚：`git archive HEAD` 后把 `26986463` 的两个文件换回 `26986463^`，重走 L0→L1→L2→ct-ast；`test/cases` 与 `examples` 产物与 HEAD 逐字节相同，66 语料清单 `diff` 空 |
+
+### 7.3 总门禁原始输出
+
+```console
+$ TMPDIR=... bash selfhost/check-all.sh
+== summary: 1575 passed, 0 failed, 5 skipped ==        # check-ast（含 p88/emit/fixpoint/metrics/docs）
+check-warnings: 502 ok, 0 failed
+check-docs: OK (2417 relative links in 388 files, v0.88.0, 11 hard gates, ...)
+check-all: OK (11 hard gates green)
+$ bash selfhost/check-sanitizers.sh
+check-sanitizers: OK (588 checks, no sanitizer report)
+$ bash tools/check.sh g0
+g0: OK (block 1.17.0, session-map present)
+$ bash tools/check.sh g8
+g8: OK (PN-2 version coherence; 9 legacy offsets)
+```
+
+5 个 skip：`p83/dist`（本地 `dist/` 的 v0.87.0 产物无法在无 zig 的 mac 上
+重建，见 §7.5）、QEMU/门禁既有的 4 个环境 skip。上述全部原始输出见
+[p88_evidence](../../test/probes/p88_evidence.txt)。
+
+### 7.4 版本与回滚
+
+- 五处 `CTC_VERSION` = `0.88.0`；51 个 `test/cases/*.expected.*` 与
+  `test/modules/p39_lib/lib.expected.abi.h` banner = `v0.88.0`；
+  `README.md` / `docs/README.md` / `AGENTS.md` 当前版本 = `v0.88.0`；
+  `test/ast/p80_docs.sh` / `p81_box.sh` / `p82_docs.sh` 的版本断言同步；
+- `g8: OK`；`version-minor` = 88（`d=0`）；
+- 单卡回滚见 E88-8：发射器可退回旧实现，输出与 v0.87 一致；实现提交
+  `26986463` 只含 `Emitter.h.ct` 与 `Expr.h.ct`，可单独 `git revert`。
+
+### 7.5 未覆盖
+
+1. 字面 `match`：L2 引导链前置，承接 `v1-PH-0`（§3.1 / battle）；
+2. `String`/可增长 buffer：发射器流式写 `FILE *`，不适用（§S88a 度量 §4-6）；
+3. `MAX_FUNCS` 余量 37 个顶层函数：下一批切片前必须复算；
+4. 本地 `dist/ct-linux-x64.tar.gz` 是 v0.87.0 的未纳管产物；本机无 zig，
+   无法重建 0.88.0 Linux 产物，`p83/dist` 按设计 skip（77）。发布前需在
+   有交叉工具链的环境重跑 `selfhost/make-dist.sh --cross <zig>`。

@@ -449,7 +449,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 
 | 项 | 值 |
 | --- | --- |
-| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-87 |
+| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-88 |
 | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
 | 门禁入口 | `tools/check.sh g0`；其余为 `selfhost/check-all.sh`（11 道硬门禁）与 `test/docs/check-docs.py`（链接 + G9） |
 | 文档 snippet | 缺失 |
@@ -509,6 +509,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 2026-11-21：PH-84 F1/F2 修复 → v0.84.1（PATCH，LANG-21 fixed）；typedef 别名可作 match 主语、`pub typedef` 跨单元发射 `struct lib_Shape`/`lib_Alias`。
 > 2026-11-21：PH-86 → v0.86.0（`d=0`）；词法器 token 改为源缓冲 `TokView{ptr,len}`、C API 迁移、错误出口清单（S86c `?`/errdefer 不可用，battle/p86-errorpath 采 A）、spec/tutorial 词法边界 + 度量；E86-1…8 通过（E86-8 回滚演练）；PH-85 快照探针改读 `1e2c30f7` 归档。
 > 2026-11-21：PH-87 → v0.87.0（`d=0`）；解析器/检查器按 kind 切片重写（13 + 15 个切片，单判别式）；语料逐字节、345 诊断逐字、自举不动点通过；A dogfood 10 条同一类 FP；`switch→match` 字面项按 battle/p87-kind-match 移交 PH-88（L2 引导链不实现 PH-84）。
+> 2026-11-21：PH-88 → v0.88.0（`d=0`）；发射器五判别函数按 kind 切片（76 个 `em_*`，判别式单读）、`MAX_IO_CALLS` 512→1024（容量，诊断文本不变；`MAX_FUNCS` 475/512）、自举不动点轮数参数化（日常 2 / tag 前 3）、66 语料逐字节 + 345 诊断逐字；字面 `match` 仍不可写入 ct-ast（L2 不实现 PH-84），E88-1 部分通过、承接 `v1-PH-0` seed cutover（battle/p88-emit-match）；v1-pre 收口。
 > 2026-11-21：PKG-14 → v0.83.1（fix）；索引校验非普通文件 exit 2、FIFO 不挂起、ferror/JSON 失败。
 > 2026-11-21：PKG-14 CI 追加 → v0.83.3（fix）；`CT_HOME` 默认索引路径在 glibc 上被自拷贝清空，已修。
 
@@ -595,9 +596,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.87.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.88.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.87.0（PH-87 解析器/检查器重写已交付：S87a `Expr::static_ctype` 14 kind → 13 个 `ctype_*` 切片、S87b `TypeCheck::expr_type` 20 kind → 15 个 `tc_expr_*` 切片，判别式只读一次 kind；语料 66 文件逐字节 + 345 条诊断逐字 + 自举不动点通过；S87c A dogfood 10 条同一类 FP、无崩溃；S87d spec §4.74 / tutorial §20 / 度量；`switch→match` 字面拼写因 L2 引导链不实现 PH-84 而移交 PH-88（battle/p87-kind-match）；E87-1…8 见卡 §7；v1-pre 顺序见 [v1 路线](docs/planning/v1-release-plan.md)（PH-88 → v1.0） |
+| 当前阶段 | v0.88.0（PH-88 发射器重写 + 自举回环已交付：五个判别函数切成 76 个 `em_*` free function、判别式只读一次 kind；`CT_FIXPOINT_ROUNDS` 日常 2 / tag 前 3 轮逐字节一致；66 语料逐字节 + 345 诊断逐字；字面 `match` 按 battle/p88-emit-match 承接 `v1-PH-0`；v1-pre 的 PH-84–88 全部收口，下一步 v1.0（`v1-PH-0`，AST-only + seed cutover）。v1-pre 证据见 [v1-pre-evidence](docs/history/v1-pre-evidence.md)，度量见 [p88_metrics](docs/history/p88_metrics.md) |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
