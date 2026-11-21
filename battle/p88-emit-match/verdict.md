@@ -1,7 +1,7 @@
-# battle/p88-emit-match 判决（DEV 建议稿，待 REVIEW / EDITOR 追签）
+# battle/p88-emit-match 判决（DEV 建议，REVIEW 2026-11-21 已追签）
 
 - 日期：2026-11-21
-- 状态：**proposed（DEV 2026-11-21 建议；未追签，不得记作已判决）**
+- 状态：**accepted（DEV 2026-11-21 建议；REVIEW 2026-11-21 追签，条件见文末；EDITOR 追签待补）**
 - 判据来源：[question.md](question.md)；承接自 [battle/p87-kind-match](../p87-kind-match/verdict.md)
   与 [PH-87 复核 §3.3](../../docs/reviews/2026-11-21-phase87-rev-verdict.md)。
 - 判据 × 证据：[p88 度量 §3/§5](../../docs/history/p88_metrics.md)、
@@ -61,5 +61,32 @@ PH-86 battle 已裁定 `?`/errdefer 不在 ct-ast 源码使用；PH-87 battle �
 > 待 REVIEW / EDITOR 填写。DEV 不自签（0.7/T-8）。追签前本文件不构成范围裁定，
 > E88-1 的部分通过只在 phase 卡与收口报告里按“待签”记录。
 
-- REVIEW：
-- EDITOR：
+- REVIEW：已追签（2026-11-21，见下节；条件 1–5 写死）。
+- EDITOR：待补（0.7/T-8；不阻断 REVIEW 的范围追签）。
+
+## REVIEW 追签（2026-11-21）
+
+**A 成立，本复核追签。** 已在 `git archive 771c5ab1` 的归档自举上独立复现 L2 前置：
+同一 ADT 源码经 L2 原样发射 `enum NodeKind { AdtCtor(int n), … }`，`cc rc=1`
+（`expected '= constant-expression' or end of enumerator definition`）；同一源码
+ct-ast 可编且产物可编。`selfhost/l1`/`selfhost/l2` 中
+`N_ADTCTOR|N_MATCH|Type.Variant|match (` 命中 0。E88-1 记**部分通过**，不得记全部通过。
+
+放行条件（写死；v1.0 不得静默改口径）：
+
+1. **承接目标 = v1.0 seed cutover（`v1-PH-0`）**。PH-88 内不换 seed、不在 ct-ast
+   源码写 ADT/`match`；引导链仍是 `L0→L1→L2→ct-ast`。
+2. **承接范围 = 76 个发射器切片 + `expr_ctype`、`maybe_box`、`chk_type`**。
+   漏一项即 E88-1 欠账未清。
+3. **v1-PH-0 判据**：把 76 个切片改成「一 kind 一臂，共用体调同一 helper」的穷尽
+   `match`（PH-84 无 or 模式）；`p88_emit` 的清单从“切片函数”改为“`match` 臂”；
+   新增“漏一臂”语言级负例（可复用 `test/ast/p87_checker/missing_arm.ct` 的
+   `match does not cover variant`）；66 语料逐字节、345 诊断逐字、自举不动点
+   （日常 2 / tag 前 3）继续成立。
+4. **改口径须显式覆盖**：若 v1-PH-0 的 seed 决策改回“PH-88 内换 seed”或另立目标，
+   须以本 battle 的失效条件显式覆盖并重新追签，不得静默改口径。
+5. **EDITOR 追签待补**：本文件现由 REVIEW 追签放行范围；EDITOR 席位追签按
+   0.7/T-8 补记，不影响 E88-1 的“部分通过”记录与上述条件。
+
+本追签不修改实现、不 push、不改 phase 卡；复核全文见
+[PH-88 收口复核](../../docs/reviews/2026-11-21-phase88-rev-verdict.md)。
