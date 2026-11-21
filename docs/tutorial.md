@@ -2137,3 +2137,63 @@ const char *too_long = "…158 字节以上的内容…";   // error: string lit
 
 实现细节（`{ptr,len}` 视图、不保证 NUL、只在 C 边界转换）见
 [language-spec §2](language-spec.md#2-词法与书写要求ct-ast)；用户代码不需要关心它。
+
+## 20. 解析器/检查器的判别式：先切片，再换 `match`（PH-87，v0.87.0）
+
+编译器自己要判断“这是哪种节点”。最直接的写法是 `switch (n->kind)`，但漏一个
+分支不会报错——它只会静默走进 `default`。PH-84 的 `match` 能证明穷尽，但要求
+主语是 ADT；ct-ast 的节点池是 `int kind` 的扁平结构，且 **ct-ast 源码由 L2 引导
+编译**，L2 还不认识 ADT/`match`（见 `battle/p87-kind-match`）。所以 PH-87 先做
+可验证的一步：把每种 kind 的分支体搬进具名函数，判别式只读一次 kind；切片与
+将来的 `match` 变体一一对应。
+
+下面这段是“换过去之后”的形状，它现在就能被 ct-ast 编译运行（ct-ast 自己暂时
+不能这样写，L2 会拒绝）：
+
+```ct
+#include <stdio.h>
+
+enum Shape {
+    Circle(int r),
+    Rect(int w, int h),
+    Point(int x, int y),
+}
+
+int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+        Shape.Point(x, y) => { return x + y; }
+    }
+}
+
+int main(void)
+{
+    printf("%d\n", area(Shape.Circle(2)));
+    printf("%d\n", area(Shape.Rect(3, 4)));
+    printf("%d\n", area(Shape.Point(5, 6)));
+    return 0;
+}
+```
+
+输出：
+
+```text
+12
+12
+11
+```
+
+漏掉一支就是编译错，不会静默兜底：
+
+```ct
+match (s) {
+    Shape.Circle(r) => { return r; }
+}   // error: match does not cover variant 'Shape.Rect' (add the arm or write '_ => { … }')
+```
+
+为什么先切片：切片是纯函数边界移动，能立刻用“语料逐字节 + 345 条诊断逐字 +
+自举不动点”验收；等 PH-88 把引导链搬开，再把每个 `tc_expr_*` / `ctype_*` 换成
+`Shape.Variant(binding) => { … }` 即可。误报情况见
+[PH-87 dogfood 报告](design/p87_dogfood.md)。

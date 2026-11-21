@@ -3126,3 +3126,32 @@ struct Shape {
 
 在上述作业落地前，本文的「已知缺陷」段落就是外部使用者的规避依据；发现新偏差时先改本文并登记，
 不要直接改 `selfhost/` 或门禁实现（边界见负责人 2026-11-15 的决定）。
+
+### 4.74 解析器/检查器的判别式切片（PH-87，实现内部）
+
+> 本节描述的**不是**用户可见语法，而是 ct-ast 自身实现的组织约束；语言语义不变。
+
+ct-ast 的节点池是扁平 `struct Node { int kind; … }`，`kind` 是手编号的 `int`
+（`N_*` 宏，跨单元各写一份）。PH-87 把解析器与检查器的 kind 判別改成**单一判别 +
+按 kind 切片**：
+
+- `Expr::static_ctype`（静态 C 类型）：14 个 kind → 13 个 `ctype_*` 函数；
+- `TypeCheck::expr_type`（检查器的类型推断）：20 个 kind → 15 个 `tc_expr_*` 函数；
+- 判别式只读一次 `nodes[n].kind`，不再在每个分支重复读；分支体逐字保留在切片函数里。
+
+**为什么不是 `match`（诚实登记）。** `match`（§4.73）只接受 ADT 值；`kind` 是
+`int`，要把它变成 ADT 主语就得改整棵节点树，属 PH-88（发射器 + 自举）范围。
+更硬的前置：ct-ast 源码由 L2 引导编译，L2 不实现 PH-84，把 `pub enum NodeKind`
+写进源码会让 L2 发射非法 C 而断链（原始输出见
+[battle/p87-kind-match](../../battle/p87-kind-match/verdict.md) 与
+[证据](../../test/probes/p87_l2_adt_evidence.txt)）。因此本版只落地可验证的切片，
+`switch → match` 的字面拼写移交 PH-88；切片与变体 1:1，届时是机械替换。
+
+**等价判据（D-017 A1）。** 测试语料发射 66 个文件逐字节不变；345 条诊断
+exit+stderr 逐字不变；自举不动点（ct-ast 与自编译 ct-ast2 的 `--emit-c` 目录
+`diff -r` 为空）通过；编译器自身产物允许差异。
+
+**漏分支的保证。** 探针 `p87_parser` / `p87_checker` 核对切片清单，并自测
+“删掉一条切片 → 探针必须变红”；语言级负例
+`test/ast/p87_checker/missing_arm.ct` 钉住
+`error: match does not cover variant 'Shape.Rect'`。
