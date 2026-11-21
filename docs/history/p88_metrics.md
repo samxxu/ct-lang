@@ -65,7 +65,8 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
 | 4 | `emit_node` 的 `N_DECL` 前处理**不返回**：它处理完后落回表达式语句支（`N_DECL` 也在该支的条件里） | 直接搬成函数会把原本的 fall-through 变成"已处理"，语义改变 | 该切片用三态：返回 `2` = 继续判别，其余返回值原样透传；判别处 `if (r != 2) return r;`。这是唯一一个 fall-through 支（脚本与探针均核对） |
 | 5 | 方法体里的 `self` 在发射 C 中拼作 `_self`；切片是自由函数，`self` 是普通参数 | 如果切片签名写成方法会撞 `MAX_METHODS` 且改 vtable | 自由函数 + 显式 `struct Emitter *self` 参数；ABI/命名契约不变 |
 | 6 | `String` 拼接/可增长 buffer **在本切片不适用** | 发射器是流式的：`self->out` 是 `FILE *`，逐 token `fputs/fprintf`，没有"先拼整行再写"的路径；剩余固定缓冲都受 `MAX_TEXT`=160 与 `header_guard(cap)` 的契约约束 | 不改：引入 `lib/std` 的 `String` 会给引导编译器增加一次分配器依赖与第二份 String 实现，收益为零（R88-3 的"必要时局部保留 buffer"）；登记为未覆盖项，供 M1/v1.1 复核 |
-| 7 | `-Wunused-variable`：切片里为了承接原函数顶部局部量（`c`/`op`/`m`）补声明，但有的分支只在嵌套作用域声明同名变量 | 首轮出现 1 条 unused 告警 | 切片内补 `(void)name;`；最终零告警 |
+| 7 | **错误路径 `?`/errdefer 不适用**：L2 引导链不下降 PH-40/PH-44（PH-86 battle A，REVIEW 已签），写进 ct-ast 源码会被原样发射成非法 C | 本切片保留原有 `return -1`/`fail_from`；没有可挂的 `?`/errdefer | 按 PH-86 口径不改；与字面 `match` 同承接到 `v1-PH-0` |
+| 8 | `-Wunused-variable`：切片里为了承接原函数顶部局部量（`c`/`op`/`m`）补声明，但有的分支只在嵌套作用域声明同名变量 | 首轮出现 1 条 unused 告警 | 切片内补 `(void)name;`；最终零告警 |
 
 ## 5 原始输出
 

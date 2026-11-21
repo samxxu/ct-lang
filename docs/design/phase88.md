@@ -155,8 +155,22 @@ g8: OK (PN-2 version coherence; 9 legacy offsets)
 ### 7.5 未覆盖
 
 1. 字面 `match`：L2 引导链前置，承接 `v1-PH-0`（§3.1 / battle）；
-2. `String`/可增长 buffer：发射器流式写 `FILE *`，不适用（§S88a 度量 §4-6）；
-3. `MAX_FUNCS` 余量 37 个顶层函数：下一批切片前必须复算；
-4. 本地 `dist/ct-linux-x64.tar.gz` 是 v0.87.0 的未纳管产物；本机无 zig，
+2. `?`/errdefer：L2 不下降 PH-40/PH-44（§3.2，PH-86 battle A），错误路径保留显式 `return -1`/`fail_from`；
+3. `String`/可增长 buffer：发射器流式写 `FILE *`，不适用（度量 §4-6）；
+4. `MAX_FUNCS` 余量 37 个顶层函数：下一批切片前必须复算；
+5. 本地 `dist/ct-linux-x64.tar.gz` 是 v0.87.0 的未纳管产物；本机无 zig，
    无法重建 0.88.0 Linux 产物，`p83/dist` 按设计 skip（77）。发布前需在
    有交叉工具链的环境重跑 `selfhost/make-dist.sh --cross <zig>`。
+
+### 3.2 错误路径 `?`/errdefer（沿用 PH-86 battle A）
+
+S88a 的“错误路径尽量 `?`/errdefer”在 v0.88.0 **不适用**：L2 引导链不下降
+PH-40 / PH-44 的 `errdefer` 与后缀 `?`，写进 ct-ast 源码会被原样发射成非法 C
+（独立复现见 [battle/p86-errorpath](../../battle/p86-errorpath/verdict.md) REVIEW
+判决；L2 中 `errdefer` 命中 0、无后缀 `?` 下降）。PH-87 卡 §1 已按同一口径
+“不改”，PH-88 沿用：
+
+- 切片保留原有的显式 `return -1` / `fail_from` 错误值，不新增也不改写错误通道；
+- 错误出口的行为由 345 条诊断逐字 + `p86_errors` 23/0 验收；
+- 与字面 `match` 同一个解锁点：`v1-PH-0` seed cutover 之后，才谈在 ct-ast 源码
+  使用 `?`/errdefer；本卡不代决。
