@@ -287,6 +287,108 @@ else
     fi
 fi
 
+# ---- F1: the typedef alias also matches and runs ---------------------------
+cat >"$tmp/alias.ct" <<'CT'
+#include <stdio.h>
+
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int area(Alias a)
+{
+    match (a) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+    }
+}
+
+int main(void)
+{
+    Alias c = Shape.Circle(2);
+    Alias r = Shape.Rect(3, 4);
+    printf("%d %d\n", area(c), area(r));
+    return 0;
+}
+CT
+if ! "$CT" "$tmp/alias.ct" -o "$tmp/alias.c" >"$tmp/o" 2>&1; then
+    bad "the typedef-alias match did not compile"
+    dump
+elif ! "$CC" -Wall -Wextra -std=c99 "$tmp/alias.c" -o "$tmp/alias.bin" >"$tmp/o" 2>&1 \
+     || ! "$tmp/alias.bin" >"$tmp/alias.out" 2>&1 \
+     || [ "$(cat "$tmp/alias.out")" != "12 12" ]; then
+    bad "the typedef-alias match did not run: $(cat "$tmp/alias.out" 2>/dev/null)"
+    dump
+else
+    ok
+fi
+
+# ---- F2: `pub typedef` across units, tag and alias both usable ------------
+mkdir -p "$tmp/xt/lib" "$tmp/xt/out"
+cat >"$tmp/xt/lib/lib.h.ct" <<'CT'
+namespace lib;
+
+pub typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+CT
+cat >"$tmp/xt/prog.ct" <<'CT'
+#include <stdio.h>
+
+import lib::lib;
+
+int by_tag(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+    }
+}
+
+int by_alias(Alias a)
+{
+    match (a) {
+        Shape.Circle(r) => { return r; }
+        Shape.Rect(w, h) => { return w + h; }
+    }
+}
+
+int main(void)
+{
+    Shape c = Shape.Circle(2);
+    Alias r = Shape.Rect(3, 4);
+    printf("%d %d %d\n", by_tag(c), by_alias(c), by_alias(r));
+    return 0;
+}
+CT
+if ! ( cd "$tmp/xt" && "$CT" build --emit-c prog.ct -o out ) >"$tmp/o" 2>&1; then
+    bad "the pub-typedef cross-unit build failed"
+    dump
+elif [ ! -f "$tmp/xt/out/lib.h" ] || [ ! -f "$tmp/xt/out/prog.c" ]; then
+    bad "the pub-typedef build did not publish both products"
+else
+    ok
+    if has "$tmp/xt/out/lib.h" "typedef struct lib_Shape {" \
+       && has "$tmp/xt/out/lib.h" "} lib_Alias;" \
+       && has "$tmp/xt/out/prog.c" "struct lib_Shape"; then
+        ok
+    else
+        bad "the pub-typedef header/consumer spelling is wrong"
+    fi
+    if no "$tmp/xt/out/prog.c" "Shape"; then
+        ok
+    elif grep -qE '(^|[^_A-Za-z0-9])Shape([^_A-Za-z0-9]|$)' "$tmp/xt/out/prog.c"; then
+        bad "the consumer product still spells the undeclared tag 'Shape'"
+        grep -nE '(^|[^_A-Za-z0-9])Shape([^_A-Za-z0-9]|$)' "$tmp/xt/out/prog.c" | head -3 | sed 's/^/    /' >&2
+    else
+        ok
+    fi
+    if ( cd "$tmp/xt" && "$CC" -Wall -Wextra -std=c99 out/*.c -o out.bin ) >"$tmp/o" 2>&1 \
+       && "$tmp/xt/out.bin" >"$tmp/xt/out.txt" 2>&1 \
+       && [ "$(cat "$tmp/xt/out.txt")" = "12 2 7" ]; then
+        ok
+    else
+        bad "the pub-typedef product did not build and run: $(cat "$tmp/o" 2>/dev/null)"
+        head -4 "$tmp/xt/out.txt" 2>/dev/null | sed 's/^/    /' >&2
+    fi
+fi
+
 # ---- the C enum / switch products do not move ------------------------------
 if ! "$CT" "$root/test/ast/30_enum/prog.ct" -o "$tmp/enum.c" >"$tmp/o" 2>&1; then
     bad "the existing enum fixture no longer compiles"

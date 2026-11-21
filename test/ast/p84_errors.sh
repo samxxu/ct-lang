@@ -200,6 +200,41 @@ CT
 bad_case "a pointer to a non-ADT is an error" "$tmp/nonadtp.ct" \
     "match needs an ADT value, but 'int *' is not an ADT" 3
 
+# ---- the alias subject reaches the ordinary missing-variant diagnostic ----
+cat >"$tmp/aliasmissing.ct" <<'CT'
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int area(Alias a)
+{
+    match (a) {
+        Shape.Circle(r) => { return 3 * r * r; }
+    }
+    return 0;
+}
+CT
+bad_case "an alias subject still gets the missing-variant error" "$tmp/aliasmissing.ct" \
+    "match does not cover variant 'Shape.Rect'" 5
+
+# ---- an alias of a non-ADT is not silently accepted -----------------------
+cat >"$tmp/aliasint.ct" <<'CT'
+typedef int Num;
+
+int f(Num n)
+{
+    match (n) {
+        _ => { return 0; }
+    }
+    return n;
+}
+
+int main(void)
+{
+    return f(1);
+}
+CT
+bad_case "an alias of a non-ADT subject is an error" "$tmp/aliasint.ct" \
+    "match needs an ADT value, but 'Num' is not an ADT" 5
+
 # ---- every diagnostic is the only one (no fallback cascade) -----------------
 if [ "$(grep -c 'error:' "$tmp/o")" -gt 2 ]; then
     fail=$((fail + 1)); echo "FAIL p84errors: a rejection cascaded into several errors" >&2

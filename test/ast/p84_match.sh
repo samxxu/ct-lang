@@ -197,6 +197,66 @@ int main(void)
 CT
 ok_check "'match' is still usable as a function name" "$tmp/name.ct"
 
+# ---- F1: the typedef alias names the same sum type -------------------------
+cat >"$tmp/alias.ct" <<'CT'
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int area(Alias a)
+{
+    match (a) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+    }
+}
+
+int main(void)
+{
+    Alias c = Shape.Circle(2);
+    Alias r = Shape.Rect(3, 4);
+    return area(c) + area(r);
+}
+CT
+ok_check "a typedef alias is a match subject" "$tmp/alias.ct"
+
+cat >"$tmp/aliasp.ct" <<'CT'
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int area(Alias *a)
+{
+    match (a) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+    }
+}
+
+int main(void)
+{
+    Alias c = Shape.Circle(2);
+    return area(&c);
+}
+CT
+ok_check "a pointer to a typedef alias is a match subject" "$tmp/aliasp.ct"
+
+# the alias's own spelling may qualify the arm too (same sum type)
+cat >"$tmp/aliasarm.ct" <<'CT'
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int area(Alias a)
+{
+    match (a) {
+        Alias.Circle(r) => { return 3 * r * r; }
+        Alias.Rect(w, h) => { return w * h; }
+    }
+}
+
+int main(void)
+{
+    Alias c = Shape.Circle(2);
+    return area(c);
+}
+CT
+ok_check "the alias may qualify the arm variant" "$tmp/aliasarm.ct"
+
 # ---- the `--types` lint (R84-2) --------------------------------------------
 cat >"$tmp/redundant.ct" <<'CT'
 enum Shape { Circle(int r), Rect(int w, int h) }
