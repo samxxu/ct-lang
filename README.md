@@ -1,6 +1,6 @@
 # ct — C with Traits 编译器
 
-> **v0.83.3** · 中文 · [English](README.en.md)
+> **v0.84.0** · 中文 · [English](README.en.md)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
 编译路径（`ct compile` / `ct build`）不做类型检查、不做优化；可选的 `ct check` 只做受限语义检查
@@ -489,7 +489,9 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **后缀 `?` 错误传播**：`expr?` 把 `Result` 失败以 `Outer::err` 返回，成功取 `value`；L44-1/2/3；`?:` 消歧（Phase 44）
 - **明确不做**：继承、默认编译路径的类型检查（`ct check` 只做受限检查）、优化（语言在 `1.0.0` 才定稿）
 
-每条语法的展开规则以 [docs/language-spec.md](docs/language-spec.md) 为准；写法范例见 [docs/patterns.md](docs/patterns.md)，
+每条语法的展开规则以 [docs/language-spec.md](docs/language-spec.md) 为准（ADT/`match` 见 §4.73）；
+写法范例见 [docs/patterns.md](docs/patterns.md)（`kind` 判别改写见 §6），教程见
+[docs/tutorial.md](docs/tutorial.md)（ADT 见 §18），
 内存约定见 [docs/memory-guide.md](docs/memory-guide.md)。
 
 **范式与边界的详读**：本页 §0.1–§0.4 是可运行展示；**权威定义与两档判断依据只在

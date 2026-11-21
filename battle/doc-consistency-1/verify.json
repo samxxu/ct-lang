@@ -1,0 +1,55 @@
+{
+  "schema": "battle-verify/1",
+  "battle": "doc-consistency-1",
+  "seat": "VERIFY",
+  "generated_at_local": "2026-11-21T08:50:00+08:00",
+  "head": {"baseline": "b7cd350b", "version": "0.83.3"},
+  "environment": {
+    "os": "macOS (Darwin arm64)",
+    "date": "2026-11-21",
+    "scope": "read-only: docs 入口/参考文档、PH-84 卡、DOC-77/78/79；battle 席位只写 battle/**"
+  },
+  "evidence": [
+    {
+      "id": "E-01",
+      "command": "wc -l docs/language-spec.md docs/patterns.md",
+      "output": "    3117 docs/language-spec.md\n     161 docs/patterns.md\n    3278 total",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-02",
+      "command": "sed -n '24p' docs/llm-guide.md",
+      "output": "| H1 | `Vec<T>` / `Map<K,V>` / `Option<T>` / `Result<T,E>` / `Str` 是**编译器内置层**（`lib/std/`），自动加载、**免 import**；不要重写，也不要再 `import std::vec` / `std::map`（这两个模块已在 std 0.3.0 删除，见 [lib/std/README](../lib/std/README.md)） |",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-03",
+      "command": "sed -n '89p' docs/glossary.md",
+      "output": "| 长度前缀字符串 Str | `struct Str { char *data; int len; }`（`lib/std/Str.h.ct`） | 内建句柄，`len` 是契约（保留内嵌 `\\0`）；`str_from` / `str_from_len` / `str_len` / `str_slice` / `str_concat` / `str_compare` / `str_c_str`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`；`impl Drop for Str` 释放 buffer；按值传递浅拷贝指针，需显式 `retain()` 深拷贝（Phase 36，见 [language-spec](language-spec.md) §4.56） |",
+      "exit": 0,
+      "reproduced": true
+    },
+    {
+      "id": "E-04",
+      "command": "grep -n '^### 4.73' docs/language-spec.md",
+      "output": "2988:### 4.73 最小 ADT 与 `match`（Phase 84，仅 ct-ast）",
+      "exit": 0,
+      "reproduced": true
+    }
+  ],
+  "anchors": [
+    {"file": "docs/llm-guide.md", "line": 24, "note": "内置层清单缺 String/U16String，Str 语义过期（不利于 B 的一条）"},
+    {"file": "docs/glossary.md", "line": 89, "note": "Str 记为 owning 句柄，与 PH-80 S5b 后借用视图冲突"},
+    {"file": "docs/language-spec.md", "line": 2988, "note": "ADT/match 的 spec 节 §4.73"}
+  ],
+  "checks": [
+    {"id": "J-1", "status": "pass", "note": "B 的最小集按 grep 可枚举：spec/tutorial/patterns 必需节 + 4 份入口文档事实/链接"},
+    {"id": "J-2", "status": "pass", "note": "五项新特性在 spec 有节；ADT/match 见 §4.73/tutorial §18/patterns §6；llm-guide 事实修正在 S84e"},
+    {"id": "J-3", "status": "pass", "note": "三处文档对同一特性给同一语义；能力→节号断言归 DOC-77"},
+    {"id": "J-4", "status": "pass", "note": "ADT 示例挂 check-ast（290/291/292、p84_layout、p84_docs）；最小集不引入不可运行代码块"},
+    {"id": "J-5", "status": "pass", "note": "判决只改 docs 与 battle/**；不改 selfhost/test 语义"},
+    {"id": "J-6", "status": "pass", "note": "最小集清单写入 PH-84 §2 S84e，未列入项不得扩写"}
+  ]
+}

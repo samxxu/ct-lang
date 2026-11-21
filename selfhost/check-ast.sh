@@ -804,6 +804,14 @@ else
     bad "p84/docs" "$(cat "$work/p84doc.out" "$work/p84doc.err" | head -5)"
 fi
 
+# PH-84 S84e (E84-9): the minimal documentation audit frozen by
+# battle/doc-consistency-1 verdict B (required sections + fact/link fixes).
+if bash test/ast/p84_docs_audit.sh >"$work/p84aud.out" 2>"$work/p84aud.err"; then
+    ok "p84/docs-audit"
+else
+    bad "p84/docs-audit" "$(cat "$work/p84aud.out" "$work/p84aud.err" | head -5)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.

@@ -21,7 +21,7 @@
 
 | # | 规则 |
 | --- | --- |
-| H1 | `Vec<T>` / `Map<K,V>` / `Option<T>` / `Result<T,E>` / `Str` 是**编译器内置层**（`lib/std/`），自动加载、**免 import**；不要重写，也不要再 `import std::vec` / `std::map`（这两个模块已在 std 0.3.0 删除，见 [lib/std/README](../lib/std/README.md)） |
+| H1 | `Vec<T>` / `Map<K,V>` / `Option<T>` / `Result<T,E>` / `String` / `U16String` / `Str` 是**编译器内置层**（`lib/std/`），自动加载、**免 import**；`String` 是 owning 句柄，`Str` 是借用视图（PH-80 起，不再有 owning `Str`）。不要重写，也不要再 `import std::vec` / `std::map`（这两个模块已在 std 0.3.0 删除，见 [lib/std/README](../lib/std/README.md)） |
 | H2 | 标准库模块用 `ct get ct/std` 安装，按 `import std::<mod>::<Unit>` 导入；**不要手写替代**，完整入口见 [std-catalog](std-catalog.md) |
 | H3 | 别人的包用 `ct get <publisher>/<name>`（配 `--index` / `CT_INDEX`）；**不要复制源码进本仓**，也不要假设裸名能解析（裸名只查官方 pin 表） |
 | H4 | 包格式是 `ct.pkg` + `publisher` + `ns-root`；不要自造清单键或目录布局，见 [package-guide](package-guide.md) |
@@ -34,7 +34,7 @@
 | 需求 | 先查 | 不要做 |
 | --- | --- | --- |
 | 动态数组 / 映射 | 内置 `Vec<T>` / `Map<K,V>` | 自己写 `struct` + `realloc` 容器 |
-| 字符串查找 / 切片 / 拼接 / 切分 / 数字解析 | `std::str`（`find` / `slice` / `concat` / `split_into` / `parse_*`） | 手写 `split` 或复制包里的 `String` |
+| 字符串查找 / 切片 / 拼接 / 切分 / 数字解析 | 内置 `String` / `Str`（`byte_index_of` / `slice` / `byte_slice` / `cstr`；`String` 为 owning，`Str` 为借用视图） | 手写 `split` 或复制包里的 `String` |
 | 文件 / 目录 / 元数据 | `std::fs`、`std::io` | 手写 `opendir` / `stat` 包装 |
 | UTF-8 编解码 / 码点计数 | `std::utf8` | 手写 UTF-8 状态机 |
 | 数字 / 浮点 / 数学 | `std::num`、`std::math` | 重写 `to_str` / `sqrt` 包装 |
@@ -59,8 +59,8 @@ ct install                           # 打印带 -I / cflags / ldflags 的构建
 
 ## 5. 判断示例
 
-- **「实现一个字符串 split」**：先看 `std::str`——`split_into` 已按分隔符切分；需要自定义语义时
-  在调用方用 `find` / `slice` 组合，不要重写 `String`。
+- **「实现一个字符串 split」**：先看内置 `String` / `Str`——按分隔符切分可用
+  `byte_index_of` + `byte_slice` 组合；不要重写 `String`。
 - **「实现 Vec / Map」**：用内置泛型；`Vec<T>` / `Map<K,V>` 由编译器预解析，见
   [language-spec §4.51](language-spec.md#451-泛型-struct固有方法与内置容器phase-29)。
 - **「加一个包」**：写 `ct.pkg`（`publisher` + `ns-root`），用 `tools/package.sh` 发布到

@@ -182,6 +182,30 @@ CT
 bad_check "a mixed payload / plain enum is refused" "$tmp/mixed.ct" \
     "every variant of an ADT must carry a payload list" 1
 
+# a tagged ADT keeps the typedef form: the alias and the tag both name the sum
+cat >"$tmp/typedef.ct" <<'CT'
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int area(Alias a)
+{
+    switch (a.tag) {
+    case 0:
+        return a.u.Circle.r;
+    default:
+        return a.u.Rect.w * a.u.Rect.h;
+    }
+}
+
+int main(void)
+{
+    Alias c = Shape.Circle(2);
+    Alias r = Shape.Rect(3, 4);
+    return area(c) + area(r);
+}
+CT
+ok_check "a typedef'd ADT parses and types" "$tmp/typedef.ct"
+ok_check "a typedef'd ADT answers its alias type" "$tmp/typedef.ct" --types
+
 # ---- the C enum does not move (E84-1) --------------------------------------
 if ! "$CT" "$root/test/ast/30_enum/prog.ct" -o "$tmp/enum.c" >"$tmp/o" 2>&1; then
     bad "the existing enum fixture no longer compiles"

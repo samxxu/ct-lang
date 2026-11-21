@@ -86,7 +86,11 @@
 | 非泛型固有方法（non-generic inherent method） | `impl Counter { int get() { … } }` | 非泛型 struct 的固有 impl；落码 `<Struct>_<method>`，属主单元定义一次、消费方从 `.h` 取原型（Phase 34） |
 | `Option` / `Result` | `Option<T>`（`has` + `value`）、`Result<T, E>`（`ok` + `value` + `err`） | `lib/std` 的普通泛型 struct，带 `use Drop`；字面量构造，`unwrap` 在错侧 `abort`，`release` 是 no-op；`none()` / `ok()` / `err()` 零初始化未用 payload 使无条件胶水安全释放；`?` / pattern / 自动释放属后续阶段（Phase 34 / Phase 36） |
 | 泛型 trait（generic trait） | `trait Iter<T> { T next(void); }` | 按实参单态化为实例行（`Iter<int>` → `Iter_int`），产物 `<Trait>_<ct_inst_encode 输出>_*`（`Iter_int_vtbl` / `__iter_int_vptr` / `Circle_Iter_int_next`，嵌套实参按转义、≥64 字符走哈希回退）；实例只能在模板属主单元创建（跨单元 L35-4），不支持默认方法体（Phase 35，见 [language-spec](language-spec.md) §4.55） |
-| 长度前缀字符串 Str | `struct Str { char *data; int len; }`（`lib/std/Str.h.ct`） | 内建句柄，`len` 是契约（保留内嵌 `\0`）；`str_from` / `str_from_len` / `str_len` / `str_slice` / `str_concat` / `str_compare` / `str_c_str`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`；`impl Drop for Str` 释放 buffer；按值传递浅拷贝指针，需显式 `retain()` 深拷贝（Phase 36，见 [language-spec](language-spec.md) §4.56） |
+| 借用字符串 Str（borrowed string） | `struct Str { char *ptr; int len; }`，非 owning | PH-80 起 `Str` 是 UTF-8 借用视图：不拥有 buffer、不释放；owning 句柄是 `String`（引用计数头 + 作用域释放）。构造见 `Str` 字面量 / `.as_str()` / `byte_slice`；`cstr()` 是 C 边界唯一出口（见 [language-spec](language-spec.md) §4.70） |
+| 拥有字符串 String（owning string） | `struct String { char *ptr; int len; }` + 前置 refcount 头 | 内置 owning 句柄；不可变，字面量由编译器发射 immortal 块；副本自动 retain、作用域 release（PH-80 / D-013，见 [language-spec](language-spec.md) §4.70） |
+| ADT / 和类型（sum type） | `enum Shape { Circle(int r), Empty() }` | 任一成员带括号负载的 `enum` 是名义和类型：C 布局 `struct T { int tag; union { … } u; }`，`tag` 为变体序号；全部成员无负载时仍是 C `enum`（PH-84，见 [language-spec](language-spec.md) §4.73） |
+| 变体（variant） | `Shape.Circle(3)` | ADT 的构造器；实参个数/类型必须匹配负载，零负载写 `Empty()`；裸变体名不引入（PH-84） |
+| `match` | `match (s) { Shape.Circle(r) => { … } }` | 语句形式的穷尽判别；必须覆盖全部变体或显式 `_`，无 fallthrough；绑定是负载的副本（owning 负载按 move）；`ct check --types` 对多余 `_` 给 lint（PH-84，见 [language-spec](language-spec.md) §4.73） |
 | 析构胶水（drop glue） | 编译器生成的 `<S>_Drop_drop` | 无显式 `impl Drop` 时按字段声明顺序递归释放每个 `uses_drop` 字段；写了显式 `impl Drop`（含 `impl<T> Drop for Box<T>`）即自负全责、不再生成字段胶水；泛型 Drop 每实例单态化一份、不产生模板态（Phase 36） |
 
 ### 2. 命名 / 修饰规则（已发布契约）

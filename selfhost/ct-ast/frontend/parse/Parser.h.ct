@@ -3218,7 +3218,15 @@ impl ParseOps for Parser {
             }
             if (self->sup->expect(";") != 0) return -1;
             if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
-            self->arena->nodes[t].aux = 1;
+            /* bit 1 marks the typedef half; bit 2 (an ADT) must survive it */
+            self->arena->nodes[t].aux = self->arena->nodes[t].aux | 1;
+            if ((self->arena->nodes[t].aux & 2) && self->arena->nodes[t].num > 0) {
+                struct Adt *adts;
+                int nadts, adi;
+                adts = frontend::sym::ct_adts(&nadts);
+                adi = (int)self->arena->nodes[t].num - 1;
+                if (adts && adi >= 0 && adi < nadts) adts[adi].is_pub = is_pub;
+            }
             snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", name);
             snprintf(self->arena->nodes[t].text3, MAX_TEXT, "%s", self->arena->nodes[t].text2);
             snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", qname);

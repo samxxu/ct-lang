@@ -184,6 +184,44 @@ if [ -f "$tmp/adt.c" ]; then
     fi
 fi
 
+# ---- a typedef'd ADT keeps the alias in its C form --------------------------
+cat >"$tmp/td.ct" <<'CT'
+#include <stdio.h>
+
+typedef enum Shape { Circle(int r), Rect(int w, int h) } Alias;
+
+int area(Alias a)
+{
+    switch (a.tag) {
+    case 0:
+        return a.u.Circle.r;
+    default:
+        return a.u.Rect.w * a.u.Rect.h;
+    }
+}
+
+int main(void)
+{
+    Alias c = Shape.Circle(2);
+    Alias r = Shape.Rect(3, 4);
+    printf("%d %d\n", area(c), area(r));
+    return 0;
+}
+CT
+if ! "$CT" "$tmp/td.ct" -o "$tmp/td.c" >"$tmp/o" 2>&1; then
+    bad "the typedef'd ADT did not compile"
+    dump
+elif ! grep -qE '^typedef struct Shape \{' "$tmp/td.c"; then
+    bad "the typedef'd ADT is not emitted as 'typedef struct'"
+elif ! "$CC" -Wall -Wextra -std=c99 "$tmp/td.c" -o "$tmp/td.bin" >"$tmp/o" 2>&1 \
+     || ! "$tmp/td.bin" >"$tmp/td.out" 2>&1 \
+     || [ "$(cat "$tmp/td.out")" != "2 12" ]; then
+    bad "the typedef'd ADT product does not build and run: $(cat "$tmp/td.out" 2>/dev/null)"
+    dump
+else
+    ok
+fi
+
 # ---- a `pub` ADT publishes the layout through its header (E84-5) -----------
 mkdir -p "$tmp/x/lib" "$tmp/x/out"
 cat >"$tmp/x/lib/lib.h.ct" <<'CT'

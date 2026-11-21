@@ -22,6 +22,12 @@ ct-ast 按 `frontend/{lex,module,parse,sym,type}` / `runtime/arena` / `backend/{
 `tool/{pkg,diag,cache,driver}` 分组，每个单元一个主类型；门禁入口是 `selfhost/check-all.sh`。
 改主线行为时看 ct-ast，改 L0 种子行为时才看本文。
 
+### 0.1 与 ct-ast 线的边界
+
+本文描述的是 **L0 种子**（`selfhost/l0/ctc.c`）的架构。安装入口 **ct-ast** 的新语法不在 L0 内：
+`ref`/`out`（§4.68）、切片 `T[]`（§4.69）、`String`/`Str`（§4.70）、`box<T>`/`new`（§4.71）、
+ADT/`match`（§4.73）都由 `selfhost/ct-ast/**` 实现，行为以 [language-spec](language-spec.md) 为准。
+
 ### 1. 设计目标
 
 | 目标 | 具体含义 |
