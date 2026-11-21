@@ -7,8 +7,8 @@
 | 严重度 | **P1（v1.0 发布，Tier 2）** |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-4；`AGENTS.md` §5.4；`tools/check.sh` |
-| 状态 | open |
-| 处置证据 | **已落地（CI-10 `48533f23`：`tools/check.sh g1/g5/g6`）；G6 旧债由 [CI-14](ci-14-g6-legacy-status-cleanup.md) 跟踪；DEV 队首建议已兑现** |
+| 状态 | deferred |
+| 处置证据 | **核心验收已达成（严格 g6，283/283 闭集）；ratchet/基线未实现且当前无必要 → deferred（触发：台账再增长 > 0，或 v1.1 复核点；owner REV）** |
 
 ## 实施规格（方案 A：ratchet 版 G6，2026-11-21）
 
@@ -98,3 +98,62 @@ G1 至少覆盖：卡顶字段 `phase-id` / `version-minor` / 状态 / 入口/�
 - [v1-readiness-1 判决](../../battle/v1-readiness-1/verdict.md)（Tier 2）
 - [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) §4
 - [issues/README.md](../README.md)
+
+## 处置（2026-11-22，REV/REQ）
+
+**结论：`deferred`（触发：台账再增长 > 0，或 v1.1 复核点；owner REV）。**
+本条的**核心验收已达成并被严格门禁替代**；未达成的是「ratchet + 基线白名单」那一段——
+核对结果是**没有实现**，而且按当前台账已无必要，故整段延后而不是补写一个空机制。
+
+核对（干净归档 `HEAD` + 本提交五文件，`/tmp/rev-testci`）：
+
+```console
+$ ls issues/.g6-baseline.tsv
+ls: issues/.g6-baseline.tsv: No such file or directory      # 基线不存在
+$ grep -n 'write-baseline\|whitelist\|ratchet\|baseline' tools/gates/issue_ledger.py ; echo rc=$?
+rc=1                                                        # 脚本里 0 命中：没有基线/白名单模式
+$ grep -n '^g6()\|g6)' tools/check.sh
+73:g6() { gate=g6; python3 "$root/tools/gates/issue_ledger.py" "$root"; }
+104:  g6) g6 ;;
+$ bash tools/check.sh g6
+g6: OK (283 issues; open=38 verified=223 rejected=10 deferred=11 superseded=1)
+$ sh test/gates/issue_ledger_test.sh
+OK g6/ledger (5 negative cases + 1 positive)
+$ bash tools/check.sh g1
+g1: OK (12 phase cards: title/status/tasks/exit-criteria/version-minor)
+```
+
+**为什么不补 ratchet。** ratchet 的目的只有一个：让门禁在旧债未清时先上线，白名单是
+「先不判红」的缓冲。CI-11 已把 283 条全部归一到 §5.4 八词（0 条非闭集、0 条无证据
+`verified`），严格模式本身就是绿的；此时加一张基线表只会多出一个**可被滥用的豁免口**，
+并让「g6 绿」不再等价于「台账干净」。因此本条的判断是：**判据不放宽，机制不做**。
+
+验收逐条对照：
+
+| # | 验收（见「验收」节） | 结果 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 184 条非闭集归一，或建立映射并在 G6 豁免 | **已达成**：0 条非闭集 | 上面 g6 的 283 全绿 |
+| 2 | 14 条 `待办` 有 owner/去向 | **已达成** | [CI-14](ci-14-g6-legacy-status-cleanup.md) 的处置表逐条列出 |
+| 3 | G6 实现（A）或 deviation（B） | **已达成**：严格 A | `tools/check.sh g6` + 5 条负例 |
+| 4 | G1 对 phase 卡字段机械检查 | **已达成** | `g1: OK (12 phase cards: …)` |
+| 5 | `check-all` 计入或写清不计入的理由 | **已达成**：理由已记录——`check-all.sh` 的治理预检只跑 G0/G8，G6 的台账检查与 G5 的 phase 卡检查不进构建链，见 [CI-10](ci-10-governance-gates-missing.md) 的 REV 复核段 | `selfhost/check-all.sh` 预检段 |
+
+最小设计（**台账再增长时**按此落地，不重新设计；本文件 §2 即设计记录）：
+
+1. 基线文件 `issues/.g6-baseline.tsv`，列 `path<TAB>违规键<TAB>归一键<TAB>类别`，只收**已存在**
+   的存量违规，由 `--write-baseline` 生成、REQ 复核后入库；
+2. `issue_ledger.py` 增加 `--write-baseline`；默认读基线：命中 → 计 `known` 并在汇总行报数，
+   **未命中 → 立刻红**（新债零豁免）；
+3. 僵尸检测：基线里的文件已归一或已不存在 → 红（防「基线永久化」）；
+4. 基线必须挂追踪 issue 且带退出条件（清空、严格模式绿、遗留项各有去向），否则红；
+5. 负例三条进 `test/gates/issue_ledger/`：新增违规红、僵尸条目红、严格模式无基线仍绿。
+
+触发条件（任一即启动，并同时把本文件状态改回 `open`）：
+
+- **台账再增长 > 0**：`g6` 首现「非闭集 / 无证据 `verified` / 缺状态」违规且判为存量
+  （例如历史回填引入的旧写法），按上面 1–5 落地 ratchet；
+- 或 **v1.1 复核点**：届时若仍无存量违规，本条的 ratchet 一段直接记 `rejected`
+  （无需实现），只保留「严格 g6 + 5 条负例」，本条随之闭合。
+
+若 EDITOR 之后决定把 g6 进 CI，落点是 `ci.yml` 的 governance 步骤（与 g0/g8 并列），
+**不进** `check-all.sh` 的 11 道产品硬门禁——这与上面第 5 条的理由是同一条。
