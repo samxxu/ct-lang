@@ -60,8 +60,16 @@ need "$metrics" "+171"
 need "$metrics" "66"
 need "$metrics" "345"
 need "$metrics" "p87-kind-match"
-expr_lines=$(wc -l < selfhost/ct-ast/frontend/parse/Expr.h.ct | tr -d ' ')
-tc_lines=$(wc -l < selfhost/ct-ast/frontend/type/TypeCheck.h.ct | tr -d ' ')
+# PH-88: the metrics report is a v0.87.0 snapshot, and PH-88 changed the
+# emitter plus a capacity comment in Expr.h.ct. Re-derive the numbers from the
+# PH-87 closeout commit, not from the live tree (same pattern as
+# p85_inventory's frozen snapshot).
+p87_base=${P87_BASELINE:-11961895}
+expr_lines=$(git show "$p87_base:selfhost/ct-ast/frontend/parse/Expr.h.ct" 2>/dev/null | wc -l | tr -d ' ')
+tc_lines=$(git show "$p87_base:selfhost/ct-ast/frontend/type/TypeCheck.h.ct" 2>/dev/null | wc -l | tr -d ' ')
+if [ -z "$expr_lines" ] || [ "$expr_lines" = "0" ]; then
+    bad "cannot read Expr.h.ct from baseline $p87_base"
+fi
 if grep -qF "| \`frontend/parse/Expr.h.ct\` | 8710 | $expr_lines |" "$metrics"; then
     ok
 else
