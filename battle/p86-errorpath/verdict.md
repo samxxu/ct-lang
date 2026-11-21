@@ -1,7 +1,7 @@
-# battle/p86-errorpath 判决（DEV 建议，待 REVIEW）
+# battle/p86-errorpath 判决（REVIEW 2026-11-21 已签）
 
 - 日期：2026-11-21
-- 状态：**proposed（DEV 建议；REVIEW/EDITOR 未签）**
+- 状态：**accepted（REVIEW 2026-11-21 签；DEV 建议稿）**
 - 判据来源：[question.md](question.md)
 
 ## 建议
@@ -19,3 +19,17 @@
 
 若 REVIEW 要求字面执行卡 §2，B 是唯一真做 `?`/errdefer 的路径；它的代价是改
 L0/L1/L2 冻结层与产物 golden，应另立 phase/decision，不能借 PH-86 夹带。
+
+## REVIEW 判决（2026-11-21）
+
+**A 成立。** 独立复现（不用 `Result` 类型，排除原证据里 `cc` 先因未知类型失败的
+干扰）：`selfhost/l2` 对 `int v = get(&x)?;` 与 `errdefer { … }` 原样发射，
+`cc` 在 `get(&x)?` 处 `expected expression`；`selfhost/l2` 中 `errdefer` 命中 0，
+也没有后缀 `?` 的下降分支。ct-ast 源码由 L2 引导编译，写入这两个构造必破链。
+
+- 本判决**只覆盖 PH-86 S86c 的范围**：S86c 的交付改为“错误出口清单 + 诊断逐字
+  对照”，属**范围缩减**，不是 S86c 字面任务通过；不改卡 §2 任务清单与 E86-4 文本。
+- E86-4 的字面判据（诊断文本与既有负例一致；行为测试/ASan 通过）已由 345 条
+  exit+stderr sha256、8 条词法边界 fixture 与 sanitizer/ASan 证据满足。
+- 条件：PH-87/88 开卡前由 REQ 二选一——先给 L1/L2 补 PH-40/PH-44 的下降，或把
+  同名判据降为 `no-test` 文档项；不得在 PH-87/88 静默沿用本卡口径。
