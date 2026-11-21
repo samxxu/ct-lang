@@ -13,6 +13,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+import frontend::sym::SymbolsTypeText;
 
 import frontend::lex::Lexer;
 import frontend::module::MapTable;

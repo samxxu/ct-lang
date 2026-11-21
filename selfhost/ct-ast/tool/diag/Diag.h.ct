@@ -63,6 +63,11 @@ trait DiagStore {
     int  nsem(void);
     int  nwarn(void);
     void set_strict(int on);
+    /* PH-85 S85d: the B checker's level when it runs on the build path.
+       0 off (no gate runs), 1 warn (the finding prints but the build goes on),
+       2 error (the finding is a hard error, the pre-PH-85 meaning). */
+    void set_types_level(int on);
+    int  type_fail(int line, int col, const char *msg, const char *path);
     /* PH-82: `leaks = error` in the package manifest. It escalates the
        existing `potential leak` records (kinds 0/2) to errors, so the run
        fails before it writes a product; `strict` keeps its own meaning. */
@@ -87,6 +92,10 @@ struct Diag {
        while an error package fails compile/build yet does not touch
        `c-boundary`, `ct check`'s policy or any other finding class. */
     int  leaks_error;
+    /* PH-85 S85d: `ct build --check-level=warn` downgrades the B findings to
+       warnings; 0 is off and 2 is error, so a run without the flag keeps the
+       exact pre-PH-85 behaviour. */
+    int  types_level;
 } use DiagStore;
 
 impl DiagStore for Diag {
@@ -104,6 +113,18 @@ impl DiagStore for Diag {
             exit(1);
         }
         return -1;
+    }
+
+    /* PH-85 S85d: a B/`--types` finding on the build path. At level 1 it
+       prints a warning and returns 0, so the gate's caller keeps going and the
+       build still writes its products; every other level is `sem_error`. */
+    int type_fail(int line, int col, const char *msg, const char *path)
+    {
+        if (self->types_level == 1) {
+            fprintf(stderr, "%s:%d:%d: warning: %s\n", path, line, col, msg);
+            return 0;
+        }
+        return self->sem_error(line, col, msg, path);
     }
 
     int record_sig_warn(int line, int col, const char *method, const char *trait,
@@ -134,6 +155,15 @@ impl DiagStore for Diag {
     int record_arity_warn(int line, int col, const char *callee, const char *msg,
                           const char *path)
     {
+        /* PH-85 S85d: `--check-level=error` escalates the B findings this
+           store would otherwise keep as warnings. The count moves `nsem`, so
+           `build_main` stops before any product is written. */
+        if (self->types_level == 2) {
+            char full[MAX_TEXT * 2];
+            snprintf(full, sizeof full, "arity mismatch: '%s' %s", callee, msg);
+            (void)self->sem_error(line, col, full, path);
+            return 0;
+        }
         struct Warn *w;
         (void)self;
         if (self->nwarns >= MAX_WARNINGS) return -1;
@@ -157,6 +187,15 @@ impl DiagStore for Diag {
     int record_type_warn(int line, int col, const char *callee, const char *msg,
                          const char *path)
     {
+        if (self->types_level == 2) {
+            char full[MAX_TEXT * 2];
+            if (callee[0])
+                snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
+            else
+                snprintf(full, sizeof full, "%s", msg);
+            (void)self->sem_error(line, col, full, path);
+            return 0;
+        }
         struct Warn *w;
         (void)self;
         if (self->nwarns >= MAX_WARNINGS) return -1;
@@ -533,6 +572,11 @@ impl DiagStore for Diag {
         return self->nwarns;
     }
 
+    void set_types_level(int on)
+    {
+        self->types_level = on;
+    }
+
     void set_strict(int on)
     {
         (void)self;
@@ -691,6 +735,20 @@ pub void ct_diag_set_strict(int on);
 void ct_diag_set_strict(int on)
 {
     g_diag.set_strict(on);
+}
+
+/* PH-85 S85d: `ct build --check-level=off|warn|error`. The level is a run
+   configuration, so `ct_diag_reset` (one call per unit) leaves it alone. */
+pub void ct_diag_set_types_level(int on);
+void ct_diag_set_types_level(int on)
+{
+    g_diag.set_types_level(on);
+}
+
+pub int ct_type_fail(int line, int col, const char *msg, const char *path);
+int ct_type_fail(int line, int col, const char *msg, const char *path)
+{
+    return g_diag.type_fail(line, col, msg, path);
 }
 
 pub void ct_diag_reset(void);

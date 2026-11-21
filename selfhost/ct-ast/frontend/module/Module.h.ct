@@ -173,6 +173,9 @@ pub struct Module {
     /* `ct check` (19.4): parse and report the semantic findings, write no C.
        The driver's compile path short-circuits on it after parsing. */
     int  check_mode;
+    /* PH-85 S85d: `ct build --check-level=off|warn|error` (0/1/2). 0 is the
+       default and keeps the build path silent, exactly as before. */
+    int  types_level;
     const char *std_flag;       /* --std=c99 | --std=gnu99 */
     const char *version;        /* CTC_VERSION, bound by the driver */
     /* Phase 17.6: the one-step build. `emit_c` keeps the old emit-only shape
@@ -1670,6 +1673,7 @@ impl ModuleOps for Module {
                 printf("usage: %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
                        "                 [--locked] [--emit-c] [--lib] [--runtime-checks] [--outdir <dir>] [--cc <path>]\n"
                        "                 [--freestanding] [--alloc <m,f[,r,c]>] [--c-boundary=strict|allow]\n"
+                       "                 [--check-level=off|warn|error]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->] [--emit-model <file|->]\n"
                        "                 [--diagnostics=text|json] [--std=c99|gnu99|c11]\n",
@@ -1986,6 +1990,12 @@ impl ModuleOps for Module {
         /* PH-69-R1: `ct check` routed through the build graph keeps check
            severity (all findings are errors), not build's signature-only 2. */
         tool::diag::ct_diag_set_strict(self->check_mode ? 1 : 2);
+        /* PH-85 S85d: the B checker on the build path. `off` leaves
+           `types_mode` 0, so no gate below runs and the build is byte-for-byte
+           what it was; `warn` / `error` turn the gates on and pick how a
+           finding is treated. */
+        tool::diag::ct_diag_set_types_level(self->types_level);
+        if (self->types_level > 0) self->p->types_mode = 1;
         /* PH-82: one package per run, so the build's first input decides the
            leak policy for every unit in it (D-012's "本包"). */
         tool::diag::ct_diag_set_leaks_error(self->leaks_for(ninput > 0 ? inputs[0] : ""));
@@ -2043,6 +2053,13 @@ impl ModuleOps for Module {
                         }
                     }
                 }
+            }
+            /* PH-85 S85d: `--check-level=error` counts its findings in
+               `nsem` without aborting the parse (a warning-shaped kernel stays
+               on its path), so stop here -- before any product is written. */
+            if (tool::diag::ct_diag_nsem()) {
+                fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
+                return 1;
             }
         }
 

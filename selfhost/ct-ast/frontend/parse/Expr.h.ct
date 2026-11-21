@@ -1609,8 +1609,7 @@ impl ExprOps for Expr {
                this is a hard error with the same wording the static-recipe
                path uses (`argtype_check_static`). */
             snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
-            tool::diag::ct_sem_error(line, col, full, self->sup->mem->path);
-            return -1;
+            return tool::diag::ct_type_fail(line, col, full, self->sup->mem->path);
         }
         if (r == 1) {
             if (self->sup->type_warn(line, col, callee, msg) != 0)
@@ -1632,8 +1631,7 @@ impl ExprOps for Expr {
         if (!self->argtype_mismatch(args, -1, ti, mi, msg, sizeof msg))
             return 0;
         snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
-        tool::diag::ct_sem_error(line, col, full, self->sup->mem->path);
-        return -1;
+        return tool::diag::ct_type_fail(line, col, full, self->sup->mem->path);
     }
 
     /* 19.3: an impl's parameter spelling against the trait's -- two declared
@@ -8355,7 +8353,7 @@ impl ExprTypes for Expr {
                      label, formal, actual);
         }
         if (diag == 7 || diag == 8)
-            return tool::diag::ct_sem_error(self->chk_line, self->chk_col, msg,
+            return tool::diag::ct_type_fail(self->chk_line, self->chk_col, msg,
                                             self->sup->mem->path);
         return tool::diag::ct_type_warn(self->chk_line, self->chk_col, "", msg,
                                         self->sup->mem->path);

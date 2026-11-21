@@ -1,6 +1,6 @@
 # ct — C with Traits 编译器
 
-> **v0.84.1** · 中文 · [English](README.en.md)
+> **v0.85.0** · 中文 · [English](README.en.md)
 
 **ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
 编译路径（`ct compile` / `ct build`）不做类型检查、不做优化；可选的 `ct check` 只做受限语义检查
@@ -454,6 +454,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ct build --lib <root.h.ct> [-o <lib.a>]` | C ABI 静态库：根 `.h.ct` 的 C 兼容 `pub` 函数进入 `<base>.abi.h`，产物为 `lib<base>.a`（`-o` 可改；`--outdir` 默认 `.ctbuild`）；泛型模板跳过并警告，不兼容签名/`main`/`pub` 全局/shim 硬错；`nm -g` 面 ⊋ 导出面，只有 `.abi.h` 的声明是 ABI（Phase 39） |
 | `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`（含 `import` 时复用 `ct build` 的单元图）：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移（以及既有的 leak / 借用类发现）一律以 `error:` 报告，有任何发现退出 `1`，干净退出 `0`（`--diagnostics=json` 时对象带 `"severity":"error"`，并带 `"col"`） |
 | `ct check --types <in.ct>` | opt-in 类型检查（PH-68/PH-69；PH-70/PH-71 的 CFG/own 走 `ct check --semantics`）：在 §4.53 的粗检（声明初值 / 赋值、`return`、容器与泛型固有方法实参）之外，补跨单元、泛型实例、trait 方法选择与容器方法的调用签名；不写产物。**默认编译路径仍不做类型检查**：`ct build` / `ct compile` 的诊断与 golden 不变 |
+| `ct build --check-level=off\|warn\|error` | 把 B 的 `--types` 检查接进构建路径（PH-85）：`off`（默认）与 PH-85 之前逐字节相同；`warn` 把发现按 `warning:` 报告、构建继续并写产物；`error` 按 `error:` 报告并在写任何产物前失败。只对 `ct build` 有效（`ct check` 里发现本来就是错误）。发现类别与 `ct check --types` 相同：赋值/初值/`return`/`$` 目标/调用实参的静态类型；`ct check --types` 的行为不变 |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号） |
 | `ct … --emit-model <file\|->` | 模型导出 JSON（PH-74 / PH-59）：入口单元的 struct 与字段（含行列）、函数等声明模型；`ct <in.ct>` 与 `ct build` 都可用，不改变生成的 C |
 | `ct index verify [<file>] [--json] [-q]` | 只读校验索引：六字段、name/publisher/version、`tag == v<version>`、`sha256` 小写 64 位、重复行；五字段旧行按行硬错。单索引 `<file>` > `CT_INDEX` > `$CT_HOME/index/index`；退出码 0/1/2，`--json` 单行稳定（契约 v1 §4.4，PH-83） |
