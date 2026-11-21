@@ -1,0 +1,586 @@
+--- a/selfhost/ct-ast/frontend/lex/Lexer.h.ct
++++ b/selfhost/ct-ast/frontend/lex/Lexer.h.ct
+@@ -27,6 +27,12 @@
+ namespace frontend::lex;
+ pub trait LexOps {
+     void next(void);
++    /* PH-85 spike: the scan split into one method per token class. */
++    void pp_line(void);
++    void ident(void);
++    void number(void);
++    void quoted(int c);
++    void punct(int c);
+ }
+ 
+ pub struct Lexer {
+@@ -65,15 +71,21 @@
+     return v * base + d;
+ }
+ 
++/* A token starts with one of these (`lex_ident_start` and the quoted branch
++   are the only places the character classes live). */
++static int lex_ident_start(int c)
++{
++    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
++}
++
+ impl LexOps for Lexer {
+-    /* Whitespace, comments and preprocessor lines are skipped before the token
+-       starts; every branch leaves `tok` and, where it applies, `toktext` /
+-       `toknum` set for the parser to read. */
++    /* The scanner's concerns, one method each: whitespace and the
++       preprocessor line, then identifiers, numbers, quoted literals and
++       punctuation. `next` only decides which one runs. */
+     void next(void)
+     {
+-        int c, n;
++        int c;
+         (void)self;
+-
+         for (;;) {
+             c = (unsigned char)self->src[self->pos];
+             if (c == 0) { self->tok = T_EOF; self->toktext[0] = 0; return; }
+@@ -103,282 +115,304 @@
+         self->tokstart = self->pos;
+         self->tokline = self->line;
+         self->toktrunc = 0;
+-        if (self->bol && c == '#') {
+-            n = 0;
+-            self->toktrunc = 0;
+-            while (self->src[self->pos] && self->src[self->pos] != '\n') {
+-                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+-                else self->toktrunc = 1;
+-                self->pos++;
+-            }
+-            self->toktext[n] = 0;
+-            self->tok = T_PP;
+-            self->bol = 0;
+-            return;
++        if (self->bol && c == '#') { self->pp_line(); return; }
++        self->bol = 0;
++        if (lex_ident_start(c)) { self->ident(); return; }
++        if (c >= '0' && c <= '9') { self->number(); return; }
++        if (c == '"' || c == '\'') { self->quoted(c); return; }
++        self->punct(c);
++    }
++
++    void pp_line(void)
++    {
++        int n;
++        n = 0;
++        self->toktrunc = 0;
++        while (self->src[self->pos] && self->src[self->pos] != '\n') {
++            if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
++            else self->toktrunc = 1;
++            self->pos++;
+         }
++        self->toktext[n] = 0;
++        self->tok = T_PP;
+         self->bol = 0;
+-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+-            n = 0;
+-            while (self->src[self->pos] && ((self->src[self->pos] >= 'a' && self->src[self->pos] <= 'z')
+-                   || (self->src[self->pos] >= 'A' && self->src[self->pos] <= 'Z')
+-                   || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9')
+-                   || self->src[self->pos] == '_')) {
+-                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+-                else self->toktrunc = 1;
++        return;
++    }
++
++    void ident(void)
++    {
++        int n;
++        n = 0;
++        while (self->src[self->pos] && ((self->src[self->pos] >= 'a' && self->src[self->pos] <= 'z')
++               || (self->src[self->pos] >= 'A' && self->src[self->pos] <= 'Z')
++               || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9')
++               || self->src[self->pos] == '_')) {
++            if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
++            else self->toktrunc = 1;
++            self->pos++;
++        }
++        self->toktext[n] = 0;
++        self->tok = T_ID;
++        return;
++    }
++
++    void number(void)
++    {
++        int c;
++        c = (unsigned char)self->src[self->pos];
++        int nstart = self->pos;
++        self->toknum = 0;
++        self->tokfloat = 0;
++        self->toksuffix[0] = 0;
++        if (c == '0' && (self->src[self->pos + 1] == 'x' || self->src[self->pos + 1] == 'X')) {
++            self->pos += 2;
++            for (;;) {
++                char h = self->src[self->pos];
++                int dv;
++                if (h >= '0' && h <= '9') dv = h - '0';
++                else if (h >= 'a' && h <= 'f') dv = h - 'a' + 10;
++                else if (h >= 'A' && h <= 'F') dv = h - 'A' + 10;
++                else break;
++                self->toknum = num_accumulate(self->toknum, 16, dv);
+                 self->pos++;
+             }
+-            self->toktext[n] = 0;
+-            self->tok = T_ID;
+-            return;
+-        }
+-        if (c >= '0' && c <= '9') {
+-            int nstart = self->pos;
+-            self->toknum = 0;
+-            self->tokfloat = 0;
+-            self->toksuffix[0] = 0;
+-            if (c == '0' && (self->src[self->pos + 1] == 'x' || self->src[self->pos + 1] == 'X')) {
+-                self->pos += 2;
+-                for (;;) {
+-                    char h = self->src[self->pos];
+-                    int dv;
+-                    if (h >= '0' && h <= '9') dv = h - '0';
+-                    else if (h >= 'a' && h <= 'f') dv = h - 'a' + 10;
+-                    else if (h >= 'A' && h <= 'F') dv = h - 'A' + 10;
+-                    else break;
+-                    self->toknum = num_accumulate(self->toknum, 16, dv);
+-                    self->pos++;
+-                }
+-            } else if (c == '0' && self->src[self->pos + 1] >= '0' && self->src[self->pos + 1] <= '7') {
+-                /* a leading zero makes the literal octal in C; reading it as
+-                   decimal changed 0755 into 755 (a mode argument silently became
+-                   a decimal value) */
++        } else if (c == '0' && self->src[self->pos + 1] >= '0' && self->src[self->pos + 1] <= '7') {
++            /* a leading zero makes the literal octal in C; reading it as
++               decimal changed 0755 into 755 (a mode argument silently became
++               a decimal value) */
++            self->pos++;
++            while (self->src[self->pos] >= '0' && self->src[self->pos] <= '7') {
++                self->toknum = num_accumulate(self->toknum, 8, self->src[self->pos] - '0');
+                 self->pos++;
+-                while (self->src[self->pos] >= '0' && self->src[self->pos] <= '7') {
+-                    self->toknum = num_accumulate(self->toknum, 8, self->src[self->pos] - '0');
+-                    self->pos++;
+-                }
+-            } else {
+-                int isflt = 0;
+-                while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
+-                    self->toknum = num_accumulate(self->toknum, 10, self->src[self->pos] - '0');
+-                    self->pos++;
+-                }
+-                /* A fraction or an exponent makes the literal floating. `1...5`
+-                   stays an integer: three dots are a range or a variadic tail,
+-                   not a decimal point. */
+-                if (self->src[self->pos] == '.' && self->src[self->pos + 1] != '.') {
++            }
++        } else {
++            int isflt = 0;
++            while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
++                self->toknum = num_accumulate(self->toknum, 10, self->src[self->pos] - '0');
++                self->pos++;
++            }
++            /* A fraction or an exponent makes the literal floating. `1...5`
++               stays an integer: three dots are a range or a variadic tail,
++               not a decimal point. */
++            if (self->src[self->pos] == '.' && self->src[self->pos + 1] != '.') {
++                isflt = 1;
++                self->pos++;
++                while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') self->pos++;
++            }
++            if (self->src[self->pos] == 'e' || self->src[self->pos] == 'E') {
++                int k = self->pos + 1;
++                if (self->src[k] == '+' || self->src[k] == '-') k++;
++                if (self->src[k] >= '0' && self->src[k] <= '9') {
+                     isflt = 1;
+-                    self->pos++;
++                    self->pos = k;
+                     while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') self->pos++;
+                 }
+-                if (self->src[self->pos] == 'e' || self->src[self->pos] == 'E') {
+-                    int k = self->pos + 1;
+-                    if (self->src[k] == '+' || self->src[k] == '-') k++;
+-                    if (self->src[k] >= '0' && self->src[k] <= '9') {
+-                        isflt = 1;
+-                        self->pos = k;
+-                        while (self->src[self->pos] >= '0' && self->src[self->pos] <= '9') self->pos++;
+-                    }
+-                }
+-                if (isflt) {
+-                    int q = 0;
+-                    if (self->src[self->pos] == 'f' || self->src[self->pos] == 'F'
+-                        || self->src[self->pos] == 'l' || self->src[self->pos] == 'L')
+-                        self->pos++;
+-                    /* keep the spelling: the parser stores floats as text */
+-                    while (nstart + q < self->pos && q + 1 < MAX_TEXT) {
+-                        self->toktext[q] = self->src[nstart + q];
+-                        q++;
+-                    }
+-                    self->toktext[q] = 0;
+-                    self->tokfloat = 1;
+-                }
+             }
+-            /* An integer literal may carry `U` / `L` letters (case-insensitive,
+-               in any order). They do not affect the value, so they are collected
+-               verbatim for the parser; the spelling is what the emitter keeps. */
+-            if (!self->tokfloat) {
++            if (isflt) {
+                 int q = 0;
+-                while (self->src[self->pos] == 'u' || self->src[self->pos] == 'U'
+-                       || self->src[self->pos] == 'l' || self->src[self->pos] == 'L') {
+-                    if (q + 1 < 8) {            /* the toksuffix capacity */
+-                        self->toksuffix[q] = self->src[self->pos];
+-                        q++;
+-                    }
++                if (self->src[self->pos] == 'f' || self->src[self->pos] == 'F'
++                    || self->src[self->pos] == 'l' || self->src[self->pos] == 'L')
+                     self->pos++;
++                /* keep the spelling: the parser stores floats as text */
++                while (nstart + q < self->pos && q + 1 < MAX_TEXT) {
++                    self->toktext[q] = self->src[nstart + q];
++                    q++;
+                 }
+-                self->toksuffix[q] = 0;
++                self->toktext[q] = 0;
++                self->tokfloat = 1;
+             }
+-            self->tok = T_NUM;
+-            return;
+         }
+-        if (c == '"' || c == '\'') {
+-            char q = (char)c;
+-            int toolong = 0;
+-            n = 0;
+-            self->toktext[n] = q;
+-            n++;
+-            self->pos++;
+-            while (self->src[self->pos] && self->src[self->pos] != q) {
+-                if (self->src[self->pos] == '\\' && self->src[self->pos + 1]) {
+-                    if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+-                    else toolong = 1;
+-                    self->pos++;
++        /* An integer literal may carry `U` / `L` letters (case-insensitive,
++           in any order). They do not affect the value, so they are collected
++           verbatim for the parser; the spelling is what the emitter keeps. */
++        if (!self->tokfloat) {
++            int q = 0;
++            while (self->src[self->pos] == 'u' || self->src[self->pos] == 'U'
++                   || self->src[self->pos] == 'l' || self->src[self->pos] == 'L') {
++                if (q + 1 < 8) {            /* the toksuffix capacity */
++                    self->toksuffix[q] = self->src[self->pos];
++                    q++;
+                 }
+-                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+-                else toolong = 1;
+                 self->pos++;
+             }
+-            if (self->src[self->pos] == q) {
+-                if (n + 1 < MAX_TEXT) { self->toktext[n] = q; n++; }
++            self->toksuffix[q] = 0;
++        }
++        self->tok = T_NUM;
++        return;
++    }
++
++    void quoted(int c)
++    {
++        int n;
++        char q = (char)c;
++        int toolong = 0;
++        n = 0;
++        self->toktext[n] = q;
++        n++;
++        self->pos++;
++        while (self->src[self->pos] && self->src[self->pos] != q) {
++            if (self->src[self->pos] == '\\' && self->src[self->pos + 1]) {
++                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
+                 else toolong = 1;
+                 self->pos++;
+             }
+-            self->toktext[n] = 0;
+-            if (toolong) self->toktrunc = 1;
+-            self->tok = T_STR;
+-            return;
++            if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
++            else toolong = 1;
++            self->pos++;
+         }
+-        /* `...` (a variadic parameter list) has to be one token: the parser
+-           cannot tell three `.` tokens from three field accesses */
+-        if (c == '.' && self->src[self->pos + 1] == '.' && self->src[self->pos + 2] == '.') {
+-            self->toktext[0] = '.';
+-            self->toktext[1] = '.';
+-            self->toktext[2] = '.';
+-            self->toktext[3] = 0;
+-            self->tok = T_PUNCT;
+-            self->pos += 3;
+-            return;
++        if (self->src[self->pos] == q) {
++            if (n + 1 < MAX_TEXT) { self->toktext[n] = q; n++; }
++            else toolong = 1;
++            self->pos++;
+         }
+-        /* `..` (a half-open range bound in `loop(a..b)`) has to be one token,
+-           and it must be tried after `...` and before `.5`: `...` already owns
+-           the three-dot form, and a number scanner only treats a trailing `.`
+-           as a float when the next character is not a `.`. */
+-        if (c == '.' && self->src[self->pos + 1] == '.') {
+-            self->toktext[0] = '.';
+-            self->toktext[1] = '.';
+-            self->toktext[2] = 0;
+-            self->tok = T_PUNCT;
+-            self->pos += 2;
+-            return;
++        self->toktext[n] = 0;
++        if (toolong) self->toktrunc = 1;
++        self->tok = T_STR;
++        return;
++    }
++
++    void punct(int c)
++    {
++    /* `...` (a variadic parameter list) has to be one token: the parser
++       cannot tell three `.` tokens from three field accesses */
++    if (c == '.' && self->src[self->pos + 1] == '.' && self->src[self->pos + 2] == '.') {
++        self->toktext[0] = '.';
++        self->toktext[1] = '.';
++        self->toktext[2] = '.';
++        self->toktext[3] = 0;
++        self->tok = T_PUNCT;
++        self->pos += 3;
++        return;
++    }
++    /* `..` (a half-open range bound in `loop(a..b)`) has to be one token,
++       and it must be tried after `...` and before `.5`: `...` already owns
++       the three-dot form, and a number scanner only treats a trailing `.`
++       as a float when the next character is not a `.`. */
++    if (c == '.' && self->src[self->pos + 1] == '.') {
++        self->toktext[0] = '.';
++        self->toktext[1] = '.';
++        self->toktext[2] = 0;
++        self->tok = T_PUNCT;
++        self->pos += 2;
++        return;
++    }
++    /* `.5` -- a floating literal that starts with the point. The `...` and
++       `..` cases above already took the multi-dot forms, so this one is
++       unambiguous. */
++    if (c == '.' && self->src[self->pos + 1] >= '0' && self->src[self->pos + 1] <= '9') {
++        int q = 0;
++        self->tokfloat = 1;
++        self->toknum = 0;
++        while (q + 1 < MAX_TEXT && (self->src[self->pos] == '.'
++               || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9'))) {
++            self->toktext[q] = self->src[self->pos];
++            q++;
++            self->pos++;
+         }
+-        /* `.5` -- a floating literal that starts with the point. The `...` and
+-           `..` cases above already took the multi-dot forms, so this one is
+-           unambiguous. */
+-        if (c == '.' && self->src[self->pos + 1] >= '0' && self->src[self->pos + 1] <= '9') {
+-            int q = 0;
+-            self->tokfloat = 1;
+-            self->toknum = 0;
+-            while (q + 1 < MAX_TEXT && (self->src[self->pos] == '.'
+-                   || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9'))) {
++        if (self->src[self->pos] == 'e' || self->src[self->pos] == 'E') {
++            if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
++            if (self->src[self->pos] == '+' || self->src[self->pos] == '-') {
++                if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
++            }
++            while (q + 1 < MAX_TEXT && self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
+                 self->toktext[q] = self->src[self->pos];
+                 q++;
+                 self->pos++;
+             }
+-            if (self->src[self->pos] == 'e' || self->src[self->pos] == 'E') {
+-                if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+-                if (self->src[self->pos] == '+' || self->src[self->pos] == '-') {
+-                    if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+-                }
+-                while (q + 1 < MAX_TEXT && self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
+-                    self->toktext[q] = self->src[self->pos];
+-                    q++;
+-                    self->pos++;
+-                }
+-            }
+-            if (self->src[self->pos] == 'f' || self->src[self->pos] == 'F'
+-                || self->src[self->pos] == 'l' || self->src[self->pos] == 'L') {
+-                if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+-            }
+-            self->toktext[q] = 0;
+-            self->tok = T_NUM;
+-            return;
+         }
+-        if (c == '-' && self->src[self->pos + 1] == '>') {
+-            self->toktext[0] = '-';
+-            self->toktext[1] = '>';
+-            self->toktext[2] = 0;
+-            self->tok = T_PUNCT;
+-            self->pos += 2;
+-            return;
++        if (self->src[self->pos] == 'f' || self->src[self->pos] == 'F'
++            || self->src[self->pos] == 'l' || self->src[self->pos] == 'L') {
++            if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+         }
+-        if (c == ':' && self->src[self->pos + 1] == ':') {
+-            self->toktext[0] = ':';
+-            self->toktext[1] = ':';
+-            self->toktext[2] = 0;
++        self->toktext[q] = 0;
++        self->tok = T_NUM;
++        return;
++    }
++    if (c == '-' && self->src[self->pos + 1] == '>') {
++        self->toktext[0] = '-';
++        self->toktext[1] = '>';
++        self->toktext[2] = 0;
++        self->tok = T_PUNCT;
++        self->pos += 2;
++        return;
++    }
++    if (c == ':' && self->src[self->pos + 1] == ':') {
++        self->toktext[0] = ':';
++        self->toktext[1] = ':';
++        self->toktext[2] = 0;
++        self->tok = T_PUNCT;
++        self->pos += 2;
++        return;
++    }
++    /* `=>` opens a closure body. It is lexed on its own, before the
++       two-character comparisons below, because those only take `=` as their
++       second character (`==`, `<=`, `>=`); `->` keeps the branch above. */
++    if (c == '=' && self->src[self->pos + 1] == '>') {
++        self->toktext[0] = '=';
++        self->toktext[1] = '>';
++        self->toktext[2] = 0;
++        self->tok = T_PUNCT;
++        self->pos += 2;
++        return;
++    }
++    /* shifts: `<<=` / `>>=` first, then `<<` / `>>`, then the comparisons
++       `<=` / `>=` below must not swallow the first character */
++    if ((c == '<' || c == '>') && self->src[self->pos + 1] == c) {
++        self->toktext[0] = (char)c;
++        self->toktext[1] = (char)c;
++        if (self->src[self->pos + 2] == '=') {
++            self->toktext[2] = '=';
++            self->toktext[3] = 0;
+             self->tok = T_PUNCT;
+-            self->pos += 2;
+-            return;
+-        }
+-        /* `=>` opens a closure body. It is lexed on its own, before the
+-           two-character comparisons below, because those only take `=` as their
+-           second character (`==`, `<=`, `>=`); `->` keeps the branch above. */
+-        if (c == '=' && self->src[self->pos + 1] == '>') {
+-            self->toktext[0] = '=';
+-            self->toktext[1] = '>';
++            self->pos += 3;
++        } else {
+             self->toktext[2] = 0;
+             self->tok = T_PUNCT;
+             self->pos += 2;
+-            return;
+         }
+-        /* shifts: `<<=` / `>>=` first, then `<<` / `>>`, then the comparisons
+-           `<=` / `>=` below must not swallow the first character */
+-        if ((c == '<' || c == '>') && self->src[self->pos + 1] == c) {
+-            self->toktext[0] = (char)c;
+-            self->toktext[1] = (char)c;
+-            if (self->src[self->pos + 2] == '=') {
+-                self->toktext[2] = '=';
+-                self->toktext[3] = 0;
+-                self->tok = T_PUNCT;
+-                self->pos += 3;
+-            } else {
+-                self->toktext[2] = 0;
+-                self->tok = T_PUNCT;
+-                self->pos += 2;
+-            }
+-            return;
+-        }
+-        if ((c == '=' || c == '!' || c == '<' || c == '>') && self->src[self->pos + 1] == '=') {
+-            self->toktext[0] = (char)c;
+-            self->toktext[1] = '=';
+-            self->toktext[2] = 0;
+-            self->tok = T_PUNCT;
+-            self->pos += 2;
+-            return;
+-        }
+-        if ((c == '+' || c == '-') && self->src[self->pos + 1] == c) {
+-            self->toktext[0] = (char)c;
+-            self->toktext[1] = (char)c;
+-            self->toktext[2] = 0;
+-            self->tok = T_PUNCT;
+-            self->pos += 2;
+-            return;
+-        }
+-        /* `&&` and `||` are their own tokens; a lone `&` / `|` stays literal */
+-        if ((c == '&' || c == '|') && self->src[self->pos + 1] == c) {
+-            self->toktext[0] = (char)c;
+-            self->toktext[1] = (char)c;
+-            self->toktext[2] = 0;
+-            self->tok = T_PUNCT;
+-            self->pos += 2;
+-            return;
+-        }
+-        /* compound assignment: `+=` `-=` `*=` `/=` `%=` `&=` `|=` `^=` */
+-        if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%'
+-             || c == '&' || c == '|' || c == '^')
+-            && self->src[self->pos + 1] == '=') {
+-            self->toktext[0] = (char)c;
+-            self->toktext[1] = '=';
+-            self->toktext[2] = 0;
+-            self->tok = T_PUNCT;
+-            self->pos += 2;
+-            return;
+-        }
++        return;
++    }
++    if ((c == '=' || c == '!' || c == '<' || c == '>') && self->src[self->pos + 1] == '=') {
+         self->toktext[0] = (char)c;
+-        self->toktext[1] = 0;
++        self->toktext[1] = '=';
++        self->toktext[2] = 0;
+         self->tok = T_PUNCT;
+-        self->pos++;
++        self->pos += 2;
++        return;
+     }
++    if ((c == '+' || c == '-') && self->src[self->pos + 1] == c) {
++        self->toktext[0] = (char)c;
++        self->toktext[1] = (char)c;
++        self->toktext[2] = 0;
++        self->tok = T_PUNCT;
++        self->pos += 2;
++        return;
++    }
++    /* `&&` and `||` are their own tokens; a lone `&` / `|` stays literal */
++    if ((c == '&' || c == '|') && self->src[self->pos + 1] == c) {
++        self->toktext[0] = (char)c;
++        self->toktext[1] = (char)c;
++        self->toktext[2] = 0;
++        self->tok = T_PUNCT;
++        self->pos += 2;
++        return;
++    }
++    /* compound assignment: `+=` `-=` `*=` `/=` `%=` `&=` `|=` `^=` */
++    if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%'
++         || c == '&' || c == '|' || c == '^')
++        && self->src[self->pos + 1] == '=') {
++        self->toktext[0] = (char)c;
++        self->toktext[1] = '=';
++        self->toktext[2] = 0;
++        self->tok = T_PUNCT;
++        self->pos += 2;
++        return;
++    }
++    self->toktext[0] = (char)c;
++    self->toktext[1] = 0;
++    self->tok = T_PUNCT;
++    self->pos++;
++    }
+ }
+ 
+ /* The instance lives after the impls: its vptr initialisers need the vtable
