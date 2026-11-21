@@ -56,7 +56,8 @@
 另外要分清两种“标准能力”的加载方式：`lib/std` 的内置层（`Vec` / `Map` / `Option` /
 `Result` / `String` / `Str` / `box`）由编译器**自动预解析**；而挂在 `char *` 上的
 `length()` / `to_int()` / `starts_with()` 等方法来自 **std 包的寄生映射**
-（`map trait CStrOps for type char *`），必须 `import std::str::String;` 才有。
+（`map trait CStrOps for type char *`），必须 `import std::str::CStrOps;` 才有
+（std 0.19.0 及以前叫 `std::str::String`；旧名保留一个 MINOR 回退）。
 两者都是标准库能力，区别只在加载方式；不要因为内置层免 import 就以为 `char *` 也自带方法。
 
 ## 3. String / Str 专章：这是全篇最重要的一节
@@ -97,14 +98,15 @@ parse_int("42", &v);           /* strlen 内部现算；s 可能是悬垂的，�
 
 ```ct
 /* CT：std 包把字符串方法寄生在 char * 上，先 import */
-import std::str::String;
+import std::str::CStrOps;       /* std 0.19.0 及以前写 std::str::String */
 
 int n = "42".to_int();         /* atoi 语义：跳过前导空白，遇到非数字停；无数字/空串返回 0 */
 int m = "  -7".to_int();
 ```
 
 `length()` / `find()` / `slice()` / `to_int()` 这些方法不是内置层自带的，而是 std 包的
-`map trait CStrOps for type char *`；`import std::str::String;` 之后才可见。std 包由
+`map trait CStrOps for type char *`；`import std::str::CStrOps;` 之后才可见
+（0.19.0 及以前用 `std::str::String`）。std 包由
 `ct get std` 安装，`ct build` 从 `ct.lock` 取 include 根。
 
 自己写 API 时，参数仍用 `Str`（零成本、长度自带）：

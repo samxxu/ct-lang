@@ -36,7 +36,7 @@ ct get ct/std@0.19.0
 
 | 模块 | 用途 | 入口 `import` |
 | --- | --- | --- |
-| `std::str` | `char *` 字节串方法：`find` / `slice` / `concat` / `split_into` / 大小写 / 数字解析 | `std::str::String` |
+| `std::str` | `char *` 字节串方法：`find` / `slice` / `concat` / `split_into` / 大小写 / 数字解析 | `std::str::String`（下一 MINOR 改名 `std::str::CStrOps`） |
 | `std::io` | stdio 流与文件描述符；`File` / `FileDesc` 是 `Drop` 资源句柄 | `std::io::Stdout` / `std::io::File` |
 | `std::fs` | `char *` 路径方法、目录流 `Dir`、元数据 `Stat` | `std::fs::Fs` |
 | `std::utf8` | UTF-8 解码、编码、码点计数；严格校验、不分配 | `std::utf8::Utf8Ops` |
