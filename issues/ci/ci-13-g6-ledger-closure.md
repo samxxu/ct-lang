@@ -7,7 +7,58 @@
 | 严重度 | **P1（v1.0 发布，Tier 2）** |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-4；`AGENTS.md` §5.4；`tools/check.sh` |
-| 状态 | **待办（CI/REQ）；或按 §5.4 登记 deviation** |
+| 状态 | **已决 A（2026-11-21 所有者）；REQ 规格已出，DEV 实现 `g6`** |
+
+## 实施规格（方案 A：ratchet 版 G6，2026-11-21）
+
+### 1. 状态归一映射（含核销类）
+
+§5.4 的 `status` 闭集是 7 个值：`open` / `verified` / `reopened` / `rejected` /
+`deferred` / `wontfix` / `superseded`（`fixed` 只允许出现在正文处置段，不得写进 `status`）。
+按**类别**归一，避免逐条猜：
+
+| 类别 | 现状写法（模式） | 归一为 | 说明 |
+| --- | --- | --- | --- |
+| **核销类** | `已修` / `已修复` / `✅ 已修复` / `修复（commit …）` | `verified` | 有独立复现与证据；只有作者自证时正文写 `fixed`，`status` 仍由 REV 置 `verified` |
+| **核销类** | `不采纳` / `rejected` / `已关闭（不采纳）` | `rejected` | 理由与决策记录 |
+| **核销类** | `wontfix` / `永不修` | `wontfix` | USER 裁定 |
+| **核销类** | `superseded` / `被取代` | `superseded` | 指向新条目 id |
+| **在办类** | `open` / `**open**` / `待办` / `待办（DEV…）` / `受理（P…）` / `评估中` / `部分修复` / `已实施未验证` | `open` | 处置写正文；`部分修复` 不置 verified |
+| **在办类** | `reopened` | `reopened` | 复核未过 |
+| **延后类** | `deferred` / `延后` | `deferred` | 触发条件或日期 |
+
+- 无法归一的写法：先归 `open`，并在正文补“状态待归一”一行；不得新造状态词。
+- `已关闭` 必须按原因拆分：修复完成 → `verified`；不修 → `wontfix`/`rejected`；
+  仅“没人跟了”不允许关闭。
+
+### 2. 白名单（挂 issue，带退出条件）
+
+- 基线文件 `issues/.g6-baseline.tsv`：`path<TAB>现状<TAB>归一键<TAB>类别`；
+  只收**尚未归一**的存量行，由 `g6 --write-baseline` 生成、REQ 复核后入库。
+- **白名单必须挂追踪 issue**：旧债清零由 [CI-14](ci-14-g6-legacy-status-cleanup.md) 跟踪；
+  退出条件写在 CI-14（基线清空、`g6` 严格模式无白名单、14 条 `待办` 全有去向）。
+- 反向约束：白名单条目对应的文件已归一、或文件不存在 → 按“僵尸条目”报红；
+  新增 issue 不受白名单保护，必须直接写合法 `status`。
+
+### 3. G1 与 check-docs 的边界
+
+| 检查 | 归属 | 覆盖 | 不覆盖 |
+| --- | --- | --- | --- |
+| G1 `g1-phase-card` / `g1-version` | `tools/check.sh g1` | phase 卡字段：`phase-id`、`version-minor`、状态、入口/出口判据非占位；新卡窗口规则 | 文档链接、版本 token、门禁计数、设计窗口归档 |
+| check-docs（第 11 道） | `test/docs/check-docs.py` | 链接、版本 token、门禁条数、design window、phase 状态与 roadmap 一致、spec pin | phase 卡字段完整性（不在 docs 门禁里重复） |
+
+- 唯一交集是「phase 状态」：**状态词合法性归 G6**，**状态与 roadmap 一致性归 check-docs**；
+  两边不互相替代，也不重复报同一错误。
+- G1/G6 通过 `tools/check.sh` 提供同名子命令；是否并入 `check-all.sh` 的 11 道硬门禁，
+  由 EDITOR 记录，不默认加条数。
+
+### 4. 门禁先开，不等旧债清完
+
+- `g6` 与基线白名单**同一次提交**落地；落地即进 CI（或 `tools/check.sh` 的常规路径），
+  立刻拦新债。
+- 184 条旧债的清零是 [CI-14](ci-14-g6-legacy-status-cleanup.md) 的节奏，不阻塞 `g6` 上线；
+  禁止把“旧债清零”当作门禁实现的前置。
+- 上线证据：一次带新违规的负例提交必须红；一次不带新违规的提交必须绿（基线内）。
 
 ## 现象
 
