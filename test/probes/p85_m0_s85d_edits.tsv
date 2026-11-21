@@ -1,0 +1,16 @@
+# PH-85 S85d (A mechanism) edits after the M0 commit. J1 (body-hash set
+# unchanged) holds at the M0 commit; these are the only bodies S85d changed or
+# added, listed here so `p85_m0` can tell "a later task edited it" from "the
+# move itself rewrote it". Every moved function must still be byte-identical.
+# kind \t unit::[Owner.]name
+modified	selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.argtype_check
+modified	selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.argtype_check_static
+modified	selfhost/ct-ast/frontend/parse/Expr.h.ct::Expr.chk_assignable
+modified	selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_arity_warn
+modified	selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.record_type_warn
+modified	selfhost/ct-ast/frontend/module/Module.h.ct::Module.build_main
+modified	selfhost/ct-ast/tool/driver/Driver.h.ct::Driver.run
+added	selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.set_types_level
+added	selfhost/ct-ast/tool/diag/Diag.h.ct::Diag.type_fail
+added	selfhost/ct-ast/tool/diag/Diag.h.ct::ct_diag_set_types_level
+added	selfhost/ct-ast/tool/diag/Diag.h.ct::ct_type_fail
