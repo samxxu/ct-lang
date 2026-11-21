@@ -153,9 +153,9 @@ impl SupportOps for ParseSupport {
     {
         int sp, sbol, stok, sline, stokline, sstart, slstart, r;
         long snum;
-        char stext[MAX_TEXT];
+        const char *stext_ptr; int stext_len;
 
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0))
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("[")))
             return 0;
         if (line) *line = self->lex->tokline;
         if (col) *col = self->lex->tokstart - self->lex->lstart + 1;
@@ -167,9 +167,9 @@ impl SupportOps for ParseSupport {
         stokline = self->lex->tokline;
         sstart = self->lex->tokstart;
         slstart = self->lex->lstart;
-        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
         self->lex_next();
-        r = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0);
+        r = (self->lex->tok == T_PUNCT && self->lex->tok_is("]"));
         self->lex->pos = sp;
         self->lex->bol = sbol;
         self->lex->tok = stok;
@@ -178,7 +178,7 @@ impl SupportOps for ParseSupport {
         self->lex->tokline = stokline;
         self->lex->tokstart = sstart;
         self->lex->lstart = slstart;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
         return r;
     }
 
@@ -246,7 +246,7 @@ impl SupportOps for ParseSupport {
     {
         (void)self;
         self->lex->next();
-        /* a name that did not fit in `toktext` is a hard error, not a silent
+        /* a name longer than the view keeps is a hard error, not a silent
            truncation: two long names sharing a prefix would collapse into one
            symbol and the generated C would fail to compile */
         if (self->lex->toktrunc && self->lex->tok == T_ID) {
@@ -259,7 +259,7 @@ impl SupportOps for ParseSupport {
     int accept(const char *p)
     {
         (void)self;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, p) == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(p)) {
             self->lex_next();
             return 1;
         }
@@ -407,11 +407,11 @@ impl SupportOps for ParseSupport {
         int depth, got, k, first;
 
         *out = -1;
-        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0)) return 0;
+        if (!(self->lex->tok == T_ID && self->lex->tok_is("__attribute__"))) return 0;
         *out = self->arena->str_begin();
         got = 0;
         first = 1;
-        while (self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0) {
+        while (self->lex->tok == T_ID && self->lex->tok_is("__attribute__")) {
             got = 1;
             depth = 0;
             for (;;) {
@@ -419,15 +419,15 @@ impl SupportOps for ParseSupport {
                 if (self->lex->tok == T_NUM && !self->lex->tokfloat)
                     snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
                 else
-                    snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                    self->lex->tok_copy(tbuf, sizeof tbuf);
                 if (!first && self->arena->str_put(' ') != 0)
                     return self->fail("__attribute__ is too long");
                 for (k = 0; tbuf[k]; k++)
                     if (self->arena->str_put(tbuf[k]) != 0)
                         return self->fail("__attribute__ is too long");
                 first = 0;
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) depth++;
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
                     depth--;
                     if (depth == 0) {
                         self->lex_next();
@@ -618,13 +618,13 @@ impl SupportOps for ParseSupport {
     {
         int depth;
         (void)self;
-        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "{") != 0)
+        if (self->lex->tok != T_PUNCT || !self->lex->tok_is("{"))
             return self->fail("expected '{'");
         depth = 0;
         while (self->lex->tok != T_EOF) {
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                 depth++;
-            } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0) {
+            } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("}")) {
                 depth--;
                 if (depth == 0) {
                     self->lex_next();
@@ -696,7 +696,7 @@ impl SupportOps for ParseSupport {
     {
         (void)self;
         while (self->lex->tok != T_EOF) {
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("}")) {
                 self->lex_next();
                 return 0;
             }

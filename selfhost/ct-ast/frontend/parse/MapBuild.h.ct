@@ -537,11 +537,11 @@ impl MapBuildOps for MapBuild {
         line = self->lex->tokline;
         col = self->lex->tokstart - self->lex->lstart + 1;
         self->sup->lex_next();                       /* consume `map` */
-        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "trait") == 0))
+        if (!(self->lex->tok == T_ID && self->lex->tok_is("trait")))
             return self->sup->fail("expected 'trait'");
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
-        snprintf(tname, sizeof tname, "%s", self->lex->toktext);
+        self->lex->tok_copy(tname, sizeof tname);
         if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
         ti = self->sym->find_trait(rtrait);
         if (ti < 0) return self->sup->fail("map of an unknown trait");
@@ -549,11 +549,11 @@ impl MapBuildOps for MapBuild {
         type_host = 0;
         host_type[0] = 0;
         self->sup->lex_next();
-        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0))
+        if (!(self->lex->tok == T_ID && self->lex->tok_is("for")))
             return self->sup->fail("expected 'for'");
         self->sup->lex_next();
         ns_host = 0;
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "instance") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("instance")) {
             if (is_static)
                 return self->sup->fail("a .m.ct unit cannot bind a trait to an instance");
             self->sup->lex_next();
@@ -562,9 +562,9 @@ impl MapBuildOps for MapBuild {
                The declared name is the last segment; the C spelling is the one the
                global was emitted under (mangled by its namespace). */
             for (;;) {
-                snprintf(inst, sizeof inst, "%s", self->lex->toktext);
+                self->lex->tok_copy(inst, sizeof inst);
                 self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("::")) {
                     self->sup->lex_next();
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a name after '::'");
                     continue;
@@ -582,7 +582,7 @@ impl MapBuildOps for MapBuild {
             }
             if (self->sym->var_cname(inst, icn, sizeof icn) != 0)
                 snprintf(icn, sizeof icn, "%s", inst);
-        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "namespace") == 0) {
+        } else if (self->lex->tok == T_ID && self->lex->tok_is("namespace")) {
             /* SH-20: the host is a namespace, not an object. Nothing is declared,
                so the binding names its symbols after the namespace path and the
                interface value's self is NULL (the wrapper never uses it). */
@@ -594,7 +594,7 @@ impl MapBuildOps for MapBuild {
             hostpath[0] = 0;
             hostcn[0] = 0;
             for (;;) {
-                wl = strlen(self->lex->toktext);
+                wl = self->lex->tokstr.len;
                 if (hl > 0) {
                     if (hl + 3 >= (int)sizeof hostpath)
                         return self->sup->fail("namespace path is too long");
@@ -610,14 +610,14 @@ impl MapBuildOps for MapBuild {
                 }
                 if (hl + (int)wl >= (int)sizeof hostpath)
                     return self->sup->fail("namespace path is too long");
-                snprintf(hostpath + hl, (size_t)sizeof hostpath - (size_t)hl, "%s", self->lex->toktext);
+                self->lex->tok_copy(hostpath + hl, (int)sizeof hostpath - hl);
                 hl += (int)wl;
                 if (cl + (int)wl >= (int)sizeof hostcn)
                     return self->sup->fail("namespace path is too long");
-                snprintf(hostcn + cl, (size_t)sizeof hostcn - (size_t)cl, "%s", self->lex->toktext);
+                self->lex->tok_copy(hostcn + cl, (int)sizeof hostcn - cl);
                 cl += (int)wl;
                 self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("::")) {
                     self->sup->lex_next();
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a name after '::'");
                     continue;
@@ -630,7 +630,7 @@ impl MapBuildOps for MapBuild {
                 return tool::diag::ct_sem_error(line, col,
                     "a static trait for a namespace host must be declared in that namespace",
                     self->sup->mem->path);
-        } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "type") == 0) {
+        } else if (self->lex->tok == T_ID && self->lex->tok_is("type")) {
             /* `map trait T for type <ctype>`: the first binding parameter is the
                receiver, matched against the call site's static type. Only a
                mapping unit may declare one. */
@@ -641,14 +641,14 @@ impl MapBuildOps for MapBuild {
             ns_host = 0;
             self->sup->lex_next();
             if (self->lex->tok == T_EOF
-                || (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0))
+                || (self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
                 return self->sup->fail("expected a type after 'for type'");
             /* The host spelling goes through the same reader as a trait
                signature or a declaration, so a type alias expands and the key
                is computed on the underlying spelling. */
             if (self->ex->parse_type(host_type, sizeof host_type) != 0) return -1;
             if (!host_type[0]
-                || (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0))
+                || (self->lex->tok == T_PUNCT && self->lex->tok_is("[")))
                 return self->sup->fail("expected a type after 'for type'");
             snprintf(inst, sizeof inst, "%s", host_type);
             snprintf(icn, sizeof icn, "%s", host_type);
@@ -700,12 +700,12 @@ impl MapBuildOps for MapBuild {
         m->line = line;
         m->unit = unit;
 
-        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             if (m->nb >= MAX_METHODS) return self->sup->fail("too many map bindings");
             b = &m->b[m->nb];
             b->line = self->lex->tokline;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
-            snprintf(b->method, MAX_TEXT, "%s", self->lex->toktext);
+            self->lex->tok_copy(b->method, MAX_TEXT);
             mi = -1;
             for (k = 0; k < self->sym->traits[ti].nm; k++)
                 if (strcmp(self->sym->traits[ti].m[k].name, b->method) == 0) { mi = k; break; }
@@ -718,24 +718,24 @@ impl MapBuildOps for MapBuild {
             if (self->sup->expect("(") != 0) return -1;
             np = 0;
             b->variadic = 0;
-            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
+            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
                 for (;;) {
                     /* a trailing `...` forwards the rest of the call verbatim:
                        the recipe names it as `...` and the emitter splices the
                        actuals the named parameters did not consume */
-                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "...") == 0) {
+                    if (self->lex->tok == T_PUNCT && self->lex->tok_is("...")) {
                         b->variadic = 1;
                         self->sup->lex_next();
-                        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0))
+                        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")")))
                             return self->sup->fail("'...' must be the last binding parameter");
                         break;
                     }
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a parameter name");
                     if (np >= MAX_PARAMS) return self->sup->fail("too many map parameters");
-                    snprintf(b->params[np], MAX_TEXT, "%s", self->lex->toktext);
+                    self->lex->tok_copy(b->params[np], MAX_TEXT);
                     np++;
                     self->sup->lex_next();
-                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                    if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                         self->sup->lex_next();
                         continue;
                     }
@@ -766,7 +766,7 @@ impl MapBuildOps for MapBuild {
                 return self->sup->fail("this binding forwards '...' but the trait method is not variadic");
             if (!b->variadic && self->sym->traits[ti].m[mi].variadic)
                 return self->sup->fail("a variadic trait method must forward '...' in its binding");
-            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "->") == 0))
+            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("->")))
                 return self->sup->fail("expected '->'");
             /* Capture the RHS verbatim from self->lex->pos: no lex_next has run since the
                '->' token, so self->lex->pos sits just past it (the parse_init_raw trick). */

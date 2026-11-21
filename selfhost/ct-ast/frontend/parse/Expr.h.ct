@@ -1829,38 +1829,38 @@ impl ExprOps for Expr {
                keyword. It only enters the type when one of the four supported
                bases follows; `int atomic = 1;` never reaches this branch. */
             if (n == 0 && self->lex->tok == T_ID
-                && strcmp(self->lex->toktext, "atomic") == 0) {
+                && self->lex->tok_is("atomic")) {
                 self->saw_atomic = 1;
                 self->sup->lex_next();
                 if (self->lex->tok == T_ID
-                    && strcmp(self->lex->toktext, "_Atomic") == 0)
+                    && self->lex->tok_is("_Atomic"))
                     return self->sup->fail("use one atomic spelling, not both");
                 if (self->lex->tok == T_ID
-                    && strcmp(self->lex->toktext, "own") == 0)
+                    && self->lex->tok_is("own"))
                     return self->sup->fail("'own' must precede the type; an owned pointer cannot be atomic");
                 if (self->lex->tok == T_ID
-                    && strcmp(self->lex->toktext, "int") == 0) {
+                    && self->lex->tok_is("int")) {
                     if (self->type_append(out, cap, &n, "_Atomic(int)") != 0) return -1;
                     self->sup->lex_next();
                     continue;
                 }
                 if (self->lex->tok == T_ID
-                    && strcmp(self->lex->toktext, "long") == 0) {
+                    && self->lex->tok_is("long")) {
                     if (self->type_append(out, cap, &n, "_Atomic(long)") != 0) return -1;
                     self->sup->lex_next();
                     continue;
                 }
                 if (self->lex->tok == T_ID
-                    && strcmp(self->lex->toktext, "bool") == 0) {
+                    && self->lex->tok_is("bool")) {
                     if (self->type_append(out, cap, &n, "_Atomic(_Bool)") != 0) return -1;
                     self->sup->lex_next();
                     continue;
                 }
                 if (self->lex->tok == T_ID
-                    && strcmp(self->lex->toktext, "void") == 0) {
+                    && self->lex->tok_is("void")) {
                     self->sup->lex_next();
                     if (self->lex->tok == T_PUNCT
-                        && strcmp(self->lex->toktext, "*") == 0) {
+                        && self->lex->tok_is("*")) {
                         if (self->type_append(out, cap, &n, "_Atomic(void *)") != 0) return -1;
                         self->sup->lex_next();
                         continue;
@@ -1875,15 +1875,15 @@ impl ExprOps for Expr {
                picks it up without a node of its own. `_Atomic int` is the
                qualifier spelling and is accepted too. */
             if (self->lex->tok == T_ID
-                && (strcmp(self->lex->toktext, "_Alignas") == 0
-                    || strcmp(self->lex->toktext, "_Atomic") == 0)) {
+                && (self->lex->tok_is("_Alignas")
+                    || self->lex->tok_is("_Atomic"))) {
                 int need_paren, depth;
                 const char *word;
-                need_paren = (strcmp(self->lex->toktext, "_Alignas") == 0);
+                need_paren = (self->lex->tok_is("_Alignas"));
                 word = need_paren ? "_Alignas" : "_Atomic";
                 if (self->type_append(out, cap, &n, word) != 0) return -1;
                 self->sup->lex_next();
-                if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
+                if (self->lex->tok != T_PUNCT || !self->lex->tok_is("(")) {
                     if (need_paren) return self->sup->fail("expected '(' after _Alignas");
                     continue;                 /* bare `_Atomic` is the qualifier */
                 }
@@ -1898,10 +1898,10 @@ impl ExprOps for Expr {
                     if (self->lex->tok == T_NUM && !self->lex->tokfloat)
                         snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
                     else
-                        snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                        self->lex->tok_copy(tbuf, sizeof tbuf);
                     if (self->type_append(out, cap, &n, tbuf) != 0) return -1;
-                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
-                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                    if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) depth++;
+                    if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
                         depth--;
                         if (depth == 0) {
                             self->sup->lex_next();
@@ -1912,42 +1912,42 @@ impl ExprOps for Expr {
                 }
                 continue;
             }
-            if (self->lex->tok == T_ID && self->is_type_word(self->lex->toktext)) {
-                if (strcmp(self->lex->toktext, "struct") == 0) {
+            if (self->lex->tok == T_ID && self->is_type_word(self->lex->tok_cstr())) {
+                if (self->lex->tok_is("struct")) {
                     char sname[MAX_TEXT];
                     self->sup->lex_next();
                     /* Phase 29: `struct Stack<int>` is the same type as
                        `Stack<int>`; the instance reader owns the spelling. */
-                    if (self->lex->tok == T_ID && frontend::sym::ct_tmpl_find(self->lex->toktext) >= 0) {
+                    if (self->lex->tok == T_ID && frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0) {
                         if (self->parse_inst_type(out, cap) != 0) return -1;
                         n = (int)strlen(out);
                         continue;
                     }
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a struct name");
-                    if (self->sup->resolve_type(self->lex->toktext, sname, sizeof sname) != 0) return -1;
+                    if (self->sup->resolve_type(self->lex->tok_cstr(), sname, sizeof sname) != 0) return -1;
                     if (self->type_append(out, cap, &n, sname) != 0) return -1;
                     if (self->sup->add_type(sname, 1) != 0) return -1;
                     self->sup->lex_next();
                     continue;
                 }
-                if (self->type_append(out, cap, &n, self->lex->toktext) != 0) return -1;
-                if (strcmp(self->lex->toktext, "enum") == 0) {
+                if (self->type_append(out, cap, &n, self->lex->tok_cstr()) != 0) return -1;
+                if (self->lex->tok_is("enum")) {
                     /* `enum Tag` keeps its keyword the way `struct Tag` does; the
                        tag joins the table under kind 5 (D-2) */
                     char sname[MAX_TEXT];
                     self->sup->lex_next();
                     if (self->lex->tok != T_ID) return self->sup->fail("expected an enum name");
-                    if (self->sup->resolve_type(self->lex->toktext, sname, sizeof sname) != 0) return -1;
+                    if (self->sup->resolve_type(self->lex->tok_cstr(), sname, sizeof sname) != 0) return -1;
                     if (self->type_append(out, cap, &n, sname) != 0) return -1;
                     if (self->sup->add_type(sname, 5) != 0) return -1;
-                } else if (strcmp(self->lex->toktext, "union") == 0) {
+                } else if (self->lex->tok_is("union")) {
                     /* a union tag is mangled like a struct tag and joins the table
                        under kind 6 */
                     char sname[MAX_TEXT];
                     self->sup->lex_next();
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a union name");
-                    if (self->sup->resolve_type(self->lex->toktext, sname, sizeof sname) != 0) return -1;
+                    if (self->sup->resolve_type(self->lex->tok_cstr(), sname, sizeof sname) != 0) return -1;
                     if (self->type_append(out, cap, &n, sname) != 0) return -1;
                     if (self->sup->add_type(sname, 6) != 0) return -1;
                 }
@@ -1962,25 +1962,24 @@ impl ExprOps for Expr {
                    still the current token; peek past it before consuming so a
                    plain name keeps the existing path below. */
                 {
-                    const char *qp = self->lex->src + self->lex->tokstart + strlen(self->lex->toktext);
+                    const char *qp = self->lex->src + self->lex->tokstart + self->lex->tokstr.len;
                     while (*qp == ' ' || *qp == '\t') qp++;
                     if (qp[0] == ':' && qp[1] == ':') {
                         char qn[MAX_TEXT];
                         int qw, qti;
-                        snprintf(qn, sizeof qn, "%s", self->lex->toktext);
+                        self->lex->tok_copy(qn, sizeof qn);
                         self->sup->lex_next();
                         for (;;) {
                             if (self->lex->tok != T_PUNCT
-                                || strcmp(self->lex->toktext, "::") != 0) break;
+                                || !self->lex->tok_is("::")) break;
                             self->sup->lex_next();
                             if (self->lex->tok != T_ID)
                                 return self->sup->fail("expected a type name after '::'");
                             qw = (int)strlen(qn);
-                            if (qw + 1 + (int)strlen(self->lex->toktext) >= (int)sizeof qn)
+                            if (qw + 1 + (int)self->lex->tokstr.len >= (int)sizeof qn)
                                 return self->sup->fail("qualified type name is too long");
                             qn[qw] = '_';
-                            snprintf(qn + qw + 1, sizeof qn - (size_t)qw - 1, "%s",
-                                     self->lex->toktext);
+                            self->lex->tok_copy(qn + qw + 1, sizeof qn - (size_t)qw - 1);
                             self->sup->lex_next();
                         }
                         if (self->sym->resolve_type(qn, rname, sizeof rname) != 0)
@@ -2005,13 +2004,13 @@ impl ExprOps for Expr {
                 /* Phase 26 fix (SH-63): the declaration's type parameter wins
                    over a same-named tag; it is kept as `T` for emission. */
                 if (self->in_generic_tparam[0]
-                    && strcmp(self->lex->toktext, self->in_generic_tparam) == 0) {
+                    && self->lex->tok_is(self->in_generic_tparam)) {
                     if (self->type_append(out, cap, &n, self->in_generic_tparam) != 0) return -1;
                     self->sup->lex_next();
                     continue;
                 }
                 if (self->in_generic_tparam2[0]
-                    && strcmp(self->lex->toktext, self->in_generic_tparam2) == 0) {
+                    && self->lex->tok_is(self->in_generic_tparam2)) {
                     if (self->type_append(out, cap, &n, self->in_generic_tparam2) != 0) return -1;
                     self->sup->lex_next();
                     continue;
@@ -2019,7 +2018,7 @@ impl ExprOps for Expr {
                 /* PH-81: `box` is a common identifier (`Box box;`). It is a
                    type only when a balanced `<...>` follows; otherwise this is
                    the declarator name and the type reader must stop here. */
-                if (strcmp(self->lex->toktext, "box") == 0) {
+                if (self->lex->tok_is("box")) {
                     const char *bp = self->lex->src + self->lex->tokstart + 3;
                     int bd = 0, bclosed = 0;
                     while (*bp == ' ' || *bp == '\t') bp++;
@@ -2038,7 +2037,7 @@ impl ExprOps for Expr {
                 }
                 /* Phase 29: `Name<arg[, arg]>` names one monomorphised instance
                    of a generic struct; the reader lives in `parse_inst_type`. */
-                if (frontend::sym::ct_tmpl_find(self->lex->toktext) >= 0) {
+                if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0) {
                     if (self->parse_inst_type(out, cap) != 0) return -1;
                     n = (int)strlen(out);
                     continue;
@@ -2049,35 +2048,35 @@ impl ExprOps for Expr {
                    refuse a bare builtin generic instead of emitting bad C. */
                 {
                     const char *qp = self->lex->src + self->lex->tokstart
-                                     + strlen(self->lex->toktext);
+                                     + self->lex->tokstr.len;
                     while (*qp == ' ' || *qp == '\t') qp++;
-                    if (*qp == '<' && (strcmp(self->lex->toktext, "Vec") == 0
-                                       || strcmp(self->lex->toktext, "Map") == 0
-                                       || strcmp(self->lex->toktext, "Option") == 0
-                                       || strcmp(self->lex->toktext, "Result") == 0)) {
+                    if (*qp == '<' && (self->lex->tok_is("Vec")
+                                       || self->lex->tok_is("Map")
+                                       || self->lex->tok_is("Option")
+                                       || self->lex->tok_is("Result"))) {
                         char gmsg[MAX_TEXT];
                         snprintf(gmsg, sizeof gmsg,
-                                 "unresolved generic type '%s' (is the builtin layer missing? set CT_STD_DIR)",
-                                 self->lex->toktext);
+                                 "unresolved generic type '%.*s' (is the builtin layer missing? set CT_STD_DIR)",
+                                 self->lex->tokstr.len, self->lex->tokstr.ptr);
                         return self->sup->fail(gmsg);
                     }
-                    if (strcmp(self->lex->toktext, "Vec") == 0
-                        || strcmp(self->lex->toktext, "Map") == 0
-                        || strcmp(self->lex->toktext, "Option") == 0
-                        || strcmp(self->lex->toktext, "Result") == 0) {
+                    if (self->lex->tok_is("Vec")
+                        || self->lex->tok_is("Map")
+                        || self->lex->tok_is("Option")
+                        || self->lex->tok_is("Result")) {
                         char gmsg[MAX_TEXT];
                         snprintf(gmsg, sizeof gmsg,
-                                 "generic struct '%s' needs type arguments in a type position",
-                                 self->lex->toktext);
+                                 "generic struct '%.*s' needs type arguments in a type position",
+                                 self->lex->tokstr.len, self->lex->tokstr.ptr);
                         return self->sup->fail(gmsg);
                     }
                 }
                 /* A visible type alias expands before any name resolution: the
                    alias is a compile-time synonym, so the type spelling (and
                    therefore the host key) is the underlying one. */
-                if (self->sym->find_type_alias(self->lex->toktext) >= 0) {
+                if (self->sym->find_type_alias(self->lex->tok_cstr()) >= 0) {
                     char etext[MAX_TEXT];
-                    if (self->sym->expand_type_alias(self->lex->toktext, etext, sizeof etext) != 0)
+                    if (self->sym->expand_type_alias(self->lex->tok_cstr(), etext, sizeof etext) != 0)
                         return self->sup->fail(self->sym->last_error());
                     if (self->type_append(out, cap, &n, etext) != 0) return -1;
                     self->sup->lex_next();
@@ -2087,9 +2086,9 @@ impl ExprOps for Expr {
                    the left, so CT never infers one. `auto` is not a type name
                    here: refuse it instead of passing it through to `cc`, where
                    C99 would accept it as a storage class. */
-                if (strcmp(self->lex->toktext, "auto") == 0)
+                if (self->lex->tok_is("auto"))
                     return self->sup->fail("'auto' is not a type in CT (write the type explicitly)");
-                if (self->sup->resolve_type(self->lex->toktext, rname, sizeof rname) != 0) return -1;
+                if (self->sup->resolve_type(self->lex->tok_cstr(), rname, sizeof rname) != 0) return -1;
                 ti = self->sym->find_type(rname);
                 if (ti < 0) {
                     /* A declared-but-not-imported alias must not fall through to
@@ -2098,12 +2097,12 @@ impl ExprOps for Expr {
                     {
                         char apath[1024];
                         int aline = 0;
-                        if (self->sym->find_global_type_alias(self->lex->toktext, apath,
+                        if (self->sym->find_global_type_alias(self->lex->tok_cstr(), apath,
                                                               sizeof apath, &aline) == 0) {
                             char amsg[1400];
                             snprintf(amsg, sizeof amsg,
                                      "type alias '%s' is declared in %s:%d but this unit does not import it",
-                                     self->lex->toktext, apath, aline);
+                                     self->lex->tok_cstr(), apath, aline);
                             return self->sup->fail(amsg);
                         }
                     }
@@ -2157,7 +2156,7 @@ impl ExprOps for Expr {
                 continue;
             }
             if (!self->type_no_ptr && self->lex->tok == T_PUNCT
-                && strcmp(self->lex->toktext, "*") == 0) {
+                && self->lex->tok_is("*")) {
                 if (self->type_append(out, cap, &n, "*") != 0) return -1;
                 self->sup->lex_next();
                 continue;
@@ -2170,20 +2169,20 @@ impl ExprOps for Expr {
            (2b.4). A `(` that does not open `(*` is left alone: no other caller
            of `parse_type` can have one there. */
         if (!self->type_no_ptr
-            && self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+            && self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
             int save_tok, save_line, save_srcline, save_bol;
             long save_num;
             size_t save_pos;
-            char save_text[MAX_TEXT];
+            const char *save_text_ptr; int save_text_len;
             save_tok = self->lex->tok;
             save_num = self->lex->toknum;
             save_line = self->lex->tokline;
             save_pos = self->lex->pos;
             save_srcline = self->lex->line;
             save_bol = self->lex->bol;
-            snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+            save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
             self->sup->lex_next();
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("*")) {
                 char plist[MAX_TEXT];
                 char dname[MAX_TEXT];
                 char fdims[MAX_TEXT];
@@ -2193,19 +2192,19 @@ impl ExprOps for Expr {
                    declarator where the name belongs: only one level is
                    supported, and the diagnostic says so (D-7). */
                 if (self->lex->tok == T_PUNCT
-                    && (strcmp(self->lex->toktext, "*") == 0
-                        || strcmp(self->lex->toktext, "(") == 0))
+                    && (self->lex->tok_is("*")
+                        || self->lex->tok_is("(")))
                     return self->sup->fail("nested function pointers are not supported");
                 if (self->lex->tok != T_ID)
                     return self->sup->fail("expected a name in the function-pointer declarator");
                 /* keep the name here: parsing the parameter list below calls
                    `parse_type` again, which clears `fnptr_name` */
-                snprintf(dname, sizeof dname, "%s", self->lex->toktext);
+                self->lex->tok_copy(dname, sizeof dname);
                 self->sup->lex_next();
                 /* dimensions sit inside the declarator, before the `)`: a
                    function-pointer array (`int (*tbl[2])(int)`) (D-5) */
                 fdims[0] = 0;
-                while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+                while (self->lex->tok == T_PUNCT && self->lex->tok_is("[")) {
                     char dim[MAX_TEXT];
                     char cur[MAX_TEXT];
                     int unsized;
@@ -2214,8 +2213,8 @@ impl ExprOps for Expr {
                     if (self->lex->tok == T_NUM) {
                         snprintf(dim, sizeof dim, "[%ld]", self->lex->toknum);
                     } else if (self->lex->tok == T_ID) {
-                        snprintf(dim, sizeof dim, "[%s]", self->lex->toktext);
-                    } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0) {
+                        snprintf(dim, sizeof dim, "[%.*s]", self->lex->tokstr.len, self->lex->tokstr.ptr);
+                    } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("]")) {
                         snprintf(dim, sizeof dim, "[]");
                         unsized = 1;
                     } else {
@@ -2231,7 +2230,7 @@ impl ExprOps for Expr {
                 if (self->sup->expect("(") != 0) return -1;
                 pn = 0;
                 plist[0] = 0;
-                if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
+                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
                     for (;;) {
                         char pt[MAX_TEXT];
                         const char *joiner;
@@ -2239,7 +2238,7 @@ impl ExprOps for Expr {
                            other parameter (`int (*log)(const char *, ...)`), so
                            it is copied into the spelling; C requires a named
                            parameter before it, and it closes the list. */
-                        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "...") == 0) {
+                        if (self->lex->tok == T_PUNCT && self->lex->tok_is("...")) {
                             if (pn == 0 || strcmp(plist, "void") == 0)
                                 return self->sup->fail("a variadic function pointer needs a named parameter before '...'");
                             if (pn + 6 > MAX_TEXT)
@@ -2258,7 +2257,7 @@ impl ExprOps for Expr {
                             return self->sup->fail("a function-pointer signature is too long");
                         snprintf(plist + pn, (size_t)(MAX_TEXT - pn), "%s%s", joiner, pt);
                         pn += (int)(strlen(joiner) + strlen(pt));
-                        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                        if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                             self->sup->lex_next();
                             continue;
                         }
@@ -2282,12 +2281,12 @@ impl ExprOps for Expr {
                 self->lex->pos = save_pos;
                 self->lex->line = save_srcline;
                 self->lex->bol = save_bol;
-                snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+                self->lex->tokstr.ptr = save_text_ptr; self->lex->tokstr.len = save_text_len;
             }
         }
         if (n == 0) {
             char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg, "expected a type (tok %d '%s')", self->lex->tok, self->lex->toktext);
+            snprintf(msg, sizeof msg, "expected a type (tok %d '%.*s')", self->lex->tok, self->lex->tokstr.len, self->lex->tokstr.ptr);
             return self->sup->fail(msg);
         }
         return 0;
@@ -2311,13 +2310,13 @@ impl ExprOps for Expr {
         int n, ti2, tn, nargs, nt2, pline, pcol;
 
         n = (int)strlen(out);
-        snprintf(tname, sizeof tname, "%s", self->lex->toktext);
+        self->lex->tok_copy(tname, sizeof tname);
         ti2 = frontend::sym::ct_tmpl_find(tname);
         tp = frontend::sym::ct_tmpls(&tn);
         if (!tp || ti2 < 0) return self->sup->fail("internal: template row vanished");
         nt2 = tp[ti2].ntparams;
         self->sup->lex_next();
-        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "<") != 0) {
+        if (self->lex->tok != T_PUNCT || !self->lex->tok_is("<")) {
             char msg[MAX_TEXT * 2];
             snprintf(msg, sizeof msg,
                      "generic struct '%s' needs type arguments in a type position", tname);
@@ -2350,11 +2349,11 @@ impl ExprOps for Expr {
                elements by value and would outlive the view. Recognise the
                spelling before the generic-argument check so the diagnostic
                names the placement instead of "expected '>'". */
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("[")) {
                 int gl = self->lex->tokline;
                 int gc = self->lex->tokstart - self->lex->lstart + 1;
                 self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0)
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("]"))
                     return tool::diag::ct_sem_error(gl, gc,
                         strcmp(tname, "box") == 0
                             ? "a slice 'T[]' cannot be stored in box<T>; it is a non-owning view"
@@ -2385,7 +2384,7 @@ impl ExprOps for Expr {
                 return self->sup->fail("type is too long");
             }
             nargs++;
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                 self->sup->lex_next();
                 continue;
             }
@@ -2396,12 +2395,13 @@ impl ExprOps for Expr {
            the first `>` closes this list and the cursor steps back one source
            character, so the closing `lex_next` re-reads the second `>` for the
            caller. The lexer itself is untouched. */
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ">>") == 0) {
-            snprintf(self->lex->toktext, MAX_TEXT, "%s", ">");
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(">>")) {
+            self->lex->tokstr.ptr = self->lex->src + self->lex->tokstart + 1;
+            self->lex->tokstr.len = 1;
             self->lex->pos = self->lex->pos - 1;
             self->lex->tokstart = self->lex->tokstart + 1;
         }
-        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, ">") != 0)
+        if (self->lex->tok != T_PUNCT || !self->lex->tok_is(">"))
             return self->sup->fail("expected '>' after the type arguments");
         self->sup->lex_next();
         if (nargs != nt2) {
@@ -2818,7 +2818,7 @@ impl ExprOps for Expr {
     {
         int warned = 0;
         (void)self;
-        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+        while (self->lex->tok == T_PUNCT && self->lex->tok_is("[")) {
             char dim[MAX_TEXT];
             char cur[MAX_TEXT];
             int unsized, open, raw, dline, dcol;
@@ -2889,11 +2889,11 @@ impl ExprOps for Expr {
                 /* a constant (an enum member) is emitted under its C name; an
                    undeclared macro name stays as written (D-9) */
                 char cn[MAX_TEXT];
-                if (self->sym->var_cname(self->lex->toktext, cn, sizeof cn) == 0)
+                if (self->sym->var_cname(self->lex->tok_cstr(), cn, sizeof cn) == 0)
                     snprintf(dim, sizeof dim, "[%s]", cn);
                 else
-                    snprintf(dim, sizeof dim, "[%s]", self->lex->toktext);
-            } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0) {
+                    snprintf(dim, sizeof dim, "[%.*s]", self->lex->tokstr.len, self->lex->tokstr.ptr);
+            } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("]")) {
                 /* `T a[][N]`: an unsized parameter dimension (10.6) */
                 snprintf(dim, sizeof dim, "[]");
                 unsized = 1;
@@ -2904,7 +2904,7 @@ impl ExprOps for Expr {
                 self->sup->lex_next();
                 /* more than one token inside the brackets (`[MAX_NAME * 2]`):
                    the expression is kept as written */
-                if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0)) {
+                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("]"))) {
                     raw = 1;
                     dim[0] = 0;
                 }
@@ -2945,7 +2945,7 @@ impl ExprOps for Expr {
                inferred-length array and stays; a parameter, field or
                uninitialised declaration is deprecated in favour of `T[]`. */
             if (unsized && !warned
-                && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0)) {
+                && !(self->lex->tok == T_PUNCT && self->lex->tok_is("="))) {
                 warned = 1;
                 if (tool::diag::ct_slice_warn(dline, dcol,
                         "'T a[]' is deprecated; write 'T[]' for a slice or 'T a[N]' for an array",
@@ -2964,7 +2964,7 @@ impl ExprOps for Expr {
         int save_tok, save_line, save_bol, save_srcline, res, save_start, save_lstart;
         long save_num;
         size_t save_pos;
-        char save_text[MAX_TEXT];
+        const char *save_text_ptr; int save_text_len;
         (void)self;
         save_tok = self->lex->tok;
         save_num = self->lex->toknum;
@@ -2974,7 +2974,7 @@ impl ExprOps for Expr {
         save_bol = self->lex->bol;
         save_start = self->lex->tokstart;
         save_lstart = self->lex->lstart;
-        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+        save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
         res = 0;
         if (self->lex->tok == T_ID) {
             char rn[MAX_TEXT];
@@ -2982,7 +2982,7 @@ impl ExprOps for Expr {
                starting with it must reach `parse_type` so the slice placement
                guard can name the fault. Recognise only the shape
                `box <balanced> name`, so `box < 3` stays a comparison. */
-            if (strcmp(self->lex->toktext, "box") == 0) {
+            if (self->lex->tok_is("box")) {
                 /* PH-81: `box` is a real template now, so `box<T>` is a type
                    in every type position (`sizeof(box<T>)`, a cast, a field).
                    Before S1 it was only a diagnostic shape, which required a
@@ -3009,20 +3009,20 @@ impl ExprOps for Expr {
             /* `T` inside its own template body is a type, even though the
                ALL_CAPS rule below would read it as a macro constant. */
             if (self->in_generic && self->in_generic_tparam[0]
-                && strcmp(self->lex->toktext, self->in_generic_tparam) == 0) {
+                && self->lex->tok_is(self->in_generic_tparam)) {
                 res = 1;
             } else
             /* `_Atomic(type)` is a type on its own: the word is a keyword, so
                the balanced list (and optional stars) is all that stands between
                it and the cast's closing parenthesis. */
-            if (strcmp(self->lex->toktext, "_Atomic") == 0) {
+            if (self->lex->tok_is("_Atomic")) {
                 int d = 0;
                 self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
                     for (;;) {
                         if (self->lex->tok == T_EOF) break;
-                        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) d++;
-                        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                        if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) d++;
+                        if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
                             d--;
                             if (d == 0) {
                                 self->sup->lex_next();
@@ -3031,16 +3031,16 @@ impl ExprOps for Expr {
                         }
                         self->sup->lex_next();
                     }
-                    while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0)
+                    while (self->lex->tok == T_PUNCT && self->lex->tok_is("*"))
                         self->sup->lex_next();
-                    res = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0);
+                    res = (self->lex->tok == T_PUNCT && self->lex->tok_is(")"));
                 }
             } else
             /* resolve first: an imported name is a type even though the table
                only holds its mangled spelling */
-            if (self->is_type_word(self->lex->toktext)) {
+            if (self->is_type_word(self->lex->tok_cstr())) {
                 res = 1;
-            } else if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) == 0
+            } else if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) == 0
                        && self->sym->find_type(rn) >= 0) {
                 res = 1;
             } else {
@@ -3052,20 +3052,20 @@ impl ExprOps for Expr {
                    (`(time_t)`, `(time_t *)`); `(f(x))` is a call in parentheses,
                    which is what an undeclared library name looks like. */
                 int i, caps;
-                caps = (self->lex->toktext[0] != 0);
-                for (i = 0; self->lex->toktext[i]; i++) {
-                    char cc = self->lex->toktext[i];
+                caps = (self->lex->tok_first() != 0);
+                for (i = 0; i < self->lex->tokstr.len; i++) {
+                    char cc = self->lex->tokstr.ptr[i];
                     if (!((cc >= 'A' && cc <= 'Z') || (cc >= '0' && cc <= '9') || cc == '_')) {
                         caps = 0;
                         break;
                     }
                 }
-                if (!caps && self->sym->find_var(self->lex->toktext) < 0
-                    && self->sym->find_func(self->lex->toktext) < 0) {
+                if (!caps && self->sym->find_var(self->lex->tok_cstr()) < 0
+                    && self->sym->find_func(self->lex->tok_cstr()) < 0) {
                     self->sup->lex_next();
-                    while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0)
+                    while (self->lex->tok == T_PUNCT && self->lex->tok_is("*"))
                         self->sup->lex_next();
-                    res = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0);
+                    res = (self->lex->tok == T_PUNCT && self->lex->tok_is(")"));
                 }
             }
         }
@@ -3077,7 +3077,7 @@ impl ExprOps for Expr {
         self->lex->bol = save_bol;
         self->lex->tokstart = save_start;
         self->lex->lstart = save_lstart;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+        self->lex->tokstr.ptr = save_text_ptr; self->lex->tokstr.len = save_text_len;
         return res;
     }
 
@@ -3089,7 +3089,7 @@ impl ExprOps for Expr {
         int save_tok, save_line, save_bol, save_srcline, res, save_start, save_lstart;
         long save_num;
         size_t save_pos;
-        char save_text[MAX_TEXT];
+        const char *save_text_ptr; int save_text_len;
         (void)self;
         save_tok = self->lex->tok;
         save_num = self->lex->toknum;
@@ -3099,7 +3099,7 @@ impl ExprOps for Expr {
         save_bol = self->lex->bol;
         save_start = self->lex->tokstart;
         save_lstart = self->lex->lstart;
-        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+        save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
         self->sup->lex_next();
         res = self->tok_is_type_name();
         self->lex->tok = save_tok;
@@ -3110,7 +3110,7 @@ impl ExprOps for Expr {
         self->lex->bol = save_bol;
         self->lex->tokstart = save_start;
         self->lex->lstart = save_lstart;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+        self->lex->tokstr.ptr = save_text_ptr; self->lex->tokstr.len = save_text_len;
         return res;
     }
 
@@ -3122,7 +3122,7 @@ impl ExprOps for Expr {
         int save_tok, save_line, save_bol, save_srcline, res;
         long save_num;
         size_t save_pos;
-        char save_text[MAX_TEXT];
+        const char *save_text_ptr; int save_text_len;
         (void)self;
         save_tok = self->lex->tok;
         save_num = self->lex->toknum;
@@ -3130,16 +3130,16 @@ impl ExprOps for Expr {
         save_pos = self->lex->pos;
         save_srcline = self->lex->line;
         save_bol = self->lex->bol;
-        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+        save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
         self->sup->lex_next();
-        res = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0);
+        res = (self->lex->tok == T_PUNCT && self->lex->tok_is("("));
         self->lex->tok = save_tok;
         self->lex->toknum = save_num;
         self->lex->tokline = save_line;
         self->lex->pos = save_pos;
         self->lex->line = save_srcline;
         self->lex->bol = save_bol;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+        self->lex->tokstr.ptr = save_text_ptr; self->lex->tokstr.len = save_text_len;
         return res;
     }
 
@@ -3218,7 +3218,7 @@ impl ExprOps for Expr {
            trait's method budget stays put. */
         left = self->parse_bitor();
         if (left < 0) return -1;
-        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
+        while (self->lex->tok == T_PUNCT && self->lex->tok_is("&&")) {
             self->sup->lex_next();
             /* L44-4: the right operand is short-circuited, so an early return
                there would be skipped on some paths. */
@@ -3233,13 +3233,13 @@ impl ExprOps for Expr {
             self->arena->nodes[n].aux = B_AND;
             left = n;
         }
-        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "||") == 0) {
+        while (self->lex->tok == T_PUNCT && self->lex->tok_is("||")) {
             self->sup->lex_next();
             self->try_ban++;
             right = self->parse_bitor();
             self->try_ban--;
             if (right < 0) return -1;
-            while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&&") == 0) {
+            while (self->lex->tok == T_PUNCT && self->lex->tok_is("&&")) {
                 self->sup->lex_next();
                 self->try_ban++;
                 inner = self->parse_bitor();
@@ -3259,7 +3259,7 @@ impl ExprOps for Expr {
             self->arena->nodes[n].aux = B_OR;
             left = n;
         }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "?") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("?")) {
             int a, b;
             /* L44-4: the condition is evaluated before either arm and an
                early return there would skip the arm selection. */
@@ -3291,14 +3291,14 @@ impl ExprOps for Expr {
            layer, which is where AutoDrop keeps its bookkeeping. Parsing the right
            side here again makes the operator right-associative. */
         if (self->assign_ok && self->lex->tok == T_PUNCT
-            && (strcmp(self->lex->toktext, "=") == 0
-                || strcmp(self->lex->toktext, "+=") == 0 || strcmp(self->lex->toktext, "-=") == 0
-                || strcmp(self->lex->toktext, "*=") == 0 || strcmp(self->lex->toktext, "/=") == 0
-                || strcmp(self->lex->toktext, "%=") == 0 || strcmp(self->lex->toktext, "&=") == 0
-                || strcmp(self->lex->toktext, "|=") == 0 || strcmp(self->lex->toktext, "^=") == 0
-                || strcmp(self->lex->toktext, "<<=") == 0 || strcmp(self->lex->toktext, ">>=") == 0)) {
+            && (self->lex->tok_is("=")
+                || self->lex->tok_is("+=") || self->lex->tok_is("-=")
+                || self->lex->tok_is("*=") || self->lex->tok_is("/=")
+                || self->lex->tok_is("%=") || self->lex->tok_is("&=")
+                || self->lex->tok_is("|=") || self->lex->tok_is("^=")
+                || self->lex->tok_is("<<=") || self->lex->tok_is(">>="))) {
             int op = 0, k2;
-            char oc = self->lex->toktext[0];
+            char oc = self->lex->tok_first();
             int aline = self->lex->tokline;
             int acol = self->lex->tokstart - self->lex->lstart + 1;
             k2 = self->arena->nodes[left].kind;
@@ -3319,7 +3319,7 @@ impl ExprOps for Expr {
             if (self->container_subscript_kind(left) == 3) {
                 int cl = self->arena->nodes[left].line;
                 int cc = self->arena->nodes[left].num;
-                if (strcmp(self->lex->toktext, "=") != 0)
+                if (!self->lex->tok_is("="))
                     return tool::diag::ct_sem_error(cl, cc,
                         "a custom subscript supports only '='; use set(k, v)",
                         self->sup->mem->path);
@@ -3396,7 +3396,7 @@ impl ExprOps for Expr {
 
         n = left;
         for (;;) {
-            if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "into") == 0))
+            if (!(self->lex->tok == T_ID && self->lex->tok_is("into")))
                 return n;
             line = self->lex->tokline;
             col = self->lex->tokstart - self->lex->lstart + 1;
@@ -3454,7 +3454,7 @@ impl ExprOps for Expr {
                 }
             }
             self->sup->lex_next();
-            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)) {
+            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{"))) {
                 self->sup->fail("expected '{' after 'into'");
                 return -1;
             }
@@ -3463,12 +3463,12 @@ impl ExprOps for Expr {
             /* a suffix after the block belongs to the whole expression:
                `cfg into { … }.port` reads the promoted receiver's port */
             if (self->lex->tok == T_PUNCT
-                && (strcmp(self->lex->toktext, ".") == 0
-                    || strcmp(self->lex->toktext, "->") == 0
-                    || strcmp(self->lex->toktext, "[") == 0
-                    || strcmp(self->lex->toktext, "(") == 0
-                    || strcmp(self->lex->toktext, "++") == 0
-                    || strcmp(self->lex->toktext, "--") == 0)) {
+                && (self->lex->tok_is(".")
+                    || self->lex->tok_is("->")
+                    || self->lex->tok_is("[")
+                    || self->lex->tok_is("(")
+                    || self->lex->tok_is("++")
+                    || self->lex->tok_is("--"))) {
                 self->postfix_seed = n;
                 n = self->parse_postfix();
                 if (n < 0) return -1;
@@ -3563,7 +3563,7 @@ impl ExprOps for Expr {
 
         left = self->parse_bxor();
         if (left < 0) return -1;
-        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "|") == 0) {
+        while (self->lex->tok == T_PUNCT && self->lex->tok_is("|")) {
             self->sup->lex_next();
             right = self->parse_bxor();
             if (right < 0) return -1;
@@ -3584,7 +3584,7 @@ impl ExprOps for Expr {
 
         left = self->parse_bitand();
         if (left < 0) return -1;
-        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "^") == 0) {
+        while (self->lex->tok == T_PUNCT && self->lex->tok_is("^")) {
             self->sup->lex_next();
             right = self->parse_bitand();
             if (right < 0) return -1;
@@ -3605,7 +3605,7 @@ impl ExprOps for Expr {
 
         left = self->parse_cmp();
         if (left < 0) return -1;
-        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&") == 0) {
+        while (self->lex->tok == T_PUNCT && self->lex->tok_is("&")) {
             self->sup->lex_next();
             right = self->parse_cmp();
             if (right < 0) return -1;
@@ -3627,8 +3627,8 @@ impl ExprOps for Expr {
         left = self->parse_add();
         if (left < 0) return -1;
         while (self->lex->tok == T_PUNCT
-               && (strcmp(self->lex->toktext, "<<") == 0 || strcmp(self->lex->toktext, ">>") == 0)) {
-            op = (self->lex->toktext[0] == '<') ? B_SHL : B_SHR;
+               && (self->lex->tok_is("<<") || self->lex->tok_is(">>"))) {
+            op = (self->lex->tok_first() == '<') ? B_SHL : B_SHR;
             self->sup->lex_next();
             right = self->parse_add();
             if (right < 0) return -1;
@@ -3651,12 +3651,12 @@ impl ExprOps for Expr {
         if (left < 0) return -1;
         while (self->lex->tok == T_PUNCT) {
             op = 0;
-            if (strcmp(self->lex->toktext, "<") == 0) op = B_LT;
-            else if (strcmp(self->lex->toktext, ">") == 0) op = B_GT;
-            else if (strcmp(self->lex->toktext, "<=") == 0) op = B_LE;
-            else if (strcmp(self->lex->toktext, ">=") == 0) op = B_GE;
-            else if (strcmp(self->lex->toktext, "==") == 0) op = B_EQ;
-            else if (strcmp(self->lex->toktext, "!=") == 0) op = B_NE;
+            if (self->lex->tok_is("<")) op = B_LT;
+            else if (self->lex->tok_is(">")) op = B_GT;
+            else if (self->lex->tok_is("<=")) op = B_LE;
+            else if (self->lex->tok_is(">=")) op = B_GE;
+            else if (self->lex->tok_is("==")) op = B_EQ;
+            else if (self->lex->tok_is("!=")) op = B_NE;
             if (op == 0) break;
             self->sup->lex_next();
             right = self->parse_shift();
@@ -3678,8 +3678,8 @@ impl ExprOps for Expr {
 
         left = self->parse_mul();
         if (left < 0) return -1;
-        while (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "+") == 0 || strcmp(self->lex->toktext, "-") == 0)) {
-            op = (self->lex->toktext[0] == '+') ? B_ADD : B_SUB;
+        while (self->lex->tok == T_PUNCT && (self->lex->tok_is("+") || self->lex->tok_is("-"))) {
+            op = (self->lex->tok_first() == '+') ? B_ADD : B_SUB;
             self->sup->lex_next();
             right = self->parse_mul();
             if (right < 0) return -1;
@@ -3700,11 +3700,11 @@ impl ExprOps for Expr {
 
         left = self->parse_unary();
         if (left < 0) return -1;
-        while (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "*") == 0
-               || strcmp(self->lex->toktext, "/") == 0 || strcmp(self->lex->toktext, "%") == 0)) {
+        while (self->lex->tok == T_PUNCT && (self->lex->tok_is("*")
+               || self->lex->tok_is("/") || self->lex->tok_is("%"))) {
             op = B_MUL;
-            if (self->lex->toktext[0] == '/') op = B_DIV;
-            else if (self->lex->toktext[0] == '%') op = B_MOD;
+            if (self->lex->tok_first() == '/') op = B_DIV;
+            else if (self->lex->tok_first() == '%') op = B_MOD;
             self->sup->lex_next();
             right = self->parse_unary();
             if (right < 0) return -1;
@@ -3723,16 +3723,16 @@ impl ExprOps for Expr {
         int n, e, op;
         (void)self;
 
-        if (self->lex->tok == T_ID && (strcmp(self->lex->toktext, "sizeof") == 0
-                                       || strcmp(self->lex->toktext, "_Alignof") == 0
-                                       || strcmp(self->lex->toktext, "alignof") == 0)) {
+        if (self->lex->tok == T_ID && (self->lex->tok_is("sizeof")
+                                       || self->lex->tok_is("_Alignof")
+                                       || self->lex->tok_is("alignof"))) {
             char tbuf[MAX_TEXT];
             int kind, rc;
             /* 1 = sizeof, 2 = C11 `_Alignof`, 4 = `alignof` (stdalign.h) */
-            kind = strcmp(self->lex->toktext, "sizeof") == 0 ? 1
-                   : strcmp(self->lex->toktext, "_Alignof") == 0 ? 2 : 4;
+            kind = self->lex->tok_is("sizeof") ? 1
+                   : self->lex->tok_is("_Alignof") ? 2 : 4;
             self->sup->lex_next();
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")
                 && self->next_is_type_name()) {
                 self->sup->lex_next();
                 if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
@@ -3773,10 +3773,10 @@ impl ExprOps for Expr {
         /* `(params) => expr` opens a closure literal. The check runs before
            the cast branch: a typed parameter list starts with a type word, so
            `next_is_type_name` would otherwise read `(int x)` as a cast. */
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")
             && closure_ahead(self))
             return self->parse_closure();
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")
             && self->next_is_type_name()) {
             char tbuf[MAX_TEXT];
             self->sup->lex_next();
@@ -3786,7 +3786,7 @@ impl ExprOps for Expr {
                a declaration initialiser, and the emitter adds the vptr items a
                trait-carrying struct needs. A postfix suffix still applies, so
                the node rides through `postfix_seed` instead of returning here. */
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                 /* a compound literal's braces go to the arena string pool for the
                    same reason a declaration initialiser does (`aux = 1`,
                    `num` = offset) */
@@ -3825,9 +3825,9 @@ impl ExprOps for Expr {
         /* prefix `++` / `--`: the same increment as the postfix form, but the
            value is the updated one (D-9 of this batch). It binds like the other
            unary operators, so `s[--n]` and `*--p` work as in C. */
-        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "++") == 0
-                                          || strcmp(self->lex->toktext, "--") == 0)) {
-            int pre = (self->lex->toktext[0] == '+') ? P_INC : P_DEC;
+        if (self->lex->tok == T_PUNCT && (self->lex->tok_is("++")
+                                          || self->lex->tok_is("--"))) {
+            int pre = (self->lex->tok_first() == '+') ? P_INC : P_DEC;
             self->sup->lex_next();
             e = self->parse_unary();
             if (e < 0) return -1;
@@ -3845,9 +3845,9 @@ impl ExprOps for Expr {
             self->arena->nodes[n].aux = pre;
             return n;
         }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "-") == 0) op = U_NEG;
-        else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "!") == 0) op = U_NOT;
-        else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "~") == 0) op = U_BNOT;
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("-")) op = U_NEG;
+        else if (self->lex->tok == T_PUNCT && self->lex->tok_is("!")) op = U_NOT;
+        else if (self->lex->tok == T_PUNCT && self->lex->tok_is("~")) op = U_BNOT;
         if (op != 0) {
             self->sup->lex_next();
             e = self->parse_unary();
@@ -3858,7 +3858,7 @@ impl ExprOps for Expr {
             self->arena->nodes[n].aux = op;
             return n;
         }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "&") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("&")) {
             int save;
             self->sup->lex_next();
             save = self->fnval_ok;
@@ -3879,7 +3879,7 @@ impl ExprOps for Expr {
             self->arena->nodes[n].a = e;
             return n;
         }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("*")) {
             self->sup->lex_next();
             e = self->parse_unary();
             if (e < 0) return -1;
@@ -4453,7 +4453,7 @@ impl ExprOps for Expr {
         int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc;
         int depth, r;
         long snum;
-        char stext[MAX_TEXT];
+        const char *stext_ptr; int stext_len;
         const char *ssuf_ptr; int ssuf_len;
 
         sp = self->lex->pos;
@@ -4466,12 +4466,12 @@ impl ExprOps for Expr {
         slstart = self->lex->lstart;
         sfloat = self->lex->tokfloat;
         strunc = self->lex->toktrunc;
-        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
         ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
         depth = 0;
         r = 0;
         self->sup->lex_next();          /* the template name */
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0)) {
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("<"))) {
             self->lex->pos = sp;
             self->lex->bol = sbol;
             self->lex->tok = stok;
@@ -4482,44 +4482,43 @@ impl ExprOps for Expr {
             self->lex->lstart = slstart;
             self->lex->tokfloat = sfloat;
             self->lex->toktrunc = strunc;
-            snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+            self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
             self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
             return 0;
         }
         self->sup->lex_next();          /* the `<` */
         depth = 1;
         while (self->lex->tok != T_EOF) {
-            const char *t = self->lex->toktext;
             if (self->lex->tok == T_PUNCT) {
-                if (t[0] == '<' && t[1] == 0) {
+                if (self->lex->tok_is("<")) {
                     depth++;
-                } else if (t[0] == '>' && t[1] == 0 && depth > 0) {
+                } else if (self->lex->tok_is(">") && depth > 0) {
                     depth--;
                     if (depth == 0) {
                         self->sup->lex_next();
                         break;
                     }
-                } else if (strcmp(t, ">>") == 0 && depth > 1) {
+                } else if (self->lex->tok_is(">>") && depth > 1) {
                     depth -= 2;
                     if (depth == 0) {
                         self->sup->lex_next();
                         break;
                     }
-                } else if (strcmp(t, ";") == 0 || strcmp(t, "{") == 0
-                           || strcmp(t, "}") == 0 || strcmp(t, "(") == 0
-                           || strcmp(t, ")") == 0 || strcmp(t, "=") == 0) {
+                } else if (self->lex->tok_is(";") || self->lex->tok_is("{")
+                           || self->lex->tok_is("}") || self->lex->tok_is("(")
+                           || self->lex->tok_is(")") || self->lex->tok_is("=")) {
                     break;
                 }
             }
             self->sup->lex_next();
         }
         if (depth == 0 && self->lex->tok == T_PUNCT
-            && strcmp(self->lex->toktext, "::") == 0) {
+            && self->lex->tok_is("::")) {
             self->sup->lex_next();
             if (self->lex->tok == T_ID) {
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT
-                    && strcmp(self->lex->toktext, "(") == 0) r = 1;
+                    && self->lex->tok_is("(")) r = 1;
             }
         }
         self->lex->pos = sp;
@@ -4532,7 +4531,7 @@ impl ExprOps for Expr {
         self->lex->lstart = slstart;
         self->lex->tokfloat = sfloat;
         self->lex->toktrunc = strunc;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
         self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
         return r;
     }
@@ -4555,7 +4554,7 @@ impl ExprOps for Expr {
             if (n < 0) return -1;
         }
         for (;;) {
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "$") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("$")) {
                 int dl = self->lex->tokline;
                 int dc = self->lex->tokstart - self->lex->lstart + 1;
                 char mname[MAX_TEXT];
@@ -4577,7 +4576,7 @@ impl ExprOps for Expr {
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID)
                     return self->sup->fail("expected a variable name after '$'");
-                snprintf(mname, sizeof mname, "%s", self->lex->toktext);
+                self->lex->tok_copy(mname, sizeof mname);
                 mvi = self->sym->find_var(mname);
                 if (mvi < 0)
                     return self->sup->fail("'$' target must be a declared variable");
@@ -4640,7 +4639,7 @@ impl ExprOps for Expr {
                 n = mv;
                 continue;
             }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("[")) {
                 /* P-7.2: a slice is its own type, so `s[i]` / `s[lo..hi]` and
                    an array's `a[lo..hi]` are recognised before the container
                    sugar. A plain `a[i]` on an array keeps C's unchecked
@@ -4669,10 +4668,10 @@ impl ExprOps for Expr {
                     self->sup->lex_next();          /* `[` */
                     idx = self->parse_expr();
                     if (idx < 0) return -1;
-                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "..") == 0) {
+                    if (self->lex->tok == T_PUNCT && self->lex->tok_is("..")) {
                         self->sup->lex_next();
                         if (!(self->lex->tok == T_PUNCT
-                              && strcmp(self->lex->toktext, "]") == 0)) {
+                              && self->lex->tok_is("]"))) {
                             hi = self->parse_expr();
                             if (hi < 0) return -1;
                         }
@@ -4924,10 +4923,10 @@ impl ExprOps for Expr {
                 n = m;
                 continue;
             }
-            if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, ".") == 0
-                                     || strcmp(self->lex->toktext, "->") == 0)) {
+            if (self->lex->tok == T_PUNCT && (self->lex->tok_is(".")
+                                     || self->lex->tok_is("->"))) {
                 int arrow;
-                arrow = (self->lex->toktext[0] == '-') ? 1 : 0;
+                arrow = (self->lex->tok_first() == '-') ? 1 : 0;
                 /* Phase 30: `.name` is the receiver sugar, so a pointer or a
                    left-value value receiver goes through `->` (the promoted
                    variable is a pointer in both cases). */
@@ -4945,11 +4944,11 @@ impl ExprOps for Expr {
                 }
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a field or method name");
-                snprintf(fname, sizeof fname, "%s", self->lex->toktext);
+                self->lex->tok_copy(fname, sizeof fname);
                 mline = self->lex->tokline;
                 mcol = self->lex->tokstart - self->lex->lstart + 1;
                 self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
                     /* P-7.2: `s.get(i)` is the slice's soft access (out of
                        range answers 0) and is resolved before trait-method
                        dispatch; a slice has no vtable. */
@@ -5516,7 +5515,7 @@ impl ExprOps for Expr {
                                 }
                                 if (aux != 0) {
                                     if (!(self->lex->tok == T_PUNCT
-                                          && strcmp(self->lex->toktext, "[") == 0))
+                                          && self->lex->tok_is("[")))
                                         return tool::diag::ct_sem_error(mline, mcol,
                                             "'.data' is a read-only raw view without a NUL guarantee; index it byte by byte or use cstr() at the C boundary",
                                             self->sup->mem->path);
@@ -5623,7 +5622,7 @@ impl ExprOps for Expr {
                 n = m;
                 continue;
             }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
                 /* a call through a pointer expression: `(*p)(x)` (D-7). A plain
                    `name(...)` was already consumed by `parse_primary`. */
                 args = self->parse_args();
@@ -5640,7 +5639,7 @@ impl ExprOps for Expr {
                after `?` cannot start an expression; otherwise the `?` belongs
                to the conditional operator one level up (`parse_expr`), so the
                postfix loop stops here without consuming it. */
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "?") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("?")) {
                 int qline, qcol;
                 char qty[MAX_TEXT];
                 int qad = 0;
@@ -5657,10 +5656,10 @@ impl ExprOps for Expr {
                         self->sup->lex_next();  /* the `.` */
                         if (self->lex->tok != T_ID)
                             return self->sup->fail("expected a field name after '?.'");
-                        snprintf(fname, sizeof fname, "%s", self->lex->toktext);
+                        self->lex->tok_copy(fname, sizeof fname);
                         self->sup->lex_next();
                         if (self->lex->tok == T_PUNCT
-                            && strcmp(self->lex->toktext, "(") == 0)
+                            && self->lex->tok_is("("))
                             return tool::diag::ct_sem_error(oline, ocol,
                                 "optional method calls are not supported; assign the receiver to a variable first",
                                 self->sup->mem->path);
@@ -5712,7 +5711,7 @@ impl ExprOps for Expr {
             }
             break;
         }
-        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "++") == 0 || strcmp(self->lex->toktext, "--") == 0)) {
+        if (self->lex->tok == T_PUNCT && (self->lex->tok_is("++") || self->lex->tok_is("--"))) {
             int k;
             if (is_range_index(self->arena, n))
                 return self->sup->fail("the range index '$' is not a variable");
@@ -5728,7 +5727,7 @@ impl ExprOps for Expr {
             m = self->sup->new_node(N_POST);
             if (m < 0) return -1;
             self->arena->nodes[m].a = n;
-            self->arena->nodes[m].aux = (self->lex->toktext[0] == '+') ? P_INC : P_DEC;
+            self->arena->nodes[m].aux = (self->lex->tok_first() == '+') ? P_INC : P_DEC;
             self->sup->lex_next();
             return m;
         }
@@ -5758,7 +5757,7 @@ impl ExprOps for Expr {
         self->sup->lex_next();                       /* the `(` */
         pstart = self->sym->nvar;
         if (self->sym->push_scope() != 0) return self->sup->fail(self->sym->last_error());
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
             for (;;) {
                 if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
                 if (self->fnptr_state) {
@@ -5768,7 +5767,7 @@ impl ExprOps for Expr {
                 } else {
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a parameter name");
-                    snprintf(name, sizeof name, "%s", self->lex->toktext);
+                    self->lex->tok_copy(name, sizeof name);
                     self->sup->lex_next();
                 }
                 if (self->sym->declare_var(name, typebuf) != 0)
@@ -5782,7 +5781,7 @@ impl ExprOps for Expr {
                                  self->sym->closures[ci].pname[self->sym->closures[ci].nparams],
                                  name, "a closure parameter name") != 0) return -1;
                 self->sym->closures[ci].nparams++;
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                     self->sup->lex_next();
                     continue;
                 }
@@ -5790,7 +5789,7 @@ impl ExprOps for Expr {
             }
         }
         if (self->sup->expect(")") != 0) return -1;
-        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "=>") != 0)
+        if (self->lex->tok != T_PUNCT || !self->lex->tok_is("=>"))
             return self->sup->fail("expected '=>' after a closure's parameter list");
         self->sup->lex_next();
         /* R09: the nesting stack is not optional. Dropping the push would leave
@@ -5805,7 +5804,7 @@ impl ExprOps for Expr {
            this object cannot import it, so the parser installed a hook. */
         /* L44-4: a closure has no outer Result return target (D44-10). */
         self->try_ban++;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
             if (!self->st_hook)
                 return self->sup->fail("a block-bodied closure needs the statement parser");
             body = self->st_hook(0, 0);
@@ -5852,7 +5851,7 @@ impl ExprOps for Expr {
            into the string pool (`N_RAW`, `aux = 1`, `num` = offset) and handed
            to the C compiler, which owns the arm choice. ct does not read the
            arms, so a trait call or a boxing inside one is not rewritten. */
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Generic") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("_Generic")) {
             char gname[MAX_TEXT];
             int off, depth, k, prev_tag;
             n = self->sup->new_node(N_RAW);
@@ -5863,7 +5862,7 @@ impl ExprOps for Expr {
                 if (self->arena->str_put(gname[k]) != 0)
                     return self->sup->fail("string pool is full");
             self->sup->lex_next();
-            if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0)
+            if (self->lex->tok != T_PUNCT || !self->lex->tok_is("("))
                 return self->sup->fail("expected '(' after _Generic");
             depth = 0;
             prev_tag = 0;
@@ -5877,7 +5876,7 @@ impl ExprOps for Expr {
                 if (self->lex->tok == T_NUM && !self->lex->tokfloat)
                     snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
                 else
-                    snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                    self->lex->tok_copy(tbuf, sizeof tbuf);
                 /* the body is copied verbatim, so a bare type parameter here
                    would reach the output as an undeclared name; refuse it
                    instead of emitting bad C (SH-62). `struct T` / `union T` /
@@ -5890,8 +5889,8 @@ impl ExprOps for Expr {
                 for (m = 0; tbuf[m]; m++)
                     if (self->arena->str_put(tbuf[m]) != 0)
                         return self->sup->fail("string pool is full");
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) depth++;
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
                     depth--;
                     if (depth == 0) {
                         self->sup->lex_next();
@@ -5912,7 +5911,7 @@ impl ExprOps for Expr {
             n = self->sup->new_node(self->lex->tokfloat ? N_FNUM : N_NUM);
             if (n < 0) return -1;
             if (self->lex->tokfloat)
-                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->lex->toktext);
+                self->lex->tok_copy(self->arena->nodes[n].text, MAX_TEXT);
             else {
                 self->arena->nodes[n].num = self->lex->toknum;
                 /* An integer suffix is spelling, not value: `U` may appear once
@@ -5946,8 +5945,8 @@ impl ExprOps for Expr {
                 int m = 0;
                 if (self->lex->toktrunc)
                     return self->sup->fail("string literal is too long (max 158 bytes; split it)");
-                while (self->lex->toktext[m]) {
-                    if (self->arena->str_put((unsigned char)self->lex->toktext[m]) != 0)
+                while (m < self->lex->tokstr.len) {
+                    if (self->arena->str_put((unsigned char)self->lex->tokstr.ptr[m]) != 0)
                         return self->sup->fail("string pool is full");
                     m++;
                 }
@@ -5960,7 +5959,7 @@ impl ExprOps for Expr {
         /* `offsetof(<struct type>, <field>)` is a builtin, not a macro: CT has
            no preprocessor, so the compiler recognises it here and the generated
            `.c` keeps the same call (D-8). */
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "offsetof") == 0
+        if (self->lex->tok == T_ID && self->lex->tok_is("offsetof")
             && self->offsetof_ahead()) {
             char tbuf[MAX_TEXT];
             char fname[MAX_TEXT];
@@ -5975,7 +5974,7 @@ impl ExprOps for Expr {
             if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
             if (self->sup->expect(",") != 0) return -1;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
-            snprintf(fname, sizeof fname, "%s", self->lex->toktext);
+            self->lex->tok_copy(fname, sizeof fname);
             /* Phase 26 fix (SH-62): a type parameter has no field list here;
                the instance emission substitutes `T` and C checks the field. */
             if (self->in_generic && self->in_generic_tparam[0]
@@ -6028,7 +6027,7 @@ impl ExprOps for Expr {
         /* `va_arg(<ap>, <type>)` is the one stdarg macro that is not a call: its
            second argument is a type, so it is a builtin like `offsetof` and the
            generated `.c` keeps the same spelling (D-9). */
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "va_arg") == 0
+        if (self->lex->tok == T_ID && self->lex->tok_is("va_arg")
             && self->offsetof_ahead()) {
             char tbuf[MAX_TEXT];
             int ap;
@@ -6049,7 +6048,7 @@ impl ExprOps for Expr {
            emitter renders it as `((int)<k>)` -- so it never reaches the symbol
            table; outside the element expression of a range initialiser it is a
            syntax error, never an undeclared name. */
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "$") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("$")) {
             /* Phase 30: inside an `into` block `$` is the receiver itself. */
             if (self->into_node >= 0) {
                 n = self->sup->new_node(N_INTO_SELF);
@@ -6079,7 +6078,7 @@ impl ExprOps for Expr {
                spelling, so the emitter writes `<Inst>_<method>(...)`. The
                cursor is still on the template name, so `parse_inst_type` reads
                `Vec<int>` exactly as a type position would. */
-            if (frontend::sym::ct_tmpl_find(self->lex->toktext) >= 0
+            if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0
                 && self->static_call_ahead()) {
                 char ibase[MAX_TEXT];
                 char sm[MAX_TEXT];
@@ -6087,13 +6086,13 @@ impl ExprOps for Expr {
                 int mn;
                 ibase[0] = 0;
                 if (self->parse_inst_type(ibase, sizeof ibase) != 0) return -1;
-                if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0))
+                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("::")))
                     return self->sup->fail("expected '::' after the instance type");
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
-                snprintf(sm, sizeof sm, "%s", self->lex->toktext);
+                self->lex->tok_copy(sm, sizeof sm);
                 self->sup->lex_next();
-                if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0))
+                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
                     return self->sup->fail("a static method call needs an argument list");
                 args = self->parse_args();
                 if (args < 0) return -1;
@@ -6149,7 +6148,7 @@ impl ExprOps for Expr {
                 char sres2[MAX_TEXT];
                 char sqn2[MAX_TEXT];
                 int sres2_is_type = 0;
-                snprintf(sres2, sizeof sres2, "%s", self->lex->toktext);
+                self->lex->tok_copy(sres2, sizeof sres2);
                 if (self->sym->find_struct(sres2) < 0
                     && self->sym->resolve_type(sres2, sqn2, (int)sizeof sqn2) == 0) {
                     if (self->sym->find_struct(sqn2) >= 0)
@@ -6164,25 +6163,27 @@ impl ExprOps for Expr {
                 long snum2;
                 int sfloat2, strunc2;
                 char stext2[MAX_TEXT];
+                int stext2_len;
                 const char *ssuf2_ptr; int ssuf2_len;
                 sp2 = self->lex->pos; sbol2 = self->lex->bol;
                 stok2 = self->lex->tok; snum2 = self->lex->toknum;
                 sline2 = self->lex->line; stokline2 = self->lex->tokline;
                 sstart2 = self->lex->tokstart; slstart2 = self->lex->lstart;
                 sfloat2 = self->lex->tokfloat; strunc2 = self->lex->toktrunc;
-                snprintf(stext2, sizeof stext2, "%s", self->lex->toktext);
+                self->lex->tok_copy(stext2, sizeof stext2);
+                stext2_len = self->lex->tokstr.len;
                 ssuf2_ptr = self->lex->toksuffix.ptr; ssuf2_len = self->lex->toksuffix.len;
                 self->sup->lex_next();   /* the struct name */
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0) {
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is(".")) {
                     self->sup->lex_next();
                     if (self->lex->tok == T_ID) {
                         char sibase[MAX_TEXT];
                         char sm2[MAX_TEXT];
                         char smsg2[MAX_TEXT + 64];
                         int mn2;
-                        snprintf(sm2, sizeof sm2, "%s", self->lex->toktext);
+                        self->lex->tok_copy(sm2, sizeof sm2);
                         self->sup->lex_next();
-                        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+                        if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
                             snprintf(sibase, sizeof sibase, "struct %s", sres2);
                             args = self->parse_args();
                             if (args < 0) return -1;
@@ -6218,7 +6219,8 @@ impl ExprOps for Expr {
                 self->lex->line = sline2; self->lex->tokline = stokline2;
                 self->lex->tokstart = sstart2; self->lex->lstart = slstart2;
                 self->lex->tokfloat = sfloat2; self->lex->toktrunc = strunc2;
-                snprintf(self->lex->toktext, sizeof self->lex->toktext, "%s", stext2);
+                self->lex->tokstr.ptr = self->lex->src + sstart2;
+                self->lex->tokstr.len = stext2_len;
                 self->lex->toksuffix.ptr = ssuf2_ptr; self->lex->toksuffix.len = ssuf2_len;
                 } else if (sres2_is_type) {
                     /* LANG-7: the receiver names a declared type (typedef, enum,
@@ -6231,24 +6233,25 @@ impl ExprOps for Expr {
                     int tp2, tbol2, ttok2, tline2, ttokline2, tstart2, tlstart2;
                     long tnum2;
                     int tfloat2, ttrunc2;
-                    char ttext2[MAX_TEXT], tm2[MAX_TEXT];
+                    char tm2[MAX_TEXT];
+                    const char *ttext2_ptr; int ttext2_len;
                     const char *tsuf2_ptr; int tsuf2_len;
                     tp2 = self->lex->pos; tbol2 = self->lex->bol;
                     ttok2 = self->lex->tok; tnum2 = self->lex->toknum;
                     tline2 = self->lex->line; ttokline2 = self->lex->tokline;
                     tstart2 = self->lex->tokstart; tlstart2 = self->lex->lstart;
                     tfloat2 = self->lex->tokfloat; ttrunc2 = self->lex->toktrunc;
-                    snprintf(ttext2, sizeof ttext2, "%s", self->lex->toktext);
+                    ttext2_ptr = self->lex->tokstr.ptr; ttext2_len = self->lex->tokstr.len;
                     tsuf2_ptr = self->lex->toksuffix.ptr; tsuf2_len = self->lex->toksuffix.len;
                     tm2[0] = 0;
                     self->sup->lex_next();   /* the type name */
-                    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0) {
+                    if (self->lex->tok == T_PUNCT && self->lex->tok_is(".")) {
                         self->sup->lex_next();
                         if (self->lex->tok == T_ID) {
-                            snprintf(tm2, sizeof tm2, "%s", self->lex->toktext);
+                            self->lex->tok_copy(tm2, sizeof tm2);
                             self->sup->lex_next();
                             if (!(self->lex->tok == T_PUNCT
-                                  && strcmp(self->lex->toktext, "(") == 0))
+                                  && self->lex->tok_is("(")))
                                 tm2[0] = 0;
                         }
                     }
@@ -6257,7 +6260,7 @@ impl ExprOps for Expr {
                     self->lex->line = tline2; self->lex->tokline = ttokline2;
                     self->lex->tokstart = tstart2; self->lex->lstart = tlstart2;
                     self->lex->tokfloat = tfloat2; self->lex->toktrunc = ttrunc2;
-                    snprintf(self->lex->toktext, sizeof self->lex->toktext, "%s", ttext2);
+                    self->lex->tokstr.ptr = ttext2_ptr; self->lex->tokstr.len = ttext2_len;
                     self->lex->toksuffix.ptr = tsuf2_ptr; self->lex->toksuffix.len = tsuf2_len;
                     if (tm2[0]) {
                         char tmsg3[MAX_TEXT + 96];
@@ -6271,7 +6274,7 @@ impl ExprOps for Expr {
             }
             n = self->sup->new_node(N_VAR);
             if (n < 0) return -1;
-            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->lex->toktext);
+            self->lex->tok_copy(self->arena->nodes[n].text2, MAX_TEXT);
             /* Phase 78 S2a: remember that this name is a ref/out parameter, so
                the emitter spells `(*name)` and the `out` walk can tell the
                parameter from a same-named shadow. */
@@ -6286,7 +6289,7 @@ impl ExprOps for Expr {
             /* Phase 31 S23b (L31-23): a view whose container was mutated after
                it was taken is stale. A name followed by `=` is being rebound,
                not read, so it is not a use of the old view. */
-            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0)
+            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("="))
                 && view_use(self, self->arena->nodes[n].text2, id_line, id_col) != 0)
                 return -1;
             /* Phase 26 fix (SH-64): an identifier that names the current
@@ -6308,7 +6311,7 @@ impl ExprOps for Expr {
             /* Phase 26: `name<type>(...)` names a generic instance. Only a name
                the symbol table already holds as a template enters this branch,
                so `a < b` on a variable stays a comparison (D26-1/D26-3). */
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "<") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
                 int gfi = self->sym->find_func(self->arena->nodes[n].text2);
                 if (gfi >= 0 && self->sym->funcs[gfi].ntparams == 1) {
                     char targ[MAX_TEXT];
@@ -6324,7 +6327,7 @@ impl ExprOps for Expr {
                                  "'%s' cannot be a generic type argument", targ);
                         return self->sup->fail(gmsg);
                     }
-                    if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ">") == 0))
+                    if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(">")))
                         return self->sup->fail("expected '>' after the generic type argument");
                     self->sup->lex_next();
                     gi = self->generic_instance(gfi, targ, id_line, id_col);
@@ -6336,7 +6339,7 @@ impl ExprOps for Expr {
             /* `Qual::fn(...)`: the qualifier names a namespace path or a type,
                and the callee lives in that namespace. Without the call it names
                a variable instead (`a::h`), whose C spelling is the mangled one. */
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "::") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("::")) {
                 snprintf(tsrc, sizeof tsrc, "%s", self->arena->nodes[n].text2);
                 if (self->parse_qual_path(self->arena->nodes[n].text2, MAX_TEXT, qc, MAX_TEXT,
                                           qv, MAX_TEXT, &qf) != 0)
@@ -6348,12 +6351,12 @@ impl ExprOps for Expr {
                 if (qf == 3) {
                     char mname[MAX_TEXT];
                     int mn;
-                    if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0))
+                    if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(".")))
                         return self->sup->fail("a static trait has no interface value");
                     self->sup->lex_next();
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a method name");
-                    snprintf(mname, sizeof mname, "%s", self->lex->toktext);
+                    self->lex->tok_copy(mname, sizeof mname);
                     self->sup->lex_next();
                     args = self->parse_args();
                     if (args < 0) return -1;
@@ -6514,7 +6517,7 @@ impl ExprOps for Expr {
                     self->arena->nodes[n].b = -1;
                     return n;
                 }
-                if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "(") != 0) {
+                if (self->lex->tok != T_PUNCT || !self->lex->tok_is("(")) {
                     if (self->sym->find_qualified_global(qv, self->arena->nodes[n].text2,
                                                          qc, MAX_TEXT) != 0) {
                         char etn[MAX_TEXT];
@@ -6536,7 +6539,7 @@ impl ExprOps for Expr {
                     return n;
                 }
             }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
                 int fi;
                 /* L26-1: a template cannot be called without naming a type
                    argument; the instance does not exist before this point. */
@@ -6984,7 +6987,7 @@ impl ExprOps for Expr {
             }
             return n;
         }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
             int save_assign;
             self->sup->lex_next();
             save_assign = self->assign_ok;
@@ -6995,7 +6998,7 @@ impl ExprOps for Expr {
                `f((a, b))`): both operands evaluate, the value is the last one.
                The node is the one the statement form builds; each operand is a
                full expression, so an assignment may appear on either side. */
-            while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+            while (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                 int r, w;
                 self->sup->lex_next();
                 r = self->parse_expr();
@@ -7018,7 +7021,7 @@ impl ExprOps for Expr {
            type-host static maps), and the `N_INTO_SELF` marker's static type
            makes that resolution see the receiver's type. */
         if (self->into_node >= 0 && self->lex->tok == T_PUNCT
-            && strcmp(self->lex->toktext, ".") == 0) {
+            && self->lex->tok_is(".")) {
             int owner, base;
             owner = self->into_node;
             base = self->sup->new_node(N_INTO_SELF);
@@ -7061,15 +7064,15 @@ impl ExprOps for Expr {
         snprintf(seg[0], MAX_TEXT, "%s", name);
         nseg = 1;
         for (;;) {
-            if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "::") != 0)
+            if (self->lex->tok != T_PUNCT || !self->lex->tok_is("::"))
                 return self->sup->fail("expected '::'");
             self->sup->lex_next();
             if (self->lex->tok != T_ID) return self->sup->fail("expected a name after '::'");
             if (nseg >= 8) return self->sup->fail("qualified name is too long");
-            snprintf(seg[nseg], MAX_TEXT, "%s", self->lex->toktext);
+            self->lex->tok_copy(seg[nseg], MAX_TEXT);
             nseg++;
             self->sup->lex_next();
-            if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "::") != 0) break;
+            if (self->lex->tok != T_PUNCT || !self->lex->tok_is("::")) break;
         }
         /* the qualifier: every segment but the last, joined with '_' */
         w = 0;
@@ -7087,13 +7090,13 @@ impl ExprOps for Expr {
             w += (int)strlen(seg[i]);
         }
         snprintf(name, (size_t)ncap, "%s", seg[nseg - 1]);
-        is_call = (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0);
+        is_call = (self->lex->tok == T_PUNCT && self->lex->tok_is("("));
         /* A static trait from a `.m.ct` unit: `host::Trait.method(...)`. The
            qualified C spelling names the trait; the source host path is what
            the emitter matches the map against. A static trait has no iface, so
            only a `.` here is legal. */
         if (!is_call && nseg >= 2 && self->lex->tok == T_PUNCT
-            && strcmp(self->lex->toktext, ".") == 0) {
+            && self->lex->tok_is(".")) {
             char tq[MAX_TEXT];
             int st = -1;
             if (snprintf(tq, sizeof tq, "%s_%s", qpath, seg[nseg - 1]) < (int)sizeof tq)
@@ -7313,7 +7316,7 @@ impl ExprOps for Expr {
 
         if (self->sup->expect("(") != 0) return -1;
         base = self->narg_pos;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
             self->sup->lex_next();
             self->arg_base = base;
             return 0;
@@ -7337,7 +7340,7 @@ impl ExprOps for Expr {
             if (tail < 0) first = e;
             else self->arena->nodes[tail].next = e;
             tail = e;
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                 self->sup->lex_next();
                 continue;
             }
@@ -7430,10 +7433,10 @@ impl ExprNew for Expr {
         int save_tok, save_line, save_bol, save_srcline, res, save_start, save_lstart;
         long save_num;
         size_t save_pos;
-        char save_text[MAX_TEXT];
+        const char *save_text_ptr; int save_text_len;
         (void)self;
 
-        if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "new") == 0))
+        if (!(self->lex->tok == T_ID && self->lex->tok_is("new")))
             return 0;
         save_tok = self->lex->tok;
         save_num = self->lex->toknum;
@@ -7443,28 +7446,28 @@ impl ExprNew for Expr {
         save_bol = self->lex->bol;
         save_start = self->lex->tokstart;
         save_lstart = self->lex->lstart;
-        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+        save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
         self->sup->lex_next();
         res = 0;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
             res = 1;                        /* malformed, but still `new` */
         } else if (self->lex->tok != T_ID) {
             res = 0;
-        } else if (strcmp(self->lex->toktext, "struct") == 0
-                   || strcmp(self->lex->toktext, "union") == 0
-                   || strcmp(self->lex->toktext, "enum") == 0) {
+        } else if (self->lex->tok_is("struct")
+                   || self->lex->tok_is("union")
+                   || self->lex->tok_is("enum")) {
             res = 1;
-        } else if (self->is_type_word(self->lex->toktext)) {
+        } else if (self->is_type_word(self->lex->tok_cstr())) {
             res = 1;
-        } else if (strcmp(self->lex->toktext, "box") == 0) {
+        } else if (self->lex->tok_is("box")) {
             res = 1;
-        } else if (frontend::sym::ct_tmpl_find(self->lex->toktext) >= 0) {
+        } else if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0) {
             res = 1;
-        } else if (self->sym->find_type_alias(self->lex->toktext) >= 0) {
+        } else if (self->sym->find_type_alias(self->lex->tok_cstr()) >= 0) {
             res = 1;
         } else {
             char rn[MAX_TEXT];
-            if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) == 0
+            if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) == 0
                 && self->sym->find_type(rn) >= 0)
                 res = 1;
         }
@@ -7476,7 +7479,7 @@ impl ExprNew for Expr {
         self->lex->bol = save_bol;
         self->lex->tokstart = save_start;
         self->lex->lstart = save_lstart;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+        self->lex->tokstr.ptr = save_text_ptr; self->lex->tokstr.len = save_text_len;
         return res;
     }
 
@@ -7501,7 +7504,7 @@ impl ExprNew for Expr {
                 "'new' cannot initialize a static object; it allocates at run time, so assign it in the function body",
                 self->sup->mem->path);
         self->sup->lex_next();              /* new */
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{"))
             return tool::diag::ct_sem_error(nline, ncol,
                 "'new' needs a named struct type before its initializer, as in 'new Point { 1, 2 }'",
                 self->sup->mem->path);
@@ -7537,7 +7540,7 @@ impl ExprNew for Expr {
                 self->sup->mem->path);
         if (frontend::sym::ct_tmpl_find("box") < 0)
             return self->sup->fail("the built-in `box` layer is missing (set CT_STD_DIR)");
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)) {
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{"))) {
             char nmsg[MAX_TEXT * 2];
             snprintf(nmsg, sizeof nmsg,
                      "'new %s' needs a brace initializer; only 'new T { ... }' is supported", base);
@@ -7600,10 +7603,10 @@ impl ExprAdt for Expr {
         (void)self;
 
         if (self->lex->tok != T_ID) return 0;
-        if (self->sym->find_var(self->lex->toktext) >= 0) return 0;
-        if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
+        if (self->sym->find_var(self->lex->tok_cstr()) >= 0) return 0;
+        if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) != 0) return 0;
         if (frontend::sym::ct_adt_from_type(rn) < 0) return 0;
-        p = self->lex->src + self->lex->tokstart + strlen(self->lex->toktext);
+        p = self->lex->src + self->lex->tokstart + self->lex->tokstr.len;
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
         if (*p != '.') return 0;
         p++;
@@ -7630,16 +7633,16 @@ impl ExprAdt for Expr {
 
         tline = self->lex->tokline;
         tcol = self->lex->tokstart - self->lex->lstart + 1;
-        if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0)
+        if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) != 0)
             return -1;
         self->sup->lex_next();                     /* the type name */
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0))
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(".")))
             return self->sup->fail("expected '.' after an ADT type name");
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a variant name after '.'");
         vline = self->lex->tokline;
         vcol = self->lex->tokstart - self->lex->lstart + 1;
-        snprintf(vname, sizeof vname, "%s", self->lex->toktext);
+        self->lex->tok_copy(vname, sizeof vname);
         self->sup->lex_next();
         adt = frontend::sym::ct_adt_from_type(rn);
         if (adt < 0) {
@@ -7652,7 +7655,7 @@ impl ExprAdt for Expr {
             snprintf(msg, sizeof msg, "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
             return tool::diag::ct_sem_error(vline, vcol, msg, self->sup->mem->path);
         }
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0)) {
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("("))) {
             adts = frontend::sym::ct_adts(&nadts);
             snprintf(msg, sizeof msg, "expected '(' after '%s.%s'", adts[adt].name, vname);
             return tool::diag::ct_sem_error(self->lex->tokline,
@@ -7818,7 +7821,7 @@ impl ExprOptional for Expr {
         int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc;
         int kind = 0;
         long snum;
-        char stext[MAX_TEXT];
+        const char *stext_ptr; int stext_len;
         const char *ssuf_ptr; int ssuf_len;
 
         sp = self->lex->pos;
@@ -7831,17 +7834,17 @@ impl ExprOptional for Expr {
         slstart = self->lex->lstart;
         sfloat = self->lex->tokfloat;
         strunc = self->lex->toktrunc;
-        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
         ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
         self->sup->lex_next();
-        if (self->lex->tok == T_NUM && self->lex->toktext[0] == '.') {
+        if (self->lex->tok == T_NUM && self->lex->tok_first() == '.') {
             kind = 0;
         } else if (self->lex->tok == T_PUNCT
-                   && strcmp(self->lex->toktext, ".") == 0) {
+                   && self->lex->tok_is(".")) {
             self->sup->lex_next();
             if (self->lex->tok == T_ID) kind = 1;
         } else if (self->lex->tok == T_PUNCT
-                   && strcmp(self->lex->toktext, "[") == 0) {
+                   && self->lex->tok_is("[")) {
             kind = 2;
         }
         self->lex->pos = sp;
@@ -7854,7 +7857,7 @@ impl ExprOptional for Expr {
         self->lex->lstart = slstart;
         self->lex->tokfloat = sfloat;
         self->lex->toktrunc = strunc;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
         self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
         return kind;
     }
@@ -8036,12 +8039,12 @@ impl ExprTraitInst for Expr {
         int n, sti, ni, nargs;
 
         n = (int)strlen(out);
-        if (self->sup->resolve_type(self->lex->toktext, tname, sizeof tname) != 0) return -1;
+        if (self->sup->resolve_type(self->lex->tok_cstr(), tname, sizeof tname) != 0) return -1;
         sti = self->sym->find_trait(tname);
         if (sti < 0 || self->sym->traits[sti].ntparams == 0)
             return self->sup->fail("internal: generic trait row vanished");
         self->sup->lex_next();
-        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, "<") != 0) {
+        if (self->lex->tok != T_PUNCT || !self->lex->tok_is("<")) {
             snprintf(msg, sizeof msg,
                      "generic trait '%s' needs type arguments in a type position", tname);
             return self->sup->fail(msg);
@@ -8062,11 +8065,11 @@ impl ExprTraitInst for Expr {
                 return -1;
             }
             self->type_depth--;
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "[") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("[")) {
                 int gl = self->lex->tokline;
                 int gc = self->lex->tokstart - self->lex->lstart + 1;
                 self->sup->lex_next();
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "]") == 0)
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("]"))
                     return tool::diag::ct_sem_error(gl, gc,
                         "a slice 'T[]' cannot be a generic type argument; it is a non-owning view",
                         self->sup->mem->path);
@@ -8109,18 +8112,19 @@ impl ExprTraitInst for Expr {
                 return self->sup->fail("type is too long");
             }
             nargs++;
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                 self->sup->lex_next();
                 continue;
             }
             break;
         }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ">>") == 0) {
-            snprintf(self->lex->toktext, MAX_TEXT, "%s", ">");
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(">>")) {
+            self->lex->tokstr.ptr = self->lex->src + self->lex->tokstart + 1;
+            self->lex->tokstr.len = 1;
             self->lex->pos = self->lex->pos - 1;
             self->lex->tokstart = self->lex->tokstart + 1;
         }
-        if (self->lex->tok != T_PUNCT || strcmp(self->lex->toktext, ">") != 0)
+        if (self->lex->tok != T_PUNCT || !self->lex->tok_is(">"))
             return self->sup->fail("expected '>' after the type arguments");
         self->sup->lex_next();
         ni = self->sym->trait_inst(tname, nargs, carg[0], carg[1],
@@ -8550,7 +8554,7 @@ impl ExprTry for Expr {
     {
         int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc;
         long snum;
-        char stext[MAX_TEXT];
+        const char *stext_ptr; int stext_len;
         const char *ssuf_ptr; int ssuf_len;
         int r;
 
@@ -8564,7 +8568,7 @@ impl ExprTry for Expr {
         slstart = self->lex->lstart;
         sfloat = self->lex->tokfloat;
         strunc = self->lex->toktrunc;
-        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
         ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
         self->sup->lex_next();          /* the token after the `?` */
         r = 1;
@@ -8572,14 +8576,14 @@ impl ExprTry for Expr {
             || self->lex->tok == T_STR) {
             r = 0;
         } else if (self->lex->tok == T_PUNCT) {
-            const char *t = self->lex->toktext;
             /* `&&` / `||` cannot start an expression either, but the design's
                disambiguation table rules them ternary (a missing `:` is the
                report a user sees, not a silently shifted operator). */
-            if (strcmp(t, "(") == 0 || strcmp(t, "-") == 0 || strcmp(t, "!") == 0
-                || strcmp(t, "~") == 0 || strcmp(t, "&") == 0 || strcmp(t, "*") == 0
-                || strcmp(t, "++") == 0 || strcmp(t, "--") == 0
-                || strcmp(t, "&&") == 0 || strcmp(t, "||") == 0)
+            if (self->lex->tok_is("(") || self->lex->tok_is("-")
+                || self->lex->tok_is("!") || self->lex->tok_is("~")
+                || self->lex->tok_is("&") || self->lex->tok_is("*")
+                || self->lex->tok_is("++") || self->lex->tok_is("--")
+                || self->lex->tok_is("&&") || self->lex->tok_is("||"))
                 r = 0;
         }
         self->lex->pos = sp;
@@ -8592,7 +8596,7 @@ impl ExprTry for Expr {
         self->lex->lstart = slstart;
         self->lex->tokfloat = sfloat;
         self->lex->toktrunc = strunc;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
         self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
         return r;
     }

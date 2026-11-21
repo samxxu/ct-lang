@@ -2,7 +2,7 @@
  * Lexer.h.ct - the source cursor and the current token, one class of its own.
  *
  * The lexer owns the source buffer, the byte cursor and the one-token lookahead
- * the parser reads (`tok`, `toktext`, `toknum`, the token's line and its start
+ * the parser reads (`tok`, `tokstr`, `toknum`, the token's line and its start
  * offset). The parser reaches it through a pointer to the singleton and asks it
  * for the next token; `accept` / `expect` / `fail` stay on the parser object
  * because they are about grammar, not about characters.
@@ -10,12 +10,13 @@
  * Macros do not cross a unit boundary, so the capacity and the token kinds are
  * declared here: MAX_TEXT 160 is the value `frontend/sym/Symbols.h.ct` lists and
  * T_EOF..T_PP 0..5 are the kinds `frontend/parse/ParseSupport.h.ct` and the
- * parser spell. The `toktext` length is spelled out as a literal because a
- * `pub struct` lands in the generated header, which carries no macros.
+ * parser spell. The capacity is a literal (a `pub struct` lands in the
+ * generated header, which carries no macros).
  */
 #include <stdio.h>
 #include <limits.h>
 #include <assert.h>
+#include <string.h>
 
 #define MAX_TEXT   160
 #define T_EOF    0
@@ -42,6 +43,19 @@ pub struct TokView {
 
 pub trait LexOps {
     void next(void);
+    /* Compare the token with a NUL-terminated C string by length, never by
+       `strcmp` on the view (the view is not terminated). */
+    int  tok_is(const char *s);
+    /* The same, for a prefix of the given length. */
+    int  tok_prefix(const char *s);
+    /* Copy the view into a caller-owned C buffer; 1 when it did not fit. */
+    int  tok_copy(char *out, int cap);
+    /* The C boundary: a NUL-terminated copy in a lexer-owned scratch buffer,
+       valid until the next `next()` (the lifetime the old token buffer had).
+       Only for an immediate call argument; never store the result. */
+    const char *tok_cstr(void);
+    /* The first byte of the token, or 0 at EOF / an empty view. */
+    int  tok_first(void);
 }
 
 pub struct Lexer {
@@ -50,15 +64,18 @@ pub struct Lexer {
     int  bol;
     int  tok;
     TokView tokstr;             /* the token's bytes, a view into `src` */
-    char toktext[160];
+    /* The C-boundary scratch buffer: `tok_cstr` copies into it. It is not the
+       token representation, only the conversion a C API argument needs. */
+    char cbuf[160];
     long toknum;
     /* the `U` / `L` suffix of an integer literal, as written (`uLL`, `LLu`):
-       the parser validates and normalizes it. 8 fits any invalid run too, so a
-       suffix that is too long is never silently truncated into a legal one. */
-    TokView toksuffix;          /* the integer suffix, a view into `src` */
-    /* 1 when the current identifier did not fit in `toktext`: the parser turns
-       it into `identifier is too long` instead of letting a silently truncated
-       name collide with another one. */
+       the parser validates and normalizes it. The view keeps 7 bytes, so an
+       invalid run is still rejected by length rather than truncated into a
+       legal-looking suffix. */
+    TokView toksuffix;
+    /* 1 when the current identifier is longer than the view keeps (MAX_TEXT-1):
+       the parser turns it into `identifier is too long` instead of letting a
+       truncated name collide with another one. */
     int  toktrunc;
     int  srclen;                /* bytes in `src`, excluding the final NUL */
     int  line;                  /* 1-based */
@@ -120,8 +137,49 @@ static long num_accumulate(long v, int base, int d)
 }
 
 impl LexOps for Lexer {
+    int tok_is(const char *s)
+    {
+        int n = (int)strlen(s);
+        if (self->tokstr.len != n) return 0;
+        if (n == 0) return 1;
+        return memcmp(self->tokstr.ptr, s, (size_t)n) == 0;
+    }
+
+    int tok_prefix(const char *s)
+    {
+        int n = (int)strlen(s);
+        if (self->tokstr.len < n) return 0;
+        if (n == 0) return 1;
+        return memcmp(self->tokstr.ptr, s, (size_t)n) == 0;
+    }
+
+    int tok_copy(char *out, int cap)
+    {
+        int n = self->tokstr.len;
+        if (cap <= 0) return 1;
+        if (n > cap - 1) n = cap - 1;
+        if (n > 0) memcpy(out, self->tokstr.ptr, (size_t)n);
+        out[n] = 0;
+        return self->tokstr.len >= cap;
+    }
+
+    const char *tok_cstr(void)
+    {
+        int n = self->tokstr.len;
+        if (n > MAX_TEXT - 1) n = MAX_TEXT - 1;
+        if (n > 0) memcpy(self->cbuf, self->tokstr.ptr, (size_t)n);
+        self->cbuf[n] = 0;
+        return self->cbuf;
+    }
+
+    int tok_first(void)
+    {
+        if (self->tokstr.len <= 0) return 0;
+        return (unsigned char)self->tokstr.ptr[0];
+    }
+
     /* Whitespace, comments and preprocessor lines are skipped before the token
-       starts; every branch leaves `tok` and, where it applies, `toktext` /
+       starts; every branch leaves `tok` / `tokstr` and, where it applies,
        `toknum` set for the parser to read. */
     void next(void)
     {
@@ -130,7 +188,7 @@ impl LexOps for Lexer {
 
         for (;;) {
             c = (unsigned char)self->src[self->pos];
-            if (c == 0) { self->tok = T_EOF; self->toktext[0] = 0; lex_view(self, self->pos, 0); return; }
+            if (c == 0) { self->tok = T_EOF; lex_view(self, self->pos, 0); return; }
             if (c == '\n') { self->bol = 1; self->line++; self->pos++; self->lstart = self->pos; continue; }
             if (c == ' ' || c == '\t' || c == '\r') { self->pos++; continue; }
             if (c == '/' && self->src[self->pos + 1] == '/') {
@@ -159,13 +217,8 @@ impl LexOps for Lexer {
         self->toktrunc = 0;
         if (self->bol && c == '#') {
             n = 0;
-            self->toktrunc = 0;
-            while (self->src[self->pos] && self->src[self->pos] != '\n') {
-                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
-                else self->toktrunc = 1;
-                self->pos++;
-            }
-            self->toktext[n] = 0;
+            while (self->src[self->pos] && self->src[self->pos] != '\n') { n++; self->pos++; }
+            if (n > MAX_TEXT - 1) self->toktrunc = 1;
             self->tok = T_PP;
             self->bol = 0;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
@@ -177,18 +230,13 @@ impl LexOps for Lexer {
             while (self->src[self->pos] && ((self->src[self->pos] >= 'a' && self->src[self->pos] <= 'z')
                    || (self->src[self->pos] >= 'A' && self->src[self->pos] <= 'Z')
                    || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9')
-                   || self->src[self->pos] == '_')) {
-                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
-                else self->toktrunc = 1;
-                self->pos++;
-            }
-            self->toktext[n] = 0;
+                   || self->src[self->pos] == '_')) { n++; self->pos++; }
+            if (n > MAX_TEXT - 1) self->toktrunc = 1;
             self->tok = T_ID;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if (c >= '0' && c <= '9') {
-            int nstart = self->pos;
             self->toknum = 0;
             self->tokfloat = 0;
             lex_suffix(self, self->pos, 0);
@@ -237,16 +285,10 @@ impl LexOps for Lexer {
                     }
                 }
                 if (isflt) {
-                    int q = 0;
                     if (self->src[self->pos] == 'f' || self->src[self->pos] == 'F'
                         || self->src[self->pos] == 'l' || self->src[self->pos] == 'L')
                         self->pos++;
                     /* keep the spelling: the parser stores floats as text */
-                    while (nstart + q < self->pos && q + 1 < MAX_TEXT) {
-                        self->toktext[q] = self->src[nstart + q];
-                        q++;
-                    }
-                    self->toktext[q] = 0;
                     self->tokfloat = 1;
                 }
             }
@@ -261,33 +303,27 @@ impl LexOps for Lexer {
                 lex_suffix(self, sstart, self->pos - sstart);
             }
             self->tok = T_NUM;
-            lex_view(self, self->tokstart, self->pos - self->tokstart);
+            /* An integer literal's value is in `toknum`; its text keeps the
+               previous token's view, exactly what the old buffer did (the
+               integer scanner never wrote it). A float keeps its spelling. */
+            if (self->tokfloat)
+                lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if (c == '"' || c == '\'') {
             char q = (char)c;
-            int toolong = 0;
-            n = 0;
-            self->toktext[n] = q;
-            n++;
+            n = 1;                      /* the opening quote */
             self->pos++;
             while (self->src[self->pos] && self->src[self->pos] != q) {
                 if (self->src[self->pos] == '\\' && self->src[self->pos + 1]) {
-                    if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
-                    else toolong = 1;
+                    n++;
                     self->pos++;
                 }
-                if (n + 1 < MAX_TEXT) { self->toktext[n] = self->src[self->pos]; n++; }
-                else toolong = 1;
+                n++;
                 self->pos++;
             }
-            if (self->src[self->pos] == q) {
-                if (n + 1 < MAX_TEXT) { self->toktext[n] = q; n++; }
-                else toolong = 1;
-                self->pos++;
-            }
-            self->toktext[n] = 0;
-            if (toolong) self->toktrunc = 1;
+            if (self->src[self->pos] == q) { n++; self->pos++; }
+            if (n > MAX_TEXT - 1) self->toktrunc = 1;
             self->tok = T_STR;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
@@ -295,10 +331,6 @@ impl LexOps for Lexer {
         /* `...` (a variadic parameter list) has to be one token: the parser
            cannot tell three `.` tokens from three field accesses */
         if (c == '.' && self->src[self->pos + 1] == '.' && self->src[self->pos + 2] == '.') {
-            self->toktext[0] = '.';
-            self->toktext[1] = '.';
-            self->toktext[2] = '.';
-            self->toktext[3] = 0;
             self->tok = T_PUNCT;
             self->pos += 3;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
@@ -309,9 +341,6 @@ impl LexOps for Lexer {
            the three-dot form, and a number scanner only treats a trailing `.`
            as a float when the next character is not a `.`. */
         if (c == '.' && self->src[self->pos + 1] == '.') {
-            self->toktext[0] = '.';
-            self->toktext[1] = '.';
-            self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
@@ -326,43 +355,38 @@ impl LexOps for Lexer {
             self->toknum = 0;
             while (q + 1 < MAX_TEXT && (self->src[self->pos] == '.'
                    || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9'))) {
-                self->toktext[q] = self->src[self->pos];
                 q++;
                 self->pos++;
             }
             if (self->src[self->pos] == 'e' || self->src[self->pos] == 'E') {
-                if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+                if (q + 1 < MAX_TEXT) { q++; self->pos++; }
                 if (self->src[self->pos] == '+' || self->src[self->pos] == '-') {
-                    if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+                    if (q + 1 < MAX_TEXT) { q++; self->pos++; }
                 }
                 while (q + 1 < MAX_TEXT && self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
-                    self->toktext[q] = self->src[self->pos];
                     q++;
                     self->pos++;
                 }
             }
             if (self->src[self->pos] == 'f' || self->src[self->pos] == 'F'
                 || self->src[self->pos] == 'l' || self->src[self->pos] == 'L') {
-                if (q + 1 < MAX_TEXT) { self->toktext[q] = self->src[self->pos]; q++; self->pos++; }
+                if (q + 1 < MAX_TEXT) { q++; self->pos++; }
             }
-            self->toktext[q] = 0;
             self->tok = T_NUM;
-            lex_view(self, self->tokstart, self->pos - self->tokstart);
+            /* An integer literal's value is in `toknum`; its text keeps the
+               previous token's view, exactly what the old buffer did (the
+               integer scanner never wrote it). A float keeps its spelling. */
+            if (self->tokfloat)
+                lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if (c == '-' && self->src[self->pos + 1] == '>') {
-            self->toktext[0] = '-';
-            self->toktext[1] = '>';
-            self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if (c == ':' && self->src[self->pos + 1] == ':') {
-            self->toktext[0] = ':';
-            self->toktext[1] = ':';
-            self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
@@ -372,9 +396,6 @@ impl LexOps for Lexer {
            two-character comparisons below, because those only take `=` as their
            second character (`==`, `<=`, `>=`); `->` keeps the branch above. */
         if (c == '=' && self->src[self->pos + 1] == '>') {
-            self->toktext[0] = '=';
-            self->toktext[1] = '>';
-            self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
@@ -383,15 +404,10 @@ impl LexOps for Lexer {
         /* shifts: `<<=` / `>>=` first, then `<<` / `>>`, then the comparisons
            `<=` / `>=` below must not swallow the first character */
         if ((c == '<' || c == '>') && self->src[self->pos + 1] == c) {
-            self->toktext[0] = (char)c;
-            self->toktext[1] = (char)c;
             if (self->src[self->pos + 2] == '=') {
-                self->toktext[2] = '=';
-                self->toktext[3] = 0;
                 self->tok = T_PUNCT;
                 self->pos += 3;
             } else {
-                self->toktext[2] = 0;
                 self->tok = T_PUNCT;
                 self->pos += 2;
             }
@@ -399,18 +415,12 @@ impl LexOps for Lexer {
             return;
         }
         if ((c == '=' || c == '!' || c == '<' || c == '>') && self->src[self->pos + 1] == '=') {
-            self->toktext[0] = (char)c;
-            self->toktext[1] = '=';
-            self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
         if ((c == '+' || c == '-') && self->src[self->pos + 1] == c) {
-            self->toktext[0] = (char)c;
-            self->toktext[1] = (char)c;
-            self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
@@ -418,9 +428,6 @@ impl LexOps for Lexer {
         }
         /* `&&` and `||` are their own tokens; a lone `&` / `|` stays literal */
         if ((c == '&' || c == '|') && self->src[self->pos + 1] == c) {
-            self->toktext[0] = (char)c;
-            self->toktext[1] = (char)c;
-            self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
@@ -430,16 +437,11 @@ impl LexOps for Lexer {
         if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%'
              || c == '&' || c == '|' || c == '^')
             && self->src[self->pos + 1] == '=') {
-            self->toktext[0] = (char)c;
-            self->toktext[1] = '=';
-            self->toktext[2] = 0;
             self->tok = T_PUNCT;
             self->pos += 2;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
         }
-        self->toktext[0] = (char)c;
-        self->toktext[1] = 0;
         self->tok = T_PUNCT;
         self->pos++;
         lex_view(self, self->tokstart, self->pos - self->tokstart);

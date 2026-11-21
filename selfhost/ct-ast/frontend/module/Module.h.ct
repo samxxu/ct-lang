@@ -590,7 +590,7 @@ impl ModuleOps for Module {
                 frontend::parse::ct_parse_lex_next();
                 continue;
             }
-            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "import") == 0) {
+            if (self->lex->tok == T_ID && self->lex->tok_is("import")) {
                 if (frontend::parse::ct_parse_skip_import() != 0) { self->p->scan_only = 0; return -1; }
                 continue;
             }
@@ -1168,7 +1168,7 @@ impl ModuleOps for Module {
     {
         int pos, bol, line, tokline, tokstart, lstart, tok, tokfloat, toktrunc;
         long num;
-        char text[MAX_TEXT];
+        const char *text_ptr; int text_len;
         const char *suffix_ptr; int suffix_len;
         char prev[MAX_TEXT];
         char prev2[MAX_TEXT];
@@ -1185,7 +1185,7 @@ impl ModuleOps for Module {
         num = self->lex->toknum;
         tokfloat = self->lex->tokfloat;
         toktrunc = self->lex->toktrunc;
-        snprintf(text, sizeof text, "%s", self->lex->toktext);
+        text_ptr = self->lex->tokstr.ptr; text_len = self->lex->tokstr.len;
         suffix_ptr = self->lex->toksuffix.ptr; suffix_len = self->lex->toksuffix.len;
 
         self->lex->pos = 0;
@@ -1196,7 +1196,8 @@ impl ModuleOps for Module {
         self->lex->tokstart = 0;
         self->lex->lstart = 0;
         self->lex->tok = T_ID;
-        self->lex->toktext[0] = 0;
+        self->lex->tokstr.ptr = self->lex->src;
+        self->lex->tokstr.len = 0;
         prev[0] = 0;
         prev2[0] = 0;
         prev_line = 0;
@@ -1209,7 +1210,7 @@ impl ModuleOps for Module {
         self->lex->next();
         while (self->lex->tok != 0) {
             if (self->lex->tok == T_PP
-                && strncmp(self->lex->toktext, "#ct-raw", 7) == 0) {
+                && self->lex->tok_prefix("#ct-raw")) {
                 /* raw blocks hold arbitrary C: nothing in them is a CT alias */
                 while (self->lex->src[self->lex->pos]) {
                     int atbol = (self->lex->pos == 0
@@ -1232,11 +1233,11 @@ impl ModuleOps for Module {
                 continue;
             }
             if (self->lex->tok == T_PUNCT) {
-                if (strcmp(self->lex->toktext, "{") == 0) depth++;
-                else if (strcmp(self->lex->toktext, "}") == 0 && depth > 0) depth--;
+                if (self->lex->tok_is("{")) depth++;
+                else if (self->lex->tok_is("}") && depth > 0) depth--;
             }
             if (depth == 0 && self->lex->tok == T_PUNCT
-                && strcmp(self->lex->toktext, "=") == 0
+                && self->lex->tok_is("=")
                 && strcmp(prev2, "type") == 0
                 && ((prev[0] >= 'a' && prev[0] <= 'z') || (prev[0] >= 'A' && prev[0] <= 'Z')
                     || prev[0] == '_')) {
@@ -1245,7 +1246,7 @@ impl ModuleOps for Module {
             }
             snprintf(prev2, sizeof prev2, "%s", prev);
             prev2_line = prev_line;
-            snprintf(prev, sizeof prev, "%s", self->lex->toktext);
+            self->lex->tok_copy(prev, sizeof prev);
             prev_line = self->lex->tokline;
             self->lex->next();
         }
@@ -1260,7 +1261,7 @@ impl ModuleOps for Module {
         self->lex->toknum = num;
         self->lex->tokfloat = tokfloat;
         self->lex->toktrunc = toktrunc;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", text);
+        self->lex->tokstr.ptr = text_ptr; self->lex->tokstr.len = text_len;
         self->lex->toksuffix.ptr = suffix_ptr; self->lex->toksuffix.len = suffix_len;
         return 0;
     }

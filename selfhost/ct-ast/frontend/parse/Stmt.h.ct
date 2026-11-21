@@ -609,7 +609,7 @@ static int check_borrow_store(struct Stmt *self, int n)
    cursor is restored, since the caller consumes the keyword itself. */
 static int borrow_decl_ahead(struct Stmt *self)
 {
-    char save_text[MAX_TEXT];
+    const char *save_text_ptr; int save_text_len;
     int save_tok, save_float, save_line, save_tokline, save_start;
     int save_lstart, save_bol, save_pos, look;
     long save_num;
@@ -623,7 +623,7 @@ static int borrow_decl_ahead(struct Stmt *self)
     save_lstart = self->lex->lstart;
     save_bol = self->lex->bol;
     save_pos = self->lex->pos;
-    snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+    save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
     self->sup->lex_next();
     look = self->is_decl_start();
     self->lex->tok = save_tok;
@@ -635,7 +635,7 @@ static int borrow_decl_ahead(struct Stmt *self)
     self->lex->lstart = save_lstart;
     self->lex->bol = save_bol;
     self->lex->pos = save_pos;
-    snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+    self->lex->tokstr.ptr = save_text_ptr; self->lex->tokstr.len = save_text_len;
     return look;
 }
 
@@ -754,8 +754,9 @@ static int borrow_escape(struct Stmt *self, int ret, int line)
 /* ---- Phase 24: array range initialisers ---------------------------------- */
 
 /* The source spelling of the current token. An integer literal carries no
-   `toktext` (the lexer keeps its value in `toknum`), so the digits are taken
-   back from the source between the token's first byte and the cursor. */
+   token text (the lexer keeps an integer's value in `toknum`), so the digits
+   are taken back from the source between the token's first byte and the
+   cursor. */
 static void range_spelling(struct Lexer *lx, char *out, int cap)
 {
     int i = 0;
@@ -767,8 +768,8 @@ static void range_spelling(struct Lexer *lx, char *out, int cap)
             i++;
         }
     } else {
-        while (lx->toktext[i] && i < cap - 1) {
-            out[i] = lx->toktext[i];
+        while (i < lx->tokstr.len && i < cap - 1) {
+            out[i] = lx->tokstr.ptr[i];
             i++;
         }
     }
@@ -826,14 +827,14 @@ static int range_bound(struct Stmt *self, long *out)
 
     line = self->lex->tokline;
     col = self->lex->tokstart - self->lex->lstart + 1;
-    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "-") == 0) {
+    if (self->lex->tok == T_PUNCT && self->lex->tok_is("-")) {
         neg = 1;
         self->sup->lex_next();
         line = self->lex->tokline;
         col = self->lex->tokstart - self->lex->lstart + 1;
     }
     /* `..` followed straight by `(` is a missing bound, not a bad one */
-    if (!neg && self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0)
+    if (!neg && self->lex->tok == T_PUNCT && self->lex->tok_is("("))
         return tool::diag::ct_sem_error(line, col, "a range initializer needs both bounds", self->mem->path);
     rc = range_bound_value(self->lex, &v, spell, (int)sizeof spell);
     if (rc == 2)
@@ -911,12 +912,12 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
     tail = -1;
     count = 0;
     self->sup->lex_next();              /* `{` */
-    while (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+    while (!(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
         int el, eline, ecol;
         char ety[MAX_TEXT];
         char tr[MAX_TEXT];
         int ip = 0;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{"))
             return tool::diag::ct_sem_error(self->lex->tokline,
                 self->lex->tokstart - self->lex->lstart + 1,
                 "a brace list cannot appear inside another brace initializer; build the inner container first",
@@ -949,7 +950,7 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
         else self->arena->nodes[tail].next = el;
         tail = el;
         count++;
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0))
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(",")))
             break;
         self->sup->lex_next();
     }
@@ -1156,9 +1157,9 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
     tail = -1;
     count = 0;
     self->sup->lex_next();              /* `{` */
-    while (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+    while (!(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
         int it, k, v, kline, kcol, vline, vcol;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{"))
             return tool::diag::ct_sem_error(self->lex->tokline,
                 self->lex->tokstart - self->lex->lstart + 1,
                 "a brace list cannot appear inside another brace initializer; build the inner container first",
@@ -1196,7 +1197,7 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
         }
         if (count < 1024) keys[count] = k;
         if (self->sup->expect(":") != 0) return -1;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0)
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{"))
             return tool::diag::ct_sem_error(self->lex->tokline,
                 self->lex->tokstart - self->lex->lstart + 1,
                 "a brace list cannot appear inside another brace initializer; build the inner container first",
@@ -1230,7 +1231,7 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
         else self->arena->nodes[tail].next = it;
         tail = it;
         count++;
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0))
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(",")))
             break;
         self->sup->lex_next();
     }
@@ -1253,10 +1254,10 @@ static int kw_paren_ahead(struct Stmt *self, const char *kw)
 {
     int sp, sbol, stok, sline, stokline, sstart, slstart, r;
     long snum;
-    char stext[MAX_TEXT];
+    const char *stext_ptr; int stext_len;
 
     if (self->lex->tok != T_ID) return 0;
-    if (strcmp(self->lex->toktext, kw) != 0) return 0;
+    if (!self->lex->tok_is(kw)) return 0;
     sp = self->lex->pos;
     sbol = self->lex->bol;
     stok = self->lex->tok;
@@ -1265,10 +1266,10 @@ static int kw_paren_ahead(struct Stmt *self, const char *kw)
     stokline = self->lex->tokline;
     sstart = self->lex->tokstart;
     slstart = self->lex->lstart;
-    snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+    stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
     self->sup->lex_next();
     r = 0;
-    if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) r = 1;
+    if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) r = 1;
     self->lex->pos = sp;
     self->lex->bol = sbol;
     self->lex->tok = stok;
@@ -1277,7 +1278,7 @@ static int kw_paren_ahead(struct Stmt *self, const char *kw)
     self->lex->tokline = stokline;
     self->lex->tokstart = sstart;
     self->lex->lstart = slstart;
-    snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+    self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
     return r;
 }
 
@@ -1310,7 +1311,7 @@ impl StmtOps for Stmt {
         const char *p;
         (void)self;
         if (self->lex->tok != T_ID) return 0;
-        if (strcmp(self->lex->toktext, "defer") != 0) return 0;
+        if (!self->lex->tok_is("defer")) return 0;
         p = self->lex->src + self->lex->tokstart + 5;
         while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
         return *p == '{';
@@ -1324,7 +1325,7 @@ impl StmtOps for Stmt {
         const char *p;
         (void)self;
         if (self->lex->tok != T_ID) return 0;
-        if (strcmp(self->lex->toktext, "err") != 0) return 0;
+        if (!self->lex->tok_is("err")) return 0;
         p = self->lex->src + self->lex->tokstart + 3;
         while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
         return *p == ':' && p[1] != ':';
@@ -1337,7 +1338,7 @@ impl StmtOps for Stmt {
         const char *p;
         (void)self;
         if (self->lex->tok != T_ID) return 0;
-        if (strcmp(self->lex->toktext, "errdefer") != 0) return 0;
+        if (!self->lex->tok_is("errdefer")) return 0;
         p = self->lex->src + self->lex->tokstart + 8;
         while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
         return *p == '{';
@@ -1593,7 +1594,7 @@ impl StmtOps for Stmt {
     int is_decl_start(void)
     {
         char rn[MAX_TEXT];
-        char save_text[MAX_TEXT];
+        const char *save_text_ptr; int save_text_len;
         int save_tok, save_float, save_line, save_tokline, save_start;
         int save_lstart, save_bol, save_pos, look, i;
         long save_num;
@@ -1612,12 +1613,12 @@ impl StmtOps for Stmt {
         /* P-7.2: `box<T> name` is a declaration shape even though `box` is not
            a registered type; `parse_type` turns it into the placement error
            (or the PH-81 "not implemented" error) instead of an expression. */
-        if (strcmp(self->lex->toktext, "box") == 0)
+        if (self->lex->tok_is("box"))
             return self->ex->tok_is_type_name();
         /* an alignment or atomic specifier may open a block-scope declaration */
-        if (strcmp(self->lex->toktext, "_Alignas") == 0) return 1;
-        if (strcmp(self->lex->toktext, "_Atomic") == 0) return 1;
-        if (strcmp(self->lex->toktext, "atomic") == 0) {
+        if (self->lex->tok_is("_Alignas")) return 1;
+        if (self->lex->tok_is("_Atomic")) return 1;
+        if (self->lex->tok_is("atomic")) {
             /* Phase 41: `atomic` is contextual. Peek one token; a supported
                or unsupported type word makes this a declaration so parse_type
                can emit L41-1. `atomic;` / `atomic = 1` stay expressions. */
@@ -1630,12 +1631,12 @@ impl StmtOps for Stmt {
             save_lstart = self->lex->lstart;
             save_bol = self->lex->bol;
             save_pos = self->lex->pos;
-            snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+            save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
             self->sup->lex_next();
             look = self->lex->tok == T_ID
-                   && (self->ex->is_type_word(self->lex->toktext)
-                       || strcmp(self->lex->toktext, "_Atomic") == 0
-                       || strcmp(self->lex->toktext, "own") == 0);
+                   && (self->ex->is_type_word(self->lex->tok_cstr())
+                       || self->lex->tok_is("_Atomic")
+                       || self->lex->tok_is("own"));
             self->lex->tok = save_tok;
             self->lex->toknum = save_num;
             self->lex->tokfloat = save_float;
@@ -1645,19 +1646,19 @@ impl StmtOps for Stmt {
             self->lex->lstart = save_lstart;
             self->lex->bol = save_bol;
             self->lex->pos = save_pos;
-            snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+            self->lex->tokstr.ptr = save_text_ptr; self->lex->tokstr.len = save_text_len;
             return look;
         }
         /* PH-57: a qualified type (`net::Conn`) starts a declaration even
            though the first segment alone is not a type name. */
         {
             const char *p = self->lex->src + self->lex->tokstart
-                            + strlen(self->lex->toktext);
+                            + self->lex->tokstr.len;
             char qn[MAX_TEXT];
             int qw;
             while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
             if (p[0] == ':' && p[1] == ':') {
-                snprintf(qn, sizeof qn, "%s", self->lex->toktext);
+                self->lex->tok_copy(qn, sizeof qn);
                 while (p[0] == ':' && p[1] == ':') {
                     p += 2;
                     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
@@ -1683,18 +1684,18 @@ impl StmtOps for Stmt {
                     && self->sym->find_type(rn) >= 0) return 1;
             }
         }
-        if (self->ex->is_type_word(self->lex->toktext)) return 1;
-        if (self->sup->resolve_type(self->lex->toktext, rn, sizeof rn) != 0) return 0;
+        if (self->ex->is_type_word(self->lex->tok_cstr())) return 1;
+        if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) != 0) return 0;
         if (self->sym->find_type(rn) >= 0) return 1;
         for (i = 0; kw[i]; i++)
-            if (strcmp(self->lex->toktext, kw[i]) == 0) return 0;
+            if (self->lex->tok_is(kw[i])) return 0;
         /* A type name this unit never saw -- a typedef from a header, such as
            `time_t`. It is a type rather than an operand when the next token is
            the declarator's name, directly (`time_t now`) or behind some stars
            (`time_t *t`); a name that already resolves to a variable or a
            function is an operand, which keeps `a * b;` an expression. */
-        if (self->sym->find_var(self->lex->toktext) >= 0) return 0;
-        if (self->sym->find_func(self->lex->toktext) >= 0) return 0;
+        if (self->sym->find_var(self->lex->tok_cstr()) >= 0) return 0;
+        if (self->sym->find_func(self->lex->tok_cstr()) >= 0) return 0;
         save_tok = self->lex->tok;
         save_num = self->lex->toknum;
         save_float = self->lex->tokfloat;
@@ -1704,9 +1705,9 @@ impl StmtOps for Stmt {
         save_lstart = self->lex->lstart;
         save_bol = self->lex->bol;
         save_pos = self->lex->pos;
-        snprintf(save_text, sizeof save_text, "%s", self->lex->toktext);
+        save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
         self->sup->lex_next();
-        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0)
+        while (self->lex->tok == T_PUNCT && self->lex->tok_is("*"))
             self->sup->lex_next();
         look = (self->lex->tok == T_ID);
         self->lex->tok = save_tok;
@@ -1718,7 +1719,7 @@ impl StmtOps for Stmt {
         self->lex->lstart = save_lstart;
         self->lex->bol = save_bol;
         self->lex->pos = save_pos;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", save_text);
+        self->lex->tokstr.ptr = save_text_ptr; self->lex->tokstr.len = save_text_len;
         return look;
     }
 
@@ -1953,11 +1954,11 @@ impl StmtOps for Stmt {
         tail = -1;
         {
         int prev_jump = 0;
-        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             /* PH-70-R3: a statement after return/break/continue cannot execute;
                labels and empty statements are exempt (`goto` targets are legal). */
             if (prev_jump && self->ex->check_mode && *self->ex->check_mode == 2
-                && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0)
+                && !(self->lex->tok == T_PUNCT && self->lex->tok_is(";"))
                 && !self->label_ahead())
                 return tool::diag::ct_sem_error(self->lex->tokline,
                     self->lex->tokstart - self->lex->lstart + 1,
@@ -2027,8 +2028,8 @@ impl StmtOps for Stmt {
            at file scope too: `top_decl` routes the keyword back into this
            branch, which keeps the construct in one place. */
         if (self->lex->tok == T_ID
-            && (strcmp(self->lex->toktext, "_Static_assert") == 0
-                || strcmp(self->lex->toktext, "static_assert") == 0)) {
+            && (self->lex->tok_is("_Static_assert")
+                || self->lex->tok_is("static_assert"))) {
             int cnd;
             s = self->sup->new_node(N_SASSERT);
             if (s < 0) return -1;
@@ -2042,7 +2043,7 @@ impl StmtOps for Stmt {
             if (self->sup->accept(",")) {
                 if (self->lex->tok != T_STR)
                     return self->sup->fail("a static assertion message must be a string literal");
-                snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", self->lex->toktext);
+                self->lex->tok_copy(self->arena->nodes[s].text, MAX_TEXT);
                 self->sup->lex_next();
             }
             if (self->sup->expect(")") != 0) return -1;
@@ -2123,20 +2124,20 @@ impl StmtOps for Stmt {
         }
         /* `;` is a statement of its own (C's empty statement): it keeps
            `for (...) ;` and `case 1: ;` on the ordinary path and emits nothing */
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "$") == 0
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("$")
             && !self->ex->dollar_ok && self->ex->into_node < 0)
             return tool::diag::ct_sem_error(self->lex->tokline,
                 self->lex->tokstart - self->lex->lstart + 1,
                 "'$' is read-only and only valid in the trailing block",
                 self->mem->path);
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(";")) {
             self->sup->lex_next();
             s = self->sup->new_node(N_EMPTY);
             if (s < 0) return -1;
             return s;
         }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "return") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) return self->parse_block();
+        if (self->lex->tok == T_ID && self->lex->tok_is("return")) {
             int rline = self->lex->tokline, rcol = self->lex->tokstart - self->lex->lstart + 1, at_start = 1, rp, cond;
             int eline = 0, ecol = 0, is_err = 0;
             if (self->in_errdefer)
@@ -2159,7 +2160,7 @@ impl StmtOps for Stmt {
                 self->sup->lex_next();
                 if (self->sup->expect(":")) return -1;
             }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is(";")) {
                 self->sup->lex_next();
                 if (is_err && self->sym->ret_type[0]
                     && strcmp(self->sym->ret_type, "void") != 0)
@@ -2356,7 +2357,7 @@ impl StmtOps for Stmt {
             if (is_err) snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
             return s;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "delete") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("delete")) {
             s = self->sup->new_node(N_DELETE);
             if (s < 0) return -1;
             self->sup->lex_next();
@@ -2399,7 +2400,7 @@ impl StmtOps for Stmt {
             if (self->sup->expect(";") != 0) return -1;
             return s;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "break") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("break")) {
             int bcol = self->lex->tokstart - self->lex->lstart + 1, is_err = 0;
             if (self->in_errdefer)
                 return tool::diag::ct_sem_error(self->lex->tokline, bcol,
@@ -2433,7 +2434,7 @@ impl StmtOps for Stmt {
                 && self->defer_prepend(s, self->defer_break_base[self->nbreak - 1], is_err) != 0) return -1;
             return s;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "continue") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("continue")) {
             int ccol = self->lex->tokstart - self->lex->lstart + 1, is_err = 0;
             if (self->in_errdefer)
                 return tool::diag::ct_sem_error(self->lex->tokline, ccol,
@@ -2464,8 +2465,8 @@ impl StmtOps for Stmt {
                 && self->defer_prepend(s, self->defer_cont_base[self->ncont - 1], is_err) != 0) return -1;
             return s;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "goto") == 0) return self->parse_goto();
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "if") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("goto")) return self->parse_goto();
+        if (self->lex->tok == T_ID && self->lex->tok_is("if")) {
             s = self->sup->new_node(N_IF);
             if (s < 0) return -1;
             self->sup->lex_next();
@@ -2483,7 +2484,7 @@ impl StmtOps for Stmt {
             e = self->parse_branch();
             if (e < 0) return -1;
             self->arena->nodes[s].b = e;
-            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "else") == 0) {
+            if (self->lex->tok == T_ID && self->lex->tok_is("else")) {
                 self->sup->lex_next();
                 e = self->parse_branch();
                 if (e < 0) return -1;
@@ -2491,7 +2492,7 @@ impl StmtOps for Stmt {
             }
             return s;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "while") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("while")) {
             s = self->sup->new_node(N_WHILE);
             if (s < 0) return -1;
             self->sup->lex_next();
@@ -2511,7 +2512,7 @@ impl StmtOps for Stmt {
             self->arena->nodes[s].b = e;
             return s;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "for") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("for")) {
             int for_base;
             s = self->sup->new_node(N_FOR);
             if (s < 0) return -1;
@@ -2522,9 +2523,9 @@ impl StmtOps for Stmt {
                `continue` starts the next iteration, so only the body's objects
                are released and the initialiser stays alive. */
             for_base = self->mem->own_base[self->sym->nscope - 1];
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is(";")) {
                 self->arena->nodes[s].a = -1;
-            } else if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
+            } else if (self->lex->tok == T_ID && self->lex->tok_is("static")) {
                 /* `for (static int i = 0; …)`: the initialiser runs once and `i`
                    keeps its value across calls (D-3 of batch 10 for the marker) */
                 self->sup->lex_next();
@@ -2565,7 +2566,7 @@ impl StmtOps for Stmt {
                 self->sup->pop_scope();
                 return -1;
             }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ";") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is(";")) {
                 self->arena->nodes[s].b = -1;
             } else {
                 self->ex->assign_ok = 1;
@@ -2584,7 +2585,7 @@ impl StmtOps for Stmt {
                 self->sup->pop_scope();
                 return -1;
             }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
                 self->arena->nodes[s].c = -1;
             } else {
                 e = self->parse_expr_stmt_node();
@@ -2612,7 +2613,7 @@ impl StmtOps for Stmt {
             self->sup->pop_scope();
             return s;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "switch") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("switch")) {
             s = self->sup->new_node(N_SWITCH);
             if (s < 0) return -1;
             self->sup->lex_next();
@@ -2625,7 +2626,7 @@ impl StmtOps for Stmt {
             if (e < 0) return -1;
             self->arena->nodes[s].a = e;
             if (self->sup->expect(")") != 0) return -1;
-            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0))
+            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
                 return self->sup->fail("expected a block after switch (...)");
             e = self->parse_switch_body();
             if (e < 0) return -1;
@@ -2636,7 +2637,7 @@ impl StmtOps for Stmt {
            call has no brace block after the `)`, so the expression path keeps
            it and `match` stays usable as an ordinary name. */
         if (self->match_ahead()) return self->parse_match();
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "do") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("do")) {
             s = self->sup->new_node(N_DOWHILE);
             if (s < 0) return -1;
             self->sup->lex_next();
@@ -2645,7 +2646,7 @@ impl StmtOps for Stmt {
             jump_pop(self, 1);
             if (e < 0) return -1;
             self->arena->nodes[s].b = e;
-            if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "while") == 0))
+            if (!(self->lex->tok == T_ID && self->lex->tok_is("while")))
                 return self->sup->fail("a do statement must be followed by while (...)");
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
@@ -2665,12 +2666,12 @@ impl StmtOps for Stmt {
            Named here so the message says why, instead of the undeclared-variable
            report the expression path would produce (D-8). */
         if (self->lex->tok == T_ID
-            && (strcmp(self->lex->toktext, "case") == 0 || strcmp(self->lex->toktext, "default") == 0))
+            && (self->lex->tok_is("case") || self->lex->tok_is("default")))
             return self->sup->fail("a case label is only allowed inside a switch");
         /* `borrow Conn *c = …` declares a borrowed pointer whose handback runs
            at scope exit; `borrow(x);` is a call to a function of that name, so
            the next token decides (see `borrow_decl_ahead`) */
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "borrow") == 0
+        if (self->lex->tok == T_ID && self->lex->tok_is("borrow")
             && borrow_decl_ahead(self)) {
             int bline = self->lex->tokline;
             int bcol = self->lex->tokstart - self->lex->lstart + 1;
@@ -2684,7 +2685,7 @@ impl StmtOps for Stmt {
             if (mark_borrow(self, s, bline, bcol) != 0) return -1;
             return s;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("own")) {
             int own_line = self->lex->tokline;
             if (self->in_errdefer)
                 return tool::diag::ct_sem_error(own_line,
@@ -2702,13 +2703,13 @@ impl StmtOps for Stmt {
            the storage class. The attribute is held for `parse_decl_node`, the
            alignment spelling is prepended to the type; either form is legal
            before `static` (`__attribute__((unused)) static int x;`). */
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "__attribute__") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("__attribute__")) {
             int a, r;
             if (self->sup->attr_pool(&a) < 0) return -1;
             if (a < 0) return -1;
             if (self->decl_attr)
                 return self->sup->fail("duplicate __attribute__ on one declaration");
-            if (!(self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0)
+            if (!(self->lex->tok == T_ID && self->lex->tok_is("static"))
                 && !self->is_decl_start())
                 return self->sup->fail("an attribute must prefix a declaration");
             self->decl_attr = a + 1;
@@ -2716,7 +2717,7 @@ impl StmtOps for Stmt {
             self->decl_attr = 0;
             return r;
         }
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_Alignas") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("_Alignas")) {
             int r, np, depth;
             char tbuf[MAX_TEXT];
             if (self->ex->decl_prefix[0])
@@ -2725,7 +2726,7 @@ impl StmtOps for Stmt {
             if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, "_Alignas") != 0)
                 return -1;
             self->sup->lex_next();
-            if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0))
+            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
                 return self->sup->fail("expected '(' after _Alignas");
             depth = 0;
             for (;;) {
@@ -2733,11 +2734,11 @@ impl StmtOps for Stmt {
                 if (self->lex->tok == T_NUM && !self->lex->tokfloat)
                     snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
                 else
-                    snprintf(tbuf, sizeof tbuf, "%s", self->lex->toktext);
+                    self->lex->tok_copy(tbuf, sizeof tbuf);
                 if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, tbuf) != 0)
                     return -1;
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) depth++;
-                if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0) {
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) depth++;
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
                     depth--;
                     if (depth == 0) {
                         self->sup->lex_next();
@@ -2761,11 +2762,11 @@ impl StmtOps for Stmt {
            duration. The declaration itself is the ordinary one; only the
            keyword and the leak bookkeeping differ (a static object is not the
            scope's to release, and `own` would mean the opposite of static). */
-        if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0) {
+        if (self->lex->tok == T_ID && self->lex->tok_is("static")) {
             self->sup->lex_next();
-            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "own") == 0)
+            if (self->lex->tok == T_ID && self->lex->tok_is("own"))
                 return self->sup->fail("a static local cannot be 'own'");
-            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "borrow") == 0)
+            if (self->lex->tok == T_ID && self->lex->tok_is("borrow"))
                 return self->sup->fail("a static local cannot be 'borrow'");
             if (!self->is_decl_start()) return self->sup->fail("expected a declaration after 'static'");
             self->static_decl = 1;
@@ -2807,7 +2808,7 @@ impl StmtOps for Stmt {
         int b, s, base, tail;
         (void)self;
 
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) return self->parse_block();
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) return self->parse_block();
         if (self->sup->push_scope() != 0) return -1;
         if (self->ndefer_blocks >= 256) {
             self->sup->pop_scope();
@@ -2895,9 +2896,9 @@ impl StmtOps for Stmt {
         long case_hi[64];
         int ncase = 0;
         while (self->lex->tok != T_EOF
-               && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+               && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             if (self->lex->tok == T_ID
-                && (strcmp(self->lex->toktext, "case") == 0 || strcmp(self->lex->toktext, "default") == 0)) {
+                && (self->lex->tok_is("case") || self->lex->tok_is("default"))) {
                 {
                 int lab_line = self->lex->tokline;
                 int lab_col = self->lex->tokstart - self->lex->lstart + 1;
@@ -2973,7 +2974,7 @@ impl StmtOps for Stmt {
         (void)self;
 
         if (self->lex->tok != T_ID) return 0;
-        if (strcmp(self->lex->toktext, "match") != 0) return 0;
+        if (!self->lex->tok_is("match")) return 0;
         p = self->lex->src + self->lex->tokstart + 5;
         for (;;) {
             if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') { p++; continue; }
@@ -3081,7 +3082,7 @@ impl StmtOps for Stmt {
         ncov = 0;
         wild = -1;
         seen_wild = 0;
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0))
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
             return self->sup->fail("expected a block after match (...)");
         self->sup->lex_next();
         s = self->sup->new_node(N_MATCH);
@@ -3094,11 +3095,11 @@ impl StmtOps for Stmt {
         arms = -1;
         tail = -1;
         while (self->lex->tok != T_EOF
-               && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)) {
+               && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             int arm_line, arm_col;
             arm_line = self->lex->tokline;
             arm_col = self->lex->tokstart - self->lex->lstart + 1;
-            if (self->lex->tok == T_ID && strcmp(self->lex->toktext, "_") == 0) {
+            if (self->lex->tok == T_ID && self->lex->tok_is("_")) {
                 int body;
                 if (seen_wild)
                     return tool::diag::ct_sem_error(arm_line, arm_col,
@@ -3122,7 +3123,7 @@ impl StmtOps for Stmt {
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "a wildcard match arm must be the last arm", self->mem->path);
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a match arm");
-                snprintf(aname, sizeof aname, "%s", self->lex->toktext);
+                self->lex->tok_copy(aname, sizeof aname);
                 aline = self->lex->tokline;
                 acol = self->lex->tokstart - self->lex->lstart + 1;
                 if (self->sup->resolve_type(aname, rn, sizeof rn) != 0)
@@ -3140,11 +3141,11 @@ impl StmtOps for Stmt {
                     return tool::diag::ct_sem_error(aline, acol, msg, self->mem->path);
                 }
                 self->sup->lex_next();
-                if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ".") == 0))
+                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(".")))
                     return self->sup->fail("expected '.' after the ADT name");
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a variant name");
-                snprintf(vname, sizeof vname, "%s", self->lex->toktext);
+                self->lex->tok_copy(vname, sizeof vname);
                 v = frontend::sym::ct_adt_variant(adt, vname);
                 if (v < 0) {
                     snprintf(msg, sizeof msg, "unknown variant '%s' of ADT '%s'",
@@ -3160,18 +3161,18 @@ impl StmtOps for Stmt {
                 covered[v] = 1;
                 ncov++;
                 self->sup->lex_next();
-                if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0))
+                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
                     return self->sup->fail("expected '(' after a variant name");
                 self->sup->lex_next();
                 first_bind = -1;
                 last_bind = -1;
                 nb = 0;
-                while (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)) {
+                while (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a binding name");
                     if (nb >= 8)
                         return self->sup->fail("too many bindings in one match arm");
-                    snprintf(bind_names[nb], MAX_TEXT, "%s", self->lex->toktext);
+                    self->lex->tok_copy(bind_names[nb], MAX_TEXT);
                     for (w = 0; w < nb; w++)
                         if (strcmp(bind_names[w], bind_names[nb]) == 0) {
                             snprintf(msg, sizeof msg, "duplicate binding '%s' in a match arm",
@@ -3288,7 +3289,7 @@ impl StmtOps for Stmt {
             return self->sup->fail("a defer block cannot declare a label");
         s = self->sup->new_node(N_CASE);
         if (s < 0) return -1;
-        is_def = strcmp(self->lex->toktext, "default") == 0;
+        is_def = self->lex->tok_is("default");
         self->arena->nodes[s].aux = is_def;
         self->sup->lex_next();
         if (!is_def) {
@@ -3300,13 +3301,13 @@ impl StmtOps for Stmt {
         if (self->sup->expect(":") != 0) return -1;
         head = -1;
         tail = -1;
-        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))
                && !(self->lex->tok == T_ID
-                    && (strcmp(self->lex->toktext, "case") == 0
-                        || strcmp(self->lex->toktext, "default") == 0))
+                    && (self->lex->tok_is("case")
+                        || self->lex->tok_is("default")))
                && !self->label_ahead()) {
             if (self->is_decl_start()
-                || (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0))
+                || (self->lex->tok == T_ID && self->lex->tok_is("static")))
                 return self->sup->fail("a declaration cannot follow a case label; wrap it in a block");
             c = self->parse_stmt();
             if (c < 0) return -1;
@@ -3316,7 +3317,7 @@ impl StmtOps for Stmt {
         }
         if (head < 0
             && (self->lex->tok == T_EOF
-                || (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)))
+                || (self->lex->tok == T_PUNCT && self->lex->tok_is("}"))))
             return self->sup->fail("a case label needs a statement");
         self->arena->nodes[s].a = head;
         return s;
@@ -3340,7 +3341,7 @@ impl StmtOps for Stmt {
             return self->sup->fail("a case label must be an integer constant");
         /* `case <low> ... <high>:` -- a GNU / C23 range. Both ends follow the
            same constant rule, and the high end waits in `case_hi`. */
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "...") == 0)) return e;
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("..."))) return e;
         self->sup->lex_next();
         hi = self->ex->parse_expr();
         if (hi < 0) return -1;
@@ -3390,11 +3391,11 @@ impl StmtOps for Stmt {
         if (s < 0) return -1;
         self->sup->lex_next();
         if (self->sup->expect("(") != 0) return -1;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "..") == 0)
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(".."))
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
                                             "a loop range needs both bounds", self->mem->path);
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(")"))
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
                                             "loop needs a count expression", self->mem->path);
@@ -3403,9 +3404,9 @@ impl StmtOps for Stmt {
         self->ex->assign_ok = 0;
         if (cnt < 0) return -1;
         hi = -1;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "..") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("..")) {
             self->sup->lex_next();
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is(")"))
                 return tool::diag::ct_sem_error(self->lex->tokline,
                                                 self->lex->tokstart - self->lex->lstart + 1,
                                                 "a loop range needs both bounds", self->mem->path);
@@ -3421,13 +3422,13 @@ impl StmtOps for Stmt {
                 hi = -1;
             }
         }
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0)
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(","))
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
                                             "loop takes exactly one count; use a native for to name the counter",
                                             self->mem->path);
         if (self->sup->expect(")") != 0) return -1;
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0))
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
                                             "loop body must be a block", self->mem->path);
@@ -3557,7 +3558,7 @@ impl StmtOps for Stmt {
         if (s < 0) return -1;
         self->sup->lex_next();
         if (self->sup->expect("(") != 0) return -1;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ")") == 0)
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(")"))
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
                                             "foreach needs a collection expression",
@@ -3566,13 +3567,13 @@ impl StmtOps for Stmt {
         c = self->ex->parse_expr();
         self->ex->assign_ok = 0;
         if (c < 0) return -1;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0)
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(","))
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
                                             "foreach takes exactly one collection",
                                             self->mem->path);
         if (self->sup->expect(")") != 0) return -1;
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0))
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
             return tool::diag::ct_sem_error(self->lex->tokline,
                                             self->lex->tokstart - self->lex->lstart + 1,
                                             "foreach body must be a block",
@@ -3820,7 +3821,7 @@ impl StmtOps for Stmt {
         int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc, r;
         int depth = 0;
         long snum;
-        char stext[MAX_TEXT];
+        const char *stext_ptr; int stext_len;
         const char *ssuf_ptr; int ssuf_len;
 
         sp = self->lex->pos;
@@ -3833,22 +3834,22 @@ impl StmtOps for Stmt {
         slstart = self->lex->lstart;
         sfloat = self->lex->tokfloat;
         strunc = self->lex->toktrunc;
-        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
         ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
         r = 0;
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PUNCT) {
-                const char *t = self->lex->toktext;
-                if (strcmp(t, "(") == 0 || strcmp(t, "[") == 0 || strcmp(t, "{") == 0) {
+                if (self->lex->tok_is("(") || self->lex->tok_is("[") || self->lex->tok_is("{")) {
                     depth++;
-                } else if (strcmp(t, ")") == 0 || strcmp(t, "]") == 0 || strcmp(t, "}") == 0) {
+                } else if (self->lex->tok_is(")") || self->lex->tok_is("]")
+                           || self->lex->tok_is("}")) {
                     if (depth > 0) depth--;
-                } else if (strcmp(t, "..") == 0) {
+                } else if (self->lex->tok_is("..")) {
                     if (depth == 0) {
                         r = 1;
                         break;
                     }
-                } else if ((strcmp(t, ",") == 0 || strcmp(t, ";") == 0) && depth == 0) {
+                } else if ((self->lex->tok_is(",") || self->lex->tok_is(";")) && depth == 0) {
                     break;
                 }
             }
@@ -3864,7 +3865,7 @@ impl StmtOps for Stmt {
         self->lex->lstart = slstart;
         self->lex->tokfloat = sfloat;
         self->lex->toktrunc = strunc;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
         self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
         return r;
     }
@@ -3906,7 +3907,7 @@ impl StmtOps for Stmt {
                                                 "a range initializer declares an array", self->mem->path);
         }
         if (range_bound(self, &start) != 0) return -1;
-        if (!(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "..") == 0))
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("..")))
             return self->sup->fail("unexpected token");
         self->sup->lex_next();
         if (range_bound(self, &stop) != 0) return -1;
@@ -3941,9 +3942,9 @@ impl StmtOps for Stmt {
            (`4..8 { $ * $ }`); the two mean the same thing, and neither can be
            confused with a declaration's brace list because `..` was already
            consumed. */
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "(") == 0) {
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
             close = ")";
-        } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+        } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
             close = "}";
         } else {
             return self->sup->fail("expected '(' or '{' after the range bound");
@@ -3985,7 +3986,7 @@ impl StmtOps for Stmt {
     {
         int sp, sbol, stok, sline, stokline, sstart, slstart, r;
         long snum;
-        char stext[MAX_TEXT];
+        const char *stext_ptr; int stext_len;
         (void)self;
 
         if (self->lex->tok != T_ID) return 0;
@@ -3997,10 +3998,10 @@ impl StmtOps for Stmt {
         stokline = self->lex->tokline;
         sstart = self->lex->tokstart;
         slstart = self->lex->lstart;
-        snprintf(stext, sizeof stext, "%s", self->lex->toktext);
+        stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
         self->sup->lex_next();
         r = 0;
-        if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ":") == 0) r = 1;
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(":")) r = 1;
         self->lex->pos = sp;
         self->lex->bol = sbol;
         self->lex->tok = stok;
@@ -4009,7 +4010,7 @@ impl StmtOps for Stmt {
         self->lex->tokline = stokline;
         self->lex->tokstart = sstart;
         self->lex->lstart = slstart;
-        snprintf(self->lex->toktext, MAX_TEXT, "%s", stext);
+        self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
         return r;
     }
 
@@ -4040,7 +4041,7 @@ impl StmtOps for Stmt {
         if (self->in_defer)
             return self->sup->fail("a defer block cannot declare a label");
         line = self->lex->tokline;
-        snprintf(name, sizeof name, "%s", self->lex->toktext);
+        self->lex->tok_copy(name, sizeof name);
         if (self->nlabels >= MAX_LABELS) return self->sup->fail("too many labels in one function");
         if (self->label_find(name) >= 0) {
             snprintf(msg, sizeof msg, "duplicate label '%s'", name);
@@ -4061,13 +4062,13 @@ impl StmtOps for Stmt {
         if (self->sup->expect(":") != 0) return -1;
         head = -1;
         tail = -1;
-        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "}") == 0)
+        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))
                && !(self->lex->tok == T_ID
-                    && (strcmp(self->lex->toktext, "case") == 0
-                        || strcmp(self->lex->toktext, "default") == 0))
+                    && (self->lex->tok_is("case")
+                        || self->lex->tok_is("default")))
                && !(head >= 0 && self->label_ahead())) {
             if (self->is_decl_start()
-                || (self->lex->tok == T_ID && strcmp(self->lex->toktext, "static") == 0))
+                || (self->lex->tok == T_ID && self->lex->tok_is("static")))
                 return self->sup->fail("a declaration cannot follow a label; wrap it in a block");
             c = self->parse_stmt();
             if (c < 0) return -1;
@@ -4101,7 +4102,7 @@ impl StmtOps for Stmt {
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a label name");
         if (self->ngotos >= MAX_LABELS) return self->sup->fail("too many gotos in one function");
-        snprintf(name, sizeof name, "%s", self->lex->toktext);
+        self->lex->tok_copy(name, sizeof name);
         snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
         snprintf(self->goto_names[self->ngotos], MAX_TEXT, "%s", name);
         self->goto_lines[self->ngotos] = self->arena->nodes[s].line;
@@ -4248,7 +4249,7 @@ impl StmtOps for Stmt {
                 snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
                 first_decl = 0;
             } else {
-            while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "*") == 0) {
+            while (self->lex->tok == T_PUNCT && self->lex->tok_is("*")) {
                 stars++;
                 self->sup->lex_next();
             }
@@ -4273,7 +4274,7 @@ impl StmtOps for Stmt {
                 snprintf(typebuf, sizeof typebuf, "%s", t2);
             }
             if (self->lex->tok != T_ID) return self->sup->fail("expected a variable name");
-            snprintf(name, sizeof name, "%s", self->lex->toktext);
+            self->lex->tok_copy(name, sizeof name);
             self->sup->lex_next();
             }
             /* P-7.2 (P-4.1): a pointer-to-slice or slice array is the same
@@ -4344,7 +4345,7 @@ impl StmtOps for Stmt {
                              self->arena->nodes[n].text3);
                 }
             }
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("=")) {
                 /* Phase 78 S2a: a local with an initialiser holds a value, so
                    an owning value may be passed as an `out` actual later. */
                 int dvi = self->sym->find_var(name);
@@ -4359,7 +4360,7 @@ impl StmtOps for Stmt {
                     char raw2[MAX_TEXT * 4];
                     char cname2[MAX_TEXT];
                     if (self->lex->tok == T_PUNCT
-                        && strcmp(self->lex->toktext, "{") == 0)
+                        && self->lex->tok_is("{"))
                         return tool::diag::ct_sem_error(self->lex->tokline,
                             self->lex->tokstart - self->lex->lstart + 1,
                             "a slice 'T[]' has no initializer list; initialize it from an array or another slice",
@@ -4443,7 +4444,7 @@ impl StmtOps for Stmt {
                         int svi2 = self->sym->find_var(name);
                         if (svi2 >= 0) self->sym->vars[svi2].slice_escape = sroot;
                     }
-                } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0) {
+                } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                     /* local `static` tables can be long, so the text goes to the
                        arena string pool (`aux = 1`, `num` = offset) */
                     char elemtype[MAX_TEXT];
@@ -4756,13 +4757,13 @@ impl StmtOps for Stmt {
                 self->sup->mem->path);
             return -1;
         }
-        if (self->lex->tok == T_PUNCT && (strcmp(self->lex->toktext, "+=") == 0 || strcmp(self->lex->toktext, "-=") == 0
-                                 || strcmp(self->lex->toktext, "*=") == 0 || strcmp(self->lex->toktext, "/=") == 0
-                                 || strcmp(self->lex->toktext, "%=") == 0 || strcmp(self->lex->toktext, "&=") == 0
-                                 || strcmp(self->lex->toktext, "|=") == 0 || strcmp(self->lex->toktext, "^=") == 0
-                                 || strcmp(self->lex->toktext, "<<=") == 0 || strcmp(self->lex->toktext, ">>=") == 0)) {
+        if (self->lex->tok == T_PUNCT && (self->lex->tok_is("+=") || self->lex->tok_is("-=")
+                                 || self->lex->tok_is("*=") || self->lex->tok_is("/=")
+                                 || self->lex->tok_is("%=") || self->lex->tok_is("&=")
+                                 || self->lex->tok_is("|=") || self->lex->tok_is("^=")
+                                 || self->lex->tok_is("<<=") || self->lex->tok_is(">>="))) {
             int op = 0, k2;
-            char oc = self->lex->toktext[0];
+            char oc = self->lex->tok_first();
             k2 = self->arena->nodes[e].kind;
             if (k2 == N_SLICE_INDEX && self->arena->nodes[e].aux == 1)
                 return tool::diag::ct_sem_error(self->arena->nodes[e].line,
@@ -4807,7 +4808,7 @@ impl StmtOps for Stmt {
             if (check_closure_assign(self, n, scol) != 0) return -1;
             if (check_borrow_store(self, n) != 0) return -1;
             if (self->mem->leak_active && self->sup->leak_assign(n) != 0) return -1;
-        } else if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "=") == 0) {
+        } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("=")) {
             int k, ip;
             int rline, rcol;
             char tt[MAX_TEXT];
@@ -4913,11 +4914,11 @@ impl StmtOps for Stmt {
                assignment to a `Vec` gets the dedicated text (L31-11) instead of
                the generic "expected an expression" the primary parser gives.
                `tt` is filled by the query above, so the target type is known. */
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")
                 && (strncmp(tt, "struct Vec_", 11) == 0 || strncmp(tt, "Vec_", 4) == 0))
                 return self->sup->fail(
                     "a brace list is not an expression; use Vec<T>::from or push");
-            if (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, "{") == 0
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")
                 && (strncmp(tt, "struct Map_", 11) == 0 || strncmp(tt, "Map_", 4) == 0))
                 return self->sup->fail(
                     "a brace list is not an expression; use Map<K, V>::from or put");
@@ -5001,7 +5002,7 @@ impl StmtOps for Stmt {
            arguments are comma-separated by the same token. Each operand is
            itself parsed by this function, so `a, b, c` nests to the right --
            the evaluation is left to right either way, which is all `,` says. */
-        while (self->lex->tok == T_PUNCT && strcmp(self->lex->toktext, ",") == 0) {
+        while (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
             self->sup->lex_next();
             rhs = self->parse_expr_stmt_node();
             if (rhs < 0) return -1;
