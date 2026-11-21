@@ -150,6 +150,271 @@ void type_key(const char *in, char *out, int cap)
 
 pub struct TypeCheck *type_get(void);
 
+/* Phase 84: an ADT constructor answers the ADT's C struct spelling. */
+/* PH-87 S87b slice: `AdtCtor` (one node kind). */
+static int tc_expr_adtctor(struct TypeCheck *self, int n, char *out, int cap)
+{
+            if (snprintf(out, (size_t)cap, "struct %s", self->arena->nodes[n].text) >= cap)
+                return -1;
+            return 0;
+}
+
+/* PH-87 S87b slice: `Var` (one node kind). */
+static int tc_expr_var(struct TypeCheck *self, int n, char *out, int cap)
+{
+    int i;
+            const char *why;
+            self->sym->errmsg[0] = 0;
+            i = self->sym->var_type(self->arena->nodes[n].text2, out, cap);
+            if (i < 0) {
+                why = self->sym->last_error();
+                if (why[0]) return self->fail(why);
+                return -1;
+            }
+            return 0;
+}
+
+/* PH-87 S87b slice: `Index` (one node kind). */
+static int tc_expr_index(struct TypeCheck *self, int n, char *out, int cap)
+{
+            /* a[i] is the pointee: a pointer's star drops, while an array's
+               declared type has none to drop -- unless it is an array *of*
+               pointers, which `is_array` keeps intact */
+            size_t ln;
+            if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
+            if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
+                int vi = self->sym->find_var(self->arena->nodes[self->arena->nodes[n].a].text2);
+                if (vi >= 0 && self->sym->vars[vi].is_array) return 0;
+            }
+            ln = strlen(out);
+            while (ln > 0 && out[ln - 1] == ' ') ln--;
+            if (ln > 0 && out[ln - 1] == '*') {
+                ln--;
+                while (ln > 0 && out[ln - 1] == ' ') ln--;
+                out[ln] = 0;
+            }
+            return 0;
+}
+
+/* PH-87 S87b slice: `Addr` (one node kind). */
+static int tc_expr_addr(struct TypeCheck *self, int n, char *out, int cap)
+{
+            if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
+            if (strlen(out) + 2 >= (size_t)cap) return -1;
+            strcat(out, " *");
+            return 0;
+}
+
+/* PH-87 S87b slice: `Mcall` (one node kind). */
+static int tc_expr_mcall(struct TypeCheck *self, int n, char *out, int cap)
+{
+            /* A static mapping call: the return type comes from the trait's
+               method signature. `aux == 5` names the trait directly; `aux == 6`
+               is a type host and the receiver's static type finds it. */
+            if (self->arena->nodes[n].aux == 5) {
+                int ti = self->sym->find_trait(self->arena->nodes[n].text);
+                int mi;
+                if (ti < 0) return -1;
+                for (mi = 0; mi < self->sym->traits[ti].nm; mi++)
+                    if (strcmp(self->sym->traits[ti].m[mi].name,
+                               self->arena->nodes[n].text2) == 0) {
+                        if (snprintf(out, (size_t)cap, "%s",
+                                     self->sym->traits[ti].m[mi].ret) >= cap) return -1;
+                        return 0;
+                    }
+                return -1;
+            }
+            if (self->arena->nodes[n].aux == 6) {
+                char rt[MAX_TEXT];
+                char rk[MAX_TEXT];
+                char tk[MAX_TEXT];
+                int i, j;
+                snprintf(rt, sizeof rt, "%s", self->arena->nodes[n].text);
+                if (!rt[0]) return -1;
+                type_key(rt, rk, MAX_TEXT);
+                for (i = 0; i < (*self->nmaps); i++) {
+                    if (!self->maps[i].is_static || !self->maps[i].type_host) continue;
+                    if (self->arena->nodes[n].text3[0]
+                        && strcmp(self->maps[i].trait, self->arena->nodes[n].text3) != 0)
+                        continue;
+                    type_key(self->maps[i].host_type, tk, MAX_TEXT);
+                    if (strcmp(tk, rk) != 0) continue;
+                    for (j = 0; j < self->maps[i].nb; j++)
+                        if (strcmp(self->maps[i].b[j].method, self->arena->nodes[n].text2) == 0) {
+                            if (snprintf(out, (size_t)cap, "%s",
+                                         self->sym->traits[self->maps[i].b[j].ti]
+                                             .m[self->maps[i].b[j].mi].ret) >= cap) return -1;
+                            return 0;
+                        }
+                }
+                return -1;
+            }
+            /* SH-72: a call through an interface value's vtable (aux 3/4)
+               returns what the receiver trait's signature says, the same way
+               the static mapping branch above reads it. Without this branch a
+               call such as `HttpResponse res = req.send();` had no static type
+               and the boxing decision reported `cannot infer the type to box`
+               even though both sides name the same interface. */
+            if (self->arena->nodes[n].aux == 3 || self->arena->nodes[n].aux == 4) {
+                int ti = self->sym->find_trait(self->arena->nodes[n].text);
+                int mi;
+                if (ti < 0) return -1;
+                for (mi = 0; mi < self->sym->traits[ti].nm; mi++)
+                    if (strcmp(self->sym->traits[ti].m[mi].name,
+                               self->arena->nodes[n].text2) == 0) {
+                        if (snprintf(out, (size_t)cap, "%s",
+                                     self->sym->traits[ti].m[mi].ret) >= cap) return -1;
+                        return 0;
+                    }
+                return -1;
+            }
+            /* Phase 31: an inherent method of an instantiated struct (aux 9/10).
+               The template's type parameters are bound to the instance's C
+               arguments so an interface element read types correctly. */
+            if (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10) {
+                if (self->inst_method_ret(self->arena->nodes[n].text,
+                                          self->arena->nodes[n].text2, out, cap))
+                    return 0;
+                return -1;
+            }
+            return -1;
+}
+
+/* PH-87 S87b slice: `Call` (one node kind). */
+static int tc_expr_call(struct TypeCheck *self, int n, char *out, int cap)
+{
+    int i;
+            i = self->sym->find_func(self->arena->nodes[n].text2);
+            if (i < 0) return -1;
+            if (snprintf(out, (size_t)cap, "%s", self->sym->funcs[i].ret) >= cap) return -1;
+            return 0;
+}
+
+/* PH-87 S87b slice: `Member), (N_ARROW` (one node kind). */
+static int tc_expr_member_or_arrow(struct TypeCheck *self, int n, char *out, int cap)
+{
+            char rt[MAX_TEXT];
+            char sname[MAX_TEXT];
+            int is_ptr, si, fi;
+            if (self->expr_type(self->arena->nodes[n].a, rt, sizeof rt) != 0) return -1;
+            is_ptr = (self->arena->nodes[n].kind == N_ARROW);
+            if (!self->concrete_struct(rt, sname, sizeof sname, &is_ptr)) return -1;
+            si = self->sym->find_struct(sname);
+            if (si < 0) return -1;
+            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+                if (strcmp(self->sym->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
+                    /* an array field decays to a pointer to its element, the
+                       same way an array variable does at the call site -- but
+                       only a one-dimensional array has a single element type
+                       to name. `char names[2][8]` decays to `char (*)[8]`,
+                       which no host spells, so it stays unknown instead of
+                       silently becoming `char *`. */
+                    const char *dims = self->sym->structs[si].fields[fi].dims;
+                    int nb = 0;
+                    const char *dp;
+                    for (dp = dims; *dp; dp++)
+                        if (*dp == '[') nb++;
+                    if (nb > 1) return -1;
+                    if (snprintf(out, (size_t)cap, "%s%s",
+                                 self->sym->structs[si].fields[fi].type,
+                                 nb == 1 ? " *" : "") >= cap)
+                        return -1;
+                    return 0;
+                }
+            return -1;
+}
+
+/* PH-87 S87b slice: `Box` (one node kind). */
+static int tc_expr_box(struct TypeCheck *self, int n, char *out, int cap)
+{
+            if (snprintf(out, (size_t)cap, "struct %s_iface%s", self->arena->nodes[n].text,
+                         (self->arena->nodes[n].aux & 2) ? " *" : "") >= cap) return -1;
+            return 0;
+}
+
+/* PH-81 S1b: `new T { ... }` has the `box<T>` type the parser recorded on the
+   node, so the declaration / assignment checks see it. */
+/* PH-87 S87b slice: `NewObj` (one node kind). */
+static int tc_expr_newobj(struct TypeCheck *self, int n, char *out, int cap)
+{
+            if (snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text3) >= cap) return -1;
+            return 0;
+}
+
+/* PH-87 S87b slice: `Num` (one node kind). */
+static int tc_expr_num(struct TypeCheck *self, int n, char *out, int cap)
+{
+            /* `text` holds the normalised suffix; the type host that claims a
+               literal has to be the one matching that suffix, not always `int` */
+            const char *sfx = self->arena->nodes[n].text;
+            const char *t = "int";
+            if (strcmp(sfx, "U") == 0) t = "unsigned";
+            else if (strcmp(sfx, "L") == 0) t = "long";
+            else if (strcmp(sfx, "UL") == 0 || strcmp(sfx, "LU") == 0) t = "unsigned long";
+            else if (strcmp(sfx, "LL") == 0) t = "long long";
+            else if (strcmp(sfx, "ULL") == 0 || strcmp(sfx, "LLU") == 0) t = "unsigned long long";
+            if (snprintf(out, (size_t)cap, "%s", t) >= cap) return -1;
+            return 0;
+}
+
+/* PH-87 S87b slice: `FNum` (one node kind). */
+static int tc_expr_fnum(struct TypeCheck *self, int n, char *out, int cap)
+{
+            size_t ln = strlen(self->arena->nodes[n].text);
+            const char *t = "double";
+            if (ln > 0 && (self->arena->nodes[n].text[ln - 1] == 'f'
+                           || self->arena->nodes[n].text[ln - 1] == 'F')) t = "float";
+            else if (ln > 0 && (self->arena->nodes[n].text[ln - 1] == 'l'
+                                || self->arena->nodes[n].text[ln - 1] == 'L')) t = "long double";
+            if (snprintf(out, (size_t)cap, "%s", t) >= cap) return -1;
+            return 0;
+}
+
+/* PH-87 S87b slice: `Str` (one node kind). */
+static int tc_expr_str(struct TypeCheck *self, int n, char *out, int cap)
+{
+            /* a C string literal is `char[N]` in an object context and `char *`
+               in a value context; a character literal is an `int`. PH-80: a
+               literal already bound to String/Str keeps that type. */
+            const char *t;
+            if (self->arena->nodes[n].aux == 1) t = "String";
+            else if (self->arena->nodes[n].aux == 2) t = "Str";
+            else t = self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
+                     ? "int" : "char *";
+            if (snprintf(out, (size_t)cap, "%s", t) >= cap) return -1;
+            return 0;
+}
+
+/* PH-87 S87b slice: `Cast` (one node kind). */
+static int tc_expr_cast(struct TypeCheck *self, int n, char *out, int cap)
+{
+            /* a compound literal has the type it names, and `va_arg` yields the
+               type it asks for, so the rest of the inference is unchanged */
+            if (snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text) >= cap) return -1;
+            return 0;
+}
+
+/* PH-87 S87b slice: `Sizeof` (one node kind). */
+static int tc_expr_sizeof(struct TypeCheck *self, int n, char *out, int cap)
+{
+    (void)self;
+    (void)n;
+            /* the corpus treats `sizeof` as `int`; `offsetof` is the same kind
+               of integral value, so it shares the answer */
+            if (snprintf(out, (size_t)cap, "%s", "int") >= cap) return -1;
+            return 0;
+}
+
+/* PH-87 S87b slice: `Into` (one node kind). */
+static int tc_expr_into(struct TypeCheck *self, int n, char *out, int cap)
+{
+            if (self->arena->nodes[n].text[0] == 0) return -1;
+            if (snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text) >= cap)
+                return -1;
+            return 0;
+}
+
+
 impl TypeOps for TypeCheck {
     /* Phase 31: the C return type of an inherent method of an instantiated
        struct, with the template's type parameters replaced by the instance's
@@ -325,228 +590,30 @@ impl TypeOps for TypeCheck {
     }
 
     /* A best-effort static type for the expressions boxing needs. */
+    /* PH-87 S87b: the node-kind dispatch, one slice per kind (the bodies are
+       the `tc_expr_*` helpers above). The kind is read once; the slice set is
+       the one `p87_checker` inventories, so a kind that loses its slice fails
+       the probe instead of silently returning "undecidable". */
     int expr_type(int n, char *out, int cap)
     {
-        int i;
-        (void)self;
+        int k;
 
-        /* Phase 84: an ADT constructor answers the ADT's C struct spelling. */
-        if (self->arena->nodes[n].kind == N_ADTCTOR) {
-            if (snprintf(out, (size_t)cap, "struct %s", self->arena->nodes[n].text) >= cap)
-                return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_VAR) {
-            const char *why;
-            self->sym->errmsg[0] = 0;
-            i = self->sym->var_type(self->arena->nodes[n].text2, out, cap);
-            if (i < 0) {
-                why = self->sym->last_error();
-                if (why[0]) return self->fail(why);
-                return -1;
-            }
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_INDEX) {
-            /* a[i] is the pointee: a pointer's star drops, while an array's
-               declared type has none to drop -- unless it is an array *of*
-               pointers, which `is_array` keeps intact */
-            size_t ln;
-            if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
-            if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
-                int vi = self->sym->find_var(self->arena->nodes[self->arena->nodes[n].a].text2);
-                if (vi >= 0 && self->sym->vars[vi].is_array) return 0;
-            }
-            ln = strlen(out);
-            while (ln > 0 && out[ln - 1] == ' ') ln--;
-            if (ln > 0 && out[ln - 1] == '*') {
-                ln--;
-                while (ln > 0 && out[ln - 1] == ' ') ln--;
-                out[ln] = 0;
-            }
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_ADDR) {
-            if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
-            if (strlen(out) + 2 >= (size_t)cap) return -1;
-            strcat(out, " *");
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_MCALL) {
-            /* A static mapping call: the return type comes from the trait's
-               method signature. `aux == 5` names the trait directly; `aux == 6`
-               is a type host and the receiver's static type finds it. */
-            if (self->arena->nodes[n].aux == 5) {
-                int ti = self->sym->find_trait(self->arena->nodes[n].text);
-                int mi;
-                if (ti < 0) return -1;
-                for (mi = 0; mi < self->sym->traits[ti].nm; mi++)
-                    if (strcmp(self->sym->traits[ti].m[mi].name,
-                               self->arena->nodes[n].text2) == 0) {
-                        if (snprintf(out, (size_t)cap, "%s",
-                                     self->sym->traits[ti].m[mi].ret) >= cap) return -1;
-                        return 0;
-                    }
-                return -1;
-            }
-            if (self->arena->nodes[n].aux == 6) {
-                char rt[MAX_TEXT];
-                char rk[MAX_TEXT];
-                char tk[MAX_TEXT];
-                int i, j;
-                snprintf(rt, sizeof rt, "%s", self->arena->nodes[n].text);
-                if (!rt[0]) return -1;
-                type_key(rt, rk, MAX_TEXT);
-                for (i = 0; i < (*self->nmaps); i++) {
-                    if (!self->maps[i].is_static || !self->maps[i].type_host) continue;
-                    if (self->arena->nodes[n].text3[0]
-                        && strcmp(self->maps[i].trait, self->arena->nodes[n].text3) != 0)
-                        continue;
-                    type_key(self->maps[i].host_type, tk, MAX_TEXT);
-                    if (strcmp(tk, rk) != 0) continue;
-                    for (j = 0; j < self->maps[i].nb; j++)
-                        if (strcmp(self->maps[i].b[j].method, self->arena->nodes[n].text2) == 0) {
-                            if (snprintf(out, (size_t)cap, "%s",
-                                         self->sym->traits[self->maps[i].b[j].ti]
-                                             .m[self->maps[i].b[j].mi].ret) >= cap) return -1;
-                            return 0;
-                        }
-                }
-                return -1;
-            }
-            /* SH-72: a call through an interface value's vtable (aux 3/4)
-               returns what the receiver trait's signature says, the same way
-               the static mapping branch above reads it. Without this branch a
-               call such as `HttpResponse res = req.send();` had no static type
-               and the boxing decision reported `cannot infer the type to box`
-               even though both sides name the same interface. */
-            if (self->arena->nodes[n].aux == 3 || self->arena->nodes[n].aux == 4) {
-                int ti = self->sym->find_trait(self->arena->nodes[n].text);
-                int mi;
-                if (ti < 0) return -1;
-                for (mi = 0; mi < self->sym->traits[ti].nm; mi++)
-                    if (strcmp(self->sym->traits[ti].m[mi].name,
-                               self->arena->nodes[n].text2) == 0) {
-                        if (snprintf(out, (size_t)cap, "%s",
-                                     self->sym->traits[ti].m[mi].ret) >= cap) return -1;
-                        return 0;
-                    }
-                return -1;
-            }
-            /* Phase 31: an inherent method of an instantiated struct (aux 9/10).
-               The template's type parameters are bound to the instance's C
-               arguments so an interface element read types correctly. */
-            if (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10) {
-                if (self->inst_method_ret(self->arena->nodes[n].text,
-                                          self->arena->nodes[n].text2, out, cap))
-                    return 0;
-                return -1;
-            }
-            return -1;
-        }
-        if (self->arena->nodes[n].kind == N_CALL) {
-            i = self->sym->find_func(self->arena->nodes[n].text2);
-            if (i < 0) return -1;
-            if (snprintf(out, (size_t)cap, "%s", self->sym->funcs[i].ret) >= cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_MEMBER || self->arena->nodes[n].kind == N_ARROW) {
-            char rt[MAX_TEXT];
-            char sname[MAX_TEXT];
-            int is_ptr, si, fi;
-            if (self->expr_type(self->arena->nodes[n].a, rt, sizeof rt) != 0) return -1;
-            is_ptr = (self->arena->nodes[n].kind == N_ARROW);
-            if (!self->concrete_struct(rt, sname, sizeof sname, &is_ptr)) return -1;
-            si = self->sym->find_struct(sname);
-            if (si < 0) return -1;
-            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-                if (strcmp(self->sym->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
-                    /* an array field decays to a pointer to its element, the
-                       same way an array variable does at the call site -- but
-                       only a one-dimensional array has a single element type
-                       to name. `char names[2][8]` decays to `char (*)[8]`,
-                       which no host spells, so it stays unknown instead of
-                       silently becoming `char *`. */
-                    const char *dims = self->sym->structs[si].fields[fi].dims;
-                    int nb = 0;
-                    const char *dp;
-                    for (dp = dims; *dp; dp++)
-                        if (*dp == '[') nb++;
-                    if (nb > 1) return -1;
-                    if (snprintf(out, (size_t)cap, "%s%s",
-                                 self->sym->structs[si].fields[fi].type,
-                                 nb == 1 ? " *" : "") >= cap)
-                        return -1;
-                    return 0;
-                }
-            return -1;
-        }
-        if (self->arena->nodes[n].kind == N_BOX) {
-            if (snprintf(out, (size_t)cap, "struct %s_iface%s", self->arena->nodes[n].text,
-                         (self->arena->nodes[n].aux & 2) ? " *" : "") >= cap) return -1;
-            return 0;
-        }
-        /* PH-81 S1b: `new T { ... }` has the `box<T>` type the parser recorded
-           on the node, so the declaration / assignment checks see it. */
-        if (self->arena->nodes[n].kind == N_NEWOBJ) {
-            if (snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text3) >= cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_NUM) {
-            /* `text` holds the normalised suffix; the type host that claims a
-               literal has to be the one matching that suffix, not always `int` */
-            const char *sfx = self->arena->nodes[n].text;
-            const char *t = "int";
-            if (strcmp(sfx, "U") == 0) t = "unsigned";
-            else if (strcmp(sfx, "L") == 0) t = "long";
-            else if (strcmp(sfx, "UL") == 0 || strcmp(sfx, "LU") == 0) t = "unsigned long";
-            else if (strcmp(sfx, "LL") == 0) t = "long long";
-            else if (strcmp(sfx, "ULL") == 0 || strcmp(sfx, "LLU") == 0) t = "unsigned long long";
-            if (snprintf(out, (size_t)cap, "%s", t) >= cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_FNUM) {
-            size_t ln = strlen(self->arena->nodes[n].text);
-            const char *t = "double";
-            if (ln > 0 && (self->arena->nodes[n].text[ln - 1] == 'f'
-                           || self->arena->nodes[n].text[ln - 1] == 'F')) t = "float";
-            else if (ln > 0 && (self->arena->nodes[n].text[ln - 1] == 'l'
-                                || self->arena->nodes[n].text[ln - 1] == 'L')) t = "long double";
-            if (snprintf(out, (size_t)cap, "%s", t) >= cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_STR) {
-            /* a C string literal is `char[N]` in an object context and `char *`
-               in a value context; a character literal is an `int`. PH-80: a
-               literal already bound to String/Str keeps that type. */
-            const char *t;
-            if (self->arena->nodes[n].aux == 1) t = "String";
-            else if (self->arena->nodes[n].aux == 2) t = "Str";
-            else t = self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
-                     ? "int" : "char *";
-            if (snprintf(out, (size_t)cap, "%s", t) >= cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_CAST || self->arena->nodes[n].kind == N_COMPOUND
-            || self->arena->nodes[n].kind == N_VAARG) {
-            /* a compound literal has the type it names, and `va_arg` yields the
-               type it asks for, so the rest of the inference is unchanged */
-            if (snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text) >= cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_SIZEOF || self->arena->nodes[n].kind == N_OFFSETOF) {
-            /* the corpus treats `sizeof` as `int`; `offsetof` is the same kind
-               of integral value, so it shares the answer */
-            if (snprintf(out, (size_t)cap, "%s", "int") >= cap) return -1;
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_INTO
-            || self->arena->nodes[n].kind == N_INTO_SELF) {
-            if (self->arena->nodes[n].text[0] == 0) return -1;
-            if (snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text) >= cap)
-                return -1;
-            return 0;
-        }
+        k = self->arena->nodes[n].kind;
+        if (k == N_ADTCTOR) return tc_expr_adtctor(self, n, out, cap);
+        if (k == N_VAR) return tc_expr_var(self, n, out, cap);
+        if (k == N_INDEX) return tc_expr_index(self, n, out, cap);
+        if (k == N_ADDR) return tc_expr_addr(self, n, out, cap);
+        if (k == N_MCALL) return tc_expr_mcall(self, n, out, cap);
+        if (k == N_CALL) return tc_expr_call(self, n, out, cap);
+        if (k == N_MEMBER || k == N_ARROW) return tc_expr_member_or_arrow(self, n, out, cap);
+        if (k == N_BOX) return tc_expr_box(self, n, out, cap);
+        if (k == N_NEWOBJ) return tc_expr_newobj(self, n, out, cap);
+        if (k == N_NUM) return tc_expr_num(self, n, out, cap);
+        if (k == N_FNUM) return tc_expr_fnum(self, n, out, cap);
+        if (k == N_STR) return tc_expr_str(self, n, out, cap);
+        if (k == N_CAST || k == N_COMPOUND || k == N_VAARG) return tc_expr_cast(self, n, out, cap);
+        if (k == N_SIZEOF || k == N_OFFSETOF) return tc_expr_sizeof(self, n, out, cap);
+        if (k == N_INTO || k == N_INTO_SELF) return tc_expr_into(self, n, out, cap);
         return -1;
     }
 
