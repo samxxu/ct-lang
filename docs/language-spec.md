@@ -91,6 +91,8 @@ impl（trait impl、固有 impl）、泛型 struct / impl / 函数
 **顺序规则**（与 L0 不同，P1）：
 
 - 函数与全局**可以先用后定义**：ct-ast 自动发射原型 / `extern` 声明（探针 `order.ct`：`main` 先调 `later()`，rc=0）。
+- **泛型函数模板是例外**：`T f<T>(T)` 目前必须先定义后使用；先用后定义会报
+  `use of an undeclared variable`（v1.1 评估统一语义或给专门诊断，SH-114）。
 - `struct` / `union` / `enum` / `trait` 必须先声明；`impl` 必须在 trait 与 struct 之后。
 - 变量仍遵守块作用域；同一作用域内重复声明按既有规则处理（§6）。
 
