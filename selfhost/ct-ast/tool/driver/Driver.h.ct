@@ -945,10 +945,14 @@ impl DriverOps for Driver {
               self->out);
         {
             int mask = self->m->io_header_mask_tail(io_from);
+            int adn = 0;
             if (self->m->freestanding) mask = 0;
             backend::emit::ct_emit_bind_io_mask(mask);
             if (mask & 1) fputs("#include <stdio.h>\n", self->out);
             if (mask & 2) fputs("#include <wchar.h>\n", self->out);
+            /* Phase 84: an ADT layout carries offsetof-based assertions. */
+            frontend::sym::ct_adts(&adn);
+            if (adn > 0) fputs("#include <stddef.h>\n", self->out);
         }
         if (self->m->line_mode) fprintf(self->out, "#line 1 \"%s\"\n", self->m->path);
         if (self->m->emit_program(prog) != 0) {

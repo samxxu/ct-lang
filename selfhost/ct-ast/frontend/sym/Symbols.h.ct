@@ -618,8 +618,10 @@ pub struct Symbols {
     const char *path;
     /* `import a::b::C as D;` brings one exported name in under `D` for this unit
        only (the table resets per unit); `alias_full` is the mangled C name. */
-    char alias_name[16][160];
-    char alias_full[16][160];
+    /* 24 (Phase 84): the compiler's own emitter unit imports 17 names; the
+       former 16 was the ceiling that stopped the self-build. */
+    char alias_name[24][160];
+    char alias_full[24][160];
     int  nalias;
     /* Type aliases (`pub type X = T;`): a per-unit visible table plus a global
        registry of every declaration loaded in this build. The global half is
@@ -1407,7 +1409,7 @@ impl SymbolOps for Symbols {
             if (strcmp(self->alias_full[i], full) == 0) return 0;
             return self->fail("one alias names two imports");
         }
-        if (self->nalias >= 16) return self->fail("too many import aliases");
+        if (self->nalias >= 24) return self->fail("too many import aliases");
         snprintf(self->alias_name[self->nalias], sizeof self->alias_name[0], "%s", name);
         snprintf(self->alias_full[self->nalias], sizeof self->alias_full[0], "%s", full);
         self->nalias++;
