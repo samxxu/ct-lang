@@ -58,7 +58,7 @@
 ## 追加注记（2026-11-21 所有者改判）
 
 - `MAX_FUNCS` 容量切片从 **Tier 1（v1-PH-0 入口）** 改为 **`v1-PH-1 / S0`（v1.1）**；
-  决策为 512 → **1024**，见 [提案](../../docs/proposals/ct-max-funcs-1024.md) 与
+  策略为**动态增长（初始 512、安全阀 65536）**，见 [提案](../../docs/proposals/ct-max-funcs-growth.md) 与
   [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)。
 - `v1-PH-0` 仍按 **501/512** 施工，新增顶层函数预算 ≤11；预计超过 11 个 helper 时
   停止并提前 S0，不得在 `v1-PH-0` 内顺手提上限。

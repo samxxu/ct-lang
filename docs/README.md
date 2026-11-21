@@ -77,7 +77,7 @@
 | [proposals/ct-bare-metal-proposal.md](proposals/ct-bare-metal-proposal.md) | 裸机生成契约提案（**已采纳并交付**）：PH-64 按本提案收口（`--freestanding` / 按需单元 / `--alloc` / const vtable，见 roadmap） | 查看裸机生成契约提案与落地 |
 | [proposals/ct-pkg-index-proposal.md](proposals/ct-pkg-index-proposal.md) | 索引仓提案（**待目标组评估**）：release dispatch + 定时扫描生成、签名/pin、digest 复用、allowlist；不在客户端扫描组织 | 查看包索引维护提案 |
 | [proposals/ct-pkg-package-maintainer-rules.md](proposals/ct-pkg-package-maintainer-rules.md) | 包仓维护者规则：`ct.pkg`、semver tag、release dispatch、digest、撤回与安全；配套索引提案 | 查看包仓发布规则 |
-| [proposals/ct-max-funcs-1024.md](proposals/ct-max-funcs-1024.md) | 容量切片提案（**已定 1024，落 v1-PH-1 / S0**）：`MAX_FUNCS` 512→1024；L2 冻结层例外；`v1-PH-0` 按 501/512 施工 | 查看容量提案 |
+| [proposals/ct-max-funcs-growth.md](proposals/ct-max-funcs-growth.md) | 容量切片提案（**已定动态增长，落 v1-PH-1 / S0**）：初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；`v1-PH-0` 按 501/512 施工 | 查看容量提案 |
 | [proposals/ct-hardware-pilot-proposal.md](proposals/ct-hardware-pilot-proposal.md) | 工程试点提案（**待 CT 组评估**）：不新增语法，用真实 MCU 验证 CT 生成 C 的上层业务/驱动封装、交叉编译、volatile/ISR/DMA/ABI/实时性/调试；底层保留 C/汇编 | 查看硬件参考工程提案 |
 | [proposals/ct-model-export-proposal.md](proposals/ct-model-export-proposal.md) | 模型导出 `--emit-model` 提案（Phase 59 依据） | 查看编译器模型导出设计 |
 | [proposals/ct-str-char-conversion-proposal.md](proposals/ct-str-char-conversion-proposal.md) | 语言侧使用反馈提案（**待项目组评估**）：`Str` → `char *` 借用视图、`char *` → `Str` 三处隐式深拷贝、目标类型决定产出与归属；实现口径与排期由项目组裁定 | 查看字符串接口互操作提案 |

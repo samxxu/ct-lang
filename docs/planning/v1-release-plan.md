@@ -196,15 +196,16 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1-pre 发射器+回环 | PH-88 | v0.88.0 | ✅ 2026-11-21（76 个发射器切片；fixpoint 日常 2 / tag 前 3 轮逐字节；字面 `match` 承接 `v1-PH-0`，见 battle/p88-emit-match） |
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
-| v1.1 容量 `MAX_FUNCS` 1024 | `v1-PH-1 / S0` | v1.1 train | 512→1024；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-1024.md)） |
+| v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
 | v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | 机制已在 PH-85；证据达标则翻转默认，未达标回退“可用不默认” |
 
 > 该编号依赖 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md)
 > 被主规范受理。未受理前，v1.0/v1.1 仍按旧规则登记 `major-release`/`release-train` deviation；
 > 不手改 AGENTS 生成块。
 >
-> **容量顺序（2026-11-21 所有者定）**：`MAX_FUNCS` 512→1024 落 `v1-PH-1 / S0`，不在 `v1-PH-0`。
-> `v1-PH-0` 按 501/512 施工，新增顶层函数 ≤11；超过即停止并提前 S0。
+> **容量顺序（2026-11-21 所有者定）**：`MAX_FUNCS` 动态增长（初始 512、安全阀 65536）
+> 落 `v1-PH-1 / S0`，不在 `v1-PH-0`。`v1-PH-0` 按 501/512 施工，新增顶层函数 ≤11；
+> 超过即停止并提前 S0。
 
 ## 4. 风险
 

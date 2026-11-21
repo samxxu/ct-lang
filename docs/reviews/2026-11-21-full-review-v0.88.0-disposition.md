@@ -35,7 +35,7 @@
 | 评审项 | 处置 |
 | --- | --- |
 | P1-1 SH-104/105 | **Tier 1**（v1-PH-0 入口），现有 issue |
-| P1-2 `MAX_FUNCS` 501/512 | 原 Tier 1 决策；**2026-11-21 所有者改落 `v1-PH-1 / S0`（512→1024）** → [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md) |
+| P1-2 `MAX_FUNCS` 501/512 | 原 Tier 1 决策；**2026-11-21 所有者改落 `v1-PH-1 / S0`（动态增长，初始 512、安全阀 65536）** → [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md) |
 | P1-3 phase-ID 迁移 | **Tier 2**（v1.0 发布）→ [DOC-83](../../issues/docs/doc-83-phase-id-migration-decision.md) |
 | P1-4 G1/G6 | **Tier 2**（v1.0 发布）→ [CI-13](../../issues/ci/ci-13-g6-ledger-closure.md) |
 | P1-5 历史 High 证据债 | **Tier 2**；SH-107/DOC-81/DOC-82 逐项“修/不修+理由” |
