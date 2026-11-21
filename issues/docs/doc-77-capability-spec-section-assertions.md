@@ -13,14 +13,16 @@
 ## 进展（2026-11-21）
 
 - 新增 [docs/capabilities.tsv](../../docs/capabilities.tsv)：20 行
-  `id<TAB>能力名<TAB>spec 节号（逗号分隔）<TAB>implemented|planned`。
-- README §3 的每条语言能力带 `<!-- cap:id -->` 标记，**只带 id、不重复节号**；
-  「泛型 struct 与内置容器」一条挂 `generic-struct` 与 `containers` 两个标记。
-  「诊断与工具」「明确不做」不是语言能力，不进表，也不挂标记。
+  `id<TAB>能力名<TAB>spec 节号（逗号分隔）<TAB>implemented|planned<TAB>首版<TAB>关联卡`；
+  首版未知写 `—`，关联卡为逗号分隔卡号（如 `LANG-22,PKG-22`）。
 - `check-docs` 新增 `check_capability_map`：
   - `implemented` 行的每个节号必须能在 spec 解析到标题（H2–H4）；
   - 状态只能 `implemented` / `planned`；id 唯一且为小写 slug；
+  - `首版` 只能 `vX.Y[.Z]` 或 `—`；`关联卡` 只能 `CARD-N` 列表或 `—`；
   - README 的每个 `cap:` id 必须在表内且恰好出现一次；表内每个 id 必须在 README 出现。
+- README §3 的每条语言能力带 `<!-- cap:id -->` 标记，**只带 id、不重复节号**；
+  「泛型 struct 与内置容器」一条挂 `generic-struct` 与 `containers` 两个标记。
+  「诊断与工具」「明确不做」不是语言能力，不进表，也不挂标记。
 - 负例自测三种都红：把 `4.70` 改成 `9.99`（节号不存在）、把 `cap:box` 改成 `cap:boxx`
   （未知 id）、以及由此产生的「box 缺标记」。
 - 版本注入边界保持 DOC-63：spec 页首不钉版本；版本只出现在 README/生成物。

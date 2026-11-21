@@ -64,9 +64,9 @@ find examples test lib/std -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' |
 | 判据 | 最小可判证据 | 现有证据 | 状态 | 负责人 |
 | --- | --- | --- | --- | --- |
 | P-4.1 存储位置硬错 | 字段 / 全局 / 接口 / box / Option / Result / 容器 / 数组元素 / 泛型实参 / 闭包捕获 | [p79_places.sh](../../../test/ast/p79_places.sh)、`p81_box/neg_field_str.ct`、`neg_box_str.ct`、`neg_box_slice.ct`、[241_map_str_key](../../../test/ast/241_map_str_key/prog.ct) | 已过 | DEV |
-| P-4.2 复合类型递归 | `Vec<int[]>` / `Map<Str,int>` / `struct { Str s; }` 硬错 | 241_map_str_key（`Map<Str>` 硬错）、`neg_field_str`（`struct { Str }` 硬错）；`Vec<Str>` / `Option<Str>` 实测可编译（视图），与 J-4a 原文偏离，见下方 J 表 | 已过 | DEV |
+| P-4.2 复合类型递归 | `Vec<int[]>` / `Map<Str,int>` / `struct { Str s; }` 硬错 | `test/ast/241_map_str_key`（`Map<Str>` 硬错）、`test/ast/p81_box/neg_field_str.ct`（`struct { Str }` 硬错）；`Vec<Str>` / `Option<Str>` 实测可编译（视图），与 J-4a 原文偏离，见下方 J 表 | 已过 | DEV |
 | P-4.3 返回值契约 | 直接 `return 局部切片 / as_str()` 可 lint；参数 / 字面量视图正例 | 缺失：`Str` 逃逸 lint 未实现（SH-106），切片只有 `slice escape` warning | 缺失 | DEV |
-| P-4.4 诊断质量 | 错误指向具体字段 / 泛型实参 / 闭包捕获 | `p79_*` / `p80_*` / `p81_box` 的 `neg_*` 逐条断言诊断文本 | 已过 | DEV |
+| P-4.4 诊断质量 | 错误指向具体字段 / 泛型实参 / 闭包捕获 | `test/ast/p79_*` / `test/ast/p80_*` / `test/ast/p81_box` 的 `neg_*` 逐条断言诊断文本 | 已过 | DEV |
 | P-4.5 残留风险 | 透传路径文档化 | [guide-for-c-programmers §3.4 / §7](../../guide-for-c-programmers.md)；缺逐类透传清单 | 部分 | REQ |
 | P-4.6 切片 place 语义 | `s[i]` 读写、越界 trap、`get` 软访问、`const T[]` 写硬错 | [p79_basic.sh](../../../test/ast/p79_basic.sh) / [p79_index.sh](../../../test/ast/p79_index.sh)（`const_write` 断言） | 已过 | DEV |
 

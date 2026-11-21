@@ -533,8 +533,8 @@ def check_j6_ledger(errors):
             errors.append(f"j6-ledger: {rid} has no 负责人")
         if state == "阻塞" and "阻塞" not in ev:
             errors.append(f"j6-ledger: {rid} is 阻塞 without a reason in 现有证据")
-        if state == "已过" and (not ev or ev in ("—", "-")):
-            errors.append(f"j6-ledger: {rid} is 已过 without an evidence pointer")
+        if state == "已过" and not re.search(r"(test/|docs/|battle/|见下|下方)", ev):
+            errors.append(f"j6-ledger: {rid} is 已过 without a path/pointer in 现有证据")
     for rid in sorted(J6_IDS - set(seen)):
         errors.append(f"j6-ledger: {rid} row is missing (SH-104)")
     return len(seen)
@@ -630,16 +630,22 @@ def check_capability_map(errors):
         if not s or s.startswith("#"):
             continue
         parts = [p.strip() for p in s.split("\t")]
-        if len(parts) != 4:
-            errors.append(f"capabilities.tsv:{n}: expected 4 tab-separated columns")
+        if len(parts) != 6:
+            errors.append(f"capabilities.tsv:{n}: expected 6 tab-separated columns")
             continue
-        cid, name, secs, status = parts
+        cid, name, secs, status, first, issues = parts
         if not re.fullmatch(r"[a-z0-9-]+", cid):
             errors.append(f"capabilities.tsv:{n}: illegal id '{cid}'")
         if cid in rows:
             errors.append(f"capabilities.tsv:{n}: duplicate id '{cid}'")
         if status not in CAP_STATUS:
             errors.append(f"capabilities.tsv:{n}: status '{status}' (expected implemented/planned)")
+        if first != "—" and not re.fullmatch(r"v\d+\.\d+(?:\.\d+)?", first):
+            errors.append(f"capabilities.tsv:{n}: 首版 '{first}' (expected vX.Y or —)")
+        if issues != "—":
+            for iid in [x.strip() for x in issues.split(",") if x.strip()]:
+                if not re.fullmatch(r"[A-Z]+-\d+", iid):
+                    errors.append(f"capabilities.tsv:{n}: 关联卡 '{iid}' (expected CARD-N or —)")
         sl = [x.strip() for x in secs.split(",") if x.strip()]
         if not sl:
             errors.append(f"capabilities.tsv:{n}: no spec section for '{cid}'")
