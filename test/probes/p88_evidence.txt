@@ -1,7 +1,9 @@
 # PH-88 (v0.88.0) 原始输出
 
 > 采集环境：macOS arm64；Apple clang 21.0.0；ct-ast 由 L0→L1→L2 自举链构建。
-> 基线：`47a8f786`（v0.87.0）。二进制：`/tmp/p88dev/ct-ast-sliced`（当前树）。
+> 基线：`47a8f786`（v0.87.0）。S88a–S88d 的原始输出用当前树构建的
+> ct-ast（banner 为版本 bump 前的 v0.87.0；语料清单按 banner 归一化）。
+> 收口树（v0.88.0）复跑结果见文末。
 
 ## S88a — p88_emit
 ```console
@@ -94,4 +96,16 @@ $ python3 tools/p85_inventory.py --root . corpus-manifest --ct work/ct-ast | dif
 ROLLBACK-CORPUS-OK（66 文件，diff 空）
 $ # test/cases + examples：回滚产物与 HEAD 逐字节相同
 ROLLBACK-VS-HEAD-OK / ROLLBACK-EXAMPLES-OK
+```
+
+## 收口树（v0.88.0）复跑
+
+```console
+$ /tmp/p88dev/v88/ct-ast --version
+ct-ast v0.88.0
+$ bash test/ast/p88_emit.sh <ct-ast>      -> p88emit: 3 passed, 0 failed
+$ bash test/ast/p88_fixpoint.sh <ct-ast>  -> p88fixpoint: 6 passed, 0 failed
+$ bash test/ast/p88_metrics.sh <ct-ast>   -> p88metrics: 9 passed, 0 failed
+$ bash test/ast/p88_docs.sh <ct-ast>      -> p88docs: 26 passed, 0 failed
+$ bash test/ast/p86_errors.sh <ct-ast>    -> p86errors: 23 passed, 0 failed
 ```
