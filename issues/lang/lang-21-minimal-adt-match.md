@@ -92,6 +92,39 @@ cc exit=1
 跨单元应发布/映射 tag 的 C 名（或编译期拒绝），不得发射非法 C。修复需补
 `p84_syntax`（别名主语）与 `p84_layout`（`pub typedef` 跨单元）的最小红/绿。
 
+
+## DEV 处置（2026-11-21，v0.84.1）
+
+**主张：fixed。** 状态字段仍为 `reopened`（REV 所有）；DEV 不自改状态，等待 REV 复核。
+
+- **F1**：新增 `ct_adt_from_type()`（`frontend/sym/Symbols.h.ct`），把类型拼写先去掉
+  `*` / `const` / `struct` 修饰，再依次直查 ADT 注册表、走 `resolve_type`（bare/alias 表）、
+  沿 typedef 的 `type_target`（`typedef` ADT 解析期记为 `struct <tag>`）回到 tag。
+  `match` 主语、`match` 分支的 ADT 名与 `Type.Variant(...)` 构造都改用它；非 ADT 别名
+  仍按 `match needs an ADT value` 拒绝。
+- **F2**：`Module` 的类型导出对 `aux & 3 == 3` 的 `N_ENUM`（pub typedef ADT）额外登记
+  tag 的 bare 名 → `lib_Shape`，消费者据此发射 `struct lib_Shape` / `lib_Alias`；
+  头文件仍只发布 `typedef struct lib_Shape … lib_Alias;`。
+
+**红证（baseline `bf88f4d9`，git archive + 同一 bootstrap 链）**
+
+```console
+$ bash test/ast/p84_match.sh  <baseline>   → p84match: 10 passed, 3 failed (exit 1)
+$ bash test/ast/p84_errors.sh <baseline>   → p84errors: 12 passed, 1 failed (exit 1)
+$ bash test/ast/p84_layout.sh <baseline>   → p84layout: 21 passed, 2 failed (exit 1)
+```
+
+**绿证（本修复提交 `53e0019f`）**
+
+```console
+$ bash test/ast/p84_match.sh  <fix>   → p84match: 13 passed, 0 failed
+$ bash test/ast/p84_errors.sh <fix>   → p84errors: 13 passed, 0 failed
+$ bash test/ast/p84_layout.sh <fix>   → p84layout: 26 passed, 0 failed
+# 别名匹配运行：12 12；pub typedef 跨单元运行：12 2 7（cc -Wall -Wextra 干净）
+```
+
+**提交**：`4f5b2cd2`（test 红）→ `53e0019f`（fix）；版本 `v0.84.1` 的收口提交随后。
+
 ## 关联
 
 - [v1 路线](../../docs/planning/v1-release-plan.md) §2.3

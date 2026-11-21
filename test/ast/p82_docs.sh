@@ -9,7 +9,7 @@
 #     (owning `box<Node>` down, raw `Node *parent` up, allow-cycle marker);
 #   - the phase card carries the §7 closeout table with E82-1…8;
 #   - the five CTC_VERSION sites, README/docs/README, roadmap and the card
-#     agree on v0.84.0;
+#     agree on v0.84.1;
 #   - `--debug-leaks` is still not implemented and is not renamed as a cycle
 #     detector (D-011 J-4c).
 #
@@ -30,15 +30,15 @@ cd "$root" || exit 1
 
 for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
          selfhost/l2/driver.ct selfhost/ct-ast/main.ct; do
-    if grep -q '#define CTC_VERSION "0.84.0"' "$f"; then
-        ok "$f CTC_VERSION 0.84.0"
+    if grep -q '#define CTC_VERSION "0.84.1"' "$f"; then
+        ok "$f CTC_VERSION 0.84.1"
     else
-        bad "$f CTC_VERSION is not 0.84.0"
+        bad "$f CTC_VERSION is not 0.84.1"
     fi
 done
 
-if grep -q 'v0\.84\.0' README.md && grep -q 'v0\.84\.0' docs/README.md; then
-    ok "README / docs/README carry v0.84.0"
+if grep -q 'v0\.84\.1' README.md && grep -q 'v0\.84\.1' docs/README.md; then
+    ok "README / docs/README carry v0.84.1"
 else
     bad "README version"
 fi

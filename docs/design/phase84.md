@@ -1,6 +1,7 @@
 # Phase 84 — 最小 ADT / `match`（v1-pre 前置）
 
-> **状态：完成（S84a–S84e；`v0.84.0`）**（2026-11-21 立项并开卡；2026-11-21 收口）。
+> **状态：完成（S84a–S84e；`v0.84.0` → v0.84.1）**（2026-11-21 立项并开卡；2026-11-21 收口；
+> v0.84.1 为 REV 打回修复 F1/F2，见 §7.6）。
 > S84e 的范围由 [battle doc-consistency-1](../../battle/doc-consistency-1/verdict.md) 判为
 > **B（最小集 + 增量补丁）**并已执行；E84-9 按该最小集判定通过，A 的全量审计仍归
 > DOC-77 / DOC-78 / DOC-79。
@@ -219,13 +220,13 @@ exit 1
 | --- | --- | --- |
 | E84-1 | `p84_syntax` 的 C enum 段：编译 `test/ast/30_enum/prog.ct` 后 `grep -qE '^enum Color \{'` 通过，运行输出与 `prog.expected.out` 一致；另对 `30_enum` / `54_attribute` / `271_qualified_enum` / `examples/c-superset/{s01_switch,s04_enum}` 与 ec355f40 构建产物做 banner 归一化 `cmp`，五个 `same:` | ✅ |
 | E84-2 | `p84_syntax`：`Shape s = Shape.Circle(2)` clean；`int n = Shape.Circle(4)` → `error: initializer: expected 'int', got 'struct Shape'`；`Shape.Circle()`/`(1,2)` → `'Shape.Circle' takes 1 argument, but 0/2 given`；`Shape.Circle("x")` → `argument 1 of 'Shape.Circle': expected 'int', got 'char *'` | ✅ |
-| E84-3 | `p84_match` 10/10（穷尽、任意顺序、指针主语、零负载、`_` 兜底、嵌套、循环内 break）；`p84_errors` 11/11（漏/重复/未知/跨 ADT/绑定数/重名/`_` 非末位/重复 `_`/非 ADT/指向非 ADT），均带位置 | ✅ |
+| E84-3 | `p84_match` 13/13（含 `Alias` / `Alias *` / `Alias.Circle` 分支；原 10/10 项不变）；`p84_errors` 13/13（漏/重复/未知/跨 ADT/绑定数/重名/`_` 非末位/重复 `_`/非 ADT/指向非 ADT/别名漏变体/非 ADT 别名），均带位置 | ✅（v0.84.1 含 F1） |
 | E84-4 | `p84_layout`：生成 C 为 `__ct_match0.tag == 0` 的 if/else 链、无 `switch (`；`290_adt_match` 运行 `102 12 -1 / 2 102 / 2 3`（绑定副本、无 fallthrough、循环内 `break` 仍属循环）；`--types` 多余 `_` lint 文本通过 | ✅ |
-| E84-5 | `p84_layout`：`struct Shape { int tag; union { … } u; }`、tag 行先于 union 行；`grep -c '^_Static_assert(' == 4`；`pub` ADT 构建产物 `lib.h` 含 `struct lib_Shape` + `offsetof(struct lib_Shape, tag) == 0`，`lib.c` 不重复定义，`no vtable`；跨单元产物 `cc -Wall -Wextra` 干净并运行 `12 12` | ✅ |
+| E84-5 | `p84_layout` 26/26：`struct Shape { int tag; union { … } u; }`、tag 行先于 union 行；4 条 `_Static_assert`；`pub` ADT 与 `pub typedef` 两条跨单元路径都发布布局且 `cc` 干净（`12 12` / `12 2 7`），`lib.c` 不重复定义、无 vtable | ✅（v0.84.1 含 F2） |
 | E84-6 | `test/ast/291_adt_kind_rewrite` 运行 `3 3 / 6 6`：同一棵树用 `switch (n->kind)` + `case K_NUM:` 与 `Node.Num(v) => …` 求值一致（E84-6 的“词法/AST 判别样例”）；patterns §6 给出逐项替换表 | ✅ |
 | E84-7 | `bash selfhost/check-all.sh`：见 §7.4；`check-warnings` 见 §7.4；`check-sanitizers.sh` 见 §7.4 | 见 §7.4 |
 | E84-8 | `p84_docs` OK（spec §4.73 / tutorial §18 / patterns §6 / 冻结清单 / C enum 不变节）；`check-goldens` 25/25 无回归；单卡回滚演练：回退 S84c 的 emitter 提交后 C enum/switch 产物仍与 ec355f40 一致（§7.5） | ✅ |
-| E84-9 | 按 [battle doc-consistency-1 判决 B](../../battle/doc-consistency-1/verdict.md) 的最小集：`p84_docs_audit` `OK p84docs_audit`（spec §4.68/69/70/71/73、tutorial §15/17/18、patterns §5/6 可定位；llm-guide 内置层清单与 `std::str` 事实修正；glossary `Str`/`String`/ADT/变体/`match` 行；architecture 的 L0 边界；README 指针）；`check-docs` 绿（2265 相对链接）；`check-battle` PASS。**A 的全量审计仍归 DOC-77/78/79**，不在本判据内 | ✅（B 范围） |
+| E84-9 | typedef 形态（F1/F2）修复后 spec §4.73 的“tag 与别名同一个和类型”承诺成立（v0.84.1）；按 [battle doc-consistency-1 判决 B](../../battle/doc-consistency-1/verdict.md) 的最小集：`p84_docs_audit` `OK p84docs_audit`（spec §4.68/69/70/71/73、tutorial §15/17/18、patterns §5/6 可定位；llm-guide 内置层清单与 `std::str` 事实修正；glossary `Str`/`String`/ADT/变体/`match` 行；architecture 的 L0 边界；README 指针）；`check-docs` 绿（2265 相对链接）；`check-battle` PASS。**A 的全量审计仍归 DOC-77/78/79**，不在本判据内 | ✅（B 范围） |
 
 ### 7.4 总门禁（收口实跑）
 
@@ -264,6 +265,25 @@ exit 0
 - `check-all` 的 G0/G8 前置均绿；11 道门禁全部通过；gate 8 的 p84 行：
   `p84/syntax`、`p84/match`、`p84/errors`、`p84/layout`、`p84/docs`、`p84/docs-audit` 全 ok。
 
+**v0.84.1（F1/F2 修复后）重跑**
+
+```console
+$ bash tools/check.sh g0            → g0: OK (block 1.17.0, session-map present)
+$ bash tools/check.sh g8            → g8: OK (PN-2 version coherence; 9 legacy offsets)
+$ bash selfhost/check-all.sh        → check-all: OK (11 hard gates green); exit 0
+  gate 8                            → == summary: 1556 passed, 0 failed, 6 skipped ==
+  gate 11                           → check-docs: OK (2267 relative links in 373 files, v0.84.1, …)
+$ env -u CT_C_BOUNDARY bash selfhost/check-warnings.sh → check-warnings: 494 ok, 0 failed
+$ bash selfhost/check-sanitizers.sh → check-sanitizers: OK (586 checks, no sanitizer report)
+$ python3 tools/check-battle.py doc-consistency-1 → PASS (0 errors, 0 warnings)
+```
+
+- 本机 `dist/` 里是上一版本（v0.84.0）的 gitignored 产物；收口前移出工作树
+  （`/tmp/p84-stale-dist-0840`），`p83_dist` 按“无产物”走 `skip`（77）——与干净 checkout
+  一致。未重新生成 Linux 产物（需 zig 交叉链，属发布动作，不在本卡）。
+- v0.84.1 的六个 p84 探针均 ok：`p84/syntax`、`p84/match`、`p84/errors`、`p84/layout`、
+  `p84/docs`、`p84/docs-audit`。
+
 ### 7.5 回滚（实跑演练）
 
 演练方式：`git worktree add /tmp/p84-rb e9112cd4` 后 `git revert --no-commit 5bd8be60`
@@ -281,6 +301,41 @@ $ C enum/switch banner 归一化 cmp：30_enum / s01_switch / s04_enum 均 same
   按预期转红（布局/发射消失），其余任务门禁仍绿。
 - C enum（无负载）与 `switch` 由未改路径发射，回滚前后产物一致。
 - S84a 的 `086d7762` 单独回滚：ADT 语法消失，C enum 路径不受影响。
+
+
+### 7.6 REV 打回修复（F1/F2，v0.84.1）
+
+REV 复核 [bf88f4d9](../reviews/2026-11-21-phase84-rev-verdict.md) 判不通过，两处阻断：
+
+| # | 现象 | 根因 | 修复 |
+| --- | --- | --- | --- |
+| F1 | `typedef enum Shape { … } Alias;` 后 `match (Alias)` / `Alias *` 被拒（`not an ADT`）；分支写 `Alias.Circle(r)` 也拒 | `parse_match` / 构造只按 tag 名查 `ct_adt_find()`，未展开 typedef 别名 | `ct_adt_from_type()`：去 `*`/`const`/`struct` 修饰后依次直查注册表、`resolve_type`、typedef 的 `type_target`（解析期记 `struct <tag>`）；主语/分支/构造共用 |
+| F2 | `pub typedef` 跨单元时消费者写 tag 名 `Shape` 被接受，产物仍写 `Shape`；头文件只有 `lib_Shape`/`lib_Alias`，`cc` 失败 | Module 的类型导出只用节点 text2（别名），未导出 tag 的 bare 名 | 对 `aux & 3 == 3` 的 N_ENUM 额外 `add_bare_type(tag, full)`；消费者发射 `struct lib_Shape` / `lib_Alias` |
+
+**红证**（baseline `bf88f4d9`，归档重建）：
+
+```console
+$ bash test/ast/p84_match.sh  <baseline>   → p84match: 10 passed, 3 failed   (exit 1)
+$ bash test/ast/p84_errors.sh <baseline>   → p84errors: 12 passed, 1 failed  (exit 1)
+$ bash test/ast/p84_layout.sh <baseline>   → p84layout: 21 passed, 2 failed  (exit 1)
+```
+
+**绿证**（修复提交 `53e0019f`）：
+
+```console
+$ bash test/ast/p84_match.sh  <fix>   → p84match: 13 passed, 0 failed
+$ bash test/ast/p84_errors.sh <fix>   → p84errors: 13 passed, 0 failed
+$ bash test/ast/p84_layout.sh <fix>   → p84layout: 26 passed, 0 failed
+$ <fix>/ct-ast alias.ct -o alias.c && cc ... && ./alias.bin
+12 12
+$ (cd x && <fix>/ct-ast build --emit-c prog.ct -o out && cc out/*.c -o out.bin && ./out.bin)
+12 2 7
+```
+
+新增覆盖：`Alias` / `Alias *` 主语、`Alias.Circle(r)` 分支、别名的漏变体仍给位置、
+`typedef int` 别名仍被拒、`pub typedef` 跨单元（tag 名 + 别名路径）编译+运行。
+`E84-3 / E84-5 / E84-9` 在 typedef 形态上由此成立；LANG-21 处置 `fixed`（状态字段仍由
+REV 持有，见条目 DEV 处置段）。版本 `v0.84.1`（PATCH，一次 fix）。
 
 ## 8 未覆盖 / 简化（诚实登记）
 

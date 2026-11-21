@@ -35,7 +35,7 @@
 | PH-81 `box`/`new`（S1；P-7.5 + S1a/S1b/S1c） | 当前 DSH 会话（DEV `dev-ph81`） | DEV | PH-81 ✅ v0.81.0（E81-1…6；P-7.5 证据；D-016） |
 | PH-82 泄漏防护（S82a–S82d；E82-1…8） | 当前 DSH 会话（DEV `dev-ph82`） | DEV | PH-82 ✅ v0.82.0（E82-1…8 全通过；D-012） |
 | PH-83 包管理契约 v1 与索引校验（S83a–S83d；E83-1…8） | 当前 DSH 会话（DEV `dev-ph83`） | DEV | PH-83 ✅ v0.83.0（契约 v1 / `ct index verify` / conformance / Linux 产物；D-014）；PKG-14 fix v0.83.1；Linux CT_HOME 路径 fix v0.83.2 |
-| PH-84 最小 ADT/match（S84a–S84e；D3；S84e = battle doc-consistency-1 判决 B 的最小集） | 当前 DSH 会话（DEV `dev-ph84`） | DEV / VERIFY（角色席位） | PH-84 ✅ v0.84.0（E84-1…9） |
+| PH-84 最小 ADT/match（S84a–S84e；D3；S84e = battle doc-consistency-1 判决 B 的最小集） | 当前 DSH 会话（DEV `dev-ph84`） | DEV / VERIFY（角色席位） | PH-84 ✅ v0.84.1（E84-1…9；REV F1/F2 fixed） |
 | PH-85 v1-pre 准备（inventory/spike/M0 粗切/A 机制） | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-85 🟨 准备（v0.85.0；入口 PH-84 含 S84e） |
 | PH-86 词法器重写 | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-86 🟨 准备（v0.86.0；入口 PH-85） |
 | PH-87 解析器 + 检查器重写 | 当前 DSH 会话（REQ） | REQ / EDITOR | PH-87 🟨 准备（v0.87.0；入口 PH-86） |

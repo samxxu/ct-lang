@@ -505,6 +505,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 > 2026-11-21：PH-82 → v0.82.0（`d=0`）；`leaks` 两档、直接环告警、allow-cycle、树模式，E82-1…8 全通过。
 > 2026-11-21：PH-83 → v0.83.0（`d=0`）；契约 v1、`ct index verify`、conformance、Linux x64 产物，E83-1…8 全通过。
 > 2026-11-21：PH-84 → v0.84.0（`d=0`）；最小 ADT/`match`（S84a–S84d），E84-1…8 通过；S84e（文档一致性）按 battle doc-consistency-1 判决 B（最小集）完成，E84-9 通过，A 的全量审计归 DOC-77/78/79。
+> 2026-11-21：PH-84 F1/F2 修复 → v0.84.1（PATCH，LANG-21 fixed）；typedef 别名可作 match 主语、`pub typedef` 跨单元发射 `struct lib_Shape`/`lib_Alias`。
 > 2026-11-21：PKG-14 → v0.83.1（fix）；索引校验非普通文件 exit 2、FIFO 不挂起、ferror/JSON 失败。
 > 2026-11-21：PKG-14 CI 追加 → v0.83.3（fix）；`CT_HOME` 默认索引路径在 glibc 上被自拷贝清空，已修。
 
@@ -591,9 +592,9 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 实现语言 | C（C99），**单文件** `ctc.c`（位于 `selfhost/l0/`） |
 | 依赖 | 无。只用 libc（`stdio` / `stdlib` / `string` / `ctype` / `stdarg`） |
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
-| 当前版本 | v0.84.0（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
+| 当前版本 | v0.84.1（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.84.0（PH-84 最小 ADT / `match` 已交付：带负载 `enum` = ADT、`Type.Variant(args)` 构造、穷尽 `match`（漏/重/未知变体硬错、`_` 必须显式且 `--types` lint 多余兜底）、tag+union 布局与四条 `_Static_assert`、绑定按值/无 fallthrough、`pub` ADT 的 `.h` 布局进入 golden；E84-1…8 通过；spec §4.73 / tutorial §18 / patterns §6；S84e 文档一致性按 battle doc-consistency-1 判决 B 的最小集完成，E84-9 通过；A 的全量审计归 DOC-77/78/79）。Phase 83 包管理契约 v1 已收口（v0.83.3，PKG-14 fix）；Phase 82/81/80/79/78/77/76 及 43–53 已收口。后续顺序见 [v1 路线](docs/planning/v1-release-plan.md)（PH-85…88 → v1.0）。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
+| 当前阶段 | v0.84.1（PH-84 最小 ADT / `match` 已交付：带负载 `enum` = ADT、`Type.Variant(args)` 构造、穷尽 `match`（漏/重/未知变体硬错、`_` 必须显式且 `--types` lint 多余兜底）、tag+union 布局与四条 `_Static_assert`、绑定按值/无 fallthrough、`pub` ADT 的 `.h` 布局进入 golden；E84-1…8 通过；spec §4.73 / tutorial §18 / patterns §6；S84e 文档一致性按 battle doc-consistency-1 判决 B 的最小集完成，E84-9 通过；A 的全量审计归 DOC-77/78/79；v0.84.1 为 REV 打回修复 F1/F2：typedef 别名作 match 主语、`pub typedef` 跨单元命名）。Phase 83 包管理契约 v1 已收口（v0.83.3，PKG-14 fix）；Phase 82/81/80/79/78/77/76 及 43–53 已收口。后续顺序见 [v1 路线](docs/planning/v1-release-plan.md)（PH-85…88 → v1.0）。简要阶段表见 [docs/roadmap.md](docs/roadmap.md)，历史见 [docs/history/phase-log.md](docs/history/phase-log.md)。 |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
