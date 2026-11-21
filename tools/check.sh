@@ -1,20 +1,33 @@
 #!/usr/bin/env bash
 # tools/check.sh - governance gate entry (not part of selfhost/check-all.sh).
 #
-# Usage: tools/check.sh g0
+# Usage: tools/check.sh g0 | g1 | g2 | g4 | g5 | g6 | g7 | g8 | g9
 #
-# g0 is the methodology landing gate: spec block + full copy + session map +
-# the three block-outside sections + the two signed deviations.  The project's
-# eleven hard gates remain in selfhost/check-all.sh; this entry only makes G0
-# runnable, because G0 is a precondition for opening a new phase (11.5 L-3).
+# These are the AGENTS 6.4 governance gates.  The project's eleven hard gates
+# remain in selfhost/check-all.sh; this entry makes every governance gate
+# runnable by name.  check-all is deliberately left unchanged: it stays the
+# end-to-end ratchet, while these entries are the per-gate judges used by REV
+# and by the CI-10/CI-11 ledger work.
+#
+#   g0  methodology landing (block + full copy + session map + deviations)
+#   g1  phase-card completeness (phase_card.py g1)
+#   g2  ACC-* mapping - SKIP: deviation g2-acc-mapping, tracked by CI-16
+#   g4  docs executable/timeliness (reuses test/docs/check-docs.py)
+#   g5  criterion <-> case minimal subset (phase_card.py g5)
+#   g6  issue-ledger closure (issue_ledger.py; 5 negative fixtures)
+#   g7  security mechanicals (secret scan + check-warnings; G7_SANITIZERS=1
+#       also runs selfhost/check-sanitizers.sh)
+#   g8  version coherence (version_coherence.py)
+#   g9  spec anchoring (spec_pin.py; master spec, else the in-repo copy)
 set -euo pipefail
 
 root="$(cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$root"
 
-fail() { echo "g0: FAIL: $*" >&2; exit 1; }
+fail() { echo "${gate:-g0}: FAIL: $*" >&2; exit 1; }
 
 g0() {
+  gate=g0
   [ -f AGENTS.md ] || fail "AGENTS.md missing"
   [ -f docs/session-map.md ] || fail "docs/session-map.md missing"
   [ -f docs/spec/ai-coding-workflow.md ] || fail "docs/spec/ai-coding-workflow.md missing"
@@ -47,21 +60,51 @@ g0() {
   echo "g0: OK (block $block_ver, session-map present)"
 }
 
-# G8 (version coherence, 6.7 PN-2 / V-1 / V-7): every phase tag's MINOR must
-# equal the phase number. Published tags listed in
-# `docs/planning/version-legacy-offsets.tsv` are a frozen exception; a mismatch
-# outside that ledger fails. Open cards must declare `version-minor == n`.
-g8() {
-  python3 "$root/tools/gates/version_coherence.py" "$root"
+g1() { gate=g1; python3 "$root/tools/gates/phase_card.py" "$root" g1; }
+
+g2() {
+  echo "g2: SKIP (deviation: g2-acc-mapping; docs/design has no ACC-* map yet, tracked by CI-16)" >&2
 }
 
-battle_selftest() {
-  bash "$root/test/battle/run.sh"
+g4() { gate=g4; python3 "$root/test/docs/check-docs.py"; }
+
+g5() { gate=g5; python3 "$root/tools/gates/phase_card.py" "$root" g5; }
+
+g6() { gate=g6; python3 "$root/tools/gates/issue_ledger.py" "$root"; }
+
+g7() {
+  gate=g7
+  python3 "$root/tools/gates/secret_scan.py" "$root"
+  local log
+  log="$(mktemp "${TMPDIR:-/tmp}/g7warn.XXXXXX")"
+  if ! bash "$root/selfhost/check-warnings.sh" >"$log" 2>&1; then
+    tail -25 "$log" >&2
+    rm -f "$log"
+    fail "check-warnings.sh is red"
+  fi
+  rm -f "$log"
+  if [ "${G7_SANITIZERS:-0}" = 1 ]; then
+    bash "$root/selfhost/check-sanitizers.sh" || fail "check-sanitizers.sh is red"
+  fi
+  echo "g7: OK (secret scan 0 hits; check-warnings green${G7_SANITIZERS:+, sanitizers green})"
 }
+
+g8() { gate=g8; python3 "$root/tools/gates/version_coherence.py" "$root"; }
+
+g9() { gate=g9; python3 "$root/tools/gates/spec_pin.py" "$root"; }
+
+battle_selftest() { bash "$root/test/battle/run.sh"; }
 
 case "${1:-}" in
   g0) g0 ;;
+  g1) g1 ;;
+  g2) g2 ;;
+  g4) g4 ;;
+  g5) g5 ;;
+  g6) g6 ;;
+  g7) g7 ;;
   g8) g8 ;;
+  g9) g9 ;;
   battle-selftest) battle_selftest ;;
-  *) echo "usage: tools/check.sh g0 | g8 | battle-selftest" >&2; exit 2 ;;
+  *) echo "usage: tools/check.sh g0 | g1 | g2 | g4 | g5 | g6 | g7 | g8 | g9 | battle-selftest" >&2; exit 2 ;;
 esac
