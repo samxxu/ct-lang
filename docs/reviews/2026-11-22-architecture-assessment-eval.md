@@ -78,7 +78,7 @@ C Shim 一等模式）的判断与仓库实际一致；对证据等级（Renode 
 | C Interop Semantics Matrix | **已立项（v1.1）** | 已开 [DOC-92](../../issues/docs/doc-92-c-interop-semantics-matrix.md)；并入现有文档，不另起平行清单 |
 | capability registry 关联 issue/测试/版本 | **已在做，扩展 J-6** | 不新开表；把 issue 状态与回归测试列补进 J-6 |
 | 独立 ABI export 契约 | **已有 P39 C 方案，等待评审** | 不另开新设计；先完成 P39 C 的单方案评审 |
-| 语义引用图替代文本判活 | **hw-2 C 方案内推进** | 文本判活是已知边界；不在 v1.0 重写依赖图 |
+| 语义引用图替代文本判活 | **v1.0 仅锁边界；语义图归 v1.2** | v1.1 用 [SH-113](../../issues/selfhost/sh113-builtin-live-boundary.md) 正负例锁边界；语义依赖图并入 [SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md) |
 | Typed/Lowered IR + 统一清理 CFG | **v1.2 方向；v1.1 先做轻量不变量** | 完整 IR 属重写，不占 v1.0/v1.1；轻量规则见 [SH-111](../../issues/selfhost/sh111-lowering-invariants.md)，完整 IR 见 [SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md) |
 | 所有权 / 异步 / DMA 生命周期 | **并入 DOC-91 + TEST-22** | shim 契约硬条款（提交即转移、完成即归还、ISR 上下文）；语言层不新增关键字 |
 | JSON 诊断全通道 | **v1.1 补 parse JSON；v1.2 code registry** | parse 7b 归 v1.1；稳定 code 归 v1.2（[LANG-10](../../issues/lang/lang-10-machine-readable-diagnostics.md) / [LANG-25](../../issues/lang/lang-25-diagnostic-code-registry.md)） |

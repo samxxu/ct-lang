@@ -2487,6 +2487,9 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   自动预解析，`ct build` 也把它作为一个单元自动加载，**两种模式都不需要 `import`、不需要 `-I`**。
   三个拼写是保留名，用户不能再声明同名 struct；旧项目里 `import std::vec` 带来的 `Vec` 定义会与
   内置名冲突（`'Vec' is a built-in type and cannot be redeclared`），须升级 `std` 包或删掉该 import。
+- **内建单元判活是近似**：构建器按源码文本（词边界标识符 + `str_` 前缀 + `new`/`box` 形态）
+  决定加载哪些内建单元，不是语义引用图。词边界已消除 `Vec`/`String`/注释这类误命中，
+  但小写导出函数名仍可能漏判；v1.1 用正负例锁住边界（SH-113），语义引用图归 v1.2（SH-112）。
 - **`pub` 泛型函数（Phase 34）**：`pub T f<T>(T x)` 合法（L26-2 已解禁），模板体必须写在 `.h.ct`
   头单元里；消费方的每个 `f<int>(…)` 在本单元发一个 `static` 实例（`f__ct<N>`），生成 `.h`
   只放类型、不放函数原型。`.ct` 单元里的 `pub` 声明仍不可被 import（`only a .h.ct unit can be
