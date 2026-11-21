@@ -22,7 +22,7 @@
 | “返回局部视图 = 硬错” | `Str` 逃逸当前无 lint（SH-106）；`T[]` 是 warning | 改为“返回局部 `Str` 视图当前无 lint；返回局部 `T[]` 是 `slice escape` warning；两者归契约 + ASan” |
 | “owning 自动释放” | 局部/参数自动；`String`/`box` 字段在宿主 `use Drop` 且无显式 impl 时有字段胶水；`Vec`/`Map` 字段无胶水；全局/ADT payload 显式；环泄漏 | 按类型 + 位置分层（下方） |
 | “泄漏 = 告警（strict 包内 error）” | 实际是 `ct.pkg` 的 `leaks = warn\|error`，与 `c-boundary=strict` 无关 | 改为“泄漏默认 warning；`leaks=error` 才升级；strict 是另一条边界” |
-| `foreach (v) { i, item }` | `i` / `item` 是**块内隐式绑定**，不是头列表；`{ i, item; }` 只是逗号表达式 | 正确写法 `foreach (v) { … i … item … }`；v0.84.1 数组与 Vec/Map 都绑定只读 `i` |
+| `foreach (v) { i, item }` | `i` / `item` 是**块内隐式绑定**，不是头列表；`{ i, item; }` 只是逗号表达式 | 正确写法 `foreach (v) { … i … item … }`；数组/Vec 绑定只读 `i`，`Map` 只给 `item.key` / `item.value` |
 | 附录 briefing | 重复上述错误 | 同步修 |
 
 ## 开头叙事（2026-11-21 修正版）
@@ -69,12 +69,41 @@
 
 字段不是“一律不释放”，而是“释放挂在宿主的 Drop 上”；宿主没有 Drop 路径才是泄漏。
 
+## 附录 briefing 修正版（2026-11-21）
+
+```text
+你是 CT 语言（source-to-source 编译到 C）的编码助手。CT 的约定：
+
+1. CT 是构建在 C 之上的语言；C 的表达式、语句与类型核心按原语法可用。
+   v1.0 起有四类常见偏离：new 是上下文关键字（D-016；int new; 仍合法）；
+   T a[] 只在形参/字段/无初始化声明中弃用；字符串字面量的裸类型仍是 char *；
+   String/Str 传给 printf 需 cstr()。
+2. 所有权：局部/参数自动 retain/release；String/box 字段在宿主 use Drop 且
+   无显式 impl 时有自动胶水；Vec/Map 字段、全局、ADT payload 需作者处理；
+   引用环仍泄漏。
+3. Str 是借用视图：不能作 struct 字段或 Map 键；Vec<Str>/Option<Str>/ADT 负载/
+   全局可编译但存的是视图；字面量常量表安全，非 immortal 来源有风险。
+4. String 用字面量直接初始化；char * 方法需 import std::str::CStrOps
+   （std 0.19.0 及以前叫 std::str::String）。
+5. 数组传参用 T[]，不要 int *a, int n。
+6. 可失败操作用 Result<T,E> + ? + errdefer，不要错误码 + goto。
+7. 多形态数据用 enum + match（穷尽），不要 int kind + switch。
+8. 遍历用 foreach(item)；数组/Vec 有块内只读 i，Map 只给 item.key / item.value。
+9. 堆单对象用 box<T> = new T { ... }；指针主要在 shim/硬件/逃生层，但合法。
+10. 泄漏默认 warning；ct.pkg 的 leaks=error 才升级。动态派发的一行链当前被拒
+    （SH-110 修复中）；静态宿主链可用。
+
+权威：docs/language-spec.md；guide-for-c-programmers.md；idioms（待入库）。
+```
+
 ## 期望
 
 1. 按上表修正原稿，新增 `docs/idioms.md`；
 2. 从 `docs/README.md` 与 `llm-guide.md` 的读者路径引入，避免“仓库一套、外部一套”；
 3. 与 [DOC-86](doc-86-readme-v088-rewrite.md)（README 大改）同批施工；
-4. 不把原稿直接复制入库；修正稿逐条对照本 issue。
+4. 不把原稿直接复制入库；修正稿逐条对照本 issue；
+5. **同步门禁**：`idioms.md` 入库时，briefing 每条关键断言标 spec 节号，并在
+   `docs/README.md` 的机器校验约定加一条（至少检查节号存在与关键短语），并入 `check-docs`。
 
 ## 验收
 
