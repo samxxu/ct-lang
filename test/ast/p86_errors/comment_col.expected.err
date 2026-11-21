@@ -1,0 +1,1 @@
+test/ast/p86_errors/comment_col.ct:5:7: error: assignment target is not assignable

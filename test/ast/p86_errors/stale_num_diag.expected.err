@@ -1,0 +1,1 @@
+test/ast/p86_errors/stale_num_diag.ct:1:7: error: expected a type (tok 2 '(')

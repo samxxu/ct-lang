@@ -1,0 +1,7 @@
+int f(void)
+{
+/* a block comment
+   spanning lines */
+    1 = 2;
+    return 0;
+}

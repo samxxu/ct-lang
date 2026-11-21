@@ -1,0 +1,1 @@
+test/ast/p86_errors/long_suffix.ct:1:25: error: an integer suffix may be U, L or LL

@@ -1,0 +1,1 @@
+test/ast/p86_errors/unterminated_string.ct:1:34: error: unexpected token

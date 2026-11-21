@@ -1,0 +1,1 @@
+test/ast/p86_errors/long_ident.ct:1:5: error: identifier is too long
