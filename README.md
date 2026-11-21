@@ -564,26 +564,26 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 ### 3. 能力一览
 
-- **两档写法：轻量路径 vs 完整路径**：轻量路径把方法直接挂在基本类型上（方法返回自身类型即可链），不引入 trait 对象；完整路径是字符串 → factory → 由 trait 定义的对象类型 → 接口链。判断依据（有没有状态、要不要多实现、调用方是否面向接口）与 0.44.1（历史基线）的接口链边界见 [language-spec §4.10.1](docs/language-spec.md)
-- **trait**：`trait` / `impl` / `use`，方法派发，trait 当类型（接口值 / 数组 / 字段 / 装箱），trait 默认方法
-- **内存**：`Drop` / `delete`、`own`（AutoDrop）、块级 `defer`（Phase 38）、路径敏感泄漏告警、`borrow` + `Handback`
-- **参数糖与切片**：`ref` / `out` 形参（Phase 78；`out` 有定值分析，owning 实参须先初始化）、`T[]` 切片（Phase 79；长度随指针走，越界检查由内建 helper 承担），见 spec §4.68 / §4.69
-- **字符串句柄**：`String` 拥有（引用计数，字面量 immortal）、`Str` 借用视图（`{ptr,len}`，零拷贝）；`String` 可作字段，`Str` 不可作字段或 `Map` 键，见 spec §4.70
-- **模块**：`namespace` / `import` / `pub` / 多文件 `ct build` / 目录 = namespace
-- **映射**：`map trait T for instance …`、`.m.ct` 零成本静态映射、伴生 C shim、`test/bindings/` 声明式 C 库对接
-- **透传**：`#ct-raw` / `#ct-endraw` 原样块（宏与手写 C 逐字节进入生成的 `.c`）
+- **两档写法：轻量路径 vs 完整路径**：轻量路径把方法直接挂在基本类型上（方法返回自身类型即可链），不引入 trait 对象；完整路径是字符串 → factory → 由 trait 定义的对象类型 → 接口链。判断依据（有没有状态、要不要多实现、调用方是否面向接口）与 0.44.1（历史基线）的接口链边界见 [language-spec §4.10.1](docs/language-spec.md) <!-- cap:paths -->
+- **trait**：`trait` / `impl` / `use`，方法派发，trait 当类型（接口值 / 数组 / 字段 / 装箱），trait 默认方法 <!-- cap:traits -->
+- **内存**：`Drop` / `delete`、`own`（AutoDrop）、块级 `defer`（Phase 38）、路径敏感泄漏告警、`borrow` + `Handback` <!-- cap:memory -->
+- **参数糖与切片**：`ref` / `out` 形参（Phase 78；`out` 有定值分析，owning 实参须先初始化）、`T[]` 切片（Phase 79；长度随指针走，越界检查由内建 helper 承担），见 spec §4.68 / §4.69 <!-- cap:params-slices -->
+- **字符串句柄**：`String` 拥有（引用计数，字面量 immortal）、`Str` 借用视图（`{ptr,len}`，零拷贝）；`String` 可作字段，`Str` 不可作字段或 `Map` 键，见 spec §4.70 <!-- cap:strings -->
+- **模块**：`namespace` / `import` / `pub` / 多文件 `ct build` / 目录 = namespace <!-- cap:modules -->
+- **映射**：`map trait T for instance …`、`.m.ct` 零成本静态映射、伴生 C shim、`test/bindings/` 声明式 C 库对接 <!-- cap:mapping -->
+- **透传**：`#ct-raw` / `#ct-endraw` 原样块（宏与手写 C 逐字节进入生成的 `.c`） <!-- cap:passthrough -->
 - **诊断与工具**：`#line` 溯源、`--diagnostics=json|text`、多错误恢复、增量缓存、`ct get` / `ct install`
-- **泛型函数**：`T name<T>(…)` + `name<int>(…)`，编译期单态化（Phase 26）；**约束泛型** `T name<T: Trait>(…)`（Phase 28）
-- **泛型 struct 与内置容器**：`struct Name<T, U>` + `impl<T> Name<Args>` 静态派发（Phase 29）；`Vec<T>` / `Map<K,V>` 免 import，`foreach` 按插入序遍历 `Map`
-- **泛型 trait**：`trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>` 约束，实例按实参编码单态化（Phase 35）
-- **标准结果类型**：`Option<T>` / `Result<T, E>` 内建于 `lib/std`，`is_some` / `is_ok` / `unwrap` 等为固有方法（Phase 34）
-- **单对象句柄**：`box<T>`（16 字节句柄 + 8 字节 `{refs,aux}` 头）、`new T { ... }`（上下文关键字，仅具名 struct）、`b.f` 自动解引用、`retain` / `release` 与 `at()` 借用（Phase 81）
-- **ADT 与 `match`**：`enum` 成员带负载即 ADT，`match` 穷尽所有变体或末位 `_`；值是 `{tag, union}`，无 vtable、无隐藏分配（Phase 84），见 spec §4.73
-- **C ABI 静态库**：`ct build --lib` 把根 `.h.ct` 的 C 兼容 `pub` 函数导出为 `.abi.h` + `lib<base>.a`（Phase 39）
-- **原子并发**：`atomic int` / `atomic long` / `atomic bool` / `atomic void *` + `ct_atomic_load` / `ct_atomic_store` / `ct_atomic_cas`（seq_cst，C11；`ct build` 自动切 `-std=c11`）（Phase 41）
-- **方法级 `pub`**：`impl` 固有方法默认私有（不进 `.h`、`static`）；写 `pub` 才跨单元公开；trait impl / `pub impl` 硬错（Phase 42）
-- **`return err:` 载荷契约**：`err:` 载荷必须可赋给函数返回类型；不一致 L43-1 硬错，四入口一致，不写坏 C（Phase 43）
-- **后缀 `?` 错误传播**：`expr?` 把 `Result` 失败以 `Outer::err` 返回，成功取 `value`；L44-1/2/3；`?:` 消歧（Phase 44）
+- **泛型函数**：`T name<T>(…)` + `name<int>(…)`，编译期单态化（Phase 26）；**约束泛型** `T name<T: Trait>(…)`（Phase 28） <!-- cap:generic-fn -->
+- **泛型 struct 与内置容器**：`struct Name<T, U>` + `impl<T> Name<Args>` 静态派发（Phase 29）；`Vec<T>` / `Map<K,V>` 免 import，`foreach` 按插入序遍历 `Map` <!-- cap:generic-struct --> <!-- cap:containers -->
+- **泛型 trait**：`trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>` 约束，实例按实参编码单态化（Phase 35） <!-- cap:generic-trait -->
+- **标准结果类型**：`Option<T>` / `Result<T, E>` 内建于 `lib/std`，`is_some` / `is_ok` / `unwrap` 等为固有方法（Phase 34） <!-- cap:option-result -->
+- **单对象句柄**：`box<T>`（16 字节句柄 + 8 字节 `{refs,aux}` 头）、`new T { ... }`（上下文关键字，仅具名 struct）、`b.f` 自动解引用、`retain` / `release` 与 `at()` 借用（Phase 81） <!-- cap:box -->
+- **ADT 与 `match`**：`enum` 成员带负载即 ADT，`match` 穷尽所有变体或末位 `_`；值是 `{tag, union}`，无 vtable、无隐藏分配（Phase 84），见 spec §4.73 <!-- cap:adt -->
+- **C ABI 静态库**：`ct build --lib` 把根 `.h.ct` 的 C 兼容 `pub` 函数导出为 `.abi.h` + `lib<base>.a`（Phase 39） <!-- cap:abi -->
+- **原子并发**：`atomic int` / `atomic long` / `atomic bool` / `atomic void *` + `ct_atomic_load` / `ct_atomic_store` / `ct_atomic_cas`（seq_cst，C11；`ct build` 自动切 `-std=c11`）（Phase 41） <!-- cap:atomics -->
+- **方法级 `pub`**：`impl` 固有方法默认私有（不进 `.h`、`static`）；写 `pub` 才跨单元公开；trait impl / `pub impl` 硬错（Phase 42） <!-- cap:method-pub -->
+- **`return err:` 载荷契约**：`err:` 载荷必须可赋给函数返回类型；不一致 L43-1 硬错，四入口一致，不写坏 C（Phase 43） <!-- cap:return-err -->
+- **后缀 `?` 错误传播**：`expr?` 把 `Result` 失败以 `Outer::err` 返回，成功取 `value`；L44-1/2/3；`?:` 消歧（Phase 44） <!-- cap:try -->
 - **明确不做**：继承、默认编译路径的类型检查（`ct check` 只做受限检查）、优化（语言在 `1.0.0` 才定稿）
 
 每条语法的展开规则以 [docs/language-spec.md](docs/language-spec.md) 为准（ADT/`match` 见 §4.73）；

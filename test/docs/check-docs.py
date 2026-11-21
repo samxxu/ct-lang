@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts thirteen invariants:
+Standard library only. It asserts fourteen invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -39,9 +39,12 @@ Standard library only. It asserts thirteen invariants:
      of the three tiers;
  13. DOC-76: README.md, docs/language-spec.md and docs/roadmap.md carry the
      same ct-compat marker (claim and spec section), all state 不再自称 C 超集,
-     and the spec= value resolves to a real heading.
+     and the spec= value resolves to a real heading;
+ 14. DOC-77: docs/capabilities.tsv lists every capability once with a legal
+     status and a spec section that resolves (for `implemented` rows), and
+     README §3 carries exactly one `<!-- cap:id -->` marker per row.
 
-Exit code 0 when all thirteen hold, 1 otherwise.
+Exit code 0 when all fourteen hold, 1 otherwise.
 """
 
 import hashlib
@@ -76,6 +79,8 @@ J6_IDS = (
 J6_STATES = {"已过", "部分", "缺失", "阻塞"}
 STABLE_TIERS = ("已冻结", "冻结中", "1.0 前可改")
 COMPAT_MARKER = re.compile(r"<!--\s*ct-compat:\s*([^>]*)-->")
+CAP_MARKER = re.compile(r"<!--\s*cap:([a-z0-9-]+)\s*-->")
+CAP_STATUS = {"implemented", "planned"}
 
 STATUS_MAP = {
     "完成": "\u2705",
@@ -610,6 +615,54 @@ def check_compat_claim(errors):
     return seen
 
 
+def check_capability_map(errors):
+    """DOC-77: docs/capabilities.tsv and the README cap markers agree, and every
+    implemented capability points at a real spec section."""
+    path = os.path.join(ROOT, "docs/capabilities.tsv")
+    if not os.path.exists(path):
+        errors.append("docs/capabilities.tsv: missing (DOC-77)")
+        return 0
+    spec = read(os.path.join(ROOT, "docs/language-spec.md"))
+    heads = set(re.findall(r"^#{2,4}\s+(\d+(?:\.\d+)*)\.?\s", spec, re.M))
+    rows = {}
+    for n, line in enumerate(read(path).splitlines(), 1):
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        parts = [p.strip() for p in s.split("\t")]
+        if len(parts) != 4:
+            errors.append(f"capabilities.tsv:{n}: expected 4 tab-separated columns")
+            continue
+        cid, name, secs, status = parts
+        if not re.fullmatch(r"[a-z0-9-]+", cid):
+            errors.append(f"capabilities.tsv:{n}: illegal id '{cid}'")
+        if cid in rows:
+            errors.append(f"capabilities.tsv:{n}: duplicate id '{cid}'")
+        if status not in CAP_STATUS:
+            errors.append(f"capabilities.tsv:{n}: status '{status}' (expected implemented/planned)")
+        sl = [x.strip() for x in secs.split(",") if x.strip()]
+        if not sl:
+            errors.append(f"capabilities.tsv:{n}: no spec section for '{cid}'")
+        if status == "implemented":
+            for sec in sl:
+                if sec not in heads:
+                    errors.append(f"capabilities.tsv:{n}: section {sec} not a heading in docs/language-spec.md")
+        rows[cid] = status
+    counts = {}
+    for m in CAP_MARKER.finditer(read(os.path.join(ROOT, "README.md"))):
+        cid = m.group(1)
+        counts[cid] = counts.get(cid, 0) + 1
+    for cid, count in counts.items():
+        if cid not in rows:
+            errors.append(f"README.md: cap marker '{cid}' is not in docs/capabilities.tsv")
+        elif count > 1:
+            errors.append(f"README.md: cap marker '{cid}' appears {count} times (expected 1)")
+    for cid in rows:
+        if cid not in counts:
+            errors.append(f"README.md: missing cap marker for '{cid}'")
+    return len(rows)
+
+
 def main():
     errors = []
     links, scanned = check_links(errors)
@@ -625,6 +678,7 @@ def main():
     j6 = check_j6_ledger(errors)
     stable = check_stable_subset(errors)
     compat = check_compat_claim(errors)
+    caps = check_capability_map(errors)
     for error in errors:
         print(f"FAIL: {error}")
     # The two status lines print on both paths: on a red run the first one names
@@ -639,7 +693,7 @@ def main():
         f"v{version}, {gates} hard gates, {phases} phase status, "
         f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
         f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s), "
-        f"{stable} stability row(s), {compat} compat marker(s))"
+        f"{stable} stability row(s), {compat} compat marker(s), {caps} capability row(s))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0

@@ -1,0 +1,23 @@
+# CT 能力 → spec 节号（DOC-77）
+# 列：id<TAB>能力名<TAB>spec 节号（逗号分隔）<TAB>状态（implemented|planned）
+# README §3 的每条能力带 <!-- cap:id --> 标记；id 必须与左列一一对应。
+paths	两档写法：轻量路径 / 完整路径	4.10.1	implemented
+traits	trait / impl / use / 默认方法 / 接口值	4.1,4.3,4.5,4.8,4.39	implemented
+memory	Drop / delete / own / defer / borrow / 泄漏告警	4.9,4.9.1,4.40	implemented
+params-slices	ref / out 参数与切片 T[]	4.68,4.69	implemented
+strings	String / Str 句柄	4.70	implemented
+modules	namespace / import / pub / 多文件	1,4.11.1	implemented
+mapping	map trait 静态映射与 shim	4.10	implemented
+passthrough	#ct-raw 原样透传	4.41	implemented
+generic-fn	泛型函数与约束泛型	4.48,4.50	implemented
+generic-struct	泛型 struct 与嵌套 impl	4.51,4.54	implemented
+containers	Vec / Map 与 foreach	4.49,4.51,4.52.1	implemented
+generic-trait	泛型 trait	4.55	implemented
+option-result	Option / Result	4.51,4.52.1	implemented
+box	box<T> / new 单对象句柄	4.71	implemented
+adt	ADT 与 match	4.73	implemented
+abi	C ABI 静态库	4.57	implemented
+atomics	atomic 修饰符与 ct_atomic_*	4.59	implemented
+method-pub	impl 方法级 pub	4.60	implemented
+return-err	errdefer / return err: 载荷契约	4.58,4.61	implemented
+try	后缀 ? 错误传播	4.62	implemented
