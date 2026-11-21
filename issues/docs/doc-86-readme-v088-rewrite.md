@@ -29,8 +29,10 @@
   - 清单 `test/docs/tutorial-cases.tsv`：列 `case_id` / 教程节 / 源文件 / 命令 / 期望 stdout；
   - runner `test/docs/check-tutorial-cases.sh <ct-ast>`：逐条执行、stdout 字节比对；缺文件 /
     缺命令 / 无输出 / 输出不符任一失败，不允许静默跳过；
-  - 首批 8 条：hello、多文件、`ref/out`、`box/new`、ADT/`match`、`String/Str`、切片、
-    HTTP 静态宿主（期望 `200 {"users":3}`）；
+  - 首批 10 条：hello、多文件、`ref/out`、`box/new`、ADT/`match`、`String/Str`、切片、
+    HTTP 静态宿主（期望 `200 {"users":3}`），加 tutorial §22 `String/Str`
+    （`test/docs/tutorial_cases/string_str.ct`，期望 `hello, ct`）与 §23 切片
+    （`test/docs/tutorial_cases/slice_sum.ct`，期望 `14 5`）；
   - 初始作为 `check-ast` 的附加段或独立脚本，不新增硬门禁条数；全绿后再评估并入门禁。
 - **LANG-24 联动**：§0.5 的 `box<T>` 拼写在 LANG-24 Stage A 落地时改 `Box<T>`，其余不动。
 

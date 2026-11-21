@@ -58,9 +58,17 @@ $ python3 test/docs/check-docs.py
 `.temp/renode-run/out/uart.txt`），其余 1576 通过、3 skip；评审基线的 1575/0/5
 来自 Renode 正常 skip 的环境。该差异记入本处置，不据此改产品判据。
 
-## 5. 未决
+## 5. 收尾状态快照（2026-11-21）
+
+| 项 | 状态 | 证据 |
+| --- | --- | --- |
+| [DOC-90](../../issues/docs/doc-90-tutorial-string-slice-chapters.md) tutorial §22/§23 | **起草中** | 两章已入库；`tutorial_cases/string_str.ct` 与 `slice_sum.ct` 实跑通过；runner 待 DEV |
+| [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) Stage 1 | **REQ 待细化** | 排在 DOC-90 之后；`lib/std → lib/core` 迁移步骤待成文 |
+| D2 README §0.1 重测 | **阻塞于 SH-110** | 触发条件已入 [v1-release-plan](../planning/v1-release-plan.md)：SH-110 合入后 48 小时内启动 |
+
+## 6. 未决
 
 - 历史 High 证据债的具体“修/不修”结论：SH-107 / DOC-81 / DOC-82 各自补；
-- phase-ID blocker A/B：等主规范裁定；
-- G1/G6：实现或 deviation，CI-13 二选一；
-- `MAX_FUNCS` 方案：SH-109 三选一，方案 A 需 USER 签字。
+- phase-ID blocker A/B：等主规范裁定（DOC-83）；
+- G1/G6：已决 A（ratchet），旧状态债由 [CI-14](../../issues/ci/ci-14-g6-legacy-status-cleanup.md) 跟踪；
+- `MAX_FUNCS`：已定动态增长（初始 512、安全阀 65536），落 `v1-PH-1 / S0`。

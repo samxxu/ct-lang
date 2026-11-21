@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | 所有者 2026-11-21 裁定“改名，作为 bug 去 fix”；[外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1；[同名核查](../../docs/review/builtin-layer-vs-std-package-name-check.md) |
-| 状态 | **accepted（bugfix；v1.0 前，不占 phase）** |
+| 状态 | **accepted（bugfix；v1.0 前，不占 phase）；REQ 待细化（排 DOC-90 之后）** |
 
 ## 现象
 

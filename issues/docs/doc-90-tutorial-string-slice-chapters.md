@@ -7,7 +7,20 @@
 | 严重度 | Medium（v1.0 前用户可见） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [tutorial §10.13](../../docs/tutorial.md)（PH-36 旧 `Str`）、[spec §4.69](../../docs/language-spec.md)、[spec §4.70](../../docs/language-spec.md)、[guide §3](../../docs/guide-for-c-programmers.md)、[DOC-86](doc-86-readme-v088-rewrite.md) D3 |
-| 状态 | **待办（v1.1；不阻塞 v1.0）** |
+| 状态 | **实施中（§22/§23 初稿已入库；tutorial-cases runner 待 DEV）** |
+
+## 进展（2026-11-21）
+
+- tutorial 新增 **§22 `String` / `Str`** 与 **§23 切片 `T[]`**，放在 §21 之后，未重排现有章节。
+- 判据措辞与 [idioms §3](../../docs/idioms.md) 同源（“这份数据过了这行还要活着 → `String`；
+  只看一眼 → `Str`”），不做第二次转述；机制细节只链 spec §4.69 / §4.70。
+- 两章各一个完整程序，已实跑：
+  - `String`/`Str` → `hello, ct`；
+  - 切片 → `14 5`（`sum(s)` 与 `sum(s[1..3])`）。
+- 可跑证据已落 fixture：`test/docs/tutorial_cases/string_str.ct`、`slice_sum.ct`；
+  [DOC-86](doc-86-readme-v088-rewrite.md) 的 D3-5 清单从 8 条扩到 10 条并指向这两个文件。
+- 顶部「按层阅读」第 3 项已从“专章待补”改为指向 §22 / §23 的入口（见 tutorial 顶部）。
+- 余项：`test/docs/check-tutorial-cases.sh` runner 与 TSV 清单由 DEV 实现。
 
 ## 现象
 

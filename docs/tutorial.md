@@ -12,8 +12,8 @@
 
 1. 值与所有权：§1–§5、§8；
 2. 参数糖 `ref` / `out`：§15；
-3. 借用视图：切片见 [spec §4.69](language-spec.md)，`String` / `Str` 见 [spec §4.70](language-spec.md)
-   （tutorial 专章待补，先读 [guide-for-c-programmers](guide-for-c-programmers.md) §3）；
+3. 借用视图：§22 `String` / `Str`、§23 切片 `T[]`；机制见
+   [spec §4.69](language-spec.md) / [spec §4.70](language-spec.md)；
 4. 句柄：`box<T>` / `new` §17；
 5. ADT 与 `match`：§18；
 6. 模块、`map` 与 std：§7、§9、§10。
@@ -2269,3 +2269,70 @@ fixpoint: 3 rounds byte-identical
 断链。切片与 `match` 的臂一一对应，等 v1.0 seed cutover（`v1-PH-0`）后机械替换；
 承接范围与判据见 [battle/p88-emit-match](../battle/p88-emit-match/verdict.md)。
 度量与 sharp edge 见 [p88_metrics](history/p88_metrics.md)。
+
+## 22. `String` / `Str`：拥有还是借用（Phase 80，v0.80.0 起可用）
+
+**判据只有一条**（与 [idioms §3](idioms.md) 同源）：这份数据过了这行还要活着 → `String`；只看一眼 → `Str`。
+
+```ct
+String greet(Str name)
+{
+    Str prefix = "hello, ";
+    return str_concat(prefix, name);
+}
+
+int main(void)
+{
+    String who = "ct";
+    String msg = greet(who.as_str());
+    printf("%s\n", msg.cstr());
+    msg.release();
+    return 0;
+}
+```
+
+```sh
+ct build greet.ct -o greet && ./greet
+# hello, ct
+```
+
+- `who` 是 owner，`who.as_str()` 借出视图；`msg` 是函数里新造的 owner，连所有权一起返回。
+- 字面量 / 空串是只读区 immortal，`release()` 是 no-op；要独立副本用 `to_string()`。
+- `Str` 是 `{ptr,len}` 视图：**不能作 struct 字段或 `Map` 键**（硬错）；`Vec<Str>`、`Option<Str>`、
+  ADT 负载、全局 `Str` 可编译，但存的是视图，owner 必须先死（[spec §4.70](language-spec.md)）。
+- 释放分层：局部/参数自动；`String` 字段在宿主 `use Drop` 且无显式 impl 时有胶水；
+  `Vec`/`Map` 字段、全局、ADT payload 由作者处理（[idioms §2](idioms.md)）。
+- `char *` 方法来自 std 包：`import std::str::CharStr;`（0.19.0 及以前 `std::str::String`）；
+  `printf` 前用 `cstr()`，`.data` 不保证 NUL。
+
+## 23. 切片 `T[]`：长度跟着指针走（Phase 79，v0.79.0 起可用）
+
+```ct
+int sum(int[] xs)
+{
+    int total = 0;
+    for (int i = 0; i < xs.len; i++) total += xs[i];
+    return total;
+}
+
+int main(void)
+{
+    int a[] = { 3, 1, 4, 1, 5 };
+    int[] s = a;
+    printf("%d %d\n", sum(s), sum(s[1..3]));
+    return 0;
+}
+```
+
+```sh
+ct build sum.ct -o sum && ./sum
+# 14 5
+```
+
+- `int[] s = a;` 从定长数组自动补长度；`s[1..3]` 是半开区间（元素 1、2 → `1 + 4 = 5`）。
+- 传参写 `sum(int[] xs)`，不要 `sum(int *xs, int n)`；`xs.len` 是元素个数。
+- `T a[] = { … }` 仍保留（推断长度的 C 数组）；`T a[]` 作形参/字段/无初值声明已弃用，
+  v0.79 警告、v1 硬错（[spec §4.69](language-spec.md)）。
+- 位置白名单：参数/局部/返回；字段、全局、接口值、`box<T>`、`Option`/`Result`、容器、
+  数组元素、泛型实参、闭包捕获一律硬错。
+- `s[i]` 带边界 trap；`s.get(i)` 软访问；`const T[]` 写元素硬错。
