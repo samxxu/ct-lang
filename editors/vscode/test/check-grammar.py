@@ -229,6 +229,25 @@ C11 = "\n".join([
 P40 = "int f(void) { errdefer { } return err: 1; }"
 # Phase 41: contextual atomic and the ct_atomic_* builtins.
 P41 = "int f(void) { atomic int n = 0; ct_atomic_store(&n, 1); return ct_atomic_load(&n); }"
+# v0.88 surface: ref/out, box/new, String/Str, slices, ADT/match, `?`, `$name`.
+NEW088 = "\n".join([
+    "bool f(ref int r, out int v)",
+    "{",
+    "    box<Record> h = new Record { 7, \"x\" };",
+    "    String s = \"hi\";",
+    "    Str view = s.as_str();",
+    "    int[] nums = { 1, 2 };",
+    "    Shape sh = Shape.Circle(2);",
+    "    match (sh) {",
+    "        Shape.Circle(r2) => { return r2 > 0; }",
+    "        _ => { return 0; }",
+    "    }",
+    "    int n = g()?;",
+    "    a.m()$x.n();",
+    "    return 0;",
+    "}",
+])
+
 # 2b.3 qualified instance host plus a recipe body; a plain C member call must
 # not be read as a recipe.
 MAP = "\n".join([
@@ -256,6 +275,9 @@ NEW_RULES = {
     "ct-generic-static-call", "ct-foreach", "ct-into", "ct-into-field",
     "ct-into-method", "ct-into-inline-field", "ct-into-inline-method",
     "ct-foreach-entry", "ct-container-method",
+    "ct-ref", "ct-out", "ct-new", "ct-box-type", "ct-owned-type",
+    "ct-adt-match", "ct-adt-construct", "ct-slice-type", "ct-try",
+    "ct-materialize",
 }
 
 
@@ -922,6 +944,29 @@ def main():
           not any(h[0] in NEW_RULES for h in by_line[1]), str(by_line[1]))
     check("new tokens inside a comment do not fire CT rules",
           not any(h[0] in NEW_RULES for h in by_line[2]), str(by_line[2]))
+
+    print()
+    print("synthetic v0.88 surface -- ref/out, box/new, String/Str, slices, ADT/match, ? and $name:")
+    rows = scan(NEW088, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`ref` / `out` -> ct-ref + ct-out",
+          "ct-ref" in by_line[1] and "ct-out" in by_line[1], str(by_line[1]))
+    check("`box<T>` / `new` -> ct-box-type + ct-new",
+          "ct-box-type" in by_line[3] and "ct-new" in by_line[3], str(by_line[3]))
+    check("`String` -> ct-owned-type", "ct-owned-type" in by_line[4], str(by_line[4]))
+    check("`Str` -> ct-owned-type", "ct-owned-type" in by_line[5], str(by_line[5]))
+    check("`int[]` -> ct-slice-type", "ct-slice-type" in by_line[6], str(by_line[6]))
+    check("`Shape.Circle(...)` -> ct-adt-construct",
+          "ct-adt-construct" in by_line[7], str(by_line[7]))
+    check("`match (sh)` -> ct-adt-match", "ct-adt-match" in by_line[8], str(by_line[8]))
+    check("match arm `Shape.Circle(r2)` -> ct-adt-construct",
+          "ct-adt-construct" in by_line[9], str(by_line[9]))
+    check("`g()?` -> ct-try", "ct-try" in by_line[12], str(by_line[12]))
+    check("`a.m()$x.n()` -> ct-materialize, not ct-range-index",
+          "ct-materialize" in by_line[13] and "ct-range-index" not in by_line[13],
+          str(by_line[13]))
 
     # v0.26.4 / DOC-68: the go-to-definition scanner lives in ../indexer.js and
     # is asserted by a plain Node script. Node is not a prerequisite of the

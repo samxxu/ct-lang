@@ -142,5 +142,58 @@
       "$0"
     ],
     "description": "Range initializer that builds a Vec<T>; `$` is the current index"
+  },
+  "box<T> / new": {
+    "prefix": "box",
+    "body": [
+      "box<${1:Record}> ${2:r} = new ${1:Record} { .${3:field} = ${4:value} };",
+      "$0"
+    ],
+    "description": "Single-object owning handle; `new` is move construction"
+  },
+  "String (owning)": {
+    "prefix": "String",
+    "body": "String ${1:s} = \"${2:hi}\";",
+    "description": "Owning UTF-8 handle; a literal binds an immortal block"
+  },
+  "Str view": {
+    "prefix": "Str",
+    "body": "Str ${1:view} = ${2:s}.as_str();",
+    "description": "Borrowed view; the owner must outlive it"
+  },
+  "slice type": {
+    "prefix": "slice",
+    "body": "${1:int}[] ${2:a}",
+    "description": "Slice `T[]`: pointer plus length, zero copy"
+  },
+  "ADT enum": {
+    "prefix": "adt",
+    "body": [
+      "enum ${1:Shape} {",
+      "\t${2:Circle}(int ${3:r}),",
+      "\t${4:Empty}(),",
+      "}"
+    ],
+    "description": "ADT: any member with a payload turns the enum into a nominal sum type"
+  },
+  "match statement": {
+    "prefix": "match",
+    "body": [
+      "match (${1:s}) {",
+      "\t${2:Shape.Circle(r)} => { $0 }",
+      "\t_ => { }",
+      "}"
+    ],
+    "description": "Exhaustive match; `_` must be last (v0.84 ADT)"
+  },
+  "ref / out parameters": {
+    "prefix": "refout",
+    "body": "${1:void} ${2:f}(ref ${3:int} ${4:r}, out ${5:int} ${6:v})",
+    "description": "Call-site sugar: pass the variable directly, no `&`"
+  },
+  "try propagation": {
+    "prefix": "try",
+    "body": "${1:expr()}?",
+    "description": "Postfix `?` error propagation (Result<T,E>)"
   }
 }

@@ -14,7 +14,17 @@
     { "include": "#ct-generic-decl" },
     { "include": "#ct-generic-call" },
     { "include": "#ct-generic-static-call" },
+    { "include": "#ct-box-type" },
     { "include": "#ct-generic-type" },
+    { "include": "#ct-ref" },
+    { "include": "#ct-out" },
+    { "include": "#ct-new" },
+    { "include": "#ct-owned-type" },
+    { "include": "#ct-adt-match" },
+    { "include": "#ct-adt-construct" },
+    { "include": "#ct-slice-type" },
+    { "include": "#ct-try" },
+    { "include": "#ct-materialize" },
     { "include": "#ct-path" },
     { "include": "#ct-trait" },
     { "include": "#ct-trait-open" },
@@ -497,8 +507,62 @@
       "match": "(?<!\\.)\\.\\.(?!\\.)",
       "name": "keyword.operator.range.ct"
     },
+    "ct-ref": {
+      "match": "\\b(ref)\\b",
+      "captures": {
+        "1": { "name": "storage.modifier.ref.ct" }
+      }
+    },
+    "ct-out": {
+      "match": "\\b(out)\\b",
+      "captures": {
+        "1": { "name": "storage.modifier.out.ct" }
+      }
+    },
+    "ct-new": {
+      "match": "\\b(new)\\b(?=[ \\t]+[A-Za-z_])",
+      "captures": {
+        "1": { "name": "keyword.other.new.ct" }
+      }
+    },
+    "ct-box-type": {
+      "match": "\\bbox\\b(?=[ \\t]*<)",
+      "name": "storage.type.box.ct"
+    },
+    "ct-owned-type": {
+      "match": "\\b(U16String|U16Str|String|Str)\\b",
+      "name": "entity.name.type.owned.ct"
+    },
+    "ct-adt-match": {
+      "match": "\\b(match)\\b[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "keyword.control.match.ct" }
+      }
+    },
+    "ct-adt-construct": {
+      "match": "\\b([A-Z][A-Za-z0-9_]*)[ \\t]*\\.[ \\t]*([A-Z][A-Za-z0-9_]*)[ \\t]*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.type.adt.ct" },
+        "2": { "name": "entity.name.function.variant.ct" }
+      }
+    },
+    "ct-slice-type": {
+      "match": "\\b(int|long|short|char|float|double|unsigned|signed|void|[A-Z][A-Za-z0-9_]*)[ \\t]*(\\[\\])",
+      "captures": {
+        "1": { "name": "entity.name.type.slice.ct" },
+        "2": { "name": "punctuation.definition.slice.ct" }
+      }
+    },
+    "ct-try": {
+      "match": "(?<=[A-Za-z0-9_\\)\\]])[ \\t]*\\?(?=[ \\t]*(?:;|,|\\)|\\]|\\}))",
+      "name": "keyword.operator.try.ct"
+    },
+    "ct-materialize": {
+      "match": "\\$[A-Za-z_][A-Za-z0-9_]*",
+      "name": "variable.language.materialize.ct"
+    },
     "ct-range-index": {
-      "match": "\\$",
+      "match": "\\$(?![A-Za-z_])",
       "name": "variable.language.range-index.ct"
     },
     "ct-closure-arrow": {

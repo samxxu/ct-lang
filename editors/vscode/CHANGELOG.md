@@ -1,5 +1,21 @@
 # Change Log
 
+## 0.6.1
+
+- v0.88 language surface: 10 new rules.
+  - `ref` / `out` (`ct-ref`, `ct-out`).
+  - `box<T>` / `new` (`ct-box-type`, `ct-new`).
+  - `String` / `Str` / `U16String` / `U16Str` (`ct-owned-type`).
+  - slices `T[]` (`ct-slice-type`).
+  - ADT constructors `Shape.Circle(…)` (`ct-adt-construct`) and `match (…)`
+    (`ct-adt-match`).
+  - postfix `?` (`ct-try`) and `$name` materialization (`ct-materialize`).
+- `$` stays `variable.language.range-index.ct` only when it is not followed by
+  an identifier, so `$x` and range `$` do not steal each other's scope.
+- Snippets: `box`, `String`, `Str`, `slice`, `adt`, `match`, `refout`, `try`.
+- `test/check-grammar.py`: 179 assertions, up from 168, with a v0.88 synthetic
+  fixture covering all new rules.
+
 ## 0.6.0
 
 - Phase 29 syntax, 12 new rules: `foreach (xs)` (`ct-foreach`), the built-in

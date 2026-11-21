@@ -53,6 +53,14 @@ impl Greeter for Person {
 | `cfg into {` + member lines | `keyword.control` + `variable.other.property` for the leading `.field` / `.method` |
 | `cfg into { .backlog = 64; }` | the inline spelling gets the same scopes (`ct-into-inline-field` / `ct-into-inline-method`) |
 | `p into { … }.add(2)` / `}->port` / `}[1]` | suffixes stay ordinary C after the block |
+| `ref int r` / `out int v` | `storage.modifier` for the call-site sugar |
+| `box<Record> r = new Record { … }` | `box` type + `new` keyword |
+| `String s = "hi";` / `Str view = s.as_str();` | built-in owning / borrowed string types |
+| `int[] nums` | slice type `T[]` |
+| `enum Shape { Circle(int r), Empty() }` | payload members make it an ADT |
+| `Shape.Circle(2)` / `match (s) { … }` | variant constructor + `match` keyword |
+| `g()?` | postfix `?` error propagation |
+| `a.m()$x.n()` | `$x` materialization target |
 
 `.m.ct` mapping units are plain `.ct` files to the editor (the suffix still
 ends in `.ct`), so they get the same highlighting; `#include` / `#define`
@@ -175,7 +183,7 @@ once before publishing.
 
 ```bash
 cd editors/vscode
-npx @vscode/vsce package        # produces ct-vscode-0.5.1.vsix
+npx @vscode/vsce package        # produces ct-vscode-0.6.1.vsix
 npx @vscode/vsce publish        # needs a Marketplace publisher + PAT
 ```
 
