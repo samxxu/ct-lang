@@ -32,28 +32,33 @@
 3. **v1.1（`v1-PH-1`）删除 `box<T>` 别名**：改为硬错并要求改写为 `Box<T>`。
 4. **裸 `box` 始终是普通标识符**：`int box;`、`r.box`、形参 `box` 不受影响；
    `box` 不进入关键字表。改名后 `Box` 成为内建模板名，隐式保留（与 `Vec` 同级）。
-5. **生成 C 符号随模板名改为 `Box_*`**（`Box_Record__new`、`Box_Record__payload_release`
-   等，[Emitter.h.ct:2580](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2580) 附近的
-   `tmpl == "box"` / `"box_"` 判断同步）。理由：避免留下「源码 `Box`、产物 `box_`」的
-   永久特例。`ct_box_hdr` 保持原名（头部类型，不随类型拼写）；`box_to_iface` 是接口装箱，
-   与本改名无关，不改。
+5. **内部一律不再用 `box` 指代该句柄**（2026-11-21 所有者追加：不允许内部继续使用 `box`）：
+   模板 `Box`、实例符号 `Box_*`、头结构 `ct_Box_hdr`、解析/发射/扫描中的
+   `tok_is("box")` / `tmpl == "box"` / `src_has_box_type` 全部随改；活跃文档、示例、
+   测试与编辑器同步，不留「源码 `Box`、产物 `box_`」的特例。
+   唯一例外：`box_to_iface` / `maybe_box` 等指「接口装箱 / 装箱动作」的既有动词，
+   以及 L0/L1/L2 冻结层——它们与 `box<T>` 句柄无关，改名会动冻结种子，不在本卡范围。
 
 ## 需要改的地方
 
 | 位置 | 改动 |
 | --- | --- |
-| `lib/std/Box.h.ct` | 模板声明 `pub struct box<T>` → `pub struct Box<T>`；`impl<T> box<T>` 同步 |
+| `lib/std/Box.h.ct` | 模板声明 `pub struct box<T>` → `pub struct Box<T>`；`impl<T> box<T>` 同步；头结构 `ct_box_hdr` → `ct_Box_hdr`；文件内注释同步 |
 | `frontend/parse/Expr.h.ct` | 类型读取处的 `tok_is("box")` 改为 `Box`，并保留 `box` 别名分支（v1.1 删）；`ttmpl`/`inst_make("box", …)` 改用 `Box` |
 | `frontend/parse/Stmt.h.ct` | `new` 路径的 `tok_is("box")` 同步 |
 | `frontend/parse/Parser.h.ct` | `is_decl_start` 的裸 `box` 判据改为 `Box`（仍需「后接 `<`」）；别名拼写同判 |
-| `backend/emit/Emitter.h.ct` | `strcmp(ins[i].tmpl, "box")`、`strncmp(base, "box_", 4)` 改为 `"Box"` / `"Box_"` |
+| `backend/emit/Emitter.h.ct` | `strcmp(ins[i].tmpl, "box")`、`strncmp(base, "box_", 4)` 改为 `"Box"` / `"Box_"`；`box_type_owns` 一类指代句柄的助手名改为 `Box_*` 或 `handle_*` 概念名，不得继续以 `box` 指代该句柄 |
 | `frontend/module/Module.h.ct` | `strncmp(t, "box_", 4)` 与源码词扫描同步；旧别名仍能触发内置层加载 |
-| `tool/driver/Driver.h.ct` | `src_has_box_type` 同时认 `Box<` 与 `box<`（v1.1 只认 `Box`） |
+| `tool/driver/Driver.h.ct` | `src_has_box_type` 改名（如 `src_has_Box_type` / `src_has_handle_type`），同时认 `Box<` 与 `box<`（v1.1 只认 `Box`） |
 | `docs/language-spec.md` | §4.71 全部示例与正文改 `Box<T>`，加一句「`box<T>` 为 v1.0 弃用别名，v1.1 删除」；§5.1 不再有破例 |
 | `docs/guide-for-c-programmers.md`、`tutorial.md`、`patterns.md`、`memory-guide.md`、`README.md` | 规范拼写改 `Box<T>`；保留一处旧拼写迁移说明 |
 | `editors/vscode` | `ct-box-type` 规则同时匹配 `Box`/`box`；snippet 默认 `Box`；`check-grammar.py` 加新旧拼写夹具 |
 | `test/ast/p81_box*` | 夹具改 `Box`，新增 `box` 别名正例（v1.0 警告）与 v1.1 负例；预期 C 符号改 `Box_*` |
 | `docs/design/phase81.md`、证据文本 | 作为历史记录保留旧拼写，加「命名已由 LANG-24 修正」注记；不重写历史证据 |
+
+**文档范围**：`docs/**` 的活跃文档（spec、两本指南、tutorial、patterns、memory-guide、
+README、std-catalog、planning、reviews 的结论行）全部改为 `Box<T>`，迁移说明只保留一处；
+`docs/history/**`、历史 phase 卡与评审判决作为快照保留旧拼写并加注记，不重写。
 
 ## 容量与窗口约束
 
@@ -61,7 +66,7 @@
   ≤11 个新增顶层函数的预算；别名分支必须复用既有 `tok_is` / 类型读取路径，**不得新增
   顶层函数**，否则停止并先走 `v1-PH-1 / S0`。
 - **v1.1（`v1-PH-1`）**：Stage B 删除别名与旧拼写扫描，属独立提交，可单提交回滚。
-- 引入版本必须 ≤ v1.0：v1.1 删除的兼容窗口正好一个 MINOR，与 `lib/core`、`CStrOps`
+- 引入版本必须 ≤ v1.0：v1.1 删除的兼容窗口正好一个 MINOR，与 `lib/core`、`CharStr`
   的「旧名一个 MINOR」口径一致。
 
 ## 验收
@@ -71,12 +76,14 @@
 - `--emit-c` 中出现 `Box_Record__new` / `Box_Record__payload_release`，不再出现 `box_Record`；
 - v1.1：`box<T>` 报硬错并提示 `write 'Box<T>'`；同一程序改 `Box` 后通过；
 - 全量 `check-ast`、`check-goldens`、`check-docs` 绿；编辑器 `check-grammar` 夹具覆盖两种拼写；
-- 活跃文档不再出现 `box<T>` 作为推荐写法（迁移说明与历史记录除外）。
+- 活跃文档不再出现 `box<T>` 作为推荐写法（迁移说明与历史记录除外）；
+- **内部无残留**：`grep -rn 'box' selfhost/ct-ast lib/std` 命中的只能是 `box_to_iface` /
+  `maybe_box` 等装箱动词或迁移注记，不得再有 `box<T>` 类型、`box_*` 实例符号、`ct_box_hdr`。
 
 ## 非目标
 
 - 不改 `box<T>` 的布局、复制协议、Drop、借用视图与 C 边界（D-016 全部保持）；
-- 不改 `ct_box_hdr`、`box_to_iface`、`maybe_box` 等内部机制名；
+- 不改 `box_to_iface` / `maybe_box` 等「装箱动作」内部机制名（与句柄无关，且 L0/L1/L2 冻结）；
 - 不引入泛型类型别名语法（`type Box<T> = …`）；别名只存在于类型名解析层；
 - 不借机改 `Vec` / `Map` / `Option` / `Result` 的任何拼写。
 

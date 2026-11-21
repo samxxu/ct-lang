@@ -32,7 +32,7 @@
 | --- | --- | --- | --- |
 | 开头 | “CT 是 C 的超集” | **删/改** | DOC-76：v1.0 起不再是 C 超集；应写“CT 是 C 风格的语言，但兼容承诺已收窄” |
 | §1 指针 | “指针只出现在 shim、MMIO、extern 边界” | **改** | 指针在任何 `.ct` 都合法；应写“主要在 shim/硬件/逃生层，应用层先想 Str/切片/box” |
-| §2 字符串字面量 | `"42".to_int()` | **补前提** | 需 `import std::str::CStrOps;`（std 0.19.0 及以前叫 `std::str::String`，旧名一个 MINOR 回退）；内置层不自动带 |
+| §2 字符串字面量 | `"42".to_int()` | **补前提** | 需 `import std::str::CharStr;`（std 0.19.0 及以前叫 `std::str::String`，旧名一个 MINOR 回退）；内置层不自动带 |
 | §2 借用存储 | “借用类型不能存（字段/容器/全局 = 硬错）” | **改** | struct 字段 / `Map` 键硬错；`Vec<Str>`、`Option<Str>`、ADT 负载、全局 `Str` 字面量可编译（存的是视图）；常量表安全，非 immortal 来源的 warning 见 [LANG-22](../../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
 | §3 借用 | “返回局部视图 = 硬错” | **改** | `Str` 逃逸当前无 lint（SH-106）；`T[]` 切片是 `slice escape` warning，不是硬错 |
 | §3 释放 | “String/box/Vec/Map = owning，自动释放” | **改** | 局部/参数自动；`String`/`box` 字段在宿主 `use Drop` 且无显式 impl 时有胶水；`Vec`/`Map` 字段无胶水；全局/ADT payload 显式；环仍泄漏 |

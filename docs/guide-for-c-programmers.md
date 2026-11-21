@@ -56,7 +56,7 @@
 另外要分清两种“标准能力”的加载方式：`lib/std` 的内置层（`Vec` / `Map` / `Option` /
 `Result` / `String` / `Str` / `box`）由编译器**自动预解析**；而挂在 `char *` 上的
 `length()` / `to_int()` / `starts_with()` 等方法来自 **std 包的寄生映射**
-（`map trait CStrOps for type char *`），必须 `import std::str::CStrOps;` 才有
+（`map trait` 挂在 `char *` 上），必须 `import std::str::CharStr;` 才有
 （std 0.19.0 及以前叫 `std::str::String`；旧名保留一个 MINOR 回退）。
 两者都是标准库能力，区别只在加载方式；不要因为内置层免 import 就以为 `char *` 也自带方法。
 
@@ -111,14 +111,14 @@ parse_int("42", &v);           /* strlen 内部现算；s 可能是悬垂的，�
 
 ```ct
 /* CT：std 包把字符串方法寄生在 char * 上，先 import */
-import std::str::CStrOps;       /* std 0.19.0 及以前写 std::str::String */
+import std::str::CharStr;      /* std 0.19.0 及以前写 std::str::String */
 
 int n = "42".to_int();         /* atoi 语义：跳过前导空白，遇到非数字停；无数字/空串返回 0 */
 int m = "  -7".to_int();
 ```
 
 `length()` / `find()` / `slice()` / `to_int()` 这些方法不是内置层自带的，而是 std 包的
-`map trait CStrOps for type char *`；`import std::str::CStrOps;` 之后才可见
+寄生映射；`import std::str::CharStr;` 之后才可见
 （0.19.0 及以前用 `std::str::String`）。std 包由
 `ct get std` 安装，`ct build` 从 `ct.lock` 取 include 根。
 
@@ -157,8 +157,9 @@ Str trim(Str s)
 
 `String` 的复制是显式的：`String s = "x";` 直接绑定 immortal 块；
 要一份独立副本用 `String copy = s.to_string();`；`Str v = "x"; String own = v.to_string();`
-同样得到独立副本。注意 `to_string()` 是内建 `String` / `Str` 的方法；std 包的 `CStrOps`
-没有给 `char *` 提供 `to_string`，所以 `"x".to_string()` 仍然是错的——先写
+同样得到独立副本。注意 `to_string()` 是内建 `String` / `Str` 的方法；std 包的 `char *`
+方法层（0.19.0 的映射 trait 叫 `CStrOps`，随单元改名为 `CharStr`）没有给 `char *`
+提供 `to_string`，所以 `"x".to_string()` 仍然是错的——先写
 `String s = "x";` 或 `Str v = "x";` 再转换。
 
 **场景三：存起来**

@@ -724,7 +724,7 @@ namespace 固定为 `std::<mod>`，调用只有一种形态：方法。宿主是
 在 `.h.ct` 里直接写 `pub trait` + `struct ... use Trait` + `impl`：
 
 ```ct
-import std::str::String;   /* std 0.19.0；下一 MINOR 改名为 std::str::CStrOps，旧名回退 */
+import std::str::String;   /* std 0.19.0；下一 MINOR 改名为 std::str::CharStr，旧名回退 */
 import std::test::Test;
 
 int main(void)

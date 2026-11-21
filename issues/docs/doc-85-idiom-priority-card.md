@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | “CT 是 C 的超集” | 与 DOC-76 冲突 | 改为下方“开头叙事修正版” |
 | “指针只出现在 shim/MMIO/extern” | 指针在任何 `.ct` 合法 | 改为“指针主要留在 shim/MMIO/extern 与逃生层；应用代码优先 Str/切片/box；指针仍合法” |
-| `"42".to_int()` | 需 `import std::str::CStrOps;`（0.19.0 及以前叫 `std::str::String`，旧名一个 MINOR 回退） | 补 import 前提；内置层不自动带 |
+| `"42".to_int()` | 需 `import std::str::CharStr;`（0.19.0 及以前叫 `std::str::String`，旧名一个 MINOR 回退） | 补 import 前提；内置层不自动带 |
 | “借用类型不能存（字段/容器/全局 = 硬错）” | `Vec<Str>` / `Option<Str>` / ADT 负载可编译；全局 `Str g = "x"` 也可编译 | struct 字段 / `Map` 键硬错；全局/容器/ADT 是借用视图风险；常量表安全，非 immortal 视图 lint 另立 [LANG-22](../lang/lang-22-nonimmortal-view-store-lint.md) |
 | “返回局部视图 = 硬错” | `Str` 逃逸当前无 lint（SH-106）；`T[]` 是 warning | 改为“返回局部 `Str` 视图当前无 lint；返回局部 `T[]` 是 `slice escape` warning；两者归契约 + ASan” |
 | “owning 自动释放” | 局部/参数自动；`String`/`box` 字段在宿主 `use Drop` 且无显式 impl 时有字段胶水；`Vec`/`Map` 字段无胶水；全局/ADT payload 显式；环泄漏 | 按类型 + 位置分层（下方） |
@@ -83,7 +83,7 @@
    引用环仍泄漏。
 3. Str 是借用视图：不能作 struct 字段或 Map 键；Vec<Str>/Option<Str>/ADT 负载/
    全局可编译但存的是视图；字面量常量表安全，非 immortal 来源有风险。
-4. String 用字面量直接初始化；char * 方法需 import std::str::CStrOps
+4. String 用字面量直接初始化；char * 方法需 import std::str::CharStr
    （std 0.19.0 及以前叫 std::str::String）。
 5. 数组传参用 T[]，不要 int *a, int n。
 6. 可失败操作用 Result<T,E> + ? + errdefer，不要错误码 + goto。
