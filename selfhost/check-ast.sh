@@ -958,6 +958,18 @@ for pr in parser checker dogfood docs; do
     fi
 done
 
+# PH-88 S88a-S88d: the emitter's 76 per-kind slices (inventory + missing-arm
+# mutation + 66-file corpus), the parameterised self-hosting fixpoint (2/3
+# rounds, same fixpoint_stage), the metrics report, and the spec/tutorial +
+# v1-pre evidence summary.
+for pr in emit fixpoint metrics docs; do
+    if bash "test/ast/p88_${pr}.sh" "$work/ct-ast" >"$work/p88$pr.out" 2>"$work/p88$pr.err"; then
+        ok "p88/${pr}"
+    else
+        bad "p88/${pr}" "$(cat "$work/p88$pr.out" "$work/p88$pr.err" | head -8)"
+    fi
+done
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
