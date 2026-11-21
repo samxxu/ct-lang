@@ -1,0 +1,42 @@
+# PH-86 S86d metrics evidence (baseline 1e2c30f7 -> v0.86.0)
+# Commands and raw outputs; medians over 5 runs on the same host.
+
+## 1. source lines (wc -l)
+$ for f in selfhost/ct-ast/frontend/lex/Lexer.h.ct ...; do git show 1e2c30f7:$f | wc -l; wc -l $f; done
+selfhost/ct-ast/frontend/lex/Lexer.h.ct                    baseline 391 current 458
+selfhost/ct-ast/frontend/parse/Expr.h.ct                   baseline 8703 current 8710
+selfhost/ct-ast/frontend/parse/Parser.h.ct                 baseline 4785 current 4795
+selfhost/ct-ast/frontend/parse/Stmt.h.ct                   baseline 5055 current 5056
+selfhost/ct-ast/frontend/parse/MapBuild.h.ct               baseline 897 current 897
+selfhost/ct-ast/frontend/parse/ParseSupport.h.ct           baseline 759 current 759
+selfhost/ct-ast/frontend/module/Module.h.ct                baseline 2934 current 2939
+
+## 2. emitted C lines (compiler self-build, *.c + *.h)
+baseline .temp/p86base/astsrc: 45717
+current  .temp/p86b/astsrc:    45817
+
+## 3. ct-ast build --emit-c wall clock, 5 runs (ms)
+baseline .temp/p86base/ct-ast: 1073 1019 1042 1053 1064  median 1053.2
+current  .temp/p86b/ct-ast:    1034 1213 1077 1080 1120  median 1080.2
+
+## 4. cc -O2 all products, 5 runs (ms)
+baseline: median 2485.2
+current:  median 2468.0
+
+## 5. fixpoint
+$ CT_C_BOUNDARY=allow .temp/p86b/ct-ast build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o .temp/self86b
+$ cc -std=c99 .temp/self86b/*.c -o .temp/self86b.bin
+$ CT_C_BOUNDARY=allow .temp/self86b.bin build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o .temp/self86b2
+$ diff -rq .temp/self86b .temp/self86b2
+(no output; exit 0)
+
+## 6. corpus bytes
+$ python3 tools/p85_inventory.py --root . corpus-manifest --ct .temp/p86b/ct-ast
+$ diff -q test/probes/p85_corpus_sha.tsv /tmp/p86b-corpus.tsv
+(files are identical; 66 corpus files)
+
+## 7. PH-85 spike comparison (same host, different tree)
+p85_spike: 391 -> 425 source lines; 1053 -> 994 ms; 0 warnings
+p86:       391 -> 458 source lines; 1053.2 -> 1080.2 ms; 0 warnings
+# p85 measured the structure-only slice; p86 adds the TokView, the C-boundary
+# helpers, the bounds assertion and the integer-stale-text preservation.
