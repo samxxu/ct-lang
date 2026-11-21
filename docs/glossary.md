@@ -230,7 +230,7 @@
 | 契约包（contract package） | `ct-pkg/hal` | 只有 `pub trait` 声明的纯 `.h.ct` 包（`Uart` / `Gpio` / `Clock` / `Log`），不含实现；平台包按它提供实现（Phase 18.3，`hal 0.1.0`） |
 | 平台包（platform package） | `ct-pkg/hal-posix` | binding 形式（`#include` 直通 + 镜像 trait/struct + 全局实例 + `map`）实现契约包；一份源码覆盖 macOS / Linux，`ct.pkg` 带 `cflags = -D_POSIX_C_SOURCE=200809L`（glibc 在 `-std=c99` 下隐藏 POSIX 声明；生成头先于源码 PP 行输出，故只能走 cc 命令行）。一个 `posix_hal` 实例可装箱成四个 trait（Phase 18.4） |
 | C 映射包（C-mapping package） | `ct-pkg/std` | `.m.ct` + 同名 `.shim.h` 零成本映射到 libc（`std::str` / `std::io` / `std::fs` / `std::utf8` / `std::num` / `std::math` … 16 个模块）：调用点展开为普通 C 调用，无 wrapper / `_iface` / vtable；容器不在包里（`Vec` / `Map` 是内置层），`ldflags = -lm` 由 `ct install` 拼进命令 |
-| 索引仓库（index repository） | `ct-pkg/index` | 托管六字段纯文本 `index`（`name version publisher url tag sha256:<hex>`）；五字段旧行（无 `publisher`）只读兼容、不能落 store。生成器、`tools/package.sh` 与 CI 都在索引仓；索引**无签名**，见 [ct-pkg-index](ct-pkg-index.md) |
+| 索引仓库（index repository） | `ct-pkg/index` | 托管六字段纯文本 `index`（`name version publisher url tag sha256:<hex>`）；五字段旧行（无 `publisher`）按行硬错（D-014 第 5 条）、不能落 store。生成器、`tools/package.sh` 与 CI 都在索引仓；索引**无签名**，见 [ct-pkg-index](ct-pkg-index.md) |
 
 ### 8. 许可
 

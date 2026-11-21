@@ -518,7 +518,7 @@ else
         && git init -q \
         && printf 'name = gutil\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >ct.pkg \
         && printf 'int gutil_value(void) { return 3; }\n' >gutil.c \
-        && git add -A && git commit -qm one && git tag 0.1.0 \
+        && git add -A && git commit -qm one && git tag v0.1.0 \
         && printf 'name = gutil\npublisher = ct\nversion = 0.2.0\nns-root = .\n' >ct.pkg \
         && git add -A && git commit -qm two && git tag v0.2.0 )
     mkdir -p "$work/home"
@@ -634,7 +634,7 @@ else
         && git init -q \
         && printf 'name = other\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >ct.pkg \
         && printf 'int other_value(void) { return 1; }\n' >other.c \
-        && git add -A && git commit -qm one && git tag 0.1.0 )
+        && git add -A && git commit -qm one && git tag v0.1.0 )
     if ( cd "$work/proj" && HOME="$work/home" \
             "$work/ct-ast" get "https://example.invalid/mismatch@*" >"$work/mis.out" 2>"$work/mis.err" ); then
         bad "name mismatch" "expected a non-zero exit"
@@ -653,7 +653,7 @@ else
     if ( cd "$work/idxseed" && HOME="$work/home2" \
             "$work/ct-ast" get "https://example.invalid/gutil@^0.1.0" >"$work/is.out" 2>"$work/is.err" ); then
         dig="$(awk '$1 == "ct/gutil" { print $NF }' "$work/idxseed/ct.lock")"
-        printf 'gutil 0.1.0 ct file://%s/gutil 0.1.0 %s\n' "$reg" "$dig" >"$work/index"
+        printf 'gutil 0.1.0 ct file://%s/gutil v0.1.0 %s\n' "$reg" "$dig" >"$work/index"
         ok "a seeded lock supplies the index digest"
     else
         bad "index seed" "non-zero exit: $(cat "$work/is.err")"
@@ -712,7 +712,7 @@ else
         bad "index unreadable" "wrong diagnostic: $(cat "$work/ir.err")"
     fi
     badsha="sha256:0000000000000000000000000000000000000000000000000000000000000000"
-    printf 'gutil 0.1.0 ct file://%s/gutil 0.1.0 %s\n' "$reg" "$badsha" >"$work/index-bad"
+    printf 'gutil 0.1.0 ct file://%s/gutil v0.1.0 %s\n' "$reg" "$badsha" >"$work/index-bad"
     if ( cd "$work/idxuse" && HOME="$work/home2" \
             "$work/ct-ast" get --index "$work/index-bad" ct/gutil >"$work/ib.out" 2>"$work/ib.err" ); then
         bad "index digest" "expected a non-zero exit"
@@ -733,15 +733,15 @@ else
             && git init -q \
             && printf 'name = util\npublisher = %s\nns-root = .\nversion = 0.1.0\n' "$pub" >ct.pkg \
             && printf 'int util_value(void) { return %s; }\n' "$([ "$pub" = a ] && echo 1 || echo 2)" >util.c \
-            && git add -A && git commit -qm "$pub" && git tag 0.1.0 )
+            && git add -A && git commit -qm "$pub" && git tag v0.1.0 )
     done
     printf 'name = demo\nversion = 0.1.0\n' >"$work/p5seed/ct.pkg"
     ( cd "$work/p5seed" && HOME="$work/p5home" "$work/ct-ast" get "$work/pub/a/util" >/dev/null 2>&1 ) \
         && adig="$(awk '$1 == "a/util" { print $NF }' "$work/p5seed/ct.lock")"
     ( cd "$work/p5seed" && HOME="$work/p5home" "$work/ct-ast" get "$work/pub/b/util" >/dev/null 2>&1 ) \
         && bdig="$(awk '$1 == "b/util" { print $NF }' "$work/p5seed/ct.lock")"
-    printf 'util 0.1.0 a file://%s/pub/a/util 0.1.0 %s\n' "$work" "$adig" >"$work/p5.index"
-    printf 'util 0.1.0 b file://%s/pub/b/util 0.1.0 %s\n' "$work" "$bdig" >>"$work/p5.index"
+    printf 'util 0.1.0 a file://%s/pub/a/util v0.1.0 %s\n' "$work" "$adig" >"$work/p5.index"
+    printf 'util 0.1.0 b file://%s/pub/b/util v0.1.0 %s\n' "$work" "$bdig" >>"$work/p5.index"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/p5a/ct.pkg"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/p5b/ct.pkg"
     if ( cd "$work/p5a" && HOME="$work/p5home" "$work/ct-ast" get --index "$work/p5.index" a/util >/dev/null 2>"$work/p5a.err" ) \
@@ -761,7 +761,7 @@ else
         bad "PKG-5 get" "$(cat "$work/p5a.err" "$work/p5b.err")"
     fi
     # A cache whose origin no longer matches the index must not be reused.
-    printf 'util 0.1.0 a file://%s/pub/b/util 0.1.0 %s\n' "$work" "$adig" >"$work/p5.bad"
+    printf 'util 0.1.0 a file://%s/pub/b/util v0.1.0 %s\n' "$work" "$adig" >"$work/p5.bad"
     printf 'name = demo\nversion = 0.1.0\n' >"$work/p5a/ct.pkg"
     if ( cd "$work/p5a" && HOME="$work/p5home" "$work/ct-ast" get --index "$work/p5.bad" a/util >/dev/null 2>"$work/p5c.err" ); then
         bad "PKG-5 origin" "expected a non-zero exit"
@@ -1557,7 +1557,7 @@ mkdir -p "$S5/repo/p/src" "$S5/proj1" "$S5/proj2"
 printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S5/repo/p/ct.pkg"
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S5/repo/p/src/p.h.ct"
 ( cd "$S5/repo/p" && git init -q && git add -A \
-    && git -c user.email=a@b -c user.name=a commit -qm one && git tag 0.1.0 )
+    && git -c user.email=a@b -c user.name=a commit -qm one && git tag v0.1.0 )
 export GIT_CONFIG_COUNT=2
 export GIT_CONFIG_KEY_1="url.file://$S5/repo/.insteadOf"
 export GIT_CONFIG_VALUE_1="https://s5.invalid/"

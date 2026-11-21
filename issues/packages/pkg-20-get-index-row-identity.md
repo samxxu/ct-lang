@@ -121,3 +121,54 @@ ctc: git clone of 'file:///tmp/nope' failed           # 没有先报 publisher �
    `tag == 'v' + version`；失败在 clone / store / lock 之前；
 3. 不做全文件扫描（未选中坏行不阻塞），不夹带 A1；跑 `p83_legacy` / `p83_verify` /
    conformance 三件套并同步 `differences.md`（D1 措辞、D2 字段数边界）。
+
+## 处置（DEV，v0.88.3，2026-11-22）：fixed
+
+`status` 保持 `open`（5.4：`fixed` 只写正文，由 REV 复核后改 `verified`）。
+
+- **修复**：`pkg_index_lookup` 与 `pkg_index_verify` 共用 `index_row_parse` +
+  `index_row_check`。`ct get` 在返回成功前对**被选中**的六字段行执行与 verify 相同的校验：
+  `index_name_ok(tok[0])`、publisher 非空 / 非 `local` / 无 `/`、`index_version_ok(tok[1])`、
+  `tag == 'v' + version`、`sha256:<64 lowercase>`；诊断带行号与类别（`identity` /
+  `tag-version` / `digest`），文案与 verify 逐字相同。
+- **失败原子性**：校验在 `git clone` / store / lock 之前；探针用测试替身 `git` 证明未调用，
+  失败请求不写 `ct.lock` 与 `~/.ct/pkg/<publisher>/<name>`。
+- **范围**：只校验**选中行**；未选中坏行不阻塞（不做 `ct get` 全文件扫描，与 verify 区分）。
+- **测试**：新增 `test/ast/pkg19_20_rows.sh` 并接入 `selfhost/check-ast.sh`；覆盖
+  badtag / badpub / badname / badver 四类选中行负例，以及合法六字段行与未选中坏行。
+- **红证**：baseline `38cd4ae4`（`git archive 38cd4ae4 | tar -x` 后按 L0→L1→L2→ct-ast 链构建），
+  `sh test/ast/pkg19_20_rows.sh <baseline ct-ast>` → exit 1；四类 `ct get` 均进入 `git clone`，
+  缺 `line 1: identity:` / `line 1: tag-version:`（test 提交 `8f3d051b`）：
+  ```console
+  FAIL pkg19_20: a tag that is not v<version> get
+    rc=1 ctc: git clone of 'file:///.../nope' failed
+  FAIL pkg19_20: a tag that is not v<version> no git
+    the resolver reached git
+  FAIL pkg19_20: publisher = local get
+    rc=1 ctc: git clone of 'file:///.../nope' failed
+  FAIL pkg19_20: publisher = local no git
+    the resolver reached git
+  ```
+- **绿证**（实现后，`ct-ast v0.88.3`，节选；完整 24 条见 PKG-19 处置）：
+  ```console
+  ok   a tag that is not v<version>: verify reports tag-version
+  ok   a tag that is not v<version>: get reports tag-version before fetch
+  ok   a tag that is not v<version>: get does not invoke git
+  ok   a tag that is not v<version>: get leaves ct.lock and store untouched
+  ok   publisher = local: verify reports identity
+  ok   publisher = local: get reports identity before fetch
+  ok   publisher = local: get does not invoke git
+  ok   publisher = local: get leaves ct.lock and store untouched
+  ok   a name outside [a-z0-9][a-z0-9-]*: get reports identity before fetch
+  ok   a version that is not x.y.z: get reports identity before fetch
+  ok   a legal six-field row still installs with the same lock row and digest
+  ok   an unselected seven-field row does not block a legal request
+  pkg19_20: OK
+  ```
+- **同提交验证**：`p83_legacy` / `p83_verify` / conformance 19/0 / `p87_dogfood` / `p88_metrics`
+  9/0 / check-all 11 门（见提交正文）。
+- **版本/文档**：v0.88.3（PATCH，V-3）；五处 `CTC_VERSION` + 51 golden/p39 ABI banner +
+  README / docs/README / AGENTS / test/README + p80/p81/p82 断言；`differences.md` D2 标记已消除。
+- **未覆盖**：digest 仍沿用既有 `sha_hex_ok`（被选中行在候选阶段即排除坏 digest，
+  错误不新增行号）；不做全文件扫描与 duplicate 检测（verify 的职责，全文件预检转 v1.1）。
+  PKG-20 与 PKG-19 共用同一次 fix（v0.88.3），未拆两个实现提交（用户本轮口径）。

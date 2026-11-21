@@ -1386,6 +1386,8 @@ p83_probe verify "PH-83-S83b verify (E83-3/4: read-only, line numbers, JSON, 0/1
     test/ast/p83_verify.sh "$work/ct-ast"
 p83_probe legacy "PH-83-S83b legacy (E83-2: five-field hard error, per-row, six-field unaffected)" \
     test/ast/p83_legacy.sh "$work/ct-ast"
+p83_probe rows "PKG-19/20 rows (selected row field-count / identity / tag before any git)" \
+    test/ast/pkg19_20_rows.sh "$work/ct-ast"
 p83_probe conformance "PH-83-S83c conformance (E83-5: shared data, CT vs shell, 3 digest vectors)" \
     test/ast/p83_conformance.sh "$work/ct-ast"
 p83_probe dist "PH-83-S83d dist (E83-6: sha256, ELF x86-64, unpacked ct -v; 77 without dist)" \

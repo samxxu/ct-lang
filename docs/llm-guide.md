@@ -25,7 +25,7 @@
 | H2 | 标准库模块用 `ct get ct/std` 安装，按 `import std::<mod>::<Unit>` 导入；**不要手写替代**，完整入口见 [std-catalog](std-catalog.md) |
 | H3 | 别人的包用 `ct get <publisher>/<name>`（配 `--index` / `CT_INDEX`）；**不要复制源码进本仓**，也不要假设裸名能解析（裸名只查官方 pin 表） |
 | H4 | 包格式是 `ct.pkg` + `publisher` + `ns-root`；不要自造清单键或目录布局，见 [package-guide](package-guide.md) |
-| H5 | 索引当前是六字段纯文本（旧五字段只读兼容）；**索引没有签名**，不要声称它「可信」或「已 pin」，见 [ct-pkg-index](ct-pkg-index.md) |
+| H5 | 索引当前是六字段纯文本（五字段旧行按行硬错）；**索引没有签名**，不要声称它「可信」或「已 pin」，见 [ct-pkg-index](ct-pkg-index.md) |
 | H6 | `hal` / `hal-posix` 的仓在 ct-pkg，但当前只有 `ct/std` 在内置 pin 表；`ct get ct/hal` 需要显式 `--index` / `CT_INDEX`（六字段行）或 URL，不要写成「无索引可用」 |
 | H7 | `proposals/` 下的文档是**提案**，不是现状；现状以 language-spec、std-catalog、package-guide、ct-pkg-index 为准 |
 

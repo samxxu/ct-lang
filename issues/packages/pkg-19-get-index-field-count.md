@@ -106,3 +106,65 @@ ctc: git clone of 'file:///tmp/nope' failed           # 先进入取回，没有
    并同步 `test/conformance/pkg/differences.md` 的 D2（该表当前明确记着 `>6` 未收紧）。
 
 本卡不做全文件预检（非目标），不夹带 A2。
+
+## 处置（DEV，v0.88.3，2026-11-22）：fixed
+
+`status` 保持 `open`（5.4：`fixed` 只写正文，由 REV 复核后改 `verified`）。
+
+- **修复**：`pkg_index_lookup` 与 `pkg_index_verify` 现在共用 `index_row_parse`（逐行切字段）
+  与 `index_row_check`（字段数 / legacy / name / publisher / version / tag / digest）。
+  `ct get` 对**被选中**的行执行同一校验：七字段行在返回前报
+  `line 1: field-count: index row has 7 fields; six are required`，不再进入 `git clone`。
+- **不变量**：五字段行走 `index_row_check` 的 legacy 分支，文案
+  `index row for '<spec> <ver>' is legacy (five fields); a six-field row is required` 不变；
+  六字段合法行的选择、锁行、digest 不变；未选中坏行不阻塞（不做全文件扫描）。
+- **失败原子性**：探针把测试替身 `git` 放在 PATH 首位；失败请求不留下调用标记，
+  `ct.lock` 与 `~/.ct/pkg/<publisher>/<name>` 均不出现。
+- **测试**：新增 `test/ast/pkg19_20_rows.sh` 并接入 `selfhost/check-ast.sh`（`p83_probe rows`），
+  覆盖七字段、badtag、badpub、badname、badver、合法六字段行、未选中坏行、verify 全文件扫描。
+- **红证**：baseline `38cd4ae4`（`git archive 38cd4ae4 | tar -x` 后按 L0→L1→L2→ct-ast 链构建），
+  `sh test/ast/pkg19_20_rows.sh <baseline ct-ast>` → exit 1；七字段行的 `ct get` 进入
+  `git clone`，缺 `line 1: field-count:`，10 条断言红（test 提交 `8f3d051b`）：
+  ```console
+  FAIL pkg19_20: a seven-field row get
+    rc=1 ctc: git clone of 'file:///.../nope' failed
+    cause: the package cache is corrupt
+  FAIL pkg19_20: a seven-field row no git
+    the resolver reached git
+  ```
+- **绿证**（实现后，`ct-ast v0.88.3`）：
+  ```console
+  $ sh test/ast/pkg19_20_rows.sh <ct-ast>
+  ok   a seven-field row: verify reports field-count
+  ok   a seven-field row: get reports field-count before fetch
+  ok   a seven-field row: get does not invoke git
+  ok   a seven-field row: get leaves ct.lock and store untouched
+  ok   a tag that is not v<version>: verify reports tag-version
+  ok   a tag that is not v<version>: get reports tag-version before fetch
+  ok   a tag that is not v<version>: get does not invoke git
+  ok   a tag that is not v<version>: get leaves ct.lock and store untouched
+  ok   publisher = local: verify reports identity
+  ok   publisher = local: get reports identity before fetch
+  ok   publisher = local: get does not invoke git
+  ok   publisher = local: get leaves ct.lock and store untouched
+  ok   a name outside [a-z0-9][a-z0-9-]*: verify reports identity
+  ok   a name outside [a-z0-9][a-z0-9-]*: get reports identity before fetch
+  ok   a name outside [a-z0-9][a-z0-9-]*: get does not invoke git
+  ok   a name outside [a-z0-9][a-z0-9-]*: get leaves ct.lock and store untouched
+  ok   a version that is not x.y.z: verify reports identity
+  ok   a version that is not x.y.z: get reports identity before fetch
+  ok   a version that is not x.y.z: get does not invoke git
+  ok   a version that is not x.y.z: get leaves ct.lock and store untouched
+  ok   a legal six-field row still installs with the same lock row and digest
+  ok   verify still accepts the legal six-field row
+  ok   an unselected seven-field row does not block a legal request
+  ok   verify still scans the whole file and reports the unselected bad row
+  pkg19_20: OK
+  ```
+- **同提交验证**：`p83_legacy` / `p83_verify` / conformance 19/0 / `p87_dogfood` / `p88_metrics`
+  9/0 / check-all 11 门（见提交正文）。
+- **版本/文档**：v0.88.3（PATCH，V-3）；五处 `CTC_VERSION` + 51 golden/p39 ABI banner +
+  README / docs/README / AGENTS / test/README + p80/p81/p82 断言；`differences.md` D2 标记已消除。
+- **未覆盖**：字段数 < 5 的行仍由 `ct get` 跳过（缺 url/tag/digest，无法成为候选），
+  `ct index verify` 仍按全文件报 `field-count`；不做 `ct get` 全文件预检（非目标，转 v1.1）。
+  PKG-19 与 PKG-20 共用同一次 fix（v0.88.3），未拆两个实现提交（用户本轮口径）。
