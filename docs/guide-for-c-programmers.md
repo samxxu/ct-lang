@@ -86,6 +86,10 @@
   但 `Vec<Str>`、`Option<Str>`、ADT 负载都能编译。能编译不等于安全——容器里存的是视图，
   owner 必须先于容器死亡。
 
+常量表是安全的例外：`Vec<Str> names = { "uart0", "uart1", "i2c0" };` 全是 immortal 字面量，
+不涉及任何 owner。只有非 immortal 来源（如 `v.push(local_string.as_str())`）才有悬垂风险；
+这类来源的 warn 级 lint 规划在 v1.1（LANG-22），当前不阻止编译。
+
 ### 3.3 从 C 代码迁移的三个典型场景
 
 **场景一：字符串参数与解析（最高频）**

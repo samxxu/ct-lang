@@ -2938,6 +2938,11 @@ parse("ab", n);  /* 调用点不写 out */
   见 phase80 卡 §7。
 - **边界**：`box<String>` 已由 PH-81 的 `box<String>::of` 回填；`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
   `Map<String,V>`）、字段/全局位置的 `String`（无自动 Drop）、跨仓外部工程迁移只做 dry-run。
+- **`Str` 存放位置（按实测）**：`Str` 不能作 struct 字段或 `Map` 键（硬错）；
+  `Vec<Str>`、`Option<Str>`、ADT 负载、全局 `Str` 可编译，但存的是借用视图，
+  owner 必须先于容器/值/全局的初始化源存活；字面量/immortal 来源安全。
+  非 immortal 来源的 warning 归 v1.1（[LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md)），
+  本版不做硬错。
 
 ### 4.71 `box<T>` / `new`：单对象句柄（Phase 81，仅 ct-ast）
 
