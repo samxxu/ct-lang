@@ -1,0 +1,33 @@
+/* PH-87 S87b: the feasibility sample for the typed-view rewrite. The compiler
+   cannot spell `match` in its own source yet (L2 bootstrap, battle/p87-kind-match),
+   but this is the exact shape the `tc_expr_*` slices become once it can: one
+   arm per variant, no `switch`, no fallthrough, exhaustiveness proved by the
+   compiler. */
+#include <stdio.h>
+
+enum Shape {
+    Circle(int r),
+    Rect(int w, int h),
+    Point(int x, int y),
+}
+
+int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) => { return 3 * r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+        Shape.Point(x, y) => { return x + y; }
+    }
+}
+
+int main(void)
+{
+    Shape a = Shape.Circle(2);
+    Shape b = Shape.Rect(3, 4);
+    Shape c = Shape.Point(5, 6);
+
+    printf("%d\n", area(a));
+    printf("%d\n", area(b));
+    printf("%d\n", area(c));
+    return 0;
+}

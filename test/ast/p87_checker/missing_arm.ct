@@ -1,0 +1,14 @@
+/* PH-87 S87b golden negative: dropping one arm is a compile error with the
+   exact PH-84 wording -- the language-level "missing branch" guard that the
+   in-source rewrite will inherit. */
+enum Shape {
+    Circle(int r),
+    Rect(int w, int h),
+}
+
+int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) => { return r; }
+    }
+}

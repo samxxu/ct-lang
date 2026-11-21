@@ -1,0 +1,40 @@
+# PH-87 S87b: why `node->kind` cannot become a `match` in ct-ast's own source
+#
+# The bootstrap chain is L0 -> L1 -> L2 -> ct-ast (selfhost/check-ast.sh:425):
+# L2 compiles selfhost/ct-ast/**. PH-84 added ADT / match to ct-ast only
+# (language-spec §4.73 "仅 ct-ast"); L2 has no lowering for either, so it
+# echoes the new syntax into the C it writes and `cc` rejects it.
+#
+# Experiment (2026-11-21, HEAD 84fd5702 + a `pub enum NodeKind` typed view in
+# frontend/type/TypeCheck.h.ct; the experiment was reverted):
+#
+# $ grep -rn "N_ADTCTOR\|Type\.Variant\|match (" selfhost/l2/core.ct selfhost/l2/driver.ct
+# (no hits: 0)
+#
+# $ sh .temp/build-ct-ast.sh . .temp/p87a
+# ... L2 writes the declaration through as a C enum:
+#
+#   .temp/p87a/astsrc/TypeCheck.c:157:
+#     enum NodeKind {
+#         AdtCtor(int n),
+#         Var(int n),
+#         Index(int n),
+#         ...
+#
+# ... and clang rejects it (20 errors, first lines):
+#
+#   selfhost/ct-ast/frontend/type/TypeCheck.h.ct:178:12: error: expected
+#   '= constant-expression' or end of enumerator definition
+#     178 |     AdtCtor(int n),
+#         |            ^
+#   fatal error: too many errors emitted, stopping at -ferror-limit=0
+#   20 errors generated.
+#
+# Reverting the experiment and keeping only the C-level slice rewrite builds
+# clean (rc 0), the corpus stays byte-identical (66 files), the 345 diagnostics
+# stay byte-identical (p86errors 23/0) and the self-compile fixpoint holds.
+#
+# Consequence: the literal `switch (kind) -> match` spelling must wait for the
+# phase that moves the bootstrap off L2 (PH-88 owns the emitter + bootstrap
+# round; D-017 §7). The mechanical mapping is already proven by
+# test/ast/291_adt_kind_rewrite and by the p87_checker feasibility fixture.
