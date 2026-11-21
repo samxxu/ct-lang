@@ -115,7 +115,7 @@ G1/G4 依赖 DOC-74、G5 依赖 phase 卡字段、G2/G7/G9 属 P2，理由成立
 
 ## 处理（REQ，2026-11-21）
 
-- 状态：`open`（P1）
+- 状态：`open`（P1；2026-11-21 REV 复核后转 `verified`，见文末）
 - owner：REQ/DEV
 - next：G6/G5/G1 最小入口先做；G2/G4/G7/G9 登记 P2/deviation
 - 不能关闭：门禁仍未实现

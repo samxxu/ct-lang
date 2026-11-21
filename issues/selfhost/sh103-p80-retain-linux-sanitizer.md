@@ -115,7 +115,7 @@ $ sh test/ast/p80_retain.sh <ct-ast>
 
 ## 处理（REQ，2026-11-21）
 
-- 状态：`open`（P1，等待 REV 复核）
+- 状态：`open`（P1，等待 REV 复核；2026-11-21 REV 复核后转 `verified`，见文末）
 - owner：REV
 - next：在 Linux CI/容器复跑 `p80_retain`，贴完整 stderr；DEV 已写 fixed，不改 status
 - 不能关闭：尚未独立复核

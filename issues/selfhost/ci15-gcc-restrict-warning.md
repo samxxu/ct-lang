@@ -31,7 +31,7 @@ Emitter.h.ct:5663: warning: 'snprintf' argument 4 overlaps destination object 'g
 
 ## 处理（REQ，2026-11-21）
 
-- 状态：`open`（P1，CI 红）
+- 状态：`open`（P1，CI 红；2026-11-21 REV 复核后转 `verified`，见文末）
 - owner：DEV
 - next：按处置段改 `memmove`，补跑 p80_retain/p83_verify/check-all
 - 不能关闭：v0.83.2 ubuntu-gcc 仍红
