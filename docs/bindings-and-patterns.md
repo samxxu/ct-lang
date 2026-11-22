@@ -1,6 +1,6 @@
 # Bindings 与模式配方
 
-> 面向在 CT 里写 bindings、容器封装与 C 互操作的人。每条配方给：**适用场景 → 最小可复制代码 →
+> 面向在 Ct 里写 bindings、容器封装与 C 互操作的人。每条配方给：**适用场景 → 最小可复制代码 →
 > 常见错误 → 一条负例（预期红的样子）**。代码按 `ct build` 的单元约定写；只在单文件
 > `ct-ast` 下可用的写法会单独注明。
 >
@@ -159,7 +159,7 @@ int main(void)
 
 - `.shim.h` / `.shim.c` 必须与 `.m.ct` 同目录同 base；有 `.shim.c` 就必须有 `.shim.h`。
 - shim 头按**文件名**解析，`ct build` 会在 `cc` 行自动加 `-I <shim 目录>`，并 include 它。
-- 用 `void *` 接 `CURL *` 是为了让 CT 不需要认识 C 头里的类型；C 允许 `void *` 隐式转成
+- 用 `void *` 接 `CURL *` 是为了让 Ct 不需要认识 C 头里的类型；C 允许 `void *` 隐式转成
   对象指针，ABI 不变。
 - `.m.ct` 方法可以用 `...` 收尾，recipe 也必须把 `...` 原样转发；`...` 必须**同时**出现在
   绑定与方法签名里，且都在最后一位。
@@ -227,9 +227,9 @@ int main(void)
 - 函数指针类型本身按源码同形发射，typedef 名内部不参与 mangling；跨单元的 ABI 兼容靠
   **每个单元用同一个 `.h.ct` 声明**，不要在两个单元各写一份拼写不同的 typedef。
 - 绑定边界的注意项：
-  - C 侧函数指针的调用约定必须与 CT 发射的 `ret (*)(params)` 一致；不要跨 DLL/so 边界
+  - C 侧函数指针的调用约定必须与 Ct 发射的 `ret (*)(params)` 一致；不要跨 DLL/so 边界
     传 `__stdcall` 之类的非默认约定。
-  - 不要把 CT 的闭包字面量当普通函数指针：闭包是 `(fn, env)` 两词 ABI，不是单个 C 指针
+  - 不要把 Ct 的闭包字面量当普通函数指针：闭包是 `(fn, env)` 两词 ABI，不是单个 C 指针
     （见 SH-67）。需要回调就写具名函数，或显式用 `struct` + trait。
   - 变参函数指针的 `...` 前必须有具名参数（`int (*logf)(char *, ...)` 可以，
     `int (*bad)(...)` 报 `'...' needs a named parameter before it`）。
@@ -471,7 +471,7 @@ zsh: segmentation fault
 
 ## 7 原子类型与操作：`atomic T` + `ct_atomic_*`（Phase 41）
 
-**适用场景**：多线程共享计数器、取消标志、无锁发布指针。CT 从 Phase 41 起提供 `atomic T`
+**适用场景**：多线程共享计数器、取消标志、无锁发布指针。Ct 从 Phase 41 起提供 `atomic T`
 修饰符和三个内建操作；`<stdatomic.h>` 的 `_Atomic` / `atomic_load` / `atomic_store` 仍按普通
 C 调用直通，不被占用。
 
@@ -503,7 +503,7 @@ int main(void)
 - `atomic` 是上下文修饰，不是无条件关键字；`int atomic = 1;` 保持合法。
 
 **与 `<stdatomic.h>` 的关系**：标准名 `atomic_load` / `atomic_store` 和 `_Atomic(struct S)` 的
-宏用法不受影响；CT 内建名带 `ct_` 前缀。不要定义 `ct_atomic_*` 同名函数。
+宏用法不受影响；Ct 内建名带 `ct_` 前缀。不要定义 `ct_atomic_*` 同名函数。
 
 **门禁**：`test/ast/p41_*` 覆盖 load/store/CAS/取消标志/引用计数；`selfhost/check-tsan.sh`
 在 nightly Linux job 跑 TSan。它不是第 12 道硬门禁，本地无 TSan 时打印 `SKIP`。
@@ -713,7 +713,7 @@ map trait TextSteps for type char * {
 
 **常见误读**
 
-1. **「impl 方法不能作接收者」≠「CT 不支持链式」。** 链式走的是类型宿主静态映射；经典
+1. **「impl 方法不能作接收者」≠「Ct 不支持链式」。** 链式走的是类型宿主静态映射；经典
    `impl` / 固有 `impl` 走派发路径，方法结果不能再作接收者，第二跳报
    `method receiver must be a variable, an element, a call or a field chain`。两条路径要分开看。
 2. **「`char *` 上挂方法」≠「给字符串加状态」。** `char *` 上只有工厂，没有字段；也不能写
@@ -727,11 +727,11 @@ map trait TextSteps for type char * {
 
 - `map trait … for type …` 只能写在 `.m.ct` 里；写在普通 `.ct` 报
   `a type host is only allowed in a .m.ct unit`。
-- 不透明 C shim 函数的调用结果不能直接起手（CT 没有它的返回类型）；先落到变量，或包一层带
-  显式返回类型的 CT 函数。
+- 不透明 C shim 函数的调用结果不能直接起手（Ct 没有它的返回类型）；先落到变量，或包一层带
+  显式返回类型的 Ct 函数。
 
 `send()` 当前是 stub，不发网络；接真 curl 时只替换 `http.shim.h` 里的 `http_*` 实现，
-CT 链路与 `http.m.ct` 不变。逐条实跑证据（退出码与报错原文）见
+Ct 链路与 `http.m.ct` 不变。逐条实跑证据（退出码与报错原文）见
 [history/reports/chain-builder-paradigm/probe.md](history/reports/chain-builder-paradigm/probe.md)。
 
 **负例（预期红）**

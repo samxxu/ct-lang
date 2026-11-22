@@ -26,7 +26,7 @@
 ## 2. Blocker B：卡片布局与参照实现不一致
 
 - 参照实现读 `docs/phases/<id>/card.md`；
-- 当前 CT 读 `docs/design/phase<NN>.md` / `docs/history/design/phase<NN>.md`，没有 `docs/phases/`；
+- 当前 Ct 读 `docs/design/phase<NN>.md` / `docs/history/design/phase<NN>.md`，没有 `docs/phases/`；
 - PN-5 的逐类表写 `phase43.md` → `v0-phase43.md`，没有要求迁到 `docs/phases/<id>/card.md`；
 - PN-1 例子却写 `docs/phases/v1-PH-0/card.md`。
 

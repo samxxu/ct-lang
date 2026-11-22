@@ -1,7 +1,7 @@
-# CT — C with Traits for VS Code
+# Ct — C with Traits for VS Code
 
 Syntax highlighting, snippets, go-to-definition and language configuration for
-**CT**, the trait-flavoured C compiled by
+**Ct**, the trait-flavoured C compiled by
 [`ct`](https://github.com/samxxu/ct-lang) (`ctc` remains a compatibility alias).
 
 ```c
@@ -104,7 +104,7 @@ approximation of the compiler's rules, not a full semantic analyzer: same-name
 methods across structs may show multiple candidates, fields are not indexed,
 and call sites inside strings/comments still resolve as words.
 
-Strings, chars and comments are tokenised *before* the CT rules, so the
+Strings, chars and comments are tokenised *before* the Ct rules, so the
 compiler's core guarantee ("never touch anything inside a string, char or
 comment") holds for the highlighter too: `printf("use self here")` stays a
 plain string.
@@ -169,7 +169,7 @@ node test/check-index.js         # the indexer's own 26 assertions, runnable wit
 
 The script replays the grammar's patterns with Python's `re` over the demos in
 `examples/`, the cases in `test/cases/` and the Phase 20–26 fixtures in
-`test/ast/`, asserting both directions: the CT rules fire on `trait` / `use` /
+`test/ast/`, asserting both directions: the Ct rules fire on `trait` / `use` /
 `impl` / `self` / `loop` / `..` / `=>` / generics, and they stay silent inside
 comments, strings and look-alike identifiers (`use_it`, `selfish`, `...`,
 `int loop = 5`, `p->x`).
@@ -206,9 +206,9 @@ details.
 
 ## 中文说明
 
-给 **CT（C with Traits）** 用的 VS Code 扩展：语法高亮 + 代码片段 + 跳转定义 + 编辑器配置。
+给 **Ct（C with Traits）** 用的 VS Code 扩展：语法高亮 + 代码片段 + 跳转定义 + 编辑器配置。
 
-- **CT 独有构造**（`trait` 定义、`use` 子句含逗号列表、`impl … for …`、隐式 `self`）由本扩展高亮；
+- **Ct 独有构造**（`trait` 定义、`use` 子句含逗号列表、`impl … for …`、隐式 `self`）由本扩展高亮；
   **其余全部交给 VS Code 内置的 C 语法**，不需要维护一份 C 语法副本。
 - `import a::b as C;`、`map trait T for instance x {`、跨行或被注释分隔的 `trait` / `impl` / `map` 头部均已覆盖。
 - **最新特性**：第三十六批的 trait 默认方法（方法体直接写在 trait 里），以及第三十八批的
@@ -220,7 +220,7 @@ details.
   GNU `__attribute__((…))`，以及 `map` recipe 方法 `write(buf, len) -> uart_put;` 与限定宿主
   `for instance hal::uart1`。这些关键字都是上下文相关的：`int loop = 5;`、`loop:`、`...`、
   `a >= b`、`p->x`、`return id<int>(42);` 均不会被误判。
-- 字符串、字符、注释**先于** CT 规则被整体吃掉，因此编译器"字符串/注释内绝不改写"的保证在高亮层面同样成立。
+- 字符串、字符、注释**先于** Ct 规则被整体吃掉，因此编译器"字符串/注释内绝不改写"的保证在高亮层面同样成立。
 - **跳转定义**：`Ctrl+Click` / `F12` 可跳到 `impl` 方法、trait/struct 声明、顶层函数与 `map` 绑定；
   `p.greet()` 会按 `p` 的声明类型收窄到对应 `impl`，`self` 取当前 `impl`（默认方法体内则取当前 trait）。
   新特性同样可跳：trait 默认方法（impl 覆盖优先）、静态映射的 `a.toInt()`（按接收者 C 类型 +

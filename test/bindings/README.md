@@ -1,4 +1,4 @@
-# Bindings — 在 CT 里消费既有 C 库
+# Bindings — 在 Ct 里消费既有 C 库
 
 > 中文
 >
@@ -13,7 +13,7 @@
 
 ### 1. 什么是 binding
 
-binding 是**纯 CT 源**，把某个 C 库的符号映射成 CT 的 `trait`，使 CT 代码能以 trait 方法调用的
+binding 是**纯 Ct 源**，把某个 C 库的符号映射成 Ct 的 `trait`，使 Ct 代码能以 trait 方法调用的
 形式使用该库。它**不引入任何语言特性**，只用两件已有能力：
 
 1. 顶层**直通 C**（`#include`、宏、全局量原样保留）；

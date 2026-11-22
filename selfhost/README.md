@@ -2,7 +2,7 @@
 
 > 中文
 
-本目录承载 CT 编译器自身的源码与门禁脚本。**每一代编译器占一个目录**（`l0/` / `l1/` / `l2/` /
+本目录承载 Ct 编译器自身的源码与门禁脚本。**每一代编译器占一个目录**（`l0/` / `l1/` / `l2/` /
 `ct-ast/`），代际边界就是目录边界；门禁脚本（`check-*.sh` / `ct-tour.sh`）留在本目录顶层。
 
 脚本与源码平级存放是刻意的——它们要在仓库根构建 `./ctc`，且冻结文件 `l1/ctc.ct` 的头注释里
@@ -13,7 +13,7 @@
 | 路径 | 代号 | 身份 |
 | --- | --- | --- |
 | `l0/ctc.c` | L0 | C 写的最简编译器（Phase 1 起冻结为种子 / 差分 oracle，只修 bug）；由宿主 C 编译器构建，二进制落**仓库根** |
-| `l1/ctc.ct` | L1 | 冻结种子：用 CT OO 子集、单文件手写全部能力，由 L0（`l0/ctc.c`）编译；能力停在 Phase 2，**不再新增**（含注释） |
+| `l1/ctc.ct` | L1 | 冻结种子：用 Ct OO 子集、单文件手写全部能力，由 L0（`l0/ctc.c`）编译；能力停在 Phase 2，**不再新增**（含注释） |
 | `l2/{core,driver}.ct` | L2 | 同一编译器拆成多单元（`import` / `pub`），由 L1 自身的 `build` 编译；自 Phase 10.7 起只作**回归 oracle** |
 | `ct-ast/**` | ct-ast | Phase 9 的 AST 版编译器，由 L2 用 `build` 编译（带 `-I selfhost/ct-ast`）：**分组多单元**，每个单元自持状态、只导出 `pub` 原语——`main.ct` 只做绑定与分派，`tool/driver` 是 compile 模式驱动（`ct <file> -o <file>`），`frontend/module` 是 build 驱动（单元表、import、`pub` 路由），`frontend/parse` 是解析器（含共享原语、表达式与类型文法及 `map` 构造器），`frontend/{lex,sym,type}` 是词法器、符号表与类型/装箱层，`runtime/arena` 是节点与字面量池，`backend/{mem,emit}` 是 AutoDrop/泄漏分析与 C 发射器，`tool/{pkg,diag,cache}` 是包管理器、告警存储与增量缓存；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
 

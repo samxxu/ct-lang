@@ -350,31 +350,31 @@ index verify: FAIL (2 invalid of 9 rows)
 
 | 判据 | 内容（原文摘要） | 原文位置（index@0cdb132） | 归属 | 本仓状态（PH-83） |
 | --- | --- | --- | --- | --- |
-| PK-1 | `ct.pkg` 存在且可读 | `tools/package-check.sh:15` | CT（`ct pkg check`） | 已实现 |
-| PK-2 | `name` / `publisher` / `version` / `ns-root` 必填；`publisher != local` | `tools/package-check.sh:16` | CT（`ct pkg check`） | 已实现 |
-| PK-5 | `ns-root` 相对、无 `..`、是已存在目录 | `tools/package-check.sh:17` | CT（`ct pkg check`） | 已实现 |
-| PK-8 | 包树内无绝对 `-I` | `tools/package-check.sh:18-19` | CT（`ct pkg check`） | 已实现 |
-| PK-3 / 4 / 6 / 7 / 9 / 10 / 11 / 12 / 13 | 无原文（编号保留） | — | 未分配 | 不在 CT |
-| R1 | `name` / `publisher` 字符集 | `tools/package-check.sh:22` | index CI / 包仓 | 不在 CT |
-| R2 | `version` 为 `x.y.z` | `tools/package-check.sh:23` | index CI / 包仓 | 不在 CT |
-| R3 | tag ↔ version（git 检出时；缺仓库/缺 tag 只告警） | `tools/package-check.sh:24-25` | index CI / 包仓 | 不在 CT |
-| S1 | 每个命名空间单元位于 `<ns-root>/<namespace path>/` | `tools/package-check.sh:28` | index CI（`--strict`） | 不在 CT |
-| S2 | `dep` 可解析且不重复同一包 | `tools/package-check.sh:29` | index CI（`--strict`） | 不在 CT |
-| S3 | `requires` 解析为 `ct` + 版本范围 | `tools/package-check.sh:30` | index CI（`--strict`） | 不在 CT |
-| S4 | `c-boundary` 为 `strict` / `allow` | `tools/package-check.sh:31` | index CI（`--strict`） | 不在 CT |
-| S5 | 包树无构建产物、缓存、`vendor/` | `tools/package-check.sh:32` | index CI（`--strict`） | 不在 CT |
+| PK-1 | `ct.pkg` 存在且可读 | `tools/package-check.sh:15` | Ct（`ct pkg check`） | 已实现 |
+| PK-2 | `name` / `publisher` / `version` / `ns-root` 必填；`publisher != local` | `tools/package-check.sh:16` | Ct（`ct pkg check`） | 已实现 |
+| PK-5 | `ns-root` 相对、无 `..`、是已存在目录 | `tools/package-check.sh:17` | Ct（`ct pkg check`） | 已实现 |
+| PK-8 | 包树内无绝对 `-I` | `tools/package-check.sh:18-19` | Ct（`ct pkg check`） | 已实现 |
+| PK-3 / 4 / 6 / 7 / 9 / 10 / 11 / 12 / 13 | 无原文（编号保留） | — | 未分配 | 不在 Ct |
+| R1 | `name` / `publisher` 字符集 | `tools/package-check.sh:22` | index CI / 包仓 | 不在 Ct |
+| R2 | `version` 为 `x.y.z` | `tools/package-check.sh:23` | index CI / 包仓 | 不在 Ct |
+| R3 | tag ↔ version（git 检出时；缺仓库/缺 tag 只告警） | `tools/package-check.sh:24-25` | index CI / 包仓 | 不在 Ct |
+| S1 | 每个命名空间单元位于 `<ns-root>/<namespace path>/` | `tools/package-check.sh:28` | index CI（`--strict`） | 不在 Ct |
+| S2 | `dep` 可解析且不重复同一包 | `tools/package-check.sh:29` | index CI（`--strict`） | 不在 Ct |
+| S3 | `requires` 解析为 `ct` + 版本范围 | `tools/package-check.sh:30` | index CI（`--strict`） | 不在 Ct |
+| S4 | `c-boundary` 为 `strict` / `allow` | `tools/package-check.sh:31` | index CI（`--strict`） | 不在 Ct |
+| S5 | 包树无构建产物、缓存、`vendor/` | `tools/package-check.sh:32` | index CI（`--strict`） | 不在 Ct |
 
-**PH-83 新增的 CT 判据（`ct index verify`，§4.4）**：
+**PH-83 新增的 Ct 判据（`ct index verify`，§4.4）**：
 
 | 判据 | 内容 | 归属 | 状态 |
 | --- | --- | --- | --- |
-| IV-1 | 六字段行、字段数正确 | CT（`ct index verify`） | PH-83 已实现 |
-| IV-2 | 五字段旧行按行硬错（D-014 第 5 条） | CT（`ct index verify` + `ct get`） | PH-83 已实现 |
-| IV-3 | `name` / `publisher` / `version` 形状 | CT | PH-83 已实现 |
-| IV-4 | `tag == v<version>` | CT | PH-83 已实现 |
-| IV-5 | `sha256:` + 64 位小写十六进制 | CT | PH-83 已实现 |
-| IV-6 | 同一 `publisher/name version` 不重复 | CT | PH-83 已实现 |
-| IV-7 | “可回放”判定，不取回、不比包树摘要 | CT | PH-83 已实现 |
+| IV-1 | 六字段行、字段数正确 | Ct（`ct index verify`） | PH-83 已实现 |
+| IV-2 | 五字段旧行按行硬错（D-014 第 5 条） | Ct（`ct index verify` + `ct get`） | PH-83 已实现 |
+| IV-3 | `name` / `publisher` / `version` 形状 | Ct | PH-83 已实现 |
+| IV-4 | `tag == v<version>` | Ct | PH-83 已实现 |
+| IV-5 | `sha256:` + 64 位小写十六进制 | Ct | PH-83 已实现 |
+| IV-6 | 同一 `publisher/name version` 不重复 | Ct | PH-83 已实现 |
+| IV-7 | “可回放”判定，不取回、不比包树摘要 | Ct | PH-83 已实现 |
 
 **不再列入本仓候选**：`dep` 全名、`requires` 可满足性、tag 一致性的离线子集——R2/R3/S2/S3
 仍归 index CI / 包仓；PH-83 不扩 `ct pkg check` 的 1/2/5/8 承诺（D-014 第 2 条）。
@@ -403,11 +403,11 @@ index verify: FAIL (2 invalid of 9 rows)
   需改清单并发新 tag（不可原地改旧 tag）。索引行与内置 pin 表必须同步。
 - **裸名语义**：PH-77 起裸名只解析官方；第三方必须 `publisher/name`。这与本契约 I2 一致，发布端不得依赖裸名。
 - **锁格式**：v2 七字段；v1 只经 `ct migrate`。发布端回放必须接受七字段并比对第 1、7 字段。
-- **格式变更流程**：先改本契约 → 两端各自实现 → index 仓全量 `verify-index` → CT 侧夹具 → 再发布。
+- **格式变更流程**：先改本契约 → 两端各自实现 → index 仓全量 `verify-index` → Ct 侧夹具 → 再发布。
 
 ## 9. 验收
 
-**CT 侧（夹具）**
+**Ct 侧（夹具）**
 
 1. 六字段行 + 干净 HOME：`ct get --index` 成功，lock 第一字段 `publisher/name`、第七字段同索引摘要；
 2. 摘要被改一行：硬错，无 store/lock 残留；
@@ -443,7 +443,7 @@ index verify: FAIL (2 invalid of 9 rows)
 | Q5 | `ct get` 输出规范串（PH-77 S2）是否成为脚本接口 | 不作为脚本解析接口；脚本只读 `ct.lock` 与退出码 |
 | Q6 | 五字段旧行的发布顺序 | **已定（D-014 第 5 条）**：按行硬错；index 仓先清零旧行再发硬错版本 |
 | Q7 | 多索引并存 | **已定（D-014 第 4 条）**：单索引；多源由调用方合并索引文件 |
-| Q8 | PK/R/S 全量原文与逐条归属 | **已定（2026-11-21，PH-83）**：§6.1 按 index@0cdb132 基线定稿；PK-1/2/5/8 归 CT，R/S 归 index CI，缺原文的 PK-3/4/6/7/9–13 编号保留但不作判据（PKG-12） |
+| Q8 | PK/R/S 全量原文与逐条归属 | **已定（2026-11-21，PH-83）**：§6.1 按 index@0cdb132 基线定稿；PK-1/2/5/8 归 Ct，R/S 归 index CI，缺原文的 PK-3/4/6/7/9–13 编号保留但不作判据（PKG-12） |
 
 ## 11. 变更与归属
 
@@ -451,11 +451,11 @@ index verify: FAIL (2 invalid of 9 rows)
 | --- | --- | --- |
 | `ct get` / lock / store / 摘要算法 | ct-lang | 先改本契约，再改实现与夹具 |
 | `ct.pkg` 键、tag 规则、预检 | ct-pkg 包仓 + index 仓 | 索引生成器先接受，包仓再发布 |
-| 索引行格式、生成/回放脚本 | ct-pkg/index | 全量 `verify-index` + CT 侧兼容 |
+| 索引行格式、生成/回放脚本 | ct-pkg/index | 全量 `verify-index` + Ct 侧兼容 |
 | `ct pkg` 边界 | ct-lang（需求方 2026-11-19 定稿 B′） | 复开透传必须显式登记并覆盖既有裁决 |
 | 契约 v1 条款与测试向量 | ct-lang（REQ） | 改条款同时改向量与 conformance；见 [D-014](../decisions/D-014.md) |
 | `ct index verify`（只读） | ct-lang（DEV，PH-83） | 不改发布边界；只读回放索引行 |
-| conformance 数据与 runner | ct-lang（REQ/DEV） | 版本化数据；shell 与 CT 共用 |
+| conformance 数据与 runner | ct-lang（REQ/DEV） | 版本化数据；shell 与 Ct 共用 |
 | Linux x64 产物 / 稳定 URL | ct-lang（发布工程） | 每 MINOR 一版 + sha256；index CI 钉版本 |
 | index 仓脚本废弃 / CI 改造 | ct-pkg/index | 由该仓确认时间表；本仓只提供契约与二进制 |
 

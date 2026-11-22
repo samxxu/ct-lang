@@ -1,4 +1,4 @@
-# CT 入门教程
+# Ct 入门教程
 
 > 中文
 
@@ -22,7 +22,7 @@
 
 ## 核心范式：字符串起手 → 工厂藏构建 → 对象方法链
 
-CT 最主要的编程范式只有一句话，三段顺序固定：
+Ct 最主要的编程范式只有一句话，三段顺序固定：
 
 1. **起点是字符串**，不是构造器。
 2. **通过 factory 创建由 trait 定义的对象类型**，不是 struct；struct 是实现细节，不出现在使用者代码里。
@@ -228,9 +228,9 @@ ct build examples/48_string_steps/src/main.ct -o /tmp/text48
 
 ### 两个常见误读
 
-**误读一：把「impl 方法不能作接收者」读成「CT 不支持链式」。**
+**误读一：把「impl 方法不能作接收者」读成「Ct 不支持链式」。**
 正确读法是：**两条路径要分开看**。类型宿主静态映射（本节）的每一跳都是 recipe 替换，
-接收者可以是字面量、变量、CT 已声明函数的调用结果，链任意长；经典 `impl` / 固有 `impl`
+接收者可以是字面量、变量、Ct 已声明函数的调用结果，链任意长；经典 `impl` / 固有 `impl`
 走派发路径，方法结果不能再作下一跳接收者，第二跳会报
 `method receiver must be a variable, an element, a call or a field chain`。
 所以「链式」是支持的，限制在**动态派发那条路径**上。边界与报错原文见
@@ -602,7 +602,7 @@ int read_file(const char *path)
 ## 9. `map` 与 bindings：把 trait 绑到已有的 C 库
 
 不想为了用 C 库而改库的代码，就用 `map` 把一个**已声明的全局实例**绑定成 trait 实现。
-这是把假 HAL 接进 CT 的官方做法（[test/bindings/mock-hal/uart.h.ct](../test/bindings/mock-hal/uart.h.ct)）：
+这是把假 HAL 接进 Ct 的官方做法（[test/bindings/mock-hal/uart.h.ct](../test/bindings/mock-hal/uart.h.ct)）：
 
 ```c
 #include "mock_hal.h"          /* 直通，让你看见库的真实声明 */
@@ -694,7 +694,7 @@ map trait Socket for namespace posix {
 `-I <shim 目录>`（有 `.shim.c` 时同时把它列为源文件）。`posix::Socket.err()` 于是展开成
 `ct_sock_errno()`。完整例子见 `test/bindings/posix-socket/`；改了 shim 会让消费者重建。
 有 `.shim.c` 却没有 `.shim.h` 时报 `a shim source needs a matching .shim.h`。
-C 头文件里的 `enum` 常量 CT 也不认识（全大写拼写只是撞上宏启发式，不算解析），同样用这层 shim
+C 头文件里的 `enum` 常量 Ct 也不认识（全大写拼写只是撞上宏启发式，不算解析），同样用这层 shim
 包成函数再绑定；判据与各类符号见 [language-spec §4.43](language-spec.md)。
 
 ### 9.3 原样块：`#ct-raw`
@@ -732,7 +732,7 @@ ct build main.ct -o main
 编译器内置层，不在包里，也不需要 import。本节只讲 `std` 的用法与坑，不重复模块清单。
 
 namespace 固定为 `std::<mod>`，调用只有一种形态：方法。宿主是 C 已有类型的模块（`str` / `fs` /
-`utf8`）用 `<Trait>.m.ct` + 同基名 `<Trait>.shim.h` 的静态映射；CT 自有类型（`arena` / `test`）
+`utf8`）用 `<Trait>.m.ct` + 同基名 `<Trait>.shim.h` 的静态映射；Ct 自有类型（`arena` / `test`）
 在 `.h.ct` 里直接写 `pub trait` + `struct ... use Trait` + `impl`：
 
 ```ct
@@ -1788,7 +1788,7 @@ Result<long, char *> twice(int n)
 
 ### 13.1 目标
 
-CT 鼓励方法链；有些链需要在中间把返回值留下来复用/调试：
+Ct 鼓励方法链；有些链需要在中间把返回值留下来复用/调试：
 
 ```ct
 M x;
@@ -1967,7 +1967,7 @@ ref/out 参数、`ref` 的借用检查、跨过程定值不在本阶段；`ref` 
 - 新特性专章：§22 `String` / `Str`、§23 切片 `T[]`（先看顶层「按层阅读」选层）
 - `examples/**` —— 51 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；其中 `49_socket` 为文档型；完整索引见 [examples/README.md](../examples/README.md)）；`test/cases/**` —— 每个语法点的最小快照
 - 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
-- 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 CT」，编译器对此零感知
+- 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 Ct」，编译器对此零感知
 - 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [design/phase8.md](history/design/phase8.md)，
   17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [design/phase17.md](history/design/phase17.md)
 

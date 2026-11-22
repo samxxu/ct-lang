@@ -483,7 +483,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
   声明后为空（`vt == NULL`），需自行赋值；装箱仅覆盖**语句赋值**（`s.lhs = v;`），**指定初始化式**
   （`Pair p = { .lhs = v };`）中的接口字段**不装箱**；**指针**接口字段（`struct T *x`）只支持派发，
   赋值保持原样（需要已有胖指针的地址，如 `s.x = &someIface;`）。
-- **CT 侧（L2）已扩展**：`selfhost/l2/**` 放开上一条的全部限制，并给出统一的「接口值 / 指向接口值的指针 / 接口值数组 / 接口指针数组」模型；装箱规则在**赋值、构造点、`return`、实参**四处完全一致：
+- **Ct 侧（L2）已扩展**：`selfhost/l2/**` 放开上一条的全部限制，并给出统一的「接口值 / 指向接口值的指针 / 接口值数组 / 接口指针数组」模型；装箱规则在**赋值、构造点、`return`、实参**四处完全一致：
 
 | 形态 | 含义 | 派发 | 下标元素的种类 |
 | --- | --- | --- | --- |
@@ -493,13 +493,13 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | `T *xs[n]` | 接口指针数组 | `xs[i]->m()` | 指针 |
 | 形参 `T xs[]` / `T *xs` | 同上，函数体内可下标 | 同左 | 值 |
 
-  另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）。**struct 类型的数组字段**（`struct Duo { Num ab[2]; }`）L0 / L2 不支持，**ct-ast 已支持**（逐元素写 vptr，见 §6）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属 CT 线（L2 / ct-ast），由 `test/acceptance/run.sh` 钉住。
+  另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）。**struct 类型的数组字段**（`struct Duo { Num ab[2]; }`）L0 / L2 不支持，**ct-ast 已支持**（逐元素写 vptr，见 §6）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属 Ct 线（L2 / ct-ast），由 `test/acceptance/run.sh` 钉住。
 
-#### 4.9 AutoDrop（Phase 5 新增，仅 CT 线）
+#### 4.9 AutoDrop（Phase 5 新增，仅 Ct 线）
 
 `own` 是一个**上下文关键字**，只出现在声明行的行首：它把变量标记为「持有对象生命周期」，
 编译器在作用域出口自动释放。它是 Phase 5 新增项，**L0（`ctc.c`）不认识它**（会原样透传），
-由 CT 线实现：L2（`selfhost/l2/**`，冻结 oracle）与 ct-ast（安装入口）。两者在出口注入的**位置要求**上
+由 Ct 线实现：L2（`selfhost/l2/**`，冻结 oracle）与 ct-ast（安装入口）。两者在出口注入的**位置要求**上
 自 v0.16.0 起不同，见下表与约束。
 
 | 源码形态 | 处理 |
@@ -813,8 +813,8 @@ recipe 替换（逐出现点）：
 - 配置方法按值返回宿主；每一跳展开成裸 C 调用，无 vtable、无装箱。
 - 经典 `impl` / 固有 `impl` 的方法结果不能作下一跳接收者（§4.5）；返回 struct 的 trait 方法还会
   发射未加 `struct` 限定的非法 C。不要把「`impl` 方法返回 `self` 的链」写成标准路径。
-- 不透明 C shim 函数的调用结果没有 CT 侧静态类型，不能直接起手；先落到变量，或包一层带显式
-  返回类型的 CT 函数。
+- 不透明 C shim 函数的调用结果没有 Ct 侧静态类型，不能直接起手；先落到变量，或包一层带显式
+  返回类型的 Ct 函数。
 - `impl char *` 不存在：`impl` 的属主必须是已声明 struct 名；`impl Trait for char *` 报
   `impl for undefined struct 'char'`，裸 `impl char *` 报 `impl of an unknown trait`。
 
@@ -904,7 +904,7 @@ static int apply(int (*fn)(int), int v) { return (*fn)(v); }
   （`int (*cb[2])(int);`）；`tbl[i](x)` 直接调用。
 - 文件作用域的初始化器可以命名本单元的函数（`static int (*gp)(int, int) = plus;`）：原型先于全局发射。
 - 赋值接受 `p = handler;` 与 `p = &handler;`；函数名作为右值时发射其 C 名。`#include` 引入的库函数
-  同样可用（`p = strcmp;`）：CT 符号表里没有的名字原样发射，由 C 编译器按原型校验；普通调用一直如此。
+  同样可用（`p = strcmp;`）：Ct 符号表里没有的名字原样发射，由 C 编译器按原型校验；普通调用一直如此。
 - 调用接受 `p(args)` 与 `(*p)(args)`，两种写法统一发射为 `(*p)(args)`。函数指针字段可以直接调用：
   `c.add(2, 3)`（`.`）与 `p->add(2, 3)`（`->`）分别发射为 `c.add(2, 3)` 与 `p->add(2, 3)`。
 - 限制：不返回函数指针；不支持嵌套函数指针（`int (**f)(int)` 报
@@ -987,7 +987,7 @@ int off = (int)(offsetof(struct Point, y));
 - 成员初值必须是整数常量表达式，否则报 `an enum value must be an integer constant`。初值不做折叠，
   `GREEN = RED + 1` 原样发射；无初值的成员不发射 `= …`，自增语义交给 C。
 - `pub enum` 的声明进入依赖单元的生成头文件，成员作为常量导入消费单元：裸名 `Mid` 与限定名 `app::High` 都能用。
-- `offsetof(<struct 类型>, <字段>)` 是**内建**（CT 没有预处理器，无法把它当宏）：第一个参数接受 `struct S`
+- `offsetof(<struct 类型>, <字段>)` 是**内建**（Ct 没有预处理器，无法把它当宏）：第一个参数接受 `struct S`
   与 typedef 别名；编译器校验结构体存在且字段存在，否则报 `offsetof needs a struct type` /
   `struct 'S' has no field 'f'`（前向声明的结构体字段未知，放行交给 C）。
 - 生成物按原样发射 `offsetof(struct S, f)`，因此**源文件必须自己写 `#include <stddef.h>`**——
@@ -1868,28 +1868,28 @@ map trait Reader for type PngReader { width(r) -> ct_png_width(r); }
 | 循环 | `type alias cycle: '<first>' -> … -> '<first>'` |
 | 目标为 trait | `type alias 'X' cannot name a trait` |
 
-#### 4.43 外部 C 符号：CT 认识哪些、不认识哪些（DOC-64）
+#### 4.43 外部 C 符号：Ct 认识哪些、不认识哪些（DOC-64）
 
-CT 没有预处理器：`#include` 只按整行透传到生成物，头文件内容不参与解析。因此一个来自 C 头文件的
-名字能否在 CT 源码里使用，取决于 CT 自己的判据，而不是头文件写了什么：
+Ct 没有预处理器：`#include` 只按整行透传到生成物，头文件内容不参与解析。因此一个来自 C 头文件的
+名字能否在 Ct 源码里使用，取决于 Ct 自己的判据，而不是头文件写了什么：
 
-| 头文件里的东西 | CT 的判据 | 典型用法 |
+| 头文件里的东西 | Ct 的判据 | 典型用法 |
 | --- | --- | --- |
 | 全大写标识符（`MAX_SIZE`、`EOF`、`SEEK_SET`） | 按宏放行：不展开，原样发射 | `buf[MAX_SIZE]`、`x == EOF` |
 | `typedef` 类型名（`time_t`、`size_t`） | 按类型放行（§4.33） | `time_t now;`、`(time_t)raw` |
 | 函数声明（`getchar`、`strlen`） | 按普通函数调用 | `c = getchar();` |
 | `stdin` / `stdout` / `stderr` | 三个特例名字直接放行 | `fputs(s, stdout)` |
 | `errno` | **不放行**，需自己写 `extern int errno;` | 声明后 `return errno;` |
-| `struct` / `union` / `enum` 的**类型名** | 只认识 CT 自己定义或登记的标签（§4.33） | `struct tm *t;` |
+| `struct` / `union` / `enum` 的**类型名** | 只认识 Ct 自己定义或登记的标签（§4.33） | `struct tm *t;` |
 | **`enum` 常量**（`Fast`、`Severity_Warn`） | **不认识**（恰好全大写的除外，见下） | `x == Fast` → `error: use of an undeclared variable` |
 | 小写 `#define`（`#define limit 4`） | 不展开、不放行，同样是未声明变量 | 换成全大写名或走 shim |
 
 - 全大写是**纯拼写启发式**：`SEEK_SET` 能过，只是因为它长得像宏，被原样发射、交给 C 编译器求值——
-  这不代表 CT 解析了那个 `enum`。同一头文件里若有 `enum Mode { Fast, Slow };`，`x == Fast` 立刻报
+  这不代表 Ct 解析了那个 `enum`。同一头文件里若有 `enum Mode { Fast, Slow };`，`x == Fast` 立刻报
   `error: use of an undeclared variable`（解析期诊断，`ct build` / `ct check` 都失败）。
 - 数组长度是例外：`int a[Fast];` 里的单个裸名按常量放行并原样发射（§4.28）；**普通表达式与 `case`
   标签不放行**——`case SEEK_SET:` 能过只因为它是全大写，`case Fast:` 会报未声明变量。
-- 想让 CT 侧直接调用 enum 常量，用映射单元 + 伴生 C shim 包一层（五行即可）：
+- 想让 Ct 侧直接调用 enum 常量，用映射单元 + 伴生 C shim 包一层（五行即可）：
 
 ```c
 /* posix/seek.shim.h —— 与 seek.m.ct 同目录、同基名 */
@@ -1910,7 +1910,7 @@ map trait Seek for namespace posix {
 
 消费者 `import posix::seek;` 之后写 `posix::Seek.set()`，生成物里展开为 `ct_seek_set()`；`ct build`
 会自动补 `-I posix/`（§4.10、tutorial §9.2）。把 `static const int` 直接放进 shim 头不够：声明在
-头文件里，CT 看不见；在 CT 源码里再声明一次又与定义重复。所以推荐函数包装（或全大写 `#define` 别名）。
+头文件里，Ct 看不见；在 Ct 源码里再声明一次又与定义重复。所以推荐函数包装（或全大写 `#define` 别名）。
 
 #### 4.44 闭包（Phase 21，仅 ct-ast）
 
@@ -2004,7 +2004,7 @@ int apply(int base) {
 
 #### 5.1 源码命名约定（语言 + 标准库 + ct-pkg，稳定契约）
 
-> 适用范围：CT 语言自身暴露的名字（内置类型、`lib/std` 内置层）、`std` 包，以及所有 ct-pkg 包。
+> 适用范围：Ct 语言自身暴露的名字（内置类型、`lib/std` 内置层）、`std` 包，以及所有 ct-pkg 包。
 > 目标：同一生态不出现 `read_file` / `readFile` / `ReadFile` 三种写法。
 
 | 类别 | 规则 | 正例 | 反例 |
@@ -2021,14 +2021,14 @@ int apply(int base) {
 - **保留名（封闭清单，只豁免「动词 / 前缀开头」一条，不豁免大小写规则）**：
   - 内置层：`Vec.len`、`Vec.has`、`Vec.at`、`Map.len`、`Map.has`（`Str` 只有字段 `len` 与自由函数
     `str_len`，**没有 `len` 方法**，因此不进保留名）；
-  - `std` 包：`std::str::String.len`（即 `std::str.len`；std 侧将改名 `CharStr`，CT 待其发版后
+  - `std` 包：`std::str::String.len`（即 `std::str.len`；std 侧将改名 `CharStr`，Ct 待其发版后
     再同步本条，不预先改）、旧 `std::vec` 的 `len` / `at`、
     旧 `std::map` 的 `len`、`std::num` 的 `max` / `min`（`int` / `long` / `long long` 三个宿主）。
   这些是存量豁免（`std::num` 的两个名字是 std `0.2.0` 的既有名），不因本条改名；
   **新增查询方法不得加入本清单**，仍按动词 / 前缀规则。
 - **映射层 trait 不是值类型**：`std::str::String`、`std::io` 的 `Path` / `File` 挂在宿主
   （`char *` / `IoFile *`）上提供方法，名字按 trait 的 PascalCase 规则，但不得当 struct 或类型别名使用；
-  是否改名（例如 `String` → `CharStr`）由所属 ct-pkg 包决定，CT 不替包保留或改名。`Path` / `File`
+  是否改名（例如 `String` → `CharStr`）由所属 ct-pkg 包决定，Ct 不替包保留或改名。`Path` / `File`
   分别映射 `char *` 与 `IoFile *`，与内建 `Str` / `Vec` 无关。
 - **不设「数学惯用词」类例外**：`max` / `min` 是按名字登记的存量豁免，不是一类新前缀；
   新的数学接口（`abs` / `clamp` / `sum` 等）不得据此免检，确需例外时逐个登记并留决策记录。
@@ -2092,7 +2092,7 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
 - 变量表无类型信息；变量按**花括号块作用域**回滚（`{` 压栈、`}` 恢复），同一作用域内出现同名时取**最先**登记者（`find_var` 首命中）。
 - **登记顺序 = 源码顺序**：在变量声明之前出现的方法调用不会被重写。
 - **（仅 L2，行重写管线）**跨行的方法调用语句不重写（按行处理）；函数签名的**参数列表**跨多行时同样不识别。ct-ast 是 AST 管线，两者都不受限。
-- **（仅 L2，行重写管线）**跨行的块注释 `/* … */` 只保护第一行：续行会被当作普通代码行处理，其中的 `self`、方法调用等照常改写（单行 `/* … */`、`//` 与字符串 / 字符字面量不受影响）。这是按行处理管线的固有限制，Phase 2–5 用 CT 重做特性时随实现一并保留（见 [roadmap](roadmap.md) 的「自举之后的恢复与新增」）。**ct-ast 不保留源码注释**：整段注释连同其中的代码一起丢弃，生成物只带溯源 banner（若要保留需单独立项）。
+- **（仅 L2，行重写管线）**跨行的块注释 `/* … */` 只保护第一行：续行会被当作普通代码行处理，其中的 `self`、方法调用等照常改写（单行 `/* … */`、`//` 与字符串 / 字符字面量不受影响）。这是按行处理管线的固有限制，Phase 2–5 用 Ct 重做特性时随实现一并保留（见 [roadmap](roadmap.md) 的「自举之后的恢复与新增」）。**ct-ast 不保留源码注释**：整段注释连同其中的代码一起丢弃，生成物只带溯源 banner（若要保留需单独立项）。
 - **文件作用域的对象 / 数组**：ct-ast 把 vptr 写进静态初始化式，不生成 `__ct_init` 构造器；
   L0 / L2 才用 `__attribute__((constructor))` 在 `main` 前补写。
 - 数组支持声明初值与变长数组（`int a[] = {…};`、`int a[n];`）；ct-ast 逐元素补 vptr。
@@ -2331,13 +2331,13 @@ int main(void) {
   不再静默截断。
 - **`?.` / `?[` 只接受指针接收者**，结果必须有 `0` 表示（struct 值 / 含 Drop 的值拒绝，L53-3/4）；
   不支持 `T?` / `Maybe<T>`、可选方法调用与 `p?.b = 1`。
-（错误恢复是 L0 的边界；CT 线会先收集多个错误再报告，见 §10。）
+（错误恢复是 L0 的边界；Ct 线会先收集多个错误再报告，见 §10。）
 
 ### 9. 诊断与退出码
 
 - **错误**：格式 `<file>:<line>:<col>: error: <message>`，输出到 `stderr`；L0 **遇错即 `exit(1)`**，
-  CT 线则先收集多个错误（§10）。
-- **L0 不产生任何警告**；CT 线会输出泄漏警告与签名不一致告警，`--diagnostics` 可切 JSON（§10）。
+  Ct 线则先收集多个错误（§10）。
+- **L0 不产生任何警告**；Ct 线会输出泄漏警告与签名不一致告警，`--diagnostics` 可切 JSON（§10）。
 - **JSON 覆盖（v1.1 目标）**：warning / type-check 通道已输出 JSON；parse 错误目前在
   `--diagnostics=json` 下仍回退文本，v1.1 补齐为同构 JSON（file/line/column/severity/message）；
   稳定诊断码 registry 归 v1.2（LANG-25），不在 v1.1 混入。
@@ -2357,7 +2357,7 @@ int main(void) {
 ### 10. L2 独有：模块系统与诊断（本文不描述其语法）
 
 多文件模式（`ct build`）、`namespace`、`import`、`pub`、`Drop`、`#line`（含 `--line` / `--no-line`）、
-泄漏警告与 `--diagnostics`，以及语义诊断（重复定义 / 签名不一致）**均由 CT 线（L2 / ct-ast）支持**，L0 不接受。
+泄漏警告与 `--diagnostics`，以及语义诊断（重复定义 / 签名不一致）**均由 Ct 线（L2 / ct-ast）支持**，L0 不接受。
 这些语法的定义与实现记录见 [roadmap](roadmap.md) 的 Phase 2–5 与 [design/restore.md](history/design/restore.md)；
 归档的测试 fixture 见 `test/archive/`，特性完整的旧实现见 git tag `overreach-oracle`。
 
@@ -2661,7 +2661,7 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 - **与 std 包 `String` 的关系**：`std::str::String` 是挂在 `char *` 上的方法层 trait（由外部 `std` 包提供 `String.m.ct`；
   下一版单元改名为 `CharStr.m.ct`，导入写作 `std::str::CharStr`），
   不是 `Str` 的子类型、别名或构造器；本仓内建 `Str` 是长度前缀的低层值句柄，二者不重复、无继承关系。
-  `String` 改名为 `CharStr` 归 ct-pkg `std` 侧处置，CT 侧只在包发版后同步 §5.1 的保留名，不改 `Str`。
+  `String` 改名为 `CharStr` 归 ct-pkg `std` 侧处置，Ct 侧只在包发版后同步 §5.1 的保留名，不改 `Str`。
 
 ### 4.57 C ABI 静态库（`ct build --lib`，Phase 39，仅 ct-ast）
 
@@ -2686,7 +2686,7 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 `atomic` 是**上下文类型修饰**：只有后跟 `int` / `long` / `void *` / `bool` 时才是类型；`int atomic = 1;`
 和单独的 `atomic;` 仍是普通标识符。四种写法映射到 C11 `_Atomic(T)`：
 
-| CT | 生成 C |
+| Ct | 生成 C |
 | --- | --- |
 | `atomic int` | `_Atomic(int)` |
 | `atomic long` | `_Atomic(long)` |
@@ -2708,7 +2708,7 @@ if (!ct_atomic_cas(&hits, &expected, v + 1))
 
 - 第一实参的静态类型必须是 `_Atomic(T) *`；`&x` 与 `_Atomic(T) *p` 都接受。
 - `ct_atomic_cas(&x, &expected, desired)` 的 `expected` 必须按地址传入；失败时写回实际值。
-- 生成物带 CT 自带的 12 个 `static inline` 助手（仅在实际用到原子操作时发射），内部调用
+- 生成物带 Ct 自带的 12 个 `static inline` 助手（仅在实际用到原子操作时发射），内部调用
   `__atomic_*`；不注入 `<stdatomic.h>`。
 - **C11 要求**：`_Atomic` 是 C11 类型。`ct build` 在存在原子单元时使用 `-std=c11`；`ct compile`
   的用户需自行以 `-std=c11` 编译生成的 C。
@@ -2840,7 +2840,7 @@ Result<long, char *> twice(int n)
 
 ### 4.66 C 边界：`c-boundary` 与 shim（Phase 65，仅 ct-ast）
 
-默认只有 CT 树（`selfhost/**`、`lib/std/**`、`test/**`、`examples/**`）与 `--c-boundary=allow`
+默认只有 Ct 树（`selfhost/**`、`lib/std/**`、`test/**`、`examples/**`）与 `--c-boundary=allow`
 的构建可以直接和 C 打交道；**外部代码默认 strict**。
 
 | 形态 | strict 下 | 出口 |
@@ -2870,7 +2870,7 @@ strict 是**护栏**不是沙箱：shim 的内容、`--ldflags` 外链的 `.c` �
 
 边界：
 
-- 只认**直接调用**；名字出现在字符串/注释里不算。取地址不是调用（但 CT 目前不允许引用未声明函数）。
+- 只认**直接调用**；名字出现在字符串/注释里不算。取地址不是调用（但 Ct 目前不允许引用未声明函数）。
 - 用户自己定义了同名函数（或宏）时**不抢**：按用户的声明处理，不补头。
 - 集合外的名字（`syslog`、`open`、`fcntl`、`exec*`、`ioctl` …）**不补头**：走 `.m.ct`/shim 或显式声明。
 - `vprintf`/`vsnprintf` 等接收 `va_list`，不是可变参数函数，不因前缀补头。

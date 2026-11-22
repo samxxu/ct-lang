@@ -96,9 +96,9 @@ This extension has its own version line; 0.5.1 does not affect the compiler's
 
 - Highlighting for raw pass-through (Phase 17.3): `#ct-raw` / `#ct-endraw`
   form an embedded block (`meta.raw.ct`) whose body is left to the C grammar,
-  so a macro or a hand-written function inside it is not read as a CT construct.
+  so a macro or a hand-written function inside it is not read as a Ct construct.
 - `test/check-grammar.py`: 36 assertions, adding the raw marker pair and a
-  "no CT keyword inside the block" check.
+  "no Ct keyword inside the block" check.
 
 ## 0.3.0
 
@@ -139,11 +139,11 @@ This extension has its own version line; 0.5.1 does not affect the compiler's
 
 Initial release.
 
-- Syntax highlighting for the CT-specific constructs: `trait` definitions,
+- Syntax highlighting for the Ct-specific constructs: `trait` definitions,
   `impl … for …` blocks, `use` clauses (including comma-separated lists) and
   the implicit `self` receiver. Everything else is delegated to VS Code's
   built-in C grammar via `include: source.c`.
-- Strings and comments are tokenised before the CT rules, so the compiler's
+- Strings and comments are tokenised before the Ct rules, so the compiler's
   "never touch anything inside a string, char or comment" guarantee holds for
   the highlighter too.
 - Language configuration: line/block comments, brackets, auto-closing and
@@ -151,6 +151,6 @@ Initial release.
 - Snippets: `trait`, `structuse`, `impl`, `method`, `call`.
 - `test/check-grammar.py`: a dependency-free smoke test (13 assertions at
   release) that replays the grammar's patterns over the demos and
-  checks both directions — the CT rules fire on `trait` / `use` / `impl` /
+  checks both directions — the Ct rules fire on `trait` / `use` / `impl` /
   `self`, and stay silent inside comments, strings and look-alike identifiers
   (`use_it`, `selfish`).

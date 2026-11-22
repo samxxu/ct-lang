@@ -31,8 +31,8 @@ own/borrow；全部 opt-in，合法语料零误报后才讨论是否进 `ct buil
 
 **目标**
 
-- 让 `ct check --types` 能机械回答“这个表达式/调用/返回/赋值在 CT 语义下类型是否成立”；
-- 让 `ct check --semantics` 覆盖控制流可判定子集与 CT 现有 own/borrow/Drop 契约；
+- 让 `ct check --types` 能机械回答“这个表达式/调用/返回/赋值在 Ct 语义下类型是否成立”；
+- 让 `ct check --semantics` 覆盖控制流可判定子集与 Ct 现有 own/borrow/Drop 契约；
 - 每相独立可交付、可回退、可进 CI；
 - 误报率可统计，合法语料零误报后逐相收紧。
 

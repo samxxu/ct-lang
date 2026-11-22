@@ -2,7 +2,7 @@
 
 > English · [中文](#中文)
 
-A single CT program that uses the Wave 1 packages:
+A single Ct program that uses the Wave 1 packages:
 
 - [`hal`](https://github.com/ct-pkg/hal) — the contract: `Uart`, `Gpio`,
   `Clock`, `Log`;
@@ -47,7 +47,7 @@ The first line (`hal`) comes from `Uart.send` on stdout; the rest come from
 
 ## 中文
 
-同一个 CT 程序把 Wave 1 的三个包放在一起用：`hal`（契约）、`hal-posix`
+同一个 Ct 程序把 Wave 1 的三个包放在一起用：`hal`（契约）、`hal-posix`
 （一个 `posix_hal` 实例装箱成四个 trait）、`std`（`string.h` / `stdio.h` /
 `math.h` 的零成本映射）。
 

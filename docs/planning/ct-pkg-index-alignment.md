@@ -43,7 +43,7 @@
 | A1 | A 读取 | `pkg_index_lookup` 接受 `ntok >= 5`，`ntok > 6` 的多余列静默忽略 | 恰好六字段；五字段按 legacy 硬错；`>6` 与 `verify` 同判为 `field-count` | 五字段文案保持 `index row ... is legacy (five fields)`；七字段在 `ct get` 与 `ct index verify` 都失败 | **bugfix** |
 | A2 | A 读取 | 只按 `name` / `publisher` 匹配；不校验选中行的 publisher 字符集与 `tag == 'v<version>'` | 对**选中的六字段行**执行与 `ct index verify` 相同的身份与 tag 校验 | 选中行非法时 `ct get` 硬错且不改 store/lock；未选中坏行不阻塞 `ct get`（与 verify 的全文件扫描区分） | **bugfix** |
 | B1 | B 校验 | `ct index verify` 已扫描全文件：字段数、五字段、publisher、version、tag、digest、重复 | 保持现状，作为 A1/A2 的对齐基准与 conformance oracle | 退出码 0/1/2、行号与错误类别与契约 §4.4 一致；`--json` 稳定 | **bugfix**（已对齐，锁死） |
-| B2 | B 校验 | digest 只接受 `sha256:<64 lowercase hex>`；16-hex/大写硬错 | 同左；与 index 行、`ct.lock` 使用同一拼写 | 同一包树在 shell 与 CT 生成的摘要逐字节一致；三组 digest 向量通过 | **bugfix**（已对齐，锁死） |
+| B2 | B 校验 | digest 只接受 `sha256:<64 lowercase hex>`；16-hex/大写硬错 | 同左；与 index 行、`ct.lock` 使用同一拼写 | 同一包树在 shell 与 Ct 生成的摘要逐字节一致；三组 digest 向量通过 | **bugfix**（已对齐，锁死） |
 | C1 | C 落库 | 读取 `ct.pkg` 后要求 `publisher`（非空、非 `local`）与 `ns-root`（相对、存在、无 `..`）；失败在写 store/lock 前 | 同左；错误文案与 PK-2/PK-5 一致 | 缺 publisher / `local` / 非法 ns-root 时不写 store、不写 lock | **bugfix**（已对齐，锁死） |
 | C2 | C 落库 | `ct.lock` 只接受 v2（`# ct-lock 2`）；首字段 `<publisher>/<name>`；digest 与索引行同拼写 | 同左；v1 硬错并提示 `run 'ct migrate'` | v1 lock 不被部分改写；未重解的其它行保留；摘要拼写不变 | **bugfix**（已对齐，锁死） |
 

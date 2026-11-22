@@ -3,7 +3,7 @@
 本目录是契约 v1 的**机器可执行基准**（[PKG-15](../../../../issues/packages/pkg-15-conformance-suite.md)，
 契约 [§3.3/§6.1](../../../../docs/planning/ct-pkg-get-contract.md)）。同一份数据同时喂给：
 
-- **CT 侧**：`ct pkg check`、`ct index verify`、`ct get <local-dir>`；
+- **Ct 侧**：`ct pkg check`、`ct index verify`、`ct get <local-dir>`；
 - **shell 侧**：`../reference.sh` 的独立实现；
 - 以及 `../run.sh` 里写死的期望行。
 

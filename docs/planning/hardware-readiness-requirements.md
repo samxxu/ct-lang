@@ -14,7 +14,7 @@
 - **P0（v0.62.1）**：先修“数组/const 的 vptr 静默坏 C”。这是 D-005 的静默坏 C，独立 patch，不塞进 PH-64。
 - **PH-64（v0.63.0，`d=1`）**：`--freestanding` + 按需单元 + `--alloc` + const vtable；验收以**符号面**为准，不以容器名单为准。
 - **硬件 pilot（不占 phase）**：PH-64 收口后做 P0（UART/GPIO/状态机）→ P1（ISR/DMA）；用真实板与厂商工具链；失败 no-go。
-- **明确不采纳**：CT 作为唯一主语言、按容器名字禁、`Option/Result` “纯值可 freestanding”、条件 const、现在立 `layout(plain)` 语法、完整借用/类型检查器。
+- **明确不采纳**：Ct 作为唯一主语言、按容器名字禁、`Option/Result` “纯值可 freestanding”、条件 const、现在立 `layout(plain)` 语法、完整借用/类型检查器。
 
 ## 1. P0：静默坏 C 止血
 
@@ -119,7 +119,7 @@
 | --- | --- |
 | 优先级 | **P1** |
 | 状态 | 采纳（需求；PH-64 后执行） |
-| 内容 | 一块真实 Cortex-M 板 + 厂商 HAL + 一个 RTOS 候选；CT 只做上层状态机/协议/驱动接口；底层 UART/GPIO/ISR/DMA 用 C shim；用 `--emit-c` 纳入厂商构建 |
+| 内容 | 一块真实 Cortex-M 板 + 厂商 HAL + 一个 RTOS 候选；Ct 只做上层状态机/协议/驱动接口；底层 UART/GPIO/ISR/DMA 用 C shim；用 `--emit-c` 纳入厂商构建 |
 | 验收 | P0：UART/GPIO/状态机在板上运行；P1：一个 ISR + 一个 DMA 通道通过 A1–A10；生成 C 与手写 C 的体积/周期/栈对比；失败 no-go |
 | 依赖 | PH-64 收口；板卡/工具链 H0 冻结 |
 | 版本 | 不占 phase；独立验证项目 |
@@ -131,7 +131,7 @@
 | --- | --- |
 | 优先级 | **P1** |
 | 状态 | 采纳（需求；随 pilot） |
-| 内容 | 生成 C 进版本库；CT 版本钉死；用厂商 Makefile/CMake 编译；不替换工具链；升级必须 diff 生成 C |
+| 内容 | 生成 C 进版本库；Ct 版本钉死；用厂商 Makefile/CMake 编译；不替换工具链；升级必须 diff 生成 C |
 | 验收 | 目标工具链直接编译生成 C；`ct -v`/sha 记录；生成 C 与二进制可追溯 |
 | 依赖 | REQ-HW-020 |
 | 版本 | 不占 phase |
@@ -143,7 +143,7 @@
 | --- | --- |
 | 优先级 | **P1** |
 | 状态 | 采纳（文档需求；不新增检查器） |
-| 内容 | 明确 CT 类型检查是部分/opt-in；`ct check --types` 覆盖有限；硬件代码仍须目标 C 编译器告警、MISRA/静态分析、人工审查 |
+| 内容 | 明确 Ct 类型检查是部分/opt-in；`ct check --types` 覆盖有限；硬件代码仍须目标 C 编译器告警、MISRA/静态分析、人工审查 |
 | 验收 | language-spec/README 有明确“不保证完整类型安全”段落；pilot 验收包含 `-Wall -Wextra` 与静态分析 |
 | 依赖 | 无 |
 | 版本 | 文档，不占 phase |
@@ -155,8 +155,8 @@
 | --- | --- |
 | 优先级 | **P1** |
 | 状态 | 采纳（边界需求） |
-| 内容 | ISR 入口、DMA buffer 生命周期、Cache/MPU、屏障仍由 C/汇编与驱动设计负责；CT 的 `own/Drop` 不单独承担 |
-| 验收 | pilot P1 的 A3/A4 通过；文档列失效矩阵；ISR 不调用可能分配/清理的 CT 函数 |
+| 内容 | ISR 入口、DMA buffer 生命周期、Cache/MPU、屏障仍由 C/汇编与驱动设计负责；Ct 的 `own/Drop` 不单独承担 |
+| 验收 | pilot P1 的 A3/A4 通过；文档列失效矩阵；ISR 不调用可能分配/清理的 Ct 函数 |
 | 依赖 | REQ-HW-020 |
 | 版本 | 不占 phase |
 | 来源 | ChatGPT 评估 + 证据席 |
@@ -167,8 +167,8 @@
 | --- | --- |
 | 优先级 | **P1** |
 | 状态 | 采纳（边界需求） |
-| 内容 | 不要求 CT 解析完整 CMSIS/厂商头；用 C shim 暴露干净声明；`#include`/属性/汇编走 C 侧 |
-| 验收 | pilot 的 UART/GPIO 只依赖 shim；不把整棵 SDK 头喂给 CT；属性/中断入口在 C 侧 |
+| 内容 | 不要求 Ct 解析完整 CMSIS/厂商头；用 C shim 暴露干净声明；`#include`/属性/汇编走 C 侧 |
+| 验收 | pilot 的 UART/GPIO 只依赖 shim；不把整棵 SDK 头喂给 Ct；属性/中断入口在 C 侧 |
 | 依赖 | REQ-HW-020 |
 | 版本 | 不占 phase |
 | 来源 | 两份提案共同点 |
@@ -201,7 +201,7 @@ PH-64 的 S5/`layout(plain)` 不在本波；pilot 失败即 no-go，不调阈值
 
 | 项 | 处置 |
 | --- | --- |
-| CT 作为唯一主语言 | 不采纳；底层 C/汇编保留 |
+| Ct 作为唯一主语言 | 不采纳；底层 C/汇编保留 |
 | 按容器名字禁 freestanding | 不采纳；改用符号面 |
 | `Option/Result` 是纯值、freestanding 可用 | 不采纳；实例化会发 `fprintf/abort`，按符号面判 |
 | 条件 const vtable | 不采纳；全量 const |

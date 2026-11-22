@@ -167,7 +167,7 @@ $ echo $?
 
 ## 4. 限制
 
-1. **方法名拆分**：CT 没有默认参数，JS `indexOf(search, from)` 拆成 `index_of` 与 `index_of_from`；
+1. **方法名拆分**：Ct 没有默认参数，JS `indexOf(search, from)` 拆成 `index_of` 与 `index_of_from`；
    同样没有重载。
 2. **大小写/trim 只覆盖 ASCII**：没有 Unicode 大小写表与 JS 全空白集合；`match`/`normalize` 等
    按 C.3 走包，不内建。

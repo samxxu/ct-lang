@@ -15,14 +15,14 @@
 | `cases/` | L0 | golden 正例：扁平文件对 `<name>.ct` + `.expected.c` / `.h` / `.out` | `run.sh` 的 cases 层 |
 | `errors/` | L0 | 负例：扁平文件对 `<name>.ct` + `<name>.expected-err` | `run.sh` 的 errors 层 |
 | `archive/` | L0（历史） | Phase 0.3 移出的越位特性 fixture，Phase 2–5 的对差基线，**不跑** | `selfhost/check-archive.sh` |
-| `modules/` | CT 线 | 特性/多单元探针：一目录一用例（输入 + `.expected.*` + 可选 `<mode>.args` 驱动提示，可含 `src/`） | `selfhost/check-ast.sh`、`selfhost/check-archive.sh` |
-| `ast/` | CT 线 | 行为探针 `01..122`（编号有跳号，另有 `loop_*` / `own_shadow_return` 等具名用例；当前共 312 个目录，含 `errors/`；行为探针 311 个；`find test/ast -mindepth 1 -maxdepth 1 -type d` 实测）：一目录一用例（`prog.ct` + `prog.expected.out`）；`ast/errors/` 为裸负例 | `selfhost/check-ast.sh` |
-| `patterns/` | CT 线 | 设计模式用例：一目录一 `prog.ct` + `expected.out`（编译 → 零告警构建 → 运行 → 比对） | `selfhost/check-ast.sh` |
-| `bindings/` | CT 线 | 声明式 C 库 binding 夹具：`mock-hal`（假 HAL，端到端）与 `posix-socket`（shim 演示）；2026-11-13 由顶层 `bindings/` 迁入 | `selfhost/check-ast.sh`、`selfhost/check-warnings.sh` |
+| `modules/` | Ct 线 | 特性/多单元探针：一目录一用例（输入 + `.expected.*` + 可选 `<mode>.args` 驱动提示，可含 `src/`） | `selfhost/check-ast.sh`、`selfhost/check-archive.sh` |
+| `ast/` | Ct 线 | 行为探针 `01..122`（编号有跳号，另有 `loop_*` / `own_shadow_return` 等具名用例；当前共 312 个目录，含 `errors/`；行为探针 311 个；`find test/ast -mindepth 1 -maxdepth 1 -type d` 实测）：一目录一用例（`prog.ct` + `prog.expected.out`）；`ast/errors/` 为裸负例 | `selfhost/check-ast.sh` |
+| `patterns/` | Ct 线 | 设计模式用例：一目录一 `prog.ct` + `expected.out`（编译 → 零告警构建 → 运行 → 比对） | `selfhost/check-ast.sh` |
+| `bindings/` | Ct 线 | 声明式 C 库 binding 夹具：`mock-hal`（假 HAL，端到端）与 `posix-socket`（shim 演示）；2026-11-13 由顶层 `bindings/` 迁入 | `selfhost/check-ast.sh`、`selfhost/check-warnings.sh` |
 | `acceptance/` | 跨层 | 端到端验收清单（`ast_spike.ct` / `ast_parse_spike.ct`）；`PENDING` 属预期、**不阻断** | `test/acceptance/run.sh` |
 | `pkg/` | 跨层 | 包管理器 `ct get` / `ct update` / `ct install` / `ct verify` 用例（含比较器范围、显式索引、构建元数据） | `test/pkg/run.sh` |
 
-`run.sh` 只驱动 **L0**（`selfhost/l0/ctc.c`）；CT 线（`selfhost/**`）的关卡由 `selfhost/check-all.sh` 聚合，
+`run.sh` 只驱动 **L0**（`selfhost/l0/ctc.c`）；Ct 线（`selfhost/**`）的关卡由 `selfhost/check-all.sh` 聚合，
 见 [selfhost/README.md](../selfhost/README.md) 的门禁表。
 
 > **当前实测（2026-11-22，v0.88.3）**：`sh test/run.sh` → `156 passed, 0 failed`；

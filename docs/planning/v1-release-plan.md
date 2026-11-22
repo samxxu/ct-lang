@@ -220,7 +220,7 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.1 删除 `box` 别名 | `v1-PH-1` | **v1.1.0** | `box<T>` 硬错并提示 `Box<T>`；独立提交、可回滚（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 | v1.1 C Shim Contract | `v1-PH-1` | v1.1 train | 正式契约：命名/头文件/所有权/错误码/ISR 上下文/ABI/测试；不新增语言关键字（[DOC-91](../../issues/docs/doc-91-c-shim-contract.md)） |
 | v1.1 异步 / DMA 生命周期契约 | `v1-PH-1` | v1.1 train | 并入 DOC-91：提交即转移、完成即归还、ISR 可调用集、回调上下文；证据仍归 TEST-22（hardware-gated） |
-| v1.1 C 互操作语义矩阵 | `v1-PH-1` | v1.1 train | 并入 guide 附录，逐项给 CT 行为、边界与权威节；不新建平行规范（[DOC-92](../../issues/docs/doc-92-c-interop-semantics-matrix.md)） |
+| v1.1 C 互操作语义矩阵 | `v1-PH-1` | v1.1 train | 并入 guide 附录，逐项给 Ct 行为、边界与权威节；不新建平行规范（[DOC-92](../../issues/docs/doc-92-c-interop-semantics-matrix.md)） |
 | v1.1 JSON 诊断 parse 通道 | `v1-PH-1` | v1.1 train | parse 错误输出与 warning/type 同构的 JSON；稳定 code 不在本项（[LANG-10](../../issues/lang/lang-10-machine-readable-diagnostics.md)） |
 | v1.2 诊断 code registry | `v1-PH-2` | v1.2 train | 稳定 `E-*`/`W-*` code + registry；与 JSON 通道分开（[LANG-25](../../issues/lang/lang-25-diagnostic-code-registry.md)） |
 | v1.2 Typed/Lowered IR | `v1-PH-2` | v1.2 train | 完整 IR + 统一清理 CFG；先设计后实施，不进入 v1.0/v1.1 门禁（[SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md)） |
@@ -228,7 +228,7 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 > **包侧 / 外部工作不纳入本表**：例如 [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)
 > （JSON 节点包：arena + 索引、NodeVec/NodeMap、schema）由 std 包 / 外部仓交付；
 > 本仓只维护 [LANG-26](../../issues/lang/lang-26-binding-site-conversion.md) 的绑定点转换 ADR
-> 与接口需求，不把外部包的排期、验收或门禁写进 CT 发布路线。
+> 与接口需求，不把外部包的排期、验收或门禁写进 Ct 发布路线。
 
 > 该编号依赖 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md)
 > 被主规范受理。未受理前，v1.0/v1.1/v1.2 仍按旧规则登记 `major-release`/`release-train` deviation；

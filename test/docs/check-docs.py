@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts fourteen invariants:
+Standard library only. It asserts fifteen invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -43,8 +43,12 @@ Standard library only. It asserts fourteen invariants:
  14. DOC-77: docs/capabilities.tsv lists every capability once with a legal
      status and a spec section that resolves (for `implemented` rows), and
      README §3 carries exactly one `<!-- cap:id -->` marker per row.
+  15. DOC-94: active prose writes the language name as `Ct`, never bare `CT`.
+      Fenced blocks, inline code, the generated spec block in AGENTS.md, and
+      the historical/exempt trees are out of scope. `--selftest` runs the
+      positive and negative fixtures for this assertion.
 
-Exit code 0 when all fourteen hold, 1 otherwise.
+Exit code 0 when all fifteen hold, 1 otherwise.
 """
 
 import hashlib
@@ -81,6 +85,26 @@ STABLE_TIERS = ("已冻结", "冻结中", "1.0 前可改")
 COMPAT_MARKER = re.compile(r"<!--\s*ct-compat:\s*([^>]*)-->")
 CAP_MARKER = re.compile(r"<!--\s*cap:([a-z0-9-]+)\s*-->")
 CAP_STATUS = {"implemented", "planned"}
+
+# DOC-94: the language name is "Ct" in active prose. The check skips code
+# (fenced blocks and inline spans), the generated spec block, and the trees
+# whose contents are historical records or byte-for-byte upstream copies.
+CT_EXEMPT_DIRS = (
+    "docs/history",
+    "docs/reviews",
+    "docs/review",
+    "docs/proposals",
+    "docs/decisions",
+    "docs/design",
+    "docs/spec",
+    "battle",
+    "issues",
+)
+CT_ACTIVE_ROOTS = ("test", "examples", "editors", "selfhost")
+BARE_CT = re.compile(r"\bCT\b")
+FENCE_LINE = re.compile(r"^\s*(```|~~~)")
+SPEC_BEGIN_LINE = re.compile(r"^\s*<!--\s*spec:begin\b.*-->\s*$")
+SPEC_END_LINE = re.compile(r"^\s*<!--\s*spec:end\b.*-->\s*$")
 
 STATUS_MAP = {
     "完成": "\u2705",
@@ -669,7 +693,124 @@ def check_capability_map(errors):
     return len(rows)
 
 
+def ct_is_active(rel):
+    """True when a repo-relative path is active prose for DOC-94.
+
+    The English mirror is out of scope by project policy, and the exempt trees
+    hold historical records, review snapshots or the verbatim upstream spec.
+    """
+    rel = rel.replace(os.sep, "/")
+    if rel == "README.en.md" or not rel.endswith(".md"):
+        return False
+    if rel in ("README.md", "AGENTS.md"):
+        return True
+    head = rel.split("/")[0]
+    if head == "docs":
+        for exempt in CT_EXEMPT_DIRS:
+            if rel == exempt + ".md" or rel.startswith(exempt + "/"):
+                return False
+        return True
+    return head in CT_ACTIVE_ROOTS
+
+
+def ct_active_paths():
+    out = []
+    for base, dirs, names in os.walk(ROOT):
+        dirs[:] = sorted(
+            d for d in dirs if d not in (".git", ".temp", "node_modules")
+        )
+        for name in sorted(names):
+            rel = os.path.relpath(os.path.join(base, name), ROOT)
+            if ct_is_active(rel):
+                out.append(os.path.join(base, name))
+    return out
+
+
+def ct_hits(text):
+    """Return (line, column, snippet) for bare CT in active prose.
+
+    The scan is line-oriented so the reported line number matches the file.
+    Inline code is stripped before matching; fenced blocks and the generated
+    spec block in AGENTS.md are skipped entirely.
+    """
+    hits = []
+    in_fence = False
+    in_spec_block = False
+    for number, line in enumerate(text.splitlines(), 1):
+        if SPEC_BEGIN_LINE.match(line):
+            in_spec_block = True
+            continue
+        if SPEC_END_LINE.match(line):
+            in_spec_block = False
+            continue
+        if in_spec_block:
+            continue
+        if FENCE_LINE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        for match in BARE_CT.finditer(INLINE.sub("", line)):
+            hits.append((number, match.start() + 1, line.strip()))
+    return hits
+
+
+def check_ct_spelling(errors):
+    """DOC-94: bare `CT` in active prose must be written `Ct`."""
+    files = ct_active_paths()
+    hits = 0
+    for path in files:
+        rel = os.path.relpath(path, ROOT)
+        for number, column, snippet in ct_hits(read(path)):
+            hits += 1
+            errors.append(
+                f"{rel}:{number}:{column}: bare 'CT' in active prose "
+                f"(write 'Ct'; DOC-94): {snippet[:70]}"
+            )
+    return hits, len(files)
+
+
+def ct_selftest():
+    """DOC-94 fixtures: prose is red, code/exempt contexts are green."""
+    cases = (
+        ("prose", "这是 CT 语言。", 1),
+        ("heading", "# CT 入门教程", 1),
+        ("adjacent text", "C 与 CT 之间", 1),
+        ("inline code", "`CT` / `CT_HOME` / `CT=/path`", 0),
+        ("fenced block", "```\nCT=/path/to/ct\n```", 0),
+        ("spec block", "<!-- spec:begin version=1 -->\nCT 包\n<!-- spec:end -->", 0),
+    )
+    paths = (
+        ("docs/glossary.md", True),
+        ("AGENTS.md", True),
+        ("docs/history/phase-log.md", False),
+        ("docs/reviews/x.md", False),
+        ("docs/spec/ai-coding-workflow.md", False),
+        ("README.en.md", False),
+        ("issues/README.md", False),
+        ("battle/x/verdict.md", False),
+    )
+    failed = 0
+    for name, text, want in cases:
+        got = len(ct_hits(text))
+        ok = got == want
+        failed += 0 if ok else 1
+        print(f"ct-ratchet selftest: {name}: {got} hit(s), expected {want} -> {'OK' if ok else 'FAIL'}")
+    for rel, want in paths:
+        got = ct_is_active(rel)
+        ok = got == want
+        failed += 0 if ok else 1
+        print(f"ct-ratchet selftest: path {rel}: active={got}, expected {want} -> {'OK' if ok else 'FAIL'}")
+    if failed:
+        print(f"ct-ratchet selftest: FAIL ({failed} case(s))")
+        return 1
+    print(f"ct-ratchet selftest: OK ({len(cases) + len(paths)} cases)")
+    return 0
+
+
 def main():
+    if "--selftest" in sys.argv[1:]:
+        return ct_selftest()
     errors = []
     links, scanned = check_links(errors)
     version = check_version(errors)
@@ -685,6 +826,7 @@ def main():
     stable = check_stable_subset(errors)
     compat = check_compat_claim(errors)
     caps = check_capability_map(errors)
+    ct, ct_files = check_ct_spelling(errors)
     for error in errors:
         print(f"FAIL: {error}")
     # The two status lines print on both paths: on a red run the first one names
@@ -699,7 +841,8 @@ def main():
         f"v{version}, {gates} hard gates, {phases} phase status, "
         f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
         f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s), "
-        f"{stable} stability row(s), {compat} compat marker(s), {caps} capability row(s))"
+        f"{stable} stability row(s), {compat} compat marker(s), "
+        f"{caps} capability row(s), {ct} bare CT in {ct_files} active file(s))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0

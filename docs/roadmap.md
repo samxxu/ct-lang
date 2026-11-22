@@ -78,7 +78,7 @@
 | Phase 63 | 删除 `vendor/` 支持（PH-54 S7） | ✅ 完成 | v0.62.0 | [卡](history/design/phase63.md) · [提案](proposals/ct-pkg-shared-store.md) |
 
 | Phase 64 | 裸机生成契约（`--freestanding` / 按需单元 / `--alloc` / const vtable） | ✅ 完成 | v0.63.0 | [卡](history/design/phase64.md) · [需求](planning/hardware-readiness-requirements.md) |
-| Phase 65 | 严格 C 边界（外部库/用户默认 strict；`.m.ct` 映射例外；CT 仓内 1.0 前代码豁免） | ✅ 完成 | v0.64.0 | [卡](history/design/phase65.md) · [battle](../battle/cinclude-2/verdict.md) |
+| Phase 65 | 严格 C 边界（外部库/用户默认 strict；`.m.ct` 映射例外；Ct 仓内 1.0 前代码豁免） | ✅ 完成 | v0.64.0 | [卡](history/design/phase65.md) · [battle](../battle/cinclude-2/verdict.md) |
 | Phase 66 | libc I/O 内置例外（按调用补头；空程序零系统头） | ✅ 完成 | v0.65.0 | [卡](history/design/phase66.md) · [D-008](decisions/D-008.md) · [SH-89](../issues/selfhost/sh89-libc-io-auto-include.md) |
 | Phase 67 | 无真机硬件能力扩展（PLL / nRF52840 / FreeRTOS / DMA / GDB） | ✅ 完成 | v0.66.0 | [卡](history/design/phase67.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
 | Phase 68 | 类型核心（`ct check --types`；修 234 误报） | ✅ 完成 | v0.67.0 | [卡](history/design/phase68.md) · [方案](planning/typecheck-semantic-plan.md) · [battle](../battle/typecheck-1/verdict.md) |
@@ -172,7 +172,7 @@
 > 包仓对齐（原 S4：std / ct-http / ct-fsguard / ct-json / ct-sse / ct-token / ct-process / ct-llm-sse）归各包仓，不属于本 phase；本仓只提供工具与判据，移交清单按仓分发。
 >
 > 包仓迁移状态（是否已迁移、`ct migrate` 是否覆盖其全部包、PK-6/12 是否绿）是**外部登记项**，
-> 由各包仓自行维护；CT 不追踪、不判定、不代为登记，也不进入本 phase 的完成判据。
+> 由各包仓自行维护；Ct 不追踪、不判定、不代为登记，也不进入本 phase 的完成判据。
 
 ### v0.58.0 之后的排期（2026-11-15 重排）
 

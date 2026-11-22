@@ -58,7 +58,7 @@ ct get ct/std@0.19.0
 - **C 宿主映射**（`.m.ct` + 同名 `.shim.h`）：`str` / `io` / `fs` / `utf8` / `num` / `math` /
   `search` / `env` / `process` / `errno` / `wchar` / `time` 的方法层。接收者是 C 已有类型
   （`char *`、`int`、`double` …），调用点直接展开成 C 调用。
-- **CT 自有类型**（`.h.ct` + 固有 `impl`）：`arena` / `test` 的值类型，以及资源句柄
+- **Ct 自有类型**（`.h.ct` + 固有 `impl`）：`arena` / `test` 的值类型，以及资源句柄
   `io::File` / `io::FileDesc` / `fs::Dir` / `locale::LocaleHandle` / `time::Timer`。
 
 包内另有 `mmap` / `poll` / `posix` / `thread` 等无独立 README 的内部单元（目录存在但不进上表）；

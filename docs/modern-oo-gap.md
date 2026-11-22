@@ -1,4 +1,4 @@
-# CT 现代化 OO 差距评估（Phase 30 收口后）
+# Ct 现代化 OO 差距评估（Phase 30 收口后）
 
 > 中文。
 >
@@ -6,13 +6,13 @@
 >
 > **当前能力以 [capabilities.tsv](capabilities.tsv) 与 [spec §4](language-spec.md) 为准；本文是 Phase 30 基线，后续相位已部分超越，不要当作现行能力表。**
 >
-> **证据口径（本轮重做）：** HEAD = `9185a59`（Phase 30 `into` 接收者块已合入并过门禁，状态「完成」）。文中凡「CT 现在能不能做某件事」的判断，均由本仓库源码重建的 `ct-ast`（`selfhost/l0` → `l1` → `l2` → `ct-ast` 全链，`CT_STD_DIR=lib/std`）实跑得出，探针一律在 `/tmp` 下，不改仓库。**与文档冲突时以实跑为准**，本轮修正了三处旧评估的漂移（见 §2.3）。
+> **证据口径（本轮重做）：** HEAD = `9185a59`（Phase 30 `into` 接收者块已合入并过门禁，状态「完成」）。文中凡「Ct 现在能不能做某件事」的判断，均由本仓库源码重建的 `ct-ast`（`selfhost/l0` → `l1` → `l2` → `ct-ast` 全链，`CT_STD_DIR=lib/std`）实跑得出，探针一律在 `/tmp` 下，不改仓库。**与文档冲突时以实跑为准**，本轮修正了三处旧评估的漂移（见 §2.3）。
 >
 > **规模口径：** 一律用 `git diff --shortstat`，不用「占现有规模百分比」。标尺两条：Phase 29 `1c87fab..1877a95 -- selfhost/ct-ast` = **2,437 行 / 13 文件**；Phase 30 `1877a95..HEAD -- selfhost/ct-ast lib/std` = **905 行 / 9 文件**。下文区间是设计级估算（±40%），只算编译器与 `lib/std`，不含夹具/文档。
 
 ## 0. 结论先行
 
-Phase 30 收口后，CT 的 OO 骨架已经闭合：trait 动态派发 + 默认方法 + 泛型 struct + 泛型函数（显式实例化）+ 有界泛型函数 + 引用计数容器 + `foreach` 协议 + `own`/`Drop` + `into` 接收者块。
+Phase 30 收口后，Ct 的 OO 骨架已经闭合：trait 动态派发 + 默认方法 + 泛型 struct + 泛型函数（显式实例化）+ 有界泛型函数 + 引用计数容器 + `foreach` 协议 + `own`/`Drop` + `into` 接收者块。
 
 **仍然差三样东西，性质各不相同：**
 
@@ -22,7 +22,7 @@ Phase 30 收口后，CT 的 OO 骨架已经闭合：trait 动态派发 + 默认�
 | 语义缺口 | 元素没有所有权（`retain`/`release` 只管缓冲）、泛型 `Drop` 缺失、接口值浅拷贝、无 RTTI | 一半是 Z1（无 GC/无隐藏运行时）的直接后果 |
 | 安全网缺口 | 赋值/返回类型不匹配不报错，推给 `cc`；诊断跨不过单元边界 | 是 Z5（类型检查 opt-in）的明确选择，但当前覆盖面偏窄 |
 
-一句话定位：**CT 不是「缺一门 OO 语言」，而是「C + 显式单态化 + 胖指针接口」这条路线走到 Phase 30 后，被容器与安全网两处卡住了。** 前者卡住「对象集合」这个最基本的 OO 用法，后者卡住「错了能在编译期知道」。
+一句话定位：**Ct 不是「缺一门 OO 语言」，而是「C + 显式单态化 + 胖指针接口」这条路线走到 Phase 30 后，被容器与安全网两处卡住了。** 前者卡住「对象集合」这个最基本的 OO 用法，后者卡住「错了能在编译期知道」。
 
 ## 1. 判据
 
@@ -30,7 +30,7 @@ Phase 30 收口后，CT 的 OO 骨架已经闭合：trait 动态派发 + 默认�
 
 取「现代优秀 OO 语言」的最小公共集（Java / C# / Kotlin / Swift / C++ / Rust / Go 的交集，而非并集）：类或等价物、接口/trait、默认方法、泛型与约束、对象集合、RTTI 或等价的下转型、闭包、错误处理、空安全、并发。**不把「必须有继承」「必须有 GC」当作判据**——这两条在 Go/Rust 上都不成立。
 
-### 1.2 CT 的既定约束
+### 1.2 Ct 的既定约束
 
 | 约束 | 含义 | 本评估的处理 |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ Phase 30 收口后，CT 的 OO 骨架已经闭合：trait 动态派发 + 默认�
 
 ### 2.2 不能做（探针失败，原文诊断）
 
-| 能力 | CT 诊断 |
+| 能力 | Ct 诊断 |
 | --- | --- |
 | `Vec<Show>` / `Map<char *, Show>` | `error: interface and vptr-bearing values cannot be stored in a container` |
 | `Vec<struct A>`（`A` 用过 `use Show`） | 同上 |
@@ -95,11 +95,11 @@ Phase 30 收口后，CT 的 OO 骨架已经闭合：trait 动态派发 + 默认�
 | 闭包作 trait 方法实参（SH-65） | `error: unknown expression node` |
 | variadic trait 方法 | `error: a trait method cannot be variadic` |
 | 接口值上的临时接收者 `make(3).v()` | `error: a method call on a temporary is only allowed at the start of a statement or of an assignment` |
-| `string s = "hi";` | CT 放行，`cc` 报 `use of undeclared identifier 'string'` |
+| `string s = "hi";` | Ct 放行，`cc` 报 `use of undeclared identifier 'string'` |
 | `auto x = 1;` | `error: 'auto' is not a type in CT (write the type explicitly)` |
 | `type MyInt = int;`（`.ct` 单元内） | `error: a type alias is only allowed in a .h.ct or .m.ct unit` |
 | `new P` | 解析为未声明变量 |
-| `own` 作字段（`struct B { own E e; }`） | CT 放行，`cc` 报 `unknown type name 'own'` |
+| `own` 作字段（`struct B { own E e; }`） | Ct 放行，`cc` 报 `unknown type name 'own'` |
 | 二次 `release` | 运行时 `SIGABRT`（硬错误，不是静默） |
 
 ### 2.3 与旧评估的三处漂移（以实跑为准）
@@ -162,7 +162,7 @@ prog.ct:6:9: error: incompatible pointer to integer conversion initializing 'int
 | O3 | 逐元素所有权（retain/release 级联） | 只有缓冲计数，元素不碰（悬垂证据见 §2.4） | L | 700–1,400 | O1（若要装箱）| Z1 允许（显式） | 是 |
 | O4 | 泛型 `Drop`（`impl Drop for X<T>`） | 拒绝 | M | 300–700 | O3 的助手生成 | 无 | 是 |
 | O5 | RTTI / 下转型（`Show -> Circle`） | 无；只能手写 tag + 静态映射 | M | 300–700 | 无 | Z1（不能反射） | 是 |
-| O6 | `own` 作字段 / 构造器 | 字段形态 CT 放行、`cc` 报错 | M | 200–500 | Drop 字段语义 | Z3 | 是 |
+| O6 | `own` 作字段 / 构造器 | 字段形态 Ct 放行、`cc` 报错 | M | 200–500 | Drop 字段语义 | Z3 | 是 |
 
 ### 3.3 数据建模
 
@@ -204,7 +204,7 @@ Phase 39 已补上 **C ABI 静态库**这一半：根 `.h.ct` 的 C 兼容 `pub`
 
 ### 3.9 并发与异步
 
-无语言级线程、原子、`async`。判定：**明确不做**（Z1、Z2）；`pthread` 走 `bindings`，与 CT 的 OO 表达力无关。
+无语言级线程、原子、`async`。判定：**明确不做**（Z1、Z2）；`pthread` 走 `bindings`，与 Ct 的 OO 表达力无关。
 
 ### 3.10 元编程与工具
 
@@ -273,7 +273,7 @@ Phase 39 已补上 **C ABI 静态库**这一半：根 `.h.ct` 的 C 兼容 `pub`
 ### B9 `own` / `Drop` 只管局部指针
 
 - **买到**：保守、可预测、泄漏有静态告警；`use Drop` + `delete` 可用。
-- **卖掉**：`own` 作字段在 CT 侧放行、`cc` 侧报错；容器不自动析构；泛型 `Drop` 缺失，模式包只能手写 `deinit()`。
+- **卖掉**：`own` 作字段在 Ct 侧放行、`cc` 侧报错；容器不自动析构；泛型 `Drop` 缺失，模式包只能手写 `deinit()`。
 - **边界**：`own` 的对象必须是 `malloc`/`calloc` 得到的结构体指针（函数体内），不是字段、不是栈值。
 - **判定**：**半选择**。字段形态是缺陷（O6），容器不析构是 O3。
 
@@ -286,9 +286,9 @@ Phase 39 已补上 **C ABI 静态库**这一半：根 `.h.ct` 的 C 兼容 `pub`
 
 ## 5. 横向对照
 
-✓ = 有；△ = 部分/有约束；✗ = 无。CT 列按 §2 实跑。
+✓ = 有；△ = 部分/有约束；✗ = 无。Ct 列按 §2 实跑。
 
-| 能力 | Java | C# | Kotlin | Swift | C++ | Rust | Go | CT |
+| 能力 | Java | C# | Kotlin | Swift | C++ | Rust | Go | Ct |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 类 + 继承 | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
 | 接口 / trait | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -307,7 +307,7 @@ Phase 39 已补上 **C ABI 静态库**这一半：根 `.h.ct` 的 C 兼容 `pub`
 | 语言级并发 / async | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
 | 空安全 | △ | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ |
 
-位置判断：**CT = C 的 ABI + 接口式动态派发 + 显式单态化泛型，但没有 GC、异常、继承、RTTI。** 比 Go 多「零运行时 + 单态化」，比 Rust 少「所有权检查」，也没有模板推导与运算符重载。它刻意不跟的是 GC / 异常 / 运行时反射 / 继承；它**想跟却没跟上**的是接口集合、泛型约束、泛型 trait、闭包作实参、下标。
+位置判断：**Ct = C 的 ABI + 接口式动态派发 + 显式单态化泛型，但没有 GC、异常、继承、RTTI。** 比 Go 多「零运行时 + 单态化」，比 Rust 少「所有权检查」，也没有模板推导与运算符重载。它刻意不跟的是 GC / 异常 / 运行时反射 / 继承；它**想跟却没跟上**的是接口集合、泛型约束、泛型 trait、闭包作实参、下标。
 
 ## 6. 分层结论
 

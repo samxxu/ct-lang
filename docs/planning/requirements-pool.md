@@ -99,7 +99,7 @@ L4 走契约，L7/L10/L8 拒绝或后置；本池只登记 L1。
 
 ### 来源
 
-裁决记录 U-1 A（2026-11-15 签字）+ 用户原话「等 CT 完成了语言特性的更新之后，要完整实现这个目标」。
+裁决记录 U-1 A（2026-11-15 签字）+ 用户原话「等 Ct 完成了语言特性的更新之后，要完整实现这个目标」。
 PH-52 的 D52-6 指向本条。
 
 ## REQ-INDEX-1 — 用户类型下标运算符：把「名 + 参数个数」的糖补成完整协议
@@ -137,7 +137,7 @@ PH-52 的 D52-6 指向本条。
 
 ### 来源
 
-用户裁决（2026-11-15，「CT 要增加用户类型可定义下标运算符的语言能力，方向是必须支持」）+ ct-json 复评实测。
+用户裁决（2026-11-15，「Ct 要增加用户类型可定义下标运算符的语言能力，方向是必须支持」）+ ct-json 复评实测。
 承接 `REQ-L1`（PH-52 方案 A 已交付）与 `REQ-JSACCESS-1`（参数类型匹配）。
 设计草案：[user-index-operator.md](../proposals/user-index-operator.md)。
 
@@ -203,19 +203,19 @@ PH-52 的 D52-6 指向本条。
 | 字段 | 值 |
 | --- | --- |
 | `id` | `REQ-PKG-1` |
-| `what` | 把 `ct pkg check` 当前的 4 条发布前 lint（ct.pkg 可读、name/publisher/version/ns-root 必填、ns-root 形状/存在、包树无绝对 `-I`）及其扩展（version/tag、namespace 目录、dep/requires、c-boundary）迁到 ct-pkg 的 shell 工具；`package.sh` 不再调用 `ct pkg check`；CT 侧保留一个过渡版本后删除。`ct get/install` 的消费者校验不删。 |
-| `why` | 发布 lint 属于包治理，不应反向依赖已安装的 ct；`package.sh` 当前靠 `ct pkg check` 才能跑，CI/维护者环境被编译器绑定。CT 只应保留消费者必须的 manifest/identity/store/lock/digest/dep 校验。 |
+| `what` | 把 `ct pkg check` 当前的 4 条发布前 lint（ct.pkg 可读、name/publisher/version/ns-root 必填、ns-root 形状/存在、包树无绝对 `-I`）及其扩展（version/tag、namespace 目录、dep/requires、c-boundary）迁到 ct-pkg 的 shell 工具；`package.sh` 不再调用 `ct pkg check`；Ct 侧保留一个过渡版本后删除。`ct get/install` 的消费者校验不删。 |
+| `why` | 发布 lint 属于包治理，不应反向依赖已安装的 ct；`package.sh` 当前靠 `ct pkg check` 才能跑，CI/维护者环境被编译器绑定。Ct 只应保留消费者必须的 manifest/identity/store/lock/digest/dep 校验。 |
 | `priority` | `P1` |
 | `status` | `open` |
-| `owner` | REQ（ct-pkg 协调；CT 侧只做 deprecation） |
+| `owner` | REQ（ct-pkg 协调；Ct 侧只做 deprecation） |
 | `last-touched` | 2026-11-18 |
-| `block` | ct-pkg 先实现 shell `check` 并让 `package.sh` 脱离 ct；否则 CT 不立 phase、不删 `ct pkg check` |
+| `block` | ct-pkg 先实现 shell `check` 并让 `package.sh` 脱离 ct；否则 Ct 不立 phase、不删 `ct pkg check` |
 
 ### 验收判据（草案）
 
 | # | 判据 | 命令 / 锚点 |
 | --- | --- | --- |
-| A1 | ct-pkg `check` 覆盖当前 4 条 + version/tag、namespace、dep/requires、c-boundary | ct-pkg CI 夹具；与 CT 旧 4 条逐条对照 |
+| A1 | ct-pkg `check` 覆盖当前 4 条 + version/tag、namespace、dep/requires、c-boundary | ct-pkg CI 夹具；与 Ct 旧 4 条逐条对照 |
 | A2 | `package.sh` 不再调用 `ct pkg check`，无 ct 安装的 CI 也能跑 | `grep -n 'ct pkg check' package.sh` 零命中；干净 CI |
 | A3 | `ct pkg check` 过渡期保留并打印 deprecation；删除后 `ct pkg` 仍保持 install/check 语义 | 过渡夹具；删除提交 |
 | A4 | `ct get/install` 的 identity/store/lock/digest/dep 校验不变 | 现有 `test/pkg` 全绿 |
@@ -223,7 +223,7 @@ PH-52 的 D52-6 指向本条。
 ### 落点
 
 - **当前不占 phase**；这是跨项目需求，先入池。
-- 若必须占 CT phase，候选 **`v0-PH-72`**（类型检查 68–71 之后、v1.0 之前），但只装 CT 侧 deprecation/删除；ct-pkg 的 shell check 不在 CT phase 内。
+- 若必须占 Ct phase，候选 **`v0-PH-72`**（类型检查 68–71 之后、v1.0 之前），但只装 Ct 侧 deprecation/删除；ct-pkg 的 shell check 不在 Ct phase 内。
 - 触发条件：ct-pkg 受理并给出 shell `check` 的验收；否则保持现状。
 
 ## REQ-TYPE-1 — 默认路径全量类型检查（本期不做）
@@ -314,7 +314,7 @@ PH-52 的 D52-6 指向本条。
 | --- | --- |
 | `id` | `REQ-POINTERFREE-1` |
 | `what` | 让日常 `.ct` 代码不再直接写指针：堆单对象、多返回、数组传递、字符串、回调五类场景各有值类型/句柄入口；指针、`own`、`defer`、`errdefer` 保留为逃生通道，不被禁止。 |
-| `why` | 五类日常用途仍要求用户直接管指针与生命周期，和 CT 的句柄/值类型方向不一致；希望把悬垂与泄漏路径收窄到可文档化、可机检的借用视图契约。 |
+| `why` | 五类日常用途仍要求用户直接管指针与生命周期，和 Ct 的句柄/值类型方向不一致；希望把悬垂与泄漏路径收窄到可文档化、可机检的借用视图契约。 |
 | `priority` | P1 |
 | `status` | `planned`（方向已评审；J-6 证据未过，未开 phase 卡） |
 | `owner` | REQ（待指派） |

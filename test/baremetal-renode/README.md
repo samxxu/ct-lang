@@ -8,7 +8,7 @@
 | `startup.c` | 向量表（16 + 82 IRQ）、`.data` 拷贝、`.bss` 清零、跳 `main` |
 | `link.ld` | STM32F407：flash `0x08000000` 1 MiB，SRAM `0x20000000` 128 KiB |
 | `board.c` | RCC / GPIOA / USART2（0x40004400）/ SysTick / PA0 按键 |
-| `prog.ct` | CT 状态机：`boot ok` → 按键 → 3 次 SysTick → `tick=3` |
+| `prog.ct` | Ct 状态机：`boot ok` → 按键 → 3 次 SysTick → `tick=3` |
 | `run.sh` | 构建固件 → Renode 加载 → 比对 `prog.expected.out` |
 
 ## 运行
