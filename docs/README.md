@@ -98,6 +98,7 @@
 | [reviews/2026-11-22-grokbot-architecture-assessment-eval.md](reviews/2026-11-22-grokbot-architecture-assessment-eval.md) | GrokBot 外部架构评估核对：规模/测试/容量/许可逐项一致；3 处事实错误（内置层预算、issues 计数、`atomic` 分类）；无新架构项 | 查看外部评估 |
 | [reviews/2026-11-22-kimi-v088-review-eval.md](reviews/2026-11-22-kimi-v088-review-eval.md) | Kimi v0.88 评审核对：非 GrokBot 评阅；D4/D5/D6 已闭环、D2 待 SH-110；`MAX_FUNCS` 475/512 为旧数；CLI `warn` 已裁决提前到下一 v0.x（SH-115） | 查看外部评估 |
 | [reviews/2026-11-22-four-external-guides-eval.md](reviews/2026-11-22-four-external-guides-eval.md) | 外部四份文档核对：速览有 4 个示例跑不通（ADT 语法/递归/box API/`#include`）与 3 处布局语义错；内存/性能指南各 4 处需修；惯用卡已归档且过期 | 查看外部文档评估 |
+| [reviews/2026-11-22-arena-rename-proposal-eval.md](reviews/2026-11-22-arena-rename-proposal-eval.md) | `std::arena` 改名提议核对：模块/类型命名前提不成立；selfhost 零 `import std::`，路径 B 不触发；真正待办是 std-catalog 与 guide/battle 的 arena 矛盾 | 查看提议评估 |
 | [reviews/](reviews/) | 历史全面评审（v0.77）：网络挂起、治理门禁缺位、台账未闭合、phase-ID 迁移、文档漂移；其中网络挂起与 C 边界 cwd 已在 v0.88 前修复 | 追溯 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
