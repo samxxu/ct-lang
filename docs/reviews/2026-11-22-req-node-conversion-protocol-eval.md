@@ -64,4 +64,7 @@
 
 - `decode<T>` / `encode<T>` 如何分派到生成代码（trait bound 还是生成函数表）；
 - 节点字符串 payload 的 owner（arena 持有 `String`，还是视图 + 输入寿命）；
-- PKG-24 的 schema 子集边界与错误码。
+- PKG-24 的 schema 子集边界与错误码；
+- **树存储重评估**：容器级联（[LANG-27](../../issues/lang/lang-27-container-cascade.md) B 项）
+  落地、或递归 ADT 布局方案（指针/间接）通过断言后 30 天内，按 LANG-27 §唤醒条件
+  重评“arena + 索引 vs 递归 ADT + 容器级联”；当前仍维持 arena + 索引，不自动切换。
