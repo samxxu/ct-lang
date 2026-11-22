@@ -1,3 +1,4 @@
+namespace core;
 /*
  * Result.h.ct - the built-in `Result<T, E>` (Phase 34 S9c).
  *

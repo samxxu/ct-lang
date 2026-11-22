@@ -980,6 +980,16 @@ for pr in emit fixpoint metrics docs; do
     fi
 done
 
+# DOC-87 Stage 2: the built-in layer's source namespace `core`. The canonical
+# `core::` spellings compile, the root spelling stays a compatibility alias, and
+# both spellings emit byte-identical C (the C symbols stay in the root
+# namespace for the window). Also checks the external `std::*` boundary.
+if bash test/ast/doc87_core.sh "$work/ct-ast" >"$work/doc87core.out" 2>"$work/doc87core.err"; then
+    ok "doc87/core"
+else
+    bad "doc87/core" "$(cat "$work/doc87core.out" "$work/doc87core.err" | head -8)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.

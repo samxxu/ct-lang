@@ -1071,6 +1071,13 @@ impl ParseDeclOps for Parser {
         if (self->lex->tok != T_PUNCT || !self->lex->tok_is(";"))
             return self->sup->fail("a namespace is file-scoped: write 'namespace A::B;'");
         self->sup->lex_next();
+        /* DOC-87 Stage 2: the built-in layer declares `namespace core` so the
+           canonical `core::Vec` spelling resolves and the declaration is visible
+           to editors. Its C symbols stay in the root compatibility namespace for
+           this MINOR (no ABI churn); `core::` is an alias of the root spelling. */
+        if (strstr(self->mem->path, "lib/core/") != 0
+            || strstr(self->mem->path, "lib/std/") != 0) /* DOC-87 迁移回退 */
+            return 0;
         snprintf(save, sizeof save, "%s", self->sym->ns);
         if (snprintf(self->sym->ns, sizeof self->sym->ns, "%s%s", save, prefix) >= (int)sizeof self->sym->ns)
             return self->sup->fail("namespace is too long");

@@ -16,7 +16,9 @@
      (emitted_after 于 SH-115 后复测：函数指针字段/指针表达式调用与结构体花括号初值
       检查增加 450 行发射 C；发射器本身未变)
      (emitted_after 于 DOC-87 Stage 1 后复测：内置层查找改为 lib/core + CT_CORE_DIR，
-      共享 `find_builtin` 增加 58 行发射 C；发射器本身未变) -->
+      共享 `find_builtin` 增加 58 行发射 C；发射器本身未变)
+     (emitted_after 于 DOC-87 Stage 2 后复测：`core::` 源级命名空间与声明查重增加 58 行
+      发射 C；发射器本身未变) -->
 
 ## 1 切片清单
 

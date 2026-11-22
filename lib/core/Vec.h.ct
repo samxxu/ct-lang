@@ -1,3 +1,4 @@
+namespace core;
 /*
  * Vec.h.ct - the built-in growable array `Vec<T>` and the insertion-ordered
  * `Map<K, V>` / `MapEntry<K, V>` pair (Phase 29).

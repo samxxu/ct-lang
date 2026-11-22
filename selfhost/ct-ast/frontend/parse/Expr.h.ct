@@ -1586,6 +1586,12 @@ static int ctype_slice_range(struct Expr *self, int n, char *out, int cap, int *
 }
 
 
+/* DOC-87 Stage 2: a qualified built-in spelling (`core::Vec<int>`) has already
+   consumed the name, so its caller parks the bare template name here and
+   `parse_inst_type` skips its own name read. A file-scope slot, not a struct
+   field: `struct Expr` is at the 64-field cap. */
+static char g_expr_inst_override[160];
+
 impl ExprOps for Expr {
     int arity_check(int line, int col, const char *callee, int got, int want)
     {
@@ -2287,8 +2293,31 @@ impl ExprOps for Expr {
                             self->lex->tok_copy(qn + qw + 1, sizeof qn - (size_t)qw - 1);
                             self->sup->lex_next();
                         }
-                        if (self->sym->resolve_type(qn, rname, sizeof rname) != 0)
-                            return self->sup->fail("unknown qualified type name");
+                        /* DOC-87 Stage 2: `core::Vec` / `core::String` /
+                           `core::box` name the built-in layer's source
+                           namespace. During the compatibility window the C
+                           symbols stay in the root namespace, so strip the
+                           prefix: a template instantiates from the `<` the
+                           cursor already sits on, a plain type resolves by its
+                           bare spelling. */
+                        {
+                            const char *resq = qn;
+                            char bare[MAX_TEXT];
+                            if (strncmp(qn, "core_", 5) == 0) {
+                                snprintf(bare, sizeof bare, "%s", qn + 5);
+                                if (frontend::sym::ct_tmpl_find(bare) >= 0) {
+                                    snprintf(g_expr_inst_override,
+                                             sizeof g_expr_inst_override, "%s", bare);
+                                    if (self->parse_inst_type(out, cap) != 0)
+                                        return -1;
+                                    n = (int)strlen(out);
+                                    continue;
+                                }
+                                resq = bare;
+                            }
+                            if (self->sym->resolve_type(resq, rname, sizeof rname) != 0)
+                                return self->sup->fail("unknown qualified type name");
+                        }
                         qti = self->sym->find_type(rname);
                         if (qti < 0) return self->sup->fail("unknown qualified type name");
                         if (self->sym->type_kind[qti] == 1) {
@@ -2615,12 +2644,17 @@ impl ExprOps for Expr {
         int n, ti2, tn, nargs, nt2, pline, pcol;
 
         n = (int)strlen(out);
-        self->lex->tok_copy(tname, sizeof tname);
+        if (g_expr_inst_override[0]) {
+            snprintf(tname, sizeof tname, "%s", g_expr_inst_override);
+            g_expr_inst_override[0] = 0;
+        } else {
+            self->lex->tok_copy(tname, sizeof tname);
+            self->sup->lex_next();
+        }
         ti2 = frontend::sym::ct_tmpl_find(tname);
         tp = frontend::sym::ct_tmpls(&tn);
         if (!tp || ti2 < 0) return self->sup->fail("internal: template row vanished");
         nt2 = tp[ti2].ntparams;
-        self->sup->lex_next();
         if (self->lex->tok != T_PUNCT || !self->lex->tok_is("<")) {
             char msg[MAX_TEXT * 2];
             snprintf(msg, sizeof msg,
@@ -3283,6 +3317,26 @@ impl ExprOps for Expr {
         res = 0;
         if (self->lex->tok == T_ID) {
             char rn[MAX_TEXT];
+            /* DOC-87 Stage 2: `core::Vec v;` in a statement position. The
+               declaration lookahead reads one name, so walk an `ns::` prefix to
+               the final segment; the lexer state is restored below. */
+            {
+                const char *qp = self->lex->src + self->lex->tokstart
+                                 + self->lex->tokstr.len;
+                while (*qp == ' ' || *qp == '\t') qp++;
+                if (qp[0] == ':' && qp[1] == ':') {
+                    for (;;) {
+                        const char *nq;
+                        self->sup->lex_next();       /* `::` */
+                        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("::"))) break;
+                        self->sup->lex_next();       /* the segment */
+                        if (self->lex->tok != T_ID) break;
+                        nq = self->lex->src + self->lex->tokstart + self->lex->tokstr.len;
+                        while (*nq == ' ' || *nq == '\t') nq++;
+                        if (!(nq[0] == ':' && nq[1] == ':')) break;
+                    }
+                }
+            }
             /* P-7.2: `box<T>` is not an implemented type yet, but a statement
                starting with it must reach `parse_type` so the slice placement
                guard can name the fault. Recognise only the shape

@@ -22,6 +22,8 @@
 | `Str` | 带长度字符串 | `char *data` + `int len` |
 
 这些是**编译器保留名**，不是 `std` 包的一部分；`std::vec` / `std::map` 已在 std 0.3.0 删除。
+DOC-87 Stage 2 起规范拼写是 `core::Vec` / `core::String` 等（源级命名空间）；根拼写在
+一个 MINOR 的兼容窗内仍可用，生成 C 不变（见 [lib/core/README](../lib/core/README.md)）。
 细节见 [lib/core/README](../lib/core/README.md) 与 [language-spec §4.51](language-spec.md#451-泛型-struct固有方法与内置容器phase-29)。
 
 ## 2. `std` 包模块

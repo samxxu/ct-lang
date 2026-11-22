@@ -21,7 +21,7 @@
 
 | # | 规则 |
 | --- | --- |
-| H1 | `Vec<T>` / `Map<K,V>` / `Option<T>` / `Result<T,E>` / `String` / `U16String` / `Str` 是**编译器内置层**（`lib/core/`），自动加载、**免 import**；`String` 是 owning 句柄，`Str` 是借用视图（PH-80 起，不再有 owning `Str`）。不要重写，也不要再 `import std::vec` / `std::map`（这两个模块已在 std 0.3.0 删除，见 [lib/core/README](../lib/core/README.md)） |
+| H1 | `Vec<T>` / `Map<K,V>` / `Option<T>` / `Result<T,E>` / `String` / `U16String` / `Str` 是**编译器内置层**（`lib/core/`，规范拼写 `core::Vec` 等，根拼写兼容窗内可用），自动加载、**免 import**；`String` 是 owning 句柄，`Str` 是借用视图（PH-80 起，不再有 owning `Str`）。不要重写，也不要再 `import std::vec` / `std::map`（这两个模块已在 std 0.3.0 删除，见 [lib/core/README](../lib/core/README.md)） |
 | H2 | 标准库模块用 `ct get ct/std` 安装，按 `import std::<mod>::<Unit>` 导入；**不要手写替代**，完整入口见 [std-catalog](std-catalog.md) |
 | H3 | 别人的包用 `ct get <publisher>/<name>`（配 `--index` / `CT_INDEX`）；**不要复制源码进本仓**，也不要假设裸名能解析（裸名只查官方 pin 表） |
 | H4 | 包格式是 `ct.pkg` + `publisher` + `ns-root`；不要自造清单键或目录布局，见 [package-guide](package-guide.md) |

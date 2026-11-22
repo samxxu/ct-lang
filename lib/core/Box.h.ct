@@ -1,3 +1,4 @@
+namespace core;
 /*
  * Box.h.ct - the built-in single-object owning handle `box<T>` (PH-81 / v0.81.0).
  *

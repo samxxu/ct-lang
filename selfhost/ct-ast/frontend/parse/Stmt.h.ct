@@ -1852,11 +1852,24 @@ impl StmtOps for Stmt {
                     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
                 }
                 /* A type is followed by `*` or the declarator's name; `.` /
-                   `(` after the chain is the qualified value/call form. */
+                   `(` after the chain is the qualified value/call form. A
+                   generic type continues with `<`. */
+                if (*p == '<'
+                    && (frontend::sym::ct_tmpl_find(qn) >= 0
+                        || (strncmp(qn, "core_", 5) == 0
+                            && frontend::sym::ct_tmpl_find(qn + 5) >= 0)))
+                    return 1;
                 if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
                       || *p == '_' || *p == '*')) return 0;
                 if (self->sup->resolve_type(qn, rn, sizeof rn) == 0
                     && self->sym->find_type(rn) >= 0) return 1;
+                /* DOC-87 Stage 2: `core::String` / `core::Vec` — the built-in
+                   layer's source namespace maps to the root spelling during the
+                   compatibility window (no C/ABI churn). */
+                if (strncmp(qn, "core_", 5) == 0
+                    && self->sup->resolve_type(qn + 5, rn, sizeof rn) == 0
+                    && (self->sym->find_type(rn) >= 0
+                        || frontend::sym::ct_tmpl_find(qn + 5) >= 0)) return 1;
             }
         }
         if (self->ex->is_type_word(self->lex->tok_cstr())) return 1;
