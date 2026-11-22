@@ -204,9 +204,10 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1-pre 解析+检查 | PH-87 | v0.87.0 | 行为保持；✅ 2026-11-21（按 kind 切片 + 单判别式；`switch→match` 字面项因 L2 引导链移交 PH-88，见 battle/p87-kind-match） |
 | v1-pre 发射器+回环 | PH-88 | v0.88.0 | ✅ 2026-11-21（76 个发射器切片；fixpoint 日常 2 / tag 前 3 轮逐字节；字面 `match` 承接 `v1-PH-0`，见 battle/p88-emit-match） |
 | v0.x B+ 强化 + CLI 默认 `warn` | 下一 v0.x（不占 v1.0） | 下一 v0.x | 补静态映射/未知类型/函数指针字段/泛型与 ADT 可判定缺口；同批把 CLI 默认 `off`→`warn`（[SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md)） |
+| v1.0 前内置层目录 `lib/core`（Stage 1） | 当前 pre 窗口（`v1-PH-0` 前） | v1.0 前 | **不等 v1.0 窗口**；REQ 就绪，待 DEV；`CT_CORE_DIR` + 一个 MINOR 回退；迁移卡见 [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) |
+| v1.0 前内置层 `namespace core`（Stage 2） | 当前 pre 窗口（Stage 1 之后） | v1.0 前 | 先补 spec §4.51/§4.70/§4.71 的命名空间与兼容窗条款，再独立提交；`core::Vec`/`core::String`/`core::box` + 根拼写一个 MINOR 别名（[DOC-87](../../issues/docs/doc-87-lib-core-rename.md) Stage 2） |
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
 | v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
-| v1.0 内置层目录 `lib/core` | `v1-PH-0` 前 | v1.0.0 | **REQ 就绪，待 DEV**；`CT_CORE_DIR` + 一个 MINOR 回退；迁移卡见 [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) |
 | v1.0 前 JSON 节点包 | 包侧（不占 phase） | v1.0 前 | arena + 索引；NodeVec/NodeMap + JSON 库 + schema 生成器；包形态不占容量、不碰冻结（[PKG-24](../../issues/packages/pkg-24-json-node-arena.md)） |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
