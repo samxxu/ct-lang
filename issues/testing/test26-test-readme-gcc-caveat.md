@@ -7,7 +7,7 @@
 | 严重度 | Low |
 | 锚点 | v0.88.3（2026-11-22） |
 | 依据 | [GrokBot 评估核对](../../docs/reviews/2026-11-22-grokbot-architecture-assessment-eval.md) §3 |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（待 DEV 一行补齐；`test/**` 不由 REQ 直接改）** |
 
 ## 现象
@@ -32,3 +32,10 @@
 - 该行落在 `test/README.md` 的「当前实测」块内，措辞与 `selfhost/README.md` 一致；
 - `python3 test/docs/check-docs.py` 仍绿；
 - 不改任何测试行为与计数。
+
+
+## 复核（REV，2026-11-22）
+
+`test/README.md` 已补「Linux GCC ≥ 8 直跑前提」：`-Wformat-truncation` / `-Wimplicit-fallthrough`，
+并指向 `selfhost/check-all.sh` 与 `selfhost/README.md`。提交 `26d571e9`。
+`python3 test/docs/check-docs.py` → OK（2744 links）。

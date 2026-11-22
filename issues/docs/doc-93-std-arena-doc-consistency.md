@@ -8,7 +8,7 @@
 | 锚点 | v0.88.3（2026-11-22） |
 | 依据 | [std::arena 改名提议评估](../../docs/reviews/2026-11-22-arena-rename-proposal-eval.md) §4 |
 | 文件 | [std-catalog](../../docs/std-catalog.md#L46)、[guide-for-c-programmers](../../docs/guide-for-c-programmers.md#L284-L290)、[battle/ct-guide-1](../../battle/ct-guide-1/verdict.md#L13) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（先请 STD 组确认；只统一文档；不改 `std::arena` 名、不把 Arena 上收 `lib/core`；内置层目录/命名空间迁移另见 DOC-87）** |
 
 ## 现象
@@ -66,3 +66,16 @@
 
 > 归属说明：本卡开在 **CT 仓 `issues/docs/`**，因为矛盾发生在 CT 仓的文档与门禁；
 > STD 包仓只需回答“模块是否存在”，不需要在 std 仓另开一张同号卡。
+
+
+## 复核（REV，2026-11-22）
+
+已核 `~/.ct/pkg/ct/std/0.19.0/std/arena/Arena.h.ct` 存在（外部 `ct/std` 0.19.0 实测），
+并按此统一三处：
+
+- `docs/guide-for-c-programmers.md`：区分内置层 `lib/std`（无 `Arena`）与外部 `ct/std` 的
+  `std::arena::Arena`（需 `ct get ct/std`）；
+- `docs/std-catalog.md`：`std::arena` 行注明「外部 `ct/std` 0.19.0 实测；不是编译器内置层」；
+- `battle/ct-guide-1/verdict.md`：追加 2026-11-22 补充，历史判决不改写。
+
+提交 `03688010`；`check-docs` 绿。未改编译器代码、未改名、未上收 `lib/core`。
