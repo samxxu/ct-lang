@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22） |
 | 依据 | [REQ 卡评估](../../docs/reviews/2026-11-22-req-node-conversion-protocol-eval.md)、[LANG-26](../lang/lang-26-binding-site-conversion.md) |
-| 状态 | open |
+| 状态 | rejected |
 | 处置证据 | **accepted（外部工作；外部目标 v1.0 前；不进入 CT `v1-release-plan`、roadmap 或门禁；不占编译器容量、不碰冻结）** |
 
 > **归属**：本卡在 CT 仓**只作接口依赖记录**。JSON 库、NodeVec/NodeMap、schema 生成器的
@@ -59,3 +59,9 @@ JSON 库 + NodeVec/NodeMap 寄生映射 + schema 生成器放在 **std 包/外�
 - 未 import 零体积；契约条款数 = 负例数；
 - 包测试独立于编译器门禁；
 - v1.0 前交付；失败不阻塞 v1.0（包侧独立回滚）。
+
+
+## 处置（USER，2026-11-22）：rejected
+
+用户明确：**PKG-24 不算本项目任务，不属于 ct-lang 仓**。该卡本身定位为 std 包/外部仓
+（arena + JSON 节点、NodeVec/NodeMap、schema 生成），应归包仓处理；本仓不实现、不排期。

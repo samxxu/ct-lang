@@ -7,7 +7,7 @@
 | 严重度 | Low（纯书写；但影响面是全仓活跃散文） |
 | 锚点 | v0.88.3（2026-11-22） |
 | 依据 | 所有者 2026-11-22 立项；外部《lib/core 提案》§2；[lib/core 提案评估](../../docs/reviews/2026-11-22-lib-core-proposal-eval.md) §4 |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-22 所有者立项；先全量替换，后开 ratchet）** |
 
 ## 目标
@@ -67,3 +67,16 @@
 - [lib/core 提案评估](../../docs/reviews/2026-11-22-lib-core-proposal-eval.md) §4；
 - [glossary](../../docs/glossary.md)；
 - [DOC-87](doc-87-lib-core-rename.md)（lib/core / core::*，独立批次）。
+
+
+## 复核（REV，2026-11-23）
+
+主干提交 `69954dab`：42 份活跃 `.md` 的 249 处散文 `CT` → `Ct`；历史/快照目录、
+spec 逐字副本、生成块、代码块豁免。`test/docs/check-docs.py` 新增 ratchet 与 `--selftest`。
+
+```console
+$ python3 test/docs/check-docs.py
+check-docs: OK (... 0 bare CT in 72 active file(s))
+$ python3 test/docs/check-docs.py --selftest
+ct-ratchet selftest: OK (14 cases)
+```

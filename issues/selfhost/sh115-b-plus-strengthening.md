@@ -7,7 +7,7 @@
 | 严重度 | **High**（CLI 默认值变更的前置） |
 | 锚点 | v0.88.3（2026-11-22） |
 | 依据 | [Kimi 评审核对](../../docs/reviews/2026-11-22-kimi-v088-review-eval.md) §5；所有者 2026-11-22 裁定 |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（下一 v0.x；与 CLI 默认 `warn` 同批落地）** |
 
 ## 背景
@@ -48,3 +48,22 @@ PH-85 只把 B 已有的判定（赋值/初值/`return`/`$` 目标/实参）接�
 - [SH-60](sh60-mct-signature-types-decorative.md)、[LANG-19](../lang/lang-19-function-pointer-call-args-unchecked.md)；
 - [v1-release-plan](../../docs/planning/v1-release-plan.md) §2.4、D2 证据；
 - [J-6 台账](../../docs/planning/j6-evidence/ledger.md)。
+
+
+## 复核（REV，2026-11-23）
+
+集成后主干提交 `cbc77624`（红 `3dd3c44a`）；默认 `--check-level=warn`，`off` 逃生，
+函数指针字段/指针表达式调用、结构体花括号初值接入共享 `check`，LANG-14/SH-60-2a/`$` 目标
+保持 error 级。
+
+```console
+$ sh test/ast/p115_bplus.sh .temp/verify-current/ct-ast
+p115: 22 passed, 0 failed
+$ sh test/ast/p85_a_wire.sh .temp/verify-current/ct-ast
+p85a: 10 passed, 0 failed
+$ TMPDIR=.temp/checktmp bash selfhost/check-all.sh
+check-all: OK (11 hard gates green)
+```
+
+66 文件 `--emit-c` 默认 warn 与 baseline `off` 逐字节相同（`p85_corpus_sha.tsv` 未变）。
+未做：SH-60 1a/1b/2b（需 D-60-1/D-60-2 决策）。

@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | 所有者 2026-11-21 裁定“改名，作为 bug 去 fix”；[外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1；[同名核查](../../docs/review/builtin-layer-vs-std-package-name-check.md) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-22 所有者改判：不等 v1.0 窗口，当前 pre 窗口完成 Stage 1+2；REQ 迁移卡就绪，待 DEV）** |
 | blocked-by | 执行顺序：Stage 1（目录/ENV，单提交）→ 补 spec 命名空间条款 → Stage 2（`namespace core`，独立提交）；负责人 DEV；合入后 48 小时内由 REQ 唤醒 STD 配合清单 |
 
@@ -256,3 +256,21 @@ $ grep -rl 'lib/std' README.md README.en.md docs/*.md | wc -l
 Stage 1；合入后 48 小时内由 REQ 唤醒外部 STD 项目组。Stage 2（`namespace core`）需先在
 spec §4.51/§4.70/§4.71 补命名空间与兼容窗条款，再独立提交、独立回滚；两条都要求在
 v1.0 发布前完成。两条都完成后本条才转 `verified`；本轮不改源码，故不以文档修订代偿。
+
+
+## 复核（REV，2026-11-23）
+
+主干集成提交：`914e1057`（Stage 1）、`c091e827`（spec 条款）、`917924b0`（Stage 2）。
+`lib/std` → `lib/core`，`CT_CORE_DIR` 为主、`CT_STD_DIR` 一个 MINOR 兼容窗；
+`core::Vec` 等规范拼写与根拼写恒等映射，C 符号/ABI 不变。
+
+```console
+$ sh test/ast/p72_stdmissing.sh .temp/verify-current/ct-ast
+OK p72/stdmissing (builtin layer diagnostics, CT_CORE_DIR and fallbacks)
+$ sh test/ast/doc87_core.sh .temp/verify-current/ct-ast
+doc87/core: 0 failure(s)
+$ TMPDIR=.temp/checktmp bash selfhost/check-all.sh
+check-all: OK (11 hard gates green)
+```
+
+未做：`core_` C 符号前缀改写（需 owner 裁定另立 issue）。

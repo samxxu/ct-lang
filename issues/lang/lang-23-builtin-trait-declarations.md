@@ -7,7 +7,7 @@
 | 严重度 | Low–Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | Kimi 2026-11-21 说明；[language-spec §4.9](../../docs/language-spec.md#L455)、[§4.40](../../docs/language-spec.md#L1646)、[§4.71](../../docs/language-spec.md#L2950) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-22 所有者改判：提前到当前 pre 窗口，不再等 v1.1；依赖 DOC-87 Stage 1）** |
 
 ## 背景
@@ -90,3 +90,16 @@ pub trait Handback { void handback(); }
   本卡不得为它生成声明**；
 - 代码与脚本由 DEV 执行，REQ 侧只改排期与验收；`AutoDrop` 的措辞纠正在
   [lib/core 提案评估](../../docs/reviews/2026-11-22-lib-core-proposal-eval.md) §2 留档。
+
+
+## 复核（REV，2026-11-23）
+
+主干提交 `fb9dddd9`：`lib/core/Vec.h.ct` 提供可见 `pub trait Drop` / `pub trait Handback`；
+`use`/`impl` 行为与 C 输出不变；用户重定义仍被拒；`AutoDrop` 非保留 trait。
+
+```console
+$ sh test/ast/lang23_builtin_traits.sh .temp/verify-current/ct-ast
+lang23: 0 failure(s)
+$ TMPDIR=.temp/checktmp bash selfhost/check-all.sh
+check-all: OK (11 hard gates green)
+```
