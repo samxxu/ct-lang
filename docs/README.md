@@ -100,6 +100,7 @@
 | [reviews/2026-11-22-four-external-guides-eval.md](reviews/2026-11-22-four-external-guides-eval.md) | 外部四份文档核对：速览有 4 个示例跑不通（ADT 语法/递归/box API/`#include`）与 3 处布局语义错；内存/性能指南各 4 处需修；惯用卡已归档且过期 | 查看外部文档评估 |
 | [reviews/2026-11-22-arena-rename-proposal-eval.md](reviews/2026-11-22-arena-rename-proposal-eval.md) | `std::arena` 改名提议核对：模块/类型命名前提不成立；selfhost 零 `import std::`，路径 B 不触发；真正待办是 std-catalog 与 guide/battle 的 arena 矛盾 | 查看提议评估 |
 | [reviews/2026-11-22-kimi-opinion-on-grok-eval.md](reviews/2026-11-22-kimi-opinion-on-grok-eval.md) | Kimi 对 GrokBot 的元评审核对：test/README 已开 TEST-26；DOC-87 已覆盖 `lib/core` + `core::*`；SH-110“修复进行中”不成立；定位/GPL 两项待裁决 | 查看元评审 |
+| [reviews/2026-11-22-lib-core-proposal-eval.md](reviews/2026-11-22-lib-core-proposal-eval.md) | lib/core 提案核对：主体与 DOC-87 一致并已提前到 pre 窗口；AutoDrop 不是 trait、LANG-23 时点冲突、`CT → Ct` 需独立 ADR | 查看提案评估 |
 | [reviews/](reviews/) | 历史全面评审（v0.77）：网络挂起、治理门禁缺位、台账未闭合、phase-ID 迁移、文档漂移；其中网络挂起与 C 边界 cwd 已在 v0.88 前修复 | 追溯 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |
