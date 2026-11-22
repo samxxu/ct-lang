@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22） |
 | 依据 | [REQ 卡评估](../../docs/reviews/2026-11-22-req-node-conversion-protocol-eval.md) |
-| 状态 | open |
+| 状态 | deferred |
 | 处置证据 | **accepted（v1.1；先 ADR；501/512 容量是硬约束）** |
 
 ## 现象
@@ -44,3 +44,10 @@ REQ 提案希望把“节点 → 容器/标量”的转换固定在绑定点，�
 
 J-6 行、`stable-subset` 三档、`capabilities.tsv` 条目、`idioms` briefing 第 11 条，
 均等 ADR 通过、特性正式立项后再加；现在不写“未批准特性”为既定事实。
+
+
+## 处置（REQ，2026-11-22）：ADR 完成，实现 deferred 到 v1.1
+
+- ADR：[D-020](../../docs/decisions/D-020.md)（绑定点、两档、查找顺序、歧义、表达式禁区、`--types`、回滚）。
+- 触发：`v1-PH-1` 开卡（v1.1）；先做 S0 容量核算，再实现四类绑定点 + 负例。
+- 本卡「连带义务」在实现落地后再登记，当前不写成既定事实。
