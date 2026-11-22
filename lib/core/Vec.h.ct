@@ -19,9 +19,27 @@ namespace core;
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * LANG-23: the visible declarations of the two reserved built-in traits.
+ * The compiler recognises `Drop` / `Handback` by name: they carry no vtable
+ * and no vptr, are not counted against MAX_TRAITS, and a user unit may not
+ * declare them again. The declarations are validated then discarded, so the
+ * generated C is unchanged. `AutoDrop` is NOT a trait: it is the automatic
+ * release mechanism of `own` (language-spec 4.9 / 4.56); do not declare it.
+ */
+pub trait Drop {
+    void drop();
+}
 
-/* Root namespace on purpose: the layer is pre-parsed, not imported, so `Vec` /
-   `Map` have to be spelled exactly as the user writes them (D29-3). */
+pub trait Handback {
+    void handback();
+}
+
+
+/* C names stay in the root namespace on purpose: the layer is pre-parsed, not
+   imported, so its C symbols must match the root spelling users write (`Vec` /
+   `Map`, D29-3). The source namespace is `core` (DOC-87 Stage 2); `core::` is
+   the canonical alias and the root spelling stays for the compatibility window. */
 
 /* The buffer header shared by both containers: a reference count, the number of
    live elements, the allocated capacity and the element storage. The header

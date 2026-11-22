@@ -35,6 +35,19 @@
   `core::*` 不会遮蔽它。
 - **不是保留关键字**：用户自己的 `namespace core`（§4.10）不受影响。
 
+## 内建 trait（LANG-23）
+
+`Vec.h.ct` 顶部有 `Drop` / `Handback` 的**可见声明**：
+
+```ct
+pub trait Drop { void drop(); }
+pub trait Handback { void handback(); }
+```
+
+它们是保留名内建 trait：编译期按名字识别，无 vtable / vptr，不计入 `MAX_TRAITS`，
+用户单元不得重新声明。声明只作契约与编辑器跳转；`use Drop` / `impl Drop` 的行为
+与生成 C 不变。`AutoDrop` 是 `own` 的自动释放机制，**不是 trait**，本目录不声明它。
+
 ## 保留名
 
 | 名字 | 含义 |

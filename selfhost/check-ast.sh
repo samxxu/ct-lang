@@ -990,6 +990,15 @@ else
     bad "doc87/core" "$(cat "$work/doc87core.out" "$work/doc87core.err" | head -8)"
 fi
 
+# LANG-23: `Drop` / `Handback` are reserved built-in traits with visible
+# declarations in lib/core; no vtable/vptr, no MAX_TRAITS entry, and user code
+# still may not redefine them. `AutoDrop` is a mechanism, not a trait.
+if bash test/ast/lang23_builtin_traits.sh "$work/ct-ast" >"$work/lang23.out" 2>"$work/lang23.err"; then
+    ok "lang23/traits"
+else
+    bad "lang23/traits" "$(cat "$work/lang23.out" "$work/lang23.err" | head -8)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.

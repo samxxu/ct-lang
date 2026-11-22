@@ -3443,7 +3443,7 @@ impl ParseOps for Parser {
     {
         int ti, mi, np, trait_line, mline, pfirst, ptail, dm, di, dj, dk, dcycle;
         int seen_borrow, seen_ref, seen_out, bline;
-        int ntp, pi;
+        int ntp, pi, discard, save_ntraits, save_ntype, save_nnode;
         char tparam[2][MAX_TEXT];
         char tbound[2][MAX_TEXT];
         char name[MAX_TEXT];
@@ -3461,6 +3461,26 @@ impl ParseOps for Parser {
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
         self->lex->tok_copy(name, sizeof name);
+        /* LANG-23: `Drop` / `Handback` are reserved built-in traits. The
+           built-in declaration unit may write them (the row is parsed for
+           validation, then discarded: no MAX_TRAITS count, no vtable, and
+           `find_trait` keeps returning <0 so every name-based built-in path
+           stays in charge). Any other unit is refused, matching L2. */
+        discard = 0;
+        if (strcmp(name, "Drop") == 0 || strcmp(name, "Handback") == 0) {
+            if (strstr(self->mem->path, "lib/core/Vec.h.ct") != 0
+                || strstr(self->mem->path, "lib/std/Vec.h.ct") != 0) {
+                discard = 1;
+            } else {
+                char dmsg[MAX_TEXT];
+                snprintf(dmsg, sizeof dmsg,
+                         "'%s' is a reserved built-in trait and cannot be defined", name);
+                return tool::diag::ct_sem_error(trait_line, 1, dmsg, self->mem->path);
+            }
+        }
+        save_ntraits = self->sym->ntraits;
+        save_ntype = self->sym->ntype;
+        save_nnode = self->arena->nnode;
         if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
         /* Phase 35: `trait Iter<T[, U]> { … }` declares a template. The row keeps
            the bare name and the parameters; `T` in a signature is substituted
@@ -3729,6 +3749,16 @@ impl ParseOps for Parser {
             snprintf(cmsg, sizeof cmsg,
                      "trait '%s' has no non-default method to break the cycle", name);
             return tool::diag::ct_sem_error(trait_line, 1, cmsg, self->mem->path);
+        }
+        /* LANG-23: the built-in declaration is visible in lib/core but creates
+           no dispatch row and no type entry. */
+        if (discard) {
+            self->sym->ntraits = save_ntraits;
+            self->sym->ntype = save_ntype;
+            /* no node from a discarded declaration may survive: literal ids
+               and instance tags are arena indices, so a stray N_PARAM would
+               shift every later unit's generated C. */
+            self->arena->nnode = save_nnode;
         }
         return NO_NODE;
     }

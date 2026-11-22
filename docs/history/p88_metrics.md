@@ -18,7 +18,9 @@
      (emitted_after 于 DOC-87 Stage 1 后复测：内置层查找改为 lib/core + CT_CORE_DIR，
       共享 `find_builtin` 增加 58 行发射 C；发射器本身未变)
      (emitted_after 于 DOC-87 Stage 2 后复测：`core::` 源级命名空间与声明查重增加 58 行
-      发射 C；发射器本身未变) -->
+      发射 C；发射器本身未变)
+     (emitted_after 于 LANG-23 后复测：内建 trait 可见声明的解析/丢弃增加 23 行发射 C；
+      发射器本身未变) -->
 
 ## 1 切片清单
 

@@ -498,6 +498,9 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 
 #### 4.9 AutoDrop（Phase 5 新增，仅 Ct 线）
 
+> **AutoDrop 不是 trait**（LANG-23）。它是 `own` 的自动释放机制，`lib/core` 不为它
+> 生成声明；`Drop` / `Handback` 才是保留名内建 trait，声明见 §4.56。
+
 `own` 是一个**上下文关键字**，只出现在声明行的行首：它把变量标记为「持有对象生命周期」，
 编译器在作用域出口自动释放。它是 Phase 5 新增项，**L0（`ctc.c`）不认识它**（会原样透传），
 由 Ct 线实现：L2（`selfhost/l2/**`，冻结 oracle）与 ct-ast（安装入口）。两者在出口注入的**位置要求**上
@@ -2678,6 +2681,14 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 - **不做**：supertrait / 接口组合（开放项与触发条件见 [phase35 卡](history/design/phase35.md) §10.2 / §10.3）、默认方法体、多 bound、关联类型、`Self`、方法级泛型与泛型 enum。
 
 ### 4.56 `Drop` 与长度前缀字符串 `Str`（Phase 36，仅 ct-ast）
+
+- **可见声明（LANG-23）**：`Drop` / `Handback` 是**保留名内建 trait**。`lib/core/Vec.h.ct`
+  提供 `pub trait Drop { void drop(); }` 与 `pub trait Handback { void handback(); }`
+  的声明，供阅读与编辑器跳转到定义；声明只是契约，**不建可派发的 trait 行**：
+  不计入 `MAX_TRAITS`、不生成 vtable / vptr，`use Drop` / `impl Drop` / `borrow`
+  仍走按名的内建路径（生成 C 与 v0.88 逐字节一致）。用户单元写 `trait Drop` /
+  `trait Handback` 仍是硬错 `'Drop' is a reserved built-in trait and cannot be defined`；
+  **`AutoDrop` 不是 trait**（§4.9），不得为它生成声明。
 
 - **`Drop` trait**：`use Drop` 只置位、不进 `use[]` 列表；`delete p` 调用 `<S>_Drop_drop(p)`，无 vtable/vptr。无显式 `impl Drop` 时，编译器按字段**声明顺序**为每个 `uses_drop` 字段递归生成释放胶水；写了显式 `impl Drop for S`（或 `impl<T> Drop for Box<T>`）即**自负全责**，不再生成字段胶水，需在体里手动释放资源。
 - **指针字段胶水（PH-48）**：自动胶水对指针字段写 `if (_self->f) Child_Drop_drop(_self->f);`——判空、把子对象传给它的 Drop，**不取字段地址、也不 `free` 子指针**；所有权仍归显式 `impl Drop`。值字段仍是 `Child_Drop_drop(&_self->f)`。多星指针与带维度的指针数组不递归（没有单一子对象可传），由显式 impl 负责。
