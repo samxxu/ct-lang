@@ -48,7 +48,7 @@ ct check --types hello.ct               # 可选类型检查
 2. ct-ast 解析整棵 AST，**函数与全局可先用后定义**（自动补原型）；类型与 trait 必须先声明，`impl` 必须在两者之后。
 3. `struct` 值加 `use Trait;` 后才有 vptr；`Trait x = s;` 把 struct 变量装箱成胖指针，`x.m()` 动态派发。
 4. 资源用 `own` / `delete` / `Drop` / `defer` / `errdefer`；错误用 `Result<T,E>` 加后缀 `?` 或 `return err:`。
-5. `ct build` 自动加载 `lib/std` 的 `Vec` / `Map` / `Option` / `Result` / `Str`，不需要 `import`。
+5. `ct build` 自动加载 `lib/core` 的 `Vec` / `Map` / `Option` / `Result` / `Str`，不需要 `import`。
 
 ---
 
@@ -157,7 +157,7 @@ v1.1 先固化轻量 lowering 不变量——临时值物化、求值顺序、`D
 | `T a[]`（形参 / 字段 / 无初值） | `T[]` 或 `T a[N]` | v0.x 警告；v1.0 起硬错 |
 | `box<T>` | `Box<T>` | v1.0 起弃用并告警；v1.1 删除（LANG-24） |
 | `std::str::String` | `std::str::CharStr` | std 发布后一个 MINOR（PKG-22） |
-| `lib/std` 根拼写 | `lib/core` | 一个 MINOR（DOC-87 Stage 1） |
+| `lib/std` 根拼写（DOC-87 迁移） | `lib/core` | 一个 MINOR（DOC-87 Stage 1） |
 
 ### 2. 词法与书写要求（ct-ast）
 
@@ -2005,7 +2005,7 @@ int apply(int base) {
 
 #### 5.1 源码命名约定（语言 + 标准库 + ct-pkg，稳定契约）
 
-> 适用范围：Ct 语言自身暴露的名字（内置类型、`lib/std` 内置层）、`std` 包，以及所有 ct-pkg 包。
+> 适用范围：Ct 语言自身暴露的名字（内置类型、`lib/core` 内置层）、`std` 包，以及所有 ct-pkg 包。
 > 目标：同一生态不出现 `read_file` / `readFile` / `ReadFile` 三种写法。
 
 | 类别 | 规则 | 正例 | 反例 |
@@ -2488,7 +2488,7 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `get(char *)` / `get(int)`）**尚未实现**，登记为 REQ-JSACCESS-1，不属于本节的容器下标糖。
   实参类型与唯一 `get` 不匹配时，`ct check` 已是硬错（PH-72 / LANG-4），`ct build` 仍只告警并
   发射 `get(0)`，因此不要把 `v[0]` 用在 `char *get(char *)` 上。
-- **内置层**：`Vec<T>`、`Map<K,V>`、`MapEntry<K,V>` 写在 `lib/std/Vec.h.ct`，编译模式在输入前
+- **内置层**：`Vec<T>`、`Map<K,V>`、`MapEntry<K,V>` 写在 `lib/core/Vec.h.ct`，编译模式在输入前
   自动预解析，`ct build` 也把它作为一个单元自动加载，**两种模式都不需要 `import`、不需要 `-I`**。
   三个拼写是保留名，用户不能再声明同名 struct；旧项目里 `import std::vec` 带来的 `Vec` 定义会与
   内置名冲突（`'Vec' is a built-in type and cannot be redeclared`），须升级 `std` 包或删掉该 import。
@@ -2503,8 +2503,8 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   非泛型 struct 加固有方法；方法落码 `<Struct>_<method>`、调用点静态派发。属主单元发一次定义
   （外部链接），消费方从生成的 `.h` 取 `int Counter_get(struct Counter *);` 原型，自己不重复定义。
   跨单元重复定义不在解析期检测，落到链接期的重复符号（R34-4）。
-- **`Option` / `Result`（Phase 34）**：`lib/std/Option.h.ct` 提供 `Option<T>`（`int has; T value;`），
-  `lib/std/Result.h.ct` 提供 `Result<T, E>`（`int ok; T value; E err;`）；两者都是普通泛型 struct，
+- **`Option` / `Result`（Phase 34）**：`lib/core/Option.h.ct` 提供 `Option<T>`（`int has; T value;`），
+  `lib/core/Result.h.ct` 提供 `Result<T, E>`（`int ok; T value; E err;`）；两者都是普通泛型 struct，
   编译器没有专门分支。构造用字面量：`{ 1, v }` / `{ 0 }`（`Result` 是 `{ 1, v, 0 }` / `{ 0, 0, e }`）。
   `Option` 的方法是 `is_some` / `is_none` / `unwrap_or` / `unwrap` / `set` / `clear` / `release`；
   `Result` 是 `is_ok` / `is_err` / `unwrap_or` / `unwrap_err_or` / `unwrap` / `unwrap_err` /
@@ -2516,7 +2516,7 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   文案列出四类键）。`int` / `long` 按键的字节比较，`char *` 走 `strcmp`（**借用**调用方指针），
   `Str` 按 `len` 加 `memcmp` 比较恰好 `len` 字节（内嵌 `\0` 不截断、不碰撞），并在 `put` 时
   **深拷贝**键、在覆盖写 / `remove` / `release` 时各释放一次；三份实现是
-  `lib/std/Vec.h.ct` 里的三个 `impl` 块，不靠 `sizeof` 猜测键的类别。`foreach` 暴露的 `Str` 键是
+  `lib/core/Vec.h.ct` 里的三个 `impl` 块，不靠 `sizeof` 猜测键的类别。`foreach` 暴露的 `Str` 键是
   **借用**，**不得 release 键**（条目仍拥有它，D47-6）。
 - **容器语义**：`Vec` / `Map` 是引用计数的句柄（共享 `ct_buf`），`retain` 增加、`release` 减少并
   返回剩余计数，归零时释放。`release` 之后该句柄即失效：对同一句柄再次 `release` 是硬错（`abort`），
@@ -2657,7 +2657,7 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 - **跨单元 `Drop`（PH-48，D48-2 / U-2 A）**：Drop 体只由**声明该 struct 的单元**发射一次，链接性独立于 `pub`（默认可见）；该单元的生成头文件发布真原型 `void <S>_Drop_drop(void *);`，消费单元只发 `extern` 声明并调用它。`impl Drop for S` 必须写在 struct 的同一单元：写在别的单元时类型头没有原型，构建在写任何 `.c` 之前硬错 L48-2（`Drop body for 'struct Res' is not visible through its header`），不再生成静默空桩。显式 `impl` 仍负责释放子指针。
 - **泛型 Drop**：`impl<T> Drop for Box<T>` 每实例单态化出一个 `Box_int_Drop_drop` / `Box_Str_Drop_drop`，不产生模板态 `Box_Drop_drop`；声明在首次使用之后仍生效（impl 在 emit 阶段解析）。容器元素协议（Phase 31）对普通 struct 同样生效：`Vec<Str>` / `Vec<Probe>` 的 `release()` 会调用元素的 `release()`。
 - **重复释放诊断**：`drop()` 体内同一 `self` 字段不得 `release()` 两次，报 `field 'X' is released more than once in drop()`。
-- **`Str`**：内建于 `lib/std/Str.h.ct`，布局 `{ char *data; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_from(s)` / `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` / `str_compare(a, b)` / `str_c_str(s)`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。
+- **`Str`**：内建于 `lib/core/Str.h.ct`，布局 `{ char *data; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_from(s)` / `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` / `str_compare(a, b)` / `str_c_str(s)`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。
 - **所有权形态**：`Str` 是值句柄，按值传递浅拷贝指针（不自动深拷贝，需显式 `retain()`）；`own Str *p = malloc(sizeof(struct Str)); ...; delete p;` 由 `Drop` 释放 buffer 再 free 结构体并置空指针。`Option<T>` / `Result<T,E>` 已加 `use Drop`，其 `none()` / `ok()` / `err()` 工厂零初始化未使用的 payload，使无条件胶水安全释放。
 - **与 std 包 `String` 的关系**：`std::str::String` 是挂在 `char *` 上的方法层 trait（由外部 `std` 包提供 `String.m.ct`；
   下一版单元改名为 `CharStr.m.ct`，导入写作 `std::str::CharStr`），
@@ -2841,7 +2841,7 @@ Result<long, char *> twice(int n)
 
 ### 4.66 C 边界：`c-boundary` 与 shim（Phase 65，仅 ct-ast）
 
-默认只有 Ct 树（`selfhost/**`、`lib/std/**`、`test/**`、`examples/**`）与 `--c-boundary=allow`
+默认只有 Ct 树（`selfhost/**`、`lib/core/**`、`test/**`、`examples/**`）与 `--c-boundary=allow`
 的构建可以直接和 C 打交道；**外部代码默认 strict**。
 
 | 形态 | strict 下 | 出口 |
@@ -2998,7 +2998,7 @@ parse("ab", n);  /* 调用点不写 out */
   重新赋值先 `retain` 右值再 `release` 旧值；作用域结束释放 owning 局部。局部绑定若是借用
   视图（`Vec.get` / `Map.get` 结果）则不 `retain` 也不 `release`；`refs = -1` 的 immortal
   字面量 / 空串在所有位置都跳过。
-- **旧类型已删除（S5b）**：`lib/std/StrLegacy.h.ct` 与 `namespace std::str` 兼容单元已移除，
+- **旧类型已删除（S5b）**：`lib/core/StrLegacy.h.ct` 与 `namespace std::str` 兼容单元已移除，
   `std::str::Str` 不再解析；仓内消费者已迁到 `String` / `Str` 新 API，外部消费者的 dry-run
   见 phase80 卡 §7。
 - **边界**：`box<String>` 已由 PH-81 的 `box<String>::of` 回填；`Map<Str,V>` 存储位置（借用类型不能作为容器键，用

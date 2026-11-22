@@ -24,7 +24,7 @@ PRINT = re.compile(r"\b(printf|fprintf|sprintf|snprintf)\s*\(")
 SCAN = (
     glob.glob("test/**/*.ct", recursive=True)
     + glob.glob("examples/**/*.ct", recursive=True)
-    + glob.glob("lib/std/*.ct")
+    + glob.glob("lib/core/*.ct")
 )
 
 

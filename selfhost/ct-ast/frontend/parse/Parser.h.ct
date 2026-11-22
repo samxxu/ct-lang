@@ -2747,7 +2747,8 @@ impl ParseOps for Parser {
             if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
             /* Phase 29 §2.5: the three container names belong to the built-in
                layer, so a user unit may not declare them again (L29-7). */
-            if (strstr(self->mem->path, "lib/std/") == 0
+            if (strstr(self->mem->path, "lib/core/") == 0
+                && strstr(self->mem->path, "lib/std/") == 0 /* DOC-87 迁移回退 */
                 && (strcmp(name, "Vec") == 0 || strcmp(name, "Map") == 0
                     || strcmp(name, "MapEntry") == 0)) {
                 char msg[MAX_TEXT * 2];

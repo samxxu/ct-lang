@@ -6,7 +6,7 @@
 | 状态 | 待评估；未立项，不占 phase |
 | 评审记录 | [ct-str-char-conversion-battle.md](../reviews/ct-str-char-conversion-battle.md)（2026-11-16，主张 / 反证 / 裁判：部分受理） |
 | 范围 | 内置 `Str` 与 `char *` 之间的转换规则 |
-| 事实基线 | v0.61.0（当前 HEAD）；`Str` 实现见 [Str.h.ct](../../lib/std/Str.h.ct) |
+| 事实基线 | v0.61.0（当前 HEAD）；`Str` 实现见 [Str.h.ct](../../lib/core/Str.h.ct) |
 | 不在范围 | 排期、phase 编号、其他字符串类型、C 侧内存管理策略的改造 |
 
 本提案分「事实」与「建议」两部分。事实部分只描述当前仓库里的行为与出处；建议部分是可被采纳、
@@ -19,17 +19,17 @@
 ### 1.1 `Str` 的布局与生命周期
 
 - `Str` 布局为 `{ char *data; int len; }`，字段私有；`len` 是契约，允许内嵌 `\0`
-  （[language-spec.md §Str](../language-spec.md#L2559)、[Str.h.ct:18-21](../../lib/std/Str.h.ct#L18-L21)）。
-- `str_from_len` 在分配时多留一个字节并写入结尾 NUL（[Str.h.ct:39-46](../../lib/std/Str.h.ct#L39-L46)），
+  （[language-spec.md §Str](../language-spec.md#L2559)、[Str.h.ct:18-21](../../lib/core/Str.h.ct#L18-L21)）。
+- `str_from_len` 在分配时多留一个字节并写入结尾 NUL（[Str.h.ct:39-46](../../lib/core/Str.h.ct#L39-L46)），
   因此内部缓冲区对 C 读者可用，但 C 读者会在内嵌 `\0` 处截断。
-- `Str` 拥有缓冲区，`Drop` 负责释放（[Str.h.ct:23-29](../../lib/std/Str.h.ct#L23-L29)）。
+- `Str` 拥有缓冲区，`Drop` 负责释放（[Str.h.ct:23-29](../../lib/core/Str.h.ct#L23-L29)）。
 
 ### 1.2 现有的显式转换
 
 | 方向 | 现有写法 | 实际行为 |
 | --- | --- | --- |
-| `char *` → `Str` | `str_from(p)` | 扫描 NUL 长度后**深拷贝**（[Str.h.ct:51-60](../../lib/std/Str.h.ct#L51-L60)）；分配失败返回 `len = -1` 的释放态，不终止 |
-| `Str` → `char *` | `str_c_str(s)` | **分配**一份 NUL 结尾副本，调用方负责 `free`（[Str.h.ct:115-127](../../lib/std/Str.h.ct#L115-L127)） |
+| `char *` → `Str` | `str_from(p)` | 扫描 NUL 长度后**深拷贝**（[Str.h.ct:51-60](../../lib/core/Str.h.ct#L51-L60)）；分配失败返回 `len = -1` 的释放态，不终止 |
+| `Str` → `char *` | `str_c_str(s)` | **分配**一份 NUL 结尾副本，调用方负责 `free`（[Str.h.ct:115-127](../../lib/core/Str.h.ct#L115-L127)） |
 | `char *` → `Str` 形参 | 直接传参 | **默认路径硬错**：`type mismatch ... expected 'Str', got 'char *'`（[language-spec.md §6.1](../language-spec.md#L2000-L2005)，v0.53.2 起） |
 
 事实层面的结果是：两个方向的纯搬运都要绕一圈——一个要显式 `str_from`，另一个要显式
@@ -100,7 +100,7 @@
 
 以下为原建议，保留为历史记录，不再作为执行口径：~~分配失败时终止程序，不返回空值或释放态~~
 ——原理由是普通声明与赋值不应迫使调用方处处判空。现状 `str_from_len` 返回 `len = -1` 的释放态
-（[Str.h.ct:39-43](../../lib/std/Str.h.ct#L39-L43)），同样不符合新裁定。
+（[Str.h.ct:39-43](../../lib/core/Str.h.ct#L39-L43)），同样不符合新裁定。
 
 仍未定：隐式转换位置没有返回值通道，与「失败必须可观察」存在张力；该位置是否继续实施自动
 深拷贝，需与提案 §3.7 末段一起裁定。

@@ -70,7 +70,7 @@
 | 事项 | 为什么必须在 v1.0 前定 | 跟踪 |
 | --- | --- | --- |
 | `box` → `Box` 规范拼写、`box_*` → `Box_*` 生成符号 | 生成 C 命名契约 v1.0 起冻结；之后再改只能加别名 | [LANG-24](../issues/lang/lang-24-box-pascalcase-rename.md) |
-| `lib/std` → `lib/core` 目录（Stage 1）+ `namespace core`（Stage 2） | 目录与加载键属于构建契约；命名空间是生成物可见变更 | [DOC-87](../issues/docs/doc-87-lib-core-rename.md) |
+| `lib/std` → `lib/core` 目录（Stage 1，迁移已落地）+ `namespace core`（Stage 2） | 目录与加载键属于构建契约；命名空间是生成物可见变更 | [DOC-87](../issues/docs/doc-87-lib-core-rename.md) |
 | v1.0 冻结时点 | 所有 `冻结中` 条目必须在此之前收敛或转入 `已冻结` | [v1 路线](planning/v1-release-plan.md) §1.5 |
 
 ## 5. 变更本清单

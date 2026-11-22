@@ -14,7 +14,7 @@
 
 | 子问题 | 结论 | 证据 |
 | --- | --- | --- |
-| 内置层占什么命名空间 | **根命名空间**（裸名 `Vec` / `Map` / `Option` / `Result` / `Str`） | `lib/std/*.ct` 全部无 `namespace`；[Vec.h.ct:19-20](../../lib/std/Vec.h.ct#L19-L20)「Root namespace on purpose: the layer is pre-parsed, not imported … (D29-3)」 |
+| 内置层占什么命名空间 | **根命名空间**（裸名 `Vec` / `Map` / `Option` / `Result` / `Str`） | `lib/std/*.ct` 全部无 `namespace`；[Vec.h.ct:19-20](../../lib/core/Vec.h.ct#L19-L20)「Root namespace on purpose: the layer is pre-parsed, not imported … (D29-3)」 |
 | 外部包占什么命名空间 | `std::<模块>` | `String.m.ct:47`、`Fs.m.ct:29`、`Io.h.ct:19`、`Num.m.ct:28`、`Test.h.ct:27` 等（外部仓文件，本仓不复制） |
 | 同名单元 | **没有** | 内置：`Vec`（含 `Map`/`MapEntry`）、`Option`、`Result`、`Str`；外部：`Arena`、`Fs`、`File`、`Io`、`Stdout`、`Math`、`Real`、`Num`、`String`、`Test`、`Utf8Ops`（`std/str` 无 `Str` 结构体，见 `String.m.ct:9-11`） |
 | 命名空间首段 | **不撞**：内置是根，外部是 `std` | 同上；`std` 只作为外部包的命名空间首段出现 |
@@ -62,8 +62,8 @@ t3: import std::str::String; + Str s = str_from("abc"); + str_len(s)
 - [language-spec.md:47](../../docs/language-spec.md#L47)（自动加载清单）、[:1926](../../docs/language-spec.md#L1926)（适用范围）、
   [:1941](../../docs/language-spec.md#L1941)（保留名）、[:2390-2392](../../docs/language-spec.md#L2390-L2392)（内置层段落）、
   [:2411-2415](../../docs/language-spec.md#L2411-L2415)（`Map` 键）、[:2546](../../docs/language-spec.md#L2546) / [:2553](../../docs/language-spec.md#L2553)（§4.56）。
-- [lib/std/README.md:5-17](../../lib/std/README.md#L5-L17)（范围）、[:28-29](../../lib/std/README.md#L28-L29)（类型表+保留名）、
-  [:43](../../lib/std/README.md#L43)（保留名）、[:80-83](../../lib/std/README.md#L80-L83)（`Str`）。
+- [lib/std/README.md:5-17](../../lib/core/README.md#L5-L17)（范围）、[:28-29](../../lib/core/README.md#L28-L29)（类型表+保留名）、
+  [:43](../../lib/core/README.md#L43)（保留名）、[:80-83](../../lib/core/README.md#L80-L83)（`Str`）。
 - [README.md:468](../../README.md#L468)、[README.en.md:64](../../README.en.md#L64)。
 - 外部包侧也有同类内置层路径写法；逐条引用属外部仓，本仓不复制，记录随包外移交清单分发。
 

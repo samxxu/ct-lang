@@ -19,8 +19,8 @@ esac
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/p80methods.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
-CT_STD_DIR="$root/lib/std"
-export CT_STD_DIR
+CT_CORE_DIR="$root/lib/core"
+export CT_CORE_DIR
 cc=${CC:-cc}
 fail=0
 ok()  { printf 'ok   %s\n' "$1"; }

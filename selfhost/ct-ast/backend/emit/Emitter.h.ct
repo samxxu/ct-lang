@@ -2400,7 +2400,7 @@ static int emit_string_literals(struct Emitter *self, int prog)
 }
 
 /* ---- PH-81 / S1: `box<T>` per-instance helpers -------------------------
-   The template lives in `lib/std/Vec.h.ct`; the compiler writes two static
+   The template lives in `lib/core/Vec.h.ct`; the compiler writes two static
    functions per instance because both need the concrete payload spelling:
      - `box_X__new(T *v)` allocates the shared `ct_box_hdr` plus payload and
        copies the captured initializer into it (refs = 1);
@@ -3549,7 +3549,7 @@ static int inst_emit_elem_protos(struct Emitter *self, int ii)
     if (elem_has_life(self, elem) && inst_emit_elem_method_protos(self, elem) != 0)
         return -1;
     /* PH-47: a `Map` also stores its key by value. An owning key (`Str`) is
-       deep-copied and released by the key block in `lib/std/Vec.h.ct`, whose
+       deep-copied and released by the key block in `lib/core/Vec.h.ct`, whose
        bodies sit with the instance methods and call the key's `retain` /
        `release` before those inherent definitions are written; compile mode has
        no header to supply the prototypes, so forward-declare them here too.
@@ -3570,7 +3570,7 @@ static int inst_emit_elem_protos(struct Emitter *self, int ii)
    `retain`/`release` on an element type that owns a resource copy the bumped
    handle and guard a release whose handle is already empty when the element is
    itself a Vec / Map; every other element is non-owning and gets empty bodies.
-   The calls in lib/std spell the reserved names and bind to these at emission
+   The calls in lib/core spell the reserved names and bind to these at emission
    time (`ginst`). */
 static int inst_emit_elem_helpers(struct Emitter *self, int ii)
 {

@@ -36,12 +36,12 @@ $ grep -n "int a\[\]" test/ast/132_foreach_array_values/prog.ct | head -1
 
 - 有利于 B：[v1-release-plan.md:23](../../docs/planning/v1-release-plan.md#L23)、
   [:61-64](../../docs/planning/v1-release-plan.md#L61-L64)（冻结/行为保持）；
-  [Str.h.ct:18](../../lib/std/Str.h.ct#L18)（`Str` 属 std）；
+  [Str.h.ct:18](../../lib/core/Str.h.ct#L18)（`Str` 属 std）；
   [exprs.ct:13](../../examples/c-superset/s01_switch/exprs.ct#L13)（`out` 是标识符）；
   [time_t.ct:26](../../examples/c-superset/s19_header_typenames/time_t.ct#L26)（`ref` 是标识符）；
   [test/ast/132_foreach_array_values/prog.ct:3](../../test/ast/132_foreach_array_values/prog.ct#L3)（`int a[]` 既有语法）；
   [Stmt.h.ct:1695-1697](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1695-L1697)（关键字表无 new/ref/out）。
-- **不利于己方**：[Vec.h.ct:29-32](../../lib/std/Vec.h.ct#L29-L32) 证明句柄协议可行；
+- **不利于己方**：[Vec.h.ct:29-32](../../lib/core/Vec.h.ct#L29-L32) 证明句柄协议可行；
   [battle/pointer-free-1/proposal.md:161](battle/pointer-free-1/proposal.md#L161-L166) 的 S2/S4 确实复用了既有能力。
   这两点不能否认，但它们只支持「以后可做」，不支持「现在整体受理」。
 

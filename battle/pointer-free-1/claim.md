@@ -23,11 +23,11 @@ $ grep -n "语言在 v1.0 冻结" docs/planning/v1-release-plan.md
 
 ## E2 — 锚点（含不利于己方）
 
-- 有利于 A：[Vec.h.ct:29-32](../../lib/std/Vec.h.ct#L29-L32)（refs/release 既有协议）；
+- 有利于 A：[Vec.h.ct:29-32](../../lib/core/Vec.h.ct#L29-L32)（refs/release 既有协议）；
   [battle/pointer-free-1/proposal.md:47](battle/pointer-free-1/proposal.md#L47-L66)（box 与 Vec 同构）；
   [battle/pointer-free-1/proposal.md:161](battle/pointer-free-1/proposal.md#L161-L166)（S2/S4 复用既有能力）。
 - **不利于己方**：[v1-release-plan.md:23](../../docs/planning/v1-release-plan.md#L23)
-  明确 v1.0 冻结语言；[Str.h.ct:18](../../lib/std/Str.h.ct#L18) 说明 `Str` 是 std 包类型，
+  明确 v1.0 冻结语言；[Str.h.ct:18](../../lib/core/Str.h.ct#L18) 说明 `Str` 是 std 包类型，
   不是编译器内建——这两点直接抬高 A 的落地门槛。
 
 ## E3 — 可证伪预测

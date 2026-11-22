@@ -1,10 +1,13 @@
-# lib/std — 内置容器层（随编译器发行）
+# lib/core — 内置容器层（随编译器发行）
+
+> 曾用名 `lib/std`（DOC-87 Stage 1，2026-11-22 迁移；旧路径与 `CT_STD_DIR` 只在一个 MINOR
+> 兼容窗内解析，命中时打印弃用警告）。
 
 > 中文。范围与判据见 [phase29.md](../../docs/history/design/phase29.md) §2.7、[language-spec §4.51](../../docs/language-spec.md)。
 
 ## 这是什么
 
-`lib/std/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）、`Option` / `Result` 与 `String` / `Str`
+`lib/core/` **只承载内置 `Vec` / `Map`（含 `MapEntry`）、`Option` / `Result` 与 `String` / `Str`
 （含 UTF-16 对）及其直接依赖**，不是整个 `std` 的新家。
 `io` / `math` 等其余模块仍由 ct-pkg 包 `std` 提供，本目录不复制、不镜像；`Str` 的
 `char *` 映射层 `std::str::String` 仍在 ct-pkg `std`（Phase 36 的 S0 实测该包没有
@@ -90,8 +93,20 @@
   `Map.get` 结果）不 retain 也不 release。`U16String` / `U16Str` 同构，UTF-16 payload 的
   头按 `char *` 回退 8 字节计算。`Map<String,V>` 的键块在 `put` 深拷贝借用键，`Map<Str,V>` 是存储位置，
   被类型检查拒绝。
-- **旧 owning `Str` 已删除（Phase 80 S5b）**：`lib/std/StrLegacy.h.ct` 与 `namespace std::str`
+- **旧 owning `Str` 已删除（Phase 80 S5b）**：`lib/core/StrLegacy.h.ct` 与 `namespace std::str`
   兼容单元已移除，旧拼写不再解析；仓内消费者已迁到 `String` / `Str`。
+
+## 迁移与回退（DOC-87 Stage 1）
+
+- 新代码用 `CT_CORE_DIR=<repo>/lib/core`；旧的 `CT_STD_DIR` 只在一个 MINOR 的兼容窗内仍被读取，
+  每次进程打印一条 `warning: CT_STD_DIR is deprecated; use CT_CORE_DIR`。
+- 查找顺序：`CT_CORE_DIR`（权威）→ `CT_STD_DIR`（弃用，打警告）→ `./lib/core` → 输入同级
+  `../lib/core` → 旧 `./lib/std` / 输入同级（DOC-87 迁移回退；命中时打警告）。`CT_CORE_DIR` 指向不存在的目录是
+  **硬错**（`CT_CORE_DIR points to a missing directory: <dir>`），不静默回退。
+- 变量值指向**包含 `Vec.h.ct` 的目录**；`--freestanding` 不加载内置层，不受影响。
+- **回退**：Stage 1 是单提交（目录 `git mv`、loader 查找、脚本、活跃文档同进同退）。`git revert`
+  该提交即恢复 `lib/std` 与旧查找（迁移回退），`CT_CORE_DIR` 随之消失；不需要 tag、不重写历史。
+- 一个 MINOR 后删除旧路径/旧变量并另立清理 issue（不并入 DOC-87 Stage 1）。
 
 ## 版本对齐
 

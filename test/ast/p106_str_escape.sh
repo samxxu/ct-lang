@@ -25,8 +25,8 @@ esac
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/p106escape.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
-CT_STD_DIR="$root/lib/std"
-export CT_STD_DIR
+CT_CORE_DIR="$root/lib/core"
+export CT_CORE_DIR
 fail=0
 ok()  { printf 'ok   %s\n' "$1"; }
 bad() { echo "FAIL p106/escape: $1" >&2; [ $# -gt 1 ] && printf '  %s\n' "$2" >&2; fail=1; }

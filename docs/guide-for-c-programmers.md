@@ -53,7 +53,7 @@
 （不可变 `String` 写入、`Str` 作 struct 字段、`Map<Str,V>` 等都会硬错）。
 这和 `goto` 的最终形态一样——留在语言里，写在文档边缘，大部分人想不起来用。
 
-另外要分清两种“标准能力”的加载方式：`lib/std` 的内置层（`Vec` / `Map` / `Option` /
+另外要分清两种“标准能力”的加载方式：`lib/core` 的内置层（`Vec` / `Map` / `Option` /
 `Result` / `String` / `Str` / `box`）由编译器**自动预解析**；而挂在 `char *` 上的
 `length()` / `to_int()` / `starts_with()` 等方法来自 **std 包的寄生映射**
 （`map trait` 挂在 `char *` 上），必须 `import std::str::CharStr;` 才有
@@ -287,7 +287,7 @@ C 程序员的老习惯「返回静态 buffer 避免分配」在 Ct 里是**反�
 String joined = str_concat(a.as_str(), b.as_str());   /* 新 owning String */
 ```
 
-编译器内置层 `lib/std` 没有 `String.concat`（只有 `U16String.concat`），也没有 `Arena`；
+编译器内置层 `lib/core`（原 `lib/std`）没有 `String.concat`（只有 `U16String.concat`），也没有 `Arena`；
 外部 `ct/std` 包（不是内置层）提供 `std::arena::Arena`，需先 `ct get ct/std`，再 `import std::arena::Arena`。
 热点路径需要批量分配时，用项目内分配器或落到逃生层，不要写成“标准库自带”。
 

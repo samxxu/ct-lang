@@ -121,7 +121,7 @@ phase81 §1.1 把它列为 S1a 入口（[docs/design/phase81.md:46](../../docs/d
 **结论：面上的回滚是单 stage 的；语义面有残留风险，须承认。** 卡面明写「S5a 可回退到旧 `Str`；
 S5b 与外部迁移绑定，不能整体单回滚」（[docs/design/phase80.md:107](../../docs/design/phase80.md#L107)）。
 S5a 只增内建类型 + 保留旧类型，旧 `lib/std/Str.h.ct` 的 `{char *data; int len}` 与生成物不动
-（[lib/std/Str.h.ct:18](../../lib/std/Str.h.ct#L18)）；回退 = 反做 8 文件 patch（E1-4 stat）+ 恢复旧拼写。
+（[lib/std/Str.h.ct:18](../../lib/core/Str.h.ct#L18)）；回退 = 反做 8 文件 patch（E1-4 stat）+ 恢复旧拼写。
 **残留风险**：裸名 `Str` 的语义是用户可见的，即使未发布也会在 golden/示例中定形；若 S5a 收口前
 改口径，会产生一次内部语义 churn。缓解：S5a 不 bump MINOR、不打 tag、不发布，收口门在 E80-7。
 

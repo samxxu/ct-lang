@@ -15,8 +15,8 @@ esac
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/p80migrate.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
-CT_STD_DIR="$root/lib/std"
-export CT_STD_DIR
+CT_CORE_DIR="$root/lib/core"
+export CT_CORE_DIR
 cc=${CC:-cc}
 fail=0
 ok()  { printf 'ok   %s\n' "$1"; }
@@ -24,18 +24,18 @@ bad() { echo "FAIL p80/migrate: $1" >&2; [ $# -gt 1 ] && printf '  %s\n' "$2" >&
 cd "$root" || exit 1
 
 # 1. the compatibility unit is gone, and no built-in source keeps the namespace.
-if [ -e lib/std/StrLegacy.h.ct ]; then
-    bad "compat unit deleted" "lib/std/StrLegacy.h.ct still exists"
+if [ -e lib/core/StrLegacy.h.ct ]; then
+    bad "compat unit deleted" "lib/core/StrLegacy.h.ct still exists"
 else
-    ok "compat unit deleted (lib/std/StrLegacy.h.ct absent)"
+    ok "compat unit deleted (lib/core/StrLegacy.h.ct absent)"
 fi
-if grep -q 'namespace std::str' lib/std/*.ct; then
-    bad "no legacy namespace" "$(grep -n 'namespace std::str' lib/std/*.ct | head -2)"
+if grep -q 'namespace std::str' lib/core/*.ct; then
+    bad "no legacy namespace" "$(grep -n 'namespace std::str' lib/core/*.ct | head -2)"
 else
     ok "no built-in source declares namespace std::str"
 fi
-if grep -q '::str_from\|::str_len' lib/std/*.ct; then
-    bad "no legacy API spelling" "$(grep -n '::str_from' lib/std/*.ct | head -2)"
+if grep -q '::str_from\|::str_len' lib/core/*.ct; then
+    bad "no legacy API spelling" "$(grep -n '::str_from' lib/core/*.ct | head -2)"
 else
     ok "no built-in source names the legacy API"
 fi

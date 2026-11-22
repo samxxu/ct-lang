@@ -139,7 +139,7 @@ int main(void)
     return 0;
 }
 CT
-( cd "$root" && CT_STD_DIR="$root/lib/std" "$CT" --freestanding "$tmp/cmode/c.ct" -o "$tmp/cmode/c.c" ) >"$tmp/cmode.log" 2>"$tmp/cmode.err"
+( cd "$root" && CT_CORE_DIR="$root/lib/core" "$CT" --freestanding "$tmp/cmode/c.ct" -o "$tmp/cmode/c.c" ) >"$tmp/cmode.log" 2>"$tmp/cmode.err"
 if [ $? -ne 0 ]; then
     echo "FAIL p64free: the compile-mode freestanding program failed: $(head -2 "$tmp/cmode.err")" >&2
     fail=1

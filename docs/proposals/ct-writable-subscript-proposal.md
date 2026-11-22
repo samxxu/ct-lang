@@ -73,8 +73,8 @@ doc["server"]?["host"] = "x";
 
 - `Vec<T>::get(int) -> T`：下标不存在（`i < 0` 或 `i >= len`）返回零值（D50-1）；
   `at(i) -> T*` 未命中返回 0；`set(i, v)` 当前在 `i >= len` 时 **静默 no-op**
-  （[Vec.h.ct:97](../../lib/std/Vec.h.ct#L97)、[Vec.h.ct:121](../../lib/std/Vec.h.ct#L121)、
-  [Vec.h.ct:132](../../lib/std/Vec.h.ct#L132)）。
+  （[Vec.h.ct:97](../../lib/core/Vec.h.ct#L97)、[Vec.h.ct:121](../../lib/core/Vec.h.ct#L121)、
+  [Vec.h.ct:132](../../lib/core/Vec.h.ct#L132)）。
 - `Map<K,V>::get(K) -> V*`：缺键 0；`put(K,V)` 插入/覆盖；`char *` 键借用，`Str` 键深拷贝。
 
 `m[k]` / `v[i]` 的读语义已经统一为「取不到就是空/零值」，**读侧不存在「越界」这个概念**。

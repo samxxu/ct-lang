@@ -115,8 +115,8 @@ EOF
     printf 'C generic enum                 %-2s  %s\n' "$rc" "$msg"
 
     rc=0
-    msg=$(cd "$root" && grep -r "struct Option" lib/std 2>&1) || rc=$?
-    printf 'D lib/std Option type          %-2s  %s\n' "$rc" "${msg:-<no match>}"
+    msg=$(cd "$root" && grep -r "struct Option" lib/core 2>&1) || rc=$?
+    printf 'D lib/core Option type          %-2s  %s\n' "$rc" "${msg:-<no match>}"
 
     rc=0
     msg=$("$ct" "$fx/p34_opt_iface.ct" -o "$work/opt_iface.c" 2>&1) || rc=$?

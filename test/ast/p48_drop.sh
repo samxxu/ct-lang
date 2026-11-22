@@ -24,7 +24,7 @@ fail_msg() { echo "FAIL $*" >&2; fail=$((fail + 1)); }
 ok_msg() { echo "ok $*"; }
 
 # --- E48-1 / E48-6: pointer field glue -------------------------------------
-if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
         test/ast/243_ptr_field_glue/prog.ct -o "$tmp/ptr.c" ) \
         >"$tmp/ptr.out" 2>"$tmp/ptr.err"; then
     fail_msg "the pointer-field fixture did not compile:"; sed 's/^/  /' "$tmp/ptr.err" >&2
@@ -69,7 +69,7 @@ int main(void)
     return 0;
 }
 VALUE
-if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" "$tmp/value.ct" -o "$tmp/value.c" ) \
+if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" "$tmp/value.ct" -o "$tmp/value.c" ) \
         >"$tmp/value.out" 2>"$tmp/value.err"; then
     fail_msg "the value-field fixture did not compile:"; sed 's/^/  /' "$tmp/value.err" >&2
 elif ! grep -Fq 'Inner_Drop_drop(&_self->inner);' "$tmp/value.c"; then
@@ -85,7 +85,7 @@ fi
 
 # --- E48-2: cross-unit Drop body -------------------------------------------
 mkdir -p "$tmp/out"
-if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" build --emit-c \
+if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" build --emit-c \
         test/ast/244_cross_unit_drop/prog.ct -o "$tmp/out" ) \
         >"$tmp/x.out" 2>"$tmp/x.err"; then
     fail_msg "the cross-unit fixture did not build:"; sed 's/^/  /' "$tmp/x.err" >&2
@@ -112,7 +112,7 @@ fi
 
 # --- E48-5: impl outside the struct's header is L48-2 ----------------------
 mkdir -p "$tmp/negout"
-if ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" build --emit-c \
+if ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" build --emit-c \
         test/ast/p48_errors/main.ct -o "$tmp/negout" ) \
         >"$tmp/neg.out" 2>"$tmp/neg.err"; then
     fail_msg "L48-2: the invisible impl compiled"

@@ -13,7 +13,7 @@ impl 签名漂移）。需要更早发现类型问题时用 `ct check --types`�
 **兼容承诺（v1.0 起）**：Ct 不再自称 C 超集。C 的表达式、语句与类型核心仍按原语法透传，
 但不再承诺 C 全集（函数式宏、strict 边界下的 `#include`、旧 L1/L2 管线语法），也不以
 “C 代码原样全收”为目标。旧工程用 v0.x 编译器或 `ct migrate`；`T a[]`、`Box`、`CharStr`、
-`lib/core` 的弃用窗口见 [spec §1.2](docs/language-spec.md)。
+`lib/std` → `lib/core` 的迁移/弃用窗口见 [spec §1.2](docs/language-spec.md)。
 <!-- ct-compat: not-c-superset claim=v1.0-not-c-superset spec=1.2 -->
 
 ---
@@ -578,7 +578,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **泛型函数**：`T name<T>(…)` + `name<int>(…)`，编译期单态化（Phase 26）；**约束泛型** `T name<T: Trait>(…)`（Phase 28） <!-- cap:generic-fn -->
 - **泛型 struct 与内置容器**：`struct Name<T, U>` + `impl<T> Name<Args>` 静态派发（Phase 29）；`Vec<T>` / `Map<K,V>` 免 import，`foreach` 按插入序遍历 `Map` <!-- cap:generic-struct --> <!-- cap:containers -->
 - **泛型 trait**：`trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>` 约束，实例按实参编码单态化（Phase 35） <!-- cap:generic-trait -->
-- **标准结果类型**：`Option<T>` / `Result<T, E>` 内建于 `lib/std`，`is_some` / `is_ok` / `unwrap` 等为固有方法（Phase 34） <!-- cap:option-result -->
+- **标准结果类型**：`Option<T>` / `Result<T, E>` 内建于 `lib/core`，`is_some` / `is_ok` / `unwrap` 等为固有方法（Phase 34） <!-- cap:option-result -->
 - **单对象句柄**：`box<T>`（16 字节句柄 + 8 字节 `{refs,aux}` 头）、`new T { ... }`（上下文关键字，仅具名 struct）、`b.f` 自动解引用、`retain` / `release` 与 `at()` 借用（Phase 81） <!-- cap:box -->
 - **ADT 与 `match`**：`enum` 成员带负载即 ADT，`match` 穷尽所有变体或末位 `_`；值是 `{tag, union}`，无 vtable、无隐藏分配（Phase 84），见 spec §4.73 <!-- cap:adt -->
 - **C ABI 静态库**：`ct build --lib` 把根 `.h.ct` 的 C 兼容 `pub` 函数导出为 `.abi.h` + `lib<base>.a`（Phase 39） <!-- cap:abi -->

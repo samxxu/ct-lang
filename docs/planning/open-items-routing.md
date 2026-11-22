@@ -34,11 +34,11 @@
 
 | # | 写法（最小样例） | 实测 | 判定 | 依据 / PH-53 覆盖 | 落点 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `Vec<int> v = {10,20}; int x = v[0];` | rc=0，生成 `int x = Vec_int_get(&v, 0);` | **已具备** | `Vec::get` 返回值；越界返回零值（[Vec.h.ct:96-104](../../lib/std/Vec.h.ct#L96-L104)） | — |
-| 2 | `Vec<int> v; if (v.has(0)) x = v[99];` | rc=0；`has(99)=0`，`v[99]` 仍返回零值 | **已具备（需 `has`/`at`）** | D50-1：`get` 零值语义不变；`has`/`at` 是并行入口（[std/README:54-59](../../lib/std/README.md#L54-L59)） | — |
+| 1 | `Vec<int> v = {10,20}; int x = v[0];` | rc=0，生成 `int x = Vec_int_get(&v, 0);` | **已具备** | `Vec::get` 返回值；越界返回零值（[Vec.h.ct:96-104](../../lib/core/Vec.h.ct#L96-L104)） | — |
+| 2 | `Vec<int> v; if (v.has(0)) x = v[99];` | rc=0；`has(99)=0`，`v[99]` 仍返回零值 | **已具备（需 `has`/`at`）** | D50-1：`get` 零值语义不变；`has`/`at` 是并行入口（[std/README:54-59](../../lib/core/README.md#L54-L59)） | — |
 | 3 | `Vec<struct P> v; v.push(p); int x = v[0].x;` | rc=0 | **已具备** | `Vec::get` 返回值类型 `T` | — |
 | 4 | `Vec<Vec<int>> vv; vv.push(inner); int x = vv[0][1];` | rc=0 | **已具备** | `Vec` 值可继续 `[]` | — |
-| 5 | `Map<char *, int> m; m.put("a",7); int *p = m["a"];` | rc=0，生成 `Map_char_p_int_get(&m,"a")`（`int *`） | **已具备** | `Map::get` 返回 `V *`；缺键 `0`（[Vec.h.ct:285](../../lib/std/Vec.h.ct#L285)） | — |
+| 5 | `Map<char *, int> m; m.put("a",7); int *p = m["a"];` | rc=0，生成 `Map_char_p_int_get(&m,"a")`（`int *`） | **已具备** | `Map::get` 返回 `V *`；缺键 `0`（[Vec.h.ct:285](../../lib/core/Vec.h.ct#L285)） | — |
 | 6 | `if (m.has("a")) x = *m["a"];` | rc=0；缺键 `m["zzz"] == 0` | **已具备（需 `has`/`*`）** | `Map::has` / `get` 契约 | — |
 | 7 | `Map<char *, struct P> m; int x = m["a"].x;` | **rc=1**：`member reference type 'struct P *' is a pointer; did you mean to use '->'?`；ct 先 rc=0 | **A bug** | `[]` 结果是 `P *`，`.x` 未自动解引用，静默发射坏 C；与 LANG-5 字段形态同根 | **0.53.2**（并入 LANG-5） |
 | 8 | `Map<char *, Map<char *, int>> m; int x = m["a"]["b"];` | **rc=1**：`array subscript is not an integer`；生成 `Map_get(&m,"a")["b"]`；ct 先 rc=0 | **A bug** | `m["a"]` 是 `Map *`，plain `[]` 未解引用；与 LANG-13 链式物化同族 | **0.53.4**（并入 LANG-13 链式修复） |
@@ -61,7 +61,7 @@
 | 16 | `m["a"]?["x"]?.y` | rc=0 | **由 PH-53 覆盖** | `?[` + `?.` 组合（[phase53:23](../history/design/phase53.md#L23)） | — |
 | 17 | `Map<char*, struct V>` 且 `V.obj` 是 `Map*`；`m["a"]?.obj?["x"]` | rc=0 | **由 PH-53 覆盖** | 字段指针 + `?[`；与 `m["a"]?.b?.c` 同族 | — |
 | 18 | `Vec<struct P> v; v[0]?.x` | **rc=1**：`optional chain '?.' requires a pointer receiver; a struct value has no empty state` | **C 拒绝（正确）** | 结构固定、`Vec::get` 返回值，无缺席态 | — |
-| 19 | `v.at(0)?.x` | rc=0 | **已具备** | `at` 返回 `T *`，有缺席态（[Vec.h.ct:121](../../lib/std/Vec.h.ct#L121)） | — |
+| 19 | `v.at(0)?.x` | rc=0 | **已具备** | `at` 返回 `T *`，有缺席态（[Vec.h.ct:121](../../lib/core/Vec.h.ct#L121)） | — |
 | 20 | `v.has(0) ? v[0].x : -1` | rc=0 | **已具备** | 先判存在，再取值 | — |
 
 ### 1.3 `Map` 点访问（`doc.server.host`）
@@ -194,7 +194,7 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 | **0.53.4** | LANG-13：三级链 + `m["a"]["b"]` plain 链 | `doc["a"]["b"]["c"]` 与 `m["a"]?["b"]?["c"]` 通过；plain `m["a"]["b"]` 要么自动解引用、要么硬错并提示 `?[`；`test/ast/263` + 负例 | 依赖 0.53.2/0.53.3 |
 | **0.53.5** | LANG-14：`char *`→`Str` 诊断 | `take("k")` rc=1、不落 `.c`；`int*`↔`char*` 仍 warning；`str_from` 通过 | 依赖 0.53.2 |
 | **0.53.6** | LANG-11：同名 `.h.ct`/`.ct` 产物冲突 | 两单元工程 rc=0；每个 `.c` 只出现一次；`extern` 链接 | 独立（Pkg/Driver） |
-| **0.53.7** | SH-76：内置层缺失误诊为 `expected a field name`（安装相对探测 + 明确诊断） | 四条探针在无 cwd `lib/std` 时 rc=0；`B`/`H` 仍过；compile/build 结论一致；隐层负例点名 `CT_STD_DIR`、不写 `.c`；裸 `Map *` 仍报类型实参缺失 | 与 0.53.6 同为 `Driver/Module` 族，**必须串行**；若一并改 `Expr` 诊断，再排到 0.53.12 之后 |
+| **0.53.7** | SH-76：内置层缺失误诊为 `expected a field name`（安装相对探测 + 明确诊断） | 四条探针在无 cwd `lib/core` 时 rc=0；`B`/`H` 仍过；compile/build 结论一致；隐层负例点名 `CT_CORE_DIR`（当时 `CT_STD_DIR`，DOC-87 迁移）、不写 `.c`；裸 `Map *` 仍报类型实参缺失 | 与 0.53.6 同为 `Driver/Module` 族，**必须串行**；若一并改 `Expr` 诊断，再排到 0.53.12 之后 |
 | **0.53.8** | SH-79：`--emit-map` 两个 facet（`--lib` 不落文件、build 的 `file` 指内置层） | ①②③④⑤：compile 落文件；build 落文件；`--lib` 落文件；`file` 全部指向输入单元且 `Box`/`main` 在册；无开关零产物、重跑逐字节相同 | 与 0.53.6/0.53.7 同 `Driver/Module/Emitter` 族，**串行**；根因不同不合并；排在 LANG-9 之前 |
 | **0.53.9** | LANG-8：`5.method()` 词法 | `5.method()`、`5.0`、`5..6` 三组 | 独立（Lexer） |
 | **0.53.10** | LANG-7：未声明变量诊断（先复验） | 指向变量名、行号正确；若已由 LANG-2 覆盖则关闭 | 与 Expr/Parser 族串行 |
@@ -205,11 +205,11 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 | **0.53.15** | SH-60 1a/1b（条件） | 视 D-60-1 裁定；未裁定不发 | 条件 |
 | **0.53.16** | LANG-16：诊断位置源过期（块注释后列号偏移、`1:-3788` 类负列） | 三探针列为 `4:4` / `4:17` / `84:4`；诊断禁止输出 `col<=0`；`at<0` 不越界读；文本其余零变化 | 与 0.53.9 同 `Lexer.h.ct` 族，**必须串行**；与 PH-62 **无依赖**（可任意先后，仅合并时串行） |
 
-**SH-76 判定（新并入）**：v0.53.0 实测「无 `lib/std` / 未设 `CT_STD_DIR`」时 compile 与 build
-**同样**报 `1:15 expected a field name`，设上 `CT_STD_DIR` 或 cwd 放 `lib/std` 后**同样** rc=0——
+**SH-76 判定（新并入）**：v0.53.0 实测「无 `lib/core` / 未设 `CT_CORE_DIR`」时 compile 与 build
+**同样**报 `1:15 expected a field name`，设上 `CT_CORE_DIR` 或 cwd 放 `lib/core` 后**同样** rc=0——
 所以不是「L0 与 L2 两套解析器结论相反」。随附 `ctc` 是 `ct` 的符号链接，compile / build 共用
 `frontend/parse`；真正的分叉是冻结种子 `l0/ctc.c` 与 ct-ast 代际（L0 不依赖模板表）。根因是
-内置层探测只有 `CT_STD_DIR` / cwd / 输入同级三路，缺「安装相对」候选，且找不到时静默继续解析。
+内置层探测只有 `CT_CORE_DIR` / cwd / 输入同级三路，缺「安装相对」候选，且找不到时静默继续解析。
 与 LANG-11 同改 `Driver.h.ct` 但根因不同，**不合并**，只串行。
 
 **合并规则：** 只有同一 issue / 同一根因可合并。`LANG-5` 方法 + 字段 → 0.53.2；
@@ -233,7 +233,7 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
 6. **并行会话**：`TypeCheck` / `Emitter` / `main` / `Driver` / `Pkg` / `test/pkg` / `test/ast/263` 未触碰。
 7. **索引行已补**：`issues/README.md` 的 LANG-15/16、SH-76–79 已登记（并行改动已落地，工作树干净）。
 8. **SH-76 环境证据**：现场「`ctc` 失败 / `ct build` 正常」在 v0.53.0 同 cwd 下不可复现；
-   已按「内置层找不到」复现两条路径。报告方需补 `ctc -v`、`ct -v`、`pwd`、`CT_STD_DIR` 才能定位其环境差异。
+   已按「内置层找不到」复现两条路径。报告方需补 `ctc -v`、`ct -v`、`pwd`、`CT_CORE_DIR` 才能定位其环境差异。
 9. **LANG-1 / LANG-2 报告差异**：HEAD `v0.53.1` 重建后两条均 rc=0（夹具 `260` / `261`）；
    报告若仍红，先核对二进制版本与 cwd，不要按「未修」重开，避免把旧版本现象当新缺陷。
 10. **LANG-10 已部分实现**：`--diagnostics=json` 的警告通道在跑；报告「完全没有机器可读诊断」
@@ -267,7 +267,7 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
 | facet | 实测 | 根因 |
 | --- | --- | --- |
 | `build --lib --emit-map` 不落文件 | rc=0，目标文件不存在 | `--lib` 在 `Module.h.ct:1573-1610` 提前收口，未走 `write_map` |
-| `build --emit-map` 的 `file` 错 | `nb.json` 全部 `file` = `lib/std/Vec.h.ct`，输入 `Box`/`main` 缺失 | `Module.h.ct:1819` 固定写 `units[0].prog`，`units[0]` 是内置层 |
+| `build --emit-map` 的 `file` 错 | `nb.json` 全部 `file` = `lib/core/Vec.h.ct`，输入 `Box`/`main` 缺失 | `Module.h.ct:1819` 固定写 `units[0].prog`，`units[0]` 是内置层 |
 
 0.53.8 验收按 SH-79 的 R1–R5：compile 落文件、build 落文件、`--lib` 落文件、**`file` 必须是输入单元**、
 无开关零产物且重跑逐字节相同。与 LANG-10 / PH-58 **不合并**：那两条是诊断通道，本条是代码模型映射；

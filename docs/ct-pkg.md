@@ -18,8 +18,8 @@
 ## 2. 本仓不内置 `std`
 
 - `std` 是独立 ct-pkg 包，不随本仓发布；本仓 `test/std/` 已移除。
-- 本仓 `lib/std/` **只承载编译器内置层**：`Vec` / `Map` / `MapEntry` / `Option` / `Result` / `Str`，
-  自动预解析、免 `import`，见 [lib/std/README](../lib/std/README.md)。它不是 `std` 包，也不复制
+- 本仓 `lib/core/` **只承载编译器内置层**：`Vec` / `Map` / `MapEntry` / `Option` / `Result` / `Str`，
+  自动预解析、免 `import`，见 [lib/core/README](../lib/core/README.md)。它不是 `std` 包，也不复制
   `std::str` / `std::fs` 等模块。
 - 消费入口是 `ct get`：官方身份 `publisher = ct`，规范名 `ct/std`，落
   `$CT_HOME/pkg/ct/std/<version>/`；`ct build` 按 `ct.lock` 自动补 include root。

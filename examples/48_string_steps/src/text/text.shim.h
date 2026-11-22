@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-/* 前缀 text_ 避免与 lib/std 的 Str 接口（str_len 等）重名。 */
+/* 前缀 text_ 避免与 lib/core 的 Str 接口（str_len 等）重名。 */
 static inline char *text_split_once(const char *s, char sep)
 {
     const char *p = strchr(s, sep);

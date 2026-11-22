@@ -64,7 +64,7 @@
 | --- | --- |
 | 优先级 | **P1** |
 | 状态 | 采纳（需求；待实现） |
-| 内容 | `ct build --emit-c` 不再无条件发射 `Vec/Option/Result/Str`；只按实际使用/实例化拉取；不得依赖 `CT_STD_DIR`、cwd 或输入旁 `../lib/std` 的隐式发现来决定“拉不拉” |
+| 内容 | `ct build --emit-c` 不再无条件发射 `Vec/Option/Result/Str`；只按实际使用/实例化拉取；不得依赖 `CT_CORE_DIR`、cwd 或输入旁 `../lib/core` 的隐式发现来决定“拉不拉” |
 | 验收 | 最小无容器程序产物只有自身 `.c`；`Option<int>` 只拉 `Option`，且其 `nm -u` 必须满足 REQ-HW-010；不得把四个单元一起塞进 `-nostdlib` 链接 |
 | 依赖 | REQ-HW-010 |
 | 版本 | PH-64 |

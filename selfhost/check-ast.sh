@@ -1237,7 +1237,7 @@ fi
 
 # Phase 78: ref / out parameters (S2a free functions, S2b methods/traits,
 # S2c types and docs). The probes build their own fixtures; they run from a temp
-# dir and link the repo's lib/std so the built-in Vec/Map shapes resolve.
+# dir and link the repo's lib/core so the built-in Vec/Map shapes resolve.
 sh test/ast/p78_basic.sh "$work/ct-ast" >"$work/p78basic.out" 2>&1
 if [ $? -eq 0 ]; then
     ok "PH-78-S2a basic (E78-1…5 ref/out free functions)"
@@ -7689,7 +7689,7 @@ fi
 # layer, with one warning, and the decoy module inside it is never read.
 repo_root=$(pwd)
 ( cd test/modules/p29_builtin_std \
-  && CT_STD_DIR="$repo_root/lib/std" "$work/ct-ast" main.ct -o "$work/p29w1.c" ) \
+  && CT_CORE_DIR="$repo_root/lib/core" "$work/ct-ast" main.ct -o "$work/p29w1.c" ) \
   >"$work/p29w1.out" 2>"$work/p29w1.err"
 if [ $? -eq 0 ] \
    && grep -Fq "the built-in Vec/Map supersede a project-local 'vendor/std' (ignored)" "$work/p29w1.err" \
@@ -7720,7 +7720,7 @@ fi
 # E29-5 on the `ct build` path: the same fixture (no import, no `ct get`) must
 # compile as a multi-unit build, link, run and warn about `vendor/std`.
 ( cd test/modules/p29_builtin_std \
-  && CT_STD_DIR="$repo_root/lib/std" "$work/ct-ast" build main.ct \
+  && CT_CORE_DIR="$repo_root/lib/core" "$work/ct-ast" build main.ct \
        -o "$work/p29w1b" --outdir "$work/p29w1bd" ) \
   >"$work/p29w1b.out" 2>"$work/p29w1b.err"
 if [ $? -eq 0 ] \

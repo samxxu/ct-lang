@@ -32,7 +32,7 @@ namespace frontend::lex;
    its first byte and `len` its byte count. It is deliberately not
    NUL-terminated; `src` is, so a consumer that wants a C string still has to
    convert at its own boundary. `TokView` has the same `{ptr,len}` layout as
-   the built-in `Str` borrowed view (lib/std/Str.h.ct); it is spelled locally
+   the built-in `Str` borrowed view (lib/core/Str.h.ct); it is spelled locally
    because the bootstrap compiler (L2) does not know the std layer and CT
    forbids a `Str` struct field anyway (PH-81), so a `Str` cannot be stored
    here. The token bytes are still never copied. */

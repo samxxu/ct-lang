@@ -27,7 +27,7 @@ report() { grep -Eq 'AddressSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer|r
 
 run_one() {
     name=$1
-    if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+    if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
             "test/ast/$name/prog.ct" -o "$tmp/$name.c" ) \
             >"$tmp/$name.out" 2>"$tmp/$name.err"; then
         fail_msg "$name: ct-ast failed:"; sed 's/^/  /' "$tmp/$name.err" >&2
@@ -97,7 +97,7 @@ fi
 
 # --- E50-6: the borrowed pointer is not released ---------------------------
 san="-fsanitize=address,undefined -fno-omit-frame-pointer"
-if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
         test/ast/p50_sanitize/prog.ct -o "$tmp/san.c" ) \
         >"$tmp/san.out" 2>"$tmp/san.err"; then
     fail_msg "E50-6: the sanitizer fixture did not compile:"; sed 's/^/  /' "$tmp/san.err" >&2

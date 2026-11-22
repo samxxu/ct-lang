@@ -31,7 +31,7 @@ ok_msg() { echo "ok $*"; }
 # --- E47-1 / E47-5: compile mode and build mode agree with expected output ---
 src=test/ast/241_map_str_key/prog.ct
 exp=test/ast/241_map_str_key/prog.expected.out
-if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" "$src" -o "$tmp/c.c" ) \
+if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" "$src" -o "$tmp/c.c" ) \
         >"$tmp/c.out" 2>"$tmp/c.err"; then
     fail_msg "compile mode failed:"; sed 's/^/  /' "$tmp/c.err" >&2
 elif ! "$cc" -Wall -Wextra -std=c99 "$tmp/c.c" -o "$tmp/c.bin" 2>"$tmp/c.cc"; then
@@ -45,7 +45,7 @@ else
 fi
 
 mkdir -p "$tmp/build"
-if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" build --emit-c "$src" -o "$tmp/build" ) \
+if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" build --emit-c "$src" -o "$tmp/build" ) \
         >"$tmp/b.out" 2>"$tmp/b.err"; then
     fail_msg "build mode failed:"; sed 's/^/  /' "$tmp/b.err" >&2
 elif ! "$cc" -std=c99 -I "$tmp/build" "$tmp/build"/*.c -o "$tmp/b.bin" 2>"$tmp/b.cc"; then
@@ -70,7 +70,7 @@ fi
 # --- E47-2: one key copy per put, one release per entry ---------------------
 rsrc=test/ast/242_map_str_release/prog.ct
 rexp=test/ast/242_map_str_release/prog.expected.out
-if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" "$rsrc" -o "$tmp/r.c" ) \
+if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" "$rsrc" -o "$tmp/r.c" ) \
         >"$tmp/r.out" 2>"$tmp/r.err"; then
     fail_msg "the release fixture did not compile:"; sed 's/^/  /' "$tmp/r.err" >&2
 elif ! "$cc" -std=c99 "$tmp/r.c" -o "$tmp/r.bin" 2>"$tmp/r.cc"; then
@@ -101,7 +101,7 @@ int main(void)
     return 0;
 }
 BORROW
-if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" "$tmp/borrow.ct" -o "$tmp/borrow.c" ) \
+if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" "$tmp/borrow.ct" -o "$tmp/borrow.c" ) \
         >"$tmp/borrow.out" 2>"$tmp/borrow.err"; then
     fail_msg "the char * borrow probe did not compile:"; sed 's/^/  /' "$tmp/borrow.err" >&2
 elif ! "$cc" -std=c99 "$tmp/borrow.c" -o "$tmp/borrow.bin" 2>"$tmp/borrow.cc" \
@@ -118,7 +118,7 @@ p47_neg() {
     name=$1
     wtext=$2
     wpos=$3
-    if ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+    if ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
             "test/ast/errors/$name.ct" -o "$tmp/neg.c" ) \
             >"$tmp/neg.out" 2>"$tmp/neg.err"; then
         fail_msg "L47-1 $name: expected a diagnostic, got exit 0"
@@ -141,10 +141,10 @@ p47_neg map_key_bad "Map does not support key type 'char' (key types: int, long,
 p47_neg L31_nested_map_key "Map does not support key type 'struct Vec_int' (key types: int, long, char *, String)" 7:24
 
 # --- E47-5: the documentation states the borrowed-key rule ------------------
-if ( cd "$root" && grep -Fq '不得 release 键' lib/std/README.md ); then
+if ( cd "$root" && grep -Fq '不得 release 键' lib/core/README.md ); then
     ok_msg "E47-5 the std README says a foreach key must not be released"
 else
-    fail_msg "lib/std/README.md does not state the borrowed-key release rule"
+    fail_msg "lib/core/README.md does not state the borrowed-key release rule"
 fi
 
 echo "p47/map-str-key: $fail failure(s)"

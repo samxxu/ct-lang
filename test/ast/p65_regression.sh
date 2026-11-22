@@ -16,7 +16,7 @@ fail=0
 mkdir -p "$tmp/proj"
 
 # 1) The four grandfathered directories resolve to allow from the repo root.
-for f in selfhost/ct-ast/main.ct lib/std/Str.h.ct test/cases/01_trait_basic.ct \
+for f in selfhost/ct-ast/main.ct lib/core/Str.h.ct test/cases/01_trait_basic.ct \
          examples/37_nested_pattern/nested_pattern.ct; do
     got=$( cd "$root" && env -u CT_C_BOUNDARY "$CT" --show-c-boundary "$f" 2>"$tmp/e" )
     if [ "$got" != "allow" ]; then
@@ -54,7 +54,7 @@ elif [ ! -x "$tmp/proj/app" ] || [ "$("$tmp/proj/app")" != "external ok" ]; then
 fi
 
 # 3) Report the grandfathered surface (the card's 688 files); fail only on zero.
-n=$( cd "$root" && find selfhost lib/std test examples -name '*.ct' 2>/dev/null | wc -l | tr -d ' ' )
+n=$( cd "$root" && find selfhost lib/core test examples -name '*.ct' 2>/dev/null | wc -l | tr -d ' ' )
 if [ "$n" -lt 600 ]; then
     echo "FAIL p65/regression: only $n .ct files under the grandfathered dirs" >&2
     fail=1

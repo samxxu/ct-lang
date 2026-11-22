@@ -6,7 +6,7 @@
 | 状态 | **已采纳并交付（PH-64，v0.63.0）**；后续变更按 CT 卡与规范走 |
 | 事实基线 | v0.62.0（`485129c9`），L0→L1→L2→ct-ast 全链现编；探针均在 `/tmp`，未改仓库 |
 | 落点 | **PH-64 → v0.63.0（已收口）**；交付核对见 [phase64 卡](../history/design/phase64.md)（`--freestanding` / 按需单元 / `--alloc` / const vtable） |
-| 关联 | 新 SH 条目（数组初值坏 C）、[SH-60](../../issues/selfhost/sh60-mct-signature-types-decorative.md)、[SH-75](../../issues/selfhost/sh75-local-iface-return-dangling.md)、[SH-25](../../issues/selfhost/sh25-typedef-alias-drops-dims.md)、[lib/std/Vec.h.ct](../../lib/std/Vec.h.ct) |
+| 关联 | 新 SH 条目（数组初值坏 C）、[SH-60](../../issues/selfhost/sh60-mct-signature-types-decorative.md)、[SH-75](../../issues/selfhost/sh75-local-iface-return-dangling.md)、[SH-25](../../issues/selfhost/sh25-typedef-alias-drops-dims.md)、[lib/std/Vec.h.ct](../../lib/core/Vec.h.ct) |
 | 定性 | **1 个静默坏 C 补丁 + 3 份生成物契约**；不新增语言特性（`layout(plain)` 列为可裁项） |
 
 > 交付状态（2026-11-20 核对）：PH-64 已按本提案收口（v0.63.0），生成物契约四项均已落地；
@@ -149,7 +149,7 @@ struct Person single = { .__greeter_vptr = &Person_Greeter_vtable };
   [:4049](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4049)）；
 - 块作用域 struct 装箱为接口时发射 `extern void *malloc(__SIZE_TYPE__);` 与 `malloc(...)`
   （[Emitter.h.ct:3939](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3939)）；
-- `Vec`/`Str` 的分配在 `lib/std`（CT 源码，[Vec.h.ct:72](../../lib/std/Vec.h.ct#L72)），不在发射器里；
+- `Vec`/`Str` 的分配在 `lib/std`（CT 源码，[Vec.h.ct:72](../../lib/core/Vec.h.ct#L72)），不在发射器里；
 - `ct build` 默认把 `Vec/Option/Result/Str` 四个单元一并发射、一并交给 `cc`（实测 `--emit-c` 产物目录
   固定含这四个 `.c`）。
 

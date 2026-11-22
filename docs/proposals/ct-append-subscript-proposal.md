@@ -22,7 +22,7 @@ fields[] = 32;   // 等价于 fields.push(32);
 
 ### 2.1 能力已经存在，只是方法式
 
-[Vec.h.ct:145](../../lib/std/Vec.h.ct#L145)：
+[Vec.h.ct:145](../../lib/core/Vec.h.ct#L145)：
 
 ```ct
 pub int push(T v)   // 成功返回 1；realloc 失败返回 0，容器不变

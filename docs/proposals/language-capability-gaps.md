@@ -543,8 +543,8 @@ b6_vec_get.c:336:16: error: initializing 'struct P *' with an expression of inco
   336 |     struct P * got = Vec_P_get(&v, 0);
 ```
 
-两种容器的签名（[lib/std/Vec.h.ct:94](../../lib/std/Vec.h.ct#L94)、[:260](../../lib/std/Vec.h.ct#L260)、
-[:399](../../lib/std/Vec.h.ct#L399)）：
+两种容器的签名（[lib/std/Vec.h.ct:94](../../lib/core/Vec.h.ct#L94)、[:260](../../lib/core/Vec.h.ct#L260)、
+[:399](../../lib/core/Vec.h.ct#L399)）：
 
 ```c
 pub T get(int i)        /* Vec：按值返回 */
@@ -592,7 +592,7 @@ oob=0
 ```
 
 `Vec::get` 的注释写明这是有意行为：「Out of range answers a zero value, never a read past the buffer」
-（[lib/std/Vec.h.ct:92-99](../../lib/std/Vec.h.ct#L92-L99)）。
+（[lib/std/Vec.h.ct:92-99](../../lib/core/Vec.h.ct#L92-L99)）。
 
 **期望能力**：调用方能区分「取到 0」与「没取到」。最小形态可以是并行的 `has(i)` / `try_get`，
 不要求改 `get`。

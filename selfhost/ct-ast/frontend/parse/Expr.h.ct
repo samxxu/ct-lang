@@ -2361,7 +2361,7 @@ impl ExprOps for Expr {
                                        || self->lex->tok_is("Result"))) {
                         char gmsg[MAX_TEXT];
                         snprintf(gmsg, sizeof gmsg,
-                                 "unresolved generic type '%.*s' (is the builtin layer missing? set CT_STD_DIR)",
+                                 "unresolved generic type '%.*s' (is the builtin layer missing? set CT_CORE_DIR, or the legacy CT_STD_DIR)",
                                  self->lex->tokstr.len, self->lex->tokstr.ptr);
                         return self->sup->fail(gmsg);
                     }
@@ -5602,7 +5602,8 @@ impl ExprOps for Expr {
                        diagnostic instead of a silent escape hatch. */
                     if (strcmp(fname, "ptr") == 0
                         && !(self->sup->mem->path
-                             && strstr(self->sup->mem->path, "lib/std/Str.h.ct") != 0)) {
+                             && (strstr(self->sup->mem->path, "lib/core/Str.h.ct") != 0
+                                 || strstr(self->sup->mem->path, "lib/std/Str.h.ct") != 0))) { /* DOC-87 迁移回退 */
                         char rty[MAX_TEXT];
                         if (self->sup->expr_type(n, rty, sizeof rty) == 0) {
                             const char *rp = rty;
@@ -7534,7 +7535,8 @@ impl ExprNew for Expr {
         }
         if (strncmp(p, "struct box_", 11) != 0 || strchr(p, '<') != 0) return 0;
         in_layer = self->sup->mem->path != 0
-                   && strstr(self->sup->mem->path, "lib/std/Vec.h.ct") != 0;
+                   && (strstr(self->sup->mem->path, "lib/core/Vec.h.ct") != 0
+                       || strstr(self->sup->mem->path, "lib/std/Vec.h.ct") != 0); /* DOC-87 迁移回退 */
         if (strcmp(fname, "h") == 0 || strcmp(fname, "ptr") == 0) {
             if (in_layer) return 0;         /* the built-in layer's own bodies */
             return tool::diag::ct_sem_error(line, col,
@@ -7672,7 +7674,8 @@ impl ExprNew for Expr {
                 "'new String' / 'new Str' is not supported; use the literal, 'to_string()' or 'as_str()'",
                 self->sup->mem->path);
         if (frontend::sym::ct_tmpl_find("box") < 0)
-            return self->sup->fail("the built-in `box` layer is missing (set CT_STD_DIR)");
+            return self->sup->fail(
+                "the built-in `box` layer is missing (set CT_CORE_DIR, or the legacy CT_STD_DIR)");
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{"))) {
             char nmsg[MAX_TEXT * 2];
             snprintf(nmsg, sizeof nmsg,

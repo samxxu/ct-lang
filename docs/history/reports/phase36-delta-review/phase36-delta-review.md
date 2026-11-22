@@ -89,7 +89,7 @@ $ ls -d /Users/samxx/*ct-pkg*          # no matches
 - L118/L129/L149：`release()` 返回剩余引用数；L129 还说「与 `Vec.release()` 的形态一致」。
 - D36-13（L176）：「引用计数或深拷贝由适配层决定；CT 层不假设」。
 
-`Vec<T>::release()` 确实返回剩余计数并从 `self->h->refs` 读取（[Vec.h.ct:187-207](file:///Users/samxx/trae-ws/ct-lang/lib/std/Vec.h.ct#L187-L207)），但 `Vec` 的 `retain` 是真实 refcount（`:176-183`）。若 `Str` 适配层是深拷贝，`retain()` 产生的是**独立 buffer**，`release()` 的返回值只能是「本句柄 1→0」，不可能回报共享计数——「剩余引用数」在不同适配层下含义不同，不能作为稳定契约。
+`Vec<T>::release()` 确实返回剩余计数并从 `self->h->refs` 读取（[Vec.h.ct:187-207](file:///Users/samxx/trae-ws/ct-lang/lib/core/Vec.h.ct#L187-L207)），但 `Vec` 的 `retain` 是真实 refcount（`:176-183`）。若 `Str` 适配层是深拷贝，`retain()` 产生的是**独立 buffer**，`release()` 的返回值只能是「本句柄 1→0」，不可能回报共享计数——「剩余引用数」在不同适配层下含义不同，不能作为稳定契约。
 
 **推荐写法**
 

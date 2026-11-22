@@ -231,15 +231,15 @@ static void Vec_Vec_int__elem_release(struct Vec_int *e) {
 
 | 方法 | 位置 | 动作 |
 | --- | --- | --- |
-| `from` | [Vec.h.ct:61](../../../lib/std/Vec.h.ct#L61) | `memcpy` 后逐元素 `__ct_elem_retain`（调用方原数组仍各自持有引用）；**`n <= 0` 或 `items == 0` 也分配 `ct_buf` header**（`refs=1, len=0, cap=0, data=0`），保证返回的句柄一定可 `release`；header 或数据分配失败都直接 abort，绝不返回不可释放句柄（D31-21）；数据写入 `h->data`（D31-24） |
-| `len` | [Vec.h.ct:86](../../../lib/std/Vec.h.ct#L86) | 不改：只读 `h->len`，D31-24 后仍只经 `h` |
-| `get` | [Vec.h.ct:93](../../../lib/std/Vec.h.ct#L93) | **不改**：借用视图，不 retain；经 `h->data` 读 |
-| `set` | [Vec.h.ct:102](../../../lib/std/Vec.h.ct#L102) | 先对入参 `retain`，再 `release` 旧元素，再赋值（别名安全：`v.set(0, v.get(0))` 不悬垂） |
-| `push` | [Vec.h.ct:109](../../../lib/std/Vec.h.ct#L109) | 先确保容量（`realloc(self->h->data)` 成功后写回 `h->data`），再 retain 入参，再赋值；header 分配失败 abort；扩容失败返回 0 且 `h` 仍有效、句柄可 `release`（E31-27、D31-21） |
-| `pop` | [Vec.h.ct:136](../../../lib/std/Vec.h.ct#L136) | 所有权移出，不 release，也不额外 retain；读取改经 `h->data`（D31-24）；`v.pop().release()` 合法（拥有型临时） |
-| `clear` | [Vec.h.ct:146](../../../lib/std/Vec.h.ct#L146) | 逐元素 `release` 后 `len = 0`（缓冲区保留） |
-| `retain` | [Vec.h.ct:152](../../../lib/std/Vec.h.ct#L152) | 只复制 `h` 并递增 `refs`，不复制数据指针、不碰元素（D31-24）；零句柄 retain 仍得零句柄 |
-| `release` | [Vec.h.ct:164](../../../lib/std/Vec.h.ct#L164) | **仅 `refs` 归零分支**逐元素 `release`，再 `free(h->data)`、`free(h)`；`h == 0` 仍 abort（D29-12/V29-2 不变）；空句柄由 `from` 分配非零 header 保证可释放 |
+| `from` | [Vec.h.ct:61](../../../lib/core/Vec.h.ct#L61) | `memcpy` 后逐元素 `__ct_elem_retain`（调用方原数组仍各自持有引用）；**`n <= 0` 或 `items == 0` 也分配 `ct_buf` header**（`refs=1, len=0, cap=0, data=0`），保证返回的句柄一定可 `release`；header 或数据分配失败都直接 abort，绝不返回不可释放句柄（D31-21）；数据写入 `h->data`（D31-24） |
+| `len` | [Vec.h.ct:86](../../../lib/core/Vec.h.ct#L86) | 不改：只读 `h->len`，D31-24 后仍只经 `h` |
+| `get` | [Vec.h.ct:93](../../../lib/core/Vec.h.ct#L93) | **不改**：借用视图，不 retain；经 `h->data` 读 |
+| `set` | [Vec.h.ct:102](../../../lib/core/Vec.h.ct#L102) | 先对入参 `retain`，再 `release` 旧元素，再赋值（别名安全：`v.set(0, v.get(0))` 不悬垂） |
+| `push` | [Vec.h.ct:109](../../../lib/core/Vec.h.ct#L109) | 先确保容量（`realloc(self->h->data)` 成功后写回 `h->data`），再 retain 入参，再赋值；header 分配失败 abort；扩容失败返回 0 且 `h` 仍有效、句柄可 `release`（E31-27、D31-21） |
+| `pop` | [Vec.h.ct:136](../../../lib/core/Vec.h.ct#L136) | 所有权移出，不 release，也不额外 retain；读取改经 `h->data`（D31-24）；`v.pop().release()` 合法（拥有型临时） |
+| `clear` | [Vec.h.ct:146](../../../lib/core/Vec.h.ct#L146) | 逐元素 `release` 后 `len = 0`（缓冲区保留） |
+| `retain` | [Vec.h.ct:152](../../../lib/core/Vec.h.ct#L152) | 只复制 `h` 并递增 `refs`，不复制数据指针、不碰元素（D31-24）；零句柄 retain 仍得零句柄 |
+| `release` | [Vec.h.ct:164](../../../lib/core/Vec.h.ct#L164) | **仅 `refs` 归零分支**逐元素 `release`，再 `free(h->data)`、`free(h)`；`h == 0` 仍 abort（D29-12/V29-2 不变）；空句柄由 `from` 分配非零 header 保证可释放 |
 | range 初值 | `Stmt.h.ct:2180-2250` | 元素有生命周期 → 硬错 L31-12（临时数组的元素引用无处释放）；`from` 本身仍允许 |
 
 > 表内行号基于基线 `bd91bfe`；S27a/S27b 把数据指针移进 `ct_buf` 后方法体整体下移，锚点以落地前的基线为准，不在本卡追写。访问点分两笔：`grep -c "self->data\|self->entries" lib/std/Vec.h.ct` 实测 **37 处**（`self->data` 10 + `self->entries` 27），加 `Vec::from` 里 4 行 `v.data`（67 `v.data = 0`、71 data 分配、78 `v.data = nd`、79 `memcpy`）才是 **41 行**；S27b 逐方法替换，`from` 的这 4 行单独处理（67/78 删除或改 `v.h->data`，71/79 的 `sizeof(v.data[0])` 改 `sizeof(items[0])`，`memcpy` 目标改 `v.h->data`）。表内“不改”仅指生命周期语义不变，数据访问仍统一改经 `h->data`。
@@ -248,17 +248,17 @@ static void Vec_Vec_int__elem_release(struct Vec_int *e) {
 
 | 方法 | 位置 | 动作 |
 | --- | --- | --- |
-| `put(char *, V)` | [Vec.h.ct:192](../../../lib/std/Vec.h.ct#L192) | 覆盖：先确保容量（`realloc(self->h->data)` 成功后），再 retain 新值，再 release 旧值，再赋值；追加：确保容量后 retain 新值再写入；header 分配失败 abort；扩容失败返回 0 且 `h` 仍有效、句柄可 `release`（E31-27、D31-21） |
-| `remove(char *)` | [Vec.h.ct:236](../../../lib/std/Vec.h.ct#L236) | 找到后 release 值，再搬移（经 `h->data`）；搬移使该键的 `V *` 与后续 `entry` 视图失效（L31-23） |
-| `get` | [Vec.h.ct:227](../../../lib/std/Vec.h.ct#L227) | 不改：返回内部指针（经 `h->data`），借用视图；下一次 `put`/`remove`/`clear`/`release` 后失效 |
-| `put(K, V)` | [Vec.h.ct:263](../../../lib/std/Vec.h.ct#L263) | 同 char* 块 |
-| `get(K)` | [Vec.h.ct:299](../../../lib/std/Vec.h.ct#L299) | 同 char* 块：返回内部指针，借用视图 |
-| `remove(K)` | [Vec.h.ct:311](../../../lib/std/Vec.h.ct#L311) | 同 char* 块 |
-| `clear` | [Vec.h.ct:327](../../../lib/std/Vec.h.ct#L327) | 逐值 `release` 后 `len = 0`；使所有 `get` 指针与 `entry` 借用视图失效 |
-| `len` | [Vec.h.ct:253](../../../lib/std/Vec.h.ct#L253) | 不改：只读 `h->len` |
-| `entry` | [Vec.h.ct:333](../../../lib/std/Vec.h.ct#L333) | 不改：返回 `MapEntry` 副本，值句柄是借用视图；下一次变更后失效 |
-| `retain` | [Vec.h.ct:341](../../../lib/std/Vec.h.ct#L341) | 只复制 `h` 并递增 `refs`，不复制 `entries`（D31-24） |
-| `release` | [Vec.h.ct:350](../../../lib/std/Vec.h.ct#L350) | 仅 `refs` 归零分支逐值 `release`，再 `free(h->data)`、`free(h)`；`h == 0` 仍 abort（V29-2 不变）；空 `Map` 由 `from(0,0)` 分配 header |
+| `put(char *, V)` | [Vec.h.ct:192](../../../lib/core/Vec.h.ct#L192) | 覆盖：先确保容量（`realloc(self->h->data)` 成功后），再 retain 新值，再 release 旧值，再赋值；追加：确保容量后 retain 新值再写入；header 分配失败 abort；扩容失败返回 0 且 `h` 仍有效、句柄可 `release`（E31-27、D31-21） |
+| `remove(char *)` | [Vec.h.ct:236](../../../lib/core/Vec.h.ct#L236) | 找到后 release 值，再搬移（经 `h->data`）；搬移使该键的 `V *` 与后续 `entry` 视图失效（L31-23） |
+| `get` | [Vec.h.ct:227](../../../lib/core/Vec.h.ct#L227) | 不改：返回内部指针（经 `h->data`），借用视图；下一次 `put`/`remove`/`clear`/`release` 后失效 |
+| `put(K, V)` | [Vec.h.ct:263](../../../lib/core/Vec.h.ct#L263) | 同 char* 块 |
+| `get(K)` | [Vec.h.ct:299](../../../lib/core/Vec.h.ct#L299) | 同 char* 块：返回内部指针，借用视图 |
+| `remove(K)` | [Vec.h.ct:311](../../../lib/core/Vec.h.ct#L311) | 同 char* 块 |
+| `clear` | [Vec.h.ct:327](../../../lib/core/Vec.h.ct#L327) | 逐值 `release` 后 `len = 0`；使所有 `get` 指针与 `entry` 借用视图失效 |
+| `len` | [Vec.h.ct:253](../../../lib/core/Vec.h.ct#L253) | 不改：只读 `h->len` |
+| `entry` | [Vec.h.ct:333](../../../lib/core/Vec.h.ct#L333) | 不改：返回 `MapEntry` 副本，值句柄是借用视图；下一次变更后失效 |
+| `retain` | [Vec.h.ct:341](../../../lib/core/Vec.h.ct#L341) | 只复制 `h` 并递增 `refs`，不复制 `entries`（D31-24） |
+| `release` | [Vec.h.ct:350](../../../lib/core/Vec.h.ct#L350) | 仅 `refs` 归零分支逐值 `release`，再 `free(h->data)`、`free(h)`；`h == 0` 仍 abort（V29-2 不变）；空 `Map` 由 `from(0,0)` 分配 header |
 
 两个 `impl` 块都必须加调用（E31-6 专门覆盖 char* 键）。两个块的数据访问一律经 `h->data`（D31-24）：`struct MapEntry<K, V> *e = self->h->data;`，`put` 的扩容写回 `h->data`；句柄拷贝因此不会在兄弟扩容后悬垂。
 
@@ -439,7 +439,7 @@ Vec<Vec<int>> g = {row1, row2};   /* 元素有生命周期时 from 逐元素 ret
 
 降级为 `Vec_<Inst>_from((T[]){e1, e2, …}, n)`；空表降级为 `Vec_<Inst>_from(0, 0)`。**结构化解析**，不走 raw 文本，因此不受 `MAX_TEXT 160` 截断（现有 `initializer is too long` 路径不适用）。
 
-`Vec<T>::from` 现有实现在 `n <= 0` 时直接返回 `h = 0`（[Vec.h.ct:68](../../../lib/std/Vec.h.ct#L68)），而 `release` 对 `h == 0` abort（P18），所以 `Vec<int> v = {}; v.release();` 当前必崩。本相把 `from` 改成：
+`Vec<T>::from` 现有实现在 `n <= 0` 时直接返回 `h = 0`（[Vec.h.ct:68](../../../lib/core/Vec.h.ct#L68)），而 `release` 对 `h == 0` abort（P18），所以 `Vec<int> v = {}; v.release();` 当前必崩。本相把 `from` 改成：
 
 - **空表/空源**（`items == 0 || n <= 0`）：仍分配 `ct_buf` header（`refs=1, len=0, cap=0, h->data=0`），保证返回句柄一定可释放；
 - **header 分配失败**：`abort()`，绝不返回 `h == 0`；

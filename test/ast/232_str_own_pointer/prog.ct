@@ -1,6 +1,6 @@
 // E36-8 (P80): `own String *` reuses the existing AutoDrop path. `delete` runs
 // the `impl Drop for String` (which releases the refcounted buffer), frees the
-// struct and nulls the pointer. The built-in layer is `lib/std/Str.h.ct`.
+// struct and nulls the pointer. The built-in layer is `lib/core/Str.h.ct`.
 #include <stdio.h>
 #include <stdlib.h>
 

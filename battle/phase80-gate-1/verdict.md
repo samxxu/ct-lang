@@ -111,7 +111,7 @@ F-1…F-6 均未被证据证实——F-1（§1.1 优先）本席明确不采纳�
 | 3 | 「卡面只有一个自洽读法」（claim J-1） | B 的读法同时满足卡头、§1.1、§1.2；A 的读法使 L6 为假 |
 | 4 | 「B 不可执行 / 阶段化即 A」（claim J-7） | 死锁只在 `box<String>` 一项；单子项修订仍是 B，不是 A |
 | 5 | 「PH-78/79 先例 = PH-80 可照做」（claim J-6） | 78/79 卡头写死了豁免；PH-80 卡头写的是「P-7.4 全量」 |
-| 6 | 「S5a 是纯加法、旧 `Str` 布局与生成物不动」（claim A-2） | 未证；p73 是替换旧 `Str`，旧 ABI 含 Drop/release/`str_*`，且 `std::str::String` trait 的命名冲突未被 P-7.4-2 覆盖（[lib/std/README.md:10](../../lib/std/README.md#L10)、[examples/wave1-demo/src/main.ct:7](../../examples/wave1-demo/src/main.ct#L7)） |
+| 6 | 「S5a 是纯加法、旧 `Str` 布局与生成物不动」（claim A-2） | 未证；p73 是替换旧 `Str`，旧 ABI 含 Drop/release/`str_*`，且 `std::str::String` trait 的命名冲突未被 P-7.4-2 覆盖（[lib/std/README.md:10](../../lib/core/README.md#L10)、[examples/wave1-demo/src/main.ct:7](../../examples/wave1-demo/src/main.ct#L7)） |
 | 7 | 「`.data` 类型可拖到 S5a-4 再定」（claim K-3） | `.data` 是类型/ABI 的一部分，S5a-1/2 的字面量与句柄就可能定形；本判决要求最迟 S5a-1 红证前（C-3） |
 
 **采纳但降级为条件**：P-7.3 在 HEAD 重放（C-4）、P-7.4 隔离原型证据（C-5）、`.data` decision（C-3）、

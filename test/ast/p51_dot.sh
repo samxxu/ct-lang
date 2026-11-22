@@ -21,7 +21,7 @@ fail_msg() { echo "FAIL $*" >&2; fail=$((fail + 1)); }
 ok_msg() { echo "ok $*"; }
 
 # --- E51-2/E51-3: the arrow / value / interface-path fixture ---------------
-if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
         test/ast/p51_arrow_ok/prog.ct -o "$tmp/arrow.c" ) \
         >"$tmp/arrow.out" 2>"$tmp/arrow.err"; then
     fail_msg "the arrow fixture did not compile:"; sed 's/^/  /' "$tmp/arrow.err" >&2
@@ -55,7 +55,7 @@ p51_neg() {
     name=$1
     wtext=$2
     wpos=$3
-    if ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+    if ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
             "test/ast/errors/$name.ct" -o "$tmp/neg.c" ) \
             >"$tmp/neg.out" 2>"$tmp/neg.err"; then
         fail_msg "$name: expected a diagnostic, got exit 0"

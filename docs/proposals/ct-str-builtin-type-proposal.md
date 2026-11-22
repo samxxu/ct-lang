@@ -6,7 +6,7 @@
 | 状态 | 草案；未立项，不占 phase |
 | 评审记录 | [ct-str-builtin-type-battle.md](../reviews/ct-str-builtin-type-battle.md)（2026-11-16，主张 / 反证 / 裁判：部分受理）；空状态问题另见 [ct-str-null-state-battle.md](../reviews/ct-str-null-state-battle.md)（三条路线对抗） |
 | 对象 | `Str` 的语言地位：内置身份、值语义、内存布局，以及它与 `char *` 的边界 |
-| 事实基线 | v0.61.1；[language-spec.md §4.56](../language-spec.md#L2552)、[Str.h.ct](../../lib/std/Str.h.ct) |
+| 事实基线 | v0.61.1；[language-spec.md §4.56](../language-spec.md#L2552)、[Str.h.ct](../../lib/core/Str.h.ct) |
 | 不在范围 | 使用方接口、交付物、具体排期 |
 
 > 本提案的对象只有 CT 自己的语言机制。文中「使用方」是泛称，不指向任何具体使用方。
@@ -106,13 +106,13 @@ C 函数等价。两宿主的映射表各自独立，不共用（P8）。
 ### 1.1 `Str` 目前是什么
 
 - 规范称 `Str` 为「内建」，但定义在 `lib/std/Str.h.ct` 的源码里：
-  `pub struct Str { char *data; int len; }`，并带 `impl Drop`（[Str.h.ct:18-29](../../lib/std/Str.h.ct#L18-L29)）。
+  `pub struct Str { char *data; int len; }`，并带 `impl Drop`（[Str.h.ct:18-29](../../lib/core/Str.h.ct#L18-L29)）。
   本提案把 `data` 定为 `const char *`：布局大小与字段顺序不变，写权限收窄。
 - `ct build` 自动加载 `Str`，不需要 `import`（[language-spec.md:47](../language-spec.md#L47)）。
 - 布局与 `len` 契约已按「保留内嵌 `\0`、不依赖结尾 NUL」写明
   （[language-spec.md:2559](../language-spec.md#L2559)）。
 - 现行所有权语义是**浅拷贝句柄**：按值传递只拷贝指针，不自动深拷贝，需要显式 `retain()`
-  （[language-spec.md:2560](../language-spec.md#L2560)；`retain()` 见 [Str.h.ct:132-134](../../lib/std/Str.h.ct#L132-L134)）。
+  （[language-spec.md:2560](../language-spec.md#L2560)；`retain()` 见 [Str.h.ct:132-134](../../lib/core/Str.h.ct#L132-L134)）。
 
 ### 1.2 与三条前提的差距
 
@@ -361,7 +361,7 @@ P1 只规定 `char *` → `Str` 的目标类型转换。已定：从 `Str` 借�
 - 运行期才知为 `NULL` 的 `char *`，隐式转换不接受：先判空，或走显式可失败构造；
 - 需要表达「可能没有值」时，用可失败构造（`bool` + 出参，或等价结果形态），失败时不产出 `Str`；
   忽略返回值按诊断处理；
-- `str_from(NULL)` 仍返回空串（[Str.h.ct:51-60](../../lib/std/Str.h.ct#L51-L60)），这是**显式调用**
+- `str_from(NULL)` 仍返回空串（[Str.h.ct:51-60](../../lib/core/Str.h.ct#L51-L60)），这是**显式调用**
   的既定语义，不作为隐式转换的 `NULL` 路径。
 
 不采纳的两条：
@@ -398,9 +398,9 @@ P1 只规定 `char *` → `Str` 的目标类型转换。已定：从 `Str` 借�
 
 现状差距（按此裁定都要改，本轮不动实现）：
 
-- `str_from_len` 失败返回 `len = -1` 的释放态（[Str.h.ct:39-43](../../lib/std/Str.h.ct#L39-L43)），
+- `str_from_len` 失败返回 `len = -1` 的释放态（[Str.h.ct:39-43](../../lib/core/Str.h.ct#L39-L43)），
   既没有可判定返回值，也没有错误码；
-- `str_c_str` 失败返回 `NULL`（[Str.h.ct:117-127](../../lib/std/Str.h.ct#L117-L127)），属「返回空值」形态；
+- `str_c_str` 失败返回 `NULL`（[Str.h.ct:117-127](../../lib/core/Str.h.ct#L117-L127)），属「返回空值」形态；
 - P2 的「一次分配加一次拷贝」把失败点带到每个赋值/传参位置；隐式转换位置没有返回值通道，
   与「失败必须可观察」存在张力——该位置要么不实施隐式拷贝，要么由项目组另定可观察机制
   （错误码 + 状态检查之类）。本轮不预设。

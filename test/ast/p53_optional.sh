@@ -13,7 +13,7 @@ ok_msg() { echo "ok $*"; }
 
 run_pos() {
     name=$1
-    if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+    if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
             "test/ast/$name/prog.ct" -o "$tmp/$name.c" ) \
             >"$tmp/$name.out" 2>"$tmp/$name.err"; then
         fail_msg "$name: ct-ast failed:"; sed 's/^/  /' "$tmp/$name.err" >&2
@@ -117,7 +117,7 @@ neg() {
     name=$1
     pos=$2
     msg=$3
-    if ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+    if ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
             "test/ast/errors/$name.ct" -o "$tmp/neg.c" ) \
             >"$tmp/neg.out" 2>"$tmp/neg.err"; then
         fail_msg "$name: expected a diagnostic, got exit 0"

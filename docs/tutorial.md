@@ -1539,7 +1539,7 @@ int main(void)
 }
 ```
 
-- **`Option` / `Result` 是库代码**：`lib/std/Option.h.ct` 与 `Result.h.ct` 都是普通泛型 struct，
+- **`Option` / `Result` 是库代码**：`lib/core/Option.h.ct` 与 `Result.h.ct` 都是普通泛型 struct，
   不需要 `import`；`{ 1, v }` 表示有值、`{ 0 }` 表示空，`Result` 是 `{ 1, v, 0 }` / `{ 0, 0, e }`。
 - **取值**：`unwrap_or` 给默认值，`unwrap` 在空 / 错误一侧 `abort`；`set` / `clear`（`Result` 是
   `set_ok` / `set_err`）就地改标签。
@@ -1604,7 +1604,7 @@ int main(void)
 - **`drop()` 里不能重复释放同一字段**：`self->buf.release()` 写两次会报
   `field 'buf' is released more than once in drop()`。
 
-字符串用内建的 `Str`（`lib/std/Str.h.ct`），布局是 `{ char *data; int len; }`，`len` 是契约
+字符串用内建的 `Str`（`lib/core/Str.h.ct`），布局是 `{ char *data; int len; }`，`len` 是契约
 （内嵌 `\0` 也保留，不靠结尾 NUL）：
 
 ```ct

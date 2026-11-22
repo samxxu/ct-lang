@@ -20,7 +20,7 @@ ok_msg() { echo "ok $*"; }
 
 run_pos() {
     name=$1
-    if ! ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+    if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
             "test/ast/$name/prog.ct" -o "$tmp/$name.c" ) \
             >"$tmp/$name.out" 2>"$tmp/$name.err"; then
         fail_msg "$name: ct-ast failed:"; sed 's/^/  /' "$tmp/$name.err" >&2
@@ -96,7 +96,7 @@ neg() {
     name=$1
     pos=$2
     msg=$3
-    if ( cd "$root" && CT_STD_DIR="$root/lib/std" "$ctast" \
+    if ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" \
             "test/ast/errors/$name.ct" -o "$tmp/neg.c" ) \
             >"$tmp/neg.out" 2>"$tmp/neg.err"; then
         fail_msg "$name: expected a diagnostic, got exit 0"
@@ -121,7 +121,7 @@ neg p52_rvalue_write 26:11 "a custom subscript write needs a statement and an lv
 neg p52_own_write   32:6  "a custom subscript set cannot take an 'own' or 'borrow' value"
 
 # --- E52-6: L52-10 cross-unit private get --------------------------------
-if ( cd "$root/test/ast/p52_private" && CT_STD_DIR="$root/lib/std" "$ctast" \
+if ( cd "$root/test/ast/p52_private" && CT_CORE_DIR="$root/lib/core" "$ctast" \
         build --emit-c consumer.ct -o "$tmp/priv" ) \
         >"$tmp/priv.out" 2>"$tmp/priv.err"; then
     fail_msg "E52-6: a private 'get' was accepted across units"

@@ -242,6 +242,11 @@ static int layer_wanted(const char *src, int bi)
     return src_has_box_type(src) || src_has_new_expr(src);
 }
 
+/* DOC-87 Stage 1: compile mode asks `Module::find_builtin` for the layer file,
+   so both modes share one five-step lookup, one hard-error rule and one set of
+   compatibility warnings. Keeping the probe in one unit also keeps the
+   self-hosted compiler's 512-function budget intact. */
+
 impl DriverOps for Driver {
     /* The token cursor and the error store live in frontend::parse; the driver
        forwards so the store stays single. */
@@ -275,20 +280,15 @@ impl DriverOps for Driver {
     int load_builtin(const char *in)
     {
         char cand[MAX_PATH];
-        char alt[MAX_PATH];
-        const char *env;
-        const char *slash;
         const char *savepath;
-        int bi, i, prog, n, head;
+        int bi, prog, head, rr;
         char *insrc = 0;
-        FILE *probe;
 
         /* SH-90: `--freestanding` means no implicit layer. Splicing it anyway
            put `<stdio.h>` and the `Str` unit's `malloc` calls into a product
            that must link under `-nostdlib`; build mode already prunes, so the
            two modes disagreed. */
         if (self->m->freestanding) return -1;
-        env = getenv("CT_STD_DIR");
         head = -1;
         {
             FILE *fi = fopen(in, "r");
@@ -312,7 +312,8 @@ impl DriverOps for Driver {
         /* P34 S9a: the layer spans `Vec.h.ct`, `Option.h.ct` and
            `Result.h.ct`; P36 S4a1 adds `Str.h.ct`. Compile mode is one C
            translation unit, so the parsed declaration chains are spliced into
-           one program. */
+           one program. DOC-87 Stage 1: the file is located by the module
+           layer, which owns `lib/core` / `CT_CORE_DIR` and the fallbacks. */
         for (bi = 0; bi < 5; bi++) {
             const char *base;
             base = bi == 0 ? "Vec.h.ct"
@@ -321,25 +322,9 @@ impl DriverOps for Driver {
                  : (bi == 3 ? "Str.h.ct" : "Box.h.ct")));
             if (insrc && !layer_wanted(insrc, bi)) continue;
             prog = -1;
-            for (i = 0; i < 3; i++) {
-                cand[0] = 0;
-                if (i == 0) {
-                    if (!env || !env[0]) continue;
-                    n = snprintf(cand, sizeof cand, "%s/%s", env, base);
-                } else if (i == 1) {
-                    n = snprintf(cand, sizeof cand, "lib/std/%s", base);
-                } else {
-                    slash = strrchr(in, '/');
-                    if (!slash || (size_t)(slash - in) >= sizeof alt) continue;
-                    memcpy(alt, in, (size_t)(slash - in));
-                    alt[slash - in] = 0;
-                    n = snprintf(cand, sizeof cand, "%s/../lib/std/%s", alt, base);
-                }
-                if (n < 0 || n >= (int)sizeof cand) continue;
-                if (strcmp(cand, in) == 0) continue;
-                probe = fopen(cand, "r");
-                if (!probe) continue;
-                fclose(probe);
+            rr = self->m->find_builtin(in, base, cand, sizeof cand);
+            if (rr == -2) return -2;
+            if (rr == 0) {
                 savepath = self->m->path;
                 self->m->path = cand;
                 self->mem->path = cand;
@@ -367,7 +352,6 @@ impl DriverOps for Driver {
                     frontend::parse::ct_parse_report();
                     return -1;
                 }
-                break;
             }
             if (prog < 0) continue;
             if (head < 0) {
@@ -851,6 +835,12 @@ impl DriverOps for Driver {
            `Map` need neither an import nor an `-I`; its nodes are spliced in
            front of the input's below. A missing layer is not an error. */
         stdprog = self->load_builtin(in);
+        /* DOC-87 Stage 1: a CT_CORE_DIR that names a missing directory is a
+           hard error, never a silent fallback to the working tree. */
+        if (stdprog == -2) {
+            frontend::parse::ct_parse_report();
+            return 1;
+        }
         /* P36 S4a2: the built-in layer's functions do not count against the
            user program's `MAX_FUNCS` budget. */
         self->sym->nfunc_base = self->sym->nfunc;

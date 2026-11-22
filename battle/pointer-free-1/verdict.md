@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | J-1 版本窗口 | **B** | v1.0 明确冻结语言，v1.1 只做行为保持的语法现代化（[v1-release-plan.md:23](../../docs/planning/v1-release-plan.md#L23)、[:61-64](../../docs/planning/v1-release-plan.md#L61-L64)）。提案是用户可见的新语法/新类型，不能塞进 v1 窗口 |
 | J-2 语法/标识符兼容 | **B** | `ref` / `out` 已是语料中的合法标识符（[exprs.ct:13](../../examples/c-superset/s01_switch/exprs.ct#L13)、[time_t.ct:26](../../examples/c-superset/s19_header_typenames/time_t.ct#L26)）；`new` 不在关键字表（[Stmt.h.ct:1695-1697](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L1695-L1697)）；`T a[]` 已是定长数组/初始化器语法（[prog.ct:3](../../test/ast/132_foreach_array_values/prog.ct#L3)）。提案只承认一个 `new` 关键字，低估了保留字与切片语法的迁移面 |
-| J-3 类型/ABI | **B** | `Str` 是 std 包里的普通 struct（[Str.h.ct:18](../../lib/std/Str.h.ct#L18)），不是编译器内建；字面量默认类型改 `Str` 需要内建化或编译器特殊识别外部包，且改变 ABI。`T[]` 与现有 `T a[]` 语义冲突；`box<T>` 头部改变布局。J1「逐字节一致」对这三项不可达 |
+| J-3 类型/ABI | **B** | `Str` 是 std 包里的普通 struct（[Str.h.ct:18](../../lib/core/Str.h.ct#L18)），不是编译器内建；字面量默认类型改 `Str` 需要内建化或编译器特殊识别外部包，且改变 ABI。`T[]` 与现有 `T a[]` 语义冲突；`box<T>` 头部改变布局。J1「逐字节一致」对这三项不可达 |
 | J-4 语义安全 | **B** | `ref`/`out` 本质仍是指针；提案没有逃逸限制，被调用者保存指针即可悬挂，而借用检查被列为非目标。`box<T>` 引用环泄漏被提案自己承认为「静默发生、无报警」（[proposal.md:141](proposal.md#L141)）。在无借用检查/无环检测下，把 box 变成日常默认会放大两类缺陷 |
 | J-5 机制自洽 | **B** | 提案自称「机制最小化」，实际新增 `box<T>`、`new`、`ref/out`、切片、`Str` 字面量、函子类型六项；J1 要求「与指针写法产物逐字节一致」，与 box 的 refs 头部、Str 的 16 字节布局、切片的 len 字段直接矛盾 |
 | J-6 证据充分性 | **B** | 附件只有设计，没有原型、没有真实语料迁移数据、没有成本量化；按 §7.7 E1–E5，A 未给出可复现的编译/运行证据 |
@@ -51,7 +51,7 @@
 ## 5 保留并认可的部分
 
 - **问题陈述**：堆单对象、多返回、数组传递、字符串、回调五类日常用途确实仍依赖指针；
-- **Vec 句柄模型**：refs/release/借用视图已在 CT 上验证（[Vec.h.ct:29-32](../../lib/std/Vec.h.ct#L29-L32)），
+- **Vec 句柄模型**：refs/release/借用视图已在 CT 上验证（[Vec.h.ct:29-32](../../lib/core/Vec.h.ct#L29-L32)），
   box 与其同构是合理方向；
 - **S4 函子参数类型**与 **S2 `out`** 是提案中面最小、复用最多的两项，可作为 v2 首批候选，
   但仍需 P-2/P-4 前置；

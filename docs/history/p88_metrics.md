@@ -14,7 +14,9 @@
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
       去掉重复分支净减 15 行发射 C；发射器本身未变)
      (emitted_after 于 SH-115 后复测：函数指针字段/指针表达式调用与结构体花括号初值
-      检查增加 450 行发射 C；发射器本身未变) -->
+      检查增加 450 行发射 C；发射器本身未变)
+     (emitted_after 于 DOC-87 Stage 1 后复测：内置层查找改为 lib/core + CT_CORE_DIR，
+      共享 `find_builtin` 增加 58 行发射 C；发射器本身未变) -->
 
 ## 1 切片清单
 

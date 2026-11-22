@@ -34,7 +34,7 @@ CT
 n_sys() { grep -c '#include *<' "$1" 2>/dev/null || true; }
 
 # compile mode, with the layer discoverable: the discriminating case.
-CT_STD_DIR="$root/lib/std" "$CT" "$tmp/empty.ct" -o "$tmp/o/empty.c" >"$tmp/e1.log" 2>"$tmp/e1.err" || {
+CT_CORE_DIR="$root/lib/core" "$CT" "$tmp/empty.ct" -o "$tmp/o/empty.c" >"$tmp/e1.log" 2>"$tmp/e1.err" || {
     echo "FAIL p66/io-empty: compile mode failed" >&2; sed 's/^/  /' "$tmp/e1.err" | head -3 >&2; exit 1; }
 n=$(n_sys "$tmp/o/empty.c")
 [ "$n" = "0" ] || { echo "FAIL p66/io-empty: compile mode empty program has $n system header(s)" >&2; grep -n '#include *<' "$tmp/o/empty.c" >&2; fail=1; }
@@ -53,7 +53,7 @@ if grep -q 'Str_Drop_drop' "$tmp/o/empty.c"; then
 fi
 
 # A program that uses a container must still get the layer.
-CT_STD_DIR="$root/lib/std" "$CT" "$tmp/vec.ct" -o "$tmp/o/vec.c" >"$tmp/v.log" 2>"$tmp/v.err" || {
+CT_CORE_DIR="$root/lib/core" "$CT" "$tmp/vec.ct" -o "$tmp/o/vec.c" >"$tmp/v.log" 2>"$tmp/v.err" || {
     echo "FAIL p66/io-empty: the Vec program no longer compiles" >&2; sed 's/^/  /' "$tmp/v.err" | head -3 >&2; exit 1; }
 if ! grep -q 'Vec_int_push' "$tmp/o/vec.c"; then
     echo "FAIL p66/io-empty: the Vec layer was pruned away from a Vec program" >&2

@@ -151,7 +151,7 @@ def resolve_anchor(raw):
     if p.is_absolute():
         return p if p.exists() else None
     candidates = [ROOT / raw]
-    for prefix in ("docs/design", "docs", "selfhost/ct-ast", "selfhost", "test", "lib/std"):
+    for prefix in ("docs/design", "docs", "selfhost/ct-ast", "selfhost", "test", "lib/core"):
         candidates.append(ROOT / prefix / raw)
     for cand in candidates:
         if cand.exists():

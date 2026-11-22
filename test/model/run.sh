@@ -67,7 +67,7 @@ then
 else
     bad "model content" "field/enum/function assertion failed"
 fi
-if grep -q 'lib/std\|/tmp/' "$work/m.json"; then
+if grep -q 'lib/core\|/tmp/' "$work/m.json"; then
     bad "paths" "absolute or builtin path leaked"
 else
     ok "relative paths, no builtin layer"

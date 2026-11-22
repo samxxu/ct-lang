@@ -4884,7 +4884,8 @@ impl StmtOps for Stmt {
         /* The built-in layer initialises `ptr`/`len` itself; the user-facing
            immutability rule applies only to callers. */
         if (self->sup->mem->path
-            && strstr(self->sup->mem->path, "lib/std/Str.h.ct") != 0)
+            && (strstr(self->sup->mem->path, "lib/core/Str.h.ct") != 0
+                || strstr(self->sup->mem->path, "lib/std/Str.h.ct") != 0)) /* DOC-87 迁移回退 */
             return 0;
         k = self->arena->nodes[e].kind;
         if (k == N_MEMBER) {

@@ -22,8 +22,8 @@ esac
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/p82cyc.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
-CT_STD_DIR="$root/lib/std"
-export CT_STD_DIR
+CT_CORE_DIR="$root/lib/core"
+export CT_CORE_DIR
 fail=0
 ok()  { printf 'ok   %s\n' "$1"; }
 bad() { echo "FAIL p82/cycle: $1" >&2; [ $# -gt 1 ] && printf '  %s\n' "$2" >&2; fail=1; }
@@ -186,7 +186,7 @@ fi
 #     zero-false-positive side, on the corpus that can actually carry one).
 hits=""
 for f in $(grep -rl 'box<' --include='*.ct' test/ examples/ lib/ 2>/dev/null); do
-    case "$f" in lib/std/Box.h.ct) continue ;; esac
+    case "$f" in lib/core/Box.h.ct) continue ;; esac
     "$ctast" "$f" -o "$work/corpus.c" >"$work/corpus.log" 2>&1
     grep -Fq "potential reference cycle" "$work/corpus.log" && hits="$hits $f"
 done

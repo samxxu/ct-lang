@@ -102,7 +102,7 @@ P-7.4 留在 S5b/收口门，这是对**收口门**的尊重；但卡头写的�
 
 - 旧 `Str` 的公开 ABI 是 `{ char *data; int len; }` + `impl Drop` 释放 buffer + `release()` 置
   `data=0,len=-1`（[language-spec.md:2594](../../docs/language-spec.md#L2594)、
-  [lib/std/Str.h.ct:18](../../lib/std/Str.h.ct#L18)）；新 `String` 是 16 字节句柄 + 隐藏 8 字节
+  [lib/std/Str.h.ct:18](../../lib/core/Str.h.ct#L18)）；新 `String` 是 16 字节句柄 + 隐藏 8 字节
   `{refs,aux}` 头（[docs/planning/j6-evidence/p73/evidence.md:222](../../docs/planning/j6-evidence/p73/evidence.md#L222)、提案 Q4），
   `ptr` 指向头之后。**同样是 16 字节，指针语义与释放契约不同**：旧代码若直接读写 `s.data`、
   手工拼 `Str`，或依赖 `str_c_str`/`str_slice` 的调用点，都不是「换一个类型名」能覆盖的。
@@ -129,7 +129,7 @@ P-7.4 留在 S5b/收口门，这是对**收口门**的尊重；但卡头写的�
 - PH-80 卡的退出判据 **E80-1…E80-8 没有任何一条提到 retain/复制协议**（E1-5：`retain` 在卡面
   0 命中），E80-8 只要求文档三处同步与 `check-all`/ASan 通过。也就是说：若 S5a 带着 p73 的
   「普通拷贝」语义落地，**没有门禁会红**。失败形态取决于一个尚未做的选择：
-  - 选「拷贝硬错」（与内置容器一致：[lib/std/README.md:49](../../lib/std/README.md#L49)
+  - 选「拷贝硬错」（与内置容器一致：[lib/std/README.md:49](../../lib/core/README.md#L49)
     「变量间直接拷贝是硬错」）→ 现有 `Str` 的「按值传递浅拷贝指针」
     （[language-spec.md:2595](../../docs/language-spec.md#L2595)）用法全部要迁移；
   - 选「浅拷贝 + 显式 retain」（旧 `Str` 口径）→ 新 `String` 带 `Drop`，按值复制后两个句柄各自
@@ -162,7 +162,7 @@ P-7.4 留在 S5b/收口门，这是对**收口门**的尊重；但卡头写的�
   7 个使用 `Map<Str, …>`（E1-8）。这些就是 P-7.4-2/3/4 要逐项记录的对象。
 - P-3.6 跨仓 dry-run 完全未做（[docs/planning/j6-evidence/p73/evidence.md:227](../../docs/planning/j6-evidence/p73/evidence.md#L227)），
   而 P-7.4-6 要的正是外部消费者 dry-run；`std::str::String` 又是
-  外部 `std` 包提供的 trait（[lib/std/README.md:10](../../lib/std/README.md#L10)），仓内已有消费者
+  外部 `std` 包提供的 trait（[lib/std/README.md:10](../../lib/core/README.md#L10)），仓内已有消费者
   `import std::str::String`（[examples/wave1-demo/src/main.ct:7](../../examples/wave1-demo/src/main.ct#L7)）。
   内建 `String` 与这个 trait 同名：这是跨仓命名/迁移问题，不是 PH-80 单仓问题。
 - 卡 R80-5 把外部 dry-run 定为 S5b blocking（G-5），但「把 `String` 内建化」这个决定发生在 S5a；
@@ -187,7 +187,7 @@ P-7.4 留在 S5b/收口门，这是对**收口门**的尊重；但卡头写的�
   parser/emitter；PH-82 的直接环检测又只展开 `box<X>` 字段（
   [phase82.md:87](../../docs/design/phase82.md#L87)），错误会继续传到 E82-3/E82-4。
 - 本席不主张「`new` 关键字会大量破坏既有代码」：tracked `.ct` 中命中单词 `new` 的 16 个文件里，
-  本席抽查到的非注释样本是英文注释（示例 [lib/std/Str.h.ct:68](../../lib/std/Str.h.ct#L68)）；
+  本席抽查到的非注释样本是英文注释（示例 [lib/std/Str.h.ct:68](../../lib/core/Str.h.ct#L68)）；
   本席**没有**做 P-1.2 要求的标识符级分类，不能断言命中为零。因此 PH-81 的阻断理由不是关键字
   兼容性，而是 **box 布局/协议与借用视图失效检测没有 P-7.5 证据**。
 
@@ -433,7 +433,7 @@ P-7.4 的参数/返回/字段 retain、旧 `Str` 并存、`Map<String>`、跨仓
   旧 `Str` 替换 [docs/planning/j6-evidence/p73/evidence.md:242](../../docs/planning/j6-evidence/p73/evidence.md#L242)；
   「不直接当 S5a 合并」[docs/planning/j6-evidence/p73/evidence.md:289](../../docs/planning/j6-evidence/p73/evidence.md#L289)。
 - 命名/迁移：[language-spec.md:2596](../../docs/language-spec.md#L2596)、
-  [lib/std/README.md:10](../../lib/std/README.md#L10)、
+  [lib/std/README.md:10](../../lib/core/README.md#L10)、
   [examples/wave1-demo/src/main.ct:7](../../examples/wave1-demo/src/main.ct#L7)。
 - 门禁纪律：[AGENTS.md:468](AGENTS.md#L468)、[AGENTS.md:590](AGENTS.md#L590)。
 
@@ -450,7 +450,7 @@ P-7.4 的参数/返回/字段 retain、旧 `Str` 并存、`Map<String>`、跨仓
    4 个负例）在 p73 已有原始输出（[docs/planning/j6-evidence/p73/evidence.md:225](../../docs/planning/j6-evidence/p73/evidence.md#L225)），
    所以 §2.1 是「裁定缺失」风险，不是「能力未证」风险。B 不夸大。
 4. **PH-81 的关键字风险很可能很低，但未测。** tracked `.ct` 中命中 `new` 的 16 个文件里，
-   抽查到的非注释样本是英文注释（E1-8；示例 [lib/std/Str.h.ct:68](../../lib/std/Str.h.ct#L68)）；
+   抽查到的非注释样本是英文注释（E1-8；示例 [lib/std/Str.h.ct:68](../../lib/core/Str.h.ct#L68)）；
    本席没有做 P-1.2 的标识符级分类，不能断言为零。B 不把「`new` 破坏既有标识符」当阻断理由；
    PH-81 的阻断只在 P-7.5 的 box 布局/协议证据。
 5. **卡面矛盾对 A 同样有利。** 卡头 [:5](../../docs/design/phase80.md#L5) 与 §1.1

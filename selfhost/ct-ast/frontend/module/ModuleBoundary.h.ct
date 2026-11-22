@@ -115,7 +115,7 @@ int c_manifest_boundary(const char *dir)
    four directories, not a cwd rule). */
 int c_path_is_core(const char *path)
 {
-    static const char *const core[4] = { "selfhost/", "lib/std/", "test/", "examples/" };
+    static const char *const core[5] = { "selfhost/", "lib/core/", "lib/std/", "test/", "examples/" }; /* DOC-87 迁移回退 */
     char cwd[1024];
     const char *p = path;
     size_t n;
@@ -123,13 +123,13 @@ int c_path_is_core(const char *path)
 
     if (path == 0 || path[0] == 0) return 0;
     /* A build invoked from the repo root may hand us absolute unit paths
-       (`$PWD/lib/std/Vec.h.ct`); strip the cwd before matching. */
+       (`$PWD/lib/core/Vec.h.ct`); strip the cwd before matching. */
     if (path[0] == '/' && getcwd(cwd, sizeof cwd) != 0) {
         n = strlen(cwd);
         if (strncmp(path, cwd, n) == 0 && path[n] == '/') p = path + n + 1;
     }
     if (p[0] == '/' || (p[0] == '.' && p[1] == '.')) return 0;
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < 5; i++)
         if (strncmp(p, core[i], strlen(core[i])) == 0) return 1;
     return 0;
 }

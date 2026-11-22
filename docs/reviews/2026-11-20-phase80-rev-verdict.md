@@ -151,7 +151,7 @@ u=2 u2=2 u3=2 u8=2
 
 - `String` / `Str` 均 16 B，`ct_str_hdr` 8 B，`_Static_assert` 随 `.ct` 源进入生成的 C 并由 `cc` 编译；不是只写在文档里。
 - `refs = -1` 的 literal / empty 在 `release()` 后仍为 `-1`，`ct_str_live_count()` 不增；`abi` / `trace` 两条夹具均绿。
-- 头文件注释与生成结构一致：`struct String { char *ptr; int len; }`、`struct ct_str_hdr { int refs; int aux; }`（[`lib/std/Str.h.ct`](../../lib/std/Str.h.ct) 顶部；生成 C 第 25–36 行）。
+- 头文件注释与生成结构一致：`struct String { char *ptr; int len; }`、`struct ct_str_hdr { int refs; int aux; }`（[`lib/std/Str.h.ct`](../../lib/core/Str.h.ct) 顶部；生成 C 第 25–36 行）。
 
 ### E80-2 L1 immortal / 借用 / U16 仅工厂：✅ 通过
 
@@ -167,7 +167,7 @@ u=2 u2=2 u3=2 u8=2
 ### E80-4 码点 / 字节 / slice：✅ 通过
 
 - `p80_methods` 的 `u8` 行覆盖 `len`（字节）/`char_len`（码点）/`byte_at`/`codepoint_at`/`get`/`s[i]`/`char_at`/`byte_slice`/`byte_index_of(_from)`；`p80_methods/prog.expected.out` 的 `u8 bytes=104,195,169,108,108,111`、`u8 cps=104,233,108,108,111` 与 UTF-8 预期一致。
-- `String.slice` 返回新 owning：`u8 slice len=2 refs=1 live=2`（`test/ast/p80_methods/prog.ct:47-48`）；`Str.slice` 在 [`lib/std/Str.h.ct:349`](../../lib/std/Str.h.ct#L349) 返回 `Str`，`str_slice` 仍是借用（`Str.h.ct:362`）。
+- `String.slice` 返回新 owning：`u8 slice len=2 refs=1 live=2`（`test/ast/p80_methods/prog.ct:47-48`）；`Str.slice` 在 [`lib/std/Str.h.ct:349`](../../lib/core/Str.h.ct#L349) 返回 `Str`，`str_slice` 仍是借用（`Str.h.ct:362`）。
 
 ### E80-5 `.data` / `cstr()` / printf 负例：✅ 通过（E80-5 断言）；D-013 §2 字面类型见 O1
 
@@ -524,7 +524,7 @@ check-sanitizers: OK (583 checks, no sanitizer report)
 
 - **O1 `.data` 静态类型措辞。** D-013 §2 与 spec §4.70 写“静态类型 `const char *` / `const uint16_t *`”，但实现把 `.data` 降为 `s.ptr`（`char *`），且 `const char *p = s.data;` 也硬错；实际是“只能下标的只读视图”，比 decision 更严。建议二选一：把 decision/spec 改成“index-only view，不作为值传出”，或实现真正可赋值的 `const char *` 视图。E80-5 的三类负例已成立，故本轮不据此单独打回，但它确实是 D-013 §2 的字面偏差。
 - **O2 旧 `Str` 文档残留。** [`docs/language-spec.md:2594`](../language-spec.md#L2594)（§4.56）、[`docs/glossary.md:89`](../glossary.md#L89)、[`docs/tutorial.md:1584`](../tutorial.md#L1584) 仍写 `str_from` / `str_len` / `str_slice` 旧语义与深拷贝 `retain`，与 §4.70 的“旧类型已删除”矛盾。建议另立 `DOC-*` 或随 SH-102 修复一并清理；`p80_docs.sh` 应加旧节负例。
-- **O3 `std::str` 外部命名空间。** [`examples/wave1-demo/src/main.ct:7`](../../examples/wave1-demo/src/main.ct#L7) 的 `import std::str::String` 是 ct-pkg `std` 的 `char *` 映射层，[`lib/std/README.md`](../../lib/std/README.md) 明确 `str` / `io` / `math` 仍由该包提供；[`test/modules/p29_builtin_std/needs_std.ct:3`](../../test/modules/p29_builtin_std/needs_std.ct#L3) 的 `import std::str;` 是内建层不含该命名空间的门禁负例。二者不是 old owning `Str` 的残留，但仓内仍能 grep 到 `std::str`，建议在删旧说明里点名这两处，避免下一轮误判。
+- **O3 `std::str` 外部命名空间。** [`examples/wave1-demo/src/main.ct:7`](../../examples/wave1-demo/src/main.ct#L7) 的 `import std::str::String` 是 ct-pkg `std` 的 `char *` 映射层，[`lib/std/README.md`](../../lib/core/README.md) 明确 `str` / `io` / `math` 仍由该包提供；[`test/modules/p29_builtin_std/needs_std.ct:3`](../../test/modules/p29_builtin_std/needs_std.ct#L3) 的 `import std::str;` 是内建层不含该命名空间的门禁负例。二者不是 old owning `Str` 的残留，但仓内仍能 grep 到 `std::str`，建议在删旧说明里点名这两处，避免下一轮误判。
 - **O4 外部 dry-run 不是第三方仓。** `/tmp/p80-ext` 确在仓外、可重跑，但只是本机独立目录，不是真实跨仓工程；卡 §7.8 已诚实登记该限制。P-7.4-6 的最终判据仍是外部 CI/项目，本轮只能确认“仓外工程无需复制内建层即可编译/运行”。
 - **O5 C-7 的复现时点。** 卡 §7.7 的 `git revert --no-commit 80c18d0a` 只在 `85a69bd0` 干净；在 `v0.80.0` HEAD 上会与 S5b 的后续改动冲突。卡已声明只回滚实现提交，但未写 checkout 点；建议在卡上补 `git checkout 85a69bd0` 或写明“演练时点”，否则后来者无法按原命令复现。
 - **O6 tag message 的 phase-id 形态。** tag message 为 `PH-80 closeout (60c6a2c)`，不是 `v0-PH-80`；这与项目当前 blocked 的 phase-ID 迁移（DOC-74）及 v0.78/v0.79 的历史 tag 形态一致，`g8` 也按 legacy offset 通过。不是 PH-80 新问题，但 V-7 的字面要求与现状有差距。

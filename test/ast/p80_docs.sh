@@ -6,7 +6,7 @@
 #   - docs/roadmap.md lists Phase 80 with its version;
 #   - the language reference has the §4.70 contract (layout, literal, `.data`,
 #     `cstr()`, UTF-16 factories, the explicit copy protocol);
-#   - lib/std/README.md names the layer units and the compatibility window;
+#   - lib/core/README.md names the layer units and the compatibility window;
 #   - the phase card carries the §7 closeout table with every E80 row, the
 #     S5b deletion (E80-7 ✅) and the C-7 / external dry-run sections.
 #
@@ -47,13 +47,13 @@ for needle in 'const char \*' 'cstr()' 'immortal' 'U16String' '旧类型已删�
     if grep -q "$needle" "$spec"; then ok "spec mentions $needle"; else bad "spec does not mention $needle"; fi
 done
 
-std=lib/std/README.md
+std=lib/core/README.md
 if grep -q 'S5b' "$std" && grep -q '旧 owning `Str` 已删除' "$std"; then
-    ok "lib/std README records the S5b deletion"
+    ok "lib/core README records the S5b deletion"
 else
-    bad "lib/std README deletion note"
+    bad "lib/core README deletion note"
 fi
-if grep -q 'U16String' "$std"; then ok "lib/std README names the UTF-16 pair"; else bad "lib/std README UTF-16"; fi
+if grep -q 'U16String' "$std"; then ok "lib/core README names the UTF-16 pair"; else bad "lib/core README UTF-16"; fi
 
 card=docs/design/phase80.md
 [ -f "$card" ] || { bad "docs/design/phase80.md missing"; exit 1; }

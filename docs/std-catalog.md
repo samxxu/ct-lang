@@ -10,7 +10,7 @@
 
 ## 1. 先看内置层（不需要安装，也不需要 import）
 
-`lib/std/` 是随编译器预解析的内置层，`ct compile` 与 `ct build` 都自动加载：
+`lib/core/` 是随编译器预解析的内置层，`ct compile` 与 `ct build` 都自动加载：
 
 | 名字 | 形态 | 说明 |
 | --- | --- | --- |
@@ -22,7 +22,7 @@
 | `Str` | 带长度字符串 | `char *data` + `int len` |
 
 这些是**编译器保留名**，不是 `std` 包的一部分；`std::vec` / `std::map` 已在 std 0.3.0 删除。
-细节见 [lib/std/README](../lib/std/README.md) 与 [language-spec §4.51](language-spec.md#451-泛型-struct固有方法与内置容器phase-29)。
+细节见 [lib/core/README](../lib/core/README.md) 与 [language-spec §4.51](language-spec.md#451-泛型-struct固有方法与内置容器phase-29)。
 
 ## 2. `std` 包模块
 
