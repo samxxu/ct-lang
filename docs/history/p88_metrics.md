@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=9371 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=49591 io_cap=1024
+     emitted_before=48223 emitted_after=49730 io_cap=1024
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
