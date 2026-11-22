@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估 P1-3 探针 P2） |
 | 依据 | [Trait/泛型覆盖映射](../../docs/reviews/2026-11-22-trait-generic-coverage-map.md)、[spec §1 顺序规则](../../docs/language-spec.md) |
-| 状态 | open |
+| 状态 | deferred |
 | 处置证据 | **已立项（v1.1；v1.0 先按 spec 例外执行）** |
 
 ## 现象
@@ -44,3 +44,11 @@ T twice<T>(T x) { return x + x; }
 - 方向 B：同一源码报专门诊断，`file:line:col` 齐全；spec 例外条目与诊断一致；
 - 两种顺序各一条 `test/ast` 用例；
 - `check-ast` / `check-all` 绿；既有语料生成 C 不变（方向 A 需额外证明）。
+
+
+## 处置（REQ，2026-11-22）：deferred
+
+- 触发：**v1.1 语言裁定窗口**
+- 范围：泛型模板顺序 A/B 裁定
+- 依据：本卡「处置证据」已标 `v1.1` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
+- 触发时：改回 `open`，按本卡验收执行；不提前扩围。

@@ -7,7 +7,7 @@
 | 严重度 | Low |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估 P1） |
 | 依据 | [LANG-10](lang-10-machine-readable-diagnostics.md)、[架构评估](../../docs/reviews/2026-11-22-architecture-assessment-eval.md) |
-| 状态 | open |
+| 状态 | deferred |
 | 处置证据 | **已立项（v1.2；与 v1.1 的 parse JSON 分开）** |
 
 ## 现象
@@ -35,3 +35,11 @@
 - 文本与 JSON 的 code 一致；
 - 至少覆盖 parse / type / trait / driver 四域；
 - 旧消息文本不被删除，只追加 code。
+
+
+## 处置（REQ，2026-11-22）：deferred
+
+- 触发：**v1.2（与 LANG-10 v1.1 parse JSON 分开）**
+- 范围：诊断码 registry
+- 依据：本卡「处置证据」已标 `v1.2` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
+- 触发时：改回 `open`，按本卡验收执行；不提前扩围。

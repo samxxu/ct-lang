@@ -53,7 +53,7 @@ $ find issues -name '*.md' ! -name README.md | wc -l
 $ grep -rl '^| 状态 |' issues --include='*.md' | wc -l
 220
 # 扫描结果（本会话）：
-| 状态 | rows: 220
+status rows: 220
 {'non-closed-set': 168, 'fixed-in-status': 6}
 files with no status at all: 0
 ```

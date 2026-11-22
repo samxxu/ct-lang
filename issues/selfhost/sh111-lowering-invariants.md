@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估 P1） |
 | 依据 | [SH-110](sh110-dynamic-dispatch-chain-fix.md)、[SH-73](sh73-temp-receiver-dynamic-dispatch.md)、[架构评估](../../docs/reviews/2026-11-22-architecture-assessment-eval.md) |
-| 状态 | open |
+| 状态 | deferred |
 | 处置证据 | **已立项（v1.1；不阻塞 v1.0）** |
 
 ## 现象
@@ -47,3 +47,11 @@ ct-ast 由 AST 直接发射 C，临时值物化、求值顺序、值类别与清
 ## 排期
 
 v1.1（`v1-PH-1`）；不阻塞 v1.0。
+
+
+## 处置（REQ，2026-11-22）：deferred
+
+- 触发：**v1.1 立项窗口（SH-110/SH-73 修复后）**
+- 范围：lowering 不变量成文 + 发射前检查
+- 依据：本卡「处置证据」已标 `v1.1` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
+- 触发时：改回 `open`，按本卡验收执行；不提前扩围。

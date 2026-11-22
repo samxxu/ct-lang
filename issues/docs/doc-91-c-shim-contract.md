@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估） |
 | 文件 | [guide-for-c-programmers](../../docs/guide-for-c-programmers.md)、[patterns](../../docs/patterns.md)、`examples/**/shim` |
-| 状态 | open |
+| 状态 | deferred |
 | 处置证据 | **已立项（v1.1；不阻塞 v1.0）** |
 
 ## 现象
@@ -56,3 +56,11 @@ C Shim 已经是事实上的架构模式（examples、test/baremetal-renode、�
 ## 排期
 
 v1.1；不阻塞 v1.0。与 [DOC-92](doc-92-c-interop-semantics-matrix.md) 同批评估。
+
+
+## 处置（REQ，2026-11-22）：deferred
+
+- 触发：**v1.1 文档窗口**
+- 范围：C Shim Contract 成文
+- 依据：本卡「处置证据」已标 `v1.1` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
+- 触发时：改回 `open`，按本卡验收执行；不提前扩围。
