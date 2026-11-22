@@ -4680,7 +4680,16 @@ impl StmtOps for Stmt {
                     if (self->ex->container_init_check(typebuf) != 0) return -1;
                     e = self->sup->new_node(N_RAW);
                     if (e < 0) return -1;
-                    if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+                    {
+                        /* SH-115: the raw list is still source text, but a
+                           literal item's type is decidable; judge those before
+                           the interface-field rewrite moves the bytes. */
+                        int bl = self->lex->tokline;
+                        int bc = self->lex->tokstart - self->lex->lstart + 1;
+                        if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+                        if (self->ex->chk_brace_init(typebuf, raw, bl, bc) != 0)
+                            return -1;
+                    }
                     if (self->sup->rewrite_init_text(typebuf, raw, fixed, sizeof fixed) != 0) return -1;
                     off = self->arena->str_begin();
                     for (k = 0; fixed[k]; k++)

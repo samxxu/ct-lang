@@ -399,6 +399,10 @@ impl DriverOps for Driver {
         out = NULL;
         self->m->check_mode = 0;
         self->p->types_mode = 0;
+        /* SH-115: `ct build` defaults to `--check-level=warn`; `ct check` keeps
+           its own opt-in (`--types`). The build branch below sets the default
+           before it parses the flag, so `--check-level=off` remains the silent
+           escape hatch and restores the pre-SH-115 build byte for byte. */
         self->m->types_level = 0;
         /* Phase 32: `--types` is an opt-in gate on `ct check` only. The scan
            runs before the `build` dispatch so `ct build --types` names the
@@ -436,6 +440,11 @@ impl DriverOps for Driver {
             }
         }
         if (argc > 1 && strcmp(argv[1], "build") == 0) {
+            /* SH-115: the CLI default for the build path is `warn`. The flag
+               loop below overrides it for `off` / `warn` / `error`; `ct check`
+               never enters this branch with its own inputs, so its opt-in
+               `--types` behaviour is unchanged. */
+            self->m->types_level = 1;
             /* S2: `build` reads ./ct.lock and the roots become explicit `-I`
                entries after the user's own flags. `--locked` is consumed here
                because `build_main` has no concept of strictness. */

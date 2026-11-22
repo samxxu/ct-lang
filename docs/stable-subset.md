@@ -47,7 +47,7 @@
 | 内建 trait（`Drop` / `Handback`）的可见声明显性化 | 冻结中 | REQ + ADR；不得引入 vtable/vptr | **v1.0 前（当前 pre 窗口；依赖 `lib/core` Stage 1）** | [LANG-23](../issues/lang/lang-23-builtin-trait-declarations.md) |
 | 非 immortal `Str` 视图存入容器的 lint（warn 级） | 冻结中 | REQ + ADR；先 warn，不升硬错 | v1.1 | [LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
 | 编译器内部分层（L0 / L1 / L2 去留、seed cutover） | 1.0 前可改 | REQ 开 issue；语义不变的不需 ADR | `v1-PH-0` 前 | [v1 路线](planning/v1-release-plan.md) §2 |
-| A 检查的默认值（`--check-level` 默认 off/warn/error） | 1.0 前可改 | REQ + ADR（产品契约） | **下一 v0.x 默认 `warn`（SH-115，不等 v1-pre）**；v1.1 视证据升 `error` | [SH-115](../issues/selfhost/sh115-b-plus-strengthening.md)、[v1 路线](planning/v1-release-plan.md) §2.4 |
+| A 检查的默认值（`--check-level` 默认 off/warn/error） | 1.0 前可改 | REQ + ADR（产品契约） | **SH-115 起默认 `warn`**（不等 v1-pre；`off` 保留逃生）；v1.1 视证据升 `error` | [SH-115](../issues/selfhost/sh115-b-plus-strengthening.md)、[v1 路线](planning/v1-release-plan.md) §2.4 |
 | spec 结构（是否拆分、目录与锚点） | 1.0 前可改 | REQ 开 issue；结构不动语义 | v1.1 | [DOC-88](../issues/docs/doc-88-spec-split-decision.md) |
 | README / tutorial 的结构与示例 | 1.0 前可改 | REQ 开 issue；事实修正不需 ADR | 持续 | [DOC-86](../issues/docs/doc-86-readme-v088-rewrite.md)、[DOC-90](../issues/docs/doc-90-tutorial-string-slice-chapters.md) |
 | phase-ID 迁移（旧编号 → `v1-PH-*`） | 1.0 前可改 | REQ 开 issue；历史记录不改写 | v1.0 发布前 | [DOC-83](../issues/docs/doc-83-phase-id-migration-decision.md) |

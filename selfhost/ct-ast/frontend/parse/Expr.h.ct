@@ -344,6 +344,21 @@ pub trait ExprTypes {
        arguments, each formal is substituted, and each actual is judged with
        L32-6 at its own start position. */
     int  chk_mcall_args(const char *ibase, const char *fname, int args);
+    /* SH-115: one call through a function pointer is judged against the
+       prototype inside its type spelling (`int (*)(int, char *)`), reusing
+       the same `chk_assignable` / `arity_warn` kernel as a named call. This is
+       the shared path for a function-pointer variable, a function-pointer
+       *field* (`o.add(...)`) and a pointer-expression callee (`(*p)(...)`);
+       silent when the spelling is not a function pointer. */
+    int  chk_callptr_args(const char *ftype, const char *callee, int args,
+                          int line, int col);
+    /* SH-115: a struct's brace initializer is judged item by item when one
+       item is exactly one literal, so `struct P p = { .x = "s" }` produces the
+       same `initializer:` finding as `int x = "s"`. Non-literal items are
+       left to C -- no expression is re-parsed and no false positive is
+       possible. Local, file-scope, compound-literal and `new T { ... }`
+       initializers share it. */
+    int  chk_brace_init(const char *type, const char *raw, int line, int col);
     /* PH-79 fix SH-100: an array value where a `T[]` is expected becomes a
        view node (`N_SLICE_RANGE` aux 3). `n` is returned unchanged when it is
        already a slice, is not an array, or is a `T a[]` parameter (decayed to
@@ -1893,9 +1908,11 @@ impl ExprOps for Expr {
         if (r == 2) {
             /* LANG-14: a struct on either side cannot be converted by C, so
                this is a hard error with the same wording the static-recipe
-               path uses (`argtype_check_static`). */
+               path uses (`argtype_check_static`). SH-115: it stays hard at
+               every `--check-level`; a `warn` downgrade would let the C
+               compiler (which is not run with -Werror) build a bad call. */
             snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
-            return tool::diag::ct_type_fail(line, col, full, self->sup->mem->path);
+            return tool::diag::ct_sem_error(line, col, full, self->sup->mem->path);
         }
         if (r == 1) {
             if (self->sup->type_warn(line, col, callee, msg) != 0)
@@ -1917,7 +1934,9 @@ impl ExprOps for Expr {
         if (!self->argtype_mismatch(args, -1, ti, mi, msg, sizeof msg))
             return 0;
         snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
-        return tool::diag::ct_type_fail(line, col, full, self->sup->mem->path);
+        /* SH-115: hard at every level -- the recipe may splice the actual into
+           the generated call and cc will not necessarily reject it. */
+        return tool::diag::ct_sem_error(line, col, full, self->sup->mem->path);
     }
 
     /* 19.3: an impl's parameter spelling against the trait's -- two declared
@@ -4084,7 +4103,14 @@ impl ExprOps for Expr {
                 if (self->container_init_check(tbuf) != 0) return -1;
                 rn = self->sup->new_node(N_RAW);
                 if (rn < 0) return -1;
-                if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+                {
+                    /* SH-115: a compound literal is a struct brace
+                       initializer too; judge its literal items. */
+                    int bl = self->lex->tokline;
+                    int bc = self->lex->tokstart - self->lex->lstart + 1;
+                    if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+                    if (self->chk_brace_init(tbuf, raw, bl, bc) != 0) return -1;
+                }
                 off = self->arena->str_begin();
                 for (k = 0; raw[k]; k++)
                     if (self->arena->str_put(raw[k]) != 0)
@@ -5362,6 +5388,8 @@ impl ExprOps for Expr {
                            with a member node as the callee (D-4). */
                         if (!self->arena->nodes[m].text[0] && self->fnptr_field(rtype, fname)) {
                             int mf;
+                            char fpt[MAX_TEXT];
+                            int fad = 0;
                             mf = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
                             if (mf < 0) return -1;
                             self->arena->nodes[mf].a = n;
@@ -5370,6 +5398,14 @@ impl ExprOps for Expr {
                             self->arena->nodes[m].a = (args == 0) ? -1 : args;
                             self->arena->nodes[m].b = mf;
                             self->arena->nodes[m].aux = 2;
+                            /* SH-115: the call is the member expression, so
+                               the prototype comes from the field's type --
+                               the residual path LANG-19 left open. */
+                            if (self->types_mode && *self->types_mode
+                                && self->static_ctype(mf, fpt, sizeof fpt, &fad, 0)
+                                && fad == 0
+                                && self->chk_callptr_args(fpt, fname, args, mline, mcol) != 0)
+                                return -1;
                         }
                         /* Still unresolved: the method may belong to a static
                            type host (`map ... for type char *`). Keep the call
@@ -5734,13 +5770,58 @@ impl ExprOps for Expr {
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
                 /* a call through a pointer expression: `(*p)(x)` (D-7). A plain
                    `name(...)` was already consumed by `parse_primary`. */
-                args = self->parse_args();
-                if (args < 0) return -1;
-                m = self->sup->new_node(N_CALL);
-                if (m < 0) return -1;
-                self->arena->nodes[m].a = (args == 0) ? -1 : args;
-                self->arena->nodes[m].b = n;
-                self->arena->nodes[m].aux = 2;
+                {
+                    int pcl = self->lex->tokline;
+                    int pcc = self->lex->tokstart - self->lex->lstart + 1;
+                    args = self->parse_args();
+                    if (args < 0) return -1;
+                    m = self->sup->new_node(N_CALL);
+                    if (m < 0) return -1;
+                    self->arena->nodes[m].a = (args == 0) ? -1 : args;
+                    self->arena->nodes[m].b = n;
+                    self->arena->nodes[m].aux = 2;
+                    /* SH-115: the callee is an expression, so its spelling
+                       carries the prototype (`int (*)(int)`); judge the
+                       actuals the same way a named call judges them. A callee
+                       whose type the tables cannot pin stays silent. */
+                    if (self->types_mode && *self->types_mode) {
+                        char ppt[MAX_TEXT];
+                        char lbl[MAX_TEXT];
+                        int pad = 0;
+                        int typed = 0;
+                        if (self->static_ctype(n, ppt, sizeof ppt, &pad, 0) && pad == 0) {
+                            typed = 1;
+                        } else if (self->arena->nodes[n].kind == N_DEREF) {
+                            /* `(*p)` where `p` already *is* the function
+                               pointer: dereferencing a function pointer
+                               yields the same function pointer, so its
+                               spelling is the one to judge. */
+                            int dn = self->arena->nodes[n].a;
+                            char dty[MAX_TEXT];
+                            int dad = 0;
+                            if (self->static_ctype(dn, dty, sizeof dty, &dad, 0)
+                                && dad == 0 && strstr(dty, "(*")) {
+                                snprintf(ppt, sizeof ppt, "%s", dty);
+                                typed = 1;
+                            }
+                        }
+                        if (typed) {
+                            lbl[0] = 0;
+                            if (self->arena->nodes[n].kind == N_VAR) {
+                                snprintf(lbl, sizeof lbl, "%s", self->arena->nodes[n].text2);
+                            } else if (self->arena->nodes[n].kind == N_DEREF
+                                       && self->arena->nodes[self->arena->nodes[n].a].kind
+                                          == N_VAR) {
+                                snprintf(lbl, sizeof lbl, "%s",
+                                         self->arena->nodes[self->arena->nodes[n].a].text2);
+                            } else {
+                                snprintf(lbl, sizeof lbl, "%s", "function pointer");
+                            }
+                            if (self->chk_callptr_args(ppt, lbl, args, pcl, pcc) != 0)
+                                return -1;
+                        }
+                    }
+                }
                 n = m;
                 continue;
             }
@@ -6673,74 +6754,17 @@ impl ExprOps for Expr {
                 /* PH-69-R2 (LANG-19): a call through a function-pointer
                    variable has no symbol row, so its prototype is parsed from
                    the variable's type (`int (*)(int, char *)`) and the same
-                   arity/type kernel is applied. A `...` tail accepts extras. */
+                   arity/type kernel is applied. A `...` tail accepts extras.
+                   SH-115 moved the kernel into `chk_callptr_args`, which the
+                   field and pointer-expression paths share. */
                 if (self->types_mode && *self->types_mode
                     && self->sym->find_func(self->arena->nodes[n].text2) < 0) {
                     char ft[MAX_TEXT];
-                    char ps[MAX_TEXT];
                     const char *an0 = self->arena->nodes[n].text2;
                     if (self->sym->var_type(an0, ft, sizeof ft) == 0
-                        && strstr(ft, "(*)") != 0) {
-                        const char *last = strrchr(ft, ')');
-                        const char *lp = last;
-                        if (last) {
-                            while (lp > ft && *lp != '(') lp--;
-                        }
-                        if (last && *lp == '(' && last > lp + 1) {
-                            int plen = (int)(last - lp - 1);
-                            int ai = (args == 0) ? -1 : args;
-                            int k = 0;
-                            int variadic = 0;
-                            if (plen >= (int)sizeof ps) plen = (int)sizeof ps - 1;
-                            memcpy(ps, lp + 1, (size_t)plen);
-                            ps[plen] = 0;
-                            while (ps[0]) {
-                                char pt[MAX_TEXT];
-                                int n = 0;
-                                char *pp = ps;
-                                while (*pp == ' ') pp++;
-                                if (strncmp(pp, "...", 3) == 0) { variadic = 1; break; }
-                                while (*pp && *pp != ',') {
-                                    if (n < (int)sizeof pt - 1) pt[n++] = *pp;
-                                    pp++;
-                                }
-                                pt[n] = 0;
-                                while (n > 0 && pt[n - 1] == ' ') pt[--n] = 0;
-                                if (*pp == ',') pp++;
-                                memmove(ps, pp, strlen(pp) + 1);
-                                if (strcmp(pt, "void") == 0 && ai < 0) break;
-                                if (ai < 0) {
-                                    char amsg[MAX_TEXT];
-                                    snprintf(amsg, sizeof amsg, "takes more arguments, %d given", k);
-                                    if (self->sup->arity_warn(self->call_line,
-                                                         self->call_col,
-                                                         an0, amsg) != 0) return -1;
-                                    break;
-                                }
-                                if (pt[0]) {
-                                    char out[MAX_TEXT];
-                                    int z = 0;
-                                    if (self->chk_type(ai, out, sizeof out, &z) == 0) {
-                                        if (self->arg_base + k < MAX_ARG_POS) {
-                                            self->chk_line = self->arg_line[self->arg_base + k];
-                                            self->chk_col = self->arg_col[self->arg_base + k];
-                                        }
-                                        self->chk_arg = k + 1;
-                                        if (self->chk_assignable(pt, out, z, 6) != 0) return -1;
-                                    }
-                                }
-                                k++;
-                                ai = self->arena->nodes[ai].next;
-                            }
-                            if (!variadic && ai >= 0) {
-                                char amsg[MAX_TEXT];
-                                snprintf(amsg, sizeof amsg, "takes fewer arguments, %d given", k + 1);
-                                if (self->sup->arity_warn(self->call_line,
-                                                     self->call_col,
-                                                     an0, amsg) != 0) return -1;
-                            }
-                        }
-                    }
+                        && self->chk_callptr_args(ft, an0, args,
+                                                  self->call_line, self->call_col) != 0)
+                        return -1;
                 }
                 {
                     const char *an = self->arena->nodes[n].text2;
@@ -7655,7 +7679,14 @@ impl ExprNew for Expr {
                      "'new %s' needs a brace initializer; only 'new T { ... }' is supported", base);
             return tool::diag::ct_sem_error(nline, ncol, nmsg, self->sup->mem->path);
         }
-        if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+        {
+            /* SH-115: the payload is the template's brace initializer, so the
+               same literal-item judgement applies (`new P { .x = "s" }`). */
+            int bl = self->lex->tokline;
+            int bc = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+            if (self->chk_brace_init(tbuf, raw, bl, bc) != 0) return -1;
+        }
         if (self->sup->rewrite_init_text(tbuf, raw, fixed, sizeof fixed) != 0) return -1;
         /* register the box<T> instance (the type parser would do the same for
            a `box<T>` spelling); the template's fields substitute T -> base */
@@ -8258,7 +8289,300 @@ impl ExprTraitInst for Expr {
     }
 }
 
+/* SH-115: the brace-initializer item scanner below is plain text work. It
+   never re-parses an expression; it only recognises an item that is one
+   literal and answers the C type `chk_assignable` needs. Anything else is
+   "undecidable" and skipped, which is what keeps the check free of false
+   positives. */
+static int bplus_space(int c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+static int bplus_id(int c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+        || (c >= '0' && c <= '9') || c == '_';
+}
+
+/* `s[0..n)` is one literal exactly when it is a string, a character constant,
+   or a decimal integer / floating literal with an optional suffix. `out` is
+   the C value type, `is_zero` marks the integer constant 0 (the null pointer
+   constant). 0 means "not one literal". */
+static int bplus_lit_type(const char *s, int n, char *out, int cap, int *is_zero)
+{
+    int i, j, digits, dots, exps, suf_at, sn, all_zero, k, ucount, lcount;
+    char suf[8];
+
+    *is_zero = 0;
+    if (n <= 0) return 0;
+    if (s[0] == '"' && n >= 2 && s[n - 1] == '"') {
+        snprintf(out, (size_t)cap, "%s", "char *");
+        return 1;
+    }
+    if (s[0] == '\'' && n >= 2 && s[n - 1] == '\'') {
+        snprintf(out, (size_t)cap, "%s", "int");
+        return 1;
+    }
+    i = 0;
+    if (i < n && (s[i] == '-' || s[i] == '+')) i++;
+    j = i;
+    digits = 0;
+    dots = 0;
+    exps = 0;
+    while (i < n && s[i] >= '0' && s[i] <= '9') { i++; digits++; }
+    if (i < n && s[i] == '.') {
+        dots = 1;
+        i++;
+        while (i < n && s[i] >= '0' && s[i] <= '9') { i++; digits++; }
+    }
+    if (digits == 0) return 0;
+    if (i < n && (s[i] == 'e' || s[i] == 'E')) {
+        int ed = 0;
+        exps = 1;
+        i++;
+        if (i < n && (s[i] == '+' || s[i] == '-')) i++;
+        while (i < n && s[i] >= '0' && s[i] <= '9') { i++; ed++; }
+        if (ed == 0) return 0;
+    }
+    suf_at = i;
+    sn = 0;
+    while (i < n && (s[i] == 'u' || s[i] == 'U' || s[i] == 'l' || s[i] == 'L'
+                     || s[i] == 'f' || s[i] == 'F')) {
+        if (sn + 1 >= (int)sizeof suf) return 0;
+        suf[sn] = s[i];
+        sn++;
+        i++;
+    }
+    suf[sn] = 0;
+    if (i != n) return 0;              /* not a single literal */
+    if (dots || exps || strchr(suf, 'f') != 0 || strchr(suf, 'F') != 0) {
+        if (strchr(suf, 'u') != 0 || strchr(suf, 'U') != 0) return 0;
+        if (sn == 0) snprintf(out, (size_t)cap, "%s", "double");
+        else if (sn == 1 && (suf[0] == 'f' || suf[0] == 'F'))
+            snprintf(out, (size_t)cap, "%s", "float");
+        else {
+            for (k = 0; k < sn; k++)
+                if (suf[k] != 'l' && suf[k] != 'L') return 0;
+            snprintf(out, (size_t)cap, "%s", "long double");
+        }
+        return 1;
+    }
+    /* an integer suffix: the only spellings that name a C numeric type */
+    ucount = 0;
+    lcount = 0;
+    for (k = 0; k < sn; k++) {
+        if (suf[k] == 'u' || suf[k] == 'U') ucount++;
+        else if (suf[k] == 'l' || suf[k] == 'L') lcount++;
+        else return 0;
+    }
+    if (sn == 0) snprintf(out, (size_t)cap, "%s", "int");
+    else if (ucount && !lcount) snprintf(out, (size_t)cap, "%s", "unsigned");
+    else if (!ucount && lcount == 1) snprintf(out, (size_t)cap, "%s", "long");
+    else if (!ucount && lcount >= 2) snprintf(out, (size_t)cap, "%s", "long long");
+    else if (ucount == 1 && lcount == 1) snprintf(out, (size_t)cap, "%s", "unsigned long");
+    else if (ucount == 1 && lcount >= 2) snprintf(out, (size_t)cap, "%s", "unsigned long long");
+    else return 0;
+    all_zero = 1;
+    for (k = j; k < suf_at; k++)
+        if (s[k] != '.' && s[k] != '0') { all_zero = 0; break; }
+    if (all_zero && digits > 0) *is_zero = 1;
+    return 1;
+}
+
 impl ExprTypes for Expr {
+    /* SH-115: judge a call through a function pointer. The callee's spelling
+       carries its prototype (`RET (*)(params)`), so the same kernel the named
+       call path uses applies here: `chk_type` for each actual, then
+       `chk_assignable(diag=6)`, and `arity_warn` for a count that cannot
+       match. `...` accepts extra actuals. A spelling without `(*)`, or a
+       prototype the tables cannot pin, answers 0 and the call stays silent
+       (D32-4's "undecidable is not an error"). */
+    int chk_callptr_args(const char *ftype, const char *callee, int args,
+                         int line, int col)
+    {
+        char ps[MAX_TEXT];
+        const char *last;
+        const char *lp;
+        int plen, ai, k, variadic;
+
+        if (!self->types_mode || !*self->types_mode) return 0;
+        if (!ftype || strstr(ftype, "(*)") == 0) return 0;
+        last = strrchr(ftype, ')');
+        if (!last) return 0;
+        lp = last;
+        while (lp > ftype && *lp != '(') lp--;
+        if (*lp != '(' || last <= lp + 1) return 0;
+        plen = (int)(last - lp - 1);
+        if (plen >= (int)sizeof ps) plen = (int)sizeof ps - 1;
+        memcpy(ps, lp + 1, (size_t)plen);
+        ps[plen] = 0;
+        ai = (args == 0) ? -1 : args;
+        k = 0;
+        variadic = 0;
+        while (ps[0]) {
+            char pt[MAX_TEXT];
+            int n = 0;
+            char *pp = ps;
+            while (*pp == ' ') pp++;
+            if (strncmp(pp, "...", 3) == 0) { variadic = 1; break; }
+            while (*pp && *pp != ',') {
+                if (n < (int)sizeof pt - 1) pt[n++] = *pp;
+                pp++;
+            }
+            pt[n] = 0;
+            while (n > 0 && pt[n - 1] == ' ') pt[--n] = 0;
+            if (*pp == ',') pp++;
+            memmove(ps, pp, strlen(pp) + 1);
+            if (strcmp(pt, "void") == 0 && ai < 0) break;
+            if (ai < 0) {
+                char amsg[MAX_TEXT];
+                snprintf(amsg, sizeof amsg, "takes more arguments, %d given", k);
+                if (self->sup->arity_warn(line, col, callee, amsg) != 0) return -1;
+                break;
+            }
+            if (pt[0]) {
+                char out[MAX_TEXT];
+                int z = 0;
+                if (self->chk_type(ai, out, sizeof out, &z) == 0) {
+                    if (self->arg_base + k < MAX_ARG_POS) {
+                        self->chk_line = self->arg_line[self->arg_base + k];
+                        self->chk_col = self->arg_col[self->arg_base + k];
+                    } else {
+                        self->chk_line = line;
+                        self->chk_col = col;
+                    }
+                    self->chk_arg = k + 1;
+                    if (self->chk_assignable(pt, out, z, 6) != 0) return -1;
+                }
+            }
+            k++;
+            ai = self->arena->nodes[ai].next;
+        }
+        if (!variadic && ai >= 0) {
+            char amsg[MAX_TEXT];
+            snprintf(amsg, sizeof amsg, "takes fewer arguments, %d given", k + 1);
+            if (self->sup->arity_warn(line, col, callee, amsg) != 0) return -1;
+        }
+        return 0;
+    }
+
+    /* SH-115: walk a struct brace initializer and judge the items that are one
+       literal. The type table gives each field's declared type; a positional
+       item maps to the field at its index, a `.name = value` item to the named
+       field. A nested brace / expression / array designator is skipped, so
+       only a confidently wrong literal is reported, in the same
+       `initializer:` words the non-brace path uses. */
+    int chk_brace_init(const char *type, const char *raw, int line, int col)
+    {
+        char base[MAX_TEXT];
+        char fname[MAX_TEXT];
+        char actual[MAX_TEXT];
+        const char *bt;
+        int si, fi, pos, i, n, item_start, item_end, depth, s0, e0, k, vstart;
+        int designated, is_zero, aline, acol;
+        size_t bl;
+
+        if (!self->types_mode || !*self->types_mode) return 0;
+        if (!type || !raw) return 0;
+        bt = type;
+        if (strncmp(bt, "struct ", 7) == 0) bt += 7;
+        while (*bt == ' ') bt++;
+        snprintf(base, sizeof base, "%s", bt);
+        bl = strlen(base);
+        while (bl > 0 && base[bl - 1] == ' ') base[--bl] = 0;
+        if (!base[0] || strchr(base, '*') || strchr(base, '[') || strchr(base, '('))
+            return 0;
+        si = self->sym->find_struct(base);
+        if (si < 0) return 0;
+        n = (int)strlen(raw);
+        if (n < 2 || raw[0] != '{' || raw[n - 1] != '}') return 0;
+        /* the first item's shape decides the whole list: C forbids mixing a
+           positional item with a designator */
+        i = 1;
+        while (i < n - 1 && bplus_space(raw[i])) i++;
+        designated = (i < n - 1 && raw[i] == '.') ? 1 : 0;
+        pos = 0;
+        i = 1;
+        while (i < n - 1) {
+            item_start = i;
+            depth = 0;
+            while (i < n - 1) {
+                int c = raw[i];
+                if (c == '"' || c == '\'') {
+                    int q = c;
+                    i++;
+                    while (i < n - 1) {
+                        if (raw[i] == '\\' && i + 1 < n - 1) { i += 2; continue; }
+                        if (raw[i] == q) { i++; break; }
+                        i++;
+                    }
+                    continue;
+                }
+                if (c == '(' || c == '[' || c == '{') { depth++; i++; continue; }
+                if (c == ')' || c == ']' || c == '}') {
+                    if (depth > 0) depth--;
+                    i++;
+                    continue;
+                }
+                if (c == ',' && depth == 0) break;
+                i++;
+            }
+            item_end = i;
+            if (i < n - 1) i++;            /* skip the comma */
+            s0 = item_start;
+            e0 = item_end;
+            while (s0 < e0 && bplus_space(raw[s0])) s0++;
+            while (e0 > s0 && bplus_space(raw[e0 - 1])) e0--;
+            fi = -1;
+            vstart = e0;
+            if (s0 < e0 && raw[s0] == '.') {
+                int fn = 0;
+                k = s0 + 1;
+                while (k < e0 && bplus_id(raw[k])) {
+                    if (fn + 1 < (int)sizeof fname) fname[fn++] = raw[k];
+                    k++;
+                }
+                fname[fn] = 0;
+                while (k < e0 && bplus_space(raw[k])) k++;
+                if (fn > 0 && k < e0 && raw[k] == '=') {
+                    k++;
+                    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+                        if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0)
+                            break;
+                    if (fi >= self->sym->structs[si].nfields) fi = -1;
+                    vstart = k;
+                }
+            } else if (!designated && s0 < e0) {
+                fi = pos;
+                vstart = s0;
+            }
+            pos++;
+            if (fi < 0 || fi >= self->sym->structs[si].nfields) continue;
+            if (self->sym->structs[si].fields[fi].dims[0]) continue;
+            while (vstart < e0 && bplus_space(raw[vstart])) vstart++;
+            while (e0 > vstart && bplus_space(raw[e0 - 1])) e0--;
+            if (vstart >= e0) continue;
+            if (!bplus_lit_type(raw + vstart, e0 - vstart, actual, sizeof actual, &is_zero))
+                continue;
+            /* the item's own source position, counted from the `{` the caller
+               passed in; the diagnostic then names the item, not the brace */
+            aline = line;
+            acol = col;
+            for (k = 0; k < s0; k++) {
+                if (raw[k] == '\n') { aline++; acol = 1; }
+                else acol++;
+            }
+            self->chk_line = aline;
+            self->chk_col = acol;
+            self->chk_arg = 0;
+            if (self->chk_assignable(self->sym->structs[si].fields[fi].type,
+                                     actual, is_zero, 1) != 0)
+                return -1;
+        }
+        return 0;
+    }
+
     /* Phase 32 S1: the type the optional `--types` pass judges. The core covers
        the shapes `static_ctype` already pins -- a variable, a member / arrow
        field, a deref, an address, a call and one subscript -- and reports
@@ -8468,8 +8792,10 @@ impl ExprTypes for Expr {
             snprintf(msg, sizeof msg, "%s: expected '%s', got '%s'",
                      label, formal, actual);
         }
+        /* SH-115: a `$` target / hard-return mismatch is a C-invalid
+           assignment, so it does not downgrade under `--check-level=warn`. */
         if (diag == 7 || diag == 8)
-            return tool::diag::ct_type_fail(self->chk_line, self->chk_col, msg,
+            return tool::diag::ct_sem_error(self->chk_line, self->chk_col, msg,
                                             self->sup->mem->path);
         return tool::diag::ct_type_warn(self->chk_line, self->chk_col, "", msg,
                                         self->sup->mem->path);
