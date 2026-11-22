@@ -206,6 +206,8 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v0.x B+ 强化 + CLI 默认 `warn` | 下一 v0.x（不占 v1.0） | 下一 v0.x | 补静态映射/未知类型/函数指针字段/泛型与 ADT 可判定缺口；同批把 CLI 默认 `off`→`warn`（[SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md)） |
 | v1.0 前内置层目录 `lib/core`（Stage 1） | 当前 pre 窗口（`v1-PH-0` 前） | v1.0 前 | **不等 v1.0 窗口**；REQ 就绪，待 DEV；`CT_CORE_DIR` + 一个 MINOR 回退；迁移卡见 [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) |
 | v1.0 前内置层 `namespace core`（Stage 2） | 当前 pre 窗口（Stage 1 之后） | v1.0 前 | 先补 spec §4.51/§4.70/§4.71 的命名空间与兼容窗条款，再独立提交；`core::Vec`/`core::String`/`core::box` + 根拼写一个 MINOR 别名（[DOC-87](../../issues/docs/doc-87-lib-core-rename.md) Stage 2） |
+| v1.0 前内建 trait 可见声明 | 当前 pre 窗口（DOC-87 Stage 1 后） | v1.0 前 | `Drop` / `Handback` 声明入 `lib/core`；`AutoDrop` 不是 trait；parser 例外、无 vtable、`MAX_TRAITS` 计数不变（[LANG-23](../../issues/lang/lang-23-builtin-trait-declarations.md)） |
+| v1.0 前语言名书写 `CT → Ct` | 当前 pre 窗口（文档批） | v1.0 前 | 先全量替换活跃散文，再开 `check-docs` ratchet；命令/路径/环境变量/历史目录豁免（[DOC-94](../../issues/docs/doc-94-ct-spelling.md)） |
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
 | v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 | v1.0 前 JSON 节点包 | 包侧（不占 phase） | v1.0 前 | arena + 索引；NodeVec/NodeMap + JSON 库 + schema 生成器；包形态不占容量、不碰冻结（[PKG-24](../../issues/packages/pkg-24-json-node-arena.md)） |

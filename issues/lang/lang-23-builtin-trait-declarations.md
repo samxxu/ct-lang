@@ -7,8 +7,8 @@
 | 严重度 | Low–Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | Kimi 2026-11-21 说明；[language-spec §4.9](../../docs/language-spec.md#L455)、[§4.40](../../docs/language-spec.md#L1646)、[§4.71](../../docs/language-spec.md#L2950) |
-| 状态 | deferred |
-| 处置证据 | **待评估（v1.1；依赖 DOC-87 Stage 1 的 `lib/core`）** |
+| 状态 | open |
+| 处置证据 | **accepted（2026-11-22 所有者改判：提前到当前 pre 窗口，不再等 v1.1；依赖 DOC-87 Stage 1）** |
 
 ## 背景
 
@@ -62,7 +62,7 @@ pub trait Handback { void handback(); }
 - 不改变 Drop/Handback 的语义、生成胶水、泄漏告警；
 - 不把 `AutoDrop` 变成 trait；
 - 不把 `arena` 收进编译器内建层（arena 是 std 包的用户面实现，维持现状）；
-- 不在 v1.0 冻结期实施（v1.1 评估）。
+- 不与 DOC-87 Stage 1 同一提交；Stage 1 落 `lib/core` 后独立提交、独立回滚。
 
 ## 风险
 
@@ -78,3 +78,15 @@ pub trait Handback { void handback(); }
 - [DOC-87](../../issues/docs/doc-87-lib-core-rename.md)（`lib/core` 目录）
 - [language-spec §4.9 / §4.40 / §4.71](../../docs/language-spec.md#L455)
 - [glossary.md](../../docs/glossary.md)
+
+## 排期改判（2026-11-22，所有者）
+
+**结论：`deferred` → `open`，提前到当前 pre 窗口（v1.0 前），不再等 v1.1。**
+
+- 执行顺序：DOC-87 Stage 1 落 `lib/core` → 独立提交 LANG-23（parser 例外、Symbols 计数排除、
+  Emitter 分支优先级、编辑器索引、spec/glossary 条款）→ DOC-87 Stage 2 时再改
+  `core::Drop` / `core::Handback`；
+- 仍然只声明 `Drop` / `Handback` 两个 trait；**`AutoDrop` 是 `own` 的机制，不是 trait，
+  本卡不得为它生成声明**；
+- 代码与脚本由 DEV 执行，REQ 侧只改排期与验收；`AutoDrop` 的措辞纠正在
+  [lib/core 提案评估](../../docs/reviews/2026-11-22-lib-core-proposal-eval.md) §2 留档。

@@ -57,8 +57,8 @@
 - 先上 ratchet 会让现有文档立即变红，与 v1.0 前的文档收口冲突；
 - “C++ / C# / C3 的排版惯例”是品牌论证，不是技术约束，不能据此直接改全仓。
 
-处理建议：**单独立命名 ADR**（或所有者书面决定），先全量替换、再开 ratchet；
-在决定前，仓库继续用 **CT**，外部四份文档的写法不反向污染仓库。
+**2026-11-22 后续**：所有者已决定**立项**，见 [DOC-94](../../issues/docs/doc-94-ct-spelling.md)。
+执行顺序仍按本节：先全量替换活跃散文，最后开 `check-docs` ratchet；不要与 DOC-87 混提交。
 
 ## 5. 处置表
 
@@ -66,16 +66,16 @@
 | --- | --- |
 | Stage 1 `lib/core` + `CT_CORE_DIR` | 接受；DOC-87 已排当前 pre 窗口，待 DEV |
 | Stage 2 `namespace core` / `core::*` | 接受；先补 spec 命名空间条款，再独立提交 |
-| Drop / Handback 可见声明 | 由 LANG-23 承接；是否提前到 pre 窗口需所有者另定 |
+| Drop / Handback 可见声明 | 由 LANG-23 承接；**2026-11-22 已改判提前到当前 pre 窗口** |
 | AutoDrop | **不是 trait**，从本批删除 |
 | `std::arena → std::Arena` | 不接受（模块名小写合规，见前次评估） |
 | Arena 上收 `lib/core` | 不触发（selfhost 零外部 std 依赖） |
-| `CT → Ct` | 待命名 ADR；不随 DOC-87 批次执行 |
+| `CT → Ct` | **已立项** [DOC-94](../../issues/docs/doc-94-ct-spelling.md)；先替换后 ratchet，不随 DOC-87 批次 |
 | STD 配合清单措辞 | 改为“外部 std 消费者是否引用 CT 的 `lib/std`”，避免把 std 包叫 `lib/std` |
 
-## 6. 需要所有者拍板的两件事
+## 6. 已拍板（2026-11-22）
 
-1. **LANG-23 是否也提前**：Drop/Handback 的可见声明是否要在当前 pre 窗口完成；
-   若否，lib/core 批次只做目录/ENV + `namespace core`，不带 trait 声明。
-2. **`CT → Ct` 是否立项**：若要做，按命名 ADR + 全量替换 + 最后开 ratchet 三步走；
-   若不做，外部文档的 Ct 写法保持外部，仓库继续 CT。
+1. **LANG-23 提前**：Drop/Handback 的可见声明在当前 pre 窗口完成，排 DOC-87 Stage 1 之后；
+   状态已改 `open`，见 [LANG-23](../../issues/lang/lang-23-builtin-trait-declarations.md)。
+2. **`CT → Ct` 立项**：见 [DOC-94](../../issues/docs/doc-94-ct-spelling.md)；先全量替换活跃散文，
+   最后开 `check-docs` ratchet，不与 DOC-87 混提交。
