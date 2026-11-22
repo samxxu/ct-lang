@@ -13,12 +13,15 @@
 
 ## 现象
 
+> 术语先行：`lib/std` 是**编译器内置层**（自动加载，不是包）；`std` 才是外部 ct-pkg 包
+> （规范名 `ct/std`，`ct get` 安装、`import std::…` 使用）。不要把 std 包写成 `lib/std`。
+
 同一个 `std::arena` 在三处说法互相矛盾：
 
 1. [std-catalog](../../docs/std-catalog.md#L46)：`std::arena` 模块存在，入口 `std::arena::Arena`
    （核对基线 std 0.19.0）；
 2. [guide-for-c-programmers](../../docs/guide-for-c-programmers.md#L284-L290)：
-   “`lib/std` … 也没有公开的 `std::arena`”；
+   “`lib/std` … 也没有公开的 `std::arena`”（这里的 `lib/std` 指内置层，不是 std 包）；
 3. [battle/ct-guide-1](../../battle/ct-guide-1/verdict.md#L13)：`std::arena` 不存在，
    已从指引删除。
 
@@ -32,9 +35,10 @@
 1. **外部确认（STD 组）**：`std 0.19.0` 是否真的发布 `arena` 模块；入口、类型名、
    是否需要 `ct get` / `import`。这是唯一无法由 CT 仓单独判定的事实。
 2. **按确认结果统一 CT 文档**：
-   - 若存在：guide 改成“`lib/std` 没有内建 arena；`std` 包提供 `std::arena::Arena`，
-     需 `ct get ct/std` 并 `import std::arena::Arena`”；std-catalog 保留；battle 加一条
-     补充说明（历史记录不改写，追加当前口径）。
+   - 若存在：guide 改成“`lib/std`（内置层）没有 arena；`std` 包（规范名 `ct/std`，
+     不是 `lib/std`）提供 `std::arena::Arena`，需 `ct get ct/std` 并
+     `import std::arena::Arena`”；std-catalog 保留；battle 加一条补充说明
+     （历史记录不改写，追加当前口径）。
    - 若不存在：std-catalog 删除该行或标 `planned`；guide 保留“无公开 arena”；
      外部文档与本仓评估同步标注“未发布”。
 3. **不改名**：`arena` 是模块名，小写与 `std::str` / `std::io` 等 15 个模块一致；

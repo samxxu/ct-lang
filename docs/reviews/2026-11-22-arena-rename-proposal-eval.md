@@ -52,7 +52,7 @@
 | 出处 | 说法 |
 | --- | --- |
 | [std-catalog](../std-catalog.md#L46) | `std::arena` 模块存在，入口 `std::arena::Arena`（std 0.19.0） |
-| [guide-for-c-programmers](../guide-for-c-programmers.md#L284-L290) | “`lib/std` … 没有公开的 `std::arena`” |
+| [guide-for-c-programmers](../guide-for-c-programmers.md#L284-L290) | “`lib/std` … 没有公开的 `std::arena`”（`lib/std` 是内置层，不是 std 包） |
 | [battle/ct-guide-1](../../battle/ct-guide-1/verdict.md#L13) | `std::arena` 不存在，已从指引删除 |
 
 三者不可能同时为真。提议拿“std::arena 存在”作前提，但仓内没有任何代码引用它；
