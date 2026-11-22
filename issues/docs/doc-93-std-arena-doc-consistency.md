@@ -9,12 +9,14 @@
 | 依据 | [std::arena 改名提议评估](../../docs/reviews/2026-11-22-arena-rename-proposal-eval.md) §4 |
 | 文件 | [std-catalog](../../docs/std-catalog.md#L46)、[guide-for-c-programmers](../../docs/guide-for-c-programmers.md#L284-L290)、[battle/ct-guide-1](../../battle/ct-guide-1/verdict.md#L13) |
 | 状态 | open |
-| 处置证据 | **accepted（先请 STD 组确认；只统一文档，不改名、不迁 `lib/core`）** |
+| 处置证据 | **accepted（先请 STD 组确认；只统一文档；不改 `std::arena` 名、不把 Arena 上收 `lib/core`；内置层目录/命名空间迁移另见 DOC-87）** |
 
 ## 现象
 
 > 术语先行：`lib/std` 是**编译器内置层**（自动加载，不是包）；`std` 才是外部 ct-pkg 包
 > （规范名 `ct/std`，`ct get` 安装、`import std::…` 使用）。不要把 std 包写成 `lib/std`。
+> 内置层自身的目录/命名空间将改为 `lib/core` / `core::*`，见
+> [DOC-87](doc-87-lib-core-rename.md)；本卡只处理 `std::arena` 的口径，不预设改名已执行。
 
 同一个 `std::arena` 在三处说法互相矛盾：
 
