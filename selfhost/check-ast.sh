@@ -905,9 +905,19 @@ fi
 # PH-85 S85d (E85-5): the B checker on the build path with off / warn / error;
 # off is the default and is byte-for-byte the pre-PH-85 build.
 if bash test/ast/p85_a_wire.sh "$work/ct-ast" >"$work/p85a.out" 2>"$work/p85a.err"; then
-    ok "p85/a-wire (E85-5: off/warn/error, default off)"
+    ok "p85/a-wire (E85-5: off/warn/error, default warn since SH-115)"
 else
     bad "p85/a-wire" "$(cat "$work/p85a.out" "$work/p85a.err" | head -5)"
+fi
+
+# SH-115: B+ strengthening -- the CLI default `warn`, function-pointer *field*
+# call checking, struct brace-initializer item checking, and the pinned
+# ADT / match / generic / const-volatile shapes. Same finding text under
+# `ct check --types` and `ct build --check-level=warn`.
+if bash test/ast/p115_bplus.sh "$work/ct-ast" >"$work/p115.out" 2>"$work/p115.err"; then
+    ok "p115/b-plus (SH-115: default warn, fnptr field, brace init)"
+else
+    bad "p115/b-plus" "$(cat "$work/p115.out" "$work/p115.err" | head -8)"
 fi
 
 # PH-86 S86a (E86-1): the current token is a zero-copy view of the source

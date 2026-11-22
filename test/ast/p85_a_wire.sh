@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # PH-85 S85d probe: the B checker on the build path, off / warn / error.
 #
-# The mechanism: `ct build --check-level=off|warn|error`. `off` is the default
-# and must be byte-for-byte what the build did before PH-85; `warn` reports the
+# The mechanism: `ct build --check-level=off|warn|error`. SH-115 moved the CLI
+# default from `off` to `warn`; `off` is now the silent escape hatch and must
+# still be byte-for-byte what the build emitted before PH-85; `warn` reports the
 # `--types` findings as warnings and still writes the products; `error` turns
 # them into errors and stops before writing anything. The flag is build-only:
 # `ct check` already makes every finding an error (`--types`), so accepting the
@@ -55,7 +56,7 @@ build() {   # build <level> <src> <dir> <tag>
     echo $? >"$tmp/$tag.rc"
 }
 
-# 1) default and off are the same run: same exit code and same products
+# 1) default and off are the same products: same exit code, same bytes
 build default "$tmp/mismatch.ct" "$tmp/d0" d0
 build off "$tmp/mismatch.ct" "$tmp/off" off
 if [ "$(cat "$tmp/d0.rc")" = "$(cat "$tmp/off.rc")" ] \
@@ -145,6 +146,16 @@ if grep -q "warning: type mismatch:" "$tmp/at_off.err" \
     ok
 else
     bad "the pre-existing arg-type warning does not follow the level"
+fi
+
+# 9) SH-115: the CLI default is `warn`, so the same B finding prints without a
+#    flag; `--check-level=off` above remains the silent escape hatch.
+build default "$tmp/mismatch.ct" "$tmp/dw" dw
+if [ "$(cat "$tmp/dw.rc")" = "0" ] \
+   && grep -q "warning: return: expected 'int', got 'char \*'" "$tmp/dw.err"; then
+    ok
+else
+    bad "the CLI default is not warn: rc=$(cat "$tmp/dw.rc") $(head -2 "$tmp/dw.err" | tr '\n' ' ')"
 fi
 
 echo "p85a: $pass passed, $fail failed"
