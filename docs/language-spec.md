@@ -2540,6 +2540,33 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   已知偏差（`Map` 线性扫描、无哈希
   索引）见 `docs/history/design/phase29.md` §10.2。
 
+### 4.51.1 内置层命名空间 `core`（DOC-87 Stage 2，仅 ct-ast）
+
+`lib/core/` 的五个内置单元（`Vec` / `Option` / `Result` / `Str` / `Box`）声明
+`namespace core;`；源文件的**规范拼写**是 `core::Vec` / `core::Map` / `core::MapEntry` /
+`core::Option` / `core::Result` / `core::String` / `core::Str` / `core::U16String` /
+`core::U16Str` / `core::box`。`core::` 与根拼写指向同一个类型、同一份实例：
+
+```ct
+core::Vec<int> v;
+v.push(1);
+core::String s = "hi";
+core::box<Node> b = new Node { 1 };
+```
+
+- **兼容窗（一个 MINOR）**：根拼写 `Vec` / `Map` / `MapEntry` / `Option` / `Result` /
+  `String` / `Str` / `U16String` / `U16Str` / `box` 仍可用，本阶段不告警；窗口结束后
+  由清理 issue 删除根拼写，C 符号改写另立 issue。
+- **生成物**：兼容窗内 `core::` 是**源级命名空间别名**，内置层的 C 符号保持根拼写
+  （`Vec_int` / `String` / `box_P`），因此没有 ABI、`--emit-model` 或 golden 变化；
+  存量语料逐字节一致，旧→新符号映射是恒等映射。`core_` 前缀的 C 名字改写不在本阶段。
+- **不是包、不重叠**：`core::*` 是编译器内置层；外部 ct-pkg `std` 包仍占 `std::*`
+  （如 `std::str::CharStr`），两者命名空间不重叠，可以在同一个构建里共存。
+- **不是保留关键字**：`core` 只作为内置层的源级命名空间；用户按 §4.10 声明自己的
+  `namespace core` 不会被拒绝（内置名 `Vec` 等仍是保留名，见本节开头）。
+- **只影响查找**：`CT_CORE_DIR` / `lib/core` 只决定文件位置，不改变 `namespace`、文件名
+  或生成物（§1.2 的兼容窗）。
+
 ### 4.52 接收者上下文块 `expr into { … }`（Phase 30，仅 ct-ast）
 
 `into` 是**上下文关键字**：`int into = 1;` 仍是普通变量，只有「表达式 + `into {`」才起块。
@@ -2955,6 +2982,10 @@ parse("ab", n);  /* 调用点不写 out */
 
 ### 4.70 `String` / `Str`：UTF-8 owning 与借用（Phase 80，仅 ct-ast）
 
+> 命名空间：本节的 `String` / `Str` / `U16String` / `U16Str` 属于内置层 `core`，
+> 规范拼写是 `core::String` / `core::Str` / `core::U16String` / `core::U16Str`；
+> 根拼写在一个 MINOR 的兼容窗内仍可用（§4.51.1）。
+
 - **类型**：`String` 是 owning 句柄（`char *ptr` + `int len`，16 字节 LP64），`Str` 是同一布局的
   borrowed 视图（无 Drop）；`U16String` / `U16Str` 是 UTF-16 对（`uint16_t *ptr` + `int len`）。
   五个句柄之前都有 8 字节头 `struct ct_str_hdr { int refs; int aux; }`：`ptr - 8` 即头；
@@ -3016,6 +3047,9 @@ parse("ab", n);  /* 调用点不写 out */
   违约由 ASan / 真板证据兜底，不由类型系统证明。
 
 ### 4.71 `box<T>` / `new`：单对象句柄（Phase 81，仅 ct-ast）
+
+> 命名空间：`box` 属于内置层 `core`，规范拼写是 `core::box`；根拼写 `box` 在一个
+> MINOR 的兼容窗内仍可用（§4.51.1）。
 
 - **类型**：`box<T>` 是单元素 owning 句柄，布局 `{ struct ct_box_hdr *h; T *ptr; }`
   （LP64 16 字节）；8 字节头 `struct ct_box_hdr { int refs; int aux; }` 在 payload 前，
