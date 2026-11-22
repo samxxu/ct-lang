@@ -57,7 +57,8 @@
 ## 5. 落地卡
 
 - [LANG-26](../../issues/lang/lang-26-binding-site-conversion.md)：v1.1，先 ADR；
-- [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)：包侧，v1.0 前交付。
+- [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)：**外部包工作**，由 std 包/外部仓交付；
+  CT 仓只保留接口依赖记录，不进入 `v1-release-plan`。外部目标 v1.0 前。
 
 ## 6. 仍未闭合的设计项（不阻塞定性）
 

@@ -210,7 +210,6 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.0 前语言名书写 `CT → Ct` | 当前 pre 窗口（文档批） | v1.0 前 | 先全量替换活跃散文，再开 `check-docs` ratchet；命令/路径/环境变量/历史目录豁免（[DOC-94](../../issues/docs/doc-94-ct-spelling.md)） |
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
 | v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
-| v1.0 前 JSON 节点包 | 包侧（不占 phase） | v1.0 前 | arena + 索引；NodeVec/NodeMap + JSON 库 + schema 生成器；包形态不占容量、不碰冻结（[PKG-24](../../issues/packages/pkg-24-json-node-arena.md)） |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
 | v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | CLI 已在下一 v0.x 默认 `warn`（SH-115）；证据达标则升 `error`，未达标回退“可用不默认” |
@@ -225,6 +224,11 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.1 JSON 诊断 parse 通道 | `v1-PH-1` | v1.1 train | parse 错误输出与 warning/type 同构的 JSON；稳定 code 不在本项（[LANG-10](../../issues/lang/lang-10-machine-readable-diagnostics.md)） |
 | v1.2 诊断 code registry | `v1-PH-2` | v1.2 train | 稳定 `E-*`/`W-*` code + registry；与 JSON 通道分开（[LANG-25](../../issues/lang/lang-25-diagnostic-code-registry.md)） |
 | v1.2 Typed/Lowered IR | `v1-PH-2` | v1.2 train | 完整 IR + 统一清理 CFG；先设计后实施，不进入 v1.0/v1.1 门禁（[SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md)） |
+
+> **包侧 / 外部工作不纳入本表**：例如 [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)
+> （JSON 节点包：arena + 索引、NodeVec/NodeMap、schema）由 std 包 / 外部仓交付；
+> 本仓只维护 [LANG-26](../../issues/lang/lang-26-binding-site-conversion.md) 的绑定点转换 ADR
+> 与接口需求，不把外部包的排期、验收或门禁写进 CT 发布路线。
 
 > 该编号依赖 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md)
 > 被主规范受理。未受理前，v1.0/v1.1/v1.2 仍按旧规则登记 `major-release`/`release-train` deviation；

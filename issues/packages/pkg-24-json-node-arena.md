@@ -2,13 +2,17 @@
 
 | 项 | 值 |
 | --- | --- |
-| 模块 | packages（std 包 / 外部仓） |
+| 模块 | packages（std 包 / 外部仓；不在 CT 仓计划） |
 | 定性 | **新特性（包侧）**（所有者 2026-11-22 裁定） |
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22） |
 | 依据 | [REQ 卡评估](../../docs/reviews/2026-11-22-req-node-conversion-protocol-eval.md)、[LANG-26](../lang/lang-26-binding-site-conversion.md) |
 | 状态 | open |
-| 处置证据 | **accepted（std 包/外部仓；v1.0 前交付；不占编译器容量、不碰冻结）** |
+| 处置证据 | **accepted（外部工作；外部目标 v1.0 前；不进入 CT `v1-release-plan`、roadmap 或门禁；不占编译器容量、不碰冻结）** |
+
+> **归属**：本卡在 CT 仓**只作接口依赖记录**。JSON 库、NodeVec/NodeMap、schema 生成器的
+> 交付、排期与验收由 std 包 / 外部仓负责；CT 仓只维护 LANG-26 的绑定点转换 ADR，
+> 以及包需要的 `map trait` / 容器接口。外部包的进展不写进 CT 发布路线。
 
 ## 定位
 
