@@ -96,7 +96,7 @@
 | [reviews/full-review-latest-disposition.md](reviews/full-review-latest-disposition.md) | 该评审处置：接受项落库、争议项 [battle/v1-readiness-1](../battle/v1-readiness-1/verdict.md) 判决、Tier 1/Tier 2 门禁 | 查看处置 |
 | [reviews/2026-11-21-v088-external-review-eval.md](reviews/2026-11-21-v088-external-review-eval.md) | 外部 v0.88 评审与惯用卡评估：MAX_FUNCS/SH-104-105 勘误、lib/core 已定 bugfix、SH-73 已裁定 bug、惯用卡逐条修正 | 查看外部评估 |
 | [reviews/2026-11-22-grokbot-architecture-assessment-eval.md](reviews/2026-11-22-grokbot-architecture-assessment-eval.md) | GrokBot 外部架构评估核对：规模/测试/容量/许可逐项一致；3 处事实错误（内置层预算、issues 计数、`atomic` 分类）；无新架构项 | 查看外部评估 |
-| [reviews/2026-11-22-kimi-v088-review-eval.md](reviews/2026-11-22-kimi-v088-review-eval.md) | Kimi v0.88 评审核对：非 GrokBot 评阅；D4/D5/D6 已闭环、D2 待 SH-110；`MAX_FUNCS` 475/512 为旧数；附录 CLI `warn` 与现行三档冲突 | 查看外部评估 |
+| [reviews/2026-11-22-kimi-v088-review-eval.md](reviews/2026-11-22-kimi-v088-review-eval.md) | Kimi v0.88 评审核对：非 GrokBot 评阅；D4/D5/D6 已闭环、D2 待 SH-110；`MAX_FUNCS` 475/512 为旧数；CLI `warn` 已裁决提前到下一 v0.x（SH-115） | 查看外部评估 |
 | [reviews/](reviews/) | 历史全面评审（v0.77）：网络挂起、治理门禁缺位、台账未闭合、phase-ID 迁移、文档漂移；其中网络挂起与 C 边界 cwd 已在 v0.88 前修复 | 追溯 |
 | [../issues/README.md](../issues/README.md) | 审查发现台账（每条一文件，含状态与处置） |
 | [history/README.md](history/README.md) | 历史档案索引：已关闭阶段的设计记录与评审报告 |

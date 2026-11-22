@@ -64,16 +64,18 @@ ct check --types hello.ct               # 可选类型检查
 | `ct-ast file.ct -o file.c` | 单文件编译（不解析 `import`） |
 | `ct build main.ct -o prog` | 多文件构建；`import` 生效，最后调用 `cc` |
 | `ct build --emit-c main.ct -o dir` | 多文件构建，只写生成的 `.c` / `.h` |
-| `ct build --check-level=off\|warn\|error main.ct -o prog` | 构建时运行 B 的 `--types` 检查（PH-85）：`off` 默认、行为不变；`warn` 报告但不阻断；`error` 报告并阻断，不写产物 |
+| `ct build --check-level=off\|warn\|error main.ct -o prog` | 构建时运行 B 的 `--types` 检查（PH-85）：v0.88.3 现状 `off` 默认、行为不变；`warn` 报告但不阻断；`error` 报告并阻断，不写产物。**决策（2026-11-22）**：下一 v0.x 随 SH-115 把默认升 `warn` |
 
 **B 检查的构建接线（PH-85，D2 = B+）**：`ct build --check-level=…` 把 `ct check --types`
-已有的判定（赋值/初值/`return`/`$` 目标/实参的静态类型）接进构建路径。默认 `off`，
+已有的判定（赋值/初值/`return`/`$` 目标/实参的静态类型）接进构建路径。v0.88.3 仍默认 `off`，
 生成物与 v0.84.x 逐字节一致；`warn` 用 `warning:` 打印发现、构建继续；`error` 用
-`error:` 打印并在写任何 `.c`/`.h` 之前退出。**默认强制**留 v1.1（S2），本阶段只交付机制；
-`ct check --types` 的默认与严重级不变。
+`error:` 打印并在写任何 `.c`/`.h` 之前退出。**所有者 2026-11-22 决定**：类型检测强化提前，
+下一 v0.x 随 [SH-115](../issues/selfhost/sh115-b-plus-strengthening.md) 把 CLI 默认升 `warn`
+（生成物不变，只多 warning；`--check-level=off` 保留逃生）；默认强制（`error`）仍留 v1.1（S2）。
 
-**两个“默认”分开**：CLI/`ct build` 的默认级别在 v1.0 前保持 `off`；v1-pre 的 CI/发布门禁以
-`--check-level=warn` 运行；v1.1 S2 才把 CLI 默认升 `error`（未达标则回退“可用不默认”）。
+**三个层级分开**：CLI/`ct build` 的默认级别（下一 v0.x 起 `warn`）；v1-pre 的 CI/发布门禁在
+FP=0 前以 `--check-level=warn` 运行、FP=0 后升 `error`；v1.1 S2 才把 CLI 默认升 `error`
+（未达标则回退“可用不默认”）。
 
 **单元类型**：`.h.ct` 发布接口；`.m.ct` 可被 `.h.ct` / `.ct` 单元 import（`map` 单元与 shim
 依赖它，夹具 `map_unit_cross` 钉住这个方向）；普通 `.ct` 单元不能被 import（`resolve_import`

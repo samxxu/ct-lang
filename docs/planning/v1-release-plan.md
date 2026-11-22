@@ -130,17 +130,23 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 
 > D2 已定（2026-11-21）：三件事解耦——**机制立即在 v0.x 落地，证据作为 v1.0 门禁，
 > 默认值由 v1-pre 窗口证据决定**。C（把发布闸门绑在存量 FP 未知数上）不采纳。
+>
+> **2026-11-22 所有者修订**：类型检测强化提前，**不等 v1-pre**；B+ 强化与 CLI 默认 `warn`
+> 同批落下一 v0.x（[SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md)）。
 
 | 层 | 内容 | 落点 |
 | --- | --- | --- |
-| **机制** | 把 B 的 checker 接进 build 路径，提供 `off / warn / error` 严重级别阶梯；默认值先保持 off | **PH-85（v0.85.0）**，与 inventory+spike 同卡 |
+| **机制** | 把 B 的 checker 接进 build 路径，提供 `off / warn / error` 严重级别阶梯 | **已完成（PH-85，v0.85.0）** |
+| **强化** | 补静态映射/未知类型/函数指针字段/泛型与 ADT 的可判定缺口；同判定同文案 | **下一 v0.x（SH-115）** |
 | **证据** | 全量语料 FP=0、固定漏报矩阵、123 个 import 单元、CFG/定值、编译时间 ≤+10%、诊断码稳定 | **v1.0 硬门禁**（v1-PH-0） |
-| **默认值** | **CLI 默认 `off`**（v1.0 前不变）；v1-pre 的 **CI/发布门禁**以 `--check-level=warn` 运行；证据达标后 v1.1 S2 把 **CLI 默认**升 `error`，未达标回退“可用不默认” | v1.1 S2；不达标即 D 回退 |
+| **默认值** | **下一 v0.x 起 CLI 默认 `warn`**（SH-115 同批；`--check-level=off` 保留逃生）；v1-pre 的 **CI/发布门禁**在 FP=0 前 `warn`、FP=0 后 `error`；v1.1 S2 把 **CLI 默认**升 `error`，未达标回退“可用不默认” | SH-115 + v1.1 S2 |
 
-- **两个“默认”分开**：CLI/日常 build 的默认值（`off`）与 v1-pre 发布门禁的运行级别（`warn`）
-  不是同一件事；v1.0 只承诺“**检查器可信**”，不承诺“默认强制”。
+- **默认值不再等 v1-pre**：所有者 2026-11-22 决定强化提前；CLI 默认 `warn` 随 SH-115 落地，
+  生成物不变，只多 `warning:` 行；要静默构建仍可显式 `--check-level=off`。
+- **“可见”与“阻断”仍分开**：CLI 默认 `warn` 是让问题可见；发布门禁的 `error` 与 v1.0 的
+  FP=0 证据才是阻断条件，两者不是同一件事。
 - 机制必须在重写前就位：42.8k 行新代码要在“有检查”的环境里写，这是 A 的最大规模 dogfood；
-- v1.0 承诺的是“**检查器可信**”（证据达标），不是“默认强制”；
+- v1.0 承诺的是“**检查器可信**”（证据达标）与“默认可见”（`warn`），不是“默认强制”；
 - 若 v1-pre 窗口证据不足，落到“可用但不默认”（D 回退），因机制已就位，顺延零成本；
 - 普通 C 兼容模式始终保留；全局默认 strict 仍留 v2.0 讨论。
 
@@ -197,13 +203,14 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1-pre 词法器 | PH-86 | v0.86.0 | 行为保持；✅ 2026-11-21（零拷贝视图 + C API 迁移；S86c 范围裁定见 battle/p86-errorpath） |
 | v1-pre 解析+检查 | PH-87 | v0.87.0 | 行为保持；✅ 2026-11-21（按 kind 切片 + 单判别式；`switch→match` 字面项因 L2 引导链移交 PH-88，见 battle/p87-kind-match） |
 | v1-pre 发射器+回环 | PH-88 | v0.88.0 | ✅ 2026-11-21（76 个发射器切片；fixpoint 日常 2 / tag 前 3 轮逐字节；字面 `match` 承接 `v1-PH-0`，见 battle/p88-emit-match） |
+| v0.x B+ 强化 + CLI 默认 `warn` | 下一 v0.x（不占 v1.0） | 下一 v0.x | 补静态映射/未知类型/函数指针字段/泛型与 ADT 可判定缺口；同批把 CLI 默认 `off`→`warn`（[SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md)） |
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
 | v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 | v1.0 内置层目录 `lib/core` | `v1-PH-0` 前 | v1.0.0 | **REQ 就绪，待 DEV**；`CT_CORE_DIR` + 一个 MINOR 回退；迁移卡见 [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) |
 | v1.0 前 JSON 节点包 | 包侧（不占 phase） | v1.0 前 | arena + 索引；NodeVec/NodeMap + JSON 库 + schema 生成器；包形态不占容量、不碰冻结（[PKG-24](../../issues/packages/pkg-24-json-node-arena.md)） |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
-| v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | 机制已在 PH-85；证据达标则翻转默认，未达标回退“可用不默认” |
+| v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | CLI 已在下一 v0.x 默认 `warn`（SH-115）；证据达标则升 `error`，未达标回退“可用不默认” |
 | v1.1 lowering 不变量 | `v1-PH-1` | v1.1 train | 临时值/求值顺序/清理边的显式规则 + 发射前检查 + 6 类小 golden；不做完整 IR（[SH-111](../../issues/selfhost/sh111-lowering-invariants.md)） |
 | v1.1 绑定点转换 ADR | `v1-PH-1` | v1.1 train | 宽松默认 + 严格 `.to<T>()`/`decode<T>` 边界；先 ADR；501/512 容量硬约束（[LANG-26](../../issues/lang/lang-26-binding-site-conversion.md)） |
 | v1.1 内建单元判活边界 | `v1-PH-1` | v1.1 train | 6 组正负例锁住文本判活边界；小写导出漏判显式标注；语义图归 v1.2（[SH-113](../../issues/selfhost/sh113-builtin-live-boundary.md)） |
@@ -269,7 +276,7 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | # | 争议 | 提案方主张 | 现行计划 | 需要决定 |
 | --- | --- | --- | --- | --- |
 | D1 | 重写是否提前到 v1.0 | 提前，v1.0 发布“两级自举 + 自证语法” | **已定**：ADT 先行（PH-84），重写为 v1-pre（PH-85…88），不进 v1.0、不推 v1.1 | — |
-| D2 | A strict 与 v1.0 | 是（G4） | **已定 B+**：机制 PH-85 接线；证据 FP=0 为 v1.0 硬门禁；默认值由 v1-pre 证据决定，不足则回退“可用不默认” | — |
+| D2 | A strict 与 v1.0 | 是（G4） | **已定 B+**：机制 PH-85 接线；**下一 v0.x 起 CLI 默认 `warn`（SH-115，不等 v1-pre）**；证据 FP=0 为 v1.0 硬门禁；v1.1 S2 视证据升 `error`，不足则回退“可用不默认” | — |
 | D3 | ADT/match 是否插入战役 | 可选先行，不阻塞 | **已定 B（A 范围）**：PH-84 先做最小 ADT/match；泛型/or/嵌套留 v1.1+ | — |
 | D4 | 重写是否可用函子签名 | 检查器用“闭包 + 函子” | **已定 A**：不依赖函子；用既有闭包/trait/函数指针；S4 仍留 v1.1+ Wave 2 | — |
 | D5 | hard deadline ≤6 phase | 建议 6 | **已定 A**：不设 deadline；失败就地停，不用时间/phase 数倒逼范围 | — |

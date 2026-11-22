@@ -3,8 +3,8 @@
 > 评估对象：Kimi 外部评审（基线 v0.88.0，2026-11-21；含 2026-11-22 附录修订）。
 > 核对基线：本仓 `main`（本轮 `46838951`）。只核对事实与时效，不改代码。
 > 结论先行：**这不是对 GrokBot 报告的评阅**——全文没有引用 GrokBot 的任何断言，也没有逐条回应；
-> 它是一份独立的 v0.88.0 全面评审。作为后者，文档面定位准、四项修正正确；但 **附录有 1 处与现行
-> 所有者决策冲突、3 处引用未落地、1 处旧数字未回改**，不能当作当前口径引用。
+> 它是一份独立的 v0.88.0 全面评审。作为后者，文档面定位准、四项修正正确；但 **附录有 3 处引用
+> 未落地、1 处旧数字未回改**；CLI 默认一项已被所有者裁决提前采纳（见 §5）。
 
 ## 1. 与 GrokBot 报告的关系
 
@@ -43,7 +43,7 @@
 | 1 | §1「`MAX_FUNCS` 余量 **475/512**（仅剩 37 槽）」 | PH-88 后实测 **501/512、余 11**；我们已在 [2026-11-21 外部评估](2026-11-21-v088-external-review-eval.md) 与 [full-review 处置](2026-11-21-full-review-v0.88.0-disposition.md) 中勘误过 | 旧数复现；附录称“已修订”却未回改此条 |
 | 2 | §1「selfhost 40+ 条记录」 | v0.88.0 基线已有 **106** 个 selfhost 卡；当前 114 | 低估台账规模 |
 | 3 | §2.1「文档 README 新增**七条**机器校验约定」 | 基线 7 条成立；当前已扩到 **8 条**（briefing↔spec 同步） | 只是时效，不属错误 |
-| 4 | 附录「**v1.0 CLI 默认 warn**（用户批准 11-22）」 | 现行 spec §1 / plan 是三档：**CLI `off`；v1-pre CI/发布门禁 `warn`；v1.1 S2 CLI `error`** | **与现行所有者决策冲突**，见 §5 |
+| 4 | 附录「**v1.0 CLI 默认 warn**（用户批准 11-22）」 | **方向被接受、时点提前**：下一 v0.x 起 CLI 默认 `warn`（SH-115）；v1.1 S2 升 `error` | 已按 §5 落库，不再是冲突 |
 | 5 | 附录「Grok v2 零代码补足清单 12 条」「ct-gen 独立项目」 | 仓内没有对应文件（`docs/planning/**`、`issues/**` 均无） | 未落地，不能引用 |
 | 6 | 附录「节点转换协议 v1.0 一步到位 W0–W5，待转 DeepSeek」 | 已被所有者裁决取代：[LANG-26](../../issues/lang/lang-26-binding-site-conversion.md)（v1.1 ADR）+ [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)（包侧、v1.0 前） | 过期；W1 不进 v1.0 |
 | 7 | 附录「SH-110（修复中）」 | 卡面状态是 `deferred`（排 `v1-PH-0`，未实现） | 小误差，避免写成“进行中” |
@@ -63,25 +63,29 @@
   这与 GrokBot 的“无新架构项”结论一致；但要注意 Kimi 没展开 AST→C 无 IR 的实现债，
   这部分仍由 SH-111/SH-112 承接。
 
-## 5. 待所有者确认的唯一决策
+## 5. 所有者裁决（2026-11-22）
 
-附录第 1 条「v1.0 CLI 默认 `warn`」与现行三档冲突：
+Kimi 附录第 1 条「v1.0 CLI 默认 `warn`」方向被接受，但**时点提前**：所有者裁定“要强化类型检测，
+不能等 v1-pre 就要实现”。落点：
 
-| 口径 | CLI 默认 | v1-pre CI / 发布门禁 | v1.1 |
-| --- | --- | --- | --- |
-| 现行 spec §1 / plan | `off` | `warn` | S2 升 `error` |
-| Kimi 附录 | `warn` | `warn` | 视证据升 `error` |
+| 项 | 现行口径 |
+| --- | --- |
+| CLI 默认 | **下一 v0.x 起 `warn`**（与 [SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md) 同批；`--check-level=off` 保留逃生） |
+| 强化范围 | SH-60 的 1a/1b/2b、函数指针字段残留、泛型/ADT/字段初值可判定错配 |
+| 发布门禁 | FP=0 前 `warn`，FP=0 后 `error`；FP=0 仍是 v1.0 硬门禁 |
+| v1.1 S2 | CLI 默认升 `error`；未达标回退“可用不默认” |
 
-两者只差“v1.0 的 CLI 默认是否提前到 warn”。现行文档已按前一行落库；若要采纳 Kimi 的版本，
-需要同步改 spec §1、v1-release-plan 的默认值行与 D2 证据口径，属于**所有者决策**，不在本次
-评估里擅自改。
+已同步：[spec §1](../language-spec.md#L62-L78)、[v1-release-plan §2.4](../planning/v1-release-plan.md#L129-L151)、
+[stable-subset](../stable-subset.md#L50)、[SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md)。
 
 ## 6. 处置建议
 
-1. **不新增卡**：D4/D5/D6 已闭环；D1 剩余项（§0.1 重测）由 SH-110 唤醒；D2/D3 已在 plan 或自述限制内。
-2. **不采用附录的 4 条旧口径**（CLI warn、Grok v2 清单、ct-gen、节点协议 v1.0 一步到位），
+1. **除 SH-115 外不新增卡**：D4/D5/D6 已闭环；D1 剩余项（§0.1 重测）由 SH-110 唤醒；
+   D2/D3 已在 plan 或自述限制内；类型检测强化由 [SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md)
+   单卡承接。
+2. **不采用附录的 3 条旧口径**（Grok v2 清单、ct-gen、节点协议 v1.0 一步到位），
    对外引用以本仓当前 spec/plan 与 [LANG-26](../../issues/lang/lang-26-binding-site-conversion.md) /
-   [PKG-24](../../issues/packages/pkg-24-json-node-arena.md) 为准。
+   [PKG-24](../../issues/packages/pkg-24-json-node-arena.md) 为准；CLI 默认一项按 §5 的提前版落地。
 3. **Kimi 若作为“GrokBot 评阅”使用，应退回重做**：需要逐条回应 GrokBot 的三处可争议结论
    （见 [GrokBot 评估核对](2026-11-22-grokbot-architecture-assessment-eval.md) §2），本文没有做。
 4. **§6 四条勘误可保留**为对外速览的修正依据，无需改 spec。
