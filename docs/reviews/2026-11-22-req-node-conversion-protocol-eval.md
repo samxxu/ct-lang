@@ -4,6 +4,8 @@
 > 核对基线：v0.88.3（2026-11-22）。本评估只做可行性/一致性核对，不改代码。
 > 结论先行：**不认可“v1.0 bugfix / 意图恢复”的定性**；这是一项新语言特性 + 大型库，
 > 当前卡面有 3 个硬阻断，应先改设计再谈排期。
+> **所有者已裁决（2026-11-22）**：改新特性、绑定点默认宽松、JSON 树 arena + 索引、
+> W1 走 ADR 落 v1.1、W2/W3 移 std 包/外部仓（v1.0 前交付）。详见 §4。
 
 ## 1. 实测结果
 
@@ -35,32 +37,30 @@
 
 - **只在绑定点转换**（声明初始化 / 赋值 / `out` / `return`）这条原则是对的；表达式内不转换
   能避免把隐式语义扩散到所有运算。
-- **`as<T>` 宽松 / `to<T>` 严格两档**成对存在，方向合理；但默认档建议反过来——
-  绑定点默认严格、边界显式宽松，才符合当前 fail-fast 口径。
+- **`as<T>` 宽松 / `to<T>` 严格两档**成对存在，方向合理；**所有者裁定绑定点默认维持宽松档**，
+  严格档由 `.to<T>()` 与 `decode<T>` 边界承担，fail-fast 在 schema/decode 层闭环。
 - **NodeVec / NodeMap 寄生映射**：P1 已证明泛型宿主语法可行；“未 import 零代码零体积”
   与现有 `.m.ct` 的零发射一致。
 - **schema 生成器、不引入运行时反射**：方向正确；但 `decode<T>`/`encode<T>` 如何分派到
   生成代码（trait bound 还是生成函数表）卡面没写，需要补。
 
-## 4. 处置建议
+## 4. 所有者裁决（2026-11-22）
 
-1. **改定性**：从“v1.0 bugfix / 意图恢复”改为“新特性提案（v1.1 起）”。
-   没有 ADR 证据时，不能用“意图恢复”绕开冻结与容量。
-2. **拆卡**：
-   - W0：只保留探针结果（P1 通过、P2 证明特性不存在）；
-   - W1：先出 ADR（绑定点转换的查找、默认档、表达式禁区），落 v1.1；
-   - W2：在 `JsonNode` 所有权定稿后作为 v1.1 增量；宿主改 `Map<String, JsonNode>`；
-   - W3：JSON 解析/序列化 + schema 生成器移到 **std 包/外部仓**，不进编译器 v1.0。
-3. **重设计 JSON 树**：优先 **arena + 索引**——`Arr(Vec<int>)`、`Obj(Map<String,int>)`，
-   节点由 arena 统一释放；这样同时绕开递归布局与 ADT 无 drop glue 两个问题。
-4. **暂不登记连带义务**：J-6 行、stable-subset、capabilities、idioms 第 11 条都等到
-   ADR 通过、特性立项后再加；现在加会把“未批准特性”写成既定事实。
+| # | 裁决 | 落点 |
+| --- | --- | --- |
+| 1 | 定性改为**新特性**；不补签“原意图”ADR | [LANG-26](../../issues/lang/lang-26-binding-site-conversion.md) |
+| 2 | 绑定点默认**维持宽松档**；严格档由 `.to<T>()` / `decode<T>` 边界承担 | LANG-26 协议条款 |
+| 3 | JSON 树定稿 **arena + 索引**（`Arr(Vec<int>)` / `Obj(Map<String,int>)`），节点 = (arena, 下标)；子树不跨文档 | [PKG-24](../../issues/packages/pkg-24-json-node-arena.md) |
+| 4 | W1 走 ADR 落 **v1.1**（501/512 容量硬约束）；W2/W3 移 **std 包/外部仓**，v1.0 前交付，包形态不占容量、不碰冻结 | LANG-26 + PKG-24 |
+| 5 | 连带义务（J-6 / stable-subset / capabilities / idioms 第 11 条）随 W1 ADR 通过后再登记 | 时序 |
 
-## 5. 需所有者裁决
+## 5. 落地卡
 
-1. 是否有“节点转换是原意图”的 ADR/评审记录？若没有，是否接受改按新特性立卡？
-2. JSON 树用 **arena + 索引**，还是“每节点 owning + 显式 Drop”？
-3. W3 放本仓还是 std 包？
-4. 绑定点默认选 **严格 `to<T>`** 还是卡面的宽松 `as<T>`？
+- [LANG-26](../../issues/lang/lang-26-binding-site-conversion.md)：v1.1，先 ADR；
+- [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)：包侧，v1.0 前交付。
 
-在这四条定稿前，本卡不宜进入 v1.0 实施队列。
+## 6. 仍未闭合的设计项（不阻塞定性）
+
+- `decode<T>` / `encode<T>` 如何分派到生成代码（trait bound 还是生成函数表）；
+- 节点字符串 payload 的 owner（arena 持有 `String`，还是视图 + 输入寿命）；
+- PKG-24 的 schema 子集边界与错误码。

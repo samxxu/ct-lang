@@ -63,7 +63,7 @@ $ python3 test/docs/check-docs.py
 | 项 | 状态 | 证据 |
 | --- | --- | --- |
 | [DOC-90](../../issues/docs/doc-90-tutorial-string-slice-chapters.md) tutorial §22/§23 | **起草中** | 两章已入库；`tutorial_cases/string_str.ct` 与 `slice_sum.ct` 实跑通过；runner 待 DEV |
-| [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) Stage 1 | **REQ 待细化** | 排在 DOC-90 之后；`lib/std → lib/core` 迁移步骤待成文 |
+| [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) Stage 1 | **REQ 细化完成，待 DEV 窗口** | 迁移卡已落：目录落点、`CT_CORE_DIR` 语义、一个 MINOR 回退、9 代码 + 21 脚本 + 12 文档替换清单、两条预写验收 |
 | D2 README §0.1 重测 | **阻塞于 SH-110** | 触发条件已入 [v1-release-plan](../planning/v1-release-plan.md)：SH-110 合入后 48 小时内启动 |
 
 ## 6. 未决

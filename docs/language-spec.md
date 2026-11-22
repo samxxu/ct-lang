@@ -2530,6 +2530,9 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `item`，它是 `MapEntry`，用 `item.key` / `item.value` 读写。长度在循环开始前取一次。对 `i`
   赋值 / 自增 / 取地址是硬错（L29-16），循环体内重声明 `item` 或 `i` 是硬错（L29-17），
   在 `Map` 体内使用 `i` 是硬错（L29-18）；容器元素与接口值不能按值拷贝（L29-15）。
+- **`Map` 键类型**：键必须是 owning / 值类型；借用视图（`Str`、切片）不能作键，
+  `Map<Str,V>` 硬错（`Map key type 'Str' is a borrowed view; use 'String' (owning)`），
+  改用 `Map<String,V>`；`Map<char *,V>` 是 C 指针键，不复制字符串。
 - **本节不涉及**：默认类型实参、显式实例列表；参数化 trait 见 §4.55，类型参数上的 bound 见 §4.54。
   已知偏差（`Map` 线性扫描、无哈希
   索引）见 `docs/history/design/phase29.md` §10.2。
@@ -3098,6 +3101,8 @@ int area(Shape s)
   两种形态不能混用：有负载后，无负载成员或显式 `= <常量>` 都是硬错。
 - **typedef 形态**：`typedef enum Tag { … } Alias;` 保留——tag 和别名都命名同一个
   和类型，产物是 `typedef struct Tag { … } Alias;`；`pub` 时布局随头发布。
+- **负载字段名（必写）**：带负载变体写作 `Name(type field, …)`；只写类型（`Bool(bool)`）
+  解析器报 `expected a payload field name`。字段名用于声明与构造；`match` 绑定按位置。
 - **构造（D84-3）**：`Type.Variant(args)`。裸变体名（`Circle(1)`）不引入，避免与 C 枚举
   常量/宏冲突；零负载变体写作 `Type.Unit()`（括号必须有）。实参数量与负载字段数不符、
   或类型与字段不符（可判定的冲突）都是**硬错**（E84-2）。

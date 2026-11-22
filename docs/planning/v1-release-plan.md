@@ -200,10 +200,12 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
 | v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 | v1.0 内置层目录 `lib/core` | `v1-PH-0` 前 | v1.0.0 | **REQ 就绪，待 DEV**；`CT_CORE_DIR` + 一个 MINOR 回退；迁移卡见 [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) |
+| v1.0 前 JSON 节点包 | 包侧（不占 phase） | v1.0 前 | arena + 索引；NodeVec/NodeMap + JSON 库 + schema 生成器；包形态不占容量、不碰冻结（[PKG-24](../../issues/packages/pkg-24-json-node-arena.md)） |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
 | v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | 机制已在 PH-85；证据达标则翻转默认，未达标回退“可用不默认” |
 | v1.1 lowering 不变量 | `v1-PH-1` | v1.1 train | 临时值/求值顺序/清理边的显式规则 + 发射前检查 + 6 类小 golden；不做完整 IR（[SH-111](../../issues/selfhost/sh111-lowering-invariants.md)） |
+| v1.1 绑定点转换 ADR | `v1-PH-1` | v1.1 train | 宽松默认 + 严格 `.to<T>()`/`decode<T>` 边界；先 ADR；501/512 容量硬约束（[LANG-26](../../issues/lang/lang-26-binding-site-conversion.md)） |
 | v1.1 内建单元判活边界 | `v1-PH-1` | v1.1 train | 6 组正负例锁住文本判活边界；小写导出漏判显式标注；语义图归 v1.2（[SH-113](../../issues/selfhost/sh113-builtin-live-boundary.md)） |
 | v1.1 泛型模板先用后定义 | `v1-PH-1` | v1.1 train | 前向收集/延迟实例化，或专门诊断；先定方向再实施（[SH-114](../../issues/selfhost/sh114-generic-template-order.md)） |
 | v1.1 删除 `box` 别名 | `v1-PH-1` | **v1.1.0** | `box<T>` 硬错并提示 `Box<T>`；独立提交、可回滚（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
