@@ -72,7 +72,8 @@
 2. **不执行路径 B**：自举纯度审计已通过（0 个 `import std::`），不迁 `lib/core`。
 3. **先解决文档矛盾**：请 STD 组确认 `std 0.19.0` 是否真的发布 `arena` 模块；CT 侧据结果
    统一 [std-catalog](../std-catalog.md) / [guide-for-c-programmers](../guide-for-c-programmers.md) /
-   battle 记录。可开一张 DOC 卡（建议 `DOC-93`），不必新开架构卡。
+   battle 记录。已开 [DOC-93](../../issues/docs/doc-93-std-arena-doc-consistency.md)，
+   不新开架构卡。
 4. **审计脚本若要入库**：按 §3 改成 `import std::` + 区分内部/外部 Arena，并明确“代码判据”
    与“文档判据”分开；不要用现在这两条命令直接做 CI 门禁。
 5. **与 DOC-87 的关系**：路径 B 才需要“Arena 直接落 lib/core”；既然 B 不成立，
