@@ -287,7 +287,8 @@ C 程序员的老习惯「返回静态 buffer 避免分配」在 CT 里是**反�
 String joined = str_concat(a.as_str(), b.as_str());   /* 新 owning String */
 ```
 
-`lib/std` 没有 `String.concat`（只有 `U16String.concat`），也没有公开的 `std::arena`。
+编译器内置层 `lib/std` 没有 `String.concat`（只有 `U16String.concat`），也没有 `Arena`；
+外部 `ct/std` 包（不是内置层）提供 `std::arena::Arena`，需先 `ct get ct/std`，再 `import std::arena::Arena`。
 热点路径需要批量分配时，用项目内分配器或落到逃生层，不要写成“标准库自带”。
 
 **⑤ 容器按形态选**

@@ -43,7 +43,7 @@ ct get ct/std@0.19.0
 | `std::num` | 整数与字符宿主方法：`to_str` / `to_base` / `clamp` / `is_digit` | `std::num::Num` |
 | `std::math` | 浮点方法：`Float` / `Real`，`x.sqrt()` / `x.pow(2.0)` | `std::math::Real` |
 | `std::search` | 带比较器的 `qsort` / `bsearch` 转发 | `std::search::Search` |
-| `std::arena` | 块式 bump 分配器 `Arena`（CT 自有类型，原生 OO） | `std::arena::Arena` |
+| `std::arena` | 块式 bump 分配器 `Arena`（外部 `ct/std` 0.19.0 实测；不是编译器内置层） | `std::arena::Arena` |
 | `std::test` | 断言计数器 `Test`；`check*` / `report` | `std::test::Test` |
 | `std::env` | 环境变量复制式读写 | `std::env::Env` |
 | `std::process` | `fork` / `exec*` / `wait*` / 信号 / `getpid` | `std::process::Process` |
