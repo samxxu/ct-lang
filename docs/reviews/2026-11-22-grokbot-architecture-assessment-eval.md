@@ -69,9 +69,9 @@
 
 1. **test/README 补一行前提**：`test/run.sh` 在 Linux GCC ≥ 8 直跑可能因
    `-Wformat-truncation` 报 1 项失败，以 `check-all.sh`（自动加 `-Wno-format-truncation`）为准。
-   路径属 `test/**`，按分工交 DEV 或开 TEST 卡，不由 REQ 直接改。
+   路径属 `test/**`，已开 [TEST-26](../../issues/testing/test26-test-readme-gcc-caveat.md) 交 DEV。
 2. **`docs/modern-oo-gap.md` 顶部加一行指针**：“当前能力以 [capabilities.tsv](../capabilities.tsv)
-   与 spec §4 为准；本文是 Phase 30 基线。” 属 `docs/**`，可随下一批文档提交。
+   与 spec §4 为准；本文是 Phase 30 基线。” 属 `docs/**`，已随本批文档提交。
 3. **不改 spec 的 `atomic` 与 `MAX_FUNCS` 条款**：两处现有文本已准确，错误在报告侧。
 4. **不新增架构卡**：报告的风险项全部已有承接卡，重复开卡只会增加台账噪声。
 

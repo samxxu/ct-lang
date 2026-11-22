@@ -4,6 +4,8 @@
 >
 > **状态：评估结论，非立项。** 本文只回答「以现代化 OO 为目标还差什么」，不改编译器、不改任何 `docs/design/` 立项卡、不动 `check-ast.sh` / `check-docs.py` 的判据。
 >
+> **当前能力以 [capabilities.tsv](capabilities.tsv) 与 [spec §4](language-spec.md) 为准；本文是 Phase 30 基线，后续相位已部分超越，不要当作现行能力表。**
+>
 > **证据口径（本轮重做）：** HEAD = `9185a59`（Phase 30 `into` 接收者块已合入并过门禁，状态「完成」）。文中凡「CT 现在能不能做某件事」的判断，均由本仓库源码重建的 `ct-ast`（`selfhost/l0` → `l1` → `l2` → `ct-ast` 全链，`CT_STD_DIR=lib/std`）实跑得出，探针一律在 `/tmp` 下，不改仓库。**与文档冲突时以实跑为准**，本轮修正了三处旧评估的漂移（见 §2.3）。
 >
 > **规模口径：** 一律用 `git diff --shortstat`，不用「占现有规模百分比」。标尺两条：Phase 29 `1c87fab..1877a95 -- selfhost/ct-ast` = **2,437 行 / 13 文件**；Phase 30 `1877a95..HEAD -- selfhost/ct-ast lib/std` = **905 行 / 9 文件**。下文区间是设计级估算（±40%），只算编译器与 `lib/std`，不含夹具/文档。
