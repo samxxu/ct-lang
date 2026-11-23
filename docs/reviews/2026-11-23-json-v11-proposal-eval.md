@@ -77,6 +77,8 @@
 
 **所有者裁决（2026-11-23）**：顺序固定为 **先落地 LANG-27，再评估方案 B**；
 本提案不按 v1.1 一步到位批准，LANG-27 合入前不启动“无 arena”树存储方案。
+后续：B 方案 B1–B8 已逐项裁定，设计见 [D-021](../decisions/D-021.md)，
+实施卡 [LANG-28](../../issues/lang/lang-28-json-tree-b.md)；A 作为回退保留。
 
 同时：
 1. `map binding` 与 `ScalarBridge` 若要保留，先立语言 ADR，不要与 JSON 包捆绑；

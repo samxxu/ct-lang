@@ -71,6 +71,8 @@ LANG-27 合入前不启动“无 arena”树存储方案，也不把 JSON v1.1 �
 
 ## 关联
 
+- [D-021](../../docs/decisions/D-021.md)：JSON 树方案 B 设计；
+- [LANG-28](lang-28-json-tree-b.md)：B 方案实施（LANG-27 为前置）；
 - [JSON v1.1 提案评估](../../docs/reviews/2026-11-23-json-v11-proposal-eval.md)：方案 B 的前置评估；
 - [节点协议评估](../../docs/reviews/2026-11-22-req-node-conversion-protocol-eval.md)；
 - [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)（rejected，外部仓）；
