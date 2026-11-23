@@ -1,7 +1,7 @@
 ---
 id: DOC-74
 title: "phase-ID 迁移未执行：无账本/双认，blocker A/B/C 未裁定"
-status: deferred
+status: verified
 area: docs
 severity: P1
 opened: 2026-11-20
