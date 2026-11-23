@@ -6342,13 +6342,22 @@ else
     bad "sig_mismatch" "$(cat "$sem-sig.err" "$sem-sig.stdout" 2>/dev/null)"
 fi
 
+# LANG-25: JSON records carry a shared `"code"` field. The archived L2 oracle
+# predates it, so compare everything *except* that one additive field and
+# assert the code separately; the message/fields stay byte-identical to L2.
+strip_json_codes() {
+    sed -E 's/"code":"[EW]-[A-Z]+-[0-9]{3}",//g' "$1"
+}
+
 rm -rf "$sem-json"
 mkdir -p "$sem-json"
 cp test/modules/sig_mismatch_json/prog.ct "$sem-json/"
 if ( cd "$sem-json" && "$work/ct-ast" --diagnostics=json prog.ct -o prog.c ) \
         >"$sem-json.out" 2>"$sem-json.err" \
-   && cmp -s "$sem-json.out" test/modules/sig_mismatch_json/expected.stdout; then
-    ok "sig_mismatch_json (JSON document matches L2)"
+   && strip_json_codes "$sem-json.out" >"$sem-json.norm" \
+   && cmp -s "$sem-json.norm" test/modules/sig_mismatch_json/expected.stdout \
+   && grep -q '"code":"W-TRAIT-002"' "$sem-json.out"; then
+    ok "sig_mismatch_json (JSON fields match L2; LANG-25 code present)"
 else
     bad "sig_mismatch_json" "stdout differs: $(cat "$sem-json.out")"
 fi
@@ -6705,8 +6714,10 @@ for c in leak_json leak_path_json; do
     args=$(cat "test/modules/$c/compile.args")
     if ( cd "$mem-$c" && "$work/ct-ast" $args ) \
             >"$mem-$c.out" 2>"$mem-$c.err" \
-       && cmp -s "$mem-$c.out" "test/modules/$c/expected.stdout"; then
-        ok "$c (JSON leak document matches L2)"
+       && strip_json_codes "$mem-$c.out" >"$mem-$c.norm" \
+       && cmp -s "$mem-$c.norm" "test/modules/$c/expected.stdout" \
+       && grep -q '"code":"W-MEM-00[12]"' "$mem-$c.out"; then
+        ok "$c (JSON fields match L2; LANG-25 code present)"
     else
         bad "$c" "stdout differs: $(cat "$mem-$c.out")"
     fi
@@ -6718,7 +6729,9 @@ rm -rf "$mem-leak_build"
 mkdir -p "$mem-leak_build"
 if "$work/ct-ast" build --emit-c --diagnostics=json test/modules/leak_build/prog.ct \
         -o "$mem-leak_build" >"$mem-leak_build.out" 2>"$mem-leak_build.err" \
-   && cmp -s "$mem-leak_build.err" test/modules/leak_build/expected.stderr \
+   && strip_json_codes "$mem-leak_build.err" >"$mem-leak_build.norm" \
+   && cmp -s "$mem-leak_build.norm" test/modules/leak_build/expected.stderr \
+   && grep -q '"code":"W-MEM-001"' "$mem-leak_build.err" \
    && "$CC" -Wall -Wextra -std=c99 "$mem-leak_build/prog.c" \
         -o "$mem-leak_build.bin" 2>"$mem-leak_build.cc" \
    && "$mem-leak_build.bin" >"$mem-leak_build.stdout" 2>&1 \
