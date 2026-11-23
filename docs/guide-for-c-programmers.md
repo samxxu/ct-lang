@@ -4,14 +4,15 @@
 >
 > **适用版本**：当前主线 **ct-ast**（版本号见 `ct -v`）。
 >
-> **核对基线：v0.84.1**（v0-PH-78 `ref`/`out`、v0-PH-79 切片、v0-PH-80 String/Str、v0-PH-81 `Box`/`new`、
-> v0-PH-84 ADT/`match` 均已落地）。旧版本行为不同之处，以 [language-spec](language-spec.md) 为准。
+> **核对基线：v0.88.3**（v0-PH-78 `ref`/`out`、v0-PH-79 切片、v0-PH-80 String/Str、
+> v0-PH-81 `Box`/`new`、v0-PH-84 ADT/`match` 均已落地；SH-116 后 `Box<T>` 的单文件
+> `ct build` 可用）。旧版本行为不同之处，以 [language-spec](language-spec.md) 为准。
 >
 > **读者假设**：熟悉 C 的 `malloc`/`free`、指针、数组衰减。不需要任何其他语言背景。
 >
 > **一句话总纲**：Ct 把你用纪律管的东西变成类型管的；指针从日常工具降级为逃生通道。
 >
-> **与 [memory-guide](memory-guide.md) 的关系**：本文讲 v0.84 的新句柄层
+> **与 [memory-guide](memory-guide.md) 的关系**：本文讲 v0.88 的新句柄层
 > （`String` / `Str` / `Box<T>` / `Vec<T>` / `Map<K,V>` / ADT）的心智模型；
 > memory-guide 讲 `own` / `borrow` / `Drop` 的指针层（逃生层与旧模型）。
 > 新代码优先按本文选型；落到逃生层时再看 memory-guide。

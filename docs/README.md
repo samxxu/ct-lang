@@ -16,7 +16,7 @@
 
 | 文档 | 内容 | 何时读 |
 | --- | --- | --- |
-| [tutorial.md](tutorial.md) | 逐章入门：核心范式（字符串 → factory → trait 对象 → 接口链）→ 安装 → 派发 → 模块 → 内存 → `map`，附命令行速查与常见坑 | 第一次使用 |
+| [tutorial.md](tutorial.md) | 逐章入门：核心范式（字符串 → factory → trait 对象 → 接口链）→ 安装 → 派发 → 模块 → 内存 → `map` → 可选链 / `ref`·`out` / `Box` / ADT·`match` / `String`·`Str` / 切片，附命令行速查与常见坑 | 第一次使用 |
 | [guide-for-c-programmers.md](guide-for-c-programmers.md) | 给 C 程序员的内存心智模型：`String`/`Str`、切片、`ref`/`out`、`Box`、ADT/`match`、残余风险 | 从 C 迁移到 Ct |
 | [c-shim-contract.md](c-shim-contract.md) | 手写 C shim 的正式契约：文件/命名、头文件边界、所有权、错误码、ISR/任务上下文、ABI、DMA 五条硬条款、host mock + Renode 冒烟 | 写或评审 shim、接裸机 |
 | [c-interop-semantics-matrix.md](c-interop-semantics-matrix.md) | guide 附录：C 互操作语义矩阵，14 项逐项给 Ct 行为、边界（透传 · strict 禁区 · shim）与权威节 + 证据 | 查一条 C 写法走哪条边界 |

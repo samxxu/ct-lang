@@ -1,0 +1,22 @@
+trait Shape { int area(); }
+struct Rect { int w; int h; } use Shape;
+struct Circle { int r; } use Shape;
+impl Shape for Rect { int area() { return self->w * self->h; } }
+impl Shape for Circle { int area() { return 3 * self->r * self->r; } }
+
+int main(void)
+{
+    Vec<Shape> shapes;
+    struct Rect r = { 3, 4 };
+    struct Circle c = { 5 };
+    int total = 0;
+    shapes.h = 0;
+    shapes.push(r);
+    shapes.push(c);
+    foreach (shapes) {
+        total = total + item.area();
+    }
+    printf("%d %d %d\n", r.area(), c.area(), total);
+    shapes.release();
+    return 0;
+}

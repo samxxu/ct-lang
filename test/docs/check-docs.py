@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts seventeen invariants:
+Standard library only. It asserts nineteen invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -65,13 +65,18 @@ Standard library only. It asserts seventeen invariants:
       `<path>#L<a>[-L<b>]  <batch>`; an entry with no reference left is a
       zombie and red, and the batch names the earliest pending batch.
       `--selftest` runs the positive/negative fixtures for both assertions.
-18. LANG-25: docs/diagnostics/codes.md is the stable diagnostic-code registry.
+ 18. LANG-25: docs/diagnostics/codes.md is the stable diagnostic-code registry.
       Every row has a legal `E-` / `W-<DOMAIN>-<NNN>` code, a matching default
       severity, and non-empty meaning / first-version / sample / test cells;
       codes are unique and at least 20 are registered; the code literals in
       selfhost/ct-ast/**/*.ct are exactly the registry set.
+ 19. DOC-96: every executable `c` / `ct` fenced block in README.md carries a
+      `// source:` marker (or a `// shape:` marker); a `docs/snippets/README/`
+      block is byte-identical to its snippet and the snippet has a
+      `.expected.out`; every snippet is referenced. `--selftest` runs the
+      positive and negative fixtures for this assertion.
 
-Exit code 0 when all eighteen hold, 1 otherwise.
+Exit code 0 when all nineteen hold, 1 otherwise.
 """
 
 import glob
@@ -244,6 +249,8 @@ CT_EXEMPT_DIRS = (
 CT_ACTIVE_ROOTS = ("test", "examples", "editors", "selfhost")
 BARE_CT = re.compile(r"\bCT\b")
 FENCE_LINE = re.compile(r"^\s*(```|~~~)")
+README_SOURCE_LINE = re.compile(r"^//\s*source:\s*(\S+)")
+README_SHAPE_LINE = re.compile(r"^//\s*shape:\s*(.+)$")
 SPEC_BEGIN_LINE = re.compile(r"^\s*<!--\s*spec:begin\b.*-->\s*$")
 SPEC_END_LINE = re.compile(r"^\s*<!--\s*spec:end\b.*-->\s*$")
 
@@ -1310,6 +1317,99 @@ def ct_hits(text):
     return hits
 
 
+def readme_code_blocks(text):
+    """Yield (lang, [body lines], first body line number) for README fences."""
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = re.match(r"^```([A-Za-z0-9_+-]*)\s*$", lines[i])
+        if not m:
+            i += 1
+            continue
+        lang = m.group(1)
+        start = i + 1
+        j = start
+        while j < len(lines) and not lines[j].startswith("```"):
+            j += 1
+        yield lang, lines[start:j], start + 1
+        i = j + 1
+
+
+def readme_snippet_errors_text(text, resolve, snippets):
+    """Every executable README block names its source; snippets stay in sync.
+
+    `resolve(path)` returns {"exists", "body", "expected"}. A `// source:
+    docs/snippets/...` block must be byte-identical to the snippet (minus the
+    marker line) and its `.expected.out` must exist; an `// source: examples/...`
+    block is an excerpt, so only the path is checked. `// shape:` marks a block
+    that is intentionally not runnable. Unreferenced snippet files are red.
+    """
+    errors = []
+    refs = []
+    for lang, block, lineno in readme_code_blocks(text):
+        if lang not in ("c", "ct") or not block:
+            continue
+        first = block[0].strip()
+        source = README_SOURCE_LINE.match(first)
+        if not source:
+            shape = README_SHAPE_LINE.match(first)
+            if shape:
+                if not shape.group(1).strip():
+                    errors.append(f"README.md:{lineno}: empty // shape: marker")
+                continue
+            errors.append(
+                f"README.md:{lineno}: fenced {lang} block lacks "
+                "'// source: <path>' or '// shape: <reason>'"
+            )
+            continue
+        path = source.group(1)
+        refs.append(path)
+        body = "\n".join(block[1:]).strip("\n")
+        state = resolve(path)
+        if not state["exists"]:
+            errors.append(f"README.md:{lineno}: source does not exist: {path}")
+            continue
+        if path.startswith("docs/snippets/"):
+            if state["body"].strip("\n") != body:
+                errors.append(
+                    f"README.md:{lineno}: block differs from {path} (edit the snippet)"
+                )
+            if not state["expected"]:
+                errors.append(
+                    f"README.md:{lineno}: missing expected output for {path}"
+                )
+    for path in snippets:
+        if path not in refs:
+            errors.append(
+                f"README.md: snippet is never referenced by '// source:': {path}"
+            )
+    return errors
+
+
+def resolve_readme_source(path):
+    full = os.path.join(ROOT, path)
+    exists = os.path.isfile(full)
+    body = read(full) if exists else ""
+    expected = False
+    if path.endswith(".ct"):
+        expected = os.path.isfile(full[:-3] + ".expected.out")
+    return {"exists": exists, "body": body, "expected": expected}
+
+
+def check_readme_snippets(errors):
+    text = read(os.path.join(ROOT, "README.md"))
+    pattern = os.path.join(ROOT, "docs", "snippets", "README", "*.ct")
+    snippets = sorted(os.path.relpath(p, ROOT) for p in glob.glob(pattern))
+    errors.extend(readme_snippet_errors_text(text, resolve_readme_source, snippets))
+    return sum(
+        1
+        for lang, block, _ in readme_code_blocks(text)
+        if lang in ("c", "ct")
+        and block
+        and README_SOURCE_LINE.match(block[0].strip())
+    )
+
+
 def check_ct_spelling(errors):
     """DOC-94: bare `CT` in active prose must be written `Ct`."""
     files = ct_active_paths()
@@ -1667,6 +1767,77 @@ def line_anchor_selftest():
     return 0
 
 
+def snippet_selftest():
+    """DOC-96 fixtures: markers, source resolution, body sync, orphan snippets."""
+    snippet = "docs/snippets/README/a.ct"
+    good = {snippet: {"exists": True, "body": "int x = 1;", "expected": True}}
+    cases = (
+        (
+            "valid shape + source",
+            "```c\n// shape: target only\nint x;\n```\n"
+            "```ct\n// source: docs/snippets/README/a.ct\nint x = 1;\n```\n",
+            good,
+            [snippet],
+            0,
+        ),
+        ("missing marker", "```c\nint x;\n```\n", {}, [], 1),
+        (
+            "missing source",
+            "```ct\n// source: examples/nope.ct\nint x;\n```\n",
+            {},
+            [],
+            1,
+        ),
+        (
+            "snippet mismatch",
+            "```ct\n// source: docs/snippets/README/a.ct\nint y = 2;\n```\n",
+            good,
+            [snippet],
+            1,
+        ),
+        (
+            "missing expected output",
+            "```ct\n// source: docs/snippets/README/a.ct\nint x = 1;\n```\n",
+            {
+                snippet: {
+                    "exists": True,
+                    "body": "int x = 1;",
+                    "expected": False,
+                }
+            },
+            [snippet],
+            1,
+        ),
+        (
+            "orphan snippet",
+            "```c\n// shape: target only\nint x;\n```\n",
+            good,
+            [snippet],
+            1,
+        ),
+    )
+    failed = 0
+    for name, text, files, snippets, want in cases:
+
+        def resolve(path, files=files):
+            return files.get(
+                path, {"exists": False, "body": "", "expected": False}
+            )
+
+        errs = readme_snippet_errors_text(text, resolve, snippets)
+        ok = (len(errs) == 0) if want == 0 else (len(errs) >= 1)
+        failed += 0 if ok else 1
+        print(
+            f"readme-snippet selftest: {name}: {len(errs)} error(s), "
+            f"expected {'0' if want == 0 else '>=1'} -> {'OK' if ok else 'FAIL'}"
+        )
+    if failed:
+        print(f"readme-snippet selftest: FAIL ({failed} case(s))")
+        return 1
+    print(f"readme-snippet selftest: OK ({len(cases)} cases)")
+    return 0
+
+
 def main():
     if "--selftest" in sys.argv[1:]:
         rc = ct_selftest()
@@ -1675,6 +1846,7 @@ def main():
         rc = toc_selftest() or rc
         rc = line_anchor_selftest() or rc
         rc = diag_registry_selftest() or rc
+        rc = snippet_selftest() or rc
         return rc
     errors = []
     links, scanned = check_links(errors)
@@ -1695,6 +1867,7 @@ def main():
     compat = check_compat_claim(errors)
     caps = check_capability_map(errors)
     ct, ct_files = check_ct_spelling(errors)
+    snippets = check_readme_snippets(errors)
     diag_codes = check_diag_registry(errors)
     for error in errors:
         print(f"FAIL: {error}")
@@ -1713,6 +1886,7 @@ def main():
         f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s), "
         f"{stable} stability row(s), {compat} compat marker(s), "
         f"{caps} capability row(s), {ct} bare CT in {ct_files} active file(s), "
+        f"{snippets} README snippet source(s), "
         f"{toc_entries}/{toc_required} outline entr(ies), "
         f"{line_refs} spec line anchor(s) in {line_entries} ledger entr(ies), "
         f"{diag_codes} diagnostic code(s))"

@@ -1,0 +1,13 @@
+String greet(Str name)
+{
+    return str_concat("hello, ", name);
+}
+
+int main(void)
+{
+    String who = "ct";
+    String msg = greet(who.as_str());
+    printf("%s\n", msg.cstr());
+    msg.release();
+    return 0;
+}

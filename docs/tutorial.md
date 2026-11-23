@@ -1893,6 +1893,37 @@ a.m().n();      /* 编译，按 hop 物化；每跳只求值一次 */
 
 `$name` 仍是可用的显式物化写法，但不再是链式调用的必要条件。
 
+## 14. 可选链 `?.` / `?[`（Phase 53，v0.53.0 起可用）
+
+`p?.f` / `p?[i]` 只在**指针接收者**上生效：接收者为 `0` 时整条表达式得 `0`，非空时等于
+`p->f` / `p[i]`。struct 值、含 `Drop` 的值与可选方法调用都不在范围内。
+
+```ct
+#include <stdio.h>
+
+struct Node { int value; struct Node *next; }
+
+int main(void)
+{
+    struct Node n = { 3, 0 };
+    struct Node *p = &n;
+    struct Node *missing = 0;
+    printf("%d %d %d\n", p?.value, p?.next?.value, missing?.value);
+    return 0;
+}
+```
+
+```sh
+ct build opt.ct -o opt && ./opt
+# 3 0 0
+```
+
+- `p?.value` 在 `p` 非空时取字段；`p?.next?.value` 任一跳为空就短路成 `0`。
+- `?[` 同形：`m?[k]` 对 `Map` 指针先 `get` 再判空，单次求值。
+- **明确不做**：`T?` / `Maybe<T>`、可选方法调用 `p?.m()`、`p?.b = 1`、`&p?.b`；这些属
+  L53-7 及后续范围。`$name` 与 `?.` 的交互见 §13.5。
+- 依据：[spec §4.65](language-spec.md#465-可选链---phase-53仅-ct-ast)。
+
 ## 15. `ref` / `out` 参数（Phase 78，v0.78.0 起可用）
 
 源码里不再写 `&` / `*`：`ref` 表示可读写的借用参数，`out` 表示由被调方写出的参数。
@@ -1958,20 +1989,7 @@ trait 方法、trait 默认体、`impl` 方法、固有方法与泛型 impl 使�
 ref/out 参数、`ref` 的借用检查、跨过程定值不在本阶段；`ref` 被存储的透传风险仍由契约与
 直接 lint 承担（J-4b）。
 
-## 16. 下一步
-
-- [language-spec.md](language-spec.md) —— 每一条展开规则的权威定义
-- [polymorphism.md](polymorphism.md) —— 为什么用 vtable 而不是别的写法
-- [architecture.md](architecture.md) —— 编译器内部怎么按行改写
-- [roadmap.md](roadmap.md) —— 已落地与后续阶段
-- 新特性专章：§22 `String` / `Str`、§23 切片 `T[]`（先看顶层「按层阅读」选层）
-- `examples/**` —— 51 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；其中 `49_socket` 为文档型；完整索引见 [examples/README.md](../examples/README.md)）；`test/cases/**` —— 每个语法点的最小快照
-- 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
-- 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 Ct」，编译器对此零感知
-- 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [phases/v0-PH-8/card.md](phases/v0-PH-8/card.md)，
-  17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [phases/v0-PH-17/card.md](phases/v0-PH-17/card.md)
-
-### 16.1 可选的类型检查：`ct check --types`
+## 16. 可选的类型检查：`ct check --types`（Phase 32）
 
 默认的 `ct check` 只做语法与既有语义检查；想让它顺手拦下明显的类型错，加 `--types`：
 
@@ -2030,7 +2048,8 @@ Box<Point> b = Box<Point>::of(p);       // 复制构造；owning 叶 retain
 `Box<String>` 只走 `Box<String>::of(s)`；`new String` 仍是硬错。`Box<Str>` 与
 `struct Bad { Str tag; }` 在类型/声明层硬错。引用环是作者责任：互持 `retain()` 后释放
 句柄仍泄漏，编译器不报环；`--debug-leaks` 若实现也只报未配对 alloc/release 计数。
-`ct build` 跨单元 `Box<T>` 在 v0.81.0 不支持，单文件编译可用。
+`ct build` 跨单元 `Box<T>` 在 v0.81.0 仍不支持；单文件 / 单单元 build 自 SH-116 起可用
+（compile 模式一直可用）。
 
 ## 18. 最小 ADT 与 `match`（Phase 84，v0.84.0 起可用）
 
@@ -2339,3 +2358,20 @@ ct build sum.ct -o sum && ./sum
 - 位置白名单：参数/局部/返回；字段、全局、接口值、`Box<T>`、`Option`/`Result`、容器、
   数组元素、泛型实参、闭包捕获一律硬错。
 - `s[i]` 带边界 trap；`s.get(i)` 软访问；`const T[]` 写元素硬错。
+
+## 24. 下一步
+
+- [language-spec.md](language-spec.md) —— 每一条展开规则的权威定义
+- [polymorphism.md](polymorphism.md) —— 为什么用 vtable 而不是别的写法
+- [architecture.md](architecture.md) —— 编译器内部怎么按行改写
+- [roadmap.md](roadmap.md) —— 已落地与后续阶段
+- 新特性专章：§14 可选链、§15 `ref` / `out`、§16 `ct check --types`、§17 `Box`、§18 ADT/`match`、
+  §22 `String` / `Str`、§23 切片 `T[]`（先看顶层「按层阅读」选层）
+- `examples/**` —— 59 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；
+  其中 `49_socket` 为文档型；完整索引见 [examples/README.md](../examples/README.md)）；
+  `test/cases/**` —— 每个语法点的最小快照
+- 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
+- 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 Ct」，编译器对此零感知
+- 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见
+  [phases/v0-PH-8/card.md](phases/v0-PH-8/card.md)，17.5 的增量（比较器范围、离线重解、显式索引、
+  构建元数据）见 [phases/v0-PH-17/card.md](phases/v0-PH-17/card.md)

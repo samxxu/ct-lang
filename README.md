@@ -22,7 +22,10 @@ impl 签名漂移）。需要更早发现类型问题时用 `ct check --types`�
 
 ### 0. 真实用法展示
 
-下面每条都解决一个具体问题；代码块后的命令与输出是 v0.88.3 的实测结果（`cc` 用系统 C 编译器）。
+下面每条都解决一个具体问题。可执行代码块都带 `// source:`：完整片段在
+[docs/snippets/README/](docs/snippets/README/)，摘录指向 `examples/`，由 `check-docs` 校验来源、
+由 `check-warnings.sh` 的 build 段编译运行；无法独立成文的形态块标 `// shape:`。命令与输出是
+v0.88.3 的实测结果（`cc` 用系统 C 编译器）。
 
 #### 0.1 HTTP 请求：完整路径的目标形态与当前可跑的静态宿主
 
@@ -30,6 +33,7 @@ impl 签名漂移）。需要更早发现类型问题时用 `ct check --types`�
 配置方法返回同一接口类型 → `send()` 换响应接口。调用点只写这一条：
 
 ```c
+// shape: 目标形态（非完整程序）；可跑样例见 examples/47
 int status = "https://api.example.com/users"
                  .method("GET")
                  .header("Accept", "application/json")
@@ -38,18 +42,13 @@ int status = "https://api.example.com/users"
                  .status();
 ```
 
-v0.88.3 的实测边界：
+v0.88.3 的实测边界：接口值落变量后逐跳（`Counter d = c.tap(1); d.status()` → `1`）、同一形状压成
+一行链（`c.tap(1)->status()` → `2`）、返回局部接口值（`ct build test/ast/239_local_iface_return/prog.ct`
+→ `0 201`）都可用（SH-72/74/75/110）；静态宿主链见 [examples/47](examples/47_chain_factory/src/main.ct)
+（`200 {"users":3}`，rc=0）。
 
-| 形态 | 命令与结果 | 结论 |
-| --- | --- | --- |
-| 接口值落变量后逐跳 | `Counter d = c.tap(1);` 再 `d.status()`：编译并运行，输出 `1`，rc=0 | 可用（SH-72 / SH-74） |
-| 同一形状压成一行链 | `c.tap(1)->status()`：编译并运行，输出 `2`，rc=0 | 可用（SH-110） |
-| 返回局部接口值 | `ct build test/ast/239_local_iface_return/prog.ct` → `0 201`，rc=0 | 可用（SH-75） |
-| 静态宿主链 | `ct build examples/47_chain_factory/src/main.ct -o /tmp/http47` 再跑 → `200 {"users":3}`，rc=0 | 可用；宿主是 struct，不是 trait 对象 |
-
-动态派发链已在 v0.88.3 pre 窗口由 [SH-110](issues/selfhost/sh110-dynamic-dispatch-chain-fix.md)
-修复；完整路径的其余边界（跨单元 factory / 装箱）仍按
-[spec §4.10.1](docs/language-spec.md#4101-链式构建器范式权威定义与两档路径) 核对。
+动态派发链已在 v0.88.3 pre 窗口由 [SH-110](issues/selfhost/sh110-dynamic-dispatch-chain-fix.md) 修复；
+完整路径的其余边界（跨单元 factory / 装箱）仍按 [spec §4.10.1](docs/language-spec.md#4101-链式构建器范式权威定义与两档路径) 核对。
 当前可运行版 [examples/47](examples/47_chain_factory/src/main.ct) 是**静态宿主形态**：宿主在映射
 单元内部是 struct，使用者代码里看不到它，也没有 vtable 与装箱。`send()` 是 stub，接真 curl 只换
 [examples/47 的 shim](examples/47_chain_factory/src/http/http.shim.h)。
@@ -60,6 +59,7 @@ v0.88.3 的实测边界：
 就能继续链。调用点只有一行：
 
 ```c
+// source: examples/48_string_steps/src/main.ct
 int n = "alpha,beta,gamma".split_once(',').split_once(',').len();
 ```
 
@@ -73,13 +73,10 @@ int n = "alpha,beta,gamma".split_once(',').split_once(',').len();
 `enum kind` 或 `switch`。
 
 ```c
-//@ct-requires: ct-ast
-#include <stdio.h>
-
+// source: docs/snippets/README/0.3_shapes.ct
 trait Shape { int area(); }
 struct Rect { int w; int h; } use Shape;
 struct Circle { int r; } use Shape;
-
 impl Shape for Rect { int area() { return self->w * self->h; } }
 impl Shape for Circle { int area() { return 3 * self->r * self->r; } }
 
@@ -89,7 +86,6 @@ int main(void)
     struct Rect r = { 3, 4 };
     struct Circle c = { 5 };
     int total = 0;
-
     shapes.h = 0;
     shapes.push(r);
     shapes.push(c);
@@ -102,8 +98,9 @@ int main(void)
 }
 ```
 
-`ct build` 实测输出 `12 75 87`；完整的多实现样例见
-[examples/02_market](examples/02_market/market.ct)。
+`ct build docs/snippets/README/0.3_shapes.ct --c-boundary=allow -o /tmp/shapes && /tmp/shapes`
+实测 `12 75 87`；`docs/snippets/` 不是内置 C 边界豁免目录，所以在仓库根目录要显式
+`--c-boundary=allow`。完整的多实现样例见 [examples/02_market](examples/02_market/market.ct)。
 
 #### 0.4 词频统计：`Map` 按插入序出报告
 
@@ -112,6 +109,7 @@ int main(void)
 [examples/25_wordcount](examples/25_wordcount/wordcount.ct)）：
 
 ```c
+// source: examples/25_wordcount/wordcount.ct
 Map<char *, int> counts;
 counts.h = 0;
 foreach (words) {
@@ -146,6 +144,7 @@ tutorial 对应章节。
 `String` 拥有、`Str` 借用，判据只有一条：这份数据过了这行还要活着 → `String`；只看一眼 → `Str`。
 
 ```ct
+// source: docs/snippets/README/0.5_greet.ct
 String greet(Str name)
 {
     return str_concat("hello, ", name);
@@ -161,9 +160,39 @@ int main(void)
 }
 ```
 
-`ct build` 实测 `hello, ct`。逐章解释见 tutorial §15（`ref`/`out`）、§17（`Box`/`new`，`at()` 借用与
-`release()`）、§18（穷尽 `match` 与 owning payload 显式释放）、§22（`String`/`Str`）、§23（切片）。
+`ct build docs/snippets/README/0.5_greet.ct --c-boundary=allow -o /tmp/greet && /tmp/greet`
+实测 `hello, ct`。逐章解释见 tutorial §15（`ref`/`out`）、§17（`Box`/`new`）、§18（`match`）、§22（`String`/`Str`）、§23（切片）。
 运行任一 example：`ct build examples/50_ref_out/prog.ct -o /tmp/e50 && /tmp/e50`。
+
+#### 0.6 驱动初始化：`defer` / `errdefer` / `?` 的成对回滚
+
+`?` 把失败沿返回值传播；`defer` 与 `errdefer` 按 LIFO 收尾，成功时只跑 `defer`，失败时先回滚再释放：
+
+```ct
+// source: docs/snippets/README/0.6_driver_rollback.ct
+Result<int, char *> open_dev(int ok)
+{
+    if (!ok) return err: (Result<int, char *>){ 0, 0, "open failed" };
+    return (Result<int, char *>){ 1, 7, 0 };
+}
+Result<int, char *> init_dev(int ok)
+{
+    defer { printf("release dev\n"); }
+    errdefer { printf("rollback init\n"); }
+    int fd = open_dev(ok)?;
+    return (Result<int, char *>){ 1, fd, 0 };
+}
+int main(void)
+{
+    Result<int, char *> a = init_dev(1);
+    Result<int, char *> b = init_dev(0);
+    printf("%d %s\n", a.ok ? a.value : -1, b.ok ? "ok" : b.err);
+    return 0;
+}
+```
+
+`ct build docs/snippets/README/0.6_driver_rollback.ct --c-boundary=allow -o /tmp/dev && /tmp/dev`
+输出 `release dev` / `rollback init` / `release dev` / `7 open failed`（成功只跑 `defer`，失败先回滚再释放）。
 
 ### 1. 快速开始
 
@@ -209,10 +238,8 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 退出码：成功 `0`，语法或 I/O 错误 `1`（`ct check` 有任何语义发现，或 `ct build` 遇到 impl 签名漂移，
 也是 `1`）。源码诊断格式为 `文件:行:列: error: 描述`；驱动层错误以 `ctc:` 开头。完整开关
 （`-I` / `--std` / `--line` / `--diagnostics` / `--ns-root` / `--freestanding` / `--lib`）见
-[教程 §11](docs/tutorial.md#11-命令行速查)。
-
-`ct get` 走系统 `git`，是包管理里唯一联网步骤：clone / fetch 失败或超时在写 `ct.lock` **之前**以非零
-退出，旧锁逐字节不变（`CT_GIT_TIMEOUT` 默认 180s，`GIT_TERMINAL_PROMPT=0`）。
+[教程 §11](docs/tutorial.md#11-命令行速查)。`ct get` 走系统 `git`，是包管理里唯一联网步骤：
+clone / fetch 失败或超时在写 `ct.lock` **之前**以非零退出，旧锁逐字节不变（`CT_GIT_TIMEOUT` 默认 180s，`GIT_TERMINAL_PROMPT=0`）。
 
 ### 3. 能力一览
 
@@ -225,57 +252,49 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **映射**：`map trait T for instance …`、`.m.ct` 零成本静态映射、伴生 C shim、`test/bindings/` 声明式 C 库对接 <!-- cap:mapping -->
 - **透传**：`#ct-raw` / `#ct-endraw` 原样块（宏与手写 C 逐字节进入生成的 `.c`） <!-- cap:passthrough -->
 - **诊断与工具**：`#line` 溯源、`--diagnostics=json|text`、多错误恢复、增量缓存、`ct get` / `ct install`
-- **泛型函数**：`T name<T>(…)` + `name<int>(…)`，编译期单态化（Phase 26）；**约束泛型** `T name<T: Trait>(…)`（Phase 28） <!-- cap:generic-fn -->
-- **泛型 struct 与内置容器**：`struct Name<T, U>` + `impl<T> Name<Args>` 静态派发（Phase 29）；`Vec<T>` / `Map<K,V>` 免 import，`foreach` 按插入序遍历 `Map` <!-- cap:generic-struct --> <!-- cap:containers -->
-- **泛型 trait**：`trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>` 约束，实例按实参编码单态化（Phase 35） <!-- cap:generic-trait -->
-- **标准结果类型**：`Option<T>` / `Result<T, E>` 内建于 `lib/core`，`is_some` / `is_ok` / `unwrap` 等为固有方法（Phase 34） <!-- cap:option-result -->
+- **泛型函数与泛型 trait**：`T name<T>(…)` + `name<int>(…)` 编译期单态化（Phase 26）；约束泛型 `T name<T: Trait>(…)`（Phase 28）；`trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>`（Phase 35） <!-- cap:generic-fn --> <!-- cap:generic-trait -->
+- **泛型 struct、容器与标准结果类型**：`struct Name<T, U>` + `impl<T> Name<Args>` 静态派发（Phase 29）；`Vec<T>` / `Map<K,V>` 免 import，`foreach` 按插入序遍历 `Map`；`Option<T>` / `Result<T, E>` 内建于 `lib/core`，`is_some` / `is_ok` / `unwrap` 等为固有方法（Phase 34） <!-- cap:generic-struct --> <!-- cap:containers --> <!-- cap:option-result -->
 - **单对象句柄**：`Box<T>`（16 字节句柄 + 8 字节 `{refs,aux}` 头）、`new T { ... }`（上下文关键字，仅具名 struct）、`b.f` 自动解引用、`retain` / `release` 与 `at()` 借用（Phase 81） <!-- cap:box -->
 - **ADT 与 `match`**：`enum` 成员带负载即 ADT，`match` 穷尽所有变体或末位 `_`；值是 `{tag, union}`，无 vtable、无隐藏分配（Phase 84），见 spec §4.73 <!-- cap:adt -->
 - **C ABI 静态库**：`ct build --lib` 把根 `.h.ct` 的 C 兼容 `pub` 函数导出为 `.abi.h` + `lib<base>.a`（Phase 39） <!-- cap:abi -->
 - **原子并发**：`atomic int` / `atomic long` / `atomic bool` / `atomic void *` + `ct_atomic_load` / `ct_atomic_store` / `ct_atomic_cas`（seq_cst，C11；`ct build` 自动切 `-std=c11`）（Phase 41） <!-- cap:atomics -->
 - **方法级 `pub`**：`impl` 固有方法默认私有（不进 `.h`、`static`）；写 `pub` 才跨单元公开；trait impl / `pub impl` 硬错（Phase 42） <!-- cap:method-pub -->
-- **`return err:` 载荷契约**：`err:` 载荷必须可赋给函数返回类型；不一致 L43-1 硬错，四入口一致，不写坏 C（Phase 43） <!-- cap:return-err -->
-- **后缀 `?` 错误传播**：`expr?` 把 `Result` 失败以 `Outer::err` 返回，成功取 `value`；L44-1/2/3；`?:` 消歧（Phase 44） <!-- cap:try -->
+- **错误传播**：`return err:` 载荷必须可赋给函数返回类型（不一致 L43-1 硬错，四入口一致，Phase 43）；`expr?` 把 `Result` 失败以 `Outer::err` 返回、成功取 `value`（L44-1/2/3，`?:` 消歧，Phase 44） <!-- cap:return-err --> <!-- cap:try -->
 - **明确不做**：继承、默认编译路径的全量类型检查（`ct check` 只做受限检查）、优化（语言在 `1.0.0` 才定稿）
 
 每条语法的展开规则以 [docs/language-spec.md](docs/language-spec.md) 为准（ADT/`match` 见 §4.73）；
 惯用优先级见 [docs/idioms.md](docs/idioms.md)；写法范例见 [docs/patterns.md](docs/patterns.md)
-（`kind` 判别改写见 §6）；教程见 [docs/tutorial.md](docs/tutorial.md)（ADT 见 §18）；
-内存约定见 [docs/memory-guide.md](docs/memory-guide.md)。
+（`kind` 判别改写见 §6）；教程见 [docs/tutorial.md](docs/tutorial.md)（ADT 见 §18）；内存约定见
+[docs/memory-guide.md](docs/memory-guide.md)。
 
-**范式与边界的详读**：本页 §0.1–§0.5 是可运行展示；**权威定义与两档判断依据只在
-[docs/language-spec.md](docs/language-spec.md) §4.10.1**，其余文档只引用；可运行样例
-[examples/47](examples/47_chain_factory/src/main.ct) 与
-[examples/48](examples/48_string_steps/src/main.ct) 由 `check-warnings.sh` 的 build-mode 段跑。
+**范式与边界的详读**：本页 §0.1–§0.6 是可运行展示；**权威定义与两档判断依据只在
+[docs/language-spec.md](docs/language-spec.md) §4.10.1**，其余文档只引用；[examples/47](examples/47_chain_factory/src/main.ct)
+与 [examples/48](examples/48_string_steps/src/main.ct) 由 `check-warnings.sh` 的 build-mode 段跑。
 
 ### 4. 仓库结构
 
 `selfhost/` 是自举链：`l0/`（C 种子）→ `l1/`（冻结）→ `l2/`（回归 oracle）→ `ct-ast/`（主线，提供
-`ct` 安装入口）；`test/` 是测试与 golden；`docs/` 是文档；标准库是独立的 ct-pkg 包 `ct/std`
-（`ct get ct/std` 获取，不随仓库发布）；`test/bindings/` 是声明式 C 库 binding；`issues/` 是审查
-台账；`AGENTS.md` 是改动规约。目录级说明见 [selfhost/README.md](selfhost/README.md)、
-[test/README.md](test/README.md) 与 [docs/architecture.md](docs/architecture.md)。
+`ct` 安装入口）；`test/` 是测试与 golden；`docs/` 是文档；标准库是独立的 ct-pkg 包 `ct/std`（`ct get ct/std` 获取，不随仓库发布）；
+`test/bindings/` 是声明式 C 库 binding；`issues/` 是审查台账；`AGENTS.md` 是改动规约。目录级说明见
+[selfhost/README.md](selfhost/README.md)、[test/README.md](test/README.md) 与 [docs/architecture.md](docs/architecture.md)。
 
 ### 5. 文档与测试
 
-- 文档导航：[docs/README.md](docs/README.md)
-- 测试：`bash selfhost/check-all.sh` 跑 12 道硬门禁；分层地图见 [test/README.md](test/README.md)
-- 改动代码前先读 [AGENTS.md](AGENTS.md)
+- 文档导航：[docs/README.md](docs/README.md)；测试：`bash selfhost/check-all.sh` 跑 12 道硬门禁，
+  分层地图见 [test/README.md](test/README.md)；改动代码前先读 [AGENTS.md](AGENTS.md)
 
 ### 6. 许可
 
-GPL-3.0-or-later（编译器本体，见 [LICENSE](LICENSE)）；生成的 `.c`/`.h` 与你的 `.ct` **不受 GPL
-约束**（[LICENSE.EXCEPTION](LICENSE.EXCEPTION)）；`examples/`、`test/`、`editors/` 为 MIT。
+GPL-3.0-or-later（编译器本体，见 [LICENSE](LICENSE)）；生成的 `.c`/`.h` 与你的 `.ct` **不受 GPL 约束**
+（[LICENSE.EXCEPTION](LICENSE.EXCEPTION)）；`examples/`、`test/`、`editors/` 为 MIT。
 
 For commercial licensing or exceptions, contact: samxxu@gmail.com
 
 ### 7. 联系
 
-作者 Sam X. Xu · samxxu@gmail.com · 问题与建议优先开
-[Issue](https://github.com/samxxu/ct-lang/issues)。
+作者 Sam X. Xu · samxxu@gmail.com · 问题与建议优先开 [Issue](https://github.com/samxxu/ct-lang/issues)。
 
 - **C 边界**（Phase 65）：外部代码默认 strict——`.ct/.h.ct` 禁直接 `#include`、`#ct-raw`、`extern`
-  与函数式宏，出口是 `<base>.shim.h` 或 `.m.ct`；包用 `ct.pkg` 的 `c-boundary`、命令用
-  `--c-boundary=strict|allow`。
+  与函数式宏，出口是 `<base>.shim.h` 或 `.m.ct`；包用 `ct.pkg` 的 `c-boundary`、命令用 `--c-boundary=strict|allow`。
 - **libc I/O 例外**（Phase 66）：`printf`/`scanf`/`puts` 族按调用补头（`<stdio.h>`），宽字符组补
   `<wchar.h>`；没有调用不带系统头，`--freestanding` 下不补。

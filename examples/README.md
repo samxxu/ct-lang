@@ -3,7 +3,7 @@
 每个目录是一份可运行的小程序，覆盖 `ct` 的一类能力；唯一例外是 `49_socket`（文档型样例，
 std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**impl / vtable**、
 **类型宿主（type host）**、**闭包**、**loop 语义**、**数组初值与泛型**、
-**新句柄层（ref/out、切片、box/new、ADT/match）**。
+**新句柄层（ref/out、切片、Box/new、ADT/match）**。
 
 ## impl / vtable
 
@@ -101,7 +101,7 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | `33_vec_brace_init` | `Vec` 花括号初值（Phase 31）：拥有型元素、空 `{}` 的非空 header、与 `from` 等价 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `34_map_literal` | `Map` 字面量（Phase 31）：插入序、重复键原位覆盖、编译期重复键报 `duplicate key` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 
-## 新句柄层（ref/out、切片、box/new、ADT/match）
+## 新句柄层（ref/out、切片、Box/new、ADT/match）
 
 四个最小样例，覆盖 PH-78 / PH-79 / PH-81 / PH-84 的新句柄；每个只有一份 `prog.ct`，
 不依赖 shim。文件首行的 `//@ct-requires: ct-ast` 让 `test/run.sh` 走 ct-ast 路径，
@@ -109,10 +109,10 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
-| `50_ref_out` | `ref` 读写借用与 `out` 写出参数；调用点不写 `&` / `*`，签名发射成普通 C 指针 | ct-ast | `test/run.sh` + `check-ast.sh` |
-| `51_slice` | `T[]` 切片、数组自动补长度、子切片 `s[1..3]`（半开）与 `xs.len` | ct-ast | `test/run.sh` + `check-ast.sh` |
-| `52_box_new` | `box<T>` / `new T { … }`、`at()` 借出 `T *`、`release()` 释放 | ct-ast | `test/run.sh` + `check-ast.sh` |
-| `53_match_adt` | 最小 ADT + 穷尽 `match`；`String` 负载由 `str_concat` 构造，绑定里显式 `release()` | ct-ast | `test/run.sh` + `check-ast.sh` |
+| `50_ref_out` | `ref` 读写借用与 `out` 写出参数；调用点不写 `&` / `*`，签名发射成普通 C 指针 | ct-ast | `test/run.sh` + `check-ast.sh`（compile）+ `check-warnings.sh` 的 new-handle build 段 |
+| `51_slice` | `T[]` 切片、数组自动补长度、子切片 `s[1..3]`（半开）与 `xs.len` | ct-ast | 同上 |
+| `52_box_new` | `Box<T>` / `new T { … }`、`at()` 借出 `T *`、`release()` 释放；SH-116 已修复 build 模式的 Box 内置单元，`ct build` 可用 | ct-ast | 同上（compile + build） |
+| `53_match_adt` | 最小 ADT + 穷尽 `match`；`String` 负载由 `str_concat` 构造，绑定里显式 `release()` | ct-ast | 同上 |
 
 ## 近相能力（TEST-23）
 
@@ -143,7 +143,10 @@ near-phase 层驱动，不放宽任何默认构建路径。
 - `check-ast.sh`：语料层以编译模式逐个编译 `examples/*/*.ct`，有 `expected.out` 的比较输出；
   `src/` 三层入口不在它的 glob 内（`check-ast.sh` 的语料层保持编译模式）。
 - `check-warnings.sh`：同一语料的零警告门禁；另有一段 `examples/*/src/main.ct` 的 build 模式，
-  覆盖 `08_map_binding/src`、`13_builder_chain`、`14_scalar_host`（目录内必须有 `.m.ct`）。
+  覆盖 `08_map_binding/src`、`13_builder_chain`、`14_scalar_host`（目录内必须有 `.m.ct`）；
+  **new-handle build 段**再覆盖 `50`–`53` 与 `docs/snippets/README/*.ct`：逐条 `ct build`、运行，
+  并与 `prog.expected.out` / `*.expected.out` 逐字节比对。compile 模式的 `test/run.sh` /
+  `check-ast.sh` 通过不等于 build 通过，`52` 的这条路径由 SH-116 修复。
 - `test/run.sh` 的 near-phase 层：`54`–`57` 各自保留生成 / 构建 / 断言命令；
   `54` 走 `--freestanding --alloc`，`55` 走 `.m.ct` + shim，`56` 读 `--emit-model` JSON，
   `57` 跑 `check --types`。

@@ -404,5 +404,56 @@ for src in examples/*/src/main.ct; do
 done
 
 echo
+echo "== new-handle examples + docs snippets (build mode) =="
+# 50-53 are the minimal examples for ref/out, slices, Box/new and ADT/match.
+# test/run.sh and check-ast.sh compile them in compile mode; this section is the
+# build-mode half, so a README/docs claim of "ct build works" is backed by a
+# gate. SH-116 is the Box one (the built-in Box unit must be emitted).
+# docs/snippets/README/*.ct are the other half of DOC-96: the README blocks are
+# byte-identical to these files (check-docs), and their .expected.out is what
+# this loop compares against.
+for src in examples/50_ref_out/prog.ct examples/51_slice/prog.ct \
+           examples/52_box_new/prog.ct examples/53_match_adt/prog.ct \
+           docs/snippets/README/*.ct; do
+    [ -f "$src" ] || continue
+    case "$src" in
+        examples/*) name="$(basename "$(dirname "$src")")" ;;
+        docs/snippets/README/*) name="snippets-$(basename "$src" .ct)" ;;
+        *) name="$(basename "$src" .ct)" ;;
+    esac
+    exp="${src%.ct}.expected.out"
+    gd="$work/build-$name"
+    rm -rf "$gd"
+    mkdir -p "$gd" || continue
+    if ! "$work/ct-ast" build --emit-c "$src" -o "$gd" \
+            >"$work/build-$name.out" 2>"$work/build-$name.err"; then
+        bad "$src" "ct-ast failed: $(cat "$work/build-$name.err")"
+        continue
+    fi
+    if ! "$CC" -Wall -Wextra -std=c99 -I "$gd" "$gd"/*.c -o "$gd/prog" \
+            2>"$work/build-$name.cc"; then
+        bad "$src" "generated C does not compile: $(cat "$work/build-$name.cc")"
+        continue
+    fi
+    if [ -s "$work/build-$name.cc" ]; then
+        bad "$src" "generated C warns: $(cat "$work/build-$name.cc")"
+        continue
+    fi
+    if ! "$gd/prog" >"$work/build-$name.stdout" 2>&1; then
+        bad "$src" "the program exited non-zero"
+        continue
+    fi
+    if [ ! -f "$exp" ]; then
+        bad "$src" "missing expected output $exp"
+        continue
+    fi
+    if ! cmp -s "$work/build-$name.stdout" "$exp"; then
+        bad "$src" "program output differs from $exp"
+        continue
+    fi
+    ok "$src"
+done
+
+echo
 printf 'check-warnings: %d ok, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
