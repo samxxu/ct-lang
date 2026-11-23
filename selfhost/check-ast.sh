@@ -998,7 +998,7 @@ done
 # mutation + 66-file corpus), the parameterised self-hosting fixpoint (2/3
 # rounds, same fixpoint_stage), the metrics report, and the spec/tutorial +
 # v1-pre evidence summary.
-for pr in emit fixpoint metrics docs; do
+for pr in emit helpers fixpoint metrics docs; do
     if bash "test/ast/p88_${pr}.sh" "$work/ct-ast" >"$work/p88$pr.out" 2>"$work/p88$pr.err"; then
         ok "p88/${pr}"
     else
