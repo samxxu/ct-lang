@@ -319,12 +319,49 @@ String joined = str_concat(a.as_str(), b.as_str());   /* 新 owning String */
 | --- | --- |
 | `Box<T>` / `new` | 消灭「指向堆单对象的指针」；句柄内部当然有指针，但被协议包住 |
 | `String` | 同上；字面量/空串是 immortal 只读块，其余是自有堆块；`.data` 是 `const char *`，不保证 NUL 结尾 |
-| `Str` / `T[]` | 内部含指针；不能作 struct 字段 / `Map` 键；可作局部/参数/返回/`Vec` 元素/ADT 负载，但都是借用视图 |
+| `Str` / `T[]` | 内部含指针；`Str` 不可作 struct 字段 / `Map` 键；`T[]` 的位置白名单更窄（字段/全局/容器/`Box` 等一律硬错）。两者都只能作局部 / 参数 / 返回值等借用位置，逐位置见 §6.2 |
 | `ref` / `out` | 发射成指针，源码无指针；**没有生命周期保证**——可被存储或传给更长寿命位置，靠契约 + 直接 lint |
 | 闭包 | 捕获按值；fn 指针 + env 是发射细节 |
 | trait 接口值 | 胖指针 `{self, vt}`，装箱/派发全自动 |
 | `own` / `defer` / `errdefer` | 指针时代的手动资源管理三件套，句柄代码里基本用不上 |
 | 原生指针 `T*` | 逃生层：FFI、MMIO、算法热点；合法、不鼓励、圈禁在边界 |
+
+### 6.1 迁移适用面：三档，不是「不能用」
+
+前提不变：公开头文件、ABI 与既有 `char *` 字段都不动。新特性按“能不能出现在 C 消费者看得见的
+导出面”分三档：
+
+| 档 | 可用位置 | 最小形态 | 规范锚点 |
+| --- | --- | --- | --- |
+| 直接用 | Ct 内部实现、C 边界参数与写法糖 | `pub int f(ref int x, out int n)` 发射 `int f(int *x, int *n)`；方法级 `pub` 决定是否进 `.h` | [§4.68](language-spec.md#468-ref--out-参数phase-78仅-ct-ast)、[§4.57](language-spec.md#457-c-abi-静态库ct-build---libphase-39仅-ct-ast) |
+| 仅内部用 | `String` / `Vec` / `Map` / `Option` / `Result` / `Box<T>` / ADT 只活在 `ct-ast` 单元内 | 内部字段、容器元素、局部变量都可以；不要写进公开 `.h.ct` 的 `pub` 签名或 C 可见 struct 字段 | [§4.70](language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)、[§4.71](language-spec.md#471-box--new单对象句柄phase-81仅-ct-ast)、[§4.73](language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast) |
+| 边界必须转 C 形态 | 对外函数 / 结构体的交接处 | `String` → `cstr()`；切片 → `(const T *, size_t)`；句柄 → `T *` 或 opaque `struct`；ADT → 显式 `tag` + union / 访问函数 | [§4.57](language-spec.md#457-c-abi-静态库ct-build---libphase-39仅-ct-ast)、[§4.69](language-spec.md#469-切片-tphase-79仅-ct-ast)、[§4.73](language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast) |
+
+**「非 C ABI」的准确含义**：这些类型**不能进入对 C 消费者承诺的导出面**（`ct build --lib`
+的 `.abi.h`、`pub` 签名、公开 struct 字段），不是“在 Ct 里不能用”。`ct-ast` 自身就用
+`String` / `Vec` / `Map` 写内部实现；把“仅内部用”读成“禁用”是过度收缩。真正的硬边界是
+位置：`T[]` 不得进字段 / 全局 / 容器元素 / `Box` / `Option` / `Result` / ADT 负载 / 泛型实参；
+`Str` 的 struct 字段与 `Map` 键也硬错（其余借用位置见 §6.2）。
+
+**「全绿」的口径**：`test/run.sh` 的 `165 passed, 0 failed` 是 **compile 模式**；`ct build` 是
+另一条路径。[SH-116](../issues/selfhost/sh116-build-mode-box-unit.md) 已修复 `Box<T>` 的 build
+模式内置单元发射，`examples/50…53` 与 `docs/snippets/README/*.ct` 由 `check-warnings.sh` 的
+build 段实际构建/运行。引用“全绿”时注明模式，不要把 compile 全绿当成 build 全绿。
+
+### 6.2 位置禁止表：`Str` 与 `T[]` 只做借用视图
+
+| 位置 | `Str` | `T[]` | 依据 |
+| --- | --- | --- | --- |
+| 函数参数 / 返回值 / 局部变量 | 允许 | 允许 | §4.70 / §4.69 |
+| struct 字段 | 硬错 | 硬错 | §4.70 / §4.69 |
+| 全局 / `static` | 可编译，但只是视图（owner 必须先活） | 硬错 | §7.1 / §4.69 |
+| 容器元素（`Vec` / `Map`） | `Vec<Str>` 可编译（存视图）；`Map<Str,V>` 键硬错 | 硬错 | §7.1 / §4.69 |
+| `Box<T>` | 硬错（`Box<Str>`） | 硬错 | §4.71 / §4.69 |
+| `Option` / `Result` / ADT 负载 / 泛型实参 | 可编译但存视图；非 immortal 来源 v1.1 起 warning | 硬错 | §7.1、LANG-22 / §4.69 |
+| `?` 与 C 边界 | 只能 `cstr()` 显式退出；`.data` 直传硬错 | 只能 `(const T *, size_t)` 或 shim | §4.70 / §4.69 |
+
+逐类透传路径（返回局部、临时接收者、跨函数转手、交给 C 边界）见 [§7.1](#71-借用视图透传矩阵)，
+本表不重复其矩阵。
 
 ## 7. 残余风险诚实清单（Ct 不拦的东西）
 
