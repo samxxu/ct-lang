@@ -13,7 +13,9 @@
 #   B. a clean copy installs into a fresh prefix (CT_SOURCE_DIR, no download);
 #      `ct -v` equals CTC_VERSION, the `ctc` alias answers too, and the
 #      installed binary compiles and runs a program;
-#   C. the clean copy never printed an L0/L1/L2 build step.
+#   C. the clean copy never printed an L0/L1/L2 build step;
+#   D. check-ast.sh and ct-tour.sh build ct-ast from the seed while keeping the
+#      L1/L2 regression oracle (D-022 section 4).
 #
 # Usage: bash selfhost/check-install.sh
 # Exit: 0 all assertions pass, 1 any failure. This script is NOT registered in
@@ -58,6 +60,32 @@ if grep -Eq 'building L[012]|\bL2 could not build|L0 could not compile L1' "$src
     bad "install.sh still contains a bootstrap-chain step"
 else
     ok "install.sh contains no bootstrap-chain step"
+fi
+
+# --- D. the gate harnesses build ct-ast from the seed, not from L2 ----------
+if ! grep -q 'bootstrap/ct-ast' "$src/selfhost/check-ast.sh"; then
+    bad "check-ast.sh does not build ct-ast from bootstrap/ct-ast"
+elif grep -q '"\$work/l2" build -I selfhost/ct-ast' "$src/selfhost/check-ast.sh"; then
+    bad "check-ast.sh still lets L2 build ct-ast"
+else
+    ok "check-ast.sh builds ct-ast from the seed"
+fi
+if grep -q 'selfhost/l2/driver.ct' "$src/selfhost/check-ast.sh"; then
+    ok "check-ast.sh still builds the L1/L2 regression oracle"
+else
+    bad "check-ast.sh dropped the L1/L2 oracle build"
+fi
+if ! grep -q 'bootstrap/ct-ast' "$src/selfhost/ct-tour.sh"; then
+    bad "ct-tour.sh step 7 does not build ct-ast from bootstrap/ct-ast"
+elif grep -q 'L2 building the AST compiler' "$src/selfhost/ct-tour.sh"; then
+    bad "ct-tour.sh step 7 still says L2 builds the AST compiler"
+else
+    ok "ct-tour.sh step 7 builds ct-ast from the seed"
+fi
+if grep -q 'L1 building the split tree' "$src/selfhost/ct-tour.sh"; then
+    ok "ct-tour.sh step 6 still demonstrates the L1 -> L2 oracle"
+else
+    bad "ct-tour.sh dropped the L1 -> L2 oracle step"
 fi
 
 # --- B. clean-copy install --------------------------------------------------
