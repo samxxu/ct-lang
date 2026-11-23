@@ -1,0 +1,15 @@
+/* P-3.5 (SH-117) negative: a by-value `String` / `Str` handle is a 16-byte
+ * struct, never a `char *`. `char *p = s` used to be accepted and emitted the
+ * invalid C `char *p = s;`. The C boundary's only exit is `cstr()` /
+ * `.data[i]`, so the implicit conversion must be a hard error. */
+#include <stdio.h>
+
+int main(void)
+{
+    Str lit = "assign";
+    String s = lit.to_string();
+    char *p = s;
+    printf("%d\n", p[0]);
+    s.release();
+    return 0;
+}

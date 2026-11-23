@@ -1,0 +1,18 @@
+/* P-3.5 (SH-117) negative: `return s` from a `char *` function used to emit
+ * `char *__ct_sret = s;`. The same no-implicit-conversion rule applies to the
+ * return position. */
+#include <stdio.h>
+
+char *give(void)
+{
+    Str lit = "return";
+    String s = lit.to_string();
+    return s;
+}
+
+int main(void)
+{
+    char *p = give();
+    printf("%d\n", p[0]);
+    return 0;
+}

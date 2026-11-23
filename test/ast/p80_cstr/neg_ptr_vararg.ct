@@ -1,0 +1,13 @@
+/* P-3.5 (SH-117) negative: a variadic position cannot declare `char *`, so
+ * `printf("%s", s)` used to pass the struct by value and read garbage. The
+ * C boundary requires `cstr()`; the compiler must refuse the handle. */
+#include <stdio.h>
+
+int main(void)
+{
+    Str lit = "vararg";
+    String s = lit.to_string();
+    printf("%s\n", s);
+    s.release();
+    return 0;
+}

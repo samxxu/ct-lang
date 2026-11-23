@@ -55,6 +55,14 @@ neg() {
 neg neg_printf_data "read-only raw view without a NUL guarantee"
 neg neg_data_value "read-only raw view without a NUL guarantee"
 neg neg_data_write "immutable"
+# P-3.5 (SH-117): a by-value String / Str handle is a 16-byte struct, never a
+# `char *`. The declaration initialiser, the return position and a variadic
+# position each used to accept it and emit invalid C (`char *p = s;`,
+# `char *__ct_sret = s;`, `printf("%s", s)`).
+neg neg_ptr_assign "cannot convert 'String' to"
+neg neg_ptr_str_assign "cannot convert 'Str' to"
+neg neg_ptr_return "cannot convert 'String' to"
+neg neg_ptr_vararg "cannot pass a 'String' handle to C function"
 
 [ "$fail" -eq 0 ] && echo "p80_cstr: OK"
 exit "$fail"
