@@ -79,4 +79,4 @@ version-minor: 1
 - [DOC-99](../../../issues/docs/doc-99-v11-prework-tracker.md)（前置准备与入口闸）
 - [v1 路线](../../planning/v1-release-plan.md)
 - [D-017](../../decisions/D-017.md)（M1 切分判据）、[D-021](../../decisions/D-021.md)（JSON 树 B）
-- [LANG-26](../../../issues/lang/lang-26-binding-site-conversion.md)、[LANG-28](../../../issues/lang/lang-28-json-tree-b.md)、[LANG-24](../../../issues/lang/lang-24-box-pascalcase-rename.md)、[TEST-23](../../../issues/testing/test-23-v077-coverage-gaps.md)、[SH-94](../../../issues/selfhost/sh94-giant-units-duplicate-constants.md)
+- [SH-94](../../../issues/selfhost/sh94-giant-units-duplicate-constants.md)、[SH-119](../../../issues/selfhost/sh119-delete-l0-l2.md)（删 L0–L2，独立卡）
