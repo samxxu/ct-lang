@@ -99,6 +99,7 @@
 | [reviews/max-calls-limit.md](reviews/max-calls-limit.md) | 只读核对：`MAX_CALLS` 1024 的计数口径（按已解析自由函数调用表达式）、固定表成因（无「禁止动态分配」证据）、按需增长的改动面与外部包余量实测 |
 | [reviews/full-review-latest.md](reviews/full-review-latest.md) | 最新全面评审（v1-pre 收口后）：11 门禁离线 11/11、check-ast 1575/0/5；P1 五项（SH-104/105、phase-ID、G1/G6、MAX_FUNCS 余量、E88-1 承接）与 v1.0 就绪 4/10 | 发布前总检 |
 | [reviews/doc-freshness-2026-11-23.md](reviews/doc-freshness-2026-11-23.md) | README/文档样例新鲜度审计：首屏仍以旧特性为主线，新特性被压到速查表；`examples/52_box_new` 的 `ct build` 失败而 compile 门禁未拦住；P0 1 / P1 4 / P2 5，附每周自动审计任务 | 文档发布前检查 |
+| [reviews/naming-consistency-2026-11-24.md](reviews/naming-consistency-2026-11-24.md) | 语言名书写一致性评审：`Ct` 为散文名、`ct` 为命令/标识符；28 处裸 `ct`（20 处语言名、8 处命令/基线）；AGENTS §1 与 DOC-94 冲突；生成块/`docs/spec` 仍有 `CT`，需上游 CR | 命名规范检查 |
 | [reviews/full-review-latest-disposition.md](reviews/full-review-latest-disposition.md) | 该评审处置：接受项落库、争议项 [battle/v1-readiness-1](../battle/v1-readiness-1/verdict.md) 判决、Tier 1/Tier 2 门禁 | 查看处置 |
 | [reviews/2026-11-21-v088-external-review-eval.md](reviews/2026-11-21-v088-external-review-eval.md) | 外部 v0.88 评审与惯用卡评估：MAX_FUNCS/SH-104-105 勘误、lib/core 已定 bugfix、SH-73 已裁定 bug、惯用卡逐条修正 | 查看外部评估 |
 | [reviews/2026-11-22-grokbot-architecture-assessment-eval.md](reviews/2026-11-22-grokbot-architecture-assessment-eval.md) | GrokBot 外部架构评估核对：规模/测试/容量/许可逐项一致；3 处事实错误（内置层预算、issues 计数、`atomic` 分类）；无新架构项 | 查看外部评估 |
