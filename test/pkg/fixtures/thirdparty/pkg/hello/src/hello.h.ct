@@ -1,0 +1,2 @@
+pub int hello_value(void);
+int hello_value(void) { return 42; }

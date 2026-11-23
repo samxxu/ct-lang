@@ -1,0 +1,8 @@
+import hello;
+#include <stdio.h>
+
+int main(void)
+{
+    printf("hello %d\n", hello_value());
+    return 0;
+}

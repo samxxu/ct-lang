@@ -1,0 +1,2 @@
+hello 0.1.0 demo ../git/hello.git v0.1.0 sha256:09dec29b1b7ed00b87ed6d0d38ffcf256bb5da0eddd3cbe2458d50bab147afb9
+hello 0.1.0 acme ../git/acme-hello.git v0.1.0 sha256:e1b567b2cf66e760ec80922b86ab399dc2d7ab35b9c57281c2ac7e079c07b443
