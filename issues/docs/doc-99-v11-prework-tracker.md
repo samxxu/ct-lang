@@ -20,7 +20,7 @@
 
 | # | 事项 | 原卡 | 类型 | 完成判据 |
 | --- | --- | --- | --- | --- |
-| P-1 | tag 触发的 linux-x64 发布构建与原生冒烟 | [CI-19](../ci/ci-19-tag-release-build.md) | CI 配置 | workflow 绿；`workflow_dispatch` 可对既有 tag 重建 |
+| P-1 | tag 触发的 linux-x64 发布构建与原生冒烟 | [CI-19](../ci/ci-19-tag-release-build.md) | CI 配置 | workflow 绿；`workflow_dispatch` 可对既有 tag 重建（**已派工 DEV，2026-11-24**） |
 | P-2 | ct-pkg 索引重构三项裁定 | [PKG-21](../packages/pkg-21-ct-pkg-index-refactor-ruling.md) | 决策（文档） | 三项各给裁定与理由；原卡转终态 |
 | P-3 | 绑定点转换 ADR | [LANG-26](../lang/lang-26-binding-site-conversion.md) | 设计（文档） | ADR 定“宽松默认 + 严格 `.to<T>()`/`decode<T>` 边界” |
 | P-4 | JSON 树方案 B 的 30 天重评 | [LANG-28](../lang/lang-28-json-tree-b.md) | 评审（文档） | LANG-27 已 verified；按 D-021 唤醒条件给出重评结论（arena+索引 vs 真树） |

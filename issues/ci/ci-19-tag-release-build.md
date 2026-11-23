@@ -8,6 +8,7 @@
 | 锚点 | `a141badb`（`v1.0.0`；2026-11-24） |
 | 依据 | [dist.md](../../docs/dist.md)、[make-dist.sh](../../selfhost/make-dist.sh)；v1.0.0 发布记录（[v1 路线](../../docs/planning/v1-release-plan.md)） |
 | 状态 | open |
+| 负责人 | DEV（`.github/**` 与构建脚本归 DEV；REQ 只写验收） |
 | 处置证据 | **accepted（2026-11-24 所有者同意：发版构建移入 CI，本机不再依赖 zig）** |
 
 ## 1. 背景
@@ -55,3 +56,12 @@ ubuntu runner 本身就是 x86_64，**原生 `cc -static` 即可**，也可以�
 - [make-dist.sh](../../selfhost/make-dist.sh)（本地构建路径）
 - [v1 路线](../../docs/planning/v1-release-plan.md)（v1.0.0 发布记录）
 - [CI-18](ci-18-box-build-drop-prototype.md)（build 模式 Box 的发现在 CI 中的先例）
+
+## 6. 派工（REQ，2026-11-24）
+
+按 [DOC-99](../docs/doc-99-v11-prework-tracker.md) 的 P-1 派给 **DEV**：新增
+`.github/workflows/release.yml`，按 §2 的六个步骤实现，按 §3 验收。
+
+REQ 的边界：本节与 §2/§3 已给出工作流形态与判据，不代改 `.github/**`、不代跑
+`workflow_dispatch`。DEV 交付时在卡内贴：run 链接、`ct -v` 输出、冒烟输出、
+资产 sha256，并说明是否覆盖了 `v1.0.0` 的既有资产。
