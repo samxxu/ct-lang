@@ -173,6 +173,7 @@ L0 命中不认识的构造时直接报错（`'namespace' is not supported by th
 **Lowering 现状与方向（非语言契约）**：ct-ast 当前由 AST 直接发射 C，没有独立 IR。
 v1.1 先固化轻量 lowering 不变量——临时值物化、求值顺序、`Drop`/`defer`/`errdefer` 清理边、
 `return`/`break`/`continue`/`goto` 清理——并在发射前加不变量检查与小 golden（SH-111）；
+实现侧规则、机械检查子集与剩余项见 [design/lowering-invariants.md](design/lowering-invariants.md)。
 完整的 Typed/Lowered IR 与统一清理 CFG 归 v1.2 架构议题（SH-112），不进入 v1.0/v1.1 的发布门禁。
 
 > 出处：本表按 [DOC-72](../issues/docs/doc-72-spec-audit-followup.md) 的 B2-1 收敛；DOC-72 仍保留

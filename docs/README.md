@@ -25,6 +25,7 @@
 | [glossary.md](glossary.md) | 术语表：项目名、语言构造、内部符号 | 读文档遇到生词 |
 | [vision.md](vision.md) | 定位、设计原则与生态策略 | 想知道「为什么这样设计」 |
 | [architecture.md](architecture.md) | 编译器内部结构与关键算法 | 改编译器 |
+| [design/lowering-invariants.md](design/lowering-invariants.md) | 发射前 lowering 不变量：清理边、errdefer、临时物化、可机械检查子集与剩余项（SH-111） | 改发射器 / 排查临时值与清理边 |
 | [polymorphism.md](polymorphism.md) | 接口多态与派发 | 设计对象协作 |
 | [construction.md](construction.md) | 对象构造语义（vptr 由谁、何时写入） | 排查构造期问题 |
 | [patterns.md](patterns.md) | 设计模式在现有特性下的写法 | 判断「要不要新增语言特性」 |

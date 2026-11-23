@@ -1631,6 +1631,10 @@ impl StmtOps for Stmt {
                 int r = self->defer_run_node(self->arena->nodes[ids[k]].a,
                                              self->arena->nodes[ids[k]].line);
                 if (r < 0) return -1;
+                /* SH-111: keep the `errdefer` flag on the materialised run so
+                   the emitter's pre-check can prove an error body never sits
+                   on a normal exit. The emitter ignores this for output. */
+                self->arena->nodes[r].aux = self->arena->nodes[ids[k]].aux;
                 if (head < 0) head = r;
                 else self->arena->nodes[tail].next = r;
                 tail = r;
@@ -1688,6 +1692,7 @@ impl StmtOps for Stmt {
             int r = self->defer_run_node(self->arena->nodes[ids[k]].a,
                                          self->arena->nodes[ids[k]].line);
             if (r < 0) return -1;
+            self->arena->nodes[r].aux = self->arena->nodes[ids[k]].aux;
             if (*tail < 0) self->arena->nodes[blk].a = r;
             else self->arena->nodes[*tail].next = r;
             *tail = r;
