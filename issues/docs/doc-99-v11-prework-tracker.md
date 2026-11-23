@@ -22,8 +22,8 @@
 | --- | --- | --- | --- | --- |
 | P-1 | tag 触发的 linux-x64 发布构建与原生冒烟 | [CI-19](../ci/ci-19-tag-release-build.md) | CI 配置 | workflow 绿；`workflow_dispatch` 可对既有 tag 重建（**已派工 DEV，2026-11-24**） |
 | P-2 | ct-pkg 索引重构三项裁定 | [PKG-21](../packages/pkg-21-ct-pkg-index-refactor-ruling.md) | 决策（文档） | 三项各给裁定与理由；原卡转终态 |
-| P-3 | 绑定点转换 ADR | [LANG-26](../lang/lang-26-binding-site-conversion.md) | 设计（文档） | ADR 定“宽松默认 + 严格 `.to<T>()`/`decode<T>` 边界” |
-| P-4 | JSON 树方案 B 的 30 天重评 | [LANG-28](../lang/lang-28-json-tree-b.md) | 评审（文档） | LANG-27 已 verified；按 D-021 唤醒条件给出重评结论（arena+索引 vs 真树） |
+| P-3 | 绑定点转换 ADR **缺口复核**（D-020 已存在，核剩余三项） | [LANG-26](../lang/lang-26-binding-site-conversion.md) | 设计（文档） | `out` 写回 / `decode<T>` / 开关三项各有“覆盖、部分、未覆盖”结论；不够则出 D-020 增量 |
+| P-4 | JSON 树方案 B 的 30 天重评 | [LANG-28](../lang/lang-28-json-tree-b.md) | 评审（文档） | LANG-27 已 verified；**截止 2026-12-23**；五条判据逐条给证据，结论三选一（维持 A / 切 B / B 限定子集） |
 | P-5 | 覆盖缺口分批补测试 | [TEST-23](../testing/test-23-v077-coverage-gaps.md) | 测试 | 行覆盖与 `ct-ast` 单测分批进 `test/**`；不改产物 |
 | — | 巨型单元与重复常量 | [SH-94](../selfhost/sh94-giant-units-duplicate-constants.md) | 源码重构 | **不在本卡执行**：并入 v1.1 S1（M1 精细切分）的 MINOR 窗口 |
 
