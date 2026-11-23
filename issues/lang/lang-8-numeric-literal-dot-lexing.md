@@ -83,3 +83,14 @@ rc=1
    `rejected` 并在 spec 写明「`5.foo()` 不是方法调用」；
 2. 若裁定方法调用优先，按 `LANG-16 → LANG-8` 的 Lexer 批次改数字扫描（`5.` 后紧跟标识符或
    `(` 时不吞 `.`），补 `5.method()`、`5.0`、`5..6` 三组夹具。
+
+## 处置（DEV/REQ，2026-11-23）：维持 C 词法
+
+**裁定：方法调用不优先于浮点字面量。** `5.foo()` 继续按 C 词法读成浮点 `5.f` +
+标识符 `oo`（无后缀时是 `5.` + `foo`），不做词法器特判；规范只在 §4.24 记明归属。
+`status` 字段不动（状态词归 REV/REQ 另走流程）。
+
+可行动诊断已落地：解析器在相邻形态下把 `unexpected token` 换成
+`a numeric literal followed by '.' is a float; add a space for a method call`；
+`5 . foo()` 仍走方法解析并报 `no method 'foo' for type 'int'`。改动见提交
+`fix(ct-ast): LANG-8 浮点后点号诊断`，探针 `test/ast/lang8_float_dot.sh`。

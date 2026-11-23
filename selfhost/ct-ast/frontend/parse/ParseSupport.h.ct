@@ -187,6 +187,30 @@ impl SupportOps for ParseSupport {
        the driver can decide when to flush it (and so recovery can drop it). */
     int fail(const char *msg)
     {
+        /* LANG-8: C's lexer reads `5.` as a float literal, so `5.foo()` leaves
+           `foo` as the next token with no suffix `.` left for the parser. The
+           generic `unexpected token` hides that cause; name it and give the
+           one-character workaround. Only the adjacent spelling is rewritten --
+           `5. foo` already has a separator and is judged on its own. */
+        if (strcmp(msg, "unexpected token") == 0 && self->lex->tok == T_ID) {
+            const char *src = self->lex->src;
+            int n = self->lex->tokstart;
+            int d = -1;
+            /* `5.foo` leaves `foo`, but `5.f` is already a suffixed float and
+               leaves `oo`; accept the optional float suffix before matching the
+               `.` that the numeric scanner consumed. */
+            if (src && n >= 2 && src[n - 1] == '.'
+                && src[n - 2] >= '0' && src[n - 2] <= '9')
+                d = n - 2;
+            else if (src && n >= 3
+                     && (src[n - 1] == 'f' || src[n - 1] == 'F'
+                         || src[n - 1] == 'l' || src[n - 1] == 'L')
+                     && src[n - 2] == '.'
+                     && src[n - 3] >= '0' && src[n - 3] <= '9')
+                d = n - 3;
+            if (d >= 0)
+                msg = "a numeric literal followed by '.' is a float; add a space for a method call";
+        }
         (void)self;
         if (!self->errmsg[0]) {
             snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
