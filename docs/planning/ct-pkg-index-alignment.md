@@ -86,7 +86,7 @@
   [Pkg.h.ct:1923-1945](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1923-L1945)；
 - lock v1 拒绝与 v2 header 见 [Pkg.h.ct:1504-1512](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1504-L1512)、
   [Pkg.h.ct:1554](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1554)；
-- 契约：I5、§4.1 发布端硬接口 3/4（[契约 §4.1](ct-pkg-get-contract.md#41-ct-get)）。
+- 契约：I5、§4.1 发布端硬接口 3/4（[契约 §4.1](ct-pkg-get-contract.md#41-ct-get消费端ct-lang-负责)）。
 
 ## 5. 合入门禁（每条 bugfix 一行一合入）
 

@@ -1725,7 +1725,7 @@ Result<long, char *> twice(int n)
 `return` 不再按外层函数返回类型检查，避免 `examples/18_generic_string_table` 的假阳性。
 
 > **兼容期**：旧 v1 工程仍可能由 `ct install` 打印 `-I vendor/std ...`，并按 vendor 读取；那是 S7
-> 之前保留的兼容路径，新工程请用 `ct migrate` 升级（见 [package-guide §9](package-guide.md#9-兼容期v1-lock-与-vendor)）。
+> 之前保留的兼容路径，新工程请用 `ct migrate` 升级（见 [package-guide §8](package-guide.md#8-v1-迁移ct-migrate)）。
 
 ## 11. 命令行速查
 

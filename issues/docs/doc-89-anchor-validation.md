@@ -83,3 +83,20 @@ S1 的清单必须作为一次性证据入库（`docs/reviews/…` 或 issue 附
 
 - [DOC-88](doc-88-spec-split-decision.md)（`language-spec.md` 行号锚点冻结与白名单分批）
 - [check-docs.py](../../test/docs/check-docs.py)
+
+## 落地（2026-11-23，DEV）
+
+**状态未改（`deferred`），待 REV/REQ 复核后转 `open` → `verified`。**
+
+- [check-docs.py](../../test/docs/check-docs.py) 新增通用 `#fragment` 校验：范围是仓库全部 Markdown
+  （`docs/history/**` 冻结快照豁免）；节锚点按 GitHub slug（中文保留、标点去掉、行内代码参与、
+  重复标题依次 `-1`），行号锚点 `#L10` / `#L10-L20` 只校验 `1 <= a <= b <= 行数`；
+  失败信息给出目标文件、原锚点与最接近的候选 slug。
+- 负例/正例进 `--selftest`：不存在的节锚点、越界行号必须红；中文 / 全角标点 / 重复标题 /
+  百分号编码 / 同文件锚点必须通过。
+- 既有死锚点：修 4 处（`README.en.md` 的 tutorial CLI 锚点、`docs/tutorial.md` 的 package-guide
+  §9→§8、`docs/planning/ct-pkg-index-alignment.md` 的契约 §4.1 锚点、DOC-71 的 §4.47 锚点）；
+  历史记录里按当时行号写的 42 处逐条登记为 `FRAGMENT_EXEMPT` 的精确 `(source, target)` 对，
+  不按目录或规则整体关闭。
+- 验证：`python3 test/docs/check-docs.py` → OK（2755 relative links / 411 files、1672 fragments /
+  684 Markdown files）；`--selftest` → OK（fragment 11 cases + CT 14 cases）。

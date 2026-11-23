@@ -112,7 +112,12 @@
 ### 文档约定（由 `test/docs/check-docs.py` 校验）
 
 1. **语言**：默认中文；英文仅根 [README.en.md](../README.en.md)（人类阅读，AI 不读）；其他文档不写英文段。
-2. **相对链接必须可解析**。唯一豁免：`docs/history/reports/**` 里指向当时存在、现已删除的
+2. **相对链接必须可解析，`#fragment` 必须命中**。节锚点按 GitHub slug 比对（中文保留、
+   标点去掉、重复标题依次加 `-1`；目标标题里的行内代码参与 slug）；行号锚点
+   `#L10` / `#L10-L20` 只校验 `1 <= a <= b <= 行数`。`docs/history/**` 是冻结快照，
+   整棵豁免；历史 issue / battle 里按当时行号写的锚点逐条登记在
+   [check-docs.py](../test/docs/check-docs.py) 的 `FRAGMENT_EXEMPT`，新增死锚点仍会红。
+   路径豁免：`docs/history/reports/**` 里指向当时存在、现已删除的
    `selfhost/ast/**` 与 `selfhost/src/**` 的链接（历史快照，正文不改写）。
 3. **版本标记**：`README.md` 与本文出现的 `vX.Y.Z` 必须是当前版本（取自 `selfhost/l0/ctc.c` 的 `CTC_VERSION`）。
    历史版本只出现在 [history/phase-log.md](history/phase-log.md) 的版本记录与 [history/](history/README.md)。

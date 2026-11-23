@@ -49,7 +49,7 @@ New here? Start with the [tutorial](docs/tutorial.md); every command in it can b
 Exit code `0` on success, `1` on syntax or I/O errors (on any `ct check` finding, or on an impl signature drift in `ct build`). Source diagnostics use `file:line:col: error: message`;
 driver-level errors keep the `ctc:` prefix even when the binary is named `ct`, so logs and existing assertions
 stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `--ns-root`) is in the
-[tutorial §11](docs/tutorial.md#11-cli-cheat-sheet).
+[tutorial §11](docs/tutorial.md#11-命令行速查).
 
 ### 3. Capabilities
 

@@ -6,7 +6,14 @@ Standard library only. It asserts fifteen invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
-     that links into the since-deleted selfhost/ast/** or selfhost/src/**;
+     that links into the since-deleted selfhost/ast/** or selfhost/src/**.
+     Every `#fragment` in any Markdown link in the repository is resolved too
+     (DOC-89): section anchors are checked against the target's headings using
+     GitHub's slug rules, line anchors (`#L10` / `#L10-L20`) against the target
+     file's length. `docs/history/**` is a frozen snapshot and is skipped; a
+     few exact (source, target) pairs quoted in historical issues/battles are
+     exempted in FRAGMENT_EXEMPT because they record the line numbers of their
+     own date;
   2. the version token written in README.md and docs/README.md equals
      CTC_VERSION in selfhost/l0/ctc.c (and all compiler layers agree);
   3. the hard-gate count stated in README.md, docs/README.md and
@@ -56,6 +63,9 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
+import unicodedata
+import urllib.parse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -89,6 +99,101 @@ STABLE_TIERS = ("已冻结", "冻结中", "1.0 前可改")
 COMPAT_MARKER = re.compile(r"<!--\s*ct-compat:\s*([^>]*)-->")
 CAP_MARKER = re.compile(r"<!--\s*cap:([a-z0-9-]+)\s*-->")
 CAP_STATUS = {"implemented", "planned"}
+
+# DOC-89: exact exemptions for dead *line* anchors quoted by historical records.
+# These documents cite the line numbers that were true on their own date; they
+# are records, not live navigation, so rewriting the numbers would falsify them.
+# The exemption is per (source file, raw target), never per directory or rule:
+# a new dead anchor in the same file still fails.
+FRAGMENT_EXEMPT = {
+    "battle/langcap-1/verdict.md": {
+        "../../issues/packages/pkg-2-ct-install-package-root-import.md#L100-L118",
+    },
+    "docs/review/builtin-layer-vs-std-package-name-check.md": {
+        "../../README.md#L468",
+    },
+    "docs/reviews/2026-11-17-pkg-index-audit.md": {
+        "../../README.md#L450",
+    },
+    "docs/proposals/ct-pure-type-alias-proposal.md": {
+        "../../test/ast/153_into_type_host/lib/ops.m.ct#L9-L15",
+    },
+    "issues/README.md": {"../docs/roadmap.md#L265"},
+    "issues/docs/doc22-batch2-stale-statements.md": {
+        "../../test/bindings/README.md#L192",
+    },
+    "issues/docs/doc25-include-roots-asymmetry.md": {"../../README.md#L507"},
+    "issues/docs/doc34-grammar-assertion-count.md": {"../../README.md#L294"},
+    "issues/docs/doc26-stale-counts-and-tag-layout.md": {
+        "../../README.md#L293",
+        "../../README.md#L554",
+        "../../README.md#L818",
+        "../../docs/roadmap.md#L904",
+        "../../docs/roadmap.md#L945",
+        "../../docs/roadmap.md#L1001",
+    },
+    "issues/docs/doc27-test-readme-stale.md": {
+        "../../test/README.md#L44",
+    },
+    "issues/docs/doc30-version-register-drift.md": {"../../docs/glossary.md#L298"},
+    "issues/docs/doc35-test-readme-probe-counts.md": {
+        "../../test/README.md#L45",
+    },
+    "issues/docs/doc36-bindings-cross-unit-interface.md": {
+        "../../test/bindings/README.md#L253-L271",
+    },
+    "issues/docs/doc37-selfhost-readme-ct-ast-layout.md": {
+        "../../selfhost/README.md#L81-L83",
+    },
+    "issues/docs/doc38-readme-gitignore-claim.md": {
+        "../../README.md#L333",
+        "../../README.md#L865",
+    },
+    "issues/docs/doc39-glossary-arena-module.md": {"../../docs/glossary.md#L354"},
+    "issues/docs/doc40-roadmap-check-ast-count.md": {
+        "../../docs/roadmap.md#L953",
+        "../../docs/roadmap.md#L1009",
+    },
+    "issues/docs/doc41-glossary-capability-patch-list.md": {
+        "../../docs/glossary.md#L400",
+    },
+    "issues/docs/doc42-readme-ast-errors-assertion.md": {
+        "../../README.md#L779-L780",
+    },
+    "issues/docs/doc46-readme-transform-table-stale.md": {
+        "../../README.md#L603",
+        "../../README.md#L604",
+        "../../README.md#L655",
+    },
+    "issues/docs/doc48-borrow-design-stale-status.md": {
+        "../../docs/history/design/borrow.md#L357-L366",
+    },
+    "issues/docs/doc47-memory-guide-stale.md": {
+        "../../docs/memory-guide.md#L646-L652",
+        "../../docs/memory-guide.md#L692",
+        "../../docs/memory-guide.md#L1048",
+    },
+    "issues/docs/doc61-roadmap-phase18-english.md": {
+        "../../docs/roadmap.md#L975",
+    },
+    "issues/docs/doc67-phase26-doc-impl-mismatch.md": {
+        "../../docs/language-spec.md#L4163-L4174",
+        "../../docs/language-spec.md#L4168",
+    },
+    "issues/docs/doc68-vscode-generic-jump-index.md": {
+        "../../editors/vscode/extension.js#L373-L390",
+    },
+    "issues/docs/doc71-range-dollar-is-member-not-index.md": {
+        "../../docs/language-spec.md#L4248",
+    },
+    "issues/docs/readme-passthrough-scope.md": {"../../README.md#L513"},
+    "issues/docs/readme-quickstart-branch.md": {"../../README.md#L477-L486"},
+    "issues/selfhost/ct-ast-parse-diag-format.md": {"../../README.md#L509"},
+    "issues/docs/language-spec-struct-array-field-stale.md": {
+        "../../docs/roadmap.md#L743",
+    },
+    "issues/docs/roadmap-stale-todo.md": {"../../docs/roadmap.md#L680-L682"},
+}
 
 # DOC-94: the language name is "Ct" in active prose. The check skips code
 # (fenced blocks and inline spans), the generated spec block, and the trees
@@ -167,6 +272,143 @@ def check_links(errors):
             ):
                 continue
             errors.append(f"{rel}: dead link -> {target}")
+    return checked, scanned
+
+
+def md_all_files():
+    """Every Markdown file in the repository (DOC-89 scans the whole tree)."""
+    out = []
+    for base, dirs, names in os.walk(ROOT):
+        dirs[:] = sorted(d for d in dirs if d not in (".git", ".temp", "node_modules"))
+        for name in sorted(names):
+            if name.endswith(".md"):
+                out.append(os.path.join(base, name))
+    return out
+
+
+def slugify(heading):
+    """GitHub's heading slug: lower-case, drop punctuation, spaces -> hyphens."""
+    text = re.sub(r"<[^>]*>", "", heading.strip()).lower()
+    text = urllib.parse.unquote(text)
+    out = []
+    for char in text:
+        if char in "- ":
+            out.append(char)
+        elif char.isspace():
+            out.append(" ")
+        elif (
+            char.isalnum()
+            or unicodedata.category(char).startswith("M")
+            or unicodedata.category(char) == "Pc"
+        ):
+            out.append(char)
+    return "".join(out).strip().replace(" ", "-")
+
+
+def heading_slugs(path):
+    """The set of anchor slugs the target Markdown file exposes."""
+    slugs = set()
+    seen = {}
+    in_fence = False
+    for line in read(path).splitlines():
+        if FENCE_LINE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        match = re.match(r"^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$", line)
+        if not match:
+            continue
+        base = slugify(match.group(2))
+        if not base:
+            continue
+        if base in seen:
+            seen[base] += 1
+            candidate = f"{base}-{seen[base]}"
+            while candidate in slugs:
+                seen[base] += 1
+                candidate = f"{base}-{seen[base]}"
+        else:
+            seen[base] = 0
+            candidate = base
+        slugs.add(candidate)
+    return slugs
+
+
+def file_line_count(path):
+    with open(path, "rb") as handle:
+        data = handle.read()
+    return data.count(b"\n") + (0 if not data or data.endswith(b"\n") else 1)
+
+
+def resolve_fragment(path, fragment):
+    """Return (ok, reason) for one `#fragment` pointing at `path` (DOC-89)."""
+    fragment = urllib.parse.unquote(fragment)
+    if not fragment:
+        return True, None
+    line = re.match(r"^L(\d+)(?:-L(\d+))?$", fragment)
+    if line:
+        start = int(line.group(1))
+        end = int(line.group(2)) if line.group(2) else start
+        count = file_line_count(path)
+        if 1 <= start <= end <= count:
+            return True, None
+        return False, f"line anchor L{start}-L{end} outside 1..{count}"
+    if not path.endswith(".md"):
+        return True, None  # non-Markdown targets have no heading anchors
+    slugs = heading_slugs(path)
+    if fragment in slugs:
+        return True, None
+    import difflib
+
+    close = difflib.get_close_matches(fragment, list(slugs), n=1, cutoff=0.6)
+    hint = close[0] if close else "(no similar heading)"
+    return False, f"no such heading; closest candidate: {hint}"
+
+
+def fragment_issues(path, text):
+    """Check every `#fragment` in one file's Markdown text."""
+    rel = os.path.relpath(path, ROOT)
+    checked = 0
+    issues = []
+    for match in LINK.finditer(text):
+        target = match.group(1).strip()
+        parts = target.split()
+        if not parts:
+            continue
+        target = parts[0]
+        if re.match(r"^(https?:|mailto:|file:)", target):
+            continue
+        if "#" not in target:
+            continue
+        dest, fragment = target.split("#", 1)
+        if not dest:
+            resolved = path
+        else:
+            resolved = os.path.normpath(os.path.join(os.path.dirname(path), dest))
+        if not os.path.exists(resolved):
+            continue  # path checking owns the missing-file case
+        if target in FRAGMENT_EXEMPT.get(rel.replace(os.sep, "/"), ()):
+            continue
+        checked += 1
+        ok, reason = resolve_fragment(resolved, fragment)
+        if not ok:
+            issues.append(f"{rel}: dead anchor -> {target} ({reason})")
+    return checked, issues
+
+
+def check_fragments(errors):
+    """DOC-89: generic `#fragment` validation over every Markdown link."""
+    checked = 0
+    scanned = 0
+    for path in md_all_files():
+        rel = os.path.relpath(path, ROOT).replace(os.sep, "/")
+        if rel.startswith("docs/history/"):
+            continue  # frozen snapshot; its anchors are historical records
+        count, issues = fragment_issues(path, strip_code(read(path)))
+        checked += count
+        scanned += 1
+        errors.extend(issues)
     return checked, scanned
 
 
@@ -880,12 +1122,87 @@ def ct_selftest():
     return 0
 
 
+def anchor_selftest():
+    """DOC-89 fixtures: positive anchors pass, missing/out-of-range are red."""
+    target_text = (
+        "# Top\n\n"
+        "## 4.53 可选类型检查 `ct check --types`（Phase 32）\n\n"
+        "## 重复标题\n\n"
+        "## 重复标题\n\n"
+        "## 全角标点：测试（一）\n"
+    )
+    cases = (
+        ("inline code in heading", "453-可选类型检查-ct-check---typesphase-32", True),
+        ("duplicate heading", "重复标题", True),
+        ("duplicate heading suffix", "重复标题-1", True),
+        ("CJK punctuation", "全角标点测试一", True),
+        ("percent-encoded", "%E9%87%8D%E5%A4%8D%E6%A0%87%E9%A2%98", True),
+        ("line range", "L1-L3", True),
+        ("missing heading", "no-such-heading", False),
+        ("line out of range", "L99", False),
+    )
+    with tempfile.TemporaryDirectory(
+        prefix="check-docs-anchor-", dir=os.environ.get("TMPDIR") or None
+    ) as work:
+        target = os.path.join(work, "target.md")
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write(target_text)
+        failed = 0
+        for name, fragment, want in cases:
+            got, _ = resolve_fragment(target, fragment)
+            ok = got == want
+            failed += 0 if ok else 1
+            print(
+                f"fragment-ratchet selftest: {name}: "
+                f"{'resolved' if got else 'rejected'} -> {'OK' if ok else 'FAIL'}"
+            )
+        positive = (
+            "[a](target.md#453-可选类型检查-ct-check---typesphase-32)\n"
+            "[b](target.md#重复标题-1)\n"
+            "[c](target.md#%E9%87%8D%E5%A4%8D%E6%A0%87%E9%A2%98)\n"
+            "[d](target.md#L2-L4)\n"
+        )
+        count, issues = fragment_issues(target, positive)
+        ok = count == 4 and not issues
+        failed += 0 if ok else 1
+        print(
+            f"fragment-ratchet selftest: positive links: "
+            f"{count} checked, {len(issues)} issue(s) -> {'OK' if ok else 'FAIL'}"
+        )
+        negative = positive + "[bad](target.md#does-not-exist)\n"
+        count, issues = fragment_issues(target, negative)
+        ok = count == 5 and len(issues) == 1 and "does-not-exist" in issues[0]
+        failed += 0 if ok else 1
+        print(
+            f"fragment-ratchet selftest: negative link: "
+            f"{len(issues)} issue(s) -> {'OK' if ok else 'FAIL'}"
+        )
+        self_path = os.path.join(work, "self.md")
+        with open(self_path, "w", encoding="utf-8") as handle:
+            handle.write("# Self\n\n[me](#self)\n[bad](#missing)\n")
+        count, issues = fragment_issues(self_path, read(self_path))
+        ok = count == 2 and len(issues) == 1
+        failed += 0 if ok else 1
+        print(
+            f"fragment-ratchet selftest: same-file fragments: "
+            f"{len(issues)} issue(s) -> {'OK' if ok else 'FAIL'}"
+        )
+    if failed:
+        print(f"fragment-ratchet selftest: FAIL ({failed} case(s))")
+        return 1
+    print(f"fragment-ratchet selftest: OK ({len(cases) + 3} cases)")
+    return 0
+
+
 def main():
     if "--selftest" in sys.argv[1:]:
         rc = ct_selftest()
-        return j6_selftest() or rc
+        rc = j6_selftest() or rc
+        rc = anchor_selftest() or rc
+        return rc
     errors = []
     links, scanned = check_links(errors)
+    fragments, fragment_files = check_fragments(errors)
     version = check_version(errors)
     gates = check_gate_count(errors)
     phases = check_phase_status(errors)
@@ -911,6 +1228,7 @@ def main():
         return 1
     print(
         f"check-docs: OK ({links} relative links in {scanned} files, "
+        f"{fragments} fragment(s) in {fragment_files} Markdown files, "
         f"v{version}, {gates} hard gates, {phases} phase status, "
         f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
         f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s), "
