@@ -999,6 +999,14 @@ else
     bad "lang23/traits" "$(cat "$work/lang23.out" "$work/lang23.err" | head -8)"
 fi
 
+# LANG-8: `5.foo()` keeps C's float lexing; the diagnostic names it instead of
+# the generic `unexpected token`, and `5 . foo()` still reaches method lookup.
+if bash test/ast/lang8_float_dot.sh "$work/ct-ast" >"$work/lang8.out" 2>"$work/lang8.err"; then
+    ok "lang8/float-dot"
+else
+    bad "lang8/float-dot" "$(cat "$work/lang8.out" "$work/lang8.err" | head -8)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
