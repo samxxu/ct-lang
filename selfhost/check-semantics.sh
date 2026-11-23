@@ -242,6 +242,40 @@ else
     bad "check: json diagnostics" "exit $rc; $(cat "$work/amb.json")"
 fi
 
+# LANG-10 7b: a *parse* error must use the same `--diagnostics=json` channel as
+# the semantic findings. Text mode keeps its exact `file:line:col: error:` line;
+# JSON mode emits one parseable document on stdout with file/line/col/severity/
+# message and nothing on stderr. The record counts must agree (D1).
+cat > "$work/parse_json.ct" <<'EOF'
+int main(void) { return 1 + ; }
+EOF
+"$work/ct-ast" check "$work/parse_json.ct" >"$work/parse_text.out" 2>"$work/parse_text.err"
+text_rc=$?
+"$work/ct-ast" check --diagnostics=json "$work/parse_json.ct" \
+    >"$work/parse_json.json" 2>"$work/parse_json.err"
+json_rc=$?
+if [ "$text_rc" -eq 1 ] && [ "$json_rc" -eq 1 ] \
+        && grep -Eq 'parse_json.ct:[0-9]+:[0-9]+: error: ' "$work/parse_text.err" \
+        && [ ! -s "$work/parse_json.err" ] \
+        && python3 - "$work/parse_json.json" "$work/parse_text.err" <<'PYCHK'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+errs = doc["errors"]
+assert len(errs) >= 1, "no error records"
+assert len(errs) == sum(1 for l in open(sys.argv[2]) if ": error: " in l), "count mismatch"
+e = errs[0]
+assert e["severity"] == "error", e
+assert e["file"].endswith("parse_json.ct"), e
+assert isinstance(e["line"], int) and e["line"] > 0, e
+assert isinstance(e["col"], int) and e["col"] > 0, e
+assert e["message"], e
+PYCHK
+then
+    ok "check: a parse error uses the --diagnostics=json channel (LANG-10)"
+else
+    bad "check: parse error JSON" "text rc=$text_rc json rc=$json_rc; $(cat "$work/parse_json.json" "$work/parse_json.err")"
+fi
+
 # The trait lives in the same unit here; the imported-unit half of the check
 # is exercised in check-ast.sh, this gate only pins the entry's behaviour.
 cat > "$work/drift.ct" <<'EOF'
