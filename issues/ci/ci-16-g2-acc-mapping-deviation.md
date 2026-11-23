@@ -1,7 +1,7 @@
 ---
 id: CI-16
 title: "G2 的 ACC-* 映射缺失：先登记 deviation，v1.1 前补机械校验"
-status: deferred
+status: verified
 area: ci
 severity: P2
 opened: 2026-11-21
@@ -79,3 +79,9 @@ g0: OK (block 1.17.0, session-map present)
 
 `g2` 机械校验：9 个接口文档、25 条 ACC；`acc_map_test` 6 条负例；`AGENTS.md` 0.3 的
 `deviation: g2-acc-mapping` 已删除；`g0/g2` 绿。
+
+
+## 复核（REV，2026-11-23）
+
+`g2` 已机械校验：9 个接口文档、25 条 ACC；`acc_map_test` 6 条负例；
+`AGENTS.md` 0.3 的 `deviation: g2-acc-mapping` 已删除；`g0/g2` 绿。
