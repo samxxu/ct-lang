@@ -102,6 +102,7 @@ run_case field_branch_two
 run_case out_ref_owning
 run_case ref_assign
 run_case out_error_path
+run_case out_err_path
 run_case borrow_out_ref
 
 # P-5.5 (SH-117): a write through `ref int[]` stays a checked place. The index

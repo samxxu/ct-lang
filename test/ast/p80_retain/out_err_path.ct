@@ -1,0 +1,35 @@
+/* P-5.4 (SH-117): the `return err:` error exit is the same handover as the
+ * early `return` form. The values assigned to `len` / `echo` before the error
+ * exit belong to the caller; the owning assignment released the caller's old
+ * buffer, and nothing is rolled back when the function reports failure.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+
+Result<int, char *> parse(Str s, out int len, out String echo)
+{
+    if (s.len == 0) {
+        len = -1;
+        echo = s.to_string();
+        return err: (Result<int, char *>){ 0, 0, "empty" };
+    }
+    len = s.len;
+    echo = s.to_string();
+    return (Result<int, char *>){ 1, 0, 0 };
+}
+
+int main(void)
+{
+    Str lit = "old";
+    String echo = lit.to_string();
+    int n = 7;
+    Result<int, char *> r = parse("", n, echo);
+    printf("err ok=%d len=%d echo=%d live=%d\n", r.ok, n, echo.len,
+           ct_str_live_count());
+    r = parse("four", n, echo);
+    printf("ok=%d len=%d echo=%d live=%d\n", r.ok, n, echo.len,
+           ct_str_live_count());
+    echo.release();
+    printf("end live=%d\n", ct_str_live_count());
+    return 0;
+}
