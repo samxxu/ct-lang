@@ -2,9 +2,9 @@
 #
 # check-ast.sh - the AST compiler's behavioural gate (Phase 9.1-9.7, 10.x, 11.x, 12.1).
 #
-# Builds the bootstrap chain (L0 -> L1 -> L2), then builds the AST compiler
-# (selfhost/ct-ast/main.ct, D30: a separate tree in parallel with the old
-# pipeline), and runs every fixture under test/ast/*/:
+# Builds the bootstrap chain (L0 -> L1 -> L2) as the regression oracle, builds
+# ct-ast from the frozen seed bootstrap/ct-ast (D-022, v1-PH-0 S2), and runs
+# every fixture under test/ast/*/:
 #
 #   prog.ct -> ct-ast -> <name>.c (+ <name>.h only for a .h.ct input)
 #           -> cc (warning-free) -> run -> compare stdout with prog.expected.out
@@ -487,14 +487,27 @@ fi
 if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
     echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
 fi
+# ct-ast itself comes from the frozen seed (D-022 / v1-PH-0 S2): the same
+# bootstrap/ct-ast/*.c that install.sh ships. The L0 -> L1 -> L2 chain above is
+# built only as the regression oracle for gates 2/3/4/5 and for the
+# differential checks below; it no longer compiles ct-ast.
+seeddir="$root/bootstrap/ct-ast"
+if [ ! -d "$seeddir" ]; then
+    echo "  the frozen seed is missing: bootstrap/ct-ast (run selfhost/gen-seed.sh)"; exit 1
+fi
+if ! "$CC" -Wall -Wextra -std=c99 -I "$seeddir" "$seeddir"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
+    echo "  the AST compiler did not build from the seed:"; sed 's/^/    /' "$work/astb.log"; exit 1
+fi
+ok "the chain builds (L0 -> L1 -> L2 as oracle; ct-ast from the frozen seed)"
+# The white-box probes (p86 token/C API, TEST-25 unit slices) still receive the
+# tree L2 emits for ct-ast's source. That tree is a frozen expectation of those
+# probes, not the shipped binary: L2 is the regression oracle here, and the
+# compiler under test above came from the seed. Keeping the two apart is what
+# D-022 means by "L1/L2 stay as oracle".
 mkdir -p "$work/astsrc"
 if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
-    echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
+    echo "  L2 could not emit the ct-ast reference tree (white-box probes):"; sed 's/^/    /' "$work/ast.out"; exit 1
 fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
-    echo "  the AST compiler did not build:"; sed 's/^/    /' "$work/astb.log"; exit 1
-fi
-ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
 
 # Phase 26 (SH-62 / SH-64): the systemic defence. A type parameter must be gone
 # from an emitted instance -- an instance substitutes it -- so a residual `T`

@@ -11,8 +11,9 @@
 #   5) true self-hosting: L1 compiles itself into L1', and L1' compiles the sample too
 #   6) the split compiler: L1 builds the multi-unit tree selfhost/l2/** into L2,
 #      and L2 compiles the sample identically as well
-#   7) the shipped entry (Phase 10.7): L2 builds ct-ast from selfhost/ct-ast/main.ct,
-#      and that binary answers to `ct`, with `ctc` kept as a compatibility alias
+#   7) the shipped entry (Phase 10.7, seed cutover in v1.0): the frozen seed
+#      bootstrap/ct-ast is compiled into ct-ast, and that binary answers to `ct`,
+#      with `ctc` kept as a compatibility alias
 #   8) the incremental cache (Phase 6.3): a second `build` of unchanged sources
 #      reuses the artifacts, and a changed dependency invalidates them
 #   9) prints where to go next
@@ -252,26 +253,29 @@ fi
 banner "7) the shipped entry: ct-ast answers to 'ct'"
 say "Phase 10.7: the installed compiler is built from selfhost/ct-ast/main.ct (ct-ast);"
 say "L2 stays as the regression oracle. The identity comes from argv[0]:"
-ast_src="$work/astsrc"
 ast_bin="$work/ct-ast-bin"
 ct_bin="$work/ct"
 alias_bin="$work/ctc"
-rm -rf "$ast_src"
-mkdir -p "$ast_src"
 
-if run "L2 building the AST compiler" "$l2_bin" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$ast_src"; then
-    printf '\n+ %s -Wall -Wextra -std=c99 %s/*.c -o %s\n' "$CC" "$ast_src" "$ast_bin"
-    if "$CC" -Wall -Wextra -std=c99 "$ast_src"/*.c -o "$ast_bin" 2>"$work/ast.log" &&
+# Since v1.0 (D-022) the shipped compiler is built from the frozen seed: the C
+# that ct-ast emitted for itself, exactly what install.sh compiles. L2 above
+# stays the regression oracle; it no longer builds ct-ast.
+seeddir="bootstrap/ct-ast"
+if [ ! -d "$seeddir" ]; then
+    printf 'FAIL: the frozen seed is missing: %s (run selfhost/gen-seed.sh)\n' "$seeddir"
+    fail=1
+else
+    say "The shipped entry is built from the frozen seed bootstrap/ct-ast:"
+    say "the C that ct-ast emitted for itself. install.sh compiles the same files."
+    printf '\n+ %s -Wall -Wextra -std=c99 -I %s %s/*.c -o %s\n' "$CC" "$seeddir" "$seeddir" "$ast_bin"
+    if "$CC" -Wall -Wextra -std=c99 -I "$seeddir" "$seeddir"/*.c -o "$ast_bin" 2>"$work/ast.log" &&
        [ ! -s "$work/ast.log" ]; then
         note "ok (warning-free)"
     else
-        printf 'FAIL: ct-ast did not build warning-free\n'
+        printf 'FAIL: ct-ast did not build warning-free from the seed\n'
         sed 's/^/    /' "$work/ast.log"
         fail=1
     fi
-else
-    printf 'FAIL: L2 could not build selfhost/ct-ast/main.ct\n'
-    fail=1
 fi
 cp "$ast_bin" "$ct_bin"
 cp "$ast_bin" "$alias_bin"
