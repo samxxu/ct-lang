@@ -109,3 +109,45 @@ $ bash test/ast/p88_metrics.sh <ct-ast>   -> p88metrics: 9 passed, 0 failed
 $ bash test/ast/p88_docs.sh <ct-ast>      -> p88docs: 26 passed, 0 failed
 $ bash test/ast/p86_errors.sh <ct-ast>    -> p86errors: 23 passed, 0 failed
 ```
+
+## v1-PH-0 S0.5a/b：字面 `match` 落地（2026-11-24，`issue/match`）
+
+seed = 本树 S0.5 落地前的一版 ct-ast 生成的 C（即 `MAX_ADT_VARIANTS=96`、
+尚未写 match 的那版）；它既能编 ADT/match，也不依赖 L2。最终编译器由 seed
+构建后自举 2 轮。
+
+```console
+$ bash test/ast/p88_emit.sh /tmp/mct2-ast
+  p88emit: slices=76 arms=420 variants=84
+  p88emit: missing-arm negative is red (match does not cover variant)
+  p88emit: 66 corpus files are byte-identical
+p88emit: 3 passed, 0 failed
+
+$ bash test/ast/p88_helpers.sh /tmp/mct2-ast
+  p88helpers: helpers=3 matches=5 variants=84
+  p88helpers: missing-arm negative is red (match does not cover variant)
+p88helpers: 2 passed, 0 failed
+
+$ bash test/ast/p86_errors.sh /tmp/mct2-ast
+p86errors: 23 passed, 0 failed          # 345 条诊断逐字
+
+$ python3 tools/p85_inventory.py --root . corpus-manifest --ct /tmp/mct2-ast \
+      | diff test/probes/p85_corpus_sha.tsv -
+（无输出：66 文件逐字节一致）
+
+$ # 自举 2 轮
+$ /tmp/mct2-ast build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o fix1
+$ cc -Wall -Wextra -std=c99 fix1/*.c -o ct2
+$ ./ct2 build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o fix2
+$ diff -r -q -x .ctcache fix1 fix2
+（无输出：2 轮逐字节一致）
+
+$ bash selfhost/check-goldens-ast.sh /tmp/mct2-ast
+check-goldens-ast: 25/25
+```
+
+**构建路径注意。** 本树仍是 `L0→L1→L2→ct-ast`；L2 不实现 ADT/match，gate 8
+的 `L2 build ct-ast` 段在本树会发射非法 C（`enum { NK_...(), }`）。seed cutover
+（S0/S2）落地前的 12/12 无法在本树取得；上面的等价值用 seed 复核。另：
+`p86_tokens`/`test25` 读 `$work/astsrc`，它们假定 L2 的符号拼写
+（`g_emit`、无括号表达式），换成 seed 发射后需随 S2 同步。
