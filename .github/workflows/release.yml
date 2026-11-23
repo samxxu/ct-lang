@@ -1,0 +1,112 @@
+name: release
+
+# CI-19: build and smoke the Linux x64 artefact on the native runner, then
+# attach it to the GitHub Release. No zig, no cross gcc, no qemu.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to rebuild (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x64:
+    name: ct-linux-x64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Build static ct from the frozen seed
+        run: |
+          set -eu
+          cc -O2 -std=c99 -static -I bootstrap/ct-ast bootstrap/ct-ast/*.c -o ct
+          file ct
+          file ct | grep -Eq 'ELF 64-bit.*x86-64' || {
+            echo "release: not an ELF 64-bit x86-64 binary" >&2; exit 1; }
+
+      - name: Check the version against the tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -eu
+          want=${TAG#v}
+          got=$(./ct -v | awk '{print $NF}')
+          echo "tag=$TAG want=$want got=$got"
+          [ "$got" = "$want" ] || { echo "release: version mismatch" >&2; exit 1; }
+
+      - name: Smoke compile and run
+        run: |
+          set -eu
+          work=$(mktemp -d)
+          ./ct compile examples/50_ref_out/prog.ct -o "$work/p50.c"
+          cc "$work/p50.c" -o "$work/p50"
+          "$work/p50" | tee "$work/p50.out"
+          grep -qx '2 3 4' "$work/p50.out"
+          ./ct compile examples/52_box_new/prog.ct -o "$work/p52.c"
+          cc "$work/p52.c" -o "$work/p52"
+          "$work/p52" | tee "$work/p52.out"
+          grep -qx '4 4' "$work/p52.out"
+          echo "smoke: OK"
+
+      - name: Package ct-linux-x64
+        id: package
+        run: |
+          set -eu
+          rm -rf dist pkg
+          mkdir -p pkg dist
+          cp ct pkg/ct
+          chmod +x pkg/ct
+          ln -s ct pkg/ctc
+          ( cd pkg && COPYFILE_DISABLE=1 tar -czf ../dist/ct-linux-x64.tar.gz ct ctc )
+          ( cd dist && sha256sum ct-linux-x64.tar.gz > ct-linux-x64.tar.gz.sha256 )
+          digest=$(awk '{print $1}' dist/ct-linux-x64.tar.gz.sha256)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          tar -tzf dist/ct-linux-x64.tar.gz
+          file ct
+
+      - name: Create the release when missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -eu
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag \
+              --title "$TAG" --notes "ct $TAG (rebuilt by release.yml)"
+          fi
+
+      - name: Upload the artefact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -eu
+          gh release upload "$TAG" \
+            dist/ct-linux-x64.tar.gz \
+            dist/ct-linux-x64.tar.gz.sha256 \
+            --clobber
+
+      - name: Record the run
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          DIGEST: ${{ steps.package.outputs.digest }}
+        run: |
+          {
+            echo "## ct-linux-x64 ($TAG)"
+            echo ""
+            echo "- version: $(./ct -v)"
+            echo "- sha256: \`$DIGEST\`"
+            echo "- smoke: \`2 3 4\` and \`4 4\`"
+            echo "- file: $(file -b ct)"
+          } >> "$GITHUB_STEP_SUMMARY"
