@@ -2,7 +2,7 @@
 """
 check-docs.py - documentation gate (Phase 17.4).
 
-Standard library only. It asserts fifteen invariants:
+Standard library only. It asserts seventeen invariants:
 
   1. every relative link in docs/**/*.md and README.md resolves;
      the only exemption is a historical snapshot under docs/history/reports/**
@@ -54,8 +54,17 @@ Standard library only. It asserts fifteen invariants:
       Fenced blocks, inline code, the generated spec block in AGENTS.md, and
       the historical/exempt trees are out of scope. `--selftest` runs the
       positive and negative fixtures for this assertion.
+  16. DOC-88: docs/language-spec.md opens with a `## 目录` outline that lists
+      every H2 (except the outline itself) and every H3 once; every outline
+      entry resolves to a real heading. A missing outline, a missing heading,
+      a duplicate entry or a dead entry is red.
+  17. DOC-88: a new `docs/language-spec.md#L...` reference is red. The existing
+      line anchors are frozen in test/docs/line-anchors.txt as
+      `<path>#L<a>[-L<b>]  <batch>`; an entry with no reference left is a
+      zombie and red, and the batch names the earliest pending batch.
+      `--selftest` runs the positive/negative fixtures for both assertions.
 
-Exit code 0 when all fifteen hold, 1 otherwise.
+Exit code 0 when all seventeen hold, 1 otherwise.
 """
 
 import hashlib
@@ -99,6 +108,19 @@ STABLE_TIERS = ("已冻结", "冻结中", "1.0 前可改")
 COMPAT_MARKER = re.compile(r"<!--\s*ct-compat:\s*([^>]*)-->")
 CAP_MARKER = re.compile(r"<!--\s*cap:([a-z0-9-]+)\s*-->")
 CAP_STATUS = {"implemented", "planned"}
+
+# DOC-88: the spec outline and the frozen line-anchor ledger. The ledger keys
+# on the referenced path plus the line fragment (the profile is global; the
+# source file is only used to compute the earliest pending batch).
+SPEC_DOC = "docs/language-spec.md"
+TOC_HEADING = "目录"
+LINE_ANCHOR_LEDGER = "test/docs/line-anchors.txt"
+LINE_BATCHES = ("B0", "B1", "B2", "B3", "HIST")
+LINE_BATCH_ORDER = {name: index for index, name in enumerate(LINE_BATCHES)}
+LINE_LEDGER_ENTRY = re.compile(
+    r"^(docs/language-spec\.md#L\d+(?:-L\d+)?)\s+(\S+)\s*$"
+)
+SPEC_LINE_ANCHOR = re.compile(r"^L(\d+)(?:-L(\d+))?$")
 
 # DOC-89: exact exemptions for dead *line* anchors quoted by historical records.
 # These documents cite the line numbers that were true on their own date; they
@@ -305,12 +327,17 @@ def slugify(heading):
     return "".join(out).strip().replace(" ", "-")
 
 
-def heading_slugs(path):
-    """The set of anchor slugs the target Markdown file exposes."""
-    slugs = set()
+def spec_headings(path):
+    """(line, level, text, slug) for every heading outside a fence, in order."""
+    return headings_from_text(read(path))
+
+
+def headings_from_text(text):
+    """Same shape as spec_headings, for files that are already in memory."""
+    out = []
     seen = {}
     in_fence = False
-    for line in read(path).splitlines():
+    for number, line in enumerate(text.splitlines(), 1):
         if FENCE_LINE.match(line):
             in_fence = not in_fence
             continue
@@ -325,14 +352,19 @@ def heading_slugs(path):
         if base in seen:
             seen[base] += 1
             candidate = f"{base}-{seen[base]}"
-            while candidate in slugs:
+            while any(item[3] == candidate for item in out):
                 seen[base] += 1
                 candidate = f"{base}-{seen[base]}"
         else:
             seen[base] = 0
             candidate = base
-        slugs.add(candidate)
-    return slugs
+        out.append((number, len(match.group(1)), match.group(2), candidate))
+    return out
+
+
+def heading_slugs(path):
+    """The set of anchor slugs the target Markdown file exposes."""
+    return {item[3] for item in spec_headings(path)}
 
 
 def file_line_count(path):
@@ -410,6 +442,211 @@ def check_fragments(errors):
         scanned += 1
         errors.extend(issues)
     return checked, scanned
+
+
+def split_toc(text):
+    """Return (found, toc_line, [fragment, ...]) for the first `## 目录` section."""
+    lines = text.splitlines()
+    in_fence = False
+    start = None
+    for index, line in enumerate(lines, 1):
+        if FENCE_LINE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if re.match(r"^##\s+" + TOC_HEADING + r"\s*$", line):
+            start = index
+            break
+    if start is None:
+        return False, None, []
+    entries = []
+    in_fence = False
+    for line in lines[start:]:
+        if FENCE_LINE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if re.match(r"^#{1,2}\s+", line) and not re.match(
+            r"^##\s+" + TOC_HEADING + r"\s*$", line
+        ):
+            break
+        for match in LINK.finditer(line):
+            target = match.group(1).strip().split()
+            if target and target[0].startswith("#"):
+                fragment = target[0][1:]
+                if fragment:
+                    entries.append(fragment)
+    return True, start, entries
+
+
+def check_spec_toc_text(text, rel=SPEC_DOC):
+    """DOC-88: every H2/H3 in the outline exactly once, every entry resolves."""
+    errors = []
+    heads = headings_from_text(text)
+    by_slug = {item[3]: item for item in heads}
+    required = [
+        item
+        for item in heads
+        if (item[1] == 2 and item[2] != TOC_HEADING) or item[1] == 3
+    ]
+    found, toc_line, entries = split_toc(text)
+    if not found:
+        return [f"{rel}: missing `## {TOC_HEADING}` outline (DOC-88)"], 0, len(required)
+    first_other_h2 = next(
+        (item[0] for item in heads if item[1] == 2 and item[2] != TOC_HEADING),
+        None,
+    )
+    if first_other_h2 is not None and toc_line > first_other_h2:
+        errors.append(
+            f"{rel}: `## {TOC_HEADING}` must come before the first H2 "
+            f"(line {first_other_h2}; DOC-88)"
+        )
+    counts = {}
+    for fragment in entries:
+        counts[fragment] = counts.get(fragment, 0) + 1
+        if fragment not in by_slug:
+            errors.append(
+                f"{rel}: outline dead item -> #{fragment} "
+                "(no such heading; DOC-88)"
+            )
+    for item in required:
+        count = counts.get(item[3], 0)
+        if count == 0:
+            errors.append(
+                f"{rel}: outline misses heading `{item[2]}` "
+                f"(#{item[3]}; DOC-88)"
+            )
+        elif count > 1:
+            errors.append(
+                f"{rel}: outline lists `{item[2]}` {count} times (DOC-88)"
+            )
+    return errors, len(entries), len(required)
+
+
+def check_spec_toc(errors):
+    path = os.path.join(ROOT, SPEC_DOC)
+    if not os.path.exists(path):
+        errors.append(f"{SPEC_DOC}: missing (DOC-88 outline)")
+        return 0, 0
+    issues, entries, required = check_spec_toc_text(read(path))
+    errors.extend(issues)
+    return entries, required
+
+
+def source_batch(rel):
+    """DOC-88 batch of a Markdown file: B0 facade, B1 issues, B2 battle, B3 rest."""
+    if rel.startswith("docs/history/"):
+        return "HIST"
+    if rel.startswith("README") or rel == "AGENTS.md" or rel.startswith("docs/"):
+        return "B0"
+    if rel.startswith("issues/"):
+        return "B1"
+    if rel.startswith("battle/"):
+        return "B2"
+    return "B3"
+
+
+def spec_line_anchor_refs():
+    """[(source_rel, `docs/language-spec.md#L...`)] for every Markdown link."""
+    refs = []
+    target = os.path.normpath(os.path.join(ROOT, SPEC_DOC))
+    for path in md_all_files():
+        rel = os.path.relpath(path, ROOT).replace(os.sep, "/")
+        text = strip_code(read(path))
+        for match in LINK.finditer(text):
+            parts = match.group(1).strip().split()
+            if not parts:
+                continue
+            link = parts[0]
+            if re.match(r"^(https?:|mailto:|file:)", link) or "#" not in link:
+                continue
+            dest, fragment = link.split("#", 1)
+            if not SPEC_LINE_ANCHOR.match(fragment):
+                continue
+            resolved = (
+                os.path.normpath(os.path.join(os.path.dirname(path), dest))
+                if dest
+                else path
+            )
+            if os.path.normpath(resolved) != target:
+                continue
+            refs.append((rel, f"{SPEC_DOC}#{fragment}"))
+    return refs
+
+
+def parse_line_anchor_ledger(text):
+    allowed = {}
+    errors = []
+    for number, line in enumerate(text.splitlines(), 1):
+        entry = line.strip()
+        if not entry or entry.startswith("#"):
+            continue
+        match = LINE_LEDGER_ENTRY.match(entry)
+        if not match:
+            errors.append(
+                f"{LINE_ANCHOR_LEDGER}:{number}: bad entry `{entry}` "
+                "(want `<path>#L<a>[-L<b>]  <batch>`; DOC-88)"
+            )
+            continue
+        key, batch = match.groups()
+        if batch not in LINE_BATCH_ORDER:
+            errors.append(
+                f"{LINE_ANCHOR_LEDGER}:{number}: unknown batch `{batch}` "
+                f"(want one of {', '.join(LINE_BATCHES)}; DOC-88)"
+            )
+        if key in allowed:
+            errors.append(
+                f"{LINE_ANCHOR_LEDGER}:{number}: duplicate entry {key} (DOC-88)"
+            )
+        allowed[key] = batch
+    return allowed, errors
+
+
+def check_line_anchors_text(refs, ledger_text):
+    """DOC-88: frozen line anchors; new refs and zombie/relabelled entries are red."""
+    allowed, errors = parse_line_anchor_ledger(ledger_text)
+    actual = {}
+    for rel, key in refs:
+        actual.setdefault(key, []).append(rel)
+    for key, sources in actual.items():
+        if key not in allowed:
+            errors.append(
+                f"{sources[0]}: new language-spec line anchor -> {key} "
+                "(DOC-88: use a section anchor; new `#L` refs are frozen out)"
+            )
+    for key, batch in allowed.items():
+        if key not in actual:
+            errors.append(
+                f"{LINE_ANCHOR_LEDGER}: zombie entry {key} {batch} "
+                "(no reference left; delete it; DOC-88)"
+            )
+            continue
+        expected = min(
+            (source_batch(rel) for rel in actual[key]),
+            key=lambda name: LINE_BATCH_ORDER[name],
+        )
+        if batch != expected:
+            errors.append(
+                f"{LINE_ANCHOR_LEDGER}: {key} is tagged {batch} but its "
+                f"earliest remaining reference is {expected} (DOC-88)"
+            )
+    return errors, len(actual), len(allowed)
+
+
+def check_line_anchors(errors):
+    ledger = os.path.join(ROOT, LINE_ANCHOR_LEDGER)
+    refs = spec_line_anchor_refs()
+    if not os.path.exists(ledger):
+        errors.append(
+            f"{LINE_ANCHOR_LEDGER}: missing (freeze the existing "
+            "language-spec line anchors; DOC-88)"
+        )
+        return len({key for _, key in refs}), 0
+    issues, actual, allowed = check_line_anchors_text(refs, read(ledger))
+    errors.extend(issues)
+    return actual, allowed
 
 
 def check_version(errors):
@@ -1194,15 +1431,125 @@ def anchor_selftest():
     return 0
 
 
+def toc_selftest():
+    """DOC-88 fixtures: outline completeness and dead-item rejection."""
+    valid = (
+        "# T\n\n"
+        "## 目录\n\n"
+        "- [A](#a)\n"
+        "- [B](#b)\n"
+        "- [4.1 C](#41-c)\n\n"
+        "## A\n\n"
+        "### B\n\n"
+        "### 4.1 C\n"
+    )
+    cases = (
+        ("valid", valid, 0),
+        ("missing heading", valid.replace("- [B](#b)\n", ""), 1),
+        ("duplicate entry", valid.replace("- [B](#b)\n", "- [B](#b)\n- [B](#b)\n"), 1),
+        ("dead entry", valid.replace("- [B](#b)\n", "- [B](#b)\n- [X](#missing)\n"), 1),
+        ("no outline", "# T\n\n## A\n\n### B\n", 1),
+        (
+            "outline not at top",
+            "# T\n\n## A\n\n## 目录\n\n- [A](#a)\n\n### B\n",
+            1,
+        ),
+    )
+    failed = 0
+    for name, text, want in cases:
+        errors, _, _ = check_spec_toc_text(text, "fixture.md")
+        ok = (len(errors) == 0) if want == 0 else (len(errors) >= 1)
+        failed += 0 if ok else 1
+        print(
+            f"outline-ratchet selftest: {name}: {len(errors)} error(s), "
+            f"expected {'0' if want == 0 else '>=1'} -> {'OK' if ok else 'FAIL'}"
+        )
+    if failed:
+        print(f"outline-ratchet selftest: FAIL ({failed} case(s))")
+        return 1
+    print(f"outline-ratchet selftest: OK ({len(cases)} cases)")
+    return 0
+
+
+def line_anchor_selftest():
+    """DOC-88 fixtures: new anchor, zombie entry, bad batch, relabelled entry."""
+    refs = [
+        ("docs/a.md", "docs/language-spec.md#L10"),
+        ("battle/b.md", "docs/language-spec.md#L20"),
+    ]
+    valid = (
+        "docs/language-spec.md#L10  B0\n"
+        "docs/language-spec.md#L20  B2\n"
+    )
+    cases = (
+        ("valid", refs, valid, 0),
+        (
+            "new anchor",
+            refs + [("issues/c.md", "docs/language-spec.md#L30")],
+            valid,
+            1,
+        ),
+        (
+            "zombie entry",
+            refs,
+            valid + "docs/language-spec.md#L40  B3\n",
+            1,
+        ),
+        (
+            "bad batch",
+            refs,
+            "docs/language-spec.md#L10  B9\n"
+            "docs/language-spec.md#L20  B2\n",
+            1,
+        ),
+        (
+            "duplicate entry",
+            refs,
+            valid + "docs/language-spec.md#L10  B0\n",
+            1,
+        ),
+        (
+            "batch relabel",
+            [("issues/c.md", "docs/language-spec.md#L10")],
+            "docs/language-spec.md#L10  B0\n",
+            1,
+        ),
+        (
+            "history entry",
+            [("docs/history/x.md", "docs/language-spec.md#L50")],
+            "docs/language-spec.md#L50  HIST\n",
+            0,
+        ),
+    )
+    failed = 0
+    for name, case_refs, ledger, want in cases:
+        errors, _, _ = check_line_anchors_text(case_refs, ledger)
+        ok = (len(errors) == 0) if want == 0 else (len(errors) >= 1)
+        failed += 0 if ok else 1
+        print(
+            f"line-anchor-ratchet selftest: {name}: {len(errors)} error(s), "
+            f"expected {'0' if want == 0 else '>=1'} -> {'OK' if ok else 'FAIL'}"
+        )
+    if failed:
+        print(f"line-anchor-ratchet selftest: FAIL ({failed} case(s))")
+        return 1
+    print(f"line-anchor-ratchet selftest: OK ({len(cases)} cases)")
+    return 0
+
+
 def main():
     if "--selftest" in sys.argv[1:]:
         rc = ct_selftest()
         rc = j6_selftest() or rc
         rc = anchor_selftest() or rc
+        rc = toc_selftest() or rc
+        rc = line_anchor_selftest() or rc
         return rc
     errors = []
     links, scanned = check_links(errors)
     fragments, fragment_files = check_fragments(errors)
+    toc_entries, toc_required = check_spec_toc(errors)
+    line_refs, line_entries = check_line_anchors(errors)
     version = check_version(errors)
     gates = check_gate_count(errors)
     phases = check_phase_status(errors)
@@ -1233,7 +1580,9 @@ def main():
         f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
         f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s), "
         f"{stable} stability row(s), {compat} compat marker(s), "
-        f"{caps} capability row(s), {ct} bare CT in {ct_files} active file(s))"
+        f"{caps} capability row(s), {ct} bare CT in {ct_files} active file(s), "
+        f"{toc_entries}/{toc_required} outline entr(ies), "
+        f"{line_refs} spec line anchor(s) in {line_entries} ledger entr(ies))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0
