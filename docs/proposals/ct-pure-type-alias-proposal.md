@@ -5,7 +5,7 @@
 | 性质 | 语言侧提案；供 CT 项目组评估。是否受理、落点与排期由项目组决定 |
 | 状态 | 草案；未立项，不占 phase |
 | 对象 | 现有 `type` 类型别名的可用范围，以及「纯别名」语义的明确承诺 |
-| 事实基线 | v0.61.1；[language-spec.md §4.42](../language-spec.md#L1720)、`selfhost/ct-ast` 主线 |
+| 事实基线 | v0.61.1；[language-spec.md §4.42](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)、`selfhost/ct-ast` 主线 |
 | 不在范围 | 编译器实现、C 侧 typedef 的生成策略、其它仓库的文件与接口 |
 
 > 本提案只写语言侧。文中「std」指本仓 `lib/std` 的公开接口，不指向任何外部使用方。
@@ -17,7 +17,7 @@
 1. **语义上，CT 已经有纯别名。** `type Name = T;` 是纯编译期同义词：不新建类型、不产生转换、
    判等与赋值按底层类型处理、方法随宿主展开自动可见、`own` 按展开后的类型处理。
 2. **但只能在 `.h.ct` / `.m.ct` 声明**；普通 `.ct` 直接硬错
-   （`a type alias is only allowed in a .h.ct or .m.ct unit`，[language-spec.md:1741](../language-spec.md#L1741)）。
+   （`a type alias is only allowed in a .h.ct or .m.ct unit`，[language-spec.md:1741](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)）。
 3. 因此整体判定：**部分够用**——语义够用，声明位置不够用。
 4. 对 std 的 `Socket` 只作 `Fd` 同义名这一用法：**只要两者都声明在 `.h.ct`（或 `.m.ct` 且 `pub`），
    今天就成立**；若要求写在普通 `.ct` 单元里，**不成立**。
@@ -50,11 +50,11 @@ pub type Count = int;
 ```
 
 - 文法：`[pub] type Name = <类型>;`，`type` 是上下文关键字，只有 `type IDENT =` 这一形状进入
-  别名分支（[language-spec.md:1744](../language-spec.md#L1744)、[Parser.h.ct:452](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L452)）。
+  别名分支（[language-spec.md:1744](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)、[Parser.h.ct:452](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L452)）。
 - 仅文件作用域；目标复用普通类型读取器，`struct` / `enum` / `union`、指针与整型同义词规范化都会发生
-  （[language-spec.md:1745](../language-spec.md#L1745)）。
+  （[language-spec.md:1745](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)）。
 - 不发射任何 typedef，不进 `--emit-map`，生成的 `.h` / `.c` 只有底层拼写
-  （[language-spec.md:1773](../language-spec.md#L1773)）。
+  （[language-spec.md:1773](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)）。
 
 现有夹具直接覆盖了别名作字段、参数与返回类型：
 
@@ -82,7 +82,7 @@ CT 的方法不是类型携带的，而是 `map trait … for type <宿主>` 绑
 之前展开，与底层拼写归一化后比较：
 
 - 规范明文：`map … for type SqliteStmt` 与 `map … for type sqlite3_stmt` 是同一个宿主
-  （[language-spec.md:1749-1753](../language-spec.md#L1749-L1753)）；
+  （[language-spec.md:1749-1753](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)）；
 - 实现注释同口径（[MapBuild.h.ct:647](../../selfhost/ct-ast/frontend/parse/MapBuild.h.ct#L647)）。
 
 两个方向都成立：挂在 `Fd` 上的方法，用 `Socket` 接收者调用会命中同一宿主；反过来，挂在
@@ -96,15 +96,15 @@ CT 的方法不是类型携带的，而是 `map trait … for type <宿主>` 绑
   [prog.ct:12-16](../../test/ast/153_into_type_host/prog.ct#L12-L16)）。
 
 若两个可达单元用别名与底层拼写各写一份同名方法，声明期不报错，调用点报
-`ambiguous type-host map for method …`（[language-spec.md:1751](../language-spec.md#L1751)）。
+`ambiguous type-host map for method …`（[language-spec.md:1751](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)）。
 
 ### 2.4 `own` 与所有权
 
 `own` 是声明行行首的上下文关键字，类型部分走同一个类型读取器
-（[language-spec.md:448](../language-spec.md#L448)）。因此 `own Socket s = …` 与 `own Fd s = …`
+（[language-spec.md:448](../language-spec.md#49-autodropphase-5-新增仅-ct-线)）。因此 `own Socket s = …` 与 `own Fd s = …`
 在展开后完全同形；`own` 的约束按**底层类型**判断：
 
-- 底层必须是结构体指针且该 struct `use Drop`（[language-spec.md:470](../language-spec.md#L470)）；
+- 底层必须是结构体指针且该 struct `use Drop`（[language-spec.md:470](../language-spec.md#49-autodropphase-5-新增仅-ct-线)）；
 - 若 `Fd` 本身是 `int` 之类的值类型，`own` 对 `Fd` 与 `Socket` 一样不适用——限制来自类型，
   不来自别名。
 
@@ -117,21 +117,21 @@ CT 的方法不是类型携带的，而是 `map trait … for type <宿主>` 绑
 | `type Name = T;` | 给类型拼写起同义词，算宿主键前折叠 | 否 | 本提案对象 |
 | `struct Name { … }` | 定义新的具名记录类型 | 是 | 与别名同名报冲突 |
 | `typedef T Name;` | 生成真实的 C typedef，进入生成物 | 是（C 侧） | 与别名同名报冲突；别名不发射 typedef |
-| `import a::b::T as U;` | 给已导出类型名换本地引用名 | 否 | 只能指向导出表里的名字；与别名同名报冲突（[language-spec.md:1770](../language-spec.md#L1770)） |
+| `import a::b::T as U;` | 给已导出类型名换本地引用名 | 否 | 只能指向导出表里的名字；与别名同名报冲突（[language-spec.md:1770](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)） |
 | `map trait X for type H` | 把 trait 方法绑定到宿主 | 否 | 不产生类型；宿主拼写先展开别名 |
 
 ### 2.6 缺口清单
 
 | # | 缺口 | 现状证据 | 影响 |
 | --- | --- | --- | --- |
-| G1 | 普通 `.ct` 不能声明别名 | 硬错文案 [language-spec.md:1741](../language-spec.md#L1741)、[Parser.h.ct:503](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L503) | 实现单元与局部代码无法起同义名；std 若想写在 `.ct` 里就不成立 |
-| G2 | 只在文件作用域，不能写在函数内 | 文法标注「仅文件作用域」[language-spec.md:1744](../language-spec.md#L1744) | 单个函数内的临时同义名无法表达 |
-| G3 | `.m.ct` 里的别名必须是 `pub` | 硬错 [language-spec.md:1742](../language-spec.md#L1742) | 映射单元不能有私有别名 |
-| G4 | 不发射 C typedef，C 读者看不到别名 | [language-spec.md:1773](../language-spec.md#L1773) | C 侧头文件、调试器、日志里只有底层拼写；对 CT 语义无影响 |
-| G5 | 无 re-export 语法，私有别名不跨单元 | import 闭包规则 [language-spec.md:1754](../language-spec.md#L1754) | 别名不能作为独立的公开名字再次导出 |
-| G6 | 同单元先声明后使用 | [language-spec.md:1760](../language-spec.md#L1760) | 预扫描只用于诊断，不改变顺序要求 |
+| G1 | 普通 `.ct` 不能声明别名 | 硬错文案 [language-spec.md:1741](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)、[Parser.h.ct:503](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L503) | 实现单元与局部代码无法起同义名；std 若想写在 `.ct` 里就不成立 |
+| G2 | 只在文件作用域，不能写在函数内 | 文法标注「仅文件作用域」[language-spec.md:1744](../language-spec.md#442-类型别名-typephase-20仅-ct-ast) | 单个函数内的临时同义名无法表达 |
+| G3 | `.m.ct` 里的别名必须是 `pub` | 硬错 [language-spec.md:1742](../language-spec.md#442-类型别名-typephase-20仅-ct-ast) | 映射单元不能有私有别名 |
+| G4 | 不发射 C typedef，C 读者看不到别名 | [language-spec.md:1773](../language-spec.md#442-类型别名-typephase-20仅-ct-ast) | C 侧头文件、调试器、日志里只有底层拼写；对 CT 语义无影响 |
+| G5 | 无 re-export 语法，私有别名不跨单元 | import 闭包规则 [language-spec.md:1754](../language-spec.md#442-类型别名-typephase-20仅-ct-ast) | 别名不能作为独立的公开名字再次导出 |
+| G6 | 同单元先声明后使用 | [language-spec.md:1760](../language-spec.md#442-类型别名-typephase-20仅-ct-ast) | 预扫描只用于诊断，不改变顺序要求 |
 | G7 | 仅主线 ct-ast 支持 | §4.42 标题「Phase 20，仅 ct-ast」 | 冻结线 l2 不含；跨层一致性需另行处理 |
-| G8 | 目标不能是 trait；`struct Alias` 是 C tag 不是同义词 | [language-spec.md:1768](../language-spec.md#L1768)、星号归属 [language-spec.md:1737](../language-spec.md#L1737) | 容易把 `type T = struct S;` 与 `type T = struct S *;` 写混 |
+| G8 | 目标不能是 trait；`struct Alias` 是 C tag 不是同义词 | [language-spec.md:1768](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)、星号归属 [language-spec.md:1737](../language-spec.md#442-类型别名-typephase-20仅-ct-ast) | 容易把 `type T = struct S;` 与 `type T = struct S *;` 写混 |
 
 ---
 
@@ -182,7 +182,7 @@ CT 的方法不是类型携带的，而是 `map trait … for type <宿主>` 绑
 | E `import … as` | `import a::b::T as U;` | 只给已导出的名字换引用名，不能给任意类型拼写起同义词 |
 
 建议 A：`type` 已经是上下文关键字，只有 `type IDENT =` 这一形状进入别名分支，现有代码不受影响
-（[language-spec.md:1744](../language-spec.md#L1744)）。
+（[language-spec.md:1744](../language-spec.md#442-类型别名-typephase-20仅-ct-ast)）。
 
 ### 4.3 语义与边界
 

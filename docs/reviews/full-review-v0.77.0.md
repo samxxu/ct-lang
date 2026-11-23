@@ -127,7 +127,7 @@
 | D-10 | [docs/architecture.md:5](../architecture.md#L5) | “面向要修改 ctc.c 的人”；全篇 L0 | 主线是 ct-ast；ct-ast 无对应架构文档 | **P2** |
 | D-11 | [selfhost/README.md:33](../../selfhost/README.md#L33) | grammar “40 项断言” | 实际 169 项 | **P3** |
 | D-12 | [docs/proposals/ct-bare-metal-proposal.md:6](../proposals/ct-bare-metal-proposal.md#L6) | “草案；未立项” | PH-64 已按该提案收口（v0.63.0）；docs/README 仍写“待评估” | **P2** |
-| D-13 | [docs/language-spec.md:2423](../language-spec.md#L2423) | 自定义 `[]` 的 `v[0]` 参数类型匹配“尚未实现” | `test/ast/p72_subscript.sh` 已钉住该错误；至少一处需更新 | **P2**（待复核） |
+| D-13 | [docs/language-spec.md:2423](../language-spec.md#464-自定义类型下标phase-52仅-ct-ast) | 自定义 `[]` 的 `v[0]` 参数类型匹配“尚未实现” | `test/ast/p72_subscript.sh` 已钉住该错误；至少一处需更新 | **P2**（待复核） |
 
 **共性原因**：文档里的计数、phase 状态、提案状态是手工维护的；没有脚本从
 `test/**`、`issues/**`、`roadmap` 回填。建议把可计数项（示例数、ast 目录数、负例数、断言数）

@@ -166,9 +166,9 @@ vtable 不是 `const`，`__vptr` / `vt` 也不是 `const` 指针。对象即使 
 ### 2.6 已经很好、不用改的部分（避免误伤）
 
 - `impl Name { … }` 固有方法：零 vtable、零布局改动，packed 3 字节帧结构仍是 3
-  （[language-spec.md:2404](../language-spec.md#L2404)）；
+  （[language-spec.md:2404](../language-spec.md#451-泛型-struct固有方法与内置容器phase-29)）；
 - `.m.ct` 静态映射：`cstr.length()` 直接发 `strlen((cstr))`，无 vtable/vptr
-  （[language-spec.md:628](../language-spec.md#L628)），**但静态 trait 不能被 struct adopt**
+  （[language-spec.md:628](../language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)），**但静态 trait 不能被 struct adopt**
   （[Parser.h.ct:2604](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L2604)）；
 - `borrow` + `Handback`：块尾按逆序发 `Conn_Handback_handback(...)` 并置空，实测不依赖堆；
 - `#include` 直通（ct 不解析厂商头）、函数指针 typedef/字段、`volatile`、`__attribute__` 直通、

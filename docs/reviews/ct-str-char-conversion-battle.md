@@ -20,7 +20,7 @@
 | C2 | 借用指针只在 `Str` 存活期内有效 | 调用返回后释放 `Str`，再用旧指针应被编译期拒绝；运行期 ASAN 无 use-after-free | 需要新的生命周期/逃逸规则（现行规范无对应条目） |
 | C3 | `char *` → `Str` 在声明处深拷贝 | `Str s = p;` 后改 `p[0]`，`s` 字节不变；`s` 的缓冲区地址与 `p` 不同 | `str_from` 现状：[Str.h.ct:51-60](../../lib/core/Str.h.ct#L51-L60) |
 | C4 | 赋值处深拷贝且旧缓冲区只释放一次 | `s = p;` 后旧 `s` 被 `Drop` 释放；ASAN 无 double-free；新 `s` 与原串无别名 | `Drop`：[Str.h.ct:23-29](../../lib/core/Str.h.ct#L23-L29) |
-| C5 | 传参位置等价于显式 `str_from` | `f(p)` 与 `f(str_from(p))` 生成物行为一致；实参为 `NULL` 时行为按最终裁定固定 | 现行 `char *` → `Str` 形参是硬错：[language-spec.md:2000-2005](../language-spec.md#L2000-L2005) |
+| C5 | 传参位置等价于显式 `str_from` | `f(p)` 与 `f(str_from(p))` 生成物行为一致；实参为 `NULL` 时行为按最终裁定固定 | 现行 `char *` → `Str` 形参是硬错：[language-spec.md:2000-2005](../language-spec.md#61-会被诊断的约束) |
 | C6 | 只在这三处转换，其他位置不静默拷贝 | 返回值、字段初值、容器字面量、三目位置各一条负例，均给出固定诊断，不生成拷贝 | 提案 §2.2 |
 | C7 | 自动深拷贝分配失败终止程序 | 用注入失败的 allocator 运行，进程以固定退出码终止，不返回释放态；诊断含分配字节数 | 与现状不同：`str_from_len` 返回 `len = -1`（[Str.h.ct:40-43](../../lib/core/Str.h.ct#L40-L43)） |
 | C8 | 既有显式写法零回归 | `str_from` / `str_c_str` 调用点、ABI、`ct check --types` 既有硬错用例全部保持 | 提案 §5 |

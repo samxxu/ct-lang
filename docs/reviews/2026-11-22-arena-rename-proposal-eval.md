@@ -7,7 +7,7 @@
 
 ## 1. 前提一「命名不合规」不成立
 
-提议写：“模块/类型用 PascalCase，`std::arena` 不合规”。核对 [spec §5.1](../language-spec.md#L2011-L2023)：
+提议写：“模块/类型用 PascalCase，`std::arena` 不合规”。核对 [spec §5.1](../language-spec.md#51-源码命名约定语言--标准库--ct-pkg稳定契约)：
 
 | 类别 | 规范要求 | `arena` 的情况 |
 | --- | --- | --- |

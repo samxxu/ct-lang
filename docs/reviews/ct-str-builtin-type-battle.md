@@ -18,14 +18,14 @@
 
 | # | 主张 | 可验证判据（实现后） | 依据 |
 | --- | --- | --- | --- |
-| C1 | 字面量仍是 `char *`；只有目标类型是 `Str` 时转换 | `Str s = "x";` 构造 `Str`；`char *p = "x";` 仍是 `char *`；不存在「无目标类型时字面量变 `Str`」的路径 | [language-spec.md:47](../language-spec.md#L47)、[:2559](../language-spec.md#L2559) |
-| C2 | `Str a = b;` 是深拷贝 | 改 `b` 内容不影响 `a`；`a` 与 `b` 的 `data` 不同；ASAN 无 double-free | 现行浅拷贝：[language-spec.md:2560](../language-spec.md#L2560) |
+| C1 | 字面量仍是 `char *`；只有目标类型是 `Str` 时转换 | `Str s = "x";` 构造 `Str`；`char *p = "x";` 仍是 `char *`；不存在「无目标类型时字面量变 `Str`」的路径 | [language-spec.md:47](../language-spec.md#0-快速开始)、[:2559](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast) |
+| C2 | `Str a = b;` 是深拷贝 | 改 `b` 内容不影响 `a`；`a` 与 `b` 的 `data` 不同；ASAN 无 double-free | 现行浅拷贝：[language-spec.md:2560](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast) |
 | C3 | 右值为临时值时直接转移，不额外拷贝 | `Str a = f();` 的分配计数比「先构造再拷贝」少一次；无泄漏 | 需新的转移规则；现行规范无 |
 | C4 | 布局是语言承诺 | C 侧 `offsetof(data)==0`、`offsetof(len)==sizeof(char *)`；`sizeof` 与语言侧一致；`data` 为 `const char *` | [Str.h.ct:18-21](../../lib/core/Str.h.ct#L18-L21) |
-| C5 | 同形 C struct 可直接对传 | 以同布局 C struct 按值传入/传出，字段值与语言侧一致 | 现行按值 struct 规则：[language-spec.md:2003](../language-spec.md#L2003-L2005) |
+| C5 | 同形 C struct 可直接对传 | 以同布局 C struct 按值传入/传出，字段值与语言侧一致 | 现行按值 struct 规则：[language-spec.md:2003](../language-spec.md#61-会被诊断的约束) |
 | C6 | 方法层不搬进编译器 | `impl Str` 与自由函数位置不变；编译器只做身份识别与代码生成 | [Str.h.ct:132-139](../../lib/core/Str.h.ct#L132-L139) |
 | C7 | 转换边界可枚举且不扩散 | 声明、赋值、传参三处生成转换；返回、字段初值、容器字面量、三目按最终裁定的边界处理 | P1；此前转换评审的收窄口径 |
-| C8 | 内嵌 `\0` 由 `len` 保证 | `Str` 与 `Str`、`Str` 与 `char *` 的比较按 `len` 做字节比较，`a[0]` 后的 `\0` 不截断 | [language-spec.md:2559](../language-spec.md#L2559)、[:2419](../language-spec.md#L2419) |
+| C8 | 内嵌 `\0` 由 `len` 保证 | `Str` 与 `Str`、`Str` 与 `char *` 的比较按 `len` 做字节比较，`a[0]` 后的 `\0` 不截断 | [language-spec.md:2559](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)、[:2419](../language-spec.md#451-泛型-struct固有方法与内置容器phase-29) |
 
 ### 1.2 主张席结论
 
@@ -67,15 +67,15 @@
 
 | 项 | 结论 | 理由与依据 |
 | --- | --- | --- |
-| P1 字面量属性 | **受理（已定）** | 负责人拍板；实现上要撤销 `char *` → `Str` 形参的硬错（[language-spec.md:2000-2005](../language-spec.md#L2000-L2005)），改为目标类型触发；不引入「字面量随上下文变类型」 |
-| P2 值语义取拷贝 | **受理（已定），附迁移条件** | 与现行 §4.56 浅拷贝冲突（[language-spec.md:2560](../language-spec.md#L2560)）；必须改写规范、给兼容窗口；`retain()` 保留，但文档要说明自动深拷贝已覆盖的场景 |
+| P1 字面量属性 | **受理（已定）** | 负责人拍板；实现上要撤销 `char *` → `Str` 形参的硬错（[language-spec.md:2000-2005](../language-spec.md#61-会被诊断的约束)），改为目标类型触发；不引入「字面量随上下文变类型」 |
+| P2 值语义取拷贝 | **受理（已定），附迁移条件** | 与现行 §4.56 浅拷贝冲突（[language-spec.md:2560](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)）；必须改写规范、给兼容窗口；`retain()` 保留，但文档要说明自动深拷贝已覆盖的场景 |
 | P3 两字段布局 | **受理（已定）** | 源码布局已一致（[Str.h.ct:18-21](../../lib/core/Str.h.ct#L18-L21)）；需要加 `offsetof`/`sizeof` 门禁与「禁止重定义」规则 |
-| P3 同形 C struct 对传 | **受理为承诺目标，当前不宣称可用** | 现行不同具名 struct 按值互传为硬错（[language-spec.md:2003](../language-spec.md#L2003-L2005)）；须新增 FFI 兼容规则并定义释放责任 |
+| P3 同形 C struct 对传 | **受理为承诺目标，当前不宣称可用** | 现行不同具名 struct 按值互传为硬错（[language-spec.md:2003](../language-spec.md#61-会被诊断的约束)）；须新增 FFI 兼容规则并定义释放责任 |
 | 内置定义落在哪一层 | **已被负责人 2026-11-16 裁定覆盖：走 B（语言层）**；原 A 建议作废，迁移条件保留（见 §6） | 负责人要求 `Str` 从 std 完全移除、迁到语言侧；自举与旧产物问题在 B 路线内解决 |
 | 与现有声明的关系 / 迁移 | **受理分阶段；不受理一次性切换** | 旧代码依赖浅拷贝，直接切换会静默改变行为；先诊断/警告，再切语义，最后移除旧路径 |
 | 方法层归属 | **已被负责人裁定覆盖：方法层随 `Str` 迁到语言侧，且为映射而非独立实现**（见 §6） | `Str` 方法不另写实现，编译期展开为与 `char *` 方法同一族 C 函数的直调；std 不再保留定义；两宿主各一份映射，不共用表 |
 | 与 `char *` 的隐式转换边界 | **受理「声明/赋值/传参」三处；不受理返回、字段初值、容器字面量、三目；借用指针可存变量（`const char *`），随 `Str` 失效；不把 `Str` 隐式转成 `char *`** | 隐式分配必须可枚举；借用生命周期靠规范而非借用检查器（P6） |
-| 内嵌 `\0` 的表示与比较 | **受理按 `len` 做字节比较；不受理 NUL 结尾视图** | 现行 `Map` 的 `Str` 键已按 `len` 做字节比较（[language-spec.md:2419](../language-spec.md#L2419)）；C 侧截断需明示 |
+| 内嵌 `\0` 的表示与比较 | **受理按 `len` 做字节比较；不受理 NUL 结尾视图** | 现行 `Map` 的 `Str` 键已按 `len` 做字节比较（[language-spec.md:2419](../language-spec.md#451-泛型-struct固有方法与内置容器phase-29)）；C 侧截断需明示 |
 | `NULL` 语义 | **不受理隐式 `NULL` → `Str`** | `str_from(0)` 返回空串而非缺失态（[Str.h.ct:51-60](../../lib/core/Str.h.ct#L51-L60)）；隐式接受会把错误压成空串；要求显式 `str_from` |
 | OOM 政策 | **不受理「默认终止」；隐式拷贝在政策确定前不实现** | 现行 `str_from_len` 返回 `len=-1`（[Str.h.ct:40-43](../../lib/core/Str.h.ct#L40-L43)）；终止会杀宿主进程，释放态又迫使逐处判空；需项目级政策 |
 | `retain()` | **受理保留** | 显式深拷贝仍有场景；P2 后自动拷贝覆盖的场景不必再手写，但函数不删 |

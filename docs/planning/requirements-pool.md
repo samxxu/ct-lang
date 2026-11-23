@@ -232,7 +232,7 @@ PH-52 的 D52-6 指向本条。
 | --- | --- |
 | `id` | `REQ-TYPE-1` |
 | **现象** | `--types` 只对 `ct check` 有效；`ct build` / `ct compile` 不进入 §4.53 的三类判定，`ct compile` 可以 rc=0 写出 `cc` 拒收的 C。把它做成默认不是开关问题：CLI 语义、严重级、全部 golden 与 archive ratchet 会一起变。 |
-| **证据锚点** | [language-spec.md:2206-2207](../language-spec.md#L2206-L2207)（「`ct build` / `ct compile` 不进入这些判定」）；[check-goldens.sh:1-26](../../selfhost/check-goldens.sh#L1-L26)（逐字节 golden）；[check-archive.sh:1-20](../../selfhost/check-archive.sh#L1-L20)（归档 oracle 逐字节 compare）；已知假阳性 `examples/18_generic_string_table/generic_string_table.ct:103`（由 `docs/design/phase45.md` S1 先修）。 |
+| **证据锚点** | [language-spec.md:2206-2207](../language-spec.md#453-可选类型检查-ct-check---typesphase-32)（「`ct build` / `ct compile` 不进入这些判定」）；[check-goldens.sh:1-26](../../selfhost/check-goldens.sh#L1-L26)（逐字节 golden）；[check-archive.sh:1-20](../../selfhost/check-archive.sh#L1-L20)（归档 oracle 逐字节 compare）；已知假阳性 `examples/18_generic_string_table/generic_string_table.ct:103`（由 `docs/design/phase45.md` S1 先修）。 |
 | **影响** | 461 语料 rc 与 `test/cases/*.expected.c` 全量重生成；`check-archive` 的 ratchet 口径变化；仓库方法论从「opt-in 检查」改为「默认严格」。 |
 | **建议做法** | 等 `docs/design/phase45.md` S1 落地、`--types` 在 40 个 example 上干净后，再按「CLI / 严重级 / golden 重生成 / 语料平价」拆 3–5 个切片评估；不在 43 / 45 内夹带。**同一要求另有一半已被覆盖**：默认路径不得以 rc=0 写出 `cc` 拒收的 C、`--types` 判得出的错必须与默认路径同判据——这是对 PH-43 收口（`v0.43.0`）复查后确认的既有事实，`err:` 分支已硬错；剩余面是普通赋值 / `return` / 容器的全量判定。见 `docs/design/phase45.md` §0.3。 |
 | **当前判定** | **本期不做**。 |
@@ -248,7 +248,7 @@ PH-52 的 D52-6 指向本条。
 | --- | --- |
 | `id` | `REQ-MEM-1` |
 | **现象** | 提案方向的「CFG + 数据流所有权」在仓库里没有承载物：无 CFG、无 IR、无基本块、无独立 pass 框架，判定全部内联在递归下降解析器与符号表里；泄漏诊断走 `check-archive` 的逐字节比对。 |
-| **证据锚点** | 全仓 `cfg / basic block / dominator / dataflow` 只命中一处无关注释 [Expr.h.ct:3044](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3044)；[check-ast.sh:34-38](../../selfhost/check-ast.sh#L34-L38)（泄漏与错误恢复两段与 L2 逐字节比对）；[check-ast.sh:13](../../selfhost/check-ast.sh#L13)（通用等价判据明确「不比诊断」）；[Memory.h.ct:44-60](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L44-L60)（`own_decl` / `own_base` 表）；[language-spec.md:1285](../language-spec.md#L1285)（值位置赋值绕过记账）。 |
+| **证据锚点** | 全仓 `cfg / basic block / dominator / dataflow` 只命中一处无关注释 [Expr.h.ct:3044](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3044)；[check-ast.sh:34-38](../../selfhost/check-ast.sh#L34-L38)（泄漏与错误恢复两段与 L2 逐字节比对）；[check-ast.sh:13](../../selfhost/check-ast.sh#L13)（通用等价判据明确「不比诊断」）；[Memory.h.ct:44-60](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L44-L60)（`own_decl` / `own_base` 表）；[language-spec.md:1285](../language-spec.md#434-表达式里的赋值ct-ast)（值位置赋值绕过记账）。 |
 | **影响** | 任何新分析要么输出与老实现完全一致的文本，要么改 golden——后者等于推翻「golden 是 oracle」；量级 5,000 行以上（AST→CFG、流敏感状态机、跨过程摘要、夹具与门禁四块）。 |
 | **建议做法** | 不建新框架。先把已判得出的错误接到默认出口（PH-43），再做 `REQ-MEM-2` 的单元内一层摘要；CFG 只作为「触发条件出现后再评估」的储备。 |
 | **当前判定** | **本期不做**；量级 5,000+ 行，超过任一已收口相。 |
@@ -264,7 +264,7 @@ PH-52 的 D52-6 指向本条。
 | --- | --- |
 | `id` | `REQ-MEM-2` |
 | **现象** | `borrow` 只是作用域 / 参数级注解，不是生命周期类型：`store(c)`（实参未标 `borrow`）与 `s->p = c` 不检查；`goto` 跨过声明会静默失效；不区分池对象与栈对象。 |
-| **证据锚点** | [language-spec.md:1497-1498](../language-spec.md#L1497-L1498)（文档自认「不要宣称『有了 borrow 就不会悬垂』」）；[Memory.h.ct:44-60](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L44-L60)；[Stmt.h.ct:284-324](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L284-L324)（`retire_before_return` / jump 出口注入）。 |
+| **证据锚点** | [language-spec.md:1497-1498](../language-spec.md#440-borrow-与-handbackphase-5-续仅-ct-ast)（文档自认「不要宣称『有了 borrow 就不会悬垂』」）；[Memory.h.ct:44-60](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L44-L60)；[Stmt.h.ct:284-324](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L284-L324)（`retire_before_return` / jump 出口注入）。 |
 | **影响** | 栈地址写进全局或字段时 `check` / `--types` 均 rc=0；ASAN 默认配置也看不见（见 `REQ-CI-2`）。 |
 | **最小可行形态** | 单元内、**一层调用**的写入摘要：被调函数若把某个形参写入全局 / 字段 / 容器，则该形参必须标 `borrow`，否则调用点硬错；函数指针与递归走保守放行；不做跨单元、不做完整生命周期。量级 300–600 行 + 夹具。 |
 | **为什么不进 43 / 45** | PH-43 只判 `return err:` 载荷可赋值；PH-45 只做闭包 `return` 跳过与指针基类型 / 层数判据。二者都不引入「写入摘要」这一新判定族，也不需要新符号表；硬塞会把两个小相扩成类型系统相。 |
@@ -298,7 +298,7 @@ PH-52 的 D52-6 指向本条。
 | --- | --- |
 | `id` | `REQ-CI-2` |
 | **现象** | `check-sanitizers.sh` 只设 `ASAN_OPTIONS=detect_leaks=0`，没有 `detect_stack_use_after_return=1`；把栈地址写进全局的逃逸程序在默认 ASAN 下正常跑完，只有打开该选项才报 `stack-use-after-return`。 |
-| **证据锚点** | [check-sanitizers.sh:14-24](../../selfhost/check-sanitizers.sh#L14-L24)（Leak 关闭说明，无栈逃逸选项）；[language-spec.md:1497-1498](../language-spec.md#L1497-L1498)（borrow 逃逸未覆盖）。 |
+| **证据锚点** | [check-sanitizers.sh:14-24](../../selfhost/check-sanitizers.sh#L14-L24)（Leak 关闭说明，无栈逃逸选项）；[language-spec.md:1497-1498](../language-spec.md#440-borrow-与-handbackphase-5-续仅-ct-ast)（borrow 逃逸未覆盖）。 |
 | **影响** | 「CI 有 ASAN」不等于「栈悬垂有人管」；提案最担心的那类悬垂目前只有手工开选项才可见。 |
 | **建议做法** | 先在 nightly 加一个独立 job / 步骤，固定 `ASAN_OPTIONS=detect_stack_use_after_return=1:detect_leaks=0` 跑现有语料，评估噪声与耗时；稳定后再决定是否并入 `check-sanitizers.sh`。 |
 | **当前判定** | **待定**（门禁增强项，不进 11 道硬门禁）。 |

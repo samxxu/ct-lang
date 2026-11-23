@@ -75,7 +75,7 @@ $ ct-ast build fp1100.ct -o ofp        # int (*fp)(int) = f; 之后 fp(0..1099)
 - **反证「不做动态分配」**：`g_maps` 用 `calloc`（SH-42），且同一文件里 `sym_alloc()` 也有堆路径。
   检索 `docs/`（`动态分配` / `MAX_CALLS` / `too many calls`）没有「解析阶段禁止分配」的规则；
   规范 §7 只把 `MAX_CALLS 1024` 列为固定容量上限之一
-  （[language-spec.md:2135](../language-spec.md#L2135)）。
+  （[language-spec.md:2135](../language-spec.md#7-容量上限)）。
 - 结论：**固定是「单元边界 + 编译期常量容量」的工程选择，不是刻意的无分配策略。**
   找不到支持「刻意不做动态分配」的证据，这一条如实记录为「找不到」。
 

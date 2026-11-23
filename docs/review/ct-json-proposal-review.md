@@ -227,7 +227,7 @@ b.release();
 ### 5.6 errdefer 与「int 返回码」不兼容
 
 规约原文：「条目带 `on_error`，只在错误出口执行。普通 `return` / `break` / `continue` / 落出只跑
-`defer`，丢弃 `errdefer`」（[language-spec.md:2345](../language-spec.md#L2345)）。实测：
+`defer`，丢弃 `errdefer`」（[language-spec.md:2345](../language-spec.md#458-errdefererr-错误出口与尾随声明phase-40仅-ct-ast)）。实测：
 `errdefer { flag = 1; }` 后 `return 7`，flag 仍为 0。
 
 所以 `json_decode` 若「失败返回 0」，errdefer **一条都不会跑**。三种可行改法：

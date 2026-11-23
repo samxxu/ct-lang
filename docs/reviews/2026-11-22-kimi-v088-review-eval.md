@@ -75,7 +75,7 @@ Kimi 附录第 1 条「v1.0 CLI 默认 `warn`」方向被接受，但**时点提
 | 发布门禁 | FP=0 前 `warn`，FP=0 后 `error`；FP=0 仍是 v1.0 硬门禁 |
 | v1.1 S2 | CLI 默认升 `error`；未达标回退“可用不默认” |
 
-已同步：[spec §1](../language-spec.md#L62-L78)、[v1-release-plan §2.4](../planning/v1-release-plan.md#L129-L151)、
+已同步：[spec §1](../language-spec.md#1-源文件模型ct-ast)、[v1-release-plan §2.4](../planning/v1-release-plan.md#L129-L151)、
 [stable-subset](../stable-subset.md#L50)、[SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md)。
 
 ## 6. 处置建议

@@ -266,8 +266,8 @@ done
 `ct`、`cc`、运行全部 rc=0，无诊断。所以「有指针子节点的树」即使在同一单元，自动胶水也是错的。
 
 **这属于什么**：**实现缺陷**。规约 §4.56 明说 `delete p` 调用 `<S>_Drop_drop(p)`，且「无显式
-impl 时按字段声明顺序递归生成释放胶水」（[language-spec.md:2325](../language-spec.md#L2325)）。
-空桩与「对指针槽取地址」都不满足这两句。另有一句承认跨单元限制（[:1569](../language-spec.md#L1569)），
+impl 时按字段声明顺序递归生成释放胶水」（[language-spec.md:2325](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)）。
+空桩与「对指针槽取地址」都不满足这两句。另有一句承认跨单元限制（[:1569](../language-spec.md#440-borrow-与-handbackphase-5-续仅-ct-ast)），
 但**没有**说「跨单元 delete 变成空操作」。
 
 **最小期望**：`delete p` 调用的 Drop 体来自**定义 impl 的单元**；指针字段的胶水对子对象调用
@@ -322,7 +322,7 @@ $ echo $?
 ```
 
 **这属于什么**：**规范空白**。规约把 `own` 的初始化式限定为 `malloc` / `calloc`
-（[language-spec.md:397](../language-spec.md#L397)），返回类型位置没有任何条款（既不允许也没禁止，
+（[language-spec.md:397](../language-spec.md#49-autodropphase-5-新增仅-ct-线)），返回类型位置没有任何条款（既不允许也没禁止，
 实现直接按「只能在函数体内」拒）。
 
 **最小期望**：`own p = factory(...)` 可写，或明确「`own` 只接受 `malloc`/`calloc`」并给出可操作诊断。

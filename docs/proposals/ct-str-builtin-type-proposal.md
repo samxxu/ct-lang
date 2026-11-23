@@ -6,7 +6,7 @@
 | 状态 | 草案；未立项，不占 phase |
 | 评审记录 | [ct-str-builtin-type-battle.md](../reviews/ct-str-builtin-type-battle.md)（2026-11-16，主张 / 反证 / 裁判：部分受理）；空状态问题另见 [ct-str-null-state-battle.md](../reviews/ct-str-null-state-battle.md)（三条路线对抗） |
 | 对象 | `Str` 的语言地位：内置身份、值语义、内存布局，以及它与 `char *` 的边界 |
-| 事实基线 | v0.61.1；[language-spec.md §4.56](../language-spec.md#L2552)、[Str.h.ct](../../lib/core/Str.h.ct) |
+| 事实基线 | v0.61.1；[language-spec.md §4.56](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)、[Str.h.ct](../../lib/core/Str.h.ct) |
 | 不在范围 | 使用方接口、交付物、具体排期 |
 
 > 本提案的对象只有 CT 自己的语言机制。文中「使用方」是泛称，不指向任何具体使用方。
@@ -108,21 +108,21 @@ C 函数等价。两宿主的映射表各自独立，不共用（P8）。
 - 规范称 `Str` 为「内建」，但定义在 `lib/std/Str.h.ct` 的源码里：
   `pub struct Str { char *data; int len; }`，并带 `impl Drop`（[Str.h.ct:18-29](../../lib/core/Str.h.ct#L18-L29)）。
   本提案把 `data` 定为 `const char *`：布局大小与字段顺序不变，写权限收窄。
-- `ct build` 自动加载 `Str`，不需要 `import`（[language-spec.md:47](../language-spec.md#L47)）。
+- `ct build` 自动加载 `Str`，不需要 `import`（[language-spec.md:47](../language-spec.md#0-快速开始)）。
 - 布局与 `len` 契约已按「保留内嵌 `\0`、不依赖结尾 NUL」写明
-  （[language-spec.md:2559](../language-spec.md#L2559)）。
+  （[language-spec.md:2559](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)）。
 - 现行所有权语义是**浅拷贝句柄**：按值传递只拷贝指针，不自动深拷贝，需要显式 `retain()`
-  （[language-spec.md:2560](../language-spec.md#L2560)；`retain()` 见 [Str.h.ct:132-134](../../lib/core/Str.h.ct#L132-L134)）。
+  （[language-spec.md:2560](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)；`retain()` 见 [Str.h.ct:132-134](../../lib/core/Str.h.ct#L132-L134)）。
 
 ### 1.2 与三条前提的差距
 
 | 前提 | 现状 | 差距性质 |
 | --- | --- | --- |
-| P1 字面量 `char *`，目标 `Str` 时隐式转换 | `char *` 传给 `Str` 形参在默认路径是**硬错**（[language-spec.md:2000-2005](../language-spec.md#L2000-L2005)） | 需要把该硬错改为按目标类型的转换 |
+| P1 字面量 `char *`，目标 `Str` 时隐式转换 | `char *` 传给 `Str` 形参在默认路径是**硬错**（[language-spec.md:2000-2005](../language-spec.md#61-会被诊断的约束)） | 需要把该硬错改为按目标类型的转换 |
 | P2 `Str a = b;` 深拷贝 | 现行 §4.56 明确「按值传递浅拷贝指针，不自动深拷贝」 | **改变已发布语义**，不是补文档 |
 | P2 临时值直接转移 | 现行规范没有 `Str` 的移动/转移规则；只有 `own` 与 AutoDrop 的语句级记账 | 需要新的转移规则与判定 |
 | P3 布局两字段固定 | 源码布局名义一致；`const` 限定是本提案新增 | 需要把布局写成语言契约，并防止用户重定义 |
-| P3 同形 C struct 直接对传 | 不同具名 struct 按值互传是硬错（[language-spec.md:2003](../language-spec.md#L2003-L2005)） | 需要 FFI 兼容规则；当前规范没有 |
+| P3 同形 C struct 直接对传 | 不同具名 struct 按值互传是硬错（[language-spec.md:2003](../language-spec.md#61-会被诊断的约束)） | 需要 FFI 兼容规则；当前规范没有 |
 
 **关键事实（必须写进正文）**：P2 把 `Str` 从「浅拷贝句柄」改为「拷贝即深拷贝」，会与既有
 `retain()` 的用法、按值传参的开销、以及所有依赖浅拷贝的调用点发生冲突。这不是语义澄清，
@@ -341,9 +341,9 @@ P1 只规定 `char *` → `Str` 的目标类型转换。已定：从 `Str` 借�
 
 ### 3.5 内嵌 `\0` 的表示与比较
 
-- 表示：`data` + `len` 已支持内嵌 `\0`（[language-spec.md:2559](../language-spec.md#L2559)）；
+- 表示：`data` + `len` 已支持内嵌 `\0`（[language-spec.md:2559](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)）；
 - 比较：必须按 `len` 做字节比较，不能只用 NUL 结尾视图（`Map` 的 `Str` 键已按此实现，
-  [language-spec.md:2419](../language-spec.md#L2419)）；
+  [language-spec.md:2419](../language-spec.md#451-泛型-struct固有方法与内置容器phase-29)）；
 - 诊断边界：构造不扫描、不禁止内嵌 `\0`；借用视图不诊断；只有产出 NUL 形态的 `to_c_str()` /
   `copy_to()` 在运行期检查并报错（P9）；
 - 与 C 侧对传时，C 读者按 NUL 解释借用视图会在第一个 `\0` 截断；这是借用视图的已知边界；

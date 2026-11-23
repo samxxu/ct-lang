@@ -19,7 +19,7 @@
 ### 1.1 `Str` 的布局与生命周期
 
 - `Str` 布局为 `{ char *data; int len; }`，字段私有；`len` 是契约，允许内嵌 `\0`
-  （[language-spec.md §Str](../language-spec.md#L2559)、[Str.h.ct:18-21](../../lib/core/Str.h.ct#L18-L21)）。
+  （[language-spec.md §Str](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)、[Str.h.ct:18-21](../../lib/core/Str.h.ct#L18-L21)）。
 - `str_from_len` 在分配时多留一个字节并写入结尾 NUL（[Str.h.ct:39-46](../../lib/core/Str.h.ct#L39-L46)），
   因此内部缓冲区对 C 读者可用，但 C 读者会在内嵌 `\0` 处截断。
 - `Str` 拥有缓冲区，`Drop` 负责释放（[Str.h.ct:23-29](../../lib/core/Str.h.ct#L23-L29)）。
@@ -30,7 +30,7 @@
 | --- | --- | --- |
 | `char *` → `Str` | `str_from(p)` | 扫描 NUL 长度后**深拷贝**（[Str.h.ct:51-60](../../lib/core/Str.h.ct#L51-L60)）；分配失败返回 `len = -1` 的释放态，不终止 |
 | `Str` → `char *` | `str_c_str(s)` | **分配**一份 NUL 结尾副本，调用方负责 `free`（[Str.h.ct:115-127](../../lib/core/Str.h.ct#L115-L127)） |
-| `char *` → `Str` 形参 | 直接传参 | **默认路径硬错**：`type mismatch ... expected 'Str', got 'char *'`（[language-spec.md §6.1](../language-spec.md#L2000-L2005)，v0.53.2 起） |
+| `char *` → `Str` 形参 | 直接传参 | **默认路径硬错**：`type mismatch ... expected 'Str', got 'char *'`（[language-spec.md §6.1](../language-spec.md#61-会被诊断的约束)，v0.53.2 起） |
 
 事实层面的结果是：两个方向的纯搬运都要绕一圈——一个要显式 `str_from`，另一个要显式
 `str_c_str` 再手动 `free`；直接传参还会撞上既有的硬错。
@@ -190,7 +190,7 @@ char *joined = a.concat(b);     /* 结果是 char *，由调用方 free */
 7. **重载与歧义**：同一调用点同时存在 `f(char *)` 与 `f(Str)` 时，自动转换会不会让原本明确的
    调用变成二义；需要规定「精确匹配优先、转换次之」还是直接报歧义。
 8. **诊断**：`ct check --types` 目前把 `char *` 传给 `Str` 形参判为硬错
-   （[language-spec.md:2000-2005](../language-spec.md#L2000-L2005)）；改为自动转换后，
+   （[language-spec.md:2000-2005](../language-spec.md#61-会被诊断的约束)）；改为自动转换后，
    这条错误文案、`ct check` 与 `ct build` 的分工都要重新定义。
 9. **target typing 的传播**：嵌套调用、条件分支两臂类型不同、无目标类型上下文各按什么规则；
    是否要求产出型操作提供默认返回类型。

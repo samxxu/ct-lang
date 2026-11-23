@@ -156,8 +156,8 @@ $ echo $?
 且映射仍只在 `.m.ct`」就算解决。
 
 **这是规范缺口还是实现缺陷**：**规范缺口**。规约把三处位置逐一排除过，且写明 `.m.ct` 只能 import
-另一个 `.m.ct`（[language-spec.md:525-530](../language-spec.md#L525-L530)、[:538](../language-spec.md#L538)、
-[:643-651](../language-spec.md#L643-L651)）。实现与规约一致，所以不是 bug，是规约画的边。
+另一个 `.m.ct`（[language-spec.md:525-530](../language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)、[:538](../language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)、
+[:643-651](../language-spec.md#4101-链式构建器范式权威定义与两档路径)）。实现与规约一致，所以不是 bug，是规约画的边。
 
 **替代盘**：
 
@@ -207,7 +207,7 @@ $ echo $?
 **期望能力**：`.h.ct` 能承载 `map … for type`，且其 recipe 展开路径与 `.m.ct` 一致。
 
 **这是规范缺口还是实现缺陷**：**规范缺口**。规约明文：`map trait … for type …` 只能出现在 `.m.ct`
-（[language-spec.md:662](../language-spec.md#L662)），shim 也只探测 `.m.ct`（[:600](../language-spec.md#L600)）。
+（[language-spec.md:662](../language-spec.md#4101-链式构建器范式权威定义与两档路径)），shim 也只探测 `.m.ct`（[:600](../language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)）。
 
 **替代盘**：同 A-1。若 A-1 落地，「映射写哪儿」就不再是阻塞——`.m.ct` 能看见接口，组合已经成立。
 
@@ -257,7 +257,7 @@ SH-18，状态「部分修复」）。另一处不对称：`pub struct` 的**裸
 **期望能力**：类型位置（声明、参数、返回、字段）接受 `ns::Type`，等价于别名 import。
 
 **这是规范缺口还是实现缺陷**：**规范缺口**。规约已把「裸名 + 别名 import」写成规定做法，并明说
-限定写法不支持（[language-spec.md:700](../language-spec.md#L700)）。所以不是实现偏离，是规范没定义语法。
+限定写法不支持（[language-spec.md:700](../language-spec.md#411-跨单元链接pub-全局与-externct-ast)）。所以不是实现偏离，是规范没定义语法。
 
 **替代盘**：
 
@@ -309,7 +309,7 @@ $ echo $?
 `Resp res = q.send();` 可编译、可调用 `res.status()`。
 
 **这是规范缺口还是实现缺陷**：**实现缺陷**。规约把「只有变量或 `&变量`、以及返回同款接口的函数
-调用能装箱」写成规则（[language-spec.md:356](../language-spec.md#L356)），但这里两侧是同一接口、
+调用能装箱」写成规则（[language-spec.md:356](../language-spec.md#48-接口多态trait-作类型)），但这里两侧是同一接口、
 目标类型来自声明，vtable 槽 `struct Resp_iface (*send)(void *)` 本身是合法的（§4.10.1 自述）。
 SH-72 已定位到 `expr_type` 对动态派发 `N_MCALL` 直接返回 -1，`maybe_box` 随即报「无法推断」——
 类型其实可推。
@@ -362,9 +362,9 @@ $ echo $?
 `a.m().n()` 与 `a.m().n().o()` 都可写。
 
 **这是规范缺口还是实现缺陷**：**规范缺口**。规约把「接收者是一次方法调用（`N_MCALL`）的形态当前
-一律拒绝」写成刻意选择，理由是「不会静默产出坏 C」（[language-spec.md:251-258](../language-spec.md#L251-L258)）；
-临时量的提升位置也被限死在「语句行首」与「赋值/声明初始化式右值行首」（[:259-267](../language-spec.md#L259-L267)）。
-同一条规约也承认这是两条 lowering 的差异、不是设计意图（[:1886-1890](../language-spec.md#L1886-L1890)）。
+一律拒绝」写成刻意选择，理由是「不会静默产出坏 C」（[language-spec.md:251-258](../language-spec.md#45-方法调用重写)）；
+临时量的提升位置也被限死在「语句行首」与「赋值/声明初始化式右值行首」（[:259-267](../language-spec.md#45-方法调用重写)）。
+同一条规约也承认这是两条 lowering 的差异、不是设计意图（[:1886-1890](../language-spec.md#62-已知限制)）。
 
 **替代盘**：逐跳落变量（规约推荐）；或走类型宿主链（[examples/47](../../examples/47_chain_factory/src/main.ct)），
 代价是失去接口对象与响应侧多实现。
@@ -707,7 +707,7 @@ $ echo $?
 
 **这是规范缺口还是实现缺陷**：**规范缺口**。规约只规定 `.m.ct` 的 prologue（`#include` / `#define`）
 按整行展开进**消费者 `.c`**，且「消费者 `.h` 不含 prologue」
-（[language-spec.md:591](../language-spec.md#L591)）。`.h.ct` 的 `#define` 没有任何导出路径——不是漏做，
+（[language-spec.md:591](../language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)）。`.h.ct` 的 `#define` 没有任何导出路径——不是漏做，
 是没定义。
 
 **替代盘**（都实测可用）：
@@ -871,8 +871,8 @@ $ echo $?
 **期望能力**：匿名 union 可以带字段名（等价于 C 的 `union { … } v;`）。
 
 **这是规范缺口还是实现缺陷**：**规范缺口**。规约 §4.18 只定义「无名字的匿名成员」并把成员名提升
-（[language-spec.md:923-942](../language-spec.md#L923-L942)），并明文拒绝具名形态
-（[:947](../language-spec.md#L947)）；错误文案自带替代写法。
+（[language-spec.md:923-942](../language-spec.md#418-匿名成员ct-ast)），并明文拒绝具名形态
+（[:947](../language-spec.md#418-匿名成员ct-ast)）；错误文案自带替代写法。
 
 **替代盘**：
 
@@ -1121,8 +1121,8 @@ if (r) { Res_Drop_drop(r); free(r); r = 0; }
 硬错，而不是发空桩）。
 
 **这是规范缺口还是实现缺陷**：**实现缺陷**。规约 §4.56 明说 `delete p` 调用 `<S>_Drop_drop(p)`，
-并说明「无显式 impl 时按字段递归生成胶水」（[language-spec.md:2325](../language-spec.md#L2325)）。
-另有一句承认跨单元限制（[:1569](../language-spec.md#L1569)），但**没有**说「跨单元 delete 是空操作」。
+并说明「无显式 impl 时按字段递归生成胶水」（[language-spec.md:2325](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)）。
+另有一句承认跨单元限制（[:1569](../language-spec.md#440-borrow-与-handbackphase-5-续仅-ct-ast)），但**没有**说「跨单元 delete 是空操作」。
 空桩是静默替代，不是规范行为。
 
 **替代盘**：在定义单元导出 `pub` 清理函数，消费方手动调用（`cfg::res_free(r)`）并自己 `free`。
@@ -1174,7 +1174,7 @@ g6_own_in_sig.ct:7:1: error: 'own' is only allowed inside a function body
 或明确禁止并给出可操作诊断。
 
 **这是规范缺口还是实现缺陷**：**规范缺口**。规约把 `own` 的初始化式限定为
-`malloc` / `calloc`（[language-spec.md:397](../language-spec.md#L397)），并规定 `own` 只在函数体内的
+`malloc` / `calloc`（[language-spec.md:397](../language-spec.md#49-autodropphase-5-新增仅-ct-线)），并规定 `own` 只在函数体内的
 声明位置；返回类型位置没有任何条款。
 
 **替代盘**：工厂内部 `malloc` 并返回普通指针，调用方自己 `delete`（失去自动释放）；或把工厂写成
@@ -1237,7 +1237,7 @@ done
 两者都不能把 `T**` 当 `T*`。
 
 **这是规范缺口还是实现缺陷**：**实现缺陷**。规约说「无显式 impl 时，编译器按字段声明顺序为每个
-`uses_drop` 字段递归生成释放胶水」（[language-spec.md:2325](../language-spec.md#L2325)）。指针字段
+`uses_drop` 字段递归生成释放胶水」（[language-spec.md:2325](../language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)）。指针字段
 的「递归」显然应当是「对子对象调用，而不是对指针槽取地址」。这是实现与条款的偏离。
 
 当前绕法只有「给父类型写显式 `impl Drop`」，但那样又会丢掉自动胶水（规约：显式 impl 即自负全责），
@@ -1292,7 +1292,7 @@ $ echo $?
 ```
 
 **这是规范缺口还是实现缺陷**：**实现缺陷**。规约说 `typedef` 可用、别名可作局部/参数/字段
-（[language-spec.md:732-733](../language-spec.md#L732-L733)），没有「记录 typedef 必须带体」的条款；
+（[language-spec.md:732-733](../language-spec.md#412-函数指针ct-ast)），没有「记录 typedef 必须带体」的条款；
 `struct JVal;` 前向声明本身是支持的。缺的是 `parse_typedef` 的「标签 + 别名 + `;`」分支：
 `Parser.h.ct:2432` 直接进 `parse_record_def`，而后者只认下一个 token 是 `;` 的前向形式
 （`Parser.h.ct:2178-2184`），否则走 `parse_record_body` 的 `expect("{")`（`Parser.h.ct:1927`），
@@ -1352,7 +1352,7 @@ $ echo $?
 ```
 
 **这是规范缺口还是实现缺陷**：**规范缺口**。语法定义是
-`impl-def ::= "impl" IDENT "for" IDENT "{" { method-def } "}"`（[language-spec.md:75](../language-spec.md#L75)），
+`impl-def ::= "impl" IDENT "for" IDENT "{" { method-def } "}"`（[language-spec.md:75](../language-spec.md#3-语法总览)），
 没有尾分号；而 `struct` / `enum` 的定义后分号是可选的（`top_decl` 对两者都 `accept(";")`，
 `Parser.h.ct:816-825`），`impl` 分支（`Parser.h.ct:808-809`）没有。所以这是**宽容度不一致**，
 不是「已定义却没做到」。要么把 grammar 改成与 `struct` 一致的可选 `;` 再补实现，要么维持拒绝
@@ -1399,7 +1399,7 @@ $ echo $?
 ```
 
 **这是规范缺口还是实现缺陷**：**实现缺陷**。规约的模型是「顶层构造展开，其余 C 代码原样透传」
-（[language-spec.md:40-41](../language-spec.md#L40-L41)），续行是 C 预处理的标准写法
+（[language-spec.md:40-41](../language-spec.md#1-源文件模型ct-ast)），续行是 C 预处理的标准写法
 （换行在翻译阶段 2 就被删除）；规约里的「逐行」描述的是扫描粒度，不是禁止拼接。实现上
 `Lexer.h.ct:90-97` 的 T_PP 分支一路读到 `\n` 就返回，不检查行尾 `\`，于是续行进入顶层声明解析，
 报错还指在第二行——用户很难联想到上一行的反斜杠。坐标见修复单 DF-2。
@@ -1410,7 +1410,7 @@ $ echo $?
 **影响面**：所有多行宏。**卡的是写法**，报错明确（但位置误导）。
 
 **放开的风险**：`#include` / `#define` 的「按整行去重」单位会从物理行变成逻辑行
-（[language-spec.md:591](../language-spec.md#L591)），同一宏的两种换行写法可能从两条变一条；
+（[language-spec.md:591](../language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)），同一宏的两种换行写法可能从两条变一条；
 要重跑 prologue 夹具，并把「`\` 后带空格不算续行」的负例写进规约。
 
 ---
@@ -1461,8 +1461,8 @@ $ echo $?
 字节之后，`ct` rc=0、`cc` rc=0，运行返回 **3**（源码语义是 6）——**编译通过，行为被改掉**。
 
 **这是规范缺口还是实现缺陷**：**实现缺陷**。规约明文要求「所有固定容量上限……越界一律 `die`
-报错，**不静默截断**」（[language-spec.md:55](../language-spec.md#L55)），标识符的超长处理也是报
-`identifier is too long`（[language-spec.md:60-61](../language-spec.md#L60-L61)）。预处理行是唯一
+报错，**不静默截断**」（[language-spec.md:55](../language-spec.md#2-词法与书写要求ct-ast)），标识符的超长处理也是报
+`identifier is too long`（[language-spec.md:60-61](../language-spec.md#2-词法与书写要求ct-ast)）。预处理行是唯一
 被漏掉的入口：`Lexer.h.ct:90-97` 的 T_PP 分支超出即丢字符、且不置 `toktrunc`
 （标识符分支在 `Lexer.h.ct:108-110` 会置位），`Parser.h.ct:1313` 再把已经截断的文本用
 `snprintf(…, MAX_TEXT, …)` 拷进 `Arena::Node.text`（`char text[160]`）。发射端只原样打印
@@ -1507,7 +1507,7 @@ $ echo $?
 
 ### 9.2 规约 §4.10.1 的描述与 tag 不同步（文档问题，不计条目）
 
-[language-spec.md:643-670](../language-spec.md#L643-L670) 的小标题写「**0.44.1 实测状态**」，但正文里
+[language-spec.md:643-670](../language-spec.md#4101-链式构建器范式权威定义与两档路径) 的小标题写「**0.44.1 实测状态**」，但正文里
 混入了 tag 之后的修复：
 
 - 说「返回接口值的调用点推断已修（SH-72）」——`5ff69ac3`，晚于 `v0.44.1`；

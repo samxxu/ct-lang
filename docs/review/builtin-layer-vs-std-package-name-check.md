@@ -59,9 +59,9 @@ t3: import std::str::String; + Str s = str_from("abc"); + str_len(s)
 
 ### 2.2 规范与文档（硬改，历史文档不改）
 
-- [language-spec.md:47](../../docs/language-spec.md#L47)（自动加载清单）、[:1926](../../docs/language-spec.md#L1926)（适用范围）、
-  [:1941](../../docs/language-spec.md#L1941)（保留名）、[:2390-2392](../../docs/language-spec.md#L2390-L2392)（内置层段落）、
-  [:2411-2415](../../docs/language-spec.md#L2411-L2415)（`Map` 键）、[:2546](../../docs/language-spec.md#L2546) / [:2553](../../docs/language-spec.md#L2553)（§4.56）。
+- [language-spec.md:47](../../docs/language-spec.md#0-快速开始)（自动加载清单）、[:1926](../../docs/language-spec.md#51-源码命名约定语言--标准库--ct-pkg稳定契约)（适用范围）、
+  [:1941](../../docs/language-spec.md#51-源码命名约定语言--标准库--ct-pkg稳定契约)（保留名）、[:2390-2392](../../docs/language-spec.md#451-泛型-struct固有方法与内置容器phase-29)（内置层段落）、
+  [:2411-2415](../../docs/language-spec.md#451-泛型-struct固有方法与内置容器phase-29)（`Map` 键）、[:2546](../../docs/language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast) / [:2553](../../docs/language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)（§4.56）。
 - [lib/std/README.md:5-17](../../lib/core/README.md#L5-L17)（范围）、[:28-29](../../lib/core/README.md#L28-L29)（类型表+保留名）、
   [:43](../../lib/core/README.md#L43)（保留名）、[:80-83](../../lib/core/README.md#L80-L83)（`Str`）。
 - [README.md:468](../../README.md#L468)、[README.en.md:64](../../README.en.md#L64)。

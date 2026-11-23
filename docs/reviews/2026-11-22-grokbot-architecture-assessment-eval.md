@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | `selfhost/ct-ast` 约 27 单元 / 45797 行 | **完全一致** | `find selfhost/ct-ast -name '*.ct'` → 27；`cat` 累计 45797 |
 | L0 约 2966 行；L2 约 7179 行 | **完全一致** | `ctc.c` 2966；L2 `core.ct` 5441 + `driver.ct` 1738 = 7179 |
-| `MAX_FUNCS` 512，整程序预算，非每单元 | 一致 | [Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L32-L36)、[spec §7](../language-spec.md#L2286-L2288) |
+| `MAX_FUNCS` 512，整程序预算，非每单元 | 一致 | [Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct#L32-L36)、[spec §7](../language-spec.md#7-容量上限) |
 | `MAX_NODES` 262144 / `MAX_VARS` 4096 / `MAX_TRAITS` 64 | 一致 | spec §7 表；`Symbols.h.ct` 常量组 |
 | `test/run.sh` 156 passed；`check-ast.sh` 1578 passed / 5 skipped | 一致 | [test/README.md](../../test/README.md#L28-L30) |
 | 11 道硬门禁；编辑器语法 179 项断言 | 一致 | `check-docs` 输出 `11 hard gates`；`editors/vscode/CHANGELOG.md` |

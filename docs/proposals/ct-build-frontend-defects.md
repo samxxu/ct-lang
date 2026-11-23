@@ -180,7 +180,7 @@ $ echo $?
 **兼容性风险**：
 
 - 此前被拒的写法变为接受，不会让现有好代码从「能编」变「编不过」。
-- `.m.ct` prologue 的「按整行去重」单位从物理行变成逻辑行（[language-spec.md:591](../language-spec.md#L591)）：
+- `.m.ct` prologue 的「按整行去重」单位从物理行变成逻辑行（[language-spec.md:591](../language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)）：
   同一宏的两种换行写法会从两条变一条，去重结果改变；要重跑 prologue 夹具。
 - 若只做拼接、不修 DF-1，>159 字节的多行宏会从「报错」变成「静默截断」——**这比现状更坏**，
   两条必须一起上或先上 DF-1 的方案 B。
@@ -319,7 +319,7 @@ $ echo $?
 ```
 
 **定性**：**规范空白**，不是实现缺陷。语法定义 `impl-def` 没有尾分号
-（[language-spec.md:75](../language-spec.md#L75)），所以拒绝是**照规约执行**。但 `struct` / `enum`
+（[language-spec.md:75](../language-spec.md#3-语法总览)），所以拒绝是**照规约执行**。但 `struct` / `enum`
 的定义后分号是可选的（`Parser.h.ct:816-825` 对两者都 `accept(";")`），`impl` 分支
 （`Parser.h.ct:808-809`）没有，宽容度不一致——这是要决定的「设计边界」，不是「已定义却没做到」。
 
