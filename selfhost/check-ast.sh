@@ -850,6 +850,16 @@ else
     bad "p84/errors" "$(cat "$work/p84err.out" "$work/p84err.err" | head -5)"
 fi
 
+# LANG-26 / D-020 (v1.1): the binding-site conversion's three safety nets that
+# the behavioural fixtures above cannot see -- generated C identical to the
+# explicit `as<T>()` call, the strict `to<T>()` result check, and the mapping
+# trait's import/ambiguity diagnostics.
+if bash test/ast/lang26_conv.sh "$work/ct-ast" >"$work/l26conv.out" 2>"$work/l26conv.err"; then
+    ok "LANG-26 binding-site conversion (control / strict / mapping diagnostics)"
+else
+    bad "LANG-26 binding-site conversion" "$(cat "$work/l26conv.out" "$work/l26conv.err" | head -8)"
+fi
+
 # PH-84 S84c (E84-4 / E84-5): the tag+union layout, the emitted construction /
 # match, the binding-is-a-copy and no-fallthrough semantics, and the pub ADT
 # header ABI.

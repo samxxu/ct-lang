@@ -1,0 +1,21 @@
+/* LANG-26 / D-020: the mapping-trait arm of the lookup. The source type has no
+   inherent `as`; the imported `lib::ops` trait supplies it, and the generated C
+   is the explicit `node.as()` recipe. */
+import lib::types;
+import lib::ops;
+#include <stdio.h>
+
+struct Num make(struct Node node) {
+    return node;
+}
+
+int main(void) {
+    struct Node node = { 5 };
+    struct Num a = node;
+    struct Num b = { 0 };
+    b = node;
+    struct Num c = make(node);
+    struct Num d = node.as<Num>();
+    printf("%d %d %d %d\n", a.v, b.v, c.v, d.v);
+    return 0;
+}

@@ -1,0 +1,53 @@
+/* LANG-26 / D-020: the wide tier `as<T>` at a binding site, the strict tier
+   `to<T>` as an explicit call, and the four binding positions this slice
+   covers (declaration, assignment, return, and the explicit spelling). The
+   generated C is the same `Node_as(&x)` / `Node_to(&x)` a hand-written call
+   produces. */
+#include <stdio.h>
+
+struct Node {
+    int v;
+};
+
+struct Num {
+    int v;
+};
+
+impl Node {
+    Num as() {
+        Num n = { self->v + 1 };
+        return n;
+    }
+
+    Option<Num> to() {
+        Option<Num> o = Option<Num>::none();
+        Num n = { self->v + 2 };
+        o.set(n);
+        return o;
+    }
+}
+
+Num make(Node n) {
+    return n;
+}
+
+int main(void) {
+    Node node = { 5 };
+
+    /* 1. declaration initialiser */
+    Num a = node;
+
+    /* 2. assignment */
+    Num b = { 0 };
+    b = node;
+
+    /* 3. return */
+    Num c = make(node);
+
+    /* the two explicit tiers keep working, and answer the same call */
+    Num d = node.as<Num>();
+    Option<Num> o = node.to<Num>();
+
+    printf("%d %d %d %d %d\n", a.v, b.v, c.v, d.v, o.unwrap().v);
+    return 0;
+}

@@ -1,0 +1,25 @@
+/* LANG-26 negative: a plain argument is not a binding site. The conversion
+   exists, so the diagnostic names the ban instead of "type mismatch". */
+struct Node {
+    int v;
+};
+
+struct Num {
+    int v;
+};
+
+impl Node {
+    Num as() {
+        Num n = { self->v + 1 };
+        return n;
+    }
+}
+
+void take(Num n) {
+}
+
+int main(void) {
+    Node node = { 5 };
+    take(node);
+    return 0;
+}

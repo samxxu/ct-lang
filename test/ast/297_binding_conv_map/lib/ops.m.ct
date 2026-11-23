@@ -1,0 +1,11 @@
+/* LANG-26: a mapping trait is imported, not declared at the call site. Its
+   `as` recipe is what the binding-site conversion expands to. */
+namespace lib;
+
+pub trait NodeOps {
+    struct Num as();
+}
+
+map trait NodeOps for type struct Node {
+    as(n) -> node_to_num(n);
+}

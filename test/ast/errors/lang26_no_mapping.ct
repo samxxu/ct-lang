@@ -1,0 +1,16 @@
+/* LANG-26 negative: the source and target are aggregates, so C cannot convert
+   them; no inherent method and no imported mapping trait declares the
+   conversion. The diagnostic is actionable, not "undeclared identifier". */
+struct Node {
+    int v;
+};
+
+struct Num {
+    int v;
+};
+
+int main(void) {
+    Node node = { 5 };
+    Num n = node;
+    return n.v;
+}

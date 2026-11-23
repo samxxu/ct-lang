@@ -1,0 +1,13 @@
+/* LANG-26: the source and target types the mapping trait converts between. */
+pub struct Node {
+    int v;
+};
+
+pub struct Num {
+    int v;
+};
+
+pub struct Num node_to_num(struct Node n) {
+    Num r = { n.v + 7 };
+    return r;
+}

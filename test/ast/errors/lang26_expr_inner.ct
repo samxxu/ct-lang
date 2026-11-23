@@ -1,0 +1,23 @@
+/* LANG-26 negative: a conversion is not allowed inside an expression. `Node`
+   has an `as` conversion, but `node + 1` is not one of the four binding
+   sites. */
+struct Node {
+    int v;
+};
+
+struct Num {
+    int v;
+};
+
+impl Node {
+    Num as() {
+        Num n = { self->v + 1 };
+        return n;
+    }
+}
+
+int main(void) {
+    Node node = { 5 };
+    int x = node + 1;
+    return x;
+}
