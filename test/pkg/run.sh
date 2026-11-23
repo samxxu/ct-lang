@@ -1713,6 +1713,17 @@ else
 fi
 
 echo
+echo "== PKG-18: native ct index refresh =="
+# The probe stages the PKG-17 fixture, generates an index with `ct index
+# refresh`, and replays a row with `ct get --index`; it leaves the fixture and
+# the worktree untouched.
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg18_index_refresh.sh"; then
+    ok "PKG-18 native ct index refresh"
+else
+    bad "PKG-18 native ct index refresh" "one or more pkg18-* steps failed (see above)"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]
