@@ -44,6 +44,7 @@
 | [ct-pkg.md](ct-pkg.md) | ct-pkg 四个角色：编译器 / std / 平台包 / 索引 | 判断一个能力该由谁提供 |
 | [ct-pkg-index.md](ct-pkg-index.md) | 索引的六字段现行形态、旧五字段兼容、信任边界与发布入口 | 加包、查索引、判断可信度 |
 | [package-guide.md](package-guide.md) | 包作者指南：清单键、`ns-root`、`ct install` | 发布或消费一个包 |
+| [package-coding-conventions.md](package-coding-conventions.md) | 包编码通用条款 CG-1…CG-7：命名、对象式调用、能力寄生、三层模型、资源与错误处理、映射唯一实现 | 设计或评审一个包的公开 API |
 
 > `proposals/` 下的文档是**提案**，不是现状；现状以本表与 language-spec / package-guide /
 > ct-pkg-index 为准。索引没有签名，pin / 签名未落地前不要声称可信。

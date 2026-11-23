@@ -20,6 +20,8 @@
 | 索引维护者 | 让包可被 `ct get <pub>/<name>` 解析 | `ct-pkg/index` 仓的索引生成器与 CI | 不在客户端扫描组织；不手改生成物 |
 
 三者职责与当前可解析范围见 [ct-pkg](ct-pkg.md)；索引字段与信任边界见 [ct-pkg-index](ct-pkg-index.md)。
+包 API 怎么设计（对象式调用、能力寄生、①/②/③ 三层、资源与错误处理）见
+[package-coding-conventions](package-coding-conventions.md)；本文件只讲清单与工具行为。
 
 ### 1. 一个包长什么样
 
@@ -117,7 +119,8 @@ S1 起 `publisher` + `ns-root` 是 store 与 lock v2 的必填身份；写 `ns-r
 
 - 包名：`[a-z0-9][a-z0-9-]*`（小写字母、数字、连字符；不以连字符开头）。
 - 包内源码命名遵循 [language-spec §5.1](language-spec.md)：函数 / 方法 `snake_case` 且动作动词开头，
-  类型 `PascalCase`，任何位置不用小驼峰；libc 直映射（`printf` 等）保留原名。
+  类型 `PascalCase`，任何位置不用小驼峰；libc 直映射（`printf` 等）保留原名。包 API 的命名判据
+  （不重复宿主、缩写准入、数学记号）见 [package-coding-conventions CG-1](package-coding-conventions.md#1-命名)。
 - `dep` 的范围沿用 Phase 8 子集：`^x.y.z`、`~x.y.z`、`>=` / `>` / `<` / `<=` / `=`、裸版本（精确）
   或 `*`，多个条件用空格表示 AND。省略 range 或写 `*` 时取最新版本；显式范围用
 MVS（取满足范围的最低版本）。
