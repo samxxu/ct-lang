@@ -1528,6 +1528,9 @@ impl ParseOps for Parser {
         self->ex->check_mode = self->check_mode;
         self->ex->narg_pos = 0;
         self->ex->arg_base = 0;
+        /* SH-60 / D-60-2: the per-unit signature evidence starts empty; the
+           prologue loop below records the unit's `#include` headers. */
+        self->sup->map_sig_begin(self->unit_is_map);
         self->sup->lex_next();
         while (self->lex->tok != T_EOF) {
             if (self->lex->tok == T_PP) {
@@ -1535,6 +1538,8 @@ impl ParseOps for Parser {
                     return tool::diag::ct_sem_error(self->lex->tokline, 1,
                         "preprocessor line exceeds 159 bytes; split it or move it to a header",
                         self->mem->path);
+                if (self->unit_is_map && self->lex->tok_prefix("#include"))
+                    self->sup->map_include(self->lex->tok_cstr());
                 if (self->c_strict && !self->unit_is_map
                     && pp_is(self->lex->tok_cstr(), "#ct-raw"))
                     return tool::diag::ct_sem_error(self->lex->tokline, 1,
@@ -3449,6 +3454,7 @@ impl ParseOps for Parser {
     {
         int ti, mi, np, trait_line, mline, pfirst, ptail, dm, di, dj, dk, dcycle;
         int seen_borrow, seen_ref, seen_out, bline;
+        int rty;
         int ntp, pi, discard, save_ntraits, save_ntype, save_nnode;
         char tparam[2][MAX_TEXT];
         char tbound[2][MAX_TEXT];
@@ -3573,7 +3579,24 @@ impl ParseOps for Parser {
         if (self->sup->expect("{") != 0) return -1;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             mline = self->lex->tokline;
-            if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+            /* D-60-1: receiver mutability is postfix (`int f() mut;`). Refuse
+               the prefix spelling with the placement instead of reading `mut`
+               as an opaque return type and turning `int` into the method
+               name. */
+            if (self->unit_is_map && self->lex->tok == T_ID
+                && self->lex->tok_is("mut"))
+                return tool::diag::ct_sem_error(mline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "receiver mutability is written after the parameter list: 'int f() mut;'",
+                    self->mem->path);
+            /* SH-60 / D-60-2: a `.m.ct` signature is the one place where an
+               unknown bare type name is an error instead of an opaque C
+               spelling -- the recipe cannot verify it and there is no C
+               header in the unit to correct it. */
+            self->sup->map_sig = self->unit_is_map;
+            rty = self->ex->parse_type(ret, sizeof ret);
+            self->sup->map_sig = 0;
+            if (rty != 0) return -1;
             if (self->ex->fnptr_state)
                 return self->sup->fail("a trait method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
@@ -3585,6 +3608,7 @@ impl ParseOps for Parser {
             self->sym->traits[ti].m[mi].body = -1;
             self->sym->traits[ti].m[mi].pnode = -1;
             self->sym->traits[ti].m[mi].line = mline;
+            self->sym->traits[ti].m[mi].is_mut = 0;
             pfirst = -1;
             ptail = -1;
             self->sup->lex_next();
@@ -3607,6 +3631,16 @@ impl ParseOps for Parser {
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
                     self->sup->lex_next();
+                    /* D-60-1: the postfix `mut` sits between `)` and `;`. */
+                    if (self->lex->tok == T_ID && self->lex->tok_is("mut")) {
+                        if (!self->unit_is_map)
+                            return tool::diag::ct_sem_error(self->lex->tokline,
+                                self->lex->tokstart - self->lex->lstart + 1,
+                                "receiver mutability is only valid on a .m.ct trait method",
+                                self->mem->path);
+                        self->sym->traits[ti].m[mi].is_mut = 1;
+                        self->sup->lex_next();
+                    }
                     if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                         if (self->unit_is_map)
                             return tool::diag::ct_sem_error(mline, 1,
@@ -3662,7 +3696,10 @@ impl ParseOps for Parser {
                         seen_out = 1;
                         self->sup->lex_next();
                     }
-                    if (self->ex->parse_type(ptype, sizeof ptype) != 0) return -1;
+                    self->sup->map_sig = self->unit_is_map;
+                    rty = self->ex->parse_type(ptype, sizeof ptype);
+                    self->sup->map_sig = 0;
+                    if (rty != 0) return -1;
                     pname[0] = 0;
                     if (self->lex->tok == T_ID) {
                         self->lex->tok_copy(pname, sizeof pname);
@@ -3714,6 +3751,16 @@ impl ParseOps for Parser {
                 }
             }
             if (self->sup->expect(")") != 0) return -1;
+            /* D-60-1: the postfix `mut` sits between `)` and the body / `;`. */
+            if (self->lex->tok == T_ID && self->lex->tok_is("mut")) {
+                if (!self->unit_is_map)
+                    return tool::diag::ct_sem_error(self->lex->tokline,
+                        self->lex->tokstart - self->lex->lstart + 1,
+                        "receiver mutability is only valid on a .m.ct trait method",
+                        self->mem->path);
+                self->sym->traits[ti].m[mi].is_mut = 1;
+                self->sup->lex_next();
+            }
             self->sym->traits[ti].m[mi].nparams = np;
             self->sym->traits[ti].m[mi].pnode = pfirst;
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {

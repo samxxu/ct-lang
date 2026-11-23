@@ -108,6 +108,15 @@ pub trait SupportOps {
     int  slice_brackets_ahead(int *line, int *col);
     int  skip_after_error(void);
     const char *last_error(void);
+    /* SH-60 / D-60-2: the evidence for a C type name in a `.m.ct` trait
+       signature. `map_sig_begin` resets the per-unit state, `map_include`
+       records one prologue line, and `map_std_typedef` answers whether the
+       name belongs to a standard header this unit includes. A name neither
+       declared in CT nor evidenced here must be spelled through a `pub type`
+       alias; the compiler never parses a C header. */
+    void map_sig_begin(int is_map);
+    void map_include(const char *line);
+    int  map_std_typedef(const char *name);
 }
 
 /* The field sizes are literals, not the macros above: a generated header carries
@@ -130,9 +139,75 @@ pub struct ParseSupport {
     int  diag_json_stderr;
     /* P-7.2: points at the parser's slice-use flag. */
     int *slice_used;
+    /* SH-60 / D-60-2: set while the parser reads a `.m.ct` trait signature.
+       An unknown bare type name is then judged against the unit's includes
+       instead of being kept as an opaque C spelling. */
+    int  map_sig;
+    /* the `#include` headers of the unit being parsed, by their spelling
+       (`stddef.h`, `sys/types.h`); the table in the impl turns one into
+       evidence for a standard typedef. */
+    char map_headers[16][64];
+    int  nmap_headers;
 } use SupportOps;
 
 pub struct ParseSupport *parse_support_get(void);
+
+/* SH-60 / D-60-2: the standard C / POSIX typedefs a `.m.ct` signature may
+   name when the unit includes the header that declares them. The compiler
+   never parses a C header, so this table is the written evidence -- a name is
+   accepted only when one of its home headers is in the unit's `#include` set.
+   The type reader already knows `size_t`, `FILE`, `intN_t` and friends, so
+   those never reach this table; a project typedef uses `pub type` instead.
+   One name may appear once per header that is required to declare it. */
+static const char *g_map_std_name[] = {
+    "size_t", "size_t", "size_t", "size_t", "size_t", "size_t", "size_t",
+    "ptrdiff_t", "wchar_t", "wchar_t", "wchar_t", "max_align_t",
+    "FILE", "fpos_t",
+    "time_t", "clock_t", "div_t", "ldiv_t", "lldiv_t",
+    "int8_t", "int16_t", "int32_t", "int64_t",
+    "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+    "int_least8_t", "int_least16_t", "int_least32_t", "int_least64_t",
+    "uint_least8_t", "uint_least16_t", "uint_least32_t", "uint_least64_t",
+    "int_fast8_t", "int_fast16_t", "int_fast32_t", "int_fast64_t",
+    "uint_fast8_t", "uint_fast16_t", "uint_fast32_t", "uint_fast64_t",
+    "intptr_t", "uintptr_t", "intmax_t", "uintmax_t", "imaxdiv_t",
+    "bool", "va_list", "char16_t", "char32_t", "wint_t", "mbstate_t",
+    "sig_atomic_t", "fenv_t", "fexcept_t",
+    "off_t", "pid_t", "ssize_t", "uid_t", "gid_t", "mode_t", "dev_t",
+    "ino_t", "nlink_t", "blksize_t", "blkcnt_t", "clockid_t", "timer_t",
+    "key_t",
+    "socklen_t",
+    "pthread_t", "pthread_mutex_t", "pthread_cond_t", "pthread_attr_t",
+    "pthread_key_t", "pthread_rwlock_t", "pthread_barrier_t",
+    "pthread_spinlock_t",
+    "DIR", "locale_t",
+    0
+};
+static const char *g_map_std_header[] = {
+    "stddef.h", "stdio.h", "stdlib.h", "string.h", "time.h", "wchar.h", "uchar.h",
+    "stddef.h", "stddef.h", "stdlib.h", "wchar.h", "stddef.h",
+    "stdio.h", "stdio.h",
+    "time.h", "time.h", "stdlib.h", "stdlib.h", "stdlib.h",
+    "stdint.h", "stdint.h", "stdint.h", "stdint.h",
+    "stdint.h", "stdint.h", "stdint.h", "stdint.h",
+    "stdint.h", "stdint.h", "stdint.h", "stdint.h",
+    "stdint.h", "stdint.h", "stdint.h", "stdint.h",
+    "stdint.h", "stdint.h", "stdint.h", "stdint.h",
+    "stdint.h", "stdint.h", "stdint.h", "stdint.h",
+    "stdint.h", "stdint.h", "stdint.h", "stdint.h", "inttypes.h",
+    "stdbool.h", "stdarg.h", "uchar.h", "uchar.h", "wchar.h", "wchar.h",
+    "signal.h", "fenv.h", "fenv.h",
+    "sys/types.h", "sys/types.h", "sys/types.h", "sys/types.h",
+    "sys/types.h", "sys/types.h", "sys/types.h", "sys/types.h",
+    "sys/types.h", "sys/types.h", "sys/types.h", "sys/types.h",
+    "sys/types.h",
+    "sys/types.h",
+    "sys/socket.h",
+    "pthread.h", "pthread.h", "pthread.h", "pthread.h",
+    "pthread.h", "pthread.h", "pthread.h",
+    "pthread.h",
+    "dirent.h", "locale.h"
+};
 
 /* LANG-10 7b: the JSON string escaper (defined after the impl). */
 static void put_json_parse(FILE *f, const char *s);
@@ -910,6 +985,63 @@ impl SupportOps for ParseSupport {
     {
         (void)self;
         return self->errmsg;
+    }
+
+    /* SH-60 / D-60-2: one unit's signature evidence starts empty; the parser
+       calls this at the top of `parse_program` and re-arms `map_sig` only
+       around a `.m.ct` trait method's return / parameter types. */
+    void map_sig_begin(int is_map)
+    {
+        (void)self;
+        (void)is_map;
+        self->map_sig = 0;
+        self->nmap_headers = 0;
+    }
+
+    /* Record `#include <h>` / `#include "h"` (a no-op for any other prologue
+       line). The header keeps its spelling, because the table above is keyed
+       by it; duplicates collapse and the list is capped -- past the cap the
+       worst outcome is one more "unknown type" diagnostic, never a wrong
+       acceptance. */
+    void map_include(const char *line)
+    {
+        const char *p;
+        const char *b;
+        char close;
+        char hdr[64];
+        int n, i;
+        (void)self;
+
+        p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "#include", 8) != 0) return;
+        p += 8;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p != '<' && *p != '"') return;
+        close = (*p == '<') ? '>' : '"';
+        b = ++p;
+        while (*p && *p != close) p++;
+        n = (int)(p - b);
+        if (n <= 0 || n >= (int)sizeof hdr) return;
+        memcpy(hdr, b, (size_t)n);
+        hdr[n] = 0;
+        for (i = 0; i < self->nmap_headers; i++)
+            if (strcmp(self->map_headers[i], hdr) == 0) return;
+        if (self->nmap_headers >= 16) return;
+        snprintf(self->map_headers[self->nmap_headers], 64, "%s", hdr);
+        self->nmap_headers++;
+    }
+
+    int map_std_typedef(const char *name)
+    {
+        int i, h;
+
+        for (i = 0; g_map_std_name[i]; i++) {
+            if (strcmp(g_map_std_name[i], name) != 0) continue;
+            for (h = 0; h < self->nmap_headers; h++)
+                if (strcmp(self->map_headers[h], g_map_std_header[i]) == 0) return 1;
+        }
+        return 0;
     }
 }
 

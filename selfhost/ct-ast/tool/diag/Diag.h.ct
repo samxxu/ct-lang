@@ -29,7 +29,7 @@ struct Warn {
     int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path, 3 borrow escape,
                            4 arity_mismatch, 5 type_mismatch, 6 ambiguous_method, 7 loop_shadow,
                            8 std_shadow, 9 slice_escape, 10 potential_cycle, 11 str_escape,
-                           12 deprecated_alias */
+                           12 deprecated_alias, 13 receiver_mutability */
     int  line;
     int  col;           /* 1-based column of the token the finding is about (0: none);
                            `ct check` reports it, compile-mode text stays `file:line:` */
@@ -51,6 +51,11 @@ trait DiagStore {
                           const char *path);
     int  record_amb_warn(int line, int col, const char *method, const char *msg,
                          const char *path);
+    /* SH-60 / D-60-1: a `mut` static method on a literal or top-level-const
+       receiver. Same severity policy as the other call-site findings: a
+       warning in compile / build mode, an error under `ct check`. */
+    int  record_recv_warn(int line, int col, const char *method, const char *msg,
+                          const char *path);
     int  record_loop_warn(int line, int col, const char *msg, const char *path);
     /* P-7.2: a direct `return` of a slice that views a local array. */
     int  record_slice_warn(int line, int col, const char *msg, const char *path);
@@ -235,6 +240,29 @@ impl DiagStore for Diag {
         if (self->nwarns >= MAX_WARNINGS) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 6;
+        w->line = line;
+        w->col = col;
+        w->path_line = 0;
+        snprintf(w->file, sizeof w->file, "%s", path);
+        snprintf(w->var, sizeof w->var, "%s", method);
+        w->tname[0] = 0;
+        w->stype[0] = 0;
+        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        self->nwarns++;
+        return 0;
+    }
+
+    /* SH-60 / D-60-1: `mut` wrote its receiver but the receiver cannot be
+       written (a literal or a top-level const value). Same record shape and
+       severity policy as 19.2 / 19.3. */
+    int record_recv_warn(int line, int col, const char *method, const char *msg,
+                         const char *path)
+    {
+        struct Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = 13;
         w->line = line;
         w->col = col;
         w->path_line = 0;
@@ -555,6 +583,17 @@ impl DiagStore for Diag {
                     fputs("\"message\":\"", jf);
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
+                } else if (w->kind == 13) {
+                    /* SH-60: a `mut` method on a read-only receiver. */
+                    fputs("\"type\":\"receiver_mutability\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,", w->line);
+                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                    fputs("\"method\":\"", jf);
+                    self->put_json(jf, w->var);
+                    fputs("\",\"message\":\"", jf);
+                    self->put_json(jf, w->msg);
+                    fputs("\"}", jf);
                 } else if (w->kind == 10) {
                     /* PH-82: a direct `Box<X>` field cycle; `message` already
                        names the chain, so JSON carries no separate field. */
@@ -624,6 +663,8 @@ impl DiagStore for Diag {
                     /* LANG-24: the deprecated alias always prints `warning:`,
                        even when `ct check` escalates the other findings. */
                     fprintf(tf, "%s warning: %s\n", loc, w->msg);
+                else if (w->kind == 13)
+                    fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
                 else if (w->kind == 10)
                     fprintf(tf, "%s %s: %s\n", loc, leaksev, w->msg);
                 else
@@ -721,6 +762,13 @@ pub int ct_amb_warn(int line, int col, const char *method, const char *msg, cons
 int ct_amb_warn(int line, int col, const char *method, const char *msg, const char *path)
 {
     return g_diag.record_amb_warn(line, col, method, msg, path);
+}
+
+/* SH-60 / D-60-1: a `mut` method on a literal / top-level-const receiver. */
+pub int ct_recv_warn(int line, int col, const char *method, const char *msg, const char *path);
+int ct_recv_warn(int line, int col, const char *method, const char *msg, const char *path)
+{
+    return g_diag.record_recv_warn(line, col, method, msg, path);
 }
 
 /* A nested `loop` shadows the outer `i` (Phase 22, D22-5). */

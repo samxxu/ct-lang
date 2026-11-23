@@ -754,6 +754,20 @@ C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`�
   拼写都先按 §4.42 展开类型别名，再参与这里的文本比较，因此别名与底层拼写是**同一个宿主**。
   接收者可以是任意**静态类型已知**的表达式——字面量、字段链、调用结果都行；recipe 只把接收者替换
   一次，因此 `s.trim().len()` 这类链式写法合法且可继续链（只有动态派发才需要 `__ct_tmpN`）。
+- **接收者可变性 `mut`（SH-60 / D-60-1）**：静态 trait 的方法可以在参数表 `)` 之后写 `mut`
+  （`int toUpper() mut;`），声明该方法会写接收者；前缀 `mut int toUpper();` 拒绝，并提示后置写法。
+  `mut` 只允许出现在 `.m.ct` 的 `pub trait` 方法上，`.h.ct` / 普通 `.ct` 的 trait 方法写它报错
+  （动态 trait 的 `impl` 是 Ct 代码，另行决策）。调用点的接收者是字面量或顶层 `const` 值时，
+  `ct build` / `ct compile` 打 `warning:` 并以 0 退出，`ct check` 同一条记录升为 `error:` 并以 1
+  退出；`"abc".len()`、`char buf[8]; buf.toUpper()` 零诊断。标注只是契约，不改变 vtable、mangled
+  名、recipe 或生成的 C。`mut` 只对类型宿主（有接收者）有意义；命名空间宿主的方法写它不产生
+  诊断，也没有可检查的接收者。裁决见 [D-023](decisions/D-023.md)。
+- **声明点类型证据（SH-60 / D-60-2）**：`.m.ct` trait 方法签名（返回类型与参数）里的类型名必须是
+  C 内建类型词、本单元或已 import 单元声明的类型 / 别名、由本单元 `#include` 的标准头提供的
+  typedef（如 `#include <time.h>` 后的 `time_t`），或同单元 `pub type X = <C 拼写>;` 声明的别名；
+  显式 `struct` / `union` / `enum` tag 拼写放行。`#include` 本身不是证据（编译器不解析 C 头），
+  裸未知名字在声明点报 `error: unknown type '<X>' in a .m.ct trait signature`；项目头里的 typedef
+  用 `pub type` 起同义词后使用（§4.42）。判据见 [D-024](decisions/D-024.md)。
 - **限定调用消解同类型多映射**（P20-01）：两个包把同名方法绑到同一宿主类型时（如都把 `len` 绑到
   `char *`），未限定的 `value.m(args)` 会因两个候选报歧义；写成 `a::ALen::len(value, args)` 只保留
   该 trait 的映射。限定名按符号名规则拼接（`a::ALen` → `a_ALen`），最后一段必须是该静态 trait 的

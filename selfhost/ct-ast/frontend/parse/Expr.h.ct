@@ -328,6 +328,17 @@ pub trait ExprAdt {
     int  parse_adt_ctor(void);
 }
 
+/* SH-60 / D-60-1: a `mut` static method writes its receiver. A literal or a
+   top-level `const` receiver has no writable storage, so the call is a
+   warning in compile / build mode and an error under `ct check` -- the same
+   severity policy as 19.2. The annotation is the author's contract; this is
+   not a dataflow analysis. The generated C is untouched. The helper lives in
+   its own small trait because `ExprOps` is at MAX_METHODS. */
+pub trait ExprRecvMut {
+    int  recv_mut_check(int recv, const char *rtype, int is_mut, int line, int col,
+                        const char *method);
+}
+
 pub trait ExprTypes {
     /* The judged type of one expression. 0 when `out` names a value type,
        non-zero when the tables cannot pin it (D32-4: the caller then stays
@@ -568,7 +579,7 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt;
+} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut;
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -1593,6 +1604,33 @@ static int ctype_slice_range(struct Expr *self, int n, char *out, int cap, int *
    field: `struct Expr` is at the 64-field cap. */
 static char g_expr_inst_override[160];
 
+/* SH-60 / D-60-2: does the type spelling read so far hold only qualifiers
+   (`const`, `volatile`, `restrict`)? Then the identifier after it is still a
+   type name, not a declarator name, and the `.m.ct` evidence rule applies to
+   it as well. `int Foo` / `struct S Foo` return 0 and keep `Foo` as the
+   declaration's name. */
+static int type_only_qualifiers(const char *spell)
+{
+    const char *p;
+    int n;
+
+    p = spell;
+    while (*p == ' ' || *p == '\t') p++;
+    while (*p) {
+        n = 0;
+        while (p[n] && p[n] != ' ' && p[n] != '\t') n++;
+        if (!((n == 5 && strncmp(p, "const", 5) == 0)
+              || (n == 8 && strncmp(p, "volatile", 8) == 0)
+              || (n == 8 && strncmp(p, "restrict", 8) == 0)
+              || (n == 10 && strncmp(p, "__restrict", 10) == 0)
+              || (n == 12 && strncmp(p, "__restrict__", 12) == 0)))
+            return 0;
+        p += n;
+        while (*p == ' ' || *p == '\t') p++;
+    }
+    return 1;
+}
+
 impl ExprOps for Expr {
     int arity_check(int line, int col, const char *callee, int got, int want)
     {
@@ -2465,6 +2503,31 @@ impl ExprOps for Expr {
                        is expected, so the spelling is kept as written; the
                        cast / `sizeof` decision happens before this point, so
                        `(NAME) + x` is never turned into one. */
+                    /* SH-60 / D-60-2: inside a `.m.ct` trait signature an
+                       unknown bare name is not kept as an opaque C spelling.
+                       It needs one of two kinds of evidence: a standard
+                       typedef whose home header the unit includes, or a
+                       `pub type` alias (already expanded above). A spelling
+                       that is still only qualifiers after the unknown name
+                       (`const TotallyBogus *`) is judged the same way, while
+                       `int Foo` keeps `Foo` as the declaration's name. */
+                    if (self->sup->map_sig
+                        && (n == 0 || type_only_qualifiers(out))) {
+                        if (!self->sup->map_std_typedef(self->lex->tok_cstr())) {
+                            char umsg[MAX_TEXT * 3];
+                            snprintf(umsg, sizeof umsg,
+                                     "unknown type '%s' in a .m.ct trait signature; "
+                                     "declare 'pub type %s = <C spelling>;' in this unit "
+                                     "or include the header that typedefs it",
+                                     self->lex->tok_cstr(), self->lex->tok_cstr());
+                            return tool::diag::ct_sem_error(self->lex->tokline,
+                                self->lex->tokstart - self->lex->lstart + 1,
+                                umsg, self->sup->mem->path);
+                        }
+                        if (self->type_append(out, cap, &n, rname) != 0) return -1;
+                        self->sup->lex_next();
+                        continue;
+                    }
                     if (n == 0) {
                         if (self->type_append(out, cap, &n, rname) != 0) return -1;
                         self->sup->lex_next();
@@ -5549,6 +5612,13 @@ impl ExprOps for Expr {
                                     struct MapTable *hm;
                                     int hn, mi2, bi2, want = 0, seen = 0, afits = 0, fits = 0;
                                     int pt = -1, pm = -1;
+                                    /* SH-60 / D-60-1: the receiver check
+                                       needs the selected method's `mut` flag.
+                                       As with the type comparison, only an
+                                       arity-fitting candidate can be selected;
+                                       one non-`mut` candidate keeps the call
+                                       quiet (the emitter may pick it). */
+                                    int mut_any = 0, mut_plain = 0;
                                     int got2 = arg_count(self->arena, args)
                                                + self->closure_arg_count(args);
                                     char rk[MAX_TEXT];
@@ -5613,6 +5683,11 @@ impl ExprOps for Expr {
                                                              : got2 == want2;
                                             if (!arity_ok) continue;
                                             afits = 1;
+                                            if (tt >= 0 && tm >= 0) {
+                                                if (self->sym->traits[tt].m[tm].is_mut)
+                                                    mut_any++;
+                                                else mut_plain++;
+                                            }
                                             if (tt < 0 || tm < 0) {
                                                 fits = 1;
                                                 continue;
@@ -5648,6 +5723,13 @@ impl ExprOps for Expr {
                                                                  self->sup->mem->path);
                                         return -1;
                                     }
+                                    /* SH-60 / D-60-1: a method that writes
+                                       its receiver cannot target a literal or
+                                       a top-level const value. */
+                                    if (mut_any > 0 && mut_plain == 0
+                                        && self->recv_mut_check(n, rt2, 1,
+                                                                mline, mcol, fname) != 0)
+                                        return -1;
                                 }
                             }
                         }
@@ -6802,6 +6884,14 @@ impl ExprOps for Expr {
                                     return -1;
                                 if (self->argtype_check_static(id_line, id_col, qc, rest,
                                                                ti3, mi3) != 0)
+                                    return -1;
+                                /* SH-60 / D-60-1: `Trait::method(recv, ...)`
+                                   keeps the receiver as the first actual, so
+                                   the same literal / top-level-const rule
+                                   applies. */
+                                if (self->recv_mut_check(args, rtype,
+                                                         self->sym->traits[ti3].m[mi3].is_mut,
+                                                         id_line, id_col, qc) != 0)
                                     return -1;
                             }
                         }
@@ -8687,6 +8777,34 @@ static int bplus_lit_type(const char *s, int n, char *out, int cap, int *is_zero
         if (s[k] != '.' && s[k] != '0') { all_zero = 0; break; }
     if (all_zero && digits > 0) *is_zero = 1;
     return 1;
+}
+
+impl ExprRecvMut for Expr {
+    int recv_mut_check(int recv, const char *rtype, int is_mut, int line, int col,
+                       const char *method)
+    {
+        char msg[MAX_TEXT * 2];
+        const char *t;
+        int k, why, vi;
+
+        if (!is_mut) return 0;
+        why = 0;
+        k = (recv >= 0) ? self->arena->nodes[recv].kind : -1;
+        if (k == N_STR || k == N_NUM || k == N_FNUM) why = 1;
+        t = rtype ? rtype : "";
+        while (*t == ' ' || *t == '\t') t++;
+        if (!why && strncmp(t, "const ", 6) == 0) why = 2;
+        if (!why && k == N_VAR) {
+            vi = self->sym->find_var(self->arena->nodes[recv].text2);
+            if (vi >= 0 && strncmp(self->sym->vars[vi].type, "const ", 6) == 0) why = 2;
+        }
+        if (!why) return 0;
+        snprintf(msg, sizeof msg, "'%s' writes its receiver, but the receiver is %s",
+                 method, why == 1 ? "a literal" : "a top-level const value");
+        if (tool::diag::ct_recv_warn(line, col, method, msg, self->sup->mem->path) != 0)
+            return self->sup->fail("too many warnings");
+        return 0;
+    }
 }
 
 impl ExprTypes for Expr {

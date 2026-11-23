@@ -247,6 +247,12 @@ pub struct MethodSig {
        the map recipe forwards the rest of the call verbatim. A real trait keeps
        this 0 -- its vtable slot is a fixed function-pointer type (batch 13). */
     int  variadic;
+    /* SH-60 / D-60-1: the postfix `mut` annotation (`int f() mut;`) says the
+       method writes its receiver. Only a static `.m.ct` method may carry it;
+       the call site warns when the receiver is a literal or a top-level const
+       value. It is a compile-time table flag only -- no vtable slot, mangled
+       name, recipe or emitted C changes. */
+    int  is_mut;
     /* A default body (`{ … }` after the signature): the N_BLOCK's index and
        the N_PARAM chain that names its parameters. Both are -1 for an abstract
        method, whose body the adopting impl must write. `line` is where the
