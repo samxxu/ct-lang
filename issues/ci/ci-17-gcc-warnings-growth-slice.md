@@ -7,7 +7,7 @@
 | 严重度 | P1 |
 | 锚点 | v0.88.3（2026-11-23） |
 | 依据 | CI run 45108883530（`ubuntu-gcc`） |
-| 状态 | open |
+| 状态 | verified |
 
 ## 现象
 
@@ -29,3 +29,9 @@ macOS clang 均不报。
 
 - `ubuntu-gcc` 的 `ct-tour` 与 warning-free 两段转绿；
 - 本机 `check-all` 12 门仍绿；`p88_emit` 66 文件逐字节不变。
+
+
+## 复核（REV，2026-11-23）
+
+CI `45111216362` 三 job 全绿（ubuntu-gcc / ubuntu-clang-smoke / macos-clang）；
+`ct-tour` 与 warning-free 两段恢复；本机 `check-all` 12 门、`p88_emit` 66 文件、goldens 25/25 均绿。
