@@ -44,6 +44,8 @@
       L2 仍固定，后续按提案切片）；发射器本身未变)
      (emitted_after 于 SH-60 后复测：接收者可变性 `mut` 的解析/调用点诊断与 `.m.ct` 声明点
       类型证据增加 293 行发射 C；发射器本身未变)
+     (emitted_after 于 SH-118 后复测：`chk_brace_init` 跳过 `{ 0 }` 聚合零填充与
+      String/Str 字段的字符串字面量，增加 22 行发射 C；不新增 B 规则)
      (emitted_after 于 TEST-25 后复测：`record_io_call` 的越界诊断带上单元名与上限，
       增加 2 行发射 C；发射器本身未变)
      (SH-116 后复测：`ct build` 把 Box 内置单元纳入存活判定/发射集合，
