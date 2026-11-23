@@ -77,6 +77,10 @@ make_repo() {
         git tag "v$ver"
     )
     git clone -q --bare --template= "$tmp" "$repo"
+    # Git does not track empty directories; a bare repo still needs refs/.
+    mkdir -p "$repo/refs/heads" "$repo/refs/tags"
+    : > "$repo/refs/heads/.keep"
+    : > "$repo/refs/tags/.keep"
     # A vendored snapshot must not record the machine-local path it was built
     # from (and the macOS-only core.* hints would make the config drift).
     git --git-dir="$repo" remote remove origin 2>/dev/null || true
