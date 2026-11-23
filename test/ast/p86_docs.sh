@@ -55,7 +55,7 @@ fi
 
 # ---- 4) the metrics report is on disk and names the measured numbers ------
 if [ -s "$metrics" ]; then ok; else bad "$metrics is missing"; fi
-need "$metrics" "PH-85"
+need "$metrics" "v0-PH-85"
 need "$metrics" "1053.2"
 need "$metrics" "1080.2"
 need "$metrics" "+67"

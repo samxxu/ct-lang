@@ -25,7 +25,7 @@ metrics=docs/design/p87_metrics.md
 dogfood=docs/design/p87_dogfood.md
 
 # ---- 1) the spec section -------------------------------------------------
-need "$spec" "### 4.74 解析器/检查器的判别式切片（PH-87，实现内部）"
+need "$spec" "### 4.74 解析器/检查器的判别式切片（v0-PH-87，实现内部）"
 need "$spec" "ctype_*"
 need "$spec" "tc_expr_*"
 need "$spec" "battle/p87-kind-match"
@@ -33,7 +33,7 @@ need "$spec" "345"
 need "$spec" "自举不动点"
 
 # ---- 2) the tutorial section and its runnable example --------------------
-need "$tut" "## 20. 解析器/检查器的判别式：先切片，再换 \`match\`（PH-87，v0.87.0）"
+need "$tut" "## 20. 解析器/检查器的判别式：先切片，再换 \`match\`（v0-PH-87，v0.87.0）"
 need "$tut" "match does not cover variant 'Shape.Rect'"
 need "$tut" "PH-88"
 awk '/^## 20\./{f=1} f && /^```ct$/{b=1; next} b && /^```$/{exit} b{print}' "$tut" >"$tmp/snippet.ct"
