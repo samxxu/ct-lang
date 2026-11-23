@@ -7,7 +7,7 @@
 | 严重度 | **High**（任何多单元/`ct build` 工程用到 `Box<T>` 都构建失败） |
 | 锚点 | `72c22173`（v0.88.3 + SH-60；2026-11-23） |
 | 依据 | [doc-freshness 报告](../../docs/reviews/doc-freshness-2026-11-23.md) P0；`lib/core/Box.h.ct` |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者同意立项；P0 复核确认，并扩大为“最小程序也失败”）** |
 
 ## 现象
@@ -89,3 +89,9 @@ $ grep -c 'ct_Box_hdr' /tmp/boxt.c     # 9（含 struct 定义）
 - [DOC-96](../docs/doc-96-doc-freshness-followups.md)（文档侧收口）
 - [DOC-86](../docs/doc-86-readme-v088-rewrite.md)（README 重写）
 - [SH-105](sh105-goldens-static-freeze.md)（静态 goldens）
+
+## 复核（REV，2026-11-23）
+
+根因：`builtin_live_for` 缺 Box 分支 + `ct_emit_add_builtin` 容量仍 `<4`。修复后 `ct build`
+单文件与多单元 Box 均生成 `Box.c/Box.h`、消费单元 `#include "Box.h"`；`sh116_build_box` 12/0；
+compile 347/build 55 既有语料逐字节；check-all 12 门绿；Box build ASan/UBSan 零报告。

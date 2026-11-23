@@ -7,7 +7,7 @@
 | 严重度 | Low（长期） |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估 P1） |
 | 依据 | [SH-111](sh111-lowering-invariants.md)、[架构评估](../../docs/reviews/2026-11-22-architecture-assessment-eval.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **设计阶段验收完成（2026-11-23）；实施 deferred 到 v1.2 `v1-PH-2`；仓库当前无 IR 代码** |
 
 ## 现象
@@ -64,3 +64,8 @@ v1.2（`v1-PH-2`）；先设计，不占 v1.0/v1.1。
   本卡仅改设计与台账，无代码。
 - 状态：**保持 `deferred` 不变**；集成后由 REV 按设计验收标准复核。触发时改回 `open`，
   先开 `v1-PH-2` 卡再实施，不提前扩围。
+
+
+## 复核（REV，2026-11-23）
+
+设计阶段验收完成：`docs/proposals/typed-lowered-ir.md`（TIR/LIR 两层、非 SSA、统一清理、验证器、迁移/回滚、对照表）+ `docs/decisions/D-026.md`。仓库仍无 IR 代码，实施 deferred 到 v1.2 `v1-PH-2`；本卡按设计验收置 verified，实施另由 D-026 前置与施工卡跟踪。

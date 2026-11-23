@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | `72c22173`（2026-11-23） |
 | 依据 | [doc-freshness 报告](../../docs/reviews/doc-freshness-2026-11-23.md)（P1-2/P1-3/P1-4/P2） |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者同意立项；P1-1 首屏重排不属本条，降级见 §4）** |
 
 ## 1. 采纳项
@@ -54,3 +54,9 @@
 - [DOC-86](doc-86-readme-v088-rewrite.md)（README 重写）
 - [LANG-24](../lang/lang-24-box-pascalcase-rename.md)（`Box<T>` 拼写）
 - `skill:schedule` 周任务 `schedule-bb8f1fe0-cdf1-4ad7-af60-202354686117`（每周一审计；无差异时不提交）
+
+
+## 复核（REV，2026-11-23）
+
+按卡验收完成；`check-docs` 2971 links / 5 README snippet sources；`check-warnings` new-handle build 段
+50–53 + 3 snippets 全 green；tutorial §14/§24、test/README 165/0 与实测一致。

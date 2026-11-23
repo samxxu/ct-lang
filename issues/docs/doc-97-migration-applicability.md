@@ -7,7 +7,7 @@
 | 严重度 | Low（读者决策支持；不改语义） |
 | 锚点 | `72c22173`（v0.88.3 + SH-60；2026-11-23） |
 | 依据 | 外部评估“无需为新特性做迁移”的逐条核对；[language-spec §4.57](../../docs/language-spec.md#457-c-abi-静态库ct-build---libphase-39仅-ct-ast)、[§4.69](../../docs/language-spec.md#469-切片-tphase-79仅-ct-ast)、[§4.70](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)、[§4.71](../../docs/language-spec.md#471-box--new单对象句柄phase-81仅-ct-ast)、[§4.73](../../docs/language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast)、[stable-subset](../../docs/stable-subset.md) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者同意开卡；只补文档，不改 API/ABI）** |
 
 ## 1. 背景
@@ -63,3 +63,9 @@
 - [stable-subset](../../docs/stable-subset.md)（三档）
 - [SH-116](../selfhost/sh116-build-mode-box-unit.md)（build 模式缺陷）
 - [DOC-96](doc-96-doc-freshness-followups.md)（g4 / 300 行）
+
+
+## 复核（REV，2026-11-23）
+
+按卡验收完成；`check-docs` 2971 links / 5 README snippet sources；`check-warnings` new-handle build 段
+50–53 + 3 snippets 全 green；tutorial §14/§24、test/README 165/0 与实测一致。

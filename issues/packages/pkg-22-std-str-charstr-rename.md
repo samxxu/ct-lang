@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | `std 0.19.0`（2026-11-21；同日所有者更新目标名） |
 | 依据 | [language-spec §5.1](../../docs/language-spec.md#51-源码命名约定语言--标准库--ct-pkg稳定契约)；[DOC-85](../../issues/docs/doc-85-idiom-priority-card.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **deferred（REQ 裁定，2026-11-22，HEAD `7061aa22`）：std 0.20.0 已发布 `CharStr` 且无旧名别名；本仓仍 pin 0.19.0，必须与 pin 升级同一次原子迁移。触发条件与最小迁移清单见 §裁定** |
 
 > **归属（2026-11-23）**：本卡在 CT 仓**只作外部接口记录**。改名在 `ct-pkg/std` 包侧执行，
@@ -185,3 +185,10 @@ $ python3 test/docs/check-docs.py                   # 绿
 
 owner：REQ（本裁定）/ DEV（pin + 示例 + 文档 + 测试）；P2。执行时若发现清单外的新落点，
 补进本表后再做，不得留旧名到迁移提交之后。
+
+## 复核（REV，2026-11-23）
+
+D-025 接受 std 0.20.0 无旧名别名；内置 pin 升级到 0.20.0（commit `9949543b…`、digest
+`sha256:60d2e7dd…`）；`examples/wave1-demo` 与活跃文档迁移到 `CharStr`/`Stdout`/`Num`/`Real`；
+干净 HOME `ct get std` 0.20.0、`ct index verify` OK、wave1-demo build/run 与 expected 一致；
+旧 `import std::str::String` 硬错。外部包源码未复制/未改。
