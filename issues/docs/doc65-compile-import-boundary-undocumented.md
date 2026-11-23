@@ -47,7 +47,7 @@ test/modules/inc/main.ct:1:1: error: 'import' is not supported in compile mode
   未顺手把同一张表里的 compile 行补齐；
 - README / 教程的 `-I` 说明只挂在 build 行上，而 compile 的 `-I` 在实现中被静默丢弃（SH-54），
   文档没有可对应的口径；
-- 语言规范里虽有“`ct compile` 不解析 import”（[language-spec.md:544](../../docs/language-spec.md#L544)），
+- 语言规范里虽有“`ct compile` 不解析 import”（[language-spec.md:544](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)），
   但位置在 `.m.ct` 生成物小节，普通 CLI 用户不会读到。
 
 ## 影响
@@ -97,6 +97,6 @@ test/modules/inc/main.ct:1:1: error: 'import' is not supported in compile mode
   补 `**single-file units only**, so import needs ct build`，并注明 `-I` 同样只对 build 生效。
 - `-I` 的补充说明是本轮 SH-54 采纳 warning 后才成立的，因此两处一并写；教程句子较短，
   只保留「`-I` 同理只对 build 生效」。
-- 未改语言规范正文（沿用建议）：[language-spec.md:544](../../docs/language-spec.md#L544) 的现有句子保留。
+- 未改语言规范正文（沿用建议）：[language-spec.md:544](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast) 的现有句子保留。
 - `ct check` 行原有边界说明未动，两行口径一致。
 - 提交：`82fab61`。

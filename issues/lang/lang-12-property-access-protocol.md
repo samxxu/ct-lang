@@ -28,10 +28,10 @@ CT 本身 rc=0（成员存在性属 `Z5` 的 opt-in 类型检查范围之外）�
 
 - 仓库没有「属性访问协议」条款；bindings 的基线写法是 `union` + `int tag`，
   访问写 `p->tag` / `(*p).v.i`：[bindings-and-patterns.md:10-47](../../docs/bindings-and-patterns.md#L10-L47)。
-- `?.` 只做**字段**访问（[language-spec.md:2652-2667](../../docs/language-spec.md#L2652-L2667)）；
-  `into` 只做块内字段赋值（[:2375-2390](../../docs/language-spec.md#L2375-L2390)）。
+- `?.` 只做**字段**访问（[language-spec.md:2652-2667](../../docs/language-spec.md#465-可选链---phase-53仅-ct-ast)）；
+  `into` 只做块内字段赋值（[:2375-2390](../../docs/language-spec.md#452-接收者上下文块-expr-into---phase-30仅-ct-ast)）。
 - 规约没有把 `doc.<key>` 定义成 `get("<key>")` 的糖；PH-52 只做 `[]`，且只按「名 + 参数个数」
-  匹配（[:2628-2630](../../docs/language-spec.md#L2628-L2630)）。
+  匹配（[:2628-2630](../../docs/language-spec.md#464-自定义类型下标phase-52仅-ct-ast)）。
 
 所以这是新需求：要么在语言层加「属性 → get」协议，要么明确「JSON 访问只用 `[]` / `get`」。
 

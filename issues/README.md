@@ -1304,7 +1304,7 @@ $ ct build -I test/modules/inc/extra test/modules/inc/main.ct -o /tmp/a.out
 - 设计文档明确按 CLI 选择模式：[restore.md](../docs/history/design/restore.md#L50-L57)
   把 compile 定义为「单文件 / `.c` 自包含」，并写「只有 `ct build` 进入多文件模式」；
   [roadmap.md](../docs/roadmap.md#L265) 写明 Phase 0 不做 import；
-  [language-spec.md](../docs/language-spec.md#L544) 写「`ct compile` 不解析 import」。
+  [language-spec.md](../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast) 写「`ct compile` 不解析 import」。
 - 缺的三环都在 compile 路径：`-I` 被丢弃（[Driver.h.ct:193-199](../selfhost/ct-ast/tool/driver/Driver.h.ct#L193-L199)）、
   没有 `load_unit` 导入闭包、没有 build 的 `.h` 映射
   （compile 的头文件是 types-only 占位，[Emitter.h.ct:3157-3158](../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3157-L3158)）。

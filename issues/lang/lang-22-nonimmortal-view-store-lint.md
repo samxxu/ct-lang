@@ -6,7 +6,7 @@
 | 定性 | 特性（warn 级 lint；**不做硬错**） |
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
-| 依据 | [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)；[language-spec §4.70](../../docs/language-spec.md#L2885-L2927)；[SH-106](../selfhost/sh106-str-view-escape-no-lint.md) |
+| 依据 | [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)；[language-spec §4.70](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)；[SH-106](../selfhost/sh106-str-view-escape-no-lint.md) |
 | 状态 | verified |
 | 处置证据 | **待评估（v1.1；不进 v1.0/本次文档修正）** |
 
@@ -63,7 +63,7 @@
 
 - [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)
 - [SH-106](../selfhost/sh106-str-view-escape-no-lint.md)
-- [language-spec §4.70](../../docs/language-spec.md#L2885-L2927)
+- [language-spec §4.70](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)
 
 ## 处置（DEV，2026-11-23）：v1.1 warn 级 lint 已实现
 

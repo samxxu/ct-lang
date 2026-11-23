@@ -13,7 +13,7 @@ confirmed-by: battle/ct-guide-1
 ## 来源
 
 [battle/ct-guide-1 判决](../../battle/ct-guide-1/verdict.md) §3、F4/F5；
-[language-spec §4.70](../../docs/language-spec.md#L2885-L2927)；
+[language-spec §4.70](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)；
 [test/ast/p79_places.sh:184](../../test/ast/p79_places.sh#L184)（`E79-6` 只覆盖 `T[]`）。
 
 ## 结论

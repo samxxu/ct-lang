@@ -5,7 +5,7 @@
 | 模块 | docs / lang |
 | 严重度 | Low（纯文档措辞；实现正确） |
 | 锚点 | `v0.26.4`（Phase 24 实现，未 bump） |
-| 文件 | [language-spec.md:1847-1848](../../docs/language-spec.md#L1847-L1848)、[language-spec.md:1864-1868](../../docs/language-spec.md#L1864-L1868)、[language-spec.md:4248](../../docs/language-spec.md#L4248)、[phase24.md:145-160](../../docs/history/design/phase24.md#L145-L160)、[Emitter.h.ct:2018-2038](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2018-L2038)、[range_init.ct:21](../../examples/15_range_init/range_init.ct#L21) |
+| 文件 | [language-spec.md:1847-1848](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast)、[language-spec.md:1864-1868](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast)、[language-spec.md:4248](../../docs/language-spec.md#9-诊断与退出码)、[phase24.md:145-160](../../docs/history/design/phase24.md#L145-L160)、[Emitter.h.ct:2018-2038](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2018-L2038)、[range_init.ct:21](../../examples/15_range_init/range_init.ct#L21) |
 | 状态 | verified |
 | 处置证据 | **verified**（2026-11-20，REV；deferred 子项见复核段） |
 
@@ -30,10 +30,10 @@ range 初值里的 `$` 与将来语境块里的 `$` 是同一个语义，只是�
 
 ## 错在哪
 
-- [language-spec.md:1847-1848](../../docs/language-spec.md#L1847-L1848) 的 `((int)k)` 本身正确，
+- [language-spec.md:1847-1848](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast) 的 `((int)k)` 本身正确，
   但 `k` 在上下文中被读成「下标」；
-- [language-spec.md:1864-1868](../../docs/language-spec.md#L1864-L1868) 与英文段
-  [language-spec.md:4248](../../docs/language-spec.md#L4248) 的诊断文案
+- [language-spec.md:1864-1868](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast) 与英文段
+  [language-spec.md:4248](../../docs/language-spec.md#9-诊断与退出码) 的诊断文案
   `the range index '$' is not a variable` 把 `$` 命名为 index；
 - [phase24.md:160](../../docs/history/design/phase24.md#L160) 写「每个 `$` 都是同一个当前下标」；
 - 发射器注释 [Emitter.h.ct:2020](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2020) 写 current index。
@@ -52,7 +52,7 @@ range 初值里的 `$` 与将来语境块里的 `$` 是同一个语义，只是�
 
 只改叙述，**不改实现、不改诊断文案、不改 `check-ast` 断言**：
 
-1. [language-spec.md:1864](../../docs/language-spec.md#L1864) 改为「`$` 是当前成员的占位，
+1. [language-spec.md:1864](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast) 改为「`$` 是当前成员的占位，
    在 range 初值里绑定为当前元素的值 `k`；`0..b` 时它恰好等于 0 起偏移」；
 2. 在英文段同位补同义澄清；
 3. 诊断文案 `the range index '$' is not a variable` 保留（已发布、被精确断言），

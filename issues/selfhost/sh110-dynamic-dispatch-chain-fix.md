@@ -69,7 +69,7 @@ return x.tuned(1).status();         /* 固有 impl 返回接口后直接接调�
 
 - [SH-73](sh73-temp-receiver-dynamic-dispatch.md)
 - [examples/47_chain_factory](../../examples/47_chain_factory/src/main.ct)
-- [language-spec §4.10.1](../../docs/language-spec.md#L251-L267)
+- [language-spec §4.10.1](../../docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)
 - [DOC-86](../../issues/docs/doc-86-readme-v088-rewrite.md)：README §0.1 等本修复后再改述
 
 ## 处置（REV/REQ，2026-11-22）

@@ -6,7 +6,7 @@
 | 定性 | 可见性重构（不改语义） |
 | 严重度 | Low–Medium |
 | 锚点 | v0.88.0（2026-11-21） |
-| 依据 | Kimi 2026-11-21 说明；[language-spec §4.9](../../docs/language-spec.md#L455)、[§4.40](../../docs/language-spec.md#L1646)、[§4.71](../../docs/language-spec.md#L2950) |
+| 依据 | Kimi 2026-11-21 说明；[language-spec §4.9](../../docs/language-spec.md#49-autodropphase-5-新增仅-ct-线)、[§4.40](../../docs/language-spec.md#440-borrow-与-handbackphase-5-续仅-ct-ast)、[§4.71](../../docs/language-spec.md#471-box--new单对象句柄phase-81仅-ct-ast) |
 | 状态 | verified |
 | 处置证据 | **accepted（2026-11-22 所有者改判：提前到当前 pre 窗口，不再等 v1.1；依赖 DOC-87 Stage 1）** |
 
@@ -76,7 +76,7 @@ pub trait Handback { void handback(); }
 ## 关联
 
 - [DOC-87](../../issues/docs/doc-87-lib-core-rename.md)（`lib/core` 目录）
-- [language-spec §4.9 / §4.40 / §4.71](../../docs/language-spec.md#L455)
+- [language-spec §4.9 / §4.40 / §4.71](../../docs/language-spec.md#49-autodropphase-5-新增仅-ct-线)
 - [glossary.md](../../docs/glossary.md)
 
 ## 排期改判（2026-11-22，所有者）

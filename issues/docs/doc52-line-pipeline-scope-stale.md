@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | Medium（把已不存在的硬约束写成「硬要求」，会误导写法与排障方向） |
 | 锚点 | commit `61e35e4`（`v0.16.1`，2026-11-01） |
-| 文件 | [tutorial.md:463-470](../../docs/tutorial.md#L463-L470)、[:947-951](../../docs/tutorial.md#L947-L951)、[language-spec.md:1467](../../docs/language-spec.md#L1467)、[:1468](../../docs/language-spec.md#L1468)、[:1481](../../docs/language-spec.md#L1481) |
+| 文件 | [tutorial.md:463-470](../../docs/tutorial.md#L463-L470)、[:947-951](../../docs/tutorial.md#L947-L951)、[language-spec.md:1467](../../docs/language-spec.md#62-已知限制)、[:1468](../../docs/language-spec.md#62-已知限制)、[:1481](../../docs/language-spec.md#62-已知限制) |
 | 状态 | verified |
 | 处置证据 | 已修（2026-11-01）：`docs/tutorial.md` §11 与 `docs/language-spec.md` §6.2 的对应条目标注「仅 L2」，删除「一行一句是硬要求」，并补「ct-ast 不保留源码注释」 |
 
@@ -19,9 +19,9 @@
 | tutorial §11-2（[:466-467](../../docs/tutorial.md#L466-L467)） | 「跨行的语句不重写……一行一句是硬要求」 | 跨行方法调用正常派发 |
 | tutorial §11-3（[:468](../../docs/tutorial.md#L468)） | 「块注释只保护第一行……续行里照常改写」 | 整段注释连同其中代码一起被丢弃 |
 | tutorial §11-4（[:470](../../docs/tutorial.md#L470)） | 「单行函数体不处理」 | 单行体内的方法调用照常派发 |
-| spec §6.2（[:1467](../../docs/language-spec.md#L1467)） | 「跨行的方法调用语句不重写（按行处理）」 | 同上 |
-| spec §6.2（[:1468](../../docs/language-spec.md#L1468)） | 块注释续行被当普通代码行改写 | ct-ast 不保留注释 |
-| spec §6.2（[:1481](../../docs/language-spec.md#L1481)） | 「单行函数体不处理，与 Phase 0 的按行改写一致」 | 同上 |
+| spec §6.2（[:1467](../../docs/language-spec.md#62-已知限制)） | 「跨行的方法调用语句不重写（按行处理）」 | 同上 |
+| spec §6.2（[:1468](../../docs/language-spec.md#62-已知限制)） | 块注释续行被当普通代码行改写 | ct-ast 不保留注释 |
+| spec §6.2（[:1481](../../docs/language-spec.md#62-已知限制)） | 「单行函数体不处理，与 Phase 0 的按行改写一致」 | 同上 |
 
 这几条并非笔误：L2 冻结后仍是行重写，ct-ast 换成 AST 后自然解除了这些限制，但文档没跟。
 英文侧同文同义（[:947-951](../../docs/tutorial.md#L947-L951)：「One statement per line is a hard requirement」等），

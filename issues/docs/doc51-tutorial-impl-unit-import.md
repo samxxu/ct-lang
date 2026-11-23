@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | **High**（教程主路径示例按字面无法构建，且与 language-spec 的明确规则相反） |
 | 锚点 | commit `61e35e4`（`v0.16.1`，2026-11-01） |
-| 文件 | [tutorial.md:250-266](../../docs/tutorial.md#L250-L266)、[:724-740](../../docs/tutorial.md#L724-L740)、[language-spec.md:20](../../docs/language-spec.md#L20) |
+| 文件 | [tutorial.md:250-266](../../docs/tutorial.md#L250-L266)、[:724-740](../../docs/tutorial.md#L724-L740)、[language-spec.md:20](../../docs/language-spec.md#ct-语言规范) |
 | 状态 | verified |
 | 处置证据 | 已修（2026-11-01）：`docs/tutorial.md` §7 中英改为 `impl_dog.h.ct`，并补「承载 `impl` 的单元要写成 `.h.ct` 才能被 import」 |
 
@@ -77,4 +77,4 @@ woof 7
 ## 关联
 
 - [DOC-52](doc52-line-pipeline-scope-stale.md)：同一页 §11 的另外三处过期陈述
-- 规则出处：`language-spec.md:20`（import 对照表）、[§6.2](../../docs/language-spec.md#L1463)
+- 规则出处：`language-spec.md:20`（import 对照表）、[§6.2](../../docs/language-spec.md#62-已知限制)

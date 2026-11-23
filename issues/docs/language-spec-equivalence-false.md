@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | **High** |
 | 锚点 | commit `4ef8b68`（2026-10-21） |
-| 文件 | [docs/language-spec.md:5-7](../../docs/language-spec.md#L5-L7)、[:495-496](../../docs/language-spec.md#L495-L496) |
+| 文件 | [docs/language-spec.md:5-7](../../docs/language-spec.md#ct-语言规范)、[:495-496](../../docs/language-spec.md#10-l2-独有模块系统与诊断本文不描述其语法) |
 | 状态 | verified |
 | 处置证据 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
 

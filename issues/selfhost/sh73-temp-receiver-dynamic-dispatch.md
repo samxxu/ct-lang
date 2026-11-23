@@ -64,11 +64,11 @@ $ echo $?
 
 - 动态派发要求接收者静态类型已知；lowering 需要重复接收者或取其地址时先物化。接收者本身是一次
   **方法调用**的形态（`a.m().n()`，AST 里是 `N_MCALL`）**当前一律拒绝**，理由是「不会静默产出坏 C」
-  （[language-spec.md:251-253](../../docs/language-spec.md#L251-L253)）。
+  （[language-spec.md:251-253](../../docs/language-spec.md#45-方法调用重写)）。
 - 右值接收者只允许提升在两种位置：**语句行首**，或**赋值 / 声明初始化式**；其它位置为保持求值顺序
-  与「只求值一次」而拒绝（[:256-267](../../docs/language-spec.md#L256-L267)）。
+  与「只求值一次」而拒绝（[:256-267](../../docs/language-spec.md#45-方法调用重写)）。
 - 允许的接收者形态固定为变量 / 元素 / 调用 / 字段链；**类型宿主不受这四种形态限制**
-  （[:985-987](../../docs/language-spec.md#L985-L987)、[:560-561](../../docs/language-spec.md#L560-L561)）。
+  （[:985-987](../../docs/language-spec.md#422-变参函数ct-ast)、[:560-561](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)）。
 
 所以 C1/C2/C3 是按设计拒绝，报错文案也与规约一致；这不是「实现漏了」，而是刻意用限制换生成 C 的稳定性。
 值得注意的是，**同样一行链在类型宿主上成立**——这正是 [examples/47_chain_factory](../../examples/47_chain_factory/src/main.ct)
@@ -101,7 +101,7 @@ $ echo $?
 - [SH-71](sh71-host-map-unit-boundary.md)：字符串起手 + 接口对象的另一处边界
 - [SH-72](sh72-iface-method-return-box.md)：方法返回接口值的消费限制
 - [examples/47_chain_factory](../../examples/47_chain_factory/src/main.ct)：当前可运行的一行链形态
-- [docs/language-spec.md §4.5 / §4.10.1 / §4.21](../../docs/language-spec.md#L251-L267)
+- [docs/language-spec.md §4.5 / §4.10.1 / §4.21](../../docs/language-spec.md#45-方法调用重写)
 - 外部来源：`ct-http/docs/review/ct-http-0.1.0-blockers.md` §4（2026-11-15 独立复核）
 
 ## 2026-11-21 所有者裁定（已定）

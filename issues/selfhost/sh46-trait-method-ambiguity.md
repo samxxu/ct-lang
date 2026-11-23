@@ -5,7 +5,7 @@
 | 模块 | selfhost（ct-ast 方法派发） |
 | 严重度 | Medium（不改退出码、不报错，但会静默调用「另一个 trait」的实现） |
 | 锚点 | commit `dab1b71`（`v0.16.2`，2026-11-02） |
-| 文件 | [Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct)、[language-spec.md:1460-1461](../../docs/language-spec.md#L1460-L1461) |
+| 文件 | [Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct)、[Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct)、[language-spec.md:1460-1461](../../docs/language-spec.md#43-impl--静态方法--vtable-变量) |
 | 状态 | rejected |
 | 处置证据 | **不采纳硬报错**（2026-11-02，`v0.16.3`）：`test/cases/06_name_collision.ct` 已把「按 `use` 顺序取第一个」钉成回归语义，硬报错属破坏性语言变更；改为在 `language-spec` §4.3 中英文档化该消解规则与已知限制 |
 

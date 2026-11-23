@@ -50,8 +50,8 @@ two
 0
 ```
 
-另见 [language-spec.md:592-630](../../docs/language-spec.md#L592)（§4.13）、
-[language-spec.md:698-736](../../docs/language-spec.md#L698)（§4.16）、语料 `test/ast/13_switch`、
+另见 [language-spec.md:592-630](../../docs/language-spec.md#413-switch-与-do-whilect-ast)（§4.13）、
+[language-spec.md:698-736](../../docs/language-spec.md#416-goto-与标签ct-ast)（§4.16）、语料 `test/ast/13_switch`、
 `test/ast/17_goto` 与 `check-ast.sh` 的 batch 4 / batch 7 负例块（每类诊断都被钉死）。
 
 ## 建议

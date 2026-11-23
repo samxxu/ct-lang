@@ -77,13 +77,13 @@ $ echo $?
 
 - `.m.ct` 只允许 `namespace` / `import` / prologue / `pub trait` / `pub type` / `map` / `_Static_assert`，
   且「映射单元只能 import 另一个映射单元」
-  （[language-spec.md:525-530](../../docs/language-spec.md#L525-L530)、[:538](../../docs/language-spec.md#L538)）。
+  （[language-spec.md:525-530](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)、[:538](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)）。
 - `.m.ct` 的 `pub trait` 自动是静态 trait：「不能 `impl`、不能进 `use`、不能作类型、不能装箱」
-  （[:548-549](../../docs/language-spec.md#L548-L549)）。
-- `map trait … for type …` 只能出现在 `.m.ct`（[:662](../../docs/language-spec.md#L662)）；shim 只为 `.m.ct`
-  探测，`.h.ct` 旁的 `*.shim.h` 被忽略（[:600](../../docs/language-spec.md#L600)）。
+  （[:548-549](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)）。
+- `map trait … for type …` 只能出现在 `.m.ct`（[:662](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)）；shim 只为 `.m.ct`
+  探测，`.h.ct` 旁的 `*.shim.h` 被忽略（[:600](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)）。
 - §4.10.1 已把三段逐段标成「第 1 段成立 / 第 2 段不成立」
-  （[:643-646](../../docs/language-spec.md#L643-L646)）。
+  （[:643-646](../../docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)）。
 
 **文档失真一处**：规约 §4.10.1 引用的 `.m.ct` 导入报错是
 `a .m.ct unit can only import another .m.ct unit`，但只有在给了 `-I` 使 `.h.ct` 能被解析到时才会走到
@@ -147,5 +147,5 @@ enum / union、`pub` trait（裸名）、`pub` 全局与类型别名，和任何
 ## 关联
 
 - [examples/47_chain_factory](../../examples/47_chain_factory/src/main.ct) / [examples/48_string_steps](../../examples/48_string_steps/src/main.ct)
-- [docs/language-spec.md §4.10 / §4.10.1](../../docs/language-spec.md#L523-L672)
+- [docs/language-spec.md §4.10 / §4.10.1](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)
 - 外部来源：`ct-http/docs/review/ct-http-0.1.0-blockers.md` §2（2026-11-15 独立复核）

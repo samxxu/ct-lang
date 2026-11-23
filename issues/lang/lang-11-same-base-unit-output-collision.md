@@ -71,8 +71,8 @@ rc=1
 ## 规范依据
 
 单元表把 `.ct` 定义为「实现 / 入口；接口写在同目录的 `.h.ct`」：
-[language-spec.md:616](../../docs/language-spec.md#L616)。`pub` 全局的导出规则是
-`.h` 发 `extern`、`.c` 发定义（[:774-775](../../docs/language-spec.md#L774-L775)）。
+[language-spec.md:616](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)。`pub` 全局的导出规则是
+`.h` 发 `extern`、`.c` 发定义（[:774-775](../../docs/language-spec.md#411-跨单元链接pub-全局与-externct-ast)）。
 当前实现没有兑现「同目录 `.h.ct` 是实现单元的接口」这条配对。
 
 ## 影响面与绕法
@@ -80,8 +80,8 @@ rc=1
 - 影响任何按「接口 / 实现」拆单元的包；`src/<ns>/` 布局的包会同时撞 PKG-2。
 - 绕法：实现单元改用不同 base（如 `cfg_impl.ct`）并作为入参；或把定义也写进 `.h.ct`
   （`pub int K = 5;`，此时 `.h` 发 `extern`、`.c` 发定义，可用）。
-- namespace 下的 C 式分离另有符号问题：`pub extern` 不 mangling（[spec:778-779](../../docs/language-spec.md#L778-L779)），
-  而 `.ct` 定义按 namespace mangling（[:783-784](../../docs/language-spec.md#L783-L784)），
+- namespace 下的 C 式分离另有符号问题：`pub extern` 不 mangling（[spec:778-779](../../docs/language-spec.md#411-跨单元链接pub-全局与-externct-ast)），
+  而 `.ct` 定义按 namespace mangling（[:783-784](../../docs/language-spec.md#411-跨单元链接pub-全局与-externct-ast)），
   两者对不上；这一半归 namespace 常量/限定名的并行登记，不在本条修。
 
 ## 修复方向

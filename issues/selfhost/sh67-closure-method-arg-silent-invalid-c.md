@@ -5,7 +5,7 @@
 | 模块 | selfhost（`Expr` 的方法调用实参 / `Emitter` 的 `N_MCALL` 与 `emit_closure_decl`） |
 | 严重度 | **High**（`ct` 退出 0 并写出 `cc` 必拒的 C，违反「生成物必须可编译」的产物契约） |
 | 锚点 | `v0.30.0`（HEAD `bd91bfe`，2026-11-11；`ct-ast` 由 HEAD 重建，只读复现） |
-| 文件 | [Expr.h.ct:3745-3764](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3745-L3764)（方法调用的 arity / 实参类型后处理，未计闭包）；[Emitter.h.ct:3372-3378](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3372-L3378)（闭包绑定故意不声明 C 变量）；[Emitter.h.ct:3997-4002](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3997-L4002)（`N_MCALL` 实参逐个 `emit_expr`）；[Emitter.h.ct:4008-4023](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4008-L4023)（只有自由调用 `N_CALL` 才展开 trampoline）；[language-spec.md:2016](../../docs/language-spec.md#L2016)（§4.49「绝不发射坏 C」）；[AGENTS.md:59](../../AGENTS.md#L59)（生成的 `.c` 必须自包含、可单独编译） |
+| 文件 | [Expr.h.ct:3745-3764](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3745-L3764)（方法调用的 arity / 实参类型后处理，未计闭包）；[Emitter.h.ct:3372-3378](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3372-L3378)（闭包绑定故意不声明 C 变量）；[Emitter.h.ct:3997-4002](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3997-L4002)（`N_MCALL` 实参逐个 `emit_expr`）；[Emitter.h.ct:4008-4023](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4008-L4023)（只有自由调用 `N_CALL` 才展开 trampoline）；[language-spec.md:2016](../../docs/language-spec.md#449-foreach-语句形态phase-27仅-ct-ast)（§4.49「绝不发射坏 C」）；[AGENTS.md:59](../../AGENTS.md#L59)（生成的 `.c` 必须自包含、可单独编译） |
 | 状态 | verified |
 | 处置证据 | **verified**（2026-11-20，REV） |
 
@@ -99,7 +99,7 @@ cc rc=1
 ## 违反的红线
 
 - [AGENTS.md:59](../../AGENTS.md#L59)：生成的 `.c` 必须自包含，保证生成物可单独编译。本条产物连 `cc` 都过不了，直接违反。
-- [language-spec.md:2016](../../docs/language-spec.md#L2016)（§4.49）：不可迭代形态一律硬错，**绝不发射坏 C**；同节 [2093](../../docs/language-spec.md#L2093) 把同一原则表述为「不会把非法 C 交给 `cc`」。
+- [language-spec.md:2016](../../docs/language-spec.md#449-foreach-语句形态phase-27仅-ct-ast)（§4.49）：不可迭代形态一律硬错，**绝不发射坏 C**；同节 [2093](../../docs/language-spec.md#449-foreach-语句形态phase-27仅-ct-ast) 把同一原则表述为「不会把非法 C 交给 `cc`」。
 - AGENTS 的产物门禁要求生成物 `-Wall -Wextra` 零告警；本条在 `-Werror` 下直接失败。
 
 按契约，正确处置只有两种：在解析/检查期硬错并给出可读诊断，或正确发射闭包绑定。当前两者都不是。

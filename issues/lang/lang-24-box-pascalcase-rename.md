@@ -3,10 +3,10 @@
 | 项 | 值 |
 | --- | --- |
 | 模块 | lang / 内置类型命名 |
-| 定性 | bug（违反 [§5.1](../../docs/language-spec.md#L1962) 命名契约） |
+| 定性 | bug（违反 [§5.1](../../docs/language-spec.md#51-源码命名约定语言--标准库--ct-pkg稳定契约) 命名契约） |
 | 严重度 | Medium（语言表面改名；涉及生成符号与文档） |
 | 锚点 | v0.88.0（2026-11-21） |
-| 依据 | [language-spec §5.1](../../docs/language-spec.md#L1962-L2020)、[§4.71](../../docs/language-spec.md#L2949)、[D-016](../../docs/decisions/D-016.md)、[Box.h.ct](../../lib/core/Box.h.ct#L34)、[Expr.h.ct:2304](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2304-L2311) |
+| 依据 | [language-spec §5.1](../../docs/language-spec.md#51-源码命名约定语言--标准库--ct-pkg稳定契约)、[§4.71](../../docs/language-spec.md#471-box--new单对象句柄phase-81仅-ct-ast)、[D-016](../../docs/decisions/D-016.md)、[Box.h.ct](../../lib/core/Box.h.ct#L34)、[Expr.h.ct:2304](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2304-L2311) |
 | 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；容量约束已解除，Stage A 即刻推进，负责人 DEV）** |
 
@@ -15,7 +15,7 @@
 `box<T>` 是内置泛型 struct，不是关键字：
 
 - `lib/std/Box.h.ct` 声明 `pub struct box<T>`（[Box.h.ct:34](../../lib/core/Box.h.ct#L34-L37)）；
-- [§5.1](../../docs/language-spec.md#L1962) 的适用范围明确含「内置类型、`lib/std` 内置层」，
+- [§5.1](../../docs/language-spec.md#51-源码命名约定语言--标准库--ct-pkg稳定契约) 的适用范围明确含「内置类型、`lib/std` 内置层」，
   判据 2 要求类型名匹配 `^[A-Z][A-Za-z0-9]*$`；`box` 是唯一破例（`String` / `Str` /
   `U16String` / `Vec` / `Map` / `Option` / `Result` 全部 PascalCase）；
 - 无任何决策记录把 `box` 登记为例外。D-016 只裁定布局、复制协议与边界，未提命名；

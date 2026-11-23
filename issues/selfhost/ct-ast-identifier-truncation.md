@@ -13,9 +13,9 @@
 
 `docs/language-spec.md` 明确要求：
 
-- [:59](../../docs/language-spec.md#L59)：固定容量上限越界**一律报错，不静默截断**；
-- [:63](../../docs/language-spec.md#L63)：标识符「超出 127 字符会**报错**（`identifier too long`），不再静默截断」；
-- 英文同义见 [:1424-1425](../../docs/language-spec.md#L1424-L1425)。
+- [:59](../../docs/language-spec.md#2-词法与书写要求ct-ast)：固定容量上限越界**一律报错，不静默截断**；
+- [:63](../../docs/language-spec.md#2-词法与书写要求ct-ast)：标识符「超出 127 字符会**报错**（`identifier too long`），不再静默截断」；
+- 英文同义见 [:1424-1425](../../docs/language-spec.md#2-词法与书写要求ct-ast)。
 
 ct-ast 的词法器对标识符的处理是：
 

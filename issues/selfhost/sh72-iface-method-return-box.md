@@ -47,10 +47,10 @@ $ cc -std=c99 out.c -o out && ./out ; echo $?
 ## 定性
 
 规约规则是「只有**变量**或 `&变量`（以及「返回同款接口」的函数调用）能装箱；类型无法推断 → `die`」
-（[language-spec.md:356](../../docs/language-spec.md#L356)）。但这里类型并非不可推断：
+（[language-spec.md:356](../../docs/language-spec.md#48-接口多态trait-作类型)）。但这里类型并非不可推断：
 
 - `req` 的静态类型是 `HttpRequest` 接口值，`send` 的 vtable 槽是
-  `struct HttpResponse_iface (*send)(void *)`（规约自己在 [§4.10.1](../../docs/language-spec.md#L649-L651)
+  `struct HttpResponse_iface (*send)(void *)`（规约自己在 [§4.10.1](../../docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)
   也承认「vtable 槽是合法的」）；
 - 目标类型来自声明行（`HttpResponse res`），两侧其实是同一接口，本不需要装箱。
 
@@ -60,7 +60,7 @@ $ cc -std=c99 out.c -o out && ./out ; echo $?
 `maybe_box` 随即报「cannot infer」（[:610-612](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L610-L612)）。
 报错文案也与事实不符——类型是可推的。
 
-规约把现状登记为 0.44.1 的限制（[§4.10.1](../../docs/language-spec.md#L647-L651)），但同一段也写明
+规约把现状登记为 0.44.1 的限制（[§4.10.1](../../docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)），但同一段也写明
 「缺的是调用点消费返回值」，即能力未落地，而非禁止。
 
 ## 影响面

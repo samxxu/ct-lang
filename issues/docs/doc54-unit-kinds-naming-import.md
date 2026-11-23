@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | **Medium**（教程与 spec 表面矛盾，影响用户对 `.m.ct` 的判断；命名规则归属不清） |
 | 锚点 | `v0.16.2`，commit `dab1b71`（2026-11-02） |
-| 文件 | [tutorial.md:281](../../docs/tutorial.md#L281)、[:760](../../docs/tutorial.md#L760)、[language-spec.md:489-493](../../docs/language-spec.md#L489-L493)、[:2103-2108](../../docs/language-spec.md#L2103-L2108)、[glossary.md:88](../../docs/glossary.md#L88) |
+| 文件 | [tutorial.md:281](../../docs/tutorial.md#L281)、[:760](../../docs/tutorial.md#L760)、[language-spec.md:489-493](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)、[:2103-2108](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)、[glossary.md:88](../../docs/glossary.md#L88) |
 | 状态 | verified |
 | 处置证据 | 已修（2026-11-02，`v0.16.3`）：教程 §7 中英补 `.m.ct`；spec §4.10 中英加单元种类表、import 搜索顺序与命名约定归属 |
 | 来源 | `ct-mac-gui-example/docs/ct-naming-and-import-issues.md`，经本仓库逐条复核后收窄 |
@@ -17,8 +17,8 @@
    同；但 `resolve_import` 在每个 root 里先探 `x.h.ct`、再探 `x.m.ct`，两者都没有才查 `x.ct` 并报错
    （[Module.h.ct:248-310](../../selfhost/ct-ast/frontend/module/Module.h.ct#L248-L310)）。
    即 `.m.ct` 可被 import，教程把它隐藏了。
-2. **spec 有规则、没有一张收口表。** §4.10 的中文 [:489-493](../../docs/language-spec.md#L489-L493)
-   与英文 [:2103-2108](../../docs/language-spec.md#L2103-L2108) 已写全「`.m.ct` 无产物、只能被 import、
+2. **spec 有规则、没有一张收口表。** §4.10 的中文 [:489-493](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)
+   与英文 [:2103-2108](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast) 已写全「`.m.ct` 无产物、只能被 import、
    `ct compile` 拒绝、同 root 并存歧义、映射单元只能 import 映射单元」，但没有「后缀 / 发布 `.h` /
    可 import / 可单独 build」的对照表；读者需要拼接散落的三段。
 3. **命名规则未进 spec / tutorial。** 规则在 [glossary.md:88](../../docs/glossary.md#L88)（
@@ -77,5 +77,5 @@
 
 - [DOC-51](doc51-tutorial-impl-unit-import.md)：同一页 §7 的 `.ct` / `.h.ct` 修正；本条是它的补充
   （修正后仍漏 `.m.ct`）。
-- 规则出处：[language-spec.md §4.10](../../docs/language-spec.md#L399)、
+- 规则出处：[language-spec.md §4.10](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)、
   [glossary.md:44](../../docs/glossary.md#L44)（映射单元定义）。

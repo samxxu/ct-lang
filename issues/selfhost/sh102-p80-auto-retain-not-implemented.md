@@ -26,7 +26,7 @@ D-013 §3 要求“按值传参、按值返回、字段赋值、容器插入 `St
 项目自己在以下位置承认该缺口：
 
 - [`lib/std/Str.h.ct:23-28`](../../lib/core/Str.h.ct#L23-L28)：`a plain by-value parameter, return or field assignment is a shallow struct copy and is not retained automatically in this phase`；
-- [`docs/language-spec.md:2918`](../../docs/language-spec.md#L2918)：同文；
+- [`docs/language-spec.md:2918`](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)：同文；
 - [`docs/design/phase80.md:364-366`](../../docs/design/phase80.md#L364-L366)：`自动 retain（D-013 §3）未实现 ... 自动半部不满足`。
 
 `p80_layout` 的 `gap param_refs=1`（[`test/ast/p80_layout/expected.trace.out:3`](../../test/ast/p80_layout/expected.trace.out#L3)）

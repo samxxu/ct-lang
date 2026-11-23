@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | Low（一句话过期，方向上「低估了编译器」而不是高估） |
 | 锚点 | commit `dab1b71`（`v0.16.2`，2026-11-02） |
-| 文件 | [language-spec.md:1460-1461](../../docs/language-spec.md#L1460-L1461) |
+| 文件 | [language-spec.md:1460-1461](../../docs/language-spec.md#61-会被诊断的约束) |
 | 状态 | verified |
 | 处置证据 | 已修（2026-11-02，`v0.16.3`）：§6.1 中英改为「ct-ast 报 `duplicate`；L0 / L2 仍取最先出现者」 |
 

@@ -160,5 +160,5 @@ return (struct Resp_iface){ (void *)&s, &S_Resp_vtable };
 
 - [SH-72](sh72-iface-method-return-box.md)：调用点消费已修（`5ff69ac3`），本条与它无先后依赖
 - [SH-73](sh73-temp-receiver-dynamic-dispatch.md)：若放开临时值接收者，会新增一条消费路径
-- [docs/language-spec.md §4.10.1](../../docs/language-spec.md#L649)：逐段状态已按修复后的实测重写
+- [docs/language-spec.md §4.10.1](../../docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)：逐段状态已按修复后的实测重写
 - 外部来源：`ct-http/docs/review/ct-http-0.1.0-blockers.md` §5（2026-11-15 独立复核）

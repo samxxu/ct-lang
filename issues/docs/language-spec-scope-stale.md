@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | **Medium** |
 | 锚点 | commit `ec97f99`（2026-10-17） |
-| 文件 | [docs/language-spec.md](../../docs/language-spec.md#L4-L14)、[§10](../../docs/language-spec.md#L428-L436) |
+| 文件 | [docs/language-spec.md](../../docs/language-spec.md#ct-语言规范)、[§10](../../docs/language-spec.md#10-l2-独有模块系统与诊断本文不描述其语法) |
 | 状态 | verified |
 | 处置证据 | ✅ 已修复（2026-10-18，方案 2：改契约） |
 

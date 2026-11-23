@@ -6,7 +6,7 @@
 | 定性 | 命名修正（避免与内置 `String` 混淆） |
 | 严重度 | Medium |
 | 锚点 | `std 0.19.0`（2026-11-21；同日所有者更新目标名） |
-| 依据 | [language-spec §5.1](../../docs/language-spec.md#L1978-L1989)；[DOC-85](../../issues/docs/doc-85-idiom-priority-card.md) |
+| 依据 | [language-spec §5.1](../../docs/language-spec.md#51-源码命名约定语言--标准库--ct-pkg稳定契约)；[DOC-85](../../issues/docs/doc-85-idiom-priority-card.md) |
 | 状态 | deferred |
 | 处置证据 | **deferred（REQ 裁定，2026-11-22，HEAD `7061aa22`）：std 0.20.0 已发布 `CharStr` 且无旧名别名；本仓仍 pin 0.19.0，必须与 pin 升级同一次原子迁移。触发条件与最小迁移清单见 §裁定** |
 
@@ -64,7 +64,7 @@
 ## 关联
 
 - [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)
-- [language-spec §5.1](../../docs/language-spec.md#L1978-L1989)
+- [language-spec §5.1](../../docs/language-spec.md#51-源码命名约定语言--标准库--ct-pkg稳定契约)
 - [DOC-87](../../issues/docs/doc-87-lib-core-rename.md)（内置层 `namespace core`，另一条线）
 
 ## §复核（REV，2026-11-22，HEAD `38cd4ae4`）

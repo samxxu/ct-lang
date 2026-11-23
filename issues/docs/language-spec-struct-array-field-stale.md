@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | **Medium** |
 | 锚点 | commit `6d764bc`（2026-10-21） |
-| 文件 | [docs/language-spec.md:333](../../docs/language-spec.md#L333)、[:880-882](../../docs/language-spec.md#L880-L882)、[:450-454](../../docs/language-spec.md#L450-L454)、[:1024-1025](../../docs/language-spec.md#L1024-L1025)、[docs/roadmap.md:743](../../docs/roadmap.md#L743)、[test/acceptance/run.sh:436-439](../../test/acceptance/run.sh#L436-L439) |
+| 文件 | [docs/language-spec.md:333](../../docs/language-spec.md#48-接口多态trait-作类型)、[:880-882](../../docs/language-spec.md#48-接口多态trait-作类型)、[:450-454](../../docs/language-spec.md#62-已知限制)、[:1024-1025](../../docs/language-spec.md#62-已知限制)、[docs/roadmap.md:743](../../docs/roadmap.md#L743)、[test/acceptance/run.sh:436-439](../../test/acceptance/run.sh#L436-L439) |
 | 状态 | verified |
 | 处置证据 | ✅ 已修复（2026-10-21，§4.8 中英、roadmap 的 p18 进度、`test/acceptance/run.sh` 注释三处对齐） |
 
