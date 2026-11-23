@@ -7,9 +7,9 @@
 | 严重度 | Medium（v1.0 前建议） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1 |
-| 状态 | deferred |
-| 处置证据 | **延后（2026-11-22，REV）**：D1 / §0.5 / D3 最小范围已落并复核；D2 仍阻塞于 SH-110（`open`），D3-5 的 runner/TSV 未入库 |
-| blocked-by | ① SH-110 合入后 48 小时内重测 §0.1；② DEV 交付 `test/docs/check-tutorial-cases.sh` + `tutorial-cases.tsv`；负责人 DEV/REV |
+| 状态 | open |
+| 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；D2 等 SH-110 合入后 48h 重测，D3-5 runner/TSV 即刻补；负责人 DEV/REV）** |
+| blocked-by | ① SH-110 合入后 48 小时内重测 §0.1；② DEV 交付 `test/docs/check-tutorial-cases.sh` + `tutorial-cases.tsv` |
 
 ## 进展（2026-11-21）
 
@@ -146,3 +146,6 @@ string_str.ct
    `docs/language-spec.md` §4.10.1 与 tutorial HTTP 走读；
 2. `test/docs/check-tutorial-cases.sh` + `test/docs/tutorial-cases.tsv` 仍未入库，D3-5 仍欠；
 3. 本条转 `verified` 前需 REV 复核 README 的 §0.5 五条实跑与 §0.1 四条断点。
+
+状态：**2026-11-23 所有者放开为 `open`**。D1/§0.5/D3 已完成；D2 等 SH-110 合入后 48h 重测，
+D3-5 runner/TSV 即刻补。

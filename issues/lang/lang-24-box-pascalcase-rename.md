@@ -7,8 +7,8 @@
 | 严重度 | Medium（语言表面改名；涉及生成符号与文档） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [language-spec §5.1](../../docs/language-spec.md#L1962-L2020)、[§4.71](../../docs/language-spec.md#L2949)、[D-016](../../docs/decisions/D-016.md)、[Box.h.ct](../../lib/core/Box.h.ct#L34)、[Expr.h.ct:2304](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2304-L2311) |
-| 状态 | deferred |
-| 处置证据 | **deferred**（2026-11-22，REV/REQ：所有者 2026-11-21 已定「v1.0 规范拼写 `Box<T>` + `box<T>` 弃用别名，v1.1 删除」；当前 `lib/std/Box.h.ct:34` 仍 `pub struct box<T>`。触发 `v1-PH-0` Stage A / `v1-PH-1` Stage B；负责人 DEV；v1.0 命名清理） |
+| 状态 | open |
+| 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；容量约束已解除，Stage A 即刻推进，负责人 DEV）** |
 
 ## 背景
 
@@ -146,3 +146,6 @@ $ grep -n 'pub struct box' lib/core/Box.h.ct
 warning、`backend/emit/Emitter.h.ct` 的 `Box_*` 符号与 `ct_Box_hdr`、
 `frontend/module/Module.h.ct` / `tool/driver/Driver.h.ct` 的判活扫描、p81/p82
 夹具与活跃文档。
+
+状态：**2026-11-23 所有者放开为 `open`**。容量约束已解除，Stage A 立即推进；
+Stage B（删除 `box` 别名）仍按 v1.1。

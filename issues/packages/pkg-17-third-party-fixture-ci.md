@@ -7,8 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [ct-pkg-get-contract.md](../../docs/planning/ct-pkg-get-contract.md)、[D-014](../../docs/decisions/D-014.md)、[PKG-14](pkg-14-ph83-index-verify-and-binary.md) |
-| 状态 | deferred |
-| 处置证据 | **deferred（REQ，2026-11-22；触发：DEV 建 fixture 并接入常规 CI）** |
+| 状态 | open |
+| 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；按本卡 §1–§5 直接开工，不再以冻结窗口为由延后；负责人 DEV）** |
 
 ## REQ 规格（2026-11-21，方案 A：仓库内 vendored 快照）
 
@@ -124,3 +124,4 @@ $ grep -n 'if: false' .github/workflows/packages.yml
 `test/pkg/run.sh` 增 PKG-17 段（三步独立输出）；若要进 GitHub Actions，需同时解除
 `packages.yml` 的 `if: false` 或新增独立 job。owner：DEV；P2；登记日期 2026-11-22。
 不做原因不是“不必做”，而是当前冻结窗口内未排到该实现；规格已就绪，可直接开工。
+状态：**2026-11-23 所有者放开为 `open`**，按 §1–§5 直接开工，不再以冻结窗口为由延后。

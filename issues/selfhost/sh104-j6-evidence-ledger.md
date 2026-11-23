@@ -7,8 +7,8 @@
 | 严重度 | High |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §1.5](../../docs/planning/v1-release-plan.md#L57-L71)、[D-011](../../docs/decisions/D-011.md) |
-| 状态 | deferred |
-| 处置证据 | **deferred**（2026-11-22，REV/REQ：台账已建（34 行，15 已过 / 9 部分 / 5 缺失 / 5 阻塞），`check_j6_ledger` 已入 `check-docs`；剩余项未清零。触发 `v1-PH-0` 入口（V1-C1）；负责人 REQ/DEV；High） |
+| 状态 | open |
+| 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先，不再 deferred；台账 22 已过 / 4 部分 / 3 缺失 / 5 阻塞；外部 std 子项 P-3.6/P-6.x 仍阻塞，其余即刻推进；负责人 REQ/DEV）** |
 | 层级 | **Tier 1（`v1-PH-0` 入口）**，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 进展（2026-11-21）
@@ -118,4 +118,5 @@ $ python3 test/docs/check-docs.py --selftest | tail -2
 j6-ledger selftest: OK (6 cases)
 ```
 
-状态仍为 `deferred`：J-6 未过，且本次任务要求不改状态；等 REV 复核后决定。
+状态：**2026-11-23 所有者放开为 `open`**。J-6 仍未过，但不再以 `deferred` 等待；
+剩余项按 §结论推进，外部 std 子项（P-3.6/P-6.x）保留阻塞。

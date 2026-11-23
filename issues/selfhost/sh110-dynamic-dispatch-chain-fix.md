@@ -7,8 +7,8 @@
 | 严重度 | High |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [SH-73](sh73-temp-receiver-dynamic-dispatch.md)；[外部评审 §4-A3](../../docs/reviews/2026-11-21-v088-external-review-eval.md) |
-| 状态 | deferred |
-| 处置证据 | **deferred**（2026-11-22，REV/REQ：HEAD `38cd4ae4` 重建 ct-ast v0.88.2，单跳/两跳动态派发链仍硬错；PH-87/88 发射器切片重写未覆盖本条。落 `v1-PH-0` 独立 bugfix（V1-C3）；负责人 DEV；High） |
+| 状态 | open |
+| 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；绿证/逐字节对照已在库，待 REV 复核后转 verified；负责人 DEV）** |
 
 ## 现象
 
@@ -171,3 +171,6 @@ return __ct_tmp3.vt->status(__ct_tmp3.self);
 **逐字节不变。** 用 `a0ce8ef1` 重建的基线与修复后 ct-ast 分别编译 `test/ast/*/prog.ct`、
 `test/cases/*.ct`、`examples/*/src/main.ct`（排除本用例），305 个可编译单文件产物逐字节相同：
 `compared=305 same=305 diff=0`。
+
+状态：**2026-11-23 所有者放开为 `open`**。绿证与逐字节对照已在库，待 REV 复核后转 `verified`；
+合入后 48 小时内触发 README §0.1 重测。

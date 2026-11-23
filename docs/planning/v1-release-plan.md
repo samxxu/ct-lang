@@ -70,6 +70,11 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 | V1-C7 | 新特性文档核对（String/Str/切片/ref-out/box/new） | spec §4.68–§4.70 已存在；补 box/new/patterns 与一致性断言 | [DOC-78](../../issues/docs/doc-78-new-feature-docs-audit.md) |
 | V1-C8 | 包体系收尾：第三方真实包 fixture + `ct index verify` 进 CI | 固定 fixture 可重放；CI 常规跑 | [PKG-17](../../issues/packages/pkg-17-third-party-fixture-ci.md) |
 
+> **2026-11-23 所有者：v1.0 入口项全部放开为 `open`，按关键路径优先完成。**
+> SH-104 的 4 个外部 std 子项（P-3.6 / P-6.1–P-6.3）仍阻塞，但其余 J-6 项与
+> SH-105 / SH-110 / PKG-17 / LANG-24 / DOC-86 即刻推进；`deferred` 不再作为等待状态。
+> SH-105 / SH-110 已有实现/绿证，待 REV 复核后翻 `verified`。
+
 ### 1.6 v1.0 不包含（已定）
 
 - 不在 v1.0 内重写 ct-ast（归 v1-pre：PH-85…88，见 §2.3）；

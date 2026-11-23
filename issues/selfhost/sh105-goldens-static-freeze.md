@@ -7,8 +7,8 @@
 | 严重度 | High |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §1.5](../../docs/planning/v1-release-plan.md#L57-L71)、[check-goldens.sh](../../selfhost/check-goldens.sh) |
-| 状态 | deferred |
-| 处置证据 | **deferred**（2026-11-22，REV/REQ：REQ 卡与 gate12 文案补丁已在库；`test/goldens/ast/`、`selfhost/check-goldens-ast.sh`、gate 12 均未落地。触发 `v1-PH-0` 入口（V1-C2）；负责人 DEV；High） |
+| 状态 | open |
+| 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；实现/绿证已在库，待 REV 复核后转 verified；负责人 DEV）** |
 | 层级 | **Tier 1（`v1-PH-0` 入口）**，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
 ## 实施卡（REQ 侧，2026-11-21）
@@ -165,4 +165,4 @@ design window: ok (12/12)
 ```
 
 负例红证（旧树 `a0ce8ef1` + 新 selftest）：gate 不存在、goldens 不存在，5 个断言全红。
-状态仍为 `deferred`：本段只落实现与证据，等 REV 复核后决定是否改状态（本次任务要求不改状态）。
+状态：**2026-11-23 所有者放开为 `open`**。实现与绿证已在库，待 REV 复核后转 `verified`。
