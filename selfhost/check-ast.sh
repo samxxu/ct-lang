@@ -77,6 +77,9 @@
 #
 # batch 12 adds the empty statement and `for`-init statics: test/ast/37_empty_stmt
 # only (the batch adds no diagnostic).
+# SH-118 adds the full-corpus B false-positive account (E-V1-5): every `.ct`
+# under examples / test / lib is checked by `ct check --types`, with an
+# explicit skip table for negatives and demos.
 #
 # batch 13 adds variadic functions: test/ast/38_variadic plus the two rejected
 # shapes (no named parameter, a variadic impl method).
@@ -1148,6 +1151,25 @@ if [ $? -eq 0 ]; then
     ok "PH-68-R4 fp (0 false positives, skip table)"
 else
     bad "PH-68-R4 fp" "$(sed -n '1,8p' "$work/p68fp.out")"
+fi
+
+# SH-118 / E-V1-5: the full P-1.1 corpus (`examples test lib`, every `.ct`)
+# must draw no B diagnostic from `ct check --types`. The skip table
+# (test/ast/p118_skip.tsv) holds only negative fixtures, diagnostic demos and
+# the pre-B p32 baseline probes; a legal fixture is never skipped, and a stale
+# row fails. `--selftest` re-injects a known B diagnostic, so the judgement
+# cannot silently stop detecting one.
+sh test/ast/p118_fp_all.sh "$work/ct-ast" >"$work/p118fp.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "SH-118 E-V1-5 fp-all (0 B diagnostics over examples test lib)"
+else
+    bad "SH-118 E-V1-5 fp-all" "$(sed -n '1,14p' "$work/p118fp.out")"
+fi
+sh test/ast/p118_fp_all.sh "$work/ct-ast" --selftest >"$work/p118fpst.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "SH-118 E-V1-5 fp-all negative (injected B diagnostic turns red)"
+else
+    bad "SH-118 E-V1-5 fp-all negative" "$(sed -n '1,8p' "$work/p118fpst.out")"
 fi
 
 sh test/ast/p69_unitgraph.sh "$work/ct-ast" >"$work/p69ug.out" 2>&1

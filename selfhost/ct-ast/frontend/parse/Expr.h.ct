@@ -9497,6 +9497,28 @@ impl ExprTypes for Expr {
             self->chk_line = aline;
             self->chk_col = acol;
             self->chk_arg = 0;
+            /* SH-118: two legal brace-item shapes are not `chk_assignable`
+               mismatches. (1) `{ 0 }` is C aggregate zero-fill: every field
+               is defined, including an owning `String` field (SH-102 / D-015
+               §1.2 relies on it). (2) `String` / `Str` fields take a string
+               literal through the same implicit binding `String s = "x"`
+               performs (PH-80 / `lit_coerce`); SH-115's brace walk missed
+               both and reported the legal p80_retain / p81_box fixtures. */
+            {
+                char fbase[MAX_TEXT];
+                const char *fp = self->sym->structs[si].fields[fi].type;
+                size_t fl;
+                if (is_zero) continue;
+                while (*fp == ' ' || *fp == '\t') fp++;
+                if (strncmp(fp, "struct ", 7) == 0) fp += 7;
+                snprintf(fbase, sizeof fbase, "%s", fp);
+                fl = strlen(fbase);
+                while (fl > 0 && (fbase[fl - 1] == ' ' || fbase[fl - 1] == '\t'))
+                    fbase[--fl] = 0;
+                if (strcmp(actual, "char *") == 0
+                    && (strcmp(fbase, "String") == 0 || strcmp(fbase, "Str") == 0))
+                    continue;
+            }
             if (self->chk_assignable(self->sym->structs[si].fields[fi].type,
                                      actual, is_zero, 1) != 0)
                 return -1;
