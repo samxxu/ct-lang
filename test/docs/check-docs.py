@@ -81,6 +81,10 @@ J6_IDS = (
     | {"P-6.%d" % i for i in (1, 2, 3, 4)}
 )
 J6_STATES = {"已过", "部分", "缺失", "阻塞"}
+J6_COUNTS = re.compile(
+    r"<!--\s*j6:counts\s+([^>]*)-->")
+J6_COUNT_KEYS = (("passed", "已过"), ("partial", "部分"),
+                 ("missing", "缺失"), ("blocked", "阻塞"))
 STABLE_TIERS = ("已冻结", "冻结中", "1.0 前可改")
 COMPAT_MARKER = re.compile(r"<!--\s*ct-compat:\s*([^>]*)-->")
 CAP_MARKER = re.compile(r"<!--\s*cap:([a-z0-9-]+)\s*-->")
@@ -535,15 +539,10 @@ def check_idiom_briefing(errors):
     return checked
 
 
-def check_j6_ledger(errors):
-    """SH-104: the J-6 evidence ledger must carry every P-1…P-6 row with a
-    legal state, a non-empty minimal criterion, and a reason on 阻塞 rows."""
-    path = os.path.join(ROOT, "docs/planning/j6-evidence/ledger.md")
-    if not os.path.exists(path):
-        errors.append("docs/planning/j6-evidence/ledger.md: missing (SH-104)")
-        return 0
-    text = read(path)
+def j6_check_text(text, errors):
+    """Validate one J-6 ledger text and return the number of rows seen."""
     seen = {}
+    counts = {state: 0 for state in J6_STATES}
     for m in J6_ROW.finditer(text):
         rid = m.group(1)
         cri, ev, state, owner = (m.group(2).strip(), m.group(3).strip(),
@@ -551,6 +550,8 @@ def check_j6_ledger(errors):
         seen[rid] = state
         if state not in J6_STATES:
             errors.append(f"j6-ledger: {rid} has status '{state}' (expected 已过/部分/缺失/阻塞)")
+            continue
+        counts[state] += 1
         if not cri or cri in ("—", "-"):
             errors.append(f"j6-ledger: {rid} has no 最小可判证据")
         if not owner or owner in ("—", "-"):
@@ -559,9 +560,43 @@ def check_j6_ledger(errors):
             errors.append(f"j6-ledger: {rid} is 阻塞 without a reason in 现有证据")
         if state == "已过" and not re.search(r"(test/|docs/|battle/|见下|下方)", ev):
             errors.append(f"j6-ledger: {rid} is 已过 without a path/pointer in 现有证据")
+        if state in ("部分", "缺失") and "承接" not in ev:
+            errors.append(f"j6-ledger: {rid} is {state} without a 承接 item "
+                          "(owner + next step)")
     for rid in sorted(J6_IDS - set(seen)):
         errors.append(f"j6-ledger: {rid} row is missing (SH-104)")
+
+    marker = J6_COUNTS.search(text)
+    if not marker:
+        errors.append("j6-ledger: missing `<!-- j6:counts passed=… partial=… missing=… blocked=… -->`")
+    else:
+        fields = {}
+        for part in marker.group(1).split():
+            if "=" in part:
+                k, v = part.split("=", 1)
+                fields[k.strip()] = v.strip()
+        for key, state in J6_COUNT_KEYS:
+            raw = fields.get(key)
+            try:
+                want = int(raw)
+            except (TypeError, ValueError):
+                errors.append(f"j6-ledger: counts marker has no integer {key}= (got {raw!r})")
+                continue
+            if want != counts[state]:
+                errors.append(f"j6-ledger: counts marker says {key}={want}, "
+                              f"rows say {state}={counts[state]}")
     return len(seen)
+
+
+def check_j6_ledger(errors):
+    """SH-104: the J-6 evidence ledger must carry every P-1…P-6 row with a
+    legal state, a non-empty minimal criterion, a reason on 阻塞 rows, a
+    承接 item on 部分/缺失 rows, and a header count that matches the rows."""
+    path = os.path.join(ROOT, "docs/planning/j6-evidence/ledger.md")
+    if not os.path.exists(path):
+        errors.append("docs/planning/j6-evidence/ledger.md: missing (SH-104)")
+        return 0
+    return j6_check_text(read(path), errors)
 
 
 def check_stable_subset(errors):
@@ -770,6 +805,43 @@ def check_ct_spelling(errors):
     return hits, len(files)
 
 
+def j6_selftest():
+    """Positive/negative fixtures for the SH-104 ledger assertions."""
+    ids = sorted(J6_IDS, key=lambda s: tuple(int(x) for x in s[2:].split(".")))
+
+    def ledger(rows, counts="passed=34 partial=0 missing=0 blocked=0"):
+        return "<!-- j6:counts " + counts + " -->\n| 判据 | 最小可判证据 | 现有证据 | 状态 | 负责人 |\n" + \
+            "| --- | --- | --- | --- | --- |\n" + "\n".join(rows) + "\n"
+
+    def row(rid, state="已过", ev="test/x", owner="DEV"):
+        return f"| {rid} | criterion | {ev} | {state} | {owner} |"
+
+    valid = ledger([row(rid) for rid in ids])
+    cases = [
+        ("valid", valid, 0),
+        ("illegal-state", ledger([row(ids[0], state="完成")] + [row(r) for r in ids[1:]]), 1),
+        ("missing-row", ledger([row(r) for r in ids[1:]]), 1),
+        ("blocked-no-reason", ledger([row(ids[0], state="阻塞", ev="test/x")] +
+                                     [row(r) for r in ids[1:]]), 1),
+        ("partial-no-承接", ledger([row(ids[0], state="部分")] +
+                                   [row(r) for r in ids[1:]]), 1),
+        ("count-mismatch", ledger([row(r) for r in ids], "passed=33 partial=0 missing=0 blocked=0"), 1),
+    ]
+    failed = 0
+    for name, text, want in cases:
+        errors = []
+        j6_check_text(text, errors)
+        ok = (len(errors) == 0) if want == 0 else (len(errors) >= want)
+        print(f"j6-ledger selftest: {name}: {len(errors)} error(s), "
+              f"expected {'0' if want == 0 else '>=1'} -> {'OK' if ok else 'FAIL'}")
+        failed += 0 if ok else 1
+    if failed:
+        print(f"j6-ledger selftest: FAIL ({failed} case(s))")
+        return 1
+    print(f"j6-ledger selftest: OK ({len(cases)} cases)")
+    return 0
+
+
 def ct_selftest():
     """DOC-94 fixtures: prose is red, code/exempt contexts are green."""
     cases = (
@@ -810,7 +882,8 @@ def ct_selftest():
 
 def main():
     if "--selftest" in sys.argv[1:]:
-        return ct_selftest()
+        rc = ct_selftest()
+        return j6_selftest() or rc
     errors = []
     links, scanned = check_links(errors)
     version = check_version(errors)
