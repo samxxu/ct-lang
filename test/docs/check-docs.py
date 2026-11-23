@@ -751,6 +751,14 @@ def phase_cards():
 
 
 def check_phase_status(errors):
+    """Two passes over the v0 cards.
+
+    The active window (newest DESIGN_WINDOW) keeps the strict check: status
+    line ↔ roadmap emoji ↔ card link. Every older card gets a cheaper pass
+    (check_whole_ledger): its header must not contradict a ✅ / ⬜ / 🟡 roadmap
+    row. The second pass exists because PH-33/34/36 shipped and tagged while
+    their headers still said 规划中 — out of window, so nothing caught it.
+    """
     roadmap = read(os.path.join(ROOT, "docs/roadmap.md"))
     cards = phase_cards()
     if not cards:
@@ -759,6 +767,7 @@ def check_phase_status(errors):
     newest = max(n for n, _, _ in cards)
     active = [(n, name, path) for n, name, path in cards
               if n >= newest - DESIGN_WINDOW + 1]
+    active_numbers = {n for n, _, _ in active}
     phases = 0
     for number, name, path in active:
         phases += 1
@@ -792,7 +801,55 @@ def check_phase_status(errors):
                 f"{rel}: the English roadmap row disagrees with status "
                 f"'{status.group(1)}' (expected {emoji})"
             )
+    phases += check_whole_ledger(errors, roadmap, cards, active_numbers)
     return phases
+
+
+PHASE_STATUS = re.compile(
+    r"状态[：:]\s*(?:\*\*)?\s*(?:[✅🟢⬜]\s*)?(已完成|完成|实施中|规划中|设计已冻结)")
+
+
+def phase_status_word(head):
+    """The status word of a card header, tolerating `**`, `✅ ` and 已完成."""
+    match = PHASE_STATUS.search(head)
+    if not match:
+        return None
+    return "完成" if match.group(1) == "已完成" else match.group(1)
+
+
+def check_whole_ledger(errors, roadmap, cards, active_numbers):
+    """Every card outside the active window keeps its header in step with its
+    roadmap row (v1.0.0 backfill: PH-33/34/36 said 规划中 for a year after the
+    tag shipped, because only the newest 12 cards were checked).
+
+    `设计已冻结` counts as terminal for a ✅ row: those cards are design
+    baselines whose phases were delivered elsewhere.
+    """
+    checked = 0
+    for number, name, path in cards:
+        if number in active_numbers:
+            continue
+        rel = f"docs/phases/{name}/card.md"
+        word = phase_status_word("\n".join(read(path).splitlines()[:30]))
+        if not word:
+            errors.append(f"{rel}: no status line (all cards, not just the window)")
+            continue
+        row = re.search(r"^\|\s*Phase\s+" + str(number) + r"\s*\|.*$", roadmap, re.M)
+        if not row:
+            errors.append(f"{rel}: no Phase {number} row in docs/roadmap.md")
+            continue
+        line = row.group(0)
+        checked += 1
+        if "✅" in line and word not in ("完成", "设计已冻结"):
+            errors.append(
+                f"{rel}: roadmap row is ✅ 完成 but the card says '{word}'")
+        if "⬜" in line and word != "规划中":
+            errors.append(
+                f"{rel}: roadmap row is ⬜ 规划中 but the card says '{word}'")
+        if "🟡" in line and word != "实施中":
+            errors.append(
+                f"{rel}: roadmap row is 🟡 实施中 but the card says '{word}'")
+    return checked
 
 
 def check_applies_to(errors):
