@@ -1702,6 +1702,17 @@ else
 fi
 
 echo
+echo "== PKG-17: vendored third-party fixture (index / get / build) =="
+# The fixture itself is under test/pkg/fixtures/thirdparty; the probe reports
+# three independently searchable steps (pkg17-index/get/build) and keeps every
+# case in its own HOME/CT_HOME.
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg17_thirdparty.sh"; then
+    ok "PKG-17 third-party fixture (pkg17-index/get/build)"
+else
+    bad "PKG-17 third-party fixture" "one or more pkg17-* steps failed (see above)"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]

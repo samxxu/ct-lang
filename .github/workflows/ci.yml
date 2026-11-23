@@ -52,6 +52,15 @@ jobs:
         run: |
           set -o pipefail
           bash selfhost/check-all.sh 2>&1 | tee /tmp/check-all.log
+      - name: PKG-17 fixture steps (gate 7)
+        run: |
+          for s in index get build; do
+            grep -q "^pkg17-$s: OK$" /tmp/check-all.log || {
+              echo "::error::missing pkg17-$s in gate 7 output"
+              exit 1
+            }
+          done
+
       - name: failure summary
         if: failure()
         run: |
@@ -78,6 +87,15 @@ jobs:
         run: |
           set -o pipefail
           bash selfhost/check-all.sh 2>&1 | tee /tmp/check-all.log
+      - name: PKG-17 fixture steps (gate 7)
+        run: |
+          for s in index get build; do
+            grep -q "^pkg17-$s: OK$" /tmp/check-all.log || {
+              echo "::error::missing pkg17-$s in gate 7 output"
+              exit 1
+            }
+          done
+
       - name: failure summary
         if: failure()
         run: |
