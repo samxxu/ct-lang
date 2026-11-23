@@ -33,8 +33,8 @@ export NO_PROXY=127.0.0.1,localhost
 export no_proxy=127.0.0.1,localhost
 
 pin_url="https://github.com/ct-pkg/std"
-pin_tag="v0.19.0"
-pin_digest="sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79"
+pin_tag="v0.20.0"
+pin_digest="sha256:60d2e7dd157facc775e80d45e6769c4f2bfe7273feed6af7ccba9676d8ae42a7"
 
 # A local git package; the pinned digest is deliberately not reproduced -- the
 # probe only needs fetch/checkout to run, not the official tree.
@@ -43,7 +43,7 @@ mkrepo() { # <dir> <tag>
     (
         cd "$1" || exit 1
         git init -q
-        printf 'name = std\npublisher = ct\nversion = 0.19.0\nns-root = .\n' >ct.pkg
+        printf 'name = std\npublisher = ct\nversion = 0.20.0\nns-root = .\n' >ct.pkg
         printf 'pub int std_value(void);\nint std_value(void) { return 1; }\n' >std.c
         git add -A
         git -c user.email=pkg23@test -c user.name=pkg23 commit -qm one || exit 1
@@ -94,7 +94,7 @@ if [ "$rc" -eq 0 ]; then
     bad "network case succeeded against a closed port"
 elif grep -q 'network/proxy' "$work/net.err" \
      && grep -q 'retry' "$work/net.err" \
-     && grep -q 'ct get ct/std@0.19.0' "$work/net.err" \
+     && grep -q 'ct get ct/std@0.20.0' "$work/net.err" \
      && grep -q 'git said' "$work/net.err"; then
     ok "an unreachable remote names network/proxy and gives a retry action"
 else

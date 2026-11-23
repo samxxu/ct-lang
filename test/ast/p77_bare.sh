@@ -26,7 +26,7 @@ if ! command -v git >/dev/null 2>&1; then
     exit 1
 fi
 
-pin_sha="sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79"
+pin_sha="sha256:60d2e7dd157facc775e80d45e6769c4f2bfe7273feed6af7ccba9676d8ae42a7"
 
 mkrepo() { # <dir> <name> <publisher> <version> <tag>
     mkdir -p "$1"
@@ -57,14 +57,14 @@ proj() { # <dir> [dep]
     printf 'name = demo\nversion = 0.1.0\n%s\n' "${2:-}" >"$1/ct.pkg"
 }
 
-mkrepo "$work/repo_off" std ct 0.19.0 v0.19.0 || exit 1
+mkrepo "$work/repo_off" std ct 0.20.0 v0.20.0 || exit 1
 mkrepo "$work/repo_acme" std acme 0.9.9 v0.9.9 || exit 1
 mkrepo "$work/repo_hal" hal acme 0.2.0 v0.2.0 || exit 1
 d_off=$(digest_of "$work/repo_off") || { echo "FAIL p77/bare: cannot digest the official fixture" >&2; exit 1; }
 d_acme=$(digest_of "$work/repo_acme") || { echo "FAIL p77/bare: cannot digest the acme fixture" >&2; exit 1; }
 d_hal=$(digest_of "$work/repo_hal") || { echo "FAIL p77/bare: cannot digest the hal fixture" >&2; exit 1; }
 cat >"$work/index" <<EOF
-std 0.19.0 ct file://$work/repo_off v0.19.0 $d_off
+std 0.20.0 ct file://$work/repo_off v0.20.0 $d_off
 std 0.9.9 acme file://$work/repo_acme v0.9.9 $d_acme
 hal 0.2.0 acme file://$work/repo_hal v0.2.0 $d_hal
 EOF
@@ -175,9 +175,9 @@ fi
 mkdir -p "$work/h9" "$work/p9"
 proj "$work/p9"
 if ( cd "$work/p9" && HOME="$work/h9" CT_HOME="$work/h9" \
-        "$ctast" get --index "$work/index" ct/std@0.19.0 >"$work/i.out" 2>"$work/i.err" ) \
-   && grep -Eq '^ct/std 0\.19\.0 git ' "$work/p9/ct.lock" \
-   && [ -f "$work/h9/pkg/ct/std/0.19.0/ct.pkg" ]; then
+        "$ctast" get --index "$work/index" ct/std@0.20.0 >"$work/i.out" 2>"$work/i.err" ) \
+   && grep -Eq '^ct/std 0\.20\.0 git ' "$work/p9/ct.lock" \
+   && [ -f "$work/h9/pkg/ct/std/0.20.0/ct.pkg" ]; then
     ok "ct/std locks as ct/std and stores under pkg/ct/std/<ver>"
 else
     bad "ct/std identity" "$(cat "$work/i.err"; cat "$work/p9/ct.lock" 2>/dev/null)"

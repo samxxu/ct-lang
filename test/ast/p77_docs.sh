@@ -32,7 +32,7 @@ else
     bad "package-guide name shapes"
 fi
 
-if grep -Fq 'ct get ct/std@0.19.0' "$guide"; then
+if grep -Fq 'ct get ct/std@0.20.0' "$guide"; then
     ok "package-guide names the pinned std version"
 else
     bad "package-guide pinned version"

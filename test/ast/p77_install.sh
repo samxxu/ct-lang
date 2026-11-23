@@ -1,6 +1,6 @@
 #!/bin/sh
 # PH-77-S4: install.sh, the tutorial, README and the package guide all recommend
-# a command that works -- `ct get ct/std@0.19.0` -- and none of them keeps the
+# a command that works -- `ct get ct/std@0.20.0` -- and none of them keeps the
 # removed `ct get std` bare form. The command is executed against a local index
 # (the same `ct/std` override the pin allows) so the probe needs no network.
 #
@@ -22,9 +22,9 @@ if [ "$(grep -c 'ct get ct/std' "$root/install.sh")" -ge 2 ]; then
 else
     bad "install.sh" "$(grep -n 'ct get' "$root/install.sh")"
 fi
-if grep -Fq 'ct get ct/std@0.19.0' "$root/docs/tutorial.md" \
+if grep -Fq 'ct get ct/std@0.20.0' "$root/docs/tutorial.md" \
    && grep -Fq '`ct get ct/std`' "$root/README.md" \
-   && grep -Fq 'ct get ct/std@0.19.0' "$root/docs/package-guide.md"; then
+   && grep -Fq 'ct get ct/std@0.20.0' "$root/docs/package-guide.md"; then
     ok "tutorial, README and package-guide agree on the official command"
 else
     bad "documented command" "$(grep -n 'ct get ct/std' "$root/docs/tutorial.md" "$root/README.md" "$root/docs/package-guide.md")"
@@ -45,11 +45,11 @@ mkdir -p "$work/repo" "$work/proj" "$work/home"
 (
     cd "$work/repo" || exit 1
     git init -q
-    printf 'name = std\npublisher = ct\nversion = 0.19.0\nns-root = .\n' >ct.pkg
+    printf 'name = std\npublisher = ct\nversion = 0.20.0\nns-root = .\n' >ct.pkg
     printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >std.h.ct
     git add -A
     git -c user.email=p77@test -c user.name=p77 commit -qm one
-    git tag v0.19.0
+    git tag v0.20.0
 )
 printf 'name = demo\nversion = 0.1.0\n' >"$work/proj/ct.pkg"
 printf 'import std;\nint main(void) { return twice(21) == 42 ? 0 : 1; }\n' >"$work/proj/main.ct"
@@ -59,12 +59,12 @@ printf 'name = demo\nversion = 0.1.0\n' >"$work/seed/proj/ct.pkg"
     "$ctast" get "$work/repo" >/dev/null 2>&1 ) \
     || { echo "FAIL p77/install: cannot digest the fixture" >&2; exit 1; }
 dig=$(awk 'NR>1 { print $NF }' "$work/seed/proj/ct.lock" | tail -1)
-printf 'std 0.19.0 ct file://%s v0.19.0 %s\n' "$work/repo" "$dig" >"$work/index"
+printf 'std 0.20.0 ct file://%s v0.20.0 %s\n' "$work/repo" "$dig" >"$work/index"
 
 if ( cd "$work/proj" && HOME="$work/home" CT_HOME="$work/home" \
-        "$ctast" get --index "$work/index" ct/std@0.19.0 >"$work/g.out" 2>"$work/g.err" ) \
-   && grep -q '^ct/std 0\.19\.0 git ' "$work/proj/ct.lock"; then
-    ok "the documented ct get ct/std@0.19.0 succeeds"
+        "$ctast" get --index "$work/index" ct/std@0.20.0 >"$work/g.out" 2>"$work/g.err" ) \
+   && grep -q '^ct/std 0\.20\.0 git ' "$work/proj/ct.lock"; then
+    ok "the documented ct get ct/std@0.20.0 succeeds"
 else
     bad "documented command run" "$(cat "$work/g.err"; cat "$work/proj/ct.lock" 2>/dev/null)"
 fi

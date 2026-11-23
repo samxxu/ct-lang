@@ -45,11 +45,11 @@ mkrepo() { # <dir> <publisher> <version> <tag>
 }
 
 mkrepo "$work/old" std 0.3.2 v0.3.2 || exit 1
-mkrepo "$work/new" ct 0.19.0 v0.19.0 || exit 1
+mkrepo "$work/new" ct 0.20.0 v0.20.0 || exit 1
 d_old=$(digest_of "$work/old") || { echo "FAIL p77/migrate: cannot digest the old fixture" >&2; exit 1; }
 d_new=$(digest_of "$work/new") || { echo "FAIL p77/migrate: cannot digest the new fixture" >&2; exit 1; }
 printf 'std 0.3.2 std file://%s v0.3.2 %s\n' "$work/old" "$d_old" >"$work/old.index"
-printf 'std 0.19.0 ct file://%s v0.19.0 %s\n' "$work/new" "$d_new" >"$work/new.index"
+printf 'std 0.20.0 ct file://%s v0.20.0 %s\n' "$work/new" "$d_new" >"$work/new.index"
 
 # A project that pinned the old official identity through the old index.
 mkdir -p "$work/home" "$work/proj"
@@ -95,19 +95,19 @@ if ( cd "$work/proj" && HOME="$work/home" CT_HOME="$work/home" \
 else
     bad "ct update migration" "$(cat "$work/u.out" "$work/u.err")"
 fi
-if grep -Fq "migrate std/std 0.3.2 -> ct/std 0.19.0" "$work/u.out"; then
+if grep -Fq "migrate std/std 0.3.2 -> ct/std 0.20.0" "$work/u.out"; then
     ok "ct update prints the before/after migration line"
 else
     bad "migration line" "$(cat "$work/u.out")"
 fi
-if grep -q '^ct/std 0\.19\.0 git ' "$work/proj/ct.lock" \
+if grep -q '^ct/std 0\.20\.0 git ' "$work/proj/ct.lock" \
    && ! grep -q '^std/std ' "$work/proj/ct.lock"; then
     ok "the lock writes one ct/std row and no std/std row"
 else
     bad "migrated lock" "$(cat "$work/proj/ct.lock")"
 fi
 if [ -f "$work/home/pkg/std/std/0.3.2/std/math.h.ct" ] \
-   && [ -f "$work/home/pkg/ct/std/0.19.0/std/math.h.ct" ]; then
+   && [ -f "$work/home/pkg/ct/std/0.20.0/std/math.h.ct" ]; then
     ok "the old store stays and the new one is added"
 else
     bad "stores after migration" "$(find "$work/home/pkg" -maxdepth 4 -type d | sort)"

@@ -19,7 +19,7 @@ ok()  { printf 'ok   %s\n' "$1"; }
 bad() { echo "FAIL p77/external: $1" >&2; [ $# -gt 1 ] && printf '  %s\n' "$2" >&2; fail=1; }
 
 index_url="https://raw.githubusercontent.com/ct-pkg/index/master/index"
-pin_sha="sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79"
+pin_sha="sha256:60d2e7dd157facc775e80d45e6769c4f2bfe7273feed6af7ccba9676d8ae42a7"
 
 if ! command -v git >/dev/null 2>&1; then
     echo "skip: git is not installed" >&2
@@ -33,7 +33,7 @@ if ! curl -fsSL --retry 2 --retry-delay 1 --max-time 10 "$index_url" >"$work/ind
     echo "skip: cannot reach $index_url ($(sed -n '1p' "$work/curl.err"))" >&2
     exit 77
 fi
-row=$(grep -E '^std 0\.19\.0 ' "$work/index" | head -1)
+row=$(grep -E '^std 0\.20\.0 ' "$work/index" | head -1)
 if [ -z "$row" ]; then
     echo "skip: the official index has no std row yet" >&2
     exit 77
@@ -81,8 +81,8 @@ elif [ "$rc" -eq 0 ]; then
 else
     bad "ct get std" "$(cat "$work/get.err")"
 fi
-if grep -q '^ct/std 0\.19\.0 git https://github\.com/ct-pkg/std ' "$work/p1/ct.lock" \
-   && [ -f "$work/h1/pkg/ct/std/0.19.0/ct.pkg" ]; then
+if grep -q '^ct/std 0\.20\.0 git https://github\.com/ct-pkg/std ' "$work/p1/ct.lock" \
+   && [ -f "$work/h1/pkg/ct/std/0.20.0/ct.pkg" ]; then
     ok "the lock is ct/std and the store is pkg/ct/std/<ver>"
 else
     bad "official store/lock" "$(cat "$work/p1/ct.lock" 2>/dev/null)"
@@ -109,9 +109,9 @@ else
 fi
 
 # --- E77-7/E77-8: the published row matches the pin -----------------------
-if [ "$idx_ver" = "0.19.0" ] && [ "$idx_pub" = "ct" ] \
+if [ "$idx_ver" = "0.20.0" ] && [ "$idx_pub" = "ct" ] \
    && [ "$idx_url" = "https://github.com/ct-pkg/std" ] \
-   && [ "$idx_tag" = "v0.19.0" ] && [ "$idx_sha" = "$pin_sha" ]; then
+   && [ "$idx_tag" = "v0.20.0" ] && [ "$idx_sha" = "$pin_sha" ]; then
     ok "the official index row matches the built-in pin"
 else
     bad "index/pin consistency" "index: $row"

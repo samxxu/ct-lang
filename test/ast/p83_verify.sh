@@ -35,7 +35,7 @@ cat >"$work/legal.index" <<EOF
 # a legal six-field index
 util 1.0.0 acme https://example.invalid/acme/util v1.0.0 sha256:$D
 util 1.1.0 acme https://example.invalid/acme/util v1.1.0 sha256:$D
-std 0.19.0 ct https://github.com/ct-pkg/std v0.19.0 sha256:$D
+std 0.20.0 ct https://github.com/ct-pkg/std v0.20.0 sha256:$D
 EOF
 
 cat >"$work/bad.index" <<EOF
