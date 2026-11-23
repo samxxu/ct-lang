@@ -158,6 +158,8 @@ int main(void)
 ```
 
 - `.shim.h` / `.shim.c` 必须与 `.m.ct` 同目录同 base；有 `.shim.c` 就必须有 `.shim.h`。
+  **正式契约**（命名、头文件边界、所有权、错误码、ISR/任务上下文、ABI、host mock + Renode）
+  见 [C Shim 契约](c-shim-contract.md)；本文只给配方。
 - shim 头按**文件名**解析，`ct build` 会在 `cc` 行自动加 `-I <shim 目录>`，并 include 它。
 - 用 `void *` 接 `CURL *` 是为了让 Ct 不需要认识 C 头里的类型；C 允许 `void *` 隐式转成
   对象指针，ABI 不变。

@@ -19,6 +19,7 @@
 | --- | --- | --- |
 | [tutorial.md](tutorial.md) | 逐章入门：核心范式（字符串 → factory → trait 对象 → 接口链）→ 安装 → 派发 → 模块 → 内存 → `map`，附命令行速查与常见坑 | 第一次使用 |
 | [guide-for-c-programmers.md](guide-for-c-programmers.md) | 给 C 程序员的内存心智模型：`String`/`Str`、切片、`ref`/`out`、`Box`、ADT/`match`、残余风险 | 从 C 迁移到 Ct |
+| [c-shim-contract.md](c-shim-contract.md) | 手写 C shim 的正式契约：文件/命名、头文件边界、所有权、错误码、ISR/任务上下文、ABI、DMA 五条硬条款、host mock + Renode 冒烟 | 写或评审 shim、接裸机 |
 | [language-spec.md §4.10.1](language-spec.md#4101-链式构建器范式权威定义与两档路径) | **链式构建器范式的唯一权威定义**：三段顺序、轻量 / 完整两档的判断依据、逐段边界与报错原文（含 SH-75 后的当前状态） | 要写或判断一条链式调用时 |
 | [language-spec.md](language-spec.md) | `.ct` 的语法与展开规则、命名契约、容量上限、明确不支持 | 想知道「这条写法展开成什么 C」 |
 | [glossary.md](glossary.md) | 术语表：项目名、语言构造、内部符号 | 读文档遇到生词 |
