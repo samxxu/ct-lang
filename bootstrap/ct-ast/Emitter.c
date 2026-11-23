@@ -412,6 +412,7 @@ static int inst_writes_helpers(struct backend_emit_Emitter *, int, int);
 static int inst_emit_elem_method_protos(struct backend_emit_Emitter *, const char *);
 static int inst_emit_elem_protos(struct backend_emit_Emitter *, int);
 static int inst_emit_elem_helpers(struct backend_emit_Emitter *, int);
+static int fail_unknown_statement(struct backend_emit_Emitter *, int);
 static int em_expr_adtctor(struct backend_emit_Emitter *, int, int);
 static int em_expr_num(struct backend_emit_Emitter *, int, int);
 static int em_expr_fnum(struct backend_emit_Emitter *, int, int);
@@ -1825,13 +1826,262 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_field(void *self, int 
     int nk;
     (void)(_self);
     nk = _self->arena->nodes[n].kind;
-    if (nk == N_FIELDS) {
-        return em_field_fields(_self, n, ind, nk);
+    struct runtime_arena_NodeKind __ct_match5 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+    if (__ct_match5.tag == 0) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
     }
-    if (((nk == N_FIELD) && (_self->arena->nodes[n].aux == 2))) {
-        return em_field_field_union(_self, n, ind, nk);
+    else if (__ct_match5.tag == 1) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
     }
-    return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    else if (__ct_match5.tag == 2) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 3) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 4) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 5) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 6) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 7) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 8) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 9) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 10) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 11) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 12) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 13) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 14) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 15) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 16) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 17) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 18) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 19) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 20) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 21) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 22) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 23) {
+        if (_self->arena->nodes[n].aux == 2) {
+            return em_field_field_union(_self, n, ind, N_FIELD);
+        }
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 24) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 25) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 26) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 27) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 28) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 29) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 30) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 31) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 32) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 33) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 34) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 35) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 36) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 37) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 38) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 39) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 40) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 41) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 42) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 43) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 44) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 45) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 46) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 47) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 48) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 49) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 50) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 51) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 52) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 53) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 54) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 55) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 56) {
+        return em_field_fields(_self, n, ind, N_FIELDS);
+    }
+    else if (__ct_match5.tag == 57) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 58) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 59) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 60) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 61) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 62) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 63) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 64) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 65) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 66) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 67) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 68) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 69) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 70) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 71) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 72) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 73) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 74) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 75) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 76) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 77) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 78) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 79) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 80) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 81) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else if (__ct_match5.tag == 82) {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
+    else {
+        return _self->__backend_emit_emitops_vptr->emit_inline(_self, n);
+    }
 }
 
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_type_decl(void *self, int n, int ind, int with_semi) {
@@ -1839,25 +2089,262 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_type_decl(void *self, 
     int nk;
     (void)(_self);
     nk = _self->arena->nodes[n].kind;
-    if (nk == N_STRUCT) {
-        return em_decl_struct(_self, n, ind, with_semi, nk);
+    struct runtime_arena_NodeKind __ct_match6 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+    if (__ct_match6.tag == 0) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    if (nk == N_UNION) {
-        return em_decl_union(_self, n, ind, with_semi, nk);
+    else if (__ct_match6.tag == 1) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    if (((nk == N_ENUM) && (_self->arena->nodes[n].aux & 2))) {
-        return em_decl_enum_adt(_self, n, ind, with_semi, nk);
+    else if (__ct_match6.tag == 2) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    if (nk == N_ENUM) {
-        return em_decl_enum(_self, n, ind, with_semi, nk);
+    else if (__ct_match6.tag == 3) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    if (nk == N_TYPEDEF) {
-        return em_decl_typedef(_self, n, ind, with_semi, nk);
+    else if (__ct_match6.tag == 4) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    if (nk == N_GLOBAL) {
-        return em_decl_global(_self, n, ind, with_semi, nk);
+    else if (__ct_match6.tag == 5) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    else if (__ct_match6.tag == 6) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 7) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 8) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 9) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 10) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 11) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 12) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 13) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 14) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 15) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 16) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 17) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 18) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 19) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 20) {
+        return em_decl_struct(_self, n, ind, with_semi, N_STRUCT);
+    }
+    else if (__ct_match6.tag == 21) {
+        return em_decl_typedef(_self, n, ind, with_semi, N_TYPEDEF);
+    }
+    else if (__ct_match6.tag == 22) {
+        return em_decl_global(_self, n, ind, with_semi, N_GLOBAL);
+    }
+    else if (__ct_match6.tag == 23) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 24) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 25) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 26) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 27) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 28) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 29) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 30) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 31) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 32) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 33) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 34) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 35) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 36) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 37) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 38) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 39) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 40) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 41) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 42) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 43) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 44) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 45) {
+        if ((_self->arena->nodes[n].aux & 2)) {
+            return em_decl_enum_adt(_self, n, ind, with_semi, N_ENUM);
+        }
+        return em_decl_enum(_self, n, ind, with_semi, N_ENUM);
+    }
+    else if (__ct_match6.tag == 46) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 47) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 48) {
+        return em_decl_union(_self, n, ind, with_semi, N_UNION);
+    }
+    else if (__ct_match6.tag == 49) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 50) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 51) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 52) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 53) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 54) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 55) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 56) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 57) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 58) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 59) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 60) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 61) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 62) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 63) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 64) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 65) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 66) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 67) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 68) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 69) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 70) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 71) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 72) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 73) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 74) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 75) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 76) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 77) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 78) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 79) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 80) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 81) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match6.tag == 82) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
 }
 
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_global_extern(void *self, int n) {
@@ -2084,91 +2571,268 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_node(void *self, int n
     int nk;
     (void)(_self);
     nk = _self->arena->nodes[n].kind;
-    if (nk == N_FUNC) {
-        return em_node_func(_self, n, ind, nk);
+    struct runtime_arena_NodeKind __ct_match7 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+    if (__ct_match7.tag == 0) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_DEFER_RUN) {
-        return em_node_defer_run(_self, n, ind, nk);
+    else if (__ct_match7.tag == 1) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_DEFER) {
-        return em_node_defer(_self, n, ind, nk);
+    else if (__ct_match7.tag == 2) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_BLOCK) {
-        return em_node_block(_self, n, ind, nk);
+    else if (__ct_match7.tag == 3) {
+        return em_node_func(_self, n, ind, N_FUNC);
     }
-    if (nk == N_MATSEQ) {
-        return em_node_matseq(_self, n, ind, nk);
+    else if (__ct_match7.tag == 4) {
+        return em_node_block(_self, n, ind, N_BLOCK);
     }
-    if (nk == N_RET) {
-        return em_node_ret(_self, n, ind, nk);
+    else if (__ct_match7.tag == 5) {
+        return em_node_ret(_self, n, ind, N_RET);
     }
-    if (nk == N_DELETE) {
-        return em_node_delete(_self, n, ind, nk);
+    else if (__ct_match7.tag == 6) {
+        if (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_MATSEQ) {
+            return em_node_expr_matseq(_self, n, ind, N_EXPR);
+        }
+        return em_node_expression_statement(_self, n, ind, N_EXPR);
     }
-    if (nk == N_BREAK) {
-        return em_node_break(_self, n, ind, nk);
+    else if (__ct_match7.tag == 7) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_CONT) {
-        return em_node_cont(_self, n, ind, nk);
+    else if (__ct_match7.tag == 8) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_EMPTY) {
-        return em_node_empty(_self, n, ind, nk);
+    else if (__ct_match7.tag == 9) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_SASSERT) {
-        return em_node_sassert(_self, n, ind, nk);
+    else if (__ct_match7.tag == 10) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_GOTO) {
-        return em_node_goto(_self, n, ind, nk);
+    else if (__ct_match7.tag == 11) {
+        if (_self->arena->nodes[n].aux == B_COMMA) {
+            return em_node_expression_statement(_self, n, ind, N_BIN);
+        }
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_LABEL) {
-        return em_node_label(_self, n, ind, nk);
-    }
-    if (nk == N_DECLS) {
-        return em_node_decls(_self, n, ind, nk);
-    }
-    if (nk == N_DECL) {
-        int r = em_node_decl(_self, n, ind, nk);
+    else if (__ct_match7.tag == 12) {
+        int r = em_node_decl(_self, n, ind, N_DECL);
         if (r != 2) {
             return r;
         }
+        return em_node_expression_statement(_self, n, ind, N_DECL);
     }
-    if (((nk == N_EXPR) && (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_MATSEQ))) {
-        return em_node_expr_matseq(_self, n, ind, nk);
+    else if (__ct_match7.tag == 13) {
+        return em_node_expression_statement(_self, n, ind, N_ASSIGN);
     }
-    if ((((((nk == N_DECL) || (nk == N_ASSIGN)) || (nk == N_EXPR)) || (nk == N_POST)) || ((nk == N_BIN) && (_self->arena->nodes[n].aux == B_COMMA)))) {
-        return em_node_expression_statement(_self, n, ind, nk);
+    else if (__ct_match7.tag == 14) {
+        return em_node_if(_self, n, ind, N_IF);
     }
-    if (nk == N_IF) {
-        return em_node_if(_self, n, ind, nk);
+    else if (__ct_match7.tag == 15) {
+        return em_node_while(_self, n, ind, N_WHILE);
     }
-    if (nk == N_WHILE) {
-        return em_node_while(_self, n, ind, nk);
+    else if (__ct_match7.tag == 16) {
+        return em_node_for(_self, n, ind, N_FOR);
     }
-    if (nk == N_FOR) {
-        return em_node_for(_self, n, ind, nk);
+    else if (__ct_match7.tag == 17) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_LOOP) {
-        return em_node_loop(_self, n, ind, nk);
+    else if (__ct_match7.tag == 18) {
+        return em_node_expression_statement(_self, n, ind, N_POST);
     }
-    if (nk == N_FOREACH) {
-        return em_node_foreach(_self, n, ind, nk);
+    else if (__ct_match7.tag == 19) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_MATCH) {
-        return em_node_match(_self, n, ind, nk);
+    else if (__ct_match7.tag == 20) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_SWITCH) {
-        return em_node_switch(_self, n, ind, nk);
+    else if (__ct_match7.tag == 21) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_CASE) {
-        return em_node_case(_self, n, ind, nk);
+    else if (__ct_match7.tag == 22) {
+        return fail_unknown_statement(_self, nk);
     }
-    if (nk == N_DOWHILE) {
-        return em_node_dowhile(_self, n, ind, nk);
+    else if (__ct_match7.tag == 23) {
+        return fail_unknown_statement(_self, nk);
     }
-{
-        char msg[MAX_TEXT];
-        snprintf(msg, sizeof(msg), "unknown statement node (kind %d)", nk);
-        return _self->__backend_emit_emitops_vptr->fail(_self, msg);
+    else if (__ct_match7.tag == 24) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 25) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 26) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 27) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 28) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 29) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 30) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 31) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 32) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 33) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 34) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 35) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 36) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 37) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 38) {
+        return em_node_break(_self, n, ind, N_BREAK);
+    }
+    else if (__ct_match7.tag == 39) {
+        return em_node_cont(_self, n, ind, N_CONT);
+    }
+    else if (__ct_match7.tag == 40) {
+        return em_node_decls(_self, n, ind, N_DECLS);
+    }
+    else if (__ct_match7.tag == 41) {
+        return em_node_delete(_self, n, ind, N_DELETE);
+    }
+    else if (__ct_match7.tag == 42) {
+        return em_node_switch(_self, n, ind, N_SWITCH);
+    }
+    else if (__ct_match7.tag == 43) {
+        return em_node_case(_self, n, ind, N_CASE);
+    }
+    else if (__ct_match7.tag == 44) {
+        return em_node_dowhile(_self, n, ind, N_DOWHILE);
+    }
+    else if (__ct_match7.tag == 45) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 46) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 47) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 48) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 49) {
+        return em_node_label(_self, n, ind, N_LABEL);
+    }
+    else if (__ct_match7.tag == 50) {
+        return em_node_goto(_self, n, ind, N_GOTO);
+    }
+    else if (__ct_match7.tag == 51) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 52) {
+        return em_node_empty(_self, n, ind, N_EMPTY);
+    }
+    else if (__ct_match7.tag == 53) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 54) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 55) {
+        return em_node_sassert(_self, n, ind, N_SASSERT);
+    }
+    else if (__ct_match7.tag == 56) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 57) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 58) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 59) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 60) {
+        return em_node_loop(_self, n, ind, N_LOOP);
+    }
+    else if (__ct_match7.tag == 61) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 62) {
+        return em_node_foreach(_self, n, ind, N_FOREACH);
+    }
+    else if (__ct_match7.tag == 63) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 64) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 65) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 66) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 67) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 68) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 69) {
+        return em_node_defer(_self, n, ind, N_DEFER);
+    }
+    else if (__ct_match7.tag == 70) {
+        return em_node_defer_run(_self, n, ind, N_DEFER_RUN);
+    }
+    else if (__ct_match7.tag == 71) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 72) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 73) {
+        return em_node_matseq(_self, n, ind, N_MATSEQ);
+    }
+    else if (__ct_match7.tag == 74) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 75) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 76) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 77) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 78) {
+        return em_node_match(_self, n, ind, N_MATCH);
+    }
+    else if (__ct_match7.tag == 79) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 80) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 81) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else if (__ct_match7.tag == 82) {
+        return fail_unknown_statement(_self, nk);
+    }
+    else {
+        return fail_unknown_statement(_self, nk);
     }
 }
 
@@ -2207,31 +2871,265 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_inline(void *self, int
     int nk;
     (void)(_self);
     nk = _self->arena->nodes[n].kind;
-    if (nk == N_TRY) {
-        return em_inline_try(_self, n, nk);
+    struct runtime_arena_NodeKind __ct_match8 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+    if (__ct_match8.tag == 0) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
     }
-    if (nk == N_DECLS) {
-        return em_inline_decls(_self, n, nk);
+    else if (__ct_match8.tag == 1) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
     }
-    if (((nk == N_FIELD) && (_self->arena->nodes[n].aux == 1))) {
-        return em_inline_field_bitfield(_self, n, nk);
+    else if (__ct_match8.tag == 2) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
     }
-    if (((nk == N_DECL) || (nk == N_FIELD))) {
-        return em_inline_decl_field(_self, n, nk);
+    else if (__ct_match8.tag == 3) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
     }
-    if (((nk == N_BIN) && (_self->arena->nodes[n].aux == B_COMMA))) {
-        return em_inline_bin_comma(_self, n, nk);
+    else if (__ct_match8.tag == 4) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
     }
-    if (nk == N_ASSIGN) {
-        return em_inline_assign(_self, n, nk);
+    else if (__ct_match8.tag == 5) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
     }
-    if (nk == N_EXPR) {
-        return em_inline_expr(_self, n, nk);
+    else if (__ct_match8.tag == 6) {
+        return em_inline_expr(_self, n, N_EXPR);
     }
-    if (nk == N_POST) {
-        return em_inline_post(_self, n, nk);
+    else if (__ct_match8.tag == 7) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
     }
-    return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    else if (__ct_match8.tag == 8) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 9) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 10) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 11) {
+        if (_self->arena->nodes[n].aux == B_COMMA) {
+            return em_inline_bin_comma(_self, n, N_BIN);
+        }
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 12) {
+        return em_inline_decl_field(_self, n, N_DECL);
+    }
+    else if (__ct_match8.tag == 13) {
+        return em_inline_assign(_self, n, N_ASSIGN);
+    }
+    else if (__ct_match8.tag == 14) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 15) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 16) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 17) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 18) {
+        return em_inline_post(_self, n, N_POST);
+    }
+    else if (__ct_match8.tag == 19) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 20) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 21) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 22) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 23) {
+        if (_self->arena->nodes[n].aux == 1) {
+            return em_inline_field_bitfield(_self, n, N_FIELD);
+        }
+        return em_inline_decl_field(_self, n, N_FIELD);
+    }
+    else if (__ct_match8.tag == 24) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 25) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 26) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 27) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 28) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 29) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 30) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 31) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 32) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 33) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 34) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 35) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 36) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 37) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 38) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 39) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 40) {
+        return em_inline_decls(_self, n, N_DECLS);
+    }
+    else if (__ct_match8.tag == 41) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 42) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 43) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 44) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 45) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 46) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 47) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 48) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 49) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 50) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 51) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 52) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 53) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 54) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 55) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 56) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 57) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 58) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 59) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 60) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 61) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 62) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 63) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 64) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 65) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 66) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 67) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 68) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 69) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 70) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 71) {
+        return em_inline_try(_self, n, N_TRY);
+    }
+    else if (__ct_match8.tag == 72) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 73) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 74) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 75) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 76) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 77) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 78) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 79) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 80) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 81) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else if (__ct_match8.tag == 82) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
+    else {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
+    }
 }
 
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_cond(void *self, int n) {
@@ -2327,109 +3225,262 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_expr(void *self, int n
     int nk;
     (void)(_self);
     nk = _self->arena->nodes[n].kind;
-    if (nk == N_ADTCTOR) {
-        return em_expr_adtctor(_self, n, nk);
+    struct runtime_arena_NodeKind __ct_match9 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+    if (__ct_match9.tag == 0) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_NUM) {
-        return em_expr_num(_self, n, nk);
+    else if (__ct_match9.tag == 1) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_FNUM) {
-        return em_expr_fnum(_self, n, nk);
+    else if (__ct_match9.tag == 2) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_STR) {
-        return em_expr_str(_self, n, nk);
+    else if (__ct_match9.tag == 3) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_RAW) {
-        return em_expr_raw(_self, n, nk);
+    else if (__ct_match9.tag == 4) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_VAR) {
-        return em_expr_var(_self, n, nk);
+    else if (__ct_match9.tag == 5) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_INTO) {
-        return em_expr_into(_self, n, nk);
+    else if (__ct_match9.tag == 6) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_INTO_SELF) {
-        return em_expr_into_self(_self, n, nk);
+    else if (__ct_match9.tag == 7) {
+        return em_expr_call(_self, n, N_CALL);
     }
-    if (nk == N_MEMBER) {
-        return em_expr_member(_self, n, nk);
+    else if (__ct_match9.tag == 8) {
+        return em_expr_num(_self, n, N_NUM);
     }
-    if (nk == N_ARROW) {
-        return em_expr_arrow(_self, n, nk);
+    else if (__ct_match9.tag == 9) {
+        return em_expr_str(_self, n, N_STR);
     }
-    if (nk == N_INDEX) {
-        return em_expr_index(_self, n, nk);
+    else if (__ct_match9.tag == 10) {
+        return em_expr_var(_self, n, N_VAR);
     }
-    if (nk == N_SLICE_INDEX) {
-        return em_expr_slice_index(_self, n, nk);
+    else if (__ct_match9.tag == 11) {
+        if (_self->arena->nodes[n].aux == B_COMMA) {
+            return em_expr_bin_comma(_self, n, N_BIN);
+        }
+        return em_expr_bin(_self, n, N_BIN);
     }
-    if (nk == N_SLICE_GET) {
-        return em_expr_slice_get(_self, n, nk);
+    else if (__ct_match9.tag == 12) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_SLICE_RANGE) {
-        return em_expr_slice_range(_self, n, nk);
+    else if (__ct_match9.tag == 13) {
+        return em_expr_assign(_self, n, N_ASSIGN);
     }
-    if (nk == N_ADDR) {
-        return em_expr_addr(_self, n, nk);
+    else if (__ct_match9.tag == 14) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_DEREF) {
-        return em_expr_deref(_self, n, nk);
+    else if (__ct_match9.tag == 15) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_CAST) {
-        return em_expr_cast(_self, n, nk);
+    else if (__ct_match9.tag == 16) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_COMPOUND) {
-        return em_expr_compound(_self, n, nk);
+    else if (__ct_match9.tag == 17) {
+        return em_expr_unary(_self, n, N_UNARY);
     }
-    if (nk == N_VAARG) {
-        return em_expr_vaarg(_self, n, nk);
+    else if (__ct_match9.tag == 18) {
+        return em_expr_post(_self, n, N_POST);
     }
-    if (nk == N_SIZEOF) {
-        return em_expr_sizeof(_self, n, nk);
+    else if (__ct_match9.tag == 19) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_OFFSETOF) {
-        return em_expr_offsetof(_self, n, nk);
+    else if (__ct_match9.tag == 20) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_POST) {
-        return em_expr_post(_self, n, nk);
+    else if (__ct_match9.tag == 21) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_PRE) {
-        return em_expr_pre(_self, n, nk);
+    else if (__ct_match9.tag == 22) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_TRY) {
-        return em_expr_try(_self, n, nk);
+    else if (__ct_match9.tag == 23) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_OPT) {
-        return em_expr_opt(_self, n, nk);
+    else if (__ct_match9.tag == 24) {
+        return em_expr_member(_self, n, N_MEMBER);
     }
-    if (nk == N_TERN) {
-        return em_expr_tern(_self, n, nk);
+    else if (__ct_match9.tag == 25) {
+        return em_expr_arrow(_self, n, N_ARROW);
     }
-    if (nk == N_ASSIGN) {
-        return em_expr_assign(_self, n, nk);
+    else if (__ct_match9.tag == 26) {
+        return em_expr_index(_self, n, N_INDEX);
     }
-    if (((nk == N_BIN) && (_self->arena->nodes[n].aux == B_COMMA))) {
-        return em_expr_bin_comma(_self, n, nk);
+    else if (__ct_match9.tag == 27) {
+        return em_expr_addr(_self, n, N_ADDR);
     }
-    if (nk == N_BIN) {
-        return em_expr_bin(_self, n, nk);
+    else if (__ct_match9.tag == 28) {
+        return em_expr_deref(_self, n, N_DEREF);
     }
-    if (nk == N_UNARY) {
-        return em_expr_unary(_self, n, nk);
+    else if (__ct_match9.tag == 29) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_NEWOBJ) {
-        return em_expr_newobj(_self, n, nk);
+    else if (__ct_match9.tag == 30) {
+        return em_expr_mcall(_self, n, N_MCALL);
     }
-    if (nk == N_BOX) {
-        return em_expr_box(_self, n, nk);
+    else if (__ct_match9.tag == 31) {
+        return em_expr_raw(_self, n, N_RAW);
     }
-    if (nk == N_MCALL) {
-        return em_expr_mcall(_self, n, nk);
+    else if (__ct_match9.tag == 32) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    if (nk == N_CALL) {
-        return em_expr_call(_self, n, nk);
+    else if (__ct_match9.tag == 33) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
     }
-    return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    else if (__ct_match9.tag == 34) {
+        return em_expr_box(_self, n, N_BOX);
+    }
+    else if (__ct_match9.tag == 35) {
+        return em_expr_cast(_self, n, N_CAST);
+    }
+    else if (__ct_match9.tag == 36) {
+        return em_expr_sizeof(_self, n, N_SIZEOF);
+    }
+    else if (__ct_match9.tag == 37) {
+        return em_expr_tern(_self, n, N_TERN);
+    }
+    else if (__ct_match9.tag == 38) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 39) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 40) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 41) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 42) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 43) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 44) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 45) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 46) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 47) {
+        return em_expr_offsetof(_self, n, N_OFFSETOF);
+    }
+    else if (__ct_match9.tag == 48) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 49) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 50) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 51) {
+        return em_expr_compound(_self, n, N_COMPOUND);
+    }
+    else if (__ct_match9.tag == 52) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 53) {
+        return em_expr_vaarg(_self, n, N_VAARG);
+    }
+    else if (__ct_match9.tag == 54) {
+        return em_expr_fnum(_self, n, N_FNUM);
+    }
+    else if (__ct_match9.tag == 55) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 56) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 57) {
+        return em_expr_pre(_self, n, N_PRE);
+    }
+    else if (__ct_match9.tag == 58) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 59) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 60) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 61) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 62) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 63) {
+        return em_expr_into(_self, n, N_INTO);
+    }
+    else if (__ct_match9.tag == 64) {
+        return em_expr_into_self(_self, n, N_INTO_SELF);
+    }
+    else if (__ct_match9.tag == 65) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 66) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 67) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 68) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 69) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 70) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 71) {
+        return em_expr_try(_self, n, N_TRY);
+    }
+    else if (__ct_match9.tag == 72) {
+        return em_expr_opt(_self, n, N_OPT);
+    }
+    else if (__ct_match9.tag == 73) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 74) {
+        return em_expr_slice_index(_self, n, N_SLICE_INDEX);
+    }
+    else if (__ct_match9.tag == 75) {
+        return em_expr_slice_range(_self, n, N_SLICE_RANGE);
+    }
+    else if (__ct_match9.tag == 76) {
+        return em_expr_slice_get(_self, n, N_SLICE_GET);
+    }
+    else if (__ct_match9.tag == 77) {
+        return em_expr_newobj(_self, n, N_NEWOBJ);
+    }
+    else if (__ct_match9.tag == 78) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 79) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 80) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else if (__ct_match9.tag == 81) {
+        return em_expr_adtctor(_self, n, N_ADTCTOR);
+    }
+    else if (__ct_match9.tag == 82) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
+    else {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown expression node");
+    }
 }
 
 static int backend_emit_Emitter_backend_emit_EmitOps_header_guard(void *self, const char * base, char * out, int cap) {
@@ -4580,6 +5631,7 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
     int needsrc;
     int k;
     int fowner;
+    int param_own;
     if (((self->arena->nodes[n].kind != N_ASSIGN) || (self->arena->nodes[n].aux != 0))) {
         return 0;
     }
@@ -4607,6 +5659,7 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
         return (-1);
     }
     idx = ((k == N_VAR) ? sb_find(self, self->arena->nodes[lhs].text2) : (-1));
+    param_own = ((k == N_VAR) && ((self->arena->nodes[lhs].aux == 2) || (self->arena->nodes[lhs].aux == 3)));
     borrowed = ((self->arena->nodes[n].sflags & 2) ? 1 : 0);
     if (k != N_VAR) {
         wrap = (borrowed || sb_is_place(self, rhs));
@@ -4615,7 +5668,7 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
         wrap = ((!borrowed) && sb_is_place(self, rhs));
     }
     needsrc = (wrap && (!sb_is_place(self, rhs)));
-    release_old = (((idx >= 0) && backend_emit_g_sb.own[idx]) && (!borrowed));
+    release_old = ((((idx >= 0) && backend_emit_g_sb.own[idx]) && (!borrowed)) || param_own);
     fbase[0] = 0;
     ffield[0] = 0;
     fowner = (-1);
@@ -4695,11 +5748,13 @@ static int sb_push_params(struct backend_emit_Emitter * self, int first, int ano
             snprintf(uname, sizeof(uname), "__arg%d", ai);
             nm = uname;
         }
-        if ((((nm[0] && (self->arena->nodes[p].aux != 2)) && (self->arena->nodes[p].aux != 3)) && (self->arena->nodes[p].text3[0] == 0))) {
+        if ((nm[0] && (self->arena->nodes[p].text3[0] == 0))) {
             sb_lpush(self, nm, self->arena->nodes[p].text);
-            kind = frontend_sym_ct_is_string_value_type(self->arena->nodes[p].text);
-            if (kind) {
-                sb_push(self, nm, self->arena->nodes[p].text, 1);
+            if (((self->arena->nodes[p].aux != 2) && (self->arena->nodes[p].aux != 3))) {
+                kind = frontend_sym_ct_is_string_value_type(self->arena->nodes[p].text);
+                if (kind) {
+                    sb_push(self, nm, self->arena->nodes[p].text, 1);
+                }
             }
         }
         ai++;
@@ -7369,6 +8424,11 @@ static int emit_match_arm(struct backend_emit_Emitter * self, int arm, int ind, 
         i = nxt;
     }
     return r;
+}
+static int fail_unknown_statement(struct backend_emit_Emitter * self, int nk) {
+    char msg[MAX_TEXT];
+    snprintf(msg, sizeof(msg), "unknown statement node (kind %d)", nk);
+    return self->__backend_emit_emitops_vptr->fail(self, msg);
 }
 static int em_expr_adtctor(struct backend_emit_Emitter * self, int n, int nk) {
     (void)(nk);

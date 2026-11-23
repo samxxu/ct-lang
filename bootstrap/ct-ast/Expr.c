@@ -201,6 +201,7 @@ static int container_sugar_kind(struct frontend_parse_Expr *, int);
 static int ref_member_flags(struct frontend_parse_Expr *, int, int *, int *);
 static int ref_arg_place(struct frontend_parse_Expr *, int);
 static int type_is_owning(struct frontend_parse_Expr *, const char *);
+static int str_handle_value(struct frontend_parse_Expr *, int, char *, int);
 static int check_refout_arg(struct frontend_parse_Expr *, int, int, const char *);
 static int view_source(struct frontend_parse_Expr *, int, int *);
 static void view_mark(struct frontend_parse_Expr *, const char *);
@@ -236,6 +237,7 @@ static int expr_is_builtin_Box_type(const char *);
 static int bplus_space(int);
 static int bplus_id(int);
 static int bplus_lit_type(const char *, int, char *, int, int *);
+static int chk_type_static(struct frontend_parse_Expr *, int, char *, int);
 void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
 static char frontend_parse_g_expr_inst_override[160];
@@ -4246,6 +4248,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     if (((strcmp(fname, "release") == 0) && frontend_parse_expr_borrow_root(_self, n))) {
                                         return tool_diag_ct_sem_error(mline, mcol, "cannot release a borrowed container view; call retain() first", _self->sup->mem->path);
                                     }
+                                    if (((((strcmp(fname, "release") == 0) || (strcmp(fname, "drop") == 0)) && (_self->arena->nodes[n].kind == N_VAR)) && (_self->arena->nodes[n].aux == 2))) {
+                                        return tool_diag_ct_sem_error(mline, mcol, "cannot release through a 'ref' parameter; the callee does not own the handle (assign a new value instead)", _self->sup->mem->path);
+                                    }
                                     int want = 0;
                                     int pk;
                                     for (pk = _self->arena->nodes[inm].a; pk > 0; pk = _self->arena->nodes[pk].next) {
@@ -5959,6 +5964,18 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             }
             if (record_io_call(_self, _self->arena->nodes[n].text2, (fi >= 0), id_line) != 0) {
                 return (-1);
+            }
+            if ((((fi < 0) && (_self->arena->nodes[n].aux != 1)) && (args > 0))) {
+                int hcur = args;
+                while (hcur > 0) {
+                    char hb[MAX_TEXT];
+                    if (str_handle_value(_self, hcur, hb, sizeof(hb))) {
+                        char hmsg[MAX_TEXT + 64];
+                        snprintf(hmsg, sizeof(hmsg), "cannot pass a '%s' handle to C function '%s': use cstr() at the C boundary", hb, _self->arena->nodes[n].text2);
+                        return tool_diag_ct_sem_error(id_line, id_col, hmsg, _self->sup->mem->path);
+                    }
+                    hcur = _self->arena->nodes[hcur].next;
+                }
             }
             if (((fi >= 0) && (_self->__frontend_parse_exprops_vptr->record_call(_self, _self->arena->nodes[n].text2, id_line) != 0))) {
                 return (-1);
@@ -7968,6 +7985,28 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
         _self->chk_line = aline;
         _self->chk_col = acol;
         _self->chk_arg = 0;
+{
+            char fbase[MAX_TEXT];
+            const char * fp = _self->sym->structs[si].fields[fi].type;
+            size_t fl;
+            if (is_zero) {
+                continue;
+            }
+            while ((((*fp) == ' ') || ((*fp) == '\t'))) {
+                fp++;
+            }
+            if (strncmp(fp, "struct ", 7) == 0) {
+                fp += 7;
+            }
+            snprintf(fbase, sizeof(fbase), "%s", fp);
+            fl = strlen(fbase);
+            while (((fl > 0) && ((fbase[(fl - 1)] == ' ') || (fbase[(fl - 1)] == '\t')))) {
+                fbase[--fl] = 0;
+            }
+            if (((strcmp(actual, "char *") == 0) && ((strcmp(fbase, "String") == 0) || (strcmp(fbase, "Str") == 0)))) {
+                continue;
+            }
+        }
         if (_self->__frontend_parse_exprtypes_vptr->chk_assignable(_self, _self->sym->structs[si].fields[fi].type, actual, is_zero, 1) != 0) {
             return (-1);
         }
@@ -7977,7 +8016,6 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
 
 static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_type(void *self, int n, char * out, int cap, int * is_zero) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int ad;
     if (is_zero) {
         (*is_zero) = 0;
     }
@@ -7985,17 +8023,42 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_type(void *self, int
         return (-1);
     }
     out[0] = 0;
-    switch (_self->arena->nodes[n].kind) {
-        case N_NUM:
+{
+        int nk;
+        nk = _self->arena->nodes[n].kind;
+        struct runtime_arena_NodeKind __ct_match4 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+        if (__ct_match4.tag == 0) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 1) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 2) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 3) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 4) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 5) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 6) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 7) {
+            return chk_type_static(_self, n, out, cap);
+        }
+        else if (__ct_match4.tag == 8) {
             if (is_zero) {
                 (*is_zero) = (_self->arena->nodes[n].num == 0);
             }
             snprintf(out, (size_t)(cap), "%s", "int");
             return 0;
-        case N_FNUM:
-            snprintf(out, (size_t)(cap), "%s", "double");
-            return 0;
-        case N_STR:
+        }
+        else if (__ct_match4.tag == 9) {
             if (_self->arena->nodes[n].aux == 1) {
                 snprintf(out, (size_t)(cap), "%s", "String");
             }
@@ -8008,8 +8071,258 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_type(void *self, int
                 }
             }
             return 0;
-        case N_TRY:
+        }
+        else if (__ct_match4.tag == 10) {
+            return chk_type_static(_self, n, out, cap);
+        }
+        else if (__ct_match4.tag == 11) {
 {
+                int op = (int)(_self->arena->nodes[n].aux);
+                if (((((op >= B_LT) && (op <= B_NE)) || (op == B_AND)) || (op == B_OR))) {
+                    snprintf(out, (size_t)(cap), "%s", "int");
+                    return 0;
+                }
+                if ((((((((op >= B_ADD) && (op <= B_MOD)) || (op == B_XOR)) || (op == B_BAND)) || (op == B_BOR)) || (op == B_SHL)) || (op == B_SHR))) {
+                    char l[MAX_TEXT];
+                    char r[MAX_TEXT];
+                    int zl = 0;
+                    int zr = 0;
+                    if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].a, l, sizeof(l), (&zl)) != 0) {
+                        return (-1);
+                    }
+                    if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].b, r, sizeof(r), (&zr)) != 0) {
+                        return (-1);
+                    }
+                    if (((strcmp(l, "double") == 0) || (strcmp(r, "double") == 0))) {
+                        snprintf(out, (size_t)(cap), "%s", "double");
+                        return 0;
+                    }
+                    if (((strcmp(l, "int") == 0) && (strcmp(r, "int") == 0))) {
+                        snprintf(out, (size_t)(cap), "%s", "int");
+                        return 0;
+                    }
+                    return (-1);
+                }
+                return (-1);
+            }
+        }
+        else if (__ct_match4.tag == 12) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 13) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 14) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 15) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 16) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 17) {
+{
+                int op = (int)(_self->arena->nodes[n].aux);
+                if (((op == U_NOT) || (op == U_BNOT))) {
+                    snprintf(out, (size_t)(cap), "%s", "int");
+                    return 0;
+                }
+                if (op == U_NEG) {
+                    char t[MAX_TEXT];
+                    int z = 0;
+                    if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].a, t, sizeof(t), (&z)) != 0) {
+                        return (-1);
+                    }
+                    if (((strcmp(t, "int") != 0) && (strcmp(t, "double") != 0))) {
+                        return (-1);
+                    }
+                    snprintf(out, (size_t)(cap), "%s", t);
+                    return 0;
+                }
+                return (-1);
+            }
+        }
+        else if (__ct_match4.tag == 18) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 19) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 20) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 21) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 22) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 23) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 24) {
+            return chk_type_static(_self, n, out, cap);
+        }
+        else if (__ct_match4.tag == 25) {
+            return chk_type_static(_self, n, out, cap);
+        }
+        else if (__ct_match4.tag == 26) {
+            return chk_type_static(_self, n, out, cap);
+        }
+        else if (__ct_match4.tag == 27) {
+            return chk_type_static(_self, n, out, cap);
+        }
+        else if (__ct_match4.tag == 28) {
+            return chk_type_static(_self, n, out, cap);
+        }
+        else if (__ct_match4.tag == 29) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 30) {
+            return chk_type_static(_self, n, out, cap);
+        }
+        else if (__ct_match4.tag == 31) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 32) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 33) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 34) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 35) {
+            snprintf(out, (size_t)(cap), "%s", _self->arena->nodes[n].text);
+            return 0;
+        }
+        else if (__ct_match4.tag == 36) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 37) {
+{
+                char t1[MAX_TEXT];
+                char t2[MAX_TEXT];
+                int z1 = 0;
+                int z2 = 0;
+                if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].b, t1, sizeof(t1), (&z1)) != 0) {
+                    return (-1);
+                }
+                if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].c, t2, sizeof(t2), (&z2)) != 0) {
+                    return (-1);
+                }
+                if (strcmp(t1, t2) != 0) {
+                    return (-1);
+                }
+                snprintf(out, (size_t)(cap), "%s", t1);
+                return 0;
+            }
+        }
+        else if (__ct_match4.tag == 38) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 39) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 40) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 41) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 42) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 43) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 44) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 45) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 46) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 47) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 48) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 49) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 50) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 51) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 52) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 53) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 54) {
+            snprintf(out, (size_t)(cap), "%s", "double");
+            return 0;
+        }
+        else if (__ct_match4.tag == 55) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 56) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 57) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 58) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 59) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 60) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 61) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 62) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 63) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 64) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 65) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 66) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 67) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 68) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 69) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 70) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 71) {
+{
+                int ad = 0;
                 char opty[MAX_TEXT];
                 char otag[MAX_TEXT];
                 char oval[MAX_TEXT];
@@ -8052,98 +8365,44 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_type(void *self, int
                 }
                 return 0;
             }
-        case N_CAST:
-            snprintf(out, (size_t)(cap), "%s", _self->arena->nodes[n].text);
-            return 0;
-        case N_TERN:
-{
-                char t1[MAX_TEXT];
-                char t2[MAX_TEXT];
-                int z1 = 0;
-                int z2 = 0;
-                if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].b, t1, sizeof(t1), (&z1)) != 0) {
-                    return (-1);
-                }
-                if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].c, t2, sizeof(t2), (&z2)) != 0) {
-                    return (-1);
-                }
-                if (strcmp(t1, t2) != 0) {
-                    return (-1);
-                }
-                snprintf(out, (size_t)(cap), "%s", t1);
-                return 0;
-            }
-        case N_UNARY:
-{
-                int op = (int)(_self->arena->nodes[n].aux);
-                if (((op == U_NOT) || (op == U_BNOT))) {
-                    snprintf(out, (size_t)(cap), "%s", "int");
-                    return 0;
-                }
-                if (op == U_NEG) {
-                    char t[MAX_TEXT];
-                    int z = 0;
-                    if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].a, t, sizeof(t), (&z)) != 0) {
-                        return (-1);
-                    }
-                    if (((strcmp(t, "int") != 0) && (strcmp(t, "double") != 0))) {
-                        return (-1);
-                    }
-                    snprintf(out, (size_t)(cap), "%s", t);
-                    return 0;
-                }
-                return (-1);
-            }
-        case N_BIN:
-{
-                int op = (int)(_self->arena->nodes[n].aux);
-                if (((((op >= B_LT) && (op <= B_NE)) || (op == B_AND)) || (op == B_OR))) {
-                    snprintf(out, (size_t)(cap), "%s", "int");
-                    return 0;
-                }
-                if ((((((((op >= B_ADD) && (op <= B_MOD)) || (op == B_XOR)) || (op == B_BAND)) || (op == B_BOR)) || (op == B_SHL)) || (op == B_SHR))) {
-                    char l[MAX_TEXT];
-                    char r[MAX_TEXT];
-                    int zl = 0;
-                    int zr = 0;
-                    if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].a, l, sizeof(l), (&zl)) != 0) {
-                        return (-1);
-                    }
-                    if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, _self->arena->nodes[n].b, r, sizeof(r), (&zr)) != 0) {
-                        return (-1);
-                    }
-                    if (((strcmp(l, "double") == 0) || (strcmp(r, "double") == 0))) {
-                        snprintf(out, (size_t)(cap), "%s", "double");
-                        return 0;
-                    }
-                    if (((strcmp(l, "int") == 0) && (strcmp(r, "int") == 0))) {
-                        snprintf(out, (size_t)(cap), "%s", "int");
-                        return 0;
-                    }
-                    return (-1);
-                }
-                return (-1);
-            }
-        case N_VAR:
-        case N_MEMBER:
-        case N_ARROW:
-        case N_DEREF:
-        case N_ADDR:
-        case N_INDEX:
-        case N_CALL:
-        case N_MCALL:
-        case N_ADTCTOR:
-            break;
-        default:
+        }
+        else if (__ct_match4.tag == 72) {
             return (-1);
+        }
+        else if (__ct_match4.tag == 73) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 74) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 75) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 76) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 77) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 78) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 79) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 80) {
+            return (-1);
+        }
+        else if (__ct_match4.tag == 81) {
+            return chk_type_static(_self, n, out, cap);
+        }
+        else if (__ct_match4.tag == 82) {
+            return (-1);
+        }
+        else {
+            return (-1);
+        }
     }
-    if ((!_self->__frontend_parse_exprops_vptr->static_ctype(_self, n, out, cap, (&ad), 0))) {
-        return (-1);
-    }
-    if (ad != 0) {
-        return (-1);
-    }
-    return 0;
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_assignable(void *self, const char * formal, const char * actual, int is_zero, int diag) {
@@ -8366,8 +8625,14 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_mcall_args(void *sel
 static int frontend_parse_Expr_frontend_parse_ExprTypes_lit_coerce(void *self, const char * type, int e) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     char base[MAX_TEXT];
+    char hb[MAX_TEXT];
+    char msg[MAX_TEXT];
     const char * p;
     size_t n;
+    if (((((type != 0) && (type[0] != 0)) && (strchr(type, '*') != 0)) && str_handle_value(_self, e, hb, sizeof(hb)))) {
+        snprintf(msg, sizeof(msg), "cannot convert '%s' to '%s': use cstr() at the C boundary", hb, type);
+        return tool_diag_ct_sem_error(_self->arena->nodes[e].line, _self->arena->nodes[e].num, msg, _self->sup->mem->path);
+    }
     if (((e < 0) || (_self->arena->nodes[e].kind != N_STR))) {
         return 0;
     }
@@ -9160,6 +9425,44 @@ static int type_is_owning(struct frontend_parse_Expr * self, const char * type) 
     }
     si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
     return ((si >= 0) && self->sym->structs[si].uses_drop);
+}
+static int str_handle_value(struct frontend_parse_Expr * self, int e, char * base, int cap) {
+    char ty[MAX_TEXT];
+    const char * p;
+    size_t n;
+    if (((base != 0) && (cap > 0))) {
+        base[0] = 0;
+    }
+    if ((((e < 0) || (base == 0)) || (cap < 2))) {
+        return 0;
+    }
+    if (self->arena->nodes[e].kind == N_CAST) {
+        return 0;
+    }
+    if (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, e, ty, sizeof(ty)) != 0) {
+        return 0;
+    }
+    p = ty;
+    while ((((*p) == ' ') || ((*p) == '\t'))) {
+        p++;
+    }
+    if (strncmp(p, "struct ", 7) == 0) {
+        p += 7;
+    }
+    n = strlen(p);
+    while (((n > 0) && ((p[(n - 1)] == ' ') || (p[(n - 1)] == '\t')))) {
+        n--;
+    }
+    if ((((n == 0) || (n >= (size_t)(cap))) || (memchr(p, '*', n) != 0))) {
+        return 0;
+    }
+    memcpy(base, p, n);
+    base[n] = 0;
+    if (((((strcmp(base, "String") == 0) || (strcmp(base, "Str") == 0)) || (strcmp(base, "U16String") == 0)) || (strcmp(base, "U16Str") == 0))) {
+        return 1;
+    }
+    base[0] = 0;
+    return 0;
 }
 static int check_refout_arg(struct frontend_parse_Expr * self, int a, int ann, const char * ptype) {
     int vi;
@@ -10174,6 +10477,16 @@ static int bplus_lit_type(const char * s, int n, char * out, int cap, int * is_z
         (*is_zero) = 1;
     }
     return 1;
+}
+static int chk_type_static(struct frontend_parse_Expr * self, int n, char * out, int cap) {
+    int ad;
+    if ((!self->__frontend_parse_exprops_vptr->static_ctype(self, n, out, cap, (&ad), 0))) {
+        return (-1);
+    }
+    if (ad != 0) {
+        return (-1);
+    }
+    return 0;
 }
 void frontend_parse_ct_expr_bind(void * arena, void * lex, void * sym, void * sup, void * cur_func, void * calls, void * ncalls, void * maps, void * nmaps) {
     frontend_parse_g_expr.arena = (struct runtime_arena_Arena *)(arena);

@@ -345,7 +345,7 @@ struct frontend_sym_Adt {
     char name[160];
     char full[160];
     int nvariants;
-    struct frontend_sym_AdtVariant variants[16];
+    struct frontend_sym_AdtVariant variants[96];
     int is_pub;
     int owner;
     char path[1024];

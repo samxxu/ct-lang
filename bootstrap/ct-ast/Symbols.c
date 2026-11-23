@@ -30,7 +30,7 @@
 #define MAX_STRUCT_IMPLS 64
 #define MAX_METH_ANN 256
 #define MAX_ADTS 64
-#define MAX_ADT_VARIANTS 16
+#define MAX_ADT_VARIANTS 96
 #define MAX_ADT_FIELDS 8
 struct ct_buf;
 struct ct_str_hdr;

@@ -681,8 +681,8 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
                 }
                 else {
                     if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "map"))) {
-                        struct frontend_parse_MapBuild * __ct_tmp0 = frontend_parse_mapbuild_get();
-                        n = __ct_tmp0->__frontend_parse_mapbuildops_vptr->parse(__ct_tmp0, _self->cur_unit);
+                        struct frontend_parse_MapBuild * __ct_tmp10 = frontend_parse_mapbuild_get();
+                        n = __ct_tmp10->__frontend_parse_mapbuildops_vptr->parse(__ct_tmp10, _self->cur_unit);
                     }
                     else {
                         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "enum"))) {
@@ -2784,7 +2784,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
             v = frontend_sym_ct_adt_add_variant(adt, _self->arena->nodes[tn].text, _self->arena->nodes[tn].text, _self->arena->nodes[tn].line, _self->arena->nodes[tn].num);
             if (v < 0) {
                 char msg[MAX_TEXT];
-                snprintf(msg, sizeof(msg), "too many variants for ADT '%s' (limit 16)", name);
+                snprintf(msg, sizeof(msg), "too many variants for ADT '%s' (limit 96)", name);
                 return tool_diag_ct_sem_error(_self->arena->nodes[tn].line, _self->arena->nodes[tn].num, msg, _self->mem->path);
             }
             adts = frontend_sym_ct_adts((&nadts));

@@ -2218,7 +2218,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match(void *self) {
     int line;
     int col;
     int i;
-    int covered[16];
+    int covered[96];
     int ncov;
     int wild;
     int seen_wild;
@@ -2286,7 +2286,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match(void *self) {
         return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
     }
     adts = frontend_sym_ct_adts((&nadts));
-    for (i = 0; ((i < adts[adt].nvariants) && (i < 16)); i++) {
+    for (i = 0; ((i < adts[adt].nvariants) && (i < 96)); i++) {
         covered[i] = 0;
     }
     ncov = 0;
