@@ -7,8 +7,8 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-23） |
 | 依据 | 外部 REQ 卡 W4/B 项；[节点协议评估](../../docs/reviews/2026-11-22-req-node-conversion-protocol-eval.md)；[spec §4.56](../../docs/language-spec.md) |
-| 状态 | deferred |
-| 处置证据 | **deferred**（触发：容器级联落地窗口；落地后 30 天内按 §唤醒条件重评估 JSON 树存储；负责人 DEV/REQ） |
+| 状态 | open |
+| 处置证据 | **accepted（2026-11-23 所有者：先落地 LANG-27；方案 B 在 LANG-27 合入后按 §唤醒条件评估，不提前承诺 v1.1 一步到位）** |
 
 ## 现状（机制核实）
 
@@ -37,6 +37,9 @@
 
 **容器级联（本卡 B 项）落地，或递归 ADT 的布局方案（指针/间接）先通过布局断言，
 以先发生者为准；触发后 30 天内重评估 JSON 树存储方案。**
+
+**所有者裁决（2026-11-23）**：顺序固定为 **先落地 LANG-27，再评估方案 B**；
+LANG-27 合入前不启动“无 arena”树存储方案，也不把 JSON v1.1 提案当作已批准。
 
 重评估对象：
 
@@ -68,6 +71,7 @@
 
 ## 关联
 
+- [JSON v1.1 提案评估](../../docs/reviews/2026-11-23-json-v11-proposal-eval.md)：方案 B 的前置评估；
 - [节点协议评估](../../docs/reviews/2026-11-22-req-node-conversion-protocol-eval.md)；
 - [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)（rejected，外部仓）；
 - [LANG-26](lang-26-binding-site-conversion.md)（D-020，v1.1 实现）；
