@@ -47,6 +47,21 @@ fail=0
 ok()  { printf 'ok   %s\n' "$1"; }
 bad() { printf 'FAIL %s%s\n' "$1" "${2:+: $2}"; fail=$((fail + 1)); }
 
+# ---------------------------------------------------------------------------
+# 0. no harness still builds ct-ast from the L1/L2 chain (v1-PH-0 S2b)
+# ---------------------------------------------------------------------------
+# L2 predates ADT/`match`, so every harness must go through seed-ct.sh. The
+# probe scans the run scripts; the only exceptions it accepts are this repo's
+# gen-seed bootstrap fallback and the two historical J-6 evidence drivers,
+# both of which carry an explicit `seedpaths: ... fallback` marker.
+if bash test/ast/seedpaths.sh >"$work/seedpaths.log" 2>&1; then
+    ok "no harness builds ct-ast from the L2 chain (seed-ct.sh is the only path)"
+else
+    bad "a harness still builds ct-ast from the L2 chain" \
+        "$(tail -n 2 "$work/seedpaths.log" | tr '\n' ' ')"
+    sed 's/^/    /' "$work/seedpaths.log"
+fi
+
 seed_files() { # dir -> the .c/.h files directly under it, sorted
     find "$1" -maxdepth 1 -type f \( -name '*.c' -o -name '*.h' \) | LC_ALL=C sort
 }
