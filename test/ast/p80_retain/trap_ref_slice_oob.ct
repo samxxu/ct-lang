@@ -1,0 +1,16 @@
+/* P-5.5 / P-5.6 (SH-117): a write through `ref int[]` stays a checked place.
+ * The index is out of bounds at run time, so the generated C must trap (the
+ * slice helper prints to stderr and exits non-zero) instead of corrupting the
+ * caller's array. */
+void write_at(ref int[] s, int i)
+{
+    s[i] = 99;
+}
+
+int main(void)
+{
+    int buf[2] = { 1, 2 };
+    int[] slice = buf;
+    write_at(slice, 5);
+    return buf[0];
+}

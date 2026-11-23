@@ -1,0 +1,37 @@
+/* P-5.2 (SH-117): the owning old value behind an `out` / `ref` string target.
+ *
+ * `slot = src` through an `out String` formal is an assignment to the caller's
+ * storage, so it follows the same contract order as a local reassignment:
+ * retain (or move) the right-hand side, hold the old handle, write, then
+ * release the old value. Without the release the caller's previous buffer
+ * leaks; without the retain the caller ends up with two handles and one
+ * reference. The alias call (`rebind(a, a)`) must stay a no-op on the count,
+ * not free the buffer the source still owns.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+
+void rebind(out String slot, ref String src)
+{
+    slot = src;
+}
+
+int main(void)
+{
+    Str la = "aa";
+    Str lb = "bbbb";
+    String a = la.to_string();
+    String b = lb.to_string();
+    printf("start a=%d b=%d live=%d\n", a.refs(), b.refs(), ct_str_live_count());
+    rebind(a, b);
+    printf("after a=%d b=%d live=%d len=%d\n", a.refs(), b.refs(),
+           ct_str_live_count(), a.len());
+    /* self-assignment: the target and the source are the same caller place */
+    rebind(a, a);
+    printf("alias a=%d b=%d live=%d len=%d\n", a.refs(), b.refs(),
+           ct_str_live_count(), a.len());
+    a.release();
+    b.release();
+    printf("end live=%d\n", ct_str_live_count());
+    return 0;
+}

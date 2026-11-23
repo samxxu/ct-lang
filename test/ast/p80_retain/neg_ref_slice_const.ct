@@ -1,0 +1,14 @@
+/* P-5.5 (SH-117) negative: a `const T[]` element is read-only, even when the
+ * slice reaches the callee through `ref`. The write must be a hard error. */
+void clobber(const int[] s)
+{
+    s[0] = 1;
+}
+
+int main(void)
+{
+    int a[2] = { 1, 2 };
+    int[] view = a;
+    clobber(view);
+    return 0;
+}

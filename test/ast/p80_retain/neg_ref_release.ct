@@ -1,0 +1,17 @@
+/* P-5.3 (SH-117) negative: a `ref String` alias is not an owner. Calling
+ * `release()` through it frees the caller's handle a second time (the
+ * assignment site already releases the old value), so the compiler must
+ * refuse it and point at the assignment form instead. */
+#include <stdio.h>
+
+void clear(ref String r)
+{
+    r.release();
+}
+
+int main(void)
+{
+    String s = "held";
+    clear(s);
+    return s.len();
+}

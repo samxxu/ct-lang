@@ -1,0 +1,39 @@
+/* P-5.4 (SH-117): an `out` assignment takes effect on every exit path.
+ *
+ * The early `return` (the error branch) runs after `len` / `echo` were
+ * assigned, so the caller must observe the new values -- the callee does not
+ * roll the assignment back. `echo` is an owning `out String`: the caller's
+ * previous buffer is released at the assignment site and the new one belongs
+ * to the caller even though the call reports failure.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+
+Result<int, char *> parse(Str s, out int len, out String echo)
+{
+    if (s.len == 0) {
+        len = -1;
+        echo = s.to_string();
+        return (Result<int, char *>){ 0, 0, "empty" };
+    }
+    len = s.len;
+    echo = s.to_string();
+    return (Result<int, char *>){ 1, 0, 0 };
+}
+
+int main(void)
+{
+    Str lit = "old";
+    String echo = lit.to_string();
+    int n = 7;
+    Result<int, char *> r = parse("", n, echo);
+    printf("empty ok=%d len=%d echo=%d live=%d\n", r.ok, n, echo.len,
+           ct_str_live_count());
+    n = 7;
+    r = parse("abc", n, echo);
+    printf("abc ok=%d len=%d echo=%d first=%d live=%d\n", r.ok, n, echo.len,
+           echo.data[0], ct_str_live_count());
+    echo.release();
+    printf("end live=%d\n", ct_str_live_count());
+    return 0;
+}

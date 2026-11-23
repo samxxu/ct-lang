@@ -21,6 +21,13 @@
 #   - the negatives the contract closes: a borrowed view escaping as an owning
 #     handle, releasing a borrowed container view (a double free), and a `goto`
 #     across an owning `String` scope (a hard error, no silent leak).
+#   - SH-117 P-5.2…P-5.6: the `out` / `ref` owning assignment keeps the same
+#     retain → hold old → write → release-old order (old value released, alias
+#     self-assignment safe), a `ref String` assignment is legal, an explicit
+#     release through a `ref` alias is refused, `out` assignments on the error
+#     path stay visible to the caller, and the borrowed types allowed as
+#     `out` / `ref` (`Str`, `int[]`) keep their immutability / bounds rules.
+#     The same positive cases run under ASan / UBSan.
 #
 # Usage: sh test/ast/p80_retain.sh <ct-ast>
 set -u
@@ -89,6 +96,35 @@ run_case field_branch_init
 run_case field_branch_straight
 run_case field_branch_else
 run_case field_branch_two
+# P-5.2 / P-5.3 / P-5.4 / P-5.5 (SH-117): the `out` / `ref` owning assignment
+# trace, the `ref` assignment, the error-path handover and the borrowed-type
+# whitelist. Every positive case also runs under ASan / UBSan (P-5.6).
+run_case out_ref_owning
+run_case ref_assign
+run_case out_error_path
+run_case borrow_out_ref
+
+# P-5.5 (SH-117): a write through `ref int[]` stays a checked place. The index
+# is out of bounds at run time, so the generated C traps instead of touching
+# the caller's array.
+trap_case() {
+    name=$1
+    if ! "$ctast" --allow-c-boundary "test/ast/p80_retain/$name.ct" -o "$work/$name.c" >"$work/$name.log" 2>&1; then
+        bad "$name compile" "$(sed -n '1,4p' "$work/$name.log")"; return
+    fi
+    if ! "$cc" -Wall -Wextra -std=c99 "$work/$name.c" -o "$work/$name" 2>"$work/$name.cc.err"; then
+        bad "$name cc" "$(sed -n '1,4p' "$work/$name.cc.err")"; return
+    fi
+    "$work/$name" >"$work/$name.out" 2>"$work/$name.err"
+    if [ $? -eq 0 ]; then
+        bad "$name" "did not trap (exit 0)"
+    elif ! grep -Fq "slice index 5 out of bounds (length 2)" "$work/$name.err"; then
+        bad "$name" "wrong trap: $(head -2 "$work/$name.err")"
+    else
+        ok "$name (out-of-bounds ref slice write trapped)"
+    fi
+}
+trap_case trap_ref_slice_oob
 
 neg() {
     name=$1; src=$2; pattern=$3; why=$4
@@ -118,6 +154,18 @@ neg field_copy test/ast/p80_retain/field_copy.ct \
     "whole-struct assignment" "C-4: whole-struct copy of an owning field"
 neg field_goto_struct test/ast/p80_retain/field_goto_struct.ct \
     "a goto cannot cross an owning String scope" "C-4: goto over a struct with an owning field"
+# P-5.3 (SH-117): a `ref` alias carries no ownership; the assignment site
+# releases the old value, so an explicit release through the alias is refused.
+neg neg_ref_release test/ast/p80_retain/neg_ref_release.ct \
+    "cannot release through a 'ref' parameter" "P-5.3: explicit release through ref"
+# P-5.5 (SH-117): the borrowed types accepted as out/ref keep their own
+# immutability and shape rules.
+neg neg_out_str_write test/ast/p80_retain/neg_out_str_write.ct \
+    "read-only subscript" "P-5.5: write through out Str"
+neg neg_ref_slice_const test/ast/p80_retain/neg_ref_slice_const.ct \
+    "cannot write to an element of a const slice" "P-5.5: const slice write behind a parameter"
+neg neg_ref_array test/ast/p80_retain/neg_ref_array.ct \
+    "ref/out parameters cannot be arrays or function pointers" "P-5.5: C array as ref"
 
 [ "$fail" -eq 0 ] && echo "p80_retain: OK"
 exit "$fail"

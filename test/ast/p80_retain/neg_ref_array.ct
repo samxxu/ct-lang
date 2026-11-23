@@ -1,0 +1,13 @@
+/* P-5.5 (SH-117) negative: the `ref` annotation does not turn a C array into
+ * a slice. `ref int a[3]` is refused like every array-shaped ref/out formal. */
+void bump(ref int a[3])
+{
+    a[0] = a[0] + 1;
+}
+
+int main(void)
+{
+    int a[3] = { 1, 2, 3 };
+    bump(a);
+    return 0;
+}

@@ -1,0 +1,46 @@
+/* P-5.5 (SH-117): borrowed types as `out` / `ref` parameters.
+ *
+ * - `out Str` writes a borrowed view into the caller's place; a view carries
+ *   no ownership, so the caller's slot needs no initial value and nothing is
+ *   released.
+ * - `ref int[]` passes a slice by reference: the callee writes through
+ *   `s[i]`, which stays a checked place (the bounds trap is a separate case).
+ * Both are on the whitelist; a `ref Str` assignment is the same shape for the
+ * other borrowed type.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+
+void pick(out Str r, Str src)
+{
+    r = src;
+}
+
+void alias(ref Str r, Str src)
+{
+    r = src;
+}
+
+void bump(ref int[] s)
+{
+    s[0] = s[0] + 1;
+    s[1] = s[1] + 10;
+}
+
+int main(void)
+{
+    Str out;
+    Str slit = "hello";
+    Str view = "view";
+    Str other;
+    int buf[2] = { 1, 2 };
+    int[] slice = buf;
+
+    pick(out, slit);
+    printf("out len=%d first=%d\n", out.len, out.data[0]);
+    alias(other, view);
+    printf("ref str len=%d first=%d\n", other.len, other.data[0]);
+    bump(slice);
+    printf("slice a0=%d a1=%d view len=%d\n", buf[0], buf[1], slice.len);
+    return 0;
+}

@@ -1,0 +1,29 @@
+/* P-5.3 (SH-117): a `ref String` assignment is legal and follows the same
+ * contract order as a local reassignment. The explicit `release` through a
+ * `ref` alias is the one form the language refuses (`neg_ref_release`): the
+ * callee does not own the caller's handle, and the assignment site already
+ * releases the old value.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+
+void copy_into(ref String dst, ref String src)
+{
+    dst = src;
+}
+
+int main(void)
+{
+    Str la = "one";
+    Str lb = "three";
+    String a = la.to_string();
+    String b = lb.to_string();
+    printf("start a=%d b=%d live=%d\n", a.refs(), b.refs(), ct_str_live_count());
+    copy_into(a, b);
+    printf("after a=%d b=%d live=%d len=%d\n", a.refs(), b.refs(),
+           ct_str_live_count(), a.len());
+    a.release();
+    b.release();
+    printf("end live=%d\n", ct_str_live_count());
+    return 0;
+}

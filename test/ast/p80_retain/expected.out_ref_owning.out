@@ -1,0 +1,4 @@
+start a=1 b=1 live=2
+after a=2 b=2 live=1 len=4
+alias a=2 b=2 live=1 len=4
+end live=0

@@ -1,0 +1,14 @@
+/* P-5.5 (SH-117) negative: `Str` is immutable even behind `out`. A write
+ * through an `out Str` formal must be refused at the subscript, not emitted
+ * as a C write to the borrowed view. */
+void clobber(out Str r)
+{
+    r[0] = 'x';
+}
+
+int main(void)
+{
+    Str v;
+    clobber(v);
+    return 0;
+}

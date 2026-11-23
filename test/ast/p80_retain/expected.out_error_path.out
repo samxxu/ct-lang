@@ -1,0 +1,3 @@
+empty ok=0 len=-1 echo=0 live=1
+abc ok=1 len=3 echo=3 first=97 live=1
+end live=0
