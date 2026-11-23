@@ -48,6 +48,8 @@ version-minor: 0
 | S1 `install.sh` 切换 | 删 L0→L1→L2 段，改 `cc bootstrap → ct`；`ctc` 别名 | 干净目录 `./install.sh --prefix /tmp/ctv1` 后 `/tmp/ctv1/ct -v` = `v1.0.0` | S |
 | S2 构建路径切换 | `install.sh` 与 `check-ast` 的 ct-ast 段改由 seed 构建；`ct-tour` 第 7 步同步；L1/L2 保留为 oracle | `check-all` 绿；`grep -n 'l2' install.sh` 无构建 ct-ast 的引用 | M |
 | S3 门禁 | 新 gate 13 `check-seed.sh`；gate 2/3/4/5 保留且绿；gate 12 独立可跑 | 门禁计数 13 同步四处文档；负例（改一个字节）判红 | M |
+| S0.5a `match` 发射器 | 76 个 `em_*` 切片改为「一 kind 一臂、共用体调同一 helper」的穷尽 `match`；`p88_emit` 清单改臂 | `p88_emit` 红→绿；66 语料逐字节；`match does not cover variant` 负例 | M |
+| S0.5b `match` 判别助手 | `expr_ctype`/`maybe_box`/`chk_type` 的 kind 判别改为穷尽 `match`；负例覆盖缺臂 | 红→绿；345 诊断逐字；自举 2 轮逐字节 | M |
 | S4 v1.0 硬门禁证据 | 全量语料 FP=0 的命令与原始输出（[SH-118](../../../issues/selfhost/sh118-full-corpus-fp-zero.md)）；J-6 剩余夹具与 J-4b 条款（[SH-117](../../../issues/selfhost/sh117-j6-local-closeout.md)）；P-3.5 处置 | 证据入库；J-6 台账无 `缺失` | L |
 | S5 文档/版本/收口 | README/spec/安装与迁移说明；`v1.0.0` bump；新 MAJOR 签字 decision；tag | `check-all` 13/13 绿；README 版本断言通过；tag 指向收口提交 | M |
 
@@ -67,6 +69,7 @@ version-minor: 0
 | E-V1-7 | DOC-76/77/79 的兼容承诺、能力节号、冻结清单断言全绿；README 版本 = `v1.0.0` |
 | E-V1-8 | 单卡回滚：`bootstrap/` + `install.sh` + 门禁改动同一提交回滚后，`v0.88.3` 链路仍可用 |
 | E-V1-9 | tag 前 3 轮自举逐字节一致（复用 `check-ast` fixpoint，轮数参数化） |
+| E-V1-10 | 76 个发射器切片与 `expr_ctype`/`maybe_box`/`chk_type` 已改为穷尽 `match`；`p88_emit` 以臂计数；缺臂负例红；66 语料逐字节 |
 
 ## 4 风险与回滚
 
