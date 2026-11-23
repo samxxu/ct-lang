@@ -34,6 +34,7 @@ import frontend::sym::SymbolsTypeText;
    program, not a per-unit allowance. The table itself is MAX_FUNCS + 64 rows.
    Raised 256 -> 512 when ct-ast hit the 256 ceiling exactly (Phase 54 S0). */
 #define MAX_FUNCS   512
+#define MAX_FUNCS_MAX 65536
 #define MAX_VARS    4096
 #define MAX_SCOPE   256
 #define MAX_TYPES   256
@@ -346,6 +347,7 @@ pub trait SymbolOps {
     int  find_var(const char *name);
     int  var_type(const char *name, char *out, int cap);
     int  find_func(const char *cname);
+    int  ensure_fn_capacity(int need);
     /* Phase 78 S2b: remember / look up an inherent method's ref/out
        annotations. Both sides normalise the host spelling (struct/union tag
        prefix and generic arguments are dropped). */
@@ -578,6 +580,7 @@ pub struct Symbols {
        into __DATA. Their caps stay literal, mirroring the MAX_* values above. */
     struct Fn   *funcs;
     int  nfunc;
+    int  fncap;
     /* Phase 41: any ct_atomic_* builtin was lowered in this program, so the
        emitter must write the static inline helper block into each .c. */
     int  atomic_used;
@@ -687,6 +690,26 @@ impl SymbolOps for Symbols {
        only locals and parameters; every declaration category shares this one
        predicate now, so a global, function, type or field cannot collide with
        the generated C either. */
+    /* SH-109: grow the function table on demand instead of treating 512 as
+       a hard whole-program limit. 512 is the initial capacity; the safety
+       valve is MAX_FUNCS_MAX (65536). */
+    int ensure_fn_capacity(int need)
+    {
+        int cap;
+        struct Fn *old;
+        if (need <= self->fncap) return 0;
+        cap = self->fncap > 0 ? self->fncap : MAX_FUNCS + 64;
+        while (cap < need && cap < MAX_FUNCS_MAX) cap *= 2;
+        if (cap > MAX_FUNCS_MAX) cap = MAX_FUNCS_MAX;
+        if (need > cap) return -1;
+        old = self->funcs;
+        self->funcs = realloc(old, (size_t)cap * sizeof(*self->funcs));
+        if (!self->funcs) { self->funcs = old; return -1; }
+        memset(self->funcs + self->fncap, 0, (size_t)(cap - self->fncap) * sizeof(*self->funcs));
+        self->fncap = cap;
+        return 0;
+    }
+
     int reserved_name(const char *name)
     {
         (void)self;
@@ -1796,6 +1819,7 @@ static int symbols_grow(struct Symbols *self)
     if (!self->funcs) {
         self->funcs = calloc(MAX_FUNCS + 64, sizeof(*self->funcs));
         if (!self->funcs) return -1;
+        self->fncap = MAX_FUNCS + 64;
     }
     if (!self->vars) {
         self->vars = calloc(MAX_VARS, sizeof(*self->vars));

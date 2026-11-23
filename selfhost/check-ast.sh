@@ -5755,12 +5755,17 @@ cap_check params "too many parameters in unit 'cap_params.ct' (limit 16)" "$work
 cap_check methods "too many trait methods" "$work/cap_methods.ct"
 {
     i=0
-    while [ "$i" -lt 512 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
+    while [ "$i" -lt 1200 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
     printf 'int main(void) { return 0; }\n'
 } >"$work/cap_funcs.ct"
-cap_check funcs "too many functions (limit 512, whole program)" "$work/cap_funcs.ct"
-# The boundary itself: 511 helpers plus `main` is exactly the cap and must build,
-# while one more is refused above. The budget is whole-program, not per unit.
+if "$work/ct-ast" "$work/cap_funcs.ct" -o "$work/cap-funcs.c" \
+        >"$work/cap-funcs.out" 2>"$work/cap-funcs.err"; then
+    ok "cap funcs (1200 functions grow past the initial 512)"
+else
+    bad "cap funcs (1200 functions grow past the initial 512)" "$(cat "$work/cap-funcs.err")"
+fi
+# The initial table is 512 rows but the budget now grows on demand (SH-109);
+# the safety valve is MAX_FUNCS_MAX (65536). The old 512 hard-fail is gone.
 {
     i=0
     while [ "$i" -lt 511 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done

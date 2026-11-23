@@ -25,6 +25,7 @@ import tool::diag::Diag;
 /* Mirror of Symbols.h.ct's whole-program function budget (macros do not cross
    units). Raised 256 -> 512 together with the other three mirrors. */
 #define MAX_FUNCS 512
+#define MAX_FUNCS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_TEXT 160
 #define T_EOF 0
@@ -496,8 +497,8 @@ impl SupportOps for ParseSupport {
         if (i >= 0 && self->sym->funcs[i].is_pub) pub_now = 1;
         fresh = 0;
         if (i < 0) {
-            if (self->sym->nfunc >= self->sym->nfunc_base + MAX_FUNCS) {
-                snprintf(msg, sizeof msg, "too many functions (limit %d, whole program)", MAX_FUNCS);
+            if (self->sym->ensure_fn_capacity(self->sym->nfunc + 1) != 0) {
+                snprintf(msg, sizeof msg, "too many functions (limit %d, whole program)", MAX_FUNCS_MAX);
                 return self->fail(msg);
             }
             i = self->sym->nfunc;
