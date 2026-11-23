@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=9772 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=9797 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=51449 io_cap=1024
+     emitted_before=48223 emitted_after=51459 io_cap=1024
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
@@ -17,8 +17,8 @@
       检查增加 450 行发射 C；发射器本身未变)
      (emitted_after 于 DOC-87 Stage 1 后复测：内置层查找改为 lib/core + CT_CORE_DIR，
       共享 `find_builtin` 增加 58 行发射 C；发射器本身未变)
-     (SH-111 后复测：发射前不变量检查进入 Emitter.h.ct，emitter_after 9512 -> 9772，
-      发射 C 同批增长；LANG-25 只改诊断映射与文本/JSON 通道，emitted_after 复测为 51449)
+     (SH-111 后复测：发射前不变量检查进入 Emitter.h.ct，emitter_after 9512 -> 9797（含深语句链的迭代遍历修正），
+      发射 C 同批增长；LANG-25 只改诊断映射与文本/JSON 通道，emitted_after 复测为 51459)
      (emitted_after 于 DOC-87 Stage 2 后复测：`core::` 源级命名空间与声明查重增加 58 行
       发射 C；发射器本身未变)
      (emitted_after 于 LANG-23 后复测：内建 trait 可见声明的解析/丢弃增加 23 行发射 C；
