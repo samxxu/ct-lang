@@ -198,15 +198,8 @@ FRAGMENT_EXEMPT = {
     "issues/docs/doc61-roadmap-phase18-english.md": {
         "../../docs/roadmap.md#L975",
     },
-    "issues/docs/doc67-phase26-doc-impl-mismatch.md": {
-        "../../docs/language-spec.md#L4163-L4174",
-        "../../docs/language-spec.md#L4168",
-    },
     "issues/docs/doc68-vscode-generic-jump-index.md": {
         "../../editors/vscode/extension.js#L373-L390",
-    },
-    "issues/docs/doc71-range-dollar-is-member-not-index.md": {
-        "../../docs/language-spec.md#L4248",
     },
     "issues/docs/readme-passthrough-scope.md": {"../../README.md#L513"},
     "issues/docs/readme-quickstart-branch.md": {"../../README.md#L477-L486"},
