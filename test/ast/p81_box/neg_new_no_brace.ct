@@ -2,6 +2,6 @@
 struct R { int id; }
 int main(void)
 {
-    box<R> b = new R;
+    Box<R> b = new R;
     return 0;
 }

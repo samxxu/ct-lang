@@ -1,7 +1,7 @@
 #!/bin/sh
-# PH-81 / S1: `box<T>` + `new` (E81-1…E81-6).
+# PH-81 / S1: `Box<T>` + `new` (E81-1…E81-6), plus the LANG-24 Stage A alias.
 #
-#   - E81-1: the box handle is two machine words, the shared `{refs, aux}`
+#   - E81-1: the Box handle is two machine words, the shared `{refs, aux}`
 #     header is 8 bytes immediately before the payload, and release runs the
 #     payload's owning fields by static type;
 #   - E81-2: `new T { ... }` accepts a named struct only, shares the brace
@@ -79,6 +79,65 @@ run_case vecbox
 run_case boxstr
 run_case cycle
 run_case ctx
+run_case alias
+run_case ident
+
+# LANG-24 Stage A: `box<T>` is the deprecated alias. Each use prints exactly one
+# warning; the canonical `Box<T>` spelling is silent. The generated symbols stay
+# `Box_*`, so the alias is a parse-level only spelling (v1.1 removes it).
+if "$ctast" --allow-c-boundary test/ast/p81_box/alias.ct -o "$work/alias.warn.c" \
+        >"$work/alias.warn.log" 2>&1; then
+    nwarn=$(grep -cF "warning: 'box<T>' is deprecated; write 'Box<T>'" "$work/alias.warn.log")
+    if [ "$nwarn" -eq 2 ]; then
+        ok "box<T> alias warns once per use (2 uses -> 2 warnings)"
+    else
+        bad "box<T> alias warning count" "expected 2, got $nwarn: $(head -4 "$work/alias.warn.log")"
+    fi
+else
+    bad "box<T> alias compile" "$(head -4 "$work/alias.warn.log")"
+fi
+if "$ctast" --allow-c-boundary test/ast/p81_box/record.ct -o "$work/record.nowarn.c" \
+        >"$work/record.nowarn.log" 2>&1; then
+    if grep -Fq "deprecated" "$work/record.nowarn.log"; then
+        bad "Box<T> canonical spelling silent" "$(head -4 "$work/record.nowarn.log")"
+    else
+        ok "Box<T> canonical spelling does not warn"
+    fi
+else
+    bad "Box<T> canonical compile" "$(head -4 "$work/record.nowarn.log")"
+fi
+
+# LANG-24 Stage A: the generated C symbols are `Box_<payload>__*`; no old
+# `box_Record` / `ct_box_hdr` spelling may survive.
+if "$ctast" --allow-c-boundary test/ast/p81_box/record.ct -o "$work/record.sym.c" \
+        >"$work/record.sym.log" 2>&1; then
+    if grep -q 'Box_Record__new' "$work/record.sym.c" \
+       && grep -q 'Box_Record__payload_release' "$work/record.sym.c"; then
+        ok "--emit-c uses Box_Record__new / Box_Record__payload_release"
+    else
+        bad "--emit-c Box_* symbols" "$(grep -E 'Record__(new|payload_release)' "$work/record.sym.c" | head -3)"
+    fi
+    if grep -q 'box_Record' "$work/record.sym.c"; then
+        bad "--emit-c has no box_Record" "$(grep -m1 'box_Record' "$work/record.sym.c")"
+    else
+        ok "--emit-c has no box_Record"
+    fi
+    if grep -q 'ct_box_hdr' "$work/record.sym.c"; then
+        bad "--emit-c has no ct_box_hdr" "$(grep -m1 'ct_box_hdr' "$work/record.sym.c")"
+    else
+        ok "--emit-c has no ct_box_hdr"
+    fi
+else
+    bad "--emit-c symbol fixture" "$(head -4 "$work/record.sym.log")"
+fi
+
+# LANG-24 Stage A: the built-in unit declares the PascalCase template.
+if grep -q '^pub struct Box<T>' lib/core/Box.h.ct \
+   && grep -q '^impl<T> Box<T>' lib/core/Box.h.ct; then
+    ok "lib/core/Box.h.ct declares pub struct Box<T> and impl<T> Box<T>"
+else
+    bad "lib/core/Box.h.ct Box<T> declaration" "$(grep -n 'struct Box\|impl<T> Box' lib/core/Box.h.ct)"
+fi
 
 # E81-4: the borrowed view is invalidated by release; ASan must catch it.
 if "$ctast" --allow-c-boundary test/ast/p81_box/uaf.ct -o "$work/uaf.c" >"$work/uaf.log" 2>&1 \
@@ -109,7 +168,7 @@ neg neg_new_string "'new String' / 'new Str' is not supported" "new of a built-i
 neg neg_new_int "'new' only accepts a named struct type" "new of a scalar"
 neg neg_new_vec "instantiate the generic first and box the value" "new of a container"
 neg neg_new_no_brace "needs a brace initializer" "new without a brace list"
-neg neg_box_slice "cannot be stored in box<T>" "slice payload"
+neg neg_box_slice "cannot be stored in Box<T>" "slice payload"
 neg neg_box_str "a borrowed view cannot be boxed" "Str payload"
 neg neg_field_str "cannot be a struct field" "borrowed Str field"
 neg neg_raw_field "raw implementation fields" "raw .ptr on a box"
@@ -130,20 +189,20 @@ if grep -q 'v0\.88\.3' README.md && grep -q 'v0\.88\.3' docs/README.md; then
 else
     bad "README version"
 fi
-if grep -q '^### 4\.71 .*box<T>' docs/language-spec.md; then
-    ok "spec has the box<T>/new section (4.71)"
+if grep -q '^### 4\.71 .*Box<T>' docs/language-spec.md; then
+    ok "spec has the Box<T>/new section (4.71)"
 else
     bad "spec section 4.71 missing"
 fi
-if grep -q '^## 17\. .*box<T>' docs/tutorial.md; then
-    ok "tutorial has the box<T>/new section (17)"
+if grep -q '^## 17\. .*Box<T>' docs/tutorial.md; then
+    ok "tutorial has the Box<T>/new section (17)"
 else
     bad "tutorial section 17 missing"
 fi
-if grep -q '`box<T>`' docs/package-guide.md && grep -q '不是 C ABI' docs/package-guide.md; then
-    ok "package-guide records the box C ABI boundary"
+if grep -q '`Box<T>`' docs/package-guide.md && grep -q '不是 C ABI' docs/package-guide.md; then
+    ok "package-guide records the Box C ABI boundary"
 else
-    bad "package-guide box C ABI note"
+    bad "package-guide Box C ABI note"
 fi
 if grep -q 'Phase 81' docs/roadmap.md && grep -q 'v0\.81\.0' docs/roadmap.md; then
     ok "roadmap lists Phase 81 with v0.81.0"

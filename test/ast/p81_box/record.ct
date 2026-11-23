@@ -1,6 +1,6 @@
 /* PH-81 E81-1/E81-2: `new T { ... }` is the only construction form, the brace
  * list is the same one `T x = { ... }` uses (positional and designated), and
- * `b.f` / `b.f = ...` auto-dereference the handle. `box<T>` shares the
+ * `b.f` / `b.f = ...` auto-dereference the handle. `Box<T>` shares the
  * `{refs, aux}` header: releasing the last handle releases the payload's
  * owning fields. */
 #include <stdio.h>
@@ -12,7 +12,7 @@ int main(void)
 {
     String lit = "owned";
     String owned = lit.to_string();
-    box<Record> r = new Record { 7, owned };
+    Box<Record> r = new Record { 7, owned };
     printf("id=%d tag=%d refs=%d tag_refs=%d\n",
            r.id, r.tag.len(), r.refs(), r.tag.refs());
     owned.release();
@@ -21,12 +21,12 @@ int main(void)
     r.id = 8;
     printf("id_after_set=%d\n", r.id);
 
-    box<Point> p = new Point { .y = 2, .x = 1 };
+    Box<Point> p = new Point { .y = 2, .x = 1 };
     printf("point=%d,%d\n", p.x, p.y);
     p.x = 5;
     printf("point_after_set=%d,%d\n", p.x, p.y);
 
-    box<Record> q = new Record { .tag = "literal", .id = 9 };
+    Box<Record> q = new Record { .tag = "literal", .id = 9 };
     printf("designated id=%d tag=%d tag_refs=%d\n", q.id, q.tag.len(), q.tag.refs());
 
     printf("before release refs=%d live=%d\n", r.refs(), ct_str_live_count());

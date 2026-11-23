@@ -233,7 +233,7 @@ P41 = "int f(void) { atomic int n = 0; ct_atomic_store(&n, 1); return ct_atomic_
 NEW088 = "\n".join([
     "bool f(ref int r, out int v)",
     "{",
-    "    box<Record> h = new Record { 7, \"x\" };",
+    "    Box<Record> h = new Record { 7, \"x\" };",
     "    String s = \"hi\";",
     "    Str view = s.as_str();",
     "    int[] nums = { 1, 2 };",
@@ -255,6 +255,11 @@ MAP = "\n".join([
     "    write(buf, len) -> uart_put;",
     "    dog_get()->hi();",
 ])
+# LANG-24 Stage A: `Box` is the canonical spelling, `box` stays a deprecated
+# alias; a bare `Box box;` / `int box;` / `r.box` is ordinary code.
+BOX_ALIAS = "box<Record> r = new Record { 7, \"x\" };"
+BOX_BARE = "struct Box { int box; } int main(void) { Box box = { 1 }; return box.box; }"
+
 # New tokens inside a string / comment are not code, exactly like `$` above.
 QUOTED = "\n".join([
     'char *s = "T id<T>(T x) loop(2..5) => _Static_assert '
@@ -953,7 +958,7 @@ def main():
         print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
     check("`ref` / `out` -> ct-ref + ct-out",
           "ct-ref" in by_line[1] and "ct-out" in by_line[1], str(by_line[1]))
-    check("`box<T>` / `new` -> ct-box-type + ct-new",
+    check("`Box<T>` / `new` -> ct-box-type + ct-new",
           "ct-box-type" in by_line[3] and "ct-new" in by_line[3], str(by_line[3]))
     check("`String` -> ct-owned-type", "ct-owned-type" in by_line[4], str(by_line[4]))
     check("`Str` -> ct-owned-type", "ct-owned-type" in by_line[5], str(by_line[5]))
@@ -967,6 +972,21 @@ def main():
     check("`a.m()$x.n()` -> ct-materialize, not ct-range-index",
           "ct-materialize" in by_line[13] and "ct-range-index" not in by_line[13],
           str(by_line[13]))
+    print()
+    print("synthetic LANG-24 alias and bare-identifier forms:")
+    rows = scan(BOX_ALIAS, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("`box<T>` alias still -> ct-box-type",
+          "ct-box-type" in by_line[1], str(by_line[1]))
+    rows = scan(BOX_BARE, rules)
+    by_line = {n: [h[0] for h in hs] for n, _, hs in rows}
+    for n, line, hits in rows:
+        print("    %3d: %-22s %s" % (n, ", ".join(h[0] for h in hits), line.strip()))
+    check("bare `Box` / `box` identifiers are not ct-box-type",
+          "ct-box-type" not in by_line[1], str(by_line[1]))
+
 
     # v0.26.4 / DOC-68: the go-to-definition scanner lives in ../indexer.js and
     # is asserted by a plain Node script. Node is not a prerequisite of the

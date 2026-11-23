@@ -2,10 +2,10 @@
  * makes the two nodes own each other; releasing both handles leaves each
  * payload at refs=1, with no compiler warning and no run-time cycle check. */
 #include <stdio.h>
-struct Node { int id; box<Node> next; }
+struct Node { int id; Box<Node> next; }
 int main(void) {
-    box<Node> a = new Node { .id = 1 };
-    box<Node> b = new Node { .id = 2 };
+    Box<Node> a = new Node { .id = 1 };
+    Box<Node> b = new Node { .id = 2 };
     a.next = b.retain();
     b.next = a.retain();
     printf("before: a_refs=%d b_refs=%d\n", a.refs(), b.refs());

@@ -1,29 +1,29 @@
-/* PH-81 E81-1/E81-4: `box<T>` is a first-class element and field. The element
+/* PH-81 E81-1/E81-4: `Box<T>` is a first-class element and field. The element
  * glue retains on insertion and releases on container release; a `get` copy is
  * a second handle, so the caller retains it explicitly (the `Vec.get` contract
  * for every owning element). */
 #include <stdio.h>
 
 struct Item { int id; String name; }
-struct Holder { box<Item> child; int n; } use Drop
+struct Holder { Box<Item> child; int n; } use Drop
 
 int main(void)
 {
-    Vec<box<Item> > v;
+    Vec<Box<Item> > v;
     v.h = 0;
-    box<Item> a = new Item { 1, "one" };
+    Box<Item> a = new Item { 1, "one" };
     v.push(a);
     printf("after push a_refs=%d len=%d\n", a.refs(), v.len());
     a.release();
 
-    box<Item> got = v.get(0).retain();
+    Box<Item> got = v.get(0).retain();
     printf("got id=%d refs=%d name=%d\n", got.id, got.refs(), got.name.len());
     got.release();
     printf("after got release len=%d\n", v.len());
     v.release();
     printf("after v release len=%d\n", v.len());
 
-    box<Item> keep = new Item { 2, "two" };
+    Box<Item> keep = new Item { 2, "two" };
     own Holder *h = malloc(sizeof(struct Holder));
     h->child = keep.retain();
     h->n = 3;

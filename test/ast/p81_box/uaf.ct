@@ -4,7 +4,7 @@
 #include <stdio.h>
 struct R { int id; String tag; }
 int main(void) {
-    box<R> b = new R { 1, "x" };
+    Box<R> b = new R { 1, "x" };
     R *p = b.at();
     b.release();
     printf("%d\n", p->id);

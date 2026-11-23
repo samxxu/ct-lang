@@ -1,6 +1,6 @@
-/* E81-3 negative: the borrowed `Str` cannot be a box payload. */
+/* E81-3 negative: the borrowed `Str` cannot be a Box payload. */
 int main(void)
 {
-    box<Str> b;
+    Box<Str> b;
     return 0;
 }

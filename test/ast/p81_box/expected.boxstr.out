@@ -1,4 +1,4 @@
-len=2 box_refs=1 s_refs=2 live=1
+len=2 Box_refs=1 s_refs=2 live=1
 after s release len=2 live=1
 borrowed len=2
 after b release refs=0 live=0

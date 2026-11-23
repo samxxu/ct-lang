@@ -1,4 +1,4 @@
 /* E81-3 negative: a borrowed `Str` cannot be a struct field, which is the
- * declaration-layer refusal `box<Bad>` relies on. */
+ * declaration-layer refusal `Box<Bad>` relies on. */
 struct Bad { Str tag; }
 int main(void) { return 0; }

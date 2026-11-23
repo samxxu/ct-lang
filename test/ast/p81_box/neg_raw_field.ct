@@ -3,7 +3,7 @@
 struct R { int id; }
 int main(void)
 {
-    box<R> b = new R { 1 };
+    Box<R> b = new R { 1 };
     R *p = b.ptr;
     return 0;
 }

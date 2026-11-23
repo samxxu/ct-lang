@@ -1,0 +1,18 @@
+/* LANG-24 Stage A negative: neither `Box` nor `box` is a keyword. A user
+ * struct named Box, its field `box`, a local `int box`, and the declaration
+ * `Box box;` all stay ordinary identifiers. */
+#include <stdio.h>
+
+struct Box { int box; }
+
+int main(void)
+{
+    int box = 3;
+    struct Box r = { .box = 4 };
+    printf("int=%d field=%d\n", box, r.box);
+    {
+        Box box = { .box = 5 };
+        printf("Box box field=%d\n", box.box);
+    }
+    return 0;
+}

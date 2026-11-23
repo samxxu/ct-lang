@@ -1,6 +1,6 @@
-/* E81-3 negative: a slice is a borrowed view and cannot be a box payload. */
+/* E81-3 negative: a slice is a borrowed view and cannot be a Box payload. */
 int main(void)
 {
-    box<int[]> b;
+    Box<int[]> b;
     return 0;
 }
