@@ -451,7 +451,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | --- | --- |
 | 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-88 |
 | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
-| 门禁入口 | `tools/check.sh g0`…`g9`（治理门禁；g2 已机械校验）；`selfhost/check-all.sh`（11 道硬门禁，保持不变） |
+| 门禁入口 | `tools/check.sh g0`…`g9`（治理门禁；g2 已机械校验）；`selfhost/check-all.sh`（12 道硬门禁，保持不变） |
 | 文档 snippet | 缺失 |
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
 | 决策记录 | `docs/decisions/D-<n>.md`；phase 决策写 `docs/design/*.md`（`D<phase>-<n>`） |

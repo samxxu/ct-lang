@@ -610,7 +610,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 ### 5. 文档与测试
 
 - 文档导航：[docs/README.md](docs/README.md)
-- 测试：`bash selfhost/check-all.sh` 跑 11 道硬门禁；分层地图见 [test/README.md](test/README.md)
+- 测试：`bash selfhost/check-all.sh` 跑 12 道硬门禁；分层地图见 [test/README.md](test/README.md)
 - 改动代码前先读 [AGENTS.md](AGENTS.md)
 
 ### 6. 许可

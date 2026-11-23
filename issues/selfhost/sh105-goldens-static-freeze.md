@@ -136,3 +136,33 @@ $ grep -c 'run_gate "12' selfhost/check-all.sh
 **触发/下一步**：`v1-PH-0` 入口（V1-C2）；负责人 DEV；High。下一步按本卡「生成命令」用 v1.0
 ct-ast 生成 25 份 `.c`（banner 版本归一化），接线 `run_gate "12) CT: ct-ast static goldens"`，
 同提交应用 gate12 文案补丁并跑「无 L1/L2 树」独立性断言。
+
+## 实现（2026-11-23，DEV；状态字段未改）
+
+按本卡「产物与布局 / 新门禁判据 / gate 12 接线」落地，DEV 侧实体已齐。
+
+- `test/goldens/ast/`：25 份 `<case>.c`，由 `ct-ast 0.88.3` 对 `test/cases/*.ct` 生成
+  （命令见目录 README）；只钉 `.c`，不制造 `.h` 假期望；
+- `selfhost/check-goldens-ast.sh`：唯一参数是 ct-ast 二进制；不构建、不读 L0/L1/L2；
+  banner 两侧 `s/v[0-9]+\.[0-9]+\.[0-9]+/vX/g` 归一化；覆盖缺失/多出/编译失败/字节不符均退出 1；
+- `selfhost/check-all.sh` 第 12 道：`run_gate "12) CT: ct-ast static goldens"`；
+  gate 8 通过 `CT_AST_KEEP` 保留已构建的 ct-ast，gate 12 复用，不二次引导；
+- `test/goldens/selftest-goldens-ast.sh`：改 golden / 删 golden / 多 golden 必红，
+  banner 版本号变化仍绿（证明归一化）；
+- `docs/planning/j6-evidence/goldens-l1-vs-ast.md`：25 行差异清单（0/25 字节一致，
+  逐例标注释丢弃 / const vtable / 指针空格 / 前向声明 / 原型，其他类为空）；
+- gate12 文案补丁已随门禁同提交应用：README / docs/README / glossary / AGENTS / issues/README
+  的「11 道」同步为「12 道」。
+
+```console
+$ bash selfhost/check-goldens-ast.sh /tmp/.../ct-ast | tail -1
+check-goldens-ast: 25/25
+$ bash test/goldens/selftest-goldens-ast.sh /tmp/.../ct-ast
+OK goldens-ast/selftest (changed/missing/extra red, clean/version-normalised green)
+$ python3 test/docs/check-docs.py | tail -2
+check-docs: OK (..., 12 hard gates, ...)
+design window: ok (12/12)
+```
+
+负例红证（旧树 `a0ce8ef1` + 新 selftest）：gate 不存在、goldens 不存在，5 个断言全红。
+状态仍为 `deferred`：本段只落实现与证据，等 REV 复核后决定是否改状态（本次任务要求不改状态）。

@@ -8693,5 +8693,10 @@ fi
 
 echo
 echo "== summary: $pass passed, $fail failed, $skipped skipped =="
+# Gate 12 (ct-ast static goldens) reuses this binary; opt-in so a standalone
+# check-ast run keeps its old behaviour.
+if [ -n "${CT_AST_KEEP:-}" ] && [ -x "$work/ct-ast" ]; then
+    cp "$work/ct-ast" "$CT_AST_KEEP" || echo "  warn: could not keep ct-ast at $CT_AST_KEEP" >&2
+fi
 rm -rf "$work"
 [ "$fail" -eq 0 ]

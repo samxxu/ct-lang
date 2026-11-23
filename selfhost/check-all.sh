@@ -26,6 +26,7 @@ export CT_C_BOUNDARY=allow
 #   9. selfhost/check-warnings.sh                generated C compiles warning-free (-Wall -Wextra)
 #  10. selfhost/check-semantics.sh               semantic entry (Phase 19.4: `ct check`)
 #  11. test/docs/check-docs.py                   docs links, version, gate count and phase status
+#  12. selfhost/check-goldens-ast.sh            ct-ast static goldens (L1/L2-free, SH-105)
 #
 # test/acceptance/run.sh reports separately and never blocks: its PENDING entries
 # are expected (AGENTS.md section 6), and run.sh's green must keep meaning
@@ -36,7 +37,7 @@ export CT_C_BOUNDARY=allow
 
 set -u
 
-# Governance preconditions (not counted in the eleven product gates): the spec
+# Governance preconditions (not counted in the twelve product gates): the spec
 # landing gate G0 and the PN-2 version-coherence gate G8 run before anything
 # else, so a phase cannot ship with MINOR != phase or with a drifted block.
 root0="$(cd "$(dirname "$0")/.." && pwd)"
@@ -92,6 +93,10 @@ fi
 fail=0
 nrun=0
 
+# Gate 12 needs a ct-ast binary; gate 8 already builds one.  Let it keep a copy
+# instead of bootstrapping the chain a second time.
+export CT_AST_KEEP="$tmpcc/ct-ast"
+
 banner() {
     printf '\n=============================================================\n%s\n=============================================================\n' "$1"
 }
@@ -120,6 +125,7 @@ run_gate "8) AST compiler (Phase 9.1–9.7 + 10.x–12.x + batches 13–39)" bas
 run_gate "9) generated C warning-free (-Wall -Wextra)" bash selfhost/check-warnings.sh
 run_gate "10) semantic entry (Phase 19.4)" bash selfhost/check-semantics.sh
 run_gate "11) docs (links, version, gate count, phase status)" python3 test/docs/check-docs.py
+run_gate "12) CT: ct-ast static goldens" bash selfhost/check-goldens-ast.sh "${CT_AST_KEEP:?ct-ast binary path not set}"
 
 banner "acceptance probes (reported only, never blocking)"
 if [ -f test/acceptance/run.sh ]; then
