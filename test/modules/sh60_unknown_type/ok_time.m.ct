@@ -1,0 +1,8 @@
+/* SH-60 / D-60-2 positive: `time_t` comes from an included standard header. */
+#include <time.h>
+
+namespace ok;
+
+pub trait Clock {
+    int at(time_t t);
+}

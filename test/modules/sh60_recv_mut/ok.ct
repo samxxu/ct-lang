@@ -1,0 +1,12 @@
+/* SH-60 / D-60-1 positive: a read method and a mutable buffer stay silent. */
+import probe::probe;
+
+int main(void)
+{
+    const char *s = "abc";
+    char buf[8];
+    int a = "abc".len();
+    int b = s.len();
+    buf.toUpper();
+    return a + b;
+}

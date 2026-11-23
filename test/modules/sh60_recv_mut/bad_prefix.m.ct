@@ -1,0 +1,7 @@
+/* SH-60 / D-60-1 negative: the prefix spelling is refused with the postfix
+   placement named (D-60-1 rejects `mut int f();`). */
+namespace badp;
+
+pub trait Prefix {
+    mut int f();
+}

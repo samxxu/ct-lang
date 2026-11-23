@@ -1,0 +1,11 @@
+/* SH-60 / D-60-1 negative: `mut` is only valid on a `.m.ct` trait method; a
+   dynamic trait's implementation is CT code, so its writability is not
+   declared this way. */
+trait Mut {
+    int f() mut;
+}
+
+int main(void)
+{
+    return 0;
+}

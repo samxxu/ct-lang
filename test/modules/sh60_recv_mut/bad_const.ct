@@ -1,0 +1,9 @@
+/* SH-60 / D-60-1 negative: a top-level const receiver cannot be written. */
+import probe::probe;
+
+int main(void)
+{
+    const char *s = "abc";
+    s.toUpper();
+    return 0;
+}

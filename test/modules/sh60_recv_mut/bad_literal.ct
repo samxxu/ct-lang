@@ -1,0 +1,8 @@
+/* SH-60 / D-60-1 negative: a string literal has no writable storage. */
+import probe::probe;
+
+int main(void)
+{
+    "abc".toUpper();
+    return 0;
+}

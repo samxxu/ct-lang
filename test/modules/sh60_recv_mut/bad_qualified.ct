@@ -1,0 +1,9 @@
+/* SH-60 / D-60-1 negative: `Trait::method(recv, ...)` names the trait, so the
+   first actual is the receiver and the same rule applies. */
+import probe::probe;
+
+int main(void)
+{
+    probe::StrOps::toUpper("abc");
+    return 0;
+}

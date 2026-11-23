@@ -1,0 +1,10 @@
+/* SH-60 / D-60-2 positive: `size_t` and `FILE` are C type words the reader
+   already knows; no alias is needed. */
+#include <stddef.h>
+#include <stdio.h>
+
+namespace ok;
+
+pub trait Io {
+    int scan(size_t n, FILE *f);
+}

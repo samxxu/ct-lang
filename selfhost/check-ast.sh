@@ -2312,6 +2312,161 @@ else
     bad "p25_static_argtype_q5" "$(head -5 "$work/p25q5.err" 2>/dev/null)"
 fi
 
+# SH-60 (2a) regression: the confident static mismatch stays a hard error at
+# every --check-level (the recipe splices the actual into the generated call)
+# and through `ct check`, which now walks the import graph. A later change
+# that turns it back into a warning makes these assertions red.
+for lvl in off warn error; do
+    rm -rf "$work/sh60a_$lvl"
+    mkdir -p "$work/sh60a_$lvl"
+    if ! "$work/ct-ast" build --emit-c --check-level="$lvl" -I "$p25" "$p25/aux6.ct" \
+            -o "$work/sh60a_$lvl" >"$work/sh60a_$lvl.out" 2>"$work/sh60a_$lvl.err" \
+       && grep -qF "error: type mismatch: 'find' argument 1: expected 'char *', got 'int'" \
+            "$work/sh60a_$lvl.err"; then
+        ok "sh60_2a_hard_at_check_level_$lvl (still an error, not a warning)"
+    else
+        bad "sh60_2a_hard_at_check_level_$lvl" "$(head -3 "$work/sh60a_$lvl.err" 2>/dev/null)"
+    fi
+done
+if "$work/ct-ast" check "$p25/aux6.ct" >"$work/sh60a_chk.out" 2>"$work/sh60a_chk.err"; then
+    bad "sh60_2a_check_entry" "expected a non-zero exit"
+elif grep -qF "error: type mismatch: 'find' argument 1: expected 'char *', got 'int'" \
+        "$work/sh60a_chk.err"; then
+    ok "sh60_2a_check_entry (\`ct check\` sees the imported mapping unit)"
+else
+    bad "sh60_2a_check_entry" "$(head -3 "$work/sh60a_chk.err" 2>/dev/null)"
+fi
+
+# SH-60 / D-60-1: a `mut` static method writes its receiver. A literal or a
+# top-level const receiver is a warning in build mode and an error under
+# `ct check`; a read method and a mutable buffer stay silent. `mut` is only
+# valid on a `.m.ct` trait method and only postfix.
+sh60=test/modules/sh60_recv_mut
+
+rm -rf "$work/sh60ok"
+mkdir -p "$work/sh60ok"
+if "$work/ct-ast" build --emit-c -I "$sh60" "$sh60/ok.ct" -o "$work/sh60ok" \
+        >"$work/sh60ok.out" 2>"$work/sh60ok.err" \
+   && ! grep -qF "writes its receiver" "$work/sh60ok.err"; then
+    ok "sh60_recv_ok (read on literal/const and write on a buffer stay silent)"
+else
+    bad "sh60_recv_ok" "$(cat "$work/sh60ok.err" 2>/dev/null | head -3)"
+fi
+
+rm -rf "$work/sh60lit"
+mkdir -p "$work/sh60lit"
+if "$work/ct-ast" build --emit-c -I "$sh60" "$sh60/bad_literal.ct" -o "$work/sh60lit" \
+        >"$work/sh60lit.out" 2>"$work/sh60lit.err" \
+   && grep -qF "warning: 'toUpper' writes its receiver, but the receiver is a literal" \
+        "$work/sh60lit.err"; then
+    ok "sh60_recv_literal_warns (build stays rc=0 and names the method)"
+else
+    bad "sh60_recv_literal_warns" "$(cat "$work/sh60lit.err" 2>/dev/null | head -3)"
+fi
+if "$work/ct-ast" check "$sh60/bad_literal.ct" >"$work/sh60litc.out" 2>"$work/sh60litc.err"; then
+    bad "sh60_recv_literal_check" "expected a non-zero exit"
+elif grep -qF "error: 'toUpper' writes its receiver, but the receiver is a literal" \
+        "$work/sh60litc.err"; then
+    ok "sh60_recv_literal_check (same record is an error under \`ct check\`)"
+else
+    bad "sh60_recv_literal_check" "$(head -3 "$work/sh60litc.err" 2>/dev/null)"
+fi
+
+if "$work/ct-ast" build --emit-c -I "$sh60" "$sh60/bad_const.ct" -o "$work/sh60lit" \
+        >"$work/sh60const.out" 2>"$work/sh60const.err" \
+   && grep -qF "warning: 'toUpper' writes its receiver, but the receiver is a top-level const value" \
+        "$work/sh60const.err"; then
+    ok "sh60_recv_const_warns (a top-level const receiver is named)"
+else
+    bad "sh60_recv_const_warns" "$(cat "$work/sh60const.err" 2>/dev/null | head -3)"
+fi
+
+if "$work/ct-ast" build --emit-c -I "$sh60" "$sh60/bad_qualified.ct" -o "$work/sh60lit" \
+        >"$work/sh60qual.out" 2>"$work/sh60qual.err" \
+   && grep -qF "warning: 'toUpper' writes its receiver, but the receiver is a literal" \
+        "$work/sh60qual.err"; then
+    ok "sh60_recv_qualified (Trait::method(recv, ...) checks the first actual)"
+else
+    bad "sh60_recv_qualified" "$(cat "$work/sh60qual.err" 2>/dev/null | head -3)"
+fi
+
+if "$work/ct-ast" check "$sh60/bad_hdr.ct" >"$work/sh60hdr.out" 2>"$work/sh60hdr.err"; then
+    bad "sh60_mut_hdr_only" "expected a non-zero exit"
+elif grep -qF "receiver mutability is only valid on a .m.ct trait method" "$work/sh60hdr.err"; then
+    ok "sh60_mut_hdr_only (a dynamic trait method cannot carry mut)"
+else
+    bad "sh60_mut_hdr_only" "$(head -3 "$work/sh60hdr.err" 2>/dev/null)"
+fi
+if "$work/ct-ast" check "$sh60/bad_prefix.m.ct" >"$work/sh60pre.out" 2>"$work/sh60pre.err"; then
+    bad "sh60_mut_prefix" "expected a non-zero exit"
+elif grep -qF "receiver mutability is written after the parameter list" "$work/sh60pre.err"; then
+    ok "sh60_mut_prefix (the prefix spelling names the postfix form)"
+else
+    bad "sh60_mut_prefix" "$(head -3 "$work/sh60pre.err" 2>/dev/null)"
+fi
+
+# SH-60 / D-60-2: a `.m.ct` trait signature's unknown bare type name is an
+# error unless it has evidence: a C type word, a standard typedef whose home
+# header the unit includes, or a `pub type` alias in the same unit. The
+# `.m.ct` from the issue (`#include <string.h>` + `TotallyBogus *`) must fail;
+# `size_t` / `FILE`, `time_t` with `<time.h>` and a project alias stay green.
+sh60u=test/modules/sh60_unknown_type
+
+if "$work/ct-ast" check "$sh60u/unknown/bad.m.ct" >"$work/sh60u1.out" 2>"$work/sh60u1.err"; then
+    bad "sh60_unknown_param" "expected a non-zero exit"
+elif grep -qF "error: unknown type 'TotallyBogus' in a .m.ct trait signature" "$work/sh60u1.err"; then
+    ok "sh60_unknown_param (a bogus parameter type is refused)"
+else
+    bad "sh60_unknown_param" "$(head -3 "$work/sh60u1.err" 2>/dev/null)"
+fi
+if "$work/ct-ast" check "$sh60u/unknown/bad_const.m.ct" >"$work/sh60u2.out" 2>"$work/sh60u2.err"; then
+    bad "sh60_unknown_const" "expected a non-zero exit"
+elif grep -qF "error: unknown type 'TotallyBogus' in a .m.ct trait signature" "$work/sh60u2.err"; then
+    ok "sh60_unknown_const (the rule also sees past qualifiers)"
+else
+    bad "sh60_unknown_const" "$(head -3 "$work/sh60u2.err" 2>/dev/null)"
+fi
+if "$work/ct-ast" check "$sh60u/unknown/bad_return.m.ct" >"$work/sh60u3.out" 2>"$work/sh60u3.err"; then
+    bad "sh60_unknown_return" "expected a non-zero exit"
+elif grep -qF "error: unknown type 'TotallyBogus' in a .m.ct trait signature" "$work/sh60u3.err"; then
+    ok "sh60_unknown_return (the return type is checked too)"
+else
+    bad "sh60_unknown_return" "$(head -3 "$work/sh60u3.err" 2>/dev/null)"
+fi
+rm -rf "$work/sh60ub"
+mkdir -p "$work/sh60ub"
+if ! "$work/ct-ast" build --emit-c -I "$sh60u" "$sh60u/build_bad.ct" -o "$work/sh60ub" \
+        >"$work/sh60ub.out" 2>"$work/sh60ub.err" \
+   && grep -qF "error: unknown type 'TotallyBogus' in a .m.ct trait signature" \
+        "$work/sh60ub.err"; then
+    ok "sh60_unknown_build (an imported mapping unit's declaration is checked)"
+else
+    bad "sh60_unknown_build" "$(head -3 "$work/sh60ub.err" 2>/dev/null)"
+fi
+
+if "$work/ct-ast" check "$sh60u/ok_builtin.m.ct" >"$work/sh60u4.out" 2>"$work/sh60u4.err"; then
+    ok "sh60_unknown_builtin (size_t / FILE are not false positives)"
+else
+    bad "sh60_unknown_builtin" "$(head -3 "$work/sh60u4.err" 2>/dev/null)"
+fi
+if "$work/ct-ast" check "$sh60u/ok_time.m.ct" >"$work/sh60u5.out" 2>"$work/sh60u5.err"; then
+    ok "sh60_unknown_header (time_t is evidenced by #include <time.h>)"
+else
+    bad "sh60_unknown_header" "$(head -3 "$work/sh60u5.err" 2>/dev/null)"
+fi
+if "$work/ct-ast" check "$sh60u/ok_alias.m.ct" >"$work/sh60u6.out" 2>"$work/sh60u6.err"; then
+    ok "sh60_unknown_alias (a pub type alias is the project's evidence)"
+else
+    bad "sh60_unknown_alias" "$(head -3 "$work/sh60u6.err" 2>/dev/null)"
+fi
+if "$work/ct-ast" check "$sh60u/bad_time.m.ct" >"$work/sh60u7.out" 2>"$work/sh60u7.err"; then
+    bad "sh60_unknown_no_header" "expected a non-zero exit"
+elif grep -qF "error: unknown type 'time_t' in a .m.ct trait signature" "$work/sh60u7.err"; then
+    ok "sh60_unknown_no_header (a standard typedef needs its header included)"
+else
+    bad "sh60_unknown_no_header" "$(head -3 "$work/sh60u7.err" 2>/dev/null)"
+fi
+
 # L25-1: a closure actual may only fill a `(fn, env)` pair of the host method.
 rm -rf "$work/p25cl"
 mkdir -p "$work/p25cl"

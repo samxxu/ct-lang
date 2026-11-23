@@ -1,0 +1,7 @@
+#include <string.h>
+
+namespace unknown;
+
+pub trait Totally {
+    int f(TotallyBogus *p);
+}

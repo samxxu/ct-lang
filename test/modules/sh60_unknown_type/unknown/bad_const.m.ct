@@ -1,0 +1,5 @@
+namespace unknown;
+
+pub trait Totally {
+    int f(const TotallyBogus *p);
+}

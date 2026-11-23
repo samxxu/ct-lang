@@ -1,0 +1,14 @@
+/* SH-60 / D-60-1: `mut` marks a static method that writes its receiver.
+   The recipe targets are undefined on purpose: these fixtures exercise the
+   call-site diagnostic and only emit C. */
+namespace probe;
+
+pub trait StrOps {
+    int len();
+    int toUpper() mut;
+}
+
+map trait StrOps for type char * {
+    len(s)     -> ct_sh60_len(s);
+    toUpper(s) -> ct_sh60_upper(s);
+}

@@ -1,0 +1,6 @@
+/* SH-60 / D-60-2 negative: `time_t` without `<time.h>` has no evidence. */
+namespace bad;
+
+pub trait Clock {
+    int at(time_t t);
+}

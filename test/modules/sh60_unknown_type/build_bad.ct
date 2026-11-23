@@ -1,0 +1,8 @@
+/* SH-60 / D-60-2 negative through the build path: the declaration point of
+   an imported `.m.ct` unit is checked before any product is written. */
+import unknown::bad;
+
+int main(void)
+{
+    return 0;
+}

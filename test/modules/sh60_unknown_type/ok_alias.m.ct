@@ -1,0 +1,12 @@
+/* SH-60 / D-60-2 positive: a project typedef is admitted through its `pub
+   type` alias; the opaque C spelling lives on the alias' right side, which is
+   not a signature position. */
+#include <proj_db.h>
+
+namespace ok;
+
+pub type Stmt = proj_stmt;
+
+pub trait Db {
+    int step(Stmt *p);
+}
