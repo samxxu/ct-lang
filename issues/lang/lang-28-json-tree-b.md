@@ -7,7 +7,7 @@
 | 严重度 | High（涉及 parser / Symbols / Emitter / 语义 / 容量） |
 | 锚点 | v0.88.3（2026-11-23） |
 | 依据 | [D-021](../../docs/decisions/D-021.md)、[JSON v1.1 提案评估](../../docs/reviews/2026-11-23-json-v11-proposal-eval.md) |
-| 状态 | deferred |
+| 状态 | rejected |
 | blocked-by | **P-4 重评结论：维持 A（2026-11-24）**；判据 1（递归 ADT 布局）与判据 2（ADT payload 级联）不满足：B1 实例壳预发射、B3 ADT retain/release/drop glue 均未落地。重提条件：B1 + B3 落地后，用 `p_lang27_cascade` + 递归 ADT/工厂返回探针复跑判据 1、2 全绿，另开卡；D-021 设计不改 |
 | 处置证据 | **accepted（设计）**：所有者 2026-11-23 逐项裁定 B1–B8；实现待 LANG-27 后按 §阶段执行。**P-4 重评（2026-11-24）：维持 A，B 不切换**，见 [重评报告](../../docs/reviews/2026-11-24-json-tree-b-reeval.md) |
 
@@ -132,3 +132,11 @@ $ /tmp/ct compile /tmp/r.ct -o /tmp/r.c && cc -std=c99 -c /tmp/r.c
 - 按本卡 §验收，“维持 A”应转 `rejected`；`status` 词按 AGENTS §5.4 归 REQ/USER，
   本轮只更新 `blocked-by` 与本节，状态字段留所有者落。
 
+
+
+## 终态（REQ，2026-11-24）
+
+P-4 重评结论 **维持 A**（[报告](../../docs/reviews/2026-11-24-json-tree-b-reeval.md)）：递归 ADT 布局
+（B1）与 ADT glue（B3）不满足，B 限定子集仍受同一布局阻塞；不切 B、不重开 PKG-24。
+本卡按原验收“维持 A → rejected”置终态；重提条件：B1 预发射壳 + B3 ADT glue 落地后，
+复跑报告判据 1/2 全绿再开新卡。
