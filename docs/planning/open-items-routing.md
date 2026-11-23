@@ -40,8 +40,8 @@
 | 4 | `Vec<Vec<int>> vv; vv.push(inner); int x = vv[0][1];` | rc=0 | **已具备** | `Vec` 值可继续 `[]` | — |
 | 5 | `Map<char *, int> m; m.put("a",7); int *p = m["a"];` | rc=0，生成 `Map_char_p_int_get(&m,"a")`（`int *`） | **已具备** | `Map::get` 返回 `V *`；缺键 `0`（[Vec.h.ct:285](../../lib/core/Vec.h.ct#L285)） | — |
 | 6 | `if (m.has("a")) x = *m["a"];` | rc=0；缺键 `m["zzz"] == 0` | **已具备（需 `has`/`*`）** | `Map::has` / `get` 契约 | — |
-| 7 | `Map<char *, struct P> m; int x = m["a"].x;` | **rc=1**：`member reference type 'struct P *' is a pointer; did you mean to use '->'?`；ct 先 rc=0 | **A bug** | `[]` 结果是 `P *`，`.x` 未自动解引用，静默发射坏 C；与 LANG-5 字段形态同根 | **0.53.2**（并入 LANG-5） |
-| 8 | `Map<char *, Map<char *, int>> m; int x = m["a"]["b"];` | **rc=1**：`array subscript is not an integer`；生成 `Map_get(&m,"a")["b"]`；ct 先 rc=0 | **A bug** | `m["a"]` 是 `Map *`，plain `[]` 未解引用；与 LANG-13 链式物化同族 | **0.53.4**（并入 LANG-13 链式修复） |
+| 7 | `Map<char *, struct P> m; int x = m["a"].x;` | **rc=1**：`member reference type 'struct P *' is a pointer; did you mean to use '->'?`；`ct` 先 rc=0 | **A bug** | `[]` 结果是 `P *`，`.x` 未自动解引用，静默发射坏 C；与 LANG-5 字段形态同根 | **0.53.2**（并入 LANG-5） |
+| 8 | `Map<char *, Map<char *, int>> m; int x = m["a"]["b"];` | **rc=1**：`array subscript is not an integer`；生成 `Map_get(&m,"a")["b"]`；`ct` 先 rc=0 | **A bug** | `m["a"]` 是 `Map *`，plain `[]` 未解引用；与 LANG-13 链式物化同族 | **0.53.4**（并入 LANG-13 链式修复） |
 | 9 | `m["a"]["b"]["c"]`（三层嵌套 Map） | 同上，plain `[]` 链 rc=1 | **A bug** | 同 #8；`?.`/`?[` 安全形态已可用 | **0.53.4** |
 | 10 | `m["a"]?["b"]` | rc=0，生成 `(t = get(&m,"a")) ? get(t,"b") : 0` | **由 v0-PH-53 覆盖** | v0-PH-53 `m?["k"]` + `m["k"]?.c`（[phase53:13-25](../phases/v0-PH-53/card.md#L13-L25)） | — |
 | 11 | `m["a"]?["b"]?["c"]` | rc=0 | **由 v0-PH-53 覆盖** | 同上 | — |

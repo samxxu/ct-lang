@@ -42,14 +42,14 @@
 > （草案写的是 `new <Struct>`，实现改用零新语法的 D1=A）。
 >
 > **构造规则**：在构造点，编译器必须写入该对象**自身以及其内部所有"可派发子对象"**的 vptr。
-> 「可派发子对象」= 类型是已知 ct struct、并且该 struct 至少 `use` 了一个 trait 的字段 / 数组元素。
+> 「可派发子对象」= 类型是已知 Ct struct、并且该 struct 至少 `use` 了一个 trait 的字段 / 数组元素。
 
 推论：
 
 1. **递归**：`Shop s` 的构造，包含 `s.owner`（Person）的构造。
 2. **只在构造点写**：没有声明的裸 `malloc` 不是构造点；`T *p = malloc|calloc(...)` 声明是，
    vptr 在声明后补写。
-3. **纯 C 结构体无影响**：字段类型不是 ct struct（或该 struct 没有 `use` trait）→ 不写入、不改写。
+3. **纯 C 结构体无影响**：字段类型不是 Ct struct（或该 struct 没有 `use` trait）→ 不写入、不改写。
 
 ### 3. 各形态的展开草案
 
@@ -63,7 +63,7 @@ struct Shop { Person owner; };
 struct Shop { struct Person owner; };
 ```
 
-- 需要**部分解析 struct 体**：识别形如 `Ident Name ;` 的简单字段，其中 `Ident` 是已知 ct struct
+- 需要**部分解析 struct 体**：识别形如 `Ident Name ;` 的简单字段，其中 `Ident` 是已知 Ct struct
   → 插入 `struct `。其余字段原样保留。
 - 明确不处理（保持透传，并记为限制）：多声明符 `Person a, b;`、位域、字段数组 `Person xs[3];`、
   匿名嵌套 struct、宏展开出的字段。**其中字段数组仅限 L0 / L2**——ct-ast 已支持（逐元素写 vptr，
@@ -163,7 +163,7 @@ if (q) free(q);
 1. **"struct 体原样透传"的承诺被部分打破**：字段类型会被改写。需确认现有 golden 是否受影响
    （`03_passthrough` 里的 `struct Point { int x; int y; };` 字段都是标量 → 预期不变）。
 2. **字段表是结构性变更**：符号表从"变量名 → struct"扩展到"字段名 → 类型"，并要处理重名、
-   未知名（字段类型不是 ct struct）。
+   未知名（字段类型不是 Ct struct）。
 3. **临时变量冲突**：数组循环的 `__ct_i` 需带块作用域，且要选一个用户不可能用到的前缀。
 4. **展开体积**：深层嵌套的递归初始化式会很长；需设深度上限并在越界时 `die`。
 5. **`new` / `delete` 与用户标识符冲突**：靠词边界 + 形态限定缓解，但无法 100% 消除歧义。
@@ -202,8 +202,8 @@ D2 = 只支持无初始化式声明 + 常量下标；**D3 = 不引入 `new`**（
 - **运行型用例（必需）**：四类问题都是**运行期**的（vptr 为空的崩溃），逐字节比对抓不到，
   必须让用例真的编译并运行、比对 stdout。
 - **反向验证（不许用力过猛）**：
-  - 普通 C 的 `struct` 定义（字段类型不是 ct struct）不被改写；
-  - 纯 C 数组 / 指针 / `malloc` 用法（不带 ct struct）不被改写；
+  - 普通 C 的 `struct` 定义（字段类型不是 Ct struct）不被改写；
+  - 纯 C 数组 / 指针 / `malloc` 用法（不带 Ct struct）不被改写；
   - 既有 24 项用例全部仍然全绿（含 `ctc ctc.c` 逐字节透传）。
 - **负例**：字段类型未知、递归深度超限等静态可判定的错误必须 `die`。
 - **文档**：命名规则与展开规则写入 `docs/language-spec.md`；`README.md` 变换表同步。

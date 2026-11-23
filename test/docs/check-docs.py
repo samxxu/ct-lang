@@ -248,6 +248,10 @@ CT_EXEMPT_DIRS = (
 )
 CT_ACTIVE_ROOTS = ("test", "examples", "editors", "selfhost")
 BARE_CT = re.compile(r"\bCT\b")
+# DOC-98: the language name is `Ct` in active prose; lowercase `ct` remains the
+# command, suffix and repository spelling, so it must be code-marked in prose.
+BARE_CT_LOWER = re.compile(r"(?<![\w./-])ct(?![\w./-])")
+URL_TEXT = re.compile(r"https?://\S+")
 FENCE_LINE = re.compile(r"^\s*(```|~~~)")
 README_SOURCE_LINE = re.compile(r"^//\s*source:\s*(\S+)")
 README_SHAPE_LINE = re.compile(r"^//\s*shape:\s*(.+)$")
@@ -1317,6 +1321,32 @@ def ct_hits(text):
     return hits
 
 
+def ct_lower_hits(text):
+    """DOC-98: bare lowercase `ct` in active prose must be `Ct` or `` `ct` ``."""
+    hits = []
+    in_fence = False
+    in_spec_block = False
+    for number, line in enumerate(text.splitlines(), 1):
+        if SPEC_BEGIN_LINE.match(line):
+            in_spec_block = True
+            continue
+        if SPEC_END_LINE.match(line):
+            in_spec_block = False
+            continue
+        if in_spec_block:
+            continue
+        if FENCE_LINE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        line = re.sub(r"<!--.*?-->", "", line)
+        line = URL_TEXT.sub("", line)
+        for match in BARE_CT_LOWER.finditer(INLINE.sub("", line)):
+            hits.append((number, match.start() + 1, line.strip()))
+    return hits
+
+
 def readme_code_blocks(text):
     """Yield (lang, [body lines], first body line number) for README fences."""
     lines = text.splitlines()
@@ -1421,6 +1451,21 @@ def check_ct_spelling(errors):
             errors.append(
                 f"{rel}:{number}:{column}: bare 'CT' in active prose "
                 f"(write 'Ct'; DOC-94): {snippet[:70]}"
+            )
+    return hits, len(files)
+
+
+def check_bare_ct(errors):
+    """DOC-98: bare lowercase `ct` in active prose is red."""
+    files = ct_active_paths()
+    hits = 0
+    for path in files:
+        rel = os.path.relpath(path, ROOT)
+        for number, column, snippet in ct_lower_hits(read(path)):
+            hits += 1
+            errors.append(
+                f"{rel}:{number}:{column}: bare 'ct' in active prose "
+                f"(write 'Ct' or `` `ct` ``; DOC-98): {snippet[:70]}"
             )
     return hits, len(files)
 
@@ -1548,6 +1593,29 @@ def j6_selftest():
         print(f"j6-ledger selftest: FAIL ({failed} case(s))")
         return 1
     print(f"j6-ledger selftest: OK ({len(cases)} cases)")
+    return 0
+
+
+def ct_lower_selftest():
+    """DOC-98 fixtures: bare prose is red; code/URL/exempt contexts are green."""
+    cases = (
+        ("prose", "这是 ct 语言。", 1),
+        ("heading", "# ct — C with Traits", 1),
+        ("inline code", "`ct build` / `ctc` / `.ct` / `ct-pkg` / `ct.lock`", 0),
+        ("fenced block", "```\nct build\n```", 0),
+        ("url", "https://example.com/ct", 0),
+        ("spec block", "<!-- spec:begin version=1 -->\nct 包\n<!-- spec:end -->", 0),
+    )
+    failed = 0
+    for name, text, want in cases:
+        got = len(ct_lower_hits(text))
+        ok = got == want
+        failed += 0 if ok else 1
+        print(f"ct-lower selftest: {name}: {got} hit(s), expected {want} -> {'OK' if ok else 'FAIL'}")
+    if failed:
+        print(f"ct-lower selftest: FAIL ({failed} case(s))")
+        return 1
+    print(f"ct-lower selftest: OK ({len(cases)} cases)")
     return 0
 
 
@@ -1841,6 +1909,7 @@ def snippet_selftest():
 def main():
     if "--selftest" in sys.argv[1:]:
         rc = ct_selftest()
+        rc = ct_lower_selftest() or rc
         rc = j6_selftest() or rc
         rc = anchor_selftest() or rc
         rc = toc_selftest() or rc
@@ -1867,6 +1936,7 @@ def main():
     compat = check_compat_claim(errors)
     caps = check_capability_map(errors)
     ct, ct_files = check_ct_spelling(errors)
+    ct_lower, _ = check_bare_ct(errors)
     snippets = check_readme_snippets(errors)
     diag_codes = check_diag_registry(errors)
     for error in errors:
@@ -1885,7 +1955,8 @@ def main():
         f"{applies} 适用版本 header(s), {superseded} superseded link(s), "
         f"{signoffs} signoff(s), {briefing} briefing item(s), {j6} J-6 row(s), "
         f"{stable} stability row(s), {compat} compat marker(s), "
-        f"{caps} capability row(s), {ct} bare CT in {ct_files} active file(s), "
+        f"{caps} capability row(s), {ct} bare CT + {ct_lower} bare ct in "
+        f"{ct_files} active file(s), "
         f"{snippets} README snippet source(s), "
         f"{toc_entries}/{toc_required} outline entr(ies), "
         f"{line_refs} spec line anchor(s) in {line_entries} ledger entr(ies), "

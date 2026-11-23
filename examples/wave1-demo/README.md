@@ -21,7 +21,7 @@ A single Ct program that uses the Wave 1 packages:
 > refreshed, build against the checkouts:
 >
 > ```sh
-> ct build -I ../../../ct-pkg/hal -I ../../../ct-pkg/hal-posix -I ../../../ct-pkg/std \
+> `ct build` -I ../../../ct-pkg/hal -I ../../../ct-pkg/hal-posix -I ../../../ct-pkg/std \
 >     --ns-root ../../../ct-pkg/hal \
 >     --cflags '-D_POSIX_C_SOURCE=200809L' --ldflags '-lm' src/main.ct -o build
 > ```

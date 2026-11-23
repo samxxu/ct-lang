@@ -6,7 +6,7 @@
 > 本文与 [proposals/ct-pkg-index-proposal.md](proposals/ct-pkg-index-proposal.md) 的区别：
 > 提案是**待目标组受理的目标形态**，不是现状；现状以本文与
 > [ct-pkg-get-contract](planning/ct-pkg-get-contract.md) 为准。
-> 核对基线：ct 0.77.1（2026-11-20）。
+> 核对基线：`ct` 0.77.1（2026-11-20）。
 
 ## 1. 它是什么
 

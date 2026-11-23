@@ -241,7 +241,7 @@ ct-ast 的顶层构造（只列构造与语义入口；产生式细节以 §4 �
 | 函数 / 全局 | `ret name(params) { … }`、`[pub] T g = …;` | §1、§5 |
 | static 断言 / raw 文本 | `static_assert(…)`、`#ct-raw` 块 | §4.41 |
 
-语句层是 C 的子集加上下列 ct 构造：
+语句层是 C 的子集加上下列 Ct 构造：
 
 | 构造 | 形态 | 说明 |
 | --- | --- | --- |
@@ -1312,7 +1312,7 @@ static int sum_all(int n, ...) {
 - `va_list` 是内置类型词，`va_list ap;` 是普通声明，原样发射。
 - `va_arg(ap, <类型>)` 是内建（第二个实参是类型，不能按普通调用解析），发射为同形调用；
   它的类型就是括号里写的类型，因此可以直接参与运算或赋给同类型变量。
-- `va_start` / `va_end` 是普通调用：ct 不声明它们，与 `printf` 一样按未知被调函数发射，
+- `va_start` / `va_end` 是普通调用：Ct 不声明它们，与 `printf` 一样按未知被调函数发射，
   由源文件的 `#include <stdarg.h>` 提供声明。
 - 普通 trait 的方法不能变参：`impl` 里出现 `...` 报 `a trait method cannot be variadic`
   （vtable 槽位是固定的函数指针类型）；trait 声明本身也不接受 `...`，会在参数位置报
@@ -1536,7 +1536,7 @@ s.log("sink %s %d\n", s.name, r);
   typedef、结构体字段、指针数组与局部声明都自动带上它（§4.22 已说明 `...` 的含义）。
 - 与 §4.22 的规则一致：`...` 前面必须至少有一个具名参数。`(...)` 与 `(void, ...)`
   都报 `a variadic function pointer needs a named parameter before '...'`。
-- 通过指针调用就是普通调用，多余实参原样透传；ct 不检查实参类型（与 `printf` 一致）。
+- 通过指针调用就是普通调用，多余实参原样透传；Ct 不检查实参类型（与 `printf` 一致）。
 
 #### 4.32 逗号表达式（ct-ast）
 
@@ -1582,7 +1582,7 @@ int main(void)
 }
 ```
 
-- ct 不展开 `#include`，头文件里的 typedef 对解析器就是未知名字。在声明位置上，
+- Ct 不展开 `#include`，头文件里的 typedef 对解析器就是未知名字。在声明位置上，
   「未知标识符 + 声明符名」的序列按类型处理，拼写原样发射，是否真是类型交给 C 编译器判断。
 - 判据：该名字既不能是已登记的类型（struct / union / enum / trait / typedef），也不能是
   已声明的变量或函数，还不能是语句关键字。所以 `return found;`、`goto done;`、
@@ -1645,7 +1645,7 @@ int main(void)
 - `_Alignof(type)` 与 `sizeof(type)` 共用一个节点，只接受**类型**形式：写 `_Alignof x`
   报 `_Alignof needs a type in parentheses`（C11 本来也只允许类型）。
 - `_Generic(…)` 整段透传：控制表达式与每个分支都交给 C 编译器（各 token 之间补一个空格），
-  类型匹配与分支选择都由它完成。ct 不读分支，所以分支里的 trait 调用、装箱等重写
+  类型匹配与分支选择都由它完成。Ct 不读分支，所以分支里的 trait 调用、装箱等重写
   **不会发生**——分支要写成 C 编译器自己能接受的代码。
 - 三者都由 ct-ast 解析并重新发射；L0 / L2 的透传行为不变。生成的 `.c` 保留 C11 拼写，
   因此构建它的 C 编译器需要接受该写法（clang 与 GCC 都可以）。
@@ -1667,7 +1667,7 @@ typedef int word __attribute__((aligned(8)));
 static int twice(int n __attribute__((unused))) { return 2 * n; }
 ```
 
-- `__attribute__((…))` 是 GNU 扩展，ct 只负责把它**原样带进生成物**：属性列表（含
+- `__attribute__((…))` 是 GNU 扩展，Ct 只负责把它**原样带进生成物**：属性列表（含
   `format(printf, 1, 2)`、`aligned(8)` 这类嵌套实参）按 token 原文捕获，连续的多个
   `__attribute__` 组一起捕获，在声明的**同一尾部位置**重新发射；语义完全交给 C 编译器。
 - 接受的位置：函数声明与定义（参数表之后、`;` 或 `{` 之前）、形参（名字/维度之后）、
@@ -2188,7 +2188,7 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
   以及**右值表达式直接装箱**——`T t = mk();` 现在是编译期硬错（v0.53.1），
   提示 `cannot box an rvalue struct; assign it to a variable first`；不再静默发射坏 C。
 - **（仅 L2）**单行函数体（`int f() { … }` 与函数头写在同一行）不处理，与 Phase 0 的按行改写一致。同理，与构造**同处一行**的语句也不会被重写：一行接口装箱、一行右值接收者均按原样透传。（`impl` 构造是例外：它的方法体由块匹配整体抽取，即使与方法头同处一行也会走重写管线。）ct-ast 没有这些限制，跨行语句与单行函数体都照常回写。
-- 不完整的 `struct` 头部（缺 `{`）不作为构造，按原样透传。`trait` / `impl` 是 ct 独有关键字：行首出现且其后紧跟标识符或 `{` 即视为构造声明，头部畸形一律报错（其后是其它 token 的行，如 `impl[n] = 0;`，仍透传）。
+- 不完整的 `struct` 头部（缺 `{`）不作为构造，按原样透传。`trait` / `impl` 是 Ct 独有关键字：行首出现且其后紧跟标识符或 `{` 即视为构造声明，头部畸形一律报错（其后是其它 token 的行，如 `impl[n] = 0;`，仍透传）。
 - 顶层构造不支持嵌套。
 - **生成物里「声明了但没用到」的 `static` 实体**：一个 `impl` 总会发射 `<S>_<T>_vtable`，一个
   `use Drop` 的 struct 总会发射 `<S>_Drop_drop`，即使本单元从不调用该 trait 的方法、也不 `delete`
@@ -2390,7 +2390,7 @@ int main(void) {
 | 常量 | 值 | 含义 | 超限行为 |
 | --- | --- | --- | --- |
 | `MAX_TRAITS` | 16 | trait 数量 / 单 struct 的 `use` 数量 | 报错退出 |
-| `MAX_FIELDS` | 32 | 单 struct 里「类型是已知 ct 类型」的字段数（值 / 指针 struct 字段、值 / 指针接口字段各表独立计） | 报错退出 |
+| `MAX_FIELDS` | 32 | 单 struct 里「类型是已知 Ct 类型」的字段数（值 / 指针 struct 字段、值 / 指针接口字段各表独立计） | 报错退出 |
 | `MAX_DEPTH` | 8 | 嵌套构造 / 字段链的递归深度上限 | 报错退出 |
 | `MAX_SCOPE` | 256 | 嵌套作用域（花括号块）深度上限 | 报错退出 |
 | `MAX_STRUCT` | 32 | struct 数量 | 报错退出 |

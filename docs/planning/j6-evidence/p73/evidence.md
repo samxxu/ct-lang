@@ -247,7 +247,7 @@ SUMMARY: AddressSanitizer: heap-use-after-free uaf_probe.c:425 in main
 3. **`box<String>`、`Map<...,String>` 未做**；`Vec<String>` 做了元素 retain/release（`vec.ct`）。
 4. **refcount 是普通 `int`，非原子**；没有线程安全承诺。
 5. **UTF-8 解码只做基本 1–4 字节**：不校验 overlong/非法序列；越界 `byte_at` 返回 0，`codepoint_at` 返回 -1；没有 `char_at` 的 `Option` 软访问。
-6. **`.data` 的类型是只读 `Str` 视图**，不是 `char *`。这是相对提案拼写的原型偏离：好处是 `.data` 不能被隐式当 NUL 字符串用，`neg_data_cstr` 能硬错；代价是 `printf("%s", s.data)` 这类写法没有专门的 ct 诊断（C 侧也不会通过，因为 `Str` 是 struct）。P-7.4 需要决定最终是 `const char *` + lint，还是保留视图类型。
+6. **`.data` 的类型是只读 `Str` 视图**，不是 `char *`。这是相对提案拼写的原型偏离：好处是 `.data` 不能被隐式当 NUL 字符串用，`neg_data_cstr` 能硬错；代价是 `printf("%s", s.data)` 这类写法没有专门的 Ct 诊断（C 侧也不会通过，因为 `Str` 是 struct）。P-7.4 需要决定最终是 `const char *` + lint，还是保留视图类型。
 7. **字面量绑定只覆盖声明/赋值/`return`/全局初始化**；函数实参位置（`f("x")` 且形参是 `String`）和 struct 字段初始化器（`Record { "x" }`）没有做 expected-type 绑定。
 8. **原始字段逃逸**：`s.ptr[...]` 写被硬错拦截，但 `char *p = s.ptr; p[0] = 'x';` 这种指针逃逸无法防止，属于提案 §5 的“作者责任/契约水位”。
 9. **`cstr()` 返回 malloc 的副本，调用方负责 `free`**；没有所有权类型，没有 `String.from_cstr`。

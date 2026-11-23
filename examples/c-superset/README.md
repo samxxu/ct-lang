@@ -1,12 +1,12 @@
-# c-superset — ct 作为 C 超集的样例
+# c-superset — Ct 作为 C 超集的样例
 
-这一组样例专门覆盖「Ct 作为 C 超集」的那一半能力：源文件是普通 C，ct 负责
+这一组样例专门覆盖「Ct 作为 C 超集」的那一半能力：源文件是普通 C，Ct 负责
 把它原样（或近似原样）发射成 C，语义与限制由真实编译结果说话。
 
 - 与 `examples/tour/` 相互独立：这里不引用、不修改 tour 的任何文件。
 - 每个特性至少两个角度：一个最小演示 + 一个真实场景，或一个纯语法例子 +
   一个与 Ct 特性混用的例子。每个角度都有自己的 `expected.out` 断言。
-- 反例单独成文件，断言的是 ct 的退出码与 stderr 中的诊断文本。
+- 反例单独成文件，断言的是 Ct 的退出码与 stderr 中的诊断文本。
 
 ## 运行
 
@@ -35,8 +35,8 @@ CC=clang bash examples/c-superset/run.sh
    同样要求编译、运行、stdout 一致。L0 生成的 C 允许有 unused 警告，但不允许
    编不过。
 
-对 `neg` 样例：ct 必须以 1 退出，stderr 必须包含 `<case>.err` 的每一行。
-对 `ccfail` 样例：ct 必须成功，cc 必须失败（用于「断言失败应由 C 判定」）。
+对 `neg` 样例：Ct 必须以 1 退出，stderr 必须包含 `<case>.err` 的每一行。
+对 `ccfail` 样例：Ct 必须成功，cc 必须失败（用于「断言失败应由 C 判定」）。
 
 ## 能力矩阵
 
@@ -45,7 +45,7 @@ CC=clang bash examples/c-superset/run.sh
 | `s01_switch` | §4.13 | 枚举分派、fallthrough、default | `case` 取值用位移/字符/`sizeof`，标签后用块包声明 | 标签后裸声明被拒 | yes |
 | `s02_do_while` | §4.13 | 先执行后判断，条件初始为假也跑一次 | 无花括号体、`break` 提前结束 | — | yes |
 | `s03_goto` | §4.16 | 向前 `goto` 跳出两层循环 | 向后 `goto` 手写循环 + 清理标签 | — | yes |
-| `s04_enum` | §4.14 | 隐式/显式枚举值、typedef、switch | `offsetof` 查 struct/union/typedef 别名 | 字段名拼错由 ct 报错 | yes |
+| `s04_enum` | §4.14 | 隐式/显式枚举值、typedef、switch | `offsetof` 查 struct/union/typedef 别名 | 字段名拼错由 Ct 报错 | yes |
 | `s05_union` | §4.15 | 带 tag 的 variant | union 作为 struct 成员、typedef 别名 | union 不能 use trait | yes |
 | `s06_bitfields` | §4.17 | 命名/无名位域，赋值截断 | 一条声明多个位域、枚举位宽 | 指针位域被拒 | yes |
 | `s07_anon_members` | §4.18 | 匿名 union/struct，名字提升 | 匿名记录里再嵌位域 | 匿名字段带名字被拒 | yes |
@@ -82,20 +82,20 @@ CC=clang bash examples/c-superset/run.sh
 2. **L0 会丢掉记录体之后的 `__attribute__`。** `struct S { ... } __attribute__((packed));`
    在 L0 的输出里没有属性，`sizeof` 从 5 变 8；前缀属性（`s21_attribute/prefix`）
    L0 能保留。所以 `s21_attribute/packed` 标 `l0=no`。
-3. **标签后不能写裸声明。** C 允许 `case 1: int x;`（作用域陷阱），ct 要求
+3. **标签后不能写裸声明。** C 允许 `case 1: int x;`（作用域陷阱），Ct 要求
    包进块；见 `s01_switch/neg_decl`。
 4. **`static_assert` 在 ct-ast 里不需要 `<assert.h>`**：生成物统一是
    `_Static_assert`。但同一份源文件直接交给 `cc -std=c99` 会失败，所以
    `s14_static_assert/sizes` 没有 `.orig.c` 零改写副本。
-5. **断言消息可以省略，但 C99 下会告警。** ct 接受
+5. **断言消息可以省略，但 C99 下会告警。** Ct 接受
    `_Static_assert(cond);` 并发射不带消息的断言；clang 在 `-std=c99` 下报
    `-Wc23-extensions`。本目录要求 cc 零警告，所以正例统一带消息。这是实测
    行为，不是「规范写了就能用」。
-6. **`_Generic` 整段透传。** 控制表达式与所有分支都不经过 ct 重写，分支里不能
+6. **`_Generic` 整段透传。** 控制表达式与所有分支都不经过 Ct 重写，分支里不能
    放 trait 调用/装箱这类 Ct 语法。
 7. **`_Atomic` 只验证语法。** 原子性、`atomic_*` 内建、内存序都不在本组样例里，
    语义完全由 cc 负责。
-8. **for 初始化子句里的 `static` 不是标准 C**（GNU 扩展）；ct 把它发射成
+8. **for 初始化子句里的 `static` 不是标准 C**（GNU 扩展）；Ct 把它发射成
    `{ static int i = 0; for (; ...; ...) }`，生成的 C 是标准 C99。
 9. **case 范围是 GNU/C23 扩展**，需要 cc 接受；clang 与 gcc 在 `-std=c99` 下
    接受且不告警（本目录用零改写副本验证过）。
@@ -103,14 +103,14 @@ CC=clang bash examples/c-superset/run.sh
     （`s07_anon_members/variant.orig.c` 直接编过）。
 11. **VLA 不做 sizeof 折叠**：`s16_array_length/vla` 的维度是变量，长度在运行期
     才确定。
-12. **`offsetof` 需要源文件自己包含 `<stddef.h>`**：ct 没有预处理器，只把
-    `offsetof(...)` 原样发射；字段校验是 ct 内建做的。
-13. **union 不能 `use` trait**：vptr 字段无处安放，ct 直接拒绝
+12. **`offsetof` 需要源文件自己包含 `<stddef.h>`**：Ct 没有预处理器，只把
+    `offsetof(...)` 原样发射；字段校验是 Ct 内建做的。
+13. **union 不能 `use` trait**：vptr 字段无处安放，Ct 直接拒绝
     （来源：`s05_union/neg_use`）。
 14. **边界语法**：`_Alignof` 只接受类型形式；`_Alignas` 重复报错；指针位域、
-    多声明符函数指针、for 条件里的裸逗号、数组型复合字面量都被 ct 拒绝，
+    多声明符函数指针、for 条件里的裸逗号、数组型复合字面量都被 Ct 拒绝，
     对应 `neg_*` 文件。
-15. **`__attribute__` 的语义完全交给 cc**；ct 只检查括号闭合、去重并规范化
+15. **`__attribute__` 的语义完全交给 cc**；Ct 只检查括号闭合、去重并规范化
     发射位置。属性能否用于某个对象由 cc 决定。局部前缀属性带初始化器时，
     生成物是 `int v __attribute__((unused)) = 5;`（见 `s21_attribute/prefix`）。
 16. **成功样例要求 cc 零警告。** 例如位域演示用变量（而不是字面量 300）赋值，
