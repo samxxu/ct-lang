@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.87.0（2026-11-21）；A dogfood `--check-level=warn` |
 | 文件 | [p87_dogfood.md](../../docs/design/p87_dogfood.md)、[PH-87 N-4](../../docs/reviews/2026-11-21-phase87-rev-verdict.md#L273) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **deferred**（2026-11-22，REV/REQ：HEAD `38cd4ae4` 重建 ct-ast v0.88.2，`char x[][MAX]` 仍报 `'T a[]' is deprecated`；10 条 FP 未收敛。触发 v1.1 的 A 误报收敛（A 默认强制前）；负责人 DEV；Medium） |
 
 ## 现象
@@ -121,3 +121,8 @@ $ echo $?
 > T-7，红提交 `432e95ed` 的父提交是 `2a3d208b`（SH-110 修复后）；已在 `2a3d208b` 的
 > 干净归档上重建 ct-ast 复跑同一探针，输出逐字相同（三 FAIL / 两 ok / 10 hits），
 > SH-110 只改发射器，不影响 A 检查器。红证成立。
+
+## 复核（REV，2026-11-23）
+
+`p108/multidim` 5/0：`char x[][MAX]` 不再误报、真正 `int a[]` 仍报；ct-ast 自身
+`--check-level=warn` 的该类命中 0；`p87_dogfood` 6/0。

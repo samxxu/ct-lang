@@ -7,7 +7,7 @@
 | 严重度 | High |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §1.5](../../docs/planning/v1-release-plan.md#L57-L71)、[check-goldens.sh](../../selfhost/check-goldens.sh) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；实现/绿证已在库，待 REV 复核后转 verified；负责人 DEV）** |
 | 层级 | **Tier 1（`v1-PH-0` 入口）**，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
@@ -166,3 +166,8 @@ design window: ok (12/12)
 
 负例红证（旧树 `a0ce8ef1` + 新 selftest）：gate 不存在、goldens 不存在，5 个断言全红。
 状态：**2026-11-23 所有者放开为 `open`**。实现与绿证已在库，待 REV 复核后转 `verified`。
+
+## 复核（REV，2026-11-23）
+
+`test/goldens/ast/` 25 份静态 `.c`；`check-goldens-ast.sh` 独立跑 25/25；gate 12 接入
+`check-all`；selftest 改/删/多 golden 必红。

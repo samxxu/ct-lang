@@ -6,7 +6,7 @@
 | 严重度 | **High（所有者 2026-11-21 裁定为 bug）** |
 | 锚点 | `v0.44.1`（`13db6cad`，2026-11-15 复核） |
 | 文件 | [Emitter.h.ct:5021](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5021)、[:2326](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2326) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；修复跟踪 SH-110，SH-110 合入后本卡复核转 verified）** |
 
 > 所有者 2026-11-21 裁定：**按 bug 修复**。下文的“有意的实现边界”保留为当时的工程评估，
@@ -152,3 +152,7 @@ $ echo $?
 **去向/触发**：修复由 [SH-110](sh110-dynamic-dispatch-chain-fix.md) 承接，排 `v1-PH-0`
 （`v1-release-plan.md` V1-C3）；负责人 DEV；优先级 High。
 状态：**2026-11-23 所有者放开为 `open`**，SH-110 合入后本卡复核转 `verified`。
+
+## 复核（REV，2026-11-23）
+
+由 SH-110 解除：`h.tap(1)->status()` 与两跳链均编译运行；每跳只求值一次；详见 SH-110。

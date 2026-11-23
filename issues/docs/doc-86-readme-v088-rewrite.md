@@ -7,7 +7,7 @@
 | 严重度 | Medium（v1.0 前建议） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1 |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；D2 等 SH-110 合入后 48h 重测，D3-5 runner/TSV 即刻补；负责人 DEV/REV）** |
 | blocked-by | ① SH-110 合入后 48 小时内重测 §0.1；② DEV 交付 `test/docs/check-tutorial-cases.sh` + `tutorial-cases.tsv` |
 
@@ -149,3 +149,8 @@ string_str.ct
 
 状态：**2026-11-23 所有者放开为 `open`**。D1/§0.5/D3 已完成；D2 等 SH-110 合入后 48h 重测，
 D3-5 runner/TSV 即刻补。
+
+## 复核（REV，2026-11-23）
+
+README 重写到 281 行；§0.1 的 `c.tap(1)->status()` 已按 SH-110 改为“可用，输出 2”；
+tutorial §13.6 与误读段同步；`check-docs` 2775 links 绿。

@@ -74,3 +74,8 @@ g0: OK (block 1.17.0, session-map present)
 负例红证（旧树 `a0ce8ef1` + 新测试、旧实现）：`acc_map.py` 不存在，`good` 用例即红；
 新增 6 个负例覆盖缺表 / 未登记 marker / 重复 id / 空证据 / 悬空登记 / 行数不足。
 状态仍为 `deferred`：本段只落实现与证据，等 REV 复核后决定是否改状态（本次任务要求不改状态）。
+
+## 复核（REV，2026-11-23）
+
+`g2` 机械校验：9 个接口文档、25 条 ACC；`acc_map_test` 6 条负例；`AGENTS.md` 0.3 的
+`deviation: g2-acc-mapping` 已删除；`g0/g2` 绿。

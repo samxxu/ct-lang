@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估 P1-3 探针 P2） |
 | 依据 | [Trait/泛型覆盖映射](../../docs/reviews/2026-11-22-trait-generic-coverage-map.md)、[spec §1 顺序规则](../../docs/language-spec.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **已立项（v1.1；v1.0 先按 spec 例外执行）** |
 
 ## 现象
@@ -102,3 +102,9 @@ generic_template_after.ct:7:20: error: generic template 'twice' must be defined 
 **回归。** `p86_errors` 23/0（既有诊断字节不变）；`p88_metrics` 9/0（发射 C 49881 行）；
 306 个单文件语料生成 C 与 `a0ce8ef1` 基线逐字节相同（`compared=306 same=306 diff=0`）。
 状态字段保持 `deferred` 不动。
+
+## 复核（REV，2026-11-23）
+
+采用方向 B：`trait_after.ct` 报
+`generic template 'twice' must be defined before its first instantiation`（位置指向模板名）；
+正例/普通未声明变量/缺名负例均保持；`p114` 5/0。

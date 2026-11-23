@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [DOC-88](doc-88-spec-split-decision.md) 精修 3；[check-docs.py](../../test/docs/check-docs.py) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **待办（v1.1 立项；落地可到 v1.2）** |
 
 ## 现象
@@ -100,3 +100,8 @@ S1 的清单必须作为一次性证据入库（`docs/reviews/…` 或 issue 附
   不按目录或规则整体关闭。
 - 验证：`python3 test/docs/check-docs.py` → OK（2755 relative links / 411 files、1672 fragments /
   684 Markdown files）；`--selftest` → OK（fragment 11 cases + CT 14 cases）。
+
+## 复核（REV，2026-11-23）
+
+`check-docs` 通用 `#fragment` 校验：1672 个 fragment / 692 文件；42 处历史行号锚点精确豁免；
+死锚点/越界锚点必红；`--selftest` 11 例绿。

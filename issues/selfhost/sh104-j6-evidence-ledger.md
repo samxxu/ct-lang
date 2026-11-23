@@ -7,7 +7,7 @@
 | 严重度 | High |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [v1-release-plan §1.5](../../docs/planning/v1-release-plan.md#L57-L71)、[D-011](../../docs/decisions/D-011.md) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先，不再 deferred；台账 22 已过 / 4 部分 / 3 缺失 / 5 阻塞；外部 std 子项 P-3.6/P-6.x 仍阻塞，其余即刻推进；负责人 REQ/DEV）** |
 | 层级 | **Tier 1（`v1-PH-0` 入口）**，见 [battle/v1-readiness-1](../../battle/v1-readiness-1/verdict.md) |
 
@@ -120,3 +120,8 @@ j6-ledger selftest: OK (6 cases)
 
 状态：**2026-11-23 所有者放开为 `open`**。J-6 仍未过，但不再以 `deferred` 等待；
 剩余项按 §结论推进，外部 std 子项（P-3.6/P-6.x）保留阻塞。
+
+## 复核（REV，2026-11-23）
+
+J-6 台账 34 行推进到 22 已过 / 4 部分 / 3 缺失 / 5 阻塞；剩余项已逐行写承接与 owner；
+`check-docs` 的 j6 计数/证据断言绿；`check-all` 1581/0。

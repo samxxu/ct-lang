@@ -5,7 +5,7 @@
 | 模块 | lang（词法） |
 | 严重度 | Low |
 | 优先级 | **P3** —— 加空格即可绕；但与 C 的同一歧义同源，登记备查 |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **deferred**（2026-11-22，REV/REQ：§4.24 按 C 词法把 `5.` 读成浮点字面量是既有设计；待语言侧裁定「方法调用语法是否优先于浮点字面量」。触发：该裁定或下一次 Lexer 批次（`LANG-16 → LANG-8`，post-58-plan.md:115）；负责人 REQ/EDITOR 裁定后交 DEV；P3 Low） |
 | 锚点 | `v0.53.1`（`c4727787`） |
 
@@ -94,3 +94,9 @@ rc=1
 `a numeric literal followed by '.' is a float; add a space for a method call`；
 `5 . foo()` 仍走方法解析并报 `no method 'foo' for type 'int'`。改动见提交
 `fix(ct-ast): LANG-8 浮点后点号诊断`，探针 `test/ast/lang8_float_dot.sh`。
+
+## 复核（REV/REQ，2026-11-23）
+
+裁定维持 C 词法：`5.foo()` 报专门文案
+`a numeric literal followed by '.' is a float; add a space for a method call`；
+`5 . foo()` 仍 `no method`；spec §4.24 记明；`p lang8` 4/4。

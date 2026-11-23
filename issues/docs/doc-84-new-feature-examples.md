@@ -7,7 +7,7 @@
 | 严重度 | Low |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) §6、P2-9 |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **延后（2026-11-22，REV）**：文档面已由 tutorial §15/§17/§18/§22/§23 与 README §0.5 覆盖；四条 `examples/5x_*` 需新增 `examples/**` 并接门禁，属 DEV 批次，不在 DOC 席位路径内 |
 | blocked-by | 执行触发：v1.0 发布前示例批（或 v1.1 首批）；负责人 DEV；需同时接 `test/run.sh` / `check-ast.sh` |
 
@@ -103,3 +103,8 @@ check-warnings: 506 ok, 0 failed
 ```
 
 索引已补在 [examples/README.md](../../examples/README.md) 的「新句柄层」一节。
+
+## 复核（REV，2026-11-23）
+
+新增 `examples/50_ref_out`、`51_slice`、`52_box_new`、`53_match_adt`，各带 expected；
+`test/run.sh` 160/0，`p88_emit` 3/0，语料 SHA 清单已更新。

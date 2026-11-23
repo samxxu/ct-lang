@@ -7,7 +7,7 @@
 | 严重度 | **P1（v1.0 发布，Tier 2）** |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-4；`AGENTS.md` §5.4；`tools/check.sh` |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **核心验收已达成（严格 g6，283/283 闭集）；ratchet/基线未实现且当前无必要 → deferred（触发：台账再增长 > 0，或 v1.1 复核点；owner REV）** |
 
 ## 实施规格（方案 A：ratchet 版 G6，2026-11-21）
@@ -182,3 +182,8 @@ OK g6/ledger (5 negative cases + 1 positive; ratchet 7 cases)
 ```
 
 状态仍为 `deferred`：本段只落实现与证据，等 REV 复核后决定是否改状态（本次任务要求不改状态）。
+
+## 复核（REV，2026-11-23）
+
+`g6 --ratchet` 落地：基线 `issues/.g6-baseline.tsv`、`--write-baseline`、新债/僵尸检测；
+严格模式仍默认；ratchet 7 条负例绿；当前 baseline=0。

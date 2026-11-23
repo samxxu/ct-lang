@@ -43,13 +43,13 @@ v0.88.3 的实测边界：
 | 形态 | 命令与结果 | 结论 |
 | --- | --- | --- |
 | 接口值落变量后逐跳 | `Counter d = c.tap(1);` 再 `d.status()`：编译并运行，输出 `1`，rc=0 | 可用（SH-72 / SH-74） |
-| 同一形状压成一行链 | `c.tap(1)->status()` → `error: method receiver must be a variable, an element, a call or a field chain`，rc=1 | **当前不支持**；[SH-110](issues/selfhost/sh110-dynamic-dispatch-chain-fix.md)（deferred，待修复） |
+| 同一形状压成一行链 | `c.tap(1)->status()`：编译并运行，输出 `2`，rc=0 | 可用（SH-110） |
 | 返回局部接口值 | `ct build test/ast/239_local_iface_return/prog.ct` → `0 201`，rc=0 | 可用（SH-75） |
 | 静态宿主链 | `ct build examples/47_chain_factory/src/main.ct -o /tmp/http47` 再跑 → `200 {"users":3}`，rc=0 | 可用；宿主是 struct，不是 trait 对象 |
 
-**不要按“完整路径已支持”宣传**：上表第二行就是缺口，跟踪卡是
-[SH-110](issues/selfhost/sh110-dynamic-dispatch-chain-fix.md)（deferred，待修复）；合入后本表与
-[spec §4.10.1](docs/language-spec.md#4101-链式构建器范式权威定义与两档路径) 一起更新。
+动态派发链已在 v0.88.3 pre 窗口由 [SH-110](issues/selfhost/sh110-dynamic-dispatch-chain-fix.md)
+修复；完整路径的其余边界（跨单元 factory / 装箱）仍按
+[spec §4.10.1](docs/language-spec.md#4101-链式构建器范式权威定义与两档路径) 核对。
 当前可运行版 [examples/47](examples/47_chain_factory/src/main.ct) 是**静态宿主形态**：宿主在映射
 单元内部是 struct，使用者代码里看不到它，也没有 vtable 与装箱。`send()` 是 stub，接真 curl 只换
 [examples/47 的 shim](examples/47_chain_factory/src/http/http.shim.h)。

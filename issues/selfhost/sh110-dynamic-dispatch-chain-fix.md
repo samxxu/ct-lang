@@ -7,7 +7,7 @@
 | 严重度 | High |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [SH-73](sh73-temp-receiver-dynamic-dispatch.md)；[外部评审 §4-A3](../../docs/reviews/2026-11-21-v088-external-review-eval.md) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；绿证/逐字节对照已在库，待 REV 复核后转 verified；负责人 DEV）** |
 
 ## 现象
@@ -174,3 +174,8 @@ return __ct_tmp3.vt->status(__ct_tmp3.self);
 
 状态：**2026-11-23 所有者放开为 `open`**。绿证与逐字节对照已在库，待 REV 复核后转 `verified`；
 合入后 48 小时内触发 README §0.1 重测。
+
+## 复核（REV，2026-11-23）
+
+`p110_dispatch_chain`：三形态编译/运行、每跳只求值一次、负例仍硬错、ASan rc=0；
+判据卡 `docs/design/sh110-dispatch-chain.md`；既有 305 语料 C 逐字节不变。

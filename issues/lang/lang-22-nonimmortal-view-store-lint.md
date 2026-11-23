@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)；[language-spec §4.70](../../docs/language-spec.md#L2885-L2927)；[SH-106](../selfhost/sh106-str-view-escape-no-lint.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **待评估（v1.1；不进 v1.0/本次文档修正）** |
 
 ## 背景
@@ -83,3 +83,8 @@ severity 与既有 `str_escape` 一致：compile / `ct build` warning，`ct chec
 
 验证：`test/ast/lang22_str_store.sh`（15 条断言，含正例与六类负例 + `ct build` warning）。
 `status` 字段不动；是否把 v1.1 lint 默认开启由 REQ/REV 另定。
+
+## 复核（REV，2026-11-23）
+
+非 immortal `Str` 视图存入 `Vec`/ADT/全局/static 时 warning；容器 push/set/put、brace 初始化
+均覆盖；安全形态不误报；`ct build` warning、`ct check` error；探针 15/15。

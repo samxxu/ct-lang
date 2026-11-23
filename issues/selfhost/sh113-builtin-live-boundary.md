@@ -7,7 +7,7 @@
 | 严重度 | Low |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估 P1） |
 | 依据 | [hw-2 判决](file:///Users/samxx/dsh-ws/ct-lang/battle/hw-2/verdict.md)、[SH-112](sh112-typed-ir-architecture.md)、[架构评估](../../docs/reviews/2026-11-22-architecture-assessment-eval.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **已立项（v1.1；v1.0 不动判活逻辑）** |
 
 ## 现象
@@ -48,3 +48,8 @@
 - 范围：判活边界 6 组测试
 - 依据：本卡「处置证据」已标 `v1.1` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
 - 触发时：改回 `open`，按本卡验收执行；不提前扩围。
+
+## 复核（REV，2026-11-23）
+
+6 组 8 条断言锁住判活边界；注释/前缀/字段/字面量/`str_` 前缀/小写导出漏判均有覆盖；
+`p113` 全 ok。

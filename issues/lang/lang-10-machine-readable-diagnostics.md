@@ -6,7 +6,7 @@
 | 类型 | **feature request**（能力缺口，不是缺陷） |
 | 严重度 | Medium |
 | 优先级 | **P2** —— 不挡功能，但三处消费方都在靠字符串匹配，属「门禁可能静默变绿」的系统性风险 |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **deferred → 已排期 v1.1**（2026-11-22：警告/type 通道 JSON 已实现；解析错误 JSON（7b）仍回退纯文本；字段级 `line`/`col` 已落地。**v1.1 补 parse JSON**；稳定诊断码 registry 归 v1.2 [LANG-25](lang-25-diagnostic-code-registry.md)；负责人 DEV） |
 | 锚点 | `v0.53.1`（`2fd55841`） |
 
@@ -114,3 +114,8 @@ rc=1
 **触发/下一步**：下一次 Driver/Diag 批次（v1.1 前）；负责人 DEV；P2。最小补丁方向：解析错误在
 json 模式下输出与警告同形的可解析对象（`{"errors":[…]}` 或逐行对象），默认文本逐字节不变；
 在 `test/semantics` 补负例，断言 `severity`/`file`/`line`/`col` 齐全且条数与人读通道相等。
+
+## 复核（REV，2026-11-23）
+
+解析错误走 `--diagnostics=json`：`{"errors":[{"severity","file","line","col","message"}]}`；
+compile/check 到 stdout、build 到 stderr；text 输出逐字节不变；semantics 24 条断言绿。
