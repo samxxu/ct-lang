@@ -7,7 +7,7 @@
 | 严重度 | Low |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估 P1） |
 | 依据 | [LANG-10](lang-10-machine-readable-diagnostics.md)、[架构评估](../../docs/reviews/2026-11-22-architecture-assessment-eval.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **已立项（v1.2；与 v1.1 的 parse JSON 分开）** |
 
 ## 现象
@@ -43,3 +43,9 @@
 - 范围：诊断码 registry
 - 依据：本卡「处置证据」已标 `v1.2` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
 - 触发时：改回 `open`，按本卡验收执行；不提前扩围。
+
+## 复核（REV，2026-11-23）
+
+`docs/diagnostics/codes.md` 36 码；文本/JSON 共用 code，默认文本逐字节不变，`--diag-codes`
+追加；registry 查重/前缀/级别断言入 check-docs + 4 selftest；p_lang25 全绿。全量域扩展按
+registry 规则增量，不再单独立项。

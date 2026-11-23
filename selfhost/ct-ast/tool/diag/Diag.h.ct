@@ -740,7 +740,7 @@ impl DiagStore for Diag {
                 else if (w->kind == 12)
                     /* LANG-24: the deprecated alias always prints `warning:`,
                        even when `ct check` escalates the other findings. */
-                    fprintf(tf, "%s warning: %s\n", loc, w->msg);
+                    fprintf(tf, "%s warning: %s%s\n", loc, w->msg, csuf);
                 else if (w->kind == 13)
                     fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
                 else if (w->kind == 10)

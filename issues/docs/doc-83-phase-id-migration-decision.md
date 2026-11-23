@@ -7,7 +7,7 @@
 | 严重度 | **P1（v1.0 发布，Tier 2）** |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) P1-3；[phase 迁移 blocker](../../docs/planning/phase-migration-blockers.md)；主规范 1.17.0 PN-1…PN-17 |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **延后（2026-11-22，REV）**：D-019 已裁定 A/B/C 并冻结执行时点；迁移于 `v1-PH-0` 开卡前一次原子完成，本轮不做 |
 | blocked-by | 执行触发：`v1-PH-0` 开卡前（主规范裁定已由 [D-019](../../docs/decisions/D-019.md) 给出；负责人 REQ/DEV） |
 
@@ -83,3 +83,8 @@ $ grep -n '执行窗口' docs/decisions/D-019.md
 **触发/负责人**：`v1-PH-0` 开卡前由 REQ 建账本（`window: W0` → `W1`），DEV 跑单一迁移脚本
 并贴 PN-6 五条断言；迁移提交只改目录/文档引用/账本，不动 tag、`battle/**`、代码、测试。
 届时应先关闭本 deferred 条目再开卡，否则 G1/G6 拦截。
+
+## 复核（REV，2026-11-23）
+
+D-019 A/B/C 已执行：d=0、`docs/phases/v0-PH-<n>/card.md`、旧卡补 `phase-id`/`version-minor`；
+W2 窗口与负例落地；迁移脚本/账本入库；见 DOC-74 复核。

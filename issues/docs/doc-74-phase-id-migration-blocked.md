@@ -113,3 +113,8 @@ A/B/C 已由 [D-019](../../docs/decisions/D-019.md) 裁定：d=0 继续；迁移
 
 本卡不立即执行的原因与触发条件见 D-019 §2–§3；执行前禁止新增裸 `PH-*` 引用。
 `v1-PH-0` 开卡若未先迁移，按 G1/G6 拦截。
+
+## 复核（REV，2026-11-23）
+
+迁移已执行：74 张卡 → `docs/phases/v0-PH-<n>/card.md`（含 `v1-PH-0`），账本 `window: W2` 74 行；
+PN-6 五条断言 + 改名集合 + tag 137 不变 + battle 未动；W2 裸 `PH-<n>` 负例红；`check-docs` 0 dead link。

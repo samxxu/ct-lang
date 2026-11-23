@@ -6,7 +6,7 @@
 | 严重度 | **High** |
 | 锚点 | commit `a1c523a`（2026-11-07，`v0.20.0`）；裁决 2026-11-09 |
 | 文件 | [TypeCheck.h.ct:75-129](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct#L75-L129)（`type_key` 丢弃 `const` / `volatile`）；[Emitter.h.ct:424](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L424)（同一张表的副本 `map_type_key`）；[Expr.h.ct:205-231](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L205-L231)（实参比较前的 `tnorm`）；[Expr.h.ct:1109-1122](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1109-L1122)（`argtype_check_static`，静态调用点的硬错）；[Expr.h.ct:2560-2569](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2560-L2569)（`aux == 6` 的多候选判定） |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **deferred（2a 已 verified；1a/1b 待 D-60-1，2b 待 D-60-2）**（2026-11-22，REV/REQ：四个静态形态在 HEAD 全部硬错；`"abc".toUpper()` / `const char *s; s.toUpper()` 仍 rc=0，未知类型 `TotallyBogus *` 仍编译；两个决策点无 decision 记录。负责人 REQ/EDITOR 裁定后交 DEV；P2） |
 
 ## 现象
@@ -304,3 +304,9 @@ $ echo $?
 本轮不实现：1a/1b 要改语言表面（trait 方法接收者可变性标注），2b 依赖头文件 typedef 设计，
 都不是本批可落的小修；不伪造 `verified`。两个决策点若长期不裁，应转 `REQ-*` 池条目，
 避免再以 issue 挂起。
+
+## 复核（REV，2026-11-23）
+
+D-023（`mut` 后置）与 D-024（`.m.ct` 声明点类型证据）落地；1a/1b 字面量/顶层 const 接收者调用
+mut 方法 build warning / check error；2a 保持硬错；2b 未知类型报错、C 头 typedef 有证据才放行；
+生成 C 对既有夹具逐字节不变；check-all 12 门绿。

@@ -146,3 +146,9 @@ $ sh test/run.sh
 
 未做：第 5 项（sanitizer/fuzz 进本地）、第 6/10 项（计数脚本回填 test/README 的旧数字）、
 第 7 项（`49_socket` 依赖的 std API）、第 8 项（ICCARM 等工具链矩阵）。
+
+## 处置（REQ，2026-11-23）：剩余项 deferred
+
+已交付：4 个近相 example（54–57）、io_names 边界、覆盖率报告、runner 计数回填。
+剩余第 5–8 项（sanitizer/fuzz 进硬门禁、`49_socket` 的 std API、ICCARM 工具链矩阵）需外部工具链/
+std 包，触发：v1.1 工具链矩阵立项；当前不阻塞 v1.0。

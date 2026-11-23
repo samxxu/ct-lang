@@ -7,7 +7,7 @@
 | 严重度 | Low |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [v0.88.0 评审](../../docs/reviews/full-review-v0.88.0.md) §2、P2-10 |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **deferred**（v1.1 起；触发：nightly 覆盖率 job 或 v1.1 立项窗口；owner DEV + VERIFY） |
 
 ## 现象
@@ -110,3 +110,8 @@ test25unit: 3 passed, 0 failed
 
 `MAX_FUNCS` 512 边界仍由 SH-109 覆盖，不重复计入本条。覆盖率没有设阈值，
 也没有进 `check-all` 的硬门禁：只有接线自检（缺 job / 缺 artifact / 缺 gcov）会红。
+
+## 复核（REV，2026-11-23）
+
+`test/coverage/run.sh` 纯 gcov，722 夹具、68.98% 行覆盖；nightly `coverage` job + artifact +
+5 条接线负例；`test25_unit.sh` 33 断言接入 check-ast；io_names 1024/1025 边界文案。

@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估 P1） |
 | 依据 | [SH-110](sh110-dynamic-dispatch-chain-fix.md)、[SH-73](sh73-temp-receiver-dynamic-dispatch.md)、[架构评估](../../docs/reviews/2026-11-22-architecture-assessment-eval.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **已立项（v1.1；不阻塞 v1.0）** |
 
 ## 现象
@@ -55,3 +55,9 @@ v1.1（`v1-PH-1`）；不阻塞 v1.0。
 - 范围：lowering 不变量成文 + 发射前检查
 - 依据：本卡「处置证据」已标 `v1.1` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
 - 触发时：改回 `open`，按本卡验收执行；不提前扩围。
+
+## 复核（REV，2026-11-23）
+
+I1–I4 机械检查落地（发射前 `invariant_check` + hoist 临时名检查），5 类正例/6 负例；
+`docs/design/lowering-invariants.md` 成文；既有语料 C 逐字节、25 goldens、p86 诊断不变。
+I5/跨块/统一清理 CFG 归 SH-112（v1.2）。
