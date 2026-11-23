@@ -822,8 +822,9 @@ def check_whole_ledger(errors, roadmap, cards, active_numbers):
     roadmap row (v1.0.0 backfill: PH-33/34/36 said 规划中 for a year after the
     tag shipped, because only the newest 12 cards were checked).
 
-    `设计已冻结` counts as terminal for a ✅ row: those cards are design
-    baselines whose phases were delivered elsewhere.
+    A ✅ row means the phase finished: the card header must say 完成. The five
+    old design-baseline cards (PH-5/6/8/9/12) were normalised in the same pass,
+    so no `设计已冻结` exemption is needed.
     """
     checked = 0
     for number, name, path in cards:
@@ -840,7 +841,7 @@ def check_whole_ledger(errors, roadmap, cards, active_numbers):
             continue
         line = row.group(0)
         checked += 1
-        if "✅" in line and word not in ("完成", "设计已冻结"):
+        if "✅" in line and word != "完成":
             errors.append(
                 f"{rel}: roadmap row is ✅ 完成 but the card says '{word}'")
         if "⬜" in line and word != "规划中":
