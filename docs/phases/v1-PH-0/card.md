@@ -48,7 +48,7 @@ version-minor: 0
 | S1 `install.sh` 切换 | 删 L0→L1→L2 段，改 `cc bootstrap → ct`；`ctc` 别名 | 干净目录 `./install.sh --prefix /tmp/ctv1` 后 `/tmp/ctv1/ct -v` = `v1.0.0` | S |
 | S2 构建路径切换 | `install.sh` 与 `check-ast` 的 ct-ast 段改由 seed 构建；`ct-tour` 第 7 步同步；L1/L2 保留为 oracle | `check-all` 绿；`grep -n 'l2' install.sh` 无构建 ct-ast 的引用 | M |
 | S3 门禁 | 新 gate 13 `check-seed.sh`；gate 2/3/4/5 保留且绿；gate 12 独立可跑 | 门禁计数 13 同步四处文档；负例（改一个字节）判红 | M |
-| S4 v1.0 硬门禁证据 | 全量语料 FP=0 的命令与原始输出；J-6 剩余夹具与 J-4b 条款；P-3.5 处置 | 证据入库；J-6 台账无 `缺失` | L |
+| S4 v1.0 硬门禁证据 | 全量语料 FP=0 的命令与原始输出（[SH-118](../../../issues/selfhost/sh118-full-corpus-fp-zero.md)）；J-6 剩余夹具与 J-4b 条款（[SH-117](../../../issues/selfhost/sh117-j6-local-closeout.md)）；P-3.5 处置 | 证据入库；J-6 台账无 `缺失` | L |
 | S5 文档/版本/收口 | README/spec/安装与迁移说明；`v1.0.0` bump；新 MAJOR 签字 decision；tag | `check-all` 13/13 绿；README 版本断言通过；tag 指向收口提交 | M |
 
 每项先提 `test(<scope>): <task-id> 红`（含 `baseline: <sha>`）；S5 的纯文档部分可写
@@ -62,8 +62,8 @@ version-minor: 0
 | E-V1-2 | `install.sh` 不引用 L0/L1/L2；无网络、无 git、干净环境可安装 |
 | E-V1-3 | ct-ast 的构建/安装路径不依赖 L2：`install.sh` 与 `check-ast` 的 ct-ast 段均吃 seed；L1/L2 只作 oracle |
 | E-V1-4 | `check-all` 13 道全绿：gate 2/3/4/5 照旧、gate 12 独立、gate 13 有正负例 |
-| E-V1-5 | 全量语料 `--check-level=warn` FP=0 的命令、清单与原始输出入库 |
-| E-V1-6 | J-6 **本仓段**无 `缺失` / `部分`；`外部` 段（P-3.6 / P-6.1–P-6.4）不计入；`阻塞` 仅 P-1.3（迁移 lint，归 v1.x；所有者 2026-11-23 已裁定可带此阻塞发布） |
+| E-V1-5 | 全量语料 `--check-level=warn` FP=0 的命令、清单与原始输出入库（[SH-118](../../../issues/selfhost/sh118-full-corpus-fp-zero.md)） |
+| E-V1-6 | J-6 **本仓段**无 `缺失` / `部分`（[SH-117](../../../issues/selfhost/sh117-j6-local-closeout.md)）；`外部` 段（P-3.6 / P-6.1–P-6.4）不计入；`阻塞` 仅 P-1.3（迁移 lint，归 v1.x；所有者 2026-11-23 已裁定可带此阻塞发布） |
 | E-V1-7 | DOC-76/77/79 的兼容承诺、能力节号、冻结清单断言全绿；README 版本 = `v1.0.0` |
 | E-V1-8 | 单卡回滚：`bootstrap/` + `install.sh` + 门禁改动同一提交回滚后，`v0.88.3` 链路仍可用 |
 | E-V1-9 | tag 前 3 轮自举逐字节一致（复用 `check-ast` fixpoint，轮数参数化） |
@@ -86,5 +86,7 @@ version-minor: 0
 - [v1 路线](../../planning/v1-release-plan.md) §1.2–§1.5
 - [SH-105](../../../issues/selfhost/sh105-goldens-static-freeze.md)（静态 goldens）
 - [SH-104](../../../issues/selfhost/sh104-j6-evidence-ledger.md)（J-6 台账）
+- [SH-117](../../../issues/selfhost/sh117-j6-local-closeout.md)（J-6 本仓段收尾）
+- [SH-118](../../../issues/selfhost/sh118-full-corpus-fp-zero.md)（全量 FP=0 证据）
 - [battle/p88-emit-match](../../../battle/p88-emit-match/verdict.md)（字面 `match` 引入 ct-ast）
 - [编号提案](../../proposals/phase-numbering-major-reset.md)、[迁移 blocker](../../planning/phase-migration-blockers.md)
