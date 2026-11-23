@@ -2362,8 +2362,9 @@ int main(void) {
 - **错误**：格式 `<file>:<line>:<col>: error: <message>`，输出到 `stderr`；L0 **遇错即 `exit(1)`**，
   Ct 线则先收集多个错误（§10）。
 - **L0 不产生任何警告**；Ct 线会输出泄漏警告与签名不一致告警，`--diagnostics` 可切 JSON（§10）。
-- **JSON 覆盖（v1.1 目标）**：warning / type-check 通道已输出 JSON；parse 错误目前在
-  `--diagnostics=json` 下仍回退文本，v1.1 补齐为同构 JSON（file/line/column/severity/message）；
+- **JSON 覆盖（v1.1）**：warning / type-check 通道与 **parse 错误**都输出 JSON；
+  parse 错误为 `{"errors":[{"severity":"error","file":…,"line":…,"col":…,"message":…}]}`，
+  compile / check 走 stdout，build 走 stderr；缺省 text 模式逐字节不变（LANG-10）。
   稳定诊断码 registry 归 v1.2（LANG-25），不在 v1.1 混入。
 - **语义类记录的严重级**：调用点 arity / 实参类型 / trait 方法歧义 / impl 签名漂移中，
   `ct build` 只把 **impl 签名漂移**当硬错（退出 `1`、不写 `.c`），其余记录仍是 `warning:`、不改变退出码；
