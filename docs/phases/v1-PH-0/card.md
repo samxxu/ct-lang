@@ -93,3 +93,20 @@ version-minor: 0
 - [SH-118](../../../issues/selfhost/sh118-full-corpus-fp-zero.md)（全量 FP=0 证据）
 - [battle/p88-emit-match](../../../battle/p88-emit-match/verdict.md)（字面 `match` 引入 ct-ast）
 - [编号提案](../../proposals/phase-numbering-major-reset.md)、[迁移 blocker](../../planning/phase-migration-blockers.md)
+
+## 6 收口证据（2026-11-24）
+
+| 判据 | 结果 |
+| --- | --- |
+| E-V1-1 seed | `bootstrap/ct-ast/` 27 `.c` + 26 `.h`，gate 13 两轮逐字节、手改负例红 |
+| E-V1-2 install | `check-install: OK (seed-built ct, clean copy, version 1.0.0)` |
+| E-V1-3 构建路径 | `install.sh`/`check-ast`/`ct-tour` 与 test/pkg/sanitizers/warnings/semantics/tsan/fuzz/coverage/acceptance/model/make-dist/CI 均吃 seed；L0–L2 只作 oracle |
+| E-V1-4 门禁 | `check-all: OK (13 hard gates green)`；gate 12 `check-goldens-ast 25/25`；gate 13 正负例绿 |
+| E-V1-5 FP=0 | `p118/fp (0 B diagnostics; checked 1377 legal .ct, skipped 47, corpus 1424)` |
+| E-V1-6 J-6 | 本仓段 `passed=28 partial=0 missing=0 blocked=1 external=5`（仅 P-1.3 阻塞，owner 已裁定归 v1.x） |
+| E-V1-7 文档 | `check-docs: OK (... v1.0.0, 13 hard gates ...)`；README/docs/AGENTS 版本一致 |
+| E-V1-8 回滚 | seed/install/gate 改动按 S0–S3 分提交，单文件夹具仍由 L0–L2 oracle 覆盖 |
+| E-V1-9 fixpoint | gate 13 两轮重建 + `p88_fixpoint` 2/3 轮逐字节 |
+| E-V1-10 match | 76 切片 → 420 臂、84 变体穷尽 `match`；缺臂负例红；66 语料逐字节、345 诊断逐字 |
+
+其他：`check-sanitizers: OK (599 checks)`；`g0/g1/g4/g5/g6/g8/g9` 绿；D-027 新 MAJOR 签字。
