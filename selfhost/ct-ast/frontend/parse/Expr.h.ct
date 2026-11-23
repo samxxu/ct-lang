@@ -6789,8 +6789,10 @@ impl ExprOps for Expr {
                             for (mi3 = 0; mi3 < self->sym->traits[ti3].nm; mi3++)
                                 if (strcmp(self->sym->traits[ti3].m[mi3].name, qc) == 0) break;
                             if (mi3 < self->sym->traits[ti3].nm) {
-                                if (self->arity_check(id_line, id_col, qc, got,
-                                                      self->sym->traits[ti3].m[mi3].nparams) != 0)
+                                if (!(self->sym->traits[ti3].m[mi3].variadic
+                                      && got >= self->sym->traits[ti3].m[mi3].nparams)
+                                    && self->arity_check(id_line, id_col, qc, got,
+                                                         self->sym->traits[ti3].m[mi3].nparams) != 0)
                                     return -1;
                                 /* 25.1: the receiver stays apart, so the
                                    remaining actuals are compared with the

@@ -1361,6 +1361,15 @@ else
     bad "SH-110 dispatch chain" "$(sed -n '1,10p' "$work/p110chain.out")"
 fi
 
+# SH-61: form 5 (`Trait::method(recv, ...)`) must honour the trait method's
+# variadic flag; a non-variadic form 5 still reports arity.
+sh test/ast/sh61_form5.sh "$work/ct-ast" >"$work/p61form5.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "SH-61 form 5 variadic arity (variadic accepted, fixed rejected)"
+else
+    bad "SH-61 form 5 variadic arity" "$(sed -n '1,10p' "$work/p61form5.out")"
+fi
+
 # SH-108: a multi-dimensional array parameter's empty first dimension
 # (`char x[][MAX]`) is legal C, not the deprecated `T a[]` slice spelling. A
 # genuine single-dimension `int a[]` still warns, and ct-ast's own
