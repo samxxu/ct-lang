@@ -31,6 +31,13 @@ import tool::diag::Diag;
 #define T_ID 1
 #define N_CALL 7
 #define N_VAR 10
+#define N_STR 9
+#define N_MEMBER 24
+#define N_ARROW 25
+#define N_INDEX 26
+#define N_DEREF 28
+#define N_MCALL 30
+#define N_SLICE_INDEX 74
 #define N_SLICE_RANGE 75
 #define T_NUM 2
 #define T_PUNCT 4
@@ -85,6 +92,13 @@ pub trait SupportOps {
        a call returning `T[]`)? Used by the placement checks that must refuse
        storing a view in an interface / closure environment. */
     int  expr_is_slice(int n);
+    /* LANG-22: SH-106's borrowed-view classifier, shared with the expression
+       and statement layers so a store into a container / ADT / global can ask
+       whether the value is a local or temporary view. */
+    int  str_handle_kind(const char *t);
+    int  str_escape_class(int e);
+    int  str_escape_class_at(int e, int depth);
+    int  str_store_warn(int e, const char *type, int line, int col);
     int  init_raw(char *out, int cap);
     /* P-7.2: `[` `]` lookahead used by every declaration position, so a slice
        spelling can be accepted (local / parameter) or refused (field / global)
@@ -152,6 +166,108 @@ impl SupportOps for ParseSupport {
                 return 1;
         }
         return 0;
+    }
+
+    /* LANG-22 (shared with SH-106): 1 `String`, 2 `U16String`, 3 `Str`,
+       4 `U16Str`; 0 for anything else. A pointer / array suffix is not a
+       handle. */
+    int str_handle_kind(const char *t)
+    {
+        const char *b;
+        (void)self;
+        size_t n;
+
+        if (t == 0) return 0;
+        b = t;
+        if (strncmp(b, "const ", 6) == 0) b += 6;
+        if (strncmp(b, "struct ", 7) == 0) b += 7;
+        while (*b == ' ' || *b == '\t') b++;
+        n = strlen(b);
+        while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) n--;
+        if (n == 0 || b[n - 1] == '*' || b[n - 1] == ']') return 0;
+        if (n == 6 && strncmp(b, "String", 6) == 0) return 1;
+        if (n == 9 && strncmp(b, "U16String", 9) == 0) return 2;
+        if (n == 3 && strncmp(b, "Str", 3) == 0) return 3;
+        if (n == 6 && strncmp(b, "U16Str", 6) == 0) return 4;
+        return 0;
+    }
+
+    int str_escape_class(int e)
+    {
+        return self->str_escape_class_at(e, 0);
+    }
+
+    /* SH-106's escape class of view expression `e`: 0 safe (immortal literal,
+       owner is a parameter / field / global / static / immortal local),
+       1 local owner, 2 temporary owner. LANG-22 reuses it unchanged. */
+    int str_escape_class_at(int e, int depth)
+    {
+        char et[MAX_TEXT];
+        int k, vi, rk, r;
+
+        if (e < 0 || depth > 8) return 0;
+        if (self->ty->expr_type(e, et, (int)sizeof et) != 0) return 0;
+        rk = self->str_handle_kind(et);
+        if (rk != 3 && rk != 4) return 0;
+        k = self->arena->nodes[e].kind;
+        if (k == N_STR) return 0;          /* immortal literal view */
+        if (k == N_VAR) {
+            vi = self->sym->find_var(self->arena->nodes[e].text2);
+            if (vi < 0) return 0;
+            return self->sym->vars[vi].str_escape;
+        }
+        if (k == N_MCALL) {
+            const char *mn = self->arena->nodes[e].text2;
+            if (!(strcmp(mn, "as_str") == 0 || strcmp(mn, "get") == 0
+                  || strcmp(mn, "at") == 0 || strcmp(mn, "char_at") == 0
+                  || strcmp(mn, "byte_slice") == 0 || strcmp(mn, "slice") == 0))
+                return 0;
+            r = self->arena->nodes[e].a;
+            if (r < 0) return 0;
+            if (self->ty->expr_type(r, et, (int)sizeof et) != 0) return 0;
+            rk = self->str_handle_kind(et);
+            if (rk == 3 || rk == 4)
+                return self->str_escape_class_at(r, depth + 1);
+            if (rk != 1 && rk != 2) return 0;
+            if (self->arena->nodes[r].kind == N_STR) return 0;
+            if (self->arena->nodes[r].kind == N_VAR) {
+                if (strcmp(self->arena->nodes[r].text2, "self") == 0) return 0;
+                vi = self->sym->find_var(self->arena->nodes[r].text2);
+                if (vi < 0) return 0;
+                if (self->sym->vars[vi].is_global || self->sym->vars[vi].is_static)
+                    return 0;
+                if (self->sym->vars[vi].is_fnparam || self->sym->vars[vi].is_param)
+                    return 0;
+                if (self->sym->vars[vi].str_immortal) return 0;
+                return 1;
+            }
+            if (self->arena->nodes[r].kind == N_MEMBER
+                || self->arena->nodes[r].kind == N_ARROW
+                || self->arena->nodes[r].kind == N_DEREF
+                || self->arena->nodes[r].kind == N_INDEX
+                || self->arena->nodes[r].kind == N_SLICE_INDEX)
+                return 0;
+            return 2;
+        }
+        if (k == N_CALL && strcmp(self->arena->nodes[e].text2, "str_slice") == 0)
+            return self->str_escape_class_at(self->arena->nodes[e].a, depth + 1);
+        return 0;
+    }
+
+    /* LANG-22: a non-immortal `Str` / `U16Str` view is being stored in a
+       container element, an ADT payload or a global / static. Warning only
+       (compile/build) and an error under `ct check`, the SH-106 policy. */
+    int str_store_warn(int e, const char *type, int line, int col)
+    {
+        char msg[MAX_TEXT * 2];
+        int hk = self->str_handle_kind(type);
+
+        if (hk != 3 && hk != 4) return 0;
+        if (self->str_escape_class(e) == 0) return 0;
+        snprintf(msg, sizeof msg,
+                 "storing a non-immortal '%s' view; the owner must outlive the container",
+                 hk == 4 ? "U16Str" : "Str");
+        return tool::diag::ct_str_warn(line, col, msg, self->mem->path);
     }
 
     /* P-7.2: `[` `]` lookahead without consuming. The lexer has no peek, so

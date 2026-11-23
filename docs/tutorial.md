@@ -2301,6 +2301,8 @@ ct build greet.ct -o greet && ./greet
 - 字面量 / 空串是只读区 immortal，`release()` 是 no-op；要独立副本用 `to_string()`。
 - `Str` 是 `{ptr,len}` 视图：**不能作 struct 字段或 `Map` 键**（硬错）；`Vec<Str>`、`Option<Str>`、
   ADT 负载、全局 `Str` 可编译，但存的是视图，owner 必须先死（[spec §4.70](language-spec.md)）。
+  非 immortal 来源存入这些位置在 v1.1 起报 warning（`ct check` 为 error）；literal / 参数 /
+  全局 / `self` 的视图不报（LANG-22）。
 - 释放分层：局部/参数自动；`String` 字段在宿主 `use Drop` 且无显式 impl 时有胶水；
   `Vec`/`Map` 字段、全局、ADT payload 由作者处理（[idioms §2](idioms.md)）。
 - `char *` 方法来自 std 包：`import std::str::CharStr;`（0.19.0 及以前 `std::str::String`）；

@@ -5378,27 +5378,44 @@ impl ExprOps for Expr {
                                template spelling (`T` / `V`). */
                             {
                                 int pi = self->arena->nodes[inm].a;
-                                int ai = args, prev = -1;
+                                int ai = args, prev = -1, aidx = 0;
                                 while (pi >= 0 && ai > 0) {
                                     char fty[MAX_TEXT];
                                     char ftr[MAX_TEXT];
                                     int fip = 0;
                                     if (self->inst_subst_type(ibase,
-                                            self->arena->nodes[pi].text, fty, sizeof fty)
-                                        && self->sup->iface_ref_type(fty, ftr, sizeof ftr, &fip)) {
-                                        int boxed = self->sup->maybe_box(ai, ftr, fip);
-                                        if (boxed < 0) return -1;
-                                        if (boxed != ai) {
-                                            if (prev < 0) args = boxed;
-                                            else self->arena->nodes[prev].next = boxed;
-                                            self->arena->nodes[boxed].next =
-                                                self->arena->nodes[ai].next;
-                                            ai = boxed;
+                                            self->arena->nodes[pi].text, fty, sizeof fty)) {
+                                        /* LANG-22: the storing methods copy the
+                                           element into the container; a
+                                           non-immortal `Str` view there would
+                                           outlive its owner. `index_of`-style
+                                           readers take a `Str` too, so only the
+                                           writers are judged. */
+                                        if ((strcmp(fname, "push") == 0
+                                             || strcmp(fname, "set") == 0
+                                             || strcmp(fname, "put") == 0)
+                                            && self->sup->str_store_warn(ai, fty,
+                                                   (self->arg_base + aidx < MAX_ARG_POS)
+                                                       ? self->arg_line[self->arg_base + aidx] : mline,
+                                                   (self->arg_base + aidx < MAX_ARG_POS)
+                                                       ? self->arg_col[self->arg_base + aidx] : mcol) != 0)
+                                            return -1;
+                                        if (self->sup->iface_ref_type(fty, ftr, sizeof ftr, &fip)) {
+                                            int boxed = self->sup->maybe_box(ai, ftr, fip);
+                                            if (boxed < 0) return -1;
+                                            if (boxed != ai) {
+                                                if (prev < 0) args = boxed;
+                                                else self->arena->nodes[prev].next = boxed;
+                                                self->arena->nodes[boxed].next =
+                                                    self->arena->nodes[ai].next;
+                                                ai = boxed;
+                                            }
                                         }
                                     }
                                     prev = ai;
                                     ai = self->arena->nodes[ai].next;
                                     pi = self->arena->nodes[pi].next;
+                                    aidx++;
                                 }
                                 self->arena->nodes[m].b = (args == 0) ? -1 : args;
                             }
@@ -8037,6 +8054,13 @@ impl ExprAdt for Expr {
             char ab[MAX_TEXT];
             int az, rc, aline, acol;
             if (k >= nfields) break;
+            /* LANG-22: an ADT payload copies the value into the variant, so a
+               non-immortal borrowed `Str` view would outlive its owner. */
+            aline = (self->arg_base + k < MAX_ARG_POS) ? self->arg_line[self->arg_base + k] : tline;
+            acol = (self->arg_base + k < MAX_ARG_POS) ? self->arg_col[self->arg_base + k] : tcol;
+            if (self->sup->str_store_warn(a, adts[adt].variants[v].fields[k].type,
+                                          aline, acol) != 0)
+                return -1;
             az = 0;
             if (self->chk_type(a, aty, sizeof aty, &az) != 0) continue;
             if (az && strchr(adts[adt].variants[v].fields[k].type, '*')) continue;

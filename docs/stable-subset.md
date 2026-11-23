@@ -45,7 +45,7 @@
 | 泄漏策略 `leaks = warn 或 error` 与 `c-boundary = allow 或 strict` 的键名 | 冻结中 | REQ + ADR | v1.1 冻结 | D-012；spec §4.70 |
 | `std` 包导入名与单元命名（`std::str::CharStr` 等） | 冻结中 | 包维护者 + 索引记录；旧名一个 MINOR | 随 PKG-22 发布 | [PKG-22](../issues/packages/pkg-22-std-str-charstr-rename.md) |
 | 内建 trait（`Drop` / `Handback`）的可见声明显性化 | 冻结中 | REQ + ADR；不得引入 vtable/vptr | **v1.0 前（当前 pre 窗口；依赖 `lib/core` Stage 1）** | [LANG-23](../issues/lang/lang-23-builtin-trait-declarations.md) |
-| 非 immortal `Str` 视图存入容器的 lint（warn 级） | 冻结中 | REQ + ADR；先 warn，不升硬错 | v1.1 | [LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
+| 非 immortal `Str` 视图存入容器的 lint（warn 级） | 冻结中 | REQ + ADR；先 warn，不升硬错；**v1.1 已实现**（compile/build warning，`ct check` error） | v1.1 | [LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
 | 编译器内部分层（L0 / L1 / L2 去留、seed cutover） | 1.0 前可改 | REQ 开 issue；语义不变的不需 ADR | `v1-PH-0` 前 | [v1 路线](planning/v1-release-plan.md) §2 |
 | A 检查的默认值（`--check-level` 默认 off/warn/error） | 1.0 前可改 | REQ + ADR（产品契约） | **SH-115 起默认 `warn`**（不等 v1-pre；`off` 保留逃生）；v1.1 视证据升 `error` | [SH-115](../issues/selfhost/sh115-b-plus-strengthening.md)、[v1 路线](planning/v1-release-plan.md) §2.4 |
 | spec 结构（是否拆分、目录与锚点） | 1.0 前可改 | REQ 开 issue；结构不动语义 | v1.1 | [DOC-88](../issues/docs/doc-88-spec-split-decision.md) |

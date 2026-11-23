@@ -38,6 +38,8 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 - 字面量 / 空串是只读区 immortal；`String s = "x";` 直接绑定 immortal 块，`release()` 是 no-op。
 - `Str` 是 `{ptr,len}` 视图：**不能作 struct 字段或 `Map` 键**（硬错）；
   `Vec<Str>`、`Option<Str>`、ADT 负载、全局 `Str` 可编译，但存的是视图，owner 必须先于容器死亡（[§4.70](language-spec.md)）。
+  非 immortal 来源存入这些位置在 v1.1 起报 warning（`ct check` 为 error）；immortal 字面量与
+  参数 / 全局 / `self` 的视图不报（LANG-22）。
 - 要独立副本用 `s.to_string()`；`char *` 没有 `to_string`，先变 `String` / `Str`。
 - `char *` 的方法（`length` / `to_int` / `starts_with`）来自 std 包映射，必须
   `import std::str::CharStr;`（std 0.19.0 及以前叫 `std::str::String`，旧名一个 MINOR）。

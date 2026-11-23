@@ -64,3 +64,22 @@
 - [DOC-85](../../issues/docs/doc-85-idiom-priority-card.md)
 - [SH-106](../selfhost/sh106-str-view-escape-no-lint.md)
 - [language-spec §4.70](../../docs/language-spec.md#L2885-L2927)
+
+## 处置（DEV，2026-11-23）：v1.1 warn 级 lint 已实现
+
+复用 SH-106 的 `str_escape` 记账（`str_escape_class`），在四个存储点判定：
+
+| 存储点 | 代码位置 |
+| --- | --- |
+| `Vec` 元素（`push` / `set` / `put` 的形参） | `Expr.h.ct` inherent method 形参循环 |
+| `Vec<Str>` brace 初始化 | `Stmt.h.ct` `parse_vec_brace_init` |
+| ADT 变体负载 | `Expr.h.ct` `parse_adt_ctor` |
+| 全局 / `static` 声明与赋值 | `Parser.h.ct` 文件作用域初始化式、`Stmt.h.ct` 赋值 |
+
+文案：`storing a non-immortal 'Str' view; the owner must outlive the container`。
+severity 与既有 `str_escape` 一致：compile / `ct build` warning，`ct check` error；
+不改变可编译性，不做硬错。安全形态（immortal 字面量、参数 / 字段 / 全局 / static /
+`self` 的视图、owning `String`）不报。
+
+验证：`test/ast/lang22_str_store.sh`（15 条断言，含正例与六类负例 + `ct build` warning）。
+`status` 字段不动；是否把 v1.1 lint 默认开启由 REQ/REV 另定。

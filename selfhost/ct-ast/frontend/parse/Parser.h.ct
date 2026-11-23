@@ -1899,6 +1899,12 @@ impl ParseOps for Parser {
                        the same literal binding as a local declaration. */
                     if (self->ex->lit_coerce(ret, e) != 0) return -1;
                 }
+                /* LANG-22: a file-scope `Str` / `U16Str` stores a view that
+                   outlives every frame; only an immortal literal, a view of
+                   another global / static, or a caller-owned view is safe. */
+                if (e >= 0
+                    && self->sup->str_store_warn(e, ret, func_line, func_col) != 0)
+                    return -1;
                 self->arena->nodes[g].a = e;
             }
             /* E2 at file scope: the environment would die with the call that

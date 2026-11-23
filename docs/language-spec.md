@@ -3074,8 +3074,12 @@ parse("ab", n);  /* 调用点不写 out */
 - **`Str` 存放位置（按实测）**：`Str` 不能作 struct 字段或 `Map` 键（硬错）；
   `Vec<Str>`、`Option<Str>`、ADT 负载、全局 `Str` 可编译，但存的是借用视图，
   owner 必须先于容器/值/全局的初始化源存活；字面量/immortal 来源安全。
-  非 immortal 来源的 warning 归 v1.1（[LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md)），
-  本版不做硬错。
+  非 immortal 来源（局部或临时 owner）存入容器元素、ADT 负载、全局 / `static`
+  自 v1.1 起报 **warning**（[LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md)）：
+  `storing a non-immortal 'Str' view; the owner must outlive the container`；
+  `ct check` 按既有 strict 规则升为 error，compile/build 继续输出 warning 且不改变
+  可编译性。安全形态不报：immortal 字面量、owner 为参数 / 字段 / 全局 / static /
+  `self`、owning `String`。不改硬错边界。
 - **异步 / ISR / DMA 边界（非语言保证）**：编译器不追踪 `Str`/切片/句柄在回调、ISR 或 DMA
   提交后的生命周期；这些由 C Shim 契约（DOC-91）约束——提交后 buffer 归谁、完成后何时归还、
   ISR 可调用集与回调上下文。v1 冻结期不新增 `isr_safe` / `no_alloc` 关键字；

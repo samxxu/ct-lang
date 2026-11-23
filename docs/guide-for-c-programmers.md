@@ -76,7 +76,7 @@
 | 拷贝 | retain/release（有成本）；局部/参数/字段赋值自动，全局不自动 | 拷 `{ptr,len}` 两个字段（零成本） |
 | 释放 | 引用计数归零自动 Drop（局部/参数）；**字段见下方分层，全局需显式 `release()`** | **不存在释放**——没有一寸自己的内存 |
 | 存进字段/容器 | `String` 字段合法；释放见下方分层；容器元素合法 | struct 字段、`Map` 键是**硬错**；`Vec<Str>`、`Option<Str>`、ADT 负载**可编译**，但存的是借用视图 |
-| 悬垂风险 | 单线程内 owning 不悬垂；跨线程共享 refcount 非原子，需自行同步 | 有（底层死了它瞎指）——**返回局部视图 / 临时接收者视图有 warning**（v0.88.2 起，见 §3.4、§7） |
+| 悬垂风险 | 单线程内 owning 不悬垂；跨线程共享 refcount 非原子，需自行同步 | 有（底层死了它瞎指）——**返回局部视图 / 临时接收者视图有 warning**（v0.88.2 起，见 §3.4、§7）；**非 immortal 视图存入容器 / ADT / 全局也有 warning**（v1.1，LANG-22） |
 
 两点容易误解：
 
@@ -95,9 +95,11 @@
 - ADT payload：本轮不生成 Drop glue（PH-84 简化项，v1.1 可能变）。
 - 引用环：仍泄漏。
 
-常量表是安全的例外：`Vec<Str> names = { "uart0", "uart1", "i2c0" };` 全是 immortal 字面量，
+常量表是安全的例外：immortal 字面量（通常先绑定为 `Str` 局部，再放进 `Vec<Str>`）
 不涉及任何 owner。只有非 immortal 来源（如 `v.push(local_string.as_str())`）才有悬垂风险；
-这类来源的 warn 级 lint 规划在 v1.1（LANG-22），当前不阻止编译。
+v1.1 起这类来源在 `Vec` / `Option` / ADT 负载 / 全局报
+`warning: storing a non-immortal 'Str' view; the owner must outlive the container`
+（`ct check` 为 error），但不改变可编译性（LANG-22）。
 
 ### 3.3 从 C 代码迁移的三个典型场景
 
