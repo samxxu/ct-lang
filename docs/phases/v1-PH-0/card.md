@@ -6,7 +6,8 @@ version-minor: 0
 # v1-PH-0 — v1.0 AST-only 收口（seed cutover）
 
 > **状态：完成（v1.0.0，2026-11-24）**。seed cutover、S0.5 字面 `match`、J-6 清零、全量 FP=0、gate 13 与版本收口均已落地。
-> **签收：** 待 EDITOR/REVIEW 复核 seed 裁定与卡片冻结字段（T-8 对 `实施中` 卡生效，本卡未开工不触发门禁）。
+> **签收：** EDITOR 2026-11-24（主编统一签收，依据收口提交 `17fb2e0b`、证据 `356d5849` 与 §6 全表）；
+> 独立 REVIEW 复核待补（不影响已完成状态）。
 > **前置**：v0-PH-88 收口（`v0.88.3`）；[D-022](../../decisions/D-022.md)（seed = 冻结 ct-ast 生成的 C）。
 > **编号**：`v1-PH-0`，`version-minor = 0`；phase-ID 迁移已执行（DOC-74 / DOC-83，D-019），本卡位于 `docs/phases/v1-PH-0/card.md`。
 

@@ -1,12 +1,16 @@
-# v1.0 / v1.1 发布路线（规划中）
+# v1.0 / v1.1 发布路线
 
 | 项 | 值 |
 | --- | --- |
-| 性质 | 产品发布路线；**未开卡**，不占 phase、不 bump |
-| 日期 | 2026-11-18 |
-| 基线 | `5605eb6c`（`v0.88.0`；v0-PH-88 已收口） |
+| 性质 | 产品发布路线；**v1.0 已发布，v1.1 规划中**，不占 phase、不 bump |
+| 日期 | 2026-11-18（2026-11-24 更新：v1.0.0 已发布） |
+| 基线 | `v1.0.0`（`v1-PH-0` 已收口；上一基线 `5605eb6c` / `v0.88.0`） |
 | 依据 | [typecheck-semantic-plan](typecheck-semantic-plan.md)、[battle typecheck-1](../../battle/typecheck-1/verdict.md) |
-| 结论 | **B 在 v1.0 前完成并 opt-in；v1.0 只保留 AST 主线；v1.1 先做 ct-ast 语法现代化，再做 A（strict 编译路径）** |
+| 结论 | **v1.0 已发布**（AST 主线 + seed cutover + B 检查器 opt-in）；**v1.1 先做 ct-ast 语法现代化（M1 切分），再把 A（strict 编译路径）默认升 `error`** |
+
+> **v1.0 发布记录（2026-11-24）**：tag `v1.0.0`（annotated）；发布资产
+> `ct-linux-x64.tar.gz` + `.sha256` 已上传 GitHub release；收口证据见
+> [v1-PH-0 §6](../phases/v1-PH-0/card.md)；新 MAJOR 签字见 D-027。
 
 ## 0. 一句话
 
