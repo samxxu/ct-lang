@@ -299,7 +299,9 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 - `ct build --locked`：store 缺失报 `is not installed`、摘要不符报 `does not match ct.lock`，不回退；
   无 lock 或 v1 lock 也直接失败。
 - 无 `ct.lock` 时不再回退 `vendor/`；旧工程先 `ct migrate`，见 §8。
-- lock 内同一裸包名出现两行（不论发布方）→ `package '<name>' is required twice: a/<name> and b/<name>`。
+- `ct get` 合并 lock 与 `ct verify` 按 **`<publisher>/<name>` 完整身份**去重：同一身份只保留一行，
+  同名不同 publisher（如 `a/hello`、`b/hello`）可以两行共存；`ct build` 读 lock 时仍要求依赖图内
+  同一裸包名只有一行（不论发布方）→ `package '<name>' is required twice: a/<name> and b/<name>`。
 - `ct verify`：v2 行检查版本目录存在与第 7 字段摘要；缺失报 `is not installed`、不符报
   `does not match ct.lock`。`--strict` 拒绝任何 `dir` 行或 v1 lock。
 - `ct migrate`：读 v1 lock 与 `vendor/<name>`，把每棵树写入 store（摘要必须与 lock 一致），

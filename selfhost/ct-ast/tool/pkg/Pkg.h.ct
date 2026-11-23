@@ -1358,14 +1358,22 @@ impl PkgOps for Pkg {
                             "official identity is 'ct'\n", cache, publisher);
             return -1;
         }
-        for (i = 0; i < self->nseen; i++)
-            if (strcmp(self->seen[i], mname) == 0) return 0;
-        if (self->nseen >= MAX_PKG_DEPS) {
-            fprintf(stderr, "ctc: too many packages (max %d)\n", MAX_PKG_DEPS);
-            return -1;
+        /* PKG-25: the identity is `<publisher>/<name>`, not the leaf name, so
+           `pkg_lock_keep` can tell demo/hello from acme/hello. */
+        {
+            char ident[MAX_TEXT];
+            if (snprintf(ident, sizeof ident, "%s/%s", publisher, mname)
+                >= (int)sizeof ident)
+                return -1;
+            for (i = 0; i < self->nseen; i++)
+                if (strcmp(self->seen[i], ident) == 0) return 0;
+            if (self->nseen >= MAX_PKG_DEPS) {
+                fprintf(stderr, "ctc: too many packages (max %d)\n", MAX_PKG_DEPS);
+                return -1;
+            }
+            snprintf(self->seen[self->nseen], MAX_TEXT, "%s", ident);
+            self->nseen++;
         }
-        snprintf(self->seen[self->nseen], MAX_TEXT, "%s", mname);
-        self->nseen++;
 
         /* M2: the same pre-copy check as `get_one`, so a git source whose
            `requires` is unsatisfied never reaches the shared store. */
@@ -1577,14 +1585,22 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: %s %s does not satisfy '%s'\n", name, ver, range);
             return -1;
         }
-        for (i = 0; i < self->nseen; i++)
-            if (strcmp(self->seen[i], name) == 0) return 0;
-        if (self->nseen >= MAX_PKG_DEPS) {
-            fprintf(stderr, "ctc: too many packages (max %d)\n", MAX_PKG_DEPS);
-            return -1;
+        /* PKG-25: record the full identity; a leaf name would make two
+           publishers share one `seen` entry. */
+        {
+            char ident[MAX_TEXT];
+            if (snprintf(ident, sizeof ident, "%s/%s", publisher, name)
+                >= (int)sizeof ident)
+                return -1;
+            for (i = 0; i < self->nseen; i++)
+                if (strcmp(self->seen[i], ident) == 0) return 0;
+            if (self->nseen >= MAX_PKG_DEPS) {
+                fprintf(stderr, "ctc: too many packages (max %d)\n", MAX_PKG_DEPS);
+                return -1;
+            }
+            snprintf(self->seen[self->nseen], MAX_TEXT, "%s", ident);
+            self->nseen++;
         }
-        snprintf(self->seen[self->nseen], MAX_TEXT, "%s", name);
-        self->nseen++;
 
         /* M2: `requires` is checked before the tree reaches the store, so a
            refused package leaves the previous store version byte-identical.
@@ -3669,13 +3685,13 @@ static int pkg_verify_lock(const char *prog, char lname[][MAX_TEXT], char lver[]
     }
     if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot read './ct.lock'\n"); return 1; }
     if (*nlock == 0) { fprintf(stderr, "ctc: ct.lock is empty\n"); return 1; }
-    /* SP-006/SP-013: one row per package; two rows sharing the bare name are a
-       hard error even under different publishers. */
+    /* PKG-25: one row per identity. Same leaf name under two publishers is a
+       legal lock once each identity was fetched; only an exact duplicate
+       `<publisher>/<name>` row is still required twice. */
     for (i = 0; i < *nlock; i++)
         for (j = i + 1; j < *nlock; j++) {
-            const char *bi = strrchr(lname[i], '/');
-            const char *bj = strrchr(lname[j], '/');
-            if (strcmp(bi ? bi + 1 : lname[i], bj ? bj + 1 : lname[j]) == 0) {
+            if (strcmp(lname[i], lname[j]) == 0) {
+                const char *bi = strrchr(lname[i], '/');
                 fprintf(stderr, "ctc: package '%s' is required twice: %s and %s\n",
                         bi ? bi + 1 : lname[i], lname[i], lname[j]);
                 return 1;
@@ -3712,14 +3728,11 @@ static int pkg_lock_keep(char *dst, size_t cap)
             nl++;
         if (nl == 0) continue;
         if (*p == '#') continue;        /* S1: v2 format header */
-        {
-            const char *base = p;
-            size_t bl = nl, j;
-            for (j = 0; j < nl; j++) if (p[j] == '/') { base = p + j + 1; bl = nl - j - 1; }
-            for (i = 0; i < g_pkg.nseen; i++)
-                if (strlen(g_pkg.seen[i]) == bl
-                    && memcmp(g_pkg.seen[i], base, bl) == 0) break;
-        }
+        /* PKG-25: compare the whole first field, `<publisher>/<name>`. A leaf
+           name would drop demo/hello when this run installed acme/hello. */
+        for (i = 0; i < g_pkg.nseen; i++)
+            if (strlen(g_pkg.seen[i]) == nl
+                && memcmp(g_pkg.seen[i], p, nl) == 0) break;
         if (i < g_pkg.nseen) continue;
         ll = strlen(line);
         if (len + ll + 1 > cap) {
