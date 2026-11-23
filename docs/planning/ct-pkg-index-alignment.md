@@ -13,7 +13,7 @@
 
 | # | 事项 | 定性 | 落点 |
 | --- | --- | --- | --- |
-| ① | `package.sh` 的 `verify_row` 找不到 `ct` 时 `warn` 并成功，可能推送未回放行（违反 I10） | **bug**，但在 index 仓 | 已另派单修复（`https://github.com/ct-pkg/index`）；本仓不动 |
+| ① | `package.sh` 的 `verify_row` 找不到 `ct` 时 `warn` 并成功，可能推送未回放行（违反 I10） | **bug**，但在 index 仓 | **已修复**：`ct-pkg/index` [`7a0c7cd`](https://github.com/ct-pkg/index/commit/7a0c7cd)；本仓不动 |
 | ② | 原生 `ct index refresh` 缺失 | **特性**，不是 bug | [PKG-18](../../issues/packages/pkg-18-native-ct-index-refresh.md)，**已 verified**（原“v1.1 冻结期不实现”的表述过期） |
 | ③ | 消费侧「三处接口对齐」 | 逐条分类 | 本文件 §3 六行；只有 bugfix 行可进冻结期 |
 

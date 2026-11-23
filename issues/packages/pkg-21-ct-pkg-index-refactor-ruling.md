@@ -7,14 +7,14 @@
 | 严重度 | Medium |
 | 锚点 | v0.84.1（2026-11-21） |
 | 依据 | 用户 2026-11-21 裁决；[D-014](../decisions/D-014.md)；[契约 v1](../planning/ct-pkg-get-contract.md)；[消费侧对齐清单](../planning/ct-pkg-index-alignment.md) |
-| 状态 | deferred |
-| 处置证据 | **deferred（REQ，2026-11-22；触发：PKG-19/20 合入 + index 仓工单可定位）** |
+| 状态 | verified |
+| 处置证据 | **verified（2026-11-24）：① 已由 ct-pkg/index `7a0c7cd` 修复；② PKG-18 verified；③ PKG-19/20 verified，B/C 四行按对齐清单锁死** |
 
 ## 裁决
 
 | # | 事项 | 定性 | 落点 |
 | --- | --- | --- | --- |
-| ① | `package.sh` 的 `verify_row` 找不到 `ct` 时 `warn` 并成功（可能推送未回放行，违反 I10） | **bug**，在 index 仓 | **index 仓（`https://github.com/ct-pkg/index`）另派单修复**；本仓不改 |
+| ① | `package.sh` 的 `verify_row` 找不到 `ct` 时 `warn` 并成功（可能推送未回放行，违反 I10） | **bug**，在 index 仓 | **已修复**：`ct-pkg/index` [`7a0c7cd`](https://github.com/ct-pkg/index/commit/7a0c7cd)（2026-11-21；`verify_row` 找不到编译器即 `fail`，回放失败也不推送）；本仓不改 |
 | ② | 原生 `ct index refresh` 缺失 | **特性**，不是 bug | [PKG-18](pkg-18-native-ct-index-refresh.md)，**已 verified**（原“v1.1 冻结期不实现”的表述过期） |
 | ③ | 消费侧「三处接口对齐」 | 逐条分类 | [对齐清单](../planning/ct-pkg-index-alignment.md)：A1 → [PKG-19](pkg-19-get-index-field-count.md)，A2 → [PKG-20](pkg-20-get-index-row-identity.md)；B/C 四行锁死为门禁 |
 
@@ -71,3 +71,15 @@ $ git log --oneline --all --grep='PKG-20' | wc -l
 触发条件：PKG-19、PKG-20 各以 `test(...) 红` + 实现提交合入，且 index 仓工单/链接可定位后，
 本卡按 PKG21-1…4 逐条复核转 `verified`。owner：REQ（协调 + 总复核）；P2；登记日期
 2026-11-22。冻结纪律不变：不实现 `ct index refresh`，不改六字段/摘要/`ct.lock` v2。
+
+## 复核（REQ，2026-11-24）：转 verified
+
+上文「处置：deferred」与「不实现 `ct index refresh`」两处已被本次复核取代。
+
+| ID | 结果 | 证据 |
+| --- | --- | --- |
+| PKG21-1 | 通过 | `ct-pkg/index` 提交 [`7a0c7cd`](https://github.com/ct-pkg/index/commit/7a0c7cd) 在 `origin/main`；`tools/package.sh` 的 `verify_row` 现在找不到 `ct` 即 `fail`，回放失败也不推送；本仓零改动 |
+| PKG21-2 | 通过 | [PKG-18](pkg-18-native-ct-index-refresh.md) 已 `verified`（原生 `ct index refresh` 已实现） |
+| PKG21-3 | 通过 | [PKG-19](pkg-19-get-index-field-count.md) / [PKG-20](pkg-20-get-index-row-identity.md) 均 `verified`；B/C 四行按[对齐清单 §3](../planning/ct-pkg-index-alignment.md) 锁死，本次未新增测试 |
+
+本卡不重开裁决，不改契约；后续若 `package.sh` 再出现“未回放也成功”的路径，按新缺陷另立案。
