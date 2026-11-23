@@ -15,7 +15,9 @@
 #      installed binary compiles and runs a program;
 #   C. the clean copy never printed an L0/L1/L2 build step;
 #   D. check-ast.sh and ct-tour.sh build ct-ast from the seed while keeping the
-#      L1/L2 regression oracle (D-022 section 4).
+#      L1/L2 regression oracle (D-022 section 4);
+#   E. gate 13 (check-seed.sh) is registered in check-all.sh and the four
+#      documented counts agree (13).
 #
 # Usage: bash selfhost/check-install.sh
 # Exit: 0 all assertions pass, 1 any failure. This script is NOT registered in
@@ -65,8 +67,8 @@ fi
 # --- D. the gate harnesses build ct-ast from the seed, not from L2 ----------
 if ! grep -q 'bootstrap/ct-ast' "$src/selfhost/check-ast.sh"; then
     bad "check-ast.sh does not build ct-ast from bootstrap/ct-ast"
-elif grep -q '"\$work/l2" build -I selfhost/ct-ast' "$src/selfhost/check-ast.sh"; then
-    bad "check-ast.sh still lets L2 build ct-ast"
+elif grep -q '"$work/astsrc"/*.c -o "$work/ct-ast"' "$src/selfhost/check-ast.sh"; then
+    bad "check-ast.sh still builds ct-ast from L2's emitted tree"
 else
     ok "check-ast.sh builds ct-ast from the seed"
 fi
@@ -86,6 +88,25 @@ if grep -q 'L1 building the split tree' "$src/selfhost/ct-tour.sh"; then
     ok "ct-tour.sh step 6 still demonstrates the L1 -> L2 oracle"
 else
     bad "ct-tour.sh dropped the L1 -> L2 oracle step"
+fi
+
+# --- E. gate 13 is registered and the counts agree --------------------------
+if grep -q 'run_gate "13) CT: frozen seed' "$src/selfhost/check-all.sh"; then
+    ok "check-all.sh registers check-seed.sh as gate 13"
+else
+    bad "check-all.sh does not register gate 13 (check-seed.sh)"
+fi
+ngates="$(grep -c '^run_gate "' "$src/selfhost/check-all.sh")"
+if [ "$ngates" -eq 13 ]; then
+    ok "check-all.sh runs 13 hard gates"
+else
+    bad "check-all.sh runs $ngates hard gates, expected 13"
+fi
+if python3 "$src/test/docs/check-docs.py" >"$work/docs.log" 2>&1 &&
+   grep -q '13 hard gates' "$work/docs.log"; then
+    ok "check-docs.py agrees on 13 hard gates"
+else
+    bad "check-docs.py does not agree on 13 hard gates" "$(tail -n 2 "$work/docs.log" | tr '\n' ' ')"
 fi
 
 # --- B. clean-copy install --------------------------------------------------
