@@ -14,6 +14,52 @@
 >
 > **稳定性**：哪些能力已冻结、改动要谁批、截止到哪个版本，见 [stable-subset](stable-subset.md)。
 
+## 目录
+
+> 本目录覆盖全部 H2 与全部 H3；§4.1–§4.50 是 §4 下的 H4 小节，随 §4 正文阅读。
+> `test/docs/check-docs.py` 双向校验：每个 H2/H3 在此恰好一条，每条都能解析。
+
+- [0. 快速开始](#0-快速开始)
+- [中文](#中文)
+- [1. 源文件模型（ct-ast）](#1-源文件模型ct-ast)
+- [2. 词法与书写要求（ct-ast）](#2-词法与书写要求ct-ast)
+- [3. 语法总览](#3-语法总览)
+- [4. 展开规则](#4-展开规则)
+- [5. 命名规则（稳定契约）](#5-命名规则稳定契约)
+- [6. 语义约束与已知问题](#6-语义约束与已知问题)
+- [7. 容量上限](#7-容量上限)
+- [8. 明确不支持](#8-明确不支持)
+- [9. 诊断与退出码](#9-诊断与退出码)
+- [10. L2 独有：模块系统与诊断（本文不描述其语法）](#10-l2-独有模块系统与诊断本文不描述其语法)
+- [4.51 泛型 struct、固有方法与内置容器（Phase 29）](#451-泛型-struct固有方法与内置容器phase-29)
+- [4.51.1 内置层命名空间 `core`（DOC-87 Stage 2，仅 ct-ast）](#4511-内置层命名空间-coredoc-87-stage-2仅-ct-ast)
+- [4.52 接收者上下文块 `expr into { … }`（Phase 30，仅 ct-ast）](#452-接收者上下文块-expr-into---phase-30仅-ct-ast)
+- [4.52.1 内置容器方法速查](#4521-内置容器方法速查)
+- [4.53 可选类型检查 `ct check --types`（Phase 32）](#453-可选类型检查-ct-check---typesphase-32)
+- [4.54 有界泛型 struct 与嵌套 impl pattern（Phase 33）](#454-有界泛型-struct-与嵌套-impl-patternphase-33)
+- [4.55 泛型 trait（Phase 35，仅 ct-ast）](#455-泛型-traitphase-35仅-ct-ast)
+- [4.56 `Drop` 与长度前缀字符串 `Str`（Phase 36，仅 ct-ast）](#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)
+- [4.57 C ABI 静态库（`ct build --lib`，Phase 39，仅 ct-ast）](#457-c-abi-静态库ct-build---libphase-39仅-ct-ast)
+- [4.58 `errdefer`、`err:` 错误出口与尾随声明（Phase 40，仅 ct-ast）](#458-errdefererr-错误出口与尾随声明phase-40仅-ct-ast)
+- [4.59 `atomic` 原子修饰符与 `ct_atomic_*`（Phase 41，仅 ct-ast）](#459-atomic-原子修饰符与-ct_atomic_phase-41仅-ct-ast)
+- [4.60 `impl` 方法可见性：方法级 `pub`，默认私有（Phase 42，仅 ct-ast）](#460-impl-方法可见性方法级-pub默认私有phase-42仅-ct-ast)
+- [4.61 `return err:` 载荷类型契约（Phase 43，仅 ct-ast）](#461-return-err-载荷类型契约phase-43仅-ct-ast)
+- [4.62 后缀 `?` 错误传播（Phase 44，仅 ct-ast）](#462-后缀--错误传播phase-44仅-ct-ast)
+- [4.63 类型契约一致性（Phase 45，仅 ct-ast）](#463-类型契约一致性phase-45仅-ct-ast)
+- [4.64 自定义类型下标（Phase 52，仅 ct-ast）](#464-自定义类型下标phase-52仅-ct-ast)
+- [4.65 可选链 `?.` / `?［`（Phase 53，仅 ct-ast）](#465-可选链---phase-53仅-ct-ast)
+- [4.66 C 边界：`c-boundary` 与 shim（Phase 65，仅 ct-ast）](#466-c-边界c-boundary-与-shimphase-65仅-ct-ast)
+- [4.67 libc I/O 内置例外：按直接调用补头（Phase 66，仅 ct-ast）](#467-libc-io-内置例外按直接调用补头phase-66仅-ct-ast)
+- [4.68 `ref` / `out` 参数（Phase 78，仅 ct-ast）](#468-ref--out-参数phase-78仅-ct-ast)
+- [4.69 切片 `T［］`（Phase 79，仅 ct-ast）](#469-切片-tphase-79仅-ct-ast)
+- [4.70 `String` / `Str`：UTF-8 owning 与借用（Phase 80，仅 ct-ast）](#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)
+- [4.71 `Box<T>` / `new`：单对象句柄（Phase 81，仅 ct-ast）](#471-box--new单对象句柄phase-81仅-ct-ast)
+- [4.72 泄漏防护：`leaks` 与直接环检测（Phase 82，仅 ct-ast）](#472-泄漏防护leaks-与直接环检测phase-82仅-ct-ast)
+- [4.73 最小 ADT 与 `match`（Phase 84，仅 ct-ast）](#473-最小-adt-与-matchphase-84仅-ct-ast)
+- [11 文档与实现一致性（缺口登记，2026-11-15）](#11-文档与实现一致性缺口登记2026-11-15)
+- [4.74 解析器/检查器的判别式切片（PH-87，实现内部）](#474-解析器检查器的判别式切片ph-87实现内部)
+- [4.75 发射器的判别式切片与自举不动点轮数（PH-88，实现内部）](#475-发射器的判别式切片与自举不动点轮数ph-88实现内部)
+
 ---
 
 ## 0. 快速开始
