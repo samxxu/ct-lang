@@ -1,0 +1,19 @@
+// 近相 example：c-boundary 的 .m.ct + .shim.h/.shim.c 最小闭环。
+// 映射单元把 trait 调用原地展开成 shim 里的普通 C 调用；消费端看不到包装、
+// 也没有 vtable。test/run.sh 的 near-phase 层与 check-warnings 的 src-layout
+// 段都会构建并运行它。
+import lib::lib;
+
+#include <stdio.h>
+
+int main(void)
+{
+    int err;
+    int first;
+
+    lib::Io.clear();
+    err = lib::Io.err() == 0;
+    first = lib::Io.next();
+    printf("%d %d\n", err, first);
+    return 0;
+}

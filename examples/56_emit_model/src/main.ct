@@ -1,0 +1,22 @@
+// 近相 example：`--emit-model` 的机器可读模型。
+// test/run.sh 的 near-phase 层把模型写到 JSON，断言 schema、struct 与函数名；
+// 程序本身照常编译运行，输出 3。
+#include <stdio.h>
+
+struct Point {
+    int x;
+    int y;
+}
+
+int add(int a, int b)
+{
+    return a + b;
+}
+
+int main(void)
+{
+    struct Point p = { 1, 2 };
+
+    printf("%d\n", add(p.x, p.y));
+    return 0;
+}

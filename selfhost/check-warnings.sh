@@ -380,7 +380,10 @@ for src in examples/*/src/main.ct; do
         bad "examples/$name" "ct-ast failed: $(cat "$work/src-$name.err")"
         continue
     fi
-    if ! "$CC" -Wall -Wextra -std=c99 $incs "$gd"/*.c -o "$gd/prog" \
+    # A shim may carry a source as well as a header (55_c_boundary_shim);
+    # it belongs on the link line just like the generated units.
+    shim_srcs=$(find "$ex" -name '*.shim.c')
+    if ! "$CC" -Wall -Wextra -std=c99 $incs "$gd"/*.c $shim_srcs -o "$gd/prog" \
             2>"$work/src-$name.cc"; then
         bad "examples/$name" "generated C does not compile: $(cat "$work/src-$name.cc")"
         continue

@@ -301,6 +301,80 @@ else
     fi
 fi
 
+# ------------------------------------------------------------------ near-phase
+echo
+echo "== near-phase examples (freestanding / shim / model / check --types) =="
+# TEST-23 item 9: the four capabilities added after v0.77 had no runnable
+# example. Each block keeps its command and its assertion here so the example
+# directory stays a small source file, not another runner.
+if ! ensure_ast; then
+    bad "near-phase examples" "the AST compiler chain did not build"
+else
+    # 54: --freestanding + --alloc. The generated C must build with no libc and
+    # leave only the target's my_alloc/my_free undefined.
+    rm -rf "$TMP/near-free"
+    mkdir -p "$TMP/near-free"
+    if CT_C_BOUNDARY=allow "$TMP/ct-ast" build --freestanding \
+            --alloc my_alloc,my_free --emit-c \
+            examples/54_freestanding_alloc/src/main.ct -o "$TMP/near-free" \
+            >"$TMP/near-free.out" 2>"$TMP/near-free.err" \
+       && $CC $CFLAGS -ffreestanding -nostdlib -c "$TMP/near-free"/*.c \
+            -o "$TMP/near-free/prog.o" >"$TMP/near-free.cc" 2>&1; then
+        undef=$("${NM:-nm}" -u "$TMP/near-free/prog.o" 2>/dev/null \
+                | awk '{print $NF}' | sed 's/^_//' | grep -v '^$' | sort -u)
+        extra=$(printf '%s\n' "$undef" | grep -vE '^(my_alloc|my_free)$' | grep -v '^$')
+        if ! grep -q 'my_alloc' "$TMP/near-free"/*.c; then
+            bad "examples/54_freestanding_alloc" "--alloc did not map the allocation call"
+        elif [ -n "$extra" ]; then
+            bad "examples/54_freestanding_alloc" "undefined non-mapped symbols: $extra"
+        else
+            ok "examples/54_freestanding_alloc (freestanding + --alloc)"
+        fi
+    else
+        bad "examples/54_freestanding_alloc" \
+            "$(cat "$TMP/near-free.err" "$TMP/near-free.cc" 2>/dev/null | head -6)"
+    fi
+
+    # 55: a .m.ct mapping plus its shim header/source, built and run.
+    rm -rf "$TMP/near-shim"
+    mkdir -p "$TMP/near-shim"
+    if "$TMP/ct-ast" build --emit-c -I examples/55_c_boundary_shim/src \
+            -I examples/55_c_boundary_shim/src/lib \
+            examples/55_c_boundary_shim/src/main.ct -o "$TMP/near-shim" \
+            >"$TMP/near-shim.out" 2>"$TMP/near-shim.err" \
+       && $CC $CFLAGS -I examples/55_c_boundary_shim/src/lib \
+            "$TMP/near-shim"/*.c examples/55_c_boundary_shim/src/lib/lib.shim.c \
+            -o "$TMP/near-shim/prog" >"$TMP/near-shim.cc" 2>&1 \
+       && "$TMP/near-shim/prog" >"$TMP/near-shim.out.txt" 2>&1 \
+       && diff -u examples/55_c_boundary_shim/src/main.expected.out \
+            "$TMP/near-shim.out.txt" >"$TMP/near-shim.diff"; then
+        ok "examples/55_c_boundary_shim (map unit + shim, built and run)"
+    else
+        bad "examples/55_c_boundary_shim" \
+            "$(cat "$TMP/near-shim.err" "$TMP/near-shim.cc" "$TMP/near-shim.diff" 2>/dev/null | head -8)"
+    fi
+
+    # 56: --emit-model is a machine-readable projection, not a build change.
+    if "$TMP/ct-ast" examples/56_emit_model/src/main.ct -o "$TMP/near-model.c" \
+            --emit-model "$TMP/near-model.json" >"$TMP/near-model.out" 2>"$TMP/near-model.err" \
+       && grep -q '"schema": "ct.model"' "$TMP/near-model.json" \
+       && grep -q '"name":"Point"' "$TMP/near-model.json" \
+       && grep -q '"name":"add"' "$TMP/near-model.json"; then
+        ok "examples/56_emit_model (--emit-model JSON carries the struct and function)"
+    else
+        bad "examples/56_emit_model" \
+            "$(cat "$TMP/near-model.err" 2>/dev/null | head -4) $(head -c 200 "$TMP/near-model.json" 2>/dev/null)"
+    fi
+
+    # 57: the opt-in typed check on the same source the example runs.
+    if "$TMP/ct-ast" check examples/57_check_types/src/main.ct --types \
+            >"$TMP/near-check.out" 2>"$TMP/near-check.err"; then
+        ok "examples/57_check_types (check --types accepts the example)"
+    else
+        bad "examples/57_check_types" "$(cat "$TMP/near-check.err" | head -4)"
+    fi
+fi
+
 # ------------------------------------------------------------------ dialect
 echo
 echo "== dialect demo =="

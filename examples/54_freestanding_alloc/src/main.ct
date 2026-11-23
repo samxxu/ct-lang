@@ -1,0 +1,20 @@
+// 近相 example：`--freestanding` + `--alloc`。
+// freestanding 不注入系统头，所以 malloc/free 的声明由 `#ct-raw` 显式带进来；
+// `--alloc my_alloc,my_free` 再把这两个调用映射到目标运行时的符号。
+// 门禁：test/run.sh 的 near-phase 层生成 C 后用 -ffreestanding -nostdlib -c
+// 编译，并断言未定义符号只有 my_alloc / my_free（没有回退到 libc）。
+#ct-raw
+#include <stdlib.h>
+#ct-endraw
+
+int main(void)
+{
+    int *p = malloc(sizeof(int));
+    int v;
+
+    if (p == 0) return 1;
+    *p = 7;
+    v = *p;
+    free(p);
+    return v == 7 ? 0 : 1;
+}

@@ -10,7 +10,7 @@
 
 | 目录 | 层级 | 形状 | 驱动脚本 |
 | --- | --- | --- | --- |
-| `run.sh` | L0 | 八层驱动器：build → unit → cases → examples → dialect → errors → limits → cli | 自身 |
+| `run.sh` | L0 | 十层驱动器：build → unit → coverage → cases → examples → near-phase → dialect → errors → limits → cli | 自身 |
 | `unit/` | L0 | 白盒单测 `test_helpers.c`（直接 `include ../../selfhost/l0/ctc.c` 以触达 static 函数） | `run.sh` 的 unit 层 |
 | `cases/` | L0 | golden 正例：扁平文件对 `<name>.ct` + `.expected.c` / `.h` / `.out` | `run.sh` 的 cases 层 |
 | `errors/` | L0 | 负例：扁平文件对 `<name>.ct` + `<name>.expected-err` | `run.sh` 的 errors 层 |
@@ -21,6 +21,7 @@
 | `bindings/` | Ct 线 | 声明式 C 库 binding 夹具：`mock-hal`（假 HAL，端到端）与 `posix-socket`（shim 演示）；2026-11-13 由顶层 `bindings/` 迁入 | `selfhost/check-ast.sh`、`selfhost/check-warnings.sh` |
 | `acceptance/` | 跨层 | 端到端验收清单（`ast_spike.ct` / `ast_parse_spike.ct`）；`PENDING` 属预期、**不阻断** | `test/acceptance/run.sh` |
 | `pkg/` | 跨层 | 包管理器 `ct get` / `ct update` / `ct install` / `ct verify` 用例（含比较器范围、显式索引、构建元数据） | `test/pkg/run.sh` |
+| `coverage/` | Ct 线（报告型） | gcov 行覆盖：`run.sh` 生成 `summary.txt`/`summary.tsv` 与原始 `.gcov`；`selftest.py` 校验 nightly 接线并能被删除/漏传 artifact 的变异弄红 | `test/coverage/run.sh`、`test/coverage/selftest.py`（`run.sh` 的 coverage 层） |
 
 `run.sh` 只驱动 **L0**（`selfhost/l0/ctc.c`）；Ct 线（`selfhost/**`）的关卡由 `selfhost/check-all.sh` 聚合，
 见 [selfhost/README.md](../selfhost/README.md) 的门禁表。

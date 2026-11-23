@@ -114,6 +114,18 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | `52_box_new` | `box<T>` / `new T { … }`、`at()` 借出 `T *`、`release()` 释放 | ct-ast | `test/run.sh` + `check-ast.sh` |
 | `53_match_adt` | 最小 ADT + 穷尽 `match`；`String` 负载由 `str_concat` 构造，绑定里显式 `release()` | ct-ast | `test/run.sh` + `check-ast.sh` |
 
+## 近相能力（TEST-23）
+
+v0.77 评审列出的四个能力缺口各有一个最小样例；它们由 `test/run.sh` 的
+near-phase 层驱动，不放宽任何默认构建路径。
+
+| 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
+| --- | --- | --- | --- |
+| `54_freestanding_alloc` | `--freestanding` 不拉 libc / 堆，`--alloc` 把 `malloc`/`free` 映射到目标符号；产物 `-ffreestanding -nostdlib -c` 可编译，未定义符号只有映射名 | ct-ast | `test/run.sh` 的 near-phase 层 |
+| `55_c_boundary_shim` | `.m.ct` 静态映射 + `.shim.h` / `.shim.c`：调用点展开为普通 C 调用，`errno` 这类全局由 shim 承载 | ct-ast + build 模式 | `test/run.sh` near-phase + `check-warnings.sh` 的 src-layout 段 |
+| `56_emit_model` | `--emit-model` 的 `ct.model` schema v1：struct / 函数 / 行号的只读投影 | ct-ast | `test/run.sh` 的 near-phase 层 |
+| `57_check_types` | `ct-ast check --types` 的 opt-in 类型检查；默认 build 路径不变 | ct-ast | `test/run.sh` 的 near-phase 层 |
+
 ## 网络（文档型）
 
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
@@ -132,4 +144,7 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
   `src/` 三层入口不在它的 glob 内（`check-ast.sh` 的语料层保持编译模式）。
 - `check-warnings.sh`：同一语料的零警告门禁；另有一段 `examples/*/src/main.ct` 的 build 模式，
   覆盖 `08_map_binding/src`、`13_builder_chain`、`14_scalar_host`（目录内必须有 `.m.ct`）。
+- `test/run.sh` 的 near-phase 层：`54`–`57` 各自保留生成 / 构建 / 断言命令；
+  `54` 走 `--freestanding --alloc`，`55` 走 `.m.ct` + shim，`56` 读 `--emit-model` JSON，
+  `57` 跑 `check --types`。
 - `wave1-demo` 依赖外部的 ct-pkg 索引，本地门禁不覆盖，只在 CI 里跑。
