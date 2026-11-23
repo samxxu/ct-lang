@@ -37,7 +37,7 @@ for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
     fi
 done
 
-if grep -q 'v0\.88\.3' README.md && grep -q 'v0\.88\.3' docs/README.md; then
+if grep -q 'v1\.0\.0' README.md && grep -q 'v1\.0\.0' docs/README.md; then
     ok "README / docs/README carry v1.0.0"
 else
     bad "README version"

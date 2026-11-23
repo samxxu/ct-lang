@@ -47,7 +47,7 @@ v1.0.0 的实测边界：接口值落变量后逐跳（`Counter d = c.tap(1); d.
 → `0 201`）都可用（SH-72/74/75/110）；静态宿主链见 [examples/47](examples/47_chain_factory/src/main.ct)
 （`200 {"users":3}`，rc=0）。
 
-动态派发链已在 v0.88.3 pre 窗口由 [SH-110](issues/selfhost/sh110-dynamic-dispatch-chain-fix.md) 修复；
+动态派发链已在 v0.88.x pre 窗口由 [SH-110](issues/selfhost/sh110-dynamic-dispatch-chain-fix.md) 修复；
 完整路径的其余边界（跨单元 factory / 装箱）仍按 [spec §4.10.1](docs/language-spec.md#4101-链式构建器范式权威定义与两档路径) 核对。
 当前可运行版 [examples/47](examples/47_chain_factory/src/main.ct) 是**静态宿主形态**：宿主在映射
 单元内部是 struct，使用者代码里看不到它，也没有 vtable 与装箱。`send()` 是 stub，接真 curl 只换
