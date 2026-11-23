@@ -64,7 +64,7 @@ version-minor: 0
 | E-V1-2 | `install.sh` 不引用 L0/L1/L2；无网络、无 git、干净环境可安装 |
 | E-V1-3 | ct-ast 的构建/安装路径不依赖 L2：`install.sh` 与 `check-ast` 的 ct-ast 段均吃 seed；L1/L2 只作 oracle |
 | E-V1-4 | `check-all` 13 道全绿：gate 2/3/4/5 照旧、gate 12 独立、gate 13 有正负例 |
-| E-V1-5 | 全量语料 `--check-level=warn` FP=0 的命令、清单与原始输出入库（[SH-118](../../../issues/selfhost/sh118-full-corpus-fp-zero.md)） |
+| E-V1-5 | 全量语料 `--check-level=warn` FP=0 的命令、清单与原始输出入库（[SH-118](../../../issues/selfhost/sh118-full-corpus-fp-zero.md)；证据 [fp-zero.md](../../planning/j6-evidence/fp-zero.md)，`7753ab33`） |
 | E-V1-6 | J-6 **本仓段**无 `缺失` / `部分`（[SH-117](../../../issues/selfhost/sh117-j6-local-closeout.md)）；`外部` 段（P-3.6 / P-6.1–P-6.4）不计入；`阻塞` 仅 P-1.3（迁移 lint，归 v1.x；所有者 2026-11-23 已裁定可带此阻塞发布） |
 | E-V1-7 | DOC-76/77/79 的兼容承诺、能力节号、冻结清单断言全绿；README 版本 = `v1.0.0` |
 | E-V1-8 | 单卡回滚：`bootstrap/` + `install.sh` + 门禁改动同一提交回滚后，`v0.88.3` 链路仍可用 |
