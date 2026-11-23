@@ -3156,13 +3156,19 @@ impl ExprOps for Expr {
     int parse_array_dims(int n)
     {
         int warned = 0;
+        int ndims = 0;
         (void)self;
         while (self->lex->tok == T_PUNCT && self->lex->tok_is("[")) {
             char dim[MAX_TEXT];
             char cur[MAX_TEXT];
-            int unsized, open, raw, dline, dcol;
+            int unsized, open, raw, dline, dcol, first_dim;
             unsized = 0;
             raw = 0;
+            /* SH-108: only a single empty dimension is the deprecated `T a[]`
+               slice spelling. `char x[][MAX]` already carries a dimension on
+               its element type, so its first `[]` is ordinary C. */
+            first_dim = (ndims == 0);
+            ndims++;
             open = self->lex->tokstart;             /* the `[` itself */
             dline = self->lex->tokline;
             dcol = self->lex->tokstart - self->lex->lstart + 1;
@@ -3282,9 +3288,14 @@ impl ExprOps for Expr {
             self->arena->nodes[n].num = 0;      /* text3 is the authoritative spelling */
             /* E79-1: `T a[]` is the old spelling. With an initializer it is an
                inferred-length array and stays; a parameter, field or
-               uninitialised declaration is deprecated in favour of `T[]`. */
-            if (unsized && !warned
-                && !(self->lex->tok == T_PUNCT && self->lex->tok_is("="))) {
+               uninitialised declaration is deprecated in favour of `T[]`.
+               SH-108: a multi-dimensional declarator (`T a[][N]`, `T a[N][]`)
+               is not this spelling -- the empty dimension belongs to an
+               element type that already has dimensions, or is a later
+               dimension. Only a lone empty `[]` warns. */
+            if (unsized && !warned && first_dim
+                && !(self->lex->tok == T_PUNCT
+                     && (self->lex->tok_is("[") || self->lex->tok_is("=")))) {
                 warned = 1;
                 if (tool::diag::ct_slice_warn(dline, dcol,
                         "'T a[]' is deprecated; write 'T[]' for a slice or 'T a[N]' for an array",

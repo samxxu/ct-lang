@@ -93,3 +93,22 @@ $ echo $?
 
 误报点全部是 `deps[][MAX_PKG_PATH]` / `lname[][MAX_TEXT]` 这类多维形参/字段；真正的
 `int a[]` 已按预期告警。状态字段保持 `deferred` 不动。
+
+**绿证（`432e95ed` 的红提交之后）。** 探针全绿：
+
+```console
+$ sh test/ast/p108_multidim_param.sh .temp/tmp-chain/g108/ct-ast
+ok   a multi-dimensional parameter first dim is not T a[]
+ok   a multi-dimensional field first dim is not T a[]
+ok   a genuine int a[] parameter still warns
+ok   a genuine int a[] field still warns
+ok   ct-ast's own --check-level=warn run has 0 T a[] hits
+$ echo $?
+0
+```
+
+**既有 A 检查器不回归。** `p79_migrate.sh` rc=0（形参/字段/无初值仍告警，`T a[] = {...}` 与 `T[]`
+仍静默）；`p79_basic.sh` rc=0。
+
+**逐字节不变。** 305 个既有单文件语料生成 C 与 `a0ce8ef1` 基线逐字节相同
+（`compared=305 same=305 diff=0`）。状态字段保持 `deferred` 不动。
