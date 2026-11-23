@@ -77,7 +77,7 @@ else
     bad "patterns tree section"
 fi
 
-card=docs/design/phase82.md
+card=docs/phases/v0-PH-82/card.md
 [ -f "$card" ] || { bad "$card missing"; exit 1; }
 if grep -q '^## 7 ' "$card"; then ok "phase card has the §7 closeout"; else bad "card §7 missing"; fi
 for id in E82-1 E82-2 E82-3 E82-4 E82-5 E82-6 E82-7 E82-8; do

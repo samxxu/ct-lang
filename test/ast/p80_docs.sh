@@ -55,8 +55,8 @@ else
 fi
 if grep -q 'U16String' "$std"; then ok "lib/core README names the UTF-16 pair"; else bad "lib/core README UTF-16"; fi
 
-card=docs/design/phase80.md
-[ -f "$card" ] || { bad "docs/design/phase80.md missing"; exit 1; }
+card=docs/phases/v0-PH-80/card.md
+[ -f "$card" ] || { bad "docs/phases/v0-PH-80/card.md missing"; exit 1; }
 if grep -q '^## 7 ' "$card"; then ok "phase card has the §7 closeout"; else bad "phase card §7 missing"; fi
 for id in E80-1 E80-2 E80-3 E80-4 E80-5 E80-6 E80-7 E80-8; do
     if grep -q "| $id |" "$card"; then ok "card rule row $id"; else bad "card missing $id"; fi
