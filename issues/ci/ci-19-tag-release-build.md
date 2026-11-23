@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | `a141badb`（`v1.0.0`；2026-11-24） |
 | 依据 | [dist.md](../../docs/dist.md)、[make-dist.sh](../../selfhost/make-dist.sh)；v1.0.0 发布记录（[v1 路线](../../docs/planning/v1-release-plan.md)） |
-| 状态 | open |
+| 状态 | verified |
 | 负责人 | DEV（`.github/**` 与构建脚本归 DEV；REQ 只写验收） |
 | 处置证据 | **accepted（2026-11-24 所有者同意：发版构建移入 CI，本机不再依赖 zig）** |
 
@@ -65,3 +65,12 @@ ubuntu runner 本身就是 x86_64，**原生 `cc -static` 即可**，也可以�
 REQ 的边界：本节与 §2/§3 已给出工作流形态与判据，不代改 `.github/**`、不代跑
 `workflow_dispatch`。DEV 交付时在卡内贴：run 链接、`ct -v` 输出、冒烟输出、
 资产 sha256，并说明是否覆盖了 `v1.0.0` 的既有资产。
+
+
+## 7. 复核（REV，2026-11-24）
+
+`workflow_dispatch` 对 `v1.0.0` 重建：run [45289869573](https://github.com/samxxu/ct-lang/actions/runs/45289869573) 绿；
+`ct -v` = `v1.0.0`；`file ct` = `ELF 64-bit LSB executable, x86-64, statically linked`；冒烟
+`2 3 4` / `4 4` 通过。资产已覆盖：
+`ct-linux-x64.tar.gz` sha256 `78c9e7feacee2319f9888febc3fae6334139c66d4bd1c5f25ce244da582f698d`
+（`sha256sum -c` OK，tar 内 `ct`/`ctc`）。全程原生 `cc -static`，未用 zig/qemu。
