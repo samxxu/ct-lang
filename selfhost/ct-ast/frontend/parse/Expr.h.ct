@@ -1175,6 +1175,37 @@ static int type_is_owning(struct Expr *self, const char *type)
     return si >= 0 && self->sym->structs[si].uses_drop;
 }
 
+/* P-3.5 (SH-117): a by-value `String` / `Str` / `U16String` / `U16Str` handle
+   is a 16-byte struct, never a C pointer. The C boundary's only exit is
+   `cstr()` (or a byte-wise `.data[i]`), so a pointer target must not receive
+   the handle: `char *p = s` used to be accepted and emit `char *p = s;`.
+   Answers 1 and fills `base` with the handle's spelling when `e` is a
+   by-value handle; a cast is the explicit escape hatch and is left alone. */
+static int str_handle_value(struct Expr *self, int e, char *base, int cap)
+{
+    char ty[MAX_TEXT];
+    const char *p;
+    size_t n;
+
+    if (base != 0 && cap > 0) base[0] = 0;
+    if (e < 0 || base == 0 || cap < 2) return 0;
+    if (self->arena->nodes[e].kind == N_CAST) return 0;
+    if (self->sup->expr_type(e, ty, sizeof ty) != 0) return 0;
+    p = ty;
+    while (*p == ' ' || *p == '\t') p++;
+    if (strncmp(p, "struct ", 7) == 0) p += 7;
+    n = strlen(p);
+    while (n > 0 && (p[n - 1] == ' ' || p[n - 1] == '\t')) n--;
+    if (n == 0 || n >= (size_t)cap || memchr(p, '*', n) != 0) return 0;
+    memcpy(base, p, n);
+    base[n] = 0;
+    if (strcmp(base, "String") == 0 || strcmp(base, "Str") == 0
+        || strcmp(base, "U16String") == 0 || strcmp(base, "U16Str") == 0)
+        return 1;
+    base[0] = 0;
+    return 0;
+}
+
 /* One actual against one parameter's annotation. 0 = accepted, -1 = a
    diagnostic was recorded. The caller supplies the source position through
    the actual node's line. */
@@ -7546,6 +7577,27 @@ impl ExprOps for Expr {
                         self->arena->nodes[n].aux = 1;
                 }
                 if (record_io_call(self, self->arena->nodes[n].text2, fi >= 0, id_line) != 0) return -1;
+                /* P-3.5 (SH-117): an unresolved callee is a C function. A
+                   by-value `String` / `Str` handle has no implicit conversion
+                   to the `char *` the C boundary spells, and a variadic
+                   position cannot declare one, so `printf("%s", s)` used to
+                   pass the struct by value. A call through a function-pointer
+                   variable (aux 1) has its own signature and is left alone. */
+                if (fi < 0 && self->arena->nodes[n].aux != 1 && args > 0) {
+                    int hcur = args;
+                    while (hcur > 0) {
+                        char hb[MAX_TEXT];
+                        if (str_handle_value(self, hcur, hb, sizeof hb)) {
+                            char hmsg[MAX_TEXT + 64];
+                            snprintf(hmsg, sizeof hmsg,
+                                     "cannot pass a '%s' handle to C function '%s': use cstr() at the C boundary",
+                                     hb, self->arena->nodes[n].text2);
+                            return tool::diag::ct_sem_error(id_line, id_col, hmsg,
+                                                            self->sup->mem->path);
+                        }
+                        hcur = self->arena->nodes[hcur].next;
+                    }
+                }
                 /* the call graph keeps the name the source wrote */
                 if (fi >= 0 && self->record_call(self->arena->nodes[n].text2, id_line) != 0) return -1;
                 /* Phase 21 S4: a closure actual must fill the callee's
@@ -9807,9 +9859,25 @@ impl ExprTypes for Expr {
     int lit_coerce(const char *type, int e)
     {
         char base[MAX_TEXT];
+        char hb[MAX_TEXT];
+        char msg[MAX_TEXT];
         const char *p;
         size_t n;
 
+        /* P-3.5 (SH-117): a pointer target cannot receive a by-value
+           `String` / `Str` handle. The declaration initialiser, the plain
+           assignment, the return position and a declared-parameter argument
+           all reach this hook with the expected type, so one check covers
+           the three shapes that used to emit `char *p = s;`. */
+        if (type != 0 && type[0] != 0 && strchr(type, '*') != 0
+            && str_handle_value(self, e, hb, sizeof hb)) {
+            snprintf(msg, sizeof msg,
+                     "cannot convert '%s' to '%s': use cstr() at the C boundary",
+                     hb, type);
+            return tool::diag::ct_sem_error(self->arena->nodes[e].line,
+                                            self->arena->nodes[e].num, msg,
+                                            self->sup->mem->path);
+        }
         if (e < 0 || self->arena->nodes[e].kind != N_STR) return 0;
         if (self->arena->str_at((int)self->arena->nodes[e].num)[0] == '\'')
             return 0;                          /* a character literal */
