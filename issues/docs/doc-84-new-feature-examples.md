@@ -73,3 +73,33 @@ $ grep -rn 'void .*(ref \|void .*(out ' examples --include='*.ct' | wc -l
 `examples/5x_ref_out` / `5x_slice` / `5x_box_new` / `5x_match_adt`，每项带 `expected.out`
 并接 `test/run.sh` + `check-ast.sh`（不新建平行 runner）。落地后本条从 `deferred` 转
 `open` 复核；与 [DOC-86](doc-86-readme-v088-rewrite.md) 的 tutorial-cases runner 可同批。
+
+## 落地（2026-11-23，DEV）
+
+**状态未改（`deferred`），待 REV 复核。**
+
+新增四个最小 example，每个 `prog.ct` + `prog.expected.out`，首行 `//@ct-requires: ct-ast`，
+由既有 `examples/*/*.ct` glob 自动接入 `test/run.sh` 与 `check-ast.sh`，不新建 runner：
+
+| 目录 | 演示 | 实测输出 |
+| --- | --- | --- |
+| `examples/50_ref_out` | `ref` / `out` 形参与调用点自动取地址 | `2 3 4` |
+| `examples/51_slice` | `T[]`、自动补长度、子切片 `s[1..3]` | `14 5 5` |
+| `examples/52_box_new` | `box<T>` / `new`、`at()` 借用、`release()` | `4 4` |
+| `examples/53_match_adt` | 穷尽 `match` + `String` 负载显式 `release()` | `hi` |
+
+证据：
+
+```console
+$ bash test/run.sh
+  ok    examples/50_ref_out/prog.ct (ct-ast)
+  ok    examples/51_slice/prog.ct (ct-ast)
+  ok    examples/52_box_new/prog.ct (ct-ast)
+  ok    examples/53_match_adt/prog.ct (ct-ast)
+== summary: 160 passed, 0 failed ==
+
+$ bash selfhost/check-warnings.sh
+check-warnings: 506 ok, 0 failed
+```
+
+索引已补在 [examples/README.md](../../examples/README.md) 的「新句柄层」一节。

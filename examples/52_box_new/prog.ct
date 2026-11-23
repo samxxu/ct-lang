@@ -1,0 +1,15 @@
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+struct Point { int x; int y; }
+
+int main(void)
+{
+    box<Point> b = new Point { 3, 4 };
+    Point *p = b.at();
+
+    p->x = p->x + 1;
+    printf("%d %d\n", b.x, b.y);
+    b.release();
+    return 0;
+}

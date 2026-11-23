@@ -1,8 +1,9 @@
 # examples —— 示例索引
 
 每个目录是一份可运行的小程序，覆盖 `ct` 的一类能力；唯一例外是 `49_socket`（文档型样例，
-std 侧 API 尚未落地，不进编译与运行门禁）。分为五组：**impl / vtable**、
-**类型宿主（type host）**、**闭包**、**loop 语义**、**数组初值与泛型**。
+std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**impl / vtable**、
+**类型宿主（type host）**、**闭包**、**loop 语义**、**数组初值与泛型**、
+**新句柄层（ref/out、切片、box/new、ADT/match）**。
 
 ## impl / vtable
 
@@ -99,6 +100,19 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为五组：**imp
 | `32_container_subscript` | 下标糖（Phase 31）：`v[i]` / `m[k]` 读写分离、链式 `g[i][j]` 与越界返回空句柄 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `33_vec_brace_init` | `Vec` 花括号初值（Phase 31）：拥有型元素、空 `{}` 的非空 header、与 `from` 等价 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `34_map_literal` | `Map` 字面量（Phase 31）：插入序、重复键原位覆盖、编译期重复键报 `duplicate key` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+
+## 新句柄层（ref/out、切片、box/new、ADT/match）
+
+四个最小样例，覆盖 PH-78 / PH-79 / PH-81 / PH-84 的新句柄；每个只有一份 `prog.ct`，
+不依赖 shim。文件首行的 `//@ct-requires: ct-ast` 让 `test/run.sh` 走 ct-ast 路径，
+`check-ast.sh` 的语料层也会编译、运行并与 `prog.expected.out` 逐字节比对。
+
+| 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
+| --- | --- | --- | --- |
+| `50_ref_out` | `ref` 读写借用与 `out` 写出参数；调用点不写 `&` / `*`，签名发射成普通 C 指针 | ct-ast | `test/run.sh` + `check-ast.sh` |
+| `51_slice` | `T[]` 切片、数组自动补长度、子切片 `s[1..3]`（半开）与 `xs.len` | ct-ast | `test/run.sh` + `check-ast.sh` |
+| `52_box_new` | `box<T>` / `new T { … }`、`at()` 借出 `T *`、`release()` 释放 | ct-ast | `test/run.sh` + `check-ast.sh` |
+| `53_match_adt` | 最小 ADT + 穷尽 `match`；`String` 负载由 `str_concat` 构造，绑定里显式 `release()` | ct-ast | `test/run.sh` + `check-ast.sh` |
 
 ## 网络（文档型）
 

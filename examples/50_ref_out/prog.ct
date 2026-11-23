@@ -1,0 +1,27 @@
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+static void inc(ref int x)
+{
+    x = x + 1;
+}
+
+static int parse_pair(Str s, out int a, out int b)
+{
+    a = 3;
+    b = 4;
+    return s.len > 0;
+}
+
+int main(void)
+{
+    int v = 1;
+    int a;
+    int b;
+
+    inc(v);
+    if (parse_pair("xy", a, b)) {
+        printf("%d %d %d\n", v, a, b);
+    }
+    return 0;
+}
