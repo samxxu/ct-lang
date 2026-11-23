@@ -9716,7 +9716,11 @@ void ct_emit_clear_builtins(void)
 pub void ct_emit_add_builtin(int u);
 void ct_emit_add_builtin(int u)
 {
-    if (g_emit.nbuiltin < 4) {
+    /* SH-116: the array holds five layer units (Vec / Option / Result / Str /
+       Box); the cap still said four, so Box was loaded and then dropped here,
+       and a user unit never included `Box.h` (its instances stayed local, with
+       only a forward declaration of `struct ct_Box_hdr`). */
+    if (g_emit.nbuiltin < 5) {
         g_emit.builtins[g_emit.nbuiltin] = u;
         g_emit.nbuiltin += 1;
     }

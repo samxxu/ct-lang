@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=9797 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=9801 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=51754 io_cap=1024
+     emitted_before=48223 emitted_after=51757 io_cap=1024
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
@@ -45,7 +45,10 @@
      (emitted_after 于 SH-60 后复测：接收者可变性 `mut` 的解析/调用点诊断与 `.m.ct` 声明点
       类型证据增加 293 行发射 C；发射器本身未变)
      (emitted_after 于 TEST-25 后复测：`record_io_call` 的越界诊断带上单元名与上限，
-      增加 2 行发射 C；发射器本身未变) -->
+      增加 2 行发射 C；发射器本身未变)
+     (SH-116 后复测：`ct build` 把 Box 内置单元纳入存活判定/发射集合，
+      发射 C 增加 3 行（Box 单元头/实现）；Emitter.h.ct 9797 -> 9801（+4 行注释）)
+-->
 
 ## 1 切片清单
 

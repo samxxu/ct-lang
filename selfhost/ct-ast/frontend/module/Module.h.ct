@@ -2759,6 +2759,12 @@ cmd_too_long:
                 && !self->is_builtin_unit(ins[i].owner)) return 1;
             if (strcmp(base, "Result") == 0 && strcmp(ins[i].tmpl, "Result") == 0
                 && !self->is_builtin_unit(ins[i].owner)) return 1;
+            /* SH-116: `Box` has its own layer unit (PH-81), so it needs the same
+               on-demand rule as the other templates. Without this branch the
+               unit was loaded but pruned: the product kept only
+               `struct ct_Box_hdr;` and `cc` rejected the incomplete type. */
+            if (strcmp(base, "Box") == 0 && strcmp(ins[i].tmpl, "Box") == 0
+                && !self->is_builtin_unit(ins[i].owner)) return 1;
             if (strcmp(base, "Str") == 0
                 && (has_word(ins[i].ctype[0], "Str") || has_word(ins[i].carg[0], "Str"))
                 && !self->is_builtin_unit(ins[i].owner))
