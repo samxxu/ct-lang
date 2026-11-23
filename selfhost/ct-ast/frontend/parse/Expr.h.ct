@@ -7136,6 +7136,155 @@ impl ExprOps for Expr {
                    still has to be declared. */
                 int ci, all_caps, vf;
                 const char *nm = self->arena->nodes[n].text2;
+                /* SH-114: a generic template used before its definition keeps
+                   the "must be defined first" rule, but the diagnostic names
+                   that rule instead of the generic undeclared-variable text.
+                   Only the `name<...>(` shape is eligible. The scan is inline:
+                   `v1-PH-0` is at the 512-function budget, so this diagnostic
+                   may not add a top-level helper (SH-109). */
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
+                    const char *gsrc = self->sup->lex->src;
+                    int guse = self->sup->lex->pos;
+                    int gpos = 0, gdepth = 0, ghint = 0;
+                    int gnlen = (int)strlen(nm);
+                    while (gsrc[gpos] && !ghint) {
+                        char gc = gsrc[gpos];
+                        if (gc == '"' || gc == '\'') {
+                            char gq = gc;
+                            gpos++;
+                            while (gsrc[gpos] && gsrc[gpos] != gq) {
+                                if (gsrc[gpos] == '\\' && gsrc[gpos + 1]) gpos++;
+                                gpos++;
+                            }
+                            if (gsrc[gpos]) gpos++;
+                            continue;
+                        }
+                        if (gc == '/' && gsrc[gpos + 1] == '*') {
+                            gpos += 2;
+                            while (gsrc[gpos]
+                                   && !(gsrc[gpos] == '*' && gsrc[gpos + 1] == '/'))
+                                gpos++;
+                            if (gsrc[gpos]) gpos += 2;
+                            continue;
+                        }
+                        if (gc == '/' && gsrc[gpos + 1] == '/') {
+                            while (gsrc[gpos] && gsrc[gpos] != '\n') gpos++;
+                            continue;
+                        }
+                        if (gc == '{') { gdepth++; gpos++; continue; }
+                        if (gc == '}') {
+                            if (gdepth > 0) gdepth--;
+                            gpos++;
+                            continue;
+                        }
+                        if (gpos > guse && gdepth == 0
+                            && ((gc >= 'A' && gc <= 'Z') || (gc >= 'a' && gc <= 'z')
+                                || gc == '_')) {
+                            int gq = gpos + 1, gp, gd, gtp0, gtp1, gb;
+                            char gtp[MAX_TEXT];
+                            while (gsrc[gq]
+                                   && ((gsrc[gq] >= 'A' && gsrc[gq] <= 'Z')
+                                       || (gsrc[gq] >= 'a' && gsrc[gq] <= 'z')
+                                       || (gsrc[gq] >= '0' && gsrc[gq] <= '9')
+                                       || gsrc[gq] == '_'))
+                                gq++;
+                            if (gq - gpos == gnlen
+                                && strncmp(gsrc + gpos, nm, (size_t)gnlen) == 0) {
+                                gp = gq;
+                                while (gsrc[gp] == ' ' || gsrc[gp] == '\t'
+                                       || gsrc[gp] == '\n' || gsrc[gp] == '\r')
+                                    gp++;
+                                if (gsrc[gp] == '<') {
+                                    gp++;
+                                    while (gsrc[gp] == ' ' || gsrc[gp] == '\t'
+                                           || gsrc[gp] == '\n' || gsrc[gp] == '\r')
+                                        gp++;
+                                    gtp0 = gp;
+                                    while (gsrc[gp]
+                                           && ((gsrc[gp] >= 'A' && gsrc[gp] <= 'Z')
+                                               || (gsrc[gp] >= 'a' && gsrc[gp] <= 'z')
+                                               || (gsrc[gp] >= '0' && gsrc[gp] <= '9')
+                                               || gsrc[gp] == '_'))
+                                        gp++;
+                                    gtp1 = gp;
+                                    gd = 0;
+                                    while (gsrc[gp]) {
+                                        if (gsrc[gp] == '<') gd++;
+                                        else if (gsrc[gp] == '>') {
+                                            if (gd == 0) { gp++; break; }
+                                            gd--;
+                                        }
+                                        gp++;
+                                    }
+                                    while (gsrc[gp] == ' ' || gsrc[gp] == '\t'
+                                           || gsrc[gp] == '\n' || gsrc[gp] == '\r')
+                                        gp++;
+                                    if (gsrc[gp] == '(') {
+                                        gb = gpos - 1;
+                                        while (gb >= 0 && (gsrc[gb] == ' '
+                                               || gsrc[gb] == '\t'
+                                               || gsrc[gb] == '\n'
+                                               || gsrc[gb] == '\r')) gb--;
+                                        if (gb >= 0 && gsrc[gb] == '*') gb--;
+                                        while (gb >= 0 && (gsrc[gb] == ' '
+                                               || gsrc[gb] == '\t'
+                                               || gsrc[gb] == '\n'
+                                               || gsrc[gb] == '\r')) gb--;
+                                        if (gb >= 0 && gsrc[gb] == '>') ghint = 1;
+                                        if (!ghint && gb >= 0
+                                            && ((gsrc[gb] >= 'A' && gsrc[gb] <= 'Z')
+                                                || (gsrc[gb] >= 'a' && gsrc[gb] <= 'z')
+                                                || (gsrc[gb] >= '0' && gsrc[gb] <= '9')
+                                                || gsrc[gb] == '_')) {
+                                            int gw0 = gb;
+                                            while (gw0 > 0
+                                                   && ((gsrc[gw0 - 1] >= 'A'
+                                                        && gsrc[gw0 - 1] <= 'Z')
+                                                       || (gsrc[gw0 - 1] >= 'a'
+                                                           && gsrc[gw0 - 1] <= 'z')
+                                                       || (gsrc[gw0 - 1] >= '0'
+                                                           && gsrc[gw0 - 1] <= '9')
+                                                       || gsrc[gw0 - 1] == '_'))
+                                                gw0--;
+                                            snprintf(gtp, sizeof gtp, "%.*s",
+                                                     gb - gw0 + 1, gsrc + gw0);
+                                            if ((gtp1 > gtp0
+                                                 && gtp1 - gtp0 == (int)strlen(gtp)
+                                                 && strncmp(gsrc + gtp0, gtp,
+                                                            (size_t)(gtp1 - gtp0)) == 0)
+                                                || strcmp(gtp, "void") == 0
+                                                || strcmp(gtp, "char") == 0
+                                                || strcmp(gtp, "short") == 0
+                                                || strcmp(gtp, "int") == 0
+                                                || strcmp(gtp, "long") == 0
+                                                || strcmp(gtp, "float") == 0
+                                                || strcmp(gtp, "double") == 0
+                                                || strcmp(gtp, "signed") == 0
+                                                || strcmp(gtp, "unsigned") == 0
+                                                || strcmp(gtp, "_Bool") == 0
+                                                || self->sym->find_type(gtp) >= 0
+                                                || self->sym->find_struct(gtp) >= 0
+                                                || self->sym->find_trait(gtp) >= 0
+                                                || self->sym->find_type_alias(gtp) >= 0)
+                                                ghint = 1;
+                                        }
+                                    }
+                                }
+                            }
+                            gpos = gq;
+                            continue;
+                        }
+                        gpos++;
+                    }
+                    if (ghint) {
+                        char gmsg[MAX_TEXT + 96];
+                        snprintf(gmsg, sizeof gmsg,
+                                 "generic template '%s' must be defined before its first instantiation",
+                                 nm);
+                        return tool::diag::ct_sem_error(id_line, id_col, gmsg,
+                                                        self->sup->mem->path);
+                    }
+                }
                 /* SH-66: a template generates no C symbol of its own, so a
                    bare template name is never a value -- only `name<type>`
                    names an instance. Without this `int (*p)(int) = id;` exited

@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=9389 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=49747 io_cap=1024
+     emitted_before=48223 emitted_after=49881 io_cap=1024
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
@@ -24,7 +24,9 @@
      (emitted_after 于 SH-110 后复测：可物化方法接收者判定与已物化 N_MCALL 接收者
       白名单增加 13 行发射 C；Emitter.h.ct 增加 18 行)
      (emitted_after 于 SH-108 后复测：多维数组空首维的弃用判定增加 4 行发射 C；
-      发射器本身未变) -->
+      发射器本身未变)
+     (emitted_after 于 SH-114 后复测：泛型模板先用后定义的判定内联在标识符路径，
+      增加 134 行发射 C；不新增顶层函数（MAX_FUNCS 已无余量，见 SH-109）) -->
 
 ## 1 切片清单
 

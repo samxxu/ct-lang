@@ -75,3 +75,30 @@ $ echo $?
 
 先用后定义目前只报通用 `use of an undeclared variable`，且位置落在 `<`（col 25）而不是
 模板名（col 20）。状态字段保持 `deferred` 不动。
+
+**绿证（`35cd9184` 的红提交之后）。** 探针全绿：
+
+```console
+$ sh test/ast/p114_generic_order.sh .temp/tmp-chain/g114b/ct-ast
+ok   template before use compiles and runs
+ok   template after use gets the dedicated positioned diagnostic
+ok   template-after-use does not fall back to the generic text
+ok   a plain undeclared variable keeps the old diagnostic
+ok   a missing generic name keeps the old diagnostic
+$ echo $?
+0
+```
+
+专门文案（指向模板名 col 20，不是 `<` 的 col 25）：
+
+```text
+generic_template_after.ct:7:20: error: generic template 'twice' must be defined before its first instantiation
+```
+
+**实现约束。** 判定内联在未声明标识符的错误路径里，没有新增顶层函数：本分支已在
+`MAX_FUNCS` 512 的预算上（加一个 helper 会触发 `too many functions`），按 SH-109 的
+`v1-PH-0` 边界「不得顺手提上限」处理，容量切片仍归 `v1-PH-1 / S0`。
+
+**回归。** `p86_errors` 23/0（既有诊断字节不变）；`p88_metrics` 9/0（发射 C 49881 行）；
+306 个单文件语料生成 C 与 `a0ce8ef1` 基线逐字节相同（`compared=306 same=306 diff=0`）。
+状态字段保持 `deferred` 不动。
