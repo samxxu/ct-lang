@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.83.3（2026-11-21） |
 | 文件 | [ct-pkg-get-contract.md](../../docs/planning/ct-pkg-get-contract.md)、[D-014](../../docs/decisions/D-014.md)、[PKG-14](pkg-14-ph83-index-verify-and-binary.md) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；按本卡 §1–§5 直接开工，不再以冻结窗口为由延后；负责人 DEV）** |
 
 ## REQ 规格（2026-11-21，方案 A：仓库内 vendored 快照）
@@ -125,3 +125,10 @@ $ grep -n 'if: false' .github/workflows/packages.yml
 `packages.yml` 的 `if: false` 或新增独立 job。owner：DEV；P2；登记日期 2026-11-22。
 不做原因不是“不必做”，而是当前冻结窗口内未排到该实现；规格已就绪，可直接开工。
 状态：**2026-11-23 所有者放开为 `open`**，按 §1–§5 直接开工，不再以冻结窗口为由延后。
+
+
+## 复核（REV，2026-11-23）
+
+vendored bare git fixture（demo/acme/ct hello）+ 三条索引；`pkg17-index/get/build` 全 OK；
+五字段/坏 digest 按行硬错且不写 store/lock；接 `test/pkg/run.sh` 与 CI 日志断言；
+离线 `GIT_ALLOW_PROTOCOL=file`、独立 HOME/CT_HOME、mktemp 并发安全。
