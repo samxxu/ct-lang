@@ -415,7 +415,7 @@ exit=0
   再 release 旧值」；卡 §7.9.1 也把「重新赋值」写成已实现
   （[phase80:394](../../docs/design/phase80.md#L394)）。**A 的「泄漏可登记」是撤回这条已交付行为**，
   不是「保留未实现承诺」。
-- **发布文档的无条件句**：[language-spec.md:2918-2922](../../docs/language-spec.md#L2918-L2922)
+- **发布文档的无条件句**：[language-spec.md:2918-2922](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)
   「重新赋值先 retain 右值再 release 旧值」已随 v0.80.1/v0.80.2 发出；R6b 证明该句在循环下为假。
 - **收口记录**：卡头「状态：完成」[phase80:3](../../docs/design/phase80.md#L3)、roadmap
   「✅ 完成（v0.80.2，SH-102 修复）」[roadmap:93](../../docs/roadmap.md#L93)，与 SH-102

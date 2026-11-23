@@ -59,8 +59,8 @@ Box.h.ct  Option.h.ct  Result.h.ct  Str.h.ct  Vec.h.ct   # 无 std::arena
 ### F1 — String 不是“永远在堆上”
 
 - 指引 L53：“数据住哪：永远在它拥有的堆上”；L151：“数据必在堆”。
-- 实物：[spec §4.70](../../docs/language-spec.md#L2888-L2893)：`refs = -1` 为 immortal（字面量/空串），
-  绑定只读静态块；[spec §4.70 边界](../../docs/language-spec.md#L2926-L2927)：字段/全局位置的
+- 实物：[spec §4.70](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)：`refs = -1` 为 immortal（字面量/空串），
+  绑定只读静态块；[spec §4.70 边界](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)：字段/全局位置的
   `String` **无自动 Drop**。
 - 建议改写：**String 是“释放责任的所有者”，不是“数据必在堆”**；字面量/空串是只读区 immortal；
   字段 `String` 合法但无自动 Drop，需显式 `release`/协议处理。
@@ -68,7 +68,7 @@ Box.h.ct  Option.h.ct  Result.h.ct  Str.h.ct  Vec.h.ct   # 无 std::arena
 ### F2 — 四个 API 不存在或参数语义错
 
 - 指引 L14：`String s = "x".to_string()`。实测失败（E1 t1）；字面量裸值类型是 `char *`
-  ([spec §4.70](../../docs/language-spec.md#L2892-L2895)）。建议改 `String s = "x";`。
+  ([spec §4.70](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)）。建议改 `String s = "x";`。
 - 指引 L85：`Str trim(Str s) { return s.slice(1, s.len - 1); }`。
   [Str.h.ct:355](../../lib/core/Str.h.ct#L355)：第二参是**长度 n**，不是 end；`len-1` 会取错区间。
   建议按字节写 `s.slice(1, s.len - 2)`（ASCII），并注明 `len` 是字节数。
@@ -82,7 +82,7 @@ Box.h.ct  Option.h.ct  Result.h.ct  Str.h.ct  Vec.h.ct   # 无 std::arena
 ### F3 — ref/out 不是“生命周期 = 本次调用”
 
 - 指引 L153 写“生命周期 = 本次调用”。
-- [spec §4.68](../../docs/language-spec.md#L2861-L2862)：“`ref` 可以被存储或传给更长寿命的位置，
+- [spec §4.68](../../docs/language-spec.md#468-ref--out-参数phase-78仅-ct-ast)：“`ref` 可以被存储或传给更长寿命的位置，
   语言不做借用检查（契约 + 直接 lint，J-4b）”。
 - 建议：改为“调用点自动取地址；语言不阻止你把 ref 存到更长寿命位置，靠契约/lint”。
 
@@ -101,7 +101,7 @@ Box.h.ct  Option.h.ct  Result.h.ct  Str.h.ct  Vec.h.ct   # 无 std::arena
 - 指引 L57：“悬垂风险 无（协议保证）”；L124：“不可变共享无副作用”；
   L167 又写“句柄跨线程共享 → 数据竞争（refcount 非原子）”。
 - 实测：局部 Str 视图返回可编译且无 lint（E1 `retlocal2`）。
-- [spec §4.70](../../docs/language-spec.md#L2888-L2889)：refcount 非原子、非线程安全；
+- [spec §4.70](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)：refcount 非原子、非线程安全；
   [selfhost/check-tsan.sh:3-6](../../selfhost/check-tsan.sh#L3-L6)：TSan 是 nightly/Linux 独立门禁。
 - 建议：改为“**单线程内** owning 不悬垂；**Str 视图逃逸不在编译期兜底**；
   跨线程共享 refcount 非原子，需自行同步；TSan 只在 nightly/Linux”。
@@ -110,8 +110,8 @@ Box.h.ct  Option.h.ct  Result.h.ct  Str.h.ct  Vec.h.ct   # 无 std::arena
 
 - 指引 L13 表格写 box 省掉“泄漏”；L165/L180 又承认引用环泄漏。
 - 指引 L165 把 `--debug-leaks` 列为防线。实测 `ct build --debug-leaks` →
-  `ctc: unknown option '--debug-leaks'`；[spec §4.71 边界](../../docs/language-spec.md#L2952-L2955)
-  写“（若将来实现）只报未配对计数”，[spec §4.72 非目标](../../docs/language-spec.md#L2985-L2986)
+  `ctc: unknown option '--debug-leaks'`；[spec §4.71 边界](../../docs/language-spec.md#471-box--new单对象句柄phase-81仅-ct-ast)
+  写“（若将来实现）只报未配对计数”，[spec §4.72 非目标](../../docs/language-spec.md#472-泄漏防护leaks-与直接环检测phase-82仅-ct-ast)
   再次声明；[phase81 评审](../../docs/reviews/2026-11-21-phase81-rev-verdict.md#L116)与
   [phase82 评审](../../docs/reviews/2026-11-21-phase82-rev-verdict.md#L118)均记录该选项未实现。
 - 直接环 lint 存在：`test/ast/p82_cycle.sh` 的文案是
@@ -136,7 +136,7 @@ Box.h.ct  Option.h.ct  Result.h.ct  Str.h.ct  Vec.h.ct   # 无 std::arena
   - `Map` 键：**硬错**（`mapstr.ct`）；
   - `Vec` 元素：**允许**（`vstr.ct` / `vpush.ct`）；
   - `Option<Str>` 与 ADT 负载：**允许**（`tv.ct` / `adt_str2.ct`）。
-- [spec §4.70 边界](../../docs/language-spec.md#L2926-L2927)只明写 `Map<Str,V>` 键。
+- [spec §4.70 边界](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)只明写 `Map<Str,V>` 键。
 - 建议改写为两行：
   - `Str` 不能作 **struct 字段 / Map 键**（硬错，必须换 owning `String`）；
   - `Vec<Str>`、`Option<Str>`、ADT 负载**可以**，但存的是借用视图，
@@ -146,15 +146,15 @@ Box.h.ct  Option.h.ct  Result.h.ct  Str.h.ct  Vec.h.ct   # 无 std::arena
 
 - 指引页首停在 v0.83.x，全篇无 `enum` 负载 / `match`。对 C 程序员应有一节，至少包含：
   - **两形态**：任一成员带负载 = ADT（tagged union）；全无负载 = C enum；不能混用
-    ([spec §4.73](../../docs/language-spec.md#L3013-L3015))。
+    ([spec §4.73](../../docs/language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast))。
   - **值类型、无 vtable、无分配**：ADT 不是 trait 接口；构造是复合字面量
-    ([spec §4.73 布局](../../docs/language-spec.md#L3053-L3056))。
+    ([spec §4.73 布局](../../docs/language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast))。
   - **match 是语句**、必须穷尽或末位 `_`、绑定是**副本**、owning payload 按 **move** 进绑定
-    ([spec §4.73](../../docs/language-spec.md#L3021-L3026))。
+    ([spec §4.73](../../docs/language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast))。
   - **最关键的诚实登记**：编译器**不生成 ADT drop glue**，owning payload（如 `String`）
     的释放由作者显式处理；`match` 绑定拿走的 owning 值同理
-    ([spec §4.73](../../docs/language-spec.md#L3061-L3064)、
-    [简化条](../../docs/language-spec.md#L3074-L3076))。
+    ([spec §4.73](../../docs/language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast)、
+    [简化条](../../docs/language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast))。
   - **实测补充（比 spec 文字更危险）**：`E.A(x)` 构造**不 retain**（`x.refs()` 仍为 1），
     `match` 绑定是浅拷贝（`s.refs()` 也为 1）；`s.release()` 后 `x.refs()` 变成垃圾值，
     原句柄悬垂。因此要把 ADT 当“move 语义”写：**payload 只释放一次，释放后原句柄不再使用**。

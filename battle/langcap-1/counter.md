@@ -9,20 +9,20 @@
 
 | 条目 | 原文 | 位置 |
 | --- | --- | --- |
-| 1 | 「`extern` 的名字不参与 mangling，因为它指向 C 库的符号」 | [language-spec.md:778-779](../../docs/language-spec.md#L778-L779) |
-| 1 | `pub` 全局的正规形态是「定义写在 `.h.ct`，`.h` 发 `extern`，`.c` 发定义」，没有「`.ct` 另写定义」的承诺 | [language-spec.md:774-775](../../docs/language-spec.md#L774-L775) |
-| 2 | 只承诺「enum 成员的 namespace mangling / 限定名 `app::High`」，没有承诺 enum 类型作用域 `Enum::Member` | [language-spec.md:905-908](../../docs/language-spec.md#L905-L908) |
+| 1 | 「`extern` 的名字不参与 mangling，因为它指向 C 库的符号」 | [language-spec.md:778-779](../../docs/language-spec.md#411-跨单元链接pub-全局与-externct-ast) |
+| 1 | `pub` 全局的正规形态是「定义写在 `.h.ct`，`.h` 发 `extern`，`.c` 发定义」，没有「`.ct` 另写定义」的承诺 | [language-spec.md:774-775](../../docs/language-spec.md#411-跨单元链接pub-全局与-externct-ast) |
+| 2 | 只承诺「enum 成员的 namespace mangling / 限定名 `app::High`」，没有承诺 enum 类型作用域 `Enum::Member` | [language-spec.md:905-908](../../docs/language-spec.md#414-enum常量表达式与-offsetofct-ast) |
 | 3 | 「包仓库的根目录就是包根：`ct.pkg`、`LICENSE` 与源码单元并列，不嵌套子目录」 | [package-guide.md:16](../../docs/package-guide.md#L16) |
 | 3 | 「单元声明了文件级命名空间，就必须坐在同名目录里……`<包根>/a/b/`」 | [package-guide.md:42-43](../../docs/package-guide.md#L42-L43) |
 | 4 | bindings 的基线写法是 `union` + `int tag`，访问写 `(*p).v.i`，不是属性协议 | [bindings-and-patterns.md:10-47](../../docs/bindings-and-patterns.md#L10-L47) |
-| 5 | 规约只承诺「名 + 参数个数」匹配，并把这个洞写成「已知洞（D52-6）」 | [language-spec.md:2628-2630](../../docs/language-spec.md#L2628-L2630)、[:2646-2648](../../docs/language-spec.md#L2646-L2648) |
-| 6 | 「方法调用的结果不能作下一跳接收者」被写进 0.44.1 的逐段实测与现状约束 | [language-spec.md:738-740](../../docs/language-spec.md#L738-L740)、[:762-763](../../docs/language-spec.md#L762-L763) |
+| 5 | 规约只承诺「名 + 参数个数」匹配，并把这个洞写成「已知洞（D52-6）」 | [language-spec.md:2628-2630](../../docs/language-spec.md#464-自定义类型下标phase-52仅-ct-ast)、[:2646-2648](../../docs/language-spec.md#464-自定义类型下标phase-52仅-ct-ast) |
+| 6 | 「方法调用的结果不能作下一跳接收者」被写进 0.44.1 的逐段实测与现状约束 | [language-spec.md:738-740](../../docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)、[:762-763](../../docs/language-spec.md#4101-链式构建器范式权威定义与两档路径) |
 | 6 | SH-73 定性为「有意的实现边界」，建议延后 | [sh73:59-69](../../issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md#L59-L69) |
-| 7 | 「`printf` 的格式串与实参类型匹配由用户负责，与 C 一致」 | [language-spec.md:1209](../../docs/language-spec.md#L1209) |
+| 7 | 「`printf` 的格式串与实参类型匹配由用户负责，与 C 一致」 | [language-spec.md:1209](../../docs/language-spec.md#424-浮点字面量ct-ast) |
 | 7 | 「明确不做」清单含「运算符重载（`into` 是脱糖例外）」 | [modern-oo-gap.md:339](../../docs/modern-oo-gap.md#L339) |
-| 8 | 「不做（D27-4）：`in` 形式、显式绑定名、迭代器、容器协议」 | [language-spec.md:2249-2250](../../docs/language-spec.md#L2249-L2250) |
-| 9 | `Str` 的 API 是显式 `str_from(s)`；没有隐式转换条款 | [language-spec.md:2492](../../docs/language-spec.md#L2492) |
-| 9 | 只有 impl 签名漂移是 `ct build` 硬错，其余语义记录是 warning | [language-spec.md:2187-2192](../../docs/language-spec.md#L2187-L2192) |
+| 8 | 「不做（D27-4）：`in` 形式、显式绑定名、迭代器、容器协议」 | [language-spec.md:2249-2250](../../docs/language-spec.md#449-foreach-语句形态phase-27仅-ct-ast) |
+| 9 | `Str` 的 API 是显式 `str_from(s)`；没有隐式转换条款 | [language-spec.md:2492](../../docs/language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast) |
+| 9 | 只有 impl 签名漂移是 `ct build` 硬错，其余语义记录是 warning | [language-spec.md:2187-2192](../../docs/language-spec.md#9-诊断与退出码) |
 
 ## E2 实测（对本席有利）
 

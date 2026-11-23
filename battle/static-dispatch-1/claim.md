@@ -40,7 +40,7 @@ $ sed -n '21,34p' /tmp/battle-static-dispatch-1/proposal.md
 | --- | --- | --- |
 | [README.md:62](../../README.md#L62) | “impl / 自由函数返回**局部**接口值……实测 `200`，期望 `201`” | R2a 的现状句（**已过时**，见反证 E2） |
 | [issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md:8](../../issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md#L8) | “状态：保持（有意限制）；建议：**延后**” | R2b 的 SH-73 定性 |
-| [docs/language-spec.md:323](../../docs/language-spec.md#L323) | 临时值接收者只允许在语句行首 / 赋值初始化式提升 | R2b 的规约依据 |
+| [docs/language-spec.md:323](../../docs/language-spec.md#45-方法调用重写) | 临时值接收者只允许在语句行首 / 赋值初始化式提升 | R2b 的规约依据 |
 | [docs/roadmap.md:147](../../docs/roadmap.md#L147) | “稳定子集清单……属文档治理，不占 Phase 编号” | R3a 仍是未排期治理项 |
 | [docs/planning/post-58-plan.md:190](../../docs/planning/post-58-plan.md#L190) | “待裁定（不自行决定）” | R3b 的“待裁定”出处（**已部分过时**） |
 

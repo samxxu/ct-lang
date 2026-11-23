@@ -90,7 +90,7 @@ error: argument 1: expected 'char *', got 'double'  # 不列候选签名
 | 利 A | [roadmap.md:89](../../docs/roadmap.md#L89) vs [phase-log.md:202-203](../../docs/history/phase-log.md#L202-L203) | Phase 76 写 v0.76.1；实际 v0.76.0（v0.76.1 是 SH-92 fix） |
 | 利 A | [typecheck-semantic-plan.md:1,5,108-111](../../docs/planning/typecheck-semantic-plan.md#L1)；[docs/README.md:41](../../docs/README.md#L41) | “未开卡” vs PH-68–71 已收口 v0.67.0–v0.70.0；索引还把编号写成 PH-67–70 |
 | 利 A | [phase-migration-blockers.md:6](../../docs/planning/phase-migration-blockers.md#L6)、[spec:6](../../docs/spec/ai-coding-workflow.md#L6) | 迁移未开始；账本不存在；但规范自标“草稿（未落入任何项目）”，PN 生效性待确认 |
-| 不利 A | [language-spec.md:2423](../../docs/language-spec.md#L2423)、[:2743-2746](../../docs/language-spec.md#L2743-L2746) | “尚未实现”仍对 A1/A3 成立；但“静默空值，不诊断”已被 PH-72 A2 改成硬错 |
+| 不利 A | [language-spec.md:2423](../../docs/language-spec.md#451-泛型-struct固有方法与内置容器phase-29)、[:2743-2746](../../docs/language-spec.md#464-自定义类型下标phase-52仅-ct-ast) | “尚未实现”仍对 A1/A3 成立；但“静默空值，不诊断”已被 PH-72 A2 改成硬错 |
 | 不利 A | [phase75.md:56](../../docs/design/phase75.md#L56) vs [:66](../../docs/design/phase75.md#L66) | §6 是“R1 未做”的阶段快照，§7 是收口；不是 G1 能查的项 |
 | 不利 A | [phase72.md:61](../../docs/design/phase72.md#L61)；[lang-4…md:8](../../issues/lang/lang-4-subscript-type-mismatch-silent-empty.md#L8) | 卡 ✅ / issue `open` 并存；12 条属实 |
 

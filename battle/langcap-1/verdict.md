@@ -64,14 +64,14 @@ int main(void) { return ns::K + ns::ARR[1] + ns::P.a; }
 
 实测 `ct build -I . app/main.ct -o out` rc=0，`./out` 退出码 `14`（`5 + 2 + 7`）。
 生成头含 `extern const int ns_K;` / `extern const int ns_ARR[3];` / `extern const struct ns_Pair ns_P;`，
-定义在对应 `.c`。这条由 [language-spec.md:774-775](../../docs/language-spec.md#L774-L775)
-（`pub` 全局定义 / `extern` 导出）与 [:783-785](../../docs/language-spec.md#L783-L785)
+定义在对应 `.c`。这条由 [language-spec.md:774-775](../../docs/language-spec.md#411-跨单元链接pub-全局与-externct-ast)
+（`pub` 全局定义 / `extern` 导出）与 [:783-785](../../docs/language-spec.md#411-跨单元链接pub-全局与-externct-ast)
 （namespace mangling 与限定名引用）直接覆盖。**主张席「namespace 内定义常量不可用」不成立。**
 
 **1b. 同名 `.h.ct` + `.ct`：A（bug）。**
 
 单元表把 `.ct` 定义为「实现 / 入口；接口写在同目录的 `.h.ct`」
-（[language-spec.md:616](../../docs/language-spec.md#L616)）。实测：
+（[language-spec.md:616](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)）。实测：
 
 ```console
 $ ct build -I . app/main.ct lib/cfg.ct -o out
@@ -92,7 +92,7 @@ rc=1
 而 `namespace ns;` 的 `.ct` 定义发射 `ns_K`。消费者写 `ns::K` 在解析期就报
 `no variable of that name in that namespace`；写裸 `K` 能过解析，但链接期 `_K` 未定义。
 根因是规约把 `extern` 定义为「指向 C 库的符号、不参与 mangling」
-（[language-spec.md:778-779](../../docs/language-spec.md#L778-L779)），
+（[language-spec.md:778-779](../../docs/language-spec.md#411-跨单元链接pub-全局与-externct-ast)），
 它从未承诺「CT 侧头声明 + 实现定义」的分离。**判 B**；登记归并行会话（namespace 常量/限定名），
 本轮不抢号。
 
@@ -122,7 +122,7 @@ C 库 `extern` 用例零回归。
 | `ns::FsErrCode::FS_ERR_NOT_FOUND` | 同上 |
 
 规约只承诺「enum 成员的 namespace mangling」与「限定名 `app::High`」
-（[language-spec.md:905-908](../../docs/language-spec.md#L905-L908)），没有承诺 **enum 类型作用域**。
+（[language-spec.md:905-908](../../docs/language-spec.md#414-enum常量表达式与-offsetofct-ast)），没有承诺 **enum 类型作用域**。
 C 也没有 `Enum::Member`；这是现行规范之外新引入的带限定符语法。SH-18 只覆盖「类型位置的 `A::B`」
 （[ct-ast-qualified-type-name-rejected.md:11-55](../../issues/selfhost/ct-ast-qualified-type-name-rejected.md#L11-L55)），
 不覆盖值位置。**判 B**，登记归并行会话；本轮只补一条诊断建议：值位置遇到 `Type::Member` 时
@@ -131,7 +131,7 @@ C 也没有 `Enum::Member`；这是现行规范之外新引入的带限定符语
 
 **最小修法与影响面**：在 `parse_primary` 的限定名分支里，若首段是已注册的 enum 标签，
 把 `Member` 解析为 `<enum C 名>_<Member>`（enum 成员已按全局常量登记，见
-[language-spec.md:905](../../docs/language-spec.md#L905)）。符号表只多一条「类型名 → enum 标签」判别；
+[language-spec.md:905](../../docs/language-spec.md#414-enum常量表达式与-offsetofct-ast)）。符号表只多一条「类型名 → enum 标签」判别；
 代码生成不变；ABI 不变。**回归断言**：`return FsErrCode::FS_ERR_NOT_FOUND;` 编译并返回 `1`；
 未知成员报错且不落 `.c`；`ns::FS_ERR_NOT_FOUND` 零回归。
 
@@ -161,8 +161,8 @@ PKG-2 已经把「让 `src/` 成为合法布局」登记为需求（`ct.pkg` 的
 
 仓库里没有任何「属性访问协议」条款。bindings 的基线写法是 `union` + `int tag`，
 访问写 `p->tag` / `(*p).v.i`（[bindings-and-patterns.md:10-47](../../docs/bindings-and-patterns.md#L10-L47)）；
-`?.` 只做**字段**访问（[language-spec.md:2652-2667](../../docs/language-spec.md#L2652-L2667)），
-`into` 只做块内字段赋值（[:2375-2390](../../docs/language-spec.md#L2375-L2390)）。
+`?.` 只做**字段**访问（[language-spec.md:2652-2667](../../docs/language-spec.md#465-可选链---phase-53仅-ct-ast)），
+`into` 只做块内字段赋值（[:2375-2390](../../docs/language-spec.md#452-接收者上下文块-expr-into---phase-30仅-ct-ast)）。
 `doc.server` 在 C 语义下就是「`JsonRef` 的 `server` 字段」，字段不存在时 `cc` 报
 `no member named 'server' in 'struct JsonRef'`；CT 不检查成员存在性（Z5），所以 `ct` 放行。
 这是 C 的字段规则，不是「属性协议没实现」。**判 B**，登记为 **LANG-12**。
@@ -184,7 +184,7 @@ PKG-2 已经把「让 `src/` 成为合法布局」登记为需求（`ct.pkg` 的
 LANG-4 已按 High 登记（[lang-4:11-16](../../issues/lang/lang-4-subscript-type-mismatch-silent-empty.md#L11-L16)、
 [:47-55](../../issues/lang/lang-4-subscript-type-mismatch-silent-empty.md#L47-L55)）。
 规约把这个行为写成「已知洞（D52-6）」
-（[language-spec.md:2646-2648](../../docs/language-spec.md#L2646-L2648)），但同一份规约在
+（[language-spec.md:2646-2648](../../docs/language-spec.md#464-自定义类型下标phase-52仅-ct-ast)），但同一份规约在
 `REQ-JSACCESS-1` 里承诺了修法；「已知」不等于「不是缺陷」。**判 A**，沿用 LANG-4。
 
 **5b. `get(char *)` 与 `get(int)` 并存：B（从未支持，需求）。**
@@ -268,7 +268,7 @@ LANG-5 把 `f().m()` 与 `b["k"].m()` 归为形态 1/2，根因是 `TypeCheck::i
 `b["k"]` 已展开为 `Box_get(&b,"k")`，随后 `.v` 直接按成员处理，发射
 `Box_get(&b,"k").v`；`ct` rc=0，`cc` 才报「member reference base type 不是结构体」。
 规约 §4.64 的「范围外」写的是「`x[k].field = v`、`x[k].m()` 在编译期报错（不落 `cc`）」
-（[language-spec.md:2649](../../docs/language-spec.md#L2649)），读形态 `x[k].field` 只是没被那句字面覆盖，
+（[language-spec.md:2649](../../docs/language-spec.md#464-自定义类型下标phase-52仅-ct-ast)），读形态 `x[k].field` 只是没被那句字面覆盖，
 但同属「成员跳转」的承诺。LANG-5 已登记并明确「方法硬错、字段静默」的不一致
 （[lang-5:22-23](../../issues/lang/lang-5-result-as-receiver.md#L22-L23)、
 [:52-56](../../issues/lang/lang-5-result-as-receiver.md#L52-L56)）。**判 A**，沿用 LANG-5。
@@ -287,8 +287,8 @@ SH-73 定性为「**有意的实现边界**」，理由是「不会静默产出�
 LANG-5 在修 6b 时明确「**SH-73 不动**：trait 动态派发的 `a.m().n()` 仍拒绝」
 （[lang-5:66-67](../../issues/lang/lang-5-result-as-receiver.md#L66-L67)）。
 规约把「接收者是一次方法调用当前一律拒绝」写进 0.44.1 的逐段实测与现状约束
-（[language-spec.md:738-740](../../docs/language-spec.md#L738-L740)、
-[:762-763](../../docs/language-spec.md#L762-L763)）。**判 C**；用户可用逐跳落变量或静态宿主链。
+（[language-spec.md:738-740](../../docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)、
+[:762-763](../../docs/language-spec.md#4101-链式构建器范式权威定义与两档路径)）。**判 C**；用户可用逐跳落变量或静态宿主链。
 
 **最小修法与影响面（6d，若未来做）**：在 Emitter 里把接收者表达式物化为 `__ct_tmpN`，再把下一跳改成
 对临时变量的调用/字段访问；需要决定 hoist 位置（语句起点 / 赋值起点）与临时值生命周期，
@@ -310,7 +310,7 @@ LANG-5 在修 6b 时明确「**SH-73 不动**：trait 动态派发的 `a.m().n()
 **7b. `printf("%s", ref)`：C（明确不做，用户负责）。**
 
 规约：「`printf` 的格式串与实参类型匹配由用户负责，与 C 一致」
-（[language-spec.md:1209](../../docs/language-spec.md#L1209)）。实测 `ct build` rc=0，
+（[language-spec.md:1209](../../docs/language-spec.md#424-浮点字面量ct-ast)）。实测 `ct build` rc=0，
 clang 给一条 `-Wformat` warning（`format specifies type 'char *' but the argument has type 'struct JsonRef'`），
 运行输出按 UB 处理。CT 不解析格式串，这是设计边界；若要收，只能走 `ct check --types` 的 opt-in
 格式串检查（新需求），不是修 bug。**判 C**。
@@ -325,7 +325,7 @@ clang 给一条 `-Wformat` warning（`format specifies type 'char *' but the arg
 **8a. `for (e in arr)`：C（明确不做）。**
 
 实测 `a.ct:4:16: error: unexpected token`。§4.49 的「不做（D27-4）」明列「`in` 形式、显式绑定名、
-迭代器、容器协议」（[language-spec.md:2249-2250](../../docs/language-spec.md#L2249-L2250)）。
+迭代器、容器协议」（[language-spec.md:2249-2250](../../docs/language-spec.md#449-foreach-语句形态phase-27仅-ct-ast)）。
 **判 C**；`foreach` 是既定写法。
 
 **最小修法与影响面（8a，若未来做）**：在 parser 把 `for (T e in expr)` 脱糖成 `foreach (expr)` +
@@ -335,11 +335,11 @@ clang 给一条 `-Wformat` warning（`format specifies type 'char *' but the arg
 **8b. 「foreach 只接受一维 C 数组」：D（主张不成立，文档旧句）。**
 
 §4.51 的容器协议写的是「数组与 `Vec` 同时绑定 `item` 与只读 `i`；`Map` 只绑定 `item`」
-（[language-spec.md:2367-2370](../../docs/language-spec.md#L2367-L2370)）；
+（[language-spec.md:2367-2370](../../docs/language-spec.md#451-泛型-struct固有方法与内置容器phase-29)）；
 教程 10.8 与 `modern-oo-gap` §3.7 也写「数组 / `Vec` / `Map`」
 （[tutorial.md:1343-1399](../../docs/tutorial.md#L1343-L1399)、
 [modern-oo-gap.md:195](../../docs/modern-oo-gap.md#L195)）。实测 `foreach (Vec<int>)` rc=0。
-§3 的语法总览也写「数组、`Vec`、`Map`」（[language-spec.md:148](../../docs/language-spec.md#L148)）。
+§3 的语法总览也写「数组、`Vec`、`Map`」（[language-spec.md:148](../../docs/language-spec.md#3-语法总览)）。
 **只有 §4.49 开头那句「在一维数组上迭代」是旧句**，属文档缺陷；若用户观察到仅数组，需核对版本（v0.53.x 已覆盖容器）。
 **动作**：改 §4.49 的旧句，指向 §4.51 的容器协议；不改实现。
 
@@ -348,7 +348,7 @@ clang 给一条 `-Wformat` warning（`format specifies type 'char *' but the arg
 **9a. 隐式转换：C（明确不做）。**
 
 `Str` 的 API 是显式 `str_from(s)` / `str_from_len(p,n)`
-（[language-spec.md:2492](../../docs/language-spec.md#L2492)）；教程示例也是
+（[language-spec.md:2492](../../docs/language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)）；教程示例也是
 `Str s = str_from("hello");`（[tutorial.md:1609](../../docs/tutorial.md#L1609)）。
 仓库没有隐式转换条款；`F-2` 明确「没有协议化的类型转换」，并建议「永久不做」隐式转换
 （[language-capability-gaps.md:985-1018](../../docs/proposals/language-capability-gaps.md#L985-L1018)）。

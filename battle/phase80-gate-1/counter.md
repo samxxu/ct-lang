@@ -101,7 +101,7 @@ P-7.4 留在 S5b/收口门，这是对**收口门**的尊重；但卡头写的�
 ### 2.1 ABI：先落布局，再补裁定
 
 - 旧 `Str` 的公开 ABI 是 `{ char *data; int len; }` + `impl Drop` 释放 buffer + `release()` 置
-  `data=0,len=-1`（[language-spec.md:2594](../../docs/language-spec.md#L2594)、
+  `data=0,len=-1`（[language-spec.md:2594](../../docs/language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)、
   [lib/std/Str.h.ct:18](../../lib/core/Str.h.ct#L18)）；新 `String` 是 16 字节句柄 + 隐藏 8 字节
   `{refs,aux}` 头（[docs/planning/j6-evidence/p73/evidence.md:222](../../docs/planning/j6-evidence/p73/evidence.md#L222)、提案 Q4），
   `ptr` 指向头之后。**同样是 16 字节，指针语义与释放契约不同**：旧代码若直接读写 `s.data`、
@@ -116,7 +116,7 @@ P-7.4 留在 S5b/收口门，这是对**收口门**的尊重；但卡头写的�
   （[selfhost/ct-ast/frontend/parse/Expr.h.ct:1324](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1324)，PH-78 S2a 引入），
   而当前语言里并没有 `String` 值类型。内建化会改变这个既有判定的含义，并与
   `std::str::String`（外部 `std` 包的 `char *` 方法层 trait，
-  [language-spec.md:2596](../../docs/language-spec.md#L2596)）同名不同物。P-7.4-2 只写了
+  [language-spec.md:2596](../../docs/language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)）同名不同物。P-7.4-2 只写了
   「旧 owning `Str` 仅 `std::str::Str` 限定名」，**没有写 `std::str::String` trait 怎么办**；
   先落代码会把一个未列出的命名冲突变成产品事实。
 
@@ -131,7 +131,7 @@ P-7.4 留在 S5b/收口门，这是对**收口门**的尊重；但卡头写的�
   「普通拷贝」语义落地，**没有门禁会红**。失败形态取决于一个尚未做的选择：
   - 选「拷贝硬错」（与内置容器一致：[lib/std/README.md:49](../../lib/core/README.md#L49)
     「变量间直接拷贝是硬错」）→ 现有 `Str` 的「按值传递浅拷贝指针」
-    （[language-spec.md:2595](../../docs/language-spec.md#L2595)）用法全部要迁移；
+    （[language-spec.md:2595](../../docs/language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)）用法全部要迁移；
   - 选「浅拷贝 + 显式 retain」（旧 `Str` 口径）→ 新 `String` 带 `Drop`，按值复制后两个句柄各自
     drop 会二次释放，除非 release 另有守卫；
   - 选「自动 retain」→ 需要参数/返回/字段的 move/copy glue，正是 p73 §8 说「会引入 move/copy
@@ -432,7 +432,7 @@ P-7.4 的参数/返回/字段 retain、旧 `Str` 并存、`Map<String>`、跨仓
   UTF-16 占位 [docs/planning/j6-evidence/p73/evidence.md:251](../../docs/planning/j6-evidence/p73/evidence.md#L251)；
   旧 `Str` 替换 [docs/planning/j6-evidence/p73/evidence.md:242](../../docs/planning/j6-evidence/p73/evidence.md#L242)；
   「不直接当 S5a 合并」[docs/planning/j6-evidence/p73/evidence.md:289](../../docs/planning/j6-evidence/p73/evidence.md#L289)。
-- 命名/迁移：[language-spec.md:2596](../../docs/language-spec.md#L2596)、
+- 命名/迁移：[language-spec.md:2596](../../docs/language-spec.md#456-drop-与长度前缀字符串-strphase-36仅-ct-ast)、
   [lib/std/README.md:10](../../lib/core/README.md#L10)、
   [examples/wave1-demo/src/main.ct:7](../../examples/wave1-demo/src/main.ct#L7)。
 - 门禁纪律：[AGENTS.md:468](AGENTS.md#L468)、[AGENTS.md:590](AGENTS.md#L590)。

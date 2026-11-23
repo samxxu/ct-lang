@@ -306,7 +306,7 @@ exit=0
   [verdict:1032-1039](../../docs/reviews/2026-11-20-phase80-rev-verdict.md#L1032-L1039) 因而仍写
   「SH-102 保持 `reopened`，不置 `verified`」。A 的“补进 §7.9”与 REV 拒绝的动作**形式上相同**；
   A 只能靠“USER 签收的合同限定 + 结构性无 UAF + 泄漏另行立案”三点与之区分（§6）。
-- **U3 仓内已经发布过无条件说法**：[language-spec.md:2920](../../docs/language-spec.md#L2920)
+- **U3 仓内已经发布过无条件说法**：[language-spec.md:2920](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)
   「重新赋值先 `retain` 右值再 `release` 旧值」已随 v0.80.1/0.80.2 发出；R6 证明该句在控制流下为假。
   A 要求同步这句；B 可以据此说 A 是在“把已发出的文档改成能收口的样子”。
 - **U4 承诺面确实变窄**：A 的“无 UAF”不含别名 / 指针写 / 跨函数写（§1.2）。而这些位置在 C 边界

@@ -8,14 +8,14 @@
 
 | 条目 | 本席依据 | 位置 |
 | --- | --- | --- |
-| 1 | 单元表把 `.ct` 定义为「实现 / 入口；接口写在同目录的 `.h.ct`」 | [language-spec.md:616](../../docs/language-spec.md#L616) |
-| 1 | `pub` 全局跨单元导出已有明文：`.c` 发定义、`.h` 发 `extern` | [language-spec.md:774-775](../../docs/language-spec.md#L774-L775) |
-| 2 | enum 成员「命名空间 mangling 与全局变量相同」，`pub enum` 的成员裸名与限定名都能用 | [language-spec.md:905-908](../../docs/language-spec.md#L905-L908) |
+| 1 | 单元表把 `.ct` 定义为「实现 / 入口；接口写在同目录的 `.h.ct`」 | [language-spec.md:616](../../docs/language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast) |
+| 1 | `pub` 全局跨单元导出已有明文：`.c` 发定义、`.h` 发 `extern` | [language-spec.md:774-775](../../docs/language-spec.md#411-跨单元链接pub-全局与-externct-ast) |
+| 2 | enum 成员「命名空间 mangling 与全局变量相同」，`pub enum` 的成员裸名与限定名都能用 | [language-spec.md:905-908](../../docs/language-spec.md#414-enum常量表达式与-offsetofct-ast) |
 | 3 | `ct install` 的语义是「打印一条可直接执行的 `ct build` 命令」 | [package-guide.md:111](../../docs/package-guide.md#L111) |
 | 5 | `REQ-JSACCESS-1` 明确承诺「同一类型可并存 `get(char *)` 与 `get(int)`」 | [requirements-pool.md:76](../../docs/planning/requirements-pool.md#L76) |
-| 6 | 规约承认两条 lowering 的差异「不是设计意图」 | [language-spec.md:1973-1977](../../docs/language-spec.md#L1973-L1977) |
-| 8 | 语法总览的容器遍历一行写的是「数组、`Vec`、`Map`」 | [language-spec.md:148](../../docs/language-spec.md#L148) |
-| 9 | `ct build` 的语义诊断里只有 impl 签名漂移是硬错，其余是 warning | [language-spec.md:2187-2192](../../docs/language-spec.md#L2187-L2192) |
+| 6 | 规约承认两条 lowering 的差异「不是设计意图」 | [language-spec.md:1973-1977](../../docs/language-spec.md#62-已知限制) |
+| 8 | 语法总览的容器遍历一行写的是「数组、`Vec`、`Map`」 | [language-spec.md:148](../../docs/language-spec.md#3-语法总览) |
+| 9 | `ct build` 的语义诊断里只有 impl 签名漂移是硬错，其余是 warning | [language-spec.md:2187-2192](../../docs/language-spec.md#9-诊断与退出码) |
 
 ## E2 实测（本席复跑）
 

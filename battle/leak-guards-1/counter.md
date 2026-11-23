@@ -14,7 +14,7 @@ $ sed -n '6p' test/modules/leak/prog.ct
 
 ## E2 — 锚点（含不利于己方）
 
-- 有利于 B：[language-spec.md:2540](../../docs/language-spec.md#L2540)（`ct check` 的 strict 已把 warning 升 error）；
+- 有利于 B：[language-spec.md:2540](../../docs/language-spec.md#453-可选类型检查-ct-check---typesphase-32)（`ct check` 的 strict 已把 warning 升 error）；
   [Diag.h.ct:281](../../selfhost/ct-ast/tool/diag/Diag.h.ct#L281)（severity 由 strict 统一决定）。
 - **不利于己方**：[package-guide.md:89](../../docs/package-guide.md#L89) 没有 `strict` 键，只有 `c-boundary` 的值；
   宽键需要新造语义，并非「零新机制」。
