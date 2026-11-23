@@ -22,15 +22,17 @@ Standard library only. It asserts seventeen invariants:
      machine-readable `<!-- gates:N -->` marker (its dated records quote
      historical counts, so prose scanning is not usable there); ci.yml job
      step labels may not name a stale count;
-  4. the status line of every docs/design/phase*.md matches the Chinese phase
+  4. the status line of every active `docs/phases/v0-PH-<n>/card.md` (the
+     newest DESIGN_WINDOW cards, DOC-74 migration) matches the Chinese phase
      table in docs/roadmap.md (done -> check, in progress -> half, planned ->
      white); the English table was removed by the docs-language policy;
   5. an "适用版本" header under docs/*.md names the compiler line, never a
      fixed version: the number goes stale at the next bump (DOC-63);
   6. G9: AGENTS.md pins the methodology's `spec-version` and `spec-sha256`
      (CI-8); a missing spec file is an explicit skip, a mismatch is red;
-  7. docs/design/ keeps the newest DESIGN_WINDOW phases, older phase docs live
-     in docs/history/design/ and may not be duplicated (DOC-66);
+  7. every phase card lives at `docs/phases/v<M>-PH-<n>/card.md`; no legacy
+     `docs/design/phase*.md` or `docs/history/design/phase*.md` card remains
+     (DOC-74 / DOC-83, D-019);
   8. every battle question's `superseded-by:` pointer and the ADR's
      `superseded-battles:` list agree in both directions;
   9. T-8 (AGENTS §0.7): an "实施中" phase card and every ADR dated on or
@@ -129,6 +131,13 @@ SPEC_LINE_ANCHOR = re.compile(r"^L(\d+)(?:-L(\d+))?$")
 # The exemption is per (source file, raw target), never per directory or rule:
 # a new dead anchor in the same file still fails.
 FRAGMENT_EXEMPT = {
+    # DOC-74 moved the historical phase cards out of the frozen
+    # docs/history/** snapshot; this citation's slug has always been one
+    # hyphen off (`ab-phase-24` vs GitHub's `abphase-24`), so it stays a
+    # historical record rather than a live navigation target.
+    "docs/phases/v0-PH-24/card.md": {
+        "../../language-spec.md#447-数组-range-初值-ab-phase-24仅-ct-ast",
+    },
     "battle/langcap-1/verdict.md": {
         "../../issues/packages/pkg-2-ct-install-package-root-import.md#L100-L118",
     },
@@ -221,6 +230,7 @@ CT_EXEMPT_DIRS = (
     "docs/proposals",
     "docs/decisions",
     "docs/design",
+    "docs/phases",
     "docs/spec",
     "battle",
     "issues",
@@ -356,9 +366,18 @@ def headings_from_text(text):
     return out
 
 
+HTML_ANCHOR = re.compile(r'<a\s+[^>]*?\b(?:id|name)="([^"]+)"', re.I)
+
+
 def heading_slugs(path):
-    """The set of anchor slugs the target Markdown file exposes."""
-    return {item[3] for item in spec_headings(path)}
+    """The set of anchor slugs the target Markdown file exposes.
+
+    Heading slugs plus explicit `<a id="...">` / `<a name="...">` anchors: the
+    historical phase cards carry explicit anchors, and DOC-74 moved them out of
+    the frozen `docs/history/**` tree into the checked `docs/phases/**` tree.
+    """
+    text = read(path)
+    return {item[3] for item in headings_from_text(text)} | set(HTML_ANCHOR.findall(text))
 
 
 def file_line_count(path):
@@ -700,42 +719,60 @@ def check_gate_count(errors):
     return actual
 
 
+def phase_cards():
+    """(n, dirname, path) for every v0 card in the canonical layout."""
+    base = os.path.join(ROOT, "docs/phases")
+    out = []
+    if not os.path.isdir(base):
+        return out
+    for name in sorted(os.listdir(base)):
+        match = re.fullmatch(r"v0-PH-(\d+)", name)
+        path = os.path.join(base, name, "card.md")
+        if match and os.path.isfile(path):
+            out.append((int(match.group(1)), name, path))
+    return sorted(out)
+
+
 def check_phase_status(errors):
     roadmap = read(os.path.join(ROOT, "docs/roadmap.md"))
+    cards = phase_cards()
+    if not cards:
+        errors.append("docs/phases: no v0-PH-<n>/card.md card found")
+        return 0
+    newest = max(n for n, _, _ in cards)
+    active = [(n, name, path) for n, name, path in cards
+              if n >= newest - DESIGN_WINDOW + 1]
     phases = 0
-    for name in sorted(os.listdir(os.path.join(ROOT, "docs/design"))):
-        match = re.fullmatch(r"phase(\d+)\.md", name)
-        if not match:
-            continue
+    for number, name, path in active:
         phases += 1
-        number = match.group(1)
-        head = "\n".join(read(os.path.join(ROOT, "docs/design", name)).splitlines()[:25])
+        rel = f"docs/phases/{name}/card.md"
+        head = "\n".join(read(path).splitlines()[:30])
         status = re.search(r"\*\*状态：\s*(完成|实施中|规划中)", head)
         if not status:
             status = re.search(r"\*\*Status:\s*(done|in progress|planned)", head, re.I)
         if not status:
-            errors.append(f"docs/design/{name}: no status line in the first 25 lines")
+            errors.append(f"{rel}: no status line in the first 30 lines")
             continue
         word = status.group(1).lower()
         emoji = STATUS_MAP.get(word) or STATUS_EN.get(word)
         if not emoji:
-            errors.append(f"docs/design/{name}: unknown status '{status.group(1)}'")
+            errors.append(f"{rel}: unknown status '{status.group(1)}'")
             continue
-        row = re.search(r"^\|\s*Phase\s+" + number + r"\s*\|.*$", roadmap, re.M)
+        row = re.search(r"^\|\s*Phase\s+" + str(number) + r"\s*\|.*$", roadmap, re.M)
         if not row:
-            errors.append(f"docs/design/{name}: no Phase {number} row in docs/roadmap.md")
+            errors.append(f"{rel}: no Phase {number} row in docs/roadmap.md")
             continue
         if emoji not in row.group(0):
             errors.append(
-                f"docs/design/{name}: status '{status.group(1)}' disagrees with the roadmap row "
+                f"{rel}: status '{status.group(1)}' disagrees with the roadmap row "
                 f"(expected {emoji})"
             )
-        if f"design/phase{number}.md" not in row.group(0):
-            errors.append(f"docs/design/{name}: roadmap row does not link design/phase{number}.md")
-        english = re.search(r"^\|\s*" + number + r"\s*\|.*$", roadmap, re.M)
+        if f"phases/v0-PH-{number}/card.md" not in row.group(0):
+            errors.append(f"{rel}: roadmap row does not link phases/v0-PH-{number}/card.md")
+        english = re.search(r"^\|\s*" + str(number) + r"\s*\|.*$", roadmap, re.M)
         if english and emoji not in english.group(0):
             errors.append(
-                f"docs/design/{name}: the English roadmap row disagrees with status "
+                f"{rel}: the English roadmap row disagrees with status "
                 f"'{status.group(1)}' (expected {emoji})"
             )
     return phases
@@ -828,36 +865,32 @@ def check_spec_pin(errors):
 
 
 def check_design_window(errors):
-    """DOC-66: docs/design/ keeps the newest DESIGN_WINDOW phases.
+    """DOC-74: one canonical card location, no legacy leftovers.
 
-    Older designs are retired to docs/history/design/; the gate only checks the
-    upper bound and forbids duplicates, so a phase cannot appear twice.
+    `docs/phases/v<M>-PH-<n>/card.md` is the only card location after the
+    DOC-74 / DOC-83 migration (D-019 B).  The old `docs/design/` and
+    `docs/history/design/` trees keep auxiliary records only; a `phase<n>.md`
+    card left there is red.  The newest DESIGN_WINDOW phases stay the active
+    window judged by assertion 4.
     """
-    design = os.path.join(ROOT, "docs/design")
-    retired = os.path.join(ROOT, "docs/history/design")
-    kept = {}
-    for name in sorted(os.listdir(design)):
-        match = re.fullmatch(r"phase(\d+)\.md", name)
-        if match:
-            kept[int(match.group(1))] = name
+    kept = {n: name for n, name, _ in phase_cards()}
     if not kept:
-        errors.append("docs/design: no phase*.md files found")
+        errors.append("docs/phases: no v0-PH-<n>/card.md card found")
         return 0, DESIGN_WINDOW
-    floor = max(kept) - DESIGN_WINDOW + 1
-    for number, name in sorted(kept.items()):
-        if number < floor:
-            errors.append(
-                f"docs/design/{name}: phase {number} is outside the {DESIGN_WINDOW}-phase "
-                f"window (oldest kept: {floor}); move it to docs/history/design/"
-            )
-    for name in sorted(os.listdir(retired)):
-        match = re.fullmatch(r"phase(\d+)\.md", name)
-        if match and int(match.group(1)) in kept:
-            errors.append(f"phase{match.group(1)}.md exists in both docs/design/ and docs/history/design/")
+    for legacy in ("docs/design", "docs/history/design"):
+        base = os.path.join(ROOT, legacy)
+        if not os.path.isdir(base):
+            continue
+        for name in sorted(os.listdir(base)):
+            if re.fullmatch(r"phase\d+\.md", name):
+                errors.append(
+                    f"{legacy}/{name}: legacy card remains after the DOC-74 migration"
+                )
     readme = read(os.path.join(ROOT, "docs/README.md"))
-    if f"最近 {DESIGN_WINDOW} 个" not in readme:
+    if "docs/phases" not in readme or "v<M>-PH-<n>" not in readme:
         errors.append(
-            f"docs/README.md: the archive policy must state 最近 {DESIGN_WINDOW} 个已完成阶段"
+            "docs/README.md: the archive policy must state cards live at "
+            "docs/phases/v<M>-PH-<n>/card.md"
         )
     return len(kept), DESIGN_WINDOW
 
@@ -928,11 +961,14 @@ def check_signoffs(errors):
     retroactively red.
     """
     checked = 0
-    design = os.path.join(ROOT, "docs", "design")
+    design = os.path.join(ROOT, "docs", "phases")
     for name in sorted(os.listdir(design)):
-        if not re.fullmatch(r"phase\d+\.md", name):
+        if not re.fullmatch(r"v0-PH-\d+", name):
             continue
-        text = read(os.path.join(design, name))
+        card = os.path.join(design, name, "card.md")
+        if not os.path.isfile(card):
+            continue
+        text = read(card)
         head = "\n".join(text.splitlines()[:25])
         if not re.search(r"\*\*状态：\s*实施中", head):
             continue
@@ -943,11 +979,11 @@ def check_signoffs(errors):
         m = re.search(r"(?m)^>\s*.*签收\s*[:：]\s*(EDITOR|REVIEW|REQ|USER)\b", head)
         if not m:
             errors.append(
-                f"docs/design/{name}: no 签收 line (T-8; expected EDITOR/REVIEW/USER)"
+                f"docs/phases/{name}/card.md: no 签收 line (T-8; expected EDITOR/REVIEW/USER)"
             )
         elif m.group(1) == "REQ":
             errors.append(
-                f"docs/design/{name}: REQ authors the card; 签收 must be EDITOR/REVIEW/USER (T-8)"
+                f"docs/phases/{name}/card.md: REQ authors the card; 签收 must be EDITOR/REVIEW/USER (T-8)"
             )
 
     adr = os.path.join(ROOT, "docs", "decisions")

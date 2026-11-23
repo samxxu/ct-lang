@@ -64,7 +64,11 @@ g0() {
   echo "g0: OK (block $block_ver, session-map present)"
 }
 
-g1() { gate=g1; python3 "$root/tools/gates/phase_card.py" "$root" g1; }
+g1() {
+  gate=g1
+  python3 "$root/tools/gates/phase_id.py" "$root"
+  python3 "$root/tools/gates/phase_card.py" "$root" g1
+}
 
 g2() { gate=g2; python3 "$root/tools/gates/acc_map.py" "$root"; }
 

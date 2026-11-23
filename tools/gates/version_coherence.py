@@ -8,6 +8,7 @@ Usage: version_coherence.py <repo-root>
 Exit: 0 coherent, 1 drift, 2 usage.
 """
 import glob
+import os
 import re
 import subprocess
 import sys
@@ -51,13 +52,21 @@ def main() -> int:
         else:
             fails.append(f"{tag} PH-{n}: MINOR={minor} != {n} and not in the legacy ledger")
 
+    card_paths = []
+    phases = root + "/docs/phases"
+    if os.path.isdir(phases):
+        for name in sorted(os.listdir(phases)):
+            mm = re.match(r"^v(0|[1-9][0-9]*)-PH-(0|[1-9][0-9]*)$", name)
+            card = phases + "/" + name + "/card.md"
+            if mm and os.path.isfile(card):
+                card_paths.append((int(mm.group(2)), card))
     for card in sorted(glob.glob(root + "/docs/design/phase[0-9]*.md")):
         mm = re.search(r"phase(\d+)\.md$", card)
-        if not mm:
-            continue
-        n = int(mm.group(1))
+        if mm:
+            card_paths.append((int(mm.group(1)), card))
+    for n, card in sorted(card_paths):
         txt = open(card, encoding="utf-8", errors="replace").read()
-        vm = re.search(r"^\| version-minor \| (\d+)", txt, re.M)
+        vm = re.search(r"^(?:\|\s*version-minor\s*\|\s*|version-minor\s*:\s*)(\d+)", txt, re.M)
         if not vm:
             if "状态：完成" in txt:
                 fails.append(f"phase{n}: closed card has no version-minor")

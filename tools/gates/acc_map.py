@@ -95,7 +95,7 @@ def mapping_rows(text):
 
 
 def check_doc(root, doc, minimum):
-    path = os.path.join(root, "docs/design", doc)
+    path = os.path.normpath(os.path.join(root, "docs/design", doc))
     errors = []
     if not os.path.exists(path):
         return [f"docs/design/{doc}: scope doc is missing"], []
