@@ -126,6 +126,30 @@ trap_case() {
 }
 trap_case trap_ref_slice_oob
 
+# J-4b (SH-117): `ref` / `out` may be stored in a longer-lived position; the
+# language does not borrow-check that store, so the probe pins the residual --
+# the compiler accepts the fixture and ASan reports the use-after-free once the
+# owner dies before the stored view. This is the storage negative the contract
+# names, not a compile-time rejection.
+asan_escape_case() {
+    name=$1
+    if ! "$ctast" --allow-c-boundary "test/ast/p80_retain/$name.ct" -o "$work/$name.c" >"$work/$name.log" 2>&1; then
+        bad "$name compile" "$(sed -n '1,4p' "$work/$name.log")"; return
+    fi
+    if ! "$cc" -Wall -Wextra -std=c99 -fsanitize=address -g "$work/$name.c" -o "$work/$name" 2>"$work/$name.cc.err"; then
+        bad "$name asan cc" "$(sed -n '1,4p' "$work/$name.cc.err")"; return
+    fi
+    ASAN_OPTIONS=detect_leaks=0 "$work/$name" >"$work/$name.out" 2>"$work/$name.err"
+    if [ $? -eq 0 ]; then
+        bad "$name" "ran clean; ASan did not catch the stored ref escape"
+    elif ! grep -Fq "heap-use-after-free" "$work/$name.err"; then
+        bad "$name" "wrong ASan report: $(head -2 "$work/$name.err")"
+    else
+        ok "$name (J-4b store escape is caught by ASan, not the type checker)"
+    fi
+}
+asan_escape_case escape_ref_store
+
 neg() {
     name=$1; src=$2; pattern=$3; why=$4
     if "$ctast" --allow-c-boundary "$src" -o "$work/$name.c" >"$work/$name.log" 2>&1; then

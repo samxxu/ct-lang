@@ -1,0 +1,27 @@
+/* J-4b (SH-117) storage negative: `ref` / `out` are raw pointers in the
+ * language, so a view taken through them may be stored in a longer-lived
+ * position. The compiler does not borrow-check that store (contract +
+ * direct lint); this fixture pins the residual -- the store is accepted and
+ * the violation is what ASan reports when the owner dies before the view.
+ *
+ * Do not "fix" this fixture into a compile error: J-4b's ruling is contract
+ * level, and the probe asserts the heap-use-after-free report instead. */
+#include <stdio.h>
+#include <stdlib.h>
+
+Str keep;
+
+void stash(ref String owner)
+{
+    keep = owner.as_str();
+}
+
+int main(void)
+{
+    Str lit = "escaped";
+    String s = lit.to_string();
+    stash(s);
+    s.release();
+    printf("first=%d\n", keep.data[0]);
+    return 0;
+}
