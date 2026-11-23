@@ -228,6 +228,31 @@ expect_text type-002 W-TYPE-002 "$ctast" check --types --diag-codes "$work/atype
 expect_text trait-001 W-TRAIT-001 "$ctast" check --diag-codes "$work/amb.ct"
 expect_text trait-002 W-TRAIT-002 "$ctast" check --diag-codes "$work/sig.ct"
 
+cat >"$work/borrow.ct" <<'EOF'
+#include <stdio.h>
+
+struct Conn { int fd; int in_use; } use Handback;
+
+impl Handback for Conn {
+    void handback() { self->in_use = 0; }
+}
+
+static struct Conn g_slot;
+
+static struct Conn *get(void)
+{
+    borrow struct Conn *c = &g_slot;
+    return c;
+}
+
+int main(void)
+{
+    struct Conn *p = get();
+    printf("%d\n", p->fd);
+    return 0;
+}
+EOF
+
 # A warning keeps compile mode's exit 0 (LANG-25 does not change severities);
 # only the diagnostic line carries the code.
 expect_warn_text() {
@@ -248,6 +273,20 @@ expect_warn_text mem-002 W-MEM-002 "$ctast" --diag-codes "$work/leakpath.ct" -o 
 expect_warn_text mem-004 W-MEM-004 "$ctast" --diag-codes "$work/slice.ct" -o "$work/x.c"
 expect_warn_text mem-006 W-MEM-006 "$ctast" --diag-codes test/ast/p106_str_escape/ret_local.ct -o "$work/x.c"
 expect_warn_text lang-001 W-LANG-001 "$ctast" --diag-codes test/ast/p81_box/alias.ct -o "$work/x.c"
+expect_warn_text mem-003 W-MEM-003 "$ctast" --diag-codes "$work/borrow.ct" -o "$work/x.c"
+mkdir -p "$work/shadow/vendor"
+: >"$work/shadow/vendor/std"
+cat >"$work/shadow/p.ct" <<'EOF'
+struct A { Map<char *, int> *m; };
+int main(void) { return 0; }
+EOF
+if ( cd "$work/shadow" && CT_CORE_DIR="$CT_CORE_DIR" "$ctast" --diag-codes p.ct -o p.c ) \
+        >"$work/shadow.out" 2>"$work/shadow.err" \
+   && grep -Fq "[W-DRIVER-001]" "$work/shadow.err"; then
+    ok "std-shadow (W-DRIVER-001)"
+else
+    bad "std-shadow" "$(sed -n '1,3p' "$work/shadow.err")"
+fi
 
 # ---- JSON: the same code, no text channel --------------------------------
 
