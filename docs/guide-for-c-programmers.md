@@ -390,5 +390,10 @@ ADT 的 payload 自己收尾：只释放一次，释放后别再碰原句柄
 [C Shim 契约](c-shim-contract.md)：文件与命名、所有权、错误码、ISR/任务上下文、ABI，
 以及 DMA 的「提交即转移、完成即归还」五条硬条款。它给的是**作者义务**，不是新的语言特性。
 
+判断“这条 C 写法在 Ct 里到底走哪条路”，查
+[C Interop Semantics Matrix](c-interop-semantics-matrix.md)：每行四列，逐项给
+Ct 行为、边界（透传 · strict 禁区 · shim）与权威节 + 证据。矩阵是本文附录，只索引
+[language-spec](language-spec.md)，不另立规范。
+
 一句话记法：**应用代码里没有 `#include` / `extern` / 函数式宏的位置；这些只出现在
 `.m.ct`、shim 与 `#ct-raw`。**

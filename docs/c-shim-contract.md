@@ -13,6 +13,9 @@
 > **证据等级**：host mock 与 Renode 冒烟**不等于**真板；DMA 真搬运仍归
 > [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md)（hardware-gated）。
 > 本文不新增语言关键字，`isr_safe` / `no_alloc` / `no_block` 只是注释标签。
+>
+> **逐项语义边界**（某条 C 写法是透传、strict 禁区还是必须走 shim）见
+> [C Interop Semantics Matrix](c-interop-semantics-matrix.md)；本文只管 shim 侧的作者义务。
 
 ## 1. 文件与命名
 
@@ -73,7 +76,7 @@
 | --- | --- | --- |
 | D-1 | **提交即转移** | `board_dma_submit(buf, len, cb, ctx)` 返回后，`buf` 归驱动所有；Ct 侧不得 `release`、重分配、写入或移动 buffer，直到完成回调返回 |
 | D-2 | **完成即归还** | 完成回调返回后所有权回到 Ct；只有此时才允许释放、复用或再次提交 buffer。回调在 ISR 里时，“归还”只表示所有权状态，释放必须延后到任务上下文 |
-| D-3 | **回调上下文必须声明** | 每个回调在头文件里标 `/* ctx: isr */` 或 `/* ctx: task */`；未声明视为 `task`，ISR 不得调用未标注 `isr` 的入口 |
+| D-3 | **回调上下文必须声明** | 每个回调在头文件里标 `/* ctx: isr */` 或 `/* ctx: task */`；未声明即违约，不得默认按 `task` 放行；ISR 不得调用未标注 `isr` 的入口 |
 | D-4 | **借用视图不得跨提交点** | 不得把 `Str`、切片、`box.at()`、`Map.get()` 的借用视图保存到提交之后；需要跨异步的数据必须是 owning 句柄，且寿命覆盖到完成回调返回 |
 | D-5 | **完成后才可释放** | 回调返回前释放/复用 buffer 是 use-after-free；回调返回后先读 status，再决定复用还是释放；错误路径同样在回调里归还所有权 |
 
@@ -100,7 +103,7 @@ int board_dma_submit(void *buf, size_t len, board_dma_done cb, void *ctx);
 - 提交失败（返回负值）时**没有发生转移**，buffer 仍归 Ct；不得调用回调。
 - 回调必须恰好调用一次；不得在回调里再次提交同一个 buffer。
 - ISR 回调里只做：读/写 `volatile` MMIO、定长拷贝、置/清标志、投递事件；
-  **禁止**分配、阻塞、`Drop`、引用计数释放、`printf`、锁、`Result` 构造。
+  **禁止**堆分配、阻塞、`Drop`、引用计数释放、`printf`、锁、可能阻塞的任务 API。
 - 需要延后处理时只投递事件，由任务上下文释放/复用。
 
 **证据边界**：`test/ast/p67_dma.sh` 只证明 DMA1 Stream6 的 `PAR/M0AR/NDTR/CR`
@@ -123,7 +126,7 @@ int board_dma_submit(void *buf, size_t len, board_dma_done cb, void *ctx);
 | C-1 | 每个 shim 入口在头文件声明处标一个 `ctx:`；回调另标自己的上下文 | 头注释可被 grep 到 |
 | C-2 | `boot` 默认 `no_block`；有堆分配时必须显式写 `alloc: heap`，且平台分配器已初始化 | 启动路径不调用调度器 |
 | C-3 | `task` 可以分配/阻塞，但必须在注释里写上限或“可阻塞”；不得从 ISR 调用未标 `isr` 的 `task` 入口 | 调用图单向 |
-| C-4 | `isr` 允许集：`volatile` MMIO 读写、定长内存拷贝、标志位、事件投递、返回；禁止集见 D-4 | 代码审查 + ASan/真板证据 |
+| C-4 | `isr` 允许集：`volatile` MMIO 读写、定长内存拷贝、标志位、事件投递、返回；禁止集见 D-3 与 §4 的 ISR 条目 | 代码审查 + ASan/真板证据 |
 | C-5 | ISR 里不得 `Drop` / `retain` / `release` 引用计数；需要延后处理只投递事件 | [§4.70](language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast) 的异步边界 |
 | C-6 | `isr_safe` / `no_alloc` / `no_block` 是**文档标签**，不是类型系统承诺；编译器不证明，证据由测试与真板兜底 | [§4.70](language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast) |
 

@@ -65,6 +65,12 @@
 **判定优先级**：一条改动同时命中多档时，取**更严**的档位。不确定时默认按 `已冻结` 处理，
 再由 REQ 裁定是否降档。
 
+**C 互操作逐项**（指针、`const`/`volatile`、数组衰减、struct 布局、enum、bit-field、
+函数指针、变参、`setjmp`/`longjmp`、`restrict`、宏、attribute/中断、内联汇编、C++）的
+“透传 / strict 禁区 / shim”判定见 [C Interop Semantics Matrix](c-interop-semantics-matrix.md)。
+该附录只索引权威节与证据，**不改本表的档位**；C shim 的作者义务见
+[C Shim 契约](c-shim-contract.md)。
+
 ## 4. 当前待决与过渡登记
 
 | 事项 | 为什么必须在 v1.0 前定 | 跟踪 |
