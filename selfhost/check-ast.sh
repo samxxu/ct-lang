@@ -1036,6 +1036,16 @@ else
     bad "sh113/builtin-live" "$(cat "$work/sh113.out" "$work/sh113.err" | head -8)"
 fi
 
+# SH-116: `ct build` must emit the Box built-in unit (`Box.c` / `Box.h`) for
+# `Box<T>` / the `box<T>` alias / `new`, and keep the unit out for a
+# user-declared `struct Box`. Compile mode is asserted alongside so the two
+# paths cannot drift again.
+if bash test/ast/sh116_build_box.sh "$work/ct-ast" >"$work/sh116.out" 2>"$work/sh116.err"; then
+    ok "sh116/build Box unit"
+else
+    bad "sh116/build Box unit" "$(cat "$work/sh116.out" "$work/sh116.err" | head -12)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
