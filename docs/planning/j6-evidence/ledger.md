@@ -25,7 +25,7 @@
 | --- | --- | --- | --- | --- |
 | P-1.1 固定基线 | 声明扫描范围 + 一条可复跑命令 + 计数一致 | `examples test lib`：1381 个 `.ct` / 31,400 行；字面量 2,321（含 24 处 `#include "…"`）、`char *` 627、`T a[] =` 37、`T a[]` 后缀 38、`ref/out` 16、`new` 54（`3e3c52ad`，命令见下） | 已过 | REQ |
 | P-1.2 按特性分类 | 每文件 6 个布尔列的 CSV（路径 + 字面量 / `char *` 形参 / `T a[]` 形参 / `T a[] =` / `ref/out` 标识符 / `new` 标识符），入库可重跑 | [p1_2.csv](p1_2.csv)（1381 行 + 表头，6 列布尔）；生成器 [gen_p1_2.py](gen_p1_2.py)：`python3 docs/planning/j6-evidence/gen_p1_2.py > docs/planning/j6-evidence/p1_2.csv` | 已过 | REQ |
-| P-1.3 自动化率 | 迁移 lint dry-run 的「可自动 / 需人工 / 语义需确认」三档百分比 | 阻塞：迁移 lint 尚未实现，无法 dry-run | 阻塞 | DEV |
+| P-1.3 自动化率 | 迁移 lint dry-run 的「可自动 / 需人工 / 语义需确认」三档百分比 | 阻塞：迁移 lint 尚未实现，无法 dry-run；所有者 2026-11-23 裁定：迁移 lint 归 v1.x，不阻塞 v1.0 | 阻塞 | DEV |
 | P-1.4 快照回放 | 基线 sha + 复跑命令 + 计数与 P-1.1 一致 | `3e3c52ad` + 下方命令；与 P-1.1 同一命令 | 已过 | REQ |
 
 ```sh
@@ -117,6 +117,7 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 - 未闭合且已写承接：P-5.2 / P-5.3 / P-5.5（out/ref 借用与释放夹具）、
   P-5.4 / P-5.6（错误路径、ASan 组合）、P-3.5（新发现：`char *p = s` / `return s`
   仍被接受并发射坏 C）。
-- **P-1.3**（迁移 lint dry-run）仍 `阻塞`：迁移 lint 不在 v1.0 范围，是否可带此阻塞发布由所有者裁定。
+- **P-1.3**（迁移 lint dry-run）仍 `阻塞`：迁移 lint 归 v1.x；所有者 2026-11-23 已裁定
+  v1.0 可带此 `阻塞` 发布。
 - **J-4a 判据需修订**：照原文写“容器硬错”会与 v0.88 实测冲突；按实测改判据，风险由 LANG-22 承接。
 - **J-4b** 仍缺 `ref/out` 逃逸契约条款与存储负例，承接 owner DEV。
