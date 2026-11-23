@@ -6,7 +6,7 @@
 | 严重度 | Medium（2026-11-22 复核已可复现） |
 | 锚点 | `v0.20.1`（2026-11-07） |
 | 文件 | [frontend/parse/Expr.h.ct:1912-1956](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L1912-L1956) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **deferred**（2026-11-22，REV/REQ：前置「变参 trait」已落地（`Symbols.h.ct:248`、`MapBuild.h.ct:768`），form 5 仍用内联 `arity_check` 不读 `variadic`；HEAD `38cd4ae4` 复现 `f takes 2 argument(s), 4 given`。触发下一次 Expr/Parser 调用点批次；负责人 DEV；P2） |
 | blocked-by | 无（2026-11-22 复核：变参 trait 已落地，缺陷现已可复现；见处置段） |
 
@@ -117,3 +117,10 @@ $ echo $?
 或在 `got > nparams && variadic` 时放行；补正例（变参 form 5 不报）+ 负例（非变参 form 5 仍报）。
 **触发/负责人/优先级**：下一次 Expr/Parser 调用点统一批次；负责人 DEV；P2（Medium）。
 本批只复核，不改 `Expr.h.ct`（产品代码）。
+
+
+## 复核（REV，2026-11-23）
+
+form 5 在 `arity_check` 前读 `traits[ti].m[mi].variadic` 与 `nparams`；`got >= nparams` 放行，
+非变参仍走 arity。探针 `test/ast/sh61_form5.sh`：变参 `var::Log::f(s,s,1,2,3)` 无 arity、
+非变参 `var::Fixed::g(...)` 仍报 `arity mismatch: 'g'`；已接 `check-ast`。
