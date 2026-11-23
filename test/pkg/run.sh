@@ -1724,6 +1724,17 @@ else
 fi
 
 echo
+echo "== PKG-25: lock merge keeps same-name different-publisher rows =="
+# The probe fetches demo/hello then acme/hello into one project and asserts both
+# lock rows survive, `ct verify --strict` accepts them, and a re-fetch of one
+# identity neither duplicates nor drops the other.
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg25_lock_keep.sh"; then
+    ok "PKG-25 lock merge keeps both publisher rows"
+else
+    bad "PKG-25 lock merge" "one or more pkg25 assertions failed (see above)"
+fi
+
+echo
 echo "== summary: $pass passed, $fail failed =="
 rm -rf "$work"
 [ "$fail" -eq 0 ]
