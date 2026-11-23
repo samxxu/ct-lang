@@ -10,10 +10,10 @@
 | 项 | 值 |
 | --- | --- |
 | 编号 | `v1-PH-0`（`MINOR = 0` ↔ `v1.0.0`） |
-| 目标 | v1.0：构建只剩“冻结 seed → ct-ast”，L1/L2 退出所有构建与门禁；v1.0 硬门禁证据齐全后发 MAJOR |
-| 范围 | seed 冻结与重建门禁、`install.sh` 切换、L1/L2 退役、门禁替换、FP=0 证据、文档与版本收口 |
-| 非目标 | 改语言语义/发射格式/命名契约；A 的默认强制（v1.1 S2）；Typed IR（v1.2）；M1 精细切分（v1.1 S1） |
-| 交付物 | `bootstrap/ct-ast/` + manifest、gate 13 `check-seed.sh`、切换后的 `install.sh`、退役后的 `check-all`/CI、FP=0 证据、v1.0.0 tag |
+| 目标 | v1.0：ct-ast 的构建与安装改走“冻结 seed → ct-ast”，L1/L2 降为回归 oracle；v1.0 硬门禁证据齐全后发 MAJOR |
+| 范围 | seed 冻结与重建门禁、`install.sh`/`check-ast` 改由 seed 构建 ct-ast、L1/L2 降为回归 oracle、FP=0 证据、文档与版本收口 |
+| 非目标 | 删 L1/L2 源码（另立卡，不进 v1.0）；改语言语义/发射格式/命名契约；A 的默认强制（v1.1 S2）；Typed IR（v1.2）；M1 精细切分（v1.1 S1） |
+| 交付物 | `bootstrap/ct-ast/` + manifest、gate 13 `check-seed.sh`、切换后的 `install.sh` 与 `check-ast` 构建段、FP=0 证据、v1.0.0 tag |
 | 任务清单 | §2（S0–S5，四列齐全） |
 | 退出判据 | E-V1-1…E-V1-9（§3） |
 | version-minor | 0 |
@@ -26,9 +26,11 @@
 1. seed = `bootstrap/ct-ast/`（27 个 `.c` + 26 个头，约 50,945 行 / 2.3 MB），由收口版 ct-ast 生成，
    每个 release tag 重新生成一次；只读，手改由 gate 13 判红。
 2. `install.sh`：`cc bootstrap/ct-ast/*.c -o ct`；`ctc` 兼容别名保留。
-3. L1/L2 退出构建、CI、门禁、安装，源码从工作树删除；历史由 tag `v0.88.3` 与 git 历史追溯。
-4. L0 `selfhost/l0/ctc.c` 保留为参考 seed，不进构建；v1.1 再评估删除。
-5. 新增 gate 13；退役 gate 2/3/4/5，替代关系见 D-022 §4。
+3. L1/L2 **保留为独立回归 oracle**（gate 2/3/4/5 自建自测），但不再参与 ct-ast 的构建与安装；
+   删源码另立卡，不进 v1.0。原因：`match` 进 ct-ast 后 L2 编不了（D-022 §2.2），
+   降为 oracle 后两者可共存。
+4. L0 `selfhost/l0/ctc.c` 保留，继续支撑旧链 gate，并作为不同源的对照。
+5. 新增 gate 13；gate 2/3/4/5 保留，只改 `check-ast` / `ct-tour` 里“L2 构建 ct-ast”那一步（D-022 §4）。
 
 实测依据（A 案 L0 无 `import`；B′ 案的 L2 对 ADT/`match` 透传；B 案两轮生成逐字节一致）
 见 D-022 §2，不再复述。
@@ -39,8 +41,8 @@
 | --- | --- | --- | --- |
 | S0 seed 冻结 | `bootstrap/ct-ast/*.c`、`bootstrap/MANIFEST.sha256`、生成脚本或命令记录 | `sh selfhost/check-seed.sh` 红→绿；两轮重建逐字节 | M |
 | S1 `install.sh` 切换 | 删 L0→L1→L2 段，改 `cc bootstrap → ct`；`ctc` 别名 | 干净目录 `./install.sh --prefix /tmp/ctv1` 后 `/tmp/ctv1/ct -v` = `v1.0.0` | S |
-| S2 L1/L2 退役 | 删 `selfhost/l1/**`、`selfhost/l2/**`；`check-all.sh` 去 gate 2/3/4/5；CI 去引导链 | `grep -rn 'selfhost/l1\|selfhost/l2'` 只剩历史文档；`check-all` 绿 | M |
-| S3 门禁替换 | 新 gate 13 `check-seed.sh`；gate 12 独立可跑；ct-tour 改写为 seed→ct-ast | 门禁计数 13 同步四处文档；负例（改一个字节）判红 | M |
+| S2 构建路径切换 | `install.sh` 与 `check-ast` 的 ct-ast 段改由 seed 构建；`ct-tour` 第 7 步同步；L1/L2 保留为 oracle | `check-all` 绿；`grep -n 'l2' install.sh` 无构建 ct-ast 的引用 | M |
+| S3 门禁 | 新 gate 13 `check-seed.sh`；gate 2/3/4/5 保留且绿；gate 12 独立可跑 | 门禁计数 13 同步四处文档；负例（改一个字节）判红 | M |
 | S4 v1.0 硬门禁证据 | 全量语料 FP=0 的命令与原始输出；J-6 剩余夹具与 J-4b 条款；P-3.5 处置 | 证据入库；J-6 台账无 `缺失` | L |
 | S5 文档/版本/收口 | README/spec/安装与迁移说明；`v1.0.0` bump；新 MAJOR 签字 decision；tag | `check-all` 13/13 绿；README 版本断言通过；tag 指向收口提交 | M |
 
@@ -53,8 +55,8 @@
 | --- | --- |
 | E-V1-1 | `bootstrap/ct-ast/` 由 ct-ast 生成且两轮重建逐字节一致；纯 `cc` 可构建可运行的 `ct` |
 | E-V1-2 | `install.sh` 不引用 L0/L1/L2；无网络、无 git、干净环境可安装 |
-| E-V1-3 | 工作树无 `selfhost/l1/**`、`selfhost/l2/**`；构建、CI、门禁、文档无引用（历史说明除外） |
-| E-V1-4 | `check-all` 不再跑 gate 2/3/4/5；gate 12 静态 goldens 独立可跑；gate 13 有正负例 |
+| E-V1-3 | ct-ast 的构建/安装路径不依赖 L2：`install.sh` 与 `check-ast` 的 ct-ast 段均吃 seed；L1/L2 只作 oracle |
+| E-V1-4 | `check-all` 13 道全绿：gate 2/3/4/5 照旧、gate 12 独立、gate 13 有正负例 |
 | E-V1-5 | 全量语料 `--check-level=warn` FP=0 的命令、清单与原始输出入库 |
 | E-V1-6 | J-6 台账无 `缺失` 行；`阻塞` 行仅剩外部 std 子项，并由所有者书面裁定“可带阻塞发布” |
 | E-V1-7 | DOC-76/77/79 的兼容承诺、能力节号、冻结清单断言全绿；README 版本 = `v1.0.0` |
@@ -66,7 +68,7 @@
 | # | 风险 | 处置 |
 | --- | --- | --- |
 | R-V1-1 | 2.3 MB 生成物进仓 | 只在 release 提交更新；gate 13 判手改 |
-| R-V1-2 | 删 L1/L2 后失去旧 oracle | gate 12 静态 goldens 先行（SH-105 已 verified）；`test/archive/` 只读保留 |
+| R-V1-2 | seed 出问题时没有第二条路 | L1/L2 保留为 oracle；回退时 `install.sh` 单提交回到旧链 |
 | R-V1-3 | 门禁计数 12→13 漂移 | 四处计数断言同批改；`check-docs` 会红 |
 | R-V1-4 | J-6 外部 std 子项无法清零 | 由所有者裁定“带阻塞发布”并写入本卡退出记录；否则 v1.0 顺延 |
 | R-V1-5 | 新语法让旧 seed 解析不了 | 一步自举；必要时两阶段 bootstrap，单独记录 |

@@ -46,8 +46,8 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 | 项 | 内容 |
 | --- | --- |
 | 构建 | `install.sh` 改为 seed → ct-ast，不再 L1→L2；`ctc` 兼容别名保留 |
-| 门禁 | `check-goldens.sh`/`check-archive.sh` 的 L1/L2 段退役；换成 AST-only 回归、seed 重建、行为等价 |
-| 代码 | L1/L2 移到 `history/` 或删除；归档 tag 保留；`docs/agents` 同步 |
+| 门禁 | gate 2/3/4/5 保留（L1/L2 作 oracle）；新增 gate 13 seed 重建（两轮逐字节）；`check-ast` / `ct-tour` 的 ct-ast 段改吃 seed |
+| 代码 | L1/L2 **保留为回归 oracle**（2026-11-23 所有者：v1.0 先不清理）；ct-ast 的构建/安装改走 seed；删源码另立卡；`docs/agents` 同步 |
 | 语言 | 冻结；B 的检查器 opt-in，不强制 |
 | 迁移 | 旧工程仍用 v0.x 编译器；v1.0 不承诺接受所有旧内部语法 |
 | 版本 | `v1.0.0` 是 MAJOR；按 [phase-numbering-major-reset](../proposals/phase-numbering-major-reset.md) 用 `v1-PH-0`，`MINOR=0`；提案未生效前仍按旧规则登记 deviation |
@@ -56,7 +56,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 
 - 干净环境只靠 seed 能构建 ct-ast 并自举；
 - 全量语料/示例通过 AST-only 门禁；
-- L1/L2 不再被任何构建/CI/文档引用（历史说明除外）；
+- ct-ast 的构建/安装只走 seed，L2 不再充当 ct-ast 的编译器；L1/L2 保留为 oracle、不进入安装路径；
 - B1–B4 的检查器已可用，但默认不阻断 `ct build`；
 - 版本/安装/文档/迁移说明齐全。
 
