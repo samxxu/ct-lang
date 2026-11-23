@@ -1372,6 +1372,16 @@ else
     bad "SH-110 dispatch chain" "$(sed -n '1,10p' "$work/p110chain.out")"
 fi
 
+# SH-111: the lowering invariants the emitter may assume, asserted before the
+# first byte. Five positive classes (return / break / continue / errdefer /
+# receiver chain) plus one injected AST fault per mechanical rule I1-I4.
+sh test/ast/p111_invariants.sh "$work/ct-ast" >"$work/p111inv.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "SH-111 lowering invariants (I1-I4, five positive classes, six negatives)"
+else
+    bad "SH-111 lowering invariants" "$(sed -n '1,12p' "$work/p111inv.out")"
+fi
+
 # SH-61: form 5 (`Trait::method(recv, ...)`) must honour the trait method's
 # variadic flag; a non-variadic form 5 still reports arity.
 sh test/ast/sh61_form5.sh "$work/ct-ast" >"$work/p61form5.out" 2>&1
