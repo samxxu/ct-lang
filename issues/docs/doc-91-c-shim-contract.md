@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估） |
 | 文件 | [guide-for-c-programmers](../../docs/guide-for-c-programmers.md)、[patterns](../../docs/patterns.md)、`examples/**/shim` |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **已立项（v1.1；不阻塞 v1.0）** |
 
 ## 现象
@@ -64,3 +64,9 @@ v1.1；不阻塞 v1.0。与 [DOC-92](doc-92-c-interop-semantics-matrix.md) 同�
 - 范围：C Shim Contract 成文
 - 依据：本卡「处置证据」已标 `v1.1` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
 - 触发时：改回 `open`，按本卡验收执行；不提前扩围。
+
+## 复核（REV，2026-11-23）
+
+`docs/c-shim-contract.md` 成文（220 行），覆盖命名/头文件、所有权、错误码、DMA 五条硬条款、
+上下文、ABI、测试；host mock（tour 15、p65_include/hdr_shim）通过；Renode 为环境 skip。
+`check-docs` 绿。

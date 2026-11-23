@@ -7,7 +7,7 @@
 | 严重度 | Medium（语言表面改名；涉及生成符号与文档） |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [language-spec §5.1](../../docs/language-spec.md#L1962-L2020)、[§4.71](../../docs/language-spec.md#L2949)、[D-016](../../docs/decisions/D-016.md)、[Box.h.ct](../../lib/core/Box.h.ct#L34)、[Expr.h.ct:2304](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2304-L2311) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者放开：v1.0 入口优先；容量约束已解除，Stage A 即刻推进，负责人 DEV）** |
 
 ## 背景
@@ -149,3 +149,11 @@ warning、`backend/emit/Emitter.h.ct` 的 `Box_*` 符号与 `ct_Box_hdr`、
 
 状态：**2026-11-23 所有者放开为 `open`**。容量约束已解除，Stage A 立即推进；
 Stage B（删除 `box` 别名）仍按 v1.1。
+
+## 复核（REV，2026-11-23）
+
+Stage A 落地（主干 `282bd371`，红 `c1ab0795`）：规范拼写 `Box<T>`，`box<T>` 每次使用
+warning `'box<T>' is deprecated; write 'Box<T>'`；`int box;`/`r.box`/`Box box;` 合法；
+`--emit-c` 为 `Box_Record__new`/`Box_Record__payload_release`，无 `box_Record`/`ct_box_hdr`；
+`p81_box: OK`、check-grammar 181/0、check-ast 1595/0。
+Stage B（v1.1 删除别名、硬错）未做，按卡片窗口保留。

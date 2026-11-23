@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22，外部架构评估） |
 | 文件 | [guide-for-c-programmers](../../docs/guide-for-c-programmers.md)、[stable-subset](../../docs/stable-subset.md)、[language-spec](../../docs/language-spec.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **已立项（v1.1；并入现有文档，不新建平行规范）** |
 
 ## 现象
@@ -61,3 +61,8 @@ v1.1；与 [DOC-91](doc-91-c-shim-contract.md) 同批评估。
 - 范围：C Interop 语义矩阵
 - 依据：本卡「处置证据」已标 `v1.1` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
 - 触发时：改回 `open`，按本卡验收执行；不提前扩围。
+
+## 复核（REV，2026-11-23）
+
+`docs/c-interop-semantics-matrix.md`（60 行）并入 guide 附录，14 行四列矩阵，覆盖 issue 的
+11 项并补 attribute/内联汇编/C++；无 TBD；`check-docs` 绿。
