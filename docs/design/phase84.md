@@ -1,5 +1,7 @@
 # Phase 84 — 最小 ADT / `match`（v1-pre 前置）
 
+<!-- g2:interface -->
+
 > **状态：完成（S84a–S84e；`v0.84.0` → v0.84.1）**（2026-11-21 立项并开卡；2026-11-21 收口；
 > v0.84.1 为 REV 打回修复 F1/F2，见 §7.6）。
 > S84e 的范围由 [battle doc-consistency-1](../../battle/doc-consistency-1/verdict.md) 判为
@@ -349,3 +351,10 @@ REV 持有，见条目 DEV 处置段）。版本 `v0.84.1`（PATCH，一次 fix�
 | 6 | A 的全量文档审计（README/llm-guide/glossary/architecture 的逐段重写） | **不做**：battle 判 B，最小集只修事实与链接；其余系统性审计归 DOC-77 / DOC-78 / DOC-79 | 各自 issue 闭环 |
 | 7 | `test/ast/p84_docs.sh` 的 REVIEW 签字 | S84d 为纯文档 `no-test:`；本会话单席位，未伪造 REVIEW 签字 | 由主控/REVIEW 席位补签（T-7 例外要求） |
 | 8 | typedef ADT 的修复未拆独立红/绿提交 | 收口核验中发现 `typedef enum Tag { … } Alias;` 的 typedef 位覆盖 ADT 位；修复与断言（`p84_syntax` 的 check 正例、`p84_layout` 的 codegen 正例）并入收口提交，未按 T-7 拆成 `test 红` + `fix` 两提交（收口提交须为最后一提交） | 作为流程偏差登记；VERIFY 复核时按小循环口径补红证 |
+
+## ACC 映射
+
+| ACC-id | 承诺 | 章节 | 判据/证据 |
+| --- | --- | --- | --- |
+| ACC-18 | ADT 布局 `tag` 在前、payload union 在后，对齐取最大；`pub` ADT 布局与 `_Static_assert` 进 ABI 头 | §1.2、§3 E84-5 | `test/ast/p84_layout.sh` |
+| ACC-19 | `match` 语法、绑定与穷尽诊断；只做语句形态，无 fallthrough | §1.1、§3 E84-1/E84-2 | `test/ast/p84_match.sh`、`test/ast/p84_errors.sh` |

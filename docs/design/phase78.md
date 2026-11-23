@@ -1,5 +1,7 @@
 # Phase 78 — `ref` / `out` 参数（S2）
 
+<!-- g2:interface -->
+
 > **状态：完成（S2a–S2c / E78-1–E78-6；`v0.78.0` + REV 打回修复 `v0.78.1`）**（2026-11-20 开卡并收口）。
 > **前置（口径写死）**：本卡入口只要求 **P-7.1a 自由函数 + P-7.1b 方法/trait 原型**，
 > 二者已由 `docs/planning/j6-evidence/ref_out/` 覆盖（基线 `2c87179a`，7 文件 369 行）。
@@ -205,3 +207,11 @@ $ CC=cc sh test/ast/p78_method.sh <ct-ast>   # p78_method: OK, exit 0
 $ CC=cc sh test/ast/p78_docs.sh              # p78_docs: OK, exit 0
 $ bash selfhost/check-all.sh                 # check-all: OK (11 hard gates green)
 ```
+
+## ACC 映射
+
+| ACC-id | 承诺 | 章节 | 判据/证据 |
+| --- | --- | --- | --- |
+| ACC-05 | `ref` / `out` 只在形参表是上下文关键字，形参表外仍是普通标识符 | §1 E78-1 | `test/ast/p78_basic.sh` |
+| ACC-06 | 签名 / 原型 / ABI 头发射 `T *`，函数体 `(*name)`，调用点自动 `&`，与手写指针 C 等价 | §3 E78-2 | `test/ast/p78_basic.sh`、`test/ast/p78_types.sh` |
+| ACC-07 | 调用点 place 白名单、`out` 初始化与 L1 定值；方法 / trait 同规则 | §3 E78-3…E78-6 | `test/ast/p78_method.sh`、`test/ast/p78_basic.sh` |

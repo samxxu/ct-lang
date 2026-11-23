@@ -48,3 +48,29 @@ ACC-07        # 仅出现在主规范副本 docs/spec/ai-coding-workflow.md 的�
 
 `deferred`，触发条件：**v1.1 开工前**（ACC-* 映射属需求侧重构，P2，不阻塞 v1.0）。
 偏离 `g2-acc-mapping` 已生效，`tools/check.sh g2` 当前 SKIP；触发时按本卡「收敛」三步执行并转 `verified`。
+
+## 实现（2026-11-23，DEV；状态字段未改）
+
+按「收敛」三步落地，`g2` 从 SKIP 换成机械校验，偏离已删除。
+
+- `docs/design/acc-scope.tsv`：9 个接口/协议文档的登记表（doc / 协议 / 最少 ACC）；
+- 9 个文档各加 `<!-- g2:interface -->` 与 `## ACC 映射` 四列表（ACC-id / 承诺 / 章节 / 判据证据），
+  当前 25 条 ACC；
+- `tools/gates/acc_map.py`：双向校验（登记表 ↔ marker）、ACC id 全局唯一、承诺/章节/证据非空、
+  证据必须是可跑/可读的 test/tools/selfhost/docs 路径或 §spec；缺表、未登记、重复 id、空证据、
+  悬空登记、行数不足均红；
+- `tools/check.sh g2`：调用 `acc_map.py`，不再是 SKIP；
+- `AGENTS.md` 0.3 删除 `deviation: g2-acc-mapping`，0.1 的「g2 见偏离」同步改为「g2 已机械校验」。
+
+```console
+$ bash tools/check.sh g2
+g2: OK (9 interface doc(s), 25 ACC row(s))
+$ sh test/gates/acc_map_test.sh
+OK g2/acc-map (6 negative cases + 1 positive)
+$ bash tools/check.sh g0
+g0: OK (block 1.17.0, session-map present)
+```
+
+负例红证（旧树 `a0ce8ef1` + 新测试、旧实现）：`acc_map.py` 不存在，`good` 用例即红；
+新增 6 个负例覆盖缺表 / 未登记 marker / 重复 id / 空证据 / 悬空登记 / 行数不足。
+状态仍为 `deferred`：本段只落实现与证据，等 REV 复核后决定是否改状态（本次任务要求不改状态）。

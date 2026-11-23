@@ -451,12 +451,12 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | --- | --- |
 | 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-88 |
 | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
-| 门禁入口 | `tools/check.sh g0`…`g9`（治理门禁；g2 见偏离）；`selfhost/check-all.sh`（11 道硬门禁，保持不变） |
+| 门禁入口 | `tools/check.sh g0`…`g9`（治理门禁；g2 已机械校验）；`selfhost/check-all.sh`（11 道硬门禁，保持不变） |
 | 文档 snippet | 缺失 |
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
 | 决策记录 | `docs/decisions/D-<n>.md`；phase 决策写 `docs/design/*.md`（`D<phase>-<n>`） |
 | 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` / `docs/README.md` / `AGENTS.md` 当前版本与 `docs/history/phase-log.md` 版本记录 |
-| 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`；`fix-tags`；`g2-acc-mapping`） |
+| 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`；`fix-tags`） |
 
 #### 0.2 话术路由
 
@@ -530,17 +530,6 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
     理由: 单人项目 + DSH 单会话；拆三个会话无协作收益且丢失上下文。
     收敛: 多人协作或 1.0 前建会话并回填 session-map。
     签字: 用户已批准（2026-11-13，本轮指示）
-
-`deviation: g2-acc-mapping`
-
-    日期: 2026-11-21
-    条款: §6.4 G2「每个接口/协议承诺映射到 ACC-* 条目」
-    现状: `docs/design/*.md` 尚无 ACC-* 条目；`tools/check.sh g2` 只打印 SKIP 并指向本偏离与 CI-16。
-    理由: 本仓历史 phase 卡以 E-* 验收判据承载承诺，ACC-* 是方法论模板字段；补映射属需求侧
-          重构，CI-10 已把 G2 列为 P2，不在 G6/G5/G1 的 P1 批次内。
-    收敛: CI-16 在 v1.1 前为 `docs/design/` 的接口/协议段落补 ACC-* 映射表，并把
-          `tools/check.sh g2` 换成机械校验（每个承诺至少一条 ACC-*，负例必红）；完成后删除本偏离。
-    签字: 用户已批准（2026-11-21，CI-10 任务指令）
 
 #### 0.4 文档语言（项目加严）
 

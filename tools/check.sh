@@ -11,7 +11,8 @@
 #
 #   g0  methodology landing (block + full copy + session map + deviations)
 #   g1  phase-card completeness (phase_card.py g1)
-#   g2  ACC-* mapping - SKIP: deviation g2-acc-mapping, tracked by CI-16
+#   g2  design-acceptable: every interface/protocol promise maps to an ACC-* row
+#       (acc_map.py; docs/design/acc-scope.tsv; CI-16)
 #   g4  docs executable/timeliness (reuses test/docs/check-docs.py)
 #   g5  criterion <-> case minimal subset (phase_card.py g5)
 #   g6  issue-ledger closure (issue_ledger.py; strict by default, 5 negative
@@ -65,9 +66,7 @@ g0() {
 
 g1() { gate=g1; python3 "$root/tools/gates/phase_card.py" "$root" g1; }
 
-g2() {
-  echo "g2: SKIP (deviation: g2-acc-mapping; docs/design has no ACC-* map yet, tracked by CI-16)" >&2
-}
+g2() { gate=g2; python3 "$root/tools/gates/acc_map.py" "$root"; }
 
 g4() { gate=g4; python3 "$root/test/docs/check-docs.py"; }
 

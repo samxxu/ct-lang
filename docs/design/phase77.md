@@ -1,5 +1,7 @@
 # Phase 77 — 官方包身份与解析契约（`ct/std`）
 
+<!-- g2:interface -->
+
 > **状态：完成（S0–S5 / E77-1–E77-8；`v0.77.0`）**（2026-11-19 立项并收口）。
 > **前置**：PH-76 先收口；两卡无技术依赖，但按号顺序执行，不插队。
 > **布局说明**：phase-ID 迁移仍被 blocker 挡住，本卡暂用 legacy 路径 `docs/design/phase77.md`，迁移时统一改名。
@@ -194,3 +196,12 @@ resolved   ct/std 0.4.0
 | E77-8 | `ct-pkg/std` `publisher = ct`、`v0.19.0` 摘要 `sha256:432086f0…`；索引六字段行；干净 HOME 上 `ct get ct/std@0.19.0` 成功 | ✅ p77_external |
 
 > 离线门禁中 p77_external 以 `skip` 退出（无网络/无 curl），不判失败；其余 p77 探针全部离线可重复。
+
+## ACC 映射
+
+| ACC-id | 承诺 | 章节 | 判据/证据 |
+| --- | --- | --- | --- |
+| ACC-01 | 官方包 identity 为 `publisher = ct`；裸名 `std` ≡ `ct/std`，第三方必须 `publisher/std` | §2.1 | `test/ast/p77_bare.sh`、`test/ast/p77_lang5_field.sh` |
+| ACC-02 | 裸名只查内置 pin 表、不查索引；`ct/<name>` 在索引 `publisher = ct` 时以索引为准 | §2.2 | `test/ast/p77_bare.sh` |
+| ACC-03 | `ct get` 文本 / `--quiet` / `--json` 都展示规范 `url@version`，tag 单列 | §2.3 | `test/ast/p77_output.sh` |
+| ACC-04 | `ct update` 把 `std/std` 旧锁迁到 `ct/std`；`ct verify` 只告警；旧 store 保留 | §2.4 | `test/ast/p77_migrate.sh` |

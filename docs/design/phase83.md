@@ -1,5 +1,7 @@
 # Phase 83 — 包管理契约 v1 与索引校验
 
+<!-- g2:interface -->
+
 > **状态：完成（v0.83.2；PKG-14 fixed）**（2026-11-20 立项并开卡；2026-11-21 S83a–S83d 完成，E83-1…8 通过）。
 > **签收：EDITOR 2026-11-20**（主编统一签收；卡作者 REQ）；S83a 契约/矩阵另需 REVIEW 签收（§5）。
 > **施工闸门**：PH-82 已收口（v0.82.0）；PKG-12 判据矩阵已按 index 基线定稿；index 仓消费方式见 §7.4。
@@ -450,3 +452,12 @@ macOS v0.83.2：35 ok + 1 skip（无 `/proc/self/mem`），`p83_verify: OK`。
 PH-83 的四项交付（契约 v1、只读 `ct index verify`、conformance、Linux x64 产物）全部落地，
 E83-1…8 通过；契约 v1 与 conformance 成为跨仓共用基准，五字段旧行的硬错行为与 `ct get`
 逐行一致。遗留项只有 §7.4 列出的上传/跨仓确认与明确非目标，不影响单卡回滚。
+
+## ACC 映射
+
+| ACC-id | 承诺 | 章节 | 判据/证据 |
+| --- | --- | --- | --- |
+| ACC-14 | 包管理契约 v1：manifest 字段、锁、store 路径与 digest 语义 | §1、§3 E83-1 | `test/pkg/run.sh`、`test/ast/p83_conformance.sh` |
+| ACC-15 | `ct index verify` 只读：零网络 / 零 store / 零 lock；坏行给行号并非零退出 | §1、§3 E83-3 | `test/ast/p83_verify.sh` |
+| ACC-16 | 五字段旧行按行硬错，与 `ct get` 判定一致；六字段行不受影响 | §1、§3 E83-2 | `test/ast/p83_legacy.sh` |
+| ACC-17 | `--json` 输出稳定，退出码 0/1/2 与契约一致；conformance 三向量共用 | §3 E83-4/E83-5 | `test/ast/p83_conformance.sh` |

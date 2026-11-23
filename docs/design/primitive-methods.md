@@ -1,5 +1,7 @@
 # 基本类型方法 · 设计与实施记录
 
+<!-- g2:interface -->
+
 > 中文
 > 状态：**已完成（P0 / P1 / P2 全部落地并验证）** · 2026-11-06
 > 锚点：工作树 `v0.19.1`（未 bump 版本、未打 tag）；P0 用现装 `ct v0.19.1` 自举并对拍
@@ -160,3 +162,10 @@ shim 文件 `<base>.shim.h` 必须与 `.m.ct` **同名同目录**，否则不会
 
 `selfhost/check-ast.sh` 新增一条：`lib.m.ct` 旁放 `Wrong.shim.h` → CT 层构建成功但生成 C 不含该头，
 `cc` 报 `call to undeclared function`。断言同时检查「未包含」和「C 构建失败」，避免依赖具体编译器措辞。
+
+## ACC 映射
+
+| ACC-id | 承诺 | 章节 | 判据/证据 |
+| --- | --- | --- | --- |
+| ACC-24 | A 类纯映射：`char *` / 数值宿主方法映射到 C 库调用，只做文本层等价 | §4 | `test/modules/map_unit_literals`、`selfhost/check-ast.sh` |
+| ACC-25 | B 类 shim：同名 `.shim.h` 自动包含，`toString()` 四槽环，改名/缺失负例 | §5、§6 | `selfhost/check-ast.sh`、`docs/design/primitive-methods.md` |

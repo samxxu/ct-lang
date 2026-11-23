@@ -1,5 +1,7 @@
 # Phase 80 — `String` / `Str`（S5）
 
+<!-- g2:interface -->
+
 > **状态：完成**（2026-11-20 立项并开卡；D-013 签收后 S5a-1…4、S5b-1 删旧迁移与 S5b-2 文档
 > 均已交付 `v0.80.0`；E80-1…8 全通过，C-7 回滚演练与外部 dry-run 见 §7.7/§7.8）。
 > **签收：EDITOR 2026-11-20**（主编统一签收；卡作者 REQ）。
@@ -457,3 +459,12 @@ Linux aarch64 glibc 返回空串，压缩后字段路径为空，`sb_field_if_me
 修复：仅 `j != i` / `j2 != i2` 时复制，原地条目保持不变；同一份生成的 ct-ast C 在 macOS
 与 Linux 容器各自编译后行为一致。回归夹具 `field_branch_two`（两个 owning 字段在 if/else
 两臂分别定义后重赋）在普通 / ASan / UBSan 下钉住 `final live=0`；`p80_retain` 共 51 条 ok。
+
+## ACC 映射
+
+| ACC-id | 承诺 | 章节 | 判据/证据 |
+| --- | --- | --- | --- |
+| ACC-08 | `String` / `Str` 16 字节句柄 + 8 字节头，refcount 与 Drop 协议 | §1、§7.5 | `test/ast/p80_layout.sh`、`test/ast/p80_retain.sh` |
+| ACC-09 | 字面量 `Str` 是视图（无 Drop），`String` 有 Drop，空串 immortal `refs=-1` | §1 | `test/ast/p80_literal.sh` |
+| ACC-10 | `.data` 只读且不保证 NUL；`cstr()` 子视图；C 边界一律 `char *` | §1、§7.5 | `test/ast/p80_cstr.sh` |
+| ACC-11 | UTF-8 码点 / `byte_*` API 与 U16 JS 核心方法；`s[i]` 只读 | §1、§7.4 E80-3 | `test/ast/p80_methods.sh` |

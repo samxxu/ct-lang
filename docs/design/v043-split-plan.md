@@ -1,5 +1,7 @@
 # CT 特性分期方案（草案，未评审、未立项）
 
+<!-- g2:interface -->
+
 > **状态**：草案。未评审、未立项、未建 phase 卡；本轮不改代码、不改 golden、不建分支/tag、不 push。
 > **基线**：`/Users/samxx/trae-ws/ct-lang`，HEAD `623605ef`（`fix(ci): v0.42.1 portable glibc/musl builds`），
 > `CTC_VERSION "0.42.1"`（`selfhost/ct-ast/main.ct:36`）；工作树仅有既有的未跟踪 `packages/`。
@@ -204,3 +206,10 @@ S0 必须只读核对：该特性在 `docs/language-spec.md`、`docs/tutorial.md
   **不写相号、不写内部排期、不写版本承诺。**
 - 版本号只在仓库内部的 README/发布记录里出现，且由收口动作统一 bump。
 - 每相收口后，能力声明必须与 `docs/language-spec.md` 逐条一致；以 spec 为准，不以本文为准。
+
+## ACC 映射
+
+| ACC-id | 承诺 | 章节 | 判据/证据 |
+| --- | --- | --- | --- |
+| ACC-22 | PH-43 错误出口类型契约：只对 `err:` 分支恒判，`ct_sem_error` 硬错，普通 `return` 仍 `--types` opt-in | §3 | `test/ast/p43_err_return_type.sh` |
+| ACC-23 | PH-44 `?` 后缀 + 单 token 前瞻；同 `E` 传播、禁位置、临时量失效化 | §4 | `test/ast/p44_try_syntax.sh`、`test/ast/p44_try_errors.sh` |

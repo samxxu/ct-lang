@@ -1,5 +1,7 @@
 # Phase 86 — v1-pre：词法器重写
 
+<!-- g2:interface -->
+
 > **状态：完成（v0.86.0）**（2026-11-21 立项并开卡；2026-11-21 收口）。
 > **签收：EDITOR 2026-11-21**（主编统一签收；卡作者 REQ）。
 > **施工闸门**：PH-85 已收口（v0.85.0，E85-2 有条件通过/D-018）；本卡按 D-018 的
@@ -180,3 +182,10 @@ check-docs: OK (2351 relative links in 382 files, v0.86.0, 11 hard gates,
   ——这是本地产物过期，不是源码回归。
 - 版本落点五处 `CTC_VERSION`、51 个 golden/ABI banner、README/docs/README 与
   AGENTS 的当前版本同收口提交更新到 `0.86.0`。
+
+## ACC 映射
+
+| ACC-id | 承诺 | 章节 | 判据/证据 |
+| --- | --- | --- | --- |
+| ACC-20 | token 文本是源缓冲 `Str` 视图（`ptr+len`），不复制、不保证 NUL；生命周期覆盖解析阶段 | §1.1、§3 E86-1 | `test/ast/p86_tokens.sh` |
+| ACC-21 | NUL 相关 C API 迁到长度比较 / `cstr()`；诊断文本不变；`?`/errdefer 出口清单成文 | §1.1、§3 E86-2/E86-4 | `test/ast/p86_capi.sh`、`test/ast/p86_errors.sh` |
