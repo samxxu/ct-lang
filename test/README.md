@@ -26,11 +26,11 @@
 `run.sh` 只驱动 **L0**（`selfhost/l0/ctc.c`）；Ct 线（`selfhost/**`）的关卡由 `selfhost/check-all.sh` 聚合，
 见 [selfhost/README.md](../selfhost/README.md) 的门禁表。
 
-> **当前实测（2026-11-22，v0.88.3）**：`sh test/run.sh` → `156 passed, 0 failed`；
+> **当前实测（2026-11-23，v0.88.3）**：`sh test/run.sh` → `165 passed, 0 failed`；
 > **前提（Linux GCC ≥ 8）**：直接跑 `test/run.sh` 可能因 `-Wformat-truncation` 在 L0 零告警项上失败；
 > `check-all.sh` 在检测到 GCC 时会自动加 `-Wno-format-truncation -Wno-implicit-fallthrough`。
 > 手工直跑时请使用 `selfhost/check-all.sh`，或按 `selfhost/README.md` 说明补这两个 `-Wno-*`。
-> `bash selfhost/check-ast.sh` → `1578 passed, 0 failed, 5 skipped`。上面的目录/用例数是夹具口径，
+> `bash selfhost/check-ast.sh` → `1602 passed, 0 failed, 5 skipped`。上面的目录/用例数是夹具口径，
 > 与这两条 runner 的 passed/skip 不同；数字随改动变化，以命令输出为准。
 
 > `*.expected.*` 一律由编译器生成后人工核对，**禁止手写**；只有在确认编译器行为变更是有意为之
