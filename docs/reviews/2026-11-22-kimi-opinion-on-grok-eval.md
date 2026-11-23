@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | `test/run.sh` 在 Linux GCC 14 直跑 153/1/2，需在 test/README 补告诫 | 成立；但仓库已开 [TEST-26](../../issues/testing/test26-test-readme-gcc-caveat.md)（`open`，交 DEV 一行） | 方向对，**已不是“待核实”** |
 | `lib/std` 与 `ct/std` 同名混淆 | [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) 已排期：Stage 1 `lib/std → lib/core` + `CT_CORE_DIR`，Stage 2 `namespace core` / `core::*`；**2026-11-22 改判为当前 pre 窗口完成，不等 v1.0**；REQ 就绪，待 DEV | 正确（排期已提前） |
-| `MAX_FUNCS=512`：SH-109 + LANG-24 入口判据 | 正确：[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md) 的入口判据 1 要求开工前测 501/512 且新增 ≤ 余量；容量增长归 SH-109 | 正确 |
+| `MAX_FUNCS=512`：SH-109 + LANG-24 入口判据 | 原判断正确；2026-11-23 所有者改判后，SH-109 动态增长提前到 pre 窗口，LANG-24 的 501/512 入口判据已解除 | 已更新 |
 | SH-73 / SH-110“修复进行中，状态未翻转” | **不成立**：两张卡均为 `deferred`；[SH-110](../../issues/selfhost/sh110-dynamic-dispatch-chain-fix.md) 落 `v1-PH-0`，仓内没有修复提交或分支证据 | **事实错误** |
 | 句柄层“冻结中”是 DOC-79 三档制 | [DOC-79](../../issues/docs/doc-79-stable-subset-freeze-list.md) 存在 | 正确 |
 | `modern-oo-gap.md` 基线旧，报告未误当能力表 | 已加 Phase 30 基线提示，指向 capabilities/spec | 已处理 |

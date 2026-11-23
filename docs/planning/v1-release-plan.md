@@ -208,14 +208,14 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.0 前内置层 `namespace core`（Stage 2） | 当前 pre 窗口（Stage 1 之后） | v1.0 前 | 先补 spec §4.51/§4.70/§4.71 的命名空间与兼容窗条款，再独立提交；`core::Vec`/`core::String`/`core::box` + 根拼写一个 MINOR 别名（[DOC-87](../../issues/docs/doc-87-lib-core-rename.md) Stage 2） |
 | v1.0 前内建 trait 可见声明 | 当前 pre 窗口（DOC-87 Stage 1 后） | v1.0 前 | `Drop` / `Handback` 声明入 `lib/core`；`AutoDrop` 不是 trait；parser 例外、无 vtable、`MAX_TRAITS` 计数不变（[LANG-23](../../issues/lang/lang-23-builtin-trait-declarations.md)） |
 | v1.0 前语言名书写 `CT → Ct` | 当前 pre 窗口（文档批） | v1.0 前 | 先全量替换活跃散文，再开 `check-docs` ratchet；命令/路径/环境变量/历史目录豁免（[DOC-94](../../issues/docs/doc-94-ct-spelling.md)） |
+| v1.0 前 `MAX_FUNCS` 动态增长 | 当前 pre 窗口 | v1.1 前 | 初始 512、按需翻倍、安全阀 65536（仅 OOM 保护）；**固定 512 不再是功能上限**；L2 冻结层例外（[提案](../proposals/ct-max-funcs-growth.md)、[SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)） |
 | v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
 | v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容器级联释放 | `v1-PH-1` | v1.1 train | `Vec`/`Map` 字段进入 Drop 胶水（元素级联）；合入后 30 天按唤醒条件评估 JSON 树方案 B（[LANG-27](../../issues/lang/lang-27-container-cascade.md)） |
-| v1.1 容量 `MAX_FUNCS` 增长 | `v1-PH-1 / S0` | v1.1 train | 初始 512、按需翻倍、安全阀 65536；L2 冻结层例外；不阻塞 `v1-PH-0`（[提案](../proposals/ct-max-funcs-growth.md)） |
 | v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | CLI 已在下一 v0.x 默认 `warn`（SH-115）；证据达标则升 `error`，未达标回退“可用不默认” |
 | v1.1 lowering 不变量 | `v1-PH-1` | v1.1 train | 临时值/求值顺序/清理边的显式规则 + 发射前检查 + 6 类小 golden；不做完整 IR（[SH-111](../../issues/selfhost/sh111-lowering-invariants.md)） |
-| v1.1 绑定点转换 ADR | `v1-PH-1` | v1.1 train | 宽松默认 + 严格 `.to<T>()`/`decode<T>` 边界；先 ADR；501/512 容量硬约束（[LANG-26](../../issues/lang/lang-26-binding-site-conversion.md)） |
+| v1.1 绑定点转换 ADR | `v1-PH-1` | v1.1 train | 宽松默认 + 严格 `.to<T>()`/`decode<T>` 边界；先 ADR；容量按 SH-109 动态增长，不再受 501/512 约束（[LANG-26](../../issues/lang/lang-26-binding-site-conversion.md)） |
 | v1.1 内建单元判活边界 | `v1-PH-1` | v1.1 train | 6 组正负例锁住文本判活边界；小写导出漏判显式标注；语义图归 v1.2（[SH-113](../../issues/selfhost/sh113-builtin-live-boundary.md)） |
 | v1.1 泛型模板先用后定义 | `v1-PH-1` | v1.1 train | 前向收集/延迟实例化，或专门诊断；先定方向再实施（[SH-114](../../issues/selfhost/sh114-generic-template-order.md)） |
 | v1.1 删除 `box` 别名 | `v1-PH-1` | **v1.1.0** | `box<T>` 硬错并提示 `Box<T>`；独立提交、可回滚（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
@@ -235,12 +235,12 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 > 被主规范受理。未受理前，v1.0/v1.1/v1.2 仍按旧规则登记 `major-release`/`release-train` deviation；
 > 不手改 AGENTS 生成块。
 >
-> **容量顺序（2026-11-21 所有者定）**：`MAX_FUNCS` 动态增长（初始 512、安全阀 65536）
-> 落 `v1-PH-1 / S0`，不在 `v1-PH-0`。`v1-PH-0` 按 501/512 施工，新增顶层函数 ≤11；
-> 超过即停止并提前 S0。
+> **容量顺序（2026-11-23 所有者改判）**：`MAX_FUNCS` 动态增长（初始 512、安全阀 65536）
+> 提前到当前 pre 窗口，不再等 `v1-PH-1 / S0`；固定 512 不再是功能上限，
+> `v1-PH-0` 不再设“新增顶层函数 ≤11”预算。安全阀 65536 只作 OOM 保护。
 >
-> **LANG-24 容量约束**：`Box<T>` 改名（含别名分支）必须复用既有类型读取路径，
-> 不给 `v1-PH-0` 新增顶层函数；若确需新增，先停并走 `S0`。
+> **LANG-24 容量约束（2026-11-23 起解除）**：`Box<T>` 改名不再受 501/512 或 ≤11 预算限制；
+> 仍要求复用既有类型读取路径，不引入不必要的顶层函数。
 >
 > **D2 唤醒条件（2026-11-21）**：SH-110 合入后 **48 小时内**启动 README §0.1 重测；
 > 完成前保持“动态派发一行链当前被拒”。被阻塞项一律把唤醒条件写在本节，防止落地后遗忘。

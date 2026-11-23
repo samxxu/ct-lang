@@ -20,7 +20,7 @@
 | 标签 `v0.88.3` 指向 `7061aa22` | 一致（附注标签对象 `c9c94e6b` 解引用到该提交） | `git tag --list 'v0.88.3' --format=…` |
 | `LICENSE.EXCEPTION` 存在，输出例外 | 一致 | 仓根 `LICENSE.EXCEPTION` |
 | SH-73 / SH-110 为 High 级 deferred | 一致 | 两张卡均 `deferred`，严重度 High |
-| SH-109 动态增长、SH-111 / SH-112 deferred | 一致 | 三张卡均 `deferred`；SH-109 落 `v1-PH-1 / S0` |
+| SH-109 动态增长、SH-111 / SH-112 deferred | 原快照一致；2026-11-23 改判后 SH-109 已 `open` 并提前到当前 pre 窗口 |
 | SH-114 泛型先用后定义、v1.1 | 一致 | [SH-114](../../issues/selfhost/sh114-generic-template-order.md) |
 | `Str` 逃逸 warning 自 v0.88.2；`box` 直接环限深 3 | 一致 | spec §4.70 / §4.72 |
 | 右值 struct 直接装箱为硬错；`match` 穷尽 | 一致 | spec §6.2、§4.73（E84-3） |
@@ -49,7 +49,7 @@
   [selfhost/README.md](../../selfhost/README.md#L71-L72)），但 [test/README.md](../../test/README.md)
   当前的“156 passed”没有写这条前提；外部用户直接跑会得到 1 failed。
 - **成熟度定位与我们一致**：「关注并小规模试用，不下注」；v1.0 的观察信号（去 L1/L2、FP=0、
-  SH-73 / SH-110 关闭、`MAX_FUNCS` 是否仍 512）与 [v1-release-plan](../planning/v1-release-plan.md)
+  SH-73 / SH-110 关闭、`MAX_FUNCS` 动态增长是否落地）与 [v1-release-plan](../planning/v1-release-plan.md)
   的清单一一对应，没有额外要求。
 - `docs/modern-oo-gap.md` 是 Phase 30 基线，报告提醒“不要当当前能力表”是对的；该文档本身已标注
   基线，但缺少指向当前能力表的入口。
@@ -60,7 +60,7 @@
 | --- | --- | --- |
 | 默认编译路径不做全量类型检查 | 不改 | 已定分层：CLI `off` / v1-pre CI `warn` / v1.1 S2 `error`；D2 证据是 v1.0 门禁 |
 | AST 直接发射、无 IR，是架构债 | 不改 | SH-111（v1.1 轻量不变量）/ SH-112（v1.2 Typed IR）已承接 |
-| `MAX_FUNCS` 512 是硬墙 | 不改 | SH-109 / v1.1 S0 按需增长；v1.0 边界明确为 501/512、新增 ≤11 |
+| `MAX_FUNCS` 512 是硬墙 | 已改 | 2026-11-23 所有者改判：SH-109 动态增长提前到当前 pre 窗口，固定 512 不再是功能上限 |
 | 无借用检查、refcount 非原子 | 不改 | 语言定位即“有纪律的 C + 句柄糖”，已在 §4.70 / §4.72 写明 |
 | 单人总线、生态薄、非 LSP | 不改 | 事实陈述，不是工程缺口；不新增治理动作 |
 | 没有性能数据 | 不改 | 报告未编造数字；我们也不承诺性能，维持“以 `cc` 产物为准” |
@@ -72,7 +72,7 @@
    路径属 `test/**`，已开 [TEST-26](../../issues/testing/test26-test-readme-gcc-caveat.md) 交 DEV。
 2. **`docs/modern-oo-gap.md` 顶部加一行指针**：“当前能力以 [capabilities.tsv](../capabilities.tsv)
    与 spec §4 为准；本文是 Phase 30 基线。” 属 `docs/**`，已随本批文档提交。
-3. **不改 spec 的 `atomic` 与 `MAX_FUNCS` 条款**：两处现有文本已准确，错误在报告侧。
+3. **`atomic` 条款不改**；`MAX_FUNCS` 已由 2026-11-23 改判为动态增长（SH-109），spec §7 随后同步。
 4. **不新增架构卡**：报告的风险项全部已有承接卡，重复开卡只会增加台账噪声。
 
 ## 6. 与上一份外部评估的关系

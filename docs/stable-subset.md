@@ -40,7 +40,7 @@
 | `ref` / `out` 参数语义与 `out` 定值分析 | 冻结中 | 同上；J-4b 逃逸契约文本补齐后才可转已冻结 | v1.1 冻结 | spec §4.68；D-011 J-4b |
 | ADT 与 `match` 的形态与上限（64 ADT / 16 变体 / 8 负载；无泛型 ADT、无 or 模式） | 冻结中 | 同上 | v1.1 冻结 | spec §4.73 |
 | `box<T>` / `new` 的语义与规范拼写 | 冻结中 | REQ + ADR 或 battle；`box` 别名的删除按 LANG-24 | v1.0 定 `Box<T>`；v1.1 删 `box` | [D-016](decisions/D-016.md)；LANG-24 |
-| `MAX_FUNCS` 动态增长（初始 512、翻倍、65536 安全阀） | 冻结中 | REQ + ADR；只允许扩大安全阀，不收紧 | v1.1（`v1-PH-1 / S0`） | [提案](proposals/ct-max-funcs-growth.md)；[SH-109](../issues/selfhost/sh109-max-funcs-capacity.md) |
+| `MAX_FUNCS` 动态增长（初始 512、翻倍、65536 安全阀） | 冻结中 | REQ + ADR；只允许扩大安全阀，不收紧 | **当前 pre 窗口（v1.1 前；2026-11-23 提前）** | [提案](proposals/ct-max-funcs-growth.md)；[SH-109](../issues/selfhost/sh109-max-funcs-capacity.md) |
 | `lib/core` 目录与 `namespace core` 布局 | 冻结中 | REQ + ADR；根拼写兼容一个 MINOR | **v1.0 前（当前 pre 窗口；Stage 1+2）** | [DOC-87](../issues/docs/doc-87-lib-core-rename.md) |
 | 泄漏策略 `leaks = warn 或 error` 与 `c-boundary = allow 或 strict` 的键名 | 冻结中 | REQ + ADR | v1.1 冻结 | D-012；spec §4.70 |
 | `std` 包导入名与单元命名（`std::str::CharStr` 等） | 冻结中 | 包维护者 + 索引记录；旧名一个 MINOR | 随 PKG-22 发布 | [PKG-22](../issues/packages/pkg-22-std-str-charstr-rename.md) |

@@ -8,7 +8,7 @@
 | 锚点 | v0.88.3（2026-11-23） |
 | 依据 | [D-021](../../docs/decisions/D-021.md)、[JSON v1.1 提案评估](../../docs/reviews/2026-11-23-json-v11-proposal-eval.md) |
 | 状态 | open |
-| blocked-by | **LANG-27 先落地**；B2/B4/B5 各自 ADR 通过；`MAX_FUNCS` 容量复核或 v1.1 S0 |
+| blocked-by | **LANG-27 先落地**；B2/B4/B5 各自 ADR 通过；SH-109 动态增长在当前 pre 窗口先落地（不再受 512 限制） |
 | 处置证据 | **accepted（设计）**：所有者 2026-11-23 逐项裁定 B1–B8；实现待 LANG-27 后按 §阶段执行 |
 
 ## 范围（按 D-021）
@@ -42,7 +42,7 @@
 - `map binding` 未 import 时有可行动诊断，歧义硬错，未用零代码；
 - 表达式 `match` 与语句 `match` 共存，`yield` 规则有负例；
 - 只读视图不可变；子树跨文档 retain/release 正确；
-- `MAX_FUNCS` 复算或 S0 已落地；`check-all` / `check-docs` 绿。
+- SH-109 动态增长已落地（固定 512 不再作预算）；`check-all` / `check-docs` 绿。
 
 ## 非目标
 

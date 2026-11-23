@@ -2313,6 +2313,10 @@ int main(void) {
 > （builtin 层经 `nfunc_base` 扣除），不是「每个单元各有一份配额」。越界文案为
 > `too many functions (limit 512, whole program)`（依据：`frontend/parse/ParseSupport.h.ct` 的判界点）。
 >
+> **决策（2026-11-23）**：`MAX_FUNCS` 将改为“初始容量 512 + 按需增长”（安全阀 65536，
+> 只作 OOM 保护）；固定 512 不再是功能上限，落地见 [SH-109](../issues/selfhost/sh109-max-funcs-capacity.md)。
+> 在 SH-109 合入前，本节仍按实测的 512 硬上限描述。
+>
 > 实现细节（ct-ast）：`MAX_NODES` 是 `selfhost/ct-ast/runtime/arena/Arena.h.ct` 里的宏，只在 `alloc` 判界时使用；
 > 而节点数组会随 `pub struct Arena` 进入生成的 `Arena.h`，**宏不跨翻译单元**，所以该字段写的是字面量
 > `262144`。两者必须相等，改一处就要同步改另一处。

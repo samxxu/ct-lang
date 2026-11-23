@@ -63,14 +63,10 @@ README、std-catalog、planning、reviews 的结论行）全部改为 `Box<T>`�
 
 ## 容量与窗口约束
 
-- **入口判据 1（2026-11-21 追加）**：开工前先测顶层函数计数（v0.88 实测 **501/512，余 11**；
-  口径为整程序 plain-C 签名预算，`static` helper 与 `pub` 包装器都算，`impl` 方法不算），
-  并估算 Stage A 的预计增量；**预计增量必须 ≤ 当前余量**。不满足则先走
-  [`v1-PH-1 / S0`](../../docs/proposals/ct-max-funcs-growth.md)（MAX_FUNCS 动态增长）复核，
-  **不得先写别名分支**。
-- **v1.0（`v1-PH-0`）**：Stage A 作为独立提交，不混进 seed cutover。`v1-PH-0` 只有
-  ≤11 个新增顶层函数的预算；别名分支必须复用既有 `tok_is` / 类型读取路径，**不得新增
-  顶层函数**，否则停止并先走 `v1-PH-1 / S0`。
+- **入口判据 1（2026-11-21 追加；2026-11-23 解除）**：`MAX_FUNCS` 固定 512 已由 [SH-109](../selfhost/sh109-max-funcs-capacity.md) 改为动态增长（当前 pre 窗口），
+  本卡不再受 501/512 或 ≤11 预算限制；别名分支仍应复用既有 `tok_is` / 类型读取路径，不引入不必要的顶层函数。
+- **v1.0（`v1-PH-0`）**：Stage A 作为独立提交，不混进 seed cutover；不再设 ≤11 预算，
+  但仍复用既有 `tok_is` / 类型读取路径，不引入无关顶层函数。
 - **v1.1（`v1-PH-1`）**：Stage B 删除别名与旧拼写扫描，属独立提交，可单提交回滚。
 - 引入版本必须 ≤ v1.0：v1.1 删除的兼容窗口正好一个 MINOR，与 `lib/core`、`CharStr`
   的「旧名一个 MINOR」口径一致。
@@ -116,22 +112,20 @@ $ grep -rn 'pub struct Box' lib/std/ | wc -l
 0
 ```
 
-**入口判据（已写入 v1-release-plan）**：开工前先测顶层函数计数（v0.88 实测 `501/512`，余 11），
-Stage A 预计增量必须 ≤ 当前余量；别名分支必须复用既有 `tok_is` / 类型读取路径，不得新增顶层
-函数，否则先走 `v1-PH-1 / S0`（[SH-109](../selfhost/sh109-max-funcs-capacity.md)）。
+**入口判据（2026-11-23 起）**：`MAX_FUNCS` 固定 512 已由 [SH-109](../selfhost/sh109-max-funcs-capacity.md)
+改为动态增长；本卡不再设“预计增量 ≤ 余量”或 ≤11 的预算。别名分支仍复用既有 `tok_is` /
+类型读取路径，不引入无关顶层函数。
 
 **触发/负责人/优先级**：`v1-PH-0`（Stage A）与 `v1-PH-1`（Stage B）；负责人 DEV，REQ 复核入口
-判据；优先级为 v1.0 命名清理（Medium）。本批不实现，因为它是语言表面改名，必须与 seed cutover
-和容量窗口一起排。
+判据；优先级为 v1.0 命名清理（Medium）。本批不实现，因为它是语言表面改名，必须与 seed cutover 一起排。
 
 ## DEV 复核（2026-11-23）：本窗口不实现
 
 本条按卡片自己的窗口约束仍停在 `deferred`：`v1-PH-0` Stage A（规范拼写
 `Box<T>` + `box<T>` 弃用别名）与 `v1-PH-1` Stage B（删除别名）都必须独立提交，
-不得混入 seed cutover；且 `v1-PH-0` 的新增顶层函数预算 ≤11
-（[v1-release-plan](../../docs/planning/v1-release-plan.md) §「容量顺序」）。当前工作树
-HEAD 是 v0.88.3 pre 窗口，`lib/core/Box.h.ct:35` 仍是 `pub struct box<T>`；本批
-不实现 Stage A，以免在 seed cutover 前改动内建层拼写/发射符号。`status` 字段未动。
+不得混入 seed cutover；容量约束已于 2026-11-23 解除（SH-109 动态增长，不再有
+501/512 或 ≤11 预算）。当前工作树 HEAD 是 v0.88.3 pre 窗口，`lib/core/Box.h.ct:35`
+仍是 `pub struct box<T>`；本批不实现 Stage A，以免在 seed cutover 前改动内建层拼写/发射符号。`status` 字段未动。
 
 最小复现（当前 HEAD 自举的 ct-ast）：
 

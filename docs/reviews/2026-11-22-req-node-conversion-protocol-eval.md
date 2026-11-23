@@ -28,7 +28,7 @@
 | 3 | `Arr(Vec<JsonNode>)` / `Obj(Map<…,JsonNode>)` | 递归 payload 以值内嵌，布局无法闭合（静态断言失败） | **arena + 索引**（`Vec<int>` / `Map<String,int>`），或指针包装 + 显式释放 |
 | 4 | `Str(Str)` 作为 JSON 字符串 | `Str` 是借用视图；ADT 不生成 drop glue（PH-84 简化项） | 明确 owner：arena 持有 `String` + 视图，或 payload 用 `String` 并依赖 W4 级联 |
 | 5 | “意图恢复 / bugfix” | 仓库内没有 `JsonNode` / 绑定点转换 / `as<T>` 的既定记录；卡面引用的“Vec/Map 句柄层补全”issue 不在本仓 | 补 ADR/决策记录，或改立新特性卡 |
-| 6 | W1 放在 v1.0 | 冻结期、501/512 容量、`v1-PH-0` 新增顶层函数 ≤11；绑定点查找是新语义面 | 至少 v1.1；若坚持 v1.0，必须先过 `S0` 并证明容量 |
+| 6 | W1 放在 v1.0 | 冻结期、`v1-PH-0` 新增顶层函数预算；绑定点查找是新语义面 | 至少 v1.1；容量约束已由 SH-109 动态增长解除（2026-11-23） |
 
 补充：`as<T>` 当前不是语言关键字；`to<T> -> Option<T>` 也需要新的泛型方法形态。
 两者都属于语言面增量，不是“增量库”。
@@ -51,7 +51,7 @@
 | 1 | 定性改为**新特性**；不补签“原意图”ADR | [LANG-26](../../issues/lang/lang-26-binding-site-conversion.md) |
 | 2 | 绑定点默认**维持宽松档**；严格档由 `.to<T>()` / `decode<T>` 边界承担 | LANG-26 协议条款 |
 | 3 | JSON 树定稿 **arena + 索引**（`Arr(Vec<int>)` / `Obj(Map<String,int>)`），节点 = (arena, 下标)；子树不跨文档 | [PKG-24](../../issues/packages/pkg-24-json-node-arena.md) |
-| 4 | W1 走 ADR 落 **v1.1**（501/512 容量硬约束）；W2/W3 移 **std 包/外部仓**，v1.0 前交付，包形态不占容量、不碰冻结 | LANG-26 + PKG-24 |
+| 4 | W1 走 ADR 落 **v1.1**；W2/W3 移 **std 包/外部仓**，v1.0 前交付，包形态不占容量、不碰冻结 | LANG-26 + PKG-24；容量已由 SH-109 解除 |
 | 5 | 连带义务（J-6 / stable-subset / capabilities / idioms 第 11 条）随 W1 ADR 通过后再登记 | 时序 |
 
 ## 5. 落地卡
