@@ -1,0 +1,56 @@
+/* SH-110 / SH-73: a method-call result may be the next hop's receiver.
+   The chain is materialised once per hop, left to right, at the head of a
+   statement or an assignment / declaration initializer (spec 4.5). */
+
+trait HttpRequest {
+    int status();
+    HttpRequest tap(int n);
+    HttpRequest bump();
+    int get_hits();
+}
+
+struct Req {
+    int s;
+    int hits;
+} use HttpRequest;
+
+impl HttpRequest for Req {
+    int status() { return self->s; }
+    HttpRequest tap(int n) { self->s = self->s + n; return self; }
+    HttpRequest bump() { self->hits = self->hits + 1; return self; }
+    int get_hits() { return self->hits; }
+}
+
+impl Req {
+    HttpRequest tuned(int n) { self->s = self->s + n; return self; }
+}
+
+int seq = 0;
+
+int tick(int n)
+{
+    seq = seq * 10 + n;
+    return n;
+}
+
+int chain_one(HttpRequest h) { return h.tap(1)->status(); }
+int chain_two(HttpRequest h) { return h.tap(2)->tap(3)->status(); }
+int chain_inherent(Req *x) { return x->tuned(4).status(); }
+int chain_bumps(HttpRequest h) { return h.bump()->bump()->get_hits(); }
+int chain_order(HttpRequest h) { return h.tap(tick(1))->tap(tick(2))->status(); }
+
+int main(void)
+{
+    Req x;
+    x.s = 1;
+    x.hits = 0;
+    HttpRequest h = x;
+
+    printf("%d\n", chain_one(h));       /* form 1: one dynamic hop */
+    printf("%d\n", chain_two(h));       /* form 2: two dynamic hops */
+    printf("%d\n", chain_inherent(&x)); /* form 3: inherent result, then dispatch */
+    printf("%d\n", chain_bumps(h));     /* exactly one evaluation per hop */
+    printf("%d\n", chain_order(h));     /* left-to-right argument order */
+    printf("%d\n", seq);
+    return 0;
+}

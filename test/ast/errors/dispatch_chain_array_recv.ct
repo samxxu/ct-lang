@@ -1,0 +1,14 @@
+/* SH-110 negative: an array value is not a legal dynamic receiver. */
+trait V { int val(void); }
+
+struct S { int a; } use V;
+
+impl V for S {
+    int val(void) { return self->a; }
+}
+
+int main(void)
+{
+    int a[3];
+    return a.val();
+}

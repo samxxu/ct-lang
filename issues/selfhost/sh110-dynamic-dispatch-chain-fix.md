@@ -115,3 +115,26 @@ $ echo $?
 README §0.1 三断点闭环）；负责人 DEV；High。开工前先按本条「修复前置：判据卡」写清求值顺序、
 临时值生命周期、可物化形态三项，再改发射器；补 ASan 用例与「不含该形态语料逐字节不变」断言。
 本批只改台账，不动 `Emitter.h.ct`。
+
+## 处置（DEV，2026-11-23）：判据卡与红证
+
+**判据卡**：[docs/design/sh110-dispatch-chain.md](../../docs/design/sh110-dispatch-chain.md) 先落库，钉住求值顺序、临时值
+生命周期与可物化接收者形态（值/指针/接口可物化；数组/函数指针仍硬错）。
+
+**红证（`baseline: a0ce8ef1`）。** 用该提交重建的 ct-ast 跑新探针：
+
+```console
+$ sh test/ast/p110_dispatch_chain.sh .temp/b/ct-ast
+FAIL p110/chain: the three chain forms were refused
+  chain.ct:24:1: error: method receiver must be a variable, an element, a call or a field chain
+FAIL p110/chain: the chain was not materialised
+  no __ct_tmp in the generated C
+ok   dispatch_chain_compound_recv keeps its diagnostic
+ok   dispatch_chain_fnptr_recv keeps its diagnostic
+ok   dispatch_chain_array_recv keeps its diagnostic
+$ echo $?
+1
+```
+
+基线里三形态全被拒；负例已在基线给出位置化硬错，修复不得把它们放开。状态字段保持
+`deferred` 不动，由 REV 复核后改词。

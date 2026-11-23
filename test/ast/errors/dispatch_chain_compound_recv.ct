@@ -1,0 +1,14 @@
+/* SH-110 negative: a compound literal is still not a legal dynamic receiver
+   (spec 4.21); only a materialisable method-call result was opened. */
+trait V { int val(void); }
+
+struct Pair { int a; int b; } use V;
+
+impl V for Pair {
+    int val(void) { return self->a + self->b; }
+}
+
+int main(void)
+{
+    return ((struct Pair){ 1, 2 }).val();
+}

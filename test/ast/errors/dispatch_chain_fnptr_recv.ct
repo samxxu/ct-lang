@@ -1,0 +1,17 @@
+/* SH-110 negative: a function-pointer value is not a legal dynamic receiver. */
+typedef int (*Fn)(int);
+
+trait V { int val(void); }
+
+struct S { int a; } use V;
+
+impl V for S {
+    int val(void) { return self->a; }
+}
+
+Fn pick(void) { return 0; }
+
+int main(void)
+{
+    return pick().val();
+}
