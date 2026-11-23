@@ -23,7 +23,7 @@
 | P-1 | tag 触发的 linux-x64 发布构建与原生冒烟 | [CI-19](../ci/ci-19-tag-release-build.md) | CI 配置 | ✅ workflow 绿；`workflow_dispatch` 对 `v1.0.0` 重建并覆盖资产（run 45289869573） |
 | P-2 | ct-pkg 索引重构三项裁定 | [PKG-21](../packages/pkg-21-ct-pkg-index-refactor-ruling.md) | 决策（文档） | **已完成**：PKG-21 verified（① `ct-pkg/index` `7a0c7cd`；② PKG-18；③ PKG-19/20） |
 | P-3 | 绑定点转换 ADR **缺口复核**（D-020 已存在，核剩余三项） | [LANG-26](../lang/lang-26-binding-site-conversion.md) | 设计（文档） | ✅ D-020 §6：`out` 未覆盖→增量、`decode<T>` 部分→边界、开关部分→形态/诊断 |
-| P-4 | JSON 树方案 B 的 30 天重评 | [LANG-28](../lang/lang-28-json-tree-b.md) | 评审（文档） | LANG-27 已 verified；**截止 2026-12-23**；五条判据逐条给证据，结论三选一（维持 A / 切 B / B 限定子集） |
+| P-4 | JSON 树方案 B 的 30 天重评 | [LANG-28](../lang/lang-28-json-tree-b.md) | 评审（文档） | ✅ 2026-11-24 提前完成：判据 1（递归 ADT 布局）、判据 2（ADT payload 级联）不满足；结论**维持 A**，报告 [2026-11-24-json-tree-b-reeval](../../docs/reviews/2026-11-24-json-tree-b-reeval.md) |
 | P-5 | 覆盖缺口分批补测试 | [TEST-23](../testing/test-23-v077-coverage-gaps.md) | 测试 | 行覆盖与 `ct-ast` 单测分批进 `test/**`；不改产物 |
 | — | 巨型单元与重复常量 | [SH-94](../selfhost/sh94-giant-units-duplicate-constants.md) | 源码重构 | **不在本卡执行**：并入 v1.1 S1（M1 精细切分）的 MINOR 窗口 |
 

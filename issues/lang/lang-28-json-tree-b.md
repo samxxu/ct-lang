@@ -8,8 +8,8 @@
 | 锚点 | v0.88.3（2026-11-23） |
 | 依据 | [D-021](../../docs/decisions/D-021.md)、[JSON v1.1 提案评估](../../docs/reviews/2026-11-23-json-v11-proposal-eval.md) |
 | 状态 | deferred |
-| blocked-by | **LANG-27 先落地**；B2/B4/B5 各自 ADR 通过；SH-109 动态增长在当前 pre 窗口先落地（不再受 512 限制） |
-| 处置证据 | **accepted（设计）**：所有者 2026-11-23 逐项裁定 B1–B8；实现待 LANG-27 后按 §阶段执行 |
+| blocked-by | **P-4 重评结论：维持 A（2026-11-24）**；判据 1（递归 ADT 布局）与判据 2（ADT payload 级联）不满足：B1 实例壳预发射、B3 ADT retain/release/drop glue 均未落地。重提条件：B1 + B3 落地后，用 `p_lang27_cascade` + 递归 ADT/工厂返回探针复跑判据 1、2 全绿，另开卡；D-021 设计不改 |
+| 处置证据 | **accepted（设计）**：所有者 2026-11-23 逐项裁定 B1–B8；实现待 LANG-27 后按 §阶段执行。**P-4 重评（2026-11-24）：维持 A，B 不切换**，见 [重评报告](../../docs/reviews/2026-11-24-json-tree-b-reeval.md) |
 
 ## 范围（按 D-021）
 
@@ -109,4 +109,26 @@ $ /tmp/ct compile /tmp/r.ct -o /tmp/r.c && cc -std=c99 -c /tmp/r.c
 - 不在本项实现 B、不写 `ct/json`、不做性能承诺；
 - 不重开 PKG-24 的外部排期；
 - 不改 D-021 的 B1–B8 设计本身（如需改，另开 ADR 修订）。
+
+## 重评结果（P-4，2026-11-24）：维持 A
+
+报告：[2026-11-24-json-tree-b-reeval.md](../../docs/reviews/2026-11-24-json-tree-b-reeval.md)。
+
+| # | 判据 | 判定 | 证据摘要 |
+| --- | --- | --- | --- |
+| 1 | 递归 ADT 布局闭合 | **不满足** | v1.0.0 seed：`enum N { Nil(), Arr(Vec<N> v) }` → `field has incomplete type 'struct Vec_N'`；非递归 `Vec<int>` payload 同样失败。手工前移实例壳（B1）后 `cc -c` 与运行均通过，证明闭合路径是 B1，但 seed 未实现 |
+| 2 | 级联无泄漏/双释放 | **不满足（B 树口径）**；容器字段满足 | `p_lang27_cascade` 17/17、ASan/UBSan、leaks 0；ADT payload 无 glue：`Vec_P__elem_release` 为 no-op，工厂返回先 `String_release` 再返回旧句柄 → ASan `heap-use-after-free` |
+| 3 | 子树跨文档语义 | **满足（契约层）** | B 允许 retain 后跨文档；禁止裸句柄/视图跨文档、跨文档写、跨线程、环、release 后使用；与 A 逐条对照见报告 §3 |
+| 4 | `Map` 键深拷贝 / `Str` owner 成本 | **满足** | 16 字节键深拷贝约 14 ns/键，`String` owner 约 15 ns；`Map` 线性扫描 O(K²) 为 A/B 共有，非 B 专属 |
+| 5 | 产出评估文档 | **满足** | 上述报告，回链 LANG-27 / 本卡 / D-021 / PKG-24 |
+
+**结论：维持 A（arena + 索引），不切 B。** 五条“缺一不可”中判据 1、2 不成立；判据 3
+的契约依赖 B3、实现未验证；判据 4 可接受且非区分项。
+
+- **不批准 B1–B8 实现**：B1 实例壳预发射、B3 ADT glue 是前置；D-021 设计文本不改。
+- **不重开 PKG-24**：A 的 rejected 结论与外部排期不变。
+- **重提条件**：B1 + B3 落地后，用 `p_lang27_cascade` + 递归 ADT/工厂返回探针复跑判据
+  1、2 全绿，再按本卡 §验收另开重评；不自动切换。
+- 按本卡 §验收，“维持 A”应转 `rejected`；`status` 词按 AGENTS §5.4 归 REQ/USER，
+  本轮只更新 `blocked-by` 与本节，状态字段留所有者落。
 
