@@ -26,7 +26,7 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 | --- | --- | --- |
 | 局部 / 参数 | `String` 自动 retain / release；`Box<T>` 走显式 `retain` / `release` | §4.70、D-016 |
 | `String` / `Box` 字段 | 宿主 `use Drop` 且**无显式 `impl Drop`** → 编译器生成字段胶水；写显式 impl 则胶水消失，作者负责 | §4.70、D-016 |
-| `Vec<T>` / `Map<K,V>` 字段 | 没有自动胶水；即使宿主 `use Drop` 也要显式 `release()` | §4.70 |
+| `Vec<T>` / `Map<K,V>` 值字段 | 宿主 `use Drop` 且无显式 `impl Drop` → 容器级联胶水（逐字段 `h != 0` 守卫，元素走 `__ct_elem_release`）；显式 impl 或非 `use Drop` 宿主需作者显式 `release()` | §4.56、§4.70 |
 | 全局 | 没有作用域出口，显式 `release()` | §4.70 |
 | ADT payload | 本轮不生成 Drop glue；按 move 语义只释放一次 | §4.73 |
 | 引用环 | 作者责任；直接环有编译期告警，不是检测 | §4.72 |
@@ -109,7 +109,7 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 你是 CT 语言（source-to-source 编译到 C）的编码助手。CT 的约定：
 
 1. CT 是构建在 C 之上的语言；C 的表达式、语句与类型核心按原语法可用。v1.0 起不再自称 C 超集；四类偏离：new 是上下文关键字（int new; 仍合法）、T a[] 只在形参/字段/无初始化声明中弃用、字符串字面量裸类型仍是 char *、String/Str 传给 printf 需 cstr()。§1.2
-2. 所有权分层：局部/参数自动 retain/release（String）；String/Box 字段在宿主 use Drop 且无显式 impl 时有自动胶水；Vec/Map 字段、全局、ADT payload 需作者处理；引用环仍泄漏。§4.70 §4.72
+2. 所有权分层：局部/参数自动 retain/release（String）；String/Box/Vec/Map 字段在宿主 use Drop 且无显式 impl 时有自动胶水（容器级联到元素）；显式 impl 的容器字段、全局、ADT payload 需作者处理；引用环仍泄漏。§4.56 §4.70 §4.72
 3. Str 是借用视图：不能作 struct 字段或 Map 键；Vec<Str>/Option<Str>/ADT 负载/全局可编译但存的是视图；字面量常量表安全，非 immortal 来源有风险。§4.70
 4. String 用字面量直接初始化；char * 方法需 import std::str::CharStr（std 0.19.0 及以前叫 std::str::String）。§5.1
 5. 数组传参用 T[]，不要 int *a, int n；T a[] 形参/字段已弃用。§4.69

@@ -1599,8 +1599,8 @@ int main(void)
 `Box_int_Drop_drop` / `Box_Str_Drop_drop`，不会留下模板态的 `Box_Drop_drop`。注意两点：
 
 - **声明顺序、自负全责**：没有显式 `impl Drop` 时，编译器按字段声明顺序为每个带 `use Drop`
-  的字段递归生成释放胶水；一旦写了 `impl Drop`（含泛型形态），就**不再**生成字段胶水，释放
-  资源是你自己的事。
+  的字段递归生成释放胶水；`Vec` / `Map` 值字段也进入这条胶水（容器级联释放元素，空句柄
+  判空跳过）。一旦写了 `impl Drop`（含泛型形态），就**不再**生成字段胶水，释放资源是你自己的事。
 - **`drop()` 里不能重复释放同一字段**：`self->buf.release()` 写两次会报
   `field 'buf' is released more than once in drop()`。
 

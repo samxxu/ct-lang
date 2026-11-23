@@ -2761,8 +2761,8 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
   `trait Handback` 仍是硬错 `'Drop' is a reserved built-in trait and cannot be defined`；
   **`AutoDrop` 不是 trait**（§4.9），不得为它生成声明。
 
-- **`Drop` trait**：`use Drop` 只置位、不进 `use[]` 列表；`delete p` 调用 `<S>_Drop_drop(p)`，无 vtable/vptr。无显式 `impl Drop` 时，编译器按字段**声明顺序**为每个 `uses_drop` 字段递归生成释放胶水；写了显式 `impl Drop for S`（或 `impl<T> Drop for Box<T>`）即**自负全责**，不再生成字段胶水，需在体里手动释放资源。
-- **字段胶水的准入是 `uses_drop` 标志，不是“所有字段”**：只有字段的 struct 类型置位 `uses_drop` 才递归；`Vec` / `Map` 是普通泛型 struct、不置位，故不出现在胶水里，生命周期由显式 `release()` 承担（§4.51、§4.70）；显式 `impl Drop` 还会整体关闭自动胶水。
+- **`Drop` trait**：`use Drop` 只置位、不进 `use[]` 列表；`delete p` 调用 `<S>_Drop_drop(p)`，无 vtable/vptr。无显式 `impl Drop` 时，编译器按字段**声明顺序**为每个 `uses_drop` 字段和每个 by-value `Vec` / `Map` 值字段递归生成释放胶水；写了显式 `impl Drop for S`（或 `impl<T> Drop for Box<T>`）即**自负全责**，不再生成字段胶水，需在体里手动释放资源。
+- **字段胶水的准入**：内置容器 `Vec` / `Map` 的**值字段**按类型名进入胶水（LANG-27）：宿主 `use Drop` 且无显式 `impl Drop` 时，胶水在该字段的声明位置写 `if (_self->f.h != 0) (void)<Inst>_release(&_self->f);`。元素释放沿用容器自己的协议：`<Inst>_release` 遍历元素并调用每实例的 `__ct_elem_release`（嵌套容器元素自带 `h == 0` 守卫），因此空句柄、空元素、越界 `get` 的零值都不会 abort；`release()` 对零句柄仍 abort 的契约不变（§4.51、§4.70）。其他 struct 字段仍以 `uses_drop` 为准：只有字段的 struct 类型置位 `uses_drop` 才递归。显式 `impl Drop` 还会整体关闭自动胶水，容器字段也由作者释放。指针字段或数组字段里的容器没有单一值句柄，不自动递归，由显式 impl 负责。
 - **指针字段胶水（PH-48）**：自动胶水对指针字段写 `if (_self->f) Child_Drop_drop(_self->f);`——判空、把子对象传给它的 Drop，**不取字段地址、也不 `free` 子指针**；所有权仍归显式 `impl Drop`。值字段仍是 `Child_Drop_drop(&_self->f)`。多星指针与带维度的指针数组不递归（没有单一子对象可传），由显式 impl 负责。
 - **跨单元 `Drop`（PH-48，D48-2 / U-2 A）**：Drop 体只由**声明该 struct 的单元**发射一次，链接性独立于 `pub`（默认可见）；该单元的生成头文件发布真原型 `void <S>_Drop_drop(void *);`，消费单元只发 `extern` 声明并调用它。`impl Drop for S` 必须写在 struct 的同一单元：写在别的单元时类型头没有原型，构建在写任何 `.c` 之前硬错 L48-2（`Drop body for 'struct Res' is not visible through its header`），不再生成静默空桩。显式 `impl` 仍负责释放子指针。
 - **泛型 Drop**：`impl<T> Drop for Box<T>` 每实例单态化出一个 `Box_int_Drop_drop` / `Box_Str_Drop_drop`，不产生模板态 `Box_Drop_drop`；声明在首次使用之后仍生效（impl 在 emit 阶段解析）。容器元素协议（Phase 31）对普通 struct 同样生效：`Vec<Str>` / `Vec<Probe>` 的 `release()` 会调用元素的 `release()`。
@@ -3120,7 +3120,8 @@ parse("ab", n);  /* 调用点不写 out */
   见 phase80 卡 §7。
 - **边界**：`Box<String>` 已由 PH-81 的 `Box<String>::of` 回填；`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
   `Map<String,V>`）、跨仓外部工程迁移只做 dry-run。字段位置的 `String` 释放取决于宿主：
-  宿主 `use Drop` 且无显式 `impl Drop` → 生成 `String` 字段胶水；`Vec`/`Map` 字段无自动胶水；
+  宿主 `use Drop` 且无显式 `impl Drop` → 生成 `String` 字段胶水；`Vec`/`Map` 值字段按 LANG-27
+  生成容器级联 `release`（元素走 `__ct_elem_release` 协议）；显式 impl 或非 `use Drop` 宿主由作者释放；
   全局位置无作用域出口，需显式 `release()`。
 - **`Str` 存放位置（按实测）**：`Str` 不能作 struct 字段或 `Map` 键（硬错）；
   `Vec<Str>`、`Option<Str>`、ADT 负载、全局 `Str` 可编译，但存的是借用视图，

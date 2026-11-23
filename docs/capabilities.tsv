@@ -12,7 +12,7 @@ mapping	map trait 静态映射与 shim	4.10	implemented	—	—
 passthrough	#ct-raw 原样透传	4.41	implemented	—	—
 generic-fn	泛型函数与约束泛型	4.48,4.50	implemented	v0.26	SH-114
 generic-struct	泛型 struct 与嵌套 impl	4.51,4.54	implemented	v0.26	—
-containers	Vec / Map 与 foreach	4.49,4.51,4.52.1	implemented	—	—
+containers	Vec / Map 与 foreach	4.49,4.51,4.52.1,4.56	implemented	—	LANG-27
 generic-trait	泛型 trait	4.55	implemented	v0.35	—
 option-result	Option / Result	4.51,4.52.1	implemented	—	—
 box	Box<T> / new 单对象句柄	4.71	implemented	v0.81	LANG-24

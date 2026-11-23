@@ -82,7 +82,9 @@ pub trait Handback { void handback(); }
 - **移动语义 + 显式 `retain()`**：变量间直接拷贝是硬错；从函数调用初始化/赋值视为移交；
   `release()` 递减引用计数并让该句柄失效，**同一句柄第二次 `release` 是硬错**（`abort`），
   即使 `retain` 出的兄弟句柄还持有共享缓冲，也不是静默 no-op / 二次递减。
-- **不自动析构**：容器没有 `Drop` 级联；`own` / `borrow` 不能进容器。
+- **不自动析构（容器自身）**：`Vec` / `Map` 模板本身不 `use Drop`，不会因为一次拷贝就先释放；宿主
+  struct 声明 `use Drop` 且无显式 `impl Drop` 时，字段胶水按 LANG-27 调用该字段的 `release()`
+  级联释放元素。`own` / `borrow` 不能进容器。
 - **`Map` 插入序**：紧凑 entries + 删除左移；扩容不改顺序，golden 稳定。
 - **`Map` 键**：白名单 `int` / `long` / `char *` / `Str`，由编译器在类型实参处强制（L29-8 / L47-1）。
   `int` / `long` 按键的字节比较，`char *` 走 `strcmp`，`Str` 按 `len` 加 `memcmp` 比较恰好那么多

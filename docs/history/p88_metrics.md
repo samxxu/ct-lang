@@ -6,7 +6,7 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=9415 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=9512 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
      emitted_before=48223 emitted_after=50860 io_cap=1024
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
@@ -35,7 +35,9 @@
       助手/头名由 `box_*` / `ct_box_hdr` 改为 `Box_*` / `ct_Box_hdr`，并按模板路径
       区分内建句柄与用户 `struct Box`；Emitter.h.ct 8876 -> 9415，发射 C 按 HEAD 重算)
      (emitted_after 于 PKG-18 后复测：新增本地 `ct index refresh`（清单解析、六字段
-      行生成、行校验与原子写）增加 492 行发射 C；发射器本身未变) -->
+      行生成、行校验与原子写）增加 492 行发射 C；发射器本身未变)
+     (emitted_after 于 LANG-27 后复测：Drop 胶水对 `Vec` / `Map` 值字段生成容器级联
+      release，并加一层实例可见性守卫；Emitter.h.ct 9415 -> 9512（+97），新增 1 个顶层 static 函数) -->
 
 ## 1 切片清单
 

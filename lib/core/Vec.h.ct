@@ -9,9 +9,11 @@ namespace core;
  * consumer. The file is named after its first `pub` type, which is the unit
  * naming rule every `.h.ct` follows.
  *
- * Both containers are ordinary generic structs: the compiler has no branch for
- * them (B29-3 / E29-12). Their methods live in `impl<...>` blocks, so they are
- * statically dispatched and never appear in a vtable.
+ * Both containers are ordinary generic structs: their layout and methods have
+ * no compiler branch (B29-3 / E29-12), and their methods live in `impl<...>`
+ * blocks, so they are statically dispatched and never appear in a vtable. The
+ * one type-name branch is LANG-27: a host `use Drop` with no explicit impl
+ * releases a by-value `Vec` / `Map` field through that instance's `release()`.
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */

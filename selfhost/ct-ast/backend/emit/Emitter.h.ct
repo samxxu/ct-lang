@@ -3503,6 +3503,56 @@ static int inst_elem_foreign(struct Emitter *self, int ii)
     return o2 >= 0 && o2 != tps[tmpl].owner;
 }
 
+/* LANG-27: 1 when this unit can see the concrete C definition of instance
+   `ii`. A `pub` template's non-foreign instance lives in its owner's header;
+   the unit sees it when the header is built-in (every generated `.c` includes
+   every layer header, E29-5), when the unit owns it, or when it is in the
+   unit's transitive import closure (a generated `.c` / `.h` includes only
+   its own header and its direct deps). A foreign-element or private-template
+   instance lives only in its owner's `.c` (Phase 33 O3 / P34 S8). The Drop
+   glue asks this before it reads an instance's fields, so a duplicated
+   per-unit glue copy in a consumer that cannot see the element type stays
+   empty instead of failing `cc` on an incomplete type. Compile mode
+   (`cur_unit < 0`) owns every instance in the one file and needs no filter. */
+static int inst_visible_in_unit(struct Emitter *self, int ii)
+{
+    char reach[MAX_UNITS];
+    int n, tn, tmpl, d, k, changed, owner, bi;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+
+    if (self->cur_unit < 0) return 1;
+    ins = frontend::sym::ct_insts(&n);
+    if (!ins || ii < 0 || ii >= n) return 0;
+    tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
+    tps = frontend::sym::ct_tmpls(&tn);
+    if (!(tps && tmpl >= 0 && tps[tmpl].is_pub && tps[tmpl].owner >= 0
+          && self->units[tps[tmpl].owner].is_hdr
+          && !inst_elem_foreign(self, ii)))
+        return ins[ii].owner == self->cur_unit;
+    owner = tps[tmpl].owner;
+    if (owner == self->cur_unit) return 1;
+    for (bi = 0; bi < self->nbuiltin; bi++)
+        if (self->builtins[bi] == owner) return 1;
+    for (d = 0; d < MAX_UNITS; d++) reach[d] = 0;
+    reach[self->cur_unit] = 1;
+    changed = 1;
+    while (changed) {
+        changed = 0;
+        for (d = 0; d < (*self->nunits); d++) {
+            if (!reach[d]) continue;
+            for (k = 0; k < self->units[d].ndep; k++) {
+                int dep = self->units[d].depu[k];
+                if (dep >= 0 && dep < MAX_UNITS && !reach[dep]) {
+                    reach[dep] = 1;
+                    changed = 1;
+                }
+            }
+        }
+    }
+    return reach[owner];
+}
+
 /* Phase 33 O3: which unit writes the element-lifecycle helper pair. A foreign
    element moves the pair to the unit that named the instance; every other case
    keeps the Phase 31 rule (the impl owner writes it). */
@@ -7902,7 +7952,7 @@ impl EmitOps for Emitter {
         {
         int si;
         for (si = 0; si < self->sym->nstructs; si++) {
-            int has = 0, fi, used = 0, legacy;
+            int has = 0, fi, used = 0, legacy, host_hidden = 0;
             const char *sname;
             if (!self->sym->structs[si].uses_drop) continue;
             /* P36 S2a2: a template row (`struct Box<T>`) has no concrete C type,
@@ -7924,6 +7974,16 @@ impl EmitOps for Emitter {
                             && strcmp(self->arena->nodes[n].text2, "Drop") == 0) has = 1;
                 if (has) continue;
             }
+            /* LANG-27: in build mode every unit carries a static copy of each
+               instance's glue (the legacy shape, E48-4). Only the copy in a unit
+               that can see the instance's own definition may read its fields;
+               elsewhere the host struct is incomplete, so the copy stays an
+               empty `(void)_self;` body. Plain structs keep the owner filter
+               above and are always visible where their body is written. */
+            if (self->sym->structs[si].is_inst && self->cur_unit >= 0) {
+                int hi = frontend::sym::ct_inst_find(self->sym->structs[si].name);
+                if (hi < 0 || !inst_visible_in_unit(self, hi)) host_hidden = 1;
+            }
             sname = self->sym->structs[si].name;
             if (legacy)
                 fprintf(self->out,
@@ -7932,18 +7992,55 @@ impl EmitOps for Emitter {
             else
                 fprintf(self->out, "void %s_Drop_drop(void *self) {\n", sname);
             fprintf(self->out, "    struct %s *_self = (struct %s *)self;\n", sname, sname);
+            if (host_hidden) {
+                fputs("    (void)_self;\n}\n\n", self->out);
+                continue;
+            }
             for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
                 char base[MAX_TEXT];
+                char ftres[MAX_TEXT];
                 const char *ft = self->sym->structs[si].fields[fi].type;
                 int stars = 0;
                 const char *q;
                 size_t bl;
                 int ci;
+                /* LANG-27: an instance row keeps the source spelling of a
+                   generic field (`Vec<int>`), so resolve it to the concrete
+                   `struct Vec_int` before the field is classified. */
+                if (strchr(ft, '<')
+                    && frontend::sym::ct_inst_resolve(ft, ftres, sizeof ftres) == 0)
+                    ft = ftres;
                 for (q = ft; *q; q++)
                     if (*q == '*') stars++;
                 /* a pointer array has no single child object; leave it to the
                    explicit Drop body */
                 if (stars > 0 && self->sym->structs[si].fields[fi].dims[0]) continue;
+                /* LANG-27: a by-value built-in container releases its elements
+                   through its own `release()` (the per-instance helper keeps
+                   the `h == 0` guard for zero handles). A container row does
+                   not carry `uses_drop`, so it is named here, in declaration
+                   order, instead of falling through to the field branch below.
+                   An explicit `impl Drop` already skipped this whole body, so
+                   the author still owns it. An array of containers has no
+                   single handle and stays with the explicit Drop body. */
+                if (stars == 0 && !self->sym->structs[si].fields[fi].dims[0]
+                    && frontend::sym::ct_is_container_type(ft)) {
+                    const char *cn = strncmp(ft, "struct ", 7) == 0 ? ft + 7 : ft;
+                    snprintf(base, sizeof base, "%s", cn);
+                    bl = strlen(base);
+                    while (bl > 0 && (base[bl - 1] == ' ' || base[bl - 1] == '\t'))
+                        base[--bl] = 0;
+                    /* A duplicated glue copy in a unit that cannot see the
+                       instance's definition stays empty (Phase 33 O3). */
+                    ci = frontend::sym::ct_inst_find(base);
+                    if (ci < 0 || !inst_visible_in_unit(self, ci)) continue;
+                    fprintf(self->out,
+                            "    if (_self->%s.h != 0) (void)%s_release(&_self->%s);\n",
+                            self->sym->structs[si].fields[fi].name, base,
+                            self->sym->structs[si].fields[fi].name);
+                    used = 1;
+                    continue;
+                }
                 if (strncmp(ft, "struct ", 7) == 0) ft += 7;
                 snprintf(base, sizeof base, "%s", ft);
                 bl = strlen(base);
