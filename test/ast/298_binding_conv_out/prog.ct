@@ -1,0 +1,43 @@
+/* LANG-26 / D-020 §6.1: an `out` actual whose formal and actual types convert
+   both ways is passed through a temporary of the formal type. The callee writes
+   the temporary, and the call site converts it back into the caller's place
+   after the call. The generated C is one GNU statement expression:
+   `({ Num tmp = Node_as(&node); r = take(&tmp); node = Num_as(&tmp); r; })`. */
+#include <stdio.h>
+
+struct Node {
+    int v;
+};
+
+struct Num {
+    int v;
+};
+
+impl Node {
+    Num as() {
+        Num n = { self->v + 1 };
+        return n;
+    }
+}
+
+impl Num {
+    Node as() {
+        Node n = { self->v + 2 };
+        return n;
+    }
+}
+
+int take(out Num n)
+{
+    Num t = { 9 };
+    n = t;
+    return 1;
+}
+
+int main(void)
+{
+    Node node = { 5 };
+    int ok = take(node);
+    printf("ok=%d node=%d\n", ok, node.v);
+    return 0;
+}
