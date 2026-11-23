@@ -6,68 +6,18 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<<<<<<< HEAD
-<!-- p88-metrics: emitter_before=8876 emitter_after=9830 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10343 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=52282 io_cap=1024
-=======
-<!-- p88-metrics: emitter_before=8876 emitter_after=10327 total_slices=76 expr_slices=34
-     node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=53275 io_cap=1024
->>>>>>> cba69d6b (feat(ct-ast): v1-PH-0 S0.5a 发射器 kind 判别改为穷尽 match)
-     (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
-     (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
-     (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
-      去掉重复分支净减 15 行发射 C；发射器本身未变)
-     (emitted_after 于 SH-115 后复测：函数指针字段/指针表达式调用与结构体花括号初值
-      检查增加 450 行发射 C；发射器本身未变)
-     (emitted_after 于 DOC-87 Stage 1 后复测：内置层查找改为 lib/core + CT_CORE_DIR，
-      共享 `find_builtin` 增加 58 行发射 C；发射器本身未变)
-     (SH-111 后复测：发射前不变量检查进入 Emitter.h.ct，emitter_after 9512 -> 9797（含深语句链的迭代遍历修正），
-      发射 C 同批增长；LANG-25 只改诊断映射与文本/JSON 通道，emitted_after 复测为 51459)
-     (emitted_after 于 DOC-87 Stage 2 后复测：`core::` 源级命名空间与声明查重增加 58 行
-      发射 C；发射器本身未变)
-     (emitted_after 于 LANG-23 后复测：内建 trait 可见声明的解析/丢弃增加 23 行发射 C；
-      发射器本身未变)
-     (emitted_after 于 SH-110 后复测：可物化方法接收者判定与已物化 N_MCALL 接收者
-      白名单增加 13 行发射 C；Emitter.h.ct 增加 18 行)
-     (emitted_after 于 SH-108 后复测：多维数组空首维的弃用判定增加 4 行发射 C；
-      发射器本身未变)
-     (emitted_after 于 SH-114 后复测：泛型模板先用后定义的判定内联在标识符路径，
-      增加 134 行发射 C；不新增顶层函数)
-     (emitted_after 于 SH-109 后复测：函数表按需增长（初始 512、安全阀 65536）
-      增补 159 行发射 C；发射器本身未变)
-     (emitted_after 于 LANG-8/10/22 后复测：浮点后点号诊断、parse JSON 通道与
-      Str 存储 lint 增加 126 行发射 C；发射器本身未变)
-     (emitted_after 于 LANG-24 Stage A 后复测：`Box<T>` 规范化把内建句柄的实例/
-      助手/头名由 `box_*` / `ct_box_hdr` 改为 `Box_*` / `ct_Box_hdr`，并按模板路径
-      区分内建句柄与用户 `struct Box`；Emitter.h.ct 8876 -> 9415，发射 C 按 HEAD 重算)
-     (emitted_after 于 PKG-18 后复测：新增本地 `ct index refresh`（清单解析、六字段
-      行生成、行校验与原子写）增加 492 行发射 C；发射器本身未变)
-     (emitted_after 于 LANG-27 后复测：Drop 胶水对 `Vec` / `Map` 值字段生成容器级联
-      release，并加一层实例可见性守卫；Emitter.h.ct 9415 -> 9512（+97），新增 1 个顶层 static 函数)
-     (emitted_after 于 L2 MAX_FUNCS 1024 后复测：L2 引导容量为 1024（SH-109 的 ct-ast 动态增长已落地；
-      L2 仍固定，后续按提案切片）；发射器本身未变)
-     (emitted_after 于 SH-60 后复测：接收者可变性 `mut` 的解析/调用点诊断与 `.m.ct` 声明点
-      类型证据增加 293 行发射 C；发射器本身未变)
-     (emitted_after 于 SH-118 后复测：`chk_brace_init` 跳过 `{ 0 }` 聚合零填充与
-      String/Str 字段的字符串字面量，增加 22 行发射 C；不新增 B 规则)
-     (emitted_after 于 TEST-25 后复测：`record_io_call` 的越界诊断带上单元名与上限，
-      增加 2 行发射 C；发射器本身未变)
-     (SH-116 后复测：`ct build` 把 Box 内置单元纳入存活判定/发射集合，
-      发射 C 增加 3 行（Box 单元头/实现）；Emitter.h.ct 9797 -> 9801（+4 行注释）)
-     (LANG-26 后复测：绑定点转换的查找/诊断在 Expr.h.ct，Emitter.h.ct 只为
-      `aux==6` 的转换失败加可行动诊断，9801 -> 9811；发射 C 51757 -> 52215)
-<<<<<<< HEAD
+     emitted_before=48223 emitted_after=54413 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
       发射 C 52218 -> 52282)
-=======
-     (v1-PH-0 S0.5a 后复测：五个判别函数的 if 链改为 84 臂的穷尽 match，
-     76 个 `em_*` 切片各占一臂；Emitter.h.ct 9814 -> 10327，发射 C 52218 -> 53275。
-     动作等价由 66 语料逐字节、345 诊断逐字、2 轮自举不动点复核)
->>>>>>> cba69d6b (feat(ct-ast): v1-PH-0 S0.5a 发射器 kind 判别改为穷尽 match)
+     (SH-118 后复测：`chk_brace_init` 跳过 `{ 0 }` 聚合零填充与 String/Str 字段的
+      字符串字面量，发射 C 52282 -> 52304)
+     (v1-PH-0 S0.5 后复测：五个判别函数的 if 链改为 84 臂的穷尽 match，76 个
+      `em_*` 切片各占一臂；`expr_ctype` / `maybe_box` / `chk_type` 同步改为
+      NodeKind match。动作等价由 66 语料逐字节、345 诊断逐字、2 轮自举不动点复核)
 -->
 
 ## 1 切片清单

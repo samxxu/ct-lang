@@ -22,6 +22,7 @@ import frontend::sym::Symbols::StructTmpl as StructTmpl;
 import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::sym::Symbols::StructImpl as StructImpl;
 import runtime::arena::Arena;
+import runtime::arena::Arena::NodeKind as NodeKind;
 import frontend::sym::SymbolsTypeText;
 
 #define MAX_TEXT 160
@@ -415,6 +416,30 @@ static int tc_expr_into(struct TypeCheck *self, int n, char *out, int cap)
 }
 
 
+/* v1-PH-0 S0.5b: the N_MEMBER / N_ARROW body, shared by the two match arms
+   (the only difference is whether the base is a pointer). */
+static int ctype_member(struct TypeCheck *self, int n, char *out, int cap, int is_ptr)
+{
+    char rt[MAX_TEXT];
+    char sname[MAX_TEXT];
+    int si, fi, w;
+
+    if (self->expr_type(self->arena->nodes[n].a, rt, sizeof rt) != 0) return -1;
+    if (!self->concrete_struct(rt, sname, sizeof sname, &is_ptr)) return -1;
+    si = self->sym->find_struct(sname);
+    if (si < 0) return -1;
+    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
+        if (strcmp(self->sym->structs[si].fields[fi].name,
+                   self->arena->nodes[n].text2) == 0) {
+            w = snprintf(out, (size_t)cap, "%s%s",
+                         self->sym->structs[si].fields[fi].type,
+                         self->sym->structs[si].fields[fi].dims);
+            if (w < 0 || w >= cap) return -1;
+            return 0;
+        }
+    return -1;
+}
+
 impl TypeOps for TypeCheck {
     /* Phase 31: the C return type of an inherent method of an instantiated
        struct, with the template's type parameters replaced by the instance's
@@ -627,66 +652,134 @@ impl TypeOps for TypeCheck {
        Everything else defers to `expr_type`. */
     int expr_ctype(int n, char *out, int cap)
     {
-        char rt[MAX_TEXT];
-        char sname[MAX_TEXT];
-        int k, is_ptr, si, fi, w;
+        int k;
 
         k = self->arena->nodes[n].kind;
-        if (k == N_VAR) {
-            int vi = self->sym->find_var(self->arena->nodes[n].text2);
-            if (vi < 0) return -1;
-            w = snprintf(out, (size_t)cap, "%s%s%s", self->sym->vars[vi].type,
-                         (strcmp(self->arena->nodes[n].text2, "self") == 0
-                          && strncmp(self->sym->vars[vi].type, "struct ", 7) == 0
-                          && !strchr(self->sym->vars[vi].type, '*')) ? " *" : "",
-                         self->sym->vars[vi].is_array ? "[]" : "");
-            if (w < 0 || w >= cap) return -1;
-            return 0;
-        }
-        if (k == N_MEMBER || k == N_ARROW) {
-            if (self->expr_type(self->arena->nodes[n].a, rt, sizeof rt) != 0) return -1;
-            is_ptr = (k == N_ARROW);
-            if (!self->concrete_struct(rt, sname, sizeof sname, &is_ptr)) return -1;
-            si = self->sym->find_struct(sname);
-            if (si < 0) return -1;
-            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-                if (strcmp(self->sym->structs[si].fields[fi].name,
-                           self->arena->nodes[n].text2) == 0) {
-                    w = snprintf(out, (size_t)cap, "%s%s",
-                                 self->sym->structs[si].fields[fi].type,
-                                 self->sym->structs[si].fields[fi].dims);
-                    if (w < 0 || w >= cap) return -1;
+
+        match ((NodeKind){ .tag = k }) {
+            NodeKind.NK_UNUSED0() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_PROG() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_PP() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_FUNC() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_BLOCK() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_RET() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_EXPR() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_CALL() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_NUM() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_STR() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_VAR() => {
+                int vi = self->sym->find_var(self->arena->nodes[n].text2);
+                int w;
+                if (vi < 0) return -1;
+                w = snprintf(out, (size_t)cap, "%s%s%s", self->sym->vars[vi].type,
+                             (strcmp(self->arena->nodes[n].text2, "self") == 0
+                              && strncmp(self->sym->vars[vi].type, "struct ", 7) == 0
+                              && !strchr(self->sym->vars[vi].type, '*')) ? " *" : "",
+                             self->sym->vars[vi].is_array ? "[]" : "");
+                if (w < 0 || w >= cap) return -1;
+                return 0;
+            
+            }
+            NodeKind.NK_BIN() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_DECL() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_ASSIGN() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_IF() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_WHILE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_FOR() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_UNARY() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_POST() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_PARAM() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_STRUCT() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_TYPEDEF() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_GLOBAL() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_FIELD() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_MEMBER() => { return ctype_member(self, n, out, cap, 0); }
+            NodeKind.NK_ARROW() => { return ctype_member(self, n, out, cap, 1); }
+            NodeKind.NK_INDEX() => {
+                char *br, *close;
+                if (self->expr_ctype(self->arena->nodes[n].a, out, cap) != 0) return -1;
+                br = strchr(out, '[');
+                if (br) {
+                    if (br[1] == ']') return 0;   /* a var's bare `[]` marker: the
+                        remaining dims are unknown, so the element stays an array */
+                    close = strchr(br, ']');
+                    if (close) memmove(br, close + 1, strlen(close + 1) + 1);
                     return 0;
                 }
-            return -1;
-        }
-        if (k == N_INDEX) {
-            char *br, *close;
-            if (self->expr_ctype(self->arena->nodes[n].a, out, cap) != 0) return -1;
-            br = strchr(out, '[');
-            if (br) {
-                if (br[1] == ']') return 0;   /* a var's bare `[]` marker: the
-                    remaining dims are unknown, so the element stays an array */
-                close = strchr(br, ']');
-                if (close) memmove(br, close + 1, strlen(close + 1) + 1);
+                br = strrchr(out, '*');
+                if (!br) return -1;
+                memmove(br, br + 1, strlen(br + 1) + 1);
                 return 0;
+            
             }
-            br = strrchr(out, '*');
-            if (!br) return -1;
-            memmove(br, br + 1, strlen(br + 1) + 1);
-            return 0;
+            NodeKind.NK_ADDR() => {
+                int n2;
+                if (self->expr_ctype(self->arena->nodes[n].a, out, cap) != 0) return -1;
+                n2 = (int)strlen(out);
+                if (n2 + 3 >= cap) return -1;
+                out[n2] = ' ';
+                out[n2 + 1] = '*';
+                out[n2 + 2] = 0;
+                return 0;
+            
+            }
+            NodeKind.NK_DEREF() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_METHOD() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_MCALL() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_RAW() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_UNUSED32() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_IMPL() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_BOX() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_CAST() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_SIZEOF() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_TERN() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_BREAK() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_CONT() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_DECLS() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_DELETE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_SWITCH() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_CASE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_DOWHILE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_ENUM() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_ENUMVAL() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_OFFSETOF() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_UNION() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_LABEL() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_GOTO() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_COMPOUND() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_EMPTY() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_VAARG() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_FNUM() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_SASSERT() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_FIELDS() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_PRE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_RAW_TEXT() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_CLOSURE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_LOOP() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_INIT_RANGE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_FOREACH() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_INTO() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_INTO_SELF() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_INIT_BRACE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_INIT_ITEM() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_INIT_MBRACE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_UNUSED68() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_DEFER() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_DEFER_RUN() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_TRY() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_OPT() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_MATSEQ() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_SLICE_INDEX() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_SLICE_RANGE() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_SLICE_GET() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_NEWOBJ() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_MATCH() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_ARM() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_BIND() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_ADTCTOR() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_ADTFIELD() => { return self->expr_type(n, out, cap); }
+            NodeKind.NK_ADTMEM() => { return self->expr_type(n, out, cap); }
         }
-        if (k == N_ADDR) {
-            int n2;
-            if (self->expr_ctype(self->arena->nodes[n].a, out, cap) != 0) return -1;
-            n2 = (int)strlen(out);
-            if (n2 + 3 >= cap) return -1;
-            out[n2] = ' ';
-            out[n2 + 1] = '*';
-            out[n2 + 2] = 0;
-            return 0;
-        }
-        return self->expr_type(n, out, cap);
     }
 
     /* Wrap `n` in a fat pointer when `trait` is expected; an expression that is
@@ -699,7 +792,7 @@ impl TypeOps for TypeCheck {
         char tname[MAX_TEXT];
         char sname[MAX_TEXT];
         char iname[MAX_TEXT];
-        int is_ptr, si, u, bnode, found, i, mptr, ip;
+        int is_ptr, si, u, bnode, found, i, mptr, ip, nk;
         (void)self;
 
         {
@@ -707,32 +800,117 @@ impl TypeOps for TypeCheck {
             if (st >= 0 && self->sym->traits[st].is_static)
                 return self->fail("a static trait has no interface value");
         }
-        if (self->arena->nodes[n].kind == N_BOX) {
-            /* already an interface value; the trait must be the expected one.
-               Bit 3 of aux marks the node as accepted by an interface context,
-               which is what the emitter requires of a namespace-host value
-               (SH-20). `b` stays a child slot: the emitter's hoist walk reads
-               it as a node index. */
-            if (strcmp(self->arena->nodes[n].text, trait) != 0)
-                return self->fail("interface type mismatch");
-            self->arena->nodes[n].aux |= 8;
-            /* a pointer target takes its address */
-            if (!addr) return n;
-            bnode = self->new_node(N_ADDR);
-            if (bnode < 0) return -1;
-            self->arena->nodes[bnode].a = n;
-            return bnode;
-        }
-        /* N_BOX text2 names the vtable's owner: the struct for a struct-level
-           boxing, the instance for a `map` boxing, so the same
-           `<owner>_<trait>_vtable` emit rule covers both. */
+        nk = self->arena->nodes[n].kind;
         mptr = 0;
         iname[0] = 0;
-        if (self->arena->nodes[n].kind == N_VAR) {
-            snprintf(iname, sizeof iname, "%s", self->arena->nodes[n].text2);
-        } else if (self->arena->nodes[n].kind == N_ADDR && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
-            snprintf(iname, sizeof iname, "%s", self->arena->nodes[self->arena->nodes[n].a].text2);
-            mptr = 1;
+        match ((NodeKind){ .tag = nk }) {
+            NodeKind.NK_BOX() => {
+                /* already an interface value; the trait must be the expected one.
+                   Bit 3 of aux marks the node as accepted by an interface context,
+                   which is what the emitter requires of a namespace-host value
+                   (SH-20). `b` stays a child slot: the emitter's hoist walk reads
+                   it as a node index. */
+                if (strcmp(self->arena->nodes[n].text, trait) != 0)
+                    return self->fail("interface type mismatch");
+                self->arena->nodes[n].aux |= 8;
+                /* a pointer target takes its address */
+                if (!addr) return n;
+                bnode = self->new_node(N_ADDR);
+                if (bnode < 0) return -1;
+                self->arena->nodes[bnode].a = n;
+                return bnode;
+            
+            }
+            NodeKind.NK_VAR() => {
+                snprintf(iname, sizeof iname, "%s", self->arena->nodes[n].text2);
+            }
+            NodeKind.NK_ADDR() => {
+                if (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
+                    snprintf(iname, sizeof iname, "%s", self->arena->nodes[self->arena->nodes[n].a].text2);
+                    mptr = 1;
+                }
+            }
+            NodeKind.NK_UNUSED0() => { }
+            NodeKind.NK_PROG() => { }
+            NodeKind.NK_PP() => { }
+            NodeKind.NK_FUNC() => { }
+            NodeKind.NK_BLOCK() => { }
+            NodeKind.NK_RET() => { }
+            NodeKind.NK_EXPR() => { }
+            NodeKind.NK_CALL() => { }
+            NodeKind.NK_NUM() => { }
+            NodeKind.NK_STR() => { }
+            NodeKind.NK_BIN() => { }
+            NodeKind.NK_DECL() => { }
+            NodeKind.NK_ASSIGN() => { }
+            NodeKind.NK_IF() => { }
+            NodeKind.NK_WHILE() => { }
+            NodeKind.NK_FOR() => { }
+            NodeKind.NK_UNARY() => { }
+            NodeKind.NK_POST() => { }
+            NodeKind.NK_PARAM() => { }
+            NodeKind.NK_STRUCT() => { }
+            NodeKind.NK_TYPEDEF() => { }
+            NodeKind.NK_GLOBAL() => { }
+            NodeKind.NK_FIELD() => { }
+            NodeKind.NK_MEMBER() => { }
+            NodeKind.NK_ARROW() => { }
+            NodeKind.NK_INDEX() => { }
+            NodeKind.NK_DEREF() => { }
+            NodeKind.NK_METHOD() => { }
+            NodeKind.NK_MCALL() => { }
+            NodeKind.NK_RAW() => { }
+            NodeKind.NK_UNUSED32() => { }
+            NodeKind.NK_IMPL() => { }
+            NodeKind.NK_CAST() => { }
+            NodeKind.NK_SIZEOF() => { }
+            NodeKind.NK_TERN() => { }
+            NodeKind.NK_BREAK() => { }
+            NodeKind.NK_CONT() => { }
+            NodeKind.NK_DECLS() => { }
+            NodeKind.NK_DELETE() => { }
+            NodeKind.NK_SWITCH() => { }
+            NodeKind.NK_CASE() => { }
+            NodeKind.NK_DOWHILE() => { }
+            NodeKind.NK_ENUM() => { }
+            NodeKind.NK_ENUMVAL() => { }
+            NodeKind.NK_OFFSETOF() => { }
+            NodeKind.NK_UNION() => { }
+            NodeKind.NK_LABEL() => { }
+            NodeKind.NK_GOTO() => { }
+            NodeKind.NK_COMPOUND() => { }
+            NodeKind.NK_EMPTY() => { }
+            NodeKind.NK_VAARG() => { }
+            NodeKind.NK_FNUM() => { }
+            NodeKind.NK_SASSERT() => { }
+            NodeKind.NK_FIELDS() => { }
+            NodeKind.NK_PRE() => { }
+            NodeKind.NK_RAW_TEXT() => { }
+            NodeKind.NK_CLOSURE() => { }
+            NodeKind.NK_LOOP() => { }
+            NodeKind.NK_INIT_RANGE() => { }
+            NodeKind.NK_FOREACH() => { }
+            NodeKind.NK_INTO() => { }
+            NodeKind.NK_INTO_SELF() => { }
+            NodeKind.NK_INIT_BRACE() => { }
+            NodeKind.NK_INIT_ITEM() => { }
+            NodeKind.NK_INIT_MBRACE() => { }
+            NodeKind.NK_UNUSED68() => { }
+            NodeKind.NK_DEFER() => { }
+            NodeKind.NK_DEFER_RUN() => { }
+            NodeKind.NK_TRY() => { }
+            NodeKind.NK_OPT() => { }
+            NodeKind.NK_MATSEQ() => { }
+            NodeKind.NK_SLICE_INDEX() => { }
+            NodeKind.NK_SLICE_RANGE() => { }
+            NodeKind.NK_SLICE_GET() => { }
+            NodeKind.NK_NEWOBJ() => { }
+            NodeKind.NK_MATCH() => { }
+            NodeKind.NK_ARM() => { }
+            NodeKind.NK_BIND() => { }
+            NodeKind.NK_ADTCTOR() => { }
+            NodeKind.NK_ADTFIELD() => { }
+            NodeKind.NK_ADTMEM() => { }
         }
         if (iname[0]) {
             for (i = 0; i < (*self->nmaps); i++)
@@ -755,9 +933,96 @@ impl TypeOps for TypeCheck {
             if (strcmp(tname, trait) == 0) {
                 if (ip == addr) return n;
                 /* an array of interface values decays to a pointer */
-                if (!ip && addr && self->arena->nodes[n].kind == N_VAR) {
-                    int vi = self->sym->find_var(self->arena->nodes[n].text2);
-                    if (vi >= 0 && self->sym->vars[vi].is_array) return n;
+                if (!ip && addr) {
+                    match ((NodeKind){ .tag = nk }) {
+                        NodeKind.NK_VAR() => {
+                            int vi = self->sym->find_var(self->arena->nodes[n].text2);
+                            if (vi >= 0 && self->sym->vars[vi].is_array) return n;
+                        }
+                        NodeKind.NK_UNUSED0() => { }
+                        NodeKind.NK_PROG() => { }
+                        NodeKind.NK_PP() => { }
+                        NodeKind.NK_FUNC() => { }
+                        NodeKind.NK_BLOCK() => { }
+                        NodeKind.NK_RET() => { }
+                        NodeKind.NK_EXPR() => { }
+                        NodeKind.NK_CALL() => { }
+                        NodeKind.NK_NUM() => { }
+                        NodeKind.NK_STR() => { }
+                        NodeKind.NK_BIN() => { }
+                        NodeKind.NK_DECL() => { }
+                        NodeKind.NK_ASSIGN() => { }
+                        NodeKind.NK_IF() => { }
+                        NodeKind.NK_WHILE() => { }
+                        NodeKind.NK_FOR() => { }
+                        NodeKind.NK_UNARY() => { }
+                        NodeKind.NK_POST() => { }
+                        NodeKind.NK_PARAM() => { }
+                        NodeKind.NK_STRUCT() => { }
+                        NodeKind.NK_TYPEDEF() => { }
+                        NodeKind.NK_GLOBAL() => { }
+                        NodeKind.NK_FIELD() => { }
+                        NodeKind.NK_MEMBER() => { }
+                        NodeKind.NK_ARROW() => { }
+                        NodeKind.NK_INDEX() => { }
+                        NodeKind.NK_ADDR() => { }
+                        NodeKind.NK_DEREF() => { }
+                        NodeKind.NK_METHOD() => { }
+                        NodeKind.NK_MCALL() => { }
+                        NodeKind.NK_RAW() => { }
+                        NodeKind.NK_UNUSED32() => { }
+                        NodeKind.NK_IMPL() => { }
+                        NodeKind.NK_BOX() => { }
+                        NodeKind.NK_CAST() => { }
+                        NodeKind.NK_SIZEOF() => { }
+                        NodeKind.NK_TERN() => { }
+                        NodeKind.NK_BREAK() => { }
+                        NodeKind.NK_CONT() => { }
+                        NodeKind.NK_DECLS() => { }
+                        NodeKind.NK_DELETE() => { }
+                        NodeKind.NK_SWITCH() => { }
+                        NodeKind.NK_CASE() => { }
+                        NodeKind.NK_DOWHILE() => { }
+                        NodeKind.NK_ENUM() => { }
+                        NodeKind.NK_ENUMVAL() => { }
+                        NodeKind.NK_OFFSETOF() => { }
+                        NodeKind.NK_UNION() => { }
+                        NodeKind.NK_LABEL() => { }
+                        NodeKind.NK_GOTO() => { }
+                        NodeKind.NK_COMPOUND() => { }
+                        NodeKind.NK_EMPTY() => { }
+                        NodeKind.NK_VAARG() => { }
+                        NodeKind.NK_FNUM() => { }
+                        NodeKind.NK_SASSERT() => { }
+                        NodeKind.NK_FIELDS() => { }
+                        NodeKind.NK_PRE() => { }
+                        NodeKind.NK_RAW_TEXT() => { }
+                        NodeKind.NK_CLOSURE() => { }
+                        NodeKind.NK_LOOP() => { }
+                        NodeKind.NK_INIT_RANGE() => { }
+                        NodeKind.NK_FOREACH() => { }
+                        NodeKind.NK_INTO() => { }
+                        NodeKind.NK_INTO_SELF() => { }
+                        NodeKind.NK_INIT_BRACE() => { }
+                        NodeKind.NK_INIT_ITEM() => { }
+                        NodeKind.NK_INIT_MBRACE() => { }
+                        NodeKind.NK_UNUSED68() => { }
+                        NodeKind.NK_DEFER() => { }
+                        NodeKind.NK_DEFER_RUN() => { }
+                        NodeKind.NK_TRY() => { }
+                        NodeKind.NK_OPT() => { }
+                        NodeKind.NK_MATSEQ() => { }
+                        NodeKind.NK_SLICE_INDEX() => { }
+                        NodeKind.NK_SLICE_RANGE() => { }
+                        NodeKind.NK_SLICE_GET() => { }
+                        NodeKind.NK_NEWOBJ() => { }
+                        NodeKind.NK_MATCH() => { }
+                        NodeKind.NK_ARM() => { }
+                        NodeKind.NK_BIND() => { }
+                        NodeKind.NK_ADTCTOR() => { }
+                        NodeKind.NK_ADTFIELD() => { }
+                        NodeKind.NK_ADTMEM() => { }
+                    }
                 }
             }
             return self->fail("interface type mismatch");
@@ -775,10 +1040,92 @@ impl TypeOps for TypeCheck {
            `(void *)&mk()` is invalid C. Reject it here instead of emitting C
            the backend cannot compile. */
         if (!is_ptr) {
-            int k = self->arena->nodes[n].kind;
-            if (k != N_VAR && k != N_MEMBER && k != N_ARROW
-                && k != N_INDEX && k != N_DEREF)
-                return self->fail("cannot box an rvalue struct; assign it to a variable first");
+            match ((NodeKind){ .tag = nk }) {
+                NodeKind.NK_VAR() => { }
+                NodeKind.NK_MEMBER() => { }
+                NodeKind.NK_ARROW() => { }
+                NodeKind.NK_INDEX() => { }
+                NodeKind.NK_DEREF() => { }
+                NodeKind.NK_UNUSED0() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_PROG() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_PP() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_FUNC() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_BLOCK() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_RET() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_EXPR() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_CALL() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_NUM() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_STR() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_BIN() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_DECL() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_ASSIGN() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_IF() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_WHILE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_FOR() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_UNARY() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_POST() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_PARAM() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_STRUCT() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_TYPEDEF() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_GLOBAL() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_FIELD() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_ADDR() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_METHOD() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_MCALL() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_RAW() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_UNUSED32() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_IMPL() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_BOX() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_CAST() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_SIZEOF() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_TERN() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_BREAK() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_CONT() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_DECLS() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_DELETE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_SWITCH() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_CASE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_DOWHILE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_ENUM() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_ENUMVAL() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_OFFSETOF() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_UNION() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_LABEL() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_GOTO() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_COMPOUND() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_EMPTY() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_VAARG() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_FNUM() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_SASSERT() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_FIELDS() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_PRE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_RAW_TEXT() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_CLOSURE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_LOOP() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_INIT_RANGE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_FOREACH() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_INTO() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_INTO_SELF() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_INIT_BRACE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_INIT_ITEM() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_INIT_MBRACE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_UNUSED68() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_DEFER() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_DEFER_RUN() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_TRY() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_OPT() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_MATSEQ() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_SLICE_INDEX() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_SLICE_RANGE() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_SLICE_GET() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_NEWOBJ() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_MATCH() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_ARM() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_BIND() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_ADTCTOR() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_ADTFIELD() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+                NodeKind.NK_ADTMEM() => { return self->fail("cannot box an rvalue struct; assign it to a variable first"); }
+            }
         }
         bnode = self->new_node(N_BOX);
         if (bnode < 0) return -1;

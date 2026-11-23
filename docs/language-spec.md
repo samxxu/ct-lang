@@ -3426,12 +3426,14 @@ v0-PH-88 把发射器的五个 kind 判别函数改成与 §4.74 同形的**单�
 之后每轮用上一轮产物编出的编译器重发，逐轮与第 1 轮比较；不新建脚本、不分叉
 比对逻辑。轮数不在 {2,3} 内直接报错退出，不静默钳位。
 
-**为什么仍不是字面 `match`（诚实登记）。** ct-ast 由 L2 引导编译，L2 不实现
-v0-PH-84 的 ADT/`match`；写 `pub enum NodeKind` 会被 L2 原样发射成非法 C 而断链
-（§4.74 同因）。76 个切片与将来的 `match` 变体一一对应，但“一 kind 一臂、共用体
-调同一 helper”的机械替换只能在引导链支持后做。承接目标已写死为 **v1.0 的 seed
-cutover（`v1-PH-0`）**，并纳入 `expr_ctype` / `maybe_box` / `chk_type` 等剩余
-kind 判别；见 [battle/p88-emit-match](../battle/p88-emit-match/verdict.md)。
+**v1-PH-0 S0.5 已落地（2026-11-24，seed cutover 后）。** 五个判别函数改为对
+`NodeKind` 视图（`(NodeKind){ .tag = nodes[n].kind }`；`Arena.h.ct` 按 `N_*` 数值
+1:1 声明 84 个变体）的穷尽 `match`：一 kind 一臂、无 or 模式、判别式只读一次，
+76 个 `em_*` 切片各占一臂。`expr_ctype` / `maybe_box` / `chk_type` 同步改造。漏臂
+由编译器报 `match does not cover variant`（`p88_emit` / `p88_helpers` 的变异自测），
+66 语料逐字节、345 条诊断逐字、2 轮自举逐字节复核。`Node.kind` 仍是扁平 `int`；
+视图是过渡拼写，v1.2 的 Typed IR 把节点树本身改成 ADT 后可直接匹配。背景见
+[battle/p88-emit-match](../battle/p88-emit-match/verdict.md)。
 
 ### 4.76 绑定点转换（LANG-26 / D-020，v1.1 切片）
 

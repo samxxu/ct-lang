@@ -32,6 +32,7 @@ import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
 import frontend::parse::ExprTypeText;
@@ -9311,6 +9312,16 @@ impl ExprRecvMut for Expr {
     }
 }
 
+/* v1-PH-0 S0.5b: the shared tail of the kinds whose type is judged by
+   `static_ctype` (the old `break` group). */
+static int chk_type_static(struct Expr *self, int n, char *out, int cap)
+{
+    int ad;
+    if (!self->static_ctype(n, out, cap, &ad, 0)) return -1;
+    if (ad != 0) return -1;
+    return 0;
+}
+
 impl ExprTypes for Expr {
     /* SH-115: judge a call through a function pointer. The callee's spelling
        carries its prototype (`RET (*)(params)`), so the same kernel the named
@@ -9535,165 +9546,242 @@ impl ExprTypes for Expr {
        skip list owns that case. */
     int chk_type(int n, char *out, int cap, int *is_zero)
     {
-        int ad;
-
         if (is_zero) *is_zero = 0;
         if (n < 0 || !out || cap < 2) return -1;
         out[0] = 0;
-        switch (self->arena->nodes[n].kind) {
-        case N_NUM:
-            /* D32-5: every arithmetic spelling is one class, so the literal
-               stays `int` whatever its suffix. `is_zero` is the null pointer
-               constant flag the caller hands to `chk_assignable`. */
-            if (is_zero) *is_zero = (self->arena->nodes[n].num == 0);
-            snprintf(out, (size_t)cap, "%s", "int");
-            return 0;
-        case N_FNUM:
-            snprintf(out, (size_t)cap, "%s", "double");
-            return 0;
-        case N_STR:
-            /* a string literal is `char *` in a value context; a character
-               literal stays the arithmetic class (`int`). PH-80: a literal
-               already bound to String/Str answers that type. */
-            if (self->arena->nodes[n].aux == 1)
-                snprintf(out, (size_t)cap, "%s", "String");
-            else if (self->arena->nodes[n].aux == 2)
-                snprintf(out, (size_t)cap, "%s", "Str");
-            else
-                snprintf(out, (size_t)cap, "%s",
-                         self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
-                         ? "int" : "char *");
-            return 0;
-        case N_TRY: {
-            /* Phase 44 (D44-2 / D44-5, L44-1..3): the operand must be a
-               `Result<T, E>`, and a value-returning function must answer a
-               `Result<U, E>` whose error parameter is the same `E`. A void
-               function only needs some `Result` operand: its failure has no
-               payload to carry. The judged type is `T`. */
-            char opty[MAX_TEXT];
-            char otag[MAX_TEXT];
-            char oval[MAX_TEXT];
-            char oerr[MAX_TEXT];
-            char rtag[MAX_TEXT];
-            char rval[MAX_TEXT];
-            char rerr[MAX_TEXT];
-            char msg[2 * MAX_TEXT + 64];
-            int oi;
-            int line = self->arena->nodes[n].line;
-            int col = (int)self->arena->nodes[n].num;
+        {
+            int nk;
 
-            if (!self->static_ctype(self->arena->nodes[n].a, opty, sizeof opty, &ad, 0))
-                return tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
-                                                self->sup->mem->path);
-            if (ad != 0 || !self->result_tag(opty, otag, sizeof otag))
-                return tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
-                                                self->sup->mem->path);
-            oi = frontend::sym::ct_inst_find(otag);
-            if (!self->result_cols(oi, oval, sizeof oval, oerr, sizeof oerr))
-                return tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
-                                                self->sup->mem->path);
-            if (!self->sym->ret_type[0])
-                return tool::diag::ct_sem_error(line, col, "'?' is not allowed here",
-                                                self->sup->mem->path);
-            if (strcmp(self->sym->ret_type, "void") != 0) {
-                if (!self->result_tag(self->sym->ret_type, rtag, sizeof rtag))
-                    return tool::diag::ct_sem_error(line, col,
-                        "postfix '?' needs a function returning Result",
-                        self->sup->mem->path);
-                oi = frontend::sym::ct_inst_find(rtag);
-                if (!self->result_cols(oi, rval, sizeof rval, rerr, sizeof rerr))
-                    return tool::diag::ct_sem_error(line, col,
-                        "postfix '?' needs a function returning Result",
-                        self->sup->mem->path);
-                if (strcmp(oerr, rerr) != 0) {
-                    snprintf(msg, sizeof msg,
-                             "'?': expected error type '%s', got '%s'", rerr, oerr);
-                    return tool::diag::ct_sem_error(line, col, msg,
-                                                    self->sup->mem->path);
-                }
-            }
-            if (snprintf(out, (size_t)cap, "%s", oval) >= cap) return -1;
-            return 0;
-        }
-        case N_CAST:
-            /* PH-68-R2: a cast's type is its target spelling. */
-            snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text);
-            return 0;
-        case N_TERN: {
-            /* Both arms must agree; the node's value type is that type. */
-            char t1[MAX_TEXT];
-            char t2[MAX_TEXT];
-            int z1 = 0;
-            int z2 = 0;
-            if (self->chk_type(self->arena->nodes[n].b, t1, sizeof t1, &z1) != 0)
-                return -1;
-            if (self->chk_type(self->arena->nodes[n].c, t2, sizeof t2, &z2) != 0)
-                return -1;
-            if (strcmp(t1, t2) != 0) return -1;
-            snprintf(out, (size_t)cap, "%s", t1);
-            return 0;
-        }
-        case N_UNARY: {
-            int op = (int)self->arena->nodes[n].aux;
-            if (op == U_NOT || op == U_BNOT) {
+            nk = self->arena->nodes[n].kind;
+            match ((NodeKind){ .tag = nk }) {
+                NodeKind.NK_UNUSED0() => { return -1; }
+                NodeKind.NK_PROG() => { return -1; }
+                NodeKind.NK_PP() => { return -1; }
+                NodeKind.NK_FUNC() => { return -1; }
+                NodeKind.NK_BLOCK() => { return -1; }
+                NodeKind.NK_RET() => { return -1; }
+                NodeKind.NK_EXPR() => { return -1; }
+                NodeKind.NK_CALL() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_NUM() => {
+                /* D32-5: every arithmetic spelling is one class, so the literal
+                   stays `int` whatever its suffix. `is_zero` is the null pointer
+                   constant flag the caller hands to `chk_assignable`. */
+                if (is_zero) *is_zero = (self->arena->nodes[n].num == 0);
                 snprintf(out, (size_t)cap, "%s", "int");
                 return 0;
-            }
-            if (op == U_NEG) {
-                char t[MAX_TEXT];
-                int z = 0;
-                if (self->chk_type(self->arena->nodes[n].a, t, sizeof t, &z) != 0)
-                    return -1;
-                if (strcmp(t, "int") != 0 && strcmp(t, "double") != 0) return -1;
-                snprintf(out, (size_t)cap, "%s", t);
-                return 0;
-            }
-            return -1;
-        }
-        case N_BIN: {
-            int op = (int)self->arena->nodes[n].aux;
-            if ((op >= B_LT && op <= B_NE) || op == B_AND || op == B_OR) {
-                snprintf(out, (size_t)cap, "%s", "int");
-                return 0;
-            }
-            if ((op >= B_ADD && op <= B_MOD) || op == B_XOR
-                || op == B_BAND || op == B_BOR || op == B_SHL || op == B_SHR) {
-                char l[MAX_TEXT];
-                char r[MAX_TEXT];
-                int zl = 0;
-                int zr = 0;
-                if (self->chk_type(self->arena->nodes[n].a, l, sizeof l, &zl) != 0)
-                    return -1;
-                if (self->chk_type(self->arena->nodes[n].b, r, sizeof r, &zr) != 0)
-                    return -1;
-                if (strcmp(l, "double") == 0 || strcmp(r, "double") == 0) {
-                    snprintf(out, (size_t)cap, "%s", "double");
-                    return 0;
                 }
-                if (strcmp(l, "int") == 0 && strcmp(r, "int") == 0) {
+                NodeKind.NK_STR() => {
+                /* a string literal is `char *` in a value context; a character
+                   literal stays the arithmetic class (`int`). PH-80: a literal
+                   already bound to String/Str answers that type. */
+                if (self->arena->nodes[n].aux == 1)
+                    snprintf(out, (size_t)cap, "%s", "String");
+                else if (self->arena->nodes[n].aux == 2)
+                    snprintf(out, (size_t)cap, "%s", "Str");
+                else
+                    snprintf(out, (size_t)cap, "%s",
+                             self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
+                             ? "int" : "char *");
+                return 0;
+                }
+                NodeKind.NK_VAR() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_BIN() => {
+    {
+                int op = (int)self->arena->nodes[n].aux;
+                if ((op >= B_LT && op <= B_NE) || op == B_AND || op == B_OR) {
                     snprintf(out, (size_t)cap, "%s", "int");
                     return 0;
                 }
+                if ((op >= B_ADD && op <= B_MOD) || op == B_XOR
+                    || op == B_BAND || op == B_BOR || op == B_SHL || op == B_SHR) {
+                    char l[MAX_TEXT];
+                    char r[MAX_TEXT];
+                    int zl = 0;
+                    int zr = 0;
+                    if (self->chk_type(self->arena->nodes[n].a, l, sizeof l, &zl) != 0)
+                        return -1;
+                    if (self->chk_type(self->arena->nodes[n].b, r, sizeof r, &zr) != 0)
+                        return -1;
+                    if (strcmp(l, "double") == 0 || strcmp(r, "double") == 0) {
+                        snprintf(out, (size_t)cap, "%s", "double");
+                        return 0;
+                    }
+                    if (strcmp(l, "int") == 0 && strcmp(r, "int") == 0) {
+                        snprintf(out, (size_t)cap, "%s", "int");
+                        return 0;
+                    }
+                    return -1;
+                }
                 return -1;
             }
-            return -1;
+                }
+                NodeKind.NK_DECL() => { return -1; }
+                NodeKind.NK_ASSIGN() => { return -1; }
+                NodeKind.NK_IF() => { return -1; }
+                NodeKind.NK_WHILE() => { return -1; }
+                NodeKind.NK_FOR() => { return -1; }
+                NodeKind.NK_UNARY() => {
+    {
+                int op = (int)self->arena->nodes[n].aux;
+                if (op == U_NOT || op == U_BNOT) {
+                    snprintf(out, (size_t)cap, "%s", "int");
+                    return 0;
+                }
+                if (op == U_NEG) {
+                    char t[MAX_TEXT];
+                    int z = 0;
+                    if (self->chk_type(self->arena->nodes[n].a, t, sizeof t, &z) != 0)
+                        return -1;
+                    if (strcmp(t, "int") != 0 && strcmp(t, "double") != 0) return -1;
+                    snprintf(out, (size_t)cap, "%s", t);
+                    return 0;
+                }
+                return -1;
+            }
+                }
+                NodeKind.NK_POST() => { return -1; }
+                NodeKind.NK_PARAM() => { return -1; }
+                NodeKind.NK_STRUCT() => { return -1; }
+                NodeKind.NK_TYPEDEF() => { return -1; }
+                NodeKind.NK_GLOBAL() => { return -1; }
+                NodeKind.NK_FIELD() => { return -1; }
+                NodeKind.NK_MEMBER() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_ARROW() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_INDEX() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_ADDR() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_DEREF() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_METHOD() => { return -1; }
+                NodeKind.NK_MCALL() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_RAW() => { return -1; }
+                NodeKind.NK_UNUSED32() => { return -1; }
+                NodeKind.NK_IMPL() => { return -1; }
+                NodeKind.NK_BOX() => { return -1; }
+                NodeKind.NK_CAST() => {
+                /* PH-68-R2: a cast's type is its target spelling. */
+                snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text);
+                return 0;
+                }
+                NodeKind.NK_SIZEOF() => { return -1; }
+                NodeKind.NK_TERN() => {
+    {
+                /* Both arms must agree; the node's value type is that type. */
+                char t1[MAX_TEXT];
+                char t2[MAX_TEXT];
+                int z1 = 0;
+                int z2 = 0;
+                if (self->chk_type(self->arena->nodes[n].b, t1, sizeof t1, &z1) != 0)
+                    return -1;
+                if (self->chk_type(self->arena->nodes[n].c, t2, sizeof t2, &z2) != 0)
+                    return -1;
+                if (strcmp(t1, t2) != 0) return -1;
+                snprintf(out, (size_t)cap, "%s", t1);
+                return 0;
+            }
+                }
+                NodeKind.NK_BREAK() => { return -1; }
+                NodeKind.NK_CONT() => { return -1; }
+                NodeKind.NK_DECLS() => { return -1; }
+                NodeKind.NK_DELETE() => { return -1; }
+                NodeKind.NK_SWITCH() => { return -1; }
+                NodeKind.NK_CASE() => { return -1; }
+                NodeKind.NK_DOWHILE() => { return -1; }
+                NodeKind.NK_ENUM() => { return -1; }
+                NodeKind.NK_ENUMVAL() => { return -1; }
+                NodeKind.NK_OFFSETOF() => { return -1; }
+                NodeKind.NK_UNION() => { return -1; }
+                NodeKind.NK_LABEL() => { return -1; }
+                NodeKind.NK_GOTO() => { return -1; }
+                NodeKind.NK_COMPOUND() => { return -1; }
+                NodeKind.NK_EMPTY() => { return -1; }
+                NodeKind.NK_VAARG() => { return -1; }
+                NodeKind.NK_FNUM() => {
+                snprintf(out, (size_t)cap, "%s", "double");
+                return 0;
+                }
+                NodeKind.NK_SASSERT() => { return -1; }
+                NodeKind.NK_FIELDS() => { return -1; }
+                NodeKind.NK_PRE() => { return -1; }
+                NodeKind.NK_RAW_TEXT() => { return -1; }
+                NodeKind.NK_CLOSURE() => { return -1; }
+                NodeKind.NK_LOOP() => { return -1; }
+                NodeKind.NK_INIT_RANGE() => { return -1; }
+                NodeKind.NK_FOREACH() => { return -1; }
+                NodeKind.NK_INTO() => { return -1; }
+                NodeKind.NK_INTO_SELF() => { return -1; }
+                NodeKind.NK_INIT_BRACE() => { return -1; }
+                NodeKind.NK_INIT_ITEM() => { return -1; }
+                NodeKind.NK_INIT_MBRACE() => { return -1; }
+                NodeKind.NK_UNUSED68() => { return -1; }
+                NodeKind.NK_DEFER() => { return -1; }
+                NodeKind.NK_DEFER_RUN() => { return -1; }
+                NodeKind.NK_TRY() => {
+    {
+                int ad = 0;
+                /* Phase 44 (D44-2 / D44-5, L44-1..3): the operand must be a
+                   `Result<T, E>`, and a value-returning function must answer a
+                   `Result<U, E>` whose error parameter is the same `E`. A void
+                   function only needs some `Result` operand: its failure has no
+                   payload to carry. The judged type is `T`. */
+                char opty[MAX_TEXT];
+                char otag[MAX_TEXT];
+                char oval[MAX_TEXT];
+                char oerr[MAX_TEXT];
+                char rtag[MAX_TEXT];
+                char rval[MAX_TEXT];
+                char rerr[MAX_TEXT];
+                char msg[2 * MAX_TEXT + 64];
+                int oi;
+                int line = self->arena->nodes[n].line;
+                int col = (int)self->arena->nodes[n].num;
+    
+                if (!self->static_ctype(self->arena->nodes[n].a, opty, sizeof opty, &ad, 0))
+                    return tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
+                                                    self->sup->mem->path);
+                if (ad != 0 || !self->result_tag(opty, otag, sizeof otag))
+                    return tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
+                                                    self->sup->mem->path);
+                oi = frontend::sym::ct_inst_find(otag);
+                if (!self->result_cols(oi, oval, sizeof oval, oerr, sizeof oerr))
+                    return tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
+                                                    self->sup->mem->path);
+                if (!self->sym->ret_type[0])
+                    return tool::diag::ct_sem_error(line, col, "'?' is not allowed here",
+                                                    self->sup->mem->path);
+                if (strcmp(self->sym->ret_type, "void") != 0) {
+                    if (!self->result_tag(self->sym->ret_type, rtag, sizeof rtag))
+                        return tool::diag::ct_sem_error(line, col,
+                            "postfix '?' needs a function returning Result",
+                            self->sup->mem->path);
+                    oi = frontend::sym::ct_inst_find(rtag);
+                    if (!self->result_cols(oi, rval, sizeof rval, rerr, sizeof rerr))
+                        return tool::diag::ct_sem_error(line, col,
+                            "postfix '?' needs a function returning Result",
+                            self->sup->mem->path);
+                    if (strcmp(oerr, rerr) != 0) {
+                        snprintf(msg, sizeof msg,
+                                 "'?': expected error type '%s', got '%s'", rerr, oerr);
+                        return tool::diag::ct_sem_error(line, col, msg,
+                                                        self->sup->mem->path);
+                    }
+                }
+                if (snprintf(out, (size_t)cap, "%s", oval) >= cap) return -1;
+                return 0;
+            }
+                }
+                NodeKind.NK_OPT() => { return -1; }
+                NodeKind.NK_MATSEQ() => { return -1; }
+                NodeKind.NK_SLICE_INDEX() => { return -1; }
+                NodeKind.NK_SLICE_RANGE() => { return -1; }
+                NodeKind.NK_SLICE_GET() => { return -1; }
+                NodeKind.NK_NEWOBJ() => { return -1; }
+                NodeKind.NK_MATCH() => { return -1; }
+                NodeKind.NK_ARM() => { return -1; }
+                NodeKind.NK_BIND() => { return -1; }
+                NodeKind.NK_ADTCTOR() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_ADTFIELD() => { return -1; }
+                NodeKind.NK_ADTMEM() => { return -1; }
+            }
         }
-        case N_VAR:
-        case N_MEMBER:
-        case N_ARROW:
-        case N_DEREF:
-        case N_ADDR:
-        case N_INDEX:
-        case N_CALL:
-        case N_MCALL:
-        case N_ADTCTOR:
-            break;
-        default:
-            return -1;                 /* S2 adds the literal and wrapper shapes */
-        }
-        if (!self->static_ctype(n, out, cap, &ad, 0)) return -1;
-        if (ad != 0) return -1;
-        return 0;
     }
 
     /* Phase 32 S3: one formal against one actual through the same kernel

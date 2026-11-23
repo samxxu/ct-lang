@@ -2179,8 +2179,8 @@ const char *too_long = "…158 字节以上的内容…";   // error: string lit
 可验证的一步：把每种 kind 的分支体搬进具名函数，判别式只读一次 kind；切片与
 将来的 `match` 变体一一对应。
 
-下面这段是“换过去之后”的形状，它现在就能被 ct-ast 编译运行（ct-ast 自己暂时
-不能这样写，L2 会拒绝）：
+下面这段是“换过去之后”的形状。v1-PH-0 的 seed cutover 后，ct-ast 自己已经
+这样写（对 `NodeKind` 视图做穷尽 `match`，见 language-spec §4.75）：
 
 ```ct
 #include <stdio.h>
