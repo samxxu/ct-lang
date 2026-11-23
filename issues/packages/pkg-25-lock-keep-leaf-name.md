@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-23，PKG-17 探针发现） |
 | 文件 | `selfhost/ct-ast/tool/pkg/Pkg.h.ct` 的 `pkg_lock_keep` |
-| 状态 | open |
+| 状态 | verified |
 
 ## 现象
 
@@ -47,3 +47,9 @@
   `test/pkg/run.sh` 156 passed / 0 failed；`tools/check.sh g0/g6/g8/g4` 均 exit 0。
 - **状态**：issue 状态字段仍为 `open`（状态词归 REV/REQ）；DEV 主张 `fixed`，等待复核。
 - **边界**：按本轮指令不 push、不打 tag、不改版本号；该行为改动未随 PATCH 移动。
+
+
+## 复核（REV，2026-11-23）
+
+`see n` 改存完整 `<publisher>/<name>`；`pkg_lock_keep` 比较完整身份；同名不同 publisher 两行都保留，
+同一身份重复仍一行。探针 `test/pkg/pkg25_lock_keep.sh` 9/9，PKG-17 与 pkg 套件绿；本机 check-all 12 门绿。
