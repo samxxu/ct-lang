@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=9512 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=51238 io_cap=1024
+     emitted_before=48223 emitted_after=51240 io_cap=1024
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
@@ -41,7 +41,9 @@
      (emitted_after 于 L2 MAX_FUNCS 1024 后复测：L2 引导容量为 1024（SH-109 的 ct-ast 动态增长已落地；
       L2 仍固定，后续按提案切片）；发射器本身未变)
      (emitted_after 于 SH-60 后复测：接收者可变性 `mut` 的解析/调用点诊断与 `.m.ct` 声明点
-      类型证据增加 293 行发射 C；发射器本身未变) -->
+      类型证据增加 293 行发射 C；发射器本身未变)
+     (emitted_after 于 TEST-25 后复测：`record_io_call` 的越界诊断带上单元名与上限，
+      增加 2 行发射 C；发射器本身未变) -->
 
 ## 1 切片清单
 
