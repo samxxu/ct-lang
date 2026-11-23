@@ -95,6 +95,23 @@ else
     bad "unit/test_helpers" "compile failed"
 fi
 
+# ------------------------------------------------------------------ coverage
+echo
+echo "== coverage wiring =="
+# TEST-25's nightly coverage job is report-only, so it is not a hard gate. Its
+# wiring still has to be checkable: the selftest proves that a missing job, a
+# job that stopped running the script or a missing artifact upload is red. It
+# also mutates each piece, so this check can itself go red.
+if ! command -v python3 >/dev/null 2>&1; then
+    skip "coverage/wiring" "python3 not on PATH"
+elif python3 test/coverage/selftest.py >"$TMP/coverage-wiring.out" 2>&1; then
+    sed 's/^/  /' "$TMP/coverage-wiring.out"
+    ok "coverage/wiring"
+else
+    sed 's/^/  /' "$TMP/coverage-wiring.out"
+    bad "coverage/wiring" "the nightly coverage job wiring is incomplete"
+fi
+
 # ------------------------------------------------------------------ cases
 echo
 echo "== golden cases =="
