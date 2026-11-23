@@ -1346,6 +1346,16 @@ else
     bad "SH-108 multidim parameter" "$(sed -n '1,10p' "$work/p108multi.out")"
 fi
 
+# SH-114: a generic function template must be defined before its first
+# instantiation (direction B). Both source orders are pinned; the forward use
+# gets a dedicated diagnostic instead of "use of an undeclared variable".
+sh test/ast/p114_generic_order.sh "$work/ct-ast" >"$work/p114order.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "SH-114 generic template order (both orders, dedicated diagnostic)"
+else
+    bad "SH-114 generic template order" "$(sed -n '1,10p' "$work/p114order.out")"
+fi
+
 # Phase 80: `String` / `Str` (S5a, D-013). Four behavioural probes keep the
 # stage tasks independently verifiable (layout/refcount, literals, methods,
 # C boundary), plus the migration/coexistence probe and the docs probe.

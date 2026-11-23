@@ -1,0 +1,15 @@
+/* SH-114: a generic function template defined before its first instantiation. */
+
+#include <stdio.h>
+
+T twice<T>(T x)
+{
+    return x + x;
+}
+
+int main(void)
+{
+    printf("%d\n", twice<int>(3));
+    printf("%d\n", twice<int>(4));
+    return 0;
+}

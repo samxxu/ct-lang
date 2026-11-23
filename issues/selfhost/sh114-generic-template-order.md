@@ -52,3 +52,26 @@ T twice<T>(T x) { return x + x; }
 - 范围：泛型模板顺序 A/B 裁定
 - 依据：本卡「处置证据」已标 `v1.1` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
 - 触发时：改回 `open`，按本卡验收执行；不提前扩围。
+
+## 处置（DEV，2026-11-23）：方向 B 红证
+
+**方向：B（保留必须先定义，给专门诊断）。** 理由：A 的前向收集/延迟实例化会改变实例名与
+生成 C 的确定性，并与 L2 引导链的「模板定义在实例化点之前」前提冲突；B 只改诊断，
+不动实例化顺序，v1.0 不阻塞。spec §1 保留例外并写明专门文案。
+
+**红证（`baseline: 5a74ffd9`，即 SH-108 修复提交）。** 用该提交的 ct-ast 跑新探针：
+
+```console
+$ sh test/ast/p114_generic_order.sh .temp/tmp-chain/g108/ct-ast
+ok   template before use compiles and runs
+FAIL p114/generic-order: template-after-use diagnostic differs
+  test/ast/errors/generic_template_after.ct:7:25: error: use of an undeclared variable
+FAIL p114/generic-order: template-after-use kept the generic undeclared-variable text
+ok   a plain undeclared variable keeps the old diagnostic
+ok   a missing generic name keeps the old diagnostic
+$ echo $?
+1
+```
+
+先用后定义目前只报通用 `use of an undeclared variable`，且位置落在 `<`（col 25）而不是
+模板名（col 20）。状态字段保持 `deferred` 不动。

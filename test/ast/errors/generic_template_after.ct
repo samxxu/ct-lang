@@ -1,0 +1,14 @@
+/* SH-114 negative: a generic template used before its definition. The parser
+   must name the ordering rule, not report a generic undeclared variable. */
+#include <stdio.h>
+
+int main(void)
+{
+    printf("%d\n", twice<int>(3));
+    return 0;
+}
+
+T twice<T>(T x)
+{
+    return x + x;
+}
