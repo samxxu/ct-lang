@@ -1,0 +1,17 @@
+bag len 2
+probe 1
+probe 2
+after bag
+map len 2
+probe 1
+probe 2
+after map
+nested 3 7
+after nested
+after zeroed
+picked len 0
+after out
+map tree 1
+after map tree
+after manual
+done

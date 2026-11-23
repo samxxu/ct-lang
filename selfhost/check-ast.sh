@@ -1429,6 +1429,16 @@ else
     bad "PH-81-S1 Box<T>/new" "$(sed -n '1,14p' "$work/p81box.out")"
 fi
 
+# LANG-27: `Vec` / `Map` fields join the automatic Drop glue (container
+# cascade). The probe pins the generated release shape, the explicit-impl and
+# no-`use Drop` negatives, the build-mode instance-visibility guard, the
+# zero-handle / out-of-range runtime traces, and the ASan/UBSan + leak check.
+if sh test/ast/p_lang27_cascade.sh "$work/ct-ast" >"$work/p27cascade.out" 2>&1; then
+    ok "LANG-27 container cascade (glue shape, negatives, runtime, ASan/UBSan, leaks)"
+else
+    bad "LANG-27 container cascade" "$(sed -n '1,14p' "$work/p27cascade.out")"
+fi
+
 # Phase 82: leak guards (S82a–S82d, D-012). `leaks` warn/error, the direct
 # `Box<X>` field cycle (depth 3, dedup), its allow-cycle suppression/negatives,
 # and the written contract + version sync.

@@ -1,0 +1,145 @@
+/* LANG-27: container cascade in the Drop glue. A host that `use Drop` and
+   writes no explicit impl releases each by-value `Vec` / `Map` field through
+   the container's own `release()`, which cascades through the existing
+   `__ct_elem_release` (zero-handle element guard included). The traces below
+   pin the element count; the empty field handle, the zero-handle element and
+   the out-of-range `get` zero value must not abort. An explicit `impl Drop`
+   still owns its body, so the same field is released exactly once.
+   License: MIT; see LICENSE.EXCEPTION */
+#include <stdio.h>
+#include <stdlib.h>
+
+/* an owning element: `Vec<Probe>` retains on push and releases on container
+   release, so the host's automatic glue shows up as exactly one line per
+   element. */
+struct Probe { int id; }
+impl Probe {
+    Probe retain() { return *self; }
+    void release() { printf("probe %d\n", self->id); }
+}
+
+struct Bag { Vec<Probe> items; } use Drop
+
+/* a `Map<K,V>` field follows the same path: its `release()` walks the entries
+   and runs the value element glue before freeing the buffer. */
+struct MapBag { Map<int, Probe> by_id; } use Drop
+
+/* nested containers: the outer release runs the inner release for each live
+   element, and a zero-handle element is a no-op (not a `release()` abort). */
+struct Nested { Vec<Vec<int>> vv; } use Drop
+
+/* both field handles stay zero: the glue guards before `release()`. */
+struct Zeroed { Vec<int> empty; Vec<Vec<int>> vv; Map<int, int> empty_map; Option<Vec<int>> opt; } use Drop
+
+/* `get` past the end answers a zero value; storing it in a Drop host must not
+   abort at scope exit. */
+struct Out { Vec<Vec<int>> vv; Vec<int> picked; } use Drop
+
+/* a nested container in a Map value: the entry release frees the inner Vec and
+   the owning `String` key. */
+struct MapTree { Map<String, Vec<int>> tree; } use Drop
+
+/* explicit impl: no field glue is generated, the author releases the field. */
+struct Manual { Vec<int> v; } use Drop
+impl Drop for Manual {
+    void drop() {
+        self->v.release();
+    }
+}
+
+int main(void)
+{
+    Probe a; a.id = 1;
+    Probe b; b.id = 2;
+    {
+        own Bag *bag = malloc(sizeof(struct Bag));
+        bag->items.h = 0;
+        bag->items.push(a);
+        bag->items.push(b);
+        int bl = bag->items.len();
+        printf("bag len %d\n", bl);
+        delete bag;
+    }
+    printf("after bag\n");
+
+    {
+        own MapBag *mb = malloc(sizeof(struct MapBag));
+        mb->by_id.h = 0;
+        mb->by_id.put(10, a);
+        mb->by_id.put(20, b);
+        int ml = mb->by_id.len();
+        printf("map len %d\n", ml);
+        delete mb;
+    }
+    printf("after map\n");
+
+    {
+        own Nested *n = malloc(sizeof(struct Nested));
+        Vec<int> inner;
+        Vec<int> zero;
+        inner.h = 0;
+        zero.h = 0;
+        n->vv.h = 0;
+        inner.push(7);
+        n->vv.push(inner);
+        n->vv.push(inner);
+        n->vv.push(zero);
+        inner.release();
+        int nl = n->vv.len();
+        Vec<int> first = n->vv.get(0);
+        printf("nested %d %d\n", nl, first.get(0));
+        delete n;
+    }
+    printf("after nested\n");
+
+    {
+        own Zeroed *z = malloc(sizeof(struct Zeroed));
+        z->empty.h = 0;
+        z->vv.h = 0;
+        z->empty_map.h = 0;
+        z->opt = Option<Vec<int>>::none();
+        delete z;
+    }
+    printf("after zeroed\n");
+
+    {
+        own Out *o = malloc(sizeof(struct Out));
+        Vec<int> inner;
+        inner.h = 0;
+        inner.push(3);
+        o->vv.h = 0;
+        o->vv.push(inner);
+        inner.release();
+        o->picked = o->vv.get(9);
+        int pl = o->picked.len();
+        printf("picked len %d\n", pl);
+        delete o;
+    }
+    printf("after out\n");
+
+    {
+        own MapTree *mt = malloc(sizeof(struct MapTree));
+        Vec<int> leaf;
+        leaf.h = 0;
+        leaf.push(4);
+        Str k = "k";
+        mt->tree.h = 0;
+        mt->tree.put(k, leaf);
+        leaf.release();
+        int tl = mt->tree.len();
+        printf("map tree %d\n", tl);
+        delete mt;
+    }
+    printf("after map tree\n");
+
+    {
+        own Manual *m = malloc(sizeof(struct Manual));
+        m->v.h = 0;
+        m->v.push(5);
+        delete m;
+    }
+    printf("after manual\n");
+
+    printf("done\n");
+    return 0;
+}
