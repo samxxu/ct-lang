@@ -123,3 +123,32 @@ Stage A 预计增量必须 ≤ 当前余量；别名分支必须复用既有 `to
 **触发/负责人/优先级**：`v1-PH-0`（Stage A）与 `v1-PH-1`（Stage B）；负责人 DEV，REQ 复核入口
 判据；优先级为 v1.0 命名清理（Medium）。本批不实现，因为它是语言表面改名，必须与 seed cutover
 和容量窗口一起排。
+
+## DEV 复核（2026-11-23）：本窗口不实现
+
+本条按卡片自己的窗口约束仍停在 `deferred`：`v1-PH-0` Stage A（规范拼写
+`Box<T>` + `box<T>` 弃用别名）与 `v1-PH-1` Stage B（删除别名）都必须独立提交，
+不得混入 seed cutover；且 `v1-PH-0` 的新增顶层函数预算 ≤11
+（[v1-release-plan](../../docs/planning/v1-release-plan.md) §「容量顺序」）。当前工作树
+HEAD 是 v0.88.3 pre 窗口，`lib/core/Box.h.ct:35` 仍是 `pub struct box<T>`；本批
+不实现 Stage A，以免在 seed cutover 前改动内建层拼写/发射符号。`status` 字段未动。
+
+最小复现（当前 HEAD 自举的 ct-ast）：
+
+```console
+$ cat > /tmp/boxcap.ct <<'CT'
+struct R { int x; }
+int main(void) { Box<R> b = new R { 1 }; return b.x; }
+CT
+$ ct-ast /tmp/boxcap.ct -o /tmp/boxcap.c
+/tmp/boxcap.ct:2:21: error: use of an undeclared variable
+rc=1
+$ grep -n 'pub struct box' lib/core/Box.h.ct
+35:pub struct box<T> {
+```
+
+小写拼写仍可用（`box<R> ...` 编译通过）。落地时需同步：`lib/core/Box.h.ct`
+模板/头结构/助手名、`frontend/parse/{Expr,Stmt,Parser}.h.ct` 的类型读取与别名
+warning、`backend/emit/Emitter.h.ct` 的 `Box_*` 符号与 `ct_Box_hdr`、
+`frontend/module/Module.h.ct` / `tool/driver/Driver.h.ct` 的判活扫描、p81/p82
+夹具与活跃文档。
