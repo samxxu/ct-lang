@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=9415 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=50368 io_cap=1024
+     emitted_before=48223 emitted_after=50860 io_cap=1024
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
@@ -33,7 +33,9 @@
       Str 存储 lint 增加 126 行发射 C；发射器本身未变)
      (emitted_after 于 LANG-24 Stage A 后复测：`Box<T>` 规范化把内建句柄的实例/
       助手/头名由 `box_*` / `ct_box_hdr` 改为 `Box_*` / `ct_Box_hdr`，并按模板路径
-      区分内建句柄与用户 `struct Box`；Emitter.h.ct 8876 -> 9415，发射 C 按 HEAD 重算) -->
+      区分内建句柄与用户 `struct Box`；Emitter.h.ct 8876 -> 9415，发射 C 按 HEAD 重算)
+     (emitted_after 于 PKG-18 后复测：新增本地 `ct index refresh`（清单解析、六字段
+      行生成、行校验与原子写）增加 492 行发射 C；发射器本身未变) -->
 
 ## 1 切片清单
 

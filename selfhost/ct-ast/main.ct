@@ -108,19 +108,25 @@ int main(int argc, char **argv)
     tool::driver::ct_driver_bind(arena, lex, sym, mem, m, p, CTC_VERSION);
     /* Phase 8 (ported in 10.6): the package subcommands live in their own unit
        and never reach the compile core; only primitives cross the boundary */
-    /* PH-83: `ct index` is read-only and has exactly one subcommand. Any other
-       spelling is a usage error (contract v1 §4.4), never a compile run. */
+    /* PH-83: `ct index verify` is read-only. PKG-18 adds `ct index refresh`,
+       which rebuilds rows from local package trees and never fetches. Any
+       other spelling is a usage error, never a compile run. */
     if (argc > 1 && strcmp(argv[1], "index") == 0) {
         if (argc > 2 && strcmp(argv[2], "verify") == 0)
             return tool::pkg::ct_index_verify(argc - 3, argv + 3, m->prog, CTC_VERSION);
+        if (argc > 2 && strcmp(argv[2], "refresh") == 0)
+            return tool::pkg::pkg_index_refresh(argc - 3, argv + 3, m->prog, CTC_VERSION);
         if (argc == 2 || (argc == 3 && (strcmp(argv[2], "-h") == 0
                                         || strcmp(argv[2], "--help") == 0))) {
             printf("usage: %s index verify [<file>] [--json] [-q]\n", m->prog);
-            printf("  the only index subcommand is read-only verification\n");
+            printf("  read-only: check all rows (file: <file> > CT_INDEX > $CT_HOME/index/index)\n");
+            printf("usage: %s index refresh --packages <list> --out <index> [--check]\n", m->prog);
+            printf("  rebuild six-field rows from local package trees; no network\n");
             return argc == 2 ? 2 : 0;
         }
         fprintf(stderr, "%s: unknown index subcommand '%s'\n", m->prog, argv[2]);
         fprintf(stderr, "usage: %s index verify [<file>] [--json] [-q]\n", m->prog);
+        fprintf(stderr, "usage: %s index refresh --packages <list> --out <index> [--check]\n", m->prog);
         return 2;
     }
     if (argc > 1 && strcmp(argv[1], "get") == 0)

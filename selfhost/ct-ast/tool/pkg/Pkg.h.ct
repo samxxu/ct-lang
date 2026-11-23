@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <unistd.h>
 
 import tool::sh::Sh;
 import tool::pkg::PkgIndex;
@@ -28,8 +29,23 @@ import tool::pkg::PkgIndex;
 #define MAX_PKG_DEPTH  8
 #define MAX_PKG_LINE   1024             /* MAX_PKG_PATH * 2, spelled out */
 #define MAX_PKG_GITERR 8                /* PKG-23: trailing git stderr lines */
+#define MAX_INDEX_ROWS 1024             /* PKG-18: one package version per list row */
 
 namespace tool::pkg;
+/* PKG-18 `ct index refresh`: one generated six-field row held in memory until
+   the whole input has been validated, so a bad row can never leave a partial
+   index behind. `line` is the package-list line the row came from. */
+struct IndexRow {
+    int  line;
+    char dir[MAX_PKG_PATH];
+    char name[MAX_TEXT];
+    char ver[32];
+    char pub[MAX_TEXT];
+    char url[MAX_PKG_PATH];
+    char tag[64];
+    char dig[80];
+};
+
 /* The package manager (Phase 8, ported in 10.6). `get`/`install` never reach the
    compile core: only `get` may run `git`, and `install` is offline (D42). */
 trait PkgOps {
@@ -89,6 +105,10 @@ static int pkg_index_lookup(const char *name, const char *range, char *url, size
    same diagnostic (contract §4.4). */
 static int index_legacy_msg(char *out, size_t cap, const char *spec, const char *ver);
 static int pkg_index_verify(int argc, char **argv, const char *prog, const char *version);
+/* PKG-18: rebuild rows from local package trees. It shares `index_row_parse`,
+   `index_row_check` and `dir_digest` with verify/get, so a generated row is
+   accepted by exactly the code that will later consume it. */
+pub int pkg_index_refresh(int argc, char **argv, const char *prog, const char *version);
 static int pkg_append_words(char *dst, size_t cap, const char *src);
 static int pkg_check_requires(const char *pkg, const char *req);
 static int pkg_verify_lock(const char *prog, char lname[][MAX_TEXT], char lver[][32],
@@ -101,6 +121,9 @@ static int pkg_verify_strict(void);
    commit. The helpers stay file-static because they need no vtable slot. */
 static int pkg_read_identity(const char *dir, char *publisher, size_t pcap,
                              char *nsroot, size_t ncap);
+static int pkg_identity_msg(const char *src, const char *publisher,
+                            const char *name, const char *nsroot,
+                            char *msg, size_t cap);
 static int pkg_store_root(char *out, size_t cap);
 static int pkg_store_dir(const char *publisher, const char *name, const char *ver,
                          char *out, size_t cap);
@@ -206,8 +229,6 @@ struct Sha256 {
 #define INDEX_ERR_STRIDE   560
 #define INDEX_ERR_KIND_OFF 4
 #define INDEX_ERR_MSG_OFF  36
-
-
 
 #define CT_ROR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
 
@@ -2468,39 +2489,58 @@ static int pkg_mkdirs(const char *path)
 }
 
 /* PKG-9: the manifest identity (`publisher` + `ns-root`) must be complete and
-   usable before any tree is fetched or committed. Both `get_one` and
-   `fetch_git` call this right after `pkg_read_identity`; `pkg_store_commit`
-   calls it again as the last line of defence. */
-static int pkg_identity_check(const char *src, const char *publisher,
-                              const char *name, const char *nsroot)
+   usable before any tree is fetched or committed. PKG-18 splits the verdict
+   from the printing: `ct index refresh` prefixes the same text with the
+   package-list line number, while `pkg_identity_check` keeps the historical
+   `ctc:` diagnostic for `get`/`fetch_git`. */
+static int pkg_identity_msg(const char *src, const char *publisher,
+                            const char *name, const char *nsroot,
+                            char *msg, size_t cap)
 {
     char nspath[MAX_PKG_PATH];
     struct stat st;
 
     if (!publisher[0]) {
-        fprintf(stderr, "ctc: '%s/ct.pkg' is missing 'publisher'\n", src);
+        snprintf(msg, cap, "'%s/ct.pkg' is missing 'publisher'", src);
         return -1;
     }
     if (strcmp(publisher, "local") == 0) {
-        fprintf(stderr, "ctc: '%s/ct.pkg' is missing 'publisher' (local is a placeholder)\n", src);
+        snprintf(msg, cap, "'%s/ct.pkg' is missing 'publisher' (local is a placeholder)", src);
         return -1;
     }
     if (strchr(publisher, '/') || strstr(publisher, "..") || strchr(name, '/') || strstr(name, "..")) {
-        fprintf(stderr, "ctc: invalid package identity '%s/%s'\n", publisher, name);
+        snprintf(msg, cap, "invalid package identity '%s/%s'", publisher, name);
         return -1;
     }
     if (!nsroot[0]) {
-        fprintf(stderr, "ctc: '%s/ct.pkg' is missing 'ns-root'\n", src);
+        snprintf(msg, cap, "'%s/ct.pkg' is missing 'ns-root'", src);
         return -1;
     }
     if (nsroot[0] == '/' || strstr(nsroot, "..") != NULL) {
-        fprintf(stderr, "ctc: ns-root '%s' must be a relative path without '..'\n", nsroot);
+        snprintf(msg, cap, "ns-root '%s' must be a relative path without '..'", nsroot);
         return -1;
     }
-    if (snprintf(nspath, sizeof nspath, "%s/%s", src, nsroot) >= (int)sizeof nspath) return -1;
+    if (snprintf(nspath, sizeof nspath, "%s/%s", src, nsroot) >= (int)sizeof nspath) {
+        snprintf(msg, cap, "ns-root path is too long under '%s'", src);
+        return -1;
+    }
     if (stat(nspath, &st) != 0 || !S_ISDIR(st.st_mode)) {
-        fprintf(stderr, "ctc: ns-root '%s' of '%s/%s' is not a directory\n",
-                nspath, publisher, name);
+        snprintf(msg, cap, "ns-root '%s' of '%s/%s' is not a directory",
+                 nspath, publisher, name);
+        return -1;
+    }
+    return 0;
+}
+
+/* Both `get_one` and `fetch_git` call this right after `pkg_read_identity`;
+   `pkg_store_commit` calls it again as the last line of defence. */
+static int pkg_identity_check(const char *src, const char *publisher,
+                              const char *name, const char *nsroot)
+{
+    char msg[MAX_PKG_LINE];
+
+    if (pkg_identity_msg(src, publisher, name, nsroot, msg, sizeof msg) != 0) {
+        fprintf(stderr, "ctc: %s\n", msg);
         return -1;
     }
     return 0;
@@ -3070,6 +3110,411 @@ oom:
     free(errs);
     free(seen);
     fprintf(stderr, "%s: out of memory while verifying '%s'\n", prog, path);
+    return 2;
+}
+
+/* `ct index refresh --packages <list> --out <index> [--check]` (PKG-18).
+   The package list is a local stand-in for the index repo's fixed repo set:
+   one `<dir> <git-url> <tag>` row per line. Name, version and publisher come
+   from the tree's `ct.pkg`; the tag must be `v<version>`; the digest is
+   `dir_digest`, the same function `ct get` re-checks after checkout and the
+   same SHA-256 stream the contract publishes. Nothing here fetches: the
+   caller has already materialised the package trees, so this slice can be
+   accepted without network or credentials. */
+int pkg_index_refresh(int argc, char **argv, const char *prog, const char *version)
+{
+    char list_path[MAX_PKG_PATH], out_path[MAX_PKG_PATH], list_dir[MAX_PKG_PATH];
+    char line[MAX_PKG_LINE], rowbuf[MAX_PKG_LINE * 2];
+    char deps[MAX_PKG_DEPS][MAX_PKG_PATH];
+    char nsroot[MAX_TEXT], imsg[512], kind[32], msg[MAX_PKG_LINE];
+    char key[MAX_TEXT * 2 + 40], prev[MAX_TEXT * 2 + 40];
+    char tmpname[MAX_PKG_PATH + 64];
+    char *errs, *buf, *old;
+    struct IndexRow *rows, tmp;
+    struct stat st;
+    const char *slash;
+    FILE *lf, *f;
+    int ai, check, have_list, have_out, nerr, cerr, nrows, seen, lineno;
+    int ndeps, ntok, i, j, w, c, diffline, av[3], bv[3];
+    size_t total, off, n, m;
+
+    check = 0;
+    have_list = 0;
+    have_out = 0;
+    list_path[0] = 0;
+    out_path[0] = 0;
+    for (ai = 0; ai < argc; ai++) {
+        if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
+            printf("usage: %s index refresh --packages <list> --out <index> [--check]\n", prog);
+            printf("  --packages <list>  one '<dir> <git-url> <tag>' row per line; '#' comments\n");
+            printf("  --out <index>      six-field output, replaced atomically\n");
+            printf("  --check            write nothing; exit 1 when <index> is stale\n");
+            printf("  exit: 0 written/up to date, 1 bad package/list/row or stale, 2 usage/I/O\n");
+            return 0;
+        }
+        if (strcmp(argv[ai], "-v") == 0 || strcmp(argv[ai], "--version") == 0) {
+            printf("%s v%s\n", prog, version);
+            return 0;
+        }
+        if (strcmp(argv[ai], "--check") == 0) {
+            check = 1;
+            continue;
+        }
+        if (strcmp(argv[ai], "--packages") == 0) {
+            ai++;
+            if (ai >= argc) {
+                fprintf(stderr, "%s: --packages needs a file\n", prog);
+                return 2;
+            }
+            if (snprintf(list_path, sizeof list_path, "%s", argv[ai]) >= (int)sizeof list_path) {
+                fprintf(stderr, "%s: package-list path is too long\n", prog);
+                return 2;
+            }
+            have_list = 1;
+            continue;
+        }
+        if (strcmp(argv[ai], "--out") == 0) {
+            ai++;
+            if (ai >= argc) {
+                fprintf(stderr, "%s: --out needs a file\n", prog);
+                return 2;
+            }
+            if (snprintf(out_path, sizeof out_path, "%s", argv[ai]) >= (int)sizeof out_path) {
+                fprintf(stderr, "%s: index path is too long\n", prog);
+                return 2;
+            }
+            have_out = 1;
+            continue;
+        }
+        if (argv[ai][0] == '-' && argv[ai][1]) {
+            fprintf(stderr, "%s: unknown option '%s'\n", prog, argv[ai]);
+            return 2;
+        }
+        fprintf(stderr, "%s: unexpected argument '%s'\n", prog, argv[ai]);
+        return 2;
+    }
+    if (!have_list || !have_out) {
+        fprintf(stderr, "usage: %s index refresh --packages <list> --out <index> [--check]\n", prog);
+        return 2;
+    }
+
+    /* Relative package directories resolve from the list file, so moving a
+       fixture or an index checkout keeps its rows valid. */
+    slash = strrchr(list_path, '/');
+    if (slash != NULL) {
+        int dl = (int)(slash - list_path);
+        if (dl == 0) snprintf(list_dir, sizeof list_dir, "/");
+        else snprintf(list_dir, sizeof list_dir, "%.*s", dl, list_path);
+    } else {
+        snprintf(list_dir, sizeof list_dir, ".");
+    }
+
+    lf = fopen(list_path, "r");
+    if (lf == NULL) {
+        fprintf(stderr, "%s: cannot read the package list '%s'\n", prog, list_path);
+        return 2;
+    }
+    rows = calloc(MAX_INDEX_ROWS, sizeof(*rows));
+    if (rows == NULL) {
+        fclose(lf);
+        fprintf(stderr, "%s: out of memory while refreshing '%s'\n", prog, out_path);
+        return 2;
+    }
+    errs = NULL;
+    nerr = 0;
+    cerr = 0;
+    nrows = 0;
+    seen = 0;
+    lineno = 0;
+    while (fgets(line, sizeof line, lf) != NULL) {
+        char *tok[8];
+        struct IndexRow *r;
+        size_t ll;
+
+        lineno++;
+        ll = strlen(line);
+        if (ll == sizeof line - 1 && line[ll - 1] != '\n') {
+            int c;
+            while ((c = fgetc(lf)) != EOF && c != '\n') { }
+            seen++;
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "list",
+                              "package list line is longer than 1023 bytes") != 0)
+                goto refresh_oom;
+            continue;
+        }
+        ntok = index_row_parse(line, tok);
+        if (ntok == 0) continue;
+        seen++;
+        if (ntok != 3) {
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "list",
+                              "package list row needs 3 fields: <dir> <git-url> <tag>") != 0)
+                goto refresh_oom;
+            continue;
+        }
+        if (nrows >= MAX_INDEX_ROWS) {
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "list",
+                              "package list has more than 1024 rows") != 0)
+                goto refresh_oom;
+            break;
+        }
+        r = &rows[nrows];
+        r->line = lineno;
+        if (tok[0][0] == '/') {
+            w = snprintf(r->dir, sizeof r->dir, "%s", tok[0]);
+        } else {
+            w = snprintf(r->dir, sizeof r->dir, "%s/%s", list_dir, tok[0]);
+        }
+        if (w < 0 || (size_t)w >= sizeof r->dir) {
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "list",
+                              "package directory path is too long") != 0)
+                goto refresh_oom;
+            continue;
+        }
+        if (snprintf(r->url, sizeof r->url, "%s", tok[1]) >= (int)sizeof r->url
+            || snprintf(r->tag, sizeof r->tag, "%s", tok[2]) >= (int)sizeof r->tag) {
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "list",
+                              "git-url or tag is too long") != 0)
+                goto refresh_oom;
+            continue;
+        }
+        ndeps = 0;
+        if (g_pkg.read_manifest(r->dir, r->name, sizeof r->name,
+                                r->ver, sizeof r->ver, deps, &ndeps) != 0) {
+            snprintf(msg, sizeof msg,
+                     "cannot read '%s/ct.pkg' or it lacks 'name'/'version'", r->dir);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "package", msg) != 0)
+                goto refresh_oom;
+            continue;
+        }
+        if (pkg_read_identity(r->dir, r->pub, sizeof r->pub,
+                              nsroot, sizeof nsroot) != 0) {
+            snprintf(msg, sizeof msg, "cannot read '%s/ct.pkg'", r->dir);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "package", msg) != 0)
+                goto refresh_oom;
+            continue;
+        }
+        if (pkg_identity_msg(r->dir, r->pub, r->name, nsroot,
+                             imsg, sizeof imsg) != 0) {
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "identity", imsg) != 0)
+                goto refresh_oom;
+            continue;
+        }
+        if (g_pkg.dir_digest(r->dir, r->dig, sizeof r->dig) != 0) {
+            snprintf(msg, sizeof msg, "cannot compute the tree digest of '%s'", r->dir);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "package", msg) != 0)
+                goto refresh_oom;
+            continue;
+        }
+        w = snprintf(rowbuf, sizeof rowbuf, "%s %s %s %s %s %s",
+                     r->name, r->ver, r->pub, r->url, r->tag, r->dig);
+        if (w < 0 || (size_t)w >= sizeof rowbuf) {
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "row",
+                              "generated index row is too long") != 0)
+                goto refresh_oom;
+            continue;
+        }
+        ntok = index_row_parse(rowbuf, tok);
+        if (index_row_check(tok, ntok, tok[0], kind, sizeof kind,
+                            msg, sizeof msg) != 0) {
+            if (index_err_add(&errs, &nerr, &cerr, lineno, kind, msg) != 0)
+                goto refresh_oom;
+            continue;
+        }
+        snprintf(key, sizeof key, "%s/%s %s", r->pub, r->name, r->ver);
+        j = 0;
+        for (i = 0; i < nrows; i++) {
+            snprintf(prev, sizeof prev, "%s/%s %s",
+                     rows[i].pub, rows[i].name, rows[i].ver);
+            if (strcmp(prev, key) == 0) { j = 1; break; }
+        }
+        if (j) {
+            snprintf(msg, sizeof msg, "index row '%s' appears more than once", key);
+            if (index_err_add(&errs, &nerr, &cerr, lineno, "duplicate", msg) != 0)
+                goto refresh_oom;
+            continue;
+        }
+        nrows++;
+    }
+    if (ferror(lf)) {
+        fclose(lf);
+        free(errs);
+        free(rows);
+        fprintf(stderr, "%s: error reading the package list '%s'\n", prog, list_path);
+        return 2;
+    }
+    fclose(lf);
+    lf = NULL;
+
+    printf("index: %s\n", out_path);
+    if (nerr > 0) {
+        for (i = 0; i < nerr; i++) {
+            char *rec = errs + (size_t)i * (size_t)INDEX_ERR_STRIDE;
+            int eline;
+            memcpy(&eline, rec, sizeof eline);
+            printf("line %d: %s: %s\n", eline, rec + INDEX_ERR_KIND_OFF,
+                   rec + INDEX_ERR_MSG_OFF);
+        }
+        printf("index refresh: FAIL (%d error(s) in %d package row(s))\n", nerr, seen);
+        free(errs);
+        free(rows);
+        return 1;
+    }
+
+    for (i = 1; i < nrows; i++) {
+        memcpy(&tmp, &rows[i], sizeof tmp);
+        j = i - 1;
+        while (j >= 0) {
+            c = strcmp(tmp.name, rows[j].name);
+            if (c == 0) {
+                if (g_pkg.version_parse(tmp.ver, av) != 0) {
+                    av[0] = 0; av[1] = 0; av[2] = 0;
+                }
+                if (g_pkg.version_parse(rows[j].ver, bv) != 0) {
+                    bv[0] = 0; bv[1] = 0; bv[2] = 0;
+                }
+                c = g_pkg.version_cmp(av, bv);
+            }
+            if (c == 0) c = strcmp(tmp.pub, rows[j].pub);
+            if (c == 0) c = strcmp(tmp.dir, rows[j].dir);
+            if (c >= 0) break;
+            memcpy(&rows[j + 1], &rows[j], sizeof tmp);
+            j--;
+        }
+        memcpy(&rows[j + 1], &tmp, sizeof tmp);
+    }
+
+    total = (size_t)nrows * (size_t)MAX_PKG_LINE + 1;
+    buf = (char *)malloc(total);
+    if (buf == NULL) {
+        free(errs);
+        free(rows);
+        fprintf(stderr, "%s: out of memory while refreshing '%s'\n", prog, out_path);
+        return 2;
+    }
+    off = 0;
+    for (i = 0; i < nrows; i++) {
+        w = snprintf(buf + off, total - off, "%s %s %s %s %s %s\n",
+                     rows[i].name, rows[i].ver, rows[i].pub,
+                     rows[i].url, rows[i].tag, rows[i].dig);
+        if (w < 0 || (size_t)w >= total - off) {
+            free(buf);
+            free(errs);
+            free(rows);
+            fprintf(stderr, "%s: cannot format the generated index\n", prog);
+            return 2;
+        }
+        off += (size_t)w;
+    }
+    buf[off] = 0;
+    free(errs);
+    free(rows);
+
+    if (check) {
+        if (stat(out_path, &st) != 0) {
+            fprintf(stderr, "%s: index '%s' does not exist; run without --check\n",
+                    prog, out_path);
+            free(buf);
+            return 1;
+        }
+        if (!S_ISREG(st.st_mode)) {
+            fprintf(stderr, "%s: not a regular file: '%s'\n", prog, out_path);
+            free(buf);
+            return 2;
+        }
+        f = fopen(out_path, "rb");
+        if (f == NULL) {
+            fprintf(stderr, "%s: cannot read the package index '%s'\n", prog, out_path);
+            free(buf);
+            return 2;
+        }
+        n = (size_t)st.st_size;
+        old = (char *)malloc(n + 1);
+        if (old == NULL) {
+            fclose(f);
+            free(buf);
+            fprintf(stderr, "%s: out of memory while checking '%s'\n", prog, out_path);
+            return 2;
+        }
+        if (n > 0 && fread(old, 1, n, f) != n) {
+            fclose(f);
+            free(old);
+            free(buf);
+            fprintf(stderr, "%s: cannot read the package index '%s'\n", prog, out_path);
+            return 2;
+        }
+        if (ferror(f)) {
+            fclose(f);
+            free(old);
+            free(buf);
+            fprintf(stderr, "%s: error reading the package index '%s'\n", prog, out_path);
+            return 2;
+        }
+        fclose(f);
+        old[n] = 0;
+        if (n == off && (off == 0 || memcmp(old, buf, off) == 0)) {
+            free(old);
+            free(buf);
+            printf("index refresh: OK (%d rows, up to date)\n", nrows);
+            return 0;
+        }
+        m = (off < n) ? off : n;
+        diffline = 1;
+        for (i = 0; (size_t)i < m; i++) {
+            if (buf[i] != old[i]) break;
+            if (buf[i] == '\n') diffline++;
+        }
+        printf("line %d: check: index differs from the regenerated rows\n", diffline);
+        free(old);
+        free(buf);
+        printf("index refresh: FAIL (index differs)\n");
+        return 1;
+    }
+
+    if (stat(out_path, &st) == 0 && !S_ISREG(st.st_mode)) {
+        fprintf(stderr, "%s: not a regular file: '%s'\n", prog, out_path);
+        free(buf);
+        return 2;
+    }
+    w = snprintf(tmpname, sizeof tmpname, "%s.tmp.%ld", out_path, (long)getpid());
+    if (w < 0 || (size_t)w >= sizeof tmpname) {
+        fprintf(stderr, "%s: index path is too long: '%s'\n", prog, out_path);
+        free(buf);
+        return 2;
+    }
+    f = fopen(tmpname, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "%s: cannot write the temporary index '%s'\n", prog, tmpname);
+        free(buf);
+        return 2;
+    }
+    if (off > 0 && fwrite(buf, 1, off, f) != off) {
+        fclose(f);
+        remove(tmpname);
+        fprintf(stderr, "%s: cannot write the temporary index '%s'\n", prog, tmpname);
+        free(buf);
+        return 2;
+    }
+    if (fflush(f) != 0 || fclose(f) != 0) {
+        remove(tmpname);
+        fprintf(stderr, "%s: cannot write the temporary index '%s'\n", prog, tmpname);
+        free(buf);
+        return 2;
+    }
+    if (rename(tmpname, out_path) != 0) {
+        remove(tmpname);
+        fprintf(stderr, "%s: cannot replace the index '%s'\n", prog, out_path);
+        free(buf);
+        return 2;
+    }
+    free(buf);
+    printf("index refresh: OK (%d rows)\n", nrows);
+    return 0;
+
+refresh_oom:
+    if (lf != NULL) fclose(lf);
+    free(errs);
+    free(rows);
+    fprintf(stderr, "%s: out of memory while refreshing '%s'\n", prog, out_path);
     return 2;
 }
 

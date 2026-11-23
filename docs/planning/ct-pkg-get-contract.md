@@ -294,6 +294,50 @@ index verify: FAIL (2 invalid of 9 rows)
 - **不可判定项**（明确不在本命令内）：包树摘要与 tag 内容一致性、tag 是否已推、发布凭据；
   这些由 §4.2 的发布端回放与 §9 index 侧验收负责。
 
+### 4.5 `ct index refresh`（生产端本地切片；PKG-18）
+
+```text
+ct index refresh --packages <list> --out <index> [--check]
+```
+
+- **输入**：本地包清单，一行 `<package-dir> <git-url> <tag>`；空行与 `#` 注释跳过。
+  `<package-dir>` 可绝对，也可相对**清单文件所在目录**；`<git-url>` 原样写入输出
+  （可为相对路径或 `file://`，便于离线回放）；`<tag>` 必须等于 `v<version>`。
+  这份清单是本地适配层，不是 index 仓 `packages.txt` / `repos.txt` 的替代；
+  退场时由调用方从 index 仓布局生成。
+- **每行的来源**：`name` / `version` / `publisher` / `ns-root` 来自
+  `<package-dir>/ct.pkg`；`sha256` 由 `<package-dir>` 按 §3.3 计算。生成器与
+  `ct get` / `ct index verify` 共用 `dir_digest`、`index_row_parse` 与
+  `index_row_check`，不另写解析或摘要。
+- **输出**：单个六字段索引文件（§3.2）。行按 `name` 字节序、`version` 数值序，
+  再按 `publisher`、包目录排序；同一 `<publisher>/<name> <version>` 出现两次即失败。
+- **不联网**：不 clone、不读 token、不写 store/`ct.lock`。调用方先把 tag 检出到本地；
+  `<git-url>` 只是输出字段，本命令不验证远端、不发现 tag、不推送。
+- **`--check`**：在内存中生成后与 `<out>` 逐字节比较。相等退出 0 并打印
+  `index refresh: OK (<n> rows, up to date)`；不等退出 1，给出首个差异行号
+  （`line <n>: check: index differs from the regenerated rows`）且**不写任何文件**。
+  `<out>` 不存在按不一致处理（退出 1，提示去掉 `--check`）。
+- **默认写**：先写同目录的 `<out>.tmp.<pid>`，`fflush` 后 `rename` 覆盖 `<out>`；
+  写、flush、rename 任一步失败都删除临时文件并保留原索引。并发刷新各自使用以
+  pid 区分的临时文件，最终留下一个完整文件。
+- **错误分类**（文本输出按清单行号升序，一行一条）：
+
+| `kind` | 退出码 | 含义 |
+| --- | --- | --- |
+| `list` | 1 | 清单行不是三个字段，或目录/URL/tag 过长 |
+| `package` | 1 | `<dir>/ct.pkg` 不可读，或缺 `name`/`version`，或摘要无法计算 |
+| `identity` | 1 | `name` / `publisher` / `version` / `ns-root` 不合 §3.1、§4.4 IV-3 |
+| `tag-version` | 1 | `tag != v<version>`（IV-4） |
+| `duplicate` | 1 | 同一 `<publisher>/<name> <version>` 第二次出现（IV-6） |
+| `check` | 1 | `--check` 与现有索引不一致 |
+| `io` / 用法 | 2 | 清单不可读、输出不是普通文件、写/rename 失败、选项错误 |
+
+  文本形如 `line <n>: <kind>: <message>`；`<n>` 是**包清单**的行号，不是输出索引的行号。
+- **边界（本切片未覆盖）**： §4.2 的默认 `ct get` 回放与 `--no-verify` 审计记录
+  （P18-2）不在本命令内；回放由调用方按 §4.1 / §4.4 执行
+  `ct index verify` + `ct get --index`。index 仓 shell 生产链退场（P18-8）是独立切片；
+  本命令不改变 `ct get` / `ct.lock` / store 的既有格式。
+
 ## 5. `ct pkg` 命令边界（定稿：B′）
 
 ### 5.1 定稿口径（battle index-pkg-1 B′，2026-11-19 确认沿用）
@@ -466,3 +510,4 @@ index verify: FAIL (2 invalid of 9 rows)
 | v1 | 2026-11-20 | 按 [D-014](../decisions/D-014.md) 七项裁定：维持 B′、判据归属矩阵、契约并入本文、单索引（I13）、五字段按行硬错（改 I12）、最小 CI 产物、PH-83 排期；新增 §3.3 digest 伪代码与 3 组向量、§4.1.1 spec/版本选择、§6.1 判据归属矩阵、Q6–Q8 |
 | v1.1 | 2026-11-21 | PH-83 S83a：§3.3 三组向量补全字节并重新实测（v1 的向量 2/3 缺输入、不可复现）；§4.1.1 补 MVS 实例；新增 §4.4 `ct index verify`（IV-1…IV-7、输出/JSON/退出码）；§6.1 按 index@0cdb132 基线定稿（缺原文编号显式标为未分配）；§7 退出码与 §10 Q8 同步 |
 | v1.2 | 2026-11-21 | PKG-14 修复：§4.4 补“输入必须是普通文件（stat+S_ISREG）、ferror、`--json` 退出 2 也为失败”；§7/§9 同步；FIFO 在 open 前拒绝 |
+| v1.3 | 2026-11-23 | PKG-18 本地切片：新增 §4.5 `ct index refresh`（包清单输入、六字段输出、排序、`--check`、原子替换、错误分类与退出码）；明确不联网、不回放、不退场 shell 链 |
