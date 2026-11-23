@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=9512 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=50860 io_cap=1024
+     emitted_before=48223 emitted_after=50946 io_cap=1024
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
@@ -37,7 +37,9 @@
      (emitted_after 于 PKG-18 后复测：新增本地 `ct index refresh`（清单解析、六字段
       行生成、行校验与原子写）增加 492 行发射 C；发射器本身未变)
      (emitted_after 于 LANG-27 后复测：Drop 胶水对 `Vec` / `Map` 值字段生成容器级联
-      release，并加一层实例可见性守卫；Emitter.h.ct 9415 -> 9512（+97），新增 1 个顶层 static 函数) -->
+      release，并加一层实例可见性守卫；Emitter.h.ct 9415 -> 9512（+97），新增 1 个顶层 static 函数)
+     (emitted_after 于 L2 MAX_FUNCS 1024 后复测：L2 引导容量为 1024（SH-109 的 ct-ast 动态增长已落地；
+      L2 仍固定，后续按提案切片）；发射器本身未变) -->
 
 ## 1 切片清单
 
