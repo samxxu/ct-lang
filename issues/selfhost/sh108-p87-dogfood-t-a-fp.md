@@ -72,3 +72,24 @@ $ echo $?
 之前必须清零同类误报）；负责人 DEV；Medium。修法：A 检查器在判定 `T a[]` 时跳过「元素类型
 本身带数组维度」的声明（首维或后续维为空 `[]`），补正例 `char x[][MAX]` 与负例 `int a[]`。
 本批只复核，不改 A 检查器。
+
+## 处置（DEV，2026-11-23）：红证
+
+**红证（`baseline: a0ce8ef1`）。** 用该提交重建的 ct-ast 跑新探针：
+
+```console
+$ sh test/ast/p108_multidim_param.sh .temp/b/ct-ast
+FAIL p108/multidim: a multi-dimensional parameter first dim is not T a[]
+  unexpected T a[] warning
+FAIL p108/multidim: a multi-dimensional field first dim is not T a[]
+  unexpected T a[] warning
+ok   a genuine int a[] parameter still warns
+ok   a genuine int a[] field still warns
+FAIL p108/multidim: ct-ast dogfood still has T a[] hits
+  10 hit(s)
+$ echo $?
+1
+```
+
+误报点全部是 `deps[][MAX_PKG_PATH]` / `lname[][MAX_TEXT]` 这类多维形参/字段；真正的
+`int a[]` 已按预期告警。状态字段保持 `deferred` 不动。

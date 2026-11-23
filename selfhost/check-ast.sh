@@ -1335,6 +1335,17 @@ else
     bad "SH-110 dispatch chain" "$(sed -n '1,10p' "$work/p110chain.out")"
 fi
 
+# SH-108: a multi-dimensional array parameter's empty first dimension
+# (`char x[][MAX]`) is legal C, not the deprecated `T a[]` slice spelling. A
+# genuine single-dimension `int a[]` still warns, and ct-ast's own
+# `--check-level=warn` run has 0 hits.
+sh test/ast/p108_multidim_param.sh "$work/ct-ast" >"$work/p108multi.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "SH-108 multidim parameter is not T a[] (single-dim still warns)"
+else
+    bad "SH-108 multidim parameter" "$(sed -n '1,10p' "$work/p108multi.out")"
+fi
+
 # Phase 80: `String` / `Str` (S5a, D-013). Four behavioural probes keep the
 # stage tasks independently verifiable (layout/refcount, literals, methods,
 # C boundary), plus the migration/coexistence probe and the docs probe.
