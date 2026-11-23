@@ -1007,6 +1007,15 @@ else
     bad "lang8/float-dot" "$(cat "$work/lang8.out" "$work/lang8.err" | head -8)"
 fi
 
+# LANG-22: a non-immortal `Str` view stored in a container / ADT / global is a
+# warning in compile/build and an error under `ct check`; immortal and
+# outliving owners stay silent.
+if bash test/ast/lang22_str_store.sh "$work/ct-ast" >"$work/lang22.out" 2>"$work/lang22.err"; then
+    ok "lang22/str-store"
+else
+    bad "lang22/str-store" "$(cat "$work/lang22.out" "$work/lang22.err" | head -8)"
+fi
+
 # SH-113: pin the built-in-unit liveness boundary (text scan + symbol scan);
 # group 6 records the known compile-mode lowercase-export miss rather than
 # hiding it. The liveness algorithm itself is unchanged.
