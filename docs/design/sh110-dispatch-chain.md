@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 条目 | [SH-110](../issues/selfhost/sh110-dynamic-dispatch-chain-fix.md)、[SH-73](../issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md) |
+| 条目 | [SH-110](../../issues/selfhost/sh110-dynamic-dispatch-chain-fix.md)、[SH-73](../../issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md) |
 | 基线 | `a0ce8ef1`（`issue/chain`） |
 | 结论 | 方法调用（`N_MCALL`）的结果在其静态类型可物化时，可作下一跳接收者 |
 | 非目标 | 不放开任意表达式接收者；不改静态宿主链 / `map` 派发；不新增语法 |

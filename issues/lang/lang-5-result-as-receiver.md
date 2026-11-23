@@ -69,6 +69,10 @@ int main(void) { Box b; return b["k"].v; }
 >
 > 回归：`test/ast/262_inherent_mcall_receiver`（`doc.get(2).get(4)` 与 `doc[3].has(3)`）、
 > `test/ast/errors/temp_receiver_trait_chain.ct`（trait 形态仍须报错）。
+>
+> **SH-110（2026-11-23）取代该回归的 trait 部分**：方法调用结果在静态类型可物化时可作下一跳
+> 接收者，`temp_receiver_trait_chain.ct` 已删除，改由 `test/ast/293_dispatch_chain` 与
+> `test/ast/p110_dispatch_chain.sh` 覆盖；本条其余判据不变。
 
 ## 影响面与绕法
 

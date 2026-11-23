@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=9371 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=9389 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=49730 io_cap=1024
+     emitted_before=48223 emitted_after=49743 io_cap=1024
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
@@ -20,7 +20,9 @@
      (emitted_after 于 DOC-87 Stage 2 后复测：`core::` 源级命名空间与声明查重增加 58 行
       发射 C；发射器本身未变)
      (emitted_after 于 LANG-23 后复测：内建 trait 可见声明的解析/丢弃增加 23 行发射 C；
-      发射器本身未变) -->
+      发射器本身未变)
+     (emitted_after 于 SH-110 后复测：可物化方法接收者判定与已物化 N_MCALL 接收者
+      白名单增加 13 行发射 C；Emitter.h.ct 增加 18 行) -->
 
 ## 1 切片清单
 
@@ -37,7 +39,7 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
 | `emit_field` | 46 行 | 9 行 | 2 | 2 |
 | **合计** | **2541 行** | **118 行** | **76** | — |
 
-- `Emitter.h.ct`：8876 → 9371 行（**+495，+5.6%**）。增量来自 76 个函数头/参数/
+- `Emitter.h.ct`：8876 → 9389 行（**+513，+5.8%**）。增量来自 76 个函数头/参数/
   `(void)` 行与切片注释；分支体本身逐字搬移（见 §3 的等价证据）。
 - 每个判别函数的 `nodes[n].kind` 读数从 29/34/6/13/2 次降为 **各 1 次**；
   切片体内同结点 kind 的读取改为使用传入值 `nk`（`p88_emit` 逐个核对）。

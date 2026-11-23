@@ -138,3 +138,36 @@ $ echo $?
 
 基线里三形态全被拒；负例已在基线给出位置化硬错，修复不得把它们放开。状态字段保持
 `deferred` 不动，由 REV 复核后改词。
+
+**绿证（`c9837490` 的红提交之后，ct-ast 重建）。** 探针全绿：
+
+```console
+$ sh test/ast/p110_dispatch_chain.sh .temp/tmp-chain/green/ct-ast
+ok   three chain forms compile, run, and keep the evaluation order
+ok   the chain is materialised into temporaries
+ok   dispatch_chain_compound_recv keeps its diagnostic
+ok   dispatch_chain_fnptr_recv keeps its diagnostic
+ok   dispatch_chain_array_recv keeps its diagnostic
+$ echo $?
+0
+```
+
+**三形态与临时量。** `test/ast/293_dispatch_chain` 生成的 C 片段：
+
+```c
+struct HttpRequest_iface __ct_tmp0 = h.vt->tap(h.self, 1);
+return __ct_tmp0.vt->status(__ct_tmp0.self);
+/* two hops, then the inherent impl: */
+struct HttpRequest_iface __ct_tmp1 = h.vt->tap(h.self, 2);
+struct HttpRequest_iface __ct_tmp2 = __ct_tmp1.vt->tap(__ct_tmp1.self, 3);
+return __ct_tmp2.vt->status(__ct_tmp2.self);
+struct HttpRequest_iface __ct_tmp3 = Req_tuned(x, 4);
+return __ct_tmp3.vt->status(__ct_tmp3.self);
+```
+
+**ASan/UBSan。** 同一夹具的产物在 `-fsanitize=address,undefined` 下运行，输出 `2 7 11 2 14 12`，
+`asan_rc=0`，无悬垂报告。
+
+**逐字节不变。** 用 `a0ce8ef1` 重建的基线与修复后 ct-ast 分别编译 `test/ast/*/prog.ct`、
+`test/cases/*.ct`、`examples/*/src/main.ct`（排除本用例），305 个可编译单文件产物逐字节相同：
+`compared=305 same=305 diff=0`。

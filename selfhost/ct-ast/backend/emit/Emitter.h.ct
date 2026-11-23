@@ -4932,6 +4932,12 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
     }
     if (self->arena->nodes[n].a < 0) return self->fail_from(n, "method call without a receiver");
     rk = self->arena->nodes[self->arena->nodes[n].a].kind;
+    /* SH-110: a method-call result the hoist pass named (`text3`) is already a
+       temporary, so it is a stable receiver like a variable. An unmaterialised
+       N_MCALL (array / function-pointer result, static-map recipe, or a
+       position the hoist pass cannot move) keeps the old refusal. */
+    if (rk == N_MCALL && self->arena->nodes[self->arena->nodes[n].a].text3[0])
+        rk = N_VAR;
     if (rk != N_VAR && rk != N_INDEX && rk != N_CALL
         && rk != N_MEMBER && rk != N_ARROW && rk != N_INTO_SELF
         && rk != N_INTO)
@@ -6752,6 +6758,17 @@ static int em_field_field_union(struct Emitter *self, int n, int ind, int nk)
     return 0;
 }
 
+/* SH-110: a materialised receiver is written as `TYPE __ct_tmpN = call;`, so
+   the static type must be a simple declarator. An array spelling (`...[]`) or
+   a function-pointer declarator (`... (*)(...)`) cannot be spliced that way;
+   those hop shapes stay refused instead of emitting bad C. */
+static int materializable_ctype(const char *t)
+{
+    if (!t || !t[0]) return 0;
+    if (strchr(t, '[') || strstr(t, "(*")) return 0;
+    return 1;
+}
+
 impl EmitOps for Emitter {
     /* Phase 38 battle p38-1: a receiver is unstable when evaluating it twice
        can observe a different value. Calls are stable once the hoist pass has
@@ -6890,7 +6907,8 @@ impl EmitOps for Emitter {
                     && self->arena->nodes[root].aux != 5
                     && self->arena->nodes[root].aux != 6) {
                     int rd = 0;
-                    if (hoist_ctype(root, bt, sizeof bt, &rd) && rd == 0) ok = 1;
+                    if (hoist_ctype(root, bt, sizeof bt, &rd) && rd == 0
+                        && materializable_ctype(bt)) ok = 1;
                 }
                 if (!ok) break;
                 if (nc >= MAX_HOISTS)
