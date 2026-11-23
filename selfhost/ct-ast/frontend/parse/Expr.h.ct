@@ -397,6 +397,10 @@ trait ExprTry {
     int  result_cols(int inst, char *val, int vcap, char *err, int ecap);
 }
 
+pub trait ExprBinding {
+    int  binding_convert(int expr, const char *target, int line, int col);
+}
+
 pub struct Expr {
     struct Arena *arena;
     struct Lexer *lex;
@@ -579,7 +583,7 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut;
+} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut;
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -1635,6 +1639,371 @@ static int type_only_qualifiers(const char *spell)
         while (*p == ' ' || *p == '\t') p++;
     }
     return 1;
+}
+
+/* LANG-26 / D-020: binding-site conversion lookup. The feature is opt-in by
+   declaration: a conversion exists only when the source type's inherent `as`
+   method or an imported type-host `map` declares it with the target's type as
+   its result. The four binding sites (declaration initialiser, assignment,
+   `out` actual, `return`) call `binding_convert`; every other expression
+   position keeps C's rules and gets the "binding site only" diagnostic when a
+   conversion would have been needed. The generated C is the same call the
+   explicit `x.as<T>()` spelling builds: `Node_as(&x)` for an inherent method,
+   the map recipe for a type host. */
+/* The comparison key for a conversion. `type_key` drops whitespace and folds
+   the integer aliases; the tag keyword is dropped too, because the declaration
+   reader and `expr_type` do not always agree on whether it is present. */
+static void bind_conv_key(const char *in, char *out, int cap)
+{
+    char k[MAX_TEXT];
+
+    frontend::type::type_key(in, k, sizeof k);
+    if (strncmp(k, "struct", 6) == 0) memmove(k, k + 6, strlen(k + 6) + 1);
+    else if (strncmp(k, "union", 5) == 0) memmove(k, k + 5, strlen(k + 5) + 1);
+    else if (strncmp(k, "enum", 4) == 0) memmove(k, k + 4, strlen(k + 4) + 1);
+    snprintf(out, (size_t)cap, "%s", k);
+}
+
+/* 1 when the spelling names a declared aggregate, so a mismatch cannot be
+   settled by C's arithmetic conversions. */
+static int bind_conv_struct_like(struct Expr *self, const char *t)
+{
+    const char *p = t;
+
+    while (*p == ' ' || *p == '\t') p++;
+    if (strncmp(p, "struct ", 7) == 0 || strncmp(p, "union ", 6) == 0
+        || strncmp(p, "enum ", 5) == 0)
+        return 1;
+    if (strstr(t, "_iface") != 0) return 1;
+    return self->sym->find_struct(t) >= 0;
+}
+
+/* The receiver spelling a method lookup needs: `struct Tag`, without a pointer
+   layer. `0` when the source is not a struct. */
+static int bind_conv_ibase(struct Expr *self, const char *stype, char *out, int cap, int *is_ptr)
+{
+    char b[MAX_TEXT];
+    size_t n;
+
+    snprintf(b, sizeof b, "%s", stype);
+    n = strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) b[--n] = 0;
+    *is_ptr = 0;
+    if (n > 0 && b[n - 1] == '*') {
+        *is_ptr = 1;
+        b[--n] = 0;
+        while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) b[--n] = 0;
+    }
+    if (strncmp(b, "struct ", 7) != 0 && strncmp(b, "union ", 6) != 0) {
+        if (self->sym->find_struct(b) < 0) return 0;
+        if (snprintf(out, (size_t)cap, "struct %s", b) >= cap) return 0;
+        return 1;
+    }
+    if (snprintf(out, (size_t)cap, "%s", b) >= cap) return 0;
+    return 1;
+}
+
+/* Find the source type's inherent `as`/`to` conversion. Answers the method
+   index, -1 when there is none, -2 when it exists but is private to another
+   unit, -3 when it exists with a non-zero argument list. `ret` receives the
+   method's result spelling (instances substituted). */
+static int bind_conv_inherent(struct Expr *self, const char *stype, const char *method, char *ret, int cap, int *is_ptr)
+{
+    char ibase[MAX_TEXT];
+    int m, np;
+
+    if (!bind_conv_ibase(self, stype, ibase, sizeof ibase, is_ptr)) return -1;
+    m = self->inst_inherent_method(ibase, method);
+    if (m == -2) return -2;
+    if (m < 0) return -1;
+    np = 0;
+    {
+        int pi;
+        for (pi = self->arena->nodes[m].a; pi > 0; pi = self->arena->nodes[pi].next) np++;
+    }
+    if (np != 0) return -3;
+    ret[0] = 0;
+    if (!self->sup->ty->inst_method_ret(ibase, method, ret, cap)) {
+        snprintf(ret, (size_t)cap, "%s", self->arena->nodes[m].text);
+    }
+    return m;
+}
+
+/* Count the visible-by-table type-host maps that declare `method` on `stype`
+   with exactly `target` as the result. The emitter re-checks import visibility
+   and reports an ambiguity, so this only decides whether a candidate exists.
+   Answers the candidate count; `ret` gets the first result spelling. */
+static int bind_conv_maps(struct Expr *self, const char *stype, const char *method, char *ret, int cap)
+{
+    char sk[MAX_TEXT];
+    char hk[MAX_TEXT];
+    char rk[MAX_TEXT];
+    int i, j, seen = 0;
+
+    bind_conv_key(stype, sk, sizeof sk);
+    for (i = 0; i < *self->nmaps; i++) {
+        if (!self->maps[i].is_static || !self->maps[i].type_host) continue;
+        bind_conv_key(self->maps[i].host_type, hk, sizeof hk);
+        if (strcmp(hk, sk) != 0) continue;
+        for (j = 0; j < self->maps[i].nb; j++) {
+            int ti = self->maps[i].b[j].ti;
+            int mi = self->maps[i].b[j].mi;
+            if (strcmp(self->maps[i].b[j].method, method) != 0) continue;
+            if (self->maps[i].b[j].nparams - self->maps[i].b[j].recv != 0) continue;
+            if (ti < 0 || mi < 0 || mi >= self->sym->traits[ti].nm) continue;
+            bind_conv_key(self->sym->traits[ti].m[mi].ret, rk, sizeof rk);
+            if (!ret[0]) snprintf(ret, (size_t)cap, "%s",
+                                  self->sym->traits[ti].m[mi].ret);
+            seen++;
+        }
+    }
+    (void)rk;
+    return seen;
+}
+
+/* Does any conversion (inherent or mapped) exist for this source spelling? */
+static int bind_conv_any(struct Expr *self, const char *stype, const char *method)
+{
+    char ret[MAX_TEXT];
+    int ptr = 0;
+
+    ret[0] = 0;
+    if (bind_conv_inherent(self, stype, method, ret, sizeof ret, &ptr) >= 0) return 1;
+    ret[0] = 0;
+    return bind_conv_maps(self, stype, method, ret, sizeof ret) > 0;
+}
+
+static int bind_conv_call(struct Expr *self, int recv, const char *stype, const char *method, const char *target, int line, int col)
+{
+    int n, ptr = 0;
+    char ibase[MAX_TEXT];
+
+    if (bind_conv_ibase(self, stype, ibase, sizeof ibase, &ptr)) {
+        /* an inherent method wins over a mapping trait (D-020 lookup order) */
+        if (bind_conv_inherent(self, stype, method, ibase, (int)sizeof ibase, &ptr) >= 0) {
+            n = self->sup->new_node(N_MCALL);
+            if (n < 0) return -1;
+            self->arena->nodes[n].aux = ptr ? 10 : 9;
+            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
+            if (ptr) {
+                size_t tl = strlen(self->arena->nodes[n].text);
+                while (tl > 0 && (self->arena->nodes[n].text[tl - 1] == '*'
+                                  || self->arena->nodes[n].text[tl - 1] == ' '))
+                    self->arena->nodes[n].text[--tl] = 0;
+            }
+            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", method);
+            snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+            self->arena->nodes[n].sflags |= 4;
+            self->arena->nodes[n].a = recv;
+            self->arena->nodes[n].b = -1;
+            self->arena->nodes[n].line = line;
+            self->arena->nodes[n].num = col;
+            return n;
+        }
+    }
+    n = self->sup->new_node(N_MCALL);
+    if (n < 0) return -1;
+    self->arena->nodes[n].aux = 6;
+    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
+    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", method);
+    snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+    self->arena->nodes[n].sflags |= 4;
+    self->arena->nodes[n].a = recv;
+    self->arena->nodes[n].b = -1;
+    self->arena->nodes[n].line = line;
+    self->arena->nodes[n].num = col;
+    return n;
+}
+
+/* The four binding sites share this. A type the two sides already agree on is
+   not a conversion; a pointer spelling, an interface target (boxing owns it)
+   and a value whose type cannot be pinned are left to the existing checks. */
+static int bind_conv_site(struct Expr *self, int expr, const char *target, int line, int col)
+{
+    char st[MAX_TEXT];
+    char sk[MAX_TEXT];
+    char tk[MAX_TEXT];
+    char ret[MAX_TEXT];
+    char tr[MAX_TEXT];
+    char msg[MAX_TEXT * 2];
+    int ptr = 0, nm, ip = 0, mm;
+
+    if (expr < 0 || !target || !target[0]) return expr;
+    if (strcmp(target, "void") == 0) return expr;
+    if (strchr(target, '*')) return expr;
+    if (self->sup->expr_type(expr, st, sizeof st) != 0 || !st[0]) return expr;
+    if (strchr(st, '*')) return expr;
+    bind_conv_key(st, sk, sizeof sk);
+    bind_conv_key(target, tk, sizeof tk);
+    if (strcmp(sk, tk) == 0) return expr;
+    /* an interface target is filled by the boxing pass, not by a conversion */
+    if (self->sup->iface_ref_type(target, tr, sizeof tr, &ip)
+        && self->sym->find_trait(tr) >= 0)
+        return expr;
+    ret[0] = 0;
+    mm = bind_conv_inherent(self, st, "as", ret, sizeof ret, &ptr);
+    if (mm >= 0) {
+        char rk[MAX_TEXT];
+        bind_conv_key(ret, rk, sizeof rk);
+        if (strcmp(rk, tk) == 0)
+            return bind_conv_call(self, expr, st, "as", target, line, col);
+        snprintf(msg, sizeof msg,
+                 "no conversion from '%s' to '%s': inherent 'as' answers '%s'",
+                 st, target, ret);
+        return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+    }
+    if (mm == -2)
+        return tool::diag::ct_sem_error(line, col,
+            "method is private to its unit", self->sup->mem->path);
+    if (mm == -3)
+        return tool::diag::ct_sem_error(line, col,
+            "an 'as' conversion takes no arguments", self->sup->mem->path);
+    ret[0] = 0;
+    nm = bind_conv_maps(self, st, "as", ret, sizeof ret);
+    if (nm > 0)
+        return bind_conv_call(self, expr, st, "as", target, line, col);
+    /* No candidate. Under `--types` the existing kernel owns the
+       "expected/got" diagnostic (its wording is pinned by p32/p43/p86), so
+       leave the expression alone. In compile mode an aggregate-to-aggregate
+       binding has no C conversion at all; name the missing conversion instead
+       of emitting C that `cc` will reject. */
+    if (self->types_mode && *self->types_mode
+        && !(self->build_mode && *self->build_mode)) return expr;
+    /* The owning-string and container types have their own binding
+       diagnostics (escape, copy/move, element type). A conversion error here
+       would preempt them, so those families keep the existing behaviour. */
+    if (frontend::sym::ct_is_string_value_type(st)
+        || frontend::sym::ct_is_string_value_type(target)
+        || frontend::sym::ct_is_container_type(st)
+        || frontend::sym::ct_is_container_type(target)
+        || strstr(st, "Box_") != 0 || strstr(target, "Box_") != 0)
+        return expr;
+    if (bind_conv_struct_like(self, st) && bind_conv_struct_like(self, target)) {
+        snprintf(msg, sizeof msg,
+                 "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s' or import a mapping trait that declares 'as'",
+                 st, target, st);
+        return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+    }
+    return expr;
+}
+
+/* `x.as<T>()`: the target is written, so a miss is always a diagnostic. */
+static int bind_conv_explicit(struct Expr *self, int recv, const char *target, int line, int col)
+{
+    char st[MAX_TEXT];
+    char sk[MAX_TEXT];
+    char tk[MAX_TEXT];
+    char ret[MAX_TEXT];
+    char msg[MAX_TEXT * 2];
+    int ptr = 0, nm, mm;
+
+    if (self->sup->expr_type(recv, st, sizeof st) != 0 || !st[0])
+        return tool::diag::ct_sem_error(line, col,
+            "cannot resolve the source type of this conversion", self->sup->mem->path);
+    bind_conv_key(st, sk, sizeof sk);
+    bind_conv_key(target, tk, sizeof tk);
+    if (strcmp(sk, tk) == 0) return recv;
+    ret[0] = 0;
+    mm = bind_conv_inherent(self, st, "as", ret, sizeof ret, &ptr);
+    if (mm == -2)
+        return tool::diag::ct_sem_error(line, col,
+            "method is private to its unit", self->sup->mem->path);
+    if (mm == -3)
+        return tool::diag::ct_sem_error(line, col,
+            "an 'as' conversion takes no arguments", self->sup->mem->path);
+    if (mm >= 0) {
+        char rk[MAX_TEXT];
+        bind_conv_key(ret, rk, sizeof rk);
+        if (strcmp(rk, tk) != 0) {
+            snprintf(msg, sizeof msg,
+                     "no conversion from '%s' to '%s': inherent 'as' answers '%s'",
+                     st, target, ret);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        return bind_conv_call(self, recv, st, "as", target, line, col);
+    }
+    ret[0] = 0;
+    nm = bind_conv_maps(self, st, "as", ret, sizeof ret);
+    if (nm > 0) return bind_conv_call(self, recv, st, "as", target, line, col);
+    snprintf(msg, sizeof msg,
+             "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s' or import a mapping trait that declares 'as'",
+             st, target, st);
+    return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+}
+
+/* The strict tier: `x.to<T>()` answers `Option<T>`. The expected C spelling is
+   the Option instance the parser would create for `Option<T>`, encoded the
+   same way `parse_inst_type` does it, so a method declared with another result
+   is named rather than silently accepted. */
+static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target, int line, int col)
+{
+    char st[MAX_TEXT];
+    char ret[MAX_TEXT];
+    char enc[MAX_TEXT];
+    char expect[MAX_TEXT];
+    char ek[MAX_TEXT];
+    char rk[MAX_TEXT];
+    char msg[MAX_TEXT * 2];
+    int ptr = 0, nm, mm;
+
+    if (self->sup->expr_type(recv, st, sizeof st) != 0 || !st[0])
+        return tool::diag::ct_sem_error(line, col,
+            "cannot resolve the source type of this conversion", self->sup->mem->path);
+    if (frontend::sym::ct_inst_encode("Option", 1, target, "", enc, sizeof enc) != 0)
+        return tool::diag::ct_sem_error(line, col,
+            "the strict conversion target is too long", self->sup->mem->path);
+    if (snprintf(expect, sizeof expect, "struct %s", enc) >= (int)sizeof expect)
+        return tool::diag::ct_sem_error(line, col,
+            "the strict conversion target is too long", self->sup->mem->path);
+    bind_conv_key(expect, ek, sizeof ek);
+    ret[0] = 0;
+    mm = bind_conv_inherent(self, st, "to", ret, sizeof ret, &ptr);
+    if (mm == -2)
+        return tool::diag::ct_sem_error(line, col,
+            "method is private to its unit", self->sup->mem->path);
+    if (mm == -3)
+        return tool::diag::ct_sem_error(line, col,
+            "a 'to' conversion takes no arguments", self->sup->mem->path);
+    if (mm >= 0) {
+        bind_conv_key(ret, rk, sizeof rk);
+        if (strcmp(rk, ek) != 0) {
+            snprintf(msg, sizeof msg,
+                     "no strict conversion from '%s' to '%s': 'to' answers '%s', expected '%s'",
+                     st, target, ret, expect);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        return bind_conv_call(self, recv, st, "to", expect, line, col);
+    }
+    ret[0] = 0;
+    nm = bind_conv_maps(self, st, "to", ret, sizeof ret);
+    if (nm > 0) return bind_conv_call(self, recv, st, "to", expect, line, col);
+    snprintf(msg, sizeof msg,
+             "no strict conversion from '%s' to '%s'; add an inherent 'to' method returning '%s' or import a mapping trait that declares 'to'",
+             st, target, expect);
+    return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+}
+
+/* D-020's expression ban: a convertible value may not be used by arithmetic.
+   Only a value that actually has an `as` conversion reaches the diagnostic;
+   every other struct operand keeps whatever C has always said. */
+static int bind_conv_arith(struct Expr *self, int left, int right, int line, int col)
+{
+    char lt[MAX_TEXT];
+    char rt[MAX_TEXT];
+    char msg[MAX_TEXT];
+    int lc = 0, rc = 0;
+
+    if (left >= 0 && self->sup->expr_type(left, lt, sizeof lt) == 0 && lt[0]
+        && bind_conv_struct_like(self, lt))
+        lc = bind_conv_any(self, lt, "as");
+    if (right >= 0 && self->sup->expr_type(right, rt, sizeof rt) == 0 && rt[0]
+        && bind_conv_struct_like(self, rt))
+        rc = bind_conv_any(self, rt, "as");
+    if (!lc && !rc) return 0;
+    snprintf(msg, sizeof msg,
+             "conversion is only allowed at a binding site (declaration/assignment/out/return); '%s' cannot be converted inside an expression",
+             lc ? lt : rt);
+    return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
 }
 
 impl ExprOps for Expr {
@@ -4149,6 +4518,10 @@ impl ExprOps for Expr {
             self->sup->lex_next();
             right = self->parse_mul();
             if (right < 0) return -1;
+            if (bind_conv_arith(self, left, right,
+                                self->lex->tokline,
+                                self->lex->tokstart - self->lex->lstart + 1) != 0)
+                return -1;
             n = self->sup->new_node(N_BIN);
             if (n < 0) return -1;
             self->arena->nodes[n].a = left;
@@ -4174,6 +4547,10 @@ impl ExprOps for Expr {
             self->sup->lex_next();
             right = self->parse_unary();
             if (right < 0) return -1;
+            if (bind_conv_arith(self, left, right,
+                                self->lex->tokline,
+                                self->lex->tokstart - self->lex->lstart + 1) != 0)
+                return -1;
             n = self->sup->new_node(N_BIN);
             if (n < 0) return -1;
             self->arena->nodes[n].a = left;
@@ -5244,6 +5621,28 @@ impl ExprOps for Expr {
                 mline = self->lex->tokline;
                 mcol = self->lex->tokstart - self->lex->lstart + 1;
                 self->sup->lex_next();
+                /* LANG-26: `x.as<T>()` is the explicit wide conversion. The
+                   type argument is the target the lookup must answer; the
+                   call takes no arguments. `as` only, no other method name
+                   changes meaning. */
+                if ((strcmp(fname, "as") == 0 || strcmp(fname, "to") == 0)
+                    && self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
+                    char targ[MAX_TEXT];
+                    self->sup->lex_next();
+                    if (self->parse_type(targ, sizeof targ) != 0) return -1;
+                    if (self->sup->expect(">") != 0) return -1;
+                    if (self->sup->expect("(") != 0) return -1;
+                    if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")")))
+                        return self->sup->fail("a conversion call takes no arguments");
+                    self->sup->lex_next();
+                    if (strcmp(fname, "to") == 0)
+                        m = bind_conv_explicit_to(self, n, targ, mline, mcol);
+                    else
+                        m = bind_conv_explicit(self, n, targ, mline, mcol);
+                    if (m < 0) return -1;
+                    n = m;
+                    continue;
+                }
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
                     /* P-7.2: `s.get(i)` is the slice's soft access (out of
                        range answers 0) and is resolved before trait-method
@@ -7181,6 +7580,40 @@ impl ExprOps for Expr {
                             return -1;
                         lc = self->arena->nodes[lc].next;
                         lk += lcl ? 2 : 1;
+                    }
+                }
+                /* LANG-26: an `out` formal is a binding site; a plain formal is
+                   not, so a convertible actual there gets the expression-ban
+                   diagnostic instead of the generic type mismatch. A closure
+                   actual occupies a `(fn, env)` pair, so the index walk is
+                   skipped when one is present. */
+                if (fi >= 0 && args > 0 && self->closure_arg_count(args) == 0) {
+                    int pc2 = args, pk3 = 0;
+                    while (pc2 > 0 && pk3 < self->sym->funcs[fi].nparams) {
+                        int apos = self->arg_base + pk3;
+                        int aline2 = apos < MAX_ARG_POS ? self->arg_line[apos] : id_line;
+                        int acol2 = apos < MAX_ARG_POS ? self->arg_col[apos] : id_col;
+                        if (self->sym->funcs[fi].pann[pk3] != 3) {
+                            char at[MAX_TEXT];
+                            char fk[MAX_TEXT];
+                            char ak[MAX_TEXT];
+                            if (self->sup->expr_type(pc2, at, sizeof at) == 0 && at[0]
+                                && bind_conv_struct_like(self, at)
+                                && bind_conv_any(self, at, "as")) {
+                                bind_conv_key(at, ak, sizeof ak);
+                                bind_conv_key(self->sym->funcs[fi].ptype[pk3], fk, sizeof fk);
+                                if (strcmp(ak, fk) != 0) {
+                                    char pmsg[MAX_TEXT * 2];
+                                    snprintf(pmsg, sizeof pmsg,
+                                        "conversion is only allowed at a binding site (declaration/assignment/out/return); argument %d of '%s' is not one",
+                                        pk3 + 1, self->arena->nodes[n].text2);
+                                    return tool::diag::ct_sem_error(aline2, acol2, pmsg,
+                                                                    self->sup->mem->path);
+                                }
+                            }
+                        }
+                        pc2 = self->arena->nodes[pc2].next;
+                        pk3++;
                     }
                 }
                 /* 19.2: the argument types against the same signature, before
@@ -9502,6 +9935,14 @@ impl ExprTry for Expr {
 
 /* The instance lives after the impls: its vptr initialisers need the vtable
    forward declarations the emitter places with each impl. */
+/* LANG-26: the four binding sites reach the lookup through this method. */
+impl ExprBinding for Expr {
+    int binding_convert(int expr, const char *target, int line, int col)
+    {
+        return bind_conv_site(self, expr, target, line, col);
+    }
+}
+
 static struct Expr g_expr;
 
 /* Only primitives cross the unit boundary (a generated header carries no
@@ -9566,3 +10007,4 @@ int expr_borrow_root(struct Expr *self, int n)
     }
     return 0;
 }
+

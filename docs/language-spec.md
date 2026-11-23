@@ -59,6 +59,7 @@
 - [11 文档与实现一致性（缺口登记，2026-11-15）](#11-文档与实现一致性缺口登记2026-11-15)
 - [4.74 解析器/检查器的判别式切片（v0-PH-87，实现内部）](#474-解析器检查器的判别式切片v0-ph-87实现内部)
 - [4.75 发射器的判别式切片与自举不动点轮数（v0-PH-88，实现内部）](#475-发射器的判别式切片与自举不动点轮数v0-ph-88实现内部)
+- [4.76 绑定点转换（LANG-26 / D-020，v1.1 切片）](#476-绑定点转换lang-26--d-020v11-切片)
 
 ---
 
@@ -3417,3 +3418,52 @@ v0-PH-84 的 ADT/`match`；写 `pub enum NodeKind` 会被 L2 原样发射成非�
 调同一 helper”的机械替换只能在引导链支持后做。承接目标已写死为 **v1.0 的 seed
 cutover（`v1-PH-0`）**，并纳入 `expr_ctype` / `maybe_box` / `chk_type` 等剩余
 kind 判别；见 [battle/p88-emit-match](../battle/p88-emit-match/verdict.md)。
+
+### 4.76 绑定点转换（LANG-26 / D-020，v1.1 切片）
+
+> **状态：v1.1 最小切片。** 本节记录已经落地的部分；`out` 实参的写回转换与
+> 自动派生（字段映射）不在本切片内，见文末“未覆盖”。
+
+绑定点转换让一个值在**绑定点**上转换成目标类型，而不是在表达式内隐式转换。
+转换的来源只有两处，按 D-020 的顺序查找：
+
+1. 源类型的固有方法 `as`（宽松档）或 `to`（严格档）；
+2. 已 import 的映射 trait（`.m.ct` 的 `map trait T for type <源类型>`）。
+
+**宽松档 `as<T>`。** `x.as<T>() -> T`：失败时由方法自己给出零值/缺省值。
+绑定点上**裸写**一个值也走宽松档：只要目标类型与源类型的固有 `as` 或映射
+trait 的 `as` 结果一致，编译器就把它改写成同一次显式调用。
+
+**严格档 `to<T>`。** `x.to<T>() -> Option<T>`：失败由调用方读 `Option`
+判别式，不静默兜底。`<T>` 会与声明结果 `Option<T>` 对照，不符即报错。
+
+**四类绑定点（本切片覆盖三类 + 显式调用）。**
+
+| 位置 | 例子 | 本切片 |
+| --- | --- | --- |
+| 声明初始化 | `Num n = node;` | 支持 |
+| 赋值 | `n = node;` | 支持 |
+| `return` | `return node;` | 支持 |
+| 显式调用 | `node.as<Num>()` / `node.to<Num>()` | 支持 |
+| `out` 实参写回 | `f(out n)` | **未实现**；仍按普通类型检查/C 报错 |
+
+表达式内（算术、普通实参、条件、下标）**不转换**：算术与普通实参会给出
+“conversion is only allowed at a binding site …” 的定位错误；其余位置保持
+C 原有行为。
+
+**查找缺失与歧义。**
+
+- 显式 `as<T>()`/`to<T>()` 找不到候选：`no conversion from 'S' to 'T'; add an
+  inherent 'as' method on 'S' or import a mapping trait that declares 'as'`；
+- 两个已 import 的映射 trait 同时声明同一 `as`：硬错，列出两个候选的
+  `<namespace>_<Trait>::<method>`，不按声明顺序静默取第一个；
+- 映射 trait 不可见（未 import）：报“no conversion … import the mapping trait …”，
+  不是“未声明标识符”。
+
+**生成 C。** 裸绑定点的产物与显式调用逐字节一致：固有方法展开为
+`<Type>_as(&x)`，映射 trait 展开为 recipe 文本。`--types` 把转换结果类型写入
+类型流；全语料 FP=0 由 `check-ast.sh` 的 p32 段与 LANG-26 probe 守住。
+
+**未覆盖（诚实登记）。** `out` 实参的写回转换需要“调用后把形式类型转成实参
+类型”的语句级改写，本切片未做；自动字段映射、`decode<T>` 边界、诊断码
+（LANG-25）也留到后续阶段。滚动回退开关 `CT_BINDING_CONVERSION=0` 尚未接线。

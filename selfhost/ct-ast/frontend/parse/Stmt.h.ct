@@ -2334,6 +2334,13 @@ impl StmtOps for Stmt {
             if (e < 0) return -1;
             /* PH-80: `return "x"` in a String/Str function binds the literal. */
             if (self->ex->lit_coerce(self->sym->ret_type, e) != 0) return -1;
+            /* LANG-26: `return` is a binding site when the function declares a
+               value result. */
+            if (!is_err && self->sym->ret_type[0]
+                && strcmp(self->sym->ret_type, "void") != 0) {
+                e = self->ex->binding_convert(e, self->sym->ret_type, eline, ecol);
+                if (e < 0) return -1;
+            }
             /* P-7.2 (P-4.3): a direct `return` of a slice that views a local
                array hands back a view whose storage dies with the frame. The
                lint names only the direct forms; pass-through paths are the
@@ -4677,6 +4684,12 @@ impl StmtOps for Stmt {
                     /* PH-80: bind a bare literal to String / Str (and refuse an
                        implicit UTF-16 literal) before the optional type pass. */
                     if (self->ex->lit_coerce(typebuf, e) != 0) return -1;
+                    /* LANG-26: a declaration initialiser is a binding site. */
+                    if (!is_slice && !self->static_decl
+                        && self->arena->nodes[n].text3[0] == 0) {
+                        e = self->ex->binding_convert(e, typebuf, iline, icol);
+                        if (e < 0) return -1;
+                    }
                     /* Phase 32 S3 (L32-1): the declared type against the
                        initialiser. The position is the initialiser's own
                        start, and the whole check stays behind `--types`. */
@@ -5095,6 +5108,11 @@ impl StmtOps for Stmt {
             if (rhs < 0) return -1;
             /* PH-80: the same expected-type binding on a plain assignment. */
             if (tt[0] && self->ex->lit_coerce(tt, rhs) != 0) return -1;
+            /* LANG-26: a plain assignment is a binding site. */
+            if (tt[0]) {
+                rhs = self->ex->binding_convert(rhs, tt, rline, rcol);
+                if (rhs < 0) return -1;
+            }
             /* LANG-22: a `Str` global / static outlives the frame, so a
                non-immortal view assigned to it dangles once the frame ends. */
             if (k == N_VAR) {

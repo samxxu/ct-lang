@@ -4825,8 +4825,18 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
                 }
         }
         if (cand < 0) {
-            snprintf(msg, sizeof msg, "no method '%s' for type '%s'",
-                     self->arena->nodes[n].text2, rt);
+            /* LANG-26: a binding-site conversion whose mapping unit is not in
+               this unit's import closure is not "an unknown method"; the
+               source wrote no method at all. Name the missing import. */
+            if ((self->arena->nodes[n].sflags & 4) != 0) {
+                snprintf(msg, sizeof msg,
+                         "no conversion from '%s' to '%s'; import the mapping trait that declares '%s' or add an inherent '%s' method",
+                         rt, self->arena->nodes[n].text4,
+                         self->arena->nodes[n].text2, self->arena->nodes[n].text2);
+            } else {
+                snprintf(msg, sizeof msg, "no method '%s' for type '%s'",
+                         self->arena->nodes[n].text2, rt);
+            }
             return self->fail_from(n, msg);
         }
         if (cand2 >= 0) {
