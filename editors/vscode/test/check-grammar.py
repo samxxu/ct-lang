@@ -188,7 +188,7 @@ GENERIC29 = "\n".join([
     "    Vec<char *>::from(names, 3);",
     "    sq.len();",
     "    v.push(4);",
-    "    Box<Box<int>> tight;",
+    "    Map<int, Box<int>> tight;",
     "    Pair<char *, Box<int>> mixed;",
     "    T max2<T: Ord>(T a, T b)",
     "    max2<int>(a, b);",
@@ -804,7 +804,7 @@ def main():
           "ct-container-method" in by_line[4], str(by_line[4]))
     check("`v.push(4)` -> ct-container-method",
           "ct-container-method" in by_line[5], str(by_line[5]))
-    check("`Box<Box<int>> tight;` -> ct-generic-type",
+    check("`Map<int, Box<int>> tight;` -> ct-generic-type (nested Box arg)",
           "ct-generic-type" in by_line[6], str(by_line[6]))
     check("`Pair<char *, Box<int>> mixed;` -> ct-generic-type",
           "ct-generic-type" in by_line[7], str(by_line[7]))

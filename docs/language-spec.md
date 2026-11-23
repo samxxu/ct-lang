@@ -507,7 +507,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | `T *xs[n]` | 接口指针数组 | `xs[i]->m()` | 指针 |
 | 形参 `T xs[]` / `T *xs` | 同上，函数体内可下标 | 同左 | 值 |
 
-  另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的 box 路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）。**struct 类型的数组字段**（`struct Duo { Num ab[2]; }`）L0 / L2 不支持，**ct-ast 已支持**（逐元素写 vptr，见 §6）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属 Ct 线（L2 / ct-ast），由 `test/acceptance/run.sh` 钉住。
+  另有：接口**数组字段**（`Node items[4]`、`self->items[i].eval()`）、指针接口字段的下标（`s.f[0].m()`）、**构造点**装箱（`Pair p = { .l = v, .ptr = &v };`，值字段与指针字段各走各的装箱路径）、以及**堆对象装箱**（`Num *p = malloc(sizeof(struct Num)); Expr e = p;`）。**仍不支持**：带聚合初始化式的接口指针（`T *g = { ... };`）。**struct 类型的数组字段**（`struct Duo { Num ab[2]; }`）L0 / L2 不支持，**ct-ast 已支持**（逐元素写 vptr，见 §6）。理由同顶部状态说明：本文对 L0 依旧准确，新能力只属 Ct 线（L2 / ct-ast），由 `test/acceptance/run.sh` 钉住。
 
 #### 4.9 AutoDrop（Phase 5 新增，仅 Ct 线）
 
@@ -2520,7 +2520,7 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   自动预解析，`ct build` 也把它作为一个单元自动加载，**两种模式都不需要 `import`、不需要 `-I`**。
   三个拼写是保留名，用户不能再声明同名 struct；旧项目里 `import std::vec` 带来的 `Vec` 定义会与
   内置名冲突（`'Vec' is a built-in type and cannot be redeclared`），须升级 `std` 包或删掉该 import。
-- **内建单元判活是近似**：构建器按源码文本（词边界标识符 + `str_` 前缀 + `new`/`box` 形态）
+- **内建单元判活是近似**：构建器按源码文本（词边界标识符 + `str_` 前缀 + `new` / `Box<` 形态，另认 `box<` 弃用别名）
   决定加载哪些内建单元，不是语义引用图。词边界已消除 `Vec`/`String`/注释这类误命中，
   但小写导出函数名仍可能漏判；v1.1 用正负例锁住边界（SH-113），语义引用图归 v1.2（SH-112）。
 - **`pub` 泛型函数（Phase 34）**：`pub T f<T>(T x)` 合法（L26-2 已解禁），模板体必须写在 `.h.ct`
@@ -2573,20 +2573,20 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 `lib/core/` 的五个内置单元（`Vec` / `Option` / `Result` / `Str` / `Box`）声明
 `namespace core;`；源文件的**规范拼写**是 `core::Vec` / `core::Map` / `core::MapEntry` /
 `core::Option` / `core::Result` / `core::String` / `core::Str` / `core::U16String` /
-`core::U16Str` / `core::box`。`core::` 与根拼写指向同一个类型、同一份实例：
+`core::U16Str` / `core::Box`。`core::` 与根拼写指向同一个类型、同一份实例：
 
 ```ct
 core::Vec<int> v;
 v.push(1);
 core::String s = "hi";
-core::box<Node> b = new Node { 1 };
+core::Box<Node> b = new Node { 1 };
 ```
 
 - **兼容窗（一个 MINOR）**：根拼写 `Vec` / `Map` / `MapEntry` / `Option` / `Result` /
-  `String` / `Str` / `U16String` / `U16Str` / `box` 仍可用，本阶段不告警；窗口结束后
+  `String` / `Str` / `U16String` / `U16Str` / `Box` 仍可用，本阶段不告警；窗口结束后
   由清理 issue 删除根拼写，C 符号改写另立 issue。
 - **生成物**：兼容窗内 `core::` 是**源级命名空间别名**，内置层的 C 符号保持根拼写
-  （`Vec_int` / `String` / `box_P`），因此没有 ABI、`--emit-model` 或 golden 变化；
+  （`Vec_int` / `String` / `Box_P`），因此没有 ABI、`--emit-model` 或 golden 变化；
   存量语料逐字节一致，旧→新符号映射是恒等映射。`core_` 前缀的 C 名字改写不在本阶段。
 - **不是包、不重叠**：`core::*` 是编译器内置层；外部 ct-pkg `std` 包仍占 `std::*`
   （如 `std::str::CharStr`），两者命名空间不重叠，可以在同一个构建里共存。
@@ -2974,7 +2974,7 @@ parse("ab", n);  /* 调用点不写 out */
   - 字面量、算术/比较表达式、调用结果、cast、自定义下标（`Phase 52` 的 `get/set` 协议）
     一律硬错：`ref/out argument must be an assignable place`。
 - **`out` 调用方初始化**：trivial（标量、无 `Drop` 的 struct、指针）可以未初始化；owning
-  （`String` / `Str`、`box<T>`、`Vec<T>`、`Map<K,V>`、任何 `use Drop` 的 struct）必须已有值——
+  （`String` / `Str`、`Box<T>`、`Vec<T>`、`Map<K,V>`、任何 `use Drop` 的 struct）必须已有值——
   声明初始化式、后续赋值、普通/`ref` 形参、文件作用域变量与 `static` 局部都算已初始化；
   未初始化的 owning 实参报 `out owning argument must be initialized`。字段/数组/容器元素作为
   实参时按"已初始化"处理（L1 不做逐字段定值，见边界）。
@@ -3016,7 +3016,7 @@ parse("ab", n);  /* 调用点不写 out */
 - **只读**：`const T[]` 的元素写硬错（`cannot write to an element of a const slice`）；
   C 数组 `T[N]` 保持 C 下标，不做边界检查。
 - **位置白名单**：切片只允许出现在参数、局部变量、表达式临时量与返回值；字段、全局、接口值、
-  `box<T>`、`Option`/`Result`、容器、数组元素、泛型实参、闭包捕获一律硬错。
+  `Box<T>`、`Option`/`Result`、容器、数组元素、泛型实参、闭包捕获一律硬错。
 - **返回**：返回局部数组或局部 owning 视图触发 lint；透传路径由作者负责。
 - **边界**：`Vec.as_slice`、`s.field[i]`、`f().get(i)`、`int[] s; s = a;` 不在首轮范围。
 
@@ -3072,7 +3072,7 @@ parse("ab", n);  /* 调用点不写 out */
 - **旧类型已删除（S5b）**：`lib/core/StrLegacy.h.ct` 与 `namespace std::str` 兼容单元已移除，
   `std::str::Str` 不再解析；仓内消费者已迁到 `String` / `Str` 新 API，外部消费者的 dry-run
   见 phase80 卡 §7。
-- **边界**：`box<String>` 已由 PH-81 的 `box<String>::of` 回填；`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
+- **边界**：`Box<String>` 已由 PH-81 的 `Box<String>::of` 回填；`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
   `Map<String,V>`）、跨仓外部工程迁移只做 dry-run。字段位置的 `String` 释放取决于宿主：
   宿主 `use Drop` 且无显式 `impl Drop` → 生成 `String` 字段胶水；`Vec`/`Map` 字段无自动胶水；
   全局位置无作用域出口，需显式 `release()`。
@@ -3090,45 +3090,49 @@ parse("ab", n);  /* 调用点不写 out */
   ISR 可调用集与回调上下文。v1 冻结期不新增 `isr_safe` / `no_alloc` 关键字；
   违约由 ASan / 真板证据兜底，不由类型系统证明。
 
-### 4.71 `box<T>` / `new`：单对象句柄（Phase 81，仅 ct-ast）
+### 4.71 `Box<T>` / `new`：单对象句柄（Phase 81，仅 ct-ast）
 
-> 命名空间：`box` 属于内置层 `core`，规范拼写是 `core::box`；根拼写 `box` 在一个
-> MINOR 的兼容窗内仍可用（§4.51.1）。
+> 命名空间：`Box` 属于内置层 `core`，规范拼写是 `core::Box`；根拼写 `Box` 在一个
+> MINOR 的兼容窗内仍可用（§4.51.1）。`box<T>` 是 v1.0 的弃用别名：仍可解析、每次使用打印
+> `warning: 'box<T>' is deprecated; write 'Box<T>'`，v1.1 删除（§1.2 弃用窗口表）。
 
-- **类型**：`box<T>` 是单元素 owning 句柄，布局 `{ struct ct_box_hdr *h; T *ptr; }`
-  （LP64 16 字节）；8 字节头 `struct ct_box_hdr { int refs; int aux; }` 在 payload 前，
-  偏移 `header_size(T) = round_up(8, _Alignof(T))`。`refs` 从 1 起；box 不使用
+- **类型**：`Box<T>` 是单元素 owning 句柄，布局 `{ struct ct_Box_hdr *h; T *ptr; }`
+  （LP64 16 字节）；8 字节头 `struct ct_Box_hdr { int refs; int aux; }` 在 payload 前，
+  偏移 `header_size(T) = round_up(8, _Alignof(T))`。`refs` 从 1 起；Box 不使用
   `refs = -1` immortal（那是 `String` 字面量 / 空串专用）。refcount 非原子、非线程安全。
 - **构造**：`new T { ... }` 是 move 构造，`T` 只能是**具名、非泛型 struct**；花括号与
-  `T x = { ... }` 共享解析（位置式、指定式 `.f = e`、嵌套）。`box<T>::of(v)` 是复制构造：
+  `T x = { ... }` 共享解析（位置式、指定式 `.f = e`、嵌套）。`Box<T>::of(v)` 是复制构造：
   payload 的 owning 叶各自 `retain`，`String` 参数在调用侧按值 retain、被调方出口 release，
-  因此 `box<String>` 由 `box<String>::of(s)` 得到。`new String` / `new Str` / 标量 / 指针 /
+  因此 `Box<String>` 由 `Box<String>::of(s)` 得到。`new String` / `new Str` / 标量 / 指针 /
   数组 / 容器 / 其他内建句柄一律硬错；`new` 不能出现在文件作用域或 `static` 局部的初始化器
   （运行时分配，直接报错）。
 - **上下文关键字**：`new` 只在后接类型名（或错误形态 `new {`）时才是构造；`int new;`、
   `r.new`、形参 `new`、`new = ...`、`new + 1` 继续是标识符。
-- **解引用**：`b.f` / `b.f = ...` 自动改写为 `b.ptr->f`（`box<T> *p` 时为 `p->ptr->f`）；
+- **解引用**：`b.f` / `b.f = ...` 自动改写为 `b.ptr->f`（`Box<T> *p` 时为 `p->ptr->f`）；
   `.h` / `.ptr` 是实现字段，用户读写硬错。
 - **生命周期**：`retain()` 共享并 `refs + 1`，`release()` 归零时按静态类型释放 payload：
-  `String` / `U16String` 字段走其 Drop，容器 / 嵌套 box 字段走 `release`，普通 struct 递归
-  其 owning 字段；`use Drop` 宿主 struct 的字段 glue 调 box Drop。采用 `Vec` 的显式协议：
+  `String` / `U16String` 字段走其 Drop，容器 / 嵌套 Box 字段走 `release`，普通 struct 递归
+  其 owning 字段；`use Drop` 宿主 struct 的字段 glue 调 Box Drop。采用 `Vec` 的显式协议：
   按值传参、字段赋值、容器插入不会自动 retain；容器元素 glue 会 retain。locally owned
-  `box<T>` 的 `release()` 由作者显式调用。
+  `Box<T>` 的 `release()` 由作者显式调用。
 - **借用视图 / 失效**：`b.at()` 返回 `T *` 借用视图，不 retain；`release()` 使该视图失效
   （与 `Vec.at` 的失效契约同构）。失效后的读取由 ASan 抓，不做运行期检查。
-- **边界**：`box<Str>` / `box<U16Str>` / `box<T[]>` 硬错；`struct Bad { Str tag; }` 在声明层
+- **边界**：`Box<Str>` / `Box<U16Str>` / `Box<T[]>` 硬错；`struct Bad { Str tag; }` 在声明层
   硬错（借用字段会活过其底层数据）。引用环是作者责任：`retain()` 成环后释放句柄仍保留
-  `refs >= 1`；v0.82.0 起对 `box<X>` 字段的直接环做**编译期告警**（§4.72），运行期仍不做
+  `refs >= 1`；v0.82.0 起对 `Box<X>` 字段的直接环做**编译期告警**（§4.72），运行期仍不做
   环检测/回收；`--debug-leaks`（若将来实现）只报未配对 alloc/release 计数，不叫环检测。
-  `ct build` 跨单元 `box<T>` 在 v0.81.0 不支持（实例/助手写在命名它的单元里，导出签名只有
+  `ct build` 跨单元 `Box<T>` 在 v0.81.0 不支持（实例/助手写在命名它的单元里，导出签名只有
   前向声明）；单文件 compile 模式与单单元 build 可用。
-- **C 边界 / ABI**：`box<T>` 是编译器生成的 nominal 句柄，不是 C ABI 导出类型；C 侧只用
+- **C 边界 / ABI**：`Box<T>` 是编译器生成的 nominal 句柄，不是 C ABI 导出类型；C 侧只用
   `T *` / 普通 struct / `void *`。句柄 16 字节、头 8 字节是 golden 断言，不是跨编译器 ABI
   承诺。
+- **命名保留**：`Box` 是内建模板名。compile 模式的源文件若自己声明 `struct Box`（含泛型
+  模板，PH-29/33/36 的历史夹具用法），内建层不加载、用户声明优先；build 模式对入口输入
+  同样处理，来自导入单元的同名声明仍按重复定义报错。新代码不应再声明同名类型。
 
 ### 4.72 泄漏防护：`leaks` 与直接环检测（Phase 82，仅 ct-ast）
 
-`box<T>` 的引用环是作者责任（§4.71）；本节把**直接环**从无声事故变成可见风险，不引入 GC /
+`Box<T>` 的引用环是作者责任（§4.71）；本节把**直接环**从无声事故变成可见风险，不引入 GC /
 weak / 跨过程分析（D-012）。
 
 - **配置**：`ct.pkg` 新增窄键 `leaks = warn|error`，缺省 `warn`。`error` 把现有的
@@ -3137,9 +3141,9 @@ weak / 跨过程分析（D-012）。
   `ct build` 取 `-I` 根的 manifest（无则入口单元目录），`ct compile` / `ct check` 取单元
   自身目录（这两种模式忽略 `-I`）。缺键、未知值与旧包一律 `warn`，存量包行为不变。`leaks`
   与 `c-boundary = strict`（§4.66）互不影响，也不改 `--debug-leaks` 的计数契约（D-011 J-4c）。
-- **检测范围**：只展开 struct 的 **`box<X>` 字段**（相邻边计 1），限深 **3 条边**：自环
+- **检测范围**：只展开 struct 的 **`Box<X>` 字段**（相邻边计 1），限深 **3 条边**：自环
   `A -> A`、`A -> B -> A`、`A -> B -> C -> A` 命中；同一环只报一次（重复的载荷字段算一条边）。
-  4 条边以上的环、经 `Vec<box<T>>` / 泛型参数 / 接口字段 / typedef 别名的间接环、泛型 struct
+  4 条边以上的环、经 `Vec<Box<T>>` / 泛型参数 / 接口字段 / typedef 别名的间接环、泛型 struct
   与其实例、跨过程转手**不在检测范围**——不报不代表没有泄漏（R82-2）。
 - **文案**：`file:line: warning: potential reference cycle: A -> B -> A; instances may leak
   unless the cycle is broken by hand`。写「可能泄漏，除非手工破环」，不写「会泄漏」；位置指向

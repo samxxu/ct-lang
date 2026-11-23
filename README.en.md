@@ -66,7 +66,7 @@ stay stable. The full flag list (`-I` / `--std` / `--line` / `--diagnostics` / `
 - **generic structs and the built-in containers**: `struct Name<T, U>` + `impl<T> Name<Args>` with static dispatch (Phase 29); `Vec<T>` / `Map<K,V>` need no import, and `foreach` walks a `Map` in insertion order
 - **generic traits**: `trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>` bounds, with instances monomorphised from the type arguments (Phase 35)
 - **standard result types**: `Option<T>` / `Result<T, E>` ship in `lib/core`, with `is_some` / `is_ok` / `unwrap` and friends as inherent methods (Phase 34)
-- **single-object handle**: `box<T>` (16-byte handle plus an 8-byte `{refs,aux}` header), `new T { ... }` (contextual keyword, named structs only), automatic `b.f` dereference, `retain` / `release` and the borrowed `at()` view (Phase 81)
+- **single-object handle**: `Box<T>` (16-byte handle plus an 8-byte `{refs,aux}` header), `new T { ... }` (contextual keyword, named structs only), automatic `b.f` dereference, `retain` / `release` and the borrowed `at()` view (Phase 81)
 - **ADTs and `match`**: an `enum` whose members carry payloads is an ADT; `match` covers every variant or ends with `_`; the value is a `{tag, union}` with no vtable and no hidden allocation (Phase 84) — spec §4.73
 - **not done by design**: inheritance, type checking on the default compile path (`ct check` runs bounded checks only), optimisation (the language is not final until `1.0.0`)
 

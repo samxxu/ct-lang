@@ -1,5 +1,8 @@
 # 阶段流水账（Phase 0–36）
 
+> 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
+
+
 > 中文
 >
 > 本文是逐相详细记录，保留写作时点的证据与版本；当前计划见 [../roadmap.md](../roadmap.md)。

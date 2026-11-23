@@ -2399,16 +2399,40 @@ static int emit_string_literals(struct Emitter *self, int prog)
     return 0;
 }
 
-/* ---- PH-81 / S1: `box<T>` per-instance helpers -------------------------
-   The template lives in `lib/core/Vec.h.ct`; the compiler writes two static
+/* ---- PH-81 / S1: `Box<T>` per-instance helpers -------------------------
+   The template lives in `lib/core/Box.h.ct`; the compiler writes two static
    functions per instance because both need the concrete payload spelling:
-     - `box_X__new(T *v)` allocates the shared `ct_box_hdr` plus payload and
+     - `Box_X__new(T *v)` allocates the shared `ct_Box_hdr` plus payload and
        copies the captured initializer into it (refs = 1);
-     - `box_X__payload_release(T *p)` releases the payload's owning fields when
+     - `Box_X__payload_release(T *p)` releases the payload's owning fields when
        the last handle goes away. This is the "release by static type" half:
-       a `String` field calls `String_Drop_drop`, a container / box field calls
+       a `String` field calls `String_Drop_drop`, a container / Box field calls
        its `release`, and a plain struct recurses into its own fields. */
-static int box_type_owns(struct Emitter *self, const char *ctype, int depth)
+/* LANG-24: only the built-in `lib/core/Box.h.ct` template is the owning
+   handle. A project may still declare its own `struct Box<T>` (the historical
+   fixtures do); its instances share the `Box_` prefix but must not inherit the
+   built-in retain/release/auto-deref rules. */
+static int inst_is_builtin_Box(const char *name)
+{
+    int inst, ti, tn;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+    const char *b = name;
+
+    if (!b || !b[0]) return 0;
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    inst = frontend::sym::ct_inst_find(b);
+    if (inst < 0) return 0;
+    ins = frontend::sym::ct_insts(&tn);
+    if (!ins) return 0;
+    ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+    tps = frontend::sym::ct_tmpls(&tn);
+    if (ti < 0 || !tps) return 0;
+    return strstr(tps[ti].path, "lib/core/Box.h.ct") != 0
+        || strstr(tps[ti].path, "lib/std/Box.h.ct") != 0;
+}
+
+static int Box_type_owns(struct Emitter *self, const char *ctype, int depth)
 {
     char base[MAX_TEXT];
     const char *b;
@@ -2426,9 +2450,10 @@ static int box_type_owns(struct Emitter *self, const char *ctype, int depth)
     while (bl > 0 && (base[bl - 1] == ' ' || base[bl - 1] == '\t')) base[--bl] = 0;
     if (strcmp(base, "String") == 0 || strcmp(base, "U16String") == 0) return 1;
     if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
-        || strncmp(base, "box_", 4) == 0 || strncmp(base, "Option_", 7) == 0
+        || strncmp(base, "Option_", 7) == 0
         || strncmp(base, "Result_", 7) == 0)
         return 1;
+    if (inst_is_builtin_Box(base)) return 1;
     si = self->sym->find_struct(base);
     if (si < 0) return 0;
     if (self->sym->structs[si].is_inst) {
@@ -2440,8 +2465,8 @@ static int box_type_owns(struct Emitter *self, const char *ctype, int depth)
         const char *ft = self->sym->structs[si].fields[fi].type;
         const char *dims = self->sym->structs[si].fields[fi].dims;
         if (dims[0]) {
-            if (box_type_owns(self, ft, depth + 1)) return 1;
-        } else if (box_type_owns(self, ft, depth + 1)) {
+            if (Box_type_owns(self, ft, depth + 1)) return 1;
+        } else if (Box_type_owns(self, ft, depth + 1)) {
             return 1;
         }
     }
@@ -2449,14 +2474,14 @@ static int box_type_owns(struct Emitter *self, const char *ctype, int depth)
 }
 
 /* Release the payload field at `expr` (a pointer expression of type T *). */
-static int box_emit_release_at(struct Emitter *self, const char *ctype, const char *expr, int depth)
+static int Box_emit_release_at(struct Emitter *self, const char *ctype, const char *expr, int depth)
 {
     char base[MAX_TEXT];
     const char *b;
     size_t bl;
     int si, fi;
 
-    if (!box_type_owns(self, ctype, depth) || depth > 16) return 0;
+    if (!Box_type_owns(self, ctype, depth) || depth > 16) return 0;
     b = ctype;
     if (strncmp(b, "struct ", 7) == 0) b += 7;
     snprintf(base, sizeof base, "%s", b);
@@ -2467,8 +2492,9 @@ static int box_emit_release_at(struct Emitter *self, const char *ctype, const ch
         return 0;
     }
     if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
-        || strncmp(base, "box_", 4) == 0 || strncmp(base, "Option_", 7) == 0
-        || strncmp(base, "Result_", 7) == 0) {
+        || strncmp(base, "Option_", 7) == 0
+        || strncmp(base, "Result_", 7) == 0
+        || inst_is_builtin_Box(base)) {
         fprintf(self->out, "    %s_release(%s);\n", base, expr);
         return 0;
     }
@@ -2487,19 +2513,19 @@ static int box_emit_release_at(struct Emitter *self, const char *ctype, const ch
                left to the explicit Drop body (the same rule the Drop glue
                follows for pointer arrays). */
             if (strchr(dims + 1, '[')) continue;
-            if (!box_type_owns(self, ft, depth + 1)) continue;
+            if (!Box_type_owns(self, ft, depth + 1)) continue;
             char at[MAX_TEXT * 2];
             fprintf(self->out,
                     "    { int __ct_i; for (__ct_i = 0; __ct_i < "
                     "(int)(sizeof((%s)->%s) / sizeof((%s)->%s[0])); __ct_i++)\n",
                     expr, fn, expr, fn);
             snprintf(at, sizeof at, "&((%s)->%s[__ct_i])", expr, fn);
-            if (box_emit_release_at(self, ft, at, depth + 1) != 0) return -1;
+            if (Box_emit_release_at(self, ft, at, depth + 1) != 0) return -1;
             fputs("    }\n", self->out);
-        } else if (box_type_owns(self, ft, depth + 1)) {
+        } else if (Box_type_owns(self, ft, depth + 1)) {
             char at[MAX_TEXT * 2];
             snprintf(at, sizeof at, "&((%s)->%s)", expr, fn);
-            if (box_emit_release_at(self, ft, at, depth + 1) != 0) return -1;
+            if (Box_emit_release_at(self, ft, at, depth + 1) != 0) return -1;
         }
     }
     return 0;
@@ -2509,9 +2535,9 @@ static int box_emit_release_at(struct Emitter *self, const char *ctype, const ch
    `src` are pointer expressions of type T *. Scalar / pointer payloads are a
    plain assignment; a `String` / `U16String` bumps the shared header inline
    (its `retain` method is written later than these helpers); a container or
-   box takes its own reference through `retain`; a plain struct copies every
+   Box takes its own reference through `retain`; a plain struct copies every
    field and then fixes up the owning ones. */
-static int box_emit_copy_at(struct Emitter *self, const char *ctype, const char *dst, const char *src, int depth)
+static int Box_emit_copy_at(struct Emitter *self, const char *ctype, const char *dst, const char *src, int depth)
 {
     char base[MAX_TEXT];
     const char *b;
@@ -2543,8 +2569,9 @@ static int box_emit_copy_at(struct Emitter *self, const char *ctype, const char 
         return 0;
     }
     if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
-        || strncmp(base, "box_", 4) == 0 || strncmp(base, "Option_", 7) == 0
-        || strncmp(base, "Result_", 7) == 0) {
+        || strncmp(base, "Option_", 7) == 0
+        || strncmp(base, "Result_", 7) == 0
+        || inst_is_builtin_Box(base)) {
         fprintf(self->out, "    *(%s) = %s_retain(%s);\n", dst, base, src);
         return 0;
     }
@@ -2561,15 +2588,15 @@ static int box_emit_copy_at(struct Emitter *self, const char *ctype, const char 
         char nd[MAX_TEXT * 2];
         char ns[MAX_TEXT * 2];
         if (dims[0]) continue;          /* arrays are the explicit Drop body's */
-        if (!box_type_owns(self, ft, depth + 1)) continue;
+        if (!Box_type_owns(self, ft, depth + 1)) continue;
         snprintf(nd, sizeof nd, "&((%s)->%s)", dst, fn);
         snprintf(ns, sizeof ns, "&((%s)->%s)", src, fn);
-        if (box_emit_copy_at(self, ft, nd, ns, depth + 1) != 0) return -1;
+        if (Box_emit_copy_at(self, ft, nd, ns, depth + 1) != 0) return -1;
     }
     return 0;
 }
 
-static int emit_box_protos(struct Emitter *self, int u)
+static int emit_Box_protos(struct Emitter *self, int u)
 {
     int i, n;
     struct StructInst *ins;
@@ -2577,7 +2604,7 @@ static int emit_box_protos(struct Emitter *self, int u)
 
     ins = frontend::sym::ct_insts(&n);
     for (i = 0; ins && i < n; i++) {
-        if (strcmp(ins[i].tmpl, "box") != 0) continue;
+        if (!inst_is_builtin_Box(ins[i].name)) continue;
         if (u >= 0 && ins[i].owner != u) continue;
         fprintf(self->out,
                 "static __attribute__((unused)) struct %s %s__new(%s *);\n",
@@ -2592,7 +2619,7 @@ static int emit_box_protos(struct Emitter *self, int u)
     return 0;
 }
 
-static int emit_box_helpers(struct Emitter *self, int u)
+static int emit_Box_helpers(struct Emitter *self, int u)
 {
     int i, n;
     struct StructInst *ins;
@@ -2600,28 +2627,28 @@ static int emit_box_helpers(struct Emitter *self, int u)
     ins = frontend::sym::ct_insts(&n);
     for (i = 0; ins && i < n; i++) {
         const char *ctype;
-        if (strcmp(ins[i].tmpl, "box") != 0) continue;
+        if (!inst_is_builtin_Box(ins[i].name)) continue;
         if (u >= 0 && ins[i].owner != u) continue;
         ctype = ins[i].ctype[0];
         fprintf(self->out,
                 "static void __attribute__((unused)) %s__payload_release(%s *p)\n{\n",
                 ins[i].name, ctype);
-        if (!box_type_owns(self, ctype, 0)) {
+        if (!Box_type_owns(self, ctype, 0)) {
             fputs("    (void)p;\n", self->out);
-        } else if (box_emit_release_at(self, ctype, "p", 0) != 0) {
+        } else if (Box_emit_release_at(self, ctype, "p", 0) != 0) {
             return -1;
         }
         fputs("}\n\n", self->out);
         fprintf(self->out,
                 "static __attribute__((unused)) struct %s %s__new(%s *v)\n{\n",
                 ins[i].name, ins[i].name, ctype);
-        fputs("    struct ct_box_hdr *h;\n", self->out);
+        fputs("    struct ct_Box_hdr *h;\n", self->out);
         fprintf(self->out, "    struct %s b;\n", ins[i].name);
         fputs("    size_t off;\n", self->out);
         fprintf(self->out,
-                "    off = ((sizeof(struct ct_box_hdr) + _Alignof(%s) - 1)"
+                "    off = ((sizeof(struct ct_Box_hdr) + _Alignof(%s) - 1)"
                 " / _Alignof(%s)) * _Alignof(%s);\n", ctype, ctype, ctype);
-        fputs("    h = (struct ct_box_hdr *)malloc(off + sizeof(*v));\n"
+        fputs("    h = (struct ct_Box_hdr *)malloc(off + sizeof(*v));\n"
               "    if (h == 0) abort();\n"
               "    h->refs = 1;\n"
               "    h->aux = 0;\n"
@@ -2633,19 +2660,19 @@ static int emit_box_helpers(struct Emitter *self, int u)
         fprintf(self->out,
                 "static __attribute__((unused)) struct %s %s__copy(%s *v)\n{\n",
                 ins[i].name, ins[i].name, ctype);
-        fputs("    struct ct_box_hdr *h;\n", self->out);
+        fputs("    struct ct_Box_hdr *h;\n", self->out);
         fprintf(self->out, "    struct %s b;\n", ins[i].name);
         fputs("    size_t off;\n", self->out);
         fprintf(self->out,
-                "    off = ((sizeof(struct ct_box_hdr) + _Alignof(%s) - 1)"
+                "    off = ((sizeof(struct ct_Box_hdr) + _Alignof(%s) - 1)"
                 " / _Alignof(%s)) * _Alignof(%s);\n", ctype, ctype, ctype);
-        fputs("    h = (struct ct_box_hdr *)malloc(off + sizeof(*v));\n"
+        fputs("    h = (struct ct_Box_hdr *)malloc(off + sizeof(*v));\n"
               "    if (h == 0) abort();\n"
               "    h->refs = 1;\n"
               "    h->aux = 0;\n"
               "    b.h = h;\n", self->out);
         fprintf(self->out, "    b.ptr = (%s *)((char *)h + off);\n", ctype);
-        if (box_emit_copy_at(self, ctype, "b.ptr", "v", 0) != 0) return -1;
+        if (Box_emit_copy_at(self, ctype, "b.ptr", "v", 0) != 0) return -1;
         fputs("    return b;\n"
               "}\n\n", self->out);
     }
@@ -2818,11 +2845,11 @@ static int emit_unit_body(struct Emitter *self, int u)
     /* Phase 29: the monomorphised structs this unit must define, after every
        plain type and before the prototypes that name them. */
     if (emit_struct_insts(self, u, 0) != 0) return -1;
-    /* PH-81: the box helpers are defined after the instance methods (which
+    /* PH-81: the Box helpers are defined after the instance methods (which
        call the payload-release helper), so their prototypes lead them. */
-    if (emit_box_protos(self, u) != 0) return -1;
+    if (emit_Box_protos(self, u) != 0) return -1;
     if (emit_struct_impls(self, u, 0) != 0) return -1;
-    if (emit_box_helpers(self, u) != 0) return -1;
+    if (emit_Box_helpers(self, u) != 0) return -1;
     /* PH-80: literal blocks (the built-in layer header is already included). */
     if (emit_string_literals(self, self->units[u].prog) != 0) return -1;
 
@@ -3450,14 +3477,13 @@ static int inst_elem_foreign(struct Emitter *self, int ii)
        spells both slot types by value, so a foreign value makes its body
        unprintable in the built-in header too. Every other template keeps the
        Phase 33 rule. */
+    /* PH-81: a built-in Box instance carries per-instance helpers that need
+       the payload spelling, so it is always written by the unit that named it. */
+    if (inst_is_builtin_Box(ins[ii].name)) return 1;
     if (strcmp(ins[ii].tmpl, "Vec") != 0 && strcmp(ins[ii].tmpl, "Map") != 0
         && strcmp(ins[ii].tmpl, "MapEntry") != 0
-        && strcmp(ins[ii].tmpl, "Option") != 0 && strcmp(ins[ii].tmpl, "Result") != 0
-        && strcmp(ins[ii].tmpl, "box") != 0)
+        && strcmp(ins[ii].tmpl, "Option") != 0 && strcmp(ins[ii].tmpl, "Result") != 0)
         return 0;
-    /* PH-81: a box instance carries per-instance helpers that need the payload
-       spelling, so it is always written by the unit that named it. */
-    if (strcmp(ins[ii].tmpl, "box") == 0) return 1;
     tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
     if (tmpl < 0 || tps[tmpl].owner < 0) return 0;
     e1 = ins[ii].ctype[0];
@@ -5120,12 +5146,12 @@ static int em_expr_call(struct Emitter *self, int n, int nk)
     } else if (strcmp(self->arena->nodes[n].text2, "__ct_elem_release") == 0
                && self->ginst[0]) {
         fprintf(self->out, "%s__elem_release(", self->ginst);
-    } else if (strcmp(self->arena->nodes[n].text2, "__ct_box_payload_release") == 0
+    } else if (strcmp(self->arena->nodes[n].text2, "__ct_Box_payload_release") == 0
                && self->ginst[0]) {
-        /* PH-81: the box template's `release` binds to the instance's
+        /* PH-81: the Box template's `release` binds to the instance's
            compiler-generated payload helper. */
         fprintf(self->out, "%s__payload_release(", self->ginst);
-    } else if (strcmp(self->arena->nodes[n].text2, "__ct_box_copy") == 0
+    } else if (strcmp(self->arena->nodes[n].text2, "__ct_Box_copy") == 0
                && self->ginst[0]) {
         fprintf(self->out, "%s__copy(", self->ginst);
     } else if (self->alloc_map && self->alloc_map[0]
@@ -7132,9 +7158,9 @@ impl EmitOps for Emitter {
 
         /* Phase 29: compile mode is one unit, so every instance is its own. */
         if (emit_struct_insts(self, -1, 0) != 0) return -1;
-        if (emit_box_protos(self, -1) != 0) return -1;
+        if (emit_Box_protos(self, -1) != 0) return -1;
         if (emit_struct_impls(self, -1, 0) != 0) return -1;
-        if (emit_box_helpers(self, -1) != 0) return -1;
+        if (emit_Box_helpers(self, -1) != 0) return -1;
         /* PH-80: the literal blocks need `struct ct_str_hdr` / `struct String`
            to be visible, which the two calls above guarantee. */
         if (emit_string_literals(self, prog) != 0) return -1;

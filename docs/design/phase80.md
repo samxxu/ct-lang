@@ -1,5 +1,8 @@
 # Phase 80 — `String` / `Str`（S5）
 
+> 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
+
+
 <!-- g2:interface -->
 
 > **状态：完成**（2026-11-20 立项并开卡；D-013 签收后 S5a-1…4、S5b-1 删旧迁移与 S5b-2 文档

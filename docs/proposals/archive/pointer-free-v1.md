@@ -1,5 +1,8 @@
 # 提案：指针退场——`box` 句柄 / `new` 表达式 / 切片 / `ref`·`out` / `Str` 一等化
 
+> 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
+
+
 > **状态：已归档（superseded）**。当前版本见 [pointer-free-v2.md](../pointer-free-v2.md)；
 > 本文件保留 2026-11-20 评审前的原始设计，不再作为施工依据。
 

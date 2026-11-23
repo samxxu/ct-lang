@@ -6,7 +6,7 @@
 #     allow-cycle rule and the "may leak ... unless broken by hand" wording;
 #     §4.71's boundary now points at it;
 #   - package-guide §2 lists the `leaks` key; patterns §5 is the tree pattern
-#     (owning `box<Node>` down, raw `Node *parent` up, allow-cycle marker);
+#     (owning `Box<Node>` down, raw `Node *parent` up, allow-cycle marker);
 #   - the phase card carries the §7 closeout table with E82-1…8;
 #   - the five CTC_VERSION sites, README/docs/README, roadmap and the card
 #     agree on v0.88.3;

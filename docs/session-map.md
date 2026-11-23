@@ -32,7 +32,7 @@
 | PH-78 `ref` / `out` 参数（S2a–S2c / E78-1–E78-6） | 当前 DSH 会话（DEV `dev-ph78`） | DEV | PH-78 ✅ v0.78.0（fix v0.78.1） |
 | PH-79 切片 `T[]`（S3a–S3e / E79-1–E79-6） | 当前 DSH 会话（DEV `dev-ph79`） | DEV | PH-79 ✅ v0.79.0 |
 | PH-80 `String`/`Str`（S5a + S5b；D-013 入口闭合） | 当前 DSH 会话（DEV `dev-ph80`） | DEV | PH-80 ✅ v0.80.4（E80-1…8 全通过；SH-102 自动 retain R1–R7，D-015 字段 release + 分支合并） |
-| PH-81 `box`/`new`（S1；P-7.5 + S1a/S1b/S1c） | 当前 DSH 会话（DEV `dev-ph81`） | DEV | PH-81 ✅ v0.81.0（E81-1…6；P-7.5 证据；D-016） |
+| PH-81 `Box`/`new`（S1；P-7.5 + S1a/S1b/S1c） | 当前 DSH 会话（DEV `dev-ph81`） | DEV | PH-81 ✅ v0.81.0（E81-1…6；P-7.5 证据；D-016） |
 | PH-82 泄漏防护（S82a–S82d；E82-1…8） | 当前 DSH 会话（DEV `dev-ph82`） | DEV | PH-82 ✅ v0.82.0（E82-1…8 全通过；D-012） |
 | PH-83 包管理契约 v1 与索引校验（S83a–S83d；E83-1…8） | 当前 DSH 会话（DEV `dev-ph83`） | DEV | PH-83 ✅ v0.83.0（契约 v1 / `ct index verify` / conformance / Linux 产物；D-014）；PKG-14 fix v0.83.1；Linux CT_HOME 路径 fix v0.83.2 |
 | PH-84 最小 ADT/match（S84a–S84e；D3；S84e = battle doc-consistency-1 判决 B 的最小集） | 当前 DSH 会话（DEV `dev-ph84`） | DEV / VERIFY（角色席位） | PH-84 ✅ v0.84.1（E84-1…9；REV F1/F2 fixed） |

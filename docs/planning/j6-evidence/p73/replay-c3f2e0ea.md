@@ -1,5 +1,8 @@
 # P-7.3 在 HEAD `c3f2e0ea` 的重放（C-4 / S5a-0）
 
+> 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
+
+
 baseline: c3f2e0ea
 
 > 日期：2026-11-20

@@ -28,7 +28,8 @@ namespace tool::diag;
 struct Warn {
     int  kind;          /* 0 potential_leak, 1 signature_mismatch, 2 leak on a path, 3 borrow escape,
                            4 arity_mismatch, 5 type_mismatch, 6 ambiguous_method, 7 loop_shadow,
-                           8 std_shadow, 9 slice_escape, 10 potential_cycle, 11 str_escape */
+                           8 std_shadow, 9 slice_escape, 10 potential_cycle, 11 str_escape,
+                           12 deprecated_alias */
     int  line;
     int  col;           /* 1-based column of the token the finding is about (0: none);
                            `ct check` reports it, compile-mode text stays `file:line:` */
@@ -58,10 +59,12 @@ trait DiagStore {
        `slice_escape`: a warning in compile/build mode, an error under
        `ct check`. */
     int  record_str_warn(int line, int col, const char *msg, const char *path);
+    /* LANG-24 Stage A: a deprecated spelling (`box<T>`); always a warning. */
+    int  record_deprecated(int line, int col, const char *msg, const char *path);
     int  record_std_shadow(int line, int col, const char *msg, const char *path);
     int  record_leak(int kind, int line, int path_line, const char *file,
                      const char *var, const char *tname);
-    /* PH-82: a direct `box<X>` field cycle (kind 10); `msg` carries the whole
+    /* PH-82: a direct `Box<X>` field cycle (kind 10); `msg` carries the whole
        sentence and the chain, because the record has no variable/type slot. */
     int  record_cycle(int line, int col, const char *msg, const char *path);
     int  emit(int json, int to_stderr);
@@ -277,6 +280,28 @@ impl DiagStore for Diag {
         if (self->nwarns >= MAX_WARNINGS) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 9;
+        w->line = line;
+        w->col = col;
+        w->path_line = 0;
+        snprintf(w->file, sizeof w->file, "%s", path);
+        w->var[0] = 0;
+        w->tname[0] = 0;
+        w->stype[0] = 0;
+        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        self->nwarns++;
+        return 0;
+    }
+
+    /* LANG-24 Stage A: `box<T>` is a deprecated alias for `Box<T>`. This is
+       a compatibility notice, not a type error, so it stays `warning:` in
+       every mode including `ct check` (v1.1 removes the alias). */
+    int record_deprecated(int line, int col, const char *msg, const char *path)
+    {
+        struct Warn *w;
+        (void)self;
+        if (self->nwarns >= MAX_WARNINGS) return -1;
+        w = &self->warns[self->nwarns];
+        w->kind = 12;
         w->line = line;
         w->col = col;
         w->path_line = 0;
@@ -521,8 +546,17 @@ impl DiagStore for Diag {
                     fputs("\"message\":\"", jf);
                     self->put_json(jf, w->msg);
                     fputs("\"}", jf);
+                } else if (w->kind == 12) {
+                    /* LANG-24: a compatibility notice, never escalated. */
+                    fputs("\"type\":\"deprecated_alias\",\"file\":\"", jf);
+                    self->put_json(jf, w->file);
+                    fprintf(jf, "\",\"line\":%d,", w->line);
+                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                    fputs("\"message\":\"", jf);
+                    self->put_json(jf, w->msg);
+                    fputs("\"}", jf);
                 } else if (w->kind == 10) {
-                    /* PH-82: a direct `box<X>` field cycle; `message` already
+                    /* PH-82: a direct `Box<X>` field cycle; `message` already
                        names the chain, so JSON carries no separate field. */
                     fputs("\"type\":\"potential_cycle\",\"file\":\"", jf);
                     self->put_json(jf, w->file);
@@ -586,6 +620,10 @@ impl DiagStore for Diag {
                     fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
                 else if (w->kind == 11)
                     fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                else if (w->kind == 12)
+                    /* LANG-24: the deprecated alias always prints `warning:`,
+                       even when `ct check` escalates the other findings. */
+                    fprintf(tf, "%s warning: %s\n", loc, w->msg);
                 else if (w->kind == 10)
                     fprintf(tf, "%s %s: %s\n", loc, leaksev, w->msg);
                 else
@@ -707,6 +745,13 @@ int ct_str_warn(int line, int col, const char *msg, const char *path)
     return g_diag.record_str_warn(line, col, msg, path);
 }
 
+/* LANG-24 Stage A: the `box<T>` alias is deprecated; one record per use. */
+pub int ct_deprecated_warn(int line, int col, const char *msg, const char *path);
+int ct_deprecated_warn(int line, int col, const char *msg, const char *path)
+{
+    return g_diag.record_deprecated(line, col, msg, path);
+}
+
 pub int ct_std_shadow_warn(int line, int col, const char *msg, const char *path);
 int ct_std_shadow_warn(int line, int col, const char *msg, const char *path)
 {
@@ -771,7 +816,7 @@ int ct_diag_leaks_failed(void)
     return 0;
 }
 
-/* PH-82: a direct `box<X>` field cycle (kind 10). */
+/* PH-82: a direct `Box<X>` field cycle (kind 10). */
 pub int ct_cycle_warn(int line, int col, const char *msg, const char *path);
 int ct_cycle_warn(int line, int col, const char *msg, const char *path)
 {

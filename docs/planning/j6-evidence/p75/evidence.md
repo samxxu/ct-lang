@@ -1,5 +1,8 @@
 # P-7.5 证据：S1 `box<T>` + `new` 隔离原型
 
+> 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
+
+
 baseline: a18e7323
 
 > 日期：2026-11-21；DEV（隔离原型 `/tmp/p75`，由 [run.sh](run.sh) 重建）

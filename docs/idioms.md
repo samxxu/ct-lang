@@ -24,8 +24,8 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 
 | 位置 | 规则 | 依据 |
 | --- | --- | --- |
-| 局部 / 参数 | `String` 自动 retain / release；`box<T>` 走显式 `retain` / `release` | §4.70、D-016 |
-| `String` / `box` 字段 | 宿主 `use Drop` 且**无显式 `impl Drop`** → 编译器生成字段胶水；写显式 impl 则胶水消失，作者负责 | §4.70、D-016 |
+| 局部 / 参数 | `String` 自动 retain / release；`Box<T>` 走显式 `retain` / `release` | §4.70、D-016 |
+| `String` / `Box` 字段 | 宿主 `use Drop` 且**无显式 `impl Drop`** → 编译器生成字段胶水；写显式 impl 则胶水消失，作者负责 | §4.70、D-016 |
 | `Vec<T>` / `Map<K,V>` 字段 | 没有自动胶水；即使宿主 `use Drop` 也要显式 `release()` | §4.70 |
 | 全局 | 没有作用域出口，显式 `release()` | §4.70 |
 | ADT payload | 本轮不生成 Drop glue；按 move 语义只释放一次 | §4.73 |
@@ -47,14 +47,14 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 ## 4. 切片：`T[]` 替代“指针 + 长度”
 
 - 传参写 `sum(int[] a)`，不要 `sum(int *a, int n)`；长度随指针走，子切片零拷贝。
-- 位置白名单：参数 / 局部 / 返回；字段、全局、接口值、`box<T>`、`Option`/`Result`、容器、
+- 位置白名单：参数 / 局部 / 返回；字段、全局、接口值、`Box<T>`、`Option`/`Result`、容器、
   数组元素、泛型实参、闭包捕获一律硬错（[§4.69](language-spec.md)）。
 - `s[i]` 带边界 trap；`s.get(i)` 软访问返回 0 指针；`const T[]` 写元素硬错。
 
 ## 5. 参数糖：`ref` / `out`
 
 - 需要写回调用方 → `out T`；读写 → `ref T`；不要裸出参指针。
-- `out` 有定值分析；owning 实参（`String` / `box` / `Vec` / `Map`）必须先初始化（[§4.68](language-spec.md)）。
+- `out` 有定值分析；owning 实参（`String` / `Box` / `Vec` / `Map`）必须先初始化（[§4.68](language-spec.md)）。
 - `ref` / `out` **没有生命周期保证**：可以存起来或传给更长寿命位置，靠契约与直接 lint（J-4b 契约待补）。
 
 ## 6. 错误：`Result<T,E>` + `?` + `errdefer`
@@ -79,10 +79,10 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 
 ## 9. 堆与指针
 
-- 单对象堆分配用 `box<T> p = new T { … };`：16 字节句柄 + 8 字节 `{refs,aux}` 头；
+- 单对象堆分配用 `Box<T> p = new T { … };`：16 字节句柄 + 8 字节 `{refs,aux}` 头；
   `p.f` 自动解引用；`at()` 是借用视图，`release()` 后失效（[§4.71](language-spec.md)）。
-- `new` 只接受具名、非泛型 struct；跨单元 `box<T>` 仍有边界（单文件 / 单单元可用）。
-- 指针**仍然合法**，但主要在 shim / MMIO / extern 与逃生层；应用代码先想 `Str` / 切片 / `box`。
+- `new` 只接受具名、非泛型 struct；跨单元 `Box<T>` 仍有边界（单文件 / 单单元可用）。
+- 指针**仍然合法**，但主要在 shim / MMIO / extern 与逃生层；应用代码先想 `Str` / 切片 / `Box`。
 
 ## 10. 泄漏
 
@@ -99,7 +99,7 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 | 数组参数 | `T[]` | `T *a, int n`；`T a[]` 形参 | §4.69 |
 | 出参 | `out T` | 裸 `T *out` | §4.68 |
 | 多形态数据 | `enum` + `match` | `int kind` + `switch` | §4.73 |
-| 单对象堆分配 | `box<T>` + `new` | `own T*` + `malloc`（除非有转移语义） | §4.71 |
+| 单对象堆分配 | `Box<T>` + `new` | `own T*` + `malloc`（除非有转移语义） | §4.71 |
 | 遍历 Map | `foreach` + `item.key` / `item.value` | 手写并行数组 | §4.49 |
 | 错误处理 | `Result` + `?` + `errdefer` | 错误码 + `goto` | §4.62 |
 
@@ -109,13 +109,13 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 你是 CT 语言（source-to-source 编译到 C）的编码助手。CT 的约定：
 
 1. CT 是构建在 C 之上的语言；C 的表达式、语句与类型核心按原语法可用。v1.0 起不再自称 C 超集；四类偏离：new 是上下文关键字（int new; 仍合法）、T a[] 只在形参/字段/无初始化声明中弃用、字符串字面量裸类型仍是 char *、String/Str 传给 printf 需 cstr()。§1.2
-2. 所有权分层：局部/参数自动 retain/release（String）；String/box 字段在宿主 use Drop 且无显式 impl 时有自动胶水；Vec/Map 字段、全局、ADT payload 需作者处理；引用环仍泄漏。§4.70 §4.72
+2. 所有权分层：局部/参数自动 retain/release（String）；String/Box 字段在宿主 use Drop 且无显式 impl 时有自动胶水；Vec/Map 字段、全局、ADT payload 需作者处理；引用环仍泄漏。§4.70 §4.72
 3. Str 是借用视图：不能作 struct 字段或 Map 键；Vec<Str>/Option<Str>/ADT 负载/全局可编译但存的是视图；字面量常量表安全，非 immortal 来源有风险。§4.70
 4. String 用字面量直接初始化；char * 方法需 import std::str::CharStr（std 0.19.0 及以前叫 std::str::String）。§5.1
 5. 数组传参用 T[]，不要 int *a, int n；T a[] 形参/字段已弃用。§4.69
 6. 可失败操作用 Result<T,E> + ? + errdefer，不要错误码 + goto。§4.62 §4.58
 7. 多形态数据用 enum + match（穷尽），不要 int kind + switch；ADT 不生成 drop glue，payload 按 move 只释放一次。§4.73
 8. 遍历用 foreach(item)；数组/Vec 有块内只读 i，Map 只给 item.key / item.value（没有 i）。§4.49
-9. 堆单对象用 box<T> = new T { ... }；指针主要在 shim/硬件/逃生层，但合法。§4.71
+9. 堆单对象用 Box<T> = new T { ... }；指针主要在 shim/硬件/逃生层，但合法。§4.71
 10. 泄漏默认 warning；ct.pkg 的 leaks=error 才升级；动态派发的一行链当前被拒（SH-110 修复中），静态宿主链可用。§4.72
 ```

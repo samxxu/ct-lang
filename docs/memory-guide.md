@@ -3,7 +3,7 @@
 > 中文
 
 > **新代码先读**：[guide-for-c-programmers.md](guide-for-c-programmers.md)（v0.84 句柄层：
-> `String` / `Str` / `box<T>` / `Vec<T>` / ADT）。本文保留 `own` / `borrow` / `Drop` 的
+> `String` / `Str` / `Box<T>` / `Vec<T>` / ADT）。本文保留 `own` / `borrow` / `Drop` 的
 > 指针层模型，主要面向逃生层、旧代码与自定义分配器。
 >
 > **适用版本**：当前主线 **ct-ast**（`selfhost/ct-ast/main.ct`，版本号见 `ct -v`，不在此固定）。冻结的 L2 只作回归对照；
@@ -502,10 +502,10 @@ $ ct --diagnostics=json leak.ct -o leak.c    # 机器可读，写 stdout
 - **保守**：宁可漏报不可误报——没告警不等于绝对没泄漏
 - **包级强制**：`ct.pkg` 写 `leaks = error`（v0.82.0，语言规范 §4.72）把本包的
   `potential leak` 与直接环告警升为构建失败；缺省 `warn`，旧包不变
-- **`box<T>` 字段的直接环**：限深 3 条边，自环 / A→B→A / A→B→C→A 报
+- **`Box<T>` 字段的直接环**：限深 3 条边，自环 / A→B→A / A→B→C→A 报
   `potential reference cycle`，文案是「可能泄漏，除非手工破环」；树/父子结构用
   `/* ct: allow-cycle */` 加向上裸指针（[patterns §5](patterns.md)）
-- **不覆盖**：运行期环、经 `Vec<box<T>>` / 泛型 / typedef 的间接环；`--debug-leaks` 仍只报
+- **不覆盖**：运行期环、经 `Vec<Box<T>>` / 泛型 / typedef 的间接环；`--debug-leaks` 仍只报
   未配对 alloc/release 计数，不叫环检测
 
 正确态度：**把告警当成提示去检查，别当成保证去放心。**

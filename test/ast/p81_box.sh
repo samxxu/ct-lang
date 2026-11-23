@@ -88,10 +88,10 @@ run_case ident
 if "$ctast" --allow-c-boundary test/ast/p81_box/alias.ct -o "$work/alias.warn.c" \
         >"$work/alias.warn.log" 2>&1; then
     nwarn=$(grep -cF "warning: 'box<T>' is deprecated; write 'Box<T>'" "$work/alias.warn.log")
-    if [ "$nwarn" -eq 2 ]; then
-        ok "box<T> alias warns once per use (2 uses -> 2 warnings)"
+    if [ "$nwarn" -eq 5 ]; then
+        ok "box<T> alias warns once per use (5 alias tokens -> 5 warnings)"
     else
-        bad "box<T> alias warning count" "expected 2, got $nwarn: $(head -4 "$work/alias.warn.log")"
+        bad "box<T> alias warning count" "expected 5, got $nwarn: $(head -4 "$work/alias.warn.log")"
     fi
 else
     bad "box<T> alias compile" "$(head -4 "$work/alias.warn.log")"

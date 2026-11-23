@@ -1,5 +1,8 @@
 # PH-80 收口复核（REV）
 
+> 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
+
+
 - 首轮复核：`v0.80.0`（annotated tag `v0.80.0`，tag object `f1730dcb4113fb98f61160065dce096672b60d66`，peeled `60c6a2c00d5037360724849c2e552bce8e14e9d4`）——结论 `REV: 打回`，D-013 §3 自动 retain 未实现；原记录保留在 §0–§10。
 - 次轮复核：`v0.80.1`（`fdcc957c63b2eac61bdcd9cb896ed730d4f717ef`，annotated tag object `752c88a9149f7aa5075cc2d21a0eeab4ce237a07`；远端 tag 一致）——SH-102 修复；三个原 ASan 复现已转绿、`p80_retain` 绿，但嵌套 `break` / `continue` 与字段重赋旧值仍漏 release，故次轮结论仍为 `REV: 打回`，见 §11。
 - 第三轮复核：`v0.80.2`（`9814f951281dc5f616bb567a50c86ac52b16a1bc`，annotated tag object `b36055a5176b042d382410068ecbc033b9942927`；远端 tag 一致）——R1–R5 已修；`p80_retain` 18 项、六探针、p78/p79、check-all/sanitizer 全绿；但字段赋值/重赋在**条件分支与循环**中仍有反例：未执行分支后重赋会 release 未初始化字段（ASan SEGV），循环内重赋不 release 旧值（`final live=2`）。故第三轮结论仍为 `REV: 打回`，见 §12。

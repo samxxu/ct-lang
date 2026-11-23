@@ -87,7 +87,7 @@ acme/
 | `version` | 是 | `x.y.z`（工具只解析前三位数字；预发布 / 构建元数据不纳入） |
 | `dep` | 否，可重复 | 依赖，`name` 或 `name@range`；格式与 Phase 8 一致 |
 | `c-boundary` | 否 | `strict` \| `allow`：本包单元的 C 边界策略。缺省按外部 `strict`；**有 manifest 但缺这个键**的旧包保留 `allow` 窗口 |
-| `leaks` | 否 | `warn` \| `error`：本包泄漏诊断与 `box<X>` 字段直接环告警的级别（v0.82.0，D-012）。缺省 `warn`；`error` 让 `ct build` / `ct compile` 失败；与 `c-boundary` 无关 |
+| `leaks` | 否 | `warn` \| `error`：本包泄漏诊断与 `Box<X>` 字段直接环告警的级别（v0.82.0，D-012）。缺省 `warn`；`error` 让 `ct build` / `ct compile` 失败；与 `c-boundary` 无关 |
 | `cflags` | 否 | 消费者编译该包时附加的编译选项，`ct install` 折进打印的命令 |
 | `ldflags` | 否 | 链接选项（如 C 映射包的 `-lm`），同上 |
 | `requires` | 否 | 对编译器版本的约束；**不满足时 `ct get` / `ct install` 失败**，`--force` 才降级为告警 |
@@ -105,7 +105,7 @@ S1 起 `publisher` + `ns-root` 是 store 与 lock v2 的必填身份；写 `ns-r
 未写该键的旧包按 `allow` 处理，新包建议显式写 `strict`（见语言规范 §4.66）。
 
 `leaks` 由 `ct build` / `ct compile` / `ct check` 读取（语言规范 §4.72）：`error` 时本包的
-`potential leak` 诊断与 `box<X>` 字段直接环告警升为构建失败，写任何 `.c` 之前退出；缺键、
+`potential leak` 诊断与 `Box<X>` 字段直接环告警升为构建失败，写任何 `.c` 之前退出；缺键、
 未知值与旧包保持 `warn`。它不改变 `c-boundary`，也不改 `--debug-leaks` 的语义。
 
 `cflags` / `ldflags` / `requires` 由 `ct install` 读取；`install` 把每个包的 `cflags` / `ldflags`
@@ -231,10 +231,10 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
   是 Ct 源层检查，C 侧只能看到 `T *`，无法从 ABI 头区分 `ref` 与 `out`；契约由包文档
   与函数注释承担。
 - 归档里还会出现 `Str_*`、vtable 等**内部符号**；`nm -g` 面 ⊋ 导出面，**只有 `.abi.h` 的声明是 ABI**。不要把 `nm` 输出当公开契约。
-- `box<T>`（PH-81）是编译器生成的 nominal 句柄，不是 C ABI 类型：导出面只允许 C 标量 /
-  `void` / 指针 / 数组参数 / 函数指针，按值 `box<T>` 与按值 struct 一样被拒。C 消费者看到
+- `Box<T>`（PH-81）是编译器生成的 nominal 句柄，不是 C ABI 类型：导出面只允许 C 标量 /
+  `void` / 指针 / 数组参数 / 函数指针，按值 `Box<T>` 与按值 struct 一样被拒。C 消费者看到
   的是 `T *` / 普通 struct；句柄 16 字节、8 字节头是 Ct 内部布局（golden 断言），不承诺
-  跨编译器 ABI。`ct build` 跨单元 `box<T>` 在 v0.81.0 不支持，导出签名里不要写 `box<T>`。
+  跨编译器 ABI。`ct build` 跨单元 `Box<T>` 在 v0.81.0 不支持，导出签名里不要写 `Box<T>`。
 - 非 `pub` 顶层函数/全局在 `--lib` 下是 `static`；导出定义是 `visibility("default")`，其余以 `-fvisibility=hidden` 编译。
 - 不做按值 struct / `pub` 全局 / 泛型函数 / dylib / MSVC；这些是 T39-1–T39-3 的开放项（见 [phase39 卡](history/design/phase39.md) §7）。
 
@@ -314,7 +314,7 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 #### 7.6 切片 `T[]` 不进包边界（PH-79）
 
 切片是 `{ptr,len}` 借用视图，只允许出现在参数、局部变量、表达式临时量与返回值；**不能**作
-struct 字段、全局、接口值、`box<T>`、`Option`/`Result`、容器元素、泛型实参或闭包捕获，
+struct 字段、全局、接口值、`Box<T>`、`Option`/`Result`、容器元素、泛型实参或闭包捕获，
 因此也不会出现在 `--lib` 的 ABI 头里。跨包传只读数据请传 `String`/`Str`（PH-80）或：
 C 边界用 `(const T *data, size_t len)`；包内调用直接传 `T[]`，由调用方保证底层存活。
 `T a[]` 形参/无初始化器声明已告警（v1 硬错），新代码写 `T[]`（视图）或 `T a[N]`（数组）。

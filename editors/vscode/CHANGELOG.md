@@ -1,5 +1,11 @@
 # Change Log
 
+## Unreleased
+
+- LANG-24 Stage A: the canonical spelling is `Box<T>`; `ct-box-type` matches
+  both `Box` and the deprecated `box` alias, and the snippet defaults to
+  `Box`. The 0.6.1 entry below keeps the spelling it shipped with.
+
 ## 0.6.1
 
 - v0.88 language surface: 10 new rules.

@@ -14,7 +14,7 @@
 2. 参数糖 `ref` / `out`：§15；
 3. 借用视图：§22 `String` / `Str`、§23 切片 `T[]`；机制见
    [spec §4.69](language-spec.md) / [spec §4.70](language-spec.md)；
-4. 句柄：`box<T>` / `new` §17；
+4. 句柄：`Box<T>` / `new` §17；
 5. ADT 与 `match`：§18；
 6. 模块、`map` 与 std：§7、§9、§10。
 
@@ -1945,7 +1945,7 @@ int main(void) {
 ### 15.2 `out` 的两条约束
 
 - **调用方初始化**：标量、无 `Drop` 的 struct、指针可以未初始化；owning 类型
-  （`String` / `Str`、`box<T>`、`Vec<T>`、`Map<K,V>`、`use Drop` 的 struct）必须已有值，
+  （`String` / `Str`、`Box<T>`、`Vec<T>`、`Map<K,V>`、`use Drop` 的 struct）必须已有值，
   否则报 `out owning argument must be initialized`。
 - **每条退出路径赋值**：`ct build` 与 `ct check` 默认硬错。顺序与 `if/else` 是精确的；
   循环、`switch`、`goto` 保守（循环/`switch` 内的赋值不算循环之后有值；`goto` 跳转时
@@ -1995,7 +1995,7 @@ v.push("s");            // argument 1: expected 'int', got 'char *'
 数组、闭包、函数指针、`void` 实际值等判不出的位置保持沉默。不带 `--types` 的 `ct check` 与
 `ct build` / `ct compile` 的输出完全不变。
 
-## 17. `box<T>` 与 `new`（Phase 81，v0.81.0 起可用）
+## 17. `Box<T>` 与 `new`（Phase 81，v0.81.0 起可用）
 
 单个堆对象现在有 owning 句柄，不再手写 `malloc` / `free` / `T *`：
 
@@ -2003,7 +2003,7 @@ v.push("s");            // argument 1: expected 'int', got 'char *'
 struct Record { int id; String tag; }
 
 int main(void) {
-    box<Record> r = new Record { 7, "x" };
+    Box<Record> r = new Record { 7, "x" };
     r.id = 8;                            // b.f / b.f = 自动解引用
     printf("%d %s\n", r.id, r.tag.cstr());
     r.release();                         // 显式释放（同 Vec 的协议）
@@ -2011,7 +2011,7 @@ int main(void) {
 }
 ```
 
-`box<T>` 是 16 字节句柄（`ct_box_hdr *h` + `T *ptr`），8 字节 `{refs, aux}` 头在 payload
+`Box<T>` 是 16 字节句柄（`ct_Box_hdr *h` + `T *ptr`），8 字节 `{refs, aux}` 头在 payload
 前；`release()` 归零时按静态类型释放 payload 的 owning 字段，`retain()` 共享。`at()` 返回
 `T *` 借用视图，`release()` 后失效（ASan 可抓，编译器不做运行期检查）。
 
@@ -2024,13 +2024,13 @@ int main(void) {
 ```ct
 struct Point { int x; int y; }
 Point p = { 1, 2 };
-box<Point> b = box<Point>::of(p);       // 复制构造；owning 叶 retain
+Box<Point> b = Box<Point>::of(p);       // 复制构造；owning 叶 retain
 ```
 
-`box<String>` 只走 `box<String>::of(s)`；`new String` 仍是硬错。`box<Str>` 与
+`Box<String>` 只走 `Box<String>::of(s)`；`new String` 仍是硬错。`Box<Str>` 与
 `struct Bad { Str tag; }` 在类型/声明层硬错。引用环是作者责任：互持 `retain()` 后释放
 句柄仍泄漏，编译器不报环；`--debug-leaks` 若实现也只报未配对 alloc/release 计数。
-`ct build` 跨单元 `box<T>` 在 v0.81.0 不支持，单文件编译可用。
+`ct build` 跨单元 `Box<T>` 在 v0.81.0 不支持，单文件编译可用。
 
 ## 18. 最小 ADT 与 `match`（Phase 84，v0.84.0 起可用）
 
@@ -2336,6 +2336,6 @@ ct build sum.ct -o sum && ./sum
 - 传参写 `sum(int[] xs)`，不要 `sum(int *xs, int n)`；`xs.len` 是元素个数。
 - `T a[] = { … }` 仍保留（推断长度的 C 数组）；`T a[]` 作形参/字段/无初值声明已弃用，
   v0.79 警告、v1 硬错（[spec §4.69](language-spec.md)）。
-- 位置白名单：参数/局部/返回；字段、全局、接口值、`box<T>`、`Option`/`Result`、容器、
+- 位置白名单：参数/局部/返回；字段、全局、接口值、`Box<T>`、`Option`/`Result`、容器、
   数组元素、泛型实参、闭包捕获一律硬错。
 - `s[i]` 带边界 trap；`s.get(i)` 软访问；`const T[]` 写元素硬错。

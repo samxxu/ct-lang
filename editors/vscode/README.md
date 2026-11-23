@@ -54,7 +54,7 @@ impl Greeter for Person {
 | `cfg into { .backlog = 64; }` | the inline spelling gets the same scopes (`ct-into-inline-field` / `ct-into-inline-method`) |
 | `p into { … }.add(2)` / `}->port` / `}[1]` | suffixes stay ordinary C after the block |
 | `ref int r` / `out int v` | `storage.modifier` for the call-site sugar |
-| `box<Record> r = new Record { … }` | `box` type + `new` keyword |
+| `Box<Record> r = new Record { … }` | `Box` type + `new` keyword (`box` is the deprecated alias) |
 | `String s = "hi";` / `Str view = s.as_str();` | built-in owning / borrowed string types |
 | `int[] nums` | slice type `T[]` |
 | `enum Shape { Circle(int r), Empty() }` | payload members make it an ADT |

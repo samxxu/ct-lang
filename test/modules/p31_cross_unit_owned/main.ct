@@ -5,7 +5,7 @@ import elem;
 
 int main(void)
 {
-    Vec<Box<int>> v;
+    Vec<Crate<int>> v;
     v.h = 0;
     return v.len();
 }

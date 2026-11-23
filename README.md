@@ -130,7 +130,7 @@ counts.release();
 
 `ct build` 实测输出 `go=3` / `ct=2` / `rust=1`。
 
-#### 0.5 新句柄速览：ref/out、切片、String/Str、box/new、ADT/match
+#### 0.5 新句柄速览：ref/out、切片、String/Str、Box/new、ADT/match
 
 v0.78–v0.84 的五条新能力各有最小可跑样例，都不依赖 shim；完整程序在 `examples/50…53` 与
 tutorial 对应章节。
@@ -140,7 +140,7 @@ tutorial 对应章节。
 | `ref` / `out` | [examples/50_ref_out](examples/50_ref_out/prog.ct) | `2 3 4` |
 | 切片 `T[]` | [examples/51_slice](examples/51_slice/prog.ct) | `14 5 5` |
 | `String` / `Str` | 下段 | `hello, ct` |
-| `box<T>` / `new` | [examples/52_box_new](examples/52_box_new/prog.ct) | `4 4` |
+| `Box<T>` / `new` | [examples/52_box_new](examples/52_box_new/prog.ct) | `4 4` |
 | ADT / `match` | [examples/53_match_adt](examples/53_match_adt/prog.ct) | `hi` |
 
 `String` 拥有、`Str` 借用，判据只有一条：这份数据过了这行还要活着 → `String`；只看一眼 → `Str`。
@@ -161,7 +161,7 @@ int main(void)
 }
 ```
 
-`ct build` 实测 `hello, ct`。逐章解释见 tutorial §15（`ref`/`out`）、§17（`box`/`new`，`at()` 借用与
+`ct build` 实测 `hello, ct`。逐章解释见 tutorial §15（`ref`/`out`）、§17（`Box`/`new`，`at()` 借用与
 `release()`）、§18（穷尽 `match` 与 owning payload 显式释放）、§22（`String`/`Str`）、§23（切片）。
 运行任一 example：`ct build examples/50_ref_out/prog.ct -o /tmp/e50 && /tmp/e50`。
 
@@ -229,7 +229,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **泛型 struct 与内置容器**：`struct Name<T, U>` + `impl<T> Name<Args>` 静态派发（Phase 29）；`Vec<T>` / `Map<K,V>` 免 import，`foreach` 按插入序遍历 `Map` <!-- cap:generic-struct --> <!-- cap:containers -->
 - **泛型 trait**：`trait Iter<T>` / `impl Iter<int> for S` / `T: Iter<int>` 约束，实例按实参编码单态化（Phase 35） <!-- cap:generic-trait -->
 - **标准结果类型**：`Option<T>` / `Result<T, E>` 内建于 `lib/core`，`is_some` / `is_ok` / `unwrap` 等为固有方法（Phase 34） <!-- cap:option-result -->
-- **单对象句柄**：`box<T>`（16 字节句柄 + 8 字节 `{refs,aux}` 头）、`new T { ... }`（上下文关键字，仅具名 struct）、`b.f` 自动解引用、`retain` / `release` 与 `at()` 借用（Phase 81） <!-- cap:box -->
+- **单对象句柄**：`Box<T>`（16 字节句柄 + 8 字节 `{refs,aux}` 头）、`new T { ... }`（上下文关键字，仅具名 struct）、`b.f` 自动解引用、`retain` / `release` 与 `at()` 借用（Phase 81） <!-- cap:box -->
 - **ADT 与 `match`**：`enum` 成员带负载即 ADT，`match` 穷尽所有变体或末位 `_`；值是 `{tag, union}`，无 vtable、无隐藏分配（Phase 84），见 spec §4.73 <!-- cap:adt -->
 - **C ABI 静态库**：`ct build --lib` 把根 `.h.ct` 的 C 兼容 `pub` 函数导出为 `.abi.h` + `lib<base>.a`（Phase 39） <!-- cap:abi -->
 - **原子并发**：`atomic int` / `atomic long` / `atomic bool` / `atomic void *` + `ct_atomic_load` / `ct_atomic_store` / `ct_atomic_cas`（seq_cst，C11；`ct build` 自动切 `-std=c11`）（Phase 41） <!-- cap:atomics -->

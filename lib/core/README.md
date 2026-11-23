@@ -15,7 +15,7 @@
 
 内置层由五个单元组成：`Vec.h.ct`（容器）、`Option.h.ct`（Phase 34）、`Result.h.ct`（Phase 34）、
 `Str.h.ct`（Phase 80：`String` / `Str` + `U16String` / `U16Str`）、`Box.h.ct`（Phase 81：
-`box<T>` 单对象 owning 句柄 + `new` / `of`）。
+`Box<T>` 单对象 owning 句柄 + `new` / `of`）。
 四者都是**编译模式**与 **`ct build`** 两条路径都会自动预解析的单元：`ct file.ct -o file.c`
 把它们 splice 到用户程序之前，`ct build` 则把它们作为独立单元参与发射；两种形态都
 **不需要 import**、不需要 `ct get`。编译模式的产物仍是单个 C TU；源级命名空间是
@@ -25,11 +25,11 @@
 
 五个单元声明 `namespace core;`，源文件的**规范拼写**是 `core::Vec` / `core::Map` /
 `core::MapEntry` / `core::Option` / `core::Result` / `core::String` / `core::Str` /
-`core::U16String` / `core::U16Str` / `core::box`。根拼写在一个 MINOR 的兼容窗内仍可用，
+`core::U16String` / `core::U16Str` / `core::Box`。根拼写在一个 MINOR 的兼容窗内仍可用，
 本阶段不告警。
 
 - **生成物**：兼容窗内 `core::` 是源级命名空间别名，内置层的 C 符号保持根拼写
-  （`Vec_int` / `String` / `box_P`），因此没有 ABI、`--emit-model` 或 golden 变化；
+  （`Vec_int` / `String` / `Box_P`），因此没有 ABI、`--emit-model` 或 golden 变化；
   旧→新符号映射是恒等映射。`core_` 前缀的 C 名字改写另立 issue。
 - **与 std 包不重叠**：外部 ct-pkg `std` 仍占 `std::*`（如 `std::str::CharStr`），
   `core::*` 不会遮蔽它。

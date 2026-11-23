@@ -1,6 +1,7 @@
 /* LANG-24 Stage A: `box<T>` is a deprecated alias for `Box<T>`. It still
- * parses and produces the same `Box_*` instance symbols, and every use prints
- * one `warning: 'box<T>' is deprecated; write 'Box<T>'` (v1.1 removes it). */
+ * parses (root or `core::` spelling) and produces the same `Box_*` instance
+ * symbols; every use prints one
+ * `warning: 'box<T>' is deprecated; write 'Box<T>'` (v1.1 removes it). */
 #include <stdio.h>
 
 struct R { int x; }
@@ -9,8 +10,13 @@ int main(void)
 {
     box<R> a = new R { 1 };
     box<R> b = new R { 2 };
-    printf("%d %d\n", a.x, b.x);
+    core::box<R> c = new R { 3 };
+    R raw = { 4 };
+    box<R> d = box<R>::of(raw);
+    printf("%d %d %d %d\n", a.x, b.x, c.x, d.x);
     a.release();
     b.release();
+    c.release();
+    d.release();
     return 0;
 }

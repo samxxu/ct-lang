@@ -1420,17 +1420,17 @@ else
     bad "SH-106 Str view escape" "$(sed -n '1,14p' "$work/p106escape.out")"
 fi
 
-# Phase 81: `box<T>` / `new` (S1). The probe covers E81-1…6: layout/header,
+# Phase 81 / LANG-24: `Box<T>` / `new` (S1) plus the deprecated `box<T>` alias.
 # new's named-struct boundary, static-type release, the borrowed at() view,
 # the author-owned cycle, the negatives and the doc/version sync.
 if sh test/ast/p81_box.sh "$work/ct-ast" >"$work/p81box.out" 2>&1; then
-    ok "PH-81-S1 box<T>/new (E81-1…6: layout, new, release, at(), cycle, docs)"
+    ok "PH-81-S1 Box<T>/new (E81-1…6: layout, new, release, at(), cycle, alias, docs)"
 else
-    bad "PH-81-S1 box<T>/new" "$(sed -n '1,14p' "$work/p81box.out")"
+    bad "PH-81-S1 Box<T>/new" "$(sed -n '1,14p' "$work/p81box.out")"
 fi
 
 # Phase 82: leak guards (S82a–S82d, D-012). `leaks` warn/error, the direct
-# `box<X>` field cycle (depth 3, dedup), its allow-cycle suppression/negatives,
+# `Box<X>` field cycle (depth 3, dedup), its allow-cycle suppression/negatives,
 # and the written contract + version sync.
 p82_probe() {
     tag=$1; label=$2

@@ -1,12 +1,12 @@
 #!/bin/sh
 # PH-82 / S82c: the direct-cycle warning's negative scope (E82-4, D-012 §2.5).
 #
-#   - `Vec<box<T>>`, a generic struct's `box<T>` field, a generic instance as a
-#     box payload, an interface-typed field and a `box<typedef>` alias are not
+#   - `Vec<Box<T>>`, a generic struct's `Box<T>` field, a generic instance as a
+#     box payload, an interface-typed field and a `Box<typedef>` alias are not
 #     edges, so their would-be rings do not report;
 #   - a ring that needs four edges is outside the depth limit;
 #   - an indirect ring that closes through a container is not reported;
-#   - the repository corpus stays silent: every `box<` fixture except the
+#   - the repository corpus stays silent: every `Box<` fixture except the
 #     deliberate `p81_box/cycle.ct`, and the struct-heavy pattern/struct
 #     fixtures, produce no `potential reference cycle`.
 #
@@ -30,20 +30,20 @@ cd "$root" || exit 1
 
 cat >"$work/vec.ct" <<'CT'
 struct B { int n; }
-struct A { Vec<box<B>> v; }
+struct A { Vec<Box<B>> v; }
 int main(void) { return 0; }
 CT
 
 cat >"$work/generic.ct" <<'CT'
 struct B { int n; }
-struct G<T> { box<T> t; box<B> b; }
+struct G<T> { Box<T> t; Box<B> b; }
 int main(void) { return 0; }
 CT
 
 cat >"$work/geninst.ct" <<'CT'
 struct P { int n; }
 struct Pair<X, Y> { X x; Y y; }
-struct H { box<Pair<int,int>> p; }
+struct H { Box<Pair<int,int>> p; }
 int main(void) { return 0; }
 CT
 
@@ -56,24 +56,24 @@ CT
 cat >"$work/alias.ct" <<'CT'
 struct B { int n; }
 typedef B BAlias;
-struct A { box<BAlias> b; }
+struct A { Box<BAlias> b; }
 int main(void) { return 0; }
 CT
 
 cat >"$work/indirect.ct" <<'CT'
-struct A { box<B> b; }
-struct B { box<C> c; }
-struct C { box<D> d; }
-struct D { box<A> a; }
+struct A { Box<B> b; }
+struct B { Box<C> c; }
+struct C { Box<D> d; }
+struct D { Box<A> a; }
 int main(void) { return 0; }
 CT
 
-# A ring that would close through a container: C -> A by box, A stores box<B>
+# A ring that would close through a container: C -> A by box, A stores Box<B>
 # only in a Vec, so no A -> B edge and no cycle.
 cat >"$work/container_ring.ct" <<'CT'
 struct B { int n; }
-struct A { Vec<box<B>> v; }
-struct C { box<A> a; }
+struct A { Vec<Box<B>> v; }
+struct C { Box<A> a; }
 int main(void) { return 0; }
 CT
 
@@ -110,18 +110,18 @@ for f in test/ast/05_struct/prog.ct test/ast/15_composition/prog.ct \
     fi
 done
 
-# And the whole `box<` corpus has exactly one finding: the deliberate self
+# And the whole `Box<` corpus has exactly one finding: the deliberate self
 # loop under p81_box (E82-4's zero-false-positive side on the real corpus).
 hits=""
-for f in $(grep -rl 'box<' --include='*.ct' test/ examples/ lib/ 2>/dev/null); do
+for f in $(grep -rl 'Box<' --include='*.ct' test/ examples/ lib/ 2>/dev/null); do
     case "$f" in lib/core/Box.h.ct) continue ;; esac
     "$ctast" "$f" -o "$work/corpus.c" >"$work/corpus.log" 2>&1
     grep -Fq "potential reference cycle" "$work/corpus.log" && hits="$hits $f"
 done
 if [ "$hits" = " test/ast/p81_box/cycle.ct" ]; then
-    ok "box corpus: exactly one finding, the deliberate p81_box/cycle.ct self loop"
+    ok "Box corpus: exactly one finding, the deliberate p81_box/cycle.ct self loop"
 else
-    bad "box corpus" "unexpected findings:$hits"
+    bad "Box corpus" "unexpected findings:$hits"
 fi
 
 [ "$fail" -eq 0 ] && echo "p82_errors: OK"

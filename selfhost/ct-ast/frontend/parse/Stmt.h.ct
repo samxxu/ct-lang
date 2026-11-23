@@ -1717,10 +1717,12 @@ impl StmtOps for Stmt {
         (void)self;
 
         if (self->lex->tok != T_ID) return 0;
-        /* P-7.2: `box<T> name` is a declaration shape even though `box` is not
-           a registered type; `parse_type` turns it into the placement error
-           (or the PH-81 "not implemented" error) instead of an expression. */
-        if (self->lex->tok_is("box"))
+        /* P-7.2 / LANG-24: `Box<T> name` (and its deprecated `box<T>` alias)
+           is a declaration shape; a bare `Box box;` stays an ordinary
+           declaration once `Box` resolves as a user type. */
+        if (self->lex->tok_is("box")
+            || (self->lex->tok_is("Box")
+                && frontend::sym::ct_tmpl_find("Box") >= 0))
             return self->ex->tok_is_type_name();
         /* an alignment or atomic specifier may open a block-scope declaration */
         if (self->lex->tok_is("_Alignas")) return 1;
@@ -1789,7 +1791,8 @@ impl StmtOps for Stmt {
                 if (*p == '<'
                     && (frontend::sym::ct_tmpl_find(qn) >= 0
                         || (strncmp(qn, "core_", 5) == 0
-                            && frontend::sym::ct_tmpl_find(qn + 5) >= 0)))
+                            && (frontend::sym::ct_tmpl_find(qn + 5) >= 0
+                                || strcmp(qn + 5, "box") == 0))))
                     return 1;
                 if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
                       || *p == '_' || *p == '*')) return 0;

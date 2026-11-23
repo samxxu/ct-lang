@@ -93,7 +93,7 @@ int main(void)
     return 0;
 }
 EOF
-expect_err box "E79-5: slice in box<T> is a hard error" "cannot be stored in box<T>"
+expect_err box "E79-5: slice in Box<T> is a hard error" "cannot be stored in Box<T>"
 
 cat >"$work/option.ct" <<'EOF'
 int main(void)

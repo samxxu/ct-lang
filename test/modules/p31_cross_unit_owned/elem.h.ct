@@ -1,10 +1,10 @@
 // Phase 31 L31-2: an element with a lifecycle, declared in this unit only.
-pub struct Box<T> {
+pub struct Crate<T> {
     T v;
 }
 
-impl<T> Box<T> {
-    pub Box<T> retain()
+impl<T> Crate<T> {
+    pub Crate<T> retain()
     {
         return *self;
     }

@@ -1,5 +1,8 @@
 # P-7.4-7（去 `box<String>`）：A.3.1–A.3.3 + ASan/UBSan
 
+> 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
+
+
 baseline: c3f2e0ea
 
 > 日期：2026-11-20；DEV（隔离原型 `/tmp/p74`，由 [run.sh](run.sh) 重建）

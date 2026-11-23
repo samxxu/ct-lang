@@ -526,7 +526,7 @@
       }
     },
     "ct-box-type": {
-      "match": "\\bbox\\b(?=[ \\t]*<)",
+      "match": "\\b(?:Box|box)\\b(?=[ \\t]*<)",
       "name": "storage.type.box.ct"
     },
     "ct-owned-type": {

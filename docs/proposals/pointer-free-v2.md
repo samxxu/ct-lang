@@ -1,5 +1,6 @@
 # 提案 v2：指针退场（预 v1.0 语言方向）
 
+
 > **状态：当前版**（2026-11-20；取代 [archive/pointer-free-v1.md](archive/pointer-free-v1.md)）。
 > **裁定链**：[D-011](../decisions/D-011.md) 为当前 ADR；[battle pointer-free-1](../../battle/pointer-free-1/verdict.md)
 > 为历史证据，卡头已标 `superseded-by: D-011`。
@@ -14,11 +15,11 @@
 | 家族 | 成员 | 作用 |
 | --- | --- | --- |
 | 借用视图 | 切片 `T[]`、`Str` | 只“看”不拥有，四位置白名单 |
-| 引用计数句柄 | `Vec<T>`、`box<T>`、`String` | 拥有 + retain/release + 借用视图 |
+| 引用计数句柄 | `Vec<T>`、`Box<T>`、`String` | 拥有 + retain/release + 借用视图 |
 | 参数语法糖 | `ref` / `out` | 源码无 `&`/`*`，发射指针 |
 | 签名语法糖 | 函子 `(A,B) => R` | 延后 Wave 2，不占本轮机制 |
 
-`new` 是 `box` 的语法糖，与 `box` 同进退，不单列机制；`T a[]` 废弃是迁移规则，不是新机制。
+`new` 是 `Box` 的语法糖，与 `Box` 同进退，不单列机制；`T a[]` 废弃是迁移规则，不是新机制。
 
 ## 1. 目标与非目标
 
@@ -47,13 +48,13 @@
 **四位置白名单（承重墙）**：
 
 > 借用类型只能出现在：函数参数、局部变量、表达式临时量、返回值。
-> 作为字段/全局/静态/接口值/`box`/`Option`/`Result`/容器元素/数组元素/泛型实参/闭包捕获，
+> 作为字段/全局/静态/接口值/`Box`/`Option`/`Result`/容器元素/数组元素/泛型实参/闭包捕获，
 > 一律类型错误（编译期硬错）。
 
 **返回值契约**：谁返回借用视图，谁负责底层数据在调用方使用期间存活；与 `String.as_str()` 同水位。
 编译器只对直接形态做 lint；经函数/方法/`out` 透传的路径由作者负责，明文写进契约。
 
-### 2.2 引用计数句柄（`Vec` / `box` / `String`）
+### 2.2 引用计数句柄（`Vec` / `Box` / `String`）
 
 统一头（数据区前，句柄 16 字节不变）：
 
@@ -62,7 +63,7 @@ struct ct_handle_hdr { int refs; int aux; };   /* 8 字节；aux 类型专属 */
 ```
 
 - 无 `drop_fn`：句柄是 nominal 类型，release 按静态类型分发；
-- `header_size(T) = round_up(8, _Alignof(T))`；`String` 的 `char` 数据 8 字节，`box<T>` 按 T 对齐；
+- `header_size(T) = round_up(8, _Alignof(T))`；`String` 的 `char` 数据 8 字节，`Box<T>` 按 T 对齐；
 - 空 `String` 用 immortal 静态空串：`refs = -1`，`release` 首行 `if (refs < 0) return;`；
 - refcount 是普通 `int`，**非原子**；句柄非线程安全，跨线程共享由作者同步（见 §4）；
 - `_Static_assert(sizeof(String_handle)==16)` 与数据区对齐断言进 golden 头。
@@ -90,13 +91,13 @@ struct ct_handle_hdr { int refs; int aux; };   /* 8 字节；aux 类型专属 */
 - 逃逸：类型系统无法阻止存入字段/全局/闭包；直接形态（参数值直接存字段/全局/直接 return）lint，
   透传形态由作者负责（契约级）。
 
-### 2.4 `box<T>` / `new`
+### 2.4 `Box<T>` / `new`
 
-- `box<T>`：单元素句柄，与 `Vec`/`String` 共用头与静态 release；借用视图/失效检测复用；
+- `Box<T>`：单元素句柄，与 `Vec`/`String` 共用头与静态 release；借用视图/失效检测复用；
 - `new`：完全关键字；`new T { ... }` 只接受**具名 struct**，花括号语法与 `T x = {...};` 共享；
 - `new String` 不允许（字面量 + `to_string()` 覆盖）；`new` 不接受数组/容器/内建句柄；
 - `T` 若含借用字段（切片/`Str`），在 struct 声明层已硬错，`new T` 不重复检查；
-- 顺序：`box/new` 放最后，等 `String` 验证句柄协议后再做。
+- 顺序：`Box/new` 放最后，等 `String` 验证句柄协议后再做。
 
 ### 2.5 函子
 
@@ -127,7 +128,7 @@ struct ct_handle_hdr { int refs; int aux; };   /* 8 字节；aux 类型专属 */
 
 ### 3.4 线程模型
 
-refcount 非原子；`String`/`box`/`Vec` 句柄非线程安全。跨线程共享必须经用户同步；
+refcount 非原子；`String`/`Box`/`Vec` 句柄非线程安全。跨线程共享必须经用户同步；
 类型层不禁止，lint 只对直接存入共享全局的形态告警。CT 提供 `atomic T`，不提供 Arc 级句柄。
 
 ## 4. 兼容承诺
@@ -171,11 +172,11 @@ CT **不再是 C 超集**，重述为：
 | PH-78 | S2 `ref/out` | v0.78.0（拟） |
 | PH-79 | S3 切片 | v0.79.0（拟） |
 | PH-80 | S5 `String/Str`（S5a/S5b） | v0.80.0（拟） |
-| PH-81 | S1 `box/new` | v0.81.0（拟） |
+| PH-81 | S1 `Box/new` | v0.81.0（拟） |
 | v1.0 | AST-only 收口（顺延） | v1.0.0 |
 | v1.1 | 语法现代化 + A strict；Wave 2 函子 | v1.1.0 |
 
-- 顺序：**S2 `ref/out` ∥ S3 切片 → S5 `String/Str` → S1 `box/new`**；S4 函子延后 Wave 2；
+- 顺序：**S2 `ref/out` ∥ S3 切片 → S5 `String/Str` → S1 `Box/new`**；S4 函子延后 Wave 2；
 - 版本：PH-78 起严格 `phase = MINOR`，无偏移表；
 - v1.0 顺延发布，范围仍 AST-only；v1.1 继续行为保持 + Wave 2；
 - S5 分 S5a（内建层 + 旧 `Str` 并存）/ S5b（删旧 `Str` + 外部迁移 + 文档三处同步）。
@@ -225,7 +226,7 @@ J-6 最低原型集：**S2 全量 + S3 全量 + S5 最小垂直切片**（String
 | ID | 任务 | 判据 |
 | --- | --- | --- |
 | P-3.1 | 16 字节句柄 + 8 字节头 | `_Static_assert`；`header_size(T)` 对齐 |
-| P-3.2 | 复制/Drop 协议 | 参数/返回/字段/`Vec<String>`/`box<String>` refcount 轨迹；ASan |
+| P-3.2 | 复制/Drop 协议 | 参数/返回/字段/`Vec<String>`/`Box<String>` refcount 轨迹；ASan |
 | P-3.3 | 字面量视图 | 字面量 `Str` 无 Drop；`String` 有 Drop；immortal 空串 `refs=-1` |
 | P-3.4 | `.data`/`cstr()` | `.data` 只读、不保证 NUL；子视图 `cstr()`；`printf` 负例 |
 | P-3.5 | C 边界 | `.m.ct`/shim/`.h.ct` 全部 `char *`；无隐式转换 |
@@ -235,7 +236,7 @@ J-6 最低原型集：**S2 全量 + S3 全量 + S5 最小垂直切片**（String
 
 | ID | 任务 | 判据 |
 | --- | --- | --- |
-| P-4.1 | 存储位置硬错 | 字段/全局/接口/box/Option/Result/容器/数组元素/泛型实参/闭包捕获 |
+| P-4.1 | 存储位置硬错 | 字段/全局/接口/Box/Option/Result/容器/数组元素/泛型实参/闭包捕获 |
 | P-4.2 | 复合类型递归 | `Vec<int[]>`、`Map<Str,int>`、`struct { Str s; }` 硬错 |
 | P-4.3 | 返回值契约 | 直接 `return 局部切片/as_str()` 可 lint；参数/字面量视图正例 |
 | P-4.4 | 诊断质量 | 错误指向具体字段/泛型实参/闭包捕获 |
@@ -270,7 +271,7 @@ J-6 最低原型集：**S2 全量 + S3 全量 + S5 最小垂直切片**（String
 | P-7.2 | S3 切片全量 | A.4；`get(i)`；构造边界硬错；返回 lint |
 | P-7.3 | S5 最小垂直切片 | String 句柄 + 字面量 `Str`；A.3.1–A.3.3 |
 | P-7.4 | S5 全量（施工前） | A.3 全绿；跨仓 dry-run |
-| P-7.5 | S1 `box/new`（最后） | 句柄协议复用；`new` 仅具名 struct |
+| P-7.5 | S1 `Box/new`（最后） | 句柄协议复用；`new` 仅具名 struct |
 
 ### A.8 升 A 条件
 
@@ -282,7 +283,7 @@ J-6 → A：P-1…P-6 证据包齐全；P-7.1a/P-7.1b/P-7.2/P-7.3 原型可编�
 | Q | 结论 |
 | --- | --- |
 | Q1 | A1；v0.x phase=MINOR，PH-78 → v0.78.0，无偏移表；v1.0 顺延、范围不变 |
-| Q2 | `box`/`new` 保留但移末位；不砍，砍则 `new` 同退 |
+| Q2 | `Box`/`new` 保留但移末位；不砍，砍则 `new` 同退 |
 | Q3 | 顺序 S2 ∥ S3 → S5 → S1；S2 最小首切片；S5 不能单独回滚，分 S5a/S5b |
 | Q4 | 统一头 `{int refs; int aux;}` 8 字节；`header_size(T)=round_up(8,_Alignof(T))`；immortal 空串 `refs=-1` |
 | Q5 | 局部句柄 return = move；非局部 owning return = retain→return→release；重新赋值先 retain 右值再 release 旧值 |
@@ -325,7 +326,7 @@ U16String u = U16String.from_utf8("str"); /* OK：UTF-16 只走工厂 */
 /* U16String x = "str"; */           /* error：不隐式转 UTF-16 */
 
 struct Record { String tag; }
-box<Record> r = new Record { 7, "x" };  /* OK："x" 按字段类型构造成 String */
+Box<Record> r = new Record { 7, "x" };  /* OK："x" 按字段类型构造成 String */
 struct Bad { Str tag; }                  /* error：借用字段禁止 */
 ```
 
@@ -378,7 +379,7 @@ int *p = s.get(9);         /* 软访问：越界 → 0，不 trap */
 - 双编码共享一份 Unicode 表；跨编码只走显式工厂：
   `String.from_utf16`、`U16String.from_utf8`、`to_utf8`、`to_utf16`。
 
-### C.4 `box` 环与线程的报警边界
+### C.4 `Box` 环与线程的报警边界
 
 - 通用环检测在编译期不可判定；只能对直接形态 lint（明显自赋值/直接成环），不是保证；
 - 线程安全需要 `Send`/`Sync` 或所有权类型系统，属第七项机制，已否决；

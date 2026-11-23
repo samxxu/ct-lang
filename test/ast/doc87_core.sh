@@ -2,7 +2,7 @@
 # DOC-87 Stage 2 probe: the built-in layer's source namespace `core`.
 #
 # The five lib/core units declare `namespace core;`, the canonical source
-# spelling is `core::Vec` / `core::String` / `core::box` / ..., and the root
+# spelling is `core::Vec` / `core::String` / `core::Box` / ..., and the root
 # spelling stays a compatibility alias for one MINOR. During the window the C
 # symbols stay in the root namespace, so `core::` and the bare spelling emit
 # byte-identical C (the banner line names the input, so it is excluded).
@@ -58,22 +58,22 @@ else
     ok "core::Vec/Option/Result/String/Str compile and run"
 fi
 
-# `core::Map` and `core::box` are the other two shapes; compile-only (the box
+# `core::Map` and `core::Box` are the other two shapes; compile-only (the Box
 # fixture would need a runtime owner for a stable run).
 cat > "$work/shapes.ct" <<'CT'
 struct P { int x; };
 int main() {
     core::Map<char *, int> m;
     m.h = 0;
-    core::box<P> b = new P { 7 };
+    core::Box<P> b = new P { 7 };
     return b.at()->x;
 }
 CT
 if ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" "$work/shapes.ct" -o "$work/shapes.c" ) \
         >"$work/shapes.log" 2>&1; then
-    ok "core::Map and core::box compile"
+    ok "core::Map and core::Box compile"
 else
-    bad "core::Map / core::box did not compile" "$(head -3 "$work/shapes.log")"
+    bad "core::Map / core::Box did not compile" "$(head -3 "$work/shapes.log")"
 fi
 
 # 3. The bare spelling still compiles (compatibility window) and emits the same

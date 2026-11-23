@@ -1,15 +1,15 @@
 namespace core;
 /*
- * Box.h.ct - the built-in single-object owning handle `box<T>` (PH-81 / v0.81.0).
+ * Box.h.ct - the built-in single-object owning handle `Box<T>` (PH-81 / v0.81.0).
  *
- *   struct ct_box_hdr { int refs; int aux; };   (8 bytes, before the payload)
- *   struct box<T>     { struct ct_box_hdr *h; T *ptr; };  (16 bytes on LP64)
+ *   struct ct_Box_hdr { int refs; int aux; };   (8 bytes, before the payload)
+ *   struct Box<T>     { struct ct_Box_hdr *h; T *ptr; };  (16 bytes on LP64)
  *
  * The header sits at `round_up(8, _Alignof(T))` bytes before `ptr`, so the
  * payload stays aligned. The handle keeps both the allocation base and the
  * payload pointer; release dispatches on the static type, because the compiler
- * writes one `box_X__payload_release(T *)` helper per instance (a `String`
- * field releases through its Drop, a container / box field through its
+ * writes one `Box_X__payload_release(T *)` helper per instance (a `String`
+ * field releases through its Drop, a container / Box field through its
  * `release`, a plain struct recurses into its own fields). There is no
  * `drop_fn`; `new T { ... }` starts at refs = 1 and never uses the immortal
  * `refs = -1` form.
@@ -18,40 +18,40 @@ namespace core;
  */
 #include <stdlib.h>
 
-/* ---- PH-81 / S1: `box<T>` (single-object owning handle) ------------------ */
+/* ---- PH-81 / S1: `Box<T>` (single-object owning handle) ------------------ */
 
 /* The shared 8-byte header sits immediately before the payload, exactly like
    `String`'s `ct_str_hdr`; the handle keeps the payload pointer and the header
    pointer, so it is two machine words. `header_size(T)` rounds 8 up to T's
    alignment, so the payload stays correctly aligned. `release` is dispatched
    by the static type: the compiler emits the payload-release helper for each
-   `box<T>` instance (a borrowed view of `T[]` would need a length and a byte
+   `Box<T>` instance (a borrowed view of `T[]` would need a length and a byte
    offset, so it is not the shared header here). */
-pub struct ct_box_hdr {
+pub struct ct_Box_hdr {
     int refs;
     int aux;
 }
 
-pub struct box<T> {
-    struct ct_box_hdr *h;
+pub struct Box<T> {
+    struct ct_Box_hdr *h;
     T *ptr;
 } use Drop
 
-impl<T> box<T> {
+impl<T> Box<T> {
     /* Box a value with a retained payload: a scalar / plain struct is copied,
        an owning field takes its own reference (the callee's by-value `String`
-       parameter is retained at entry and released at exit, so the box needs a
+       parameter is retained at entry and released at exit, so the Box needs a
        second reference). `new T { ... }` is the move form for a fresh value. */
-    pub static box<T> of(T v)
+    pub static Box<T> of(T v)
     {
-        return __ct_box_copy(&v);
+        return __ct_Box_copy(&v);
     }
 
     /* A retained alias sharing the same payload; the increment is skipped for
        the immortal form (never used by `new`, which always starts at 1). */
-    pub box<T> retain()
+    pub Box<T> retain()
     {
-        box<T> r;
+        Box<T> r;
         r.h = self->h;
         r.ptr = self->ptr;
         if (r.h != 0 && r.h->refs >= 0) r.h->refs = r.h->refs + 1;
@@ -73,7 +73,7 @@ impl<T> box<T> {
         if (self->h->refs < 0) return;
         self->h->refs = self->h->refs - 1;
         if (self->h->refs == 0) {
-            __ct_box_payload_release(self->ptr);
+            __ct_Box_payload_release(self->ptr);
             free(self->h);
         }
         self->h = 0;
@@ -86,7 +86,7 @@ impl<T> box<T> {
         if (self->h->refs < 0) return;
         self->h->refs = self->h->refs - 1;
         if (self->h->refs == 0) {
-            __ct_box_payload_release(self->ptr);
+            __ct_Box_payload_release(self->ptr);
             free(self->h);
         }
         self->h = 0;
@@ -110,19 +110,19 @@ impl<T> box<T> {
     }
 }
 
-impl<T> Drop for box<T> {
+impl<T> Drop for Box<T> {
     /* The Drop receiver is the erased `void *` form, so the body casts it back
        and repeats the release sequence instead of calling a sibling method
-       (a generic body cannot dispatch on a symbolic `box<T>` receiver). */
+       (a generic body cannot dispatch on a symbolic `Box<T>` receiver). */
     void drop()
     {
-        struct box<T> *b;
-        b = (struct box<T> *)self;
+        struct Box<T> *b;
+        b = (struct Box<T> *)self;
         if (b->h == 0) return;
         if (b->h->refs < 0) return;
         b->h->refs = b->h->refs - 1;
         if (b->h->refs == 0) {
-            __ct_box_payload_release(b->ptr);
+            __ct_Box_payload_release(b->ptr);
             free(b->h);
         }
         b->h = 0;

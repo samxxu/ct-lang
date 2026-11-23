@@ -4,7 +4,7 @@
 >
 > **适用版本**：当前主线 **ct-ast**（版本号见 `ct -v`）。
 >
-> **核对基线：v0.84.1**（PH-78 `ref`/`out`、PH-79 切片、PH-80 String/Str、PH-81 `box`/`new`、
+> **核对基线：v0.84.1**（PH-78 `ref`/`out`、PH-79 切片、PH-80 String/Str、PH-81 `Box`/`new`、
 > PH-84 ADT/`match` 均已落地）。旧版本行为不同之处，以 [language-spec](language-spec.md) 为准。
 >
 > **读者假设**：熟悉 C 的 `malloc`/`free`、指针、数组衰减。不需要任何其他语言背景。
@@ -12,7 +12,7 @@
 > **一句话总纲**：Ct 把你用纪律管的东西变成类型管的；指针从日常工具降级为逃生通道。
 >
 > **与 [memory-guide](memory-guide.md) 的关系**：本文讲 v0.84 的新句柄层
-> （`String` / `Str` / `box<T>` / `Vec<T>` / `Map<K,V>` / ADT）的心智模型；
+> （`String` / `Str` / `Box<T>` / `Vec<T>` / `Map<K,V>` / ADT）的心智模型；
 > memory-guide 讲 `own` / `borrow` / `Drop` 的指针层（逃生层与旧模型）。
 > 新代码优先按本文选型；落到逃生层时再看 memory-guide。
 
@@ -22,7 +22,7 @@
 
 | 你在 C 里手写的东西 | Ct 里的对应物 | 你省掉了什么 |
 | --- | --- | --- |
-| `T *p = malloc(...)` + 全仓记「谁 free」 | `box<T> p = new T { ... }` | `malloc`/`free` 配对、`sizeof`；**不省**引用环与未配对句柄的泄漏 |
+| `T *p = malloc(...)` + 全仓记「谁 free」 | `Box<T> p = new T { ... }` | `malloc`/`free` 配对、`sizeof`；**不省**引用环与未配对句柄的泄漏 |
 | `char *s = strdup(...)` + `strlen` 满地跑 | `String s = "x";` | 长度计算、NUL 约定、深拷贝约定（代价是 retain/release） |
 | `int *a, int n` 双参数传数组 | `int[] a` 切片 | 长度与指针失配、越界无防护 |
 | `int f(..., int *out)` + 调用方猜是否写回 | `out int x` / `ref int x` | 意图靠注释、忘写未初始化 |
@@ -38,7 +38,7 @@
 ┌─ 日常层（默认，无指针）──────────────────────────┐
 │  值：struct、int、数组 T a[N]                      │
 │  借用视图：Str、切片 T[]（{ptr,len}，无 Drop）      │
-│  拥有句柄：String、box<T>、Vec<T>、Map（引用计数）  │
+│  拥有句柄：String、Box<T>、Vec<T>、Map（引用计数）  │
 │  参数糖：ref / out                                  │
 ├─ 逃生层（合法，不鼓励）──────────────────────────┤
 │  指针、own、malloc/free、defer/errdefer             │
@@ -54,7 +54,7 @@
 这和 `goto` 的最终形态一样——留在语言里，写在文档边缘，大部分人想不起来用。
 
 另外要分清两种“标准能力”的加载方式：`lib/core` 的内置层（`Vec` / `Map` / `Option` /
-`Result` / `String` / `Str` / `box`）由编译器**自动预解析**；而挂在 `char *` 上的
+`Result` / `String` / `Str` / `Box`）由编译器**自动预解析**；而挂在 `char *` 上的
 `length()` / `to_int()` / `starts_with()` 等方法来自 **std 包的寄生映射**
 （`map trait` 挂在 `char *` 上），必须 `import std::str::CharStr;` 才有
 （std 0.19.0 及以前叫 `std::str::String`；旧名保留一个 MINOR 回退）。
@@ -88,8 +88,8 @@
 
 **字段释放分层（v0.88 实测）**：
 
-- `String` / `box<T>` 字段：宿主 struct `use Drop` 且**没有显式 `impl Drop`** → 编译器生成字段胶水
-  （`String_Drop_drop` / `box_*_Drop_drop`）；一旦写显式 `impl Drop`，胶水不再生成，作者自己释放。
+- `String` / `Box<T>` 字段：宿主 struct `use Drop` 且**没有显式 `impl Drop`** → 编译器生成字段胶水
+  （`String_Drop_drop` / `Box_*_Drop_drop`）；一旦写显式 `impl Drop`，胶水不再生成，作者自己释放。
 - `Vec<T>` / `Map<K,V>` 字段：自动胶水为空；即使宿主 `use Drop`，也要在 Drop/协议里显式 `release()`。
 - 全局：没有作用域出口，必须显式 `release()`。
 - ADT payload：本轮不生成 Drop glue（PH-84 简化项，v1.1 可能变）。
@@ -132,7 +132,7 @@ int v = 0;                     /* trivial 也可不初始化；owning 必须先�
 parse_int("42", v);
 ```
 
-`out` 的 owning 实参（`String` / `box<T>` / `Vec<T>` / `Map<K,V>`）必须先初始化：
+`out` 的 owning 实参（`String` / `Box<T>` / `Vec<T>` / `Map<K,V>`）必须先初始化：
 `String s; take(s);` 会硬错（`out owning argument must be initialized`）。
 
 **场景二：返回值（你最容易踩的地方）**
@@ -236,7 +236,7 @@ int area(Shape s)
 - **上限**：每个 build 最多 64 个 ADT，每个 ADT 最多 16 个变体、每变体最多 8 个负载；
   无泛型 ADT、无 or/守卫/嵌套/结构体模式、无表达式形式 `match`。
 
-**最重要的一条：ADT 不生成 drop glue。** 负载里如果是 `String` / `box<T>` / `Vec<T>`，
+**最重要的一条：ADT 不生成 drop glue。** 负载里如果是 `String` / `Box<T>` / `Vec<T>`，
 编译器不会在 ADT 离开作用域时替你释放。实测还更进一步：
 
 ```ct
@@ -299,21 +299,21 @@ String joined = str_concat(a.as_str(), b.as_str());   /* 新 owning String */
 | --- | --- | --- |
 | 动态长度、跨函数持有 | `Vec<T>` | 定长数组硬撑 |
 | 键值查找 | `Map<K,V>`（字符串键用 `Map<String,V>`） | 手写哈希表；`Map<Str,V>` 会硬错 |
-| 单对象堆分配 | `box<T>` | `own T*` + `malloc`（除非你有明确的转移语义需求） |
+| 单对象堆分配 | `Box<T>` | `own T*` + `malloc`（除非你有明确的转移语义需求） |
 
-`box<T>` 的句柄在 LP64 上是 16 字节（两个机器字），payload 前有 8 字节 `{refs, aux}` 头；
+`Box<T>` 的句柄在 LP64 上是 16 字节（两个机器字），payload 前有 8 字节 `{refs, aux}` 头；
 `b.f` 自动解引用到 payload，`b.at()` 返回借用 `T *`（`release()` 后失效）。
 
 **⑥ 什么时候才回逃生层拿指针**
 
 只有一个判据：**FFI 边界或硬件。** shim 里接 C 库、MMIO 寄存器、自定义分配器——这些是 C 的地盘，
-指针永远合法。应用代码里冒出指针，先问自己是不是该用切片/`Str`/`box`。
+指针永远合法。应用代码里冒出指针，先问自己是不是该用切片/`Str`/`Box`。
 
 ## 6. 各特性与指针的关系速查
 
 | 特性 | 与指针的关系 |
 | --- | --- |
-| `box<T>` / `new` | 消灭「指向堆单对象的指针」；句柄内部当然有指针，但被协议包住 |
+| `Box<T>` / `new` | 消灭「指向堆单对象的指针」；句柄内部当然有指针，但被协议包住 |
 | `String` | 同上；字面量/空串是 immortal 只读块，其余是自有堆块；`.data` 是 `const char *`，不保证 NUL 结尾 |
 | `Str` / `T[]` | 内部含指针；不能作 struct 字段 / `Map` 键；可作局部/参数/返回/`Vec` 元素/ADT 负载，但都是借用视图 |
 | `ref` / `out` | 发射成指针，源码无指针；**没有生命周期保证**——可被存储或传给更长寿命位置，靠契约 + 直接 lint |
@@ -332,8 +332,8 @@ Ct 的护栏水位是「比 C 严格得多，比 Rust 松」。以下残余**存
 | 引用环（A 持 B、B 持 A） | 静默泄漏，无告警 | 文档契约「环=作者责任」；直接环有 lint；`--debug-leaks` **当前未实现**，将来也只报未配对计数 |
 | `Str` 视图活到 owner 死后（返回局部视图、临时接收者、经函数转手） | 悬垂读，UB | 前两种直接形态有 **warning**（v0.88.2 起，`borrowed 'Str' view escapes`；`ct check` 升 error，见 [SH-106](../issues/selfhost/sh106-str-view-escape-no-lint.md)）；经函数转手仍靠契约 + ASan；`T[]` 切片有 `slice escape` warning |
 | 句柄跨线程共享 | 数据竞争（refcount 非原子） | 契约「句柄非 atomic」+ TSan（nightly/Linux 独立门禁）；需要时用 atomic 自己同步 |
-| ADT 的 owning payload（`String` / `box` / `Vec`） | 不自动释放 → 泄漏；释放绑定后原句柄悬垂 | ADT 无 drop glue，作者显式释放**一次**；把 ADT 当 move 语义 |
-| `String` / `box<T>` 字段（宿主无 `use Drop`，或写了显式 `impl Drop`） | 泄漏 | 宿主 `use Drop` 且无显式 impl → 字段胶水；否则显式 `release()` |
+| ADT 的 owning payload（`String` / `Box` / `Vec`） | 不自动释放 → 泄漏；释放绑定后原句柄悬垂 | ADT 无 drop glue，作者显式释放**一次**；把 ADT 当 move 语义 |
+| `String` / `Box<T>` 字段（宿主无 `use Drop`，或写了显式 `impl Drop`） | 泄漏 | 宿主 `use Drop` 且无显式 impl → 字段胶水；否则显式 `release()` |
 | `Vec<T>` / `Map<K,V>` 字段、全局位置 | 无自动胶水 / 无作用域出口 → 泄漏 | 显式 `release()` 或由协议/析构路径处理 |
 | 逃生层 own 指针的一切经典错误 | 泄漏/悬垂/double free | 泄漏告警（保守、不保证）；ASan |
 
@@ -360,11 +360,11 @@ Ct 的护栏水位是「比 C 严格得多，比 Rust 松」。以下残余**存
 ## 8. 口诀（打印贴在显示器边上）
 
 ```
-数据过这行还要活吗？  要 → String / box / Vec
+数据过这行还要活吗？  要 → String / Box / Vec
                        不要 → Str / 切片
 函数内造的 → String 出去；路过别人的 → Str 递出去
 先绑 owner，再取视图；视图用完前，owner 别死
-指针主要留在 shim 和寄存器；应用层先想 Str / 切片 / box
+指针主要留在 shim 和寄存器；应用层先想 Str / 切片 / Box
 ADT 的 payload 自己收尾：只释放一次，释放后别再碰原句柄
 互相持有会泄漏——就记住这一条
 ```

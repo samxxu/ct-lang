@@ -25,7 +25,7 @@ ct-ast 按 `frontend/{lex,module,parse,sym,type}` / `runtime/arena` / `backend/{
 ### 0.1 与 ct-ast 线的边界
 
 本文描述的是 **L0 种子**（`selfhost/l0/ctc.c`）的架构。安装入口 **ct-ast** 的新语法不在 L0 内：
-`ref`/`out`（§4.68）、切片 `T[]`（§4.69）、`String`/`Str`（§4.70）、`box<T>`/`new`（§4.71）、
+`ref`/`out`（§4.68）、切片 `T[]`（§4.69）、`String`/`Str`（§4.70）、`Box<T>`/`new`（§4.71）、
 ADT/`match`（§4.73）都由 `selfhost/ct-ast/**` 实现，行为以 [language-spec](language-spec.md) 为准。
 
 ### 1. 设计目标

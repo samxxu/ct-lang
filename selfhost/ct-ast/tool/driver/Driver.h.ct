@@ -128,7 +128,7 @@ static int src_has_prefix(const char *s, const char *pre)
     return 0;
 }
 
-/* PH-81: the built-in layer must load for `box<T>` / `new T { ... }`, but a
+/* PH-81: the built-in layer must load for `Box<T>` (or its deprecated `box<T>` alias) / `new T { ... }`, but a
    comment or a string that merely contains the word must not pull it in (that
    changed the `--emit-c` bytes of module fixtures whose prose says "a new X").
    This scan skips comments and literals and requires `new` to be followed by a
@@ -183,9 +183,9 @@ static int src_has_new_expr(const char *s)
 /* PH-66 R3: decide BEFORE parsing. Parsing an unused unit would leave its
    symbols in the tables, and the emitter would then declare (never define)
    things like `Str_Drop_drop` -- a `-Wunused-function` warning on GCC. */
-/* PH-81: `box<T>` in code (not a comment/string, and not a variable merely
-   named `box`). */
-static int src_has_box_type(const char *s)
+/* PH-81 / LANG-24: `Box<T>` (or the deprecated `box<T>` alias) in code -- not
+   a comment/string, and not a variable merely named Box/box. */
+static int src_has_Box_type(const char *s)
 {
     const char *p = s;
 
@@ -210,10 +210,64 @@ static int src_has_box_type(const char *s)
             const char *q = p;
             while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
                    || (*q >= '0' && *q <= '9') || *q == '_') q++;
-            if ((size_t)(q - p) == 3 && strncmp(p, "box", 3) == 0) {
+            if ((size_t)(q - p) == 3
+                && (strncmp(p, "Box", 3) == 0 || strncmp(p, "box", 3) == 0)) {
                 const char *t = q;
                 while (*t == ' ' || *t == '\t') t++;
                 if (*t == '<') return 1;
+            }
+            p = q;
+        }
+    }
+    return 0;
+}
+
+/* LANG-24: a source that declares its own `struct Box` keeps that type; the
+   built-in layer is not spliced, so the historical phase 29/33/36 fixtures
+   (and any project that already owns the name) keep compiling. `Box` is still
+   auto-loaded for every program that does not declare it. */
+static int src_declares_Box(const char *s)
+{
+    const char *p = s;
+    int after_tag = 0;
+
+    while (*p) {
+        if (p[0] == '/' && p[1] == '/') { while (*p && *p != '\n') p++; continue; }
+        if (p[0] == '/' && p[1] == '*') {
+            p += 2;
+            while (*p && !(p[0] == '*' && p[1] == '/')) p++;
+            if (*p) p += 2;
+            continue;
+        }
+        if (*p == '"' || *p == '\'') {
+            char q = *p;
+            p++;
+            while (*p && *p != q) { if (*p == '\\' && p[1]) p++; p++; }
+            if (*p) p++;
+            continue;
+        }
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+              || (*p >= '0' && *p <= '9') || *p == '_')) {
+            if (*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r')
+                after_tag = 0;
+            p++;
+            continue;
+        }
+        {
+            const char *q = p;
+            while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
+                   || (*q >= '0' && *q <= '9') || *q == '_') q++;
+            if ((size_t)(q - p) == 6 && strncmp(p, "struct", 6) == 0) {
+                after_tag = 1;
+            } else if ((size_t)(q - p) == 5 && strncmp(p, "union", 5) == 0) {
+                after_tag = 1;
+            } else if ((size_t)(q - p) == 4 && strncmp(p, "enum", 4) == 0) {
+                after_tag = 1;
+            } else {
+                if (after_tag && (size_t)(q - p) == 3
+                    && strncmp(p, "Box", 3) == 0)
+                    return 1;
+                after_tag = 0;
             }
             p = q;
         }
@@ -237,9 +291,10 @@ static int layer_wanted(const char *src, int bi)
            as the borrowed Str, so either name must splice it in. */
         return src_has_word(src, "Str") || src_has_word(src, "String")
             || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
-    /* PH-81: the box template has its own unit, so programs that never name a
-       box are byte-identical to the pre-S1 output. */
-    return src_has_box_type(src) || src_has_new_expr(src);
+    /* PH-81: the Box template has its own unit, so programs that never name a
+       Box are byte-identical to the pre-S1 output. */
+    return !src_declares_Box(src)
+        && (src_has_Box_type(src) || src_has_new_expr(src));
 }
 
 /* DOC-87 Stage 1: compile mode asks `Module::find_builtin` for the layer file,

@@ -18,7 +18,7 @@
 | 文档 | 内容 | 何时读 |
 | --- | --- | --- |
 | [tutorial.md](tutorial.md) | 逐章入门：核心范式（字符串 → factory → trait 对象 → 接口链）→ 安装 → 派发 → 模块 → 内存 → `map`，附命令行速查与常见坑 | 第一次使用 |
-| [guide-for-c-programmers.md](guide-for-c-programmers.md) | 给 C 程序员的内存心智模型：`String`/`Str`、切片、`ref`/`out`、`box`、ADT/`match`、残余风险 | 从 C 迁移到 Ct |
+| [guide-for-c-programmers.md](guide-for-c-programmers.md) | 给 C 程序员的内存心智模型：`String`/`Str`、切片、`ref`/`out`、`Box`、ADT/`match`、残余风险 | 从 C 迁移到 Ct |
 | [language-spec.md §4.10.1](language-spec.md#4101-链式构建器范式权威定义与两档路径) | **链式构建器范式的唯一权威定义**：三段顺序、轻量 / 完整两档的判断依据、逐段边界与报错原文（含 SH-75 后的当前状态） | 要写或判断一条链式调用时 |
 | [language-spec.md](language-spec.md) | `.ct` 的语法与展开规则、命名契约、容量上限、明确不支持 | 想知道「这条写法展开成什么 C」 |
 | [glossary.md](glossary.md) | 术语表：项目名、语言构造、内部符号 | 读文档遇到生词 |
@@ -97,7 +97,7 @@
 | [reviews/2026-11-21-v088-external-review-eval.md](reviews/2026-11-21-v088-external-review-eval.md) | 外部 v0.88 评审与惯用卡评估：MAX_FUNCS/SH-104-105 勘误、lib/core 已定 bugfix、SH-73 已裁定 bug、惯用卡逐条修正 | 查看外部评估 |
 | [reviews/2026-11-22-grokbot-architecture-assessment-eval.md](reviews/2026-11-22-grokbot-architecture-assessment-eval.md) | GrokBot 外部架构评估核对：规模/测试/容量/许可逐项一致；3 处事实错误（内置层预算、issues 计数、`atomic` 分类）；无新架构项 | 查看外部评估 |
 | [reviews/2026-11-22-kimi-v088-review-eval.md](reviews/2026-11-22-kimi-v088-review-eval.md) | Kimi v0.88 评审核对：非 GrokBot 评阅；D4/D5/D6 已闭环、D2 待 SH-110；`MAX_FUNCS` 475/512 为旧数；CLI `warn` 已裁决提前到下一 v0.x（SH-115） | 查看外部评估 |
-| [reviews/2026-11-22-four-external-guides-eval.md](reviews/2026-11-22-four-external-guides-eval.md) | 外部四份文档核对：速览有 4 个示例跑不通（ADT 语法/递归/box API/`#include`）与 3 处布局语义错；内存/性能指南各 4 处需修；惯用卡已归档且过期 | 查看外部文档评估 |
+| [reviews/2026-11-22-four-external-guides-eval.md](reviews/2026-11-22-four-external-guides-eval.md) | 外部四份文档核对：速览有 4 个示例跑不通（ADT 语法/递归/Box API/`#include`）与 3 处布局语义错；内存/性能指南各 4 处需修；惯用卡已归档且过期 | 查看外部文档评估 |
 | [reviews/2026-11-22-arena-rename-proposal-eval.md](reviews/2026-11-22-arena-rename-proposal-eval.md) | `std::arena` 改名提议核对：模块/类型命名前提不成立；selfhost 零 `import std::`，路径 B 不触发；真正待办是 std-catalog 与 guide/battle 的 arena 矛盾 | 查看提议评估 |
 | [reviews/2026-11-22-kimi-opinion-on-grok-eval.md](reviews/2026-11-22-kimi-opinion-on-grok-eval.md) | Kimi 对 GrokBot 的元评审核对：test/README 已开 TEST-26；DOC-87 已覆盖 `lib/core` + `core::*`；SH-110“修复进行中”不成立；定位/GPL 两项待裁决 | 查看元评审 |
 | [reviews/2026-11-22-lib-core-proposal-eval.md](reviews/2026-11-22-lib-core-proposal-eval.md) | lib/core 提案核对：主体与 DOC-87 一致并已提前到 pre 窗口；AutoDrop 不是 trait、LANG-23 时点冲突、`CT → Ct` 需独立 ADR | 查看提案评估 |

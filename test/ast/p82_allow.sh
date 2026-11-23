@@ -32,7 +32,7 @@ cd "$root" || exit 1
 # The documented tree pattern: the marker sits on the struct line.
 cat >"$work/tree.ct" <<'CT'
 struct Node {                 /* ct: allow-cycle */
-    box<Node> first_child;
+    Box<Node> first_child;
     Node *parent;
 }
 int main(void) { return 0; }
@@ -40,7 +40,7 @@ CT
 
 cat >"$work/tree_nomark.ct" <<'CT'
 struct Node {
-    box<Node> first_child;
+    Box<Node> first_child;
     Node *parent;
 }
 int main(void) { return 0; }
@@ -49,29 +49,29 @@ CT
 # A self loop with the marker on the line above the struct: not suppressed.
 cat >"$work/above.ct" <<'CT'
 /* ct: allow-cycle */
-struct N { box<N> child; }
+struct N { Box<N> child; }
 int main(void) { return 0; }
 CT
 
 # A self loop with the marker on a field line: not suppressed either.
 cat >"$work/fieldmark.ct" <<'CT'
 struct M {
-    box<M> child;  /* ct: allow-cycle */
+    Box<M> child;  /* ct: allow-cycle */
 }
 int main(void) { return 0; }
 CT
 
 # Marker on the second participant of A -> B -> A: the cycle is suppressed.
 cat >"$work/partner.ct" <<'CT'
-struct A { box<B> b; }
-struct B { box<A> a; }        /* ct: allow-cycle */
+struct A { Box<B> b; }
+struct B { Box<A> a; }        /* ct: allow-cycle */
 int main(void) { return 0; }
 CT
 
 # Marker on an unrelated struct: A -> B -> A is still reported.
 cat >"$work/unrelated.ct" <<'CT'
-struct A { box<B> b; }
-struct B { box<A> a; }
+struct A { Box<B> b; }
+struct B { Box<A> a; }
 struct Z { int n; }           /* ct: allow-cycle */
 int main(void) { return 0; }
 CT

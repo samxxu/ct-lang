@@ -2591,7 +2591,7 @@ impl ParseOps for Parser {
                         self->mem->path);
                 /* PH-81 S1a: a borrowed `Str` / `U16Str` is a view, so a field
                    would outlive the bytes it borrows; this is the struct
-                   declaration layer `box<Bad>` relies on. */
+                   declaration layer `Box<Bad>` relies on. */
                 if (strncmp(fb, "struct ", 7) == 0) fb += 7;
                 while (*fb == ' ' || *fb == '\t') fb++;
                 if (strcmp(fb, "Str") == 0 || strcmp(fb, "U16Str") == 0)

@@ -104,8 +104,8 @@ import frontend::parse::ExprTypeText;
    in `b`, the value category in `aux` and the receiver's static type in
    `text`; the emitter names the promoted variable in `text3`. */
 #define N_MATSEQ 73
-/* PH-81 S1b: `new T { ... }` -- a `box<T>` construction. `text` is the
-   payload C type, `text2` the box instance name, `text3` the box C type and
+/* PH-81 S1b: `new T { ... }` -- a `Box<T>` construction. `text` is the
+   payload C type, `text2` the Box instance name, `text3` the Box C type and
    `a` the captured brace initialiser (N_RAW). */
 #define N_NEWOBJ 77
 #define N_INTO 63
@@ -311,13 +311,13 @@ pub trait ExprOptional {
 /* Phase 32: the opt-in `--types` gate. Its own trait because `ExprOps` already
    sits at MAX_METHODS, and both grammars that need the gate -- the expression
    layer and the statement layer -- hold this object. */
-/* PH-81 / S1: `new` and the `box<T>` member sugar. `ExprOps` is at
+/* PH-81 / S1: `new` and the `Box<T>` member sugar. `ExprOps` is at
    MAX_METHODS, so the construction parser and the auto-deref helper live in
    their own small trait like the optional / subscript grammars. */
 pub trait ExprNew {
     int  new_ahead(void);
     int  parse_new_expr(void);
-    int  box_member_deref(int recv, int arrow, const char *fname,
+    int  Box_member_deref(int recv, int arrow, const char *fname,
                           int line, int col, int *out);
 }
 
@@ -1129,7 +1129,7 @@ static int ref_arg_place(struct Expr *self, int n)
 }
 
 /* Phase 78 S2a: owning types are the ones whose value carries a resource:
-   `String` / `Str`, `box<T>`, `Vec<T>`, `Map<K,V>` and any struct with a
+   `String` / `Str`, `Box<T>`, `Vec<T>`, `Map<K,V>` and any struct with a
    `use Drop`. A pointer to one is not owning, and neither is a plain scalar
    or struct. */
 static int type_is_owning(struct Expr *self, const char *type)
@@ -1140,7 +1140,7 @@ static int type_is_owning(struct Expr *self, const char *type)
 
     if (!type || !type[0]) return 0;
     if (strcmp(type, "String") == 0 || strcmp(type, "Str") == 0) return 1;
-    if (strncmp(type, "box<", 4) == 0 || strncmp(type, "Box<", 4) == 0) return 1;
+    if (strncmp(type, "Box<", 4) == 0) return 1;
     if (strncmp(type, "Vec<", 4) == 0 || strncmp(type, "struct Vec_", 11) == 0
         || strncmp(type, "Vec_", 4) == 0) return 1;
     if (strncmp(type, "Map<", 4) == 0 || strncmp(type, "struct Map_", 11) == 0
@@ -2295,7 +2295,8 @@ impl ExprOps for Expr {
                             self->sup->lex_next();
                         }
                         /* DOC-87 Stage 2: `core::Vec` / `core::String` /
-                           `core::box` name the built-in layer's source
+                           `core::Box` (and the deprecated `core::box`) name the
+                           built-in layer's source
                            namespace. During the compatibility window the C
                            symbols stay in the root namespace, so strip the
                            prefix: a template instantiates from the `<` the
@@ -2306,6 +2307,17 @@ impl ExprOps for Expr {
                             char bare[MAX_TEXT];
                             if (strncmp(qn, "core_", 5) == 0) {
                                 snprintf(bare, sizeof bare, "%s", qn + 5);
+                                /* LANG-24 Stage A: `core::box<T>` is the same
+                                   deprecated alias as the root spelling. */
+                                if (strcmp(bare, "box") == 0) {
+                                    if (tool::diag::ct_deprecated_warn(
+                                            self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "'box<T>' is deprecated; write 'Box<T>'",
+                                            self->sup->mem->path) != 0)
+                                        return self->sup->fail("too many warnings");
+                                    snprintf(bare, sizeof bare, "%s", "Box");
+                                }
                                 if (frontend::sym::ct_tmpl_find(bare) >= 0) {
                                     snprintf(g_expr_inst_override,
                                              sizeof g_expr_inst_override, "%s", bare);
@@ -2350,9 +2362,12 @@ impl ExprOps for Expr {
                     self->sup->lex_next();
                     continue;
                 }
-                /* PH-81: `box` is a common identifier (`Box box;`). It is a
-                   type only when a balanced `<...>` follows; otherwise this is
-                   the declarator name and the type reader must stop here. */
+                /* PH-81 / LANG-24: `box` is the deprecated alias for `Box`
+                   and a common identifier (`Box box;`). It is a type only when
+                   a balanced `<...>` follows; otherwise this is the declarator
+                   name and the type reader must stop here. The alias maps to
+                   the Box template in `parse_inst_type`, which records the one
+                   warning for this use. */
                 if (self->lex->tok_is("box")) {
                     const char *bp = self->lex->src + self->lex->tokstart + 3;
                     int bd = 0, bclosed = 0;
@@ -2369,6 +2384,10 @@ impl ExprOps for Expr {
                         }
                     }
                     if (!bclosed) break;
+                    if (frontend::sym::ct_tmpl_find("Box") < 0) break;
+                    if (self->parse_inst_type(out, cap) != 0) return -1;
+                    n = (int)strlen(out);
+                    continue;
                 }
                 /* Phase 29: `Name<arg[, arg]>` names one monomorphised instance
                    of a generic struct; the reader lives in `parse_inst_type`. */
@@ -2642,15 +2661,27 @@ impl ExprOps for Expr {
         char canon[MAX_TEXT];
         char abuf[MAX_TEXT];
         struct StructTmpl *tp;
-        int n, ti2, tn, nargs, nt2, pline, pcol;
+        int n, ti2, tn, nargs, nt2, pline, pcol, aline, acol;
 
         n = (int)strlen(out);
+        /* LANG-24 Stage A: `box<T>` is the deprecated alias for `Box<T>`.
+           It maps to the Box template before encoding, so every generated
+           symbol is `Box_*`; each alias use records one warning. */
+        aline = self->lex->tokline;
+        acol = self->lex->tokstart - self->lex->lstart + 1;
         if (g_expr_inst_override[0]) {
             snprintf(tname, sizeof tname, "%s", g_expr_inst_override);
             g_expr_inst_override[0] = 0;
         } else {
             self->lex->tok_copy(tname, sizeof tname);
             self->sup->lex_next();
+        }
+        if (strcmp(tname, "box") == 0) {
+            if (tool::diag::ct_deprecated_warn(aline, acol,
+                    "'box<T>' is deprecated; write 'Box<T>'",
+                    self->sup->mem->path) != 0)
+                return self->sup->fail("too many warnings");
+            snprintf(tname, sizeof tname, "%s", "Box");
         }
         ti2 = frontend::sym::ct_tmpl_find(tname);
         tp = frontend::sym::ct_tmpls(&tn);
@@ -2695,8 +2726,8 @@ impl ExprOps for Expr {
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is("]"))
                     return tool::diag::ct_sem_error(gl, gc,
-                        strcmp(tname, "box") == 0
-                            ? "a slice 'T[]' cannot be stored in box<T>; it is a non-owning view"
+                        strcmp(tname, "Box") == 0
+                            ? "a slice 'T[]' cannot be stored in Box<T>; it is a non-owning view"
                             : "a slice 'T[]' cannot be a generic type argument; it is a non-owning view",
                         self->sup->mem->path);
                 return self->sup->fail("expected '>' after the type arguments");
@@ -2977,17 +3008,17 @@ impl ExprOps for Expr {
                      tname, nt2, nargs);
             return self->sup->fail(msg);
         }
-        /* PH-81 S1a: `box<T>` is an owning slot, so T may not be a borrowed
+        /* PH-81 S1a: `Box<T>` is an owning slot, so T may not be a borrowed
            view (`Str` / `U16Str` / a slice). The struct-declaration layer
            refuses the same shape for a field; this check catches the type
            argument form, which never reaches that layer. */
-        if (strcmp(tname, "box") == 0 && nargs > 0) {
+        if (strcmp(tname, "Box") == 0 && nargs > 0) {
             if (strcmp(c1, "struct Str") == 0 || strcmp(c1, "Str") == 0
                 || strcmp(c1, "struct U16Str") == 0 || strcmp(c1, "U16Str") == 0
                 || strcmp(c1, "struct __ct_slice") == 0
                 || strstr(c1, "[]") != 0)
                 return self->sup->fail(
-                    "a borrowed view cannot be boxed; box<T> owns its payload (use String for an owning string)");
+                    "a borrowed view cannot be boxed; Box<T> owns its payload (use String for an owning string)");
         }
         /* L29-13 (Phase 31 O1 partial unfreeze): interface values
            (`struct X_iface`) are stored as a two-word non-owning copy, so only
@@ -3349,33 +3380,28 @@ impl ExprOps for Expr {
                     }
                 }
             }
-            /* P-7.2: `box<T>` is not an implemented type yet, but a statement
-               starting with it must reach `parse_type` so the slice placement
-               guard can name the fault. Recognise only the shape
-               `box <balanced> name`, so `box < 3` stays a comparison. */
-            if (self->lex->tok_is("box")) {
-                /* PH-81: `box` is a real template now, so `box<T>` is a type
-                   in every type position (`sizeof(box<T>)`, a cast, a field).
-                   Before S1 it was only a diagnostic shape, which required a
-                   declarator name after the closing `>`. */
-                if (frontend::sym::ct_tmpl_find("box") >= 0) {
-                    size_t p2 = self->lex->pos;
-                    int d2 = 0;
-                    int closed = 0;
-                    while (self->lex->src[p2] == ' ' || self->lex->src[p2] == '\t') p2++;
-                    if (self->lex->src[p2] == '<') {
-                        p2++;
-                        while (self->lex->src[p2] && self->lex->src[p2] != '\n') {
-                            if (self->lex->src[p2] == '<') d2++;
-                            else if (self->lex->src[p2] == '>') {
-                                if (d2 == 0) { p2++; closed = 1; break; }
-                                d2--;
-                            }
-                            p2++;
+            /* P-7.2 / LANG-24: `Box<T>` (and the deprecated `box<T>` alias)
+               is a type in every type position (`sizeof(Box<T>)`, a cast, a
+               field). Recognise only a balanced `<...>` after the name, so
+               `Box < 3` / `box < 3` stay comparisons. */
+            if ((self->lex->tok_is("Box") || self->lex->tok_is("box"))
+                && frontend::sym::ct_tmpl_find("Box") >= 0) {
+                size_t p2 = self->lex->pos;
+                int d2 = 0;
+                int closed = 0;
+                while (self->lex->src[p2] == ' ' || self->lex->src[p2] == '\t') p2++;
+                if (self->lex->src[p2] == '<') {
+                    p2++;
+                    while (self->lex->src[p2] && self->lex->src[p2] != '\n') {
+                        if (self->lex->src[p2] == '<') d2++;
+                        else if (self->lex->src[p2] == '>') {
+                            if (d2 == 0) { p2++; closed = 1; break; }
+                            d2--;
                         }
+                        p2++;
                     }
-                    if (closed) res = 1;
                 }
+                if (closed) res = 1;
             } else
             /* `T` inside its own template body is a type, even though the
                ALL_CAPS rule below would read it as a macro constant. */
@@ -5763,7 +5789,7 @@ impl ExprOps for Expr {
                         }
                     }
                     {
-                        int bm = self->box_member_deref(n, arrow, fname, mline, mcol, &m);
+                        int bm = self->Box_member_deref(n, arrow, fname, mline, mcol, &m);
                         if (bm < 0) return -1;
                         if (!bm) {
                             m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
@@ -6118,7 +6144,7 @@ impl ExprOps for Expr {
 
         qc[0] = 0;
         qv[0] = 0;
-        /* PH-81 S1b: `new T { ... }` builds a `box<T>`; `new` stays an ordinary
+        /* PH-81 S1b: `new T { ... }` builds a `Box<T>`; `new` stays an ordinary
            identifier everywhere else (contextual keyword). */
         if (self->new_ahead()) return self->parse_new_expr();
         /* C11 `_Generic(…)` is a pass-through: the whole selection is copied
@@ -6352,7 +6378,9 @@ impl ExprOps for Expr {
                spelling, so the emitter writes `<Inst>_<method>(...)`. The
                cursor is still on the template name, so `parse_inst_type` reads
                `Vec<int>` exactly as a type position would. */
-            if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0
+            if ((frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0
+                 || (self->lex->tok_is("box")
+                     && frontend::sym::ct_tmpl_find("Box") >= 0))
                 && self->static_call_ahead()) {
                 char ibase[MAX_TEXT];
                 char sm[MAX_TEXT];
@@ -7737,14 +7765,40 @@ impl ExprOps for Expr {
     }
 }
 
+/* LANG-24: only the built-in `lib/core/Box.h.ct` template auto-dereferences
+   as the owning handle. A project may still declare its own `struct Box<T>`
+   (the historical fixtures do); those instances share the `Box_` prefix but
+   are ordinary structs. */
+static int expr_is_builtin_Box_type(const char *type)
+{
+    char base[MAX_TEXT];
+    int inst, ti, tn;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+
+    if (!type || !type[0]) return 0;
+    snprintf(base, sizeof base, "%s", type);
+    if (strncmp(base, "struct ", 7) == 0)
+        memmove(base, base + 7, strlen(base + 7) + 1);
+    inst = frontend::sym::ct_inst_find(base);
+    if (inst < 0) return 0;
+    ins = frontend::sym::ct_insts(&tn);
+    if (!ins) return 0;
+    ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+    tps = frontend::sym::ct_tmpls(&tn);
+    if (ti < 0 || !tps) return 0;
+    return strstr(tps[ti].path, "lib/core/Box.h.ct") != 0
+        || strstr(tps[ti].path, "lib/std/Box.h.ct") != 0;
+}
+
 impl ExprNew for Expr {
-    /* PH-81 S1a: `box<T>` auto-dereferences for field access. `b.f` becomes
-       `b.ptr->f` (and `p->f` on a `box<T> *` becomes `p->ptr->f`), so the
+    /* PH-81 S1a: `Box<T>` auto-dereferences for field access. `b.f` becomes
+       `b.ptr->f` (and `p->f` on a `Box<T> *` becomes `p->ptr->f`), so the
        payload's fields are read and assigned without spelling `at()` or `->`.
        The two handle fields are private: `.h` / `.ptr` are refused outside the
        built-in layer, exactly like `String.ptr`. Returns 1 when the final node
-       was built, 0 when the receiver is not a box, -1 on a diagnostic. */
-    int box_member_deref(int recv, int arrow, const char *fname, int line, int col, int *out)
+       was built, 0 when the receiver is not a Box, -1 on a diagnostic. */
+    int Box_member_deref(int recv, int arrow, const char *fname, int line, int col, int *out)
     {
         char ty[MAX_TEXT];
         char *p;
@@ -7765,14 +7819,15 @@ impl ExprNew for Expr {
             while (bl > 0 && (p[bl - 1] == ' ' || p[bl - 1] == '\t')) bl--;
             p[bl] = 0;
         }
-        if (strncmp(p, "struct box_", 11) != 0 || strchr(p, '<') != 0) return 0;
+        if (strncmp(p, "struct Box_", 11) != 0 || strchr(p, '<') != 0) return 0;
+        if (!expr_is_builtin_Box_type(p)) return 0;
         in_layer = self->sup->mem->path != 0
                    && (strstr(self->sup->mem->path, "lib/core/Vec.h.ct") != 0
                        || strstr(self->sup->mem->path, "lib/std/Vec.h.ct") != 0); /* DOC-87 迁移回退 */
         if (strcmp(fname, "h") == 0 || strcmp(fname, "ptr") == 0) {
             if (in_layer) return 0;         /* the built-in layer's own bodies */
             return tool::diag::ct_sem_error(line, col,
-                "'.h' / '.ptr' are raw implementation fields; use the box's methods or at()",
+                "'.h' / '.ptr' are raw implementation fields; use the Box's methods or at()",
                 self->sup->mem->path);
         }
         pn = self->sup->new_node(stars > 0 ? N_ARROW : N_MEMBER);
@@ -7826,7 +7881,7 @@ impl ExprNew for Expr {
             res = 1;
         } else if (self->is_type_word(self->lex->tok_cstr())) {
             res = 1;
-        } else if (self->lex->tok_is("box")) {
+        } else if (self->lex->tok_is("Box") || self->lex->tok_is("box")) {
             res = 1;
         } else if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0) {
             res = 1;
@@ -7852,7 +7907,7 @@ impl ExprNew for Expr {
 
     /* PH-81 S1b: `new T { ... }`. Only a named (non-template, non-instance)
     struct is accepted; the brace list is the same captured initializer
-    `T x = { ... };` uses. The result is a `box<T>` handle whose refs count
+    `T x = { ... };` uses. The result is a `Box<T>` handle whose refs count
     starts at one. `new` never lands in a static/global initializer: the
     emitter refuses it there because the construction is a call. */
     int parse_new_expr(void)
@@ -7905,9 +7960,9 @@ impl ExprNew for Expr {
             return tool::diag::ct_sem_error(nline, ncol,
                 "'new String' / 'new Str' is not supported; use the literal, 'to_string()' or 'as_str()'",
                 self->sup->mem->path);
-        if (frontend::sym::ct_tmpl_find("box") < 0)
+        if (frontend::sym::ct_tmpl_find("Box") < 0)
             return self->sup->fail(
-                "the built-in `box` layer is missing (set CT_CORE_DIR, or the legacy CT_STD_DIR)");
+                "the built-in `Box` layer is missing (set CT_CORE_DIR, or the legacy CT_STD_DIR)");
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{"))) {
             char nmsg[MAX_TEXT * 2];
             snprintf(nmsg, sizeof nmsg,
@@ -7923,13 +7978,13 @@ impl ExprNew for Expr {
             if (self->chk_brace_init(tbuf, raw, bl, bc) != 0) return -1;
         }
         if (self->sup->rewrite_init_text(tbuf, raw, fixed, sizeof fixed) != 0) return -1;
-        /* register the box<T> instance (the type parser would do the same for
-           a `box<T>` spelling); the template's fields substitute T -> base */
-        if (self->inst_make("box", 1, tbuf, "", tbuf, "", enc, sizeof enc, 0,
+        /* register the Box<T> instance (the type parser would do the same for
+           a `Box<T>` spelling); the template's fields substitute T -> base */
+        if (self->inst_make("Box", 1, tbuf, "", tbuf, "", enc, sizeof enc, 0,
                             nline, ncol) != 0)
             return -1;
         /* the payload-release helper and the constructor need the payload
-           spelling, so the node keeps both the box instance and the payload */
+           spelling, so the node keeps both the Box instance and the payload */
         {
             int n, r;
             n = self->sup->new_node(N_NEWOBJ);

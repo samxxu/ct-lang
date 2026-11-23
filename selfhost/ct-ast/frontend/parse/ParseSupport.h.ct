@@ -740,7 +740,7 @@ impl SupportOps for ParseSupport {
     int maybe_box(int n, const char *trait, int addr)
     {
         const char *why;
-        int box;
+        int bnode;
         char msg[MAX_TEXT * 2];
         /* P-7.2 (P-4.1): an interface slot owns the concrete value it boxes;
            a slice is a non-owning view and cannot be stored there. The
@@ -757,13 +757,13 @@ impl SupportOps for ParseSupport {
                                             msg, self->mem->path);
         }
         self->ty->errmsg[0] = 0;
-        box = self->ty->maybe_box(n, trait, addr);
-        if (box < 0) {
+        bnode = self->ty->maybe_box(n, trait, addr);
+        if (bnode < 0) {
             why = self->ty->last_error();
             if (why[0]) return self->fail(why);
             return -1;
         }
-        return box;
+        return bnode;
     }
 
     int rewrite_init_text(const char *stype, const char *raw, char *out, int cap)

@@ -1,14 +1,14 @@
 #!/bin/sh
-# PH-82 / S82b: the direct `box<X>` field-cycle warning (E82-3, E82-6).
+# PH-82 / S82b: the direct `Box<X>` field-cycle warning (E82-3, E82-6).
 #
-#   - only `box<X>` fields are edges; adjacent edges count one; the walk stops
+#   - only `Box<X>` fields are edges; adjacent edges count one; the walk stops
 #     at three edges, so a self loop, A -> B -> A and A -> B -> C -> A are hit
 #     and a four-edge ring is not;
 #   - a repeated payload field is one edge, and a cycle is reported once;
 #   - `warn` (the default) keeps exit 0; `leaks = error` fails the build;
 #   - the wording says "may leak ... unless the cycle is broken by hand" and
 #     never "will leak" (D-012); `--debug-leaks` is not a cycle detector;
-#   - the repository's whole `box<` corpus produces exactly one finding: the
+#   - the repository's whole `Box<` corpus produces exactly one finding: the
 #     deliberate `test/ast/p81_box/cycle.ct` self loop.
 #
 # Usage: sh test/ast/p82_cycle.sh <ct-ast>
@@ -30,41 +30,41 @@ bad() { echo "FAIL p82/cycle: $1" >&2; [ $# -gt 1 ] && printf '  %s\n' "$2" >&2;
 cd "$root" || exit 1
 
 cat >"$work/self.ct" <<'CT'
-struct C { box<C> self; box<int> i; }
+struct C { Box<C> self; Box<int> i; }
 int main(void) { return 0; }
 CT
 
 cat >"$work/two.ct" <<'CT'
-struct A { box<B> b; box<B> b2; }
-struct B { box<A> a; }
+struct A { Box<B> b; Box<B> b2; }
+struct B { Box<A> a; }
 int main(void) { return 0; }
 CT
 
 cat >"$work/three.ct" <<'CT'
-struct A { box<B> b; }
-struct B { box<C> c; }
-struct C { box<A> a; }
+struct A { Box<B> b; }
+struct B { Box<C> c; }
+struct C { Box<A> a; }
 int main(void) { return 0; }
 CT
 
 cat >"$work/four.ct" <<'CT'
-struct A { box<B> b; }
-struct B { box<C> c; }
-struct C { box<D> d; }
-struct D { box<A> a; }
+struct A { Box<B> b; }
+struct B { Box<C> c; }
+struct C { Box<D> d; }
+struct D { Box<A> a; }
 int main(void) { return 0; }
 CT
 
 cat >"$work/oneway.ct" <<'CT'
-struct A { box<B> b; }
+struct A { Box<B> b; }
 struct B { int n; }
-struct D { box<A> a; }
+struct D { Box<A> a; }
 int main(void) { return 0; }
 CT
 
 cat >"$work/pointer.ct" <<'CT'
 struct A { B *p; }
-struct B { box<A> a; }
+struct B { Box<A> a; }
 int main(void) { return 0; }
 CT
 
@@ -105,7 +105,7 @@ else
     bad "depth limit" "exit $rc: $(head -2 "$work/four.log")"
 fi
 
-# 5) a one-way box chain is not a cycle.
+# 5) a one-way Box chain is not a cycle.
 compile oneway
 if [ "$rc" -eq 0 ] && ! grep -Fq "potential reference cycle" "$work/oneway.log"; then
     ok "a one-way chain (D -> A -> B) is not reported"
@@ -113,10 +113,10 @@ else
     bad "one-way" "exit $rc: $(head -2 "$work/oneway.log")"
 fi
 
-# 6) only box fields count: a plain pointer field is not an edge.
+# 6) only Box fields count: a plain pointer field is not an edge.
 compile pointer
 if [ "$rc" -eq 0 ] && ! grep -Fq "potential reference cycle" "$work/pointer.log"; then
-    ok "a plain pointer field is not a box edge (A * B -> A alone is not a cycle)"
+    ok "a plain pointer field is not a Box edge (A * B -> A alone is not a cycle)"
 else
     bad "pointer field" "exit $rc: $(head -2 "$work/pointer.log")"
 fi
@@ -181,11 +181,11 @@ else
     ok "leaks = error: no .c product is written"
 fi
 
-# 10) the repository's `box<` corpus has exactly one finding: the deliberate
-#     self loop. Every other fixture with a box field stays silent (E82-4's
+# 10) the repository's `Box<` corpus has exactly one finding: the deliberate
+#     self loop. Every other fixture with a Box field stays silent (E82-4's
 #     zero-false-positive side, on the corpus that can actually carry one).
 hits=""
-for f in $(grep -rl 'box<' --include='*.ct' test/ examples/ lib/ 2>/dev/null); do
+for f in $(grep -rl 'Box<' --include='*.ct' test/ examples/ lib/ 2>/dev/null); do
     case "$f" in lib/core/Box.h.ct) continue ;; esac
     "$ctast" "$f" -o "$work/corpus.c" >"$work/corpus.log" 2>&1
     grep -Fq "potential reference cycle" "$work/corpus.log" && hits="$hits $f"

@@ -94,8 +94,8 @@
 | Phase 78 | `ref` / `out` 参数（S2；上下文关键字、调用点 lvalue、`out` 定值） | ✅ 完成（S2a–S2c / E78-1–E78-6；REV fix v0.78.1） | v0.78.0（fix v0.78.1） | [卡](design/phase78.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 79 | 切片 `T[]`（S3；`T[]` 唯一、带检查 place、`const T[]`） | ✅ 完成（S3a–S3e / E79-1–E79-6） | v0.79.0 | [卡](design/phase79.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
 | Phase 80 | `String` / `Str`（S5；UTF-8/UTF-16 双类型、L1 字面量、std 迁移） | ✅ 完成（v0.80.4；SH-102 verified，D-015） | v0.80.4 | [卡](design/phase80.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
-| Phase 81 | `box<T>` + `new`（S1；共享句柄协议、`new` 仅具名 struct） | ✅ 完成（v0.81.0；P-7.5 + S1a/S1b/S1c，E81-1…6 通过） | v0.81.0 | [卡](design/phase81.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
-| Phase 82 | 泄漏防护（`leaks` 两档 `warn` / `error`；`box` 字段直接环告警；树模式文档） | ✅ 完成（v0.82.1；E82-1…8 通过，D-012；SH-103 Linux 字段表修复） | v0.82.1 | [卡](design/phase82.md) · [提案](proposals/leak-guards.md) · [判决](../battle/leak-guards-1/verdict.md) · [D-012](decisions/D-012.md) |
+| Phase 81 | `Box<T>` + `new`（S1；共享句柄协议、`new` 仅具名 struct） | ✅ 完成（v0.81.0；P-7.5 + S1a/S1b/S1c，E81-1…6 通过） | v0.81.0 | [卡](design/phase81.md) · [安排](planning/pointer-free-phase-plan.md) · [提案](proposals/pointer-free-v2.md) |
+| Phase 82 | 泄漏防护（`leaks` 两档 `warn` / `error`；`Box` 字段直接环告警；树模式文档） | ✅ 完成（v0.82.1；E82-1…8 通过，D-012；SH-103 Linux 字段表修复） | v0.82.1 | [卡](design/phase82.md) · [提案](proposals/leak-guards.md) · [判决](../battle/leak-guards-1/verdict.md) · [D-012](decisions/D-012.md) |
 | Phase 83 | 包管理契约 v1 与索引校验（只读 `ct index verify`；Linux x64 产物；conformance） | ✅ 完成（v0.83.0；E83-1…8 通过，D-014；PKG-14 fixed v0.83.1；Linux 默认索引路径 fix v0.83.2） | v0.83.0（fix v0.83.1 / v0.83.2） | [卡](design/phase83.md) · [评估](reviews/2026-11-20-pkg-contract-proposal-eval.md) · [契约](planning/ct-pkg-get-contract.md) · [D-014](decisions/D-014.md) |
 | Phase 84 | 最小 ADT / `match`（名义和类型 + 负载 + 穷尽检查 + 变量绑定；D3）+ **S84e 文档一致性（B 判决，最小集）** | ✅ 完成（S84a–S84e，v0.84.0；E84-1…9 通过；v0.84.1 为 REV F1/F2 修复；A 的全量审计归 DOC-77/78/79） | v0.84.0（fix v0.84.1） | [卡](design/phase84.md) · [battle doc-consistency-1](../battle/doc-consistency-1/question.md) · [LANG-21](../issues/lang/lang-21-minimal-adt-match.md) |
 | Phase 85 | v1-pre：inventory + 单切片 spike（门）+ M0 粗切 + A 机制接线（`off/warn/error`） | ✅ 完成（v0.85.0；**E85-2 有条件通过（D-018）**，其余 E85 通过；spike 只证结构等价，整子系统重写门不通过、移交 PH-86 per-function，见卡 §8） | v0.85.0 | [卡](design/phase85.md) · [v1 路线 §2.3/§2.4/§2.7](planning/v1-release-plan.md) · [D-017](decisions/D-017.md) |
@@ -112,7 +112,7 @@
 > 不占 phase 号，见 [blockers](planning/phase-migration-blockers.md)。
 
 > **指针退场（v0.78–v0.82）**：PH-78 S2 `ref/out` → PH-79 S3 切片 → PH-80 S5 `String/Str`
-> → PH-81 S1 `box/new`；S2 ∥ S3 可并行准备，单卡纪律先开 S2；S4 函子延后 v1.1+ Wave 2。
+> → PH-81 S1 `Box/new`；S2 ∥ S3 可并行准备，单卡纪律先开 S2；S4 函子延后 v1.1+ Wave 2。
 > PH-78 已收口（v0.78.0 / fix v0.78.1），PH-79 已收口（v0.79.0）；
 > PH-80 已收口（v0.80.4；S5a 内建层 + S5b 删旧 `str` 与消费者迁移，E80-7 通过；SH-102 自动 retain R1–R7 修复，D-015 口径）；
 > PH-82 已收口（v0.82.0；`leaks` 两档、直接环告警、`allow-cycle`、树模式；E82-1…8）；PH-83 已收口（v0.83.0；契约 v1 / `ct index verify` / conformance / Linux x64 产物，E83-1…8；D-014）。
