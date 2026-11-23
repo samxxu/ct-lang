@@ -9358,59 +9358,83 @@ impl EmitOps for Emitter {
         int k, h, err_exit;
         (void)self;
 
-        if (n < 0) return 0;
-        if (depth > 2048) {
-            char dmsg[MAX_TEXT];
-            snprintf(dmsg, sizeof dmsg, "lowering invariant I1: AST walk cycle at node %d (kind %d)", n,
-                     n >= 0 && n < self->arena->nnode ? self->arena->nodes[n].kind : -1);
-            return self->fail(dmsg);
-        }
-        if (n >= self->arena->nnode)
-            return self->fail("lowering invariant I1: a child index is outside the node pool");
-        k = self->arena->nodes[n].kind;
-        if (k == N_RET || k == N_BREAK || k == N_CONT) {
-            err_exit = strcmp(self->arena->nodes[n].text2, "err") == 0;
-            if (self->invariant_edge(self->arena->nodes[n].b, err_exit, n) != 0) return -1;
-            if (k == N_RET) {
-                if (self->arena->nodes[n].aux == 1 && !self->arena->nodes[n].text[0])
-                    return self->fail_from(n,
-                        "lowering invariant I4: a return marked for materialisation has no type");
-                if (self->invariant_scan(self->arena->nodes[n].a, depth + 1) != 0) return -1;
+        /* `n` walks a sibling chain iteratively: a 3000-call fixture makes a
+           3000-statement block, and recursion on `next` would exhaust the
+           stack on a legal program. `depth` counts nesting, not siblings. */
+        while (n >= 0) {
+            if (depth > 2048) {
+                char dmsg[MAX_TEXT];
+                snprintf(dmsg, sizeof dmsg,
+                         "lowering invariant I1: AST walk is deeper than 2048 at node %d", n);
+                return self->fail(dmsg);
             }
-            return self->invariant_scan(self->arena->nodes[n].next, depth + 1);
-        }
-        if (k == N_GOTO) {
-            if (self->arena->nodes[n].b >= 0)
-                return self->fail_from(n, "lowering invariant I1: a goto carries a cleanup edge");
-            return self->invariant_scan(self->arena->nodes[n].next, depth + 1);
-        }
-        if (k == N_TRY) {
-            h = self->try_cleanup(n);
-            if (self->invariant_edge(h, 1, n) != 0) return -1;
-        }
-        /* Declaration containers are not an executable tree: their child
-           slots carry field / declarator lists whose `next` links are not
-           statement siblings and can revisit a node. They hold no jump and no
-           `?`, so the walk stops at the two that own a body. */
-        if (k == N_STRUCT || k == N_FIELD || k == N_FIELDS || k == N_TYPEDEF
-            || k == N_GLOBAL || k == N_PP || k == N_ENUM || k == N_ENUMVAL
-            || k == N_UNION)
-            return self->invariant_scan(self->arena->nodes[n].next, depth + 1);
-        if (k == N_IMPL) {
+            if (n >= self->arena->nnode)
+                return self->fail("lowering invariant I1: a child index is outside the node pool");
+            k = self->arena->nodes[n].kind;
+            if (k == N_RET || k == N_BREAK || k == N_CONT) {
+                err_exit = strcmp(self->arena->nodes[n].text2, "err") == 0;
+                if (self->invariant_edge(self->arena->nodes[n].b, err_exit, n) != 0) return -1;
+                if (k == N_RET) {
+                    if (self->arena->nodes[n].aux == 1 && !self->arena->nodes[n].text[0])
+                        return self->fail_from(n,
+                            "lowering invariant I4: a return marked for materialisation has no type");
+                    if (self->invariant_scan(self->arena->nodes[n].a, depth + 1) != 0) return -1;
+                }
+                n = self->arena->nodes[n].next;
+                continue;
+            }
+            if (k == N_GOTO) {
+                if (self->arena->nodes[n].b >= 0)
+                    return self->fail_from(n, "lowering invariant I1: a goto carries a cleanup edge");
+                n = self->arena->nodes[n].next;
+                continue;
+            }
+            if (k == N_TRY) {
+                h = self->try_cleanup(n);
+                if (self->invariant_edge(h, 1, n) != 0) return -1;
+            }
+            /* Declaration containers are not an executable tree: their child
+               slots carry field / declarator lists whose `next` links are not
+               statement siblings. They hold no jump and no `?`, so the walk
+               stops at the two that own a body. */
+            if (k == N_STRUCT || k == N_FIELD || k == N_FIELDS || k == N_TYPEDEF
+                || k == N_GLOBAL || k == N_PP || k == N_ENUM || k == N_ENUMVAL
+                || k == N_UNION) {
+                n = self->arena->nodes[n].next;
+                continue;
+            }
+            if (k == N_IMPL) {
+                if (self->invariant_scan(self->arena->nodes[n].a, depth + 1) != 0) return -1;
+                n = self->arena->nodes[n].next;
+                continue;
+            }
+            if (k == N_FUNC) {
+                if (self->invariant_scan(self->arena->nodes[n].b, depth + 1) != 0) return -1;
+                n = self->arena->nodes[n].next;
+                continue;
+            }
+            if (k == N_DEFER_RUN && self->arena->nodes[n].aux == 1)
+                return self->fail_from(n, "lowering invariant I3: an errdefer body reaches a normal block tail");
             if (self->invariant_scan(self->arena->nodes[n].a, depth + 1) != 0) return -1;
-            return self->invariant_scan(self->arena->nodes[n].next, depth + 1);
-        }
-        if (k == N_FUNC) {
             if (self->invariant_scan(self->arena->nodes[n].b, depth + 1) != 0) return -1;
-            return self->invariant_scan(self->arena->nodes[n].next, depth + 1);
+            if (self->invariant_scan(self->arena->nodes[n].c, depth + 1) != 0) return -1;
+            if (self->invariant_scan(self->arena->nodes[n].d, depth + 1) != 0) return -1;
+            /* Only a statement list uses `next` as a sibling link. Expression
+               nodes reuse the slot for internal lists (an argument / call
+               table), so following it there can revisit a node. */
+            if (k == N_EXPR || k == N_ASSIGN || k == N_DECL || k == N_DECLS
+                || k == N_DELETE || k == N_EMPTY || k == N_SASSERT
+                || k == N_LABEL || k == N_IF || k == N_WHILE || k == N_FOR
+                || k == N_LOOP || k == N_FOREACH || k == N_MATCH || k == N_SWITCH
+                || k == N_CASE || k == N_DOWHILE || k == N_DEFER_RUN || k == N_RAW
+                || k == N_BLOCK || k == N_POST
+                || (k == N_BIN && self->arena->nodes[n].aux == B_COMMA)) {
+                n = self->arena->nodes[n].next;
+                continue;
+            }
+            return 0;
         }
-        if (k == N_DEFER_RUN && self->arena->nodes[n].aux == 1)
-            return self->fail_from(n, "lowering invariant I3: an errdefer body reaches a normal block tail");
-        if (self->invariant_scan(self->arena->nodes[n].a, depth + 1) != 0) return -1;
-        if (self->invariant_scan(self->arena->nodes[n].b, depth + 1) != 0) return -1;
-        if (self->invariant_scan(self->arena->nodes[n].c, depth + 1) != 0) return -1;
-        if (self->invariant_scan(self->arena->nodes[n].d, depth + 1) != 0) return -1;
-        return self->invariant_scan(self->arena->nodes[n].next, depth + 1);
+        return 0;
     }
 
     /* SH-111: the test seam for the invariants themselves. A program the
@@ -9422,6 +9446,7 @@ impl EmitOps for Emitter {
         const char *fault;
         int i, j, tail, r, del, run, er, nj;
         (void)self;
+        r = -1;
 
         fault = getenv("CT_EMIT_INVARIANT_FAULT");
         if (fault && fault[0]) {
