@@ -52,3 +52,11 @@ J-6 行、`stable-subset` 三档、`capabilities.tsv` 条目、`idioms` briefing
 - ADR：[D-020](../../docs/decisions/D-020.md)（绑定点、两档、查找顺序、歧义、表达式禁区、`--types`、回滚）。
 - 触发：`v1-PH-1` 开卡（v1.1）；先做 S0 容量核算，再实现四类绑定点 + 负例。
 - 本卡「连带义务」在实现落地后再登记，当前不写成既定事实。
+
+
+## 实现进度（DEV，2026-11-24）
+
+v1.1 切片已落：声明/赋值/`return` 三类绑定点 + `as<T>`/`.to<T>()` + 映射 trait + 歧义/未 import 诊断；
+生成 C 与显式调用逐字节一致；`--types` 语料 FP 零差异；`lang26_conv` 6/6。
+**剩余**：`out` 实参写回转换（需语句级临时+回写）、`decode<T>` 边界、`CT_BINDING_CONVERSION=0` 开关；
+本卡保持 `deferred`，不把剩余项说成完成。
