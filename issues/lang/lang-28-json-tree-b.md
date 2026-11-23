@@ -7,7 +7,7 @@
 | 严重度 | High（涉及 parser / Symbols / Emitter / 语义 / 容量） |
 | 锚点 | v0.88.3（2026-11-23） |
 | 依据 | [D-021](../../docs/decisions/D-021.md)、[JSON v1.1 提案评估](../../docs/reviews/2026-11-23-json-v11-proposal-eval.md) |
-| 状态 | open |
+| 状态 | deferred |
 | blocked-by | **LANG-27 先落地**；B2/B4/B5 各自 ADR 通过；SH-109 动态增长在当前 pre 窗口先落地（不再受 512 限制） |
 | 处置证据 | **accepted（设计）**：所有者 2026-11-23 逐项裁定 B1–B8；实现待 LANG-27 后按 §阶段执行 |
 
@@ -49,3 +49,9 @@
 - 不在本卡实现 `ct/json` 包、schema 生成器或外部排期；
 - 不回到 arena + 索引作为默认；
 - 不做 COW、可变树、运行时反射。
+
+## 处置（REQ，2026-11-23）：deferred 到 v1.1 S1
+
+LANG-27 容器级联已落地（本卡 blocked-by S0 解除），但 B1/B3/B4/B5 各自仍需 ADR 与
+parser/Emitter 改造，属 v1.1 阶段 S1–S3；不阻塞 v1.0。触发：`v1-PH-1` 开卡且 B1/B3 ADR 通过。
+

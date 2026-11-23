@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-23） |
 | 依据 | 外部 REQ 卡 W4/B 项；[节点协议评估](../../docs/reviews/2026-11-22-req-node-conversion-protocol-eval.md)；[spec §4.56](../../docs/language-spec.md) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-23 所有者：先落地 LANG-27；方案 B 在 LANG-27 合入后按 §唤醒条件评估，不提前承诺 v1.1 一步到位）** |
 
 ## 现状（机制核实）
@@ -78,3 +78,9 @@ LANG-27 合入前不启动“无 arena”树存储方案，也不把 JSON v1.1 �
 - [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)（rejected，外部仓）；
 - [LANG-26](lang-26-binding-site-conversion.md)（D-020，v1.1 实现）；
 - [language-spec §4.56 / §4.70](../../docs/language-spec.md)。
+
+## 复核（REV，2026-11-23）
+
+`Vec`/`Map` by-value 字段在宿主 `use Drop` 胶水中按声明顺序级联 `release`；元素走
+`__ct_elem_release`（h==0 守卫）；显式 `impl Drop` 仍不生成胶水；指针/数组字段不自动递归。
+`p_lang27_cascade` 17 ok（生成 C 形状/负例/运行/ASan/UBSan/leaks 0）；check-all 12 门绿。

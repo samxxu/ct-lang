@@ -7,7 +7,7 @@
 | 严重度 | Low |
 | 锚点 | v0.88.0（2026-11-21） |
 | 依据 | [外部评审与惯用卡评估](../../docs/reviews/2026-11-21-v088-external-review-eval.md) §1 |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **延后（2026-11-22，REV）**：A+ 决策已定稿（不拆文件；目录双向断言 + 行号锚点冻结/白名单 + DOC-89 另立）；三项执行属 v1.1，不在 v1-PH-0 冻结期做 |
 | blocked-by | 执行触发：v1.1 开卡（或 spec > 4,000 行 / 导航被评审认定不可用 / 多维护者冲突成为常态）；负责人 REQ，DOC-89 承接通用锚点校验 |
 
@@ -218,3 +218,9 @@ FAIL: test/docs/line-anchors.txt: zombie entry docs/language-spec.md#L9999 B0 (�
 | `185e0acd` | `docs(gate): DOC-88 删除已迁移的 FRAGMENT_EXEMPT` |
 
 不 push、不打 tag、不改版本号；`language-spec.md` 现 3,404 行，未过 4,000 行的拆分评估阈值。
+
+## 复核（REV，2026-11-23）
+
+A+ 三项执行完成：`language-spec.md` 顶部 40 条目录（全 H2 + 全 H3）双向断言；
+行号锚点冻结 + 白名单，B0/B1/B2 共 239 处迁移，余 3 条 HIST；DOC-89 通用 fragment 复用；
+`check-docs` 与 selftest 绿。

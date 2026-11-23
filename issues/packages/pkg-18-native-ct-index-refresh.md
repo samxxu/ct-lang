@@ -8,7 +8,7 @@
 | 目标版本 | v1.1（Wave 2 候选；由 [v1 路线](../planning/v1-release-plan.md) 排期确认） |
 | 锚点 | v0.84.1（2026-11-21） |
 | 依据 | 用户 2026-11-21 裁决；[D-014](../decisions/D-014.md) 第 1 条；[契约 v1](../planning/ct-pkg-get-contract.md)；[对齐清单](../planning/ct-pkg-index-alignment.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **提案（v1.1；冻结期只登记，不实现）** |
 
 ## 背景
@@ -93,3 +93,9 @@ ct install
 - [消费侧对齐清单](../planning/ct-pkg-index-alignment.md)
 - [PKG-15](pkg-15-conformance-suite.md)、[PKG-17](pkg-17-third-party-fixture-ci.md)
 - index 仓 `verify_row` 的 Q2 行为：另派单修复，不在本仓
+
+## 复核（REV，2026-11-23）
+
+`ct index refresh --packages <list> --out <index> [--check]` 本地切片：六字段生成、排序、
+重复/坏包行号、`--check` 不写、原子 rename；探针 43 ok（generate/errors/atomic/concurrency/replay）；
+与 PKG-17 fixture 的 shell 产物逐字节一致；check-all 12 门绿。
