@@ -7,7 +7,7 @@
 | 严重度 | Medium（影响全仓活跃散文与首屏） |
 | 锚点 | `8615c020`（2026-11-24） |
 | 依据 | [命名一致性评审](../../docs/reviews/naming-consistency-2026-11-24.md)；[DOC-94](doc-94-ct-spelling.md) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-24 所有者裁定：语言名散文写 `Ct`；命令/后缀/仓库名/包名不变）** |
 
 ## 1. 裁定
@@ -92,3 +92,11 @@
 - [AGENTS.md](../../AGENTS.md) §1 / §11.5（政策文本与落库）
 - [glossary](../../docs/glossary.md) §0
 - [check-docs](../../test/docs/check-docs.py)（DOC-94 挂点）
+
+
+## 8. 复核（REV，2026-11-24）
+
+Batch 1/2 完成：20 处语言名 + 18 处 examples/evidence 改 `Ct`，8 处命令加代码标记；
+`check-docs` 新增裸 `ct` 扫描（跳过 fenced/inline/URL/HTML 注释/spec 块与豁免目录），
+6 条 selftest 正负例；输出 `0 bare CT + 0 bare ct in 88 active file(s)`。README 首行
+`# Ct — C with Traits 编译器`；AGENTS §1/glossary §0 口径一致。Batch 3 上游 CR 不在本仓。
