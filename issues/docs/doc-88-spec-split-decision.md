@@ -131,3 +131,90 @@ $ grep -n 'target.split("#", 1)\[0\]' test/docs/check-docs.py
 **触发/负责人**：v1.1 开卡时由 REQ 排 A+ 三项（每批锚点迁移单独提交、可单批回滚）；
 若 spec 先过 4,000 行或出现多维护者并行冲突，提前启动 B 评估。DOC-89 承接通用锚点校验，
 可在 v1.2 落地，不阻塞本条的 A+。
+
+## 实施（DOC/DEV，2026-11-23）
+
+**状态未改（`deferred`），A+ 三项已按 decision 执行，待 REV/REQ 复核后决定状态。**
+
+### 1. 目录（精修 1）
+
+`docs/language-spec.md` 顶部新增 `## 目录`，列**全部 H2（除目录自身）与全部 H3**，共 40 条：
+一级节 0/1–10、§4.51–§4.75（含 4.51.1 / 4.52.1）与 §11。§4.1–§4.50 是 §4 下的 H4 小节，
+随 §4 正文阅读，不单列。条目一律用标题生成的稳定节锚点，不写行号。
+
+`test/docs/check-docs.py` 新增双向断言（DOC-88 §1）：每个 H2/H3 在目录中恰好一条；
+目录每条必须解析到真实标题；缺目录、缺标题、重复条目、死条目、目录不在顶部均红。
+`--selftest` 增加 6 例夹具（valid / missing / duplicate / dead / no-outline / not-at-top）。
+
+### 2. 行号锚点冻结与白名单（精修 2）
+
+- 新断言：任何 Markdown 里指向 `docs/language-spec.md#L…` 的链接，若不在
+  `test/docs/line-anchors.txt`，即红；白名单条目无引用（僵尸）、批次不是最早待迁移批次、
+  重复条目、非法批次也红。
+- 白名单格式：`docs/language-spec.md#L<a>[-L<b>]  <批次>`；批次 `B0`/`B1`/`B2`/`B3`/`HIST`。
+- 迁移按 DOC-88 的 B0–B3 分批，单独提交、可单批回滚；迁移时按该文件写作时点的 spec 版本
+  定位原行所属小节，不按当前行号猜。
+
+| 批次 | 范围 | 本轮迁移 | 剩余 |
+| --- | --- | --- | --- |
+| B0 | `README.md` / `AGENTS.md` / `docs/**`（`docs/history/**` 除外） | 91 处 / 19 文件 | 0 |
+| B1 | `issues/**` | 91 处 / 32 文件 | 0 |
+| B2 | `battle/**` | 57 处 / 10 文件 | 0 |
+| B3 | `test/**` / `examples/**` / `selfhost/**` 等 | 0 处（本轮无命中） | 0 |
+| HIST | `docs/history/**` | 不迁移（3 条） | 3 条永不移出 |
+
+白名单从 **163 条**（242 处引用）收缩到 **3 条**，全部是 `docs/history/**` 的 `HIST`。
+`FRAGMENT_EXEMPT` 里 DOC-67 / DOC-71 的三条越界 spec 行号豁免随迁移删除。
+
+### 3. 通用锚点校验（精修 3）
+
+复用 DOC-89 已落地的 `#fragment` 校验（节锚点 / 行号范围 / 同文件 / 中文 slug / 重复标题），
+不另造一套；本轮只在其上叠加 `language-spec.md#L…` 的冻结与白名单。
+
+### 4. 证据
+
+红（`test(docs): DOC-88 红`，baseline `b9708205`）：
+
+```console
+$ python3 test/docs/check-docs.py
+FAIL: docs/language-spec.md: missing `## 目录` outline (DOC-88)
+check-docs: FAIL (1 problem(s))
+
+$ python3 test/docs/check-docs.py --selftest | tail -2
+outline-ratchet selftest: OK (6 cases)
+line-anchor-ratchet selftest: OK (7 cases)
+```
+
+实现后绿：
+
+```console
+$ python3 test/docs/check-docs.py
+check-docs: OK (… 40/40 outline entr(ies), 3 spec line anchor(s) in 3 ledger entr(ies))
+$ python3 test/docs/check-docs.py --selftest
+line-anchor-ratchet selftest: OK (7 cases)
+$ bash tools/check.sh g4   # rc=0
+$ bash tools/check.sh g1   # rc=0
+$ bash tools/check.sh g8   # rc=0
+```
+
+负例（实跑后还原）：
+
+```console
+# 新增 language-spec 行号锚点
+FAIL: docs/README.md: new language-spec line anchor -> docs/language-spec.md#L9999 (DOC-88 …)
+# 白名单僵尸条目
+FAIL: test/docs/line-anchors.txt: zombie entry docs/language-spec.md#L9999 B0 (… DOC-88)
+```
+
+### 5. 提交
+
+| 提交 | 内容 |
+| --- | --- |
+| `eba03c83` | `test(docs): DOC-88 红`：断言 + 白名单初版 + 夹具 |
+| `85ab40c0` | `docs(spec): DOC-88 顶部目录（40 条）` |
+| `39f6e1e2` | `docs(anchors): DOC-88 B0 迁移（91 处）` |
+| `1d6e5673` | `docs(anchors): DOC-88 B1 迁移（91 处）` |
+| `c5af1515` | `docs(anchors): DOC-88 B2 迁移（57 处）` |
+| `185e0acd` | `docs(gate): DOC-88 删除已迁移的 FRAGMENT_EXEMPT` |
+
+不 push、不打 tag、不改版本号；`language-spec.md` 现 3,404 行，未过 4,000 行的拆分评估阈值。
