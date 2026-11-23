@@ -1382,6 +1382,16 @@ else
     bad "SH-111 lowering invariants" "$(sed -n '1,12p' "$work/p111inv.out")"
 fi
 
+# LANG-25: the stable diagnostic-code registry. `--diag-codes` appends the
+# code to text; JSON carries it in every record; the probe exercises parse /
+# driver / lower / type / trait / name / mem / lang and text/JSON agreement.
+sh test/ast/p_lang25.sh "$work/ct-ast" >"$work/plang25.out" 2>&1
+if [ $? -eq 0 ]; then
+    ok "LANG-25 diagnostic codes (registry, text, JSON, agreement)"
+else
+    bad "LANG-25 diagnostic codes" "$(sed -n '1,12p' "$work/plang25.out")"
+fi
+
 # SH-61: form 5 (`Trait::method(recv, ...)`) must honour the trait method's
 # variadic flag; a non-variadic form 5 still reports arity.
 sh test/ast/sh61_form5.sh "$work/ct-ast" >"$work/p61form5.out" 2>&1
