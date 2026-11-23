@@ -65,10 +65,16 @@ Standard library only. It asserts seventeen invariants:
       `<path>#L<a>[-L<b>]  <batch>`; an entry with no reference left is a
       zombie and red, and the batch names the earliest pending batch.
       `--selftest` runs the positive/negative fixtures for both assertions.
+18. LANG-25: docs/diagnostics/codes.md is the stable diagnostic-code registry.
+      Every row has a legal `E-` / `W-<DOMAIN>-<NNN>` code, a matching default
+      severity, and non-empty meaning / first-version / sample / test cells;
+      codes are unique and at least 20 are registered; the code literals in
+      selfhost/ct-ast/**/*.ct are exactly the registry set.
 
-Exit code 0 when all seventeen hold, 1 otherwise.
+Exit code 0 when all eighteen hold, 1 otherwise.
 """
 
+import glob
 import hashlib
 import os
 import re
@@ -1319,6 +1325,89 @@ def check_ct_spelling(errors):
     return hits, len(files)
 
 
+DIAG_CODE = re.compile(r"^[EW]-[A-Z]+-[0-9]{3}$")
+DIAG_SOURCE = re.compile(r"\b[EW]-[A-Z]+-[0-9]{3}\b")
+DIAG_TABLE = "docs/diagnostics/codes.md"
+
+
+def parse_diag_table(text, errors):
+    """Parse the LANG-25 table; return (code set, row count)."""
+    codes = set()
+    rows = 0
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if not cells or not DIAG_CODE.match(cells[0]):
+            continue
+        rows += 1
+        code = cells[0]
+        if len(cells) != 6:
+            errors.append(f"{DIAG_TABLE}:{number}: row must have six cells (code, level, meaning, first version, sample, test)")
+            continue
+        if code in codes:
+            errors.append(f"{DIAG_TABLE}:{number}: duplicate diagnostic code {code}")
+        codes.add(code)
+        level = cells[1]
+        if level not in ("error", "warning"):
+            errors.append(f"{DIAG_TABLE}:{number}: {code} default level must be 'error' or 'warning', got {level!r}")
+        elif (level == "error") != code.startswith("E-"):
+            errors.append(f"{DIAG_TABLE}:{number}: {code} prefix does not match default level {level}")
+        for column, name in ((2, "meaning"), (3, "first version"), (4, "sample"), (5, "test")):
+            if not cells[column]:
+                errors.append(f"{DIAG_TABLE}:{number}: {code} has an empty {name} cell")
+    return codes, rows
+
+
+def check_diag_registry(errors):
+    """LANG-25: registry uniqueness/format and source literal equality."""
+    path = os.path.join(ROOT, DIAG_TABLE)
+    if not os.path.isfile(path):
+        errors.append(f"{DIAG_TABLE}: missing (LANG-25 registry)")
+        return 0
+    registered, rows = parse_diag_table(read(path), errors)
+    if rows < 20:
+        errors.append(f"{DIAG_TABLE}: only {rows} registered codes; LANG-25 requires at least 20")
+    source = set()
+    for path in glob.glob(os.path.join(ROOT, "selfhost", "ct-ast", "**", "*.ct"),
+                          recursive=True):
+        source.update(DIAG_SOURCE.findall(read(path)))
+    for code in sorted(source - registered):
+        errors.append(f"{DIAG_TABLE}: {code} is used by selfhost but not registered")
+    for code in sorted(registered - source):
+        errors.append(f"{DIAG_TABLE}: {code} is registered but no selfhost source emits it")
+    return len(registered)
+
+
+def diag_registry_selftest():
+    """Duplicate/format negatives for the registry assertion."""
+    good = (
+        "| code | level | meaning | version | sample | test |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| E-PARSE-001 | error | x | v | s | t |\n"
+        "| W-TYPE-001 | warning | x | v | s | t |\n"
+    )
+    cases = [
+        ("valid", good, 0),
+        ("duplicate", good + "| E-PARSE-001 | error | x | v | s | t |\n", 1),
+        ("prefix", good + "| W-PARSE-002 | error | x | v | s | t |\n", 1),
+        ("short-row", good + "| E-PARSE-003 | error | x | v |\n", 1),
+    ]
+    failed = 0
+    for name, text, want in cases:
+        errs = []
+        parse_diag_table(text, errs)
+        ok = (len(errs) == 0) if want == 0 else (len(errs) >= 1)
+        failed += 0 if ok else 1
+        print(f"diag-registry selftest: {name}: {len(errs)} error(s), "
+              f"expected {'0' if want == 0 else '>=1'} -> {'OK' if ok else 'FAIL'}")
+    if failed:
+        print(f"diag-registry selftest: FAIL ({failed} case(s))")
+        return 1
+    print(f"diag-registry selftest: OK ({len(cases)} cases)")
+    return 0
+
+
 def j6_selftest():
     """Positive/negative fixtures for the SH-104 ledger assertions."""
     ids = sorted(J6_IDS, key=lambda s: tuple(int(x) for x in s[2:].split(".")))
@@ -1585,6 +1674,7 @@ def main():
         rc = anchor_selftest() or rc
         rc = toc_selftest() or rc
         rc = line_anchor_selftest() or rc
+        rc = diag_registry_selftest() or rc
         return rc
     errors = []
     links, scanned = check_links(errors)
@@ -1605,6 +1695,7 @@ def main():
     compat = check_compat_claim(errors)
     caps = check_capability_map(errors)
     ct, ct_files = check_ct_spelling(errors)
+    diag_codes = check_diag_registry(errors)
     for error in errors:
         print(f"FAIL: {error}")
     # The two status lines print on both paths: on a red run the first one names
@@ -1623,7 +1714,8 @@ def main():
         f"{stable} stability row(s), {compat} compat marker(s), "
         f"{caps} capability row(s), {ct} bare CT in {ct_files} active file(s), "
         f"{toc_entries}/{toc_required} outline entr(ies), "
-        f"{line_refs} spec line anchor(s) in {line_entries} ledger entr(ies))"
+        f"{line_refs} spec line anchor(s) in {line_entries} ledger entr(ies), "
+        f"{diag_codes} diagnostic code(s))"
     )
     print(f"design window: ok ({design}/{window})")  # non-zero/duplicate is fatal above
     return 0

@@ -102,7 +102,7 @@ CT_EMIT_INVARIANT_FAULT=cleanup-jump  ct-ast prog.ct -o /tmp/x.c
 
 ## 7 诊断码
 
-本层四条机械检查的稳定码（LANG-25 的 registry 落地后登记在 `docs/diagnostics/codes.md`）：
+本层四条机械检查的稳定码（registry：[diagnostics/codes.md](../diagnostics/codes.md)）：
 
 | code | 含义 | 默认级别 |
 | --- | --- | --- |
@@ -111,8 +111,9 @@ CT_EMIT_INVARIANT_FAULT=cleanup-jump  ct-ast prog.ct -o /tmp/x.c
 | `E-LOWER-006` | I3 errdefer 走正常边 | error |
 | `E-LOWER-007` | I4 接收者临时缺失/重名 | error |
 
-`E-LOWER-001`–`E-LOWER-003` 是既有降级诊断（临时链不可物化、hoist 过多、类型不可推断），
-本层不改文案，只由 LANG-25 的 registry 统一编码。
+`E-LOWER-001` / `E-LOWER-002` 是既有降级诊断（临时接收者不在语句起点、单语句 hoist 过多），
+本层不改文案，只由 LANG-25 的 registry 统一编码；`E-LOWER-003` 预留给「无法推断 hoist 类型」
+的防御分支，当前未接入，registry 不登记未实现的码。
 
 ## 8 边界
 

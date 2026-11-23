@@ -137,6 +137,10 @@ pub struct ParseSupport {
        build to stderr (stdout already carries the suggested cc line). */
     int  diag_json;
     int  diag_json_stderr;
+    /* LANG-25: the stable code recorded with the first failure, and the
+       `--diag-codes` text switch (default text stays byte-identical). */
+    char errcode[32];
+    int  diag_codes;
     /* P-7.2: points at the parser's slice-use flag. */
     int *slice_used;
     /* SH-60 / D-60-2: set while the parser reads a `.m.ct` trait signature.
@@ -420,6 +424,9 @@ impl SupportOps for ParseSupport {
             self->errcol = self->lex->tokstart - self->lex->lstart + 1;
             /* at EOF the cursor's start is not on the line it reports */
             if (self->errcol < 1) self->errcol = 1;
+            snprintf(self->errcode, sizeof self->errcode, "%s",
+                     tool::diag::ct_diag_code_for_error(self->errmsg));
+            if (!self->errcode[0]) snprintf(self->errcode, sizeof self->errcode, "E-PARSE-999");
         }
         return -1;
     }
@@ -435,6 +442,9 @@ impl SupportOps for ParseSupport {
             if (self->mem->path) snprintf(self->errfile, sizeof self->errfile, "%s", self->mem->path);
             self->errline = line;
             self->errcol = 1;
+            snprintf(self->errcode, sizeof self->errcode, "%s",
+                     tool::diag::ct_diag_code_for_error(self->errmsg));
+            if (!self->errcode[0]) snprintf(self->errcode, sizeof self->errcode, "E-PARSE-999");
         }
         return -1;
     }
@@ -450,6 +460,8 @@ impl SupportOps for ParseSupport {
             self->errfile[0] = 0;
             self->errline = 0;
             self->errcol = 0;
+            snprintf(self->errcode, sizeof self->errcode, "%s",
+                     tool::diag::ct_diag_code_for_error(self->errmsg));
         }
         return -1;
     }
@@ -464,6 +476,11 @@ impl SupportOps for ParseSupport {
         if (self->diag_json) {
             FILE *f = self->diag_json_stderr ? stderr : stdout;
             fputs("{\"errors\":[{\"severity\":\"error\",", f);
+            if (self->errcode[0]) {
+                fputs("\"code\":\"", f);
+                put_json_parse(f, self->errcode);
+                fputs("\",", f);
+            }
             if (self->errline > 0) {
                 fputs("\"file\":\"", f);
                 put_json_parse(f, self->errfile);
@@ -474,8 +491,13 @@ impl SupportOps for ParseSupport {
             fputs("\"}]}\n", f);
             return 1;
         }
-        if (self->errline > 0)
+        if (self->errline > 0 && self->diag_codes && self->errcode[0])
+            fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", self->errfile, self->errline,
+                    self->errcol, self->errmsg, self->errcode);
+        else if (self->errline > 0)
             fprintf(stderr, "%s:%d:%d: error: %s\n", self->errfile, self->errline, self->errcol, self->errmsg);
+        else if (self->diag_codes && self->errcode[0])
+            fprintf(stderr, "ctc: %s [%s]\n", self->errmsg, self->errcode);
         else
             fprintf(stderr, "ctc: %s\n", self->errmsg);
         return 1;

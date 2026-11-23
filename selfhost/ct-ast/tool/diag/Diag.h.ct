@@ -23,6 +23,64 @@
 #define MAX_WARNINGS 32
 
 namespace tool::diag;
+
+/* LANG-25: the stable diagnostic code registry (docs/diagnostics/codes.md).
+   The table lives here once; parse errors, the warning store and the emitter
+   all ask these two functions, so text and JSON cannot drift. `999` is the
+   explicit "not yet classified" bucket per domain -- a code is never guessed
+   from the message a second time at a call site. */
+pub const char *ct_diag_code_for_error(const char *msg);
+const char *ct_diag_code_for_error(const char *msg)
+{
+    if (strstr(msg, "unexpected token")) return "E-PARSE-001";
+    if (strstr(msg, "expected an expression")) return "E-PARSE-002";
+    if (strstr(msg, "use of an undeclared variable")) return "E-PARSE-004";
+    if (strstr(msg, "a defer block cannot transfer control")) return "E-PARSE-006";
+    if (strstr(msg, "an errdefer block cannot transfer control")) return "E-PARSE-007";
+    if (strstr(msg, "break is only allowed in a loop or switch")) return "E-PARSE-008";
+    if (strstr(msg, "continue is only allowed in a loop")) return "E-PARSE-009";
+    if (strstr(msg, "unreachable code after a jump")) return "E-PARSE-010";
+    if (strstr(msg, "auto-drop requires the closing")) return "E-PARSE-011";
+    if (strstr(msg, "a goto cannot cross a block with defer")) return "E-PARSE-012";
+    if (strstr(msg, "an own object cannot be rolled back by errdefer")) return "E-PARSE-013";
+    if (strstr(msg, "a closure cannot escape through 'return'")) return "E-PARSE-014";
+    if (strstr(msg, "cannot resolve import")) return "E-DRIVER-001";
+    if (strstr(msg, "cannot open the input file")) return "E-DRIVER-002";
+    if (strstr(msg, "a .m.ct unit produces no output")) return "E-DRIVER-003";
+    if (strstr(msg, "cannot write the output file")) return "E-DRIVER-004";
+    if (strstr(msg, "a method call on a temporary")) return "E-LOWER-001";
+    if (strstr(msg, "too many hoisted receivers")) return "E-LOWER-002";
+    if (strstr(msg, "lowering invariant I1")) return "E-LOWER-004";
+    if (strstr(msg, "lowering invariant I2")) return "E-LOWER-005";
+    if (strstr(msg, "lowering invariant I3")) return "E-LOWER-006";
+    if (strstr(msg, "lowering invariant I4")) return "E-LOWER-007";
+    /* the two escalations reuse the warning-class code, not a second one */
+    if (strstr(msg, "type mismatch")) return "W-TYPE-002";
+    if (strstr(msg, "arity mismatch")) return "W-TYPE-001";
+    if (strstr(msg, "ambiguous method")) return "W-TRAIT-001";
+    if (strstr(msg, "signature mismatch")) return "W-TRAIT-002";
+    return "";
+}
+
+pub const char *ct_diag_warn_code(int kind);
+const char *ct_diag_warn_code(int kind)
+{
+    if (kind == 0) return "W-MEM-001";
+    if (kind == 1) return "W-TRAIT-002";
+    if (kind == 2) return "W-MEM-002";
+    if (kind == 3) return "W-MEM-003";
+    if (kind == 4) return "W-TYPE-001";
+    if (kind == 5) return "W-TYPE-002";
+    if (kind == 6) return "W-TRAIT-001";
+    if (kind == 7) return "W-NAME-001";
+    if (kind == 8) return "W-DRIVER-001";
+    if (kind == 9) return "W-MEM-004";
+    if (kind == 10) return "W-MEM-005";
+    if (kind == 11) return "W-MEM-006";
+    if (kind == 12) return "W-LANG-001";
+    return "";
+}
+
 /* One collected warning (10.2 signature mismatch, 10.3 leak, 19.1 arity,
    19.2 argument type, 19.3 ambiguity, 22 nested `loop` shadowing). */
 struct Warn {
@@ -81,6 +139,8 @@ trait DiagStore {
        0 off (no gate runs), 1 warn (the finding prints but the build goes on),
        2 error (the finding is a hard error, the pre-PH-85 meaning). */
     void set_types_level(int on);
+    /* LANG-25: text mode appends the stable code only on request. */
+    void set_codes(int on);
     int  type_fail(int line, int col, const char *msg, const char *path);
     /* PH-82: `leaks = error` in the package manifest. It escalates the
        existing `potential leak` records (kinds 0/2) to errors, so the run
@@ -111,6 +171,9 @@ struct Diag {
        default, so only an explicit `--check-level=off` (0) restores the exact
        pre-PH-85 build. */
     int  types_level;
+    /* LANG-25: `--diag-codes` appends `[E-...]` / `[W-...]` to text lines.
+       Default text stays byte-identical; JSON carries the code either way. */
+    int  codes;
 } use DiagStore;
 
 impl DiagStore for Diag {
@@ -119,8 +182,12 @@ impl DiagStore for Diag {
        is still checked; `run`/`build_main` close with L2's summary line. */
     int sem_error(int line, int col, const char *msg, const char *path)
     {
-        (void)self;
-        fprintf(stderr, "%s:%d:%d: error: %s\n", path, line, col, msg);
+        const char *code;
+        code = ct_diag_code_for_error(msg);
+        if (self->codes && code[0])
+            fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
+        else
+            fprintf(stderr, "%s:%d:%d: error: %s\n", path, line, col, msg);
         self->nsem++;
         /* past the cap the reports are cascades of the first few, not news */
         if (self->nsem > MAX_ERRORS) {
@@ -136,7 +203,11 @@ impl DiagStore for Diag {
     int type_fail(int line, int col, const char *msg, const char *path)
     {
         if (self->types_level == 1) {
-            fprintf(stderr, "%s:%d:%d: warning: %s\n", path, line, col, msg);
+            const char *code = ct_diag_code_for_error(msg);
+            if (self->codes && code[0])
+                fprintf(stderr, "%s:%d:%d: warning: %s [%s]\n", path, line, col, msg, code);
+            else
+                fprintf(stderr, "%s:%d:%d: warning: %s\n", path, line, col, msg);
             return 0;
         }
         return self->sem_error(line, col, msg, path);
@@ -479,6 +550,9 @@ impl DiagStore for Diag {
                 struct Warn *w = &self->warns[i];
                 if (i) fputc(',', jf);
                 fputc('{', jf);
+                fputs("\"code\":\"", jf);
+                self->put_json(jf, ct_diag_warn_code(w->kind));
+                fputs("\",", jf);
                 if (self->strict == 1 || (w->kind == 1 && self->strict == 2)
                     || (self->leaks_error
                         && (w->kind == 0 || w->kind == 2 || w->kind == 10)))
@@ -622,54 +696,58 @@ impl DiagStore for Diag {
                    (`file:line:col:`); compile and build stay `file:line:` so
                    their bytes do not move (D19-4). */
                 char loc[MAX_PATH + 32];
+                char csuf[64];
+                const char *wcode = ct_diag_warn_code(w->kind);
+                if (self->codes && wcode[0]) snprintf(csuf, sizeof csuf, " [%s]", wcode);
+                else csuf[0] = 0;
                 if (self->strict && w->col > 0)
                     snprintf(loc, sizeof loc, "%s:%d:%d:", w->file, w->line, w->col);
                 else
                     snprintf(loc, sizeof loc, "%s:%d:", w->file, w->line);
                 if (w->kind == 1)
-                    fprintf(tf, "%s %s: signature mismatch: '%s' in impl of '%s' for '%s': %s\n",
-                            loc, sigsev, w->var, w->tname, w->stype, w->msg);
+                    fprintf(tf, "%s %s: signature mismatch: '%s' in impl of '%s' for '%s': %s%s\n",
+                            loc, sigsev, w->var, w->tname, w->stype, w->msg, csuf);
                 else if (w->kind == 2)
-                    fprintf(tf, "%s %s: potential leak: '%s' (%s*) may leak on a return path (line %d)\n",
-                            loc, leaksev, w->var, w->tname, w->path_line);
+                    fprintf(tf, "%s %s: potential leak: '%s' (%s*) may leak on a return path (line %d)%s\n",
+                            loc, leaksev, w->var, w->tname, w->path_line, csuf);
                 else if (w->kind == 3)
-                    fprintf(tf, "%s %s: a borrowed pointer escapes through 'return'\n",
-                            loc, sev);
+                    fprintf(tf, "%s %s: a borrowed pointer escapes through 'return'%s\n",
+                            loc, sev, csuf);
                 else if (w->kind == 4)
-                    fprintf(tf, "%s %s: arity mismatch: '%s' %s\n",
-                            loc, sev, w->var, w->msg);
+                    fprintf(tf, "%s %s: arity mismatch: '%s' %s%s\n",
+                            loc, sev, w->var, w->msg, csuf);
                 else if (w->kind == 5) {
                     /* Phase 32: an empty callee means the message already
                        carries its own label (`initializer: …`), so nothing
                        is prefixed. */
                     if (w->var[0])
-                        fprintf(tf, "%s %s: type mismatch: '%s' %s\n",
-                                loc, sev, w->var, w->msg);
+                        fprintf(tf, "%s %s: type mismatch: '%s' %s%s\n",
+                                loc, sev, w->var, w->msg, csuf);
                     else
-                        fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                        fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
                 }
                 else if (w->kind == 6)
-                    fprintf(tf, "%s %s: ambiguous method: '%s' %s\n",
-                            loc, sev, w->var, w->msg);
+                    fprintf(tf, "%s %s: ambiguous method: '%s' %s%s\n",
+                            loc, sev, w->var, w->msg, csuf);
                 else if (w->kind == 7)
-                    fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
                 else if (w->kind == 8)
-                    fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
                 else if (w->kind == 9)
-                    fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
                 else if (w->kind == 11)
-                    fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
                 else if (w->kind == 12)
                     /* LANG-24: the deprecated alias always prints `warning:`,
                        even when `ct check` escalates the other findings. */
                     fprintf(tf, "%s warning: %s\n", loc, w->msg);
                 else if (w->kind == 13)
-                    fprintf(tf, "%s %s: %s\n", loc, sev, w->msg);
+                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
                 else if (w->kind == 10)
-                    fprintf(tf, "%s %s: %s\n", loc, leaksev, w->msg);
+                    fprintf(tf, "%s %s: %s%s\n", loc, leaksev, w->msg, csuf);
                 else
-                    fprintf(tf, "%s %s: potential leak: '%s' (%s*) allocated but never deleted\n",
-                            loc, leaksev, w->var, w->tname);
+                    fprintf(tf, "%s %s: potential leak: '%s' (%s*) allocated but never deleted%s\n",
+                            loc, leaksev, w->var, w->tname, csuf);
             }
         }
         /* PH-82: the leak escalation is the run's failure signal even when
@@ -693,6 +771,11 @@ impl DiagStore for Diag {
     void set_types_level(int on)
     {
         self->types_level = on;
+    }
+
+    void set_codes(int on)
+    {
+        self->codes = on ? 1 : 0;
     }
 
     void set_strict(int on)
@@ -883,6 +966,12 @@ pub void ct_diag_set_types_level(int on);
 void ct_diag_set_types_level(int on)
 {
     g_diag.set_types_level(on);
+}
+
+pub void ct_diag_set_codes(int on);
+void ct_diag_set_codes(int on)
+{
+    g_diag.set_codes(on);
 }
 
 pub int ct_type_fail(int line, int col, const char *msg, const char *path);

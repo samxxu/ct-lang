@@ -4836,11 +4836,12 @@ int ct_parse_report(void)
     return g_parse.sup->report();
 }
 
-pub void ct_parse_set_json(int on, int to_stderr);
-void ct_parse_set_json(int on, int to_stderr)
+pub void ct_parse_set_json(int on, int to_stderr, int codes);
+void ct_parse_set_json(int on, int to_stderr, int codes)
 {
     g_parse.sup->diag_json = on;
     g_parse.sup->diag_json_stderr = to_stderr;
+    g_parse.sup->diag_codes = codes;
 }
 
 pub void ct_parse_lex_next(void);

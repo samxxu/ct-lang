@@ -171,6 +171,7 @@ pub struct Module {
     int  have_model;
     const char *prog;
     int  diag_json;             /* --diagnostics=json */
+    int  diag_codes;            /* --diag-codes: text carries [E-...] / [W-...] */
     int  diag_emitted;          /* build: warnings already printed before emit */
     /* `ct check` (19.4): parse and report the semantic findings, write no C.
        The driver's compile path short-circuits on it after parsing. */
@@ -1874,7 +1875,7 @@ impl ModuleOps for Module {
                        "                 [--check-level=off|warn|error]\n"
                        "                 [--cflags <s>] [--ldflags <s>]\n"
                        "                 [--line|--no-line] [--emit-map <file|->] [--emit-model <file|->]\n"
-                       "                 [--diagnostics=text|json] [--std=c99|gnu99|c11]\n",
+                       "                 [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n",
                        self->prog);
                 return 0;
             }
@@ -1966,6 +1967,10 @@ impl ModuleOps for Module {
                     fprintf(stderr, "ctc: %s value is too long\n", is_cf ? "--cflags" : "--ldflags");
                     return 1;
                 }
+                continue;
+            }
+            if (strcmp(argv[i], "--diag-codes") == 0) {
+                self->diag_codes = 1;
                 continue;
             }
             if (strncmp(argv[i], "--diagnostics=", 14) == 0) {
@@ -2131,7 +2136,8 @@ impl ModuleOps for Module {
             return 1;
         }
         if (!self->emit_c && ct_ensure_dir(self->outdir) != 0) {
-            fprintf(stderr, "ctc: cannot create '%s'\n", self->outdir);
+            fprintf(stderr, "ctc: cannot create '%s'%s\n", self->outdir,
+                    self->diag_codes ? " [E-DRIVER-004]" : "");
             return 1;
         }
         if (!self->nsroot) {
@@ -2203,7 +2209,9 @@ impl ModuleOps for Module {
         frontend::parse::ct_parse_clear_error();
         /* LANG-10 7b: a parse failure follows `--diagnostics=json`; build keeps
            the document on stderr (stdout carries the cc line), check on stdout. */
-        frontend::parse::ct_parse_set_json(self->diag_json, self->check_mode ? 0 : 1);
+        frontend::parse::ct_parse_set_json(self->diag_json, self->check_mode ? 0 : 1,
+                                           self->diag_codes);
+        tool::diag::ct_diag_set_codes(self->diag_codes);
         self->build_mode = 1;
 
         /* Phase 29 E29-5: the built-in layer is loaded as a unit of every
@@ -2310,7 +2318,8 @@ impl ModuleOps for Module {
                     return 1;
                 }
                 if (ct_ensure_dir(self->outdir) != 0) {
-                    fprintf(stderr, "ctc: cannot create '%s'\n", self->outdir);
+                    fprintf(stderr, "ctc: cannot create '%s'%s\n", self->outdir,
+                    self->diag_codes ? " [E-DRIVER-004]" : "");
                     return 1;
                 }
                 if (snprintf(hp, sizeof hp, "%s/%s.abi.h", self->outdir,
