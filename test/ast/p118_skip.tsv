@@ -1,0 +1,54 @@
+# SH-118 / E-V1-5 skip table: <path><TAB><reason>
+#
+# Only files that are NOT part of the legal corpus belong here. A legal
+# fixture is never skipped; a real false positive must fail the gate.
+# p118_fp_all.sh rejects a stale row (the file no longer produces a B
+# diagnostic), so this table can only shrink. Adding a row needs a reason
+# in this file and a note in the commit body (SH-118 acceptance).
+examples/tour/16_diagnostics/mixed_json/prog.ct	demo: tour 16_diagnostics 诊断演示（故意触发 type_mismatch）
+examples/tour/16_diagnostics/type_arg/prog.ct	demo: tour 16_diagnostics 诊断演示（故意触发 type_mismatch）
+examples/tour/16_diagnostics/type_loop/prog.ct	demo: tour 16_diagnostics 诊断演示（故意触发 L22-5 loop 计数警告）
+test/ast/check_errors/check_assign_ptr.ct	negative: B 负例（期望 assignment 诊断）
+test/ast/check_errors/check_container_push.ct	negative: B 负例（期望 argument 诊断）
+test/ast/check_errors/check_container_put.ct	negative: B 负例（期望 argument 诊断）
+test/ast/check_errors/check_container_set.ct	negative: B 负例（期望 argument 诊断）
+test/ast/check_errors/check_container_struct.ct	negative: B 负例（期望 argument 诊断）
+test/ast/check_errors/check_generic_arg.ct	negative: B 负例（期望 argument 诊断）
+test/ast/check_errors/check_init_ptr.ct	negative: B 负例（期望 initializer 诊断）
+test/ast/check_errors/check_return_in_void.ct	negative: B 负例（期望 return 诊断）
+test/ast/check_errors/check_return_missing.ct	negative: B 负例（期望 return 诊断）
+test/ast/check_errors/check_return_ptr.ct	negative: B 负例（期望 return 诊断）
+test/ast/check_errors/check_return_struct.ct	negative: B 负例（期望 return 诊断）
+test/ast/check_errors/check_struct_assign.ct	negative: B 负例（期望 assignment 诊断）
+test/ast/errors/iface_mismatch.ct	negative: test/ast/errors 错误巡回（interface type mismatch）
+test/ast/errors/lang26_no_mapping.ct	negative: test/ast/errors 错误巡回（initializer: Num/Node）
+test/ast/errors/p41_atomic_valuetype/prog.ct	negative: test/ast/errors 错误巡回（atomic value type mismatch）
+test/ast/errors/p43_err_return_int/prog.ct	negative: test/ast/errors 错误巡回（Result return 形状）
+test/ast/errors/p43_err_return_ptr/prog.ct	negative: test/ast/errors 错误巡回（Result return 形状）
+test/ast/errors/p43_err_return_result/prog.ct	negative: test/ast/errors 错误巡回（Result return 形状）
+test/ast/errors/p43_err_return_struct/prog.ct	negative: test/ast/errors 错误巡回（Result return 形状）
+test/ast/errors/p45_assign/prog.ct	negative: test/ast/errors 错误巡回（struct 指针赋值）
+test/ast/errors/p45_container/prog.ct	negative: test/ast/errors 错误巡回（容器实参）
+test/ast/errors/p45_depth/prog.ct	negative: test/ast/errors 错误巡回（指针深度）
+test/ast/errors/p45_init/prog.ct	negative: test/ast/errors 错误巡回（struct 指针初值）
+test/ast/errors/p45_return/prog.ct	negative: test/ast/errors 错误巡回（struct 指针 return）
+test/ast/errors/struct_arg_from_charptr.ct	negative: test/ast/errors 错误巡回（struct 实参）
+test/ast/errors/struct_arg_wrong_struct.ct	negative: test/ast/errors 错误巡回（struct 实参）
+test/ast/loop_count_type/prog.ct	demo: L22-5 非整数 loop 计数告警演示（合法但有告警）
+test/ast/p80_retain/neg_escape.ct	negative: 借用视图逃逸（--types 负例）
+test/errors/box_already_iface.ct	negative: test/errors 错误巡回（Box/iface）
+test/errors/box_iface_wrong_trait.ct	negative: test/errors 错误巡回（Box/iface）
+test/errors/box_return_wrong_trait.ct	negative: test/errors 错误巡回（Box/iface）
+test/errors/method_chain_result.ct	negative: test/errors 错误巡回（方法链结果）
+test/modules/p25_static_argtype/aux6.ct	negative: SH-60 静态映射实参负例（type-host dot call）
+test/modules/p25_static_argtype/q3.ct	negative: SH-60 静态映射实参负例（ns::Trait.method）
+test/modules/p25_static_argtype/q4.ct	negative: SH-60 静态映射实参负例（ns::method）
+test/modules/p25_static_argtype/q5.ct	negative: SH-60 静态映射实参负例（Trait::method）
+test/probes/fixtures/p32_assign.ct	baseline: p32 前 B 基线夹具（含故意未检查的 C 转换，B 判红正确）
+test/probes/fixtures/p32_container.ct	baseline: p32 前 B 基线夹具（含故意未检查的 C 转换，B 判红正确）
+test/probes/fixtures/p32_ok.ct	baseline: p32 前 B 基线夹具（`char *pc = struct A *` 为 C 非法转换，B 判红正确）
+test/probes/fixtures/p32_push.ct	baseline: p32 前 B 基线夹具（含故意未检查的 C 转换，B 判红正确）
+test/probes/fixtures/p32_ret_void.ct	baseline: p32 前 B 基线夹具（含故意未检查的 C 转换，B 判红正确）
+test/probes/fixtures/p32_return.ct	baseline: p32 前 B 基线夹具（含故意未检查的 C 转换，B 判红正确）
+test/probes/fixtures/p32_struct.ct	baseline: p32 前 B 基线夹具（struct A/B 互赋为 C 非法，B 判红正确）
+test/probes/fixtures/p35_iface_mismatch.ct	negative: p35 接口不匹配负例
