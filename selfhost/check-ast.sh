@@ -1007,6 +1007,15 @@ else
     bad "lang8/float-dot" "$(cat "$work/lang8.out" "$work/lang8.err" | head -8)"
 fi
 
+# SH-113: pin the built-in-unit liveness boundary (text scan + symbol scan);
+# group 6 records the known compile-mode lowercase-export miss rather than
+# hiding it. The liveness algorithm itself is unchanged.
+if bash test/ast/sh113_builtin_live.sh "$work/ct-ast" >"$work/sh113.out" 2>"$work/sh113.err"; then
+    ok "sh113/builtin-live"
+else
+    bad "sh113/builtin-live" "$(cat "$work/sh113.out" "$work/sh113.err" | head -8)"
+fi
+
 # TEST-20: the generated C must not only be symbol-clean, it must boot on a
 # Cortex-M and take an interrupt. QEMU + arm-none-eabi-gcc are optional host
 # tools: without them the probe says `skip`, it never pretends to pass.
