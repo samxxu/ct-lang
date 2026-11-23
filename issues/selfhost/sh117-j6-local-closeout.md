@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | `78477712`（2026-11-24） |
 | 依据 | [J-6 台账](../../docs/planning/j6-evidence/ledger.md) 本仓段 3 缺失 / 3 部分；[SH-104](sh104-j6-evidence-ledger.md)（台账与拆段） |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-24 所有者同意开卡；承接 SH-104 未闭合的本仓段证据）** |
 
 ## 1. 范围
@@ -191,3 +191,9 @@ ok   escape_ref_store (J-4b store escape is caught by ASan, not the type checker
   offsets）、`g9` OK（spec 1.18.0）。
 - 未闭合项：**无**。P-1.3 仍 `阻塞`（所有者 2026-11-23 已裁定迁移 lint 归 v1.x）；
   外部段 5 项（P-3.6 / P-6.1–P-6.4）不属本仓 v1.0。
+
+## 复核（REV，2026-11-24）
+
+7 行全部闭合，台账 `passed=28 partial=0 missing=0 blocked=1 external=5`；P-3.5 修编译器并补
+赋值/return/变参负例；P-5.2/P-5.3 补 out/ref owning 赋值与 ref 显式 release；P-5.4/P-5.5/P-5.6
+补错误路径/借用类型/ASan；J-4b 条款成文 + 存储逃逸 ASan 负例。check-ast 1630/0/5、sanitizers 599。

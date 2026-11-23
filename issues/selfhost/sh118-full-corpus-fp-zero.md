@@ -7,7 +7,7 @@
 | 严重度 | High（A 的证据是 v1.0 硬门禁） |
 | 锚点 | `78477712`（2026-11-24） |
 | 依据 | [v1 路线 §2.4](../../docs/planning/v1-release-plan.md)、[SH-115](sh115-b-plus-strengthening.md) 第 4 条、[v1-PH-0](../../docs/phases/v1-PH-0/card.md) E-V1-5 |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-24 所有者同意开卡；证据归本卡，机制已在 SH-115 落地）** |
 
 ## 1. 问题
@@ -56,3 +56,8 @@ v1.0 的硬门禁是“**全量语料 FP=0**”（D2 = B+），但仓里只有�
 - [SH-115](sh115-b-plus-strengthening.md)（B+ 强化与默认 `warn`）
 - [SH-117](sh117-j6-local-closeout.md)（同批的 J-6 本仓段证据）
 - [J-6 台账](../../docs/planning/j6-evidence/ledger.md)（P-1.1 基线口径）
+
+## 复核（REV，2026-11-24）
+
+`p118_fp_all.sh` 对 1424 个 `.ct`（1377 合法 / 47 skip）跑 `ct check --types`，B 诊断 0 命中；
+修复 7 个 `{ 0 }`/String 字段合法初值误报；证据 `fp-zero.md` 入库并接入 check-ast；注入负例红。
