@@ -112,3 +112,7 @@ $ echo $?
 
 **逐字节不变。** 305 个既有单文件语料生成 C 与 `a0ce8ef1` 基线逐字节相同
 （`compared=305 same=305 diff=0`）。状态字段保持 `deferred` 不动。
+
+**PH-87 dogfood 基准更新。** `p87_dogfood.sh` 由「期望 10 条同一类 FP」改为「期望 0 条」；
+`test/probes/p87_dogfood.tsv` 清空；`docs/design/p87_dogfood.md` 保留 PH-87 历史证据并加
+§3 SH-108 复测（0 条）。`p87_dogfood` 6/0、`p87_docs` 23/0。

@@ -5,10 +5,10 @@
 # E87-5 asks for a dogfood run with no crash and a registered false-positive
 # list. This probe builds ct-ast's own tree with `--check-level=warn`, requires
 # the build to succeed, and compares the warnings with
-# `test/probes/p87_dogfood.tsv`. Every finding in that manifest is the same
-# class (`'T a[]' is deprecated` on the first dimension of a multi-dimensional
-# array parameter), which is a false positive: `char x[][N]` is a C array
-# parameter and names no slice.
+# `test/probes/p87_dogfood.tsv`. PH-87 registered 10 findings, all one class
+# (`'T a[]' is deprecated` on the first dimension of a multi-dimensional array
+# parameter), as false positives. SH-108 fixed that class: the manifest is now
+# empty and the run must report 0 warnings.
 #
 # Usage: bash test/ast/p87_dogfood.sh <ct-ast>
 set -u
@@ -33,11 +33,11 @@ else
 fi
 
 warn=$(grep -c 'warning:' "$tmp/build.err" || true)
-if [ "$warn" -eq 10 ]; then
+if [ "$warn" -eq 0 ]; then
     ok
-    echo "  p87dogfood: $warn warnings, all one class"
+    echo "  p87dogfood: 0 warnings after SH-108"
 else
-    bad "expected 10 warnings, got $warn"
+    bad "expected 0 warnings after SH-108, got $warn"
 fi
 if [ "$warn" -gt 0 ] && grep 'warning:' "$tmp/build.err" \
         | grep -vFq "warning: 'T a[]' is deprecated; write 'T[]' for a slice or 'T a[N]' for an array"; then
@@ -59,8 +59,8 @@ else
 fi
 
 doc=docs/design/p87_dogfood.md
-if [ -s "$doc" ] && grep -Fq "10" "$doc" \
-   && grep -Fq "T a[]" "$doc" && grep -Fq "误报" "$doc"; then
+if [ -s "$doc" ] && grep -Fq "SH-108" "$doc" \
+   && grep -Fq "0 条 warning" "$doc" && grep -Fq "误报" "$doc"; then
     ok
 else
     bad "$doc is missing the dogfood counts or the false-positive list"

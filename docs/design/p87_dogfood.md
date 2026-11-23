@@ -2,7 +2,8 @@
 
 - 日期：2026-11-21
 - 命令：`ct-ast build --emit-c --check-level=warn -I selfhost/ct-ast selfhost/ct-ast/main.ct -o <dir>`
-- 结果：**rc=0，无崩溃**；10 条 warning，全部同一类，**均判为误报（FP）**。
+- 结果（PH-87，2026-11-21）：**rc=0，无崩溃**；10 条 warning，全部同一类，**均判为误报（FP）**。
+- 现行（SH-108，2026-11-23）：同一命令 **0 条 warning**；误报已收敛，见 §3。
 - 探针：`bash test/ast/p87_dogfood.sh <ct-ast>`；清单：`test/probes/p87_dogfood.tsv`。
 
 ## 1 原始输出（10 条）
@@ -34,3 +35,19 @@ $ echo $?
   归入 A 机制的误报收敛，不在 PH-87 改语义。
 - 说明：同一命令换成 `--check-level=error` 时这 10 条仍以 warning 出现（它们不走
   `--types` 的 B 类finding 升级路径），rc 仍为 0；本卡只登记，不改行为。
+
+## 3 SH-108 后的复测（2026-11-23）
+
+**0 条 warning。** `parse_array_dims` 现在只在「单维且唯一空维」时发 `'T a[]'` 弃用；
+`char x[][MAX]` 这类多维形参/字段的空首维不再误报。复测命令与 §1 相同：
+
+```console
+$ ct-ast build --emit-c --check-level=warn -I selfhost/ct-ast selfhost/ct-ast/main.ct -o <dir>
+$ echo $?
+0
+$ grep -c "warning:" <stderr>
+0
+```
+
+`test/probes/p87_dogfood.tsv` 随之清空；探针 `p87_dogfood.sh` 断言 0 条 warning。
+§1–2 保留 PH-87 的历史证据与 FP 判定，不回改。
