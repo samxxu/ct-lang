@@ -696,15 +696,15 @@ impl SymbolOps for Symbols {
     int ensure_fn_capacity(int need)
     {
         int cap;
-        struct Fn *old;
+        void *grown;
         if (need <= self->fncap) return 0;
         cap = self->fncap > 0 ? self->fncap : MAX_FUNCS + 64;
         while (cap < need && cap < MAX_FUNCS_MAX) cap *= 2;
         if (cap > MAX_FUNCS_MAX) cap = MAX_FUNCS_MAX;
         if (need > cap) return -1;
-        old = self->funcs;
-        self->funcs = realloc(old, (size_t)cap * sizeof(*self->funcs));
-        if (!self->funcs) { self->funcs = old; return -1; }
+        grown = realloc(self->funcs, (size_t)cap * sizeof(*self->funcs));
+        if (!grown) return -1;
+        self->funcs = grown;
         memset(self->funcs + self->fncap, 0, (size_t)(cap - self->fncap) * sizeof(*self->funcs));
         self->fncap = cap;
         return 0;
