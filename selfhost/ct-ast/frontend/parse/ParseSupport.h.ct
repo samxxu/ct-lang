@@ -108,11 +108,19 @@ pub struct ParseSupport {
     char errfile[1024];         /* the input the message was recorded against */
     int  errline;               /* 0 = a driver-level message, no source position */
     int  errcol;
+    /* LANG-10 7b: `--diagnostics=json` also covers a recorded parse failure.
+       The channel matches the mode: compile/check write the document to stdout,
+       build to stderr (stdout already carries the suggested cc line). */
+    int  diag_json;
+    int  diag_json_stderr;
     /* P-7.2: points at the parser's slice-use flag. */
     int *slice_used;
 } use SupportOps;
 
 pub struct ParseSupport *parse_support_get(void);
+
+/* LANG-10 7b: the JSON string escaper (defined after the impl). */
+static void put_json_parse(FILE *f, const char *s);
 
 impl SupportOps for ParseSupport {
     int new_node(int kind)
@@ -254,11 +262,26 @@ impl SupportOps for ParseSupport {
         return -1;
     }
 
-    /* Flush the recorded failure once, in the shape it was recorded with. */
+    /* Flush the recorded failure once, in the shape it was recorded with.
+       LANG-10 7b: JSON mode emits one document with the same fields the
+       semantic findings use; text mode stays byte-identical. */
     int report(void)
     {
         (void)self;
         if (!self->errmsg[0]) return 1;
+        if (self->diag_json) {
+            FILE *f = self->diag_json_stderr ? stderr : stdout;
+            fputs("{\"errors\":[{\"severity\":\"error\",", f);
+            if (self->errline > 0) {
+                fputs("\"file\":\"", f);
+                put_json_parse(f, self->errfile);
+                fprintf(f, "\",\"line\":%d,\"col\":%d,", self->errline, self->errcol);
+            }
+            fputs("\"message\":\"", f);
+            put_json_parse(f, self->errmsg);
+            fputs("\"}]}\n", f);
+            return 1;
+        }
         if (self->errline > 0)
             fprintf(stderr, "%s:%d:%d: error: %s\n", self->errfile, self->errline, self->errcol, self->errmsg);
         else
@@ -770,6 +793,26 @@ impl SupportOps for ParseSupport {
     {
         (void)self;
         return self->errmsg;
+    }
+}
+
+/* LANG-10 7b: the JSON escaping the diagnostic store already uses, kept local
+   because `Diag::put_json` is a method of another unit. */
+static void put_json_parse(FILE *f, const char *s)
+{
+    for (; *s; s++) {
+        if (*s == '"' || *s == '\\') {
+            fputc('\\', f);
+            fputc(*s, f);
+        } else if (*s == '\n') {
+            fputs("\\n", f);
+        } else if (*s == '\t') {
+            fputs("\\t", f);
+        } else if ((unsigned char)*s < 0x20) {
+            fputc('?', f);
+        } else {
+            fputc(*s, f);
+        }
     }
 }
 

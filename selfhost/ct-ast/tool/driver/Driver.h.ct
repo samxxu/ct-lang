@@ -796,6 +796,9 @@ impl DriverOps for Driver {
             return 0;
         }
         self->m->path = in;
+        /* LANG-10 7b: a parse failure follows the chosen diagnostics channel
+           (compile/check -> stdout). Set before any lexer/parser call. */
+        frontend::parse::ct_parse_set_json(self->m->diag_json, 0);
         self->mem->path = self->m->path;
         self->sym->path = self->mem->path;
         backend::emit::ct_emit_set_path(self->m->path);

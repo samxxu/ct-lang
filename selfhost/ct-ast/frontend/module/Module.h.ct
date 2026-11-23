@@ -2102,6 +2102,9 @@ impl ModuleOps for Module {
         self->diag_emitted = 0;
         self->p->cur_func[0] = 0;
         frontend::parse::ct_parse_clear_error();
+        /* LANG-10 7b: a parse failure follows `--diagnostics=json`; build keeps
+           the document on stderr (stdout carries the cc line), check on stdout. */
+        frontend::parse::ct_parse_set_json(self->diag_json, self->check_mode ? 0 : 1);
         self->build_mode = 1;
 
         /* Phase 29 E29-5: the built-in layer is loaded as a unit of every
