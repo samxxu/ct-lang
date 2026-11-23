@@ -944,7 +944,7 @@ fi
 # re-run and compared with the manifest frozen at baseline 1e2c30f7; the S86c
 # scope decision and its L2 pass-through evidence are checked on disk too.
 if bash test/ast/p86_errors.sh "$work/ct-ast" >"$work/p86err.out" 2>"$work/p86err.err"; then
-    ok "p86/errors (E86-4: 345 diagnostics byte-identical, scope evidence)"
+    ok "p86/errors (E86-4: 344 diagnostics byte-identical, scope evidence)"
 else
     bad "p86/errors" "$(cat "$work/p86err.out" "$work/p86err.err" | head -8)"
 fi
