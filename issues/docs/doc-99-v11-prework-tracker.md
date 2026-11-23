@@ -7,7 +7,7 @@
 | 严重度 | Low |
 | 锚点 | `d5e273e0`（`v1.0.0` 后；2026-11-24） |
 | 依据 | [AGENTS §6.7](../../AGENTS.md#L139-L148) V-2/V-3/V-4；[v1 路线](../../docs/planning/v1-release-plan.md) |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-24 所有者同意：v1.1.0 开卡前先做这些准备项，全部不动版本号）** |
 
 ## 1. 目的
@@ -24,7 +24,7 @@
 | P-2 | ct-pkg 索引重构三项裁定 | [PKG-21](../packages/pkg-21-ct-pkg-index-refactor-ruling.md) | 决策（文档） | **已完成**：PKG-21 verified（① `ct-pkg/index` `7a0c7cd`；② PKG-18；③ PKG-19/20） |
 | P-3 | 绑定点转换 ADR **缺口复核**（D-020 已存在，核剩余三项） | [LANG-26](../lang/lang-26-binding-site-conversion.md) | 设计（文档） | ✅ D-020 §6：`out` 未覆盖→增量、`decode<T>` 部分→边界、开关部分→形态/诊断 |
 | P-4 | JSON 树方案 B 的 30 天重评 | [LANG-28](../lang/lang-28-json-tree-b.md) | 评审（文档） | ✅ 2026-11-24 提前完成：判据 1（递归 ADT 布局）、判据 2（ADT payload 级联）不满足；结论**维持 A**，报告 [2026-11-24-json-tree-b-reeval](../../docs/reviews/2026-11-24-json-tree-b-reeval.md) |
-| P-5 | 覆盖缺口分批补测试 | [TEST-23](../testing/test-23-v077-coverage-gaps.md) | 测试 | 行覆盖与 `ct-ast` 单测分批进 `test/**`；不改产物 |
+| P-5 | 覆盖缺口分批补测试 | [TEST-23](../testing/test-23-v077-coverage-gaps.md) | 测试 | ✅ `test/coverage/run.sh` 722 夹具/68.98%、`test25_unit.sh` 33 断言、io_names 1024/1025 边界、54–57 近相 example 均进 `test/**`；剩余外部工具链项仍归 TEST-23 |
 | — | 巨型单元与重复常量 | [SH-94](../selfhost/sh94-giant-units-duplicate-constants.md) | 源码重构 | **不在本卡执行**：并入 v1.1 S1（M1 精细切分）的 MINOR 窗口 |
 
 ## 3. 约束
@@ -55,3 +55,10 @@
 - [v1 路线](../../docs/planning/v1-release-plan.md)（v1.1 train 表）
 - [AGENTS §6.7](../../AGENTS.md#L139-L148)（V-2/V-3/V-4）
 - [D-021](../../docs/decisions/D-021.md)（JSON 树方案 B 与唤醒条件）
+
+
+## 7. 复核（REV，2026-11-24）
+
+P-1…P-5 全部完成：P-1 release run 45289869573；P-2 PKG-21 verified；P-3 D-020 §6；
+P-4 LANG-28 rejected（维持 A）；P-5 覆盖率/单测/边界/近相 example。全卡零版本移动，
+`check-docs` 绿，g8-version 绿。
