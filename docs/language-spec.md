@@ -3054,8 +3054,22 @@ parse("ab", n);  /* 调用点不写 out */
   与 trait 声明一致（`ref/out annotation does not match the trait's`），否则 vtable 槽与实现
   的函数指针类型不同；调用点的 lvalue/owning 规则与自由函数一致。
 - **既有语义不变**：`ref` / `out` 不改变指针、`own`、`borrow`、`defer` / `errdefer` 与 AutoDrop
-  的规则；生成的只是普通 C 指针和 `(*name)`。`ref` 可以被存储或传给更长寿命的位置，语言不做
-  借用检查（契约 + 直接 lint，J-4b）。
+  的规则；生成的只是普通 C 指针和 `(*name)`。
+- **逃逸契约（J-4b）**：`ref` / `out` 在语言里就是普通 C 指针，**可以存储、可以传给更长寿命的
+  位置**——字段、全局 / `static`、容器元素、ADT 负载、`return`、闭包捕获、转交给另一个
+  `ref` / `out` 形参，编译器一律不拦；不做借用检查，也不做生命周期检查。作者契约：
+  - 被引用的存储必须在每个逃逸点仍然存活：把 `ref` / `out` 形参保存到超出调用帧的位置后，
+    调用方必须保证它指向的存储活得一样久；
+  - `ref` 是别名不是所有者：不得通过 `ref` 显式 `release` / `drop`（硬错
+    `cannot release through a 'ref' parameter`），旧值由赋值点释放；
+  - `out` 是所有权移交：赋值点按「retain（或 move）右值 → 保留旧句柄 → 写入 → release 旧值」
+    执行，别名自赋值安全；提前 `return` / `err:` 出口上已经赋的值归调用方，不撤销；
+  - 类型系统能硬拦的只有把借用视图存进**禁止借用视图的位置**（`struct` 字段、`Map` 键等，
+    见 §4.69 / §4.70）；其余长寿命位置只由直接 lint（`Str` 存储 lint、SH-106 逃逸 lint）与
+    ASan / UBSan / `--debug-leaks` 兜底，不由类型系统证明。
+- **逃逸负例（J-4b）**：`ref` / `out` 上的视图存进全局、owner 先释放再读——编译器接受该存储
+  （契约级），ASan 报 `heap-use-after-free`；`ref` 上显式 release 是硬错。两者分别由
+  `p80_retain.sh` 的 `asan_escape_case` 与 `neg_ref_release` 断言（证据见 J-6 台账）。
 - **边界**：数组与函数指针形态的 ref/out 参数报
   `ref/out parameters cannot be arrays or function pointers`；闭包、`ref` 的跨单元高阶形态、
   Map 的自定义下标协议不作为 place；`out` 的 L1 不建模短路表达式、三元分支之外的控制流与

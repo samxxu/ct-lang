@@ -1987,7 +1987,7 @@ int main(void) {
 trait 方法、trait 默认体、`impl` 方法、固有方法与泛型 impl 使用同一规则；vtable 槽与
 实现定义都发射 `T *`，impl 的 `ref`/`out` 注解必须与 trait 一致。数组/函数指针形态的
 ref/out 参数、`ref` 的借用检查、跨过程定值不在本阶段；`ref` 被存储的透传风险仍由契约与
-直接 lint 承担（J-4b）。
+直接 lint 承担（J-4b，契约见 [§4.68](language-spec.md)）。
 
 ## 16. 可选的类型检查：`ct check --types`（Phase 32）
 
