@@ -123,3 +123,26 @@ string_str.ct
 
 **触发/负责人**：① DEV 修 SH-110（或裁定不修，改为在 §0.1 写“经裁定不支持”）后，REV 重测
 §0.1 并关闭 D2；② DEV 交付 runner + 10 条 TSV 且全绿后，本条转 `verified`。两项可并行。
+
+## 落地（2026-11-23，DOC/DEV）
+
+**状态未改（`deferred`）。D2 的 SH-110 依赖仍在，未宣称一行链已支持。**
+
+- README 从 628 行重写为 281 行（≤300）：保留 §0.1–§0.5 可运行展示、§1 快速开始、§2 命令、
+  §3 能力（20 个 `cap:` 标记不变）、§4–§7；删除内嵌的 shim 全文，改为指向
+  `examples/47` / `examples/48` 与 spec §4.10.1。
+- §0.1 用 v0.88.3 重测断点：接口值落变量后逐跳可跑（`1`，rc=0）；同一形状的一行链仍报
+  `error: method receiver must be a variable, an element, a call or a field chain`（rc=1，
+  [SH-110](../selfhost/sh110-dynamic-dispatch-chain-fix.md) deferred）；返回局部接口值
+  `0 201`（rc=0）；静态宿主 `200 {"users":3}`（rc=0）。
+- §0.5 五项新特性各有可定位样例：ref/out、切片、`String`/`Str`、box/new、ADT/match；
+  前四项指到 `examples/50…53`，`String` 段实跑 `hello, ct`。
+- tutorial 联动：顶部「按层阅读」与 §0.5 顺序一致；HTTP 走读的基线从 v0.88.0 改为 v0.88.3，
+  保留“一行链仍被拒、SH-110 修复中”的诚实表述；`docs/README.md` 的 §4.10.1 索引同步。
+
+**待唤醒（SH-110 合入后 48 小时内）**：
+
+1. 用新版本重测 §0.1，把“当前不支持 / deferred，待修复”改为“一行链可用”，并同步
+   `docs/language-spec.md` §4.10.1 与 tutorial HTTP 走读；
+2. `test/docs/check-tutorial-cases.sh` + `test/docs/tutorial-cases.tsv` 仍未入库，D3-5 仍欠；
+3. 本条转 `verified` 前需 REV 复核 README 的 §0.5 五条实跑与 §0.1 四条断点。
