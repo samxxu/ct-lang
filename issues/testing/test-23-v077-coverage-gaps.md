@@ -111,3 +111,38 @@ $ command -v llvm-cov lcov gcov
 - 状态：`deferred`（P2，1.0 后质量批）
 - 触发：v1.0 发布后，或 nightly 覆盖率任务启动时
 - 不能关闭：覆盖率/单测/示例尚未交付；不在 1.0 硬门禁内
+
+## 处置（2026-11-23，DEV，部分交付；status 不动）
+
+TEST-23 的第 1–4 项与第 9 项在本批落地；第 5–8 项与第 10 项未做。
+front-matter 仍是 `deferred`（是否转 `open`/`verified` 由 REQ 决定）。
+
+| 缺口 | 本批交付 | 验收命令 / 输出 |
+| --- | --- | --- |
+| 1 行覆盖 | [`test/coverage/run.sh`](../../test/coverage/run.sh)（gcov，只报告）+ nightly `coverage` job + artifact | `bash test/coverage/run.sh` → `line coverage: 68.98%`（19935/28901，25 个源） |
+| 2 ct-ast 白盒单测 | [`test/ast/test25_unit.sh`](../../test/ast/test25_unit.sh) + 三个 C 夹具：`tc_expr_num`/`tc_expr_fnum`/`type_key`、`ctype_adtctor`/`ctype_opt`/`ctype_slice_get`/`ctype_slice_range`、`em_expr_num`/`map_clean_type`/`map_recipe_callee` | `test25unit: 3 passed, 0 failed`；由 `check-ast.sh` 调用 |
+| 3 容量 | `io_names` 1024 临界 + 1025 越界；越界文案写上单元名与上限 | `check-ast.sh` 的 capacity 段 |
+| 9 近相 example | `examples/54_freestanding_alloc`、`55_c_boundary_shim`、`56_emit_model`、`57_check_types` | `sh test/run.sh` 的 near-phase 层 4 项 `ok` |
+
+红证（基线 `43b1b086`，实现前）：
+
+```console
+$ <基线 ct-ast> /tmp/cap_io_names.ct -o /tmp/cap_io_names.c
+/tmp/cap_io_names.ct:2052:12: error: too many distinct calls
+rc=1
+$ python3 test/coverage/selftest.py
+FAIL coverage-wiring: nightly.yml: no 'coverage:' job
+rc=1
+```
+
+绿（本批 HEAD）：
+
+```console
+$ python3 test/coverage/selftest.py
+coverage-wiring: 1 real check + 5 negative mutations, all as expected
+$ sh test/run.sh
+== summary: 165 passed, 0 failed ==
+```
+
+未做：第 5 项（sanitizer/fuzz 进本地）、第 6/10 项（计数脚本回填 test/README 的旧数字）、
+第 7 项（`49_socket` 依赖的 std API）、第 8 项（ICCARM 等工具链矩阵）。

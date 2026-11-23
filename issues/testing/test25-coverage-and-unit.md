@@ -77,3 +77,36 @@ $ grep -c 'cap_check' selfhost/check-ast.sh
   具体可达形态——声明函数或裸名——由 DEV 在夹具里定，本条只钉「临界放行 / 越界报错」）。
 - 若 v1.1 前有人先落 ③，本条只保留覆盖率与白盒半边，不重复立案；
   `MAX_FUNCS` 512 边界已由 [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md) 覆盖，不再计入本条。
+
+## 处置（2026-11-23，DEV，三项已落；status 不动）
+
+本批把「覆盖率 / ct-ast 白盒 / `io_names` 夹具」三项都落了，front-matter 仍是
+`deferred`（是否转 `open`/`verified` 由 REQ 决定；本批不阻塞 v1-PH-0）。
+
+| 项 | 交付 | 验收 |
+| --- | --- | --- |
+| 覆盖率 | [`test/coverage/run.sh`](../../test/coverage/run.sh)（gcov，无第三方，只报告）+ [`nightly.yml`](../../.github/workflows/nightly.yml) 的 `coverage` job + `ct-ast-gcov` artifact | 本机 `line coverage: 68.98%`（19935/28901）；接线自检 `test/coverage/selftest.py` 含 5 条变异负例 |
+| ct-ast 白盒 | [`test/ast/test25_unit.sh`](../../test/ast/test25_unit.sh) + 3 个 C 夹具（同 TEST-23 的清单）；走 `include` 生成单元的 L0 路线，不引入 gtest | `test25unit: 3 passed, 0 failed`；`check-ast.sh` 的 `test25/unit` 项 |
+| `io_names` 容量 | `1024` 临界放行、`1025` 越界报错；文案改为 `too many distinct calls in unit '<name>' (limit 1024)` | `check-ast.sh` capacity 段的 `cap io_names` 两项 |
+
+红证（基线 `43b1b086`）：
+
+```console
+$ grep -n 'llvm-cov\|gcov' .github/workflows/nightly.yml ; echo rc=$?
+rc=1
+$ <基线 ct-ast> /tmp/cap_io_names.ct -o /tmp/cap_io_names.c
+/tmp/cap_io_names.ct:2052:12: error: too many distinct calls
+rc=1
+```
+
+绿：
+
+```console
+$ bash test/coverage/run.sh
+line coverage: 68.98%   (report only; no threshold)
+$ bash test/ast/test25_unit.sh <generated-src> cc
+test25unit: 3 passed, 0 failed
+```
+
+`MAX_FUNCS` 512 边界仍由 SH-109 覆盖，不重复计入本条。覆盖率没有设阈值，
+也没有进 `check-all` 的硬门禁：只有接线自检（缺 job / 缺 artifact / 缺 gcov）会红。
