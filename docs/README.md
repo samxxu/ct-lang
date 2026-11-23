@@ -58,6 +58,7 @@
 | [proposals/phase-numbering-major-reset.md](proposals/phase-numbering-major-reset.md) | 主规范 CR 提案：每个 MAJOR 从 `v0-PH-0` 重编号，`MINOR == 本 major 内 n`；`v1-PH-0`/`v1-PH-1`，历史 `PH-*` 不复用 | 查看大版本 phase 编号提案 |
 | [planning/phase-migration-blockers.md](planning/phase-migration-blockers.md) | phase ID 迁移 blocker：旧 major 的 `version-minor` 偏移、卡片布局、旧卡字段；裁定前不动文件 | 查看迁移阻塞项 |
 | [planning/v1-release-plan.md](planning/v1-release-plan.md) | v1.0/v1.1 发布路线（**规划中**）：v1.0 AST-only 去旧管线（保留 seed）、B 检查器 opt-in；v1.1 语法现代化 → A strict 编译路径 | 查看 v1 发布路线 |
+| [proposals/typed-lowered-ir.md](proposals/typed-lowered-ir.md) | v1.2 Typed/Lowered IR 设计提案（**设计验收完成、未实施**）：TIR/LIR、统一清理 CFG、emitter 契约、不变量验证器、迁移/回滚与语义依赖图；实施 deferred 到 `v1-PH-2`（[D-026](decisions/D-026.md)） | 查看 v1.2 IR 设计 |
 | [planning/typecheck-semantic-plan.md](planning/typecheck-semantic-plan.md) | 类型/语义检查（**已交付、历史计划**）：v0-PH-68–71 已收口（版本 0.67.0–0.70.0）——类型核心 → 跨单元/泛型 → CFG → own/borrow；全部 opt-in，不进编译路径 | 查看类型检查方案与收口追溯 |
 | [planning/post-58-plan.md](planning/post-58-plan.md) | 58 之后的重排评估：在册项矩阵、依赖、顺序与并行、放弃/合并清单、编号断裂与待裁定 | 决定 58 之后先做什么、哪些不做 |
 | [planning/hardware-readiness-requirements.md](planning/hardware-readiness-requirements.md) | 硬件可用性需求（评估会产出，**未立项**）：P0 数组/const vptr、v0-PH-64 freestanding/alloc/const vtable、硬件 pilot；含采纳/延后/不采纳与顺序 | 查看硬件需求与验收 |

@@ -8,7 +8,7 @@
 | 锚点 | v0.88.3（2026-11-22，外部架构评估 P1） |
 | 依据 | [SH-111](sh111-lowering-invariants.md)、[架构评估](../../docs/reviews/2026-11-22-architecture-assessment-eval.md) |
 | 状态 | deferred |
-| 处置证据 | **已立项（v1.2 架构议题；不进入 v1.0/v1.1 门禁）** |
+| 处置证据 | **设计阶段验收完成（2026-11-23）；实施 deferred 到 v1.2 `v1-PH-2`；仓库当前无 IR 代码** |
 
 ## 现象
 
@@ -49,3 +49,18 @@ v1.2（`v1-PH-2`）；先设计，不占 v1.0/v1.1。
 - 范围：Typed/Lowered IR 设计
 - 依据：本卡「处置证据」已标 `v1.2` 立项、不阻塞 v1.0；v1.0/v1.1 冻结期不排工。
 - 触发时：改回 `open`，按本卡验收执行；不提前扩围。
+
+## 设计阶段验收（ARCH/REQ，2026-11-23）
+
+- 提案：[typed-lowered-ir.md](../../docs/proposals/typed-lowered-ir.md) —— IR 形态（TIR/LIR）、
+  CFG 与统一清理、emitter 契约、不变量验证器、迁移 / golden / 自举 / 回滚、语义依赖图，
+  以及「现状 AST→C」与「IR→C」对照表（提案 §6）。
+- 决策：[D-026](../../docs/decisions/D-026.md) —— 设计选择与被否方案、实施前置（v1.1 稳定、
+  SH-111 剩余项、容量、seed/golden、施工卡）与不实施时点。
+- 结论：**设计阶段验收通过；未实施**。仓库当前 `backend/` 仍只有 `emit` 与 `mem`，
+  没有 TIR/LIR/IR verifier；本卡不改代码、不改版本号、不开施工卡。
+- 实施时点：v1.2（`v1-PH-2`）。触发条件与前置见 D-026 §4/§6；不满足则继续 deferred。
+- 验证：`tools/check.sh g0` / `g1` / `g4` 全绿（2026-11-23；原始输出见提交正文）；
+  本卡仅改设计与台账，无代码。
+- 状态：**保持 `deferred` 不变**；集成后由 REV 按设计验收标准复核。触发时改回 `open`，
+  先开 `v1-PH-2` 卡再实施，不提前扩围。
