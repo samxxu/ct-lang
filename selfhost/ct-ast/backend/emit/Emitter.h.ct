@@ -7399,8 +7399,7 @@ impl EmitOps for Emitter {
             if (!self->sym->structs[si].uses_drop
                 || self->sym->structs[si].is_template) continue;
             owner = self->sym->structs[si].owner;
-            legacy = (self->cur_unit < 0 || owner < 0
-                      || self->sym->structs[si].is_inst);
+            legacy = (self->cur_unit < 0 || owner < 0);
             if (self->cur_unit < 0) {
                 fprintf(self->out,
                         "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
