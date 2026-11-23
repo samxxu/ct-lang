@@ -322,7 +322,10 @@ else
             -o "$TMP/near-free/prog.o" >"$TMP/near-free.cc" 2>&1; then
         undef=$("${NM:-nm}" -u "$TMP/near-free/prog.o" 2>/dev/null \
                 | awk '{print $NF}' | sed 's/^_//' | grep -v '^$' | sort -u)
-        extra=$(printf '%s\n' "$undef" | grep -vE '^(my_alloc|my_free)$' | grep -v '^$')
+        # Under ASan/UBSan the wrapper injects runtime symbols; they are not
+        # part of the freestanding contract this example pins.
+        extra=$(printf '%s\n' "$undef" | grep -vE '^(my_alloc|my_free)$' \
+                | grep -vE '^(__asan|__ubsan|__sanitizer)' | grep -v '^$')
         if ! grep -q 'my_alloc' "$TMP/near-free"/*.c; then
             bad "examples/54_freestanding_alloc" "--alloc did not map the allocation call"
         elif [ -n "$extra" ]; then
