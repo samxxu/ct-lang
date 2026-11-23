@@ -1,6 +1,6 @@
 # Phase 32 / 33 立项卡第六轮独立评审
 
-- 对象：`docs/history/design/phase32.md`、`docs/history/design/phase33.md`（提交 `9450a57`，只含两张卡）
+- 对象：`docs/phases/v0-PH-32/card.md`、`docs/phases/v0-PH-33/card.md`（提交 `9450a57`，只含两张卡）
 - 范围：只评审这两张卡；Phase 31 与 34–36 不在范围（仅在核对编号占用时读取目录声明）
 - 方式：只读 + 单条 `ct-ast` / `cc` 探针，产物在 `/tmp/r6/**`；未跑 `check-all.sh`；未改卡片、未 commit
 - 探针二进制：`/tmp/ct-ast`（v0.26.4）

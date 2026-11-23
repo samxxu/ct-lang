@@ -1,6 +1,6 @@
 # Phase 36 · `8a65096` 窄范围复核（上一轮 1 High + 3 Medium + 2 Low）
 
-> 范围：`8a65096`（`docs/history/design/phase36.md` +20/−16、`docs/proposals/ct-pkg-agent-runtime.md` +4/−2）。只读；未改任何文件。
+> 范围：`8a65096`（`docs/phases/v0-PH-36/card.md` +20/−16、`docs/proposals/ct-pkg-agent-runtime.md` +4/−2）。只读；未改任何文件。
 > 前序：`4e02f31` 复核（`2026-11-12/phase36-delta-rereview/`）。
 
 ## 总判定：**GO**

@@ -6,7 +6,7 @@
 | 定性 | 文档缺口（新特性无教程章节） |
 | 严重度 | Medium（v1.0 前用户可见） |
 | 锚点 | v0.88.0（2026-11-21） |
-| 依据 | [tutorial §10.13](../../docs/tutorial.md)（PH-36 旧 `Str`）、[spec §4.69](../../docs/language-spec.md)、[spec §4.70](../../docs/language-spec.md)、[guide §3](../../docs/guide-for-c-programmers.md)、[DOC-86](doc-86-readme-v088-rewrite.md) D3 |
+| 依据 | [tutorial §10.13](../../docs/tutorial.md)（v0-PH-36 旧 `Str`）、[spec §4.69](../../docs/language-spec.md)、[spec §4.70](../../docs/language-spec.md)、[guide §3](../../docs/guide-for-c-programmers.md)、[DOC-86](doc-86-readme-v088-rewrite.md) D3 |
 | 状态 | verified |
 | 处置证据 | **复核通过（2026-11-22，REV）**：§22/§23 已入库，两条 fixture 实跑 `hello, ct` / `14 5`；顶部「按层阅读」与 §16 均指向新章；`check-docs` 绿（runner/TSV 归 DOC-86 D3-5） |
 
@@ -25,9 +25,9 @@
 
 ## 现象
 
-tutorial 已有 22 个章节，但没有 **PH-79 切片** 与 **PH-80 `String`/`Str`** 的专章：
+tutorial 已有 22 个章节，但没有 **v0-PH-79 切片** 与 **v0-PH-80 `String`/`Str`** 的专章：
 
-- §10.13 讲的是 PH-36 的长度前缀 `Str`（低层内建），不是 PH-80 的 owning `String` / 借用 `Str` 心智模型；
+- §10.13 讲的是 v0-PH-36 的长度前缀 `Str`（低层内建），不是 v0-PH-80 的 owning `String` / 借用 `Str` 心智模型；
 - 顶部“按层阅读”目前只能把这两项指到 spec §4.69 / §4.70 与 guide §3；
 - README §0.5 已有三个可跑程序，tutorial 作为“逐章教程”反而缺最常用的一层。
 
@@ -48,7 +48,7 @@ tutorial 已有 22 个章节，但没有 **PH-79 切片** 与 **PH-80 `String`/`
   5. `char *` 方法：`import std::str::CharStr;`（0.19.0 及以前 `std::str::String`），
      没有 `"x".to_string()`；
   6. 一个完整程序 + 实测输出（沿用 README §0.5 的 `hello, ct`，不复制措辞）；
-  7. 与 §10.13 的关系：§10.13 是 PH-36 的低层 `Str`，本章是 PH-80 的完整心智模型，不删旧章。
+  7. 与 §10.13 的关系：§10.13 是 v0-PH-36 的低层 `Str`，本章是 v0-PH-80 的完整心智模型，不删旧章。
 - **§23 切片 `T[]`**：
   1. 表示 `{ptr,len}`；`int[] s = a` 自动补长度；子切片 `a[lo..hi]` 半开；
   2. 传参：`sum(int[] a)` 替代 `sum(int *a, int n)`；`T a[]` 作形参/字段已弃用；
@@ -75,7 +75,7 @@ tutorial 已有 22 个章节，但没有 **PH-79 切片** 与 **PH-80 `String`/`
 ## 非目标
 
 - 不重写整个 tutorial，不重排现有章节；
-- 不删 §10.13（PH-36 历史能力保留，只在 §22 里说明关系）；
+- 不删 §10.13（v0-PH-36 历史能力保留，只在 §22 里说明关系）；
 - 不把 spec §4.69 / §4.70 的全文搬进教程；
 - 不在 v1.0 冻结期做（v1.1 落地；若需要提前，单独裁定）。
 

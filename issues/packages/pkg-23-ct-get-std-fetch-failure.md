@@ -177,8 +177,8 @@ $ grep -c p106 /tmp/rev-pkg23/checkast-pkg.log
 
 5 条失败均为 **archive 环境项**（探针要读 git 历史，归档没有 `.git`）：逐条核对命令，
 `p85/inventory`、`p85/spike`、`p85/m0`、`p87/docs`、`p88/metrics` 全部走
-`git archive` / `git show`；6 条 skip 为 Renode ×4、PH-77 external（curl 超时）、
-PH-83 dist（无产物）。上轮同一归档是 `1570 passed, 7 failed, 5 skipped`，多出的失败
+`git archive` / `git show`；6 条 skip 为 Renode ×4、v0-PH-77 external（curl 超时）、
+v0-PH-83 dist（无产物）。上轮同一归档是 `1570 passed, 7 failed, 5 skipped`，多出的失败
 正是 `FAIL SH-106 ... test/ast/p106_str_escape.sh: No such file or directory`；本轮该行
 消失，且日志里 `p106` 零命中。
 

@@ -1,6 +1,6 @@
 # 分发产物：`ct-linux-x64.tar.gz`
 
-> 中文 · PH-83（v0.83.2）· 契约 [§4.4](planning/ct-pkg-get-contract.md)、[D-014](decisions/D-014.md) 第 6 条
+> 中文 · v0-PH-83（v0.83.2）· 契约 [§4.4](planning/ct-pkg-get-contract.md)、[D-014](decisions/D-014.md) 第 6 条
 
 每个 MINOR 发布一份 Linux x64 产物，供 `ct-pkg/index` 的 CI 与不装源码的用户钉版本使用。
 产物**不入 git**（`dist/` 在 `.gitignore`）；发布时上传到 GitHub Release 的稳定 URL。
@@ -94,7 +94,7 @@ p83_dist: OK
 
 | 项 | 现状 |
 | --- | --- |
-| 平台 | 只发 `linux-x64`（D-014 第 6 条最小产物）；macOS / Windows 产物不在 PH-83 范围 |
+| 平台 | 只发 `linux-x64`（D-014 第 6 条最小产物）；macOS / Windows 产物不在 v0-PH-83 范围 |
 | 可复现 | 未做 bit-for-bit 复现：tar 的 mtime/uid 未归一，zig 版本也影响产物；发布以 `.sha256` 钉住当次产物 |
 | 吊销 | 没有签名/pin 基础设施（D-014 第 6 条）；只提供 sha256 + 稳定 URL |
 | 上传 | 本卡不 push、不打 tag；产物在本地 `dist/` 生成并验证，上传由发布动作执行 |

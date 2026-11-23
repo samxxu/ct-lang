@@ -1,0 +1,162 @@
+---
+phase-id: v0-PH-48
+version-minor: 48
+---
+
+# Phase 48 — Drop 语义闭环（指针字段胶水 + 跨单元 Drop 体）
+
+> **状态：完成（2026-11-15；v0.48.0；S1–S6 全绿）**
+> **归属**：本仓库维护规格与判据；实现由外部 harness 交付（[手册](../../design/phase46-52-handoff.md)）。
+> **基线**：本卡最后一次提交；与容器族正交，可与 v0-PH-46 并行开发，门禁串行。
+> **规模**：300–550 行（编译器 + 夹具 + 文档）。
+> **代码锚点有效版本**：`v0.49.0`（2026-11-15 复核；优先按符号名定位，行号随发射器增长漂移）。
+> **版本**：`v0.48.0`（若采纳 U-4 A）。
+
+## 0 一句话目标
+
+让「指针字段递归 Drop」与「跨单元 `delete`/AutoDrop 调真实 Drop 体」同时成立，且不再有静默空桩。
+
+## 1 本卡做 / 本卡不做
+
+| 做 | 不做 |
+| --- | --- |
+| 指针字段胶水：`if (_self->f) T_Drop_drop(_self->f);`（判空、不取地址、**不 free**） | 不自动 `free` 子指针（所有权仍归显式 `impl Drop`） |
+| 胶水按**类型 owner 单元**发射（不是「本单元符号表」） | 不改 Drop 顺序、不改 `self` 绑定 |
+| 跨单元通过 `extern` 声明调用真实体；头文件传播「impl 存在/可见」信号 | 不把 Drop 体放进 `.abi.h` |
+| 有 impl 但不可见 → 硬错 L48-2，**不再发空桩** | 不改容器的 `release` 语义 |
+| 补 `emit_vtable_fwd`（`Emitter.h.ct:2649-2721`；原型分支 `:2704`/`:2709`/`:2717`/`:2720`）的 `static` 原型通道（改为条件发射） | 不把 `try_release_payload` 纳入「同判据」 |
+
+## 2 前置依赖
+
+无硬前置。**与 v0-PH-46 共享「单元归属策略」一节**：46 的 D46-2 先冻结（条目下沉），本卡 D48-2 引用同一判定函数；不合并两相。
+
+## 3 现象（v0.47.0 及以前实测；v0.48.0 已修复）
+
+| 形态 | rc | 输出 |
+| --- | --- | --- |
+| `struct Node { Leaf *leaf; } use Drop;`（单单元） | 0 | `leaf drop 22792752`（id 被读成指针低 32 位） |
+| `impl Drop` 在 `.h.ct`、`delete` 在 `main.ct` | 0 | 只打印 `done`，缺 `res drop 7` |
+
+复现：
+
+```sh
+mkdir -p /tmp/p48 && cd /tmp/p48
+"$work/ct-ast" g8.ct -o g8.c && cc -std=c99 g8.c -o g8 && ./g8      # leaf drop <垃圾>
+"$work/ct-ast" build d4/main.ct -o d4out && cc -std=c99 d4out/*.c -o d4 && ./d4  # 只有 done
+```
+
+代码锚点（2026-11-15 按 `v0.49.0` 复核；优先按符号名定位，行号会随发射器增长漂移）：
+
+| 事实 | 位置（符号 + 行号） |
+| --- | --- |
+| 胶水按「类型 owner 单元 + 非模板」发射；owner 不符或 `has_drop_impl` 真则跳过（build 模式）；compile/实例/无 owner 走 legacy 分支 | `emit_impls`，`Emitter.h.ct:3224-3248`（owner 过滤 `:3233-3239`；legacy 分支 `:3240-3247`） |
+| 发函数体：legacy 发 `static`，build 模式发非 `static`；无 Drop 字段则 `(void)_self`（空桩） | `emit_impls`，`Emitter.h.ct:3250-3291`（`static` `:3252`；非 `static` `:3255`；空桩 `:3290`） |
+| 指针字段传子对象、判空、**不取地址** | `emit_impls`，`Emitter.h.ct:3279`：`if (_self->f) <T>_Drop_drop(_self->f);` |
+| 原型通道：owner 单元发普通声明，消费单元发 `extern` | `emit_vtable_fwd`，`Emitter.h.ct:2649-2721`（`static … __attribute__((unused))` `:2704`/`:2709`；普通 `:2717`；`extern` `:2720`） |
+| 第二发射点 `try_release_payload`：指针早退；非指针 `uses_drop` 走 `&tmp.field` | `try_release_payload`，`Emitter.h.ct:5918-5966`（指针早退 `:5930`；Drop 回退 `:5964-5965`） |
+
+### 3.1 S0 基线（派工时 v0.47.0 重录；v0.48.0 已修复）
+
+**不沿用旧卡读数**。派工时用 HEAD `46969693` 的源码按 `check-ast.sh` 的引导链构建 `ct-ast`，
+`CT_STD_DIR=<repo>/lib/std`，两个探针原样重跑：
+
+| 形态 | rc | 实测输出 | 生成 C 关键行 |
+| --- | --- | --- | --- |
+| 单单元 `Node{Leaf *leaf} use Drop` | 0 / cc 0 / run 0 | `node ready`、`leaf drop 21110480`、`done` | `Node_Drop_drop` 体内：`Leaf_Drop_drop(&_self->leaf);`（`v47/g8.c:24`） |
+| 跨单元（`impl Drop` 在 `.h.ct`，`delete` 在 `main.ct`） | 0 / cc 0 / run 0 | 只有 `done`，缺 `res drop 7` | `res.c:8,10` **和** `main.c:9,12` 各发一份 `static lib_Res_Drop_drop`；`main.c` 那份是空桩（`(void)_self`），`delete` 调的是它（`main.c:20`） |
+
+与旧卡 §3 的差异（派工时读数）：
+
+| 项 | 旧卡 §3（v0.44.x 读数） | v0.47.0 重录 |
+| --- | --- | --- |
+| 单单元输出 | `leaf drop <垃圾 id>` | 同（本次 `21110480`），`cc` 仍 rc=0 |
+| 跨单元输出 | 只有 `done` | 同；另查明机制是**两个单元各发一份 static**，`main` 那份空桩被 `delete` 命中 |
+| 锚点行号 | `3101-3115` / `3114-3139` / `2615-2619` / `5764-5770` / `5800-5801` | 派工时：`:3114-3127` / `:3128-3152` / `:2628-2632` / `:5768-5784` / `:5779-5781`；**当前 v0.49.0 见 §3 表** |
+| v0-PH-46 影响 | — | `git diff v0.44.2..v0.47.0 -- Emitter.h.ct` 共 +18/−4，**0 处 `Drop_drop` hunk**、1 处 `inst_elem_foreign`；46 的实例 body 下沉没有改胶水逻辑，只把行号推后（原型/胶水区间 +13 行） |
+
+**v0.48.0 收口后按 v0.49.0 复跑**（`ct v0.49.0`，同组探针）：
+
+| 形态 | rc | 实测输出 | 生成 C 关键行 |
+| --- | --- | --- | --- |
+| 单单元 | 0 / cc 0 / run 0 | `node ready`、`leaf drop 7`、`done` | `if (_self->leaf) Leaf_Drop_drop(_self->leaf);`（`g8.c:24`） |
+| 跨单元 | 0 / cc 0 / run 0 | `res drop 7`、`done` | `main.c:9` `extern void lib_Res_Drop_drop(void *self);`；调用 `main.c:15`；定义 `res.c:10` |
+
+结论：§3.1 上半段保留的是**修复前**读数，只作回归对照；v0.49.0 上两个形态均已符合本卡目标，
+`§6` 判据无需改动。
+
+## 4 修法方向（两个独立决策）
+
+### 4.1 决策一：胶水归谁发（D48-1，不依赖可见性）
+
+| 点 | 位置 | 改法 |
+| --- | --- | --- |
+| 发射过滤 | `emit_impls`，`Emitter.h.ct:3224-3248` | 判据从「本单元符号表」改为「类型 owner 单元」（与 v0-PH-46 的 `inst_elem_foreign` 同源判定） |
+| 指针字段分支 | `emit_impls`，`Emitter.h.ct:3279` | `if (_self->f) <T>_Drop_drop(_self->f);` |
+| 第二发射点 | `try_release_payload`，`Emitter.h.ct:5918-5966`；指针早退 `:5930` | 明确**不在本卡断言面**；若同一指针字段形态出现，按 D48-1 判空，不做 `&` 取址 |
+
+### 4.2 决策二：跨单元怎么看见（D48-2，需裁决 U-2）
+
+| 项 | 方案（默认 A，见 U-2） |
+| --- | --- |
+| 符号可见性 | Drop 胶水**单独一档**：定义单元发非 `static`，不经 v0-PH-42 的 `pub` 判定 |
+| 消费单元 | 只发 `extern void <S>_Drop_drop(void *);`，不发函数体 |
+| 头文件 | 传播 `uses_drop` + `has_drop_impl`（或等价可见性位）；消费单元据此三态决策 |
+| 三态 | ① impl 可见 → `extern`；② 无 impl → 本单元按字段发胶水；③ 有 impl 不可见 → 硬错 L48-2，不落 `.c` |
+| 原型通道 | `emit_vtable_fwd`，`Emitter.h.ct:2649-2721` 的 `static` 原型改为条件发射（`:2704`/`:2709` 为 `static`，`:2717` 普通，`:2720` `extern`） |
+
+## 5 任务切分
+
+| 切片 | 内容 | 出口 |
+| --- | --- | --- |
+| S0 | 只读核对上表五处 + 头文件字段传播路径；产出三态矩阵 | 无提交 |
+| S1 | 红证：单单元指针字段 + 跨单元 Drop（两探针） | `test: v0-PH-48 红` |
+| S2 | 胶水 owner 过滤 + 指针字段判空（决策一） | ≤150 行 |
+| S3 | 头文件信号 + 三态 + `extern`/原型通道（决策二） | ≤150 行 |
+| S4 | L48-2 + 负例 | ≤2 文件 |
+| S5 | 文档：跨单元 Drop 与显式释放责任 | 或 `blocked-by` |
+| S6 | 收口 | §6 |
+
+## 6 验收判据
+
+| ID | 命令 / 比对 | 通过条件 | 失败条件 |
+| --- | --- | --- | --- |
+| E48-1 | `p48_ptr_field_glue` 运行，stdout `cmp` 与期望两行表 | 逐字相等 | 出现垃圾 id / 多次 drop |
+| E48-2 | `p48_cross_unit_drop` 运行，stdout `cmp` `res drop 7` + `done`（锁顺序） | `cmp` rc=0 | 缺行或乱序 |
+| E48-3 | `bash selfhost/check-sanitizers.sh`（`detect_leaks=0`） | rc=0，无 UAF/double-free 报告 | 任一 sanitizer 报告 |
+| E48-4 | 既有 Drop 夹具（`test/ast/225_generic_drop`、`63_own_return_field`）产物快照 `cmp` | rc=0 | 任一 diff |
+| E48-5 | `p48_errors.sh`：impl 不可见 → rc=1、文案 L48-2、不写 `.c` | 逐字命中 | 生成空桩或落 `.c` |
+| E48-6 | 生成 C 中指针字段胶水必须含 `if (_self->f)` 且无 `&_self->f`；值字段胶水不变 | `grep` 断言通过 | 出现 `&_self->` |
+| E48-7 | `bash selfhost/check-all.sh` | 11 green | 任一失败 |
+
+## 7 范围外归属
+
+| 项 | 归属 |
+| --- | --- |
+| 自动 free / 递归释放所有权 | 不做（显式 `impl Drop`） |
+| 容器的 `release` 是否跑元素 Drop | v0-PH-50 契约 |
+| `Handback` 胶水 | v0-PH-38（只保证原型通道不被本卡改坏） |
+| `.abi.h` 导出 Drop 体 | 不做 |
+
+## 8 风险与回滚
+
+| 风险 | 信号 | 回滚 |
+| --- | --- | --- |
+| owner 过滤误伤 `Vec`/泛型实例 | 既有夹具红 | 回滚 S2；过滤条件限定 `uses_drop && !is_template` |
+| 三态判定漏「可见但私有」 | E48-5 未命中 | 回滚 S3，先补头文件信号位 |
+| 与 v0-PH-42 可见性冲突（若 U-2 选 B） | 链接失败 | 按 U-2 结论重裁；默认 A 不受影响 |
+| golden 漂移 | `check-goldens` 红 | 逐字节核对后重生成；否则回滚 |
+| 把 sanitizer 当硬门禁宣传 | 报告措辞 | 卡面已写：本相必跑，不计入 11 道 |
+
+### 9 收口记录（2026-11-15）
+
+| 项 | 结果 |
+| --- | --- |
+| E48-1 | `243_ptr_field_glue`：`leaf drop 7` / `done`；生成物 `if (_self->leaf) Leaf_Drop_drop(_self->leaf);`，无 `&_self->` |
+| E48-2 | `244_cross_unit_drop`：`res drop 7` / `done`；header 原型 + consumer `extern` |
+| E48-3 | 两夹具 ASAN/UBSAN 直接验证 0 报告；check-sanitizers 整体有既存红，按卡面不计入 11 道 |
+| E48-4 | `225_generic_drop` / `63_own_return_field` 产物逐字节一致 |
+| E48-5 | L48-2：rc=1、定位到 struct、不写 `.c` |
+| E48-6 | 指针字段判空、无取址；值字段胶水不变 |
+| E48-7 | check-all 11/11；check-ast 1385/0、warnings 647/0 |
+
+tag/push：`v0.48.0` annotated tag 与分支自动 push。

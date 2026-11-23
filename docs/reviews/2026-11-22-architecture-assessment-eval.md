@@ -29,7 +29,7 @@ C Shim 一等模式）的判断与仓库实际一致；对证据等级（Renode 
 | 报告断言 | 仓库证据 | 判定 |
 | --- | --- | --- |
 | 版本 v0.88.3 | `selfhost/ct-ast/main.ct` 的 `CTC_VERSION` | ✅ |
-| 常规 `ct build` 不默认跑完整类型检查 | [spec §1](../language-spec.md) 的 `--check-level=off\|warn\|error`：`off` 默认；PH-85 只交付机制 | ✅ |
+| 常规 `ct build` 不默认跑完整类型检查 | [spec §1](../language-spec.md) 的 `--check-level=off\|warn\|error`：`off` 默认；v0-PH-85 只交付机制 | ✅ |
 | `--lib`/ABI 头与 `pub` 不是同一件事 | `--lib` 已实现并写 `.abi.h`；导出集只收**根单元**的 `pub` 函数，非 C 兼容类型硬错（`Module.h.ct` 的 `abi_exports` 构建段） | ✅（但措辞需校正，见 §3） |
 | P39-1 否定“全量 `pub` 自动导出”的主张 | [p39-1 判决](file:///Users/samxx/dsh-ws/ct-lang/battle/p39-1/verdict.md)：`verdict: rejected`，C 方案待单方案评审 | ✅ |
 | 内建单元判活仍靠源码文本 | `Driver.h.ct` 的 `src_has_word` / `src_has_prefix` / `src_has_box_type` 驱动 `builtin_live_for` | ✅（导入本身走语义单元表） |

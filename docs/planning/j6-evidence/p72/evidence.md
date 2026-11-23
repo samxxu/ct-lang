@@ -19,7 +19,7 @@
 - **P-4.1 放置矩阵 10/10**：字段、全局、接口值、box、Option、Result、容器（Vec/Map）、数组元素、泛型实参、闭包捕获，每类都有硬错与负例，诊断指向 `[` 或赋值位置。
 - **P-4.2 嵌套泛型**：`Option<Option<int[]>>`、`Map<char *, Vec<int[]>>` 均在递归参数位置报红。
 - **P-4.3 返回契约**：直接返回局部数组视图 lint；返回形参视图为正例。`as_str()`/字面量视图按 lead 指示留给 P-7.3，本证据不声称覆盖。
-- **box 的限定**：`box<T>` 本身是 PH-81 的未来类型，本原型未实现其存储/句柄语义；只实现了 `box<int[]>` 的**解析期放置拒绝**（`box<int>` 会报 "not implemented"）。因此“放置硬错”通过，“box 存储语义”未覆盖（见 §6）。
+- **box 的限定**：`box<T>` 本身是 v0-PH-81 的未来类型，本原型未实现其存储/句柄语义；只实现了 `box<int[]>` 的**解析期放置拒绝**（`box<int>` 会报 "not implemented"）。因此“放置硬错”通过，“box 存储语义”未覆盖（见 §6）。
 - **J-6**：P-7.2 可按本证据判过；J-6 整体仍需 P-7.1a/P-7.1b、P-7.3，不能仅凭 P-7.2 升 A。
 
 ## 1. P-7.2 逐项
@@ -133,7 +133,7 @@ $ echo $?
 
 1. `T[]` ABI 是擦除元素类型/const 的 `{void *ptr; int len;}`；元素类型只在符号表，使用处 cast。
 2. 只支持局部、形参、切片返回类型；字段/全局/泛型实参/数组元素/接口/box 是硬错；容器/闭包由同一检查覆盖。
-3. **box**：`box<T>` 的存储/句柄语义未实现（PH-81）；只加了 `box<int[]>` 的解析期放置拒绝。最小补法：PH-81 实现时复用该检查点，并把 `box<int>` 从“not implemented”切换到真实类型。
+3. **box**：`box<T>` 的存储/句柄语义未实现（v0-PH-81）；只加了 `box<int[]>` 的解析期放置拒绝。最小补法：v0-PH-81 实现时复用该检查点，并把 `box<int>` 从“not implemented”切换到真实类型。
 4. 元素类型只实测 `int` 与具名 `struct`；数组/指针/typedef 别名元素、`char`/`Str`（S5）未支持。
 5. 子切片编译期越界硬错只在基座是字面 `[N]` 且两端为整数字面量时触发；`T a[] = {…}`、slice 基座走运行期 trap。
 6. `s[i]`/`s.get(i)` 基座必须是裸 slice 变量；`s.field[i]`、`f().get(i)` 未支持；`int[] s; s = a;` 未支持（`s = a[1..4]` 可以）。
@@ -154,7 +154,7 @@ $ echo $?
 - **E2**：锚点见 §2；**不利一条**：`box<T>` 本体未实现，A.4 的 box 类只证明了“放置拒绝”，没有 box 存储语义；P-4.3 的 `as_str()`/字面量视图未做。
 - **E3 可证伪预测**：任一正例失败、任一放置负例退出 0 或缺诊断、trap 不非零、lint 无 `slice escape`，则 P-7.2 失败；本次均未出现。
 - **E4 代价**：源码 9 文件（新增行数见 patch stat）；夹具 24 个 + runner + expected；`struct __ct_slice` 16 字节/align 8；helper 仅 slice 程序发射。
-- **E5 失败时替代/收缩**：box 可降级为“PH-81 前只做放置拒绝”；闭包/接口的透传路径可降为契约 + lint（P-4.5）。
+- **E5 失败时替代/收缩**：box 可降级为“v0-PH-81 前只做放置拒绝”；闭包/接口的透传路径可降为契约 + lint（P-4.5）。
 
 ## 8. patch 与结论
 
@@ -166,9 +166,9 @@ $ echo $?
 
 ## 7. rebase 到当前 HEAD（2026-11-20）
 
-- 基线：`ca3354a5`（PH-78 收口复核，`v0.78.0`）。
-- 方法：在 `dff5a0df` 上应用原 `p72.patch` 并提交，再 rebase 到 `ca3354a5`；唯一冲突是 `Parser.h.ct` 的 `parse_params`（PH-78 的 `ref/out` 与 P-7.2 的 slice 标注），已合并保留两者。
+- 基线：`ca3354a5`（v0-PH-78 收口复核，`v0.78.0`）。
+- 方法：在 `dff5a0df` 上应用原 `p72.patch` 并提交，再 rebase 到 `ca3354a5`；唯一冲突是 `Parser.h.ct` 的 `parse_params`（v0-PH-78 的 `ref/out` 与 P-7.2 的 slice 标注），已合并保留两者。
 - 复现：`bash evidence/p72/run.sh` → **25 passed, 0 failed**（自举链 + 25 项断言 + A.4 放置 10/10）。
 - 产物：[`p72-rebased-ca3354a5.patch`](p72-rebased-ca3354a5.patch)（仅 `selfhost/**`，8 文件，878+/14-）。
 - 回归：`examples/01_greeter`、`05_body_dispatch`、`24_vec_ops`、`48_string_steps` 均编译通过，greeter 运行输出正常。
-- 结论：P-7.2 可直接移植到 PH-79 当前基线；`evidence/` 目录不随主仓入库。
+- 结论：P-7.2 可直接移植到 v0-PH-79 当前基线；`evidence/` 目录不随主仓入库。

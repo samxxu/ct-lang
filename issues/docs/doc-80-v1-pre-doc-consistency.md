@@ -6,13 +6,13 @@
 | 定性 | 文档缺口（新语法特性落伍；范围待 battle） |
 | 严重度 | High（v1-pre 入口前置） |
 | 锚点 | v0.83.3（2026-11-21） |
-| 文件 | [PH-84 S84e](../../docs/design/phase84.md)、[battle doc-consistency-1](../../battle/doc-consistency-1/question.md) |
+| 文件 | [v0-PH-84 S84e](../../docs/phases/v0-PH-84/card.md)、[battle doc-consistency-1](../../battle/doc-consistency-1/question.md) |
 | 状态 | verified |
 | 处置证据 | **复核通过（2026-11-22，REV）**：范围按 battle doc-consistency-1 判决 B（最小集）；E84-9 ✅；`p84_docs_audit` OK；`check-docs` OK（2601 链接 / 401 文件，v0.88.2） |
 
 ## 现象
 
-新语法特性已落地（String/Str、切片、ref/out、box/new，ADT/match 随 PH-84），但文档仍落伍：
+新语法特性已落地（String/Str、切片、ref/out、box/new，ADT/match 随 v0-PH-84），但文档仍落伍：
 - spec 有 §4.68–§4.71，但 README、llm-guide、glossary、architecture 等未系统覆盖；
 - tutorial/patterns 只有零散片段；
 - 同一特性的类型/语义/限制在多处可能矛盾；
@@ -38,12 +38,12 @@
 
 ## 关联
 
-- [PH-84](../../docs/design/phase84.md) S84e、[DOC-77](doc-77-capability-spec-section-assertions.md)、[DOC-78](doc-78-new-feature-docs-audit.md)
+- [v0-PH-84](../../docs/phases/v0-PH-84/card.md) S84e、[DOC-77](doc-77-capability-spec-section-assertions.md)、[DOC-78](doc-78-new-feature-docs-audit.md)
 
 ## 复核（2026-11-22，REV）
 
 **结论：`verified`。** DOC-80 的范围已由 [battle doc-consistency-1](../../battle/doc-consistency-1/verdict.md)
-判决 B（最小集 + 增量补丁）冻结，PH-84 S84e 按该范围执行；A 的全量审计按判决移交
+判决 B（最小集 + 增量补丁）冻结，v0-PH-84 S84e 按该范围执行；A 的全量审计按判决移交
 [DOC-77](doc-77-capability-spec-section-assertions.md) / [DOC-78](doc-78-new-feature-docs-audit.md) /
 [DOC-79](doc-79-stable-subset-freeze-list.md)，不在本条验收内。
 
@@ -51,7 +51,7 @@
 
 | 判据 | 结果 | 证据 |
 | --- | --- | --- |
-| E84-9 通过 | ✅ | [phase84.md](../../docs/design/phase84.md) E84-9 行：B 范围 ✅，`p84_docs_audit` `OK` |
+| E84-9 通过 | ✅ | [phase84.md](../../docs/phases/v0-PH-84/card.md) E84-9 行：B 范围 ✅，`p84_docs_audit` `OK` |
 | battle 清单内文档对齐 | ✅ | 必需节 spec §4.68–§4.71/§4.73、tutorial §15/§17/§18、patterns §5/§6；入口文档事实/链接修正 |
 | 未列入项未扩写 | ✅ | 判决 B §2.4 范围外：全量重写/重排未做；A 归 DOC-77/78/79 |
 | `check-docs` 与能力→节号断言 | ✅ | 下方命令；README capability 标记 `cap:params-slices`/`cap:strings`/`cap:box`/`cap:adt` |

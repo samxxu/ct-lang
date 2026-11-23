@@ -161,7 +161,7 @@ $ test -f H/proj/ct.lock; echo $?
 
 逐条：A1/A2、A1b、A3、A6、A7 全绿。原单「rc=0 + 静默退 v1 lock」是 v0.58.0 历史锚点，
 HEAD 已不可复现；本次红证针对 HEAD 残余缺陷（拒绝前仍提交依赖），与历史锚点分开记录。
-A4/A5 的显式 v1 开关未实现：PH-63 已移除 vendor 读写，v1 行无法被 `ct build` 消费，
+A4/A5 的显式 v1 开关未实现：v0-PH-63 已移除 vendor 读写，v1 行无法被 `ct build` 消费，
 「没有标记就拒绝」的理由成立，不计漏项。T-7：红 `527dcb66`（父 `eed1cbcd`）→ 修 `35757b08`。
 
 ## 5 DOC-69 / 71 / 72 / 73
@@ -169,11 +169,11 @@ A4/A5 的显式 v1 开关未实现：PH-63 已移除 vendor 读写，v1 行无�
 ### 5.1 DOC-69
 
 ```console
-$ awk '/^### 1.4/,/^### 1.5/' docs/history/design/phase26.md | grep -c '^| D[0-9]'
+$ awk '/^### 1.4/,/^### 1.5/' docs/phases/v0-PH-26/card.md | grep -c '^| D[0-9]'
 22
-$ awk '/^### 1.4/,/^### 1.5/' docs/history/design/phase26.md | grep -c '^| D2[3-9]'
+$ awk '/^### 1.4/,/^### 1.5/' docs/phases/v0-PH-26/card.md | grep -c '^| D2[3-9]'
 0
-$ awk '/^### 1.5/,/^### 1.6/' docs/history/design/phase26.md | grep -c '^| E[0-9]'
+$ awk '/^### 1.5/,/^### 1.6/' docs/phases/v0-PH-26/card.md | grep -c '^| E[0-9]'
 8
 $ git merge-base --is-ancestor d73e3fb2 HEAD; echo $?
 0
@@ -187,7 +187,7 @@ $ git merge-base --is-ancestor d73e3fb2 HEAD; echo $?
 ```console
 $ grep -n '当前成员的占位' docs/language-spec.md
 2154:- **`$` 是当前成员的占位，不是下标**：...
-$ grep -n '当前成员值' docs/history/design/phase24.md
+$ grep -n '当前成员值' docs/phases/v0-PH-24/card.md
 160:4. **可多次出现**：... 同一个当前成员值 ...
 $ grep -n '`\$`（当前成员 / 自身）' docs/glossary.md
 69:| `$`（当前成员 / 自身） | ... |
@@ -295,7 +295,7 @@ design window: ok (12/12)
    `#447-数组-range-初值-ab-phase-24仅-ct-ast`，按 GitHub `github-slugger` 对标题
    「4.47 数组 range 初值 `a..b($)`（Phase 24，仅 ct-ast）」的计算，实际应为
    `#447-数组-range-初值-abphase-24仅-ct-ast`（`ab` 与 `phase` 之间无连字符）。位置：
-   [phase24.md:160-161](../history/design/phase24.md#L160-L161) 与
+   [phase24.md:160-161](../phases/v0-PH-24/card.md#L160-L161) 与
    [DOC-71 处置项 1](../../issues/docs/doc71-range-dollar-is-member-not-index.md)。全仓 fragment
    链接 89 条，不合规 10 条（本批新增 2 条、既有 8 条）；`check-docs` 只校验相对路径存在，
    不校验 `#fragment`。内容正确，记为引用瑕疵，建议下次文档提交统一修正。

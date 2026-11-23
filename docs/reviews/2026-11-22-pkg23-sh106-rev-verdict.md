@@ -127,7 +127,7 @@ $ bash selfhost/check-ast.sh          # 00eb6df1 archive，私有 TMPDIR
 ```
 
 （另 6 条是 archive 环境项：p85/p87/p88 的 `fatal: not a git repository` 与
-PH-77 external 外部探针；不是 PKG-23。SH-106 这条是提交内容缺陷，换 clone 同样红。）
+v0-PH-77 external 外部探针；不是 PKG-23。SH-106 这条是提交内容缺陷，换 clone 同样红。）
 回滚侧同样不成立：
 
 ```console
@@ -274,14 +274,14 @@ README/docs/AGENTS/test README 全部 0.88.2，代码/golden 无 0.88.1 残留�
 
 ```console
 $ TMPDIR=... CT_DIST=/tmp/rev-final/absent.tar.gz bash selfhost/check-all.sh
-  FAIL  PH-77-S5 external: ok   ct get std succeeds with a clean HOME and no index
+  FAIL  v0-PH-77-S5 external: ok   ct get std succeeds with a clean HOME and no index
 ...
 == summary: 1576 passed, 1 failed, 5 skipped ==      # check-ast
 FAIL: 8) AST compiler (...) (exit 1)
 check-all: FAIL (at least one hard gate failed)
 ```
 
-本环境 `check-all` 为 **10/11**：唯一红是 PH-77-S5 external（第二次 `ct get
+本环境 `check-all` 为 **10/11**：唯一红是 v0-PH-77-S5 external（第二次 `ct get
 ct/std` 的 clone 在 180s 超时；且官方 index 的第一条 `std` 行已变成 `0.20.0`
 — `std 0.20.0 ct ... v0.20.0 sha256:60d2e7dd…`，探针 `head -1` 取首行后与内置
 pin 0.19.0 比较，E77-8 因此红；index 里仍有 0.19.0 行，属探针取行口径的陈旧，

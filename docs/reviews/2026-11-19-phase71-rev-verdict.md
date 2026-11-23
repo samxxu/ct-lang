@@ -1,13 +1,13 @@
-# PH-71 收口复核（REV）
+# v0-PH-71 收口复核（REV）
 
 > **结论：`REV: 通过`**（附 3 项不阻断观察，见 §8）
 > **复核对象**：`bc7c715b0a8cd77fb39b70927afea82bc366e1df`
-> （`feat(ast): PH-71 own/borrow/Drop + 包级 strict 收口（v0.70.0）`），tag `v0.70.0`。
+> （`feat(ast): v0-PH-71 own/borrow/Drop + 包级 strict 收口（v0.70.0）`），tag `v0.70.0`。
 > **复核者**：REV / rev-ph71；日期 2026-11-19。
 > **方法**：只依据提交与 clean archive。用 `git archive bc7c715b` 在 `/tmp/rev71-clean`
 > 重新自举 L0→L1→L2→ct-ast，不使用工作树二进制；红证用 `git archive 2afca600` 在
 > `/tmp/rev71-base` 重建同一条链复现，不采信转述。
-> **并行说明**：复核期间分支 HEAD 已从 `bc7c715b` 推进到 `88b70523`（PH-72 并行），工作树
+> **并行说明**：复核期间分支 HEAD 已从 `bc7c715b` 推进到 `88b70523`（v0-PH-72 并行），工作树
 > 另有未提交改动。本报告对版本与树内容一律用 `git show bc7c715b:` / clean archive 取证；
 > verdict 提交基于当时 HEAD，只含本文件。
 
@@ -65,9 +65,9 @@ exit=0
 
 ```console
 $ git log --oneline -3 bc7c715b
-bc7c715b feat(ast): PH-71 own/borrow/Drop + 包级 strict 收口（v0.70.0）
-0832f01a feat(ast): PH-71 own 双删 + 包级 strict
-cbe82bbf test(ast): PH-71 红（own/drop/pkgstrict）
+bc7c715b feat(ast): v0-PH-71 own/borrow/Drop + 包级 strict 收口（v0.70.0）
+0832f01a feat(ast): v0-PH-71 own 双删 + 包级 strict
+cbe82bbf test(ast): v0-PH-71 红（own/drop/pkgstrict）
 $ git rev-parse bc7c715b^ 0832f01a^ cbe82bbf^
 0832f01ab2fcb0ec90d91fa9b089df354c84461d
 cbe82bbf6fd8a20d2ff20c879eac7d96ba15db1a
@@ -177,7 +177,7 @@ $ git branch -r --contains bc7c715b
 ```
 
 tag 为 annotated，peeled commit = 收口提交，远端 tag 对象与 peeled 值均与本地一致；message
-为 `PH-71 closeout (bc7c715)`（legacy 裸 `PH-71`，phase-ID 迁移仍被 blocker 挡住，按现状记录，
+为 `v0-PH-71 closeout (bc7c715)`（legacy 裸 `v0-PH-71`，phase-ID 迁移仍被 blocker 挡住，按现状记录，
 不单独判红）。`tools/check.sh g0` 与 `test/docs/check-docs.py` 均绿：
 
 ```console
@@ -204,9 +204,9 @@ run：<https://github.com/samxxu/ct-lang/actions/runs/44458525794>
 `ubuntu-gcc` 的 `hard gates`：
 
 ```text
-ok    PH-71-R1 own (double delete)
-ok    PH-71-R2 drop (order + single release)
-ok    PH-71-R3 pkgstrict (manifest opt-in)
+ok    v0-PH-71-R1 own (double delete)
+ok    v0-PH-71-R2 drop (order + single release)
+ok    v0-PH-71-R3 pkgstrict (manifest opt-in)
 == summary: 1502 passed, 0 failed, 0 skipped ==
 check-all: OK (11 hard gates green)
 ```
@@ -214,9 +214,9 @@ check-all: OK (11 hard gates green)
 `macos-clang`：
 
 ```text
-ok    PH-71-R1 own (double delete)
-ok    PH-71-R2 drop (order + single release)
-ok    PH-71-R3 pkgstrict (manifest opt-in)
+ok    v0-PH-71-R1 own (double delete)
+ok    v0-PH-71-R2 drop (order + single release)
+ok    v0-PH-71-R3 pkgstrict (manifest opt-in)
 == summary: 1496 passed, 0 failed, 5 skipped ==
 check-all: OK (11 hard gates green)
 ```
@@ -240,12 +240,12 @@ check-all: OK (11 hard gates green)
   但 `1498` 是本机 macOS（4 skip）的数，不是 `ubuntu-gcc` CI 的数（1502 passed / 0 skipped）；
   卡未标注口径，见 §8。
 - **验收与 pass**：R1 在卡 §3 的交付物写「`own` 转移与 `borrow` 回手的作用域判定」，而
-  PH-71 实际新增的是双删诊断；own 转移（PH-49）与 borrow 回手（早于本轮，`cd0c6f68`）是既有
+  v0-PH-71 实际新增的是双删诊断；own 转移（v0-PH-49）与 borrow 回手（早于本轮，`cd0c6f68`）是既有
   能力。卡 §6 的 R1 证据只写双删/单删，没有把转移/回手算作本轮实现；口径偏窄但未虚构。
 - **红证**：baseline、父关系、红/绿都能独立复现；红提交正文只有一行结论，没有 T-7 要求的
   命令、原始输出与退出码，且引用「卡 §7」——卡只有 §0–§6（红提交时 §0–§5），§7 不存在。
   属证据/引用缺陷，不改变红证成立。
-- **`AGENTS.md` 0.1** 仍写 `phase=PH-66`（PH-69 复核已记过），不属本次版本落点，随文档修订
+- **`AGENTS.md` 0.1** 仍写 `phase=v0-PH-66`（v0-PH-69 复核已记过），不属本次版本落点，随文档修订
   一并改。
 
 ## 8 不阻断观察（建议后续处理）
@@ -254,15 +254,15 @@ check-all: OK (11 hard gates green)
    变量都会被判 `double delete`。建议后续 Issue 把记账从「函数级基名」改为「具体左值 + 作用域
    身份」，或至少在卡/文档写明这是保守近似。本轮 20 个合法 `delete` 夹具零回归，且方案 §2
    非目标写「不要求所有 C 合法写法通过 strict」，故不阻断收口。
-2. **红证格式**：`test(ast): PH-71 红` 正文补命令、原始输出与退出码；把「见卡 §7」改为实际
+2. **红证格式**：`test(ast): v0-PH-71 红` 正文补命令、原始输出与退出码；把「见卡 §7」改为实际
    章节（或删掉）。
 3. **证据口径**：卡 §6 / 收口提交正文的 `check-ast 1498 passed` 标注为「本机 macOS，4 skipped」；
    若引用 CI，请用 `ubuntu-gcc 1502 passed / 0 skipped`。另 R1 的标题可按实际交付收窄为
-   「own 双删」，避免读者把 PH-49 与既有 borrow 回手能力算成本轮新增。
+   「own 双删」，避免读者把 v0-PH-49 与既有 borrow 回手能力算成本轮新增。
 
 ## 9 未覆盖声明
 
 - 未在本机完整跑 `bash selfhost/check-all.sh`（耗时长）；11 道门禁以 `bc7c715b` 的 CI run 为准，
-  本机另跑了完整 `check-ast.sh`（1498/0/4）与三个 PH-71 探针。
+  本机另跑了完整 `check-ast.sh`（1498/0/4）与三个 v0-PH-71 探针。
 - 未核对 macOS runner 的 5 条 skip 明细（只取 summary 行）；CI 日志来自 GitHub Actions。
 - 按用户限定，本次提交只含本 verdict，未在 `issues/` 立双删误报条目；建议由下一轮 REV/REQ 补立。

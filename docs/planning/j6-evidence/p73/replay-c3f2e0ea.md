@@ -102,13 +102,13 @@ M  selfhost/ct-ast/tool/driver/Driver.h.ct
 
 ## 3. 三处冲突与解决
 
-冲突都是「HEAD 的 PH-79 切片/切片逃逸改动」与「P-7.3 字面量绑定」落在同一位置；两侧语义正交，
+冲突都是「HEAD 的 v0-PH-79 切片/切片逃逸改动」与「P-7.3 字面量绑定」落在同一位置；两侧语义正交，
 解决规则一律是**两侧都保留，只决定顺序**。
 
 | # | 文件 | ours（HEAD） | theirs（P-7.3 patch） | 解决 |
 | --- | --- | --- | --- | --- |
 | 1 | `selfhost/ct-ast/backend/emit/Emitter.h.ct:1412` | P-7.2 的 `g_slice_used` 与 `emit_slice_helpers` 前置声明 | `emit_string_literals` 的完整定义 | 先保留 P-7.2 两个声明，再放 `emit_string_literals`；删除中间与尾部冲突标记 |
-| 2 | `selfhost/ct-ast/frontend/parse/Expr.h.ct:318` | `ExprTypes` 里的 `slice_view_from_array`（PH-79/SH-100） | `lit_coerce`（P-7.3） | 两个 trait 方法都保留：`slice_view_from_array` 在前，`lit_coerce` 在后 |
+| 2 | `selfhost/ct-ast/frontend/parse/Expr.h.ct:318` | `ExprTypes` 里的 `slice_view_from_array`（v0-PH-79/SH-100） | `lit_coerce`（P-7.3） | 两个 trait 方法都保留：`slice_view_from_array` 在前，`lit_coerce` 在后 |
 | 3 | `selfhost/ct-ast/frontend/parse/Stmt.h.ct:2304` | 切片逃逸 lint + `slice_view_from_array` 调用 | `lit_coerce` 调用 + 「Phase 32 S5」注释 | 顺序改为 ① `lit_coerce` → ② 切片逃逸 lint → ③ `slice_view_from_array` → ④ Phase 32 注释；随后接原有的 Phase 43 类型判定 |
 
 解决后自检：
@@ -177,7 +177,7 @@ $ git merge-base --is-ancestor c3f2e0ea HEAD; echo $?
 
 1. **只重放 P-7.3 最小切片**：旧 owning `Str` 仍被替换，`std::str::Str` 限定名并存未证（C-5 `coexist.md` 另证）；
 2. **自动 retain 未做**：按值参数/返回/字段的自动 retain 不在 P-7.3；C-5 `asan.md` 用显式协议 + 说明；
-3. **`box<String>`、`Map<...,String>`、真实 UTF-16** 不在本切片（`box` 属 PH-81；其余见 C-5）；
+3. **`box<String>`、`Map<...,String>`、真实 UTF-16** 不在本切片（`box` 属 v0-PH-81；其余见 C-5）；
 4. **既有测试套件不全绿**：11 个 `test/ast` + 1 个 example 消费者仍用旧 `Str`，属 P-7.4-3 迁移清单；
 5. 本重放是 macOS/Apple clang 21 一次实测；`run.sh` 用 `CC` 可换编译器，但本文件只声明这次的原值；
 6. 冲突解决是人工语义判断，不是 patch 作者的上游产物；解决后的树只在 `/tmp`，未 push、未打 tag。

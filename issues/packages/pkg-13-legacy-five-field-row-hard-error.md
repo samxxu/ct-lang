@@ -49,7 +49,7 @@ ctc: index row for 'acme/util 1.0.0' is legacy (five fields); a six-field row is
 - [D-014](../../docs/decisions/D-014.md)、[PKG-12](pkg-12-contract-v1-doc-gaps.md)
 - [ct-pkg-index.md](../../docs/ct-pkg-index.md) §2/§3 需同步旧行为描述
 
-## 处置（DEV，PH-83 S83b，2026-11-21）
+## 处置（DEV，v0-PH-83 S83b，2026-11-21）
 
 - 实现：`ct get` 的索引解析在**请求解析命中**五字段行时硬错（`tool/pkg/Pkg.h.ct` 的
   `pkg_index_lookup`），消息为

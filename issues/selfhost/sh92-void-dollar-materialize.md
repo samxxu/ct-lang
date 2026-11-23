@@ -52,15 +52,15 @@ $ sh test/ast/p76_chain.sh /tmp/rev-ph76-1-work/ct-ast; echo $?
 OK p76/chain (tail, multi-hop, type/const/non-call/argument negatives)
 0
 $ /tmp/rev-ph76-1-work/ct-ast check --types void.ct; echo rc=$?
-void.ct:4:47: error: '$' needs a non-void result; this hop has none (PH-76)
+void.ct:4:47: error: '$' needs a non-void result; this hop has none (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-1-work/ct-ast check void.ct; echo rc=$?
-void.ct:4:47: error: '$' needs a non-void result; this hop has none (PH-76)
+void.ct:4:47: error: '$' needs a non-void result; this hop has none (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-1-work/ct-ast build -o void.bin void.ct; echo rc=$?
-void.ct:4:47: error: '$' needs a non-void result; this hop has none (PH-76)
+void.ct:4:47: error: '$' needs a non-void result; this hop has none (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 ```
@@ -79,4 +79,4 @@ FAIL p76/chain: void-returning hop accepted
 `'$' target: expected 'int', got 'struct B'`。修复点在
 `selfhost/ct-ast/frontend/parse/Expr.h.ct:4366-4377`（`static_ctype` 返回 0/空类型时显式拒绝），
 与 `test/ast/p76_chain.sh` 的 void 负例一致。逐条对照见
-[PH-76 复核补正](../../docs/reviews/2026-11-19-phase76-rev-verdict.md) §10。
+[v0-PH-76 复核补正](../../docs/reviews/2026-11-19-phase76-rev-verdict.md) §10。

@@ -12,7 +12,7 @@
 ## 精确触发条件
 
 类型在固有 `impl` 里只声明了**参数类型与下标实参类型不一致**的 `get`（典型是 `char *get(char *)`），
-同时源码里写下标。PH-52 的协议匹配只看「方法名 + 参数个数 + 非 `static`」
+同时源码里写下标。v0-PH-52 的协议匹配只看「方法名 + 参数个数 + 非 `static`」
 （[Expr.h.ct:6269-6320](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L6269-L6320)），于是 `x[0]` 被展开成
 `X_get(&x, 0)`——把一个整数当指针传入。
 
@@ -69,7 +69,7 @@ error: type 'J' has no subscript matching 'get(int)': candidates are 'char *get(
 
 把「实参静态类型 → 候选签名」的匹配接进 `custom_index_method`，0 命中 / 歧义均硬错。属 `REQ-INDEX-1` 的 S1 切片。
 
-## 处置（2026-11-19，PH-72）
+## 处置（2026-11-19，v0-PH-72）
 
 - 提交：`d5906bd8`
 - 改动：`custom_index_method` 增加下标类型判定（chk_type + chk_assignable）
@@ -77,7 +77,7 @@ error: type 'J' has no subscript matching 'get(int)': candidates are 'char *get(
 
 ## 处置（2026-11-20，DEV · 复跑）
 
-- 结论：PH-72 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 结论：v0-PH-72 的修复仍在 HEAD；只记录证据，不改 `status`。
 - 命令/输出：
 
 ```console

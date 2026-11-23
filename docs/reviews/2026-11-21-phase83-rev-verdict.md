@@ -1,4 +1,4 @@
-# PH-83 收口复核（REV · 2026-11-21）
+# v0-PH-83 收口复核（REV · 2026-11-21）
 
 | 项 | 值 |
 | --- | --- |
@@ -6,7 +6,7 @@
 | 范围 | 契约 v1（digest 三向量、spec/MVS/单索引、判据矩阵）、只读 `ct index verify`、五字段按行硬错、conformance、Linux x64 产物；E83-1…8、版本/tag/G8/check-all/sanitizer、merge 后 `v0.82.1` 自洽；第二轮另复核 PKG-14 修复（非普通文件/ferror/JSON）；第三轮复核 v0.83.2 的 Linux glibc 默认索引路径自拷贝修复 |
 | 方法 | 第一轮：`git archive 5378850e` → 独立自举；跑 p83 四探针；独立 Python 复算三向量；REV 自建 verify 反例；`gh release download v0.83.0`；T-7 红基线复跑；`g0`/`g8`/`check-docs`/`check-all`/`check-sanitizers`。第二轮：`git archive v0.83.1` 自举；重跑全部反例；QEMU Linux 产物验 ferror；`gh release download v0.83.1`；回归 E83-1/3/5/6/7。第三轮：`git archive v0.83.2`；AlmaLinux 9 glibc 容器复现 v0.83.1 红、v0.83.2 绿；x86_64 Linux 容器跑 p83_dist；macOS 35 ok + 1 skip |
 | 结论 | 第一轮 **REV: 不通过**（E83-4 未过：`ct index verify` 对目录/设备/FIFO 等非普通文件不返回契约要求的退出码 2，目录甚至输出 `OK (0 rows)`；E83-1/3/5/6/7 通过，E83-2 行为通过但跨仓前置未确认，E83-8 未重跑完整 revert）。第二轮 **REV: 通过**（v0.83.1 PKG-14 已修复并独立复核，见 §14）；第三轮 **v0.83.2 CI 回归复核：通过**（Linux glibc 默认索引路径自拷贝已修复，见 §15） |
-| 交付 | 第一轮：本文件；`docs/design/phase83.md` 的 S83a REVIEW 签收；`issues/packages/pkg-14-…` 置 `reopened`；不改代码、不 push。第二轮：本文件 §14；`pkg-14-…` 置 `verified`；不改代码、不 push。第三轮：本文件 §15；PKG-14 保持 `verified`；不改代码、不 push |
+| 交付 | 第一轮：本文件；`docs/phases/v0-PH-83/card.md` 的 S83a REVIEW 签收；`issues/packages/pkg-14-…` 置 `reopened`；不改代码、不 push。第二轮：本文件 §14；`pkg-14-…` 置 `verified`；不改代码、不 push。第三轮：本文件 §15；PKG-14 保持 `verified`；不改代码、不 push |
 
 > 第二轮（v0.83.1）见 §14、第三轮（v0.83.2）见 §15；第一轮的不通过记录保留在 §5.2/§13，历史不覆盖。
 
@@ -254,7 +254,7 @@ JSON 键序固定为 `index, ok, rows, valid, invalid, errors`；`errors` 每项
 0 全部合法；1 存在坏行；2 用法错误、索引不存在或不可读。
 ```
 
-E83-4（[`phase83.md:78`](../design/phase83.md#L78)）要求“退出码 0/1/2 语义与契约 §7 一致”。
+E83-4（[`phase83.md:78`](../phases/v0-PH-83/card.md#L78)）要求“退出码 0/1/2 语义与契约 §7 一致”。
 `ct index verify` 对**目录**（以及 `/dev/null`、指向目录的 symlink、`CT_INDEX` 指向目录、
 `$CT_HOME/index/index` 是目录）返回 **0**，并打印 `OK (0 rows)`；`--json` 则输出 `"ok":true`：
 
@@ -350,7 +350,7 @@ tag
 $ git rev-parse v0.83.0^{commit}
 958cede3654731858ab1fd0dc12530558a94bf5e
 $ git for-each-ref refs/tags/v0.83.0 --format='%(taggername) %(taggerdate:iso) %(contents:subject)'
-Sam X. Xu@macMini 2026-11-21 04:32:22 +0800 PH-83 closeout (958cede3)
+Sam X. Xu@macMini 2026-11-21 04:32:22 +0800 v0-PH-83 closeout (958cede3)
 $ git ls-remote origin 'refs/tags/v0.83.0*'
 9a64f0040080346020ec8928dbe023dc745182ee	refs/tags/v0.83.0
 958cede3654731858ab1fd0dc12530558a94bf5e	refs/tags/v0.83.0^{}
@@ -384,7 +384,7 @@ check-docs: OK (2193 relative links in 364 files, v0.83.0, 11 hard gates, 12 pha
 ```
 
 `g8` 的 9 条 legacy offset 告警均来自 `version-legacy-offsets.tsv`（v0.66.0–v0.74.0），
-v0.83.0 的 `PH-83 closeout` 消息与 MINOR=83 相符（v0.83.0 本身无告警）。check-docs 的
+v0.83.0 的 `v0-PH-83 closeout` 消息与 MINOR=83 相符（v0.83.0 本身无告警）。check-docs 的
 2193/364 是本文件入库后的计数；卡 §7.3 的 2189/363 是本文件入库前的计数。
 
 check-all（工作树，`TMPDIR=.temp/rev-ph83/all`）：
@@ -395,10 +395,10 @@ $ TMPDIR=$PWD/.temp/rev-ph83/all bash selfhost/check-all.sh
 == summary: 156 passed, 0 failed ==          # L0
 == 169 checks, 0 failed ==                   # package manager
 == summary: 153 passed, 0 failed ==          # archive
-  ok    PH-83-S83b verify (E83-3/4: read-only, line numbers, JSON, 0/1/2)
-  ok    PH-83-S83b legacy (E83-2: five-field hard error, per-row, six-field unaffected)
-  ok    PH-83-S83c conformance (E83-5: shared data, CT vs shell, 3 digest vectors)
-  ok    PH-83-S83d dist (E83-6: sha256, ELF x86-64, unpacked ct -v; 77 without dist)
+  ok    v0-PH-83-S83b verify (E83-3/4: read-only, line numbers, JSON, 0/1/2)
+  ok    v0-PH-83-S83b legacy (E83-2: five-field hard error, per-row, six-field unaffected)
+  ok    v0-PH-83-S83c conformance (E83-5: shared data, CT vs shell, 3 digest vectors)
+  ok    v0-PH-83-S83d dist (E83-6: sha256, ELF x86-64, unpacked ct -v; 77 without dist)
 == summary: 1549 passed, 0 failed, 4 skipped ==  # AST
 == summary: 20 pass, 0 new, 0 pending, 0 regression ==  # acceptance（仅报告）
 check-warnings: 490 ok, 0 failed
@@ -540,7 +540,7 @@ c07ebfa885779e38f2fa98a95ae5fbc81c4b6d41	refs/tags/v0.82.1^{}
 - E83-8 未独立复跑完整 revert（代码路径核对通过；见 §9/§12）。
 
 **S83a 签收**：S83a 为纯文档任务，契约/矩阵经本复核独立验算（三向量、无 TBD、矩阵归属），
-已在 `docs/design/phase83.md` §5 补 `签收: REVIEW 2026-11-21`。
+已在 `docs/phases/v0-PH-83/card.md` §5 补 `签收: REVIEW 2026-11-21`。
 
 **issue 状态**：`PKG-14`（只读 `ct index verify` 与 Linux x64 产物）置 `reopened`，
 附最小复现与 `Pkg.h.ct:2674`/`:2803` 定位；PKG-12/13/15 未改状态（见 §12 第 1 条与

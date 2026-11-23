@@ -132,14 +132,14 @@ b899da2e8d51679727e3615e1855ba2905de78f8  refs/tags/v0.63.3
 | D-2 | `docs/README.md:41` 类型检查行=“已交付、历史计划”，无“未开卡” | ✅ |
 | D-3 | 实测 `295`（errors/*.ct）/`299`（ast 目录）/`51`（examples）与 README 一致 | ✅ |
 | D-4 | `docs/tutorial.md:1903` 写 51 个示例目录（`find` 实测） | ✅ |
-| D-5 | `AGENTS.md:452` `phase=PH-77` | ✅ |
-| D-6 | `docs/session-map.md` PH-38…PH-77 行在同一张完整表内，blockquote 移到表后 | ✅ |
+| D-5 | `AGENTS.md:452` `phase=v0-PH-77` | ✅ |
+| D-6 | `docs/session-map.md` v0-PH-38…v0-PH-77 行在同一张完整表内，blockquote 移到表后 | ✅ |
 | D-7 | `docs/roadmap.md:89` Phase 76 收口 `v0.76.0` | ✅ |
 | D-8 | `README.md` §0/§0.1/§3 把 0.44.1 标为“历史基线（最近实测）” | ✅ |
 | D-9 | `README.md:450/452` 补 `ct check --types` 与 `--emit-model` | ✅ |
 | D-10 | `docs/architecture.md` §0 四代编译器表（L0/L1/L2/ct-ast） | ✅ |
 | D-11 | `selfhost/README.md:33` grammar 169 项 | ✅ |
-| D-12 | `ct-bare-metal-proposal.md` 状态=“已采纳并交付（PH-64，v0.63.0）” | ✅ |
+| D-12 | `ct-bare-metal-proposal.md` 状态=“已采纳并交付（v0-PH-64，v0.63.0）” | ✅ |
 | D-13 | §4.64 与实测一致：`ct check` rc=1（error），`ct compile`/`ct build` rc=0（warning，仍发射 `get(0)`）；按键类型分派仍标未实现 | ✅ |
 | design window | 条件项：“下次开 phase 前退役 phase66”；当前 `check-docs` 报 `design window: ok (12/12)`，未触发 | 记录（条件 deferred） |
 | package-guide 信任模型 | §4.1 pin 强校验 / 第三方索引仅便利 / 显式索引覆盖 pin | ✅ |
@@ -187,11 +187,11 @@ rc=0
 ## 7 不改判 / 观察（不阻断）
 
 1. **LANG-20**：复核确认原报例子是合法调用；真正的错配 `v.push("x")` 已由
-   `p69_containers.sh` 与 PH-69-R4 覆盖。误报成立，但 5.4 把 `rejected` 分给 REQ/USER，
+   `p69_containers.sh` 与 v0-PH-69-R4 覆盖。误报成立，但 5.4 把 `rejected` 分给 REQ/USER，
    REV 不代写，保持 `open` 交 REQ 改判。
 2. **TEST-21**：本机宿主的 Renode 需要写工作树外目录、JIT 不可用，探针按设计 `exit 77`
    skip；不判绿，CI Linux 仍是权威运行点。
-3. **SH-79 处置段的 `a0f2e2c` 不是可解析 sha**（`git rev-parse` 报 unknown）；实际 PH-74
+3. **SH-79 处置段的 `a0f2e2c` 不是可解析 sha**（`git rev-parse` 报 unknown）；实际 v0-PH-74
    提交为 `ffc08538`（模型行列与 SH-79 两 facet）与 `5d271142`（收口）。探针绿，结论不受影响，
    仅记录引用瑕疵。
 4. **CI-11 的 220/168 数字可复算**，但口径是“220 行里 52 行命中闭集（open 24 / verified 17 /

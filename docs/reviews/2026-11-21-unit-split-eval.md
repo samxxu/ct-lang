@@ -5,7 +5,7 @@
 | 评估对象 | 外部《v1-pre 重写期的源码组织——单元细切分》（v2，2026-11-21 收；仓外文件） |
 | 评估方 | REQ |
 | 结论 | 方向受理；按 A/B/C/D 四组逐条裁定，升 v3；落点 [D-017](../decisions/D-017.md) |
-| 关联 | [v1 路线](../planning/v1-release-plan.md)、[D1–D9](2026-11-21-v1-campaign-eval.md)、[PH-84](../design/phase84.md) |
+| 关联 | [v1 路线](../planning/v1-release-plan.md)、[D1–D9](2026-11-21-v1-campaign-eval.md)、[v0-PH-84](../phases/v0-PH-84/card.md) |
 
 ## 1. 事实核对
 
@@ -40,9 +40,9 @@
 
 | # | 争议 | v3 裁定 |
 | --- | --- | --- |
-| C1 | M 的落点缺失 | **R 仍在 v1-pre（PH-85–88）**；**M1 落 v1.1（v1-PH-1 / S1）**；v1.0 不被 M 阻塞 |
+| C1 | M 的落点缺失 | **R 仍在 v1-pre（v0-PH-85–88）**；**M1 落 v1.1（v1-PH-1 / S1）**；v1.0 不被 M 阻塞 |
 | C2 | “原地重写”未入库 | 正式写入 [D-017](../decisions/D-017.md) 第 2 条；“已另行裁定”改为引用 D-017 |
-| C3 | R-first 不解决 R 噪声 | 采用 **M0 粗切（PH-85）→ R（PH-86–88）→ M1（v1.1）** |
+| C3 | R-first 不解决 R 噪声 | 采用 **M0 粗切（v0-PH-85）→ R（v0-PH-86–88）→ M1（v1.1）** |
 | C4 | 并行会话冲突 | M0/M1 单写者分支；其他会话绕开；合入窗口与 `check-all` 全绿绑定 |
 
 > 措辞修正：Kimi C1 的“M 放 v1.1”按 C3 收窄为 **M1 放 v1.1**；R 不移动，否则与 D1 冲突。
@@ -56,11 +56,11 @@
 ## 6. 最终时序
 
 ```text
-PH-84  ADT/match
-PH-85  inventory + spike（门） + M0 粗切 + A 机制
-PH-86  词法器 R
-PH-87  解析器 + 检查器 R
-PH-88  发射器 R + 自举不动点
+v0-PH-84  ADT/match
+v0-PH-85  inventory + spike（门） + M0 粗切 + A 机制
+v0-PH-86  词法器 R
+v0-PH-87  解析器 + 检查器 R
+v0-PH-88  发射器 R + 自举不动点
 v1.0   AST-only 收口
 v1.1   S1 M1 精细切分 → S2 A 默认强制
 ```

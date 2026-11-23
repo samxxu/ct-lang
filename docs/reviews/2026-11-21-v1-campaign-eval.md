@@ -19,7 +19,7 @@
 
 | 项 | 现状 | 判断 |
 | --- | --- | --- |
-| 基线 v0.83.x | `main` = v0.83.3，PH-83 `ct index verify` 已实现 | 属实 |
+| 基线 v0.83.x | `main` = v0.83.3，v0-PH-83 `ct index verify` 已实现 | 属实 |
 | v1.0 范围 | [v1 路线 §1.3](../planning/v1-release-plan.md#L38-L48)：AST-only、seed → ct-ast、L1/L2 退役 | 提案 §3 基本重合 |
 | 重写位置 | [v1 路线 §2](../planning/v1-release-plan.md)：v1.1 S1（行为保持） | 提案要提前到 v1.0，**冲突** |
 | A strict | v1.1 S2 | 提案要作为 v1.0 门禁，**冲突** |
@@ -39,15 +39,15 @@
 - 冻结清单（DOC-79）、兼容承诺（DOC-76）、能力→节号断言（DOC-77）、新特性文档核对（DOC-78）；
 - 包体系收尾（PKG-17）。
 
-同时明确 **v1.0 不包含**重写、A 默认强制；ADT 由 PH-84 独立完成（§1.6）。
+同时明确 **v1.0 不包含**重写、A 默认强制；ADT 由 v0-PH-84 独立完成（§1.6）。
 
 ## 4. 重写部分（v1-pre，D1/D3 已定）
 
 见 [v1-release-plan §2.3/§2.6](../planning/v1-release-plan.md)：
 
-- PH-84 先做最小 ADT/match，为重写提供穷尽判别；
-- PH-85 inventory 先行 + 单切片 spike，量出行数/编译耗时/golden 逐字节/Sharp edge；
-- spike 通过才排后续切片（PH-86–88）；
+- v0-PH-84 先做最小 ADT/match，为重写提供穷尽判别；
+- v0-PH-85 inventory 先行 + 单切片 spike，量出行数/编译耗时/golden 逐字节/Sharp edge；
+- spike 通过才排后续切片（v0-PH-86–88）；
 - 自举复用现有 fixpoint；
 - 不依赖未落地特性（含 S4 函子）。
 
@@ -55,15 +55,15 @@
 
 | # | 状态 |
 | --- | --- |
-| D1 重写时序 | **已定（2026-11-21）**：独立 v1-pre（PH-85 inventory+spike → PH-86 词法 → PH-87 解析+检查 → PH-88 发射器），不进 v1.0、不推 v1.1 |
-| D2 A-strict 门禁 | **已定（2026-11-21，B+）**：机制 PH-85 接线；证据 FP=0 为 v1.0 硬门禁；默认值由 v1-pre 证据决定，不足则回退“可用不默认” |
-| D3 ADT/match 时序 | **已定（2026-11-21，B + A 范围）**：PH-84 先做最小 ADT/match（名义和类型 + 负载 + 穷尽 + 绑定）；泛型/or/嵌套留 v1.1+；验收见 [LANG-21](../../issues/lang/lang-21-minimal-adt-match.md) |
+| D1 重写时序 | **已定（2026-11-21）**：独立 v1-pre（v0-PH-85 inventory+spike → v0-PH-86 词法 → v0-PH-87 解析+检查 → v0-PH-88 发射器），不进 v1.0、不推 v1.1 |
+| D2 A-strict 门禁 | **已定（2026-11-21，B+）**：机制 v0-PH-85 接线；证据 FP=0 为 v1.0 硬门禁；默认值由 v1-pre 证据决定，不足则回退“可用不默认” |
+| D3 ADT/match 时序 | **已定（2026-11-21，B + A 范围）**：v0-PH-84 先做最小 ADT/match（名义和类型 + 负载 + 穷尽 + 绑定）；泛型/or/嵌套留 v1.1+；验收见 [LANG-21](../../issues/lang/lang-21-minimal-adt-match.md) |
 | D4 函子依赖 | **已定（2026-11-21，A）**：重写不依赖函子；检查器用既有闭包/trait/函数指针；S4 仍留 v1.1+ Wave 2 |
 | D5 deadline | **已定（2026-11-21，A）**：不设 hard deadline；失败就地停，不用时间/phase 数倒逼范围 |
-| D6 重写期冻结 | **已定（2026-11-21，A）**：PH-85–88 主线只收 bugfix，新特性暂停；每张重写卡独占合入 |
+| D6 重写期冻结 | **已定（2026-11-21，A）**：v0-PH-85–88 主线只收 bugfix，新特性暂停；每张重写卡独占合入 |
 | D7 页首版本注入 | **已定（2026-11-21，A）**：版本只注入 README/生成物，spec 页首保持 DOC-63；能力→节号断言进 check-docs |
 | D8 三轮自举 | **已定（2026-11-21，A）**：扩展现有 fixpoint，轮数参数化（日常/切片 2 轮、tag 前 3 轮），不新建脚本 |
-| D9 收益预估 | **已定（2026-11-21，A）**：以 PH-85 spike 实测为准，不承诺 -20~30% 区间；行数/耗时报告落 history |
+| D9 收益预估 | **已定（2026-11-21，A）**：以 v0-PH-85 spike 实测为准，不承诺 -20~30% 区间；行数/耗时报告落 history |
 
 详见 [v1-release-plan §6](../planning/v1-release-plan.md)。
 

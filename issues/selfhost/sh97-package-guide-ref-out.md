@@ -12,7 +12,7 @@ confirmed-by: REV-PH-78
 
 ## 来源
 
-[PH-78 收口复核](../../docs/reviews/2026-11-20-phase78-rev-verdict.md) B3（E78-6 的
+[v0-PH-78 收口复核](../../docs/reviews/2026-11-20-phase78-rev-verdict.md) B3（E78-6 的
 spec/package-guide 同步）。
 
 ## 现象

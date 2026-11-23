@@ -26,7 +26,7 @@
 | 1 | `Obj(Map<Str, JsonNode>)` | `Map<Str,…>` 是硬错；`Str` 只能作借用视图 | `Map<String, JsonNode>`（键深拷贝），或自定义键驻留/arena |
 | 2 | `Bool(bool)` / `Null;` | ADT 负载必须带字段名；混合形态用 `Null()` | `Bool(bool v)`、`Num(double v)`、`Str(Str s)`、`Null()` |
 | 3 | `Arr(Vec<JsonNode>)` / `Obj(Map<…,JsonNode>)` | 递归 payload 以值内嵌，布局无法闭合（静态断言失败） | **arena + 索引**（`Vec<int>` / `Map<String,int>`），或指针包装 + 显式释放 |
-| 4 | `Str(Str)` 作为 JSON 字符串 | `Str` 是借用视图；ADT 不生成 drop glue（PH-84 简化项） | 明确 owner：arena 持有 `String` + 视图，或 payload 用 `String` 并依赖 W4 级联 |
+| 4 | `Str(Str)` 作为 JSON 字符串 | `Str` 是借用视图；ADT 不生成 drop glue（v0-PH-84 简化项） | 明确 owner：arena 持有 `String` + 视图，或 payload 用 `String` 并依赖 W4 级联 |
 | 5 | “意图恢复 / bugfix” | 仓库内没有 `JsonNode` / 绑定点转换 / `as<T>` 的既定记录；卡面引用的“Vec/Map 句柄层补全”issue 不在本仓 | 补 ADR/决策记录，或改立新特性卡 |
 | 6 | W1 放在 v1.0 | 冻结期、`v1-PH-0` 新增顶层函数预算；绑定点查找是新语义面 | 至少 v1.1；容量约束已由 SH-109 动态增长解除（2026-11-23） |
 

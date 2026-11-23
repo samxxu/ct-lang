@@ -1,4 +1,4 @@
-# PH-69-R1 施工计划（跨单元可检）
+# v0-PH-69-R1 施工计划（跨单元可检）
 
 > 状态：R1 未开工；本文件把 `ct check` 支持 `import` 的路径拆开，供下一次会话直接施工。
 > 依据：`typecheck-semantic-plan.md` §3（v0-PH-69）、`phase69.md` §3 R1。

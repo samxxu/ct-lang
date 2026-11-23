@@ -12,7 +12,7 @@
 
 ## 背景
 
-PH-85 只把 B 已有的判定（赋值/初值/`return`/`$` 目标/实参）接进 `ct build`，默认仍是 `off`。
+v0-PH-85 只把 B 已有的判定（赋值/初值/`return`/`$` 目标/实参）接进 `ct build`，默认仍是 `off`。
 所有者 2026-11-22 裁定：**强化类型检测现在做，不等 v1-pre**；强化落地同批把 CLI
 `--check-level` 默认从 `off` 升为 `warn`（`--check-level=off` 保留为逃生口）。
 
@@ -44,7 +44,7 @@ PH-85 只把 B 已有的判定（赋值/初值/`return`/`$` 目标/实参）接�
 
 ## 关联
 
-- PH-85 机制（`--check-level=off|warn|error`）；
+- v0-PH-85 机制（`--check-level=off|warn|error`）；
 - [SH-60](sh60-mct-signature-types-decorative.md)、[LANG-19](../lang/lang-19-function-pointer-call-args-unchecked.md)；
 - [v1-release-plan](../../docs/planning/v1-release-plan.md) §2.4、D2 证据；
 - [J-6 台账](../../docs/planning/j6-evidence/ledger.md)。

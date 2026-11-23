@@ -19,7 +19,7 @@ Batch 2 把「命名空间全局 mangling」与「跨单元装箱」都打通了
 | 3 | [test/modules/map_ns/hal/uart.ct](../../test/modules/map_ns/hal/uart.ct#L3) | `Globals are not mangled by this compiler yet` | 全局已按命名空间 mangling 为 `hal_uart1`（`a758fa4`） |
 | 4 | [docs/design/batch2-cross-unit-oo.md](../../docs/history/design/batch2-cross-unit-oo.md#L5) | `状态：已获用户批准…本文件是本批次的实现依据` | 本批次已实现并提交，状态应改为「已实现」并标注出口验证 |
 
-`docs/design/phase12.md` 的两处 `unit-private` 属于**当时冻结设计**的历史陈述，可保留；
+`docs/phases/v0-PH-12/card.md` 的两处 `unit-private` 属于**当时冻结设计**的历史陈述，可保留；
 建议在文件头部加一行「跨单元装箱已由 Batch 2 解除」，避免读者把它当作现状。
 
 ## 影响
@@ -33,7 +33,7 @@ Batch 2 把「命名空间全局 mangling」与「跨单元装箱」都打通了
 1. 三处代码/文档注释改为现状：`pub trait` + `pub` 实例导出 vtable；未公开的一对保持 `static`。
 2. 设计文档状态改为「已实现（Batch 2，2026-10-22）」，并在 §3 每个需求后标注对应的提交与
    验收用例；保留 §2 的 spike 记录作为历史证据。
-3. `docs/design/phase12.md` 头部加一行状态注记（只加注记，不改冻结正文）。
+3. `docs/phases/v0-PH-12/card.md` 头部加一行状态注记（只加注记，不改冻结正文）。
 
 ## 验证
 

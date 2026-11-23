@@ -5,8 +5,8 @@
 - 证据基线：HEAD `v0.53.1` 重建 `ct-ast`（`/tmp/cthead`）
 - 形式：逐条反证（主张 → 反证 → 裁定）
 - 结论：**通过方向**，但只在「语句级语法糖、仅 `Vec`、失败即 abort」三条同时成立时通过；
-  「不放开 `v[i] = x`」已被 [PH-62 可写下标提案](../proposals/ct-writable-subscript-proposal.md)
-  取代；本提案并入 PH-62 作为 S1 切片，不单独排期。本轮不排 phase 卡、不改 `selfhost/**`
+  「不放开 `v[i] = x`」已被 [v0-PH-62 可写下标提案](../proposals/ct-writable-subscript-proposal.md)
+  取代；本提案并入 v0-PH-62 作为 S1 切片，不单独排期。本轮不排 phase 卡、不改 `selfhost/**`
 
 ## 1 主张席
 
@@ -37,7 +37,7 @@
   2. 只对 `Vec<T>`，`Map` / C 数组 / `Str` 硬错；
   3. `push` 失败即 abort，不静默；
   4. `v[i] = x` 保持拒绝，非目标写死；
-- **落点**：并入 **PH-62**（作为 S1 切片），原 PH-61 不单独占号；
+- **落点**：并入 **v0-PH-62**（作为 S1 切片），原 v0-PH-61 不单独占号；
 - **不排 phase 卡**：待需求定稿、roadmap 登记后再开。
 
 ## 4 未决问题（进需求定稿前回答）

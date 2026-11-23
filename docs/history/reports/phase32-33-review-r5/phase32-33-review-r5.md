@@ -1,6 +1,6 @@
 # Phase 32 / 33 立项卡第五轮独立评审
 
-- 评审对象：`docs/history/design/phase32.md`、`docs/history/design/phase33.md`，以及 `docs/roadmap.md` 第 47/48 行（英文表第 1025/1026 行）
+- 评审对象：`docs/phases/v0-PH-32/card.md`、`docs/phases/v0-PH-33/card.md`，以及 `docs/roadmap.md` 第 47/48 行（英文表第 1025/1026 行）
 - 基线：`b9cfe2e`（工作区干净，评审期间未改任何文件、未 `git add`/`commit`）
 - 评审方式：只读核对 + 单条 `ct-ast` / `cc` 探针（产物全部写 `/tmp/r5/**`）；按指令**未跑** `bash selfhost/check-all.sh`
 - 探针二进制：`/tmp/ct-ast`（v0.26.4），仅用于确认方向；判据红证仍须 S0 在 Phase 31 收口提交上重跑
@@ -73,7 +73,7 @@ Phase 32 的阻断点不是措辞：四条独立实测表明，按卡片当前�
 
 #### H6 `211_coverage_aux` 与 Phase 34 的 `211_option_basic` 撞号
 
-- 位置：`phase32-draft.md:280`、`:377`；对照 `docs/history/design/phase34.md:205`、`:269`
+- 位置：`phase32-draft.md:280`、`:377`；对照 `docs/phases/v0-PH-34/card.md:205`、`:269`
 - 事实：Phase 34 的 `ast/211_option_basic` 早在 `3a81e68` 就存在；`211_coverage_aux` 是本卡在 `38e5e56` 才引入（`git log -S` 可复现）。
 - 后果：两个阶段会在 `test/ast/` 下产生同号目录，样例/夹具台账无法唯一索引。
 - 可验证修法：按"新卡改号"原则，Phase 32 的 `211_coverage_aux` → `229_coverage_aux`（229 当前空闲；228 属 P34，221–227 属 P36，215–220 属 P35）。同步 `:208-213`、`:280`、`:377` 三处。**不要**动 Phase 34。
@@ -115,7 +115,7 @@ Phase 32 的阻断点不是措辞：四条独立实测表明，按卡片当前�
 #### H1 `ast/209_depth4_boundary` 与本轮之前的 Phase 32 `ast/209_valid_assignments` 撞号
 
 - 位置：`phase33-draft.md:186`、`:256`（S7）、`:283`（E33-11）、`:295`、`:370`；对照 `phase32-draft.md:278`、`:304`、`:378`
-- 事实：`git log -S '209_valid_assignments' -- docs/history/design/phase32.md` 显示该编号自 `2d9d2f7` 起存在；`209_depth4_boundary` 由 `b9cfe2e` 首次引入。Phase 33 是本轮才占用 209 的一方。
+- 事实：`git log -S '209_valid_assignments' -- docs/phases/v0-PH-32/card.md` 显示该编号自 `2d9d2f7` 起存在；`209_depth4_boundary` 由 `b9cfe2e` 首次引入。Phase 33 是本轮才占用 209 的一方。
 - 后果：同一 `test/ast/209_*` 目录前缀被两张卡同时申请，夹具台账与样例编号无法唯一；按"新卡改号"的既定规则属硬冲突。
 - 可验证修法：Phase 33 的 `209_depth4_boundary` → `207_depth4_boundary`（207 空闲，且与 200–206 连续），同步改 `:186`、`:256`、`:283`、`:295`、`:370` 五处。**不要**动 Phase 32 的 209（它是先占方），也**不要**动 208（无冲突）。
 - 备注：Phase 32 的 `211_coverage_aux` 与 Phase 34 撞号（Phase 32 H6），两处必须分别修，不能靠一次重排同时解决。
@@ -287,7 +287,7 @@ prog.ct:16:1: error: no method 'depth' for type 'struct Box_Box_lint_r'
 
 ## 7 评审纪律声明
 
-- 本次只读：未修改 `docs/history/design/phase32.md`、`phase33-draft.md`、`docs/roadmap.md` 任何字节，未 `git add`/`commit`。
+- 本次只读：未修改 `docs/phases/v0-PH-32/card.md`、`phase33-draft.md`、`docs/roadmap.md` 任何字节，未 `git add`/`commit`。
 - 未运行 `bash selfhost/check-all.sh`；仅运行单条 `/tmp/ct-ast` 与 `cc`，产物全部落 `/tmp/r5/**`。
 - 未改判据、未改 golden、未动版本号；所有"冲突"裁定均给出可复现的 `git log -S` 或实测命令。
-- 评审期间另有会话并发修改 `docs/history/design/phase34.md`、`phase35-draft.md`、`phase36-draft.md` 与 `docs/roadmap.md`（`git status` 可见）。这些改动不在本次范围，评审未触碰；`roadmap.md` 第 47/48 行与英文表第 1025/1026 行在复核时仍是 `945–1,560` / `840–1,570`，上述引用有效。
+- 评审期间另有会话并发修改 `docs/phases/v0-PH-34/card.md`、`phase35-draft.md`、`phase36-draft.md` 与 `docs/roadmap.md`（`git status` 可见）。这些改动不在本次范围，评审未触碰；`roadmap.md` 第 47/48 行与英文表第 1025/1026 行在复核时仍是 `945–1,560` / `840–1,570`，上述引用有效。

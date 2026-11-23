@@ -7,7 +7,7 @@
 | 严重度 | Medium（产物带 libc 头与 Str 代码；`-nostdlib` 链不上） |
 | 状态 | verified |
 | 锚点 | `v0.63.4`（`72ed6dc6`） |
-| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[PH-64 卡](../../docs/design/phase64.md) |
+| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[v0-PH-64 卡](../../docs/phases/v0-PH-64/card.md) |
 
 ## 现象
 
@@ -28,7 +28,7 @@ $ grep -n 'malloc' /tmp/p.c | head -2
 
 ## 原因
 
-按需单元（PH-64 T2）只在 `build` 路径的 emit 前算 `builtin_live`；compile 模式走
+按需单元（v0-PH-64 T2）只在 `build` 路径的 emit 前算 `builtin_live`；compile 模式走
 `load_builtin` 的无条件拼接，`--freestanding` 只关掉了 constructor 与未映射堆的硬错，
 没有关掉层本身。
 

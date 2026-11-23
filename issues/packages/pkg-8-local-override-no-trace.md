@@ -8,7 +8,7 @@
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`get_spec` / `get_one` 无本地覆盖分支）、`Module.h.ct` `resolve_import`（导入方目录静默优先） |
 | 状态 | verified |
-| 处置证据 | **已修**（PH-54 S2/S3：SP-015；构建 stderr 发 `note:`，`Pkg.h.ct:2896`） |
+| 处置证据 | **已修**（v0-PH-54 S2/S3：SP-015；构建 stderr 发 `note:`，`Pkg.h.ct:2896`） |
 
 ## 现象
 

@@ -85,10 +85,10 @@ HEAD `v0.53.1` 重建 `ct-ast` 实测：
 | --- | --- | --- |
 | 警告通道的 JSON | `ct check --types --diagnostics=json` 输出 `{"warnings":[{"severity":"error","type":"type_mismatch","file":...,"line":3,"col":18,...}]}` | **已实现**；缺夹具与负例，记 **D**（补证据，不新开能力） |
 | 解析错误的 JSON | `ct check --diagnostics=json parse.ct` 仍输出 `parse.ct:1:1: error: unexpected token`（stderr，纯文本） | **A bug**：usage 全局宣称 `--diagnostics=text\|json`，解析通道静默回退文本 |
-| 字段级位置 | `Symbols.h.ct:232-238` 的 `Field{name,type,dims}` 无 `line/col`；结构体字段相关诊断只能回到 struct 行 | **B 新特性**：要动前端模型，归 PH-58 |
+| 字段级位置 | `Symbols.h.ct:232-238` 的 `Field{name,type,dims}` 无 `line/col`；结构体字段相关诊断只能回到 struct 行 | **B 新特性**：要动前端模型，归 v0-PH-58 |
 
 因此本条不再整体按 feature 排期：解析错误 JSON 进 patch（与 LANG-3 的诊断判据共用夹具），
-字段位置进 PH-58，警告 JSON 只补夹具复验。原「请求」与「验收判据」保留作为能力全量目标。
+字段位置进 v0-PH-58，警告 JSON 只补夹具复验。原「请求」与「验收判据」保留作为能力全量目标。
 
 ## 处置（REV/REQ，2026-11-22）
 
@@ -108,7 +108,7 @@ rc=1
 | --- | --- | --- |
 | 7a 警告通道 JSON | 已实现；`check-semantics.sh` 断言 JSON 可解析且含 `severity`/`type` | 完成 |
 | 7b 解析错误 JSON | `--diagnostics=json` 下仍走 stderr 纯文本，与 usage 的 `--diagnostics=text\|json` 不一致 | **本条唯一剩余实现项** |
-| 7c 字段级位置 | `Symbols.h.ct:288-289` 的 `Field` 已有 `line`/`col`（PH-59 / PH-74 J11） | 完成 |
+| 7c 字段级位置 | `Symbols.h.ct:288-289` 的 `Field` 已有 `line`/`col`（v0-PH-59 / v0-PH-74 J11） | 完成 |
 
 **为什么不现在修**：7b 是 Driver/Diag 族的小改，但本批只做台账复核；`0.53.14` 的原排期已过期。
 **触发/下一步**：下一次 Driver/Diag 批次（v1.1 前）；负责人 DEV；P2。最小补丁方向：解析错误在

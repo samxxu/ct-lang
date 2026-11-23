@@ -199,7 +199,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ct <in.ct>` / `ct compile <in.ct>` | 单文件编译：普通 `.ct` 只写 `.c`，`.h.ct` 才额外写同名 `.h`；只接受单文件单元，`import` 需改用 `ct build` |
 | `ct build <in.ct>… [-o <exe>]` | 多文件构建：生成物默认放 `.ctbuild/`，再调用 C 编译器产出可执行文件；`--emit-c` 只发 `.c`/`.h`，`--runtime-checks` 在接口派发前检查空 vtable（默认关闭） |
 | `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`；有发现以 `error:` 报告并退出 `1`，干净退出 `0` |
-| `ct check --types <in.ct>` | opt-in 类型检查（PH-68/69 + PH-70/71 的 CFG/own 走 `--semantics`）；与 `ct build --check-level=warn` 同判定、同文案 |
+| `ct check --types <in.ct>` | opt-in 类型检查（v0-PH-68/69 + v0-PH-70/71 的 CFG/own 走 `--semantics`）；与 `ct build --check-level=warn` 同判定、同文案 |
 | `ct build --check-level=off\|warn\|error` | 把 B 的检查接进构建路径；SH-115 起默认 `warn`，只报 `warning:`、生成物与 `off` 逐字节相同；`error` 在写产物前失败 |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号）；`--emit-model` 写模型 JSON |
 | `ct index verify [<file>] [--json] [-q]` | 只读校验索引：六字段、`tag == v<version>`、`sha256`、重复行；退出码 0/1/2 |

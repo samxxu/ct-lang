@@ -6,8 +6,8 @@
 | 类型 | 静默错误（类型/arity 均不报） |
 | 严重度 | Medium |
 | 状态 | verified |
-| 处置证据 | **verified**（2026-11-20，REV；PH-69-R2） |
-| 承诺出处 | [PH-69 卡](../../docs/design/phase69.md) R2 |
+| 处置证据 | **verified**（2026-11-20，REV；v0-PH-69-R2） |
+| 承诺出处 | [v0-PH-69 卡](../../docs/phases/v0-PH-69/card.md) R2 |
 
 ## 现象
 
@@ -28,14 +28,14 @@ int main(void)
 
 ## 触发条件
 
-拿到 `int (*fp)(int)` 形态即可复现；详见 PH-69-R2。
+拿到 `int (*fp)(int)` 形态即可复现；详见 v0-PH-69-R2。
 
 ## 修复方向
 
 在调用判定里解析函数指针类型串（`ret (*)(params)`），复用 `chk_assignable(diag=6)`；
 arity 与变参（`...`）分开处理。
 
-## 处置（2026-11-19，PH-69-R2）
+## 处置（2026-11-19，v0-PH-69-R2）
 
 - 实现：调用分支在 `find_func` 落空且变量类型含 `(*)` 时解析原型，复用
   `chk_type`/`chk_assignable(diag=6)` 与 `arity_warn`；`...` 尾接受多余实参，
@@ -47,7 +47,7 @@ arity 与变参（`...`）分开处理。
 
 ## 处置（2026-11-20，DEV · 复跑）
 
-- 结论：PH-69-R2 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 结论：v0-PH-69-R2 的修复仍在 HEAD；只记录证据，不改 `status`。
 - 命令/输出：
 
 ```console
@@ -67,4 +67,4 @@ $ echo $?
 ```
 
 探针覆盖负例（错类型 / 多余实参 / 零实参均报 `argument 1` 或 `arity mismatch`）与
-正例（合法调用、`...` 尾）；实现属 PH-69-R2，修复在 HEAD。
+正例（合法调用、`...` 尾）；实现属 v0-PH-69-R2，修复在 HEAD。

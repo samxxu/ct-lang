@@ -10,7 +10,7 @@
 ## 1. 背景
 
 `MAX_FUNCS` 是整程序顶层 plain-C 签名预算（`static` helper 与 `pub` 包装器都算，
-`impl` 方法不算）。PH-88 新增 76 个 `em_*` 自由函数后实测 **501/512，余 11**。
+`impl` 方法不算）。v0-PH-88 新增 76 个 `em_*` 自由函数后实测 **501/512，余 11**。
 
 `v1-PH-0` 计划把 76 个切片改成穷尽 `match`，会新增 helper；固定 512 不应再作为功能上限。
 所有者 2026-11-21 决定改为“按需增长 + 高安全阀”；2026-11-23 进一步改判：**提前到当前
@@ -123,5 +123,5 @@ bash selfhost/check-all.sh             # L0→L1→L2→ct-ast
 
 - [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)
 - [v1 路线 §2.3](../planning/v1-release-plan.md)
-- [PH-88 卡](../design/phase88.md) §7.5
+- [v0-PH-88 卡](../phases/v0-PH-88/card.md) §7.5
 - [p88_metrics](../history/p88_metrics.md) §4 #3

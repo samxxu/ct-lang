@@ -12,7 +12,7 @@ confirmed-by: REV-PH-78
 
 ## 来源
 
-[PH-78 收口复核](../../docs/reviews/2026-11-20-phase78-rev-verdict.md) B1（E78-2 / E78-6）。
+[v0-PH-78 收口复核](../../docs/reviews/2026-11-20-phase78-rev-verdict.md) B1（E78-2 / E78-6）。
 
 ## 复现（baseline `ca3354a5`，ct-ast v0.78.0）
 

@@ -8,7 +8,7 @@
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | [Pkg.h.ct](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct)（`get_one` / `fetch_git` 的 `seen[]` 只按 name 去重） |
 | 状态 | verified |
-| 处置证据 | **已修**（PH-54 S2：SP-006/013；`Pkg.h.ct:2284-2291`、`:2872-2877` 报 `is required twice`） |
+| 处置证据 | **已修**（v0-PH-54 S2：SP-006/013；`Pkg.h.ct:2284-2291`、`:2872-2877` 报 `is required twice`） |
 
 ## 现象
 

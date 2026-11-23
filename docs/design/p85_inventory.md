@@ -1,11 +1,11 @@
-# PH-85 S85a 源码 inventory（v0.85.0）
+# v0-PH-85 S85a 源码 inventory（v0.85.0）
 
 > **S85a 交付物**。本文件是 `selfhost/ct-ast/**` 在 v0.85.0（M0 粗切之后）的
 > 函数集合、职责、文件级状态、导入图与环清单；`tools/p85_inventory.py` 重算这些
 > 数字，`test/ast/p85_inventory.sh` 逐行比对，**文档漂移即红**。
 > M0 之前的基线（函数体哈希集合、产物集合、旧→新映射）见
 > [p85_m0.md](p85_m0.md)；spike 见 [p85_spike.md](p85_spike.md)。
-> 依据：[D-017](../decisions/D-017.md) A2/A3/A4/B1、[phase85.md](phase85.md) §1.2。
+> 依据：[D-017](../decisions/D-017.md) A2/A3/A4/B1、[phase85.md](../phases/v0-PH-85/card.md) §1.2。
 
 ## 0 方法与抽查口径
 
@@ -36,7 +36,7 @@
 | backend::emit | 3 | 9518 | 192 | 节点→C 发射、vtable/初始化器、头文件与 ABI 头、map/model 导出 |
 | backend::mem | 1 | 481 | 15 | 所有权/泄漏分析（`own`/borrow/AutoDrop） |
 | runtime::arena | 1 | 163 | 9 | 节点池与字符串池 |
-| tool::diag | 1 | 758 | 40 | 警告存储、`nsem` 计数、`check` 的严重级、PH-85 的 `types_level` |
+| tool::diag | 1 | 758 | 40 | 警告存储、`nsem` 计数、`check` 的严重级、v0-PH-85 的 `types_level` |
 | tool::driver | 1 | 1043 | 12 | 命令行、模式分派、`--check-level` 预扫描 |
 | tool::pkg | 2 | 3847 | 72 | 包管理（`get/install/verify/index`）与索引行校验 |
 | tool::cache | 1 | 168 | 6 | 构建缓存键与依赖折叠 |
@@ -95,7 +95,7 @@
 | `g_init` | `backend/emit/Init.h.ct` | `init_get()` | vptr/初始化器子对象 |
 | `g_memory` | `backend/mem/Memory.h.ct` | `memory_get()` | 所有权分析单例 |
 | `g_arena` | `runtime/arena/Arena.h.ct` | `arena_get()` | 节点池/字符串池 |
-| `g_diag` | `tool/diag/Diag.h.ct` | `ct_*` 诊断门面 | 警告数组 + `nsem` + `types_level`（PH-85） |
+| `g_diag` | `tool/diag/Diag.h.ct` | `ct_*` 诊断门面 | 警告数组 + `nsem` + `types_level`（v0-PH-85） |
 | `g_cache` | `tool/cache/Cache.h.ct` | `cache_get()` | 缓存表 |
 | `g_pkg` | `tool/pkg/Pkg.h.ct` | `ct_pkg_*`/`ct_index_verify` 门面 | 包管理器状态 |
 | `g_driver` | `tool/driver/Driver.h.ct` | `ct_driver_run` | 命令行上下文 |
@@ -105,8 +105,8 @@
 | 状态 | 单元 | 用途 |
 | --- | --- | --- |
 | `g_sha_k[64]`、`g_hexd` | `tool/pkg/Pkg.h.ct` | SHA-256 常量表与十六进制字母（M0 未搬：签名用 `size_t`，且 `struct Sha256` 随之留在宿主） |
-| `g_cycle_adj[8][4]`、`g_cycle_nout[8]` | `frontend/module/Module.h.ct` | 直接环检测的邻接表（PH-82） |
-| `g_adts`、`g_nadts` | `frontend/sym/Symbols.h.ct` | ADT 注册表（PH-84）；随 `Symbols` 单例走 |
+| `g_cycle_adj[8][4]`、`g_cycle_nout[8]` | `frontend/module/Module.h.ct` | 直接环检测的邻接表（v0-PH-82） |
+| `g_adts`、`g_nadts` | `frontend/sym/Symbols.h.ct` | ADT 注册表（v0-PH-84）；随 `Symbols` 单例走 |
 | `g_ntraits`/`g_nfuncs` 等数组长度 | 各单元 | `pub struct` 落头文件，宏不跨单元，长度写死为字面量 |
 
 ### 2.3 归属规则（B1）与 M0 的边界
@@ -150,12 +150,12 @@
 - **cycles: 0**。基线（`10c23c77`）就没有导入环；M0 的 6 个新单元都**不**导入宿主，
   依赖方向是“宿主 → 新单元”，因此没有新增环（J4）。
 - 现状的“非环但重”依赖：`frontend::parse` 的 7 个单元几乎都依赖
-  `Symbols` + `ParseSupport` + `Expr`，这是 PH-86–88 要保留的边界；破环/减边不在
+  `Symbols` + `ParseSupport` + `Expr`，这是 v0-PH-86–88 要保留的边界；破环/减边不在
   M0 范围（D-017 A4：破环单独成案）。
 
 ## 4 可折叠 helper（R 切片目标）
 
-R 切片（PH-86–88）用 `?`/`errdefer`/`match` 折叠的候选，按“可机械识别”的三类列出；
+R 切片（v0-PH-86–88）用 `?`/`errdefer`/`match` 折叠的候选，按“可机械识别”的三类列出；
 数字由 `tools/p85_inventory.py` 的同名扫描给出（函数体为口径）。
 
 ### 4.1 `?`（错误传播）
@@ -165,8 +165,8 @@ R 切片（PH-86–88）用 `?`/`errdefer`/`match` 折叠的候选，按“可�
   `emit_expr`、`emit_node`、`parse_postfix`、`parse_stmt`、`parse_decl_node`、
   `chk_assignable`、`chk_mcall_args`、`sym_find` 系列、`pkg_*` 系列。
 - 词法器**没有**错误通道（`toktrunc` 是标志位，错误由解析器报），所以 `?` 在
-  `Lexer` 上不适用——这是 PH-86 的范围边界。
-- 折叠判据（PH-86 卡）：折叠后 `return -1` 的语义（-1 是“错误”而非“任意负值”）
+  `Lexer` 上不适用——这是 v0-PH-86 的范围边界。
+- 折叠判据（v0-PH-86 卡）：折叠后 `return -1` 的语义（-1 是“错误”而非“任意负值”）
   与 `#line`/诊断位置不变。
 
 ### 4.2 `errdefer`（清理）
@@ -175,7 +175,7 @@ R 切片（PH-86–88）用 `?`/`errdefer`/`match` 折叠的候选，按“可�
   `func_end`（7，defer/errdefer 收尾）、`build_main`（6，临时目录/缓存）、
   `parse_func`（3）、`is_decl_start`（2），以及 `parse_stmt`/`parse_decl_node`/
   `parse_block`/`emit_node` 各 1。
-- 这些函数是 PH-87/88 的 `errdefer` 首选；`own` 资源（`FILE *`、堆分配）的释放点
+- 这些函数是 v0-PH-87/88 的 `errdefer` 首选；`own` 资源（`FILE *`、堆分配）的释放点
   与 `goto` 标签同址。
 
 ### 4.3 `match`（穷尽判别）
@@ -187,8 +187,8 @@ R 切片（PH-86–88）用 `?`/`errdefer`/`match` 折叠的候选，按“可�
   `Emitter::emit_inline`（13）、`Expr::parse_expr`（11）、`Emitter::expr_unstable`（11）。
 - `switch (…kind)` 语句另有 5 处（`chk_type` 17 case、`static_ctype` 14、
   `map_fold_num` 10、`emit_node` 6、`parse_stmt` 4）。
-- PH-84 的 ADT/`match` 是这些判别链的落点；`Emitter::emit_node`/`emit_expr` 是
-  PH-88 的主目标，`chk_type`/`static_ctype` 归 PH-87。
+- v0-PH-84 的 ADT/`match` 是这些判别链的落点；`Emitter::emit_node`/`emit_expr` 是
+  v0-PH-88 的主目标，`chk_type`/`static_ctype` 归 v0-PH-87。
 
 ### 4.4 不适合折叠的 helper（M0 已确认不动）
 
@@ -202,7 +202,7 @@ R 切片（PH-86–88）用 `?`/`errdefer`/`match` 折叠的候选，按“可�
 
 | # | 项 | 现状 | 去向 |
 | --- | --- | --- | --- |
-| 1 | 文件级状态的**动态**生命周期（谁在何时赋值） | 只列归属与使用方，不追踪时序 | PH-86–88 逐切片时补 |
-| 2 | `tool::pkg` 的 `g_sha_k`/`struct Sha256` | 留在宿主（`size_t` 会进 `.h`） | PH-86 词法器之外的独立小任务 |
+| 1 | 文件级状态的**动态**生命周期（谁在何时赋值） | 只列归属与使用方，不追踪时序 | v0-PH-86–88 逐切片时补 |
+| 2 | `tool::pkg` 的 `g_sha_k`/`struct Sha256` | 留在宿主（`size_t` 会进 `.h`） | v0-PH-86 词法器之外的独立小任务 |
 | 3 | 导入图仍偏重（parse 7 单元互依） | 只登记，不破环 | D-017 A4：破环单独成案 |
 | 4 | 函数体哈希只覆盖 `{ … }` 文本 | 注释/签名变化不计 | 与 J1 口径一致（见 p85_m0.md） |

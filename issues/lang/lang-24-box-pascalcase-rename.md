@@ -55,7 +55,7 @@
 | `docs/guide-for-c-programmers.md`、`tutorial.md`、`patterns.md`、`memory-guide.md`、`README.md` | 规范拼写改 `Box<T>`；保留一处旧拼写迁移说明 |
 | `editors/vscode` | `ct-box-type` 规则同时匹配 `Box`/`box`；snippet 默认 `Box`；`check-grammar.py` 加新旧拼写夹具 |
 | `test/ast/p81_box*` | 夹具改 `Box`，新增 `box` 别名正例（v1.0 警告）与 v1.1 负例；预期 C 符号改 `Box_*` |
-| `docs/design/phase81.md`、证据文本 | 作为历史记录保留旧拼写，加「命名已由 LANG-24 修正」注记；不重写历史证据 |
+| `docs/phases/v0-PH-81/card.md`、证据文本 | 作为历史记录保留旧拼写，加「命名已由 LANG-24 修正」注记；不重写历史证据 |
 
 **文档范围**：`docs/**` 的活跃文档（spec、两本指南、tutorial、patterns、memory-guide、
 README、std-catalog、planning、reviews 的结论行）全部改为 `Box<T>`，迁移说明只保留一处；

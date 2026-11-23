@@ -1,4 +1,4 @@
-# PH-82 收口复核（REV · 2026-11-21）
+# v0-PH-82 收口复核（REV · 2026-11-21）
 
 > 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
 
@@ -9,7 +9,7 @@
 | 范围 | `leaks` 两档、`box<X>` 直接环（限深 3 / 去重 / 仅 box）、`allow-cycle`、树模式；E82-1…8、D-012、battle leak-guards-1；版本 / tag / G8 / check-all / sanitizer |
 | 方法 | `git archive v0.82.0` → 独立自举 L0→L1→L2→ct-ast（不读工作树产物）；跑 p82 五个探针与 p81/p80 关键探针；读码对照卡 / D-012 / battle；REV 自建正负例；T-7 红基线复跑；回滚演练；`g0` / `g8` / `check-docs` / `check-all` / `check-sanitizers` |
 | 结论 | **REV: 通过**（E82-1…8 均通过；§6 为不阻断观察） |
-| 交付 | 本文件；不改代码、不 push；无 PH-82 issue 状态变更 |
+| 交付 | 本文件；不改代码、不 push；无 v0-PH-82 issue 状态变更 |
 
 ## 1 独立自举（archive，不依赖工作树产物）
 
@@ -219,7 +219,7 @@ $ git cat-file -t v0.82.0; git rev-parse v0.82.0^{commit}
 tag
 d80c2418c0376ad7467a5416c1d231fb62155743
 $ git for-each-ref refs/tags/v0.82.0 --format='%(taggername) %(subject)'
-Sam X. Xu@macMini PH-82 closeout (d80c241)
+Sam X. Xu@macMini v0-PH-82 closeout (d80c241)
 $ git ls-remote origin 'refs/tags/v0.82.0*'
 189e4469...  refs/tags/v0.82.0
 d80c2418...  refs/tags/v0.82.0^{}     # 远端 annotated tag 解引用到收口提交
@@ -228,7 +228,7 @@ $ bash tools/check.sh g8   → g8: OK (PN-2 version coherence; 9 legacy offsets)
 $ python3 test/docs/check-docs.py
 check-docs: OK (2185 links / 361 files, v0.82.0, 11 hard gates, 12 phase status, 7 signoff)
 $ bash selfhost/check-all.sh
-  ok    PH-82-S82a…S82d 五条
+  ok    v0-PH-82-S82a…S82d 五条
   == summary: 156 passed, 0 failed ==          # L0
   == summary: 153 passed, 0 failed ==          # check-archive
   == summary: 1545 passed, 0 failed, 4 skipped ==  # AST
@@ -259,16 +259,16 @@ golden/expected/ABI banner（非 `.sh`）+ `p80_docs.sh`/`p81_box.sh`；非版�
 
 ## 6 不阻断观察
 
-1. **`ns-root` 包根清单读不到（最重要，PH-83 前必须处理）**：消费者拿到的 `-I` 是
+1. **`ns-root` 包根清单读不到（最重要，v0-PH-83 前必须处理）**：消费者拿到的 `-I` 是
    `<版本>/<ns-root>`，`ct.pkg` 在它上一级；`leaks_for` 只读 `-I` 根与入口单元目录，不向上找包根，
    于是 `ns-root = src` 的包写 `leaks = error` 也不会生效（CE-7：`warning` + exit 0 + 落产物）。
-   建议在 PH-83 的包 v1 契约落地前修 `leaks_for`（按 `--ns-root`/包根解析），或另立 SH 条目；
-   当前 `ns-root = .` 的存量布局不受影响，故不阻断 PH-82。
+   建议在 v0-PH-83 的包 v1 契约落地前修 `leaks_for`（按 `--ns-root`/包根解析），或另立 SH 条目；
+   当前 `ns-root = .` 的存量布局不受影响，故不阻断 v0-PH-82。
 2. **spec §4.72「`-I` 根的 manifest（无则入口单元目录）」措辞偏宽**：实测当 `-I` 根存在但无
    `ct.pkg` 时直接回到 `warn`，不会再用入口单元目录（`/tmp/rev82/ceI`：`project/src/ct.pkg`
    `leaks = error`，`-I project` 构建 exit 0 + `warning`）。代码与本条注释的意图是「build 看 `-I` 根，
    compile/check 因忽略 `-I` 才回退」；建议把 spec 改成同一口径，避免读者按字面期待回退。
-3. **PH-81 既有 `box<T>` 编码碰撞（非 PH-82 引入）**：同一 `box<X>` 在 X 定义前、后各出现一次时，
+3. **v0-PH-81 既有 `box<T>` 编码碰撞（非 v0-PH-82 引入）**：同一 `box<X>` 在 X 定义前、后各出现一次时，
    `box<B>`（前向）与 `box<B>`（已定义）被当成两个不同实参，报
    `two type arguments encode to the same C name 'box_B'`。最小复现（v0.81.0 与 v0.82.0 同报，故不是本卡回归）：
    `struct A { box<B> b; } struct B { int n; } struct C { box<B> b2; }`。
@@ -282,16 +282,16 @@ golden/expected/ABI banner（非 `.sh`）+ `p80_docs.sh`/`p81_box.sh`；非版�
    `A { box<B> }` / `B { box<A> }` 会被检测（CE-6）。实现比文档宽，建议改卡为「跨单元直接环可检」。
 7. **「最小行号 struct」与实现**：卡 §7.4 / spec §4.72 写「行号最小」，代码按 struct 行号（row）最小；
    单单元内二者一致，多单元时行号不可跨文件比较，属措辞小瑕。
-8. **tag message 用 `PH-82` 而非 `v0-PH-82`**：与 `v0.81.0` 的 `PH-81 closeout` 先例一致，
-   phase-ID 迁移仍被 blocker 挡住、`g8` 接受；不是 PH-82 缺口。
+8. **tag message 用 `v0-PH-82` 而非 `v0-PH-82`**：与 `v0.81.0` 的 `v0-PH-81 closeout` 先例一致，
+   phase-ID 迁移仍被 blocker 挡住、`g8` 接受；不是 v0-PH-82 缺口。
 
 ## 7 未覆盖 / 范围外
 
 - 回滚演练只做「整卡 8 提交反序 revert 后与 `bf558eb7` 零 diff」，未在回退树上重跑 11 门（树与开工前一致）。
 - 限深 3 以上的环、运行期环/GC/weak、`--debug-leaks` 计数均为 D-012 明示范围外。
-- `ns-root` 包的 v1 契约归 PH-83（D-014）；本轮只验证 PH-82 声明的 `-I` 根/单元目录路径。
+- `ns-root` 包的 v1 契约归 v0-PH-83（D-014）；本轮只验证 v0-PH-82 声明的 `-I` 根/单元目录路径。
 - 未验证 32 位平台上的 `box` 布局；E82 不含此判据。
-- `tools/check.sh` 仍只有 `g0`/`g8`/`battle-selftest`，G1/G4/G6 缺位是既有治理缺口（`full-review-v0.77.0` 已登记），不属 PH-82。
+- `tools/check.sh` 仍只有 `g0`/`g8`/`battle-selftest`，G1/G4/G6 缺位是既有治理缺口（`full-review-v0.77.0` 已登记），不属 v0-PH-82。
 
 ## 8 结论与交付
 
@@ -299,5 +299,5 @@ golden/expected/ABI banner（非 `.sh`）+ `p80_docs.sh`/`p81_box.sh`；非版�
 直接环（自环/2/3 边、限深、去重、仅 `box<X>`）、`allow-cycle` 同行豁免与 `ct check` 抑制点、文案、
 `patterns` 树模式、旧 golden 与回滚均经独立复现。版本五处一致、annotated tag 指向收口提交且远端一致、
 `g0`/`g8`/`check-docs`/`check-all`（11 门）/`check-sanitizers`（583 项）全绿。§6 的 8 条均为不阻断观察，
-其中第 1 条（`ns-root` 包根清单）建议在 PH-83 前处理并另立条目，第 3 条是 PH-81 既有 `box<T>` 编码缺陷，
-均不据此回退 PH-82。本轮不改代码、不 push、无 PH-82 issue 状态变更。
+其中第 1 条（`ns-root` 包根清单）建议在 v0-PH-83 前处理并另立条目，第 3 条是 v0-PH-81 既有 `box<T>` 编码缺陷，
+均不据此回退 v0-PH-82。本轮不改代码、不 push、无 v0-PH-82 issue 状态变更。

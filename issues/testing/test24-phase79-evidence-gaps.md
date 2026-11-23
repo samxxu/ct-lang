@@ -1,6 +1,6 @@
 ---
 id: TEST-24
-title: "PH-79 证据/任务声明与仓库不符：p79_index/places/migrate/docs 不存在、无红证基线"
+title: "v0-PH-79 证据/任务声明与仓库不符：p79_index/places/migrate/docs 不存在、无红证基线"
 status: verified
 area: testing
 severity: P2
@@ -8,15 +8,15 @@ opened: 2026-11-20
 confirmed-by: REV-PH-79
 ---
 
-# TEST-24 · PH-79 的任务/红证与仓库对不上
+# TEST-24 · v0-PH-79 的任务/红证与仓库对不上
 
 ## 来源
 
-[PH-79 收口复核](../../docs/reviews/2026-11-20-phase79-rev-verdict.md) B4（G1/G5/T-7/PN-10）。
+[v0-PH-79 收口复核](../../docs/reviews/2026-11-20-phase79-rev-verdict.md) B4（G1/G5/T-7/PN-10）。
 
 ## 现象
 
-卡面 `docs/design/phase79.md:67-73` 的验收列写了五个脚本：
+卡面 `docs/phases/v0-PH-79/card.md:67-73` 的验收列写了五个脚本：
 
 | 任务 | 卡面验收 |
 | --- | --- |
@@ -88,7 +88,7 @@ PN-10 也要求每个 stage 有独立红/绿提交；实际只有一个红提交
 - 新增 `test/ast/p79_migrate.sh`（E79-1：形参/字段/无初始化器告警、`T a[] = {...}` 静默、
   `T[]` 与 `T a[N]` 静默）；
 - 新增 `test/ast/p79_docs.sh`（S3e：spec §4.69 + package-guide §7.6 的关键承诺）；
-- 四个脚本与 `p79_basic` 一起接入 `selfhost/check-ast.sh`（PH-79-S3/S3b/S3c/S3d/S3e 五项）；
+- 四个脚本与 `p79_basic` 一起接入 `selfhost/check-ast.sh`（v0-PH-79-S3/S3b/S3c/S3d/S3e 五项）；
 - `p79_basic` 增加 `a[1..]`、`sum(a)`、`return a`、结构体数组字段、`bump(s[1])` 等九条断言，
   并在卡 §2.1 去掉 `Vec.as_slice`、在 §5/§8 更新计数。
 
@@ -142,7 +142,7 @@ p79_migrate: 7
 p79_docs: 15
 ```
 
-`selfhost/check-ast.sh` 已接入五项（`PH-79-S3`/`S3b`/`S3c`/`S3d`/`S3e`），全量运行绿色。
+`selfhost/check-ast.sh` 已接入五项（`v0-PH-79-S3`/`S3b`/`S3c`/`S3d`/`S3e`），全量运行绿色。
 红证可追溯：红提交 `f9294448` 的父提交就是 `2a2f3933`（`git merge-base --is-ancestor` 为真），
 正文含 `baseline: 2a2f3933`、命令、退出码；逐字输出在
 [`test/ast/p79_red_rev.log`](../../test/ast/p79_red_rev.log)（144 行，含四个基线脚本缺失与

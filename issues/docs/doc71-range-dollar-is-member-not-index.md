@@ -5,7 +5,7 @@
 | 模块 | docs / lang |
 | 严重度 | Low（纯文档措辞；实现正确） |
 | 锚点 | `v0.26.4`（Phase 24 实现，未 bump） |
-| 文件 | [language-spec.md:1847-1848](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast)、[language-spec.md:1864-1868](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast)、[language-spec.md:4248](../../docs/language-spec.md#9-诊断与退出码)、[phase24.md:145-160](../../docs/history/design/phase24.md#L145-L160)、[Emitter.h.ct:2018-2038](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2018-L2038)、[range_init.ct:21](../../examples/15_range_init/range_init.ct#L21) |
+| 文件 | [language-spec.md:1847-1848](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast)、[language-spec.md:1864-1868](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast)、[language-spec.md:4248](../../docs/language-spec.md#9-诊断与退出码)、[phase24.md:145-160](../../docs/phases/v0-PH-24/card.md#L145-L160)、[Emitter.h.ct:2018-2038](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2018-L2038)、[range_init.ct:21](../../examples/15_range_init/range_init.ct#L21) |
 | 状态 | verified |
 | 处置证据 | **verified**（2026-11-20，REV；deferred 子项见复核段） |
 
@@ -35,7 +35,7 @@ range 初值里的 `$` 与将来语境块里的 `$` 是同一个语义，只是�
 - [language-spec.md:1864-1868](../../docs/language-spec.md#447-数组-range-初值-abphase-24仅-ct-ast) 与英文段
   [language-spec.md:4248](../../docs/language-spec.md#9-诊断与退出码) 的诊断文案
   `the range index '$' is not a variable` 把 `$` 命名为 index；
-- [phase24.md:160](../../docs/history/design/phase24.md#L160) 写「每个 `$` 都是同一个当前下标」；
+- [phase24.md:160](../../docs/phases/v0-PH-24/card.md#L160) 写「每个 `$` 都是同一个当前下标」；
 - 发射器注释 [Emitter.h.ct:2020](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2020) 写 current index。
 
 正确表述应是：**`$` = 当前成员（当前语境的自身）**。在 `a..b(expr)` 中，成员是序列
@@ -59,7 +59,7 @@ range 初值里的 `$` 与将来语境块里的 `$` 是同一个语义，只是�
    在 spec 中注明它是历史措辞，`$` 并非标识符；
 4. [glossary.md](../../docs/glossary.md) 增加 `$` 条目：当前语境的自身／当前成员，
    并列出绑定语境（range 初值；将来的接收者语境块）与能力差异（range 中只读）；
-5. [phase24.md:160](../../docs/history/design/phase24.md#L160) 与发射器注释的「current index」
+5. [phase24.md:160](../../docs/phases/v0-PH-24/card.md#L160) 与发射器注释的「current index」
    改为「current member」（注释改动可随下次实现提交，不单独立项）。
 
 ## 处置
@@ -77,7 +77,7 @@ range 初值里的 `$` 与将来语境块里的 `$` 是同一个语义，只是�
 | 2 | 英文段同位补澄清 | **n/a（已无英文段）** | 文档语言政策（AGENTS §0.4）已删除 `## English`；`grep -rn '^## English' docs/language-spec.md` 无命中，不需补 |
 | 3 | 诊断文案保留并注明历史措辞 | **fixed** | 同 §4.47：`the range index '$' is not a variable` 保留，注明是 Phase 24 发布时的历史措辞、`$` 并非标识符、文案被精确断言故不改 |
 | 4 | glossary 增加 `$` 条目 | **fixed** | [glossary](../../docs/glossary.md#1-语言构造)：新增「`$`（当前成员 / 自身）」，列 range 初值 / `into` 两个绑定语境，注明 range 中只读 |
-| 5 | `phase24.md` 与发射器注释改「current member」 | **fixed（phase24）/ deferred（代码注释）** | [phase24.md:160](../../docs/history/design/phase24.md#L160) 改为「当前成员值」；`Emitter.h.ct:312` / `:3101` 的 `index` 注释属代码，按 issue 原文「可随下次实现提交，不单独立项」，本次不碰代码，已在本文登记为剩余项 |
+| 5 | `phase24.md` 与发射器注释改「current member」 | **fixed（phase24）/ deferred（代码注释）** | [phase24.md:160](../../docs/phases/v0-PH-24/card.md#L160) 改为「当前成员值」；`Emitter.h.ct:312` / `:3101` 的 `index` 注释属代码，按 issue 原文「可随下次实现提交，不单独立项」，本次不碰代码，已在本文登记为剩余项 |
 
 实测命令与原始输出（证明实现绑定成员值，不是 0 起下标）：
 
@@ -115,7 +115,7 @@ $ grep -n 'squares' examples/15_range_init/range_init.expected.out
 ```console
 $ grep -n '当前成员的占位' docs/language-spec.md
 2154:- **`$` 是当前成员的占位，不是下标**：...
-$ grep -n '当前成员值' docs/history/design/phase24.md
+$ grep -n '当前成员值' docs/phases/v0-PH-24/card.md
 160:4. **可多次出现**：... 同一个当前成员值 ...
 $ grep -n '`\$`（当前成员 / 自身）' docs/glossary.md
 69:| `$`（当前成员 / 自身） | ... | ... |
@@ -144,7 +144,7 @@ glossary 新增 `$` 条目（range / `into` 两个绑定语境、range 只读）
 `#447-数组-range-初值-ab-phase-24仅-ct-ast`。按 GitHub `github-slugger` 对标题
 「4.47 数组 range 初值 `a..b($)`（Phase 24，仅 ct-ast）」的计算，实际锚点是
 `#447-数组-range-初值-abphase-24仅-ct-ast`（`ab` 与 `phase` 之间没有连字符）。
-两处分别在 [phase24.md:160-161](../../docs/history/design/phase24.md#L160-L161) 与本文件处置项 1；
+两处分别在 [phase24.md:160-161](../../docs/phases/v0-PH-24/card.md#L160-L161) 与本文件处置项 1；
 `check-docs` 只校验相对路径存在，不校验 `#fragment`，故门禁未红。全仓同类 fragment
 链接共 89 条，不合规 10 条（本批新增 2 条，其余 8 条为既有），建议下一次文档提交统一修正，
 不影响本条内容结论。

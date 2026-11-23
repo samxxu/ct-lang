@@ -1,4 +1,4 @@
-# PH-84（v0.84.0）REV 复核
+# v0-PH-84（v0.84.0）REV 复核
 
 > 复核席位：REV（`rev-ph84`） · 2026-11-21
 > 对象：`d863fedb3580e3ac7dbebb6e77e9e9dce92288db`（HEAD，未 push、未 tag）
@@ -279,7 +279,7 @@ README / docs/README / AGENTS / phase-log / roadmap / session-map 均为 v0.84.0
 - **O3（主语表达式）**：`match (*p)` 与 `match (c ? a : b)` 报 `cannot determine the type of the match subject`；函数调用、字段、数组元素主语可用。spec 只承诺“ADT 值或 ADT * 指针”，但“主语求值一次”容易被读成任意表达式；建议在 §4.73 写清受支持的主语形态。
 - **O4（探针盲区）**：`p84_syntax`/`p84_layout` 未覆盖 `typedef` 别名作 match 主语与 `pub typedef` 跨单元；`p84_docs`/`p84_docs_audit` 是 grep 断言，抓不到 spec-impl 不一致。F1/F2 修好后应把这两类加入探针。
 - **O5（环境差异）**：本机 `check-all` 为 `1556 passed, 6 skipped`，卡 §7.4 为 `1557 passed, 5 skipped`；多出的 skip 是 Renode 相关（本机沙箱无法用其 user directory/JIT），不是产品失败。
-- **O6（收口叙述）**：`docs/design/phase84.md`、roadmap、session-map 仍写“E84-1…9 通过 / ✅”；本报告打回后，这些叙述应由 DEV/REQ 在修复提交中同步，不属 REV 的交付范围。
+- **O6（收口叙述）**：`docs/phases/v0-PH-84/card.md`、roadmap、session-map 仍写“E84-1…9 通过 / ✅”；本报告打回后，这些叙述应由 DEV/REQ 在修复提交中同步，不属 REV 的交付范围。
 
 ## 8. 未覆盖 / 说明
 
@@ -401,8 +401,8 @@ $ ./out/prog.bin
 ```console
 $ git log --format='%h %p %s' -4
 1cc20c25 53e0019f chore(ph84): v0.84.1——REV F1/F2 修复收口（LANG-21 fixed）
-53e0019f 4f5b2cd2 fix(ct-ast): PH-84 F1/F2 修复（typedef ADT 的 match 与跨单元命名）
-4f5b2cd2 bf88f4d9 test(ct-ast): PH-84 F1/F2 红（typedef ADT match / pub typedef 跨单元）
+53e0019f 4f5b2cd2 fix(ct-ast): v0-PH-84 F1/F2 修复（typedef ADT 的 match 与跨单元命名）
+4f5b2cd2 bf88f4d9 test(ct-ast): v0-PH-84 F1/F2 红（typedef ADT match / pub typedef 跨单元）
 $ git merge-base --is-ancestor bf88f4d9 HEAD; echo ancestor=$?
 ancestor=0
 
@@ -587,4 +587,4 @@ $ grep -n 'v0.84.1' README.md docs/README.md AGENTS.md docs/history/phase-log.md
   若后续要求任意 typedef 链可达，建议另立条目，在 `ct_adt_from_type()` 里递归解析
   `type_target`，而不是在本次修复中扩大范围。
 
-**`REV: 通过`**；PH-84 可按 v0.84.1 收口，F1/F2 不再阻断 E84-3/E84-5/E84-9。
+**`REV: 通过`**；v0-PH-84 可按 v0.84.1 收口，F1/F2 不再阻断 E84-3/E84-5/E84-9。

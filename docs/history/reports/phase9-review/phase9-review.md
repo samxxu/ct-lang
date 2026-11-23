@@ -123,7 +123,7 @@
 
 - 该 commit 位于 first-parent 链**第 73 位**（`HEAD=1`），**在 v0.5.0（`a76b800`）之前** → 落在 **Phase 4/5 边界**；
 - `git diff pre-ast-mainline 8010875 -- selfhost/src/` = **2471+/414−**（core.ct 1588、driver.ct 1287、ctc.ct 10），**跨越 Phase 5–8 的全部 `src/**` 演进**；
-- 但 [AGENTS.md §2](../../../../AGENTS.md#L70)、[phase9.md](../../design/phase9.md) D36、[roadmap:738](../../../roadmap.md) 均称其为「切到 AST 主线前最后一个 `src/**` 状态 / 9.7 归档点」。
+- 但 [AGENTS.md §2](../../../../AGENTS.md#L70)、[phase9.md](../../../phases/v0-PH-9/card.md) D36、[roadmap:738](../../../roadmap.md) 均称其为「切到 AST 主线前最后一个 `src/**` 状态 / 9.7 归档点」。
 
 **事实**：该 tag 并非 9.7 前的 `src/**` 状态；任何「按归档点回放 `src/**`」的操作会回放到 Phase 4/5。缓解因素：仓库内**无脚本**引用该 tag（仅文档），且 `src/**` 在 Phase 9 确实冻结，**D36 冻结语义未被违反**——问题纯粹在 tag 与文档口径不一致。
 

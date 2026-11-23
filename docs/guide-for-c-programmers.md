@@ -4,8 +4,8 @@
 >
 > **适用版本**：当前主线 **ct-ast**（版本号见 `ct -v`）。
 >
-> **核对基线：v0.84.1**（PH-78 `ref`/`out`、PH-79 切片、PH-80 String/Str、PH-81 `Box`/`new`、
-> PH-84 ADT/`match` 均已落地）。旧版本行为不同之处，以 [language-spec](language-spec.md) 为准。
+> **核对基线：v0.84.1**（v0-PH-78 `ref`/`out`、v0-PH-79 切片、v0-PH-80 String/Str、v0-PH-81 `Box`/`new`、
+> v0-PH-84 ADT/`match` 均已落地）。旧版本行为不同之处，以 [language-spec](language-spec.md) 为准。
 >
 > **读者假设**：熟悉 C 的 `malloc`/`free`、指针、数组衰减。不需要任何其他语言背景。
 >
@@ -43,7 +43,7 @@
 ├─ 逃生层（合法，不鼓励）──────────────────────────┤
 │  指针、own、malloc/free、defer/errdefer             │
 │  适用：FFI 内部、MMIO、自定义分配器、未句柄化的资源  │
-├─ 圈禁边界（PH-65 strict）────────────────────────┤
+├─ 圈禁边界（v0-PH-65 strict）────────────────────────┤
 │  禁的是：#include / #ct-raw / extern / 函数式宏     │
 │  不是禁指针——指针在任何 .ct 里都合法                │
 └──────────────────────────────────────────────────┘
@@ -94,7 +94,7 @@
   生成 `if (_self->f.h != 0) (void)<Inst>_release(&_self->f);`，元素按容器协议
   `__ct_elem_release` 级联（空句柄不 abort）；写显式 `impl Drop` 后仍由作者显式 `release()`。
 - 全局：没有作用域出口，必须显式 `release()`。
-- ADT payload：本轮不生成 Drop glue（PH-84 简化项，v1.1 可能变）。
+- ADT payload：本轮不生成 Drop glue（v0-PH-84 简化项，v1.1 可能变）。
 - 引用环：仍泄漏。
 
 常量表是安全的例外：immortal 字面量（通常先绑定为 `Str` 局部，再放进 `Vec<Str>`）

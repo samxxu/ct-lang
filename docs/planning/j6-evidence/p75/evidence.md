@@ -6,7 +6,7 @@
 baseline: a18e7323
 
 > 日期：2026-11-21；DEV（隔离原型 `/tmp/p75`，由 [run.sh](run.sh) 重建）
-> 原型补丁：[prototype.patch](prototype.patch)；[phase81 卡](../../../design/phase81.md) §1.2；
+> 原型补丁：[prototype.patch](prototype.patch)；[phase81 卡](../../../phases/v0-PH-81/card.md) §1.2；
 > [提案 v2](../../../proposals/pointer-free-v2.md) A.7；[D-011](../../../decisions/D-011.md)、
 > [D-013](../../../decisions/D-013.md)。
 > 主仓未改 `selfhost/**`、`lib/std/**`、`test/**`；本目录只落证据、补丁与复现脚本。
@@ -311,8 +311,8 @@ $ echo $?
    `box<String>` 回填以 `of` 满足。
 5. **payload-release 的数组覆盖有限**：单维 owning 数组会逐元素释放；多维数组留给显式 Drop
    （与现有 Drop glue 的规则一致）。
-6. **文档未落**：spec §4.71 / tutorial / package-guide 属 PH-81 S1c，不在 P-7.5 原型内。
-7. **ASan 泄漏检测关闭**：harness 用 `ASAN_OPTIONS=detect_leaks=0`（与 PH-80 一致），环泄漏用
+6. **文档未落**：spec §4.71 / tutorial / package-guide 属 v0-PH-81 S1c，不在 P-7.5 原型内。
+7. **ASan 泄漏检测关闭**：harness 用 `ASAN_OPTIONS=detect_leaks=0`（与 v0-PH-80 一致），环泄漏用
    `refs` 轨迹证明，不用 LeakSanitizer（Darwin 上也不稳定）。
 
 ## 7. E1–E5（提案 A.0）
@@ -335,7 +335,7 @@ $ echo $?
 ## 8. 判定
 
 P-7.5 **通过**：E81-1…5 的机制在隔离原型中可编译、可运行、ASan/UBSan 干净，负例与旧 golden 都稳定。
-PH-81 主仓实现按 S1a/S1b/S1c 进入施工；§6 的跨单元与自动 retain 限制不阻塞 E81。
+v0-PH-81 主仓实现按 S1a/S1b/S1c 进入施工；§6 的跨单元与自动 retain 限制不阻塞 E81。
 
 ## 附：证据可复现的源码位置
 

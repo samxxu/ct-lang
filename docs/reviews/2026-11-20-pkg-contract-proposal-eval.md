@@ -45,7 +45,7 @@
 | 4 | 多 registry / 多索引 | **单索引**，写清 `--index` > `CT_INDEX` > 默认路径 | 与实现一致；多源由调用方合并索引文件 |
 | 5 | 五字段旧索引行 | **按行立即硬错**，其余六字段行照常可用 | 需求方选择立即收敛；推翻契约 I12 |
 | 6 | CI 分发 | **每 MINOR 发 linux-x64 tar.gz + sha256，稳定 URL** | 满足 index CI 钉版本；先不做全矩阵 |
-| 7 | 排期与归属 | 契约/向量/矩阵立即做；`ct index verify` 与产物开 **PH-83**（PH-82 后、v1.0 前）；跨仓废弃由 index 仓确认 | 不打断 PH-80→82→v1.0 |
+| 7 | 排期与归属 | 契约/向量/矩阵立即做；`ct index verify` 与产物开 **v0-PH-83**（v0-PH-82 后、v1.0 前）；跨仓废弃由 index 仓确认 | 不打断 v0-PH-80→82→v1.0 |
 
 ## 4. 不受理 / 降级的部分
 
@@ -72,7 +72,7 @@
 | 评估与裁定记录 | REQ | 本文 + [D-014](../decisions/D-014.md)，本轮 |
 | 契约缺口跟踪 | REQ | [PKG-12](../../issues/packages/pkg-12-contract-v1-doc-gaps.md) |
 | 五字段按行硬错 + 发布前置 | REQ/DEV | [PKG-13](../../issues/packages/pkg-13-legacy-five-field-row-hard-error.md) |
-| `ct index verify` + Linux x64 产物（PH-83） | DEV | [PKG-14](../../issues/packages/pkg-14-ph83-index-verify-and-binary.md) |
+| `ct index verify` + Linux x64 产物（v0-PH-83） | DEV | [PKG-14](../../issues/packages/pkg-14-ph83-index-verify-and-binary.md) |
 | conformance 数据 + runner | REQ/DEV | [PKG-15](../../issues/packages/pkg-15-conformance-suite.md) |
 | 外部基线与跨仓时间表 | REQ | [PKG-16](../../issues/packages/pkg-16-external-baseline-and-schedule.md) |
 

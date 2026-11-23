@@ -1,9 +1,9 @@
-# PH-87 收口复核（REV，2026-11-21）
+# v0-PH-87 收口复核（REV，2026-11-21）
 
 > **结论：通过（PASS；E87-2 部分通过，经本复核追签 battle A 放行）。**
 > HEAD `11961895`（v0.87.0；`6058075d` CI-16 是其祖先）。E87-1、E87-3…8 通过；
 > E87-2 按下文 §3 裁定。非阻断项见 §11。未 push、未改实现。
-> 对象：[phase87 卡](../design/phase87.md)、[p87_dogfood](../design/p87_dogfood.md)、
+> 对象：[phase87 卡](../phases/v0-PH-87/card.md)、[p87_dogfood](../design/p87_dogfood.md)、
 > [p87_metrics](../design/p87_metrics.md)、
 > [battle/p87-kind-match](../../battle/p87-kind-match/verdict.md)、
 > [L2 证据](../../test/probes/p87_l2_adt_evidence.txt)。
@@ -128,8 +128,8 @@ L2 把 ADT 语法**原样透传**成非法 C（`enum` 带负载），而同一�
 
 ### 3.2 为什么不选 B/C
 
-- **B（先给 L1/L2 补 ADT/match 下降）**：要改冻结引导层与 L2 发射器，等于在 PH-87
-  里重做一遍 PH-84，跨 phase、动 L2 产物与 golden；不能在 PH-87 夹带。
+- **B（先给 L1/L2 补 ADT/match 下降）**：要改冻结引导层与 L2 发射器，等于在 v0-PH-87
+  里重做一遍 v0-PH-84，跨 phase、动 L2 产物与 golden；不能在 v0-PH-87 夹带。
 - **C（只在夹具里写 `match` 声称可替换）**：编译器源码没变，是假绿。
 
 A（切片 + 单判别 + 探针 + 语言级漏分支负例）是本卡可验证、可回滚、不动语义的最大交付；
@@ -140,15 +140,15 @@ battle 判决由 EDITOR 作、非作者席位签收，DEV 不能自签；本复�
 [battle 文末](../../battle/p87-kind-match/verdict.md) 追签，补上非作者签收。因此
 E87-2 的「部分通过」是经签的范围裁定，不是 DEV 单方改判；卡「完成」以本追签为前提。
 
-### 3.3 放行条件（REQ/EDITOR 在 PH-88 开卡前落实）
+### 3.3 放行条件（REQ/EDITOR 在 v0-PH-88 开卡前落实）
 
-1. **承接目标必须写死。** battle/卡/phase-log 说「移交 PH-88」，但 PH-88 卡 §1.1/§3
+1. **承接目标必须写死。** battle/卡/phase-log 说「移交 v0-PH-88」，但 v0-PH-88 卡 §1.1/§3
    E88-1 只写**发射器** tag 判别换 `match`，其 §1.2 的「轮数参数化」仍是
-   `L0→L1→L2→ct-ast` 链；照现卡执行，PH-88 仍由 L2 构建第一代 ct-ast，**编不了含
+   `L0→L1→L2→ct-ast` 链；照现卡执行，v0-PH-88 仍由 L2 构建第一代 ct-ast，**编不了含
    `match` 的源码**。字面项的真正解锁点是 v1.0 的 seed cutover（`v1-PH-0`：
    §1.2 的「保留 seed + 去 L1/L2」，见 [v1 路线](../planning/v1-release-plan.md)），
-   或在 PH-88 内显式新增「换 seed」任务。二者必须选一个并写进卡的退出判据，否则
-   E87-2 的欠账会在 PH-88 静默丢失。
+   或在 v0-PH-88 内显式新增「换 seed」任务。二者必须选一个并写进卡的退出判据，否则
+   E87-2 的欠账会在 v0-PH-88 静默丢失。
 2. **承接范围要含全部剩余 kind 判别。** 本卡只切了 `static_ctype`/`expr_type`；
    `expr_ctype`、`maybe_box` 仍在（卡 §7.6 已登记），另有 `chk_type`
    （`selfhost/ct-ast/frontend/parse/Expr.h.ct` 的
@@ -156,9 +156,9 @@ E87-2 的「部分通过」是经签的范围裁定，不是 DEV 单方改判；
    字面 `match` 应把它们一并纳入，否则「`node->kind` 判别换穷尽 match」仍不完整。
 
 **若必须在本卡字面完成**：唯一真做路径是 B（L1/L2 补 ADT/match 下降），或提前做
-v1.0 的 seed cutover；两者都应另立 phase/decision，不能借 PH-87 夹带。最小可行
+v1.0 的 seed cutover；两者都应另立 phase/decision，不能借 v0-PH-87 夹带。最小可行
 顺序是：先定 seed（v1.0 §1.2 的 A 或 B）→ 用 v0.87 源码构建第一代 ct-ast →
-用它编含 `match` 的源码 → 回归 66 语料/345 诊断/不动点。注意 PH-84 的 `match`
+用它编含 `match` 的源码 → 回归 66 语料/345 诊断/不动点。注意 v0-PH-84 的 `match`
 **没有 or 模式**（§4.73 非目标），所以 MEMBER/ARROW 等共用体不能写成单臂
 `A | B =>`；机械映射应是「一 kind 一臂，共用体调同一 helper」，battle 里
 「切片与变体 1:1」的说法要按此修正（13/14、15/20，不是 28/34）。
@@ -227,7 +227,7 @@ g8: OK (PN-2 version coherence; 9 legacy offsets)
 可执行片段由 `p87_docs` 编译运行（输出 `12/12/11`）。
 
 > 注：卡 §7.4 的 check-docs 原始输出写 `2374 / 385`，干净 HEAD 实为 `2369 / 384`；
-> 差额来自工作树里其他任务的未提交文件（与 PH-86 复核 N-3 同类）。门禁本身仍绿。
+> 差额来自工作树里其他任务的未提交文件（与 v0-PH-86 复核 N-3 同类）。门禁本身仍绿。
 
 ## 8 E87-8 — 回滚演练
 
@@ -268,10 +268,10 @@ workflow；`nightly.yml` 的 sanitizer/fuzz 不用 `git archive`，无需该字�
 | # | 项 | 影响 | 建议 |
 | --- | --- | --- | --- |
 | N-1 | `p87_parser`/`p87_checker` 只核对切片**集合**与 kind 集合，不核对 kind→body 的映射；互换两个切片体后两探针、`p85_m0`、`p86_errors` 全绿 | 本实现的分支体已证逐字搬运（§2），实际等价；但未来错接无门禁可拦 | 补一个按 kind 的行为夹具，或在探针里加「kind→helper 映射」断言 |
-| N-2 | battle/卡说「切片与变体 1:1」；实为 13 函数/14 kind、15/20（共用体） | 不影响行为；PH-88 若按 1:1 写 `match` 会多出 6 个未定义臂 | 改成「一 kind 一臂，共用体调同一 helper」；PH-84 无 or 模式 |
-| N-3 | 卡 §7.6 的「未拆」清单漏了 `chk_type` 的 `switch (kind)`；`expr_ctype`/`maybe_box` 仍在 | E87-2 的「全部 tag 判别换 match」不完整 | 并入 PH-88/v1.0 的字面 match 承接范围（§3.3 条件 2） |
+| N-2 | battle/卡说「切片与变体 1:1」；实为 13 函数/14 kind、15/20（共用体） | 不影响行为；v0-PH-88 若按 1:1 写 `match` 会多出 6 个未定义臂 | 改成「一 kind 一臂，共用体调同一 helper」；v0-PH-84 无 or 模式 |
+| N-3 | 卡 §7.6 的「未拆」清单漏了 `chk_type` 的 `switch (kind)`；`expr_ctype`/`maybe_box` 仍在 | E87-2 的「全部 tag 判别换 match」不完整 | 并入 v0-PH-88/v1.0 的字面 match 承接范围（§3.3 条件 2） |
 | N-4 | dogfood 10 条 FP 只登记、未立 issue（卡 §7.6 说「建议另立」） | R87-3 允许只记录；但 FP 会随复用扩散 | 按建议立 `SH-*`，归 A 机制误报收敛 |
-| N-5 | 卡 §7.4 check-docs `2374/385` 只在混入其他任务未提交文件时复现；干净 HEAD `2369/384` | 门禁仍绿；收口证据被工作树污染 | 用干净 HEAD 重录该行，或注明当时未提交文件（同 PH-86 N-3） |
+| N-5 | 卡 §7.4 check-docs `2374/385` 只在混入其他任务未提交文件时复现；干净 HEAD `2369/384` | 门禁仍绿；收口证据被工作树污染 | 用干净 HEAD 重录该行，或注明当时未提交文件（同 v0-PH-86 N-3） |
 | N-6 | S87a 红证正文引 `git archive 71afb32f`，该 sha 不在 HEAD 历史；与 `5ffd516f` 同 tree、同 patch-id；`baseline: 84fd5702` 是 test 提交的祖父（中间只隔 ci.yml 的 CI-16） | 红证实质可复现（用 `5ffd516f`）；字面 sha 在新克隆不可取 | 下次收口把红证引用改为 `5ffd516f`/`6058075d`，或注明 CI-16 仅 ci.yml |
 
 ## 12 未覆盖声明

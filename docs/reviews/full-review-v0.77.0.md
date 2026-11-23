@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 基线 | `5b13fef4`（v0.77.0 + PH-77 收口复核，2026-11-19） |
+| 基线 | `5b13fef4`（v0.77.0 + v0-PH-77 收口复核，2026-11-19） |
 | 范围 | 编译器（L0 / L1 / L2 / ct-ast）、`test/**`、`docs/**`、`examples/**`、`issues/**`、`tools/**` |
 | 方法 | 读码 + 全量门禁 + 文档/台账脚本核对 + 抽样探针；不修改源码、测试与既有文档 |
 | 结论 | **产品门禁 11/11 绿；未发现产品级 P0。主要风险集中在治理门禁、问题台账、phase-ID 迁移与文档漂移，尚不到 v1.0 发布门槛。** |
@@ -19,7 +19,7 @@
 - **测试面广**：`test/ast` 299 个目录、`test/ast/errors` 295 个负例、`test/modules` 102、`test/cases`
   25 个 L0 golden、`test/pkg` 147、VS Code 语法 169 项断言；另有 sanitizer 与确定性 fuzz 的 nightly。
 - **代码卫生好**：ct-ast 无 `TODO/FIXME/XXX`；固定容量越界走硬错；分配有 null 检查；
-  生成 C 在 `-Wall -Wextra` 下零告警；PH-64/65/66 的裸机、C 边界、libc I/O 契约都有门禁。
+  生成 C 在 `-Wall -Wextra` 下零告警；v0-PH-64/65/66 的裸机、C 边界、libc I/O 契约都有门禁。
 - **文档链接健康**：`check-docs` 1938 条相对链接、323 个文件全绿（含本报告）。
 
 **不能直接发布 1.0 的原因**
@@ -32,8 +32,8 @@
 3. **phase-ID 迁移未执行**：主规范已到 1.17.0，PN-1…PN-17 要求 `v<M>-PH-<n>` 与迁移账本；
    仓库仍用裸 `PH-*`，`docs/planning/phase-id-ledger.md` 不存在，迁移被 A/B/C 三个 blocker 明确挂起。
    这不阻塞 v0.77，但阻塞 `v1-PH-0` 的干净开卡。
-4. **文档漂移成簇**：类型检查规划仍写“未开卡”（PH-68–71 已收口）；`test/README` 写 119 个目录 /
-   141 个负例（实际 299 / 295）；教程写 16 个示例（实际 52）；AGENTS 实例化节仍写 `phase=PH-66`。
+4. **文档漂移成簇**：类型检查规划仍写“未开卡”（v0-PH-68–71 已收口）；`test/README` 写 119 个目录 /
+   141 个负例（实际 299 / 295）；教程写 16 个示例（实际 52）；AGENTS 实例化节仍写 `phase=v0-PH-66`。
 5. **硬门禁依赖网络且可无限挂起**：首次 `check-all` 卡在 `p77_external`（`ct get` → `system("git clone")`
    无超时），>15 分钟未返回，人工 kill 后 gate 8 报 exit 143；离线重跑才 11/11 绿。
 
@@ -69,7 +69,7 @@
 
 治理门禁：`g0` OK（1.17.0）；`g8` OK（9 条 legacy offset warning，全部在账本内）。
 
-**关键异常（P1）**：首次 `check-all` 在 `PH-77-S4 install` 之后的下一个探针 `p77_external` 卡死。
+**关键异常（P1）**：首次 `check-all` 在 `v0-PH-77-S4 install` 之后的下一个探针 `p77_external` 卡死。
 该探针的 `curl` 有 `--max-time 10`，但随后的 `ct get` 走 `Pkg.h.ct` 的
 `system("git clone --quiet …")`（[Pkg.h.ct:944](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L944)），没有超时；
 网络黑洞/凭据提示都会让硬门禁无限等待。离线重跑时 `p77_external` 以 77 skip，11/11 才绿。
@@ -115,18 +115,18 @@
 
 | # | 位置 | 现状 | 实际 | 级别 |
 | --- | --- | --- | --- | --- |
-| D-1 | [docs/planning/typecheck-semantic-plan.md:1](../planning/typecheck-semantic-plan.md#L1) | “规划中 / 未开卡”，基线 v0.65.1，版本位 v0-PH-68…71 | PH-68–71 均已收口（v0.67.0–v0.70.0） | **P1** |
+| D-1 | [docs/planning/typecheck-semantic-plan.md:1](../planning/typecheck-semantic-plan.md#L1) | “规划中 / 未开卡”，基线 v0.65.1，版本位 v0-PH-68…71 | v0-PH-68–71 均已收口（v0.67.0–v0.70.0） | **P1** |
 | D-2 | [docs/README.md:41](../README.md#L41) | 类型检查规划（**未开卡**） | 同上 | **P1** |
 | D-3 | [test/README.md:6](../../test/README.md#L6)、[:18](../../test/README.md#L18) | `ast/errors` 141 个；`ast/` 119 个目录 | 295 个负例；299 个目录 | **P1** |
 | D-4 | [docs/tutorial.md:1903](../tutorial.md#L1903) | “16 个可运行示例” | 52 个示例目录 | **P2** |
-| D-5 | [AGENTS.md:452](../../AGENTS.md#L452) | `phase=PH-66` | 当前 PH-77 | **P1** |
-| D-6 | [docs/session-map.md:21](../session-map.md#L21) | 表格中间插入 blockquote，后续 PH-66…77 行被截断 | 表格渲染断裂；且首行 phase 仍是旧值 | **P2** |
-| D-7 | [docs/roadmap.md:89](../roadmap.md#L89) | Phase 76 收口 v0.76.1 | PH-76 收口 v0.76.0；v0.76.1 是 SH-92 fix | **P3** |
+| D-5 | [AGENTS.md:452](../../AGENTS.md#L452) | `phase=v0-PH-66` | 当前 v0-PH-77 | **P1** |
+| D-6 | [docs/session-map.md:21](../session-map.md#L21) | 表格中间插入 blockquote，后续 v0-PH-66…77 行被截断 | 表格渲染断裂；且首行 phase 仍是旧值 | **P2** |
+| D-7 | [docs/roadmap.md:89](../roadmap.md#L89) | Phase 76 收口 v0.76.1 | v0-PH-76 收口 v0.76.0；v0.76.1 是 SH-92 fix | **P3** |
 | D-8 | [README.md:25](../../README.md#L25)、[:32](../../README.md#L32)、[:55](../../README.md#L55) | 以 0.44.1 为完整路径的阻塞基线 | 当前 v0.77.0；结论可能仍成立，但应写“最近实测”并注明历史 | **P2** |
-| D-9 | `README.md` 常用命令表 | 缺 `--emit-model`（PH-74）与 `ct check --types`（PH-68–71） | 已发布能力未进用户入口 | **P2** |
+| D-9 | `README.md` 常用命令表 | 缺 `--emit-model`（v0-PH-74）与 `ct check --types`（v0-PH-68–71） | 已发布能力未进用户入口 | **P2** |
 | D-10 | [docs/architecture.md:5](../architecture.md#L5) | “面向要修改 ctc.c 的人”；全篇 L0 | 主线是 ct-ast；ct-ast 无对应架构文档 | **P2** |
 | D-11 | [selfhost/README.md:33](../../selfhost/README.md#L33) | grammar “40 项断言” | 实际 169 项 | **P3** |
-| D-12 | [docs/proposals/ct-bare-metal-proposal.md:6](../proposals/ct-bare-metal-proposal.md#L6) | “草案；未立项” | PH-64 已按该提案收口（v0.63.0）；docs/README 仍写“待评估” | **P2** |
+| D-12 | [docs/proposals/ct-bare-metal-proposal.md:6](../proposals/ct-bare-metal-proposal.md#L6) | “草案；未立项” | v0-PH-64 已按该提案收口（v0.63.0）；docs/README 仍写“待评估” | **P2** |
 | D-13 | [docs/language-spec.md:2423](../language-spec.md#464-自定义类型下标phase-52仅-ct-ast) | 自定义 `[]` 的 `v[0]` 参数类型匹配“尚未实现” | `test/ast/p72_subscript.sh` 已钉住该错误；至少一处需更新 | **P2**（待复核） |
 
 **共性原因**：文档里的计数、phase 状态、提案状态是手工维护的；没有脚本从
@@ -142,14 +142,14 @@
 - 221 个 issue 文件；`open` 24、`受理` 5、`保持` 1、`blocked` 1、`?` 1，其余为
   `已修` / `已修复` / `✅ 已修复` / `verified` / `fixed` 等 20 余种写法。
 - 至少 **13 个已被 phase 修复但 issue 仍 open**：
-  - LANG-3 / LANG-4 / LANG-11 / LANG-16 / LANG-17 / SH-76（PH-72，v0.71.0）
-  - LANG-9（PH-73，v0.72.0）
-  - SH-65 / SH-67（PH-75，v0.74.0）
+  - LANG-3 / LANG-4 / LANG-11 / LANG-16 / LANG-17 / SH-76（v0-PH-72，v0.71.0）
+  - LANG-9（v0-PH-73，v0.72.0）
+  - SH-65 / SH-67（v0-PH-75，v0.74.0）
   - PKG-9 / PKG-10 / PKG-11（v0.58.2 / v0.63.3 / v0.63.4）
-  - TEST-21（PH-67 已在 CI 绿，issue 仍是 `open`）
-- 反例：`issues/lang/lang-4…md:8` 写 `open`，而 `docs/design/phase72.md:61` 写 `✅`；
-  `issues/lang/lang-9…md:8` 写 `open`，`docs/design/phase73.md:57-59` 写 `✅`；
-  `docs/design/phase75.md:56` 写 SH-65“⬜ 未做”，同文件 `:66` 又写“✅”。
+  - TEST-21（v0-PH-67 已在 CI 绿，issue 仍是 `open`）
+- 反例：`issues/lang/lang-4…md:8` 写 `open`，而 `docs/phases/v0-PH-72/card.md:61` 写 `✅`；
+  `issues/lang/lang-9…md:8` 写 `open`，`docs/phases/v0-PH-73/card.md:57-59` 写 `✅`；
+  `docs/phases/v0-PH-75/card.md:56` 写 SH-65“⬜ 未做”，同文件 `:66` 又写“✅”。
 - 按 AGENTS §5.4，状态词只允许 8 个；当前至少 **168 条**不在闭集内。G6 若实现，这一片会红。
 
 ### 5.2 治理门禁缺位
@@ -158,7 +158,7 @@
 没有同名子命令。项目用 `selfhost/check-all.sh`（11 道产品硬门禁）+ `check-docs.py` 替代，
 但这不等于 G1/G2/G5/G6/G7 的判据：
 
-- **G1**（phase 卡完整性 / 草案 / 编号）：没有机械校验；PH-75 卡自相矛盾就是漏网。
+- **G1**（phase 卡完整性 / 草案 / 编号）：没有机械校验；v0-PH-75 卡自相矛盾就是漏网。
 - **G2**（ACC 映射）：没有。
 - **G4**（snippet / 300 行 / `applies-to`）：`docs/snippets/` 不存在；`language-spec` 2824 行、
   `tutorial` 1931 行，按 300 行规则本应失败或分拆；`check-docs` 只做了链接/版本部分。
@@ -227,7 +227,7 @@
 ## 7. 样例覆盖
 
 - 52 个示例目录，编号到 `49_socket`；`examples/README.md` 是完整索引。
-- **没有 PH-64 之后的示例**：`--freestanding` / `--alloc`、`--c-boundary` / shim、`--emit-model`、
+- **没有 v0-PH-64 之后的示例**：`--freestanding` / `--alloc`、`--c-boundary` / shim、`--emit-model`、
   `ct check --types`、`ct get ct/std` 都只有测试/文档，没有可运行 example。
 - `49_socket` 是**文档型样例**（只有 README，不进门禁），其依赖的 `FileDesc`/`Socket` 在仓内不存在；
   这是有说明的缺口，但用户点进去会发现不能跑。
@@ -265,7 +265,7 @@
 2. **补治理门禁或登记 deviation**：至少实现 `g6`（台账闭合）与 `g5`（判据↔用例）的最小子集；
    `g4` 要么补 `docs/snippets/` + 300 行门禁，要么在 AGENTS 登记明确放宽。
 3. **做一次台账闭合批**：把 LANG-3/4/9/11/16/17、SH-65/67/76、PKG-9/10/11、TEST-21 等
-   已修条目改成 `fixed`/`verified`，统一状态词；修 PH-75 卡的“未做 vs ✅”矛盾。
+   已修条目改成 `fixed`/`verified`，统一状态词；修 v0-PH-75 卡的“未做 vs ✅”矛盾。
 4. **解决 phase-ID blocker A/B/C**，在开 `v1-PH-0` 前建立账本与迁移脚本；迁移前不要再新增裸 `PH-*` 引用。
 5. **文档刷新批**：D-1…D-6（类型检查计划、test/README、tutorial、AGENTS 0.1、session-map、
    docs/README 索引）；把可计数项改为脚本断言。
@@ -278,7 +278,7 @@
 8. **补 4 个 near-phase example**（freestanding / c-boundary / type-check / emit-model）。
 9. **补覆盖率报告**（nightly，仅报告）与 3–5 个容量上限夹具；评估 ct-ast 纯函数层单测。
 10. **收紧 C 边界 cwd 后门**或写清规则；补一条 `--show-c-boundary` 的“仓根 + 外部路径”负例。
-11. **文档/提案生命周期**：把 `ct-bare-metal-proposal` 标为已采纳（PH-64）；`docs/README`
+11. **文档/提案生命周期**：把 `ct-bare-metal-proposal` 标为已采纳（v0-PH-64）；`docs/README`
     的提案索引与 `roadmap` 的 Phase 76 版本位一起修正。
 
 ---

@@ -75,7 +75,7 @@ ctc: 'hello' is ambiguous; write acme/hello or zed/hello
 - 维护方式：`packages.txt` 是 allowlist，夜间 workflow `index.yml` 重建并提交；`release-package.sh` 在发布 tag 后刷新索引（外部 `README.md:27`、`:81-83`、`:121`、`:182-187`）。
 - 外部 README 明确承认版本表达限制：`index always names each remote's highest v* tag`，`std` 需要同时服务旧编译器，`the index cannot express`（外部 `README.md:52-56`、`:73-77`）。
 
-这与仓内 Phase 18 的 D18-7 一致：`ct-pkg/index` 仓库、五字段纯文本、包 release 时 CI 追加/更新一行（[phase18.md:177](../history/design/phase18.md#L177)）。**但消费端在 PH-54 S1 已经升级为六字段**（[phase54.md:93-102](../history/design/phase54.md#L93-L102)），生产端仍停在五字段，契约出现分叉。
+这与仓内 Phase 18 的 D18-7 一致：`ct-pkg/index` 仓库、五字段纯文本、包 release 时 CI 追加/更新一行（[phase18.md:177](../phases/v0-PH-18/card.md#L177)）。**但消费端在 v0-PH-54 S1 已经升级为六字段**（[phase54.md:93-102](../phases/v0-PH-54/card.md#L93-L102)），生产端仍停在五字段，契约出现分叉。
 
 ### 1.4 官方包清单的现状
 
@@ -102,7 +102,7 @@ ctc: '<cache>/ct.pkg' is missing 'publisher'
 
 （[Pkg.h.ct:1924-1938](../../selfhost/ct-ast/tool/pkg/Pkg.h.ct#L1924-L1938)）
 
-根因可以追到 PH-54 的 S4：**“S4（包仓对齐）已移出本 phase：`publisher` / `ns-root` / tag / 各仓测试改写归对应包仓，本卡不再跟踪，也不再作为收口判据”**（[phase54.md:129](../history/design/phase54.md#L129)）。消费者升级了，包仓对齐没有落在本仓任何 phase 的验收里。
+根因可以追到 v0-PH-54 的 S4：**“S4（包仓对齐）已移出本 phase：`publisher` / `ns-root` / tag / 各仓测试改写归对应包仓，本卡不再跟踪，也不再作为收口判据”**（[phase54.md:129](../phases/v0-PH-54/card.md#L129)）。消费者升级了，包仓对齐没有落在本仓任何 phase 的验收里。
 
 ## 2. 解析链路
 
@@ -204,7 +204,7 @@ ctc: '<home>/.cache/ct-pkg/std/ct.pkg' is missing 'publisher'
 
 ### 3.3 `vendor/` 删除
 
-PH-63 / S7（v0.62.0）删除了 `vendor/` 的读写：`get` 不创建 `vendor/`，build/install/verify/update 不再读 vendor，v1 lock 只报错，`ct migrate` 作为一次性桥保留（[phase63.md:24-38](../history/design/phase63.md#L24-L38)）。因此：
+v0-PH-63 / S7（v0.62.0）删除了 `vendor/` 的读写：`get` 不创建 `vendor/`，build/install/verify/update 不再读 vendor，v1 lock 只报错，`ct migrate` 作为一次性桥保留（[phase63.md:24-38](../phases/v0-PH-63/card.md#L24-L38)）。因此：
 
 - 新工程：只可能走 store + v2 lock。
 - 旧工程：必须先 `ct migrate`；而 migrate 要把 vendor 树写进 store，同样要求清单有 `publisher`/`ns-root`，老官方包无法直接迁移。
@@ -510,7 +510,7 @@ FSG-02 的根因在当前代码仍在：`ct install` 的 import 校验只试 `%s
 | --- | --- | --- | --- |
 | G1 | 没有默认索引，也不自动下载 | 开箱即用时限定名必失败 | 工具侧（可选） |
 | G2 | 生产端五字段，消费端六字段 | 官方索引无法解析限定名 | 索引生产 + 工具契约 |
-| G3 | 索引指向的官方版本（std 0.2.0 等）缺 `publisher`/`ns-root`；std 0.3.2 已补但未入索引 | 即使索引正确，0.2.0 仍被 store 拒绝；0.3.2 只能走 URL/本地 | 包仓 + 索引生产（PH-54 S4 移出后无人跟踪） |
+| G3 | 索引指向的官方版本（std 0.2.0 等）缺 `publisher`/`ns-root`；std 0.3.2 已补但未入索引 | 即使索引正确，0.2.0 仍被 store 拒绝；0.3.2 只能走 URL/本地 | 包仓 + 索引生产（v0-PH-54 S4 移出后无人跟踪） |
 | G4 | 限定名在索引缺失时落 URL clone | 诊断误导，可能 clone 到错误来源 | 工具侧 |
 | G5 | 非法 sha 行导致 rc=1 但无任何 stderr | 不可诊断 | 工具侧 |
 | G6 | 索引 publisher 与清单 publisher 不一致不报错 | 请求 `zed/hello` 可静默得到 `acme/hello` | 工具侧（安全/正确性） |
@@ -589,24 +589,24 @@ FSG-02 的根因在当前代码仍在：`ct install` 的 import 校验只试 `%s
 
 | 编号 | 状态 | 与索引的关系 | 证据 |
 | --- | --- | --- | --- |
-| Phase 17.5 | 已交付 | 显式索引、`CT_INDEX`/`--index`、五字段 | [phase18.md:51](../history/design/phase18.md#L51) |
-| Phase 18.2 / D18-7 | 已交付（历史） | `ct-pkg/index`、五字段、gen/refresh、nightly | [phase18.md:94](../history/design/phase18.md#L94)、`:135`、`:177` |
+| Phase 17.5 | 已交付 | 显式索引、`CT_INDEX`/`--index`、五字段 | [phase18.md:51](../phases/v0-PH-18/card.md#L51) |
+| Phase 18.2 / D18-7 | 已交付（历史） | `ct-pkg/index`、五字段、gen/refresh、nightly | [phase18.md:94](../phases/v0-PH-18/card.md#L94)、`:135`、`:177` |
 | Phase 20 P20-05 | 已交付后续 | 索引生成器移出本仓；消费端范围查询后补 | [phase-log.md:31](../history/phase-log.md#L31) |
-| PH-54 S1（v0.55.0） | 已交付 | 六字段、`publisher`/`ns-root`、限定名、歧义硬错、多版本 store | [phase54.md:93-102](../history/design/phase54.md#L93-L102) |
-| PH-54 S2/S3/S5/S6 | 已交付 | build 读 lock、verify/migrate/update、双 HOME 复现 | [phase54.md:106-137](../history/design/phase54.md#L106-L137) |
-| PH-63 S7（v0.62.0） | 已交付 | 删 `vendor/`；缺身份字段在 store 提交处硬错 | [phase63.md:24-38](../history/design/phase63.md#L24-L38) |
+| v0-PH-54 S1（v0.55.0） | 已交付 | 六字段、`publisher`/`ns-root`、限定名、歧义硬错、多版本 store | [phase54.md:93-102](../phases/v0-PH-54/card.md#L93-L102) |
+| v0-PH-54 S2/S3/S5/S6 | 已交付 | build 读 lock、verify/migrate/update、双 HOME 复现 | [phase54.md:106-137](../phases/v0-PH-54/card.md#L106-L137) |
+| v0-PH-63 S7（v0.62.0） | 已交付 | 删 `vendor/`；缺身份字段在 store 提交处硬错 | [phase63.md:24-38](../phases/v0-PH-63/card.md#L24-L38) |
 | SH-81（v0.61.1） | 已修 | 无索引时限定名不再被当成 URL，给出解析指引 | [issues/README.md:343](../../issues/README.md#L343)、[phase-log.md:183](../history/phase-log.md#L183) |
 | SH-83（v0.61.1） | 已修 | `ct install` v2 不再打印 `-I` | [issues/README.md:345](../../issues/README.md#L345) |
 | PKG-2/4/5/7/8 | 已修 | 包根/同名/缓存键/lock 读取/override 留痕 | [issues/README.md:353-359](../../issues/README.md#L353-L359) |
 | PKG-3 | 已修（issue 内） | 未知键告警，v0.58.3 | issue 状态行 `:10`；[phase-log.md:180](../history/phase-log.md#L180) |
 | PKG-6 | 已修（issue 内） | install 试解析 import，v0.58.2 | issue 状态行 `:10`；[phase-log.md:179](../history/phase-log.md#L179) |
-| PKG-9 | 实际已修 | S7 后缺身份字段直接失败，不再静默退 v1 | [phase63.md:36](../history/design/phase63.md#L36) |
+| PKG-9 | 实际已修 | S7 后缺身份字段直接失败，不再静默退 v1 | [phase63.md:36](../phases/v0-PH-63/card.md#L36) |
 
 ### 6.2 仍 open / 待决策
 
 | 编号 | 状态 | 说明 |
 | --- | --- | --- |
-| PKG-9 issue | 文本仍写 **open** | 代码已由 PH-63 S7 修掉；issue 与 `post-58` 未回填（[pkg-9…md:9](../../issues/packages/pkg-9-missing-identity-fields-silent-v1-lock.md#L9)、[post-58-phase-sequence.md:35](../planning/post-58-phase-sequence.md#L35)） |
+| PKG-9 issue | 文本仍写 **open** | 代码已由 v0-PH-63 S7 修掉；issue 与 `post-58` 未回填（[pkg-9…md:9](../../issues/packages/pkg-9-missing-identity-fields-silent-v1-lock.md#L9)、[post-58-phase-sequence.md:35](../planning/post-58-phase-sequence.md#L35)） |
 | 索引提案 | **待评估**，无 phase | [ct-pkg-index-proposal.md](../proposals/ct-pkg-index-proposal.md) 未接受；没有对应 phase 或 decision |
 | 包维护者规则提案 | **待评估** | 依赖 `ct pkg digest`，该命令未实现（[ct-pkg-package-maintainer-rules.md:61-66](../proposals/ct-pkg-package-maintainer-rules.md#L61-L66)） |
 | `packages.yml` host/target | **暂停** `if: false` | TODO 说 `ct-pkg/index` 为空、std/hal-posix 无 v0.1.0 tag（[packages.yml:44-51](../../.github/workflows/packages.yml#L44-L51)、`:92-95`）；该前提已过期，但 job 仍暂停 |
@@ -636,7 +636,7 @@ FSG-02 的根因在当前代码仍在：`ct install` 的 import 校验只试 `%s
 | [package-guide.md:81](../package-guide.md#L81) | `requires` 只写编译器约束 | 实现正确；但示例容易让人误写成 `requires = std ...` | 加一条反例指向 `dep` |
 | [tutorial.md:1746](../tutorial.md#L1746) | `ct update` “v1 沿用旧 vendor 路径重解” | S7 后 v1 直接报错 | 改为 `ct migrate` |
 | [tutorial.md:1747](../tutorial.md#L1747) | `ct install` 拼 store 的 `-I` | v2 不打印 `-I` | 同上 |
-| [post-58-phase-sequence.md:34-37](../planning/post-58-phase-sequence.md#L34-L37) | PKG-6/PKG-9 open、vendor 仍支持 | 均已被 v0.58.2 / PH-63 改掉 | 该文是 2026-11-15 快照，建议标注“已被后续 phase 取代” |
+| [post-58-phase-sequence.md:34-37](../planning/post-58-phase-sequence.md#L34-L37) | PKG-6/PKG-9 open、vendor 仍支持 | 均已被 v0.58.2 / v0-PH-63 改掉 | 该文是 2026-11-15 快照，建议标注“已被后续 phase 取代” |
 | [packages.yml:44-51](../../.github/workflows/packages.yml#L44-L51) | “index 为空、std 无 v0.1.0 tag” | 索引已有 12 行但停在 std 0.2.0；上游 std 已 0.3.2 且已补身份 | 更新 TODO：阻塞是索引刷新，不只是 tag |
 | [ct-pkg-index-proposal.md:14](../proposals/ct-pkg-index-proposal.md#L14) | “`index 仓` 尚不存在，无对应实现” | 外部仓存在且已维护五字段索引 | 改为“旧五字段索引存在，但不满足本提案六字段契约” |
 | [ct-pkg-index-proposal.md:45](../proposals/ct-pkg-index-proposal.md#L45) | “一行对应一个版本”；消费者取最低满足版本 | 外部生成器每个包只保留最高 tag 一行 | 生产端多版本是前置，不是已实现 |
@@ -652,7 +652,7 @@ FSG-02 的根因在当前代码仍在：`ct install` 的 import 校验只试 `%s
 | 现行设计文档 | `docs/design/phase46-52-plan.md` | 1 | 同上 |
 | 规范草稿 | `docs/spec/ai-coding-workflow.md` | 1 | `:1334` 的 ct-lang 路径；`:7` 的 `/Users/samxx/trae-ws` 适用范围也过期 |
 | 复核记录 | `docs/review/builtin-layer-vs-std-package-name-check.md` | 1 | 可改为相对引用 |
-| 历史设计 | `docs/history/design/phase45.md` | 1 | 历史记录，建议保留原文并加“路径已迁移”注 |
+| 历史设计 | `docs/phases/v0-PH-45/card.md` | 1 | 历史记录，建议保留原文并加“路径已迁移”注 |
 | 历史报告 | `docs/history/reports/phase31-s20b-review/…` | 9 | 历史证据，保留原文 |
 | 历史报告 | `docs/history/reports/phase36-delta-review/…` | 2 | 同上 |
 | 历史报告 | `docs/history/reports/phase36-delta-rereview/…` | 5 | 同上 |

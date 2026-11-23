@@ -53,7 +53,7 @@ test/modules (46+ .ct 文件):
 **方案 A（发射器侧）**：对 `_self`、vtable、Drop 函数的发射点逐一判断是否会被引用，不引用则不发射。这要在发射器层面引入「可达性分析」，改动面大。
 
 **方案 B（局部抑制，改动最小）**：
-- `_self`：方法体改写后扫一遍，若无 `self` / `_self` 引用则追加 `(void)_self;`（与 `docs/design/phase6.md:106` 记录的既有做法一致——那里是手写在 CT 源里，这里可由发射器代劳）。
+- `_self`：方法体改写后扫一遍，若无 `self` / `_self` 引用则追加 `(void)_self;`（与 `docs/phases/v0-PH-6/card.md:106` 记录的既有做法一致——那里是手写在 CT 源里，这里可由发射器代劳）。
 - vtable / Drop 函数：在发射后追加 `(void)<obj>;` 抑制告警；或改用 attribute `__attribute__((unused))`。
 
 注意：这会改动生成物，属于**行为变更**，需要用户确认并按规约重新生成受影响的 golden（check-goldens 的语料等价只比运行结果，不动运行输出）。

@@ -1,18 +1,18 @@
 # 提案：自定义类型下标协议（REQ-L1）
 
-> **已归档（2026-11-15 重排）**：REQ-L1 已由 PH-52 方案 A 交付（v0.52.0）；本文保留作设计依据，
-> 不再作为待办。未覆盖的 `v[0]` / 参数类型匹配 / 写形态并入 PH-62（见
+> **已归档（2026-11-15 重排）**：REQ-L1 已由 v0-PH-52 方案 A 交付（v0.52.0）；本文保留作设计依据，
+> 不再作为待办。未覆盖的 `v[0]` / 参数类型匹配 / 写形态并入 v0-PH-62（见
 > [post-58-plan.md](../planning/post-58-plan.md) §6）。
 
-> **状态：提案 / 未立项 / 未过分析，不作数**（2026-11-13；原 `phase40-draft.md` 因 PH-40 已由
+> **状态：提案 / 未立项 / 未过分析，不作数**（2026-11-13；原 `phase40-draft.md` 因 v0-PH-40 已由
 > errdefer 占用，移入 `docs/proposals/`；等待 AN、排期与立项）。
 > **基线**：若立项，以立项时的 `HEAD` 为基线；S0 记录 `baseline: <sha>` 并复跑 §2.2。
 > **文档形态**：`docs/proposals/custom-index-protocol.md`；转正时由 EDITOR 新建 phase 卡。
-> **前置**：[phase31.md](../history/design/phase31.md)（`v[i]` / `m[k]` 的既有降级路径与 L31-3/L31-4 写保护）、
-> [phase34-draft.md](../history/design/phase34.md)（非泛型固有 `impl Name`）。
+> **前置**：[phase31.md](../phases/v0-PH-31/card.md)（`v[i]` / `m[k]` 的既有降级路径与 L31-3/L31-4 写保护）、
+> [phase34-draft.md](../phases/v0-PH-34/card.md)（非泛型固有 `impl Name`）。
 > **关联**：[requirements-pool.md](../planning/requirements-pool.md) 的 `REQ-L1`、
 > [modern-oo-gap.md](../modern-oo-gap.md) §6.2（`C1 下标糖`）。
-> **编号**：不认领 phase 编号；PH-40 已由 errdefer 占用，本提案通过 AN 后按 roadmap 空位排期。
+> **编号**：不认领 phase 编号；v0-PH-40 已由 errdefer 占用，本提案通过 AN 后按 roadmap 空位排期。
 > **规模**：编译器 120–220；夹具/断言 90–170；文档 40–80；合计 **250–470**（±40%）。
 > **纪律**：不 bump、不打 tag、不 push；只更新本提案。
 

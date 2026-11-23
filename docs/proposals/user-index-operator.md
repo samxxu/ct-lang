@@ -1,14 +1,14 @@
 # 提案：用户类型下标运算符（REQ-INDEX-1）
 
-> **并入 PH-62（2026-11-15 重排）**：本文自述「未立项、未过分析，不作数」；其协议设计转入
-> PH-62 的设计附件，与 REQ-JSACCESS-1 / REQ-INDEX-1 同一套匹配机制。不要单独立项。
+> **并入 v0-PH-62（2026-11-15 重排）**：本文自述「未立项、未过分析，不作数」；其协议设计转入
+> v0-PH-62 的设计附件，与 REQ-JSACCESS-1 / REQ-INDEX-1 同一套匹配机制。不要单独立项。
 > 见 [post-58-plan.md](../planning/post-58-plan.md) §6。
 
 > **状态：提案 / 未立项 / 未过分析，不作数**（2026-11-15）。
 > **基线**：本仓 `v0.53.1` 之前的工作树（`v0.53.0` 之后，含两处 P0 修复）；立项时 S0 记录 `baseline: <sha>` 并复跑 §1。
-> **关联**：[requirements-pool.md](../planning/requirements-pool.md) 的 `REQ-INDEX-1`（本条登记）、`REQ-L1`（PH-52 已交付方案 A）、
+> **关联**：[requirements-pool.md](../planning/requirements-pool.md) 的 `REQ-INDEX-1`（本条登记）、`REQ-L1`（v0-PH-52 已交付方案 A）、
 > `REQ-JSACCESS-1`（参数类型匹配，本提案的第一步）。
-> **前作**：[custom-index-protocol.md](custom-index-protocol.md)（REQ-L1 的设计草案）、[history/design/phase52.md](../history/design/phase52.md)（方案 A 施工卡与 D52-2 / D52-5 / D52-6）。
+> **前作**：[custom-index-protocol.md](custom-index-protocol.md)（REQ-L1 的设计草案）、[phases/v0-PH-52/card.md](../phases/v0-PH-52/card.md)（方案 A 施工卡与 D52-2 / D52-5 / D52-6）。
 > **规模估算**：编译器 150–300 行；夹具/断言 80–160 行；文档 30–60 行。
 > **纪律**：不 bump、不打 tag、不 push；本文件只登记与设计，不动实现。
 
@@ -16,7 +16,7 @@
 
 ## 0 一句话
 
-把 PH-52 的「方法名 + 参数个数」静态糖，补成一套**完整的用户类型下标协议**：参数类型参与匹配、借用视图有明确形态、
+把 v0-PH-52 的「方法名 + 参数个数」静态糖，补成一套**完整的用户类型下标协议**：参数类型参与匹配、借用视图有明确形态、
 缺失/越界语义落到包层、复合赋值与取址给出二值化的支持或拒绝——仍然只做编译期静态展开，不引入运行期派发。
 
 ---
@@ -125,7 +125,7 @@ ct-json 需要 `doc[0]` 与 `doc["k"]` 并存。方案 A 下同类型只能有�
 | 交互面 | 裁定 |
 | --- | --- |
 | `into` 块 | `x into { … }` 内的 `$` 是接收者别名；**`$[k]` 不在本条范围**（`$` 的静态类型判定与 `into` 的物化语义耦合，另案）。块外的 `x[k]` 不受影响。 |
-| 泛型 | 沿用 PH-52 的实例还原：`Box<int>` 的下标按 `Box_int_get` 展开，诊断里的类型名用 `ct_inst_find` 还原成 `Box<int>`（[Expr.h.ct:6245-6263](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L6245-L6263)）。参数类型匹配在**实例化后的签名**上做。 |
+| 泛型 | 沿用 v0-PH-52 的实例还原：`Box<int>` 的下标按 `Box_int_get` 展开，诊断里的类型名用 `ct_inst_find` 还原成 `Box<int>`（[Expr.h.ct:6245-6263](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L6245-L6263)）。参数类型匹配在**实例化后的签名**上做。 |
 | `impl` 签名 | 只有固有 `impl X { … }` 参与；`impl Trait for X` 里的同名方法不参与（今天已如此，`inst_inherent_method` 保证）。固有 impl 与 trait impl 同名时，`x[k]` 永远选固有那个。 |
 | 跨单元 | `get` / `set` 私有（无 `pub`）→ 消费单元不可见 → 沿用 L52-10 的硬错文案，不放宽。 |
 
@@ -181,7 +181,7 @@ ct-json 需要 `doc[0]` 与 `doc["k"]` 并存。方案 A 下同类型只能有�
 | --- | --- | --- |
 | 主张席（NULL） | 统一 `NULL`：`V *get(K)` 返回 0 即缺失，规则最简单，C 侧零成本 | 借用形态天然有 NULL |
 | 反证席（OPTION） | 值形态没有 NULL 表示（`int get(int)` 不能返回空），统一 NULL 只能强制所有 `get` 返回指针，等于禁止值拷贝，破坏 §1.1 现状 | `type_key` 不区分「可空」；`int` 无哨兵 |
-| 证据席（ARCH） | 两者不能统一：**语言层不规定**，借用用 NULL、值用 `Option<V>`，`?` 已在 PH-44 落地可做归一 | 规范 §4.61 / §4.62；`Option` 随 `ct build` 自动加载 |
+| 证据席（ARCH） | 两者不能统一：**语言层不规定**，借用用 NULL、值用 `Option<V>`，`?` 已在 v0-PH-44 落地可做归一 | 规范 §4.61 / §4.62；`Option` 随 `ct build` 自动加载 |
 
 **裁定：C-NO-LANGUAGE-RULE**——语言不定义缺失语义；借用形态用 NULL，值形态用 `Option` / 包的哨兵。
 理由写进规范对应段落（见 §6 T-4）。
@@ -247,15 +247,15 @@ ct-json 需要 `doc[0]` 与 `doc["k"]` 并存。方案 A 下同类型只能有�
 
 ### 6.2 排期建议
 
-- **相号**：`PH-54`（`PH-53` 已收口 `v0.53.0`，54 是下一个空位）。本提案只做候选登记，**不占号**。
+- **相号**：`v0-PH-54`（`v0-PH-53` 已收口 `v0.53.0`，54 是下一个空位）。本提案只做候选登记，**不占号**。
 - **与当前工作的关系**：不抢正在做的两处 P0 缺陷修复（字符串截断在
   [Lexer.h.ct](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct) + [Expr.h.ct](../../selfhost/ct-ast/frontend/parse/Expr.h.ct) 的 `T_STR` 分支；
   右值装箱在 [TypeCheck.h.ct](../../selfhost/ct-ast/frontend/type/TypeCheck.h.ct) 的 `maybe_box`），两边的改动文件区域不重叠。
-  PH-53 已收口，不存在占位冲突。
+  v0-PH-53 已收口，不存在占位冲突。
 - **拆两步**：**先只读**（S1，即 `REQ-JSACCESS-1`），**后借用写**（S2/S3）。理由：只读是下游 ct-json / rill-dsl 的
   真实阻塞（`doc[0]["k"]` 的第一跳），借用写是能力补齐；先只读可以让 ct-json 提前解阻塞，且 S1 的红证最小。
-- **依赖**：`REQ-JSACCESS-1` ⊂ S1（先做）；PH-52（已交付）与 PH-51（已交付）是前置；S2 依赖 S1 的匹配结果。
-- **不并入 PH-52**：PH-52 的 D52-2 / D52-6 是冻结口径，本需求改的是那条口径本身，必须另立相号并显式记录版本。
+- **依赖**：`REQ-JSACCESS-1` ⊂ S1（先做）；v0-PH-52（已交付）与 v0-PH-51（已交付）是前置；S2 依赖 S1 的匹配结果。
+- **不并入 v0-PH-52**：v0-PH-52 的 D52-2 / D52-6 是冻结口径，本需求改的是那条口径本身，必须另立相号并显式记录版本。
 
 ---
 
@@ -267,7 +267,7 @@ ct-json 需要 `doc[0]` 与 `doc["k"]` 并存。方案 A 下同类型只能有�
 | IX-E2 | 只有 `char *get(char *)` 时 `x[0]` 硬错并列出候选 | `... \| grep -F "INDEX_1_no_candidate"` | 文案含两个候选签名 | rc=0 或文案缺候选 |
 | IX-E3 | 借用写 `*x[0] = 7;` 后读回 7 | `... \| grep -F "ok    index_borrow_write"` | 输出 `7` | 编译失败或值错 |
 | IX-E4 | `x[k] += 1` / `x[k]++` / `&x[k]` 三形态文案与位置 | `... \| grep -F "INDEX_L"` | 三条全命中 | 任一放行 |
-| IX-E5 | PH-52 既有夹具零回归 | `bash selfhost/check-ast.sh 2>&1 \| grep -c "p52_"` | 与基线计数一致 | 少一条 |
+| IX-E5 | v0-PH-52 既有夹具零回归 | `bash selfhost/check-ast.sh 2>&1 \| grep -c "p52_"` | 与基线计数一致 | 少一条 |
 | IX-E6 | `Vec` / `Map` 与 C 透传零回归 | `./selfhost/check-ast.sh 2>&1 \| grep -F "ok    p52_str_only"` | 命中 | 未命中 |
 | IX-E7 | 全量门禁 | `bash selfhost/check-all.sh 2>&1 \| tail -3` | 11 green | 任一红 |
 
@@ -289,7 +289,7 @@ cannot take the address of a custom subscript; use x[k] itself
 | --- | --- | --- | --- |
 | IX-R1 | `static_ctype` 推不出实参类型，匹配退化成「无法判定」 | 字面量以外的键（函数返回值、成员链）全报错 | 硬错 + 提示落局部变量；不回退 C 下标（D52-5） |
 | IX-R2 | 借用写形态与既有 `set` 同时存在，选择规则歧义 | 同类型既有 `set(int,int)` 又有 `int *get(int)` | 明确优先级：有 `set` 走 `set`，无 `set` 才走 `*get`；夹具钉住 |
-| IX-R3 | 参数类型匹配放宽后，PH-52 的字符串键行为变化 | `p52_*` 红 | 以 `type_key` 精确比较，`char *` 与 `const char *` 同 key，保证 `p52_*` 不变 |
+| IX-R3 | 参数类型匹配放宽后，v0-PH-52 的字符串键行为变化 | `p52_*` 红 | 以 `type_key` 精确比较，`char *` 与 `const char *` 同 key，保证 `p52_*` 不变 |
 | IX-R4 | 复合赋值若强行支持，下标子表达式被求值两次 | `x[f()] += 1` 出现两次 `f()` | D-IX-7 明确不支持，硬错 |
 | IX-R5 | 自举链不认新分支 | `check-goldens` fixpoint 红 | 编译器源码不使用该语法；只改解析与诊断 |
 

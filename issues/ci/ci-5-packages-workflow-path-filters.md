@@ -47,7 +47,7 @@ on:
 
 1. **补过滤**（推荐）：`selfhost/ct-ast/tool/pkg/**`、`test/pkg/**`、`examples/wave1-demo/**`、
    `.github/workflows/packages.yml`；
-2. 维持现状，但在 `docs/design/phase18.md` §18.2 把「触及包或索引相关文件」改成
+2. 维持现状，但在 `docs/phases/v0-PH-18/card.md` §18.2 把「触及包或索引相关文件」改成
    「触及 demo 或本工作流；包工具与外部仓库改动由 nightly 覆盖」。
 
 ## 验证

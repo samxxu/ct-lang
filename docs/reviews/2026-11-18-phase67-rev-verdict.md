@@ -1,4 +1,4 @@
-# 2026-11-18 PH-67 收口复核（REV，补正后）
+# 2026-11-18 v0-PH-67 收口复核（REV，补正后）
 
 | 项 | 值 |
 | --- | --- |
@@ -24,7 +24,7 @@ Apple clang version 21.0.0 (clang-2100.4.1.1)
   但 R2/R3/R5 的 run.sh 硬性要求 Linux（`nrf52/run.sh:14`、`freertos/run.sh:12`、
   `gdb.sh:16`），故本地 77 skip。按卡 D67-1 与沙箱约束，**未**在本机启动 host
   Renode；Renode 级运行只认 CI 日志。
-- `/tmp/ct-host-renode/ct-ast` 是既有产物，自报 `ct-ast v0.65.1`（PH-66）。
+- `/tmp/ct-host-renode/ct-ast` 是既有产物，自报 `ct-ast v0.65.1`（v0-PH-66）。
   独立复核用 `/tmp/rev67`（从 `709d3a7` 源码自举、七步 `rc=0`）：
 
 ```console
@@ -36,7 +36,7 @@ ct-ast v0.66.0
 
 ```console
 $ git diff --name-only 709d3a7..HEAD
-docs/history/design/phase67.md
+docs/phases/v0-PH-67/card.md
 docs/reviews/2026-11-18-phase67-rev-verdict.md
 ```
 
@@ -48,9 +48,9 @@ docs/reviews/2026-11-18-phase67-rev-verdict.md
 | --- | --- |
 | 任务级红证（T-7） | **5/5 通过**：按补正后的卡 §8 实现 sha，`git rev-parse <impl>^` 逐一等于对应红证。 |
 | 探针与门禁 | 5 支探针存在且都被 `selfhost/check-ast.sh` 调用；`p67_clock`、`p67_dma` 本地静态面通过；`p67_nrf52`、`p67_freertos`、`p67_gdb` 77 skip（非 Linux）。 |
-| CI | `709d3a7` 的 run `44339119194` 三 job 全绿；`ubuntu-gcc` 有 `ok PH-67-R1…R5` 五行，`check-all: OK (11 hard gates green)`。卡 §8 已改引此 run。 |
+| CI | `709d3a7` 的 run `44339119194` 三 job 全绿；`ubuntu-gcc` 有 `ok v0-PH-67-R1…R5` 五行，`check-all: OK (11 hard gates green)`。卡 §8 已改引此 run。 |
 | 版本 | 五处 `CTC_VERSION` = `0.66.0`；`README.md` / `docs/README.md` / `AGENTS.md` / `docs/history/phase-log.md` 已同步。 |
-| tag | annotated tag `v0.66.0` 已重建（对象 `d45d632…`），message 为 `PH-67 closeout (709d3a7)`；指向 `709d3a7`，远端 peeled 同提交。 |
+| tag | annotated tag `v0.66.0` 已重建（对象 `d45d632…`），message 为 `v0-PH-67 closeout (709d3a7)`；指向 `709d3a7`，远端 peeled 同提交。 |
 | 边界 | TEST-22 仍 `open`；`git status` 仅 `?? battle/static-dispatch-1/`；无真机结论。 |
 
 ## 2 任务级红证（R1–R5）
@@ -124,7 +124,7 @@ rc=77
 
 ```console
 $ XDG_CACHE_HOME=/tmp/ghcache gh run list --workflow ci.yml --limit 3
-completed	success	feat(ast): PH-67 无真机硬件能力扩展收口（v0.66.0）	ci	main	push	44339119194	9m46s	2026-11-18T15:44:32Z
+completed	success	feat(ast): v0-PH-67 无真机硬件能力扩展收口（v0.66.0）	ci	main	push	44339119194	9m46s	2026-11-18T15:44:32Z
 completed	success	fix(ast): R5 让 GDB 的 continue 启动机器	ci	main	push	44335562103	11m8s	2026-11-18T15:25:57Z
 completed	failure	fix(ast): R5 GDB 带上 ELF 以解析符号	ci	main	push	44332046948	16m42s	2026-11-18T15:07:59Z
 
@@ -141,11 +141,11 @@ $ XDG_CACHE_HOME=/tmp/ghcache gh run view 44339119194
 `ubuntu-gcc` 的逐行原始输出（`gh run view 44339119194 --log` 摘录）：
 
 ```text
-ubuntu-gcc	hard gates	2026-11-18T15:52:29.7431874Z   ok    PH-67-R1 clock (PLL 168MHz, BRR derived)
-ubuntu-gcc	hard gates	2026-11-18T15:52:40.6883018Z   ok    PH-67-R2 nRF52840 (second vendor: flash 0x0, UART0)
-ubuntu-gcc	hard gates	2026-11-18T15:52:51.7948610Z   ok    PH-67-R3 FreeRTOS (2 tasks, queue, SysTick/PendSV/SVC)
-ubuntu-gcc	hard gates	2026-11-18T15:52:51.8112967Z   ok    PH-67-R4 DMA (Stream6 descriptor registers)
-ubuntu-gcc	hard gates	2026-11-18T15:52:54.8468791Z   ok    PH-67-R5 GDB (breakpoint main)
+ubuntu-gcc	hard gates	2026-11-18T15:52:29.7431874Z   ok    v0-PH-67-R1 clock (PLL 168MHz, BRR derived)
+ubuntu-gcc	hard gates	2026-11-18T15:52:40.6883018Z   ok    v0-PH-67-R2 nRF52840 (second vendor: flash 0x0, UART0)
+ubuntu-gcc	hard gates	2026-11-18T15:52:51.7948610Z   ok    v0-PH-67-R3 FreeRTOS (2 tasks, queue, SysTick/PendSV/SVC)
+ubuntu-gcc	hard gates	2026-11-18T15:52:51.8112967Z   ok    v0-PH-67-R4 DMA (Stream6 descriptor registers)
+ubuntu-gcc	hard gates	2026-11-18T15:52:54.8468791Z   ok    v0-PH-67-R5 GDB (breakpoint main)
 ubuntu-gcc	hard gates	2026-11-18T15:52:17.8956434Z   ok    baremetal_renode (STM32F4: boot, button, SysTick, UART)
 ubuntu-gcc	hard gates	2026-11-18T15:54:15.6390419Z check-all: OK (11 hard gates green)
 ubuntu-gcc	hard gates	2026-11-18T15:53:29.6746830Z == summary: 1483 passed, 0 failed, 0 skipped ==
@@ -180,7 +180,7 @@ d45d63245da4105bff61a29a6983424e1554804b	refs/tags/v0.66.0
 709d3a7673bfa47f747a449f6132f829824dcb86	refs/tags/v0.66.0^{}
 ```
 
-tag message（重建后，合法 UTF-8，含 `PH-67` 与 sha 前 7 位）：
+tag message（重建后，合法 UTF-8，含 `v0-PH-67` 与 sha 前 7 位）：
 
 ```console
 $ git cat-file -p v0.66.0
@@ -189,7 +189,7 @@ type commit
 tag v0.66.0
 tagger Sam X. Xu@macMini <samxxu@gmail.com> 1795017788 +0800
 
-PH-67 closeout (709d3a7)
+v0-PH-67 closeout (709d3a7)
 ```
 
 `v0.66.0` 是 annotated tag：本地 tag 对象 `d45d632…`，`ls-remote` 第一行与之
@@ -201,15 +201,15 @@ PH-67 closeout (709d3a7)
 
 | 行 | 卡内写的 | 实测 | 判定 |
 | --- | --- | --- | --- |
-| E67-1 | `OK p67/clock (168MHz, BRR derived from PCLK)`；CI `ok PH-67-R1 clock` | 本地逐字相同；CI 为 `ok PH-67-R1 clock (PLL 168MHz, BRR derived)`（卡省略后缀，非假） | 成立 |
-| E67-2 | CI `ok PH-67-R2 nRF52840 (second vendor: flash 0x0, UART0)` | CI 逐字相同 | 成立 |
-| E67-3 | CI `ok PH-67-R3 FreeRTOS (2 tasks, queue, SysTick/PendSV/SVC)` | CI 逐字相同 | 成立 |
-| E67-4 | CI `ok PH-67-R4 DMA (Stream6 descriptor registers)`；真实搬运见 TEST-22 | CI 逐字相同；`p67_dma.sh` 自身只验编译面，寄存器回读由 `baremetal_renode`（`dma=1`）覆盖；TEST-22 `open` | 成立 |
-| E67-5 | CI `ok PH-67-R5 GDB (breakpoint main)` | CI 逐字相同 | 成立 |
+| E67-1 | `OK p67/clock (168MHz, BRR derived from PCLK)`；CI `ok v0-PH-67-R1 clock` | 本地逐字相同；CI 为 `ok v0-PH-67-R1 clock (PLL 168MHz, BRR derived)`（卡省略后缀，非假） | 成立 |
+| E67-2 | CI `ok v0-PH-67-R2 nRF52840 (second vendor: flash 0x0, UART0)` | CI 逐字相同 | 成立 |
+| E67-3 | CI `ok v0-PH-67-R3 FreeRTOS (2 tasks, queue, SysTick/PendSV/SVC)` | CI 逐字相同 | 成立 |
+| E67-4 | CI `ok v0-PH-67-R4 DMA (Stream6 descriptor registers)`；真实搬运见 TEST-22 | CI 逐字相同；`p67_dma.sh` 自身只验编译面，寄存器回读由 `baremetal_renode`（`dma=1`）覆盖；TEST-22 `open` | 成立 |
+| E67-5 | CI `ok v0-PH-67-R5 GDB (breakpoint main)` | CI 逐字相同 | 成立 |
 | E67-6 | `check-all` 11/11；版本 `v0.66.0` + annotated tag | `check-all: OK (11 hard gates green)`；五处版本一致；tag 成立 | 成立 |
 | 任务级红证 | 5 个红证 sha；均为对应实现提交的父提交 | 补正后的实现 sha 逐一满足（见 §2） | 成立 |
 | 实现提交 | R1 `da40abf7`、R2 `7e2ae6e3`、R3 `a1995028`、R4 `cc2de5ce`、R5 `2d685d2a` | 与 git 历史一致；三个 follow-up 修正已注明 | 成立 |
-| CI 证据 | 收口提交 `709d3a7` 的 run `44339119194`，三 job 全绿，`ok PH-67-R1…R5` | run 的 head_sha 为 `709d3a7`，三 job 全绿，五行 `ok` | 成立 |
+| CI 证据 | 收口提交 `709d3a7` 的 run `44339119194`，三 job 全绿，`ok v0-PH-67-R1…R5` | run 的 head_sha 为 `709d3a7`，三 job 全绿，五行 `ok` | 成立 |
 
 没有发现“把 skip 写成 pass”：`ubuntu-clang-smoke`/`macos-clang` 的 R2/R3/R5
 明写 `skip`，`ubuntu-gcc` 真跑。也没有发现把寄存器面写成真实 DMA 搬运：
@@ -236,10 +236,10 @@ TEST-22 仍 `open`（hardware-gated），是本次的登记项，不是本次缺
 | --- | --- | --- | --- |
 | 1 | 卡 §8 把 R2 `f95883b0`、R3 `c2cf8cc1`、R5 `ee830378` 当实现提交 | 卡已改为 `7e2ae6e3`/`a1995028`/`2d685d2a`，并注明三个 follow-up；`impl^` 与红证 5/5 相等 | 已消解 |
 | 2 | §8 CI 证据引用父提交 run `44335562103` | 卡已改为 `709d3a7` 的 run `44339119194`，并注记父提交 run；该 run head_sha、三 job、五行 `ok` 均复核 | 已消解 |
-| 3 | `v0.66.0` tag message 截断/缺 sha | tag 已重建：message `PH-67 closeout (709d3a7)`，合法 UTF-8，含 phase-id 与 sha；仍指向 `709d3a7`，远端已同步 | 已消解 |
+| 3 | `v0.66.0` tag message 截断/缺 sha | tag 已重建：message `v0-PH-67 closeout (709d3a7)`，合法 UTF-8，含 phase-id 与 sha；仍指向 `709d3a7`，远端已同步 | 已消解 |
 
 三项均已按证据修正，无未消解项。补正提交 `e78a0cdb` 只改
-`docs/history/design/phase67.md`（`git show --stat` = 1 file, 3 insertions/2 deletions），
+`docs/phases/v0-PH-67/card.md`（`git show --stat` = 1 file, 3 insertions/2 deletions），
 未改实现/测试。
 
 ## 9 未覆盖声明
@@ -258,7 +258,7 @@ TEST-22 仍 `open`（hardware-gated），是本次的登记项，不是本次缺
 
 初判的三项否项（§8 实现提交映射、§8 CI run 引用、tag message）均已修正并复验：
 补正后的实现 sha 与红证 5/5 对应；`44339119194` 是 `709d3a7` 的 run 且三 job 全绿、
-五行 `ok`；tag 重建后 message 含 `PH-67` 与 `709d3a7`、annotated、指向收口提交、
+五行 `ok`；tag 重建后 message 含 `v0-PH-67` 与 `709d3a7`、annotated、指向收口提交、
 远端 peeled 一致。其余门禁与边界不变：五处版本 `0.66.0`、`check-all` 11/11、
 TEST-22 保持 `open`、工作树仅 `battle/static-dispatch-1/` 未跟踪。
 

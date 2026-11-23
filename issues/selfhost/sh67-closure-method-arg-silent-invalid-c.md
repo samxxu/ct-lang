@@ -130,9 +130,9 @@ cc rc=1
 2. **后续（并入 SH-65 / F3）**：pair 形方法参数（`int (*f)(void *env, int), void *env`）按 `(fn, env)` 展开，`N_MCALL` 复用 `N_CALL` 的 trampoline 逻辑；单函数指针形保持硬错。
 3. **验收**：`test/ast/errors/` 增两条负例——`closure_method_arg_literal.ct` 与 `closure_method_arg_var.ct`；`check-ast.sh` 断言 `compile` 与 `check` 都退出 1、文案与 `文件:行:列` 一致、且失败时不写 `.c`。正例（pair 形展开）留给 F3。
 
-## 处置（2026-11-19，PH-75）
+## 处置（2026-11-19，v0-PH-75）
 
-- 提交：`74e58fe7`（pair 支持）+ `ffe3621d`（容器豁免）（实现见 `git log --grep "PH-75-R1"`）
+- 提交：`74e58fe7`（pair 支持）+ `ffe3621d`（容器豁免）（实现见 `git log --grep "v0-PH-75-R1"`）
 - 改动：单 fp 形态继续硬错（不再静默坏 C）；pair 形态走 SH-65 支持
 - 验证：`p75_closure_neg.sh` → `OK p75/closure-neg`
 

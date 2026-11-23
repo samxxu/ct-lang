@@ -3,12 +3,12 @@
 # and a `## ACC 映射` table whose ACC ids are globally unique.  `min` is the
 # minimum number of ACC rows that document must own.
 doc	接口/协议	min
-phase77.md	官方包身份、解析优先级、ct get 输出、旧锁迁移	4
-phase78.md	ref/out 上下文关键字、签名/ABI、调用点 place 与 out 定值	3
-phase80.md	String/Str 句柄与 Drop、字面量视图、C 边界、UTF-8/UTF-16 API	4
-phase81.md	Box<T> 句柄协议、new/花括号共享解析	2
-phase83.md	包管理契约 v1、ct index verify、conformance、分发产物	4
-phase84.md	ADT 布局/ABI、match 语法与穷尽诊断	2
-phase86.md	token 源缓冲视图与 C API、错误出口清单	2
-v043-split-plan.md	PH-43 错误出口类型契约、PH-44 `?` 传播	2
+../phases/v0-PH-77/card.md	官方包身份、解析优先级、ct get 输出、旧锁迁移	4
+../phases/v0-PH-78/card.md	ref/out 上下文关键字、签名/ABI、调用点 place 与 out 定值	3
+../phases/v0-PH-80/card.md	String/Str 句柄与 Drop、字面量视图、C 边界、UTF-8/UTF-16 API	4
+../phases/v0-PH-81/card.md	Box<T> 句柄协议、new/花括号共享解析	2
+../phases/v0-PH-83/card.md	包管理契约 v1、ct index verify、conformance、分发产物	4
+../phases/v0-PH-84/card.md	ADT 布局/ABI、match 语法与穷尽诊断	2
+../phases/v0-PH-86/card.md	token 源缓冲视图与 C API、错误出口清单	2
+v043-split-plan.md	v0-PH-43 错误出口类型契约、v0-PH-44 `?` 传播	2
 primitive-methods.md	宿主方法映射（A 类纯映射、B 类 shim）	2

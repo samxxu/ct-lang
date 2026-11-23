@@ -1784,7 +1784,7 @@ Result<long, char *> twice(int n)
 
 > **状态：Phase 76 规划中，当前 `ct` 不接受 `$name`，本节不是可运行语法。**
 > 现在请用 §13.4 的两行拆链或 `into`；本节只用于评审/预览，避免把规划当成现状。
-> 依据：[Phase 76 卡](history/design/phase76.md)、[battle inline-materialize-2](../battle/inline-materialize-2/verdict.md)。
+> 依据：[Phase 76 卡](phases/v0-PH-76/card.md)、[battle inline-materialize-2](../battle/inline-materialize-2/verdict.md)。
 
 ### 13.1 目标
 
@@ -1968,8 +1968,8 @@ ref/out 参数、`ref` 的借用检查、跨过程定值不在本阶段；`ref` 
 - `examples/**` —— 51 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；其中 `49_socket` 为文档型；完整索引见 [examples/README.md](../examples/README.md)）；`test/cases/**` —— 每个语法点的最小快照
 - 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
 - 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 Ct」，编译器对此零感知
-- 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [design/phase8.md](history/design/phase8.md)，
-  17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [design/phase17.md](history/design/phase17.md)
+- 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见 [phases/v0-PH-8/card.md](phases/v0-PH-8/card.md)，
+  17.5 的增量（比较器范围、离线重解、显式索引、构建元数据）见 [phases/v0-PH-17/card.md](phases/v0-PH-17/card.md)
 
 ### 16.1 可选的类型检查：`ct check --types`
 
@@ -2123,7 +2123,7 @@ ADT 本身不自动释放 payload（作者显式处理）。上限：64 个 ADT 
 把 `node->kind` 判别机械改写成穷尽 `match` 的做法见
 [patterns §6](patterns.md#6-kind-判别改写成穷尽-match)。
 
-## 19. 词法边界：长名字、长字符串与相邻字面量（PH-86，v0.86.0 起可用）
+## 19. 词法边界：长名字、长字符串与相邻字面量（v0-PH-86，v0.86.0 起可用）
 
 词法器把 token 存成源缓冲的视图，用户能看到的仍是两条长度规则：标识符超过
 159 字符报 `identifier is too long`；表达式位置的单个字符串字面量超过 158 字节报
@@ -2151,12 +2151,12 @@ const char *too_long = "…158 字节以上的内容…";   // error: string lit
 实现细节（`{ptr,len}` 视图、不保证 NUL、只在 C 边界转换）见
 [language-spec §2](language-spec.md#2-词法与书写要求ct-ast)；用户代码不需要关心它。
 
-## 20. 解析器/检查器的判别式：先切片，再换 `match`（PH-87，v0.87.0）
+## 20. 解析器/检查器的判别式：先切片，再换 `match`（v0-PH-87，v0.87.0）
 
 编译器自己要判断“这是哪种节点”。最直接的写法是 `switch (n->kind)`，但漏一个
-分支不会报错——它只会静默走进 `default`。PH-84 的 `match` 能证明穷尽，但要求
+分支不会报错——它只会静默走进 `default`。v0-PH-84 的 `match` 能证明穷尽，但要求
 主语是 ADT；ct-ast 的节点池是 `int kind` 的扁平结构，且 **ct-ast 源码由 L2 引导
-编译**，L2 还不认识 ADT/`match`（见 `battle/p87-kind-match`）。所以 PH-87 先做
+编译**，L2 还不认识 ADT/`match`（见 `battle/p87-kind-match`）。所以 v0-PH-87 先做
 可验证的一步：把每种 kind 的分支体搬进具名函数，判别式只读一次 kind；切片与
 将来的 `match` 变体一一对应。
 
@@ -2207,13 +2207,13 @@ match (s) {
 ```
 
 为什么先切片：切片是纯函数边界移动，能立刻用“语料逐字节 + 345 条诊断逐字 +
-自举不动点”验收；等 PH-88 把引导链搬开，再把每个 `tc_expr_*` / `ctype_*` 换成
+自举不动点”验收；等 v0-PH-88 把引导链搬开，再把每个 `tc_expr_*` / `ctype_*` 换成
 `Shape.Variant(binding) => { … }` 即可。误报情况见
-[PH-87 dogfood 报告](design/p87_dogfood.md)。
+[v0-PH-87 dogfood 报告](design/p87_dogfood.md)。
 
-## 21. 发射器切片与自举不动点：日常 2 轮，tag 前 3 轮（PH-88，v0.88.0）
+## 21. 发射器切片与自举不动点：日常 2 轮，tag 前 3 轮（v0-PH-88，v0.88.0）
 
-PH-87 把解析器和检查器的 kind 判别切成一张函数表；PH-88 对发射器做同一件事：
+v0-PH-87 把解析器和检查器的 kind 判别切成一张函数表；v0-PH-88 对发射器做同一件事：
 `emit_node` / `emit_expr` / `emit_type_decl` / `emit_inline` / `emit_field`
 不再各自背一条 1000 行的 `if` 链，而是**读一次 kind、调用一个切片函数**。
 判别式只出现一次，新增 kind 忘了写切片时，探针会把它当“清单外的一支”报红。

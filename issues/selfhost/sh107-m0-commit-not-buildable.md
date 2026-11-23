@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 模块 | selfhost（PH-85 S85c / 提交纪律） |
+| 模块 | selfhost（v0-PH-85 S85c / 提交纪律） |
 | 定性 | 提交不绿（T-7 先红后绿、T-4 单任务回滚） |
 | 严重度 | High（实现提交的验收证据不成立） |
 | 锚点 | `e88561af`（S85c M0）、`c7f8ed93`（补 import 的 S85d） |
@@ -70,7 +70,7 @@ error: could not revert e88561af...
 
 ## 期望
 
-- 在**未 push** 前重排 PH-85 的提交：把 `Driver`/`Parser`/`TypeCheck` 的 3 个 import 放进
+- 在**未 push** 前重排 v0-PH-85 的提交：把 `Driver`/`Parser`/`TypeCheck` 的 3 个 import 放进
   `e88561af`（或把 M0 与 S85d 合并为一个不可分的提交），使 M0 实现提交独立构建、
   `p85_m0` 与 `check-all` 在该提交上转绿；
 - `p85_m0` 探针增加“用当前树构建出的 ct-ast”这一前置，或由 check-ast 的构建段兜底；
@@ -85,7 +85,7 @@ error: could not revert e88561af...
 
 ## 关联
 
-- [PH-85 卡](../../docs/design/phase85.md) §7.1/S85c、§7.2、§7.5、E85-3/E85-8
+- [v0-PH-85 卡](../../docs/phases/v0-PH-85/card.md) §7.1/S85c、§7.2、§7.5、E85-3/E85-8
 - [REV 复核](../../docs/reviews/2026-11-21-phase85-rev-verdict.md) §4.2
 
 ## DEV 处置（2026-11-21）

@@ -57,8 +57,8 @@
 - [4.72 泄漏防护：`leaks` 与直接环检测（Phase 82，仅 ct-ast）](#472-泄漏防护leaks-与直接环检测phase-82仅-ct-ast)
 - [4.73 最小 ADT 与 `match`（Phase 84，仅 ct-ast）](#473-最小-adt-与-matchphase-84仅-ct-ast)
 - [11 文档与实现一致性（缺口登记，2026-11-15）](#11-文档与实现一致性缺口登记2026-11-15)
-- [4.74 解析器/检查器的判别式切片（PH-87，实现内部）](#474-解析器检查器的判别式切片ph-87实现内部)
-- [4.75 发射器的判别式切片与自举不动点轮数（PH-88，实现内部）](#475-发射器的判别式切片与自举不动点轮数ph-88实现内部)
+- [4.74 解析器/检查器的判别式切片（v0-PH-87，实现内部）](#474-解析器检查器的判别式切片v0-ph-87实现内部)
+- [4.75 发射器的判别式切片与自举不动点轮数（v0-PH-88，实现内部）](#475-发射器的判别式切片与自举不动点轮数v0-ph-88实现内部)
 
 ---
 
@@ -110,10 +110,10 @@ ct check --types hello.ct               # 可选类型检查
 | `ct-ast file.ct -o file.c` | 单文件编译（不解析 `import`） |
 | `ct build main.ct -o prog` | 多文件构建；`import` 生效，最后调用 `cc` |
 | `ct build --emit-c main.ct -o dir` | 多文件构建，只写生成的 `.c` / `.h` |
-| `ct build --check-level=off\|warn\|error main.ct -o prog` | 构建时运行 B 的 `--types` 检查（PH-85 / SH-115）：**默认 `warn`**，把发现按 `warning:` 报告、构建继续并写产物（生成物与 `off` 逐字节相同）；`off` 是静默逃生口；`error` 报告并阻断，不写产物 |
+| `ct build --check-level=off\|warn\|error main.ct -o prog` | 构建时运行 B 的 `--types` 检查（v0-PH-85 / SH-115）：**默认 `warn`**，把发现按 `warning:` 报告、构建继续并写产物（生成物与 `off` 逐字节相同）；`off` 是静默逃生口；`error` 报告并阻断，不写产物 |
 
-**B 检查的构建接线（PH-85，D2 = B+）**：`ct build --check-level=…` 把 `ct check --types`
-已有的判定（赋值/初值/`return`/`$` 目标/实参的静态类型）接进构建路径。PH-85 交付机制时默认
+**B 检查的构建接线（v0-PH-85，D2 = B+）**：`ct build --check-level=…` 把 `ct check --types`
+已有的判定（赋值/初值/`return`/`$` 目标/实参的静态类型）接进构建路径。v0-PH-85 交付机制时默认
 `off`；**SH-115（2026-11-22）把 CLI 默认升为 `warn`**，生成物与之前逐字节相同、只多
 `warning:` 行；`off` 保留为静默逃生口；`error` 用 `error:` 打印并在写任何 `.c`/`.h` 之前退出。
 SH-115 同批补了函数指针**字段**调用（LANG-19 残余路径）与结构体花括号初值的可判定错配。
@@ -219,7 +219,7 @@ v1.1 先固化轻量 lowering 不变量——临时值物化、求值顺序、`D
   在编译期报 `string literal is too long (max 158 bytes; split it)`，不再静默截断；
   更长的文本请拆成相邻字面量（它们会拼接）或写入初始化器。
 - 固定容量上限越界一律报错（§7），不静默丢数据；v0.53.1 起字符串字面量也归入这一类。
-- **token 文本是实现内部的源缓冲视图（PH-86 起，仅 ct-ast）**：当前 token 以
+- **token 文本是实现内部的源缓冲视图（v0-PH-86 起，仅 ct-ast）**：当前 token 以
   `{ptr,len}` 指向源缓冲，不逐 token 复制、也不保证 NUL 终止；源缓冲在整段解析期间
   有效。实现内部只在 C 边界转换（调用方缓冲或词法器 scratch），因此上面的
   159/158 上限仍是唯一的可见词法长度规则，用户代码不需要关心 NUL。
@@ -568,7 +568,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 | 源码形态 | 处理 |
 | --- | --- |
 | `own Person *p = malloc(sizeof(struct Person));` | 去掉 `own` 后照常声明；登记 autodrop |
-| `own Person *p = make();`（工厂返回 `struct Person *`） | 同上；初始化式可以是**返回类型字面量为 `struct X *` 的函数调用**（PH-49） |
+| `own Person *p = make();`（工厂返回 `struct Person *`） | 同上；初始化式可以是**返回类型字面量为 `struct X *` 的函数调用**（v0-PH-49） |
 | `own Person *p = 0;`（零值） | 去掉 `own` 后照常声明，但**不登记** autodrop（零值不拥有对象，块尾不释放） |
 | 声明作用域的闭合 `}`（行首） | 在该行之前插入 `if (p) { Person_Drop_drop(p); free(p); p = 0; }` |
 | 每个 `return` 之前（L2 要求行首；ct-ast 无位置要求） | 同上，插入全部 autodrop 变量的释放（声明逆序） |
@@ -580,7 +580,7 @@ struct Greeter_iface { void *self; struct Greeter_vtbl *vt; };
 约束与限制：
 
 - 初始化式只有三种：`malloc(...)`、`calloc(...)`，或一个**自由函数调用**且其 `Symbols` 记录的返回类型
-  字面量为 `struct X *`（X 必须与声明的结构体一致，PH-49 D49-1）。判定只看调用点与符号表返回串，
+  字面量为 `struct X *`（X 必须与声明的结构体一致，v0-PH-49 D49-1）。判定只看调用点与符号表返回串，
   不做表达式类型推导；`&x`、字段取址、指针算术等其他指针表达式仍是 L49-1 硬错。
   必须是**结构体指针**且该 struct 必须 `use Drop`；否则编译期报错。
 - **零值**初始化（`= 0`）合法但不登记 autodrop：块尾不释放，也不产生诊断；运行时工厂返回 0 时依赖
@@ -924,7 +924,7 @@ ct-ast／v1 线解除 SH-73 的连跳限制（方法结果逐 hop 物化），�
 - 单元内私有 helper 既可以写成 `impl` 里不带 `pub` 的方法，也可以沿用 `.ct` 文件里的 `static`
   自由函数。
 
-#### 4.11.2 字段级可见性（LANG-9 / PH-73）
+#### 4.11.2 字段级可见性（LANG-9 / v0-PH-73）
 
 - `.h.ct` 的 `pub struct` 允许给字段加 `pub`。**只要该 struct 至少有一个字段标了 `pub`**，公开头
   只发射这些 `pub` 字段；未标 `pub` 的字段只出现在实现单元自己的视图里（`.c` 先
@@ -937,7 +937,7 @@ ct-ast／v1 线解除 SH-73 的连跳限制（方法结果逐 hop 物化），�
 - ABI：增删/改序 `pub` 字段是破坏性变更；未标 `pub` 的字段可以自由调整。`ct build --lib` 的
   `.abi.h` 同理只反映公开面。
 
-#### 4.11.3 链中物化 `expr$name`（PH-76）
+#### 4.11.3 链中物化 `expr$name`（v0-PH-76）
 
 方法调用之后可以写 `$name`，把这一跳的返回值**物化到已声明变量**，链继续以该变量为接收者：
 
@@ -2178,7 +2178,7 @@ L0 / L2 仍取最先出现者，后者不可达、不报错。
 - **生成物里「声明了但没用到」的 `static` 实体**：一个 `impl` 总会发射 `<S>_<T>_vtable`，一个
   `use Drop` 的 struct 总会发射 `<S>_Drop_drop`，即使本单元从不调用该 trait 的方法、也不 `delete`
   （ct-ast 不做跨过程可达性分析）。compile 模式下这些符号带 `__attribute__((unused))` 的 `static`
-  形态；PH-48 起 build 模式的 Drop 体由 owner 单元以非 `static` 发出（头文件带真原型），因此不会
+  形态；v0-PH-48 起 build 模式的 Drop 体由 owner 单元以非 `static` 发出（头文件带真原型），因此不会
   因「未使用」告警。属性与既有的 `__ct_init` 的 `__attribute__((constructor))` 同源，需要
   GCC / clang。它们**不影响**语义与运行。
 - **闭包**（Phase 21，仅 ct-ast）的限制是语言规则，不是实现缺口：不能进 `.h.ct`、不能作返回值 /
@@ -2398,7 +2398,7 @@ int main(void) {
 - **自定义下标只做单层、只按名字 + 参数个数匹配**（§4.64）。多级连写 `v["a"]["b"]` 会被当作
   C 指针算术，可能静默得错值；数字下标 `v[0]` 在 `get(char *)` 类型上会展开成 `get(0)`（C 里是
   空指针常量）：`ct compile` / `ct build` 只给 warning（rc=0，产物仍是错调用），`ct check` 给
-  error（rc=1，L32-6 / PH-72）。**按键类型分派仍待 `REQ-JSACCESS-1`**（同类型并存 `get(char *)` /
+  error（rc=1，L32-6 / v0-PH-72）。**按键类型分派仍待 `REQ-JSACCESS-1`**（同类型并存 `get(char *)` /
   `get(int)` 各选其版）；JSON 数字下标请继续用包层 `get_idx`，或等 `REQ-JSACCESS-1` 与
   `REQ-INDEX-1`（[设计草案](proposals/user-index-operator.md)）落地。
 - **表达式位置的超长字符串**（>158 字节）在 v0.53.1 起是编译期硬错，拆成相邻字面量或写入初始化器；
@@ -2533,8 +2533,8 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 - **固有方法**：`impl<T> Name<Args> { … }` 给实例加方法，落码 `<Instance>_<method>`，调用点
   **静态派发**（`v.push(3)` → `Vec_int_push(&v, 3)`），不生成 vtable、不装箱；同一实例可同时有
   多个 `impl` 块。实参默认只检查元数；`ct check --types` 会额外检查类型（L32-6），
-  `ct build` / `ct compile` 仍不检查（`docs/history/design/phase29.md` §10.2）。
-- **`.` 与 `->`（PH-51，仅 ct-ast）**：结构体指针作为方法接收者必须用 `->`；`.` 是硬错 L51-1
+  `ct build` / `ct compile` 仍不检查（`docs/phases/v0-PH-29/card.md` §10.2）。
+- **`.` 与 `->`（v0-PH-51，仅 ct-ast）**：结构体指针作为方法接收者必须用 `->`；`.` 是硬错 L51-1
   （`'.' cannot call method 'f' through a pointer receiver; use '->f()'`），不会再发射 `S_f(&p)` /
   `Vec_int_push(&p, …)`。值接收者的 `.`、接口指针的 `.`（`Show *p; p.m()`，按接口值派发）与
   类型宿主（`map … for type`，含 `char *`）的 `.` 都不受影响。
@@ -2552,15 +2552,15 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `a..b { expr }` 与 Phase 24 的 `a..b(expr)` 同义；当声明类型是 `Vec<T>` 时，range 是
   「产物为静态数组」的表达式，降级为 `Vec_<enc>_from((T[n]){ … }, n)`，因此
   `Vec<int> v = 4..8 { $ * $ };` 合法。编译器只知道入口名与元素 C 类型，**不认识 `Vec` 的字段**
-  （`docs/history/design/phase29.md` §11）。
+  （`docs/phases/v0-PH-29/card.md` §11）。
 - **内置容器下标与字面量（Phase 31 起）**：`v[i]` 发射为 `v.get(i)`、`v[i] = x` 发射为
   `v.set(i, x)`；`m["k"]` 发射为 `m.get("k")`（取元素值，越界/缺键得零值或空指针），
   `m["k"] = x` 发射为 `m.put("k", x)`；`Map<K,V> m = { "a": 1, "b": 2 };` 发射为
   `Map_<enc>_from((struct MapEntry_<enc>[2]){ … }, 2)`。三者都受上面的容器语义约束；
   不再有「Vec/Map 不可下标」的硬错。
-- **自定义类型的 `[]`**：见 §4.64（PH-52，单层字符串键）；按键类型分派（同一类型并存
+- **自定义类型的 `[]`**：见 §4.64（v0-PH-52，单层字符串键）；按键类型分派（同一类型并存
   `get(char *)` / `get(int)`）**尚未实现**，登记为 REQ-JSACCESS-1，不属于本节的容器下标糖。
-  实参类型与唯一 `get` 不匹配时，`ct check` 已是硬错（PH-72 / LANG-4），`ct build` 仍只告警并
+  实参类型与唯一 `get` 不匹配时，`ct check` 已是硬错（v0-PH-72 / LANG-4），`ct build` 仍只告警并
   发射 `get(0)`，因此不要把 `v[0]` 用在 `char *get(char *)` 上。
 - **内置层**：`Vec<T>`、`Map<K,V>`、`MapEntry<K,V>` 写在 `lib/core/Vec.h.ct`，编译模式在输入前
   自动预解析，`ct build` 也把它作为一个单元自动加载，**两种模式都不需要 `import`、不需要 `-I`**。
@@ -2612,7 +2612,7 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   改用 `Map<String,V>`；`Map<char *,V>` 是 C 指针键，不复制字符串。
 - **本节不涉及**：默认类型实参、显式实例列表；参数化 trait 见 §4.55，类型参数上的 bound 见 §4.54。
   已知偏差（`Map` 线性扫描、无哈希
-  索引）见 `docs/history/design/phase29.md` §10.2。
+  索引）见 `docs/phases/v0-PH-29/card.md` §10.2。
 
 ### 4.51.1 内置层命名空间 `core`（DOC-87 Stage 2，仅 ct-ast）
 
@@ -2749,7 +2749,7 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 - **泛型 trait × 泛型 struct**：只支持参数一一对应的 `impl<T> MyVec<T> use Iter<T>`，其它形态报 `unsupported generic trait implementation shape`。
 - **跨单元边界**：泛型 trait 实例只能在模板属主单元创建；消费方可以命名该类型，但创建实例即报 `a generic trait instance must be created in its owner unit`（L35-4）。
 - **冲突与容量**：编码名与已声明的 trait、`struct <I>_vtbl` 或 `struct <I>_iface` 撞名时报 `trait instance name '<I>' collides with a declared type`；模板行与实例行共用 `MAX_TRAITS = 64`，第 65 条报 `too many traits`。
-- **不做**：supertrait / 接口组合（开放项与触发条件见 [phase35 卡](history/design/phase35.md) §10.2 / §10.3）、默认方法体、多 bound、关联类型、`Self`、方法级泛型与泛型 enum。
+- **不做**：supertrait / 接口组合（开放项与触发条件见 [phase35 卡](phases/v0-PH-35/card.md) §10.2 / §10.3）、默认方法体、多 bound、关联类型、`Self`、方法级泛型与泛型 enum。
 
 ### 4.56 `Drop` 与长度前缀字符串 `Str`（Phase 36，仅 ct-ast）
 
@@ -2763,8 +2763,8 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 
 - **`Drop` trait**：`use Drop` 只置位、不进 `use[]` 列表；`delete p` 调用 `<S>_Drop_drop(p)`，无 vtable/vptr。无显式 `impl Drop` 时，编译器按字段**声明顺序**为每个 `uses_drop` 字段和每个 by-value `Vec` / `Map` 值字段递归生成释放胶水；写了显式 `impl Drop for S`（或 `impl<T> Drop for Box<T>`）即**自负全责**，不再生成字段胶水，需在体里手动释放资源。
 - **字段胶水的准入**：内置容器 `Vec` / `Map` 的**值字段**按类型名进入胶水（LANG-27）：宿主 `use Drop` 且无显式 `impl Drop` 时，胶水在该字段的声明位置写 `if (_self->f.h != 0) (void)<Inst>_release(&_self->f);`。元素释放沿用容器自己的协议：`<Inst>_release` 遍历元素并调用每实例的 `__ct_elem_release`（嵌套容器元素自带 `h == 0` 守卫），因此空句柄、空元素、越界 `get` 的零值都不会 abort；`release()` 对零句柄仍 abort 的契约不变（§4.51、§4.70）。其他 struct 字段仍以 `uses_drop` 为准：只有字段的 struct 类型置位 `uses_drop` 才递归。显式 `impl Drop` 还会整体关闭自动胶水，容器字段也由作者释放。指针字段或数组字段里的容器没有单一值句柄，不自动递归，由显式 impl 负责。
-- **指针字段胶水（PH-48）**：自动胶水对指针字段写 `if (_self->f) Child_Drop_drop(_self->f);`——判空、把子对象传给它的 Drop，**不取字段地址、也不 `free` 子指针**；所有权仍归显式 `impl Drop`。值字段仍是 `Child_Drop_drop(&_self->f)`。多星指针与带维度的指针数组不递归（没有单一子对象可传），由显式 impl 负责。
-- **跨单元 `Drop`（PH-48，D48-2 / U-2 A）**：Drop 体只由**声明该 struct 的单元**发射一次，链接性独立于 `pub`（默认可见）；该单元的生成头文件发布真原型 `void <S>_Drop_drop(void *);`，消费单元只发 `extern` 声明并调用它。`impl Drop for S` 必须写在 struct 的同一单元：写在别的单元时类型头没有原型，构建在写任何 `.c` 之前硬错 L48-2（`Drop body for 'struct Res' is not visible through its header`），不再生成静默空桩。显式 `impl` 仍负责释放子指针。
+- **指针字段胶水（v0-PH-48）**：自动胶水对指针字段写 `if (_self->f) Child_Drop_drop(_self->f);`——判空、把子对象传给它的 Drop，**不取字段地址、也不 `free` 子指针**；所有权仍归显式 `impl Drop`。值字段仍是 `Child_Drop_drop(&_self->f)`。多星指针与带维度的指针数组不递归（没有单一子对象可传），由显式 impl 负责。
+- **跨单元 `Drop`（v0-PH-48，D48-2 / U-2 A）**：Drop 体只由**声明该 struct 的单元**发射一次，链接性独立于 `pub`（默认可见）；该单元的生成头文件发布真原型 `void <S>_Drop_drop(void *);`，消费单元只发 `extern` 声明并调用它。`impl Drop for S` 必须写在 struct 的同一单元：写在别的单元时类型头没有原型，构建在写任何 `.c` 之前硬错 L48-2（`Drop body for 'struct Res' is not visible through its header`），不再生成静默空桩。显式 `impl` 仍负责释放子指针。
 - **泛型 Drop**：`impl<T> Drop for Box<T>` 每实例单态化出一个 `Box_int_Drop_drop` / `Box_Str_Drop_drop`，不产生模板态 `Box_Drop_drop`；声明在首次使用之后仍生效（impl 在 emit 阶段解析）。容器元素协议（Phase 31）对普通 struct 同样生效：`Vec<Str>` / `Vec<Probe>` 的 `release()` 会调用元素的 `release()`。
 - **重复释放诊断**：`drop()` 体内同一 `self` 字段不得 `release()` 两次，报 `field 'X' is released more than once in drop()`。
 - **`Str`**：内建于 `lib/core/Str.h.ct`，布局 `{ char *data; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_from(s)` / `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` / `str_compare(a, b)` / `str_c_str(s)`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。
@@ -2866,10 +2866,10 @@ Result<int, char *> f(int n)
 
 - 文案：`return: expected '<T>', got '<U>'`，位置在载荷表达式起点。
 - 只判 `err:` 分支；普通 `return` 仍只在 `--types` 下检查（避免闭包 `ret_type` 的既有假阳性）。
-- 复用 PH-32 的豁免：接口槽、裸 `0` 填指针；指针基类型/层数按 §4.53 判（PH-45 起）。
+- 复用 v0-PH-32 的豁免：接口槽、裸 `0` 填指针；指针基类型/层数按 §4.53 判（v0-PH-45 起）。
 - 判不出的形态（数组 / 闭包 / 函数指针 / `sizeof` / `_Generic` / 宏）仍交 `cc`；闭包体
-  `return err:` 的 `ret_type` 缺陷按 PH-43 §0.2 另案记录。
-- 发射与清理不变：仍走 PH-40 的临时量、errdefer/defer 单栈 LIFO。
+  `return err:` 的 `ret_type` 缺陷按 v0-PH-43 §0.2 另案记录。
+- 发射与清理不变：仍走 v0-PH-40 的临时量、errdefer/defer 单栈 LIFO。
 
 ### 4.62 后缀 `?` 错误传播（Phase 44，仅 ct-ast）
 
@@ -2893,12 +2893,12 @@ Result<long, char *> twice(int n)
 - 消歧：`?` 后不能开始表达式（`;` `)` `,` `]` `->` 等）才是后缀；`a ? b : c` 仍是三目。
 - 诊断：L44-1 外层不是 `Result`；L44-2 `E` 不同；L44-3 操作数不是 `Result`。
 - 禁止位置：`if`/`while`/`for`/`switch` 条件、`&&`/`||` 右操作数、三目两侧、闭包体、`defer`/`errdefer` 块、文件作用域（L44-4）。
-- 失败分支走既有清理链：`errdefer` → `defer` → `own` release；临时量 move 后清零，丢弃的 payload 调 `release`/Drop glue（ASAN 夹具 `p44_try_drop.sh`）。同一表达式多个 `?` 各求值一次，但顺序仍受 C 操作数顺序约束（PH-44 §9 记录）。
+- 失败分支走既有清理链：`errdefer` → `defer` → `own` release；临时量 move 后清零，丢弃的 payload 调 `release`/Drop glue（ASAN 夹具 `p44_try_drop.sh`）。同一表达式多个 `?` 各求值一次，但顺序仍受 C 操作数顺序约束（v0-PH-44 §9 记录）。
 
 ### 4.63 类型契约一致性（Phase 45，仅 ct-ast）
 
 - 闭包块体内的 `return` 不再读外层 `ret_type`；`ct check --types` 对闭包体保持静默
-  （闭包返回类型推断仍是独立缺陷，见 PH-43 §0.2）。
+  （闭包返回类型推断仍是独立缺陷，见 v0-PH-43 §0.2）。
 - 指针初值 / 赋值 / `return` / 容器实参与普通实参共用同一条判据：**结构体指针**同层不同基类型、
   不同星数报 L45-1 / L45-2；标量指针（`int *` ↔ `char *`）不同基类型仍跳过，`void *` ↔ 任意对象指针、
   裸 `0`、typedef、数组、闭包、函数指针也跳过。
@@ -2947,7 +2947,7 @@ Result<long, char *> twice(int n)
 - **切词**：`?.` / `?[` 是 parser 组合，不新增词法 token；`?` 后是 `T_NUM` 且以 `.`
   开头时仍按三目（`c?.5 : 1.0` → `(c ? .5 : 1.0)`），`a?.5` 是不完整三目语法错误。
 - **范围外**：`T?` / `Maybe<T>`、struct 值接收者、可选方法调用、`p?.b = 1` / `&p?.b`、
-  用户类型 `get` 的指针接收者协议；`struct X *p` 的 `p?.f` 之外的 `.` 规则仍按 PH-51。
+  用户类型 `get` 的指针接收者协议；`struct X *p` 的 `p?.f` 之外的 `.` 规则仍按 v0-PH-51。
 
 ### 4.66 C 边界：`c-boundary` 与 shim（Phase 65，仅 ct-ast）
 
@@ -3118,7 +3118,7 @@ parse("ab", n);  /* 调用点不写 out */
 - **旧类型已删除（S5b）**：`lib/core/StrLegacy.h.ct` 与 `namespace std::str` 兼容单元已移除，
   `std::str::Str` 不再解析；仓内消费者已迁到 `String` / `Str` 新 API，外部消费者的 dry-run
   见 phase80 卡 §7。
-- **边界**：`Box<String>` 已由 PH-81 的 `Box<String>::of` 回填；`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
+- **边界**：`Box<String>` 已由 v0-PH-81 的 `Box<String>::of` 回填；`Map<Str,V>` 存储位置（借用类型不能作为容器键，用
   `Map<String,V>`）、跨仓外部工程迁移只做 dry-run。字段位置的 `String` 释放取决于宿主：
   宿主 `use Drop` 且无显式 `impl Drop` → 生成 `String` 字段胶水；`Vec`/`Map` 值字段按 LANG-27
   生成容器级联 `release`（元素走 `__ct_elem_release` 协议）；显式 impl 或非 `use Drop` 宿主由作者释放；
@@ -3174,7 +3174,7 @@ parse("ab", n);  /* 调用点不写 out */
   `T *` / 普通 struct / `void *`。句柄 16 字节、头 8 字节是 golden 断言，不是跨编译器 ABI
   承诺。
 - **命名保留**：`Box` 是内建模板名。compile 模式的源文件若自己声明 `struct Box`（含泛型
-  模板，PH-29/33/36 的历史夹具用法），内建层不加载、用户声明优先；build 模式对入口输入
+  模板，v0-PH-29/33/36 的历史夹具用法），内建层不加载、用户声明优先；build 模式对入口输入
   同样处理，来自导入单元的同名声明仍按重复定义报错。新代码不应再声明同名类型。
 
 ### 4.72 泄漏防护：`leaks` 与直接环检测（Phase 82，仅 ct-ast）
@@ -3295,7 +3295,7 @@ struct Shape {
   ADT 不能带显式枚举值；无泛型 ADT；`match` 不能作为表达式；没有 or / 守卫 / 嵌套 / 结构体
   模式；`offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器产物负责）。
 
-#### 冻结清单登记（PH-84 范围）
+#### 冻结清单登记（v0-PH-84 范围）
 
 | 项 | 冻结内容 | 改动授权 |
 | --- | --- | --- |
@@ -3307,14 +3307,14 @@ struct Shape {
 | 诊断文本 | §4.73 与 `test/ast/p84_*` 钉住的文案与位置 | 同 T-7/门禁变更流程 |
 | `ct check --types` lint | “可穷尽却用 `_`” 的文案与 opt-in 属性 | 同上 |
 
-> 本表是 PH-84 自己的冻结面；v1.0 的**全局**稳定子集清单仍归 DOC-79（REQ），本阶段不代写。
+> 本表是 v0-PH-84 自己的冻结面；v1.0 的**全局**稳定子集清单仍归 DOC-79（REQ），本阶段不代写。
 
 #### C enum 不变（E84-1 / E84-8）
 
 无负载 `enum` 的语法、成员常量、`enum Tag` / `typedef enum … Alias` 形态、`case` 取值、
 生成产物（`enum Tag { … }`）与既有行为全部不变；ADT 只走 payload 分支。既有
 `test/ast/30_enum`、`examples/c-superset/s04_enum`、`examples/c-superset/s01_switch`
-的产物与运行输出在 PH-84 前后一致（版本 banner 除外）。
+的产物与运行输出在 v0-PH-84 前后一致（版本 banner 除外）。
 
 
 ## 11 文档与实现一致性（缺口登记，2026-11-15）
@@ -3336,12 +3336,12 @@ struct Shape {
 在上述作业落地前，本文的「已知缺陷」段落就是外部使用者的规避依据；发现新偏差时先改本文并登记，
 不要直接改 `selfhost/` 或门禁实现（边界见负责人 2026-11-15 的决定）。
 
-### 4.74 解析器/检查器的判别式切片（PH-87，实现内部）
+### 4.74 解析器/检查器的判别式切片（v0-PH-87，实现内部）
 
 > 本节描述的**不是**用户可见语法，而是 ct-ast 自身实现的组织约束；语言语义不变。
 
 ct-ast 的节点池是扁平 `struct Node { int kind; … }`，`kind` 是手编号的 `int`
-（`N_*` 宏，跨单元各写一份）。PH-87 把解析器与检查器的 kind 判別改成**单一判别 +
+（`N_*` 宏，跨单元各写一份）。v0-PH-87 把解析器与检查器的 kind 判別改成**单一判别 +
 按 kind 切片**：
 
 - `Expr::static_ctype`（静态 C 类型）：14 个 kind → 13 个 `ctype_*` 函数；
@@ -3349,12 +3349,12 @@ ct-ast 的节点池是扁平 `struct Node { int kind; … }`，`kind` 是手编�
 - 判别式只读一次 `nodes[n].kind`，不再在每个分支重复读；分支体逐字保留在切片函数里。
 
 **为什么不是 `match`（诚实登记）。** `match`（§4.73）只接受 ADT 值；`kind` 是
-`int`，要把它变成 ADT 主语就得改整棵节点树，属 PH-88（发射器 + 自举）范围。
-更硬的前置：ct-ast 源码由 L2 引导编译，L2 不实现 PH-84，把 `pub enum NodeKind`
+`int`，要把它变成 ADT 主语就得改整棵节点树，属 v0-PH-88（发射器 + 自举）范围。
+更硬的前置：ct-ast 源码由 L2 引导编译，L2 不实现 v0-PH-84，把 `pub enum NodeKind`
 写进源码会让 L2 发射非法 C 而断链（原始输出见
 [battle/p87-kind-match](../battle/p87-kind-match/verdict.md) 与
 [证据](../test/probes/p87_l2_adt_evidence.txt)）。因此本版只落地可验证的切片，
-`switch → match` 的字面拼写移交 PH-88；切片与变体 1:1，届时是机械替换。
+`switch → match` 的字面拼写移交 v0-PH-88；切片与变体 1:1，届时是机械替换。
 
 **等价判据（D-017 A1）。** 测试语料发射 66 个文件逐字节不变；345 条诊断
 exit+stderr 逐字不变；自举不动点（ct-ast 与自编译 ct-ast2 的 `--emit-c` 目录
@@ -3365,12 +3365,12 @@ exit+stderr 逐字不变；自举不动点（ct-ast 与自编译 ct-ast2 的 `--
 `test/ast/p87_checker/missing_arm.ct` 钉住
 `error: match does not cover variant 'Shape.Rect'`。
 
-### 4.75 发射器的判别式切片与自举不动点轮数（PH-88，实现内部）
+### 4.75 发射器的判别式切片与自举不动点轮数（v0-PH-88，实现内部）
 
 > 本节与 §4.74 同类：描述 ct-ast 自身的组织约束与门禁，**不是**用户可见语法；
 > 发射格式、命名契约与 ABI 均不变。
 
-PH-88 把发射器的五个 kind 判别函数改成与 §4.74 同形的**单一判别 + 按 kind 切片**：
+v0-PH-88 把发射器的五个 kind 判别函数改成与 §4.74 同形的**单一判别 + 按 kind 切片**：
 
 | 判别函数 | 切片前 | 切片后 | 切片数 |
 | --- | --- | --- | --- |
@@ -3398,7 +3398,7 @@ PH-88 把发射器的五个 kind 判别函数改成与 §4.74 同形的**单一�
 比对逻辑。轮数不在 {2,3} 内直接报错退出，不静默钳位。
 
 **为什么仍不是字面 `match`（诚实登记）。** ct-ast 由 L2 引导编译，L2 不实现
-PH-84 的 ADT/`match`；写 `pub enum NodeKind` 会被 L2 原样发射成非法 C 而断链
+v0-PH-84 的 ADT/`match`；写 `pub enum NodeKind` 会被 L2 原样发射成非法 C 而断链
 （§4.74 同因）。76 个切片与将来的 `match` 变体一一对应，但“一 kind 一臂、共用体
 调同一 helper”的机械替换只能在引导链支持后做。承接目标已写死为 **v1.0 的 seed
 cutover（`v1-PH-0`）**，并纳入 `expr_ctype` / `maybe_box` / `chk_type` 等剩余

@@ -7,7 +7,7 @@
 | 复核者 | REV |
 | HEAD | `8739ec96`（`8739ec962da42a1e6d4da0a9c20a3cbbdc52589a`，`ct-ast v0.65.1`） |
 | A 部分结论 | **4/4 通过**：SH-89 / SH-90 / SH-91 / TEST-20 均 `verified`（无 skip） |
-| B 部分结论 | **不成立（部分任务）**：PH-65 R1–R5 合规；R6 / R7 不合规；PH-66 R1–R5 的 test/impl 父提交关系成立，但红证均未写 `baseline: <sha>`（R5 无 baseline 字段） |
+| B 部分结论 | **不成立（部分任务）**：v0-PH-65 R1–R5 合规；R6 / R7 不合规；v0-PH-66 R1–R5 的 test/impl 父提交关系成立，但红证均未写 `baseline: <sha>`（R5 无 baseline 字段） |
 
 复核期间 HEAD 由 `ff9dd9c5` 前移到 `8739ec96`；新增提交只动
 `docs/reviews/2026-11-17-pkg-index-audit.md`（953 行，纯文档），
@@ -158,7 +158,7 @@ rc=0
 （c）提交正文的 `baseline:` 值是 sha 且 `git merge-base --is-ancestor` 为真。
 不重跑红证（按要求只核对）。
 
-### 3.1 PH-65（R1–R7）
+### 3.1 v0-PH-65（R1–R7）
 
 | 任务 | test 提交（红） | impl 提交 | `impl^ == test` | baseline 字段 | baseline 是 HEAD 祖先 | 判定 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -173,17 +173,17 @@ rc=0
 逐条发现：
 
 1. **R6 引用错误且无红/绿对**：`64fc41db` 的实际标题是
-   `test(ast): PH-65-R7 红（C 边界文档）`，其父提交是 `983ecf33`
-   （`PH-65-R6 接入门禁`），不是任何"R6 实现提交"。R6 的真实夹具提交是
-   `d044860a`（`PH-65-R6 回归面探针`，父 `8c2824d3`），随后 `983ecf33` 仍是
-   `test(...)` 提交；全历史 `--grep='PH-65-R6'` 只有这两个 `test` 提交，没有
+   `test(ast): v0-PH-65-R7 红（C 边界文档）`，其父提交是 `983ecf33`
+   （`v0-PH-65-R6 接入门禁`），不是任何"R6 实现提交"。R6 的真实夹具提交是
+   `d044860a`（`v0-PH-65-R6 回归面探针`，父 `8c2824d3`），随后 `983ecf33` 仍是
+   `test(...)` 提交；全历史 `--grep='v0-PH-65-R6'` 只有这两个 `test` 提交，没有
    `feat`/`fix` 实现提交。`d044860a` 正文写的是
    `红证（baseline: 相位前 v0.63.4 构建 /tmp/p0/ct-head）`，也不是 sha。
    §9 把 R6 与 R7 都指向 `64fc41db`，属**引用错误**。
 2. **R7 缺 baseline**：`ef121c6c^ == 64fc41db` 成立，但 `64fc41db` 正文
    （`git log -1 --format='%B'`）没有任何 `baseline:` 行，不满足 T-7 的最小字段。
 
-### 3.2 PH-66（R1–R5）
+### 3.2 v0-PH-66（R1–R5）
 
 | 任务 | test 提交（红） | impl 提交 | `impl^ == test` | baseline 字段（原文） | baseline 是 HEAD 祖先 | 判定 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -203,7 +203,7 @@ rc=0
 3. **R5**：`ac55c523` 正文完全没有 baseline 字段（`git log --format='%B'` 已核）。
    它虽是"纯文档"任务，卡片 §4 的 R5 行没有 `no-test: <理由>`，不能按 T-7 的
    纯文档例外豁免；即便豁免，红证字段仍缺 baseline。
-4. 附带（不属 §9 表格）：PH-66 收口提交 `9c3f175e` 正文把 R5 实现写成
+4. 附带（不属 §9 表格）：v0-PH-66 收口提交 `9c3f175e` 正文把 R5 实现写成
    `ab202b1f`，该对象在仓库中不存在（`git cat-file -t` 报 not a valid object
    name）；实际 R5 实现是 `d5e0fa80`。属提交正文笔误，不影响 §9 的 test 链。
 
@@ -219,7 +219,7 @@ rc=0
 be092eaf90437e93db4c1cd086533947   # 6/6 完全相同
 ```
 
-`git diff -U0 <立项> HEAD -- docs/design/phase65.md` 的 hunk 只落在
+`git diff -U0 <立项> HEAD -- docs/phases/v0-PH-65/card.md` 的 hunk 只落在
 第 3 行、74–75、118–120、189–204；§4/§5 位于 133–161，**未相交**。
 phase66 的 hunk 只落在第 3 行、108–124；§4/§5 位于 64–86，**未相交**。
 两者都只改了状态行、§3.4 可观测入口与收口对照表。

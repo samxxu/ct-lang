@@ -1,14 +1,14 @@
-# PH-70 收口复核（REV）
+# v0-PH-70 收口复核（REV）
 
 - 日期：2026-11-19
 - 角色：REV（独立复核）
 - 复核对象：`2afca6009e58d81d9b4924b2c5baa2eae47e7030`（
-  `feat(ast): PH-70 CFG/定值/控制流收口（v0.69.0）`），tag `v0.69.0`
-- 对象：`docs/design/phase70.md` §3 / §4 / §7（R1–R3、E70-1…E70-3）
+  `feat(ast): v0-PH-70 CFG/定值/控制流收口（v0.69.0）`），tag `v0.69.0`
+- 对象：`docs/phases/v0-PH-70/card.md` §3 / §4 / §7（R1–R3、E70-1…E70-3）
 - 结论：**REV: 通过**
 
 依据只有仓库提交、按 README 自举出的 `ct-ast`、以及 `2afca600` 的 CI run。复核期间工作树
-HEAD 已推进到 PH-72（`88b70523`），因此所有判定都固定在 `2afca600`：探针在
+HEAD 已推进到 v0-PH-72（`88b70523`），因此所有判定都固定在 `2afca600`：探针在
 `git archive 2afca600` 的 `/tmp` 树里跑，`check-all` 在 `2afca600` 的 `/tmp` clone 里跑，
 不使用工作树当前产物。下文的「非阻断更正项」是文档/数字/口径偏差，不改变结论。
 
@@ -96,16 +96,16 @@ check-all: OK (11 hard gates green)
 ```
 
 11/11 全绿。4 个 skip 是 Renode / nRF52 / FreeRTOS / GDB（macOS 宿主没有 Linux Renode），
-与 PH-70 无关，由 CI 的 `ubuntu-gcc` 覆盖。`check-ast` 的 PH-70 断言逐条列出：
+与 v0-PH-70 无关，由 CI 的 `ubuntu-gcc` 覆盖。`check-ast` 的 v0-PH-70 断言逐条列出：
 
 ```text
-ok    PH-70-R1 flow (break/continue context)
-ok    PH-70-R3 switch (duplicate case)
-ok    PH-70-R3 unreachable (after jump)
-ok    PH-70-R2 return (missing return)
-ok    PH-70-R2 definite (return + uninit)
-ok    PH-70-R2 uninit (uninitialized read)
-ok    PH-70-R1 cfg (structured termination)
+ok    v0-PH-70-R1 flow (break/continue context)
+ok    v0-PH-70-R3 switch (duplicate case)
+ok    v0-PH-70-R3 unreachable (after jump)
+ok    v0-PH-70-R2 return (missing return)
+ok    v0-PH-70-R2 definite (return + uninit)
+ok    v0-PH-70-R2 uninit (uninitialized read)
+ok    v0-PH-70-R1 cfg (structured termination)
 ```
 
 golden 变化（`2afca600` 对 `test/cases` + `test/modules`）：
@@ -171,21 +171,21 @@ files=67 types_p70_hits=0 sem_p70_hits=0
 
 ```console
 $ git log --oneline -25 2afca600
-2afca600 feat(ast): PH-70 CFG/定值/控制流收口（v0.69.0）
-c5a41939 test(ast): PH-70-R2 汇总探针（definite）
-92f123d9 feat(ast): PH-70-R1 结构化控制流终止判定
-81655b47 test(ast): PH-70-R1 红（结构化终止）
-fd216b80 fix(ast): PH-70 语义检查只在 --semantics 下生效
-ef9dc826 feat(ast): PH-70-R2 未初始化读检测（--semantics）
-cc992b4f test(ast): PH-70-R2 红（未初始化读）
-865e02fb feat(ast): PH-70-R2 非 void 函数缺 return 检测（--semantics）
-c57c5485 test(ast): PH-70-R2 红（非 void 函数缺 return）
-d275ec25 feat(ast): PH-70-R3 重复 case 检测（--semantics）
-92b59e17 test(ast): PH-70-R3 红（重复 case）
-a52c39a4 feat(ast): PH-70-R3 不可达代码检测（--semantics）
-34cb1189 test(ast): PH-70-R3 红（不可达代码）
-fe0e4d21 feat(ast): PH-70-R1 break/continue 上下文检查（--semantics）
-b3e01c79 test(ast): PH-70-R1 红（break/continue 上下文）
+2afca600 feat(ast): v0-PH-70 CFG/定值/控制流收口（v0.69.0）
+c5a41939 test(ast): v0-PH-70-R2 汇总探针（definite）
+92f123d9 feat(ast): v0-PH-70-R1 结构化控制流终止判定
+81655b47 test(ast): v0-PH-70-R1 红（结构化终止）
+fd216b80 fix(ast): v0-PH-70 语义检查只在 --semantics 下生效
+ef9dc826 feat(ast): v0-PH-70-R2 未初始化读检测（--semantics）
+cc992b4f test(ast): v0-PH-70-R2 红（未初始化读）
+865e02fb feat(ast): v0-PH-70-R2 非 void 函数缺 return 检测（--semantics）
+c57c5485 test(ast): v0-PH-70-R2 红（非 void 函数缺 return）
+d275ec25 feat(ast): v0-PH-70-R3 重复 case 检测（--semantics）
+92b59e17 test(ast): v0-PH-70-R3 红（重复 case）
+a52c39a4 feat(ast): v0-PH-70-R3 不可达代码检测（--semantics）
+34cb1189 test(ast): v0-PH-70-R3 红（不可达代码）
+fe0e4d21 feat(ast): v0-PH-70-R1 break/continue 上下文检查（--semantics）
+b3e01c79 test(ast): v0-PH-70-R1 红（break/continue 上下文）
 ```
 
 | 任务 | 红提交（路径集合） | baseline（提交正文） | 实现提交 | 配对 |
@@ -216,8 +216,8 @@ R1 与 R3-unreach 的 baseline 不是 test 提交的直接父（父分别是 `f3
 **关于「R2 无独立红提交」**：对 *行为* 不成立——R2 有两条独立红证（`c57c5485` 缺 return、
 `cc992b4f` 未初始化读），各有相邻实现提交。只有 `p70_definite.sh` 这个**汇总入口**
 （`c5a41939`）无独立红：它只新增 9 行转发脚本、不改行为，卡 §3 的 R2 verify 行原本就写
-这个文件名，补它是为了让判据可逐字执行，理由成立。`0b159b1c` 是 **PH-69**-R2 的实现提交，
-与 PH-70 的 R2 无关，不能当 PH-70 的红证。
+这个文件名，补它是为了让判据可逐字执行，理由成立。`0b159b1c` 是 **v0-PH-69**-R2 的实现提交，
+与 v0-PH-70 的 R2 无关，不能当 v0-PH-70 的红证。
 
 ## 6 版本 / tag / CI
 
@@ -250,11 +250,11 @@ $ git ls-remote --tags origin v0.69.0 'v0.69.0^{}'
 3444bf2a...  refs/tags/v0.69.0
 2afca600...  refs/tags/v0.69.0^{}
 $ git cat-file -p v0.69.0 | tail -1
-PH-70 closeout (2afca60)
+v0-PH-70 closeout (2afca60)
 ```
 
 annotated tag、peeled = 收口提交、本地 tag 对象与远端逐字相同；`origin/main` 包含
-`2afca600`。message 的 `PH-70 closeout (2afca60)` 与 v0.66–v0.70 的既有写法一致。
+`2afca600`。message 的 `v0-PH-70 closeout (2afca60)` 与 v0.66–v0.70 的既有写法一致。
 
 CI（`gh run view 44457058787`，event=push，headSha=`2afca600`）：workflow `ci` 的
 conclusion 为 `success`，三个 job `ubuntu-gcc` / `macos-clang` / `ubuntu-clang-smoke`
@@ -278,10 +278,10 @@ workflow 的路径/触发条件，不是失败。
 5. 新增的 `ct check --semantics` 只出现在 phase 卡片、phase-log 与方案里，README 的 CLI
    表（`README.md:448`）与 `docs/language-spec.md` §4.53 未提。新用户可见开关应补进 CLI
    文档。
-6. 卡 §3 的 R3 deliverable 含 `goto 越界`，但 PH-70 没有新增 goto 探针/实现；goto 的
+6. 卡 §3 的 R3 deliverable 含 `goto 越界`，但 v0-PH-70 没有新增 goto 探针/实现；goto 的
    `test/ast/32_goto` 与 defer/own 跨作用域检查是既有能力。建议在 §7 注明「goto 沿用既有
    检查」，而不是让读者以为本轮覆盖了它。
-7. `p70_flow.sh` / `p70_cfg.sh` 头注释标 `PH-70-R1`，卡 §3 把 flow 归 R3，提交 `b3e01c79`
+7. `p70_flow.sh` / `p70_cfg.sh` 头注释标 `v0-PH-70-R1`，卡 §3 把 flow 归 R3，提交 `b3e01c79`
    也标 R1；属标签漂移。`read of uninitialized variable` 诊断没带变量名、行列是 `1:0`，
    与 `phase70-r2-plan.md` 的 `use of uninitialized variable 'x'` 不一致，属诊断质量。
 8. `ct compile --semantics` 被静默接受（rc=0，不生效），`ct build --semantics` 报
@@ -293,5 +293,5 @@ workflow 的路径/触发条件，不是失败。
   本机 `check-all` 另作独立佐证。
 - 本机 `check-all` 是 macOS / Apple clang；Linux GCC 的 11/11 以 `2afca600` 的 `ubuntu-gcc`
   CI run 为准，未在本机跑 GCC 全量。
-- 未复核 phase-ID 迁移窗口（仓库无账本，仍走 legacy `docs/design/phase70.md`）；未穷举
+- 未复核 phase-ID 迁移窗口（仓库无账本，仍走 legacy `docs/phases/v0-PH-70/card.md`）；未穷举
   `--semantics` 的所有语法组合，只按五支探针 + 67 个合法文件 + 5 个负例覆盖。

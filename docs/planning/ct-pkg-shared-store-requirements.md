@@ -5,7 +5,7 @@
 | 状态 | **已定稿**（2026-11-15；依据 [提案](../proposals/ct-pkg-shared-store.md) §12 五条裁定） |
 | 性质 | **契约变更**，不是增量字段：`docs/package-guide.md` §1 现写死「包根 = 单元根、单元与 `ct.pkg` 并列不嵌套」，本需求以 `ns-root` 取代该契约；`ct install` 的 `-I vendor/<name>` 输出契约同时作废 |
 | 判据形态 | 全部为二值判据（通过/失败），每条给出可执行验收命令；不含主观项 |
-| 施工入口 | [phase54.md](../history/design/phase54.md)（S0 卡）；切片与版本位见 [roadmap §ct-pkg 共享库](../roadmap.md) |
+| 施工入口 | [phase54.md](../phases/v0-PH-54/card.md)（S0 卡）；切片与版本位见 [roadmap §ct-pkg 共享库](../roadmap.md) |
 | 变更控制 | 判据只能更严不能放宽；如需改判据，另起 errata 并保留原文 |
 
 ## 1. 术语

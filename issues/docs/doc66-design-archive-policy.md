@@ -68,6 +68,6 @@
 $ python3 test/docs/check-docs.py   # design window: ok (11/12)
 ```
 
-红证：临时树加入 `design/phase99.md` + `design/phase80.md` + 重复归档 `history/design/phase99.md`
+红证：临时树加入 `phases/v0-PH-99/card.md` + `phases/v0-PH-80/card.md` + 重复归档 `phases/v0-PH-99/card.md`
 → 两条错误（phase 80 越界，oldest kept: 88；`phase99.md exists in both docs/design/ and
 docs/history/design/`）。

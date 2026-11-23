@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 状态 | rejected |
 | 处置证据 | **rejected**（2026-11-22，REQ/REV 改判：原报告例子是合法调用；真实错配 `Vec<int>.push("x")` 已报 `argument 1: expected 'int', got 'char *'`；`test/ast/p69_containers.sh` OK） |
-| 承诺出处 | [PH-69 卡](../../docs/design/phase69.md) R4 |
+| 承诺出处 | [v0-PH-69 卡](../../docs/phases/v0-PH-69/card.md) R4 |
 
 ## 现象
 
@@ -33,7 +33,7 @@ int main(void)
 在容器方法分支用 `inst_subst_type(ibase, formal)` 解析 `T`，再走
 `chk_assignable(diag=6)`；先覆盖 `push/set/put`。
 
-## 复测（2026-11-19，PH-69-R4）
+## 复测（2026-11-19，v0-PH-69-R4）
 
 原报告的例子是**合法**调用：`g: Vec<Vec<int>>`、`row: Vec<int>`，`g.push(row)`
 的元素类型正是 `Vec<int>`。真正的错配如下，当前编译器已正确报错：
@@ -47,11 +47,11 @@ bad.ct:4:12: error: argument 1: expected 'int', got 'char *'
 
 内建容器经 `struct Vec_int` 实例走的是 `chk_mcall_args` 的 `impl` 绑定路径，
 `T` 被替换后比较。因此本条**不成立**，建议 REV 改 `rejected`（或 `wontfix`），
-不需要新实现；PH-69-R4 以探针 `p69_containers.sh` 验收既有行为。
+不需要新实现；v0-PH-69-R4 以探针 `p69_containers.sh` 验收既有行为。
 
 ## 处置（2026-11-20，DEV · 复跑）
 
-- 结论：本条原判为误报（PH-69-R4 已覆盖既有行为）；本轮复跑确认探针绿，
+- 结论：本条原判为误报（v0-PH-69-R4 已覆盖既有行为）；本轮复跑确认探针绿，
   仍需 REV 改判 `rejected`/`wontfix`。只记录证据，不改 `status`。
 - 命令/输出：
 
@@ -99,7 +99,7 @@ $ echo $?
   不是「实参类型不检查」的证据；
 - 内建容器经 `struct Vec_int` 实例走 `chk_mcall_args` 的 `impl` 绑定路径，`T` 已按接收者实例替换；
   真实错配（`push("x")`）在 `ct check --types` 下硬错、退出 1；
-- PH-69-R4 的探针 `p69_containers.sh` 就是这条既有行为的回归断言，HEAD 绿。
+- v0-PH-69-R4 的探针 `p69_containers.sh` 就是这条既有行为的回归断言，HEAD 绿。
 
 无需新实现；本条关闭。若将来发现其他容器方法（`set`/`put`/`insert`）有真实的 T 未替换路径，
 按新证据另立条目，不复活本条。

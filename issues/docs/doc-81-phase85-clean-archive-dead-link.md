@@ -1,4 +1,4 @@
-# DOC-81 · PH-85 收口提交的干净归档 check-docs 因 docs/README 死链失败
+# DOC-81 · v0-PH-85 收口提交的干净归档 check-docs 因 docs/README 死链失败
 
 | 项 | 值 |
 | --- | --- |
@@ -48,7 +48,7 @@ design window: ok (12/12)
 rc=0
 ```
 
-PH-85 卡 §7.4 记的是 `check-docs: OK (2295 relative links in 377 files, v0.85.0, …)`，
+v0-PH-85 卡 §7.4 记的是 `check-docs: OK (2295 relative links in 377 files, v0.85.0, …)`，
 与工作树的 2318/378 也对不上：收口证据是在**加 guide 行之前**跑的，加行后没有重跑
 归档树。
 
@@ -67,7 +67,7 @@ PH-85 卡 §7.4 记的是 `check-docs: OK (2295 relative links in 377 files, v0.
 
 ## 关联
 
-- [PH-85 卡](../../docs/design/phase85.md) §7.4、E85-7
+- [v0-PH-85 卡](../../docs/phases/v0-PH-85/card.md) §7.4、E85-7
 - [REV 复核](../../docs/reviews/2026-11-21-phase85-rev-verdict.md) §4.1
 
 ## DEV 处置（2026-11-21）

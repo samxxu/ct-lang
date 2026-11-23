@@ -88,11 +88,11 @@
 | 内建 trait 声明（built-in trait declaration） | `lib/core/Vec.h.ct` 的 `pub trait Drop { void drop(); }` / `pub trait Handback { void handback(); }` | 保留名内建 trait 的**可见声明**：只作契约与编辑器跳转，不入 `MAX_TRAITS`、不生成 vtable/vptr；`use` / `impl` 仍按名走内建路径。`AutoDrop` 是 `own` 的机制，不是 trait（LANG-23，见 [spec §4.56](language-spec.md)） |
 | `Option` / `Result` | `Option<T>`（`has` + `value`）、`Result<T, E>`（`ok` + `value` + `err`） | `lib/core` 的普通泛型 struct，带 `use Drop`；字面量构造，`unwrap` 在错侧 `abort`，`release` 是 no-op；`none()` / `ok()` / `err()` 零初始化未用 payload 使无条件胶水安全释放；`?` / pattern / 自动释放属后续阶段（Phase 34 / Phase 36） |
 | 泛型 trait（generic trait） | `trait Iter<T> { T next(void); }` | 按实参单态化为实例行（`Iter<int>` → `Iter_int`），产物 `<Trait>_<ct_inst_encode 输出>_*`（`Iter_int_vtbl` / `__iter_int_vptr` / `Circle_Iter_int_next`，嵌套实参按转义、≥64 字符走哈希回退）；实例只能在模板属主单元创建（跨单元 L35-4），不支持默认方法体（Phase 35，见 [language-spec](language-spec.md) §4.55） |
-| 借用字符串 Str（borrowed string） | `struct Str { char *ptr; int len; }`，非 owning | PH-80 起 `Str` 是 UTF-8 借用视图：不拥有 buffer、不释放；owning 句柄是 `String`（引用计数头 + 作用域释放）。构造见 `Str` 字面量 / `.as_str()` / `byte_slice`；`cstr()` 是 C 边界唯一出口（见 [language-spec](language-spec.md) §4.70） |
-| 拥有字符串 String（owning string） | `struct String { char *ptr; int len; }` + 前置 refcount 头 | 内置 owning 句柄；不可变，字面量由编译器发射 immortal 块；副本自动 retain、作用域 release（PH-80 / D-013，见 [language-spec](language-spec.md) §4.70） |
-| ADT / 和类型（sum type） | `enum Shape { Circle(int r), Empty() }` | 任一成员带括号负载的 `enum` 是名义和类型：C 布局 `struct T { int tag; union { … } u; }`，`tag` 为变体序号；全部成员无负载时仍是 C `enum`（PH-84，见 [language-spec](language-spec.md) §4.73） |
-| 变体（variant） | `Shape.Circle(3)` | ADT 的构造器；实参个数/类型必须匹配负载，零负载写 `Empty()`；裸变体名不引入（PH-84） |
-| `match` | `match (s) { Shape.Circle(r) => { … } }` | 语句形式的穷尽判别；必须覆盖全部变体或显式 `_`，无 fallthrough；绑定是负载的副本（owning 负载按 move）；`ct check --types` 对多余 `_` 给 lint（PH-84，见 [language-spec](language-spec.md) §4.73） |
+| 借用字符串 Str（borrowed string） | `struct Str { char *ptr; int len; }`，非 owning | v0-PH-80 起 `Str` 是 UTF-8 借用视图：不拥有 buffer、不释放；owning 句柄是 `String`（引用计数头 + 作用域释放）。构造见 `Str` 字面量 / `.as_str()` / `byte_slice`；`cstr()` 是 C 边界唯一出口（见 [language-spec](language-spec.md) §4.70） |
+| 拥有字符串 String（owning string） | `struct String { char *ptr; int len; }` + 前置 refcount 头 | 内置 owning 句柄；不可变，字面量由编译器发射 immortal 块；副本自动 retain、作用域 release（v0-PH-80 / D-013，见 [language-spec](language-spec.md) §4.70） |
+| ADT / 和类型（sum type） | `enum Shape { Circle(int r), Empty() }` | 任一成员带括号负载的 `enum` 是名义和类型：C 布局 `struct T { int tag; union { … } u; }`，`tag` 为变体序号；全部成员无负载时仍是 C `enum`（v0-PH-84，见 [language-spec](language-spec.md) §4.73） |
+| 变体（variant） | `Shape.Circle(3)` | ADT 的构造器；实参个数/类型必须匹配负载，零负载写 `Empty()`；裸变体名不引入（v0-PH-84） |
+| `match` | `match (s) { Shape.Circle(r) => { … } }` | 语句形式的穷尽判别；必须覆盖全部变体或显式 `_`，无 fallthrough；绑定是负载的副本（owning 负载按 move）；`ct check --types` 对多余 `_` 给 lint（v0-PH-84，见 [language-spec](language-spec.md) §4.73） |
 | 析构胶水（drop glue） | 编译器生成的 `<S>_Drop_drop` | 无显式 `impl Drop` 时按字段声明顺序递归释放每个 `uses_drop` 字段；`Vec` / `Map` 值字段按类型名直接进入胶水（LANG-27：`if (_self->f.h != 0) (void)<Inst>_release(&_self->f);`，元素走 `__ct_elem_release` 级联）；写了显式 `impl Drop`（含 `impl<T> Drop for Box<T>`）即自负全责、不再生成字段胶水；泛型 Drop 每实例单态化一份、不产生模板态（Phase 36） |
 
 ### 2. 命名 / 修饰规则（已发布契约）
@@ -162,7 +162,7 @@
 | 子命令 install | `ct install` | 离线校验 store 与 v2 `ct.lock`（逐包摘要 + 清单依赖覆盖），把各包的 `-I` / `cflags` / `ldflags` 拼成**一条** `ct build` 命令；不修改清单、不联网、不调 `cc`（Phase 8.3，17.5 扩元数据，S7 后） |
 | 子命令 verify | `ct verify` | 离线校验 store 与 v2 `ct.lock` 后报 `verified N package(s)`；只读，不写任何文件（Phase 17.5，S7 后） |
 | 版本范围（range） | `^` / `~` / 精确 / `*` / `>=` `>` `<` `<=` `=` | 空格分隔的子句视为 AND；`^` / `~` 沿用原语义，比较器按三段版本数比较（Phase 17.5，不做完整 SemVer） |
-| 显式索引（index） | `--index <file>` / `CT_INDEX` | 纯文本，每行 `name version publisher git-url tag sha256:<hex>`；`ct get` 用它解析 `<publisher>/<name>`，并可在命中 `publisher = ct` 行时覆盖官方 pin；裸名只查内置 pin 表，不查索引（PH-77） |
+| 显式索引（index） | `--index <file>` / `CT_INDEX` | 纯文本，每行 `name version publisher git-url tag sha256:<hex>`；`ct get` 用它解析 `<publisher>/<name>`，并可在命中 `publisher = ct` 行时覆盖官方 pin；裸名只查内置 pin 表，不查索引（v0-PH-77） |
 | 输出选项 | `-o <file\|dir>` | |
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
 | C 标准目标 | `--std=c99`（默认）/ `--std=gnu99` | Phase 6.4：暂无可差异发射点，`build` 把它写进建议的 `cc` 命令；其他值硬报错 |
@@ -199,7 +199,7 @@
 | 阶段（Phase） | Phase 0 / 0.1 / 0.2 / 0.3（剥离越位）/ 1（自举）/ 2–5（恢复 + 新增特性）/ 6（生态）/ 7（工具链）/ 8（包管理）/ 9（AST 新主线）/ 10（主线切换）/ 11（`map` 构造）/ 12（bindings + 方言深化）/ 17（工程质量与新能力） | 见 [roadmap](roadmap.md)；编号与版本一一对应（Phase *n* ↔ `v0.n.x`），当前 v0.17.0。例外：`v0.13.0` / `v0.14.0` / `v0.15.0` / `v0.15.1` / `v0.16.0` / `v0.16.1` / `v0.16.2` / `v0.16.3` 是 Phase 12 之后的补丁收口（C 子集补齐 / trait 默认方法 / `.m.ct` 静态映射 / 静态映射的 `sizeof` 修复 / `borrow` + `Handback` / borrow 审查修复 / 静态表堆化 + `ct.lock` 改 SHA-256 / `return` 求值顺序 + 字段上限文案 + 文档漂移），不对应新阶段 |
 | 子阶段（sub-phase） | 1.0–1.7 + 1.9（1.8 `map` 移至 Phase 6） | 越位实现期的落地顺序 |
 | 出口标准（exit criteria） | 每阶段的验收清单 | |
-| 设计决策 | D1–D52、D17-1–D17-9、D-A | D1–D8 见 [design/restore.md](history/design/restore.md) §6，D9–D14 见 [design/phase5.md](history/design/phase5.md)，D15–D20 见 [design/phase6.md](history/design/phase6.md)，D21–D27 见 [design/phase8.md](history/design/phase8.md)，D28–D37 见 [design/phase9.md](history/design/phase9.md)，D38–D45 见 [design/phase10.md](history/design/phase10.md)，D46–D52 见 [design/phase12.md](history/design/phase12.md)，D17-1–D17-9 见 [design/phase17.md](history/design/phase17.md) |
+| 设计决策 | D1–D52、D17-1–D17-9、D-A | D1–D8 见 [design/restore.md](history/design/restore.md) §6，D9–D14 见 [phases/v0-PH-5/card.md](phases/v0-PH-5/card.md)，D15–D20 见 [phases/v0-PH-6/card.md](phases/v0-PH-6/card.md)，D21–D27 见 [phases/v0-PH-8/card.md](phases/v0-PH-8/card.md)，D28–D37 见 [phases/v0-PH-9/card.md](phases/v0-PH-9/card.md)，D38–D45 见 [phases/v0-PH-10/card.md](phases/v0-PH-10/card.md)，D46–D52 见 [phases/v0-PH-12/card.md](phases/v0-PH-12/card.md)，D17-1–D17-9 见 [phases/v0-PH-17/card.md](phases/v0-PH-17/card.md) |
 | 自举（bootstrap / self-hosting） | L0 → L1 → L2 → ct-ast | 用 Ct 重写编译器 |
 | AST 版编译器（ct-ast） | `selfhost/ct-ast/main.ct` | Phase 9 新主线：词法 → 递归下降 → AST → 发射；纯 Ct 的多单元树（`main.ct` 只做绑定与分派），自编并达到全量行为等价 |
 | 行为等价（behavioural equivalence） | D34 | 等价口径 = 退出码 + 产物零警告可编 + **程序输出一致**（不比对生成的 C 文本） |

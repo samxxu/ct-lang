@@ -1,8 +1,8 @@
-# PH-87 S87c — A 机制对编译器自身的 dogfood（`--check-level=warn`）
+# v0-PH-87 S87c — A 机制对编译器自身的 dogfood（`--check-level=warn`）
 
 - 日期：2026-11-21
 - 命令：`ct-ast build --emit-c --check-level=warn -I selfhost/ct-ast selfhost/ct-ast/main.ct -o <dir>`
-- 结果（PH-87，2026-11-21）：**rc=0，无崩溃**；10 条 warning，全部同一类，**均判为误报（FP）**。
+- 结果（v0-PH-87，2026-11-21）：**rc=0，无崩溃**；10 条 warning，全部同一类，**均判为误报（FP）**。
 - 现行（SH-108，2026-11-23）：同一命令 **0 条 warning**；误报已收敛，见 §3。
 - 探针：`bash test/ast/p87_dogfood.sh <ct-ast>`；清单：`test/probes/p87_dogfood.tsv`。
 
@@ -32,7 +32,7 @@ $ echo $?
 
 - FP 数：**10**；崩溃：**0**；其它类别的诊断：**0**。
 - 处置：不阻塞本卡（R87-3）。建议另立 issue（数组形参首维不应触发 slice 弃用提示），
-  归入 A 机制的误报收敛，不在 PH-87 改语义。
+  归入 A 机制的误报收敛，不在 v0-PH-87 改语义。
 - 说明：同一命令换成 `--check-level=error` 时这 10 条仍以 warning 出现（它们不走
   `--types` 的 B 类finding 升级路径），rc 仍为 0；本卡只登记，不改行为。
 
@@ -50,4 +50,4 @@ $ grep -c "warning:" <stderr>
 ```
 
 `test/probes/p87_dogfood.tsv` 随之清空；探针 `p87_dogfood.sh` 断言 0 条 warning。
-§1–2 保留 PH-87 的历史证据与 FP 判定，不回改。
+§1–2 保留 v0-PH-87 的历史证据与 FP 判定，不回改。

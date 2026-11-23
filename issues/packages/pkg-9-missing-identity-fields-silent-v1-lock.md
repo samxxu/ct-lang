@@ -101,7 +101,7 @@ $ echo $?
 
 ## 处置（2026-11-20，DEV #2）
 
-**结论：fixed**。原单描述的「rc=0 + 静默退 v1 lock」在 HEAD 已不存在（PH-63
+**结论：fixed**。原单描述的「rc=0 + 静默退 v1 lock」在 HEAD 已不存在（v0-PH-63
 移除 vendor、`pkg_store_commit` 强制身份），但**失败路径不写 store** 仍不成立：
 身份检查发生在 `get_spec` 遍历依赖之后，被拒的 get 会先把依赖提交到共享 store。
 本次把校验前移，并补回归探针。
@@ -158,7 +158,7 @@ $ echo $?
     == summary: 153 passed, 0 failed ==
   ```
 - 关于 A4（显式 v1 开关）：仓库没有、也不再需要 v1 兼容标记（vendor 读取路径已在
-  PH-63 移除，v1 行无法被 build 消费）。按「没有标记就拒绝」处理，未新增开关。
+  v0-PH-63 移除，v1 行无法被 build 消费）。按「没有标记就拒绝」处理，未新增开关。
 - 提交：
   - `527dcb66` `test(pkg): PKG-9 红 — 被拒的 get 仍把依赖写进 store`
   - `35757b08` `fix(pkg): PKG-9 身份校验前移，被拒的 get 不写 store`
@@ -219,7 +219,7 @@ $ test -f H/proj/ct.lock; echo $?
 A1b（拒绝先于依赖遍历，store 无 `ct/demo`）绿；A3（完整清单写 v2 lock + store）绿；
 A6（旧 lock 字节不变）绿；A7（`ct pkg check` 两文案与 rc=1 不变）绿。
 
-**A4/A5 的显式 v1 开关未实现**：处置给出的理由是 PH-63 已移除 vendor 读写，v1 行无法被
+**A4/A5 的显式 v1 开关未实现**：处置给出的理由是 v0-PH-63 已移除 vendor 读写，v1 行无法被
 `ct build` 消费，故「没有标记就拒绝」；核对 `Pkg.h.ct` 与 v0.77.2 的失败路径，理由成立，
 不计为漏项。issue 原描述的「rc=0 + 静默退 v1 lock」属历史锚点（v0.58.0），本次不复跑该历史
 二进制，只以 HEAD 残余缺陷（store 写入）做红/绿，避免把历史现象当成 HEAD 缺陷。

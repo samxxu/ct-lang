@@ -101,7 +101,7 @@ struct ct_handle_hdr { int refs; int aux; };   /* 8 字节；aux 类型专属 */
 
 ### 2.5 函子
 
-`(A,B) => R` 延后到 Wave 2；PH-75 已让闭包进方法实参，签名糖不阻塞其余家族。
+`(A,B) => R` 延后到 Wave 2；v0-PH-75 已让闭包进方法实参，签名糖不阻塞其余家族。
 
 ## 3. `String` / `Str` 定稿
 
@@ -169,15 +169,15 @@ CT **不再是 C 超集**，重述为：
 
 | phase | 内容 | 版本 |
 | --- | --- | --- |
-| PH-78 | S2 `ref/out` | v0.78.0（拟） |
-| PH-79 | S3 切片 | v0.79.0（拟） |
-| PH-80 | S5 `String/Str`（S5a/S5b） | v0.80.0（拟） |
-| PH-81 | S1 `Box/new` | v0.81.0（拟） |
+| v0-PH-78 | S2 `ref/out` | v0.78.0（拟） |
+| v0-PH-79 | S3 切片 | v0.79.0（拟） |
+| v0-PH-80 | S5 `String/Str`（S5a/S5b） | v0.80.0（拟） |
+| v0-PH-81 | S1 `Box/new` | v0.81.0（拟） |
 | v1.0 | AST-only 收口（顺延） | v1.0.0 |
 | v1.1 | 语法现代化 + A strict；Wave 2 函子 | v1.1.0 |
 
 - 顺序：**S2 `ref/out` ∥ S3 切片 → S5 `String/Str` → S1 `Box/new`**；S4 函子延后 Wave 2；
-- 版本：PH-78 起严格 `phase = MINOR`，无偏移表；
+- 版本：v0-PH-78 起严格 `phase = MINOR`，无偏移表；
 - v1.0 顺延发布，范围仍 AST-only；v1.1 继续行为保持 + Wave 2；
 - S5 分 S5a（内建层 + 旧 `Str` 并存）/ S5b（删旧 `Str` + 外部迁移 + 文档三处同步）。
 - 详细入口/退出/回滚见 [pointer-free-phase-plan](../planning/pointer-free-phase-plan.md)。
@@ -249,7 +249,7 @@ J-6 最低原型集：**S2 全量 + S3 全量 + S5 最小垂直切片**（String
 | P-5.1 | `out` 未初始化 | 硬错或零初始化；无 UB |
 | P-5.2 | 旧值释放/别名 | retain 右值 → release 旧值 → 写入；无 UAF |
 | P-5.3 | `ref` 赋值 vs 显式 release | 赋值允许；显式 release 硬错 |
-| P-5.4 | `out` 错误路径 | 赋值即生效；PH-70 保证至少一次 |
+| P-5.4 | `out` 错误路径 | 赋值即生效；v0-PH-70 保证至少一次 |
 | P-5.5 | `out/ref` 借用类型 | `out Str`/`ref int[]` 白名单 + 底层契约 |
 | P-5.6 | 泄漏/双释放 | ASan + `__ct_allocs/__ct_frees` |
 
@@ -282,7 +282,7 @@ J-6 → A：P-1…P-6 证据包齐全；P-7.1a/P-7.1b/P-7.2/P-7.3 原型可编�
 
 | Q | 结论 |
 | --- | --- |
-| Q1 | A1；v0.x phase=MINOR，PH-78 → v0.78.0，无偏移表；v1.0 顺延、范围不变 |
+| Q1 | A1；v0.x phase=MINOR，v0-PH-78 → v0.78.0，无偏移表；v1.0 顺延、范围不变 |
 | Q2 | `Box`/`new` 保留但移末位；不砍，砍则 `new` 同退 |
 | Q3 | 顺序 S2 ∥ S3 → S5 → S1；S2 最小首切片；S5 不能单独回滚，分 S5a/S5b |
 | Q4 | 统一头 `{int refs; int aux;}` 8 字节；`header_size(T)=round_up(8,_Alignof(T))`；immortal 空串 `refs=-1` |

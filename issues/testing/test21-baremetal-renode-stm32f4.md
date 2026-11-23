@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 状态 | verified |
 | 处置证据 | **verified**（CI `ubuntu-gcc`：`ok baremetal_renode (STM32F4: boot, button, SysTick, UART)`；run `44882080268`；见文末处置） |
-| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[PH-64 卡](../../docs/design/phase64.md) |
+| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[v0-PH-64 卡](../../docs/phases/v0-PH-64/card.md) |
 
 ## 缺口
 
@@ -41,7 +41,7 @@ GPIO 的寄存器面。
 ## 关联
 
 - [TEST-20](test20-baremetal-qemu-smoke.md)：通用 Cortex-M 冒烟；
-- [PH-64 卡 §5](../../docs/design/phase64.md)：符号面证据。
+- [v0-PH-64 卡 §5](../../docs/phases/v0-PH-64/card.md)：符号面证据。
 
 ## 处置（2026-11-20，DEV · 复跑）
 
@@ -83,7 +83,7 @@ skip: container Renode is known-slow here; set RENODE_ALLOW_SLOW=1 to try
 $ echo $?
 77
 
-# 2) 权威运行点：CI ubuntu-gcc 的硬门禁原始日志（PH-67 复核已入库）
+# 2) 权威运行点：CI ubuntu-gcc 的硬门禁原始日志（v0-PH-67 复核已入库）
 ubuntu-gcc	hard gates	2026-11-18T15:52:17.8956434Z   ok    baremetal_renode (STM32F4: boot, button, SysTick, UART)
 
 # 3) 最近一次 ci 运行（v0.88.0，`5605eb6c`）

@@ -7,7 +7,7 @@
 | 锚点 | commit `553d300`（2026-11-02，工作树 `v0.18.0`） |
 | 文件 | [selfhost/l2/core.ct](../../selfhost/l2/core.ct)、[frontend/sym/Symbols.h.ct](../../selfhost/ct-ast/frontend/sym/Symbols.h.ct) |
 | 状态 | verified |
-| 处置证据 | 已处置（2026-11-02，`v0.18.0`）：短期项已做——`docs/design/phase18.md` 的 18.0 进展注明「只解除函数 / impl 两类上限」，并列出三项仍低于 ct-ast 的上限；中期抬值归入容量账本，触发条件与 SH-1 / TEST-9 一致 |
+| 处置证据 | 已处置（2026-11-02，`v0.18.0`）：短期项已做——`docs/phases/v0-PH-18/card.md` 的 18.0 进展注明「只解除函数 / impl 两类上限」，并列出三项仍低于 ct-ast 的上限；中期抬值归入容量账本，触发条件与 SH-1 / TEST-9 一致 |
 
 ## 现象
 
@@ -36,7 +36,7 @@ ct-ast 的 bug。18.0 的「容量解除」标题也容易让人以为上限已�
 
 ## 建议
 
-- 短期：在 [docs/design/phase18.md](../../docs/design/phase18.md) 18.0 的进展里注明
+- 短期：在 [docs/phases/v0-PH-18/card.md](../../docs/phases/v0-PH-18/card.md) 18.0 的进展里注明
   「只解除函数 / impl 两类上限，其余仍低于 ct-ast」，避免读者误解。
 - 中期：纳入容量策略（与 SH-1 / TEST-9 同一账本），按实际增长率决定是否把 L2 的
   struct / fields / vars 抬到与 ct-ast 同值或改为动态增长。

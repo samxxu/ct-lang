@@ -3,15 +3,15 @@
 | 项 | 值 |
 | --- | --- |
 | 模块 | test（`test/baremetal-qemu/`） |
-| 类型 | 测试缺口（PH-64 的符号面只到 `nm -u`，没有"能启动、能进中断"的证据） |
+| 类型 | 测试缺口（v0-PH-64 的符号面只到 `nm -u`，没有"能启动、能进中断"的证据） |
 | 严重度 | Medium |
 | 状态 | verified |
 | 锚点 | `v0.63.4`（`72ed6dc6`） |
-| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[PH-64 卡](../../docs/design/phase64.md) |
+| 承诺出处 | [REQ-HW-010/011](../../docs/planning/hardware-readiness-requirements.md)、[v0-PH-64 卡](../../docs/phases/v0-PH-64/card.md) |
 
 ## 缺口
 
-PH-64 的验收停在"每个单元 `nm -u` ⊆ 允许集"。符号面干净不等于能启动：vector table、
+v0-PH-64 的验收停在"每个单元 `nm -u` ⊆ 允许集"。符号面干净不等于能启动：vector table、
 `.data/.bss`、SysTick 向量、semihosting 退出都没被任何门禁覆盖。
 
 ## 处置
@@ -36,7 +36,7 @@ QEMU 的 `lm3s6965evb` 是 Cortex-M3 通用模型，**不是** STM32F4 / nRF52 /
 ## 关联
 
 - [SH-90](../selfhost/sh90-freestanding-compile-mode-layer.md)：该冒烟顺带发现的 compile 模式缺口；
-- [PH-64 卡 §5](../../docs/design/phase64.md)：符号面证据。
+- [v0-PH-64 卡 §5](../../docs/phases/v0-PH-64/card.md)：符号面证据。
 
 ## 复核（REV，2026-11-18）
 

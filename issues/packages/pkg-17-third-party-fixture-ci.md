@@ -75,7 +75,7 @@ test/pkg/fixtures/thirdparty/
 
 ## 现象
 
-`ct index verify` 已实现（PH-83），但常规 CI 尚未覆盖；第三方身份路径缺少一个可重放的
+`ct index verify` 已实现（v0-PH-83），但常规 CI 尚未覆盖；第三方身份路径缺少一个可重放的
 真实包 fixture，无法证明“非官方 publisher 可安装”。
 
 ## 期望

@@ -32,7 +32,7 @@ confirmed-by: REQ-review-v077-1
 
 ## 范围
 
-P2；可与 PH-65 C 边界修复同批。
+P2；可与 v0-PH-65 C 边界修复同批。
 
 ## 处置（2026-11-20，DEV）
 
@@ -69,7 +69,7 @@ OK p66/io-boundary
 
 既有 strict/豁免用例全部保留并通过（上列均 `env -u CT_C_BOUNDARY`）。
 
-附带：12 支早于 PH-65 的探针（p44_try_drop、p46/p47/p48、p64_alloc/
+附带：12 支早于 v0-PH-65 的探针（p44_try_drop、p46/p47/p48、p64_alloc/
 const_vtable/no_init_array/on_demand、p71_drop/own、p72_outputcollision/
 subscript）fixture 自由 `#include`，以前靠 cwd 后门单独运行也会得到 allow；
 现改为显式 `export CT_C_BOUNDARY=allow`（它们不是边界探针），提交

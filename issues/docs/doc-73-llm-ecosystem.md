@@ -130,7 +130,7 @@
 | A1 | **fixed** | llm-guide §5：问「字符串 split」→ 先看 `std::str` 的 `split_into`（实测存在于 `std/str/String.shim.h`），不要手写 |
 | A2 | **fixed** | llm-guide H1 + std-catalog §1：`Vec`/`Map`（以及 `Option`/`Result`/`Str`）是内置层，免 import，不重写 |
 | A3 | **fixed** | llm-guide H4 + ct-pkg §3：包格式 `ct.pkg` + `publisher` + `ns-root`；发布走索引仓脚本，不复制源码 |
-| A4 | **fixed（前提已按实测更正）** | issue 写作时（2026-11-18，v0.65.1）的「当前五字段、六字段是目标」已被 PH-77 的 S5/E77-8（v0.77.0）取代：实测官方索引 `std` 行是**六字段**，索引里五字段旧行仍可解析但没有 `publisher`、不能落 store。文档按「六字段现行 / 五字段旧行只读兼容」表述，不再写反 |
+| A4 | **fixed（前提已按实测更正）** | issue 写作时（2026-11-18，v0.65.1）的「当前五字段、六字段是目标」已被 v0-PH-77 的 S5/E77-8（v0.77.0）取代：实测官方索引 `std` 行是**六字段**，索引里五字段旧行仍可解析但没有 `publisher`、不能落 store。文档按「六字段现行 / 五字段旧行只读兼容」表述，不再写反 |
 | A5 | **fixed** | 五/六字段口径已在 ct-pkg-index / package-guide / glossary 三处统一；`docs/README` 与 ct-pkg-index 都明确 `proposals/` 不是现状 |
 | A6 | **fixed** | llm-guide §6 文档地图从 language-spec → std-catalog → ct-pkg / ct-pkg-index / package-guide / tutorial 可直接走通 |
 

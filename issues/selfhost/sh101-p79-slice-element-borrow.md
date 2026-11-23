@@ -12,7 +12,7 @@ confirmed-by: REV-PH-79
 
 ## 来源
 
-[PH-79 收口复核](../../docs/reviews/2026-11-20-phase79-rev-verdict.md) B3（E79-3）。
+[v0-PH-79 收口复核](../../docs/reviews/2026-11-20-phase79-rev-verdict.md) B3（E79-3）。
 
 ## 复现（`v0.79.1` `effbf6f7`）
 
@@ -58,7 +58,7 @@ borrow_member.ct:7:1: error: ref/out argument must be an assignable place
 
 `selfhost/ct-ast/frontend/parse/Expr.h.ct:1257-1297` 的 `ref_arg_place()` 没有
 `N_SLICE_INDEX` 分支：`s[i]` 落到末尾 `return 0`。成员路径 `s[0].x` 先查基址
-`N_SLICE_INDEX`，同样失败。PH-78 的 place 规则没有与 PH-79 的切片 place 接通。
+`N_SLICE_INDEX`，同样失败。v0-PH-78 的 place 规则没有与 v0-PH-79 的切片 place 接通。
 
 ## 期望
 

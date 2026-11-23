@@ -1,13 +1,13 @@
-# PH-72 收口复核（REV）
+# v0-PH-72 收口复核（REV）
 
 > **结论：`REV: 通过`**（附 5 项不阻断观察，见 §8）
 > **复核对象**：`820aaf3cdc581ced291e321e78676e3a27540567`
-> （`feat(ast): PH-72 静默错误与诊断批收口（v0.71.0）`），tag `v0.71.0`。
+> （`feat(ast): v0-PH-72 静默错误与诊断批收口（v0.71.0）`），tag `v0.71.0`。
 > **复核者**：REV / rev-ph72；日期 2026-11-19。
 > **方法**：只依据提交与 clean archive。用 `git archive 820aaf3c` 在 `/tmp/ph72-rev-clean`
 > 重新自举 L0→L1→L2→ct-ast，不使用工作树二进制；红证用 `git archive <baseline>` 在
 > `/tmp/ph72-base-*` 重建同一条链复现，不采信转述。
-> **并行说明**：复核期间 HEAD 从 `ee1e06d7` 推进到 `ffc08538`（PH-73/74 并行），工作树另有
+> **并行说明**：复核期间 HEAD 从 `ee1e06d7` 推进到 `ffc08538`（v0-PH-73/74 并行），工作树另有
 > 未跟踪 `battle/static-dispatch-1/` 与他人未提交改动。本报告对 820aaf3c 一律用 clean archive
 > 或 `git show 820aaf3c:` 取证；verdict 提交只含本文件。
 
@@ -68,18 +68,18 @@ $ /tmp/ph72-rev-clean/ct-ast build --emit-c -o /tmp/ph72-raw/ppout /tmp/ph72-raw
 
 ```console
 $ git log --oneline 820aaf3c -13
-820aaf3c feat(ast): PH-72 静默错误与诊断批收口（v0.71.0）
-88b70523 test(ast): PH-72-R6 限定名验收探针
-4280ed7e feat(ast): PH-72-R5 内置层缺失的明确诊断（SH-76）
-4c3c2893 test(ast): PH-72-R5 红（内置层缺失误诊）
-2a4c632f fix(ast): PH-72-R4 拒绝超长预处理行 + 修正注释后列号
-91579d18 test(ast): PH-72-R4 红（pp 截断 + 注释后列号）
-c45e41fb feat(ast): PH-72-R3 同名单元产物冲突硬错（LANG-11）
-3a118b65 test(ast): PH-72-R3 红（同名产物冲突）
-d5906bd8 feat(ast): PH-72-R2 下标 key 类型判定（LANG-4）
-b74023ba test(ast): PH-72-R2 红（下标 key 类型）
-43cf9251 feat(ast): PH-72-R1 调用表扩到 8192 并命名上限（LANG-3）
-e5480de1 test(ast): PH-72-R1 红（MAX_CALLS 容量与诊断）
+820aaf3c feat(ast): v0-PH-72 静默错误与诊断批收口（v0.71.0）
+88b70523 test(ast): v0-PH-72-R6 限定名验收探针
+4280ed7e feat(ast): v0-PH-72-R5 内置层缺失的明确诊断（SH-76）
+4c3c2893 test(ast): v0-PH-72-R5 红（内置层缺失误诊）
+2a4c632f fix(ast): v0-PH-72-R4 拒绝超长预处理行 + 修正注释后列号
+91579d18 test(ast): v0-PH-72-R4 红（pp 截断 + 注释后列号）
+c45e41fb feat(ast): v0-PH-72-R3 同名单元产物冲突硬错（LANG-11）
+3a118b65 test(ast): v0-PH-72-R3 红（同名产物冲突）
+d5906bd8 feat(ast): v0-PH-72-R2 下标 key 类型判定（LANG-4）
+b74023ba test(ast): v0-PH-72-R2 红（下标 key 类型）
+43cf9251 feat(ast): v0-PH-72-R1 调用表扩到 8192 并命名上限（LANG-3）
+e5480de1 test(ast): v0-PH-72-R1 红（MAX_CALLS 容量与诊断）
 ```
 
 | 任务 | 红提交 | 实现 | 红是否实现父提交 | baseline |
@@ -138,7 +138,7 @@ rc=0
 ## 4 六条 issue 的处置段
 
 ```console
-$ grep -rl '处置（2026-11-19，PH-72）' issues/ | sort
+$ grep -rl '处置（2026-11-19，v0-PH-72）' issues/ | sort
 issues/lang/lang-11-same-base-unit-output-collision.md
 issues/lang/lang-16-diagnostic-position-negative.md
 issues/lang/lang-17-preprocessor-line-truncation.md
@@ -162,7 +162,7 @@ issues/selfhost/sh76-builtin-layer-missing-misdiagnosis.md
 
 处置段本身没有夸大，但六条 issue 的完整验收表并未全绿，不能被当作「全部已修」：
 
-- **LANG-3**：D2 满足；D1 的「整次构建累计」口径未写进文案；D4 的 `--diagnostics=json` 仍是纯文本（与 LANG-10 联动，不在 PH-72 卡内）。
+- **LANG-3**：D2 满足；D1 的「整次构建累计」口径未写进文案；D4 的 `--diagnostics=json` 仍是纯文本（与 LANG-10 联动，不在 v0-PH-72 卡内）。
 - **LANG-11**：选择「同 base 硬错」，不是 issue 期望的产物分流/自动配对；C 式 `.h.ct`+`.ct` 布局仍不可用，两单元 rc=0 回归未满足。
 - **SH-76**：只做「明确诊断」，没有实现 issue R1 的「按安装相对路径找到内置层、四条探针 rc=0」；裸 `Map` 的 R5 已满足。
 - **LANG-16**：列号已修；issue 的 P4（`col<=0` 兜底）与 P5（`at<0` 不索引 `nodes[-1]`）没有对应改动，处置段也没声称做了。
@@ -202,8 +202,8 @@ $ git branch -r --contains 820aaf3c
   origin/main
 ```
 
-annotated tag 对象、peeled commit 与远端完全一致；message 为 `PH-72 closeout (820aaf3)`，
-sha 前 7 位正确。phase-ID 迁移仍被 blocker 挡住，message 沿用 legacy 裸 `PH-72`（与 PH-71
+annotated tag 对象、peeled commit 与远端完全一致；message 为 `v0-PH-72 closeout (820aaf3)`，
+sha 前 7 位正确。phase-ID 迁移仍被 blocker 挡住，message 沿用 legacy 裸 `v0-PH-72`（与 v0-PH-71
 同口径，按现状记录，不单独判红）。
 
 ## 6 CI
@@ -231,7 +231,7 @@ ubuntu-clang-smoke	cancelled
 
 ```console
 $ git diff --name-only 820aaf3c 7d8f484c
-docs/design/phase70.md
+docs/phases/v0-PH-70/card.md
 $ gh run view 44460777015 --json headSha,status,conclusion,jobs \
 >   --jq '.headSha, .status, .conclusion, (.jobs[] | [.name,.conclusion] | @tsv)'
 7d8f484c79b73a0c2da66f7feb486f03c4df1185
@@ -265,11 +265,11 @@ $ sh test/modules/p39_lib/r8_probe.sh /tmp/ph72-rev-clean/ct-ast
 p39_r8: OK
 ```
 
-p39 ABI 的 golden 只变 banner。后续 phase（不在本次审计范围，只回答「是否被 PH-72 影响」）：
-`820aaf3c..HEAD` 是 `7d8f484c`（docs）→ PH-73 → PH-74，未见回退/修正 PH-72 的提交，也未见后续
-提交改到 `load_unit` 的 shim 分支、`custom_index_method` 或未知泛型诊断的判定行。PH-74 在
-`Module.h.ct` 补的三处 `lstart = 0` 属重入词法器的既有缺口（PH-72 只改块注释内的 `lstart`
-推进），不是 PH-72 引入的回归。结论：在 PH-72 范围内未观察到对 p39 r8 / PH-73 的破坏。
+p39 ABI 的 golden 只变 banner。后续 phase（不在本次审计范围，只回答「是否被 v0-PH-72 影响」）：
+`820aaf3c..HEAD` 是 `7d8f484c`（docs）→ v0-PH-73 → v0-PH-74，未见回退/修正 v0-PH-72 的提交，也未见后续
+提交改到 `load_unit` 的 shim 分支、`custom_index_method` 或未知泛型诊断的判定行。v0-PH-74 在
+`Module.h.ct` 补的三处 `lstart = 0` 属重入词法器的既有缺口（v0-PH-72 只改块注释内的 `lstart`
+推进），不是 v0-PH-72 引入的回归。结论：在 v0-PH-72 范围内未观察到对 p39 r8 / v0-PH-73 的破坏。
 
 ## 8 不阻断观察
 
@@ -284,8 +284,8 @@ p39 ABI 的 golden 只变 banner。后续 phase（不在本次审计范围，只
    `check-archive: OK (no regression)`，`p45_contract.sh` 隔离复跑 `6/6`。这是既有的测试夹具
    健壮性问题，不属于 820aaf3c 的行为缺陷。
 4. **收口提交内含两处未单独走 T-7 的行为微调**：`Module.h.ct` 跳过两个 `.h.ct` shim 的同 base
-   查重（保留 PH-65 ambiguity 诊断），`Expr.h.ct` 把 R5 的未知 `Name<` 诊断收窄到
-   Vec/Map/Option/Result（避免误伤模板函数）。两处都在收口提交正文写明，并由既有 PH-65 测试与
+   查重（保留 v0-PH-65 ambiguity 诊断），`Expr.h.ct` 把 R5 的未知 `Name<` 诊断收窄到
+   Vec/Map/Option/Result（避免误伤模板函数）。两处都在收口提交正文写明，并由既有 v0-PH-65 测试与
    `p72_stdmissing.sh` 覆盖，但严格说应各有一个红/实现对。另收口提交正文写「卡 §6/§7」，
    而 `phase72.md` 只有 §0–§6，§7 不存在。
 5. **六条 issue 仍是 `open`，且都只是「卡范围」内的部分修复**：不要把 LANG-3 当作 D1/D4 全满足、
@@ -296,5 +296,5 @@ p39 ABI 的 golden 只变 banner。后续 phase（不在本次审计范围，只
 ## 9 未覆盖声明
 
 - 未在本机跑通完整 `check-all`：首次整跑被同主机另一会话的固定临时路径污染（§8 第 3 条），只隔离复跑被污染的两道门禁；11 道门的硬件矩阵以 `7d8f484c` 的三 job CI 为准。
-- 未审计 PH-73/PH-74 本身；只核 PH-72 范围内对 p39 r8 与后续提交的影响。
+- 未审计 v0-PH-73/v0-PH-74 本身；只核 v0-PH-72 范围内对 p39 r8 与后续提交的影响。
 - 按任务限定，本次提交只含本 verdict，未改 `issues/` 状态或处置段，未 push。

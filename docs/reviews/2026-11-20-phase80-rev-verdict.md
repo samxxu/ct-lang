@@ -1,4 +1,4 @@
-# PH-80 收口复核（REV）
+# v0-PH-80 收口复核（REV）
 
 > 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
 
@@ -198,7 +198,7 @@ u=2 u2=2 u3=2 u8=2
 
 ### 4.1 §1 放行 / `box<String>` / P-7.4-6：✅ 按 decision 执行
 
-- `box<String>` 移出 S5a 入口，回填条件写为 PH-81 收口；S5a 探针未要求 `box`。
+- `box<String>` 移出 S5a 入口，回填条件写为 v0-PH-81 收口；S5a 探针未要求 `box`。
 - P-7.4-6 留在 S5b blocking，并以仓外 dry-run 关闭（§5.3）。
 - `D-013` 的 C-1…C-6、C-7 顺序与卡一致；C-7 证据见 §6。
 
@@ -223,7 +223,7 @@ test/ast/p80_cstr/neg_data_value.ct:5:1: error: '.data' is a read-only raw view 
 $ grep -n 'gap' test/ast/p80_layout/expected.trace.out
 3:gap param_refs=1 (no automatic retain on a by-value parameter)
 $ sed -n '1,12p' test/ast/p80_layout/trace.ct
-/* PH-80 S5a-1 / D-013 §3: the refcount trace at every position the retain
+/* v0-PH-80 S5a-1 / D-013 §3: the refcount trace at every position the retain
  * contract names - literal (immortal), explicit copy/retain/release, a
  * by-value parameter, a return, a struct field, a `Vec` element and
  * `own`/`delete`.
@@ -370,7 +370,7 @@ $ grep -rn 'std::str::Str' --include='*.ct' .
 
 卡 §7.3 的 12 个仓内消费者（`225` / `232` / `examples/40_str_ownership`、`227`、`230` / `231`、`241` / `242` / `286` / `p50_sanitize` / `p50_str_has` / `p50_table`）在 `v0.80.0` 树中均使用 `String` / `Str` 新 API 或 `std::str::Str` 限定名的迁移形态；`p80_migrate` 的 `post` / `post_compile` / `std_smoke` / `embedded` 全绿；check-all 的 `p44_try_drop` / `p47_map` / `p64_on_demand` 也随迁移变绿（check-all 原始输出中无 FAIL）。
 
-`examples/wave1-demo/src/main.ct:7` 仍写 `import std::str::String;`：这是 ct-pkg `std` 包的 `char *` 映射层（`lib/std/README.md` 明确 `str` / `io` / `math` 仍由该包提供），不是被删的 old owning `Str`；`test/modules/p29_builtin_std/needs_std.ct:3` 的 `import std::str;` 是“内建层不含 std::str”的门禁负例。两者都不是 PH-80 的删旧残留；见 O3。
+`examples/wave1-demo/src/main.ct:7` 仍写 `import std::str::String;`：这是 ct-pkg `std` 包的 `char *` 映射层（`lib/std/README.md` 明确 `str` / `io` / `math` 仍由该包提供），不是被删的 old owning `Str`；`test/modules/p29_builtin_std/needs_std.ct:3` 的 `import std::str;` 是“内建层不含 std::str”的门禁负例。两者都不是 v0-PH-80 的删旧残留；见 O3。
 
 ### 5.3 外部 dry-run：✅（仓外目录 + 两模式）
 
@@ -456,13 +456,13 @@ $ bash selfhost/check-ast.sh
 c7_ast_exit=1
 ```
 
-**边界**：在 `v0.80.0` 当前 HEAD `60c6a2c` 上重跑同一 `git revert --no-commit 80c18d0a` 会因 S5b 后续改动在 5 个文件冲突（`lib/std/Str.h.ct`、`Emitter.h.ct`、`Module.h.ct`、`Expr.h.ct`、`Driver.h.ct`），不能干净复现。这与卡 §7.7 的声明一致：演练只回滚 S5a 实现提交，且是“S5a-1 后补做”；整相回滚需要同时回滚 test + feat，不在该演练内。该项不是 PH-80 的新缺陷，但报告须写明复现时点（O5）。
+**边界**：在 `v0.80.0` 当前 HEAD `60c6a2c` 上重跑同一 `git revert --no-commit 80c18d0a` 会因 S5b 后续改动在 5 个文件冲突（`lib/std/Str.h.ct`、`Emitter.h.ct`、`Module.h.ct`、`Expr.h.ct`、`Driver.h.ct`），不能干净复现。这与卡 §7.7 的声明一致：演练只回滚 S5a 实现提交，且是“S5a-1 后补做”；整相回滚需要同时回滚 test + feat，不在该演练内。该项不是 v0-PH-80 的新缺陷，但报告须写明复现时点（O5）。
 
 ## 7 版本 / tag / G0 / G8 / check-all / sanitizer
 
 ```console
 $ git tag -l v0.80.0 --format='%(refname:short) %(objecttype) %(contents)'
-v0.80.0 tag PH-80 closeout (60c6a2c)
+v0.80.0 tag v0-PH-80 closeout (60c6a2c)
 $ git cat-file -t v0.80.0
 tag
 $ git rev-parse v0.80.0^{commit}
@@ -496,12 +496,12 @@ check-all / warnings / sanitizer（归档树，独立重建）：
 ```console
 $ bash selfhost/check-all.sh
 ...
-  ok    PH-80-S5a-1 layout (E80-1: 16-byte handle, 8-byte header, immortal, refcount trace)
-  ok    PH-80-S5a-2 literal (E80-2: L1 immortal, Str borrow, UTF-16 factories)
-  ok    PH-80-S5a-3 methods (E80-3/4/6: codepoint/byte API, U16 JS core, read-only s[i])
-  ok    PH-80-S5a-4 cstr (E80-5: .data read-only, cstr() NUL, printf negative)
-  ok    PH-80-S5a/S5b migrate (E80-7: legacy deletion, consumer migration)
-  ok    PH-80-S5b-2 docs (E80-8: spec 4.70, README, roadmap, card 7)
+  ok    v0-PH-80-S5a-1 layout (E80-1: 16-byte handle, 8-byte header, immortal, refcount trace)
+  ok    v0-PH-80-S5a-2 literal (E80-2: L1 immortal, Str borrow, UTF-16 factories)
+  ok    v0-PH-80-S5a-3 methods (E80-3/4/6: codepoint/byte API, U16 JS core, read-only s[i])
+  ok    v0-PH-80-S5a-4 cstr (E80-5: .data read-only, cstr() NUL, printf negative)
+  ok    v0-PH-80-S5a/S5b migrate (E80-7: legacy deletion, consumer migration)
+  ok    v0-PH-80-S5b-2 docs (E80-8: spec 4.70, README, roadmap, card 7)
 ...
 check-warnings: 490 ok, 0 failed
 ...
@@ -517,7 +517,7 @@ check-sanitizers: OK (583 checks, no sanitizer report)
 
 ## 8 诚实性：是否“未覆盖写成通过”
 
-1. **D-013 §3 的缺口不是隐瞒，但被“全通过”话术盖过。** 卡 §7.9.1、spec §4.70、`lib/std/README.md`、`Str.h.ct:23-28` 都明写“按值传参 / 返回 / 字段自动 retain 本轮未实现”；`trace.ct` 甚至用 `gap param_refs=1` 把它钉成回归。但卡头“E80-1…8 全通过”、§7.4 E80-8 的“✅ 通过”、以及 `AGENTS.md` 第 590 行的“E80-1…8 全通过”没有同时写 D-013 §3 未满足。E80-1…8 本身不含自动 retain 判据，所以“E80 全绿”为真并不能推出“D-013 满足”；把两者并列成“PH-80 收口完成”就是未覆盖写成通过。
+1. **D-013 §3 的缺口不是隐瞒，但被“全通过”话术盖过。** 卡 §7.9.1、spec §4.70、`lib/std/README.md`、`Str.h.ct:23-28` 都明写“按值传参 / 返回 / 字段自动 retain 本轮未实现”；`trace.ct` 甚至用 `gap param_refs=1` 把它钉成回归。但卡头“E80-1…8 全通过”、§7.4 E80-8 的“✅ 通过”、以及 `AGENTS.md` 第 590 行的“E80-1…8 全通过”没有同时写 D-013 §3 未满足。E80-1…8 本身不含自动 retain 判据，所以“E80 全绿”为真并不能推出“D-013 满足”；把两者并列成“v0-PH-80 收口完成”就是未覆盖写成通过。
 2. **E80-8 的“spec 三处同步”被高估。** 新增 §4.70 存在且 `p80_docs` 绿，但 §4.56、glossary、tutorial §10.13 仍以现在时描述已删除的旧 owning `Str`（`str_from` / `str_c_str` / 深拷贝 `retain` / `impl Drop for Str`）；这些 API 在 `v0.80.0` 已不存在。`p80_docs.sh` 只 grep §4.70 关键词，未扫描旧节。此为本轮第二处覆盖缺口（O2），不改变 D-013 §3 的阻断结论，但 E80-8 不应写成“全绿”。
 3. **删旧本身是真实的。** `StrLegacy.h.ct` 已删、`namespace std::str` 已无、`std::str::Str` 仅负例；12 个消费者已迁移；外部 dry-run 在仓外可重跑。这一点没有“假删旧”。
 4. **C-7 证据与命令输出一致。** 在演练时点 `85a69bd0` 复现的 revert 状态与 23 条 FAIL 均与卡一致；卡也声明了只回滚实现提交的粒度限制。未发现伪造。
@@ -530,14 +530,14 @@ check-sanitizers: OK (583 checks, no sanitizer report)
 - **O3 `std::str` 外部命名空间。** [`examples/wave1-demo/src/main.ct:7`](../../examples/wave1-demo/src/main.ct#L7) 的 `import std::str::String` 是 ct-pkg `std` 的 `char *` 映射层，[`lib/std/README.md`](../../lib/core/README.md) 明确 `str` / `io` / `math` 仍由该包提供；[`test/modules/p29_builtin_std/needs_std.ct:3`](../../test/modules/p29_builtin_std/needs_std.ct#L3) 的 `import std::str;` 是内建层不含该命名空间的门禁负例。二者不是 old owning `Str` 的残留，但仓内仍能 grep 到 `std::str`，建议在删旧说明里点名这两处，避免下一轮误判。
 - **O4 外部 dry-run 不是第三方仓。** `/tmp/p80-ext` 确在仓外、可重跑，但只是本机独立目录，不是真实跨仓工程；卡 §7.8 已诚实登记该限制。P-7.4-6 的最终判据仍是外部 CI/项目，本轮只能确认“仓外工程无需复制内建层即可编译/运行”。
 - **O5 C-7 的复现时点。** 卡 §7.7 的 `git revert --no-commit 80c18d0a` 只在 `85a69bd0` 干净；在 `v0.80.0` HEAD 上会与 S5b 的后续改动冲突。卡已声明只回滚实现提交，但未写 checkout 点；建议在卡上补 `git checkout 85a69bd0` 或写明“演练时点”，否则后来者无法按原命令复现。
-- **O6 tag message 的 phase-id 形态。** tag message 为 `PH-80 closeout (60c6a2c)`，不是 `v0-PH-80`；这与项目当前 blocked 的 phase-ID 迁移（DOC-74）及 v0.78/v0.79 的历史 tag 形态一致，`g8` 也按 legacy offset 通过。不是 PH-80 新问题，但 V-7 的字面要求与现状有差距。
+- **O6 tag message 的 phase-id 形态。** tag message 为 `v0-PH-80 closeout (60c6a2c)`，不是 `v0-PH-80`；这与项目当前 blocked 的 phase-ID 迁移（DOC-74）及 v0.78/v0.79 的历史 tag 形态一致，`g8` 也按 legacy offset 通过。不是 v0-PH-80 新问题，但 V-7 的字面要求与现状有差距。
 - **O7 字段/全局 `String` 无自动 Drop。** 卡 §7.9.4 已写“字段/全局 String 无自动 Drop，普通字段靠作者 release”；这是 D-013 §3 之外的独立边界（D-013 只要求 retain，不要求字段 Drop），本轮不据此加判。
 
 ## 10 处置与提交
 
 - 结论：`REV: 打回`。
 - 新建 [SH-102](../../issues/selfhost/sh102-p80-auto-retain-not-implemented.md)（`status: open`，P1）：D-013 §3 的按值传参 / 返回 / 字段赋值自动 retain 未实现；含三个 ASan UAF 复现与 `file:line` 证据。
-- 本轮没有需要置 `verified` 的既有 PH-80 SH/TEST 条目（`issues/` 中没有 PH-80 条目）；不修改任何既有 issue 状态。
+- 本轮没有需要置 `verified` 的既有 v0-PH-80 SH/TEST 条目（`issues/` 中没有 v0-PH-80 条目）；不修改任何既有 issue 状态。
 - 未改实现代码、未 push、未打新 tag；只提交本 verdict 与 SH-102。
 
 ## 11 次轮复核（v0.80.1，SH-102 修复）
@@ -600,7 +600,7 @@ p79_docs     exit=0 ok=15
 ```console
 $ bash selfhost/check-all.sh
 ...
-  ok    PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)
+  ok    v0-PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)
 ...
 check-warnings: 490 ok, 0 failed
 check-docs: OK (2156 relative links in 357 files, v0.80.1, 11 hard gates, 12 phase status, ...)
@@ -870,7 +870,7 @@ p79_docs     exit=0 ok=15
 ```console
 $ bash selfhost/check-all.sh
 ...
-  ok    PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)
+  ok    v0-PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)
 ...
 check-warnings: 490 ok, 0 failed
 check-docs: OK (2158 relative links in 357 files, v0.80.2, 11 hard gates, 12 phase status, ...)
@@ -1098,7 +1098,7 @@ p79_docs     exit=0 ok=15
 
 $ bash selfhost/check-all.sh
 ...
-  ok    PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)
+  ok    v0-PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)
 ...
 check-warnings: 490 ok, 0 failed
 check-docs: OK (2164 relative links in 358 files, v0.80.3, 11 hard gates, 12 phase status, ...)
@@ -1109,7 +1109,7 @@ $ bash selfhost/check-sanitizers.sh
 check-sanitizers: OK (583 checks, no sanitizer report)
 ```
 
-`check-all` 内 AST 汇总为 `1539 passed, 0 failed, 4 skipped`；`grep -c FAIL` 为 0。与 battle C-7 的基线 `5 skipped` 差 1：v0.80.2 的 `PH-77-S5 external` 条目因网络可用而实际执行，属于环境差异，不是失败（O2）。
+`check-all` 内 AST 汇总为 `1539 passed, 0 failed, 4 skipped`；`grep -c FAIL` 为 0。与 battle C-7 的基线 `5 skipped` 差 1：v0.80.2 的 `v0-PH-77-S5 external` 条目因网络可用而实际执行，属于环境差异，不是失败（O2）。
 
 ```console
 $ git tag -l v0.80.3 --format='%(refname:short) %(objecttype) %(contents)'
@@ -1275,11 +1275,11 @@ compile_exit=1
   明列的登记泄漏，不是 UAF。未发现 R6a/R6b 的新 UAF/SEGV。
 - **O1（不阻断）D-015 签字占位。** `signer: USER（待追认）` 未补真实签字；按本轮用户授权
   （battle 决定已获授权）记录为占位，不据此单独打回；若按 5.4 严格执行，应在追认后再置 `verified`。
-- **O2（不阻断）`check-all` 的 `skipped` 由 5 变 4。** v0.80.2 的 `PH-77-S5 external` 因网络不可用
+- **O2（不阻断）`check-all` 的 `skipped` 由 5 变 4。** v0.80.2 的 `v0-PH-77-S5 external` 因网络不可用
   而 skip；本机网络可用，该条实际执行，故为 `1539 passed, 0 failed, 4 skipped`。不是代码回归，
   但 battle C-7 的“5 skipped 不变”在环境变化下不能机械照抄。
 - **O3（不阻断）C-5 记录。** 当前 `docs/roadmap.md:93` 仍写“SH-102 fixed 待 REV 复核”，
-  `docs/design/phase80.md` 卡头已写“完成”；在 SH-102 仍 `reopened` 时这与 battle C-5 的
+  `docs/phases/v0-PH-80/card.md` 卡头已写“完成”；在 SH-102 仍 `reopened` 时这与 battle C-5 的
   “未通过分支应撤回完成/修复表述”不完全一致；若本轮最终通过，需同步该行。本轮只改 verdict 与
   SH-102，不代改 roadmap。
 

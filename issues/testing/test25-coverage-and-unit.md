@@ -70,7 +70,7 @@ $ grep -c 'cap_check' selfhost/check-ast.sh
 覆盖率仍无法回答「45k 行里哪些没跑到」。
 
 - owner：DEV（nightly 覆盖率 job、`io_names` 夹具）+ VERIFY（白盒试点选型与红证）。
-- 触发条件：**v1.1 立项窗口**（或 PH-88 之后第一个非冻结 MINOR，先到先用）——
+- 触发条件：**v1.1 立项窗口**（或 v0-PH-88 之后第一个非冻结 MINOR，先到先用）——
   ① nightly 增加 `llvm-cov`/`gcov` **只报告不设阈值**的 job，报告可下载；
   ② `em_*` / `ctype_*` / `tc_expr_*` 各选 1–2 个纯函数做最小白盒夹具（不改端到端门禁）；
   ③ 补 `io_names` 临界 + 越界两条夹具（上限 1024 个不同被调名，越界须报错并补上限文案；

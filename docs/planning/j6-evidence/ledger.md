@@ -52,7 +52,7 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 | P-2.2 `ref/out` 上下文关键字 | 形参表内识别；形参表外仍是标识符 | [p78_basic.sh](../../../test/ast/p78_basic.sh) E78-1：`int out;`、`time_t *ref;`、形参名 `out` 全部合法 | 已过 | DEV |
 | P-2.3 `T[]` 唯一拼写 | `T[]` 前缀；`T a[]` 形参/字段告警；`ct check` 升 error；`T a[] = {…}` 保留 | [p79_basic.sh](../../../test/ast/p79_basic.sh)（`int[] s`、`int a[] = {…}`）+ [p79_migrate.sh](../../../test/ast/p79_migrate.sh)（告警与 strict 升级） | 已过 | DEV |
 | P-2.4 花括号共享解析 | `new T {…}` 与 `T x = {…}` 的位置式 / 指定式 / 嵌套同路径 | [p81_box.sh](../../../test/ast/p81_box.sh) E81-2 + [record.ct](../../../test/ast/p81_box/record.ct) | 已过 | DEV |
-| P-2.5 旧语料 parse | 全量语料 parse 通过；golden 变化逐条 | 干净归档 `a0ce8ef1` 的编译器源与 HEAD 逐字节相同（`git diff a0ce8ef1..HEAD -- selfhost/l0 selfhost/l1 selfhost/l2 selfhost/ct-ast` 为 0 行），故以 HEAD 的 `selfhost/check-ast.sh` 全量输出为准：**1581 passed / 0 failed / 5 skipped**（`selfhost/check-all.sh` 第 8 道）；golden 变化清单见 [docs/planning/j6-evidence/goldens-l1-vs-ast.md](goldens-l1-vs-ast.md)。干净归档复跑至 PH-79 段（418 条输出、0 失败）后中止，作为旁证而非唯一证据 | 已过 | DEV |
+| P-2.5 旧语料 parse | 全量语料 parse 通过；golden 变化逐条 | 干净归档 `a0ce8ef1` 的编译器源与 HEAD 逐字节相同（`git diff a0ce8ef1..HEAD -- selfhost/l0 selfhost/l1 selfhost/l2 selfhost/ct-ast` 为 0 行），故以 HEAD 的 `selfhost/check-ast.sh` 全量输出为准：**1581 passed / 0 failed / 5 skipped**（`selfhost/check-all.sh` 第 8 道）；golden 变化清单见 [docs/planning/j6-evidence/goldens-l1-vs-ast.md](goldens-l1-vs-ast.md)。干净归档复跑至 v0-PH-79 段（418 条输出、0 失败）后中止，作为旁证而非唯一证据 | 已过 | DEV |
 
 ## P-3 String/Str ABI（J-6c）
 
@@ -85,7 +85,7 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 | P-5.1 `out` 未初始化 | 硬错或零初始化；无 UB | [p70_definite.sh](../../../test/ast/p70_definite.sh)、[p78_basic.sh](../../../test/ast/p78_basic.sh)、[ref_out/bad_out_uninit.ct](ref_out/bad_out_uninit.ct) | 已过 | DEV |
 | P-5.2 旧值释放 / 别名 | retain 右值 → release 旧值 → 写入；无 UAF | 缺失：`out String` / `ref String` 的 owning 旧值释放轨迹没有专项夹具。承接：DEV 在 `p80_retain` 增加 out/ref 组合（owner DEV，未在本轮闭合） | 缺失 | DEV |
 | P-5.3 `ref` 赋值 vs 显式 release | 赋值允许；显式 release 硬错 | 缺失：`ref String` 赋值与 `release(ref)` 两例都没有夹具。承接：DEV 补两侧矩阵（owner DEV，未在本轮闭合） | 缺失 | DEV |
-| P-5.4 `out` 错误路径 | 赋值即生效；PH-70 保证至少一次 | `p70_definite.sh` 覆盖定值；错误路径（提前 `return` / `err:`）的显式 out 用例缺。承接：DEV 补错误路径夹具（owner DEV） | 部分 | DEV |
+| P-5.4 `out` 错误路径 | 赋值即生效；v0-PH-70 保证至少一次 | `p70_definite.sh` 覆盖定值；错误路径（提前 `return` / `err:`）的显式 out 用例缺。承接：DEV 补错误路径夹具（owner DEV） | 部分 | DEV |
 | P-5.5 `out/ref` 借用类型 | `out Str` / `ref int[]` 白名单 + 底层契约 | 缺失：借用类型作 `out/ref` 的夹具。承接：DEV 补 `out Str` / `ref int[]` 正例与越界负例（owner DEV） | 缺失 | DEV |
 | P-5.6 泄漏 / 双释放 | ASan + `__ct_allocs/__ct_frees` | `check-sanitizers` 586 checks 广覆盖；`p80_retain` 的 owning 路径在 ASan/UBSan 下逐例跑；缺 `ref/out` 专项组合。承接：DEV 把 out/ref 夹具并入 ASan 组合（owner DEV） | 部分 | DEV |
 | P-5.7 字符串下标与不可变 | `String[i]` 单码点只读；`U16String[i]` 单 code unit 只读；写操作硬错 | [p80_methods/prog.ct](../../../test/ast/p80_methods/prog.ct) 第 34 行 `view = s[1]` 只读正例；[neg_write_index.ct](../../../test/ast/p80_methods/neg_write_index.ct) `s[0] = 'x'` 硬错；[neg_u16_write.ct](../../../test/ast/p80_methods/neg_u16_write.ct) U16 写硬错 | 已过 | DEV |

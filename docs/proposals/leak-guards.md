@@ -1,7 +1,7 @@
 # 提案：泄漏防护三板斧——直接环检测 / strict 升级 / 树模式
 
 
-> 状态：已裁定并实现（2026-11-21 v0.82.0；判决见 [battle leak-guards-1](../../battle/leak-guards-1/verdict.md) 与 [D-012](../decisions/D-012.md)；L1/L2/L4 进 PH-82，L3 descope）
+> 状态：已裁定并实现（2026-11-21 v0.82.0；判决见 [battle leak-guards-1](../../battle/leak-guards-1/verdict.md) 与 [D-012](../decisions/D-012.md)；L1/L2/L4 进 v0-PH-82，L3 descope）
 > 基线：v0.77.x；与「指针退场」提案独立（对现行 own/句柄代码同样生效），可并行施工。
 > 说明：文中 `ct.pkg strict`、header debug 字段、`--debug-leaks` 环扫描等表述与仓库现状不符；
 > 实际落卡口径以 D-012 为准（`leaks = warn|error`；L3 descope；`--debug-leaks` 只报计数）。
@@ -79,7 +79,7 @@ struct Node {
 
 - 不做运行期自动环回收（tracing GC 简化版也不做）；
 - 不引入 weak 引用类型（直接环静态检测覆盖其 80% 价值，性价比不成立）；
-- 不做跨过程/跨单元逃逸分析（PH-71 非目标不动摇）；
+- 不做跨过程/跨单元逃逸分析（v0-PH-71 非目标不动摇）；
 - 不承诺间接环的静态检测。
 
 ## 6. 施工切片

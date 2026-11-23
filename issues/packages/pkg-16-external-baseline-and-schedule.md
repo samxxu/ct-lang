@@ -37,7 +37,7 @@
 
 - [评估](../../docs/reviews/2026-11-20-pkg-contract-proposal-eval.md)、[D-014](../../docs/decisions/D-014.md)
 
-## 证据（DEV，PH-83，2026-11-21）
+## 证据（DEV，v0-PH-83，2026-11-21）
 
 - 已取到并可复核的基线：`ct-pkg/index` @ `0cdb132a179a9cfab5e339da9fec856ec4f29fcc`
   （`main`，2026-11-20）；`tools/` 清单、`package-check.sh`、`gen-index.sh`、

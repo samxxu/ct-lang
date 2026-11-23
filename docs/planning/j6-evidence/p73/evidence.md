@@ -285,8 +285,8 @@ P-7.3 的最小判据可以记为 **通过**：`String` 16 字节句柄 + 8 字�
 
 ## 11. rebase 到当前 HEAD（2026-11-20）
 
-- 基线：`5736f0d5`（`v0.78.1`，PH-78 收口后）。
+- 基线：`5736f0d5`（`v0.78.1`，v0-PH-78 收口后）。
 - 方法：在 `dff5a0df` 应用原 `p73.patch` 并提交，再 rebase 到 `5736f0d5`；无冲突。
 - 复现：`sh test/p73/run.sh` → **16 passed, 0 failed**（含 ASan、build 模式、6 个负例）。
 - 产物：[`p73-rebased-5736f0d5.patch`](p73-rebased-5736f0d5.patch)（`selfhost/**` + `lib/std/Str.h.ct`，8 文件，560+/111-）。
-- 限定：这是 P-7.3 最小切片，替换了旧 `lib/std/Str.h.ct`，既有测试套件不会全绿；只作 PH-80 参考，不直接当 S5a 合并。
+- 限定：这是 P-7.3 最小切片，替换了旧 `lib/std/Str.h.ct`，既有测试套件不会全绿；只作 v0-PH-80 参考，不直接当 S5a 合并。

@@ -1,8 +1,8 @@
-# PH-53 `?.` 第二轮 battle：struct 值接收者与切词策略
+# v0-PH-53 `?.` 第二轮 battle：struct 值接收者与切词策略
 
 > **状态：裁定记录（2026-11-15）**。两席实测 + 裁定；不改实现、不改 golden、不 bump。
 > **基准**：仓库 `1d49bb1a`（未构建）；CT 行为用 `/tmp/ctgap/bin/ct`（`ct v0.44.1`）实测。
-> `?` 的解析/诊断路径自 PH-44（`99e9e754`）后未再改动，故该副本对这两个语法用例有代表性。
+> `?` 的解析/诊断路径自 v0-PH-44（`99e9e754`）后未再改动，故该副本对这两个语法用例有代表性。
 > **探针**：`/tmp/battle53`；未执行仓库内脚本或二进制（工作区未受信）。
 > **前置裁定（负责人已定，不再争）**：map 键缺失整链跳出、结果 NULL，对齐 `Map::get`；
 > 指针接收者 `p?.field` 展开为 `(p ? p->field : 0)`；切词按下文 §4，不合成 `?.` token。
@@ -79,7 +79,7 @@
 | --- | --- | --- |
 | `T_NUM` 且文本以 `.` 开头 | 三目 + 浮点字面量 | `c?.5 : 1.0` → `(c ? .5 : 1.0)` |
 | `T_PUNCT "."`，再下一个是 `T_ID` | 可选链 | `a?.b` → `(a ? a->b : 0)` |
-| 其他 | 维持 PH-44 的后缀 `?` / 三目规则 | `x?;`、`a ? b : c` |
+| 其他 | 维持 v0-PH-44 的后缀 `?` / 三目规则 | `x?;`、`a ? b : c` |
 
 **词法依据**（静态核对，`selfhost/ct-ast/frontend/lex/Lexer.h.ct`）：
 
@@ -170,7 +170,7 @@ no .c
 
 ## 6 对既有记录的影响
 
-- 施工卡已落库：[history/design/phase53.md](../history/design/phase53.md)（2026-11-15；E53-1–E53-16）。
+- 施工卡已落库：[phases/v0-PH-53/card.md](../phases/v0-PH-53/card.md)（2026-11-15；E53-1–E53-16）。
 - [phase53-optional-chain-draft.md](../proposals/phase53-optional-chain-draft.md) §4.2 由「切词冲突」
   改为「切词策略」；§4.1 补「值上取到的一跳」；§2 / §5 同步接收者范围。切词不再作为阻塞或风险项。
 - [phase53-scope-draft.md](../proposals/phase53-scope-draft.md) 的 B1 行同步：普通 struct 值接收者

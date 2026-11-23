@@ -12,7 +12,7 @@ confirmed-by: REV-PH-79
 
 ## 来源
 
-[PH-79 收口复核](../../docs/reviews/2026-11-20-phase79-rev-verdict.md) B1（E79-2）。
+[v0-PH-79 收口复核](../../docs/reviews/2026-11-20-phase79-rev-verdict.md) B1（E79-2）。
 
 ## 复现（`v0.79.1` `effbf6f7`，ct-ast 独立自举）
 

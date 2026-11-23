@@ -1,11 +1,11 @@
-# PH-88 收口复核（REV，2026-11-21）
+# v0-PH-88 收口复核（REV，2026-11-21）
 
 > **结论：通过（PASS；E88-1 部分通过，经本复核追签 battle/p88-emit-match 放行；
 > E88-4 / E88-7 附非阻断勘误 N-1）。**
 > HEAD `771c5ab1`（v0.88.0，未 push/tag）。E88-2、E88-3、E88-5、E88-6、E88-8
 > 通过；E88-1 按 §3 裁定；E88-4 / E88-7 的报告/文档同步成立，但 `MAX_FUNCS`
 > 数值有误（§9 N-1），不阻断本卡功能判据，须在下一批切片前修正。
-> 对象：[phase88 卡](../design/phase88.md)、[p88_metrics](../history/p88_metrics.md)、
+> 对象：[phase88 卡](../phases/v0-PH-88/card.md)、[p88_metrics](../history/p88_metrics.md)、
 > [v1-pre 证据](../history/v1-pre-evidence.md)、
 > [battle/p88-emit-match](../../battle/p88-emit-match/verdict.md)、
 > [p88 证据](../../test/probes/p88_evidence.txt)。未 push、未改实现、未打 tag。
@@ -90,9 +90,9 @@ selfhost/ct-ast/tool/pkg/Pkg.h.ct:1650:72: error: too many distinct calls
 [battle/p88-emit-match](../../battle/p88-emit-match/verdict.md) 追签 A，并把承接
 条件写死在文末：
 
-1. 承接目标 = **v1.0 seed cutover（`v1-PH-0`）**；PH-88 内不换 seed；
+1. 承接目标 = **v1.0 seed cutover（`v1-PH-0`）**；v0-PH-88 内不换 seed；
 2. 承接范围 = **76 个发射器切片 + `expr_ctype`、`maybe_box`、`chk_type`**；
-3. v1-PH-0 的判据 = 一 kind 一臂的穷尽 `match`（PH-84 无 or 模式）、`p88_emit`
+3. v1-PH-0 的判据 = 一 kind 一臂的穷尽 `match`（v0-PH-84 无 or 模式）、`p88_emit`
    清单改“`match` 臂”、新增“漏一臂”语言级负例、66 语料/345 诊断/不动点继续成立；
 4. 改口径须显式覆盖并重新追签，不得静默；EDITOR 追签待补（0.7/T-8）。
 
@@ -156,7 +156,7 @@ check-ast: CT_FIXPOINT_ROUNDS must be 2 or 3 (got '4')        # exit 2
 
 **通过（附 N-1 勘误）。** `p88_metrics` 9/0，复算 `Emitter.h.ct` 8876→9371 行、
 76 切片（34/26/6/8/2）、发射 C 48223→48646 行、io 容量 1024 与 sharp-edge 必备
-条目。报告结构、PH-85 spike 对照、`String` 判定、fall-through 说明均成立。
+条目。报告结构、v0-PH-85 spike 对照、`String` 判定、fall-through 说明均成立。
 `MAX_FUNCS` 一处数值错误见 N-1；该探针只 grep 字符串，不校验数字，故仍绿。
 
 ## 6 E88-5 / E88-6 / E88-7 — 总门禁、基线、文档
@@ -191,7 +191,7 @@ tutorial §21、[v1-pre 证据](../history/v1-pre-evidence.md) 入库。spec §4
 **通过。** 在 `771c5ab1` 归档上把 `26986463` 的两个文件换回 `26986463^`
 （= `a516db47`，其 Emitter/Expr 与 `47a8f786` 逐字相同，已用 `git diff --stat`
 确认），重走 L0→L1→L2→ct-ast；回滚编译器 66 语料清单与冻结清单、以及与 HEAD
-编译器清单均 diff 空。回滚构建在 512 的 io 容量下成功，也反证 PH-88 切片是
+编译器清单均 diff 空。回滚构建在 512 的 io 容量下成功，也反证 v0-PH-88 切片是
 容量调整的唯一动因。
 
 ```console
@@ -222,7 +222,7 @@ RB-VS-HEAD-OK
 | # | 项 | 影响 | 建议 |
 | --- | --- | --- | --- |
 | N-1 | `MAX_FUNCS` 数字错误：p88_metrics §4 #3、spec §4.75、v1-pre 证据 §3 #4、卡 §7.5 #4 写“399→475、余量 37”，phase-log / AGENTS 同；临时插桩实测 **425→501、余量 11**（`MAX_FUNCS` 仍 512） | 不影响本卡构建/门禁（余量仍为正）；但下一批切片按 37 规划会撞顶 | 下一批切片前把六处改为 425→501/余量 11（纯文档勘误；不 +PATCH，按 6.7 V-4） |
-| N-2 | 收口证据的 check-docs 计数 `2417/388/6 适用版本` 与干净 HEAD `2418/387/5` 不一致；差异来自采集时工作树未提交文件（`docs/guide-for-c-programmers.md` 带 `适用版本`）与后续文档链接 | 门禁仍绿，仅证据时效 | 用干净 HEAD 重录该行或注明工作树污染（同 PH-87 N-5） |
+| N-2 | 收口证据的 check-docs 计数 `2417/388/6 适用版本` 与干净 HEAD `2418/387/5` 不一致；差异来自采集时工作树未提交文件（`docs/guide-for-c-programmers.md` 带 `适用版本`）与后续文档链接 | 门禁仍绿，仅证据时效 | 用干净 HEAD 重录该行或注明工作树污染（同 v0-PH-87 N-5） |
 | N-3 | `p88_metrics` 只 grep `MAX_FUNCS` 字符串，不校验数字；`p88_emit` 只核切片清单/kind 集合，不核 kind→body 映射 | 本实现的等价已由 363 夹具 + 345 诊断 + 不动点覆盖；未来换 body 无门禁可拦 | 补 kind→helper 行为夹具；度量探针把 N-1 数字纳入复算 |
 
 ## 10 未覆盖声明

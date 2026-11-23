@@ -1,10 +1,10 @@
-# PH-69 收口复核（REV）
+# v0-PH-69 收口复核（REV）
 
 - 日期：2026-11-19
 - 角色：REV（独立复核）
 - 复核对象：`de261b42452e8b2eff13822938d7e489499edc39`（复核时 HEAD；
-  `feat(ast): PH-69 跨单元/函数指针/容器检查收口（v0.68.0）`）
-- 对象：`docs/history/design/phase69.md` §7 收口对照表（E69-1…E69-3）与 R1–R4
+  `feat(ast): v0-PH-69 跨单元/函数指针/容器检查收口（v0.68.0）`）
+- 对象：`docs/phases/v0-PH-69/card.md` §7 收口对照表（E69-1…E69-3）与 R1–R4
 - 结论：**REV: 通过**
 
 依据只有仓库提交、按 README 自举出的 `ct-ast`、以及本提交的 CI run。下文“非阻断更正项”
@@ -106,15 +106,15 @@ $ git show de261b42 -- selfhost test/cases test/modules \
 ## 5 红证/实现配对
 
 ```console
-$ git log --oneline | grep PH-69
-de261b42 feat(ast): PH-69 跨单元/函数指针/容器检查收口（v0.68.0）
-f6b4520c fix(ast): PH-69-R2 零实参 arity + R4 容器实参探针
-0b159b1c feat(ast): PH-69-R2 函数指针调用按原型判定（LANG-19）
-b71ac5c0 test(ast): PH-69-R2 红（函数指针调用原型）
-373ea27c test(ast): PH-69-R3/E69-2 探针 + 记录 R2/R4 缺口
-1cbc5f53 fix(ast): PH-69-R1 既有门禁按跨单元 check 语义更新
-49565323 feat(ast): PH-69-R1 ct check 复用 build 单元图（不写产物）
-a926f609 test(ast): PH-69-R1 红（跨单元检查）
+$ git log --oneline | grep v0-PH-69
+de261b42 feat(ast): v0-PH-69 跨单元/函数指针/容器检查收口（v0.68.0）
+f6b4520c fix(ast): v0-PH-69-R2 零实参 arity + R4 容器实参探针
+0b159b1c feat(ast): v0-PH-69-R2 函数指针调用按原型判定（LANG-19）
+b71ac5c0 test(ast): v0-PH-69-R2 红（函数指针调用原型）
+373ea27c test(ast): v0-PH-69-R3/E69-2 探针 + 记录 R2/R4 缺口
+1cbc5f53 fix(ast): v0-PH-69-R1 既有门禁按跨单元 check 语义更新
+49565323 feat(ast): v0-PH-69-R1 ct check 复用 build 单元图（不写产物）
+a926f609 test(ast): v0-PH-69-R1 红（跨单元检查）
 ```
 
 | 任务 | 红提交（路径集合） | baseline = 红提交父 | 实现提交 | 配对 |
@@ -135,7 +135,7 @@ yes
 R3/R4「验收任务（无实现）」属实：
 
 - R3 的 trait 歧义诊断由 `d2d18690`（2026-11-03，`feat(check): report trait-method ambiguity …`）
-  引入；PH-69 只新增 `p69_traits.sh`（`373ea27c`），无源码实现。
+  引入；v0-PH-69 只新增 `p69_traits.sh`（`373ea27c`），无源码实现。
 - R4 的内建容器/泛型方法实参检查由 `89171100`（2026-11-12，P32 S7
   `judge container and generic method arguments`）引入；`f6b4520c` 只新增
   `p69_containers.sh` 与 R2 零实参修正（源码改动仅在 `Expr.h.ct`），无 R4 实现。
@@ -155,18 +155,18 @@ R3/R4「验收任务（无实现）」属实：
 `ubuntu-gcc` 日志（`hard gates` step）：
 
 ```text
-ok    PH-69-R1 unitgraph (multi-unit check, no artifacts)
-ok    PH-69-R3 traits (single + ambiguous dispatch)
-ok    PH-69-R2 calls (fnptr prototype)
-ok    PH-69-R4 containers (builtin container args)
-ok    PH-69-E69-2 fp (import units clean)
-ok    check: an unresolved import is a hard error (PH-69-R1)
+ok    v0-PH-69-R1 unitgraph (multi-unit check, no artifacts)
+ok    v0-PH-69-R3 traits (single + ambiguous dispatch)
+ok    v0-PH-69-R2 calls (fnptr prototype)
+ok    v0-PH-69-R4 containers (builtin container args)
+ok    v0-PH-69-E69-2 fp (import units clean)
+ok    check: an unresolved import is a hard error (v0-PH-69-R1)
 == summary: 1492 passed, 0 failed, 0 skipped ==
 check-all: OK (11 hard gates green)
 ```
 
 `macos-clang` 的 AST 套件为 `1486 passed, 0 failed, 5 skipped`，最终同样
-`check-all: OK (11 hard gates green)`；`ubuntu-clang-smoke` 也出现五条 `ok PH-69-*`。
+`check-all: OK (11 hard gates green)`；`ubuntu-clang-smoke` 也出现五条 `ok v0-PH-69-*`。
 本机在 HEAD 跑 `bash selfhost/check-ast.sh`：
 
 ```console
@@ -199,7 +199,7 @@ rc=0
 ```
 
 skip 没有被写成 pass：本机 `check-ast` 明确报 `4 skipped`；CI 的 macOS job 报 `5 skipped`；
-`check-all` 与 PH-69 五条断言均以 `ok` 单独列出，skip 另有 `skip` 行。
+`check-all` 与 v0-PH-69 五条断言均以 `ok` 单独列出，skip 另有 `skip` 行。
 
 ## 8 非阻断更正项（不改变结论）
 
@@ -214,7 +214,7 @@ skip 没有被写成 pass：本机 `check-ast` 明确报 `4 skipped`；CI 的 ma
    `test(...) 红` 父提交（R2 主红/实现配对 `b71ac5c0`→`0b159b1c` 不受影响）。
 5. `p69_fp` 只覆盖 `test/ast` 的 26 个合法 import 单元；E69-2「FP=0」是这一口径，
    不代表 `test/modules` 的合法夹具也逐条做过 check 侧零诊断断言（它们由 build 门禁覆盖）。
-6. 其他：`AGENTS.md` 0.1 的 `phase=PH-66` 仍停在旧值（当前 PH-69），不属本次版本落点，
+6. 其他：`AGENTS.md` 0.1 的 `phase=v0-PH-66` 仍停在旧值（当前 v0-PH-69），不属本次版本落点，
    建议随文档修订一并更新。
 
 ## 9 未覆盖声明

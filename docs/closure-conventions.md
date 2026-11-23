@@ -6,7 +6,7 @@
 > S3 之后才可用，今天能照着写的是**档①**（`struct` + `trait` + 适配函数）。
 > 适用版本：`ct -v`（ct-ast 主线）。
 >
-> 关联：[history/design/phase21.md](history/design/phase21.md)（决策 D21-1–D21-17 与切片 S0–S7）、
+> 关联：[phases/v0-PH-21/card.md](phases/v0-PH-21/card.md)（决策 D21-1–D21-17 与切片 S0–S7）、
 > [language-spec.md](language-spec.md)、[memory-guide.md](memory-guide.md)、
 > 可运行示例 [../examples/09_callback/callback.ct](../examples/09_callback/callback.ct)。
 
@@ -138,7 +138,7 @@ t.ct:4:9: note: tier 1: trait Op { int call(int x); } ...
 
 `note:` 走独立通道：不递增错误计数、不占 `MAX_ERRORS`、不进 `--diagnostics=json` 的 `warnings`，
 `ct check` 的退出码与 `ctc: N error(s) generated` 的 `N` 都不变。文案清单（小写、无句号、
-标识符单引号）以 [history/design/phase21.md](history/design/phase21.md) §4.6 为准。
+标识符单引号）以 [phases/v0-PH-21/card.md](phases/v0-PH-21/card.md) §4.6 为准。
 
 ### 6. 已知未防护面（必须如实标注）
 

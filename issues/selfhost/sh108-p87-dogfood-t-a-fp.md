@@ -1,12 +1,12 @@
-# SH-108 · PH-87 dogfood 的 10 条 `T a[]` 误报（多维数组形参首维）
+# SH-108 · v0-PH-87 dogfood 的 10 条 `T a[]` 误报（多维数组形参首维）
 
 | 项 | 值 |
 | --- | --- |
 | 模块 | selfhost（A 检查器误报） |
-| 定性 | bug（误报，不阻塞 PH-87 收口） |
+| 定性 | bug（误报，不阻塞 v0-PH-87 收口） |
 | 严重度 | Medium |
 | 锚点 | v0.87.0（2026-11-21）；A dogfood `--check-level=warn` |
-| 文件 | [p87_dogfood.md](../../docs/design/p87_dogfood.md)、[PH-87 N-4](../../docs/reviews/2026-11-21-phase87-rev-verdict.md#L273) |
+| 文件 | [p87_dogfood.md](../../docs/design/p87_dogfood.md)、[v0-PH-87 N-4](../../docs/reviews/2026-11-21-phase87-rev-verdict.md#L273) |
 | 状态 | verified |
 | 处置证据 | **deferred**（2026-11-22，REV/REQ：HEAD `38cd4ae4` 重建 ct-ast v0.88.2，`char x[][MAX]` 仍报 `'T a[]' is deprecated`；10 条 FP 未收敛。触发 v1.1 的 A 误报收敛（A 默认强制前）；负责人 DEV；Medium） |
 
@@ -22,7 +22,7 @@
 不是 CT 的 slice。诊断只应针对真正的 `T a[]` 声明。
 
 证据：[p87_dogfood.md](../../docs/design/p87_dogfood.md) 的 1–10 行；
-[PH-87 复核 N-4](../../docs/reviews/2026-11-21-phase87-rev-verdict.md#L273) 要求“按建议立 `SH-*`，
+[v0-PH-87 复核 N-4](../../docs/reviews/2026-11-21-phase87-rev-verdict.md#L273) 要求“按建议立 `SH-*`，
 归 A 机制误报收敛”。
 
 ## 期望
@@ -40,7 +40,7 @@
 
 ## 关联
 
-- [PH-87 卡](../../docs/design/phase87.md) §7.6、E87-5
+- [v0-PH-87 卡](../../docs/phases/v0-PH-87/card.md) §7.6、E87-5
 - [p87_dogfood.md](../../docs/design/p87_dogfood.md)
 - [v1-pre 证据](../../docs/history/v1-pre-evidence.md) 承接项 7
 
@@ -113,8 +113,8 @@ $ echo $?
 **逐字节不变。** 305 个既有单文件语料生成 C 与 `a0ce8ef1` 基线逐字节相同
 （`compared=305 same=305 diff=0`）。状态字段保持 `deferred` 不动。
 
-**PH-87 dogfood 基准更新。** `p87_dogfood.sh` 由「期望 10 条同一类 FP」改为「期望 0 条」；
-`test/probes/p87_dogfood.tsv` 清空；`docs/design/p87_dogfood.md` 保留 PH-87 历史证据并加
+**v0-PH-87 dogfood 基准更新。** `p87_dogfood.sh` 由「期望 10 条同一类 FP」改为「期望 0 条」；
+`test/probes/p87_dogfood.tsv` 清空；`docs/design/p87_dogfood.md` 保留 v0-PH-87 历史证据并加
 §3 SH-108 复测（0 条）。`p87_dogfood` 6/0、`p87_docs` 23/0。
 
 > **T-7 红证基线口径（2026-11-23）**：上面的红证用 `a0ce8ef1` 重建的二进制。严格按

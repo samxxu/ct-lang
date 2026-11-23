@@ -59,10 +59,10 @@ run=0
 
 结论：receiver 位从 `&_self`（`struct S **`）改为 `_self`（`struct S *`），与 ref 实参一致；
 不是压警告，receiver 语义正确。`ct check` exit 0，`ct build` 零警告、运行 exit 0。
-REV 置 `verified`。完整的 PH-79/SH-98 复核见
+REV 置 `verified`。完整的 v0-PH-79/SH-98 复核见
 [2026-11-20-phase79-rev-verdict.md](../../docs/reviews/2026-11-20-phase79-rev-verdict.md)。
 
 > 范围说明：本 fix 覆盖 inherent/泛型 mcall 的 `self` receiver。trait vtable 路径的
 > `self.bump(...)` 仍发射 `_self.__t_vptr->bump(&_self, ...)`，并另有非法 C（`_self.__t_vptr`
-> 对指针用 `.`）；那是 PH-78 遗留的 trait 自调用 codegen 路径，不在 SH-98 的复现与 fix 范围内，
+> 对指针用 `.`）；那是 v0-PH-78 遗留的 trait 自调用 codegen 路径，不在 SH-98 的复现与 fix 范围内，
 > 记在 verdict 的不阻断观察里，未据此把 SH-98 打回。

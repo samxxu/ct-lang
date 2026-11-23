@@ -7,7 +7,7 @@
 | 日期 | 初稿 2026-11-19；v1 修订 2026-11-20 |
 | 适用 | ct-lang 的 `ct get` / `ct install` / `ct update` / `ct verify` / `ct.lock`；ct-pkg/index 的 `tools/package.sh` / `refresh-index.sh` / `verify-index.sh` / `index` / `repos.txt` |
 | 不适用 | 包内 API、构建系统、索引 CI 的具体实现细节 |
-| 关联 | [PH-77](../design/phase77.md)、[包指南](../package-guide.md)、[发布规则提案](../proposals/ct-pkg-package-maintainer-rules.md)、[battle index-pkg-1](../../battle/index-pkg-1/verdict.md)、[battle index-install-1](../../battle/index-install-1/verdict.md) |
+| 关联 | [v0-PH-77](../phases/v0-PH-77/card.md)、[包指南](../package-guide.md)、[发布规则提案](../proposals/ct-pkg-package-maintainer-rules.md)、[battle index-pkg-1](../../battle/index-pkg-1/verdict.md)、[battle index-install-1](../../battle/index-install-1/verdict.md) |
 
 ## 0. 一句话
 
@@ -392,7 +392,7 @@ ct index refresh --packages <list> --out <index> [--check]
 > **不分配归属、不作为任何一方的验收判据**，也不再在矩阵里复述未经原文支持的摘要。
 > 后续由 index 仓补原文后另开契约定版（不回到“待补”状态）。
 
-| 判据 | 内容（原文摘要） | 原文位置（index@0cdb132） | 归属 | 本仓状态（PH-83） |
+| 判据 | 内容（原文摘要） | 原文位置（index@0cdb132） | 归属 | 本仓状态（v0-PH-83） |
 | --- | --- | --- | --- | --- |
 | PK-1 | `ct.pkg` 存在且可读 | `tools/package-check.sh:15` | Ct（`ct pkg check`） | 已实现 |
 | PK-2 | `name` / `publisher` / `version` / `ns-root` 必填；`publisher != local` | `tools/package-check.sh:16` | Ct（`ct pkg check`） | 已实现 |
@@ -408,20 +408,20 @@ ct index refresh --packages <list> --out <index> [--check]
 | S4 | `c-boundary` 为 `strict` / `allow` | `tools/package-check.sh:31` | index CI（`--strict`） | 不在 Ct |
 | S5 | 包树无构建产物、缓存、`vendor/` | `tools/package-check.sh:32` | index CI（`--strict`） | 不在 Ct |
 
-**PH-83 新增的 Ct 判据（`ct index verify`，§4.4）**：
+**v0-PH-83 新增的 Ct 判据（`ct index verify`，§4.4）**：
 
 | 判据 | 内容 | 归属 | 状态 |
 | --- | --- | --- | --- |
-| IV-1 | 六字段行、字段数正确 | Ct（`ct index verify`） | PH-83 已实现 |
-| IV-2 | 五字段旧行按行硬错（D-014 第 5 条） | Ct（`ct index verify` + `ct get`） | PH-83 已实现 |
-| IV-3 | `name` / `publisher` / `version` 形状 | Ct | PH-83 已实现 |
-| IV-4 | `tag == v<version>` | Ct | PH-83 已实现 |
-| IV-5 | `sha256:` + 64 位小写十六进制 | Ct | PH-83 已实现 |
-| IV-6 | 同一 `publisher/name version` 不重复 | Ct | PH-83 已实现 |
-| IV-7 | “可回放”判定，不取回、不比包树摘要 | Ct | PH-83 已实现 |
+| IV-1 | 六字段行、字段数正确 | Ct（`ct index verify`） | v0-PH-83 已实现 |
+| IV-2 | 五字段旧行按行硬错（D-014 第 5 条） | Ct（`ct index verify` + `ct get`） | v0-PH-83 已实现 |
+| IV-3 | `name` / `publisher` / `version` 形状 | Ct | v0-PH-83 已实现 |
+| IV-4 | `tag == v<version>` | Ct | v0-PH-83 已实现 |
+| IV-5 | `sha256:` + 64 位小写十六进制 | Ct | v0-PH-83 已实现 |
+| IV-6 | 同一 `publisher/name version` 不重复 | Ct | v0-PH-83 已实现 |
+| IV-7 | “可回放”判定，不取回、不比包树摘要 | Ct | v0-PH-83 已实现 |
 
 **不再列入本仓候选**：`dep` 全名、`requires` 可满足性、tag 一致性的离线子集——R2/R3/S2/S3
-仍归 index CI / 包仓；PH-83 不扩 `ct pkg check` 的 1/2/5/8 承诺（D-014 第 2 条）。
+仍归 index CI / 包仓；v0-PH-83 不扩 `ct pkg check` 的 1/2/5/8 承诺（D-014 第 2 条）。
 
 ## 7. 失败与退出码
 
@@ -443,9 +443,9 @@ ct index refresh --packages <list> --out <index> [--check]
 
 - **五字段旧行**：D-014 第 5 条起**按行硬错**（请求命中旧行即失败，提示六字段）；其余六字段行不受影响。
   生成端已停止产出旧行；发布前置是 index 仓先清零旧行。
-- **官方身份**：按 [PH-77](../design/phase77.md) 归一为 `ct/std`；`ct-pkg/std` 当前 `publisher = std` 属**契约违约**，
+- **官方身份**：按 [v0-PH-77](../phases/v0-PH-77/card.md) 归一为 `ct/std`；`ct-pkg/std` 当前 `publisher = std` 属**契约违约**，
   需改清单并发新 tag（不可原地改旧 tag）。索引行与内置 pin 表必须同步。
-- **裸名语义**：PH-77 起裸名只解析官方；第三方必须 `publisher/name`。这与本契约 I2 一致，发布端不得依赖裸名。
+- **裸名语义**：v0-PH-77 起裸名只解析官方；第三方必须 `publisher/name`。这与本契约 I2 一致，发布端不得依赖裸名。
 - **锁格式**：v2 七字段；v1 只经 `ct migrate`。发布端回放必须接受七字段并比对第 1、7 字段。
 - **格式变更流程**：先改本契约 → 两端各自实现 → index 仓全量 `verify-index` → Ct 侧夹具 → 再发布。
 
@@ -482,12 +482,12 @@ ct index refresh --packages <list> --out <index> [--check]
 | --- | --- | --- |
 | Q1 | `ct pkg` 是否透传 `package.sh` | **已定（2026-11-19）：保持 B′**；透传不采纳，复开需新裁决 |
 | Q2 | `package.sh` 缺 `ct` 时跳过回放 | 改为失败；至少 `--no-verify` 显式留痕 |
-| Q3 | 官方 pin 表（PH-77）与索引行的关系 | 以索引行为生产真值，pin 表必须与官方行逐字段一致，一致性探针门禁 |
+| Q3 | 官方 pin 表（v0-PH-77）与索引行的关系 | 以索引行为生产真值，pin 表必须与官方行逐字段一致，一致性探针门禁 |
 | Q4 | 索引签名/pin | 自动消费前必须有 pin/签名；手动 `--index` 可保持现状 |
-| Q5 | `ct get` 输出规范串（PH-77 S2）是否成为脚本接口 | 不作为脚本解析接口；脚本只读 `ct.lock` 与退出码 |
+| Q5 | `ct get` 输出规范串（v0-PH-77 S2）是否成为脚本接口 | 不作为脚本解析接口；脚本只读 `ct.lock` 与退出码 |
 | Q6 | 五字段旧行的发布顺序 | **已定（D-014 第 5 条）**：按行硬错；index 仓先清零旧行再发硬错版本 |
 | Q7 | 多索引并存 | **已定（D-014 第 4 条）**：单索引；多源由调用方合并索引文件 |
-| Q8 | PK/R/S 全量原文与逐条归属 | **已定（2026-11-21，PH-83）**：§6.1 按 index@0cdb132 基线定稿；PK-1/2/5/8 归 Ct，R/S 归 index CI，缺原文的 PK-3/4/6/7/9–13 编号保留但不作判据（PKG-12） |
+| Q8 | PK/R/S 全量原文与逐条归属 | **已定（2026-11-21，v0-PH-83）**：§6.1 按 index@0cdb132 基线定稿；PK-1/2/5/8 归 Ct，R/S 归 index CI，缺原文的 PK-3/4/6/7/9–13 编号保留但不作判据（PKG-12） |
 
 ## 11. 变更与归属
 
@@ -498,7 +498,7 @@ ct index refresh --packages <list> --out <index> [--check]
 | 索引行格式、生成/回放脚本 | ct-pkg/index | 全量 `verify-index` + Ct 侧兼容 |
 | `ct pkg` 边界 | ct-lang（需求方 2026-11-19 定稿 B′） | 复开透传必须显式登记并覆盖既有裁决 |
 | 契约 v1 条款与测试向量 | ct-lang（REQ） | 改条款同时改向量与 conformance；见 [D-014](../decisions/D-014.md) |
-| `ct index verify`（只读） | ct-lang（DEV，PH-83） | 不改发布边界；只读回放索引行 |
+| `ct index verify`（只读） | ct-lang（DEV，v0-PH-83） | 不改发布边界；只读回放索引行 |
 | conformance 数据与 runner | ct-lang（REQ/DEV） | 版本化数据；shell 与 Ct 共用 |
 | Linux x64 产物 / 稳定 URL | ct-lang（发布工程） | 每 MINOR 一版 + sha256；index CI 钉版本 |
 | index 仓脚本废弃 / CI 改造 | ct-pkg/index | 由该仓确认时间表；本仓只提供契约与二进制 |
@@ -507,7 +507,7 @@ ct index refresh --packages <list> --out <index> [--check]
 
 | 版本 | 日期 | 内容 |
 | --- | --- | --- |
-| v1 | 2026-11-20 | 按 [D-014](../decisions/D-014.md) 七项裁定：维持 B′、判据归属矩阵、契约并入本文、单索引（I13）、五字段按行硬错（改 I12）、最小 CI 产物、PH-83 排期；新增 §3.3 digest 伪代码与 3 组向量、§4.1.1 spec/版本选择、§6.1 判据归属矩阵、Q6–Q8 |
-| v1.1 | 2026-11-21 | PH-83 S83a：§3.3 三组向量补全字节并重新实测（v1 的向量 2/3 缺输入、不可复现）；§4.1.1 补 MVS 实例；新增 §4.4 `ct index verify`（IV-1…IV-7、输出/JSON/退出码）；§6.1 按 index@0cdb132 基线定稿（缺原文编号显式标为未分配）；§7 退出码与 §10 Q8 同步 |
+| v1 | 2026-11-20 | 按 [D-014](../decisions/D-014.md) 七项裁定：维持 B′、判据归属矩阵、契约并入本文、单索引（I13）、五字段按行硬错（改 I12）、最小 CI 产物、v0-PH-83 排期；新增 §3.3 digest 伪代码与 3 组向量、§4.1.1 spec/版本选择、§6.1 判据归属矩阵、Q6–Q8 |
+| v1.1 | 2026-11-21 | v0-PH-83 S83a：§3.3 三组向量补全字节并重新实测（v1 的向量 2/3 缺输入、不可复现）；§4.1.1 补 MVS 实例；新增 §4.4 `ct index verify`（IV-1…IV-7、输出/JSON/退出码）；§6.1 按 index@0cdb132 基线定稿（缺原文编号显式标为未分配）；§7 退出码与 §10 Q8 同步 |
 | v1.2 | 2026-11-21 | PKG-14 修复：§4.4 补“输入必须是普通文件（stat+S_ISREG）、ferror、`--json` 退出 2 也为失败”；§7/§9 同步；FIFO 在 open 前拒绝 |
 | v1.3 | 2026-11-23 | PKG-18 本地切片：新增 §4.5 `ct index refresh`（包清单输入、六字段输出、排序、`--check`、原子替换、错误分类与退出码）；明确不联网、不回放、不退场 shell 链 |

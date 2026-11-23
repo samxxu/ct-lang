@@ -2,12 +2,12 @@
 
 | 项 | 值 |
 | --- | --- |
-| 模块 | test（PH-67-R4） |
+| 模块 | test（v0-PH-67-R4） |
 | 类型 | 测试缺口：只验了寄存器面 |
 | 严重度 | Medium |
 | 状态 | deferred |
 | 处置证据 | **deferred**（真板门控；触发：STM32F4 真板到位，或 REQ-HW-020 参考工程先落地；owner DEV） |
-| 承诺出处 | [PH-67 卡](../../docs/design/phase67.md) R4 / E67-4 |
+| 承诺出处 | [v0-PH-67 卡](../../docs/phases/v0-PH-67/card.md) R4 / E67-4 |
 
 ## 现状
 

@@ -1,4 +1,4 @@
-# PH-81 收口复核（REV · 2026-11-21）
+# v0-PH-81 收口复核（REV · 2026-11-21）
 
 > 命名注记（LANG-24 Stage A）：本文件是历史快照，正文保留当时的 `box<T>` 拼写；v1.0 起规范拼写为 `Box<T>`（见 docs/language-spec.md §1.2）。
 
@@ -8,8 +8,8 @@
 | 复核对象 | `c2ec9cd6`（`v0.81.0`，tag `v0.81.0`） |
 | 范围 | `box<T>` + `new`（S1a–S1c）、E81-1…6、D-016、D-011 J-2a、版本 / tag / G8 / check-all / sanitizer |
 | 方法 | `git archive v0.81.0` → 独立自举 L0→L1→L2→ct-ast（不读工作树产物）；跑 p81 与 p78/79/80 关键探针；独立正例 / 负例；P-7.5 `run.sh` 复跑；`check-all` / `check-sanitizers` / `check-warnings` / `g0` / `g8` / `check-docs` / `p39 r8`；读码对照卡与 D-016 |
-| 结论 | **REV: 通过**（PH-81 范围内未发现阻断缺口；§5 为不阻断观察） |
-| 交付 | 本文件；不改代码、不 push；无 PH-81 issue 状态变更 |
+| 结论 | **REV: 通过**（v0-PH-81 范围内未发现阻断缺口；§5 为不阻断观察） |
+| 交付 | 本文件；不改代码、不 push；无 v0-PH-81 issue 状态变更 |
 
 ## 1 独立自举（archive，不依赖工作树产物）
 
@@ -71,7 +71,7 @@ ok   spec has the box<T>/new section (4.71)
 ok   tutorial has the box<T>/new section (17)
 ok   package-guide records the box C ABI boundary
 ok   roadmap lists Phase 81 with v0.81.0
-ok   D-016 records the PH-81 design decision
+ok   D-016 records the v0-PH-81 design decision
 p81_box: OK
 $ echo $?
 0
@@ -184,7 +184,7 @@ tag
 $ git rev-parse v0.81.0^{commit}
 c2ec9cd6c10bb96e0846c698d28895ca7611a67c
 $ git tag -n1 v0.81.0
-v0.81.0         PH-81 closeout (c2ec9cd)
+v0.81.0         v0-PH-81 closeout (c2ec9cd)
 $ git ls-remote origin 'refs/tags/v0.81.0*'
 239677a272404e3ae4f4012418aeaf2613ef3da0        refs/tags/v0.81.0
 c2ec9cd6c10bb96e0846c698d28895ca7611a67c        refs/tags/v0.81.0^{}
@@ -197,14 +197,14 @@ check-docs: OK (2181 relative links in 360 files, v0.81.0, 11 hard gates, 12 pha
 ```
 
 - **版本**：五处 `CTC_VERSION`、`README.md`、`docs/README.md`、`AGENTS.md`、`docs/history/phase-log.md` 全部
-  `v0.81.0`；MINOR=81=PH-81（`d=0`），PATCH=0。
-- **tag**：annotated（`cat-file -t` = `tag`）、指向收口提交、message 含 `PH-81` 与前 7 位 `c2ec9cd`、已推
+  `v0.81.0`；MINOR=81=v0-PH-81（`d=0`），PATCH=0。
+- **tag**：annotated（`cat-file -t` = `tag`）、指向收口提交、message 含 `v0-PH-81` 与前 7 位 `c2ec9cd`、已推
   （远端 tag object 与本地一致，`^{}` 解引用到 `c2ec9cd6`）。
 - **独立门禁**（archive 构建，`/tmp/rev81`）：
 
 ```console
 $ bash selfhost/check-all.sh
-  ok    PH-81-S1 box<T>/new (E81-1…6: layout, new, release, at(), cycle, docs)
+  ok    v0-PH-81-S1 box<T>/new (E81-1…6: layout, new, release, at(), cycle, docs)
   == summary: 1540 passed, 0 failed, 4 skipped ==
 check-all: OK (11 hard gates green)          # exit 0
 
@@ -223,7 +223,7 @@ check-sanitizers: OK (583 checks, no sanitizer report)   # exit 0
    但该旗标在 ct-ast 未实现（实测 `ctc: unknown option '--debug-leaks'`）。卡 §7.2/§7.4 与 D-016 §6
    已如实写明「未实现、将来也只报计数」，所以读完卡与 D-016 后**不构成事实冲突**；建议后续文档把
    §1/E81-5 改成「若实现则只报计数」，避免只读前文的读者误解。不阻断 E81-5 的「不宣称环检测」判据。
-2. **D-011 J-2a 无回指**：D-016 §2/§8 已完整记录「J-2a 的完全关键字在 PH-81 范围内被 D-016 取代」；
+2. **D-011 J-2a 无回指**：D-016 §2/§8 已完整记录「J-2a 的完全关键字在 v0-PH-81 范围内被 D-016 取代」；
    D-011 §2 表述仍是「完全关键字；`int new;` 硬错」，且没有 `superseded-by: D-016` 回指。
    建议后续文档提交补一行回指（D-011 其余裁定不变）。
 3. **卡 §6/§7 编号**：`## 6 收口对照（E81-1…6）` 下没有正文，`### 7.1`…`### 7.4` 直接接在其后；
@@ -233,14 +233,14 @@ check-sanitizers: OK (583 checks, no sanitizer report)   # exit 0
    证据有效，但严格按 T-7「baseline 是 test 提交的父提交」应写 `d4fd01f9` 或把文档提交排到红证之后。
 5. **`lib/std/README.md` 量词**：本轮改成「内置层由五个单元组成」，但下一句仍是「四者都是……自动预解析的单元」
    （原文未同步改）。纯文档笔误。
-6. **既有缺陷（非 PH-81 引入）**：struct 初始化器里调用方法会被原样发射，ct-ast 接受后 C 编译报
+6. **既有缺陷（非 v0-PH-81 引入）**：struct 初始化器里调用方法会被原样发射，ct-ast 接受后 C 编译报
    `no member named 'retain' / 'to_string'`。最小复现（v0.81.0 与 v0.80.4 均可复现）：
    `struct R { String s; } ... struct R r = { y.to_string() };` →
    `error: no member named 'to_string' in 'struct String'`；
    `struct H { Vec<int> v; } ... struct H h = { v.retain() };` 同型。
    `new` 因共享花括号路径同样受影响（如 `new Record { 1, lit.to_string() }`、`new Node { leaf.retain() }`）。
-   该缺陷在 PH-81 之前就存在（v0.80.4 复现，只用 String/Vec），E81-2 的「与 `T x = {...}` 同路径」反而被满足；
-   建议另立 SH 条目，不据此回退 PH-81。
+   该缺陷在 v0-PH-81 之前就存在（v0.80.4 复现，只用 String/Vec），E81-2 的「与 `T x = {...}` 同路径」反而被满足；
+   建议另立 SH 条目，不据此回退 v0-PH-81。
 7. **E81-4 的「无泄漏」措辞**：p81 与 check-sanitizers 都设 `ASAN_OPTIONS=detect_leaks=0`（编译器 arena +
    环用例按设计泄漏），所以「ASan 无泄漏」实际由 `refs`/`ct_str_live_count()` 归零 + ASan/UBSan 无报告
    共同证明；LeakSanitizer 本身未开启。判据实质满足，措辞可比实现更准确地写成「refs/live 归零 + 无 sanitizer 报告」。
@@ -251,14 +251,14 @@ check-sanitizers: OK (583 checks, no sanitizer report)   # exit 0
 - 自动 retain 未插入（D-016 §4 的显式协议），按设计不测。
 - `--debug-leaks` 未实现，无法验证其计数输出。
 - `tools/check.sh` 仍只有 `g0` / `g8` / `battle-selftest` 子命令（G1/G4/G6 缺位），
-  是 `full-review-v0.77.0` 已登记的治理缺口，不属于 PH-81；本轮用 `g0` + `g8` + `check-docs` 覆盖可执行部分。
+  是 `full-review-v0.77.0` 已登记的治理缺口，不属于 v0-PH-81；本轮用 `g0` + `g8` + `check-docs` 覆盖可执行部分。
 - 未单独验证 32 位平台上的句柄字节数；卡与 spec 的 16/8 是 LP64 断言。
 
 ## 8 结论与交付
 
 **REV: 通过。** E81-1…6 均有独立复现的原始输出；D-016 的布局 / 上下文关键字 / 复制协议 / 静态 release /
 跨单元边界记录与实现一致；P-7.5 证据可复跑；版本、annotated tag、G8、`check-all`（11 门）、sanitizer、
-warnings、check-docs 全绿。§6 的 7 条均为不阻断观察，其中第 6 条是 PH-81 之前既有的初始化器方法调用缺陷，
+warnings、check-docs 全绿。§6 的 7 条均为不阻断观察，其中第 6 条是 v0-PH-81 之前既有的初始化器方法调用缺陷，
 建议另立 issue，不在本次回退。
 
-本次只提交本文件，不 push，无 PH-81 issue 状态变更。
+本次只提交本文件，不 push，无 v0-PH-81 issue 状态变更。

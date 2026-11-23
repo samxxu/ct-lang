@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | **Medium** |
 | 锚点 | commit `4ef8b68`（2026-10-21） |
-| 文件 | [docs/design/phase10.md:74](../../docs/history/design/phase10.md#L74)（D44）、[:59](../../docs/history/design/phase10.md#L59)（10.6） |
+| 文件 | [docs/phases/v0-PH-10/card.md:74](../../docs/phases/v0-PH-10/card.md#L74)（D44）、[:59](../../docs/phases/v0-PH-10/card.md#L59)（10.6） |
 | 状态 | verified |
 | 处置证据 | ✅ 已修复（2026-10-21；验证见 [issues/README.md](../README.md) 的「Phase 12 复审」一节） |
 

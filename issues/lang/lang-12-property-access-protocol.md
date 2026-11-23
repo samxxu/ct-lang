@@ -6,7 +6,7 @@
 | 严重度 | Medium |
 | 优先级 | **P2** —— ct-json 的可读性诉求；有库层绕法，不挡 0.1.0 |
 | 状态 | rejected |
-| 处置证据 | **rejected**（2026-11-15 重排：与 PH-56 同判。缺键时点访问是空指针解引用，无法安全定义；安全形态 `m["k"]` / `m["k"]?.c` 已可用） |
+| 处置证据 | **rejected**（2026-11-15 重排：与 v0-PH-56 同判。缺键时点访问是空指针解引用，无法安全定义；安全形态 `m["k"]` / `m["k"]?.c` 已可用） |
 | 锚点 | `v0.53.1`（`3337ac7a`） |
 | 类型 | **从未支持（需求）** |
 
@@ -30,7 +30,7 @@ CT 本身 rc=0（成员存在性属 `Z5` 的 opt-in 类型检查范围之外）�
   访问写 `p->tag` / `(*p).v.i`：[bindings-and-patterns.md:10-47](../../docs/bindings-and-patterns.md#L10-L47)。
 - `?.` 只做**字段**访问（[language-spec.md:2652-2667](../../docs/language-spec.md#465-可选链---phase-53仅-ct-ast)）；
   `into` 只做块内字段赋值（[:2375-2390](../../docs/language-spec.md#452-接收者上下文块-expr-into---phase-30仅-ct-ast)）。
-- 规约没有把 `doc.<key>` 定义成 `get("<key>")` 的糖；PH-52 只做 `[]`，且只按「名 + 参数个数」
+- 规约没有把 `doc.<key>` 定义成 `get("<key>")` 的糖；v0-PH-52 只做 `[]`，且只按「名 + 参数个数」
   匹配（[:2628-2630](../../docs/language-spec.md#464-自定义类型下标phase-52仅-ct-ast)）。
 
 所以这是新需求：要么在语言层加「属性 → get」协议，要么明确「JSON 访问只用 `[]` / `get`」。
@@ -79,7 +79,7 @@ int n = port.as_int();
 
 ## 与其他条目的关系
 
-- 多级 `doc["a"]["b"]` 仍受 PH-52 单层限制（`REQ-JSACCESS-1` / `REQ-INDEX-1`）；
+- 多级 `doc["a"]["b"]` 仍受 v0-PH-52 单层限制（`REQ-JSACCESS-1` / `REQ-INDEX-1`）；
 - `doc["server"].has(k)` 仍受 SH-73 的接收者形态限制（[sh73:59-69](../selfhost/sh73-temp-receiver-dynamic-dispatch.md#L59-L69)）；
 - `doc["server"].v`（下标结果取字段）是 LANG-5 的静默坏 C，与本条不同：那条是**已有字段**的访问守卫，
   本条是**不存在的 key 当字段**的新协议。

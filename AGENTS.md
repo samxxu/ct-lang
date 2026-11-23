@@ -456,7 +456,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 
 | 项 | 值 |
 | --- | --- |
-| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=PH-88 |
+| 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=v0-PH-88 |
 | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
 | 门禁入口 | `tools/check.sh g0`…`g9`（治理门禁；g2 已机械校验）；`selfhost/check-all.sh`（12 道硬门禁，保持不变） |
 | 文档 snippet | 缺失 |
@@ -482,41 +482,41 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 
     日期: 2026-11-12
     条款: §6.7 V-1
-    现状: v0.36.0 五处一致；PH-36 已收口，MINOR=phase=36，d=0。Phase 27–29 属 V-1 在途不追溯。
+    现状: v0.36.0 五处一致；v0-PH-36 已收口，MINOR=phase=36，d=0。Phase 27–29 属 V-1 在途不追溯。
     理由: 历史 tag 不可回改；Phase 27–29 在 v0.30.0 合并发布，重编号会跳号并留 CHANGELOG 空段。
     收敛: 无需补偿；收口时 MINOR = PH-<n>。
     签字: 用户已批准（2026-11-12）
 
-> 2026-11-13：PH-37 → v0.37.0，d=0。
-> 2026-11-13：PH-39 → v0.39.0，d=0。
-> 2026-11-13：PH-40 → v0.40.0，d=0；v0.40.1 为 SH-68 review fix。
-> 2026-11-13：PH-41 → v0.41.0，d=0。
-> 2026-11-14：PH-42 → v0.42.1，d=0。
-> 2026-11-14：PH-43 → v0.43.0，d=0。
-> 2026-11-14：PH-44 → v0.44.1，d=0。
-> 2026-11-15：**PH-54 占 v0.54.0–v0.58.0**（S0 / S1 / S2 / S3 / S5+S6 各一个 MINOR），比 phase 号多 4 个 MINOR；
+> 2026-11-13：v0-PH-37 → v0.37.0，d=0。
+> 2026-11-13：v0-PH-39 → v0.39.0，d=0。
+> 2026-11-13：v0-PH-40 → v0.40.0，d=0；v0.40.1 为 SH-68 review fix。
+> 2026-11-13：v0-PH-41 → v0.41.0，d=0。
+> 2026-11-14：v0-PH-42 → v0.42.1，d=0。
+> 2026-11-14：v0-PH-43 → v0.43.0，d=0。
+> 2026-11-14：v0-PH-44 → v0.44.1，d=0。
+> 2026-11-15：**v0-PH-54 占 v0.54.0–v0.58.0**（S0 / S1 / S2 / S3 / S5+S6 各一个 MINOR），比 phase 号多 4 个 MINOR；
 > 已发布 tag 不回改，也不把新功能降级成 PATCH（`v0.58.x` 只收 fix）。
 > 后续按「下一个空位」连续分配（相位 55 / 56 / 58 / 61 无 phase，不占版本）：
-> **PH-57 → v0.59.0、PH-59 → v0.60.0、PH-60 跳过、PH-62 → v0.61.0（d=1）、PH-63 → v0.62.0**。
-> 换算表：`d = n - MINOR`，PH-57/59/62 为 **-2 / -1 / 1**（PH-60 跳过）；`g1-version` 与 `g8-version` 按本表核对，
-> PH-62–PH-75 因已发布 tag 保持 `d=1`；**PH-76 起恢复 `d=0`（MINOR = phase）**。新增 phase 一律先查本表，不得按 phase 号直接当 MINOR。
-> **PH-60 为条件相位**：无确认消费者则不立相，PH-62 → v0.61.0、PH-63 → v0.62.0，版本位不空置。
-> 2026-11-16：PH-64 → v0.63.0（d=1，按表中「下一个空位」）；SH-86 P0 → v0.62.1（fix，已打 tag）。
+> **v0-PH-57 → v0.59.0、v0-PH-59 → v0.60.0、v0-PH-60 跳过、v0-PH-62 → v0.61.0（d=1）、v0-PH-63 → v0.62.0**。
+> 换算表：`d = n - MINOR`，v0-PH-57/59/62 为 **-2 / -1 / 1**（v0-PH-60 跳过）；`g1-version` 与 `g8-version` 按本表核对，
+> v0-PH-62–v0-PH-75 因已发布 tag 保持 `d=1`；**v0-PH-76 起恢复 `d=0`（MINOR = phase）**。新增 phase 一律先查本表，不得按 phase 号直接当 MINOR。
+> **v0-PH-60 为条件相位**：无确认消费者则不立相，v0-PH-62 → v0.61.0、v0-PH-63 → v0.62.0，版本位不空置。
+> 2026-11-16：v0-PH-64 → v0.63.0（d=1，按表中「下一个空位」）；SH-86 P0 → v0.62.1（fix，已打 tag）。
 > 2026-11-17：v0.63.3（PKG-10 默认取最新 tag；Phase 65 期内 fix，MINOR 仍 63）。
 > 2026-11-17：v0.63.4（PKG-11 get 输出详情；Phase 65 期内 fix，MINOR 仍 63）。
-> 2026-11-19：恢复 PN-2 `phase = MINOR`；PH-76 → v0.76.0、PH-77 → v0.77.0（`d=0`）。`v0.75.0` 因历史偏移（PH-75 = v0.74.0）不再补发，登记为历史空位。
-> 2026-11-20：PH-78 → v0.78.0（`d=0`）；v0.78.1 为 PH-78 REV 打回修复（SH-95/96/97）。
-> 2026-11-20：PH-79 → v0.79.0（`d=0`）；v0.79.2 为 PH-79 REV 打回修复（SH-99/100/101、TEST-24）。
-> 2026-11-20：指针退场排期 PH-78 → v0.78.0（S2）、PH-79 → v0.79.0（S3）、PH-80 → v0.80.0（S5）、PH-81 → v0.81.0（S1）、PH-82 → v0.82.0（泄漏防护）；v1.0 顺延。均 `d=0`，见 [phase 安排](docs/planning/pointer-free-phase-plan.md)。
-> 2026-11-21：PH-81 → v0.81.0（`d=0`）；P-7.5 证据、S1a/S1b/S1c 红绿、E81-1…6 全通过。
-> 2026-11-21：PH-82 → v0.82.0（`d=0`）；`leaks` 两档、直接环告警、allow-cycle、树模式，E82-1…8 全通过。
-> 2026-11-21：PH-83 → v0.83.0（`d=0`）；契约 v1、`ct index verify`、conformance、Linux x64 产物，E83-1…8 全通过。
-> 2026-11-21：PH-84 → v0.84.0（`d=0`）；最小 ADT/`match`（S84a–S84d），E84-1…8 通过；S84e（文档一致性）按 battle doc-consistency-1 判决 B（最小集）完成，E84-9 通过，A 的全量审计归 DOC-77/78/79。
-> 2026-11-21：PH-85 → v0.85.0（`d=0`）；inventory + 词法器 spike + M0 粗切 6 单元 + A 机制 `--check-level=off|warn|error`（默认 off）；**E85-2 有条件通过（D-018）**：spike 已执行、度量/逐字节/sharp edge 齐，整子系统新语法重写门不通过、移交 PH-86 per-function；REV 打回 F1–F4 已修（干净归档、M0 提交独立可构建、D-018、逆序回滚演练）。
-> 2026-11-21：PH-84 F1/F2 修复 → v0.84.1（PATCH，LANG-21 fixed）；typedef 别名可作 match 主语、`pub typedef` 跨单元发射 `struct lib_Shape`/`lib_Alias`。
-> 2026-11-21：PH-86 → v0.86.0（`d=0`）；词法器 token 改为源缓冲 `TokView{ptr,len}`、C API 迁移、错误出口清单（S86c `?`/errdefer 不可用，battle/p86-errorpath 采 A）、spec/tutorial 词法边界 + 度量；E86-1…8 通过（E86-8 回滚演练）；PH-85 快照探针改读 `1e2c30f7` 归档。
-> 2026-11-21：PH-87 → v0.87.0（`d=0`）；解析器/检查器按 kind 切片重写（13 + 15 个切片，单判别式）；语料逐字节、345 诊断逐字、自举不动点通过；A dogfood 10 条同一类 FP；`switch→match` 字面项按 battle/p87-kind-match 移交 PH-88（L2 引导链不实现 PH-84）。
-> 2026-11-21：PH-88 → v0.88.0（`d=0`）；发射器五判别函数按 kind 切片（76 个 `em_*`，判别式单读）、`MAX_IO_CALLS` 512→1024（容量，诊断文本不变；`MAX_FUNCS` 501/512，余 11）、自举不动点轮数参数化（日常 2 / tag 前 3）、66 语料逐字节 + 345 诊断逐字；字面 `match` 仍不可写入 ct-ast（L2 不实现 PH-84），E88-1 部分通过、承接 `v1-PH-0` seed cutover（battle/p88-emit-match）；v1-pre 收口。
+> 2026-11-19：恢复 PN-2 `phase = MINOR`；v0-PH-76 → v0.76.0、v0-PH-77 → v0.77.0（`d=0`）。`v0.75.0` 因历史偏移（v0-PH-75 = v0.74.0）不再补发，登记为历史空位。
+> 2026-11-20：v0-PH-78 → v0.78.0（`d=0`）；v0.78.1 为 v0-PH-78 REV 打回修复（SH-95/96/97）。
+> 2026-11-20：v0-PH-79 → v0.79.0（`d=0`）；v0.79.2 为 v0-PH-79 REV 打回修复（SH-99/100/101、TEST-24）。
+> 2026-11-20：指针退场排期 v0-PH-78 → v0.78.0（S2）、v0-PH-79 → v0.79.0（S3）、v0-PH-80 → v0.80.0（S5）、v0-PH-81 → v0.81.0（S1）、v0-PH-82 → v0.82.0（泄漏防护）；v1.0 顺延。均 `d=0`，见 [phase 安排](docs/planning/pointer-free-phase-plan.md)。
+> 2026-11-21：v0-PH-81 → v0.81.0（`d=0`）；P-7.5 证据、S1a/S1b/S1c 红绿、E81-1…6 全通过。
+> 2026-11-21：v0-PH-82 → v0.82.0（`d=0`）；`leaks` 两档、直接环告警、allow-cycle、树模式，E82-1…8 全通过。
+> 2026-11-21：v0-PH-83 → v0.83.0（`d=0`）；契约 v1、`ct index verify`、conformance、Linux x64 产物，E83-1…8 全通过。
+> 2026-11-21：v0-PH-84 → v0.84.0（`d=0`）；最小 ADT/`match`（S84a–S84d），E84-1…8 通过；S84e（文档一致性）按 battle doc-consistency-1 判决 B（最小集）完成，E84-9 通过，A 的全量审计归 DOC-77/78/79。
+> 2026-11-21：v0-PH-85 → v0.85.0（`d=0`）；inventory + 词法器 spike + M0 粗切 6 单元 + A 机制 `--check-level=off|warn|error`（默认 off）；**E85-2 有条件通过（D-018）**：spike 已执行、度量/逐字节/sharp edge 齐，整子系统新语法重写门不通过、移交 v0-PH-86 per-function；REV 打回 F1–F4 已修（干净归档、M0 提交独立可构建、D-018、逆序回滚演练）。
+> 2026-11-21：v0-PH-84 F1/F2 修复 → v0.84.1（PATCH，LANG-21 fixed）；typedef 别名可作 match 主语、`pub typedef` 跨单元发射 `struct lib_Shape`/`lib_Alias`。
+> 2026-11-21：v0-PH-86 → v0.86.0（`d=0`）；词法器 token 改为源缓冲 `TokView{ptr,len}`、C API 迁移、错误出口清单（S86c `?`/errdefer 不可用，battle/p86-errorpath 采 A）、spec/tutorial 词法边界 + 度量；E86-1…8 通过（E86-8 回滚演练）；v0-PH-85 快照探针改读 `1e2c30f7` 归档。
+> 2026-11-21：v0-PH-87 → v0.87.0（`d=0`）；解析器/检查器按 kind 切片重写（13 + 15 个切片，单判别式）；语料逐字节、345 诊断逐字、自举不动点通过；A dogfood 10 条同一类 FP；`switch→match` 字面项按 battle/p87-kind-match 移交 v0-PH-88（L2 引导链不实现 v0-PH-84）。
+> 2026-11-21：v0-PH-88 → v0.88.0（`d=0`）；发射器五判别函数按 kind 切片（76 个 `em_*`，判别式单读）、`MAX_IO_CALLS` 512→1024（容量，诊断文本不变；`MAX_FUNCS` 501/512，余 11）、自举不动点轮数参数化（日常 2 / tag 前 3）、66 语料逐字节 + 345 诊断逐字；字面 `match` 仍不可写入 ct-ast（L2 不实现 v0-PH-84），E88-1 部分通过、承接 `v1-PH-0` seed cutover（battle/p88-emit-match）；v1-pre 收口。
 > 2026-11-21：PKG-14 → v0.83.1（fix）；索引校验非普通文件 exit 2、FIFO 不挂起、ferror/JSON 失败。
 > 2026-11-21：PKG-14 CI 追加 → v0.83.3（fix）；`CT_HOME` 默认索引路径在 glibc 上被自拷贝清空，已修。
 
@@ -605,7 +605,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 构建 | `gcc selfhost/l0/ctc.c -o ctc`（必须 `-Wall -Wextra -std=c99` 零警告；源码在 `selfhost/`，二进制仍落仓库根） |
 | 当前版本 | v0.88.3（`CTC_VERSION`，见 `ctc.c` 顶部；会写进生成物注释） |
 | 许可 | 编译器 GPL-3.0-or-later（`LICENSE`）；`.ct` 源码与生成物**不受 GPL 约束**（`LICENSE.EXCEPTION`）；`examples/`、`test/` 与 `editors/` 为 MIT |
-| 当前阶段 | v0.88.0（PH-88 发射器重写 + 自举回环已交付：五个判别函数切成 76 个 `em_*` free function、判别式只读一次 kind；`CT_FIXPOINT_ROUNDS` 日常 2 / tag 前 3 轮逐字节一致；66 语料逐字节 + 345 诊断逐字；字面 `match` 按 battle/p88-emit-match 承接 `v1-PH-0`；v1-pre 的 PH-84–88 全部收口，下一步 v1.0（`v1-PH-0`，AST-only + seed cutover）。v1-pre 证据见 [v1-pre-evidence](docs/history/v1-pre-evidence.md)，度量见 [p88_metrics](docs/history/p88_metrics.md) |
+| 当前阶段 | v0.88.0（v0-PH-88 发射器重写 + 自举回环已交付：五个判别函数切成 76 个 `em_*` free function、判别式只读一次 kind；`CT_FIXPOINT_ROUNDS` 日常 2 / tag 前 3 轮逐字节一致；66 语料逐字节 + 345 诊断逐字；字面 `match` 按 battle/p88-emit-match 承接 `v1-PH-0`；v1-pre 的 v0-PH-84–88 全部收口，下一步 v1.0（`v1-PH-0`，AST-only + seed cutover）。v1-pre 证据见 [v1-pre-evidence](docs/history/v1-pre-evidence.md)，度量见 [p88_metrics](docs/history/p88_metrics.md) |
 | 规模目标 | 保持单文件、可一次读完；不要把 `ctc.c` 拆成多文件 |
 
 ### 2. 文件职责与改动边界
@@ -648,16 +648,16 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
   `vendor/`。这是包管理子命令的受控例外——**零网络**不变，编译器核（`ct compile` / `ct build --emit-c`）仍
   **零子进程**，且不得内置 HTTP 客户端。无 `git` 时 git 源硬报错并提示，本地源照常可用。Phase 17.5 的
   `ct update` / `ct verify` 完全离线：`update` 只复用 `vendor/` 缓存与 `ct.lock` 已钉住的提交，`verify` 只读。
-  见 [design/phase8.md](docs/history/design/phase8.md)（D22 / D26）。
+  见 [phases/v0-PH-8/card.md](docs/phases/v0-PH-8/card.md)（D22 / D26）。
 - **例外（Phase 17 `ct build` 一步到位）**：`ct build` **默认**在发射 `.c` / `.h` 之后调用**本地 C 编译器**
   （`$CC` / `--cc`，默认 `cc`）产出可执行文件——用户 2026-11-02 授权的受控子进程例外。**零网络**不变；
   `ct compile` 与 `ct build --emit-c` 仍**零子进程**；`ct build` 不解析 `cc` 的诊断、不做增量链接、
-  不内置构建系统，路径与参数一律按单引号规则转义。见 [design/phase17.md](docs/history/design/phase17.md)（D17-9）。
+  不内置构建系统，路径与参数一律按单引号规则转义。见 [phases/v0-PH-17/card.md](docs/phases/v0-PH-17/card.md)（D17-9）。
 - **例外（Phase 12 bindings）**：仓库内 `test/bindings/**`（Phase 12 时在顶层，2026-11-13 迁入 `test/`），承载对既有 C 库的**声明式 binding**
   （`selfhost` 之外的第二类源码目录）。binding 只是 Ct 源——直通 `#include` ＋ 镜像声明 ＋ `map`，
   **只声明外部符号，不 vendored、不下载、不链接**；仓库内假 HAL 的 C 头 / 实现仅作**演示与测试**，
   **绝不**成为编译器构建步骤（`gcc selfhost/l0/ctc.c`、`./test/run.sh` 的编译相关层与 Ct 线关卡都不得依赖它）。
-  见 [phase-log](docs/history/phase-log.md) 的 Phase 12 记录与 [design/phase12.md](docs/history/design/phase12.md)。
+  见 [phase-log](docs/history/phase-log.md) 的 Phase 12 记录与 [phases/v0-PH-12/card.md](docs/phases/v0-PH-12/card.md)。
 - `editors/**` 必须保持**纯声明式 JSON**：无构建步骤、无 npm 依赖、无需打包器，改完可直接
   `npx @vscode/vsce package`。插件只负责高亮与编辑体验，不做语法校验、**不调用 `ctc`**（方言亦不例外：
   插件不代跑展开器，`--watch` / 后台自动展开推迟；消费映射信息只能读编译器已产出的 map JSON）。

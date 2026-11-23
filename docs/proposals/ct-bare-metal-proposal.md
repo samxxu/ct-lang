@@ -2,14 +2,14 @@
 
 | 项 | 值 |
 | --- | --- |
-| 性质 | 使用方提案；已由 CT 项目组受理并按 PH-64 交付。本文保留为提案、依据与验收追溯 |
-| 状态 | **已采纳并交付（PH-64，v0.63.0）**；后续变更按 CT 卡与规范走 |
+| 性质 | 使用方提案；已由 CT 项目组受理并按 v0-PH-64 交付。本文保留为提案、依据与验收追溯 |
+| 状态 | **已采纳并交付（v0-PH-64，v0.63.0）**；后续变更按 CT 卡与规范走 |
 | 事实基线 | v0.62.0（`485129c9`），L0→L1→L2→ct-ast 全链现编；探针均在 `/tmp`，未改仓库 |
-| 落点 | **PH-64 → v0.63.0（已收口）**；交付核对见 [phase64 卡](../history/design/phase64.md)（`--freestanding` / 按需单元 / `--alloc` / const vtable） |
+| 落点 | **v0-PH-64 → v0.63.0（已收口）**；交付核对见 [phase64 卡](../phases/v0-PH-64/card.md)（`--freestanding` / 按需单元 / `--alloc` / const vtable） |
 | 关联 | 新 SH 条目（数组初值坏 C）、[SH-60](../../issues/selfhost/sh60-mct-signature-types-decorative.md)、[SH-75](../../issues/selfhost/sh75-local-iface-return-dangling.md)、[SH-25](../../issues/selfhost/sh25-typedef-alias-drops-dims.md)、[lib/std/Vec.h.ct](../../lib/core/Vec.h.ct) |
 | 定性 | **1 个静默坏 C 补丁 + 3 份生成物契约**；不新增语言特性（`layout(plain)` 列为可裁项） |
 
-> 交付状态（2026-11-20 核对）：PH-64 已按本提案收口（v0.63.0），生成物契约四项均已落地；
+> 交付状态（2026-11-20 核对）：v0-PH-64 已按本提案收口（v0.63.0），生成物契约四项均已落地；
 > 真实板卡 pilot 仍属 `HW-1`（外部依赖，无硬件不阻塞，见 roadmap）。
 
 > 本文只从“生成物能不能进 MCU 工程”立论，不评价 CT 的语言表达力。文中所有“实测”都有命令与原始输出；
@@ -30,7 +30,7 @@
    但四个 `.o` 一起进场，`-nostdlib` 工程会因 `malloc` 未定义而红。
 4. vtable 是**可写**的 `static struct …_vtbl`；即使对象进了 `.rodata`，vtable 仍占 SRAM。
 
-建议：**先发 P0 patch（1）**；再开 PH-64 做（2）（3）（4）与门禁。不要在 patch 里顺手改 vtable 的
+建议：**先发 P0 patch（1）**；再开 v0-PH-64 做（2）（3）（4）与门禁。不要在 patch 里顺手改 vtable 的
 `const` 或 `--freestanding` 语义，那会把一次止血变成一次产品级变更。
 
 ---
@@ -195,7 +195,7 @@ vtable 不是 `const`，`__vptr` / `vt` 也不是 `const` 指针。对象即使 
 
 验收见 §4 B1–B7。这是一次纯 `fix`，按 D-005 的“静默坏 C 一律判 bug、走 PATCH”执行，不占 MINOR。
 
-### 3.2 PH-64（建议）：`--freestanding` + `--alloc` + const vtable
+### 3.2 v0-PH-64（建议）：`--freestanding` + `--alloc` + const vtable
 
 #### S1 `--freestanding`（compile / build / check 同一开关）
 
@@ -267,7 +267,7 @@ struct Greeter_iface { void *self; const struct Greeter_vtbl *vt; };
 | B6 | 多维 `Person g[2][2] = …` 在 `ct` 阶段硬错，文案指明多维数组与 trait 的组合不受支持；不生成 C |
 | B7 | `check-all` 11/11；既有 golden 零变化 |
 
-### PH-64
+### v0-PH-64
 
 | # | 判据（可执行） |
 | --- | --- |
@@ -294,7 +294,7 @@ struct Greeter_iface { void *self; const struct Greeter_vtbl *vt; };
 | S4 | baremetal 门禁段 + 文档 | `check-ast.sh`、README、spec | F8/F9 | M |
 | S5 | （可选）`layout(plain)` | Parser/Emitter + 负例 | F7 | M |
 
-P0 独立成立，不依赖 PH-64；每项独立提交、独立回滚。S3 的 golden 重生成不得与 S1 混在同一提交。
+P0 独立成立，不依赖 v0-PH-64；每项独立提交、独立回滚。S3 的 golden 重生成不得与 S1 混在同一提交。
 
 ---
 
@@ -315,7 +315,7 @@ P0 独立成立，不依赖 PH-64；每项独立提交、独立回滚。S3 的 g
 对象内的 `__x_vptr` 与 `_iface.vt` 承担同一件事。若把它删掉、在装箱点填 `_iface`，可一次性消掉
 `sizeof` 污染、数组初始化 bug、const/Flash 限制，以及“C 代码创建的结构体 vptr 为 0”的 FFI 隐患。
 
-但这是 ABI 级变更，**不建议塞进 PH-64**。建议先出设计记录，满足三条才开相：
+但这是 ABI 级变更，**不建议塞进 v0-PH-64**。建议先出设计记录，满足三条才开相：
 
 1. 每个 `.` 调用点的接收者类型要么具体、要么 `_iface`（无第三种）；
 2. 跨单元 trait impl 的方法可导出为非 `static` 包装，且与 vtable 槽一一对应；
@@ -327,12 +327,12 @@ P0 独立成立，不依赖 PH-64；每项独立提交、独立回滚。S3 的 g
 
 ## 8. 需要维护者裁定
 
-1. **版本位**：AGENTS §0.3 写“PH-62 起恢复 `d=0`”，但同段又写 `PH-62 → v0.61.0`（`d=1`），
-   且 [phase63.md](../history/design/phase63.md) 实算 `d=1`。按现有相位表，PH-64 应为 **v0.63.0（`d=1`）**。
+1. **版本位**：AGENTS §0.3 写“v0-PH-62 起恢复 `d=0`”，但同段又写 `v0-PH-62 → v0.61.0`（`d=1`），
+   且 [phase63.md](../phases/v0-PH-63/card.md) 实算 `d=1`。按现有相位表，v0-PH-64 应为 **v0.63.0（`d=1`）**。
    开卡前请修正该句，否则 `g1-version` 与卡片会互相打架。
 2. **P0 编号**：建议新立一条 SH（下一个空位，当前到 SH-82），只装 §2.1/§2.2 两条静默坏 C；
    不与 SH-25 合并（入口不同，合并会让回归面失控）。
-3. **PH-64 是否受理**：若只接受 P0，也请明确——P0 独立成立，不依赖 PH-64。
+3. **v0-PH-64 是否受理**：若只接受 P0，也请明确——P0 独立成立，不依赖 v0-PH-64。
 4. **const vtable**：接受“一次改到底 + golden 全量重生成”，还是先只在 `--freestanding` 下 const？
    我建议前者；后者会让 `.h` 类型随模式变化，跨模式链接出问题。
 5. **S5 `layout(plain)`**：保留还是裁掉？裁掉的话，至少把“镜像结构体不得 adopt trait”写进文档。

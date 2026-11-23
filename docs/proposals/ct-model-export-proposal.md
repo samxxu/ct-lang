@@ -2,10 +2,10 @@
 
 | 项 | 值 |
 | --- | --- |
-| 状态 | **方案依据（已开卡）**：PH-59 [M1](../history/design/phase59.md)；本文不再单列「待研判」 |
+| 状态 | **方案依据（已开卡）**：v0-PH-59 [M1](../phases/v0-PH-59/card.md)；本文不再单列「待研判」 |
 | 来源 | SwiftCT 静态映射评估（2026-11-15） |
-| 拟占 | `PH-59`（提案通过并完成需求定稿后再占号） |
-| 关联 | [SH-79](../../issues/selfhost/sh79-build-lib-emit-map-silent.md)、[LANG-9](../../issues/lang/lang-9-struct-field-visibility-abi.md)、[LANG-10](../../issues/lang/lang-10-machine-readable-diagnostics.md)、PH-58 |
+| 拟占 | `v0-PH-59`（提案通过并完成需求定稿后再占号） |
+| 关联 | [SH-79](../../issues/selfhost/sh79-build-lib-emit-map-silent.md)、[LANG-9](../../issues/lang/lang-9-struct-field-visibility-abi.md)、[LANG-10](../../issues/lang/lang-10-machine-readable-diagnostics.md)、v0-PH-58 |
 | 第一个消费者 | SwiftCT 的 PHP 生成器（读模型，不读 `.h`） |
 
 ## 1 要解决什么
@@ -51,7 +51,7 @@
 
 SwiftCT 侧列出的最小集：struct 名、字段名、字段类型、字段可见性、kind（struct/union/enum）、
 函数名与形参类型、所属单元/命名空间、字段位置（`line` / `col`）。位置是**必带字段**，
-由 PH-58 提供；生成器可以不用，但模型不得缺。
+由 v0-PH-58 提供；生成器可以不用，但模型不得缺。
 
 ## 3 方案取舍
 
@@ -108,7 +108,7 @@ SwiftCT 侧列出的最小集：struct 名、字段名、字段类型、字段�
 4. **可见性**：字段**全量导出，含非 `pub` 字段**；`visibility` 在 LANG-9 落地前一律
    `"unknown"`，落地后填 `pub` / `private`。
 5. **kind**：`struct` / `union` / `enum`（enum 的成员表第一版可不导出，列为非目标）。
-6. **位置必带**：每个字段必须带 `line` / `col`（`loc`），依赖 PH-58 落地；PH-59 不提供
+6. **位置必带**：每个字段必须带 `line` / `col`（`loc`），依赖 v0-PH-58 落地；v0-PH-59 不提供
    「无位置」变体，也不把位置当作同版本内的增量补丁。**不含**：C 语句 AST、表达式树、内联汇编、注释。
 
 ### 4.1 字段范围（已定，2026-11-15）
@@ -122,13 +122,13 @@ SwiftCT 侧列出的最小集：struct 名、字段名、字段类型、字段�
 
 这条裁定优先于「只导出公开面」的直觉；`--lib` 的 ABI 面仍只含自由函数，但**模型导出不是 ABI 面**。
 
-## 5 与 PH-58 / LANG-10 的边界（是否合并）
+## 5 与 v0-PH-58 / LANG-10 的边界（是否合并）
 
 **不合并成一条「机器可读输出」总需求，但共享一节口径。** 三条通道：
 
 | 通道 | 内容 | 消费者 | 稳定性 |
 | --- | --- | --- | --- |
-| 诊断 JSON（LANG-10 / PH-58） | 错误/警告 + 位置 | 编辑器、CI、门禁 | 诊断码与级别可依赖 |
+| 诊断 JSON（LANG-10 / v0-PH-58） | 错误/警告 + 位置 | 编辑器、CI、门禁 | 诊断码与级别可依赖 |
 | 代码模型（本提案） | struct/字段/函数/可见性 | 代码生成器 | schema 版本化契约 |
 | `--emit-map`（SH-79） | 调试映射（prog ↔ 源） | 测试夹具、调试 | 不承诺 |
 
@@ -176,15 +176,15 @@ SwiftCT 侧列出的最小集：struct 名、字段名、字段类型、字段�
 | M7 | LANG-9 未落地时 `visibility` 为 `unknown`（不得据此过滤字段）；落地后私有/pub 区分正确 |
 | M8 | 至少一个外部消费者夹具（SwiftCT PHP 生成器的最小读取脚本）能解析并按名取到字段 |
 | M9 | 私有字段必须出现在 `fields` 中；按模型还原的 struct 字段名/顺序与 `.abi.h` 一致 |
-| M10 | 每个字段带 `line` / `col`（PH-58 提供）；缺位置即验收失败。PH-58 未落地时 PH-59 不开工 |
+| M10 | 每个字段带 `line` / `col`（v0-PH-58 提供）；缺位置即验收失败。v0-PH-58 未落地时 v0-PH-59 不开工 |
 
 ## 10 排位与依赖
 
-- 位置：`PH-57（v0.59.0）→ PH-59（v0.60.0）`；版本位按 AGENTS §0.3 的相位表；
-- 依赖：LANG-10 7c（`Field` 补 `line` / `col`，原写作草案号 PH-58）必须先落地——字段位置是必带字段，
+- 位置：`v0-PH-57（v0.59.0）→ v0-PH-59（v0.60.0）`；版本位按 AGENTS §0.3 的相位表；
+- 依赖：LANG-10 7c（`Field` 补 `line` / `col`，原写作草案号 v0-PH-58）必须先落地——字段位置是必带字段，
   不是可选增强；LANG-9 不阻塞 M1，未落地时 `visibility` 写 `unknown`（已定降级）；
 - 与 SH-79：只共享内部遍历，**不挡 M1**；SH-79 独立修，M2 前完成即可；
-- 与 PH-60（注记）：PH-59 必须在前，注记产出的元数据才有出口。
+- 与 v0-PH-60（注记）：v0-PH-59 必须在前，注记产出的元数据才有出口。
 
 ## 11 研判与后续
 

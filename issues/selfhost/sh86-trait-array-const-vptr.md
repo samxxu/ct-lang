@@ -72,7 +72,7 @@ $ ct d4.ct -o d4.c && cc d4.c -o d4 && ./d4 ; echo $?
 ## 关联
 
 - [SH-25](sh25-typedef-alias-drops-dims.md)：`typedef` 别名漏拷 `dims`（已修，另一入口）；
-- REQ-HW-010…013（PH-64）：符号面、按需单元、`--alloc`、const vtable。
+- REQ-HW-010…013（v0-PH-64）：符号面、按需单元、`--alloc`、const vtable。
 
 ## 复核（REV，2026-11-17）
 

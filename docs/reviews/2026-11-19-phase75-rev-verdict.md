@@ -1,14 +1,14 @@
-# PH-75 收口复核（REV）
+# v0-PH-75 收口复核（REV）
 
 > **结论：`REV: 通过`**（附 4 项不阻断观察，见 §8）
 > **复核对象**：`c827a5ae64179bc912933e6411a15c3943d3138a`
-> （`feat(ast): PH-75 闭包作方法实参收口（v0.74.0）`），tag `v0.74.0`。
+> （`feat(ast): v0-PH-75 闭包作方法实参收口（v0.74.0）`），tag `v0.74.0`。
 > **复核者**：REV / rev-ph75；日期 2026-11-19。
 > **方法**：只依据提交与 clean 副本。用 clean clone/`git archive c827a5ae` 在
 > `/tmp/rev-ph75` 重新自举 L0→L1→L2→ct-ast；红证在红提交的 clean 副本上重建编译器复现，
 > 不采信转述，也不使用工作树当前产物。
-> **并行说明**：复核期间工作树有另一会话的在途改动（`docs/design/phase65.md` 删除、
-> `docs/design/phase77.md` 新增、`docs/roadmap.md`、`docs/session-map.md` 修改）。本报告全部
+> **并行说明**：复核期间工作树有另一会话的在途改动（`docs/phases/v0-PH-65/card.md` 删除、
+> `docs/phases/v0-PH-77/card.md` 新增、`docs/roadmap.md`、`docs/session-map.md` 修改）。本报告全部
 > 验收都在 `c827a5ae` 的 clean 副本上做；verdict 提交只含本文件，不触碰这些在途改动。
 
 ## 1 环境与自举
@@ -102,13 +102,13 @@ rc=0
 ## 4 红证/实现配对
 
 ```console
-$ git log --oneline --grep PH-75
-c827a5ae feat(ast): PH-75 闭包作方法实参收口（v0.74.0）
-74e58fe7 feat(ast): PH-75-R1 pair 形闭包作方法实参（SH-65）
-eaa78050 test(ast): PH-75-R1 红（pair 形闭包作方法实参）
-ffe3621d fix(ast): PH-75-R2 闭包拒绝只作用于 struct/trait 方法
-eb9280d6 feat(ast): PH-75-R2 闭包作方法实参硬错（SH-65/SH-67）
-542c19ba test(ast): PH-75-R2 红（闭包作方法实参静默）
+$ git log --oneline --grep v0-PH-75
+c827a5ae feat(ast): v0-PH-75 闭包作方法实参收口（v0.74.0）
+74e58fe7 feat(ast): v0-PH-75-R1 pair 形闭包作方法实参（SH-65）
+eaa78050 test(ast): v0-PH-75-R1 红（pair 形闭包作方法实参）
+ffe3621d fix(ast): v0-PH-75-R2 闭包拒绝只作用于 struct/trait 方法
+eb9280d6 feat(ast): v0-PH-75-R2 闭包作方法实参硬错（SH-65/SH-67）
+542c19ba test(ast): v0-PH-75-R2 红（闭包作方法实参静默）
 $ git rev-parse eaa78050^ 74e58fe7^ 542c19ba^ eb9280d6^
 2f0ec52d50fd7d21840f523d33e0d35e7d0b6a56
 eaa78050ee9754959001ad0d79ac176cef10dbb7
@@ -164,7 +164,7 @@ $ git rev-parse v0.74.0 v0.74.0^{}
 c827a5ae64179bc912933e6411a15c3943d3138a
 $ git cat-file -p v0.74.0 | tail -2
 
-PH-75 closeout (c827a5a)
+v0-PH-75 closeout (c827a5a)
 $ git ls-remote --tags origin 'v0.74.0*'
 8021f511018812d6975d4fa3fed848a84326b45a	refs/tags/v0.74.0
 c827a5ae64179bc912933e6411a15c3943d3138a	refs/tags/v0.74.0^{}
@@ -172,7 +172,7 @@ $ git ls-remote origin refs/heads/main
 c827a5ae64179bc912933e6411a15c3943d3138a	refs/heads/main
 ```
 
-`v0.74.0` = PH-75、`d=1`（`AGENTS.md` 的 `version-minor-offset` 偏离登记），
+`v0.74.0` = v0-PH-75、`d=1`（`AGENTS.md` 的 `version-minor-offset` 偏离登记），
 与卡 §0 的 `version-minor: 74`、`docs/history/phase-log.md` 的 `v0.74.0` 行一致。
 
 ## 6 CI

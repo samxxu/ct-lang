@@ -8,8 +8,8 @@
 
 | 报告项 | 结论 | 复核 |
 | --- | --- | --- |
-| §1 PH-85–88 证据链可信 | **接受** | 与 phase-log、p88_metrics、battle 记录一致 |
-| §1 `MAX_FUNCS` 475/512、余 37 | **修正** | 实测 **501/512、余 11**（[p88_metrics](../history/p88_metrics.md) §4 #3；PH-88 N-1） |
+| §1 v0-PH-85–88 证据链可信 | **接受** | 与 phase-log、p88_metrics、battle 记录一致 |
+| §1 `MAX_FUNCS` 475/512、余 37 | **修正** | 实测 **501/512、余 11**（[p88_metrics](../history/p88_metrics.md) §4 #3；v0-PH-88 N-1） |
 | §2 D1 README 首行“ct check 只做受限语义检查”过时 | **按“保留 + 补 `--types`”处理（2026-11-21）** | 原句仍准确；README 中/英已补 `ct check --types` 可选子集说明 |
 | §2 D1 能力清单缺五项、示例旧风格 | **接受（编辑项）** | 属门面重写，不是事实错误；转 [DOC-86](../../issues/docs/doc-86-readme-v088-rewrite.md) |
 | §2 D2 README §0.1 基线 0.44.1 | **接受（待重测）** | 与 SH-73 绑定；转 DOC-86 |

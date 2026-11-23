@@ -22,8 +22,8 @@
 | 记录 | 内容 |
 | --- | --- |
 | [phase-log.md](phase-log.md) | Phase 0–36 的逐相详细记录、版本记录、已定设计决策与待定项；[../roadmap.md](../roadmap.md) 只做简要索引 |
-| [p88_metrics.md](p88_metrics.md) | PH-88（v0.88.0）发射器切片度量与 sharp edge：76 个 kind 切片、行数/耗时/发射 C、fixpoint 2/3 轮、PH-85 spike 对照 |
-| [v1-pre-evidence.md](v1-pre-evidence.md) | v1-pre（PH-84…PH-88）逐相结论、承接目标与遗留清单；v1.0 入口前的证据摘要 |
+| [p88_metrics.md](p88_metrics.md) | v0-PH-88（v0.88.0）发射器切片度量与 sharp edge：76 个 kind 切片、行数/耗时/发射 C、fixpoint 2/3 轮、v0-PH-85 spike 对照 |
+| [v1-pre-evidence.md](v1-pre-evidence.md) | v1-pre（v0-PH-84…v0-PH-88）逐相结论、承接目标与遗留清单；v1.0 入口前的证据摘要 |
 
 ### design/ —— 已关闭阶段的设计记录
 
@@ -31,17 +31,17 @@
 | --- | --- |
 | [bootstrap.md](design/bootstrap.md) | 自举链的目标目录结构、分层规则与里程碑（M1–M6） |
 | [restore.md](design/restore.md) | Phase 2–4 的恢复式重做（D1–D8） |
-| [phase5.md](design/phase5.md) | 新增特性：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace（D9–D14） |
-| [phase6.md](design/phase6.md) | 生态与扩展：`map`、反向映射表、增量缓存、多目标、方言（D15–D20） |
-| [phase8.md](design/phase8.md) | 包管理与分发 `ct-pkg`（D21–D27） |
-| [phase9.md](design/phase9.md) | AST 版编译器（D28–D37） |
-| [phase10.md](design/phase10.md) | 主线切换到 ct-ast（D38–D45） |
-| [phase12.md](design/phase12.md) | 官方 bindings 与方言深化（D46–D52） |
-| [phase17.md](design/phase17.md) | 工程质量与新能力：CI 矩阵、官方 `std`、raw 透传、文档分层、包管理补全、`ct build` 一步到位（D17-1–D17-9；2026-11-10 因 design window 归档） |
-| [phase18.md](design/phase18.md) | 生态建设：ct-pkg 组织、包规范与首批包、索引 / CI 复用（D18-1–D18-11；2026-11-11 因 design window 归档） |
-| [phase19.md](design/phase19.md) | 受限语义检查：调用点 arity、实参类型粗粒度兼容、trait 方法歧义、跨单元签名、`ct check`（D19-1–D19-5；2026-11-11 因 design window 归档） |
-| [phase22.md](design/phase22.md) | `loop` 语法糖：`loop(<次数>)` 展开为单行 `for`，上下文相关关键字与嵌套遮蔽告警（D22-1–D22-12；2026-11-13 因 design window 归档） |
-| [phase23.md](design/phase23.md) | `loop(a..b)` 范围语法：半开区间展开为单行 `for`，两个边界各求值一次、先 `a` 后 `b`（D23-1–D23-9；2026-11-13 因 design window 归档） |
+| [phase5.md](../phases/v0-PH-5/card.md) | 新增特性：AutoDrop / 路径敏感泄漏分析 / 目录 = namespace（D9–D14） |
+| [phase6.md](../phases/v0-PH-6/card.md) | 生态与扩展：`map`、反向映射表、增量缓存、多目标、方言（D15–D20） |
+| [phase8.md](../phases/v0-PH-8/card.md) | 包管理与分发 `ct-pkg`（D21–D27） |
+| [phase9.md](../phases/v0-PH-9/card.md) | AST 版编译器（D28–D37） |
+| [phase10.md](../phases/v0-PH-10/card.md) | 主线切换到 ct-ast（D38–D45） |
+| [phase12.md](../phases/v0-PH-12/card.md) | 官方 bindings 与方言深化（D46–D52） |
+| [phase17.md](../phases/v0-PH-17/card.md) | 工程质量与新能力：CI 矩阵、官方 `std`、raw 透传、文档分层、包管理补全、`ct build` 一步到位（D17-1–D17-9；2026-11-10 因 design window 归档） |
+| [phase18.md](../phases/v0-PH-18/card.md) | 生态建设：ct-pkg 组织、包规范与首批包、索引 / CI 复用（D18-1–D18-11；2026-11-11 因 design window 归档） |
+| [phase19.md](../phases/v0-PH-19/card.md) | 受限语义检查：调用点 arity、实参类型粗粒度兼容、trait 方法歧义、跨单元签名、`ct check`（D19-1–D19-5；2026-11-11 因 design window 归档） |
+| [phase22.md](../phases/v0-PH-22/card.md) | `loop` 语法糖：`loop(<次数>)` 展开为单行 `for`，上下文相关关键字与嵌套遮蔽告警（D22-1–D22-12；2026-11-13 因 design window 归档） |
+| [phase23.md](../phases/v0-PH-23/card.md) | `loop(a..b)` 范围语法：半开区间展开为单行 `for`，两个边界各求值一次、先 `a` 后 `b`（D23-1–D23-9；2026-11-13 因 design window 归档） |
 | [borrow.md](design/borrow.md) | `borrow` + `Handback` 的设计与实现记录（D-A…D-D） |
 | [dialect.md](design/dialect.md) | 方言系统与作者指南 |
 | [next-decisions.md](design/next-decisions.md) | 容量上限策略与第三十三批方向（已定案并落地） |

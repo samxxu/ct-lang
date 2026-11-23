@@ -1,8 +1,8 @@
-# PH-78 收口复核（REV）
+# v0-PH-78 收口复核（REV）
 
 - 首轮复核：`v0.78.0`（annotated tag `7f621315`，peeled `1d466c0a960abd8272e179f8bcceb469ae9ff13b`）；原结论 `REV: 打回`，完整记录保留在 §0.1。
 - 本轮复核：`v0.78.1`（`c75e55df`，SH-95/96/97 修复；annotated tag `360788acc`，peeled `c75e55df`）。
-- 基线：`07693e47`（`v0.77.2`，PH-78 源码改动之前）。
+- 基线：`07693e47`（`v0.77.2`，v0-PH-78 源码改动之前）。
 - 环境：macOS arm64；`Apple clang version 21.0.0 (clang-2100.4.1.1)`；`CC=cc`。
 - 方法：`git archive v0.78.1 | tar -x -C /tmp/rev-ph78-1`，按项目自举链独立重建 L0→L1→L2→ct-ast；所有本轮探针只使用该归档构建出的二进制。
 - 结论：**通过**。三条原打回项已在 v0.78.1 修复并独立复现；原打回记录原样保留，修复证据见 §0.2、§2.1、§4.1。
@@ -278,7 +278,7 @@ methods.ct:3:26: error: unknown type name 'ref'
 exit=1
 ```
 
-红证可复现。注意：T-7 字面要求 baseline 是 test 提交的**父**提交；此处 `4a3b8b5d^ = cec61c22`（仅 docs/design/phase78.md 开卡，源码与 07693e47 相同），所以行为上等价，但字面判据未满足。另 `4a3b8b5d` 的路径集合含 `docs/design/phase78.md` 与 `selfhost/check-ast.sh`，不纯是“只含测试/夹具/红证”。
+红证可复现。注意：T-7 字面要求 baseline 是 test 提交的**父**提交；此处 `4a3b8b5d^ = cec61c22`（仅 docs/phases/v0-PH-78/card.md 开卡，源码与 07693e47 相同），所以行为上等价，但字面判据未满足。另 `4a3b8b5d` 的路径集合含 `docs/phases/v0-PH-78/card.md` 与 `selfhost/check-ast.sh`，不纯是“只含测试/夹具/红证”。
 
 ## 4 首轮（v0.78.0）版本、tag 与门禁
 
@@ -365,10 +365,10 @@ $ CC=cc sh test/ast/p78_docs.sh                                  # p78_docs: OK,
 ```console
 $ bash selfhost/check-ast.sh
 ...
-ok    PH-78-S2a basic (E78-1…5 ref/out free functions)
-ok    PH-78-S2b method (E78-6 methods/trait/default/inherent)
-ok    PH-78-S2c types (base-type negatives, shapes, semantics)
-ok    PH-78-S2c docs (spec + tutorial)
+ok    v0-PH-78-S2a basic (E78-1…5 ref/out free functions)
+ok    v0-PH-78-S2b method (E78-6 methods/trait/default/inherent)
+ok    v0-PH-78-S2c types (base-type negatives, shapes, semantics)
+ok    v0-PH-78-S2c docs (spec + tutorial)
 == summary: 1525 passed, 0 failed, 4 skipped ==   （exit 0）
 $ bash selfhost/check-sanitizers.sh
 ...
@@ -420,7 +420,7 @@ build=1
 5. **测试覆盖已补（v0.78.1）**：新增 `self`、`f().x`、bit-field、`const int g`、package-guide 的负例；仍缺 `const` 指针/pointee、for-init/do-while、先读后写等（见 §7.1）。
 6. **T-7 形式**：v0.78.1 的三条 fix 另有红证 `4bcbe5a3`（父提交，baseline `ca3354a5`）；首轮 `4a3b8b5d` 的 baseline 是祖先而非父（`cec61c22` 为 docs-only 开卡），字面 T-7 仍不完美。
 7. **tag 指向**：`v0.78.0` peel 到 `1d466c0a`（battle 判决 docs 提交），版本 bump/卡收口在父提交 `6a63e1e4`；`v0.78.1` peel 到 `c75e55df`（版本 bump/收口提交）。按用户定义 `1d466c0a` 是 v0.78.0 收口提交则成立；按 V-7 严格读法可再确认。
-8. **pre-existing（非 PH-78 引入）**：trait default body / inherent method 的 `self.a(...)` 发射 `_self.__t_vptr` / `S_a(&_self, ...)` receiver 错误，在 baseline、v0.78.0、v0.78.1 上都存在；静态固有方法的语句式调用 `S.mark(n);` 也被误判为声明。它们不是本卡新增，但会被 p78 的“方法/trait 同一规则”暴露，建议另立 issue。
+8. **pre-existing（非 v0-PH-78 引入）**：trait default body / inherent method 的 `self.a(...)` 发射 `_self.__t_vptr` / `S_a(&_self, ...)` receiver 错误，在 baseline、v0.78.0、v0.78.1 上都存在；静态固有方法的语句式调用 `S.mark(n);` 也被误判为声明。它们不是本卡新增，但会被 p78 的“方法/trait 同一规则”暴露，建议另立 issue。
 9. **E78-1 边界**：形参第一 token 的 `ref`/`out` 按设计总是注解，因此一个名为 `ref`/`out` 的 typedef 不能作形参类型；与“上下文关键字”一致，不阻断。
 
 ### 7.1 v0.78.1 复核新增/残余（不阻断本轮三项验收）
@@ -438,7 +438,7 @@ Bus error: 10
 run=138
 ```
 2. **`self` 作 receiver 的 `&_self` 仍在**：SH-96 只修第二实参（ref/out 实参），`self.bump(self)` 的第一个 receiver 仍发 `&_self`，cc 有一条不兼容指针警告；当前 fixture 的 `bump` 不用 `self`，所以 run 0。若方法体使用 `self->v`，仍是 pre-existing 错误；建议另立 issue。
-3. **原 §7 的 out 边界仍在**：owning 初始化为“曾经赋值”、`out` 先读后写、for-init/do-while 过度保守、条件内嵌套赋值不识别；这些是 PH-78 的 L1 边界/文档问题，不因 v0.78.1 改变。
+3. **原 §7 的 out 边界仍在**：owning 初始化为“曾经赋值”、`out` 先读后写、for-init/do-while 过度保守、条件内嵌套赋值不识别；这些是 v0-PH-78 的 L1 边界/文档问题，不因 v0.78.1 改变。
 
 ## 8 复核边界
 

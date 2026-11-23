@@ -1,4 +1,4 @@
-# PH-68 收口复核（REV）
+# v0-PH-68 收口复核（REV）
 
 > **结论**：`REV: 通过`（附 3 项不阻断观察，见 §6）
 > **复核者**：REV / rev-ph68；日期 2026-11-19；HEAD `bf8190b182d7062ec6c10364a08db92a8d6ccdf3`。
@@ -88,18 +88,18 @@ battle-enum total=530 plain-green=438 FP=0 plain-red=92
 ## 2 红证与实现配对
 
 ```console
-$ git log --oneline | grep PH-68
-bf8190b1 feat(ast): PH-68 类型核心收口（v0.67.0）
-f1ee02c6 test(ast): PH-68-R3/R4 四位置探针与误报账
-0a8438a4 feat(ast): PH-68-R2 表达式类型表（二元/一元/三元/cast）
-8b60e9ae test(ast): PH-68-R2 红（表达式类型表）
-42a1932d feat(ast): PH-68-R1 数组维度参与初值判定（234 转绿）
-067413f8 test(ast): PH-68-R1 红（数组维度初值）
+$ git log --oneline | grep v0-PH-68
+bf8190b1 feat(ast): v0-PH-68 类型核心收口（v0.67.0）
+f1ee02c6 test(ast): v0-PH-68-R3/R4 四位置探针与误报账
+0a8438a4 feat(ast): v0-PH-68-R2 表达式类型表（二元/一元/三元/cast）
+8b60e9ae test(ast): v0-PH-68-R2 红（表达式类型表）
+42a1932d feat(ast): v0-PH-68-R1 数组维度参与初值判定（234 转绿）
+067413f8 test(ast): v0-PH-68-R1 红（数组维度初值）
 ```
 
-- R1：实现 `42a1932d` 的父提交 = `067413f8`（`test(ast): PH-68-R1 红…`），
+- R1：实现 `42a1932d` 的父提交 = `067413f8`（`test(ast): v0-PH-68-R1 红…`），
   红证 baseline `ba5572b3` = `067413f8^`；`ba5572b3` 是 HEAD 祖先。
-- R2：实现 `0a8438a4` 的父提交 = `8b60e9ae`（`test(ast): PH-68-R2 红…`），
+- R2：实现 `0a8438a4` 的父提交 = `8b60e9ae`（`test(ast): v0-PH-68-R2 红…`），
   红证 baseline `1589515b` = `8b60e9ae^`；`1589515b` 是 HEAD 祖先。
 
 **独立重建红证**（`git archive <baseline>` → 同一条自举链 → 用 HEAD 的探针跑基线二进制）：
@@ -147,7 +147,7 @@ $ git ls-remote origin 'refs/tags/v0.67.0*'
 2c5036ec1fff1b82078f853fff69eba1ff7cb1f2	refs/tags/v0.67.0
 bf8190b182d7062ec6c10364a08db92a8d6ccdf3	refs/tags/v0.67.0^{}
 $ git tag -n99 v0.67.0
-v0.67.0         PH-68 closeout (bf8190b)
+v0.67.0         v0-PH-68 closeout (bf8190b)
 ```
 
 本地 tag 对象与远端一致（`2c5036ec…`），peeled commit 与 HEAD 一致（`bf8190b…`）。
@@ -156,11 +156,11 @@ v0.67.0         PH-68 closeout (bf8190b)
 
 ```console
 $ XDG_CACHE_HOME=/tmp/ghcache gh run list --workflow ci.yml --limit 5
-in_progress  feat(ast): PH-68 类型核心收口（v0.67.0）  ci  main  push  44410450867 ...
-completed success  test(ast): PH-68-R3/R4 四位置探针与误报账  ci  main  push  44408642249 ...
-completed success  feat(ast): PH-68-R2 表达式类型表（二元/一元/三元/cast）  ci  main  push  44404536596 ...
+in_progress  feat(ast): v0-PH-68 类型核心收口（v0.67.0）  ci  main  push  44410450867 ...
+completed success  test(ast): v0-PH-68-R3/R4 四位置探针与误报账  ci  main  push  44408642249 ...
+completed success  feat(ast): v0-PH-68-R2 表达式类型表（二元/一元/三元/cast）  ci  main  push  44404536596 ...
 completed success  docs(roadmap): 开卡 v0-PH-69…75，非硬件相全部就位  ci  main  push  44403287564 ...
-completed cancelled  feat(ast): PH-68-R1 数组维度参与初值判定（234 转绿）  ci  main  push  44402619514 ...
+completed cancelled  feat(ast): v0-PH-68-R1 数组维度参与初值判定（234 转绿）  ci  main  push  44402619514 ...
 ```
 
 `bf8190b` 的 run `44410450867`（headSha 逐字等于 HEAD）最终：
@@ -173,10 +173,10 @@ ubuntu-gcc success / macos-clang success / ubuntu-clang-smoke success
 `ubuntu-gcc` 日志（`gh run view --job 135176863866 --log`）：
 
 ```text
-ok    PH-68-R1 typebuf (array dimension survives the initializer check)
-ok    PH-68-R2 exprtypes (bin/unary/tern/cast typed)
-ok    PH-68-R3 positions (init/assign/return/container arg)
-ok    PH-68-R4 fp (0 false positives, skip table)
+ok    v0-PH-68-R1 typebuf (array dimension survives the initializer check)
+ok    v0-PH-68-R2 exprtypes (bin/unary/tern/cast typed)
+ok    v0-PH-68-R3 positions (init/assign/return/container arg)
+ok    v0-PH-68-R4 fp (0 false positives, skip table)
 check-all: OK (11 hard gates green)
 == summary: 1487 passed, 0 failed, 0 skipped ==   # 该 summary 为 check-ast 段
 ```
@@ -190,15 +190,15 @@ run URL：https://github.com/samxxu/ct-lang/actions/runs/44410450867
 本地 `/tmp/rev68` 独立自举后跑 `bash selfhost/check-ast.sh`：
 
 ```console
-ok    PH-68-R1 typebuf (array dimension survives the initializer check)
-ok    PH-68-R2 exprtypes (bin/unary/tern/cast typed)
-ok    PH-68-R3 positions (init/assign/return/container arg)
-ok    PH-68-R4 fp (0 false positives, skip table)
+ok    v0-PH-68-R1 typebuf (array dimension survives the initializer check)
+ok    v0-PH-68-R2 exprtypes (bin/unary/tern/cast typed)
+ok    v0-PH-68-R3 positions (init/assign/return/container arg)
+ok    v0-PH-68-R4 fp (0 false positives, skip table)
 == summary: 1483 passed, 0 failed, 4 skipped ==
 EXIT=0
 ```
 
-4 条 skip 全是 Renode/平台项（`baremetal_renode`、`PH-67-R2/R3/R5`），**没有一条 PH-68**；
+4 条 skip 全是 Renode/平台项（`baremetal_renode`、`v0-PH-67-R2/R3/R5`），**没有一条 v0-PH-68**；
 CI 的 Linux 上 4 条全部执行，故 CI summary 为 `1487 passed, 0 failed, 0 skipped`。
 卡 §6 写的 `check-ast 1483 passed` 是本地账，与上述一致。
 
@@ -245,17 +245,17 @@ $ git show bf8190b -- test/cases | grep -E '^[+-]' | grep -v '^[+-][+-]' | grep 
    建议在脚本注释或卡里把这条排除与 `loop_count_type` 并列写明，避免读者误以为
    234 也在 301 中。
 3. **R1 红提交混入了卡与 roadmap。** `067413f8` 除 `p68_typebuf.sh` 外还新增
-   `docs/history/design/phase68.md` 与改 `docs/roadmap.md`。按 6.6 T-7 的“只含测试、夹具与红证”
+   `docs/phases/v0-PH-68/card.md` 与改 `docs/roadmap.md`。按 6.6 T-7 的“只含测试、夹具与红证”
    字面，这是范围混合；红证本身与实现配对不受影响。建议后续红提交只带测试与证据。
 
-另：tag message 用 legacy `PH-68`，而卡 §0 的编号是 `v0-PH-68`；因 phase-ID 迁移仍被
+另：tag message 用 legacy `v0-PH-68`，而卡 §0 的编号是 `v0-PH-68`；因 phase-ID 迁移仍被
 blocker 挡住（卡首已注明 legacy 路径），此处按现状记录，不单独判红。
 
 ## 7 结论
 
 四条退出判据在独立自举的 `ct-ast` 上逐条通过；红证/实现配对与 R3/R4 的“验收任务”定性
 均与 git 事实相符；五处版本、annotated tag、远端 tag 与 `bf8190b` 一致；CI 三 job 全绿，
-`ubuntu-gcc` 有 `ok PH-68-R1…R4` 与 `check-all: OK (11 hard gates green)`；`check-ast`
-本地 1483 passed / 0 failed，4 条 skip 均非 PH-68；skip 未被写成 pass。
+`ubuntu-gcc` 有 `ok v0-PH-68-R1…R4` 与 `check-all: OK (11 hard gates green)`；`check-ast`
+本地 1483 passed / 0 failed，4 条 skip 均非 v0-PH-68；skip 未被写成 pass。
 
 **`REV: 通过`**

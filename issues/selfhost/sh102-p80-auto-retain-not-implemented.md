@@ -12,9 +12,9 @@ confirmed-by: REV-PH-80
 
 ## 来源
 
-[PH-80 收口复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §4.3、B1；
+[v0-PH-80 收口复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §4.3、B1；
 [D-013](../../docs/decisions/D-013.md) §3“复制 / retain 合同（C-6）”；
-[phase80 卡 §7.9.1](../../docs/design/phase80.md#L364)。
+[phase80 卡 §7.9.1](../../docs/phases/v0-PH-80/card.md#L364)。
 
 ## 结论
 
@@ -27,7 +27,7 @@ D-013 §3 要求“按值传参、按值返回、字段赋值、容器插入 `St
 
 - [`lib/std/Str.h.ct:23-28`](../../lib/core/Str.h.ct#L23-L28)：`a plain by-value parameter, return or field assignment is a shallow struct copy and is not retained automatically in this phase`；
 - [`docs/language-spec.md:2918`](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)：同文；
-- [`docs/design/phase80.md:364-366`](../../docs/design/phase80.md#L364-L366)：`自动 retain（D-013 §3）未实现 ... 自动半部不满足`。
+- [`docs/phases/v0-PH-80/card.md:364-366`](../../docs/phases/v0-PH-80/card.md#L364-L366)：`自动 retain（D-013 §3）未实现 ... 自动半部不满足`。
 
 `p80_layout` 的 `gap param_refs=1`（[`test/ast/p80_layout/expected.trace.out:3`](../../test/ast/p80_layout/expected.trace.out#L3)）
 把该事实钉成回归断言，因此探针全绿不能证明 D-013 §3 满足。
@@ -150,7 +150,7 @@ READ of size 1 at 0x602000000978 thread T0
 
 ## 影响
 
-- D-013 §3 是 USER 2026-11-20 签收的 C-6 合同；未实现意味着 PH-80 不能按“D-013 满足”收口。
+- D-013 §3 是 USER 2026-11-20 签收的 C-6 合同；未实现意味着 v0-PH-80 不能按“D-013 满足”收口。
 - 当前 API 文档要求使用者在参数 / 返回 / 字段位置显式 `retain()`，但这与 D-013 的“自动 retain”相反；
   按文档正常使用（被调方 `release()` 参数）会触发 UAF，ASan 可稳定捕获。
 - 容器插入不受影响（`Vec` / `Map` glue 已 retain），`p80_layout` 的 trace 已覆盖。
@@ -243,7 +243,7 @@ $ ./ret   -> after return s=2 r=2 / r after caller release data0=114            
 
 ## 复核（REV，2026-11-20，v0.80.1）：**reopened**
 
-复核记录见 [PH-80 次轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §11。三个原 ASan
+复核记录见 [v0-PH-80 次轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §11。三个原 ASan
 复现（参数 / 字段赋值 / 非局部返回）与 `p80_retain` 已在 v0.80.1 转绿；但该修复仍有新的漏 release /
 UAF，故不置 `verified`，SH-102 置 `reopened`。
 
@@ -372,7 +372,7 @@ $ ./neg_goto       -> error: a goto cannot cross an owning String scope; restruc
 
 ## 复核（REV，2026-11-20，v0.80.2）：仍 **reopened**
 
-复核记录见 [PH-80 第三轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §12。R1–R5
+复核记录见 [v0-PH-80 第三轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §12。R1–R5
 （嵌套跳转、直线字段重赋、结构体字面量、多声明符、goto 硬错）均已修；三例原 ASan UAF、
 `p80_retain` 18 项、六探针、check-all/sanitizer 全绿。但字段赋值/重赋在控制流下仍有反例，
 不置 `verified`。
@@ -514,7 +514,7 @@ $ ./field_goto_struct -> error: a goto cannot cross an owning String scope; …
 
 ## 复核（REV，2026-11-21，v0.80.3）：仍 **reopened**
 
-复核记录见 [PH-80 第四轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §13。C-2/C-3/C-4
+复核记录见 [v0-PH-80 第四轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §13。C-2/C-3/C-4
 的 11 个夹具、`p80_retain` 39 项与全量门禁均通过，未发现新的 UAF/SEGV；D-015 硬错路线机械项
 齐全（`signer: USER（待追认）` 按用户授权作为不阻断观察）。但 C-1 的硬错语义仍有一个合法反例，
 故不置 `verified`。
@@ -637,7 +637,7 @@ $ ./field_branch0 / branch_rt / switch / loop_bare / copy / goto_struct
 
 ## 复核（REV，2026-11-21，v0.80.4）：**verified**
 
-复核记录见 [PH-80 第五轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §14。
+复核记录见 [v0-PH-80 第五轮复核](../../docs/reviews/2026-11-20-phase80-rev-verdict.md) §14。
 
 - **R7 / C-1 分支合并已修**：`field_branch_init`（`{0}` 后条件更新再重赋）、
   `field_branch_straight`（直线赋值后条件更新再重赋）、`field_branch_else`（if/else 两臂定义后

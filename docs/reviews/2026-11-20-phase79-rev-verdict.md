@@ -1,4 +1,4 @@
-# PH-79 收口复核（REV）
+# v0-PH-79 收口复核（REV）
 
 - 首轮复核：`v0.79.1`（`effbf6f7`，annotated tag）——原结论 `REV: 打回`（B1–B4）；原记录保留在 §7。
 - 本轮复核：`v0.79.2`（`13dcb594`，annotated tag `06117fe1`，peeled `13dcb594`）——SH-99/100/101、
@@ -82,7 +82,7 @@ ok   E79-3/SH-101: a borrow keeps the bounds trap
 ```
 
 `p79_index` / `p79_places` / `p79_migrate` / `p79_docs` 分别覆盖 E79-3/4、E79-5/6、E79-1、S3e；
-`selfhost/check-ast.sh` 已接入 `PH-79-S3`/`S3b`/`S3c`/`S3d`/`S3e` 五项，全量运行五项均 `ok`。
+`selfhost/check-ast.sh` 已接入 `v0-PH-79-S3`/`S3b`/`S3c`/`S3d`/`S3e` 五项，全量运行五项均 `ok`。
 
 ### 1.3 `p78_method.sh`（SH-96/98 不回归）
 
@@ -258,7 +258,7 @@ $ wc -l test/ast/p79_red_rev.log
 | E79-3 | 通过 | `p79_index` 10/10：读写底层、元素类型、参数下标、上/下/runtime trap、`get` 软访问、`const` 借用拒绝；`bump(s[1])`/`bump(s[1].f)` 通过且越界 trap（§2.3）。 |
 | E79-4 | 通过 | `const int[]` 元素写与借用都在 CT 层硬错；C 数组 `a[5]` 保持 C 下标、不 trap（build 有 cc `-Warray-bounds` 提示，见 §6）。 |
 | E79-5 | 通过 | `p79_places` 17/17：参数/局部/临时/返回允许；字段/全局/接口/`box`/`Option`/`Result`/`Vec`/`Map`/数组元素/泛型实参/闭包捕获全红。 |
-| E79-6 | 通过 | `p79_places` 的 `ret_slice`/`ret_sub`/`ret_array` 触发 `slice escape`；全局/静态数组视图不 lint；`check-ast` 1529/0/5（本机，PH-77-S5 外部索引超时跳过）、`check-sanitizers` 581/0（见 §5）。 |
+| E79-6 | 通过 | `p79_places` 的 `ret_slice`/`ret_sub`/`ret_array` 触发 `slice escape`；全局/静态数组视图不 lint；`check-ast` 1529/0/5（本机，v0-PH-77-S5 外部索引超时跳过）、`check-sanitizers` 581/0（见 §5）。 |
 
 ## 4 SH-98 不回归
 
@@ -309,17 +309,17 @@ $ CT_C_BOUNDARY=allow sh selfhost/check-semantics.sh
 check-semantics: OK (23 assertions)
 $ sh selfhost/check-ast.sh
 == summary: 1529 passed, 0 failed, 5 skipped ==
-  ok    PH-79-S3 slices (E79-1…5 T[], place, get, const, migration)
-  ok    PH-79-S3b index (E79-3/4 checked place, trap, get, const)
-  ok    PH-79-S3c places (E79-5 whitelist, E79-6 escape lint)
-  ok    PH-79-S3d migrate (E79-1 T a[] warnings, inferred array)
-  ok    PH-79-S3e docs (spec 4.69 + package-guide 7.6)
+  ok    v0-PH-79-S3 slices (E79-1…5 T[], place, get, const, migration)
+  ok    v0-PH-79-S3b index (E79-3/4 checked place, trap, get, const)
+  ok    v0-PH-79-S3c places (E79-5 whitelist, E79-6 escape lint)
+  ok    v0-PH-79-S3d migrate (E79-1 T a[] warnings, inferred array)
+  ok    v0-PH-79-S3e docs (spec 4.69 + package-guide 7.6)
 $ sh selfhost/check-sanitizers.sh
 check-sanitizers: OK (581 checks, no sanitizer report)
 ```
 
-说明：5 skipped 是环境跳过（`baremetal_renode` 与 PH-67-R2/R3/R5 需要 Linux Renode；
-PH-77-S5 外部索引因网络超时跳过）。全量 `check-all.sh` 未整跑，上列覆盖其
+说明：5 skipped 是环境跳过（`baremetal_renode` 与 v0-PH-67-R2/R3/R5 需要 Linux Renode；
+v0-PH-77-S5 外部索引因网络超时跳过）。全量 `check-all.sh` 未整跑，上列覆盖其
 1、2、8、9、11 与 sanitizer 关键段；`g0`/`g8` 另在仓内跑。各段均 exit 0。
 
 ## 6 边界、诚实性与不阻断观察
@@ -429,4 +429,4 @@ no p79 red log
 - 版本：`v0.79.2`，五处 `CTC_VERSION=0.79.2`；annotated tag `v0.79.2` peeled `13dcb594`，
   远端 `origin/main` 与 tag 一致；`g8` 绿。
 - 本轮只改 verdict 与四个 issue 状态；未改实现代码、未 push。
-- 复评结论：PH-79 S3 可按 v0.79.2 收口；§6 的已登记边界留给后续 phase，不阻断本轮。
+- 复评结论：v0-PH-79 S3 可按 v0.79.2 收口；§6 的已登记边界留给后续 phase，不阻断本轮。

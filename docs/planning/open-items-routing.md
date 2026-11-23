@@ -1,9 +1,9 @@
 # 未完成条目分流评估（2026-11-15，窄范围版）
 
 > **作废口径（v0.58.0 之后）**：本文基线是 `v0.53.1`。表内的 `0.53.x` PATCH 位、以及
-> `PH-55`–`PH-62` 的草案号，在 v0.58.0 之后**不再执行**；正文保留作研判证据，不改写实测记录。
-> 现行顺序与取舍见 [post-58-plan.md](post-58-plan.md)。其中 `PH-58` 从未在 roadmap 立项，
-> 凡把它当前置的引用（`history/design/phase59.md`、两份提案）一律按「LANG-10 7c：`Field` 补行列」处理。
+> `v0-PH-55`–`v0-PH-62` 的草案号，在 v0.58.0 之后**不再执行**；正文保留作研判证据，不改写实测记录。
+> 现行顺序与取舍见 [post-58-plan.md](post-58-plan.md)。其中 `v0-PH-58` 从未在 roadmap 立项，
+> 凡把它当前置的引用（`phases/v0-PH-59/card.md`、两份提案）一律按「LANG-10 7c：`Field` 补行列」处理。
 
 | 项 | 值 |
 | --- | --- |
@@ -18,11 +18,11 @@
 | 顺序 | 队列 | 说明 |
 | --- | --- | --- |
 | **1** | **PATCH 清零** | `0.53.2` 起连续发；先静默错值 / 静默坏 C，再诊断，再工具缺陷；不攒批 |
-| **2** | **PH-53 可选链** | patch 清完后才进 S0；仓库卡面显示 `v0.53.0` 已完成，若重开则从 S0 重走（见 §5.1） |
-| **3** | **PH-54 包机制** | 不插队；按 §4 判断为 PH-54 内工作分解 |
-| **4** | **PH-55+ 新特性** | 只保留经批准的容器点访问 / 自定义 `get` 协议 / 限定名 / 诊断；排在包机制之后 |
-| **5** | **PH-59 模型导出 → PH-60 视图注记** | 两项只到**提案 + 研判**，未排 phase 卡；研判结论见 §8。模型导出必须先于注记 |
-| **6** | **PH-62 可写下标与嵌套链** | 吸收 PH-61 的 `v[] = x`；`m[k] = v`、`v[i] = x`、`m["a"]["b"]` 读写；见 §9，未排 phase 卡 |
+| **2** | **v0-PH-53 可选链** | patch 清完后才进 S0；仓库卡面显示 `v0.53.0` 已完成，若重开则从 S0 重走（见 §5.1） |
+| **3** | **v0-PH-54 包机制** | 不插队；按 §4 判断为 v0-PH-54 内工作分解 |
+| **4** | **v0-PH-55+ 新特性** | 只保留经批准的容器点访问 / 自定义 `get` 协议 / 限定名 / 诊断；排在包机制之后 |
+| **5** | **v0-PH-59 模型导出 → v0-PH-60 视图注记** | 两项只到**提案 + 研判**，未排 phase 卡；研判结论见 §8。模型导出必须先于注记 |
+| **6** | **v0-PH-62 可写下标与嵌套链** | 吸收 v0-PH-61 的 `v[] = x`；`m[k] = v`、`v[i] = x`、`m["a"]["b"]` 读写；见 §9，未排 phase 卡 |
 
 ---
 
@@ -32,7 +32,7 @@
 
 ### 1.1 `[]` 取值
 
-| # | 写法（最小样例） | 实测 | 判定 | 依据 / PH-53 覆盖 | 落点 |
+| # | 写法（最小样例） | 实测 | 判定 | 依据 / v0-PH-53 覆盖 | 落点 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `Vec<int> v = {10,20}; int x = v[0];` | rc=0，生成 `int x = Vec_int_get(&v, 0);` | **已具备** | `Vec::get` 返回值；越界返回零值（[Vec.h.ct:96-104](../../lib/core/Vec.h.ct#L96-L104)） | — |
 | 2 | `Vec<int> v; if (v.has(0)) x = v[99];` | rc=0；`has(99)=0`，`v[99]` 仍返回零值 | **已具备（需 `has`/`at`）** | D50-1：`get` 零值语义不变；`has`/`at` 是并行入口（[std/README:54-59](../../lib/core/README.md#L54-L59)） | — |
@@ -43,9 +43,9 @@
 | 7 | `Map<char *, struct P> m; int x = m["a"].x;` | **rc=1**：`member reference type 'struct P *' is a pointer; did you mean to use '->'?`；ct 先 rc=0 | **A bug** | `[]` 结果是 `P *`，`.x` 未自动解引用，静默发射坏 C；与 LANG-5 字段形态同根 | **0.53.2**（并入 LANG-5） |
 | 8 | `Map<char *, Map<char *, int>> m; int x = m["a"]["b"];` | **rc=1**：`array subscript is not an integer`；生成 `Map_get(&m,"a")["b"]`；ct 先 rc=0 | **A bug** | `m["a"]` 是 `Map *`，plain `[]` 未解引用；与 LANG-13 链式物化同族 | **0.53.4**（并入 LANG-13 链式修复） |
 | 9 | `m["a"]["b"]["c"]`（三层嵌套 Map） | 同上，plain `[]` 链 rc=1 | **A bug** | 同 #8；`?.`/`?[` 安全形态已可用 | **0.53.4** |
-| 10 | `m["a"]?["b"]` | rc=0，生成 `(t = get(&m,"a")) ? get(t,"b") : 0` | **由 PH-53 覆盖** | PH-53 `m?["k"]` + `m["k"]?.c`（[phase53:13-25](../history/design/phase53.md#L13-L25)） | — |
-| 11 | `m["a"]?["b"]?["c"]` | rc=0 | **由 PH-53 覆盖** | 同上 | — |
-| 12 | `Vec<T> *p; p?[i]` | PH-53 卡面明确收录 | **由 PH-53 覆盖** | `p?[i]`（[phase53:23](../history/design/phase53.md#L23)） | — |
+| 10 | `m["a"]?["b"]` | rc=0，生成 `(t = get(&m,"a")) ? get(t,"b") : 0` | **由 v0-PH-53 覆盖** | v0-PH-53 `m?["k"]` + `m["k"]?.c`（[phase53:13-25](../phases/v0-PH-53/card.md#L13-L25)） | — |
+| 11 | `m["a"]?["b"]?["c"]` | rc=0 | **由 v0-PH-53 覆盖** | 同上 | — |
+| 12 | `Vec<T> *p; p?[i]` | v0-PH-53 卡面明确收录 | **由 v0-PH-53 覆盖** | `p?[i]`（[phase53:23](../phases/v0-PH-53/card.md#L23)） | — |
 
 > #1/#2 的「越界静默零值」不是 bug：D50-1 明确 `get` 零值语义不变，并要求用 `has`/`at` 区分。
 > 若要求 `[]` 本身返回「缺席」而不是零值，那是**新特性**（checked index / Option），不是当前承诺；
@@ -53,13 +53,13 @@
 
 ### 1.2 `?.` 取值
 
-| # | 写法（最小样例） | 实测 | 判定 | 依据 / PH-53 覆盖 | 落点 |
+| # | 写法（最小样例） | 实测 | 判定 | 依据 / v0-PH-53 覆盖 | 落点 |
 | --- | --- | --- | --- | --- | --- |
-| 13 | `Map<char *, struct V> m; int n = m["a"]?.n;` | rc=0；生成 `(t = get(&m,"a")) ? t->n : 0` | **由 PH-53 覆盖** | `m["k"]?.c`，`V` 为值类型（[phase53:22](../history/design/phase53.md#L22)） | — |
-| 14 | `m["missing"]?.n` | rc=0；缺键 → `0` | **由 PH-53 覆盖** | 缺键 `get` 返回 `0`，三目短路 | — |
+| 13 | `Map<char *, struct V> m; int n = m["a"]?.n;` | rc=0；生成 `(t = get(&m,"a")) ? t->n : 0` | **由 v0-PH-53 覆盖** | `m["k"]?.c`，`V` 为值类型（[phase53:22](../phases/v0-PH-53/card.md#L22)） | — |
+| 14 | `m["missing"]?.n` | rc=0；缺键 → `0` | **由 v0-PH-53 覆盖** | 缺键 `get` 返回 `0`，三目短路 | — |
 | 15 | `m["a"]["x"]?.y`（plain 内层 `[]`） | **rc=1**：`array subscript is not an integer` | **A bug / 用 `?[` 绕** | plain `[]` 链是 #8 的 bug；安全形态 `m["a"]?["x"]?.y` rc=0（#16） | 0.53.4 |
-| 16 | `m["a"]?["x"]?.y` | rc=0 | **由 PH-53 覆盖** | `?[` + `?.` 组合（[phase53:23](../history/design/phase53.md#L23)） | — |
-| 17 | `Map<char*, struct V>` 且 `V.obj` 是 `Map*`；`m["a"]?.obj?["x"]` | rc=0 | **由 PH-53 覆盖** | 字段指针 + `?[`；与 `m["a"]?.b?.c` 同族 | — |
+| 16 | `m["a"]?["x"]?.y` | rc=0 | **由 v0-PH-53 覆盖** | `?[` + `?.` 组合（[phase53:23](../phases/v0-PH-53/card.md#L23)） | — |
+| 17 | `Map<char*, struct V>` 且 `V.obj` 是 `Map*`；`m["a"]?.obj?["x"]` | rc=0 | **由 v0-PH-53 覆盖** | 字段指针 + `?[`；与 `m["a"]?.b?.c` 同族 | — |
 | 18 | `Vec<struct P> v; v[0]?.x` | **rc=1**：`optional chain '?.' requires a pointer receiver; a struct value has no empty state` | **C 拒绝（正确）** | 结构固定、`Vec::get` 返回值，无缺席态 | — |
 | 19 | `v.at(0)?.x` | rc=0 | **已具备** | `at` 返回 `T *`，有缺席态（[Vec.h.ct:121](../../lib/core/Vec.h.ct#L121)） | — |
 | 20 | `v.has(0) ? v[0].x : -1` | rc=0 | **已具备** | 先判存在，再取值 | — |
@@ -76,10 +76,10 @@
 
 - Map 点访问在语义上**可以定义**，因为 Map 有缺键态；但 **plain `m.server.host` 必须拒绝**：
   缺键时 `m.server` 是空指针，再 `.host` 是空指针解引用，语言无法给出「报错 / 空 / 未定义」之外的
-  安全默认值。唯一安全的点是 **`m.server?.host`**，而它已经等价于 `m["server"]?.host`（rc=0，PH-53 覆盖）。
+  安全默认值。唯一安全的点是 **`m.server?.host`**，而它已经等价于 `m["server"]?.host`（rc=0，v0-PH-53 覆盖）。
 - 因此 Map 点访问是**冗余语法糖**，不是容器基本可用性；判 **C（不排期）**。
   若主控坚持，最小形态是「只对 `Map` 的 `.name` 脱糖为 `get("name")`，且必须与 `?.` 连用」；
-  这是 **PH-56 可选草案**，只开容器语法糖，**不与静态 struct 属性访问共用协议**（见 §3.2 代价）。
+  这是 **v0-PH-56 可选草案**，只开容器语法糖，**不与静态 struct 属性访问共用协议**（见 §3.2 代价）。
 - 此前「struct 值类型不该有 `?.`」的裁定**不直接约束 Map**：Map 的缺席态在键查找，不在 struct 形状；
   但它**约束了 `Vec<struct P>`**：`v[0]?.x` 被正确拒绝，替代写法是 `v.at(0)?.x` 或 `v.has(0) ? v[0].x`。
 
@@ -89,7 +89,7 @@
 
 | 条目 | 现状 / 实测 | 判定 | 落点 |
 | --- | --- | --- | --- |
-| 同名重载 / 按键类型分派（REQ-JSACCESS-1） | **不是 Vec/Map 的问题**：`Vec` 只有 `get(int)`，`Map<K,V>` 只有 `get(K)`；两类容器各自按 K 分派，无同名冲突。`get(char*)` + `get(int)` 并存只发生在**用户自定义包装类型**上（实测 `conflicting types for 'J_get'`） | **B 新特性**（自定义容器协议）；对 Vec/Map 本身**已具备** | **PH-55 可选**，P3；不阻塞容器访问 |
+| 同名重载 / 按键类型分派（REQ-JSACCESS-1） | **不是 Vec/Map 的问题**：`Vec` 只有 `get(int)`，`Map<K,V>` 只有 `get(K)`；两类容器各自按 K 分派，无同名冲突。`get(char*)` + `get(int)` 并存只发生在**用户自定义包装类型**上（实测 `conflicting types for 'J_get'`） | **B 新特性**（自定义容器协议）；对 Vec/Map 本身**已具备** | **v0-PH-55 可选**，P3；不阻塞容器访问 |
 | 自定义 `get` 类型不匹配静默空值（LANG-4） | 自定义类型上 `get(char*)` 收 `int` 实参，静默走缺键分支；Vec/Map 无此问题 | **A bug**（自定义协议，非 Vec/Map 基本可用性） | **0.53.3** |
 | 运算符与格式化协议 | `Map<char*,int>` 的 `m["k"]` 是 `int *`；`*m["k"] + 1` 可用；`m["k"] + 1` 是指针算术；`printf("%s", m["k"])` 类型不符 | **C 拒绝**（不引入运算符重载；`[]` 已文档化为 `get`，需显式 `*`） | 不排期 |
 | 字面量→`Str` | `Map<char *, V>` 直接 `m["host"]`；`Map<Str,V>` 需 `str_from("host")` | **已具备** / 隐式转换 **C 拒绝** | 不排期 |
@@ -100,14 +100,14 @@
 | `5.method()` | LANG-8 | **A bug** | 0.53.7 |
 | MAX_CALLS 1024 | LANG-3 | **A bug** | 0.53.9 |
 | struct 字段 ABI | LANG-9 | **A bug** | 0.53.10 |
-| 机器可读诊断 / debug | LANG-10 + 无 issue 的 debug 便利性 | **B 新特性** | PH-58 |
-| 限定名 / namespace 常量 | SH-18 + 条目 1c/2 | **B 新特性** | PH-57 |
+| 机器可读诊断 / debug | LANG-10 + 无 issue 的 debug 便利性 | **B 新特性** | v0-PH-58 |
+| 限定名 / namespace 常量 | SH-18 + 条目 1c/2 | **B 新特性** | v0-PH-57 |
 
 ---
 
 ## 3 新 phase 草案（只保留窄范围相关）
 
-### 3.1 PH-55 · 自定义容器 `get` 协议（可选，P3）
+### 3.1 v0-PH-55 · 自定义容器 `get` 协议（可选，P3）
 
 | 项 | 草案 |
 | --- | --- |
@@ -117,26 +117,26 @@
 | 与静态 struct | **不共用**属性协议；只做 `get` 重载，不动字段访问 |
 | 优先级 | P3；容器基本访问不依赖它 |
 
-### 3.2 PH-56 · Map 点访问（条件草案，默认不做）
+### 3.2 v0-PH-56 · Map 点访问（条件草案，默认不做）
 
 | 项 | 草案 |
 | --- | --- |
 | 范围 | 只对 `Map` 的 `.name` 脱糖为 `get("name")`，且**必须**与 `?.` 连用：`m.server?.host`；缺键 → `0` |
-| 现状 | `m["server"]?.host` 已 rc=0（PH-53 覆盖）；点访问是冗余糖 |
+| 现状 | `m["server"]?.host` 已 rc=0（v0-PH-53 覆盖）；点访问是冗余糖 |
 | 为什么默认 C | plain `m.server.host` 无法安全定义（空指针解引用）；可选点没有新增能力 |
 | 若做（仅容器） | 解析器/类型推断识别 Map 接收者；不改符号表 / ABI；S–M；不碰静态 struct 字段 |
 | 若与静态 struct 共用 | 需要字段存在性 / 类型解析 + 与 C 字段访问冲突 + struct 无缺席态；M–L；**不推荐** |
 | 判据草案 | E56-1 `m.server?.host` 返回预期值；E56-2 缺键 → `0`；E56-3 `m.server.host` 硬错；E56-4 静态 struct 字段零变化；E56-5 `m["server"]?.host` 零回归 |
-| 关系 PH-53 | PH-53 已覆盖安全形态；PH-56 只在主控明确要语法糖时开，且排在 PH-53 后 |
+| 关系 v0-PH-53 | v0-PH-53 已覆盖安全形态；v0-PH-56 只在主控明确要语法糖时开，且排在 v0-PH-53 后 |
 
-### 3.3 PH-57 · 限定名与 namespace 常量（保留；v0.59.0）
+### 3.3 v0-PH-57 · 限定名与 namespace 常量（保留；v0.59.0）
 
 `SH-18` 类型位置 `A::B`；`LANG-15` 值位置 `Type::Member`（`FsErrCode::FS_ERR_OUT_OF_BOUNDS`）；
 enum 类型作用域 `E::M`；namespace 内 `pub extern` 头声明 + `.ct` 定义。
 判据：`FsErrCode::FS_ERR_NOT_FOUND` 可用、`ns::Type` 类型位置可用、`.h.ct` 声明 + `.ct` 定义可链接、
 C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 当命名空间变量）。依赖 LANG-11 patch。
 
-### 3.4 PH-58 · 诊断与调试（保留）
+### 3.4 v0-PH-58 · 诊断与调试（保留）
 
 `LANG-10` 剩余部分：**字段级 `line/col`**（7c，`Field` 加模型字段）+ debug 便利性
 （`--keep-c` / `-g` 透传 / 源码行映射）。机器可读**警告**通道已实现，只补夹具；
@@ -146,16 +146,16 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 
 ---
 
-## 4 包机制归属（PH-54）
+## 4 包机制归属（v0-PH-54）
 
 | 项 | 判断 |
 | --- | --- |
 | 分类 | **phase**，不是 patch：`ns-root` 取代「包根 = 单元根」、发布方身份、共享 store、v2 lock，是工具契约变更 |
-| 编号 | **PH-54**（已在实施 S0，不另起号） |
-| 与 S0–S7 | **推荐 A（未采纳）**：当初建议只保留 `v0.54.0` 一个 MINOR；实际执行为 S0–S3、S5/S6 各一个 MINOR，PH-54 占 v0.54.0–v0.58.0。现行版本位见 [AGENTS §0.3](../../AGENTS.md#03-偏离项) 与 [post-58-plan](post-58-plan.md) |
-| 备选 B | 若每片独立发版，则 S0–S7 提升为 PH-54…PH-60；语言新特性顺延 PH-62+，且要重排 S4/S6 版本位 |
-| PKG-3…8 | 全部随 PH-54 S1/S2/S4；PKG-5 列为 S1 首任务；PKG-7 是需求缺口（B），其余是 bug 但依赖新模型（D-005 §2.4 例外） |
-| 顺序 | PH-53 之后；不插队 |
+| 编号 | **v0-PH-54**（已在实施 S0，不另起号） |
+| 与 S0–S7 | **推荐 A（未采纳）**：当初建议只保留 `v0.54.0` 一个 MINOR；实际执行为 S0–S3、S5/S6 各一个 MINOR，v0-PH-54 占 v0.54.0–v0.58.0。现行版本位见 [AGENTS §0.3](../../AGENTS.md#03-偏离项) 与 [post-58-plan](post-58-plan.md) |
+| 备选 B | 若每片独立发版，则 S0–S7 提升为 v0-PH-54…v0-PH-60；语言新特性顺延 v0-PH-62+，且要重排 S4/S6 版本位 |
+| PKG-3…8 | 全部随 v0-PH-54 S1/S2/S4；PKG-5 列为 S1 首任务；PKG-7 是需求缺口（B），其余是 bug 但依赖新模型（D-005 §2.4 例外） |
+| 顺序 | v0-PH-53 之后；不插队 |
 
 ---
 
@@ -173,10 +173,10 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 | 6 | `build --lib --emit-map` 不写文件 | rc=0，`map.json` 不存在；compile 模式同参数写出 1558 字节 | **A**（SH-79） | **0.53.8**；显式支持或硬错 |
 | 7a | 警告通道 JSON | `--diagnostics=json` 输出 `{"warnings":[…]}` | **D**（已实现，缺夹具） | 并进 0.53.14 回归 |
 | 7b | 解析错误 JSON | `parse.ct:1:1: error: unexpected token`（纯文本） | **A**（LANG-10 子项） | **0.53.14** |
-| 7c | 字段级位置 | `Field{name,type,dims}` 无 `line/col`（`Symbols.h.ct:232-238`） | **B** | **PH-58** |
-| 8 | `Type::Member` 限定名取值 | `FsErrCode::FS_ERR_OUT_OF_BOUNDS` → `no variable of that name in that namespace` | **B**（LANG-15） | **PH-57**（与 SH-18 同 phase，入口不同） |
+| 7c | 字段级位置 | `Field{name,type,dims}` 无 `line/col`（`Symbols.h.ct:232-238`） | **B** | **v0-PH-58** |
+| 8 | `Type::Member` 限定名取值 | `FsErrCode::FS_ERR_OUT_OF_BOUNDS` → `no variable of that name in that namespace` | **B**（LANG-15） | **v0-PH-57**（与 SH-18 同 phase，入口不同） |
 | 9 | `char *` → `Str` 只 warning | LANG-14 已在序列；声称已修、夹具待补 | **A + D** | **0.53.5**（复用编号） |
-| 10 | `ct install` 只发 `-I vendor/<包>` | PH-54 已收 `ns-root` 与包根契约 | **B**（工具能力） | **PH-54**（复用编号，不重开） |
+| 10 | `ct install` 只发 `-I vendor/<包>` | v0-PH-54 已收 `ns-root` 与包根契约 | **B**（工具能力） | **v0-PH-54**（复用编号，不重开） |
 
 **1/3/4 是否同一类问题**：
 
@@ -203,7 +203,7 @@ C 库 `extern` 零回归、诊断区分类型/值位置（不把 `Type::Member` 
 | **0.53.13** | SH-65（+SH-67 若同根） | 闭包字面量 / 先绑变量两种入口 rc=0 且 `cc` 过 | 依赖 0.53.4 |
 | **0.53.14** | LANG-10（7b）：解析错误走 JSON 通道 | `--diagnostics=json` 下解析错误输出可解析对象；默认文本逐字节不变；警告 JSON 补夹具（7a） | 与 Driver/Diag 族串行（0.53.8 之后） |
 | **0.53.15** | SH-60 1a/1b（条件） | 视 D-60-1 裁定；未裁定不发 | 条件 |
-| **0.53.16** | LANG-16：诊断位置源过期（块注释后列号偏移、`1:-3788` 类负列） | 三探针列为 `4:4` / `4:17` / `84:4`；诊断禁止输出 `col<=0`；`at<0` 不越界读；文本其余零变化 | 与 0.53.9 同 `Lexer.h.ct` 族，**必须串行**；与 PH-62 **无依赖**（可任意先后，仅合并时串行） |
+| **0.53.16** | LANG-16：诊断位置源过期（块注释后列号偏移、`1:-3788` 类负列） | 三探针列为 `4:4` / `4:17` / `84:4`；诊断禁止输出 `col<=0`；`at<0` 不越界读；文本其余零变化 | 与 0.53.9 同 `Lexer.h.ct` 族，**必须串行**；与 v0-PH-62 **无依赖**（可任意先后，仅合并时串行） |
 
 **SH-76 判定（新并入）**：v0.53.0 实测「无 `lib/core` / 未设 `CT_CORE_DIR`」时 compile 与 build
 **同样**报 `1:15 expected a field name`，设上 `CT_CORE_DIR` 或 cwd 放 `lib/core` 后**同样** rc=0——
@@ -225,11 +225,11 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
 
 ## 6 风险与未决
 
-1. **PH-53 状态冲突**：卡面已完成 `v0.53.0`，指令要求 patch 后开 S0；本表保留槽位，若重开需在卡上追加「重开理由 + S0 范围」。
+1. **v0-PH-53 状态冲突**：卡面已完成 `v0.53.0`，指令要求 patch 后开 S0；本表保留槽位，若重开需在卡上追加「重开理由 + S0 范围」。
 2. **LANG-5 版本漂移**：`fe16bfe3` 未 bump；0.53.2 必须先补版本，否则 PATCH 号不成立。
 3. **LANG-13/14 夹具缺失**：只按「声称已修」引用，不能记绿；补齐后若仍红，继续按 bug 修。
 4. **Map plain `[]` / `.field`**：当前静默发射坏 C；安全替代是 `?[` / `?.`，但 plain 形态仍应「可用或硬错」，不能留在 `cc`。
-5. **PH-54 版本位**：A 方案要改 roadmap 的 `v0.55–v0.60`；本轮只登记，不改 roadmap。
+5. **v0-PH-54 版本位**：A 方案要改 roadmap 的 `v0.55–v0.60`；本轮只登记，不改 roadmap。
 6. **并行会话**：`TypeCheck` / `Emitter` / `main` / `Driver` / `Pkg` / `test/pkg` / `test/ast/263` 未触碰。
 7. **索引行已补**：`issues/README.md` 的 LANG-15/16、SH-76–79 已登记（并行改动已落地，工作树干净）。
 8. **SH-76 环境证据**：现场「`ctc` 失败 / `ct build` 正常」在 v0.53.0 同 cwd 下不可复现；
@@ -249,13 +249,13 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
   [SH-77](../../issues/selfhost/sh77-abi-hash-name-only.md)（ABI_HASH 仅名字，拒绝）、
   [SH-78](../../issues/selfhost/sh78-lib-export-free-functions-only.md)（`--lib` 只导出自由函数，拒绝）、
   [SH-79](../../issues/selfhost/sh79-build-lib-emit-map-silent.md)（`build --lib --emit-map` 静默）、
-  [LANG-15](../../issues/lang/lang-15-qualified-enum-member-value.md)（`Type::Member` 取值，PH-57）、
+  [LANG-15](../../issues/lang/lang-15-qualified-enum-member-value.md)（`Type::Member` 取值，v0-PH-57）、
   [LANG-16](../../issues/lang/lang-16-diagnostic-position-negative.md)（诊断位置源过期，patch 0.53.16）。
 - 核查：[内置层与 `std` 包同名](../review/builtin-layer-vs-std-package-name-check.md)（`65481e6f`；
   结论：不冲突，物理改名后置）。
 - 复用编号：LANG-1 / LANG-2（已修复核）、LANG-3（补诊断判据）、LANG-10（拆三块）、LANG-14（已在序列）、
-  SH-18（类型位置）、PH-54（包机制）。
-- 不改 `docs/roadmap.md`、`docs/history/design/phase53.md`、`docs/history/design/phase54.md`、发版契约、`selfhost/**`。
+  SH-18（类型位置）、v0-PH-54（包机制）。
+- 不改 `docs/roadmap.md`、`docs/phases/v0-PH-53/card.md`、`docs/phases/v0-PH-54/card.md`、发版契约、`selfhost/**`。
 - 只本地提交，不 push、不打 tag。
 
 ---
@@ -270,36 +270,36 @@ LANG-9 单独发，期间冻结其它 header/Emitter 改动。
 | `build --emit-map` 的 `file` 错 | `nb.json` 全部 `file` = `lib/core/Vec.h.ct`，输入 `Box`/`main` 缺失 | `Module.h.ct:1819` 固定写 `units[0].prog`，`units[0]` 是内置层 |
 
 0.53.8 验收按 SH-79 的 R1–R5：compile 落文件、build 落文件、`--lib` 落文件、**`file` 必须是输入单元**、
-无开关零产物且重跑逐字节相同。与 LANG-10 / PH-58 **不合并**：那两条是诊断通道，本条是代码模型映射；
+无开关零产物且重跑逐字节相同。与 LANG-10 / v0-PH-58 **不合并**：那两条是诊断通道，本条是代码模型映射；
 只共享「信封/版本/路径/确定性」口径（见模型导出提案 §5）。
 
 ### 8.2 B 组：两项提案（只到研判，不排 phase 卡）
 
 | 提案 | 文档 | 拟占 | 结论 | 前置 |
 | --- | --- | --- | --- | --- |
-| 模型图导出 | [ct-model-export-proposal](../proposals/ct-model-export-proposal.md) | **PH-59** | 通过方向：新 `--emit-model`，不扩 `--emit-map` 契约；schema 版本化；**字段全量导出（含非 `pub`）**，`visibility` 在 LANG-9 前标 `unknown`（已定） | LANG-9（可见性）；PH-58 之后 |
-| 视图节点注记 | [ct-view-annotation-proposal](../proposals/ct-view-annotation-proposal.md) | **PH-60** | 通过方向：struct 后置 `view` 子句；零 ABI | **PH-59 schema 冻结** |
+| 模型图导出 | [ct-model-export-proposal](../proposals/ct-model-export-proposal.md) | **v0-PH-59** | 通过方向：新 `--emit-model`，不扩 `--emit-map` 契约；schema 版本化；**字段全量导出（含非 `pub`）**，`visibility` 在 LANG-9 前标 `unknown`（已定） | LANG-9（可见性）；v0-PH-58 之后 |
+| 视图节点注记 | [ct-view-annotation-proposal](../proposals/ct-view-annotation-proposal.md) | **v0-PH-60** | 通过方向：struct 后置 `view` 子句；零 ABI | **v0-PH-59 schema 冻结** |
 
 研判记录：[swiftct-mapping-proposal-review](../review/swiftct-mapping-proposal-review.md)；
 决策记录：[static-mapping-feasibility](../design/static-mapping-feasibility.md)。
 
-**PH-59 已开卡（2026-11-15）**：[phase59.md](../history/design/phase59.md)，范围 = 无 `import` 单单元端到端（M1）；
+**v0-PH-59 已开卡（2026-11-15）**：[phase59.md](../phases/v0-PH-59/card.md)，范围 = 无 `import` 单单元端到端（M1）；
 多单元/多根列为 M2，**依赖本文件 §8.1 的 SH-79 两项 facet 落地**。已定三条：bridging header 判为构建产物、
 模型导出全字段（`visibility` 在 LANG-9 前为 `unknown`）、首版不做多单元且不自己拼模型图。
-PH-60 仍未开卡，等 PH-59 schema 冻结。
+v0-PH-60 仍未开卡，等 v0-PH-59 schema 冻结。
 
-**顺序**：PH-53 → PH-54 → PH-57 → PH-58 → **PH-59 模型导出 → PH-60 视图注记**。
-模型导出必须在注记之前：注记的产出没有模型出口就是「写了没人读」。两者与 PH-53/54/57 无依赖，
-不改其判据；PH-58 的字段位置对模型导出是**必带项**（J11），PH-58 滑期则降级为只带 `line`，不退化为缺席。
+**顺序**：v0-PH-53 → v0-PH-54 → v0-PH-57 → v0-PH-58 → **v0-PH-59 模型导出 → v0-PH-60 视图注记**。
+模型导出必须在注记之前：注记的产出没有模型出口就是「写了没人读」。两者与 v0-PH-53/54/57 无依赖，
+不改其判据；v0-PH-58 的字段位置对模型导出是**必带项**（J11），v0-PH-58 滑期则降级为只带 `line`，不退化为缺席。
 
-## 9 容器下标可写与嵌套链（PH-62，吸收 PH-61，2026-11-15 提案）
+## 9 容器下标可写与嵌套链（v0-PH-62，吸收 v0-PH-61，2026-11-15 提案）
 
 | 项 | 结论 |
 | --- | --- |
 | 性质 | **B 新能力**：`m[k] = v` / `v[i] = x` / 嵌套写是新语法与新语义；其中「朴素嵌套读发出坏 C」是 A 类子项，可先止血 |
 | 现状 | `m["a"]=1` → `a Map subscript is read-only; use put(k, v)`；`v[0]=9` → `read-only; use set(i, v)`；`doc["server"]["host"]="..."` → 生成 `Map_get(&doc,"server")["host"]=...`，cc 报 `array subscript is not an integer`；`m["a"][0]=1` → cc 报 `assigning to 'struct Vec_int' from int`；`?["x"] =` → `optional chain/subscript is not an lvalue` |
 | 语义 | **下标是 get/put/set 的糖**：`m[k]`→`get`、`v[i]`→`get`、`m[k]=v`→`put`、`v[i]=x`→`set`；读侧不存在「越界」，取不到即零值/空；`set` **补齐再写**：`i>=len` 时 `len=max(len,i+1)`，中间洞为零值，`has(i)` 为真；负下标写报错；分配失败 abort；Map 写缺键即创建，NULL 键报错；嵌套读零值传播，嵌套写 Map 建空、Vec 按 set 补齐；洞释放统一在 `__ct_elem_release`（值类型快路径、句柄按类型谓词）；大跨度只 warning（`CT_VEC_GROW_WARN_SPAN`，可调非契约），不拒绝 |
-| 文档 | [提案](../proposals/ct-writable-subscript-proposal.md)、[研判](../review/ct-writable-subscript-proposal-review.md)；PH-61 提案/研判标注「并入 PH-62，作为 S1 切片」 |
-| 落点 | **PH-62**；PH-61 的 `v[] = x` 作为 S1；**未排 phase 卡** |
-| 依赖 | 无语言依赖；改 `Expr` / TypeCheck / Emitter，与 TypeCheck/Expr 族串行；与 PH-53/54/57/58/59/60 无依赖 |
-| 边界 | 与 [LANG-16](../../issues/lang/lang-16-diagnostic-position-negative.md)（patch 0.53.16）**互不依赖**：PH-62 管写语义，LANG-16 管位置源与诊断兜底；W1–W22 与 P1–P6 无交叉；仅同改 `Expr.h.ct` 时合并串行 |
+| 文档 | [提案](../proposals/ct-writable-subscript-proposal.md)、[研判](../review/ct-writable-subscript-proposal-review.md)；v0-PH-61 提案/研判标注「并入 v0-PH-62，作为 S1 切片」 |
+| 落点 | **v0-PH-62**；v0-PH-61 的 `v[] = x` 作为 S1；**未排 phase 卡** |
+| 依赖 | 无语言依赖；改 `Expr` / TypeCheck / Emitter，与 TypeCheck/Expr 族串行；与 v0-PH-53/54/57/58/59/60 无依赖 |
+| 边界 | 与 [LANG-16](../../issues/lang/lang-16-diagnostic-position-negative.md)（patch 0.53.16）**互不依赖**：v0-PH-62 管写语义，LANG-16 管位置源与诊断兜底；W1–W22 与 P1–P6 无交叉；仅同改 `Expr.h.ct` 时合并串行 |

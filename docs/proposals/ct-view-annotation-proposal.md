@@ -4,8 +4,8 @@
 | --- | --- |
 | 状态 | **提案（待研判）**；不排 phase 卡、不改 `selfhost/**` |
 | 来源 | SwiftCT 静态映射评估（2026-11-15） |
-| 拟占 | `PH-60`（须等 PH-59 模型导出定稿后再占号） |
-| 关联 | [ct-model-export-proposal](ct-model-export-proposal.md)、LANG-9、PH-58 |
+| 拟占 | `v0-PH-60`（须等 v0-PH-59 模型导出定稿后再占号） |
+| 关联 | [ct-model-export-proposal](ct-model-export-proposal.md)、LANG-9、v0-PH-58 |
 | 第一个消费者 | SwiftCT 的 PHP 生成器（读模型里的 `view` 元数据） |
 
 ## 1 要解决什么
@@ -99,7 +99,7 @@ pub struct UserCard {
 | --- | --- |
 | 解析器 | 后置子句 + 上下文关键字，约 **S** |
 | 符号/校验 | 字段存在性与非 static 校验，约 **S** |
-| 模型导出 | schema 加 `view: {state, children}`，约 **S**（依赖 PH-59） |
+| 模型导出 | schema 加 `view: {state, children}`，约 **S**（依赖 v0-PH-59） |
 | 风险 1 | `view` 与既有标识符冲突 → 限定为 struct 体后，加回归（字段名 `view`、变量名 `view`） |
 | 风险 2 | 语义蔓延成模板/运行时框架 → 非目标写死，评审守住 |
 | 风险 3 | 私有字段进模型引发争议 → 研判时定「允许但标 visibility」或「只允许 pub」 |
@@ -109,7 +109,7 @@ pub struct UserCard {
 
 - 不做 JSX / 模板语法 / 组件运行时；
 - 不做数据绑定执行语义（只声明，不生成同步代码）；
-- 不做属性访问协议（那是 PH-56 的独立议题）；
+- 不做属性访问协议（那是 v0-PH-56 的独立议题）；
 - 不改变 struct 布局、字段可见性、构造方式；
 - 不导出 enum 成员或函数注记（第一版只 struct）。
 
@@ -137,10 +137,10 @@ pub struct UserCard {
 
 ## 10 排位与依赖
 
-- 位置：**PH-60**，在 PH-59（模型导出）之后；
-- 依赖：PH-59 的 schema 与导出入口必须先冻结；否则注记写了没有统一出口；
-- 与 PH-58：字段 `line/col` 是可选增强（V2 的错误定位用编译器现有位置即可，不依赖 PH-58）；
-- 与 PH-57：无依赖；
+- 位置：**v0-PH-60**，在 v0-PH-59（模型导出）之后；
+- 依赖：v0-PH-59 的 schema 与导出入口必须先冻结；否则注记写了没有统一出口；
+- 与 v0-PH-58：字段 `line/col` 是可选增强（V2 的错误定位用编译器现有位置即可，不依赖 v0-PH-58）；
+- 与 v0-PH-57：无依赖；
 - 与 SH-79：无依赖（注记不进 `--emit-map`）。
 
 ## 11 研判与后续

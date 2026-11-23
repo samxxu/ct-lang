@@ -1,13 +1,13 @@
-# PH-73 收口复核（REV）
+# v0-PH-73 收口复核（REV）
 
 > **结论：`REV: 通过`**（附 6 项不阻断观察，见 §8）
 > **复核对象**：`ee1e06d7a2c0abac033af977f52d83a5c2b5b8dc`
-> （`feat(ast): PH-73 字段可见性与 ABI 收口（v0.72.0）`），tag `v0.72.0`。
+> （`feat(ast): v0-PH-73 字段可见性与 ABI 收口（v0.72.0）`），tag `v0.72.0`。
 > **复核者**：REV / rev-ph73；日期 2026-11-19。
 > **方法**：只依据提交与 clean archive。用 `git archive ee1e06d7` 在 `/tmp/rev73-clean`
 > 重新自举 L0→L1→L2→ct-ast；红证用 `git archive 7d8f484c` 在 `/tmp/rev73-base` 重建同一条
 > 链复现，不采信转述。
-> **并行说明**：复核期间 HEAD 已从 `ee1e06d7` 推进到 `ffc08538`（PH-74），工作树另有未提交
+> **并行说明**：复核期间 HEAD 已从 `ee1e06d7` 推进到 `ffc08538`（v0-PH-74），工作树另有未提交
 > 改动。本报告对版本与树内容一律用 `git show ee1e06d7:` 或 clean archive 取证；verdict 提交
 > 只含本文件，不触碰并行改动。
 
@@ -58,7 +58,7 @@ exit=0
 
 ### 3.1 公开视图只有 `pub` 字段，单元 `.c` 看全量
 
-独立夹具（`/tmp/rev73-clean/indep`，非 PH-73 探针）：`pub struct Mix` 含 `pub int fd;`、
+独立夹具（`/tmp/rev73-clean/indep`，非 v0-PH-73 探针）：`pub struct Mix` 含 `pub int fd;`、
 `pub int id, flags;` 与私有 `int secret;`：
 
 ```c
@@ -142,11 +142,11 @@ struct Dog {
 
 ```console
 $ git log --oneline -5 ee1e06d7
-ee1e06d7 feat(ast): PH-73 字段可见性与 ABI 收口（v0.72.0）
-92e3e3be test(ast): 接入 PH-73 的 abi/docs 探针
-504ab873 test(ast)+docs: PH-73-R2/R3 ABI 冲突验收与字段可见性文档
-1e08d0c9 feat(ast): PH-73-R1 字段级 pub 决定导出面（LANG-9）
-b1a742a4 test(ast): PH-73-R1 红（字段可见性导出面）
+ee1e06d7 feat(ast): v0-PH-73 字段可见性与 ABI 收口（v0.72.0）
+92e3e3be test(ast): 接入 v0-PH-73 的 abi/docs 探针
+504ab873 test(ast)+docs: v0-PH-73-R2/R3 ABI 冲突验收与字段可见性文档
+1e08d0c9 feat(ast): v0-PH-73-R1 字段级 pub 决定导出面（LANG-9）
+b1a742a4 test(ast): v0-PH-73-R1 红（字段可见性导出面）
 $ git rev-parse b1a742a4^ 1e08d0c9^ 504ab873^ 92e3e3be^ ee1e06d7^
 7d8f484c79b73a0c2da66f7feb486f03c4df1185
 b1a742a4e05470363d41ef1de050a848b7952762
@@ -220,7 +220,7 @@ $ git rev-parse v0.72.0 'v0.72.0^{commit}'
 5f3ff1e8541342a3230f328e91650b12949e0621
 ee1e06d7a2c0abac033af977f52d83a5c2b5b8dc
 $ git tag -l -n1 v0.72.0
-v0.72.0         PH-73 closeout (ee1e06d)
+v0.72.0         v0-PH-73 closeout (ee1e06d)
 $ git ls-remote --tags origin 'refs/tags/v0.72.0*'
 5f3ff1e8541342a3230f328e91650b12949e0621	refs/tags/v0.72.0
 ee1e06d7a2c0abac033af977f52d83a5c2b5b8dc	refs/tags/v0.72.0^{}
@@ -230,7 +230,7 @@ $ git branch -r --contains ee1e06d7
 ```
 
 annotated tag、peeled commit = 收口提交、远端 tag 对象与 peeled 值均与本地一致；message 含
-`PH-73` 与 sha 前 7 位（裸 `PH-73` 为 phase-ID 迁移 blocker 下的 legacy 形态）。五处落点与
+`v0-PH-73` 与 sha 前 7 位（裸 `v0-PH-73` 为 phase-ID 迁移 blocker 下的 legacy 形态）。五处落点与
 `README.md`/`docs/README.md`/`docs/history/phase-log.md` 的 v0.72.0 一致；G0 与 check-docs 绿：
 
 ```console
@@ -257,15 +257,15 @@ run：<https://github.com/samxxu/ct-lang/actions/runs/44461759806>
 `ubuntu-gcc` AST 段：
 
 ```text
-ok    PH-73-R2 abi (duplicate struct refused)
-ok    PH-73-R3 docs (field visibility)
-ok    PH-73-R1 export (pub field surface)
+ok    v0-PH-73-R2 abi (duplicate struct refused)
+ok    v0-PH-73-R3 docs (field visibility)
+ok    v0-PH-73-R1 export (pub field surface)
 == summary: 1511 passed, 0 failed, 0 skipped ==
 check-all: OK (11 hard gates green)
 ```
 
-`macos-clang`：同样三条 `PH-73-*` 全 `ok`，`summary: 1505 passed, 0 failed, 5 skipped`，
-`check-all: OK (11 hard gates green)`。`ubuntu-clang-smoke`：AST 段三条 `PH-73-*` 全 `ok`、
+`macos-clang`：同样三条 `v0-PH-73-*` 全 `ok`，`summary: 1505 passed, 0 failed, 5 skipped`，
+`check-all: OK (11 hard gates green)`。`ubuntu-clang-smoke`：AST 段三条 `v0-PH-73-*` 全 `ok`、
 `1505 passed, 0 failed, 5 skipped`，另跑 L0（`154 passed, 0 failed`）与 warning-free。
 
 ## 8 不阻断观察（建议后续处理）
@@ -274,14 +274,14 @@ check-all: OK (11 hard gates green)
    `baseline` 与红/绿父关系正确，REV 已在 §4 独立复现。建议把命令与输出补进 issue 或卡片。
 2. **本机完整 `check-ast.sh` 的 4 条红是并行撞车，不是代码缺陷**：完整跑得
    `1503 passed, 4 failed, 4 skipped`，集中在 p41/p43/p44/p45 诊断；这些探针把 stderr 固定
-   写到 `/tmp/p41e.err` 等共享路径，复核期间 PH-74 会话并行跑同一套探针导致串读。四条单独
+   写到 `/tmp/p41e.err` 等共享路径，复核期间 v0-PH-74 会话并行跑同一套探针导致串读。四条单独
    复跑全绿：`p41/errors: 9 passed`、`p43/errors: 4 passed`、`p44/errors: 11 passed`、
    `p45/contract: 6/6`。CI 与本报告结论不受影响。
 3. **`1507 passed` 口径**：收口正文写 `check-ast 1507 passed`，与 CI 的 `ubuntu-gcc 1511/0/0`、
    `macos-clang 1505/0/5` 不同；1507 应是本机 macOS（4 skip）数。建议标注口径或引用 CI 数。
-4. **偏离条款文字矛盾（存量）**：`AGENTS.md` 0.3 写「PH-62 起恢复 `d = 0`」，但同段
-   `PH-62 → v0.61.0（d=1）`、`PH-64 → v0.63.0（d=1）`，本卡 `72（PH-73，d=1）` 也按 d=1
-   收口；版本链 `PH-66→v0.65.0 … PH-73→v0.72.0` 与 d=1 自洽。建议统一为「永久偏移 1」。
+4. **偏离条款文字矛盾（存量）**：`AGENTS.md` 0.3 写「v0-PH-62 起恢复 `d = 0`」，但同段
+   `v0-PH-62 → v0.61.0（d=1）`、`v0-PH-64 → v0.63.0（d=1）`，本卡 `72（v0-PH-73，d=1）` 也按 d=1
+   收口；版本链 `v0-PH-66→v0.65.0 … v0-PH-73→v0.72.0` 与 d=1 自洽。建议统一为「永久偏移 1」。
 5. **`.h.ct` 之外的字段级 `pub` 未拒绝**：普通 `.ct` 单元的
    `pub struct S { pub int a; int b; }` 会发射 `#ifdef CT_UNIT_PRIVATE` 头段，但该单元 `.c`
    不定义宏，`s.b` 到 `cc` 阶段才报 `no member named 'b'`。规范已把字段级 `pub` 限定在
@@ -296,5 +296,5 @@ check-all: OK (11 hard gates green)
   `44461759806` 为准，本机另跑三个 `p73_*`、`p39 r8`、`split`、`g0`、`check-docs.py` 与
   `check-ast.sh`（4 条红见 §8.2，已单独复跑澄清）。
 - 未逐条展开 `ubuntu-clang-smoke` 全部日志，只核对三个 step 的 success 与 AST 段三行。
-- 按用户限定，本次提交只含本 verdict，不 push；PH-74 未提交改动与 `battle/static-dispatch-1/`
+- 按用户限定，本次提交只含本 verdict，不 push；v0-PH-74 未提交改动与 `battle/static-dispatch-1/`
   未跟踪目录均未触碰。

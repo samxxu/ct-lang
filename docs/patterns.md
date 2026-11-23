@@ -90,7 +90,7 @@ struct Node {                 /* ct: allow-cycle */
 - `first_child` 是 `Box<Node>`：父节点释放时按静态类型递归 release 子节点，深度由树结构决定；
 - `parent` 用裸指针：向上不拥有，不会与子节点的 refs 互相咬住；
 - `struct` 这一行要带 `/* ct: allow-cycle */`，否则 v0.82.0 起会报
-  `potential reference cycle: Node -> Node`（PH-82 / D-012）。检测只展开 `Box<X>` 字段，
+  `potential reference cycle: Node -> Node`（v0-PH-82 / D-012）。检测只展开 `Box<X>` 字段，
   所以把 `parent` 写成裸指针本身已经「手工破环」；标记是把作者意图写进代码，并让
   `ct check` 留一条 `note:` 供审计。
 - 需要强制时在 `ct.pkg` 写 `leaks = error`：漏掉标记的直接环会让构建失败，带 `allow-cycle`

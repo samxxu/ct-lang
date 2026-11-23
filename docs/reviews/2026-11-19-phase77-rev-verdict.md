@@ -1,8 +1,8 @@
-# PH-77 收口复核（REV）
+# v0-PH-77 收口复核（REV）
 
 > **结论：`REV: 通过`**（附 4 项不阻断观察，见 §8）
 > **复核对象**：`1aff4deb708a44d8dfd61b0667ce4168502c7ce2`
-> （`docs(pkg): PH-77 S0/S4 官方 ct/std 文档与 v0.77.0 收口`），tag `v0.77.0`。
+> （`docs(pkg): v0-PH-77 S0/S4 官方 ct/std 文档与 v0.77.0 收口`），tag `v0.77.0`。
 > **复核者**：REV / rev-ph77；日期 2026-11-19。
 > **方法**：只依据 tag 归档。用 `git archive v0.77.0 | tar -x -C /tmp/rev-ph77`
 > 取源码，在 `/tmp/rev-ph77` 重新自举 L0→L1→L2→ct-ast；红证在 baseline
@@ -102,7 +102,7 @@ OK p77/external (clean-HOME pin, both spellings, index row matches)
 外部探针在干净 `HOME`/`CT_HOME` 下从零 clone `ct/std`，实测成功，因此 E77-1 的
 “无索引成功”与 E77-8 的“另一台干净 HOME”均属于实测而非离线形状推断。
 
-## 3 E77-1…E77-8 逐项对照（[卡 §4](../design/phase77.md#4-退出判据)）
+## 3 E77-1…E77-8 逐项对照（[卡 §4](../phases/v0-PH-77/card.md#4-退出判据)）
 | 判据 | 证据 | 结果 |
 | --- | --- | --- |
 | E77-1 | 外部探针：`ct get std succeeds with a clean HOME and no index`；锁行 `ct/std 0.19.0 git https://github.com/ct-pkg/std …`；store `pkg/ct/std/0.19.0` | ✅ |
@@ -148,10 +148,10 @@ requires = ct >= 0.67.0
 ## 5 提交卫生
 ```console
 $ git log --oneline -4
-1aff4deb docs(pkg): PH-77 S0/S4 官方 ct/std 文档与 v0.77.0 收口
-d72c17ee feat(ast): PH-77 官方包身份、pin 表、输出与旧锁迁移
-7772e214 test(ast): PH-77-S0..S5 红
-8a30a9f0 docs(tutorial): PH-76 标题改为已实现
+1aff4deb docs(pkg): v0-PH-77 S0/S4 官方 ct/std 文档与 v0.77.0 收口
+d72c17ee feat(ast): v0-PH-77 官方包身份、pin 表、输出与旧锁迁移
+7772e214 test(ast): v0-PH-77-S0..S5 红
+8a30a9f0 docs(tutorial): v0-PH-76 标题改为已实现
 
 $ git rev-parse 7772e214^ d72c17ee^
 8a30a9f05fa50107fec7a05ad7dc16411b2e1d37
@@ -170,8 +170,8 @@ d16d6ffa fix(ast): SH-92 void 跳 `$x` 在 `$` 处拒绝（v0.76.1）
 - 红提交 `7772e214` 的父是 baseline `8a30a9f0`，实现提交 `d72c17ee` 的父是红提交；
   顺序为 `8a30a9f0 → 7772e214 → d72c17ee → 1aff4deb`，满足 6.6 T-7。
 - baseline 是 `HEAD` 的祖先（`merge-base --is-ancestor` 为真）。
-- `1aff4deb` 路径集合不含 `battle/`；`d16d6ffa` 是此前的 PH-76/SH-92 fix（v0.76.1），
-  不是 PH-77 的交付或回归，不在本卡范围。
+- `1aff4deb` 路径集合不含 `battle/`；`d16d6ffa` 是此前的 v0-PH-76/SH-92 fix（v0.76.1），
+  不是 v0-PH-77 的交付或回归，不在本卡范围。
 - 版本 bump 带入的 51 个 golden/expected 仅 banner 版本 token 变化：对
   `1aff4deb^..1aff4deb` 的 `test/cases`、`test/modules` 逐行过滤 `v0.76.x`/`v0.77.0`
   后无其他增删行。
@@ -225,7 +225,7 @@ type commit
 tag v0.77.0
 tagger Sam X. Xu@macMini <samxxu@gmail.com> 1795091358 +0800
 
-PH-77 closeout (1aff4de)
+v0-PH-77 closeout (1aff4de)
 ```
 
 `1aff4deb` 含 `README.md` / `docs/README.md` / `AGENTS.md` / `docs/history/phase-log.md`
@@ -233,9 +233,9 @@ PH-77 closeout (1aff4de)
 
 ```console
 $ bash tools/check.sh g8
-g8: warn: v0.66.0 PH-67: legacy offset MINOR=66 (ledger)
+g8: warn: v0.66.0 v0-PH-67: legacy offset MINOR=66 (ledger)
 g8: warn: …（v0.67.0–v0.73.0 共 7 行同类 warn，略）
-g8: warn: v0.74.0 PH-75: legacy offset MINOR=74 (ledger)
+g8: warn: v0.74.0 v0-PH-75: legacy offset MINOR=74 (ledger)
 g8: OK (PN-2 version coherence; 9 legacy offsets)
 
 $ bash test/pkg/run.sh

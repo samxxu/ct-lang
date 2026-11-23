@@ -1,4 +1,4 @@
-# PH-85（v0.85.0）REV 复核
+# v0-PH-85（v0.85.0）REV 复核
 
 > 复核席位：REV（`rev-ph85`） · 2026-11-21
 > 对象：`e0b0c5616931567742f89124de98e2bbc1a2884d`（HEAD，未 push、未 tag）
@@ -22,7 +22,7 @@
   `TypeCheck` 调用的 3 个搬移函数没有 import，import 在下一个提交 `c7f8ed93`（S85d）
   才补上；该提交的“全链零警告/不动点”与 `842 functions / 11 S85d edits` 都是
   S85d 之后的数字。`p85_m0` 探针不构建当前树，因此在该提交上仍可 4/4，掩盖了问题。
-- **F3（判据，E85-2）**：卡 §1.3 要求“完整等价重写”且“spike 通过才排 PH-86–88”，
+- **F3（判据，E85-2）**：卡 §1.3 要求“完整等价重写”且“spike 通过才排 v0-PH-86–88”，
   E85-2 又写“门通过”；但 DEV 的 spike 只做结构拆分（`next` 309→39 行），没有迁移
   `Str` 视图/`?`/`errdefer`/`match`，报告 §4 自己记“整子系统新语法等价重写：不通过”。
   R85-1 只说“不通过则退化”，不能把 E85-2 变成通过。卡 §7.3 标 `⚠️`、§8 写“门不通过”，
@@ -86,7 +86,7 @@ p85a: 9 passed, 0 failed
 
 | 位置 | 原文要点 | 对 E85-2 的作用 |
 | --- | --- | --- |
-| 卡 §1.3（`docs/design/phase85.md:39-41`） | “选一个子系统……做**完整等价重写**”；“**spike 通过才排 PH-86–88**；不通过则退化为按 inventory 逐项替换” | 门 = 能否整体重写；不通过是 R85-1 的降级分支 |
+| 卡 §1.3（`docs/phases/v0-PH-85/card.md:39-41`） | “选一个子系统……做**完整等价重写**”；“**spike 通过才排 v0-PH-86–88**；不通过则退化为按 inventory 逐项替换” | 门 = 能否整体重写；不通过是 R85-1 的降级分支 |
 | 卡 §2（`:64`） | S85b “单切片等价重写与度量” | 允许单切片，但仍叫“等价重写” |
 | E85-2（`:76`） | “spike 报告含……；**门通过**” | 字面要求门通过 |
 | R85-1（`:88`） | “spike 不通过 → 退化为逐项替换；不进入整体重写” | 允许不通过后继续，但没把 E85-2 改成通过 |
@@ -112,7 +112,7 @@ $ grep -nE '^\+.*(void|int) (pp_line|ident|number|quoted|punct|lex_ident_start)'
 $ grep -n "结构等价\|不通过（未覆盖）\|门的含义" docs/design/p85_spike.md
 70:| 结构等价（拆分、逐字节语料、不动点、零告警） | **通过**（§1/§2 原始输出） |
 71:| 整子系统“新语法等价重写”（`Str` 视图 / `?` / `defer` / `match`） | **不通过（未覆盖）**：… |
-72:| 门的含义（卡 §1.3 / R85-1） | **作为“PH-86 可以一次整体重写”的门：不通过。** 按 R85-1 退化为… |
+72:| 门的含义（卡 §1.3 / R85-1） | **作为“v0-PH-86 可以一次整体重写”的门：不通过。** 按 R85-1 退化为… |
 ```
 
 ### 3.3 裁定
@@ -121,25 +121,25 @@ $ grep -n "结构等价\|不通过（未覆盖）\|门的含义" docs/design/p85
 
 1. E85-2 的断言是“门通过”，而报告、卡 §7.3、卡 §8 三处都承认门**没有**通过；
    结构等价 + 度量 + sharp edges 是 E85-2 的前半句，不是“门通过”的替代品。
-2. R85-1 是**风险处置**，不是**判据改写**：它允许 PH-86–88 走逐项替换，但不把
+2. R85-1 是**风险处置**，不是**判据改写**：它允许 v0-PH-86–88 走逐项替换，但不把
    “门不通过”记成“E85-2 通过”。收口记录写“E85-1…8 通过”与卡面自相矛盾。
-3. 因此 PH-85 可以按 R85-1 的**降级路径**继续，但必须由 EDITOR 签一条 decision
+3. 因此 v0-PH-85 可以按 R85-1 的**降级路径**继续，但必须由 EDITOR 签一条 decision
    明确“E85-2 的验收 = spike 已执行 + 度量/逐字节/sharp edges + 明确门结论”，
-   并把整体新语法重写移交 PH-86 的 per-function 切片；不得在 decision 之前把
+   并把整体新语法重写移交 v0-PH-86 的 per-function 切片；不得在 decision 之前把
    E85-2 记成 ✅。
 
 ### 3.4 最小补做范围
 
 - **推荐（无代码）**：一条签收 decision（`docs/decisions/D-<n>.md`），内容三项：
   ① E85-2 降级口径（spike 已执行 + 度量 + 逐字节 + sharp edges + 明确门结论）；
-  ② 整子系统新语法重写按 R85-1 移交 PH-86，PH-86 卡按
+  ② 整子系统新语法重写按 R85-1 移交 v0-PH-86，v0-PH-86 卡按
   “punct → number → quoted/pp_line → `Str` 视图”拆，不承诺整体重写；
   ③ `AGENTS.md:508`、`docs/history/phase-log.md:187`、卡 §7.3 三处统一改写。
   这是最小补做，且与 R85-1 一致。
 - **若坚持字面门**：补一次真正的完整新语法等价重写（至少一个完整子系统，含
   `Str` 视图/`?`/`defer`/`match` 中适用部分），以 66 语料逐字节、自举不动点、ASan
   为证。词法器的 sharp edge（`Str` 视图波及 Parser/Expr/Stmt、无错误通道）使它
-  实质是 PH-86 的工作量；放在 PH-86 更符合卡 §2.3 的分段，不应回填 PH-85。
+  实质是 v0-PH-86 的工作量；放在 v0-PH-86 更符合卡 §2.3 的分段，不应回填 v0-PH-85。
 
 ## 4 阻断项最小复现
 
@@ -291,7 +291,7 @@ rc=0
 ```
 
 `check-ast` 是 1561 passed / 5 skipped（卡 §7.4 记 1562 / 4；本机多 1 个 host 工具
-skip，与 PH-84 复核时的差异同类）。四探针在 check-ast 内均为 `ok`
+skip，与 v0-PH-84 复核时的差异同类）。四探针在 check-ast 内均为 `ok`
 （`p85/inventory`、`p85/spike`、`p85/m0`、`p85/a-wire`）。
 
 ```console
@@ -332,7 +332,7 @@ selfhost/ct-ast/main.ct          CTC_VERSION "0.85.0"
    不应用 patch 重建；本次复核已手工应用并验证 66 文件一致，但探针本身不能替代。
 7. **工作树/归档差异**：复核时工作树含其他会话的未跟踪文件（`docs/guide-for-c-programmers.md`、
    `issues/selfhost/sh106-...`、`battle/ct-guide-1/**`、`docs/memory-guide.md` 改动）。
-   本复核只以 `git archive e0b0c561` 为准；未把那些文件计入 PH-85 绿证。
+   本复核只以 `git archive e0b0c561` 为准；未把那些文件计入 v0-PH-85 绿证。
 
 ## 8 证据限制
 
@@ -343,7 +343,7 @@ selfhost/ct-ast/main.ct          CTC_VERSION "0.85.0"
   两者均在归档树上跑。
 - `check-all` 的 gate 11 红灯是 F1；gate 1–10 在该归档上通过。工作树 `check-docs` 绿
   只说明未跟踪文件在场，不能作为提交证据。
-- 本复核未修改 `docs/design/phase85.md`、源码、测试或版本；只提交本文件与
+- 本复核未修改 `docs/phases/v0-PH-85/card.md`、源码、测试或版本；只提交本文件与
   [DOC-81](../../issues/docs/doc-81-phase85-clean-archive-dead-link.md)、
   [DOC-82](../../issues/docs/doc-82-phase85-e85-2-gate.md)、
   [SH-107](../../issues/selfhost/sh107-m0-commit-not-buildable.md)。
@@ -419,7 +419,7 @@ $ git diff 10c23c77 104dfc54 -- selfhost/ct-ast/frontend/module/Module.h.ct \
 >   | grep -E '^\+' | grep -v '^+++'
 +import frontend::module::ModuleBoundary;
 +                       "                 [--check-level=off|warn|error]\n"
-+            /* PH-85 S85d: `--check-level=error` counts its findings in
++            /* v0-PH-85 S85d: `--check-level=error` counts its findings in
 +               `nsem` without aborting the parse (a warning-shaped kernel stays
 +               on its path), so stop here -- before any product is written. */
 +            if (tool::diag::ct_diag_nsem()) {
@@ -469,7 +469,7 @@ p85m0: 4 passed, 0 failed               rc=0
 
 ```console
 $ sed -n '1,10p' docs/decisions/D-018.md
-# D-018 · PH-85 E85-2 的降级口径（spike 门）
+# D-018 · v0-PH-85 E85-2 的降级口径（spike 门）
 - 日期：2026-11-21
 - 状态：**accepted**
 - 目标：`v0-PH-85`（v0.85.0）

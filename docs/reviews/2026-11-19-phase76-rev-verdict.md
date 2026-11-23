@@ -1,9 +1,9 @@
-# PH-76 收口复核（REV）
+# v0-PH-76 收口复核（REV）
 
 > **结论（补正后）：`REV: 通过`**（SH-92 已修复并复核；原 `REV: 不通过` 记录保留在 §5/§9，
 > 补正证据见 §10）
 > **复核对象**：`247ade5bd5a2c7e4278d29df9c1ebcd16d302c67`
-> （``feat(ast): PH-76 链中物化 `$name` 收口（v0.76.0）``），tag `v0.76.0`。
+> （``feat(ast): v0-PH-76 链中物化 `$name` 收口（v0.76.0）``），tag `v0.76.0`。
 > **补正对象**：`d16d6ffab8661e0ccc87f1b8f2ffbfcbe7e81ce8`（SH-92 fix，tag `v0.76.1`），
 > 红证 `b2aefc6b3117a5b2f4008daadead4159b1e21e36`；补正复核于 2026-11-19 18:42。
 > **复核者**：REV / rev-ph76；日期 2026-11-19。
@@ -87,47 +87,47 @@ tm.ct:6:53: error: '$' target: expected 'int', got 'struct B'
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types cn.ct
-cn.ct:4:60: error: a const value cannot be a '$' target (PH-76)
+cn.ct:4:60: error: a const value cannot be a '$' target (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types nc.ct
-nc.ct:4:46: error: '$name' must follow a method call (PH-76)
+nc.ct:4:46: error: '$name' must follow a method call (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types ag.ct
-ag.ct:5:62: error: '$name' is only allowed in a statement expression (PH-76)
+ag.ct:5:62: error: '$name' is only allowed in a statement expression (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types own2.ct   # own struct S *p = malloc(...)，类型匹配
-own2.ct:9:10: error: own/borrow cannot be a '$' target (PH-76)
+own2.ct:9:10: error: own/borrow cannot be a '$' target (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types borrow.ct # borrow struct S *p
-borrow.ct:5:50: error: own/borrow cannot be a '$' target (PH-76)
+borrow.ct:5:50: error: own/borrow cannot be a '$' target (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types th/prog.ct       # import lib::ops 的 type-host
-th/prog.ct:8:13: error: '$name' does not support type-host / .m.ct recipes in v1 (PH-76)
+th/prog.ct:8:13: error: '$name' does not support type-host / .m.ct recipes in v1 (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types th/recipe.ct     # lib::FileOps.tell(h)$x
-th/recipe.ct:8:25: error: '$name' does not support type-host / .m.ct recipes in v1 (PH-76)
+th/recipe.ct:8:25: error: '$name' does not support type-host / .m.ct recipes in v1 (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types cond.ct
-cond.ct:4:54: error: '$name' is only allowed in a statement expression (PH-76)
+cond.ct:4:54: error: '$name' is only allowed in a statement expression (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types decl.ct
-decl.ct:4:58: error: '$name' is only allowed in a statement expression (PH-76)
+decl.ct:4:58: error: '$name' is only allowed in a statement expression (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types ret.ct
-ret.ct:4:40: error: '$name' is only allowed in a statement expression (PH-76)
+ret.ct:4:40: error: '$name' is only allowed in a statement expression (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types opt2.ct          # q?.v$y
-opt2.ct:6:9: error: '$name' must follow a method call (PH-76)
+opt2.ct:6:9: error: '$name' must follow a method call (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-work/ct-ast check --types opt3.ct          # a.m()$x?.n()$y
@@ -142,7 +142,7 @@ rc=1
 ## 5 阻断项（原）：`void` 返回不是硬错（E76-3 未满足；已在 SH-92 / `d16d6ffa` 修复，见 §10）
 
 卡 §4 的冻结判据 E76-3 明写「类型不匹配、**void**、`?.`、own/borrow/const、type-host、
-条件/实参/下标均硬错」（[phase76.md:86](../history/design/phase76.md)），tutorial §13.3 也把
+条件/实参/下标均硬错」（[phase76.md:86](../phases/v0-PH-76/card.md)），tutorial §13.3 也把
 `a.void_method()$x.n();  /* 返回 void，无可赋值结果 */` 列在「拒绝的形态」
 （[tutorial.md:1842](../tutorial.md)）。实测**不是**硬错：
 
@@ -189,11 +189,11 @@ rc=1
 $ git log -1 --format='%H%n%P%n%s' d8570e92
 d8570e92c070d5f0175c8c5eacd8793a3dac687c
 6591aa651d36fac2c6aca67ad8f9469dfed4da26
-test(ast): PH-76-S1 红（`$name` 链中物化）
+test(ast): v0-PH-76-S1 红（`$name` 链中物化）
 $ git log -1 --format='%H%n%P%n%s' c3889bda
 c3889bda27649beda458488873c29077094aaeb3
 d8570e92c070d5f0175c8c5eacd8793a3dac687c
-feat(ast): PH-76-S1..S3 `$name` 链中物化
+feat(ast): v0-PH-76-S1..S3 `$name` 链中物化
 $ git merge-base --is-ancestor 6591aa65 HEAD && echo baseline_is_ancestor=yes
 baseline_is_ancestor=yes
 $ git merge-base --is-ancestor d8570e92 c3889bda && echo red_is_impl_parent=yes
@@ -260,7 +260,7 @@ g8: OK (PN-2 version coherence; 9 legacy offsets)
 G8=0
 ```
 
-（上述 9 条 legacy offset 警告均针对 v0.66.0–v0.74.0 的历史相位，不涉及 PH-76。）
+（上述 9 条 legacy offset 警告均针对 v0.66.0–v0.74.0 的历史相位，不涉及 v0-PH-76。）
 
 工作树与 tag 无差异；`git show 247ade5b -- test/cases` 的非 banner 行为空，golden 只改了
 `v0.74.0`→`v0.76.0` 的 banner 两行/例（v0.75.0 为已登记的历史空位）。
@@ -272,7 +272,7 @@ G8=0
    `$name`」；同节 §13.4（1856 行）却写「v0.76.0 起可用（语句表达式内）」。功能已实现，
    标题/状态是反向过时，不影响本次 E76-3 的判定，但应在补 void 的同一 fix 中一并改掉。
 2. **赋值右值不是「语句表达式」的接受面。** `int y; y = s.m()$x;` 报
-   `'$name' is only allowed in a statement expression (PH-76)`（rc=1）：
+   `'$name' is only allowed in a statement expression (v0-PH-76)`（rc=1）：
    `parse_expr_stmt_node` 在解析语句顶层后先把 `mat_state` 清零
    （[Stmt.h.ct:4180-4183](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct)），再解析 `=` 右侧，
    所以 `$` 只接受「整条语句就是该链」的形态。实现比规范 §4.11.3 的字面「语句表达式」
@@ -340,15 +340,15 @@ EXIT=0
 
 ```console
 $ /tmp/rev-ph76-1-work/ct-ast check --types void.ct; echo rc=$?
-void.ct:4:47: error: '$' needs a non-void result; this hop has none (PH-76)
+void.ct:4:47: error: '$' needs a non-void result; this hop has none (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-1-work/ct-ast check void.ct; echo rc=$?
-void.ct:4:47: error: '$' needs a non-void result; this hop has none (PH-76)
+void.ct:4:47: error: '$' needs a non-void result; this hop has none (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 $ /tmp/rev-ph76-1-work/ct-ast build -o void.bin void.ct; echo rc=$?
-void.ct:4:47: error: '$' needs a non-void result; this hop has none (PH-76)
+void.ct:4:47: error: '$' needs a non-void result; this hop has none (v0-PH-76)
 ctc: 1 error(s) generated
 rc=1
 ```

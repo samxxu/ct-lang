@@ -51,13 +51,13 @@ rc=1
 ## 为什么是「新特性」而不是 bug
 
 - 规范只写了类型位置的限定名限制（SH-18），没有承诺过 `Type::Member` 取值；
-- 原 battle 第 2 条已定为 B（限定名取值），落点是 PH-57；
+- 原 battle 第 2 条已定为 B（限定名取值），落点是 v0-PH-57；
 - 与 SH-18 的区别：SH-18 是 `parse_type` 拒绝 `ns::Type`；本条是表达式解析把 `Type` 当命名空间，
   两者共享 `::` 词法，但符号查找目标不同（类型表 vs 枚举成员表）。
 
-## 落点（PH-57）
+## 落点（v0-PH-57）
 
-与 SH-18 同 phase：PH-57「限定名与 namespace 常量」。判据草案：
+与 SH-18 同 phase：v0-PH-57「限定名与 namespace 常量」。判据草案：
 
 | ID | 断言 |
 | --- | --- |
@@ -70,4 +70,4 @@ rc=1
 ## 文件族
 
 `frontend/parse/Expr.h.ct`（`::` 值路径）+ `frontend/sym`（枚举成员表）。与 TypeCheck/Expr 链同族，
-**排在 patch 清完之后**（PH-57 在 PH-53 / PH-54 之后）。
+**排在 patch 清完之后**（v0-PH-57 在 v0-PH-53 / v0-PH-54 之后）。

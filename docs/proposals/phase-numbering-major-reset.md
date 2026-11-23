@@ -10,8 +10,8 @@
 
 ## 0. 一句话
 
-**每个 MAJOR 从 `PH-0` 重新编号，ID 带 major：`v1-PH-0`、`v1-PH-1`；`MINOR == 本 major 内的 n`。
-历史 `PH-1…PH-73` 一次性机械迁移为 `v0-PH-1…v0-PH-73`，旧 `PH-*` 只存在于双认窗口、迁移账本和历史证据中。**
+**每个 MAJOR 从 `v0-PH-0` 重新编号，ID 带 major：`v1-PH-0`、`v1-PH-1`；`MINOR == 本 major 内的 n`。
+历史 `v0-PH-1…v0-PH-73` 一次性机械迁移为 `v0-PH-1…v0-PH-73`，旧 `PH-*` 只存在于双认窗口、迁移账本和历史证据中。**
 
 ## 0.1 CR 评审结论（已接受）
 
@@ -29,9 +29,9 @@
 
 ## 1. 现状
 
-- 现有 phase 全局递增：`PH-67`、`PH-68`…
+- 现有 phase 全局递增：`v0-PH-67`、`v0-PH-68`…
 - 版本规则：`PH-<n>` 收口时 `MINOR == n`（有 `d` 偏移按表换算）。
-- v1.0.0 的 `MINOR=0`，按新规则应开 `v1-PH-0`；旧 `PH-0` 不存在，避免与历史 `PH-1` 歧义。
+- v1.0.0 的 `MINOR=0`，按新规则应开 `v1-PH-0`；旧 `v0-PH-0` 不存在，避免与历史 `v0-PH-1` 歧义。
 - v1.1 若拆“语法重写 + A”两个 phase，会得到 v1.1/v1.2，与“A 放 v1.1”冲突。
 
 ## 2. 新规则
@@ -39,7 +39,7 @@
 1. phase ID 带 major：`v<M>-PH-<n>`，例如 `v1-PH-0`、`v1-PH-1`、`v2-PH-0`。
 2. 每个 MAJOR 第一相 `n=0`；`v1.0.0 ↔ v1-PH-0`，`v1.1.0 ↔ v1-PH-1`。
 3. `MINOR == n`；PATCH 只记 fix；新 major 不再需要 `d` 偏移。
-4. 历史 `PH-1…PH-73` 迁移为 `v0-PH-1…v0-PH-73`；迁移完成后旧 `PH-*` 不再作为常规 ID。
+4. 历史 `v0-PH-1…v0-PH-73` 迁移为 `v0-PH-1…v0-PH-73`；迁移完成后旧 `PH-*` 不再作为常规 ID。
 5. release train 允许一个 phase 内多个 stage（S1/S2），但只有一个 phase 号、一次 MINOR bump；
    **每个 stage 必须有独立红/绿提交与独立收口判据**（CR 第 4 条）。
 6. tag 仍是 `v<M>.<n>.<p>`；phase 卡 `version-minor` 写 local n（v1.0 为 0）。
@@ -52,10 +52,10 @@ CR 要求“只改文件、目录、文档引用；不改 tag/历史提交”。
 
 | 对象 | 是否改 | 规则 |
 | --- | --- | --- |
-| 文档中的 `PH-43` | 改 | `v0-PH-43` |
+| 文档中的 `v0-PH-43` | 改 | `v0-PH-43` |
 | 卡文件名 `phase43.md` | 改 | `v0-phase43.md` |
 | 卡文件名 `phase64-draft.md` | 改 | `v0-phase64.md`（同时去掉 `-draft`） |
-| `history/design/phase43.md` | 改 | `history/design/v0-phase43.md` |
+| `phases/v0-PH-43/card.md` | 改 | `history/design/v0-phase43.md` |
 | planning 的 `phase53-*.md` | 改 | `v0-phase53-*.md` |
 | 目录名含 phase 号 | 改 | `v0-phaseNN`（如有） |
 | tag `v0.43.0` | **不改** | 历史 tag 不可回改 |
@@ -63,7 +63,7 @@ CR 要求“只改文件、目录、文档引用；不改 tag/历史提交”。
 | battle 原始证据 | **不改** | `battle/**` 的旧 ID/命令/输出保留；账本注明它是历史证据 |
 | 代码/测试字符串 | **不改** | 不因文档重命名动行为 |
 
-> `AGENTS.md` 生成块由主规范同步；项目侧不手改。当前 `phase=PH-66` 等实例化行在窗口结束后
+> `AGENTS.md` 生成块由主规范同步；项目侧不手改。当前 `phase=v0-PH-66` 等实例化行在窗口结束后
 > 改为 `v0-PH-66`。
 
 ## 4. 迁账本与集合断言
@@ -72,7 +72,7 @@ CR 要求“只改文件、目录、文档引用；不改 tag/历史提交”。
 
 | 旧 ID | 新 ID | 旧路径 | 新路径 | 版本 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| PH-43 | v0-PH-43 | docs/design/phase43.md | docs/design/v0-phase43.md | v0.43.0 | migrated |
+| v0-PH-43 | v0-PH-43 | docs/phases/v0-PH-43/card.md | docs/design/v0-phase43.md | v0.43.0 | migrated |
 
 机械断言（迁移脚本内）：
 

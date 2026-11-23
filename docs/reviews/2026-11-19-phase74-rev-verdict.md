@@ -1,8 +1,8 @@
-# PH-74 收口复核（REV）
+# v0-PH-74 收口复核（REV）
 
 > **结论：`REV: 通过`**（附 3 项不阻断观察，见 §8）
 > **复核对象**：`5d271142f74606fff73d9bf5d87add12351535ab`
-> （`feat(ast): PH-74 模型导出收口（v0.73.0）`），tag `v0.73.0`。
+> （`feat(ast): v0-PH-74 模型导出收口（v0.73.0）`），tag `v0.73.0`。
 > **复核者**：REV / rev-ph74；日期 2026-11-19。
 > **方法**：只依据提交与 clean archive。用 `git archive 5d271142` 在 `/tmp/rev74-t/src`
 > 重新自举 L0→L1→L2→ct-ast；红证用 `git archive ee1e06d7` 在 `/tmp/rev74-base` 重建同一条链
@@ -52,8 +52,8 @@ E74-3 用 clean 树跑全量门禁：
 
 ```console
 $ bash selfhost/check-all.sh
-  ok    PH-74-R1/R2 model (J11 loc + entry unit)
-  ok    PH-74-R3 map (lib facet + entry file)
+  ok    v0-PH-74-R1/R2 model (J11 loc + entry unit)
+  ok    v0-PH-74-R3 map (lib facet + entry file)
 ...
 == summary: 1509 passed, 0 failed, 4 skipped ==
 ...
@@ -66,7 +66,7 @@ check-all: OK (11 hard gates green)
 
 ### 3.1 model JSON 的 `loc.line/col`
 
-独立夹具（非 PH-74 探针）：
+独立夹具（非 v0-PH-74 探针）：
 
 ```console
 $ printf 'struct S { int a; };\nint f(void) { return 0; }\n' > m.ct
@@ -107,8 +107,8 @@ $ git merge-base --is-ancestor 0ac39705 ffc08538 && echo yes
 yes
 ```
 
-`0ac39705`（`test(ast): PH-74 红`）的父提交是 `ee1e06d7`，且它是 `ffc08538`
-（`feat(ast): PH-74 模型行列与 SH-79 两 facet`）的父提交；红→绿相邻，配对成立。
+`0ac39705`（`test(ast): v0-PH-74 红`）的父提交是 `ee1e06d7`，且它是 `ffc08538`
+（`feat(ast): v0-PH-74 模型行列与 SH-79 两 facet`）的父提交；红→绿相邻，配对成立。
 
 用 clean 树探针跑基线 `ee1e06d7` 产物，红证可复现：
 
@@ -147,7 +147,7 @@ $ git rev-parse v0.73.0 v0.73.0^{}
 81c7a709f1850b7eee3cf74a13f93f3054005a18
 5d271142f74606fff73d9bf5d87add12351535ab
 $ git cat-file -p v0.73.0 | tail -2
-PH-74 closeout (5d27114)
+v0-PH-74 closeout (5d27114)
 $ git ls-remote --tags origin 'v0.73.0*'
 81c7a709f1850b7eee3cf74a13f93f3054005a18	refs/tags/v0.73.0
 5d271142f74606fff73d9bf5d87add12351535ab	refs/tags/v0.73.0^{}
@@ -155,7 +155,7 @@ $ git ls-remote origin refs/heads/main
 5d271142f74606fff73d9bf5d87add12351535ab	refs/heads/main
 ```
 
-tag message 含 phase 与收口 sha 前 7 位；`v0.73.0` = 83（PH-74，`d=1`）符合 `AGENTS.md`
+tag message 含 phase 与收口 sha 前 7 位；`v0.73.0` = 83（v0-PH-74，`d=1`）符合 `AGENTS.md`
 的 `version-minor-offset` 偏离登记。
 
 ## 6 CI
@@ -175,7 +175,7 @@ run：https://github.com/samxxu/ct-lang/actions/runs/44463399586
 
 ## 7 诚实性：字段面未被改动破坏
 
-PH-74 的实现 diff 只在 Emitter 的 `loc` 加 `col`、Module 加 `model_unit` 与 entry 选择，
+v0-PH-74 的实现 diff 只在 Emitter 的 `loc` 加 `col`、Module 加 `model_unit` 与 entry 选择，
 未改 `pub` 字段可见性/ABI 导出面。旧回归全绿：
 
 ```console

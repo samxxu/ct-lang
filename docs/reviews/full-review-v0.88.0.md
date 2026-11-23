@@ -5,10 +5,10 @@
 
 | 项 | 值 |
 | --- | --- |
-| 基线 | `5605eb6c`（tag `v0.88.0`，2026-11-21；PH-88 收口 + REV N-1 订正） |
+| 基线 | `5605eb6c`（tag `v0.88.0`，2026-11-21；v0-PH-88 收口 + REV N-1 订正） |
 | 范围 | 编译器（L0/L1/L2/ct-ast）、`test/**`、`docs/**`、`examples/**`、`issues/**`、`tools/**`、CI |
 | 方法 | 读码 + 离线全量门禁 + 文档/台账脚本 + 抽样探针；不修改源码、测试与既有文档 |
-| 结论 | **产品门禁 11/11 绿，v1-pre（PH-78–88）已交付；未发现产品级 P0。v1.0 仍有 5 个 P1 前置未清，尚不可发布。** |
+| 结论 | **产品门禁 11/11 绿，v1-pre（v0-PH-78–88）已交付；未发现产品级 P0。v1.0 仍有 5 个 P1 前置未清，尚不可发布。** |
 | 证据 | §10；离线日志 `/tmp/ct-review-v088-check-all.log`（11/11） |
 
 > 工作树有未提交的 `docs/guide-for-c-programmers.md`、`battle/ct-guide-1/`、`docs/memory-guide.md`
@@ -22,7 +22,7 @@
 
 - **产品门禁全绿**：离线 `check-all` 11/11；`check-ast` **1575 passed / 0 failed / 5 skipped**；
   `test/run.sh` 156/0；goldens 25/25；grammar 169/0；package 153/0；`check-docs` 2439 links / 390 files。
-- **v1-pre 重写闭环**：PH-85–88 完成词法器 `TokView`、解析器/检查器 kind 切片、发射器 76 个
+- **v1-pre 重写闭环**：v0-PH-85–88 完成词法器 `TokView`、解析器/检查器 kind 切片、发射器 76 个
   `em_*` 切片；66 语料逐字节、345 条诊断逐字、自举不动点 2/3 轮通过。
 - **语言面继续扩展并有测试**：`ref`/`out`、切片 `T[]`、`String`/`Str`、`box<T>`/`new`、
   leak guards、`match`/ADT、`ct index verify`、conformance、Linux x64 产物；每相都有 p78–p88 探针。
@@ -39,7 +39,7 @@
    184/242 条状态词不在 AGENTS §5.4 闭集内，15 条 open-ish + 14 条 `待办` 仍未清。
 4. **自举容量只剩 11 个顶层函数**：`MAX_FUNCS` 实测 **501/512**；v1-PH-0 计划把 76 个切片
    转成穷尽 `match`，再切一批就会撞顶；卡面仍写“余量 37”，与度量冲突。
-5. **PH-88 的 E88-1 只“部分通过”**：字面 `match` 因 L2 引导链不支持 ADT 未进源码，承接
+5. **v0-PH-88 的 E88-1 只“部分通过”**：字面 `match` 因 L2 引导链不支持 ADT 未进源码，承接
    `v1-PH-0` seed cutover；`battle/p88-emit-match` 的 EDITOR 追签仍待补。
 
 ---
@@ -109,10 +109,10 @@
 | D-1 | [test/README.md:19](../../test/README.md#L19) | `ast/` 299 个目录；行为 298 | 312 / 311 | **P2** |
 | D-2 | [test/README.md:28](../../test/README.md#L28) | 实测 v0.77.0；1519/0/4 | v0.88.0；1575/0/5 | **P2** |
 | D-3 | docs/README 评审索引 | 评审开始时仍写“最新一轮（针对 0.77.0）” | 本报告已更新为 v0.88.0 并保留历史入口 | **P2**（本轮已修） |
-| D-4 | [docs/design/phase88.md:160](../design/phase88.md#L160) | `MAX_FUNCS` 余量 37 | p88_metrics 实测 501/512（余 11） | **P2** |
+| D-4 | [docs/phases/v0-PH-88/card.md:160](../phases/v0-PH-88/card.md#L160) | `MAX_FUNCS` 余量 37 | p88_metrics 实测 501/512（余 11） | **P2** |
 | D-5 | [docs/history/p88_metrics.md:103](../history/p88_metrics.md#L103) | 余量 37 | 同文件 :64 写 501/512（余 11） | **P2** |
 | D-6 | [docs/history/phase-log.md:188](../history/phase-log.md#L188) | `MAX_FUNCS` 475/512 | 实测 501/512 | **P2** |
-| D-7 | [docs/planning/v1-release-plan.md:7](../planning/v1-release-plan.md#L7) | 基线 v0.65.1 / Phase 66 | v0.88.0 / PH-88 已收口 | **P3** |
+| D-7 | [docs/planning/v1-release-plan.md:7](../planning/v1-release-plan.md#L7) | 基线 v0.65.1 / Phase 66 | v0.88.0 / v0-PH-88 已收口 | **P3** |
 | D-8 | `docs/README.md` 评审索引 | 只给 `reviews/` 目录，无 v0.88 报告 | 本报告加入索引 | **P3** |
 
 > 上一轮的 typecheck 计划、session-map、裸机提案、tutorial 示例数、selfhost grammar 数都已修正；
@@ -135,7 +135,7 @@
 - **G1/G6 仍缺位**：`tools/check.sh` 只有 `g0`/`g8`/`battle-selftest`；G1（phase 卡完整性）、
   G6（台账闭合）没有机械实现，也没有 `deviation:`。当前 184 条非闭集状态就是 G6 缺失的直接后果。
 - **T-8 签收**：8 个 signoff 被 `check-docs` 校验；`battle/p88-emit-match` 仍写
-  “EDITOR 追签待补”，与 PH-88 卡“EDITOR 签收”并存。
+  “EDITOR 追签待补”，与 v0-PH-88 卡“EDITOR 签收”并存。
 
 ---
 
@@ -154,7 +154,7 @@
 - 0 个 TODO/FIXME；固定容量越界硬错；分配 null 检查；生成 C 零告警；ASAN/UBSAN +
   确定性 fuzz 可覆盖 ct-ast。
 - 四代编译器差分 + 66 语料逐字节 + 345 诊断逐字 + 自举不动点，是强正确性防线。
-- PH-88 切片把判别式 kind 读数降到每函数 1 次，`emit 0.74→0.76s`（+2.7%，噪声内），
+- v0-PH-88 切片把判别式 kind 读数降到每函数 1 次，`emit 0.74→0.76s`（+2.7%，噪声内），
   发射 C +0.88%；重构本身行为保持。
 
 **风险**
@@ -168,7 +168,7 @@
    是字面量（宏不跨单元）。改容量时要同步多处，容易漂移。
 4. **默认编译路径不做类型检查**：`ct check --types`/`--check-level` 是 opt-in；这是已定设计，
    但“build 绿”不等于类型正确，README/教程应持续显眼说明。
-5. **引导链能力分叉**：ct-ast 不能用自己实现的 `match`/`?`/errdefer（L2 不下降 PH-40/44/84）；
+5. **引导链能力分叉**：ct-ast 不能用自己实现的 `match`/`?`/errdefer（L2 不下降 v0-PH-40/44/84）；
    v1-PH-0 的 seed cutover 是唯一解，且必须同时清 E88-1 承接项。
 6. **包链**：官方 pin 有 sha256；第三方索引仍无签名，`ct get` 网络路径虽已加超时/禁交互，
    信任模型仍应写清。
@@ -178,9 +178,9 @@
 ## 6. 样例覆盖
 
 - 51 个示例目录（`examples/README.md` 到 `49_socket`）；`49_socket` 是文档型、不进门禁。
-- **PH-78 之后没有新增 example**：`ref`/`out`、切片 `T[]`、`String`/`Str`、`box`/`new`、
+- **v0-PH-78 之后没有新增 example**：`ref`/`out`、切片 `T[]`、`String`/`Str`、`box`/`new`、
   `leaks`、`match`/ADT、`ct index verify` 只有 spec/tutorial/测试，没有可运行示例目录。
-- 教程已更新到 §21（PH-88），示例计数改为 51（D-4 已修）；但新特性仍缺“最小可跑”的
+- 教程已更新到 §21（v0-PH-88），示例计数改为 51（D-4 已修）；但新特性仍缺“最小可跑”的
   `examples/5x_*`。
 - 建议补 4 个 example：`ref_out`、`slice`、`box_new`、`match_adt`（每个 20–40 行，带 expected）。
 
@@ -198,7 +198,7 @@
 | **v1.0 就绪** | **4/10** | SH-104/105、phase-ID、G6、MAX_FUNCS、E88-1 五项未清 |
 
 **判断**：v0.88.0 是 **v1-pre 的合格收口**，产品代码与测试可信；但 **v1.0 不是“再做一点”**，
-它需要先清五个硬前置。不能把“PH-78–88 全部收口”等同于“v1.0 可发”。
+它需要先清五个硬前置。不能把“v0-PH-78–88 全部收口”等同于“v1.0 可发”。
 
 ---
 

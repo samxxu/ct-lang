@@ -12,7 +12,7 @@
 
 ## 现象
 
-`MAX_FUNCS` 是整程序顶层函数预算（512）。PH-88 的 76 个 `em_*` free function 后
+`MAX_FUNCS` 是整程序顶层函数预算（512）。v0-PH-88 的 76 个 `em_*` free function 后
 实测 **501/512，余 11**；`v1-PH-0` 计划再把切片改成穷尽 `match`，新增 helper 就会撞顶。
 
 - 代码副本：ct-ast 三处 `Symbols.h.ct:36` / `Expr.h.ct:65` / `ParseSupport.h.ct:27`，
@@ -40,7 +40,7 @@
 ## 非目标
 
 - 不在本 issue 内实现 `match` 切片重写（归 `v1-PH-0`）；
-- 不改 `MAX_IO_CALLS 1024`（PH-88 已定）；
+- 不改 `MAX_IO_CALLS 1024`（v0-PH-88 已定）；
 - 不做“静默提上限”。
 
 ## 关联
@@ -48,7 +48,7 @@
 - [容量提案](../../docs/proposals/ct-max-funcs-growth.md)
 - [v1-readiness-1 判决](../../battle/v1-readiness-1/verdict.md)：原 Tier 1，2026-11-21 改落 `v1-PH-1 / S0`；
   2026-11-23 所有者再次改判提前到当前 pre 窗口
-- [PH-88 卡](../../docs/design/phase88.md) §7.5
+- [v0-PH-88 卡](../../docs/phases/v0-PH-88/card.md) §7.5
 - [p88_metrics](../../docs/history/p88_metrics.md) §4 #3、§5
 - [v1 路线](../../docs/planning/v1-release-plan.md) §1.5 / §2.3
 
@@ -69,7 +69,7 @@ $ grep -rn 'MAX_FUNCS_CAP\|65536' selfhost/ct-ast/frontend/sym/Symbols.h.ct self
 
 **口径说明**：D-017 是 v1-pre 的单元切分裁定（M0/M1），不裁 `MAX_FUNCS` 容量；容量结论在
 [ct-max-funcs-growth.md](../../docs/proposals/ct-max-funcs-growth.md) 与本条「决策」段，二者一致。
-PH-88 只把 `MAX_IO_CALLS` 512→1024，并把 `MAX_FUNCS` 用量推到 501/512（余 11），不等于本条
+v0-PH-88 只把 `MAX_IO_CALLS` 512→1024，并把 `MAX_FUNCS` 用量推到 501/512（余 11），不等于本条
 要求的动态增长。
 
 **触发/下一步**：**当前 pre 窗口**（v1.1 前；2026-11-23 改判）；负责人 DEV；P1。

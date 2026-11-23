@@ -1,4 +1,4 @@
-# PKG-14 · PH-83 开卡需求：只读 `ct index verify` 与 Linux x64 产物
+# PKG-14 · v0-PH-83 开卡需求：只读 `ct index verify` 与 Linux x64 产物
 
 | 项 | 值 |
 | --- | --- |
@@ -43,17 +43,17 @@
 
 ## 施工前置
 
-- PH-82 收口；
+- v0-PH-82 收口；
 - [PKG-12](pkg-12-contract-v1-doc-gaps.md) 的判据归属矩阵定稿（至少完成 `verify` 所需条目）；
 - index 仓确认消费该产物的方式。
 
 ## 关联
 
-- [PH-83 roadmap 条目](../../docs/roadmap.md)、[D-014](../../docs/decisions/D-014.md)
+- [v0-PH-83 roadmap 条目](../../docs/roadmap.md)、[D-014](../../docs/decisions/D-014.md)
 
 ## 复核（REV，2026-11-21）：**reopened**
 
-PKG-14 的 E83-6（契约 §9 CT 侧验收项；对应 PH-83 卡 E83-4）未过：PH-83 收口复核
+PKG-14 的 E83-6（契约 §9 CT 侧验收项；对应 v0-PH-83 卡 E83-4）未过：v0-PH-83 收口复核
 （`5378850e`）发现 `ct index verify` 对非普通文件输入不返回契约要求的
 退出码 2：目录、`/dev/null`、指向目录的 symlink、`CT_INDEX` 指向目录、
 `$CT_HOME/index/index` 为目录时均输出 `index verify: OK (0 rows)` 并 exit 0，`--json`
@@ -73,7 +73,7 @@ $ echo $?
 与读错误均 exit 2；`--json` 不得在 exit 2 时给 `ok:true`；`p83_verify` 补目录/FIFO 负例。
 
 证据：[REV verdict](../../docs/reviews/2026-11-21-phase83-rev-verdict.md) §5.2。修复前
-PH-83 不写 `REV: 通过`。
+v0-PH-83 不写 `REV: 通过`。
 
 ## 处置（DEV，v0.83.1，2026-11-21）：fixed
 
@@ -135,7 +135,7 @@ Release：`ct-linux-x64.tar.gz` sha256 `7265d00a9d0e93aabeb5a91ee06212c8ff885343
 
 ## CI 追加（v0.83.2，DEV，2026-11-21）
 
-REV 第二轮 verified 后，CI v0.83.1 在 ubuntu-clang/gcc 上 `PH-83-S83b verify` 红、macOS 绿。
+REV 第二轮 verified 后，CI v0.83.1 在 ubuntu-clang/gcc 上 `v0-PH-83-S83b verify` 红、macOS 绿。
 Linux 容器（Fedora/aarch64，clang）复现并定位为**产品差异**：
 
 - `pkg_index_verify` 的默认索引分支先令 `ip = path`，随后

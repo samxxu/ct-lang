@@ -13,10 +13,10 @@
 | D-4 `phase88.md` MAX_FUNCS 余量 | 37 → **11（501/512）** | p88_metrics §4 #3 |
 | D-5 `p88_metrics.md` 余量 | 37 → **11（501/512）** | 同文件 §5 |
 | D-6 `phase-log.md` MAX_FUNCS | 475/512 → **501/512（余 11）**（两处） | p88_metrics |
-| D-7 `v1-release-plan.md` 基线 | v0.65.1 / Phase 66 → **v0.88.0 / PH-88** | 本轮 |
+| D-7 `v1-release-plan.md` 基线 | v0.65.1 / Phase 66 → **v0.88.0 / v0-PH-88** | 本轮 |
 | D-8/P3-12 `docs/README` 评审索引 | 最新 v0.88.0 + 历史 v0.77.0 具体链接 | 本轮 |
 | P3-13 工作树 guide/battle/memory/sh106 | 与本处置同一批提交入库 | 见提交记录 |
-| P1-5 历史债之一：dogfood FP 未立案 | 立 [SH-108](../../issues/selfhost/sh108-p87-dogfood-t-a-fp.md) | PH-87 N-4 |
+| P1-5 历史债之一：dogfood FP 未立案 | 立 [SH-108](../../issues/selfhost/sh108-p87-dogfood-t-a-fp.md) | v0-PH-87 N-4 |
 
 补充勘误（评审 N-1 的剩余位置）：`language-spec.md` §4.75、`v1-pre-evidence.md`、
 `AGENTS.md` 的 MAX_FUNCS 数字同步到 **425 → 501 / 余 11**。

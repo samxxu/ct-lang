@@ -4,7 +4,7 @@
 | --- | --- |
 | 性质 | 产品发布路线；**未开卡**，不占 phase、不 bump |
 | 日期 | 2026-11-18 |
-| 基线 | `5605eb6c`（`v0.88.0`；PH-88 已收口） |
+| 基线 | `5605eb6c`（`v0.88.0`；v0-PH-88 已收口） |
 | 依据 | [typecheck-semantic-plan](typecheck-semantic-plan.md)、[battle typecheck-1](../../battle/typecheck-1/verdict.md) |
 | 结论 | **B 在 v1.0 前完成并 opt-in；v1.0 只保留 AST 主线；v1.1 先做 ct-ast 语法现代化，再做 A（strict 编译路径）** |
 
@@ -39,7 +39,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 > `bootstrap/ct-ast/` 冻结 ct-ast 自身生成的 C（27 个 `.c`、约 50,945 行 / 2.3 MB），每个 release
 > 重新生成；`install.sh` 直接 `cc seed → ct`；L1/L2 退出构建与门禁；L0 保留为参考 seed、不进构建。
 > A 案实测不成立（L0 无 `import`）；B′（冻 L2 的 C）也不成立（L2 对 ADT/`match` 静默透传）。
-> 卡与任务见 [`v1-PH-0`](../design/v1-phase0.md)。
+> 卡与任务见 [`v1-PH-0`](../phases/v1-PH-0/card.md)。
 
 ### 1.3 v1.0 范围
 
@@ -84,8 +84,8 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 
 ### 1.6 v1.0 不包含（已定）
 
-- 不在 v1.0 内重写 ct-ast（归 v1-pre：PH-85…88，见 §2.3）；
-- A 的**默认强制**不作为 v1.0 门禁（归 v1.1 S2）；但 **A 的机制**在 PH-85 接线，
+- 不在 v1.0 内重写 ct-ast（归 v1-pre：v0-PH-85…88，见 §2.3）；
+- A 的**默认强制**不作为 v1.0 门禁（归 v1.1 S2）；但 **A 的机制**在 v0-PH-85 接线，
   **A 的证据**（全量 FP=0）是 v1.0 硬门禁（D2 = B+）；
 - 不在本线内做 ADT/match；
 - 不改语言语义、发射格式、命名契约。
@@ -93,50 +93,50 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 ## 2. v1-pre：编译器现代语法重写 + v1.1：A strict
 
 > D1 已定（2026-11-21）：重写**不进 v1.0、也不推到 v1.1**，而是在 v0.x 序列里插入
-> **v1-pre 阶段（PH-85…PH-88）**；D3 已定：**ADT/match（PH-84）先行**，
-> 重写用穷尽 match 替换 `node->kind` 判别。v1.0 在 PH-88 之后发布，v1.1 只保留 A 默认强制。
+> **v1-pre 阶段（v0-PH-85…v0-PH-88）**；D3 已定：**ADT/match（v0-PH-84）先行**，
+> 重写用穷尽 match 替换 `node->kind` 判别。v1.0 在 v0-PH-88 之后发布，v1.1 只保留 A 默认强制。
 
 ### 2.1 为什么分四段
 
-- **ADT 前置（PH-84）**：最小 ADT/match，语言新增；为重写提供穷尽判别；
-- **v1-pre（PH-85…88）**：ct-ast 用最新语法重写，行为保持；大范围重构，必须独立隔离；
+- **ADT 前置（v0-PH-84）**：最小 ADT/match，语言新增；为重写提供穷尽判别；
+- **v1-pre（v0-PH-85…88）**：ct-ast 用最新语法重写，行为保持；大范围重构，必须独立隔离；
 - **v1.0（v1-PH-0）**：AST-only 收口、去 L1/L2、证据台账；在重写之后做快照发布；
 - **v1.1（v1-PH-1 / S2）**：A 默认强制，产品契约变更；
 - **v1.2（v1-PH-2）**：Typed/Lowered IR 架构议题（先设计，不阻塞 v1.0/v1.1）。
 
 这些阶段不塞进同一个 phase；各 phase 独立 bump MINOR（v0.84–v0.88）。
 
-### 2.2 S1：ct-ast 语法现代化（v1-pre，PH-85…88）
+### 2.2 S1：ct-ast 语法现代化（v1-pre，v0-PH-85…88）
 
 - 只改 `selfhost/ct-ast/**` 源码，不改用户可见语义/生成 C 行为；
-- 用 v1.0 前已冻结的语法：`defer`/`?`/`foreach`/`own`/`borrow`/泛型/trait，以及 PH-84 的最小 ADT/match；按适用性逐项采用；
-- 先做 inventory（PH-85）：哪些旧写法可用新特性替代、预计行数/风险；不“为用而用”；
+- 用 v1.0 前已冻结的语法：`defer`/`?`/`foreach`/`own`/`borrow`/泛型/trait，以及 v0-PH-84 的最小 ADT/match；按适用性逐项采用；
+- 先做 inventory（v0-PH-85）：哪些旧写法可用新特性替代、预计行数/风险；不“为用而用”；
 - 每批任务保持：自举不动点、全量语料生成 C 不变、行为等价；
 - **不依赖函子签名**（D4 已定）：检查器用既有闭包 / trait / 函数指针表达；
   S4 函子仍留 v1.1+ Wave 2；
 - 出口：源码可读性/重复度指标改善；无用户可见变化；独立回退。
 
-### 2.3 v1-pre 重写 train（PH-84…88，D1/D3 已定）
+### 2.3 v1-pre 重写 train（v0-PH-84…88，D1/D3 已定）
 
 | phase | 版本 | 内容 | 入口 | 出口 |
 | --- | --- | --- | --- | --- |
-| PH-84 | v0.84.0 | **最小 ADT/match**：名义和类型 + 构造器负载 + 穷尽 match + 变量绑定 | PH-83 收口 | tag 判别可机械替换为穷尽 match；漏分支进 golden 负例；合法语料零误报 |
-| PH-85 | v0.85.0 | inventory + 单切片 spike（门）+ **M0 粗切**（5–6 单元，零精细分类）+ **A 机制接线** | PH-84 收口（含 S84e 文档一致性） | spike 报告 + M0 集合基线/映射 + 状态清单；A 机制可用且默认不变 |
-| PH-86 | v0.86.0 | 词法器重写（零拷贝 `Str` 切片；NUL/长度契约） | PH-85 | 测试语料发射逐字节不变；自身发射允许差异（自举+ASan+行为测试） |
-| PH-87 | v0.87.0 | 解析器 + 检查器重写 | PH-86 | 测试语料发射逐字节不变；诊断文本不变 |
-| PH-88 | v0.88.0 | 发射器重写 + 扩展自举不动点（轮数参数化） | PH-87 | 每切片 2 轮、tag 前 3 轮逐字节一致；行数报告落 history |
+| v0-PH-84 | v0.84.0 | **最小 ADT/match**：名义和类型 + 构造器负载 + 穷尽 match + 变量绑定 | v0-PH-83 收口 | tag 判别可机械替换为穷尽 match；漏分支进 golden 负例；合法语料零误报 |
+| v0-PH-85 | v0.85.0 | inventory + 单切片 spike（门）+ **M0 粗切**（5–6 单元，零精细分类）+ **A 机制接线** | v0-PH-84 收口（含 S84e 文档一致性） | spike 报告 + M0 集合基线/映射 + 状态清单；A 机制可用且默认不变 |
+| v0-PH-86 | v0.86.0 | 词法器重写（零拷贝 `Str` 切片；NUL/长度契约） | v0-PH-85 | 测试语料发射逐字节不变；自身发射允许差异（自举+ASan+行为测试） |
+| v0-PH-87 | v0.87.0 | 解析器 + 检查器重写 | v0-PH-86 | 测试语料发射逐字节不变；诊断文本不变 |
+| v0-PH-88 | v0.88.0 | 发射器重写 + 扩展自举不动点（轮数参数化） | v0-PH-87 | 每切片 2 轮、tag 前 3 轮逐字节一致；行数报告落 history |
 
-> PH-84 的 ADT 范围按 D3-A：**只做**名义和类型、负载、穷尽检查、变量绑定；
+> v0-PH-84 的 ADT 范围按 D3-A：**只做**名义和类型、负载、穷尽检查、变量绑定；
 > 泛型 ADT、or 模式、嵌套模式登记为 v1.1+ 增量提案。若 spike 证明某类节点形态
 > （如变长负载）无法覆盖，允许在 A 内增补该单一形态，不升级为泛型/全功能。
-> **PH-84 还包含 S84e 文档一致性**：范围由 [battle doc-consistency-1](../../battle/doc-consistency-1/question.md)
-> 决定；PH-85 入口要求它一起收口（详见 [PH-84 §1.4/§2](../design/phase84.md)）。
+> **v0-PH-84 还包含 S84e 文档一致性**：范围由 [battle doc-consistency-1](../../battle/doc-consistency-1/question.md)
+> 决定；v0-PH-85 入口要求它一起收口（详见 [v0-PH-84 §1.4/§2](../phases/v0-PH-84/card.md)）。
 
 - 每张卡独立合入、独立回滚；同一时刻只允许一张施工卡；
 - 任一阶段不通过，停在原地，不进入下一阶段；
 - **不设 hard deadline**（D5 已定）：沿用项目“不承诺时间”口径，不用日历或 phase 数倒逼范围；
-- **重写期冻结策略**（D6 已定 A）：从 PH-85 开始到 PH-88 收口，主线**只收 bugfix**，
-  新特性暂停；每张重写卡独占合入，不做“特性 + rebase”并行。PH-84 的 ADT 不在冻结窗口内。
+- **重写期冻结策略**（D6 已定 A）：从 v0-PH-85 开始到 v0-PH-88 收口，主线**只收 bugfix**，
+  新特性暂停；每张重写卡独占合入，不做“特性 + rebase”并行。v0-PH-84 的 ADT 不在冻结窗口内。
 
 ### 2.4 A：机制 / 证据 / 默认值（D2 已定：B+）
 
@@ -148,7 +148,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 
 | 层 | 内容 | 落点 |
 | --- | --- | --- |
-| **机制** | 把 B 的 checker 接进 build 路径，提供 `off / warn / error` 严重级别阶梯 | **已完成（PH-85，v0.85.0）** |
+| **机制** | 把 B 的 checker 接进 build 路径，提供 `off / warn / error` 严重级别阶梯 | **已完成（v0-PH-85，v0.85.0）** |
 | **强化** | 补静态映射/未知类型/函数指针字段/泛型与 ADT 的可判定缺口；同判定同文案 | **下一 v0.x（SH-115）** |
 | **证据** | 全量语料 FP=0、固定漏报矩阵、123 个 import 单元、CFG/定值、编译时间 ≤+10%、诊断码稳定 | **v1.0 硬门禁**（v1-PH-0） |
 | **默认值** | **下一 v0.x 起 CLI 默认 `warn`**（SH-115 同批；`--check-level=off` 保留逃生）；v1-pre 的 **CI/发布门禁**在 FP=0 前 `warn`、FP=0 后 `error`；v1.1 S2 把 **CLI 默认**升 `error`，未达标回退“可用不默认” | SH-115 + v1.1 S2 |
@@ -170,10 +170,10 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 - 所有历史 C 代码零迁移；
 - 全局默认 strict。
 
-### 2.6 重写前置细则（PH-85 门）
+### 2.6 重写前置细则（v0-PH-85 门）
 
-> D1/D3 已定（§2.3）：PH-84 先做 ADT/match，重写在 PH-85…88；v1.0 之后只保留快照发布。
-> 本节是 PH-85 的执行细则，不改变 phase 划分。
+> D1/D3 已定（§2.3）：v0-PH-84 先做 ADT/match，重写在 v0-PH-85…88；v1.0 之后只保留快照发布。
+> 本节是 v0-PH-85 的执行细则，不改变 phase 划分。
 
 1. **inventory 先行**：按子系统列出“旧写法 → 新特性 → 预计行数 → 风险”，不直接开写；
 2. **单切片 spike**：先选一个子系统（建议词法器或发射器）做完整等价重写，产出：
@@ -188,10 +188,10 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 
 ### 2.7 单元切分 M0/M1（D-017 已定）
 
-> 提案 v3 的落点：**M0 粗切并入 PH-85，R 不变，M1 落 v1.1**。
+> 提案 v3 的落点：**M0 粗切并入 v0-PH-85，R 不变，M1 落 v1.1**。
 > 完整裁定见 [D-017](../decisions/D-017.md)、[评估](../reviews/2026-11-21-unit-split-eval.md)。
 
-- **时序**：PH-84 ADT → PH-85 inventory+spike + **M0 粗切** + A 机制 → PH-86–88 R → v1.0 → v1.1 S1 **M1 精细切分** → S2 A；
+- **时序**：v0-PH-84 ADT → v0-PH-85 inventory+spike + **M0 粗切** + A 机制 → v0-PH-86–88 R → v1.0 → v1.1 S1 **M1 精细切分** → S2 A；
 - **M0**：按子系统粗切 5–6 个单元，不做精细分类；目的是降低 R 期间 diff 噪声；
 - **M1**：纯搬移落位，v1.1 第一个 stage；不影响 v1.0；
 - **两级判据**：测试语料发射逐字节不变；编译器自身发射允许差异，靠自举不动点 + ASan + 行为测试；
@@ -210,18 +210,18 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | B 跨单元 | v0-PH-69 | v0.68.0 | opt-in |
 | B CFG | v0-PH-70 | v0.69.0 | opt-in |
 | B own/borrow | v0-PH-71 | v0.70.0 | opt-in |
-| ADT/match（最小） | PH-84 | v0.84.0 | 语言新增；只为重写提供穷尽判别 |
-| v1-pre inventory+spike+M0 | PH-85 | v0.85.0 | 门：通过才排后续；含 M0 粗切 + A 机制接线 |
-| v1-pre 词法器 | PH-86 | v0.86.0 | 行为保持；✅ 2026-11-21（零拷贝视图 + C API 迁移；S86c 范围裁定见 battle/p86-errorpath） |
-| v1-pre 解析+检查 | PH-87 | v0.87.0 | 行为保持；✅ 2026-11-21（按 kind 切片 + 单判别式；`switch→match` 字面项因 L2 引导链移交 PH-88，见 battle/p87-kind-match） |
-| v1-pre 发射器+回环 | PH-88 | v0.88.0 | ✅ 2026-11-21（76 个发射器切片；fixpoint 日常 2 / tag 前 3 轮逐字节；字面 `match` 承接 `v1-PH-0`，见 battle/p88-emit-match） |
+| ADT/match（最小） | v0-PH-84 | v0.84.0 | 语言新增；只为重写提供穷尽判别 |
+| v1-pre inventory+spike+M0 | v0-PH-85 | v0.85.0 | 门：通过才排后续；含 M0 粗切 + A 机制接线 |
+| v1-pre 词法器 | v0-PH-86 | v0.86.0 | 行为保持；✅ 2026-11-21（零拷贝视图 + C API 迁移；S86c 范围裁定见 battle/p86-errorpath） |
+| v1-pre 解析+检查 | v0-PH-87 | v0.87.0 | 行为保持；✅ 2026-11-21（按 kind 切片 + 单判别式；`switch→match` 字面项因 L2 引导链移交 v0-PH-88，见 battle/p87-kind-match） |
+| v1-pre 发射器+回环 | v0-PH-88 | v0.88.0 | ✅ 2026-11-21（76 个发射器切片；fixpoint 日常 2 / tag 前 3 轮逐字节；字面 `match` 承接 `v1-PH-0`，见 battle/p88-emit-match） |
 | v0.x B+ 强化 + CLI 默认 `warn` | 下一 v0.x（不占 v1.0） | 下一 v0.x | 补静态映射/未知类型/函数指针字段/泛型与 ADT 可判定缺口；同批把 CLI 默认 `off`→`warn`（[SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md)） |
 | v1.0 前内置层目录 `lib/core`（Stage 1） | 当前 pre 窗口（`v1-PH-0` 前） | v1.0 前 | **不等 v1.0 窗口**；REQ 就绪，待 DEV；`CT_CORE_DIR` + 一个 MINOR 回退；迁移卡见 [DOC-87](../../issues/docs/doc-87-lib-core-rename.md) |
 | v1.0 前内置层 `namespace core`（Stage 2） | 当前 pre 窗口（Stage 1 之后） | v1.0 前 | 先补 spec §4.51/§4.70/§4.71 的命名空间与兼容窗条款，再独立提交；`core::Vec`/`core::String`/`core::box` + 根拼写一个 MINOR 别名（[DOC-87](../../issues/docs/doc-87-lib-core-rename.md) Stage 2） |
 | v1.0 前内建 trait 可见声明 | 当前 pre 窗口（DOC-87 Stage 1 后） | v1.0 前 | `Drop` / `Handback` 声明入 `lib/core`；`AutoDrop` 不是 trait；parser 例外、无 vtable、`MAX_TRAITS` 计数不变（[LANG-23](../../issues/lang/lang-23-builtin-trait-declarations.md)） |
 | v1.0 前语言名书写 `CT → Ct` | 当前 pre 窗口（文档批） | v1.0 前 | 先全量替换活跃散文，再开 `check-docs` ratchet；命令/路径/环境变量/历史目录豁免（[DOC-94](../../issues/docs/doc-94-ct-spelling.md)） |
 | v1.0 前 `MAX_FUNCS` 动态增长 | 当前 pre 窗口 | v1.1 前 | 初始 512、按需翻倍、安全阀 65536（仅 OOM 保护）；**固定 512 不再是功能上限**；L2 冻结层例外（[提案](../proposals/ct-max-funcs-growth.md)、[SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)） |
-| v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 PH-88 之后 |
+| v1.0 AST-only | `v1-PH-0` | **v1.0.0** | 新 major 首相；`MINOR=0`；在 v0-PH-88 之后 |
 | v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容器级联释放 | `v1-PH-1` | v1.1 train | `Vec`/`Map` 字段进入 Drop 胶水（元素级联）；合入后 30 天按唤醒条件评估 JSON 树方案 B（[LANG-27](../../issues/lang/lang-27-container-cascade.md)） |
@@ -278,9 +278,9 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 ## 5. 建议顺序
 
 1. 完成 B（v0-PH-68–71），保持 opt-in；
-2. 开 `PH-84`（v0.84.0）：最小 ADT/match；
-3. 开 `PH-85`（v0.85.0）：inventory + 单切片 spike（门）+ M0 粗切 + A 机制接线；
-4. 依次开 `PH-86` 词法器（✅ v0.86.0）、`PH-87` 解析+检查（✅ v0.87.0；`match` 字面项随 PH-88 的自举搬迁落地）、`PH-88` 发射器+回环（✅ v0.88.0；v1-pre 收口）；
+2. 开 `v0-PH-84`（v0.84.0）：最小 ADT/match；
+3. 开 `v0-PH-85`（v0.85.0）：inventory + 单切片 spike（门）+ M0 粗切 + A 机制接线；
+4. 依次开 `v0-PH-86` 词法器（✅ v0.86.0）、`v0-PH-87` 解析+检查（✅ v0.87.0；`match` 字面项随 v0-PH-88 的自举搬迁落地）、`v0-PH-88` 发射器+回环（✅ v0.88.0；v1-pre 收口）；
 5. 开 `v1-PH-0`（v1.0），先定 seed，再退 L1/L2；
 6. 开 `v1-PH-1 / S1`（M1 精细切分）→ `S2`（A 默认强制）；
 7. v2.0 再讨论全局默认 strict。
@@ -295,15 +295,15 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 
 | # | 争议 | 提案方主张 | 现行计划 | 需要决定 |
 | --- | --- | --- | --- | --- |
-| D1 | 重写是否提前到 v1.0 | 提前，v1.0 发布“两级自举 + 自证语法” | **已定**：ADT 先行（PH-84），重写为 v1-pre（PH-85…88），不进 v1.0、不推 v1.1 | — |
-| D2 | A strict 与 v1.0 | 是（G4） | **已定 B+**：机制 PH-85 接线；**下一 v0.x 起 CLI 默认 `warn`（SH-115，不等 v1-pre）**；证据 FP=0 为 v1.0 硬门禁；v1.1 S2 视证据升 `error`，不足则回退“可用不默认” | — |
-| D3 | ADT/match 是否插入战役 | 可选先行，不阻塞 | **已定 B（A 范围）**：PH-84 先做最小 ADT/match；泛型/or/嵌套留 v1.1+ | — |
+| D1 | 重写是否提前到 v1.0 | 提前，v1.0 发布“两级自举 + 自证语法” | **已定**：ADT 先行（v0-PH-84），重写为 v1-pre（v0-PH-85…88），不进 v1.0、不推 v1.1 | — |
+| D2 | A strict 与 v1.0 | 是（G4） | **已定 B+**：机制 v0-PH-85 接线；**下一 v0.x 起 CLI 默认 `warn`（SH-115，不等 v1-pre）**；证据 FP=0 为 v1.0 硬门禁；v1.1 S2 视证据升 `error`，不足则回退“可用不默认” | — |
+| D3 | ADT/match 是否插入战役 | 可选先行，不阻塞 | **已定 B（A 范围）**：v0-PH-84 先做最小 ADT/match；泛型/or/嵌套留 v1.1+ | — |
 | D4 | 重写是否可用函子签名 | 检查器用“闭包 + 函子” | **已定 A**：不依赖函子；用既有闭包/trait/函数指针；S4 仍留 v1.1+ Wave 2 | — |
 | D5 | hard deadline ≤6 phase | 建议 6 | **已定 A**：不设 deadline；失败就地停，不用时间/phase 数倒逼范围 | — |
-| D6 | 重写期主线是否冻结 | 倾向不冻结 + 切片 rebase | **已定 A**：PH-85–88 主线只收 bugfix，新特性暂停；切片独占合入 | — |
+| D6 | 重写期主线是否冻结 | 倾向不冻结 + 切片 rebase | **已定 A**：v0-PH-85–88 主线只收 bugfix，新特性暂停；切片独占合入 | — |
 | D7 | G7 页首版本注入 | 页首注入版本 | **已定 A**：版本只注入 README/生成物，spec 页首保持 DOC-63；能力→节号断言进 check-docs（V1-C6） | — |
 | D8 | 三轮自举是否新建 | 新建三轮回环 | **已定 A**：扩展现有 fixpoint，轮数参数化（日常 2 轮、tag 前 3 轮），不新建脚本 | — |
-| D9 | 收益预估（-20~30%） | 按子系统估算 | **已定 A**：以 PH-85 spike 实测为准，不承诺区间；行数/耗时报告落 history |
+| D9 | 收益预估（-20~30%） | 按子系统估算 | **已定 A**：以 v0-PH-85 spike 实测为准，不承诺区间；行数/耗时报告落 history |
 
 > 收敛方式：裁定先入本表与 roadmap，再开 phase 卡；未入库前不得在卡里提前落实现代码。
 > 改判需显式 ADR/battle 覆盖，不改本表历史。

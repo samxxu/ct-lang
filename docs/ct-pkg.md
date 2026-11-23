@@ -35,7 +35,7 @@
 
 `ct pkg` 的边界按 [D-010](decisions/D-010.md) 定稿为 **B′**：`ct pkg` 是 `ct install` 的别名，
 `ct pkg check <dir>` 是原生只读检查；不做 `package.sh` 透传。DOC-73 早先把 `ct pkg check` 写成
-「过渡」，该说法已被 PH-77 / D-010 的 B′ 定稿取代。
+「过渡」，该说法已被 v0-PH-77 / D-010 的 B′ 定稿取代。
 
 ## 4. 当前可解析范围（实测）
 

@@ -141,7 +141,7 @@ int lib_conn_secret(struct lib_Conn *);
 先做「不静默」：字段文本里出现 `pub` 时硬错。字段级可见性是更大的工程（需要把 struct 体拆成
 头/实现两份并生成两套定义），建议单独立相，不塞进本轮 P1 修复。
 
-## 处置（2026-11-19，PH-73）
+## 处置（2026-11-19，v0-PH-73）
 
 - 提交：`1e08d0c9`（R1），`92e3e3be`（R2/R3 验收与文档）
 - 改动：字段前缀 `pub` 进入解析器并登记 `Field.is_pub`；`emit_type_decl` 对
@@ -154,7 +154,7 @@ int lib_conn_secret(struct lib_Conn *);
 
 ## 处置（2026-11-20，DEV · 复跑）
 
-- 结论：PH-73 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 结论：v0-PH-73 的修复仍在 HEAD；只记录证据，不改 `status`。
 - 命令/输出：
 
 ```console

@@ -13,7 +13,7 @@
 
 ## 现象
 
-PH-78 之后没有新增 example：`ref`/`out`、切片 `T[]`、`String`/`Str`、`box`/`new`、
+v0-PH-78 之后没有新增 example：`ref`/`out`、切片 `T[]`、`String`/`Str`、`box`/`new`、
 leaks、`match`/ADT、`ct index verify` 只有 spec/tutorial/测试，没有可运行示例目录。
 教程已更新到 §21，但缺少“最小可跑”的 `examples/5x_*`。
 

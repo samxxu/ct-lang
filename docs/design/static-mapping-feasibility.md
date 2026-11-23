@@ -2,7 +2,7 @@
 
 > 中文
 >
-> **作用**：把 SwiftCT 静态映射链路上「已定」与「待定」的取舍集中在一处，作为 [模型导出提案](../proposals/ct-model-export-proposal.md)、[视图注记提案](../proposals/ct-view-annotation-proposal.md) 与 [Phase 59 卡](../history/design/phase59.md) 的共同依据。
+> **作用**：把 SwiftCT 静态映射链路上「已定」与「待定」的取舍集中在一处，作为 [模型导出提案](../proposals/ct-model-export-proposal.md)、[视图注记提案](../proposals/ct-view-annotation-proposal.md) 与 [Phase 59 卡](../phases/v0-PH-59/card.md) 的共同依据。
 > **不重复**：字段格式与 schema 细节以提案 §4 为准；判据以 Phase 59 卡为准。本文只记**决策及其阻塞面**。
 > **基线**：`v0.53.0`；研判记录见 [swiftct-mapping-proposal-review](../review/swiftct-mapping-proposal-review.md)。
 
@@ -88,10 +88,10 @@ ct build（CT 侧）+ 包内 bridging header（构建产物）→ Xcode / SPM
 | 项 | 裁定 |
 | --- | --- |
 | 范围 | `fields[]` **必带** `loc{file,line,col}`，指向字段声明处 |
-| 依赖 | **PH-58**（字段级位置，[routing §3.4/7c](../planning/open-items-routing.md)）；PH-58 本来就排在 PH-59 之前 |
-| 滑期降级 | PH-58 若滑期，降级为「只带 `line`」并在卡内显式标注缺 `col`；不得退回到「不写该键」 |
+| 依赖 | **v0-PH-58**（字段级位置，[routing §3.4/7c](../planning/open-items-routing.md)）；v0-PH-58 本来就排在 v0-PH-59 之前 |
+| 滑期降级 | v0-PH-58 若滑期，降级为「只带 `line`」并在卡内显式标注缺 `col`；不得退回到「不写该键」 |
 | 判据要求 | 必须有一条能真红的断言：`loc` 存在且指向声明行/列；golden 用**字段级**定位，不许停在 struct 级 |
-| 依据 1 | 提案自己的 schema 规则：字段从「可缺席」变「必有」属于改义，按定义要 +1 大版本——那就等于 PH-59 出厂即欠一次大版本 |
+| 依据 1 | 提案自己的 schema 规则：字段从「可缺席」变「必有」属于改义，按定义要 +1 大版本——那就等于 v0-PH-59 出厂即欠一次大版本 |
 | 依据 2 | 原 J1–J10 没有一条断言位置，golden 停在 struct 级也能全绿，等于「回指」这个卖点没有判据 |
 
 ---
@@ -99,7 +99,7 @@ ct build（CT 侧）+ 包内 bridging header（构建产物）→ Xcode / SPM
 ## 3 待定（无）
 
 原「字段级回指」已按 §2.6 转「必带」；异步/流式/动态增删已按 §2.4 转非目标；多单元已按 §2.3 转 M2。
-与映射相关的待定项已清零。剩余的**版本位冲突**不属于映射决策，登记在 [Phase 59 卡](../history/design/phase59.md) §8。
+与映射相关的待定项已清零。剩余的**版本位冲突**不属于映射决策，登记在 [Phase 59 卡](../phases/v0-PH-59/card.md) §8。
 
 > §2 六条即当前全量裁定，Phase 59 只实现这六条的范围。
 
@@ -111,5 +111,5 @@ ct build（CT 侧）+ 包内 bridging header（构建产物）→ Xcode / SPM
 | --- | --- |
 | [模型导出提案](../proposals/ct-model-export-proposal.md) | schema 格式、方案取舍、非目标；§4.1 已含 §2.2 |
 | [视图注记提案](../proposals/ct-view-annotation-proposal.md) | 依赖本文件 §2.2/§2.5/§2.6 冻结后才能定 schema |
-| [Phase 59 卡](../history/design/phase59.md) | 实现 §2 六条；待定项已清空 |
-| [open-items-routing §8](../planning/open-items-routing.md) | 排位、SH-79 与 PH-58 字段位置的边界 |
+| [Phase 59 卡](../phases/v0-PH-59/card.md) | 实现 §2 六条；待定项已清空 |
+| [open-items-routing §8](../planning/open-items-routing.md) | 排位、SH-79 与 v0-PH-58 字段位置的边界 |

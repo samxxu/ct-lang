@@ -20,7 +20,7 @@
   `minor == n`；需要主规范补 legacy offset 判据；
 - **B 卡片路径**：参照实现读 `docs/phases/<id>/card.md`，当前仓是
   `docs/design/phase<NN>.md`；需要主规范确认路径；
-- **C 旧卡字段**：旧卡只有 `| 编号 | PH-66 |`，缺 `phase-id` / `version-minor`；
+- **C 旧卡字段**：旧卡只有 `| 编号 | v0-PH-66 |`，缺 `phase-id` / `version-minor`；
   需要决定迁移脚本补字段还是适配层推导。
 
 ## 期望（建议口径，待主规范签字）
@@ -58,7 +58,7 @@
 
 [D-019](../../docs/decisions/D-019.md) 已对三个 blocker 给出裁定：
 
-- **A**：`d=0` 继续，PH-76 起 `MINOR = phase`，迁移不改任何已收口版本号；
+- **A**：`d=0` 继续，v0-PH-76 起 `MINOR = phase`，迁移不改任何已收口版本号；
 - **B**：迁移到 `docs/phases/v0-PH-<n>/card.md`，但在 `v1-PH-0` 开卡前**一次原子迁移**，
   不逐卡拉锯；
 - **C**：迁移脚本一并补 `phase-id:` / `version-minor:`；迁移前新卡（v1 起）必须写这两个字段。

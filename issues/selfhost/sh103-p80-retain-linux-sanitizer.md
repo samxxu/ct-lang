@@ -13,7 +13,7 @@ confirmed-by: CI-44804723025
 ## 现象
 
 v0.82.0 起 CI `ubuntu-clang-smoke` 与 `ubuntu-gcc` 的 AST 套件报：
-`FAIL PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)`；
+`FAIL v0-PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)`；
 探针输出停在 `ok struct_lit -fsanitize=address`，无最终 `p80_retain: OK`；
 macOS clang 同版本全绿。常规运行、UBSan 的 retain/jump/field_reassign 均 ok。
 
@@ -28,7 +28,7 @@ CI run `44804723025`；本地 macOS `sh test/ast/p80_retain.sh <ct-ast>` 绿。
 ## 处置
 
 待查：在 Linux 容器/CI 上取 `struct_lit` sanitizer 完整 stderr；`test/ast/p80_retain.sh`
-现已输出完整 stderr（commit 8dfb34c7 的诊断改动）。修复前 PH-82 tag 的 CI 为红。
+现已输出完整 stderr（commit 8dfb34c7 的诊断改动）。修复前 v0-PH-82 tag 的 CI 为红。
 
 ## 处置（DEV，2026-11-21）：**fixed**
 
@@ -104,14 +104,14 @@ $ sh test/ast/p80_retain.sh <ct-ast>
 
 ### 边界（Linux 容器的环境性失败，不计入 SH-103）
 
-- `check-ast` 在容器的 5 项失败与 SH-103 无关：4 项 `PH-77-S1…S4` 需要 `git` 做离线
+- `check-ast` 在容器的 5 项失败与 SH-103 无关：4 项 `v0-PH-77-S1…S4` 需要 `git` 做离线
   fixture，容器内未安装 `git`（`p77: git is required for the offline fixtures`）；
-  1 项 `PH-79-S3d` 的 `E79-1 field.ct` 生成 C 被 clang 18 拒绝（
+  1 项 `v0-PH-79-S3d` 的 `E79-1 field.ct` 生成 C 被 clang 18 拒绝（
   `flexible array member 'xs' not allowed in otherwise empty struct`），是既有夹具与
   Linux clang 的差异，另案。
 - `docs/dist.md` 的 `../planning/ct-pkg-get-contract.md` / `../decisions/D-014.md` 是
-  PH-83 提交 `2a0a0d38` 引入的链接写法（从 `docs/dist.md` 出发多了一级 `../`），
-  `check-docs` 因此报 2 个 dead link；不属 SH-103，留给 PH-83 收口处理。
+  v0-PH-83 提交 `2a0a0d38` 引入的链接写法（从 `docs/dist.md` 出发多了一级 `../`），
+  `check-docs` 因此报 2 个 dead link；不属 SH-103，留给 v0-PH-83 收口处理。
 
 ## 处理（REQ，2026-11-21）
 

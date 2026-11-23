@@ -1,8 +1,8 @@
-# PH-86 收口复核（REV，2026-11-21）
+# v0-PH-86 收口复核（REV，2026-11-21）
 
 > **结论：通过（PASS）**。HEAD `2189c5f5`（v0.86.0）。E86-1…8 逐条复核通过；
 > 3 项非阻断见 §9。未 push、未改实现。
-> 对象：[phase86 卡](../design/phase86.md)、[p86_errors](../design/p86_errors.md)、
+> 对象：[phase86 卡](../phases/v0-PH-86/card.md)、[p86_errors](../design/p86_errors.md)、
 > [p86_metrics](../design/p86_metrics.md)、
 > [battle/p86-errorpath](../../battle/p86-errorpath/verdict.md)。
 
@@ -57,7 +57,7 @@ Lexer.h:0   Lexer.c:0
   词法扫描本身 `tokstr.ptr = src + start`，`len` 由游标相减得到；
 - `TokView { const char *ptr; int len; }` 与 `lib/std/Str.h.ct` 的
   `Str { char *ptr; int len; }` 同布局（const 不改变布局）；L2 不认识 std 层、
-  PH-81 禁止 `Str` 字段，故本地拼写，卡 §7.4 已记账；
+  v0-PH-81 禁止 `Str` 字段，故本地拼写，卡 §7.4 已记账；
 - `lex_view_ok` 断言 `ptr + len <= src + srclen`；`read_file` 的源缓冲在进程内不释放
   （既有行为），`load_unit` 保存/恢复 `srclen`；AST 侧名字均经 `tok_copy` 落副本；
   多单元探针（头单元先解析）在 ASan 下另测，输出 42，无报告（§6 CE-1）。
@@ -154,7 +154,7 @@ golden；选项 C（只在测试夹具里用）是假绿。故 S86c 改为“错
 对照”，**是范围缩减，不是 S86c 字面任务通过**；E86-4 的字面判据（诊断不变 +
 行为/ASan）已满足。REVIEW 已在
 [battle/p86-errorpath](../../battle/p86-errorpath/verdict.md) 签字，并附条件：
-PH-87/88 开卡前由 REQ 二选一（补引导层，或把同名判据降为 `no-test` 文档项），
+v0-PH-87/88 开卡前由 REQ 二选一（补引导层，或把同名判据降为 `no-test` 文档项），
 不得静默沿用。
 
 ## 6 新反例（4 条，均在本机归档自举上）

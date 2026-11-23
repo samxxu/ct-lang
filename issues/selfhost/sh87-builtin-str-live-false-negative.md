@@ -68,7 +68,7 @@ out/d.c:7:12: error: call to undeclared function 'str_len'; ISO C99 and later do
 
 - [battle/hw-2](../../battle/hw-2/verdict.md)：J-1/J-2 均不成立，判决 `rejected`；
 - [D-007](../../docs/decisions/D-007.md)：决策记录（含失效条件）；
-- [PH-64 卡 §5](../../docs/design/phase64.md)：T2 的证据行需在 fix 收口时追加注记。
+- [v0-PH-64 卡 §5](../../docs/phases/v0-PH-64/card.md)：T2 的证据行需在 fix 收口时追加注记。
 
 ## 复核（REV，2026-11-17）
 

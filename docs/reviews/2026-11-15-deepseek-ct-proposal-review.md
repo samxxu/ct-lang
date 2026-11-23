@@ -25,7 +25,7 @@
 | 1 | `container_index_check` 在 `Expr.h.ct:3729-3742` | **错（行号）**：实际在 `Expr.h.ct:3870-3883`；草案自身的锚点（:79）也停在旧行号 | 源码 |
 | 2 | 该函数「只识别 `Vec_` / `Map_` 前缀」 | **不准确**：它是 V29-4 的**拒绝守卫**，只对已解析的非指针 `struct Vec_*` / `struct Map_*` 报错（`a Vec is not subscriptable…` / `a Map is not subscriptable…`）；用户 struct 是「没有分支」而非「按前缀识别后放行」 | `Expr.h.ct:3867-3883` |
 | 3 | 用户 struct 的 `obj[k]` 原样发射，`cc` 报 `array subscript is not an integer` | **成立（文案分形态）**：`struct Box{int n;} b; b[0];` → `ct-ast` rc=0，生成 C 保留 `b[0];`，`cc` 报 `subscripted value is not an array, pointer, or vector`；`b["k"]` 才是 `array subscript is not an integer` | 实测 `/tmp/l1probe.ct` |
-| 4 | `phase40-draft.md` 给出 D40-1…D40-9、E40-1…E40-10，是本需求的完整草案 | **错（张冠李戴）**：`docs/history/design/phase40.md` 是已完成的 `errdefer` 相（D40-1..10、E40-1..9）；E40-4 是 `err:` 语法负例，不是「缺 get」诊断 | `phase40-draft.md:3`、:63-72、:178-186 |
+| 4 | `phase40-draft.md` 给出 D40-1…D40-9、E40-1…E40-10，是本需求的完整草案 | **错（张冠李戴）**：`docs/phases/v0-PH-40/card.md` 是已完成的 `errdefer` 相（D40-1..10、E40-1..9）；E40-4 是 `err:` 语法负例，不是「缺 get」诊断 | `phase40-draft.md:3`、:63-72、:178-186 |
 | 5 | L1 草案真实存在且编号为 D40/E40 | **错**：真实草案是 `docs/proposals/custom-index-protocol.md`，编号 `RL1-D1..D8`、`RL1-L1..L9`、`RL1-E1..E10`；文首自述「提案 / 未立项 / 未过分析，不作数」 | 草案 :3、:46-53、:158-171 |
 | 6 | REQ-L1 状态 open、已立项草案 | **半对**：`requirements-pool.md` 的 `REQ-L1` 确为 `status = open`、`priority = P0`；但「已立项草案」不成立——草案未过分析、明确「不作数」 | `requirements-pool.md:9-19` |
 | 7 | `q_suffix_ahead` 是 Phase 44 的 Result 传播后缀 | **错**：它是三目与后缀 `?` 的**消歧函数**：吃掉 `?` 后回看下一个 token 能否开始表达式，能则按三目、不能才按后缀；返回 0 表示「可开始表达式」= 三目 | `Expr.h.ct:6364-6412`、调用点 :4608 |
@@ -33,7 +33,7 @@
 | 9 | `?.` 在 CT 里不存在 | **成立**：词法只有显式双字符分支（`->` `::` `=>` `<<` `>=` 等），没有 `?.`；`.` 单字符 | `Lexer.h.ct:219-316` |
 | 10 | `Map.get` 缺键返回 0 | **成立**：`pub V *get(char *k)`，`self->h == 0 || k == 0` 或未命中都 `return 0` | `lib/std/Vec.h.ct:260-269` |
 | 11 | `Vec.get` 越界行为（评审要求核） | 提案未提；实际返回**零值 T**（先 `memset` 再返回），不是 0 指针 | `lib/std/Vec.h.ct:94-102` |
-| 12 | `Vec` / `Map` 内置、免 import（Phase 29） | **成立**：语言内置实例与遍历，样例中未 import 即可用 | `language-spec.md` Phase 29 节、`docs/history/design/phase29.md` |
+| 12 | `Vec` / `Map` 内置、免 import（Phase 29） | **成立**：语言内置实例与遍历，样例中未 import 即可用 | `language-spec.md` Phase 29 节、`docs/phases/v0-PH-29/card.md` |
 | 13 | `foreach` 遍历 Map 用 `item.key` / `item.value`（D29-13） | **成立**：D29-13 明确只认内置 `Vec` / `Map`；`'i' has no meaning in a Map foreach; use item.key / item.value` | `phase29.md:476/739`、`Stmt.h.ct:3171` |
 | 14 | `Map` key 白名单 int / long / char\* | **成立**：报错原文 `Map does not support key type '%s' (use int, long or char *)` | `Expr.h.ct:2174` |
 | 15 | `Trait` 无 `tparam` | **错**：`pub struct Trait` 有 `ntparams` / `tparam[2][160]` / `bound[2][160]` / `tmpl`（Phase 35，参数化 trait `trait Iter<T>`） | `Symbols.h.ct:205-230` |

@@ -15,7 +15,7 @@
 
 ## 1. Blocker A：旧 major 的 `version-minor` 偏移
 
-- 现状：`PH-66` 对应 `v0.65.0/0.65.1`，`version-minor: 65`（`d=1`），不是 66。
+- 现状：`v0-PH-66` 对应 `v0.65.0/0.65.1`，`version-minor: 65`（`d=1`），不是 66。
 - 迁移后：`v0-PH-66`，按 PN-2 工具期望 `version-minor == 66`；但实际版本是 0.65.x。
 - 参照实现 `phase_version.py` 只做 `minor == n`，不认 `d`；`g1` 会红。
 - PN-2 又说旧 MAJOR 的偏移只作历史；这与“工具只认 `minor == n`”冲突。
@@ -40,7 +40,7 @@
 
 ## 3. Blocker C：旧卡缺 `phase-id` / `version-minor` 字段
 
-- 旧卡用 `| 编号 | PH-66 |`，不是顶部 `phase-id:`；
+- 旧卡用 `| 编号 | v0-PH-66 |`，不是顶部 `phase-id:`；
 - 部分卡 `version-minor: 65`，部分可能缺；
 - 参照实现要求 `phase-id`/`version-minor`，且扫描所有卡。
 

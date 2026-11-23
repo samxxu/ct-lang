@@ -8,7 +8,7 @@
 | 锚点 | 工作树 `89b1124b`（`ct v0.53.0` 二进制实测） |
 | 文件 | `selfhost/ct-ast/frontend/module/Module.h.ct`（无 `ct.lock` 引用）、`selfhost/ct-ast/tool/driver/Driver.h.ct`（同样无） |
 | 状态 | verified |
-| 处置证据 | **已修**（PH-54 S2：SP-008；`ct build` 默认读 `ct.lock` 并自动补 `-I`，显式 `-I` 优先） |
+| 处置证据 | **已修**（v0-PH-54 S2：SP-008；`ct build` 默认读 `ct.lock` 并自动补 `-I`，显式 `-I` 优先） |
 
 ## 现象
 

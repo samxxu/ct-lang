@@ -363,11 +363,11 @@
 | --- | --- | --- | --- |
 | PKG-2 | Medium | `ct install` 曾只打印 `-I vendor/<包名>`，包内单元在 `src/<ns>/` 时消费端照抄即报 `cannot resolve import`（**已解决**：v0.55.0 `ns-root`、v0.58.0 `ct build` 读 lock） | [pkg-2-ct-install-package-root-import.md](packages/pkg-2-ct-install-package-root-import.md) |
 | PKG-3 | Medium | `ct.pkg` 未知键（如 `ns-root`）被静默忽略；`ns-root` 已改为读取并硬错，未知键告警仍缺（**部分解决**） | [pkg-3-unknown-keys-silently-ignored.md](packages/pkg-3-unknown-keys-silently-ignored.md) |
-| PKG-4 | Medium | 依赖图内同名包静默取首个，无诊断（**已修**，PH-54 S2 / SP-006、SP-013） | [pkg-4-duplicate-package-name-silent-first.md](packages/pkg-4-duplicate-package-name-silent-first.md) |
+| PKG-4 | Medium | 依赖图内同名包静默取首个，无诊断（**已修**，v0-PH-54 S2 / SP-006、SP-013） | [pkg-4-duplicate-package-name-silent-first.md](packages/pkg-4-duplicate-package-name-silent-first.md) |
 | PKG-5 | **High** | `ct get` 缓存键是裸包名，不同发布方的同名包互相串用（**已修**，v0.58.1 / `fb82420c`） | [pkg-5-cache-key-bare-name.md](packages/pkg-5-cache-key-bare-name.md) |
 | PKG-6 | Medium | `ct install` 不校验 import 解析，解析不到仍返回 0（**open**） | [pkg-6-install-does-not-validate-imports.md](packages/pkg-6-install-does-not-validate-imports.md) |
-| PKG-7 | Medium | `ct build` 不读 `ct.lock`，不自动补 `-I`（**已修**，PH-54 S2 / SP-008） | [pkg-7-build-does-not-read-lock.md](packages/pkg-7-build-does-not-read-lock.md) |
-| PKG-8 | Medium | 本地目录覆盖共享库时构建期无留痕（**已修**，PH-54 S2/S3 / SP-015） | [pkg-8-local-override-no-trace.md](packages/pkg-8-local-override-no-trace.md) |
+| PKG-7 | Medium | `ct build` 不读 `ct.lock`，不自动补 `-I`（**已修**，v0-PH-54 S2 / SP-008） | [pkg-7-build-does-not-read-lock.md](packages/pkg-7-build-does-not-read-lock.md) |
+| PKG-8 | Medium | 本地目录覆盖共享库时构建期无留痕（**已修**，v0-PH-54 S2/S3 / SP-015） | [pkg-8-local-override-no-trace.md](packages/pkg-8-local-override-no-trace.md) |
 | PKG-9 | **High**（静默） | 清单缺 `publisher` / `ns-root` 时 `ct get` 不报错、rc=0，静默退回 v1 单行 lock；只有 `ct pkg check` 才报（**open**，建议 v0.58.2） | [pkg-9-missing-identity-fields-silent-v1-lock.md](packages/pkg-9-missing-identity-fields-silent-v1-lock.md) |
 | PKG-10 | **High**（静默） | `ct get <git>` 无 range / `*` 落到最旧 tag；应取最新，显式范围仍 MVS | [pkg-10-default-git-tag-oldest.md](packages/pkg-10-default-git-tag-oldest.md) |
 | PKG-11 | Medium | `ct get` 只打印 `installed N package(s)`；改为默认详情、`-q` 一行 name/version/url、`--json` | [pkg-11-get-output-too-terse.md](packages/pkg-11-get-output-too-terse.md) |
@@ -392,12 +392,12 @@
 | LANG-6 | Medium | `ct install` 只打印 `-I vendor/<包名>`，`src/` 布局的包消费方报 `cannot resolve import` | **并入 [PKG-2](packages/pkg-2-ct-install-package-root-import.md)**（不另立文件） |
 | LANG-3 | Medium | `MAX_CALLS` 固定 1024、按整次构建累计、拆单元无效；每条 324 字节 | [lang-3-max-calls-fixed-cap.md](lang/lang-3-max-calls-fixed-cap.md) |
 | LANG-14 | Medium | struct 形参收到非 struct 实参只报 warning、由 cc 兜底（ct-json JSON-3，**已修** `struct_arg_from_charptr`） | [lang-14-charptr-to-struct-arg-warning.md](lang/lang-14-charptr-to-struct-arg-warning.md) |
-| LANG-16 | Medium | 诊断位置源过期：块注释后列号偏移、`1:-3788` 类负列（patch 0.53.16，与 PH-62 独立） | [lang-16-diagnostic-position-negative.md](lang/lang-16-diagnostic-position-negative.md) |
+| LANG-16 | Medium | 诊断位置源过期：块注释后列号偏移、`1:-3788` 类负列（patch 0.53.16，与 v0-PH-62 独立） | [lang-16-diagnostic-position-negative.md](lang/lang-16-diagnostic-position-negative.md) |
 | LANG-17 | **High**（静默） | 超长预处理行（`#define` / `#include` > 159 字节）被静默截断，截断点合法时全链路 rc=0 但语义已改（DF-1 转入） | [lang-17-preprocessor-line-truncation.md](lang/lang-17-preprocessor-line-truncation.md) |
 | LANG-18 | **P0（High）** | 已修 v0.61.1； 包发布工程编译回归：泛型指针结构体字段（`Map<Str, int> *index;`）报 `expected a field name` | [lang-18-generic-pointer-struct-field-parse.md](lang/lang-18-generic-pointer-struct-field-parse.md) |
 | LANG-10 | Medium（feature） | 诊断无可机读格式：门禁靠 `grep 'warning:'`、编辑器/CI 只能读人用文本，改文案即可能静默变绿 | [lang-10-machine-readable-diagnostics.md](lang/lang-10-machine-readable-diagnostics.md) |
 | LANG-12 | Medium（feature） | 自定义类型没有属性访问协议：`doc.server.host` 落到 C 字段规则，CT 放行、`cc` 报 `no member named` | [lang-12-property-access-protocol.md](lang/lang-12-property-access-protocol.md) |
-| LANG-15 | Medium（feature） | 枚举成员不能写 `FsErrCode::FS_ERR_OUT_OF_BOUNDS`：值位置 `Type::Member` 被当成命名空间变量（PH-57） | [lang-15-qualified-enum-member-value.md](lang/lang-15-qualified-enum-member-value.md) |
+| LANG-15 | Medium（feature） | 枚举成员不能写 `FsErrCode::FS_ERR_OUT_OF_BOUNDS`：值位置 `Type::Member` 被当成命名空间变量（v0-PH-57） | [lang-15-qualified-enum-member-value.md](lang/lang-15-qualified-enum-member-value.md) |
 | LANG-7 | Low | 静态方法解析失败报 `use of an undeclared variable`，列号指向类型名 | [lang-7-undeclared-variable-points-at-type.md](lang/lang-7-undeclared-variable-points-at-type.md) |
 | LANG-8 | Low | 裸 `5.method()` 因 `5.` 被扫成浮点而报 `unexpected token`；加空格可绕 | [lang-8-numeric-literal-dot-lexing.md](lang/lang-8-numeric-literal-dot-lexing.md) |
 
@@ -515,7 +515,7 @@ DOC-28 已随本轮同步修正（见文末「测试覆盖度与文档一致性�
 
 | 文档 | 原表述 | 订正 |
 | --- | --- | --- |
-| [design/phase9.md](../docs/history/design/phase9.md) 头部 | 「设计已冻结，未实现；不要照此创建 `selfhost/ast/**`」 | 改为 9.1–9.7 已全部落地（v0.9.0 收口），Phase 10 起该实现是安装入口主线 |
+| [phases/v0-PH-9/card.md](../docs/phases/v0-PH-9/card.md) 头部 | 「设计已冻结，未实现；不要照此创建 `selfhost/ast/**`」 | 改为 9.1–9.7 已全部落地（v0.9.0 收口），Phase 10 起该实现是安装入口主线 |
 | [construction.md](../docs/construction.md) 状态行 / §1 表 / §2 推论 2 / §3.5 / §6（中英） | 堆对象创建「推迟到 Phase 1」，需手写 vptr | 堆对象已落地（[restore](../docs/history/design/restore.md) D1=A：`T *p = malloc\|calloc(...)` 声明后自动补 vptr），D5 记为「源文件自带 `<stdlib.h>`」 |
 | [polymorphism.md](../docs/polymorphism.md) 头部 | 「尚未实现：接口数组、接口字段的装箱」 | 已于 2026-10-17 补齐，由 `test/cases/28_iface_field.ct` 与 acceptance 的 p01–p08 钉住 |
 | [design/bootstrap.md](../docs/history/design/bootstrap.md) 状态行（中英） | 「目录结构与构建流程都还不存在」 | 自举链已在 `selfhost/**` 运行；仅目标 `ctrait/` 布局未落地 |
@@ -1088,7 +1088,7 @@ SH-25…SH-32 的修复都在工作树里，本轮逐条实测通过（详见
 1. DOC-51 → DOC-52：同一页 §7 / §11，中英同改，改完用报告附录的探针自查；
 2. SH-42（arena 堆化）：唯一动运行时的一步，先量后改，验收以 `ls -lh ct` 与九关为准；
 3. SH-44（摘要换 SHA-256）：涉及 `ct.lock` 兼容（旧 lock 失效需授权），并重生成 `test/pkg` 夹具；
-4. SH-43（`ct build` 能力）：**已定（2026-11-02）**——默认一步到位产出可执行文件，`--emit-c` 保留只发 C，见 [design/phase17.md](../docs/history/design/phase17.md) 的 17.6 / D17-9。
+4. SH-43（`ct build` 能力）：**已定（2026-11-02）**——默认一步到位产出可执行文件，`--emit-c` 保留只发 C，见 [phases/v0-PH-17/card.md](../docs/phases/v0-PH-17/card.md) 的 17.6 / D17-9。
 
 ### 不立案与偏差订正
 
@@ -1386,7 +1386,7 @@ DOC-44 记录过的问题：README 处置节说多轮已关闭，但条目状态
 （09/10/12 的 OO 化根因），按「现状 / 复现 / 影响 / 建议方向」落账，语言侧本轮不动。
 
 同轮登记判据缺口 [DOC-69](docs/doc69-phase26-exit-criteria-patch-gap.md)：Phase 26 的 E1–E8 冻结时
-未覆盖 v0.26.4 补丁交付物；映射写在 `docs/history/design/phase26.md` §9.9，冻结原文不动。
+未覆盖 v0.26.4 补丁交付物；映射写在 `docs/phases/v0-PH-26/card.md` §9.9，冻结原文不动。
 
 同轮登记 [DOC-70](docs/doc70-each-statement-form-unimplemented.md)：语句级 `foreach (…) { … item … }`
 未实现、未排期；命名上不把库层 `each` 升为语句关键字，语句形态定名 `foreach`，旧名 `each(map){…}`

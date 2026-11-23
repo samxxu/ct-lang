@@ -1,4 +1,4 @@
-# LANG-21 · 最小 ADT / `match`（PH-84 需求）
+# LANG-21 · 最小 ADT / `match`（v0-PH-84 需求）
 
 | 项 | 值 |
 | --- | --- |
@@ -39,9 +39,9 @@ ct-ast 重写要把 `node->kind` 的 tag 判别 + `switch` 换成**穷尽 `match
 
 ## REV 复核（2026-11-21，`d863fedb`）
 
-**结论：reopened。** PH-84 的 E84-1/2/4/6/7/8 核心行为通过；typedef ADT 形态在
+**结论：reopened。** v0-PH-84 的 E84-1/2/4/6/7/8 核心行为通过；typedef ADT 形态在
 `match` 与跨单元两处失败。完整证据见
-[PH-84 REV 复核](../../docs/reviews/2026-11-21-phase84-rev-verdict.md) §3。
+[v0-PH-84 REV 复核](../../docs/reviews/2026-11-21-phase84-rev-verdict.md) §3。
 
 ### F1 · `Alias` 不能作 `match` 主语
 
@@ -149,7 +149,7 @@ $ bash test/ast/p84_layout.sh <fix>   → p84layout: 26 passed, 0 failed
 - **版本**：五处 `CTC_VERSION` 均 `0.84.1`；提交 `4f5b2cd2`（test 红）→
   `53e0019f`（fix）→ `1cc20c25`（收口）。
 
-完整命令与原始输出见 [PH-84 REV 复核 §9](../../docs/reviews/2026-11-21-phase84-rev-verdict.md)。
+完整命令与原始输出见 [v0-PH-84 REV 复核 §9](../../docs/reviews/2026-11-21-phase84-rev-verdict.md)。
 
 ## 关联
 

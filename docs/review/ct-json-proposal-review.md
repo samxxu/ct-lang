@@ -277,7 +277,7 @@ b.release();
 
 | 提案项 | 提案说法 | 实测/规约 | 结论 |
 | --- | --- | --- | --- |
-| L1 `v["key"]` | 待落地；引「`phase40-draft.md` 的 D40-1–D40-9」 | **引用错了**：`docs/history/design/phase40.md` 是 `errdefer` 的卡（文件首行「Phase 40 — `errdefer` 与显式错误出口」，D40-* 是它的决策编号）；L1 的草案是 `docs/proposals/custom-index-protocol.md`（RL1-D1–D7，首行自述「未立项 / 未过分析，不作数」） | **未落地** |
+| L1 `v["key"]` | 待落地；引「`phase40-draft.md` 的 D40-1–D40-9」 | **引用错了**：`docs/phases/v0-PH-40/card.md` 是 `errdefer` 的卡（文件首行「Phase 40 — `errdefer` 与显式错误出口」，D40-* 是它的决策编号）；L1 的草案是 `docs/proposals/custom-index-protocol.md`（RL1-D1–D7，首行自述「未立项 / 未过分析，不作数」） | **未落地** |
 | `?.` | 待落地 | 无 `?.` token；Phase 44 是后缀 `?`（`q_suffix_ahead`） | **未落地** |
 | errdefer | 「Phase 40 已落地，直接用」 | Phase 40 ✅（`roadmap:56`）；但只在错误出口执行（`:2345`） | **已落地，语义不同** |
 | own / Drop | 已落地 | 是；但 `own` 不接工厂返回、不写返回类型；跨单元 Drop 空桩 | **有条件成立** |

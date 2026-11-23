@@ -2,10 +2,10 @@
 
 | 项 | 值 |
 | --- | --- |
-| 状态 | **已被 PH-62 吸收**；保留作 S1 切片参考，不单独排期、不排 phase 卡 |
+| 状态 | **已被 v0-PH-62 吸收**；保留作 S1 切片参考，不单独排期、不排 phase 卡 |
 | 来源 | 负责人语言需求（2026-11-15）：`fields[] = 32;` 表示在末尾追加一个元素 |
-| 拟占 | 并入 **PH-62**（`v[] = x` 作为 S1 切片），不再单独占号 |
-| 关联 | `Vec::push` / `Vec::set` / `Vec::at` / `Vec::has`、SH-79（模型导出）、PH-58 |
+| 拟占 | 并入 **v0-PH-62**（`v[] = x` 作为 S1 切片），不再单独占号 |
+| 关联 | `Vec::push` / `Vec::set` / `Vec::at` / `Vec::has`、SH-79（模型导出）、v0-PH-58 |
 | 定性 | **语法糖**（能力已存在：`v.push(x)`）；新语法形态 → 走提案，不走 patch |
 
 ## 1 要解决什么
@@ -133,7 +133,7 @@ v.push(32);         // rc=0；len=3，v[2]=32
 
 ## 6 非目标
 
-- 原「不放开 `v[i] = x`」**已废止**：由 PH-62 接管（`set` 补齐再写，`len = max(len, i+1)`）；
+- 原「不放开 `v[i] = x`」**已废止**：由 v0-PH-62 接管（`set` 补齐再写，`len = max(len, i+1)`）；
   本提案只保留 `v[] = x` 切片，不再作为独立非目标；
 - 不支持 `Map` / C 数组 / `Str` 的空下标；
 - 不做 `insert(i, x)` / `reserve` / `resize` / 拼接；
@@ -158,7 +158,7 @@ v.push(32);         // rc=0；len=3，v[2]=32
 | A4 | 读 `v[]`、`v[] += 1`、`v[] == x`、`v[][]`、`v[]={1,2}` 全部硬错，诊断含「只能出现在 `=` 左侧」 |
 | A5 | `Map<char*,int> m; m[]=1;` → 硬错，提示用 `put(k, v)` |
 | A6 | `int a[2]; a[]=1;` → 硬错，提示 C 数组不能增长 |
-| A7 | 原「`v[0]=9;` 仍报 read-only」**已废止**：由 PH-62 改为可写 + `set` 补齐再写，见 [可写下标提案](ct-writable-subscript-proposal.md) |
+| A7 | 原「`v[0]=9;` 仍报 read-only」**已废止**：由 v0-PH-62 改为可写 + `set` 补齐再写，见 [可写下标提案](ct-writable-subscript-proposal.md) |
 | A8 | RHS 类型不匹配 → 与 `push` 相同的类型错误，不写 `.c` |
 | A9 | `make_vec()[] = 1;` → 硬错（接收者必须是 lvalue） |
 | A10 | 生成 C 只含 `Vec_<enc>_push` + abort 包装；`.abi.h` 逐字节不变 |
@@ -166,10 +166,10 @@ v.push(32);         // rc=0；len=3，v[2]=32
 
 ## 9 排位与后续
 
-- 位置：**并入 PH-62**（[容器下标可写与嵌套链](ct-writable-subscript-proposal.md)），作为其 S1 切片；
-  不再单独占 PH-61，也不单独排期；
-- 理由：PH-62 要放开 `v[i] = x`，与本提案原「不放开」非目标直接冲突；先发会造成同一处语法/发射返工；
+- 位置：**并入 v0-PH-62**（[容器下标可写与嵌套链](ct-writable-subscript-proposal.md)），作为其 S1 切片；
+  不再单独占 v0-PH-61，也不单独排期；
+- 理由：v0-PH-62 要放开 `v[i] = x`，与本提案原「不放开」非目标直接冲突；先发会造成同一处语法/发射返工；
 - 依赖：无语言依赖；改 `frontend/parse/Expr.h.ct` 与 `Emitter`，与 TypeCheck/Expr 族**串行**；
 - 研判记录见 [ct-append-subscript-proposal-review](../review/ct-append-subscript-proposal-review.md)；
-  该记录的「不放开 `v[i] = x`」结论已被 PH-62 取代；
+  该记录的「不放开 `v[i] = x`」结论已被 v0-PH-62 取代；
 - 提案阶段不改 `selfhost/**`、不排 phase 卡。

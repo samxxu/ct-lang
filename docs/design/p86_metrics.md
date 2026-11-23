@@ -1,7 +1,7 @@
-# PH-86 S86d — 词法器重写的行数与编译耗时（v0.86.0）
+# v0-PH-86 S86d — 词法器重写的行数与编译耗时（v0.86.0）
 
 > **S86d 交付物**。基线 `1e2c30f7`（v0.85.0），当前 v0.86.0。
-> 对照 [PH-85 spike](p85_spike.md) §1；原始命令与输出见
+> 对照 [v0-PH-85 spike](p85_spike.md) §1；原始命令与输出见
 > [test/probes/p86_metrics_evidence.txt](../../test/probes/p86_metrics_evidence.txt)。
 > 判据：E86-6（行数/耗时报告入库）、E86-3（第 1 层逐字节不变）。
 
@@ -45,9 +45,9 @@
 `strlen + memcmp`；token 非常短（≤7 字节），差异落在构建噪声内。零拷贝没有再引入
 分配，`tok_cstr` 只用于 37 个 C 边界实参。
 
-## 4 对照 PH-85 spike
+## 4 对照 v0-PH-85 spike
 
-| 指标 | PH-85 spike（结构切片） | PH-86（本卡） |
+| 指标 | v0-PH-85 spike（结构切片） | v0-PH-86（本卡） |
 | --- | --- | --- |
 | `Lexer.h.ct` | 391 → 425（+34） | 391 → 458（+67） |
 | `ct-ast build --emit-c` | 1053 → 994 ms | 1053.2 → 1080.2 ms |

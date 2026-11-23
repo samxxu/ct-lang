@@ -89,9 +89,9 @@ rc=0
 | R4 | **`file` 字段必须是输入单元**：`m.json` 里每个 `file` ∈ 输入单元集合；不得出现 `lib/std/*`；输入的 `Box` / `main` 必须在 `structs` / `functions` 里 |
 | R5 | 不带 `--emit-map` 时零产物；同一输入重复运行 JSON 逐字节相同 |
 
-## 与 LANG-10 / PH-58 的关系
+## 与 LANG-10 / v0-PH-58 的关系
 
-- **不合并**：LANG-10 / PH-58 是**诊断**通道（错误/警告的 JSON 与字段位置）；SH-79 是**代码模型**
+- **不合并**：LANG-10 / v0-PH-58 是**诊断**通道（错误/警告的 JSON 与字段位置）；SH-79 是**代码模型**
   导出（struct/函数/调用图）。消费者与稳定性要求不同。
 - 共同点只有「机器可读输出的信封与版本化」；这条统一口径放到模型导出提案
   （[ct-model-export-proposal](../../docs/proposals/ct-model-export-proposal.md) §5），
@@ -102,9 +102,9 @@ rc=0
 `Driver` / `Module` / `Emitter` 与 LANG-11、SH-76 同族，**必须串行发版**；根因不同，**不合并**。
 `Emitter` 的改动还会与 LANG-9 的 header/ABI 窗口冲突，排期时把 0.53.8 放在 LANG-9 之前。
 
-## 处置（2026-11-19，PH-74）
+## 处置（2026-11-19，v0-PH-74）
 
-- 提交：`a0f2e2c`（R1–R3 实现，commit 见 `git log --grep PH-74`）
+- 提交：`a0f2e2c`（R1–R3 实现，commit 见 `git log --grep v0-PH-74`）
 - 改动：model/map 的 prog 改用 entry unit（按输入路径匹配，`--lib` 用 root_u）；
   `--lib` 分支在 ABI 头之后写 map/model；字段 `loc` 增 `col` 并修正新单元
   `lstart` 未重置导致的负列。
@@ -113,7 +113,7 @@ rc=0
 
 ## 处置（2026-11-20，DEV · 复跑）
 
-- 结论：PH-74 的修复仍在 HEAD；只记录证据，不改 `status`。
+- 结论：v0-PH-74 的修复仍在 HEAD；只记录证据，不改 `status`。
 - 命令/输出：
 
 ```console
@@ -136,6 +136,6 @@ $ echo $?
 0
 ```
 
-处置段引用的 `a0f2e2c` 不是可解析 sha（`git rev-parse` 报 unknown）；实际 PH-74
+处置段引用的 `a0f2e2c` 不是可解析 sha（`git rev-parse` 报 unknown）；实际 v0-PH-74
 提交为 `ffc08538`（模型行列与 SH-79 两 facet）和 `5d271142`（收口），均在 HEAD 祖先。
 探针绿，结论不受引用瑕疵影响。

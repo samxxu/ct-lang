@@ -14,12 +14,12 @@
 | `what` | 允许自定义 struct 在 `impl` 中声明签名匹配的 `get` / `set` 后使用 `obj[key]` / `obj[idx]` 下标语法，由编译器展开为对应方法调用；类型未声明该协议时是编译期硬错，错误信息必须指名类型。 |
 | `why` | Agent 内核与 Rill DSL 的 JSON/参数表需要在自定义容器上写 `env["key"]`、`args[i]`；今天只有 `Vec` / `Map` 有下标糖，用户类型只能写 `env.get("key")`，把宿主语言的容器习惯泄漏进上层 DSL，也让「换容器实现」变成调用点改写。该语法只做方法调用的语法糖，零运行时，符合 Z1/Z3。 |
 | `priority` | `P0` |
-| `status` | `done`（PH-52 方案 A，v0.52.0；只主张单层字符串键，`v[0]` 的已知洞见 `REQ-JSACCESS-1` 与 `REQ-INDEX-1`） |
+| `status` | `done`（v0-PH-52 方案 A，v0.52.0；只主张单层字符串键，`v[0]` 的已知洞见 `REQ-JSACCESS-1` 与 `REQ-INDEX-1`） |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-15 |
 | `block` | 空（未阻塞） |
 
-> **落地口径（2026-11-15 回填）**：PH-52 按方案 A 交付，夹具以 `p52_*` 命名（`p52_read` / `p52_generic` /
+> **落地口径（2026-11-15 回填）**：v0-PH-52 按方案 A 交付，夹具以 `p52_*` 命名（`p52_read` / `p52_generic` /
 > `p52_write` / `p52_c_passthrough` / `p52_str_only` / `p52_private` / `p52_subscript.sh`），下表 A1–A7 里
 > `233_*` / `L1_*` 的旧命名未采用；判据内容由 `test/ast/p52_*` 与 `check-ast.sh` 的对应断言覆盖。
 > `v[0]` 不在方案 A 的验收面内，已拆到 `REQ-JSACCESS-1` 与 `REQ-INDEX-1`。
@@ -66,7 +66,7 @@ L4 走契约，L7/L10/L8 拒绝或后置；本池只登记 L1。
 
 ### 方案草案
 
-- [custom-index-protocol.md](../proposals/custom-index-protocol.md)（未立项；PH-40 已由 errdefer 占用，等待 AN 与排期）。
+- [custom-index-protocol.md](../proposals/custom-index-protocol.md)（未立项；v0-PH-40 已由 errdefer 占用，等待 AN 与排期）。
 
 ## REQ-JSACCESS-1 — 自定义下标的参数类型匹配（支持 `v[0]`）
 
@@ -74,12 +74,12 @@ L4 走契约，L7/L10/L8 拒绝或后置；本池只登记 L1。
 | --- | --- |
 | `id` | `REQ-JSACCESS-1` |
 | `what` | 自定义下标的协议匹配从「方法名 + 参数个数」扩展到「方法名 + 参数类型」：同一类型可并存 `get(char *)` 与 `get(int)`，`v["k"]` 与 `v[0]` 各选其版；无匹配时编译期硬错并列出候选签名。 |
-| `why` | 「JS 风格访问」长期目标（`doc["a"]["b"]`、`doc[0]["k"]`）的组成部分。PH-52 的方案 A 只覆盖单层字符串键；实测 `v[0]` 会展开成 `get(0)` 并静默返回空（PH-52 D52-6）。用户 2026-11-15 明确：等语言特性更新完成后要完整实现该目标，**不得砍掉**。 |
+| `why` | 「JS 风格访问」长期目标（`doc["a"]["b"]`、`doc[0]["k"]`）的组成部分。v0-PH-52 的方案 A 只覆盖单层字符串键；实测 `v[0]` 会展开成 `get(0)` 并静默返回空（v0-PH-52 D52-6）。用户 2026-11-15 明确：等语言特性更新完成后要完整实现该目标，**不得砍掉**。 |
 | `priority` | `P1` |
 | `status` | `open` |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-15 |
-| `block` | 空（等 PH-52 收口后评估；**不占相号**） |
+| `block` | 空（等 v0-PH-52 收口后评估；**不占相号**） |
 
 ### 验收判据（实现后生效）
 
@@ -88,19 +88,19 @@ L4 走契约，L7/L10/L8 拒绝或后置；本池只登记 L1。
 | A1 | 同类型并存 `get(char *)` / `get(int)`：`v["k"]` 与 `v[0]` 各展开为对应版本 | `./selfhost/check-ast.sh 2>&1 \| grep -F "ok    jsaccess_overload_both"` |
 | A2 | 只有 `get(char *)` 时 `v[0]` 是编译期硬错（不再是静默空） | `./selfhost/check-ast.sh 2>&1 \| grep -F "JSACCESS_1_no_int_get"` |
 | A3 | 实参类型无匹配时硬错，并列出候选签名 | `./selfhost/check-ast.sh 2>&1 \| grep -F "JSACCESS_2_no_candidate"` |
-| A4 | PH-52 的单层字符串键（`v["k"]`）零回归 | `./selfhost/check-ast.sh 2>&1 \| grep -F "ok    24x_custom_index_read"` |
+| A4 | v0-PH-52 的单层字符串键（`v["k"]`）零回归 | `./selfhost/check-ast.sh 2>&1 \| grep -F "ok    24x_custom_index_read"` |
 | A5 | 多级连写 `v["a"]["b"]` 仍由包层承担，本条不主张 | 文档句 + `p52` 夹具不回归 |
 
 ### 范围外
 
 - 多级连写、指针接收者进协议、其他运算符重载。
 - 跨单元导出面的重载可见性（另案）。
-- 不占相号：排期时另立，不得在 PH-52 内扩面。
+- 不占相号：排期时另立，不得在 v0-PH-52 内扩面。
 
 ### 来源
 
 裁决记录 U-1 A（2026-11-15 签字）+ 用户原话「等 Ct 完成了语言特性的更新之后，要完整实现这个目标」。
-PH-52 的 D52-6 指向本条。
+v0-PH-52 的 D52-6 指向本条。
 
 ## REQ-INDEX-1 — 用户类型下标运算符：把「名 + 参数个数」的糖补成完整协议
 
@@ -108,7 +108,7 @@ PH-52 的 D52-6 指向本条。
 | --- | --- |
 | `id` | `REQ-INDEX-1` |
 | `what` | 用户类型在固有 `impl` 中声明 `V get(K)` / `void set(K, V)`（或借用形态 `V *get(K)`）后，`x[k]` 读、`x[k] = v` 写、`*x[k] = v` 借写三种形态都由编译器静态展开为方法调用；同类型可并存不同参数类型的 `get`，实参类型决定选哪一版；`+=` / `++` / `&x[k]` 要么明确支持、要么明确硬错。语言只规定「协议」，不规定缺失/越界语义（由包用 `NULL` 或 `Option<V>` 表达）。 |
-| `why` | PH-52 交付的方案 A 只按「名 + 参数个数 + 非 static」匹配，于是 `char *get(char*)` 存在时 `x[0]` 会静默展开成 `get(0)` 并返回空（D52-6）。下游 ct-json 的 `doc[0]["k"]`、rill-dsl 的容器下标都卡在这一层，今天只能提供 `get_idx(i)` 过渡方法，把容器的调用习惯泄漏进上层 DSL。用户 2026-11-15 拍板「方向是必须支持」。 |
+| `why` | v0-PH-52 交付的方案 A 只按「名 + 参数个数 + 非 static」匹配，于是 `char *get(char*)` 存在时 `x[0]` 会静默展开成 `get(0)` 并返回空（D52-6）。下游 ct-json 的 `doc[0]["k"]`、rill-dsl 的容器下标都卡在这一层，今天只能提供 `get_idx(i)` 过渡方法，把容器的调用习惯泄漏进上层 DSL。用户 2026-11-15 拍板「方向是必须支持」。 |
 | `priority` | `P1` |
 | `status` | `open` |
 | `owner` | REQ（待指派） |
@@ -123,7 +123,7 @@ PH-52 的 D52-6 指向本条。
 | A2 | 只有 `char *get(char *)` 时 `x[0]` 是编译期硬错，文案列出候选签名 | `./selfhost/check-ast.sh 2>&1 \| grep -F "INDEX_1_no_candidate"` |
 | A3 | 借用形态 `int *get(int)`：`*x[0] = 7;` 发射为对返回指针的解引用赋值，运行读到 `7` | `./selfhost/check-ast.sh 2>&1 \| grep -F "ok    index_borrow_write"` |
 | A4 | `x[k] += 1` / `x[k]++` / `&x[k]` 的行为二值化：要么全支持（借用形态下等价于 `set` / 解引用），要么全部硬错且文案一致 | `./selfhost/check-ast.sh 2>&1 \| grep -F "INDEX_L"` |
-| A5 | 写在值位置、右值接收者、`static`、参数个数不符仍是硬错，文案与 PH-52 的 L52-* 逐字不回归 | 既有 `test/ast/p52_*` 与 `p52_subscript.sh` 全绿 |
+| A5 | 写在值位置、右值接收者、`static`、参数个数不符仍是硬错，文案与 v0-PH-52 的 L52-* 逐字不回归 | 既有 `test/ast/p52_*` 与 `p52_subscript.sh` 全绿 |
 | A6 | `Vec` / `Map` 内建下标零回归（`v[0]`、`m["k"]` 与写保护文案逐字不变） | 既有 `p52_str_only` / L31 负例全绿 |
 | A7 | 全量门禁零失败 | `bash selfhost/check-all.sh 2>&1 \| tail -3` |
 
@@ -138,7 +138,7 @@ PH-52 的 D52-6 指向本条。
 ### 来源
 
 用户裁决（2026-11-15，「Ct 要增加用户类型可定义下标运算符的语言能力，方向是必须支持」）+ ct-json 复评实测。
-承接 `REQ-L1`（PH-52 方案 A 已交付）与 `REQ-JSACCESS-1`（参数类型匹配）。
+承接 `REQ-L1`（v0-PH-52 方案 A 已交付）与 `REQ-JSACCESS-1`（参数类型匹配）。
 设计草案：[user-index-operator.md](../proposals/user-index-operator.md)。
 
 ## REQ-ABI-1 — 用 ABI 哈希做导出面校验（评估后不采纳）
@@ -232,15 +232,15 @@ PH-52 的 D52-6 指向本条。
 | --- | --- |
 | `id` | `REQ-TYPE-1` |
 | **现象** | `--types` 只对 `ct check` 有效；`ct build` / `ct compile` 不进入 §4.53 的三类判定，`ct compile` 可以 rc=0 写出 `cc` 拒收的 C。把它做成默认不是开关问题：CLI 语义、严重级、全部 golden 与 archive ratchet 会一起变。 |
-| **证据锚点** | [language-spec.md:2206-2207](../language-spec.md#453-可选类型检查-ct-check---typesphase-32)（「`ct build` / `ct compile` 不进入这些判定」）；[check-goldens.sh:1-26](../../selfhost/check-goldens.sh#L1-L26)（逐字节 golden）；[check-archive.sh:1-20](../../selfhost/check-archive.sh#L1-L20)（归档 oracle 逐字节 compare）；已知假阳性 `examples/18_generic_string_table/generic_string_table.ct:103`（由 `docs/design/phase45.md` S1 先修）。 |
+| **证据锚点** | [language-spec.md:2206-2207](../language-spec.md#453-可选类型检查-ct-check---typesphase-32)（「`ct build` / `ct compile` 不进入这些判定」）；[check-goldens.sh:1-26](../../selfhost/check-goldens.sh#L1-L26)（逐字节 golden）；[check-archive.sh:1-20](../../selfhost/check-archive.sh#L1-L20)（归档 oracle 逐字节 compare）；已知假阳性 `examples/18_generic_string_table/generic_string_table.ct:103`（由 `docs/phases/v0-PH-45/card.md` S1 先修）。 |
 | **影响** | 461 语料 rc 与 `test/cases/*.expected.c` 全量重生成；`check-archive` 的 ratchet 口径变化；仓库方法论从「opt-in 检查」改为「默认严格」。 |
-| **建议做法** | 等 `docs/design/phase45.md` S1 落地、`--types` 在 40 个 example 上干净后，再按「CLI / 严重级 / golden 重生成 / 语料平价」拆 3–5 个切片评估；不在 43 / 45 内夹带。**同一要求另有一半已被覆盖**：默认路径不得以 rc=0 写出 `cc` 拒收的 C、`--types` 判得出的错必须与默认路径同判据——这是对 PH-43 收口（`v0.43.0`）复查后确认的既有事实，`err:` 分支已硬错；剩余面是普通赋值 / `return` / 容器的全量判定。见 `docs/design/phase45.md` §0.3。 |
+| **建议做法** | 等 `docs/phases/v0-PH-45/card.md` S1 落地、`--types` 在 40 个 example 上干净后，再按「CLI / 严重级 / golden 重生成 / 语料平价」拆 3–5 个切片评估；不在 43 / 45 内夹带。**同一要求另有一半已被覆盖**：默认路径不得以 rc=0 写出 `cc` 拒收的 C、`--types` 判得出的错必须与默认路径同判据——这是对 v0-PH-43 收口（`v0.43.0`）复查后确认的既有事实，`err:` 分支已硬错；剩余面是普通赋值 / `return` / 容器的全量判定。见 `docs/phases/v0-PH-45/card.md` §0.3。 |
 | **当前判定** | **本期不做**。 |
 | `priority` | `P2` |
 | `status` | `open` |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-14 |
-| `block` | 依赖 `docs/design/phase45.md` 收口与用户对默认策略的单独签字 |
+| `block` | 依赖 `docs/phases/v0-PH-45/card.md` 收口与用户对默认策略的单独签字 |
 
 ## REQ-MEM-1 — 基于 CFG 的所有权 / 资源数据流分析（本期不做）
 
@@ -250,7 +250,7 @@ PH-52 的 D52-6 指向本条。
 | **现象** | 提案方向的「CFG + 数据流所有权」在仓库里没有承载物：无 CFG、无 IR、无基本块、无独立 pass 框架，判定全部内联在递归下降解析器与符号表里；泄漏诊断走 `check-archive` 的逐字节比对。 |
 | **证据锚点** | 全仓 `cfg / basic block / dominator / dataflow` 只命中一处无关注释 [Expr.h.ct:3044](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3044)；[check-ast.sh:34-38](../../selfhost/check-ast.sh#L34-L38)（泄漏与错误恢复两段与 L2 逐字节比对）；[check-ast.sh:13](../../selfhost/check-ast.sh#L13)（通用等价判据明确「不比诊断」）；[Memory.h.ct:44-60](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L44-L60)（`own_decl` / `own_base` 表）；[language-spec.md:1285](../language-spec.md#434-表达式里的赋值ct-ast)（值位置赋值绕过记账）。 |
 | **影响** | 任何新分析要么输出与老实现完全一致的文本，要么改 golden——后者等于推翻「golden 是 oracle」；量级 5,000 行以上（AST→CFG、流敏感状态机、跨过程摘要、夹具与门禁四块）。 |
-| **建议做法** | 不建新框架。先把已判得出的错误接到默认出口（PH-43），再做 `REQ-MEM-2` 的单元内一层摘要；CFG 只作为「触发条件出现后再评估」的储备。 |
+| **建议做法** | 不建新框架。先把已判得出的错误接到默认出口（v0-PH-43），再做 `REQ-MEM-2` 的单元内一层摘要；CFG 只作为「触发条件出现后再评估」的储备。 |
 | **当前判定** | **本期不做**；量级 5,000+ 行，超过任一已收口相。 |
 | `priority` | `P3` |
 | `status` | `dormant` |
@@ -267,7 +267,7 @@ PH-52 的 D52-6 指向本条。
 | **证据锚点** | [language-spec.md:1497-1498](../language-spec.md#440-borrow-与-handbackphase-5-续仅-ct-ast)（文档自认「不要宣称『有了 borrow 就不会悬垂』」）；[Memory.h.ct:44-60](../../selfhost/ct-ast/backend/mem/Memory.h.ct#L44-L60)；[Stmt.h.ct:284-324](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L284-L324)（`retire_before_return` / jump 出口注入）。 |
 | **影响** | 栈地址写进全局或字段时 `check` / `--types` 均 rc=0；ASAN 默认配置也看不见（见 `REQ-CI-2`）。 |
 | **最小可行形态** | 单元内、**一层调用**的写入摘要：被调函数若把某个形参写入全局 / 字段 / 容器，则该形参必须标 `borrow`，否则调用点硬错；函数指针与递归走保守放行；不做跨单元、不做完整生命周期。量级 300–600 行 + 夹具。 |
-| **为什么不进 43 / 45** | PH-43 只判 `return err:` 载荷可赋值；PH-45 只做闭包 `return` 跳过与指针基类型 / 层数判据。二者都不引入「写入摘要」这一新判定族，也不需要新符号表；硬塞会把两个小相扩成类型系统相。 |
+| **为什么不进 43 / 45** | v0-PH-43 只判 `return err:` 载荷可赋值；v0-PH-45 只做闭包 `return` 跳过与指针基类型 / 层数判据。二者都不引入「写入摘要」这一新判定族，也不需要新符号表；硬塞会把两个小相扩成类型系统相。 |
 | **建议做法** | 等 43 / 44 / 45 收口后单独立项；先只做单元内一层摘要，跨单元与完整 lifetime 继续留在池里。 |
 | **当前判定** | **待定**（本期不立项）。 |
 | `priority` | `P2` |
@@ -281,10 +281,10 @@ PH-52 的 D52-6 指向本条。
 | 字段 | 值 |
 | --- | --- |
 | `id` | `REQ-CI-1` |
-| **现象** | `check-tsan.sh` 与 PH-41 卡都写「nightly Linux job 会跑」，但 `nightly.yml` 只有 `sanitizers` 与 `fuzz` 两个 job，没有 tsan。二者必须择一对齐：补 job，或改脚本 / 卡措辞。 |
-| **证据锚点** | [nightly.yml:12-33](../../.github/workflows/nightly.yml#L12-L33)（仅 sanitizers + fuzz）；[check-tsan.sh:6-7](../../selfhost/check-tsan.sh#L6-L7)（「The nightly workflow runs it on Linux」）；[phase41-draft.md:240](../history/design/phase41.md#L240)、[phase41-draft.md:324](../history/design/phase41.md#L324)（R7「nightly Linux job」）。 |
+| **现象** | `check-tsan.sh` 与 v0-PH-41 卡都写「nightly Linux job 会跑」，但 `nightly.yml` 只有 `sanitizers` 与 `fuzz` 两个 job，没有 tsan。二者必须择一对齐：补 job，或改脚本 / 卡措辞。 |
+| **证据锚点** | [nightly.yml:12-33](../../.github/workflows/nightly.yml#L12-L33)（仅 sanitizers + fuzz）；[check-tsan.sh:6-7](../../selfhost/check-tsan.sh#L6-L7)（「The nightly workflow runs it on Linux」）；[phase41-draft.md:240](../phases/v0-PH-41/card.md#L240)、[phase41-draft.md:324](../phases/v0-PH-41/card.md#L324)（R7「nightly Linux job」）。 |
 | **影响** | TSan 实际未在 CI 执行；文档与 CI 事实不一致，读者会误以为并发回归有人守。 |
-| **建议做法** | 二选一：① 在 `nightly.yml` 增加 ubuntu + `-fsanitize=thread` 的 tsan job；② 把脚本与 PH-41 卡改成「TSan 仅本地手动跑」。**本轮只记录，不动 CI / 不动脚本 / 不改卡。** |
+| **建议做法** | 二选一：① 在 `nightly.yml` 增加 ubuntu + `-fsanitize=thread` 的 tsan job；② 把脚本与 v0-PH-41 卡改成「TSan 仅本地手动跑」。**本轮只记录，不动 CI / 不动脚本 / 不改卡。** |
 | **当前判定** | **待定**（口径一致性修复，P1；需用户就「补 job 还是改口径」二选一）。 |
 | `priority` | `P1` |
 | `status` | `open` |

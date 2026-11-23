@@ -20,7 +20,7 @@ confirmed-by: REQ-review-v077-1
 2. ct-ast 无单元测试（Lexer/Parser/TypeCheck/Emitter 只端到端）；
 3. 容量上限只测 `MAX_CALLS`；`MAX_GENERIC_INSTS=64`、`MAX_CLOSURES=64`、`MAX_PARAMS=16`、`MAX_STRUCT_TPARAMS=2` 无边界夹具；
 4. sanitizer/fuzz 只在 nightly；
-5. PH-64 后能力无 example：freestanding/alloc、c-boundary/shim、emit-model、check --types；
+5. v0-PH-64 后能力无 example：freestanding/alloc、c-boundary/shim、emit-model、check --types；
 6. examples 实际 51 个（报告写 52），教程仍写 16；
 7. `49_socket` 是文档型样例（只有 README，不进门禁），依赖的 `FileDesc`/`Socket` 仓内不存在；
 8. 工具链矩阵缺失：GCC/clang 之外（ICCARM 等）未验证，生成 C 依赖 `__attribute__`；
