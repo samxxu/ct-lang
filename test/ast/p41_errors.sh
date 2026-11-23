@@ -2,19 +2,21 @@
 # Phase 41 L41 diagnostics: one exact message per negative fixture.
 set -u
 ctast=$1
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pXX.XXXXXX") || exit 1
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 pass=0
 fail=0
 check() {
     name=$1
     want=$2
-    if "$ctast" check "test/ast/errors/$name/prog.ct" >/tmp/p41e.out 2>/tmp/p41e.err; then
+    if "$ctast" check "test/ast/errors/$name/prog.ct" >"$tmp/p41e.out" 2>"$tmp/p41e.err"; then
         echo "FAIL $name: expected non-zero"; fail=$((fail + 1)); return
     fi
-    if ! grep -qF "$want" /tmp/p41e.err; then
-        echo "FAIL $name: missing '$want'"; sed 's/^/  /' /tmp/p41e.err; fail=$((fail + 1)); return
+    if ! grep -qF "$want" "$tmp/p41e.err"; then
+        echo "FAIL $name: missing '$want'"; sed 's/^/  /' "$tmp/p41e.err"; fail=$((fail + 1)); return
     fi
-    if ! grep -qE '^test/ast/errors/.*/prog\.ct:[0-9]+:[0-9]+: error: ' /tmp/p41e.err; then
-        echo "FAIL $name: missing file:line:col"; sed 's/^/  /' /tmp/p41e.err; fail=$((fail + 1)); return
+    if ! grep -qE '^test/ast/errors/.*/prog\.ct:[0-9]+:[0-9]+: error: ' "$tmp/p41e.err"; then
+        echo "FAIL $name: missing file:line:col"; sed 's/^/  /' "$tmp/p41e.err"; fail=$((fail + 1)); return
     fi
     pass=$((pass + 1))
 }

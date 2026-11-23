@@ -11,12 +11,12 @@ run() {
     name=$1
     code=$2
     kind=$3
-    printf '%s\n' "$code" > /tmp/p44syntax.ct
-    "$ctast" check /tmp/p44syntax.ct >/tmp/p44syntax.out 2>/tmp/p44syntax.err
+    printf '%s\n' "$code" > "$tmp/p44syntax.ct"
+    "$ctast" check "$tmp/p44syntax.ct" >"$tmp/p44syntax.out" 2>"$tmp/p44syntax.err"
     rc=$?
     case "$kind" in
     S|T)
-        [ "$rc" -eq 0 ] || { echo "FAIL $name: expected rc=0, got $rc"; head -2 /tmp/p44syntax.err; return 1; }
+        [ "$rc" -eq 0 ] || { echo "FAIL $name: expected rc=0, got $rc"; head -2 "$tmp/p44syntax.err"; return 1; }
         ;;
     E)
         [ "$rc" -ne 0 ] || { echo "FAIL $name: expected a syntax error (missing ':')"; return 1; }
@@ -25,6 +25,8 @@ run() {
     return 0
 }
 ctast=${1:?usage: p44_try_syntax.sh <ct-ast>}
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pXX.XXXXXX") || exit 1
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 pass=0
 fail=0
 for spec in \

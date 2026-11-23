@@ -6,28 +6,30 @@
 # fourth argument pins the exact `line:column`.
 set -u
 ctast=${1:?usage: p44_try_errors.sh <ct-ast>}
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pXX.XXXXXX") || exit 1
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 pass=0
 fail=0
 check() {
     d=$1
     want=$2
     pos=${3:-}
-    "$ctast" compile "test/ast/errors/$d/prog.ct" -o "/tmp/p44-$d.c" >/tmp/p44.out 2>/tmp/p44.err
+    "$ctast" compile "test/ast/errors/$d/prog.ct" -o ""$tmp/p44-$d.c"" >"$tmp/p44.out" 2>"$tmp/p44.err"
     if [ $? -eq 0 ]; then
         echo "FAIL $d: rc=0"
         fail=$((fail + 1))
         return
     fi
     if [ -n "$pos" ]; then
-        if ! grep -Fq "test/ast/errors/$d/prog.ct:$pos: error: $want" /tmp/p44.err; then
+        if ! grep -Fq "test/ast/errors/$d/prog.ct:$pos: error: $want" "$tmp/p44.err"; then
             echo "FAIL $d: missing '$pos: error: $want'"
-            sed 's/^/  /' /tmp/p44.err
+            sed 's/^/  /' "$tmp/p44.err"
             fail=$((fail + 1))
             return
         fi
-    elif ! grep -Fq "$want" /tmp/p44.err; then
+    elif ! grep -Fq "$want" "$tmp/p44.err"; then
         echo "FAIL $d: missing '$want'"
-        sed 's/^/  /' /tmp/p44.err
+        sed 's/^/  /' "$tmp/p44.err"
         fail=$((fail + 1))
         return
     fi
