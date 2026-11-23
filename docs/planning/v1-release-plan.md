@@ -67,7 +67,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 
 | # | 事项 | 验收 | 跟踪 |
 | --- | --- | --- | --- |
-| V1-C1 | J-6 全量证据台账（P-1…P-6）+ J-3/J-4/J-5 逐张核对 | 台账零未决；“已实施未验证”清零 | [SH-104](../../issues/selfhost/sh104-j6-evidence-ledger.md) |
+| V1-C1 | J-6 证据台账（P-1…P-6）+ J-3/J-4/J-5 逐张核对 | **本仓段**零 `缺失` / `部分`；外部段（P-3.6 / P-6.1–P-6.4）标 `外部`、转 std 包，不计入 v1.0 | [SH-104](../../issues/selfhost/sh104-j6-evidence-ledger.md) |
 | V1-C2 | goldens 静态化（去 L1/L2 的前置） | 静态期望文件覆盖全部语料；`ct-ast vs 静态 golden` 可独立跑（ct-ast 只钉 `.c`；新增 gate 12） | [SH-105](../../issues/selfhost/sh105-goldens-static-freeze.md) |
 | V1-C3 | SH-73 解除 + README §0.1 三断点闭环 | 完整路径可原样书写并钉入 `test/ast` | [SH-73](../../issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md) |
 | V1-C4 | 稳定子集冻结清单成文（三档 + 改动授权级别） | 成文且进 check-docs 断言 | [DOC-79](../../issues/docs/doc-79-stable-subset-freeze-list.md) |
@@ -77,9 +77,10 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 | V1-C8 | 包体系收尾：第三方真实包 fixture + `ct index verify` 进 CI | 固定 fixture 可重放；CI 常规跑 | [PKG-17](../../issues/packages/pkg-17-third-party-fixture-ci.md) |
 
 > **2026-11-23 所有者：v1.0 入口项全部放开为 `open`，按关键路径优先完成。**
-> SH-104 的 4 个外部 std 子项（P-3.6 / P-6.1–P-6.3）仍阻塞，但其余 J-6 项与
-> SH-105 / SH-110 / PKG-17 / LANG-24 / DOC-86 即刻推进；`deferred` 不再作为等待状态。
-> SH-105 / SH-110 已有实现/绿证，待 REV 复核后翻 `verified`。
+> SH-104 已拆段（2026-11-23）：`P-3.6` / `P-6.1`–`P-6.4` 归 std 包，标 `外部`、不再阻塞本仓；
+> v1.0 只要求**本仓段**零 `缺失` / `部分`（余 `P-3.5`、`P-5.2`–`P-5.6`、`J-4b`）。
+> `P-1.3`（迁移 lint）保留 `阻塞`，由所有者裁定是否可带此阻塞发布。
+> SH-105 / SH-110 / PKG-17 / LANG-24 / DOC-86 已完成；`deferred` 不再作为等待状态。
 
 ### 1.6 v1.0 不包含（已定）
 

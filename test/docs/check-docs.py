@@ -99,11 +99,12 @@ J6_IDS = (
     | {"P-5.%d" % i for i in range(1, 8)}
     | {"P-6.%d" % i for i in (1, 2, 3, 4)}
 )
-J6_STATES = {"已过", "部分", "缺失", "阻塞"}
+J6_STATES = {"已过", "部分", "缺失", "阻塞", "外部"}
 J6_COUNTS = re.compile(
     r"<!--\s*j6:counts\s+([^>]*)-->")
 J6_COUNT_KEYS = (("passed", "已过"), ("partial", "部分"),
-                 ("missing", "缺失"), ("blocked", "阻塞"))
+                 ("missing", "缺失"), ("blocked", "阻塞"),
+                 ("external", "外部"))
 STABLE_TIERS = ("已冻结", "冻结中", "1.0 前可改")
 COMPAT_MARKER = re.compile(r"<!--\s*ct-compat:\s*([^>]*)-->")
 CAP_MARKER = re.compile(r"<!--\s*cap:([a-z0-9-]+)\s*-->")
@@ -1021,7 +1022,8 @@ def j6_check_text(text, errors):
                                  m.group(4).strip(), m.group(5).strip())
         seen[rid] = state
         if state not in J6_STATES:
-            errors.append(f"j6-ledger: {rid} has status '{state}' (expected 已过/部分/缺失/阻塞)")
+            errors.append(f"j6-ledger: {rid} has status '{state}' "
+                          "(expected 已过/部分/缺失/阻塞/外部)")
             continue
         counts[state] += 1
         if not cri or cri in ("—", "-"):
@@ -1030,6 +1032,9 @@ def j6_check_text(text, errors):
             errors.append(f"j6-ledger: {rid} has no 负责人")
         if state == "阻塞" and "阻塞" not in ev:
             errors.append(f"j6-ledger: {rid} is 阻塞 without a reason in 现有证据")
+        if state == "外部" and "外部" not in ev:
+            errors.append(f"j6-ledger: {rid} is 外部 without naming the external owner "
+                          "in 现有证据")
         if state == "已过" and not re.search(r"(test/|docs/|battle/|见下|下方)", ev):
             errors.append(f"j6-ledger: {rid} is 已过 without a path/pointer in 现有证据")
         if state in ("部分", "缺失") and "承接" not in ev:
@@ -1040,7 +1045,8 @@ def j6_check_text(text, errors):
 
     marker = J6_COUNTS.search(text)
     if not marker:
-        errors.append("j6-ledger: missing `<!-- j6:counts passed=… partial=… missing=… blocked=… -->`")
+        errors.append("j6-ledger: missing `<!-- j6:counts passed=… partial=… missing=… "
+                      "blocked=… external=… -->`")
     else:
         fields = {}
         for part in marker.group(1).split():
@@ -1281,7 +1287,7 @@ def j6_selftest():
     """Positive/negative fixtures for the SH-104 ledger assertions."""
     ids = sorted(J6_IDS, key=lambda s: tuple(int(x) for x in s[2:].split(".")))
 
-    def ledger(rows, counts="passed=34 partial=0 missing=0 blocked=0"):
+    def ledger(rows, counts="passed=34 partial=0 missing=0 blocked=0 external=0"):
         return "<!-- j6:counts " + counts + " -->\n| 判据 | 最小可判证据 | 现有证据 | 状态 | 负责人 |\n" + \
             "| --- | --- | --- | --- | --- |\n" + "\n".join(rows) + "\n"
 
@@ -1297,7 +1303,13 @@ def j6_selftest():
                                      [row(r) for r in ids[1:]]), 1),
         ("partial-no-承接", ledger([row(ids[0], state="部分")] +
                                    [row(r) for r in ids[1:]]), 1),
-        ("count-mismatch", ledger([row(r) for r in ids], "passed=33 partial=0 missing=0 blocked=0"), 1),
+        ("count-mismatch", ledger([row(r) for r in ids],
+                                  "passed=33 partial=0 missing=0 blocked=0 external=0"), 1),
+        ("external-no-owner", ledger([row(ids[0], state="外部", ev="test/x")] +
+                                     [row(r) for r in ids[1:]]), 1),
+        ("external-valid", ledger([row(ids[0], state="外部", ev="外部：std 包侧")] +
+                                  [row(r) for r in ids[1:]],
+                                  "passed=33 partial=0 missing=0 blocked=0 external=1"), 0),
     ]
     failed = 0
     for name, text, want in cases:

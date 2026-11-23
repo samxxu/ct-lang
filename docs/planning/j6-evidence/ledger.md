@@ -6,15 +6,18 @@
 > 锚点：v0.88.0 / HEAD `10c7e439`（2026-11-21）。判据来源：[pointer-free-v2 附录 A](../../proposals/pointer-free-v2.md#L190-L262) 与 §C.5。
 >
 > **状态口径**：`已过` = 有具名可复跑探针/命令且判据可复核；`部分` = 有证据但缺判据的某一半；
-> `缺失` = 没有证据；`阻塞` = 依赖未落地（lint / std 发版 / 环境），不是“待办”。
+> `缺失` = 没有证据；`阻塞` = 依赖本仓未落地的能力（如迁移 lint），不是“待办”；
+> **`外部` = 判据对象在外部包/外部仓，不属本仓 v1.0**（2026-11-23 拆段：`P-3.6`、`P-6.x` 转 std 包）。
 >
 > **范围**：只收 P-1…P-6（含 §C.5 的 P-3.7 / P-3.8 / P-4.6 / P-5.7）。P-7.x 原型
 > （[j6-evidence](.) 的 p72/p73/p74/p75/ref_out）只证明“能跑”，不冒充本台账；P-8.1 不属 J-6 闸门。
+> **v1.0 只对“本仓段”负责**：本仓段不得有 `缺失` / `部分`；`外部` 段不计入 v1.0 门禁。
 >
-> 本文件的 `P-x.y` 行由 `check-docs` 校验：状态枚举、最小可判证据非空、`阻塞` 必须写依据。
-> 台账当前结论：**J-6 未过**——22 已过 / 4 部分 / 3 缺失 / 5 阻塞（J 表另计）。
+> 本文件的 `P-x.y` 行由 `check-docs` 校验：状态枚举、最小可判证据非空、`阻塞` 必须写依据、
+> `外部` 必须写明外部归属。
+> 台账当前结论：**本仓段 22 已过 / 3 部分 / 3 缺失 / 1 阻塞；外部段 5 项已转 std 包**。
 >
-> <!-- j6:counts passed=22 partial=4 missing=3 blocked=5 -->
+> <!-- j6:counts passed=22 partial=3 missing=3 blocked=1 external=5 -->
 
 ## P-1 语料测量（J-6a）
 
@@ -60,7 +63,7 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 | P-3.3 字面量视图 | 字面量 `Str` 无 Drop；`String` 有 Drop；immortal 空串 `refs=-1` | [p80_literal.sh](../../../test/ast/p80_literal.sh) | 已过 | DEV |
 | P-3.4 `.data` / `cstr()` | `.data` 只读、不保证 NUL；子视图 `cstr()`；`printf` 负例 | [p80_cstr](../../../test/ast/p80_cstr)（`prog.ct` + `neg_data_value` / `neg_data_write` / `neg_printf_data`） | 已过 | DEV |
 | P-3.5 C 边界 | `.m.ct` / shim / `.h.ct` 全部 `char *`；无隐式转换 | [examples/47](../../../examples/47_chain_factory)、[examples/48](../../../examples/48_string_steps) 的 `.m.ct` + shim；`p80_cstr/neg_printf_data.ct`（`.data` → `%s` 硬错）；函数实参 `String`/`Str` → `char *` 被拒。**新发现**：`char *p = s` 与 `return s`（`String`/`Str`）仍被接受并发射 `char *p = s;` 坏 C；承接：DEV 补赋值/返回/变参三类负例（owner DEV） | 部分 | DEV |
-| P-3.6 跨仓 dry-run | `std::str::Str` 限定名并存；消费者清单；std 新版本 | 阻塞：std 新版本未发（PKG-22 目标名 `CharStr` 待包侧落地），没有 dry-run 对象 | 阻塞 | DEV |
+| P-3.6 跨仓 dry-run | `std::str::Str` 限定名并存；消费者清单；std 新版本 | 外部：`std::str` 的限定名并存与消费者清单归 std 包（[PKG-22](../../../issues/packages/pkg-22-std-str-charstr-rename.md)）；本仓 `selfhost/` 无 `import std::`，不由 v1.0 判定 | 外部 | 包侧 |
 | P-3.7 `U16String` / `U16Str` 类型与工厂 | `from_utf8` / `from_utf16` / `to_utf8` / `to_utf16`；`len` 为 code unit；示例可编译 | [p80_methods/prog.ct](../../../test/ast/p80_methods/prog.ct) 覆盖 `U16String.from_utf8`、`U16String.from_utf16`、`String.from_utf16`、`to_utf8`、`to_utf16`，期望输出见 [prog.expected.out](../../../test/ast/p80_methods/prog.expected.out) 第 38–41 行；[p80_literal/literal.ct](../../../test/ast/p80_literal/literal.ct) 另测 `to_utf16`/`from_utf16`/`to_utf8` | 已过 | DEV |
 | P-3.8 `U16String` 核心方法集 | snake_case 方法表；越界 / 负下标 / `Option` 返回与 JS 语义对照 | `p80_methods` 方法表 + 期望输出：`char_code_at(99)=0`、`code_point_at(99)=0`、`at(-1)` 取末项、`at(99)`/`get(99)` 返回空视图（`prog.expected.out` 第 16–21 行）；写下标硬错见 [neg_u16_write.ct](../../../test/ast/p80_methods/neg_u16_write.ct)。实现以空视图而非 `Option` 返回，按 §4.70 现状记录 | 已过 | DEV |
 
@@ -91,10 +94,10 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 
 | 判据 | 最小可判证据 | 现有证据 | 状态 | 负责人 |
 | --- | --- | --- | --- | --- |
-| P-6.1 消费者清单 | `import std::str::Str` 全部有迁移动作 | 阻塞：std 新版本（`CharStr`）未发，消费者清单无对象 | 阻塞 | DEV |
-| P-6.2 包版本 / 索引 | std 新 MINOR；索引行；旧锁不破坏 | 阻塞：随 PKG-22 包侧发布 | 阻塞 | DEV |
-| P-6.3 迁移 dry-run | 典型工程 `Str`→`String` 可编译、行为等价 | 阻塞：需新 std 才能 dry-run | 阻塞 | DEV |
-| P-6.4 发布前检查 | README / spec / roadmap 三处同步 | README / spec / roadmap 的 v1.0 文案已同步；std 版本相关段落待发版。承接：REQ 在 std 发版后复核三处（owner REQ） | 部分 | REQ |
+| P-6.1 消费者清单 | `import std::str::Str` 全部有迁移动作 | 外部：消费者全部在 std 包侧；本仓 `selfhost/` 无 `import std::`，`test/modules/p29_builtin_std` 是“未安装则不解析”的负例，不取外部包 | 外部 | 包侧 |
+| P-6.2 包版本 / 索引 | std 新 MINOR；索引行；旧锁不破坏 | 外部：std 新 MINOR 与索引行随 [PKG-22](../../../issues/packages/pkg-22-std-str-charstr-rename.md) 由包侧发布 | 外部 | 包侧 |
+| P-6.3 迁移 dry-run | 典型工程 `Str`→`String` 可编译、行为等价 | 外部：dry-run 以新 std 为对象，归包侧；本仓不持有该对象 | 外部 | 包侧 |
+| P-6.4 发布前检查 | README / spec / roadmap 三处同步 | 外部：README / spec / roadmap 的 v1.0 文案已同步；余下“std 版本相关段落”随包侧发版复核，不进本仓 v1.0 | 外部 | 包侧 |
 
 ## J-3 / J-4 / J-5 逐张核对
 
@@ -108,11 +111,12 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 
 ## 结论
 
-- **J-6 未过**：22 已过 / 4 部分 / 3 缺失 / 5 阻塞（J 表另计；`<!-- j6:counts -->` 与逐行计数由 check-docs 校验）。
+- **本仓段未过**：22 已过 / 3 部分 / 3 缺失 / 1 阻塞（J 表另计；`<!-- j6:counts -->` 与逐行计数由 check-docs 校验）。
+- **外部段已转出**：P-3.6、P-6.1–P-6.4 共 5 项标 `外部`，归 std 包；不计入本仓 v1.0 门禁。
 - 本轮闭合：P-1.2（[p1_2.csv](p1_2.csv) + 生成器）、P-3.7 / P-3.8 / P-4.3（SH-106）/ P-4.5（guide §7.1）/ P-5.7。
 - 未闭合且已写承接：P-5.2 / P-5.3 / P-5.5（out/ref 借用与释放夹具）、
-  P-5.4 / P-5.6 / P-6.4（错误路径、ASan 组合、std 发版后复核）、P-3.5（新发现：`char *p = s` / `return s`
+  P-5.4 / P-5.6（错误路径、ASan 组合）、P-3.5（新发现：`char *p = s` / `return s`
   仍被接受并发射坏 C）。
-- **P-1.3 / P-3.6 / P-6.1–P-6.3** 在 lint 与 std 发布前不可判，保持阻塞，不写“预计通过”。
+- **P-1.3**（迁移 lint dry-run）仍 `阻塞`：迁移 lint 不在 v1.0 范围，是否可带此阻塞发布由所有者裁定。
 - **J-4a 判据需修订**：照原文写“容器硬错”会与 v0.88 实测冲突；按实测改判据，风险由 LANG-22 承接。
 - **J-4b** 仍缺 `ref/out` 逃逸契约条款与存储负例，承接 owner DEV。
