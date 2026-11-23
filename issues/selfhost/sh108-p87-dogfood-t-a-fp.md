@@ -116,3 +116,8 @@ $ echo $?
 **PH-87 dogfood 基准更新。** `p87_dogfood.sh` 由「期望 10 条同一类 FP」改为「期望 0 条」；
 `test/probes/p87_dogfood.tsv` 清空；`docs/design/p87_dogfood.md` 保留 PH-87 历史证据并加
 §3 SH-108 复测（0 条）。`p87_dogfood` 6/0、`p87_docs` 23/0。
+
+> **T-7 红证基线口径（2026-11-23）**：上面的红证用 `a0ce8ef1` 重建的二进制。严格按
+> T-7，红提交 `432e95ed` 的父提交是 `2a3d208b`（SH-110 修复后）；已在 `2a3d208b` 的
+> 干净归档上重建 ct-ast 复跑同一探针，输出逐字相同（三 FAIL / 两 ok / 10 hits），
+> SH-110 只改发射器，不影响 A 检查器。红证成立。
