@@ -14,7 +14,10 @@
 #   g2  ACC-* mapping - SKIP: deviation g2-acc-mapping, tracked by CI-16
 #   g4  docs executable/timeliness (reuses test/docs/check-docs.py)
 #   g5  criterion <-> case minimal subset (phase_card.py g5)
-#   g6  issue-ledger closure (issue_ledger.py; 5 negative fixtures)
+#   g6  issue-ledger closure (issue_ledger.py; strict by default, 5 negative
+#       fixtures).  `g6 --ratchet` judges against issues/.g6-baseline.tsv
+#       (CI-13); `g6 --write-baseline` regenerates it.  See
+#       docs/planning/g6-ratchet.md for when to use which mode.
 #   g7  security mechanicals (secret scan + check-warnings; G7_SANITIZERS=1
 #       also runs selfhost/check-sanitizers.sh)
 #   g8  version coherence (version_coherence.py)
@@ -70,7 +73,7 @@ g4() { gate=g4; python3 "$root/test/docs/check-docs.py"; }
 
 g5() { gate=g5; python3 "$root/tools/gates/phase_card.py" "$root" g5; }
 
-g6() { gate=g6; python3 "$root/tools/gates/issue_ledger.py" "$root"; }
+g6() { gate=g6; python3 "$root/tools/gates/issue_ledger.py" "$root" "$@"; }
 
 g7() {
   gate=g7
@@ -101,10 +104,10 @@ case "${1:-}" in
   g2) g2 ;;
   g4) g4 ;;
   g5) g5 ;;
-  g6) g6 ;;
+  g6) shift; g6 "$@" ;;
   g7) g7 ;;
   g8) g8 ;;
   g9) g9 ;;
   battle-selftest) battle_selftest ;;
-  *) echo "usage: tools/check.sh g0 | g1 | g2 | g4 | g5 | g6 | g7 | g8 | g9 | battle-selftest" >&2; exit 2 ;;
+  *) echo "usage: tools/check.sh g0 | g1 | g2 | g4 | g5 | g6 [--ratchet|--write-baseline] | g7 | g8 | g9 | battle-selftest" >&2; exit 2 ;;
 esac

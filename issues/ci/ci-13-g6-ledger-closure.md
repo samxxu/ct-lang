@@ -157,3 +157,28 @@ g1: OK (12 phase cards: title/status/tasks/exit-criteria/version-minor)
 
 若 EDITOR 之后决定把 g6 进 CI，落点是 `ci.yml` 的 governance 步骤（与 g0/g8 并列），
 **不进** `check-all.sh` 的 11 道产品硬门禁——这与上面第 5 条的理由是同一条。
+
+## 实现（2026-11-23，DEV；状态字段未改）
+
+按本文件「最小设计」1–5 落地 ratchet，**默认严格模式不变**；基线 0 行，因此三种模式当前等价。
+
+- `tools/gates/issue_ledger.py`：`--ratchet` / `--write-baseline` / `--baseline` / `--tracking`；
+  违规结构化出「现状 / 归一键 / 类别」，新增违规零豁免，僵尸行报红，减少只能显式重写；
+- `tools/check.sh g6 [--ratchet|--write-baseline]`：默认仍走严格判据；
+- `issues/.g6-baseline.tsv`：4 列格式 + `# tracking: CI-14`，当前 0 数据行；
+- `docs/planning/g6-ratchet.md`：两种模式、格式、追踪 issue 要求、何时用；
+- `test/gates/issue_ledger_test.sh`：在原有 5 负例 + 1 正例上追加 7 个 ratchet 用例
+  （新债红、僵尸红、已知绿、重写减少、无 tracking 红、tracking 无退出条件红、严格无基线绿）。
+
+```console
+$ bash tools/check.sh g6 --write-baseline
+g6: baseline written (0 row(s), tracking CI-14)
+$ bash tools/check.sh g6 --ratchet
+g6: OK (297 issues; ratchet: known=0 new=0 zombie=0 baseline=0)
+$ bash tools/check.sh g6
+g6: OK (297 issues; verified=246 rejected=12 deferred=38 superseded=1)
+$ sh test/gates/issue_ledger_test.sh
+OK g6/ledger (5 negative cases + 1 positive; ratchet 7 cases)
+```
+
+状态仍为 `deferred`：本段只落实现与证据，等 REV 复核后决定是否改状态（本次任务要求不改状态）。
