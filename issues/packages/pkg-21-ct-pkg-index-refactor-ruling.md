@@ -14,8 +14,8 @@
 
 | # | 事项 | 定性 | 落点 |
 | --- | --- | --- | --- |
-| ① | `package.sh` 的 `verify_row` 找不到 `ct` 时 `warn` 并成功（可能推送未回放行，违反 I10） | **bug**，在 index 仓 | **index 仓另派单修复**；本仓不改 |
-| ② | 原生 `ct index refresh` 缺失 | **特性**，不是 bug | [PKG-18](pkg-18-native-ct-index-refresh.md)，v1.1；冻结期不实现 |
+| ① | `package.sh` 的 `verify_row` 找不到 `ct` 时 `warn` 并成功（可能推送未回放行，违反 I10） | **bug**，在 index 仓 | **index 仓（`https://github.com/ct-pkg/index`）另派单修复**；本仓不改 |
+| ② | 原生 `ct index refresh` 缺失 | **特性**，不是 bug | [PKG-18](pkg-18-native-ct-index-refresh.md)，**已 verified**（原“v1.1 冻结期不实现”的表述过期） |
 | ③ | 消费侧「三处接口对齐」 | 逐条分类 | [对齐清单](../planning/ct-pkg-index-alignment.md)：A1 → [PKG-19](pkg-19-get-index-field-count.md)，A2 → [PKG-20](pkg-20-get-index-row-identity.md)；B/C 四行锁死为门禁 |
 
 ## 口径
