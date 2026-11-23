@@ -1213,7 +1213,7 @@ static int sb_assign(struct Emitter *self, int n, int ind)
 {
     char t[MAX_TEXT];
     char fbase[MAX_TEXT], ffield[MAX_TEXT];
-    int kind, lhs, rhs, idx, borrowed, wrap, release_old, needsrc, k, fowner;
+    int kind, lhs, rhs, idx, borrowed, wrap, release_old, needsrc, k, fowner, param_own;
 
     if (self->arena->nodes[n].kind != N_ASSIGN || self->arena->nodes[n].aux != 0)
         return 0;
@@ -1230,6 +1230,17 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     if (self->hoist_rvalue(n) != 0) return -1;
     if (self->emit_hoists(ind) != 0) return -1;
     idx = (k == N_VAR) ? sb_find(self, self->arena->nodes[lhs].text2) : -1;
+    /* P-5.2 (SH-117): an `out` / `ref` owning string target is the caller's
+       storage, not a tracked local. The caller-side rule already requires an
+       owning `out` actual to hold a value, and a `ref` alias names the
+       caller's value. The assignment site therefore follows the same order as
+       a local rebind: hold the old handle, retain (or move) the right-hand
+       side, write, then release the old value. Without the release the
+       caller's previous buffer leaks; without the retain two handles share one
+       reference. */
+    param_own = (k == N_VAR
+                 && (self->arena->nodes[lhs].aux == 2
+                     || self->arena->nodes[lhs].aux == 3));
     borrowed = (self->arena->nodes[n].sflags & 2) ? 1 : 0;
     /* a storage position owns a reference even for a borrowed source; a local
        keeps the borrow. Only a place can be address-taken directly, so a
@@ -1237,7 +1248,7 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     if (k != N_VAR) wrap = (borrowed || sb_is_place(self, rhs));
     else wrap = (!borrowed && sb_is_place(self, rhs));
     needsrc = wrap && !sb_is_place(self, rhs);
-    release_old = (idx >= 0 && g_sb.own[idx] && !borrowed);
+    release_old = (idx >= 0 && g_sb.own[idx] && !borrowed) || param_own;
     fbase[0] = 0;
     ffield[0] = 0;
     fowner = -1;
@@ -1302,11 +1313,16 @@ static int sb_push_params(struct Emitter *self, int first, int anon)
             snprintf(uname, sizeof uname, "__arg%d", ai);
             nm = uname;
         }
-        if (nm[0] && self->arena->nodes[p].aux != 2 && self->arena->nodes[p].aux != 3
-            && self->arena->nodes[p].text3[0] == 0) {
+        if (nm[0] && self->arena->nodes[p].text3[0] == 0) {
+            /* P-5.2 (SH-117): a `ref` / `out` parameter is not an owning
+               binding (no entry retain, no scope release), but its base type
+               must stay resolvable: the assignment to `(*name)` is an owning
+               assignment for `sb_assign`, exactly like a local rebind. */
             sb_lpush(self, nm, self->arena->nodes[p].text);
-            kind = frontend::sym::ct_is_string_value_type(self->arena->nodes[p].text);
-            if (kind) sb_push(self, nm, self->arena->nodes[p].text, 1);
+            if (self->arena->nodes[p].aux != 2 && self->arena->nodes[p].aux != 3) {
+                kind = frontend::sym::ct_is_string_value_type(self->arena->nodes[p].text);
+                if (kind) sb_push(self, nm, self->arena->nodes[p].text, 1);
+            }
         }
         ai++;
     }

@@ -5843,6 +5843,19 @@ impl ExprOps for Expr {
                                 return tool::diag::ct_sem_error(mline, mcol,
                                     "cannot release a borrowed container view; call retain() first",
                                     self->sup->mem->path);
+                            /* P-5.3 (SH-117): a `ref` parameter is an alias,
+                               not an owner. The assignment site releases the
+                               old value, so an explicit release through the
+                               alias would free the caller's handle a second
+                               time. `out` may still release: the caller hands
+                               the old value over. */
+                            if ((strcmp(fname, "release") == 0
+                                 || strcmp(fname, "drop") == 0)
+                                && self->arena->nodes[n].kind == N_VAR
+                                && self->arena->nodes[n].aux == 2)
+                                return tool::diag::ct_sem_error(mline, mcol,
+                                    "cannot release through a 'ref' parameter; the callee does not own the handle (assign a new value instead)",
+                                    self->sup->mem->path);
                             /* Phase 29: an inherent method of an instantiated
                                struct dispatches statically. The receiver's
                                concrete type is already in `ibase`, so the
