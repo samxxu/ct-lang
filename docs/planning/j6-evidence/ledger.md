@@ -63,7 +63,7 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 | P-3.3 字面量视图 | 字面量 `Str` 无 Drop；`String` 有 Drop；immortal 空串 `refs=-1` | [p80_literal.sh](../../../test/ast/p80_literal.sh) | 已过 | DEV |
 | P-3.4 `.data` / `cstr()` | `.data` 只读、不保证 NUL；子视图 `cstr()`；`printf` 负例 | [p80_cstr](../../../test/ast/p80_cstr)（`prog.ct` + `neg_data_value` / `neg_data_write` / `neg_printf_data`） | 已过 | DEV |
 | P-3.5 C 边界 | `.m.ct` / shim / `.h.ct` 全部 `char *`；无隐式转换 | [examples/47](../../../examples/47_chain_factory)、[examples/48](../../../examples/48_string_steps) 的 `.m.ct` + shim；`p80_cstr/neg_printf_data.ct`（`.data` → `%s` 硬错）；函数实参 `String`/`Str` → `char *` 被拒。**新发现**：`char *p = s` 与 `return s`（`String`/`Str`）仍被接受并发射 `char *p = s;` 坏 C；承接：DEV 补赋值/返回/变参三类负例（owner DEV） | 部分 | DEV |
-| P-3.6 跨仓 dry-run | `std::str::Str` 限定名并存；消费者清单；std 新版本 | 外部：`std::str` 的限定名并存与消费者清单归 std 包（[PKG-22](../../../issues/packages/pkg-22-std-str-charstr-rename.md)）；本仓 `selfhost/` 无 `import std::`，不由 v1.0 判定 | 外部 | 包侧 |
+| P-3.6 跨仓 dry-run | `std::str::Str` 限定名并存；消费者清单；std 新版本 | 外部：std 0.20.0 已发布 `CharStr` 且无旧名别名；消费者清单归 std 包（[PKG-22](../../../issues/packages/pkg-22-std-str-charstr-rename.md)）；本仓 `selfhost/` 无 `import std::`，不由 v1.0 判定 | 外部 | 包侧 |
 | P-3.7 `U16String` / `U16Str` 类型与工厂 | `from_utf8` / `from_utf16` / `to_utf8` / `to_utf16`；`len` 为 code unit；示例可编译 | [p80_methods/prog.ct](../../../test/ast/p80_methods/prog.ct) 覆盖 `U16String.from_utf8`、`U16String.from_utf16`、`String.from_utf16`、`to_utf8`、`to_utf16`，期望输出见 [prog.expected.out](../../../test/ast/p80_methods/prog.expected.out) 第 38–41 行；[p80_literal/literal.ct](../../../test/ast/p80_literal/literal.ct) 另测 `to_utf16`/`from_utf16`/`to_utf8` | 已过 | DEV |
 | P-3.8 `U16String` 核心方法集 | snake_case 方法表；越界 / 负下标 / `Option` 返回与 JS 语义对照 | `p80_methods` 方法表 + 期望输出：`char_code_at(99)=0`、`code_point_at(99)=0`、`at(-1)` 取末项、`at(99)`/`get(99)` 返回空视图（`prog.expected.out` 第 16–21 行）；写下标硬错见 [neg_u16_write.ct](../../../test/ast/p80_methods/neg_u16_write.ct)。实现以空视图而非 `Option` 返回，按 §4.70 现状记录 | 已过 | DEV |
 
@@ -95,9 +95,9 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 | 判据 | 最小可判证据 | 现有证据 | 状态 | 负责人 |
 | --- | --- | --- | --- | --- |
 | P-6.1 消费者清单 | `import std::str::Str` 全部有迁移动作 | 外部：消费者全部在 std 包侧；本仓 `selfhost/` 无 `import std::`，`test/modules/p29_builtin_std` 是“未安装则不解析”的负例，不取外部包 | 外部 | 包侧 |
-| P-6.2 包版本 / 索引 | std 新 MINOR；索引行；旧锁不破坏 | 外部：std 新 MINOR 与索引行随 [PKG-22](../../../issues/packages/pkg-22-std-str-charstr-rename.md) 由包侧发布 | 外部 | 包侧 |
+| P-6.2 包版本 / 索引 | std 新 MINOR；索引行；旧锁不破坏 | 外部：std 0.20.0 与索引行已由包侧发布；本仓 pin 与消费者随 [PKG-22](../../../issues/packages/pkg-22-std-str-charstr-rename.md) 升到 0.20.0，旧锁/旧 store 不改写 | 外部 | 包侧 |
 | P-6.3 迁移 dry-run | 典型工程 `Str`→`String` 可编译、行为等价 | 外部：dry-run 以新 std 为对象，归包侧；本仓不持有该对象 | 外部 | 包侧 |
-| P-6.4 发布前检查 | README / spec / roadmap 三处同步 | 外部：README / spec / roadmap 的 v1.0 文案已同步；余下“std 版本相关段落”随包侧发版复核，不进本仓 v1.0 | 外部 | 包侧 |
+| P-6.4 发布前检查 | README / spec / roadmap 三处同步 | 外部：README / spec / roadmap 的 v1.0 文案已同步；“std 版本相关段落”已随 PKG-22 / D-025 更新到 0.20.0，不改 v1.0 门禁 | 外部 | 包侧 |
 
 ## J-3 / J-4 / J-5 逐张核对
 

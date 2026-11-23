@@ -1,25 +1,28 @@
-# wave1-demo — the four `hal` traits and the standard library together
+# wave1-demo — the `hal` traits and the standard library together
 
 > English · [中文](#中文)
 
 A single Ct program that uses the Wave 1 packages:
 
 - [`hal`](https://github.com/ct-pkg/hal) — the contract: `Uart`, `Gpio`,
-  `Clock`, `Log`;
+  `Log`, plus the namespace entry `Clock`;
 - [`hal-posix`](https://github.com/ct-pkg/hal-posix) — one `posix_hal` instance
-  that boxes into all four traits;
+  that boxes into the three object traits; `Clock` is called as
+  `hal::Clock.nowMs()`;
 - [`std`](https://github.com/ct-pkg/std) — zero-cost mappings over `string.h`,
   `stdio.h` and `math.h` (`std::str`, `std::io`, `std::math`).
 
 ## Running it
 
-> **TODO(version-reset, 2026-11-06):** `hal-posix` and `std` have no published
-> `v0.1.0` tag or index row yet — the `1.x` line was withdrawn and the index is
-> empty. The `ct get` recipe below therefore fails until both are re-tagged and
-> `ct-pkg/index` is refreshed. Until then build against the checkouts:
+> **TODO(2026-11-06, updated 2026-11-23):** `std` 0.20.0 is published and has an
+> index row, so `ct get std` works. `hal` / `hal-posix` still have no `v0.1.0`
+> tag or index row (the `1.x` line was withdrawn), so `ct get hal-posix` in the
+> recipe below still fails. Until both are re-tagged and `ct-pkg/index` is
+> refreshed, build against the checkouts:
 >
 > ```sh
 > ct build -I ../../../ct-pkg/hal -I ../../../ct-pkg/hal-posix -I ../../../ct-pkg/std \
+>     --ns-root ../../../ct-pkg/hal \
 >     --cflags '-D_POSIX_C_SOURCE=200809L' --ldflags '-lm' src/main.ct -o build
 > ```
 
@@ -48,12 +51,12 @@ The first line (`hal`) comes from `Uart.send` on stdout; the rest come from
 ## 中文
 
 同一个 Ct 程序把 Wave 1 的三个包放在一起用：`hal`（契约）、`hal-posix`
-（一个 `posix_hal` 实例装箱成四个 trait）、`std`（`string.h` / `stdio.h` /
-`math.h` 的零成本映射）。
+（一个 `posix_hal` 实例装箱成三个对象 trait；`Clock` 是 namespace 入口，
+按 `hal::Clock.nowMs()` 调用）、`std`（`string.h` / `stdio.h` / `math.h` 的零成本映射）。
 
-`std` 尚无 `v0.1.0` tag 与索引行（1.x 版本线已撤回，索引为空），所以在重新打
-tag 之前只能按上面的 `-I` 方式直接对着 `ct-pkg/` 的检出编译；`ct get std` 的
-那一段是发布后的用法，属于待办。
+`std` 0.20.0 已发布并有索引行，`ct get std` 可用；`hal` / `hal-posix` 仍没有
+`v0.1.0` tag 或索引行（1.x 版本线撤回后未重发），所以 `ct get hal-posix` 仍会
+失败。在重新发布前，只能按上面的 `-I` 方式直接对着 `ct-pkg/` 的检出编译。
 
 按上面的步骤在临时目录里 `ct get hal-posix`、`ct get std`，再 `ct update`
 / `ct verify` / `ct install`，执行 `ct install` 打印的那一条命令，最后

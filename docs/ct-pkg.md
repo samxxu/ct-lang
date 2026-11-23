@@ -39,7 +39,7 @@
 
 ## 4. 当前可解析范围（实测）
 
-- **官方 pin 表只有 `ct/std`**（`std 0.19.0`，url / tag / sha256 编译进 `ct`）：
+- **官方 pin 表只有 `ct/std`**（`std 0.20.0`，url / tag / sha256 编译进 `ct`）：
   `ct get ct/std` 与 `ct get std` 都是无索引可用的官方路径。
 - **`ct/hal` 目前不在 pin 表**：仓库在 `ct-pkg/hal`，但官方索引行仍是五字段旧行（无 `publisher`）。
   按契约 v1（[D-014](decisions/D-014.md) 第 5 条），请求命中五字段行**按行硬错**；要用它必须给

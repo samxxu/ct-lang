@@ -43,7 +43,7 @@
 | `MAX_FUNCS` 动态增长（初始 512、翻倍、65536 安全阀） | 冻结中 | REQ + ADR；只允许扩大安全阀，不收紧 | **当前 pre 窗口（v1.1 前；2026-11-23 提前）** | [提案](proposals/ct-max-funcs-growth.md)；[SH-109](../issues/selfhost/sh109-max-funcs-capacity.md) |
 | `lib/core` 目录与 `namespace core` 布局 | 冻结中 | REQ + ADR；根拼写兼容一个 MINOR | **v1.0 前（当前 pre 窗口；Stage 1+2）** | [DOC-87](../issues/docs/doc-87-lib-core-rename.md) |
 | 泄漏策略 `leaks = warn 或 error` 与 `c-boundary = allow 或 strict` 的键名 | 冻结中 | REQ + ADR | v1.1 冻结 | D-012；spec §4.70 |
-| `std` 包导入名与单元命名（`std::str::CharStr` 等） | 冻结中 | 包维护者 + 索引记录；旧名一个 MINOR | 随 PKG-22 发布 | [PKG-22](../issues/packages/pkg-22-std-str-charstr-rename.md) |
+| `std` 包导入名与单元命名（`std::str::CharStr` 等） | 冻结中 | 包维护者 + 索引记录；std 0.20.0 起无旧名别名（[D-025](decisions/D-025.md)） | 已随 PKG-22 发布 | [PKG-22](../issues/packages/pkg-22-std-str-charstr-rename.md) |
 | 内建 trait（`Drop` / `Handback`）的可见声明显性化 | 冻结中 | REQ + ADR；不得引入 vtable/vptr | **v1.0 前（当前 pre 窗口；依赖 `lib/core` Stage 1）** | [LANG-23](../issues/lang/lang-23-builtin-trait-declarations.md) |
 | 非 immortal `Str` 视图存入容器的 lint（warn 级） | 冻结中 | REQ + ADR；先 warn，不升硬错；**v1.1 已实现**（compile/build warning，`ct check` error） | v1.1 | [LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
 | 编译器内部分层（L0 / L1 / L2 去留、seed cutover） | 1.0 前可改 | REQ 开 issue；语义不变的不需 ADR | `v1-PH-0` 前 | [v1 路线](planning/v1-release-plan.md) §2 |

@@ -12,7 +12,7 @@ impl 签名漂移）。需要更早发现类型问题时用 `ct check --types`�
 
 **兼容承诺（v1.0 起）**：Ct 不再自称 C 超集。C 的表达式、语句与类型核心仍按原语法透传，但不再
 承诺 C 全集（函数式宏、strict 边界下的 `#include`、旧 L1/L2 管线语法），也不以“C 代码原样全收”
-为目标。旧工程用 v0.x 编译器或 `ct migrate`；`T a[]`、`Box`、`CharStr`、`lib/std` → `lib/core`
+为目标。旧工程用 v0.x 编译器或 `ct migrate`；`T a[]`、`Box`、`std::str::String` → `std::str::CharStr`、`lib/std` → `lib/core`
 的迁移/弃用窗口见 [spec §1.2](docs/language-spec.md)。
 <!-- ct-compat: not-c-superset claim=v1.0-not-c-superset spec=1.2 -->
 

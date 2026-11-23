@@ -33,10 +33,10 @@ curl -fsSL https://raw.githubusercontent.com/ct-pkg/index/master/index \
   | awk 'NF{print NF}' | sort | uniq -c
 ```
 
-官方 `std` 行（六字段，2026-11-20 实测）：
+官方 `std` 行（六字段，2026-11-23 实测）：
 
 ```text
-std 0.19.0 ct https://github.com/ct-pkg/std v0.19.0 sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79
+std 0.20.0 ct https://github.com/ct-pkg/std v0.20.0 sha256:60d2e7dd157facc775e80d45e6769c4f2bfe7273feed6af7ccba9676d8ae42a7
 ```
 
 > 五字段/六字段**不是**「当前 vs 目标」的二选一：六字段是现行形态，五字段是仍在文件里的旧行。

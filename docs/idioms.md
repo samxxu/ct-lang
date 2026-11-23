@@ -42,7 +42,7 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
   参数 / 全局 / `self` 的视图不报（LANG-22）。
 - 要独立副本用 `s.to_string()`；`char *` 没有 `to_string`，先变 `String` / `Str`。
 - `char *` 的方法（`length` / `to_int` / `starts_with`）来自 std 包映射，必须
-  `import std::str::CharStr;`（std 0.19.0 及以前叫 `std::str::String`，旧名一个 MINOR）。
+  `import std::str::CharStr;`（std 0.20.0 起；0.19.0 及以前叫 `std::str::String`，旧名已删除）。
 
 ## 4. 切片：`T[]` 替代“指针 + 长度”
 
@@ -111,7 +111,7 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 1. CT 是构建在 C 之上的语言；C 的表达式、语句与类型核心按原语法可用。v1.0 起不再自称 C 超集；四类偏离：new 是上下文关键字（int new; 仍合法）、T a[] 只在形参/字段/无初始化声明中弃用、字符串字面量裸类型仍是 char *、String/Str 传给 printf 需 cstr()。§1.2
 2. 所有权分层：局部/参数自动 retain/release（String）；String/Box/Vec/Map 字段在宿主 use Drop 且无显式 impl 时有自动胶水（容器级联到元素）；显式 impl 的容器字段、全局、ADT payload 需作者处理；引用环仍泄漏。§4.56 §4.70 §4.72
 3. Str 是借用视图：不能作 struct 字段或 Map 键；Vec<Str>/Option<Str>/ADT 负载/全局可编译但存的是视图；字面量常量表安全，非 immortal 来源有风险。§4.70
-4. String 用字面量直接初始化；char * 方法需 import std::str::CharStr（std 0.19.0 及以前叫 std::str::String）。§5.1
+4. String 用字面量直接初始化；char * 方法需 import std::str::CharStr（std 0.20.0 起；0.19.0 及以前叫 std::str::String）。§5.1
 5. 数组传参用 T[]，不要 int *a, int n；T a[] 形参/字段已弃用。§4.69
 6. 可失败操作用 Result<T,E> + ? + errdefer，不要错误码 + goto。§4.62 §4.58
 7. 多形态数据用 enum + match（穷尽），不要 int kind + switch；ADT 不生成 drop glue，payload 按 move 只释放一次。§4.73

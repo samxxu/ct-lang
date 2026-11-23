@@ -476,7 +476,7 @@ static void pkg_scrub(const char *in, char *out, size_t cap)
    last MAX_PKG_GITERR non-empty lines are printed redacted; the classes are
    ordered most-specific first so "Authentication failed" is not reported
    as a generic network error. `spec` is the explicit spelling to retry
-   (`ct/std@0.19.0` for the official pin), `cache` is the checkout path. */
+   (`ct/std@0.20.0` for the official pin), `cache` is the checkout path. */
 static void pkg_git_diag(const char *errfile, const char *cache,
                          const char *spec)
 {
@@ -1192,7 +1192,7 @@ impl PkgOps for Pkg {
         if (snprintf(self->giterr, sizeof self->giterr, "%s/.ct-pkg.err", root)
             >= (int)sizeof self->giterr) return -1;
         /* The explicit spelling the failure advice points at: official pins
-           are most useful as `ct/std@0.19.0`; a URL or a publisher-qualified
+           are most useful as `ct/std@0.20.0`; a URL or a publisher-qualified
            name stays in the shape the user typed. */
         if (cache_pub && cache_pub[0]) {
             const char *vt;
@@ -2340,11 +2340,11 @@ static int pkg_pin_lookup(const char *name, const char *range,
                           char *tag, size_t tcap, char *sha, size_t scap)
 {
     static const char *const pnames[] = { "std" };
-    static const char *const pvers[]  = { "0.19.0" };
+    static const char *const pvers[]  = { "0.20.0" };
     static const char *const purls[]  = { "https://github.com/ct-pkg/std" };
-    static const char *const ptags[]  = { "v0.19.0" };
+    static const char *const ptags[]  = { "v0.20.0" };
     static const char *const pshas[]  = {
-        "sha256:432086f0ec6c9ef3cdce5e24d465924d207e81d04f97595518d6e7d584ddaa79"
+        "sha256:60d2e7dd157facc775e80d45e6769c4f2bfe7273feed6af7ccba9676d8ae42a7"
     };
     int i, n;
 

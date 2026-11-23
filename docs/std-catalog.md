@@ -5,7 +5,7 @@
 > 回答一个问题：**要用的能力在 `std` 的哪个模块、叫什么入口**。完整方法、参数、返回值、
 > 内存归属与坑在包内 `std/<mod>/README.md`，本文不复制。
 >
-> 核对基线：`std 0.19.0`（`ct 0.77.1` 内置 pin 表；2026-11-20 实测），16 个模块。
+> 核对基线：`std 0.20.0`（`ct 0.88.3` 内置 pin 表；2026-11-23 实测），16 个模块。
 > 版本以 `ct get ct/std` 的解析结果为准。
 
 ## 1. 先看内置层（不需要安装，也不需要 import）
@@ -31,21 +31,21 @@ DOC-87 Stage 2 起规范拼写是 `core::Vec` / `core::String` 等（源级命�
 安装：
 
 ```sh
-ct get ct/std@0.19.0
+ct get ct/std@0.20.0
 ```
 
 导入形态固定为 `import std::<mod>::<Unit>;`；`<Unit>` 是下表的「入口」。
 
 | 模块 | 用途 | 入口 `import` |
 | --- | --- | --- |
-| `std::str` | `char *` 字节串方法：`find` / `slice` / `concat` / `split_into` / 大小写 / 数字解析 | `std::str::String`（下一 MINOR 改名 `std::str::CharStr`） |
+| `std::str` | `char *` 字节串方法：`find` / `slice` / `concat` / `split_into` / 大小写 / 数字解析 | `std::str::CharStr` |
 | `std::io` | stdio 流与文件描述符；`File` / `FileDesc` 是 `Drop` 资源句柄 | `std::io::Stdout` / `std::io::File` |
 | `std::fs` | `char *` 路径方法、目录流 `Dir`、元数据 `Stat` | `std::fs::Fs` |
 | `std::utf8` | UTF-8 解码、编码、码点计数；严格校验、不分配 | `std::utf8::Utf8Ops` |
 | `std::num` | 整数与字符宿主方法：`to_str` / `to_base` / `clamp` / `is_digit` | `std::num::Num` |
 | `std::math` | 浮点方法：`Float` / `Real`，`x.sqrt()` / `x.pow(2.0)` | `std::math::Real` |
 | `std::search` | 带比较器的 `qsort` / `bsearch` 转发 | `std::search::Search` |
-| `std::arena` | 块式 bump 分配器 `Arena`（外部 `ct/std` 0.19.0 实测；不是编译器内置层） | `std::arena::Arena` |
+| `std::arena` | 块式 bump 分配器 `Arena`（外部 `ct/std` 0.20.0 提供；不是编译器内置层） | `std::arena::Arena` |
 | `std::test` | 断言计数器 `Test`；`check*` / `report` | `std::test::Test` |
 | `std::env` | 环境变量复制式读写 | `std::env::Env` |
 | `std::process` | `fork` / `exec*` / `wait*` / 信号 / `getpid` | `std::process::Process` |
@@ -68,12 +68,12 @@ ct get ct/std@0.19.0
 
 ## 3. 装在哪、完整 API 去哪读
 
-`ct get ct/std@0.19.0` 把包写进共享 store；`ct build` 按 `ct.lock` 自动补 include root：
+`ct get ct/std@0.20.0` 把包写进共享 store；`ct build` 按 `ct.lock` 自动补 include root：
 
 ```
-$CT_HOME/pkg/ct/std/0.19.0/            # ns-root = .，include root 就是版本目录
-$CT_HOME/pkg/ct/std/0.19.0/std/<mod>/  # 模块目录
-$CT_HOME/pkg/ct/std/0.19.0/std/<mod>/README.md  # 方法全集、参数、返回值、内存归属、坑
+$CT_HOME/pkg/ct/std/0.20.0/            # ns-root = .，include root 就是版本目录
+$CT_HOME/pkg/ct/std/0.20.0/std/<mod>/  # 模块目录
+$CT_HOME/pkg/ct/std/0.20.0/std/<mod>/README.md  # 方法全集、参数、返回值、内存归属、坑
 ```
 
 `CT_HOME` 默认 `$HOME/.ct`。包内每个模块只有一份 `README.md`，**不再有独立 `tutorial.md`**；

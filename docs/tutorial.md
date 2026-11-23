@@ -720,7 +720,7 @@ static int raw_helper(int n) { return n + 1; }
 补 store 的 include root，消费者不再手写 `-I`：
 
 ```sh
-ct get ct/std@0.19.0        # 官方 pin 表；无索引、无网络索引仓
+ct get ct/std@0.20.0        # 官方 pin 表；无索引、无网络索引仓
 ct build main.ct -o main
 ```
 
@@ -736,7 +736,7 @@ namespace 固定为 `std::<mod>`，调用只有一种形态：方法。宿主是
 在 `.h.ct` 里直接写 `pub trait` + `struct ... use Trait` + `impl`：
 
 ```ct
-import std::str::String;   /* std 0.19.0；下一 MINOR 改名为 std::str::CharStr，旧名回退 */
+import std::str::CharStr;   /* std 0.20.0 起；旧名 String 已删除（D-025） */
 import std::test::Test;
 
 int main(void)

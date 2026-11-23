@@ -168,7 +168,7 @@ name version publisher git-url tag sha256:<64 hex>
   「你选择的索引文件 + 你显式写的 `<publisher>/<name>`」；要更强保证，用显式 URL，并让 `ct.lock` 钉住摘要。
 
 ```sh
-ct get ct/std@0.19.0         # 官方包：内置 pin 表，无索引可用
+ct get ct/std@0.20.0         # 官方包：内置 pin 表，无索引可用
 ct get --refresh std          # 丢弃 git 缓存并重新 fetch（缓存损坏时）
 ct get <pub>/<name>@<range>  # 第三方：发布方限定 + --index/CT_INDEX
 ct get ./path                # 本地目录同样按清单的 publisher/ns-root 落 store
@@ -253,7 +253,7 @@ cc -I .ctbuild consumer.c .ctbuild/libmylib.a -o consumer
 | 索引读不到 | `--index` / `CT_INDEX` 路径错 | 检查路径；无索引时裸名无法解析 |
 | `git fetch ... failed` + `network/proxy unreachable` | 网络、DNS 或代理不可达 | 重试；检查 `https_proxy` / `ALL_PROXY` / DNS；`CT_GIT_TIMEOUT` 可调超时 |
 | `... authentication/permission denied` | 凭据、token 或 SSH key 不可用 | 换有效凭据；git 以 `GIT_TERMINAL_PROMPT=0` 运行，不会弹窗 |
-| `... remote tag/object missing` | 远端没有 pin 的 tag/对象 | 核对 pin/tag 或先发布该 tag；显式版本用 `ct get ct/std@0.19.0` |
+| `... remote tag/object missing` | 远端没有 pin 的 tag/对象 | 核对 pin/tag 或先发布该 tag；显式版本用 `ct get ct/std@0.20.0` |
 | `... package cache is corrupt` | 缓存 `.git` 损坏或 origin 不符 | `rm -rf '<cache>'` 后重试，或 `ct get --refresh <spec>` |
 
 ### 7. 现状契约与陷阱（改契约前必读）

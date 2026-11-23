@@ -45,7 +45,7 @@
 ## 4. 最小命令
 
 ```sh
-ct get ct/std@0.19.0        # 官方 pin 表；无需索引；解析到 std 0.19.0
+ct get ct/std@0.20.0        # 官方 pin 表；无需索引；解析到 std 0.20.0
 ct build main.ct -o main    # ct.lock 自动补 store 的 include root
 
 ct get <pub>/<name> --index <file>   # 第三方：显式索引
