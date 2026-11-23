@@ -45,19 +45,22 @@
 #   CT=/path/to/ct bash examples/tour/run.sh  # use an existing ct-ast binary
 #   CC=clang bash examples/tour/run.sh
 #
-# Without CT, the runner uses `ct` from PATH; if that is missing it builds the
-# bootstrap chain (L0 -> L1 -> L2 -> ct-ast) under $TMPDIR, exactly as
-# selfhost/check-warnings.sh does. Nothing is written into the repository.
+# Without CT, the runner uses `ct` from PATH; if that is missing it builds
+# ct-ast from the frozen seed (bootstrap/ct-ast) under $TMPDIR. L0 is still
+# built for the samples tagged l0=yes. Nothing is written into the repository.
 
 set -u
+
+# The pkg cases run in a throwaway copy under $work; their free `#include`s are
+# fixtures, not the compiler's own source, so the C boundary policy is cleared.
+export CT_C_BOUNDARY=allow
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 here="$(cd "$(dirname "$0")" && pwd)"
 CC="${CC:-cc}"
 filter="${1:-}"
 
-work="${TMPDIR:-/tmp}"
-work="${work%/}/ct-tour-examples.$$"
+work=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/cttour.XXXXXX") || exit 1
 rm -rf "$work"
 mkdir -p "$work" || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
@@ -191,26 +194,10 @@ if [ -n "${CT:-}" ]; then
 elif command -v ct >/dev/null 2>&1; then
     ct="$(command -v ct)"
 else
-    echo "  no ct on PATH and CT is unset: building the bootstrap chain"
-    if ! "$l0" "$root/selfhost/l1/ctc.ct" -o "$work/l1.c" 2>"$work/l1.log"; then
-        echo "  L0 could not compile L1:"; show "$work/l1.log"; exit 1
-    fi
-    if ! "$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
-        echo "  L1 did not build:"; show "$work/l1b.log"; exit 1
-    fi
-    mkdir -p "$work/l2src" "$work/astsrc"
-    if ! "$work/l1" build "$root/selfhost/l2/driver.ct" -o "$work/l2src" >"$work/l2.out" 2>&1; then
-        echo "  L1 could not build the split tree:"; show "$work/l2.out"; exit 1
-    fi
-    if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
-        echo "  L2 did not build:"; show "$work/l2b.log"; exit 1
-    fi
-    if ! "$work/l2" build -I "$root/selfhost/ct-ast" "$root/selfhost/ct-ast/main.ct" \
-            -o "$work/astsrc" >"$work/ast.out" 2>&1; then
-        echo "  L2 could not build ct-ast:"; show "$work/ast.out"; exit 1
-    fi
-    if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
-        echo "  ct-ast did not build:"; show "$work/astb.log"; exit 1
+    echo "  no ct on PATH and CT is unset: building ct-ast from the frozen seed"
+    if ! CC="$CC" CFLAGS="-Wall -Wextra -std=c99" \
+            sh "$root/selfhost/seed-ct.sh" build "$work/ct-ast" >"$work/ast.out" 2>&1; then
+        echo "  ct-ast did not build from the frozen seed:"; show "$work/ast.out"; exit 1
     fi
     ct="$work/ct-ast"
 fi

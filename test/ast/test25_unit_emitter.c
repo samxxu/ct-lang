@@ -40,7 +40,9 @@ int main(void)
     memset(nodes, 0, sizeof nodes);
     arena.nodes = nodes;
     arena.nnode = 4;
-    em = g_emit;
+    /* The shipped emitter namespaces the global (`backend_emit_g_emit`); the
+     * L2-era spelling `g_emit` no longer exists in the frozen seed's C. */
+    em = backend_emit_g_emit;
     em.arena = &arena;
     em.out = tmpfile();
     if (!em.out) {

@@ -62,8 +62,11 @@ if [ -n "$EMITTED" ]; then
         need "$EMITTED/Lexer.h" "struct frontend_lex_TokView"
         need "$EMITTED/Lexer.h" "struct frontend_lex_TokView tokstr;"
         need "$EMITTED/Lexer.h" "struct frontend_lex_TokView toksuffix;"
-        need "$EMITTED/Lexer.c" "tokstr.ptr = l->src + start"
-        need "$EMITTED/Lexer.c" "toksuffix.ptr = l->src + start"
+        # The shipped emitter parenthesises the sum; the seed carries that
+        # spelling. The assertion is about the view pointing into `l->src`,
+        # not about the parentheses.
+        need "$EMITTED/Lexer.c" "tokstr.ptr = (l->src + start)"
+        need "$EMITTED/Lexer.c" "toksuffix.ptr = (l->src + start)"
         need "$EMITTED/Lexer.c" "lex_view_ok"
         # a token copy would need a copy call into the view
         reject "$EMITTED/Lexer.c" 'memcpy\(\s*&?(self->|l->)?tokstr'

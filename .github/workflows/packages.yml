@@ -11,6 +11,7 @@ on:
   push:
     paths:
       - 'examples/wave1-demo/**'
+      - 'bootstrap/ct-ast/**'
       - 'selfhost/ct-ast/**'
       - 'selfhost/l0/**'
       - 'selfhost/l1/**'
@@ -20,6 +21,7 @@ on:
   pull_request:
     paths:
       - 'examples/wave1-demo/**'
+      - 'bootstrap/ct-ast/**'
       - 'selfhost/ct-ast/**'
       - 'selfhost/l0/**'
       - 'selfhost/l1/**'
@@ -52,16 +54,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: bootstrap ct
+      - name: bootstrap ct (frozen seed)
         run: |
-          mkdir -p "$RUNNER_TEMP/ct" "$RUNNER_TEMP/ct/l2src" "$RUNNER_TEMP/astsrc"
-          gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$RUNNER_TEMP/ct/ctc"
-          "$RUNNER_TEMP/ct/ctc" selfhost/l1/ctc.ct -o "$RUNNER_TEMP/ct/l1.c"
-          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l1.c" -o "$RUNNER_TEMP/ct/l1"
-          "$RUNNER_TEMP/ct/l1" build selfhost/l2/driver.ct -o "$RUNNER_TEMP/ct/l2src"
-          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l2src"/*.c -o "$RUNNER_TEMP/ct/l2"
-          "$RUNNER_TEMP/ct/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$RUNNER_TEMP/astsrc"
-          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/astsrc"/*.c -o "$RUNNER_TEMP/ct/ct"
+          # v1-PH-0 S2b / D-022: build the shipped compiler from bootstrap/ct-ast.
+          # The L0 -> L1 -> L2 walk can no longer build ct-ast after `match`.
+          mkdir -p "$RUNNER_TEMP/ct"
+          gcc -Wall -Wextra -std=c99 -I bootstrap/ct-ast bootstrap/ct-ast/*.c \
+            -o "$RUNNER_TEMP/ct/ct"
           echo "$RUNNER_TEMP/ct" >> "$GITHUB_PATH"
 
       - name: fetch the package index
@@ -102,16 +101,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user
 
-      - name: bootstrap ct
+      - name: bootstrap ct (frozen seed)
         run: |
-          mkdir -p "$RUNNER_TEMP/ct" "$RUNNER_TEMP/ct/l2src" "$RUNNER_TEMP/astsrc"
-          gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$RUNNER_TEMP/ct/ctc"
-          "$RUNNER_TEMP/ct/ctc" selfhost/l1/ctc.ct -o "$RUNNER_TEMP/ct/l1.c"
-          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l1.c" -o "$RUNNER_TEMP/ct/l1"
-          "$RUNNER_TEMP/ct/l1" build selfhost/l2/driver.ct -o "$RUNNER_TEMP/ct/l2src"
-          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/ct/l2src"/*.c -o "$RUNNER_TEMP/ct/l2"
-          "$RUNNER_TEMP/ct/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$RUNNER_TEMP/astsrc"
-          gcc -Wall -Wextra -std=c99 "$RUNNER_TEMP/astsrc"/*.c -o "$RUNNER_TEMP/ct/ct"
+          # v1-PH-0 S2b / D-022: build the shipped compiler from bootstrap/ct-ast.
+          # The L0 -> L1 -> L2 walk can no longer build ct-ast after `match`.
+          mkdir -p "$RUNNER_TEMP/ct"
+          gcc -Wall -Wextra -std=c99 -I bootstrap/ct-ast bootstrap/ct-ast/*.c \
+            -o "$RUNNER_TEMP/ct/ct"
           echo "$RUNNER_TEMP/ct" >> "$GITHUB_PATH"
 
       - name: fetch the package index

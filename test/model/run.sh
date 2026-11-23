@@ -4,40 +4,19 @@ set -u
 CC="${CC:-cc}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root" || exit 1
-work="${TMPDIR:-/tmp}/ct-model-test.$$"
+work=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctmodel.XXXXXX") || exit 1
 rm -rf "$work"; mkdir -p "$work" || exit 1
 fails=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1: $2"; fails=$((fails+1)); }
 
 ct="$work/ct-ast"
-if ! "$CC" ${CC:+-std=c99} selfhost/l0/ctc.c -o "$work/ctc0" >/dev/null 2>&1; then
-    echo "  L0 did not build"; exit 1
-fi
-# reuse the repository's bootstrap chain through check-ast's build path
-if ! bash selfhost/check-ast.sh >/dev/null 2>&1; then
-    echo "  bootstrap chain failed"; exit 1
-fi
-# check-ast leaves no reusable binary; build a local one the same way the gate does
-if ! "$work/ctc0" selfhost/l1/ctc.ct -o "$work/l1.c" >/dev/null 2>&1; then
-    echo "  L1 did not emit"; exit 1
-fi
-if ! "$CC" -std=c99 "$work/l1.c" -o "$work/l1" >/dev/null 2>&1; then
-    echo "  L1 did not build"; exit 1
-fi
-mkdir -p "$work/l2src"
-if ! "$work/l1" build -I selfhost/l2 selfhost/l2/driver.ct -o "$work/l2src" >/dev/null 2>&1; then
-    echo "  L2 did not build"; exit 1
-fi
-if ! "$CC" -std=c99 "$work"/l2src/*.c -o "$work/l2" >/dev/null 2>&1; then
-    echo "  L2 did not link"; exit 1
-fi
-mkdir -p "$work/astsrc"
-if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >/dev/null 2>&1; then
-    echo "  ct-ast did not build"; exit 1
-fi
-if ! "$CC" -std=c99 "$work"/astsrc/*.c -o "$ct" >/dev/null 2>&1; then
-    echo "  ct-ast did not link"; exit 1
+# v1-PH-0 S2b: the compiler comes from the frozen seed. The old L0 -> L1 -> L2
+# walk cannot build ct-ast after `match` and is not this probe's subject.
+if ! CC="$CC" CFLAGS="-std=c99" sh "$root/selfhost/seed-ct.sh" build "$ct" \
+        >"$work/astb.log" 2>&1; then
+    echo "  ct-ast did not build from the frozen seed: $(tail -2 "$work/astb.log" | tr '\n' ' ')"
+    exit 1
 fi
 
 if "$ct" --emit-model "$work/m.json" test/model/case1/box.ct -o "$work/box.c" >/dev/null 2>"$work/m.err"; then

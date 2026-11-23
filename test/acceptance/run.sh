@@ -2,7 +2,7 @@
 #
 # AST capacity acceptance probes.
 #
-#   ./test/acceptance/run.sh                    build the live compiler (L0->L1->L2), probe it
+#   ./test/acceptance/run.sh                    build ct-ast from the frozen seed, probe it
 #   CT=/path/to/ctc ./test/acceptance/run.sh    probe a prebuilt compiler
 #
 # This is NOT part of ./test/run.sh on purpose: the probes describe capabilities
@@ -24,56 +24,29 @@
 # a construct that merely "compiles and segfaults" is still PENDING -- silent
 # passthrough must not count as support.
 #
+# PH-65: these probes predate the C boundary and generate fixtures in a temp
+# directory with free `#include`s; clear the policy for this harness.
+export CT_C_BOUNDARY=allow
+
 set -u
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CC=${CC:-cc}
 CFLAGS="-Wall -Wextra -std=c99"
-TMP=$(mktemp -d) || exit 1
+TMP=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctacc.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
 cd "$ROOT" || exit 1
 
 CT=${CT:-}
 if [ -z "$CT" ]; then
-    # The live compiler is ct-ast (the installed entry since 10.7). Probing L2
-    # instead is still possible via `CT=<l2 binary>` and used to be the default
-    # until Phase 12; L0 (`CT=<l0 binary>`) is also honoured, but its PENDING
-    # verdicts are then expected, not failures.
-    if ! $CC $CFLAGS selfhost/l0/ctc.c -o "$TMP/ctc-l0" 2>"$TMP/build.log"; then
-        echo "building selfhost/l0/ctc.c (L0) failed:"
-        sed 's/^/    /' "$TMP/build.log"
-        exit 1
-    fi
-    if ! "$TMP/ctc-l0" selfhost/l1/ctc.ct -o "$TMP/ctc-l1.c" 2>"$TMP/build.log"; then
-        echo "L0 could not compile L1 (selfhost/l1/ctc.ct):"
-        sed 's/^/    /' "$TMP/build.log"
-        exit 1
-    fi
-    if ! $CC $CFLAGS "$TMP/ctc-l1.c" -o "$TMP/ctc-l1" 2>"$TMP/build.log"; then
-        echo "building L1 failed:"
-        sed 's/^/    /' "$TMP/build.log"
-        exit 1
-    fi
-    mkdir -p "$TMP/l2src"
-    if ! "$TMP/ctc-l1" build selfhost/l2/driver.ct -o "$TMP/l2src" 2>"$TMP/build.log"; then
-        echo "L1 could not build selfhost/l2/**:"
-        sed 's/^/    /' "$TMP/build.log"
-        exit 1
-    fi
-    if ! $CC $CFLAGS "$TMP/l2src"/*.c -o "$TMP/ctc-l2" 2>"$TMP/build.log"; then
-        echo "building L2 failed:"
-        sed 's/^/    /' "$TMP/build.log"
-        exit 1
-    fi
-    mkdir -p "$TMP/astsrc"
-    if ! "$TMP/ctc-l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$TMP/astsrc" 2>"$TMP/build.log"; then
-        echo "L2 could not build ct-ast (selfhost/ct-ast/main.ct):"
-        sed 's/^/    /' "$TMP/build.log"
-        exit 1
-    fi
-    if ! $CC $CFLAGS "$TMP/astsrc"/*.c -o "$TMP/ct-ast" 2>"$TMP/build.log"; then
-        echo "building ct-ast failed:"
+    # The live compiler is ct-ast (the installed entry since 10.7), built from
+    # the frozen seed (D-022). `CT=<path>` still probes any prebuilt compiler;
+    # probing L2 was possible until Phase 12, but L2 can no longer parse the
+    # ADT/`match` source, so it is not a default any more.
+    if ! CC="$CC" CFLAGS="$CFLAGS" sh "$ROOT/selfhost/seed-ct.sh" build "$TMP/ct-ast" \
+            2>"$TMP/build.log"; then
+        echo "building ct-ast from bootstrap/ct-ast (the frozen seed) failed:"
         sed 's/^/    /' "$TMP/build.log"
         exit 1
     fi

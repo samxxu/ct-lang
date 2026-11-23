@@ -3,8 +3,10 @@
 #
 #   bash selfhost/make-dist.sh [--out <dir>] [--cross <zig>] [--no-smoke]
 #
-# Pipeline (same bootstrap as check-ast.sh):
-#   L0 (cc) -> L1.c -> L1 -> L2.c -> L2 -> astsrc/*.c -> target ct
+# Pipeline (D-022, v1-PH-0 S2b):
+#   bootstrap/ct-ast/*.c -> target ct
+# The seed is the C the shipped ct-ast emits for itself; the old L0 -> L1 -> L2
+# walk cannot build it after `match` and is no longer a distribution step.
 # The target compiler is either the host's cc on Linux, or a cross compiler
 # (zig cc -target x86_64-linux-musl -static) so a macOS host can still produce
 # a real Linux ELF. The artefact is:
@@ -38,20 +40,11 @@ while [ $# -gt 0 ]; do
 done
 cd "$root" || exit 1
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/make-dist.XXXXXX") || exit 1
+work=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/mkdist.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
-echo "== bootstrap (host $CC) =="
-$CC -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" || exit 1
-"$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" || exit 1
-$CC -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" || exit 1
-mkdir -p "$work/l2src"
-"$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.log" 2>&1 || {
-    echo "make-dist: L1 could not build L2:" >&2; sed 's/^/  /' "$work/l2.log" >&2; exit 1; }
-$CC -Wall -Wextra -std=c99 "$work"/l2src/*.c -o "$work/l2" || exit 1
-mkdir -p "$work/astsrc"
-"$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.log" 2>&1 || {
-    echo "make-dist: L2 could not build ct-ast:" >&2; sed 's/^/  /' "$work/ast.log" >&2; exit 1; }
+seed="$root/bootstrap/ct-ast"
+[ -d "$seed" ] || { echo "make-dist: the frozen seed is missing: $seed" >&2; exit 1; }
 
 echo "== target (Linux x86_64) =="
 if [ -n "$cross" ]; then
@@ -60,18 +53,18 @@ if [ -n "$cross" ]; then
     echo "cross: $cross cc -target x86_64-linux-musl -static"
     ZIG_GLOBAL_CACHE_DIR="$work/zigcache" ZIG_LOCAL_CACHE_DIR="$work/zigcache" \
         "$cross" cc -target x86_64-linux-musl -static -O2 -std=c99 \
-        "$work"/astsrc/*.c -o "$work/ct" || {
+        -I "$seed" "$seed"/*.c -o "$work/ct" || {
         echo "make-dist: zig cross build failed" >&2; exit 1; }
     linkage="static musl"
 elif [ "$(uname -s)" = "Linux" ]; then
     # A native Linux build is the authority; prefer a static link so the
     # glibc baseline does not leak into the artefact, but fall back with a
     # warning when static libc is absent.
-    if $CC -O2 -std=c99 -static "$work"/astsrc/*.c -o "$work/ct" 2>"$work/link.log"; then
+    if $CC -O2 -std=c99 -static -I "$seed" "$seed"/*.c -o "$work/ct" 2>"$work/link.log"; then
         linkage="static"
     else
         echo "make-dist: warning: static link unavailable; using the host glibc" >&2
-        $CC -O2 -std=c99 "$work"/astsrc/*.c -o "$work/ct" || exit 1
+        $CC -O2 -std=c99 -I "$seed" "$seed"/*.c -o "$work/ct" || exit 1
         linkage="dynamic (host glibc $(getconf GNU_LIBC_VERSION 2>/dev/null || echo '?'))"
     fi
 else

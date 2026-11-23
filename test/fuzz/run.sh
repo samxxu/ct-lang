@@ -24,6 +24,10 @@
 
 set -u
 
+# The mutations are written to a temp directory and may keep a free `#include`,
+# so the source-level C boundary policy is not what this gate exercises.
+export CT_C_BOUNDARY=allow
+
 # Fixed collation, so `find | sort` picks the same seed order on every host.
 LC_ALL=C
 export LC_ALL
@@ -34,7 +38,7 @@ cd "$root" || exit 1
 CC="${CC:-cc}"
 root_seed=20261102
 
-work="$(mktemp -d)" || exit 1
+work="$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctfuzz.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 # GCC >= 8 needs the same two -Wno flags check-all.sh uses, so the frozen layers
@@ -52,29 +56,13 @@ bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 echo "cc: $CC"
 echo "seed: $root_seed"
 echo
-echo "== build the bootstrap chain and the AST compiler =="
-if ! "$CC" $flags selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
-    echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
-fi
-if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
-    echo "  L0 could not compile L1:"; sed 's/^/    /' "$work/l1.log"; exit 1
-fi
-if ! "$CC" $flags "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
-    echo "  L1 did not build:"; sed 's/^/    /' "$work/l1b.log"; exit 1
-fi
-mkdir -p "$work/l2src"
-if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
-    echo "  L1 could not build the split tree:"; sed 's/^/    /' "$work/l2.out"; exit 1
-fi
-if ! "$CC" $flags "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
-    echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
-fi
-mkdir -p "$work/astsrc"
-if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
-    echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
-fi
-if ! "$CC" $flags "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
-    echo "  the AST compiler did not build:"; sed 's/^/    /' "$work/astb.log"; exit 1
+echo "== build the AST compiler (frozen seed) =="
+# v1-PH-0 S2b: fuzz the shipped compiler; the L1/L2 chain can no longer build
+# ct-ast after `match`. L1/L2 remain gates 2/3/4/5's oracle, not this input.
+if ! CC="$CC" CFLAGS="$flags" sh "$root/selfhost/seed-ct.sh" build "$work/ct-ast" \
+        >"$work/ast.out" 2>&1; then
+    echo "  the AST compiler did not build from the frozen seed:"
+    sed 's/^/    /' "$work/ast.out"; exit 1
 fi
 
 # LCG from Numerical Recipes: explicit modulo keeps it identical on every host

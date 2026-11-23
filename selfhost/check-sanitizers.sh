@@ -2,7 +2,7 @@
 #
 # check-sanitizers.sh - the ASAN/UBSAN gate (Phase 17.1).
 #
-# Builds the whole chain (L0 -> L1 -> L2 -> ct-ast) with
+# Builds ct-ast from the frozen seed (bootstrap/ct-ast, D-022) with
 # `-fsanitize=address,undefined -fno-omit-frame-pointer`, then runs:
 #
 #   1. ./test/run.sh          (the L0 suite, with every generated binary and
@@ -35,7 +35,7 @@ ASAN_OPTIONS="detect_leaks=0"
 UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1"
 export ASAN_OPTIONS UBSAN_OPTIONS
 
-work="$(mktemp -d)" || exit 1
+work="$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctsan.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 # One wrapper for every compile below. GCC >= 8 also enables
@@ -64,31 +64,15 @@ sanitizer_report() {
 
 echo "cc: $CC ($san)"
 echo
-echo "== build the bootstrap chain and the AST compiler (sanitized) =="
-if ! "$SANCC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
-    echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
+echo "== build the AST compiler from the frozen seed (sanitized) =="
+# v1-PH-0 S2b: instrument the shipped compiler. L2 cannot build ct-ast after
+# `match`; L1/L2 stay the regression oracle of gates 2/3/4/5, not this input.
+if ! CC="$SANCC" CFLAGS="-Wall -Wextra -std=c99" \
+        sh "$root/selfhost/seed-ct.sh" build "$work/ct-ast" >"$work/ast.out" 2>&1; then
+    echo "  ct-ast did not build from the frozen seed:"
+    sed 's/^/    /' "$work/ast.out"; exit 1
 fi
-if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
-    echo "  L0 could not compile L1:"; sed 's/^/    /' "$work/l1.log"; exit 1
-fi
-if ! "$SANCC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
-    echo "  L1 did not build:"; sed 's/^/    /' "$work/l1b.log"; exit 1
-fi
-mkdir -p "$work/l2src"
-if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
-    echo "  L1 could not build the split tree:"; sed 's/^/    /' "$work/l2.out"; exit 1
-fi
-if ! "$SANCC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
-    echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
-fi
-mkdir -p "$work/astsrc"
-if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
-    echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
-fi
-if ! "$SANCC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
-    echo "  the AST compiler did not build:"; sed 's/^/    /' "$work/astb.log"; exit 1
-fi
-ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
+ok "ct-ast builds from the frozen seed (sanitized)"
 
 echo
 echo "== L0 suite (test/run.sh, sanitized) =="

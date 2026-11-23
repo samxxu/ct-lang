@@ -1,9 +1,10 @@
 #!/bin/sh
 # TEST-25: offline line-coverage report for ct-ast (gcov, report only).
 #
-# Builds the bootstrap chain, instruments the generated C tree with
-# `--coverage`, runs the compiler over its behavioural corpus (compile mode
-# where it can, build mode for the multi-unit fixtures), and turns the gcov
+# Materialises the frozen seed (bootstrap/ct-ast, the shipped compiler's C),
+# instruments that tree with `--coverage`, runs the compiler over its
+# behavioural corpus (compile mode where it can, build mode for the multi-unit
+# fixtures), and turns the gcov
 # counters into one line-coverage summary plus a per-file table.
 #
 # Why gcov: it ships with GCC, needs no third-party tool and no network. The
@@ -29,7 +30,7 @@ cd "$root" || exit 1
 CC=${CC:-cc}
 GCOV=${GCOV:-gcov}
 out=${COVERAGE_OUT:-$root/.temp/coverage}
-work=${TMPDIR:-/tmp}/ct-coverage.$$
+work=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctcov.XXXXXX") || exit 1
 cflags="-Wall -Wextra -std=c99"
 
 rm -rf "$work"
@@ -54,27 +55,13 @@ if ! $CC $cflags --coverage "$work/probe.c" -o "$work/probe" >"$work/probe.log" 
     skip_or_fail "$CC cannot link with --coverage (see $work/probe.log)"
 fi
 
-echo "== build the bootstrap chain and the instrumentation =="
-if ! $CC $cflags selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
-    echo "coverage: the L0 build failed:" >&2; sed 's/^/  /' "$work/l0.log" >&2; exit 1
-fi
-if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
-    echo "coverage: L0 could not compile L1:" >&2; sed 's/^/  /' "$work/l1.log" >&2; exit 1
-fi
-if ! $CC $cflags "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
-    echo "coverage: L1 did not build:" >&2; sed 's/^/  /' "$work/l1b.log" >&2; exit 1
-fi
-mkdir -p "$work/l2src"
-if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
-    echo "coverage: L1 could not build L2:" >&2; sed 's/^/  /' "$work/l2.out" >&2; exit 1
-fi
-if ! $CC $cflags "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
-    echo "coverage: L2 did not build:" >&2; sed 's/^/  /' "$work/l2b.log" >&2; exit 1
-fi
-mkdir -p "$work/astsrc"
-if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" \
-        >"$work/ast.out" 2>&1; then
-    echo "coverage: L2 could not build the AST compiler:" >&2; sed 's/^/  /' "$work/ast.out" >&2; exit 1
+echo "== materialise the frozen seed and the instrumentation =="
+# v1-PH-0 S2b: instrument the shipped compiler's C (the seed), not an L2-built
+# tree. The seed carries the same `#line` anchors back to the `.ct` sources,
+# so gcov still attributes counters to the sources under test.
+if ! sh "$root/selfhost/seed-ct.sh" astsrc "$work/astsrc" >"$work/ast.out" 2>&1; then
+    echo "coverage: could not materialise bootstrap/ct-ast:" >&2
+    sed 's/^/  /' "$work/ast.out" >&2; exit 1
 fi
 
 # Instrument all units in one directory so every gcno/gcda pair lands in

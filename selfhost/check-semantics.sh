@@ -2,8 +2,8 @@
 #
 # check-semantics.sh - the semantic entry's gate (Phase 19.4).
 #
-# Builds the bootstrap chain and the AST compiler, then asserts the behaviour
-# of `ct check` (D19-4):
+# Builds the AST compiler from the frozen seed (D-022) and then asserts the
+# behaviour of `ct check` (D19-4):
 #
 #   - a clean unit exits 0 and prints nothing;
 #   - a `.m.ct` declaration unit is a valid input, an import-bearing unit is not;
@@ -24,11 +24,8 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 
 CC="${CC:-cc}"
-work="${TMPDIR:-/tmp}"
-work="${work%/}/ct-semantics-test.$$"
-
-rm -rf "$work"
-mkdir -p "$work" || exit 1
+work=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctsem.XXXXXX") || exit 1
+trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 pass=0
 fail=0
@@ -37,29 +34,13 @@ bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 
 echo "cc: $CC"
 echo
-echo "== build the bootstrap chain and the AST compiler =="
-if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
-    echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
-fi
-if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
-    echo "  L0 could not compile L1:"; sed 's/^/    /' "$work/l1.log"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
-    echo "  L1 did not build:"; sed 's/^/    /' "$work/l1b.log"; exit 1
-fi
-mkdir -p "$work/l2src"
-if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
-    echo "  L1 could not build the split tree:"; sed 's/^/    /' "$work/l2.out"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
-    echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
-fi
-mkdir -p "$work/astsrc"
-if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
-    echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
-    echo "  the AST compiler did not build:"; sed 's/^/    /' "$work/astb.log"; exit 1
+echo "== build the AST compiler from the frozen seed =="
+# v1-PH-0 S2b: this gate judges `ct check` on the shipped compiler. The
+# L0 -> L1 -> L2 walk is no longer a build path for ct-ast after `match`.
+if ! CC="$CC" CFLAGS="-Wall -Wextra -std=c99" \
+        sh "$root/selfhost/seed-ct.sh" build "$work/ct-ast" >"$work/ast.out" 2>&1; then
+    echo "  ct-ast did not build from the frozen seed:"
+    sed 's/^/    /' "$work/ast.out"; exit 1
 fi
 
 # -- the probes ------------------------------------------------------------

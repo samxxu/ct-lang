@@ -8,8 +8,8 @@
 # entry) with `-Wall -Wextra -std=c99 -c` and fails if stderr is not empty.
 #
 # Coverage:
-#   - the bootstrap chain's own artefacts (l1.c, l2/*.c, ast/*.c), so ct-ast
-#     keeps emitting warning-free C for the compiler itself;
+#   - the frozen seed (bootstrap/ct-ast/*.c), i.e. the C the shipped compiler
+#     emits for itself, so ct-ast keeps emitting warning-free C;
 #   - test/ast/*/prog.ct            (one unit per fixture);
 #   - test/patterns/*/prog.ct       (one unit per design pattern);
 #   - test/cases/*.ct + examples/*/*.ct (compile mode; a dialect demo is
@@ -44,11 +44,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 
 CC="${CC:-cc}"
-work="${TMPDIR:-/tmp}"
-work="${work%/}/ct-warn-test.$$"
-
-rm -rf "$work"
-mkdir -p "$work" || exit 1
+work=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctwarn.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 pass=0
@@ -58,30 +54,18 @@ bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 
 echo "cc: $CC"
 echo
-echo "== build the bootstrap chain and the AST compiler =="
-if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
-    echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
+echo "== materialise the frozen seed and build the AST compiler =="
+# v1-PH-0 S2b: the compiler under test is the seed-built ct-ast. The same tree
+# is scanned below; L2 cannot build it after `match`.
+if ! CC="$CC" CFLAGS="-Wall -Wextra -std=c99" \
+        sh "$root/selfhost/seed-ct.sh" astsrc "$work/astsrc" >"$work/ast.out" 2>&1; then
+    echo "  could not materialise bootstrap/ct-ast:"; sed 's/^/    /' "$work/ast.out"; exit 1
 fi
-if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.out"; then
-    echo "  L0 could not compile L1:"; sed 's/^/    /' "$work/l1.out"; exit 1
+if ! CC="$CC" CFLAGS="-Wall -Wextra -std=c99" \
+        sh "$root/selfhost/seed-ct.sh" build "$work/ct-ast" >"$work/astb.log" 2>&1; then
+    echo "  the AST compiler did not build from the frozen seed:"; sed 's/^/    /' "$work/astb.log"; exit 1
 fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
-    echo "  L1 did not build:"; sed 's/^/    /' "$work/l1b.log"; exit 1
-fi
-mkdir -p "$work/l2src" "$work/astsrc"
-if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
-    echo "  L1 could not build the split tree:"; sed 's/^/    /' "$work/l2.out"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
-    echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
-fi
-if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
-    echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
-    echo "  the AST compiler did not build:"; sed 's/^/    /' "$work/astb.log"; exit 1
-fi
-ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
+ok "ct-ast builds from the frozen seed"
 
 # scan_one <label> <generated.c> [extra cc flags...]
 scan_one() {
@@ -103,8 +87,6 @@ echo
 echo "== the compiler's own artefacts =="
 # The chain build above already puts -Wall -Wextra on these files; this repeats
 # the check explicitly so a warning is attributed to the right layer.
-scan_one "l1.c" "$work/l1.c"
-for f in "$work"/l2src/*.c; do scan_one "l2/$(basename "$f")" "$f"; done
 for f in "$work"/astsrc/*.c; do scan_one "ct-ast/$(basename "$f")" "$f"; done
 
 echo

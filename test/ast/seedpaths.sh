@@ -9,9 +9,10 @@
 # regression oracle of gates 2/3/4/5.
 #
 # Two checks:
-#   1. no executable shell file in the tracked tree (test/, selfhost/,
-#      examples/, docs/, install.sh, tools/ ...; .temp/ is scratch) contains a
-#      non-comment command matching `l[12].*build.*selfhost/ct-ast`;
+#   1. no executable shell / launcher / CI file in the tracked tree (test/,
+#      selfhost/, examples/, docs/, install.sh, tools/, *.command,
+#      .github/workflows/*.yml; .temp/ is scratch) contains a non-comment
+#      command matching `l[12].*build.*selfhost/ct-ast`;
 #   2. the two allowed exceptions still carry their marker comment, so an
 #      allowlist entry cannot rot silently. Those are:
 #        - selfhost/gen-seed.sh: the seed-missing bootstrap fallback;
@@ -65,8 +66,11 @@ scan() {
 }
 
 # ---- 1) the real tree -----------------------------------------------------
-find . \( -path ./.temp -o -path ./.git \) -prune -o \
-    -type f -name '*.sh' -print 2>/dev/null | LC_ALL=C sort >"$tmp/files"
+{
+    find . \( -path ./.temp -o -path ./.git \) -prune -o \
+        -type f \( -name '*.sh' -o -name '*.command' \) -print 2>/dev/null
+    find .github/workflows -type f -name '*.yml' -print 2>/dev/null
+} | LC_ALL=C sort >"$tmp/files"
 nfiles=$(wc -l <"$tmp/files" | tr -d ' ')
 scan "$root" "$tmp/files" >"$tmp/hits"
 if [ -s "$tmp/hits" ]; then
@@ -74,7 +78,7 @@ if [ -s "$tmp/hits" ]; then
         "$(wc -l <"$tmp/hits" | tr -d ' ') line(s) in $(cut -d: -f1 "$tmp/hits" | sort -u | tr '\n' ' ')"
     sed 's/^/    /' "$tmp/hits"
 else
-    ok "no harness builds ct-ast from the L2 chain ($nfiles shell files)"
+    ok "no harness builds ct-ast from the L2 chain ($nfiles shell/CI files)"
 fi
 
 # ---- 2) every allowlist entry says why it is allowed ----------------------
@@ -100,12 +104,22 @@ cat >"$tmp/ok/harness/run.sh" <<'POS'
 sh selfhost/seed-ct.sh build "$work/ct-ast"
 POS
 find "$tmp/neg" -type f -name '*.sh' >"$tmp/neg.list"
-find "$tmp/ok" -type f -name '*.sh' >"$tmp/ok.list"
 if [ -n "$(scan "$tmp/neg" "$tmp/neg.list")" ]; then
     ok "negative fixture: a leaked L2 build is rejected"
 else
     bad "negative fixture: a leaked L2 build was accepted (the scanner is blind)"
 fi
+# The CI workflow is a build path too: a `.yml` leak must be caught.
+mkdir -p "$tmp/negci/.github/workflows"
+printf '      - run: |\n          "$RUNNER_TEMP/ct/l%s" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o x\n' 2 \
+    >"$tmp/negci/.github/workflows/ci.yml"
+find "$tmp/negci" -type f -name '*.yml' >"$tmp/negci.list"
+if [ -n "$(scan "$tmp/negci" "$tmp/negci.list")" ]; then
+    ok "negative fixture: a leaked L2 build in CI is rejected"
+else
+    bad "negative fixture: a leaked L2 build in CI was accepted"
+fi
+find "$tmp/ok" -type f -name '*.sh' >"$tmp/ok.list"
 if [ -z "$(scan "$tmp/ok" "$tmp/ok.list")" ]; then
     ok "positive fixture: a comment and a seed build stay green"
 else

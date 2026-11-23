@@ -8,6 +8,8 @@
 # silent hand edit could change the compiler without changing any source, so this
 # gate is the only judge of it:
 #
+#   0. no harness still builds ct-ast from the L1/L2 chain (v1-PH-0 S2b): the
+#      path probe test/ast/seedpaths.sh scans the run scripts;
 #   1. bootstrap/MANIFEST.sha256 lists every seeded .c/.h and every digest
 #      matches -- a hand edit, an added file or a deleted file is red;
 #   2. a plain `cc` build of the seed is warning-free and the binary runs;
@@ -23,7 +25,7 @@
 #
 # Usage: bash selfhost/check-seed.sh
 #        CC=clang bash selfhost/check-seed.sh
-# Exit: 0 all five checks pass, 1 any failure.
+# Exit: 0 all six checks pass, 1 any failure.
 set -u
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -40,7 +42,7 @@ else
     sha256_of() { sha256sum "$1" | awk '{print $1}'; }
 fi
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/ct-seed.XXXXXX")" || exit 1
+work="$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctseedchk.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 fail=0

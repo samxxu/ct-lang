@@ -7,10 +7,14 @@
 # shipped compiler from. Regenerate it only when cutting a release tag
 # (R-V1-1) and commit the whole directory with this script's manifest.
 #
-# One-step bootstrap: the seed comes from the ct-ast of the previous release, so
-# today this walks the frozen chain L0 -> L1 -> L2 -> ct-ast and lets that
-# binary emit its own C. `CT_BOOTSTRAP_CT` skips the walk when a ct-ast binary
-# is already at hand (for example the installed one).
+# One-step bootstrap: the seed comes from the ct-ast of the previous release.
+# When `bootstrap/ct-ast` already exists (the normal case) that frozen seed is
+# compiled and used as the emitter -- it is the previous release's compiler and
+# understands the current source. `CT_BOOTSTRAP_CT` overrides it when a newer
+# compiler is at hand (two-stage bootstrap). Only when no seed exists yet does
+# this fall back to the old L0 -> L1 -> L2 -> ct-ast walk: that is the
+# seed-missing bootstrap exception, kept for the very first seed and for a
+# historical checkout, not a build path for any harness.
 #
 # Usage:
 #   bash selfhost/gen-seed.sh
@@ -30,7 +34,7 @@ manifest="$root/bootstrap/MANIFEST.sha256"
 say() { printf '==> %s\n' "$*"; }
 die() { printf 'gen-seed: error: %s\n' "$*" >&2; exit 1; }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/ct-gen-seed.XXXXXX")" || exit 1
+work="$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctseed.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 # --- 1. obtain a ct-ast binary ------------------------------------------------
@@ -38,8 +42,18 @@ if [ -n "${CT_BOOTSTRAP_CT:-}" ]; then
     ct="$CT_BOOTSTRAP_CT"
     [ -x "$ct" ] || die "CT_BOOTSTRAP_CT is not executable: $ct"
     say "using CT_BOOTSTRAP_CT=$ct"
+elif sh "$root/selfhost/seed-ct.sh" exists; then
+    say "using the frozen seed bootstrap/ct-ast as the emitter"
+    CC="$CC" CFLAGS="-Wall -Wextra -std=c99" \
+        sh "$root/selfhost/seed-ct.sh" build "$work/ct" ||
+        die "the frozen seed cannot build itself; set CT_BOOTSTRAP_CT to a newer ct (two-stage bootstrap)"
+    ct="$work/ct"
 else
-    say "building the chain (L0 -> L1 -> L2 -> ct-ast) to get the emitter"
+    # seedpaths: bootstrap fallback -- no seed exists yet, so the only emitter
+    # available is the old L0 -> L1 -> L2 -> ct-ast chain. This is the single
+    # place L2 still builds ct-ast: it bootstraps the first seed. Every harness
+    # must use selfhost/seed-ct.sh instead (test/ast/seedpaths.sh enforces it).
+    say "no seed yet: building the chain (L0 -> L1 -> L2 -> ct-ast) to get the emitter"
     "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" ||
         die "L0 did not build"
     "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" ||
@@ -52,6 +66,7 @@ else
     "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" ||
         die "L2 did not build"
     mkdir -p "$work/astsrc"
+    # seedpaths: bootstrap fallback (the line below is the seed-missing path)
     "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" \
         >"$work/ast.log" 2>&1 ||
         { sed 's/^/    /' "$work/ast.log" >&2; die "L2 could not build ct-ast"; }

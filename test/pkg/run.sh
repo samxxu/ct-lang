@@ -6,8 +6,8 @@ export CT_C_BOUNDARY=allow
 #
 # test/pkg/run.sh - Phase 8.1 + 8.2 + 8.3: the local, git and install halves of ct-pkg.
 #
-# Builds the whole bootstrap chain (L0 -> L1 -> L2 -> ct-ast, the compiler that
-# now ships `get`/`install`) and exercises `ct get` on a throwaway project:
+# Builds ct-ast from the frozen seed (the compiler that now ships
+# `get`/`install`) and exercises `ct get` on a throwaway project:
 # manifest parsing, a version range, a recursive local `dep`, the shared store
 # ($CT_HOME/pkg/<publisher>/<name>/<version>) and the v2 `ct.lock` rows.
 # Phase 8.2 adds a git source: a local git repository stands in for the registry
@@ -40,11 +40,10 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root" || exit 1
 
 CC="${CC:-cc}"
-work="${TMPDIR:-/tmp}"
-work="${work%/}/ct-pkg-test.$$"
+work=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctpkg.XXXXXX") || exit 1
 
-rm -rf "$work"
 mkdir -p "$work" || exit 1
+trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 # Every `ct get` installs into the shared store; keep it inside the throwaway
 # root so the real $HOME is never touched. Suites that need isolation override
@@ -60,33 +59,15 @@ bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 
 echo "cc: $CC"
 echo
-echo "== build the bootstrap chain =="
-if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
-    echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
+echo "== build the AST compiler (frozen seed) =="
+# Phase 10.6: the package subcommands ship with ct-ast. Since v1-PH-0 S2b the
+# compiler comes from the frozen seed (D-022); the L1/L2 chain can no longer
+# build it after `match`, and it is not what this gate exercises.
+if ! CC="$CC" CFLAGS="-Wall -Wextra -std=c99" sh "$root/selfhost/seed-ct.sh" \
+        build "$work/ct-ast" >"$work/ast.out" 2>&1; then
+    echo "  ct-ast did not build from the frozen seed:"; sed 's/^/    /' "$work/ast.out"; exit 1
 fi
-if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
-    echo "  L0 could not compile L1:"; sed 's/^/    /' "$work/l1.log"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
-    echo "  L1 did not build:"; sed 's/^/    /' "$work/l1b.log"; exit 1
-fi
-mkdir -p "$work/l2src"
-if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
-    echo "  L1 could not build the split tree:"; sed 's/^/    /' "$work/l2.out"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
-    echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
-fi
-# Phase 10.6: the package subcommands now ship with the AST compiler (ct-ast),
-# which L2 builds from selfhost/ct-ast/main.ct. This gate drives that entry.
-mkdir -p "$work/astsrc"
-if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
-    echo "  L2 could not build the AST compiler:"; sed 's/^/    /' "$work/ast.out"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
-    echo "  the AST compiler did not build:"; sed 's/^/    /' "$work/astb.log"; exit 1
-fi
-ok "the chain builds (L0 -> L1 -> L2 -> ct-ast)"
+ok "ct-ast builds from the frozen seed"
 
 echo
 echo "== a project and two local packages =="

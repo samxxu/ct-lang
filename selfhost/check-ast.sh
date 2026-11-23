@@ -221,8 +221,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 
 CC="${CC:-cc}"
-work="${TMPDIR:-/tmp}"
-work="${work%/}/ct-ast-test.$$"
+work=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctast.XXXXXX") || exit 1
 
 rm -rf "$work"
 mkdir -p "$work" || exit 1
@@ -499,14 +498,14 @@ if ! "$CC" -Wall -Wextra -std=c99 -I "$seeddir" "$seeddir"/*.c -o "$work/ct-ast"
     echo "  the AST compiler did not build from the seed:"; sed 's/^/    /' "$work/astb.log"; exit 1
 fi
 ok "the chain builds (L0 -> L1 -> L2 as oracle; ct-ast from the frozen seed)"
-# The white-box probes (p86 token/C API, TEST-25 unit slices) still receive the
-# tree L2 emits for ct-ast's source. That tree is a frozen expectation of those
-# probes, not the shipped binary: L2 is the regression oracle here, and the
-# compiler under test above came from the seed. Keeping the two apart is what
-# D-022 means by "L1/L2 stay as oracle".
-mkdir -p "$work/astsrc"
-if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1; then
-    echo "  L2 could not emit the ct-ast reference tree (white-box probes):"; sed 's/^/    /' "$work/ast.out"; exit 1
+# The white-box probes (p86 token/C API, TEST-25 unit slices) need the compiler's
+# emitted C tree. That tree is exactly the frozen seed: gate 13 proves the seed
+# rebuilds itself byte for byte, and the seed is what the compiler under test was
+# compiled from. Copy it instead of asking L2 -- L2 no longer parses ADT/`match`
+# (v1-PH-0 S2b). L2 above stays the regression oracle; it is just not this tree's
+# emitter any more.
+if ! sh "$root/selfhost/seed-ct.sh" astsrc "$work/astsrc" >"$work/ast.out" 2>&1; then
+    echo "  could not materialise the seed tree (white-box probes):"; sed 's/^/    /' "$work/ast.out"; exit 1
 fi
 
 # Phase 26 (SH-62 / SH-64): the systemic defence. A type parameter must be gone

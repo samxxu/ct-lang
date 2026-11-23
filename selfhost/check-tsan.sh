@@ -10,7 +10,7 @@ set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 CC="${CC:-cc}"
-work="$(mktemp -d)" || exit 1
+work="$(mktemp -d "${CT_SHORT_TMP:-/tmp}/cttsan.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 printf 'int main(void) { return 0; }\n' > "$work/tsan.c"
@@ -22,22 +22,12 @@ fi
 
 echo "cc: $CC"
 echo
-echo "== build ct-ast =="
-mkdir -p "$work/l2src" "$work/astsrc"
-if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.err"; then
-    echo "FAIL l0: $(cat "$work/l0.err")"; exit 1
-fi
-if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.err" \
-   || ! "$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" 2>"$work/l1b.err"; then
-    echo "FAIL l1: $(cat "$work/l1.err" "$work/l1b.err")"; exit 1
-fi
-if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1 \
-   || ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.err"; then
-    echo "FAIL l2: $(cat "$work/l2.out" "$work/l2b.err")"; exit 1
-fi
-if ! "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" >"$work/ast.out" 2>&1 \
-   || ! "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct-ast" 2>"$work/astb.err"; then
-    echo "FAIL ct-ast: $(cat "$work/ast.out" "$work/astb.err")"; exit 1
+echo "== build ct-ast (frozen seed) =="
+# v1-PH-0 S2b: the runtime probes below need the shipped compiler. The
+# L0 -> L1 -> L2 walk can no longer build ct-ast after `match`.
+if ! CC="$CC" CFLAGS="-Wall -Wextra -std=c99" \
+        sh "$root/selfhost/seed-ct.sh" build "$work/ct-ast" >"$work/ast.out" 2>&1; then
+    echo "FAIL ct-ast: $(cat "$work/ast.out")"; exit 1
 fi
 
 pass=0

@@ -48,7 +48,13 @@ git -C "$repo" archive "$base" | tar -x -C "$work" || die "git archive $base fai
 say "prototype.patch applied"
 
 say
-say "== toolchain (L0 -> L1 -> L2 -> ct-ast) =="
+# seedpaths: historical fallback -- this driver archives a baseline commit
+# (p74: c3f2e0ea, p75: a18e7323) that predates bootstrap/ct-ast. The current
+# seed also rejects that patched source (newer `.data`/bound rules), so the
+# archived baseline's own L0 -> L1 -> L2 chain is the only reproducible emitter
+# for this evidence. This is not a build path for any shipped harness; every
+# harness goes through selfhost/seed-ct.sh (test/ast/seedpaths.sh enforces it).
+say "== toolchain (L0 -> L1 -> L2 -> ct-ast; historical baseline) =="
 "$cc" -Wall -Wextra -std=c99 "$work/selfhost/l0/ctc.c" -o "$b/ctc" \
     >"$logs/l0.log" 2>&1 || die "L0 build failed: $(tail -2 "$logs/l0.log")"
 "$b/ctc" "$work/selfhost/l1/ctc.ct" -o "$b/l1.c" \

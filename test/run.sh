@@ -24,10 +24,11 @@ export CT_C_BOUNDARY=allow
 #
 # An example that declares `//@ct-requires: ct-ast` uses a construct L0 does not
 # know (a `map`, a range initialiser, a generic), so it is driven by the AST
-# compiler instead. The bootstrap chain L0 -> L1 -> L2 -> ct-ast is built lazily
-# in $TMP the first time one is reached, and the example then goes through the
-# same generate/build/run/diff path as every other example. The chain is a
-# mirror of selfhost/check-ast.sh's, so a break in either is visible here too.
+# compiler instead. ct-ast is built lazily in $TMP the first time one is
+# reached, from the frozen seed bootstrap/ct-ast through selfhost/seed-ct.sh
+# (D-022); the example then goes through the same generate/build/run/diff path
+# as every other example. L0 stays here for the other layers; L1/L2 are not
+# part of this harness at all.
 #
 # test/archive/ holds the Phases 2–5 (CT-side) fixtures -- namespaces, multi-file
 # `ct build`, imports, Drop, `#line` and warning diagnostics -- that Phase 0.3
@@ -39,7 +40,11 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CC=${CC:-cc}
 CFLAGS="-Wall -Wextra -std=c99"
-TMP=$(mktemp -d) || exit 1
+# A private, short scratch dir: ct-ast messages carry a fixed-size text buffer
+# (MAX_TEXT), and a deep macOS TMPDIR can truncate a fixture path and turn a
+# pass into a false failure. CT_SHORT_TMP overrides the base when /tmp is not
+# the right place.
+TMP=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctrun.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
 # Run ctc with paths relative to the repo root: the generated header embeds the
@@ -161,22 +166,15 @@ echo
 echo "== examples =="
 
 # The AST compiler is built on demand: examples that L0 cannot compile are the
-# only consumers, and extending the chain unconditionally would slow every run.
+# only consumers, and building it unconditionally would slow every run.
 ast_state=""
 ensure_ast() {
     if [ -n "$ast_state" ]; then return "$ast_state"; fi
     ast_state=1
     {
-        "$TMP/ctc" selfhost/l1/ctc.ct -o "$TMP/ast-l1.c" &&
-        $CC $CFLAGS "$TMP/ast-l1.c" -o "$TMP/ast-l1" &&
-        mkdir -p "$TMP/ast-l2src" &&
-        "$TMP/ast-l1" build selfhost/l2/driver.ct -o "$TMP/ast-l2src" &&
-        $CC $CFLAGS "$TMP"/ast-l2src/*.c -o "$TMP/ast-l2" &&
-        mkdir -p "$TMP/ast-src" &&
-        "$TMP/ast-l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$TMP/ast-src" &&
-        $CC $CFLAGS "$TMP"/ast-src/*.c -o "$TMP/ct-ast"
+        CC="$CC" CFLAGS="$CFLAGS" sh "$ROOT/selfhost/seed-ct.sh" build "$TMP/ct-ast"
     } >"$TMP/ast-build.log" 2>&1 || {
-        echo "  the AST compiler chain failed to build:"
+        echo "  the AST compiler could not be built from the frozen seed:"
         sed 's/^/    /' "$TMP/ast-build.log"
         return 1
     }
