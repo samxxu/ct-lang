@@ -7415,7 +7415,11 @@ impl EmitOps for Emitter {
                         "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
                         self->sym->structs[si].name);
             } else if (legacy) {
-                /* the legacy writer emits a static body in every unit */
+                /* the legacy writer emits a static body in every unit; the
+                   instance body is written before its first use, so a static
+                   prototype in a unit that never defines it is only a gcc
+                   -Wunused-function warning (Box in build mode, CI-18). */
+                if (self->sym->structs[si].is_inst) continue;
                 fprintf(self->out,
                         "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
                         self->sym->structs[si].name);
