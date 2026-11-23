@@ -79,13 +79,14 @@ High。本批不改台账内容，只把状态从笼统 `open` 收敛到 `deferr
 ## 证据补齐（2026-11-23，DEV；状态字段未改）
 
 本轮按台账逐行补证据/引用，能实跑的都贴了命令或产物；**未闭合项全部写明承接 owner，
-不把未完成写成 `已过`**。台账当前 **21 已过 / 5 部分 / 3 缺失 / 5 阻塞**（34 行）。
+不把未完成写成 `已过`**。台账当前 **22 已过 / 4 部分 / 3 缺失 / 5 阻塞**（34 行）。
 
-**本轮闭合（5 行）**：
+**本轮闭合（6 行）**：
 
 | 判据 | 证据 |
 | --- | --- |
 | P-1.2 逐文件 CSV | [p1_2.csv](../../docs/planning/j6-evidence/p1_2.csv)（1381 行 + 表头，6 列）；生成器 [gen_p1_2.py](../../docs/planning/j6-evidence/gen_p1_2.py)，命令：`python3 docs/planning/j6-evidence/gen_p1_2.py > docs/planning/j6-evidence/p1_2.csv` |
+| P-2.5 全量语料 parse | `selfhost/check-all.sh` 第 8 道：`== summary: 1581 passed, 0 failed, 5 skipped ==`；编译器源与 `a0ce8ef1` 逐字节相同（`git diff` 0 行），golden 差异见 [goldens-l1-vs-ast.md](../../docs/planning/j6-evidence/goldens-l1-vs-ast.md) |
 | P-3.7 U16 工厂 | `test/ast/p80_methods/prog.ct` + `prog.expected.out` 第 38–41 行（`from_utf8` / `from_utf16` / `String.from_utf16` / `to_utf8` / `to_utf16`） |
 | P-3.8 U16 方法集 | `p80_methods` 期望输出第 16–21 行（越界 / 负下标 / `get(99)` 空视图）；`neg_u16_write.ct` 写硬错 |
 | P-4.3 `Str` 逃逸 lint | `test/ast/p106_str_escape.sh`（SH-106 verified），接入 `selfhost/check-ast.sh:1354` |
@@ -96,7 +97,6 @@ High。本批不改台账内容，只把状态从笼统 `open` 收敛到 `deferr
 
 | 判据 | 现状 | 承接 |
 | --- | --- | --- |
-| P-2.5 干净归档全量复跑 | 本轮复跑至 PH-79 段（418 条输出、0 失败）后因耗时中止 | DEV 在 CI/长任务跑完并贴 summary |
 | P-3.5 C 边界隐式转换 | 新发现：`char *p = s`、`return s`（`String`/`Str`）被接受并发射坏 C | DEV 补赋值/返回/变参负例（可能另立案） |
 | P-5.2 / P-5.3 / P-5.5 | out/ref owning 旧值释放、赋值 vs release、借用类型 out/ref 无夹具 | DEV |
 | P-5.4 / P-5.6 | out 错误路径、ref/out 的 ASan 组合 | DEV |

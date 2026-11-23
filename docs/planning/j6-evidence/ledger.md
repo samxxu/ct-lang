@@ -9,9 +9,9 @@
 > （[j6-evidence](.) 的 p72/p73/p74/p75/ref_out）只证明“能跑”，不冒充本台账；P-8.1 不属 J-6 闸门。
 >
 > 本文件的 `P-x.y` 行由 `check-docs` 校验：状态枚举、最小可判证据非空、`阻塞` 必须写依据。
-> 台账当前结论：**J-6 未过**——21 已过 / 5 部分 / 3 缺失 / 5 阻塞（J 表另计）。
+> 台账当前结论：**J-6 未过**——22 已过 / 4 部分 / 3 缺失 / 5 阻塞（J 表另计）。
 >
-> <!-- j6:counts passed=21 partial=5 missing=3 blocked=5 -->
+> <!-- j6:counts passed=22 partial=4 missing=3 blocked=5 -->
 
 ## P-1 语料测量（J-6a）
 
@@ -46,7 +46,7 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 | P-2.2 `ref/out` 上下文关键字 | 形参表内识别；形参表外仍是标识符 | [p78_basic.sh](../../../test/ast/p78_basic.sh) E78-1：`int out;`、`time_t *ref;`、形参名 `out` 全部合法 | 已过 | DEV |
 | P-2.3 `T[]` 唯一拼写 | `T[]` 前缀；`T a[]` 形参/字段告警；`ct check` 升 error；`T a[] = {…}` 保留 | [p79_basic.sh](../../../test/ast/p79_basic.sh)（`int[] s`、`int a[] = {…}`）+ [p79_migrate.sh](../../../test/ast/p79_migrate.sh)（告警与 strict 升级） | 已过 | DEV |
 | P-2.4 花括号共享解析 | `new T {…}` 与 `T x = {…}` 的位置式 / 指定式 / 嵌套同路径 | [p81_box.sh](../../../test/ast/p81_box.sh) E81-2 + [record.ct](../../../test/ast/p81_box/record.ct) | 已过 | DEV |
-| P-2.5 旧语料 parse | 全量语料 parse 通过；golden 变化逐条 | 本机 `check-ast` 2026-11-21：1576 passed / 0 failed / 3 skipped，另有 1 个 Renode 环境失败（缺 `uart.txt`）。本轮干净归档 `a0ce8ef1` 复跑至 PH-79 段（418 条输出，0 失败）后因耗时中止，**全量复跑未完成**；golden 变化清单见 [goldens-l1-vs-ast.md](goldens-l1-vs-ast.md)。承接：DEV 在 CI 或独立长任务中跑完并贴 summary（owner DEV） | 部分 | DEV |
+| P-2.5 旧语料 parse | 全量语料 parse 通过；golden 变化逐条 | 干净归档 `a0ce8ef1` 的编译器源与 HEAD 逐字节相同（`git diff a0ce8ef1..HEAD -- selfhost/l0 selfhost/l1 selfhost/l2 selfhost/ct-ast` 为 0 行），故以 HEAD 的 `selfhost/check-ast.sh` 全量输出为准：**1581 passed / 0 failed / 5 skipped**（`selfhost/check-all.sh` 第 8 道）；golden 变化清单见 [docs/planning/j6-evidence/goldens-l1-vs-ast.md](goldens-l1-vs-ast.md)。干净归档复跑至 PH-79 段（418 条输出、0 失败）后中止，作为旁证而非唯一证据 | 已过 | DEV |
 
 ## P-3 String/Str ABI（J-6c）
 
@@ -105,9 +105,9 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 
 ## 结论
 
-- **J-6 未过**：21 已过 / 5 部分 / 3 缺失 / 5 阻塞（J 表另计；`<!-- j6:counts -->` 与逐行计数由 check-docs 校验）。
+- **J-6 未过**：22 已过 / 4 部分 / 3 缺失 / 5 阻塞（J 表另计；`<!-- j6:counts -->` 与逐行计数由 check-docs 校验）。
 - 本轮闭合：P-1.2（[p1_2.csv](p1_2.csv) + 生成器）、P-3.7 / P-3.8 / P-4.3（SH-106）/ P-4.5（guide §7.1）/ P-5.7。
-- 未闭合且已写承接：P-2.5（干净归档全量复跑）、P-5.2 / P-5.3 / P-5.5（out/ref 借用与释放夹具）、
+- 未闭合且已写承接：P-5.2 / P-5.3 / P-5.5（out/ref 借用与释放夹具）、
   P-5.4 / P-5.6 / P-6.4（错误路径、ASan 组合、std 发版后复核）、P-3.5（新发现：`char *p = s` / `return s`
   仍被接受并发射坏 C）。
 - **P-1.3 / P-3.6 / P-6.1–P-6.3** 在 lint 与 std 发布前不可判，保持阻塞，不写“预计通过”。
