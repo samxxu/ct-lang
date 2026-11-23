@@ -1,16 +1,23 @@
 #!/bin/sh
-# ct installer — download a ct source archive from GitHub, bootstrap the
-# compiler chain (L0 -> L1 -> L2 -> ct-ast) and install the `ct` entry.
+# ct installer — download a ct source archive from GitHub, build the bundled
+# bootstrap seed (bootstrap/ct-ast, the C that ct-ast emits for itself) and
+# install the `ct` entry.
 #
 #   curl -fsSL https://raw.githubusercontent.com/samxxu/ct-lang/main/install.sh | sh
-#   ./install.sh --prefix "$HOME/bin" --version v0.12.0
+#   ./install.sh --prefix "$HOME/bin" --version v1.0.0
 #
 # Requirements: a C compiler (`cc` or `$CC`) and `tar`; `curl` or `wget` for the
 # download. Building from a local checkout (no download) works with:
 #
 #   CT_SOURCE_DIR=. ./install.sh
 #
+# The old L0 -> L1 -> L2 -> ct-ast walk is not part of installing any more
+# (D-022): the seed is compiled directly, so an install needs no ct binary and
+# no previous generation. L1/L2 stay in the tree as the regression oracle of
+# gates 2/3/4/5, not as a build step here.
+#
 # License: GPL-3.0-or-later (this script); see LICENSE and LICENSE.EXCEPTION.
+# The generated seed under bootstrap/ is not covered by the GPL (LICENSE.EXCEPTION).
 
 set -eu
 
@@ -80,28 +87,10 @@ else
     say "extracted to $src"
 fi
 
-# Two tree layouts exist: releases up to v0.12.0 keep the seed at the root and
-# the later stages under selfhost/{ctc.ct,src,ast}; main moved them to
-# selfhost/{l0,l1,l2,ct-ast} and needs -I for ct-ast's grouped imports.
-if [ -f "$src/selfhost/l0/ctc.c" ]; then
-    seed=selfhost/l0/ctc.c
-    l1_src=selfhost/l1/ctc.ct
-    l2_src=selfhost/l2/driver.ct
-    ast_src=selfhost/ct-ast/main.ct
-    ast_inc="-I selfhost/ct-ast"
-elif [ -f "$src/ctc.c" ]; then
-    seed=ctc.c
-    l1_src=selfhost/ctc.ct
-    l2_src=selfhost/src/driver.ct
-    ast_src=selfhost/ast/main.ct
-    ast_inc=""
-else
-    die "'$src' does not look like a ct source tree (no ctc.c)"
-fi
-# These paths are resolved against $src: the shell is still in the caller's
-# directory here, so a bare relative test would look in the wrong tree.
-[ -f "$src/$l1_src" ] || die "this ref has no $l1_src"
-[ -f "$src/$l2_src" ] || die "this ref has no $l2_src (it predates the L2 split; install a newer tag)"
+seed="$src/bootstrap/ct-ast"
+[ -d "$seed" ] || die "'$src' carries no bootstrap/ct-ast seed; this ref predates the v1.0 seed cutover (use its own install.sh)"
+set -- "$seed"/*.c
+[ -f "$1" ] || die "the seed directory has no C files: $seed"
 
 # --- 2. pick the C compiler flags ----------------------------------------------
 
@@ -118,38 +107,13 @@ fi
 
 say "compiler: $CC ($cflags)"
 
-# --- 3. bootstrap L0 -> L1 -> L2 -> ct-ast -------------------------------------
+# --- 3. build ct from the bundled seed ----------------------------------------
 
 cd "$src"
 
-say "building L0 (the C seed)"
+say "building ct from the bundled seed (bootstrap/ct-ast)"
 # shellcheck disable=SC2086
-"$CC" $cflags "$seed" -o "$work/ctc" || die "L0 did not build"
-
-say "building L1"
-"$work/ctc" "$l1_src" -o "$work/l1.c" || die "L0 could not compile L1"
-# shellcheck disable=SC2086
-"$CC" $cflags "$work/l1.c" -o "$work/l1" || die "L1 did not build"
-
-say "building L2 (the regression oracle)"
-mkdir -p "$work/l2src"
-"$work/l1" build "$l2_src" -o "$work/l2src" >"$work/l2.log" 2>&1 ||
-    { cat "$work/l2.log" >&2; die "L1 could not build L2"; }
-# shellcheck disable=SC2086
-"$CC" $cflags "$work/l2src"/*.c -o "$work/l2" || die "L2 did not build"
-
-if [ -f "$ast_src" ]; then
-    say "building ct-ast (the installed entry)"
-    mkdir -p "$work/astsrc"
-    # shellcheck disable=SC2086
-    "$work/l2" build $ast_inc "$ast_src" -o "$work/astsrc" >"$work/ast.log" 2>&1 ||
-        { cat "$work/ast.log" >&2; die "L2 could not build ct-ast"; }
-    # shellcheck disable=SC2086
-    "$CC" $cflags "$work/astsrc"/*.c -o "$work/ct" || die "ct-ast did not build"
-else
-    warn "'$ast_src' is absent in this ref; installing L2 as the entry"
-    cp "$work/l2" "$work/ct"
-fi
+"$CC" $cflags -I "$seed" "$seed"/*.c -o "$work/ct" || die "the seed did not build"
 
 # --- 4. install ----------------------------------------------------------------
 
