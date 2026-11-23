@@ -43,6 +43,7 @@
 #define MAX_VARS   512
 #define MAX_SCOPE  256
 #define MAX_FUNCS  512
+#define MAX_FUNCS_MAX 65536
 #define MAX_UNITS  64                     /* units in one `ctc build` run */
 #define MAX_BUILD  32                     /* inputs on a single command line */
 #define MAX_IMPORTS 32                    /* `import` lines per unit */
@@ -523,6 +524,7 @@ struct SymTab {
     int     nvars;
     FuncSig *funcs;
     int     nfuncs;
+    int     fncap;
     /* The structs whose use-clause mentions the reserved `Drop`, in declaration
        order. Their drop bodies are emitted only when a `delete` reaches them
        (`drop_used`). Part of the symbol table, not a loose global. */
@@ -1255,6 +1257,7 @@ static void sym_alloc(void)
     g_sym.traits  = xcalloc(MAX_TRAITS, sizeof(Trait));
     g_sym.structs = xcalloc(MAX_STRUCT, sizeof(Struct));
     g_sym.funcs   = xcalloc(MAX_FUNCS, sizeof(FuncSig));
+    g_sym.fncap   = MAX_FUNCS;
     g_sym.impls   = xcalloc(MAX_MAP_IMPLS, sizeof(ImplEntry));
 }
 
@@ -5239,7 +5242,16 @@ impl RewriteOps for Pipe {
             for (q = 0; q < sym->nfuncs; q++)
                 if (strcmp(sym->funcs[q].cname, cname) == 0) { fi = q; break; }
             if (fi < 0) {
-                if (sym->nfuncs >= MAX_FUNCS) die(0, "too many functions (limit %d, whole program)", MAX_FUNCS);
+                if (sym->nfuncs >= sym->fncap) {
+                    int cap = sym->fncap > 0 ? sym->fncap * 2 : MAX_FUNCS;
+                    if (cap > MAX_FUNCS_MAX) cap = MAX_FUNCS_MAX;
+                    if (sym->nfuncs >= cap)
+                        die(0, "too many functions (limit %d, whole program)", MAX_FUNCS_MAX);
+                    sym->funcs = realloc(sym->funcs, (size_t)cap * sizeof(FuncSig));
+                    if (!sym->funcs) die(0, "out of memory growing the function table");
+                    memset(&sym->funcs[sym->nfuncs], 0, (size_t)(cap - sym->nfuncs) * sizeof(FuncSig));
+                    sym->fncap = cap;
+                }
                 fi = sym->nfuncs++;
                 sym->funcs[fi].ret_owned = 0;   /* fresh row: no ownership fact yet */
             }
