@@ -3,7 +3,7 @@
 #
 # Usage: tools/check.sh g0 | g1 | g2 | g4 | g5 | g6 | g7 | g8 | g9
 #
-# These are the AGENTS 6.4 governance gates.  The project's eleven hard gates
+# These are the AGENTS 6.4 governance gates.  The project's thirteen hard gates
 # remain in selfhost/check-all.sh; this entry makes every governance gate
 # runnable by name.  check-all is deliberately left unchanged: it stays the
 # end-to-end ratchet, while these entries are the per-gate judges used by REV

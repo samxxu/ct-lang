@@ -15,13 +15,13 @@
 | `l0/ctc.c` | L0 | C 写的最简编译器（Phase 1 起冻结为种子 / 差分 oracle，只修 bug）；由宿主 C 编译器构建，二进制落**仓库根** |
 | `l1/ctc.ct` | L1 | 冻结种子：用 Ct OO 子集、单文件手写全部能力，由 L0（`l0/ctc.c`）编译；能力停在 Phase 2，**不再新增**（含注释） |
 | `l2/{core,driver}.ct` | L2 | 同一编译器拆成多单元（`import` / `pub`），由 L1 自身的 `build` 编译；自 Phase 10.7 起只作**回归 oracle** |
-| `ct-ast/**` | ct-ast | Phase 9 的 AST 版编译器，由 L2 用 `build` 编译（带 `-I selfhost/ct-ast`）：**分组多单元**，每个单元自持状态、只导出 `pub` 原语——`main.ct` 只做绑定与分派，`tool/driver` 是 compile 模式驱动（`ct <file> -o <file>`），`frontend/module` 是 build 驱动（单元表、import、`pub` 路由），`frontend/parse` 是解析器（含共享原语、表达式与类型文法及 `map` 构造器），`frontend/{lex,sym,type}` 是词法器、符号表与类型/装箱层，`runtime/arena` 是节点与字面量池，`backend/{mem,emit}` 是 AutoDrop/泄漏分析与 C 发射器，`tool/{pkg,diag,cache}` 是包管理器、告警存储与增量缓存；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
+| `ct-ast/**` | ct-ast | Phase 9 的 AST 版编译器，自 v1.0 起由冻结 seed `bootstrap/ct-ast` 用宿主 `cc` 构建（D-022）；L2 只作回归 oracle：**分组多单元**，每个单元自持状态、只导出 `pub` 原语——`main.ct` 只做绑定与分派，`tool/driver` 是 compile 模式驱动（`ct <file> -o <file>`），`frontend/module` 是 build 驱动（单元表、import、`pub` 路由），`frontend/parse` 是解析器（含共享原语、表达式与类型文法及 `map` 构造器），`frontend/{lex,sym,type}` 是词法器、符号表与类型/装箱层，`runtime/arena` 是节点与字面量池，`backend/{mem,emit}` 是 AutoDrop/泄漏分析与 C 发射器，`tool/{pkg,diag,cache}` 是包管理器、告警存储与增量缓存；**自 Phase 10.7 起提供安装入口**（`ct` / `ctc`） |
 
 **单元命名**：每个单元以它的主类型命名（`Parser.h.ct` ↔ `struct Parser`），一个单元一个主类型，附属记录类型可同文件；主类型过大可拆子对象单元（文件头注明所属主对象），入口 `main.ct` 例外。这条与其它命名约定同在 [AGENTS.md](../AGENTS.md) §3，并由 `check-ast.sh` 的 unit-name lint 校验。
 
-## 脚本（11 道硬门禁）
+## 脚本（13 道硬门禁）
 
-`check-all.sh` 是聚合入口，依次跑下面 11 道硬门禁，任一失败即整体非零：
+`check-all.sh` 是聚合入口，依次跑下面 13 道硬门禁，任一失败即整体非零：
 
 | # | 门禁 | 作用 |
 | --- | --- | --- |
@@ -36,24 +36,22 @@
 | 9 | `check-warnings.sh` | 全部生成 C 在 `-Wall -Wextra` 下零告警 |
 | 10 | `check-semantics.sh` | `ct check` 语义入口（D19-4：诊断按 error、不写产物） |
 | 11 | `test/docs/check-docs.py` | 文档链接、版本标记、门禁条数与阶段状态（见 [docs/README.md](../docs/README.md)） |
+| 12 | `check-goldens-ast.sh` | ct-ast 静态 goldens（不读 L1/L2，SH-105） |
+| 13 | `check-seed.sh` | 冻结 seed：manifest 逐文件 sha256、两轮重建逐字节、手改负例（D-022） |
 
 规则：改动 `selfhost/**` 后必须跑 `bash selfhost/check-all.sh`；各层（L0 / L1 / L2 / ct-ast）的冻结
 约定与硬边界见 [AGENTS.md](../AGENTS.md) §2、§6。
 
-### 手工自举（`install.sh` 的等价步骤）
+### 安装（`install.sh` 的等价步骤）
 
 ```sh
-gcc -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o ctc             # L0 种子（唯一的 C 构建，名字是 ctc）
-./ctc selfhost/l1/ctc.ct -o /tmp/ctc-l1.c                       # L0 编出 L1 的 C
-gcc -Wall -Wextra -std=c99 /tmp/ctc-l1.c -o /tmp/ctc-l1         # 得到 L1
-mkdir -p /tmp/ct-l2 && /tmp/ctc-l1 build selfhost/l2/driver.ct -o /tmp/ct-l2   # L1 编出 L2 源
-gcc -Wall -Wextra -std=c99 /tmp/ct-l2/*.c -o /tmp/ctc-l2        # 得到 L2（回归 oracle）
-mkdir -p /tmp/ct-ast && /tmp/ctc-l2 build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o /tmp/ct-ast
-gcc -Wall -Wextra -std=c99 /tmp/ct-ast/*.c -o "$HOME/.local/bin/ct"            # 单入口 ct（ct-ast）
-ln -s ct "$HOME/.local/bin/ctc"                                 # ctc 兼容别名
+cc -Wall -Wextra -std=c99 -I bootstrap/ct-ast bootstrap/ct-ast/*.c -o "$HOME/.local/bin/ct"   # 冻结 seed → ct
+ln -s ct "$HOME/.local/bin/ctc"                                  # ctc 兼容别名
 ```
 
-`install.sh` 做的事与这段相同，外加下载源码归档与路径自适应（`v0.12.0` 及更早的 tag 目录布局不同）。
+`install.sh` 做的事与这段相同，外加下载源码归档。seed 由 `bash selfhost/gen-seed.sh`
+在发版时重新生成（D-022），并由 gate 13 校验只读；L0→L1→L2 链保留为 gate 2/3/4/5 的
+回归 oracle，不再参与 ct-ast 的构建与安装。
 
 ### 干净 clone 与容器复验
 
@@ -61,11 +59,11 @@ ln -s ct "$HOME/.local/bin/ctc"                                 # ctc 兼容别�
 
 ```bash
 git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
-bash selfhost/check-all.sh         # 期望末行：check-all: OK (11 hard gates green)
+bash selfhost/check-all.sh         # 期望末行：check-all: OK (13 hard gates green)
 ```
 
 干净 clone 不需要预处理：`.gitignore` 只忽略按名字的生成物（`/ctc`、`*.o`、`a.out`、`examples/*/*.c|h`、
-`.ctcache/` 等），门禁自己从 `selfhost/l0/ctc.c` 构建到 `ct-ast`。Linux 容器只需 `gcc`、`git`、`python3`
+`.ctcache/` 等），门禁用 `bootstrap/ct-ast` 构建 ct-ast，并从 `selfhost/l0/ctc.c` 构建 L1/L2 oracle。Linux 容器只需 `gcc`、`git`、`python3`
 与常规 POSIX 工具（`sh`/`bash`、`diff`、`sed`、`awk`、`mktemp`）。两点平台差异属预期：
 
 - **GCC 的警告集更宽**：`-Wall -Wextra` 下 GCC ≥ 8 额外启用 `-Wformat-truncation`，会对冻结层的 `snprintf`

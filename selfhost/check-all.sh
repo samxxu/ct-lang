@@ -27,6 +27,8 @@ export CT_C_BOUNDARY=allow
 #  10. selfhost/check-semantics.sh               semantic entry (Phase 19.4: `ct check`)
 #  11. test/docs/check-docs.py                   docs links, version, gate count and phase status
 #  12. selfhost/check-goldens-ast.sh            ct-ast static goldens (L1/L2-free, SH-105)
+#  13. selfhost/check-seed.sh                   frozen seed: manifest, two rebuild rounds
+#                                                byte-identical, hand-edit negative (D-022)
 #
 # test/acceptance/run.sh reports separately and never blocks: its PENDING entries
 # are expected (AGENTS.md section 6), and run.sh's green must keep meaning
@@ -37,7 +39,7 @@ export CT_C_BOUNDARY=allow
 
 set -u
 
-# Governance preconditions (not counted in the twelve product gates): the spec
+# Governance preconditions (not counted in the thirteen product gates): the spec
 # landing gate G0 and the PN-2 version-coherence gate G8 run before anything
 # else, so a phase cannot ship with MINOR != phase or with a drifted block.
 root0="$(cd "$(dirname "$0")/.." && pwd)"
@@ -126,6 +128,7 @@ run_gate "9) generated C warning-free (-Wall -Wextra)" bash selfhost/check-warni
 run_gate "10) semantic entry (Phase 19.4)" bash selfhost/check-semantics.sh
 run_gate "11) docs (links, version, gate count, phase status)" python3 test/docs/check-docs.py
 run_gate "12) CT: ct-ast static goldens" bash selfhost/check-goldens-ast.sh "${CT_AST_KEEP:?ct-ast binary path not set}"
+run_gate "13) CT: frozen seed (bootstrap/ct-ast)" bash selfhost/check-seed.sh
 
 banner "acceptance probes (reported only, never blocking)"
 if [ -f test/acceptance/run.sh ]; then
