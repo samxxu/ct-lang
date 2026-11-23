@@ -6,9 +6,15 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
+<<<<<<< HEAD
 <!-- p88-metrics: emitter_before=8876 emitter_after=9830 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
      emitted_before=48223 emitted_after=52282 io_cap=1024
+=======
+<!-- p88-metrics: emitter_before=8876 emitter_after=10327 total_slices=76 expr_slices=34
+     node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
+     emitted_before=48223 emitted_after=53275 io_cap=1024
+>>>>>>> cba69d6b (feat(ct-ast): v1-PH-0 S0.5a 发射器 kind 判别改为穷尽 match)
      (emitted_after 于 v0.88.1 PKG-23 后复测：Pkg 诊断代码增加 224 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.2 SH-106 后复测：Str 视图逃逸 lint 增加 286 行发射 C；发射器本身未变)
      (emitted_after 于 v0.88.3 PKG-19/PKG-20 后复测：lookup 与 verify 共用行解析/校验，
@@ -52,10 +58,16 @@
       发射 C 增加 3 行（Box 单元头/实现）；Emitter.h.ct 9797 -> 9801（+4 行注释）)
      (LANG-26 后复测：绑定点转换的查找/诊断在 Expr.h.ct，Emitter.h.ct 只为
       `aux==6` 的转换失败加可行动诊断，9801 -> 9811；发射 C 51757 -> 52215)
+<<<<<<< HEAD
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
       发射 C 52218 -> 52282)
+=======
+     (v1-PH-0 S0.5a 后复测：五个判别函数的 if 链改为 84 臂的穷尽 match，
+     76 个 `em_*` 切片各占一臂；Emitter.h.ct 9814 -> 10327，发射 C 52218 -> 53275。
+     动作等价由 66 语料逐字节、345 诊断逐字、2 轮自举不动点复核)
+>>>>>>> cba69d6b (feat(ct-ast): v1-PH-0 S0.5a 发射器 kind 判别改为穷尽 match)
 -->
 
 ## 1 切片清单

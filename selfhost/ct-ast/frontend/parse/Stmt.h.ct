@@ -3171,7 +3171,7 @@ impl StmtOps for Stmt {
     int parse_match(void)
     {
         int s, e, arms, tail, arm, adt, v, line, col, i;
-        int covered[16];
+        int covered[96];
         int ncov, wild, seen_wild, is_ptr, a2;
         int aline, acol;
         char tybuf[MAX_TEXT];
@@ -3223,7 +3223,7 @@ impl StmtOps for Stmt {
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
         adts = frontend::sym::ct_adts(&nadts);
-        for (i = 0; i < adts[adt].nvariants && i < 16; i++) covered[i] = 0;
+        for (i = 0; i < adts[adt].nvariants && i < 96; i++) covered[i] = 0;
         ncov = 0;
         wild = -1;
         seen_wild = 0;

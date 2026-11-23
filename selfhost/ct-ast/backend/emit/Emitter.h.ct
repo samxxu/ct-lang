@@ -3952,6 +3952,16 @@ static int emit_match_arm(struct Emitter *self, int arm, int ind, int k, int ptr
  * signatures, and the trait surface must not grow.
  * ====================================================================== */
 
+/* PH-88/v1-PH-0 S0.5: the shared body for a kind the statement emitter does
+   not accept. The exhaustive match keeps every kind an explicit arm; the
+   non-statement arms share this one body. */
+static int fail_unknown_statement(struct Emitter *self, int nk)
+{
+    char msg[MAX_TEXT];
+    snprintf(msg, sizeof msg, "unknown statement node (kind %d)", nk);
+    return self->fail(msg);
+}
+
 /* PH-88: one node kind; the dispatcher read `kind` once. */
 static int em_expr_adtctor(struct Emitter *self, int n, int nk)
 {
@@ -8188,9 +8198,97 @@ impl EmitOps for Emitter {
 
         nk = self->arena->nodes[n].kind;
 
-        if (nk == N_FIELDS) return em_field_fields(self, n, ind, nk);
-        if (nk == N_FIELD && self->arena->nodes[n].aux == 2) return em_field_field_union(self, n, ind, nk);
-        return self->emit_inline(n);
+        match ((NodeKind){ .tag = nk }) {
+            NodeKind.NK_UNUSED0() => { return self->emit_inline(n); }
+            NodeKind.NK_PROG() => { return self->emit_inline(n); }
+            NodeKind.NK_PP() => { return self->emit_inline(n); }
+            NodeKind.NK_FUNC() => { return self->emit_inline(n); }
+            NodeKind.NK_BLOCK() => { return self->emit_inline(n); }
+            NodeKind.NK_RET() => { return self->emit_inline(n); }
+            NodeKind.NK_EXPR() => { return self->emit_inline(n); }
+            NodeKind.NK_CALL() => { return self->emit_inline(n); }
+            NodeKind.NK_NUM() => { return self->emit_inline(n); }
+            NodeKind.NK_STR() => { return self->emit_inline(n); }
+            NodeKind.NK_VAR() => { return self->emit_inline(n); }
+            NodeKind.NK_BIN() => { return self->emit_inline(n); }
+            NodeKind.NK_DECL() => { return self->emit_inline(n); }
+            NodeKind.NK_ASSIGN() => { return self->emit_inline(n); }
+            NodeKind.NK_IF() => { return self->emit_inline(n); }
+            NodeKind.NK_WHILE() => { return self->emit_inline(n); }
+            NodeKind.NK_FOR() => { return self->emit_inline(n); }
+            NodeKind.NK_UNARY() => { return self->emit_inline(n); }
+            NodeKind.NK_POST() => { return self->emit_inline(n); }
+            NodeKind.NK_PARAM() => { return self->emit_inline(n); }
+            NodeKind.NK_STRUCT() => { return self->emit_inline(n); }
+            NodeKind.NK_TYPEDEF() => { return self->emit_inline(n); }
+            NodeKind.NK_GLOBAL() => { return self->emit_inline(n); }
+            NodeKind.NK_FIELD() => {
+                if (self->arena->nodes[n].aux == 2) return em_field_field_union(self, n, ind, N_FIELD);
+                return self->emit_inline(n);
+            }
+            NodeKind.NK_MEMBER() => { return self->emit_inline(n); }
+            NodeKind.NK_ARROW() => { return self->emit_inline(n); }
+            NodeKind.NK_INDEX() => { return self->emit_inline(n); }
+            NodeKind.NK_ADDR() => { return self->emit_inline(n); }
+            NodeKind.NK_DEREF() => { return self->emit_inline(n); }
+            NodeKind.NK_METHOD() => { return self->emit_inline(n); }
+            NodeKind.NK_MCALL() => { return self->emit_inline(n); }
+            NodeKind.NK_RAW() => { return self->emit_inline(n); }
+            NodeKind.NK_UNUSED32() => { return self->emit_inline(n); }
+            NodeKind.NK_IMPL() => { return self->emit_inline(n); }
+            NodeKind.NK_BOX() => { return self->emit_inline(n); }
+            NodeKind.NK_CAST() => { return self->emit_inline(n); }
+            NodeKind.NK_SIZEOF() => { return self->emit_inline(n); }
+            NodeKind.NK_TERN() => { return self->emit_inline(n); }
+            NodeKind.NK_BREAK() => { return self->emit_inline(n); }
+            NodeKind.NK_CONT() => { return self->emit_inline(n); }
+            NodeKind.NK_DECLS() => { return self->emit_inline(n); }
+            NodeKind.NK_DELETE() => { return self->emit_inline(n); }
+            NodeKind.NK_SWITCH() => { return self->emit_inline(n); }
+            NodeKind.NK_CASE() => { return self->emit_inline(n); }
+            NodeKind.NK_DOWHILE() => { return self->emit_inline(n); }
+            NodeKind.NK_ENUM() => { return self->emit_inline(n); }
+            NodeKind.NK_ENUMVAL() => { return self->emit_inline(n); }
+            NodeKind.NK_OFFSETOF() => { return self->emit_inline(n); }
+            NodeKind.NK_UNION() => { return self->emit_inline(n); }
+            NodeKind.NK_LABEL() => { return self->emit_inline(n); }
+            NodeKind.NK_GOTO() => { return self->emit_inline(n); }
+            NodeKind.NK_COMPOUND() => { return self->emit_inline(n); }
+            NodeKind.NK_EMPTY() => { return self->emit_inline(n); }
+            NodeKind.NK_VAARG() => { return self->emit_inline(n); }
+            NodeKind.NK_FNUM() => { return self->emit_inline(n); }
+            NodeKind.NK_SASSERT() => { return self->emit_inline(n); }
+            NodeKind.NK_FIELDS() => {
+                return em_field_fields(self, n, ind, N_FIELDS);
+            }
+            NodeKind.NK_PRE() => { return self->emit_inline(n); }
+            NodeKind.NK_RAW_TEXT() => { return self->emit_inline(n); }
+            NodeKind.NK_CLOSURE() => { return self->emit_inline(n); }
+            NodeKind.NK_LOOP() => { return self->emit_inline(n); }
+            NodeKind.NK_INIT_RANGE() => { return self->emit_inline(n); }
+            NodeKind.NK_FOREACH() => { return self->emit_inline(n); }
+            NodeKind.NK_INTO() => { return self->emit_inline(n); }
+            NodeKind.NK_INTO_SELF() => { return self->emit_inline(n); }
+            NodeKind.NK_INIT_BRACE() => { return self->emit_inline(n); }
+            NodeKind.NK_INIT_ITEM() => { return self->emit_inline(n); }
+            NodeKind.NK_INIT_MBRACE() => { return self->emit_inline(n); }
+            NodeKind.NK_UNUSED68() => { return self->emit_inline(n); }
+            NodeKind.NK_DEFER() => { return self->emit_inline(n); }
+            NodeKind.NK_DEFER_RUN() => { return self->emit_inline(n); }
+            NodeKind.NK_TRY() => { return self->emit_inline(n); }
+            NodeKind.NK_OPT() => { return self->emit_inline(n); }
+            NodeKind.NK_MATSEQ() => { return self->emit_inline(n); }
+            NodeKind.NK_SLICE_INDEX() => { return self->emit_inline(n); }
+            NodeKind.NK_SLICE_RANGE() => { return self->emit_inline(n); }
+            NodeKind.NK_SLICE_GET() => { return self->emit_inline(n); }
+            NodeKind.NK_NEWOBJ() => { return self->emit_inline(n); }
+            NodeKind.NK_MATCH() => { return self->emit_inline(n); }
+            NodeKind.NK_ARM() => { return self->emit_inline(n); }
+            NodeKind.NK_BIND() => { return self->emit_inline(n); }
+            NodeKind.NK_ADTCTOR() => { return self->emit_inline(n); }
+            NodeKind.NK_ADTFIELD() => { return self->emit_inline(n); }
+            NodeKind.NK_ADTMEM() => { return self->emit_inline(n); }
+        }
     }
 
     /* Top-level declarations: struct / typedef / global (with a semicolon as
@@ -8202,13 +8300,103 @@ impl EmitOps for Emitter {
 
         nk = self->arena->nodes[n].kind;
 
-        if (nk == N_STRUCT) return em_decl_struct(self, n, ind, with_semi, nk);
-        if (nk == N_UNION) return em_decl_union(self, n, ind, with_semi, nk);
-        if (nk == N_ENUM && (self->arena->nodes[n].aux & 2)) return em_decl_enum_adt(self, n, ind, with_semi, nk);
-        if (nk == N_ENUM) return em_decl_enum(self, n, ind, with_semi, nk);
-        if (nk == N_TYPEDEF) return em_decl_typedef(self, n, ind, with_semi, nk);
-        if (nk == N_GLOBAL) return em_decl_global(self, n, ind, with_semi, nk);
-        return self->fail_from(n, "unknown declaration node");
+        match ((NodeKind){ .tag = nk }) {
+            NodeKind.NK_UNUSED0() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_PROG() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_PP() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_FUNC() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_BLOCK() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_RET() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_EXPR() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_CALL() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_NUM() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_STR() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_VAR() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_BIN() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_DECL() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_ASSIGN() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_IF() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_WHILE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_FOR() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_UNARY() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_POST() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_PARAM() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_STRUCT() => {
+                return em_decl_struct(self, n, ind, with_semi, N_STRUCT);
+            }
+            NodeKind.NK_TYPEDEF() => {
+                return em_decl_typedef(self, n, ind, with_semi, N_TYPEDEF);
+            }
+            NodeKind.NK_GLOBAL() => {
+                return em_decl_global(self, n, ind, with_semi, N_GLOBAL);
+            }
+            NodeKind.NK_FIELD() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_MEMBER() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_ARROW() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_INDEX() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_ADDR() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_DEREF() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_METHOD() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_MCALL() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_RAW() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_UNUSED32() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_IMPL() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_BOX() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_CAST() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_SIZEOF() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_TERN() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_BREAK() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_CONT() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_DECLS() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_DELETE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_SWITCH() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_CASE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_DOWHILE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_ENUM() => {
+                if (self->arena->nodes[n].aux & 2) return em_decl_enum_adt(self, n, ind, with_semi, N_ENUM);
+                return em_decl_enum(self, n, ind, with_semi, N_ENUM);
+            }
+            NodeKind.NK_ENUMVAL() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_OFFSETOF() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_UNION() => {
+                return em_decl_union(self, n, ind, with_semi, N_UNION);
+            }
+            NodeKind.NK_LABEL() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_GOTO() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_COMPOUND() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_EMPTY() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_VAARG() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_FNUM() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_SASSERT() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_FIELDS() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_PRE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_RAW_TEXT() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_CLOSURE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_LOOP() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_INIT_RANGE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_FOREACH() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_INTO() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_INTO_SELF() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_INIT_BRACE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_INIT_ITEM() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_INIT_MBRACE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_UNUSED68() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_DEFER() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_DEFER_RUN() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_TRY() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_OPT() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_MATSEQ() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_SLICE_INDEX() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_SLICE_RANGE() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_SLICE_GET() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_NEWOBJ() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_MATCH() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_ARM() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_BIND() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_ADTCTOR() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_ADTFIELD() => { return self->fail_from(n, "unknown declaration node"); }
+            NodeKind.NK_ADTMEM() => { return self->fail_from(n, "unknown declaration node"); }
+        }
     }
 
     /* The header's view of a global: a declaration, never the definition and
@@ -8407,39 +8595,151 @@ impl EmitOps for Emitter {
 
         nk = self->arena->nodes[n].kind;
 
-        if (nk == N_FUNC) return em_node_func(self, n, ind, nk);
-        if (nk == N_DEFER_RUN) return em_node_defer_run(self, n, ind, nk);
-        if (nk == N_DEFER) return em_node_defer(self, n, ind, nk);
-        if (nk == N_BLOCK) return em_node_block(self, n, ind, nk);
-        if (nk == N_MATSEQ) return em_node_matseq(self, n, ind, nk);
-        if (nk == N_RET) return em_node_ret(self, n, ind, nk);
-        if (nk == N_DELETE) return em_node_delete(self, n, ind, nk);
-        if (nk == N_BREAK) return em_node_break(self, n, ind, nk);
-        if (nk == N_CONT) return em_node_cont(self, n, ind, nk);
-        if (nk == N_EMPTY) return em_node_empty(self, n, ind, nk);
-        if (nk == N_SASSERT) return em_node_sassert(self, n, ind, nk);
-        if (nk == N_GOTO) return em_node_goto(self, n, ind, nk);
-        if (nk == N_LABEL) return em_node_label(self, n, ind, nk);
-        if (nk == N_DECLS) return em_node_decls(self, n, ind, nk);
-        if (nk == N_DECL) {
-            int r = em_node_decl(self, n, ind, nk);
-            if (r != 2) return r;
-        }
-        if (nk == N_EXPR && self->arena->nodes[self->arena->nodes[n].a].kind == N_MATSEQ) return em_node_expr_matseq(self, n, ind, nk);
-        if (nk == N_DECL || nk == N_ASSIGN || nk == N_EXPR || nk == N_POST || (nk == N_BIN && self->arena->nodes[n].aux == B_COMMA)) return em_node_expression_statement(self, n, ind, nk);
-        if (nk == N_IF) return em_node_if(self, n, ind, nk);
-        if (nk == N_WHILE) return em_node_while(self, n, ind, nk);
-        if (nk == N_FOR) return em_node_for(self, n, ind, nk);
-        if (nk == N_LOOP) return em_node_loop(self, n, ind, nk);
-        if (nk == N_FOREACH) return em_node_foreach(self, n, ind, nk);
-        if (nk == N_MATCH) return em_node_match(self, n, ind, nk);
-        if (nk == N_SWITCH) return em_node_switch(self, n, ind, nk);
-        if (nk == N_CASE) return em_node_case(self, n, ind, nk);
-        if (nk == N_DOWHILE) return em_node_dowhile(self, n, ind, nk);
-        {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg, "unknown statement node (kind %d)", nk);
-            return self->fail(msg);
+        match ((NodeKind){ .tag = nk }) {
+            NodeKind.NK_UNUSED0() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_PROG() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_PP() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_FUNC() => {
+                return em_node_func(self, n, ind, N_FUNC);
+            }
+            NodeKind.NK_BLOCK() => {
+                return em_node_block(self, n, ind, N_BLOCK);
+            }
+            NodeKind.NK_RET() => {
+                return em_node_ret(self, n, ind, N_RET);
+            }
+            NodeKind.NK_EXPR() => {
+                if (self->arena->nodes[self->arena->nodes[n].a].kind == N_MATSEQ) return em_node_expr_matseq(self, n, ind, N_EXPR);
+                return em_node_expression_statement(self, n, ind, N_EXPR);
+            }
+            NodeKind.NK_CALL() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_NUM() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_STR() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_VAR() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_BIN() => {
+                if (self->arena->nodes[n].aux == B_COMMA) return em_node_expression_statement(self, n, ind, N_BIN);
+                return fail_unknown_statement(self, nk);
+            }
+            NodeKind.NK_DECL() => {
+                int r = em_node_decl(self, n, ind, N_DECL);
+                if (r != 2) return r;
+                return em_node_expression_statement(self, n, ind, N_DECL);
+            }
+            NodeKind.NK_ASSIGN() => {
+                return em_node_expression_statement(self, n, ind, N_ASSIGN);
+            }
+            NodeKind.NK_IF() => {
+                return em_node_if(self, n, ind, N_IF);
+            }
+            NodeKind.NK_WHILE() => {
+                return em_node_while(self, n, ind, N_WHILE);
+            }
+            NodeKind.NK_FOR() => {
+                return em_node_for(self, n, ind, N_FOR);
+            }
+            NodeKind.NK_UNARY() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_POST() => {
+                return em_node_expression_statement(self, n, ind, N_POST);
+            }
+            NodeKind.NK_PARAM() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_STRUCT() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_TYPEDEF() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_GLOBAL() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_FIELD() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_MEMBER() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_ARROW() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_INDEX() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_ADDR() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_DEREF() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_METHOD() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_MCALL() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_RAW() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_UNUSED32() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_IMPL() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_BOX() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_CAST() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_SIZEOF() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_TERN() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_BREAK() => {
+                return em_node_break(self, n, ind, N_BREAK);
+            }
+            NodeKind.NK_CONT() => {
+                return em_node_cont(self, n, ind, N_CONT);
+            }
+            NodeKind.NK_DECLS() => {
+                return em_node_decls(self, n, ind, N_DECLS);
+            }
+            NodeKind.NK_DELETE() => {
+                return em_node_delete(self, n, ind, N_DELETE);
+            }
+            NodeKind.NK_SWITCH() => {
+                return em_node_switch(self, n, ind, N_SWITCH);
+            }
+            NodeKind.NK_CASE() => {
+                return em_node_case(self, n, ind, N_CASE);
+            }
+            NodeKind.NK_DOWHILE() => {
+                return em_node_dowhile(self, n, ind, N_DOWHILE);
+            }
+            NodeKind.NK_ENUM() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_ENUMVAL() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_OFFSETOF() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_UNION() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_LABEL() => {
+                return em_node_label(self, n, ind, N_LABEL);
+            }
+            NodeKind.NK_GOTO() => {
+                return em_node_goto(self, n, ind, N_GOTO);
+            }
+            NodeKind.NK_COMPOUND() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_EMPTY() => {
+                return em_node_empty(self, n, ind, N_EMPTY);
+            }
+            NodeKind.NK_VAARG() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_FNUM() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_SASSERT() => {
+                return em_node_sassert(self, n, ind, N_SASSERT);
+            }
+            NodeKind.NK_FIELDS() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_PRE() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_RAW_TEXT() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_CLOSURE() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_LOOP() => {
+                return em_node_loop(self, n, ind, N_LOOP);
+            }
+            NodeKind.NK_INIT_RANGE() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_FOREACH() => {
+                return em_node_foreach(self, n, ind, N_FOREACH);
+            }
+            NodeKind.NK_INTO() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_INTO_SELF() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_INIT_BRACE() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_INIT_ITEM() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_INIT_MBRACE() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_UNUSED68() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_DEFER() => {
+                return em_node_defer(self, n, ind, N_DEFER);
+            }
+            NodeKind.NK_DEFER_RUN() => {
+                return em_node_defer_run(self, n, ind, N_DEFER_RUN);
+            }
+            NodeKind.NK_TRY() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_OPT() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_MATSEQ() => {
+                return em_node_matseq(self, n, ind, N_MATSEQ);
+            }
+            NodeKind.NK_SLICE_INDEX() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_SLICE_RANGE() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_SLICE_GET() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_NEWOBJ() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_MATCH() => {
+                return em_node_match(self, n, ind, N_MATCH);
+            }
+            NodeKind.NK_ARM() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_BIND() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_ADTCTOR() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_ADTFIELD() => { return fail_unknown_statement(self, nk); }
+            NodeKind.NK_ADTMEM() => { return fail_unknown_statement(self, nk); }
         }
     }
 
@@ -8484,15 +8784,110 @@ impl EmitOps for Emitter {
 
         nk = self->arena->nodes[n].kind;
 
-        if (nk == N_TRY) return em_inline_try(self, n, nk);
-        if (nk == N_DECLS) return em_inline_decls(self, n, nk);
-        if (nk == N_FIELD && self->arena->nodes[n].aux == 1) return em_inline_field_bitfield(self, n, nk);
-        if (nk == N_DECL || nk == N_FIELD) return em_inline_decl_field(self, n, nk);
-        if (nk == N_BIN && self->arena->nodes[n].aux == B_COMMA) return em_inline_bin_comma(self, n, nk);
-        if (nk == N_ASSIGN) return em_inline_assign(self, n, nk);
-        if (nk == N_EXPR) return em_inline_expr(self, n, nk);
-        if (nk == N_POST) return em_inline_post(self, n, nk);
-        return self->fail_from(n, "cannot inline this node");
+        match ((NodeKind){ .tag = nk }) {
+            NodeKind.NK_UNUSED0() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_PROG() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_PP() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_FUNC() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_BLOCK() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_RET() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_EXPR() => {
+                return em_inline_expr(self, n, N_EXPR);
+            }
+            NodeKind.NK_CALL() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_NUM() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_STR() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_VAR() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_BIN() => {
+                if (self->arena->nodes[n].aux == B_COMMA) return em_inline_bin_comma(self, n, N_BIN);
+                return self->fail_from(n, "cannot inline this node");
+            }
+            NodeKind.NK_DECL() => {
+                return em_inline_decl_field(self, n, N_DECL);
+            }
+            NodeKind.NK_ASSIGN() => {
+                return em_inline_assign(self, n, N_ASSIGN);
+            }
+            NodeKind.NK_IF() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_WHILE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_FOR() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_UNARY() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_POST() => {
+                return em_inline_post(self, n, N_POST);
+            }
+            NodeKind.NK_PARAM() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_STRUCT() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_TYPEDEF() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_GLOBAL() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_FIELD() => {
+                if (self->arena->nodes[n].aux == 1) return em_inline_field_bitfield(self, n, N_FIELD);
+                return em_inline_decl_field(self, n, N_FIELD);
+            }
+            NodeKind.NK_MEMBER() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_ARROW() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_INDEX() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_ADDR() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_DEREF() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_METHOD() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_MCALL() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_RAW() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_UNUSED32() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_IMPL() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_BOX() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_CAST() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_SIZEOF() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_TERN() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_BREAK() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_CONT() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_DECLS() => {
+                return em_inline_decls(self, n, N_DECLS);
+            }
+            NodeKind.NK_DELETE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_SWITCH() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_CASE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_DOWHILE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_ENUM() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_ENUMVAL() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_OFFSETOF() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_UNION() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_LABEL() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_GOTO() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_COMPOUND() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_EMPTY() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_VAARG() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_FNUM() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_SASSERT() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_FIELDS() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_PRE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_RAW_TEXT() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_CLOSURE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_LOOP() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_INIT_RANGE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_FOREACH() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_INTO() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_INTO_SELF() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_INIT_BRACE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_INIT_ITEM() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_INIT_MBRACE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_UNUSED68() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_DEFER() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_DEFER_RUN() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_TRY() => {
+                return em_inline_try(self, n, N_TRY);
+            }
+            NodeKind.NK_OPT() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_MATSEQ() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_SLICE_INDEX() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_SLICE_RANGE() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_SLICE_GET() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_NEWOBJ() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_MATCH() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_ARM() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_BIND() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_ADTCTOR() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_ADTFIELD() => { return self->fail_from(n, "cannot inline this node"); }
+            NodeKind.NK_ADTMEM() => { return self->fail_from(n, "cannot inline this node"); }
+        }
     }
 
     int emit_cond(int n)
@@ -8585,41 +8980,159 @@ impl EmitOps for Emitter {
 
         nk = self->arena->nodes[n].kind;
 
-        if (nk == N_ADTCTOR) return em_expr_adtctor(self, n, nk);
-        if (nk == N_NUM) return em_expr_num(self, n, nk);
-        if (nk == N_FNUM) return em_expr_fnum(self, n, nk);
-        if (nk == N_STR) return em_expr_str(self, n, nk);
-        if (nk == N_RAW) return em_expr_raw(self, n, nk);
-        if (nk == N_VAR) return em_expr_var(self, n, nk);
-        if (nk == N_INTO) return em_expr_into(self, n, nk);
-        if (nk == N_INTO_SELF) return em_expr_into_self(self, n, nk);
-        if (nk == N_MEMBER) return em_expr_member(self, n, nk);
-        if (nk == N_ARROW) return em_expr_arrow(self, n, nk);
-        if (nk == N_INDEX) return em_expr_index(self, n, nk);
-        if (nk == N_SLICE_INDEX) return em_expr_slice_index(self, n, nk);
-        if (nk == N_SLICE_GET) return em_expr_slice_get(self, n, nk);
-        if (nk == N_SLICE_RANGE) return em_expr_slice_range(self, n, nk);
-        if (nk == N_ADDR) return em_expr_addr(self, n, nk);
-        if (nk == N_DEREF) return em_expr_deref(self, n, nk);
-        if (nk == N_CAST) return em_expr_cast(self, n, nk);
-        if (nk == N_COMPOUND) return em_expr_compound(self, n, nk);
-        if (nk == N_VAARG) return em_expr_vaarg(self, n, nk);
-        if (nk == N_SIZEOF) return em_expr_sizeof(self, n, nk);
-        if (nk == N_OFFSETOF) return em_expr_offsetof(self, n, nk);
-        if (nk == N_POST) return em_expr_post(self, n, nk);
-        if (nk == N_PRE) return em_expr_pre(self, n, nk);
-        if (nk == N_TRY) return em_expr_try(self, n, nk);
-        if (nk == N_OPT) return em_expr_opt(self, n, nk);
-        if (nk == N_TERN) return em_expr_tern(self, n, nk);
-        if (nk == N_ASSIGN) return em_expr_assign(self, n, nk);
-        if (nk == N_BIN && self->arena->nodes[n].aux == B_COMMA) return em_expr_bin_comma(self, n, nk);
-        if (nk == N_BIN) return em_expr_bin(self, n, nk);
-        if (nk == N_UNARY) return em_expr_unary(self, n, nk);
-        if (nk == N_NEWOBJ) return em_expr_newobj(self, n, nk);
-        if (nk == N_BOX) return em_expr_box(self, n, nk);
-        if (nk == N_MCALL) return em_expr_mcall(self, n, nk);
-        if (nk == N_CALL) return em_expr_call(self, n, nk);
-        return self->fail_from(n, "unknown expression node");
+        match ((NodeKind){ .tag = nk }) {
+            NodeKind.NK_UNUSED0() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_PROG() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_PP() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_FUNC() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_BLOCK() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_RET() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_EXPR() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_CALL() => {
+                return em_expr_call(self, n, N_CALL);
+            }
+            NodeKind.NK_NUM() => {
+                return em_expr_num(self, n, N_NUM);
+            }
+            NodeKind.NK_STR() => {
+                return em_expr_str(self, n, N_STR);
+            }
+            NodeKind.NK_VAR() => {
+                return em_expr_var(self, n, N_VAR);
+            }
+            NodeKind.NK_BIN() => {
+                if (self->arena->nodes[n].aux == B_COMMA) return em_expr_bin_comma(self, n, N_BIN);
+                return em_expr_bin(self, n, N_BIN);
+            }
+            NodeKind.NK_DECL() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_ASSIGN() => {
+                return em_expr_assign(self, n, N_ASSIGN);
+            }
+            NodeKind.NK_IF() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_WHILE() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_FOR() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_UNARY() => {
+                return em_expr_unary(self, n, N_UNARY);
+            }
+            NodeKind.NK_POST() => {
+                return em_expr_post(self, n, N_POST);
+            }
+            NodeKind.NK_PARAM() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_STRUCT() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_TYPEDEF() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_GLOBAL() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_FIELD() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_MEMBER() => {
+                return em_expr_member(self, n, N_MEMBER);
+            }
+            NodeKind.NK_ARROW() => {
+                return em_expr_arrow(self, n, N_ARROW);
+            }
+            NodeKind.NK_INDEX() => {
+                return em_expr_index(self, n, N_INDEX);
+            }
+            NodeKind.NK_ADDR() => {
+                return em_expr_addr(self, n, N_ADDR);
+            }
+            NodeKind.NK_DEREF() => {
+                return em_expr_deref(self, n, N_DEREF);
+            }
+            NodeKind.NK_METHOD() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_MCALL() => {
+                return em_expr_mcall(self, n, N_MCALL);
+            }
+            NodeKind.NK_RAW() => {
+                return em_expr_raw(self, n, N_RAW);
+            }
+            NodeKind.NK_UNUSED32() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_IMPL() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_BOX() => {
+                return em_expr_box(self, n, N_BOX);
+            }
+            NodeKind.NK_CAST() => {
+                return em_expr_cast(self, n, N_CAST);
+            }
+            NodeKind.NK_SIZEOF() => {
+                return em_expr_sizeof(self, n, N_SIZEOF);
+            }
+            NodeKind.NK_TERN() => {
+                return em_expr_tern(self, n, N_TERN);
+            }
+            NodeKind.NK_BREAK() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_CONT() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_DECLS() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_DELETE() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_SWITCH() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_CASE() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_DOWHILE() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_ENUM() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_ENUMVAL() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_OFFSETOF() => {
+                return em_expr_offsetof(self, n, N_OFFSETOF);
+            }
+            NodeKind.NK_UNION() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_LABEL() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_GOTO() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_COMPOUND() => {
+                return em_expr_compound(self, n, N_COMPOUND);
+            }
+            NodeKind.NK_EMPTY() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_VAARG() => {
+                return em_expr_vaarg(self, n, N_VAARG);
+            }
+            NodeKind.NK_FNUM() => {
+                return em_expr_fnum(self, n, N_FNUM);
+            }
+            NodeKind.NK_SASSERT() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_FIELDS() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_PRE() => {
+                return em_expr_pre(self, n, N_PRE);
+            }
+            NodeKind.NK_RAW_TEXT() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_CLOSURE() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_LOOP() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_INIT_RANGE() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_FOREACH() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_INTO() => {
+                return em_expr_into(self, n, N_INTO);
+            }
+            NodeKind.NK_INTO_SELF() => {
+                return em_expr_into_self(self, n, N_INTO_SELF);
+            }
+            NodeKind.NK_INIT_BRACE() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_INIT_ITEM() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_INIT_MBRACE() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_UNUSED68() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_DEFER() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_DEFER_RUN() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_TRY() => {
+                return em_expr_try(self, n, N_TRY);
+            }
+            NodeKind.NK_OPT() => {
+                return em_expr_opt(self, n, N_OPT);
+            }
+            NodeKind.NK_MATSEQ() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_SLICE_INDEX() => {
+                return em_expr_slice_index(self, n, N_SLICE_INDEX);
+            }
+            NodeKind.NK_SLICE_RANGE() => {
+                return em_expr_slice_range(self, n, N_SLICE_RANGE);
+            }
+            NodeKind.NK_SLICE_GET() => {
+                return em_expr_slice_get(self, n, N_SLICE_GET);
+            }
+            NodeKind.NK_NEWOBJ() => {
+                return em_expr_newobj(self, n, N_NEWOBJ);
+            }
+            NodeKind.NK_MATCH() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_ARM() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_BIND() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_ADTCTOR() => {
+                return em_expr_adtctor(self, n, N_ADTCTOR);
+            }
+            NodeKind.NK_ADTFIELD() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_ADTMEM() => { return self->fail_from(n, "unknown expression node"); }
+        }
     }
 
     /* `foo` -> `FOO_H`; a leading digit gets an underscore so the guard is a

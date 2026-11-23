@@ -3161,7 +3161,7 @@ impl ParseOps for Parser {
                         self->arena->nodes[tn].num);
                 if (v < 0) {
                     char msg[MAX_TEXT];
-                    snprintf(msg, sizeof msg, "too many variants for ADT '%s' (limit 16)", name);
+                    snprintf(msg, sizeof msg, "too many variants for ADT '%s' (limit 96)", name);
                     return tool::diag::ct_sem_error(self->arena->nodes[tn].line,
                         self->arena->nodes[tn].num, msg, self->mem->path);
                 }

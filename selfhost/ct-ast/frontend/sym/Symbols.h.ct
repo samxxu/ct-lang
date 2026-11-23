@@ -538,7 +538,7 @@ pub int ct_inst_resolve(const char *in, char *out, int cap);
 
    Caps are literals: the generated header carries no macros. */
 #define MAX_ADTS 64
-#define MAX_ADT_VARIANTS 16
+#define MAX_ADT_VARIANTS 96
 #define MAX_ADT_FIELDS 8
 pub struct AdtField {
     char name[160];
@@ -556,7 +556,7 @@ pub struct Adt {
     char name[160];             /* the source name, `Shape` */
     char full[160];             /* the namespace-mangled C tag, `lib_Shape` */
     int  nvariants;
-    struct AdtVariant variants[16];
+    struct AdtVariant variants[96];
     int  is_pub;
     int  owner;                 /* the unit that declared it; -1 in compile mode */
     char path[1024];
