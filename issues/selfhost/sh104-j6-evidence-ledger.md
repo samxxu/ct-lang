@@ -75,3 +75,47 @@ roadmap 自标“J-6 未过”；J-3/J-4/J-5 也缺逐张核对。
 
 **触发/负责人/优先级**：`v1-PH-0` 入口（V1-C1），负责人 REQ（台账）/DEV（夹具与 lint）；
 High。本批不改台账内容，只把状态从笼统 `open` 收敛到 `deferred`，避免与「零未决」的完成态混淆。
+
+## 证据补齐（2026-11-23，DEV；状态字段未改）
+
+本轮按台账逐行补证据/引用，能实跑的都贴了命令或产物；**未闭合项全部写明承接 owner，
+不把未完成写成 `已过`**。台账当前 **21 已过 / 5 部分 / 3 缺失 / 5 阻塞**（34 行）。
+
+**本轮闭合（5 行）**：
+
+| 判据 | 证据 |
+| --- | --- |
+| P-1.2 逐文件 CSV | [p1_2.csv](../../docs/planning/j6-evidence/p1_2.csv)（1381 行 + 表头，6 列）；生成器 [gen_p1_2.py](../../docs/planning/j6-evidence/gen_p1_2.py)，命令：`python3 docs/planning/j6-evidence/gen_p1_2.py > docs/planning/j6-evidence/p1_2.csv` |
+| P-3.7 U16 工厂 | `test/ast/p80_methods/prog.ct` + `prog.expected.out` 第 38–41 行（`from_utf8` / `from_utf16` / `String.from_utf16` / `to_utf8` / `to_utf16`） |
+| P-3.8 U16 方法集 | `p80_methods` 期望输出第 16–21 行（越界 / 负下标 / `get(99)` 空视图）；`neg_u16_write.ct` 写硬错 |
+| P-4.3 `Str` 逃逸 lint | `test/ast/p106_str_escape.sh`（SH-106 verified），接入 `selfhost/check-ast.sh:1354` |
+| P-4.5 透传路径 | [docs/guide-for-c-programmers.md §7.1](../../docs/guide-for-c-programmers.md) 逐类矩阵 |
+| P-5.7 下标只读 | `p80_methods/prog.ct:34` 只读正例；`neg_write_index.ct`、`neg_u16_write.ct` 硬错 |
+
+**仍未闭合（承接已写进台账）**：
+
+| 判据 | 现状 | 承接 |
+| --- | --- | --- |
+| P-2.5 干净归档全量复跑 | 本轮复跑至 PH-79 段（418 条输出、0 失败）后因耗时中止 | DEV 在 CI/长任务跑完并贴 summary |
+| P-3.5 C 边界隐式转换 | 新发现：`char *p = s`、`return s`（`String`/`Str`）被接受并发射坏 C | DEV 补赋值/返回/变参负例（可能另立案） |
+| P-5.2 / P-5.3 / P-5.5 | out/ref owning 旧值释放、赋值 vs release、借用类型 out/ref 无夹具 | DEV |
+| P-5.4 / P-5.6 | out 错误路径、ref/out 的 ASan 组合 | DEV |
+| P-6.4 | std 发版后复核 README/spec/roadmap | REQ |
+| P-1.3 / P-3.6 / P-6.1–P-6.3 | 依赖迁移 lint / std 发版，不可判 | DEV / 包侧 |
+| J-4b | `ref/out` 逃逸契约条款未成文 | DEV/REQ |
+
+**check-docs 断言加强**（`test/docs/check-docs.py`）：
+
+- 台账头部 `<!-- j6:counts passed=… partial=… missing=… blocked=… -->` 必须与逐行计数一致；
+- `已过` 必须带路径指针；`部分`/`缺失` 必须写 `承接`（owner + 下一步）；`阻塞` 必须写依据；
+- 新增 6 条自测（合法、非法状态、缺行、阻塞无依据、部分无承接、计数不符），`--selftest` 全过。
+
+```console
+$ python3 test/docs/check-docs.py | tail -2
+check-docs: OK (..., 34 J-6 row(s), ...)
+design window: ok (12/12)
+$ python3 test/docs/check-docs.py --selftest | tail -2
+j6-ledger selftest: OK (6 cases)
+```
+
+状态仍为 `deferred`：J-6 未过，且本次任务要求不改状态；等 REV 复核后决定。

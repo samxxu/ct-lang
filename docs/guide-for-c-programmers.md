@@ -335,6 +335,23 @@ Ct 的护栏水位是「比 C 严格得多，比 Rust 松」。以下残余**存
 | `Vec<T>` / `Map<K,V>` 字段、全局位置 | 无自动胶水 / 无作用域出口 → 泄漏 | 显式 `release()` 或由协议/析构路径处理 |
 | 逃生层 own 指针的一切经典错误 | 泄漏/悬垂/double free | 泄漏告警（保守、不保证）；ASan |
 
+### 7.1 借用视图透传矩阵
+
+`Str` / `U16Str` / `T[]` 是借用视图；下表列出**每一条透传路径**上 Ct 是 warning、硬错还是不分析，
+避免把“没有告警”误读成“安全”。探针与契约同源，新增形态必须在这里加一行。
+
+| 透传路径 | Ct 行为 | 依据 / 探针 |
+| --- | --- | --- |
+| 返回局部 owner 的 `Str` 视图 | warning（`ct check` 升 error） | `test/ast/p106_str_escape.sh` |
+| 临时接收者取视图后返回 / 存储 | warning（同一 lint） | `test/ast/p106_str_escape.sh` |
+| 局部 `Str` 绑定再返回 | warning（同一 lint 传播） | `test/ast/p106_str_escape.sh` |
+| 作为函数参数借用 | 允许（不改所有权） | `test/ast/p106_str_escape.sh` 正例 |
+| 存入普通字段 / 全局 | 硬错（借用视图不能进非视图位置） | `test/ast/p79_places.sh` |
+| `Vec<Str>` / `Option<Str>` / ADT 负载 | 允许存视图；`LANG-22` 规划 warn | `test/ast/p81_box/neg_*`、`LANG-22` |
+| `Map` 键 | 硬错（键需 immortal） | `test/ast/241_map_str_key` |
+| 跨函数转手（参数进、另一个函数返回） | 不分析；契约 + ASan | 本节 §7、`SH-106` |
+| 交给 C 边界 | 只有 `cstr()` 显式退出；`.data` 直传是硬错 | `test/ast/p80_cstr` |
+
 **记住这份清单不是缺陷披露，是价格标签**——这些就是「不做 GC、不做借用检查器」省下来的
 复杂度所付的尾款。每一项都比 C 里的对应风险多一层防线，但没有一项是零成本。
 
