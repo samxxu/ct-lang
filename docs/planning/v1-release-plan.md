@@ -242,6 +242,11 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.2 诊断 code registry | `v1-PH-2` | v1.2 train | 稳定 `E-*`/`W-*` code + registry；与 JSON 通道分开（[LANG-25](../../issues/lang/lang-25-diagnostic-code-registry.md)） |
 | v1.2 Typed/Lowered IR | `v1-PH-2` | v1.2 train | 完整 IR + 统一清理 CFG；先设计后实施，不进入 v1.0/v1.1 门禁（[SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md)） |
 
+> **v1-PH-1 已开卡（2026-11-24，规划中）**：施工清单以
+> [卡 §2](../phases/v1-PH-1/card.md) 为准。本表里 SH-111 / SH-112 / SH-113 / SH-114、
+> DOC-91 / DOC-92、LANG-10 已全部 `verified`，不重复施工；入口闸与阶段划分见
+> [DOC-99](../../issues/docs/doc-99-v11-prework-tracker.md)（P-4 是 S2 的闸，P-5 并入 S3）。
+
 > **包侧 / 外部工作不纳入本表**：例如 [PKG-24](../../issues/packages/pkg-24-json-node-arena.md)
 > （JSON 节点包：arena + 索引、NodeVec/NodeMap、schema）由 std 包 / 外部仓交付；
 > 本仓只维护 [LANG-26](../../issues/lang/lang-26-binding-site-conversion.md) 的绑定点转换 ADR
