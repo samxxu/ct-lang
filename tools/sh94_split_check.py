@@ -6,18 +6,31 @@ units without touching a body. This tool re-derives three claims:
 
   1. the body-hash multiset of `selfhost/ct-ast/**` is identical to the
      baseline commit (every body byte-identical, nothing added or dropped);
-  2. each mapped function now lives in the named unit, as a free `pub`
-     function (a move out of a `static` host needs the exported prototype);
+  2. each mapped function now lives in the named unit: either a free `pub`
+     function (a move out of a `static` host needs the exported prototype),
+     or -- with `--methods` -- a trait-impl method, whose body must be the
+     same one the host held;
   3. the line diff is mechanical: with every function definition removed from
-     both sides, a host's skeleton may only gain an `import` (and blank /
-     comment lines); a new unit's skeleton is only boilerplate.
+     both sides, a host's skeleton may only gain an `import` and lose the
+     moved `impl ... {` header (plus blank / comment lines); a new unit's
+     skeleton is only boilerplate.
 
 Usage:
     python3 tools/sh94_split_check.py --baseline <sha> --map host=a,b:NewUnit.h.ct
+    python3 tools/sh94_split_check.py --methods --baseline <sha> \
+        --skeleton-baseline <parent-sha> --map host=Trait:fn1,fn2:NewUnit.h.ct
     python3 tools/sh94_split_check.py --baseline <sha> --map ... --map ...
 
 `--map` is repeatable; the host is a repo-relative path, the unit is the path
-the moved functions must appear in. Exit: 0 ok, 1 a claim failed, 2 usage.
+the moved functions must appear in. A method map may spell the impl trait
+before the names (`host=Trait:fn1,fn2:unit`); the trait only documents the
+move -- claim 2 accepts any single trait impl in the target unit because the
+compiler already enforces `impl` uniqueness per `(struct, trait)`.
+
+`--skeleton-baseline` (default: `--baseline`) is the commit the *skeleton*
+diff is taken against, so a series of slices can each be judged pure relative
+to its parent while the body multiset stays compared with the frozen baseline.
+Exit: 0 ok, 1 a claim failed, 2 usage.
 """
 
 import argparse
@@ -42,9 +55,14 @@ SKELETON_OK = [
     re.compile(r"^\s*#\s*(include|define)\b"),
     re.compile(r"^\s*namespace\s+[A-Za-z_:]+\s*;\s*$"),
     re.compile(r"^\s*pub\s+struct\s+\w+\s*\{?\s*$"),
+    re.compile(r"^\s*impl\s+\w+\s+for\s+\w+\s*\{?\s*$"),
     re.compile(r"^\s*int\s+unused;\s*$"),
     re.compile(r"^\s*\}\s*$"),
 ]
+
+# A method move takes the `impl <Trait> for <Struct> {` header with it; the
+# host may only lose that one line (the body lines are cut by `skeleton`).
+IMPL_HEAD = re.compile(r"^\s*impl\s+\w+\s+for\s+\w+\s*\{\s*$")
 
 
 def extract(root, rev):
@@ -87,9 +105,18 @@ def main(argv):
     ap.add_argument("--baseline", required=True)
     ap.add_argument("--map", action="append", default=[],
                     help="host=a,b:NewUnit.h.ct (repeatable)")
+    ap.add_argument("--methods", action="store_true",
+                    help="the mapped definitions are trait-impl methods")
+    ap.add_argument("--skeleton-baseline", default=None,
+                    help="commit for the skeleton diff (default: --baseline)")
     args = ap.parse_args(argv)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     base_units = {u["path"]: u for u in extract(root, args.baseline)}
+    skel_rev = args.skeleton_baseline or args.baseline
+    if skel_rev == args.baseline:
+        skel_units = base_units
+    else:
+        skel_units = {u["path"]: u for u in extract(root, skel_rev)}
     cur_units = {u["path"]: u for u in inv.scan(root)}
     bad = []
 
@@ -116,8 +143,12 @@ def main(argv):
     hosts = set()
     for row in args.map:
         left, _, unit = row.rpartition(":")
-        hosts.add(left.split("=", 1)[0])
-        for fn in left.split("=", 1)[1].split(","):
+        host, _, spec = left.partition("=")
+        hosts.add(host)
+        # a method map may lead with the impl trait (`Trait:fn1,fn2`)
+        if ":" in spec:
+            spec = spec.split(":", 1)[1]
+        for fn in spec.split(","):
             hits = by_name.get(fn, [])
             if len(hits) != 1:
                 bad.append("%s is defined %d time(s)" % (fn, len(hits)))
@@ -125,7 +156,10 @@ def main(argv):
             path, f = hits[0]
             if path != unit:
                 bad.append("%s moved to %s, expected %s" % (fn, path, unit))
-            if f["kind"] != "free":
+            if args.methods:
+                if f["kind"] != "method":
+                    bad.append("%s is not a trait-impl method" % fn)
+            elif f["kind"] != "free":
                 bad.append("%s is not a free function" % fn)
             if not f["body"].startswith("{"):
                 bad.append("%s has no body" % fn)
@@ -133,18 +167,18 @@ def main(argv):
             # and the defining line must now be `pub`, not `static`
             src = open(os.path.join(root, path), encoding="utf-8").read()
             line = src.splitlines()[f["hdr_line"] - 1]
-            if not line.lstrip().startswith("pub "):
+            if not args.methods and not line.lstrip().startswith("pub "):
                 bad.append("%s is not exported in %s: %r" % (fn, path, line))
 
     # skeleton: a host may only gain import lines; a new unit only boilerplate
     for host in sorted(hosts):
-        if host not in cur_units or host not in base_units:
+        if host not in cur_units or host not in skel_units:
             bad.append("host %s is not a unit on both sides" % host)
             continue
         # baseline text comes from the archive; re-extract just this file
-        base_text = git_show(root, args.baseline, host)
+        base_text = git_show(root, skel_rev, host)
         new_text = open(os.path.join(root, host), encoding="utf-8").read()
-        old = skeleton(inv.blank(base_text), base_units[host])
+        old = skeleton(inv.blank(base_text), skel_units[host])
         new = skeleton(inv.blank(new_text), cur_units[host])
         for line in changed_lines(old, new):
             if line.startswith("+") and any(p.match(line[1:]) for p in SKELETON_OK):
@@ -152,6 +186,9 @@ def main(argv):
             if line.startswith("-") and line[1:].strip() == "":
                 continue
             if line.startswith("-") and re.match(r"^\s*static\s+[A-Za-z_].*;\s*$", line[1:]):
+                continue
+            if line.startswith("-") and (IMPL_HEAD.match(line[1:])
+                                         or line[1:].strip() == "}"):
                 continue
             if line.startswith("+") and line[1:].strip() == "":
                 continue
@@ -172,8 +209,15 @@ def main(argv):
             print("sh94_split: FAIL %s" % line, file=sys.stderr)
         print("sh94_split: FAIL (%d finding(s))" % len(bad))
         return 1
+    moved = 0
+    for row in args.map:
+        left = row.rpartition(":")[0]
+        spec = left.partition("=")[2]
+        if ":" in spec:
+            spec = spec.split(":", 1)[1]
+        moved += len(spec.split(","))
     print("sh94_split: %d bodies, multiset identical; %d moved function(s) in place;"
-          " skeletons mechanical" % (sum(b.values()), sum(len(r.rpartition(':')[0].split('=', 1)[1].split(',')) for r in args.map)))
+          " skeletons mechanical" % (sum(b.values()), moved))
     return 0
 
 
