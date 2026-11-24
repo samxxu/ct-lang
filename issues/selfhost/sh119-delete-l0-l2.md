@@ -24,7 +24,7 @@
 | 对象 | 现状 |
 | --- | --- |
 | 脚本 | 12 个引用 `l0/l1/l2/ctc.c`：`check-all`、`check-archive`、`check-ast`、`check-goldens`、`check-goldens-ast`、`check-install`、`check-m2a`、`check-seed`、`ct-tour`、`gen-seed`、`test/run.sh`、`test/ast/p80_docs.sh` |
-| 门禁 1 | [`test/run.sh:74`](../../test/run.sh#L74) 用 `cc selfhost/l0/ctc.c` 构建被测编译器；删 L0 后必须换 |
+| 门禁 1 | [`test/run.sh:74`](../../test/run.sh) 用 `cc selfhost/l0/ctc.c` 构建被测编译器；删 L0 后必须换 |
 | 门禁 8 | [`check-ast.sh:473`](../../selfhost/check-ast.sh#L473) 构建 L0 链；[`:7372`](../../selfhost/check-ast.sh#L7372) 用 `ctc.c` 作输入做 seed 探针 |
 | `install.sh` | 仍有 L1/L2 的 legacy 分支（`l1_src` / `l2_src`） |
 | 文档 | 119 个 `.md` 提到 `selfhost/l0/l1/l2`（含 AGENTS、README、architecture、history） |
@@ -88,3 +88,13 @@
 - `check-ast` 删除 L0→L1→L2 oracle 构建与 L2 对差分支；`gen-seed` 去掉无 seed 的旧链 fallback；
 - 门禁计数同步 README/docs/AGENTS/glossary/selfhost README/issues README；历史引用走 check-docs 的 SH-119 豁免，S4 再清；
 - `check-all: OK (9 hard gates green)`；`check-docs` OK；`check-install` 在 S2 提交后复跑。
+
+
+## S3 收口（2026-11-24，DEV）
+
+- 删除 `selfhost/l0`；`install.sh` 已无 L0/L1/L2 legacy 分支（S1/S2 完成）；
+- `test/run.sh` 改为 seed-built `ct`：seed 构建、版本、25 个 `test/cases` 编译 + `cc -c`、`examples/01` 端到端；
+  L0 专属 unit/dialect/CLI 夹具随 L0 退役，语料覆盖由 gate 12 静态 goldens + gate 8 check-ast 承担（未静默删 fixture）；
+- `check-ast` 删除 L0 seed 探针；`examples/c-superset` 的 L0 构建改 seed；版本落点收敛到 `selfhost/ct-ast/main.ct`；
+- `check-install` 版本源改 ct-ast、检查 L1/L2 已退役；`gen-seed` 无 seed 时只报错；
+- 门禁数仍 9（gate 1 保留，gate 2–5 退役）。

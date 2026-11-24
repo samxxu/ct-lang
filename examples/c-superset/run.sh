@@ -153,11 +153,11 @@ printf '  audit ok: %d cases, %d features\n' \
 # L0 seed
 # ---------------------------------------------------------------------------
 echo
-echo "== build the frozen L0 seed (selfhost/l0/ctc.c) =="
-if ! "$CC" -Wall -Wextra -std=c99 "$root/selfhost/l0/ctc.c" -o "$work/l0" 2>"$work/l0.log"; then
-    echo "  L0 did not build:"; show "$work/l0.log"; exit 1
+echo "== build the frozen seed (bootstrap/ct-ast) =="
+if ! "$CC" -Wall -Wextra -std=c99 -I "$root/bootstrap/ct-ast" "$root/bootstrap/ct-ast"/*.c -o "$work/seedct" 2>"$work/seed.log"; then
+    echo "  seed did not build:"; show "$work/seed.log"; exit 1
 fi
-printf '  ok    L0 built\n'
+printf '  ok    seed built\n'
 
 # ---------------------------------------------------------------------------
 # locate ct-ast

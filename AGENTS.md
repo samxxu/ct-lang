@@ -462,7 +462,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | 文档 snippet | 缺失 |
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
 | 决策记录 | `docs/decisions/D-<n>.md`；phase 决策写 `docs/design/*.md`（`D<phase>-<n>`） |
-| 版本落点 | 五处 `CTC_VERSION`：`selfhost/l0/ctc.c`、`selfhost/l1/ctc.ct`、`selfhost/l2/core.ct`、`selfhost/l2/driver.ct`、`selfhost/ct-ast/main.ct`；另 `README.md` / `docs/README.md` / `AGENTS.md` 当前版本与 `docs/history/phase-log.md` 版本记录 |
+| 版本落点 | `selfhost/ct-ast/main.ct` 的 `CTC_VERSION`（SH-119 S3 后唯一源码落点）；另 `README.md` / `docs/README.md` / `AGENTS.md` 当前版本与 `docs/history/phase-log.md` 版本记录 |
 | 偏离项 | 见 0.3（`version-minor-offset`；`single-session-workflow`；`fix-tags`） |
 
 #### 0.2 话术路由

@@ -693,7 +693,7 @@ def check_version(errors):
         errors.append("selfhost/ct-ast/main.ct: CTC_VERSION not found")
         return None
     version = found.group(1)
-    for other in ("selfhost/l0/ctc.c",):
+    for other in ():
         text = read(os.path.join(ROOT, other))
         other_version = re.search(r'#define\s+CTC_VERSION\s+"([0-9.]+)"', text)
         if not other_version or other_version.group(1) != version:
