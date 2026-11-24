@@ -1,0 +1,264 @@
+/*
+ * ExprNewObject.h.ct - the `new T { ... }` construction grammar and the
+ * `Box<T>` auto-deref it shares, moved out of Expr.h.ct (SH-94 S1, pure move).
+ *
+ * The three methods hold `self`; the host type and the `ExprNew` trait live in
+ * ExprCore.h.ct, so this unit imports Core (and the host-free Box query in
+ * ExprPure) instead of the host, and the import graph stays acyclic. Bodies
+ * are byte-identical to the ones Expr.h.ct used to hold; Expr.h.ct imports
+ * this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <string.h>
+
+import frontend::lex::Lexer;
+import backend::mem::Memory;
+import frontend::parse::ExprCore;
+import frontend::parse::ExprPure;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
+import tool::diag::Diag;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_TEXT 160
+#define MAX_RAW_INIT 4096
+#define N_ARROW 25
+#define N_MEMBER 24
+#define N_NEWOBJ 77
+#define N_RAW 31
+#define T_ID 1
+#define T_PUNCT 4
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct ExprNewObject {
+    int unused;
+}
+
+impl ExprNew for Expr {
+    /* PH-81 S1a: `Box<T>` auto-dereferences for field access. `b.f` becomes
+       `b.ptr->f` (and `p->f` on a `Box<T> *` becomes `p->ptr->f`), so the
+       payload's fields are read and assigned without spelling `at()` or `->`.
+       The two handle fields are private: `.h` / `.ptr` are refused outside the
+       built-in layer, exactly like `String.ptr`. Returns 1 when the final node
+       was built, 0 when the receiver is not a Box, -1 on a diagnostic. */
+    int Box_member_deref(int recv, int arrow, const char *fname, int line, int col, int *out)
+    {
+        char ty[MAX_TEXT];
+        char *p;
+        size_t bl;
+        int stars, pn, mn, in_layer;
+        (void)arrow;
+
+        if (self->sup->expr_type(recv, ty, sizeof ty) != 0) return 0;
+        p = ty;
+        while (*p == ' ' || *p == '\t') p++;
+        bl = strlen(p);
+        while (bl > 0 && (p[bl - 1] == ' ' || p[bl - 1] == '\t')) bl--;
+        p[bl] = 0;
+        stars = 0;
+        while (bl > 0 && p[bl - 1] == '*') {
+            stars++;
+            bl--;
+            while (bl > 0 && (p[bl - 1] == ' ' || p[bl - 1] == '\t')) bl--;
+            p[bl] = 0;
+        }
+        if (strncmp(p, "struct Box_", 11) != 0 || strchr(p, '<') != 0) return 0;
+        if (!expr_is_builtin_Box_type(p)) return 0;
+        in_layer = self->sup->mem->path != 0
+                   && (strstr(self->sup->mem->path, "lib/core/Vec.h.ct") != 0
+                       || strstr(self->sup->mem->path, "lib/std/Vec.h.ct") != 0); /* DOC-87 迁移回退 */
+        if (strcmp(fname, "h") == 0 || strcmp(fname, "ptr") == 0) {
+            if (in_layer) return 0;         /* the built-in layer's own bodies */
+            return tool::diag::ct_sem_error(line, col,
+                "'.h' / '.ptr' are raw implementation fields; use the Box's methods or at()",
+                self->sup->mem->path);
+        }
+        pn = self->sup->new_node(stars > 0 ? N_ARROW : N_MEMBER);
+        if (pn < 0) return -1;
+        self->arena->nodes[pn].a = recv;
+        snprintf(self->arena->nodes[pn].text2, MAX_TEXT, "ptr");
+        snprintf(self->arena->nodes[pn].text, MAX_TEXT, "%s", ty);
+        mn = self->sup->new_node(N_ARROW);
+        if (mn < 0) return -1;
+        self->arena->nodes[mn].a = pn;
+        snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", fname);
+        self->arena->nodes[mn].line = line;
+        self->arena->nodes[mn].num = col;
+        *out = mn;
+        return 1;
+    }
+
+    /* PH-81 S1b: is the current `new` an operator rather than an identifier?
+       `new` is a contextual keyword: it starts a construction only when the
+       next token begins a type name. `int new;`, `r.new`, `new = 5` and
+       `new + 1` therefore keep their old meaning; only `new T { ... }` (and
+       the malformed `new { ... }`) enters the construction path. */
+    int new_ahead(void)
+    {
+        int save_tok, save_line, save_bol, save_srcline, res, save_start, save_lstart;
+        long save_num;
+        size_t save_pos;
+        const char *save_text_ptr; int save_text_len;
+        (void)self;
+
+        if (!(self->lex->tok == T_ID && self->lex->tok_is("new")))
+            return 0;
+        save_tok = self->lex->tok;
+        save_num = self->lex->toknum;
+        save_line = self->lex->tokline;
+        save_pos = self->lex->pos;
+        save_srcline = self->lex->line;
+        save_bol = self->lex->bol;
+        save_start = self->lex->tokstart;
+        save_lstart = self->lex->lstart;
+        save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
+        self->sup->lex_next();
+        res = 0;
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
+            res = 1;                        /* malformed, but still `new` */
+        } else if (self->lex->tok != T_ID) {
+            res = 0;
+        } else if (self->lex->tok_is("struct")
+                   || self->lex->tok_is("union")
+                   || self->lex->tok_is("enum")) {
+            res = 1;
+        } else if (self->is_type_word(self->lex->tok_cstr())) {
+            res = 1;
+        } else if (self->lex->tok_is("Box") || self->lex->tok_is("box")) {
+            res = 1;
+        } else if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0) {
+            res = 1;
+        } else if (self->sym->find_type_alias(self->lex->tok_cstr()) >= 0) {
+            res = 1;
+        } else {
+            char rn[MAX_TEXT];
+            if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) == 0
+                && self->sym->find_type(rn) >= 0)
+                res = 1;
+        }
+        self->lex->tok = save_tok;
+        self->lex->toknum = save_num;
+        self->lex->tokline = save_line;
+        self->lex->pos = save_pos;
+        self->lex->line = save_srcline;
+        self->lex->bol = save_bol;
+        self->lex->tokstart = save_start;
+        self->lex->lstart = save_lstart;
+        self->lex->tokstr.ptr = save_text_ptr; self->lex->tokstr.len = save_text_len;
+        return res;
+    }
+
+    /* PH-81 S1b: `new T { ... }`. Only a named (non-template, non-instance)
+    struct is accepted; the brace list is the same captured initializer
+    `T x = { ... };` uses. The result is a `Box<T>` handle whose refs count
+    starts at one. `new` never lands in a static/global initializer: the
+    emitter refuses it there because the construction is a call. */
+    int parse_new_expr(void)
+    {
+        char tbuf[MAX_TEXT];
+        char base[MAX_TEXT];
+        char raw[MAX_RAW_INIT];
+        char fixed[4096];
+        char enc[MAX_TEXT];
+        int nline, ncol, off, k, si;
+
+        nline = self->lex->tokline;
+        ncol = self->lex->tokstart - self->lex->lstart + 1;
+        if (self->static_init)
+            return tool::diag::ct_sem_error(nline, ncol,
+                "'new' cannot initialize a static object; it allocates at run time, so assign it in the function body",
+                self->sup->mem->path);
+        self->sup->lex_next();              /* new */
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{"))
+            return tool::diag::ct_sem_error(nline, ncol,
+                "'new' needs a named struct type before its initializer, as in 'new Point { 1, 2 }'",
+                self->sup->mem->path);
+        if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+        if (strncmp(tbuf, "struct ", 7) != 0)
+            return tool::diag::ct_sem_error(nline, ncol,
+                "'new' only accepts a named struct type; scalars, pointers, arrays, unions, enums and built-in handles are not boxed",
+                self->sup->mem->path);
+        snprintf(base, sizeof base, "%s", tbuf + 7);
+        if (strchr(base, '*') || strchr(base, '[') || strchr(base, '<'))
+            return tool::diag::ct_sem_error(nline, ncol,
+                "'new' only accepts a plain named struct type; pointers, arrays and generic instances are not boxed",
+                self->sup->mem->path);
+        si = self->sym->find_struct(base);
+        if (si < 0)
+            return tool::diag::ct_sem_error(nline, ncol,
+                "'new' only accepts a named struct type declared in this program",
+                self->sup->mem->path);
+        if (self->sym->structs[si].is_template || self->sym->structs[si].is_inst)
+            return tool::diag::ct_sem_error(nline, ncol,
+                "'new' only accepts a named non-generic struct type; instantiate the generic first and box the value",
+                self->sup->mem->path);
+        if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
+            || strncmp(base, "MapEntry_", 9) == 0
+            || strncmp(base, "Option_", 7) == 0 || strncmp(base, "Result_", 7) == 0
+            || strncmp(base, "U16String", 9) == 0 || strncmp(base, "U16Str", 6) == 0)
+            return tool::diag::ct_sem_error(nline, ncol,
+                "'new' does not box built-in handles, containers or borrowed views",
+                self->sup->mem->path);
+        if (strcmp(base, "String") == 0 || strcmp(base, "Str") == 0)
+            return tool::diag::ct_sem_error(nline, ncol,
+                "'new String' / 'new Str' is not supported; use the literal, 'to_string()' or 'as_str()'",
+                self->sup->mem->path);
+        if (frontend::sym::ct_tmpl_find("Box") < 0)
+            return self->sup->fail(
+                "the built-in `Box` layer is missing (set CT_CORE_DIR, or the legacy CT_STD_DIR)");
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{"))) {
+            char nmsg[MAX_TEXT * 2];
+            snprintf(nmsg, sizeof nmsg,
+                     "'new %s' needs a brace initializer; only 'new T { ... }' is supported", base);
+            return tool::diag::ct_sem_error(nline, ncol, nmsg, self->sup->mem->path);
+        }
+        {
+            /* SH-115: the payload is the template's brace initializer, so the
+               same literal-item judgement applies (`new P { .x = "s" }`). */
+            int bl = self->lex->tokline;
+            int bc = self->lex->tokstart - self->lex->lstart + 1;
+            if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+            if (self->chk_brace_init(tbuf, raw, bl, bc) != 0) return -1;
+        }
+        if (self->sup->rewrite_init_text(tbuf, raw, fixed, sizeof fixed) != 0) return -1;
+        /* register the Box<T> instance (the type parser would do the same for
+           a `Box<T>` spelling); the template's fields substitute T -> base */
+        if (self->inst_make("Box", 1, tbuf, "", tbuf, "", enc, sizeof enc, 0,
+                            nline, ncol) != 0)
+            return -1;
+        /* the payload-release helper and the constructor need the payload
+           spelling, so the node keeps both the Box instance and the payload */
+        {
+            int n, r;
+            n = self->sup->new_node(N_NEWOBJ);
+            if (n < 0) return -1;
+            r = self->sup->new_node(N_RAW);
+            if (r < 0) return -1;
+            off = self->arena->str_begin();
+            for (k = 0; fixed[k]; k++)
+                if (self->arena->str_put(fixed[k]) != 0)
+                    return self->sup->fail("initializer is too long");
+            self->arena->str_end();
+            self->arena->nodes[r].num = off;
+            self->arena->nodes[r].aux = 1;
+            self->arena->nodes[n].a = r;
+            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", enc);
+            {
+                char ctype[MAX_TEXT];
+                snprintf(ctype, sizeof ctype, "struct %s", enc);
+                snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", ctype);
+            }
+            self->arena->nodes[n].line = nline;
+            self->arena->nodes[n].num = ncol;
+            return n;
+        }
+    }
+
+}
