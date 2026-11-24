@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# LANG-22: a non-immortal `Str` / `U16Str` view stored in a container element,
-# an ADT payload or a global / static is a warning in compile/build and an
-# error under `ct check` (the SH-106 severity policy). Immortal literals, views
-# of an owner that outlives the frame (parameter / global / static / `self`)
-# and owning `String` values are silent.
+# LANG-22: a non-immortal `Str` / `U16Str` view stored in a container element
+# or a global / static is a warning in compile/build and an error under
+# `ct check` (the SH-106 severity policy). Immortal literals, views of an owner
+# that outlives the frame (parameter / global / static / `self`) and owning
+# `String` values are silent.
+#
+# LANG-29 S2 / B3 tightens one site: a bare `Str` ADT payload is refused at the
+# declaration (compile and check alike) -- the payload is copied and has no
+# owner to keep alive, so the warning is no longer enough. The probe pins that
+# hard error instead of the old warning.
 #
 # Usage: bash test/ast/lang22_str_store.sh <ct-ast>
 set -u
@@ -80,13 +85,28 @@ neg option_set 'int main(void) {
     o.set(s.as_str());
     return o.is_some();
 }'
-neg adt_payload 'enum Msg { Text(Str s), None() }
+# LANG-29 S2 / B3: a bare `Str` payload is a hard error, not a warning.
+cat >"$tmp/adt_payload.ct" <<'CT'
+enum Msg { Text(Str s), None() }
 int main(void) {
-    String a = "hello";
-    String s = a.to_string();
-    Msg m = Msg.Text(s.as_str());
-    return s.len;
-}'
+    Msg m = Msg.Text("immortal");
+    return m.tag;
+}
+CT
+"$CT" check --types "$tmp/adt_payload.ct" >"$tmp/adt_payload.chk" 2>&1
+chk=$?
+if [ "$chk" -eq 1 ] && grep -Fq "error: an ADT payload cannot be a bare 'Str' view" "$tmp/adt_payload.chk"; then
+    ok "adt_payload: bare Str payload is a check error"
+else
+    bad "adt_payload: check --types (exit $chk): $(head -1 "$tmp/adt_payload.chk")"
+fi
+"$CT" "$tmp/adt_payload.ct" -o "$tmp/adt_payload.c" >"$tmp/adt_payload.cmp" 2>&1
+cmp=$?
+if [ "$cmp" -ne 0 ] && grep -Fq "error: an ADT payload cannot be a bare 'Str' view" "$tmp/adt_payload.cmp"; then
+    ok "adt_payload: bare Str payload is a compile error"
+else
+    bad "adt_payload: compile (exit $cmp): $(head -1 "$tmp/adt_payload.cmp")"
+fi
 neg global_assign 'Str gv;
 int main(void) {
     String a = "hello";
