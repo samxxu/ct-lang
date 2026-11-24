@@ -90,8 +90,8 @@ fi
 
 # ---- 3) the capacity the rewrite forced ---------------------------------
 if [ "$io_cap" = "1024" ] \
-   && grep -q 'char io_names\[1024\]\[64\];' selfhost/ct-ast/frontend/parse/Expr.h.ct \
-   && grep -q 'e->nio >= 1024' selfhost/ct-ast/frontend/parse/Expr.h.ct; then
+   && grep -rq 'char io_names\[1024\]\[64\];' selfhost/ct-ast/frontend/parse/ \
+   && grep -rq 'e->nio >= 1024' selfhost/ct-ast/frontend/parse/; then
     ok; echo "  p88metrics: distinct-callee capacity is 1024"
 else
     bad "the distinct-callee capacity is not the documented 1024"

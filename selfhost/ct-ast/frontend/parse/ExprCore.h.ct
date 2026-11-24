@@ -1,0 +1,459 @@
+/*
+ * ExprCore.h.ct - the Expr host type and the traits it implements
+ * (SH-94 S1, pure move out of Expr.h.ct).
+ *
+ * The method bodies stay in Expr.h.ct; this unit holds only the `pub struct
+ * Expr` layout and the ten trait declarations it `use`s, so a method group can
+ * move to its own child unit without importing the host (which would close an
+ * import cycle). Nothing here runs: the parser's state, the traits and the
+ * vtable surface are the same bytes Expr.h.ct declared.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+import frontend::lex::Lexer;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import runtime::arena::Arena;
+
+namespace frontend::parse;
+/* `cur_func` and the call table stay the parser's (the driver reads them back),
+   so this object points at them; `calls` points into storage that unit owns. */
+pub trait ExprOps {
+    int  is_type_word(const char *w);
+    int  type_append(char *out, int cap, int *n, const char *tok);
+    int  parse_type(char *out, int cap);
+    /* Phase 29: read `Name<arg[, arg]>` (the lexer sits on `Name`) and append
+       the encoded instance tag to `out`. */
+    int  parse_inst_type(char *out, int cap);
+    /* Phase 29: create (or reuse) the monomorphised row for `Name<c1, c2>` and
+       register its struct layout. `depth` bounds nested instantiation; `line` /
+       `col` are the first type argument's source position (0 when a nested
+       registration has no argument list of its own). */
+    int  inst_make(const char *tname, int nargs, const char *a1, const char *a2,
+                   const char *c1, const char *c2, char *enc, int enc_cap,
+                   int depth, int line, int col);
+    /* Phase 29: a substituted field spelling may itself name an instance
+       (`MapEntry<K, V>`); register it so the emitter can print its layout. */
+    int  inst_register_nested(const char *spell, int depth);
+    /* L29-13: 1 when this C type is a struct that carries a vptr (directly or
+       through a value field). Interface values (`struct X_iface`) are not
+       flagged: Phase 31 O1 stores them as a plain two-word copy. */
+    int  container_vptr_type(const char *ctype, int depth);
+    /* L31-1: 1 when this C type is an interface pointer (`struct X_iface *`).
+       There is no boxing path from a concrete value into an interface-pointer
+       slot, so such an element is refused and pointed at the value form. */
+    int  container_iface_ptr(const char *ctype);
+    /* Phase 31: replace the template's type parameters in `spell` with the
+       instance's concrete C arguments (`T` -> `struct Show_iface`). A spelling
+       that mentions no parameter passes through unchanged. */
+    int  inst_subst_type(const char *ibase, const char *spell, char *out, int cap);
+    /* L31-2 / Phase 33 O3: 1 when a container element (an interface value or an
+       owning instance) is declared in a unit other than the container template's
+       own. The emitter uses it to move the instance's helpers and methods to the
+       unit that named it. */
+    int  container_elem_foreign(const char *ctype, int container_tmpl);
+    /* Phase 26: register (or reuse) the instance of template `gfi` for the
+       concrete type spelling `targ`; returns its index in `sym->ginsts`. */
+    int  generic_instance(int gfi, const char *targ, int line, int col);
+    /* Phase 29: the method node `impl<T> Name<Args>` declares for the receiver
+       type `ibase` (a `struct <instance>` spelling), or -1. */
+    int  inst_inherent_method(const char *ibase, const char *fname);
+    /* P29-2: the receiverless (static) method of an instance, and the
+       lookahead that tells `Vec<int>::from(...)` from `Vec < 3`. */
+    int  inst_static_method(const char *ibase, const char *fname);
+    int  static_call_ahead(void);
+    /* Phase 29 V29-4: a `Vec` / `Map` handle is a two-field struct in C, so the
+       subscript and brace-initializer spellings C would reject (`struct Vec_int`
+       is not an array, `{ "k": 1 }` is not an aggregate) are refused here with a
+       position instead of being emitted. */
+    int  container_index_check(int base);
+    /* V29-4: one static C type for an expression, so every subscript base is
+       judged by the same rules. It covers a variable, a member / arrow field,
+       a deref, a call (direct or through a function pointer), a method call and
+       one array / pointer subscript. Each deref or subscript peels exactly one
+       layer. A base whose type the tables cannot pin is left unresolved and is
+       not judged (cc stays the last word); a resolved container spelling is
+       always refused. */
+    int  static_ctype(int n, char *out, int cap, int *array_depth, int depth);
+    /* `typedef` alias -> the spelling it was declared with (name lookup). */
+    int  ctype_expand(const char *in, char *out, int cap, int depth);
+    /* `RET (*)(params)` -> RET, the abstract declarator the emitter splices. */
+    int  fnptr_ret(const char *ftype, char *out, int cap);
+    /* one pointer layer only: `T **` -> `T *`, never `T`. */
+    int  peel_ptr(const char *ty, char *out, int cap);
+    int  container_init_check(const char *ctype);
+    int  container_global_init_check(const char *ctype);
+    /* Phase 31 O3: the write forms a subscript has no lvalue for. The kind is
+       1 for a `Vec`, 2 for a `Map`, 0 when the chain holds no subscript. */
+    int  container_subscript_kind(int n);
+    int  container_write_check(int n);
+    int  container_addr_check(int n);
+    /* Phase 31 S16b: one Map literal key or value against its slot, using the
+       19.2 coarse kernel. 0 compatible, 1 a confident mismatch, -1 undecidable. */
+    int  brace_arg_ok(const char *formal, const char *actual);
+    int  parse_array_dims(int n);
+    int  next_is_type_name(void);
+    int  tok_is_type_name(void);
+    int  offsetof_ahead(void);
+    int  fnptr_field(const char *stype, const char *field);
+    int  const_ok(int n);
+    int  parse_expr(void);
+    /* Phase 30: consume `into { … }` (and any postfix suffix after it). The
+       caller sets `into_ok` for the positions the card allows; anywhere else a
+       block here is L30-1. */
+    int  into_tail(int left, int allow);
+    int  into_block(int recv, char *type, int line, int col);
+    int  into_member_check(int base, char *fname, int line, int col);
+    int  parse_bitor(void);
+    int  parse_bxor(void);
+    int  parse_bitand(void);
+    int  parse_shift(void);
+    int  parse_cmp(void);
+    int  parse_add(void);
+    int  parse_mul(void);
+    int  parse_unary(void);
+    int  parse_postfix(void);
+    int  parse_primary(void);
+    int  parse_args(void);
+    int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap,
+                         int *form);
+    int  record_call(const char *callee, int line);
+    int  arity_check(int line, int col, const char *callee, int got, int want);
+    int  map_arity(int line, int col, const char *trait, const char *method, int got);
+    int  argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi);
+    /* SH-60: a static map's actuals are compared with the host trait's
+       signature (same rules as 19.2) but a confident mismatch is a hard error,
+       not a warning: the recipe splices the actual into the generated call, so
+       nothing else can catch it, and `ct check` never sees an imported
+       mapping unit. */
+    int  argtype_check_static(int line, int col, const char *callee, int args, int ti, int mi);
+    /* 25.1: the silent half of `argtype_check` -- 0 compatible / undecidable,
+       1 a confident mismatch written to `msg`. A type host with several
+       candidate maps asks every candidate before it warns. */
+    int  argtype_mismatch(int args, int fi, int ti, int mi, char *msg, int cap);
+    /* Phase 21 S4: closure actuals fill a `(fn, env)` pair and count as two
+       C arguments. */
+    int  type_is_fnptr(const char *t);
+    int  type_is_void_ptr(const char *t);
+    int  formal_is_env_fn(const char *t);
+    int  arg_is_closure(int a);
+    int  closure_arg_count(int args);
+    int  closure_arg_check(int line, int col, const char *callee, int args, int fi);
+    /* 25.1: the static-recipe counterpart -- a closure actual may only fill a
+       `(fn, env)` pair of the host method (L25-1). */
+    int  map_closure_check(int line, int col, int args, int ti, int mi);
+    int  decl_type_compat(const char *formal, const char *actual);
+    /* Phase 21 S2: `(params) => expr` is parsed and checked, never emitted.
+       `parse_closure` runs at the `(` that opens the literal; `closure_bind`
+       compares it with the function pointer type its declaration spells. */
+    int  parse_closure(void);
+    int  closure_bind(int ci, const char *host, const char *vname);
+    int  closure_arg_bind(int ci, const char *ftype);
+}
+
+/* Phase 35: `ExprOps` is at MAX_METHODS; trait-instance type reading gets the
+   same small-trait treatment as the optional type gate below. */
+pub trait ExprTraitInst {
+    int  parse_trait_inst_type(char *out, int cap);
+}
+
+/* PH-52: the user-type subscript protocol lives in its own trait because
+   `ExprOps` is at MAX_METHODS. `custom_index_label` renders `Box<int>` for an
+   instance row and the bare name otherwise; `custom_index_method` matches the
+   inherent method by name + arity only (D52-2) and emits L52-1..L52-5 / L52-10
+   on failure. */
+pub trait ExprSubscript {
+    int  custom_index_label(const char *bty, char *out, int cap);
+    int  custom_index_method(const char *bty, const char *name, int want,
+                             int line, int col, int writable, int idx_node);
+}
+
+/* Phase 53: parser-level optional chain (`?.` / `?[`). Kept out of `ExprOps`
+   (at MAX_METHODS) like the other small traits. The lookahead never consumes;
+   the two builders allocate `N_OPT` and emit the frozen L53 diagnostics. */
+pub trait ExprOptional {
+    int  opt_suffix_kind(void);
+    int  opt_field(int recv, const char *fname, int line, int col);
+    int  opt_subscript(int recv, int idx, int line, int col);
+    int  opt_lvalue_check(int n, int line, int col);
+    int  opt_result_ok(const char *ty, int subscript, int line, int col);
+}
+
+/* Phase 32: the opt-in `--types` gate. Its own trait because `ExprOps` already
+   sits at MAX_METHODS, and both grammars that need the gate -- the expression
+   layer and the statement layer -- hold this object. */
+/* PH-81 / S1: `new` and the `Box<T>` member sugar. `ExprOps` is at
+   MAX_METHODS, so the construction parser and the auto-deref helper live in
+   their own small trait like the optional / subscript grammars. */
+pub trait ExprNew {
+    int  new_ahead(void);
+    int  parse_new_expr(void);
+    int  Box_member_deref(int recv, int arrow, const char *fname,
+                          int line, int col, int *out);
+}
+
+/* Phase 84: `Type.Variant(args)` construction. Its own small trait because
+   `ExprOps` already sits at MAX_METHODS, like the optional / new grammars. */
+pub trait ExprAdt {
+    int  adt_ctor_ahead(void);
+    int  parse_adt_ctor(void);
+}
+
+/* SH-60 / D-60-1: a `mut` static method writes its receiver. A literal or a
+   top-level `const` receiver has no writable storage, so the call is a
+   warning in compile / build mode and an error under `ct check` -- the same
+   severity policy as 19.2. The annotation is the author's contract; this is
+   not a dataflow analysis. The generated C is untouched. The helper lives in
+   its own small trait because `ExprOps` is at MAX_METHODS. */
+pub trait ExprRecvMut {
+    int  recv_mut_check(int recv, const char *rtype, int is_mut, int line, int col,
+                        const char *method);
+}
+
+pub trait ExprTypes {
+    /* The judged type of one expression. 0 when `out` names a value type,
+       non-zero when the tables cannot pin it (D32-4: the caller then stays
+       silent). `is_zero` is optional and marks the bare literal `0`, a null
+       pointer constant wherever a pointer is expected. */
+    int  chk_type(int n, char *out, int cap, int *is_zero);
+    /* One compatibility judgement through the shared `arg_class` kernel
+       (D32-2). `diag` picks the wording: 1 initializer, 2 assignment,
+       3 return, 6 a container argument (the index comes from `chk_arg`).
+       The position is read from `chk_line` / `chk_col`; the caller sets both
+       before the call, because an AST node only records its line. */
+    int  chk_assignable(const char *formal, const char *actual, int is_zero, int diag);
+    /* Phase 32 S7: the arguments of one inherent method call on an instance.
+       The impl's type parameters are bound to the instance's concrete C
+       arguments, each formal is substituted, and each actual is judged with
+       L32-6 at its own start position. */
+    int  chk_mcall_args(const char *ibase, const char *fname, int args);
+    /* SH-115: one call through a function pointer is judged against the
+       prototype inside its type spelling (`int (*)(int, char *)`), reusing
+       the same `chk_assignable` / `arity_warn` kernel as a named call. This is
+       the shared path for a function-pointer variable, a function-pointer
+       *field* (`o.add(...)`) and a pointer-expression callee (`(*p)(...)`);
+       silent when the spelling is not a function pointer. */
+    int  chk_callptr_args(const char *ftype, const char *callee, int args,
+                          int line, int col);
+    /* SH-115: a struct's brace initializer is judged item by item when one
+       item is exactly one literal, so `struct P p = { .x = "s" }` produces the
+       same `initializer:` finding as `int x = "s"`. Non-literal items are
+       left to C -- no expression is re-parsed and no false positive is
+       possible. Local, file-scope, compound-literal and `new T { ... }`
+       initializers share it. */
+    int  chk_brace_init(const char *type, const char *raw, int line, int col);
+    /* PH-79 fix SH-100: an array value where a `T[]` is expected becomes a
+       view node (`N_SLICE_RANGE` aux 3). `n` is returned unchanged when it is
+       already a slice, is not an array, or is a `T a[]` parameter (decayed to
+       a pointer, so no length is available). */
+    int  slice_view_from_array(int n);
+    /* PH-80 (D-013): bind a bare string literal to the expected `String` /
+       `Str` type. `String` becomes an immortal compiler-emitted literal handle
+       (N_STR aux 1); `Str` becomes a borrowed view (aux 2). An implicit
+       `U16String` literal is refused here. Returns -1 after a diagnostic. */
+    int  lit_coerce(const char *type, int e);
+}
+
+/* Phase 44: the postfix `?` helpers. Their own small trait because `ExprOps`
+   already sits at MAX_METHODS (the same reason `ExprTraitInst` and `ExprTypes`
+   are separate); `static_ctype` and `parse_postfix` reach them through this
+   object. */
+pub trait ExprTry {
+    /* 1 when the `?` at the cursor is the suffix rather than the conditional
+       operator (a single-token lookahead with the lexer saved and restored). */
+    int  q_suffix_ahead(void);
+    /* The `Result<T, E>` instance behind a C type spelling, and its payload
+       types. A pointer to a Result answers 0 (L44-1). */
+    int  result_tag(const char *ctype, char *tag, int cap);
+    int  result_cols(int inst, char *val, int vcap, char *err, int ecap);
+}
+
+pub trait ExprBinding {
+    int  binding_convert(int expr, const char *target, int line, int col);
+}
+
+pub struct Expr {
+    struct Arena *arena;
+    struct Lexer *lex;
+    struct Symbols *sym;
+    struct ParseSupport *sup;
+    char *cur_func;                      /* the parser's current function name */
+    struct Call *calls;  /* storage owned by parse.h.ct */
+    int *ncalls;
+    /* PH-66 R1: every direct call's source name, resolved or not. The call
+       graph above only keeps calls to known functions; libc I/O is unknown by
+       design, so it needs this second list. */
+    /* PH-88: the emitter's one-function-per-kind dispatch slices add ~80 distinct
+       callees to ct-ast's own tree. A macro cannot cross a unit boundary (the
+       struct is emitted into Expr.h), so the capacity is a literal; the check
+       below spells the same number. Capacity, not semantics: the diagnostic
+       text is unchanged, only the point it fires moves. */
+    char io_names[1024][64];
+    int  io_owner[1024];   /* cur_unit of the caller, so build mode can scope */
+    int  io_known[1024];   /* 1 when the callee resolves to a user/layer function */
+    int  io_line[1024];
+    int  nio;
+    /* A function-pointer declarator carries its name inside the type
+       (`int (*cb)(void *)`), so `parse_type` reads it and the caller takes it
+       from here instead of expecting an identifier of its own. 160 is MAX_TEXT
+       here: the generated header carries no macros. (D-7) */
+    char fnptr_name[160];
+    int  call_line;
+    int  call_col;
+    /* The array dimensions of a function pointer live inside its declarator
+       (`int (*tbl[2])(int)`), so `parse_type` collects them here and the four
+       declaration entries copy them into the node's `text3` (D-5). */
+    char fnptr_dims[160];
+    int  fnptr_state;
+    /* Phase 41: the type just read used the contextual `atomic` modifier.
+       Contexts that cannot hold an atomic value (return type, typedef) reset
+       this before parse_type and reject it afterwards. */
+    int  saw_atomic;
+    /* Set when the type just read named a trait. `parse_type` turns a trait
+       into its `struct T_iface`, which is right everywhere except a type
+       alias: a synonym must name a concrete spelling, so the alias parser
+       rejects the target with a message of its own. */
+    int  saw_trait;
+    /* A specifier captured before the storage class (`_Alignas(16) static int
+       g;`) arrives here; `parse_type` prepends it and clears the slot, so the
+       declaration keeps its canonical spelling (`static _Alignas(16) int g`). */
+    char decl_prefix[160];
+    /* Set while the expression being parsed may name a C library function
+       (`p = strcmp;`, `p = &strcmp;`): an unknown bare identifier is then
+       emitted verbatim instead of being rejected. */
+    int  fnval_ok;
+    /* Phase 26: set by the parser while a generic template's body is being
+       parsed. A generic call there would need an instance of a function whose
+       own instance set is not fixed yet, so it is refused (L26-5). */
+    int  in_generic;
+    /* Phase 26 fix (SH-62): the current template's type parameter spelling
+       while its body is parsed. `next_is_type_name` otherwise treats an
+       ALL_CAPS name as a C macro constant, which turned `sizeof(T)` into a
+       raw expression and let `ct compile` emit `sizeof(T)`. */
+    char in_generic_tparam[160];
+    /* Phase 29: the second type parameter of a generic struct template
+       (`struct Pair<T, U>`), empty when the template or the function has one. */
+    char in_generic_tparam2[160];
+    /* Phase 29: set while `parse_type` reads a type argument that is itself an
+       instance. Since S20b the surrounding instance takes that argument by its
+       C spelling (`struct Vec_int`), so the encoder produces one name in every
+       path (`Vec_Vec__int`); this flag only tells the reader the argument was an
+       instance. Empty when the last type was not an instance. */
+    char inst_canon[160];
+    /* Phase 29: nesting depth of `parse_type` while it reads type arguments;
+       deeper than four is refused (L29-4). */
+    int  type_depth;
+    /* Phase 29: the unit being parsed, copied from the parser when a unit
+       starts, so an instance records who created it. */
+    int  cur_unit;
+    /* Phase 31 L31-2: points at the driver's `ct build` flag, copied from the
+       parser when a unit starts. A single-file compile sees every definition,
+       so the cross-unit element guard only applies when this is 1. */
+    int *build_mode;
+    /* Phase 32: points at the parser's `types_mode`, set only by `ct check
+       --types`. Every phase-32 judgement reads this flag and stays silent
+       when it is 0. */
+    int *types_mode;
+    /* PH-70-R1: points at the parser's `check_mode` so statement-level flow
+       checks (break/continue context) can be gated on `ct check`. */
+    int *check_mode;
+    /* PH-81: set while a `static` local's initializer is parsed, so `new`
+       (a run-time allocation) is refused before it reaches C. */
+    int  static_init;
+    /* Phase 32: the source position of the expression under judgement and the
+       argument index L32-6 names. The caller sets them just before calling
+       `chk_assignable`; an AST node carries only its line. */
+    int  chk_line;
+    int  chk_col;
+    int  chk_arg;
+    /* Phase 32 S7: each argument's own start position, captured while the
+       argument list is parsed. A nested call grows the frame past the
+       parent's slots; the frame is popped when the list closes. */
+    int  arg_line[32];
+    int  arg_col[32];
+    int  narg_pos;
+    int  arg_base;
+    /* Phase 28: the trait bound of the template whose body is being parsed.
+       A method call on the type parameter resolves against this trait instead
+       of failing to find a struct; empty for a plain template and outside one. */
+    char in_generic_bound[160];
+    /* Phase 26 fix (SH-63): the last bare struct/union/enum tag `parse_type`
+       expanded into `struct <tag>`. A template whose return type was written
+       bare `T` must become the type parameter, not the same-named tag. */
+    char last_bare_tag[160];
+    /* Phase 26 fix (SH-62, reopened): a `sizeof` / `_Alignof` / `alignof` type
+       operand written without parentheses (`sizeof T`) takes one type name and
+       stops before `*`, which belongs to the surrounding multiplication. */
+    int  type_no_ptr;
+    /* Set while a full expression may carry an assignment (`(c = f())` and a
+       condition): the statement layer owns top-level assignments, so this stays
+       0 there and `x = 1;` is unchanged. */
+    int  assign_ok;
+    /* Phase 24: non-zero only while the element expression of a range
+       initialiser (`int a[] = 0..3($ * 2)`) is being parsed. `$` is not an
+       identifier -- it has no scope, no symbol and no C spelling -- so it is
+       accepted as a primary here and anywhere else reports the ordinary syntax
+       error instead of an undeclared name. */
+    int  dollar_ok;
+    /* Phase 40 R5: set while a range initialiser's element is parsed, so a
+       `$` node can be told apart from the trailing-declaration alias. */
+    int  range_ctx;
+    /* Phase 30: `> 0` only while the expression at one of the allowed value
+       positions (a declaration initialiser, an assignment's right side, a
+       `return`, an expression statement) is parsed. A nested expression clears
+       it, so `f(x into { … })` is L30-1 instead of being accepted. */
+    int  into_ok;
+    /* PH-76: `expr$name` materialisation. Allowed only in a statement
+       expression; the parser records the pending `name = call` nodes here and
+       the statement layer wraps them in one N_MATSEQ. */
+    long mat_state;   /* PH-76: bit62 allow, bits0..20 head+1, bits21..41 tail+1 */
+    /* The `N_INTO` whose block is being parsed, or -1. `$` and a leading
+       `.name` bind to it, and a second `into` inside the same block is L30-7. */
+    int  into_node;
+    /* A compound literal is parsed where a cast would be (`(type){ … }`), but a
+       postfix suffix still belongs to it (`(struct P){1,2}.y`). The cast branch
+       leaves the finished node here and calls `parse_postfix`, which consumes
+       the seed instead of parsing another primary. -1 = none; `ct_expr_bind`
+       sets that up, since the instance is static. */
+    int  postfix_seed;
+    /* Phase 21 S5: a block body (`=> { … }`) is the statement layer's, and the
+       expression object may not import it (that would close a cycle), so the
+       parser installs a hook after both sub-objects are bound. Phase 44 reuses
+       the same hook for the postfix `?`: op 0 parses a block body, op 1
+       snapshots the defer / `own` failure cleanup of the `?` node in `arg`. */
+    int (*st_hook)(int op, int arg);
+    /* Enclosing closures while a literal's body is being parsed. An inner
+       literal's captures are copied up into every enclosing environment whose
+       frame is outside this literal, so the inner environment can be built
+       from fields instead of names that do not exist there. */
+    int  cl_stack[16];
+    int  cl_pstart[16];
+    int  ncl_stack;
+    /* The map table the parser owns. A qualified call may name a namespace
+       host's method without the trait segment (`std::io::puts(...)`), and the
+       namespace/recipe pair is only known from this table. */
+    struct MapTable *maps;
+    int *nmaps;
+    /* Phase 31 S23b (L31-23): the live borrowed views of this function, keyed
+       by the view variable and the container, so a shadowed name cannot alias
+       either. `view_bad` refuses the next use after a mutation. */
+    int  nview;
+    int  view_vi[64];
+    int  view_cvi[64];
+    int  view_bad[64];
+    /* Phase 31 S23b (L31-22): the iterated variable of each enclosing
+       `foreach`, so a mutation call on it inside the body is refused. */
+    int  niter;
+    char iter[8][160];
+    /* Phase 44: inside a condition, a short-circuit right operand, a ternary
+       arm, a closure body or a defer body a postfix `?` is refused (L44-4). */
+    int  try_ban;
+    /* Phase 44: per-`?` failure cleanup, captured when the node is built (the
+       defer stack and the `own` list are live only during parsing) and read by
+       the emitter through `expr_get`. A node with no cleanup records -1. */
+    int  ntry_cleanup;
+    int  try_cleanup_node[512];
+    int  try_cleanup_head[512];
+} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut;

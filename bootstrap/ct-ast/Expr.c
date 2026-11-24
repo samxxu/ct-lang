@@ -12,6 +12,7 @@
 #include "Diag.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
+#include "ExprCore.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -158,33 +159,15 @@ struct tool_pkg_PkgRec;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
 struct tool_driver_Driver;
-struct frontend_parse_ExprTraitInst_vtbl {
-    int (*parse_trait_inst_type)(void *, char *, int);
-};
-struct frontend_parse_ExprTraitInst_iface {
-    void *self;
-    const struct frontend_parse_ExprTraitInst_vtbl *vt;
-};
-
-struct frontend_parse_ExprTry_vtbl {
-    int (*q_suffix_ahead)(void *);
-    int (*result_tag)(void *, const char *, char *, int);
-    int (*result_cols)(void *, int, char *, int, char *, int);
-};
-struct frontend_parse_ExprTry_iface {
-    void *self;
-    const struct frontend_parse_ExprTry_vtbl *vt;
-};
-
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable;
 const struct frontend_parse_ExprNew_vtbl frontend_parse_Expr_frontend_parse_ExprNew_vtable;
 const struct frontend_parse_ExprAdt_vtbl frontend_parse_Expr_frontend_parse_ExprAdt_vtable;
 const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_parse_ExprSubscript_vtable;
 const struct frontend_parse_ExprOptional_vtbl frontend_parse_Expr_frontend_parse_ExprOptional_vtable;
-static const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable __attribute__((unused));
+const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable;
 const struct frontend_parse_ExprRecvMut_vtbl frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable;
 const struct frontend_parse_ExprTypes_vtbl frontend_parse_Expr_frontend_parse_ExprTypes_vtable;
-static const struct frontend_parse_ExprTry_vtbl frontend_parse_Expr_frontend_parse_ExprTry_vtable __attribute__((unused));
+const struct frontend_parse_ExprTry_vtbl frontend_parse_Expr_frontend_parse_ExprTry_vtable;
 const struct frontend_parse_ExprBinding_vtbl frontend_parse_Expr_frontend_parse_ExprBinding_vtable;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
@@ -7714,7 +7697,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_typ
     return 0;
 }
 
-static const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable __attribute__((unused)) = {
+const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable = {
     .parse_trait_inst_type = frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_type
 };
 
@@ -8867,7 +8850,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTry_result_cols(void *self, in
     return 1;
 }
 
-static const struct frontend_parse_ExprTry_vtbl frontend_parse_Expr_frontend_parse_ExprTry_vtable __attribute__((unused)) = {
+const struct frontend_parse_ExprTry_vtbl frontend_parse_Expr_frontend_parse_ExprTry_vtable = {
     .q_suffix_ahead = frontend_parse_Expr_frontend_parse_ExprTry_q_suffix_ahead,
     .result_tag = frontend_parse_Expr_frontend_parse_ExprTry_result_tag,
     .result_cols = frontend_parse_Expr_frontend_parse_ExprTry_result_cols
