@@ -31,23 +31,6 @@ pub trait StmtOps {
     int  del_base(int n, char *out, int cap);
     int  del_take(const char *name);
     int  body_has_jump(int n);
-    int  defer_ahead(void);
-    int  err_ahead(void);
-    int  errdefer_ahead(void);
-    int  errdefer_own_refs(int n);
-    int  parse_trailing_defer(int decl);
-    int  trailing_alias(int n, const char *name);
-    int  defer_add(int node);
-    int  defer_active_depth(void);
-    int  defer_mark_block(void);
-    int  defer_run_node(int body, int line);
-    int  defer_prepend(int node, int base, int on_error);
-    /* Phase 44: capture the failure cleanup (defer / errdefer bodies, then the
-       `own` releases, exactly the order a source `return err:` takes) of the
-       postfix `?` node `n`. Called from the expression layer through the
-       parser's hook while the defer stack and the owned list are still live. */
-    int  try_attach(int n);
-    int  defer_flush_block(int blk, int *tail);
     int  parse_stmt(void);
     int  parse_branch(void);
     int  parse_decl_node(void);
@@ -78,6 +61,30 @@ pub trait StmtOps {
     int  closure_global_init(int e, const char *name, int line, int col);
     int  func_begin(void);
     int  func_end(void);
+}
+
+/* Phase 38 / Phase 40 / Phase 44: the `defer` / `errdefer` machinery -- the
+   three lookaheads, the per-block stack, the failure-cleanup capture on a
+   `return err:` and the postfix `?` attach. Its own trait because the family
+   is one role and `StmtOps` keeps the statement / declaration grammar. */
+pub trait StmtDeferOps {
+    int  defer_ahead(void);
+    int  err_ahead(void);
+    int  errdefer_ahead(void);
+    int  errdefer_own_refs(int n);
+    int  parse_trailing_defer(int decl);
+    int  trailing_alias(int n, const char *name);
+    int  defer_add(int node);
+    int  defer_active_depth(void);
+    int  defer_mark_block(void);
+    int  defer_run_node(int body, int line);
+    int  defer_prepend(int node, int base, int on_error);
+    /* Phase 44: capture the failure cleanup (defer / errdefer bodies, then the
+       `own` releases, exactly the order a source `return err:` takes) of the
+       postfix `?` node `n`. Called from the expression layer through the
+       parser's hook while the defer stack and the owned list are still live. */
+    int  try_attach(int n);
+    int  defer_flush_block(int blk, int *tail);
 }
 
 pub struct Stmt {
@@ -185,4 +192,4 @@ pub struct Stmt {
     int  last_yield_line;
     int  last_yield_col;
     int  last_yield_count;
-} use StmtOps;
+} use StmtOps, StmtDeferOps;

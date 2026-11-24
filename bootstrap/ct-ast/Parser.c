@@ -135,6 +135,7 @@ struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
 struct frontend_parse_Stmt;
+struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct tool_sh_Sh;
@@ -1183,7 +1184,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     (void)(_self);
     lead = (_self->pending_attr ? (_self->pending_attr - 1) : (-1));
     _self->pending_attr = 0;
-    if ((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "errdefer")) && _self->st->__frontend_parse_stmtops_vptr->errdefer_ahead(_self->st))) {
+    if ((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "errdefer")) && _self->st->__frontend_parse_stmtdeferops_vptr->errdefer_ahead(_self->st))) {
         return tool_diag_ct_sem_error(_self->lex->tokline, 1, "errdefer is not allowed here", _self->mem->path);
     }
     func_line = _self->lex->tokline;
@@ -5114,7 +5115,7 @@ static int enum_adt_ahead(struct frontend_parse_Parser * self) {
 }
 static int parser_st_hook(int op, int arg) {
     if (op == 1) {
-        return frontend_parse_g_parse.st->__frontend_parse_stmtops_vptr->try_attach(frontend_parse_g_parse.st, arg);
+        return frontend_parse_g_parse.st->__frontend_parse_stmtdeferops_vptr->try_attach(frontend_parse_g_parse.st, arg);
     }
     if (op == 2) {
         return frontend_parse_g_parse.st->__frontend_parse_stmtops_vptr->parse_match_expr(frontend_parse_g_parse.st);

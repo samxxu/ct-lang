@@ -69,6 +69,7 @@ struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
 struct frontend_parse_Stmt;
+struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct tool_sh_Sh;
@@ -93,19 +94,6 @@ struct frontend_parse_StmtOps_vtbl {
     int (*del_base)(void *, int, char *, int);
     int (*del_take)(void *, const char *);
     int (*body_has_jump)(void *, int);
-    int (*defer_ahead)(void *);
-    int (*err_ahead)(void *);
-    int (*errdefer_ahead)(void *);
-    int (*errdefer_own_refs)(void *, int);
-    int (*parse_trailing_defer)(void *, int);
-    int (*trailing_alias)(void *, int, const char *);
-    int (*defer_add)(void *, int);
-    int (*defer_active_depth)(void *);
-    int (*defer_mark_block)(void *);
-    int (*defer_run_node)(void *, int, int);
-    int (*defer_prepend)(void *, int, int, int);
-    int (*try_attach)(void *, int);
-    int (*defer_flush_block)(void *, int, int *);
     int (*parse_stmt)(void *);
     int (*parse_branch)(void *);
     int (*parse_decl_node)(void *);
@@ -135,6 +123,26 @@ struct frontend_parse_StmtOps_vtbl {
 struct frontend_parse_StmtOps_iface {
     void *self;
     const struct frontend_parse_StmtOps_vtbl *vt;
+};
+
+struct frontend_parse_StmtDeferOps_vtbl {
+    int (*defer_ahead)(void *);
+    int (*err_ahead)(void *);
+    int (*errdefer_ahead)(void *);
+    int (*errdefer_own_refs)(void *, int);
+    int (*parse_trailing_defer)(void *, int);
+    int (*trailing_alias)(void *, int, const char *);
+    int (*defer_add)(void *, int);
+    int (*defer_active_depth)(void *);
+    int (*defer_mark_block)(void *);
+    int (*defer_run_node)(void *, int, int);
+    int (*defer_prepend)(void *, int, int, int);
+    int (*try_attach)(void *, int);
+    int (*defer_flush_block)(void *, int, int *);
+};
+struct frontend_parse_StmtDeferOps_iface {
+    void *self;
+    const struct frontend_parse_StmtDeferOps_vtbl *vt;
 };
 
 struct frontend_parse_Stmt {
@@ -203,6 +211,7 @@ struct frontend_parse_Stmt {
     int last_yield_col;
     int last_yield_count;
     const struct frontend_parse_StmtOps_vtbl *__frontend_parse_stmtops_vptr;
+    const struct frontend_parse_StmtDeferOps_vtbl *__frontend_parse_stmtdeferops_vptr;
 };
 
 #endif

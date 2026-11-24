@@ -13,6 +13,7 @@
 #include "StmtRangeScan.h"
 #include "StmtScope.h"
 #include "StmtCore.h"
+#include "StmtDefer.h"
 #include "TypeCheck.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
@@ -148,6 +149,7 @@ struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
 struct frontend_parse_Stmt;
+struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct tool_sh_Sh;
@@ -163,7 +165,6 @@ const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_Stmt
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-static int autodrop_append(struct frontend_parse_Stmt *, int, int, int *);
 static int retire_before_return(struct frontend_parse_Stmt *, int, int);
 static int retire_before_jump(struct frontend_parse_Stmt *, int, int);
 static int jump_push(struct frontend_parse_Stmt *, int, int);
@@ -192,372 +193,7 @@ static int stmt_owning_struct(struct frontend_parse_Stmt *, const char *);
 static void match_expr_type_key(const char *, char *, int);
 void frontend_parse_ct_stmt_bind(void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Stmt * frontend_parse_stmt_get(void);
-static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable };
-static int frontend_parse_Stmt_frontend_parse_StmtOps_defer_ahead(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    const char * p;
-    (void)(_self);
-    if (_self->lex->tok != T_ID) {
-        return 0;
-    }
-    if ((!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "defer"))) {
-        return 0;
-    }
-    p = ((_self->lex->src + _self->lex->tokstart) + 5);
-    while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\r')) || ((*p) == '\n'))) {
-        p++;
-    }
-    return ((*p) == '{');
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_err_ahead(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    const char * p;
-    (void)(_self);
-    if (_self->lex->tok != T_ID) {
-        return 0;
-    }
-    if ((!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "err"))) {
-        return 0;
-    }
-    p = ((_self->lex->src + _self->lex->tokstart) + 3);
-    while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\r')) || ((*p) == '\n'))) {
-        p++;
-    }
-    return (((*p) == ':') && (p[1] != ':'));
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_errdefer_ahead(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    const char * p;
-    (void)(_self);
-    if (_self->lex->tok != T_ID) {
-        return 0;
-    }
-    if ((!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "errdefer"))) {
-        return 0;
-    }
-    p = ((_self->lex->src + _self->lex->tokstart) + 8);
-    while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\r')) || ((*p) == '\n'))) {
-        p++;
-    }
-    return ((*p) == '{');
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_errdefer_own_refs(void *self, int n) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int d;
-    for (; n >= 0; n = _self->arena->nodes[n].next) {
-        if (_self->arena->nodes[n].kind == N_VAR) {
-            int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-            for (d = 0; ((vi >= 0) && (d < _self->mem->nowner)); d++) {
-                if (_self->mem->own_var[d] == vi) {
-                    return tool_diag_ct_sem_error(_self->arena->nodes[n].line, 1, "an own object cannot be rolled back by errdefer", _self->mem->path);
-                }
-            }
-        }
-        if (_self->__frontend_parse_stmtops_vptr->errdefer_own_refs(_self, _self->arena->nodes[n].a) != 0) {
-            return (-1);
-        }
-        if (_self->__frontend_parse_stmtops_vptr->errdefer_own_refs(_self, _self->arena->nodes[n].b) != 0) {
-            return (-1);
-        }
-        if (_self->__frontend_parse_stmtops_vptr->errdefer_own_refs(_self, _self->arena->nodes[n].c) != 0) {
-            return (-1);
-        }
-        if (_self->__frontend_parse_stmtops_vptr->errdefer_own_refs(_self, _self->arena->nodes[n].d) != 0) {
-            return (-1);
-        }
-    }
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_trailing_alias(void *self, int n, const char * name) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    for (; n >= 0; n = _self->arena->nodes[n].next) {
-        if ((((_self->arena->nodes[n].kind == N_VAR) && (strcmp(_self->arena->nodes[n].text2, "$") == 0)) && (strcmp(_self->arena->nodes[n].text3, "range") != 0))) {
-            snprintf(_self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
-        }
-        if (((_self->arena->nodes[n].kind == N_DECL) && (strcmp(_self->arena->nodes[n].text2, name) == 0))) {
-            return tool_diag_ct_sem_error(_self->arena->nodes[n].line, 1, "a trailing block cannot shadow the '$' name", _self->mem->path);
-        }
-        if (((((_self->arena->nodes[n].kind == N_ASSIGN) && (_self->arena->nodes[n].a >= 0)) && (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_VAR)) && (strcmp(_self->arena->nodes[_self->arena->nodes[n].a].text2, "$") == 0))) {
-            return tool_diag_ct_sem_error(_self->arena->nodes[n].line, 1, "'$' is read-only and only valid in the trailing block", _self->mem->path);
-        }
-        if (_self->__frontend_parse_stmtops_vptr->trailing_alias(_self, _self->arena->nodes[n].a, name) != 0) {
-            return (-1);
-        }
-        if (_self->__frontend_parse_stmtops_vptr->trailing_alias(_self, _self->arena->nodes[n].b, name) != 0) {
-            return (-1);
-        }
-        if (_self->__frontend_parse_stmtops_vptr->trailing_alias(_self, _self->arena->nodes[n].c, name) != 0) {
-            return (-1);
-        }
-        if (_self->__frontend_parse_stmtops_vptr->trailing_alias(_self, _self->arena->nodes[n].d, name) != 0) {
-            return (-1);
-        }
-    }
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_trailing_defer(void *self, int decl) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int d;
-    int body;
-    int is_err;
-    int save_defer;
-    int save_err;
-    is_err = _self->__frontend_parse_stmtops_vptr->errdefer_ahead(_self);
-    if (((!is_err) && (!_self->__frontend_parse_stmtops_vptr->defer_ahead(_self)))) {
-        return 0;
-    }
-    if ((_self->in_defer || _self->in_errdefer)) {
-        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), (is_err ? "an errdefer block cannot transfer control" : "a defer block cannot transfer control"), _self->mem->path);
-    }
-    if (_self->switch_depth > 0) {
-        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), (is_err ? "errdefer is not allowed here" : "defer is not allowed inside a switch"), _self->mem->path);
-    }
-{
-        size_t pl = strlen(_self->mem->path);
-        if (((pl >= 5) && (strcmp(((_self->mem->path + pl) - 5), ".h.ct") == 0))) {
-            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), (is_err ? "errdefer is not allowed here" : "defer is not allowed in a .h.ct unit"), _self->mem->path);
-        }
-    }
-    if (_self->arena->nodes[decl].kind == N_DECLS) {
-        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a trailing defer needs a single declaration", _self->mem->path);
-    }
-    d = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_DEFER);
-    if (d < 0) {
-        return (-1);
-    }
-    _self->arena->nodes[d].line = _self->lex->tokline;
-    _self->arena->nodes[d].aux = (is_err ? 1 : 0);
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-{
-        int save_dollar = _self->ex->dollar_ok;
-        save_defer = _self->in_defer;
-        save_err = _self->in_errdefer;
-        _self->in_defer = 1;
-        _self->in_errdefer = is_err;
-        _self->ex->dollar_ok = 1;
-        _self->ex->try_ban++;
-        body = _self->__frontend_parse_stmtops_vptr->parse_block(_self);
-        _self->ex->try_ban--;
-        _self->ex->dollar_ok = save_dollar;
-        _self->in_defer = save_defer;
-        _self->in_errdefer = save_err;
-    }
-    if (body < 0) {
-        return (-1);
-    }
-    if (_self->__frontend_parse_stmtops_vptr->trailing_alias(_self, body, _self->arena->nodes[decl].text2) != 0) {
-        return (-1);
-    }
-    if ((is_err && (_self->__frontend_parse_stmtops_vptr->errdefer_own_refs(_self, body) != 0))) {
-        return (-1);
-    }
-    _self->arena->nodes[d].a = body;
-    if (_self->__frontend_parse_stmtops_vptr->defer_add(_self, d) != 0) {
-        return (-1);
-    }
-    if (is_err) {
-        _self->defer_block_err[(_self->ndefer_blocks - 1)] = 1;
-    }
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_defer_active_depth(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int i;
-    int n;
-    (void)(_self);
-    n = 0;
-    for (i = 0; i < _self->ndefer_blocks; i++) {
-        if (_self->defer_head[i] >= 0) {
-            n++;
-        }
-    }
-    return n;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_defer_mark_block(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int b;
-    int i;
-    int j;
-    int id;
-    (void)(_self);
-    b = (_self->ndefer_blocks - 1);
-    if (((b < 0) || (_self->defer_head[b] < 0))) {
-        return 0;
-    }
-    id = _self->defer_ids[b];
-    for (i = 0; i < _self->nlabels; i++) {
-        for (j = 0; j < _self->label_path_depth[i]; j++) {
-            if (_self->label_path[i][j] == id) {
-                _self->label_path_has[i][j] = 1;
-            }
-        }
-    }
-    for (i = 0; i < _self->ngotos; i++) {
-        for (j = 0; j < _self->goto_path_depth[i]; j++) {
-            if (_self->goto_path[i][j] == id) {
-                _self->goto_path_has[i][j] = 1;
-            }
-        }
-    }
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_defer_add(void *self, int node) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int b;
-    int t;
-    (void)(_self);
-    b = (_self->ndefer_blocks - 1);
-    if (b < 0) {
-        return (-1);
-    }
-    t = _self->defer_tail[b];
-    if (t < 0) {
-        _self->defer_head[b] = node;
-    }
-    else {
-        _self->arena->nodes[t].next = node;
-    }
-    _self->defer_tail[b] = node;
-    _self->arena->nodes[node].next = (-1);
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_defer_run_node(void *self, int body, int line) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int r;
-    (void)(_self);
-    r = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_DEFER_RUN);
-    if (r < 0) {
-        return (-1);
-    }
-    _self->arena->nodes[r].a = body;
-    _self->arena->nodes[r].line = line;
-    return r;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_defer_prepend(void *self, int node, int base, int on_error) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int i;
-    int k;
-    int n;
-    int head;
-    int tail;
-    int ids[256];
-    (void)(_self);
-    head = (-1);
-    tail = (-1);
-    for (i = (_self->ndefer_blocks - 1); i >= base; i--) {
-        n = 0;
-        for (k = _self->defer_head[i]; k >= 0; k = _self->arena->nodes[k].next) {
-            if (((!on_error) && (_self->arena->nodes[k].aux == 1))) {
-                continue;
-            }
-            if (n >= 256) {
-                return (-1);
-            }
-            ids[n] = k;
-            n++;
-        }
-        for (k = (n - 1); k >= 0; k--) {
-            int r = _self->__frontend_parse_stmtops_vptr->defer_run_node(_self, _self->arena->nodes[ids[k]].a, _self->arena->nodes[ids[k]].line);
-            if (r < 0) {
-                return (-1);
-            }
-            _self->arena->nodes[r].aux = _self->arena->nodes[ids[k]].aux;
-            if (head < 0) {
-                head = r;
-            }
-            else {
-                _self->arena->nodes[tail].next = r;
-            }
-            tail = r;
-        }
-    }
-    if (head >= 0) {
-        _self->arena->nodes[tail].next = _self->arena->nodes[node].b;
-        _self->arena->nodes[node].b = head;
-    }
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_try_attach(void *self, int n) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int blk;
-    int tail;
-    int head;
-    struct frontend_parse_Expr * ex;
-    ex = _self->ex;
-    if (ex->ntry_cleanup >= 512) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many postfix '?' in one program (limit 512)");
-    }
-    blk = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_BLOCK);
-    if (blk < 0) {
-        return (-1);
-    }
-    tail = (-1);
-    if (autodrop_append(_self, blk, 0, (&tail)) != 0) {
-        return (-1);
-    }
-    head = ((tail >= 0) ? _self->arena->nodes[blk].a : (-1));
-    _self->arena->nodes[n].b = head;
-    if (_self->__frontend_parse_stmtops_vptr->defer_prepend(_self, n, 0, 1) != 0) {
-        return (-1);
-    }
-    head = _self->arena->nodes[n].b;
-    _self->arena->nodes[n].b = (-1);
-    ex->try_cleanup_node[ex->ntry_cleanup] = n;
-    ex->try_cleanup_head[ex->ntry_cleanup] = head;
-    ex->ntry_cleanup++;
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_defer_flush_block(void *self, int blk, int * tail) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int i;
-    int k;
-    int n;
-    int ids[256];
-    (void)(_self);
-    i = (_self->ndefer_blocks - 1);
-    if (i < 0) {
-        return 0;
-    }
-    n = 0;
-    for (k = _self->defer_head[i]; k >= 0; k = _self->arena->nodes[k].next) {
-        if (_self->arena->nodes[k].aux == 1) {
-            continue;
-        }
-        if (n >= 256) {
-            return (-1);
-        }
-        ids[n] = k;
-        n++;
-    }
-    for (k = (n - 1); k >= 0; k--) {
-        int r = _self->__frontend_parse_stmtops_vptr->defer_run_node(_self, _self->arena->nodes[ids[k]].a, _self->arena->nodes[ids[k]].line);
-        if (r < 0) {
-            return (-1);
-        }
-        _self->arena->nodes[r].aux = _self->arena->nodes[ids[k]].aux;
-        if ((*tail) < 0) {
-            _self->arena->nodes[blk].a = r;
-        }
-        else {
-            _self->arena->nodes[(*tail)].next = r;
-        }
-        (*tail) = r;
-    }
-    return 0;
-}
-
+static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable, .__frontend_parse_stmtdeferops_vptr = &frontend_parse_Stmt_frontend_parse_StmtDeferOps_vtable };
 static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     char rn[MAX_TEXT];
@@ -1119,7 +755,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
             prev_jump = _self->__frontend_parse_stmtops_vptr->stmt_terminates(_self, s);
         }
     }
-    if (_self->__frontend_parse_stmtops_vptr->defer_flush_block(_self, blk, (&tail)) != 0) {
+    if (_self->__frontend_parse_stmtdeferops_vptr->defer_flush_block(_self, blk, (&tail)) != 0) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
@@ -1136,7 +772,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return tool_diag_ct_sem_error(_self->lex->tokline, 1, "auto-drop requires the closing '}' at the start of a line", _self->mem->path);
         }
-        if (autodrop_append(_self, blk, base, (&tail)) != 0) {
+        if (frontend_parse_autodrop_append(_self, blk, base, (&tail)) != 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
         }
@@ -1150,7 +786,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
         return (-1);
     }
     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-    (void)(_self->__frontend_parse_stmtops_vptr->defer_mark_block(_self));
+    (void)(_self->__frontend_parse_stmtdeferops_vptr->defer_mark_block(_self));
     _self->ndefer_blocks = (_self->ndefer_blocks - 1);
     if (arm_here) {
         int dep = (_self->yield_depth - 1);
@@ -1207,7 +843,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         }
         return s;
     }
-    if (_self->__frontend_parse_stmtops_vptr->errdefer_ahead(_self)) {
+    if (_self->__frontend_parse_stmtdeferops_vptr->errdefer_ahead(_self)) {
         int eline = _self->lex->tokline;
         int ecol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
         int body;
@@ -1237,11 +873,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         if (body < 0) {
             return (-1);
         }
-        if (_self->__frontend_parse_stmtops_vptr->errdefer_own_refs(_self, body) != 0) {
+        if (_self->__frontend_parse_stmtdeferops_vptr->errdefer_own_refs(_self, body) != 0) {
             return (-1);
         }
         _self->arena->nodes[s].a = body;
-        if (_self->__frontend_parse_stmtops_vptr->defer_add(_self, s) != 0) {
+        if (_self->__frontend_parse_stmtdeferops_vptr->defer_add(_self, s) != 0) {
             return (-1);
         }
         _self->defer_block_err[(_self->ndefer_blocks - 1)] = 1;
@@ -1251,7 +887,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         }
         return s;
     }
-    if (_self->__frontend_parse_stmtops_vptr->defer_ahead(_self)) {
+    if (_self->__frontend_parse_stmtdeferops_vptr->defer_ahead(_self)) {
         int dline = _self->lex->tokline;
         int dcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
         int body;
@@ -1282,7 +918,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             return (-1);
         }
         _self->arena->nodes[s].a = body;
-        if (_self->__frontend_parse_stmtops_vptr->defer_add(_self, s) != 0) {
+        if (_self->__frontend_parse_stmtdeferops_vptr->defer_add(_self, s) != 0) {
             return (-1);
         }
         s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_EMPTY);
@@ -1331,7 +967,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             return (-1);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        if (_self->__frontend_parse_stmtops_vptr->err_ahead(_self)) {
+        if (_self->__frontend_parse_stmtdeferops_vptr->err_ahead(_self)) {
             is_err = 1;
             snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "err");
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -1363,7 +999,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
                     return (-1);
                 }
             }
-            if (((_self->__frontend_parse_stmtops_vptr->defer_active_depth(_self) > 0) && (_self->__frontend_parse_stmtops_vptr->defer_prepend(_self, s, 0, is_err) != 0))) {
+            if (((_self->__frontend_parse_stmtdeferops_vptr->defer_active_depth(_self) > 0) && (_self->__frontend_parse_stmtdeferops_vptr->defer_prepend(_self, s, 0, is_err) != 0))) {
                 return (-1);
             }
             if (is_err) {
@@ -1504,12 +1140,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
                 return (-1);
             }
         }
-        if (_self->__frontend_parse_stmtops_vptr->defer_active_depth(_self) > 0) {
+        if (_self->__frontend_parse_stmtdeferops_vptr->defer_active_depth(_self) > 0) {
             if ((((_self->arena->nodes[s].a >= 0) && _self->sym->ret_type[0]) && (strcmp(_self->sym->ret_type, "void") != 0))) {
                 _self->arena->nodes[s].aux = 1;
                 snprintf(_self->arena->nodes[s].text, MAX_TEXT, "%s", _self->sym->ret_type);
             }
-            if (_self->__frontend_parse_stmtops_vptr->defer_prepend(_self, s, 0, is_err) != 0) {
+            if (_self->__frontend_parse_stmtdeferops_vptr->defer_prepend(_self, s, 0, is_err) != 0) {
                 return (-1);
             }
         }
@@ -1581,7 +1217,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             return (-1);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        if (_self->__frontend_parse_stmtops_vptr->err_ahead(_self)) {
+        if (_self->__frontend_parse_stmtdeferops_vptr->err_ahead(_self)) {
             is_err = 1;
             snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "err");
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -1604,7 +1240,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         if (((_self->nbreak > 0) && (retire_before_jump(_self, s, _self->break_base[(_self->nbreak - 1)]) < 0))) {
             return (-1);
         }
-        if (((_self->nbreak > 0) && (_self->__frontend_parse_stmtops_vptr->defer_prepend(_self, s, _self->defer_break_base[(_self->nbreak - 1)], is_err) != 0))) {
+        if (((_self->nbreak > 0) && (_self->__frontend_parse_stmtdeferops_vptr->defer_prepend(_self, s, _self->defer_break_base[(_self->nbreak - 1)], is_err) != 0))) {
             return (-1);
         }
         return s;
@@ -1623,7 +1259,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             return (-1);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        if (_self->__frontend_parse_stmtops_vptr->err_ahead(_self)) {
+        if (_self->__frontend_parse_stmtdeferops_vptr->err_ahead(_self)) {
             is_err = 1;
             snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "err");
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -1643,7 +1279,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         if (((_self->ncont > 0) && (retire_before_jump(_self, s, _self->cont_base[(_self->ncont - 1)]) < 0))) {
             return (-1);
         }
-        if (((_self->ncont > 0) && (_self->__frontend_parse_stmtops_vptr->defer_prepend(_self, s, _self->defer_cont_base[(_self->ncont - 1)], is_err) != 0))) {
+        if (((_self->ncont > 0) && (_self->__frontend_parse_stmtdeferops_vptr->defer_prepend(_self, s, _self->defer_cont_base[(_self->ncont - 1)], is_err) != 0))) {
             return (-1);
         }
         return s;
@@ -1759,7 +1395,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
                         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                         return (-1);
                     }
-                    if ((_self->__frontend_parse_stmtops_vptr->defer_ahead(_self) || _self->__frontend_parse_stmtops_vptr->errdefer_ahead(_self))) {
+                    if ((_self->__frontend_parse_stmtdeferops_vptr->defer_ahead(_self) || _self->__frontend_parse_stmtdeferops_vptr->errdefer_ahead(_self))) {
                         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                         return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a trailing defer needs a single declaration", _self->mem->path);
                     }
@@ -2052,7 +1688,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         if (s < 0) {
             return (-1);
         }
-        if (_self->__frontend_parse_stmtops_vptr->parse_trailing_defer(_self, s) != 0) {
+        if (_self->__frontend_parse_stmtdeferops_vptr->parse_trailing_defer(_self, s) != 0) {
             return (-1);
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
@@ -2064,7 +1700,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
     if (s < 0) {
         return (-1);
     }
-    if ((_self->__frontend_parse_stmtops_vptr->defer_ahead(_self) || _self->__frontend_parse_stmtops_vptr->errdefer_ahead(_self))) {
+    if ((_self->__frontend_parse_stmtdeferops_vptr->defer_ahead(_self) || _self->__frontend_parse_stmtdeferops_vptr->errdefer_ahead(_self))) {
         return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a trailing defer needs a single declaration", _self->mem->path);
     }
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
@@ -2109,11 +1745,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_branch(void *self) {
     }
     _self->arena->nodes[b].a = s;
     tail = s;
-    if (_self->__frontend_parse_stmtops_vptr->defer_flush_block(_self, b, (&tail)) != 0) {
+    if (_self->__frontend_parse_stmtdeferops_vptr->defer_flush_block(_self, b, (&tail)) != 0) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
-    if (((_self->mem->nowner > base) && (autodrop_append(_self, b, base, (&tail)) != 0))) {
+    if (((_self->mem->nowner > base) && (frontend_parse_autodrop_append(_self, b, base, (&tail)) != 0))) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
@@ -2122,7 +1758,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_branch(void *self) {
         return (-1);
     }
     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-    (void)(_self->__frontend_parse_stmtops_vptr->defer_mark_block(_self));
+    (void)(_self->__frontend_parse_stmtdeferops_vptr->defer_mark_block(_self));
     _self->ndefer_blocks = (_self->ndefer_blocks - 1);
     return b;
 }
@@ -2213,7 +1849,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_switch_body(void *se
             tail = s;
         }
     }
-    if (_self->__frontend_parse_stmtops_vptr->defer_flush_block(_self, blk, (&tail)) != 0) {
+    if (_self->__frontend_parse_stmtdeferops_vptr->defer_flush_block(_self, blk, (&tail)) != 0) {
         _self->switch_depth = (_self->switch_depth - 1);
         jump_pop(_self, 0);
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
@@ -2226,7 +1862,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_switch_body(void *se
         return (-1);
     }
     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-    (void)(_self->__frontend_parse_stmtops_vptr->defer_mark_block(_self));
+    (void)(_self->__frontend_parse_stmtdeferops_vptr->defer_mark_block(_self));
     _self->ndefer_blocks = (_self->ndefer_blocks - 1);
     return blk;
 }
@@ -4935,19 +4571,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_closure_global_init(void *
 }
 
 const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_StmtOps_vtable = {
-    .defer_ahead = frontend_parse_Stmt_frontend_parse_StmtOps_defer_ahead,
-    .err_ahead = frontend_parse_Stmt_frontend_parse_StmtOps_err_ahead,
-    .errdefer_ahead = frontend_parse_Stmt_frontend_parse_StmtOps_errdefer_ahead,
-    .errdefer_own_refs = frontend_parse_Stmt_frontend_parse_StmtOps_errdefer_own_refs,
-    .trailing_alias = frontend_parse_Stmt_frontend_parse_StmtOps_trailing_alias,
-    .parse_trailing_defer = frontend_parse_Stmt_frontend_parse_StmtOps_parse_trailing_defer,
-    .defer_active_depth = frontend_parse_Stmt_frontend_parse_StmtOps_defer_active_depth,
-    .defer_mark_block = frontend_parse_Stmt_frontend_parse_StmtOps_defer_mark_block,
-    .defer_add = frontend_parse_Stmt_frontend_parse_StmtOps_defer_add,
-    .defer_run_node = frontend_parse_Stmt_frontend_parse_StmtOps_defer_run_node,
-    .defer_prepend = frontend_parse_Stmt_frontend_parse_StmtOps_defer_prepend,
-    .try_attach = frontend_parse_Stmt_frontend_parse_StmtOps_try_attach,
-    .defer_flush_block = frontend_parse_Stmt_frontend_parse_StmtOps_defer_flush_block,
     .is_decl_start = frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start,
     .del_base = frontend_parse_Stmt_frontend_parse_StmtOps_del_base,
     .del_take = frontend_parse_Stmt_frontend_parse_StmtOps_del_take,
@@ -4987,55 +4610,6 @@ const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_Stmt
     .closure_global_init = frontend_parse_Stmt_frontend_parse_StmtOps_closure_global_init
 };
 
-static int autodrop_append(struct frontend_parse_Stmt * self, int blk, int base, int * tail) {
-    int d;
-    for (d = (self->mem->nowner - 1); d >= base; d--) {
-        int del;
-        int v;
-        int vi;
-        const char * name;
-        const char * tp;
-        size_t bl;
-        vi = self->mem->own_var[d];
-        if (((vi >= 0) && (!self->sym->vars[vi].autodrop))) {
-            continue;
-        }
-        del = self->sup->__frontend_parse_supportops_vptr->new_node(self->sup, N_DELETE);
-        v = self->sup->__frontend_parse_supportops_vptr->new_node(self->sup, N_VAR);
-        if (((del < 0) || (v < 0))) {
-            return (-1);
-        }
-        self->arena->nodes[del].aux = self->mem->own_kind[d];
-        self->arena->nodes[del].line = self->arena->nodes[self->mem->own_decl[d]].line;
-        name = self->arena->nodes[self->mem->own_decl[d]].text2;
-        if (((vi >= 0) && (self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, name) != vi))) {
-            self->arena->nodes[self->mem->own_decl[d]].aux = 2;
-            snprintf(self->arena->nodes[v].text2, MAX_TEXT, "__ct_own_%d", self->mem->own_decl[d]);
-        }
-        else {
-            snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", name);
-        }
-        self->arena->nodes[del].a = v;
-        tp = self->arena->nodes[self->mem->own_decl[d]].text;
-        if (strncmp(tp, "struct ", 7) == 0) {
-            tp += 7;
-        }
-        snprintf(self->arena->nodes[del].text, MAX_TEXT, "%s", tp);
-        bl = strlen(self->arena->nodes[del].text);
-        while (((bl > 0) && ((self->arena->nodes[del].text[(bl - 1)] == '*') || (self->arena->nodes[del].text[(bl - 1)] == ' ')))) {
-            bl = (bl - 1);
-            self->arena->nodes[del].text[bl] = 0;
-        }
-        if ((*tail) < 0) {
-            self->arena->nodes[blk].a = del;
-        }
-        else {
-            self->arena->nodes[(*tail)].next = del;
-        }
-        (*tail) = del;
-    }
-    return 0;
-}
 static int retire_before_return(struct frontend_parse_Stmt * self, int ret, int permanent) {
     int blk;
     int tail;
@@ -5048,7 +4622,7 @@ static int retire_before_return(struct frontend_parse_Stmt * self, int ret, int 
         return (-1);
     }
     tail = (-1);
-    if (autodrop_append(self, blk, 0, (&tail)) != 0) {
+    if (frontend_parse_autodrop_append(self, blk, 0, (&tail)) != 0) {
         return (-1);
     }
     if (tail < 0) {
@@ -5078,7 +4652,7 @@ static int retire_before_jump(struct frontend_parse_Stmt * self, int jump, int b
         return (-1);
     }
     tail = (-1);
-    if (autodrop_append(self, blk, base, (&tail)) != 0) {
+    if (frontend_parse_autodrop_append(self, blk, base, (&tail)) != 0) {
         return (-1);
     }
     if (tail >= 0) {
