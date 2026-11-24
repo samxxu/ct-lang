@@ -473,7 +473,9 @@ impl TypeOps for TypeCheck {
             for (ni2 = 0; ni2 < self->arena->nnode; ni2++) {
                 if (self->arena->nodes[ni2].kind != N_IMPL) continue;
                 if (self->arena->nodes[ni2].text2[0]) continue;
-                if (self->arena->nodes[ni2].aux < 0) continue;
+                /* -1 is a template impl; an ADT inherent impl is
+                   `-2 - adt` (LANG-29 S3 / B2). */
+                if (self->arena->nodes[ni2].aux == -1) continue;
                 if (strcmp(self->arena->nodes[ni2].text, ibase) != 0) continue;
                 for (mi2 = self->arena->nodes[ni2].a; mi2 >= 0;
                      mi2 = self->arena->nodes[mi2].next)

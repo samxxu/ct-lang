@@ -3881,6 +3881,17 @@ impl ParseOps for Parser {
             if (self->sup->resolve_type(tname, rinh, sizeof rinh) != 0) return -1;
             si_inh = self->sym->find_struct(rinh);
             if (si_inh >= 0) return self->parse_impl_inherent(rinh, si_inh, impl_line);
+            /* LANG-29 S3 / B2: an enum ADT is a nominal type too, so
+               `impl N { … }` writes inherent methods without a trait. The
+               struct row index is negative for an ADT (see
+               `parse_impl_inherent`); `-2 - adt` keeps template impls (-1)
+               distinct. */
+            {
+                int adi_inh = frontend::sym::ct_adt_find(rinh);
+                if (adi_inh < 0) adi_inh = frontend::sym::ct_adt_find(tname);
+                if (adi_inh >= 0)
+                    return self->parse_impl_inherent(rinh, -2 - adi_inh, impl_line);
+            }
         }
         /* A static trait has no iface and no vtable: it is bound by a `map`,
            never implemented. */
@@ -4161,12 +4172,29 @@ impl ParseOps for Parser {
         char mname[MAX_TEXT];
         char stype[MAX_TEXT];
         int type_index;
+        /* LANG-29 S3 / B2: `si <= -2` encodes an enum ADT row (`-2 - adt`),
+           because an ADT has no struct row of its own. Its C spelling is the
+           generated `struct <full>` and its methods are named `<tag>_<method>`
+           exactly like a plain struct's. */
+        int adt = (si <= -2) ? (-2 - si) : -1;
+        int type_is_pub = 0;
 
-        type_index = self->sym->find_type(rname);
-        if (type_index >= 0 && self->sym->type_kind[type_index] == 1)
-            snprintf(stype, sizeof stype, "struct %s", rname);
-        else
-            snprintf(stype, sizeof stype, "%s", rname);
+        if (adt >= 0) {
+            struct Adt *adts;
+            int nadts;
+            adts = frontend::sym::ct_adts(&nadts);
+            if (!adts || adt >= nadts)
+                return self->sup->fail("the ADT row is missing");
+            snprintf(stype, sizeof stype, "struct %s", adts[adt].full);
+            type_is_pub = adts[adt].is_pub;
+        } else {
+            type_index = self->sym->find_type(rname);
+            if (type_index >= 0 && self->sym->type_kind[type_index] == 1)
+                snprintf(stype, sizeof stype, "struct %s", rname);
+            else
+                snprintf(stype, sizeof stype, "%s", rname);
+            type_is_pub = self->sym->structs[si].is_pub;
+        }
         if (self->sup->expect("{") != 0) return -1;
         node = self->sup->new_node(N_IMPL);
         if (node < 0) return -1;
@@ -4198,9 +4226,11 @@ impl ParseOps for Parser {
             } else if (self->lex->tok == T_ID && self->lex->tok_is("pub")) {
                 return self->sup->fail("duplicate pub on one method");
             }
-            if (is_pub && (!self->unit_is_hdr || !self->sym->structs[si].is_pub))
+            if (is_pub && (!self->unit_is_hdr || !type_is_pub))
                 return tool::diag::ct_sem_error(mline, 1,
-                    "a pub method needs a pub struct in a .h.ct unit",
+                    adt >= 0
+                        ? "a pub method needs a pub ADT in a .h.ct unit"
+                        : "a pub method needs a pub struct in a .h.ct unit",
                     self->mem->path);
             if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
             if (self->ex->fnptr_state)

@@ -150,7 +150,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret(void *s
             if (_self->arena->nodes[ni2].text2[0]) {
                 continue;
             }
-            if (_self->arena->nodes[ni2].aux < 0) {
+            if (_self->arena->nodes[ni2].aux == (-1)) {
                 continue;
             }
             if (strcmp(_self->arena->nodes[ni2].text, ibase) != 0) {

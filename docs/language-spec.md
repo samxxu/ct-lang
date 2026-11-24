@@ -2866,7 +2866,12 @@ impl Counter {
 }
 ```
 
-- `pub` 只允许在 `.h.ct` 单元的 `pub struct` 固有 `impl` 方法上；`.ct` 单元 / 私有 struct 报 L42-1。
+- `pub` 只允许在 `.h.ct` 单元的 `pub struct` / `pub enum` ADT 固有 `impl` 方法上；
+  `.ct` 单元 / 私有类型报 L42-1。
+- **enum ADT 的固有方法（LANG-29 S3 / B2，仅 ct-ast）**：`impl N { … }` 也适用于 payload
+  形态的 enum ADT。方法落码 `<N>_<method>`、接收者 `struct N *`，无 vtable；方法体内可用
+  `match (self)`（按值匹配，发射器解引用一次）、构造变体、读取普通结构体字段。跨单元的
+  `pub` 规则与 struct 相同：属主 `.h.ct` 的头文件导出原型，消费者按符号调用。
 - trait impl（`impl Trait for S`）的方法写 `pub` 报 L42-2；块级 `pub impl` 报 L42-3。
 - 私有方法：不进 `.h`，定义发 `static __attribute__((unused))`；同单元调用允许，跨单元调用 L42-4（实例）/ L42-5（静态）。
 - 模板固有方法同规则：`exported = 模板 pub && 属主 .h.ct && 方法 pub`；foreign-element 副本恒 `static`。
@@ -2928,9 +2933,9 @@ Result<long, char *> twice(int n)
 
 ### 4.64 自定义类型下标（Phase 52，仅 ct-ast）
 
-- **读形态**：非指针的 `struct` 值接收者、且类型在 `impl` 里有固有 `get` 时，`obj[k]`
-  展开为 `obj.get(k)`（复用 `N_MCALL` / `aux = 9`，与容器下标同形）。**方案 A**：只匹配
-  名字 + 参数个数（1）+ 非 `static`，**不看参数类型**（D52-2）。
+- **读形态**：非指针的 `struct` 值接收者（含 enum ADT，B2）、且类型在 `impl` 里有固有
+  `get` 时，`obj[k]` 展开为 `obj.get(k)`（复用 `N_MCALL` / `aux = 9`，与容器下标同形）。
+  **方案 A**：只匹配名字 + 参数个数（1）+ 非 `static`，**不看参数类型**（D52-2）。
 - **写形态**：语句 `obj[k] = v;` 展开为 `obj.set(k, v)`；`set` 同样只按名字 + 参数个数（2）
   + 非 `static` 匹配。只支持普通 `=`、且接收者必须是可回溯到变量的左值（D52-4）。
 - **诊断**（位置一律指向 `[`；一次只报一条）：
@@ -2951,8 +2956,12 @@ Result<long, char *> twice(int n)
   `error:`（rc=1），`ct compile` / `ct build` 是 `warning:`（rc=0，产物仍发射 `get(0)`）。
   完整的按键类型分派（同类型并存 `get(char *)` / `get(int)` 各选其版）**尚未实现**，由
   `REQ-JSACCESS-1` 承接；在此之前 JSON 数字下标请用 `get_idx`，不要写 `v[0]`。
-- **范围外**：`x[k].field = v`、`x[k].m()` 在编译期报错（不落 `cc`）；连写 `v["a"]["b"]`
-  会被当成 C 指针算术，可能静默得错值，必须由包层（如 `JsonRef`）提供多级访问。
+- **多级链（LANG-29 S3 / B2，仅 ct-ast）**：`x[k].field`、`x[k].field.field` 与
+  `x[k].m()` 可用。链根的下标表达式与 `get` 调用各只出现一次；`get` 的返回值按值落到
+  临时量，再取该临时量地址调用方法（不取调用结果的地址、不落 C 指针算术）。调用结果
+  `f().field` / `f().m()` 遵循同一规则。
+- **范围外**：`x[k].field = v`（写穿下标）仍在编译期报错（不落 `cc`）；连写
+  `v["a"]["b"]` 对容器仍是 C 指针算术的旧语义，必须由包层（如 `JsonRef`）提供多级访问。
 
 ### 4.65 可选链 `?.` / `?[`（Phase 53，仅 ct-ast）
 

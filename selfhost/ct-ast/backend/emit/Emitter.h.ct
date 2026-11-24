@@ -5560,12 +5560,25 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
             snprintf(base, sizeof base, "%s", self->arena->nodes[n].text + 7);
         si = self->sym->find_struct(base);
         if (si < 0) {
-            snprintf(msg2, sizeof msg2, "no method '%s' for type '%s'",
-                     self->arena->nodes[n].text2, self->arena->nodes[n].text);
-            return self->fail_from(n, msg2);
+            /* LANG-29 S3 / B2: an enum ADT is not in the struct table, but its
+               inherent methods are named by the ADT's C tag (`<tag>_<method>`). */
+            int adi = frontend::sym::ct_adt_from_type(self->arena->nodes[n].text);
+            struct Adt *adts;
+            int nadts;
+            if (adi < 0) {
+                snprintf(msg2, sizeof msg2, "no method '%s' for type '%s'",
+                         self->arena->nodes[n].text2, self->arena->nodes[n].text);
+                return self->fail_from(n, msg2);
+            }
+            adts = frontend::sym::ct_adts(&nadts);
+            if (!adts || adi >= nadts)
+                return self->fail_from(n, "the ADT row is missing");
+            fprintf(self->out, "%s_%s(", adts[adi].full,
+                    self->arena->nodes[n].text2);
+        } else {
+            fprintf(self->out, "%s_%s(", self->sym->structs[si].name,
+                    self->arena->nodes[n].text2);
         }
-        fprintf(self->out, "%s_%s(", self->sym->structs[si].name,
-                self->arena->nodes[n].text2);
         if (self->arena->nodes[n].aux == 9
             && !(self->sym->self_mode
                  && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR
@@ -5604,12 +5617,23 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
             snprintf(base, sizeof base, "%s", self->arena->nodes[n].text + 7);
         si = self->sym->find_struct(base);
         if (si < 0) {
-            snprintf(msg2, sizeof msg2, "no static method '%s' for type '%s'",
-                     self->arena->nodes[n].text2, self->arena->nodes[n].text);
-            return self->fail_from(n, msg2);
+            int adi = frontend::sym::ct_adt_from_type(self->arena->nodes[n].text);
+            struct Adt *adts;
+            int nadts;
+            if (adi < 0) {
+                snprintf(msg2, sizeof msg2, "no static method '%s' for type '%s'",
+                         self->arena->nodes[n].text2, self->arena->nodes[n].text);
+                return self->fail_from(n, msg2);
+            }
+            adts = frontend::sym::ct_adts(&nadts);
+            if (!adts || adi >= nadts)
+                return self->fail_from(n, "the ADT row is missing");
+            fprintf(self->out, "%s_%s(", adts[adi].full,
+                    self->arena->nodes[n].text2);
+        } else {
+            fprintf(self->out, "%s_%s(", self->sym->structs[si].name,
+                    self->arena->nodes[n].text2);
         }
-        fprintf(self->out, "%s_%s(", self->sym->structs[si].name,
-                self->arena->nodes[n].text2);
         {
             int pann[16], pai = 0, has;
             has = self->sym->find_meth_ann(self->arena->nodes[n].text,
@@ -6860,7 +6884,19 @@ static int em_node_match(struct Emitter *self, int n, int ind, int nk)
     self->emit_indent(ind);
     fprintf(self->out, "struct %s%s__ct_match%d __attribute__((unused)) = (",
             adts[tagi].full, ptr ? " *" : " ", k);
-    if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+    /* LANG-29 S3 / B2: inside an inherent (or trait) method the source `self`
+       is a value, but `self_mode` spells it `_self`, a pointer. A match over
+       that receiver keeps the value form and dereferences here, so the same
+       body compiles inside and outside an impl. */
+    {
+        int self_deref = self->sym->self_mode
+            && self->arena->nodes[n].a >= 0
+            && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR
+            && strcmp(self->arena->nodes[self->arena->nodes[n].a].text2,
+                      "self") == 0;
+        if (self_deref) fputs("*(_self)", self->out);
+        else if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+    }
     fputs(");\n", self->out);
     narm = 0;
     for (arm = self->arena->nodes[n].b; arm >= 0; arm = self->arena->nodes[arm].next)
@@ -8484,33 +8520,50 @@ impl EmitOps for Emitter {
            `self.field` (N_MEMBER) is rewritten to `_self->field` by the
            self_mode-aware member emitter below. */
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            int si;
+            int si, type_pub;
             const char *sname;
+            const char *tag;
             const char *mret;
             if (self->arena->nodes[n].kind != N_IMPL) continue;
             if (self->arena->nodes[n].text2[0]) continue;   /* trait impl: above */
             si = self->arena->nodes[n].aux;
-            if (si < 0) continue;   /* template impl: emit_struct_impls */
+            if (si == -1) continue;   /* template impl: emit_struct_impls */
             sname = self->arena->nodes[n].text;
+            /* LANG-29 S3 / B2: an ADT impl has no struct row (`aux = -2 - adt`);
+               its methods are named and typed by the ADT's C tag just like a
+               plain struct's, and its body uses the same `self_mode`. */
+            if (si <= -2) {
+                struct Adt *adts;
+                int nadts;
+                int type_adt = -2 - si;
+                adts = frontend::sym::ct_adts(&nadts);
+                if (!adts || type_adt >= nadts)
+                    return self->fail_from(n, "the ADT row is missing");
+                tag = adts[type_adt].full;
+                type_pub = adts[type_adt].is_pub;
+            } else {
+                tag = self->sym->structs[si].name;
+                type_pub = self->decl_is_pub(N_STRUCT, tag);
+            }
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 char owner[MAX_TEXT];
                 int is_static;
                 mret = self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void";
                 is_static = self->arena->nodes[m].c;
-                snprintf(owner, sizeof owner, "%s_%s", self->sym->structs[si].name,
+                snprintf(owner, sizeof owner, "%s_%s", tag,
                          self->arena->nodes[m].text2);
                 if (emit_closures(self, owner, self->arena->nodes[m].line) != 0) return -1;
                 self->nclvar = 0;
                 self->closure_ci = 0;
                 /* P34 S5b: a `pub` struct publishes its methods, so they carry
                    external linkage for importers; a private one stays static. */
-                if (!self->decl_is_pub(N_STRUCT, self->sym->structs[si].name)
+                if (!type_pub
                     || self->arena->nodes[m].d != 1)
                     fputs("static __attribute__((unused)) ", self->out);
-                fprintf(self->out, "%s %s_%s(", mret, self->sym->structs[si].name,
+                fprintf(self->out, "%s %s_%s(", mret, tag,
                         self->arena->nodes[m].text2);
                 if (!is_static)
-                    fprintf(self->out, "struct %s *self", self->sym->structs[si].name);
+                    fprintf(self->out, "struct %s *self", tag);
                 k = self->arena->nodes[m].a;
                 while (k > 0) {
                     if (!is_static || k != self->arena->nodes[m].a) fputs(", ", self->out);
@@ -9139,22 +9192,36 @@ impl EmitOps for Emitter {
        prototype here. */
     int emit_inherent_protos(int prog)
     {
-        int n, m, k, si, is_static;
+        int n, m, k, si, is_static, adi;
+        const char *tagp;
 
         (void)self;
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             if (self->arena->nodes[n].kind != N_IMPL) continue;
             if (self->arena->nodes[n].text2[0]) continue;   /* trait impl */
             si = self->arena->nodes[n].aux;
-            if (si < 0) continue;   /* template impl */
-            if (!self->decl_is_pub(N_STRUCT, self->sym->structs[si].name)) continue;
+            if (si == -1) continue;   /* template impl */
+            /* LANG-29 S3 / B2: a pub enum ADT publishes its inherent methods
+               through the same header contract as a pub struct. */
+            if (si <= -2) {
+                struct Adt *adts;
+                int adts_n;
+                adi = -2 - si;
+                adts = frontend::sym::ct_adts(&adts_n);
+                if (!adts || adi >= adts_n) continue;
+                if (!adts[adi].is_pub) continue;
+                tagp = adts[adi].full;
+            } else {
+                if (!self->decl_is_pub(N_STRUCT, self->sym->structs[si].name)) continue;
+                tagp = self->sym->structs[si].name;
+            }
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 if (self->arena->nodes[m].d != 1) continue;
                 is_static = self->arena->nodes[m].c;
                 fprintf(self->out, "%s %s_%s(",
                         self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void",
-                        self->sym->structs[si].name, self->arena->nodes[m].text2);
-                if (!is_static) fprintf(self->out, "struct %s *", self->sym->structs[si].name);
+                        tagp, self->arena->nodes[m].text2);
+                if (!is_static) fprintf(self->out, "struct %s *", tagp);
                 for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
                     if (!is_static || k != self->arena->nodes[m].a) fputs(", ", self->out);
                     if (self->arena->nodes[k].aux == 2

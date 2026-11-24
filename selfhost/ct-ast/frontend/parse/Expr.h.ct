@@ -4981,7 +4981,9 @@ impl ExprOps for Expr {
         for (ni = 0; ni < self->arena->nnode; ni++) {
             if (self->arena->nodes[ni].kind != N_IMPL) continue;
             if (self->arena->nodes[ni].text2[0]) continue;
-            if (self->arena->nodes[ni].aux < 0) continue;
+            /* -1 is a template impl (`impl<T> Box<T>`); an ADT inherent impl
+               carries `-2 - adt` (LANG-29 S3 / B2). */
+            if (self->arena->nodes[ni].aux == -1) continue;
             if (strcmp(self->arena->nodes[ni].text, ibase) != 0) continue;
             for (m = self->arena->nodes[ni].a; m >= 0;
                  m = self->arena->nodes[m].next)
@@ -5040,7 +5042,9 @@ impl ExprOps for Expr {
         for (ni = 0; ni < self->arena->nnode; ni++) {
             if (self->arena->nodes[ni].kind != N_IMPL) continue;
             if (self->arena->nodes[ni].text2[0]) continue;
-            if (self->arena->nodes[ni].aux < 0) continue;
+            /* -1 is a template impl (`impl<T> Box<T>`); an ADT inherent impl
+               carries `-2 - adt` (LANG-29 S3 / B2). */
+            if (self->arena->nodes[ni].aux == -1) continue;
             if (strcmp(self->arena->nodes[ni].text, ibase) != 0) continue;
             for (m = self->arena->nodes[ni].a; m >= 0;
                  m = self->arena->nodes[m].next)

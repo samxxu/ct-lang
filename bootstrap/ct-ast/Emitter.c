@@ -1533,7 +1533,9 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_impls(void *self, int 
     }
     for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
         int si;
+        int type_pub;
         const char * sname;
+        const char * tag;
         const char * mret;
         if (_self->arena->nodes[n].kind != N_IMPL) {
             continue;
@@ -1542,27 +1544,42 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_impls(void *self, int 
             continue;
         }
         si = _self->arena->nodes[n].aux;
-        if (si < 0) {
+        if (si == (-1)) {
             continue;
         }
         sname = _self->arena->nodes[n].text;
+        if (si <= (-2)) {
+            struct frontend_sym_Adt * adts;
+            int nadts;
+            int type_adt = ((-2) - si);
+            adts = frontend_sym_ct_adts((&nadts));
+            if (((!adts) || (type_adt >= nadts))) {
+                return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "the ADT row is missing");
+            }
+            tag = adts[type_adt].full;
+            type_pub = adts[type_adt].is_pub;
+        }
+        else {
+            tag = _self->sym->structs[si].name;
+            type_pub = _self->__backend_emit_emitops_vptr->decl_is_pub(_self, N_STRUCT, tag);
+        }
         for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
             char owner[MAX_TEXT];
             int is_static;
             mret = (_self->arena->nodes[m].text[0] ? _self->arena->nodes[m].text : "void");
             is_static = _self->arena->nodes[m].c;
-            snprintf(owner, sizeof(owner), "%s_%s", _self->sym->structs[si].name, _self->arena->nodes[m].text2);
+            snprintf(owner, sizeof(owner), "%s_%s", tag, _self->arena->nodes[m].text2);
             if (emit_closures(_self, owner, _self->arena->nodes[m].line) != 0) {
                 return (-1);
             }
             _self->nclvar = 0;
             _self->closure_ci = 0;
-            if (((!_self->__backend_emit_emitops_vptr->decl_is_pub(_self, N_STRUCT, _self->sym->structs[si].name)) || (_self->arena->nodes[m].d != 1))) {
+            if (((!type_pub) || (_self->arena->nodes[m].d != 1))) {
                 fputs("static __attribute__((unused)) ", _self->out);
             }
-            fprintf(_self->out, "%s %s_%s(", mret, _self->sym->structs[si].name, _self->arena->nodes[m].text2);
+            fprintf(_self->out, "%s %s_%s(", mret, tag, _self->arena->nodes[m].text2);
             if ((!is_static)) {
-                fprintf(_self->out, "struct %s *self", _self->sym->structs[si].name);
+                fprintf(_self->out, "struct %s *self", tag);
             }
             k = _self->arena->nodes[m].a;
             while (k > 0) {
@@ -2538,6 +2555,8 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_inherent_protos(void *
     int k;
     int si;
     int is_static;
+    int adi;
+    const char * tagp;
     (void)(_self);
     for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
         if (_self->arena->nodes[n].kind != N_IMPL) {
@@ -2547,20 +2566,36 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_inherent_protos(void *
             continue;
         }
         si = _self->arena->nodes[n].aux;
-        if (si < 0) {
+        if (si == (-1)) {
             continue;
         }
-        if ((!_self->__backend_emit_emitops_vptr->decl_is_pub(_self, N_STRUCT, _self->sym->structs[si].name))) {
-            continue;
+        if (si <= (-2)) {
+            struct frontend_sym_Adt * adts;
+            int adts_n;
+            adi = ((-2) - si);
+            adts = frontend_sym_ct_adts((&adts_n));
+            if (((!adts) || (adi >= adts_n))) {
+                continue;
+            }
+            if ((!adts[adi].is_pub)) {
+                continue;
+            }
+            tagp = adts[adi].full;
+        }
+        else {
+            if ((!_self->__backend_emit_emitops_vptr->decl_is_pub(_self, N_STRUCT, _self->sym->structs[si].name))) {
+                continue;
+            }
+            tagp = _self->sym->structs[si].name;
         }
         for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
             if (_self->arena->nodes[m].d != 1) {
                 continue;
             }
             is_static = _self->arena->nodes[m].c;
-            fprintf(_self->out, "%s %s_%s(", (_self->arena->nodes[m].text[0] ? _self->arena->nodes[m].text : "void"), _self->sym->structs[si].name, _self->arena->nodes[m].text2);
+            fprintf(_self->out, "%s %s_%s(", (_self->arena->nodes[m].text[0] ? _self->arena->nodes[m].text : "void"), tagp, _self->arena->nodes[m].text2);
             if ((!is_static)) {
-                fprintf(_self->out, "struct %s *", _self->sym->structs[si].name);
+                fprintf(_self->out, "struct %s *", tagp);
             }
             for (k = _self->arena->nodes[m].a; k > 0; k = _self->arena->nodes[k].next) {
                 if (((!is_static) || (k != _self->arena->nodes[m].a))) {
@@ -10186,10 +10221,22 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
         if (si < 0) {
-            snprintf(msg2, sizeof(msg2), "no method '%s' for type '%s'", self->arena->nodes[n].text2, self->arena->nodes[n].text);
-            return self->__backend_emit_emitops_vptr->fail_from(self, n, msg2);
+            int adi = frontend_sym_ct_adt_from_type(self->arena->nodes[n].text);
+            struct frontend_sym_Adt * adts;
+            int nadts;
+            if (adi < 0) {
+                snprintf(msg2, sizeof(msg2), "no method '%s' for type '%s'", self->arena->nodes[n].text2, self->arena->nodes[n].text);
+                return self->__backend_emit_emitops_vptr->fail_from(self, n, msg2);
+            }
+            adts = frontend_sym_ct_adts((&nadts));
+            if (((!adts) || (adi >= nadts))) {
+                return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
+            }
+            fprintf(self->out, "%s_%s(", adts[adi].full, self->arena->nodes[n].text2);
         }
-        fprintf(self->out, "%s_%s(", self->sym->structs[si].name, self->arena->nodes[n].text2);
+        else {
+            fprintf(self->out, "%s_%s(", self->sym->structs[si].name, self->arena->nodes[n].text2);
+        }
         if (((self->arena->nodes[n].aux == 9) && (!((self->sym->self_mode && (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)) && (strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0))))) {
             fputs("&", self->out);
         }
@@ -10231,10 +10278,22 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
         if (si < 0) {
-            snprintf(msg2, sizeof(msg2), "no static method '%s' for type '%s'", self->arena->nodes[n].text2, self->arena->nodes[n].text);
-            return self->__backend_emit_emitops_vptr->fail_from(self, n, msg2);
+            int adi = frontend_sym_ct_adt_from_type(self->arena->nodes[n].text);
+            struct frontend_sym_Adt * adts;
+            int nadts;
+            if (adi < 0) {
+                snprintf(msg2, sizeof(msg2), "no static method '%s' for type '%s'", self->arena->nodes[n].text2, self->arena->nodes[n].text);
+                return self->__backend_emit_emitops_vptr->fail_from(self, n, msg2);
+            }
+            adts = frontend_sym_ct_adts((&nadts));
+            if (((!adts) || (adi >= nadts))) {
+                return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
+            }
+            fprintf(self->out, "%s_%s(", adts[adi].full, self->arena->nodes[n].text2);
         }
-        fprintf(self->out, "%s_%s(", self->sym->structs[si].name, self->arena->nodes[n].text2);
+        else {
+            fprintf(self->out, "%s_%s(", self->sym->structs[si].name, self->arena->nodes[n].text2);
+        }
 {
             int pann[16];
             int pai = 0;
@@ -11499,8 +11558,16 @@ static int em_node_match(struct backend_emit_Emitter * self, int n, int ind, int
     ptr = self->arena->nodes[n].aux;
     self->__backend_emit_emitops_vptr->emit_indent(self, ind);
     fprintf(self->out, "struct %s%s__ct_match%d __attribute__((unused)) = (", adts[tagi].full, (ptr ? " *" : " "), k);
-    if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
-        return (-1);
+{
+        int self_deref = (((self->sym->self_mode && (self->arena->nodes[n].a >= 0)) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)) && (strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0));
+        if (self_deref) {
+            fputs("*(_self)", self->out);
+        }
+        else {
+            if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
+                return (-1);
+            }
+        }
     }
     fputs(");\n", self->out);
     narm = 0;

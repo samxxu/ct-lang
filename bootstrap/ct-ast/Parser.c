@@ -3577,6 +3577,15 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         if (si_inh >= 0) {
             return _self->__frontend_parse_parseops_vptr->parse_impl_inherent(_self, rinh, si_inh, impl_line);
         }
+{
+            int adi_inh = frontend_sym_ct_adt_find(rinh);
+            if (adi_inh < 0) {
+                adi_inh = frontend_sym_ct_adt_find(tname);
+            }
+            if (adi_inh >= 0) {
+                return _self->__frontend_parse_parseops_vptr->parse_impl_inherent(_self, rinh, ((-2) - adi_inh), impl_line);
+            }
+        }
     }
     if (((ti >= 0) && _self->sym->traits[ti].is_static)) {
         if (tool_diag_ct_sem_error(impl_line, 1, "a static trait cannot be implemented", _self->mem->path) != 0) {
@@ -3846,12 +3855,27 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
     char mname[MAX_TEXT];
     char stype[MAX_TEXT];
     int type_index;
-    type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rname);
-    if (((type_index >= 0) && (_self->sym->type_kind[type_index] == 1))) {
-        snprintf(stype, sizeof(stype), "struct %s", rname);
+    int adt = ((si <= (-2)) ? ((-2) - si) : (-1));
+    int type_is_pub = 0;
+    if (adt >= 0) {
+        struct frontend_sym_Adt * adts;
+        int nadts;
+        adts = frontend_sym_ct_adts((&nadts));
+        if (((!adts) || (adt >= nadts))) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the ADT row is missing");
+        }
+        snprintf(stype, sizeof(stype), "struct %s", adts[adt].full);
+        type_is_pub = adts[adt].is_pub;
     }
     else {
-        snprintf(stype, sizeof(stype), "%s", rname);
+        type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rname);
+        if (((type_index >= 0) && (_self->sym->type_kind[type_index] == 1))) {
+            snprintf(stype, sizeof(stype), "struct %s", rname);
+        }
+        else {
+            snprintf(stype, sizeof(stype), "%s", rname);
+        }
+        type_is_pub = _self->sym->structs[si].is_pub;
     }
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "{") != 0) {
         return (-1);
@@ -3890,8 +3914,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "duplicate pub on one method");
             }
         }
-        if ((is_pub && ((!_self->unit_is_hdr) || (!_self->sym->structs[si].is_pub)))) {
-            return tool_diag_ct_sem_error(mline, 1, "a pub method needs a pub struct in a .h.ct unit", _self->mem->path);
+        if ((is_pub && ((!_self->unit_is_hdr) || (!type_is_pub)))) {
+            return tool_diag_ct_sem_error(mline, 1, ((adt >= 0) ? "a pub method needs a pub ADT in a .h.ct unit" : "a pub method needs a pub struct in a .h.ct unit"), _self->mem->path);
         }
         if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
             return (-1);

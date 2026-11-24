@@ -3221,7 +3221,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_inst_inherent_method(void 
         if (_self->arena->nodes[ni].text2[0]) {
             continue;
         }
-        if (_self->arena->nodes[ni].aux < 0) {
+        if (_self->arena->nodes[ni].aux == (-1)) {
             continue;
         }
         if (strcmp(_self->arena->nodes[ni].text, ibase) != 0) {
@@ -3290,7 +3290,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_inst_static_method(void *s
         if (_self->arena->nodes[ni].text2[0]) {
             continue;
         }
-        if (_self->arena->nodes[ni].aux < 0) {
+        if (_self->arena->nodes[ni].aux == (-1)) {
             continue;
         }
         if (strcmp(_self->arena->nodes[ni].text, ibase) != 0) {
