@@ -11,6 +11,7 @@
 #include "Arena.h"
 #include "Diag.h"
 #include "ExprTypeText.h"
+#include "ExprPure.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -133,13 +134,18 @@ struct backend_mem_Memory;
 struct frontend_type_TypeCheck;
 struct frontend_parse_ParseSupport;
 struct frontend_parse_ExprTypeText;
+struct frontend_parse_ExprPure;
 struct frontend_parse_Expr;
 struct backend_emit_EmitterText;
+struct backend_emit_EmitterQuery;
+struct backend_emit_EmitterMapText;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_Emitter;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
+struct frontend_parse_StmtRangeScan;
+struct frontend_parse_StmtScope;
 struct frontend_parse_Stmt;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
@@ -187,11 +193,7 @@ int frontend_parse_expr_borrow_root(struct frontend_parse_Expr *, int);
 void frontend_parse_expr_view_bind(struct frontend_parse_Expr *, const char *, int);
 void frontend_parse_expr_iter_push(struct frontend_parse_Expr *, const char *);
 void frontend_parse_expr_iter_pop(struct frontend_parse_Expr *);
-static int arg_count(struct runtime_arena_Arena *, int);
-static int slice_range_ahead(struct frontend_lex_Lexer *);
-static int is_range_index(struct runtime_arena_Arena *, int);
 static int closure_ahead(struct frontend_parse_Expr *);
-static int closure_capture_index(struct frontend_sym_Closure *, const char *);
 static int closure_capture_error(struct frontend_parse_Expr *, int, const char *);
 static int closure_copy(struct frontend_parse_Expr *, char *, const char *, const char *);
 static int closure_capture_add(struct frontend_parse_Expr *, int, int, int);
@@ -224,7 +226,6 @@ static int ctype_slice_index(struct frontend_parse_Expr *, int, char *, int, int
 static int ctype_slice_get(struct frontend_parse_Expr *, int, char *, int, int *, int);
 static int ctype_slice_range(struct frontend_parse_Expr *, int, char *, int, int *, int);
 static int type_only_qualifiers(const char *);
-static void bind_conv_key(const char *, char *, int);
 static int bind_conv_struct_like(struct frontend_parse_Expr *, const char *);
 static int bind_conv_ibase(struct frontend_parse_Expr *, const char *, char *, int, int *);
 static int bind_conv_inherent(struct frontend_parse_Expr *, const char *, const char *, char *, int, int *);
@@ -233,16 +234,11 @@ static int bind_conv_binding(struct frontend_parse_Expr *, const char *, const c
 static int bind_conv_call_binding(struct frontend_parse_Expr *, int, const char *, const char *, int, int);
 static int bind_conv_any(struct frontend_parse_Expr *, const char *, const char *);
 static int bind_conv_call(struct frontend_parse_Expr *, int, const char *, const char *, const char *, int, int);
-static int bind_conv_on(void);
 static int bind_conv_site(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_conv_explicit(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_conv_explicit_to(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_outconv_rewrite(struct frontend_parse_Expr *, int, int, int, int, int, const char *, int, int);
 static int bind_conv_arith(struct frontend_parse_Expr *, int, int, int, int);
-static int expr_is_builtin_Box_type(const char *);
-static int bplus_space(int);
-static int bplus_id(int);
-static int bplus_lit_type(const char *, int, char *, int, int *);
 static int chk_type_static(struct frontend_parse_Expr *, int, char *, int);
 void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
@@ -3089,7 +3085,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
         if (e < 0) {
             return (-1);
         }
-        if (is_range_index(_self->arena, e)) {
+        if (frontend_parse_is_range_index(_self->arena, e)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the range index '$' is not a variable");
         }
         if (_self->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self, e, _self->arena->nodes[e].line, _self->arena->nodes[e].num) != 0) {
@@ -3143,7 +3139,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
         if (e < 0) {
             return (-1);
         }
-        if (is_range_index(_self->arena, e)) {
+        if (frontend_parse_is_range_index(_self->arena, e)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the range index '$' is not a variable");
         }
         if (_self->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self, e, _self->arena->nodes[e].line, _self->arena->nodes[e].num) != 0) {
@@ -3836,7 +3832,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     s_array = ((_self->sym->vars[svi].is_array && (!s_slice)) && (!_self->sym->vars[svi].is_fnparam));
                 }
             }
-            if ((s_slice || (s_array && slice_range_ahead(_self->lex)))) {
+            if ((s_slice || (s_array && frontend_parse_slice_range_ahead(_self->lex)))) {
                 int bl = _self->lex->tokline;
                 _self->sup->__frontend_parse_supportops_vptr->note_slice(_self->sup);
                 int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
@@ -4149,7 +4145,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         if (args < 0) {
                             return (-1);
                         }
-                        if (arg_count(_self->arena, args) != 1) {
+                        if (frontend_parse_arg_count(_self->arena, args) != 1) {
                             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "slice get() takes exactly one index");
                         }
                         m = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_SLICE_GET);
@@ -4222,7 +4218,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 snprintf(msgb, sizeof(msgb), "trait '%s' has no method '%s'", _self->in_generic_bound, fname);
                                 return tool_diag_ct_sem_error(mline, mcol, msgb, _self->sup->mem->path);
                             }
-                            bgot = (arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
+                            bgot = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
                             if (_self->__frontend_parse_exprops_vptr->arity_check(_self, mline, mcol, fname, bgot, _self->sym->traits[bt].m[bmi].nparams) != 0) {
                                 return (-1);
                             }
@@ -4279,7 +4275,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     for (pk = _self->arena->nodes[inm].a; pk > 0; pk = _self->arena->nodes[pk].next) {
                                         want++;
                                     }
-                                    if (_self->__frontend_parse_exprops_vptr->arity_check(_self, mline, mcol, fname, (arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args)), want) != 0) {
+                                    if (_self->__frontend_parse_exprops_vptr->arity_check(_self, mline, mcol, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args)), want) != 0) {
                                         return (-1);
                                     }
 {
@@ -4450,7 +4446,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     int pm = (-1);
                                     int mut_any = 0;
                                     int mut_plain = 0;
-                                    int got2 = (arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
+                                    int got2 = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
                                     char rk[MAX_TEXT];
                                     char tk[MAX_TEXT];
                                     char msg[MAX_TEXT];
@@ -4676,7 +4672,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             break;
                         }
                     }
-                    if (((mi < _self->sym->traits[t].nm) && (_self->__frontend_parse_exprops_vptr->map_arity(_self, mline, mcol, _self->arena->nodes[m].text, fname, (arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0))) {
+                    if (((mi < _self->sym->traits[t].nm) && (_self->__frontend_parse_exprops_vptr->map_arity(_self, mline, mcol, _self->arena->nodes[m].text, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0))) {
                         return (-1);
                     }
 {
@@ -4871,7 +4867,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
     }
     if (((_self->lex->tok == T_PUNCT) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "++") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "--")))) {
         int k;
-        if (is_range_index(_self->arena, n)) {
+        if (frontend_parse_is_range_index(_self->arena, n)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the range index '$' is not a variable");
         }
         if (_self->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self, n, _self->arena->nodes[n].line, _self->arena->nodes[n].num) != 0) {
@@ -5362,7 +5358,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     }
                 }
             }
-            if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, ibase, sm, (arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+            if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, ibase, sm, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
                 return (-1);
             }
             mn = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
@@ -5446,7 +5442,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, smsg2);
                                 }
                             }
-                            if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, sibase, sm2, (arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+                            if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, sibase, sm2, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
                                 return (-1);
                             }
                             mn2 = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
@@ -5626,7 +5622,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 snprintf(_self->arena->nodes[mn].text, MAX_TEXT, "%s", _self->arena->nodes[n].text2);
                 snprintf(_self->arena->nodes[mn].text2, MAX_TEXT, "%s", mname);
                 snprintf(_self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
-                if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, mname, (arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+                if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, mname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
                     return (-1);
                 }
 {
@@ -5667,7 +5663,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 snprintf(_self->arena->nodes[mn].text, MAX_TEXT, "%s", _self->arena->nodes[n].text2);
                 snprintf(_self->arena->nodes[mn].text2, MAX_TEXT, "%s", qc);
                 snprintf(_self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
-                if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, qc, (arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+                if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, qc, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
                     return (-1);
                 }
 {
@@ -5704,7 +5700,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 if (args == 0) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a qualified method call needs a receiver argument");
                 }
-                got = (arg_count(_self->arena, args) - 1);
+                got = (frontend_parse_arg_count(_self->arena, args) - 1);
                 if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, args, rtype, sizeof(rtype)) != 0) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot infer the receiver type of a qualified method call");
                 }
@@ -5831,7 +5827,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                             "unsigned long", "long long", "unsigned long long",
                             "_Bool", NULL
                         };
-                    got = arg_count(_self->arena, args);
+                    got = frontend_parse_arg_count(_self->arena, args);
                     a1 = args;
                     a2 = ((a1 >= 0) ? _self->arena->nodes[a1].next : (-1));
                     a3 = ((a2 >= 0) ? _self->arena->nodes[a2].next : (-1));
@@ -6033,7 +6029,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 int got;
                 int want;
                 int tail_ok;
-                got = (arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
+                got = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
                 want = _self->sym->funcs[fi].nparams;
                 tail_ok = (_self->sym->funcs[fi].variadic && (got > want));
                 if (((!tail_ok) && (_self->__frontend_parse_exprops_vptr->arity_check(_self, id_line, id_col, _self->arena->nodes[n].text2, got, want) != 0))) {
@@ -6052,7 +6048,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     lk += (lcl ? 2 : 1);
                 }
             }
-            if (((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0)) && bind_conv_on())) {
+            if (((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0)) && frontend_parse_bind_conv_on())) {
                 int pc2 = args;
                 int pk3 = 0;
                 while (((pc2 > 0) && (pk3 < _self->sym->funcs[fi].nparams))) {
@@ -6064,8 +6060,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                         char fk[MAX_TEXT];
                         char ak[MAX_TEXT];
                         if (((((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, pc2, at, sizeof(at)) == 0) && at[0]) && bind_conv_struct_like(_self, at)) && bind_conv_any(_self, at, "as"))) {
-                            bind_conv_key(at, ak, sizeof(ak));
-                            bind_conv_key(_self->sym->funcs[fi].ptype[pk3], fk, sizeof(fk));
+                            frontend_parse_bind_conv_key(at, ak, sizeof(ak));
+                            frontend_parse_bind_conv_key(_self->sym->funcs[fi].ptype[pk3], fk, sizeof(fk));
                             if (strcmp(ak, fk) != 0) {
                                 char pmsg[MAX_TEXT * 2];
                                 snprintf(pmsg, sizeof(pmsg), "conversion is only allowed at a binding site (declaration/assignment/out/return); argument %d of '%s' is not one", (pk3 + 1), _self->arena->nodes[n].text2);
@@ -6861,7 +6857,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_Box_member_deref(void *sel
     if (((strncmp(p, "struct Box_", 11) != 0) || (strchr(p, '<') != 0))) {
         return 0;
     }
-    if ((!expr_is_builtin_Box_type(p))) {
+    if ((!frontend_parse_expr_is_builtin_Box_type(p))) {
         return 0;
     }
     in_layer = ((_self->sup->mem->path != 0) && ((strstr(_self->sup->mem->path, "lib/core/Vec.h.ct") != 0) || (strstr(_self->sup->mem->path, "lib/std/Vec.h.ct") != 0)));
@@ -7919,7 +7915,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
         return 0;
     }
     i = 1;
-    while (((i < (n - 1)) && bplus_space(raw[i]))) {
+    while (((i < (n - 1)) && frontend_parse_bplus_space(raw[i]))) {
         i++;
     }
     designated = (((i < (n - 1)) && (raw[i] == '.')) ? 1 : 0);
@@ -7969,10 +7965,10 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
         }
         s0 = item_start;
         e0 = item_end;
-        while (((s0 < e0) && bplus_space(raw[s0]))) {
+        while (((s0 < e0) && frontend_parse_bplus_space(raw[s0]))) {
             s0++;
         }
-        while (((e0 > s0) && bplus_space(raw[(e0 - 1)]))) {
+        while (((e0 > s0) && frontend_parse_bplus_space(raw[(e0 - 1)]))) {
             e0--;
         }
         fi = (-1);
@@ -7980,14 +7976,14 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
         if (((s0 < e0) && (raw[s0] == '.'))) {
             int fn = 0;
             k = (s0 + 1);
-            while (((k < e0) && bplus_id(raw[k]))) {
+            while (((k < e0) && frontend_parse_bplus_id(raw[k]))) {
                 if ((fn + 1) < (int)(sizeof(fname))) {
                     fname[fn++] = raw[k];
                 }
                 k++;
             }
             fname[fn] = 0;
-            while (((k < e0) && bplus_space(raw[k]))) {
+            while (((k < e0) && frontend_parse_bplus_space(raw[k]))) {
                 k++;
             }
             if ((((fn > 0) && (k < e0)) && (raw[k] == '='))) {
@@ -8016,16 +8012,16 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
         if (_self->sym->structs[si].fields[fi].dims[0]) {
             continue;
         }
-        while (((vstart < e0) && bplus_space(raw[vstart]))) {
+        while (((vstart < e0) && frontend_parse_bplus_space(raw[vstart]))) {
             vstart++;
         }
-        while (((e0 > vstart) && bplus_space(raw[(e0 - 1)]))) {
+        while (((e0 > vstart) && frontend_parse_bplus_space(raw[(e0 - 1)]))) {
             e0--;
         }
         if (vstart >= e0) {
             continue;
         }
-        if ((!bplus_lit_type((raw + vstart), (e0 - vstart), actual, sizeof(actual), (&is_zero)))) {
+        if ((!frontend_parse_bplus_lit_type((raw + vstart), (e0 - vstart), actual, sizeof(actual), (&is_zero)))) {
             continue;
         }
         aline = line;
@@ -8886,87 +8882,6 @@ const struct frontend_parse_ExprBinding_vtbl frontend_parse_Expr_frontend_parse_
     .binding_convert = frontend_parse_Expr_frontend_parse_ExprBinding_binding_convert
 };
 
-static int arg_count(struct runtime_arena_Arena * a, int first) {
-    int c = 0;
-    while (first > 0) {
-        c++;
-        first = a->nodes[first].next;
-    }
-    return c;
-}
-static int slice_range_ahead(struct frontend_lex_Lexer * lex) {
-    int p = (lex->tokstart + 1);
-    int depth = 0;
-    while (lex->src[p]) {
-        char c = lex->src[p];
-        if (((c == '"') || (c == '\''))) {
-            char q = c;
-            p++;
-            while ((lex->src[p] && (lex->src[p] != q))) {
-                if (((lex->src[p] == '\\') && lex->src[(p + 1)])) {
-                    p++;
-                }
-                p++;
-            }
-            if (lex->src[p]) {
-                p++;
-            }
-        }
-        else {
-            if (((c == '/') && (lex->src[(p + 1)] == '*'))) {
-                p += 2;
-                while ((lex->src[p] && (!((lex->src[p] == '*') && (lex->src[(p + 1)] == '/'))))) {
-                    p++;
-                }
-                if (lex->src[p]) {
-                    p += 2;
-                }
-            }
-            else {
-                if (((c == '/') && (lex->src[(p + 1)] == '/'))) {
-                    while ((lex->src[p] && (lex->src[p] != '\n'))) {
-                        p++;
-                    }
-                }
-                else {
-                    if ((((c == '(') || (c == '[')) || (c == '{'))) {
-                        depth++;
-                        p++;
-                    }
-                    else {
-                        if (((c == ')') || (c == '}'))) {
-                            if (depth > 0) {
-                                depth--;
-                            }
-                            p++;
-                        }
-                        else {
-                            if (c == ']') {
-                                if (depth == 0) {
-                                    return 0;
-                                }
-                                depth--;
-                                p++;
-                            }
-                            else {
-                                if ((((c == '.') && (lex->src[(p + 1)] == '.')) && (depth == 0))) {
-                                    return 1;
-                                }
-                                else {
-                                    p++;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return 0;
-}
-static int is_range_index(struct runtime_arena_Arena * a, int n) {
-    return (((n >= 0) && (a->nodes[n].kind == N_VAR)) && (strcmp(a->nodes[n].text2, "$") == 0));
-}
 static int closure_ahead(struct frontend_parse_Expr * self) {
     const char * s = self->lex->src;
     int i = self->lex->tokstart;
@@ -9028,15 +8943,6 @@ static int closure_ahead(struct frontend_parse_Expr * self) {
     }
     return ((s[i] == '=') && (s[(i + 1)] == '>'));
 }
-static int closure_capture_index(struct frontend_sym_Closure * c, const char * name) {
-    int i;
-    for (i = 0; i < c->ncap; i++) {
-        if (strcmp(c->cap_name[i], name) == 0) {
-            return i;
-        }
-    }
-    return (-1);
-}
 static int closure_capture_error(struct frontend_parse_Expr * self, int line, const char * msg) {
     tool_diag_ct_sem_error(line, 1, msg, self->sup->mem->path);
     tool_diag_ct_sem_note(line, 1, CT_EXPR_CLOSURE_HINT, self->sup->mem->path);
@@ -9071,7 +8977,7 @@ static int closure_capture_add(struct frontend_parse_Expr * self, int ci, int vi
         snprintf(msg, sizeof(msg), "a closure cannot capture the slice '%s' (a view cannot outlive its array)", name);
         return closure_capture_error(self, line, msg);
     }
-    if (closure_capture_index(c, name) >= 0) {
+    if (frontend_parse_closure_capture_index(c, name) >= 0) {
         return 0;
     }
     if (c->ncap >= 16) {
@@ -9197,13 +9103,13 @@ static int closure_walk_mutate(struct frontend_parse_Expr * self, int ci, int n)
     if (nd->kind == N_CLOSURE) {
         return 0;
     }
-    if (((((nd->kind == N_ASSIGN) && (nd->a >= 0)) && (self->arena->nodes[nd->a].kind == N_VAR)) && (closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0))) {
+    if (((((nd->kind == N_ASSIGN) && (nd->a >= 0)) && (self->arena->nodes[nd->a].kind == N_VAR)) && (frontend_parse_closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0))) {
         return closure_capture_error(self, self->arena->nodes[nd->a].line, "a captured variable cannot be reassigned inside a closure");
     }
-    if ((((((nd->kind == N_PRE) || (nd->kind == N_POST)) && (nd->a >= 0)) && (self->arena->nodes[nd->a].kind == N_VAR)) && (closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0))) {
+    if ((((((nd->kind == N_PRE) || (nd->kind == N_POST)) && (nd->a >= 0)) && (self->arena->nodes[nd->a].kind == N_VAR)) && (frontend_parse_closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0))) {
         return closure_capture_error(self, self->arena->nodes[nd->a].line, "a captured variable cannot be reassigned inside a closure");
     }
-    if (((((nd->kind == N_ADDR) && (nd->a >= 0)) && (self->arena->nodes[nd->a].kind == N_VAR)) && (closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0))) {
+    if (((((nd->kind == N_ADDR) && (nd->a >= 0)) && (self->arena->nodes[nd->a].kind == N_VAR)) && (frontend_parse_closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0))) {
         return closure_capture_error(self, self->arena->nodes[nd->a].line, "the address of a captured variable cannot be taken inside a closure");
     }
     if (closure_walk_mutate(self, ci, nd->a) != 0) {
@@ -9992,24 +9898,6 @@ static int type_only_qualifiers(const char * spell) {
     }
     return 1;
 }
-static void bind_conv_key(const char * in, char * out, int cap) {
-    char k[MAX_TEXT];
-    frontend_type_type_key(in, k, sizeof(k));
-    if (strncmp(k, "struct", 6) == 0) {
-        memmove(k, (k + 6), (strlen((k + 6)) + 1));
-    }
-    else {
-        if (strncmp(k, "union", 5) == 0) {
-            memmove(k, (k + 5), (strlen((k + 5)) + 1));
-        }
-        else {
-            if (strncmp(k, "enum", 4) == 0) {
-                memmove(k, (k + 4), (strlen((k + 4)) + 1));
-            }
-        }
-    }
-    snprintf(out, (size_t)(cap), "%s", k);
-}
 static int bind_conv_struct_like(struct frontend_parse_Expr * self, const char * t) {
     const char * p = t;
     while ((((*p) == ' ') || ((*p) == '\t'))) {
@@ -10090,7 +9978,7 @@ static int bind_conv_maps(struct frontend_parse_Expr * self, const char * stype,
     int i;
     int j;
     int seen = 0;
-    bind_conv_key(stype, sk, sizeof(sk));
+    frontend_parse_bind_conv_key(stype, sk, sizeof(sk));
     for (i = 0; i < (*self->nmaps); i++) {
         if (self->maps[i].is_binding) {
             continue;
@@ -10098,7 +9986,7 @@ static int bind_conv_maps(struct frontend_parse_Expr * self, const char * stype,
         if (((!self->maps[i].is_static) || (!self->maps[i].type_host))) {
             continue;
         }
-        bind_conv_key(self->maps[i].host_type, hk, sizeof(hk));
+        frontend_parse_bind_conv_key(self->maps[i].host_type, hk, sizeof(hk));
         if (strcmp(hk, sk) != 0) {
             continue;
         }
@@ -10114,7 +10002,7 @@ static int bind_conv_maps(struct frontend_parse_Expr * self, const char * stype,
             if ((((ti < 0) || (mi < 0)) || (mi >= self->sym->traits[ti].nm))) {
                 continue;
             }
-            bind_conv_key(self->sym->traits[ti].m[mi].ret, rk, sizeof(rk));
+            frontend_parse_bind_conv_key(self->sym->traits[ti].m[mi].ret, rk, sizeof(rk));
             if ((!ret[0])) {
                 snprintf(ret, (size_t)(cap), "%s", self->sym->traits[ti].m[mi].ret);
             }
@@ -10131,17 +10019,17 @@ static int bind_conv_binding(struct frontend_parse_Expr * self, const char * sty
     char dk[MAX_TEXT];
     int i;
     int seen = 0;
-    bind_conv_key(stype, sk, sizeof(sk));
-    bind_conv_key(target, tk, sizeof(tk));
+    frontend_parse_bind_conv_key(stype, sk, sizeof(sk));
+    frontend_parse_bind_conv_key(target, tk, sizeof(tk));
     for (i = 0; i < (*self->nmaps); i++) {
         if ((!self->maps[i].is_binding)) {
             continue;
         }
-        bind_conv_key(self->maps[i].host_type, hk, sizeof(hk));
+        frontend_parse_bind_conv_key(self->maps[i].host_type, hk, sizeof(hk));
         if (strcmp(hk, sk) != 0) {
             continue;
         }
-        bind_conv_key(self->maps[i].bind_dst, dk, sizeof(dk));
+        frontend_parse_bind_conv_key(self->maps[i].bind_dst, dk, sizeof(dk));
         if (strcmp(dk, tk) != 0) {
             continue;
         }
@@ -10220,10 +10108,6 @@ static int bind_conv_call(struct frontend_parse_Expr * self, int recv, const cha
     self->arena->nodes[n].num = col;
     return n;
 }
-static int bind_conv_on(void) {
-    const char * v = getenv("CT_BINDING_CONVERSION");
-    return (!(v && (strcmp(v, "0") == 0)));
-}
 static int bind_conv_site(struct frontend_parse_Expr * self, int expr, const char * target, int line, int col) {
     char st[MAX_TEXT];
     char sk[MAX_TEXT];
@@ -10235,7 +10119,7 @@ static int bind_conv_site(struct frontend_parse_Expr * self, int expr, const cha
     int nm;
     int ip = 0;
     int mm;
-    if ((!bind_conv_on())) {
+    if ((!frontend_parse_bind_conv_on())) {
         return expr;
     }
     if ((((expr < 0) || (!target)) || (!target[0]))) {
@@ -10253,8 +10137,8 @@ static int bind_conv_site(struct frontend_parse_Expr * self, int expr, const cha
     if (strchr(st, '*')) {
         return expr;
     }
-    bind_conv_key(st, sk, sizeof(sk));
-    bind_conv_key(target, tk, sizeof(tk));
+    frontend_parse_bind_conv_key(st, sk, sizeof(sk));
+    frontend_parse_bind_conv_key(target, tk, sizeof(tk));
     if (strcmp(sk, tk) == 0) {
         return expr;
     }
@@ -10265,7 +10149,7 @@ static int bind_conv_site(struct frontend_parse_Expr * self, int expr, const cha
     mm = bind_conv_inherent(self, st, "as", ret, sizeof(ret), (&ptr));
     if (mm >= 0) {
         char rk[MAX_TEXT];
-        bind_conv_key(ret, rk, sizeof(rk));
+        frontend_parse_bind_conv_key(ret, rk, sizeof(rk));
         if (strcmp(rk, tk) == 0) {
             return bind_conv_call(self, expr, st, "as", target, line, col);
         }
@@ -10310,8 +10194,8 @@ static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const
     if (((self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, recv, st, sizeof(st)) != 0) || (!st[0]))) {
         return tool_diag_ct_sem_error(line, col, "cannot resolve the source type of this conversion", self->sup->mem->path);
     }
-    bind_conv_key(st, sk, sizeof(sk));
-    bind_conv_key(target, tk, sizeof(tk));
+    frontend_parse_bind_conv_key(st, sk, sizeof(sk));
+    frontend_parse_bind_conv_key(target, tk, sizeof(tk));
     if (strcmp(sk, tk) == 0) {
         return recv;
     }
@@ -10325,7 +10209,7 @@ static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const
     }
     if (mm >= 0) {
         char rk[MAX_TEXT];
-        bind_conv_key(ret, rk, sizeof(rk));
+        frontend_parse_bind_conv_key(ret, rk, sizeof(rk));
         if (strcmp(rk, tk) != 0) {
             snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s': inherent 'as' answers '%s'", st, target, ret);
             return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
@@ -10363,7 +10247,7 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, co
     if (snprintf(expect, sizeof(expect), "struct %s", enc) >= (int)(sizeof(expect))) {
         return tool_diag_ct_sem_error(line, col, "the strict conversion target is too long", self->sup->mem->path);
     }
-    bind_conv_key(expect, ek, sizeof(ek));
+    frontend_parse_bind_conv_key(expect, ek, sizeof(ek));
     ret[0] = 0;
     mm = bind_conv_inherent(self, st, "to", ret, sizeof(ret), (&ptr));
     if (mm == (-2)) {
@@ -10373,7 +10257,7 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, co
         return tool_diag_ct_sem_error(line, col, "a 'to' conversion takes no arguments", self->sup->mem->path);
     }
     if (mm >= 0) {
-        bind_conv_key(ret, rk, sizeof(rk));
+        frontend_parse_bind_conv_key(ret, rk, sizeof(rk));
         if (strcmp(rk, ek) != 0) {
             snprintf(msg, sizeof(msg), "no strict conversion from '%s' to '%s': 'to' answers '%s', expected '%s'", st, target, ret, expect);
             return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
@@ -10430,7 +10314,7 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
             }
         }
     }
-    if (((((!bind_conv_on()) || (call < 0)) || (args <= 0)) || (np <= 0))) {
+    if (((((!frontend_parse_bind_conv_on()) || (call < 0)) || (args <= 0)) || (np <= 0))) {
         return args;
     }
     ret[0] = 0;
@@ -10458,8 +10342,8 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
         if (((((((((ann == 3) && ft) && ft[0]) && (strcmp(ft, "void") != 0)) && (!strchr(ft, '*'))) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, cur, at, sizeof(at)) == 0)) && at[0]) && (!strchr(at, '*')))) {
             int ip = 0;
             char itr[MAX_TEXT];
-            bind_conv_key(at, ak, sizeof(ak));
-            bind_conv_key(ft, fk, sizeof(fk));
+            frontend_parse_bind_conv_key(at, ak, sizeof(ak));
+            frontend_parse_bind_conv_key(ft, fk, sizeof(fk));
             if ((((((((((strcmp(ak, fk) != 0) && (!(self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, ft, itr, sizeof(itr), (&ip)) && (self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, itr) >= 0)))) && (!frontend_sym_ct_is_string_value_type(at))) && (!frontend_sym_ct_is_string_value_type(ft))) && (!frontend_sym_ct_is_container_type(at))) && (!frontend_sym_ct_is_container_type(ft))) && (strstr(at, "Box_") == 0)) && (strstr(ft, "Box_") == 0)) && (bind_conv_any(self, at, "as") || (bind_conv_struct_like(self, at) && bind_conv_struct_like(self, ft))))) {
                 do_conv = 1;
             }
@@ -10545,7 +10429,7 @@ static int bind_conv_arith(struct frontend_parse_Expr * self, int left, int righ
     char msg[MAX_TEXT];
     int lc = 0;
     int rc = 0;
-    if ((!bind_conv_on())) {
+    if ((!frontend_parse_bind_conv_on())) {
         return 0;
     }
     if (((((left >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, left, lt, sizeof(lt)) == 0)) && lt[0]) && bind_conv_struct_like(self, lt))) {
@@ -10559,198 +10443,6 @@ static int bind_conv_arith(struct frontend_parse_Expr * self, int left, int righ
     }
     snprintf(msg, sizeof(msg), "conversion is only allowed at a binding site (declaration/assignment/out/return); '%s' cannot be converted inside an expression", (lc ? lt : rt));
     return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
-}
-static int expr_is_builtin_Box_type(const char * type) {
-    char base[MAX_TEXT];
-    int inst;
-    int ti;
-    int tn;
-    struct frontend_sym_StructInst * ins;
-    struct frontend_sym_StructTmpl * tps;
-    if (((!type) || (!type[0]))) {
-        return 0;
-    }
-    snprintf(base, sizeof(base), "%s", type);
-    if (strncmp(base, "struct ", 7) == 0) {
-        memmove(base, (base + 7), (strlen((base + 7)) + 1));
-    }
-    inst = frontend_sym_ct_inst_find(base);
-    if (inst < 0) {
-        return 0;
-    }
-    ins = frontend_sym_ct_insts((&tn));
-    if ((!ins)) {
-        return 0;
-    }
-    ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
-    tps = frontend_sym_ct_tmpls((&tn));
-    if (((ti < 0) || (!tps))) {
-        return 0;
-    }
-    return ((strstr(tps[ti].path, "lib/core/Box.h.ct") != 0) || (strstr(tps[ti].path, "lib/std/Box.h.ct") != 0));
-}
-static int bplus_space(int c) {
-    return ((((c == ' ') || (c == '\t')) || (c == '\n')) || (c == '\r'));
-}
-static int bplus_id(int c) {
-    return (((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || ((c >= '0') && (c <= '9'))) || (c == '_'));
-}
-static int bplus_lit_type(const char * s, int n, char * out, int cap, int * is_zero) {
-    int i;
-    int j;
-    int digits;
-    int dots;
-    int exps;
-    int suf_at;
-    int sn;
-    int all_zero;
-    int k;
-    int ucount;
-    int lcount;
-    char suf[8];
-    (*is_zero) = 0;
-    if (n <= 0) {
-        return 0;
-    }
-    if ((((s[0] == '"') && (n >= 2)) && (s[(n - 1)] == '"'))) {
-        snprintf(out, (size_t)(cap), "%s", "char *");
-        return 1;
-    }
-    if ((((s[0] == '\'') && (n >= 2)) && (s[(n - 1)] == '\''))) {
-        snprintf(out, (size_t)(cap), "%s", "int");
-        return 1;
-    }
-    i = 0;
-    if (((i < n) && ((s[i] == '-') || (s[i] == '+')))) {
-        i++;
-    }
-    j = i;
-    digits = 0;
-    dots = 0;
-    exps = 0;
-    while ((((i < n) && (s[i] >= '0')) && (s[i] <= '9'))) {
-        i++;
-        digits++;
-    }
-    if (((i < n) && (s[i] == '.'))) {
-        dots = 1;
-        i++;
-        while ((((i < n) && (s[i] >= '0')) && (s[i] <= '9'))) {
-            i++;
-            digits++;
-        }
-    }
-    if (digits == 0) {
-        return 0;
-    }
-    if (((i < n) && ((s[i] == 'e') || (s[i] == 'E')))) {
-        int ed = 0;
-        exps = 1;
-        i++;
-        if (((i < n) && ((s[i] == '+') || (s[i] == '-')))) {
-            i++;
-        }
-        while ((((i < n) && (s[i] >= '0')) && (s[i] <= '9'))) {
-            i++;
-            ed++;
-        }
-        if (ed == 0) {
-            return 0;
-        }
-    }
-    suf_at = i;
-    sn = 0;
-    while (((i < n) && ((((((s[i] == 'u') || (s[i] == 'U')) || (s[i] == 'l')) || (s[i] == 'L')) || (s[i] == 'f')) || (s[i] == 'F')))) {
-        if ((sn + 1) >= (int)(sizeof(suf))) {
-            return 0;
-        }
-        suf[sn] = s[i];
-        sn++;
-        i++;
-    }
-    suf[sn] = 0;
-    if (i != n) {
-        return 0;
-    }
-    if ((((dots || exps) || (strchr(suf, 'f') != 0)) || (strchr(suf, 'F') != 0))) {
-        if (((strchr(suf, 'u') != 0) || (strchr(suf, 'U') != 0))) {
-            return 0;
-        }
-        if (sn == 0) {
-            snprintf(out, (size_t)(cap), "%s", "double");
-        }
-        else {
-            if (((sn == 1) && ((suf[0] == 'f') || (suf[0] == 'F')))) {
-                snprintf(out, (size_t)(cap), "%s", "float");
-            }
-            else {
-                for (k = 0; k < sn; k++) {
-                    if (((suf[k] != 'l') && (suf[k] != 'L'))) {
-                        return 0;
-                    }
-                }
-                snprintf(out, (size_t)(cap), "%s", "long double");
-            }
-        }
-        return 1;
-    }
-    ucount = 0;
-    lcount = 0;
-    for (k = 0; k < sn; k++) {
-        if (((suf[k] == 'u') || (suf[k] == 'U'))) {
-            ucount++;
-        }
-        else {
-            if (((suf[k] == 'l') || (suf[k] == 'L'))) {
-                lcount++;
-            }
-            else {
-                return 0;
-            }
-        }
-    }
-    if (sn == 0) {
-        snprintf(out, (size_t)(cap), "%s", "int");
-    }
-    else {
-        if ((ucount && (!lcount))) {
-            snprintf(out, (size_t)(cap), "%s", "unsigned");
-        }
-        else {
-            if (((!ucount) && (lcount == 1))) {
-                snprintf(out, (size_t)(cap), "%s", "long");
-            }
-            else {
-                if (((!ucount) && (lcount >= 2))) {
-                    snprintf(out, (size_t)(cap), "%s", "long long");
-                }
-                else {
-                    if (((ucount == 1) && (lcount == 1))) {
-                        snprintf(out, (size_t)(cap), "%s", "unsigned long");
-                    }
-                    else {
-                        if (((ucount == 1) && (lcount >= 2))) {
-                            snprintf(out, (size_t)(cap), "%s", "unsigned long long");
-                        }
-                        else {
-                            return 0;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    all_zero = 1;
-    for (k = j; k < suf_at; k++) {
-        if (((s[k] != '.') && (s[k] != '0'))) {
-            all_zero = 0;
-            break;
-        }
-    }
-    if ((all_zero && (digits > 0))) {
-        (*is_zero) = 1;
-    }
-    return 1;
 }
 static int chk_type_static(struct frontend_parse_Expr * self, int n, char * out, int cap) {
     int ad;

@@ -10,6 +10,8 @@
 #include "Expr.h"
 #include "Diag.h"
 #include "StmtRangeText.h"
+#include "StmtRangeScan.h"
+#include "StmtScope.h"
 #include "TypeCheck.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
@@ -130,13 +132,18 @@ struct backend_mem_Memory;
 struct frontend_type_TypeCheck;
 struct frontend_parse_ParseSupport;
 struct frontend_parse_ExprTypeText;
+struct frontend_parse_ExprPure;
 struct frontend_parse_Expr;
 struct backend_emit_EmitterText;
+struct backend_emit_EmitterQuery;
+struct backend_emit_EmitterMapText;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_Emitter;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
+struct frontend_parse_StmtRangeScan;
+struct frontend_parse_StmtScope;
 struct frontend_parse_Stmt;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
@@ -159,8 +166,6 @@ static int retire_before_jump(struct frontend_parse_Stmt *, int, int);
 static int jump_push(struct frontend_parse_Stmt *, int, int);
 static void jump_pop(struct frontend_parse_Stmt *, int);
 static int return_reads_autodrop(struct frontend_parse_Stmt *, int);
-static int var_scope(struct frontend_sym_Symbols *, int);
-static int outlives(struct frontend_sym_Symbols *, int, int);
 static int closure_error(struct frontend_parse_Stmt *, int, int, const char *);
 static int closure_var_index(struct frontend_parse_Stmt *, int);
 static int closure_is_returned(struct frontend_parse_Stmt *, int);
@@ -172,8 +177,6 @@ static int borrow_decl_ahead(struct frontend_parse_Stmt *);
 static int mark_borrow(struct frontend_parse_Stmt *, int, int, int);
 static int borrow_escape(struct frontend_parse_Stmt *, int, int);
 static int str_escape_op(struct frontend_parse_Stmt *, int, int, const char *, int, int, int, int, int);
-static void range_spelling(struct frontend_lex_Lexer *, char *, int);
-static int range_bound_value(struct frontend_lex_Lexer *, long *, char *, int);
 static int range_bound(struct frontend_parse_Stmt *, long *);
 static int range_element_bad(struct frontend_parse_Stmt *, const char *, const char *, char *, int);
 static int parse_vec_brace_init(struct frontend_parse_Stmt *, const char *, const char *);
@@ -5120,24 +5123,6 @@ static int return_reads_autodrop(struct frontend_parse_Stmt * self, int e) {
     }
     return 0;
 }
-static int var_scope(struct frontend_sym_Symbols * sym, int vi) {
-    int s;
-    for (s = (sym->nscope - 1); s >= 0; s--) {
-        if (sym->scope[s] <= vi) {
-            return s;
-        }
-    }
-    return (-1);
-}
-static int outlives(struct frontend_sym_Symbols * sym, int target, int source) {
-    if (((target < 0) || (source < 0))) {
-        return 0;
-    }
-    if ((sym->vars[target].is_global || sym->vars[target].is_static)) {
-        return 1;
-    }
-    return (var_scope(sym, target) < var_scope(sym, source));
-}
 static int closure_error(struct frontend_parse_Stmt * self, int line, int col, const char * msg) {
     tool_diag_ct_sem_error(line, col, msg, self->mem->path);
     tool_diag_ct_sem_note(line, col, CT_CLOSURE_HINT, self->mem->path);
@@ -5199,7 +5184,7 @@ static int check_closure_assign(struct frontend_parse_Stmt * self, int n, int co
     }
     if (kind == N_VAR) {
         lv = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[lhs].text2);
-        if (((lv >= 0) && outlives(self->sym, lv, bv))) {
+        if (((lv >= 0) && frontend_parse_outlives(self->sym, lv, bv))) {
             snprintf(msg, sizeof(msg), "a closure cannot be stored in '%s' (its scope outlives the closure)", self->sym->vars[lv].name);
             return closure_error(self, self->arena->nodes[n].line, col, msg);
         }
@@ -5220,7 +5205,7 @@ static int check_closure_decl_init(struct frontend_parse_Stmt * self, int n, con
         return 0;
     }
     dv = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, name);
-    if (((dv >= 0) && outlives(self->sym, dv, bv))) {
+    if (((dv >= 0) && frontend_parse_outlives(self->sym, dv, bv))) {
         snprintf(msg, sizeof(msg), "a closure cannot be stored in '%s' (its scope outlives the closure)", name);
         return closure_error(self, self->arena->nodes[n].line, col, msg);
     }
@@ -5275,7 +5260,7 @@ static int check_borrow_store(struct frontend_parse_Stmt * self, int n) {
     if (lv < 0) {
         return 0;
     }
-    if ((!outlives(self->sym, lv, bv))) {
+    if ((!frontend_parse_outlives(self->sym, lv, bv))) {
         return 0;
     }
     snprintf(msg, sizeof(msg), "a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)", self->sym->vars[lv].name);
@@ -5516,69 +5501,6 @@ static int str_escape_op(struct frontend_parse_Stmt * self, int op, int e, const
     }
     return self->sup->__frontend_parse_supportops_vptr->str_escape_class_at(self->sup, e, depth);
 }
-static void range_spelling(struct frontend_lex_Lexer * lx, char * out, int cap) {
-    int i = 0;
-    if (lx->tok == T_NUM) {
-        int s = lx->tokstart;
-        while ((((s + i) < lx->pos) && (i < (cap - 1)))) {
-            out[i] = lx->src[(s + i)];
-            i++;
-        }
-    }
-    else {
-        while (((i < lx->tokstr.len) && (i < (cap - 1)))) {
-            out[i] = lx->tokstr.ptr[i];
-            i++;
-        }
-    }
-    out[i] = 0;
-    if ((!out[0])) {
-        snprintf(out, (size_t)(cap), "%s", "end of file");
-    }
-}
-static int range_bound_value(struct frontend_lex_Lexer * lx, long * out, char * spell, int cap) {
-    char text[MAX_TEXT];
-    const char * p;
-    long v = 0;
-    int base = 10;
-    int d;
-    int nd = 0;
-    range_spelling(lx, text, (int)(sizeof(text)));
-    snprintf(spell, (size_t)(cap), "%s", text);
-    if (((lx->tok != T_NUM) || lx->tokfloat)) {
-        return 1;
-    }
-    p = text;
-    if (((p[0] == '0') && ((p[1] == 'x') || (p[1] == 'X')))) {
-        base = 16;
-        p += 2;
-    }
-    else {
-        if ((((p[0] == '0') && (p[1] >= '0')) && (p[1] <= '7'))) {
-            base = 8;
-            p += 1;
-        }
-    }
-    while ((d = frontend_parse_range_digit((*p), base)) >= 0) {
-        if (v > ((LONG_MAX - d) / base)) {
-            return 2;
-        }
-        v = ((v * base) + d);
-        p++;
-        nd++;
-    }
-    if ((!nd)) {
-        return 1;
-    }
-    while ((*p)) {
-        if ((((((*p) != 'u') && ((*p) != 'U')) && ((*p) != 'l')) && ((*p) != 'L'))) {
-            return 1;
-        }
-        p++;
-    }
-    (*out) = v;
-    return 0;
-}
 static int range_bound(struct frontend_parse_Stmt * self, long * out) {
     char spell[MAX_TEXT];
     char msg[256];
@@ -5598,7 +5520,7 @@ static int range_bound(struct frontend_parse_Stmt * self, long * out) {
     if ((((!neg) && (self->lex->tok == T_PUNCT)) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, "("))) {
         return tool_diag_ct_sem_error(line, col, "a range initializer needs both bounds", self->mem->path);
     }
-    rc = range_bound_value(self->lex, (&v), spell, (int)(sizeof(spell)));
+    rc = frontend_parse_range_bound_value(self->lex, (&v), spell, (int)(sizeof(spell)));
     if (rc == 2) {
         return tool_diag_ct_sem_error(line, col, "a range bound is out of range", self->mem->path);
     }
