@@ -1,7 +1,7 @@
 ---
 id: TEST-23
 title: "v0.77 覆盖缺口：无行覆盖、ct-ast 无单测、容量上限/近相 example 缺失"
-status: deferred
+status: verified
 area: testing
 severity: P2
 opened: 2026-11-20
