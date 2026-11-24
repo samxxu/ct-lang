@@ -168,3 +168,18 @@ U16String.h.ct  → core::String / core::Str / core::utf16::U16Str
 - [package-guide「一单元一主类型」](../../docs/package-guide.md)、
   [glossary「单元命名」](../../docs/glossary.md)。
 - [lib/core/README](../../lib/core/README.md)：当前五单元布局的自我描述。
+
+## DEV 处置（2026-11-24，分支 `issue/sh120`）
+
+| 项 | 结果 |
+| --- | --- |
+| 提交 | `711dacc8` test(ast) 红；`94d67519` feat(core) 实现；`65325ed5` chore(seed) 重生成 |
+| 布局 | `lib/core/String.h.ct`（`String` + 辅助 `ct_str_hdr`，`namespace core`，572 行）、`lib/core/Str.h.ct`（`Str`，`namespace core`，203 行）、`lib/core/utf16/U16String.h.ct`（560 行）、`lib/core/utf16/U16Str.h.ct`（78 行），各一主类型 |
+| 依赖 | `Str` / `U16Str` 无 import、无 owning 返回；`String → Str`；`U16String → String / Str / U16Str`。内建层是预解析单元，头文件由 emitter 互相包含，加载顺序 `Vec, Option, Result, Str, String, U16Str, U16String, Box` 即拓扑序 |
+| 内置层 | `Module` 的 `builtin_units[8]` / `builtin_live[8]` / 加载顺序 / `find_builtin` 的 `utf16/` 子路径；`Driver` compile 列表 8 槽 + `layer_wanted`；`Emitter.builtins[8]` 与 `ct_emit_add_builtin` 上限 8；`Expr` / `Stmt` 的 `ptr` 写保护覆盖四个文件；`builtin_live_for` 分开扫描 UTF-8 / UTF-16 两半并补依赖闭包（U16 拉 String/Str/U16Str/Vec） |
+| U16 兼容 | 规范名 `core::utf16::U16String` / `core::utf16::U16Str` 的类型拼写可用；裸 `U16String` / `U16Str` 与旧 `core::U16String` / `core::U16Str` 在 MINOR 窗口内解析到同一根符号（`lib/core` 命名空间省略窗，C/ABI 名不变）。语言没有可用的类型别名语法，兼容由该窗口提供；记录在 `lib/core/README.md`。工厂仍写 `U16String.from_utf8(...)`（点形式）；`类型::静态方法` 不是本语言面 |
+| 红证 | `711dacc8`（父 `44fa2c95`）：`test(ast): SH-120 红`，`bash test/ast/sh120_split.sh <baseline ct-ast>` → `sh120_split: 6 passed, 18 failed` |
+| 绿证 | `selfhost/check-all.sh` **OK (9 hard gates green)**；`test/ast/sh120_split.sh` 24/0；`sh113` 8/0；`doc87_core` 0 failure；`p44` 7/0（含 `str_ptr`）；`p39` r1–r8 全绿；`p85` m0 4/0、spike 14/0；`p88` metrics 9/0、emit 3/0；`check-all` 见收口证据 |
+| 构建产物 | `ct build` 产出 `String.c` / `Str.c` / `U16String.c` / `U16Str.c`；`String` 单元头文件名为 `String_.h`（避免大小写不敏感文件系统上 `#include <string.h>` 命中 `String.h`）；`--lib` 的全局符号多出四个单元共享的 `ct_str_*` / `ct_u16_*` 辅助函数，登记在 `test/modules/p39_lib/expected.internal` |
+| seed | 已用当前行为的两级自举重生成 `bootstrap/ct-ast` 与 `MANIFEST.sha256`；gate 13 两轮逐字节一致、手改负例红 |
+| 未覆盖 | ① 未做 `--emit-model` / ABI 逐字节对照，只用 goldens、p39、check-warnings 覆盖；② `core::utf16::U16String::from_utf8` 的 `::` 静态调用仍不支持（语言面限制，类型拼写与点形式已覆盖）；③ `p85_corpus_sha.tsv` 的 4 个字符串样例与 `p88_metrics.md` 的 live pin 按“内建层拆分会改变发射 C/行数”更新，PH-85/88 历史数字保留并注明；④ 仓内无 examples 使用 U16（审计数字沿用 issue） |
