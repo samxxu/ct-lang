@@ -167,9 +167,11 @@ else
 fi
 
 # 9) the key is narrow: a different warning class keeps its severity and the
-#    build keeps its pre-PH-82 exit code.
+#    build keeps its pre-PH-82 exit code. `--check-level=off` parks the B/type
+#    level (v1-PH-1 S3 default `error` would escalate the arity record) so this
+#    assertion stays about `leaks` alone.
 mkdir -p "$work/err/arity"
-"$ctast" build -I "$work/err" --emit-c -o "$work/err/arity" "$work/err/arity.ct" \
+"$ctast" build --check-level=off -I "$work/err" --emit-c -o "$work/err/arity" "$work/err/arity.ct" \
     >"$work/err.arity.log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && grep -Fq "warning: arity mismatch" "$work/err.arity.log" \

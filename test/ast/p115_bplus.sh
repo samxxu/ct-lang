@@ -1,10 +1,12 @@
 #!/bin/sh
-# SH-115: B+ type-check strengthening, and the CLI `--check-level` default.
+# SH-115 + v1-PH-1 S3: B+ type-check strengthening, and the CLI
+# `--check-level` default.
 #
 # What this probe pins:
-#   1) `ct build` defaults to `--check-level=warn`: a B finding is a warning,
-#      the build still writes its products, and `--check-level=off` stays a
-#      silent escape hatch whose products are byte-identical to the default.
+#   1) `ct build` defaults to `--check-level=error` (v1-PH-1 S3): a B finding
+#      fails the build before any product. An explicit `--check-level=warn`
+#      reports and still writes its products; `--check-level=off` stays the
+#      silent escape hatch whose products are byte-identical to `warn`.
 #   2) a call through a function-pointer *field* (`o.add(...)`) is judged
 #      against the field's prototype -- the residual path LANG-19 left open.
 #   3) a struct brace initializer is judged item by item when the item is one
@@ -242,29 +244,36 @@ int main(void)
 }
 CT
 
-# ---- 1) default warn, off escape, unchanged products -----------------------
+# ---- 1) default error, warn/off escape, unchanged products ----------------
 build d0 "$tmp/d0" "$tmp/mismatch.ct"
+build warn "$tmp/warn" "$tmp/mismatch.ct" warn
 build off "$tmp/off" "$tmp/mismatch.ct" off
 build err "$tmp/err" "$tmp/mismatch.ct" error
 build chk "$tmp/chk" "$tmp/mismatch.ct" error
 check types "$tmp/mismatch.ct"
 
-if rc_is d0 0 && has d0 "warning: return: expected 'int', got 'char \*'" \
-   && [ -f "$tmp/d0/mismatch.c" ]; then
-    ok; echo "  p115: default build reports a B warning and writes the product"
+if [ "$(cat "$tmp/d0.rc")" != "0" ] && has d0 "error: return: expected 'int', got 'char \*'" \
+   && [ ! -f "$tmp/d0/mismatch.c" ]; then
+    ok; echo "  p115: default build fails on a B finding and writes no product"
 else
-    bad "default build did not warn-and-continue: rc=$(cat "$tmp/d0.rc") $(head -3 "$tmp/d0.err" | tr '\n' ' ')"
+    bad "default build did not fail-before-product: rc=$(cat "$tmp/d0.rc") $(head -3 "$tmp/d0.err" | tr '\n' ' ')"
+fi
+if rc_is warn 0 && has warn "warning: return: expected 'int', got 'char \*'" \
+   && [ -f "$tmp/warn/mismatch.c" ]; then
+    ok; echo "  p115: explicit --check-level=warn still warns and writes the product"
+else
+    bad "explicit warn did not warn-and-continue: rc=$(cat "$tmp/warn.rc") $(head -3 "$tmp/warn.err" | tr '\n' ' ')"
 fi
 if rc_is off 0 && is_empty off; then
     ok; echo "  p115: --check-level=off is the silent escape hatch"
 else
     bad "--check-level=off did not stay silent: rc=$(cat "$tmp/off.rc") $(head -3 "$tmp/off.err" | tr '\n' ' ')"
 fi
-if [ -f "$tmp/d0/mismatch.c" ] && [ -f "$tmp/off/mismatch.c" ] \
-   && cmp -s "$tmp/d0/mismatch.c" "$tmp/off/mismatch.c"; then
-    ok; echo "  p115: default warn emits the same C as off"
+if [ -f "$tmp/warn/mismatch.c" ] && [ -f "$tmp/off/mismatch.c" ] \
+   && cmp -s "$tmp/warn/mismatch.c" "$tmp/off/mismatch.c"; then
+    ok; echo "  p115: warn emits the same C as off"
 else
-    bad "default warn changed the generated C"
+    bad "warn changed the generated C"
 fi
 if [ "$(cat "$tmp/err.rc")" != "0" ] && has err "error: return: expected 'int', got 'char \*'" \
    && [ ! -f "$tmp/err/mismatch.c" ]; then
@@ -280,7 +289,7 @@ fi
 
 # ---- 2) function-pointer field call ----------------------------------------
 check fnfield_c "$tmp/fnfield.ct"
-build fnfield_b "$tmp/fnfield_b" "$tmp/fnfield.ct"
+build fnfield_b "$tmp/fnfield_b" "$tmp/fnfield.ct" warn
 build fnfield_o "$tmp/fnfield_o" "$tmp/fnfield.ct" off
 check fnfield_pos_c "$tmp/fnfield_pos.ct"
 check fnfield_arity_c "$tmp/fnfield_arity.ct"
@@ -322,7 +331,7 @@ fi
 
 # ---- 3) struct brace initializer -------------------------------------------
 check brace_c "$tmp/brace_local.ct"
-build brace_b "$tmp/brace_b" "$tmp/brace_local.ct"
+build brace_b "$tmp/brace_b" "$tmp/brace_local.ct" warn
 build brace_o "$tmp/brace_o" "$tmp/brace_local.ct" off
 check brace_pos_c "$tmp/brace_pos.ct"
 check brace_global_c "$tmp/brace_global.ct"

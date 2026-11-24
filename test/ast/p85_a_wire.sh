@@ -2,10 +2,11 @@
 # PH-85 S85d probe: the B checker on the build path, off / warn / error.
 #
 # The mechanism: `ct build --check-level=off|warn|error`. SH-115 moved the CLI
-# default from `off` to `warn`; `off` is now the silent escape hatch and must
-# still be byte-for-byte what the build emitted before PH-85; `warn` reports the
-# `--types` findings as warnings and still writes the products; `error` turns
-# them into errors and stops before writing anything. The flag is build-only:
+# default from `off` to `warn`; v1-PH-1 S3 moved it on to `error`. `off` is the
+# silent escape hatch and must still be byte-for-byte what the build emitted
+# before PH-85; `warn` reports the `--types` findings as warnings and still
+# writes the products; `error` (the default now) turns them into errors and
+# stops before writing anything. The flag is build-only:
 # `ct check` already makes every finding an error (`--types`), so accepting the
 # level there would be a second, contradictory knob.
 #
@@ -56,14 +57,23 @@ build() {   # build <level> <src> <dir> <tag>
     echo $? >"$tmp/$tag.rc"
 }
 
-# 1) default and off are the same products: same exit code, same bytes
+# 1) v1-PH-1 S3: the default is error, so it stops before any product; warn is
+#    the explicit downgrade and emits the same bytes as the off escape hatch.
 build default "$tmp/mismatch.ct" "$tmp/d0" d0
+build warn "$tmp/mismatch.ct" "$tmp/warn1" warn1
 build off "$tmp/mismatch.ct" "$tmp/off" off
-if [ "$(cat "$tmp/d0.rc")" = "$(cat "$tmp/off.rc")" ] \
-   && diff -r "$tmp/d0" "$tmp/off" >/dev/null 2>&1; then
+if [ "$(cat "$tmp/d0.rc")" != "0" ] \
+   && grep -q "error: return: expected 'int', got 'char \*'" "$tmp/d0.err" \
+   && [ "$(ls "$tmp/d0" 2>/dev/null | wc -l | tr -d ' ')" = "0" ]; then
     ok
 else
-    bad "default and off differ"
+    bad "default did not fail before the product: rc=$(cat "$tmp/d0.rc") $(head -2 "$tmp/d0.err" | tr '\n' ' ')"
+fi
+if [ "$(cat "$tmp/warn1.rc")" = "$(cat "$tmp/off.rc")" ] \
+   && diff -r "$tmp/warn1" "$tmp/off" >/dev/null 2>&1; then
+    ok
+else
+    bad "warn and off differ"
 fi
 
 # 2) off is silent: the B-only finding must not print (the pre-existing
@@ -148,14 +158,14 @@ else
     bad "the pre-existing arg-type warning does not follow the level"
 fi
 
-# 9) SH-115: the CLI default is `warn`, so the same B finding prints without a
-#    flag; `--check-level=off` above remains the silent escape hatch.
+# 9) v1-PH-1 S3: the CLI default is `error`, so the same B finding blocks the
+#    build without a flag; `--check-level=off` above remains the escape hatch.
 build default "$tmp/mismatch.ct" "$tmp/dw" dw
-if [ "$(cat "$tmp/dw.rc")" = "0" ] \
-   && grep -q "warning: return: expected 'int', got 'char \*'" "$tmp/dw.err"; then
+if [ "$(cat "$tmp/dw.rc")" != "0" ] \
+   && grep -q "error: return: expected 'int', got 'char \*'" "$tmp/dw.err"; then
     ok
 else
-    bad "the CLI default is not warn: rc=$(cat "$tmp/dw.rc") $(head -2 "$tmp/dw.err" | tr '\n' ' ')"
+    bad "the CLI default is not error: rc=$(cat "$tmp/dw.rc") $(head -2 "$tmp/dw.err" | tr '\n' ' ')"
 fi
 
 echo "p85a: $pass passed, $fail failed"

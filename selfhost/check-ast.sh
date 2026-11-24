@@ -961,19 +961,21 @@ else
 fi
 
 # PH-85 S85d (E85-5): the B checker on the build path with off / warn / error;
-# off is the default and is byte-for-byte the pre-PH-85 build.
+# `off` is byte-for-byte the pre-PH-85 build and the escape hatch. SH-115 made
+# `warn` the default; v1-PH-1 S3 made `error` the default.
 if bash test/ast/p85_a_wire.sh "$work/ct-ast" >"$work/p85a.out" 2>"$work/p85a.err"; then
-    ok "p85/a-wire (E85-5: off/warn/error, default warn since SH-115)"
+    ok "p85/a-wire (E85-5: off/warn/error, default error since v1-PH-1 S3)"
 else
     bad "p85/a-wire" "$(cat "$work/p85a.out" "$work/p85a.err" | head -5)"
 fi
 
-# SH-115: B+ strengthening -- the CLI default `warn`, function-pointer *field*
-# call checking, struct brace-initializer item checking, and the pinned
-# ADT / match / generic / const-volatile shapes. Same finding text under
-# `ct check --types` and `ct build --check-level=warn`.
+# SH-115: B+ strengthening -- function-pointer *field* call checking, struct
+# brace-initializer item checking, and the pinned ADT / match / generic /
+# const-volatile shapes. v1-PH-1 S3 makes `error` the CLI default; an explicit
+# `--check-level=warn` keeps the warn-and-continue path, `off` the escape.
+# Same finding text under `ct check --types` and `--check-level=warn`.
 if bash test/ast/p115_bplus.sh "$work/ct-ast" >"$work/p115.out" 2>"$work/p115.err"; then
-    ok "p115/b-plus (SH-115: default warn, fnptr field, brace init)"
+    ok "p115/b-plus (SH-115 + v1-PH-1 S3: default error, fnptr field, brace init)"
 else
     bad "p115/b-plus" "$(cat "$work/p115.out" "$work/p115.err" | head -8)"
 fi
@@ -2331,7 +2333,9 @@ mkdir -p "$mod-htf"
 # A shortage is already fatal when the recipe is expanded ("a map call has
 # fewer arguments than its binding"), and a failed build drops the recorded
 # warnings, so the build case pins that message rather than the warning.
-if "$work/ct-ast" build --emit-c -I test/modules/map_unit_type \
+# `--check-level=warn` keeps the type level out of this p20 assertion (the S3
+# default `error` would otherwise report the arity record first).
+if "$work/ct-ast" build --emit-c --check-level=warn -I test/modules/map_unit_type \
         test/modules/p20_type_host_arity/few.ct -o "$mod-htf" \
         >"$work/mhtf.out" 2>"$work/mhtf.err"; then
     bad "p20_type_host_arity_few" "expected a non-zero exit"
@@ -2343,7 +2347,7 @@ fi
 
 rm -rf "$mod-htm"
 mkdir -p "$mod-htm"
-if "$work/ct-ast" build --emit-c -I test/modules/map_unit_type \
+if "$work/ct-ast" build --emit-c --check-level=warn -I test/modules/map_unit_type \
         test/modules/p20_type_host_arity/more.ct -o "$mod-htm" \
         >"$work/mhtm.out" 2>"$work/mhtm.err" \
    && grep -qF "warning: arity mismatch: 'toLong' takes 1 argument(s), 2 given" "$work/mhtm.err"; then
@@ -3115,14 +3119,16 @@ for ha in "${ha_cases[@]}"; do
         "$ha_recv" >"$ha/more.ct"
     printf 'import num;\nint main(void) { %s x = 1; return (int)x.plus(); }\n' \
         "$ha_recv" >"$ha/few.ct"
-    if "$work/ct-ast" build --emit-c -I "$ha" "$ha/more.ct" -o "$ha/mout" \
+    # `--check-level=warn` pins the p20 arity record as a warning; the S3
+    # default `error` would pre-empt the recipe-shortage diagnostic below.
+    if "$work/ct-ast" build --emit-c --check-level=warn -I "$ha" "$ha/more.ct" -o "$ha/mout" \
             >"$ha/more.out" 2>"$ha/more.err" \
        && grep -qF "warning: arity mismatch: 'plus' takes 1 argument(s), 2 given" "$ha/more.err"; then
         ok "p20_host_arity_int_more[$ha_i $ha_host/$ha_recv]"
     else
         bad "p20_host_arity_int_more[$ha_i $ha_host/$ha_recv]" "$(head -3 "$ha/more.err")"
     fi
-    if "$work/ct-ast" build --emit-c -I "$ha" "$ha/few.ct" -o "$ha/fout" \
+    if "$work/ct-ast" build --emit-c --check-level=warn -I "$ha" "$ha/few.ct" -o "$ha/fout" \
             >"$ha/few.out" 2>"$ha/few.err"; then
         bad "p20_host_arity_int_few[$ha_i $ha_host/$ha_recv]" "expected a non-zero exit"
     elif grep -qF "a map call has fewer arguments than its binding" "$ha/few.err"; then
@@ -3608,7 +3614,8 @@ else
 fi
 rm -rf "$work/p20qa2"
 mkdir -p "$work/p20qa2"
-if ! "$work/ct-ast" build --emit-c test/modules/p20_qual_arity/more.ct -o "$work/p20qa2" \
+if ! "$work/ct-ast" build --emit-c --check-level=warn \
+        test/modules/p20_qual_arity/more.ct -o "$work/p20qa2" \
         >"$work/p20qa2.out" 2>"$work/p20qa2.err"; then
     bad "p20_qual_arity_more" "expected a build with an arity warning: $(head -2 "$work/p20qa2.err")"
 elif grep -qF "warning: arity mismatch: 'len' takes 0 argument(s), 1 given" "$work/p20qa2.err"; then
