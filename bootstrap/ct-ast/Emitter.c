@@ -120,6 +120,9 @@
 #define U_NOT 2
 #define U_BNOT 3
 #define P_INC 1
+#define MAX_LAYOUT_DEPTH 32
+#define MAX_LAYOUT_ADTS 64
+#define MAX_LAYOUT_INSTS 128
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -414,6 +417,14 @@ static int inst_writes_helpers(struct backend_emit_Emitter *, int, int);
 static int inst_emit_elem_method_protos(struct backend_emit_Emitter *, const char *);
 static int inst_emit_elem_protos(struct backend_emit_Emitter *, int);
 static int inst_emit_elem_helpers(struct backend_emit_Emitter *, int);
+static int type_needs_layout(const char *, const char *);
+static int type_inst_index(const char *);
+static int adt_layout_closure(struct backend_emit_Emitter *, int, int);
+static int inst_layout_closure(struct backend_emit_Emitter *, int, int);
+static int type_layout_closure(struct backend_emit_Emitter *, const char *, int);
+static int shell_owned_here(struct backend_emit_Emitter *, int);
+static int shell_preemit(struct backend_emit_Emitter *, int, int);
+static int preemit_adt_payload(struct backend_emit_Emitter *, int);
 static int fail_unknown_statement(struct backend_emit_Emitter *, int);
 static int em_expr_adtctor(struct backend_emit_Emitter *, int, int);
 static int em_expr_num(struct backend_emit_Emitter *, int, int);
@@ -515,7 +526,12 @@ void backend_emit_ct_emit_set_no_write(int);
 int backend_emit_ct_emit_no_write(void);
 static struct backend_emit_StrRetain backend_emit_g_sb;
 static int backend_emit_g_oc_bypass_node = (-1);
+static int backend_emit_g_shell_u = (-1);
+static int backend_emit_g_shell_header;
 static int * backend_emit_g_slice_used;
+static int backend_emit_g_adt_layout_state[MAX_LAYOUT_ADTS];
+static int backend_emit_g_inst_layout_state[MAX_LAYOUT_INSTS];
+static int backend_emit_g_shell_emit_state[MAX_LAYOUT_INSTS];
 static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable };
 static int backend_emit_Emitter_backend_emit_EmitOps_expr_unstable(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
@@ -773,6 +789,8 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, in
     _self->errmsg[0] = 0;
     _self->failline = 0;
     _self->cur_unit = (-1);
+    backend_emit_g_shell_u = (-1);
+    backend_emit_g_shell_header = 0;
     if (_self->__backend_emit_emitops_vptr->invariant_check(_self, prog) != 0) {
         return (-1);
     }
@@ -7268,6 +7286,8 @@ static int emit_Box_helpers(struct backend_emit_Emitter * self, int u) {
 static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
     int n;
     int i;
+    backend_emit_g_shell_u = u;
+    backend_emit_g_shell_header = 0;
     if (self->__backend_emit_emitops_vptr->invariant_check(self, self->units[u].prog) != 0) {
         return (-1);
     }
@@ -7446,6 +7466,8 @@ static int write_unit_header_body(struct backend_emit_Emitter * self, int u, con
     int n;
     int i;
     int pp;
+    backend_emit_g_shell_u = u;
+    backend_emit_g_shell_header = 1;
     fprintf(self->out, "#ifndef %s\n", guard);
     fprintf(self->out, "#define %s\n", guard);
     if (backend_emit_unit_has_adt(u, 1)) {
@@ -8397,10 +8419,229 @@ static void emit_slice_helpers(struct backend_emit_Emitter * self) {
     fputs("struct __ct_slice { void *ptr; int len; };\n", self->out);
     fputs("static void __attribute__((unused)) __ct_slice_check(struct __ct_slice *s, int i)\n""{\n""    if (i < 0 || i >= s->len) {\n""        fprintf(stderr, \"ct: slice index %d out of bounds (length %d)\\n\", i, s->len);\n""        exit(1);\n""    }\n""}\n""__attribute__((unused)) static void *__ct_slice_at(struct __ct_slice *s, int i, unsigned long esz)\n""{\n""    __ct_slice_check(s, i);\n""    return (char *)s->ptr + (unsigned long)i * esz;\n""}\n""__attribute__((unused)) static void *__ct_slice_get(struct __ct_slice s, int i, unsigned long esz)\n""{\n""    if (i < 0 || i >= s.len) return 0;\n""    return (char *)s.ptr + (unsigned long)i * esz;\n""}\n""__attribute__((unused)) static struct __ct_slice __ct_slice_range(void *p, int len, int lo, int hi, unsigned long esz, const char *where)\n""{\n""    struct __ct_slice s;\n""    if (lo < 0 || hi < lo || hi > len) {\n""        fprintf(stderr, \"%s: slice construction out of bounds: [%d,%d) for length %d\\n\", where, lo, hi, len);\n""        exit(1);\n""    }\n""    s.ptr = (char *)p + (unsigned long)lo * esz;\n""    s.len = hi - lo;\n""    return s;\n""}\n\n", self->out);
 }
+static int type_needs_layout(const char * type, const char * name) {
+    char pat[MAX_TEXT];
+    const char * p;
+    const char * q;
+    size_t n;
+    if (((((!type) || (!type[0])) || (!name)) || (!name[0]))) {
+        return 0;
+    }
+    if ((strchr(type, '*') || strchr(type, '('))) {
+        return 0;
+    }
+    snprintf(pat, sizeof(pat), "struct %s", name);
+    n = strlen(pat);
+    for (p = strstr(type, pat); p; p = strstr((p + 1), pat)) {
+        if ((((p != type) && (p[(-1)] != ' ')) && (p[(-1)] != '('))) {
+            continue;
+        }
+        q = (p + n);
+        if ((((((*q) != 0) && ((*q) != ' ')) && ((*q) != '[')) && ((*q) != ','))) {
+            continue;
+        }
+        return 1;
+    }
+    return 0;
+}
+static int type_inst_index(const char * type) {
+    int i;
+    int n;
+    struct frontend_sym_StructInst * ins;
+    ins = frontend_sym_ct_insts((&n));
+    if ((!ins)) {
+        return (-1);
+    }
+    for (i = 0; ((i < n) && (i < MAX_LAYOUT_INSTS)); i++) {
+        if (type_needs_layout(type, ins[i].name)) {
+            return i;
+        }
+    }
+    return (-1);
+}
+static int type_layout_closure(struct backend_emit_Emitter * self, const char * type, int depth) {
+    int ai;
+    int ii;
+    if (((((!type) || (!type[0])) || strchr(type, '*')) || strchr(type, '('))) {
+        return 0;
+    }
+    ai = frontend_sym_ct_adt_from_type(type);
+    if (ai >= 0) {
+        return adt_layout_closure(self, ai, depth);
+    }
+    ii = type_inst_index(type);
+    if (ii >= 0) {
+        return inst_layout_closure(self, ii, depth);
+    }
+    return 0;
+}
+static int adt_layout_closure(struct backend_emit_Emitter * self, int adi, int depth) {
+    int v;
+    int f;
+    int nadts;
+    struct frontend_sym_Adt * adts;
+    char msg[MAX_TEXT];
+    adts = frontend_sym_ct_adts((&nadts));
+    if (((((!adts) || (adi < 0)) || (adi >= nadts)) || (adi >= MAX_LAYOUT_ADTS))) {
+        return 0;
+    }
+    if (depth > MAX_LAYOUT_DEPTH) {
+        snprintf(msg, sizeof(msg), "a by-value ADT payload nests deeper than %d; use a pointer or a container", MAX_LAYOUT_DEPTH);
+        return self->__backend_emit_emitops_vptr->fail(self, msg);
+    }
+    if (backend_emit_g_adt_layout_state[adi] == 2) {
+        return 0;
+    }
+    if (backend_emit_g_adt_layout_state[adi] == 1) {
+        snprintf(msg, sizeof(msg), "ADT '%s' is recursive by value; store a pointer or a container instead", adts[adi].name);
+        return self->__backend_emit_emitops_vptr->fail(self, msg);
+    }
+    backend_emit_g_adt_layout_state[adi] = 1;
+    for (v = 0; v < adts[adi].nvariants; v++) {
+        for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+            if (type_layout_closure(self, adts[adi].variants[v].fields[f].type, (depth + 1)) != 0) {
+                return (-1);
+            }
+        }
+    }
+    backend_emit_g_adt_layout_state[adi] = 2;
+    return 0;
+}
+static int inst_layout_closure(struct backend_emit_Emitter * self, int ii, int depth) {
+    int ti;
+    int j;
+    int n;
+    struct frontend_sym_StructInst * ins;
+    char msg[MAX_TEXT];
+    ins = frontend_sym_ct_insts((&n));
+    if (((((!ins) || (ii < 0)) || (ii >= n)) || (ii >= MAX_LAYOUT_INSTS))) {
+        return 0;
+    }
+    if (depth > MAX_LAYOUT_DEPTH) {
+        snprintf(msg, sizeof(msg), "a by-value ADT payload nests deeper than %d; use a pointer or a container", MAX_LAYOUT_DEPTH);
+        return self->__backend_emit_emitops_vptr->fail(self, msg);
+    }
+    if (backend_emit_g_inst_layout_state[ii] == 2) {
+        return 0;
+    }
+    if (backend_emit_g_inst_layout_state[ii] == 1) {
+        snprintf(msg, sizeof(msg), "generic instance '%s' is recursive by value; store a pointer instead", ins[ii].name);
+        return self->__backend_emit_emitops_vptr->fail(self, msg);
+    }
+    backend_emit_g_inst_layout_state[ii] = 1;
+    ti = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, ins[ii].name);
+    if (ti >= 0) {
+        for (j = 0; j < self->sym->structs[ti].nfields; j++) {
+            if (type_layout_closure(self, self->sym->structs[ti].fields[j].type, (depth + 1)) != 0) {
+                return (-1);
+            }
+        }
+    }
+    backend_emit_g_inst_layout_state[ii] = 2;
+    return 0;
+}
+static int shell_owned_here(struct backend_emit_Emitter * self, int ii) {
+    int tmpl;
+    int tn;
+    int n;
+    int already;
+    struct frontend_sym_StructInst * ins;
+    struct frontend_sym_StructTmpl * tps;
+    ins = frontend_sym_ct_insts((&n));
+    tps = frontend_sym_ct_tmpls((&tn));
+    if (((((!ins) || (!tps)) || (ii < 0)) || (ii >= n))) {
+        return 0;
+    }
+    tmpl = frontend_sym_ct_tmpl_find(ins[ii].tmpl);
+    if (tmpl < 0) {
+        return 0;
+    }
+    already = (((tps[tmpl].is_pub && (tps[tmpl].owner >= 0)) && self->units[tps[tmpl].owner].is_hdr) && (!inst_elem_foreign(self, ii)));
+    if (((already && backend_emit_g_shell_header) && (tps[tmpl].owner == backend_emit_g_shell_u))) {
+        already = 0;
+    }
+    if (already) {
+        return 0;
+    }
+    if (backend_emit_g_shell_u < 0) {
+        return 1;
+    }
+    return (ins[ii].owner == backend_emit_g_shell_u);
+}
+static int shell_preemit(struct backend_emit_Emitter * self, int ii, int depth) {
+    int ti;
+    int j;
+    int n;
+    struct frontend_sym_StructInst * ins;
+    char msg[MAX_TEXT];
+    ins = frontend_sym_ct_insts((&n));
+    if (((((!ins) || (ii < 0)) || (ii >= n)) || (ii >= MAX_LAYOUT_INSTS))) {
+        return 0;
+    }
+    if (depth > MAX_LAYOUT_DEPTH) {
+        snprintf(msg, sizeof(msg), "a by-value ADT payload nests deeper than %d; use a pointer or a container", MAX_LAYOUT_DEPTH);
+        return self->__backend_emit_emitops_vptr->fail(self, msg);
+    }
+    if (backend_emit_g_shell_emit_state[ii] == 2) {
+        return 0;
+    }
+    if (backend_emit_g_shell_emit_state[ii] == 1) {
+        snprintf(msg, sizeof(msg), "generic instance '%s' is recursive by value; store a pointer instead", ins[ii].name);
+        return self->__backend_emit_emitops_vptr->fail(self, msg);
+    }
+    backend_emit_g_shell_emit_state[ii] = 1;
+    ti = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, ins[ii].name);
+    if (ti >= 0) {
+        for (j = 0; j < self->sym->structs[ti].nfields; j++) {
+            int dep = type_inst_index(self->sym->structs[ti].fields[j].type);
+            if (((dep >= 0) && (shell_preemit(self, dep, (depth + 1)) != 0))) {
+                return (-1);
+            }
+        }
+    }
+    if (((!ins[ii].emitted) && shell_owned_here(self, ii))) {
+        if (inst_emit_one(self, ii) != 0) {
+            return (-1);
+        }
+    }
+    backend_emit_g_shell_emit_state[ii] = 2;
+    return 0;
+}
+static int preemit_adt_payload(struct backend_emit_Emitter * self, int adi) {
+    int v;
+    int f;
+    int i;
+    int n;
+    int nadts;
+    struct frontend_sym_Adt * adts;
+    struct frontend_sym_StructInst * ins;
+    adts = frontend_sym_ct_adts((&nadts));
+    ins = frontend_sym_ct_insts((&n));
+    if (((((!adts) || (!ins)) || (adi < 0)) || (adi >= nadts))) {
+        return 0;
+    }
+    for (i = 0; ((i < n) && (i < MAX_LAYOUT_INSTS)); i++) {
+        backend_emit_g_shell_emit_state[i] = 0;
+    }
+    for (v = 0; v < adts[adi].nvariants; v++) {
+        for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+            for (i = 0; ((i < n) && (i < MAX_LAYOUT_INSTS)); i++) {
+                if ((!type_needs_layout(adts[adi].variants[v].fields[f].type, ins[i].name))) {
+                    continue;
+                }
+                if (shell_preemit(self, i, 0) != 0) {
+                    return (-1);
+                }
+            }
+        }
+    }
+    return 0;
+}
 static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int with_semi) {
     int adi;
     int v;
     int f;
+    int i;
     struct frontend_sym_Adt * adts;
     int nadts;
     const char * tag;
@@ -8411,6 +8652,18 @@ static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int
     adts = frontend_sym_ct_adts((&nadts));
     if ((((!adts) || (adi < 0)) || (adi >= nadts))) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
+    }
+    for (i = 0; i < MAX_LAYOUT_ADTS; i++) {
+        backend_emit_g_adt_layout_state[i] = 0;
+    }
+    for (i = 0; i < MAX_LAYOUT_INSTS; i++) {
+        backend_emit_g_inst_layout_state[i] = 0;
+    }
+    if (adt_layout_closure(self, adi, 0) != 0) {
+        return (-1);
+    }
+    if (preemit_adt_payload(self, adi) != 0) {
+        return (-1);
     }
     is_typedef = ((self->arena->nodes[n].aux & 1) ? 1 : 0);
     tag = adts[adi].full;

@@ -2399,6 +2399,13 @@ static int emit_generic_defs(struct Emitter *self, int u)
    the block is therefore absent from every non-atomic product. */
 
 
+/* LANG-29 S1 / B1: the writer whose types are being emitted and whether it is
+   the header writer, so the ADT payload pre-emission knows if an instance
+   definition is already visible through an included header. Declared before
+   `emit_unit_body`, which runs before the emit helpers below. */
+static int g_shell_u = -1;
+static int g_shell_header;
+
 /* P-7.2: the parser's slice-use flag. It lives as a file-scope pointer rather
    than in `struct Emitter` (that struct is at the build's 64-field cap), and
    is declared up here because `emit_unit_body` runs before the bind at the end
@@ -2725,6 +2732,11 @@ static int emit_unit_body(struct Emitter *self, int u)
 {
     int n, i;
 
+    /* LANG-29 S1 / B1: the type writer runs per unit; record which unit and
+       which product so the ADT payload pre-emission places each shell once. */
+    g_shell_u = u;
+    g_shell_header = 0;
+
     /* SH-111: the same pre-emission assertion as compile mode, per unit. It
        runs before the banner, so a refusal leaves no half-written product. */
     if (self->invariant_check(self->units[u].prog) != 0) return -1;
@@ -2936,6 +2948,11 @@ static int emit_unit_body(struct Emitter *self, int u)
 static int write_unit_header_body(struct Emitter *self, int u, const char *guard)
 {
     int n, i, pp;
+
+    /* LANG-29 S1 / B1: this is the header writer; the instance shells a pub
+       ADT needs may have to land in this header rather than the matching .c. */
+    g_shell_u = u;
+    g_shell_header = 1;
 
     fprintf(self->out, "#ifndef %s\n", guard);
     fprintf(self->out, "#define %s\n", guard);
@@ -3846,10 +3863,240 @@ static void emit_slice_helpers(struct Emitter *self)
 
 
 
+/* LANG-29 S1 / B1: the ADT payload layout closure.
+ *
+ * A payload is stored by value, so a concrete generic instance it names
+ * (`Vec<N>` / `Map<String, N>`) must be a complete type when the union is
+ * written. The instance writer (`emit_struct_insts`) runs after every plain
+ * type, so without this walk the ADT would hold an incomplete `struct Vec_N`.
+ * The walk pre-emits exactly the instance *shell* -- the struct definition --
+ * before the ADT, in dependency order; the instance bodies (its methods and
+ * helpers) and `MapEntry_*` stay in their usual place, and the shared
+ * `emitted` flag keeps the later writer from repeating the definition.
+ *
+ * A by-value cycle (direct self reference, mutual reference, or a cycle that
+ * only closes through an instance field) is not lawfully laid out by C: it is
+ * refused here instead of leaving invalid C. A chain longer than the depth
+ * limit is refused for the same reason a recursive walk needs a bound. A
+ * pointer field (`N *next`) is not a layout dependency, so it is skipped.
+ *
+ * `g_shell_u` / `g_shell_header` name the writer that is running. An instance
+ * the template owner's header already defines is not repeated here; when the
+ * owner's header is the one being written, it is not visible yet and the shell
+ * must be emitted. Caps mirror the registry caps (`MAX_ADTS` 64,
+ * `MAX_STRUCT_INSTS` 128). */
+#define MAX_LAYOUT_DEPTH 32
+#define MAX_LAYOUT_ADTS 64
+#define MAX_LAYOUT_INSTS 128
+
+static int g_adt_layout_state[MAX_LAYOUT_ADTS];
+static int g_inst_layout_state[MAX_LAYOUT_INSTS];
+static int g_shell_emit_state[MAX_LAYOUT_INSTS];
+
+/* 1 when `type` names `struct <name>` by value, so the named layout must be
+   complete before a field of `type` can be written. A pointer field, an array
+   of pointers and a function-pointer parameter need only a forward
+   declaration, so they are not dependencies. */
+static int type_needs_layout(const char *type, const char *name)
+{
+    char pat[MAX_TEXT];
+    const char *p, *q;
+    size_t n;
+
+    if (!type || !type[0] || !name || !name[0]) return 0;
+    if (strchr(type, '*') || strchr(type, '(')) return 0;
+    snprintf(pat, sizeof pat, "struct %s", name);
+    n = strlen(pat);
+    for (p = strstr(type, pat); p; p = strstr(p + 1, pat)) {
+        if (p != type && p[-1] != ' ' && p[-1] != '(') continue;
+        q = p + n;
+        if (*q != 0 && *q != ' ' && *q != '[' && *q != ',') continue;
+        return 1;
+    }
+    return 0;
+}
+
+/* The instance a by-value type spelling names, or -1. */
+static int type_inst_index(const char *type)
+{
+    int i, n;
+    struct StructInst *ins;
+
+    ins = frontend::sym::ct_insts(&n);
+    if (!ins) return -1;
+    for (i = 0; i < n && i < MAX_LAYOUT_INSTS; i++)
+        if (type_needs_layout(type, ins[i].name)) return i;
+    return -1;
+}
+
+static int adt_layout_closure(struct Emitter *self, int adi, int depth);
+static int inst_layout_closure(struct Emitter *self, int ii, int depth);
+
+/* One by-value type edge: an ADT or an instance, else nothing. */
+static int type_layout_closure(struct Emitter *self, const char *type, int depth)
+{
+    int ai, ii;
+
+    if (!type || !type[0] || strchr(type, '*') || strchr(type, '(')) return 0;
+    ai = frontend::sym::ct_adt_from_type(type);
+    if (ai >= 0) return adt_layout_closure(self, ai, depth);
+    ii = type_inst_index(type);
+    if (ii >= 0) return inst_layout_closure(self, ii, depth);
+    return 0;
+}
+
+static int adt_layout_closure(struct Emitter *self, int adi, int depth)
+{
+    int v, f, nadts;
+    struct Adt *adts;
+    char msg[MAX_TEXT];
+
+    adts = frontend::sym::ct_adts(&nadts);
+    if (!adts || adi < 0 || adi >= nadts || adi >= MAX_LAYOUT_ADTS) return 0;
+    if (depth > MAX_LAYOUT_DEPTH) {
+        snprintf(msg, sizeof msg,
+                 "a by-value ADT payload nests deeper than %d; use a pointer or a container",
+                 MAX_LAYOUT_DEPTH);
+        return self->fail(msg);
+    }
+    if (g_adt_layout_state[adi] == 2) return 0;
+    if (g_adt_layout_state[adi] == 1) {
+        snprintf(msg, sizeof msg,
+                 "ADT '%s' is recursive by value; store a pointer or a container instead",
+                 adts[adi].name);
+        return self->fail(msg);
+    }
+    g_adt_layout_state[adi] = 1;
+    for (v = 0; v < adts[adi].nvariants; v++)
+        for (f = 0; f < adts[adi].variants[v].nfields; f++)
+            if (type_layout_closure(self, adts[adi].variants[v].fields[f].type,
+                                    depth + 1) != 0)
+                return -1;
+    g_adt_layout_state[adi] = 2;
+    return 0;
+}
+
+/* An instance's fields are concrete C spellings, so a by-value edge to another
+   instance is walked the same way; a self edge is a layout cycle. */
+static int inst_layout_closure(struct Emitter *self, int ii, int depth)
+{
+    int ti, j, n;
+    struct StructInst *ins;
+    char msg[MAX_TEXT];
+
+    ins = frontend::sym::ct_insts(&n);
+    if (!ins || ii < 0 || ii >= n || ii >= MAX_LAYOUT_INSTS) return 0;
+    if (depth > MAX_LAYOUT_DEPTH) {
+        snprintf(msg, sizeof msg,
+                 "a by-value ADT payload nests deeper than %d; use a pointer or a container",
+                 MAX_LAYOUT_DEPTH);
+        return self->fail(msg);
+    }
+    if (g_inst_layout_state[ii] == 2) return 0;
+    if (g_inst_layout_state[ii] == 1) {
+        snprintf(msg, sizeof msg,
+                 "generic instance '%s' is recursive by value; store a pointer instead",
+                 ins[ii].name);
+        return self->fail(msg);
+    }
+    g_inst_layout_state[ii] = 1;
+    ti = self->sym->find_struct(ins[ii].name);
+    if (ti >= 0) {
+        for (j = 0; j < self->sym->structs[ti].nfields; j++)
+            if (type_layout_closure(self, self->sym->structs[ti].fields[j].type,
+                                    depth + 1) != 0)
+                return -1;
+    }
+    g_inst_layout_state[ii] = 2;
+    return 0;
+}
+
+/* 1 when this writer must print the instance definition: its template owner's
+   header already carries it otherwise. */
+static int shell_owned_here(struct Emitter *self, int ii)
+{
+    int tmpl, tn, n, already;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+
+    ins = frontend::sym::ct_insts(&n);
+    tps = frontend::sym::ct_tmpls(&tn);
+    if (!ins || !tps || ii < 0 || ii >= n) return 0;
+    tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
+    if (tmpl < 0) return 0;
+    already = tps[tmpl].is_pub && tps[tmpl].owner >= 0
+              && self->units[tps[tmpl].owner].is_hdr
+              && !inst_elem_foreign(self, ii);
+    /* The owner's header is included before the types, except when it is the
+       file being written now: that definition has not been reached yet. */
+    if (already && g_shell_header && tps[tmpl].owner == g_shell_u) already = 0;
+    if (already) return 0;
+    if (g_shell_u < 0) return 1;
+    return ins[ii].owner == g_shell_u;
+}
+
+/* Emit `ii`'s shell after the shells its own by-value fields need. */
+static int shell_preemit(struct Emitter *self, int ii, int depth)
+{
+    int ti, j, n;
+    struct StructInst *ins;
+    char msg[MAX_TEXT];
+
+    ins = frontend::sym::ct_insts(&n);
+    if (!ins || ii < 0 || ii >= n || ii >= MAX_LAYOUT_INSTS) return 0;
+    if (depth > MAX_LAYOUT_DEPTH) {
+        snprintf(msg, sizeof msg,
+                 "a by-value ADT payload nests deeper than %d; use a pointer or a container",
+                 MAX_LAYOUT_DEPTH);
+        return self->fail(msg);
+    }
+    if (g_shell_emit_state[ii] == 2) return 0;
+    if (g_shell_emit_state[ii] == 1) {
+        snprintf(msg, sizeof msg,
+                 "generic instance '%s' is recursive by value; store a pointer instead",
+                 ins[ii].name);
+        return self->fail(msg);
+    }
+    g_shell_emit_state[ii] = 1;
+    ti = self->sym->find_struct(ins[ii].name);
+    if (ti >= 0) {
+        for (j = 0; j < self->sym->structs[ti].nfields; j++) {
+            int dep = type_inst_index(self->sym->structs[ti].fields[j].type);
+            if (dep >= 0 && shell_preemit(self, dep, depth + 1) != 0) return -1;
+        }
+    }
+    if (!ins[ii].emitted && shell_owned_here(self, ii))
+        if (inst_emit_one(self, ii) != 0) return -1;
+    g_shell_emit_state[ii] = 2;
+    return 0;
+}
+
+/* Pre-emit every instance shell the ADT's payload names by value. */
+static int preemit_adt_payload(struct Emitter *self, int adi)
+{
+    int v, f, i, n, nadts;
+    struct Adt *adts;
+    struct StructInst *ins;
+
+    adts = frontend::sym::ct_adts(&nadts);
+    ins = frontend::sym::ct_insts(&n);
+    if (!adts || !ins || adi < 0 || adi >= nadts) return 0;
+    for (i = 0; i < n && i < MAX_LAYOUT_INSTS; i++) g_shell_emit_state[i] = 0;
+    for (v = 0; v < adts[adi].nvariants; v++)
+        for (f = 0; f < adts[adi].variants[v].nfields; f++)
+            for (i = 0; i < n && i < MAX_LAYOUT_INSTS; i++) {
+                if (!type_needs_layout(adts[adi].variants[v].fields[f].type,
+                                       ins[i].name))
+                    continue;
+                if (shell_preemit(self, i, 0) != 0) return -1;
+            }
+    return 0;
+}
+
 /* `with_semi` is accepted for signature parity with the type writer. */
 static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi)
 {
-    int adi, v, f;
+    int adi, v, f, i;
     struct Adt *adts;
     int nadts;
     const char *tag;
@@ -3861,6 +4108,12 @@ static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi)
     adts = frontend::sym::ct_adts(&nadts);
     if (!adts || adi < 0 || adi >= nadts)
         return self->fail_from(n, "the ADT row is missing");
+    /* LANG-29 S1 / B1: refuse a layout that cannot close, then write the
+       instance shells its payload holds before the union. */
+    for (i = 0; i < MAX_LAYOUT_ADTS; i++) g_adt_layout_state[i] = 0;
+    for (i = 0; i < MAX_LAYOUT_INSTS; i++) g_inst_layout_state[i] = 0;
+    if (adt_layout_closure(self, adi, 0) != 0) return -1;
+    if (preemit_adt_payload(self, adi) != 0) return -1;
     is_typedef = (self->arena->nodes[n].aux & 1) ? 1 : 0;
     tag = adts[adi].full;
     alias = self->arena->nodes[n].text2;
@@ -7185,6 +7438,8 @@ impl EmitOps for Emitter {
         self->errmsg[0] = 0;
         self->failline = 0;
         self->cur_unit = -1;
+        g_shell_u = -1;
+        g_shell_header = 0;
         /* SH-111: assert the lowering invariants before the first byte is
            written. A legal program cannot fail this; a failure means the
            parser/lowering built an AST the emitter's contract does not cover. */
