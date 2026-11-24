@@ -117,7 +117,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 - 先做 inventory（v0-PH-85）：哪些旧写法可用新特性替代、预计行数/风险；不“为用而用”；
 - 每批任务保持：自举不动点、全量语料生成 C 不变、行为等价；
 - **不依赖函子签名**（D4 已定）：检查器用既有闭包 / trait / 函数指针表达；
-  S4 函子仍留 v1.1+ Wave 2；
+  S4 函子并入 `v1-PH-2` S3（2026-11-25 改判）；
 - 出口：源码可读性/重复度指标改善；无用户可见变化；独立回退。
 
 ### 2.3 v1-pre 重写 train（v0-PH-84…88，D1/D3 已定）
@@ -168,7 +168,7 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 - v1.0 承诺的是“**检查器可信**”（证据达标）与“默认可见”（`warn`），不是“默认强制”；
   v1.1 S3 才把默认升级为 `error`；
 - 若 v1-pre 窗口证据不足，落到“可用但不默认”（D 回退），因机制已就位，顺延零成本；
-- 普通 C 兼容模式始终保留；全局默认 strict 仍留 v2.0 讨论。
+- 普通 C 兼容模式保留；v1.2 起 **C 边界默认 strict**（V1 欠账：收回 v0-PH-65 的 pre-1.0 四目录豁免），C 互操作必须显式 allow（manifest / CLI / `.m.ct` / shim）。
 
 ### 2.5 A 的“工业级”定位
 
@@ -243,8 +243,18 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.1 异步 / DMA 生命周期契约 | `v1-PH-1` | v1.1 train | 并入 DOC-91：提交即转移、完成即归还、ISR 可调用集、回调上下文；证据仍归 TEST-22（hardware-gated） |
 | v1.1 C 互操作语义矩阵 | `v1-PH-1` | v1.1 train | 并入 guide 附录，逐项给 Ct 行为、边界与权威节；不新建平行规范（[DOC-92](../../issues/docs/doc-92-c-interop-semantics-matrix.md)） |
 | v1.1 JSON 诊断 parse 通道 | `v1-PH-1` | v1.1 train | parse 错误输出与 warning/type 同构的 JSON；稳定 code 不在本项（[LANG-10](../../issues/lang/lang-10-machine-readable-diagnostics.md)） |
-| v1.2 诊断 code registry | `v1-PH-2` | v1.2 train | 稳定 `E-*`/`W-*` code + registry；与 JSON 通道分开（[LANG-25](../../issues/lang/lang-25-diagnostic-code-registry.md)） |
-| v1.2 Typed/Lowered IR | `v1-PH-2` | v1.2 train | 完整 IR + 统一清理 CFG；先设计后实施，不进入 v1.0/v1.1 门禁（[SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md)） |
+| v1.2 诊断 code registry | `v1-PH-2 / S0` | v1.2 train | 稳定 `E-*`/`W-*` code + registry；与 JSON 通道分开（[LANG-25](../../issues/lang/lang-25-diagnostic-code-registry.md)） |
+| v1.2 Typed/Lowered IR | `v1-PH-2 / S1 + S8` | v1.2 train | **LIR 先行**：S1 是总闸（TIR 视图 + LIR + 清理 CFG + 验证器）；S8 做 emitter 契约、语义图与自举切换（[SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md)） |
+| v1.2 小欠账 | `v1-PH-2 / S0` | v1.2 train | ABI-3 / ABI-4 缺陷、CI-1 / CI-2 两个 nightly job、文档纠偏；缺陷可独立切 `v1.1.1` |
+| v1.2 下标协议完整化 | `v1-PH-2 / S2` | v1.2 train | REQ-JSACCESS-1 → REQ-INDEX-1：参数类型匹配、读写/借写、`+=`/`++`/`&` 二值化 |
+| v1.2 函子签名糖 | `v1-PH-2 / S3` | v1.2 train | `(A,B) => R`；先 ADR，再实现；原定 v1.1+ Wave 2（2026-11-25 改判） |
+| v1.2 ADT 模式扩展 | `v1-PH-2 / S4–S6` | v1.2 train | 字面量/嵌套/结构体 → or/守卫 → 泛型 ADT；泛型 ADT 放最后 |
+| v1.2 检查器深化 | `v1-PH-2 / S7` | v1.2 train | REQ-TYPE-1、REQ-MEM-2、P-1.3 迁移 lint；REQ-MEM-1 只复评 |
+| v1.2 全局默认 strict（V1 欠账） | `v1-PH-2 / S9` | v1.2 train | 默认翻转；`selfhost/`、`lib/core/` 迁到边界单元并零 allow；`examples`/`test` 能迁则迁、C 互操作用例显式 allow；`ct migrate` 为旧包写 `c-boundary = allow` |
+
+> **v1-PH-2 已开卡（2026-11-25，规划中）**：所有者同日裁定**不再单开 v1.3/v1.4/v1.5**，
+> 存量欠账全部折进 [卡 §2](../phases/v1-PH-2/card.md) 的 S0–S10，**LIR 先行（S1 总闸）**，
+> 整卡只 bump 一次 `v1.2.0`。
 
 > **v1-PH-1 已开卡（2026-11-24，规划中）**：施工清单以
 > [卡 §2](../phases/v1-PH-1/card.md) 为准。本表里 SH-111 / SH-112 / SH-113 / SH-114、
@@ -295,8 +305,9 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 3. 开 `v0-PH-85`（v0.85.0）：inventory + 单切片 spike（门）+ M0 粗切 + A 机制接线；
 4. 依次开 `v0-PH-86` 词法器（✅ v0.86.0）、`v0-PH-87` 解析+检查（✅ v0.87.0；`match` 字面项随 v0-PH-88 的自举搬迁落地）、`v0-PH-88` 发射器+回环（✅ v0.88.0；v1-pre 收口）；
 5. 开 `v1-PH-0`（v1.0），先定 seed，再退 L1/L2；
-6. 开 `v1-PH-1 / S1`（M1 精细切分）→ `S2`（A 默认强制）；
-7. v2.0 再讨论全局默认 strict。
+6. 开 `v1-PH-1 / S1`（M1 精细切分）→ `S2`（A 默认强制）（✅ v1.1.0）；
+7. 开 `v1-PH-2`（v1.2，单卡 S0–S10）：小欠账 → IR-1（总闸）→ 下标协议 → 函子 → ADT 模式 → 检查器 → IR-2 → strict profile → 收口；
+8. 全局默认 strict 在 v1.2 收回 v0-PH-65 的 pre-1.0 豁免并翻转默认；C 互操作改显式 allow，本路线到 `v1.2.0` 为止。
 
 不建议把“去旧代码”“语法重写”“A 全量检查”塞进同一个 phase。
 
@@ -311,7 +322,7 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | D1 | 重写是否提前到 v1.0 | 提前，v1.0 发布“两级自举 + 自证语法” | **已定**：ADT 先行（v0-PH-84），重写为 v1-pre（v0-PH-85…88），不进 v1.0、不推 v1.1 | — |
 | D2 | A strict 与 v1.0 | 是（G4） | **已定 B+**：机制 v0-PH-85 接线；**下一 v0.x 起 CLI 默认 `warn`（SH-115，不等 v1-pre）**；证据 FP=0 为 v1.0 硬门禁；v1.1 S2 视证据升 `error`，不足则回退“可用不默认” | — |
 | D3 | ADT/match 是否插入战役 | 可选先行，不阻塞 | **已定 B（A 范围）**：v0-PH-84 先做最小 ADT/match；泛型/or/嵌套留 v1.1+ | — |
-| D4 | 重写是否可用函子签名 | 检查器用“闭包 + 函子” | **已定 A**：不依赖函子；用既有闭包/trait/函数指针；S4 仍留 v1.1+ Wave 2 | — |
+| D4 | 重写是否可用函子签名 | 检查器用“闭包 + 函子” | **已定 A**：不依赖函子；用既有闭包/trait/函数指针；S4 仍留 v1.1+ Wave 2（**2026-11-25 改判：并入 `v1-PH-2` S3**） | — |
 | D5 | hard deadline ≤6 phase | 建议 6 | **已定 A**：不设 deadline；失败就地停，不用时间/phase 数倒逼范围 | — |
 | D6 | 重写期主线是否冻结 | 倾向不冻结 + 切片 rebase | **已定 A**：v0-PH-85–88 主线只收 bugfix，新特性暂停；切片独占合入 | — |
 | D7 | G7 页首版本注入 | 页首注入版本 | **已定 A**：版本只注入 README/生成物，spec 页首保持 DOC-63；能力→节号断言进 check-docs（V1-C6） | — |

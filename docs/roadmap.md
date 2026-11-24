@@ -104,7 +104,7 @@
 | Phase 88 | v1-pre：发射器重写 + 扩展自举回环（轮数参数化） | ✅ 完成（v0.88.0；S88a–S88d，E88-1…8 见卡 §7；发射器 76 个 kind 切片 + 判别式单读；fixpoint 日常 2 / tag 前 3 轮；字面 `match` 按 battle/p88-emit-match 承接 `v1-PH-0` seed cutover） | v0.88.0 | [卡](phases/v0-PH-88/card.md) · [battle](../battle/p88-emit-match/verdict.md) · [度量](history/p88_metrics.md) · [v1-pre 证据](history/v1-pre-evidence.md) · [v1 路线 §2.3](planning/v1-release-plan.md) |
 | `v1-PH-0` | v1.0 收口（ct-ast 构建/安装改走 **seed = 冻结 ct-ast 生成的 C**，D-022 已定；L1/L2 降为回归 oracle、v1.0 不删；**A 证据 FP=0 硬门禁**；前置 goldens 静态化 + J-6 台账；在 v0-PH-88 之后） | ✅ 完成（v1.0.0；seed cutover + 字面 match + 13 门） | v1.0.0（MAJOR） | [卡](phases/v1-PH-0/card.md) · [D-022](decisions/D-022.md) · [v1 路线](planning/v1-release-plan.md) · [编号提案](proposals/phase-numbering-major-reset.md) |
 | `v1-PH-1` | v1.1：S1 M1 精细切分 + SH-94 → S2 LANG-26 剩余 / **ADT-match 完整化（LANG-29）** → S3 A 默认 `error` + TEST-23 → S4 删 `box` 别名与收口 | ✅ 完成（v1.1.0；S0–S4） | v1.1.0 | [卡](phases/v1-PH-1/card.md) · [DOC-99](../issues/docs/doc-99-v11-prework-tracker.md) · [v1 路线](planning/v1-release-plan.md) |
-| `v1-PH-2` | v1.2 Typed/Lowered IR：先设计后实施（TIR/LIR、统一清理 CFG、emitter 契约、不变量验证器、语义依赖图） | 🗺️ 规划中（**设计验收完成、未实施**，D-026） | v1.2.0（拟） | [提案](proposals/typed-lowered-ir.md) · [D-026](decisions/D-026.md) · [SH-112](../issues/selfhost/sh112-typed-ir-architecture.md) · [v1 路线](planning/v1-release-plan.md) |
+| `v1-PH-2` | v1.2：**LIR 先行**（S1 总闸）+ 历史欠账清零（小欠账、下标协议、函子、ADT 模式、检查器、**全局默认 strict**）；单卡 S0–S10，只 bump 一次 MINOR | ⬜ 规划中（已开卡；设计来源 D-026；2026-11-25 所有者裁定不再单开 v1.3–v1.5） | v1.2.0（拟） | [卡](phases/v1-PH-2/card.md) · [提案](proposals/typed-lowered-ir.md) · [D-026](decisions/D-026.md) · [需求池](planning/requirements-pool.md) |
 | `HW-1` | **真板 pilot**（REQ-HW-020：真实板卡 + 厂商 HAL + RTOS；含 [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) DMA 真实搬运） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [需求](planning/hardware-readiness-requirements.md) · [TEST-22](../issues/testing/test22-dma-real-transfer-hardware-gated.md) |
 | `HW-2` | **第二厂商真板**（nRF52840 / RP2040 的烧录、调试与电气验证） | ⬜ 外部依赖（无硬件，不阻塞开发） | — | [v0-PH-67 卡](phases/v0-PH-67/card.md) · [TEST-21](../issues/testing/test21-baremetal-renode-stm32f4.md) |
 
@@ -113,7 +113,8 @@
 > 不占 phase 号，见 [blockers](planning/phase-migration-blockers.md)。
 
 > **指针退场（v0.78–v0.82）**：v0-PH-78 S2 `ref/out` → v0-PH-79 S3 切片 → v0-PH-80 S5 `String/Str`
-> → v0-PH-81 S1 `Box/new`；S2 ∥ S3 可并行准备，单卡纪律先开 S2；S4 函子延后 v1.1+ Wave 2。
+> → v0-PH-81 S1 `Box/new`；S2 ∥ S3 可并行准备，单卡纪律先开 S2；S4 函子并入 `v1-PH-2` S3
+> （原定 v1.1+ Wave 2；2026-11-25 所有者改判：不单开 phase）。
 > v0-PH-78 已收口（v0.78.0 / fix v0.78.1），v0-PH-79 已收口（v0.79.0）；
 > v0-PH-80 已收口（v0.80.4；S5a 内建层 + S5b 删旧 `str` 与消费者迁移，E80-7 通过；SH-102 自动 retain R1–R7 修复，D-015 口径）；
 > v0-PH-82 已收口（v0.82.0；`leaks` 两档、直接环告警、`allow-cycle`、树模式；E82-1…8）；v0-PH-83 已收口（v0.83.0；契约 v1 / `ct index verify` / conformance / Linux x64 产物，E83-1…8；D-014）。
@@ -199,8 +200,8 @@ v0-PH-61 已被 v0-PH-62 吸收。**本轮不重排既有编号**；版本位与
 
 ### 未排期（治理项）
 
-- **增量编译基准**：build cache 已有（Phase 10.5 的 cold/warm 与依赖失效），先在 Phase 36 收口提交上测冷/热构建与内核规模语料，再决定是否立项。
-- **稳定子集清单**：Z6 的 1.0 冻结原则已有，补 trait / Drop / arena 的具体清单，属文档治理，不占 Phase 编号。
+- **增量编译基准**：并入 [`v1-PH-2` S9](phases/v1-PH-2/card.md) 的收口证据——冷/热构建各测一次并记录，不单独立项。
+- **稳定子集清单**：已由 [stable-subset.md](stable-subset.md) 交付，无待办。
 
 ### 外部计划（不在本仓）
 
