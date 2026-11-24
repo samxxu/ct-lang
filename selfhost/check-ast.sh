@@ -865,6 +865,16 @@ else
     bad "p84/layout" "$(cat "$work/p84lay.out" "$work/p84lay.err" | head -5)"
 fi
 
+# LANG-29 S1 (B1): an ADT whose payload names a concrete generic instance
+# (`Vec<N>`, `Map<String, N>`) gets the instance shell pre-emitted before its
+# layout; a by-value self / mutual reference and a nesting past the limit are
+# refused. The positive fixture is 299_adt_recursive.
+if bash test/ast/l29b1_recursive.sh "$work/ct-ast" >"$work/l29b1.out" 2>"$work/l29b1.err"; then
+    ok "l29b1/adt-recursive"
+else
+    bad "l29b1/adt-recursive" "$(cat "$work/l29b1.out" "$work/l29b1.err" | head -8)"
+fi
+
 # PH-84 S84d (E84-8): the ADT / `match` documentation is in the spec, the
 # tutorial and the patterns rewrite sample, and the freeze list is registered.
 if bash test/ast/p84_docs.sh >"$work/p84doc.out" 2>"$work/p84doc.err"; then

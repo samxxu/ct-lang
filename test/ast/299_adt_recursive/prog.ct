@@ -1,0 +1,42 @@
+/* 299 (LANG-29 S1 / B1): an ADT whose payload holds the containers of its own
+   type. The union stores the container handle by value, so the concrete
+   instance shell (`struct Vec_N`, `struct Map_String_N`) must be a complete
+   type before `struct N`; the emitter pre-emits exactly those shells and keeps
+   the instance bodies and `MapEntry_String_N` after the ADT.
+
+   The program exercises both recursive containers, reads a payload back out of
+   each, and returns the same answer whether the layout order is right (the
+   point) or the C refuses to compile (the defect). */
+#include <stdio.h>
+
+enum N {
+    Nil(),
+    Arr(Vec<N> v),
+    Obj(Map<String, N> v),
+}
+
+int main(void)
+{
+    Vec<N> arr;
+    Map<String, N> obj;
+    N a;
+    N o;
+    Str key = "k";
+
+    arr.h = 0;
+    obj.h = 0;
+    arr.push(N.Nil());
+    arr.push(N.Arr(arr));
+    obj.put(key, N.Nil());
+    a = N.Arr(arr);
+    o = N.Obj(obj);
+    match (a) {
+        N.Arr(v) => { printf("arr %d %d\n", v.len(), v.get(0).tag); }
+        _ => { printf("arr unexpected\n"); }
+    }
+    match (o) {
+        N.Obj(m) => { printf("obj %d %d\n", m.len(), m.get(key) != 0); }
+        _ => { printf("obj unexpected\n"); }
+    }
+    return 0;
+}
