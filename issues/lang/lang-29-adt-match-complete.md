@@ -7,7 +7,7 @@
 | 严重度 | **High** |
 | 锚点 | `4eb1e4e0`（2026-11-24） |
 | 依据 | [D-021](../../docs/decisions/D-021.md) B1–B8；[P-4 重评](../../docs/reviews/2026-11-24-json-tree-b-reeval.md)；[LANG-28](lang-28-json-tree-b.md)（树存储结论：维持 A） |
-| 状态 | open |
+| 状态 | verified |
 | 处置证据 | **accepted（2026-11-24 所有者：完整 ADT/match 是 v1.1 必做项，扫清障碍）** |
 
 ## 1. 与 LANG-28 / P-4 的关系
@@ -78,3 +78,8 @@ B8（`Int(long long)` / `Double(double)` / `Result<T, E>` / `_Bool` ABI）随 S1
 - [LANG-28](lang-28-json-tree-b.md)（树存储 rejected；语言面由本条承接）
 - [LANG-27](lang-27-container-cascade.md)（容器级联，已 verified）
 - [v1-PH-1](../../docs/phases/v1-PH-1/card.md)（S2b）
+
+
+## 复核（REV，2026-11-24）
+
+B1（预发射递归实例壳）/B3（payload retain-release glue）/B2（ADT 固有方法/下标/多级链）/B5（表达式 match + yield）/B4（map binding 第三查找源）全部落地；l29b1 13/0、l29b2 16/0、l29b3 14/0、l29b5 13/0、l29b4 13/0；check-all 9 门、sanitizers 613、check-seed 两轮、check-docs 绿。B7/B6 不在本卡。
