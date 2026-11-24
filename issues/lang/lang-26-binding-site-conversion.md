@@ -7,7 +7,7 @@
 | 严重度 | Medium |
 | 锚点 | v0.88.3（2026-11-22） |
 | 依据 | [REQ 卡评估](../../docs/reviews/2026-11-22-req-node-conversion-protocol-eval.md) |
-| 状态 | deferred |
+| 状态 | verified |
 | 处置证据 | **accepted（v1.1；先 ADR；容量按 SH-109 动态增长，不再受 501/512 约束）** |
 
 ## 现象
@@ -102,3 +102,10 @@ v1.1 切片已落：声明/赋值/`return` 三类绑定点 + `as<T>`/`.to<T>()` 
 - 产出：D-020 的增量段落（或卡内一条“无需新 ADR”的结论 + 理由）；
 - 验收：剩余三项各有一句明确结论；`check-docs` 绿；**零代码、零版本移动**；
 - 非目标：实现 `out` 写回 / `decode<T>` / 开关（归 v1.1 MINOR）；不改 spec 正文。
+
+
+## 复核（REV，2026-11-24）
+
+`out` 写回转换、`CT_BINDING_CONVERSION=0` 开关与 `decode<T>` 边界探针已落；`lang26_conv` 18/0，
+生成 C 与显式调用一致，`p118` 0 B 诊断，check-all 13 门、sanitizers 600、seed gate 13 绿。
+剩余自动字段映射/稳定诊断码归后续，不阻塞本卡验收。
