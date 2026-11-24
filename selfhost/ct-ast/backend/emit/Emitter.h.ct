@@ -757,6 +757,9 @@ static int sb_rhs_fresh(struct Emitter *self, int n)
     if (k == N_ADTCTOR) return 1;
     /* the postfix `?` hands its payload over (it clears the carrier) */
     if (k == N_TRY) return 1;
+    /* LANG-29 S4 / B5: an expression match hands over the value its result
+       temporary already owns; the temporary is raw C, so no release follows. */
+    if (k == N_MATCH) return 1;
     if (k == N_CAST) return sb_rhs_fresh(self, self->arena->nodes[n].a);
     return 0;
 }
@@ -1409,7 +1412,13 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX
         && k != N_DEREF && k != N_SLICE_INDEX) return 0;
     g_sb.hitparam = 0;
-    if (sb_expr_type(self, lhs, t, sizeof t) != 0) return 0;
+    if (sb_expr_type(self, lhs, t, sizeof t) != 0) {
+        /* LANG-29 S4 / B5: the expression-match result temporary is declared
+           by the compiler's own statement expression, so it is not in the
+           symbol table; the parser stamped its type on the assignment. */
+        if (!(k == N_VAR && self->arena->nodes[n].text[0])) return 0;
+        snprintf(t, sizeof t, "%s", self->arena->nodes[n].text);
+    }
     kind = frontend::sym::ct_is_string_value_type(t);
     /* LANG-29 S2 / B3: rebinding an owning ADT follows the same contract as a
        String rebind (hold the old value, retain or move the source, release
@@ -4476,7 +4485,10 @@ static int emit_match_arm(struct Emitter *self, int arm, int ind, int k, int ptr
     (void)nadts;
     b = self->arena->nodes[arm].b;
     if (b < 0) return self->fail_from(arm, "the match arm has no body");
-    if (self->arena->nodes[arm].aux) return self->emit_node(b, ind);
+    /* LANG-29 S4 / B5: bit 1 is the wildcard; bit 2 marks an expression-match
+       arm (whose block carries the yield assignment), so only bit 1 skips the
+       binding prefix. */
+    if (self->arena->nodes[arm].aux & 1) return self->emit_node(b, ind);
     first = -1;
     last = -1;
     for (i = self->arena->nodes[arm].a; i >= 0; i = self->arena->nodes[i].next) {
@@ -6862,6 +6874,79 @@ static int em_node_foreach(struct Emitter *self, int n, int ind, int nk)
     fputs("}\n", self->out);
     self->emit_indent(ind);
     fputs("}\n", self->out);
+    return 0;
+}
+
+/* LANG-29 S4 / B5: `match` in expression position. The statement writer's
+   arm machinery is reused (bindings are injected into the arm's block, scope
+   release stays the block writer's), but the whole form is a GNU statement
+   expression with two temporaries: the subject (evaluated exactly once) and
+   the result. Each value arm assigns its `yield` expression to the result;
+   the final `__ct_mresN;` is the value the surrounding expression sees. The
+   name is patched here because the parser runs before the emitter's
+   temporary numbering. */
+static int match_expr_emit(struct Emitter *self, int n)
+{
+    int k, arm, narm, idx, ptr, tagi, self_deref;
+    char rtype[MAX_TEXT];
+    char rnorm[MAX_TEXT];
+    struct Adt *adts;
+    int nadts;
+
+    if ((self->arena->nodes[n].sflags & 8) == 0)
+        return self->fail_from(n, "a statement match is not an expression");
+    adts = frontend::sym::ct_adts(&nadts);
+    tagi = frontend::sym::ct_adt_find(self->arena->nodes[n].text);
+    if (!adts || tagi < 0 || tagi >= nadts)
+        return self->fail_from(n, "the ADT row is missing");
+    k = self->ntmp;
+    self->ntmp++;
+    ptr = self->arena->nodes[n].aux;
+    snprintf(rtype, sizeof rtype, "%s", self->arena->nodes[n].text2);
+    snprintf(rnorm, sizeof rnorm, "%s", rtype);
+    sb_norm_own_type(self, rnorm, sizeof rnorm);
+    fputs("({ ", self->out);
+    fprintf(self->out, "struct %s%s__ct_match%d = (", adts[tagi].full,
+            ptr ? " *" : " ", k);
+    self_deref = self->sym->self_mode
+        && self->arena->nodes[n].a >= 0
+        && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR
+        && strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0;
+    if (self_deref) fputs("*(_self)", self->out);
+    else if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
+    fputs("); ", self->out);
+    if (rnorm[0] && strcmp(rnorm, "void") != 0)
+        fprintf(self->out, "%s __ct_mres%d = (%s){0}; ", rnorm, k, rnorm);
+    narm = 0;
+    for (arm = self->arena->nodes[n].b; arm >= 0; arm = self->arena->nodes[arm].next)
+        narm++;
+    idx = 0;
+    for (arm = self->arena->nodes[n].b; arm >= 0;
+         arm = self->arena->nodes[arm].next, idx++) {
+        /* the parser's placeholder name -> this match's result temporary */
+        if (self->arena->nodes[arm].c >= 0) {
+            int asg = self->arena->nodes[arm].c;
+            int tv = self->arena->nodes[asg].a;
+            if (tv >= 0) {
+                char nm[32];
+                snprintf(nm, sizeof nm, "__ct_mres%d", k);
+                snprintf(self->arena->nodes[tv].text2, MAX_TEXT, "%s", nm);
+            }
+        }
+        if (idx < narm - 1) {
+            if (self->arena->nodes[arm].aux & 1)
+                return self->fail_from(arm, "a wildcard match arm must be the last arm");
+            fputs(idx == 0 ? "if (" : "else if (", self->out);
+            fprintf(self->out, "__ct_match%d%stag == %d) ",
+                    k, ptr ? "->" : ".", (int)self->arena->nodes[arm].num);
+        } else if (narm > 1) {
+            fputs("else ", self->out);
+        }
+        if (emit_match_arm(self, arm, 0, k, ptr) != 0) return -1;
+    }
+    if (rnorm[0] && strcmp(rnorm, "void") != 0)
+        fprintf(self->out, "__ct_mres%d; ", k);
+    fputs("})", self->out);
     return 0;
 }
 
@@ -9858,7 +9943,9 @@ impl EmitOps for Emitter {
             NodeKind.NK_NEWOBJ() => {
                 return em_expr_newobj(self, n, N_NEWOBJ);
             }
-            NodeKind.NK_MATCH() => { return self->fail_from(n, "unknown expression node"); }
+            NodeKind.NK_MATCH() => {
+                return match_expr_emit(self, n);
+            }
             NodeKind.NK_ARM() => { return self->fail_from(n, "unknown expression node"); }
             NodeKind.NK_BIND() => { return self->fail_from(n, "unknown expression node"); }
             NodeKind.NK_ADTCTOR() => {

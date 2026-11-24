@@ -4762,6 +4762,15 @@ impl ExprOps for Expr {
         int n, e, op;
         (void)self;
 
+        /* LANG-29 S4 / B5: `match (subject) { … }` in expression position.
+           The statement reader lives in the statement layer, which this unit
+           may not import (a cycle), so the parser's hook is asked twice: once
+           for the `match (...) {` lookahead, once for the reader. A bare
+           `match(x)` call or a variable named `match` keeps the old path. */
+        if (self->lex->tok == T_ID && self->lex->tok_is("match")
+            && self->st_hook != 0 && self->st_hook(3, 0) != 0)
+            return self->st_hook(2, 0);
+
         if (self->lex->tok == T_ID && (self->lex->tok_is("sizeof")
                                        || self->lex->tok_is("_Alignof")
                                        || self->lex->tok_is("alignof"))) {
@@ -10000,7 +10009,16 @@ impl ExprTypes for Expr {
                 NodeKind.NK_SLICE_RANGE() => { return -1; }
                 NodeKind.NK_SLICE_GET() => { return -1; }
                 NodeKind.NK_NEWOBJ() => { return -1; }
-                NodeKind.NK_MATCH() => { return -1; }
+                NodeKind.NK_MATCH() => {
+                /* LANG-29 S4 / B5: an expression match carries its unified arm
+                   type; the statement form still has none here. */
+                if ((self->arena->nodes[n].sflags & 8) != 0
+                    && self->arena->nodes[n].text2[0]) {
+                    snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text2);
+                    return 0;
+                }
+                return -1;
+            }
                 NodeKind.NK_ARM() => { return -1; }
                 NodeKind.NK_BIND() => { return -1; }
                 NodeKind.NK_ADTCTOR() => { return chk_type_static(self, n, out, cap); }

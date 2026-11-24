@@ -10,6 +10,7 @@
 #include "Expr.h"
 #include "Diag.h"
 #include "StmtRangeText.h"
+#include "TypeCheck.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
 #include <limits.h>
@@ -182,6 +183,7 @@ static int map_dup_key(struct frontend_parse_Stmt *, int *, int, int, char *, in
 static int parse_map_brace_init(struct frontend_parse_Stmt *, const char *, const char *, const char *, const char *);
 static int kw_paren_ahead(struct frontend_parse_Stmt *, const char *);
 static int stmt_owning_struct(struct frontend_parse_Stmt *, const char *);
+static void match_expr_type_key(const char *, char *, int);
 void frontend_parse_ct_stmt_bind(void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Stmt * frontend_parse_stmt_get(void);
 static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable };
@@ -988,7 +990,26 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
     int tail;
     int s;
     int base;
+    int arm_here;
+    int save_in_match_arm;
+    int save_yield_depth;
     (void)(_self);
+    arm_here = _self->match_arm_pending;
+    save_in_match_arm = _self->in_match_arm;
+    save_yield_depth = _self->yield_depth;
+    _self->match_arm_pending = 0;
+    _self->in_match_arm = arm_here;
+    if (arm_here) {
+        if (_self->yield_depth >= 16) {
+            _self->in_match_arm = save_in_match_arm;
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "match expressions are nested too deeply");
+        }
+        _self->yield_depth = (_self->yield_depth + 1);
+        _self->yield_expr[(_self->yield_depth - 1)] = (-1);
+        _self->yield_count[(_self->yield_depth - 1)] = 0;
+        _self->yield_line[(_self->yield_depth - 1)] = 0;
+        _self->yield_col[(_self->yield_depth - 1)] = 0;
+    }
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "{") != 0) {
         return (-1);
     }
@@ -1015,6 +1036,65 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
 {
         int prev_jump = 0;
         while (((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))))) {
+            if ((((_self->in_match_arm && (_self->yield_depth > 0)) && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "yield"))) {
+                int dep;
+                int yl;
+                int yc;
+                int ye;
+                dep = (_self->yield_depth - 1);
+                yl = _self->lex->tokline;
+                yc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+                if (_self->yield_count[dep] > 0) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    _self->in_match_arm = save_in_match_arm;
+                    _self->yield_depth = save_yield_depth;
+                    return tool_diag_ct_sem_error(yl, yc, "an expression-match arm yields exactly once", _self->mem->path);
+                }
+                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                _self->ex->assign_ok = 1;
+                _self->ex->try_ban++;
+                ye = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
+                _self->ex->try_ban--;
+                _self->ex->assign_ok = 0;
+                if (ye < 0) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    _self->in_match_arm = save_in_match_arm;
+                    _self->yield_depth = save_yield_depth;
+                    return (-1);
+                }
+                if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    _self->in_match_arm = save_in_match_arm;
+                    _self->yield_depth = save_yield_depth;
+                    return (-1);
+                }
+                _self->yield_expr[dep] = ye;
+                _self->yield_count[dep] = 1;
+                _self->yield_line[dep] = yl;
+                _self->yield_col[dep] = yc;
+{
+                    int yz = 0;
+                    if (((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, ye, _self->yield_type[dep], MAX_TEXT) != 0) && (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, ye, _self->yield_type[dep], MAX_TEXT, (&yz)) != 0))) {
+                        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                        _self->in_match_arm = save_in_match_arm;
+                        _self->yield_depth = save_yield_depth;
+                        return tool_diag_ct_sem_error(yl, yc, "cannot determine the type yielded by this match arm", _self->mem->path);
+                    }
+                }
+                if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}")))) {
+                    int el = _self->lex->tokline;
+                    int ec = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+                    int again = ((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "yield"));
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    _self->in_match_arm = save_in_match_arm;
+                    _self->yield_depth = save_yield_depth;
+                    if (again) {
+                        return tool_diag_ct_sem_error(el, ec, "an expression-match arm yields exactly once", _self->mem->path);
+                    }
+                    return tool_diag_ct_sem_error(el, ec, "'yield' must be the last statement of an expression-match arm", _self->mem->path);
+                }
+                continue;
+            }
             if (((((prev_jump && _self->ex->check_mode) && ((*_self->ex->check_mode) == 2)) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ";")))) && (!_self->__frontend_parse_stmtops_vptr->label_ahead(_self)))) {
                 return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "unreachable code after a jump", _self->mem->path);
             }
@@ -1066,6 +1146,16 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
     (void)(_self->__frontend_parse_stmtops_vptr->defer_mark_block(_self));
     _self->ndefer_blocks = (_self->ndefer_blocks - 1);
+    if (arm_here) {
+        int dep = (_self->yield_depth - 1);
+        _self->last_yield_expr = _self->yield_expr[dep];
+        _self->last_yield_line = _self->yield_line[dep];
+        _self->last_yield_col = _self->yield_col[dep];
+        _self->last_yield_count = _self->yield_count[dep];
+        snprintf(_self->last_yield_type, MAX_TEXT, "%s", _self->yield_type[dep]);
+        _self->yield_depth = (_self->yield_depth - 1);
+    }
+    _self->in_match_arm = save_in_match_arm;
     return blk;
 }
 
@@ -1075,6 +1165,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
     int e;
     int c;
     (void)(_self);
+    if ((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "yield")) && (!(_self->in_match_arm && (_self->yield_depth > 0))))) {
+        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "'yield' is only allowed as the last statement of an expression-match arm", _self->mem->path);
+    }
     if (((_self->lex->tok == T_ID) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Static_assert") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "static_assert")))) {
         int cnd;
         s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_SASSERT);
@@ -2500,6 +2593,561 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match(void *self) {
         return (-1);
     }
     _self->arena->nodes[s].b = arms;
+    if (wild < 0) {
+        for (i = 0; i < adts[adt].nvariants; i++) {
+            if (covered[i]) {
+                continue;
+            }
+            snprintf(msg, sizeof(msg), "match does not cover variant '%s.%s'"" (add the arm or write '_ => { … }')", adts[adt].name, adts[adt].variants[i].name);
+            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+        }
+    }
+    else {
+        if (((_self->ex->types_mode && (*_self->ex->types_mode)) && (ncov == adts[adt].nvariants))) {
+            snprintf(msg, sizeof(msg), "match covers every variant of '%s'; the wildcard arm is unnecessary", adts[adt].name);
+            if (tool_diag_ct_type_warn(line, col, "", msg, _self->mem->path) != 0) {
+                return (-1);
+            }
+        }
+    }
+    return s;
+}
+
+static int frontend_parse_Stmt_frontend_parse_StmtOps_expr_match_ahead(void *self) {
+    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
+    const char * p;
+    int depth;
+    (void)(_self);
+    if (_self->lex->tok != T_ID) {
+        return 0;
+    }
+    if ((!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "match"))) {
+        return 0;
+    }
+    p = ((_self->lex->src + _self->lex->tokstart) + 5);
+    for (; ; ) {
+        if ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
+            p++;
+            continue;
+        }
+        break;
+    }
+    if ((*p) != '(') {
+        return 0;
+    }
+    depth = 0;
+    while ((*p)) {
+        if ((((*p) == '"') || ((*p) == '\''))) {
+            char q = (*p);
+            p++;
+            while (((*p) && ((*p) != q))) {
+                if ((((*p) == '\\') && p[1])) {
+                    p++;
+                }
+                p++;
+            }
+            if ((*p)) {
+                p++;
+            }
+            continue;
+        }
+        if ((((*p) == '/') && (p[1] == '*'))) {
+            p += 2;
+            while (((*p) && (!(((*p) == '*') && (p[1] == '/'))))) {
+                p++;
+            }
+            if ((*p)) {
+                p += 2;
+            }
+            continue;
+        }
+        if ((((*p) == '/') && (p[1] == '/'))) {
+            while (((*p) && ((*p) != '\n'))) {
+                p++;
+            }
+            continue;
+        }
+        if ((*p) == '(') {
+            depth++;
+        }
+        else {
+            if ((*p) == ')') {
+                depth--;
+                if (depth == 0) {
+                    p++;
+                    break;
+                }
+            }
+        }
+        p++;
+    }
+    for (; ; ) {
+        if ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
+            p++;
+            continue;
+        }
+        break;
+    }
+    return ((*p) == '{');
+}
+
+static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match_expr(void *self) {
+    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
+    int s;
+    int e;
+    int arms;
+    int tail;
+    int arm;
+    int adt;
+    int v;
+    int line;
+    int col;
+    int i;
+    int covered[96];
+    int ncov;
+    int wild;
+    int seen_wild;
+    int is_ptr;
+    int a2;
+    int body;
+    int asg;
+    int yexpr;
+    int have_type;
+    int ytyped;
+    int block_form;
+    int yline;
+    int ycol;
+    char tybuf[MAX_TEXT];
+    char tname[MAX_TEXT];
+    char aname[MAX_TEXT];
+    char rn[MAX_TEXT];
+    char vname[MAX_TEXT];
+    char msg[3 * MAX_TEXT];
+    char rtype[MAX_TEXT];
+    char rkey[MAX_TEXT];
+    char ytype[MAX_TEXT];
+    char ykey[MAX_TEXT];
+    struct frontend_sym_Adt * adts;
+    int nadts;
+    line = _self->lex->tokline;
+    col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "(") != 0) {
+        return (-1);
+    }
+    _self->ex->assign_ok = 1;
+    _self->ex->try_ban++;
+    e = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
+    _self->ex->try_ban--;
+    _self->ex->assign_ok = 0;
+    if (e < 0) {
+        return (-1);
+    }
+    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
+        return (-1);
+    }
+    if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, e, tybuf, sizeof(tybuf)) != 0) {
+        return tool_diag_ct_sem_error(line, col, "cannot determine the type of the match subject", _self->mem->path);
+    }
+{
+        const char * b;
+        char * w;
+        size_t n;
+        b = tybuf;
+        while ((((*b) == ' ') || ((*b) == '\t'))) {
+            b++;
+        }
+        snprintf(tname, sizeof(tname), "%s", b);
+        n = strlen(tname);
+        is_ptr = 0;
+        while (((n > 0) && ((tname[(n - 1)] == ' ') || (tname[(n - 1)] == '*')))) {
+            if (tname[(n - 1)] == '*') {
+                is_ptr = 1;
+            }
+            n--;
+            tname[n] = 0;
+        }
+        w = tname;
+        if (strncmp(w, "struct ", 7) == 0) {
+            w += 7;
+        }
+        if (w != tname) {
+            memmove(tname, w, (strlen(w) + 1));
+        }
+    }
+    adt = frontend_sym_ct_adt_from_type(tname);
+    if (adt < 0) {
+        snprintf(msg, sizeof(msg), "match needs an ADT value, but '%s' is not an ADT", tybuf);
+        return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+    }
+    adts = frontend_sym_ct_adts((&nadts));
+    for (i = 0; ((i < adts[adt].nvariants) && (i < 96)); i++) {
+        covered[i] = 0;
+    }
+    ncov = 0;
+    wild = (-1);
+    seen_wild = 0;
+    have_type = 0;
+    rtype[0] = 0;
+    if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a block after match (...)");
+    }
+    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MATCH);
+    if (s < 0) {
+        return (-1);
+    }
+    snprintf(_self->arena->nodes[s].text, MAX_TEXT, "%s", adts[adt].full);
+    _self->arena->nodes[s].aux = is_ptr;
+    _self->arena->nodes[s].a = e;
+    _self->arena->nodes[s].line = line;
+    _self->arena->nodes[s].num = col;
+    _self->arena->nodes[s].sflags = (_self->arena->nodes[s].sflags | 8);
+    arms = (-1);
+    tail = (-1);
+    while (((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))))) {
+        int arm_line;
+        int arm_col;
+        int variant;
+        int bind_head;
+        arm_line = _self->lex->tokline;
+        arm_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+        bind_head = (-1);
+        variant = (-1);
+        if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_"))) {
+            if (seen_wild) {
+                return tool_diag_ct_sem_error(arm_line, arm_col, "duplicate wildcard match arm", _self->mem->path);
+            }
+            seen_wild = 1;
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        }
+        else {
+            int nb;
+            int first_bind;
+            int last_bind;
+            int w;
+            char bind_names[8][160];
+            if (seen_wild) {
+                return tool_diag_ct_sem_error(arm_line, arm_col, "a wildcard match arm must be the last arm", _self->mem->path);
+            }
+            if (_self->lex->tok != T_ID) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a match arm");
+            }
+            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, aname, sizeof(aname));
+            if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, aname, rn, sizeof(rn)) != 0) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown ADT type in a match arm");
+            }
+            a2 = frontend_sym_ct_adt_from_type(rn);
+            if (a2 < 0) {
+                snprintf(msg, sizeof(msg), "match arm names '%s', which is not an ADT", aname);
+                return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
+            }
+            if (a2 != adt) {
+                snprintf(msg, sizeof(msg), "match arm names ADT '%s', but the subject is '%s'", adts[a2].name, adts[adt].name);
+                return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
+            }
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ".")))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '.' after the ADT name");
+            }
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            if (_self->lex->tok != T_ID) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a variant name");
+            }
+            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, vname, sizeof(vname));
+            v = frontend_sym_ct_adt_variant(adt, vname);
+            if (v < 0) {
+                snprintf(msg, sizeof(msg), "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
+                return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
+            }
+            if (covered[v]) {
+                snprintf(msg, sizeof(msg), "duplicate match arm for variant '%s.%s'", adts[adt].name, vname);
+                return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
+            }
+            covered[v] = 1;
+            ncov++;
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '(' after a variant name");
+            }
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            first_bind = (-1);
+            last_bind = (-1);
+            nb = 0;
+            while ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
+                if (_self->lex->tok != T_ID) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a binding name");
+                }
+                if (nb >= 8) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many bindings in one match arm");
+                }
+                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, bind_names[nb], MAX_TEXT);
+                for (w = 0; w < nb; w++) {
+                    if (strcmp(bind_names[w], bind_names[nb]) == 0) {
+                        snprintf(msg, sizeof(msg), "duplicate binding '%s' in a match arm", bind_names[nb]);
+                        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
+                    }
+                }
+                w = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_BIND);
+                if (w < 0) {
+                    return (-1);
+                }
+                snprintf(_self->arena->nodes[w].text, MAX_TEXT, "%s", bind_names[nb]);
+                if (first_bind < 0) {
+                    first_bind = w;
+                }
+                else {
+                    _self->arena->nodes[last_bind].next = w;
+                }
+                last_bind = w;
+                nb++;
+                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                if (_self->sup->__frontend_parse_supportops_vptr->accept(_self->sup, ",")) {
+                    continue;
+                }
+                break;
+            }
+            if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
+                return (-1);
+            }
+            if (nb != adts[adt].variants[v].nfields) {
+                snprintf(msg, sizeof(msg), "match arm for '%s.%s' binds %d name%s, but the variant has %d field%s", adts[adt].name, vname, nb, ((nb == 1) ? "" : "s"), adts[adt].variants[v].nfields, ((adts[adt].variants[v].nfields == 1) ? "" : "s"));
+                return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
+            }
+            variant = v;
+            bind_head = first_bind;
+            (void)(last_bind);
+        }
+        if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
+            return (-1);
+        }
+        if (variant >= 0) {
+            int w;
+            if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
+                return (-1);
+            }
+            w = 0;
+            for (i = bind_head; i >= 0; (i = _self->arena->nodes[i].next, w++)) {
+                int vi;
+                int decl;
+                int raw;
+                snprintf(_self->arena->nodes[i].text2, MAX_TEXT, "%s", adts[adt].variants[variant].fields[w].type);
+                snprintf(_self->arena->nodes[i].text3, MAX_TEXT, "%s", adts[adt].variants[variant].fields[w].name);
+                if (_self->sym->__frontend_sym_symbolops_vptr->declare_var(_self->sym, _self->arena->nodes[i].text, _self->arena->nodes[i].text2) != 0) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
+                }
+                vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[i].text);
+                if (vi >= 0) {
+                    _self->sym->vars[vi].initialized = 1;
+                }
+                decl = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_DECL);
+                raw = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_RAW);
+                if (((decl < 0) || (raw < 0))) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    return (-1);
+                }
+                snprintf(_self->arena->nodes[decl].text, MAX_TEXT, "%s", _self->arena->nodes[i].text2);
+                snprintf(_self->arena->nodes[decl].text2, MAX_TEXT, "%s", _self->arena->nodes[i].text);
+                _self->arena->nodes[decl].aux = 3;
+                _self->arena->nodes[decl].a = raw;
+                _self->arena->nodes[raw].aux = 0;
+                _self->arena->nodes[i].a = decl;
+                _self->arena->nodes[i].b = raw;
+            }
+        }
+        yexpr = (-1);
+        ytyped = 0;
+        block_form = 0;
+        yline = arm_line;
+        ycol = arm_col;
+        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
+            block_form = 1;
+            int q;
+            int last;
+            int deferring;
+            _self->match_arm_pending = 1;
+            body = _self->__frontend_parse_stmtops_vptr->parse_block(_self);
+            if (body < 0) {
+                if (variant >= 0) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                }
+                return (-1);
+            }
+            deferring = 0;
+            for (q = _self->arena->nodes[body].a; q >= 0; q = _self->arena->nodes[q].next) {
+                if (((_self->arena->nodes[q].kind == N_DEFER_RUN) || (_self->arena->nodes[q].kind == N_DELETE))) {
+                    deferring = 1;
+                }
+            }
+            if ((deferring && (_self->last_yield_count > 0))) {
+                if (variant >= 0) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                }
+                return tool_diag_ct_sem_error(arm_line, arm_col, "defer / own is not supported inside an expression-match arm", _self->mem->path);
+            }
+            if (_self->last_yield_count > 0) {
+                yexpr = _self->last_yield_expr;
+                yline = _self->last_yield_line;
+                ycol = _self->last_yield_col;
+                snprintf(ytype, sizeof(ytype), "%s", _self->last_yield_type);
+                ytyped = 1;
+            }
+            else {
+                last = (-1);
+                for (q = _self->arena->nodes[body].a; q >= 0; q = _self->arena->nodes[q].next) {
+                    last = q;
+                }
+                if (((last >= 0) && (((_self->arena->nodes[last].kind == N_RET) || (_self->arena->nodes[last].kind == N_BREAK)) || (_self->arena->nodes[last].kind == N_CONT)))) {
+                    yexpr = (-1);
+                }
+                else {
+                    if (variant >= 0) {
+                        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    }
+                    return tool_diag_ct_sem_error(arm_line, arm_col, "an expression-match arm must yield a value (add 'yield <expr>;' or end with 'return')", _self->mem->path);
+                }
+            }
+        }
+        else {
+            yline = _self->lex->tokline;
+            ycol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+            _self->ex->assign_ok = 1;
+            _self->ex->try_ban++;
+            yexpr = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
+            _self->ex->try_ban--;
+            _self->ex->assign_ok = 0;
+            if (yexpr < 0) {
+                if (variant >= 0) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                }
+                return (-1);
+            }
+{
+                int yz = 0;
+                if (((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, yexpr, ytype, sizeof(ytype)) != 0) && (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, yexpr, ytype, sizeof(ytype), (&yz)) != 0))) {
+                    if (variant >= 0) {
+                        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    }
+                    return tool_diag_ct_sem_error(yline, ycol, "cannot determine the type yielded by this match arm", _self->mem->path);
+                }
+                ytyped = 1;
+            }
+            body = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_BLOCK);
+            if (body < 0) {
+                if (variant >= 0) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                }
+                return (-1);
+            }
+            _self->arena->nodes[body].a = (-1);
+        }
+        asg = (-1);
+        if (yexpr >= 0) {
+            if ((!ytyped)) {
+                if (variant >= 0) {
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                }
+                return tool_diag_ct_sem_error(yline, ycol, "cannot determine the type yielded by this match arm", _self->mem->path);
+            }
+            match_expr_type_key(ytype, ykey, sizeof(ykey));
+            if ((!have_type)) {
+                snprintf(rtype, sizeof(rtype), "%s", ytype);
+                snprintf(rkey, sizeof(rkey), "%s", ykey);
+                have_type = 1;
+            }
+            else {
+                if (strcmp(ykey, rkey) != 0) {
+                    if (variant >= 0) {
+                        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    }
+                    snprintf(msg, sizeof(msg), "match arm yields '%s', but an earlier arm yields '%s'", ytype, rtype);
+                    return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
+                }
+            }
+{
+                int tv;
+                int last;
+                tv = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_VAR);
+                asg = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ASSIGN);
+                if (((tv < 0) || (asg < 0))) {
+                    if (variant >= 0) {
+                        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    }
+                    return (-1);
+                }
+                snprintf(_self->arena->nodes[tv].text2, MAX_TEXT, "%s", "__ct_mres");
+                _self->arena->nodes[tv].line = yline;
+                _self->arena->nodes[tv].num = ycol;
+                _self->arena->nodes[asg].a = tv;
+                _self->arena->nodes[asg].b = yexpr;
+                snprintf(_self->arena->nodes[asg].text, MAX_TEXT, "%s", ytype);
+                _self->arena->nodes[asg].line = yline;
+                _self->arena->nodes[asg].num = ycol;
+                last = (-1);
+                for (i = _self->arena->nodes[body].a; i >= 0; i = _self->arena->nodes[i].next) {
+                    last = i;
+                }
+                if (last < 0) {
+                    _self->arena->nodes[body].a = asg;
+                }
+                else {
+                    _self->arena->nodes[last].next = asg;
+                }
+            }
+        }
+        arm = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ARM);
+        if (arm < 0) {
+            if (variant >= 0) {
+                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            }
+            return (-1);
+        }
+        _self->arena->nodes[arm].aux = (((variant < 0) ? 1 : 0) | 2);
+        _self->arena->nodes[arm].num = variant;
+        _self->arena->nodes[arm].a = bind_head;
+        _self->arena->nodes[arm].b = body;
+        _self->arena->nodes[arm].c = asg;
+        _self->arena->nodes[arm].line = arm_line;
+        _self->arena->nodes[arm].num = ((variant < 0) ? (-1) : variant);
+        if (variant >= 0) {
+            snprintf(_self->arena->nodes[arm].text, MAX_TEXT, "%s", vname);
+            snprintf(_self->arena->nodes[arm].text2, MAX_TEXT, "%s", adts[adt].variants[variant].cname);
+            snprintf(_self->arena->nodes[arm].text3, MAX_TEXT, "%s", adts[adt].full);
+        }
+        if (variant < 0) {
+            wild = arm;
+        }
+        if (variant >= 0) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+        }
+        if (arms < 0) {
+            arms = arm;
+        }
+        else {
+            _self->arena->nodes[tail].next = arm;
+        }
+        tail = arm;
+        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            continue;
+        }
+        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))) {
+            break;
+        }
+        if (block_form) {
+            continue;
+        }
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected ',' or '}' after an expression-match arm");
+    }
+    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
+        return (-1);
+    }
+    _self->arena->nodes[s].b = arms;
+    if ((!have_type)) {
+        return tool_diag_ct_sem_error(line, col, "an expression match needs at least one arm that yields a value", _self->mem->path);
+    }
+    snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "%s", rtype);
     if (wild < 0) {
         for (i = 0; i < adts[adt].nvariants; i++) {
             if (covered[i]) {
@@ -4311,6 +4959,8 @@ const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_Stmt
     .parse_switch_body = frontend_parse_Stmt_frontend_parse_StmtOps_parse_switch_body,
     .match_ahead = frontend_parse_Stmt_frontend_parse_StmtOps_match_ahead,
     .parse_match = frontend_parse_Stmt_frontend_parse_StmtOps_parse_match,
+    .expr_match_ahead = frontend_parse_Stmt_frontend_parse_StmtOps_expr_match_ahead,
+    .parse_match_expr = frontend_parse_Stmt_frontend_parse_StmtOps_parse_match_expr,
     .parse_label = frontend_parse_Stmt_frontend_parse_StmtOps_parse_label,
     .parse_case_value = frontend_parse_Stmt_frontend_parse_StmtOps_parse_case_value,
     .loop_ahead = frontend_parse_Stmt_frontend_parse_StmtOps_loop_ahead,
@@ -5540,6 +6190,24 @@ static int stmt_owning_struct(struct frontend_parse_Stmt * self, const char * ty
         }
     }
     return 0;
+}
+static void match_expr_type_key(const char * in, char * out, int cap) {
+    char k[MAX_TEXT];
+    frontend_type_type_key(in, k, sizeof(k));
+    if (strncmp(k, "struct", 6) == 0) {
+        memmove(k, (k + 6), (strlen((k + 6)) + 1));
+    }
+    else {
+        if (strncmp(k, "union", 5) == 0) {
+            memmove(k, (k + 5), (strlen((k + 5)) + 1));
+        }
+        else {
+            if (strncmp(k, "enum", 4) == 0) {
+                memmove(k, (k + 4), (strlen((k + 4)) + 1));
+            }
+        }
+    }
+    snprintf(out, (size_t)(cap), "%s", k);
 }
 void frontend_parse_ct_stmt_bind(void * arena, void * lex, void * sym, void * mem, void * sup, void * ex) {
     frontend_parse_g_stmt.arena = (struct runtime_arena_Arena *)(arena);

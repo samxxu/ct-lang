@@ -92,7 +92,7 @@
 | 拥有字符串 String（owning string） | `struct String { char *ptr; int len; }` + 前置 refcount 头 | 内置 owning 句柄；不可变，字面量由编译器发射 immortal 块；副本自动 retain、作用域 release（v0-PH-80 / D-013，见 [language-spec](language-spec.md) §4.70） |
 | ADT / 和类型（sum type） | `enum Shape { Circle(int r), Empty() }` | 任一成员带括号负载的 `enum` 是名义和类型：C 布局 `struct T { int tag; union { … } u; }`，`tag` 为变体序号；全部成员无负载时仍是 C `enum`（v0-PH-84，见 [language-spec](language-spec.md) §4.73） |
 | 变体（variant） | `Shape.Circle(3)` | ADT 的构造器；实参个数/类型必须匹配负载，零负载写 `Empty()`；裸变体名不引入（v0-PH-84） |
-| `match` | `match (s) { Shape.Circle(r) => { … } }` | 语句形式的穷尽判别；必须覆盖全部变体或显式 `_`，无 fallthrough；绑定是负载的副本（owning 负载按 retain 副本）；`ct check --types` 对多余 `_` 给 lint（v0-PH-84，见 [language-spec](language-spec.md) §4.73） |
+| `match` | `match (s) { Shape.Circle(r) => { … } }` | 穷尽判别，有语句与表达式两种形态；表达式臂写 `Pattern => expr` 或块内 `yield expr;`，产值臂类型必须一致（LANG-29 S4 / B5）；必须覆盖全部变体或显式 `_`，无 fallthrough；绑定是负载的副本（owning 负载按 retain 副本）；`ct check --types` 对多余 `_` 给 lint（v0-PH-84，见 [language-spec](language-spec.md) §4.73） |
 | 析构胶水（drop glue） | 编译器生成的 `<S>_Drop_drop` | 无显式 `impl Drop` 时按字段声明顺序递归释放每个 `uses_drop` 字段；`Vec` / `Map` 值字段按类型名直接进入胶水（LANG-27：`if (_self->f.h != 0) (void)<Inst>_release(&_self->f);`，元素走 `__ct_elem_release` 级联）；写了显式 `impl Drop`（含 `impl<T> Drop for Box<T>`）即自负全责、不再生成字段胶水；泛型 Drop 每实例单态化一份、不产生模板态（Phase 36） |
 
 ### 2. 命名 / 修饰规则（已发布契约）

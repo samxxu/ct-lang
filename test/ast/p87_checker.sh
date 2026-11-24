@@ -52,7 +52,8 @@ helpers = sorted(set(re.findall(r'^static int (tc_expr_\w+)\(struct TypeCheck \*
 want_helpers = sorted(["tc_expr_adtctor", "tc_expr_var", "tc_expr_index", "tc_expr_addr",
                        "tc_expr_mcall", "tc_expr_call", "tc_expr_member_or_arrow",
                        "tc_expr_box", "tc_expr_newobj", "tc_expr_num", "tc_expr_fnum",
-                       "tc_expr_str", "tc_expr_cast", "tc_expr_sizeof", "tc_expr_into"])
+                       "tc_expr_str", "tc_expr_cast", "tc_expr_sizeof", "tc_expr_into",
+                       "tc_expr_match"])
 if helpers != want_helpers:
     problems.append("the slice set drifted: %s" % ",".join(helpers))
 calls = sorted(set(re.findall(r'\b(tc_expr_\w+)\(self', body)))
@@ -62,7 +63,7 @@ kinds = sorted(set(re.findall(r'k == (N_\w+)', body)))
 want_kinds = sorted(["N_ADTCTOR", "N_VAR", "N_INDEX", "N_ADDR", "N_MCALL", "N_CALL",
                      "N_MEMBER", "N_ARROW", "N_BOX", "N_NEWOBJ", "N_NUM", "N_FNUM",
                      "N_STR", "N_CAST", "N_COMPOUND", "N_VAARG", "N_SIZEOF",
-                     "N_OFFSETOF", "N_INTO", "N_INTO_SELF"])
+                     "N_OFFSETOF", "N_INTO", "N_INTO_SELF", "N_MATCH"])
 if kinds != want_kinds:
     problems.append("covered kinds differ: %s" % ",".join(kinds))
 if problems:

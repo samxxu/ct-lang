@@ -65,11 +65,12 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 
 ## 7. 多形态：`enum` 负载 + `match`
 
-- 成员带括号负载即 ADT；`match` 是语句，分支体要花括号，没有 fallthrough（[§4.73](language-spec.md)）。
+- 成员带括号负载即 ADT；`match` 有语句和表达式两种形态，分支体要花括号，没有 fallthrough（[§4.73](language-spec.md)）。
 - 必须覆盖全部变体，或最后写一个 `_`；全部覆盖后再写 `_` 会被提示“多余”。
 - **ADT payload 有 glue**：owning 句柄由编译器生成的 retain/release 浅共享；构造、拷贝、
   按值实参、`match` 绑定各取一份引用，作用域出口释放一次（LANG-29 S2 / B3）。
-- 上限：64 个 ADT / 16 变体 / 8 负载；无泛型 ADT、无 or 模式、无表达式形式 `match`。
+- 表达式形态的臂写 `=> expr` 或块内 `yield expr;`，产值臂类型必须一致；`yield` 只在臂块内有效（LANG-29 S4 / B5）。
+- 上限：64 个 ADT / 16 变体 / 8 负载；无泛型 ADT、无 or 模式。
 
 ## 8. 遍历：`foreach` 的隐式绑定
 

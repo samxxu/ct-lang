@@ -15,6 +15,7 @@
 #define MAX_INIT_TEXT 16384
 #define N_CALL   7
 #define N_VAR    10
+#define N_MATCH  78
 #define N_ADTCTOR 81
 #define N_NUM    8
 #define N_STR    9
@@ -117,6 +118,7 @@ static int tc_expr_cast(struct frontend_type_TypeCheck *, int, char *, int);
 static int tc_expr_sizeof(struct frontend_type_TypeCheck *, int, char *, int);
 static int tc_expr_into(struct frontend_type_TypeCheck *, int, char *, int);
 static int ctype_member(struct frontend_type_TypeCheck *, int, char *, int, int);
+static int tc_expr_match(struct frontend_type_TypeCheck *, int, char *, int);
 static struct frontend_type_TypeCheck frontend_type_g_type = { .__frontend_type_typeops_vptr = &frontend_type_TypeCheck_frontend_type_TypeOps_vtable };
 static int frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret(void *self, const char * ibase, const char * fname, char * out, int cap) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
@@ -389,6 +391,9 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_type(void *self, i
     }
     if (((k == N_INTO) || (k == N_INTO_SELF))) {
         return tc_expr_into(_self, n, out, cap);
+    }
+    if (k == N_MATCH) {
+        return tc_expr_match(_self, n, out, cap);
     }
     return (-1);
 }
@@ -2250,6 +2255,18 @@ static int ctype_member(struct frontend_type_TypeCheck * self, int n, char * out
         }
     }
     return (-1);
+}
+static int tc_expr_match(struct frontend_type_TypeCheck * self, int n, char * out, int cap) {
+    if ((self->arena->nodes[n].sflags & 8) == 0) {
+        return (-1);
+    }
+    if ((!self->arena->nodes[n].text2[0])) {
+        return (-1);
+    }
+    if (snprintf(out, (size_t)(cap), "%s", self->arena->nodes[n].text2) >= cap) {
+        return (-1);
+    }
+    return 0;
 }
 struct frontend_type_TypeCheck * frontend_type_type_get(void) {
     return (&frontend_type_g_type);

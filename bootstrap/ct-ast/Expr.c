@@ -2955,6 +2955,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
     int e;
     int op;
     (void)(_self);
+    if (((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "match")) && (_self->st_hook != 0)) && (_self->st_hook(3, 0) != 0))) {
+        return _self->st_hook(2, 0);
+    }
     if (((_self->lex->tok == T_ID) && ((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "sizeof") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Alignof")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "alignof")))) {
         char tbuf[MAX_TEXT];
         int kind;
@@ -8434,6 +8437,10 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_type(void *self, int
             return (-1);
         }
         else if (__ct_match4.tag == 78) {
+            if ((((_self->arena->nodes[n].sflags & 8) != 0) && _self->arena->nodes[n].text2[0])) {
+                snprintf(out, (size_t)(cap), "%s", _self->arena->nodes[n].text2);
+                return 0;
+            }
             return (-1);
         }
         else if (__ct_match4.tag == 79) {

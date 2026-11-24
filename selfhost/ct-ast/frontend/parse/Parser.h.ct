@@ -4789,6 +4789,9 @@ static struct Field   g_pend_fields[64];
 static int parser_st_hook(int op, int arg)
 {
     if (op == 1) return g_parse.st->try_attach(arg);
+    /* LANG-29 S4 / B5: op 3 is the expression-form lookahead, op 2 the reader. */
+    if (op == 2) return g_parse.st->parse_match_expr();
+    if (op == 3) return g_parse.st->expr_match_ahead();
     return g_parse.st->parse_block();
 }
 

@@ -3254,8 +3254,9 @@ weak / 跨过程分析（D-012）。
 ### 4.73 最小 ADT 与 `match`（Phase 84，仅 ct-ast）
 
 最小名义和类型，为 ct-ast 重写提供穷尽判别（D3 / LANG-21）。本轮只做名义和类型、
-构造器负载、穷尽 `match` 与变量绑定；泛型 ADT、or / 守卫 / 字面量 / 嵌套 / 结构体模式、
-表达式形式的 `match` 都是**非目标**（v1.1+ 增量提案，R84-5）。
+构造器负载、穷尽 `match` 与变量绑定；泛型 ADT、or / 守卫 / 字面量 / 嵌套 / 结构体模式
+仍是**非目标**（v1.1+ 增量提案，R84-5）。表达式形式的 `match` 由 LANG-29 S4 / B5
+补齐（见下），语句形式与其拼写不变。
 
 #### 语法（冻结）
 
@@ -3286,9 +3287,22 @@ int area(Shape s)
 - **构造（D84-3）**：`Type.Variant(args)`。裸变体名（`Circle(1)`）不引入，避免与 C 枚举
   常量/宏冲突；零负载变体写作 `Type.Unit()`（括号必须有）。实参数量与负载字段数不符、
   或类型与字段不符（可判定的冲突）都是**硬错**（E84-2）。
-- **`match`**：语句形式（本轮无表达式形式）。每个分支是
-  `Type.Variant(bindings) => { … }`；绑定是**裸名**，类型取自负载字段，payload 按值绑定
-  （owning 负载按 retain 副本进绑定，见下）。分支体必须有花括号，无 fallthrough。
+- **语句 `match`**：每个分支是 `Type.Variant(bindings) => { … }`；绑定是**裸名**，
+  类型取自负载字段，payload 按值绑定（owning 负载按 retain 副本进绑定，见下）。分支体
+  必须有花括号，无 fallthrough。
+- **表达式 `match`（LANG-29 S4 / B5）**：同一头 `match (subject) { … }` 是值。臂写作
+  `Pattern => expr` 或 `Pattern => { …; yield expr; }`：
+  - `yield <expr>;` 是臂的**唯一正常出口**；块臂必须恰好一个 `yield`，且它必须是块内
+    最后一条语句（`yield` 之后还有语句是硬错）。臂以 `return` / `break` / `continue`
+    结尾时按**发散**处理，不需要 `yield`；
+  - 所有产值的臂必须给出**同一类型**（比较前去掉 aggregate tag 与空白）；不一致是硬错；
+  - `yield` 是**上下文关键字**：只在表达式 `match` 的臂块里生效；臂外写 `yield` 报
+    `'yield' is only allowed as the last statement of an expression-match arm`，
+    `yield` 仍可作普通标识符；
+  - 无块尾隐式取值（`{ … }` 的最后一条表达式不会自动成为值）；主语仍只求值一次，穷尽
+    与 `_` 末位规则与语句形式相同；
+  - 句法：`=> expr` 臂以 `,` 分隔；花括号臂在自己的 `}` 处结束，逗号可省略，也可以写。
+  接受形如 `return match (n) { N.Leaf(v) => v, N.Nil() => 0 };` 的写法。
 - **穷尽（E84-3）**：必须覆盖全部变体，或显式写一个 `_ => { … }`；缺分支、重复分支、
   未知变体、跨 ADT 的变体、绑定数与负载不符、绑定重名都编译错并给位置。`_` 必须写在
   最后一支，且只能有一个。
@@ -3325,7 +3339,9 @@ struct Shape {
 - **`match` 的 C 形态**：主语求值一次存进 `__ct_matchN` 临时量，分支发射为
   `if (…tag == k) … else if … else …`（最后一支是 `else`，穷尽已由解析期证明）。不用 C
   `switch`：分支里的 `break` 必须仍表示**外层循环**的 break，且 if/else 链天然无
-  fallthrough（E84-4）。
+  fallthrough（E84-4）。表达式形式整体是一个 GNU statement expression：
+  `({ struct T __ct_matchN = (subject); R __ct_mresN = (R){0}; …; __ct_mresN; })`，
+  每个产值臂把 `yield` 表达式赋给 `__ct_mresN`；`R` 是解析期统一的臂类型。
 - **绑定语义**：arm 绑定是该臂块内的普通局部量，初值取自 `__ct_matchN.u.<Variant>.<field>`；
   绑定是**副本**（值语义），修改绑定不改变被 match 的值。owning 负载（`String` / 容器 /
   `Box` / 嵌套 ADT）按 **retain 副本**绑定：绑定持有自己的一份引用，臂块结束时释放；
@@ -3345,9 +3361,11 @@ struct Shape {
 - **payload 生命周期（LANG-29 S2 / B3 起）**：ADT 的 owning payload 由编译器生成的
   `<T>_retain` / `<T>_release` 持有与释放；裸 `Str` 不能作 payload（存 `String`，取视图用
   `as_str()`），声明处即硬错。
-- **简化（诚实登记）**：ADT 不能带显式枚举值；无泛型 ADT；`match` 不能作为表达式；没有
-  or / 守卫 / 嵌套 / 结构体模式；`offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器
-  产物负责）。
+- **简化（诚实登记）**：ADT 不能带显式枚举值；无泛型 ADT；没有 or / 守卫 / 嵌套 /
+  结构体模式；`offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器产物负责）。
+  表达式 `match` 的当前切面另有三条边界（LANG-29 S4 / B5）：臂块内不允许 `defer` /
+  `own`（`yield` 必须在清理之前求值），`yield` 不能出现在臂块里嵌套的内部块中，
+  且不实现块尾隐式取值。
 
 #### 冻结清单登记（v0-PH-84 范围）
 

@@ -18,6 +18,7 @@
 #include "Expr.h"
 #include "Diag.h"
 #include "StmtRangeText.h"
+#include "TypeCheck.h"
 
 
 struct ct_buf;
@@ -114,6 +115,8 @@ struct frontend_parse_StmtOps_vtbl {
     int (*parse_switch_body)(void *);
     int (*match_ahead)(void *);
     int (*parse_match)(void *);
+    int (*expr_match_ahead)(void *);
+    int (*parse_match_expr)(void *);
     int (*parse_label)(void *);
     int (*parse_case_value)(void *);
     int (*label_ahead)(void *);
@@ -189,6 +192,19 @@ struct frontend_parse_Stmt {
     char goto_path_has[64][256];
     int label_path_depth[64];
     int goto_path_depth[64];
+    int match_arm_pending;
+    int in_match_arm;
+    int yield_depth;
+    int yield_expr[16];
+    int yield_line[16];
+    int yield_col[16];
+    int yield_count[16];
+    char yield_type[16][160];
+    char last_yield_type[160];
+    int last_yield_expr;
+    int last_yield_line;
+    int last_yield_col;
+    int last_yield_count;
     const struct frontend_parse_StmtOps_vtbl *__frontend_parse_stmtops_vptr;
 };
 void frontend_parse_ct_stmt_bind(void *, void *, void *, void *, void *, void *);

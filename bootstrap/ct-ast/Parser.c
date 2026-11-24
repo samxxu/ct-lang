@@ -5109,6 +5109,12 @@ static int parser_st_hook(int op, int arg) {
     if (op == 1) {
         return frontend_parse_g_parse.st->__frontend_parse_stmtops_vptr->try_attach(frontend_parse_g_parse.st, arg);
     }
+    if (op == 2) {
+        return frontend_parse_g_parse.st->__frontend_parse_stmtops_vptr->parse_match_expr(frontend_parse_g_parse.st);
+    }
+    if (op == 3) {
+        return frontend_parse_g_parse.st->__frontend_parse_stmtops_vptr->expr_match_ahead(frontend_parse_g_parse.st);
+    }
     return frontend_parse_g_parse.st->__frontend_parse_stmtops_vptr->parse_block(frontend_parse_g_parse.st);
 }
 void frontend_parse_ct_parse_bind(void * arena, void * lex, void * sym, void * ty, void * mem, void * build_mode, void * check_mode) {

@@ -2135,11 +2135,27 @@ struct Shape {
 `_Static_assert` 一起进生成头。ADT 没有 vtable、没有分配、不是 trait 接口值。
 `pub enum` 放进 `.h.ct` 后，其他单元可直接 `import` 并构造/匹配。
 
-**边界**：泛型 ADT、or / 守卫 / 字面量 / 嵌套 / 结构体模式、表达式形式的 `match`
-都留到 v1.1+；`match` 只接受 ADT 主语（普通 `int` 会报
-`match needs an ADT value, but 'int' is not an ADT`）；owning payload 按 retain 副本绑定，
-ADT 值按 retain/release 浅共享，作用域出口自动释放（LANG-29 S2 / B3）。上限：64 个 ADT / 每 ADT 16 个变体 /
-每变体 8 个负载字段。C enum 与 `switch` 的行为完全不变。
+**表达式形式（LANG-29 S4 / B5 起）**：同一个 `match (s) { … }` 也能当值用：
+
+```ct
+int area2(Shape s)
+{
+    return match (s) {
+        Shape.Circle(r) => { yield 3 * r * r; }
+        Shape.Rect(w, h) => w * h,
+        _ => 0,
+    };
+}
+```
+
+臂写 `Pattern => expr`，或写块并用 `yield expr;` 作为唯一正常出口；所有产值臂的类型
+必须一致；臂以 `return` / `break` / `continue` 结尾时按发散处理。主语仍只求值一次。
+
+**边界**：泛型 ADT、or / 守卫 / 字面量 / 嵌套 / 结构体模式留到 v1.1+；`match` 只接受
+ADT 主语（普通 `int` 会报 `match needs an ADT value, but 'int' is not an ADT`）；
+owning payload 按 retain 副本绑定，ADT 值按 retain/release 浅共享，作用域出口自动释放
+（LANG-29 S2 / B3）。上限：64 个 ADT / 每 ADT 16 个变体 / 每变体 8 个负载字段。
+C enum 与 `switch` 的行为完全不变。
 
 把 `node->kind` 判别机械改写成穷尽 `match` 的做法见
 [patterns §6](patterns.md#6-kind-判别改写成穷尽-match)。
