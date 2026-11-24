@@ -20,6 +20,7 @@
 #include "StmtRangeText.h"
 #include "StmtRangeScan.h"
 #include "StmtScope.h"
+#include "StmtCore.h"
 #include "TypeCheck.h"
 
 
@@ -90,132 +91,8 @@ struct tool_pkg_PkgRec;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
 struct tool_driver_Driver;
-struct frontend_parse_StmtOps_vtbl {
-    int (*is_decl_start)(void *);
-    int (*parse_block)(void *);
-    int (*missing_return_check)(void *, int, const char *, int);
-    int (*stmt_terminates)(void *, int);
-    int (*u_reset)(void *);
-    int (*u_add)(void *, int, const char *);
-    int (*u_mark_lvalue)(void *, int);
-    int (*u_scan)(void *, int);
-    int (*uninit_check)(void *, int, int);
-    int (*del_base)(void *, int, char *, int);
-    int (*del_take)(void *, const char *);
-    int (*body_has_jump)(void *, int);
-    int (*defer_ahead)(void *);
-    int (*err_ahead)(void *);
-    int (*errdefer_ahead)(void *);
-    int (*errdefer_own_refs)(void *, int);
-    int (*parse_trailing_defer)(void *, int);
-    int (*trailing_alias)(void *, int, const char *);
-    int (*defer_add)(void *, int);
-    int (*defer_active_depth)(void *);
-    int (*defer_mark_block)(void *);
-    int (*defer_run_node)(void *, int, int);
-    int (*defer_prepend)(void *, int, int, int);
-    int (*try_attach)(void *, int);
-    int (*defer_flush_block)(void *, int, int *);
-    int (*parse_stmt)(void *);
-    int (*parse_branch)(void *);
-    int (*parse_decl_node)(void *);
-    int (*string_raw_write_check)(void *, int);
-    int (*parse_expr_stmt_node)(void *);
-    int (*parse_switch_body)(void *);
-    int (*match_ahead)(void *);
-    int (*parse_match)(void *);
-    int (*expr_match_ahead)(void *);
-    int (*parse_match_expr)(void *);
-    int (*parse_label)(void *);
-    int (*parse_case_value)(void *);
-    int (*label_ahead)(void *);
-    int (*label_find)(void *, const char *);
-    int (*parse_named_label)(void *);
-    int (*parse_goto)(void *);
-    int (*loop_ahead)(void *);
-    int (*parse_loop)(void *);
-    int (*foreach_ahead)(void *);
-    int (*parse_foreach)(void *);
-    int (*range_init_ahead)(void *);
-    int (*parse_range_init)(void *, int, const char *);
-    int (*closure_global_init)(void *, int, const char *, int, int);
-    int (*func_begin)(void *);
-    int (*func_end)(void *);
-};
-struct frontend_parse_StmtOps_iface {
-    void *self;
-    const struct frontend_parse_StmtOps_vtbl *vt;
-};
-
 extern const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_StmtOps_vtable;
 
-struct frontend_parse_Stmt {
-    struct runtime_arena_Arena * arena;
-    struct frontend_lex_Lexer * lex;
-    struct frontend_sym_Symbols * sym;
-    struct backend_mem_Memory * mem;
-    struct frontend_parse_ParseSupport * sup;
-    struct frontend_parse_Expr * ex;
-    int switch_depth;
-    int case_hi;
-    int static_decl;
-    int decl_attr;
-    int nlabels;
-    int f_string_local;
-    char label_names[64][160];
-    int label_lines[64];
-    int ngotos;
-    char goto_names[64][160];
-    int goto_lines[64];
-    int loop_depth;
-    char u_decl[48][160];
-    int u_dline[48];
-    int nu;
-    char u_asg[48][160];
-    int na;
-    char u_rd[48][160];
-    int nr;
-    char u_addr[48][160];
-    int nx;
-    char del_names[64][160];
-    int ndel;
-    int foreach_depth;
-    int break_base[256];
-    int break_is_switch[256];
-    int nbreak;
-    int cont_base[256];
-    int ncont;
-    int in_defer;
-    int in_errdefer;
-    int ndefer_blocks;
-    int defer_head[256];
-    int defer_tail[256];
-    int defer_ids[257];
-    int defer_block_err[256];
-    int ndefer_next_id;
-    int defer_break_base[256];
-    int defer_cont_base[256];
-    int label_path[64][256];
-    int goto_path[64][256];
-    char label_path_has[64][256];
-    char goto_path_has[64][256];
-    int label_path_depth[64];
-    int goto_path_depth[64];
-    int match_arm_pending;
-    int in_match_arm;
-    int yield_depth;
-    int yield_expr[16];
-    int yield_line[16];
-    int yield_col[16];
-    int yield_count[16];
-    char yield_type[16][160];
-    char last_yield_type[160];
-    int last_yield_expr;
-    int last_yield_line;
-    int last_yield_col;
-    int last_yield_count;
-    const struct frontend_parse_StmtOps_vtbl *__frontend_parse_stmtops_vptr;
-};
 void frontend_parse_ct_stmt_bind(void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Stmt * frontend_parse_stmt_get(void);
 

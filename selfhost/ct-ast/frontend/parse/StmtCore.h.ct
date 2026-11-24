@@ -1,0 +1,188 @@
+/*
+ * StmtCore.h.ct - the Stmt host type and the traits it implements
+ * (SH-94 S1, pure move out of Stmt.h.ct).
+ *
+ * The method bodies stay in Stmt.h.ct; this unit holds only the `pub struct
+ * Stmt` layout and its trait surface, so a method group can move to its own
+ * child unit without importing the host (which would close an import cycle).
+ * Nothing here runs: the statement parser's state and vtable surface are the
+ * same bytes Stmt.h.ct declared.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+import backend::mem::Memory;
+import frontend::lex::Lexer;
+import frontend::parse::Expr;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import runtime::arena::Arena;
+
+namespace frontend::parse;
+pub trait StmtOps {
+    int  is_decl_start(void);
+    int  parse_block(void);
+    int  missing_return_check(int body, const char *ret, int line);
+    int  stmt_terminates(int n);
+    int  u_reset(void);
+    int  u_add(int which, const char *s);
+    int  u_mark_lvalue(int n);
+    int  u_scan(int n);
+    int  uninit_check(int body, int line);
+    int  del_base(int n, char *out, int cap);
+    int  del_take(const char *name);
+    int  body_has_jump(int n);
+    int  defer_ahead(void);
+    int  err_ahead(void);
+    int  errdefer_ahead(void);
+    int  errdefer_own_refs(int n);
+    int  parse_trailing_defer(int decl);
+    int  trailing_alias(int n, const char *name);
+    int  defer_add(int node);
+    int  defer_active_depth(void);
+    int  defer_mark_block(void);
+    int  defer_run_node(int body, int line);
+    int  defer_prepend(int node, int base, int on_error);
+    /* Phase 44: capture the failure cleanup (defer / errdefer bodies, then the
+       `own` releases, exactly the order a source `return err:` takes) of the
+       postfix `?` node `n`. Called from the expression layer through the
+       parser's hook while the defer stack and the owned list are still live. */
+    int  try_attach(int n);
+    int  defer_flush_block(int blk, int *tail);
+    int  parse_stmt(void);
+    int  parse_branch(void);
+    int  parse_decl_node(void);
+    /* PH-80: refuse a raw `String.ptr` / `Str.ptr` write (immutability). */
+    int  string_raw_write_check(int e);
+    int  parse_expr_stmt_node(void);
+    int  parse_switch_body(void);
+    /* Phase 84: `match` is a statement, so its lookahead and reader live here. */
+    int  match_ahead(void);
+    int  parse_match(void);
+    /* LANG-29 S4 / B5: the same `match` form in expression position. The
+       expression layer cannot import this one (the edge would close a cycle),
+       so `parse_unary` reaches both through the parser's `st_hook`. */
+    int  expr_match_ahead(void);
+    int  parse_match_expr(void);
+    int  parse_label(void);
+    int  parse_case_value(void);
+    int  label_ahead(void);
+    int  label_find(const char *name);
+    int  parse_named_label(void);
+    int  parse_goto(void);
+    int  loop_ahead(void);
+    int  parse_loop(void);
+    int  foreach_ahead(void);
+    int  parse_foreach(void);
+    int  range_init_ahead(void);
+    int  parse_range_init(int n, const char *type);
+    int  closure_global_init(int e, const char *name, int line, int col);
+    int  func_begin(void);
+    int  func_end(void);
+}
+
+pub struct Stmt {
+    struct Arena *arena;
+    struct Lexer *lex;
+    struct Symbols *sym;
+    struct Memory *mem;
+    struct ParseSupport *sup;
+    struct Expr *ex;
+    /* A switch may skip a case or fall through, so the ordered-block ownership
+       rules do not hold inside one: `own` is refused while this is non-zero
+       (D-7). The body has its own label grammar, so `parse_block` is not used.
+       g_stmt is static, so this starts at zero. */
+    int switch_depth;
+    /* The high end of `case 1 ... 5:` (`-1` when the label is a single value).
+       `parse_case_value` fills it and `parse_label` moves it onto the node. */
+    int case_hi;
+    /* Non-zero while `parse_decl_node` reads a `static` local: each N_DECL it
+       builds is marked (`aux = 1`) and kept out of the leak analysis, since a
+       static object outlives every scope that names it. */
+    int static_decl;
+    /* A GNU `__attribute__((…))` written before a block-scope declaration
+       (`0` = none, else the pool offset plus one). `parse_decl_node` moves it
+       onto every `N_DECL` it builds, so a multi-declarator line shares it. */
+    int decl_attr;
+    /* C labels are function-scoped, so both tables are reset at every function
+       (or method) body: a duplicate is caught at the second spelling, and a
+       `goto` whose label never shows up is reported when the body ends. The
+       lengths are literals because a `pub struct` lands in the generated
+       header, which carries no macros (`MAX_LABELS` is the value used here). */
+    int  nlabels;
+    /* SH-102: a local owning `String` / `U16String` binding makes any `goto`
+       in the same function unsafe (a jump can skip a scope's release or enter
+       it past the declaration), so the body is refused at `func_end`. */
+    int  f_string_local;
+    char label_names[64][160];
+    int  label_lines[64];
+    int  ngotos;
+    char goto_names[64][160];
+    int  goto_lines[64];
+    /* How many `loop` bodies enclose the statement being parsed. Only an inner
+       `loop` inside an outer `loop` is diagnosed (D22-5): a hand-written `int i`
+       or a native `for (int i = …)` is ordinary C shadowing and stays silent. */
+    int  loop_depth;
+    /* PH-70-R2: per-function flow facts for the uninitialized-read check. */
+    char u_decl[48][160]; int u_dline[48]; int nu;
+    char u_asg[48][160]; int na;
+    char u_rd[48][160]; int nr;
+    char u_addr[48][160]; int nx;
+    /* PH-71-R1: variables explicitly released by `delete` in this function. */
+    char del_names[64][160]; int ndel;
+    /* How many `foreach` bodies enclose the statement being parsed. Only an
+       inner `foreach` inside an outer one is diagnosed (D27-10, mirroring
+       D22-5): a hand-written `item` stays ordinary C shadowing and is silent. */
+    int  foreach_depth;
+    /* AutoDrop across a jump. A `break` / `continue` leaves its construct, so
+       the `own` objects declared inside it have to be released first, exactly
+       like `return` (SH-33). Each enclosing construct pushes the boundary its
+       jump may release down to: a `switch` only offers a `break` (a `continue`
+       in it belongs to the enclosing loop), and a `for` keeps the initialiser's
+       object alive across `continue` but not across `break`. The length is a
+       literal because a `pub struct` lands in the generated header. */
+    int  break_base[256];
+    int  break_is_switch[256];
+    int  nbreak;
+    int  cont_base[256];
+    int  ncont;
+    /* Phase 38: one defer stack per open block. `parse_block` pushes an entry;
+       `defer_add` appends at parse time, and the exits materialise wrappers.
+       `in_defer` rejects control transfer inside a defer body. */
+    int  in_defer;
+    int  in_errdefer;
+    int  ndefer_blocks;
+    int  defer_head[256];
+    int  defer_tail[256];
+    int  defer_ids[257];
+    int  defer_block_err[256];
+    int  ndefer_next_id;
+    int  defer_break_base[256];
+    int  defer_cont_base[256];
+    /* The defer depth at each label/goto, so `func_end` can reject a jump
+       across a block that owns a defer while allowing a same-block jump. */
+    int  label_path[64][256];
+    int  goto_path[64][256];
+    char label_path_has[64][256];
+    char goto_path_has[64][256];
+    int  label_path_depth[64];
+    int  goto_path_depth[64];
+    /* LANG-29 S4 / B5: an expression-match arm block. `match_arm_pending`
+       marks the next `parse_block` as an arm's direct block; the `yield_*`
+       frames are a small stack so an expression match nested inside an arm
+       cannot clobber the enclosing arm's yield. `last_*` is the frame the
+       block just closed, read by `parse_match_expr` after `parse_block`
+       returns. The lengths are literals (a `pub struct` lands in the header). */
+    int  match_arm_pending;
+    int  in_match_arm;
+    int  yield_depth;
+    int  yield_expr[16];
+    int  yield_line[16];
+    int  yield_col[16];
+    int  yield_count[16];
+    char yield_type[16][160];
+    char last_yield_type[160];
+    int  last_yield_expr;
+    int  last_yield_line;
+    int  last_yield_col;
+    int  last_yield_count;
+} use StmtOps;

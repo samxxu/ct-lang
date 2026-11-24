@@ -12,6 +12,7 @@
 #include "StmtRangeText.h"
 #include "StmtRangeScan.h"
 #include "StmtScope.h"
+#include "StmtCore.h"
 #include "TypeCheck.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
