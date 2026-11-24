@@ -69,3 +69,13 @@
 - [DOC-99](../docs/doc-99-v11-prework-tracker.md)（前置准备，本卡不属准备项）
 - [D-022](../../docs/decisions/D-022.md)（seed 策略）
 - [SH-105](sh105-goldens-static-freeze.md)（静态 goldens，gate 12 的来源）
+
+
+## S1 切片（2026-11-24，DEV）
+
+已完成 **manifest 校验 + 负例**，未删任何目录：
+
+- 新增 `selfhost/check-archive-manifest.sh`：46 行 manifest 逐文件 sha256；缺文件/摘要不符/未列文件均红；
+- `--selftest`：干净副本绿、追加一字节红、删除一文件红；
+- 挂进 gate 12 `selfhost/check-goldens-ast.sh`（不新增门禁号），gate 12 仍 `25/25` 且输出 `archive-manifest: OK (46 files)`；
+- 本切片只加校验与负例，未改 `test/run.sh`、未改构建链、未动版本。

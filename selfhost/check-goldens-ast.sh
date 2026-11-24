@@ -106,6 +106,13 @@ for golden in "$goldens"/*.c; do
     fi
 done
 
+# SH-119 S1: the archive is the historical oracle after L0/L1/L2 retire.
+# Its sha256 manifest lives in the same gate 12 (no new gate number).
+if ! sh "$root/selfhost/check-archive-manifest.sh"; then
+    echo "FAIL archive-manifest (test/archive does not match its manifest)"
+    fail=$((fail + 1))
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "check-goldens-ast: $pass/$total"
 else
