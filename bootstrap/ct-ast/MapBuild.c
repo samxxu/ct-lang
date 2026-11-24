@@ -408,6 +408,191 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_rewrite_globals(vo
     return 0;
 }
 
+static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void *self, int line, int col, int unit) {
+    struct frontend_parse_MapBuild *_self = (struct frontend_parse_MapBuild *)self;
+    char src[MAX_TEXT];
+    char dst[MAX_TEXT];
+    char param[MAX_TEXT];
+    char msg[MAX_TEXT * 2];
+    struct frontend_module_MapTable * m;
+    struct frontend_module_MapBind * b;
+    int i;
+    int n;
+    int c;
+    int q;
+    int depth;
+    int eof;
+    int long_call;
+    int k;
+    (void)(line);
+    (void)(col);
+    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    if ((!(*_self->unit_is_map))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a map binding is only allowed in a .m.ct unit");
+    }
+    if (((_self->lex->tok == T_EOF) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a source type after 'binding'");
+    }
+    if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, src, sizeof(src)) != 0) {
+        return (-1);
+    }
+    if (((!src[0]) || (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "->"))))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '->' after a map binding's source type");
+    }
+    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    if (((_self->lex->tok == T_EOF) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a target type after '->'");
+    }
+    if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, dst, sizeof(dst)) != 0) {
+        return (-1);
+    }
+    if ((!dst[0])) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a target type after '->'");
+    }
+    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "{") != 0) {
+        return (-1);
+    }
+    if ((!((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "from")))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected 'from' in a map binding");
+    }
+    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "(") != 0) {
+        return (-1);
+    }
+    if (_self->lex->tok != T_ID) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a binding parameter name");
+    }
+    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, param, sizeof(param));
+    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
+        return (-1);
+    }
+    if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "->")))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '->' in a map binding");
+    }
+    if ((*_self->nmaps) >= MAX_MAPS) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many maps");
+    }
+    m = (&_self->maps[(*_self->nmaps)]);
+    snprintf(m->trait, MAX_TEXT, "%s", "");
+    snprintf(m->inst, MAX_TEXT, "%s", "");
+    snprintf(m->cname, MAX_TEXT, "%s", "");
+    snprintf(m->prefix, MAX_TEXT, "%s", "");
+    snprintf(m->vtable, MAX_TEXT, "%s", "");
+    snprintf(m->host_type, MAX_TEXT, "%s", src);
+    snprintf(m->bind_dst, MAX_TEXT, "%s", dst);
+    m->ns_host = 0;
+    m->is_static = 1;
+    m->type_host = 1;
+    m->is_binding = 1;
+    snprintf(m->path, MAX_TEXT, "%s", _self->sup->mem->path);
+    m->line = line;
+    m->unit = unit;
+    m->nb = 1;
+    b = (&m->b[0]);
+    snprintf(b->method, MAX_TEXT, "%s", "from");
+    snprintf(b->params[0], MAX_TEXT, "%s", param);
+    b->nparams = 1;
+    b->ti = (-1);
+    b->mi = (-1);
+    b->direct = 0;
+    b->recv = 1;
+    b->variadic = 0;
+    b->wrapper[0] = 0;
+    b->line = line;
+    i = _self->lex->pos;
+    n = 0;
+    q = 0;
+    depth = 0;
+    eof = 0;
+    long_call = 0;
+    while (((((_self->lex->src[i] == ' ') || (_self->lex->src[i] == '\t')) || (_self->lex->src[i] == '\n')) || (_self->lex->src[i] == '\r'))) {
+        i++;
+    }
+    for (; ; ) {
+        c = (unsigned char)(_self->lex->src[i]);
+        if (c == 0) {
+            eof = 1;
+            break;
+        }
+        if ((((q == 0) && (depth == 0)) && (c == ';'))) {
+            break;
+        }
+        if ((n + 1) >= MAX_TEXT) {
+            long_call = 1;
+            break;
+        }
+        if (((q == 0) && ((c == '"') || (c == '\'')))) {
+            q = c;
+        }
+        else {
+            if (((q != 0) && (c == q))) {
+                q = 0;
+            }
+            else {
+                if ((((q != 0) && (c == '\\')) && _self->lex->src[(i + 1)])) {
+                    b->call[n] = (char)(c);
+                    n++;
+                    i++;
+                    c = (unsigned char)(_self->lex->src[i]);
+                }
+                else {
+                    if (((q == 0) && (c == '('))) {
+                        depth++;
+                    }
+                    else {
+                        if (((q == 0) && (c == ')'))) {
+                            depth--;
+                        }
+                    }
+                }
+            }
+        }
+        b->call[n] = (char)(c);
+        n++;
+        i++;
+    }
+    if (eof) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated map binding recipe");
+    }
+    if (long_call) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "map binding recipe is too long");
+    }
+    while (((n > 0) && ((((b->call[(n - 1)] == ' ') || (b->call[(n - 1)] == '\t')) || (b->call[(n - 1)] == '\n')) || (b->call[(n - 1)] == '\r')))) {
+        n--;
+    }
+    b->call[n] = 0;
+    _self->lex->pos = i;
+    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
+        return (-1);
+    }
+    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
+        return (-1);
+    }
+    if (check_static_call(_self, m, b) != 0) {
+        return (-1);
+    }
+    for (k = 0; k < (*_self->nmaps); k++) {
+        if ((!_self->maps[k].is_binding)) {
+            continue;
+        }
+        if (_self->maps[k].unit != unit) {
+            continue;
+        }
+        if (strcmp(_self->maps[k].host_type, src) != 0) {
+            continue;
+        }
+        if (strcmp(_self->maps[k].bind_dst, dst) != 0) {
+            continue;
+        }
+        snprintf(msg, sizeof(msg), "duplicate map binding for '%s' -> '%s' (first at %s:%d)", src, dst, _self->maps[k].path, _self->maps[k].line);
+        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+    }
+    (*_self->nmaps)++;
+    return NO_NODE;
+}
+
 static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, int unit) {
     struct frontend_parse_MapBuild *_self = (struct frontend_parse_MapBuild *)self;
     char tname[MAX_TEXT];
@@ -452,8 +637,11 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     line = _self->lex->tokline;
     col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "binding"))) {
+        return _self->__frontend_parse_mapbuildops_vptr->parse_binding(_self, line, col, unit);
+    }
     if ((!((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "trait")))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected 'trait'");
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected 'trait' or 'binding'");
     }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (_self->lex->tok != T_ID) {
@@ -848,6 +1036,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
 const struct frontend_parse_MapBuildOps_vtbl frontend_parse_MapBuild_frontend_parse_MapBuildOps_vtable = {
     .check_call = frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call,
     .rewrite_globals = frontend_parse_MapBuild_frontend_parse_MapBuildOps_rewrite_globals,
+    .parse_binding = frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding,
     .parse = frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse
 };
 

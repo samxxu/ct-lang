@@ -44,6 +44,7 @@ pub trait MapBuildOps {
     int  check_call(char *b, const char *inst);
     int  rewrite_globals(char *s);
     int  parse(int unit);
+    int  parse_binding(int line, int col, int unit);
 }
 
 /* The tables the mapper fills belong to the parser (they are part of the unit
@@ -514,6 +515,132 @@ impl MapBuildOps for MapBuild {
         return 0;
     }
 
+    /* LANG-29 S4 / B4: `map binding <Source> -> <Target> { from(x) -> call; }`.
+       It is the compile-time (Source, Target) -> recipe registry behind the
+       D-020 binding-site conversion. Like a static `map trait` it lives in a
+       `.m.ct` unit, expands at the use site and emits nothing; unlike a trait
+       it declares no method name, no wrapper and no vtable — the pair itself
+       is the lookup key and `from` is only the recipe's binding parameter
+       holder. */
+    int parse_binding(int line, int col, int unit)
+    {
+        char src[MAX_TEXT];
+        char dst[MAX_TEXT];
+        char param[MAX_TEXT];
+        char msg[MAX_TEXT * 2];
+        struct MapTable *m;
+        struct MapBind *b;
+        int i, n, c, q, depth, eof, long_call, k;
+
+        (void)line;
+        (void)col;
+        self->sup->lex_next();                       /* consume `binding` */
+        if (!*self->unit_is_map)
+            return self->sup->fail("a map binding is only allowed in a .m.ct unit");
+        if (self->lex->tok == T_EOF
+            || (self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
+            return self->sup->fail("expected a source type after 'binding'");
+        if (self->ex->parse_type(src, sizeof src) != 0) return -1;
+        if (!src[0] || !(self->lex->tok == T_PUNCT && self->lex->tok_is("->")))
+            return self->sup->fail("expected '->' after a map binding's source type");
+        self->sup->lex_next();
+        if (self->lex->tok == T_EOF
+            || (self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
+            return self->sup->fail("expected a target type after '->'");
+        if (self->ex->parse_type(dst, sizeof dst) != 0) return -1;
+        if (!dst[0]) return self->sup->fail("expected a target type after '->'");
+        if (self->sup->expect("{") != 0) return -1;
+        if (!(self->lex->tok == T_ID && self->lex->tok_is("from")))
+            return self->sup->fail("expected 'from' in a map binding");
+        self->sup->lex_next();
+        if (self->sup->expect("(") != 0) return -1;
+        if (self->lex->tok != T_ID)
+            return self->sup->fail("expected a binding parameter name");
+        self->lex->tok_copy(param, sizeof param);
+        self->sup->lex_next();
+        if (self->sup->expect(")") != 0) return -1;
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("->")))
+            return self->sup->fail("expected '->' in a map binding");
+        if (*self->nmaps >= MAX_MAPS) return self->sup->fail("too many maps");
+        m = &self->maps[*self->nmaps];
+        snprintf(m->trait, MAX_TEXT, "%s", "");
+        snprintf(m->inst, MAX_TEXT, "%s", "");
+        snprintf(m->cname, MAX_TEXT, "%s", "");
+        snprintf(m->prefix, MAX_TEXT, "%s", "");
+        snprintf(m->vtable, MAX_TEXT, "%s", "");
+        snprintf(m->host_type, MAX_TEXT, "%s", src);
+        snprintf(m->bind_dst, MAX_TEXT, "%s", dst);
+        m->ns_host = 0;
+        m->is_static = 1;
+        m->type_host = 1;
+        m->is_binding = 1;
+        snprintf(m->path, MAX_TEXT, "%s", self->sup->mem->path);
+        m->line = line;
+        m->unit = unit;
+        m->nb = 1;
+        b = &m->b[0];
+        snprintf(b->method, MAX_TEXT, "%s", "from");
+        snprintf(b->params[0], MAX_TEXT, "%s", param);
+        b->nparams = 1;
+        b->ti = -1;
+        b->mi = -1;
+        b->direct = 0;
+        b->recv = 1;
+        b->variadic = 0;
+        b->wrapper[0] = 0;
+        b->line = line;
+        /* capture the recipe verbatim, exactly like the static `map trait`
+           path: it is validated as one call, then expanded at the use site */
+        i = self->lex->pos;
+        n = 0;
+        q = 0;
+        depth = 0;
+        eof = 0;
+        long_call = 0;
+        while (self->lex->src[i] == ' ' || self->lex->src[i] == '\t'
+               || self->lex->src[i] == '\n' || self->lex->src[i] == '\r') i++;
+        for (;;) {
+            c = (unsigned char)self->lex->src[i];
+            if (c == 0) { eof = 1; break; }
+            if (q == 0 && depth == 0 && c == ';') break;
+            if (n + 1 >= MAX_TEXT) { long_call = 1; break; }
+            if (q == 0 && (c == '"' || c == '\'')) q = c;
+            else if (q != 0 && c == q) q = 0;
+            else if (q != 0 && c == '\\' && self->lex->src[i + 1]) {
+                b->call[n] = (char)c;
+                n++;
+                i++;
+                c = (unsigned char)self->lex->src[i];
+            } else if (q == 0 && c == '(') depth++;
+            else if (q == 0 && c == ')') depth--;
+            b->call[n] = (char)c;
+            n++;
+            i++;
+        }
+        if (eof) return self->sup->fail("unterminated map binding recipe");
+        if (long_call) return self->sup->fail("map binding recipe is too long");
+        while (n > 0 && (b->call[n - 1] == ' ' || b->call[n - 1] == '\t'
+                         || b->call[n - 1] == '\n' || b->call[n - 1] == '\r')) n--;
+        b->call[n] = 0;
+        self->lex->pos = i;
+        self->sup->lex_next();
+        if (self->sup->expect(";") != 0) return -1;
+        if (self->sup->expect("}") != 0) return -1;
+        if (check_static_call(self, m, b) != 0) return -1;
+        for (k = 0; k < *self->nmaps; k++) {
+            if (!self->maps[k].is_binding) continue;
+            if (self->maps[k].unit != unit) continue;
+            if (strcmp(self->maps[k].host_type, src) != 0) continue;
+            if (strcmp(self->maps[k].bind_dst, dst) != 0) continue;
+            snprintf(msg, sizeof msg,
+                     "duplicate map binding for '%s' -> '%s' (first at %s:%d)",
+                     src, dst, self->maps[k].path, self->maps[k].line);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        (*self->nmaps)++;
+        return NO_NODE;
+    }
+
     int parse(int unit)
     {
         char tname[MAX_TEXT];
@@ -537,8 +664,10 @@ impl MapBuildOps for MapBuild {
         line = self->lex->tokline;
         col = self->lex->tokstart - self->lex->lstart + 1;
         self->sup->lex_next();                       /* consume `map` */
+        if (self->lex->tok == T_ID && self->lex->tok_is("binding"))
+            return self->parse_binding(line, col, unit);
         if (!(self->lex->tok == T_ID && self->lex->tok_is("trait")))
-            return self->sup->fail("expected 'trait'");
+            return self->sup->fail("expected 'trait' or 'binding'");
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
         self->lex->tok_copy(tname, sizeof tname);

@@ -96,6 +96,8 @@ struct frontend_module_MapTable {
     int is_static;
     int type_host;
     char host_type[160];
+    int is_binding;
+    char bind_dst[160];
     struct frontend_module_MapBind b[64];
     int nb;
     int line;

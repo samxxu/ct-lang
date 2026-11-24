@@ -48,6 +48,11 @@ pub struct MapTable {
     int  is_static;                 /* declared in a `.m.ct` unit: no wrapper, no vtable */
     int  type_host;                 /* 1 when the host is a C type (`for type`) */
     char host_type[160];            /* the type host's receiver spelling */
+    /* LANG-29 S4 / B4: a compile-time `map binding <Source> -> <Target>` entry.
+       It sits in the same table so import reachability (`map_visible`) is shared;
+       it has no trait, no wrapper and no vtable. `bind_dst` is the target type. */
+    int  is_binding;
+    char bind_dst[160];
     struct MapBind b[64];
     int  nb;
     int  line;

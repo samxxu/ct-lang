@@ -756,3 +756,75 @@ error: impl for undefined struct 'char'
 ```text
 error: no method 'get' for type 'char *'
 ```
+
+## 9 绑定点转换的第三来源：`map binding`
+
+**适用场景**：一个类型对（`Node -> Num`）有固定的转换函数，既能像显式 `as<T>()`
+一样调用，又希望声明初始化、赋值与 `return` 处裸写即可转换；转换实现属于一个
+可 import 的映射单元，而不是源类型的固有方法。
+
+```ct
+/* shapes.h.ct */
+pub struct Node { int v; }
+pub struct Num  { int n; }
+pub struct Num node_to_num(struct Node x) {
+    Num r = { x.v + 7 };
+    return r;
+}
+```
+
+```ct
+/* ops.m.ct —— 映射单元，不产生产物 */
+map binding struct Node -> struct Num {
+    from(x) -> node_to_num(x);
+}
+```
+
+```ct
+/* prog.ct */
+import shapes;
+import ops;
+
+struct Num twice(struct Node n)
+{
+    return n;                      /* return 处裸写即转换 */
+}
+
+int main(void)
+{
+    struct Node node = { 5 };
+    struct Num a = node;           /* 声明初始化 */
+    struct Num b;
+    b = node;                      /* 赋值 */
+    struct Num c = node.as<Num>(); /* 显式宽松档 */
+    return a.n + b.n + c.n + twice(node).n == 4 * 12 ? 0 : 1;
+}
+```
+
+- 查找序：源类型固有 `as` → 已 import 的 `map binding` → 已 import 的
+  `map trait`（D-021 §4）；前一个命中，后面的不参与。
+- recipe 在**使用点**展开（`node_to_num((node))`），没有 wrapper / vtable /
+  运行时注册表；只写 `map binding` 而不使用它，生成的 C 里不出现这次调用。
+- 未 import `ops` 时是“缺转换”硬错，诊断会提示 import 一个带 `map binding` 的
+  映射单元；同一对由两个已 import 的单元提供时报歧义，并列两个候选文件名。
+- 只做一跳：`A -> B` 与 `B -> C` 不会把 `A` 直接转成 `C`。
+- `map binding` 只能写在 `.m.ct`；严格档 `to<T>()` 仍只由固有 `to` / `map trait`
+  提供（本切片的边界）。
+
+**负例（预期红）**
+
+```ct
+import shapes;      /* 故意不 import ops */
+int main(void)
+{
+    struct Node n = { 5 };
+    struct Num a = n;
+    return a.n;
+}
+```
+
+```text
+error: no conversion from 'struct Node' to 'struct Num'; add an inherent 'as' method
+on 'struct Node', import a mapping trait that declares 'as', or import a mapping unit
+with a 'map binding' for this pair
+```

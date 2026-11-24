@@ -1792,6 +1792,32 @@ static int map_visible(struct Emitter *e, int i)
     return e->maps[i].unit >= 0 && e->maps[i].unit < MAX_UNITS && reach[e->maps[i].unit];
 }
 
+/* The file name of a unit path, for a diagnostic that must name both
+   candidates inside the 160-byte message cap. */
+static void map_path_base(const char *p, char *out, int cap)
+{
+    const char *b = p;
+    const char *q;
+    for (q = p; *q; q++)
+        if (*q == '/' || *q == '\\') b = q + 1;
+    snprintf(out, (size_t)cap, "%s", b);
+}
+
+/* LANG-29 S4 / B4: the comparison key of a `map binding` pair. Same
+   normalisation as the parser's `bind_conv_key`: `type_key` folds whitespace
+   and integer aliases, then the aggregate tag is dropped so `Node` and
+   `struct Node` are the same key. */
+static void map_bind_key(const char *in, char *out, int cap)
+{
+    char k[MAX_TEXT];
+
+    frontend::type::type_key(in, k, sizeof k);
+    if (strncmp(k, "struct", 6) == 0) memmove(k, k + 6, strlen(k + 6) + 1);
+    else if (strncmp(k, "union", 5) == 0) memmove(k, k + 5, strlen(k + 5) + 1);
+    else if (strncmp(k, "enum", 4) == 0) memmove(k, k + 4, strlen(k + 4) + 1);
+    snprintf(out, (size_t)cap, "%s", k);
+}
+
 /* The prologue of the map closure: every `#include` / `#define` line of an
    imported `.m.ct` unit, deduplicated by whole line. Emitted only in build
    mode, where the unit table exists. */
@@ -5408,6 +5434,57 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
         return emit_recipe(self, &self->maps[found], &self->maps[found].b[bind],
                            -1, self->arena->nodes[n].b, n);
     }
+    /* LANG-29 S4 / B4: a binding-site conversion served by a `map binding`.
+       Only the pair matters; the recipe is expanded exactly like a static
+       type-host map, so the generated C is the hand-written call. Two visible
+       bindings for the same pair are a hard error that names both units. */
+    if (self->arena->nodes[n].aux == 12) {
+        char rt[MAX_TEXT];
+        char tg[MAX_TEXT];
+        char rk[MAX_TEXT];
+        char tk[MAX_TEXT];
+        char hk[MAX_TEXT];
+        char dk[MAX_TEXT];
+        char msg[512];
+        int mi, cand = -1, cand2 = -1;
+
+        snprintf(rt, sizeof rt, "%s", self->arena->nodes[n].text);
+        snprintf(tg, sizeof tg, "%s", self->arena->nodes[n].text4);
+        if (!rt[0] || !tg[0])
+            return self->fail_from(n, "a map binding conversion lost its pair");
+        map_bind_key(rt, rk, MAX_TEXT);
+        map_bind_key(tg, tk, MAX_TEXT);
+        for (mi = 0; mi < (*self->nmaps); mi++) {
+            if (!self->maps[mi].is_binding) continue;
+            if (!map_visible(self, mi)) continue;
+            map_bind_key(self->maps[mi].host_type, hk, MAX_TEXT);
+            if (strcmp(hk, rk) != 0) continue;
+            map_bind_key(self->maps[mi].bind_dst, dk, MAX_TEXT);
+            if (strcmp(dk, tk) != 0) continue;
+            if (cand < 0) cand = mi;
+            else if (cand2 < 0) cand2 = mi;
+        }
+        if (cand < 0) {
+            snprintf(msg, sizeof msg,
+                     "no conversion from '%s' to '%s'; import a mapping unit with "
+                     "a 'map binding' for this pair, import a mapping trait that "
+                     "declares 'as', or add an inherent 'as' method",
+                     rt, tg);
+            return self->fail_from(n, msg);
+        }
+        if (cand2 >= 0) {
+            char p1[MAX_TEXT];
+            char p2[MAX_TEXT];
+            map_path_base(self->maps[cand].path, p1, sizeof p1);
+            map_path_base(self->maps[cand2].path, p2, sizeof p2);
+            snprintf(msg, sizeof msg,
+                     "ambiguous map binding for '%s' -> '%s': %s and %s; exactly one imported binding may serve a pair",
+                     rt, tg, p1, p2);
+            return self->fail_from(n, msg);
+        }
+        return emit_recipe(self, &self->maps[cand], &self->maps[cand].b[0],
+                           self->arena->nodes[n].a, -1, n);
+    }
     if (self->arena->nodes[n].aux == 6) {
         char rt[MAX_TEXT];
         char rk[MAX_TEXT];
@@ -5423,6 +5500,7 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
            and be missed there */
         frontend::type::type_key(rt, rk, MAX_TEXT);
         for (mi = 0; mi < (*self->nmaps); mi++) {
+            if (self->maps[mi].is_binding) continue;
             if (!self->maps[mi].is_static || !self->maps[mi].type_host) continue;
             if (!map_visible(self, mi)) continue;
             /* P20-01: a qualified call names the trait, so only its map
@@ -10354,8 +10432,14 @@ impl EmitOps for Emitter {
         fputs("],\n", f);
 
         fputs("  \"maps\": [", f);
+        first = 1;
         for (i = 0; i < (*self->nmaps); i++) {
-            if (i > 0) fputc(',', f);
+            /* LANG-29 S4 / B4: a `map binding` is a conversion registry entry,
+               not a trait map; the `--emit-map` contract stays the Phase 11
+               shape (its own reporting is out of the B4 slice). */
+            if (self->maps[i].is_binding) continue;
+            if (!first) fputc(',', f);
+            first = 0;
             fputs("{\"trait\":\"", f);
             self->emit_json_str(f, self->maps[i].trait);
             if (self->maps[i].is_static) {

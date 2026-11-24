@@ -3484,10 +3484,38 @@ v0-PH-88 把发射器的五个 kind 判别函数改成与 §4.74 同形的**单�
 > 自动派生（字段映射）与 `decode<T>` 的实现不在本切片内，见文末“未覆盖”。
 
 绑定点转换让一个值在**绑定点**上转换成目标类型，而不是在表达式内隐式转换。
-转换的来源只有两处，按 D-020 的顺序查找：
+转换的来源有三处，按 D-021 §4 的顺序查找：
 
 1. 源类型的固有方法 `as`（宽松档）或 `to`（严格档）；
-2. 已 import 的映射 trait（`.m.ct` 的 `map trait T for type <源类型>`）。
+2. 已 import 的 **`map binding`**（编译期 `(Source, Target) -> recipe` 注册表）；
+3. 已 import 的映射 trait（`.m.ct` 的 `map trait T for type <源类型>`）。
+
+**`map binding` 注册表（LANG-29 S4 / B4）。** 一个映射单元（`.m.ct`）可以声明
+一条类型对到 recipe 的转换：
+
+```ct
+map binding struct Node -> struct Num {
+    from(x) -> node_to_num(x);
+}
+```
+
+- 查找键是 **(源类型, 目标类型)** 对，不是方法名；`from(x)` 只给 recipe 一个形参名，
+  `x` 在展开时替换为绑定点的实际值（只替换一次；同一 recipe 里多次出现会要求先
+  落局部量，与静态 map 的规则相同）。
+- **import 可见**：只有当前单元 import 闭包内声明的 binding 参与查找；未 import 时
+  按“缺转换”诊断并提示 import，而不是“未声明标识符”。
+- **一跳**：只做 `Source -> Target` 的直接查找，不串 `A -> B -> C`；需要两跳时写两条
+  binding 并由源码显式转两次。
+- **歧义硬错**：同一对由两个已 import 的 binding 提供时编译失败，诊断并列两个
+  声明单元的文件名；不按声明顺序静默取第一个。
+- **查找序**：固有 `as` 命中时 binding 不参与；binding 命中时已 import 的
+  `map trait` 不参与。*严格档 `to<T>()` 仍只由固有 `to` / 映射 trait 提供，binding
+  只服务宽松档与裸绑定点*（本切片的诚实边界）。
+- **生成 C / 零成本**：使用点直接展开 recipe（如 `node_to_num((node))`），没有
+  wrapper、vtable、运行时注册表；`.m.ct` 不产生产物，import 但未使用的 binding
+  不贡献任何代码。
+- **开关**：`CT_BINDING_CONVERSION=0` 关闭四类绑定点的隐式转换，binding 随之不参与；
+  显式 `.as<T>()` 仍可命中 binding（显式调用从来不受该开关影响）。
 
 **宽松档 `as<T>`。** `x.as<T>() -> T`：失败时由方法自己给出零值/缺省值。
 绑定点上**裸写**一个值也走宽松档：只要目标类型与源类型的固有 `as` 或映射
@@ -3532,7 +3560,8 @@ C 原有行为。
 **查找缺失与歧义。**
 
 - 显式 `as<T>()`/`to<T>()` 找不到候选：`no conversion from 'S' to 'T'; add an
-  inherent 'as' method on 'S' or import a mapping trait that declares 'as'`；
+  inherent 'as' method on 'S', import a mapping trait that declares 'as', or import
+  a mapping unit with a 'map binding' for this pair`；
 - 两个已 import 的映射 trait 同时声明同一 `as`：硬错，列出两个候选的
   `<namespace>_<Trait>::<method>`，不按声明顺序静默取第一个；
 - 映射 trait 不可见（未 import）：报“no conversion … import the mapping trait …”，
@@ -3549,4 +3578,5 @@ v1.1 映射层。绑定点裸写只查 `as` / `to`，绝不会回退到 `decode`
 `Result<T, DecodeError>` 承担，不静默零值。
 
 **未覆盖（诚实登记）。** 自动字段映射、`decode<T>` 的实现、诊断码
-（LANG-25）留到后续阶段。
+（LANG-25）留到后续阶段。`map binding` 的当前切面只服务宽松档与裸绑定点，
+严格档 `to<T>()` 不查 binding；`--emit-map` 的 JSON 也不列 binding（B4 范围外）。

@@ -1775,6 +1775,7 @@ static int bind_conv_maps(struct Expr *self, const char *stype, const char *meth
 
     bind_conv_key(stype, sk, sizeof sk);
     for (i = 0; i < *self->nmaps; i++) {
+        if (self->maps[i].is_binding) continue;
         if (!self->maps[i].is_static || !self->maps[i].type_host) continue;
         bind_conv_key(self->maps[i].host_type, hk, sizeof hk);
         if (strcmp(hk, sk) != 0) continue;
@@ -1794,6 +1795,50 @@ static int bind_conv_maps(struct Expr *self, const char *stype, const char *meth
     return seen;
 }
 
+/* LANG-29 S4 / B4: the `map binding` registry. A binding is keyed by the
+   (source, target) pair alone — no method name — and sits between the source
+   type's inherent `as` and an imported `map trait` (D-021 §4). The count is
+   what the caller needs: > 1 is the emitter's ambiguity, since only it can
+   tell which declaring unit the current unit actually imports. */
+static int bind_conv_binding(struct Expr *self, const char *stype, const char *target)
+{
+    char sk[MAX_TEXT];
+    char tk[MAX_TEXT];
+    char hk[MAX_TEXT];
+    char dk[MAX_TEXT];
+    int i, seen = 0;
+
+    bind_conv_key(stype, sk, sizeof sk);
+    bind_conv_key(target, tk, sizeof tk);
+    for (i = 0; i < *self->nmaps; i++) {
+        if (!self->maps[i].is_binding) continue;
+        bind_conv_key(self->maps[i].host_type, hk, sizeof hk);
+        if (strcmp(hk, sk) != 0) continue;
+        bind_conv_key(self->maps[i].bind_dst, dk, sizeof dk);
+        if (strcmp(dk, tk) != 0) continue;
+        seen++;
+    }
+    return seen;
+}
+
+/* The conversion node for a `map binding` hit: aux 12 tells the emitter to
+   look the pair up in the binding registry and expand the recipe. */
+static int bind_conv_call_binding(struct Expr *self, int recv, const char *stype,
+                                  const char *target, int line, int col)
+{
+    int n = self->sup->new_node(N_MCALL);
+    if (n < 0) return -1;
+    self->arena->nodes[n].aux = 12;
+    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
+    snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+    self->arena->nodes[n].sflags = self->arena->nodes[n].sflags | 4;
+    self->arena->nodes[n].a = recv;
+    self->arena->nodes[n].b = -1;
+    self->arena->nodes[n].line = line;
+    self->arena->nodes[n].num = col;
+    return n;
+}
+
 /* Does any conversion (inherent or mapped) exist for this source spelling? */
 static int bind_conv_any(struct Expr *self, const char *stype, const char *method)
 {
@@ -1803,7 +1848,8 @@ static int bind_conv_any(struct Expr *self, const char *stype, const char *metho
     ret[0] = 0;
     if (bind_conv_inherent(self, stype, method, ret, sizeof ret, &ptr) >= 0) return 1;
     ret[0] = 0;
-    return bind_conv_maps(self, stype, method, ret, sizeof ret) > 0;
+    if (bind_conv_maps(self, stype, method, ret, sizeof ret) > 0) return 1;
+    return 0;
 }
 
 static int bind_conv_call(struct Expr *self, int recv, const char *stype, const char *method, const char *target, int line, int col)
@@ -1903,6 +1949,11 @@ static int bind_conv_site(struct Expr *self, int expr, const char *target, int l
     if (mm == -3)
         return tool::diag::ct_sem_error(line, col,
             "an 'as' conversion takes no arguments", self->sup->mem->path);
+    /* D-021 §4 lookup order: inherent `as`, then a `map binding`, then an
+       imported `map trait`. The binding is keyed by the pair, so it is asked
+       before the method table. */
+    if (bind_conv_binding(self, st, target) > 0)
+        return bind_conv_call_binding(self, expr, st, target, line, col);
     ret[0] = 0;
     nm = bind_conv_maps(self, st, "as", ret, sizeof ret);
     if (nm > 0)
@@ -1925,7 +1976,9 @@ static int bind_conv_site(struct Expr *self, int expr, const char *target, int l
         return expr;
     if (bind_conv_struct_like(self, st) && bind_conv_struct_like(self, target)) {
         snprintf(msg, sizeof msg,
-                 "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s' or import a mapping trait that declares 'as'",
+                 "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', "
+                 "import a mapping trait that declares 'as', or import a mapping unit "
+                 "with a 'map binding' for this pair",
                  st, target, st);
         return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
     }
@@ -1967,11 +2020,15 @@ static int bind_conv_explicit(struct Expr *self, int recv, const char *target, i
         }
         return bind_conv_call(self, recv, st, "as", target, line, col);
     }
+    if (bind_conv_binding(self, st, target) > 0)
+        return bind_conv_call_binding(self, recv, st, target, line, col);
     ret[0] = 0;
     nm = bind_conv_maps(self, st, "as", ret, sizeof ret);
     if (nm > 0) return bind_conv_call(self, recv, st, "as", target, line, col);
     snprintf(msg, sizeof msg,
-             "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s' or import a mapping trait that declares 'as'",
+             "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', "
+             "import a mapping trait that declares 'as', or import a mapping unit "
+             "with a 'map binding' for this pair",
              st, target, st);
     return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
 }
@@ -6289,6 +6346,7 @@ impl ExprOps for Expr {
                                        dropping a surplus actual in silence */
                                     frontend::type::type_key(rt2, rk, sizeof rk);
                                     for (mi2 = 0; mi2 < hn; mi2++) {
+                                        if (hm[mi2].is_binding) continue;
                                         if (!hm[mi2].is_static
                                             || !hm[mi2].type_host) continue;
                                         frontend::type::type_key(hm[mi2].host_type, tk, sizeof tk);

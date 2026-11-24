@@ -371,6 +371,8 @@ static int adoption_default_only(struct backend_emit_Emitter *, int, const char 
 static int default_missing_field(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int, char *);
 static int emit_default_method(struct backend_emit_Emitter *, int, const char *, int, int, int);
 static int map_visible(struct backend_emit_Emitter *, int);
+static void map_path_base(const char *, char *, int);
+static void map_bind_key(const char *, char *, int);
 static int emit_map_prologues(struct backend_emit_Emitter *, int);
 static void map_clean_type(const char *, char *);
 static void trait_qual_name(struct frontend_sym_Symbols *, int, char *, int);
@@ -4108,10 +4110,15 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_map(void *self, const
     }
     fputs("],\n", f);
     fputs("  \"maps\": [", f);
+    first = 1;
     for (i = 0; i < (*_self->nmaps); i++) {
-        if (i > 0) {
+        if (_self->maps[i].is_binding) {
+            continue;
+        }
+        if ((!first)) {
             fputc(',', f);
         }
+        first = 0;
         fputs("{\"trait\":\"", f);
         _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->maps[i].trait);
         if (_self->maps[i].is_static) {
@@ -6357,6 +6364,34 @@ static int map_visible(struct backend_emit_Emitter * e, int i) {
         }
     }
     return (((e->maps[i].unit >= 0) && (e->maps[i].unit < MAX_UNITS)) && reach[e->maps[i].unit]);
+}
+static void map_path_base(const char * p, char * out, int cap) {
+    const char * b = p;
+    const char * q;
+    for (q = p; (*q); q++) {
+        if ((((*q) == '/') || ((*q) == '\\'))) {
+            b = (q + 1);
+        }
+    }
+    snprintf(out, (size_t)(cap), "%s", b);
+}
+static void map_bind_key(const char * in, char * out, int cap) {
+    char k[MAX_TEXT];
+    frontend_type_type_key(in, k, sizeof(k));
+    if (strncmp(k, "struct", 6) == 0) {
+        memmove(k, (k + 6), (strlen((k + 6)) + 1));
+    }
+    else {
+        if (strncmp(k, "union", 5) == 0) {
+            memmove(k, (k + 5), (strlen((k + 5)) + 1));
+        }
+        else {
+            if (strncmp(k, "enum", 4) == 0) {
+                memmove(k, (k + 4), (strlen((k + 4)) + 1));
+            }
+        }
+    }
+    snprintf(out, (size_t)(cap), "%s", k);
 }
 static int emit_map_prologues(struct backend_emit_Emitter * e, int u) {
     char reach[MAX_UNITS];
@@ -10063,6 +10098,62 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         }
         return emit_recipe(self, (&self->maps[found]), (&self->maps[found].b[bind]), (-1), self->arena->nodes[n].b, n);
     }
+    if (self->arena->nodes[n].aux == 12) {
+        char rt[MAX_TEXT];
+        char tg[MAX_TEXT];
+        char rk[MAX_TEXT];
+        char tk[MAX_TEXT];
+        char hk[MAX_TEXT];
+        char dk[MAX_TEXT];
+        char msg[512];
+        int mi;
+        int cand = (-1);
+        int cand2 = (-1);
+        snprintf(rt, sizeof(rt), "%s", self->arena->nodes[n].text);
+        snprintf(tg, sizeof(tg), "%s", self->arena->nodes[n].text4);
+        if (((!rt[0]) || (!tg[0]))) {
+            return self->__backend_emit_emitops_vptr->fail_from(self, n, "a map binding conversion lost its pair");
+        }
+        map_bind_key(rt, rk, MAX_TEXT);
+        map_bind_key(tg, tk, MAX_TEXT);
+        for (mi = 0; mi < (*self->nmaps); mi++) {
+            if ((!self->maps[mi].is_binding)) {
+                continue;
+            }
+            if ((!map_visible(self, mi))) {
+                continue;
+            }
+            map_bind_key(self->maps[mi].host_type, hk, MAX_TEXT);
+            if (strcmp(hk, rk) != 0) {
+                continue;
+            }
+            map_bind_key(self->maps[mi].bind_dst, dk, MAX_TEXT);
+            if (strcmp(dk, tk) != 0) {
+                continue;
+            }
+            if (cand < 0) {
+                cand = mi;
+            }
+            else {
+                if (cand2 < 0) {
+                    cand2 = mi;
+                }
+            }
+        }
+        if (cand < 0) {
+            snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s'; import a mapping unit with ""a 'map binding' for this pair, import a mapping trait that ""declares 'as', or add an inherent 'as' method", rt, tg);
+            return self->__backend_emit_emitops_vptr->fail_from(self, n, msg);
+        }
+        if (cand2 >= 0) {
+            char p1[MAX_TEXT];
+            char p2[MAX_TEXT];
+            map_path_base(self->maps[cand].path, p1, sizeof(p1));
+            map_path_base(self->maps[cand2].path, p2, sizeof(p2));
+            snprintf(msg, sizeof(msg), "ambiguous map binding for '%s' -> '%s': %s and %s; exactly one imported binding may serve a pair", rt, tg, p1, p2);
+            return self->__backend_emit_emitops_vptr->fail_from(self, n, msg);
+        }
+        return emit_recipe(self, (&self->maps[cand]), (&self->maps[cand].b[0]), self->arena->nodes[n].a, (-1), n);
+    }
     if (self->arena->nodes[n].aux == 6) {
         char rt[MAX_TEXT];
         char rk[MAX_TEXT];
@@ -10082,6 +10173,9 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         }
         frontend_type_type_key(rt, rk, MAX_TEXT);
         for (mi = 0; mi < (*self->nmaps); mi++) {
+            if (self->maps[mi].is_binding) {
+                continue;
+            }
             if (((!self->maps[mi].is_static) || (!self->maps[mi].type_host))) {
                 continue;
             }

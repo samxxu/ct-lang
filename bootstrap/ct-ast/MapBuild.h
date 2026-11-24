@@ -81,6 +81,7 @@ struct frontend_parse_MapBuildOps_vtbl {
     int (*check_call)(void *, char *, const char *);
     int (*rewrite_globals)(void *, char *);
     int (*parse)(void *, int);
+    int (*parse_binding)(void *, int, int, int);
 };
 struct frontend_parse_MapBuildOps_iface {
     void *self;

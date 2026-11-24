@@ -229,6 +229,8 @@ static int bind_conv_struct_like(struct frontend_parse_Expr *, const char *);
 static int bind_conv_ibase(struct frontend_parse_Expr *, const char *, char *, int, int *);
 static int bind_conv_inherent(struct frontend_parse_Expr *, const char *, const char *, char *, int, int *);
 static int bind_conv_maps(struct frontend_parse_Expr *, const char *, const char *, char *, int);
+static int bind_conv_binding(struct frontend_parse_Expr *, const char *, const char *);
+static int bind_conv_call_binding(struct frontend_parse_Expr *, int, const char *, const char *, int, int);
 static int bind_conv_any(struct frontend_parse_Expr *, const char *, const char *);
 static int bind_conv_call(struct frontend_parse_Expr *, int, const char *, const char *, const char *, int, int);
 static int bind_conv_on(void);
@@ -4458,6 +4460,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     hn = (*_self->sup->ty->nmaps);
                                     frontend_type_type_key(rt2, rk, sizeof(rk));
                                     for (mi2 = 0; mi2 < hn; mi2++) {
+                                        if (hm[mi2].is_binding) {
+                                            continue;
+                                        }
                                         if (((!hm[mi2].is_static) || (!hm[mi2].type_host))) {
                                             continue;
                                         }
@@ -10087,6 +10092,9 @@ static int bind_conv_maps(struct frontend_parse_Expr * self, const char * stype,
     int seen = 0;
     bind_conv_key(stype, sk, sizeof(sk));
     for (i = 0; i < (*self->nmaps); i++) {
+        if (self->maps[i].is_binding) {
+            continue;
+        }
         if (((!self->maps[i].is_static) || (!self->maps[i].type_host))) {
             continue;
         }
@@ -10116,6 +10124,46 @@ static int bind_conv_maps(struct frontend_parse_Expr * self, const char * stype,
     (void)(rk);
     return seen;
 }
+static int bind_conv_binding(struct frontend_parse_Expr * self, const char * stype, const char * target) {
+    char sk[MAX_TEXT];
+    char tk[MAX_TEXT];
+    char hk[MAX_TEXT];
+    char dk[MAX_TEXT];
+    int i;
+    int seen = 0;
+    bind_conv_key(stype, sk, sizeof(sk));
+    bind_conv_key(target, tk, sizeof(tk));
+    for (i = 0; i < (*self->nmaps); i++) {
+        if ((!self->maps[i].is_binding)) {
+            continue;
+        }
+        bind_conv_key(self->maps[i].host_type, hk, sizeof(hk));
+        if (strcmp(hk, sk) != 0) {
+            continue;
+        }
+        bind_conv_key(self->maps[i].bind_dst, dk, sizeof(dk));
+        if (strcmp(dk, tk) != 0) {
+            continue;
+        }
+        seen++;
+    }
+    return seen;
+}
+static int bind_conv_call_binding(struct frontend_parse_Expr * self, int recv, const char * stype, const char * target, int line, int col) {
+    int n = self->sup->__frontend_parse_supportops_vptr->new_node(self->sup, N_MCALL);
+    if (n < 0) {
+        return (-1);
+    }
+    self->arena->nodes[n].aux = 12;
+    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
+    snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+    self->arena->nodes[n].sflags = (self->arena->nodes[n].sflags | 4);
+    self->arena->nodes[n].a = recv;
+    self->arena->nodes[n].b = (-1);
+    self->arena->nodes[n].line = line;
+    self->arena->nodes[n].num = col;
+    return n;
+}
 static int bind_conv_any(struct frontend_parse_Expr * self, const char * stype, const char * method) {
     char ret[MAX_TEXT];
     int ptr = 0;
@@ -10124,7 +10172,10 @@ static int bind_conv_any(struct frontend_parse_Expr * self, const char * stype, 
         return 1;
     }
     ret[0] = 0;
-    return (bind_conv_maps(self, stype, method, ret, sizeof(ret)) > 0);
+    if (bind_conv_maps(self, stype, method, ret, sizeof(ret)) > 0) {
+        return 1;
+    }
+    return 0;
 }
 static int bind_conv_call(struct frontend_parse_Expr * self, int recv, const char * stype, const char * method, const char * target, int line, int col) {
     int n;
@@ -10227,6 +10278,9 @@ static int bind_conv_site(struct frontend_parse_Expr * self, int expr, const cha
     if (mm == (-3)) {
         return tool_diag_ct_sem_error(line, col, "an 'as' conversion takes no arguments", self->sup->mem->path);
     }
+    if (bind_conv_binding(self, st, target) > 0) {
+        return bind_conv_call_binding(self, expr, st, target, line, col);
+    }
     ret[0] = 0;
     nm = bind_conv_maps(self, st, "as", ret, sizeof(ret));
     if (nm > 0) {
@@ -10239,7 +10293,7 @@ static int bind_conv_site(struct frontend_parse_Expr * self, int expr, const cha
         return expr;
     }
     if ((bind_conv_struct_like(self, st) && bind_conv_struct_like(self, target))) {
-        snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s' or import a mapping trait that declares 'as'", st, target, st);
+        snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', ""import a mapping trait that declares 'as', or import a mapping unit ""with a 'map binding' for this pair", st, target, st);
         return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
     }
     return expr;
@@ -10278,12 +10332,15 @@ static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const
         }
         return bind_conv_call(self, recv, st, "as", target, line, col);
     }
+    if (bind_conv_binding(self, st, target) > 0) {
+        return bind_conv_call_binding(self, recv, st, target, line, col);
+    }
     ret[0] = 0;
     nm = bind_conv_maps(self, st, "as", ret, sizeof(ret));
     if (nm > 0) {
         return bind_conv_call(self, recv, st, "as", target, line, col);
     }
-    snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s' or import a mapping trait that declares 'as'", st, target, st);
+    snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', ""import a mapping trait that declares 'as', or import a mapping unit ""with a 'map binding' for this pair", st, target, st);
     return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
 }
 static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, const char * target, int line, int col) {
