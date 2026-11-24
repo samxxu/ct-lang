@@ -19,11 +19,11 @@
 #define MAX_PATH 1024
 #define MAX_FLAGS 1024                  /* mirrors Module.h.ct's --cflags cap */
 struct ct_buf;
+struct Str;
 struct ct_str_hdr;
 struct String;
-struct Str;
-struct U16String;
 struct U16Str;
+struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
@@ -169,9 +169,9 @@ static int tool_driver_Driver_tool_driver_DriverOps_load_builtin(void *self, con
             fclose(fi);
         }
     }
-    for (bi = 0; bi < 5; bi++) {
+    for (bi = 0; bi < 8; bi++) {
         const char * base;
-        base = ((bi == 0) ? "Vec.h.ct" : ((bi == 1) ? "Option.h.ct" : ((bi == 2) ? "Result.h.ct" : ((bi == 3) ? "Str.h.ct" : "Box.h.ct"))));
+        base = ((bi == 0) ? "Vec.h.ct" : ((bi == 1) ? "Option.h.ct" : ((bi == 2) ? "Result.h.ct" : ((bi == 3) ? "Str.h.ct" : ((bi == 4) ? "String.h.ct" : ((bi == 5) ? "utf16/U16Str.h.ct" : ((bi == 6) ? "utf16/U16String.h.ct" : "Box.h.ct")))))));
         if ((insrc && (!layer_wanted(insrc, bi)))) {
             continue;
         }
@@ -1100,7 +1100,7 @@ static int layer_wanted(const char * src, int bi) {
         return 1;
     }
     if (bi == 0) {
-        return (((((src_has_word(src, "Vec") || src_has_word(src, "Map")) || src_has_word(src, "Str")) || src_has_word(src, "String")) || src_has_word(src, "U16String")) || src_has_prefix(src, "str_"));
+        return (((((((src_has_word(src, "Vec") || src_has_word(src, "Map")) || src_has_word(src, "Str")) || src_has_word(src, "String")) || src_has_word(src, "U16String")) || src_has_word(src, "U16Str")) || src_has_prefix(src, "str_")) || src_has_prefix(src, "u16_"));
     }
     if (bi == 1) {
         return src_has_word(src, "Option");
@@ -1108,8 +1108,11 @@ static int layer_wanted(const char * src, int bi) {
     if (bi == 2) {
         return src_has_word(src, "Result");
     }
-    if (bi == 3) {
-        return (((src_has_word(src, "Str") || src_has_word(src, "String")) || src_has_word(src, "U16String")) || src_has_prefix(src, "str_"));
+    if (((bi == 3) || (bi == 4))) {
+        return (((((src_has_word(src, "Str") || src_has_word(src, "String")) || src_has_word(src, "U16String")) || src_has_word(src, "U16Str")) || src_has_prefix(src, "str_")) || src_has_prefix(src, "u16_"));
+    }
+    if (((bi == 5) || (bi == 6))) {
+        return ((src_has_word(src, "U16String") || src_has_word(src, "U16Str")) || src_has_prefix(src, "u16_"));
     }
     return ((!src_declares_Box(src)) && (src_has_Box_type(src) || src_has_new_expr(src)));
 }

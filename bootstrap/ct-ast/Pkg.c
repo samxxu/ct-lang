@@ -26,11 +26,11 @@
 #define INDEX_ERR_MSG_OFF  36
 #define CT_ROR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
 struct ct_buf;
+struct Str;
 struct ct_str_hdr;
 struct String;
-struct Str;
-struct U16String;
 struct U16Str;
+struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;

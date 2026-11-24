@@ -26,11 +26,11 @@
 
 
 struct ct_buf;
+struct Str;
 struct ct_str_hdr;
 struct String;
-struct Str;
-struct U16String;
 struct U16Str;
+struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
@@ -148,9 +148,9 @@ struct frontend_module_Module {
     int ninc;
     const char * nsroot;
     int line_mode;
-    int builtin_units[5];
+    int builtin_units[8];
     int nbuiltin;
-    int builtin_live[5];
+    int builtin_live[8];
     int computed_live;
     int line_force;
     char map_path[1024];

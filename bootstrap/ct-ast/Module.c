@@ -42,11 +42,11 @@
 #define CYCLE_ROWS 256
 #define CYCLE_DEGREE 64
 struct ct_buf;
+struct Str;
 struct ct_str_hdr;
 struct String;
-struct Str;
-struct U16String;
 struct U16Str;
+struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
@@ -107,7 +107,7 @@ extern void U16String_Drop_drop(void *self);
 
 static int ct_pkg_ns_clash(struct frontend_module_Module *, char *, int, char *, int);
 static int is_layer_fn(struct frontend_sym_Symbols *, int, int, const char *);
-static int file_uses_str(struct frontend_sym_Symbols *, const char *, int, int);
+static int file_uses_str(struct frontend_sym_Symbols *, const char *, int, int, int);
 static int ct_shim_ambiguity(struct frontend_module_Module *, const struct frontend_module_Unit *, int);
 static const char * cycle_file(struct frontend_module_Module *, int);
 static int cycle_is_builtin_Box(struct frontend_module_Module *, const char *);
@@ -1816,16 +1816,19 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     _self->builtin_live[2] = 0;
     _self->builtin_live[3] = 0;
     _self->builtin_live[4] = 0;
+    _self->builtin_live[5] = 0;
+    _self->builtin_live[6] = 0;
+    _self->builtin_live[7] = 0;
     backend_emit_ct_emit_clear_builtins();
 {
         char bpath[MAX_PATH];
         int bi;
-        for (bi = 0; bi < 5; bi++) {
+        for (bi = 0; bi < 8; bi++) {
             const char * base;
-            if (((bi == 4) && (!_self->__frontend_module_moduleops_vptr->module_inputs_want_Box(_self, inputs, ninput)))) {
+            if (((bi == 7) && (!_self->__frontend_module_moduleops_vptr->module_inputs_want_Box(_self, inputs, ninput)))) {
                 continue;
             }
-            base = ((bi == 0) ? "Vec.h.ct" : ((bi == 1) ? "Option.h.ct" : ((bi == 2) ? "Result.h.ct" : ((bi == 3) ? "Str.h.ct" : "Box.h.ct"))));
+            base = ((bi == 0) ? "Vec.h.ct" : ((bi == 1) ? "Option.h.ct" : ((bi == 2) ? "Result.h.ct" : ((bi == 3) ? "Str.h.ct" : ((bi == 4) ? "String.h.ct" : ((bi == 5) ? "utf16/U16Str.h.ct" : ((bi == 6) ? "utf16/U16String.h.ct" : "Box.h.ct")))))));
 {
                 int br = _self->__frontend_module_moduleops_vptr->find_builtin(_self, inputs[0], base, bpath, sizeof(bpath));
                 if (br == (-2)) {
@@ -2338,12 +2341,50 @@ static int frontend_module_Module_frontend_module_ModuleOps_builtin_live_for(voi
     const char * base;
     int i;
     int n;
+    int su = (-1);
+    int si = (-1);
+    int uu = (-1);
+    int us = (-1);
+    int str_used = 0;
+    int u16_used = 0;
     struct frontend_sym_StructInst * ins;
     (void)(_self);
     if ((!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, u))) {
         return 1;
     }
     base = _self->units[u].base;
+    for (i = 0; i < _self->nbuiltin; i++) {
+        const char * b = _self->units[_self->builtin_units[i]].base;
+        if (strcmp(b, "Str") == 0) {
+            su = _self->builtin_units[i];
+        }
+        if (strcmp(b, "String") == 0) {
+            si = _self->builtin_units[i];
+        }
+        if (strcmp(b, "U16String") == 0) {
+            uu = _self->builtin_units[i];
+        }
+        if (strcmp(b, "U16Str") == 0) {
+            us = _self->builtin_units[i];
+        }
+    }
+    for (i = 0; i < _self->nunits; i++) {
+        if (_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, i)) {
+            continue;
+        }
+        if (((su >= 0) && file_uses_str(_self->sym, _self->units[i].path, _self->units[su].fn_start, _self->units[su].fn_end, 0))) {
+            str_used = 1;
+        }
+        if (((si >= 0) && file_uses_str(_self->sym, _self->units[i].path, _self->units[si].fn_start, _self->units[si].fn_end, 0))) {
+            str_used = 1;
+        }
+        if (((uu >= 0) && file_uses_str(_self->sym, _self->units[i].path, _self->units[uu].fn_start, _self->units[uu].fn_end, 1))) {
+            u16_used = 1;
+        }
+        if (((us >= 0) && file_uses_str(_self->sym, _self->units[i].path, _self->units[us].fn_start, _self->units[us].fn_end, 1))) {
+            u16_used = 1;
+        }
+    }
     ins = frontend_sym_ct_insts((&n));
     for (i = 0; i < n; i++) {
         if ((((strcmp(base, "Vec") == 0) && ((strcmp(ins[i].tmpl, "Vec") == 0) || (strcmp(ins[i].tmpl, "Map") == 0))) && (!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, ins[i].owner)))) {
@@ -2361,28 +2402,21 @@ static int frontend_module_Module_frontend_module_ModuleOps_builtin_live_for(voi
         if ((((strcmp(base, "Str") == 0) && (frontend_module_has_word(ins[i].ctype[0], "Str") || frontend_module_has_word(ins[i].carg[0], "Str"))) && (!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, ins[i].owner)))) {
             return 1;
         }
+        if ((((strcmp(base, "U16String") == 0) && (frontend_module_has_word(ins[i].ctype[0], "U16String") || frontend_module_has_word(ins[i].carg[0], "U16String"))) && (!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, ins[i].owner)))) {
+            return 1;
+        }
     }
     if (strcmp(base, "Vec") == 0) {
-        int su = (-1);
-        for (i = 0; i < _self->nbuiltin; i++) {
-            if (strcmp(_self->units[_self->builtin_units[i]].base, "Str") == 0) {
-                su = _self->builtin_units[i];
-            }
+        if (((su >= 0) && (str_used || u16_used))) {
+            return 1;
         }
-        if (su >= 0) {
-            for (i = 0; i < _self->nunits; i++) {
-                if (((!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, i)) && file_uses_str(_self->sym, _self->units[i].path, _self->units[su].fn_start, _self->units[su].fn_end))) {
-                    return 1;
-                }
-            }
-        }
+        return 0;
     }
-    if (strcmp(base, "Str") == 0) {
-        for (i = 0; i < _self->nunits; i++) {
-            if (((!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, i)) && file_uses_str(_self->sym, _self->units[i].path, _self->units[u].fn_start, _self->units[u].fn_end))) {
-                return 1;
-            }
-        }
+    if (((strcmp(base, "Str") == 0) || (strcmp(base, "String") == 0))) {
+        return ((str_used || u16_used) ? 1 : 0);
+    }
+    if (((strcmp(base, "U16Str") == 0) || (strcmp(base, "U16String") == 0))) {
+        return (u16_used ? 1 : 0);
     }
     return 0;
 }
@@ -2777,7 +2811,7 @@ static int is_layer_fn(struct frontend_sym_Symbols * sym, int fn_start, int fn_e
     }
     return 0;
 }
-static int file_uses_str(struct frontend_sym_Symbols * sym, const char * path, int fn_start, int fn_end) {
+static int file_uses_str(struct frontend_sym_Symbols * sym, const char * path, int fn_start, int fn_end, int u16_only) {
     FILE * f;
     char * b;
     char word[96];
@@ -2852,11 +2886,24 @@ static int file_uses_str(struct frontend_sym_Symbols * sym, const char * path, i
         if (wl > 0) {
             word[wl] = 0;
             wl = 0;
-            if (((frontend_module_word_is(word, "Str") || frontend_module_word_is(word, "String")) || frontend_module_word_is(word, "U16String"))) {
-                hit = 1;
-                break;
+            if (u16_only) {
+                if (frontend_module_word_is(word, "U16String")) {
+                    hit = 1;
+                    break;
+                }
             }
-            pend = is_layer_fn(sym, fn_start, fn_end, word);
+            else {
+                if (((frontend_module_word_is(word, "Str") || frontend_module_word_is(word, "String")) || frontend_module_word_is(word, "U16String"))) {
+                    hit = 1;
+                    break;
+                }
+            }
+            if (u16_only) {
+                pend = ((strncmp(word, "u16_", 4) == 0) || (strncmp(word, "ct_u16_", 7) == 0));
+            }
+            else {
+                pend = is_layer_fn(sym, fn_start, fn_end, word);
+            }
         }
         if ((((c == '/') && ((i + 1) < (int)(n))) && (b[(i + 1)] == '/'))) {
             state = 1;
@@ -2891,8 +2938,15 @@ static int file_uses_str(struct frontend_sym_Symbols * sym, const char * path, i
     }
     if (((!hit) && (wl > 0))) {
         word[wl] = 0;
-        if (((frontend_module_word_is(word, "Str") || frontend_module_word_is(word, "String")) || frontend_module_word_is(word, "U16String"))) {
-            hit = 1;
+        if (u16_only) {
+            if (frontend_module_word_is(word, "U16String")) {
+                hit = 1;
+            }
+        }
+        else {
+            if (((frontend_module_word_is(word, "Str") || frontend_module_word_is(word, "String")) || frontend_module_word_is(word, "U16String"))) {
+                hit = 1;
+            }
         }
     }
     free(b);

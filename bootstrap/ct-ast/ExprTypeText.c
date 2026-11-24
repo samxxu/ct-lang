@@ -15,11 +15,11 @@
 #include <string.h>
 #define MAX_TEXT 160
 struct ct_buf;
+struct Str;
 struct ct_str_hdr;
 struct String;
-struct Str;
-struct U16String;
 struct U16Str;
+struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;

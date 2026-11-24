@@ -89,11 +89,11 @@
 #define T_STR 3
 #define CT_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
 struct ct_buf;
+struct Str;
 struct ct_str_hdr;
 struct String;
-struct Str;
-struct U16String;
 struct U16Str;
+struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
@@ -655,6 +655,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
                 return 1;
             }
             if ((((strncmp(qn, "core_", 5) == 0) && (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, (qn + 5), rn, sizeof(rn)) == 0)) && ((_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0) || (frontend_sym_ct_tmpl_find((qn + 5)) >= 0)))) {
+                return 1;
+            }
+            if ((((strncmp(qn, "core_utf16_", 11) == 0) && (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, (qn + 11), rn, sizeof(rn)) == 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
                 return 1;
             }
         }
@@ -3853,7 +3856,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_string_raw_write_check(voi
     if (e < 0) {
         return 0;
     }
-    if ((_self->sup->mem->path && ((strstr(_self->sup->mem->path, "lib/core/Str.h.ct") != 0) || (strstr(_self->sup->mem->path, "lib/std/Str.h.ct") != 0)))) {
+    if ((_self->sup->mem->path && (((((strstr(_self->sup->mem->path, "lib/core/Str.h.ct") != 0) || (strstr(_self->sup->mem->path, "lib/core/String.h.ct") != 0)) || (strstr(_self->sup->mem->path, "lib/core/utf16/U16Str.h.ct") != 0)) || (strstr(_self->sup->mem->path, "lib/core/utf16/U16String.h.ct") != 0)) || (strstr(_self->sup->mem->path, "lib/std/Str.h.ct") != 0)))) {
         return 0;
     }
     k = _self->arena->nodes[e].kind;

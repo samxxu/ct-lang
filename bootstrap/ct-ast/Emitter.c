@@ -121,11 +121,11 @@
 #define U_BNOT 3
 #define P_INC 1
 struct ct_buf;
+struct Str;
 struct ct_str_hdr;
 struct String;
-struct Str;
-struct U16String;
 struct U16Str;
+struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
@@ -259,7 +259,7 @@ struct backend_emit_Emitter {
     const char * version;
     struct frontend_module_Unit * units;
     int * nunits;
-    int builtins[5];
+    int builtins[8];
     int nbuiltin;
     int * builtin_live;
     int io_mask;
@@ -819,6 +819,14 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, in
                 return (-1);
             }
         }
+    }
+    if (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, "String") >= 0) {
+        fputs("struct String String_retain(struct String *);\n", _self->out);
+        fputs("void String_release(struct String *);\n", _self->out);
+    }
+    if (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, "U16String") >= 0) {
+        fputs("struct U16String U16String_retain(struct U16String *);\n", _self->out);
+        fputs("void U16String_release(struct U16String *);\n", _self->out);
     }
     if (emit_struct_insts(_self, (-1), 0) != 0) {
         return (-1);
@@ -3631,11 +3639,14 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_unit_header(void *sel
     int rc;
     (void)(_self);
     _self->gprefix = _self->units[u].nsprefix;
-    if (snprintf(path, sizeof(path), "%s/%s.h", _self->outdir, _self->units[u].base) >= (int)(sizeof(path))) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "output path is too long");
-    }
-    if (_self->__backend_emit_emitops_vptr->header_guard(_self, _self->units[u].base, guard, sizeof(guard)) != 0) {
-        return (-1);
+{
+        const char * hb = ((strcmp(_self->units[u].base, "String") == 0) ? "String_" : _self->units[u].base);
+        if (snprintf(path, sizeof(path), "%s/%s.h", _self->outdir, hb) >= (int)(sizeof(path))) {
+            return _self->__backend_emit_emitops_vptr->fail(_self, "output path is too long");
+        }
+        if (_self->__backend_emit_emitops_vptr->header_guard(_self, hb, guard, sizeof(guard)) != 0) {
+            return (-1);
+        }
     }
     f = fopen(path, "w");
     if ((!f)) {
@@ -7310,7 +7321,7 @@ static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
         if (priv) {
             fputs("#define CT_UNIT_PRIVATE 1\n", self->out);
         }
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[u].base);
+        fprintf(self->out, "#include \"%s.h\"\n", ((strcmp(self->units[u].base, "String") == 0) ? "String_" : self->units[u].base));
     }
     for (i = 0; i < self->units[u].ndep; i++) {
         if (self->units[self->units[u].depu[i]].is_map) {
@@ -7326,7 +7337,7 @@ static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
         if ((((bu < 0) || (bu >= (*self->nunits))) || (bu == u))) {
             continue;
         }
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[bu].base);
+        fprintf(self->out, "#include \"%s.h\"\n", ((strcmp(self->units[bu].base, "String") == 0) ? "String_" : self->units[bu].base));
     }
     fputs("\n", self->out);
     if ((*self->line_mode)) {
@@ -7490,7 +7501,7 @@ static int write_unit_header_body(struct backend_emit_Emitter * self, int u, con
         if ((((bu < 0) || (bu >= (*self->nunits))) || (bu == u))) {
             continue;
         }
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[bu].base);
+        fprintf(self->out, "#include \"%s.h\"\n", ((strcmp(self->units[bu].base, "String") == 0) ? "String_" : self->units[bu].base));
     }
     if (self->nbuiltin > 0) {
         fputs("\n", self->out);
@@ -11660,7 +11671,7 @@ void backend_emit_ct_emit_clear_builtins(void) {
     backend_emit_g_emit.nbuiltin = 0;
 }
 void backend_emit_ct_emit_add_builtin(int u) {
-    if (backend_emit_g_emit.nbuiltin < 5) {
+    if (backend_emit_g_emit.nbuiltin < 8) {
         backend_emit_g_emit.builtins[backend_emit_g_emit.nbuiltin] = u;
         backend_emit_g_emit.nbuiltin += 1;
     }

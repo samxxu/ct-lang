@@ -11,11 +11,11 @@
 #define MAX_ERRORS   20                 /* recovery cap: past this the compiler stops */
 #define MAX_WARNINGS 32
 struct ct_buf;
+struct Str;
 struct ct_str_hdr;
 struct String;
-struct Str;
-struct U16String;
 struct U16Str;
+struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;

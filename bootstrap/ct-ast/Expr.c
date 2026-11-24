@@ -93,11 +93,11 @@
 #define U_BNOT 3
 #define CT_EXPR_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
 struct ct_buf;
+struct Str;
 struct ct_str_hdr;
 struct String;
-struct Str;
-struct U16String;
 struct U16Str;
+struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
@@ -963,23 +963,29 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_type(void *self, cha
 {
                         const char * resq = qn;
                         char bare[MAX_TEXT];
-                        if (strncmp(qn, "core_", 5) == 0) {
-                            snprintf(bare, sizeof(bare), "%s", (qn + 5));
-                            if (strcmp(bare, "box") == 0) {
-                                if (tool_diag_ct_deprecated_warn(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "'box<T>' is deprecated; write 'Box<T>'", _self->sup->mem->path) != 0) {
-                                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many warnings");
-                                }
-                                snprintf(bare, sizeof(bare), "%s", "Box");
-                            }
-                            if (frontend_sym_ct_tmpl_find(bare) >= 0) {
-                                snprintf(frontend_parse_g_expr_inst_override, sizeof(frontend_parse_g_expr_inst_override), "%s", bare);
-                                if (_self->__frontend_parse_exprops_vptr->parse_inst_type(_self, out, cap) != 0) {
-                                    return (-1);
-                                }
-                                n = (int)(strlen(out));
-                                continue;
-                            }
+                        if (strncmp(qn, "core_utf16_", 11) == 0) {
+                            snprintf(bare, sizeof(bare), "%s", (qn + 11));
                             resq = bare;
+                        }
+                        else {
+                            if (strncmp(qn, "core_", 5) == 0) {
+                                snprintf(bare, sizeof(bare), "%s", (qn + 5));
+                                if (strcmp(bare, "box") == 0) {
+                                    if (tool_diag_ct_deprecated_warn(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "'box<T>' is deprecated; write 'Box<T>'", _self->sup->mem->path) != 0) {
+                                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many warnings");
+                                    }
+                                    snprintf(bare, sizeof(bare), "%s", "Box");
+                                }
+                                if (frontend_sym_ct_tmpl_find(bare) >= 0) {
+                                    snprintf(frontend_parse_g_expr_inst_override, sizeof(frontend_parse_g_expr_inst_override), "%s", bare);
+                                    if (_self->__frontend_parse_exprops_vptr->parse_inst_type(_self, out, cap) != 0) {
+                                        return (-1);
+                                    }
+                                    n = (int)(strlen(out));
+                                    continue;
+                                }
+                                resq = bare;
+                            }
                         }
                         if (_self->sym->__frontend_sym_symbolops_vptr->resolve_type(_self->sym, resq, rname, sizeof(rname)) != 0) {
                             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown qualified type name");
@@ -4562,7 +4568,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         }
                     }
                 }
-                if (((strcmp(fname, "ptr") == 0) && (!(_self->sup->mem->path && ((strstr(_self->sup->mem->path, "lib/core/Str.h.ct") != 0) || (strstr(_self->sup->mem->path, "lib/std/Str.h.ct") != 0)))))) {
+                if (((strcmp(fname, "ptr") == 0) && (!(_self->sup->mem->path && (((((strstr(_self->sup->mem->path, "lib/core/Str.h.ct") != 0) || (strstr(_self->sup->mem->path, "lib/core/String.h.ct") != 0)) || (strstr(_self->sup->mem->path, "lib/core/utf16/U16Str.h.ct") != 0)) || (strstr(_self->sup->mem->path, "lib/core/utf16/U16String.h.ct") != 0)) || (strstr(_self->sup->mem->path, "lib/std/Str.h.ct") != 0)))))) {
                     char rty[MAX_TEXT];
                     if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, n, rty, sizeof(rty)) == 0) {
                         const char * rp = rty;
@@ -6443,6 +6449,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
         w += (int)(strlen(seg[i]));
     }
     snprintf(name, (size_t)(ncap), "%s", seg[(nseg - 1)]);
+    if (strncmp(qpath, "core_utf16_", 11) == 0) {
+        memmove(qpath, (qpath + 11), (strlen((qpath + 11)) + 1));
+    }
     is_call = ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("));
     if (((((!is_call) && (nseg >= 2)) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "."))) {
         char tq[MAX_TEXT];
