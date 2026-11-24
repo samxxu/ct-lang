@@ -53,6 +53,12 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   文本/可重复性函数整段搬出；函数体逐字节不变），发射 C 56610 → 57158（+548：
   新增两个单元的头/前置声明与搬移后的单元边界，行为由 70 语料逐字节与 25/25
   goldens 复核）。切片清单仍为 76，判别式仍各读 1 次。
+- **v1-PH-1 S1 方法级拆分（SH-94，纯搬移）后的 live 校准**：`Emitter.h.ct`
+  11062 → 10740 行（-322：`EmitterCore` 抽出 `struct Emitter` 与 `EmitOps`
+  声明，`EmitterTry` 搬出 4 个 postfix `?` 方法；函数体逐字节不变），发射 C
+  57158 → 57769（+611：四个 Core 与三个方法子单元的头/前置声明和单元边界；
+  Expr/Stmt 的方法组同批）。切片清单仍为 76，判别式仍各读 1 次。方法与布局见
+  [sh94-m1-core-layout](../design/sh94-m1-core-layout.md)。
 - **LANG-29 S4/B4（v1-PH-1 S2b）后的 live 校准**：`Emitter.h.ct` 11173 → 11257 行
   （+84：`map binding` 的 aux 12 recipe 展开、pair 键归一、候选歧义诊断与
   `--emit-map` registry 跳过），发射 C 56258 → 56610（+352：同一代码的生成物）。

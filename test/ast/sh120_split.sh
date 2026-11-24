@@ -85,7 +85,7 @@ fi
 # ---- 3. eight built-in slots ----------------------------------------------
 if grep -q 'builtin_units\[8\]' "$root/selfhost/ct-ast/frontend/module/Module.h.ct" \
    && grep -q 'builtin_live\[8\]' "$root/selfhost/ct-ast/frontend/module/Module.h.ct" \
-   && grep -q 'builtins\[8\]' "$root/selfhost/ct-ast/backend/emit/Emitter.h.ct"; then
+   && grep -rq 'builtins\[8\]' "$root/selfhost/ct-ast/backend/emit"; then
     ok "builtin layer: Module/Driver/Emitter use eight slots"
 else
     bad "a built-in slot table is not eight entries"
