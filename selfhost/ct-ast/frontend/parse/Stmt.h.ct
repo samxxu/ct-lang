@@ -29,6 +29,8 @@ import frontend::parse::ParseSupport;
 import frontend::parse::Expr;
 import tool::diag::Diag;
 import frontend::parse::StmtRangeText;
+import frontend::parse::StmtRangeScan;
+import frontend::parse::StmtScope;
 import frontend::type::TypeCheck;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
@@ -447,27 +449,11 @@ static int return_reads_autodrop(struct Stmt *self, int e)
 /* The scope a variable belongs to: the innermost scope whose opening boundary
    is at or before it. A parameter sits in the function's own scope and a local
    in the block's, so a shallower scope index is a longer-lived variable. */
-static int var_scope(struct Symbols *sym, int vi)
-{
-    int s;
-
-    for (s = sym->nscope - 1; s >= 0; s--)
-        if (sym->scope[s] <= vi) return s;
-    return -1;
-}
-
 /* Whether `target` outlives `source`: a global or a block-scope `static` lives
    past every scope, and a shallower scope outlives a deeper one. A sibling in
    the same scope dies with the source, so it does not. This is the one lifetime
    comparison shared by the borrow store check and (Phase 21) the closure
    escape check; keep both callers on it instead of open-coding the rule. */
-static int outlives(struct Symbols *sym, int target, int source)
-{
-    if (target < 0 || source < 0) return 0;
-    if (sym->vars[target].is_global || sym->vars[target].is_static) return 1;
-    return var_scope(sym, target) < var_scope(sym, source);
-}
-
 /* Phase 21 S4: every closure error is followed by the same copy-pasteable
    tier-1 recipe. It goes through the note channel, which prints only: the
    error cap, the warning array, the JSON document and exit codes do not move.
@@ -886,65 +872,11 @@ static int str_escape_op(struct Stmt *self, int op, int e, const char *name, int
    token text (the lexer keeps an integer's value in `toknum`), so the digits
    are taken back from the source between the token's first byte and the
    cursor. */
-static void range_spelling(struct Lexer *lx, char *out, int cap)
-{
-    int i = 0;
-
-    if (lx->tok == T_NUM) {
-        int s = lx->tokstart;
-        while (s + i < lx->pos && i < cap - 1) {
-            out[i] = lx->src[s + i];
-            i++;
-        }
-    } else {
-        while (i < lx->tokstr.len && i < cap - 1) {
-            out[i] = lx->tokstr.ptr[i];
-            i++;
-        }
-    }
-    out[i] = 0;
-    if (!out[0]) snprintf(out, (size_t)cap, "%s", "end of file");
-}
-
-
 /* Evaluate one range bound from its source spelling. The shared lexer neither
    rejects a digit-less `0x` (it yields 0) nor detects overflow, so the spelling
    is re-read here instead of trusting `toknum`: 0 = ok, 1 = not an integer
    literal, 2 = out of `long`. Popping a value that does not fit is what keeps a
    wrapped bound from turning into a bogus `count`. */
-static int range_bound_value(struct Lexer *lx, long *out, char *spell, int cap)
-{
-    char text[MAX_TEXT];
-    const char *p;
-    long v = 0;
-    int base = 10, d, nd = 0;
-
-    range_spelling(lx, text, (int)sizeof text);
-    snprintf(spell, (size_t)cap, "%s", text);
-    if (lx->tok != T_NUM || lx->tokfloat) return 1;
-    p = text;
-    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
-        base = 16;
-        p += 2;
-    } else if (p[0] == '0' && p[1] >= '0' && p[1] <= '7') {
-        base = 8;
-        p += 1;
-    }
-    while ((d = range_digit(*p, base)) >= 0) {
-        if (v > (LONG_MAX - d) / base) return 2;
-        v = v * base + d;
-        p++;
-        nd++;
-    }
-    if (!nd) return 1;
-    while (*p) {
-        if (*p != 'u' && *p != 'U' && *p != 'l' && *p != 'L') return 1;
-        p++;
-    }
-    *out = v;
-    return 0;
-}
-
 /* Parse one bound: an optional unary `-` and one integer literal. The cursor
    ends past the literal. */
 static int range_bound(struct Stmt *self, long *out)

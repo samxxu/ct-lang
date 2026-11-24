@@ -1,0 +1,42 @@
+/*
+ * StmtScope.h.ct - variable-scope and lifetime queries moved out of Stmt.h.ct
+ * (SH-94 S1, pure move).
+ *
+ * Bodies are byte-identical to the ones Stmt.h.ct used to hold; the
+ * declaration line only loses `static` and gains a `pub` prototype, and the
+ * call sites stay unchanged (same namespace, host imports this unit).
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <string.h>
+
+import frontend::sym::Symbols;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct StmtScope {
+    int unused;
+}
+
+pub int var_scope(struct Symbols *sym, int vi);
+pub int outlives(struct Symbols *sym, int target, int source);
+
+pub int var_scope(struct Symbols *sym, int vi)
+{
+    int s;
+
+    for (s = sym->nscope - 1; s >= 0; s--)
+        if (sym->scope[s] <= vi) return s;
+    return -1;
+}
+
+pub int outlives(struct Symbols *sym, int target, int source)
+{
+    if (target < 0 || source < 0) return 0;
+    if (sym->vars[target].is_global || sym->vars[target].is_static) return 1;
+    return var_scope(sym, target) < var_scope(sym, source);
+}

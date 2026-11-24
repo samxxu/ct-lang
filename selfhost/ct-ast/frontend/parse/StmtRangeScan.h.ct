@@ -1,0 +1,83 @@
+/*
+ * StmtRangeScan.h.ct - range-bound lexing and number parsing helpers moved out of Stmt.h.ct
+ * (SH-94 S1, pure move).
+ *
+ * Bodies are byte-identical to the ones Stmt.h.ct used to hold; the
+ * declaration line only loses `static` and gains a `pub` prototype, and the
+ * call sites stay unchanged (same namespace, host imports this unit).
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <string.h>
+#include <limits.h>
+
+import frontend::lex::Lexer;
+import frontend::parse::StmtRangeText;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_TEXT 160
+#define T_NUM 2
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct StmtRangeScan {
+    int unused;
+}
+
+pub void range_spelling(struct Lexer *lx, char *out, int cap);
+pub int range_bound_value(struct Lexer *lx, long *out, char *spell, int cap);
+
+pub void range_spelling(struct Lexer *lx, char *out, int cap)
+{
+    int i = 0;
+
+    if (lx->tok == T_NUM) {
+        int s = lx->tokstart;
+        while (s + i < lx->pos && i < cap - 1) {
+            out[i] = lx->src[s + i];
+            i++;
+        }
+    } else {
+        while (i < lx->tokstr.len && i < cap - 1) {
+            out[i] = lx->tokstr.ptr[i];
+            i++;
+        }
+    }
+    out[i] = 0;
+    if (!out[0]) snprintf(out, (size_t)cap, "%s", "end of file");
+}
+
+pub int range_bound_value(struct Lexer *lx, long *out, char *spell, int cap)
+{
+    char text[MAX_TEXT];
+    const char *p;
+    long v = 0;
+    int base = 10, d, nd = 0;
+
+    range_spelling(lx, text, (int)sizeof text);
+    snprintf(spell, (size_t)cap, "%s", text);
+    if (lx->tok != T_NUM || lx->tokfloat) return 1;
+    p = text;
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        base = 16;
+        p += 2;
+    } else if (p[0] == '0' && p[1] >= '0' && p[1] <= '7') {
+        base = 8;
+        p += 1;
+    }
+    while ((d = range_digit(*p, base)) >= 0) {
+        if (v > (LONG_MAX - d) / base) return 2;
+        v = v * base + d;
+        p++;
+        nd++;
+    }
+    if (!nd) return 1;
+    while (*p) {
+        if (*p != 'u' && *p != 'U' && *p != 'l' && *p != 'L') return 1;
+        p++;
+    }
+    *out = v;
+    return 0;
+}
