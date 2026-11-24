@@ -1,0 +1,150 @@
+/* 300 (LANG-29 S2 / B3): an ADT payload owns its leaves -- `String`, `Vec`
+   payloads, a nested ADT and a `Box` -- so every copy takes its own reference
+   and the last value releases it (D-021 §3, shallow sharing). The fixture is
+   the positive half of the B3 acceptance:
+
+     - a factory returning `Msg.Text(String)` no longer frees the payload it
+       hands back (the P-4 use-after-free);
+     - a declaration copy, an assignment copy, a by-value parameter and a
+       `match` binding each retain, and each scope end releases once;
+     - a rebind releases the old variant's payload;
+     - `Wrap.Many(Vec<Msg>)` cascades through the container element glue, and
+       the last `Wrap` release frees both strings;
+     - `Holder.Boxed(Box<String>)` releases the box payload once.
+
+   `ct_str_live_count()` counts live heap string buffers (not references), so
+   every line proves ownership: the factory payload stays at 1 through all
+   copies, the container case adds two temporaries, and the final `all freed`
+   line reads 0 -- no leak, no double free. `bind refs=4` is the refcount at
+   the binding: the factory value + `copy` + `inner` + the binding's retained
+   copy. */
+#include <stdio.h>
+
+enum Msg {
+    Text(String s),
+    Num(int n),
+}
+
+enum Wrap {
+    Empty(),
+    One(Msg m),
+    Many(Vec<Msg> v),
+}
+
+enum Holder {
+    NoBox(),
+    Boxed(Box<String> b),
+}
+
+Msg make(void)
+{
+    String s = str_dup("factory-payload");
+    return Msg.Text(s);
+}
+
+Msg echo(Msg m)
+{
+    return m;
+}
+
+void body(void)
+{
+    Msg m = make();
+    printf("factory live=%d\n", ct_str_live_count());
+
+    Msg copy;
+    copy = m;
+    printf("after copy live=%d\n", ct_str_live_count());
+
+    {
+        Msg inner = m;
+        printf("inner live=%d\n", ct_str_live_count());
+        match (inner) {
+            Msg.Text(s) => { printf("bind refs=%d len=%d\n", s.refs(), s.len); }
+            _ => { printf("bad inner\n"); }
+        }
+        printf("after arm live=%d\n", ct_str_live_count());
+    }
+    printf("after inner live=%d\n", ct_str_live_count());
+
+    {
+        Msg passed = echo(m);
+        match (passed) {
+            Msg.Text(s) => { printf("echo len=%d\n", s.len); }
+            _ => { printf("bad echo\n"); }
+        }
+    }
+    printf("after echo live=%d\n", ct_str_live_count());
+
+    {
+        Wrap w = Wrap.One(m);
+        printf("wrap live=%d\n", ct_str_live_count());
+        match (w) {
+            Wrap.One(x) => {
+                match (x) {
+                    Msg.Text(s) => { printf("nested len=%d\n", s.len); }
+                    _ => { printf("bad nested\n"); }
+                }
+            }
+            _ => { printf("bad wrap\n"); }
+        }
+    }
+    printf("after wrap live=%d\n", ct_str_live_count());
+
+    {
+        Vec<Msg> v;
+        Msg a = Msg.Text(str_dup("one"));
+        Msg b = Msg.Text(str_dup("two"));
+        v.h = 0;
+        v.push(a);
+        v.push(b);
+        a = Msg.Num(1);
+        b = Msg.Num(2);
+        Wrap w = Wrap.Many(v);
+        v.release();
+        printf("many live=%d\n", ct_str_live_count());
+        match (w) {
+            Wrap.Many(items) => {
+                printf("many len=%d\n", items.len());
+                Msg g0 = items.get(0);
+                Msg g1 = items.get(1);
+                match (g0) {
+                    Msg.Text(s) => { printf("first len=%d\n", s.len); }
+                    _ => { printf("bad first\n"); }
+                }
+                match (g1) {
+                    Msg.Text(s) => { printf("second len=%d\n", s.len); }
+                    _ => { printf("bad second\n"); }
+                }
+            }
+            _ => { printf("bad many\n"); }
+        }
+    }
+    printf("after many live=%d\n", ct_str_live_count());
+
+    {
+        String s = str_dup("boxed");
+        Box<String> b = Box<String>::of(s);
+        Holder h = Holder.Boxed(b);
+        b.release();
+        printf("box live=%d\n", ct_str_live_count());
+        match (h) {
+            Holder.Boxed(x) => {
+                String *sp = x.at();
+                printf("boxed len=%d\n", sp->len());
+            }
+            _ => { printf("bad box\n"); }
+        }
+    }
+    printf("after box live=%d\n", ct_str_live_count());
+
+    m = Msg.Num(7);
+    printf("after rebind live=%d\n", ct_str_live_count());
+}
+
+int main(void)
+{
+    body();
+    printf("all freed live=%d\n", ct_str_live_count());
+    return 0;
+}

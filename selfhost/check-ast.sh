@@ -875,6 +875,17 @@ else
     bad "l29b1/adt-recursive" "$(cat "$work/l29b1.out" "$work/l29b1.err" | head -8)"
 fi
 
+# LANG-29 S2 (B3): an owning ADT payload (String / container / Box / nested
+# ADT) is retained by every copy and released once by the last value, so a
+# factory return cannot free what it hands back. The positive fixture is
+# 300_adt_payload_glue; the probe also pins the bare-`Str` rejection, the
+# escape-from-an-arm case and the view-binding (not an owner) shape.
+if bash test/ast/l29b3_glue.sh "$work/ct-ast" >"$work/l29b3.out" 2>"$work/l29b3.err"; then
+    ok "l29b3/adt-payload-glue"
+else
+    bad "l29b3/adt-payload-glue" "$(cat "$work/l29b3.out" "$work/l29b3.err" | head -8)"
+fi
+
 # PH-84 S84d (E84-8): the ADT / `match` documentation is in the spec, the
 # tutorial and the patterns rewrite sample, and the freeze list is registered.
 if bash test/ast/p84_docs.sh >"$work/p84doc.out" 2>"$work/p84doc.err"; then

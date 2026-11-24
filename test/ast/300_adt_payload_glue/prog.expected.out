@@ -1,0 +1,21 @@
+factory live=1
+after copy live=1
+inner live=1
+bind refs=4 len=15
+after arm live=1
+after inner live=1
+echo len=15
+after echo live=1
+wrap live=1
+nested len=15
+after wrap live=1
+many live=3
+many len=2
+first len=3
+second len=3
+after many live=1
+box live=2
+boxed len=5
+after box live=1
+after rebind live=1
+all freed live=0
