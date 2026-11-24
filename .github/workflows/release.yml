@@ -83,8 +83,11 @@ jobs:
         run: |
           set -eu
           if ! gh release view "$TAG" >/dev/null 2>&1; then
+            # A tag push and a manual dispatch can race to create the release;
+            # the loser sees "tag_name already exists", which is success here.
             gh release create "$TAG" --verify-tag \
-              --title "$TAG" --notes "ct $TAG (rebuilt by release.yml)"
+              --title "$TAG" --notes "ct $TAG (rebuilt by release.yml)" \
+              || gh release view "$TAG" >/dev/null
           fi
 
       - name: Upload the artefact
