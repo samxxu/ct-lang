@@ -314,13 +314,6 @@ def check_links(errors):
                 "/selfhost/ast/" in resolved or "/selfhost/src/" in resolved
             ):
                 continue
-            # SH-119 S2: historical records may still point at the retired
-            # L0/L1/L2 trees and their gate scripts; S4 rewrites active docs.
-            if rel.startswith("docs/history/") and re.search(
-                r"/selfhost/(l0|l1|l2)/|/selfhost/(check-goldens|check-archive|check-m2a|ct-tour)\.sh",
-                resolved,
-            ):
-                continue
             errors.append(f"{rel}: dead link -> {target}")
     return checked, scanned
 

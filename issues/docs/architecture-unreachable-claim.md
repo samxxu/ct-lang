@@ -5,7 +5,7 @@
 | 模块 | docs |
 | 严重度 | **Medium** |
 | 锚点 | commit `8aac450`（2026-10-17） |
-| 文件 | [docs/architecture.md](../../docs/architecture.md#L150) L150 |
+| 文件 | [docs/architecture.md](../../docs/architecture.md)（旧 L0 章节已随 SH-119 退役） |
 | 状态 | verified |
 | 处置证据 | 已修复（commit `b6b3dc4`） |
 

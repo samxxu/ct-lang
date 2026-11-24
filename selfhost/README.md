@@ -60,7 +60,7 @@ bash selfhost/check-all.sh         # 期望末行：check-all: OK (9 hard gates 
 ```
 
 干净 clone 不需要预处理：`.gitignore` 只忽略按名字的生成物（`/ctc`、`*.o`、`a.out`、`examples/*/*.c|h`、
-`.ctcache/` 等），门禁用 `bootstrap/ct-ast` 构建 ct-ast，并从 `selfhost/l0/ctc.c` 构建 L1/L2 oracle。Linux 容器只需 `gcc`、`git`、`python3`
+`.ctcache/` 等），门禁用 `bootstrap/ct-ast` 构建 ct-ast；L0/L1/L2 已退役（SH-119），不再构建 oracle。Linux 容器只需 `gcc`、`git`、`python3`
 与常规 POSIX 工具（`sh`/`bash`、`diff`、`sed`、`awk`、`mktemp`）。两点平台差异属预期：
 
 - **GCC 的警告集更宽**：`-Wall -Wextra` 下 GCC ≥ 8 额外启用 `-Wformat-truncation`，会对冻结层的 `snprintf`

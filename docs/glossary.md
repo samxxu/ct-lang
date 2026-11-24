@@ -139,8 +139,8 @@
 | 驱动（driver） | `compile_range` / `compile_file` / `compile_main` | 编排，不碰解析/生成逻辑；L0 现在只做单文件 |
 | `#line` 映射 | `#line <源行> "<.ct>"` | 多文件默认开、单文件默认关（D4=A）。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 Ct 重做** |
 | 行号发射 | `line_of` / `line_at` / `line_break` | 偏移→行号缓存 / 发射 / 生成块边界强制重发。**同上，已移出 L0** |
-| 泄漏警告（leak warning） | `potential_leak` · `leak_check_scope` · `leak_check_return` | 保守：作用域结束仍 owned 报确定泄漏（kind 0）；条件 `return` 留下的未返回对象另报一次 `may leak on a return path`（kind 2，JSON 带 `path_line`）；Phase 6.2 起 `T *q = f();` 若 `f` 可能返回它自己的分配（`ret_owned`），`q` 也计为 owned。**已由 Phase 4/5/6 在 `selfhost/l2/**` 实现** |
-| owned（堆对象持有） | `Var.owned` / `own_line` / `autodrop` | 由 `T *p = malloc/calloc(...)` 在创建点标记；Phase 6.2 起 `T *q = f()`（`f` 的 `ret_owned` 为真且返回同一 struct 指针）也标记；`own` 另置 `autodrop`（Phase 5）。**在 `selfhost/l2/**` 实现** |
+| 泄漏警告（leak warning） | `potential_leak` · `leak_check_scope` · `leak_check_return` | 保守：作用域结束仍 owned 报确定泄漏（kind 0）；条件 `return` 留下的未返回对象另报一次 `may leak on a return path`（kind 2，JSON 带 `path_line`）；Phase 6.2 起 `T *q = f();` 若 `f` 可能返回它自己的分配（`ret_owned`），`q` 也计为 owned。**Phase 4/5/6 在已退役的 L2 中实现（SH-119 后归 ct-ast，历史见 v1.0.0）** |
+| owned（堆对象持有） | `Var.owned` / `own_line` / `autodrop` | 由 `T *p = malloc/calloc(...)` 在创建点标记；Phase 6.2 起 `T *q = f()`（`f` 的 `ret_owned` 为真且返回同一 struct 指针）也标记；`own` 另置 `autodrop`（Phase 5）。**在已退役的 L2 中实现（SH-119 后归 ct-ast）** |
 | 错误恢复（error recovery） | `setjmp` 守卫 + `recover_pos` | `die` 报告后长跳到 `compile_range` 的守卫，并重同步到下一个 `}` 之后或下一行行首；上限 `MAX_ERRORS=20`，失败的编译删除产物并在末尾补 `ctc: N error(s) generated`。Phase 4 切片 3 **新增**（无 oracle） |
 | 语义诊断（semantic check） | `duplicate trait/struct` · `signature_mismatch` | 重复定义按 cname 报错（namespace 隔离）；impl 的返回类型 / 参数个数与 trait 不符时告警（**不比参数类型**）。Phase 4 切片 4 **新增**（无 oracle） |
 | 前端 / 后端（frontend / backend） | `selfhost/ct-ast/frontend/**` · `backend/**` | 前端：词法 → 解析 → 符号表 → 类型检查 → 模块；后端：发射（`.c` / `.h` / JSON / vptr 初始化） |
@@ -167,7 +167,7 @@
 | `#line` 开关 | `--line` / `--no-line` | 覆盖默认 |
 | C 标准目标 | `--std=c99`（默认）/ `--std=gnu99` | Phase 6.4：暂无可差异发射点，`build` 把它写进建议的 `cc` 命令；其他值硬报错 |
 | 帮助/版本 | `-h`/`--help`、`-v`/`--version` | |
-| JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7）。**已由 Phase 4 切片 2 在 `selfhost/l2/**` 恢复** |
+| JSON 诊断 | `--diagnostics=json` / `--diagnostics=text` | 警告格式：JSON 走 stdout（`ct compile`），text 为人可读 stderr（默认）；目前仅泄漏警告（Phase 1.7）。**Phase 4 切片 2 在已退役的 L2 中恢复（SH-119 后归 ct-ast）** |
 | 增量缓存（incremental cache） | `<outdir>/.ctcache/<unit>.key` | Phase 6.3：每个单元一枚键（路径 + `mtime.size` + 版本 + `--line`/`--diagnostics` + 依赖 digest），键一致且产物在盘即跳过重生成（`.c` 必有；`.h.ct` 单元另需 `.h`）。**缓存命中不重放 `#line` 与告警**；`--emit-map` 下不命中。重编译集 = `order` 前缀 ∪ 依赖闭包 |
 
 ### 5. 测试
@@ -180,7 +180,7 @@
 | 用例（fixture） | `test/cases/*.ct`、`test/errors/*.ct` | |
 | 正例（positive case） | `test/cases/` | 生成→逐字节比对→编译→运行 |
 | 负例（negative case） | `test/errors/<name>.expected-err` | `ctc` 必须非 0 退出且带期望诊断 |
-| 白盒单测（white-box unit test） | `test/unit/test_helpers.c` | `#include "../../selfhost/l0/ctc.c"` 以触达 `static` 函数 |
+| 白盒单测（white-box unit test） | `test/unit/test_helpers.c` | L0 时代夹具；SH-119 后不再进 gate 1，保留为历史 |
 | 重新生成基线（regeneration） | `./ctc <case>.ct -o <case>.expected.c` | 行为变更后重生成并**人工核对 diff** |
 | 语法冒烟测试 | `python3 editors/vscode/test/check-grammar.py` | 校验插件高亮，**不进** run.sh |
 | 端到端（end-to-end） | examples 层 | 生成→构建→运行→比对 |

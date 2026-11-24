@@ -952,7 +952,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 
 自举（Phase 1）完成后才动手。出口判据按**类别**分两类（不再按子阶段分）：Phase 2–4 是**恢复**（有归档 oracle + 冻结 golden，出口 = **byte-identical**，无需再拍设计）；Phase 5 是**新增**（无 oracle 可对差，出口 = **设计冻结 + 新用例 + `run.sh` 全绿**）。实现层面的设计见 [design/restore.md](design/restore.md)（决策 D1–D8，仅 D6 待定；D7 已定为「本地优先」，D8：`map` 移出，见 Phase 6）。
 
-**实现方针——保真优先（2026-10-16 用户确认）**：用 CT 重做这些特性时，以**与归档 oracle 逐字节一致**为准，**包括复刻其既有行为与限制**（例如跨行块注释的 `/* … */` **续行**会被当作普通代码行处理，见 [language-spec](../language-spec.md) §6.2）。因此**不修改 `test/archive/**` 的输入、也不重新生成任何归档 golden**——fixture 与 golden 都是冻结的 oracle；既有缺陷照实写进 §6.2，而不是靠改语料把它绕开。对差关卡是 [selfhost/check-archive.sh](../../selfhost/check-archive.sh)。
+**实现方针——保真优先（2026-10-16 用户确认）**：用 CT 重做这些特性时，以**与归档 oracle 逐字节一致**为准，**包括复刻其既有行为与限制**（例如跨行块注释的 `/* … */` **续行**会被当作普通代码行处理，见 [language-spec](../language-spec.md) §6.2）。因此**不修改 `test/archive/**` 的输入、也不重新生成任何归档 golden**——fixture 与 golden 都是冻结的 oracle；既有缺陷照实写进 §6.2，而不是靠改语料把它绕开。对差关卡是 `selfhost/check-archive.sh`（v1.0.0 历史，SH-119 已退役）。
 
 **次序的三条硬约束（不能乱）**：
 

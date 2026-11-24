@@ -7,7 +7,7 @@
 | 严重度 | **High**（改动 gate 1–5、`test/run.sh`、`install.sh`、`check-ast` 探针） |
 | 锚点 | `db4e6500`（`v1.0.0` 后；2026-11-24） |
 | 依据 | 所有者裁定（A/B/C 中选 C）；[v1-PH-1](../../docs/phases/v1-PH-1/card.md)；[DOC-99](../docs/doc-99-v11-prework-tracker.md) |
-| 状态 | open |
+| 状态 | verified |
 | 负责人 | DEV |
 | 处置证据 | **accepted（2026-11-24 所有者：全删 L0/L1/L2，`test/archive` 用 sha256 manifest 守）** |
 
@@ -98,3 +98,9 @@
 - `check-ast` 删除 L0 seed 探针；`examples/c-superset` 的 L0 构建改 seed；版本落点收敛到 `selfhost/ct-ast/main.ct`；
 - `check-install` 版本源改 ct-ast、检查 L1/L2 已退役；`gen-seed` 无 seed 时只报错；
 - 门禁数仍 9（gate 1 保留，gate 2–5 退役）。
+
+
+## S4/S5 收口（2026-11-24，DEV）
+
+- S4：`docs/architecture.md` 重写为 ct-ast 架构（L0 章节退役）；test/selfhost/glossary/design 的 L0/L1/L2 活跃引用改为历史说明；历史链接改指 v1.0.0 历史或代码跨度；删除 check-docs 的 SH-119 临时豁免。
+- S5：`check-all: OK (9 hard gates green)`；`check-docs` OK（9 gates）；`check-install`、`check-seed` 绿；`g8-version` 绿（零版本移动）。
