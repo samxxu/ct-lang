@@ -65,6 +65,7 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
+struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct frontend_parse_MapBuild;
@@ -133,10 +134,6 @@ struct backend_emit_EmitOps_vtbl {
     int (*emit_map_brace_init)(void *, int);
     int (*write_header)(void *, const char *);
     int (*write_abi_header)(void *, const char *);
-    int (*try_result_tag)(void *, const char *, char *, int);
-    int (*try_result_cols)(void *, int, char *, int, char *, int);
-    int (*try_cleanup)(void *, int);
-    int (*try_release_payload)(void *, const char *, const char *, const char *);
     int (*fail)(void *, const char *);
     int (*fail_from)(void *, int, const char *);
     int (*invariant_check)(void *, int);
@@ -147,6 +144,17 @@ struct backend_emit_EmitOps_vtbl {
 struct backend_emit_EmitOps_iface {
     void *self;
     const struct backend_emit_EmitOps_vtbl *vt;
+};
+
+struct backend_emit_EmitterTryOps_vtbl {
+    int (*try_result_tag)(void *, const char *, char *, int);
+    int (*try_result_cols)(void *, int, char *, int, char *, int);
+    int (*try_cleanup)(void *, int);
+    int (*try_release_payload)(void *, const char *, const char *, const char *);
+};
+struct backend_emit_EmitterTryOps_iface {
+    void *self;
+    const struct backend_emit_EmitterTryOps_vtbl *vt;
 };
 
 struct backend_emit_Emitter {
@@ -215,6 +223,7 @@ struct backend_emit_Emitter {
     char gtarg2[160];
     char ginst[160];
     const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
+    const struct backend_emit_EmitterTryOps_vtbl *__backend_emit_emittertryops_vptr;
 };
 
 #endif

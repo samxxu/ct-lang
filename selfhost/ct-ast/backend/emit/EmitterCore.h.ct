@@ -93,6 +93,23 @@ pub trait EmitOps {
     int  emit_map_brace_init(int n);
     int  write_header(const char *outc);
     int  write_abi_header(const char *path);
+    int  fail(const char *msg);
+    int  fail_from(int n, const char *msg);
+    /* SH-111: the lowering invariants the emitter may assume. The checker is
+       deliberately separate from emission: it runs before the first byte is
+       written, reports at the source position of the node that broke the
+       rule, and changes no product for a legal program. */
+    int  invariant_check(int prog);
+    int  invariant_scan(int n, int depth);
+    int  invariant_edge(int head, int err_exit, int at);
+    int  invariant_temp_check(void);
+}
+
+/* Phase 44: the postfix `?` support -- naming the `Result<T, E>` instance,
+   the error column and the captured cleanup, and releasing a discarded
+   payload. It keeps its own trait and unit because the family is one role and
+   `EmitOps` stays the dispatch surface. */
+pub trait EmitterTryOps {
     /* Phase 44: the `Result<T, E>` instance behind a C type spelling and its
        payload types, so a postfix `?` can name the operand, compare the error
        parameter and spell the outer `<Inst>_err(...)` call. */
@@ -105,16 +122,6 @@ pub trait EmitOps {
        `release` method when one is callable and otherwise its local Drop glue.
        0 even when the type owns nothing (a scalar or a pointer). */
     int  try_release_payload(const char *ctype, const char *tmp, const char *field);
-    int  fail(const char *msg);
-    int  fail_from(int n, const char *msg);
-    /* SH-111: the lowering invariants the emitter may assume. The checker is
-       deliberately separate from emission: it runs before the first byte is
-       written, reports at the source position of the node that broke the
-       rule, and changes no product for a legal program. */
-    int  invariant_check(int prog);
-    int  invariant_scan(int n, int depth);
-    int  invariant_edge(int head, int err_exit, int at);
-    int  invariant_temp_check(void);
 }
 
 /* The driver points the collaborators, the module tables, the options and the
@@ -238,4 +245,4 @@ pub struct Emitter {
        be retained nor released. `sb_blk` holds the binding depth at each
        statement block so a `break` / `continue` can release what the skipped
        closing brace would have. The literals are the documented caps. */
-} use EmitOps;
+} use EmitOps, EmitterTryOps;

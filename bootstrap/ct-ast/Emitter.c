@@ -14,6 +14,7 @@
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"
 #include "EmitterCore.h"
+#include "EmitterTry.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Emitter.h.ct"
 #include <stdio.h>
@@ -175,6 +176,7 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
+struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct frontend_parse_MapBuild;
@@ -407,7 +409,7 @@ static int * backend_emit_g_slice_used;
 static int backend_emit_g_adt_layout_state[MAX_LAYOUT_ADTS];
 static int backend_emit_g_inst_layout_state[MAX_LAYOUT_INSTS];
 static int backend_emit_g_shell_emit_state[MAX_LAYOUT_INSTS];
-static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable };
+static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable };
 static int backend_emit_Emitter_backend_emit_EmitOps_expr_unstable(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int k;
@@ -4238,153 +4240,6 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_header(void *self, co
     return 0;
 }
 
-static int backend_emit_Emitter_backend_emit_EmitOps_try_result_tag(void *self, const char * ctype, char * tag, int cap) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    char buf[MAX_TEXT];
-    size_t n;
-    int inst;
-    int ninst;
-    struct frontend_sym_StructInst * ins;
-    (void)(_self);
-    if (((!ctype) || (!ctype[0]))) {
-        return 0;
-    }
-    if (snprintf(buf, sizeof(buf), "%s", ctype) >= (int)(sizeof(buf))) {
-        return 0;
-    }
-    n = strlen(buf);
-    while (((n > 0) && ((buf[(n - 1)] == ' ') || (buf[(n - 1)] == '*')))) {
-        if (buf[(n - 1)] == '*') {
-            return 0;
-        }
-        buf[--n] = 0;
-    }
-    if (strncmp(buf, "struct ", 7) == 0) {
-        memmove(buf, (buf + 7), (strlen((buf + 7)) + 1));
-    }
-    else {
-        if (((strncmp(buf, "union ", 6) == 0) || (strncmp(buf, "enum ", 5) == 0))) {
-            return 0;
-        }
-    }
-    inst = frontend_sym_ct_inst_find(buf);
-    if (inst < 0) {
-        return 0;
-    }
-    ins = frontend_sym_ct_insts((&ninst));
-    if (((!ins) || (inst >= ninst))) {
-        return 0;
-    }
-    if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
-        return 0;
-    }
-    if (snprintf(tag, (size_t)(cap), "%s", buf) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_try_result_cols(void *self, int inst, char * val, int vcap, char * err, int ecap) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int ninst;
-    struct frontend_sym_StructInst * ins;
-    (void)(_self);
-    ins = frontend_sym_ct_insts((&ninst));
-    if ((((!ins) || (inst < 0)) || (inst >= ninst))) {
-        return 0;
-    }
-    if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
-        return 0;
-    }
-    if (snprintf(val, (size_t)(vcap), "%s", ins[inst].ctype[0]) >= vcap) {
-        return 0;
-    }
-    if (snprintf(err, (size_t)(ecap), "%s", ins[inst].carg[1]) >= ecap) {
-        return 0;
-    }
-    return 1;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_try_cleanup(void *self, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    struct frontend_parse_Expr * ex;
-    int i;
-    (void)(_self);
-    ex = frontend_parse_expr_get();
-    for (i = 0; i < ex->ntry_cleanup; i++) {
-        if (ex->try_cleanup_node[i] == n) {
-            return ex->try_cleanup_head[i];
-        }
-    }
-    return (-1);
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_try_release_payload(void *self, const char * ctype, const char * tmp, const char * field) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    char base[MAX_TEXT];
-    int si;
-    int inst;
-    int ninst;
-    int n;
-    int m;
-    struct frontend_sym_StructInst * ins;
-    (void)(_self);
-    if (((!ctype) || (strncmp(ctype, "struct ", 7) != 0))) {
-        return 0;
-    }
-    snprintf(base, sizeof(base), "%s", (ctype + 7));
-{
-        size_t bl = strlen(base);
-        while (((bl > 0) && ((base[(bl - 1)] == ' ') || (base[(bl - 1)] == '*')))) {
-            if (base[(bl - 1)] == '*') {
-                return 0;
-            }
-            bl--;
-            base[bl] = 0;
-        }
-    }
-    si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
-    if (si < 0) {
-        return 0;
-    }
-    inst = frontend_sym_ct_inst_find(base);
-    ins = frontend_sym_ct_insts((&ninst));
-    for (n = 0; n < _self->arena->nnode; n++) {
-        if (_self->arena->nodes[n].kind != N_IMPL) {
-            continue;
-        }
-        if (_self->arena->nodes[n].text2[0]) {
-            continue;
-        }
-        if (_self->arena->nodes[n].aux == si) {
-        }
-        else {
-            if (((((_self->arena->nodes[n].aux == (-1)) && (inst >= 0)) && (inst < ninst)) && (strcmp(_self->arena->nodes[n].text, ins[inst].tmpl) == 0))) {
-            }
-            else {
-                continue;
-            }
-        }
-        for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
-            if (strcmp(_self->arena->nodes[m].text2, "release") != 0) {
-                continue;
-            }
-            if (((_self->arena->nodes[m].a > 0) || _self->arena->nodes[m].c)) {
-                continue;
-            }
-            if ((!(((_self->arena->nodes[m].d == 1) || (_self->cur_unit == (-1))) || (_self->sym->structs[si].owner == _self->cur_unit)))) {
-                continue;
-            }
-            fprintf(_self->out, "%s_release(&%s.%s); ", base, tmp, field);
-            return 0;
-        }
-    }
-    if (_self->sym->structs[si].uses_drop) {
-        fprintf(_self->out, "%s_Drop_drop(&%s.%s); ", base, tmp, field);
-    }
-    return 0;
-}
-
 static int backend_emit_Emitter_backend_emit_EmitOps_invariant_edge(void *self, int head, int err_exit, int at) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int c;
@@ -4472,7 +4327,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_invariant_scan(void *self, 
             continue;
         }
         if (k == N_TRY) {
-            h = _self->__backend_emit_emitops_vptr->try_cleanup(_self, n);
+            h = _self->__backend_emit_emittertryops_vptr->try_cleanup(_self, n);
             if (_self->__backend_emit_emitops_vptr->invariant_edge(_self, h, 1, n) != 0) {
                 return (-1);
             }
@@ -4742,10 +4597,6 @@ const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps
     .write_map = backend_emit_Emitter_backend_emit_EmitOps_write_map,
     .write_abi_header = backend_emit_Emitter_backend_emit_EmitOps_write_abi_header,
     .write_header = backend_emit_Emitter_backend_emit_EmitOps_write_header,
-    .try_result_tag = backend_emit_Emitter_backend_emit_EmitOps_try_result_tag,
-    .try_result_cols = backend_emit_Emitter_backend_emit_EmitOps_try_result_cols,
-    .try_cleanup = backend_emit_Emitter_backend_emit_EmitOps_try_cleanup,
-    .try_release_payload = backend_emit_Emitter_backend_emit_EmitOps_try_release_payload,
     .invariant_edge = backend_emit_Emitter_backend_emit_EmitOps_invariant_edge,
     .invariant_scan = backend_emit_Emitter_backend_emit_EmitOps_invariant_scan,
     .invariant_check = backend_emit_Emitter_backend_emit_EmitOps_invariant_check,
@@ -9217,7 +9068,7 @@ static int em_expr_try(struct backend_emit_Emitter * self, int n, int nk) {
             return self->__backend_emit_emitops_vptr->fail_from(self, n, "'?' needs a Result operand");
         }
     }
-    if (((!self->__backend_emit_emitops_vptr->try_result_tag(self, opty, otag, sizeof(otag))) || (!self->__backend_emit_emitops_vptr->try_result_cols(self, frontend_sym_ct_inst_find(otag), oval, sizeof(oval), oerr, sizeof(oerr))))) {
+    if (((!self->__backend_emit_emittertryops_vptr->try_result_tag(self, opty, otag, sizeof(otag))) || (!self->__backend_emit_emittertryops_vptr->try_result_cols(self, frontend_sym_ct_inst_find(otag), oval, sizeof(oval), oerr, sizeof(oerr))))) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "'?' needs a Result operand");
     }
     if ((!self->cur_ret[0])) {
@@ -9237,7 +9088,7 @@ static int em_expr_try(struct backend_emit_Emitter * self, int n, int nk) {
         }
     }
     if (strcmp(self->cur_ret, "void") != 0) {
-        if (((!self->__backend_emit_emitops_vptr->try_result_tag(self, self->cur_ret, rtag, sizeof(rtag))) || (!self->__backend_emit_emitops_vptr->try_result_cols(self, frontend_sym_ct_inst_find(rtag), rval, sizeof(rval), rerr, sizeof(rerr))))) {
+        if (((!self->__backend_emit_emittertryops_vptr->try_result_tag(self, self->cur_ret, rtag, sizeof(rtag))) || (!self->__backend_emit_emittertryops_vptr->try_result_cols(self, frontend_sym_ct_inst_find(rtag), rval, sizeof(rval), rerr, sizeof(rerr))))) {
             return self->__backend_emit_emitops_vptr->fail_from(self, n, "postfix '?' needs a function returning Result");
         }
         if (strcmp(oerr, rerr) != 0) {
@@ -9257,7 +9108,7 @@ static int em_expr_try(struct backend_emit_Emitter * self, int n, int nk) {
     self->try_discard = save_disc;
     fputs(";\n", self->out);
     fprintf(self->out, "if (!%s.ok) {\n", qt);
-    h = self->__backend_emit_emitops_vptr->try_cleanup(self, n);
+    h = self->__backend_emit_emittertryops_vptr->try_cleanup(self, n);
     while (h >= 0) {
         if (self->arena->nodes[h].kind == N_DEFER_RUN) {
             self->__backend_emit_emitops_vptr->emit_indent(self, 1);
@@ -9269,7 +9120,7 @@ static int em_expr_try(struct backend_emit_Emitter * self, int n, int nk) {
     }
     if (strcmp(self->cur_ret, "void") == 0) {
         self->__backend_emit_emitops_vptr->emit_indent(self, 1);
-        if (self->__backend_emit_emitops_vptr->try_release_payload(self, ety, qt, "err") != 0) {
+        if (self->__backend_emit_emittertryops_vptr->try_release_payload(self, ety, qt, "err") != 0) {
             return (-1);
         }
         fputs("\n", self->out);
@@ -9295,7 +9146,7 @@ static int em_expr_try(struct backend_emit_Emitter * self, int n, int nk) {
     fputs("}\n", self->out);
     if (self->try_discard) {
         self->__backend_emit_emitops_vptr->emit_indent(self, 1);
-        if (self->__backend_emit_emitops_vptr->try_release_payload(self, vty, qt, "value") != 0) {
+        if (self->__backend_emit_emittertryops_vptr->try_release_payload(self, vty, qt, "value") != 0) {
             return (-1);
         }
         fputs("\n", self->out);

@@ -23,6 +23,7 @@
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"
 #include "EmitterCore.h"
+#include "EmitterTry.h"
 
 
 struct ct_buf;
@@ -74,6 +75,7 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
+struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct frontend_parse_MapBuild;
