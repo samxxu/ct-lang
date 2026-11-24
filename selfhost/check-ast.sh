@@ -886,6 +886,16 @@ else
     bad "l29b3/adt-payload-glue" "$(cat "$work/l29b3.out" "$work/l29b3.err" | head -8)"
 fi
 
+# LANG-29 S3 (B2): an enum ADT takes inherent methods (`impl N { … }`, no
+# trait), a custom subscript (`n[k]` / `n[k] = v`) and multi-level chains
+# rooted at one. The positive fixture is 301_adt_methods; the probe pins the
+# single-evaluation / no-pointer-arithmetic shape and the L52 negatives.
+if bash test/ast/l29b2_methods.sh "$work/ct-ast" >"$work/l29b2.out" 2>"$work/l29b2.err"; then
+    ok "l29b2/adt-methods"
+else
+    bad "l29b2/adt-methods" "$(cat "$work/l29b2.out" "$work/l29b2.err" | head -8)"
+fi
+
 # PH-84 S84d (E84-8): the ADT / `match` documentation is in the spec, the
 # tutorial and the patterns rewrite sample, and the freeze list is registered.
 if bash test/ast/p84_docs.sh >"$work/p84doc.out" 2>"$work/p84doc.err"; then

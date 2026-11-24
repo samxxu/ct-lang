@@ -1,0 +1,18 @@
+/* LANG-29 S3 / B2: the subscript protocol needs an instance method. */
+enum Cell {
+    Box(int *p),
+    Empty(int z)
+}
+
+impl Cell {
+    static int get(int i) {
+        return i;
+    }
+}
+
+int main(void)
+{
+    Cell c = Cell.Empty(1);
+    int x = c[0];
+    return x;
+}

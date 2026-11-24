@@ -1,0 +1,95 @@
+#include <stdio.h>
+
+struct Point {
+    int x;
+}
+
+struct Slot {
+    Point at;
+}
+
+impl Slot {
+    int twice() {
+        return self->at.x * 2;
+    }
+}
+
+enum Cell {
+    Box(Slot *s),
+    Empty(int z)
+}
+
+impl Cell {
+    Slot get(int i) {
+        Slot none;
+        none.at.x = -1;
+        if (i != 0) return none;
+        match (self) {
+            Cell.Box(s) => { return *s; }
+            Cell.Empty(z) => { none.at.x = z; return none; }
+        }
+        return none;
+    }
+    void set(int i, Slot v) {
+        if (i != 0) return;
+        match (self) {
+            Cell.Box(s) => { s->at.x = v.at.x; }
+            Cell.Empty(z) => { z = v.at.x; }
+        }
+    }
+    int value() {
+        match (self) {
+            Cell.Box(s) => { return s->at.x; }
+            Cell.Empty(z) => { return z; }
+        }
+        return -1;
+    }
+    int rebuilt() {
+        Cell c = Cell.Empty(5);
+        return c.value();
+    }
+}
+
+Slot make_slot(int v)
+{
+    Slot s;
+    s.at.x = v;
+    return s;
+}
+
+int calls = 0;
+
+int index(void)
+{
+    calls = calls + 1;
+    return 0;
+}
+
+int main(void)
+{
+    Slot inner;
+    inner.at.x = 7;
+    Cell c = Cell.Box(&inner);
+
+    int a = c[0].at.x;
+    int t = c[index()].twice();
+    int v = c.value();
+    Cell e = Cell.Empty(0);
+    int ev = e.value();
+
+    Slot n;
+    n.at.x = 21;
+    c[0] = n;
+    int after = c[0].at.x;
+
+    int oob = c[9].at.x;
+    c[9] = n;
+    int oob2 = c[0].at.x;
+    int built = c.rebuilt();
+    int f = make_slot(5).at.x;
+    int g = make_slot(6).twice();
+
+    printf("%d %d %d %d %d %d %d %d %d %d %d\n",
+           a, t, v, ev, after, oob, oob2, calls, built, f, g);
+    return 0;
+}

@@ -1,0 +1,18 @@
+/* LANG-29 S3 / B2: a read-only ADT subscript rejects the write form. */
+enum Cell {
+    Box(int *p),
+    Empty(int z)
+}
+
+impl Cell {
+    int get(int i) {
+        return i;
+    }
+}
+
+int main(void)
+{
+    Cell c = Cell.Empty(1);
+    c[0] = 9;
+    return 0;
+}

@@ -1,0 +1,20 @@
+/* LANG-29 S3 / B2: an ADT inherent method that does not exist is a hard
+   error, not a silent C field access. */
+enum Cell {
+    Box(int *p),
+    Empty(int z)
+}
+
+impl Cell {
+    int value() {
+        return 0;
+    }
+}
+
+int main(void)
+{
+    int x = 3;
+    Cell c = Cell.Box(&x);
+    c.nope();
+    return 0;
+}
