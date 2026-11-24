@@ -56,6 +56,11 @@ SKELETON_OK = [
     re.compile(r"^\s*namespace\s+[A-Za-z_:]+\s*;\s*$"),
     re.compile(r"^\s*pub\s+struct\s+\w+\s*\{?\s*$"),
     re.compile(r"^\s*impl\s+\w+\s+for\s+\w+\s*\{?\s*$"),
+    # a move carries the leading comment of the definition with it; a comment
+    # line is mechanical (the body hash already covers comments inside bodies)
+    re.compile(r"^\s*/\*"),
+    re.compile(r"^\s*\*"),
+    re.compile(r"^\s*//"),
     re.compile(r"^\s*int\s+unused;\s*$"),
     re.compile(r"^\s*\}\s*$"),
 ]
@@ -191,6 +196,8 @@ def main(argv):
                                          or line[1:].strip() == "}"):
                 continue
             if line.startswith("+") and line[1:].strip() == "":
+                continue
+            if line[:1] in "+-" and re.match(r"^\s*(?:/\*|\*|//)", line[1:]):
                 continue
             bad.append("%s skeleton changed: %r" % (host, line[:100]))
     for row in args.map:
