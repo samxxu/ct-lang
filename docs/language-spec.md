@@ -111,19 +111,19 @@ ct check --types hello.ct               # 可选类型检查
 | `ct-ast file.ct -o file.c` | 单文件编译（不解析 `import`） |
 | `ct build main.ct -o prog` | 多文件构建；`import` 生效，最后调用 `cc` |
 | `ct build --emit-c main.ct -o dir` | 多文件构建，只写生成的 `.c` / `.h` |
-| `ct build --check-level=off\|warn\|error main.ct -o prog` | 构建时运行 B 的 `--types` 检查（v0-PH-85 / SH-115）：**默认 `warn`**，把发现按 `warning:` 报告、构建继续并写产物（生成物与 `off` 逐字节相同）；`off` 是静默逃生口；`error` 报告并阻断，不写产物 |
+| `ct build --check-level=off\|warn\|error main.ct -o prog` | 构建时运行 B 的 `--types` 检查（v0-PH-85 / SH-115 / v1-PH-1 S3）：**默认 `error`**，报告并阻断、不写产物；显式 `warn` 把发现按 `warning:` 报告、构建继续并写产物（生成物与 `off` 逐字节相同）；`off` 是静默逃生口 |
 
 **B 检查的构建接线（v0-PH-85，D2 = B+）**：`ct build --check-level=…` 把 `ct check --types`
 已有的判定（赋值/初值/`return`/`$` 目标/实参的静态类型）接进构建路径。v0-PH-85 交付机制时默认
-`off`；**SH-115（2026-11-22）把 CLI 默认升为 `warn`**，生成物与之前逐字节相同、只多
-`warning:` 行；`off` 保留为静默逃生口；`error` 用 `error:` 打印并在写任何 `.c`/`.h` 之前退出。
-SH-115 同批补了函数指针**字段**调用（LANG-19 残余路径）与结构体花括号初值的可判定错配。
-`ct check --types` 与 `ct build --check-level=warn` 同判定、同文案。默认强制（`error`）仍留
-v1.1（S2）。
+`off`；SH-115（2026-11-22）把 CLI 默认升为 `warn`；**v1-PH-1 S3（2026-11-24）把 CLI 默认升为
+`error`**：发现即用 `error:` 打印并在写任何 `.c`/`.h` 之前退出。显式 `--check-level=warn`
+保留「只报告、继续写产物」的旧行为（生成物与 `off` 逐字节相同），`--check-level=off` 是静默
+逃生口。SH-115 同批补了函数指针**字段**调用（LANG-19 残余路径）与结构体花括号初值的可判定错配。
+`ct check --types` 与 `ct build --check-level=warn` 同判定、同文案。
 
-**三个层级分开**：CLI/`ct build` 的默认级别（SH-115 起 `warn`）；v1-pre 的 CI/发布门禁在
-FP=0 前以 `--check-level=warn` 运行、FP=0 后升 `error`；v1.1 S2 才把 CLI 默认升 `error`
-（未达标则回退“可用不默认”）。
+**三个层级分开**：CLI/`ct build` 的默认级别（SH-115 起 `warn`，v1-PH-1 S3 起 `error`）；
+v1-pre 的 CI/发布门禁在 FP=0 前以 `--check-level=warn` 运行、FP=0 后升 `error`；v1.1 S3
+按 FP=0 证据把 CLI 默认升到 `error`（回退只需一次提交：`--check-level=off` 保留）。
 
 **单元类型**：`.h.ct` 发布接口；`.m.ct` 可被 `.h.ct` / `.ct` 单元 import（`map` 单元与 shim
 依赖它，夹具 `map_unit_cross` 钉住这个方向）；普通 `.ct` 单元不能被 import（`resolve_import`

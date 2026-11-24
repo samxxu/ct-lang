@@ -177,8 +177,8 @@ pub struct Module {
        The driver's compile path short-circuits on it after parsing. */
     int  check_mode;
     /* PH-85 S85d: `ct build --check-level=off|warn|error` (0/1/2). SH-115:
-       `warn` (1) is the CLI default for the build path, so only an explicit
-       0 keeps the build path silent. */
+       `warn` (1) was the CLI default; v1-PH-1 S3 makes `error` (2) the CLI
+       default, so only an explicit 0 keeps the build path silent. */
     int  types_level;
     const char *std_flag;       /* --std=c99 | --std=gnu99 */
     const char *version;        /* CTC_VERSION, bound by the driver */
@@ -2206,11 +2206,11 @@ impl ModuleOps for Module {
         /* PH-69-R1: `ct check` routed through the build graph keeps check
            severity (all findings are errors), not build's signature-only 2. */
         tool::diag::ct_diag_set_strict(self->check_mode ? 1 : 2);
-        /* PH-85 S85d: the B checker on the build path. SH-115 made `warn` the
-           CLI default, so `types_mode` is 1 for an ordinary build; an explicit
-           `--check-level=off` leaves it 0 and the build is byte-for-byte what
-           it was before PH-85. `warn` / `error` pick how a finding is
-           treated. */
+        /* PH-85 S85d: the B checker on the build path. SH-115 made `warn` and
+           v1-PH-1 S3 makes `error` the CLI default, so `types_mode` is 1 for
+           an ordinary build; an explicit `--check-level=off` leaves it 0 and
+           the build is byte-for-byte what it was before PH-85. `warn` /
+           `error` pick how a finding is treated. */
         tool::diag::ct_diag_set_types_level(self->types_level);
         if (self->types_level > 0) self->p->types_mode = 1;
         /* PH-82: one package per run, so the build's first input decides the

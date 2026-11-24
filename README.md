@@ -3,10 +3,11 @@
 > **v1.0.0** · 中文 · [English](README.en.md)
 
 **Ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
-`ct compile` 不做类型检查、不做优化；`ct build` 自 SH-115 起默认以 `--check-level=warn` 跑 B 的
-静态类型检查（赋值/初值/`return`/`$` 目标/调用实参；`--check-level=off` 可静默），只报
-`warning:`、生成物不变；`ct check` 只做受限语义检查（调用点 arity、实参类型、trait 方法歧义、
-impl 签名漂移）。需要更早发现类型问题时用 `ct check --types`（可选子集，见
+`ct compile` 不做类型检查、不做优化；`ct build` 自 v1-PH-1 S3 起默认以 `--check-level=error` 跑
+B 的静态类型检查（赋值/初值/`return`/`$` 目标/调用实参），有发现即失败、不写产物；显式
+`--check-level=warn` 只报 `warning:`、生成物不变，`--check-level=off` 可静默；`ct check` 只做
+受限语义检查（调用点 arity、实参类型、trait 方法歧义、impl 签名漂移）。需要更早发现类型问题时用
+`ct check --types`（可选子集，见
 [spec §4.53](docs/language-spec.md#453-可选类型检查-ct-check---typesphase-32)）。生成物是
 **可读的普通 C**，vtable 与 `_self` 强转等样板代码都由编译器生成。
 
@@ -229,7 +230,7 @@ gcc /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 | `ct build <in.ct>… [-o <exe>]` | 多文件构建：生成物默认放 `.ctbuild/`，再调用 C 编译器产出可执行文件；`--emit-c` 只发 `.c`/`.h`，`--runtime-checks` 在接口派发前检查空 vtable（默认关闭） |
 | `ct check <in.ct>` | 只跑受限语义检查、不写 `.c`；有发现以 `error:` 报告并退出 `1`，干净退出 `0` |
 | `ct check --types <in.ct>` | opt-in 类型检查（v0-PH-68/69 + v0-PH-70/71 的 CFG/own 走 `--semantics`）；与 `ct build --check-level=warn` 同判定、同文案 |
-| `ct build --check-level=off\|warn\|error` | 把 B 的检查接进构建路径；SH-115 起默认 `warn`，只报 `warning:`、生成物与 `off` 逐字节相同；`error` 在写产物前失败 |
+| `ct build --check-level=off\|warn\|error` | 把 B 的检查接进构建路径；v1-PH-1 S3 起默认 `error`、在写产物前失败；显式 `warn` 只报 `warning:`、生成物与 `off` 逐字节相同；`off` 静默逃生 |
 | `ct … --emit-map <file\|->` | 写出反向映射表 JSON（trait / struct / 函数 / impl → 生成的 C 符号）；`--emit-model` 写模型 JSON |
 | `ct index verify [<file>] [--json] [-q]` | 只读校验索引：六字段、`tag == v<version>`、`sha256`、重复行；退出码 0/1/2 |
 | `ct get` / `ct update` / `ct install` / `ct verify` / `ct migrate` | 包管理：拉包进共享 store、写 v2 `ct.lock`；`ct build` 自动读 lock。S7 后不再读写 `vendor/`，旧工程用 [`ct migrate`](docs/package-guide.md#8-v1-迁移ct-migrate) 一次性迁入 |

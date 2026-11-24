@@ -277,7 +277,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         }
     }
     if (((argc > 1) && (strcmp(argv[1], "build") == 0))) {
-        _self->m->types_level = 1;
+        _self->m->types_level = 2;
         char roots[16][512];
         char notes[16][512];
         char * bargv[256];

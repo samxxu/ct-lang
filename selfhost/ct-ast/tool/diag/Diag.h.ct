@@ -168,8 +168,8 @@ struct Diag {
     int  leaks_error;
     /* PH-85 S85d: `ct build --check-level=warn` downgrades the B findings to
        warnings and `error` promotes them; SH-115 made 1 (`warn`) the CLI
-       default, so only an explicit `--check-level=off` (0) restores the exact
-       pre-PH-85 build. */
+       default and v1-PH-1 S3 moved it to 2 (`error`), so only an explicit
+       `--check-level=off` (0) restores the exact pre-PH-85 build. */
     int  types_level;
     /* LANG-25: `--diag-codes` appends `[E-...]` / `[W-...]` to text lines.
        Default text stays byte-identical; JSON carries the code either way. */

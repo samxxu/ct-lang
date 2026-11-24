@@ -149,20 +149,24 @@ v1.0 = AST-only + 去掉旧管线 + B 检查器可用（opt-in）；v1.1 = 先�
 >
 > **2026-11-22 所有者修订**：类型检测强化提前，**不等 v1-pre**；B+ 强化与 CLI 默认 `warn`
 > 同批落下一 v0.x（[SH-115](../../issues/selfhost/sh115-b-plus-strengthening.md)）。
+> **2026-11-24 v1.1 S3**：全量语料 FP=0 证据（[SH-118](../../issues/selfhost/sh118-full-corpus-fp-zero.md)）达标，
+> CLI 默认 `warn` → `error`；显式 `--check-level=off` 保留逃生。
 
 | 层 | 内容 | 落点 |
 | --- | --- | --- |
 | **机制** | 把 B 的 checker 接进 build 路径，提供 `off / warn / error` 严重级别阶梯 | **已完成（v0-PH-85，v0.85.0）** |
 | **强化** | 补静态映射/未知类型/函数指针字段/泛型与 ADT 的可判定缺口；同判定同文案 | **下一 v0.x（SH-115）** |
 | **证据** | 全量语料 FP=0、固定漏报矩阵、123 个 import 单元、CFG/定值、编译时间 ≤+10%、诊断码稳定 | **v1.0 硬门禁**（v1-PH-0） |
-| **默认值** | **下一 v0.x 起 CLI 默认 `warn`**（SH-115 同批；`--check-level=off` 保留逃生）；v1-pre 的 **CI/发布门禁**在 FP=0 前 `warn`、FP=0 后 `error`；v1.1 S2 把 **CLI 默认**升 `error`，未达标回退“可用不默认” | SH-115 + v1.1 S2 |
+| **默认值** | **v1-PH-1 S3 起 CLI 默认 `error`**（2026-11-24，FP=0 证据沿用 [SH-118](../../issues/selfhost/sh118-full-corpus-fp-zero.md)）；`--check-level=off` 保留逃生，回退“可用不默认”只需一次提交；v1-pre 的 **CI/发布门禁**在 FP=0 前 `warn`、FP=0 后 `error` | SH-115 + v1.1 S3 |
 
 - **默认值不再等 v1-pre**：所有者 2026-11-22 决定强化提前；CLI 默认 `warn` 随 SH-115 落地，
-  生成物不变，只多 `warning:` 行；要静默构建仍可显式 `--check-level=off`。
-- **“可见”与“阻断”仍分开**：CLI 默认 `warn` 是让问题可见；发布门禁的 `error` 与 v1.0 的
-  FP=0 证据才是阻断条件，两者不是同一件事。
+  生成物不变，只多 `warning:` 行；v1.1 S3 再按 FP=0 证据把 CLI 默认升 `error`，要静默构建仍可
+  显式 `--check-level=off`。
+- **“可见”与“阻断”仍分开**：v1.0 的 CLI 默认 `warn` 只让问题可见；发布门禁的 `error` 与
+  v1.0 的 FP=0 证据才是阻断条件。v1.1 S3 在证据达标后把默认本身升级为阻断。
 - 机制必须在重写前就位：42.8k 行新代码要在“有检查”的环境里写，这是 A 的最大规模 dogfood；
 - v1.0 承诺的是“**检查器可信**”（证据达标）与“默认可见”（`warn`），不是“默认强制”；
+  v1.1 S3 才把默认升级为 `error`；
 - 若 v1-pre 窗口证据不足，落到“可用但不默认”（D 回退），因机制已就位，顺延零成本；
 - 普通 C 兼容模式始终保留；全局默认 strict 仍留 v2.0 讨论。
 
@@ -229,7 +233,7 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.0 命名清理 `Box<T>` | `v1-PH-0` | v1.0.0 | 规范拼写 `Box<T>`；`box<T>` 别名 + 弃用告警；独立提交，不混入 seed cutover（[LANG-24](../../issues/lang/lang-24-box-pascalcase-rename.md)） |
 | v1.1 M1 精细切分 | `v1-PH-1 / S1` | v1.1 train | 纯搬移；不单独 bump |
 | v1.1 容器级联释放 | `v1-PH-1` | v1.1 train | `Vec`/`Map` 字段进入 Drop 胶水（元素级联）；合入后 30 天按唤醒条件评估 JSON 树方案 B（[LANG-27](../../issues/lang/lang-27-container-cascade.md)） |
-| v1.1 A 默认强制 | `v1-PH-1 / S2` | **v1.1.0** | CLI 已在下一 v0.x 默认 `warn`（SH-115）；证据达标则升 `error`，未达标回退“可用不默认” |
+| v1.1 A 默认强制 | `v1-PH-1 / S3` | **v1.1.0** | ✅ 2026-11-24：CLI 默认由 `warn` 升 `error`（FP=0 证据沿用 SH-118/p118）；`off` 保留逃生，单提交可回退 |
 | v1.1 lowering 不变量 | `v1-PH-1` | v1.1 train | 临时值/求值顺序/清理边的显式规则 + 发射前检查 + 6 类小 golden；不做完整 IR（[SH-111](../../issues/selfhost/sh111-lowering-invariants.md)） |
 | v1.1 绑定点转换 ADR | `v1-PH-1` | v1.1 train | 宽松默认 + 严格 `.to<T>()`/`decode<T>` 边界；先 ADR；容量按 SH-109 动态增长，不再受 501/512 约束（[LANG-26](../../issues/lang/lang-26-binding-site-conversion.md)） |
 | v1.1 内建单元判活边界 | `v1-PH-1` | v1.1 train | 6 组正负例锁住文本判活边界；小写导出漏判显式标注；语义图归 v1.2（[SH-113](../../issues/selfhost/sh113-builtin-live-boundary.md)） |
