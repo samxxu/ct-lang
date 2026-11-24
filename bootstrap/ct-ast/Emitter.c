@@ -13,6 +13,7 @@
 #include "EmitterText.h"
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"
+#include "EmitterCore.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Emitter.h.ct"
 #include <stdio.h>
@@ -173,9 +174,9 @@ struct frontend_parse_ExprNewObject;
 struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
+struct backend_emit_Emitter;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
-struct backend_emit_Emitter;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -193,142 +194,10 @@ struct tool_pkg_PkgRec;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
 struct tool_driver_Driver;
-struct backend_emit_EmitOps_vtbl {
-    int (*emit_program)(void *, int);
-    int (*emit_unit)(void *, int);
-    int (*write_unit_header)(void *, int);
-    int (*emit_struct_fwd)(void *);
-    int (*emit_trait_range)(void *, int, int, int);
-    int (*emit_proto)(void *, int);
-    int (*emit_vtable_fwd)(void *, int);
-    int (*header_guard)(void *, const char *, char *, int);
-    int (*write_map)(void *, const char *, int, int);
-    int (*write_model)(void *, const char *, int);
-    int (*emit_json_str)(void *, FILE *, const char *);
-    int (*emit_node)(void *, int, int);
-    int (*emit_field)(void *, int, int);
-    int (*emit_inline)(void *, int);
-    int (*emit_type_name)(void *, const char *, const char *);
-    int (*emit_type_name_dims)(void *, const char *, const char *, const char *);
-    int (*emit_expr)(void *, int);
-    int (*emit_outconv)(void *, int);
-    int (*emit_ref_arg)(void *, int);
-    int (*emit_value_for)(void *, const char *, int);
-    int (*expr_unstable)(void *, int);
-    int (*hoist_rvalue)(void *, int);
-    int (*hoist_scan)(void *, int, int);
-    int (*emit_hoists)(void *, int);
-    int (*hoist_expr)(void *, int, int);
-    int (*emit_cond)(void *, int);
-    int (*emit_indent)(void *, int);
-    int (*emit_type_decl)(void *, int, int, int);
-    int (*emit_global_decl)(void *, int);
-    int (*emit_global_extern)(void *, int);
-    int (*decl_is_pub)(void *, int, const char *);
-    int (*vtable_exported)(void *, int, const char *);
-    int (*map_vtable_exported)(void *, int);
-    int (*emit_link_externs)(void *, int, int);
-    int (*emit_inherent_protos)(void *, int);
-    int (*unit_has_drop_impl)(void *, int, int);
-    int (*drop_visible)(void *, int);
-    int (*node_mentions)(void *, int, const char *);
-    int (*emit_trait_decls)(void *);
-    int (*emit_impls)(void *, int);
-    int (*emit_maps)(void *, int);
-    int (*emit_unit_init)(void *, int);
-    int (*emit_raw_init)(void *, int, const char *, const char *, int);
-    int (*emit_range_init)(void *, int);
-    int (*emit_brace_init)(void *, int);
-    int (*emit_map_brace_init)(void *, int);
-    int (*write_header)(void *, const char *);
-    int (*write_abi_header)(void *, const char *);
-    int (*try_result_tag)(void *, const char *, char *, int);
-    int (*try_result_cols)(void *, int, char *, int, char *, int);
-    int (*try_cleanup)(void *, int);
-    int (*try_release_payload)(void *, const char *, const char *, const char *);
-    int (*fail)(void *, const char *);
-    int (*fail_from)(void *, int, const char *);
-    int (*invariant_check)(void *, int);
-    int (*invariant_scan)(void *, int, int);
-    int (*invariant_edge)(void *, int, int, int);
-    int (*invariant_temp_check)(void *);
-};
-struct backend_emit_EmitOps_iface {
-    void *self;
-    const struct backend_emit_EmitOps_vtbl *vt;
-};
-
-static const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps_vtable __attribute__((unused));
+const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps_vtable;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-struct backend_emit_Emitter {
-    struct runtime_arena_Arena * arena;
-    struct frontend_sym_Symbols * sym;
-    struct frontend_type_TypeCheck * ty;
-    struct frontend_lex_Lexer * lex;
-    FILE * out;
-    const char * path;
-    const char * version;
-    struct frontend_module_Unit * units;
-    int * nunits;
-    int builtins[8];
-    int nbuiltin;
-    int * builtin_live;
-    int io_mask;
-    int no_write;
-    struct frontend_module_MapTable * maps;
-    int * nmaps;
-    struct frontend_module_Call * calls;
-    int * ncalls;
-    int * build_mode;
-    int * line_mode;
-    int * runtime_checks;
-    int * freestanding;
-    char * alloc_map;
-    char alloc_m[64];
-    char alloc_f[64];
-    char alloc_r[64];
-    char alloc_c[64];
-    int * abi_mode;
-    int * abi_root;
-    int * abi_exports;
-    int * abi_n;
-    char * outdir;
-    const char * prog;
-    int * nparams;
-    struct frontend_sym_Field * pend_fields;
-    int * npend;
-    int hoist_calls[4];
-    int nhoist;
-    int opt_nodes[8];
-    int nopt;
-    int opt_scan;
-    int into_nodes[4];
-    int ninto;
-    int ntmp;
-    int raw_call;
-    int failline;
-    char errmsg[160];
-    char cur_ret[160];
-    int try_discard;
-    const char * gprefix;
-    struct backend_emit_Init * init;
-    int cur_unit;
-    int closure_ci;
-    char clvar[64][160];
-    int clid[64];
-    int nclvar;
-    int range_depth;
-    int range_k;
-    char gtparam[160];
-    char gtarg[160];
-    char gtname[160];
-    char gtparam2[160];
-    char gtarg2[160];
-    char ginst[160];
-    const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
-};
 static int emit_gsub_type(struct backend_emit_Emitter *, const char *, char *, int);
 static int sb_find(struct backend_emit_Emitter *, const char *);
 static void sb_push(struct backend_emit_Emitter *, const char *, const char *, int);
@@ -4824,7 +4693,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_fail_from(void *self, int n
     return _self->__backend_emit_emitops_vptr->fail(_self, msg);
 }
 
-static const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps_vtable __attribute__((unused)) = {
+const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps_vtable = {
     .expr_unstable = backend_emit_Emitter_backend_emit_EmitOps_expr_unstable,
     .emit_indent = backend_emit_Emitter_backend_emit_EmitOps_emit_indent,
     .hoist_rvalue = backend_emit_Emitter_backend_emit_EmitOps_hoist_rvalue,

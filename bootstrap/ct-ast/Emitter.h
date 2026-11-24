@@ -22,6 +22,7 @@
 #include "EmitterText.h"
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"
+#include "EmitterCore.h"
 
 
 struct ct_buf;
@@ -72,9 +73,9 @@ struct frontend_parse_ExprNewObject;
 struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
+struct backend_emit_Emitter;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
-struct backend_emit_Emitter;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -92,6 +93,8 @@ struct tool_pkg_PkgRec;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
 struct tool_driver_Driver;
+extern const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps_vtable;
+
 struct backend_emit_FldSnap {
     int n;
     char path[128][160];

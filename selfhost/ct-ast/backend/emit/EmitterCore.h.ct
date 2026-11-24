@@ -1,0 +1,241 @@
+/*
+ * EmitterCore.h.ct - the Emitter host type and its trait surface
+ * (SH-94 S1, pure move out of Emitter.h.ct).
+ *
+ * Unlike Expr/Stmt the instance was private to its unit, but a child unit can
+ * only reach `self->field` when the layout is published; D-017 B1 allows the
+ * `static -> pub` interface change. Publishing the type also publishes `FILE`
+ * in the generated header, which is why the unit keeps its `#include
+ * <stdio.h>` (the generated header copies the unit's includes). The trait
+ * becomes `pub` for the same reason: a private trait's vtbl struct is written
+ * only into its declaring unit's `.c`, so an impl in a child unit could not
+ * define the vtable (the Expr/Stmt cores hit the same rule).
+ *
+ * No body moves here; the methods stay in Emitter.h.ct and its existing
+ * `EmitterQuery` / `EmitterMapText` sub-object units.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+
+import backend::emit::Init;
+import frontend::lex::Lexer;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable;
+import frontend::module::Unit;
+import frontend::sym::Symbols::Field as Field;
+import frontend::sym::Symbols;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
+
+namespace backend::emit;
+/* The whole emitter API. The vptr / initialiser writer lives on a sub-object
+   (`Init.h.ct`), which keeps this trait clear of the method ceiling; `last_error`
+   is not a method -- the driver reads the message through
+   `ct_emit_last_error`. */
+pub trait EmitOps {
+    int  emit_program(int prog);
+    int  emit_unit(int u);
+    int  write_unit_header(int u);
+    int  emit_struct_fwd(void);
+    int  emit_trait_range(int start, int end, int mode);
+    int  emit_proto(int i);
+    int  emit_vtable_fwd(int prog);
+    int  header_guard(const char *base, char *out, int cap);
+    int  write_map(const char *dest, int prog, int u);
+    int  write_model(const char *dest, int prog);
+    int  emit_json_str(FILE *f, const char *s);
+    int  emit_node(int n, int ind);
+    int  emit_field(int n, int ind);
+    int  emit_inline(int n);
+    int  emit_type_name(const char *type, const char *name);
+    int  emit_type_name_dims(const char *type, const char *name, const char *dims);
+    int  emit_expr(int n);
+    /* LANG-26 / D-020 §6.1: a call whose `out` actual needed a temporary. The
+       call is emitted as one GNU statement expression: the forward conversion
+       initialises the temporary, the call runs, the write-back follows. */
+    int  emit_outconv(int n);
+    /* Phase 78 S2: one `ref` / `out` actual. A plain place takes its address;
+       a Vec/Map subscript sugar already answers a pointer (`at`) and must not
+       be addressed again. */
+    int  emit_ref_arg(int n);
+    /* PH-79 fix SH-100: one value against an expected C type. An array where a
+       slice (`struct __ct_slice`) is expected becomes a `{ptr,len}` view. */
+    int  emit_value_for(const char *want, int n);
+    int  expr_unstable(int n);
+    int  hoist_rvalue(int n);
+    int  hoist_scan(int n, int top);
+    int  emit_hoists(int ind);
+    int  hoist_expr(int n, int ind);
+    int  emit_cond(int n);
+    int  emit_indent(int n);
+    int  emit_type_decl(int n, int ind, int with_semi);
+    int  emit_global_decl(int n);
+    int  emit_global_extern(int n);
+    int  decl_is_pub(int kind, const char *name);
+    int  vtable_exported(int si, const char *tname);
+    int  map_vtable_exported(int i);
+    int  emit_link_externs(int prog, int u);
+    int  emit_inherent_protos(int prog);
+    /* PH-48 D48-2: the concrete `impl Drop` unit and the callable check; both
+       live on the trait so the compiler's MAX_FUNCS budget stays untouched
+       (the self-hosted build is at its top-level signature ceiling). */
+    int  unit_has_drop_impl(int u, int si);
+    int  drop_visible(int si);
+    int  node_mentions(int n, const char *name);
+    int  emit_trait_decls(void);
+    int  emit_impls(int prog);
+    int  emit_maps(int u);
+    int  emit_unit_init(int prog);
+    int  emit_raw_init(int raw, const char *type, const char *dims, int assign);
+    int  emit_range_init(int n);
+    int  emit_brace_init(int n);
+    int  emit_map_brace_init(int n);
+    int  write_header(const char *outc);
+    int  write_abi_header(const char *path);
+    /* Phase 44: the `Result<T, E>` instance behind a C type spelling and its
+       payload types, so a postfix `?` can name the operand, compare the error
+       parameter and spell the outer `<Inst>_err(...)` call. */
+    int  try_result_tag(const char *ctype, char *tag, int cap);
+    int  try_result_cols(int inst, char *val, int vcap, char *err, int ecap);
+    /* Phase 44: the failure cleanup the parser captured for the `?` node `n`
+       (defer / errdefer bodies and `own` releases), or -1. */
+    int  try_cleanup(int n);
+    /* Phase 44: dispose of a payload the statement discards, through its
+       `release` method when one is callable and otherwise its local Drop glue.
+       0 even when the type owns nothing (a scalar or a pointer). */
+    int  try_release_payload(const char *ctype, const char *tmp, const char *field);
+    int  fail(const char *msg);
+    int  fail_from(int n, const char *msg);
+    /* SH-111: the lowering invariants the emitter may assume. The checker is
+       deliberately separate from emission: it runs before the first byte is
+       written, reports at the source position of the node that broke the
+       rule, and changes no product for a legal program. */
+    int  invariant_check(int prog);
+    int  invariant_scan(int n, int depth);
+    int  invariant_edge(int head, int err_exit, int at);
+    int  invariant_temp_check(void);
+}
+
+/* The driver points the collaborators, the module tables, the options and the
+   output sink at one run's state. The emission scratch (hoisted temporaries)
+   lives here too; the parser's signature/field scratch is only *pointed at*
+   (it belongs to the driver), and so is the version string. */
+pub struct Emitter {
+    struct Arena *arena;
+    struct Symbols *sym;
+    struct TypeCheck *ty;
+    struct Lexer *lex;
+    FILE *out;
+    const char *path;
+    const char *version;
+    struct Unit *units;  int *nunits;
+    /* Phase 29 E29-5: the built-in container unit is loaded in `ct build` but is
+       not an import edge of any unit (it must not key the cache), so the
+       emitter includes its header explicitly. -1 when the layer is absent. */
+    int  builtins[8];   /* P34 S9a / SH-120: Vec / Option / Result / Str /
+                           String / U16Str / U16String / Box layer units */
+    int  nbuiltin;
+    /* PH-64 T2: slot-parallel liveness; a dead layer unit is not included and
+       not emitted, so the product set follows what the program can reach. */
+    int *builtin_live;
+    /* PH-66 R2: bit0 <stdio.h>, bit1 <wchar.h> -- headers the unit's direct
+       libc I/O calls need. Bound by the module layer before each unit. */
+    int  io_mask;
+    /* PH-69-R1: `ct check` reuses the build pipeline but must not write. */
+    int  no_write;
+    struct MapTable  *maps;   int *nmaps;
+    struct Call *calls;  int *ncalls;
+    int  *build_mode;
+    int  *line_mode;
+    int  *runtime_checks;  /* Phase 37 O2: guard a null vtable before iface dispatch */
+    /* PH-64: the bare-metal contract, bound by `ct_emit_bind_flags`. */
+    int  *freestanding;
+    char *alloc_map;
+    /* PH-64: the split of `--alloc A[,B[,C[,D]]]`; defaults keep libc. */
+    char alloc_m[64];
+    char alloc_f[64];
+    char alloc_r[64];
+    char alloc_c[64];
+    /* Phase 39 R3: set only while the module layer asks for `<base>.abi.h`. */
+    int  *abi_mode;
+    int  *abi_root;
+    int  *abi_exports;
+    int  *abi_n;
+    char *outdir;
+    const char *prog;
+    /* parse-time scratch owned by the driver */
+    int  *nparams;
+    struct Field *pend_fields;
+    int  *npend;
+    /* emission scratch */
+    int  hoist_calls[4];
+    int  nhoist;
+    /* PH-53: optional-chain nodes whose receiver needs a `__ct_optN`
+       temporary. The declaration is emitted at the statement head; the
+       assignment stays in the ternary's condition so evaluation is lazy. */
+    int  opt_nodes[8];
+    int  nopt;
+    int  opt_scan;              /* PH-53: collect optional temps only */
+    /* Phase 30: receivers whose block is spliced at the statement head */
+    int  into_nodes[4];
+    int  ninto;
+    int  ntmp;
+    int  raw_call;
+    int  failline;              /* the source line of the node that failed, 0 = none */
+    char errmsg[160];
+    /* Phase 44: the C return type of the function or method whose body is being
+       written, so a postfix `?` knows its propagation target. Empty outside a
+       function body (a file-scope `?` has no outer Result to return). */
+    char cur_ret[160];
+    /* Phase 44: set while a statement discards an expression's value, so a
+       postfix `?` releases the payload it would otherwise leak. */
+    int  try_discard;
+    /* The mangled prefix of the unit being written (`a_b_`, empty at the root).
+       A namespaced global is emitted as `<prefix><name>`; `emit_program` sets
+       this from `sym->ns`, the build writers from `units[u].nsprefix`. */
+    const char *gprefix;
+    /* the vptr / initialiser writer (Init.h.ct) */
+    struct Init *init;
+    /* the unit being written: `-1` in compile mode, which has no map closure */
+    int  cur_unit;
+    /* Phase 21 S3: the closure whose body is being written (`ci + 1`, 0 = none)
+       so a captured name prints `__ct_cl_e->name`, and the closure variables in
+       scope at the current statement (name -> id) for call-site expansion. */
+    int  closure_ci;
+    char clvar[64][160];
+    int  clid[64];
+    int  nclvar;
+    /* Phase 24: `> 0` while an `N_INIT_RANGE` initialiser is being written, and
+       the index of the element being written. `$` prints `((int)<range_k>)`, so
+       the placeholder never reaches C and the element subtree is emitted once
+       per element without being copied. */
+    int  range_depth;
+    int  range_k;
+    /* Phase 26: the template being written as a monomorphised instance. All
+       three are empty when no instance is active; the type-printing paths
+       substitute `gtparam` with `gtarg`, and `N_FUNC` prints `gtname` in place
+       of the template's own C name. No AST field is touched (D26-7). */
+    char gtparam[160];
+    char gtarg[160];
+    char gtname[160];
+    /* Phase 29: the second parameter of a generic struct template. A method of
+       `impl<T, U> Pair<T, U>` is monomorphised once per instance, and both
+       parameters are substituted in the same body. */
+    char gtparam2[160];
+    char gtarg2[160];
+    /* Phase 31: the instance whose inherent method is being written. The
+       reserved element-lifecycle calls (`__ct_elem_retain` /
+       `__ct_elem_release`) in a container's body bind to this instance's
+       per-instance helper, so no AST copy is needed. Empty outside an instance
+       method. */
+    char ginst[160];
+    /* PH-80 SH-102 (D-013 §3): the owning by-value `String` / `U16String`
+       bindings in the body being written. A by-value parameter is retained at
+       entry, every owning local is released at scope exit, and an assignment
+       retains the right-hand side before releasing the old value. `sb_own` is 0
+       for a borrowed view (a `Vec.get` / `Map.get` result), which must neither
+       be retained nor released. `sb_blk` holds the binding depth at each
+       statement block so a `break` / `continue` can release what the skipped
+       closing brace would have. The literals are the documented caps. */
+} use EmitOps;
