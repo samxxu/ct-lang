@@ -32,6 +32,9 @@ CC="${CC:-cc}"
 san="-fsanitize=address,undefined -fno-omit-frame-pointer"
 
 ASAN_OPTIONS="detect_leaks=0"
+if [ "${CT_ASAN_STACK:-0}" = "1" ]; then
+    ASAN_OPTIONS="$ASAN_OPTIONS:detect_stack_use_after_return=1"
+fi
 UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1"
 export ASAN_OPTIONS UBSAN_OPTIONS
 

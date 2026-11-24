@@ -52,3 +52,28 @@ jobs:
           name: ct-ast-gcov
           path: .temp/coverage/
           if-no-files-found: warn
+
+
+  # REQ-CI-1: TSan is documented in check-tsan.sh / v0-PH-41 as nightly; run it
+  # here so concurrent regressions actually have a guard.
+  tsan:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: ThreadSanitizer
+        run: bash selfhost/check-tsan.sh
+
+  # REQ-CI-2: ASan's default does not see stack-use-after-return. This job turns
+  # the detector on for the existing corpus (report-only until the noise floor
+  # is known); it is not part of the local hard gates.
+  asan-stack:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+      CT_ASAN_STACK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: ASan stack-use-after-return
+        run: bash selfhost/check-sanitizers.sh

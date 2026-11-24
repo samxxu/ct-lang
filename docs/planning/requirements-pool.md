@@ -180,7 +180,7 @@ v0-PH-52 的 D52-6 指向本条。
 | `what` | `--lib` 生成 `.abi.h` 时，导出签名里出现的枚举标签没有声明，消费方编译该头文件失败；需要为枚举形参补上等价的前置声明（`enum X;` 一类的写法需按 C 标准确认）。 |
 | `why` | 前置声明循环只识别 `struct ` 前缀（[Emitter.h.ct:5347](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5347)），`enum` 形参被跳过。实测 `void f(enum E e);` 在 clang 下只给 `-Wvisibility`（标签只在参数表内可见），换 gcc / 开 `-Werror` 时构建失败；枚举按值传参必须完整类型。 |
 | `priority` | `P2` |
-| `status` | `planned`（`v1-PH-2` S0） |
+| `status` | `done`（`v1-PH-2` S0，2026-11-25） |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-25 |
 | `block` | 无（缺陷；S0 可独立切 `v1.1.1`） |
@@ -193,7 +193,7 @@ v0-PH-52 的 D52-6 指向本条。
 | `what` | 导出签名里出现 `union *` 形参时，`.abi.h` 没有对应的 `union X;` 前置声明。 |
 | `why` | 同一处前缀判断只认 `struct `（[Emitter.h.ct:5347](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5347)），`union` 被跳过。实测 `void f(union U *p);` 在 clang 下给 `-Wvisibility`，参数表内的标签与消费方的实际 `union U` 不是同一标签，调用点会出现不兼容指针诊断。 |
 | `priority` | `P3` |
-| `status` | `planned`（`v1-PH-2` S0） |
+| `status` | `done`（`v1-PH-2` S0，2026-11-25） |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-25 |
 | `block` | 无（缺陷；与 REQ-ABI-3 同批） |
@@ -333,6 +333,19 @@ v0-PH-52 的 D52-6 指向本条。
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-25 |
 | `block` | 无；顺序固定为 S4 字面量/嵌套/结构体 → S5 or/守卫 → S6 泛型 ADT；泛型 ADT 最后做，需复核布局与 `Box`/`Vec` 互操作 |
+
+## REQ-CAP-1 — 容量上限动态化（L0 遗留）
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-CAP-1` |
+| `what` | 把 L0 留下的“固定上限 + 越界硬报错”全部改为按需容量：49 个 `Limits.h.ct` 常量 + 8 个单元内本地常量 + 14 处硬编码；计数类动态倍增，文本/路径类按需缓冲；只保留 OOM 安全阀与语言语义上限。 |
+| `why` | `MAX_METHODS=64` 已挡住新增方法，`MAX_TEXT=160` 在 31 个单元出现 1494 次（791 处定长数组）；这些是编译器实现债，不是语言规则。清单见 [capacity-limits](capacity-limits.md)。 |
+| `priority` | `P1` |
+| `status` | `planned`（`v1-PH-2` S1a-0） |
+| `owner` | REQ（待指派） |
+| `last-touched` | 2026-11-25 |
+| `block` | 无；C3 语言上限（ADT 形态、泛型元数）需先改 spec / stable-subset，不随本项私放 |
 
 ## REQ-STRICT-1 — 全局默认 strict（V1 欠账）
 

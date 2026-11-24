@@ -10162,11 +10162,20 @@ impl EmitOps for Emitter {
                                        : self->sym->funcs[order[i]].ptype[p];
                 char nm[MAX_TEXT];
                 int q = 0;
-                if (strncmp(tp, "struct ", 7) != 0) continue;
-                tp += 7;
-                while (*tp && (isalnum((unsigned char)*tp) || *tp == '_') && q < MAX_TEXT - 1)
-                    nm[q++] = *tp++;
-                nm[q] = 0;
+                /* REQ-ABI-3/4: struct, union and enum parameters all need a
+                   tag forward declaration in the exported header. */
+                if (strncmp(tp, "struct ", 7) == 0) {
+                    snprintf(nm, sizeof nm, "struct %s", tp + 7);
+                } else if (strncmp(tp, "union ", 6) == 0) {
+                    snprintf(nm, sizeof nm, "union %s", tp + 6);
+                } else if (strncmp(tp, "enum ", 5) == 0) {
+                    snprintf(nm, sizeof nm, "enum %s", tp + 5);
+                } else {
+                    continue;
+                }
+                /* keep only the tag spelling (drop trailing stars/space) */
+                q = (int)strlen(nm);
+                while (q > 0 && !(isalnum((unsigned char)nm[q - 1]) || nm[q - 1] == '_')) nm[--q] = 0;
                 if (!q) continue;
                 for (j = 0; j < ns; j++) if (strcmp(fwd[j], nm) == 0) break;
                 if (j == ns && ns < 64) snprintf(fwd[ns++], MAX_TEXT, "%s", nm);
@@ -10181,7 +10190,7 @@ impl EmitOps for Emitter {
                     snprintf(fwd[i], sizeof fwd[i], "%s", tmp2);
                     snprintf(fwd[j], sizeof fwd[j], "%s", tmp);
                 }
-        for (i = 0; i < ns; i++) fprintf(f, "struct %s;\n", fwd[i]);
+        for (i = 0; i < ns; i++) fprintf(f, "%s;\n", fwd[i]);
         if (ns > 0) fputs("\n", f);
         for (i = 0; i < n; i++) {
             fi = order[i];

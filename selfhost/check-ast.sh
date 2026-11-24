@@ -5018,6 +5018,13 @@ else
     bad "p39 r8" "$(cat "$work/p39r8.out" "$work/p39r8.err")"
 fi
 
+if bash test/ast/abi_enum_union.sh "$work/ct-ast" >"$work/abieu.out" 2>"$work/abieu.err"; then
+    ok "REQ-ABI-3/4 enum/union ABI forwards"
+else
+    bad "REQ-ABI-3/4 enum/union ABI forwards" "$(cat "$work/abieu.out" "$work/abieu.err" | head -6)"
+fi
+
+
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
     ok "p39 docs"

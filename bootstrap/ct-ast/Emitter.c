@@ -4127,14 +4127,26 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_abi_header(void *self
             const char * tp = ((p < 0) ? _self->sym->funcs[order[i]].ret : _self->sym->funcs[order[i]].ptype[p]);
             char nm[MAX_TEXT];
             int q = 0;
-            if (strncmp(tp, "struct ", 7) != 0) {
-                continue;
+            if (strncmp(tp, "struct ", 7) == 0) {
+                snprintf(nm, sizeof(nm), "struct %s", (tp + 7));
             }
-            tp += 7;
-            while ((((*tp) && (isalnum((unsigned char)((*tp))) || ((*tp) == '_'))) && (q < (MAX_TEXT - 1)))) {
-                nm[q++] = (*tp++);
+            else {
+                if (strncmp(tp, "union ", 6) == 0) {
+                    snprintf(nm, sizeof(nm), "union %s", (tp + 6));
+                }
+                else {
+                    if (strncmp(tp, "enum ", 5) == 0) {
+                        snprintf(nm, sizeof(nm), "enum %s", (tp + 5));
+                    }
+                    else {
+                        continue;
+                    }
+                }
             }
-            nm[q] = 0;
+            q = (int)(strlen(nm));
+            while (((q > 0) && (!(isalnum((unsigned char)(nm[(q - 1)])) || (nm[(q - 1)] == '_'))))) {
+                nm[--q] = 0;
+            }
             if ((!q)) {
                 continue;
             }
@@ -4161,7 +4173,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_abi_header(void *self
         }
     }
     for (i = 0; i < ns; i++) {
-        fprintf(f, "struct %s;\n", fwd[i]);
+        fprintf(f, "%s;\n", fwd[i]);
     }
     if (ns > 0) {
         fputs("\n", f);
