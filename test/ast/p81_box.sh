@@ -176,8 +176,7 @@ neg neg_new_global "only supported in a local initializer" "new at file scope"
 neg neg_new_static "cannot initialize a static object" "new in a static local"
 
 # E81-6: the written contract and the version落点 stay in step.
-for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
-         selfhost/l2/driver.ct selfhost/ct-ast/main.ct; do
+for f in selfhost/l0/ctc.c selfhost/ct-ast/main.ct; do
     if grep -q '#define CTC_VERSION "1.0.0"' "$f"; then
         ok "$f CTC_VERSION 1.0.0"
     else

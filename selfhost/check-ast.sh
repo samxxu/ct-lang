@@ -469,23 +469,7 @@ else
 fi
 
 echo
-echo "== build the bootstrap chain and the AST compiler =="
-if ! "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" 2>"$work/l0.log"; then
-    echo "  compiler build failed:"; sed 's/^/    /' "$work/l0.log"; exit 1
-fi
-if ! "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" 2>"$work/l1.log"; then
-    echo "  L0 could not compile L1:"; sed 's/^/    /' "$work/l1.log"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" 2>"$work/l1b.log"; then
-    echo "  L1 did not build:"; sed 's/^/    /' "$work/l1b.log"; exit 1
-fi
-mkdir -p "$work/l2src"
-if ! "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.out" 2>&1; then
-    echo "  L1 could not build the split tree:"; sed 's/^/    /' "$work/l2.out"; exit 1
-fi
-if ! "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" 2>"$work/l2b.log"; then
-    echo "  L2 did not build:"; sed 's/^/    /' "$work/l2b.log"; exit 1
-fi
+echo "== build the AST compiler from the frozen seed =="
 # ct-ast itself comes from the frozen seed (D-022 / v1-PH-0 S2): the same
 # bootstrap/ct-ast/*.c that install.sh ships. The L0 -> L1 -> L2 chain above is
 # built only as the regression oracle for gates 2/3/4/5 and for the
@@ -497,7 +481,7 @@ fi
 if ! "$CC" -Wall -Wextra -std=c99 -I "$seeddir" "$seeddir"/*.c -o "$work/ct-ast" 2>"$work/astb.log"; then
     echo "  the AST compiler did not build from the seed:"; sed 's/^/    /' "$work/astb.log"; exit 1
 fi
-ok "the chain builds (L0 -> L1 -> L2 as oracle; ct-ast from the frozen seed)"
+ok "ct-ast builds from the frozen seed (L0/L1/L2 retired)"
 # The white-box probes (p86 token/C API, TEST-25 unit slices) need the compiler's
 # emitted C tree. That tree is exactly the frozen seed: gate 13 proves the seed
 # rebuilds itself byte for byte, and the seed is what the compiler under test was
@@ -7231,16 +7215,12 @@ i=1
         i=$((i + 1))
     done
 } >"$rec-cap/cap.ct"
-if ( cd "$rec-cap" && "$work/l2" cap.ct -o l2.c ) >/dev/null 2>"$rec-cap/l2.err"; then
-    bad "max_errors" "L2 was expected to fail"
-elif ( cd "$rec-cap" && "$work/ct-ast" cap.ct -o ast.c ) >/dev/null 2>"$rec-cap/ast.err"; then
+if ( cd "$rec-cap" && "$work/ct-ast" cap.ct -o ast.c ) >/dev/null 2>"$rec-cap/ast.err"; then
     bad "max_errors" "expected a non-zero exit"
-elif ! cmp -s "$rec-cap/l2.err" "$rec-cap/ast.err"; then
-    bad "max_errors" "the report differs from L2"
 elif ! grep -q '^ctc: too many errors, stopping$' "$rec-cap/ast.err"; then
     bad "max_errors" "the cap line is missing"
 else
-    ok "max_errors (same cap and report as L2)"
+    ok "max_errors (cap and report)"
 fi
 
 echo
@@ -7259,14 +7239,6 @@ if "$work/ct-ast" build --emit-c "$cac/src/main.ct" -o "$cac/ast" >/dev/null 2>"
     ok "cache: a cold build stamps every unit"
 else
     bad "cache" "cold build failed: $(cat "$cac/ast.err")"
-fi
-if "$work/l2" build "$cac/src/main.ct" -o "$cac/l2" >/dev/null 2>&1 \
-   && cmp -s "$cac/ast/.ctcache/main.c.key" "$cac/l2/.ctcache/main.c.key" \
-   && cmp -s "$cac/ast/.ctcache/shapes.c.key" "$cac/l2/.ctcache/shapes.c.key" \
-   && cmp -s "$cac/ast/.ctcache/impl_dog.c.key" "$cac/l2/.ctcache/impl_dog.c.key"; then
-    ok "cache: keys match L2 byte for byte"
-else
-    bad "cache keys" "the key spelling differs from L2"
 fi
 touch -t 200001010000 "$cac/ast/main.c" "$cac/ast/shapes.c" "$cac/ast/impl_dog.c"
 cached=$(mtime "$cac/ast/main.c")
@@ -7329,21 +7301,21 @@ int main(void)
     return (a != 0) || (c != 0);
 }
 INCEOF
-if "$work/l2" build -I "$inc" --ns-root "$inc" "$inc/main.ct" -o "$inc/out" \
+if "$work/ct-ast" build --emit-c -I "$inc" --ns-root "$inc" "$inc/main.ct" -o "$inc/out" \
         >/dev/null 2>"$inc/1.err" \
    && grep -q "struct cache_B" "$inc/out/C.h"; then
-    ok "cache: L2 cold build resolves imported types"
+    ok "cache: cold build resolves imported types"
 else
-    bad "cache: L2 cold build" "$(cat "$inc/1.err" "$inc/out/C.h" 2>/dev/null)"
+    bad "cache: cold build" "$(cat "$inc/1.err" "$inc/out/C.h" 2>/dev/null)"
 fi
 printf '\n/* changed */\n' >> "$inc/pa/A.h.ct"
-if "$work/l2" build -I "$inc" --ns-root "$inc" "$inc/main.ct" -o "$inc/out" \
+if "$work/ct-ast" build --emit-c -I "$inc" --ns-root "$inc" "$inc/main.ct" -o "$inc/out" \
         >/dev/null 2>"$inc/2.err" \
    && grep -q "struct cache_B" "$inc/out/C.h" \
    && "$CC" -Wall -Wextra -std=c99 "$inc/out"/*.c -o "$inc/bin" >/dev/null 2>"$inc/cc.err"; then
-    ok "cache: L2 recompiles the dependency closure of a dirty unit"
+    ok "cache: recompiles the dependency closure of a dirty unit"
 else
-    bad "cache: L2 dependency closure" "$(cat "$inc/2.err" "$inc/cc.err" 2>/dev/null)"
+    bad "cache: dependency closure" "$(cat "$inc/2.err" "$inc/cc.err" 2>/dev/null)"
 fi
 
 echo

@@ -28,8 +28,7 @@ ok()  { printf 'ok   %s\n' "$1"; }
 bad() { echo "FAIL p82/docs: $1" >&2; [ $# -gt 1 ] && printf '  %s\n' "$2" >&2; fail=1; }
 cd "$root" || exit 1
 
-for f in selfhost/l0/ctc.c selfhost/l1/ctc.ct selfhost/l2/core.ct \
-         selfhost/l2/driver.ct selfhost/ct-ast/main.ct; do
+for f in selfhost/l0/ctc.c selfhost/ct-ast/main.ct; do
     if grep -q '#define CTC_VERSION "1.0.0"' "$f"; then
         ok "$f CTC_VERSION 1.0.0"
     else

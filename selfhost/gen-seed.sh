@@ -49,30 +49,8 @@ elif sh "$root/selfhost/seed-ct.sh" exists; then
         die "the frozen seed cannot build itself; set CT_BOOTSTRAP_CT to a newer ct (two-stage bootstrap)"
     ct="$work/ct"
 else
-    # seedpaths: bootstrap fallback -- no seed exists yet, so the only emitter
-    # available is the old L0 -> L1 -> L2 -> ct-ast chain. This is the single
-    # place L2 still builds ct-ast: it bootstraps the first seed. Every harness
-    # must use selfhost/seed-ct.sh instead (test/ast/seedpaths.sh enforces it).
-    say "no seed yet: building the chain (L0 -> L1 -> L2 -> ct-ast) to get the emitter"
-    "$CC" -Wall -Wextra -std=c99 selfhost/l0/ctc.c -o "$work/ctc" ||
-        die "L0 did not build"
-    "$work/ctc" selfhost/l1/ctc.ct -o "$work/l1.c" ||
-        die "L0 could not compile L1"
-    "$CC" -Wall -Wextra -std=c99 "$work/l1.c" -o "$work/l1" ||
-        die "L1 did not build"
-    mkdir -p "$work/l2src"
-    "$work/l1" build selfhost/l2/driver.ct -o "$work/l2src" >"$work/l2.log" 2>&1 ||
-        { sed 's/^/    /' "$work/l2.log" >&2; die "L1 could not build L2"; }
-    "$CC" -Wall -Wextra -std=c99 "$work/l2src"/*.c -o "$work/l2" ||
-        die "L2 did not build"
-    mkdir -p "$work/astsrc"
-    # seedpaths: bootstrap fallback (the line below is the seed-missing path)
-    "$work/l2" build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o "$work/astsrc" \
-        >"$work/ast.log" 2>&1 ||
-        { sed 's/^/    /' "$work/ast.log" >&2; die "L2 could not build ct-ast"; }
-    "$CC" -Wall -Wextra -std=c99 "$work/astsrc"/*.c -o "$work/ct" ||
-        die "ct-ast did not build"
-    ct="$work/ct"
+    die "no frozen seed: bootstrap/ct-ast is required (L0/L1/L2 retired); set CT_BOOTSTRAP_CT for a one-step rebuild"
+
 fi
 
 say "emitter: $("$ct" -v)"

@@ -46,7 +46,7 @@
   并明确列出没跑的部分（11 门禁、sanitizer、裸机、联网 `ct get`）。这个口径值得保留。
 - **Linux GCC 直跑 `test/run.sh` 的发现是有效的**：`check-all.sh` 会自动包
   `-Wno-format-truncation`（[check-all.sh](../../selfhost/check-all.sh#L74-L89)、
-  [selfhost/README.md](../../selfhost/README.md#L71-L72)），但 [test/README.md](../../test/README.md)
+  [selfhost/README.md](../../selfhost/README.md#L69-L70)），但 [test/README.md](../../test/README.md)
   当前的“156 passed”没有写这条前提；外部用户直接跑会得到 1 failed。
 - **成熟度定位与我们一致**：「关注并小规模试用，不下注」；v1.0 的观察信号（去 L1/L2、FP=0、
   SH-73 / SH-110 关闭、`MAX_FUNCS` 动态增长是否落地）与 [v1-release-plan](../planning/v1-release-plan.md)

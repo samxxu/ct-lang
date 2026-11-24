@@ -138,12 +138,11 @@
   与 SH-65 同入口族，但 SH-65 是字面量传入的响亮失败，本条是退出 0 的静默坏产物；建议先硬错，
   codegen 修复并入 SH-65 / F3。见 [SH-67](selfhost/sh67-closure-method-arg-silent-invalid-c.md)。
 - 严重度：`High`（对外失真/影响正确性认知）· `Medium`（可察觉的缺口）· `Low`（措辞/残留）· `Info`（设计观察）。
-<!-- gates:13 -->
-- **硬关卡计数随阶段演进（当前 13 道）**：`test/run.sh`、`check-goldens`、`check-archive`、`check-m2a`、
-  `ct-tour`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、
+<!-- gates:9 -->
+- **硬关卡计数随阶段演进（当前 9 道）**：`test/run.sh`、编辑器语法、`test/pkg/run.sh`、`check-ast`、`check-warnings`、
   `check-semantics`、`test/docs/check-docs.py`、`check-goldens-ast`、`check-seed`；构成以 [check-all.sh](../selfhost/check-all.sh) 的
   `run_gate` 行为准。下文各**带日期的验证记录**里出现的旧关口数（六道 / 七道 / 八道 / 九道 / 十道 / 十二道）是该记录
-  当时的口径，非现状；现状以 `check-all.sh` 的「13 hard gates green」为准。本文件的现状计数由
+  当时的口径，非现状；现状以 `check-all.sh` 的「9 hard gates green」为准。本文件的现状计数由
   上方 `<!-- gates:N -->` 标记声明，`test/docs/check-docs.py` 只校验该标记（历史记录里的旧口径不参与）。
 
 ## 模块索引

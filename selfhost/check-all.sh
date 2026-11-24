@@ -6,17 +6,11 @@ export CT_C_BOUNDARY=allow
 #
 # check-all.sh - run every hard gate in one command.
 #
-# `./test/run.sh` only drives L0 (selfhost/l0/ctc.c); the CT line (selfhost/l1/ctc.ct plus
-# selfhost/l2/**) has its own scripts. The 2026-10-17 review found no single
-# entry point that runs them all (issues/ci/no-aggregate-gate-entry.md), so this
-# wrapper is that entry point.
+# `./test/run.sh` drives the L0 seed compiler; the CT line (ct-ast from the
+# frozen seed) has its own scripts. gate 2–5 retired with L1/L2 (SH-119 S2).
 #
 # Hard gates (any failure fails the run):
 #   1. ./test/run.sh                             L0 suite (eight layers)
-#   2. selfhost/check-goldens.sh                 L1 vs goldens, L1' loop, L1/L2 fixpoint
-#   3. selfhost/check-archive.sh                 L2 against the archived oracle (ratchet)
-#   4. selfhost/check-m2a.sh                     L1 output byte-identical with L0
-#   5. selfhost/ct-tour.sh                       end-to-end tour
 #   6. editors/vscode/test/check-grammar.py      editor grammar (167 assertions,
 #                                                168 when node is on PATH)
 #   7. test/pkg/run.sh                           package manager (Phase 8.1 + 8.2 + 8.3)
@@ -117,10 +111,6 @@ run_gate() {
 }
 
 run_gate "1) L0 suite (test/run.sh)" ./test/run.sh
-run_gate "2) CT: check-goldens" bash selfhost/check-goldens.sh
-run_gate "3) CT: check-archive" bash selfhost/check-archive.sh
-run_gate "4) CT: check-m2a" bash selfhost/check-m2a.sh
-run_gate "5) CT: ct-tour" bash selfhost/ct-tour.sh
 run_gate "6) editor grammar" python3 editors/vscode/test/check-grammar.py
 run_gate "7) package manager (Phase 8.1 + 8.2 + 8.3)" bash test/pkg/run.sh
 run_gate "8) AST compiler (Phase 9.1–9.7 + 10.x–12.x + batches 13–39)" bash selfhost/check-ast.sh

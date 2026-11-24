@@ -17,11 +17,11 @@
 #   D. check-ast.sh and ct-tour.sh build ct-ast from the seed while keeping the
 #      L1/L2 regression oracle (D-022 section 4);
 #   E. gate 13 (check-seed.sh) is registered in check-all.sh and the four
-#      documented counts agree (13).
+#      documented counts agree (9).
 #
 # Usage: bash selfhost/check-install.sh
 # Exit: 0 all assertions pass, 1 any failure. This script is NOT registered in
-# selfhost/check-all.sh: the count stays at 13 gates.
+# selfhost/check-all.sh: the count stays at 9 gates.
 set -u
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -44,8 +44,8 @@ if ! git archive HEAD | tar -x -C "$src"; then
     exit 1
 fi
 
-version="$(sed -n 's/^#define CTC_VERSION "\([0-9][0-9.]*\)"$/\1/p' "$src/selfhost/l0/ctc.c" | head -n 1)"
-[ -n "$version" ] || { bad "no CTC_VERSION in selfhost/l0/ctc.c"; exit 1; }
+version="$(sed -n 's/^#define CTC_VERSION "\([0-9][0-9.]*\)"$/\1/p' "$src/selfhost/ct-ast/main.ct" | head -n 1)"
+[ -n "$version" ] || { bad "no CTC_VERSION in selfhost/ct-ast/main.ct"; exit 1; }
 
 # --- A. the script's own build path ----------------------------------------
 if grep -Eq 'selfhost/l[012]|l[012]_src|ast_src' "$src/install.sh"; then
@@ -64,30 +64,18 @@ else
     ok "install.sh contains no bootstrap-chain step"
 fi
 
-# --- D. the gate harnesses build ct-ast from the seed, not from L2 ----------
+# --- D. the gate harnesses build ct-ast from the seed; L1/L2 are retired ----
 if ! grep -q 'bootstrap/ct-ast' "$src/selfhost/check-ast.sh"; then
     bad "check-ast.sh does not build ct-ast from bootstrap/ct-ast"
-elif grep -q '"$work/astsrc"/*.c -o "$work/ct-ast"' "$src/selfhost/check-ast.sh"; then
-    bad "check-ast.sh still builds ct-ast from L2's emitted tree"
+elif grep -q 'selfhost/l2/driver.ct' "$src/selfhost/check-ast.sh"; then
+    bad "check-ast.sh still builds the retired L1/L2 oracle"
 else
-    ok "check-ast.sh builds ct-ast from the seed"
+    ok "check-ast.sh builds ct-ast from the seed (L1/L2 retired)"
 fi
-if grep -q 'selfhost/l2/driver.ct' "$src/selfhost/check-ast.sh"; then
-    ok "check-ast.sh still builds the L1/L2 regression oracle"
+if [ -e "$src/selfhost/ct-tour.sh" ]; then
+    bad "ct-tour.sh should be retired with L1/L2"
 else
-    bad "check-ast.sh dropped the L1/L2 oracle build"
-fi
-if ! grep -q 'bootstrap/ct-ast' "$src/selfhost/ct-tour.sh"; then
-    bad "ct-tour.sh step 7 does not build ct-ast from bootstrap/ct-ast"
-elif grep -q 'L2 building the AST compiler' "$src/selfhost/ct-tour.sh"; then
-    bad "ct-tour.sh step 7 still says L2 builds the AST compiler"
-else
-    ok "ct-tour.sh step 7 builds ct-ast from the seed"
-fi
-if grep -q 'L1 building the split tree' "$src/selfhost/ct-tour.sh"; then
-    ok "ct-tour.sh step 6 still demonstrates the L1 -> L2 oracle"
-else
-    bad "ct-tour.sh dropped the L1 -> L2 oracle step"
+    ok "ct-tour.sh retired"
 fi
 
 # --- E. gate 13 is registered and the counts agree --------------------------
@@ -97,16 +85,16 @@ else
     bad "check-all.sh does not register gate 13 (check-seed.sh)"
 fi
 ngates="$(grep -c '^run_gate "' "$src/selfhost/check-all.sh")"
-if [ "$ngates" -eq 13 ]; then
-    ok "check-all.sh runs 13 hard gates"
+if [ "$ngates" -eq 9 ]; then
+    ok "check-all.sh runs 9 hard gates"
 else
-    bad "check-all.sh runs $ngates hard gates, expected 13"
+    bad "check-all.sh runs $ngates hard gates, expected 9"
 fi
 if python3 "$src/test/docs/check-docs.py" >"$work/docs.log" 2>&1 &&
-   grep -q '13 hard gates' "$work/docs.log"; then
-    ok "check-docs.py agrees on 13 hard gates"
+   grep -q '9 hard gates' "$work/docs.log"; then
+    ok "check-docs.py agrees on 9 hard gates"
 else
-    bad "check-docs.py does not agree on 13 hard gates" "$(tail -n 2 "$work/docs.log" | tr '\n' ' ')"
+    bad "check-docs.py does not agree on 9 hard gates" "$(tail -n 2 "$work/docs.log" | tr '\n' ' ')"
 fi
 
 # --- B. clean-copy install --------------------------------------------------

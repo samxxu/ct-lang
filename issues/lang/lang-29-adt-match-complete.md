@@ -52,7 +52,7 @@ B8（`Int(long long)` / `Double(double)` / `Result<T, E>` / `_Bool` ABI）随 S1
 - `match` 绑定 owning payload 时不产生 UAF（ASan 正例）；
 - `map binding` 未 import 有可行动诊断；歧义硬错；未使用零成本；
 - 全量 `--check-level=warn` FP=0 不回退；生成物变化按 golden 更新并单独提交；
-- `check-all` 13 门绿；容量用 SH-109 动态增长，不受 512 限制。
+- `check-all` 9 门绿；容量用 SH-109 动态增长，不受 512 限制。
 
 ## 5. 风险
 

@@ -129,7 +129,7 @@
 3. **版本标记**：`README.md` 与本文出现的 `vX.Y.Z` 必须是当前版本（取自 `selfhost/l0/ctc.c` 的 `CTC_VERSION`）。
    历史版本只出现在 [history/phase-log.md](history/phase-log.md) 的版本记录与 [history/](history/README.md)。
 4. **门禁条数**：`README.md`、本文与 [glossary.md](glossary.md) 写出的硬门禁条数必须等于
-   `selfhost/check-all.sh` 实际运行的条数（当前共 13 道硬门禁）。
+   `selfhost/check-all.sh` 实际运行的条数（当前共 9 道硬门禁）。
 5. **阶段状态**：`docs/design/phase*.md` 的状态行（完成 / 实施中 / 规划中）必须与 [roadmap.md](roadmap.md)
    的简要阶段表一致（✅ / 🟨 / ⬜）；详细证据见 [history/phase-log.md](history/phase-log.md)。
 6. **路线图与流水账**：[roadmap.md](roadmap.md) 只做简要索引，不写逐相叙述；逐相细节、版本记录与决策全文在

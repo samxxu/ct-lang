@@ -314,6 +314,13 @@ def check_links(errors):
                 "/selfhost/ast/" in resolved or "/selfhost/src/" in resolved
             ):
                 continue
+            # SH-119 S2: historical records may still point at the retired
+            # L0/L1/L2 trees and their gate scripts; S4 rewrites active docs.
+            if rel.startswith("docs/history/") and re.search(
+                r"/selfhost/(l0|l1|l2)/|/selfhost/(check-goldens|check-archive|check-m2a|ct-tour)\.sh",
+                resolved,
+            ):
+                continue
             errors.append(f"{rel}: dead link -> {target}")
     return checked, scanned
 
@@ -680,17 +687,17 @@ def check_line_anchors(errors):
 
 
 def check_version(errors):
-    ctc = read(os.path.join(ROOT, "selfhost/l0/ctc.c"))
+    ctc = read(os.path.join(ROOT, "selfhost/ct-ast/main.ct"))
     found = re.search(r'#define\s+CTC_VERSION\s+"([0-9.]+)"', ctc)
     if not found:
-        errors.append("selfhost/l0/ctc.c: CTC_VERSION not found")
+        errors.append("selfhost/ct-ast/main.ct: CTC_VERSION not found")
         return None
     version = found.group(1)
-    for other in ("selfhost/l1/ctc.ct", "selfhost/l2/core.ct", "selfhost/ct-ast/main.ct"):
+    for other in ("selfhost/l0/ctc.c",):
         text = read(os.path.join(ROOT, other))
         other_version = re.search(r'#define\s+CTC_VERSION\s+"([0-9.]+)"', text)
         if not other_version or other_version.group(1) != version:
-            errors.append(f"{other}: CTC_VERSION differs from selfhost/l0/ctc.c ({version})")
+            errors.append(f"{other}: CTC_VERSION differs from selfhost/ct-ast/main.ct ({version})")
     for doc in ("README.md", "docs/README.md"):
         for token in re.findall(r"v(\d+\.\d+\.\d+)", read(os.path.join(ROOT, doc))):
             if token != version:

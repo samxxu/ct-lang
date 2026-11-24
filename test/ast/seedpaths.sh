@@ -15,7 +15,6 @@
 #      command matching `l[12].*build.*selfhost/ct-ast`;
 #   2. the two allowed exceptions still carry their marker comment, so an
 #      allowlist entry cannot rot silently. Those are:
-#        - selfhost/gen-seed.sh: the seed-missing bootstrap fallback;
 #        - docs/planning/j6-evidence/p7{4,5}/run.sh: historical evidence
 #          drivers whose archived baseline commit predates the seed and must
 #          be built by that baseline's own L2.
@@ -39,7 +38,6 @@ bad() { printf 'FAIL %s%s\n' "$1" "${2:+: $2}"; fail=$((fail + 1)); }
 # The only files allowed to keep a non-comment L2 -> ct-ast command.
 allowed() {
     case "$1" in
-        ./selfhost/gen-seed.sh) return 0 ;;
         ./docs/planning/j6-evidence/p74/run.sh) return 0 ;;
         ./docs/planning/j6-evidence/p75/run.sh) return 0 ;;
     esac
@@ -82,8 +80,7 @@ else
 fi
 
 # ---- 2) every allowlist entry says why it is allowed ----------------------
-for f in selfhost/gen-seed.sh \
-         docs/planning/j6-evidence/p74/run.sh \
+for f in docs/planning/j6-evidence/p74/run.sh \
          docs/planning/j6-evidence/p75/run.sh; do
     if grep -q 'seedpaths: .*fallback' "$f"; then
         ok "$f carries its seedpaths fallback marker"

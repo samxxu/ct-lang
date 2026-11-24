@@ -79,3 +79,12 @@
 - `--selftest`：干净副本绿、追加一字节红、删除一文件红；
 - 挂进 gate 12 `selfhost/check-goldens-ast.sh`（不新增门禁号），gate 12 仍 `25/25` 且输出 `archive-manifest: OK (46 files)`；
 - 本切片只加校验与负例，未改 `test/run.sh`、未改构建链、未动版本。
+
+
+## S2 收口（2026-11-24，DEV）
+
+- 删除 `selfhost/l1`、`selfhost/l2` 与 gate 2–5 脚本（`check-goldens`/`check-archive`/`check-m2a`/`ct-tour`）；
+- `check-all` 保留原编号、移除 4 个 `run_gate`，硬门禁 **13 → 9**；
+- `check-ast` 删除 L0→L1→L2 oracle 构建与 L2 对差分支；`gen-seed` 去掉无 seed 的旧链 fallback；
+- 门禁计数同步 README/docs/AGENTS/glossary/selfhost README/issues README；历史引用走 check-docs 的 SH-119 豁免，S4 再清；
+- `check-all: OK (9 hard gates green)`；`check-docs` OK；`check-install` 在 S2 提交后复跑。

@@ -20,7 +20,7 @@ version-minor: 18
 >
 > 前置约束：除 **18.0** 外，一律只改 `selfhost/ct-ast/**`、顶层新增目录、`.github/workflows/**`
 > 与 `docs/**`；**18.0 是本阶段唯一获授权的冻结层例外**——只动
-> [`selfhost/l2/core.ct`](../../../selfhost/l2/core.ct) 的容量常量与表分配方式（D18-11），
+> `core.ct`（L2 已退役） 的容量常量与表分配方式（D18-11），
 > L0 / L1 保持不动。不引入第三方库、构建系统或代码生成脚本；编译器侧**零网络**与
 > **零子进程**契约不变（`ct get` 仍允许 git，`ct update` / `ct verify` 仍离线）。
 
@@ -62,7 +62,7 @@ version-minor: 18
 
 | 切片 | 内容 | 主要改动面 | 出口 |
 | --- | --- | --- | --- |
-| **18.0** | **容量解除** | [`core.ct`](../../../selfhost/l2/core.ct)：`MAX_FUNCS 128→256`、`MAX_MAP_IMPLS 256→512`；函数 / trait / struct / 反向映射四张定长表改 `calloc` 堆分配；必要的常量注释同步 | L2 能编 256 函数的 ct-ast；257 仍在 ct-ast 自己的上限处失败；BSS / 二进制增量有实测记录；`check-archive.sh` 与 11 道门禁全绿 |
+| **18.0** | **容量解除** | `core.ct`（L2 已退役）：`MAX_FUNCS 128→256`、`MAX_MAP_IMPLS 256→512`；函数 / trait / struct / 反向映射四张定长表改 `calloc` 堆分配；必要的常量注释同步 | L2 能编 256 函数的 ct-ast；257 仍在 ct-ast 自己的上限处失败；BSS / 二进制增量有实测记录；`check-archive.sh` 与 11 道门禁全绿 |
 | **18.1** | **包规范与作者指南** | 新增 `docs/package-guide.md`（中英）；约定 `ct.pkg` 键、命名 / 版本 / tag / 目录 / licence / 依赖规则 | 规范可被 CI 与人工同时校验；`test/pkg/run.sh` 增加 manifest 约定的正负例 |
 | **18.2** | **索引与 CI** | `ct-pkg/index` 仓库（外部）的 `index` 文件与生成脚本；本仓库新增 `.github/workflows/packages.yml` 与夜间目标机 job | 包通过索引可解析；`ct verify` 绿；索引由 CI 生成并提交；本地门禁仍为 11 道 |
 | **18.3** | **`hal` 契约包** | `ct-pkg/hal`：`Uart` / `Gpio` / `Clock` / `Log` 四个 trait，纯 `.h.ct`，无 impl | 契约可被平台包 `use`；与 `bindings/mock-hal` 的命名对齐（D18-6） |
@@ -72,7 +72,7 @@ version-minor: 18
 
 #### 18.0 容量解除
 
-- 只改 [`selfhost/l2/core.ct`](../../../selfhost/l2/core.ct)：`MAX_FUNCS` 128 → **256**（与 ct-ast 的
+- 只改 `core.ct`（L2 已退役）：`MAX_FUNCS` 128 → **256**（与 ct-ast 的
   [`Symbols.h.ct`](../../../selfhost/ct-ast/frontend/sym/Symbols.h.ct) 对齐），`MAX_MAP_IMPLS` 256 → **512**。
 - 四张定长表（函数签名、trait、struct、反向映射）改为 `calloc` 堆分配，避免上限翻倍带来 BSS 膨胀；
   分配失败按既有约定 `exit(1)`。

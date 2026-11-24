@@ -280,7 +280,7 @@ clone / fetch 失败或超时在写 `ct.lock` **之前**以非零退出，旧锁
 
 ### 5. 文档与测试
 
-- 文档导航：[docs/README.md](docs/README.md)；测试：`bash selfhost/check-all.sh` 跑 13 道硬门禁，
+- 文档导航：[docs/README.md](docs/README.md)；测试：`bash selfhost/check-all.sh` 跑 9 道硬门禁，
   分层地图见 [test/README.md](test/README.md)；改动代码前先读 [AGENTS.md](AGENTS.md)
 
 ### 6. 许可

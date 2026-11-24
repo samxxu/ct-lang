@@ -19,17 +19,14 @@
 
 **单元命名**：每个单元以它的主类型命名（`Parser.h.ct` ↔ `struct Parser`），一个单元一个主类型，附属记录类型可同文件；主类型过大可拆子对象单元（文件头注明所属主对象），入口 `main.ct` 例外。这条与其它命名约定同在 [AGENTS.md](../AGENTS.md) §3，并由 `check-ast.sh` 的 unit-name lint 校验。
 
-## 脚本（13 道硬门禁）
+## 脚本（9 道硬门禁）
 
-`check-all.sh` 是聚合入口，依次跑下面 13 道硬门禁，任一失败即整体非零：
+`check-all.sh` 是聚合入口，依次跑下面 9 道硬门禁，任一失败即整体非零：
 
 | # | 门禁 | 作用 |
 | --- | --- | --- |
 | 1 | `./test/run.sh` | L0 八层套件（见 [test/README.md](../test/README.md)） |
-| 2 | `check-goldens.sh` | L0 → L1 的 golden 逐字节比对、L1′ 自举闭环、L1 拆出 L2 后仍一致 |
-| 3 | `check-archive.sh` | `test/archive/**` 越位特性 fixture 的对差 ratchet |
-| 4 | `check-m2a.sh` | M2-a 单用例验收（L0 → L1 → 01_trait_basic 与 golden 逐字节一致） |
-| 5 | `ct-tour.sh` | 一条龙演示整条自举链 |
+| — | gate 2–5 | 已随 `selfhost/l1`/`l2` 退役（SH-119 S2）；编号保留，不重排 |
 | 6 | `editors/vscode/test/check-grammar.py` | 编辑器高亮语法（179 项断言，`python3 editors/vscode/test/check-grammar.py` 实测） |
 | 7 | `test/pkg/run.sh` | 包管理器 `ct get` / `ct update` / `ct install` / `ct verify`（含比较器范围、显式索引、构建元数据） |
 | 8 | `check-ast.sh` | ct-ast 行为、语料等价、不动点、负例、缓存与诊断 |
@@ -50,8 +47,8 @@ ln -s ct "$HOME/.local/bin/ctc"                                  # ctc 兼容别
 ```
 
 `install.sh` 做的事与这段相同，外加下载源码归档。seed 由 `bash selfhost/gen-seed.sh`
-在发版时重新生成（D-022），并由 gate 13 校验只读；L0→L1→L2 链保留为 gate 2/3/4/5 的
-回归 oracle，不再参与 ct-ast 的构建与安装。
+在发版时重新生成（D-022），并由 gate 13 校验只读；L0→L1→L2 链已随 SH-119 S2 退役，
+历史归档由 `test/archive/MANIFEST.sha256` 与 gate 12 守。
 
 ### 干净 clone 与容器复验
 
@@ -59,7 +56,7 @@ ln -s ct "$HOME/.local/bin/ctc"                                  # ctc 兼容别
 
 ```bash
 git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
-bash selfhost/check-all.sh         # 期望末行：check-all: OK (13 hard gates green)
+bash selfhost/check-all.sh         # 期望末行：check-all: OK (9 hard gates green)
 ```
 
 干净 clone 不需要预处理：`.gitignore` 只忽略按名字的生成物（`/ctc`、`*.o`、`a.out`、`examples/*/*.c|h`、
