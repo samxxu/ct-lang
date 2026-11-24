@@ -153,6 +153,7 @@ struct frontend_module_MapBind;
 struct frontend_module_MapTable;
 struct frontend_module_Unit;
 struct runtime_arena_Node;
+struct runtime_arena_OutConv;
 struct runtime_arena_Arena;
 struct tool_diag_Warn;
 struct tool_diag_Diag;
@@ -197,6 +198,7 @@ struct backend_emit_EmitOps_vtbl {
     int (*emit_type_name)(void *, const char *, const char *);
     int (*emit_type_name_dims)(void *, const char *, const char *, const char *);
     int (*emit_expr)(void *, int);
+    int (*emit_outconv)(void *, int);
     int (*emit_ref_arg)(void *, int);
     int (*emit_value_for)(void *, const char *, int);
     int (*expr_unstable)(void *, int);
@@ -512,6 +514,7 @@ int backend_emit_ct_emit_error_line(void);
 void backend_emit_ct_emit_set_no_write(int);
 int backend_emit_ct_emit_no_write(void);
 static struct backend_emit_StrRetain backend_emit_g_sb;
+static int backend_emit_g_oc_bypass_node = (-1);
 static int * backend_emit_g_slice_used;
 static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable };
 static int backend_emit_Emitter_backend_emit_EmitOps_expr_unstable(void *self, int n) {
@@ -3220,10 +3223,78 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_value_for(void *self, 
     return _self->__backend_emit_emitops_vptr->emit_expr(_self, n);
 }
 
+static int backend_emit_Emitter_backend_emit_EmitOps_emit_outconv(void *self, int n) {
+    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
+    int i;
+    int rid;
+    char ret[MAX_TEXT];
+    char rbuf[MAX_TEXT];
+    const char * rt;
+    ret[0] = 0;
+    for (i = 0; i < _self->arena->noutconv; i++) {
+        if (((_self->arena->outconv[i].call == n) && (!ret[0]))) {
+            snprintf(ret, sizeof(ret), "%s", _self->arena->outconv[i].ret);
+        }
+    }
+    fputs("({ ", _self->out);
+    for (i = 0; i < _self->arena->noutconv; i++) {
+        if (_self->arena->outconv[i].call != n) {
+            continue;
+        }
+        fprintf(_self->out, "%s %s = ", _self->arena->outconv[i].formal, _self->arena->nodes[_self->arena->outconv[i].temp].text2);
+        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->outconv[i].fwd) != 0) {
+            return (-1);
+        }
+        fputs("; ", _self->out);
+    }
+    rt = ret;
+    if (emit_gsub_type(_self, ret, rbuf, sizeof(rbuf)) == 0) {
+        rt = rbuf;
+    }
+    rid = (-1);
+    if ((ret[0] && (strcmp(ret, "void") != 0))) {
+        rid = _self->ntmp;
+        _self->ntmp++;
+        fprintf(_self->out, "%s __ct_outret%d = ", rt, rid);
+    }
+{
+        int save_bypass = backend_emit_g_oc_bypass_node;
+        backend_emit_g_oc_bypass_node = n;
+        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, n) != 0) {
+            backend_emit_g_oc_bypass_node = save_bypass;
+            return (-1);
+        }
+        backend_emit_g_oc_bypass_node = save_bypass;
+    }
+    fputs("; ", _self->out);
+    for (i = 0; i < _self->arena->noutconv; i++) {
+        if (_self->arena->outconv[i].call != n) {
+            continue;
+        }
+        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->outconv[i].writeback) != 0) {
+            return (-1);
+        }
+        fputs("; ", _self->out);
+    }
+    if (rid >= 0) {
+        fprintf(_self->out, "__ct_outret%d; ", rid);
+    }
+    fputs("})", _self->out);
+    return 0;
+}
+
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_expr(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int nk;
     (void)(_self);
+    if (((n != backend_emit_g_oc_bypass_node) && (_self->arena->noutconv > 0))) {
+        int oi;
+        for (oi = 0; oi < _self->arena->noutconv; oi++) {
+            if (_self->arena->outconv[oi].call == n) {
+                return _self->__backend_emit_emitops_vptr->emit_outconv(_self, n);
+            }
+        }
+    }
     nk = _self->arena->nodes[n].kind;
     struct runtime_arena_NodeKind __ct_match9 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
     if (__ct_match9.tag == 0) {
@@ -4714,6 +4785,7 @@ static const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_
     .emit_cond = backend_emit_Emitter_backend_emit_EmitOps_emit_cond,
     .emit_ref_arg = backend_emit_Emitter_backend_emit_EmitOps_emit_ref_arg,
     .emit_value_for = backend_emit_Emitter_backend_emit_EmitOps_emit_value_for,
+    .emit_outconv = backend_emit_Emitter_backend_emit_EmitOps_emit_outconv,
     .emit_expr = backend_emit_Emitter_backend_emit_EmitOps_emit_expr,
     .header_guard = backend_emit_Emitter_backend_emit_EmitOps_header_guard,
     .emit_unit = backend_emit_Emitter_backend_emit_EmitOps_emit_unit,

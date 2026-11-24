@@ -16,6 +16,7 @@
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 import frontend::sym::SymbolsTypeText;
 
@@ -1847,6 +1848,16 @@ static int bind_conv_call(struct Expr *self, int recv, const char *stype, const 
     return n;
 }
 
+/* D-020 §6.3: the compile-time rollback switch. `CT_BINDING_CONVERSION=0`
+   turns every *implicit* binding-site conversion off, returning the four sites
+   to v1.0's expected/got behaviour and suppressing the expression ban; the
+   explicit `as<T>()` / `to<T>()` spellings never consult this. */
+static int bind_conv_on(void)
+{
+    const char *v = getenv("CT_BINDING_CONVERSION");
+    return !(v && strcmp(v, "0") == 0);
+}
+
 /* The four binding sites share this. A type the two sides already agree on is
    not a conversion; a pointer spelling, an interface target (boxing owns it)
    and a value whose type cannot be pinned are left to the existing checks. */
@@ -1860,6 +1871,8 @@ static int bind_conv_site(struct Expr *self, int expr, const char *target, int l
     char msg[MAX_TEXT * 2];
     int ptr = 0, nm, ip = 0, mm;
 
+    /* D-020 §6.3: off means v1.0 -- no implicit conversion at any binding site */
+    if (!bind_conv_on()) return expr;
     if (expr < 0 || !target || !target[0]) return expr;
     if (strcmp(target, "void") == 0) return expr;
     if (strchr(target, '*')) return expr;
@@ -2015,6 +2028,148 @@ static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target
     return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
 }
 
+/* D-020 §6.1: an `out` actual whose formal and actual types convert both ways
+   gets a temporary. The parser replaces the actual in the call's argument chain
+   with a synthetic variable of the formal's base type and records the two
+   explicit conversions plus the write-back assignment in the arena's side
+   table; the emitter splices them around the call. The temp starts as the
+   converted actual, so the callee reads the caller's value; the write-back runs
+   after the call on every return path (an `out` formal is written on every path
+   by the L1 definite-assignment rule). Either direction missing is a hard
+   error, never a partial write-back. */
+static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind, int a, int b, const char *retin, int line, int col)
+{
+    char fts[16][MAX_TEXT];
+    int anns[16];
+    char at[MAX_TEXT];
+    char ak[MAX_TEXT];
+    char fk[MAX_TEXT];
+    char ret[MAX_TEXT];
+    char name[MAX_TEXT];
+    int cur, prev, k, np, pi;
+
+    /* kind 0 = free function (`a` = func index), 1 = trait method
+       (`a` = trait, `b` = method), 2 = inherent method (`a` = first N_PARAM) */
+    np = 0;
+    if (kind == 0 && a >= 0) {
+        np = self->sym->funcs[a].nparams;
+        for (k = 0; k < np && k < 16; k++) {
+            snprintf(fts[k], MAX_TEXT, "%s", self->sym->funcs[a].ptype[k]);
+            anns[k] = (int)(unsigned char)self->sym->funcs[a].pann[k];
+        }
+    } else if (kind == 1 && a >= 0 && b >= 0) {
+        np = self->sym->traits[a].m[b].nparams;
+        for (k = 0; k < np && k < 16; k++) {
+            snprintf(fts[k], MAX_TEXT, "%s", self->sym->traits[a].m[b].ptype[k]);
+            anns[k] = (int)(unsigned char)self->sym->traits[a].m[b].pann[k];
+        }
+    } else if (kind == 2) {
+        for (pi = a; pi > 0 && np < 16; pi = self->arena->nodes[pi].next) {
+            snprintf(fts[np], MAX_TEXT, "%s", self->arena->nodes[pi].text);
+            anns[np] = (int)(unsigned char)self->arena->nodes[pi].aux;
+            np++;
+        }
+    } else {
+        return args;
+    }
+    if (!bind_conv_on() || call < 0 || args <= 0 || np <= 0) return args;
+    ret[0] = 0;
+    if (kind == 0) snprintf(ret, sizeof ret, "%s", self->sym->funcs[a].ret);
+    else if (kind == 1) snprintf(ret, sizeof ret, "%s", self->sym->traits[a].m[b].ret);
+    else if (retin) snprintf(ret, sizeof ret, "%s", retin);
+    prev = -1;
+    cur = args;
+    k = 0;
+    while (cur > 0 && k < np) {
+        int nxt = self->arena->nodes[cur].next;
+        const char *ft = fts[k];
+        int ann = anns[k];
+        int do_conv = 0;
+
+        /* only `out`; a pointer spelling, an interface target and the owning
+           string / container / Box families keep their existing diagnostics */
+        if (ann == 3 && ft && ft[0] && strcmp(ft, "void") != 0 && !strchr(ft, '*')
+            && self->sup->expr_type(cur, at, sizeof at) == 0 && at[0]
+            && !strchr(at, '*')) {
+            int ip = 0;
+            char itr[MAX_TEXT];
+            bind_conv_key(at, ak, sizeof ak);
+            bind_conv_key(ft, fk, sizeof fk);
+            if (strcmp(ak, fk) != 0
+                && !(self->sup->iface_ref_type(ft, itr, sizeof itr, &ip)
+                     && self->sym->find_trait(itr) >= 0)
+                && !frontend::sym::ct_is_string_value_type(at)
+                && !frontend::sym::ct_is_string_value_type(ft)
+                && !frontend::sym::ct_is_container_type(at)
+                && !frontend::sym::ct_is_container_type(ft)
+                && strstr(at, "Box_") == 0 && strstr(ft, "Box_") == 0
+                /* A source type that declares `as` is a conversion site,
+                   and so is an aggregate-to-aggregate pair (that is where the
+                   "no conversion / import a mapping trait" diagnostic comes
+                   from). A struct against a scalar keeps v1.0's
+                   `type mismatch` (p78's `out int` vs struct P). */
+                && (bind_conv_any(self, at, "as")
+                    || (bind_conv_struct_like(self, at)
+                        && bind_conv_struct_like(self, ft))))
+                do_conv = 1;
+        }
+        if (do_conv) {
+            int fwd, rev, wb, t, vi, seq;
+            /* the actual must be an assignable place before it is replaced */
+            if (check_refout_arg(self, cur, ann, ft) != 0) return -1;
+            fwd = bind_conv_explicit(self, cur, ft, line, col);
+            if (fwd < 0) return -1;
+            if (self->arena->noutconv >= 32)
+                return self->sup->fail("too many 'out' conversion temporaries in one unit");
+            /* a user-visible name is avoided; `__ct_` is reserved for user
+               declarations, so the compiler's own temp uses `_ct_outconvN` */
+            seq = self->arena->noutconv;
+            for (;;) {
+                snprintf(name, sizeof name, "_ct_outconv%d", seq);
+                if (self->sym->find_var(name) < 0) break;
+                seq++;
+            }
+            t = self->sup->new_node(N_VAR);
+            if (t < 0) return -1;
+            snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", ft);
+            snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[t].line = line;
+            self->arena->nodes[t].num = col;
+            if (self->sym->declare_var(name, ft) != 0) return -1;
+            vi = self->sym->find_var(name);
+            if (vi >= 0) self->sym->vars[vi].initialized = 1;
+            rev = bind_conv_explicit(self, t, at, line, col);
+            if (rev < 0) return -1;
+            wb = self->sup->new_node(N_ASSIGN);
+            if (wb < 0) return -1;
+            self->arena->nodes[wb].a = cur;
+            self->arena->nodes[wb].b = rev;
+            self->arena->nodes[wb].line = line;
+            self->arena->nodes[wb].num = col;
+            self->arena->outconv[self->arena->noutconv].call = call;
+            self->arena->outconv[self->arena->noutconv].actual = cur;
+            self->arena->outconv[self->arena->noutconv].temp = t;
+            self->arena->outconv[self->arena->noutconv].fwd = fwd;
+            self->arena->outconv[self->arena->noutconv].writeback = wb;
+            snprintf(self->arena->outconv[self->arena->noutconv].formal,
+                     sizeof self->arena->outconv[self->arena->noutconv].formal,
+                     "%s", ft);
+            snprintf(self->arena->outconv[self->arena->noutconv].ret,
+                     sizeof self->arena->outconv[self->arena->noutconv].ret,
+                     "%s", ret);
+            self->arena->noutconv++;
+            if (prev < 0) args = t;
+            else self->arena->nodes[prev].next = t;
+            self->arena->nodes[t].next = nxt;
+            cur = t;
+        }
+        prev = cur;
+        cur = nxt;
+        k++;
+    }
+    return args;
+}
+
 /* D-020's expression ban: a convertible value may not be used by arithmetic.
    Only a value that actually has an `as` conversion reaches the diagnostic;
    every other struct operand keeps whatever C has always said. */
@@ -2025,6 +2180,7 @@ static int bind_conv_arith(struct Expr *self, int left, int right, int line, int
     char msg[MAX_TEXT];
     int lc = 0, rc = 0;
 
+    if (!bind_conv_on()) return 0;
     if (left >= 0 && self->sup->expr_type(left, lt, sizeof lt) == 0 && lt[0]
         && bind_conv_struct_like(self, lt))
         lc = bind_conv_any(self, lt, "as");
@@ -5777,6 +5933,15 @@ impl ExprOps for Expr {
                             if (self->arity_check(mline, mcol, fname, bgot,
                                                   self->sym->traits[bt].m[bmi].nparams) != 0)
                                 return -1;
+                            /* LANG-26 / D-020 §6.1: the constrained call is
+                               a binding site too. */
+                            if (self->closure_arg_count(args) == 0) {
+                                int na = bind_outconv_rewrite(self, m, args, 1, bt, bmi,
+                                                              "", mline, mcol);
+                                if (na < 0) return -1;
+                                args = na;
+                                self->arena->nodes[m].b = (args == 0) ? -1 : args;
+                            }
                             if (self->argtype_check(mline, mcol, fname, args, -1, bt, bmi) != 0)
                                 return -1;
                             /* Phase 78 S2b: the bound trait's annotations
@@ -5883,6 +6048,23 @@ impl ExprOps for Expr {
                                         return -1;
                                     pi = self->arena->nodes[pi].next;
                                     pia = self->arena->nodes[pia].next;
+                                }
+                            }
+                            /* LANG-26 / D-020 §6.1: the same out write-back
+                               on an inherent method's call site. The formal
+                               chain is the method's own N_PARAM list and the
+                               result comes from the instance substitution. */
+                            {
+                                char retm[MAX_TEXT];
+                                retm[0] = 0;
+                                if (self->sup->ty->inst_method_ret(ibase, fname,
+                                                                   retm, sizeof retm)) {
+                                    int na = bind_outconv_rewrite(self, m, args, 2,
+                                                self->arena->nodes[inm].a, -1, retm,
+                                                mline, mcol);
+                                    if (na < 0) return -1;
+                                    args = na;
+                                    self->arena->nodes[m].b = (args == 0) ? -1 : args;
                                 }
                             }
                             /* Phase 32 S7 (L32-6): bind, substitute, judge. */
@@ -6382,6 +6564,17 @@ impl ExprOps for Expr {
                                         "a closure cannot be passed to a method argument yet (SH-65); pass '(fn, env)' explicitly",
                                         self->sup->mem->path);
                             }
+                        }
+                        /* LANG-26 / D-020 §6.1: a trait method's convertible
+                           `out` actual gets the same temporary + write-back. */
+                        if (!self->sym->traits[t].is_static
+                            && mi < self->sym->traits[t].nm
+                            && self->closure_arg_count(args) == 0) {
+                            int na = bind_outconv_rewrite(self, m, args, 1, t, mi,
+                                                          "", mline, mcol);
+                            if (na < 0) return -1;
+                            args = na;
+                            self->arena->nodes[m].b = (args == 0) ? -1 : args;
                         }
                         /* 19.2: the argument types against the resolved trait
                            method, same rules as a function call. */
@@ -7653,7 +7846,8 @@ impl ExprOps for Expr {
                    diagnostic instead of the generic type mismatch. A closure
                    actual occupies a `(fn, env)` pair, so the index walk is
                    skipped when one is present. */
-                if (fi >= 0 && args > 0 && self->closure_arg_count(args) == 0) {
+                if (fi >= 0 && args > 0 && self->closure_arg_count(args) == 0
+                    && bind_conv_on()) {
                     int pc2 = args, pk3 = 0;
                     while (pc2 > 0 && pk3 < self->sym->funcs[fi].nparams) {
                         int apos = self->arg_base + pk3;
@@ -7681,6 +7875,16 @@ impl ExprOps for Expr {
                         pc2 = self->arena->nodes[pc2].next;
                         pk3++;
                     }
+                }
+                /* LANG-26 / D-020 §6.1: a convertible `out` actual becomes a
+                   formal-typed temporary plus a write-back. Done before the
+                   argument-type pass, which then sees a formal-typed variable;
+                   the place was judged above, before the replacement. */
+                if (fi >= 0 && args > 0 && self->closure_arg_count(args) == 0) {
+                    int na = bind_outconv_rewrite(self, n, args, 0, fi, -1, "", id_line, id_col);
+                    if (na < 0) return -1;
+                    args = na;
+                    self->arena->nodes[n].a = args;
                 }
                 /* 19.2: the argument types against the same signature, before
                    the boxing pass rewrites interface arguments (an interface

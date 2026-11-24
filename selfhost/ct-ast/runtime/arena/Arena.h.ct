@@ -149,6 +149,22 @@ pub trait ArenaOps {
     void reset(void);
 }
 
+/* LANG-26 / D-020 §6.1: one `out` actual whose formal type and actual type
+   convert to each other. The parser records the two explicit conversion calls
+   and the write-back assignment here; the emitter splices them around the call
+   as one GNU statement expression, so the temporary lives exactly across the
+   call and no parser/AST shape change is needed. `ret` empty means the callee
+   returns void. */
+pub struct OutConv {
+    int  call;       /* the N_CALL / N_MCALL node carrying the actual */
+    int  actual;     /* the caller's place (conversion receiver, write target) */
+    int  temp;       /* the `Formal temp` N_VAR between the two conversions */
+    int  fwd;        /* actual -> formal conversion call */
+    int  writeback;  /* `actual = temp -> actual` assignment node */
+    char formal[160];/* C spelling of the formal's base type */
+    char ret[160];   /* C spelling of the callee's result ('void' or empty) */
+}
+
 pub struct Arena {
     /* The two pools are calloc'd on first use (SH-42): as inline arrays in a
        file-scope `static` instance they put ~69 MB of zeroes into __DATA and
@@ -159,6 +175,10 @@ pub struct Arena {
     int  nnode;
     char *strpool;
     int  nstrpool;
+    /* LANG-26: at most 32 converted `out` actuals per unit; a call with more is
+       a hard error rather than a silent drop. */
+    struct OutConv outconv[32];
+    int  noutconv;
 } use ArenaOps;
 
 pub struct Arena *arena_get(void);
@@ -243,6 +263,7 @@ impl ArenaOps for Arena {
     void reset(void)
     {
         self->nnode = 0;
+        self->noutconv = 0;
     }
 }
 

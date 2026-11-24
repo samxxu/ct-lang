@@ -39,6 +39,7 @@ struct frontend_module_MapBind;
 struct frontend_module_MapTable;
 struct frontend_module_Unit;
 struct runtime_arena_Node;
+struct runtime_arena_OutConv;
 struct runtime_arena_Arena;
 struct tool_diag_Warn;
 struct tool_diag_Diag;
@@ -137,6 +138,7 @@ static const char * runtime_arena_Arena_runtime_arena_ArenaOps_str_at(void *self
 static void runtime_arena_Arena_runtime_arena_ArenaOps_reset(void *self) {
     struct runtime_arena_Arena *_self = (struct runtime_arena_Arena *)self;
     _self->nnode = 0;
+    _self->noutconv = 0;
 }
 
 const struct runtime_arena_ArenaOps_vtbl runtime_arena_Arena_runtime_arena_ArenaOps_vtable = {

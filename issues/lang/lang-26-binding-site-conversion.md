@@ -58,8 +58,19 @@ J-6 行、`stable-subset` 三档、`capabilities.tsv` 条目、`idioms` briefing
 
 v1.1 切片已落：声明/赋值/`return` 三类绑定点 + `as<T>`/`.to<T>()` + 映射 trait + 歧义/未 import 诊断；
 生成 C 与显式调用逐字节一致；`--types` 语料 FP 零差异；`lang26_conv` 6/6。
-**剩余**：`out` 实参写回转换（需语句级临时+回写）、`decode<T>` 边界、`CT_BINDING_CONVERSION=0` 开关；
-本卡保持 `deferred`，不把剩余项说成完成。
+
+2026-11-24 第二轮（D-020 §6，DEV）：
+
+- `out` 实参写回转换已落：双向可转换时经形式类型临时量，调用后写回；失败路径
+  （`false` / `err:` / 提前 `return`）不撤销；缺失/歧义硬错。生成 C 为
+  `({ T t = fwd; r = call(&t); actual = rev(t); r; })`；自由函数、固有方法与
+  trait 方法的调用点都已覆盖。
+- `CT_BINDING_CONVERSION=0` 已接线：默认开；关闭后四类绑定点回到 v1.0 诊断，
+  显式 `.as<T>()` / `.to<T>()` 不受影响。
+- `decode<T>` 按 D-020 §6.2 不实现（归映射层），补了边界探针：绑定点裸写只调用
+  `as`，只声明 `decode` 的类型仍是 “no conversion”。
+- 探针 `lang26_conv` 17/17；`--types` 全语料 FP=0；`check-ast` 全绿。
+- 本卡保持 `deferred`，不把剩余项说成完成。
 
 ## 任务描述（P-3，2026-11-24；v1.1 前置准备）
 

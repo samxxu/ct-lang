@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10343 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10415 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=54413 io_cap=1024
+     emitted_before=48223 emitted_after=54712 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -18,6 +18,9 @@
      (v1-PH-0 S0.5 后复测：五个判别函数的 if 链改为 84 臂的穷尽 match，76 个
       `em_*` 切片各占一臂；`expr_ctype` / `maybe_box` / `chk_type` 同步改为
       NodeKind match。动作等价由 66 语料逐字节、345 诊断逐字、2 轮自举不动点复核)
+     (LANG-26 后复测：`out` 写回转换与 `CT_BINDING_CONVERSION` 开关落在
+      Expr.h.ct / Emitter.h.ct / Arena.h.ct；Emitter.h.ct 10343 -> 10415，
+      发射 C 54413 -> 54712，切片清单不变)
 -->
 
 ## 1 切片清单
@@ -35,8 +38,9 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
 | `emit_field` | 46 行 | 9 行 | 2 | 2 |
 | **合计** | **2541 行** | **118 行** | **76** | — |
 
-- `Emitter.h.ct`：8876 → 9389 行（**+513，+5.8%**）。增量来自 76 个函数头/参数/
-  `(void)` 行与切片注释；分支体本身逐字搬移（见 §3 的等价证据）。
+- `Emitter.h.ct`：8876 → 10415 行（**+1539，+17.3%**）。S88c 的增量来自 76 个
+  函数头/参数/`(void)` 行与切片注释；后续阶段（SH-117、SH-118、v1-PH-0 S0.5、
+  LANG-26）在同一文件继续增长，分支体本身逐字搬移（见 §3 的等价证据）。
 - 每个判别函数的 `nodes[n].kind` 读数从 29/34/6/13/2 次降为 **各 1 次**；
   切片体内同结点 kind 的读取改为使用传入值 `nk`（`p88_emit` 逐个核对）。
 

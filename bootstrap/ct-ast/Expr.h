@@ -6,6 +6,7 @@
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "SymbolsTypeText.h"
@@ -53,6 +54,7 @@ struct frontend_module_MapBind;
 struct frontend_module_MapTable;
 struct frontend_module_Unit;
 struct runtime_arena_Node;
+struct runtime_arena_OutConv;
 struct runtime_arena_Arena;
 struct tool_diag_Warn;
 struct tool_diag_Diag;

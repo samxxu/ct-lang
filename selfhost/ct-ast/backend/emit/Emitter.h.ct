@@ -191,6 +191,10 @@ trait EmitOps {
     int  emit_type_name(const char *type, const char *name);
     int  emit_type_name_dims(const char *type, const char *name, const char *dims);
     int  emit_expr(int n);
+    /* LANG-26 / D-020 §6.1: a call whose `out` actual needed a temporary. The
+       call is emitted as one GNU statement expression: the forward conversion
+       initialises the temporary, the call runs, the write-back follows. */
+    int  emit_outconv(int n);
     /* Phase 78 S2: one `ref` / `out` actual. A plain place takes its address;
        a Vec/Map subscript sugar already answers a pointer (`at`) and must not
        be addressed again. */
@@ -432,6 +436,13 @@ struct Emitter {
    private to this unit and single-threaded), so the `pub struct Emitter`
    field budget is untouched. */
 static struct StrRetain g_sb;
+
+/* LANG-26: the call node whose own `out`-conversion statement expression is
+   being written, so the intercept does not fire again for that node while a
+   different nested call still gets its own statement expression. -1 = none.
+   A file-scope flag keeps the `pub struct Emitter` field budget untouched (the
+   emitter is single-threaded). */
+static int g_oc_bypass_node = -1;
 
 /* defined further down; `sb_norm` needs it to substitute a template spelling */
 static int emit_gsub_type(struct Emitter *self, const char *type, char *buf, int cap);
@@ -8973,11 +8984,72 @@ impl EmitOps for Emitter {
         return self->emit_expr(n);
     }
 
+    int emit_outconv(int n)
+    {
+        int i, rid;
+        char ret[MAX_TEXT];
+        char rbuf[MAX_TEXT];
+        const char *rt;
+
+        ret[0] = 0;
+        for (i = 0; i < self->arena->noutconv; i++)
+            if (self->arena->outconv[i].call == n && !ret[0])
+                snprintf(ret, sizeof ret, "%s", self->arena->outconv[i].ret);
+        /* the temporary declarations and the forward conversions run first, in
+           argument order; the call sees `&temp` for each converted actual */
+        fputs("({ ", self->out);
+        for (i = 0; i < self->arena->noutconv; i++) {
+            if (self->arena->outconv[i].call != n) continue;
+            fprintf(self->out, "%s %s = ", self->arena->outconv[i].formal,
+                    self->arena->nodes[self->arena->outconv[i].temp].text2);
+            if (self->emit_expr(self->arena->outconv[i].fwd) != 0) return -1;
+            fputs("; ", self->out);
+        }
+        /* a value the caller uses survives the write-back through a result
+           temporary; a void call needs none */
+        rt = ret;
+        if (emit_gsub_type(self, ret, rbuf, sizeof rbuf) == 0) rt = rbuf;
+        rid = -1;
+        if (ret[0] && strcmp(ret, "void") != 0) {
+            rid = self->ntmp;
+            self->ntmp++;
+            fprintf(self->out, "%s __ct_outret%d = ", rt, rid);
+        }
+        {
+            int save_bypass = g_oc_bypass_node;
+            g_oc_bypass_node = n;
+            if (self->emit_expr(n) != 0) {
+                g_oc_bypass_node = save_bypass;
+                return -1;
+            }
+            g_oc_bypass_node = save_bypass;
+        }
+        fputs("; ", self->out);
+        /* every converted actual is written back after the call, on every
+           return path: the L1 rule already guarantees the callee assigned it */
+        for (i = 0; i < self->arena->noutconv; i++) {
+            if (self->arena->outconv[i].call != n) continue;
+            if (self->emit_expr(self->arena->outconv[i].writeback) != 0) return -1;
+            fputs("; ", self->out);
+        }
+        if (rid >= 0) fprintf(self->out, "__ct_outret%d; ", rid);
+        fputs("})", self->out);
+        return 0;
+    }
+
     int emit_expr(int n)
     {
         int nk;
         (void)self;
 
+        /* LANG-26: a call with a converted `out` actual is one statement
+           expression; the bypass flag keeps the inner call from re-entering. */
+        if (n != g_oc_bypass_node && self->arena->noutconv > 0) {
+            int oi;
+            for (oi = 0; oi < self->arena->noutconv; oi++)
+                if (self->arena->outconv[oi].call == n)
+                    return self->emit_outconv(n);
+        }
         nk = self->arena->nodes[n].kind;
 
         match ((NodeKind){ .tag = nk }) {

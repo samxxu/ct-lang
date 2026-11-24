@@ -14,6 +14,7 @@
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #define B_ADD 1
 #define B_AND 12
@@ -124,6 +125,7 @@ struct frontend_module_MapBind;
 struct frontend_module_MapTable;
 struct frontend_module_Unit;
 struct runtime_arena_Node;
+struct runtime_arena_OutConv;
 struct runtime_arena_Arena;
 struct tool_diag_Warn;
 struct tool_diag_Diag;
@@ -229,9 +231,11 @@ static int bind_conv_inherent(struct frontend_parse_Expr *, const char *, const 
 static int bind_conv_maps(struct frontend_parse_Expr *, const char *, const char *, char *, int);
 static int bind_conv_any(struct frontend_parse_Expr *, const char *, const char *);
 static int bind_conv_call(struct frontend_parse_Expr *, int, const char *, const char *, const char *, int, int);
+static int bind_conv_on(void);
 static int bind_conv_site(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_conv_explicit(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_conv_explicit_to(struct frontend_parse_Expr *, int, const char *, int, int);
+static int bind_outconv_rewrite(struct frontend_parse_Expr *, int, int, int, int, int, const char *, int, int);
 static int bind_conv_arith(struct frontend_parse_Expr *, int, int, int, int);
 static int expr_is_builtin_Box_type(const char *);
 static int bplus_space(int);
@@ -4211,6 +4215,14 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             if (_self->__frontend_parse_exprops_vptr->arity_check(_self, mline, mcol, fname, bgot, _self->sym->traits[bt].m[bmi].nparams) != 0) {
                                 return (-1);
                             }
+                            if (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0) {
+                                int na = bind_outconv_rewrite(_self, m, args, 1, bt, bmi, "", mline, mcol);
+                                if (na < 0) {
+                                    return (-1);
+                                }
+                                args = na;
+                                _self->arena->nodes[m].b = ((args == 0) ? (-1) : args);
+                            }
                             if (_self->__frontend_parse_exprops_vptr->argtype_check(_self, mline, mcol, fname, args, (-1), bt, bmi) != 0) {
                                 return (-1);
                             }
@@ -4268,6 +4280,18 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                             }
                                             pi = _self->arena->nodes[pi].next;
                                             pia = _self->arena->nodes[pia].next;
+                                        }
+                                    }
+{
+                                        char retm[MAX_TEXT];
+                                        retm[0] = 0;
+                                        if (_self->sup->ty->__frontend_type_typeops_vptr->inst_method_ret(_self->sup->ty, ibase, fname, retm, sizeof(retm))) {
+                                            int na = bind_outconv_rewrite(_self, m, args, 2, _self->arena->nodes[inm].a, (-1), retm, mline, mcol);
+                                            if (na < 0) {
+                                                return (-1);
+                                            }
+                                            args = na;
+                                            _self->arena->nodes[m].b = ((args == 0) ? (-1) : args);
                                         }
                                     }
                                     if ((_self->types_mode && (*_self->types_mode))) {
@@ -4672,6 +4696,14 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 return tool_diag_ct_sem_error(mline, mcol, "a closure cannot be passed to a method argument yet (SH-65); pass '(fn, env)' explicitly", _self->sup->mem->path);
                             }
                         }
+                    }
+                    if ((((!_self->sym->traits[t].is_static) && (mi < _self->sym->traits[t].nm)) && (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0))) {
+                        int na = bind_outconv_rewrite(_self, m, args, 1, t, mi, "", mline, mcol);
+                        if (na < 0) {
+                            return (-1);
+                        }
+                        args = na;
+                        _self->arena->nodes[m].b = ((args == 0) ? (-1) : args);
                     }
                     if ((((!_self->sym->traits[t].is_static) && (mi < _self->sym->traits[t].nm)) && (_self->__frontend_parse_exprops_vptr->argtype_check(_self, mline, mcol, fname, args, (-1), t, mi) != 0))) {
                         return (-1);
@@ -6006,7 +6038,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     lk += (lcl ? 2 : 1);
                 }
             }
-            if ((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0))) {
+            if (((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0)) && bind_conv_on())) {
                 int pc2 = args;
                 int pk3 = 0;
                 while (((pc2 > 0) && (pk3 < _self->sym->funcs[fi].nparams))) {
@@ -6030,6 +6062,14 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     pc2 = _self->arena->nodes[pc2].next;
                     pk3++;
                 }
+            }
+            if ((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0))) {
+                int na = bind_outconv_rewrite(_self, n, args, 0, fi, (-1), "", id_line, id_col);
+                if (na < 0) {
+                    return (-1);
+                }
+                args = na;
+                _self->arena->nodes[n].a = args;
             }
             if (((fi >= 0) && (_self->__frontend_parse_exprops_vptr->argtype_check(_self, id_line, id_col, _self->arena->nodes[n].text2, args, fi, (-1), (-1)) != 0))) {
                 return (-1);
@@ -10113,6 +10153,10 @@ static int bind_conv_call(struct frontend_parse_Expr * self, int recv, const cha
     self->arena->nodes[n].num = col;
     return n;
 }
+static int bind_conv_on(void) {
+    const char * v = getenv("CT_BINDING_CONVERSION");
+    return (!(v && (strcmp(v, "0") == 0)));
+}
 static int bind_conv_site(struct frontend_parse_Expr * self, int expr, const char * target, int line, int col) {
     char st[MAX_TEXT];
     char sk[MAX_TEXT];
@@ -10124,6 +10168,9 @@ static int bind_conv_site(struct frontend_parse_Expr * self, int expr, const cha
     int nm;
     int ip = 0;
     int mm;
+    if ((!bind_conv_on())) {
+        return expr;
+    }
     if ((((expr < 0) || (!target)) || (!target[0]))) {
         return expr;
     }
@@ -10268,12 +10315,166 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, co
     snprintf(msg, sizeof(msg), "no strict conversion from '%s' to '%s'; add an inherent 'to' method returning '%s' or import a mapping trait that declares 'to'", st, target, expect);
     return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
 }
+static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int args, int kind, int a, int b, const char * retin, int line, int col) {
+    char fts[16][MAX_TEXT];
+    int anns[16];
+    char at[MAX_TEXT];
+    char ak[MAX_TEXT];
+    char fk[MAX_TEXT];
+    char ret[MAX_TEXT];
+    char name[MAX_TEXT];
+    int cur;
+    int prev;
+    int k;
+    int np;
+    int pi;
+    np = 0;
+    if (((kind == 0) && (a >= 0))) {
+        np = self->sym->funcs[a].nparams;
+        for (k = 0; ((k < np) && (k < 16)); k++) {
+            snprintf(fts[k], MAX_TEXT, "%s", self->sym->funcs[a].ptype[k]);
+            anns[k] = (int)((unsigned char)(self->sym->funcs[a].pann[k]));
+        }
+    }
+    else {
+        if ((((kind == 1) && (a >= 0)) && (b >= 0))) {
+            np = self->sym->traits[a].m[b].nparams;
+            for (k = 0; ((k < np) && (k < 16)); k++) {
+                snprintf(fts[k], MAX_TEXT, "%s", self->sym->traits[a].m[b].ptype[k]);
+                anns[k] = (int)((unsigned char)(self->sym->traits[a].m[b].pann[k]));
+            }
+        }
+        else {
+            if (kind == 2) {
+                for (pi = a; ((pi > 0) && (np < 16)); pi = self->arena->nodes[pi].next) {
+                    snprintf(fts[np], MAX_TEXT, "%s", self->arena->nodes[pi].text);
+                    anns[np] = (int)((unsigned char)(self->arena->nodes[pi].aux));
+                    np++;
+                }
+            }
+            else {
+                return args;
+            }
+        }
+    }
+    if (((((!bind_conv_on()) || (call < 0)) || (args <= 0)) || (np <= 0))) {
+        return args;
+    }
+    ret[0] = 0;
+    if (kind == 0) {
+        snprintf(ret, sizeof(ret), "%s", self->sym->funcs[a].ret);
+    }
+    else {
+        if (kind == 1) {
+            snprintf(ret, sizeof(ret), "%s", self->sym->traits[a].m[b].ret);
+        }
+        else {
+            if (retin) {
+                snprintf(ret, sizeof(ret), "%s", retin);
+            }
+        }
+    }
+    prev = (-1);
+    cur = args;
+    k = 0;
+    while (((cur > 0) && (k < np))) {
+        int nxt = self->arena->nodes[cur].next;
+        const char * ft = fts[k];
+        int ann = anns[k];
+        int do_conv = 0;
+        if (((((((((ann == 3) && ft) && ft[0]) && (strcmp(ft, "void") != 0)) && (!strchr(ft, '*'))) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, cur, at, sizeof(at)) == 0)) && at[0]) && (!strchr(at, '*')))) {
+            int ip = 0;
+            char itr[MAX_TEXT];
+            bind_conv_key(at, ak, sizeof(ak));
+            bind_conv_key(ft, fk, sizeof(fk));
+            if ((((((((((strcmp(ak, fk) != 0) && (!(self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, ft, itr, sizeof(itr), (&ip)) && (self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, itr) >= 0)))) && (!frontend_sym_ct_is_string_value_type(at))) && (!frontend_sym_ct_is_string_value_type(ft))) && (!frontend_sym_ct_is_container_type(at))) && (!frontend_sym_ct_is_container_type(ft))) && (strstr(at, "Box_") == 0)) && (strstr(ft, "Box_") == 0)) && (bind_conv_any(self, at, "as") || (bind_conv_struct_like(self, at) && bind_conv_struct_like(self, ft))))) {
+                do_conv = 1;
+            }
+        }
+        if (do_conv) {
+            int fwd;
+            int rev;
+            int wb;
+            int t;
+            int vi;
+            int seq;
+            if (check_refout_arg(self, cur, ann, ft) != 0) {
+                return (-1);
+            }
+            fwd = bind_conv_explicit(self, cur, ft, line, col);
+            if (fwd < 0) {
+                return (-1);
+            }
+            if (self->arena->noutconv >= 32) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "too many 'out' conversion temporaries in one unit");
+            }
+            seq = self->arena->noutconv;
+            for (; ; ) {
+                snprintf(name, sizeof(name), "_ct_outconv%d", seq);
+                if (self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, name) < 0) {
+                    break;
+                }
+                seq++;
+            }
+            t = self->sup->__frontend_parse_supportops_vptr->new_node(self->sup, N_VAR);
+            if (t < 0) {
+                return (-1);
+            }
+            snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", ft);
+            snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[t].line = line;
+            self->arena->nodes[t].num = col;
+            if (self->sym->__frontend_sym_symbolops_vptr->declare_var(self->sym, name, ft) != 0) {
+                return (-1);
+            }
+            vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, name);
+            if (vi >= 0) {
+                self->sym->vars[vi].initialized = 1;
+            }
+            rev = bind_conv_explicit(self, t, at, line, col);
+            if (rev < 0) {
+                return (-1);
+            }
+            wb = self->sup->__frontend_parse_supportops_vptr->new_node(self->sup, N_ASSIGN);
+            if (wb < 0) {
+                return (-1);
+            }
+            self->arena->nodes[wb].a = cur;
+            self->arena->nodes[wb].b = rev;
+            self->arena->nodes[wb].line = line;
+            self->arena->nodes[wb].num = col;
+            self->arena->outconv[self->arena->noutconv].call = call;
+            self->arena->outconv[self->arena->noutconv].actual = cur;
+            self->arena->outconv[self->arena->noutconv].temp = t;
+            self->arena->outconv[self->arena->noutconv].fwd = fwd;
+            self->arena->outconv[self->arena->noutconv].writeback = wb;
+            snprintf(self->arena->outconv[self->arena->noutconv].formal, sizeof(self->arena->outconv[self->arena->noutconv].formal), "%s", ft);
+            snprintf(self->arena->outconv[self->arena->noutconv].ret, sizeof(self->arena->outconv[self->arena->noutconv].ret), "%s", ret);
+            self->arena->noutconv++;
+            if (prev < 0) {
+                args = t;
+            }
+            else {
+                self->arena->nodes[prev].next = t;
+            }
+            self->arena->nodes[t].next = nxt;
+            cur = t;
+        }
+        prev = cur;
+        cur = nxt;
+        k++;
+    }
+    return args;
+}
 static int bind_conv_arith(struct frontend_parse_Expr * self, int left, int right, int line, int col) {
     char lt[MAX_TEXT];
     char rt[MAX_TEXT];
     char msg[MAX_TEXT];
     int lc = 0;
     int rc = 0;
+    if ((!bind_conv_on())) {
+        return 0;
+    }
     if (((((left >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, left, lt, sizeof(lt)) == 0)) && lt[0]) && bind_conv_struct_like(self, lt))) {
         lc = bind_conv_any(self, lt, "as");
     }
