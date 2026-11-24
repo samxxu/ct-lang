@@ -156,7 +156,9 @@ U16String.h.ct  → core::String / core::Str / core::utf16::U16Str
    （`ct_str_hdr` 作为辅助记录放行），负例“两个主类型”必须红；
 8. 更新 `lib/core/README.md`（五个单元 → 八个；`lib/core/utf16` 与 `namespace core::utf16`；
    U16 新公开名）、`docs/language-spec.md`、tutorial 与所有旧路径/旧名引用；
-9. U16 旧名 `core::U16String` / `core::U16Str` 的迁移/别名方案有记录；没有则不得直接改公开名。
+9. U16 旧名 `core::U16String` / `core::U16Str` 的迁移/别名方案有记录；没有则不得直接改公开名；
+10. **重生成 `bootstrap/ct-ast`**，`selfhost/check-seed.sh` 两轮重建逐字节一致、手改负例红；
+    `install.sh` 用新 seed 装出的 `ct -v` 为当前版本——内置层变了而 seed 不换，等于发布旧编译器。
 
 ## 关联
 

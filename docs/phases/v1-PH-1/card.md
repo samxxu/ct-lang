@@ -28,6 +28,7 @@ version-minor: 1
 
 | 闸 | 内容 | 现状 |
 | --- | --- | --- |
+| 前置 S0 | **SH-119**（删 L0/L1/L2）→ **SH-120**（`Str.h.ct` 拆分 + 重生成 seed） | 未完成；两项都必须先于 S1 |
 | 入口 | DOC-99 的 P-1（CI 发布构建）、P-2（PKG-21）、P-3（D-020 缺口复核） | **已完成**（2026-11-24） |
 | S2 闸 | P-4 JSON 树重评 | **已完成（维持 A）**；JSON 存储不切 B，但 B1/B3 等语言面由 [LANG-29](../../../issues/lang/lang-29-adt-match-complete.md) 在 S2b 内直接实施 |
 | S3 汇入 | P-5 与 `TEST-23` 合并推进 | 未做 |
@@ -37,8 +38,9 @@ version-minor: 1
 
 | 任务 | 交付 | 验收 | effort |
 | --- | --- | --- | --- |
+| S0 前置（SH-119 + SH-120） | 删 L0–L2；把 `Str.h.ct` 拆成 String/Str/U16String/U16Str 四单元；**重生成 `bootstrap/ct-ast`** | SH-119 收口；gate 13 两轮逐字节、手改负例红；`ct build` 四类型样例通过 | L |
 | S1 M1 精细切分 + SH-94 | 纯搬移落位；`Expr`/`Emitter` 巨型单元拆开、重复上限常量收敛为单一定义 | 函数体哈希集合不变 + 机械行白名单；`check-all` 绿；单元名 `<Subsystem><Role>.h.ct` 全局唯一；生成物零差异 | L |
-| S2 LANG-26 剩余 | 三类绑定点之外的剩余项：`out` 实参写回、`decode<T>` 边界、`CT_BINDING_CONVERSION=0` 开关 | 剩余三项逐一有正负例；生成 C 与显式调用等价；开关关闭后诊断口径一致 | M |
+| S2 LANG-26 剩余（**已完成 2026-11-24**） | `out` 写回、`decode<T>`、`CT_BINDING_CONVERSION=0` 已落地 | LANG-26 verified（`lang26_conv` 18/0） | — |
 | S2b ADT/match 完整化（LANG-29） | B1 预发射实例壳 → B3 ADT glue/retain → B2 ADT 方法/下标/多级链 → B4 `map binding` + B5 表达式 `match` | 递归 ADT 生成 C 可编译；`doc["user"]["age"]` 读写；表达式 `match` + `yield` 负例；payload ASan 零；`check-all` 绿 | L |
 | S3 A 默认 `error` | CLI `--check-level` 默认由 `warn` 升 `error`；`off` 保留逃生 | 全量 FP=0 证据沿用 `p118`；`--check-level=off` 生成物逐字节不变；回退只需一次提交 | M |
 | S3b TEST-23 | 行覆盖、`ct-ast` 单测、容量上限与近相 example | 覆盖报告与单测入库；`test/**` 分批提交；不改产物 | L |
@@ -60,6 +62,7 @@ version-minor: 1
 | E-V2-7 | `box<T>` 硬错；同一程序改 `Box<T>` 通过 |
 | E-V2-8 | `stable-subset` 完成冻结分档切换；`check-docs` 的稳定子集断言绿 |
 | E-V2-9 | `v1.1.0`：版本、annotated tag、`check-all` 13 门、dist 与发布流程齐全 |
+| E-V2-10 | 前置完成：SH-119 与 SH-120 均 verified；`bootstrap/ct-ast` 已按新内置层重生成，gate 13 两轮逐字节、手改负例红 |
 
 ## 4 风险与回滚
 
@@ -70,6 +73,7 @@ version-minor: 1
 | R-V2-3 | A 升 `error` 误报把用户挡住 | 先复用 v1.0 的 FP=0 证据；`off` 保留；发布说明写清回退 |
 | R-V2-4 | ADT 布局变化波及既有 golden / 语义面扩大 | B1 只改布局、单独提交并逐字节对照；B3 改 payload 生命周期前先补 ADR |
 | R-V2-5 | `box` 删除影响既有样例 | 先全仓扫描；样例与文档同批改，独立提交可回滚 |
+| R-V2-6 | 改 `lib/core` 却忘重生成 seed → 装出旧编译器 | SH-120 验收第 10 条 + gate 13；任何内置层改动同批重生成 |
 
 回滚：S1–S4 各自独立提交；`v1.1.0` 的版本/tag 单独回滚。
 
