@@ -16,7 +16,9 @@
 - 本条接管 LANG-28 里的 **B1/B2/B3/B4/B5 语言面**：它们不只为 JSON 服务，是 ADT/match
   完整能力的一部分；
 - **B7（只读视图 / 子树跨文档）** 与 **B6（`ct-gen` 外部）** 不在本条；
-- 重提条件（LANG-28 里写的“B1+B3 落地后重评”）由本条直接承担 B1/B3 的实现。
+- 重提条件（LANG-28 里写的“B1+B3 落地后重评”）由本条直接承担 B1/B3 的实现；
+- **语言能力与包解耦**：JSON 是外部 ct-pkg 包，不在本仓；本条不引用任何包类型做验收，
+  夹具一律用中性的 `Node` / `Tree` / `Result<T, E>`。包侧是否采用这些能力由包自己决定。
 
 ## 2. 现在的障碍（v1.0.0 实测）
 
@@ -39,8 +41,8 @@
 | S3 B2 | enum ADT 的固有方法、自定义下标、多级链（含字段 / 方法 / 写形态）；临时量只求值一次，不落 C 指针算术 | S2 |
 | S4 B4 + B5 | `map binding` 作为 D-020 第三查找源（编译期、import 可见、一跳、歧义硬错）；表达式 `match`（`yield` 语义）与语句形态共存 | S3 |
 
-B8（`Int(long long)` / `Double(double)` / `Result<JsonNode, JsonError>` / `_Bool` ABI）随 S1 一起定，
-但**不引入 JSON 包**。
+B8（`Int(long long)` / `Double(double)` / `Result<T, E>` / `_Bool` ABI）随 S1 一起定，
+但**不引入任何外部包**。
 
 ## 4. 验收
 
