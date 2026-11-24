@@ -90,8 +90,8 @@ CT
 if [ $? -ne 0 ]; then
     echo "FAIL p64ond: the layer-helper program did not build: $(head -2 "$tmp/strfn.err")" >&2
     fail=1
-elif [ ! -e "$tmp/strfn/Str.c" ]; then
-    echo "FAIL p64ond: str_from/str_len did not pull Str.c" >&2
+elif [ ! -e "$tmp/strfn/String.c" ]; then
+    echo "FAIL p64ond: a String use did not pull String.c" >&2
     fail=1
 elif ! "$CC" -Wall -Wextra -std=c99 "$tmp/strfn"/*.c -o "$tmp/strfn.bin" 2>"$tmp/strfn.cc"; then
     echo "FAIL p64ond: the layer-helper product did not link: $(head -3 "$tmp/strfn.cc")" >&2
@@ -120,8 +120,8 @@ CT
 if [ $? -ne 0 ]; then
     echo "FAIL p64ond: the struct-Struct program did not build: $(head -2 "$tmp/structname.err")" >&2
     fail=1
-elif [ -e "$tmp/structname/Str.c" ]; then
-    echo "FAIL p64ond: a user struct named Struct pulled Str.c" >&2
+elif [ -e "$tmp/structname/String.c" ]; then
+    echo "FAIL p64ond: a user struct named Struct pulled String.c" >&2
     fail=1
 fi
 
@@ -139,8 +139,8 @@ fi
 if [ $? -ne 0 ]; then
     echo "FAIL p64ond: the large-source program did not build: $(head -2 "$tmp/bigs.err")" >&2
     fail=1
-elif [ ! -e "$tmp/bigs/Str.c" ]; then
-    echo "FAIL p64ond: a Str mention past 262143 bytes was missed" >&2
+elif [ ! -e "$tmp/bigs/String.c" ]; then
+    echo "FAIL p64ond: a String mention past 262143 bytes was missed" >&2
     fail=1
 fi
 

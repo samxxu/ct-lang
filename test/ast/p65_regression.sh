@@ -16,7 +16,7 @@ fail=0
 mkdir -p "$tmp/proj"
 
 # 1) The four grandfathered directories resolve to allow from the repo root.
-for f in selfhost/ct-ast/main.ct lib/core/Str.h.ct test/cases/01_trait_basic.ct \
+for f in selfhost/ct-ast/main.ct lib/core/String.h.ct test/cases/01_trait_basic.ct \
          examples/37_nested_pattern/nested_pattern.ct; do
     got=$( cd "$root" && env -u CT_C_BOUNDARY "$CT" --show-c-boundary "$f" 2>"$tmp/e" )
     if [ "$got" != "allow" ]; then

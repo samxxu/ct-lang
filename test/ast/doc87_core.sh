@@ -1,7 +1,8 @@
 #!/bin/sh
 # DOC-87 Stage 2 probe: the built-in layer's source namespace `core`.
 #
-# The five lib/core units declare `namespace core;`, the canonical source
+# The lib/core units declare `namespace core;` (the UTF-16 pair under
+# `core::utf16`), the canonical source
 # spelling is `core::Vec` / `core::String` / `core::Box` / ..., and the root
 # spelling stays a compatibility alias for one MINOR. During the window the C
 # symbols stay in the root namespace, so `core::` and the bare spelling emit
@@ -22,11 +23,18 @@ ok()  { printf 'ok   %s\n' "$1"; }
 bad() { echo "FAIL doc87/core: $1" >&2; [ $# -gt 1 ] && printf '  %s\n' "$2" >&2; fail=$((fail + 1)); }
 
 # 1. Every built-in unit declares the namespace.
-for u in Vec Option Result Str Box; do
+for u in Vec Option Result Str String Box; do
     if grep -qx 'namespace core;' "lib/core/$u.h.ct"; then
         ok "$u.h.ct declares namespace core"
     else
         bad "$u.h.ct has no 'namespace core;'"
+    fi
+done
+for u in U16String U16Str; do
+    if grep -qx 'namespace core::utf16;' "lib/core/utf16/$u.h.ct"; then
+        ok "utf16/$u.h.ct declares namespace core::utf16"
+    else
+        bad "utf16/$u.h.ct has no 'namespace core::utf16;'"
     fi
 done
 
@@ -41,7 +49,10 @@ int main() {
     core::Result<int, int> r = { 1, 8, 0 };
     core::String s = "hi";
     core::Str t = s.as_str();
-    printf("%d %d %d %s %d\n", v.get(0), o.value, r.value, s.cstr(), t.len);
+    core::utf16::U16String u = U16String.from_utf8(t);
+    core::utf16::U16Str w = u.as_str();
+    printf("%d %d %d %s %d %d\n", v.get(0), o.value, r.value, s.cstr(), t.len, w.len);
+    u.release();
     return 0;
 }
 CT
@@ -52,10 +63,10 @@ elif ! cc -std=c99 "$work/core.c" -o "$work/core.bin" 2>"$work/core.cc"; then
     bad "core:: product did not build" "$(head -3 "$work/core.cc")"
 elif ! "$work/core.bin" >"$work/core.out" 2>&1; then
     bad "core:: product exited non-zero"
-elif ! grep -qx '3 4 8 hi 2' "$work/core.out"; then
+elif ! grep -qx '3 4 8 hi 2 2' "$work/core.out"; then
     bad "core:: product output drifted: $(cat "$work/core.out")"
 else
-    ok "core::Vec/Option/Result/String/Str compile and run"
+    ok "core::Vec/Option/Result/String/Str and core::utf16::U16String/U16Str compile and run"
 fi
 
 # `core::Map` and `core::Box` are the other two shapes; compile-only (the Box
@@ -78,7 +89,7 @@ fi
 
 # 3. The bare spelling still compiles (compatibility window) and emits the same
 #    C apart from the banner's input path.
-sed 's/core:://g' "$work/core.ct" > "$work/bare.ct"
+sed -e 's/core::utf16:://g' -e 's/core:://g' "$work/core.ct" > "$work/bare.ct"
 if ! ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" "$work/bare.ct" -o "$work/bare.c" ) \
         >"$work/bare.log" 2>&1; then
     bad "bare spelling stopped compiling" "$(head -3 "$work/bare.log")"
