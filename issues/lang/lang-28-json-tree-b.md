@@ -140,3 +140,9 @@ P-4 重评结论 **维持 A**（[报告](../../docs/reviews/2026-11-24-json-tree
 （B1）与 ADT glue（B3）不满足，B 限定子集仍受同一布局阻塞；不切 B、不重开 PKG-24。
 本卡按原验收“维持 A → rejected”置终态；重提条件：B1 预发射壳 + B3 ADT glue 落地后，
 复跑报告判据 1/2 全绿再开新卡。
+
+## 后续（2026-11-24）
+
+所有者裁定：**完整 ADT/`match` 是 v1.1 必做项**。B1/B2/B3/B4/B5 的语言面由
+[LANG-29](lang-29-adt-match-complete.md) 承接；本卡 `rejected` 只针对“把 JSON 树存储切到 B”，
+不改变 ADT/match 的补齐计划。
