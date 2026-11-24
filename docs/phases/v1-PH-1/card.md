@@ -31,7 +31,7 @@ version-minor: 1
 | 入口 | DOC-99 的 P-1（CI 发布构建）、P-2（PKG-21）、P-3（D-020 缺口复核） | **已完成**（2026-11-24） |
 | S2 闸 | P-4 JSON 树重评 | **已完成（维持 A）**；JSON 存储不切 B，但 B1/B3 等语言面由 [LANG-29](../../../issues/lang/lang-29-adt-match-complete.md) 在 S2b 内直接实施 |
 | S3 汇入 | P-5 与 `TEST-23` 合并推进 | 未做 |
-| 已解除 | LANG-27（容器级联）verified；SH-109（`MAX_FUNCS` 动态增长）已落地 | — |
+| 已解除 | LANG-27（容器级联）verified；SH-109（`MAX_FUNCS` 动态增长）已落地；**LANG-26 剩余三项已 verified（2026-11-24，S2a 完成）** | — |
 
 ## 2 任务
 
