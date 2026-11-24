@@ -1,0 +1,7 @@
+/* LANG-29 S4 / B4: the compile-time `map binding` registry.
+   The pair is (source type, target type); `from(x)` is the conversion's
+   binding parameter and the recipe is a single call, expanded at the use
+   site. This unit emits nothing. */
+map binding struct Node -> struct Num {
+    from(x) -> node_to_num(x);
+}

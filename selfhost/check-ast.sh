@@ -906,6 +906,17 @@ else
     bad "l29b5/match-expression" "$(cat "$work/l29b5.out" "$work/l29b5.err" | head -8)"
 fi
 
+# LANG-29 S4 (B4): a `map binding` registry is the third lookup source of the
+# D-020 binding-site conversion, between the inherent `as` and an imported
+# `map trait`. The positive fixture is 303_map_binding; the probe pins the
+# lookup order, the import/ambiguity/one-hop negatives and zero cost when
+# unused.
+if bash test/ast/l29b4_binding.sh "$work/ct-ast" >"$work/l29b4.out" 2>"$work/l29b4.err"; then
+    ok "l29b4/map-binding"
+else
+    bad "l29b4/map-binding" "$(cat "$work/l29b4.out" "$work/l29b4.err" | head -8)"
+fi
+
 # PH-84 S84d (E84-8): the ADT / `match` documentation is in the spec, the
 # tutorial and the patterns rewrite sample, and the freeze list is registered.
 if bash test/ast/p84_docs.sh >"$work/p84doc.out" 2>"$work/p84doc.err"; then

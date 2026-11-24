@@ -1,0 +1,37 @@
+/* 303 (LANG-29 S4 / B4): a `map binding` is the third lookup source of the
+   D-020 binding-site conversion, between the source type's inherent `as` and
+   an imported `map trait`. It is compile-time only: the recipe expands at the
+   use site, no wrapper / vtable / runtime registry is emitted, and a binding
+   that is imported but never used contributes no code.
+
+   The fixture drives all three binding sites the protocol converts without an
+   explicit call: declaration initialiser, assignment and `return`; the
+   explicit `.as<Num>()` spelling resolves through the same registry. */
+import shapes;
+import ops;
+
+#include <stdio.h>
+
+struct Num twice(struct Node n)
+{
+    return n;
+}
+
+int main(void)
+{
+    struct Node node = { 5 };
+
+    struct Num a = node;
+    printf("decl %d\n", a.n);
+
+    struct Num b;
+    b = node;
+    printf("assign %d\n", b.n);
+
+    printf("return %d\n", twice(node).n);
+
+    struct Num c = node.as<Num>();
+    printf("explicit %d\n", c.n);
+
+    return 0;
+}

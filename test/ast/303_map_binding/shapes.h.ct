@@ -1,0 +1,13 @@
+pub struct Node {
+    int v;
+}
+
+pub struct Num {
+    int n;
+}
+
+pub struct Num node_to_num(struct Node x)
+{
+    Num r = { x.v + 7 };
+    return r;
+}
