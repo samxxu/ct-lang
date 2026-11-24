@@ -896,6 +896,16 @@ else
     bad "l29b2/adt-methods" "$(cat "$work/l29b2.out" "$work/l29b2.err" | head -8)"
 fi
 
+# LANG-29 S4 (B5): `match` is also an expression (`yield` semantics) and
+# coexists with the statement form. The positive fixture is 302_adt_match_expr;
+# the probe pins the statement-expression lowering, single subject evaluation
+# and the three `yield` negatives (missing / twice / mismatched type).
+if bash test/ast/l29b5_match_expr.sh "$work/ct-ast" >"$work/l29b5.out" 2>"$work/l29b5.err"; then
+    ok "l29b5/match-expression"
+else
+    bad "l29b5/match-expression" "$(cat "$work/l29b5.out" "$work/l29b5.err" | head -8)"
+fi
+
 # PH-84 S84d (E84-8): the ADT / `match` documentation is in the spec, the
 # tutorial and the patterns rewrite sample, and the freeze list is registered.
 if bash test/ast/p84_docs.sh >"$work/p84doc.out" 2>"$work/p84doc.err"; then

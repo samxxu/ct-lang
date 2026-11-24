@@ -1,0 +1,84 @@
+/* 302 (LANG-29 S4 / B5): `match` is also an expression.
+ *
+ * The same ADT match now has a value: an arm is either `Pattern => expr` or
+ * `Pattern => { …; yield expr; }`, every value arm yields the same type, and
+ * the whole form is usable where a C expression is (initialiser, argument,
+ * `return`). Statement `match` is unchanged and both spellings coexist.
+ *
+ * The fixture pins the four rules that differ from the statement form:
+ *   - the subject is still evaluated exactly once (the `next_node` counter);
+ *   - `return match (n) { … };` is the documented acceptance shape;
+ *   - `yield` is the arm's normal exit and may follow ordinary statements
+ *     (`int prod = p * q; yield prod + 1;`);
+ *   - an arm whose block ends in `return` diverges and needs no `yield`.
+ */
+#include <stdio.h>
+
+enum N {
+    Leaf(int v),
+    Pair(int a, int b),
+    Nil()
+}
+
+int calls = 0;
+
+N next_node(void)
+{
+    calls = calls + 1;
+    return N.Leaf(calls);
+}
+
+int value(N n)
+{
+    return match (n) {
+        N.Leaf(v) => v,
+        N.Pair(a, b) => a + b,
+        N.Nil() => 0,
+    };
+}
+
+int guarded(N n)
+{
+    return match (n) {
+        N.Leaf(v) => v * 10,
+        N.Pair(a, b) => a + b,
+        N.Nil() => { return -1; },
+    };
+}
+
+int classic(N n)
+{
+    match (n) {
+        N.Leaf(v) => { return v; }
+        N.Pair(a, b) => { return a + b; }
+        N.Nil() => { return 0; }
+    }
+    return -2;
+}
+
+int main(void)
+{
+    N a = N.Leaf(7);
+    N b = N.Pair(3, 4);
+    N c = N.Nil();
+
+    printf("%d %d %d\n", value(a), value(b), value(c));
+    printf("%d %d %d\n", guarded(a), guarded(b), guarded(c));
+    printf("%d\n", classic(b));
+
+    int t = match (b) {
+        N.Pair(p, q) => {
+            int prod = p * q;
+            yield prod + 1;
+        }
+        N.Leaf(v) => v,
+        N.Nil() => 0,
+    };
+    printf("%d\n", t);
+
+    printf("%d\n", match (a) { N.Leaf(v) => v * 2, N.Pair(x, y) => x + y, N.Nil() => -1 });
+    printf("%d\n", calls);
+    printf("%d\n", value(next_node()));
+    printf("%d\n", calls);
+    return 0;
+}

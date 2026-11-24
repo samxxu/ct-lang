@@ -1,0 +1,20 @@
+#include <stdio.h>
+
+enum M {
+    A(int v),
+    B()
+}
+
+int f(M m)
+{
+    int r = match (m) {
+        M.A(v) => { v; }
+        M.B() => 0,
+    };
+    return r;
+}
+
+int main(void)
+{
+    return f(M.A(1));
+}
