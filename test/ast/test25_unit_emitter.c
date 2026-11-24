@@ -1,9 +1,10 @@
 /*
  * TEST-25: white-box unit tests for the Emitter slice functions.
  *
- * `em_expr_num` is one of the PH-88 per-kind emitter slices; `map_clean_type`
- * and `map_recipe_callee` are the pure string helpers the static-map path
- * uses. All three are `static` in the emitted `Emitter.c`, so this file
+ * `em_expr_num` is one of the PH-88 per-kind emitter slices; `backend_emit_map_clean_type`
+ * and `backend_emit_map_recipe_callee` are the pure string helpers the static-map
+ * path uses (SH-94 S1 moved them to EmitterMapText); `em_expr_num` is still
+ * `static` in the emitted `Emitter.c`, so this file
  * includes that translation unit (the L0 test/unit recipe). The harness only
  * touches the two fields each helper reads (`arena`, `out`), never the build
  * driver.
@@ -64,19 +65,19 @@ int main(void)
     }
 
     /* ---- map_clean_type: drop the array dimensions and trailing blanks ---- */
-    map_clean_type("char a[32]", out);
+    backend_emit_map_clean_type("char a[32]", out);
     eq_str("map_clean_type array", out, "char a");
-    map_clean_type("int  [3]", out);
+    backend_emit_map_clean_type("int  [3]", out);
     eq_str("map_clean_type trailing blanks", out, "int");
-    map_clean_type("struct Point", out);
+    backend_emit_map_clean_type("struct Point", out);
     eq_str("map_clean_type plain", out, "struct Point");
 
     /* ---- map_recipe_callee: the leading identifier of a recipe ---- */
-    map_recipe_callee("  atoi(s)", out);
+    backend_emit_map_recipe_callee("  atoi(s)", out);
     eq_str("map_recipe_callee leading space", out, "atoi");
-    map_recipe_callee("snprintf(dst, n)", out);
+    backend_emit_map_recipe_callee("snprintf(dst, n)", out);
     eq_str("map_recipe_callee underscores", out, "snprintf");
-    map_recipe_callee("(nan)", out);
+    backend_emit_map_recipe_callee("(nan)", out);
     eq_str("map_recipe_callee non-identifier", out, "");
 
     fclose(em.out);

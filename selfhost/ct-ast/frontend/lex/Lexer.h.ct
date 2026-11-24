@@ -18,7 +18,6 @@
 #include <assert.h>
 #include <string.h>
 
-/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
 #define T_EOF    0
 #define T_ID     1
