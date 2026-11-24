@@ -5,7 +5,7 @@ version-minor: 1
 
 # v1-PH-1 — v1.1：M1 切分、语言面收口与 A 默认强制
 
-> **状态：规划中**（2026-11-24 开卡；入口 P-1/P-2/P-3 已完成；施工未开工）。
+> **状态：完成（v1.1.0，2026-11-24）**。S0 前置、S1 切分、S2 语言面、S3 检查器、S3b 测试、S4 收口均已落地。
 > **入口闸**：[DOC-99](../../../issues/docs/doc-99-v11-prework-tracker.md)——P-4 是 S2 的闸，P-5 并入 S3。
 > **前置**：`v1-PH-0` 收口（`v1.0.0`）；LANG-27 verified；SH-109 动态增长已落地。
 > **编号**：`v1-PH-1`，`version-minor = 1` ↔ `v1.1.0`。
@@ -44,7 +44,7 @@ version-minor: 1
 | S2b ADT/match 完整化（LANG-29） | B1 预发射实例壳 → B3 ADT glue/retain → B2 ADT 方法/下标/多级链 → B4 `map binding` + B5 表达式 `match` | 递归 ADT 生成 C 可编译；`doc["user"]["age"]` 读写；表达式 `match` + `yield` 负例；payload ASan 零；`check-all` 绿 | L |
 | S3 A 默认 `error` | CLI `--check-level` 默认由 `warn` 升 `error`；`off` 保留逃生 | 全量 FP=0 证据沿用 `p118`；`--check-level=off` 生成物逐字节不变；回退只需一次提交 | M |
 | S3b TEST-23 | 行覆盖、`ct-ast` 单测、容量上限与近相 example | 覆盖报告与单测入库；`test/**` 分批提交；不改产物 | L |
-| S4 删 `box` 别名 + 收口 | `box<T>` 硬错并提示 `Box<T>`；语言面分档更新；`v1.1.0` 版本、tag、dist | `check-all` 13 门绿；`stable-subset` 把 `String`/`Str`/切片/`ref-out`/ADT/`Box` 转“已冻结”；tag 与 dist 与 v1.0 同流程 | M |
+| S4 删 `box` 别名 + 收口 | `box<T>` 硬错并提示 `Box<T>`；语言面分档更新；`v1.1.0` 版本、tag、dist | `check-all` 9 门绿；`stable-subset` 把 `String`/`Str`/切片/`ref-out`/ADT/`Box` 转“已冻结”；tag 与 dist 与 v1.0 同流程 | M |
 
 每项先提 `test(<scope>): <task-id> 红`（含 `baseline: <sha>`）；S1 的纯搬移与 S4 的纯文档部分可写
 `no-test: <理由>` 并由 REVIEW 签字。
@@ -85,3 +85,21 @@ version-minor: 1
 - [D-017](../../decisions/D-017.md)（M1 切分判据）、[D-021](../../decisions/D-021.md)（JSON 树 B）
 - [LANG-26](../../../issues/lang/lang-26-binding-site-conversion.md)、[LANG-29](../../../issues/lang/lang-29-adt-match-complete.md)（ADT/match 完整化）、[LANG-24](../../../issues/lang/lang-24-box-pascalcase-rename.md)、[TEST-23](../../../issues/testing/test-23-v077-coverage-gaps.md)
 - [SH-94](../../../issues/selfhost/sh94-giant-units-duplicate-constants.md)、[SH-119](../../../issues/selfhost/sh119-delete-l0-l2.md)（删 L0–L2，独立卡）
+
+
+## 6 收口证据（2026-11-24，v1.1.0）
+
+| 判据 | 结果 |
+| --- | --- |
+| E-V2-1 M1 | `sh94_split` 1046 函数体哈希多重集不变；31 纯函数 + 23 方法搬移；生成物逐字节；9 门绿 |
+| E-V2-2 SH-94 | `Limits.h.ct` 49 上限单源 + 22 镜像 + 漂移 selftest；Expr/Emitter/Stmt 已 Core 化并拆出 5 子单元；剩余宿主行数 9526/10740/5307，扩展形状见 `docs/design/sh94-m1-core-layout.md` |
+| E-V2-3 LANG-26 | `out` 写回 + `CT_BINDING_CONVERSION=0` + `decode` 边界，`lang26_conv` 18/0 |
+| E-V2-4 LANG-29 | B1/B3/B2/B5/B4 全落；l29b1 13/0、l29b2 16/0、l29b3 14/0、l29b5 13/0、l29b4 13/0 |
+| E-V2-5 A 默认 | 默认 `error`；`off` 全语料逐字节；p115 23/0、p85a 11/0 |
+| E-V2-6 TEST-23 | 覆盖率/单测/io_names/近相 example 入库 |
+| E-V2-7 box | `box<T>` 硬错；`Box<T>` 通过；p81 10/0 |
+| E-V2-8 stable-subset | 六项 `冻结中 → 已冻结`（v1.1.0 起） |
+| E-V2-9 版本 | `CTC_VERSION 1.1.0`、tag `v1.1.0`、9 门、seed 两轮、release workflow |
+| E-V2-10 前置 | SH-119/SH-120 verified；seed 39 `.c` + 38 `.h` 重生成 |
+
+`check-all: OK (9 hard gates green)`；`check-docs` v1.1.0；`check-sanitizers` 613；`g1/g8` 绿。

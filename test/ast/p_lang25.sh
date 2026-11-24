@@ -272,7 +272,6 @@ expect_warn_text mem-001 W-MEM-001 "$ctast" --diag-codes "$work/leak.ct" -o "$wo
 expect_warn_text mem-002 W-MEM-002 "$ctast" --diag-codes "$work/leakpath.ct" -o "$work/x.c"
 expect_warn_text mem-004 W-MEM-004 "$ctast" --diag-codes "$work/slice.ct" -o "$work/x.c"
 expect_warn_text mem-006 W-MEM-006 "$ctast" --diag-codes test/ast/p106_str_escape/ret_local.ct -o "$work/x.c"
-expect_warn_text lang-001 W-LANG-001 "$ctast" --diag-codes test/ast/p81_box/alias.ct -o "$work/x.c"
 expect_warn_text mem-003 W-MEM-003 "$ctast" --diag-codes "$work/borrow.ct" -o "$work/x.c"
 mkdir -p "$work/shadow/vendor"
 : >"$work/shadow/vendor/std"

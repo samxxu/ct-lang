@@ -89,7 +89,7 @@ expect_err iface "E79-5: slice as an interface value is a hard error" \
 cat >"$work/box.ct" <<'EOF'
 int main(void)
 {
-    box<int[]> b;
+    Box<int[]> b;
     return 0;
 }
 EOF

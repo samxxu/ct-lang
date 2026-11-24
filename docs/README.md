@@ -2,7 +2,7 @@
 
 > 中文
 >
-> **当前版本 v1.0.0。** 全部 phase 卡集中在 [phases/](phases/)，一卡一目录（`docs/phases/v<M>-PH-<n>/card.md`，PN-1）；`design/` 只保留计划、评审与映射等辅助记录，`history/design/` 为历史快照；评审报告
+> **当前版本 v1.1.0。** 全部 phase 卡集中在 [phases/](phases/)，一卡一目录（`docs/phases/v<M>-PH-<n>/card.md`，PN-1）；`design/` 只保留计划、评审与映射等辅助记录，`history/design/` 为历史快照；评审报告
 > 与其余历史记录在 [history/](history/README.md)。仓库入口见 [../README.md](../README.md)，改动
 > 规约见 [../AGENTS.md](../AGENTS.md)。
 >

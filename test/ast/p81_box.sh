@@ -14,7 +14,7 @@
 #     the refs the compiler leaves behind) and no cycle detection is claimed;
 #   - E81-6: the same generated code passes ASan/UBSan warning-free, and the
 #     five CTC_VERSION sites / README / spec 4.71 / tutorial 17 / package-guide
-#     / roadmap / D-016 agree with v1.0.0.
+#     / roadmap / D-016 agree with v1.1.0.
 #
 # `new` is contextual: `int new;`, `r.new`, a parameter named `new` and
 # `new = ...` stay identifiers (ctx.ct); the construction form is refused in a
@@ -79,22 +79,16 @@ run_case vecbox
 run_case boxstr
 run_case cycle
 run_case ctx
-run_case alias
 run_case ident
 
-# LANG-24 Stage A: `box<T>` is the deprecated alias. Each use prints exactly one
-# warning; the canonical `Box<T>` spelling is silent. The generated symbols stay
-# `Box_*`, so the alias is a parse-level only spelling (v1.1 removes it).
-if "$ctast" --allow-c-boundary test/ast/p81_box/alias.ct -o "$work/alias.warn.c" \
-        >"$work/alias.warn.log" 2>&1; then
-    nwarn=$(grep -cF "warning: 'box<T>' is deprecated; write 'Box<T>'" "$work/alias.warn.log")
-    if [ "$nwarn" -eq 5 ]; then
-        ok "box<T> alias warns once per use (5 alias tokens -> 5 warnings)"
-    else
-        bad "box<T> alias warning count" "expected 5, got $nwarn: $(head -4 "$work/alias.warn.log")"
-    fi
+# LANG-24 Stage B (v1.1 S4): `box<T>` is a hard error; write `Box<T>`.
+if "$ctast" --allow-c-boundary test/ast/p81_box/alias.ct -o "$work/alias.err.c" \
+        >"$work/alias.err.log" 2>&1; then
+    bad "box<T> alias" "expected a non-zero exit"
+elif ! grep -Fq "'box<T>' is no longer supported; write 'Box<T>'" "$work/alias.err.log"; then
+    bad "box<T> alias message" "$(head -4 "$work/alias.err.log")"
 else
-    bad "box<T> alias compile" "$(head -4 "$work/alias.warn.log")"
+    ok "box<T> alias is a hard error with the Box<T> hint"
 fi
 if "$ctast" --allow-c-boundary test/ast/p81_box/record.ct -o "$work/record.nowarn.c" \
         >"$work/record.nowarn.log" 2>&1; then
@@ -177,14 +171,14 @@ neg neg_new_static "cannot initialize a static object" "new in a static local"
 
 # E81-6: the written contract and the version落点 stay in step.
 for f in selfhost/ct-ast/main.ct; do
-    if grep -q '#define CTC_VERSION "1.0.0"' "$f"; then
-        ok "$f CTC_VERSION 1.0.0"
+    if grep -q '#define CTC_VERSION "1.1.0"' "$f"; then
+        ok "$f CTC_VERSION 1.1.0"
     else
-        bad "$f CTC_VERSION is not 1.0.0"
+        bad "$f CTC_VERSION is not 1.1.0"
     fi
 done
-if grep -q 'v1\.0\.0' README.md && grep -q 'v1\.0\.0' docs/README.md; then
-    ok "README / docs/README carry v1.0.0"
+if grep -q 'v1\.1\.0' README.md && grep -q 'v1\.1\.0' docs/README.md; then
+    ok "README / docs/README carry v1.1.0"
 else
     bad "README version"
 fi

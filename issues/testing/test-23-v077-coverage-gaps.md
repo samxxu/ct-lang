@@ -152,3 +152,10 @@ $ sh test/run.sh
 已交付：4 个近相 example（54–57）、io_names 边界、覆盖率报告、runner 计数回填。
 剩余第 5–8 项（sanitizer/fuzz 进硬门禁、`49_socket` 的 std API、ICCARM 工具链矩阵）需外部工具链/
 std 包，触发：v1.1 工具链矩阵立项；当前不阻塞 v1.0。
+
+
+## 复核（REV，2026-11-24）
+
+缺口 1–4、9、10 已交付：`test/coverage/run.sh`（722 夹具/68.98%）、`test25_unit.sh` 33 断言、
+io_names 1024/1025、54–57 近相 example、计数回填。缺口 7–8（socket 文档样例、ICCARM 工具链矩阵）
+仍属外部工具链，记录为后续 v1.x 外部项，不阻塞本卡验收。

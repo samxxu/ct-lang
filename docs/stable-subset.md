@@ -35,11 +35,11 @@
 | 内建容器与结果类型 API（`Vec` / `Map` / `Option` / `Result` 的公开方法名与语义） | 已冻结 | 同上 | v1.0.0 起 | spec §4.13–§4.30、§4.31 |
 | `foreach` 语义（数组/Vec 绑定只读 `i`；`Map` 只给 `item.key` / `item.value`） | 已冻结 | 同上 | v1.0.0 起 | spec §4.49、§4.70 |
 | 命名契约 §5.1（类型 PascalCase、函数 snake_case；保留名清单封闭） | 已冻结 | 同上；保留名清单只能经 ADR 追加 | v1.0.0 起 | spec §5.1 |
-| `String` / `Str` 的布局、存放位置与释放分层 | 冻结中 | REQ + ADR 或 battle；破坏性改动 MINOR + 一个 MINOR 回退 | v1.1 冻结 | spec §4.70；[LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
-| 切片 `T[]` 的拼写、位置白名单与边界行为 | 冻结中 | 同上 | v1.1 冻结 | spec §4.69；[SH-108](../issues/selfhost/sh108-p87-dogfood-t-a-fp.md) |
-| `ref` / `out` 参数语义与 `out` 定值分析 | 冻结中 | 同上；逃逸契约已写入 spec §4.68（J-4b） | v1.1 冻结 | spec §4.68；D-011 J-4b |
-| ADT 与 `match` 的形态与上限（64 ADT / 16 变体 / 8 负载；无泛型 ADT、无 or 模式） | 冻结中 | 同上 | v1.1 冻结 | spec §4.73 |
-| `box<T>` / `new` 的语义与规范拼写 | 冻结中 | REQ + ADR 或 battle；`box` 别名的删除按 LANG-24 | v1.0 定 `Box<T>`；v1.1 删 `box` | [D-016](decisions/D-016.md)；LANG-24 |
+| `String` / `Str` 的布局、存放位置与释放分层 | 已冻结 | REQ + ADR 或 battle；破坏性改动 MINOR + 一个 MINOR 回退 | v1.1.0 起 | spec §4.70；[LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
+| 切片 `T[]` 的拼写、位置白名单与边界行为 | 已冻结 | 同上 | v1.1.0 起 | spec §4.69；[SH-108](../issues/selfhost/sh108-p87-dogfood-t-a-fp.md) |
+| `ref` / `out` 参数语义与 `out` 定值分析 | 已冻结 | 同上；逃逸契约已写入 spec §4.68（J-4b） | v1.1.0 起 | spec §4.68；D-011 J-4b |
+| ADT 与 `match` 的形态与上限（64 ADT / 16 变体 / 8 负载；无泛型 ADT、无 or 模式） | 已冻结 | 同上 | v1.1.0 起 | spec §4.73 |
+| `Box<T>` / `new` 的语义与规范拼写 | 已冻结 | REQ + ADR；`box<T>` 别名已于 v1.1.0 删除（硬错） | v1.1.0 起 | [D-016](decisions/D-016.md)；LANG-24 |
 | `MAX_FUNCS` 动态增长（初始 512、翻倍、65536 安全阀） | 冻结中 | REQ + ADR；只允许扩大安全阀，不收紧 | **当前 pre 窗口（v1.1 前；2026-11-23 提前）** | [提案](proposals/ct-max-funcs-growth.md)；[SH-109](../issues/selfhost/sh109-max-funcs-capacity.md) |
 | `lib/core` 目录与 `namespace core` 布局 | 冻结中 | REQ + ADR；根拼写兼容一个 MINOR | **v1.0 前（当前 pre 窗口；Stage 1+2）** | [DOC-87](../issues/docs/doc-87-lib-core-rename.md) |
 | 泄漏策略 `leaks = warn 或 error` 与 `c-boundary = allow 或 strict` 的键名 | 冻结中 | REQ + ADR | v1.1 冻结 | D-012；spec §4.70 |

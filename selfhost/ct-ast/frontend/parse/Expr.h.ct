@@ -2461,15 +2461,8 @@ impl ExprOps for Expr {
                                 snprintf(bare, sizeof bare, "%s", qn + 5);
                                 /* LANG-24 Stage A: `core::box<T>` is the same
                                    deprecated alias as the root spelling. */
-                                if (strcmp(bare, "box") == 0) {
-                                    if (tool::diag::ct_deprecated_warn(
-                                            self->lex->tokline,
-                                            self->lex->tokstart - self->lex->lstart + 1,
-                                            "'box<T>' is deprecated; write 'Box<T>'",
-                                            self->sup->mem->path) != 0)
-                                        return self->sup->fail("too many warnings");
-                                    snprintf(bare, sizeof bare, "%s", "Box");
-                                }
+                                if (strcmp(bare, "box") == 0)
+                                    return self->sup->fail("'box<T>' is no longer supported; write 'Box<T>'");
                                 if (frontend::sym::ct_tmpl_find(bare) >= 0) {
                                     snprintf(g_expr_inst_override,
                                              sizeof g_expr_inst_override, "%s", bare);
@@ -2838,14 +2831,10 @@ impl ExprOps for Expr {
         char canon[MAX_TEXT];
         char abuf[MAX_TEXT];
         struct StructTmpl *tp;
-        int n, ti2, tn, nargs, nt2, pline, pcol, aline, acol;
+        int n, ti2, tn, nargs, nt2, pline, pcol;
 
         n = (int)strlen(out);
-        /* LANG-24 Stage A: `box<T>` is the deprecated alias for `Box<T>`.
-           It maps to the Box template before encoding, so every generated
-           symbol is `Box_*`; each alias use records one warning. */
-        aline = self->lex->tokline;
-        acol = self->lex->tokstart - self->lex->lstart + 1;
+        /* LANG-24 Stage B: `box<T>` is a hard error; write `Box<T>`. */
         if (g_expr_inst_override[0]) {
             snprintf(tname, sizeof tname, "%s", g_expr_inst_override);
             g_expr_inst_override[0] = 0;
@@ -2853,13 +2842,8 @@ impl ExprOps for Expr {
             self->lex->tok_copy(tname, sizeof tname);
             self->sup->lex_next();
         }
-        if (strcmp(tname, "box") == 0) {
-            if (tool::diag::ct_deprecated_warn(aline, acol,
-                    "'box<T>' is deprecated; write 'Box<T>'",
-                    self->sup->mem->path) != 0)
-                return self->sup->fail("too many warnings");
-            snprintf(tname, sizeof tname, "%s", "Box");
-        }
+        if (strcmp(tname, "box") == 0)
+            return self->sup->fail("'box<T>' is no longer supported; write 'Box<T>'");
         ti2 = frontend::sym::ct_tmpl_find(tname);
         tp = frontend::sym::ct_tmpls(&tn);
         if (!tp || ti2 < 0) return self->sup->fail("internal: template row vanished");

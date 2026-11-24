@@ -152,60 +152,31 @@ if compile_case box_compile 7; then
     fi
 fi
 
-# ---- 3/4. deprecated box<T> alias ----------------------------------------
+# ---- 3/4. box<T> is a hard error (LANG-24 Stage B, v1.1) ----------------
 new_case alias_build
 cat >"$work/alias_build/main.ct" <<'CT'
-#include <stdio.h>
-
 struct P { int x; }
-
-int main(void)
-{
-    box<P> b = new P { 6 };
-    int y = b.at()->x;
-    b.release();
-    printf("%d\n", y);
-    return 0;
-}
+int main(void) { box<P> b = new P { 6 }; return b.at()->x; }
 CT
-if build_case alias_build 6; then
-    dir=$work/alias_build
-    nwarn=$(grep -cF "'box<T>' is deprecated; write 'Box<T>'" "$dir/build.log")
-    if [ "$nwarn" -ne 1 ]; then
-        bad "alias_build: deprecated warning count $nwarn, expected 1" \
-            "$(head -3 "$dir/build.log")"
-    elif [ ! -f "$dir/.ctbuild/Box.c" ] || [ ! -f "$dir/.ctbuild/Box.h" ]; then
-        bad "alias_build: the alias did not emit the Box unit" \
-            "$(ls "$dir/.ctbuild" 2>/dev/null | tr '\n' ' ')"
-    else
-        ok "alias_build: box<T> emits Box.c/Box.h and warns once"
-    fi
+if ( cd "$work/alias_build" && "$ctast" build -o prog main.ct ) >"$work/alias_build/build.log" 2>&1; then
+    bad "alias_build" "box<T> was accepted"
+elif grep -Fq "'box<T>' is no longer supported; write 'Box<T>'" "$work/alias_build/build.log"; then
+    ok "alias_build: box<T> is a hard error with the Box<T> hint"
+else
+    bad "alias_build" "$(head -3 "$work/alias_build/build.log")"
 fi
 
 new_case alias_compile
 cat >"$work/alias_compile/main.ct" <<'CT'
-#include <stdio.h>
-
 struct P { int x; }
-
-int main(void)
-{
-    box<P> b = new P { 6 };
-    int y = b.at()->x;
-    b.release();
-    printf("%d\n", y);
-    return 0;
-}
+int main(void) { box<P> b = new P { 6 }; return b.at()->x; }
 CT
-if compile_case alias_compile 6; then
-    nwarn=$(grep -cF "'box<T>' is deprecated; write 'Box<T>'" "$work/alias_compile/compile.log")
-    if [ "$nwarn" -ne 1 ]; then
-        bad "alias_compile: deprecated warning count $nwarn, expected 1"
-    elif ! grep -Fq 'struct ct_Box_hdr {' "$work/alias_compile/main.c"; then
-        bad "alias_compile: the one TU lost the header definition"
-    else
-        ok "alias_compile: box<T> stays a parse-level alias"
-    fi
+if "$ctast" "$work/alias_compile/main.ct" -o "$work/alias_compile/main.c" >"$work/alias_compile/compile.log" 2>&1; then
+    bad "alias_compile" "box<T> was accepted"
+elif grep -Fq "'box<T>' is no longer supported; write 'Box<T>'" "$work/alias_compile/compile.log"; then
+    ok "alias_compile: box<T> is a hard error with the Box<T> hint"
+else
+    bad "alias_compile" "$(head -3 "$work/alias_compile/compile.log")"
 fi
 
 # ---- 5/6. a user-owned struct Box keeps the built-in layer out (LANG-24) --
