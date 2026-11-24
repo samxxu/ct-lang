@@ -36,6 +36,9 @@ SKELETON_OK = [
     re.compile(r"^\s*$"),
     re.compile(r"^\s*import\s+[A-Za-z0-9_:]+\s*(?:as\s+\w+)?\s*;\s*$"),
     re.compile(r"^\s*pub\s+[A-Za-z_].*;\s*$"),   # exported prototype
+    re.compile(r"^\s*pub\s+[A-Za-z_].*,\s*$"),   # prototype first line
+    re.compile(r"^\s+[A-Za-z_][^;]*;\s*$"),       # prototype continuation
+    re.compile(r"^\s*(?:static|pub)\s+[A-Za-z_].*;\s*$"),
     re.compile(r"^\s*#\s*(include|define)\b"),
     re.compile(r"^\s*namespace\s+[A-Za-z_:]+\s*;\s*$"),
     re.compile(r"^\s*pub\s+struct\s+\w+\s*\{?\s*$"),
@@ -147,6 +150,8 @@ def main(argv):
             if line.startswith("+") and any(p.match(line[1:]) for p in SKELETON_OK):
                 continue
             if line.startswith("-") and line[1:].strip() == "":
+                continue
+            if line.startswith("-") and re.match(r"^\s*static\s+[A-Za-z_].*;\s*$", line[1:]):
                 continue
             if line.startswith("+") and line[1:].strip() == "":
                 continue

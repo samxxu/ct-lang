@@ -1,0 +1,176 @@
+/*
+ * EmitterQuery.h.ct - pure queries over the symbol tables, the arena and the impl rows moved out of Emitter.h.ct
+ * (SH-94 S1, pure move).
+ *
+ * Bodies are byte-identical to the ones Emitter.h.ct used to hold; the
+ * declaration line only loses `static` and gains a `pub` prototype, and the
+ * call sites stay unchanged (same namespace, host imports this unit).
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <string.h>
+
+import frontend::module::MapTable::MapBind as MapBind;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructImpl as StructImpl;
+import runtime::arena::Arena;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_TEXT 160
+#define N_IMPL 33
+#define N_VAR 10
+#define N_ARROW 25
+#define MAX_LAYOUT_INSTS 128
+
+namespace backend::emit;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct EmitterQuery {
+    int unused;
+}
+
+pub int sb_life_needs_handle_guard(const char *prefix);
+pub int impl_writes(struct Arena *arena, int node, const char *name);
+pub int impl_exists_anywhere(struct Arena *arena, int si, const char *tname);
+pub int default_missing_field(struct Arena *arena, int n, struct Symbols *sym,
+                                 int si, char *out);
+pub int map_param_index(struct MapBind *b, const char *name);
+pub void trait_qual_name(struct Symbols *sym, int ti, char *out, int cap);
+pub int inst_is_builtin_Box(const char *name);
+pub int emit_impl_score(struct StructImpl *im, int ki);
+pub int type_needs_layout(const char *type, const char *name);
+pub int type_inst_index(const char *type);
+pub int materializable_ctype(const char *t);
+
+pub int sb_life_needs_handle_guard(const char *prefix)
+{
+    return (strncmp(prefix, "Vec_", 4) == 0 || strncmp(prefix, "Map_", 4) == 0);
+}
+
+pub int impl_writes(struct Arena *arena, int node, const char *name)
+{
+    int m;
+    for (m = arena->nodes[node].a; m >= 0; m = arena->nodes[m].next)
+        if (strcmp(arena->nodes[m].text2, name) == 0) return 1;
+    return 0;
+}
+
+pub int impl_exists_anywhere(struct Arena *arena, int si, const char *tname)
+{
+    int n;
+    for (n = 0; n < arena->nnode; n++)
+        if (arena->nodes[n].kind == N_IMPL && arena->nodes[n].aux == si
+            && strcmp(arena->nodes[n].text2, tname) == 0) return 1;
+    return 0;
+}
+
+pub int default_missing_field(struct Arena *arena, int n, struct Symbols *sym,
+                                 int si, char *out)
+{
+    for (; n >= 0; n = arena->nodes[n].next) {
+        if (arena->nodes[n].kind == N_ARROW && arena->nodes[n].a >= 0) {
+            int r = arena->nodes[n].a;
+            if (arena->nodes[r].kind == N_VAR && strcmp(arena->nodes[r].text2, "self") == 0) {
+                int fi, found = 0;
+                for (fi = 0; fi < sym->structs[si].nfields; fi++)
+                    if (strcmp(sym->structs[si].fields[fi].name, arena->nodes[n].text2) == 0) found = 1;
+                if (!found) {
+                    snprintf(out, MAX_TEXT, "%s", arena->nodes[n].text2);
+                    return 1;
+                }
+            }
+        }
+        if (default_missing_field(arena, arena->nodes[n].a, sym, si, out)) return 1;
+        if (default_missing_field(arena, arena->nodes[n].b, sym, si, out)) return 1;
+        if (default_missing_field(arena, arena->nodes[n].c, sym, si, out)) return 1;
+        if (default_missing_field(arena, arena->nodes[n].d, sym, si, out)) return 1;
+    }
+    return 0;
+}
+
+pub int map_param_index(struct MapBind *b, const char *name)
+{
+    int i;
+    for (i = 0; i < b->nparams; i++)
+        if (strcmp(b->params[i], name) == 0) return i;
+    return -1;
+}
+
+pub void trait_qual_name(struct Symbols *sym, int ti, char *out, int cap)
+{
+    snprintf(out, (size_t)cap, "%s", sym->traits[ti].name);
+}
+
+pub int inst_is_builtin_Box(const char *name)
+{
+    int inst, ti, tn;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+    const char *b = name;
+
+    if (!b || !b[0]) return 0;
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    inst = frontend::sym::ct_inst_find(b);
+    if (inst < 0) return 0;
+    ins = frontend::sym::ct_insts(&tn);
+    if (!ins) return 0;
+    ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+    tps = frontend::sym::ct_tmpls(&tn);
+    if (ti < 0 || !tps) return 0;
+    return strstr(tps[ti].path, "lib/core/Box.h.ct") != 0
+        || strstr(tps[ti].path, "lib/std/Box.h.ct") != 0;
+}
+
+pub int emit_impl_score(struct StructImpl *im, int ki)
+{
+    int i, s, tp;
+    s = 0;
+    for (i = 0; i < im[ki].nargs; i++) {
+        tp = 0;
+        if (im[ki].ntparams > 0 && strcmp(im[ki].pat[i], im[ki].tparam[0]) == 0) tp = 1;
+        if (im[ki].ntparams > 1 && strcmp(im[ki].pat[i], im[ki].tparam[1]) == 0) tp = 1;
+        if (!tp) s++;
+    }
+    return s;
+}
+
+pub int type_needs_layout(const char *type, const char *name)
+{
+    char pat[MAX_TEXT];
+    const char *p, *q;
+    size_t n;
+
+    if (!type || !type[0] || !name || !name[0]) return 0;
+    if (strchr(type, '*') || strchr(type, '(')) return 0;
+    snprintf(pat, sizeof pat, "struct %s", name);
+    n = strlen(pat);
+    for (p = strstr(type, pat); p; p = strstr(p + 1, pat)) {
+        if (p != type && p[-1] != ' ' && p[-1] != '(') continue;
+        q = p + n;
+        if (*q != 0 && *q != ' ' && *q != '[' && *q != ',') continue;
+        return 1;
+    }
+    return 0;
+}
+
+pub int type_inst_index(const char *type)
+{
+    int i, n;
+    struct StructInst *ins;
+
+    ins = frontend::sym::ct_insts(&n);
+    if (!ins) return -1;
+    for (i = 0; i < n && i < MAX_LAYOUT_INSTS; i++)
+        if (type_needs_layout(type, ins[i].name)) return i;
+    return -1;
+}
+
+pub int materializable_ctype(const char *t)
+{
+    if (!t || !t[0]) return 0;
+    if (strchr(t, '[') || strstr(t, "(*")) return 0;
+    return 1;
+}
