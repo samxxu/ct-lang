@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10701 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=11019 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=55045 io_cap=1024
+     emitted_before=48223 emitted_after=55384 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -43,6 +43,11 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   54712 → 54792（+80：内建层拆分后的四个字符串单元、单元归属与前置声明）。上面 PH-88
   的历史数字保持不变；本文件头部的 `emitter_after` / `emitted_after` 是 p88_metrics 的
   live pin，随每次 emitter 变更同步。
+- **LANG-29 S2/B3（v1-PH-1 S2b）后的 live 校准**：`Emitter.h.ct` 10701 → 11003 行
+  （+318：ADT payload 的 owning 判定、`sb` 作用域/参数/返回的通用 retain-release、
+  按 variant 发射的 `T_retain`/`T_release` 与构造/绑定插入点），发射 C 55045 →
+  55384（+339：同一代码的生成物，外加内建层调用点不变）。切片清单仍为 76，
+  判别式仍各读 1 次；本次没有新增 kind 分支。
 - **LANG-29 S1/B1（v1-PH-1 S2b）后的 live 校准**：`Emitter.h.ct` 10446 → 10701 行
   （+255：ADT payload 布局闭合校验、按拓扑序防环/深度上限的实例壳预发射，及其
   单测注释），发射 C 54792 → 55045（+253：同一代码的生成物）。切片清单仍为 76，

@@ -240,8 +240,9 @@ int area(Shape s)
 - **上限**：每个 build 最多 64 个 ADT，每个 ADT 最多 16 个变体、每变体最多 8 个负载；
   无泛型 ADT、无 or/守卫/嵌套/结构体模式、无表达式形式 `match`。
 
-**最重要的一条：ADT 不生成 drop glue。** 负载里如果是 `String` / `Box<T>` / `Vec<T>`，
-编译器不会在 ADT 离开作用域时替你释放。实测还更进一步：
+**重要的一条：ADT 的 owning payload 有 retain/release。** 负载里如果是 `String` /
+`Box<T>` / `Vec<T>`，编译器在构造、拷贝、按值实参和 `match` 绑定时 retain，作用域出口
+release 一次；显式 `release()` 后再离开作用域也是安全的（句柄已清零，二次 release 是 no-op）：
 
 ```ct
 enum Msg { Text(String body), Ping() }
@@ -373,7 +374,7 @@ Ct 的护栏水位是「比 C 严格得多，比 Rust 松」。以下残余**存
 | 引用环（A 持 B、B 持 A） | 静默泄漏，无告警 | 文档契约「环=作者责任」；直接环有 lint；`--debug-leaks` **当前未实现**，将来也只报未配对计数 |
 | `Str` 视图活到 owner 死后（返回局部视图、临时接收者、经函数转手） | 悬垂读，UB | 前两种直接形态有 **warning**（v0.88.2 起，`borrowed 'Str' view escapes`；`ct check` 升 error，见 [SH-106](../issues/selfhost/sh106-str-view-escape-no-lint.md)）；经函数转手仍靠契约 + ASan；`T[]` 切片有 `slice escape` warning |
 | 句柄跨线程共享 | 数据竞争（refcount 非原子） | 契约「句柄非 atomic」+ TSan（nightly/Linux 独立门禁）；需要时用 atomic 自己同步 |
-| ADT 的 owning payload（`String` / `Box` / `Vec`） | 不自动释放 → 泄漏；释放绑定后原句柄悬垂 | ADT 无 drop glue，作者显式释放**一次**；把 ADT 当 move 语义 |
+| ADT 的 owning payload（`String` / `Box` / `Vec` / 嵌套 ADT） | 构造/拷贝/绑定漏 retain 会悬垂或双释放 | 编译器生成 `T_retain`/`T_release` 浅共享；作用域出口释放一次（LANG-29 S2 / B3）；裸 `Str` payload 硬错 |
 | `String` / `Box<T>` / `Vec<T>` / `Map<K,V>` 字段（宿主无 `use Drop`，或写了显式 `impl Drop`） | 泄漏 | 宿主 `use Drop` 且无显式 impl → 字段胶水（容器级联到元素）；否则显式 `release()` |
 | `Vec<T>` / `Map<K,V>` 全局位置、容器指针/数组字段 | 无作用域出口或无单一句柄 → 泄漏 | 显式 `release()` 或由协议/析构路径处理 |
 | 逃生层 own 指针的一切经典错误 | 泄漏/悬垂/double free | 泄漏告警（保守、不保证）；ASan |

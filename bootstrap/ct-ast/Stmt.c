@@ -3782,7 +3782,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
         if ((((!_self->static_decl) && (_self->arena->nodes[n].text3[0] == 0)) && (frontend_sym_ct_is_string_value_type(typebuf) || stmt_owning_struct(_self, typebuf)))) {
             _self->f_string_local = 1;
         }
-        if ((((_self->arena->nodes[n].text3[0] == 0) && frontend_sym_ct_is_string_value_type(typebuf)) && frontend_parse_expr_borrow_root(_self->ex, _self->arena->nodes[n].a))) {
+        if ((((_self->arena->nodes[n].text3[0] == 0) && (frontend_sym_ct_is_string_value_type(typebuf) || (frontend_sym_ct_adt_from_type(typebuf) >= 0))) && frontend_parse_expr_borrow_root(_self->ex, _self->arena->nodes[n].a))) {
             _self->arena->nodes[n].sflags |= 2;
         }
         if (_self->arena->nodes[n].text3[0] == 0) {
@@ -4220,7 +4220,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                         }
                         frontend_parse_expr_view_bind(_self->ex, _self->arena->nodes[e].text2, rhs);
                     }
-                    if ((frontend_sym_ct_is_string_value_type(tt) && frontend_parse_expr_borrow_root(_self->ex, rhs))) {
+                    if (((frontend_sym_ct_is_string_value_type(tt) || (frontend_sym_ct_adt_from_type(tt) >= 0)) && frontend_parse_expr_borrow_root(_self->ex, rhs))) {
                         _self->arena->nodes[n].sflags |= 2;
                     }
                     if (k == N_VAR) {

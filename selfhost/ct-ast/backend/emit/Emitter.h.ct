@@ -447,6 +447,8 @@ static int g_oc_bypass_node = -1;
 
 /* defined further down; `sb_norm` needs it to substitute a template spelling */
 static int emit_gsub_type(struct Emitter *self, const char *type, char *buf, int cap);
+/* defined with the Box helpers; the ADT payload predicate reads it early */
+static int inst_is_builtin_Box(const char *name);
 
 
 /* The innermost tracked binding named `name`, or -1. */
@@ -503,6 +505,136 @@ static void sb_norm(struct Emitter *self, const char *in, char *out, int cap)
         if (frontend::sym::ct_inst_resolve(t, res, sizeof res) == 0) t = res;
     }
     snprintf(out, (size_t)cap, "%s", t);
+}
+
+/* LANG-29 S2 / B3 (D-021 §3): the ADT value protocol.
+ *
+ * An ADT value shares its owning payload leaves -- `String` / `U16String`, a
+ * built-in container, a built-in `Box`, or a nested ADT -- so every copy needs
+ * its own reference and the last value releases it. The emitter writes one
+ * `struct T T_retain(struct T *)` / `void T_release(struct T *)` pair per ADT
+ * that owns anything (the same spelling an explicit `impl T { retain/release }`
+ * would use, and the protocol the container element glue already calls). This
+ * predicate and `sb_life_prefix` are the two readers; a non-owning ADT emits
+ * nothing, so a scalar-only ADT's generated C is unchanged.
+ *
+ * Deliberately not owning here: a plain struct payload (its copy / Drop glue is
+ * the author's explicit protocol) and `Option` / `Result` (their payload is a
+ * value and they expose no `retain`). Both are registered as out of B3 scope.
+ */
+static int adt_owns(struct Emitter *self, int adi, int depth);
+static int adt_own_kind(struct Emitter *self, const char *type, int depth);
+
+/* The C base tag of a type spelling: `struct Vec_N` / `Vec<N>` -> `Vec_N`. */
+static void adt_base_type(struct Emitter *self, const char *type, char *out, int cap)
+{
+    char t[MAX_TEXT];
+    const char *b;
+    size_t n;
+    sb_norm(self, type, t, sizeof t);
+    b = t;
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    else if (strncmp(b, "union ", 6) == 0) b += 6;
+    else if (strncmp(b, "enum ", 5) == 0) b += 5;
+    while (*b == ' ' || *b == '\t') b++;
+    snprintf(out, (size_t)cap, "%s", b);
+    n = strlen(out);
+    while (n > 0 && (out[n - 1] == ' ' || out[n - 1] == '\t')) out[--n] = 0;
+}
+
+/* 1 when an ADT field / value of this spelling carries an owning leaf. */
+static int adt_own_kind(struct Emitter *self, const char *type, int depth)
+{
+    char base[MAX_TEXT];
+    int ai;
+    if (!type || !type[0] || depth > 16) return 0;
+    if (strchr(type, '*') || strchr(type, '[')) return 0;
+    if (frontend::sym::ct_is_string_value_type(type)) return 1;
+    adt_base_type(self, type, base, sizeof base);
+    if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0) return 1;
+    if (inst_is_builtin_Box(base)) return 1;
+    ai = frontend::sym::ct_adt_from_type(type);
+    if (ai >= 0 && adt_owns(self, ai, depth + 1)) return 1;
+    return 0;
+}
+
+/* 1 when any variant of this ADT carries an owning payload field. */
+static int adt_owns(struct Emitter *self, int adi, int depth)
+{
+    int v, f, n;
+    struct Adt *adts;
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts || adi < 0 || adi >= n || depth > 16) return 0;
+    for (v = 0; v < adts[adi].nvariants; v++)
+        for (f = 0; f < adts[adi].variants[v].nfields; f++)
+            if (adt_own_kind(self, adts[adi].variants[v].fields[f].type, depth))
+                return 1;
+    return 0;
+}
+
+/* The `<prefix>_retain` / `<prefix>_release` names of an owning value type, or
+   0 when the type owns nothing (its copies are plain C assignments). The
+   buffer belongs to the caller; the returned pointer is either it or a static
+   `String` / `U16String` prefix. */
+static const char *sb_life_prefix(struct Emitter *self, const char *type, char *buf, int cap)
+{
+    char base[MAX_TEXT];
+    int k, ai, n;
+    struct Adt *adts;
+    if (!type || !type[0] || strchr(type, '*')) return 0;
+    k = frontend::sym::ct_is_string_value_type(type);
+    if (k) {
+        snprintf(buf, (size_t)cap, "%s", sb_prefix(k));
+        return buf;
+    }
+    adt_base_type(self, type, base, sizeof base);
+    if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
+        || inst_is_builtin_Box(base)) {
+        snprintf(buf, (size_t)cap, "%s", base);
+        return buf;
+    }
+    ai = frontend::sym::ct_adt_from_type(type);
+    if (ai < 0 || !adt_owns(self, ai, 0)) return 0;
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts || ai >= n) return 0;
+    snprintf(buf, (size_t)cap, "%s", adts[ai].full);
+    return buf;
+}
+
+/* 1 when a *local* value of this spelling is tracked automatically (the two
+   string handles and an owning ADT). Containers and Box keep their explicit
+   `release()` contract for ordinary locals, so a by-value container return or
+   parameter must not gain an automatic retain/release here. */
+static int sb_value_type_owns(struct Emitter *self, const char *type)
+{
+    int ai;
+    if (!type || !type[0] || strchr(type, '*')) return 0;
+    if (frontend::sym::ct_is_string_value_type(type)) return 1;
+    ai = frontend::sym::ct_adt_from_type(type);
+    return ai >= 0 && adt_owns(self, ai, 0);
+}
+
+/* Normalise an owning value type to its C spelling for a temporary declaration:
+   an ADT reached through a bare field spelling (`Msg`) needs `struct Msg`. */
+static void sb_norm_own_type(struct Emitter *self, char *t, int cap)
+{
+    int ai, n;
+    struct Adt *adts;
+    (void)self;
+    if (strncmp(t, "struct ", 7) == 0) return;
+    ai = frontend::sym::ct_adt_from_type(t);
+    if (ai < 0) return;
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts || ai >= n) return;
+    snprintf(t, (size_t)cap, "struct %s", adts[ai].full);
+}
+
+/* 1 when a container / Box lvalue owns a heap handle its `release` must guard:
+   the built-in `Vec` / `Map` abort on a zero handle (D29-12), unlike `String`
+   and `Box`, whose release already tolerates it. */
+static int sb_life_needs_handle_guard(const char *prefix)
+{
+    return (strncmp(prefix, "Vec_", 4) == 0 || strncmp(prefix, "Map_", 4) == 0);
 }
 
 /* 1 when the declared (pre-substitution) spelling is one of the template
@@ -620,6 +752,9 @@ static int sb_rhs_fresh(struct Emitter *self, int n)
     if (n < 0) return 1;
     k = self->arena->nodes[n].kind;
     if (k == N_CALL || k == N_MCALL || k == N_STR || k == N_NUM) return 1;
+    /* LANG-29 S2 / B3: a constructor result is a freshly built ADT value, so
+       its own reference (and its payload's) moves into the destination. */
+    if (k == N_ADTCTOR) return 1;
     /* the postfix `?` hands its payload over (it clears the carrier) */
     if (k == N_TRY) return 1;
     if (k == N_CAST) return sb_rhs_fresh(self, self->arena->nodes[n].a);
@@ -873,14 +1008,20 @@ static int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
    skipping `skip` (a handle that a `return` moves out). */
 static int sb_release_from(struct Emitter *self, int base, int skip, int ind)
 {
-    int i, kind;
+    int i;
+    char pbuf[MAX_TEXT];
+    const char *pfx;
     if (base < 0) base = 0;
     for (i = g_sb.n - 1; i >= base; i--) {
         if (i == skip || !g_sb.own[i]) continue;
-        kind = frontend::sym::ct_is_string_value_type(g_sb.type[i]);
-        if (!kind) continue;
+        pfx = sb_life_prefix(self, g_sb.type[i], pbuf, sizeof pbuf);
+        if (!pfx) continue;
         self->emit_indent(ind);
-        fprintf(self->out, "%s_release(&%s);\n", sb_prefix(kind), g_sb.name[i]);
+        if (sb_life_needs_handle_guard(pfx))
+            fprintf(self->out, "if (%s.h != 0) (void)%s_release(&%s);\n",
+                    g_sb.name[i], pfx, g_sb.name[i]);
+        else
+            fprintf(self->out, "%s_release(&%s);\n", pfx, g_sb.name[i]);
     }
     return 0;
 }
@@ -921,14 +1062,20 @@ static int sb_ret_mentions(struct Emitter *self, int expr, const char *name)
    names. */
 static int sb_ret_release(struct Emitter *self, int expr, int view, int skip, int ind)
 {
-    int i, kind;
+    int i;
+    char pbuf[MAX_TEXT];
+    const char *pfx;
     for (i = g_sb.n - 1; i >= 0; i--) {
         if (i == skip || !g_sb.own[i]) continue;
         if (view && sb_ret_mentions(self, expr, g_sb.name[i])) continue;
-        kind = frontend::sym::ct_is_string_value_type(g_sb.type[i]);
-        if (!kind) continue;
+        pfx = sb_life_prefix(self, g_sb.type[i], pbuf, sizeof pbuf);
+        if (!pfx) continue;
         self->emit_indent(ind);
-        fprintf(self->out, "%s_release(&%s);\n", sb_prefix(kind), g_sb.name[i]);
+        if (sb_life_needs_handle_guard(pfx))
+            fprintf(self->out, "if (%s.h != 0) (void)%s_release(&%s);\n",
+                    g_sb.name[i], pfx, g_sb.name[i]);
+        else
+            fprintf(self->out, "%s_release(&%s);\n", pfx, g_sb.name[i]);
     }
     return 0;
 }
@@ -1171,16 +1318,24 @@ static int sb_struct_assign_check(struct Emitter *self, int n)
 static int sb_decl(struct Emitter *self, int n, int ind)
 {
     const char *tp;
-    int kind, init, borrowed;
+    char pbuf[MAX_TEXT];
+    const char *pfx;
+    int kind, init, borrowed, adt, bind;
     if (self->arena->nodes[n].kind != N_DECL) return 0;
     tp = self->arena->nodes[n].text;
     kind = frontend::sym::ct_is_string_value_type(tp);
+    /* LANG-29 S2 / B3: an ADT local is an owning binding; a match binding
+       (aux 3) owns its payload copy for every owning payload type, including
+       the containers and Box that an ordinary local still releases explicitly. */
+    adt = !strchr(tp, '*') && (frontend::sym::ct_adt_from_type(tp) >= 0)
+          && adt_owns(self, frontend::sym::ct_adt_from_type(tp), 0);
+    bind = (self->arena->nodes[n].aux == 3) && sb_life_prefix(self, tp, pbuf, sizeof pbuf) != 0;
     /* a static local outlives the block; a shadowed auto-drop alias is not a
        plain binding; an array is not a value */
     if (self->arena->nodes[n].text3[0] || self->arena->nodes[n].aux == 1
         || self->arena->nodes[n].aux == 2) return 0;
     init = self->arena->nodes[n].a;
-    if (!kind) {
+    if (!kind && !adt && !bind) {
         /* a plain local still records its declared type: `h.tag = s` needs it,
            and an aggregate initialiser defines every owning field (C zero-fills
            the omitted members) */
@@ -1188,25 +1343,41 @@ static int sb_decl(struct Emitter *self, int n, int ind)
         sb_mark_aggregate(self, n);
         return 0;
     }
-    if (init >= 0) {
+    if (kind && !bind && init >= 0) {
         int k = self->arena->nodes[init].kind;
         if (k == N_INIT_RANGE || k == N_INIT_BRACE || k == N_INIT_MBRACE
             || k == N_RAW || k == N_CLOSURE) return 0;
+    }
+    pfx = sb_life_prefix(self, tp, pbuf, sizeof pbuf);
+    if (!pfx) {
+        /* a pointer / otherwise untracked spelling is still a local whose type
+           later member assignments resolve: fall back to the plain record. */
+        sb_lpush(self, self->arena->nodes[n].text2, tp);
+        sb_mark_aggregate(self, n);
+        return 0;
     }
     if (self->hoist_rvalue(n) != 0) return -1;
     if (self->emit_hoists(ind) != 0) return -1;
     self->emit_indent(ind);
     if (self->emit_type_name_dims(tp, self->arena->nodes[n].text2,
                                   self->arena->nodes[n].text3) != 0) return -1;
+    if (self->arena->nodes[n].aux == 3)
+        fputs(" __attribute__((unused))", self->out);
     borrowed = 0;
     if (init < 0) {
         fputs(" = { 0 }", self->out);
     } else {
-        int wrap;
+        int wrap, ik;
+        ik = self->arena->nodes[init].kind;
         borrowed = (self->arena->nodes[n].sflags & 2) ? 1 : 0;
-        wrap = !borrowed && !sb_rhs_fresh(self, init) && sb_is_place(self, init);
+        wrap = !borrowed && !sb_rhs_fresh(self, init)
+               && (sb_is_place(self, init)
+                   || (ik == N_RAW
+                       && sb_text_place_p(self->arena->nodes[init].aux
+                              ? self->arena->str_at((int)self->arena->nodes[init].num)
+                              : self->arena->nodes[init].text)));
         fputs(" = ", self->out);
-        if (wrap) fprintf(self->out, "%s_retain(&(", sb_prefix(kind));
+        if (wrap) fprintf(self->out, "%s_retain(&(", pfx);
         if (self->emit_expr(init) != 0) return -1;
         if (wrap) fputs("))", self->out);
     }
@@ -1224,8 +1395,10 @@ static int sb_decl(struct Emitter *self, int n, int ind)
 static int sb_assign(struct Emitter *self, int n, int ind)
 {
     char t[MAX_TEXT];
+    char pbuf[MAX_TEXT];
     char fbase[MAX_TEXT], ffield[MAX_TEXT];
-    int kind, lhs, rhs, idx, borrowed, wrap, release_old, needsrc, k, fowner, param_own;
+    int kind, lhs, rhs, idx, borrowed, wrap, release_old, needsrc, k, fowner, param_own, ai;
+    const char *pfx;
 
     if (self->arena->nodes[n].kind != N_ASSIGN || self->arena->nodes[n].aux != 0)
         return 0;
@@ -1238,7 +1411,17 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     g_sb.hitparam = 0;
     if (sb_expr_type(self, lhs, t, sizeof t) != 0) return 0;
     kind = frontend::sym::ct_is_string_value_type(t);
-    if (!kind || g_sb.hitparam) return 0;
+    /* LANG-29 S2 / B3: rebinding an owning ADT follows the same contract as a
+       String rebind (hold the old value, retain or move the source, release
+       the old). A container local still releases explicitly (unchanged). */
+    if (!kind) {
+        ai = frontend::sym::ct_adt_from_type(t);
+        if (ai < 0 || !adt_owns(self, ai, 0)) return 0;
+    }
+    if (g_sb.hitparam) return 0;
+    pfx = sb_life_prefix(self, t, pbuf, sizeof pbuf);
+    if (!pfx) return 0;
+    sb_norm_own_type(self, t, sizeof t);
     if (self->hoist_rvalue(n) != 0) return -1;
     if (self->emit_hoists(ind) != 0) return -1;
     idx = (k == N_VAR) ? sb_find(self, self->arena->nodes[lhs].text2) : -1;
@@ -1296,13 +1479,13 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     }
     if (self->emit_expr(lhs) != 0) return -1;
     fputs(" = ", self->out);
-    if (wrap) fprintf(self->out, "%s_retain(&(", sb_prefix(kind));
+    if (wrap) fprintf(self->out, "%s_retain(&(", pfx);
     if (needsrc) fprintf(self->out, "__ct_src%d", self->ntmp - 1);
     else if (self->emit_expr(rhs) != 0) return -1;
     if (wrap) fputs("))", self->out);
     fputs("; ", self->out);
     if (release_old)
-        fprintf(self->out, "%s_release(&__ct_sold%d); ", sb_prefix(kind), self->ntmp - 1);
+        fprintf(self->out, "%s_release(&__ct_sold%d); ", pfx, self->ntmp - 1);
     fputs("}\n", self->out);
     if (idx >= 0) g_sb.own[idx] = borrowed ? 0 : 1;
     if ((k == N_MEMBER || k == N_ARROW) && fbase[0])
@@ -1313,7 +1496,7 @@ static int sb_assign(struct Emitter *self, int n, int ind)
    `sb_retain_params` once the opening brace exists). */
 static int sb_push_params(struct Emitter *self, int first, int anon)
 {
-    int p, ai, kind;
+    int p, ai, ai2;
     char uname[32];
     g_sb.n = 0;
     g_sb.ln = 0;
@@ -1332,8 +1515,13 @@ static int sb_push_params(struct Emitter *self, int first, int anon)
                assignment for `sb_assign`, exactly like a local rebind. */
             sb_lpush(self, nm, self->arena->nodes[p].text);
             if (self->arena->nodes[p].aux != 2 && self->arena->nodes[p].aux != 3) {
-                kind = frontend::sym::ct_is_string_value_type(self->arena->nodes[p].text);
-                if (kind) sb_push(self, nm, self->arena->nodes[p].text, 1);
+                /* LANG-29 S2 / B3: a by-value ADT parameter owns a reference
+                   for the duration of the body, exactly like a String one. */
+                ai2 = strchr(self->arena->nodes[p].text, '*')
+                        ? -1 : frontend::sym::ct_adt_from_type(self->arena->nodes[p].text);
+                if (frontend::sym::ct_is_string_value_type(self->arena->nodes[p].text)
+                    || (ai2 >= 0 && adt_owns(self, ai2, 0)))
+                    sb_push(self, nm, self->arena->nodes[p].text, 1);
             }
         }
         ai++;
@@ -1341,16 +1529,18 @@ static int sb_push_params(struct Emitter *self, int first, int anon)
     return 0;
 }
 
-/* The entry retain of every registered by-value string parameter. */
+/* The entry retain of every registered by-value owning parameter. */
 static int sb_retain_params(struct Emitter *self, int ind)
 {
-    int i, kind;
+    int i;
+    char pbuf[MAX_TEXT];
+    const char *pfx;
     for (i = 0; i < g_sb.n; i++) {
-        kind = frontend::sym::ct_is_string_value_type(g_sb.type[i]);
-        if (!kind || !g_sb.own[i]) continue;
+        if (!g_sb.own[i]) continue;
+        pfx = sb_life_prefix(self, g_sb.type[i], pbuf, sizeof pbuf);
+        if (!pfx) continue;
         self->emit_indent(ind);
-        fprintf(self->out, "%s = %s_retain(&%s);\n", g_sb.name[i],
-                sb_prefix(kind), g_sb.name[i]);
+        fprintf(self->out, "%s = %s_retain(&%s);\n", g_sb.name[i], pfx, g_sb.name[i]);
     }
     return 0;
 }
@@ -2723,6 +2913,96 @@ static int emit_Box_helpers(struct Emitter *self, int u)
     return 0;
 }
 
+/* ---- LANG-29 S2 / B3: the per-ADT retain / release glue ----------------
+   One pair per owning ADT (the predicate is `adt_owns`), emitted with the same
+   `<T>_retain` / `<T>_release` spelling an explicit `impl T { … }` would use so
+   the container element glue needs no special case. `retain` walks only the
+   current variant and bumps every owning leaf; `release` drops the same leaves
+   and lets the last reference free the tree. A `Vec` / `Map` leaf is guarded on
+   its zero handle: the built-in `release` aborts on `h == 0` (D29-12), while a
+   zero-initialised ADT value legitimately holds one. */
+/* 1 when this variant carries at least one owning payload field. */
+static int adt_own_kind_variant(struct Emitter *self, int adi, int v)
+{
+    int f, n;
+    struct Adt *adts;
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts || adi < 0 || adi >= n || v < 0 || v >= adts[adi].nvariants) return 0;
+    for (f = 0; f < adts[adi].variants[v].nfields; f++)
+        if (adt_own_kind(self, adts[adi].variants[v].fields[f].type, 0)) return 1;
+    return 0;
+}
+
+static int adt_emit_variant_life(struct Emitter *self, int adi, int v, int retain)
+{
+    int f, n;
+    struct Adt *adts;
+    char lv[MAX_TEXT];
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts || adi < 0 || adi >= n || v < 0 || v >= adts[adi].nvariants) return 0;
+    for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+        const char *ft = adts[adi].variants[v].fields[f].type;
+        char pbuf[MAX_TEXT];
+        char base[MAX_TEXT];
+        const char *pfx;
+        if (!adt_own_kind(self, ft, 0)) continue;
+        pfx = sb_life_prefix(self, ft, pbuf, sizeof pbuf);
+        if (!pfx) continue;
+        adt_base_type(self, ft, base, sizeof base);
+        snprintf(lv, sizeof lv, "self->u.%s.%s",
+                 adts[adi].variants[v].cname, adts[adi].variants[v].fields[f].name);
+        if (retain)
+            fprintf(self->out, "        %s = %s_retain(&%s);\n", lv, pfx, lv);
+        else if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0)
+            fprintf(self->out, "        if ((%s).h != 0) (void)%s_release(&%s);\n",
+                    lv, pfx, lv);
+        else
+            fprintf(self->out, "        %s_release(&%s);\n", pfx, lv);
+    }
+    return 0;
+}
+
+static int emit_adt_life_defs(struct Emitter *self, int u)
+{
+    int i, n, v, d;
+    struct Adt *adts;
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts) return 0;
+    for (i = 0; i < n; i++) {
+        if (u >= 0 && adts[i].owner != u) continue;
+        if (!adt_owns(self, i, 0)) continue;
+        d = (u >= 0 && adts[i].is_pub) ? 0 : 1;
+        if (d)
+            fprintf(self->out, "static __attribute__((unused)) struct %s %s_retain(struct %s *self)\n{\n",
+                    adts[i].full, adts[i].full, adts[i].full);
+        else
+            fprintf(self->out, "struct %s %s_retain(struct %s *self)\n{\n",
+                    adts[i].full, adts[i].full, adts[i].full);
+        for (v = 0; v < adts[i].nvariants; v++) {
+            if (!adt_own_kind_variant(self, i, v)) continue;
+            fprintf(self->out, "    if (self->tag == %d) {\n", v);
+            if (adt_emit_variant_life(self, i, v, 1) != 0) return -1;
+            fputs("    }\n", self->out);
+        }
+        fputs("    return *self;\n}\n\n", self->out);
+        if (d)
+            fprintf(self->out, "static __attribute__((unused)) void %s_release(struct %s *self)\n{\n",
+                    adts[i].full, adts[i].full);
+        else
+            fprintf(self->out, "void %s_release(struct %s *self)\n{\n",
+                    adts[i].full, adts[i].full);
+        fputs("    if (self == 0) return;\n", self->out);
+        for (v = 0; v < adts[i].nvariants; v++) {
+            if (!adt_own_kind_variant(self, i, v)) continue;
+            fprintf(self->out, "    if (self->tag == %d) {\n", v);
+            if (adt_emit_variant_life(self, i, v, 0) != 0) return -1;
+            fputs("    }\n", self->out);
+        }
+        fputs("}\n\n", self->out);
+    }
+    return 0;
+}
+
 /* The per-unit emission proper: everything from the banner to the last
    function, run with `self->out` already pointing at an open file. Every
    failure is a bare `return -1`; the method that opened the file closes it and
@@ -2906,6 +3186,8 @@ static int emit_unit_body(struct Emitter *self, int u)
     if (emit_Box_protos(self, u) != 0) return -1;
     if (emit_struct_impls(self, u, 0) != 0) return -1;
     if (emit_Box_helpers(self, u) != 0) return -1;
+    /* LANG-29 S2 / B3: after the container instance methods the glue calls. */
+    if (emit_adt_life_defs(self, u) != 0) return -1;
     /* PH-80: literal blocks (the built-in layer header is already included). */
     if (emit_string_literals(self, self->units[u].prog) != 0) return -1;
 
@@ -3434,6 +3716,12 @@ static int elem_has_life(struct Emitter *self, const char *elem)
     struct StructImpl *im;
 
     if (frontend::sym::ct_is_container_type(elem)) return 1;
+    /* LANG-29 S2 / B3: an ADT element carries the compiler-written
+       `T_retain` / `T_release` pair, so the container glue binds to it. */
+    {
+        int adi = frontend::sym::ct_adt_from_type(elem);
+        if (adi >= 0) return adt_owns(self, adi, 0);
+    }
     if (strncmp(elem, "struct ", 7) != 0) return 0;
     snprintf(base, sizeof base, "%s", elem + 7);
     snprintf(want, sizeof want, "struct %s", base);
@@ -4160,6 +4448,16 @@ static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi)
     fprintf(self->out,
             "_Static_assert(sizeof(struct %s) >= offsetof(struct %s, u) + sizeof(((struct %s *)0)->u), \"%s: the payload must fit\");\n",
             tag, tag, tag, tag);
+    /* LANG-29 S2 / B3: the owning-value protocol is declared with the layout so
+       the element glue and every copy site see it before its definition. A pub
+       ADT publishes it from the header; a private one keeps it static. */
+    if (adt_owns(self, adi, 0)) {
+        int link = adts[adi].is_pub && !g_shell_header ? 0 : 1;
+        fputs(link ? "static " : "", self->out);
+        fprintf(self->out, "struct %s %s_retain(struct %s *);\n", tag, tag, tag);
+        fputs(link ? "static " : "", self->out);
+        fprintf(self->out, "void %s_release(struct %s *);\n", tag, tag);
+    }
     return 0;
 }
 
@@ -4240,6 +4538,8 @@ static int em_expr_adtctor(struct Emitter *self, int n, int nk)
 
 
     int adi2, v2, f2, a2;
+    char pbuf[MAX_TEXT];
+    const char *pfx;
     struct Adt *adts2;
     int nadts2;
     adi2 = frontend::sym::ct_adt_find(self->arena->nodes[n].text);
@@ -4254,10 +4554,21 @@ static int em_expr_adtctor(struct Emitter *self, int n, int nk)
         fprintf(self->out, ", .u = { .%s = { ", adts2[adi2].variants[v2].cname);
         a2 = self->arena->nodes[n].a;
         for (f2 = 0; f2 < adts2[adi2].variants[v2].nfields; f2++) {
+            int retain;
             if (f2 > 0) fputs(", ", self->out);
-            fprintf(self->out, ".%s = (", adts2[adi2].variants[v2].fields[f2].name);
             if (a2 < 0) return self->fail_from(n, "an ADT argument is missing");
+            /* LANG-29 S2 / B3: the payload stores the value, so an owning
+               argument that stays owned elsewhere is retained here (a fresh
+               call result / nested constructor moves its own reference in). */
+            pfx = sb_life_prefix(self, adts2[adi2].variants[v2].fields[f2].type,
+                                 pbuf, sizeof pbuf);
+            retain = pfx && !sb_rhs_fresh(self, a2)
+                     && (sb_is_place(self, a2)
+                         || self->arena->nodes[a2].kind == N_RAW);
+            fprintf(self->out, ".%s = (", adts2[adi2].variants[v2].fields[f2].name);
+            if (retain) fprintf(self->out, "%s_retain(&(", pfx);
             if (self->emit_expr(a2) != 0) return -1;
+            if (retain) fputs("))", self->out);
             fputs(")", self->out);
             a2 = self->arena->nodes[a2].next;
         }
@@ -5774,15 +6085,20 @@ static int em_node_ret(struct Emitter *self, int n, int ind, int nk)
 
 
     char tmp[MAX_TEXT];
+    char rpbuf[MAX_TEXT];
+    const char *rpfx;
     int r, rtv, wrap;
-    /* SH-102 (D-013 §3): the string handle this return hands back. A
+    /* SH-102 (D-013 §3): the owning handle this return hands back. A
        local / parameter handle is moved (its scope release is skipped);
        a place (a field, a global, a deref) is retained so the caller
        gets its own reference; a call result or literal moves. `sret` is
        materialised before the releases so a release cannot run under
-       the value it feeds. */
+       the value it feeds. LANG-29 S2 / B3 extends the same contract to an
+       owning ADT return type. */
     int srk, smove, sretain, sret;
-    srk = frontend::sym::ct_is_string_value_type(self->cur_ret);
+    rpfx = sb_value_type_owns(self, self->cur_ret)
+           ? sb_life_prefix(self, self->cur_ret, rpbuf, sizeof rpbuf) : 0;
+    srk = rpfx ? 1 : 0;
     smove = srk ? sb_ret_move(self, self->arena->nodes[n].a) : -1;
     /* an escape: a borrowed-string function hands back a `Str` view
        where the caller expects an owning `String` */
@@ -5855,12 +6171,12 @@ static int em_node_ret(struct Emitter *self, int n, int ind, int nk)
         if (sretain) {
             self->emit_indent(ind);
             fprintf(self->out, "__ct_sret%d = %s_retain(&__ct_sret%d);\n",
-                    sret, sb_prefix(srk), sret);
+                    sret, rpfx, sret);
         }
     } else if (sretain && rtv >= 0) {
         self->emit_indent(ind);
         fprintf(self->out, "__ct_ret%d = %s_retain(&__ct_ret%d);\n",
-                rtv, sb_prefix(srk), rtv);
+                rtv, rpfx, rtv);
     }
     /* the parser hangs the scope's releases off `b`; they run at the
        return's own indentation, before the value leaves (SH-33) */
@@ -7555,6 +7871,8 @@ impl EmitOps for Emitter {
         if (emit_Box_protos(self, -1) != 0) return -1;
         if (emit_struct_impls(self, -1, 0) != 0) return -1;
         if (emit_Box_helpers(self, -1) != 0) return -1;
+        /* LANG-29 S2 / B3: the per-ADT retain / release definitions. */
+        if (emit_adt_life_defs(self, -1) != 0) return -1;
         /* PH-80: the literal blocks need `struct ct_str_hdr` / `struct String`
            to be visible, which the two calls above guarantee. */
         if (emit_string_literals(self, prog) != 0) return -1;

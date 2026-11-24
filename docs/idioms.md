@@ -67,8 +67,8 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 
 - 成员带括号负载即 ADT；`match` 是语句，分支体要花括号，没有 fallthrough（[§4.73](language-spec.md)）。
 - 必须覆盖全部变体，或最后写一个 `_`；全部覆盖后再写 `_` 会被提示“多余”。
-- **ADT 不生成 drop glue**：payload 里的 owning 句柄按 move 语义只释放一次；构造不 retain，
-  绑定是浅拷贝，释放后原句柄悬垂。
+- **ADT payload 有 glue**：owning 句柄由编译器生成的 retain/release 浅共享；构造、拷贝、
+  按值实参、`match` 绑定各取一份引用，作用域出口释放一次（LANG-29 S2 / B3）。
 - 上限：64 个 ADT / 16 变体 / 8 负载；无泛型 ADT、无 or 模式、无表达式形式 `match`。
 
 ## 8. 遍历：`foreach` 的隐式绑定
@@ -114,7 +114,7 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 4. String 用字面量直接初始化；char * 方法需 import std::str::CharStr（std 0.20.0 起；0.19.0 及以前叫 std::str::String）。§5.1
 5. 数组传参用 T[]，不要 int *a, int n；T a[] 形参/字段已弃用。§4.69
 6. 可失败操作用 Result<T,E> + ? + errdefer，不要错误码 + goto。§4.62 §4.58
-7. 多形态数据用 enum + match（穷尽），不要 int kind + switch；ADT 不生成 drop glue，payload 按 move 只释放一次。§4.73
+7. 多形态数据用 enum + match（穷尽），不要 int kind + switch；ADT payload 由 retain/release 浅共享，作用域出口自动释放。§4.73
 8. 遍历用 foreach(item)；数组/Vec 有块内只读 i，Map 只给 item.key / item.value（没有 i）。§4.49
 9. 堆单对象用 Box<T> = new T { ... }；指针主要在 shim/硬件/逃生层，但合法。§4.71
 10. 泄漏默认 warning；ct.pkg 的 leaks=error 才升级；动态派发的一行链当前被拒（SH-110 修复中），静态宿主链可用。§4.72

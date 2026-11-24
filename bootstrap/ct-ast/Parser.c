@@ -2802,6 +2802,11 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
                     snprintf(msg, sizeof(msg), "too many payload fields for '%s.%s' (limit 8)", name, _self->arena->nodes[tn].text);
                     return tool_diag_ct_sem_error(_self->arena->nodes[fld].line, _self->arena->nodes[fld].num, msg, _self->mem->path);
                 }
+                if (((_self->sup->__frontend_parse_supportops_vptr->str_handle_kind(_self->sup, _self->arena->nodes[fld].text) == 3) || (_self->sup->__frontend_parse_supportops_vptr->str_handle_kind(_self->sup, _self->arena->nodes[fld].text) == 4))) {
+                    char msg[MAX_TEXT * 2];
+                    snprintf(msg, sizeof(msg), "an ADT payload cannot be a bare '%s' view; store a 'String' and take a view with as_str()", ((_self->sup->__frontend_parse_supportops_vptr->str_handle_kind(_self->sup, _self->arena->nodes[fld].text) == 4) ? "U16Str" : "Str"));
+                    return tool_diag_ct_sem_error(_self->arena->nodes[fld].line, _self->arena->nodes[fld].num, msg, _self->mem->path);
+                }
             }
         }
         ao = (-1);

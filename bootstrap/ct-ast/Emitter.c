@@ -320,11 +320,19 @@ struct backend_emit_Emitter {
     const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
 };
 static int emit_gsub_type(struct backend_emit_Emitter *, const char *, char *, int);
+static int inst_is_builtin_Box(const char *);
 static int sb_find(struct backend_emit_Emitter *, const char *);
 static void sb_push(struct backend_emit_Emitter *, const char *, const char *, int);
 static int sb_lfind(struct backend_emit_Emitter *, const char *);
 static void sb_lpush(struct backend_emit_Emitter *, const char *, const char *);
 static void sb_norm(struct backend_emit_Emitter *, const char *, char *, int);
+static int adt_owns(struct backend_emit_Emitter *, int, int);
+static int adt_own_kind(struct backend_emit_Emitter *, const char *, int);
+static void adt_base_type(struct backend_emit_Emitter *, const char *, char *, int);
+static const char * sb_life_prefix(struct backend_emit_Emitter *, const char *, char *, int);
+static int sb_value_type_owns(struct backend_emit_Emitter *, const char *);
+static void sb_norm_own_type(struct backend_emit_Emitter *, char *, int);
+static int sb_life_needs_handle_guard(const char *);
 static int sb_is_tparam(struct backend_emit_Emitter *, const char *);
 static int sb_expr_type(struct backend_emit_Emitter *, int, char *, int);
 static int sb_rhs_fresh(struct backend_emit_Emitter *, int);
@@ -394,12 +402,14 @@ static int emit_struct_impls(struct backend_emit_Emitter *, int, int);
 static int emit_generic_defs(struct backend_emit_Emitter *, int);
 static void emit_slice_helpers(struct backend_emit_Emitter *);
 static int emit_string_literals(struct backend_emit_Emitter *, int);
-static int inst_is_builtin_Box(const char *);
 static int Box_type_owns(struct backend_emit_Emitter *, const char *, int);
 static int Box_emit_release_at(struct backend_emit_Emitter *, const char *, const char *, int);
 static int Box_emit_copy_at(struct backend_emit_Emitter *, const char *, const char *, const char *, int);
 static int emit_Box_protos(struct backend_emit_Emitter *, int);
 static int emit_Box_helpers(struct backend_emit_Emitter *, int);
+static int adt_own_kind_variant(struct backend_emit_Emitter *, int, int);
+static int adt_emit_variant_life(struct backend_emit_Emitter *, int, int, int);
+static int emit_adt_life_defs(struct backend_emit_Emitter *, int);
 static int emit_unit_body(struct backend_emit_Emitter *, int);
 static int write_unit_header_body(struct backend_emit_Emitter *, int, const char *);
 static int inst_emit_one(struct backend_emit_Emitter *, int);
@@ -856,6 +866,9 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, in
         return (-1);
     }
     if (emit_Box_helpers(_self, (-1)) != 0) {
+        return (-1);
+    }
+    if (emit_adt_life_defs(_self, (-1)) != 0) {
         return (-1);
     }
     if (emit_string_literals(_self, prog) != 0) {
@@ -4893,6 +4906,139 @@ static void sb_norm(struct backend_emit_Emitter * self, const char * in, char * 
     }
     snprintf(out, (size_t)(cap), "%s", t);
 }
+static void adt_base_type(struct backend_emit_Emitter * self, const char * type, char * out, int cap) {
+    char t[MAX_TEXT];
+    const char * b;
+    size_t n;
+    sb_norm(self, type, t, sizeof(t));
+    b = t;
+    if (strncmp(b, "struct ", 7) == 0) {
+        b += 7;
+    }
+    else {
+        if (strncmp(b, "union ", 6) == 0) {
+            b += 6;
+        }
+        else {
+            if (strncmp(b, "enum ", 5) == 0) {
+                b += 5;
+            }
+        }
+    }
+    while ((((*b) == ' ') || ((*b) == '\t'))) {
+        b++;
+    }
+    snprintf(out, (size_t)(cap), "%s", b);
+    n = strlen(out);
+    while (((n > 0) && ((out[(n - 1)] == ' ') || (out[(n - 1)] == '\t')))) {
+        out[--n] = 0;
+    }
+}
+static int adt_own_kind(struct backend_emit_Emitter * self, const char * type, int depth) {
+    char base[MAX_TEXT];
+    int ai;
+    if ((((!type) || (!type[0])) || (depth > 16))) {
+        return 0;
+    }
+    if ((strchr(type, '*') || strchr(type, '['))) {
+        return 0;
+    }
+    if (frontend_sym_ct_is_string_value_type(type)) {
+        return 1;
+    }
+    adt_base_type(self, type, base, sizeof(base));
+    if (((strncmp(base, "Vec_", 4) == 0) || (strncmp(base, "Map_", 4) == 0))) {
+        return 1;
+    }
+    if (inst_is_builtin_Box(base)) {
+        return 1;
+    }
+    ai = frontend_sym_ct_adt_from_type(type);
+    if (((ai >= 0) && adt_owns(self, ai, (depth + 1)))) {
+        return 1;
+    }
+    return 0;
+}
+static int adt_owns(struct backend_emit_Emitter * self, int adi, int depth) {
+    int v;
+    int f;
+    int n;
+    struct frontend_sym_Adt * adts;
+    adts = frontend_sym_ct_adts((&n));
+    if (((((!adts) || (adi < 0)) || (adi >= n)) || (depth > 16))) {
+        return 0;
+    }
+    for (v = 0; v < adts[adi].nvariants; v++) {
+        for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+            if (adt_own_kind(self, adts[adi].variants[v].fields[f].type, depth)) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+static const char * sb_life_prefix(struct backend_emit_Emitter * self, const char * type, char * buf, int cap) {
+    char base[MAX_TEXT];
+    int k;
+    int ai;
+    int n;
+    struct frontend_sym_Adt * adts;
+    if ((((!type) || (!type[0])) || strchr(type, '*'))) {
+        return 0;
+    }
+    k = frontend_sym_ct_is_string_value_type(type);
+    if (k) {
+        snprintf(buf, (size_t)(cap), "%s", backend_emit_sb_prefix(k));
+        return buf;
+    }
+    adt_base_type(self, type, base, sizeof(base));
+    if ((((strncmp(base, "Vec_", 4) == 0) || (strncmp(base, "Map_", 4) == 0)) || inst_is_builtin_Box(base))) {
+        snprintf(buf, (size_t)(cap), "%s", base);
+        return buf;
+    }
+    ai = frontend_sym_ct_adt_from_type(type);
+    if (((ai < 0) || (!adt_owns(self, ai, 0)))) {
+        return 0;
+    }
+    adts = frontend_sym_ct_adts((&n));
+    if (((!adts) || (ai >= n))) {
+        return 0;
+    }
+    snprintf(buf, (size_t)(cap), "%s", adts[ai].full);
+    return buf;
+}
+static int sb_value_type_owns(struct backend_emit_Emitter * self, const char * type) {
+    int ai;
+    if ((((!type) || (!type[0])) || strchr(type, '*'))) {
+        return 0;
+    }
+    if (frontend_sym_ct_is_string_value_type(type)) {
+        return 1;
+    }
+    ai = frontend_sym_ct_adt_from_type(type);
+    return ((ai >= 0) && adt_owns(self, ai, 0));
+}
+static void sb_norm_own_type(struct backend_emit_Emitter * self, char * t, int cap) {
+    int ai;
+    int n;
+    struct frontend_sym_Adt * adts;
+    (void)(self);
+    if (strncmp(t, "struct ", 7) == 0) {
+        return;
+    }
+    ai = frontend_sym_ct_adt_from_type(t);
+    if (ai < 0) {
+        return;
+    }
+    adts = frontend_sym_ct_adts((&n));
+    if (((!adts) || (ai >= n))) {
+        return;
+    }
+    snprintf(t, (size_t)(cap), "struct %s", adts[ai].full);
+}
+static int sb_life_needs_handle_guard(const char * prefix) {
+    return ((strncmp(prefix, "Vec_", 4) == 0) || (strncmp(prefix, "Map_", 4) == 0));
+}
 static int sb_is_tparam(struct backend_emit_Emitter * self, const char * raw) {
     char t[MAX_TEXT];
     size_t n;
@@ -5034,6 +5180,9 @@ static int sb_rhs_fresh(struct backend_emit_Emitter * self, int n) {
     }
     k = self->arena->nodes[n].kind;
     if (((((k == N_CALL) || (k == N_MCALL)) || (k == N_STR)) || (k == N_NUM))) {
+        return 1;
+    }
+    if (k == N_ADTCTOR) {
         return 1;
     }
     if (k == N_TRY) {
@@ -5354,7 +5503,8 @@ static int sb_rewrite_init(struct backend_emit_Emitter * self, const char * t, i
 }
 static int sb_release_from(struct backend_emit_Emitter * self, int base, int skip, int ind) {
     int i;
-    int kind;
+    char pbuf[MAX_TEXT];
+    const char * pfx;
     if (base < 0) {
         base = 0;
     }
@@ -5362,12 +5512,17 @@ static int sb_release_from(struct backend_emit_Emitter * self, int base, int ski
         if (((i == skip) || (!backend_emit_g_sb.own[i]))) {
             continue;
         }
-        kind = frontend_sym_ct_is_string_value_type(backend_emit_g_sb.type[i]);
-        if ((!kind)) {
+        pfx = sb_life_prefix(self, backend_emit_g_sb.type[i], pbuf, sizeof(pbuf));
+        if ((!pfx)) {
             continue;
         }
         self->__backend_emit_emitops_vptr->emit_indent(self, ind);
-        fprintf(self->out, "%s_release(&%s);\n", backend_emit_sb_prefix(kind), backend_emit_g_sb.name[i]);
+        if (sb_life_needs_handle_guard(pfx)) {
+            fprintf(self->out, "if (%s.h != 0) (void)%s_release(&%s);\n", backend_emit_g_sb.name[i], pfx, backend_emit_g_sb.name[i]);
+        }
+        else {
+            fprintf(self->out, "%s_release(&%s);\n", pfx, backend_emit_g_sb.name[i]);
+        }
     }
     return 0;
 }
@@ -5402,7 +5557,8 @@ static int sb_ret_mentions(struct backend_emit_Emitter * self, int expr, const c
 }
 static int sb_ret_release(struct backend_emit_Emitter * self, int expr, int view, int skip, int ind) {
     int i;
-    int kind;
+    char pbuf[MAX_TEXT];
+    const char * pfx;
     for (i = (backend_emit_g_sb.n - 1); i >= 0; i--) {
         if (((i == skip) || (!backend_emit_g_sb.own[i]))) {
             continue;
@@ -5410,12 +5566,17 @@ static int sb_ret_release(struct backend_emit_Emitter * self, int expr, int view
         if ((view && sb_ret_mentions(self, expr, backend_emit_g_sb.name[i]))) {
             continue;
         }
-        kind = frontend_sym_ct_is_string_value_type(backend_emit_g_sb.type[i]);
-        if ((!kind)) {
+        pfx = sb_life_prefix(self, backend_emit_g_sb.type[i], pbuf, sizeof(pbuf));
+        if ((!pfx)) {
             continue;
         }
         self->__backend_emit_emitops_vptr->emit_indent(self, ind);
-        fprintf(self->out, "%s_release(&%s);\n", backend_emit_sb_prefix(kind), backend_emit_g_sb.name[i]);
+        if (sb_life_needs_handle_guard(pfx)) {
+            fprintf(self->out, "if (%s.h != 0) (void)%s_release(&%s);\n", backend_emit_g_sb.name[i], pfx, backend_emit_g_sb.name[i]);
+        }
+        else {
+            fprintf(self->out, "%s_release(&%s);\n", pfx, backend_emit_g_sb.name[i]);
+        }
     }
     return 0;
 }
@@ -5661,28 +5822,40 @@ static int sb_struct_assign_check(struct backend_emit_Emitter * self, int n) {
 }
 static int sb_decl(struct backend_emit_Emitter * self, int n, int ind) {
     const char * tp;
+    char pbuf[MAX_TEXT];
+    const char * pfx;
     int kind;
     int init;
     int borrowed;
+    int adt;
+    int bind;
     if (self->arena->nodes[n].kind != N_DECL) {
         return 0;
     }
     tp = self->arena->nodes[n].text;
     kind = frontend_sym_ct_is_string_value_type(tp);
+    adt = (((!strchr(tp, '*')) && (frontend_sym_ct_adt_from_type(tp) >= 0)) && adt_owns(self, frontend_sym_ct_adt_from_type(tp), 0));
+    bind = ((self->arena->nodes[n].aux == 3) && (sb_life_prefix(self, tp, pbuf, sizeof(pbuf)) != 0));
     if (((self->arena->nodes[n].text3[0] || (self->arena->nodes[n].aux == 1)) || (self->arena->nodes[n].aux == 2))) {
         return 0;
     }
     init = self->arena->nodes[n].a;
-    if ((!kind)) {
+    if ((((!kind) && (!adt)) && (!bind))) {
         sb_lpush(self, self->arena->nodes[n].text2, tp);
         sb_mark_aggregate(self, n);
         return 0;
     }
-    if (init >= 0) {
+    if (((kind && (!bind)) && (init >= 0))) {
         int k = self->arena->nodes[init].kind;
         if ((((((k == N_INIT_RANGE) || (k == N_INIT_BRACE)) || (k == N_INIT_MBRACE)) || (k == N_RAW)) || (k == N_CLOSURE))) {
             return 0;
         }
+    }
+    pfx = sb_life_prefix(self, tp, pbuf, sizeof(pbuf));
+    if ((!pfx)) {
+        sb_lpush(self, self->arena->nodes[n].text2, tp);
+        sb_mark_aggregate(self, n);
+        return 0;
     }
     if (self->__backend_emit_emitops_vptr->hoist_rvalue(self, n) != 0) {
         return (-1);
@@ -5694,17 +5867,22 @@ static int sb_decl(struct backend_emit_Emitter * self, int n, int ind) {
     if (self->__backend_emit_emitops_vptr->emit_type_name_dims(self, tp, self->arena->nodes[n].text2, self->arena->nodes[n].text3) != 0) {
         return (-1);
     }
+    if (self->arena->nodes[n].aux == 3) {
+        fputs(" __attribute__((unused))", self->out);
+    }
     borrowed = 0;
     if (init < 0) {
         fputs(" = { 0 }", self->out);
     }
     else {
         int wrap;
+        int ik;
+        ik = self->arena->nodes[init].kind;
         borrowed = ((self->arena->nodes[n].sflags & 2) ? 1 : 0);
-        wrap = (((!borrowed) && (!sb_rhs_fresh(self, init))) && sb_is_place(self, init));
+        wrap = (((!borrowed) && (!sb_rhs_fresh(self, init))) && (sb_is_place(self, init) || ((ik == N_RAW) && backend_emit_sb_text_place_p((self->arena->nodes[init].aux ? self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, (int)(self->arena->nodes[init].num)) : self->arena->nodes[init].text)))));
         fputs(" = ", self->out);
         if (wrap) {
-            fprintf(self->out, "%s_retain(&(", backend_emit_sb_prefix(kind));
+            fprintf(self->out, "%s_retain(&(", pfx);
         }
         if (self->__backend_emit_emitops_vptr->emit_expr(self, init) != 0) {
             return (-1);
@@ -5720,6 +5898,7 @@ static int sb_decl(struct backend_emit_Emitter * self, int n, int ind) {
 }
 static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
     char t[MAX_TEXT];
+    char pbuf[MAX_TEXT];
     char fbase[MAX_TEXT];
     char ffield[MAX_TEXT];
     int kind;
@@ -5733,6 +5912,8 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
     int k;
     int fowner;
     int param_own;
+    int ai;
+    const char * pfx;
     if (((self->arena->nodes[n].kind != N_ASSIGN) || (self->arena->nodes[n].aux != 0))) {
         return 0;
     }
@@ -5750,9 +5931,20 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
         return 0;
     }
     kind = frontend_sym_ct_is_string_value_type(t);
-    if (((!kind) || backend_emit_g_sb.hitparam)) {
+    if ((!kind)) {
+        ai = frontend_sym_ct_adt_from_type(t);
+        if (((ai < 0) || (!adt_owns(self, ai, 0)))) {
+            return 0;
+        }
+    }
+    if (backend_emit_g_sb.hitparam) {
         return 0;
     }
+    pfx = sb_life_prefix(self, t, pbuf, sizeof(pbuf));
+    if ((!pfx)) {
+        return 0;
+    }
+    sb_norm_own_type(self, t, sizeof(t));
     if (self->__backend_emit_emitops_vptr->hoist_rvalue(self, n) != 0) {
         return (-1);
     }
@@ -5808,7 +6000,7 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
     }
     fputs(" = ", self->out);
     if (wrap) {
-        fprintf(self->out, "%s_retain(&(", backend_emit_sb_prefix(kind));
+        fprintf(self->out, "%s_retain(&(", pfx);
     }
     if (needsrc) {
         fprintf(self->out, "__ct_src%d", (self->ntmp - 1));
@@ -5823,7 +6015,7 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
     }
     fputs("; ", self->out);
     if (release_old) {
-        fprintf(self->out, "%s_release(&__ct_sold%d); ", backend_emit_sb_prefix(kind), (self->ntmp - 1));
+        fprintf(self->out, "%s_release(&__ct_sold%d); ", pfx, (self->ntmp - 1));
     }
     fputs("}\n", self->out);
     if (idx >= 0) {
@@ -5837,7 +6029,7 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
 static int sb_push_params(struct backend_emit_Emitter * self, int first, int anon) {
     int p;
     int ai;
-    int kind;
+    int ai2;
     char uname[32];
     backend_emit_g_sb.n = 0;
     backend_emit_g_sb.ln = 0;
@@ -5852,8 +6044,8 @@ static int sb_push_params(struct backend_emit_Emitter * self, int first, int ano
         if ((nm[0] && (self->arena->nodes[p].text3[0] == 0))) {
             sb_lpush(self, nm, self->arena->nodes[p].text);
             if (((self->arena->nodes[p].aux != 2) && (self->arena->nodes[p].aux != 3))) {
-                kind = frontend_sym_ct_is_string_value_type(self->arena->nodes[p].text);
-                if (kind) {
+                ai2 = (strchr(self->arena->nodes[p].text, '*') ? (-1) : frontend_sym_ct_adt_from_type(self->arena->nodes[p].text));
+                if ((frontend_sym_ct_is_string_value_type(self->arena->nodes[p].text) || ((ai2 >= 0) && adt_owns(self, ai2, 0)))) {
                     sb_push(self, nm, self->arena->nodes[p].text, 1);
                 }
             }
@@ -5864,14 +6056,18 @@ static int sb_push_params(struct backend_emit_Emitter * self, int first, int ano
 }
 static int sb_retain_params(struct backend_emit_Emitter * self, int ind) {
     int i;
-    int kind;
+    char pbuf[MAX_TEXT];
+    const char * pfx;
     for (i = 0; i < backend_emit_g_sb.n; i++) {
-        kind = frontend_sym_ct_is_string_value_type(backend_emit_g_sb.type[i]);
-        if (((!kind) || (!backend_emit_g_sb.own[i]))) {
+        if ((!backend_emit_g_sb.own[i])) {
+            continue;
+        }
+        pfx = sb_life_prefix(self, backend_emit_g_sb.type[i], pbuf, sizeof(pbuf));
+        if ((!pfx)) {
             continue;
         }
         self->__backend_emit_emitops_vptr->emit_indent(self, ind);
-        fprintf(self->out, "%s = %s_retain(&%s);\n", backend_emit_g_sb.name[i], backend_emit_sb_prefix(kind), backend_emit_g_sb.name[i]);
+        fprintf(self->out, "%s = %s_retain(&%s);\n", backend_emit_g_sb.name[i], pfx, backend_emit_g_sb.name[i]);
     }
     return 0;
 }
@@ -7283,6 +7479,114 @@ static int emit_Box_helpers(struct backend_emit_Emitter * self, int u) {
     }
     return 0;
 }
+static int adt_own_kind_variant(struct backend_emit_Emitter * self, int adi, int v) {
+    int f;
+    int n;
+    struct frontend_sym_Adt * adts;
+    adts = frontend_sym_ct_adts((&n));
+    if ((((((!adts) || (adi < 0)) || (adi >= n)) || (v < 0)) || (v >= adts[adi].nvariants))) {
+        return 0;
+    }
+    for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+        if (adt_own_kind(self, adts[adi].variants[v].fields[f].type, 0)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+static int adt_emit_variant_life(struct backend_emit_Emitter * self, int adi, int v, int retain) {
+    int f;
+    int n;
+    struct frontend_sym_Adt * adts;
+    char lv[MAX_TEXT];
+    adts = frontend_sym_ct_adts((&n));
+    if ((((((!adts) || (adi < 0)) || (adi >= n)) || (v < 0)) || (v >= adts[adi].nvariants))) {
+        return 0;
+    }
+    for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+        const char * ft = adts[adi].variants[v].fields[f].type;
+        char pbuf[MAX_TEXT];
+        char base[MAX_TEXT];
+        const char * pfx;
+        if ((!adt_own_kind(self, ft, 0))) {
+            continue;
+        }
+        pfx = sb_life_prefix(self, ft, pbuf, sizeof(pbuf));
+        if ((!pfx)) {
+            continue;
+        }
+        adt_base_type(self, ft, base, sizeof(base));
+        snprintf(lv, sizeof(lv), "self->u.%s.%s", adts[adi].variants[v].cname, adts[adi].variants[v].fields[f].name);
+        if (retain) {
+            fprintf(self->out, "        %s = %s_retain(&%s);\n", lv, pfx, lv);
+        }
+        else {
+            if (((strncmp(base, "Vec_", 4) == 0) || (strncmp(base, "Map_", 4) == 0))) {
+                fprintf(self->out, "        if ((%s).h != 0) (void)%s_release(&%s);\n", lv, pfx, lv);
+            }
+            else {
+                fprintf(self->out, "        %s_release(&%s);\n", pfx, lv);
+            }
+        }
+    }
+    return 0;
+}
+static int emit_adt_life_defs(struct backend_emit_Emitter * self, int u) {
+    int i;
+    int n;
+    int v;
+    int d;
+    struct frontend_sym_Adt * adts;
+    adts = frontend_sym_ct_adts((&n));
+    if ((!adts)) {
+        return 0;
+    }
+    for (i = 0; i < n; i++) {
+        if (((u >= 0) && (adts[i].owner != u))) {
+            continue;
+        }
+        if ((!adt_owns(self, i, 0))) {
+            continue;
+        }
+        d = (((u >= 0) && adts[i].is_pub) ? 0 : 1);
+        if (d) {
+            fprintf(self->out, "static __attribute__((unused)) struct %s %s_retain(struct %s *self)\n{\n", adts[i].full, adts[i].full, adts[i].full);
+        }
+        else {
+            fprintf(self->out, "struct %s %s_retain(struct %s *self)\n{\n", adts[i].full, adts[i].full, adts[i].full);
+        }
+        for (v = 0; v < adts[i].nvariants; v++) {
+            if ((!adt_own_kind_variant(self, i, v))) {
+                continue;
+            }
+            fprintf(self->out, "    if (self->tag == %d) {\n", v);
+            if (adt_emit_variant_life(self, i, v, 1) != 0) {
+                return (-1);
+            }
+            fputs("    }\n", self->out);
+        }
+        fputs("    return *self;\n}\n\n", self->out);
+        if (d) {
+            fprintf(self->out, "static __attribute__((unused)) void %s_release(struct %s *self)\n{\n", adts[i].full, adts[i].full);
+        }
+        else {
+            fprintf(self->out, "void %s_release(struct %s *self)\n{\n", adts[i].full, adts[i].full);
+        }
+        fputs("    if (self == 0) return;\n", self->out);
+        for (v = 0; v < adts[i].nvariants; v++) {
+            if ((!adt_own_kind_variant(self, i, v))) {
+                continue;
+            }
+            fprintf(self->out, "    if (self->tag == %d) {\n", v);
+            if (adt_emit_variant_life(self, i, v, 0) != 0) {
+                return (-1);
+            }
+            fputs("    }\n", self->out);
+        }
+        fputs("}\n\n", self->out);
+    }
+    return 0;
+}
 static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
     int n;
     int i;
@@ -7412,6 +7716,9 @@ static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
         return (-1);
     }
     if (emit_Box_helpers(self, u) != 0) {
+        return (-1);
+    }
+    if (emit_adt_life_defs(self, u) != 0) {
         return (-1);
     }
     if (emit_string_literals(self, self->units[u].prog) != 0) {
@@ -7997,6 +8304,12 @@ static int elem_has_life(struct backend_emit_Emitter * self, const char * elem) 
     struct frontend_sym_StructImpl * im;
     if (frontend_sym_ct_is_container_type(elem)) {
         return 1;
+    }
+{
+        int adi = frontend_sym_ct_adt_from_type(elem);
+        if (adi >= 0) {
+            return adt_owns(self, adi, 0);
+        }
     }
     if (strncmp(elem, "struct ", 7) != 0) {
         return 0;
@@ -8706,6 +9019,13 @@ static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int
     fprintf(self->out, "_Static_assert(offsetof(struct %s, u) >= sizeof(int), \"%s: the payload union must follow the tag\");\n", tag, tag);
     fprintf(self->out, "_Static_assert(offsetof(struct %s, u) >= offsetof(struct %s, tag) + sizeof(int), \"%s: the tag must end before the payload union\");\n", tag, tag, tag);
     fprintf(self->out, "_Static_assert(sizeof(struct %s) >= offsetof(struct %s, u) + sizeof(((struct %s *)0)->u), \"%s: the payload must fit\");\n", tag, tag, tag, tag);
+    if (adt_owns(self, adi, 0)) {
+        int link = ((adts[adi].is_pub && (!backend_emit_g_shell_header)) ? 0 : 1);
+        fputs((link ? "static " : ""), self->out);
+        fprintf(self->out, "struct %s %s_retain(struct %s *);\n", tag, tag, tag);
+        fputs((link ? "static " : ""), self->out);
+        fprintf(self->out, "void %s_release(struct %s *);\n", tag, tag);
+    }
     return 0;
 }
 static int emit_match_arm(struct backend_emit_Emitter * self, int arm, int ind, int k, int ptr) {
@@ -8772,6 +9092,8 @@ static int em_expr_adtctor(struct backend_emit_Emitter * self, int n, int nk) {
     int v2;
     int f2;
     int a2;
+    char pbuf[MAX_TEXT];
+    const char * pfx;
     struct frontend_sym_Adt * adts2;
     int nadts2;
     adi2 = frontend_sym_ct_adt_find(self->arena->nodes[n].text);
@@ -8788,15 +9110,24 @@ static int em_expr_adtctor(struct backend_emit_Emitter * self, int n, int nk) {
         fprintf(self->out, ", .u = { .%s = { ", adts2[adi2].variants[v2].cname);
         a2 = self->arena->nodes[n].a;
         for (f2 = 0; f2 < adts2[adi2].variants[v2].nfields; f2++) {
+            int retain;
             if (f2 > 0) {
                 fputs(", ", self->out);
             }
-            fprintf(self->out, ".%s = (", adts2[adi2].variants[v2].fields[f2].name);
             if (a2 < 0) {
                 return self->__backend_emit_emitops_vptr->fail_from(self, n, "an ADT argument is missing");
             }
+            pfx = sb_life_prefix(self, adts2[adi2].variants[v2].fields[f2].type, pbuf, sizeof(pbuf));
+            retain = ((pfx && (!sb_rhs_fresh(self, a2))) && (sb_is_place(self, a2) || (self->arena->nodes[a2].kind == N_RAW)));
+            fprintf(self->out, ".%s = (", adts2[adi2].variants[v2].fields[f2].name);
+            if (retain) {
+                fprintf(self->out, "%s_retain(&(", pfx);
+            }
             if (self->__backend_emit_emitops_vptr->emit_expr(self, a2) != 0) {
                 return (-1);
+            }
+            if (retain) {
+                fputs("))", self->out);
             }
             fputs(")", self->out);
             a2 = self->arena->nodes[a2].next;
@@ -10443,6 +10774,8 @@ static int em_node_matseq(struct backend_emit_Emitter * self, int n, int ind, in
 static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int nk) {
     (void)(nk);
     char tmp[MAX_TEXT];
+    char rpbuf[MAX_TEXT];
+    const char * rpfx;
     int r;
     int rtv;
     int wrap;
@@ -10450,7 +10783,8 @@ static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int n
     int smove;
     int sretain;
     int sret;
-    srk = frontend_sym_ct_is_string_value_type(self->cur_ret);
+    rpfx = (sb_value_type_owns(self, self->cur_ret) ? sb_life_prefix(self, self->cur_ret, rpbuf, sizeof(rpbuf)) : 0);
+    srk = (rpfx ? 1 : 0);
     smove = (srk ? sb_ret_move(self, self->arena->nodes[n].a) : (-1));
     if (((srk && (self->arena->nodes[n].a >= 0)) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR))) {
         char et[MAX_TEXT];
@@ -10507,13 +10841,13 @@ static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int n
         fputs(";\n", self->out);
         if (sretain) {
             self->__backend_emit_emitops_vptr->emit_indent(self, ind);
-            fprintf(self->out, "__ct_sret%d = %s_retain(&__ct_sret%d);\n", sret, backend_emit_sb_prefix(srk), sret);
+            fprintf(self->out, "__ct_sret%d = %s_retain(&__ct_sret%d);\n", sret, rpfx, sret);
         }
     }
     else {
         if ((sretain && (rtv >= 0))) {
             self->__backend_emit_emitops_vptr->emit_indent(self, ind);
-            fprintf(self->out, "__ct_ret%d = %s_retain(&__ct_ret%d);\n", rtv, backend_emit_sb_prefix(srk), rtv);
+            fprintf(self->out, "__ct_ret%d = %s_retain(&__ct_ret%d);\n", rtv, rpfx, rtv);
         }
     }
     for (r = self->arena->nodes[n].b; r >= 0; r = self->arena->nodes[r].next) {

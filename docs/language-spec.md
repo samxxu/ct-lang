@@ -3279,7 +3279,7 @@ int area(Shape s)
   或类型与字段不符（可判定的冲突）都是**硬错**（E84-2）。
 - **`match`**：语句形式（本轮无表达式形式）。每个分支是
   `Type.Variant(bindings) => { … }`；绑定是**裸名**，类型取自负载字段，payload 按值绑定
-  （owning 负载视作 move 进绑定，见下）。分支体必须有花括号，无 fallthrough。
+  （owning 负载按 retain 副本进绑定，见下）。分支体必须有花括号，无 fallthrough。
 - **穷尽（E84-3）**：必须覆盖全部变体，或显式写一个 `_ => { … }`；缺分支、重复分支、
   未知变体、跨 ADT 的变体、绑定数与负载不符、绑定重名都编译错并给位置。`_` 必须写在
   最后一支，且只能有一个。
@@ -3318,9 +3318,10 @@ struct Shape {
   `switch`：分支里的 `break` 必须仍表示**外层循环**的 break，且 if/else 链天然无
   fallthrough（E84-4）。
 - **绑定语义**：arm 绑定是该臂块内的普通局部量，初值取自 `__ct_matchN.u.<Variant>.<field>`；
-  绑定是**副本**（值语义），修改绑定不改变被 match 的值。owning 负载按 move 处理：绑定
-  取得该值的使用权，ADT 本身不自动释放 payload（本阶段不生成 ADT 的 drop glue，见 R84-4
-  与“简化”条）。
+  绑定是**副本**（值语义），修改绑定不改变被 match 的值。owning 负载（`String` / 容器 /
+  `Box` / 嵌套 ADT）按 **retain 副本**绑定：绑定持有自己的一份引用，臂块结束时释放；
+  ADT 值按 retain/release **浅共享**——构造、拷贝、按值实参与 `return` 各取一份引用，
+  作用域出口与最后一个值释放（LANG-29 S2 / B3）。
 - **主语**：ADT 值或 `ADT *` 指针都接受；指针主语用 `->` 读 tag/payload。
 
 #### 实现上限与边界
@@ -3332,9 +3333,12 @@ struct Shape {
 - ADT 必须**先声明后使用**（与 struct 一致）：`match`/构造时 tag 必须已在类型表中。
 - 跨单元：`pub` ADT 经 `.h.ct` 的生成头发布布局，消费者可构造/匹配；变体表在 build 内
   全局登记，故同一 ADT 只读一次。`--emit-model` 的 `enums` 列表本轮不含 ADT。
-- **简化（诚实登记）**：本轮不为 ADT 生成 Drop glue，owning payload 的释放由作者显式处理；
-  ADT 不能带显式枚举值；无泛型 ADT；`match` 不能作为表达式；没有 or / 守卫 / 嵌套 / 结构体
-  模式；`offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器产物负责）。
+- **payload 生命周期（LANG-29 S2 / B3 起）**：ADT 的 owning payload 由编译器生成的
+  `<T>_retain` / `<T>_release` 持有与释放；裸 `Str` 不能作 payload（存 `String`，取视图用
+  `as_str()`），声明处即硬错。
+- **简化（诚实登记）**：ADT 不能带显式枚举值；无泛型 ADT；`match` 不能作为表达式；没有
+  or / 守卫 / 嵌套 / 结构体模式；`offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器
+  产物负责）。
 
 #### 冻结清单登记（v0-PH-84 范围）
 

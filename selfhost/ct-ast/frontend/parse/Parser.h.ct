@@ -3186,6 +3186,20 @@ impl ParseOps for Parser {
                         return tool::diag::ct_sem_error(self->arena->nodes[fld].line,
                             self->arena->nodes[fld].num, msg, self->mem->path);
                     }
+                    /* LANG-29 S2 / B3 (D-021 §3): an ADT payload is copied by
+                       value and its owning leaves are retain/released, so a
+                       bare `Str` view has no owner to keep alive. Store a
+                       `String` instead and take a view with `as_str()`. */
+                    if (self->sup->str_handle_kind(self->arena->nodes[fld].text) == 3
+                        || self->sup->str_handle_kind(self->arena->nodes[fld].text) == 4) {
+                        char msg[MAX_TEXT * 2];
+                        snprintf(msg, sizeof msg,
+                                 "an ADT payload cannot be a bare '%s' view; store a 'String' and take a view with as_str()",
+                                 self->sup->str_handle_kind(self->arena->nodes[fld].text) == 4
+                                     ? "U16Str" : "Str");
+                        return tool::diag::ct_sem_error(self->arena->nodes[fld].line,
+                            self->arena->nodes[fld].num, msg, self->mem->path);
+                    }
                 }
             }
             ao = -1;

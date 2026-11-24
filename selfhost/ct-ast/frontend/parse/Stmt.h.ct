@@ -4760,9 +4760,11 @@ impl StmtOps for Stmt {
             /* PH-80 SH-102 (D-013 §3): a `String` / `U16String` local bound to a
                borrowed view stays a view (no retain, no scope release); the
                emitter reads this bit instead of re-deriving the provenance from
-               an initialiser whose variables are gone by then. */
+               an initialiser whose variables are gone by then. LANG-29 S2 / B3
+               follows the same rule for an owning ADT local (`Msg m = v.get(0)`). */
             if (self->arena->nodes[n].text3[0] == 0
-                && frontend::sym::ct_is_string_value_type(typebuf)
+                && (frontend::sym::ct_is_string_value_type(typebuf)
+                    || frontend::sym::ct_adt_from_type(typebuf) >= 0)
                 && frontend::parse::expr_borrow_root(self->ex,
                                                      self->arena->nodes[n].a))
                 self->arena->nodes[n].sflags |= 2;
@@ -5183,8 +5185,10 @@ impl StmtOps for Stmt {
                                                 self->arena->nodes[e].text2, rhs);
             }
             /* PH-80 SH-102 (D-013 §3): the same provenance fact for a string
-               handle assignment, whichever place the target names. */
-            if (frontend::sym::ct_is_string_value_type(tt)
+               handle assignment, whichever place the target names. LANG-29 S2 /
+               B3 repeats it for an owning ADT target. */
+            if ((frontend::sym::ct_is_string_value_type(tt)
+                 || frontend::sym::ct_adt_from_type(tt) >= 0)
                 && frontend::parse::expr_borrow_root(self->ex, rhs))
                 self->arena->nodes[n].sflags |= 2;
             /* SH-106: rebinding a `Str` / `U16Str` local follows its new

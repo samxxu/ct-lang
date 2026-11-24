@@ -2137,8 +2137,8 @@ struct Shape {
 
 **边界**：泛型 ADT、or / 守卫 / 字面量 / 嵌套 / 结构体模式、表达式形式的 `match`
 都留到 v1.1+；`match` 只接受 ADT 主语（普通 `int` 会报
-`match needs an ADT value, but 'int' is not an ADT`）；owning payload 视为 move 进绑定，
-ADT 本身不自动释放 payload（作者显式处理）。上限：64 个 ADT / 每 ADT 16 个变体 /
+`match needs an ADT value, but 'int' is not an ADT`）；owning payload 按 retain 副本绑定，
+ADT 值按 retain/release 浅共享，作用域出口自动释放（LANG-29 S2 / B3）。上限：64 个 ADT / 每 ADT 16 个变体 /
 每变体 8 个负载字段。C enum 与 `switch` 的行为完全不变。
 
 把 `node->kind` 判别机械改写成穷尽 `match` 的做法见
