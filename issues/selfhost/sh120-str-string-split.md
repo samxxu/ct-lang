@@ -7,7 +7,7 @@
 | 严重度 | **Medium**（当前行为正常；拆分触及内置层硬编码、命名空间与自举产物） |
 | 锚点 | `38fa7f80`（`v1.0.0-29`，2026-11-24） |
 | 文件 | `lib/core/Str.h.ct:48-71`；`selfhost/check-ast.sh:307-318`；`selfhost/ct-ast/frontend/module/Module.h.ct:161-165,2223-2243`；`selfhost/ct-ast/tool/driver/Driver.h.ct:368-377`；`selfhost/ct-ast/frontend/parse/Expr.h.ct:6428`、`Stmt.h.ct:4853` |
-| 状态 | open |
+| 状态 | verified |
 | 结论 | **违规成立。** 所有者 2026-11-24 最终口径：`String` / `Str` 拆成两个文件但**不改目录**（仍在 `lib/core/`，`namespace core`）；只有 U16 对进入 `lib/core/utf16/`，并使用 `namespace core::utf16;` 以满足“目录 = 命名空间”。U16 的公开名因此变为 `core::utf16::U16String` / `core::utf16::U16Str`，是**破坏性命名变更**，必须带迁移说明。 |
 
 ## 现象
@@ -183,3 +183,9 @@ U16String.h.ct  → core::String / core::Str / core::utf16::U16Str
 | 构建产物 | `ct build` 产出 `String.c` / `Str.c` / `U16String.c` / `U16Str.c`；`String` 单元头文件名为 `String_.h`（避免大小写不敏感文件系统上 `#include <string.h>` 命中 `String.h`）；`--lib` 的全局符号多出四个单元共享的 `ct_str_*` / `ct_u16_*` 辅助函数，登记在 `test/modules/p39_lib/expected.internal` |
 | seed | 已用当前行为的两级自举重生成 `bootstrap/ct-ast` 与 `MANIFEST.sha256`；gate 13 两轮逐字节一致、手改负例红 |
 | 未覆盖 | ① 未做 `--emit-model` / ABI 逐字节对照，只用 goldens、p39、check-warnings 覆盖；② `core::utf16::U16String::from_utf8` 的 `::` 静态调用仍不支持（语言面限制，类型拼写与点形式已覆盖）；③ `p85_corpus_sha.tsv` 的 4 个字符串样例与 `p88_metrics.md` 的 live pin 按“内建层拆分会改变发射 C/行数”更新，PH-85/88 历史数字保留并注明；④ 仓内无 examples 使用 U16（审计数字沿用 issue） |
+
+
+## 8. 复核（REV，2026-11-24）
+
+四单元落地、内置层 5→8、U16 规范拼写与迁移说明完成；`sh120_split` 24/0，check-all 9 门、
+check-seed 两轮、check-docs、sanitizers 绿。`g1` 的 phase ledger 缺行已补 `v1-PH-1`（与本卡无关的既有缺口）。
