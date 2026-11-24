@@ -24,6 +24,7 @@ import tool::diag::Diag;
 
 /* Mirror of Symbols.h.ct's whole-program function budget (macros do not cross
    units). Raised 256 -> 512 together with the other three mirrors. */
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_FUNCS 512
 #define MAX_FUNCS_MAX 65536
 #define MAX_PARAMS 16

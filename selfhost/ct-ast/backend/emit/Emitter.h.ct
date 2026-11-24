@@ -36,6 +36,7 @@ import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import backend::emit::EmitterText;
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_HOISTS 4

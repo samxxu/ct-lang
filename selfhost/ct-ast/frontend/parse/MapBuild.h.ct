@@ -26,6 +26,7 @@ import frontend::parse::ParseSupport;
 import frontend::sym::Symbols;
 import tool::diag::Diag;
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
 #define MAX_PARAMS 16
 #define MAX_METHODS 64

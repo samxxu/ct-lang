@@ -29,6 +29,7 @@ import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import frontend::sym::SymbolsTypeText;
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
 
 namespace backend::emit;

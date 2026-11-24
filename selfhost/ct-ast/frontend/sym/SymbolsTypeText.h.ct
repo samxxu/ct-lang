@@ -12,6 +12,7 @@
 #include <ctype.h>
 
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT    160
 #define MAX_STRUCT_TPARAMS 2
 

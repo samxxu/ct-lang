@@ -38,6 +38,7 @@ import tool::diag::Diag;
 import tool::sh::Sh;
 import frontend::module::ModuleBoundary;
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_UNITS  64

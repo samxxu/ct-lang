@@ -27,6 +27,7 @@ import frontend::sym::SymbolsTypeText;
    sections). The rest are reachable but stay unfixtured on purpose: each case
    costs a generator plus a text contract, and the return has flattened. Pin one
    only when that cap is about to change. */
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT    160
 #define MAX_PARAMS  16
 /* Whole-program budget: `nfunc` accumulates across every unit in one build

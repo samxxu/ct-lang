@@ -31,6 +31,7 @@ import tool::diag::Diag;
 import frontend::parse::StmtRangeText;
 import frontend::type::TypeCheck;
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
 #define MAX_RAW_INIT 4096
 #define MAX_INIT_TEXT 16384

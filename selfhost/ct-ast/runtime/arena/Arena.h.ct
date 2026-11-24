@@ -11,6 +11,7 @@
  * (~70 K nodes by v0.15.0); the pool is a capacity, not a language limit.
  */
 #include <stdlib.h>
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_NODES 262144
 namespace runtime::arena;
 /* The pool owns storage only: node kinds and the meaning of the child slots are

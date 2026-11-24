@@ -21,6 +21,7 @@
 import tool::sh::Sh;
 import tool::pkg::PkgIndex;
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT       160
 #define MAX_LOCK       4096             /* MAX_PKG_PATH * 8, spelled out */
 #define MAX_PKG_DEPS   16

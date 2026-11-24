@@ -62,6 +62,7 @@ import frontend::parse::ExprTypeText;
    budget started failing on ct-ast's own source; 2048 keeps the growth room.
    The table is `MAX_CALLS * sizeof(struct Call)`, so this costs ~320 KiB in
    BSS, not a product change. */
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_CALLS 8192
 /* Mirror of Symbols.h.ct's whole-program budget; macros do not cross units. */
 #define MAX_FUNCS 512

@@ -39,6 +39,7 @@ import runtime::arena::Arena;
 import tool::diag::Diag;
 import frontend::sym::SymbolsTypeText;
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_FIELDS 64
 #define MAX_IMPORTS 32
 #define MAX_INIT_TEXT 16384

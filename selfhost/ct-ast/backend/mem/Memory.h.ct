@@ -17,6 +17,7 @@ import frontend::sym::Symbols;
 import runtime::arena::Arena;
 import tool::diag::Diag;
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT  160
 #define MAX_VARS  4096
 /* only the node kinds this unit reads; the numbers are the ones the parser

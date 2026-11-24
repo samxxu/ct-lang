@@ -315,6 +315,16 @@ else
     bad "unit names" "$(cat "$work/unitnames.out" "$work/unitnames.err" | head -5)"
 fi
 
+# SH-94: `frontend/sym/Limits.h.ct` is the one place a MAX_* cap value is
+# chosen; every other unit's define is a mirror and must agree. The negative
+# (a drifted mirror, a rogue cap, and the repair) is the tool's own selftest.
+if python3 tools/limits_sync.py --check >"$work/limits.out" 2>"$work/limits.err" \
+   && python3 tools/limits_sync.py --selftest >"$work/limits.st" 2>&1; then
+    ok "cap authority ($(tail -1 "$work/limits.out"))"
+else
+    bad "cap authority" "$(cat "$work/limits.out" "$work/limits.err" "$work/limits.st" | head -5)"
+fi
+
 # TEST-19: C leaves argument evaluation order unspecified, so a fixture that
 # prints `m.remove(k)` and `m.len()` in one call reads differently on GCC/x86-64
 # (right to left) and clang/arm64 -- that was the ubuntu-gcc failure at v0.63.0.

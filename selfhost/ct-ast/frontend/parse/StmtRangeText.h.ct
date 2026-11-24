@@ -21,6 +21,7 @@ import frontend::parse::ParseSupport;
 import frontend::parse::Expr;
 import tool::diag::Diag;
 
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
 
 namespace frontend::parse;
