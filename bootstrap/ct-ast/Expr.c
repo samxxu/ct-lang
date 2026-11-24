@@ -13,6 +13,7 @@
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
+#include "ExprAdtCtor.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -137,6 +138,7 @@ struct frontend_parse_ParseSupport;
 struct frontend_parse_ExprTypeText;
 struct frontend_parse_ExprPure;
 struct frontend_parse_Expr;
+struct frontend_parse_ExprAdtCtor;
 struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
@@ -161,7 +163,6 @@ struct tool_pkg_Sha256;
 struct tool_driver_Driver;
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable;
 const struct frontend_parse_ExprNew_vtbl frontend_parse_Expr_frontend_parse_ExprNew_vtable;
-const struct frontend_parse_ExprAdt_vtbl frontend_parse_Expr_frontend_parse_ExprAdt_vtable;
 const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_parse_ExprSubscript_vtable;
 const struct frontend_parse_ExprOptional_vtbl frontend_parse_Expr_frontend_parse_ExprOptional_vtable;
 const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable;
@@ -7056,178 +7057,6 @@ const struct frontend_parse_ExprNew_vtbl frontend_parse_Expr_frontend_parse_Expr
     .Box_member_deref = frontend_parse_Expr_frontend_parse_ExprNew_Box_member_deref,
     .new_ahead = frontend_parse_Expr_frontend_parse_ExprNew_new_ahead,
     .parse_new_expr = frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr
-};
-
-static int frontend_parse_Expr_frontend_parse_ExprAdt_adt_ctor_ahead(void *self) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    const char * p;
-    char rn[MAX_TEXT];
-    int i;
-    (void)(_self);
-    if (_self->lex->tok != T_ID) {
-        return 0;
-    }
-    if (_self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) {
-        return 0;
-    }
-    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rn, sizeof(rn)) != 0) {
-        return 0;
-    }
-    if (frontend_sym_ct_adt_from_type(rn) < 0) {
-        return 0;
-    }
-    p = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
-    while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
-        p++;
-    }
-    if ((*p) != '.') {
-        return 0;
-    }
-    p++;
-    while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
-        p++;
-    }
-    i = 0;
-    while ((((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || (((*p) >= '0') && ((*p) <= '9'))) || ((*p) == '_')) && ((i + 1) < MAX_TEXT))) {
-        i++;
-        p++;
-    }
-    if (i == 0) {
-        return 0;
-    }
-    while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
-        p++;
-    }
-    return ((*p) == '(');
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int tline;
-    int tcol;
-    int vline;
-    int vcol;
-    int args;
-    int nargs;
-    int adt;
-    int v;
-    int nfields;
-    int n;
-    int k;
-    int a;
-    char rn[MAX_TEXT];
-    char vname[MAX_TEXT];
-    char msg[3 * MAX_TEXT];
-    struct frontend_sym_Adt * adts;
-    int nadts;
-    tline = _self->lex->tokline;
-    tcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rn, sizeof(rn)) != 0) {
-        return (-1);
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ".")))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '.' after an ADT type name");
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if (_self->lex->tok != T_ID) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a variant name after '.'");
-    }
-    vline = _self->lex->tokline;
-    vcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, vname, sizeof(vname));
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    adt = frontend_sym_ct_adt_from_type(rn);
-    if (adt < 0) {
-        snprintf(msg, sizeof(msg), "'%s' is not an ADT", rn);
-        return tool_diag_ct_sem_error(tline, tcol, msg, _self->sup->mem->path);
-    }
-    v = frontend_sym_ct_adt_variant(adt, vname);
-    if (v < 0) {
-        adts = frontend_sym_ct_adts((&nadts));
-        snprintf(msg, sizeof(msg), "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
-        return tool_diag_ct_sem_error(vline, vcol, msg, _self->sup->mem->path);
-    }
-    if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
-        adts = frontend_sym_ct_adts((&nadts));
-        snprintf(msg, sizeof(msg), "expected '(' after '%s.%s'", adts[adt].name, vname);
-        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->sup->mem->path);
-    }
-    args = _self->__frontend_parse_exprops_vptr->parse_args(_self);
-    if (args < 0) {
-        return (-1);
-    }
-    if (args == 0) {
-        args = (-1);
-    }
-    adts = frontend_sym_ct_adts((&nadts));
-    nfields = adts[adt].variants[v].nfields;
-    nargs = 0;
-    for (a = args; a > 0; a = _self->arena->nodes[a].next) {
-        nargs++;
-    }
-    if (nargs != nfields) {
-        snprintf(msg, sizeof(msg), "'%s.%s' takes %d argument%s, but %d given", adts[adt].name, vname, nfields, ((nfields == 1) ? "" : "s"), nargs);
-        return tool_diag_ct_sem_error(tline, tcol, msg, _self->sup->mem->path);
-    }
-    k = 0;
-    for (a = args; a > 0; (a = _self->arena->nodes[a].next, k++)) {
-        char aty[MAX_TEXT];
-        char fb[MAX_TEXT];
-        char ab[MAX_TEXT];
-        int az;
-        int rc;
-        int aline;
-        int acol;
-        if (k >= nfields) {
-            break;
-        }
-        aline = (((_self->arg_base + k) < MAX_ARG_POS) ? _self->arg_line[(_self->arg_base + k)] : tline);
-        acol = (((_self->arg_base + k) < MAX_ARG_POS) ? _self->arg_col[(_self->arg_base + k)] : tcol);
-        if (_self->sup->__frontend_parse_supportops_vptr->str_store_warn(_self->sup, a, adts[adt].variants[v].fields[k].type, aline, acol) != 0) {
-            return (-1);
-        }
-        az = 0;
-        if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, a, aty, sizeof(aty), (&az)) != 0) {
-            continue;
-        }
-        if ((az && strchr(adts[adt].variants[v].fields[k].type, '*'))) {
-            continue;
-        }
-        rc = frontend_parse_arg_class(adts[adt].variants[v].fields[k].type, aty, fb, sizeof(fb), ab, sizeof(ab));
-        if (rc == 2) {
-            int fs;
-            int as;
-            fs = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (fb + 6));
-            as = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (ab + 6));
-            if ((((fs < 0) || (as < 0)) || (fs == as))) {
-                rc = 0;
-            }
-        }
-        if (rc != 1) {
-            continue;
-        }
-        aline = (((_self->arg_base + k) < MAX_ARG_POS) ? _self->arg_line[(_self->arg_base + k)] : tline);
-        acol = (((_self->arg_base + k) < MAX_ARG_POS) ? _self->arg_col[(_self->arg_base + k)] : tcol);
-        snprintf(msg, sizeof(msg), "argument %d of '%s.%s': expected '%s', got '%s'", (k + 1), adts[adt].name, vname, adts[adt].variants[v].fields[k].type, aty);
-        return tool_diag_ct_sem_error(aline, acol, msg, _self->sup->mem->path);
-    }
-    n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ADTCTOR);
-    if (n < 0) {
-        return (-1);
-    }
-    snprintf(_self->arena->nodes[n].text, MAX_TEXT, "%s", adts[adt].full);
-    snprintf(_self->arena->nodes[n].text2, MAX_TEXT, "%s", adts[adt].variants[v].cname);
-    snprintf(_self->arena->nodes[n].text3, MAX_TEXT, "%s", adts[adt].variants[v].name);
-    _self->arena->nodes[n].num = v;
-    _self->arena->nodes[n].line = tline;
-    _self->arena->nodes[n].a = args;
-    return n;
-}
-
-const struct frontend_parse_ExprAdt_vtbl frontend_parse_Expr_frontend_parse_ExprAdt_vtable = {
-    .adt_ctor_ahead = frontend_parse_Expr_frontend_parse_ExprAdt_adt_ctor_ahead,
-    .parse_adt_ctor = frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor
 };
 
 static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label(void *self, const char * bty, char * out, int cap) {

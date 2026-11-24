@@ -59,6 +59,7 @@ struct frontend_parse_ParseSupport;
 struct frontend_parse_ExprTypeText;
 struct frontend_parse_ExprPure;
 struct frontend_parse_Expr;
+struct frontend_parse_ExprAdtCtor;
 struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;

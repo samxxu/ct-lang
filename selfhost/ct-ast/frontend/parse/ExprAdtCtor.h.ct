@@ -1,0 +1,167 @@
+/*
+ * ExprAdtCtor.h.ct - the `Type.Variant(args)` constructor grammar, moved out
+ * of Expr.h.ct (SH-94 S1, pure move).
+ *
+ * The two methods hold `self` and read the lexer, the symbol tables, the
+ * shared primitives, the arena and the trait dispatch surface; the host type
+ * lives in ExprCore.h.ct, so this unit imports Core rather than the host and
+ * the import graph stays acyclic. Bodies are byte-identical to the ones
+ * Expr.h.ct used to hold; Expr.h.ct imports this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <string.h>
+
+import frontend::lex::Lexer;
+import backend::mem::Memory;
+import frontend::parse::ExprCore;
+import frontend::parse::ExprTypeText;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
+import tool::diag::Diag;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_TEXT 160
+#define MAX_ARG_POS 32
+#define N_ADTCTOR 81
+#define T_ID 1
+#define T_PUNCT 4
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct ExprAdtCtor {
+    int unused;
+}
+
+impl ExprAdt for Expr {
+    /* 1 when the cursor is `Type.Variant(` and `Type` names an ADT. A visible
+       variable of the same name keeps the ordinary member-access path: a
+       variable wins over a type, as it does everywhere else. The token stream
+       cannot be rewound, so the lookahead scans the raw source. */
+    int adt_ctor_ahead(void)
+    {
+        const char *p;
+        char rn[MAX_TEXT];
+        int i;
+        (void)self;
+
+        if (self->lex->tok != T_ID) return 0;
+        if (self->sym->find_var(self->lex->tok_cstr()) >= 0) return 0;
+        if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) != 0) return 0;
+        if (frontend::sym::ct_adt_from_type(rn) < 0) return 0;
+        p = self->lex->src + self->lex->tokstart + self->lex->tokstr.len;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        if (*p != '.') return 0;
+        p++;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        i = 0;
+        while (((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                || (*p >= '0' && *p <= '9') || *p == '_') && i + 1 < MAX_TEXT) {
+            i++;
+            p++;
+        }
+        if (i == 0) return 0;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        return *p == '(';
+    }
+
+    int parse_adt_ctor(void)
+    {
+        int tline, tcol, vline, vcol, args, nargs, adt, v, nfields, n, k, a;
+        char rn[MAX_TEXT];
+        char vname[MAX_TEXT];
+        char msg[3 * MAX_TEXT];
+        struct Adt *adts;
+        int nadts;
+
+        tline = self->lex->tokline;
+        tcol = self->lex->tokstart - self->lex->lstart + 1;
+        if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) != 0)
+            return -1;
+        self->sup->lex_next();                     /* the type name */
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(".")))
+            return self->sup->fail("expected '.' after an ADT type name");
+        self->sup->lex_next();
+        if (self->lex->tok != T_ID) return self->sup->fail("expected a variant name after '.'");
+        vline = self->lex->tokline;
+        vcol = self->lex->tokstart - self->lex->lstart + 1;
+        self->lex->tok_copy(vname, sizeof vname);
+        self->sup->lex_next();
+        adt = frontend::sym::ct_adt_from_type(rn);
+        if (adt < 0) {
+            snprintf(msg, sizeof msg, "'%s' is not an ADT", rn);
+            return tool::diag::ct_sem_error(tline, tcol, msg, self->sup->mem->path);
+        }
+        v = frontend::sym::ct_adt_variant(adt, vname);
+        if (v < 0) {
+            adts = frontend::sym::ct_adts(&nadts);
+            snprintf(msg, sizeof msg, "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
+            return tool::diag::ct_sem_error(vline, vcol, msg, self->sup->mem->path);
+        }
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("("))) {
+            adts = frontend::sym::ct_adts(&nadts);
+            snprintf(msg, sizeof msg, "expected '(' after '%s.%s'", adts[adt].name, vname);
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                self->lex->tokstart - self->lex->lstart + 1, msg, self->sup->mem->path);
+        }
+        args = self->parse_args();
+        if (args < 0) return -1;
+        if (args == 0) args = -1;              /* an empty list is a real value */
+        adts = frontend::sym::ct_adts(&nadts);
+        nfields = adts[adt].variants[v].nfields;
+        nargs = 0;
+        for (a = args; a > 0; a = self->arena->nodes[a].next) nargs++;
+        if (nargs != nfields) {
+            snprintf(msg, sizeof msg, "'%s.%s' takes %d argument%s, but %d given",
+                     adts[adt].name, vname, nfields, nfields == 1 ? "" : "s", nargs);
+            return tool::diag::ct_sem_error(tline, tcol, msg, self->sup->mem->path);
+        }
+        k = 0;
+        for (a = args; a > 0; a = self->arena->nodes[a].next, k++) {
+            char aty[MAX_TEXT];
+            char fb[MAX_TEXT];
+            char ab[MAX_TEXT];
+            int az, rc, aline, acol;
+            if (k >= nfields) break;
+            /* LANG-22: an ADT payload copies the value into the variant, so a
+               non-immortal borrowed `Str` view would outlive its owner. */
+            aline = (self->arg_base + k < MAX_ARG_POS) ? self->arg_line[self->arg_base + k] : tline;
+            acol = (self->arg_base + k < MAX_ARG_POS) ? self->arg_col[self->arg_base + k] : tcol;
+            if (self->sup->str_store_warn(a, adts[adt].variants[v].fields[k].type,
+                                          aline, acol) != 0)
+                return -1;
+            az = 0;
+            if (self->chk_type(a, aty, sizeof aty, &az) != 0) continue;
+            if (az && strchr(adts[adt].variants[v].fields[k].type, '*')) continue;
+            rc = arg_class(adts[adt].variants[v].fields[k].type, aty,
+                           fb, sizeof fb, ab, sizeof ab);
+            if (rc == 2) {
+                int fs, as;
+                fs = self->sym->find_struct(fb + 6);
+                as = self->sym->find_struct(ab + 6);
+                if (fs < 0 || as < 0 || fs == as) rc = 0;
+            }
+            if (rc != 1) continue;
+            aline = (self->arg_base + k < MAX_ARG_POS) ? self->arg_line[self->arg_base + k] : tline;
+            acol = (self->arg_base + k < MAX_ARG_POS) ? self->arg_col[self->arg_base + k] : tcol;
+            snprintf(msg, sizeof msg, "argument %d of '%s.%s': expected '%s', got '%s'",
+                     k + 1, adts[adt].name, vname,
+                     adts[adt].variants[v].fields[k].type, aty);
+            return tool::diag::ct_sem_error(aline, acol, msg, self->sup->mem->path);
+        }
+        n = self->sup->new_node(N_ADTCTOR);
+        if (n < 0) return -1;
+        snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", adts[adt].full);
+        snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", adts[adt].variants[v].cname);
+        snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", adts[adt].variants[v].name);
+        self->arena->nodes[n].num = v;
+        self->arena->nodes[n].line = tline;
+        self->arena->nodes[n].a = args;
+        return n;
+    }
+}

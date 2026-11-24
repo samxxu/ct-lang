@@ -21,6 +21,7 @@
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
+#include "ExprAdtCtor.h"
 
 
 struct ct_buf;
@@ -66,6 +67,7 @@ struct frontend_parse_ParseSupport;
 struct frontend_parse_ExprTypeText;
 struct frontend_parse_ExprPure;
 struct frontend_parse_Expr;
+struct frontend_parse_ExprAdtCtor;
 struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
@@ -90,7 +92,6 @@ struct tool_pkg_Sha256;
 struct tool_driver_Driver;
 extern const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable;
 extern const struct frontend_parse_ExprNew_vtbl frontend_parse_Expr_frontend_parse_ExprNew_vtable;
-extern const struct frontend_parse_ExprAdt_vtbl frontend_parse_Expr_frontend_parse_ExprAdt_vtable;
 extern const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_parse_ExprSubscript_vtable;
 extern const struct frontend_parse_ExprOptional_vtbl frontend_parse_Expr_frontend_parse_ExprOptional_vtable;
 extern const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable;
