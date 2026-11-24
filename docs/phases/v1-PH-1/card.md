@@ -29,7 +29,7 @@ version-minor: 1
 | 闸 | 内容 | 现状 |
 | --- | --- | --- |
 | 入口 | DOC-99 的 P-1（CI 发布构建）、P-2（PKG-21）、P-3（D-020 缺口复核） | **已完成**（2026-11-24） |
-| S2 闸 | P-4 JSON 树 30 天重评（截止 2026-12-23） | 未做；**未出结论前 LANG-28 不开工** |
+| S2 闸 | P-4 JSON 树重评 | **已完成（2026-11-24，提前）：维持 A**；LANG-28 已 `rejected`，S2b 不施工 |
 | S3 汇入 | P-5 与 `TEST-23` 合并推进 | 未做 |
 | 已解除 | LANG-27（容器级联）verified；SH-109（`MAX_FUNCS` 动态增长）已落地 | — |
 
@@ -39,7 +39,7 @@ version-minor: 1
 | --- | --- | --- | --- |
 | S1 M1 精细切分 + SH-94 | 纯搬移落位；`Expr`/`Emitter` 巨型单元拆开、重复上限常量收敛为单一定义 | 函数体哈希集合不变 + 机械行白名单；`check-all` 绿；单元名 `<Subsystem><Role>.h.ct` 全局唯一；生成物零差异 | L |
 | S2 LANG-26 剩余 | 三类绑定点之外的剩余项：`out` 实参写回、`decode<T>` 边界、`CT_BINDING_CONVERSION=0` 开关 | 剩余三项逐一有正负例；生成 C 与显式调用等价；开关关闭后诊断口径一致 | M |
-| S2b LANG-28（条件） | **仅当 P-4 判“切 B”**：B1/B3 ADR + 递归 ADT 布局/ADT 方法/下标链/表达式 `match` | 递归 `Vec<JsonNode>`/`Map<String,JsonNode>` 生成 C 可编译；ASan 无泄漏；`doc["user"]["age"]` 读写；P-4 判“维持 A”则以“不做 + 记录”通过 | L |
+| S2b LANG-28（不适用） | P-4 结论“维持 A”，LANG-28 已 `rejected`；不切 B、不重开 PKG-24 | 以“不做的记录”通过（E-V2-4）；重提条件见 LANG-28 终态 | — |
 | S3 A 默认 `error` | CLI `--check-level` 默认由 `warn` 升 `error`；`off` 保留逃生 | 全量 FP=0 证据沿用 `p118`；`--check-level=off` 生成物逐字节不变；回退只需一次提交 | M |
 | S3b TEST-23 | 行覆盖、`ct-ast` 单测、容量上限与近相 example | 覆盖报告与单测入库；`test/**` 分批提交；不改产物 | L |
 | S4 删 `box` 别名 + 收口 | `box<T>` 硬错并提示 `Box<T>`；语言面分档更新；`v1.1.0` 版本、tag、dist | `check-all` 13 门绿；`stable-subset` 把 `String`/`Str`/切片/`ref-out`/ADT/`Box` 转“已冻结”；tag 与 dist 与 v1.0 同流程 | M |
@@ -54,7 +54,7 @@ version-minor: 1
 | E-V2-1 | M1 纯搬移：函数体哈希集合不变、生成物零差异、单元名规范、`check-all` 绿 |
 | E-V2-2 | SH-94：巨型单元已拆或登记不拆理由；重复上限常量只留一处定义 |
 | E-V2-3 | LANG-26 剩余三项全部闭合（正负例 + 开关语义） |
-| E-V2-4 | LANG-28 按 P-4 结论执行：切 B 则五条判据全绿；维持 A 则以“不做的记录”通过 |
+| E-V2-4 | LANG-28 已 `rejected`（P-4 维持 A，[报告](../../reviews/2026-11-24-json-tree-b-reeval.md)）；本版不做 B1/B3，重提条件见该卡终态 |
 | E-V2-5 | A 默认 `error`：CLI 默认生效、`off` 逃生、FP=0 证据、单提交回退 |
 | E-V2-6 | TEST-23：行覆盖、`ct-ast` 单测、容量/近相 example 均有入库证据 |
 | E-V2-7 | `box<T>` 硬错；同一程序改 `Box<T>` 通过 |
