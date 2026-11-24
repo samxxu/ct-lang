@@ -1604,7 +1604,9 @@ int main(void)
 - **`drop()` 里不能重复释放同一字段**：`self->buf.release()` 写两次会报
   `field 'buf' is released more than once in drop()`。
 
-字符串用内建的 `Str`（`lib/core/Str.h.ct`），布局是 `{ char *data; int len; }`，`len` 是契约
+字符串用内建的 `String` / `Str`（`lib/core/String.h.ct` 与 `lib/core/Str.h.ct`；UTF-16 对在
+`lib/core/utf16/`，规范名 `core::utf16::U16String` / `core::utf16::U16Str`）。`Str` 的布局是
+`{ char *ptr; int len; }`，`len` 是契约
 （内嵌 `\0` 也保留，不靠结尾 NUL）：
 
 ```ct

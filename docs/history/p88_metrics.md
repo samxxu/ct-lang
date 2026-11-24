@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10415 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10446 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=54712 io_cap=1024
+     emitted_before=48223 emitted_after=54792 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -38,6 +38,11 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
 | `emit_field` | 46 行 | 9 行 | 2 | 2 |
 | **合计** | **2541 行** | **118 行** | **76** | — |
 
+- **SH-120（v1-PH-1 S0）后的 live 校准**：`Emitter.h.ct` 10415 → 10446 行（+31：
+  `String.h` 头名映射、八槽注释与实例胶水前的 retain/release 前置声明），发射 C
+  54712 → 54792（+80：内建层拆分后的四个字符串单元、单元归属与前置声明）。上面 PH-88
+  的历史数字保持不变；本文件头部的 `emitter_after` / `emitted_after` 是 p88_metrics 的
+  live pin，随每次 emitter 变更同步。
 - `Emitter.h.ct`：8876 → 10415 行（**+1539，+17.3%**）。S88c 的增量来自 76 个
   函数头/参数/`(void)` 行与切片注释；后续阶段（SH-117、SH-118、v1-PH-0 S0.5、
   LANG-26）在同一文件继续增长，分支体本身逐字搬移（见 §3 的等价证据）。

@@ -3,6 +3,10 @@
 # export set plus expected.internal (D-002 default A). PH-48 U-2 A adds the
 # Drop body to the exported surface, by design; PH-80 has three owning handles
 # (`String` and `U16String`), so the two Drop bodies are the fixed part and the rest sits in expected.internal.
+# SH-120: the four string units share `pub` helpers across C translation units
+# (`ct_str_*` / `ct_u16_*`). They are layer internals, not the archive's public
+# surface, so they join expected.internal; the exported entry points stay `add`
+# / `name` / `point_x` plus the two Drop bodies.
 set -u
 CT=${1:?usage: r5_probe.sh <ct-ast>}
 root=$(cd -- "$(dirname -- "$0")/../../.." && pwd)

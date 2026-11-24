@@ -76,8 +76,17 @@ U16String_trim_end
 U16String_trim_lead
 U16String_trim_start
 U16String_trim_tail
+ct_str_alloc
+ct_str_cp_count
+ct_str_cp_off
+ct_str_decode
 ct_str_live_count
+ct_str_seq_len
+ct_str_view
+ct_u16_lead
 ct_u16_live_count
+ct_u16_trail
+ct_u16_view
 str_compare
 str_concat
 str_dup

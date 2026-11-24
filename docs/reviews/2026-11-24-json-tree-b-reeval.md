@@ -202,7 +202,7 @@ B-C1/C2/C3/C6 都依赖 B3 的 retain/release 胶水，而 §2.2 已证明当前
 探针（`.temp/p4/bench/bench.ct`，未入库）：16 字节键、`Map<String,int>` 与
 `Map<char *,int>` 对照、10000 次重复；`cc -O2`、macOS arm64、clang；每格取 5 次运行的中位数，
 单位 ns/操作。`String` 键走 `impl<V> Map<String,V>` 的深拷贝
-（[Str.h.ct:1021](../../lib/core/Str.h.ct#L1021)）；`char *` 键是借用、不拷贝。
+（[String.h.ct:273](../../lib/core/String.h.ct#L273)）；`char *` 键是借用、不拷贝。
 
 | 操作 | n=64 | n=256 | 说明 |
 | --- | --- | --- | --- |

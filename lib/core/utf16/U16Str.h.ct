@@ -1,0 +1,78 @@
+namespace core::utf16;
+/*
+ * U16Str.h.ct - the built-in borrowed UTF-16 view `U16Str`.
+ *
+ *   struct U16Str { uint16_t *ptr; int len; };
+ *
+ * `U16Str` borrows a UTF-16 code-unit range; it never owns and has no Drop.
+ * This unit has no import: every method returns `int` / `uint16_t` / `U16Str`.
+ * The owning `U16String` and the `to_string()` / `to_utf8()` extensions live in
+ * `U16String.h.ct` (the edge `U16String -> U16Str`; never the reverse).
+ *
+ * The three helpers are `pub` because `U16String.h.ct` reuses them; compile
+ * mode splices the layer into one C translation unit, so each is defined once.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdint.h>
+
+pub struct U16Str {
+    uint16_t *ptr;
+    int len;
+}
+
+pub int ct_u16_lead(uint16_t c)
+{
+    return c >= 0xD800 && c <= 0xDBFF;
+}
+
+pub int ct_u16_trail(uint16_t c)
+{
+    return c >= 0xDC00 && c <= 0xDFFF;
+}
+
+pub U16Str ct_u16_view(uint16_t *p, int len)
+{
+    U16Str v;
+    v.ptr = p;
+    v.len = len;
+    return v;
+}
+
+impl U16Str {
+    pub int len() {
+        return self->len;
+    }
+
+    pub uint16_t char_code_at(int i) {
+        if (i < 0 || i >= self->len) return 0;
+        return self->ptr[i];
+    }
+
+    pub U16Str char_at(int i) {
+        if (i < 0 || i >= self->len) return ct_u16_view(self->ptr, 0);
+        return ct_u16_view(self->ptr + i, 1);
+    }
+
+    pub U16Str get(int i) {
+        if (i < 0 || i >= self->len) return ct_u16_view(self->ptr, 0);
+        return ct_u16_view(self->ptr + i, 1);
+    }
+
+    pub U16Str at(int i) {
+        int k = i;
+        if (k < 0) k = self->len + k;
+        return self->get(k);
+    }
+
+    pub int code_point_at(int i) {
+        uint16_t c;
+        if (i < 0 || i >= self->len) return -1;
+        c = self->ptr[i];
+        if (ct_u16_lead(c) && i + 1 < self->len && ct_u16_trail(self->ptr[i + 1])) {
+            int v = ((c - 0xD800) << 10) + (self->ptr[i + 1] - 0xDC00) + 0x10000;
+            return v;
+        }
+        return c;
+    }
+}

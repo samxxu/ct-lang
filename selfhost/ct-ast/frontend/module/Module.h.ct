@@ -158,11 +158,11 @@ pub struct Module {
        Phase 34 S9a turns it into a set of files: `Vec.h.ct` keeps the
        containers, `Option.h.ct` / `Result.h.ct` carry the ecosystem types.
        `nbuiltin` is 0 when this installation has no layer. */
-    int  builtin_units[5];
+    int  builtin_units[8];
     int  nbuiltin;
     /* PH-64 T2: a built-in unit is emitted only when the program can reach it.
        Filled once per build, before the emit loop. */
-    int  builtin_live[5];      /* slot order, parallel to builtin_units[] */
+    int  builtin_live[8];      /* slot order, parallel to builtin_units[] */
     int  computed_live;
     int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
     char map_path[1024];
@@ -237,7 +237,8 @@ static int is_layer_fn(struct Symbols *sym, int fn_start, int fn_end, const char
    (`str_from`, `str_len`) contain no `Str` at all (J-1). So: whole identifiers
    only; comments and literals skipped; a layer function counts only when it is
    called; the whole file is read. */
-static int file_uses_str(struct Symbols *sym, const char *path, int fn_start, int fn_end)
+static int file_uses_str(struct Symbols *sym, const char *path, int fn_start, int fn_end,
+                         int u16_only)
 {
     FILE *f;
     char *b;
@@ -298,12 +299,21 @@ static int file_uses_str(struct Symbols *sym, const char *path, int fn_start, in
         if (wl > 0) {
             word[wl] = 0;
             wl = 0;
-            if (word_is(word, "Str") || word_is(word, "String")
-                || word_is(word, "U16String")) {
+            if (u16_only) {
+                if (word_is(word, "U16String")) {
+                    hit = 1;
+                    break;
+                }
+            } else if (word_is(word, "Str") || word_is(word, "String")
+                       || word_is(word, "U16String")) {
                 hit = 1;
                 break;
             }
-            pend = is_layer_fn(sym, fn_start, fn_end, word);
+            if (u16_only)
+                pend = (strncmp(word, "u16_", 4) == 0
+                        || strncmp(word, "ct_u16_", 7) == 0);
+            else
+                pend = is_layer_fn(sym, fn_start, fn_end, word);
         }
         if (c == '/' && i + 1 < (int)n && b[i + 1] == '/') {
             state = 1;
@@ -336,8 +346,10 @@ static int file_uses_str(struct Symbols *sym, const char *path, int fn_start, in
     }
     if (!hit && wl > 0) {
         word[wl] = 0;
-        if (word_is(word, "Str") || word_is(word, "String")
-            || word_is(word, "U16String")) hit = 1;
+        if (u16_only) {
+            if (word_is(word, "U16String")) hit = 1;
+        } else if (word_is(word, "Str") || word_is(word, "String")
+                   || word_is(word, "U16String")) hit = 1;
     }
     free(b);
     return hit;
@@ -2220,7 +2232,9 @@ impl ModuleOps for Module {
            land in its own `.h` / `.c` exactly like a user template. A missing
            file is not an error (an installation may not carry it).
            P34 S9a: the layer may span several files (`Vec.h.ct`, `Option.h.ct`,
-           `Result.h.ct`); P36 S4a1 adds `Str.h.ct`. Each found file joins the
+           `Result.h.ct`); P36 S4a1 adds `Str.h.ct`; SH-120 splits the strings
+           into `Str.h.ct` / `String.h.ct` / `utf16/U16Str.h.ct` /
+           `utf16/U16String.h.ct` (eight slots). Each found file joins the
            layer. */
         self->nbuiltin = 0;
         self->computed_live = 0;
@@ -2229,18 +2243,24 @@ impl ModuleOps for Module {
         self->builtin_live[2] = 0;
         self->builtin_live[3] = 0;
         self->builtin_live[4] = 0;
+        self->builtin_live[5] = 0;
+        self->builtin_live[6] = 0;
+        self->builtin_live[7] = 0;
         backend::emit::ct_emit_clear_builtins();
         {
             char bpath[MAX_PATH];
             int bi;
-            for (bi = 0; bi < 5; bi++) {
+            for (bi = 0; bi < 8; bi++) {
                 const char *base;
-                if (bi == 4 && !self->module_inputs_want_Box(inputs, ninput))
+                if (bi == 7 && !self->module_inputs_want_Box(inputs, ninput))
                     continue;
                 base = bi == 0 ? "Vec.h.ct"
                      : (bi == 1 ? "Option.h.ct"
                      : (bi == 2 ? "Result.h.ct"
-                     : (bi == 3 ? "Str.h.ct" : "Box.h.ct")));
+                     : (bi == 3 ? "Str.h.ct"
+                     : (bi == 4 ? "String.h.ct"
+                     : (bi == 5 ? "utf16/U16Str.h.ct"
+                     : (bi == 6 ? "utf16/U16String.h.ct" : "Box.h.ct"))))));
                 {
                     int br = self->find_builtin(inputs[0], base, bpath, sizeof bpath);
                     if (br == -2) return frontend::parse::ct_parse_report();
@@ -2738,16 +2758,50 @@ cmd_too_long:
     int builtin_live_for(int u)
     {
         const char *base;
-        int i, n;
+        int i, n, su = -1, si = -1, uu = -1, us = -1, str_used = 0, u16_used = 0;
         struct frontend_sym_StructInst *ins;
         (void)self;
 
         if (!self->is_builtin_unit(u)) return 1;
         base = self->units[u].base;
+        /* PH-80 / SH-120: the string units are plain structs, so the user
+           sources are scanned for their names and exported functions. The
+           UTF-8 and UTF-16 halves are scanned separately: a UTF-8-only program
+           must not emit the UTF-16 units, while a UTF-16 program needs
+           String / Str / U16Str because U16String calls their helpers. */
+        for (i = 0; i < self->nbuiltin; i++) {
+            const char *b = self->units[self->builtin_units[i]].base;
+            if (strcmp(b, "Str") == 0) su = self->builtin_units[i];
+            if (strcmp(b, "String") == 0) si = self->builtin_units[i];
+            if (strcmp(b, "U16String") == 0) uu = self->builtin_units[i];
+            if (strcmp(b, "U16Str") == 0) us = self->builtin_units[i];
+        }
+        for (i = 0; i < self->nunits; i++) {
+            if (self->is_builtin_unit(i)) continue;
+            /* The layer helpers now span the pair: `str_slice` / `str_compare`
+               live in Str, `str_dup` / `str_concat` / `ct_str_live_count` in
+               String. Scan both ranges so a helper call is still a use. */
+            if (su >= 0 && file_uses_str(self->sym, self->units[i].path,
+                                         self->units[su].fn_start,
+                                         self->units[su].fn_end, 0))
+                str_used = 1;
+            if (si >= 0 && file_uses_str(self->sym, self->units[i].path,
+                                         self->units[si].fn_start,
+                                         self->units[si].fn_end, 0))
+                str_used = 1;
+            if (uu >= 0 && file_uses_str(self->sym, self->units[i].path,
+                                         self->units[uu].fn_start,
+                                         self->units[uu].fn_end, 1))
+                u16_used = 1;
+            if (us >= 0 && file_uses_str(self->sym, self->units[i].path,
+                                         self->units[us].fn_start,
+                                         self->units[us].fn_end, 1))
+                u16_used = 1;
+        }
         ins = frontend::sym::ct_insts(&n);
         for (i = 0; i < n; i++) {
-            /* PH-80: the built-in `Str` unit itself names `Vec<U16String>`
-               (the `split` result), so parsing it registers a `Vec` instance.
+            /* PH-80: the built-in layer itself names `Vec<U16String>` (the
+               `split` result), so parsing it registers a `Vec` instance.
                That layer-internal instance must not make the container unit
                live on its own; a concrete `Vec`/`Map` named by a user unit, or
                the container the live string layer needs, pulls it in (below). */
@@ -2769,28 +2823,22 @@ cmd_too_long:
                 && (has_word(ins[i].ctype[0], "Str") || has_word(ins[i].carg[0], "Str"))
                 && !self->is_builtin_unit(ins[i].owner))
                 return 1;
+            if (strcmp(base, "U16String") == 0
+                && (has_word(ins[i].ctype[0], "U16String")
+                    || has_word(ins[i].carg[0], "U16String"))
+                && !self->is_builtin_unit(ins[i].owner))
+                return 1;
         }
-        /* PH-80: the string layer needs the container unit for `split`; when a
-           user unit names the string layer, pull both. */
+        /* The string layer needs the container unit for `split`; the UTF-16
+           half additionally needs the UTF-8 half (String / Str) and U16Str. */
         if (strcmp(base, "Vec") == 0) {
-            int su = -1;
-            for (i = 0; i < self->nbuiltin; i++)
-                if (strcmp(self->units[self->builtin_units[i]].base, "Str") == 0)
-                    su = self->builtin_units[i];
-            if (su >= 0)
-                for (i = 0; i < self->nunits; i++)
-                    if (!self->is_builtin_unit(i)
-                        && file_uses_str(self->sym, self->units[i].path,
-                                         self->units[su].fn_start, self->units[su].fn_end))
-                        return 1;
+            if (su >= 0 && (str_used || u16_used)) return 1;
+            return 0;
         }
-        if (strcmp(base, "Str") == 0) {
-            for (i = 0; i < self->nunits; i++)
-                if (!self->is_builtin_unit(i)
-                    && file_uses_str(self->sym, self->units[i].path,
-                                     self->units[u].fn_start, self->units[u].fn_end))
-                    return 1;
-        }
+        if (strcmp(base, "Str") == 0 || strcmp(base, "String") == 0)
+            return (str_used || u16_used) ? 1 : 0;
+        if (strcmp(base, "U16Str") == 0 || strcmp(base, "U16String") == 0)
+            return u16_used ? 1 : 0;
         return 0;
     }
 

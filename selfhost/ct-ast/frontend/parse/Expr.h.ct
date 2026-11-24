@@ -2906,7 +2906,15 @@ impl ExprOps for Expr {
                         {
                             const char *resq = qn;
                             char bare[MAX_TEXT];
-                            if (strncmp(qn, "core_", 5) == 0) {
+                            /* SH-120: `core::utf16::U16String` / `U16Str`.
+                               The built-in layer's C symbols stay in the root
+                               namespace (lib/core is namespace-elided), so
+                               the nested qualifier maps to the bare spelling
+                               exactly like `core::String` does. */
+                            if (strncmp(qn, "core_utf16_", 11) == 0) {
+                                snprintf(bare, sizeof bare, "%s", qn + 11);
+                                resq = bare;
+                            } else if (strncmp(qn, "core_", 5) == 0) {
                                 snprintf(bare, sizeof bare, "%s", qn + 5);
                                 /* LANG-24 Stage A: `core::box<T>` is the same
                                    deprecated alias as the root spelling. */
@@ -6426,6 +6434,9 @@ impl ExprOps for Expr {
                     if (strcmp(fname, "ptr") == 0
                         && !(self->sup->mem->path
                              && (strstr(self->sup->mem->path, "lib/core/Str.h.ct") != 0
+                                 || strstr(self->sup->mem->path, "lib/core/String.h.ct") != 0
+                                 || strstr(self->sup->mem->path, "lib/core/utf16/U16Str.h.ct") != 0
+                                 || strstr(self->sup->mem->path, "lib/core/utf16/U16String.h.ct") != 0
                                  || strstr(self->sup->mem->path, "lib/std/Str.h.ct") != 0))) { /* DOC-87 迁移回退 */
                         char rty[MAX_TEXT];
                         if (self->sup->expr_type(n, rty, sizeof rty) == 0) {
@@ -8285,6 +8296,13 @@ impl ExprOps for Expr {
             w += (int)strlen(seg[i]);
         }
         snprintf(name, (size_t)ncap, "%s", seg[nseg - 1]);
+        /* SH-120: `core::utf16::U16String::from_utf8` / `U16Str` name the
+           built-in layer's nested namespace; its C symbols stay in the root
+           namespace, so the qualifier maps to the bare spelling exactly like
+           the type position does. */
+        if (strncmp(qpath, "core_utf16_", 11) == 0) {
+            memmove(qpath, qpath + 11, strlen(qpath + 11) + 1);
+        }
         is_call = (self->lex->tok == T_PUNCT && self->lex->tok_is("("));
         /* A static trait from a `.m.ct` unit: `host::Trait.method(...)`. The
            qualified C spelling names the trait; the source host path is what

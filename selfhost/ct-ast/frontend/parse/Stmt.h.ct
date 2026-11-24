@@ -1810,6 +1810,11 @@ impl StmtOps for Stmt {
                     && self->sup->resolve_type(qn + 5, rn, sizeof rn) == 0
                     && (self->sym->find_type(rn) >= 0
                         || frontend::sym::ct_tmpl_find(qn + 5) >= 0)) return 1;
+                /* SH-120: `core::utf16::U16String` / `U16Str` in a statement
+                   position maps to the bare built-in spelling. */
+                if (strncmp(qn, "core_utf16_", 11) == 0
+                    && self->sup->resolve_type(qn + 11, rn, sizeof rn) == 0
+                    && self->sym->find_type(rn) >= 0) return 1;
             }
         }
         if (self->ex->is_type_word(self->lex->tok_cstr())) return 1;
@@ -4851,6 +4856,9 @@ impl StmtOps for Stmt {
            immutability rule applies only to callers. */
         if (self->sup->mem->path
             && (strstr(self->sup->mem->path, "lib/core/Str.h.ct") != 0
+                || strstr(self->sup->mem->path, "lib/core/String.h.ct") != 0
+                || strstr(self->sup->mem->path, "lib/core/utf16/U16Str.h.ct") != 0
+                || strstr(self->sup->mem->path, "lib/core/utf16/U16String.h.ct") != 0
                 || strstr(self->sup->mem->path, "lib/std/Str.h.ct") != 0)) /* DOC-87 迁移回退 */
             return 0;
         k = self->arena->nodes[e].kind;

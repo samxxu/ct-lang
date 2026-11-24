@@ -279,18 +279,26 @@ static int layer_wanted(const char *src, int bi)
 {
     if (src == 0) return 1;
     if (bi == 0)
-        /* PH-80 (D-013): the Str unit now spells `Vec<U16String>` for `split`, so the
-           container unit must be spliced whenever the string unit is. */
+        /* PH-80 (D-013): the string layer needs `Vec` for `split`, so the
+           container unit is spliced whenever either string half is. */
         return src_has_word(src, "Vec") || src_has_word(src, "Map")
             || src_has_word(src, "Str") || src_has_word(src, "String")
-            || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
+            || src_has_word(src, "U16String") || src_has_word(src, "U16Str")
+            || src_has_prefix(src, "str_") || src_has_prefix(src, "u16_");
     if (bi == 1) return src_has_word(src, "Option");
     if (bi == 2) return src_has_word(src, "Result");
-    if (bi == 3)
-        /* PH-80 (D-013): the String owning handle lives in the same layer unit
-           as the borrowed Str, so either name must splice it in. */
+    if (bi == 3 || bi == 4)
+        /* SH-120: `Str.h.ct` and `String.h.ct` are a pair -- String extends
+           Str and owns every allocating helper, so either name (or a `str_`
+           call) splices both; the UTF-16 half also needs them. */
         return src_has_word(src, "Str") || src_has_word(src, "String")
-            || src_has_word(src, "U16String") || src_has_prefix(src, "str_");
+            || src_has_word(src, "U16String") || src_has_word(src, "U16Str")
+            || src_has_prefix(src, "str_") || src_has_prefix(src, "u16_");
+    if (bi == 5 || bi == 6)
+        /* SH-120: only a program that names the UTF-16 pair (or calls a
+           `u16_` layer function) splices the UTF-16 units. */
+        return src_has_word(src, "U16String") || src_has_word(src, "U16Str")
+            || src_has_prefix(src, "u16_");
     /* PH-81: the Box template has its own unit, so programs that never name a
        Box are byte-identical to the pre-S1 output. */
     return !src_declares_Box(src)
@@ -365,16 +373,21 @@ impl DriverOps for Driver {
             }
         }
         /* P34 S9a: the layer spans `Vec.h.ct`, `Option.h.ct` and
-           `Result.h.ct`; P36 S4a1 adds `Str.h.ct`. Compile mode is one C
-           translation unit, so the parsed declaration chains are spliced into
-           one program. DOC-87 Stage 1: the file is located by the module
-           layer, which owns `lib/core` / `CT_CORE_DIR` and the fallbacks. */
-        for (bi = 0; bi < 5; bi++) {
+           `Result.h.ct`; P36 S4a1 adds `Str.h.ct`; SH-120 adds the split
+           `String.h.ct`, `utf16/U16Str.h.ct` and `utf16/U16String.h.ct`
+           (eight slots). Compile mode is one C translation unit, so the
+           parsed declaration chains are spliced into one program. DOC-87
+           Stage 1: the file is located by the module layer, which owns
+           `lib/core` / `CT_CORE_DIR` and the fallbacks. */
+        for (bi = 0; bi < 8; bi++) {
             const char *base;
             base = bi == 0 ? "Vec.h.ct"
                  : (bi == 1 ? "Option.h.ct"
                  : (bi == 2 ? "Result.h.ct"
-                 : (bi == 3 ? "Str.h.ct" : "Box.h.ct")));
+                 : (bi == 3 ? "Str.h.ct"
+                 : (bi == 4 ? "String.h.ct"
+                 : (bi == 5 ? "utf16/U16Str.h.ct"
+                 : (bi == 6 ? "utf16/U16String.h.ct" : "Box.h.ct"))))));
             if (insrc && !layer_wanted(insrc, bi)) continue;
             prog = -1;
             rr = self->m->find_builtin(in, base, cand, sizeof cand);

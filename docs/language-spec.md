@@ -2631,10 +2631,12 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 
 ### 4.51.1 内置层命名空间 `core`（DOC-87 Stage 2，仅 ct-ast）
 
-`lib/core/` 的五个内置单元（`Vec` / `Option` / `Result` / `Str` / `Box`）声明
-`namespace core;`；源文件的**规范拼写**是 `core::Vec` / `core::Map` / `core::MapEntry` /
-`core::Option` / `core::Result` / `core::String` / `core::Str` / `core::U16String` /
-`core::U16Str` / `core::Box`。`core::` 与根拼写指向同一个类型、同一份实例：
+`lib/core/` 的八个内置单元（`Vec` / `Option` / `Result` / `Str` / `String` /
+`utf16/U16Str` / `utf16/U16String` / `Box`）中，UTF-8 与容器单元声明
+`namespace core;`，UTF-16 对声明 `namespace core::utf16;`；源文件的**规范拼写**是
+`core::Vec` / `core::Map` / `core::MapEntry` / `core::Option` / `core::Result` /
+`core::String` / `core::Str` / `core::utf16::U16String` / `core::utf16::U16Str` /
+`core::Box`。`core::` 与根拼写指向同一个类型、同一份实例：
 
 ```ct
 core::Vec<int> v;
@@ -2644,8 +2646,13 @@ core::Box<Node> b = new Node { 1 };
 ```
 
 - **兼容窗（一个 MINOR）**：根拼写 `Vec` / `Map` / `MapEntry` / `Option` / `Result` /
-  `String` / `Str` / `U16String` / `U16Str` / `Box` 仍可用，本阶段不告警；窗口结束后
-  由清理 issue 删除根拼写，C 符号改写另立 issue。
+  `String` / `Str` / `U16String` / `U16Str` / `Box` 仍可用，本阶段不告警；`core::U16String` /
+  `core::U16Str` 也是别名。窗口结束后由清理 issue 删除根拼写与旧别名，C 符号改写另立 issue。
+- **SH-120 单元布局**：`String`（+ 辅助 `ct_str_hdr`）在 `lib/core/String.h.ct`，`Str` 在
+  `lib/core/Str.h.ct`；`U16String` / `U16Str` 在 `lib/core/utf16/`。依赖单向：
+  `String -> Str`，`U16String -> String / Str / U16Str`，`Str` / `U16Str` 无出边。
+  U16 的公开名是 `core::utf16::U16String` / `core::utf16::U16Str`（破坏性命名变更，
+  带一个 MINOR 兼容窗，见 [lib/core/README](../lib/core/README.md)）。
 - **生成物**：兼容窗内 `core::` 是**源级命名空间别名**，内置层的 C 符号保持根拼写
   （`Vec_int` / `String` / `Box_P`），因此没有 ABI、`--emit-model` 或 golden 变化；
   存量语料逐字节一致，旧→新符号映射是恒等映射。`core_` 前缀的 C 名字改写不在本阶段。
@@ -2782,7 +2789,7 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 - **跨单元 `Drop`（v0-PH-48，D48-2 / U-2 A）**：Drop 体只由**声明该 struct 的单元**发射一次，链接性独立于 `pub`（默认可见）；该单元的生成头文件发布真原型 `void <S>_Drop_drop(void *);`，消费单元只发 `extern` 声明并调用它。`impl Drop for S` 必须写在 struct 的同一单元：写在别的单元时类型头没有原型，构建在写任何 `.c` 之前硬错 L48-2（`Drop body for 'struct Res' is not visible through its header`），不再生成静默空桩。显式 `impl` 仍负责释放子指针。
 - **泛型 Drop**：`impl<T> Drop for Box<T>` 每实例单态化出一个 `Box_int_Drop_drop` / `Box_Str_Drop_drop`，不产生模板态 `Box_Drop_drop`；声明在首次使用之后仍生效（impl 在 emit 阶段解析）。容器元素协议（Phase 31）对普通 struct 同样生效：`Vec<Str>` / `Vec<Probe>` 的 `release()` 会调用元素的 `release()`。
 - **重复释放诊断**：`drop()` 体内同一 `self` 字段不得 `release()` 两次，报 `field 'X' is released more than once in drop()`。
-- **`Str`**：内建于 `lib/core/Str.h.ct`，布局 `{ char *data; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_from(s)` / `str_from_len(p, n)` / `str_len(s)` / `str_slice(s, start, n)` / `str_concat(a, b)` / `str_compare(a, b)` / `str_c_str(s)`；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。
+- **`Str`**：借用视图内建于 `lib/core/Str.h.ct`（SH-120 起）；会分配 owning `String` 的自由函数（`str_dup` / `str_dup_len` / `str_concat`）与 `impl Str { String to_string() }` 在 `lib/core/String.h.ct`，避免 `Str -> String` 的反向边。布局 `{ char *ptr; int len; }`，`len` 是契约（保留内嵌 `\0`，不依赖结尾 NUL）。API：`str_slice(s, start, n)` / `str_compare(a, b)`（`Str.h.ct`）、`str_dup` / `str_dup_len` / `str_concat`（`String.h.ct`）；方法 `retain()` 深拷贝、`release()` 释放并置 `data=0,len=-1`。`impl Drop for Str` 释放 buffer；`free(0)` 是 no-op，故零值 `Str` 可安全 drop。
 - **所有权形态**：`Str` 是值句柄，按值传递浅拷贝指针（不自动深拷贝，需显式 `retain()`）；`own Str *p = malloc(sizeof(struct Str)); ...; delete p;` 由 `Drop` 释放 buffer 再 free 结构体并置空指针。`Option<T>` / `Result<T,E>` 已加 `use Drop`，其 `none()` / `ok()` / `err()` 工厂零初始化未使用的 payload，使无条件胶水安全释放。
 - **与 std 包 `CharStr` 的关系**：`std::str::CharStr` 是挂在 `char *` 上的方法层 trait（由外部 `std` 包提供 `CharStr.m.ct`；
   std 0.20.0 起旧名 `String` 已删除，见 [D-025](decisions/D-025.md)），
@@ -3097,13 +3104,16 @@ parse("ab", n);  /* 调用点不写 out */
 
 ### 4.70 `String` / `Str`：UTF-8 owning 与借用（Phase 80，仅 ct-ast）
 
-> 命名空间：本节的 `String` / `Str` / `U16String` / `U16Str` 属于内置层 `core`，
-> 规范拼写是 `core::String` / `core::Str` / `core::U16String` / `core::U16Str`；
-> 根拼写在一个 MINOR 的兼容窗内仍可用（§4.51.1）。
+> 命名空间：本节的 `String` / `Str` 属于内置层 `core`，规范拼写是 `core::String` /
+> `core::Str`；`U16String` / `U16Str` 属于 `core::utf16`，规范拼写是
+> `core::utf16::U16String` / `core::utf16::U16Str`（SH-120；类型拼写可用，工厂仍用点形式
+> `U16String.from_utf8(Str)`）。根拼写（以及旧 `core::U16String` / `core::U16Str`）
+> 在一个 MINOR 的兼容窗内仍可用（§4.51.1）。
 
 - **类型**：`String` 是 owning 句柄（`char *ptr` + `int len`，16 字节 LP64），`Str` 是同一布局的
   borrowed 视图（无 Drop）；`U16String` / `U16Str` 是 UTF-16 对（`uint16_t *ptr` + `int len`）。
-  五个句柄之前都有 8 字节头 `struct ct_str_hdr { int refs; int aux; }`：`ptr - 8` 即头；
+  四个句柄（`String` / `Str` / `U16String` / `U16Str`）之前都有 8 字节头
+  `struct ct_str_hdr { int refs; int aux; }`：`ptr - 8` 即头；
   `refs = -1` 为 immortal（字面量 / 空串），`release` 首行直接返回。refcount 是普通 `int`，
   非原子、非线程安全，作者负责同步。
 - **字面量**：`String s = "x"` 绑定编译器发射的 L1 immortal 静态块（只读区，Drop 不释放）；

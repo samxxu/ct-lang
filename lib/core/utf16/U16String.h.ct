@@ -1,0 +1,560 @@
+namespace core::utf16;
+/*
+ * U16String.h.ct - the built-in owning UTF-16 handle `U16String`.
+ *
+ *   struct U16String { uint16_t *ptr; int len; };
+ *
+ * `U16String` owns a refcounted array of code units; the 8-byte
+ * `ct_str_hdr` sits before the payload (2-byte aligned, so the header size
+ * stays 8). Code-unit length is the JS `length`; `code_point_at` combines a
+ * surrogate pair. A UTF-16 value only comes from an explicit factory
+ * (`from_utf8` / `from_utf16`); there is no implicit literal.
+ *
+ * Layer position: the single direction `U16String -> String / Str / U16Str`.
+ * The cross-encoding `String.from_utf16` / `String.to_utf16` extensions live
+ * here (they are the only reason `String` would name a UTF-16 type), and so do
+ * the `U16Str.to_string` / `U16Str.to_utf8` extensions. This unit imports
+ * nothing at source level: the compiler pre-parses the layer and every built-in
+ * header includes the others, so the load order (Str, String, U16Str,
+ * U16String) is the dependency order.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdlib.h>
+#include <stdint.h>
+
+pub struct U16String {
+    uint16_t *ptr;
+    int len;
+} use Drop
+
+static int ct_u16_live = 0;
+
+pub int ct_u16_live_count(void)
+{
+    return ct_u16_live;
+}
+
+static U16String ct_u16_alloc(const uint16_t *p, int len)
+{
+    U16String s;
+    struct ct_str_hdr *h;
+    int i;
+    if (len < 0) len = 0;
+    h = (struct ct_str_hdr *)malloc(sizeof(struct ct_str_hdr)
+                                    + (size_t)(len + 1) * sizeof(uint16_t));
+    if (h == 0) {
+        s.ptr = 0;
+        s.len = 0;
+        return s;
+    }
+    h->refs = 1;
+    h->aux = 0;
+    ct_u16_live = ct_u16_live + 1;
+    s.ptr = (uint16_t *)(h + 1);
+    s.len = len;
+    for (i = 0; i < len; i++) s.ptr[i] = p ? p[i] : 0;
+    s.ptr[len] = 0;
+    return s;
+}
+
+/* UTF-16 code-unit count of a UTF-8 byte range. Invalid sequences are treated
+   as the replacement character, matching the UTF-8 helpers' 1..4 byte rule. */
+static int ct_u16_units_for_utf8(const char *p, int n)
+{
+    int off = 0, units = 0;
+    while (off < n) {
+        int l = ct_str_seq_len(p, off, n);
+        int cp = ct_str_decode(p, off, n);
+        if (l <= 0) l = 1;
+        off += l;
+        units += cp > 0xFFFF ? 2 : 1;
+    }
+    return units;
+}
+
+/* Decode UTF-8 into a fresh owning UTF-16 handle. */
+pub U16String u16_from_utf8(Str s)
+{
+    U16String out;
+    int off, k, units;
+    units = ct_u16_units_for_utf8(s.ptr, s.len);
+    out = ct_u16_alloc(0, units);
+    if (out.ptr == 0) return out;
+    off = 0;
+    k = 0;
+    while (off < s.len) {
+        int l = ct_str_seq_len(s.ptr, off, s.len);
+        int cp = ct_str_decode(s.ptr, off, s.len);
+        if (l <= 0) l = 1;
+        if (l > s.len - off) l = s.len - off;
+        off += l;
+        if (cp > 0xFFFF) {
+            int v = cp - 0x10000;
+            out.ptr[k] = (uint16_t)(0xD800 + (v >> 10));
+            out.ptr[k + 1] = (uint16_t)(0xDC00 + (v & 0x3FF));
+            k = k + 2;
+        } else {
+            out.ptr[k] = (uint16_t)cp;
+            k = k + 1;
+        }
+    }
+    return out;
+}
+
+impl U16String {
+    /* JS `length`: code units, not codepoints. */
+    pub int len() {
+        return self->len;
+    }
+
+    pub uint16_t char_code_at(int i) {
+        if (i < 0 || i >= self->len) return 0;
+        return self->ptr[i];
+    }
+
+    /* A single-code-unit borrowed view; out of range gives an empty view. */
+    pub U16Str char_at(int i) {
+        if (i < 0 || i >= self->len) return ct_u16_view(self->ptr, 0);
+        return ct_u16_view(self->ptr + i, 1);
+    }
+
+    /* Custom subscript protocol: `u[i]` is the read-only one-unit view. There
+       is no `set`, so a write is a hard error. */
+    pub U16Str get(int i) {
+        if (i < 0 || i >= self->len) return ct_u16_view(self->ptr, 0);
+        return ct_u16_view(self->ptr + i, 1);
+    }
+
+    /* JS `at`: a negative index counts from the end. */
+    pub U16Str at(int i) {
+        int k = i;
+        if (k < 0) k = self->len + k;
+        return self->get(k);
+    }
+
+    /* The decoded code point at code-unit index `i`; a surrogate pair counts
+       once. Out of range answers -1. */
+    pub int code_point_at(int i) {
+        uint16_t c;
+        if (i < 0 || i >= self->len) return -1;
+        c = self->ptr[i];
+        if (ct_u16_lead(c) && i + 1 < self->len && ct_u16_trail(self->ptr[i + 1])) {
+            int v = ((c - 0xD800) << 10) + (self->ptr[i + 1] - 0xDC00) + 0x10000;
+            return v;
+        }
+        return c;
+    }
+
+    pub Str to_utf8() {
+        char *buf;
+        int i, k, n;
+        String out;
+        n = 0;
+        for (i = 0; i < self->len; i++) {
+            int cp = self->code_point_at(i);
+            if (cp < 0) cp = 0xFFFD;
+            if (cp < 0x80) n = n + 1;
+            else if (cp < 0x800) n = n + 2;
+            else if (cp < 0x10000) n = n + 3;
+            else n = n + 4;
+            if (cp > 0xFFFF) i = i + 1;
+        }
+        out = ct_str_alloc(0, n);
+        if (out.ptr == 0) return ct_str_view(0, 0);
+        buf = out.ptr;
+        k = 0;
+        for (i = 0; i < self->len; i++) {
+            int cp = self->code_point_at(i);
+            if (cp < 0) cp = 0xFFFD;
+            if (cp < 0x80) {
+                buf[k] = (char)cp;
+                k = k + 1;
+            } else if (cp < 0x800) {
+                buf[k] = (char)(0xC0 | (cp >> 6));
+                buf[k + 1] = (char)(0x80 | (cp & 0x3F));
+                k = k + 2;
+            } else if (cp < 0x10000) {
+                buf[k] = (char)(0xE0 | (cp >> 12));
+                buf[k + 1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+                buf[k + 2] = (char)(0x80 | (cp & 0x3F));
+                k = k + 3;
+            } else {
+                buf[k] = (char)(0xF0 | (cp >> 18));
+                buf[k + 1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+                buf[k + 2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+                buf[k + 3] = (char)(0x80 | (cp & 0x3F));
+                k = k + 4;
+                i = i + 1;
+            }
+        }
+        return ct_str_view(out.ptr, out.len);
+    }
+
+    pub U16String to_utf16() {
+        return ct_u16_alloc(self->ptr, self->len);
+    }
+
+    /* The full borrowed view (the UTF-16 counterpart of `String.as_str`). */
+    pub U16Str as_str() {
+        return ct_u16_view(self->ptr, self->len);
+    }
+
+    pub U16String copy() {
+        return ct_u16_alloc(self->ptr, self->len);
+    }
+
+    pub U16String retain() {
+        U16String r;
+        struct ct_str_hdr *h;
+        r.ptr = self->ptr;
+        r.len = self->len;
+        if (r.ptr == 0) return r;
+        h = (struct ct_str_hdr *)((char *)r.ptr - sizeof(struct ct_str_hdr));
+        if (h->refs >= 0) h->refs = h->refs + 1;
+        return r;
+    }
+
+    pub void release() {
+        struct ct_str_hdr *h;
+        if (self->ptr == 0) return;
+        h = (struct ct_str_hdr *)((char *)self->ptr - sizeof(struct ct_str_hdr));
+        if (h->refs < 0) return;
+        h->refs = h->refs - 1;
+        if (h->refs == 0) {
+            ct_u16_live = ct_u16_live - 1;
+            free(h);
+        }
+        self->ptr = 0;
+        self->len = 0;
+    }
+
+    pub int refs() {
+        struct ct_str_hdr *h;
+        if (self->ptr == 0) return 0;
+        h = (struct ct_str_hdr *)((char *)self->ptr - sizeof(struct ct_str_hdr));
+        return h->refs;
+    }
+}
+
+impl Drop for U16String {
+    void drop() {
+        struct ct_str_hdr *h;
+        if (self->ptr == 0) return;
+        h = (struct ct_str_hdr *)((char *)self->ptr - sizeof(struct ct_str_hdr));
+        if (h->refs < 0) return;
+        h->refs = h->refs - 1;
+        if (h->refs == 0) {
+            ct_u16_live = ct_u16_live - 1;
+            free(h);
+        }
+        self->ptr = 0;
+        self->len = 0;
+    }
+}
+
+impl U16String {
+    /* Explicit factory: a UTF-16 value only comes from a factory. */
+    pub static U16String from_utf8(Str s) {
+        return u16_from_utf8(s);
+    }
+
+    /* An owning copy of a borrowed UTF-16 view. */
+    pub static U16String from_utf16(U16Str s) {
+        return ct_u16_alloc(s.ptr, s.len);
+    }
+
+    /* JS `slice`: negative indexes count from the end, then both ends clamp. */
+    pub U16String slice(int start, int end) {
+        int a = start, b = end;
+        if (a < 0) a = self->len + a;
+        if (b < 0) b = self->len + b;
+        if (a < 0) a = 0;
+        if (b < 0) b = 0;
+        if (a > self->len) a = self->len;
+        if (b > self->len) b = self->len;
+        if (b < a) b = a;
+        return ct_u16_alloc(self->ptr + a, b - a);
+    }
+
+    /* JS `substring`: NaN/negative clamp to 0 and the arguments swap. */
+    pub U16String substring(int start, int end) {
+        int a = start, b = end, t;
+        if (a < 0) a = 0;
+        if (b < 0) b = 0;
+        if (a > self->len) a = self->len;
+        if (b > self->len) b = self->len;
+        if (a > b) {
+            t = a;
+            a = b;
+            b = t;
+        }
+        return ct_u16_alloc(self->ptr + a, b - a);
+    }
+
+    /* The first code-unit index of `needle`, at or after `from`; -1 when
+       absent. An empty needle matches at `from` when in range. */
+    pub int index_of_from(U16Str needle, int from) {
+        int i, j;
+        if (from < 0) from = 0;
+        if (needle.len == 0) return from <= self->len ? from : -1;
+        i = from;
+        while (i + needle.len <= self->len) {
+            j = 0;
+            while (j < needle.len && self->ptr[i + j] == needle.ptr[j]) j++;
+            if (j == needle.len) return i;
+            i++;
+        }
+        return -1;
+    }
+
+    pub int index_of(U16Str needle) {
+        return self->index_of_from(needle, 0);
+    }
+
+    pub int last_index_of(U16Str needle) {
+        int i, j;
+        if (needle.len == 0) return self->len;
+        if (needle.len > self->len) return -1;
+        i = self->len - needle.len;
+        while (i >= 0) {
+            j = 0;
+            while (j < needle.len && self->ptr[i + j] == needle.ptr[j]) j++;
+            if (j == needle.len) return i;
+            i--;
+        }
+        return -1;
+    }
+
+    pub int includes(U16Str needle) {
+        return self->index_of_from(needle, 0) >= 0;
+    }
+
+    pub int starts_with(U16Str prefix) {
+        int i;
+        if (prefix.len > self->len) return 0;
+        for (i = 0; i < prefix.len; i++)
+            if (self->ptr[i] != prefix.ptr[i]) return 0;
+        return 1;
+    }
+
+    pub int ends_with(U16Str suffix) {
+        int i;
+        if (suffix.len > self->len) return 0;
+        for (i = 0; i < suffix.len; i++)
+            if (self->ptr[self->len - suffix.len + i] != suffix.ptr[i]) return 0;
+        return 1;
+    }
+
+    /* `concat` returns a fresh owning value, like JS `+`; neither input is
+       consumed. */
+    pub U16String concat(U16Str other) {
+        U16String out;
+        int i;
+        out = ct_u16_alloc(0, self->len + other.len);
+        if (out.ptr == 0) return out;
+        for (i = 0; i < self->len; i++) out.ptr[i] = self->ptr[i];
+        for (i = 0; i < other.len; i++) out.ptr[self->len + i] = other.ptr[i];
+        return out;
+    }
+
+    /* One pass over `before`; `after` may be longer or shorter. */
+    pub U16String replace(U16Str before, U16Str after) {
+        int at = self->index_of_from(before, 0);
+        U16String out;
+        int i;
+        if (at < 0) return ct_u16_alloc(self->ptr, self->len);
+        out = ct_u16_alloc(0, self->len - before.len + after.len);
+        if (out.ptr == 0) return out;
+        for (i = 0; i < at; i++) out.ptr[i] = self->ptr[i];
+        for (i = 0; i < after.len; i++) out.ptr[at + i] = after.ptr[i];
+        for (i = at + before.len; i < self->len; i++)
+            out.ptr[i - before.len + after.len] = self->ptr[i];
+        return out;
+    }
+
+    /* Count occurrences (an empty `before` never matches, so no infinite
+       loop), size the result once, then copy. */
+    pub U16String replace_all(U16Str before, U16Str after) {
+        int i, hits, at, src, dst;
+        U16String out;
+        if (before.len == 0) return ct_u16_alloc(self->ptr, self->len);
+        hits = 0;
+        i = 0;
+        while (i + before.len <= self->len) {
+            if (self->index_of_from(before, i) == i) {
+                hits = hits + 1;
+                i = i + before.len;
+            } else {
+                i = i + 1;
+            }
+        }
+        out = ct_u16_alloc(0, self->len + hits * (after.len - before.len));
+        if (out.ptr == 0) return out;
+        src = 0;
+        dst = 0;
+        while (src < self->len) {
+            at = self->index_of_from(before, src);
+            if (at == src) {
+                for (i = 0; i < after.len; i++) out.ptr[dst + i] = after.ptr[i];
+                dst = dst + after.len;
+                src = src + before.len;
+            } else {
+                out.ptr[dst] = self->ptr[src];
+                dst = dst + 1;
+                src = src + 1;
+            }
+        }
+        return out;
+    }
+
+    /* ASCII case mapping; a non-ASCII code unit is left unchanged (no locale
+       tables are built in). */
+    pub U16String to_upper_case() {
+        U16String out;
+        int i;
+        out = ct_u16_alloc(self->ptr, self->len);
+        if (out.ptr == 0) return out;
+        for (i = 0; i < self->len; i++)
+            if (out.ptr[i] >= 'a' && out.ptr[i] <= 'z')
+                out.ptr[i] = (uint16_t)(out.ptr[i] - 32);
+        return out;
+    }
+
+    pub U16String to_lower_case() {
+        U16String out;
+        int i;
+        out = ct_u16_alloc(self->ptr, self->len);
+        if (out.ptr == 0) return out;
+        for (i = 0; i < self->len; i++)
+            if (out.ptr[i] >= 'A' && out.ptr[i] <= 'Z')
+                out.ptr[i] = (uint16_t)(out.ptr[i] + 32);
+        return out;
+    }
+
+    /* JS whitespace is wider than ASCII; the built-in subset trims the ASCII
+       set only (documented in the matrix). */
+    pub int trim_lead(int from) {
+        int i = from;
+        while (i < self->len && (self->ptr[i] == ' ' || self->ptr[i] == '\t'
+               || self->ptr[i] == '\n' || self->ptr[i] == '\r'))
+            i++;
+        return i;
+    }
+
+    pub int trim_tail(int from) {
+        int i = from;
+        while (i > 0 && (self->ptr[i - 1] == ' ' || self->ptr[i - 1] == '\t'
+               || self->ptr[i - 1] == '\n' || self->ptr[i - 1] == '\r'))
+            i--;
+        return i;
+    }
+
+    pub U16String trim() {
+        int a = self->trim_lead(0);
+        int b = self->trim_tail(self->len);
+        if (b < a) b = a;
+        return ct_u16_alloc(self->ptr + a, b - a);
+    }
+
+    pub U16String trim_start() {
+        int a = self->trim_lead(0);
+        return ct_u16_alloc(self->ptr + a, self->len - a);
+    }
+
+    pub U16String trim_end() {
+        int b = self->trim_tail(self->len);
+        return ct_u16_alloc(self->ptr, b);
+    }
+
+    pub U16String repeat(int n) {
+        U16String out;
+        int i, k;
+        if (n < 0) n = 0;
+        out = ct_u16_alloc(0, self->len * n);
+        if (out.ptr == 0) return out;
+        for (k = 0; k < n; k++)
+            for (i = 0; i < self->len; i++) out.ptr[k * self->len + i] = self->ptr[i];
+        return out;
+    }
+
+    /* Pad to `target` code units; the pad string is repeated and truncated.
+       An empty pad or a non-positive target is a no-op copy. */
+    pub U16String pad_start(int target, U16Str pad) {
+        U16String out;
+        int fill, i;
+        if (target <= self->len || pad.len == 0) return ct_u16_alloc(self->ptr, self->len);
+        out = ct_u16_alloc(0, target);
+        if (out.ptr == 0) return out;
+        fill = target - self->len;
+        for (i = 0; i < fill; i++) out.ptr[i] = pad.ptr[i % pad.len];
+        for (i = 0; i < self->len; i++) out.ptr[fill + i] = self->ptr[i];
+        return out;
+    }
+
+    pub U16String pad_end(int target, U16Str pad) {
+        U16String out;
+        int fill, i;
+        if (target <= self->len || pad.len == 0) return ct_u16_alloc(self->ptr, self->len);
+        out = ct_u16_alloc(0, target);
+        if (out.ptr == 0) return out;
+        for (i = 0; i < self->len; i++) out.ptr[i] = self->ptr[i];
+        fill = target - self->len;
+        for (i = 0; i < fill; i++) out.ptr[self->len + i] = pad.ptr[i % pad.len];
+        return out;
+    }
+
+    /* `split` returns owning pieces; `Vec<U16String>` uses the element
+       retain/release glue, so the vector and the caller each own a handle. */
+    pub Vec<U16String> split(U16Str sep) {
+        Vec<U16String> out;
+        int at, from, i;
+        U16String piece;
+        out.h = 0;
+        if (sep.len == 0) {
+            for (i = 0; i < self->len; i++) {
+                piece = ct_u16_alloc(self->ptr + i, 1);
+                out.push(piece);
+                piece.release();
+            }
+            return out;
+        }
+        from = 0;
+        while (from <= self->len) {
+            at = self->index_of_from(sep, from);
+            if (at < 0) at = self->len;
+            piece = ct_u16_alloc(self->ptr + from, at - from);
+            out.push(piece);
+            piece.release();
+            if (at == self->len) break;
+            from = at + sep.len;
+        }
+        return out;
+    }
+}
+
+impl U16Str {
+    pub U16String to_string() {
+        return ct_u16_alloc(self->ptr, self->len);
+    }
+
+    pub Str to_utf8() {
+        U16String t;
+        t = self->to_string();
+        return t.to_utf8();
+    }
+}
+
+impl String {
+    /* `String.from_utf16(U16Str)` is the other explicit cross-encoding
+       factory; it reuses the UTF-16 view's own encoder. */
+    pub static String from_utf16(U16Str s) {
+        Str v = s.to_utf8();
+        return v.to_string();
+    }
+
+    pub U16String to_utf16() {
+        Str v = self->as_str();
+        return u16_from_utf8(v);
+    }
+}

@@ -326,7 +326,8 @@ struct Emitter {
     /* Phase 29 E29-5: the built-in container unit is loaded in `ct build` but is
        not an import edge of any unit (it must not key the cache), so the
        emitter includes its header explicitly. -1 when the layer is absent. */
-    int  builtins[5];   /* P34 S9a: Vec / Option / Result / Str / Box layer units */
+    int  builtins[8];   /* P34 S9a / SH-120: Vec / Option / Result / Str /
+                           String / U16Str / U16String / Box layer units */
     int  nbuiltin;
     /* PH-64 T2: slot-parallel liveness; a dead layer unit is not included and
        not emitted, so the product set follows what the program can reach. */
@@ -2775,7 +2776,9 @@ static int emit_unit_body(struct Emitter *self, int u)
             if (hp && hv) priv = 1;
         }
         if (priv) fputs("#define CT_UNIT_PRIVATE 1\n", self->out);
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[u].base);
+        fprintf(self->out, "#include \"%s.h\"\n",
+                strcmp(self->units[u].base, "String") == 0
+                    ? "String_" : self->units[u].base);
     }
     for (i = 0; i < self->units[u].ndep; i++) {
         if (self->units[self->units[u].depu[i]].is_map) continue;
@@ -2789,7 +2792,9 @@ static int emit_unit_body(struct Emitter *self, int u)
         int bu = self->builtins[i];
         if (self->builtin_live && !self->builtin_live[i]) continue;
         if (bu < 0 || bu >= *self->nunits || bu == u) continue;
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[bu].base);
+        fprintf(self->out, "#include \"%s.h\"\n",
+                strcmp(self->units[bu].base, "String") == 0
+                    ? "String_" : self->units[bu].base);
     }
     fputs("\n", self->out);
     if ((*self->line_mode)) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
@@ -2980,7 +2985,9 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
         int bu = self->builtins[i];
         if (self->builtin_live && !self->builtin_live[i]) continue;
         if (bu < 0 || bu >= *self->nunits || bu == u) continue;
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[bu].base);
+        fprintf(self->out, "#include \"%s.h\"\n",
+                strcmp(self->units[bu].base, "String") == 0
+                    ? "String_" : self->units[bu].base);
     }
     if (self->nbuiltin > 0) fputs("\n", self->out);
 
@@ -7273,6 +7280,21 @@ impl EmitOps for Emitter {
             }
         }
 
+        /* SH-120: generic instance glue (`Result<String, E>`,
+           `Option<String>`, ...) is written before the inherent-method
+           prototype pass and calls the owning handles' retain/release
+           protocol. Declare that protocol here; the four handles are already
+           defined by the type pass above. (The same prototypes reappear with
+           the unit bodies, exactly as the pre-SH-120 output did.) */
+        if (self->sym->find_struct("String") >= 0) {
+            fputs("struct String String_retain(struct String *);\n", self->out);
+            fputs("void String_release(struct String *);\n", self->out);
+        }
+        if (self->sym->find_struct("U16String") >= 0) {
+            fputs("struct U16String U16String_retain(struct U16String *);\n", self->out);
+            fputs("void U16String_release(struct U16String *);\n", self->out);
+        }
+
         /* Phase 29: compile mode is one unit, so every instance is its own. */
         if (emit_struct_insts(self, -1, 0) != 0) return -1;
         if (emit_Box_protos(self, -1) != 0) return -1;
@@ -9274,9 +9296,18 @@ impl EmitOps for Emitter {
         (void)self;
 
         self->gprefix = self->units[u].nsprefix;
-        if (snprintf(path, sizeof path, "%s/%s.h", self->outdir, self->units[u].base) >= (int)sizeof path)
-            return self->fail("output path is too long");
-        if (self->header_guard(self->units[u].base, guard, sizeof guard) != 0) return -1;
+        /* SH-120: the `String` unit's header would be `String.h`, which a
+           case-insensitive filesystem resolves for every `#include
+           <string.h>` once the output directory is on the include path. The
+           C unit stays `String.c` (the acceptance name); only its header is
+           `String_.h`, so libc's `string.h` is always the real one. */
+        {
+            const char *hb = strcmp(self->units[u].base, "String") == 0
+                             ? "String_" : self->units[u].base;
+            if (snprintf(path, sizeof path, "%s/%s.h", self->outdir, hb) >= (int)sizeof path)
+                return self->fail("output path is too long");
+            if (self->header_guard(hb, guard, sizeof guard) != 0) return -1;
+        }
         f = fopen(path, "w");
         if (!f) return self->fail("cannot write the header");
         self->out = f;
@@ -10330,11 +10361,11 @@ void ct_emit_clear_builtins(void)
 pub void ct_emit_add_builtin(int u);
 void ct_emit_add_builtin(int u)
 {
-    /* SH-116: the array holds five layer units (Vec / Option / Result / Str /
-       Box); the cap still said four, so Box was loaded and then dropped here,
-       and a user unit never included `Box.h` (its instances stayed local, with
-       only a forward declaration of `struct ct_Box_hdr`). */
-    if (g_emit.nbuiltin < 5) {
+    /* SH-116: the array holds every layer unit; the cap once said four, so Box
+       was loaded and then dropped here, and a user unit never included
+       `Box.h` (its instances stayed local, with only a forward declaration of
+       `struct ct_Box_hdr`). SH-120 raises the array/cap to eight. */
+    if (g_emit.nbuiltin < 8) {
         g_emit.builtins[g_emit.nbuiltin] = u;
         g_emit.nbuiltin += 1;
     }

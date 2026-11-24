@@ -170,7 +170,7 @@ u=2 u2=2 u3=2 u8=2
 ### E80-4 码点 / 字节 / slice：✅ 通过
 
 - `p80_methods` 的 `u8` 行覆盖 `len`（字节）/`char_len`（码点）/`byte_at`/`codepoint_at`/`get`/`s[i]`/`char_at`/`byte_slice`/`byte_index_of(_from)`；`p80_methods/prog.expected.out` 的 `u8 bytes=104,195,169,108,108,111`、`u8 cps=104,233,108,108,111` 与 UTF-8 预期一致。
-- `String.slice` 返回新 owning：`u8 slice len=2 refs=1 live=2`（`test/ast/p80_methods/prog.ct:47-48`）；`Str.slice` 在 [`lib/std/Str.h.ct:349`](../../lib/core/Str.h.ct#L349) 返回 `Str`，`str_slice` 仍是借用（`Str.h.ct:362`）。
+- `String.slice` 返回新 owning：`u8 slice len=2 refs=1 live=2`（`test/ast/p80_methods/prog.ct:47-48`）；`Str.slice` 在 [`lib/core/Str.h.ct:133`](../../lib/core/Str.h.ct#L133) 返回 `Str`，`str_slice` 仍是借用（`Str.h.ct:362`）。
 
 ### E80-5 `.data` / `cstr()` / printf 负例：✅ 通过（E80-5 断言）；D-013 §2 字面类型见 O1
 

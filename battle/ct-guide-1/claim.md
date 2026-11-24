@@ -70,11 +70,11 @@ Box.h.ct  Option.h.ct  Result.h.ct  Str.h.ct  Vec.h.ct   # 无 std::arena
 - 指引 L14：`String s = "x".to_string()`。实测失败（E1 t1）；字面量裸值类型是 `char *`
   ([spec §4.70](../../docs/language-spec.md#470-string--strutf-8-owning-与借用phase-80仅-ct-ast)）。建议改 `String s = "x";`。
 - 指引 L85：`Str trim(Str s) { return s.slice(1, s.len - 1); }`。
-  [Str.h.ct:355](../../lib/core/Str.h.ct#L355)：第二参是**长度 n**，不是 end；`len-1` 会取错区间。
+  [Str.h.ct:133](../../lib/core/Str.h.ct#L133)：第二参是**长度 n**，不是 end；`len-1` 会取错区间。
   建议按字节写 `s.slice(1, s.len - 2)`（ASCII），并注明 `len` 是字节数。
 - 指引 L132：`a.concat(b)`。仓库只有 `str_concat(Str, Str) -> String`
-  ([Str.h.ct:390](../../lib/core/Str.h.ct#L390)) 和 `U16String.concat`
-  ([Str.h.ct:821](../../lib/core/Str.h.ct#L821))；**没有 `String.concat`**。
+  ([String.h.ct:239](../../lib/core/String.h.ct#L239)) 和 `U16String.concat`
+  ([U16String.h.ct:351](../../lib/core/utf16/U16String.h.ct#L351))；**没有 `String.concat`**。
   建议：`str_concat(a.as_str(), b.as_str())`。
 - 指引 L132：`std::arena`。`lib/std` 只有 Box/Option/Result/Str/Vec；arena 是编译器内部
   `selfhost/ct-ast/runtime/arena`，不是公开 std 包。建议删掉或标“未内置”。

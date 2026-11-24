@@ -3,11 +3,9 @@
 # compiler tree (SH-120).
 #
 # A `.h.ct` unit is named after its main type. Auxiliary records that the main
-# type needs (`ct_str_hdr`, `ct_buf`, `ct_Box_hdr`) and the two container
-# companions (`MapEntry`, and `Map` sharing `Vec.h.ct` since PH-29) are allowed;
-# anything else is a second main type and fails. String.h.ct is the one unit
-# that legitimately carries an auxiliary record with a non-`ct_` name? No --
-# `ct_str_hdr` follows the `ct_` convention.
+# type needs (`ct_str_hdr`, `ct_buf`, `ct_Box_hdr`) and the container companion
+# `MapEntry` are allowed; `Map` sharing `Vec.h.ct` is the one pre-existing
+# exception (PH-29). Anything else is a second main type and fails.
 #
 # Usage: sh selfhost/unit-name-lint.sh <dir>...
 # Exit: 0 all units one main type; 1 a violation.

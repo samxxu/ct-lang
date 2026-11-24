@@ -304,18 +304,15 @@ if [ "${1:-}" = "--fixpoint-only" ]; then
 fi
 echo "cc: $CC"
 echo
-echo "== unit names (a unit file is named after its main type) =="
-name_bad=""
-for f in $(find selfhost/ct-ast -name '*.h.ct' | sort); do
-    b="$(basename "$f" .h.ct)"
-    if ! grep -qE "^(pub )?(struct|union|enum|trait) $b( |$)" "$f"; then
-        name_bad="$name_bad $b"
-    fi
-done
-if [ -z "$name_bad" ]; then
-    ok "every .h.ct unit declares a type named after its file"
+echo "== unit names (one main type per unit: selfhost/ct-ast + lib/core) =="
+# SH-120: the lint now covers the built-in layer too, including
+# `lib/core/utf16/`. A unit may carry auxiliary records (`ct_str_hdr` etc.) but
+# only one main type; the negative fixture lives in test/ast/sh120_split.sh.
+if sh selfhost/unit-name-lint.sh selfhost/ct-ast lib/core lib/core/utf16 \
+        >"$work/unitnames.out" 2>"$work/unitnames.err"; then
+    ok "$(cat "$work/unitnames.out")"
 else
-    bad "unit names" "$name_bad"
+    bad "unit names" "$(cat "$work/unitnames.out" "$work/unitnames.err" | head -5)"
 fi
 
 # TEST-19: C leaves argument evaluation order unspecified, so a fixture that
@@ -1486,6 +1483,15 @@ p80_probe docs "PH-80-S5b-2 docs (E80-8: spec 4.70, README, roadmap, card 7)" \
     test/ast/p80_docs.sh
 p80_probe retain "PH-80-SH-102 retain (D-013 §3 automatic retain trace, ASan/UBSan, escapes)" \
     test/ast/p80_retain.sh "$work/ct-ast"
+
+# SH-120: the four-unit string split, the eight-slot built-in layer, on-demand
+# liveness, the canonical `core::utf16::U16String` spelling and the
+# one-main-type lint (including its two-main-type negative).
+if bash test/ast/sh120_split.sh "$work/ct-ast" >"$work/sh120.out" 2>&1; then
+    ok "SH-120 Str/String/U16 split (four units, eight slots, DAG, liveness, U16 namespace)"
+else
+    bad "SH-120 Str/String/U16 split" "$(sed -n '1,14p' "$work/sh120.out")"
+fi
 
 # SH-106: the borrowed `Str` view escape lint (the E79-6 `slice escape`
 # counterpart for `String` / `Str`). The probe pins the two escape shapes, the
