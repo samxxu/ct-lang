@@ -126,6 +126,63 @@
 - C3 与 C1/C2 同属 S1a-0，但 spec / stable-subset 的改写必须与实现同批提交，不允许实现先行；
 - 每个切片都要重生成 `bootstrap/ct-ast` 并过 gate 13（内置层/编译器自身布局变化）。
 
+## 5.1 C2n-0 spike：驻留池 + `TypeAlias` 迁移
+
+**目的**：用一个最小结构体验证“字符串驻留池 + 字段改 `const char *`”的形状，再批量迁移 791 处
+`char[MAX_TEXT]`。spike 只迁 `Symbols.h.ct` 的 `TypeAlias.name` / `.target`，**不动** `path`、
+parser、emitter，也不改任何诊断文案。
+
+### 5.1.1 新单元与 API
+
+新单元 `selfhost/ct-ast/runtime/text/Intern.h.ct`（`namespace runtime::text`），提供：
+
+| API | 语义 |
+| --- | --- |
+| `pub const char *ct_intern(const char *s)` | 去重后返回稳定指针；`NULL` 表示 OOM 或超 `TEXT_LIMIT` |
+| `pub const char *ct_intern_len(const char *s, int n)` | 同上，允许非 NUL 结尾片段 |
+| `pub void ct_intern_reset(void)` | 仅测试用；生产进程不调用 |
+
+实现要求：
+
+- FNV-1a + 开放寻址；装载因子 0.7 时表按 2 倍增长；`strcmp` 去重；
+- 每条字符串单独 `malloc` 复制，长度上限 `TEXT_LIMIT=65536`；超限返回 `NULL`，**不截断**；
+- 池内存在进程生命周期内不释放（编译一次即退出）；`ct_intern_reset` 只在测试中释放；
+- 指针稳定：池增长只搬表项，不搬字符串本体。
+- 若 Ct 的 `pub` 自由函数在 `const char *` 返回值上有语法限制，退回 `char *`（池内仍只读），
+  在函数注释里标明“caller must not mutate”，不改变调用点语义。
+
+### 5.1.2 迁移步骤（一个提交）
+
+1. 新建 `runtime/text/Intern.h.ct`，在 `Symbols.h.ct` 加 `import runtime::text::Intern;`；
+2. `pub struct TypeAlias` 的 `char name[160]` / `char target[160]` 改 `const char *`；
+3. 三处写入点（`begin_type_alias` / `finish_type_alias` / `add_visible_type_alias` /
+   `add_forward_type_alias`）由 `snprintf(..., MAX_TEXT, ...)` 改 `ct_intern(...)`；
+   `NULL` 时走既有 `fail` 路径并给 OOM 文案，不落半成品；
+4. 复查 `sizeof(name)`、`strncpy`、`memcpy`、按值赋值与 reset：指针复制即可，
+   **reset 不得 free**（池拥有）；
+5. 生成物对照：用户语料 `check-goldens-ast.sh` 25/25；编译器自身 C/seed 允许差异（D-017 A1 第 2 层）；
+6. `gen-seed.sh` + `check-seed.sh` 两轮逐字节。
+
+### 5.1.3 spike 判据
+
+| # | 判据 |
+| --- | --- |
+| S1 | `ct_intern("x") == ct_intern("x")`（指针相等）；`ct_intern_len("abc",2)` 得 `"ab"` |
+| S2 | 64 KiB 字符串可 intern；65537 字节返回 `NULL` 且有明确错误，不截断 |
+| S3 | 生成 2000 个不同别名（`type A0001 = int;` …）编译通过；重复别名不触发额外分配 |
+| S4 | `check-goldens-ast.sh` 25/25；`check-ast.sh` fixpoint；`p85_inventory.py cycles` 0 |
+| S5 | `TypeAlias` 内不再有 `char [160]`；`MAX_TEXT` 在 `Symbols.h.ct` 的引用数下降（记录前后 `grep -c`） |
+| S6 | seed 两轮逐字节；`check-all` 绿 |
+
+S1/S2 用独立 C harness 链接生成的 `Intern.c`（`test/ast/intern_pool.sh`），不进编译器 CLI；
+S3 用生成的 `.ct` 夹具。
+
+### 5.1.4 回滚与风险
+
+- 回滚：revert 该提交 + 重生成 seed；池是新增单元，删除即恢复。
+- 风险：`TypeAlias` 是 `pub struct`，改字段类型会改编译器自身头文件与 seed，但**不影响用户生成 C**；
+  若某调用点依赖 `char[]` 可写（例如就地 `strcat`），改为池指针前必须先改成局部 builder。
+
 ## 6 关联
 
 - [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)（已落地的动态容量样板）
