@@ -176,7 +176,9 @@ pub struct Emitter {
     struct Field *pend_fields;
     int  *npend;
     /* emission scratch */
-    int  hoist_calls[4];
+    /* S1a-0 C1: the per-statement hoist/into lists grow on demand. */
+    int *hoist_calls;
+    int  hoistcap;
     int  nhoist;
     /* PH-53: optional-chain nodes whose receiver needs a `__ct_optN`
        temporary. The declaration is emitted at the statement head; the
@@ -185,7 +187,8 @@ pub struct Emitter {
     int  nopt;
     int  opt_scan;              /* PH-53: collect optional temps only */
     /* Phase 30: receivers whose block is spliced at the statement head */
-    int  into_nodes[4];
+    int *into_nodes;
+    int  intocap;
     int  ninto;
     int  ntmp;
     int  raw_call;

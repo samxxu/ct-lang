@@ -24,10 +24,12 @@
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_HOISTS 4
+#define MAX_HOISTS_MAX 65536
 #define N_MATSEQ 73
 #define N_INTO 63
 #define N_INTO_SELF 64
 #define MAX_INTOS 4
+#define MAX_INTOS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
 #define MAX_UNITS  64
@@ -387,6 +389,8 @@ static int em_inline_expr(struct backend_emit_Emitter *, int, int);
 static int em_inline_post(struct backend_emit_Emitter *, int, int);
 static int em_field_fields(struct backend_emit_Emitter *, int, int, int);
 static int em_field_field_union(struct backend_emit_Emitter *, int, int, int);
+static int ensure_hoist_capacity(struct backend_emit_Emitter *, int);
+static int ensure_into_capacity(struct backend_emit_Emitter *, int);
 void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char *, const char *);
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);
 void backend_emit_ct_emit_bind_flags(int *, char *, int *);
@@ -477,7 +481,8 @@ static int backend_emit_Emitter_backend_emit_EmitOps_hoist_scan(void *self, int 
     int lvl;
     int i;
     int nc;
-    int chain[MAX_HOISTS];
+    int * chain = 0;
+    int chaincap = 0;
     (void)(_self);
     if (n < 0) {
         return 0;
@@ -492,8 +497,8 @@ static int backend_emit_Emitter_backend_emit_EmitOps_hoist_scan(void *self, int 
         _self->nopt++;
     }
     if (_self->arena->nodes[n].kind == N_INTO) {
-        if (_self->ninto >= MAX_INTOS) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "too many 'into' receivers in one statement");
+        if (ensure_into_capacity(_self, (_self->ninto + 1)) != 0) {
+            return (-1);
         }
         if (((_self->arena->nodes[n].a >= 0) && (_self->__backend_emit_emitops_vptr->hoist_scan(_self, _self->arena->nodes[n].a, 0) != 0))) {
             return (-1);
@@ -532,8 +537,23 @@ static int backend_emit_Emitter_backend_emit_EmitOps_hoist_scan(void *self, int 
             if ((!ok)) {
                 break;
             }
-            if (nc >= MAX_HOISTS) {
-                return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "too many hoisted receivers in one statement");
+            if (nc >= chaincap) {
+                int ncap = ((chaincap > 0) ? (chaincap * 2) : MAX_HOISTS);
+                int * grown;
+                if (ncap > MAX_HOISTS_MAX) {
+                    ncap = MAX_HOISTS_MAX;
+                }
+                if (nc >= ncap) {
+                    free(chain);
+                    return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "out of memory");
+                }
+                grown = (int *)(realloc(chain, ((size_t)(ncap) * sizeof((*grown)))));
+                if ((!grown)) {
+                    free(chain);
+                    return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "out of memory");
+                }
+                chain = grown;
+                chaincap = ncap;
             }
             chain[nc] = root;
             nc++;
@@ -544,14 +564,20 @@ static int backend_emit_Emitter_backend_emit_EmitOps_hoist_scan(void *self, int 
         }
         if (nc > 0) {
             if ((!top)) {
+                free(chain);
                 return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "a method call on a temporary is only allowed at the start of a statement or of an assignment");
             }
             for (i = (nc - 1); i >= 0; i--) {
+                if (ensure_hoist_capacity(_self, (_self->nhoist + 1)) != 0) {
+                    free(chain);
+                    return (-1);
+                }
                 snprintf(_self->arena->nodes[chain[i]].text3, MAX_TEXT, "__ct_tmp%d", _self->ntmp);
                 _self->ntmp++;
                 _self->hoist_calls[_self->nhoist] = chain[i];
                 _self->nhoist++;
             }
+            free(chain);
         }
     }
     if (((_self->arena->nodes[n].a >= 0) && (_self->__backend_emit_emitops_vptr->hoist_scan(_self, _self->arena->nodes[n].a, 0) != 0))) {
@@ -12037,6 +12063,56 @@ static int em_field_field_union(struct backend_emit_Emitter * self, int n, int i
     }
     self->__backend_emit_emitops_vptr->emit_indent(self, ind);
     fputs("}", self->out);
+    return 0;
+}
+static int ensure_hoist_capacity(struct backend_emit_Emitter * self, int need) {
+    int cap;
+    int * grown;
+    if (need <= self->hoistcap) {
+        return 0;
+    }
+    cap = ((self->hoistcap > 0) ? self->hoistcap : MAX_HOISTS);
+    while (((cap < need) && (cap < MAX_HOISTS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_HOISTS_MAX) {
+        cap = MAX_HOISTS_MAX;
+    }
+    if (need > cap) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    grown = (int *)(realloc(self->hoist_calls, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    memset((grown + self->hoistcap), 0, ((size_t)((cap - self->hoistcap)) * sizeof((*grown))));
+    self->hoist_calls = grown;
+    self->hoistcap = cap;
+    return 0;
+}
+static int ensure_into_capacity(struct backend_emit_Emitter * self, int need) {
+    int cap;
+    int * grown;
+    if (need <= self->intocap) {
+        return 0;
+    }
+    cap = ((self->intocap > 0) ? self->intocap : MAX_INTOS);
+    while (((cap < need) && (cap < MAX_INTOS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_INTOS_MAX) {
+        cap = MAX_INTOS_MAX;
+    }
+    if (need > cap) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    grown = (int *)(realloc(self->into_nodes, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    memset((grown + self->intocap), 0, ((size_t)((cap - self->intocap)) * sizeof((*grown))));
+    self->into_nodes = grown;
+    self->intocap = cap;
     return 0;
 }
 void backend_emit_ct_emit_bind(void * arena, void * sym, void * ty, void * lex, const char * version, char * outdir, const char * prog) {

@@ -195,12 +195,14 @@ struct backend_emit_Emitter {
     int * nparams;
     struct frontend_sym_Field * pend_fields;
     int * npend;
-    int hoist_calls[4];
+    int * hoist_calls;
+    int hoistcap;
     int nhoist;
     int opt_nodes[8];
     int nopt;
     int opt_scan;
-    int into_nodes[4];
+    int * into_nodes;
+    int intocap;
     int ninto;
     int ntmp;
     int raw_call;

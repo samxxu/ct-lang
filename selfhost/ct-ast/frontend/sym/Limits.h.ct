@@ -41,11 +41,13 @@ pub struct Limits {
 #define MAX_GLOBAL_TYPE_ALIASES      256
 #define MAX_GLOBAL_TYPE_ALIASES_MAX       65536
 #define MAX_HOISTS                   4
+#define MAX_HOISTS_MAX               65536
 #define MAX_IMPORTS                  32
 #define MAX_INCDIRS                  16
 #define MAX_INIT_ITEM                4096
 #define MAX_INIT_TEXT                16384
 #define MAX_INTOS                    4
+#define MAX_INTOS_MAX                65536
 #define MAX_KEY                      768
 #define MAX_LABELS                   64
 #define MAX_LABELS_MAX               65536

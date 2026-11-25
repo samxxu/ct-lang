@@ -44,11 +44,13 @@ import backend::emit::EmitterTry;
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_HOISTS 4
+#define MAX_HOISTS_MAX 65536
 /* Phase 30: the receiver block and its `$` / `.name` reference. */
 #define N_MATSEQ 73
 #define N_INTO 63
 #define N_INTO_SELF 64
 #define MAX_INTOS 4
+#define MAX_INTOS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
 #define MAX_UNITS  64
@@ -7364,6 +7366,42 @@ static int em_field_field_union(struct Emitter *self, int n, int ind, int nk)
    the static type must be a simple declarator. An array spelling (`...[]`) or
    a function-pointer declarator (`... (*)(...)`) cannot be spliced that way;
    those hop shapes stay refused instead of emitting bad C. */
+/* S1a-0 C1: the per-statement hoist and `into` lists are heap blocks that
+   double from MAX_HOISTS/MAX_INTOS; the new slots are zeroed. */
+static int ensure_hoist_capacity(struct Emitter *self, int need)
+{
+    int cap;
+    int *grown;
+    if (need <= self->hoistcap) return 0;
+    cap = self->hoistcap > 0 ? self->hoistcap : MAX_HOISTS;
+    while (cap < need && cap < MAX_HOISTS_MAX) cap *= 2;
+    if (cap > MAX_HOISTS_MAX) cap = MAX_HOISTS_MAX;
+    if (need > cap) return self->fail("out of memory");
+    grown = (int *)realloc(self->hoist_calls, (size_t)cap * sizeof(*grown));
+    if (!grown) return self->fail("out of memory");
+    memset(grown + self->hoistcap, 0, (size_t)(cap - self->hoistcap) * sizeof(*grown));
+    self->hoist_calls = grown;
+    self->hoistcap = cap;
+    return 0;
+}
+
+static int ensure_into_capacity(struct Emitter *self, int need)
+{
+    int cap;
+    int *grown;
+    if (need <= self->intocap) return 0;
+    cap = self->intocap > 0 ? self->intocap : MAX_INTOS;
+    while (cap < need && cap < MAX_INTOS_MAX) cap *= 2;
+    if (cap > MAX_INTOS_MAX) cap = MAX_INTOS_MAX;
+    if (need > cap) return self->fail("out of memory");
+    grown = (int *)realloc(self->into_nodes, (size_t)cap * sizeof(*grown));
+    if (!grown) return self->fail("out of memory");
+    memset(grown + self->intocap, 0, (size_t)(cap - self->intocap) * sizeof(*grown));
+    self->into_nodes = grown;
+    self->intocap = cap;
+    return 0;
+}
+
 impl EmitOps for Emitter {
     /* Phase 38 battle p38-1: a receiver is unstable when evaluating it twice
        can observe a different value. Calls are stable once the hoist pass has
@@ -7419,7 +7457,6 @@ impl EmitOps for Emitter {
         self->arena->nodes[n].next = saved;
         return 0;
     }
-
     /* A chain like `f().a.b` as a method receiver has to be materialised: C
        will not take the address of the call result. Root calls are recorded
        and named `__ct_tmpN`. `top` marks the statement's expression root; an
@@ -7427,7 +7464,7 @@ impl EmitOps for Emitter {
        to, so it is an error rather than a silent reordering. */
     int hoist_scan(int n, int top)
     {
-        int root, lvl, i, nc, chain[MAX_HOISTS];
+        int root, lvl, i, nc, *chain = 0, chaincap = 0;
         (void)self;
 
         if (n < 0) return 0;
@@ -7449,8 +7486,8 @@ impl EmitOps for Emitter {
            spliced in front of the statement. Do not walk `b` here -- those are
            statements, and they get their own hoists when they are emitted. */
         if (self->arena->nodes[n].kind == N_INTO) {
-            if (self->ninto >= MAX_INTOS)
-                return self->fail_from(n, "too many 'into' receivers in one statement");
+            if (ensure_into_capacity(self, self->ninto + 1) != 0)
+                return -1;
             /* §2.8: a chained segment's receiver is the inner segment, so the
                inner promotion is recorded (and numbered) first. */
             if (self->arena->nodes[n].a >= 0
@@ -7506,23 +7543,44 @@ impl EmitOps for Emitter {
                         && materializable_ctype(bt)) ok = 1;
                 }
                 if (!ok) break;
-                if (nc >= MAX_HOISTS)
-                    return self->fail_from(n, "too many hoisted receivers in one statement");
+                if (nc >= chaincap) {
+                    int ncap = chaincap > 0 ? chaincap * 2 : MAX_HOISTS;
+                    int *grown;
+                    if (ncap > MAX_HOISTS_MAX) ncap = MAX_HOISTS_MAX;
+                    if (nc >= ncap) {
+                        free(chain);
+                        return self->fail_from(n, "out of memory");
+                    }
+                    grown = (int *)realloc(chain, (size_t)ncap * sizeof(*grown));
+                    if (!grown) {
+                        free(chain);
+                        return self->fail_from(n, "out of memory");
+                    }
+                    chain = grown;
+                    chaincap = ncap;
+                }
                 chain[nc] = root;
                 nc++;
                 if (self->arena->nodes[root].kind != N_MCALL) break;
                 lvl = root;
             }
             if (nc > 0) {
-                if (!top)
+                if (!top) {
+                    free(chain);
                     return self->fail_from(n, "a method call on a temporary is only allowed at the start of a statement or of an assignment");
+                }
                 for (i = nc - 1; i >= 0; i--) {
+                    if (ensure_hoist_capacity(self, self->nhoist + 1) != 0) {
+                        free(chain);
+                        return -1;
+                    }
                     snprintf(self->arena->nodes[chain[i]].text3, MAX_TEXT,
                              "__ct_tmp%d", self->ntmp);
                     self->ntmp++;
                     self->hoist_calls[self->nhoist] = chain[i];
                     self->nhoist++;
                 }
+                free(chain);
             }
         }
         if (self->arena->nodes[n].a >= 0 && self->hoist_scan(self->arena->nodes[n].a, 0) != 0) return -1;
