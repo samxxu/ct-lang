@@ -1774,7 +1774,7 @@ impl ParseOps for Parser {
         char ret[MAX_TEXT];
         const char *name;
         const char *cname;
-        char gns[MAX_TEXT];
+        const char *gns = "";
         char tparam[MAX_TEXT];
         char bound[MAX_TEXT];
         char *gparam[1];
@@ -1915,14 +1915,18 @@ impl ParseOps for Parser {
                underscore form a qualified reference matches (`a_b`). */
             if (is_extern || !self->sym->ns || !self->sym->ns[0]) {
                 cname = runtime::text::ct_intern(name);
-                gns[0] = 0;
+                gns = "";
             } else {
+                /* S1a-0 C2p: the namespace is a pool text, so its underscore
+                   form is one too -- the old `gns[160]` cut a declaration in a
+                   namespace longer than 159 bytes, and a qualified reference
+                   could then no longer match it. */
                 size_t nl;
                 cname = runtime::text::ct_intern_join(self->sym->ns, name);
                 if (!cname) return self->sup->fail("out of memory");
-                snprintf(gns, sizeof gns, "%s", self->sym->ns);
-                nl = strlen(gns);
-                if (nl > 0) gns[nl - 1] = 0;      /* drop the trailing '_' */
+                nl = strlen(self->sym->ns);
+                gns = runtime::text::ct_intern_len(self->sym->ns, (int)nl - 1);
+                if (!gns) return self->sup->fail("out of memory");
             }
             if (!cname) return self->sup->fail("out of memory");
             g = self->sup->new_node(N_GLOBAL);

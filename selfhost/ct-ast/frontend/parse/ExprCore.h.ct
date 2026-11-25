@@ -60,8 +60,8 @@ pub trait ExprOps {
 
     int  parse_args(void);
 
-    int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap,
-                         int *form);
+    int  parse_qual_path(const char *first, const char **name_out,
+                         const char **cname_out, const char **qpath_out, int *form);
 }
 
 pub trait ExprStaticType {

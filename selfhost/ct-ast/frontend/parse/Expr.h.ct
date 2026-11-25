@@ -36,6 +36,7 @@ import runtime::arena::Arena;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -3255,20 +3256,18 @@ impl ExprOps for Expr {
     int parse_primary(void)
     {
         int n, args, id_line, id_col;
-        char qc[MAX_TEXT];
-        char qv[MAX_TEXT];
-        char tsrc[MAX_TEXT];
-        /* S1a-0 C2n-2: `parse_qual_path` takes its in/out name in a scratch
-           buffer now that the node row is an immutable pool pointer; the
-           resulting segment is interned back into `text2`. */
-        char nbuf[MAX_TEXT];
-        char tag[MAX_TEXT];
+        /* S1a-0 C2p: `parse_qual_path` returns pool texts for the last
+           segment, the callee and the qualifier, so none of these can be cut at
+           160 bytes. `qc` doubles as the qualified call's callee spelling for
+           the generic call path below (empty for a plain call). */
+        const char *qc = "";
+        const char *qv = "";
+        const char *tsrc = "";
+        const char *nbuf = "";
+        const char *tag = "";
         int qf;
         int nu, nl, sl;
         (void)self;
-
-        qc[0] = 0;
-        qv[0] = 0;
         /* PH-81 S1b: `new T { ... }` builds a `Box<T>`; `new` stays an ordinary
            identifier everywhere else (contextual keyword). */
         if (self->new_ahead()) return self->parse_new_expr();
@@ -3779,13 +3778,11 @@ impl ExprOps for Expr {
                and the callee lives in that namespace. Without the call it names
                a variable instead (`a::h`), whose C spelling is the mangled one. */
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("::")) {
-                snprintf(tsrc, sizeof tsrc, "%s", self->arena->nodes[n].text2);
-                snprintf(nbuf, sizeof nbuf, "%s", self->arena->nodes[n].text2);
-                if (self->parse_qual_path(nbuf, MAX_TEXT, qc, MAX_TEXT,
-                                          qv, MAX_TEXT, &qf) != 0)
+                tsrc = self->arena->nodes[n].text2;
+                if (self->parse_qual_path(self->arena->nodes[n].text2,
+                                          &nbuf, &qc, &qv, &qf) != 0)
                     return -1;
-                self->arena->nodes[n].text2 = runtime::text::ct_intern(nbuf);
-                if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
+                self->arena->nodes[n].text2 = nbuf;
                 /* `Trait::ns`: a namespace-host interface value (SH-20). The
                    host has no object, so the node carries no operand (`a`), the
                    vtable is named after `text2` and `text3` keeps the source
@@ -3811,7 +3808,7 @@ impl ExprOps for Expr {
                     if (!self->arena->nodes[mn].text) return self->sup->fail("out of memory");
                     self->arena->nodes[mn].text2 = runtime::text::ct_intern(mname);
                     if (!self->arena->nodes[mn].text2) return self->sup->fail("out of memory");
-                    self->arena->nodes[mn].text3 = runtime::text::ct_intern(qv);
+                    self->arena->nodes[mn].text3 = qv;
                     if (!self->arena->nodes[mn].text3) return self->sup->fail("out of memory");
                     if (self->map_arity(id_line, id_col, self->arena->nodes[n].text2,
                                         mname, arg_count(self->arena, args)
@@ -3854,9 +3851,9 @@ impl ExprOps for Expr {
                     self->arena->nodes[mn].aux = 5;
                     self->arena->nodes[mn].text = runtime::text::ct_intern(self->arena->nodes[n].text2);
                     if (!self->arena->nodes[mn].text) return self->sup->fail("out of memory");
-                    self->arena->nodes[mn].text2 = runtime::text::ct_intern(qc);
+                    self->arena->nodes[mn].text2 = qc;
                     if (!self->arena->nodes[mn].text2) return self->sup->fail("out of memory");
-                    self->arena->nodes[mn].text3 = runtime::text::ct_intern(qv);
+                    self->arena->nodes[mn].text3 = qv;
                     if (!self->arena->nodes[mn].text3) return self->sup->fail("out of memory");
                     if (self->map_arity(id_line, id_col, self->arena->nodes[n].text2,
                                         qc, arg_count(self->arena, args)
@@ -3922,9 +3919,9 @@ impl ExprOps for Expr {
                     self->arena->nodes[mn].aux = 6;
                     self->arena->nodes[mn].text = runtime::text::ct_intern(rtype);
                     if (!self->arena->nodes[mn].text) return self->sup->fail("out of memory");
-                    self->arena->nodes[mn].text2 = runtime::text::ct_intern(qc);
+                    self->arena->nodes[mn].text2 = qc;
                     if (!self->arena->nodes[mn].text2) return self->sup->fail("out of memory");
-                    self->arena->nodes[mn].text3 = runtime::text::ct_intern(self->arena->nodes[n].text2);
+                    self->arena->nodes[mn].text3 = nbuf;
                     if (!self->arena->nodes[mn].text3) return self->sup->fail("out of memory");
                     /* The trait's own signature is the judge: `nparams` counts
                        the method's parameters, never the receiver. */
@@ -3963,13 +3960,13 @@ impl ExprOps for Expr {
                     return mn;
                 }
                 if (qf == 2) {
-                    if (snprintf(tag, sizeof tag, "%s|%s", tsrc, qv) >= MAX_TEXT)
-                        return self->sup->fail("qualified name is too long");
+                    tag = runtime::text::ct_internf("%s|%s", tsrc, qv);
+                    if (!tag) return self->sup->fail("out of memory");
                     self->arena->nodes[n].text = runtime::text::ct_intern(self->arena->nodes[n].text2);
                     if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
                     self->arena->nodes[n].text2 = runtime::text::ct_intern(qc);
                     if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
-                    self->arena->nodes[n].text3 = runtime::text::ct_intern(tag);
+                    self->arena->nodes[n].text3 = tag;
                     if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
                     self->arena->nodes[n].kind = N_BOX;
                     self->arena->nodes[n].a = -1;
@@ -3978,24 +3975,24 @@ impl ExprOps for Expr {
                     return n;
                 }
                 if (self->lex->tok != T_PUNCT || !self->lex->tok_is("(")) {
-                    if (self->sym->find_qualified_global(qv, self->arena->nodes[n].text2,
-                                                         qc, MAX_TEXT) != 0) {
-                        char etn[MAX_TEXT];
+                    qc = self->sym->find_qualified_global(qv, self->arena->nodes[n].text2);
+                    if (!qc) {
+                        const char *etn;
                         int eti;
-                        if (self->sym->resolve_type(qv, etn, sizeof etn) == 0
+                        etn = self->sym->resolve_type_text(qv);
+                        if (etn
                             && (eti = self->sym->find_type(etn)) >= 0
                             && self->sym->type_kind[eti] == 5) {
-                            char emsg[MAX_TEXT * 2];
-                            snprintf(emsg, sizeof emsg, "'%s' has no member '%s'",
-                                     qv, self->arena->nodes[n].text2);
-                            return self->sup->fail(emsg);
+                            return self->sup->fail(runtime::text::ct_internf(
+                                     "'%s' has no member '%s'",
+                                     qv, self->arena->nodes[n].text2));
                         }
 
                         return self->sup->fail("no variable of that name in that namespace"
                                                " (qualified type names are not supported;"
                                                " use the bare name or an alias import)");
                     }
-                    self->arena->nodes[n].text3 = runtime::text::ct_intern(qc);
+                    self->arena->nodes[n].text3 = qc;
                     if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
                     return n;
                 }
@@ -4664,84 +4661,104 @@ impl ExprOps for Expr {
     }
 
     /* Consume the rest of a `Qual::name` path -- the cursor sits on its first
-       '::'. Writes the last segment into `name`, the namespace path in
-       underscore form (`a_b`, no trailing separator) into `qpath`, and, when the
-       path is followed by `(`, the callee's C spelling into `cname`. The
-       qualifier is a namespace path (`runtime::arena`) or a type name (`Arena`),
-       whose mangled spelling carries the namespace it belongs to. A path that is
-       not followed by `(` names a variable, which the caller resolves.
+       '::'. Returns the last segment in `*name_out`, the qualifier in
+       underscore form (`a_b`, no trailing separator) in `*qpath_out`, and,
+       when the path is followed by `(`, the callee's C spelling in
+       `*cname_out`. The qualifier is a namespace path (`runtime::arena`) or a
+       type name (`Arena`), whose mangled spelling carries the namespace it
+       belongs to. A path that is not followed by `(` names a variable, which
+       the caller resolves.
 
        `form` tells the caller which of those the path turned out to be:
        0 = a qualified variable (resolve with `find_qualified_global`),
        1 = a qualified call (`cname` holds the callee),
        2 = a namespace-host interface value (`Trait::ns`, SH-20): `name` holds
            the trait's C name, `cname` the host's underscore prefix and `qpath`
-           the host's source path, for the emitter's diagnostics. */
-    int parse_qual_path(char *name, int ncap, char *cname, int ccap,
-                        char *qpath, int qcap, int *form)
+           the host's source path, for the emitter's diagnostics.
+
+       S1a-0 C2p: the three spellings are built in growable `ct_text_*` blocks
+       and returned as pool texts. The old `qpath[160]`/`cname[160]` parameters
+       refused any qualified path whose underscore form passed 159 bytes even
+       when every segment was short; only `TEXT_LIMIT` applies now. */
+    int parse_qual_path(const char *first, const char **name_out,
+                        const char **cname_out, const char **qpath_out, int *form)
     {
-        char cand[MAX_TEXT];
-        char tn[MAX_TEXT];
-        char hp[MAX_TEXT];
+        char *qpath = 0;
+        char *cand = 0;
+        int qcap = 0, ccap = 0;
         const char **seg;
-        int nseg, fi, i, w, is_call;
-        size_t us;
+        const char *name = "";
+        const char *cname = "";
+        int nseg, fi, i, is_call, rc = -1;
         (void)self;
 
         *form = 0;
+        *name_out = "";
+        *cname_out = "";
+        *qpath_out = "";
+        if (tool::sh::ct_text_init(&qpath, &qcap, 160) != 0)
+            return self->sup->fail("out of memory");
+        if (tool::sh::ct_text_init(&cand, &ccap, 160) != 0) {
+            tool::sh::ct_text_free(&qpath, &qcap);
+            return self->sup->fail("out of memory");
+        }
         /* S1a-0 C2o: the segments live in a growing row block. The old
            `seg[8][160]` cut a qualified path at eight segments; only the
            formal text bound applies now. */
         seg = self->qseg;
         if (self->qsegcap < 8) {
             const char **grown = (const char **)realloc(seg, 8 * sizeof(*grown));
-            if (!grown) return self->sup->fail("out of memory");
+            if (!grown) { rc = self->sup->fail("out of memory"); goto done; }
             seg = grown;
             self->qseg = seg;
             self->qsegcap = 8;
         }
-        seg[0] = runtime::text::ct_intern(name);
-        if (!seg[0]) return self->sup->fail("out of memory");
+        seg[0] = runtime::text::ct_intern(first);
+        if (!seg[0]) { rc = self->sup->fail("out of memory"); goto done; }
         nseg = 1;
         for (;;) {
-            if (self->lex->tok != T_PUNCT || !self->lex->tok_is("::"))
-                return self->sup->fail("expected '::'");
+            if (self->lex->tok != T_PUNCT || !self->lex->tok_is("::")) {
+                rc = self->sup->fail("expected '::'");
+                goto done;
+            }
             self->sup->lex_next();
-            if (self->lex->tok != T_ID) return self->sup->fail("expected a name after '::'");
+            if (self->lex->tok != T_ID) {
+                rc = self->sup->fail("expected a name after '::'");
+                goto done;
+            }
             if (nseg >= self->qsegcap) {
                 int ncap = self->qsegcap * 2;
                 const char **grown;
                 if (ncap > TEXT_LIMIT) ncap = TEXT_LIMIT;
-                if (nseg >= ncap) return self->sup->fail("qualified name is too long");
+                if (nseg >= ncap) {
+                    rc = self->sup->fail("qualified name is too long");
+                    goto done;
+                }
                 grown = (const char **)realloc(self->qseg, (size_t)ncap * sizeof(*grown));
-                if (!grown) return self->sup->fail("out of memory");
+                if (!grown) { rc = self->sup->fail("out of memory"); goto done; }
                 self->qseg = grown;
                 self->qsegcap = ncap;
                 seg = grown;
             }
             seg[nseg] = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
                                                      self->lex->tokstr.len);
-            if (!seg[nseg]) return self->sup->fail("out of memory");
+            if (!seg[nseg]) { rc = self->sup->fail("out of memory"); goto done; }
             nseg++;
             self->sup->lex_next();
             if (self->lex->tok != T_PUNCT || !self->lex->tok_is("::")) break;
         }
         /* the qualifier: every segment but the last, joined with '_' */
-        w = 0;
-        qpath[0] = 0;
         for (i = 0; i < nseg - 1; i++) {
-            if (i > 0) {
-                if (w + 1 >= qcap) return self->sup->fail("qualified name is too long");
-                qpath[w] = '_';
-                w++;
-                qpath[w] = 0;
+            if (i > 0 && tool::sh::ct_text_cat(&qpath, &qcap, "_") != 0) {
+                rc = self->sup->fail("out of memory");
+                goto done;
             }
-            if (w + (int)strlen(seg[i]) >= qcap)
-                return self->sup->fail("qualified name is too long");
-            snprintf(qpath + w, (size_t)(qcap - w), "%s", seg[i]);
-            w += (int)strlen(seg[i]);
+            if (tool::sh::ct_text_cat(&qpath, &qcap, seg[i]) != 0) {
+                rc = self->sup->fail("out of memory");
+                goto done;
+            }
         }
-        snprintf(name, (size_t)ncap, "%s", seg[nseg - 1]);
+        name = seg[nseg - 1];
         /* SH-120: `core::utf16::U16String::from_utf8` / `U16Str` name the
            built-in layer's nested namespace; its C symbols stay in the root
            namespace, so the qualifier maps to the bare spelling exactly like
@@ -4756,45 +4773,52 @@ impl ExprOps for Expr {
            only a `.` here is legal. */
         if (!is_call && nseg >= 2 && self->lex->tok == T_PUNCT
             && self->lex->tok_is(".")) {
-            char tq[MAX_TEXT];
-            int st = -1;
-            if (snprintf(tq, sizeof tq, "%s_%s", qpath, seg[nseg - 1]) < (int)sizeof tq)
+            char *tq = 0;
+            int tqcap = 0, st = -1;
+            if (tool::sh::ct_text_fmt(&tq, 64, "%s_%s", qpath, seg[nseg - 1]) == 0) {
                 st = self->sym->find_trait(tq);
+                tool::sh::ct_text_free(&tq, &tqcap);
+            }
             if (st >= 0 && self->sym->traits[st].is_static) {
-                int hw = 0;
                 qpath[0] = 0;
                 for (i = 0; i < nseg - 1; i++) {
-                    if (i > 0) {
-                        if (hw + 2 >= qcap) return self->sup->fail("qualified name is too long");
-                        qpath[hw] = ':';
-                        qpath[hw + 1] = ':';
-                        hw += 2;
-                        qpath[hw] = 0;
+                    if (i > 0 && tool::sh::ct_text_cat(&qpath, &qcap, "::") != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
                     }
-                    if (hw + (int)strlen(seg[i]) >= qcap)
-                        return self->sup->fail("qualified name is too long");
-                    snprintf(qpath + hw, (size_t)(qcap - hw), "%s", seg[i]);
-                    hw += (int)strlen(seg[i]);
+                    if (tool::sh::ct_text_cat(&qpath, &qcap, seg[i]) != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
+                    }
                 }
-                snprintf(name, (size_t)ncap, "%s", self->sym->traits[st].name);
+                name = self->sym->traits[st].name;
                 *form = 3;
-                return 0;
+                rc = 0;
+                goto done;
             }
         }
         if (is_call) {
-            if (snprintf(cand, sizeof cand, "%s_%s", qpath, seg[nseg - 1]) >= (int)sizeof cand)
-                return self->sup->fail("qualified name is too long");
+            if (tool::sh::ct_text_printf(&cand, &ccap, "%s_%s", qpath, seg[nseg - 1]) != 0) {
+                rc = self->sup->fail("out of memory");
+                goto done;
+            }
             fi = self->sym->find_func(cand);
             if (fi < 0 && nseg == 2) {
-                /* a lone segment may be a type: its C name is `<prefix><Type>`, so
-                   the namespace prefix is everything up to its last '_' */
-                if (self->sym->resolve_type(seg[0], tn, sizeof tn) == 0) {
-                    us = strlen(tn);
-                    while (us > 0 && tn[us - 1] != '_') us--;
-                    tn[us] = 0;
-                    if (snprintf(cand, sizeof cand, "%s%s", tn, seg[1]) < (int)sizeof cand)
-                        fi = self->sym->find_func(cand);
+                /* A lone segment may be a type: its C name is `<prefix><Type>`,
+                   so the namespace prefix is everything up to its last '_'.
+                   When the spelling carries no '_' the prefix is empty and the
+                   bare function name is retried -- that is how an imported
+                   namespace-less unit (`plain::twice`) resolves. */
+                const char *tn = self->sym->resolve_type_text(seg[0]);
+                const char *us = tn ? strrchr(tn, '_') : (const char *)0;
+                int plen = us ? (int)(us - tn + 1) : 0;
+                if (tool::sh::ct_text_reset(&cand, &ccap, 160) != 0
+                    || tool::sh::ct_text_printf(&cand, &ccap, "%.*s%s",
+                                                plen, tn ? tn : "", seg[1]) != 0) {
+                    rc = self->sup->fail("out of memory");
+                    goto done;
                 }
+                fi = self->sym->find_func(cand);
             }
             if (fi < 0) {
                 /* P20-01: `Trait::method(recv, ...)` names a static trait
@@ -4803,14 +4827,15 @@ impl ExprOps for Expr {
                    the way symbol names are (`a::ALen` -> `a_ALen`); the last
                    segment must be a method of that trait, so a namespace
                    function of a similar name is not hijacked. */
-                char tq[MAX_TEXT];
-                int st = -1;
+                char *tq = 0;
+                int tqcap = 0, st = -1;
                 if (nseg == 2) {
-                    if (self->sym->resolve_type(seg[0], tn, sizeof tn) == 0)
-                        st = self->sym->find_trait(tn);
+                    const char *tn = self->sym->resolve_type_text(seg[0]);
+                    if (tn) st = self->sym->find_trait(tn);
                     if (st < 0) st = self->sym->find_trait(seg[0]);
-                } else if (snprintf(tq, sizeof tq, "%s", qpath) < (int)sizeof tq) {
+                } else if (tool::sh::ct_text_fmt(&tq, 64, "%s", qpath) == 0) {
                     st = self->sym->find_trait(tq);
+                    tool::sh::ct_text_free(&tq, &tqcap);
                 }
                 if (st >= 0 && self->sym->traits[st].is_static) {
                     int mi2, okm = 0;
@@ -4818,26 +4843,22 @@ impl ExprOps for Expr {
                         if (strcmp(self->sym->traits[st].m[mi2].name, seg[nseg - 1]) == 0)
                             okm = 1;
                     if (okm) {
-                        int hw2 = 0;
                         qpath[0] = 0;
                         for (i = 0; i < nseg - 1; i++) {
-                            if (i > 0) {
-                                if (hw2 + 2 >= qcap)
-                                    return self->sup->fail("qualified name is too long");
-                                qpath[hw2] = ':';
-                                qpath[hw2 + 1] = ':';
-                                hw2 += 2;
-                                qpath[hw2] = 0;
+                            if (i > 0 && tool::sh::ct_text_cat(&qpath, &qcap, "::") != 0) {
+                                rc = self->sup->fail("out of memory");
+                                goto done;
                             }
-                            if (hw2 + (int)strlen(seg[i]) >= qcap)
-                                return self->sup->fail("qualified name is too long");
-                            snprintf(qpath + hw2, (size_t)(qcap - hw2), "%s", seg[i]);
-                            hw2 += (int)strlen(seg[i]);
+                            if (tool::sh::ct_text_cat(&qpath, &qcap, seg[i]) != 0) {
+                                rc = self->sup->fail("out of memory");
+                                goto done;
+                            }
                         }
-                        snprintf(name, (size_t)ncap, "%s", self->sym->traits[st].name);
-                        snprintf(cname, (size_t)ccap, "%s", seg[nseg - 1]);
+                        name = self->sym->traits[st].name;
+                        cname = seg[nseg - 1];
                         *form = 5;
-                        return 0;
+                        rc = 0;
+                        goto done;
                     }
                 }
                 /* A static namespace-host map may be called without its trait
@@ -4845,127 +4866,141 @@ impl ExprOps for Expr {
                    the method directly. The recipe is the same one
                    `std::io::Io.puts(...)` expands, so the emitter needs no new
                    form; only an ambiguous method name is rejected. */
-                char host[MAX_TEXT];
-                char only[2][MAX_TEXT];
-                int hw = 0, mp, bi, hits = 0;
-                host[0] = 0;
+                const char *only[2];
+                int mp, bi, hits = 0;
+                only[0] = "";
+                only[1] = "";
+                if (tool::sh::ct_text_reset(&cand, &ccap, 160) != 0) {
+                    rc = self->sup->fail("out of memory");
+                    goto done;
+                }
                 for (i = 0; i < nseg - 1; i++) {
-                    if (i > 0) {
-                        if (hw + 2 >= (int)sizeof host)
-                            return self->sup->fail("qualified name is too long");
-                        host[hw] = ':';
-                        host[hw + 1] = ':';
-                        hw += 2;
-                        host[hw] = 0;
+                    if (i > 0 && tool::sh::ct_text_cat(&cand, &ccap, "::") != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
                     }
-                    if (hw + (int)strlen(seg[i]) >= (int)sizeof host)
-                        return self->sup->fail("qualified name is too long");
-                    snprintf(host + hw, sizeof host - (size_t)hw, "%s", seg[i]);
-                    hw += (int)strlen(seg[i]);
+                    if (tool::sh::ct_text_cat(&cand, &ccap, seg[i]) != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
+                    }
                 }
                 for (mp = 0; mp < *self->nmaps; mp++) {
                     if (!(*self->maps)[mp].is_static || !(*self->maps)[mp].ns_host)
                         continue;
-                    if (strcmp((*self->maps)[mp].inst, host) != 0) continue;
+                    if (strcmp((*self->maps)[mp].inst, cand) != 0) continue;
                     for (bi = 0; bi < (*self->maps)[mp].nb; bi++) {
                         if (strcmp((*self->maps)[mp].b[bi].method, seg[nseg - 1]) != 0) continue;
-                        if (hits < 2)
-                            snprintf(only[hits], MAX_TEXT, "%s", (*self->maps)[mp].trait);
+                        if (hits < 2) only[hits] = (*self->maps)[mp].trait;
                         hits++;
                     }
                 }
                 if (hits > 1) {
-                    char m[MAX_TEXT * 2];
-                    snprintf(m, sizeof m, "'%s' is ambiguous on '%s': bound by %s and %s",
-                             seg[nseg - 1], host, only[0], only[1]);
-                    return self->sup->fail(m);
+                    rc = self->sup->fail(tool::sh::ct_scratch_fmt(
+                             "'%s' is ambiguous on '%s': bound by %s and %s",
+                             seg[nseg - 1], cand, only[0], only[1]));
+                    goto done;
                 }
                 if (hits == 1) {
-                    snprintf(name, (size_t)ncap, "%s", only[0]);
-                    snprintf(cname, (size_t)ccap, "%s", seg[nseg - 1]);
-                    snprintf(qpath, (size_t)qcap, "%s", host);
+                    name = only[0];
+                    cname = seg[nseg - 1];
+                    if (tool::sh::ct_text_reset(&qpath, &qcap, 160) != 0
+                        || tool::sh::ct_text_cat(&qpath, &qcap, cand) != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
+                    }
                     *form = 4;
-                    return 0;
+                    rc = 0;
+                    goto done;
                 }
-                return self->sup->fail("no function of that name in that namespace");
+                rc = self->sup->fail("no function of that name in that namespace");
+                goto done;
             }
-            snprintf(cname, (size_t)ccap, "%s", self->sym->funcs[fi].cname);
+            cname = self->sym->funcs[fi].cname;
             *form = 1;
-            return 0;
+            rc = 0;
+            goto done;
         }
         /* SH-20: `Trait::ns` names a namespace host, not a variable. Only a
            trait qualifier takes this form; a struct or typedef stays a
            (rejected) qualified variable. */
-        if (nseg >= 2 && self->sym->resolve_type(seg[0], tn, sizeof tn) == 0
-            && self->sym->find_trait(tn) >= 0) {
-            /* A static trait has no iface to box, so `Trait::host` is always the
-               wrong shape; name the form that works at the site. */
-            int st = self->sym->find_trait(tn);
-            if (st >= 0 && self->sym->traits[st].is_static) {
-                char host[MAX_TEXT];
-                char m[MAX_TEXT * 2];
-                int hw = 0;
-                host[0] = 0;
-                for (i = 1; i < nseg; i++) {
-                    if (i > 1 && hw + 2 < (int)sizeof host) {
-                        host[hw] = ':';
-                        host[hw + 1] = ':';
-                        hw += 2;
-                        host[hw] = 0;
+        {
+            const char *tn = self->sym->resolve_type_text(seg[0]);
+            if (nseg >= 2 && tn && self->sym->find_trait(tn) >= 0) {
+                /* A static trait has no iface to box, so `Trait::host` is always the
+                   wrong shape; name the form that works at the site. */
+                int st = self->sym->find_trait(tn);
+                if (st >= 0 && self->sym->traits[st].is_static) {
+                    if (tool::sh::ct_text_reset(&cand, &ccap, 160) != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
                     }
-                    if (hw + (int)strlen(seg[i]) >= (int)sizeof host)
-                        return self->sup->fail("qualified name is too long");
-                    snprintf(host + hw, sizeof host - (size_t)hw, "%s", seg[i]);
-                    hw += (int)strlen(seg[i]);
+                    for (i = 1; i < nseg; i++) {
+                        if (i > 1 && tool::sh::ct_text_cat(&cand, &ccap, "::") != 0) {
+                            rc = self->sup->fail("out of memory");
+                            goto done;
+                        }
+                        if (tool::sh::ct_text_cat(&cand, &ccap, seg[i]) != 0) {
+                            rc = self->sup->fail("out of memory");
+                            goto done;
+                        }
+                    }
+                    rc = self->sup->fail(tool::sh::ct_scratch_fmt(
+                             "a static trait has no interface value; call '%s::%s.<method>()'",
+                             cand, seg[0]));
+                    goto done;
                 }
-                snprintf(m, sizeof m,
-                         "a static trait has no interface value; call '%s::%s.<method>()'",
-                         host, seg[0]);
-                return self->sup->fail(m);
-            }
-            /* the host in underscore form, then the symbol prefix spelled the
-               way `map` spells it: a trait that already carries the namespace
-               keeps its own name (SH-20 §4) */
-            w = 0;
-            hp[0] = 0;
-            for (i = 1; i < nseg; i++) {
-                if (i > 1) {
-                    if (w + 1 >= (int)sizeof hp)
-                        return self->sup->fail("qualified name is too long");
-                    hp[w] = '_';
-                    w++;
-                    hp[w] = 0;
+                /* the host in underscore form, then the symbol prefix spelled the
+                   way `map` spells it: a trait that already carries the namespace
+                   keeps its own name (SH-20 §4) */
+                if (tool::sh::ct_text_reset(&cand, &ccap, 160) != 0) {
+                    rc = self->sup->fail("out of memory");
+                    goto done;
                 }
-                if (w + (int)strlen(seg[i]) >= (int)sizeof hp)
-                    return self->sup->fail("qualified name is too long");
-                snprintf(hp + w, sizeof hp - (size_t)w, "%s", seg[i]);
-                w += (int)strlen(seg[i]);
-            }
-            if (strncmp(tn, hp, strlen(hp)) == 0 && tn[strlen(hp)] == '_')
-                snprintf(cname, (size_t)ccap, "%s", tn);
-            else if (snprintf(cname, (size_t)ccap, "%s_%s", hp, tn) >= ccap)
-                return self->sup->fail("qualified name is too long");
-            /* and the host in source form, for the emitter's diagnostic */
-            w = 0;
-            qpath[0] = 0;
-            for (i = 1; i < nseg; i++) {
-                if (i > 1) {
-                    if (w + 2 >= qcap) return self->sup->fail("qualified name is too long");
-                    qpath[w] = ':';
-                    qpath[w + 1] = ':';
-                    w += 2;
-                    qpath[w] = 0;
+                for (i = 1; i < nseg; i++) {
+                    if (i > 1 && tool::sh::ct_text_cat(&cand, &ccap, "_") != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
+                    }
+                    if (tool::sh::ct_text_cat(&cand, &ccap, seg[i]) != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
+                    }
                 }
-                if (w + (int)strlen(seg[i]) >= qcap)
-                    return self->sup->fail("qualified name is too long");
-                snprintf(qpath + w, (size_t)(qcap - w), "%s", seg[i]);
-                w += (int)strlen(seg[i]);
+                if (strncmp(tn, cand, strlen(cand)) == 0 && tn[strlen(cand)] == '_')
+                    cname = tn;
+                else {
+                    cname = runtime::text::ct_internf("%s_%s", cand, tn);
+                    if (!cname) { rc = self->sup->fail("out of memory"); goto done; }
+                }
+                /* and the host in source form, for the emitter's diagnostic */
+                qpath[0] = 0;
+                for (i = 1; i < nseg; i++) {
+                    if (i > 1 && tool::sh::ct_text_cat(&qpath, &qcap, "::") != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
+                    }
+                    if (tool::sh::ct_text_cat(&qpath, &qcap, seg[i]) != 0) {
+                        rc = self->sup->fail("out of memory");
+                        goto done;
+                    }
+                }
+                name = tn;
+                *form = 2;
+                rc = 0;
+                goto done;
             }
-            snprintf(name, (size_t)ncap, "%s", tn);
-            *form = 2;
-            return 0;
         }
-        return 0;
+        rc = 0;
+    done:
+        if (rc == 0) {
+            *name_out = name;
+            *cname_out = cname;
+            *qpath_out = runtime::text::ct_intern(qpath);
+            if (!*qpath_out) rc = self->sup->fail("out of memory");
+        }
+        tool::sh::ct_text_free(&qpath, &qcap);
+        tool::sh::ct_text_free(&cand, &ccap);
+        return rc;
     }
 
     int parse_args(void)

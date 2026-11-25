@@ -113,7 +113,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*is_const_name)(void *, const char *);
     int (*var_cname)(void *, const char *, char *, int);
     int (*var_ambiguous)(void *, const char *);
-    int (*find_qualified_global)(void *, const char *, const char *, char *, int);
+    const char * (*find_qualified_global)(void *, const char *, const char *);
     int (*find_var)(void *, const char *);
     int (*var_type)(void *, const char *, char *, int);
     int (*find_func)(void *, const char *);
@@ -156,6 +156,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*ns_decl_name)(void *, const char *, char *, int);
     const char * (*ns_decl_text)(void *, const char *);
     int (*resolve_type)(void *, const char *, char *, int);
+    const char * (*resolve_type_text)(void *, const char *);
     int (*add_alias)(void *, const char *, const char *);
     int (*push_scope)(void *);
     int (*pop_scope)(void *);

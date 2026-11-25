@@ -1302,7 +1302,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     char ret[MAX_TEXT];
     const char * name;
     const char * cname;
-    char gns[MAX_TEXT];
+    const char * gns = "";
     char tparam[MAX_TEXT];
     char bound[MAX_TEXT];
     char * gparam[1];
@@ -1427,7 +1427,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         }
         if (((is_extern || (!_self->sym->ns)) || (!_self->sym->ns[0]))) {
             cname = runtime_text_ct_intern(name);
-            gns[0] = 0;
+            gns = "";
         }
         else {
             size_t nl;
@@ -1435,10 +1435,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
             if ((!cname)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            snprintf(gns, sizeof(gns), "%s", _self->sym->ns);
-            nl = strlen(gns);
-            if (nl > 0) {
-                gns[(nl - 1)] = 0;
+            nl = strlen(_self->sym->ns);
+            gns = runtime_text_ct_intern_len(_self->sym->ns, ((int)(nl) - 1));
+            if ((!gns)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
         }
         if ((!cname)) {

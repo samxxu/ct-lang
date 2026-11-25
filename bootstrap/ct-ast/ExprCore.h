@@ -104,7 +104,7 @@ struct frontend_parse_ExprOps_vtbl {
     int (*parse_postfix)(void *);
     int (*parse_primary)(void *);
     int (*parse_args)(void *);
-    int (*parse_qual_path)(void *, char *, int, char *, int, char *, int, int *);
+    int (*parse_qual_path)(void *, const char *, const char * *, const char * *, const char * *, int *);
 };
 struct frontend_parse_ExprOps_iface {
     void *self;

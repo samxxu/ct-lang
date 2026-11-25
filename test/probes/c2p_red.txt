@@ -9,3 +9,12 @@ FAIL c2p: qv: compile failed: .../qv.ct:3:213: error: qualified name is too long
 FAIL c2p: qc: compile failed: .../qc.ct:3:215: error: qualified name is too long
   200/1000-byte literals: kept whole
 c2p: 1 passed, 2 failed
+
+green (C2p-1 implementation):
+command: bash test/ast/c2p_limits.sh <ct-ast built from this commit's seed>
+exit: 0
+output:
+  >160-byte qualified variable: resolved and emitted whole
+  >160-byte qualified call: resolved and emitted whole
+  200/1000-byte literals: kept whole
+c2p: 3 passed, 0 failed

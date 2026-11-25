@@ -10,6 +10,7 @@
 #include "TypeCheck.h"
 #include "Arena.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -2364,18 +2365,16 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
     int args;
     int id_line;
     int id_col;
-    char qc[MAX_TEXT];
-    char qv[MAX_TEXT];
-    char tsrc[MAX_TEXT];
-    char nbuf[MAX_TEXT];
-    char tag[MAX_TEXT];
+    const char * qc = "";
+    const char * qv = "";
+    const char * tsrc = "";
+    const char * nbuf = "";
+    const char * tag = "";
     int qf;
     int nu;
     int nl;
     int sl;
     (void)(_self);
-    qc[0] = 0;
-    qv[0] = 0;
     if (_self->__frontend_parse_exprnew_vptr->new_ahead(_self)) {
         return _self->__frontend_parse_exprnew_vptr->parse_new_expr(_self);
     }
@@ -2984,15 +2983,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             }
         }
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::"))) {
-            snprintf(tsrc, sizeof(tsrc), "%s", _self->arena->nodes[n].text2);
-            snprintf(nbuf, sizeof(nbuf), "%s", _self->arena->nodes[n].text2);
-            if (_self->__frontend_parse_exprops_vptr->parse_qual_path(_self, nbuf, MAX_TEXT, qc, MAX_TEXT, qv, MAX_TEXT, (&qf)) != 0) {
+            tsrc = _self->arena->nodes[n].text2;
+            if (_self->__frontend_parse_exprops_vptr->parse_qual_path(_self, _self->arena->nodes[n].text2, (&nbuf), (&qc), (&qv), (&qf)) != 0) {
                 return (-1);
             }
-            _self->arena->nodes[n].text2 = runtime_text_ct_intern(nbuf);
-            if ((!_self->arena->nodes[n].text2)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
+            _self->arena->nodes[n].text2 = nbuf;
             if (qf == 3) {
                 char mname[MAX_TEXT];
                 int mn;
@@ -3024,7 +3019,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 if ((!_self->arena->nodes[mn].text2)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->arena->nodes[mn].text3 = runtime_text_ct_intern(qv);
+                _self->arena->nodes[mn].text3 = qv;
                 if ((!_self->arena->nodes[mn].text3)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
@@ -3070,11 +3065,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 if ((!_self->arena->nodes[mn].text)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->arena->nodes[mn].text2 = runtime_text_ct_intern(qc);
+                _self->arena->nodes[mn].text2 = qc;
                 if ((!_self->arena->nodes[mn].text2)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->arena->nodes[mn].text3 = runtime_text_ct_intern(qv);
+                _self->arena->nodes[mn].text3 = qv;
                 if ((!_self->arena->nodes[mn].text3)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
@@ -3139,11 +3134,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 if ((!_self->arena->nodes[mn].text)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->arena->nodes[mn].text2 = runtime_text_ct_intern(qc);
+                _self->arena->nodes[mn].text2 = qc;
                 if ((!_self->arena->nodes[mn].text2)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->arena->nodes[mn].text3 = runtime_text_ct_intern(_self->arena->nodes[n].text2);
+                _self->arena->nodes[mn].text3 = nbuf;
                 if ((!_self->arena->nodes[mn].text3)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
@@ -3176,8 +3171,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 return mn;
             }
             if (qf == 2) {
-                if (snprintf(tag, sizeof(tag), "%s|%s", tsrc, qv) >= MAX_TEXT) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+                tag = runtime_text_ct_internf("%s|%s", tsrc, qv);
+                if ((!tag)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
                 _self->arena->nodes[n].text = runtime_text_ct_intern(_self->arena->nodes[n].text2);
                 if ((!_self->arena->nodes[n].text)) {
@@ -3187,7 +3183,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 if ((!_self->arena->nodes[n].text2)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->arena->nodes[n].text3 = runtime_text_ct_intern(tag);
+                _self->arena->nodes[n].text3 = tag;
                 if ((!_self->arena->nodes[n].text3)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
@@ -3198,17 +3194,17 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 return n;
             }
             if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
-                if (_self->sym->__frontend_sym_symbolops_vptr->find_qualified_global(_self->sym, qv, _self->arena->nodes[n].text2, qc, MAX_TEXT) != 0) {
-                    char etn[MAX_TEXT];
+                qc = _self->sym->__frontend_sym_symbolops_vptr->find_qualified_global(_self->sym, qv, _self->arena->nodes[n].text2);
+                if ((!qc)) {
+                    const char * etn;
                     int eti;
-                    if ((((_self->sym->__frontend_sym_symbolops_vptr->resolve_type(_self->sym, qv, etn, sizeof(etn)) == 0) && ((eti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, etn)) >= 0)) && (_self->sym->type_kind[eti] == 5))) {
-                        char emsg[MAX_TEXT * 2];
-                        snprintf(emsg, sizeof(emsg), "'%s' has no member '%s'", qv, _self->arena->nodes[n].text2);
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, emsg);
+                    etn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, qv);
+                    if (((etn && ((eti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, etn)) >= 0)) && (_self->sym->type_kind[eti] == 5))) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("'%s' has no member '%s'", qv, _self->arena->nodes[n].text2));
                     }
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "no variable of that name in that namespace"" (qualified type names are not supported;"" use the bare name or an alias import)");
                 }
-                _self->arena->nodes[n].text3 = runtime_text_ct_intern(qc);
+                _self->arena->nodes[n].text3 = qc;
                 if ((!_self->arena->nodes[n].text3)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
@@ -3861,42 +3857,58 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected an expression");
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self, char * name, int ncap, char * cname, int ccap, char * qpath, int qcap, int * form) {
+static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self, const char * first, const char * * name_out, const char * * cname_out, const char * * qpath_out, int * form) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char cand[MAX_TEXT];
-    char tn[MAX_TEXT];
-    char hp[MAX_TEXT];
+    char * qpath = 0;
+    char * cand = 0;
+    int qcap = 0;
+    int ccap = 0;
     const char * * seg;
+    const char * name = "";
+    const char * cname = "";
     int nseg;
     int fi;
     int i;
-    int w;
     int is_call;
-    size_t us;
+    int rc = (-1);
     (void)(_self);
     (*form) = 0;
+    (*name_out) = "";
+    (*cname_out) = "";
+    (*qpath_out) = "";
+    if (tool_sh_ct_text_init((&qpath), (&qcap), 160) != 0) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    if (tool_sh_ct_text_init((&cand), (&ccap), 160) != 0) {
+        tool_sh_ct_text_free((&qpath), (&qcap));
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     seg = _self->qseg;
     if (_self->qsegcap < 8) {
         const char * * grown = (const char * *)(realloc(seg, (8 * sizeof((*grown)))));
         if ((!grown)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            goto done;
         }
         seg = grown;
         _self->qseg = seg;
         _self->qsegcap = 8;
     }
-    seg[0] = runtime_text_ct_intern(name);
+    seg[0] = runtime_text_ct_intern(first);
     if ((!seg[0])) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        goto done;
     }
     nseg = 1;
     for (; ; ) {
         if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::")))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '::'");
+            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '::'");
+            goto done;
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (_self->lex->tok != T_ID) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a name after '::'");
+            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a name after '::'");
+            goto done;
         }
         if (nseg >= _self->qsegcap) {
             int ncap = (_self->qsegcap * 2);
@@ -3905,11 +3917,13 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
                 ncap = TEXT_LIMIT;
             }
             if (nseg >= ncap) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+                rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+                goto done;
             }
             grown = (const char * *)(realloc(_self->qseg, ((size_t)(ncap) * sizeof((*grown)))));
             if ((!grown)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                goto done;
             }
             _self->qseg = grown;
             _self->qsegcap = ncap;
@@ -3917,7 +3931,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
         }
         seg[nseg] = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
         if ((!seg[nseg])) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            goto done;
         }
         nseg++;
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -3925,80 +3940,70 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
             break;
         }
     }
-    w = 0;
-    qpath[0] = 0;
     for (i = 0; i < (nseg - 1); i++) {
-        if (i > 0) {
-            if ((w + 1) >= qcap) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
-            }
-            qpath[w] = '_';
-            w++;
-            qpath[w] = 0;
+        if (((i > 0) && (tool_sh_ct_text_cat((&qpath), (&qcap), "_") != 0))) {
+            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            goto done;
         }
-        if ((w + (int)(strlen(seg[i]))) >= qcap) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+        if (tool_sh_ct_text_cat((&qpath), (&qcap), seg[i]) != 0) {
+            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            goto done;
         }
-        snprintf((qpath + w), (size_t)((qcap - w)), "%s", seg[i]);
-        w += (int)(strlen(seg[i]));
     }
-    snprintf(name, (size_t)(ncap), "%s", seg[(nseg - 1)]);
+    name = seg[(nseg - 1)];
     if (strncmp(qpath, "core_utf16_", 11) == 0) {
         memmove(qpath, (qpath + 11), (strlen((qpath + 11)) + 1));
     }
     is_call = ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("));
     if (((((!is_call) && (nseg >= 2)) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "."))) {
-        char tq[MAX_TEXT];
+        char * tq = 0;
+        int tqcap = 0;
         int st = (-1);
-        if (snprintf(tq, sizeof(tq), "%s_%s", qpath, seg[(nseg - 1)]) < (int)(sizeof(tq))) {
+        if (tool_sh_ct_text_fmt((&tq), 64, "%s_%s", qpath, seg[(nseg - 1)]) == 0) {
             st = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tq);
+            tool_sh_ct_text_free((&tq), (&tqcap));
         }
         if (((st >= 0) && _self->sym->traits[st].is_static)) {
-            int hw = 0;
             qpath[0] = 0;
             for (i = 0; i < (nseg - 1); i++) {
-                if (i > 0) {
-                    if ((hw + 2) >= qcap) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
-                    }
-                    qpath[hw] = ':';
-                    qpath[(hw + 1)] = ':';
-                    hw += 2;
-                    qpath[hw] = 0;
+                if (((i > 0) && (tool_sh_ct_text_cat((&qpath), (&qcap), "::") != 0))) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
                 }
-                if ((hw + (int)(strlen(seg[i]))) >= qcap) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+                if (tool_sh_ct_text_cat((&qpath), (&qcap), seg[i]) != 0) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
                 }
-                snprintf((qpath + hw), (size_t)((qcap - hw)), "%s", seg[i]);
-                hw += (int)(strlen(seg[i]));
             }
-            snprintf(name, (size_t)(ncap), "%s", _self->sym->traits[st].name);
+            name = _self->sym->traits[st].name;
             (*form) = 3;
-            return 0;
+            rc = 0;
+            goto done;
         }
     }
     if (is_call) {
-        if (snprintf(cand, sizeof(cand), "%s_%s", qpath, seg[(nseg - 1)]) >= (int)(sizeof(cand))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+        if (tool_sh_ct_text_printf((&cand), (&ccap), "%s_%s", qpath, seg[(nseg - 1)]) != 0) {
+            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            goto done;
         }
         fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, cand);
         if (((fi < 0) && (nseg == 2))) {
-            if (_self->sym->__frontend_sym_symbolops_vptr->resolve_type(_self->sym, seg[0], tn, sizeof(tn)) == 0) {
-                us = strlen(tn);
-                while (((us > 0) && (tn[(us - 1)] != '_'))) {
-                    us--;
-                }
-                tn[us] = 0;
-                if (snprintf(cand, sizeof(cand), "%s%s", tn, seg[1]) < (int)(sizeof(cand))) {
-                    fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, cand);
-                }
+            const char * tn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, seg[0]);
+            const char * us = (tn ? strrchr(tn, '_') : (const char *)(0));
+            int plen = (us ? (int)(((us - tn) + 1)) : 0);
+            if (((tool_sh_ct_text_reset((&cand), (&ccap), 160) != 0) || (tool_sh_ct_text_printf((&cand), (&ccap), "%.*s%s", plen, (tn ? tn : ""), seg[1]) != 0))) {
+                rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                goto done;
             }
+            fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, cand);
         }
         if (fi < 0) {
-            char tq[MAX_TEXT];
+            char * tq = 0;
+            int tqcap = 0;
             int st = (-1);
             if (nseg == 2) {
-                if (_self->sym->__frontend_sym_symbolops_vptr->resolve_type(_self->sym, seg[0], tn, sizeof(tn)) == 0) {
+                const char * tn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, seg[0]);
+                if (tn) {
                     st = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tn);
                 }
                 if (st < 0) {
@@ -4006,8 +4011,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
                 }
             }
             else {
-                if (snprintf(tq, sizeof(tq), "%s", qpath) < (int)(sizeof(tq))) {
+                if (tool_sh_ct_text_fmt((&tq), 64, "%s", qpath) == 0) {
                     st = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tq);
+                    tool_sh_ct_text_free((&tq), (&tqcap));
                 }
             }
             if (((st >= 0) && _self->sym->traits[st].is_static)) {
@@ -4019,58 +4025,49 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
                     }
                 }
                 if (okm) {
-                    int hw2 = 0;
                     qpath[0] = 0;
                     for (i = 0; i < (nseg - 1); i++) {
-                        if (i > 0) {
-                            if ((hw2 + 2) >= qcap) {
-                                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
-                            }
-                            qpath[hw2] = ':';
-                            qpath[(hw2 + 1)] = ':';
-                            hw2 += 2;
-                            qpath[hw2] = 0;
+                        if (((i > 0) && (tool_sh_ct_text_cat((&qpath), (&qcap), "::") != 0))) {
+                            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                            goto done;
                         }
-                        if ((hw2 + (int)(strlen(seg[i]))) >= qcap) {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+                        if (tool_sh_ct_text_cat((&qpath), (&qcap), seg[i]) != 0) {
+                            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                            goto done;
                         }
-                        snprintf((qpath + hw2), (size_t)((qcap - hw2)), "%s", seg[i]);
-                        hw2 += (int)(strlen(seg[i]));
                     }
-                    snprintf(name, (size_t)(ncap), "%s", _self->sym->traits[st].name);
-                    snprintf(cname, (size_t)(ccap), "%s", seg[(nseg - 1)]);
+                    name = _self->sym->traits[st].name;
+                    cname = seg[(nseg - 1)];
                     (*form) = 5;
-                    return 0;
+                    rc = 0;
+                    goto done;
                 }
             }
-            char host[MAX_TEXT];
-            char only[2][MAX_TEXT];
-            int hw = 0;
+            const char * only[2];
             int mp;
             int bi;
             int hits = 0;
-            host[0] = 0;
+            only[0] = "";
+            only[1] = "";
+            if (tool_sh_ct_text_reset((&cand), (&ccap), 160) != 0) {
+                rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                goto done;
+            }
             for (i = 0; i < (nseg - 1); i++) {
-                if (i > 0) {
-                    if ((hw + 2) >= (int)(sizeof(host))) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
-                    }
-                    host[hw] = ':';
-                    host[(hw + 1)] = ':';
-                    hw += 2;
-                    host[hw] = 0;
+                if (((i > 0) && (tool_sh_ct_text_cat((&cand), (&ccap), "::") != 0))) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
                 }
-                if ((hw + (int)(strlen(seg[i]))) >= (int)(sizeof(host))) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+                if (tool_sh_ct_text_cat((&cand), (&ccap), seg[i]) != 0) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
                 }
-                snprintf((host + hw), (sizeof(host) - (size_t)(hw)), "%s", seg[i]);
-                hw += (int)(strlen(seg[i]));
             }
             for (mp = 0; mp < (*_self->nmaps); mp++) {
                 if (((!(*_self->maps)[mp].is_static) || (!(*_self->maps)[mp].ns_host))) {
                     continue;
                 }
-                if (strcmp((*_self->maps)[mp].inst, host) != 0) {
+                if (strcmp((*_self->maps)[mp].inst, cand) != 0) {
                     continue;
                 }
                 for (bi = 0; bi < (*_self->maps)[mp].nb; bi++) {
@@ -4078,100 +4075,111 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
                         continue;
                     }
                     if (hits < 2) {
-                        snprintf(only[hits], MAX_TEXT, "%s", (*_self->maps)[mp].trait);
+                        only[hits] = (*_self->maps)[mp].trait;
                     }
                     hits++;
                 }
             }
             if (hits > 1) {
-                char m[MAX_TEXT * 2];
-                snprintf(m, sizeof(m), "'%s' is ambiguous on '%s': bound by %s and %s", seg[(nseg - 1)], host, only[0], only[1]);
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, m);
+                rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("'%s' is ambiguous on '%s': bound by %s and %s", seg[(nseg - 1)], cand, only[0], only[1]));
+                goto done;
             }
             if (hits == 1) {
-                snprintf(name, (size_t)(ncap), "%s", only[0]);
-                snprintf(cname, (size_t)(ccap), "%s", seg[(nseg - 1)]);
-                snprintf(qpath, (size_t)(qcap), "%s", host);
+                name = only[0];
+                cname = seg[(nseg - 1)];
+                if (((tool_sh_ct_text_reset((&qpath), (&qcap), 160) != 0) || (tool_sh_ct_text_cat((&qpath), (&qcap), cand) != 0))) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
+                }
                 (*form) = 4;
-                return 0;
+                rc = 0;
+                goto done;
             }
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "no function of that name in that namespace");
+            rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "no function of that name in that namespace");
+            goto done;
         }
-        snprintf(cname, (size_t)(ccap), "%s", _self->sym->funcs[fi].cname);
+        cname = _self->sym->funcs[fi].cname;
         (*form) = 1;
-        return 0;
+        rc = 0;
+        goto done;
     }
-    if ((((nseg >= 2) && (_self->sym->__frontend_sym_symbolops_vptr->resolve_type(_self->sym, seg[0], tn, sizeof(tn)) == 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tn) >= 0))) {
-        int st = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tn);
-        if (((st >= 0) && _self->sym->traits[st].is_static)) {
-            char host[MAX_TEXT];
-            char m[MAX_TEXT * 2];
-            int hw = 0;
-            host[0] = 0;
+{
+        const char * tn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, seg[0]);
+        if ((((nseg >= 2) && tn) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tn) >= 0))) {
+            int st = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tn);
+            if (((st >= 0) && _self->sym->traits[st].is_static)) {
+                if (tool_sh_ct_text_reset((&cand), (&ccap), 160) != 0) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
+                }
+                for (i = 1; i < nseg; i++) {
+                    if (((i > 1) && (tool_sh_ct_text_cat((&cand), (&ccap), "::") != 0))) {
+                        rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        goto done;
+                    }
+                    if (tool_sh_ct_text_cat((&cand), (&ccap), seg[i]) != 0) {
+                        rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        goto done;
+                    }
+                }
+                rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("a static trait has no interface value; call '%s::%s.<method>()'", cand, seg[0]));
+                goto done;
+            }
+            if (tool_sh_ct_text_reset((&cand), (&ccap), 160) != 0) {
+                rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                goto done;
+            }
             for (i = 1; i < nseg; i++) {
-                if (((i > 1) && ((hw + 2) < (int)(sizeof(host))))) {
-                    host[hw] = ':';
-                    host[(hw + 1)] = ':';
-                    hw += 2;
-                    host[hw] = 0;
+                if (((i > 1) && (tool_sh_ct_text_cat((&cand), (&ccap), "_") != 0))) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
                 }
-                if ((hw + (int)(strlen(seg[i]))) >= (int)(sizeof(host))) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+                if (tool_sh_ct_text_cat((&cand), (&ccap), seg[i]) != 0) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
                 }
-                snprintf((host + hw), (sizeof(host) - (size_t)(hw)), "%s", seg[i]);
-                hw += (int)(strlen(seg[i]));
             }
-            snprintf(m, sizeof(m), "a static trait has no interface value; call '%s::%s.<method>()'", host, seg[0]);
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, m);
-        }
-        w = 0;
-        hp[0] = 0;
-        for (i = 1; i < nseg; i++) {
-            if (i > 1) {
-                if ((w + 1) >= (int)(sizeof(hp))) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+            if (((strncmp(tn, cand, strlen(cand)) == 0) && (tn[strlen(cand)] == '_'))) {
+                cname = tn;
+            }
+            else {
+                cname = runtime_text_ct_internf("%s_%s", cand, tn);
+                if ((!cname)) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
                 }
-                hp[w] = '_';
-                w++;
-                hp[w] = 0;
             }
-            if ((w + (int)(strlen(seg[i]))) >= (int)(sizeof(hp))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
-            }
-            snprintf((hp + w), (sizeof(hp) - (size_t)(w)), "%s", seg[i]);
-            w += (int)(strlen(seg[i]));
-        }
-        if (((strncmp(tn, hp, strlen(hp)) == 0) && (tn[strlen(hp)] == '_'))) {
-            snprintf(cname, (size_t)(ccap), "%s", tn);
-        }
-        else {
-            if (snprintf(cname, (size_t)(ccap), "%s_%s", hp, tn) >= ccap) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
-            }
-        }
-        w = 0;
-        qpath[0] = 0;
-        for (i = 1; i < nseg; i++) {
-            if (i > 1) {
-                if ((w + 2) >= qcap) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+            qpath[0] = 0;
+            for (i = 1; i < nseg; i++) {
+                if (((i > 1) && (tool_sh_ct_text_cat((&qpath), (&qcap), "::") != 0))) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
                 }
-                qpath[w] = ':';
-                qpath[(w + 1)] = ':';
-                w += 2;
-                qpath[w] = 0;
+                if (tool_sh_ct_text_cat((&qpath), (&qcap), seg[i]) != 0) {
+                    rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    goto done;
+                }
             }
-            if ((w + (int)(strlen(seg[i]))) >= qcap) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
-            }
-            snprintf((qpath + w), (size_t)((qcap - w)), "%s", seg[i]);
-            w += (int)(strlen(seg[i]));
+            name = tn;
+            (*form) = 2;
+            rc = 0;
+            goto done;
         }
-        snprintf(name, (size_t)(ncap), "%s", tn);
-        (*form) = 2;
-        return 0;
     }
-    return 0;
+    rc = 0;
+    done:
+        ;
+        if (rc == 0) {
+            (*name_out) = name;
+            (*cname_out) = cname;
+            (*qpath_out) = runtime_text_ct_intern(qpath);
+            if ((!(*qpath_out))) {
+                rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+        }
+        tool_sh_ct_text_free((&qpath), (&qcap));
+        tool_sh_ct_text_free((&cand), (&ccap));
+        return rc;
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprOps_parse_args(void *self) {

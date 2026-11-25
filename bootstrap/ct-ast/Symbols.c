@@ -706,19 +706,16 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_var_ambiguous(void *self,
     return ((i >= 0) ? _self->vars[i].ambiguous : 0);
 }
 
-static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_qualified_global(void *self, const char * qual, const char * name, char * cname, int cap) {
+static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_find_qualified_global(void *self, const char * qual, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
     (void)(_self);
     for (i = (_self->nvar - 1); i >= 0; i--) {
         if (((_self->vars[i].is_global && (strcmp(_self->vars[i].name, name) == 0)) && (strcmp(_self->vars[i].ns, qual) == 0))) {
-            if (snprintf(cname, (size_t)(cap), "%s", _self->vars[i].cname) >= cap) {
-                return (-1);
-            }
-            return 0;
+            return _self->vars[i].cname;
         }
     }
-    return (-1);
+    return (const char *)(0);
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_var(void *self, const char * name) {
@@ -1742,6 +1739,39 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type(void *self, 
     return 0;
 }
 
+static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type_text(void *self, const char * name) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int i;
+    (void)(_self);
+    if ((!name)) {
+        name = "";
+    }
+    for (i = 0; i < _self->nalias; i++) {
+        if (strcmp(_self->alias_name[i], name) == 0) {
+            return _self->alias_full[i];
+        }
+    }
+    if ((_self->ns && _self->ns[0])) {
+        const char * qn = runtime_text_ct_intern_join(_self->ns, name);
+        if ((!qn)) {
+            return (const char *)(0);
+        }
+        if ((((_self->__frontend_sym_symbolops_vptr->find_type(_self, qn) >= 0) || (_self->__frontend_sym_symbolops_vptr->find_trait(_self, qn) >= 0)) || (_self->__frontend_sym_symbolops_vptr->find_struct(_self, qn) >= 0))) {
+            return qn;
+        }
+    }
+    for (i = 0; i < _self->ntb; i++) {
+        if (strcmp(_self->tbare[i], name) != 0) {
+            continue;
+        }
+        if (_self->tbambig[i]) {
+            return runtime_text_ct_intern(name);
+        }
+        return _self->tfull[i];
+    }
+    return runtime_text_ct_intern(name);
+}
+
 const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_SymbolOps_vtable = {
     .fail = frontend_sym_Symbols_frontend_sym_SymbolOps_fail,
     .last_error = frontend_sym_Symbols_frontend_sym_SymbolOps_last_error,
@@ -1799,7 +1829,8 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .add_alias = frontend_sym_Symbols_frontend_sym_SymbolOps_add_alias,
     .ensure_bare_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_bare_capacity,
     .add_bare_type = frontend_sym_Symbols_frontend_sym_SymbolOps_add_bare_type,
-    .resolve_type = frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type
+    .resolve_type = frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type,
+    .resolve_type_text = frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type_text
 };
 
 static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_find_type_alias(void *self, const char * name) {
