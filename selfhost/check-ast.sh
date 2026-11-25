@@ -193,8 +193,9 @@
 # `#ct-endraw` closes it; the emitted text is re-anchored with a `#line` on the
 # line after the block. test/ast/65_raw pins the verbatim copy and the anchor,
 # and four negatives pin the column-1 rule, the unclosed block, the stray
-# `#ct-endraw` and trailing text. The cap is 32768 bytes, and the compiler's
-# own sources must stay free of raw blocks.
+# `#ct-endraw` and trailing text. The cap is the formal TEXT_LIMIT (65536
+# bytes; it was 32768 before S1a-0 C2a), and the compiler's own sources must
+# stay free of raw blocks.
 #
 # batch 41 adds two things a static map can do that a real trait cannot: a
 # method may end in `...` (the recipe forwards the actuals the named parameters

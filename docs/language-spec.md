@@ -1876,7 +1876,8 @@ int main(void)
 
 约束与诊断：
 
-- 一个块最多 **32768 字节**（超限报 `raw block exceeds 32768 bytes`）。
+- 一个块最多 **65536 字节**（形式上限 `TEXT_LIMIT`，超限报 `raw block exceeds 65536 bytes`）。
+  块字节本来就写进可增长的 arena 字面量池，没有定长缓冲；65536 是资源保护，不是语言上限。
 - 标记必须在**第 1 列**（`  #ct-raw` 报 `#ct-raw must start at column 1`），其后只允许空白。
 - 未闭合在**起始行**报 `unclosed #ct-raw (expected #ct-endraw)`；孤立的 `#ct-endraw` 报
   `#ct-endraw without #ct-raw`；关闭行后跟非空白文本报 `unexpected text after #ct-endraw`。

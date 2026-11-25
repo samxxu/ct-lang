@@ -30,8 +30,8 @@
 #define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
-#define MAX_RAW_BLOCK 32768
 #define MAX_TEXT 160
+#define TEXT_LIMIT 65536
 #define MAX_TRAITS 64
 #define NO_NODE (-2)
 #define N_ASSIGN 13
@@ -4845,8 +4845,8 @@ static int raw_text_node(struct frontend_parse_Parser * self) {
         i++;
     }
     len = (end - ls);
-    if (len > MAX_RAW_BLOCK) {
-        return self->sup->__frontend_parse_supportops_vptr->fail_at(self->sup, line, "raw block exceeds 32768 bytes");
+    if (len > TEXT_LIMIT) {
+        return self->sup->__frontend_parse_supportops_vptr->fail_at(self->sup, line, "raw block exceeds 65536 bytes");
     }
     off = self->arena->__runtime_arena_arenaops_vptr->str_begin(self->arena);
     for (i = 0; i < len; i++) {

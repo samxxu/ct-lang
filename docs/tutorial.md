@@ -710,7 +710,7 @@ static int raw_helper(int n) { return n + 1; }
 ```
 
 生成物在块后写一行 `#line`（恢复到块后的源行号）；`--no-line` 只去掉这行锚点，块内容不变。
-一个块上限 32768 字节；`.m.ct` 仍只接受 `#include` / `#define`；ct-ast 自身的源码不得使用块。
+一个块上限 65536 字节（形式上限 `TEXT_LIMIT`，只作资源保护）；`.m.ct` 仍只接受 `#include` / `#define`；ct-ast 自身的源码不得使用块。
 规则与诊断见 [language-spec §4.41](language-spec.md#441-raw-透传ct-rawphase-173仅-ct-ast)。
 
 ## 10. 标准库：`std`

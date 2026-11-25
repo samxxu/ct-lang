@@ -47,7 +47,7 @@ run_case()
     printf '#include <stdio.h>\n\n#ct-raw\n/* '
     awk 'BEGIN { for (i = 0; i < 39990; i++) printf "x" }'
     printf ' */\nstatic int raw_tail(void) { return 7; }\n#ct-endraw\n\n'
-    printf 'int main(void) { printf("%%d\\n", raw_tail()); return 0; }\n'
+    printf 'int main(void) { return raw_tail() == 7 ? 0 : 1; }\n'
 } >"$w/raw_big.ct"
 if run_case raw_big "$w/raw_big.ct" 0; then
     if grep -Fq 'xxxxxxxxxx */' "$w/raw_big.c"; then

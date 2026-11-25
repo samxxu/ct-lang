@@ -52,8 +52,10 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
-#define MAX_RAW_BLOCK 32768
 #define MAX_TEXT 160
+/* S1a-0 C2: a raw block is stored in the growable literal pool, so the old
+   fixed MAX_RAW_BLOCK 32768 is gone; only the formal text bound remains. */
+#define TEXT_LIMIT 65536
 #define MAX_TRAITS 64
 #define NO_NODE (-2)
 /* only the node kinds this pass builds or reads; the numbers are the shared
@@ -467,8 +469,8 @@ static int raw_text_node(struct Parser *self)
         i++;
     }
     len = end - ls;
-    if (len > MAX_RAW_BLOCK)
-        return self->sup->fail_at(line, "raw block exceeds 32768 bytes");
+    if (len > TEXT_LIMIT)
+        return self->sup->fail_at(line, "raw block exceeds 65536 bytes");
     off = self->arena->str_begin();
     for (i = 0; i < len; i++)
         if (self->arena->str_put((int)src[ls + i]) != 0)
