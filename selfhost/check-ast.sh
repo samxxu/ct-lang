@@ -6414,22 +6414,18 @@ i=0
 while [ "$i" -lt 17 ]; do bargs="$bargs -I /tmp"; i=$((i + 1)); done
 if "$work/ct-ast" build --emit-c $bargs test/ast/02_expr/prog.ct -o "$work/cli-bdir" \
         >"$work/cli-binc.out" 2>"$work/cli-binc.err"; then
-    bad "build: 17 -I roots" "expected a non-zero exit"
-elif grep -q "too many -I roots" "$work/cli-binc.err"; then
-    ok "build: the 17th -I root is rejected"
+    ok "build: 17 -I roots are accepted"
 else
-    bad "build: 17 -I roots" "wrong diagnostic: $(cat "$work/cli-binc.err")"
+    bad "build: 17 -I roots" "expected success: $(cat "$work/cli-binc.err")"
 fi
 bargs=""
 i=0
 while [ "$i" -lt 65 ]; do bargs="$bargs test/ast/02_expr/prog.ct"; i=$((i + 1)); done
 if "$work/ct-ast" build --emit-c $bargs -o "$work/cli-bdir" \
         >"$work/cli-bin.out" 2>"$work/cli-bin.err"; then
-    bad "build: 65 inputs" "expected a non-zero exit"
-elif grep -q "too many inputs" "$work/cli-bin.err"; then
-    ok "build: too many inputs is rejected"
+    ok "build: 65 inputs are accepted"
 else
-    bad "build: 65 inputs" "wrong diagnostic: $(cat "$work/cli-bin.err")"
+    bad "build: 65 inputs" "expected success: $(cat "$work/cli-bin.err")"
 fi
 
 echo

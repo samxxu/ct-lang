@@ -131,6 +131,7 @@ struct frontend_parse_ParseDeclOps_vtbl {
     int (*type_alias_ahead)(void *);
     int (*parse_type_alias)(void *, int);
     int (*append_node)(void *, int, int);
+    int (*ensure_rels)(void *, int);
     int (*skip_import)(void *);
     int (*top_decl)(void *, int);
     int (*parse_namespace)(void *, int);
@@ -151,8 +152,9 @@ struct frontend_parse_Parser {
     int * build_mode;
     int * check_mode;
     int types_mode;
-    char rels[32][160];
+    char * rels;
     int nrels;
+    int relcap;
     struct frontend_module_Call * calls;
     int ncalls;
     int callcap;
@@ -166,7 +168,7 @@ struct frontend_parse_Parser {
     char c_base[160];
     int unit_is_hdr;
     int seen_decl;
-    int rel_line[32];
+    int * rel_line;
     char cur_record[160];
     int field_pub;
     int field_col;

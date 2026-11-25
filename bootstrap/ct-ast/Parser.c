@@ -23,6 +23,7 @@
 #define MAX_FIELDS 64
 #define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
+#define MAX_IMPORTS_MAX 65536
 #define MAX_INIT_TEXT 16384
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
@@ -379,6 +380,41 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_append_node(void *s
     return 0;
 }
 
+static int frontend_parse_Parser_frontend_parse_ParseDeclOps_ensure_rels(void *self, int need) {
+    struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
+    int cap;
+    char * grown;
+    int * lines;
+    (void)(_self);
+    if (need <= _self->relcap) {
+        return 0;
+    }
+    cap = ((_self->relcap > 0) ? _self->relcap : MAX_IMPORTS);
+    while (((cap < need) && (cap < MAX_IMPORTS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_IMPORTS_MAX) {
+        cap = MAX_IMPORTS_MAX;
+    }
+    if (need > cap) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    grown = (char *)(realloc(_self->rels, ((size_t)(cap) * MAX_TEXT)));
+    if ((!grown)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    memset((grown + ((size_t)(_self->relcap) * MAX_TEXT)), 0, ((size_t)((cap - _self->relcap)) * MAX_TEXT));
+    lines = (int *)(realloc(_self->rel_line, ((size_t)(cap) * sizeof((*lines)))));
+    if ((!lines)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    memset((lines + _self->relcap), 0, ((size_t)((cap - _self->relcap)) * sizeof((*lines))));
+    _self->rels = grown;
+    _self->rel_line = lines;
+    _self->relcap = cap;
+    return 0;
+}
+
 static int frontend_parse_Parser_frontend_parse_ParseDeclOps_skip_import(void *self) {
     struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
     char seg[16][MAX_TEXT];
@@ -445,11 +481,11 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_skip_import(void *s
         snprintf((rel + n), (sizeof(rel) - n), "%s", seg[i]);
         n += strlen(seg[i]);
     }
-    if (rel[0]) {
-        if (_self->nrels >= MAX_IMPORTS) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many imports");
+    if ((rel[0] && _self->scan_only)) {
+        if (_self->__frontend_parse_parsedeclops_vptr->ensure_rels(_self, (_self->nrels + 1)) != 0) {
+            return (-1);
         }
-        snprintf(_self->rels[_self->nrels], MAX_TEXT, "%s", rel);
+        snprintf((_self->rels + ((size_t)(_self->nrels) * MAX_TEXT)), MAX_TEXT, "%s", rel);
         _self->rel_line[_self->nrels] = import_line;
         _self->nrels++;
     }
@@ -880,6 +916,7 @@ const struct frontend_parse_ParseDeclOps_vtbl frontend_parse_Parser_frontend_par
     .type_alias_ahead = frontend_parse_Parser_frontend_parse_ParseDeclOps_type_alias_ahead,
     .parse_type_alias = frontend_parse_Parser_frontend_parse_ParseDeclOps_parse_type_alias,
     .append_node = frontend_parse_Parser_frontend_parse_ParseDeclOps_append_node,
+    .ensure_rels = frontend_parse_Parser_frontend_parse_ParseDeclOps_ensure_rels,
     .skip_import = frontend_parse_Parser_frontend_parse_ParseDeclOps_skip_import,
     .top_decl = frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl,
     .parse_namespace = frontend_parse_Parser_frontend_parse_ParseDeclOps_parse_namespace

@@ -51,9 +51,9 @@
 | `MAX_PARAMS` | 16 | 21 | A | **已动态**：`Fn`/`MethodSig` 形参三/两组并行块 + `MethAnn` 注记块倍增到 `MAX_PARAMS_MAX=65536`；实例行深拷贝；map 参数仍 16（剩余） |
 | `MAX_TYPE_ALIASES` | 64 | 6 | A | **已动态**：本地 `taliases` 倍增到 `MAX_TYPE_ALIASES_MAX=65536` |
 | `MAX_GLOBAL_TYPE_ALIASES` | 256 | 4 | A | **已动态**：全局 `gtaliases` 倍增到 `MAX_GLOBAL_TYPE_ALIASES_MAX=65536` |
-| `MAX_IMPORTS` | 32 | 10 | A | 动态 |
-| `MAX_INCDIRS` | 16 | 4 | A | 动态 |
-| `MAX_UNITS` | 64 | 24 | A | 动态 |
+| `MAX_IMPORTS` | 32 | 10 | A | **已动态**：`Module` 的单元依赖行 `dep`/`depu` 与 `Parser` 的导入表一起倍增到 `MAX_IMPORTS_MAX=65536`；删除 `too many imports`，`cache_key_of` 的 `MAX_IH` 定长块改为按 `ndep` 分配 |
+| `MAX_INCDIRS` | 16 | 4 | A | **已动态**：`Module.incdirs` 堆块倍增到 `MAX_INCDIRS_MAX=65536`；删除 `too many -I roots` |
+| `MAX_UNITS` | 64 | 24 | A | **已动态**：`Module.units` 堆块倍增到 `MAX_UNITS_MAX=65536`（扩容后重绑 emitter），`build_main` 的 inputs/cache 行走堆块，可达性 scratch 按 `nunits` 增长；删除 `too many units` / `too many inputs` |
 | `MAX_PKG_DEPS` | 16 | 42 | A | 动态 |
 | `MAX_DIGEST_FILES` | 4096 | 4 | A | 动态 |
 | `MAX_INIT_ITEM` | 4096 | 3 | A | 动态 |
@@ -84,7 +84,6 @@
 | --- | --- | --- | --- | --- |
 | `MAX_FLAGS` | 1024 | `Module.h.ct` / `Driver.h.ct` | B | 动态 |
 | `MAX_CMD` | 8192 | `Module.h.ct` | B | 动态 |
-| `MAX_IH` | 5120 | `Module.h.ct`（`MAX_IMPORTS * MAX_TEXT`） | B | 动态，随 A/B 消除 |
 | `MAX_ERRORS` | 20 | `Diag.h.ct` | D | 错误恢复上限；保留并明确文案 |
 | `MAX_LOCK` | 4096 | `Pkg.h.ct`（`MAX_PKG_PATH * 8`） | B | 动态 |
 | `MAX_PKG_LINE` | 1024 | `Pkg.h.ct` | B | 动态 |

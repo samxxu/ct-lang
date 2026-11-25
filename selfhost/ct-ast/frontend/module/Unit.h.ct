@@ -14,9 +14,14 @@ pub struct Unit {
     char base[160];
     char ns[160];
     char nsprefix[160];         /* `ns` in mangled form (`a_b_`), for globals */
-    char dep[32][160];
-    int  depu[32];              /* the dependency's unit index (cache folding) */
+    /* S1a-0 C1: the dependency rows grow on demand (old cap 32). `dep` is a
+       flat block, one 160-byte row per import, because a pub struct lands in a
+       header that carries no macros and a pointer-to-array declarator is not
+       part of the dialect; `depu` is the parallel index table. */
+    char *dep;
+    int  *depu;                 /* the dependency's unit index (cache folding) */
     int  ndep;
+    int  depcap;
     int  prog;
     int  is_hdr;                /* a `.h.ct` unit: publishes a header, importable */
     int  is_map;                /* a `.m.ct` unit: a compile-time mapping, no output */

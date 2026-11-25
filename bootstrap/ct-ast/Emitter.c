@@ -32,7 +32,6 @@
 #define MAX_INTOS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
-#define MAX_UNITS  64
 #define N_PP      2
 #define N_FUNC    3
 #define N_BLOCK   4
@@ -305,6 +304,7 @@ static int inst_emit_elem_helpers(struct backend_emit_Emitter *, int);
 static int ensure_adt_layout_state(int);
 static int ensure_inst_layout_state(int);
 static int ensure_shell_emit_state(int);
+static int ensure_reach(struct backend_emit_Emitter *, int);
 static int adt_layout_closure(struct backend_emit_Emitter *, int, int);
 static int inst_layout_closure(struct backend_emit_Emitter *, int, int);
 static int type_layout_closure(struct backend_emit_Emitter *, const char *, int);
@@ -393,6 +393,7 @@ static int ensure_hoist_capacity(struct backend_emit_Emitter *, int);
 static int ensure_into_capacity(struct backend_emit_Emitter *, int);
 void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char *, const char *);
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);
+void backend_emit_ct_emit_bind_units(void *);
 void backend_emit_ct_emit_bind_flags(int *, char *, int *);
 void backend_emit_ct_emit_bind_builtin_live(int *);
 void backend_emit_ct_emit_bind_io_mask(int);
@@ -6039,7 +6040,7 @@ static int emit_default_method(struct backend_emit_Emitter * e, int si, const ch
     return 0;
 }
 static int map_visible(struct backend_emit_Emitter * e, int i) {
-    char reach[MAX_UNITS];
+    char * reach;
     int u;
     int d;
     int k;
@@ -6050,7 +6051,11 @@ static int map_visible(struct backend_emit_Emitter * e, int i) {
     if (e->maps[i].unit == e->cur_unit) {
         return 1;
     }
-    for (u = 0; u < MAX_UNITS; u++) {
+    if (ensure_reach(e, (*e->nunits)) != 0) {
+        return e->__backend_emit_emitops_vptr->fail(e, "out of memory");
+    }
+    reach = e->reach;
+    for (u = 0; u < (*e->nunits); u++) {
         reach[u] = 0;
     }
     reach[e->cur_unit] = 1;
@@ -6063,17 +6068,17 @@ static int map_visible(struct backend_emit_Emitter * e, int i) {
             }
             for (k = 0; k < e->units[d].ndep; k++) {
                 int dep = e->units[d].depu[k];
-                if ((((dep >= 0) && (dep < MAX_UNITS)) && (!reach[dep]))) {
+                if ((((dep >= 0) && (dep < (*e->nunits))) && (!reach[dep]))) {
                     reach[dep] = 1;
                     changed = 1;
                 }
             }
         }
     }
-    return (((e->maps[i].unit >= 0) && (e->maps[i].unit < MAX_UNITS)) && reach[e->maps[i].unit]);
+    return (((e->maps[i].unit >= 0) && (e->maps[i].unit < (*e->nunits))) && reach[e->maps[i].unit]);
 }
 static int emit_map_prologues(struct backend_emit_Emitter * e, int u) {
-    char reach[MAX_UNITS];
+    char * reach;
     char seen[64][256];
     char line[256];
     int nseen;
@@ -6083,7 +6088,11 @@ static int emit_map_prologues(struct backend_emit_Emitter * e, int u) {
     int i;
     int dup;
     int changed;
-    for (i = 0; i < MAX_UNITS; i++) {
+    if (ensure_reach(e, (*e->nunits)) != 0) {
+        return e->__backend_emit_emitops_vptr->fail(e, "out of memory");
+    }
+    reach = e->reach;
+    for (i = 0; i < (*e->nunits); i++) {
         reach[i] = 0;
     }
     reach[u] = 1;
@@ -6096,7 +6105,7 @@ static int emit_map_prologues(struct backend_emit_Emitter * e, int u) {
             }
             for (k = 0; k < e->units[d].ndep; k++) {
                 int dep = e->units[d].depu[k];
-                if ((((dep >= 0) && (dep < MAX_UNITS)) && (!reach[dep]))) {
+                if ((((dep >= 0) && (dep < (*e->nunits))) && (!reach[dep]))) {
                     reach[dep] = 1;
                     changed = 1;
                 }
@@ -7320,7 +7329,7 @@ static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
         if (self->units[self->units[u].depu[i]].is_map) {
             continue;
         }
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
+        fprintf(self->out, "#include \"%s.h\"\n", (self->units[u].dep + ((size_t)(i) * MAX_TEXT)));
     }
     for (i = 0; i < self->nbuiltin; i++) {
         int bu = self->builtins[i];
@@ -7486,7 +7495,7 @@ static int write_unit_header_body(struct backend_emit_Emitter * self, int u, con
         if (self->units[self->units[u].depu[i]].is_map) {
             continue;
         }
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
+        fprintf(self->out, "#include \"%s.h\"\n", (self->units[u].dep + ((size_t)(i) * MAX_TEXT)));
     }
     if (self->units[u].ndep > 0) {
         fputs("\n", self->out);
@@ -8100,7 +8109,7 @@ static int inst_elem_foreign(struct backend_emit_Emitter * self, int ii) {
     return ((o2 >= 0) && (o2 != tps[tmpl].owner));
 }
 static int inst_visible_in_unit(struct backend_emit_Emitter * self, int ii) {
-    char reach[MAX_UNITS];
+    char * reach;
     int n;
     int tn;
     int tmpl;
@@ -8132,7 +8141,11 @@ static int inst_visible_in_unit(struct backend_emit_Emitter * self, int ii) {
             return 1;
         }
     }
-    for (d = 0; d < MAX_UNITS; d++) {
+    if (ensure_reach(self, (*self->nunits)) != 0) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    reach = self->reach;
+    for (d = 0; d < (*self->nunits); d++) {
         reach[d] = 0;
     }
     reach[self->cur_unit] = 1;
@@ -8145,7 +8158,7 @@ static int inst_visible_in_unit(struct backend_emit_Emitter * self, int ii) {
             }
             for (k = 0; k < self->units[d].ndep; k++) {
                 int dep = self->units[d].depu[k];
-                if ((((dep >= 0) && (dep < MAX_UNITS)) && (!reach[dep]))) {
+                if ((((dep >= 0) && (dep < (*self->nunits))) && (!reach[dep]))) {
                     reach[dep] = 1;
                     changed = 1;
                 }
@@ -8455,6 +8468,31 @@ static int ensure_shell_emit_state(int need) {
     memset((grown + backend_emit_g_shell_emit_cap), 0, ((size_t)((cap - backend_emit_g_shell_emit_cap)) * sizeof((*grown))));
     backend_emit_g_shell_emit_state = grown;
     backend_emit_g_shell_emit_cap = cap;
+    return 0;
+}
+static int ensure_reach(struct backend_emit_Emitter * self, int need) {
+    int cap;
+    char * grown;
+    if (need <= self->reachcap) {
+        return 0;
+    }
+    cap = ((self->reachcap > 0) ? self->reachcap : 64);
+    while (((cap < need) && (cap < 65536))) {
+        cap *= 2;
+    }
+    if (cap > 65536) {
+        cap = 65536;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (char *)(realloc(self->reach, (size_t)(cap)));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + self->reachcap), 0, (size_t)((cap - self->reachcap)));
+    self->reach = grown;
+    self->reachcap = cap;
     return 0;
 }
 static int type_layout_closure(struct backend_emit_Emitter * self, const char * type, int depth) {
@@ -12141,6 +12179,9 @@ void backend_emit_ct_emit_bind_tables(void * units, int * nunits, void * maps, i
     backend_emit_g_emit.abi_root = abi_root;
     backend_emit_g_emit.abi_exports = abi_exports;
     backend_emit_g_emit.abi_n = abi_n;
+}
+void backend_emit_ct_emit_bind_units(void * units) {
+    backend_emit_g_emit.units = (struct frontend_module_Unit *)(units);
 }
 void backend_emit_ct_emit_bind_flags(int * freestanding, char * alloc_map, int * slice_used) {
     backend_emit_g_emit.freestanding = freestanding;

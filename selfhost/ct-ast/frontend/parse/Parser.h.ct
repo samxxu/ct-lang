@@ -45,6 +45,7 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_FIELDS 64
 #define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
+#define MAX_IMPORTS_MAX 65536
 #define MAX_INIT_TEXT 16384
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
@@ -167,6 +168,8 @@ pub trait ParseDeclOps {
     int  type_alias_ahead(void);
     int  parse_type_alias(int is_pub);
     int  append_node(int prog, int n);
+    /* S1a-0 C1: grow the import list to hold `need` rows (old cap 32). */
+    int  ensure_rels(int need);
     int  skip_import(void);
     int  top_decl(int is_pub);
     int  parse_namespace(int prog);
@@ -185,9 +188,13 @@ pub struct Parser {
     int  types_mode;
     /* The module tables the translation-unit passes fill: the import list the
        scanner and the parser share, and the call graph and `map` records the
-       map JSON reports. The driver reads them back through this object. */
-    char rels[32][160];
+       map JSON reports. The driver reads them back through this object.
+       S1a-0 C1: the import list is a flat heap block (row stride MAX_TEXT)
+       that grows on demand; a fixed `char[32][160]` could not hold a unit
+       with more imports than the old cap. */
+    char *rels;
     int  nrels;
+    int  relcap;
     /* These tables have element types from other units, and a generated header
        carries no `#include`, so their storage lives in this unit's `.c` and the
        object keeps a pointer (the arrangement `ct_emit_bind_tables` already
@@ -220,7 +227,7 @@ pub struct Parser {
     int  seen_decl;
     /* The line of each import, recorded by `skip_import` so a `.m.ct` unit that
        imports a non-map unit is reported at the import line. */
-    int  rel_line[32];
+    int *rel_line;
     /* The record whose body is being read. Its fields land in
        `structs[].fields[]`; when the body has no tag (`typedef struct { … }`),
        this stays empty and the fields land in `pend_fields` instead. An
@@ -657,6 +664,35 @@ impl ParseDeclOps for Parser {
        also usable short here. `import a::b::C::D as E;` pulls in one exported
        name instead: `a::b::C` is the unit, `D` is what it exports and `E` is how
        this file spells it. */
+    /* S1a-0 C1: the import list grows by doubling from MAX_IMPORTS, with
+       MAX_IMPORTS_MAX as the formal ceiling. A build's imports are recorded
+       while `scan_only` is set, so the pass that decides the dependency graph
+       never depends on a fixed 32-row table. */
+    int ensure_rels(int need)
+    {
+        int cap;
+        char *grown;
+        int *lines;
+        (void)self;
+        if (need <= self->relcap) return 0;
+        cap = self->relcap > 0 ? self->relcap : MAX_IMPORTS;
+        while (cap < need && cap < MAX_IMPORTS_MAX) cap *= 2;
+        if (cap > MAX_IMPORTS_MAX) cap = MAX_IMPORTS_MAX;
+        if (need > cap) return self->sup->fail("out of memory");
+        grown = (char *)realloc(self->rels, (size_t)cap * MAX_TEXT);
+        if (!grown) return self->sup->fail("out of memory");
+        memset(grown + (size_t)self->relcap * MAX_TEXT, 0,
+               (size_t)(cap - self->relcap) * MAX_TEXT);
+        lines = (int *)realloc(self->rel_line, (size_t)cap * sizeof(*lines));
+        if (!lines) return self->sup->fail("out of memory");
+        memset(lines + self->relcap, 0,
+               (size_t)(cap - self->relcap) * sizeof(*lines));
+        self->rels = grown;
+        self->rel_line = lines;
+        self->relcap = cap;
+        return 0;
+    }
+
     int skip_import(void)
     {
         char seg[16][MAX_TEXT];
@@ -705,9 +741,12 @@ impl ParseDeclOps for Parser {
             snprintf(rel + n, sizeof rel - n, "%s", seg[i]);
             n += strlen(seg[i]);
         }
-        if (rel[0]) {
-            if (self->nrels >= MAX_IMPORTS) return self->sup->fail("too many imports");
-            snprintf(self->rels[self->nrels], MAX_TEXT, "%s", rel);
+        /* Only the dependency-graph scan records imports: the parse pass sees
+           the same lines again and would otherwise charge this unit for its
+           dependencies' rows (the module layer keeps one stack). */
+        if (rel[0] && self->scan_only) {
+            if (self->ensure_rels(self->nrels + 1) != 0) return -1;
+            snprintf(self->rels + (size_t)self->nrels * MAX_TEXT, MAX_TEXT, "%s", rel);
             self->rel_line[self->nrels] = import_line;
             self->nrels++;
         }

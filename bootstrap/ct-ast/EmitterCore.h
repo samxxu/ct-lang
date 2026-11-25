@@ -198,6 +198,8 @@ struct backend_emit_Emitter {
     int * hoist_calls;
     int hoistcap;
     int nhoist;
+    char * reach;
+    int reachcap;
     int opt_nodes[8];
     int nopt;
     int opt_scan;

@@ -53,7 +53,6 @@ import backend::emit::EmitterTry;
 #define MAX_INTOS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
-#define MAX_UNITS  64
 
 /* the node kinds this unit dispatches on (D32: one tag, one dispatch) */
 #define N_PP      2
@@ -1519,11 +1518,13 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
    it. A `.m.ct` unit can only be used through `import`. */
 static int map_visible(struct Emitter *e, int i)
 {
-    char reach[MAX_UNITS];
+    char *reach;
     int u, d, k, changed;
     if (e->cur_unit < 0) return 1;
     if (e->maps[i].unit == e->cur_unit) return 1;
-    for (u = 0; u < MAX_UNITS; u++) reach[u] = 0;
+    if (ensure_reach(e, *e->nunits) != 0) return e->fail("out of memory");
+    reach = e->reach;
+    for (u = 0; u < *e->nunits; u++) reach[u] = 0;
     reach[e->cur_unit] = 1;
     changed = 1;
     while (changed) {
@@ -1532,14 +1533,15 @@ static int map_visible(struct Emitter *e, int i)
             if (!reach[d]) continue;
             for (k = 0; k < e->units[d].ndep; k++) {
                 int dep = e->units[d].depu[k];
-                if (dep >= 0 && dep < MAX_UNITS && !reach[dep]) {
+                if (dep >= 0 && dep < *e->nunits && !reach[dep]) {
                     reach[dep] = 1;
                     changed = 1;
                 }
             }
         }
     }
-    return e->maps[i].unit >= 0 && e->maps[i].unit < MAX_UNITS && reach[e->maps[i].unit];
+    return e->maps[i].unit >= 0 && e->maps[i].unit < *e->nunits
+           && reach[e->maps[i].unit];
 }
 
 /* The file name of a unit path, for a diagnostic that must name both
@@ -1553,11 +1555,13 @@ static int map_visible(struct Emitter *e, int i)
    mode, where the unit table exists. */
 static int emit_map_prologues(struct Emitter *e, int u)
 {
-    char reach[MAX_UNITS];
+    char *reach;
     char seen[64][256];
     char line[256];
     int nseen, d, k, n, i, dup, changed;
-    for (i = 0; i < MAX_UNITS; i++) reach[i] = 0;
+    if (ensure_reach(e, *e->nunits) != 0) return e->fail("out of memory");
+    reach = e->reach;
+    for (i = 0; i < *e->nunits; i++) reach[i] = 0;
     reach[u] = 1;
     changed = 1;
     while (changed) {
@@ -1566,7 +1570,7 @@ static int emit_map_prologues(struct Emitter *e, int u)
             if (!reach[d]) continue;
             for (k = 0; k < e->units[d].ndep; k++) {
                 int dep = e->units[d].depu[k];
-                if (dep >= 0 && dep < MAX_UNITS && !reach[dep]) {
+                if (dep >= 0 && dep < *e->nunits && !reach[dep]) {
                     reach[dep] = 1;
                     changed = 1;
                 }
@@ -2761,7 +2765,8 @@ static int emit_unit_body(struct Emitter *self, int u)
     }
     for (i = 0; i < self->units[u].ndep; i++) {
         if (self->units[self->units[u].depu[i]].is_map) continue;
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
+        fprintf(self->out, "#include \"%s.h\"\n",
+                self->units[u].dep + (size_t)i * MAX_TEXT);
     }
     /* Phase 29 E29-5: instances of the built-in templates are defined in the
        layer's headers; the unit sees them although there is no import edge.
@@ -2961,7 +2966,8 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
     if (pp > 0) fputs("\n", self->out);
     for (i = 0; i < self->units[u].ndep; i++) {
         if (self->units[self->units[u].depu[i]].is_map) continue;
-        fprintf(self->out, "#include \"%s.h\"\n", self->units[u].dep[i]);
+        fprintf(self->out, "#include \"%s.h\"\n",
+                self->units[u].dep + (size_t)i * MAX_TEXT);
     }
     if (self->units[u].ndep > 0) fputs("\n", self->out);
     /* Phase 29 E29-5: a `pub` signature may name an instance defined in the
@@ -3541,7 +3547,7 @@ static int inst_elem_foreign(struct Emitter *self, int ii)
    (`cur_unit < 0`) owns every instance in the one file and needs no filter. */
 static int inst_visible_in_unit(struct Emitter *self, int ii)
 {
-    char reach[MAX_UNITS];
+    char *reach;
     int n, tn, tmpl, d, k, changed, owner, bi;
     struct StructInst *ins;
     struct StructTmpl *tps;
@@ -3559,7 +3565,9 @@ static int inst_visible_in_unit(struct Emitter *self, int ii)
     if (owner == self->cur_unit) return 1;
     for (bi = 0; bi < self->nbuiltin; bi++)
         if (self->builtins[bi] == owner) return 1;
-    for (d = 0; d < MAX_UNITS; d++) reach[d] = 0;
+    if (ensure_reach(self, *self->nunits) != 0) return self->fail("out of memory");
+    reach = self->reach;
+    for (d = 0; d < *self->nunits; d++) reach[d] = 0;
     reach[self->cur_unit] = 1;
     changed = 1;
     while (changed) {
@@ -3568,7 +3576,7 @@ static int inst_visible_in_unit(struct Emitter *self, int ii)
             if (!reach[d]) continue;
             for (k = 0; k < self->units[d].ndep; k++) {
                 int dep = self->units[d].depu[k];
-                if (dep >= 0 && dep < MAX_UNITS && !reach[dep]) {
+                if (dep >= 0 && dep < *self->nunits && !reach[dep]) {
                     reach[dep] = 1;
                     changed = 1;
                 }
@@ -3911,6 +3919,25 @@ static int ensure_shell_emit_state(int need)
     memset(grown + g_shell_emit_cap, 0, (size_t)(cap - g_shell_emit_cap) * sizeof(*grown));
     g_shell_emit_state = grown;
     g_shell_emit_cap = cap;
+    return 0;
+}
+
+/* S1a-0 C1: one scratch byte per unit for the reachability walks. The block
+   follows `*self->nunits`, which grows past the old 64-unit cap. */
+static int ensure_reach(struct Emitter *self, int need)
+{
+    int cap;
+    char *grown;
+    if (need <= self->reachcap) return 0;
+    cap = self->reachcap > 0 ? self->reachcap : 64;
+    while (cap < need && cap < 65536) cap *= 2;
+    if (cap > 65536) cap = 65536;
+    if (need > cap) return -1;
+    grown = (char *)realloc(self->reach, (size_t)cap);
+    if (!grown) return -1;
+    memset(grown + self->reachcap, 0, (size_t)(cap - self->reachcap));
+    self->reach = grown;
+    self->reachcap = cap;
     return 0;
 }
 
@@ -10730,6 +10757,14 @@ void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
     g_emit.abi_root = abi_root;
     g_emit.abi_exports = abi_exports;
     g_emit.abi_n = abi_n;
+}
+
+/* S1a-0 C1: the module layer's unit table grows; a realloc moves it, so the
+   emitter (which holds it as a pointer) is re-pointed after every move. */
+pub void ct_emit_bind_units(void *units);
+void ct_emit_bind_units(void *units)
+{
+    g_emit.units = (struct Unit *)units;
 }
 
 /* PH-64: the bare-metal flags live in their own bind, so the long table

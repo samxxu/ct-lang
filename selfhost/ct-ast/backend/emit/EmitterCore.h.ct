@@ -180,6 +180,11 @@ pub struct Emitter {
     int *hoist_calls;
     int  hoistcap;
     int  nhoist;
+    /* S1a-0 C1: the unit-reachability walks (`map_visible`,
+       `emit_map_prologues`, `inst_visible_in_unit`) share one scratch row
+       instead of a `char[MAX_UNITS]` stack row. */
+    char *reach;
+    int  reachcap;
     /* PH-53: optional-chain nodes whose receiver needs a `__ct_optN`
        temporary. The declaration is emitted at the statement head; the
        assignment stays in the ternary's condition so evaluation is lazy. */

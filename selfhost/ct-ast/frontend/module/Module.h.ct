@@ -42,11 +42,13 @@ import frontend::module::ModuleBoundary;
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_UNITS  64
+#define MAX_UNITS_MAX 65536
 #define MAX_IMPORTS 32
+#define MAX_IMPORTS_MAX 65536
 #define MAX_INCDIRS 16
+#define MAX_INCDIRS_MAX 65536
 #define MAX_FLAGS  1024                 /* accumulated --cflags / --ldflags */
 #define MAX_CMD    8192                 /* one composed cc command line */
-#define MAX_IH     5120                 /* MAX_IMPORTS * MAX_TEXT, spelled out */
 #define MAX_KEY    768                  /* one unit's incremental-cache key */
 
 /* token kinds (the scanner only needs these two) */
@@ -77,6 +79,12 @@ pub trait ModuleOps {
     int  read_file(const char *path);
     int  base_name(const char *path, char *out, int cap, int *is_hdr, int *is_map);
     int  path_dir(const char *path, char *out, int cap);
+    /* S1a-0 C1: the three module tables grow by doubling from their old caps
+       (MAX_UNITS / MAX_IMPORTS / MAX_INCDIRS) to their `*_MAX` ceiling. */
+    int  ensure_unit_capacity(int need);
+    int  ensure_incdir_capacity(int need);
+    int  ensure_unit_dep_capacity(int u, int need);
+    int  ensure_reach(int need);
     int  scan_imports(const char *from);
     int  resolve_import(const char *from, const char *rel, char *out, int cap,
                         int *is_hdr, int *is_map, int line);
@@ -142,13 +150,20 @@ pub struct Module {
        keeps a pointer. */
     struct Unit *units;
     int  nunits;
+    int  unitcap;               /* S1a-0 C1: grows from MAX_UNITS on demand */
     int  build_mode;
     /* Array bounds are literals because this struct lands in a generated header
-       that carries no macros; 1024 is MAX_PATH and 16 is MAX_INCDIRS here. */
+       that carries no macros; 1024 is MAX_PATH. The import roots grow from
+       MAX_INCDIRS (16) on demand, so their storage is a heap block too. */
     char outdir[1024];
-    const char *incdirs[16];
+    const char **incdirs;
     int  ninc;
+    int  inccap;
     const char *nsroot;
+    /* S1a-0 C1: the reachability walk's scratch row (one byte per unit),
+       grown on demand and reused; `unit_reaches` is not re-entrant. */
+    char *reach;
+    int  reachcap;
     /* Run options. `prog` is the entry name `-v` and the usage lines print
        (D44): `ct` when installed under that name, `ctc` for the compatibility
        alias, `ct-ast` for the development binary. Driver diagnostics keep the
@@ -681,13 +696,107 @@ impl ModuleOps for Module {
         return 0;
     }
 
+    /* S1a-0 C1: the unit table doubles from MAX_UNITS; each move rebinds the
+       emitter, which holds `units` as a pointer (a realloc invalidates it).
+       The new rows are zeroed so a fresh Unit starts at ndep 0 / dep NULL. */
+    int ensure_unit_capacity(int need)
+    {
+        int cap;
+        struct Unit *grown;
+        (void)self;
+        if (need <= self->unitcap) return 0;
+        cap = self->unitcap > 0 ? self->unitcap : MAX_UNITS;
+        while (cap < need && cap < MAX_UNITS_MAX) cap *= 2;
+        if (cap > MAX_UNITS_MAX) cap = MAX_UNITS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct Unit *)realloc(self->units, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->unitcap, 0,
+               (size_t)(cap - self->unitcap) * sizeof(*grown));
+        self->units = grown;
+        self->unitcap = cap;
+        backend::emit::ct_emit_bind_units(grown);
+        return 0;
+    }
+
+    /* S1a-0 C1: the `-I` roots double from MAX_INCDIRS; only the table moves,
+       the strings stay owned by argv. */
+    int ensure_incdir_capacity(int need)
+    {
+        int cap;
+        const char **grown;
+        (void)self;
+        if (need <= self->inccap) return 0;
+        cap = self->inccap > 0 ? self->inccap : MAX_INCDIRS;
+        while (cap < need && cap < MAX_INCDIRS_MAX) cap *= 2;
+        if (cap > MAX_INCDIRS_MAX) cap = MAX_INCDIRS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (const char **)realloc((void *)self->incdirs,
+                                       (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->inccap, 0,
+               (size_t)(cap - self->inccap) * sizeof(*grown));
+        self->incdirs = grown;
+        self->inccap = cap;
+        return 0;
+    }
+
+    /* S1a-0 C1: one unit's dependency rows (`dep` text + `depu` indices) grow
+       together from MAX_IMPORTS; both new halves are zeroed. */
+    int ensure_unit_dep_capacity(int u, int need)
+    {
+        int cap;
+        char *deps;
+        int *ids;
+        (void)self;
+        if (need <= self->units[u].depcap) return 0;
+        cap = self->units[u].depcap > 0 ? self->units[u].depcap : MAX_IMPORTS;
+        while (cap < need && cap < MAX_IMPORTS_MAX) cap *= 2;
+        if (cap > MAX_IMPORTS_MAX) cap = MAX_IMPORTS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        deps = (char *)realloc(self->units[u].dep, (size_t)cap * MAX_TEXT);
+        if (!deps) return self->fail("out of memory");
+        memset(deps + (size_t)self->units[u].depcap * MAX_TEXT, 0,
+               (size_t)(cap - self->units[u].depcap) * MAX_TEXT);
+        ids = (int *)realloc(self->units[u].depu, (size_t)cap * sizeof(*ids));
+        if (!ids) return self->fail("out of memory");
+        memset(ids + self->units[u].depcap, 0,
+               (size_t)(cap - self->units[u].depcap) * sizeof(*ids));
+        self->units[u].dep = deps;
+        self->units[u].depu = ids;
+        self->units[u].depcap = cap;
+        return 0;
+    }
+
+    /* S1a-0 C1: the reachability scratch row used by `unit_reaches`. */
+    int ensure_reach(int need)
+    {
+        int cap;
+        char *grown;
+        (void)self;
+        if (need <= self->reachcap) return 0;
+        cap = self->reachcap > 0 ? self->reachcap : MAX_UNITS;
+        while (cap < need && cap < MAX_UNITS_MAX) cap *= 2;
+        if (cap > MAX_UNITS_MAX) cap = MAX_UNITS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (char *)realloc(self->reach, (size_t)cap);
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->reachcap, 0, (size_t)(cap - self->reachcap));
+        self->reach = grown;
+        self->reachcap = cap;
+        return 0;
+    }
+
     /* Imports are the leading declarations of a unit, so one pass finds them
        before anything is parsed. The dependencies are not loaded yet, so this
        pass only records the paths (`scan_only` keeps `skip_import` from trying
-       to resolve aliases against a symbol table that does not have them). */
+       to resolve aliases against a symbol table that does not have them).
+       S1a-0 C1: the list is the parser's growable block; a caller records its
+       own slice starting at the current `nrels`, and a recursive load appends
+       after it and restores the counter on the way out. The scan itself does
+       not reset the counter, or an outer unit's rows would be lost. */
     int scan_imports(const char *from)
     {
-        self->p->nrels = 0;
         self->p->scan_only = 1;
         self->path = from;
         self->mem->path = self->path;
@@ -963,20 +1072,15 @@ impl ModuleOps for Module {
        shared tables before its importers are parsed. Returns the unit index. */
     int load_unit(const char *path)
     {
-        char rels[MAX_IMPORTS][MAX_TEXT];
-        int  lines[MAX_IMPORTS];
         char dep[MAX_PATH];
         char *mysrc;
         int mysrclen;
-        int u, i, k, d, nrels, is_hdr, is_map, dep_is_map, dup, dn, gn;
+        int u, i, k, d, nrels, rb, is_hdr, is_map, dep_is_map, dup, dn, gn;
         (void)self;
 
         for (u = 0; u < self->nunits; u++)
             if (strcmp(self->units[u].path, path) == 0) return u;
-        if (self->nunits >= MAX_UNITS) {
-            self->fail("too many units");
-            return -1;
-        }
+        if (self->ensure_unit_capacity(self->nunits + 1) != 0) return -1;
         u = self->nunits;
         self->nunits++;
         if (snprintf(self->units[u].path, MAX_PATH, "%s", path) >= MAX_PATH) {
@@ -1064,15 +1168,17 @@ impl ModuleOps for Module {
         if (self->read_file(path) != 0) return -1;
         mysrc = (char *)self->lex->src;
         mysrclen = self->lex->srclen;
+        /* S1a-0 C1: this unit's rows start at the current counter; a recursive
+           load appends after them and restores the counter, so the slice stays
+           valid while this loop walks it. */
+        rb = self->p->nrels;
         if (self->scan_imports(path) != 0) return -1;
-        nrels = self->p->nrels;
+        nrels = self->p->nrels - rb;
         for (i = 0; i < nrels; i++) {
-            snprintf(rels[i], MAX_TEXT, "%s", self->p->rels[i]);
-            lines[i] = self->p->rel_line[i];
-        }
-        for (i = 0; i < nrels; i++) {
-            if (self->resolve_import(path, rels[i], dep, sizeof dep, &is_hdr, &dep_is_map,
-                                    lines[i]) != 0) return -1;
+            if (self->resolve_import(path,
+                                     self->p->rels + (size_t)(rb + i) * MAX_TEXT,
+                                     dep, sizeof dep, &is_hdr, &dep_is_map,
+                                     self->p->rel_line[rb + i]) != 0) return -1;
             /* SH-71 A-1: a mapping unit may also import a header unit. The
                type host's trait signature has to name the interface type it
                returns, and only a `.h.ct` unit publishes one; the header
@@ -1094,7 +1200,7 @@ impl ModuleOps for Module {
                 snprintf(cmsg, sizeof cmsg,
                          "circular import: '%s' imports '%s', which is still being loaded",
                          self->units[u].path, self->units[d].path);
-                return tool::diag::ct_sem_error(lines[i], 1, cmsg, path);
+                return tool::diag::ct_sem_error(self->p->rel_line[rb + i], 1, cmsg, path);
             }
             /* Two `import` lines may name the same unit; a dependency is listed
                once, so the generated `#include` is emitted once. */
@@ -1102,11 +1208,10 @@ impl ModuleOps for Module {
             for (k = 0; k < self->units[u].ndep; k++)
                 if (self->units[u].depu[k] == d) dup = 1;
             if (dup) continue;
-            if (self->units[u].ndep >= MAX_IMPORTS) {
-                self->fail("too many imports");
+            if (self->ensure_unit_dep_capacity(u, self->units[u].ndep + 1) != 0)
                 return -1;
-            }
-            snprintf(self->units[u].dep[self->units[u].ndep], MAX_TEXT, "%s", self->units[d].base);
+            snprintf(self->units[u].dep + (size_t)self->units[u].ndep * MAX_TEXT,
+                     MAX_TEXT, "%s", self->units[d].base);
             self->units[u].depu[self->units[u].ndep] = d;
             self->units[u].ndep++;
         }
@@ -1263,11 +1368,12 @@ impl ModuleOps for Module {
                     return self->fail(self->sym->last_error());
             }
         }
-        /* `scan_imports` counted this unit's imports into `rels`, but the
-           recursive loads above left the counter at a dependency's value, and
-           parsing skips the same `import` lines again -- start that pass from
-           zero so a unit is never charged for its dependencies' imports. */
-        self->p->nrels = 0;
+        /* S1a-0 C1: this unit's import slice begins at `rb`; the recursive
+           loads above appended after it, so restore the counter to the slice
+           end. The parse pass skips the same `import` lines with `scan_only`
+           clear, which no longer records anything, so this unit is never
+           charged for its dependencies' imports. */
+        self->p->nrels = rb + nrels;
         self->p->scan_only = 0;
         self->path = path;
         self->mem->path = self->path;
@@ -1302,6 +1408,10 @@ impl ModuleOps for Module {
         /* `sym->ns` is the mangled prefix the unit's parser used for its
            exported names; its globals need the same prefix here. */
         snprintf(self->units[u].nsprefix, MAX_TEXT, "%s", self->sym->ns);
+        /* S1a-0 C1: drop this unit's import rows; the caller (or the next
+           top-level load) starts from the slice base again, so the parser's
+           block stays as large as the widest single unit, not the build. */
+        self->p->nrels = rb;
         return u;
     }
 
@@ -1310,13 +1420,15 @@ impl ModuleOps for Module {
        same program shape. */
     int unit_reaches(int from, int to)
     {
-        char reach[MAX_UNITS];
+        char *reach;
         int d, k, changed;
         (void)self;
 
         if (from == to) return 1;
-        if (to < 0 || to >= MAX_UNITS) return 0;
-        for (d = 0; d < MAX_UNITS; d++) reach[d] = 0;
+        if (to < 0 || to >= self->nunits) return 0;
+        if (self->ensure_reach(self->nunits) != 0) return 0;
+        reach = self->reach;
+        for (d = 0; d < self->nunits; d++) reach[d] = 0;
         reach[from] = 1;
         changed = 1;
         while (changed) {
@@ -1325,7 +1437,7 @@ impl ModuleOps for Module {
                 if (!reach[d]) continue;
                 for (k = 0; k < self->units[d].ndep; k++) {
                     int dep = self->units[d].depu[k];
-                    if (dep >= 0 && dep < MAX_UNITS && !reach[dep]) {
+                    if (dep >= 0 && dep < self->nunits && !reach[dep]) {
                         reach[dep] = 1;
                         changed = 1;
                     }
@@ -1594,18 +1706,25 @@ impl ModuleOps for Module {
        layer owns the graph, so the folding happens here. */
     int cache_key_of(int u, char *out, int cap)
     {
-        char ih[MAX_IH];
+        /* S1a-0 C1: the key material is one row per import, so a fixed
+           MAX_IH block cannot outlive the old 32-import cap. Sized from the
+           actual `ndep`; `MAX_IH` is gone with the cap it mirrored. */
+        char *ih;
         unsigned long dep;
-        size_t n, k;
+        size_t n, k, ihcap;
         int w;
         (void)self;
 
         n = 0;
+        ihcap = (size_t)self->units[u].ndep * (MAX_TEXT + 4) + 256;
+        ih = (char *)malloc(ihcap);
+        if (!ih) return -1;
         ih[0] = 0;
         for (k = 0; k < (size_t)self->units[u].ndep; k++) {
-            w = snprintf(ih + n, sizeof ih - n, "%s%s;", self->units[u].dep[k],
+            w = snprintf(ih + n, ihcap - n, "%s%s;",
+                         self->units[u].dep + k * MAX_TEXT,
                          self->units[self->units[u].depu[k]].is_map ? ".m" : ".h");
-            if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
+            if (w < 0 || (size_t)w >= ihcap - n) { free(ih); return -1; }
             n += (size_t)w;
         }
         /* A shim is part of the mapping's definition: touching either file must
@@ -1613,15 +1732,15 @@ impl ModuleOps for Module {
         if (self->units[u].is_map && self->units[u].has_shim) {
             struct stat st;
             if (stat(self->units[u].shim_h, &st) == 0) {
-                w = snprintf(ih + n, sizeof ih - n, "sh@%lu.%lu;",
+                w = snprintf(ih + n, ihcap - n, "sh@%lu.%lu;",
                              (unsigned long)st.st_mtime, (unsigned long)st.st_size);
-                if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
+                if (w < 0 || (size_t)w >= ihcap - n) { free(ih); return -1; }
                 n += (size_t)w;
             }
             if (self->units[u].shim_c[0] && stat(self->units[u].shim_c, &st) == 0) {
-                w = snprintf(ih + n, sizeof ih - n, "sc@%lu.%lu;",
+                w = snprintf(ih + n, ihcap - n, "sc@%lu.%lu;",
                              (unsigned long)st.st_mtime, (unsigned long)st.st_size);
-                if (w < 0 || (size_t)w >= sizeof ih - n) return -1;
+                if (w < 0 || (size_t)w >= ihcap - n) { free(ih); return -1; }
                 n += (size_t)w;
             }
         }
@@ -1631,10 +1750,13 @@ impl ModuleOps for Module {
                 + self->units[self->units[u].depu[k]].digest;
         if (self->cache->key(self->units[u].path, ih, dep, self->line_force,
                              self->diag_json, self->runtime_checks,
-                             self->nsroot, out, cap) != 0)
+                             self->nsroot, out, cap) != 0) {
+            free(ih);
             return -1;
+        }
         /* the unit's own digest is what its dependants fold next */
         self->units[u].digest = self->cache->digest(out);
+        free(ih);
         return 0;
     }
 
@@ -1840,11 +1962,14 @@ impl ModuleOps for Module {
 
     int build_main(int argc, char **argv)
     {
-        const char *inputs[MAX_UNITS];
+        /* S1a-0 C1: the per-run rows are heap blocks. `inputs` is bounded by
+           argc; the three cache-walk rows follow the grown unit table. A
+           fixed `[MAX_UNITS]` stack row would cap the build at 64 again. */
+        const char **inputs;
         int ninput, i, u, o, cn;
-        int dirty[MAX_UNITS];
-        int cstate[MAX_UNITS];
-        int corder[MAX_UNITS];
+        int *dirty;
+        int *cstate;
+        int *corder;
         const char *outdir;
         const char *oarg;
         const char *ccpath;
@@ -1853,6 +1978,11 @@ impl ModuleOps for Module {
         char root[MAX_PATH];
         (void)self;
 
+        inputs = (const char **)calloc((size_t)argc, sizeof(*inputs));
+        if (!inputs) {
+            fprintf(stderr, "ctc: out of memory\n");
+            return 1;
+        }
         ninput = 0;
         outdir = NULL;
         oarg = NULL;
@@ -2067,8 +2197,8 @@ impl ModuleOps for Module {
                     return 1;
                 }
                 i++;
-                if (self->ninc >= MAX_INCDIRS) {
-                    fprintf(stderr, "ctc: too many -I roots\n");
+                if (self->ensure_incdir_capacity(self->ninc + 1) != 0) {
+                    fprintf(stderr, "ctc: out of memory\n");
                     return 1;
                 }
                 self->incdirs[self->ninc] = argv[i];
@@ -2088,8 +2218,8 @@ impl ModuleOps for Module {
                 fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
                 return 1;
             }
-            if (ninput >= MAX_UNITS) {
-                fprintf(stderr, "ctc: too many inputs\n");
+            if (ninput >= MAX_UNITS_MAX) {
+                fprintf(stderr, "ctc: out of memory\n");
                 return 1;
             }
             inputs[ninput] = argv[i];
@@ -2528,6 +2658,13 @@ impl ModuleOps for Module {
            dependency-first postorder, so a unit's key can fold its dependencies'
            digests; a unit whose dependency is dirty is dirty too. `--emit-map`
            never reuses, because the map spans the whole run. */
+        dirty = (int *)calloc((size_t)self->nunits, sizeof(*dirty));
+        cstate = (int *)calloc((size_t)self->nunits, sizeof(*cstate));
+        corder = (int *)calloc((size_t)self->nunits, sizeof(*corder));
+        if (!dirty || !cstate || !corder) {
+            fprintf(stderr, "ctc: out of memory\n");
+            return 1;
+        }
         for (u = 0; u < self->nunits; u++) cstate[u] = 0;
         cn = 0;
         for (u = 0; u < self->nunits; u++)
@@ -3193,8 +3330,17 @@ void ct_module_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void
             fprintf(stderr, "ctc: out of memory\n");
             exit(1);
         }
+        g_module.unitcap = MAX_UNITS;
     }
     g_module.units = g_units;
+    if (!g_module.incdirs) {
+        g_module.incdirs = calloc(MAX_INCDIRS, sizeof(*g_module.incdirs));
+        if (!g_module.incdirs) {
+            fprintf(stderr, "ctc: out of memory\n");
+            exit(1);
+        }
+        g_module.inccap = MAX_INCDIRS;
+    }
     /* PH-65 R1: both modes start from "resolve per path"; build_main and the
        driver may override it from the command line. */
     g_module.c_boundary = -1;

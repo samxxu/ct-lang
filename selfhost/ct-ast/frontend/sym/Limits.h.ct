@@ -43,7 +43,9 @@ pub struct Limits {
 #define MAX_HOISTS                   4
 #define MAX_HOISTS_MAX               65536
 #define MAX_IMPORTS                  32
+#define MAX_IMPORTS_MAX              65536
 #define MAX_INCDIRS                  16
+#define MAX_INCDIRS_MAX              65536
 #define MAX_INIT_ITEM                4096
 #define MAX_INIT_TEXT                16384
 #define MAX_INTOS                    4
@@ -90,6 +92,7 @@ pub struct Limits {
 #define MAX_TYPE_ALIASES             64
 #define MAX_TYPE_ALIASES_MAX              65536
 #define MAX_UNITS                    64
+#define MAX_UNITS_MAX                65536
 #define MAX_VARS                     4096
 #define MAX_VARS_MAX                 65536
 #define MAX_WARNINGS                 32

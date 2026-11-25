@@ -81,9 +81,10 @@ struct frontend_module_Unit {
     char base[160];
     char ns[160];
     char nsprefix[160];
-    char dep[32][160];
-    int depu[32];
+    char * dep;
+    int * depu;
     int ndep;
+    int depcap;
     int prog;
     int is_hdr;
     int is_map;

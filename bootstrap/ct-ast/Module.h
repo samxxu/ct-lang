@@ -101,6 +101,10 @@ struct frontend_module_ModuleOps_vtbl {
     int (*read_file)(void *, const char *);
     int (*base_name)(void *, const char *, char *, int, int *, int *);
     int (*path_dir)(void *, const char *, char *, int);
+    int (*ensure_unit_capacity)(void *, int);
+    int (*ensure_incdir_capacity)(void *, int);
+    int (*ensure_unit_dep_capacity)(void *, int, int);
+    int (*ensure_reach)(void *, int);
     int (*scan_imports)(void *, const char *);
     int (*resolve_import)(void *, const char *, const char *, char *, int, int *, int *, int);
     int (*load_unit)(void *, const char *);
@@ -152,11 +156,15 @@ struct frontend_module_Module {
     const char * path;
     struct frontend_module_Unit * units;
     int nunits;
+    int unitcap;
     int build_mode;
     char outdir[1024];
-    const char * incdirs[16];
+    const char * * incdirs;
     int ninc;
+    int inccap;
     const char * nsroot;
+    char * reach;
+    int reachcap;
     int line_mode;
     int builtin_units[8];
     int nbuiltin;

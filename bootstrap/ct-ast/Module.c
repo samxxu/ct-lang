@@ -23,11 +23,13 @@
 #define MAX_TEXT   160
 #define MAX_PATH   1024
 #define MAX_UNITS  64
+#define MAX_UNITS_MAX 65536
 #define MAX_IMPORTS 32
+#define MAX_IMPORTS_MAX 65536
 #define MAX_INCDIRS 16
+#define MAX_INCDIRS_MAX 65536
 #define MAX_FLAGS  1024                 /* accumulated --cflags / --ldflags */
 #define MAX_CMD    8192                 /* one composed cc command line */
-#define MAX_IH     5120                 /* MAX_IMPORTS * MAX_TEXT, spelled out */
 #define MAX_KEY    768                  /* one unit's incremental-cache key */
 #define T_ID     1
 #define T_PUNCT  4
@@ -240,9 +242,128 @@ static int frontend_module_Module_frontend_module_ModuleOps_path_dir(void *self,
     return 0;
 }
 
+static int frontend_module_Module_frontend_module_ModuleOps_ensure_unit_capacity(void *self, int need) {
+    struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
+    int cap;
+    struct frontend_module_Unit * grown;
+    (void)(_self);
+    if (need <= _self->unitcap) {
+        return 0;
+    }
+    cap = ((_self->unitcap > 0) ? _self->unitcap : MAX_UNITS);
+    while (((cap < need) && (cap < MAX_UNITS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_UNITS_MAX) {
+        cap = MAX_UNITS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_module_Unit *)(realloc(_self->units, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->unitcap), 0, ((size_t)((cap - _self->unitcap)) * sizeof((*grown))));
+    _self->units = grown;
+    _self->unitcap = cap;
+    backend_emit_ct_emit_bind_units(grown);
+    return 0;
+}
+
+static int frontend_module_Module_frontend_module_ModuleOps_ensure_incdir_capacity(void *self, int need) {
+    struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
+    int cap;
+    const char * * grown;
+    (void)(_self);
+    if (need <= _self->inccap) {
+        return 0;
+    }
+    cap = ((_self->inccap > 0) ? _self->inccap : MAX_INCDIRS);
+    while (((cap < need) && (cap < MAX_INCDIRS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_INCDIRS_MAX) {
+        cap = MAX_INCDIRS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    grown = (const char * *)(realloc((void *)(_self->incdirs), ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->inccap), 0, ((size_t)((cap - _self->inccap)) * sizeof((*grown))));
+    _self->incdirs = grown;
+    _self->inccap = cap;
+    return 0;
+}
+
+static int frontend_module_Module_frontend_module_ModuleOps_ensure_unit_dep_capacity(void *self, int u, int need) {
+    struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
+    int cap;
+    char * deps;
+    int * ids;
+    (void)(_self);
+    if (need <= _self->units[u].depcap) {
+        return 0;
+    }
+    cap = ((_self->units[u].depcap > 0) ? _self->units[u].depcap : MAX_IMPORTS);
+    while (((cap < need) && (cap < MAX_IMPORTS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_IMPORTS_MAX) {
+        cap = MAX_IMPORTS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    deps = (char *)(realloc(_self->units[u].dep, ((size_t)(cap) * MAX_TEXT)));
+    if ((!deps)) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    memset((deps + ((size_t)(_self->units[u].depcap) * MAX_TEXT)), 0, ((size_t)((cap - _self->units[u].depcap)) * MAX_TEXT));
+    ids = (int *)(realloc(_self->units[u].depu, ((size_t)(cap) * sizeof((*ids)))));
+    if ((!ids)) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    memset((ids + _self->units[u].depcap), 0, ((size_t)((cap - _self->units[u].depcap)) * sizeof((*ids))));
+    _self->units[u].dep = deps;
+    _self->units[u].depu = ids;
+    _self->units[u].depcap = cap;
+    return 0;
+}
+
+static int frontend_module_Module_frontend_module_ModuleOps_ensure_reach(void *self, int need) {
+    struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
+    int cap;
+    char * grown;
+    (void)(_self);
+    if (need <= _self->reachcap) {
+        return 0;
+    }
+    cap = ((_self->reachcap > 0) ? _self->reachcap : MAX_UNITS);
+    while (((cap < need) && (cap < MAX_UNITS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_UNITS_MAX) {
+        cap = MAX_UNITS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    grown = (char *)(realloc(_self->reach, (size_t)(cap)));
+    if ((!grown)) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->reachcap), 0, (size_t)((cap - _self->reachcap)));
+    _self->reach = grown;
+    _self->reachcap = cap;
+    return 0;
+}
+
 static int frontend_module_Module_frontend_module_ModuleOps_scan_imports(void *self, const char * from) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
-    _self->p->nrels = 0;
     _self->p->scan_only = 1;
     _self->path = from;
     _self->mem->path = _self->path;
@@ -527,8 +648,6 @@ static int frontend_module_Module_frontend_module_ModuleOps_is_builtin_unit(void
 
 static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self, const char * path) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
-    char rels[MAX_IMPORTS][MAX_TEXT];
-    int lines[MAX_IMPORTS];
     char dep[MAX_PATH];
     char * mysrc;
     int mysrclen;
@@ -537,6 +656,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     int k;
     int d;
     int nrels;
+    int rb;
     int is_hdr;
     int is_map;
     int dep_is_map;
@@ -549,8 +669,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
             return u;
         }
     }
-    if (_self->nunits >= MAX_UNITS) {
-        _self->__frontend_module_moduleops_vptr->fail(_self, "too many units");
+    if (_self->__frontend_module_moduleops_vptr->ensure_unit_capacity(_self, (_self->nunits + 1)) != 0) {
         return (-1);
     }
     u = _self->nunits;
@@ -646,16 +765,13 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     }
     mysrc = (char *)(_self->lex->src);
     mysrclen = _self->lex->srclen;
+    rb = _self->p->nrels;
     if (_self->__frontend_module_moduleops_vptr->scan_imports(_self, path) != 0) {
         return (-1);
     }
-    nrels = _self->p->nrels;
+    nrels = (_self->p->nrels - rb);
     for (i = 0; i < nrels; i++) {
-        snprintf(rels[i], MAX_TEXT, "%s", _self->p->rels[i]);
-        lines[i] = _self->p->rel_line[i];
-    }
-    for (i = 0; i < nrels; i++) {
-        if (_self->__frontend_module_moduleops_vptr->resolve_import(_self, path, rels[i], dep, sizeof(dep), (&is_hdr), (&dep_is_map), lines[i]) != 0) {
+        if (_self->__frontend_module_moduleops_vptr->resolve_import(_self, path, (_self->p->rels + ((size_t)((rb + i)) * MAX_TEXT)), dep, sizeof(dep), (&is_hdr), (&dep_is_map), _self->p->rel_line[(rb + i)]) != 0) {
             return (-1);
         }
         d = _self->__frontend_module_moduleops_vptr->load_unit(_self, dep);
@@ -665,7 +781,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
         if (_self->units[d].prog < 0) {
             char cmsg[MAX_PATH + 128];
             snprintf(cmsg, sizeof(cmsg), "circular import: '%s' imports '%s', which is still being loaded", _self->units[u].path, _self->units[d].path);
-            return tool_diag_ct_sem_error(lines[i], 1, cmsg, path);
+            return tool_diag_ct_sem_error(_self->p->rel_line[(rb + i)], 1, cmsg, path);
         }
         dup = 0;
         for (k = 0; k < _self->units[u].ndep; k++) {
@@ -676,11 +792,10 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
         if (dup) {
             continue;
         }
-        if (_self->units[u].ndep >= MAX_IMPORTS) {
-            _self->__frontend_module_moduleops_vptr->fail(_self, "too many imports");
+        if (_self->__frontend_module_moduleops_vptr->ensure_unit_dep_capacity(_self, u, (_self->units[u].ndep + 1)) != 0) {
             return (-1);
         }
-        snprintf(_self->units[u].dep[_self->units[u].ndep], MAX_TEXT, "%s", _self->units[d].base);
+        snprintf((_self->units[u].dep + ((size_t)(_self->units[u].ndep) * MAX_TEXT)), MAX_TEXT, "%s", _self->units[d].base);
         _self->units[u].depu[_self->units[u].ndep] = d;
         _self->units[u].ndep++;
     }
@@ -830,7 +945,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
             }
         }
     }
-    _self->p->nrels = 0;
+    _self->p->nrels = (rb + nrels);
     _self->p->scan_only = 0;
     _self->path = path;
     _self->mem->path = _self->path;
@@ -862,12 +977,13 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     _self->units[u].call_end = _self->p->ncalls;
     snprintf(_self->units[u].ns, MAX_TEXT, "%s", _self->p->ns_decl);
     snprintf(_self->units[u].nsprefix, MAX_TEXT, "%s", _self->sym->ns);
+    _self->p->nrels = rb;
     return u;
 }
 
 static int frontend_module_Module_frontend_module_ModuleOps_unit_reaches(void *self, int from, int to) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
-    char reach[MAX_UNITS];
+    char * reach;
     int d;
     int k;
     int changed;
@@ -875,10 +991,14 @@ static int frontend_module_Module_frontend_module_ModuleOps_unit_reaches(void *s
     if (from == to) {
         return 1;
     }
-    if (((to < 0) || (to >= MAX_UNITS))) {
+    if (((to < 0) || (to >= _self->nunits))) {
         return 0;
     }
-    for (d = 0; d < MAX_UNITS; d++) {
+    if (_self->__frontend_module_moduleops_vptr->ensure_reach(_self, _self->nunits) != 0) {
+        return 0;
+    }
+    reach = _self->reach;
+    for (d = 0; d < _self->nunits; d++) {
         reach[d] = 0;
     }
     reach[from] = 1;
@@ -891,7 +1011,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_unit_reaches(void *s
             }
             for (k = 0; k < _self->units[d].ndep; k++) {
                 int dep = _self->units[d].depu[k];
-                if ((((dep >= 0) && (dep < MAX_UNITS)) && (!reach[dep]))) {
+                if ((((dep >= 0) && (dep < _self->nunits)) && (!reach[dep]))) {
                     reach[dep] = 1;
                     changed = 1;
                 }
@@ -1178,17 +1298,24 @@ static int frontend_module_Module_frontend_module_ModuleOps_cache_order(void *se
 
 static int frontend_module_Module_frontend_module_ModuleOps_cache_key_of(void *self, int u, char * out, int cap) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
-    char ih[MAX_IH];
+    char * ih;
     unsigned long dep;
     size_t n;
     size_t k;
+    size_t ihcap;
     int w;
     (void)(_self);
     n = 0;
+    ihcap = (((size_t)(_self->units[u].ndep) * (MAX_TEXT + 4)) + 256);
+    ih = (char *)(malloc(ihcap));
+    if ((!ih)) {
+        return (-1);
+    }
     ih[0] = 0;
     for (k = 0; k < (size_t)(_self->units[u].ndep); k++) {
-        w = snprintf((ih + n), (sizeof(ih) - n), "%s%s;", _self->units[u].dep[k], (_self->units[_self->units[u].depu[k]].is_map ? ".m" : ".h"));
-        if (((w < 0) || ((size_t)(w) >= (sizeof(ih) - n)))) {
+        w = snprintf((ih + n), (ihcap - n), "%s%s;", (_self->units[u].dep + (k * MAX_TEXT)), (_self->units[_self->units[u].depu[k]].is_map ? ".m" : ".h"));
+        if (((w < 0) || ((size_t)(w) >= (ihcap - n)))) {
+            free(ih);
             return (-1);
         }
         n += (size_t)(w);
@@ -1196,15 +1323,17 @@ static int frontend_module_Module_frontend_module_ModuleOps_cache_key_of(void *s
     if ((_self->units[u].is_map && _self->units[u].has_shim)) {
         struct stat st;
         if (stat(_self->units[u].shim_h, (&st)) == 0) {
-            w = snprintf((ih + n), (sizeof(ih) - n), "sh@%lu.%lu;", (unsigned long)(st.st_mtime), (unsigned long)(st.st_size));
-            if (((w < 0) || ((size_t)(w) >= (sizeof(ih) - n)))) {
+            w = snprintf((ih + n), (ihcap - n), "sh@%lu.%lu;", (unsigned long)(st.st_mtime), (unsigned long)(st.st_size));
+            if (((w < 0) || ((size_t)(w) >= (ihcap - n)))) {
+                free(ih);
                 return (-1);
             }
             n += (size_t)(w);
         }
         if ((_self->units[u].shim_c[0] && (stat(_self->units[u].shim_c, (&st)) == 0))) {
-            w = snprintf((ih + n), (sizeof(ih) - n), "sc@%lu.%lu;", (unsigned long)(st.st_mtime), (unsigned long)(st.st_size));
-            if (((w < 0) || ((size_t)(w) >= (sizeof(ih) - n)))) {
+            w = snprintf((ih + n), (ihcap - n), "sc@%lu.%lu;", (unsigned long)(st.st_mtime), (unsigned long)(st.st_size));
+            if (((w < 0) || ((size_t)(w) >= (ihcap - n)))) {
+                free(ih);
                 return (-1);
             }
             n += (size_t)(w);
@@ -1215,9 +1344,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_cache_key_of(void *s
         dep = ((dep * (unsigned long)(1099511628211)) + _self->units[_self->units[u].depu[k]].digest);
     }
     if (_self->cache->__tool_cache_cacheops_vptr->key(_self->cache, _self->units[u].path, ih, dep, _self->line_force, _self->diag_json, _self->runtime_checks, _self->nsroot, out, cap) != 0) {
+        free(ih);
         return (-1);
     }
     _self->units[u].digest = _self->cache->__tool_cache_cacheops_vptr->digest(_self->cache, out);
+    free(ih);
     return 0;
 }
 
@@ -1443,15 +1574,15 @@ static int frontend_module_Module_frontend_module_ModuleOps_module_inputs_want_B
 
 static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *self, int argc, char * * argv) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
-    const char * inputs[MAX_UNITS];
+    const char * * inputs;
     int ninput;
     int i;
     int u;
     int o;
     int cn;
-    int dirty[MAX_UNITS];
-    int cstate[MAX_UNITS];
-    int corder[MAX_UNITS];
+    int * dirty;
+    int * cstate;
+    int * corder;
     const char * outdir;
     const char * oarg;
     const char * ccpath;
@@ -1461,6 +1592,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     int st;
     char root[MAX_PATH];
     (void)(_self);
+    inputs = (const char * *)(calloc((size_t)(argc), sizeof((*inputs))));
+    if ((!inputs)) {
+        fprintf(stderr, "ctc: out of memory\n");
+        return 1;
+    }
     ninput = 0;
     outdir = NULL;
     oarg = NULL;
@@ -1665,8 +1801,8 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                 return 1;
             }
             i++;
-            if (_self->ninc >= MAX_INCDIRS) {
-                fprintf(stderr, "ctc: too many -I roots\n");
+            if (_self->__frontend_module_moduleops_vptr->ensure_incdir_capacity(_self, (_self->ninc + 1)) != 0) {
+                fprintf(stderr, "ctc: out of memory\n");
                 return 1;
             }
             _self->incdirs[_self->ninc] = argv[i];
@@ -1686,8 +1822,8 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
             return 1;
         }
-        if (ninput >= MAX_UNITS) {
-            fprintf(stderr, "ctc: too many inputs\n");
+        if (ninput >= MAX_UNITS_MAX) {
+            fprintf(stderr, "ctc: out of memory\n");
             return 1;
         }
         inputs[ninput] = argv[i];
@@ -2102,6 +2238,13 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             fprintf(stderr, "ctc: shim base name '%s' is ambiguous: %s and %s\n", _self->units[u].base, _self->units[k].shim_dir, _self->units[u].shim_dir);
             return 1;
         }
+    }
+    dirty = (int *)(calloc((size_t)(_self->nunits), sizeof((*dirty))));
+    cstate = (int *)(calloc((size_t)(_self->nunits), sizeof((*cstate))));
+    corder = (int *)(calloc((size_t)(_self->nunits), sizeof((*corder))));
+    if ((((!dirty) || (!cstate)) || (!corder))) {
+        fprintf(stderr, "ctc: out of memory\n");
+        return 1;
     }
     for (u = 0; u < _self->nunits; u++) {
         cstate[u] = 0;
@@ -2772,6 +2915,10 @@ const struct frontend_module_ModuleOps_vtbl frontend_module_Module_frontend_modu
     .read_file = frontend_module_Module_frontend_module_ModuleOps_read_file,
     .base_name = frontend_module_Module_frontend_module_ModuleOps_base_name,
     .path_dir = frontend_module_Module_frontend_module_ModuleOps_path_dir,
+    .ensure_unit_capacity = frontend_module_Module_frontend_module_ModuleOps_ensure_unit_capacity,
+    .ensure_incdir_capacity = frontend_module_Module_frontend_module_ModuleOps_ensure_incdir_capacity,
+    .ensure_unit_dep_capacity = frontend_module_Module_frontend_module_ModuleOps_ensure_unit_dep_capacity,
+    .ensure_reach = frontend_module_Module_frontend_module_ModuleOps_ensure_reach,
     .scan_imports = frontend_module_Module_frontend_module_ModuleOps_scan_imports,
     .resolve_import = frontend_module_Module_frontend_module_ModuleOps_resolve_import,
     .find_builtin = frontend_module_Module_frontend_module_ModuleOps_find_builtin,
@@ -3262,8 +3409,17 @@ void frontend_module_ct_module_bind(void * arena, void * lex, void * sym, void *
             fprintf(stderr, "ctc: out of memory\n");
             exit(1);
         }
+        frontend_module_g_module.unitcap = MAX_UNITS;
     }
     frontend_module_g_module.units = frontend_module_g_units;
+    if ((!frontend_module_g_module.incdirs)) {
+        frontend_module_g_module.incdirs = calloc(MAX_INCDIRS, sizeof((*frontend_module_g_module.incdirs)));
+        if ((!frontend_module_g_module.incdirs)) {
+            fprintf(stderr, "ctc: out of memory\n");
+            exit(1);
+        }
+        frontend_module_g_module.inccap = MAX_INCDIRS;
+    }
     frontend_module_g_module.c_boundary = (-1);
     frontend_module_g_module.show_c_boundary = 0;
     frontend_module_g_module.show_io_headers = 0;

@@ -131,6 +131,7 @@ struct backend_emit_StrRetain {
 };
 void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char *, const char *);
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);
+void backend_emit_ct_emit_bind_units(void *);
 void backend_emit_ct_emit_bind_flags(int *, char *, int *);
 void backend_emit_ct_emit_bind_builtin_live(int *);
 void backend_emit_ct_emit_bind_io_mask(int);
