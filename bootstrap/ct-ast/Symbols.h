@@ -113,6 +113,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*ensure_fn_capacity)(void *, int);
     int (*ensure_var_capacity)(void *, int);
     int (*ensure_scope_capacity)(void *, int);
+    int (*ensure_type_capacity)(void *, int);
     int (*add_meth_ann)(void *, const char *, const char *, const int *, int);
     int (*find_meth_ann)(void *, const char *, const char *, int *, int);
     int (*resolve_func)(void *, const char *);
@@ -379,10 +380,11 @@ struct frontend_sym_Symbols {
     int * scope;
     int nscope;
     int scopecap;
-    char types[256][160];
-    int type_kind[256];
-    char type_target[256][160];
+    char * types;
+    int * type_kind;
+    char * type_target;
     int ntype;
+    int typecap;
     struct frontend_sym_Trait * traits;
     int ntraits;
     struct frontend_sym_StructDef * structs;

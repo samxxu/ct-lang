@@ -68,6 +68,7 @@ pub struct Limits {
 #define MAX_TEXT                     160
 #define MAX_TRAITS                   64
 #define MAX_TYPES                    256
+#define MAX_TYPES_MAX                65536
 #define MAX_TYPE_ALIASES             64
 #define MAX_UNITS                    64
 #define MAX_VARS                     4096

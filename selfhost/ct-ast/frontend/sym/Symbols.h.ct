@@ -41,6 +41,7 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_SCOPE   256
 #define MAX_SCOPE_MAX 65536
 #define MAX_TYPES   256
+#define MAX_TYPES_MAX 65536
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
 #define MAX_TRAITS  64
@@ -367,6 +368,7 @@ pub trait SymbolOps {
     /* S1a-0 C1: the variable table and the scope stack grow on demand. */
     int  ensure_var_capacity(int need);
     int  ensure_scope_capacity(int need);
+    int  ensure_type_capacity(int need);
     /* Phase 78 S2b: remember / look up an inherent method's ref/out
        annotations. Both sides normalise the host spelling (struct/union tag
        prefix and generic arguments are dropped). */
@@ -621,14 +623,18 @@ pub struct Symbols {
     int  *scope;
     int  nscope;
     int  scopecap;
-    char types[256][160];
-    int  type_kind[256];        /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef,
+    /* S1a-0 C1: three parallel blocks grown together by
+       `ensure_type_capacity`; `types`/`type_target` are flat rows of MAX_TEXT
+       bytes, so a realloc moves both the names and their kind/target. */
+    char *types;
+    int  *type_kind;            /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef,
                                    5 = enum tag, 6 = union tag */
     /* V29-4: the spelling a C typedef stands for (`typedef Vec<int> (*VecFn)(void)`
        keeps `struct Vec_int (*)(void)`), so the subscript checker resolves the
        alias by name instead of inferring it from the use site. */
-    char type_target[256][160];
+    char *type_target;
     int  ntype;
+    int  typecap;
     struct Trait *traits;
     int  ntraits;
     struct StructDef *structs;      /* MAX_STRUCTS + MAX_STRUCT_INSTS rows */
@@ -773,6 +779,41 @@ impl SymbolOps for Symbols {
         memset(grown + self->scopecap, 0, (size_t)(cap - self->scopecap) * sizeof(*grown));
         self->scope = grown;
         self->scopecap = cap;
+        return 0;
+    }
+
+    /* S1a-0 C1: the type table and its two parallel arrays move together.
+       A failed later realloc leaves the earlier blocks larger than `typecap`;
+       that is harmless (capacity is a lower bound), so no partial state is
+       visible to a reader. */
+    int ensure_type_capacity(int need)
+    {
+        int cap;
+        char *names;
+        int *kinds;
+        char *targets;
+        (void)self;
+        if (need <= self->typecap) return 0;
+        cap = self->typecap > 0 ? self->typecap : MAX_TYPES;
+        while (cap < need && cap < MAX_TYPES_MAX) cap *= 2;
+        if (cap > MAX_TYPES_MAX) cap = MAX_TYPES_MAX;
+        if (need > cap) return self->fail("out of memory");
+        names = (char *)realloc(self->types, (size_t)cap * MAX_TEXT);
+        if (!names) return self->fail("out of memory");
+        memset(names + (size_t)self->typecap * MAX_TEXT, 0,
+               (size_t)(cap - self->typecap) * MAX_TEXT);
+        self->types = names;
+        kinds = (int *)realloc(self->type_kind, (size_t)cap * sizeof(*kinds));
+        if (!kinds) return self->fail("out of memory");
+        memset(kinds + self->typecap, 0,
+               (size_t)(cap - self->typecap) * sizeof(*kinds));
+        self->type_kind = kinds;
+        targets = (char *)realloc(self->type_target, (size_t)cap * MAX_TEXT);
+        if (!targets) return self->fail("out of memory");
+        memset(targets + (size_t)self->typecap * MAX_TEXT, 0,
+               (size_t)(cap - self->typecap) * MAX_TEXT);
+        self->type_target = targets;
+        self->typecap = cap;
         return 0;
     }
 
@@ -1110,7 +1151,7 @@ impl SymbolOps for Symbols {
         int i;
         (void)self;
         for (i = 0; i < self->ntype; i++)
-            if (strcmp(self->types[i], name) == 0) return i;
+            if (strcmp(self->types + (size_t)i * MAX_TEXT, name) == 0) return i;
         return -1;
     }
 
@@ -1140,8 +1181,8 @@ impl SymbolOps for Symbols {
             snprintf(msg, sizeof msg, "type '%s' conflicts with an existing type alias", name);
             return self->fail(msg);
         }
-        if (self->ntype >= MAX_TYPES) return self->fail("too many types");
-        snprintf(self->types[self->ntype], MAX_TEXT, "%s", name);
+        if (self->ensure_type_capacity(self->ntype + 1) != 0) return -1;
+        snprintf(self->types + (size_t)self->ntype * MAX_TEXT, MAX_TEXT, "%s", name);
         self->type_kind[self->ntype] = kind;
         self->ntype++;
         return 0;
@@ -1155,7 +1196,7 @@ impl SymbolOps for Symbols {
         int i;
         i = self->find_type(name);
         if (i < 0) return 0;
-        snprintf(self->type_target[i], MAX_TEXT, "%s", target);
+        snprintf(self->type_target + (size_t)i * MAX_TEXT, MAX_TEXT, "%s", target);
         return 1;
     }
 
@@ -1163,8 +1204,8 @@ impl SymbolOps for Symbols {
     {
         int i;
         i = self->find_type(name);
-        if (i < 0 || !self->type_target[i][0]) return 0;
-        snprintf(out, (size_t)cap, "%s", self->type_target[i]);
+        if (i < 0 || !self->type_target[(size_t)i * MAX_TEXT]) return 0;
+        snprintf(out, (size_t)cap, "%s", self->type_target + (size_t)i * MAX_TEXT);
         return 1;
     }
 
@@ -1942,6 +1983,15 @@ static int symbols_grow(struct Symbols *self)
     if (!self->gtaliases) {
         self->gtaliases = calloc(MAX_GLOBAL_TYPE_ALIASES, sizeof(*self->gtaliases));
         if (!self->gtaliases) return -1;
+    }
+    if (!self->types) {
+        self->types = calloc(MAX_TYPES, MAX_TEXT);
+        if (!self->types) return -1;
+        self->type_kind = calloc(MAX_TYPES, sizeof(*self->type_kind));
+        if (!self->type_kind) return -1;
+        self->type_target = calloc(MAX_TYPES, MAX_TEXT);
+        if (!self->type_target) return -1;
+        self->typecap = MAX_TYPES;
     }
     return 0;
 }

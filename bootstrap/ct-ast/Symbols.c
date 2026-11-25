@@ -17,6 +17,7 @@
 #define MAX_SCOPE   256
 #define MAX_SCOPE_MAX 65536
 #define MAX_TYPES   256
+#define MAX_TYPES_MAX 65536
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
 #define MAX_TRAITS  64
@@ -235,6 +236,48 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_scope_capacity(voi
     memset((grown + _self->scopecap), 0, ((size_t)((cap - _self->scopecap)) * sizeof((*grown))));
     _self->scope = grown;
     _self->scopecap = cap;
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    char * names;
+    int * kinds;
+    char * targets;
+    (void)(_self);
+    if (need <= _self->typecap) {
+        return 0;
+    }
+    cap = ((_self->typecap > 0) ? _self->typecap : MAX_TYPES);
+    while (((cap < need) && (cap < MAX_TYPES_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_TYPES_MAX) {
+        cap = MAX_TYPES_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    names = (char *)(realloc(_self->types, ((size_t)(cap) * MAX_TEXT)));
+    if ((!names)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((names + ((size_t)(_self->typecap) * MAX_TEXT)), 0, ((size_t)((cap - _self->typecap)) * MAX_TEXT));
+    _self->types = names;
+    kinds = (int *)(realloc(_self->type_kind, ((size_t)(cap) * sizeof((*kinds)))));
+    if ((!kinds)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((kinds + _self->typecap), 0, ((size_t)((cap - _self->typecap)) * sizeof((*kinds))));
+    _self->type_kind = kinds;
+    targets = (char *)(realloc(_self->type_target, ((size_t)(cap) * MAX_TEXT)));
+    if ((!targets)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((targets + ((size_t)(_self->typecap) * MAX_TEXT)), 0, ((size_t)((cap - _self->typecap)) * MAX_TEXT));
+    _self->type_target = targets;
+    _self->typecap = cap;
     return 0;
 }
 
@@ -584,7 +627,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_type(void *self, con
     int i;
     (void)(_self);
     for (i = 0; i < _self->ntype; i++) {
-        if (strcmp(_self->types[i], name) == 0) {
+        if (strcmp((_self->types + ((size_t)(i) * MAX_TEXT)), name) == 0) {
             return i;
         }
     }
@@ -617,10 +660,10 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_type(void *self, cons
         snprintf(msg, sizeof(msg), "type '%s' conflicts with an existing type alias", name);
         return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
     }
-    if (_self->ntype >= MAX_TYPES) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "too many types");
+    if (_self->__frontend_sym_symbolops_vptr->ensure_type_capacity(_self, (_self->ntype + 1)) != 0) {
+        return (-1);
     }
-    snprintf(_self->types[_self->ntype], MAX_TEXT, "%s", name);
+    snprintf((_self->types + ((size_t)(_self->ntype) * MAX_TEXT)), MAX_TEXT, "%s", name);
     _self->type_kind[_self->ntype] = kind;
     _self->ntype++;
     return 0;
@@ -633,7 +676,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_set_type_target(void *sel
     if (i < 0) {
         return 0;
     }
-    snprintf(_self->type_target[i], MAX_TEXT, "%s", target);
+    snprintf((_self->type_target + ((size_t)(i) * MAX_TEXT)), MAX_TEXT, "%s", target);
     return 1;
 }
 
@@ -641,10 +684,10 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_of(void *self
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
     i = _self->__frontend_sym_symbolops_vptr->find_type(_self, name);
-    if (((i < 0) || (!_self->type_target[i][0]))) {
+    if (((i < 0) || (!_self->type_target[((size_t)(i) * MAX_TEXT)]))) {
         return 0;
     }
-    snprintf(out, (size_t)(cap), "%s", _self->type_target[i]);
+    snprintf(out, (size_t)(cap), "%s", (_self->type_target + ((size_t)(i) * MAX_TEXT)));
     return 1;
 }
 
@@ -1121,6 +1164,7 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .ensure_fn_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_capacity,
     .ensure_var_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_var_capacity,
     .ensure_scope_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_scope_capacity,
+    .ensure_type_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_capacity,
     .reserved_name = frontend_sym_Symbols_frontend_sym_SymbolOps_reserved_name,
     .unit_name = frontend_sym_Symbols_frontend_sym_SymbolOps_unit_name,
     .push_scope = frontend_sym_Symbols_frontend_sym_SymbolOps_push_scope,
@@ -1572,6 +1616,21 @@ static int symbols_grow(struct frontend_sym_Symbols * self) {
         if ((!self->gtaliases)) {
             return (-1);
         }
+    }
+    if ((!self->types)) {
+        self->types = calloc(MAX_TYPES, MAX_TEXT);
+        if ((!self->types)) {
+            return (-1);
+        }
+        self->type_kind = calloc(MAX_TYPES, sizeof((*self->type_kind)));
+        if ((!self->type_kind)) {
+            return (-1);
+        }
+        self->type_target = calloc(MAX_TYPES, MAX_TEXT);
+        if ((!self->type_target)) {
+            return (-1);
+        }
+        self->typecap = MAX_TYPES;
     }
     return 0;
 }
