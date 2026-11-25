@@ -143,5 +143,39 @@ run_case arg_pos "$w/arg_pos.ct" 0 || fail=1
 } >"$w/meth_ann.ct"
 run_case meth_ann "$w/meth_ann.ct" 0 || fail=1
 
+# MAX_LAYOUT_INSTS: 130 generic instances, plus an ADT payload that names the
+# last one by value, so the layout walk reaches index 129 (old bound 128).
+# MAX_LAYOUT_ADTS itself is shadowed by the C-class MAX_ADTS=64 (not opened in
+# C1); the state array grows anyway.
+{
+    i=0
+    while [ "$i" -lt 60 ]; do
+        echo "enum E$i {"
+        echo '    A(int x),'
+        echo '    B(),'
+        echo '}'
+        i=$((i + 1))
+    done
+    echo 'struct G<T> { T x; };'
+    i=0
+    while [ "$i" -lt 130 ]; do
+        echo "struct B$i { int v; };"
+        i=$((i + 1))
+    done
+    echo 'enum Holder {'
+    echo '    H(G<B129> g),'
+    echo '    Null(),'
+    echo '}'
+    echo 'struct All {'
+    i=0
+    while [ "$i" -lt 130 ]; do
+        echo "    G<B$i> f$i;"
+        i=$((i + 1))
+    done
+    echo '};'
+    echo 'int main(void) { return 0; }'
+} >"$w/layout.ct"
+run_case layout "$w/layout.ct" 0 || fail=1
+
 [ "$fail" -eq 0 ] || exit 1
 echo "OK S1a-0 cap growth"
