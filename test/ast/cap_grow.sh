@@ -321,5 +321,44 @@ run_case raw_init "$w/raw_init.ct" 0 || fail=1
 } >"$w/init_item.ct"
 run_case init_item "$w/init_item.ct" 0 || fail=1
 
+# MAX_IMPORT_ALIASES: one unit imports 40 named units (old cap 24). Each
+# `import u::U<n>;` binds an alias for the exported `U<n>` type, so this is the
+# exact path S1a-1's one-unit-per-method-group split grows.
+mkdir -p "$w/aliases/u"
+i=0
+while [ "$i" -lt 40 ]; do
+    printf 'namespace u;\npub struct U%d {\n    int x;\n}\npub int u%d(void) { return %d; }\n' \
+        "$i" "$i" "$i" >"$w/aliases/u/U$i.h.ct"
+    i=$((i + 1))
+done
+{
+    i=0
+    while [ "$i" -lt 40 ]; do
+        echo "import u::U$i;"
+        i=$((i + 1))
+    done
+    echo 'int main(void)'
+    echo '{'
+    echo '    int s = 0;'
+    i=0
+    while [ "$i" -lt 40 ]; do
+        echo "    struct U$i v$i = { .x = 1 };"
+        echo "    s = s + v$i.x;"
+        i=$((i + 1))
+    done
+    echo '    return s == 40 ? 0 : 1;'
+    echo '}'
+} >"$w/aliases/main.ct"
+if ! "$ct" build "$w/aliases/main.ct" -o "$w/aliases.bin" \
+        --outdir "$w/aliases.build" -I "$w/aliases" >"$w/aliases.log" 2>&1; then
+    echo "FAIL aliases: ct-ast rejected 40 named imports: $(tail -1 "$w/aliases.log")"
+    fail=1
+elif ! "$w/aliases.bin"; then
+    echo "FAIL aliases: the program did not return 0"
+    fail=1
+else
+    echo "ok   aliases"
+fi
+
 [ "$fail" -eq 0 ] || exit 1
 echo "OK S1a-0 cap growth"

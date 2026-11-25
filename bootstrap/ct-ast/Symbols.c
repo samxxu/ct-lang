@@ -13,6 +13,8 @@
 #define MAX_PARAMS_MAX 65536
 #define MAX_FUNCS   512
 #define MAX_FUNCS_MAX 65536
+#define MAX_IMPORT_ALIASES 24
+#define MAX_IMPORT_ALIASES_MAX 65536
 #define MAX_VARS    4096
 #define MAX_VARS_MAX 65536
 #define MAX_SCOPE   256
@@ -1479,24 +1481,59 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ns_decl_name(void *self, 
     return 0;
 }
 
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_alias_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    char * names;
+    char * fulls;
+    (void)(_self);
+    if (need <= _self->aliascap) {
+        return 0;
+    }
+    cap = ((_self->aliascap > 0) ? _self->aliascap : MAX_IMPORT_ALIASES);
+    while (((cap < need) && (cap < MAX_IMPORT_ALIASES_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_IMPORT_ALIASES_MAX) {
+        cap = MAX_IMPORT_ALIASES_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    names = (char *)(realloc(_self->alias_name, ((size_t)(cap) * MAX_TEXT)));
+    if ((!names)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((names + ((size_t)(_self->aliascap) * MAX_TEXT)), 0, ((size_t)((cap - _self->aliascap)) * MAX_TEXT));
+    _self->alias_name = names;
+    fulls = (char *)(realloc(_self->alias_full, ((size_t)(cap) * MAX_TEXT)));
+    if ((!fulls)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((fulls + ((size_t)(_self->aliascap) * MAX_TEXT)), 0, ((size_t)((cap - _self->aliascap)) * MAX_TEXT));
+    _self->alias_full = fulls;
+    _self->aliascap = cap;
+    return 0;
+}
+
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_alias(void *self, const char * name, const char * full) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
     (void)(_self);
     for (i = 0; i < _self->nalias; i++) {
-        if (strcmp(_self->alias_name[i], name) != 0) {
+        if (strcmp((_self->alias_name + ((size_t)(i) * MAX_TEXT)), name) != 0) {
             continue;
         }
-        if (strcmp(_self->alias_full[i], full) == 0) {
+        if (strcmp((_self->alias_full + ((size_t)(i) * MAX_TEXT)), full) == 0) {
             return 0;
         }
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "one alias names two imports");
     }
-    if (_self->nalias >= 24) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "too many import aliases");
+    if (_self->__frontend_sym_symbolops_vptr->ensure_alias_capacity(_self, (_self->nalias + 1)) != 0) {
+        return (-1);
     }
-    snprintf(_self->alias_name[_self->nalias], sizeof(_self->alias_name[0]), "%s", name);
-    snprintf(_self->alias_full[_self->nalias], sizeof(_self->alias_full[0]), "%s", full);
+    snprintf((_self->alias_name + ((size_t)(_self->nalias) * MAX_TEXT)), MAX_TEXT, "%s", name);
+    snprintf((_self->alias_full + ((size_t)(_self->nalias) * MAX_TEXT)), MAX_TEXT, "%s", full);
     _self->nalias++;
     return 0;
 }
@@ -1532,10 +1569,10 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type(void *self, 
     int i;
     (void)(_self);
     for (i = 0; i < _self->nalias; i++) {
-        if (strcmp(_self->alias_name[i], name) != 0) {
+        if (strcmp((_self->alias_name + ((size_t)(i) * MAX_TEXT)), name) != 0) {
             continue;
         }
-        w = snprintf(out, (size_t)(cap), "%s", _self->alias_full[i]);
+        w = snprintf(out, (size_t)(cap), "%s", (_self->alias_full + ((size_t)(i) * MAX_TEXT)));
         if (((w < 0) || (w >= cap))) {
             return _self->__frontend_sym_symbolops_vptr->fail(_self, "name is too long");
         }
@@ -1626,6 +1663,7 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .method_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait,
     .method_trait_amb = frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb,
     .ns_decl_name = frontend_sym_Symbols_frontend_sym_SymbolOps_ns_decl_name,
+    .ensure_alias_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_alias_capacity,
     .add_alias = frontend_sym_Symbols_frontend_sym_SymbolOps_add_alias,
     .add_bare_type = frontend_sym_Symbols_frontend_sym_SymbolOps_add_bare_type,
     .resolve_type = frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type
@@ -1696,7 +1734,7 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
         return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
     }
     for (i = 0; i < _self->nalias; i++) {
-        if (strcmp(_self->alias_name[i], name) == 0) {
+        if (strcmp((_self->alias_name + ((size_t)(i) * MAX_TEXT)), name) == 0) {
             snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
             return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
         }
@@ -1796,7 +1834,7 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_visible_type_alias
         return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
     }
     for (i = 0; i < _self->nalias; i++) {
-        if (strcmp(_self->alias_name[i], name) == 0) {
+        if (strcmp((_self->alias_name + ((size_t)(i) * MAX_TEXT)), name) == 0) {
             snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
             return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
         }

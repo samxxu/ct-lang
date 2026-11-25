@@ -37,6 +37,8 @@ import frontend::sym::SymbolsTypeText;
    Raised 256 -> 512 when ct-ast hit the 256 ceiling exactly (Phase 54 S0). */
 #define MAX_FUNCS   512
 #define MAX_FUNCS_MAX 65536
+#define MAX_IMPORT_ALIASES 24
+#define MAX_IMPORT_ALIASES_MAX 65536
 #define MAX_VARS    4096
 #define MAX_VARS_MAX 65536
 #define MAX_SCOPE   256
@@ -407,6 +409,7 @@ pub trait SymbolOps {
     int  ensure_type_capacity(int need);
     int  ensure_ginst_capacity(int need);
     int  ensure_closure_capacity(int need);
+    int  ensure_alias_capacity(int need);
     int  ensure_type_alias_capacity(int need);
     int  ensure_global_type_alias_capacity(int need);
     /* Phase 78 S2b: remember / look up an inherent method's ref/out
@@ -744,11 +747,14 @@ pub struct Symbols {
     const char *path;
     /* `import a::b::C as D;` brings one exported name in under `D` for this unit
        only (the table resets per unit); `alias_full` is the mangled C name. */
-    /* 24 (Phase 84): the compiler's own emitter unit imports 17 names; the
-       former 16 was the ceiling that stopped the self-build. */
-    char alias_name[24][160];
-    char alias_full[24][160];
+    /* S1a-0 C1: the import-alias rows grow on demand from 24. They are two
+       flat MAX_TEXT-row blocks; `ensure_alias_capacity` grows them together.
+       (Before this they were fixed `char [24][160]` arrays, which S1a-1's
+       one-unit-per-method-group split immediately outgrew.) */
+    char *alias_name;
+    char *alias_full;
     int  nalias;
+    int  aliascap;
     /* Type aliases (`pub type X = T;`): a per-unit visible table plus a global
        registry of every declaration loaded in this build. The global half is
        what lets `parse_type` say "declared in ... but not imported" instead of
@@ -1898,6 +1904,34 @@ impl SymbolOps for Symbols {
         return 0;
     }
 
+    /* Grow the import-alias rows to at least `need`. Mirrors the other S1a-0
+       ensure_* blocks: double from the current capacity (24 initially) up to
+       MAX_IMPORT_ALIASES_MAX, and fail with the OOM message past that. */
+    int ensure_alias_capacity(int need)
+    {
+        int cap;
+        char *names;
+        char *fulls;
+        (void)self;
+        if (need <= self->aliascap) return 0;
+        cap = self->aliascap > 0 ? self->aliascap : MAX_IMPORT_ALIASES;
+        while (cap < need && cap < MAX_IMPORT_ALIASES_MAX) cap *= 2;
+        if (cap > MAX_IMPORT_ALIASES_MAX) cap = MAX_IMPORT_ALIASES_MAX;
+        if (need > cap) return self->fail("out of memory");
+        names = (char *)realloc(self->alias_name, (size_t)cap * MAX_TEXT);
+        if (!names) return self->fail("out of memory");
+        memset(names + (size_t)self->aliascap * MAX_TEXT, 0,
+               (size_t)(cap - self->aliascap) * MAX_TEXT);
+        self->alias_name = names;
+        fulls = (char *)realloc(self->alias_full, (size_t)cap * MAX_TEXT);
+        if (!fulls) return self->fail("out of memory");
+        memset(fulls + (size_t)self->aliascap * MAX_TEXT, 0,
+               (size_t)(cap - self->aliascap) * MAX_TEXT);
+        self->alias_full = fulls;
+        self->aliascap = cap;
+        return 0;
+    }
+
     /* Register one `import ... as ...` alias for the current unit. A second
        import that binds the same alias to a different name is ambiguous, so it
        is an error rather than a silent override. */
@@ -1907,13 +1941,13 @@ impl SymbolOps for Symbols {
         (void)self;
 
         for (i = 0; i < self->nalias; i++) {
-            if (strcmp(self->alias_name[i], name) != 0) continue;
-            if (strcmp(self->alias_full[i], full) == 0) return 0;
+            if (strcmp(self->alias_name + (size_t)i * MAX_TEXT, name) != 0) continue;
+            if (strcmp(self->alias_full + (size_t)i * MAX_TEXT, full) == 0) return 0;
             return self->fail("one alias names two imports");
         }
-        if (self->nalias >= 24) return self->fail("too many import aliases");
-        snprintf(self->alias_name[self->nalias], sizeof self->alias_name[0], "%s", name);
-        snprintf(self->alias_full[self->nalias], sizeof self->alias_full[0], "%s", full);
+        if (self->ensure_alias_capacity(self->nalias + 1) != 0) return -1;
+        snprintf(self->alias_name + (size_t)self->nalias * MAX_TEXT, MAX_TEXT, "%s", name);
+        snprintf(self->alias_full + (size_t)self->nalias * MAX_TEXT, MAX_TEXT, "%s", full);
         self->nalias++;
         return 0;
     }
@@ -1949,8 +1983,8 @@ impl SymbolOps for Symbols {
         (void)self;
 
         for (i = 0; i < self->nalias; i++) {
-            if (strcmp(self->alias_name[i], name) != 0) continue;
-            w = snprintf(out, (size_t)cap, "%s", self->alias_full[i]);
+            if (strcmp(self->alias_name + (size_t)i * MAX_TEXT, name) != 0) continue;
+            w = snprintf(out, (size_t)cap, "%s", self->alias_full + (size_t)i * MAX_TEXT);
             if (w < 0 || w >= cap) return self->fail("name is too long");
             return 0;
         }
@@ -2054,7 +2088,7 @@ impl TypeAliasOps for Symbols {
             return self->fail(msg);
         }
         for (i = 0; i < self->nalias; i++)
-            if (strcmp(self->alias_name[i], name) == 0) {
+            if (strcmp(self->alias_name + (size_t)i * MAX_TEXT, name) == 0) {
                 snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
                 return self->fail(msg);
             }
@@ -2141,7 +2175,7 @@ impl TypeAliasOps for Symbols {
             return self->fail(msg);
         }
         for (i = 0; i < self->nalias; i++)
-            if (strcmp(self->alias_name[i], name) == 0) {
+            if (strcmp(self->alias_name + (size_t)i * MAX_TEXT, name) == 0) {
                 snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
                 return self->fail(msg);
             }

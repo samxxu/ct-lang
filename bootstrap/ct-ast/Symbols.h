@@ -122,6 +122,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*ensure_type_capacity)(void *, int);
     int (*ensure_ginst_capacity)(void *, int);
     int (*ensure_closure_capacity)(void *, int);
+    int (*ensure_alias_capacity)(void *, int);
     int (*ensure_type_alias_capacity)(void *, int);
     int (*ensure_global_type_alias_capacity)(void *, int);
     int (*add_meth_ann)(void *, const char *, const char *, const int *, int);
@@ -439,9 +440,10 @@ struct frontend_sym_Symbols {
     int ntb;
     char ns[160];
     const char * path;
-    char alias_name[24][160];
-    char alias_full[24][160];
+    char * alias_name;
+    char * alias_full;
     int nalias;
+    int aliascap;
     struct frontend_sym_TypeAlias * taliases;
     int ntalias;
     int taliascap;
