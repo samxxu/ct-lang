@@ -1,0 +1,815 @@
+/*
+ * StmtLoop.h.ct - the loop / foreach / range grammar (SH-94 S1a-1, pure move out of Stmt.h.ct).
+ *
+ * The method bodies are byte-identical to the ones Stmt.h.ct held; the
+ * `Stmt` type and every trait declaration live in StmtCore.h.ct, so this unit
+ * imports Core instead of the host and the import graph stays acyclic.
+ * Stmt.h.ct imports this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+import frontend::sym::SymbolsTypeText;
+import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
+import frontend::lex::Lexer;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::sym::Symbols::StructInst as StructInst;
+import backend::mem::Memory;
+import frontend::parse::ParseSupport;
+import frontend::parse::Expr;
+import tool::diag::Diag;
+import frontend::parse::StmtRangeText;
+import frontend::parse::StmtRangeScan;
+import frontend::parse::StmtScope;
+import frontend::parse::StmtCore;
+import frontend::parse::StmtDefer;
+import frontend::type::TypeCheck;
+import frontend::parse::StmtMatch;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_TEXT 160
+#define MAX_ADT_FIELDS_MAX 65536
+#define MAX_LABELS 64
+#define MAX_LABELS_MAX 65536
+#define B_COMMA 19
+#define B_ADD 1
+#define B_SUB 2
+#define B_MUL 3
+#define B_DIV 4
+#define B_MOD 11
+#define B_SHL 17
+#define B_SHR 18
+#define B_BAND 15
+#define B_BOR 16
+#define B_XOR 14
+#define N_INDEX 26
+#define N_CALL 7
+#define N_MCALL 30
+#define N_ARROW 25
+#define N_ASSIGN 13
+#define N_BIN 11
+#define N_BLOCK 4
+#define N_CLOSURE 59
+#define N_BREAK 38
+#define N_CASE 43
+#define N_CONT 39
+#define N_DECL 12
+#define N_DECLS 40
+#define N_DELETE 41
+#define N_DEREF 28
+#define N_DOWHILE 44
+#define N_EMPTY 52
+#define N_SASSERT 55
+#define N_EXPR 6
+#define N_FOR 16
+#define N_GOTO 50
+#define N_IF 14
+#define N_INIT_RANGE 61
+#define N_MATSEQ 73
+#define N_INIT_BRACE 65
+#define N_INIT_ITEM 66
+#define N_DEFER 69
+#define N_DEFER_RUN 70
+#define N_INIT_MBRACE 67
+#define N_LABEL 49
+#define N_LOOP 60
+#define N_FOREACH 62
+#define N_MEMBER 24
+#define N_NUM 8
+#define N_STR 9
+#define N_UNARY 17
+#define N_POST 18
+#define N_PRE 57
+#define N_ADDR 27
+#define N_RAW 31
+#define N_RET 5
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET   76
+#define N_SWITCH 42
+#define N_MATCH 78
+#define N_ARM 79
+#define N_BIND 80
+#define N_VAR 10
+#define N_WHILE 15
+#define N_INTO 63
+#define N_INTO_SELF 64
+#define T_EOF 0
+#define T_ID 1
+#define T_NUM 2
+#define T_PUNCT 4
+#define T_STR 3
+#define CT_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct StmtLoop {
+    int unused;
+}
+
+pub int jump_push(struct Stmt *self, int brk, int cont)
+{
+    if (self->nbreak >= 256 || (cont >= 0 && self->ncont >= 256))
+        return self->sup->fail("loops are nested too deeply");
+    self->break_base[self->nbreak] = brk;
+    self->break_is_switch[self->nbreak] = (cont < 0);
+    self->defer_break_base[self->nbreak] = self->ndefer_blocks;
+    self->nbreak = self->nbreak + 1;
+    if (cont < 0) return 0;
+    self->cont_base[self->ncont] = cont;
+    self->defer_cont_base[self->ncont] = self->ndefer_blocks;
+    self->ncont = self->ncont + 1;
+    return 0;
+}
+
+pub void jump_pop(struct Stmt *self, int with_cont)
+{
+    if (self->nbreak > 0) self->nbreak = self->nbreak - 1;
+    if (with_cont && self->ncont > 0) self->ncont = self->ncont - 1;
+}
+
+pub int range_bound(struct Stmt *self, long *out)
+{
+    char spell[MAX_TEXT];
+    char msg[256];
+    int neg = 0, rc, line, col;
+    long v = 0;
+
+    line = self->lex->tokline;
+    col = self->lex->tokstart - self->lex->lstart + 1;
+    if (self->lex->tok == T_PUNCT && self->lex->tok_is("-")) {
+        neg = 1;
+        self->sup->lex_next();
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+    }
+    /* `..` followed straight by `(` is a missing bound, not a bad one */
+    if (!neg && self->lex->tok == T_PUNCT && self->lex->tok_is("("))
+        return tool::diag::ct_sem_error(line, col, "a range initializer needs both bounds", self->mem->path);
+    rc = range_bound_value(self->lex, &v, spell, (int)sizeof spell);
+    if (rc == 2)
+        return tool::diag::ct_sem_error(line, col, "a range bound is out of range", self->mem->path);
+    if (rc == 1) {
+        snprintf(msg, sizeof msg, "a range bound must be an integer literal (got '%s')", spell);
+        return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+    }
+    self->sup->lex_next();
+    *out = neg ? -v : v;
+    return 0;
+}
+
+pub int range_element_bad(struct Stmt *self, const char *type, const char *dims, char *why, int cap)
+{
+    char tr[MAX_TEXT];
+    char tmp[MAX_TEXT];
+    const char *first;
+    int ip = 0;
+    size_t n;
+
+    first = strchr(dims, '[');
+    if (first && strchr(first + 1, '[')) {
+        range_element_spelling(type, why, cap);
+        n = strlen(why);
+        snprintf(why + n, (size_t)cap - n, "%s", first + 1);
+        return 1;
+    }
+    if (self->sup->iface_ref_type(type, tr, (int)sizeof tr, &ip) && !ip) {
+        range_element_spelling(type, why, cap);
+        return 1;
+    }
+    snprintf(tmp, sizeof tmp, "%s", type);
+    n = strlen(tmp);
+    while (n > 0 && (tmp[n - 1] == ' ' || tmp[n - 1] == '\t')) n--;
+    if (n > 0 && tmp[n - 1] == '*') return 0;
+    if (strstr(type, "struct ") || strstr(type, "union ")) {
+        range_element_spelling(type, why, cap);
+        return 1;
+    }
+    return 0;
+}
+
+pub int kw_paren_ahead(struct Stmt *self, const char *kw)
+{
+    int sp, sbol, stok, sline, stokline, sstart, slstart, r;
+    long snum;
+    const char *stext_ptr; int stext_len;
+
+    if (self->lex->tok != T_ID) return 0;
+    if (!self->lex->tok_is(kw)) return 0;
+    sp = self->lex->pos;
+    sbol = self->lex->bol;
+    stok = self->lex->tok;
+    snum = self->lex->toknum;
+    sline = self->lex->line;
+    stokline = self->lex->tokline;
+    sstart = self->lex->tokstart;
+    slstart = self->lex->lstart;
+    stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
+    self->sup->lex_next();
+    r = 0;
+    if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) r = 1;
+    self->lex->pos = sp;
+    self->lex->bol = sbol;
+    self->lex->tok = stok;
+    self->lex->toknum = snum;
+    self->lex->line = sline;
+    self->lex->tokline = stokline;
+    self->lex->tokstart = sstart;
+    self->lex->lstart = slstart;
+    self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
+    return r;
+}
+
+impl StmtLoop for Stmt {
+    /* Is the current token `loop` immediately followed by `(`? */
+    int loop_ahead(void)
+    {
+        return kw_paren_ahead(self, "loop");
+    }
+
+    /* Phase 27: is the current token `foreach` immediately followed by `(`? */
+    int foreach_ahead(void)
+    {
+        return kw_paren_ahead(self, "foreach");
+    }
+
+    int parse_loop(void)
+    {
+        int s, cnt, hi, body, line, col, cls, bi, nb, vi;
+        int bounds[2];
+        char msg[MAX_TEXT];
+        char t[MAX_TEXT];
+        char ct[MAX_TEXT];
+        char ex[MAX_TEXT];
+        const char *p;
+        int bare;
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        s = self->sup->new_node(N_LOOP);
+        if (s < 0) return -1;
+        self->sup->lex_next();
+        if (self->sup->expect("(") != 0) return -1;
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(".."))
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "a loop range needs both bounds", self->mem->path);
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(")"))
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "loop needs a count expression", self->mem->path);
+        self->ex->assign_ok = 1;
+        cnt = self->ex->parse_expr();
+        self->ex->assign_ok = 0;
+        if (cnt < 0) return -1;
+        hi = -1;
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("..")) {
+            self->sup->lex_next();
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is(")"))
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                                                self->lex->tokstart - self->lex->lstart + 1,
+                                                "a loop range needs both bounds", self->mem->path);
+            self->ex->assign_ok = 1;
+            hi = self->ex->parse_expr();
+            self->ex->assign_ok = 0;
+            if (hi < 0) return -1;
+            /* `loop(0..b)` is `loop(b)` (D23-2). Only a literal zero is folded,
+               and the rule is purely syntactic: `-0` and `0+0` stay ranges, so
+               nothing here depends on constant folding. */
+            if (self->arena->nodes[cnt].kind == N_NUM && self->arena->nodes[cnt].num == 0) {
+                cnt = hi;
+                hi = -1;
+            }
+        }
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(","))
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "loop takes exactly one count; use a native for to name the counter",
+                                            self->mem->path);
+        if (self->sup->expect(")") != 0) return -1;
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "loop body must be a block", self->mem->path);
+        /* Both bounds go through the same two checks. D23-8: a pointer, an
+           array, a struct/union value or a function pointer is a hard error --
+           comparing an address with the implicit `int i` is never intended, and
+           a bare `loop(arr)` slipped through silently in Phase 22. L22-5 keeps
+           the softer rule: a scalar that is statically known not to be an
+           integer (float/double/void) still compiles, converted to `int`, and
+           only warns. A spelling this layer cannot classify stays silent: a
+           false positive is worse than a miss. */
+        bounds[0] = cnt;
+        bounds[1] = hi;
+        nb = (hi == -1) ? 1 : 2;
+        for (bi = 0; bi < nb; bi++) {
+            int e = bounds[bi];
+            /* `int a[4]` and `int *p` spell the same type string, so only the
+               symbol table can tell an array bound apart. */
+            vi = -1;
+            if (self->arena->nodes[e].kind == N_VAR)
+                vi = self->sym->find_var(self->arena->nodes[e].text2);
+            if (vi >= 0 && self->sym->vars[vi].is_array) {
+                snprintf(msg, sizeof msg,
+                         "a loop bound must be an integer (got the array '%s')",
+                         self->sym->vars[vi].name);
+                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+            }
+            /* An array that is not a plain variable -- `m.cells`, a field
+               declared with dimensions -- only shows its `[]` in the
+               dimension-preserving type, and it must be checked before the
+               `expr_type` gate below: a one-dimensional field decays to a
+               pointer (`expr_type` answers), but a two-dimensional one has no
+               single element type and `expr_type` gives up, which used to leave
+               `loop(m.cells)` completely silent. */
+            if (self->sup->expr_ctype(e, ct, sizeof ct) == 0 && strchr(ct, '[')) {
+                snprintf(msg, sizeof msg,
+                         "a loop bound must be an integer (got '%s')", ct);
+                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+            }
+            if (self->sup->expr_type(e, t, sizeof t) != 0) continue;
+            bare = 1;
+            for (p = t; *p; p++)
+                if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+                      || (*p >= '0' && *p <= '9') || *p == '_'))
+                    bare = 0;
+            if (bare && self->sym->expand_type_alias(t, ex, sizeof ex) == 0)
+                snprintf(t, sizeof t, "%s", ex);
+            /* `[` is a backstop here: the two checks above already reject
+               arrays, but an alias could still expand to a dimensioned type. */
+            if (strchr(t, '*') || strchr(t, '[') || strchr(t, '(')
+                || strncmp(t, "struct ", 7) == 0 || strncmp(t, "union ", 6) == 0) {
+                snprintf(msg, sizeof msg,
+                         "a loop bound must be an integer (got '%s')", t);
+                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+            }
+            cls = loop_count_class(t);
+            if (cls == 0) {
+                snprintf(msg, sizeof msg,
+                         "count must be an integer (got '%s'); the value is converted to int", t);
+                if (tool::diag::ct_type_warn(line, col, "loop", msg, self->mem->path) != 0)
+                    return -1;
+            }
+        }
+        if (self->sup->push_scope() != 0) return -1;
+        if (self->sup->declare_var("i", "int") != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        /* Only `loop` inside `loop` is reported (D22-5): the inner one shadows
+           the outer implicit `i`. A hand-written `int i` or a native `for` is
+           ordinary C shadowing and stays silent. */
+        if (self->loop_depth > 0) {
+            if (tool::diag::ct_loop_warn(line, col,
+                    "loop shadows the outer 'i'; use a native for to name the inner counter",
+                    self->mem->path) != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+        }
+        self->loop_depth = self->loop_depth + 1;
+        if (jump_push(self, self->mem->nowner, self->mem->nowner) != 0) {
+            self->loop_depth = self->loop_depth - 1;
+            self->sup->pop_scope();
+            return -1;
+        }
+        body = self->parse_block();
+        jump_pop(self, 1);
+        self->loop_depth = self->loop_depth - 1;
+        if (body < 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        self->sup->pop_scope();
+        self->arena->nodes[s].a = cnt;
+        self->arena->nodes[s].b = hi;
+        self->arena->nodes[s].d = body;
+        return s;
+    }
+
+    int parse_foreach(void)
+    {
+        int s, c, body, line, col, vi, nd, ip, bare;
+        int aux, inst, nargs;
+        char msg[MAX_TEXT];
+        char elem[MAX_TEXT];
+        char ex[MAX_TEXT];
+        char tr[MAX_TEXT];
+        char iname[MAX_TEXT];
+        char enc[MAX_TEXT];
+        const char *p;
+        const char *q;
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        s = self->sup->new_node(N_FOREACH);
+        if (s < 0) return -1;
+        self->sup->lex_next();
+        if (self->sup->expect("(") != 0) return -1;
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(")"))
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "foreach needs a collection expression",
+                                            self->mem->path);
+        self->ex->assign_ok = 1;
+        c = self->ex->parse_expr();
+        self->ex->assign_ok = 0;
+        if (c < 0) return -1;
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(","))
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "foreach takes exactly one collection",
+                                            self->mem->path);
+        if (self->sup->expect(")") != 0) return -1;
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
+            return tool::diag::ct_sem_error(self->lex->tokline,
+                                            self->lex->tokstart - self->lex->lstart + 1,
+                                            "foreach body must be a block",
+                                            self->mem->path);
+        if (self->arena->nodes[c].kind != N_VAR)
+            return tool::diag::ct_sem_error(line, col,
+                                            "foreach needs a plain array variable",
+                                            self->mem->path);
+        vi = self->sym->find_var(self->arena->nodes[c].text2);
+        if (vi < 0)
+            return tool::diag::ct_sem_error(line, col,
+                                            "foreach needs a declared array",
+                                            self->mem->path);
+        /* Phase 29 (D29-13): the built-in containers iterate through their own
+           protocol -- `Vec` by `len`/`get`, `Map` by `len`/`entry`. `item` is a
+           by-value copy either way; `i` is a read-only binding for `Vec` only,
+           and naming it in a `Map` body is the L29-18 hard error (a map has no
+           natural position, and offering one would read as an order promise). */
+        aux = 0;
+        iname[0] = 0;
+        snprintf(iname, sizeof iname, "%s", self->sym->vars[vi].type);
+        if (strncmp(iname, "struct ", 7) == 0)
+            memmove(iname, iname + 7, strlen(iname + 7) + 1);
+        /* P-7.2: a slice iterates through its `{ptr,len}` view. `item` is a
+           by-value copy of the element, like the array path. */
+        if (self->sym->vars[vi].is_slice) {
+            aux = 3;
+            snprintf(elem, sizeof elem, "%s", self->sym->vars[vi].slice_elem);
+        }
+        inst = frontend::sym::ct_inst_find(iname);
+        if (inst >= 0) {
+            struct StructInst *ins = frontend::sym::ct_insts(&nargs);
+            if (strcmp(ins[inst].tmpl, "Vec") == 0) {
+                aux = 1;
+                snprintf(elem, sizeof elem, "%s", ins[inst].ctype[0]);
+            } else if (strcmp(ins[inst].tmpl, "Map") == 0) {
+                aux = 2;
+            }
+        }
+        if (aux == 1 || aux == 2) {
+            /* L29-15: a container element would be a second owner of the same
+               buffer, and an interface value would lose its vptr on the copy.
+               Both are the same "the element cannot be copied by value" rule. */
+            int kk;
+            {
+                struct StructInst *ins = frontend::sym::ct_insts(&nargs);
+                for (kk = 0; kk < (aux == 1 ? 1 : 2); kk++) {
+                    /* Judged by the instance tag the argument resolved to, not
+                       by the source spelling: since S20b a nested argument is
+                       carried as its C tag (`struct MapEntry_char_p_int`), so a
+                       `ct_inst_split` on `carg` would never match. D31-4
+                       unfroze interface and container elements, not the entry
+                       type, so this branch stays. */
+                    const char *tag = ins[inst].ctype[kk];
+                    int mt = -1;
+                    if (strncmp(tag, "struct ", 7) == 0 && strchr(tag, '*') == 0) {
+                        tag += 7;
+                        mt = frontend::sym::ct_inst_find(tag);
+                    }
+                    if (mt >= 0
+                        && strcmp(frontend::sym::ct_insts(&nd)[mt].tmpl, "MapEntry") == 0) {
+                        snprintf(msg, sizeof msg,
+                                 "foreach cannot iterate a container of '%s' (interface, vptr-bearing or container element)",
+                                 ins[inst].ctype[kk]);
+                        return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                    }
+                }
+                if (aux == 2) {
+                    /* The item type is the matching `MapEntry` instance; its
+                       layout is registered here so the C spelling exists even
+                       when the user never wrote `MapEntry<...>` themselves. */
+                    if (self->ex->inst_make("MapEntry", 2,
+                                            ins[inst].carg, ins[inst].ctype,
+                                            enc, MAX_TEXT, 0, 0, 0) != 0)
+                        return -1;
+                    snprintf(elem, sizeof elem, "struct %s", enc);
+                }
+            }
+        }
+        if (aux == 0) {
+        /* `int a[]` as a parameter is `int *a` in C; `sizeof` would answer the
+           pointer's size and silently iterate the wrong count. */
+        if (self->sym->vars[vi].is_param || self->sym->vars[vi].is_fnparam) {
+            snprintf(msg, sizeof msg,
+                     "foreach cannot iterate the array parameter '%s' (its length is lost)",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        if (!self->sym->vars[vi].dims[0]) {
+            snprintf(msg, sizeof msg,
+                     "foreach needs an array or a Vec/Map; '%s' is not iterable",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        snprintf(elem, sizeof elem, "%s", self->sym->vars[vi].type);
+        /* A function-pointer array stores its declarator in `text3` instead of
+           plain `[N]`; `int item = handlers[i];` would be illegal C. */
+        if (self->sym->vars[vi].dims[0] != '[' || strchr(elem, '(')) {
+            snprintf(msg, sizeof msg,
+                     "foreach cannot iterate '%s'; its declarator is not a plain array",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        nd = 0;
+        for (p = self->sym->vars[vi].dims; *p; p++)
+            if (*p == '[') nd++;
+        if (nd > 1) {
+            snprintf(msg, sizeof msg,
+                     "foreach does not support multidimensional arrays ('%s')",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        /* A file-scope `int a[];` stays incomplete; the local `int a[] = {…}`
+           is completed by its initialiser, which only C sees. */
+        if (self->sym->vars[vi].is_global && strstr(self->sym->vars[vi].dims, "[]")) {
+            snprintf(msg, sizeof msg,
+                     "foreach needs an array with a known length ('%s')",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        /* A typedef can hide an array element (`typedef int Row[4]; Row a[2];`);
+           `Row item = a[i];` is not C, so refuse it like a second dimension. */
+        bare = 1;
+        for (q = elem; *q; q++)
+            if (!((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
+                  || (*q >= '0' && *q <= '9') || *q == '_')) bare = 0;
+        if (bare && self->sym->expand_type_alias(elem, ex, sizeof ex) == 0
+            && strchr(ex, '[')) {
+            snprintf(msg, sizeof msg,
+                     "foreach does not support multidimensional arrays ('%s')",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        /* An interface value is a (vptr, data) pair; a by-value copy would
+           bypass the vptr discipline, and the element type gives no owner. */
+        if (self->sup->iface_ref_type(elem, tr, sizeof tr, &ip) && !ip) {
+            snprintf(msg, sizeof msg,
+                     "foreach cannot copy interface values ('%s')",
+                     self->sym->vars[vi].name);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        }   /* aux == 0: the Phase 27 array path ends here */
+        if (self->sup->push_scope() != 0) return -1;
+        if (self->sup->declare_var("item", elem) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        /* Phase 31 S23a (L31-13): inside a container loop `item` is a borrowed
+           view of the stored element, never an owner. */
+        if (aux != 0) {
+            int ivi = self->sym->find_var("item");
+            if (ivi >= 0) self->sym->vars[ivi].cview = 1;
+        }
+        /* D29-14: an array or `Vec` also binds the read-only index `i`. A `Map`
+           binds it too, so that naming it reports L29-18 instead of an
+           undeclared name; the emitter prints no `i` line for a `Map` body. */
+        if (self->sup->declare_var("i", "int") != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        if (self->foreach_depth > 0) {
+            if (tool::diag::ct_loop_warn(line, col,
+                    "foreach shadows the outer 'item'; use a native for to name the binding",
+                    self->mem->path) != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+        }
+        self->foreach_depth = self->foreach_depth + 1;
+        if (jump_push(self, self->mem->nowner, self->mem->nowner) != 0) {
+            self->foreach_depth = self->foreach_depth - 1;
+            self->sup->pop_scope();
+            return -1;
+        }
+        /* Phase 31 S23b (L31-22): the body may not mutate the container it is
+           iterating; the expression layer compares the receiver with this name. */
+        frontend::parse::expr_iter_push(self->ex, self->arena->nodes[c].text2);
+        body = self->parse_block();
+        frontend::parse::expr_iter_pop(self->ex);
+        jump_pop(self, 1);
+        self->foreach_depth = self->foreach_depth - 1;
+        if (body < 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
+        /* D29-14: the bindings are fixed for the whole body. Redeclaring `item`
+           or `i` is L29-17; assigning / incrementing / taking the address of
+           the index is L29-16 (it stands for the position, not a variable); and
+           a `Map` body has no `i` at all (L29-18), because insertion order is
+           not an ordinal the loop promises. The scan only sees nodes the body
+           itself created: the arena grows monotonically while it is parsed. */
+        for (nd = body; nd < self->arena->nnode; nd++) {
+            int k0 = self->arena->nodes[nd].kind;
+            if (k0 == N_DECL
+                && (strcmp(self->arena->nodes[nd].text2, "item") == 0
+                    || strcmp(self->arena->nodes[nd].text2, "i") == 0)) {
+                snprintf(msg, sizeof msg, "cannot redeclare the foreach binding '%s'",
+                         self->arena->nodes[nd].text2);
+            } else if (aux == 2 && k0 == N_VAR
+                       && strcmp(self->arena->nodes[nd].text2, "i") == 0) {
+                snprintf(msg, sizeof msg,
+                         "'i' has no meaning in a Map foreach; use item.key / item.value");
+            } else if (aux != 2
+                       && (k0 == N_ASSIGN || k0 == N_POST || k0 == N_PRE
+                           || k0 == N_ADDR)
+                       && self->arena->nodes[nd].a >= 0
+                       && self->arena->nodes[self->arena->nodes[nd].a].kind == N_VAR
+                       && strcmp(self->arena->nodes[self->arena->nodes[nd].a].text2,
+                                 "i") == 0) {
+                snprintf(msg, sizeof msg, "the foreach index 'i' is read-only");
+            } else {
+                continue;
+            }
+            self->sup->pop_scope();
+            return tool::diag::ct_sem_error(self->arena->nodes[nd].line, 1, msg,
+                                            self->mem->path);
+        }
+        self->sup->pop_scope();
+        snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", elem);
+        /* aux: 0 = array, 1 = Vec, 2 = Map; text2 names the container instance
+           the emitter calls `len` / `get` / `entry` on. */
+        self->arena->nodes[s].aux = aux;
+        if (aux == 3)
+            snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s",
+                     self->sym->vars[vi].cname);
+        else
+            snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", aux ? iname : "");
+        self->arena->nodes[s].a = c;
+        self->arena->nodes[s].d = body;
+        return s;
+    }
+
+    int range_init_ahead(void)
+    {
+        int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc, r;
+        int depth = 0;
+        long snum;
+        const char *stext_ptr; int stext_len;
+        const char *ssuf_ptr; int ssuf_len;
+
+        sp = self->lex->pos;
+        sbol = self->lex->bol;
+        stok = self->lex->tok;
+        snum = self->lex->toknum;
+        sline = self->lex->line;
+        stokline = self->lex->tokline;
+        sstart = self->lex->tokstart;
+        slstart = self->lex->lstart;
+        sfloat = self->lex->tokfloat;
+        strunc = self->lex->toktrunc;
+        stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
+        ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
+        r = 0;
+        while (self->lex->tok != T_EOF) {
+            if (self->lex->tok == T_PUNCT) {
+                if (self->lex->tok_is("(") || self->lex->tok_is("[") || self->lex->tok_is("{")) {
+                    depth++;
+                } else if (self->lex->tok_is(")") || self->lex->tok_is("]")
+                           || self->lex->tok_is("}")) {
+                    if (depth > 0) depth--;
+                } else if (self->lex->tok_is("..")) {
+                    if (depth == 0) {
+                        r = 1;
+                        break;
+                    }
+                } else if ((self->lex->tok_is(",") || self->lex->tok_is(";")) && depth == 0) {
+                    break;
+                }
+            }
+            self->sup->lex_next();
+        }
+        self->lex->pos = sp;
+        self->lex->bol = sbol;
+        self->lex->tok = stok;
+        self->lex->toknum = snum;
+        self->lex->line = sline;
+        self->lex->tokline = stokline;
+        self->lex->tokstart = sstart;
+        self->lex->lstart = slstart;
+        self->lex->tokfloat = sfloat;
+        self->lex->toktrunc = strunc;
+        self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
+        self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
+        return r;
+    }
+
+    int parse_range_init(int n, const char *type)
+    {
+        long start, stop, dim;
+        unsigned long cnt;
+        int e, elem, line, col, save_dollar;
+        int is_vec;
+        char elemtype[MAX_TEXT];
+        char iname[MAX_TEXT];
+        char why[MAX_TEXT];
+        char msg[256];
+        const char *close;
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        elemtype[0] = 0;
+        iname[0] = 0;
+        is_vec = 0;
+        /* L24-5: an array declarator, or (P29-1) a by-value `Vec<T>` */
+        if (!self->arena->nodes[n].text3[0]) {
+            is_vec = range_vec_target(type, elemtype, (int)sizeof elemtype,
+                                      iname, (int)sizeof iname);
+            if (!is_vec)
+                return tool::diag::ct_sem_error(line, col,
+                                                "a range initializer declares an array", self->mem->path);
+        }
+        if (range_bound(self, &start) != 0) return -1;
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("..")))
+            return self->sup->fail("unexpected token");
+        self->sup->lex_next();
+        if (range_bound(self, &stop) != 0) return -1;
+        /* L24-3: an empty initialiser list has no target meaning. The bounds
+           fit `long`, so the difference is compared in unsigned arithmetic and
+           a huge span can never wrap into a plausible count. */
+        if (stop <= start)
+            return tool::diag::ct_sem_error(line, col, "an empty range has no elements", self->mem->path);
+        cnt = (unsigned long)stop - (unsigned long)start;
+        if (cnt > 1024)
+            return tool::diag::ct_sem_error(line, col, "too many range elements (limit 1024)", self->mem->path);
+        /* L24-7: a numeric dimension has to agree with the range. `[]` and any
+           spelling this layer cannot evaluate are left to C. A `Vec` declares
+           no dimension, so the count is the only size. */
+        if (!is_vec
+            && range_dim_value(self->arena->nodes[n].text3, &dim) && dim != (long)cnt) {
+            snprintf(msg, sizeof msg,
+                     "the array size '%ld' does not match the range (%ld elements)",
+                     dim, (long)cnt);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        /* L24-6: scalar elements only -- for a `Vec` the element type is the
+           instance's type argument, not the container struct */
+        if (range_element_bad(self, is_vec ? elemtype : type,
+                              is_vec ? "" : self->arena->nodes[n].text3,
+                              why, (int)sizeof why)) {
+            snprintf(msg, sizeof msg, "a range initializer cannot initialize '%s' elements", why);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        /* P29-1: the element list accepts the parenthesised form Phase 24
+           froze (`0..3($)`) and the brace form the request writes
+           (`4..8 { $ * $ }`); the two mean the same thing, and neither can be
+           confused with a declaration's brace list because `..` was already
+           consumed. */
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
+            close = ")";
+        } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
+            close = "}";
+        } else {
+            return self->sup->fail("expected '(' or '{' after the range bound");
+        }
+        self->sup->lex_next();
+        save_dollar = self->ex->dollar_ok;
+        {
+            int save_range = self->ex->range_ctx;
+            self->ex->dollar_ok = 1;
+            self->ex->range_ctx = 1;
+            elem = self->ex->parse_expr();
+            self->ex->range_ctx = save_range;
+        }
+        self->ex->dollar_ok = save_dollar;
+        if (elem < 0) return -1;
+        if (self->sup->expect(close) != 0) return -1;
+        e = self->sup->new_node(N_INIT_RANGE);
+        if (e < 0) return -1;
+        /* One element subtree, however many elements: the node count does not
+           grow with `count`, which is what makes the 1024 cap safe (D24-10). */
+        self->arena->nodes[e].a = elem;
+        self->arena->nodes[e].num = start;
+        self->arena->nodes[e].aux = (int)cnt;
+        self->arena->nodes[e].line = line;
+        if (is_vec) {
+            /* non-empty `text2` is the emitter's marker for the literal +
+               constructor form */
+            snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", elemtype);
+            snprintf(self->arena->nodes[e].text2, MAX_TEXT, "%s", iname);
+        }
+        return e;
+    }
+}

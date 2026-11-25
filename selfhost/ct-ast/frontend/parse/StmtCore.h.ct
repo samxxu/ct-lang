@@ -68,6 +68,14 @@ pub trait StmtOps {
 
     int  parse_goto(void);
 
+    int  closure_global_init(int e, const char *name, int line, int col);
+
+    int  func_begin(void);
+
+    int  func_end(void);
+}
+
+pub trait StmtLoop {
     int  loop_ahead(void);
 
     int  parse_loop(void);
@@ -79,13 +87,8 @@ pub trait StmtOps {
     int  range_init_ahead(void);
 
     int  parse_range_init(int n, const char *type);
-
-    int  closure_global_init(int e, const char *name, int line, int col);
-
-    int  func_begin(void);
-
-    int  func_end(void);
 }
+
 
 pub trait StmtMatch {
     /* Phase 84: `match` is a statement, so its lookahead and reader live here. */
@@ -239,4 +242,4 @@ pub struct Stmt {
     int  last_yield_line;
     int  last_yield_col;
     int  last_yield_count;
-} use StmtOps, StmtDeferOps, StmtMatch;
+} use StmtOps, StmtDeferOps, StmtMatch, StmtLoop;

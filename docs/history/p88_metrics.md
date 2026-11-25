@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10966 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=64050 io_cap=1024
+     emitted_before=48223 emitted_after=64229 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -108,6 +108,10 @@
       `StmtMatch` trait，方法体与 `match_expr_type_key` 搬入
       `frontend/parse/StmtMatch.h.ct`，Emitter.h.ct 不变（10966），发射 C
       63872 -> 64050，切片清单仍为 76)
+     (v1-PH-2 S1a-1 C2 后复测：`StmtOps` 的 6 个循环方法拆成
+      `StmtLoop` trait，方法体与 5 个 helper 搬入
+      `frontend/parse/StmtLoop.h.ct`，Emitter.h.ct 不变（10966），发射 C
+      64050 -> 64229，切片清单仍为 76)
 -->
 
 ## 1 切片清单

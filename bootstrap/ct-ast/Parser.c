@@ -1441,8 +1441,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
                 _self->arena->nodes[e].aux = 1;
             }
             else {
-                if (_self->st->__frontend_parse_stmtops_vptr->range_init_ahead(_self->st)) {
-                    e = _self->st->__frontend_parse_stmtops_vptr->parse_range_init(_self->st, g, ret);
+                if (_self->st->__frontend_parse_stmtloop_vptr->range_init_ahead(_self->st)) {
+                    e = _self->st->__frontend_parse_stmtloop_vptr->parse_range_init(_self->st, g, ret);
                     if (e < 0) {
                         return (-1);
                     }
