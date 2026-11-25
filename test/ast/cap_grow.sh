@@ -111,5 +111,37 @@ run_case params "$w/params.ct" 0 || fail=1
 } >"$w/method_params.ct"
 run_case method_params "$w/method_params.ct" 0 || fail=1
 
+# MAX_ARG_POS: a variadic call with 40 arguments (old position-table cap 32).
+# The old code silently stopped recording positions past 32; now every
+# argument keeps its own position.
+{
+    echo 'int vf(int n, ...)'
+    echo '{'
+    echo '    return n;'
+    echo '}'
+    echo 'int main(void)'
+    echo '{'
+    printf '    return vf(0'
+    i=1
+    while [ "$i" -lt 40 ]; do printf ', %d' "$i"; i=$((i + 1)); done
+    printf ');\n}\n'
+} >"$w/arg_pos.ct"
+run_case arg_pos "$w/arg_pos.ct" 0 || fail=1
+
+# MAX_METH_ANN: 300 inherent methods, each recorded in the ref/out
+# annotation table (old cap 256).
+{
+    echo 'struct S { int x; };'
+    echo 'impl S {'
+    i=0
+    while [ "$i" -lt 300 ]; do
+        echo "    int m$i(int x) { return x; }"
+        i=$((i + 1))
+    done
+    echo '}'
+    echo 'int main(void) { return 0; }'
+} >"$w/meth_ann.ct"
+run_case meth_ann "$w/meth_ann.ct" 0 || fail=1
+
 [ "$fail" -eq 0 ] || exit 1
 echo "OK S1a-0 cap growth"
