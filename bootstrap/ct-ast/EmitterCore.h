@@ -174,7 +174,7 @@ struct backend_emit_Emitter {
     int no_write;
     struct frontend_module_MapTable * maps;
     int * nmaps;
-    struct frontend_module_Call * calls;
+    struct frontend_module_Call * * calls;
     int * ncalls;
     int * build_mode;
     int * line_mode;

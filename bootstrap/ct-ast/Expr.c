@@ -40,6 +40,7 @@
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 8192
+#define MAX_CALLS_MAX 65536
 #define MAX_FUNCS 512
 #define MAX_FUNCS_MAX 65536
 #define MAX_ARG_POS 32
@@ -227,7 +228,7 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr *, int, const char *
 static int bind_outconv_rewrite(struct frontend_parse_Expr *, int, int, int, int, int, const char *, int, int);
 static int bind_conv_arith(struct frontend_parse_Expr *, int, int, int, int);
 static int chk_type_static(struct frontend_parse_Expr *, int, char *, int);
-void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *);
+void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
 static char frontend_parse_g_expr_inst_override[160];
 static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable };
@@ -6724,14 +6725,30 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_record_call(void *self, co
     if ((!_self->cur_func[0])) {
         return 0;
     }
-    if ((*_self->ncalls) >= MAX_CALLS) {
-        char cmsg[MAX_TEXT];
-        snprintf(cmsg, sizeof(cmsg), "too many calls (MAX_CALLS=%d; split into library builds or use indirection)", MAX_CALLS);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, cmsg);
+    if ((*_self->ncalls) >= (*_self->callcap)) {
+        int cap;
+        struct frontend_module_Call * grown;
+        if ((*_self->ncalls) >= MAX_CALLS_MAX) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        cap = (((*_self->callcap) > 0) ? (*_self->callcap) : MAX_CALLS);
+        while (((cap <= (*_self->ncalls)) && (cap < MAX_CALLS_MAX))) {
+            cap *= 2;
+        }
+        if (cap > MAX_CALLS_MAX) {
+            cap = MAX_CALLS_MAX;
+        }
+        grown = (struct frontend_module_Call *)(realloc((*_self->calls), ((size_t)(cap) * sizeof((*grown)))));
+        if ((!grown)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        memset((grown + (*_self->callcap)), 0, ((size_t)((cap - (*_self->callcap))) * sizeof((*grown))));
+        (*_self->calls) = grown;
+        (*_self->callcap) = cap;
     }
-    snprintf(_self->calls[(*_self->ncalls)].caller, MAX_TEXT, "%s", _self->cur_func);
-    snprintf(_self->calls[(*_self->ncalls)].callee, MAX_TEXT, "%s", callee);
-    _self->calls[(*_self->ncalls)].line = line;
+    snprintf((*_self->calls)[(*_self->ncalls)].caller, MAX_TEXT, "%s", _self->cur_func);
+    snprintf((*_self->calls)[(*_self->ncalls)].callee, MAX_TEXT, "%s", callee);
+    (*_self->calls)[(*_self->ncalls)].line = line;
     (*_self->ncalls)++;
     return 0;
 }
@@ -10010,14 +10027,15 @@ static int chk_type_static(struct frontend_parse_Expr * self, int n, char * out,
     }
     return 0;
 }
-void frontend_parse_ct_expr_bind(void * arena, void * lex, void * sym, void * sup, void * cur_func, void * calls, void * ncalls, void * maps, void * nmaps) {
+void frontend_parse_ct_expr_bind(void * arena, void * lex, void * sym, void * sup, void * cur_func, void * calls, void * ncalls, void * callcap, void * maps, void * nmaps) {
     frontend_parse_g_expr.arena = (struct runtime_arena_Arena *)(arena);
     frontend_parse_g_expr.lex = (struct frontend_lex_Lexer *)(lex);
     frontend_parse_g_expr.sym = (struct frontend_sym_Symbols *)(sym);
     frontend_parse_g_expr.sup = (struct frontend_parse_ParseSupport *)(sup);
     frontend_parse_g_expr.cur_func = (char *)(cur_func);
-    frontend_parse_g_expr.calls = (struct frontend_module_Call *)(calls);
+    frontend_parse_g_expr.calls = (struct frontend_module_Call * *)(calls);
     frontend_parse_g_expr.ncalls = (int *)(ncalls);
+    frontend_parse_g_expr.callcap = (int *)(callcap);
     frontend_parse_g_expr.maps = (struct frontend_module_MapTable *)(maps);
     frontend_parse_g_expr.nmaps = (int *)(nmaps);
     frontend_parse_g_expr.postfix_seed = (-1);

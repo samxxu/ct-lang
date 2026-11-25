@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#define MAX_CALLS 8192
+#define MAX_CALLS_MAX 65536
 #define MAX_FIELDS 64
 #define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
@@ -186,7 +188,6 @@ int frontend_parse_ct_parse_io_call_unit(int);
 int frontend_parse_ct_parse_io_call_known(int);
 int frontend_parse_ct_parse_io_call_line(int);
 static struct frontend_parse_Parser frontend_parse_g_parse = { .__frontend_parse_parseops_vptr = &frontend_parse_Parser_frontend_parse_ParseOps_vtable, .__frontend_parse_parsedeclops_vptr = &frontend_parse_Parser_frontend_parse_ParseDeclOps_vtable };
-static struct frontend_module_Call frontend_parse_g_calls[8192];
 static struct frontend_module_MapTable * frontend_parse_g_maps;
 static int frontend_parse_Parser_frontend_parse_ParseDeclOps_struct_def_ahead(void *self) {
     struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
@@ -5187,7 +5188,12 @@ void frontend_parse_ct_parse_bind(void * arena, void * lex, void * sym, void * t
     frontend_parse_g_parse.sup->sym = (struct frontend_sym_Symbols *)(sym);
     frontend_parse_g_parse.sup->ty = (struct frontend_type_TypeCheck *)(ty);
     frontend_parse_g_parse.sup->mem = (struct backend_mem_Memory *)(mem);
-    frontend_parse_g_parse.calls = frontend_parse_g_calls;
+    frontend_parse_g_parse.calls = (struct frontend_module_Call *)(calloc(MAX_CALLS, sizeof((*frontend_parse_g_parse.calls))));
+    if ((!frontend_parse_g_parse.calls)) {
+        fprintf(stderr, "ctc: out of memory\n");
+        exit(1);
+    }
+    frontend_parse_g_parse.callcap = MAX_CALLS;
     if ((!frontend_parse_g_maps)) {
         frontend_parse_g_maps = calloc(64, sizeof((*frontend_parse_g_maps)));
         if ((!frontend_parse_g_maps)) {
@@ -5199,7 +5205,7 @@ void frontend_parse_ct_parse_bind(void * arena, void * lex, void * sym, void * t
     frontend_parse_g_parse.pend_fields = 0;
     frontend_parse_g_parse.pendcap = 0;
     frontend_parse_ct_mapbuild_bind(lex, frontend_parse_g_parse.sup, sym, frontend_parse_g_parse.maps, (&frontend_parse_g_parse.nmaps), (&frontend_parse_g_parse.unit_is_map));
-    frontend_parse_ct_expr_bind(arena, lex, sym, frontend_parse_g_parse.sup, frontend_parse_g_parse.cur_func, frontend_parse_g_parse.calls, (&frontend_parse_g_parse.ncalls), frontend_parse_g_parse.maps, (&frontend_parse_g_parse.nmaps));
+    frontend_parse_ct_expr_bind(arena, lex, sym, frontend_parse_g_parse.sup, frontend_parse_g_parse.cur_func, (&frontend_parse_g_parse.calls), (&frontend_parse_g_parse.ncalls), (&frontend_parse_g_parse.callcap), frontend_parse_g_parse.maps, (&frontend_parse_g_parse.nmaps));
     frontend_parse_g_parse.ex = frontend_parse_expr_get();
     frontend_parse_ct_stmt_bind(arena, lex, sym, frontend_parse_g_parse.mem, frontend_parse_g_parse.sup, frontend_parse_g_parse.ex);
     frontend_parse_g_parse.st = frontend_parse_stmt_get();

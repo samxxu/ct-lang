@@ -152,7 +152,7 @@ pub struct Emitter {
     /* PH-69-R1: `ct check` reuses the build pipeline but must not write. */
     int  no_write;
     struct MapTable  *maps;   int *nmaps;
-    struct Call *calls;  int *ncalls;
+    struct Call **calls;  int *ncalls;
     int  *build_mode;
     int  *line_mode;
     int  *runtime_checks;  /* Phase 37 O2: guard a null vtable before iface dispatch */

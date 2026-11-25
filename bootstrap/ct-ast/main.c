@@ -136,7 +136,7 @@ int main(int argc, char * * argv) {
         }
     }
     backend_emit_ct_emit_bind(arena, sym, ty, lex, CTC_VERSION, m->outdir, m->prog);
-    backend_emit_ct_emit_bind_tables(m->units, (&m->nunits), p->maps, (&p->nmaps), p->calls, (&p->ncalls), (&m->build_mode), (&m->line_mode), (&m->runtime_checks), (&m->abi_mode), (&m->lib_root), m->abi_exports, (&m->abi_n));
+    backend_emit_ct_emit_bind_tables(m->units, (&m->nunits), p->maps, (&p->nmaps), (&p->calls), (&p->ncalls), (&m->build_mode), (&m->line_mode), (&m->runtime_checks), (&m->abi_mode), (&m->lib_root), m->abi_exports, (&m->abi_n));
     backend_emit_ct_emit_bind_flags((&m->freestanding), m->alloc_map, (&p->slice_used));
     backend_emit_ct_emit_bind_parse((&p->nparams), p->pend_fields, (&p->npend));
     tool_driver_ct_driver_bind(arena, lex, sym, mem, m, p, CTC_VERSION);

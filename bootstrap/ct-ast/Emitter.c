@@ -3965,12 +3965,12 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_map(void *self, const
             fputc(',', f);
         }
         fputs("{\"caller\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->calls[i].caller);
+        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (*_self->calls)[i].caller);
         fputs("\",\"callee\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->calls[i].callee);
+        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (*_self->calls)[i].callee);
         fputs("\",\"file\":\"", f);
         _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d}", _self->calls[i].line);
+        fprintf(f, "\",\"line\":%d}", (*_self->calls)[i].line);
     }
     fputs("],\n", f);
     fputs("  \"maps\": [", f);
@@ -11933,7 +11933,7 @@ void backend_emit_ct_emit_bind_tables(void * units, int * nunits, void * maps, i
     backend_emit_g_emit.nunits = nunits;
     backend_emit_g_emit.maps = (struct frontend_module_MapTable *)(maps);
     backend_emit_g_emit.nmaps = nmaps;
-    backend_emit_g_emit.calls = (struct frontend_module_Call *)(calls);
+    backend_emit_g_emit.calls = (struct frontend_module_Call * *)(calls);
     backend_emit_g_emit.ncalls = ncalls;
     backend_emit_g_emit.build_mode = build_mode;
     backend_emit_g_emit.line_mode = line_mode;

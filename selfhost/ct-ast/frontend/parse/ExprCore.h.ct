@@ -280,8 +280,12 @@ pub struct Expr {
     struct Symbols *sym;
     struct ParseSupport *sup;
     char *cur_func;                      /* the parser's current function name */
-    struct Call *calls;  /* storage owned by parse.h.ct */
+    /* S1a-0 C1: the call table is a growable block owned by parse.h.ct;
+       `calls` points at that unit's slot so a realloc there is visible here
+       without a second copy, and `callcap` is its capacity. */
+    struct Call **calls;
     int *ncalls;
+    int *callcap;
     /* PH-66 R1: every direct call's source name, resolved or not. The call
        graph above only keeps calls to known functions; libc I/O is unknown by
        design, so it needs this second list. */

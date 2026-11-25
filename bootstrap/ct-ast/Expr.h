@@ -107,7 +107,7 @@ int frontend_parse_expr_borrow_root(struct frontend_parse_Expr *, int);
 void frontend_parse_expr_view_bind(struct frontend_parse_Expr *, const char *, int);
 void frontend_parse_expr_iter_push(struct frontend_parse_Expr *, const char *);
 void frontend_parse_expr_iter_pop(struct frontend_parse_Expr *);
-void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *);
+void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
 
 #endif

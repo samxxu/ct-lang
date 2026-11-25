@@ -40,6 +40,8 @@ import tool::diag::Diag;
 import frontend::sym::SymbolsTypeText;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_CALLS 8192
+#define MAX_CALLS_MAX 65536
 #define MAX_FIELDS 64
 #define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
@@ -191,6 +193,7 @@ pub struct Parser {
        uses for the same tables). */
     struct Call *calls;
     int  ncalls;
+    int  callcap;
     struct MapTable *maps;
     int  nmaps;
     int  cur_unit;                      /* index of the unit being parsed */
@@ -4811,9 +4814,6 @@ static struct Parser g_parse;
    arrays stay here and `g_parse` points at them. `g_maps` is a heap block
    (SH-42): one `struct MapTable` carries 64 `MapBind` rows, so 64 of them inline
    put ~14 MB of zeroes into __DATA and shipped a 21 MB compiler. */
-/* Keep in step with MAX_CALLS in Expr.h.ct: macros do not cross a unit
-   boundary, and a smaller array here would be an overflow, not a diagnostic. */
-static struct Call g_calls[8192];
 static struct MapTable  *g_maps;
 
 /* Phase 21 S5: a block-bodied closure needs `parse_block`, which lives in the
@@ -4846,7 +4846,16 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
     g_parse.sup->sym = (struct Symbols *)sym;
     g_parse.sup->ty = (struct TypeCheck *)ty;
     g_parse.sup->mem = (struct Memory *)mem;
-    g_parse.calls = g_calls;
+    /* S1a-0 C1: the call table grows on demand (`record_call` in Expr.h.ct
+       reallocs through the slot bound below); MAX_CALLS is the starting
+       capacity. The block is allocated here because `struct Call` belongs to
+       the module layer. */
+    g_parse.calls = (struct Call *)calloc(MAX_CALLS, sizeof(*g_parse.calls));
+    if (!g_parse.calls) {
+        fprintf(stderr, "ctc: out of memory\n");
+        exit(1);
+    }
+    g_parse.callcap = MAX_CALLS;
     if (!g_maps) {
         g_maps = calloc(64, sizeof(*g_maps));
         if (!g_maps) {
@@ -4863,8 +4872,8 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
                      &g_parse.unit_is_map);
     /* the expression chain: it reads the same cursor and primitives, and writes
        the call table and the current-function name this unit owns */
-    ct_expr_bind(arena, lex, sym, g_parse.sup, g_parse.cur_func, g_parse.calls, &g_parse.ncalls,
-                 g_parse.maps, &g_parse.nmaps);
+    ct_expr_bind(arena, lex, sym, g_parse.sup, g_parse.cur_func, &g_parse.calls, &g_parse.ncalls,
+                 &g_parse.callcap, g_parse.maps, &g_parse.nmaps);
     g_parse.ex = expr_get();
     /* the statement layer reads the same cursor and tables and writes nodes
        through the same primitives */

@@ -68,6 +68,7 @@ import frontend::parse::ExprNewObject;
    BSS, not a product change. */
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_CALLS 8192
+#define MAX_CALLS_MAX 65536
 /* Mirror of Symbols.h.ct's whole-program budget; macros do not cross units. */
 #define MAX_FUNCS 512
 #define MAX_FUNCS_MAX 65536
@@ -8109,16 +8110,23 @@ impl ExprOps for Expr {
     {
         (void)self;
         if (!self->cur_func[0]) return 0;
-        if (*self->ncalls >= MAX_CALLS) {
-            char cmsg[MAX_TEXT];
-            snprintf(cmsg, sizeof cmsg,
-                     "too many calls (MAX_CALLS=%d; split into library builds or use indirection)",
-                     MAX_CALLS);
-            return self->sup->fail(cmsg);
+        if (*self->ncalls >= *self->callcap) {
+            int cap;
+            struct Call *grown;
+            if (*self->ncalls >= MAX_CALLS_MAX) return self->sup->fail("out of memory");
+            cap = *self->callcap > 0 ? *self->callcap : MAX_CALLS;
+            while (cap <= *self->ncalls && cap < MAX_CALLS_MAX) cap *= 2;
+            if (cap > MAX_CALLS_MAX) cap = MAX_CALLS_MAX;
+            grown = (struct Call *)realloc(*self->calls, (size_t)cap * sizeof(*grown));
+            if (!grown) return self->sup->fail("out of memory");
+            memset(grown + *self->callcap, 0,
+                   (size_t)(cap - *self->callcap) * sizeof(*grown));
+            *self->calls = grown;
+            *self->callcap = cap;
         }
-        snprintf(self->calls[*self->ncalls].caller, MAX_TEXT, "%s", self->cur_func);
-        snprintf(self->calls[*self->ncalls].callee, MAX_TEXT, "%s", callee);
-        self->calls[*self->ncalls].line = line;
+        snprintf((*self->calls)[*self->ncalls].caller, MAX_TEXT, "%s", self->cur_func);
+        snprintf((*self->calls)[*self->ncalls].callee, MAX_TEXT, "%s", callee);
+        (*self->calls)[*self->ncalls].line = line;
         (*self->ncalls)++;
         return 0;
     }
@@ -9446,16 +9454,17 @@ static struct Expr g_expr;
 
 /* Only primitives cross the unit boundary (a generated header carries no
    #include, so the collaborators arrive as `void *` and are cast here). */
-pub void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls, void *maps, void *nmaps);
-void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls, void *maps, void *nmaps)
+pub void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls, void *callcap, void *maps, void *nmaps);
+void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, void *calls, void *ncalls, void *callcap, void *maps, void *nmaps)
 {
     g_expr.arena = (struct Arena *)arena;
     g_expr.lex = (struct Lexer *)lex;
     g_expr.sym = (struct Symbols *)sym;
     g_expr.sup = (struct ParseSupport *)sup;
     g_expr.cur_func = (char *)cur_func;
-    g_expr.calls = (struct Call *)calls;
+    g_expr.calls = (struct Call **)calls;
     g_expr.ncalls = (int *)ncalls;
+    g_expr.callcap = (int *)callcap;
     g_expr.maps = (struct MapTable *)maps;
     g_expr.nmaps = (int *)nmaps;
     g_expr.postfix_seed = -1;

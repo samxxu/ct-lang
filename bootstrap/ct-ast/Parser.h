@@ -154,6 +154,7 @@ struct frontend_parse_Parser {
     int nrels;
     struct frontend_module_Call * calls;
     int ncalls;
+    int callcap;
     struct frontend_module_MapTable * maps;
     int nmaps;
     int cur_unit;

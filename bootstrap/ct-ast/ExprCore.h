@@ -246,8 +246,9 @@ struct frontend_parse_Expr {
     struct frontend_sym_Symbols * sym;
     struct frontend_parse_ParseSupport * sup;
     char * cur_func;
-    struct frontend_module_Call * calls;
+    struct frontend_module_Call * * calls;
     int * ncalls;
+    int * callcap;
     char io_names[1024][64];
     int io_owner[1024];
     int io_known[1024];

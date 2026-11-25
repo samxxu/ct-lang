@@ -10020,12 +10020,12 @@ impl EmitOps for Emitter {
         for (i = cls; i < cle; i++) {
             if (i > cls) fputc(',', f);
             fputs("{\"caller\":\"", f);
-            self->emit_json_str(f, self->calls[i].caller);
+            self->emit_json_str(f, (*self->calls)[i].caller);
             fputs("\",\"callee\":\"", f);
-            self->emit_json_str(f, self->calls[i].callee);
+            self->emit_json_str(f, (*self->calls)[i].callee);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d}", self->calls[i].line);
+            fprintf(f, "\",\"line\":%d}", (*self->calls)[i].line);
         }
         fputs("],\n", f);
 
@@ -10575,7 +10575,7 @@ void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
     g_emit.nunits = nunits;
     g_emit.maps = (struct MapTable *)maps;
     g_emit.nmaps = nmaps;
-    g_emit.calls = (struct Call *)calls;
+    g_emit.calls = (struct Call **)calls;
     g_emit.ncalls = ncalls;
     g_emit.build_mode = build_mode;
     g_emit.line_mode = line_mode;

@@ -27,6 +27,7 @@ pub struct Limits {
 #define MAX_ALIAS_CHAIN              32
 #define MAX_ARG_POS                  32
 #define MAX_CALLS                    8192
+#define MAX_CALLS_MAX                65536
 #define MAX_CLOSURES                 64
 #define MAX_CLOSURES_MAX                  65536
 #define MAX_DIGEST_FILES             4096
