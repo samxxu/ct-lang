@@ -60,7 +60,7 @@
 | `MAX_RAW_INIT` | 4096 | 9 | A | 动态 |
 | `MAX_LAYOUT_ADTS` | 64 | 5 | A | 动态 |
 | `MAX_LAYOUT_INSTS` | 128 | 11 | A | 动态 |
-| `MAX_WARNINGS` | 32 | 15 | A | 动态（或按 `--max-warnings`） |
+| `MAX_WARNINGS` | 32 | 15 | A | **已落**：`warns` 倍增到 65536；`--max-warnings` 另议 |
 | `MAX_ADTS` | 64 | 5 | C | 放开到 `CAP_LIMIT`；spec §8 / stable-subset 同步 |
 | `MAX_ADT_VARIANTS` | 96 | 3 | C | 放开到 `CAP_LIMIT`；spec §8 / stable-subset 同步 |
 | `MAX_ADT_FIELDS` | 8 | 3 | C | 放开到 `CAP_LIMIT`；spec §8 / stable-subset 同步 |
@@ -69,7 +69,7 @@
 | `MAX_LAYOUT_DEPTH` | 32 | 8 | D | 递归深度保护；保留 |
 | `MAX_PKG_DEPTH` | 8 | 4 | D | 依赖深度保护；保留 |
 | `MAX_FUNCS_MAX` | 65536 | 10 | D | OOM 安全阀；保留 |
-| `MAX_NODES` | 262144 | 7 | D | arena 改为动态增长，形式上限 `NODE_LIMIT = 16777216`（OOM） |
+| `MAX_NODES` | 262144 | 7 | D | **已落**：arena 倍增到 `NODE_LIMIT=16777216`（新槽清零） |
 | `MAX_TEXT` | 160 | 1494 | B | 动态文本；当前 791 处定长数组，最大切片 |
 | `MAX_PATH` | 1024 | 74 | B | 路径按需分配；OS 上限单独报错 |
 | `MAX_PKG_PATH` | 512 | 85 | B | 同上（包内路径） |
