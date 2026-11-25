@@ -27,6 +27,44 @@ pub trait ExprOps {
        position instead of being emitted. */
     int  container_index_check(int base);
 
+    int  parse_expr(void);
+
+    /* Phase 30: consume `into { … }` (and any postfix suffix after it). The
+       caller sets `into_ok` for the positions the card allows; anywhere else a
+       block here is L30-1. */
+    int  into_tail(int left, int allow);
+
+    int  into_block(int recv, char *type, int line, int col);
+
+    int  into_member_check(int base, char *fname, int line, int col);
+
+    int  parse_bitor(void);
+
+    int  parse_bxor(void);
+
+    int  parse_bitand(void);
+
+    int  parse_shift(void);
+
+    int  parse_cmp(void);
+
+    int  parse_add(void);
+
+    int  parse_mul(void);
+
+    int  parse_unary(void);
+
+    int  parse_postfix(void);
+
+    int  parse_primary(void);
+
+    int  parse_args(void);
+
+    int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap,
+                         int *form);
+}
+
+pub trait ExprStaticType {
     /* V29-4: one static C type for an expression, so every subscript base is
        judged by the same rules. It covers a variable, a member / arrow field,
        a deref, a call (direct or through a function pointer), a method call and
@@ -72,43 +110,8 @@ pub trait ExprOps {
     int  fnptr_field(const char *stype, const char *field);
 
     int  const_ok(int n);
-
-    int  parse_expr(void);
-
-    /* Phase 30: consume `into { … }` (and any postfix suffix after it). The
-       caller sets `into_ok` for the positions the card allows; anywhere else a
-       block here is L30-1. */
-    int  into_tail(int left, int allow);
-
-    int  into_block(int recv, char *type, int line, int col);
-
-    int  into_member_check(int base, char *fname, int line, int col);
-
-    int  parse_bitor(void);
-
-    int  parse_bxor(void);
-
-    int  parse_bitand(void);
-
-    int  parse_shift(void);
-
-    int  parse_cmp(void);
-
-    int  parse_add(void);
-
-    int  parse_mul(void);
-
-    int  parse_unary(void);
-
-    int  parse_postfix(void);
-
-    int  parse_primary(void);
-
-    int  parse_args(void);
-
-    int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap,
-                         int *form);
 }
+
 
 pub trait ExprTypeParse {
     int  is_type_word(const char *w);
@@ -538,4 +541,4 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut, ExprCallCheck, ExprClosure, ExprInstantiate, ExprTypeParse;
+} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut, ExprCallCheck, ExprClosure, ExprInstantiate, ExprTypeParse, ExprStaticType;

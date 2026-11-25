@@ -1370,7 +1370,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
 {
             int dim_line = _self->lex->tokline;
             int dim_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-            if (_self->ex->__frontend_parse_exprops_vptr->parse_array_dims(_self->ex, g) != 0) {
+            if (_self->ex->__frontend_parse_exprstatictype_vptr->parse_array_dims(_self->ex, g) != 0) {
                 return (-1);
             }
             if (_self->arena->nodes[g].text3[0]) {
@@ -1405,7 +1405,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
                 int off;
                 int k;
                 int fixedcap;
-                if (_self->ex->__frontend_parse_exprops_vptr->container_global_init_check(_self->ex, ret) != 0) {
+                if (_self->ex->__frontend_parse_exprstatictype_vptr->container_global_init_check(_self->ex, ret) != 0) {
                     return (-1);
                 }
                 e = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_RAW);
@@ -1948,7 +1948,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
                 _self->arena->nodes[p].aux = 3;
             }
         }
-        if (_self->ex->__frontend_parse_exprops_vptr->parse_array_dims(_self->ex, p) != 0) {
+        if (_self->ex->__frontend_parse_exprstatictype_vptr->parse_array_dims(_self->ex, p) != 0) {
             return (-1);
         }
         if (((seen_ref || seen_out) && (_self->arena->nodes[p].text3[0] || _self->ex->fnptr_state))) {
@@ -2323,7 +2323,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_field_def(void *s
         if ((_self->ex->fnptr_state && _self->ex->fnptr_dims[0])) {
             snprintf(_self->arena->nodes[m].text3, MAX_TEXT, "%s", _self->ex->fnptr_dims);
         }
-        if (_self->ex->__frontend_parse_exprops_vptr->parse_array_dims(_self->ex, m) != 0) {
+        if (_self->ex->__frontend_parse_exprstatictype_vptr->parse_array_dims(_self->ex, m) != 0) {
             return (-1);
         }
         ao = (-1);
@@ -2349,7 +2349,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_field_def(void *s
             if (w < 0) {
                 return (-1);
             }
-            if ((((!_self->ex->__frontend_parse_exprops_vptr->const_ok(_self->ex, w)) && (_self->arena->nodes[w].kind != N_VAR)) && (_self->arena->nodes[w].kind != N_RAW))) {
+            if ((((!_self->ex->__frontend_parse_exprstatictype_vptr->const_ok(_self->ex, w)) && (_self->arena->nodes[w].kind != N_VAR)) && (_self->arena->nodes[w].kind != N_RAW))) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a bit-field width must be an integer constant");
             }
             _self->arena->nodes[m].aux = 1;
@@ -2803,7 +2803,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
                 if (e < 0) {
                     return (-1);
                 }
-                if ((!_self->ex->__frontend_parse_exprops_vptr->const_ok(_self->ex, e))) {
+                if ((!_self->ex->__frontend_parse_exprstatictype_vptr->const_ok(_self->ex, e))) {
                     return tool_diag_ct_sem_error(vline, vcol, "an enum value must be an integer constant", _self->mem->path);
                 }
                 _self->arena->nodes[tn].a = e;
@@ -3513,7 +3513,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
                     }
                     snprintf(_self->arena->nodes[sp].text, MAX_TEXT, "%s", ptype);
                     snprintf(_self->arena->nodes[sp].text2, MAX_TEXT, "%s", pname);
-                    if (_self->ex->__frontend_parse_exprops_vptr->parse_array_dims(_self->ex, sp) != 0) {
+                    if (_self->ex->__frontend_parse_exprstatictype_vptr->parse_array_dims(_self->ex, sp) != 0) {
                         return (-1);
                     }
                     if (_self->arena->nodes[sp].text3[0]) {

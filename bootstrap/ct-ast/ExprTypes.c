@@ -809,7 +809,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_type(void *self, int
                 int oi;
                 int line = _self->arena->nodes[n].line;
                 int col = (int)(_self->arena->nodes[n].num);
-                if ((!_self->__frontend_parse_exprops_vptr->static_ctype(_self, _self->arena->nodes[n].a, opty, sizeof(opty), (&ad), 0))) {
+                if ((!_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, _self->arena->nodes[n].a, opty, sizeof(opty), (&ad), 0))) {
                     return tool_diag_ct_sem_error(line, col, "'?' needs a Result operand", _self->sup->mem->path);
                 }
                 if (((ad != 0) || (!_self->__frontend_parse_exprtry_vptr->result_tag(_self, opty, otag, sizeof(otag))))) {
@@ -947,7 +947,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_slice_view_from_array(vo
     if ((((_self->arena->nodes[n].kind == N_SLICE_RANGE) || (_self->arena->nodes[n].kind == N_SLICE_INDEX)) || (_self->arena->nodes[n].kind == N_SLICE_GET))) {
         return n;
     }
-    if ((!_self->__frontend_parse_exprops_vptr->static_ctype(_self, n, t, sizeof(t), (&d), 0))) {
+    if ((!_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, n, t, sizeof(t), (&d), 0))) {
         return n;
     }
     if (d != 1) {
@@ -1300,7 +1300,7 @@ int frontend_parse_str_handle_value(struct frontend_parse_Expr * self, int e, ch
 }
 int frontend_parse_chk_type_static(struct frontend_parse_Expr * self, int n, char * out, int cap) {
     int ad;
-    if ((!self->__frontend_parse_exprops_vptr->static_ctype(self, n, out, cap, (&ad), 0))) {
+    if ((!self->__frontend_parse_exprstatictype_vptr->static_ctype(self, n, out, cap, (&ad), 0))) {
         return (-1);
     }
     if (ad != 0) {

@@ -283,7 +283,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self,
             return tool_diag_ct_sem_error(line, col, "optional chain on a map lookup requires a value-typed V; got pointer value type; use a map of values or guard the inner pointer", _self->sup->mem->path);
         }
     }
-    if (((!_self->__frontend_parse_exprops_vptr->static_ctype(_self, recv, rty, sizeof(rty), (&ad), 0)) || (ad != 0))) {
+    if (((!_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, recv, rty, sizeof(rty), (&ad), 0)) || (ad != 0))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot resolve the receiver type of '?.'");
     }
     if (strchr(rty, '*') == 0) {
@@ -321,7 +321,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self,
         snprintf(msg, sizeof(msg), "type '%s' has no field '%s'", base, fname);
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
     }
-    if ((!_self->__frontend_parse_exprops_vptr->ctype_expand(_self, _self->sym->structs[si].fields[fi].type, fty, sizeof(fty), 0))) {
+    if ((!_self->__frontend_parse_exprstatictype_vptr->ctype_expand(_self, _self->sym->structs[si].fields[fi].type, fty, sizeof(fty), 0))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot resolve the optional field type");
     }
     if (_self->__frontend_parse_exproptional_vptr->opt_result_ok(_self, fty, 0, line, col) != 0) {
@@ -352,7 +352,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_subscript(void *s
     int inst;
     int nins;
     struct frontend_sym_StructInst * ins;
-    if (((!_self->__frontend_parse_exprops_vptr->static_ctype(_self, recv, rty, sizeof(rty), (&ad), 0)) || (ad != 0))) {
+    if (((!_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, recv, rty, sizeof(rty), (&ad), 0)) || (ad != 0))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot resolve the receiver type of '?['");
     }
     if (strchr(rty, '*') == 0) {

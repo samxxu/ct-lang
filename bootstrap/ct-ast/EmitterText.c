@@ -116,7 +116,7 @@ int backend_emit_dims_depth(const char * dims) {
 int backend_emit_hoist_ctype(int n, char * out, int cap, int * depth) {
     struct frontend_parse_Expr * ex;
     ex = frontend_parse_expr_get();
-    return ex->__frontend_parse_exprops_vptr->static_ctype(ex, n, out, cap, depth, 0);
+    return ex->__frontend_parse_exprstatictype_vptr->static_ctype(ex, n, out, cap, depth, 0);
 }
 const char * backend_emit_sb_prefix(int kind) {
     return ((kind == 2) ? "U16String" : "String");

@@ -230,7 +230,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
         return 0;
     }
     if ((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box") || (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Box") && (frontend_sym_ct_tmpl_find("Box") >= 0)))) {
-        return _self->ex->__frontend_parse_exprops_vptr->tok_is_type_name(_self->ex);
+        return _self->ex->__frontend_parse_exprstatictype_vptr->tok_is_type_name(_self->ex);
     }
     if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Alignas")) {
         return 1;
@@ -833,7 +833,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         if (cnd < 0) {
             return (-1);
         }
-        if ((!_self->ex->__frontend_parse_exprops_vptr->const_ok(_self->ex, cnd))) {
+        if ((!_self->ex->__frontend_parse_exprstatictype_vptr->const_ok(_self->ex, cnd))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a static assertion needs a constant condition");
         }
         _self->arena->nodes[s].a = cnd;
@@ -2926,7 +2926,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_case_value(void *sel
     if (e < 0) {
         return (-1);
     }
-    if ((((!_self->ex->__frontend_parse_exprops_vptr->const_ok(_self->ex, e)) && (_self->arena->nodes[e].kind != N_VAR)) && (_self->arena->nodes[e].kind != N_RAW))) {
+    if ((((!_self->ex->__frontend_parse_exprstatictype_vptr->const_ok(_self->ex, e)) && (_self->arena->nodes[e].kind != N_VAR)) && (_self->arena->nodes[e].kind != N_RAW))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a case label must be an integer constant");
     }
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "...")))) {
@@ -2937,7 +2937,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_case_value(void *sel
     if (hi < 0) {
         return (-1);
     }
-    if ((((!_self->ex->__frontend_parse_exprops_vptr->const_ok(_self->ex, hi)) && (_self->arena->nodes[hi].kind != N_VAR)) && (_self->arena->nodes[hi].kind != N_RAW))) {
+    if ((((!_self->ex->__frontend_parse_exprstatictype_vptr->const_ok(_self->ex, hi)) && (_self->arena->nodes[hi].kind != N_VAR)) && (_self->arena->nodes[hi].kind != N_RAW))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a case label must be an integer constant");
     }
     _self->case_hi = hi;
@@ -3852,7 +3852,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
 {
             int dim_line = _self->lex->tokline;
             int dim_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-            if (_self->ex->__frontend_parse_exprops_vptr->parse_array_dims(_self->ex, n) != 0) {
+            if (_self->ex->__frontend_parse_exprstatictype_vptr->parse_array_dims(_self->ex, n) != 0) {
                 return (-1);
             }
             if (strchr(_self->arena->nodes[n].text3, '$')) {
@@ -4020,7 +4020,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                             }
                         }
                         else {
-                            if (_self->ex->__frontend_parse_exprops_vptr->container_init_check(_self->ex, typebuf) != 0) {
+                            if (_self->ex->__frontend_parse_exprstatictype_vptr->container_init_check(_self->ex, typebuf) != 0) {
                                 return (-1);
                             }
                             e = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_RAW);
@@ -4308,7 +4308,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
         if (_self->ex->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self->ex, e, _self->arena->nodes[e].line, _self->arena->nodes[e].num) != 0) {
             return (-1);
         }
-        if (_self->ex->__frontend_parse_exprops_vptr->container_write_check(_self->ex, e) != 0) {
+        if (_self->ex->__frontend_parse_exprstatictype_vptr->container_write_check(_self->ex, e) != 0) {
             return (-1);
         }
         if (_self->__frontend_parse_stmtops_vptr->string_raw_write_check(_self, e) != 0) {
@@ -4406,8 +4406,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
             if (_self->ex->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self->ex, e, _self->arena->nodes[e].line, _self->arena->nodes[e].num) != 0) {
                 return (-1);
             }
-            if (((_self->arena->nodes[e].kind == N_MCALL) && ((_self->ex->__frontend_parse_exprops_vptr->container_subscript_kind(_self->ex, e) == 1) || (_self->ex->__frontend_parse_exprops_vptr->container_subscript_kind(_self->ex, e) == 2)))) {
-                int ck = _self->ex->__frontend_parse_exprops_vptr->container_subscript_kind(_self->ex, e);
+            if (((_self->arena->nodes[e].kind == N_MCALL) && ((_self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e) == 1) || (_self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e) == 2)))) {
+                int ck = _self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e);
                 int idx;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 _self->ex->into_ok = 1;
@@ -4429,7 +4429,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                 _self->arena->nodes[n].a = e;
             }
             else {
-                if (_self->ex->__frontend_parse_exprops_vptr->container_subscript_kind(_self->ex, e) == 3) {
+                if (_self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e) == 3) {
                     int cl = _self->arena->nodes[e].line;
                     int cc = _self->arena->nodes[e].num;
                     int recv = _self->arena->nodes[e].a;
@@ -4476,7 +4476,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                     if (((k == N_SLICE_INDEX) && (_self->arena->nodes[e].aux == 1))) {
                         return tool_diag_ct_sem_error(_self->arena->nodes[e].line, _self->arena->nodes[e].num, "cannot write to an element of a const slice", _self->mem->path);
                     }
-                    if (_self->ex->__frontend_parse_exprops_vptr->container_write_check(_self->ex, e) != 0) {
+                    if (_self->ex->__frontend_parse_exprstatictype_vptr->container_write_check(_self->ex, e) != 0) {
                         return (-1);
                     }
                     if (_self->__frontend_parse_stmtops_vptr->string_raw_write_check(_self, e) != 0) {
@@ -5595,7 +5595,7 @@ static int parse_map_brace_init(struct frontend_parse_Stmt * self, const char * 
         }
 {
             char kty[MAX_TEXT];
-            if (((self->sup->__frontend_parse_supportops_vptr->expr_ctype(self->sup, k, kty, sizeof(kty)) == 0) && (self->ex->__frontend_parse_exprops_vptr->brace_arg_ok(self->ex, ktype, kty) == 1))) {
+            if (((self->sup->__frontend_parse_supportops_vptr->expr_ctype(self->sup, k, kty, sizeof(kty)) == 0) && (self->ex->__frontend_parse_exprstatictype_vptr->brace_arg_ok(self->ex, ktype, kty) == 1))) {
                 char msg[512];
                 snprintf(msg, sizeof(msg), "initializer item %d has key type '%s', expected '%s'", (count + 1), kty, ktype);
                 return tool_diag_ct_sem_error(kline, kcol, msg, self->mem->path);
@@ -5635,7 +5635,7 @@ static int parse_map_brace_init(struct frontend_parse_Stmt * self, const char * 
                     return (-1);
                 }
             }
-            if (((self->sup->__frontend_parse_supportops_vptr->expr_ctype(self->sup, v, vty, sizeof(vty)) == 0) && (self->ex->__frontend_parse_exprops_vptr->brace_arg_ok(self->ex, vtype, vty) == 1))) {
+            if (((self->sup->__frontend_parse_supportops_vptr->expr_ctype(self->sup, v, vty, sizeof(vty)) == 0) && (self->ex->__frontend_parse_exprstatictype_vptr->brace_arg_ok(self->ex, vtype, vty) == 1))) {
                 char msg[512];
                 snprintf(msg, sizeof(msg), "initializer item %d has value type '%s', expected '%s'", (count + 1), vty, vtype);
                 return tool_diag_ct_sem_error(vline, vcol, msg, self->mem->path);

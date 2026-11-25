@@ -34,6 +34,7 @@
 #include "ExprClosure.h"
 #include "ExprInstantiate.h"
 #include "ExprTypeParse.h"
+#include "ExprStaticType.h"
 
 
 struct ct_buf;

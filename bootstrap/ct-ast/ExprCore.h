@@ -88,22 +88,6 @@ struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct frontend_parse_ExprOps_vtbl {
     int (*container_index_check)(void *, int);
-    int (*static_ctype)(void *, int, char *, int, int *, int);
-    int (*ctype_expand)(void *, const char *, char *, int, int);
-    int (*fnptr_ret)(void *, const char *, char *, int);
-    int (*peel_ptr)(void *, const char *, char *, int);
-    int (*container_init_check)(void *, const char *);
-    int (*container_global_init_check)(void *, const char *);
-    int (*container_subscript_kind)(void *, int);
-    int (*container_write_check)(void *, int);
-    int (*container_addr_check)(void *, int);
-    int (*brace_arg_ok)(void *, const char *, const char *);
-    int (*parse_array_dims)(void *, int);
-    int (*next_is_type_name)(void *);
-    int (*tok_is_type_name)(void *);
-    int (*offsetof_ahead)(void *);
-    int (*fnptr_field)(void *, const char *, const char *);
-    int (*const_ok)(void *, int);
     int (*parse_expr)(void *);
     int (*into_tail)(void *, int, int);
     int (*into_block)(void *, int, char *, int, int);
@@ -124,6 +108,29 @@ struct frontend_parse_ExprOps_vtbl {
 struct frontend_parse_ExprOps_iface {
     void *self;
     const struct frontend_parse_ExprOps_vtbl *vt;
+};
+
+struct frontend_parse_ExprStaticType_vtbl {
+    int (*static_ctype)(void *, int, char *, int, int *, int);
+    int (*ctype_expand)(void *, const char *, char *, int, int);
+    int (*fnptr_ret)(void *, const char *, char *, int);
+    int (*peel_ptr)(void *, const char *, char *, int);
+    int (*container_init_check)(void *, const char *);
+    int (*container_global_init_check)(void *, const char *);
+    int (*container_subscript_kind)(void *, int);
+    int (*container_write_check)(void *, int);
+    int (*container_addr_check)(void *, int);
+    int (*brace_arg_ok)(void *, const char *, const char *);
+    int (*parse_array_dims)(void *, int);
+    int (*next_is_type_name)(void *);
+    int (*tok_is_type_name)(void *);
+    int (*offsetof_ahead)(void *);
+    int (*fnptr_field)(void *, const char *, const char *);
+    int (*const_ok)(void *, int);
+};
+struct frontend_parse_ExprStaticType_iface {
+    void *self;
+    const struct frontend_parse_ExprStaticType_vtbl *vt;
 };
 
 struct frontend_parse_ExprTypeParse_vtbl {
@@ -354,6 +361,7 @@ struct frontend_parse_Expr {
     const struct frontend_parse_ExprClosure_vtbl *__frontend_parse_exprclosure_vptr;
     const struct frontend_parse_ExprInstantiate_vtbl *__frontend_parse_exprinstantiate_vptr;
     const struct frontend_parse_ExprTypeParse_vtbl *__frontend_parse_exprtypeparse_vptr;
+    const struct frontend_parse_ExprStaticType_vtbl *__frontend_parse_exprstatictype_vptr;
 };
 
 #endif

@@ -26,6 +26,7 @@
 #include "ExprClosure.h"
 #include "ExprInstantiate.h"
 #include "ExprTypeParse.h"
+#include "ExprStaticType.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -185,7 +186,6 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-static int expr_generic_token(struct frontend_parse_Expr *);
 int frontend_parse_expr_borrow_root(struct frontend_parse_Expr *, int);
 void frontend_parse_expr_view_bind(struct frontend_parse_Expr *, const char *, int);
 void frontend_parse_expr_iter_push(struct frontend_parse_Expr *, const char *);
@@ -201,19 +201,6 @@ static void view_mark(struct frontend_parse_Expr *, const char *);
 static int view_use(struct frontend_parse_Expr *, const char *, int, int);
 static int iter_hit(struct frontend_parse_Expr *, const char *);
 static int record_io_call(struct frontend_parse_Expr *, const char *, int, int);
-static int ctype_adtctor(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_var(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_try(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_index(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_deref(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_addr(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_member_or_arrow(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_call(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_opt(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_mcall(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_slice_index(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_slice_get(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int ctype_slice_range(struct frontend_parse_Expr *, int, char *, int, int *, int);
 static int bind_conv_explicit(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_conv_explicit_to(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_outconv_rewrite(struct frontend_parse_Expr *, int, int, int, int, int, const char *, int, int);
@@ -221,478 +208,7 @@ static int bind_conv_arith(struct frontend_parse_Expr *, int, int, int, int);
 static int ensure_arg_capacity(struct frontend_parse_Expr *, int);
 void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
-static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable, .__frontend_parse_exprcallcheck_vptr = &frontend_parse_Expr_frontend_parse_ExprCallCheck_vtable, .__frontend_parse_exprclosure_vptr = &frontend_parse_Expr_frontend_parse_ExprClosure_vtable, .__frontend_parse_exprinstantiate_vptr = &frontend_parse_Expr_frontend_parse_ExprInstantiate_vtable, .__frontend_parse_exprtypeparse_vptr = &frontend_parse_Expr_frontend_parse_ExprTypeParse_vtable };
-static int frontend_parse_Expr_frontend_parse_ExprOps_parse_array_dims(void *self, int n) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int warned = 0;
-    int ndims = 0;
-    (void)(_self);
-    while (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "["))) {
-        char dim[MAX_TEXT];
-        char cur[MAX_TEXT];
-        int unsized;
-        int open;
-        int raw;
-        int dline;
-        int dcol;
-        int first_dim;
-        unsized = 0;
-        raw = 0;
-        first_dim = (ndims == 0);
-        ndims++;
-        open = _self->lex->tokstart;
-        dline = _self->lex->tokline;
-        dcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-        dim[0] = 0;
-        if (_self->in_generic_ntparam > 0) {
-            int p = (open + 1);
-            int depth = 0;
-            while (_self->lex->src[p]) {
-                char ch = _self->lex->src[p];
-                int id0 = ((((ch >= 'A') && (ch <= 'Z')) || ((ch >= 'a') && (ch <= 'z'))) || (ch == '_'));
-                if (id0) {
-                    int q = (p + 1);
-                    int gpi;
-                    int hit = 0;
-                    const char * hitn = 0;
-                    while (_self->lex->src[q]) {
-                        char c2 = _self->lex->src[q];
-                        if ((!(((((c2 >= 'A') && (c2 <= 'Z')) || ((c2 >= 'a') && (c2 <= 'z'))) || ((c2 >= '0') && (c2 <= '9'))) || (c2 == '_')))) {
-                            break;
-                        }
-                        q++;
-                    }
-                    for (gpi = 0; gpi < _self->in_generic_ntparam; gpi++) {
-                        const char * gpn = _self->in_generic_tparam[gpi];
-                        int tlen;
-                        if (((!gpn) || (!gpn[0]))) {
-                            continue;
-                        }
-                        tlen = (int)(strlen(gpn));
-                        if ((((q - p) == tlen) && (strncmp((_self->lex->src + p), gpn, (size_t)(tlen)) == 0))) {
-                            hit = 1;
-                            hitn = gpn;
-                            break;
-                        }
-                    }
-                    if (hit) {
-                        char dmsg[MAX_TEXT + 96];
-                        snprintf(dmsg, sizeof(dmsg), "type parameter '%s' cannot be used in an array dimension", hitn);
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, dmsg);
-                    }
-                    p = q;
-                }
-                else {
-                    if (((ch == '/') && (_self->lex->src[(p + 1)] == '*'))) {
-                        p += 2;
-                        while ((_self->lex->src[p] && (!((_self->lex->src[p] == '*') && (_self->lex->src[(p + 1)] == '/'))))) {
-                            p++;
-                        }
-                        if (_self->lex->src[p]) {
-                            p += 2;
-                        }
-                    }
-                    else {
-                        if (ch == '[') {
-                            depth++;
-                            p++;
-                        }
-                        else {
-                            if (ch == ']') {
-                                if (depth == 0) {
-                                    break;
-                                }
-                                depth--;
-                                p++;
-                            }
-                            else {
-                                p++;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        if (_self->lex->tok == T_NUM) {
-            snprintf(dim, sizeof(dim), "[%ld]", _self->lex->toknum);
-        }
-        else {
-            if (_self->lex->tok == T_ID) {
-                char cn[MAX_TEXT];
-                if (_self->sym->__frontend_sym_symbolops_vptr->var_cname(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), cn, sizeof(cn)) == 0) {
-                    snprintf(dim, sizeof(dim), "[%s]", cn);
-                }
-                else {
-                    snprintf(dim, sizeof(dim), "[%.*s]", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
-                }
-            }
-            else {
-                if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "]"))) {
-                    snprintf(dim, sizeof(dim), "[]");
-                    unsized = 1;
-                }
-                else {
-                    raw = 1;
-                }
-            }
-        }
-        if (((!unsized) && (!raw))) {
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "]")))) {
-                raw = 1;
-                dim[0] = 0;
-            }
-        }
-        if (raw) {
-            int p2;
-            int d2;
-            int q2;
-            p2 = (open + 1);
-            d2 = 0;
-            q2 = 0;
-            dim[q2] = '[';
-            q2++;
-            while ((_self->lex->src[p2] && ((q2 + 2) < MAX_TEXT))) {
-                char ch = _self->lex->src[p2];
-                if (ch == '[') {
-                    d2++;
-                }
-                else {
-                    if (ch == ']') {
-                        if (d2 == 0) {
-                            break;
-                        }
-                        d2--;
-                    }
-                }
-                dim[q2] = ch;
-                q2++;
-                p2++;
-            }
-            if (_self->lex->src[p2] != ']') {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected an array length");
-            }
-            dim[q2] = ']';
-            q2++;
-            dim[q2] = 0;
-            _self->lex->pos = (p2 + 1);
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        }
-        else {
-            if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "]") != 0) {
-                return (-1);
-            }
-        }
-        snprintf(cur, sizeof(cur), "%s%s", _self->arena->nodes[n].text3, dim);
-        snprintf(_self->arena->nodes[n].text3, MAX_TEXT, "%s", cur);
-        _self->arena->nodes[n].num = 0;
-        if ((((unsized && (!warned)) && first_dim) && (!((_self->lex->tok == T_PUNCT) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "[") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "=")))))) {
-            warned = 1;
-            if (tool_diag_ct_slice_warn(dline, dcol, "'T a[]' is deprecated; write 'T[]' for a slice or 'T a[N]' for an array", _self->sup->mem->path) != 0) {
-                return (-1);
-            }
-        }
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_tok_is_type_name(void *self) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int save_tok;
-    int save_line;
-    int save_bol;
-    int save_srcline;
-    int res;
-    int save_start;
-    int save_lstart;
-    long save_num;
-    size_t save_pos;
-    const char * save_text_ptr;
-    int save_text_len;
-    (void)(_self);
-    save_tok = _self->lex->tok;
-    save_num = _self->lex->toknum;
-    save_line = _self->lex->tokline;
-    save_pos = _self->lex->pos;
-    save_srcline = _self->lex->line;
-    save_bol = _self->lex->bol;
-    save_start = _self->lex->tokstart;
-    save_lstart = _self->lex->lstart;
-    save_text_ptr = _self->lex->tokstr.ptr;
-    save_text_len = _self->lex->tokstr.len;
-    res = 0;
-    if (_self->lex->tok == T_ID) {
-        char rn[MAX_TEXT];
-{
-            const char * qp = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
-            while ((((*qp) == ' ') || ((*qp) == '\t'))) {
-                qp++;
-            }
-            if (((qp[0] == ':') && (qp[1] == ':'))) {
-                for (; ; ) {
-                    const char * nq;
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::")))) {
-                        break;
-                    }
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    if (_self->lex->tok != T_ID) {
-                        break;
-                    }
-                    nq = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
-                    while ((((*nq) == ' ') || ((*nq) == '\t'))) {
-                        nq++;
-                    }
-                    if ((!((nq[0] == ':') && (nq[1] == ':')))) {
-                        break;
-                    }
-                }
-            }
-        }
-        if (((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Box") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box")) && (frontend_sym_ct_tmpl_find("Box") >= 0))) {
-            size_t p2 = _self->lex->pos;
-            int d2 = 0;
-            int closed = 0;
-            while (((_self->lex->src[p2] == ' ') || (_self->lex->src[p2] == '\t'))) {
-                p2++;
-            }
-            if (_self->lex->src[p2] == '<') {
-                p2++;
-                while ((_self->lex->src[p2] && (_self->lex->src[p2] != '\n'))) {
-                    if (_self->lex->src[p2] == '<') {
-                        d2++;
-                    }
-                    else {
-                        if (_self->lex->src[p2] == '>') {
-                            if (d2 == 0) {
-                                p2++;
-                                closed = 1;
-                                break;
-                            }
-                            d2--;
-                        }
-                    }
-                    p2++;
-                }
-            }
-            if (closed) {
-                res = 1;
-            }
-        }
-        else {
-            if ((_self->in_generic && expr_generic_token(_self))) {
-                res = 1;
-            }
-            else {
-                if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Atomic")) {
-                    int d = 0;
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
-                        for (; ; ) {
-                            if (_self->lex->tok == T_EOF) {
-                                break;
-                            }
-                            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
-                                d++;
-                            }
-                            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")"))) {
-                                d--;
-                                if (d == 0) {
-                                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                                    break;
-                                }
-                            }
-                            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                        }
-                        while (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*"))) {
-                            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                        }
-                        res = ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")"));
-                    }
-                }
-                else {
-                    if (_self->__frontend_parse_exprtypeparse_vptr->is_type_word(_self, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex))) {
-                        res = 1;
-                    }
-                    else {
-                        if (((_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rn, sizeof(rn)) == 0) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
-                            res = 1;
-                        }
-                        else {
-                            int i;
-                            int caps;
-                            caps = (_self->lex->__frontend_lex_lexops_vptr->tok_first(_self->lex) != 0);
-                            for (i = 0; i < _self->lex->tokstr.len; i++) {
-                                char cc = _self->lex->tokstr.ptr[i];
-                                if ((!((((cc >= 'A') && (cc <= 'Z')) || ((cc >= '0') && (cc <= '9'))) || (cc == '_')))) {
-                                    caps = 0;
-                                    break;
-                                }
-                            }
-                            if ((((!caps) && (_self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) < 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) < 0))) {
-                                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                                while (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*"))) {
-                                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                                }
-                                res = ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")"));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    _self->lex->tok = save_tok;
-    _self->lex->toknum = save_num;
-    _self->lex->tokline = save_line;
-    _self->lex->pos = save_pos;
-    _self->lex->line = save_srcline;
-    _self->lex->bol = save_bol;
-    _self->lex->tokstart = save_start;
-    _self->lex->lstart = save_lstart;
-    _self->lex->tokstr.ptr = save_text_ptr;
-    _self->lex->tokstr.len = save_text_len;
-    return res;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_next_is_type_name(void *self) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int save_tok;
-    int save_line;
-    int save_bol;
-    int save_srcline;
-    int res;
-    int save_start;
-    int save_lstart;
-    long save_num;
-    size_t save_pos;
-    const char * save_text_ptr;
-    int save_text_len;
-    (void)(_self);
-    save_tok = _self->lex->tok;
-    save_num = _self->lex->toknum;
-    save_line = _self->lex->tokline;
-    save_pos = _self->lex->pos;
-    save_srcline = _self->lex->line;
-    save_bol = _self->lex->bol;
-    save_start = _self->lex->tokstart;
-    save_lstart = _self->lex->lstart;
-    save_text_ptr = _self->lex->tokstr.ptr;
-    save_text_len = _self->lex->tokstr.len;
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    res = _self->__frontend_parse_exprops_vptr->tok_is_type_name(_self);
-    _self->lex->tok = save_tok;
-    _self->lex->toknum = save_num;
-    _self->lex->tokline = save_line;
-    _self->lex->pos = save_pos;
-    _self->lex->line = save_srcline;
-    _self->lex->bol = save_bol;
-    _self->lex->tokstart = save_start;
-    _self->lex->lstart = save_lstart;
-    _self->lex->tokstr.ptr = save_text_ptr;
-    _self->lex->tokstr.len = save_text_len;
-    return res;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_offsetof_ahead(void *self) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int save_tok;
-    int save_line;
-    int save_bol;
-    int save_srcline;
-    int res;
-    long save_num;
-    size_t save_pos;
-    const char * save_text_ptr;
-    int save_text_len;
-    (void)(_self);
-    save_tok = _self->lex->tok;
-    save_num = _self->lex->toknum;
-    save_line = _self->lex->tokline;
-    save_pos = _self->lex->pos;
-    save_srcline = _self->lex->line;
-    save_bol = _self->lex->bol;
-    save_text_ptr = _self->lex->tokstr.ptr;
-    save_text_len = _self->lex->tokstr.len;
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    res = ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("));
-    _self->lex->tok = save_tok;
-    _self->lex->toknum = save_num;
-    _self->lex->tokline = save_line;
-    _self->lex->pos = save_pos;
-    _self->lex->line = save_srcline;
-    _self->lex->bol = save_bol;
-    _self->lex->tokstr.ptr = save_text_ptr;
-    _self->lex->tokstr.len = save_text_len;
-    return res;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_fnptr_field(void *self, const char * stype, const char * field) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char buf[MAX_TEXT];
-    char * base;
-    size_t n;
-    int s;
-    int fi;
-    int ti;
-    (void)(_self);
-    snprintf(buf, sizeof(buf), "%s", stype);
-    base = buf;
-    if (strncmp(base, "struct ", 7) == 0) {
-        base += 7;
-    }
-    while ((*base) == ' ') {
-        base++;
-    }
-    n = strlen(base);
-    while (((n > 0) && ((base[(n - 1)] == ' ') || (base[(n - 1)] == '*')))) {
-        base[(n - 1)] = 0;
-        n--;
-    }
-    s = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
-    if (s < 0) {
-        return 0;
-    }
-    for (fi = 0; fi < _self->sym->structs[s].nfields; fi++) {
-        if (strcmp(_self->sym->structs[s].fields[fi].name, field) != 0) {
-            continue;
-        }
-        if (strstr(_self->sym->structs[s].fields[fi].type, "(*")) {
-            return 1;
-        }
-        ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, _self->sym->structs[s].fields[fi].type);
-        return ((ti >= 0) && (_self->sym->type_kind[ti] == 4));
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_const_ok(void *self, int n) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int k;
-    (void)(_self);
-    if (n < 0) {
-        return 0;
-    }
-    k = _self->arena->nodes[n].kind;
-    if (((((k == N_NUM) || (k == N_RAW)) || (k == N_SIZEOF)) || (k == N_OFFSETOF))) {
-        return 1;
-    }
-    if (k == N_STR) {
-        return (_self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, (int)(_self->arena->nodes[n].num))[0] == '\'');
-    }
-    if (k == N_VAR) {
-        return _self->sym->__frontend_sym_symbolops_vptr->is_const_name(_self->sym, _self->arena->nodes[n].text2);
-    }
-    if (k == N_UNARY) {
-        return ((((_self->arena->nodes[n].aux == U_NEG) || (_self->arena->nodes[n].aux == U_NOT)) || (_self->arena->nodes[n].aux == U_BNOT)) && _self->__frontend_parse_exprops_vptr->const_ok(_self, _self->arena->nodes[n].a));
-    }
-    if (k == N_BIN) {
-        return (_self->__frontend_parse_exprops_vptr->const_ok(_self, _self->arena->nodes[n].a) && _self->__frontend_parse_exprops_vptr->const_ok(_self, _self->arena->nodes[n].b));
-    }
-    return 0;
-}
-
+static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable, .__frontend_parse_exprcallcheck_vptr = &frontend_parse_Expr_frontend_parse_ExprCallCheck_vtable, .__frontend_parse_exprclosure_vptr = &frontend_parse_Expr_frontend_parse_ExprClosure_vtable, .__frontend_parse_exprinstantiate_vptr = &frontend_parse_Expr_frontend_parse_ExprInstantiate_vtable, .__frontend_parse_exprtypeparse_vptr = &frontend_parse_Expr_frontend_parse_ExprTypeParse_vtable, .__frontend_parse_exprstatictype_vptr = &frontend_parse_Expr_frontend_parse_ExprStaticType_vtable };
 static int frontend_parse_Expr_frontend_parse_ExprOps_parse_expr(void *self) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     int left;
@@ -803,7 +319,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_expr(void *self) {
         if (_self->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self, left, _self->arena->nodes[left].line, _self->arena->nodes[left].num) != 0) {
             return (-1);
         }
-        if (_self->__frontend_parse_exprops_vptr->container_subscript_kind(_self, left) == 3) {
+        if (_self->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self, left) == 3) {
             int cl = _self->arena->nodes[left].line;
             int cc = _self->arena->nodes[left].num;
             if ((!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "="))) {
@@ -811,7 +327,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_expr(void *self) {
             }
             return tool_diag_ct_sem_error(cl, cc, "a custom subscript write needs a statement and an lvalue receiver", _self->sup->mem->path);
         }
-        if (_self->__frontend_parse_exprops_vptr->container_write_check(_self, left) != 0) {
+        if (_self->__frontend_parse_exprstatictype_vptr->container_write_check(_self, left) != 0) {
             return (-1);
         }
         if ((((((((k2 != N_VAR) && (k2 != N_MEMBER)) && (k2 != N_ARROW)) && (k2 != N_INDEX)) && (k2 != N_SLICE_INDEX)) && (k2 != N_DEREF)) && (k2 != N_INTO_SELF))) {
@@ -1332,7 +848,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
         int rc;
         kind = (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "sizeof") ? 1 : (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Alignof") ? 2 : 4));
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && _self->__frontend_parse_exprops_vptr->next_is_type_name(_self))) {
+        if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && _self->__frontend_parse_exprstatictype_vptr->next_is_type_name(_self))) {
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
                 return (-1);
@@ -1348,7 +864,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
             _self->arena->nodes[n].aux = kind;
             return n;
         }
-        if (_self->__frontend_parse_exprops_vptr->tok_is_type_name(_self)) {
+        if (_self->__frontend_parse_exprstatictype_vptr->tok_is_type_name(_self)) {
             _self->type_no_ptr = 1;
             rc = _self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf));
             _self->type_no_ptr = 0;
@@ -1381,7 +897,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
     if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && closure_ahead(_self))) {
         return _self->__frontend_parse_exprclosure_vptr->parse_closure(_self);
     }
-    if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && _self->__frontend_parse_exprops_vptr->next_is_type_name(_self))) {
+    if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && _self->__frontend_parse_exprstatictype_vptr->next_is_type_name(_self))) {
         char tbuf[MAX_TEXT];
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
@@ -1400,7 +916,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
             if (((tl > 0) && (tbuf[(tl - 1)] == '*'))) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a compound literal needs an object type");
             }
-            if (_self->__frontend_parse_exprops_vptr->container_init_check(_self, tbuf) != 0) {
+            if (_self->__frontend_parse_exprstatictype_vptr->container_init_check(_self, tbuf) != 0) {
                 return (-1);
             }
             rn = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_RAW);
@@ -1461,7 +977,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
         if (_self->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self, e, _self->arena->nodes[e].line, _self->arena->nodes[e].num) != 0) {
             return (-1);
         }
-        if (_self->__frontend_parse_exprops_vptr->container_write_check(_self, e) != 0) {
+        if (_self->__frontend_parse_exprstatictype_vptr->container_write_check(_self, e) != 0) {
             return (-1);
         }
         n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_PRE);
@@ -1515,7 +1031,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
         if (_self->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self, e, _self->arena->nodes[e].line, _self->arena->nodes[e].num) != 0) {
             return (-1);
         }
-        if (_self->__frontend_parse_exprops_vptr->container_addr_check(_self, e) != 0) {
+        if (_self->__frontend_parse_exprstatictype_vptr->container_addr_check(_self, e) != 0) {
             return (-1);
         }
         n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ADDR);
@@ -1541,180 +1057,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
     return _self->__frontend_parse_exprops_vptr->parse_postfix(_self);
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprOps_ctype_expand(void *self, const char * in, char * out, int cap, int depth) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char name[MAX_TEXT];
-    char target[MAX_TEXT];
-    int i;
-    int len;
-    int bare;
-    if (depth > 8) {
-        return 0;
-    }
-    len = (int)(strlen(in));
-    while (((len > 0) && (in[(len - 1)] == ' '))) {
-        len--;
-    }
-    i = 0;
-    while (((i < len) && (in[i] == ' '))) {
-        i++;
-    }
-    if (((i >= len) || ((len - i) >= (int)(sizeof(name))))) {
-        return 0;
-    }
-    snprintf(name, sizeof(name), "%.*s", (len - i), (in + i));
-    bare = 1;
-    for (i = 0; name[i]; i++) {
-        int c = (unsigned char)(name[i]);
-        if (i == 0) {
-            if ((!((((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z'))) || (c == '_')))) {
-                bare = 0;
-                break;
-            }
-        }
-        else {
-            if ((!(((((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z'))) || ((c >= '0') && (c <= '9'))) || (c == '_')))) {
-                bare = 0;
-                break;
-            }
-        }
-    }
-    if ((bare && _self->sym->__frontend_sym_symbolops_vptr->type_target_of(_self->sym, name, target, sizeof(target)))) {
-        return _self->__frontend_parse_exprops_vptr->ctype_expand(_self, target, out, cap, (depth + 1));
-    }
-    if (snprintf(out, cap, "%s", name) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_fnptr_ret(void *self, const char * ftype, char * out, int cap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    const char * p;
-    const char * q;
-    int len;
-    int depth;
-    (void)(_self);
-    p = strstr(ftype, "(*)");
-    if (((!p) || (p == ftype))) {
-        return 0;
-    }
-    q = (p + 3);
-    while ((*q) == ' ') {
-        q++;
-    }
-    if ((*q) != '(') {
-        return 0;
-    }
-    depth = 0;
-    for (; (*q); q++) {
-        if ((*q) == '(') {
-            depth++;
-        }
-        else {
-            if ((*q) == ')') {
-                depth--;
-                if (depth == 0) {
-                    break;
-                }
-            }
-        }
-    }
-    if (depth != 0) {
-        return 0;
-    }
-    len = (int)((p - ftype));
-    while (((len > 0) && (ftype[(len - 1)] == ' '))) {
-        len--;
-    }
-    if (len <= 0) {
-        return 0;
-    }
-    if (snprintf(out, cap, "%.*s", len, ftype) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_peel_ptr(void *self, const char * ty, char * out, int cap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int len;
-    (void)(_self);
-    len = (int)(strlen(ty));
-    while (((len > 0) && (ty[(len - 1)] == ' '))) {
-        len--;
-    }
-    if (((len <= 0) || (ty[(len - 1)] != '*'))) {
-        return 0;
-    }
-    len--;
-    while (((len > 0) && (ty[(len - 1)] == ' '))) {
-        len--;
-    }
-    if (len <= 0) {
-        return 0;
-    }
-    if (snprintf(out, cap, "%.*s", len, ty) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_static_ctype(void *self, int n, char * out, int cap, int * array_depth, int depth) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int k;
-    (*array_depth) = 0;
-    if (((n < 0) || (depth > 8))) {
-        return 0;
-    }
-    k = _self->arena->nodes[n].kind;
-    if (k == N_ADTCTOR) {
-        return ctype_adtctor(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_VAR) {
-        return ctype_var(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_TRY) {
-        return ctype_try(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_INDEX) {
-        return ctype_index(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_DEREF) {
-        return ctype_deref(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_ADDR) {
-        return ctype_addr(_self, n, out, cap, array_depth, depth);
-    }
-    if (((k == N_MEMBER) || (k == N_ARROW))) {
-        return ctype_member_or_arrow(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_CALL) {
-        return ctype_call(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_OPT) {
-        return ctype_opt(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_MCALL) {
-        return ctype_mcall(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_SLICE_INDEX) {
-        return ctype_slice_index(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_SLICE_GET) {
-        return ctype_slice_get(_self, n, out, cap, array_depth, depth);
-    }
-    if (k == N_SLICE_RANGE) {
-        return ctype_slice_range(_self, n, out, cap, array_depth, depth);
-    }
-    return 0;
-}
-
 static int frontend_parse_Expr_frontend_parse_ExprOps_container_index_check(void *self, int base) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     char ty[MAX_TEXT];
     int ad;
-    if ((!_self->__frontend_parse_exprops_vptr->static_ctype(_self, base, ty, sizeof(ty), (&ad), 0))) {
+    if ((!_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, base, ty, sizeof(ty), (&ad), 0))) {
         return 0;
     }
     if (ad > 0) {
@@ -1730,109 +1077,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_container_index_check(void
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a Map is not subscriptable: use get(key)");
     }
     return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_container_init_check(void *self, const char * ctype) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    if (((strncmp(ctype, "struct Vec_", 11) == 0) || (strncmp(ctype, "Vec_", 4) == 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a Vec cannot be initialized from a brace list: use a range initializer or Vec<T>::from");
-    }
-    if (((strncmp(ctype, "struct Map_", 11) == 0) || (strncmp(ctype, "Map_", 4) == 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a Map cannot be initialized from a brace list: use put(key, value)");
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_container_global_init_check(void *self, const char * ctype) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    if (((strncmp(ctype, "struct Vec_", 11) == 0) || (strncmp(ctype, "Vec_", 4) == 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a Vec brace initializer is only supported in a local declaration");
-    }
-    if (((strncmp(ctype, "struct Map_", 11) == 0) || (strncmp(ctype, "Map_", 4) == 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a Map brace initializer is only supported in a local declaration");
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_container_subscript_kind(void *self, int n) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    while (n >= 0) {
-        int k = _self->arena->nodes[n].kind;
-        if ((((k == N_MCALL) && ((_self->arena->nodes[n].aux == 9) || (_self->arena->nodes[n].aux == 10))) && ((strcmp(_self->arena->nodes[n].text2, "get") == 0) || (strcmp(_self->arena->nodes[n].text2, "at") == 0)))) {
-            if (((strncmp(_self->arena->nodes[n].text, "struct Vec_", 11) == 0) || (strncmp(_self->arena->nodes[n].text, "Vec_", 4) == 0))) {
-                return 1;
-            }
-            if (((strncmp(_self->arena->nodes[n].text, "struct Map_", 11) == 0) || (strncmp(_self->arena->nodes[n].text, "Map_", 4) == 0))) {
-                return 2;
-            }
-            if (((_self->arena->nodes[n].line > 0) && (_self->arena->nodes[n].num > 0))) {
-                return 3;
-            }
-            return 0;
-        }
-        if (((k != N_MEMBER) && (k != N_ARROW))) {
-            return 0;
-        }
-        n = _self->arena->nodes[n].a;
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_container_write_check(void *self, int n) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int k = _self->__frontend_parse_exprops_vptr->container_subscript_kind(_self, n);
-    int at = n;
-    if (k == 0) {
-        return 0;
-    }
-    while (((at >= 0) && ((_self->arena->nodes[at].kind == N_MEMBER) || (_self->arena->nodes[at].kind == N_ARROW)))) {
-        at = _self->arena->nodes[at].a;
-    }
-    if (k == 1) {
-        return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "a Vec subscript is read-only; use set(i, v)", _self->sup->mem->path);
-    }
-    if (k == 3) {
-        return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "a custom subscript supports only '='; use set(k, v)", _self->sup->mem->path);
-    }
-    return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "a Map subscript is read-only; use put(k, v)", _self->sup->mem->path);
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_container_addr_check(void *self, int n) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int k = _self->__frontend_parse_exprops_vptr->container_subscript_kind(_self, n);
-    int at = n;
-    if (k == 0) {
-        return 0;
-    }
-    while (((at >= 0) && ((_self->arena->nodes[at].kind == N_MEMBER) || (_self->arena->nodes[at].kind == N_ARROW)))) {
-        at = _self->arena->nodes[at].a;
-    }
-    if (k == 3) {
-        return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "cannot take the address of a custom subscript; bind it to a local first", _self->sup->mem->path);
-    }
-    return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "cannot take the address of a container subscript; bind it to a local first", _self->sup->mem->path);
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_brace_arg_ok(void *self, const char * formal, const char * actual) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char fb[MAX_TEXT];
-    char ab[MAX_TEXT];
-    int r;
-    int fs;
-    int as;
-    r = frontend_parse_arg_class(formal, actual, fb, sizeof(fb), ab, sizeof(ab));
-    if (r != 2) {
-        return r;
-    }
-    if (((strncmp(fb, "struct", 6) != 0) || (strncmp(ab, "struct", 6) != 0))) {
-        return 2;
-    }
-    fs = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (fb + 6));
-    as = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (ab + 6));
-    if (((fs < 0) || (as < 0))) {
-        return (-1);
-    }
-    return ((fs == as) ? 0 : 1);
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) {
@@ -1896,7 +1140,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 int mad = 0;
                 int trc;
                 rty[0] = 0;
-                trc = _self->__frontend_parse_exprops_vptr->static_ctype(_self, n, rty, sizeof(rty), (&mad), 0);
+                trc = _self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, n, rty, sizeof(rty), (&mad), 0);
                 if (((trc == 0) || (!rty[0]))) {
                     return tool_diag_ct_sem_error(dl, dc, "'$' needs a non-void result; this hop has none (PH-76)", _self->sup->mem->path);
                 }
@@ -2030,7 +1274,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
             }
             char bty[MAX_TEXT];
             int bd = 0;
-            int known = _self->__frontend_parse_exprops_vptr->static_ctype(_self, n, bty, sizeof(bty), (&bd), 0);
+            int known = _self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, n, bty, sizeof(bty), (&bd), 0);
             int sugar = 0;
             if (((((known && (bd == 0)) && (strchr(bty, '*') == 0)) && (strncmp(bty, "struct ", 7) != 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, bty) >= 0))) {
                 char nb[MAX_TEXT];
@@ -2073,7 +1317,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 }
                 if ((((rt >= 0) && (_self->arena->nodes[rt].kind == N_CALL)) && (!_self->arena->nodes[rt].text[0]))) {
                     rd2 = 0;
-                    if ((_self->__frontend_parse_exprops_vptr->static_ctype(_self, rt, rty, sizeof(rty), (&rd2), 0) && (rd2 == 0))) {
+                    if ((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, rt, rty, sizeof(rty), (&rd2), 0) && (rd2 == 0))) {
                         snprintf(_self->arena->nodes[rt].text, MAX_TEXT, "%s", rty);
                     }
                 }
@@ -2177,7 +1421,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 }
                 if ((((rt >= 0) && (_self->arena->nodes[rt].kind == N_CALL)) && (!_self->arena->nodes[rt].text[0]))) {
                     rd2 = 0;
-                    if ((_self->__frontend_parse_exprops_vptr->static_ctype(_self, rt, rty, sizeof(rty), (&rd2), 0) && (rd2 == 0))) {
+                    if ((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, rt, rty, sizeof(rty), (&rd2), 0) && (rd2 == 0))) {
                         snprintf(_self->arena->nodes[rt].text, MAX_TEXT, "%s", rty);
                     }
                 }
@@ -2523,7 +1767,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 }
                             }
                         }
-                        if (((!_self->arena->nodes[m].text[0]) && _self->__frontend_parse_exprops_vptr->fnptr_field(_self, rtype, fname))) {
+                        if (((!_self->arena->nodes[m].text[0]) && _self->__frontend_parse_exprstatictype_vptr->fnptr_field(_self, rtype, fname))) {
                             int mf;
                             char fpt[MAX_TEXT];
                             int fad = 0;
@@ -2537,7 +1781,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             _self->arena->nodes[m].a = ((args == 0) ? (-1) : args);
                             _self->arena->nodes[m].b = mf;
                             _self->arena->nodes[m].aux = 2;
-                            if (((((_self->types_mode && (*_self->types_mode)) && _self->__frontend_parse_exprops_vptr->static_ctype(_self, mf, fpt, sizeof(fpt), (&fad), 0)) && (fad == 0)) && (_self->__frontend_parse_exprtypes_vptr->chk_callptr_args(_self, fpt, fname, args, mline, mcol) != 0))) {
+                            if (((((_self->types_mode && (*_self->types_mode)) && _self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, mf, fpt, sizeof(fpt), (&fad), 0)) && (fad == 0)) && (_self->__frontend_parse_exprtypes_vptr->chk_callptr_args(_self, fpt, fname, args, mline, mcol) != 0))) {
                                 return (-1);
                             }
                         }
@@ -2875,7 +2119,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     char lbl[MAX_TEXT];
                     int pad = 0;
                     int typed = 0;
-                    if ((_self->__frontend_parse_exprops_vptr->static_ctype(_self, n, ppt, sizeof(ppt), (&pad), 0) && (pad == 0))) {
+                    if ((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, n, ppt, sizeof(ppt), (&pad), 0) && (pad == 0))) {
                         typed = 1;
                     }
                     else {
@@ -2883,7 +2127,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             int dn = _self->arena->nodes[n].a;
                             char dty[MAX_TEXT];
                             int dad = 0;
-                            if (((_self->__frontend_parse_exprops_vptr->static_ctype(_self, dn, dty, sizeof(dty), (&dad), 0) && (dad == 0)) && strstr(dty, "(*"))) {
+                            if (((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, dn, dty, sizeof(dty), (&dad), 0) && (dad == 0)) && strstr(dty, "(*"))) {
                                 snprintf(ppt, sizeof(ppt), "%s", dty);
                                 typed = 1;
                             }
@@ -2972,7 +2216,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
             _self->arena->nodes[m].a = n;
             _self->arena->nodes[m].line = qline;
             _self->arena->nodes[m].num = qcol;
-            if ((_self->__frontend_parse_exprops_vptr->static_ctype(_self, n, qty, sizeof(qty), (&qad), 0) && (qad == 0))) {
+            if ((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, n, qty, sizeof(qty), (&qad), 0) && (qad == 0))) {
                 snprintf(_self->arena->nodes[m].text, MAX_TEXT, "%s", qty);
             }
             if ((!_self->st_hook)) {
@@ -2994,7 +2238,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
         if (_self->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self, n, _self->arena->nodes[n].line, _self->arena->nodes[n].num) != 0) {
             return (-1);
         }
-        if (_self->__frontend_parse_exprops_vptr->container_write_check(_self, n) != 0) {
+        if (_self->__frontend_parse_exprstatictype_vptr->container_write_check(_self, n) != 0) {
             return (-1);
         }
         k = _self->arena->nodes[n].kind;
@@ -3171,7 +2415,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         _self->arena->nodes[n].num = off;
         return n;
     }
-    if ((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "offsetof")) && _self->__frontend_parse_exprops_vptr->offsetof_ahead(_self))) {
+    if ((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "offsetof")) && _self->__frontend_parse_exprstatictype_vptr->offsetof_ahead(_self))) {
         char tbuf[MAX_TEXT];
         char fname[MAX_TEXT];
         char base[MAX_TEXT];
@@ -3257,7 +2501,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         snprintf(_self->arena->nodes[n].text2, MAX_TEXT, "%s", fname);
         return n;
     }
-    if ((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "va_arg")) && _self->__frontend_parse_exprops_vptr->offsetof_ahead(_self))) {
+    if ((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "va_arg")) && _self->__frontend_parse_exprstatictype_vptr->offsetof_ahead(_self))) {
         char tbuf[MAX_TEXT];
         int ap;
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -4743,12 +3987,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_args(void *self) {
 }
 
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable = {
-    .parse_array_dims = frontend_parse_Expr_frontend_parse_ExprOps_parse_array_dims,
-    .tok_is_type_name = frontend_parse_Expr_frontend_parse_ExprOps_tok_is_type_name,
-    .next_is_type_name = frontend_parse_Expr_frontend_parse_ExprOps_next_is_type_name,
-    .offsetof_ahead = frontend_parse_Expr_frontend_parse_ExprOps_offsetof_ahead,
-    .fnptr_field = frontend_parse_Expr_frontend_parse_ExprOps_fnptr_field,
-    .const_ok = frontend_parse_Expr_frontend_parse_ExprOps_const_ok,
     .parse_expr = frontend_parse_Expr_frontend_parse_ExprOps_parse_expr,
     .into_tail = frontend_parse_Expr_frontend_parse_ExprOps_into_tail,
     .into_block = frontend_parse_Expr_frontend_parse_ExprOps_into_block,
@@ -4761,35 +3999,13 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .parse_add = frontend_parse_Expr_frontend_parse_ExprOps_parse_add,
     .parse_mul = frontend_parse_Expr_frontend_parse_ExprOps_parse_mul,
     .parse_unary = frontend_parse_Expr_frontend_parse_ExprOps_parse_unary,
-    .ctype_expand = frontend_parse_Expr_frontend_parse_ExprOps_ctype_expand,
-    .fnptr_ret = frontend_parse_Expr_frontend_parse_ExprOps_fnptr_ret,
-    .peel_ptr = frontend_parse_Expr_frontend_parse_ExprOps_peel_ptr,
-    .static_ctype = frontend_parse_Expr_frontend_parse_ExprOps_static_ctype,
     .container_index_check = frontend_parse_Expr_frontend_parse_ExprOps_container_index_check,
-    .container_init_check = frontend_parse_Expr_frontend_parse_ExprOps_container_init_check,
-    .container_global_init_check = frontend_parse_Expr_frontend_parse_ExprOps_container_global_init_check,
-    .container_subscript_kind = frontend_parse_Expr_frontend_parse_ExprOps_container_subscript_kind,
-    .container_write_check = frontend_parse_Expr_frontend_parse_ExprOps_container_write_check,
-    .container_addr_check = frontend_parse_Expr_frontend_parse_ExprOps_container_addr_check,
-    .brace_arg_ok = frontend_parse_Expr_frontend_parse_ExprOps_brace_arg_ok,
     .parse_postfix = frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix,
     .parse_primary = frontend_parse_Expr_frontend_parse_ExprOps_parse_primary,
     .parse_qual_path = frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path,
     .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args
 };
 
-static int expr_generic_token(struct frontend_parse_Expr * self) {
-    int i;
-    if ((!self->in_generic_tparam)) {
-        return 0;
-    }
-    for (i = 0; i < self->in_generic_ntparam; i++) {
-        if (((self->in_generic_tparam[i] && self->in_generic_tparam[i][0]) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, self->in_generic_tparam[i]))) {
-            return 1;
-        }
-    }
-    return 0;
-}
 static int closure_ahead(struct frontend_parse_Expr * self) {
     const char * s = self->lex->src;
     int i = self->lex->tokstart;
@@ -5180,299 +4396,6 @@ static int record_io_call(struct frontend_parse_Expr * e, const char * callee, i
     e->io_line[e->nio] = line;
     e->nio++;
     return 0;
-}
-static int ctype_adtctor(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    (void)(array_depth);
-    (void)(depth);
-    if (snprintf(out, (size_t)(cap), "struct %s", self->arena->nodes[n].text) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-static int ctype_var(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    const char * ty;
-    int i;
-    (void)(depth);
-    i = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[n].text2);
-    if (i < 0) {
-        return 0;
-    }
-    if ((!self->__frontend_parse_exprops_vptr->ctype_expand(self, self->sym->vars[i].type, out, cap, 0))) {
-        return 0;
-    }
-    if (self->sym->vars[i].is_array) {
-        for (ty = self->sym->vars[i].dims; (*ty); ty++) {
-            if ((*ty) == '[') {
-                (*array_depth)++;
-            }
-        }
-    }
-    return 1;
-}
-static int ctype_try(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    char tmp[MAX_TEXT];
-    int ad;
-    (void)(array_depth);
-    char qtag[MAX_TEXT];
-    char qval[MAX_TEXT];
-    char qerr[MAX_TEXT];
-    int qi;
-    if ((!self->__frontend_parse_exprops_vptr->static_ctype(self, self->arena->nodes[n].a, tmp, sizeof(tmp), (&ad), (depth + 1)))) {
-        return 0;
-    }
-    if (ad != 0) {
-        return 0;
-    }
-    if ((!self->__frontend_parse_exprtry_vptr->result_tag(self, tmp, qtag, sizeof(qtag)))) {
-        return 0;
-    }
-    qi = frontend_sym_ct_inst_find(qtag);
-    if ((!self->__frontend_parse_exprtry_vptr->result_cols(self, qi, qval, sizeof(qval), qerr, sizeof(qerr)))) {
-        return 0;
-    }
-    if (snprintf(out, cap, "%s", qval) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-static int ctype_index(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    char tmp[MAX_TEXT];
-    int ad;
-    if ((!self->__frontend_parse_exprops_vptr->static_ctype(self, self->arena->nodes[n].a, tmp, sizeof(tmp), (&ad), (depth + 1)))) {
-        return 0;
-    }
-    if (ad > 0) {
-        if (snprintf(out, cap, "%s", tmp) >= cap) {
-            return 0;
-        }
-        (*array_depth) = (ad - 1);
-        return 1;
-    }
-    return self->__frontend_parse_exprops_vptr->peel_ptr(self, tmp, out, cap);
-}
-static int ctype_deref(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    char tmp[MAX_TEXT];
-    int ad;
-    if ((!self->__frontend_parse_exprops_vptr->static_ctype(self, self->arena->nodes[n].a, tmp, sizeof(tmp), (&ad), (depth + 1)))) {
-        return 0;
-    }
-    if (ad > 0) {
-        if (snprintf(out, cap, "%s", tmp) >= cap) {
-            return 0;
-        }
-        (*array_depth) = (ad - 1);
-        return 1;
-    }
-    return self->__frontend_parse_exprops_vptr->peel_ptr(self, tmp, out, cap);
-}
-static int ctype_addr(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    char tmp[MAX_TEXT];
-    int ad;
-    (void)(array_depth);
-    if ((!self->__frontend_parse_exprops_vptr->static_ctype(self, self->arena->nodes[n].a, tmp, sizeof(tmp), (&ad), (depth + 1)))) {
-        return 0;
-    }
-    if (ad != 0) {
-        return 0;
-    }
-    if (((!tmp[0]) || (snprintf(out, cap, "%s%s*", tmp, ((tmp[(strlen(tmp) - 1)] == '*') ? "" : " ")) >= cap))) {
-        return 0;
-    }
-    return 1;
-}
-static int ctype_member_or_arrow(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    char tmp[MAX_TEXT];
-    char tmp2[MAX_TEXT];
-    const char * ty;
-    int i;
-    int si;
-    int ad;
-    if (self->arena->nodes[n].aux == 9) {
-        if (snprintf(out, cap, "%s", "const char *") >= cap) {
-            return 0;
-        }
-        (*array_depth) = 0;
-        return 1;
-    }
-    if (self->arena->nodes[n].aux == 11) {
-        if (snprintf(out, cap, "%s", "const uint16_t *") >= cap) {
-            return 0;
-        }
-        (*array_depth) = 0;
-        return 1;
-    }
-    if ((!self->__frontend_parse_exprops_vptr->static_ctype(self, self->arena->nodes[n].a, tmp, sizeof(tmp), (&ad), (depth + 1)))) {
-        return 0;
-    }
-    if (ad != 0) {
-        return 0;
-    }
-    if (self->arena->nodes[n].kind == N_ARROW) {
-        if ((!self->__frontend_parse_exprops_vptr->peel_ptr(self, tmp, tmp2, sizeof(tmp2)))) {
-            return 0;
-        }
-        snprintf(tmp, sizeof(tmp), "%s", tmp2);
-    }
-    ty = tmp;
-    if (strncmp(ty, "struct ", 7) == 0) {
-        ty += 7;
-    }
-    si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, ty);
-    if (si < 0) {
-        return 0;
-    }
-    for (i = 0; i < self->sym->structs[si].nfields; i++) {
-        if (strcmp(self->sym->structs[si].fields[i].name, self->arena->nodes[n].text2) != 0) {
-            continue;
-        }
-        if ((!self->__frontend_parse_exprops_vptr->ctype_expand(self, self->sym->structs[si].fields[i].type, out, cap, 0))) {
-            return 0;
-        }
-        for (ty = self->sym->structs[si].fields[i].dims; (*ty); ty++) {
-            if ((*ty) == '[') {
-                (*array_depth)++;
-            }
-        }
-        return 1;
-    }
-    return 0;
-}
-static int ctype_call(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    char tmp[MAX_TEXT];
-    char tmp2[MAX_TEXT];
-    int i;
-    int ad;
-    (void)(array_depth);
-    if (self->arena->nodes[n].aux == 2) {
-        int ci = self->arena->nodes[n].b;
-        if (((ci >= 0) && (self->arena->nodes[ci].kind == N_DEREF))) {
-            int ad2;
-            if ((!self->__frontend_parse_exprops_vptr->static_ctype(self, self->arena->nodes[ci].a, tmp, sizeof(tmp), (&ad2), (depth + 1)))) {
-                return 0;
-            }
-            if (ad2 != 0) {
-                return 0;
-            }
-            if (self->__frontend_parse_exprops_vptr->fnptr_ret(self, tmp, out, cap)) {
-                return 1;
-            }
-            if ((!self->__frontend_parse_exprops_vptr->peel_ptr(self, tmp, tmp2, sizeof(tmp2)))) {
-                return 0;
-            }
-            return self->__frontend_parse_exprops_vptr->fnptr_ret(self, tmp2, out, cap);
-        }
-        if ((!self->__frontend_parse_exprops_vptr->static_ctype(self, ci, tmp, sizeof(tmp), (&ad), (depth + 1)))) {
-            return 0;
-        }
-        if (ad != 0) {
-            return 0;
-        }
-        return self->__frontend_parse_exprops_vptr->fnptr_ret(self, tmp, out, cap);
-    }
-    i = self->sym->__frontend_sym_symbolops_vptr->resolve_func(self->sym, self->arena->nodes[n].text2);
-    if (i >= 0) {
-        if (((!self->sym->funcs[i].ret[0]) || (strcmp(self->sym->funcs[i].ret, "void") == 0))) {
-            return 0;
-        }
-        return self->__frontend_parse_exprops_vptr->ctype_expand(self, self->sym->funcs[i].ret, out, cap, 0);
-    }
-    i = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[n].text2);
-    if (i < 0) {
-        return 0;
-    }
-    if ((!self->__frontend_parse_exprops_vptr->ctype_expand(self, self->sym->vars[i].type, tmp, sizeof(tmp), 0))) {
-        return 0;
-    }
-    return self->__frontend_parse_exprops_vptr->fnptr_ret(self, tmp, out, cap);
-}
-static int ctype_opt(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    (void)(array_depth);
-    (void)(depth);
-    if ((!self->arena->nodes[n].text2[0])) {
-        return 0;
-    }
-    if (snprintf(out, cap, "%s", self->arena->nodes[n].text2) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-static int ctype_mcall(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    char tmp2[MAX_TEXT];
-    int si;
-    int i;
-    (void)(array_depth);
-    (void)(depth);
-    if (((self->arena->nodes[n].aux == 9) || (self->arena->nodes[n].aux == 10))) {
-        i = self->__frontend_parse_exprinstantiate_vptr->inst_inherent_method(self, self->arena->nodes[n].text, self->arena->nodes[n].text2);
-    }
-    else {
-        i = (-1);
-    }
-    if (i >= 0) {
-        char ib[MAX_TEXT];
-        char rs[MAX_TEXT];
-        if ((!self->arena->nodes[i].text[0])) {
-            return 0;
-        }
-        snprintf(ib, sizeof(ib), "%s", self->arena->nodes[n].text);
-        if ((ib[0] && (strncmp(ib, "struct ", 7) != 0))) {
-            snprintf(tmp2, sizeof(tmp2), "struct %s", ib);
-            snprintf(ib, sizeof(ib), "%s", tmp2);
-        }
-        if (self->__frontend_parse_exprinstantiate_vptr->inst_subst_type(self, ib, self->arena->nodes[i].text, rs, sizeof(rs))) {
-            if (snprintf(out, (size_t)(cap), "%s", rs) >= cap) {
-                return 0;
-            }
-            return 1;
-        }
-        return self->__frontend_parse_exprops_vptr->ctype_expand(self, self->arena->nodes[i].text, out, cap, 0);
-    }
-    si = self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, self->arena->nodes[n].text);
-    if (si < 0) {
-        return 0;
-    }
-    for (i = 0; i < self->sym->traits[si].nm; i++) {
-        if (strcmp(self->sym->traits[si].m[i].name, self->arena->nodes[n].text2) != 0) {
-            continue;
-        }
-        if (((!self->sym->traits[si].m[i].ret[0]) || (strcmp(self->sym->traits[si].m[i].ret, "void") == 0))) {
-            return 0;
-        }
-        return self->__frontend_parse_exprops_vptr->ctype_expand(self, self->sym->traits[si].m[i].ret, out, cap, 0);
-    }
-    return 0;
-}
-static int ctype_slice_index(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    (void)(array_depth);
-    (void)(depth);
-    if ((!self->arena->nodes[n].text[0])) {
-        return 0;
-    }
-    if (snprintf(out, cap, "%s", self->arena->nodes[n].text) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-static int ctype_slice_get(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    (void)(array_depth);
-    (void)(depth);
-    if ((!self->arena->nodes[n].text[0])) {
-        return 0;
-    }
-    if (snprintf(out, cap, "%s *", self->arena->nodes[n].text) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-static int ctype_slice_range(struct frontend_parse_Expr * self, int n, char * out, int cap, int * array_depth, int depth) {
-    (void)(self);
-    (void)(n);
-    (void)(array_depth);
-    (void)(depth);
-    if (snprintf(out, cap, "%s", "struct __ct_slice") >= cap) {
-        return 0;
-    }
-    return 1;
 }
 static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const char * target, int line, int col) {
     char st[MAX_TEXT];
