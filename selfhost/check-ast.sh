@@ -4153,31 +4153,31 @@ if "$work/ct-ast" --emit-map - test/ast/13_map_instance/prog.ct -o "$work/mmapm.
 else
     bad "map JSON" "$(cat "$work/mmapm.err")"
 fi
-# The 65th map overflows MAX_MAPS (64). Each map needs its own instance now that
-# a duplicate (instance, trait) pair is refused before the cap can be reached.
+# S1a-0 C1: the map table grows on demand, so the 70th map (old MAX_MAPS = 64)
+# is accepted and emits its wrapper and vtable. Each map needs its own instance
+# because a duplicate (instance, trait) pair is refused before any cap matters.
 mi=0
 {
     printf 'trait Controller {\n    int send(char *buf, int len);\n}\n'
     printf 'struct Uart {\n    int fd;\n};\n'
     printf 'int mock_send(struct Uart *u, char *b, int n) {\n    (void)b;\n    return n + u->fd;\n}\n'
-    while [ "$mi" -le 65 ]; do
+    while [ "$mi" -lt 70 ]; do
         printf 'struct Uart u%d;\n' "$mi"
         mi=$((mi + 1))
     done
     mi=0
-    while [ "$mi" -lt 65 ]; do
+    while [ "$mi" -lt 70 ]; do
         printf 'map trait Controller for instance u%d {\n    send(buf, len) -> mock_send(&u%d, buf, len);\n}\n' "$mi" "$mi"
         mi=$((mi + 1))
     done
     printf 'int main(void) { return 0; }\n'
 } > "$work/map-many.ct"
 if "$work/ct-ast" "$work/map-many.ct" -o "$work/map-many.c" \
-        >"$work/map-many.out" 2>"$work/map-many.err"; then
-    bad "map cap" "expected a non-zero exit"
-elif grep -q "too many maps" "$work/map-many.err"; then
-    ok "map (MAX_MAPS cap)"
+        >"$work/map-many.out" 2>"$work/map-many.err" \
+   && grep -q 'u69_Controller_vtable' "$work/map-many.c"; then
+    ok "map (table grows past MAX_MAPS)"
 else
-    bad "map cap" "no diagnostic on stderr"
+    bad "map cap" "$(cat "$work/map-many.err")"
 fi
 # 11.3: a map must bind every trait method; an unbound slot would be a null
 # function pointer (calling it crashes at run time).
@@ -5073,6 +5073,12 @@ if bash test/ast/cap_grow.sh "$work/ct-ast" >"$work/capg.out" 2>"$work/capg.err"
     ok "S1a-0 parser/emitter caps grow"
 else
     bad "S1a-0 parser/emitter caps grow" "$(cat "$work/capg.out" "$work/capg.err" | head -6)"
+fi
+
+if bash test/ast/map_cap.sh "$work/ct-ast" >"$work/mapc.out" 2>"$work/mapc.err"; then
+    ok "S1a-0 map table and binding parameters grow"
+else
+    bad "S1a-0 map table and binding parameters grow" "$(cat "$work/mapc.out" "$work/mapc.err" | head -6)"
 fi
 
 
