@@ -1778,6 +1778,18 @@ else
 fi
 
 echo
+echo "== S1a-0 C2k: package-manager store/lock/index paths (MAX_PKG_PATH) =="
+# The probe runs a >512-byte store path through get/verify/install, a
+# >512-byte package dir through build/lock roots and `pkg check`, a >512-byte
+# index git-url through refresh/verify, and a >512-byte index path through
+# `--index` and `index verify`.
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg33_long_store.sh"; then
+    ok "S1a-0 C2 package store/lock/index paths"
+else
+    bad "S1a-0 C2 package store/lock/index paths" "the pkg33 probe failed"
+fi
+
+echo
 echo "== PKG-25: lock merge keeps same-name different-publisher rows =="
 # The probe fetches demo/hello then acme/hello into one project and asserts both
 # lock rows survive, `ct verify --strict` accepts them, and a re-fetch of one
