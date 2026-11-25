@@ -1745,6 +1745,17 @@ else
 fi
 
 echo
+echo "== S1a-0 C2h: package-manager line text (MAX_PKG_LINE) =="
+# The probe feeds `ct index verify` a 1418-byte legal row and a 1800-byte
+# comment line; the old 1024-byte reader rejected the row and split the
+# comment into a bogus one-field row.
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg30_line_text.sh"; then
+    ok "S1a-0 C2 package line text"
+else
+    bad "S1a-0 C2 package line text" "the pkg30 probe failed"
+fi
+
+echo
 echo "== PKG-25: lock merge keeps same-name different-publisher rows =="
 # The probe fetches demo/hello then acme/hello into one project and asserts both
 # lock rows survive, `ct verify --strict` accepts them, and a re-fetch of one
