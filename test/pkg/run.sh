@@ -1767,6 +1767,17 @@ else
 fi
 
 echo
+echo "== S1a-0 C2j: package-manager dependency rows (MAX_PKG_PATH) =="
+# The probe puts a 569-byte `dep =` spec in a project manifest; get records it
+# once (no duplicate) and install re-reads it against the lock. The old dep row
+# stopped at 512 bytes and `install` called it "bad dependency <truncated>".
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg32_long_dep.sh"; then
+    ok "S1a-0 C2 package dependency rows"
+else
+    bad "S1a-0 C2 package dependency rows" "the pkg32 probe failed"
+fi
+
+echo
 echo "== PKG-25: lock merge keeps same-name different-publisher rows =="
 # The probe fetches demo/hello then acme/hello into one project and asserts both
 # lock rows survive, `ct verify --strict` accepts them, and a re-fetch of one
