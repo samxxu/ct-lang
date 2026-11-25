@@ -1917,17 +1917,18 @@ else
     ok "raw (build mode mirrors the anchor)"
 fi
 
-# The cap is 32768 bytes for one block; one byte more is refused by name.
+# The formal text cap is TEXT_LIMIT (65536 bytes) for one block; one byte
+# more is refused by name.
 {
     printf '#include <stdio.h>\n\n#ct-raw\n'
-    awk 'BEGIN { for (i = 0; i < 32769; i++) printf "x"; printf "\n" }'
+    awk 'BEGIN { for (i = 0; i < 65537; i++) printf "x"; printf "\n" }'
     printf '#ct-endraw\n\nint main(void) { return 0; }\n'
 } > "$work/raw-big.ct"
 if "$work/ct-ast" "$work/raw-big.ct" -o "$work/raw-big.c" \
         >"$work/raw-big.out" 2>"$work/raw-big.err"; then
     bad "raw cap" "an over-long block was accepted"
-elif grep -q "raw block exceeds 32768 bytes" "$work/raw-big.err"; then
-    ok "raw (the 32768-byte cap)"
+elif grep -q "raw block exceeds 65536 bytes" "$work/raw-big.err"; then
+    ok "raw (the 65536-byte formal cap)"
 else
     bad "raw cap" "$(cat "$work/raw-big.err")"
 fi
@@ -5085,6 +5086,12 @@ if bash test/ast/cap_adt.sh "$work/ct-ast" >"$work/adtc.out" 2>"$work/adtc.err";
     ok "S1a-0 ADT counts grow"
 else
     bad "S1a-0 ADT counts grow" "$(cat "$work/adtc.out" "$work/adtc.err" | head -6)"
+fi
+
+if bash test/ast/cap_text.sh "$work/ct-ast" >"$work/capt.out" 2>"$work/capt.err"; then
+    ok "S1a-0 C2 text caps"
+else
+    bad "S1a-0 C2 text caps" "$(cat "$work/capt.out" "$work/capt.err" | head -6)"
 fi
 
 
