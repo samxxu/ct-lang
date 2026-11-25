@@ -2,6 +2,7 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include "Symbols.h"
 #include "SymbolsTypeText.h"
+#include "Intern.h"
 
 #line 1 "selfhost/ct-ast/frontend/sym/Symbols.h.ct"
 #include <stdio.h>
@@ -62,6 +63,7 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
+struct runtime_text_Intern;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -1716,7 +1718,10 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
             return 0;
         }
         memset((&_self->taliases[i]), 0, sizeof(_self->taliases[i]));
-        snprintf(_self->taliases[i].name, sizeof(_self->taliases[i].name), "%s", name);
+        _self->taliases[i].name = runtime_text_ct_intern(name);
+        if ((!_self->taliases[i].name)) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
         snprintf(_self->taliases[i].path, sizeof(_self->taliases[i].path), "%s", path);
         _self->taliases[i].line = line;
         _self->taliases[i].is_pub = is_pub;
@@ -1745,7 +1750,10 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
     i = _self->ntalias;
     _self->ntalias++;
     memset((&_self->taliases[i]), 0, sizeof(_self->taliases[i]));
-    snprintf(_self->taliases[i].name, sizeof(_self->taliases[i].name), "%s", name);
+    _self->taliases[i].name = runtime_text_ct_intern(name);
+    if ((!_self->taliases[i].name)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
     snprintf(_self->taliases[i].path, sizeof(_self->taliases[i].path), "%s", path);
     _self->taliases[i].line = line;
     _self->taliases[i].is_pub = is_pub;
@@ -1763,6 +1771,7 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_finish_type_alias(void
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
     int g;
+    const char * tgt;
     if (_self->ntachain <= 0) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "internal: type alias declaration is not open");
     }
@@ -1770,7 +1779,11 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_finish_type_alias(void
     if (i < 0) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "internal: type alias declaration is not open");
     }
-    snprintf(_self->taliases[i].target, sizeof(_self->taliases[i].target), "%s", target);
+    tgt = runtime_text_ct_intern(target);
+    if ((!tgt)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    _self->taliases[i].target = tgt;
     _self->taliases[i].forward = 0;
     _self->taliases[i].resolving = 0;
     if (_self->__frontend_sym_symbolops_vptr->ensure_global_type_alias_capacity(_self, (_self->ngtalias + 1)) != 0) {
@@ -1807,7 +1820,10 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_forward_type_alias
     i = _self->ntalias;
     _self->ntalias++;
     memset((&_self->taliases[i]), 0, sizeof(_self->taliases[i]));
-    snprintf(_self->taliases[i].name, sizeof(_self->taliases[i].name), "%s", name);
+    _self->taliases[i].name = runtime_text_ct_intern(name);
+    if ((!_self->taliases[i].name)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
     snprintf(_self->taliases[i].path, sizeof(_self->taliases[i].path), "%s", path);
     _self->taliases[i].line = line;
     _self->taliases[i].owner = owner;
@@ -1823,7 +1839,7 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_visible_type_alias
         if (strcmp(_self->taliases[i].name, name) != 0) {
             continue;
         }
-        if (strcmp(_self->taliases[i].target, target) == 0) {
+        if ((_self->taliases[i].target && (strcmp(_self->taliases[i].target, target) == 0))) {
             return 0;
         }
         snprintf(msg, sizeof(msg), "type alias '%s' is exported by both %s and %s", name, _self->taliases[i].path, path);
@@ -1845,8 +1861,14 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_visible_type_alias
     i = _self->ntalias;
     _self->ntalias++;
     memset((&_self->taliases[i]), 0, sizeof(_self->taliases[i]));
-    snprintf(_self->taliases[i].name, sizeof(_self->taliases[i].name), "%s", name);
-    snprintf(_self->taliases[i].target, sizeof(_self->taliases[i].target), "%s", target);
+    _self->taliases[i].name = runtime_text_ct_intern(name);
+    if ((!_self->taliases[i].name)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    _self->taliases[i].target = runtime_text_ct_intern(target);
+    if ((!_self->taliases[i].target)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
     snprintf(_self->taliases[i].path, sizeof(_self->taliases[i].path), "%s", path);
     _self->taliases[i].line = line;
     _self->taliases[i].owner = owner;
@@ -1912,7 +1934,7 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_expand_type_alias(void
     }
     snprintf(_self->tachain[_self->ntachain], 160, "%s", name);
     _self->ntachain++;
-    if ((!_self->taliases[i].target[0])) {
+    if (((!_self->taliases[i].target) || (!_self->taliases[i].target[0]))) {
         _self->ntachain--;
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "type alias has no target");
     }
@@ -1986,28 +2008,39 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_expand_type_text(void 
 static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_resolve_exported_type_aliases(void *self, int owner) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
-    int k;
     char out[160];
+    const char * tgt;
     for (i = 0; i < _self->ngtalias; i++) {
         if (_self->gtaliases[i].owner != owner) {
+            continue;
+        }
+        if ((!_self->gtaliases[i].target)) {
             continue;
         }
         if (_self->__frontend_sym_typealiasops_vptr->expand_type_text(_self, _self->gtaliases[i].target, out, sizeof(out)) != 0) {
             return (-1);
         }
-        snprintf(_self->gtaliases[i].target, sizeof(_self->gtaliases[i].target), "%s", out);
+        tgt = runtime_text_ct_intern(out);
+        if ((!tgt)) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
+        _self->gtaliases[i].target = tgt;
     }
     for (i = 0; i < _self->ntalias; i++) {
         if (_self->taliases[i].owner != owner) {
             continue;
         }
+        if ((!_self->taliases[i].target)) {
+            continue;
+        }
         if (_self->__frontend_sym_typealiasops_vptr->expand_type_text(_self, _self->taliases[i].target, out, sizeof(out)) != 0) {
             return (-1);
         }
-        k = snprintf(_self->taliases[i].target, sizeof(_self->taliases[i].target), "%s", out);
-        if (((k < 0) || (k >= (int)(sizeof(_self->taliases[i].target))))) {
-            return _self->__frontend_sym_symbolops_vptr->fail(_self, "type alias is too long");
+        tgt = runtime_text_ct_intern(out);
+        if ((!tgt)) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
         }
+        _self->taliases[i].target = tgt;
     }
     return 0;
 }

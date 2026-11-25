@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10153 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=65420 io_cap=1024
+     emitted_before=48223 emitted_after=65713 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -134,6 +134,11 @@
       `EmitInit` trait，方法体与 `sb_rewrite_init` 搬入
       `backend/emit/EmitInit.h.ct`；Emitter.h.ct 10430 -> 10153，发射 C
       65203 -> 65420，切片清单仍为 76；D1–D3 完成)
+     (v1-PH-2 S1a-0 C2n-0 后复测：新增 `runtime/text/Intern.h.ct`
+      （字符串驻留池，`TypeAlias.name`/`.target` 改 `const char *`），
+      Emitter.h.ct 不变（10153），发射 C 65420 -> 65713（+202 新单元 +
+      91 既有 .c：每文件新增一行前向声明，Symbols.c 的 8 处 ct_intern
+      赋值与 13 行旧 snprintf 删除），切片清单仍为 76)
 -->
 
 ## 1 切片清单

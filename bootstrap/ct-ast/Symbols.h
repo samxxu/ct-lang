@@ -11,6 +11,7 @@
 #include <ctype.h>
 
 #include "SymbolsTypeText.h"
+#include "Intern.h"
 
 
 struct ct_buf;
@@ -21,6 +22,7 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
+struct runtime_text_Intern;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -170,8 +172,8 @@ extern const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sy
 extern const struct frontend_sym_TypeAliasOps_vtbl frontend_sym_Symbols_frontend_sym_TypeAliasOps_vtable;
 
 struct frontend_sym_TypeAlias {
-    char name[160];
-    char target[160];
+    const char * name;
+    const char * target;
     char path[1024];
     int line;
     int is_pub;

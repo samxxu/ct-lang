@@ -1062,6 +1062,17 @@ else
     bad "test25/unit" "$(cat "$work/test25unit.out" "$work/test25unit.err" | head -8)"
 fi
 
+# v1-PH-2 S1a-0 C2n-0: the string-interning pool (`runtime::text::Intern`) and
+# the `TypeAlias.name` / `.target` migration. The probe links the generated
+# `Intern.c` with a C harness (dedup, a real malloc copy, pointer stability
+# across growth, length/64K/65537 and reset), compiles 2000 aliases through the
+# compiler under test, and re-runs the chain / cycle / cross-unit alias paths.
+if bash test/ast/intern_pool.sh "$work/ct-ast" "$CC" >"$work/intern.out" 2>"$work/intern.err"; then
+    ok "c2n/intern ($(tail -1 "$work/intern.out"))"
+else
+    bad "c2n/intern" "$(cat "$work/intern.out" "$work/intern.err" | head -8)"
+fi
+
 # DOC-87 Stage 2: the built-in layer's source namespace `core`. The canonical
 # `core::` spellings compile, the root spelling stays a compatibility alias, and
 # both spellings emit byte-identical C (the C symbols stay in the root

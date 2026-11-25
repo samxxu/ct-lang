@@ -22,6 +22,7 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct frontend_sym_SymbolsTypeText;
+struct runtime_text_Intern;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;

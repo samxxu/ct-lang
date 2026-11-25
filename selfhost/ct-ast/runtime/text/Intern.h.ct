@@ -1,0 +1,167 @@
+/*
+ * Intern.h.ct - the string-interning pool for ct-ast's text fields, one class
+ * of its own.
+ *
+ * S1a-0 C2n-0 spike: `TypeAlias.name` / `.target` are the first two fields to
+ * move off a fixed `char[160]` and onto a `const char *` owned by this pool.
+ * The pool is process-wide: a text is allocated once, deduplicated by content
+ * and never moved, so a pointer handed out stays valid until the caller
+ * explicitly resets the pool. A pointer field is then a plain copy -- no
+ * `strncpy`, no `sizeof`, no per-row ownership -- and a per-unit symbol-table
+ * reset can drop a row without freeing a text another row still points at.
+ *
+ * The table is open addressing with linear probing over FNV-1a (32-bit). It
+ * doubles when the next insert would pass a 0.7 load factor; the strings
+ * themselves are separate `malloc` blocks, so growth never moves a pointer
+ * that was already returned. `TEXT_LIMIT` is the formal text bound: a longer
+ * text is refused (NULL), never truncated, and a refused text is not inserted
+ * (so a later lookup cannot see a cut copy of it).
+ *
+ * `ct_intern_len` takes an explicit byte count, so a caller that already knows
+ * the length needs no scan. The pool stores the length it was given and
+ * compares by (length, bytes), so an embedded NUL is content, not a
+ * terminator; every stored text is NUL-terminated after those bytes so a C
+ * consumer can still read it as a string.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* Mirror of the formal text bound in frontend/sym/Limits.h.ct. */
+#define TEXT_LIMIT 65536
+
+namespace runtime::text;
+/* A stateless unit: the type exists only because a unit file is named after its
+   main type. Nothing instantiates it; the pool state is file-scope below. */
+pub struct Intern {
+    int unused;
+}
+
+/* Intern the NUL-terminated `s`; NULL in, NULL out. The result is valid until
+   `ct_intern_reset`, and equal texts return the same pointer. */
+pub const char *ct_intern(const char *s);
+/* Intern exactly `len` bytes of `s`; those bytes may contain NUL. A NULL `s`,
+   a negative length or a length above `TEXT_LIMIT` returns NULL. */
+pub const char *ct_intern_len(const char *s, int len);
+/* Release every interned text and the table. Pointers handed out before the
+   call are dangling afterwards; no caller may hold one across a reset. */
+pub void ct_intern_reset(void);
+
+/* One power-of-two slot table. An empty slot is a NULL `slot`; `len[i]` is the
+   stored byte count (meaningless while `slot[i]` is NULL). `count` is the
+   number of live rows, kept so the load factor needs no scan. */
+static char **g_iset;
+static int *g_ilen;
+static int g_icap;
+static int g_icount;
+
+/* FNV-1a over exactly `len` bytes, truncated to 32 bits. The same hash selects
+   the home slot and detects drift on a grow, so insertion and lookup agree. */
+static unsigned long ct_intern_hash(const char *s, int len)
+{
+    unsigned long h = 2166136261UL;
+    int i;
+
+    for (i = 0; i < len; i++) {
+        h = (h ^ (unsigned long)(unsigned char)s[i]) & 0xffffffffUL;
+        h = (h * 16777619UL) & 0xffffffffUL;
+    }
+    return h;
+}
+
+/* Double the slot table and re-insert every live text. The text blocks are
+   moved between slots, never copied, so a returned pointer stays put. A failed
+   allocation leaves the old table intact and reports OOM. */
+static int ct_intern_grow(void)
+{
+    int ncap, i;
+    char **nset;
+    int *nlen;
+
+    ncap = g_icap > 0 ? g_icap * 2 : 64;
+    nset = (char **)calloc((size_t)ncap, sizeof(*nset));
+    nlen = (int *)calloc((size_t)ncap, sizeof(*nlen));
+    if (!nset || !nlen) {
+        free(nset);
+        free(nlen);
+        return -1;
+    }
+    for (i = 0; i < g_icap; i++) {
+        unsigned long h;
+        int idx;
+        if (!g_iset[i]) continue;
+        h = ct_intern_hash(g_iset[i], g_ilen[i]);
+        idx = (int)(h & (unsigned long)(ncap - 1));
+        while (nset[idx]) idx = (idx + 1) & (ncap - 1);
+        nset[idx] = g_iset[i];
+        nlen[idx] = g_ilen[i];
+    }
+    free(g_iset);
+    free(g_ilen);
+    g_iset = nset;
+    g_ilen = nlen;
+    g_icap = ncap;
+    return 0;
+}
+
+/* The one insert path. Lookup first (dedup), grow before the insert would pass
+   the 0.7 load, then copy into a fresh block. Every early failure returns NULL
+   without inserting, so a refused text is never visible to a later lookup. */
+static const char *ct_intern_put(const char *s, int len)
+{
+    unsigned long h;
+    int idx;
+    char *buf;
+
+    if (!s || len < 0 || len > TEXT_LIMIT) return (const char *)0;
+    h = ct_intern_hash(s, len);
+    if (g_icap > 0) {
+        idx = (int)(h & (unsigned long)(g_icap - 1));
+        while (g_iset[idx]) {
+            if (g_ilen[idx] == len && memcmp(g_iset[idx], s, (size_t)len) == 0)
+                return (const char *)g_iset[idx];
+            idx = (idx + 1) & (g_icap - 1);
+        }
+    }
+    if (g_icap == 0 || (g_icount + 1) * 10 > g_icap * 7) {
+        if (ct_intern_grow() != 0) return (const char *)0;
+    }
+    idx = (int)(h & (unsigned long)(g_icap - 1));
+    while (g_iset[idx]) idx = (idx + 1) & (g_icap - 1);
+    buf = (char *)malloc((size_t)len + 1);
+    if (!buf) return (const char *)0;
+    if (len > 0) memcpy(buf, s, (size_t)len);
+    buf[len] = 0;
+    g_iset[idx] = buf;
+    g_ilen[idx] = len;
+    g_icount++;
+    return (const char *)buf;
+}
+
+const char *ct_intern(const char *s)
+{
+    if (!s) return (const char *)0;
+    return ct_intern_put(s, (int)strlen(s));
+}
+
+const char *ct_intern_len(const char *s, int len)
+{
+    return ct_intern_put(s, len);
+}
+
+void ct_intern_reset(void)
+{
+    int i;
+
+    if (g_iset) {
+        for (i = 0; i < g_icap; i++) free(g_iset[i]);
+    }
+    free(g_iset);
+    free(g_ilen);
+    g_iset = (char **)0;
+    g_ilen = (int *)0;
+    g_icap = 0;
+    g_icount = 0;
+}

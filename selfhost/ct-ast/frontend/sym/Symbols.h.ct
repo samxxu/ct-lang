@@ -20,6 +20,7 @@
 #include <string.h>
 #include <ctype.h>
 import frontend::sym::SymbolsTypeText;
+import runtime::text::Intern;
 
 /* Contract-tested caps (TEST-9): check-ast.sh generates one overflow fixture for
    MAX_PARAMS, MAX_METHODS, MAX_FUNCS, MAX_SCOPE, MAX_VARS, MAX_FIELDS and
@@ -83,8 +84,13 @@ namespace frontend::sym;
    `resolving` marks the one currently being parsed, so a self reference is a
    cycle instead of an empty expansion. */
 pub struct TypeAlias {
-    char name[160];
-    char target[160];
+    /* S1a-0 C2n-0: `name` / `target` are interned texts owned by
+       runtime::text::Intern, not inline `char[160]` arrays. They are copied as
+       pointers and never freed by a symbol-table reset (only the pool may
+       release them), so a row reset per unit cannot dangle another row's
+       spelling. */
+    const char *name;
+    const char *target;
     char path[1024];
     int  line;
     int  is_pub;
@@ -2071,7 +2077,8 @@ impl TypeAliasOps for Symbols {
                local declaration of the same name shadows it in place: the
                local target is what the rest of this unit sees from here on. */
             memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
-            snprintf(self->taliases[i].name, sizeof self->taliases[i].name, "%s", name);
+            self->taliases[i].name = runtime::text::ct_intern(name);
+            if (!self->taliases[i].name) return self->fail("out of memory");
             snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
             self->taliases[i].line = line;
             self->taliases[i].is_pub = is_pub;
@@ -2096,7 +2103,8 @@ impl TypeAliasOps for Symbols {
         i = self->ntalias;
         self->ntalias++;
         memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
-        snprintf(self->taliases[i].name, sizeof self->taliases[i].name, "%s", name);
+        self->taliases[i].name = runtime::text::ct_intern(name);
+        if (!self->taliases[i].name) return self->fail("out of memory");
         snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
         self->taliases[i].line = line;
         self->taliases[i].is_pub = is_pub;
@@ -2112,10 +2120,13 @@ impl TypeAliasOps for Symbols {
     int finish_type_alias(const char *target)
     {
         int i, g;
+        const char *tgt;
         if (self->ntachain <= 0) return self->fail("internal: type alias declaration is not open");
         i = self->find_type_alias(self->tachain[self->ntachain - 1]);
         if (i < 0) return self->fail("internal: type alias declaration is not open");
-        snprintf(self->taliases[i].target, sizeof self->taliases[i].target, "%s", target);
+        tgt = runtime::text::ct_intern(target);
+        if (!tgt) return self->fail("out of memory");
+        self->taliases[i].target = tgt;
         self->taliases[i].forward = 0;
         self->taliases[i].resolving = 0;
         if (self->ensure_global_type_alias_capacity(self->ngtalias + 1) != 0) return -1;
@@ -2145,7 +2156,8 @@ impl TypeAliasOps for Symbols {
         i = self->ntalias;
         self->ntalias++;
         memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
-        snprintf(self->taliases[i].name, sizeof self->taliases[i].name, "%s", name);
+        self->taliases[i].name = runtime::text::ct_intern(name);
+        if (!self->taliases[i].name) return self->fail("out of memory");
         snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
         self->taliases[i].line = line;
         self->taliases[i].owner = owner;
@@ -2164,7 +2176,8 @@ impl TypeAliasOps for Symbols {
         char msg[512];
         for (i = 0; i < self->ntalias; i++) {
             if (strcmp(self->taliases[i].name, name) != 0) continue;
-            if (strcmp(self->taliases[i].target, target) == 0) return 0;
+            if (self->taliases[i].target
+                && strcmp(self->taliases[i].target, target) == 0) return 0;
             snprintf(msg, sizeof msg,
                      "type alias '%s' is exported by both %s and %s",
                      name, self->taliases[i].path, path);
@@ -2183,8 +2196,10 @@ impl TypeAliasOps for Symbols {
         i = self->ntalias;
         self->ntalias++;
         memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
-        snprintf(self->taliases[i].name, sizeof self->taliases[i].name, "%s", name);
-        snprintf(self->taliases[i].target, sizeof self->taliases[i].target, "%s", target);
+        self->taliases[i].name = runtime::text::ct_intern(name);
+        if (!self->taliases[i].name) return self->fail("out of memory");
+        self->taliases[i].target = runtime::text::ct_intern(target);
+        if (!self->taliases[i].target) return self->fail("out of memory");
         snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
         self->taliases[i].line = line;
         self->taliases[i].owner = owner;
@@ -2242,7 +2257,7 @@ impl TypeAliasOps for Symbols {
             return self->fail("type alias expansion is too deep");
         snprintf(self->tachain[self->ntachain], 160, "%s", name);
         self->ntachain++;
-        if (!self->taliases[i].target[0]) {
+        if (!self->taliases[i].target || !self->taliases[i].target[0]) {
             self->ntachain--;
             return self->fail("type alias has no target");
         }
@@ -2300,21 +2315,26 @@ impl TypeAliasOps for Symbols {
        a self-contained row and never depends on this unit's private names. */
     int resolve_exported_type_aliases(int owner)
     {
-        int i, k;
+        int i;
         char out[160];
+        const char *tgt;
         for (i = 0; i < self->ngtalias; i++) {
             if (self->gtaliases[i].owner != owner) continue;
+            if (!self->gtaliases[i].target) continue;
             if (self->expand_type_text(self->gtaliases[i].target, out, sizeof out) != 0)
                 return -1;
-            snprintf(self->gtaliases[i].target, sizeof self->gtaliases[i].target, "%s", out);
+            tgt = runtime::text::ct_intern(out);
+            if (!tgt) return self->fail("out of memory");
+            self->gtaliases[i].target = tgt;
         }
         for (i = 0; i < self->ntalias; i++) {
             if (self->taliases[i].owner != owner) continue;
+            if (!self->taliases[i].target) continue;
             if (self->expand_type_text(self->taliases[i].target, out, sizeof out) != 0)
                 return -1;
-            k = snprintf(self->taliases[i].target, sizeof self->taliases[i].target, "%s", out);
-            if (k < 0 || k >= (int)sizeof self->taliases[i].target)
-                return self->fail("type alias is too long");
+            tgt = runtime::text::ct_intern(out);
+            if (!tgt) return self->fail("out of memory");
+            self->taliases[i].target = tgt;
         }
         return 0;
     }
