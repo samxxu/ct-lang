@@ -114,11 +114,15 @@
 | 切片 | 内容 | 判据 |
 | --- | --- | --- |
 | C1 计数 | 33 个 A 类（含本地 `MAX_INDEX_ROWS` 与第 4 节 A 类字面量）：`realloc` 倍增，OOM 阀与 `MAX_FUNCS` 同形 | 旧上限的越界负例改为“可增长并通过”；新增扩容用例；生成物逐字节 |
-| C2 文本/路径 | 7 个 B 类 + `MAX_FLAGS`/`MAX_CMD`/`MAX_LOCK` 等；`char[MAX_TEXT]` 逐步改为按需缓冲 | 长名/长路径用例；无静默截断；生成物逐字节 |
-| C3 语言上限 | `MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS` / `MAX_STRUCT_TPARAMS` 一并放到形式上限；**同一提交改 spec §8 / stable-subset** | spec 与实现一致；“类型参数最多两个”退役；正负例 |
+| C2 文本/路径（已完成 C2a–C2m） | 路径/命令/键/锁/行/初始化文本等已按需增长；`MAX_PKG_PATH`、`MAX_PATH` 已退场 | 切片证据见 §2 / §3 |
+| C2n `MAX_TEXT` 驻留池 | 把 791 处 `char[MAX_TEXT]` 改“字符串驻留池 + 偏移/句柄”，一次替换；分三步：①池单元 + 符号表字段 ②parser/Expr/Stmt ③emitter/诊断 | 池自测（去重、超 `TEXT_LIMIT` 报错）；名字 API 统一；生成物逐字节；seed 两轮 |
+| C2o 硬编码长度 | 实例名 159、字面量 158、import 别名 24、导出类型名 128 → 池/动态 | 长名正例；旧上限负例改“增长成功” |
+| C2p 合批 | 每提交 4–6 个单元（单元簇），不按单 cap 一片；C4 只在收口做一次 | 每提交只重生成一次 seed；`check-ast` 绿 |
+| C3 语言上限（已完成） | `MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS` / `MAX_STRUCT_TPARAMS` 已放到形式上限，spec §8 / stable-subset 同批改写 | 已有切片证据；spec 与实现一致 |
 | C4 测试与文档 | TEST-9 的“too many”契约改为“增长成功”；spec §8 上限表退役；`Limits.h.ct` 只留 `CAP_LIMIT` / `TEXT_LIMIT` / `NODE_LIMIT` 与 D 类 | `check-all` 绿；seed 两轮逐字节 |
 
-- C1 与 C2 各自独立提交、独立回滚；C2 涉及 31 个单元与 791 处数组，排在 C1 之后；
+- C2a–C2m 已落地的切片不回滚；**C2n 是单写者阶段**：池迁移期间不允许并行改 Expr/Stmt；
+- C2n 完成后再做 C2o/C2p；C2p 的并行只适用于 S1a-1（见卡 N-7）；
 - C3 与 C1/C2 同属 S1a-0，但 spec / stable-subset 的改写必须与实现同批提交，不允许实现先行；
 - 每个切片都要重生成 `bootstrap/ct-ast` 并过 gate 13（内置层/编译器自身布局变化）。
 

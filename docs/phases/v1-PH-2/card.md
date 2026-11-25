@@ -41,7 +41,7 @@ version-minor: 2
 | 总闸 | **S1a-0 → S1a-1 → S1b**：S1a-0 放开容量上限；S1a-1 纯搬移收敛单元（SH-94 剩余）；S1b 落 LIR；未过闸，S2–S9 不开工 | 未开工 |
 | 例外 | S0 不依赖 S1a/S1b，可先做并独立切 `v1.1.1` | 未开工 |
 | stage 闸 | 每 stage 独立红证 → 独立合入 → 独立回滚；未过闸不进入下一 stage | 未开工 |
-| 收口闸 | E-V3-* 全绿；`check-all`；seed 两轮逐字节；`v1.2.0` tag | 未开工 |
+| 收口闸 | E-V3-* 全绿；`check-all`；seed 两轮逐字节；`v1.2.0` 由所有者手工打 tag | 未开工 |
 
 ### 1.1 真实依赖矩阵
 
@@ -68,14 +68,15 @@ version-minor: 2
 > N-4：S8 不得反向阻塞 S2–S7；功能先落在 LIR，切换最后做。
 > N-5：外部/触发式条目（`REQ-PKG-1`、`REQ-ABI-2`、`TEST-22`、`PKG-16`）不进入本卡判据。
 > N-6：C3 语言上限（ADT 形态、泛型元数）与 C1/C2 同批收到形式上限；spec §8 / stable-subset 的改写必须与实现同一提交，不允许实现先行。
+> N-7：S1a-1 内 **Expr（A/B 组）与 Stmt（C 组）文件集不重叠，可并行**；Emitter D 组可与其并行；但都必须等 S1a-0 收口（C2n 驻留池是单写者阶段）。
 
 ## 2 任务（stage）
 
 | stage | 交付 | 对应条目 | 验收 | effort |
 | --- | --- | --- | --- | --- |
 | S0 小欠账与基线 | 枚举形参 / `union *` 形参的 `.abi.h` 前置声明；nightly 补 TSan 与 ASAN 栈逃逸 job；诊断码 registry 完整化；文档纠偏（AGENTS pin、需求池过期字段） | [SH-121](../../../issues/selfhost/sh121-abi-enum-forward.md)、[SH-122](../../../issues/selfhost/sh122-abi-union-forward.md)、[REQ-CI-1](../../planning/requirements-pool.md#L279-L293)、[REQ-CI-2](../../planning/requirements-pool.md#L295-L309)、[LANG-25](../../../issues/lang/lang-25-diagnostic-code-registry.md)、[DOC-100](../../../issues/docs/doc-100-upstream-ct-cr.md) | 两个缺陷各有 issue 与正负例；两个 nightly job 绿；码表与源码一致；文档门禁绿；生成物零变化 | M |
-| S1a-0 容量上限动态化 | C1：33 个计数上限 + 8 个本地常量 + 第 4 节 A 类字面量 → 动态倍增到 `CAP_LIMIT=65536`；C2：7 个文本/路径 + `MAX_FLAGS` / `MAX_CMD` / `MAX_LOCK` → 按需缓冲到 `TEXT_LIMIT=65536`；C3：ADT 形态与泛型元数同批收到形式上限并改 spec / stable-subset；`MAX_NODES` 改动态 arena（`NODE_LIMIT=16M`）；只保留深度/错误恢复保护 | [capacity-limits](../../planning/capacity-limits.md)、[SH-109](../../../issues/selfhost/sh109-max-funcs-capacity.md) | 旧上限负例改为“可增长并通过”；长名/长路径用例；形式上限只由 OOM/注入自测触发；生成物逐字节；seed 两轮 | L |
-| S1a-1 单元收敛（SH-94 剩余） | 纯搬移，按 [design §4](../../design/sh94-m1-core-layout.md#4-剩余拆分计划2026-11-25)：**Phase A** Expr 七个小组（A1–A7）→ **Phase B** 拆 `ExprOps`（B1–B5：CallCheck / Closure / Instantiate / TypeParse / StaticType）→ **Phase C** 拆 `StmtOps`（C1–C5：Match / Loop / Switch / Control / Uninit）→ **Phase D1–D3** 只拆 Emitter 的 `hoist` / `invariant` / `init`（执行序 D2→D1→D3）；`em_*` 76 个 kind 切片沿用既有自由函数工具 | [SH-94](../../../issues/selfhost/sh94-giant-units-duplicate-constants.md)、[sh94-m1-core-layout](../../design/sh94-m1-core-layout.md) | 每片 `tools/sh94_split_check.py` 函数体多重集不变；生成物逐字节；seed 两轮；单元名全局唯一；环数 0；A1 为 spike | L |
+| S1a-0 容量上限动态化 | C1：33 个计数上限 + 8 个本地常量 + 第 4 节 A 类字面量 → 动态倍增到 `CAP_LIMIT=65536`；C2a–C2m 已落（路径/命令/键/锁/行/初始化文本）；**C2n：剩余 `MAX_TEXT` 改字符串驻留池（791 处一次替换）**；C2o：硬编码 159/158/24/128；C2p：按单元簇合批，每提交 4–6 单元；C3：ADT 形态与泛型元数同批收到形式上限并改 spec / stable-subset；`MAX_NODES` 改动态 arena（`NODE_LIMIT=16M`）；只保留深度/错误恢复保护 | [capacity-limits](../../planning/capacity-limits.md)、[SH-109](../../../issues/selfhost/sh109-max-funcs-capacity.md) | 旧上限负例改为“可增长并通过”；长名/长路径用例；形式上限只由 OOM/注入自测触发；生成物逐字节；seed 两轮 | L |
+| S1a-1 单元收敛（SH-94 剩余） | 纯搬移，按 [design §4](../../design/sh94-m1-core-layout.md#4-剩余拆分计划2026-11-25)：**Phase A** Expr 七个小组（A1–A7）→ **Phase B** 拆 `ExprOps`（B1–B5：CallCheck / Closure / Instantiate / TypeParse / StaticType）→ **Phase C** 拆 `StmtOps`（C1–C5：Match / Loop / Switch / Control / Uninit）→ **Phase D1–D3** 只拆 Emitter 的 `hoist` / `invariant` / `init`（执行序 D2→D1→D3）；**Expr/Stmt 可并行（N-7）**；`em_*` 76 个 kind 切片沿用既有自由函数工具 | [SH-94](../../../issues/selfhost/sh94-giant-units-duplicate-constants.md)、[sh94-m1-core-layout](../../design/sh94-m1-core-layout.md) | 每片 `tools/sh94_split_check.py` 函数体多重集不变；生成物逐字节；seed 两轮；单元名全局唯一；环数 0；A1 为 spike | L |
 | S1b IR-1（总闸） | TIR typed 视图；LIR 覆盖现有发射形态；scope 树 + 清理条目栈 + 每条出口清理集；`return` / `break` / `continue` / 合法 `goto` / `?` 失败 / errdefer 清理边；TIR/LIR 两处不变量检查点（`E-IR-1xx`）；AST 路径保留为 oracle 双跑 | [SH-112](../../../issues/selfhost/sh112-typed-ir-architecture.md)、typed-lowered-ir §2–§5 | 全语料生成 C 逐字节不变；六类清理边夹具；验证器负例不产出 C；IR 覆盖清单 | L |
 | S2 下标协议完整化 | REQ-JSACCESS-1（名 + 参数类型匹配）→ REQ-INDEX-1（读/写/借写；`+=` / `++` / `&x[k]` 二值化） | [REQ-JSACCESS-1](../../planning/requirements-pool.md#L71-L103)、[REQ-INDEX-1](../../planning/requirements-pool.md#L105-L142) | 两条 A1–A7 全绿；无匹配硬错并列候选；`p52_*` 零回归；`ct-json` / `rill` 冒烟 | L |
 | S3 函子签名糖 | `(A,B) => R`：先 ADR（与 trait/闭包关系、类型语法、ABI、IDE 展开），再在 LIR 上实现 | [REQ-FUNCTOR-1](../../planning/requirements-pool.md)、[pointer-free-v2 §2.5](../../proposals/pointer-free-v2.md) | ADR 通过；正负例；零运行期成本；spec 新节 + IDE 语法高亮 | M |
@@ -85,12 +86,16 @@ version-minor: 2
 | S7 检查器与证据 | REQ-TYPE-1（`--types` 三类判定进 `build/compile` 默认，先 FP=0 再分切片）；REQ-MEM-2（用 S1b 的 CFG 做单元内写入摘要）；REQ-MEM-1 只复评；P-1.3 迁移 lint | [REQ-TYPE-1](../../planning/requirements-pool.md#L229-L243)、[REQ-MEM-2](../../planning/requirements-pool.md#L261-L277)、[J-6 台账](../../planning/j6-evidence/ledger.md) | FP=0 证据；`--check-level=off` 逃生；写入摘要正负例；迁移 lint 三档 dry-run；`check-all` 绿 | L |
 | S8 IR-2 | emitter 契约（类型/实例化/生命周期判定移出 emitter）；内建层/泛型实例语义依赖图；golden 差异清单后重基线；自举切换；**切换后按 [design §4.5](../../design/sh94-m1-core-layout.md#45-phase-demitter分两段避免与-ir-重复劳动) 做 Emitter D4–D6（EmitHeader / EmitDecl / EmitExpr）** | typed-lowered-ir §4、§6–§8、[SH-113](../../../issues/selfhost/sh113-builtin-live-boundary.md)、[SH-94](../../../issues/selfhost/sh94-giant-units-duplicate-constants.md) | emitter 无类型/实例化/生命周期判定（评审签字）；全语料等价或差异清单签字；自举 2 轮（tag 前 3 轮）逐字节；D4–D6 生成物逐字节；旧路径一提交可回滚 | L |
 | S9 全局默认 strict（V1 欠账） | ① 审计 `798` 处 `#include`（`selfhost` 35 / `lib` 8 / `examples` 180 / `test` 575），分三类：边界单元、C 互操作用例、待清理；② `selfhost/` 与 `lib/core/` 迁到边界单元（`.m.ct` / shim），**零 allow**；③ `examples/`、`test/` 能迁则迁，C 互操作/负例显式 allow；④ `c_boundary_for` 去掉四目录豁免，默认 strict；manifest 无键改为 strict，`ct migrate` 为旧包写 `c-boundary = allow`；⑤ spec §1.2 / §4.66 与 README 更新；⑥ 自举与 seed 重生成 | [REQ-STRICT-1](../../planning/requirements-pool.md)、[v0-PH-65](../v0-PH-65/card.md) | 默认 strict 下 `check-all` 绿；`selfhost/`、`lib/core/` 零 allow；普通 `.ct` 无 include 不受影响；显式 allow 仍可用；`ct migrate` 旧包夹具通过；自举 2 轮 + seed 两轮逐字节 | L |
-| S10 收口 | `stable-subset` 分档更新；冷/热构建各测一次并记录（不立项）；`v1.2.0` 版本、annotated tag、release、dist；seed 重生成 | — | E-V3-11 | M |
+| S10 收口 | `stable-subset` 分档更新；冷/热构建各测一次并记录（不立项）；`CTC_VERSION 1.2.0` 与 dist；**tag 与 release 不自动创建**，由所有者手工验证后执行；seed 重生成 | — | E-V3-11 | M |
 
 > **S9 的边界（重要）**：这不是“加一个显式开关”，而是把 [v0-PH-65](../v0-PH-65/card.md) 的
 > pre-1.0 四目录豁免收回，**默认翻转为 strict**。C 互操作不删除：`.m.ct` / shim、manifest
 > `c-boundary = allow`、CLI `--c-boundary=allow` 继续可用，但必须显式。`798` 处 `#include` 是
 > **待迁移清单**，不是保留默认 allow 的理由；`examples` / `test` 中确实在测 C 互操作的用例保留并标注 allow。
+> **S10 的版本纪律（所有者 2026-11-26）**：`v1.2.0` **禁止自动打 tag**。S10 只提交
+> `CTC_VERSION`、dist 与收口证据；annotated tag 与 GitHub release 由所有者手工验证后执行。
+> `release.yml` 仅在 tag push / `workflow_dispatch` 时运行，仓库内不存在自动打 tag 的步骤。
+>
 > **stage 纪律**：每个 stage 独立提交、独立回滚；同一时刻只有一个会话持有施工分支。
 
 ## 3 退出判据
@@ -109,7 +114,7 @@ version-minor: 2
 | E-V3-8 | 检查器：REQ-TYPE-1 FP=0 + 分切片；REQ-MEM-2 写入摘要；P-1.3 迁移 lint；`off` 逃生 |
 | E-V3-9 | IR-2：emitter 不再做类型/实例化/生命周期判定；语义图替换文本判活；golden 差异清单签字；自举 2 轮（tag 前 3 轮）逐字节；D4–D6 逐片生成物逐字节 |
 | E-V3-10 | 全局默认 strict：默认下 `check-all` 绿；`selfhost/` 与 `lib/core/` 零 allow；普通无 include 的 `.ct` 逐字节不变；显式 allow（manifest / CLI / shim）正负例；`ct migrate` 旧包夹具通过 |
-| E-V3-11 | 收口：`CTC_VERSION 1.2.0`、annotated tag、release 与 dist 同 v1.1 流程、`check-all` 全绿、seed 两轮逐字节 |
+| E-V3-11 | 收口：`CTC_VERSION 1.2.0`、dist 与发布流程同 v1.1；**不自动打 tag / 不自动发 release**——所有者手工验证后才创建 annotated tag；`check-all` 全绿、seed 两轮逐字节 |
 
 ## 4 风险与回滚
 

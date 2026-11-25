@@ -258,6 +258,10 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 > 存量欠账全部折进 [卡 §2](../phases/v1-PH-2/card.md) 的 S0–S10：**S1a-0 放开容量上限 →
 > S1a-1 做 SH-94 剩余单元收敛 → S1b 落 LIR（总闸）**，整卡只 bump 一次 `v1.2.0`。
 
+> **v1.2.0 版本纪律（2026-11-26 所有者）**：**不自动打 tag**。收口只提交 `CTC_VERSION 1.2.0`
+> 与 dist；annotated tag / GitHub release 由所有者手工验证后执行。`release.yml` 只响应
+> tag push 与 `workflow_dispatch`，不在 CI 内创建 tag。
+
 > **v1-PH-1 已开卡（2026-11-24，规划中）**：施工清单以
 > [卡 §2](../phases/v1-PH-1/card.md) 为准。本表里 SH-111 / SH-112 / SH-113 / SH-114、
 > DOC-91 / DOC-92、LANG-10 已全部 `verified`，不重复施工；入口闸与阶段划分见
