@@ -96,6 +96,7 @@ struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
+struct tool_pkg_DepList;
 struct tool_pkg_PkgRec;
 struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
@@ -104,7 +105,7 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct tool_pkg_PkgOps_vtbl {
-    int (*read_manifest)(void *, const char *, char *, size_t, char *, size_t, char * *, int *, int *);
+    int (*read_manifest)(void *, const char *, char *, size_t, char *, size_t, struct tool_pkg_DepList *);
     int (*version_parse)(void *, const char *, int[3]);
     int (*version_cmp)(void *, const int[3], const int[3]);
     int (*range_match)(void *, const char *, const char *);
@@ -150,6 +151,11 @@ struct tool_pkg_IndexRow {
     char url[MAX_PKG_PATH];
     char tag[64];
     char dig[80];
+};
+struct tool_pkg_DepList {
+    char * * spec;
+    int n;
+    int cap;
 };
 struct tool_pkg_PkgRec {
     char name[MAX_TEXT];
@@ -271,6 +277,8 @@ static int pkg_git_diag(struct tool_pkg_Pkg *, const char *, const char *, const
 static int pkg_pathrows_ensure(char * *, int *, int);
 static int pkg_seen_ensure(struct tool_pkg_Pkg *, int);
 static int pkg_recs_ensure(struct tool_pkg_Pkg *, int);
+static int pkg_deps_ensure(struct tool_pkg_DepList *, int);
+static void pkg_deps_free(struct tool_pkg_DepList *);
 static int pkg_lockrows_ensure(struct tool_pkg_LockRow * *, int *, int);
 static int pkg_lockparsed_ensure(struct tool_pkg_LockParsedRow * *, int *, int);
 static int index_row_parse(char *, char *[8]);
@@ -306,13 +314,14 @@ static const unsigned int tool_pkg_g_sha_k[64] = {
     0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 };
 static struct tool_pkg_Pkg tool_pkg_g_pkg = { .__tool_pkg_pkgops_vptr = &tool_pkg_Pkg_tool_pkg_PkgOps_vtable };
-static int tool_pkg_Pkg_tool_pkg_PkgOps_read_manifest(void *self, const char * dir, char * name, size_t ncap, char * ver, size_t vcap, char * * deps, int * depcap, int * ndeps) {
+static int tool_pkg_Pkg_tool_pkg_PkgOps_read_manifest(void *self, const char * dir, char * name, size_t ncap, char * ver, size_t vcap, struct tool_pkg_DepList * deps) {
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
     char * path;
     char * line;
     int linecap;
     FILE * f;
     int ok;
+    int i;
     path = pkg_pathf(_self, "%s/ct.pkg", dir);
     if ((!path)) {
         return (-1);
@@ -325,7 +334,10 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_read_manifest(void *self, const char * d
     linecap = 0;
     name[0] = 0;
     ver[0] = 0;
-    (*ndeps) = 0;
+    for (i = 0; i < deps->n; i++) {
+        free(deps->spec[i]);
+    }
+    deps->n = 0;
     ok = 1;
     while (pkg_text_fgets(_self, (&line), (&linecap), f) == 1) {
         char * ls;
@@ -390,18 +402,26 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_read_manifest(void *self, const char * d
             }
             else {
                 if (((kl == 3) && (strncmp(ls, "dep", 3) == 0))) {
-                    if (vl >= MAX_PKG_PATH) {
+                    char * spec;
+                    if (vl >= TEXT_LIMIT) {
                         ok = 0;
                         break;
                     }
-                    if (pkg_pathrows_ensure(deps, depcap, ((*ndeps) + 1)) != 0) {
+                    if (pkg_deps_ensure(deps, (deps->n + 1)) != 0) {
                         fprintf(stderr, "ctc: out of memory\n");
                         ok = 0;
                         break;
                     }
-                    memcpy(((*deps) + ((size_t)((*ndeps)) * MAX_PKG_PATH)), v, vl);
-                    (*deps)[(((size_t)((*ndeps)) * MAX_PKG_PATH) + vl)] = 0;
-                    (*ndeps)++;
+                    spec = (char *)(malloc((vl + 1)));
+                    if ((!spec)) {
+                        fprintf(stderr, "ctc: out of memory\n");
+                        ok = 0;
+                        break;
+                    }
+                    memcpy(spec, v, vl);
+                    spec[vl] = 0;
+                    deps->spec[deps->n] = spec;
+                    deps->n = (deps->n + 1);
                 }
                 else {
                     if ((!(((((((((((((kl == 9) && (strncmp(ls, "publisher", 9) == 0)) || ((kl == 7) && (strncmp(ls, "ns-root", 7) == 0))) || ((kl == 6) && (strncmp(ls, "cflags", 6) == 0))) || ((kl == 7) && (strncmp(ls, "ldflags", 7) == 0))) || ((kl == 8) && (strncmp(ls, "requires", 8) == 0))) || ((kl == 7) && ((strncmp(ls, "licence", 7) == 0) || (strncmp(ls, "license", 7) == 0)))) || ((kl == 5) && (strncmp(ls, "leaks", 5) == 0))) || ((kl == 9) && (strncmp(ls, "namespace", 9) == 0))) || ((kl == 6) && (strncmp(ls, "source", 6) == 0))) || ((kl == 7) && (strncmp(ls, "website", 7) == 0))) || ((kl == 4) && (strncmp(ls, "type", 4) == 0))) || ((kl == 6) && (strncmp(ls, "strict", 6) == 0))))) {
@@ -1126,8 +1146,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_fetch_git(void *self, const char * url, 
     int commitcap;
     char mname[MAX_TEXT];
     char mver[32];
-    char * deps;
-    int depcap;
+    struct tool_pkg_DepList deps;
     char tag[MAX_TEXT];
     char dig[80];
     char publisher[MAX_TEXT];
@@ -1135,7 +1154,6 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_fetch_git(void *self, const char * url, 
     char store[MAX_PKG_PATH];
     const char * home;
     struct stat st;
-    int ndeps;
     int i;
     int w;
     int rc;
@@ -1173,9 +1191,9 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_fetch_git(void *self, const char * url, 
     if (pkg_scrub(_self, url, (&surl), (&surlcap)) != 0) {
         return (-1);
     }
-    deps = NULL;
-    depcap = 0;
-    ndeps = 0;
+    deps.spec = 0;
+    deps.n = 0;
+    deps.cap = 0;
     if (depth > MAX_PKG_DEPTH) {
         fprintf(stderr, "ctc: dependency chain is too deep at '%s'\n", name);
         return (-1);
@@ -1413,7 +1431,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_fetch_git(void *self, const char * url, 
         fprintf(stderr, "ctc: git returned no commit for '%s'\n", name);
         return (-1);
     }
-    if (_self->__tool_pkg_pkgops_vptr->read_manifest(_self, cache, mname, sizeof(mname), mver, sizeof(mver), (&deps), (&depcap), (&ndeps)) != 0) {
+    if (_self->__tool_pkg_pkgops_vptr->read_manifest(_self, cache, mname, sizeof(mname), mver, sizeof(mver), (&deps)) != 0) {
         fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", cache);
         return (-1);
     }
@@ -1469,14 +1487,12 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_fetch_git(void *self, const char * url, 
             fprintf(stderr, "ctc: continuing despite the requires mismatch (--force)\n");
         }
     }
-    for (i = 0; i < ndeps; i++) {
-        if (_self->__tool_pkg_pkgops_vptr->get_spec(_self, (deps + ((size_t)(i) * MAX_PKG_PATH)), cache, (depth + 1)) != 0) {
+    for (i = 0; i < deps.n; i++) {
+        if (_self->__tool_pkg_pkgops_vptr->get_spec(_self, deps.spec[i], cache, (depth + 1)) != 0) {
             return (-1);
         }
     }
-    free(deps);
-    deps = NULL;
-    ndeps = 0;
+    pkg_deps_free((&deps));
     if (_self->__tool_pkg_pkgops_vptr->dir_digest(_self, cache, dig, sizeof(dig)) != 0) {
         fprintf(stderr, "ctc: cannot hash '%s'\n", cache);
         return (-1);
@@ -1648,26 +1664,24 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get_one(void *self, const char * dir, co
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
     char name[MAX_TEXT];
     char ver[32];
-    char * deps;
-    int depcap;
+    struct tool_pkg_DepList deps;
     char dig[80];
     char publisher[MAX_TEXT];
     char nsroot[MAX_PKG_PATH];
     char store[MAX_PKG_PATH];
-    int ndeps;
     int i;
     int w;
     int existed;
     struct stat st;
     struct tool_pkg_PkgRec * rec;
-    deps = NULL;
-    depcap = 0;
-    ndeps = 0;
+    deps.spec = 0;
+    deps.n = 0;
+    deps.cap = 0;
     if (depth > MAX_PKG_DEPTH) {
         fprintf(stderr, "ctc: dependency chain is too deep at '%s'\n", dir);
         return (-1);
     }
-    if (_self->__tool_pkg_pkgops_vptr->read_manifest(_self, dir, name, sizeof(name), ver, sizeof(ver), (&deps), (&depcap), (&ndeps)) != 0) {
+    if (_self->__tool_pkg_pkgops_vptr->read_manifest(_self, dir, name, sizeof(name), ver, sizeof(ver), (&deps)) != 0) {
         fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", dir);
         return (-1);
     }
@@ -1715,14 +1729,12 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get_one(void *self, const char * dir, co
             fprintf(stderr, "ctc: continuing despite the requires mismatch (--force)\n");
         }
     }
-    for (i = 0; i < ndeps; i++) {
-        if (_self->__tool_pkg_pkgops_vptr->get_spec(_self, (deps + ((size_t)(i) * MAX_PKG_PATH)), dir, (depth + 1)) != 0) {
+    for (i = 0; i < deps.n; i++) {
+        if (_self->__tool_pkg_pkgops_vptr->get_spec(_self, deps.spec[i], dir, (depth + 1)) != 0) {
             return (-1);
         }
     }
-    free(deps);
-    deps = NULL;
-    ndeps = 0;
+    pkg_deps_free((&deps));
     if (_self->__tool_pkg_pkgops_vptr->dir_digest(_self, dir, dig, sizeof(dig)) != 0) {
         fprintf(stderr, "ctc: cannot hash '%s'\n", dir);
         return (-1);
@@ -1780,14 +1792,13 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_remember_dep(void *self, const char * sp
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
     char * buf;
     char newname[MAX_TEXT];
-    char cur[MAX_PKG_PATH];
     char cn[MAX_TEXT];
+    char * cur;
     char * p;
     char * end;
     long sz;
     size_t n;
     size_t sl;
-    size_t cl;
     int found;
     int have_name;
     FILE * f;
@@ -1867,9 +1878,12 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_remember_dep(void *self, const char * sp
             break;
         }
         if (have_name) {
-            cl = ((vl < (sizeof(cur) - 1)) ? vl : (sizeof(cur) - 1));
-            memcpy(cur, v, cl);
-            cur[cl] = 0;
+            cur = pkg_text_dupn(_self, v, vl);
+            if ((!cur)) {
+                free(buf);
+                fprintf(stderr, "ctc: out of memory\n");
+                return (-1);
+            }
             if (((_self->__tool_pkg_pkgops_vptr->dep_name(_self, cur, cn, sizeof(cn)) == 0) && (strcmp(cn, newname) == 0))) {
                 found = 1;
                 break;
@@ -1905,14 +1919,12 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_dep_name(void *self, const char * spec, 
     char * mp;
     char sname[MAX_TEXT];
     char sver[32];
-    char * deps;
-    int depcap;
-    int ndeps;
+    struct tool_pkg_DepList deps;
     FILE * f;
     (void)(_self);
-    deps = NULL;
-    depcap = 0;
-    ndeps = 0;
+    deps.spec = 0;
+    deps.n = 0;
+    deps.cap = 0;
     if (_self->__tool_pkg_pkgops_vptr->split_spec(_self, spec, (&path), (&range)) != 0) {
         return (-1);
     }
@@ -1942,11 +1954,11 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_dep_name(void *self, const char * spec, 
         return _self->__tool_pkg_pkgops_vptr->git_name(_self, path, name, cap);
     }
     fclose(f);
-    if (_self->__tool_pkg_pkgops_vptr->read_manifest(_self, full, sname, sizeof(sname), sver, sizeof(sver), (&deps), (&depcap), (&ndeps)) != 0) {
-        free(deps);
+    if (_self->__tool_pkg_pkgops_vptr->read_manifest(_self, full, sname, sizeof(sname), sver, sizeof(sver), (&deps)) != 0) {
+        pkg_deps_free((&deps));
         return _self->__tool_pkg_pkgops_vptr->git_name(_self, path, name, cap);
     }
-    free(deps);
+    pkg_deps_free((&deps));
     if (snprintf(name, cap, "%s", sname) >= (int)(cap)) {
         return (-1);
     }
@@ -2117,8 +2129,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
     struct stat st;
     char pname[MAX_TEXT];
     char pver[32];
-    char * pdeps;
-    int depcap;
+    struct tool_pkg_DepList pdeps;
     struct tool_pkg_LockRow * lrows;
     char vdir[MAX_PKG_PATH];
     char cf[MAX_TEXT];
@@ -2140,7 +2151,6 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
     char imp[MAX_TEXT];
     char rel[MAX_PKG_PATH];
     char cand[MAX_PKG_PATH];
-    int ndeps;
     int nlock;
     int lockcap;
     int i;
@@ -2152,9 +2162,9 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
     (void)(_self);
     iline = 0;
     ilinecap = 0;
-    pdeps = NULL;
-    depcap = 0;
-    ndeps = 0;
+    pdeps.spec = 0;
+    pdeps.n = 0;
+    pdeps.cap = 0;
     nlock = 0;
     lockcap = 0;
     lrows = NULL;
@@ -2174,16 +2184,16 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
         return 1;
     }
     fclose(f);
-    if (_self->__tool_pkg_pkgops_vptr->read_manifest(_self, ".", pname, sizeof(pname), pver, sizeof(pver), (&pdeps), (&depcap), (&ndeps)) != 0) {
+    if (_self->__tool_pkg_pkgops_vptr->read_manifest(_self, ".", pname, sizeof(pname), pver, sizeof(pver), (&pdeps)) != 0) {
         fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
         return 1;
     }
     if (pkg_verify_lock(prog, (&lrows), (&nlock), (&lockcap)) != 0) {
         return 1;
     }
-    for (i = 0; i < ndeps; i++) {
+    for (i = 0; i < pdeps.n; i++) {
         char * spec;
-        spec = (pdeps + ((size_t)(i) * MAX_PKG_PATH));
+        spec = pdeps.spec[i];
         if (((_self->__tool_pkg_pkgops_vptr->split_spec(_self, spec, (&dpath), (&drange)) != 0) || (_self->__tool_pkg_pkgops_vptr->dep_name(_self, spec, dname, sizeof(dname)) != 0))) {
             fprintf(stderr, "ctc: bad dependency '%s'\n", spec);
             rc = 1;
@@ -2201,9 +2211,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
             rc = 1;
         }
     }
-    free(pdeps);
-    pdeps = NULL;
-    ndeps = 0;
+    pkg_deps_free((&pdeps));
     if (rc != 0) {
         return 1;
     }
@@ -3478,6 +3486,40 @@ static int pkg_recs_ensure(struct tool_pkg_Pkg * self, int need) {
     self->reccap = c;
     return 0;
 }
+static int pkg_deps_ensure(struct tool_pkg_DepList * deps, int need) {
+    int c;
+    char * * grown;
+    if (need <= deps->cap) {
+        return 0;
+    }
+    c = ((deps->cap > 0) ? deps->cap : MAX_PKG_DEPS);
+    while (((c < need) && (c < MAX_PKG_DEPS_MAX))) {
+        c *= 2;
+    }
+    if (c > MAX_PKG_DEPS_MAX) {
+        c = MAX_PKG_DEPS_MAX;
+    }
+    if (need > c) {
+        return (-1);
+    }
+    grown = (char * *)(realloc(deps->spec, ((size_t)(c) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    deps->spec = grown;
+    deps->cap = c;
+    return 0;
+}
+static void pkg_deps_free(struct tool_pkg_DepList * deps) {
+    int i;
+    for (i = 0; i < deps->n; i++) {
+        free(deps->spec[i]);
+    }
+    free(deps->spec);
+    deps->spec = 0;
+    deps->n = 0;
+    deps->cap = 0;
+}
 static int pkg_lockrows_ensure(struct tool_pkg_LockRow * * rows, int * cap, int need) {
     int c;
     struct tool_pkg_LockRow * grown;
@@ -4427,8 +4469,7 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     char * rowbuf;
     int linecap;
     int rowbufcap;
-    char * deps;
-    int depcap;
+    struct tool_pkg_DepList deps;
     char nsroot[MAX_TEXT];
     char kind[32];
     char * imsg;
@@ -4459,7 +4500,6 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     int seen;
     int lineno;
     int rows_cap;
-    int ndeps;
     int ntok;
     int i;
     int j;
@@ -4481,6 +4521,9 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     out_path = 0;
     list_dir = 0;
     list_dircap = 0;
+    deps.spec = 0;
+    deps.n = 0;
+    deps.cap = 0;
     imsg = 0;
     imsgcap = 0;
     msg = 0;
@@ -4492,9 +4535,6 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     check = 0;
     have_list = 0;
     have_out = 0;
-    deps = NULL;
-    depcap = 0;
-    ndeps = 0;
     for (ai = 0; ai < argc; ai++) {
         if (((strcmp(argv[ai], "-h") == 0) || (strcmp(argv[ai], "--help") == 0))) {
             printf("usage: %s index refresh --packages <list> --out <index> [--check]\n", prog);
@@ -4648,14 +4688,15 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
             }
             continue;
         }
-        ndeps = 0;
-        if (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->read_manifest(&tool_pkg_g_pkg, r->dir, r->name, sizeof(r->name), r->ver, sizeof(r->ver), (&deps), (&depcap), (&ndeps)) != 0) {
+        if (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->read_manifest(&tool_pkg_g_pkg, r->dir, r->name, sizeof(r->name), r->ver, sizeof(r->ver), (&deps)) != 0) {
+            pkg_deps_free((&deps));
             pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "cannot read '%s/ct.pkg' or it lacks 'name'/'version'", r->dir);
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "package", msg) != 0) {
                 goto refresh_oom;
             }
             continue;
         }
+        pkg_deps_free((&deps));
         if (pkg_read_identity(r->dir, r->pub, sizeof(r->pub), nsroot, sizeof(nsroot)) != 0) {
             pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "cannot read '%s/ct.pkg'", r->dir);
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "package", msg) != 0) {
@@ -5154,8 +5195,7 @@ static int pkg_update_v2(const char * prog) {
     long sz;
     char pname[MAX_TEXT];
     char pver[32];
-    char * pdeps;
-    int depcap;
+    struct tool_pkg_DepList pdeps;
     struct tool_pkg_LockRow * lrows;
     char * url;
     int urlcap;
@@ -5163,7 +5203,6 @@ static int pkg_update_v2(const char * prog) {
     char sha[80];
     char oldver[32];
     char newver[32];
-    int ndeps;
     int nlock;
     int lockcap;
     int i;
@@ -5175,10 +5214,10 @@ static int pkg_update_v2(const char * prog) {
     int official;
     url = 0;
     urlcap = 0;
-    pdeps = NULL;
-    depcap = 0;
+    pdeps.spec = 0;
+    pdeps.n = 0;
+    pdeps.cap = 0;
     lrows = NULL;
-    ndeps = 0;
     nlock = 0;
     lockcap = 0;
     buf = (char *)(0);
@@ -5190,7 +5229,7 @@ static int pkg_update_v2(const char * prog) {
         return 1;
     }
     fclose(f);
-    if (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->read_manifest(&tool_pkg_g_pkg, ".", pname, sizeof(pname), pver, sizeof(pver), (&pdeps), (&depcap), (&ndeps)) != 0) {
+    if (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->read_manifest(&tool_pkg_g_pkg, ".", pname, sizeof(pname), pver, sizeof(pver), (&pdeps)) != 0) {
         fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
         return 1;
     }
@@ -5198,12 +5237,12 @@ static int pkg_update_v2(const char * prog) {
         return 1;
     }
     rc = 0;
-    for (i = 0; i < ndeps; i++) {
+    for (i = 0; i < pdeps.n; i++) {
         char * path;
         char * range;
         char dname[MAX_TEXT];
         char * spec;
-        spec = (pdeps + ((size_t)(i) * MAX_PKG_PATH));
+        spec = pdeps.spec[i];
         if (((tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->split_spec(&tool_pkg_g_pkg, spec, (&path), (&range)) != 0) || (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->dep_name(&tool_pkg_g_pkg, spec, dname, sizeof(dname)) != 0))) {
             fprintf(stderr, "ctc: bad dependency '%s'\n", spec);
             rc = 1;
@@ -5221,9 +5260,7 @@ static int pkg_update_v2(const char * prog) {
             rc = 1;
         }
     }
-    free(pdeps);
-    pdeps = NULL;
-    ndeps = 0;
+    pkg_deps_free((&pdeps));
     if (rc != 0) {
         return 1;
     }
@@ -5531,9 +5568,7 @@ static int pkg_migrate(const char * prog) {
     int rc;
     char mname[MAX_TEXT];
     char mver[32];
-    char * deps;
-    int depcap;
-    int ndeps;
+    struct tool_pkg_DepList deps;
     char publisher[MAX_TEXT];
     char nsroot[MAX_PKG_PATH];
     char src[MAX_PKG_PATH];
@@ -5547,9 +5582,9 @@ static int pkg_migrate(const char * prog) {
     line = 0;
     linecap = 0;
     fr = 0;
-    deps = NULL;
-    depcap = 0;
-    ndeps = 0;
+    deps.spec = 0;
+    deps.n = 0;
+    deps.cap = 0;
     outlen = 0;
     outcap = MAX_LOCK;
     out = (char *)(malloc((size_t)(outcap)));
@@ -5632,12 +5667,13 @@ static int pkg_migrate(const char * prog) {
             rc = 1;
             continue;
         }
-        ndeps = 0;
-        if (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->read_manifest(&tool_pkg_g_pkg, src, mname, sizeof(mname), mver, sizeof(mver), (&deps), (&depcap), (&ndeps)) != 0) {
+        if (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->read_manifest(&tool_pkg_g_pkg, src, mname, sizeof(mname), mver, sizeof(mver), (&deps)) != 0) {
+            pkg_deps_free((&deps));
             fprintf(stderr, "ctc: cannot read '%s/ct.pkg'\n", src);
             rc = 1;
             continue;
         }
+        pkg_deps_free((&deps));
         if (((strcmp(mname, name) != 0) || (strcmp(mver, ver) != 0))) {
             fprintf(stderr, "ctc: '%s/ct.pkg' names '%s %s', lock says '%s %s'\n", src, mname, mver, name, ver);
             rc = 1;

@@ -1,6 +1,6 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键（C2b）、初始化文本（C2c）、pkg 锁文本（C2d）、pkg 命令/路径文本（C2e）、cc 命令行（C2f）、cflags/ldflags 累加器（C2g）、pkg 行读取（C2h）与包目录/树扫描路径（C2i）已按需增长**；B/D 类其余待做）。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键（C2b）、初始化文本（C2c）、pkg 锁文本（C2d）、pkg 命令/路径文本（C2e）、cc 命令行（C2f）、cflags/ldflags 累加器（C2g）、pkg 行读取（C2h）、包目录/树扫描路径（C2i）与 dep 行（C2j）已按需增长**；B/D 类其余待做）。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
@@ -73,7 +73,7 @@
 | `MAX_NODES` | 262144 | 7 | D | **已落**：arena 倍增到 `NODE_LIMIT=16777216`（新槽清零） |
 | `MAX_TEXT` | 160 | 1494 | B | 动态文本；当前 791 处定长数组，最大切片 |
 | `MAX_PATH` | 1024 | 74 | B | 路径按需分配；OS 上限单独报错 |
-| `MAX_PKG_PATH` | 512 | 85 | B | **部分动态（C2i）**：包目录与树扫描路径已按需——`pkg_pathf` 精确分配、`read_manifest` / `pkg_read_identity` / `pkg_read_meta` 的行与 `<dir>/ct.pkg`、`dir_digest` 的 `sha_collect` / `sha_sort`（指针行，每文件一条精确字符串）、`copy_tree`、`IndexRow.dir`、`ct index refresh` 的 list/out/tmp 路径、`split_spec` 的 path/range 均不再有 512 字节上限；`ct get <569 字节目录>` / `ct verify` / `ct index refresh` 正例。**剩余**：store / lock 行字段（`PkgRec.store`、`LockRow.ipath`、`LockParsedRow.*`）、`IndexRow.url`、`Pkg.index`、dep 行块与 `-I` roots/notes 的 512-stride 行（C2j） |
+| `MAX_PKG_PATH` | 512 | 85 | B | **部分动态（C2i）**：包目录与树扫描路径已按需——`pkg_pathf` 精确分配、`read_manifest` / `pkg_read_identity` / `pkg_read_meta` 的行与 `<dir>/ct.pkg`、`dir_digest` 的 `sha_collect` / `sha_sort`（指针行，每文件一条精确字符串）、`copy_tree`、`IndexRow.dir`、`ct index refresh` 的 list/out/tmp 路径、`split_spec` 的 path/range 均不再有 512 字节上限；`ct get <569 字节目录>` / `ct verify` / `ct index refresh` 正例。**dep 行已按需（C2j）**：`struct DepList` 每行一条精确分配的自有字符串（`get` / `install` / `update` / `migrate` / `index refresh` 共用，递归安全），`remember_dep` 的重复行比较也按 spec 全长。**剩余**：store / lock 行字段（`PkgRec.store`、`LockRow.ipath`、`LockParsedRow.*`）、`IndexRow.url`、`Pkg.index`、`-I` roots/notes 的 512-stride 行（C2k） |
 | `MAX_PKG_CMD` | 2048 | 35 | B | **已动态（C2e）**：`Pkg` 的命令/路径缓冲改 `self` 持有的按需文本（初值 2048，倍增到 `TEXT_LIMIT=65536`，OOM 显式）；`sh_quote` 改为 `char **` + 容量，`git_run` / `fetch_git` / `git_pick_tag` / `install` / `update` 的定长命令缓冲删除；文本在 `ct_pkg_*` 入口返回时由 `pkg_owned_free` 统一释放 |
 | `MAX_KEY` | 768 | 8 | B | **已动态（C2b）**：缓存键按需增长（初值 768，倍增到 `MAX_KEY_MAX=65536`）；`Cache.key` 返回 `char **` + 容量，OOM/超限显式报错，不再静默跳过缓存 |
 | `MAX_INIT_TEXT` | 16384 | 8 | B | **已动态（C2c）**：重写文本按需倍增到 `MAX_INIT_TEXT_MAX=65536`；单项与改名 scratch 按实际长度分配；超限报 `initializer text exceeds 65536 bytes`，不再无诊断地返回 -1 |

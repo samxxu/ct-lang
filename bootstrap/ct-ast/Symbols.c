@@ -118,6 +118,7 @@ struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
+struct tool_pkg_DepList;
 struct tool_pkg_PkgRec;
 struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
