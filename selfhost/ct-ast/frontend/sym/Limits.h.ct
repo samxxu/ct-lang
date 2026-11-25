@@ -32,6 +32,7 @@ pub struct Limits {
 #define MAX_CLOSURES                 64
 #define MAX_CLOSURES_MAX                  65536
 #define MAX_DIGEST_FILES             4096
+#define MAX_DIGEST_FILES_MAX         65536
 #define MAX_FIELDS                   64
 #define MAX_FIELDS_MAX               65536
 #define MAX_FUNCS                    512

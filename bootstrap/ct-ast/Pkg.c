@@ -20,7 +20,9 @@
 #define MAX_PKG_LINE   1024             /* MAX_PKG_PATH * 2, spelled out */
 #define MAX_PKG_GITERR 8                /* PKG-23: trailing git stderr lines */
 #define MAX_INDEX_ROWS 1024             /* PKG-18: one package version per list row */
+#define MAX_INDEX_ROWS_MAX 65536        /* S1a-0 C1: formal cap for MAX_INDEX_ROWS */
 #define MAX_DIGEST_FILES 4096
+#define MAX_DIGEST_FILES_MAX 65536
 #define INDEX_ERR_STRIDE   560
 #define INDEX_ERR_KIND_OFF 4
 #define INDEX_ERR_MSG_OFF  36
@@ -209,7 +211,7 @@ static void sha256_update(struct tool_pkg_Sha256 *, const unsigned char *, size_
 static void sha256_final(struct tool_pkg_Sha256 *);
 static void sha256_hex(const struct tool_pkg_Sha256 *, char *);
 static int sha256_file(struct tool_pkg_Sha256 *, const char *, const char *);
-static int sha_collect(const char *, const char *, char *, int *, int);
+static int sha_collect(const char *, const char *, char * *, int *, int *);
 static void sha_sort(char *, int);
 static int sha_hex_ok(const char *);
 static void pkg_scrub(const char *, char *, size_t);
@@ -624,17 +626,19 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_dir_digest(void *self, const char * dir,
     char hex[65];
     int i;
     int n;
+    int listcap;
     int w;
     (void)(_self);
     if (((stat(dir, (&st)) != 0) || (!S_ISDIR(st.st_mode)))) {
         return (-1);
     }
-    list = (char *)(malloc(((size_t)(MAX_DIGEST_FILES) * (size_t)(MAX_PKG_PATH))));
+    listcap = MAX_DIGEST_FILES;
+    list = (char *)(malloc(((size_t)(listcap) * (size_t)(MAX_PKG_PATH))));
     if ((!list)) {
         return (-1);
     }
     n = 0;
-    if (sha_collect(dir, "", list, (&n), MAX_DIGEST_FILES) != 0) {
+    if (sha_collect(dir, "", (&list), (&n), (&listcap)) != 0) {
         free(list);
         return (-1);
     }
@@ -2531,7 +2535,7 @@ static int sha256_file(struct tool_pkg_Sha256 * s, const char * rel, const char 
     fclose(f);
     return 0;
 }
-static int sha_collect(const char * dir, const char * rel, char * list, int * n, int cap) {
+static int sha_collect(const char * dir, const char * rel, char * * list, int * n, int * cap) {
     DIR * d;
     struct dirent * e;
     struct stat st;
@@ -2579,11 +2583,33 @@ static int sha_collect(const char * dir, const char * rel, char * list, int * n,
         }
         else {
             if (S_ISREG(st.st_mode)) {
-                if ((*n) >= cap) {
-                    closedir(d);
-                    return (-1);
+                if ((*n) >= (*cap)) {
+                    int ncap;
+                    int i;
+                    char * grown;
+                    ncap = (((*cap) > 0) ? (*cap) : MAX_DIGEST_FILES);
+                    while (((ncap <= (*n)) && (ncap < MAX_DIGEST_FILES_MAX))) {
+                        ncap *= 2;
+                    }
+                    if (ncap > MAX_DIGEST_FILES_MAX) {
+                        ncap = MAX_DIGEST_FILES_MAX;
+                    }
+                    if ((*n) >= MAX_DIGEST_FILES_MAX) {
+                        closedir(d);
+                        return (-1);
+                    }
+                    grown = (char *)(realloc((*list), ((size_t)(ncap) * MAX_PKG_PATH)));
+                    if ((!grown)) {
+                        closedir(d);
+                        return (-1);
+                    }
+                    for (i = (*cap); i < ncap; i++) {
+                        grown[((size_t)(i) * MAX_PKG_PATH)] = 0;
+                    }
+                    (*list) = grown;
+                    (*cap) = ncap;
                 }
-                snprintf((list + ((size_t)((*n)) * MAX_PKG_PATH)), MAX_PKG_PATH, "%s", r);
+                snprintf(((*list) + ((size_t)((*n)) * MAX_PKG_PATH)), MAX_PKG_PATH, "%s", r);
                 (*n) = ((*n) + 1);
             }
         }
@@ -3594,6 +3620,7 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     int nrows;
     int seen;
     int lineno;
+    int rows_cap;
     int ndeps;
     int ntok;
     int i;
@@ -3684,11 +3711,15 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
         fprintf(stderr, "%s: cannot read the package list '%s'\n", prog, list_path);
         return 2;
     }
-    rows = calloc(MAX_INDEX_ROWS, sizeof((*rows)));
-    if (rows == NULL) {
-        fclose(lf);
-        fprintf(stderr, "%s: out of memory while refreshing '%s'\n", prog, out_path);
-        return 2;
+{
+        int rowcap = MAX_INDEX_ROWS;
+        rows = calloc((size_t)(rowcap), sizeof((*rows)));
+        if (rows == NULL) {
+            fclose(lf);
+            fprintf(stderr, "%s: out of memory while refreshing '%s'\n", prog, out_path);
+            return 2;
+        }
+        rows_cap = rowcap;
     }
     errs = NULL;
     nerr = 0;
@@ -3723,11 +3754,29 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
             }
             continue;
         }
-        if (nrows >= MAX_INDEX_ROWS) {
-            if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "list", "package list has more than 1024 rows") != 0) {
+        if (nrows >= rows_cap) {
+            int ncap;
+            struct tool_pkg_IndexRow * grown;
+            ncap = ((rows_cap > 0) ? rows_cap : MAX_INDEX_ROWS);
+            while (((ncap <= nrows) && (ncap < MAX_INDEX_ROWS_MAX))) {
+                ncap *= 2;
+            }
+            if (ncap > MAX_INDEX_ROWS_MAX) {
+                ncap = MAX_INDEX_ROWS_MAX;
+            }
+            if (nrows >= MAX_INDEX_ROWS_MAX) {
+                if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "list", "package list has more than 65536 rows") != 0) {
+                    goto refresh_oom;
+                }
+                break;
+            }
+            grown = (struct tool_pkg_IndexRow *)(realloc(rows, ((size_t)(ncap) * sizeof((*grown)))));
+            if (grown == NULL) {
                 goto refresh_oom;
             }
-            break;
+            memset((grown + rows_cap), 0, ((size_t)((ncap - rows_cap)) * sizeof((*grown))));
+            rows = grown;
+            rows_cap = ncap;
         }
         r = (&rows[nrows]);
         r->line = lineno;

@@ -55,7 +55,7 @@
 | `MAX_INCDIRS` | 16 | 4 | A | **已动态**：`Module.incdirs` 堆块倍增到 `MAX_INCDIRS_MAX=65536`；删除 `too many -I roots` |
 | `MAX_UNITS` | 64 | 24 | A | **已动态**：`Module.units` 堆块倍增到 `MAX_UNITS_MAX=65536`（扩容后重绑 emitter），`build_main` 的 inputs/cache 行走堆块，可达性 scratch 按 `nunits` 增长；删除 `too many units` / `too many inputs` |
 | `MAX_PKG_DEPS` | 16 | 42 | A | 动态 |
-| `MAX_DIGEST_FILES` | 4096 | 4 | A | 动态 |
+| `MAX_DIGEST_FILES` | 4096 | 4 | A | **已动态**：`dir_digest` 的文件路径块按倍增 realloc 到 `MAX_DIGEST_FILES_MAX=65536`（`sha_collect` 收 `char **`/`int *cap`），4100 文件树可算摘要 |
 | `MAX_INIT_ITEM` | 4096 | 3 | A | 动态 |
 | `MAX_RAW_INIT` | 4096 | 9 | A | 动态 |
 | `MAX_LAYOUT_ADTS` | 64 | 5 | A | **已动态**：`g_adt_layout_state` 堆块倍增到 `MAX_LAYOUT_ADTS_MAX=65536`（受 C 类 MAX_ADTS=64 遮蔽） |
@@ -88,7 +88,7 @@
 | `MAX_LOCK` | 4096 | `Pkg.h.ct`（`MAX_PKG_PATH * 8`） | B | 动态 |
 | `MAX_PKG_LINE` | 1024 | `Pkg.h.ct` | B | 动态 |
 | `MAX_PKG_GITERR` | 8 | `Pkg.h.ct` | D | 展示行数；保留 |
-| `MAX_INDEX_ROWS` | 1024 | `Pkg.h.ct` | A | 动态 |
+| `MAX_INDEX_ROWS` | 1024 | `Pkg.h.ct` | A | **已动态**：`ct index refresh` 行表倍增到 `MAX_INDEX_ROWS_MAX=65536`；删除 `package list has more than 1024 rows` |
 
 ## 4 硬编码数字上限
 
