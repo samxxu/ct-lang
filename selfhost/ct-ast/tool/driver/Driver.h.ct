@@ -13,9 +13,9 @@
  * #include, so neither the FILE * nor the trait may appear in its surface.
  * `main` reaches it through the `pub` primitives at the end of the file.
  *
- * Macros do not cross a unit boundary, so the caps used here are declared here;
- * MAX_PATH 1024 is also the path length `frontend/module/Module.h.ct` and the
- * emitter spell.
+ * Macros do not cross a unit boundary, so the caps used here are declared here.
+ * S1a-0 C2l: the compile-mode default output path and the `-I` root handed to
+ * `ct check` are run-scoped blocks (tool/sh), not `char[MAX_PATH]` arrays.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,17 +32,17 @@ import runtime::arena::Arena;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
 import tool::pkg::Pkg;
+import tool::sh::Sh;
 import frontend::module::ModuleBoundary;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
-#define MAX_PATH 1024
 #define MAX_FLAGS 1024                  /* mirrors Module.h.ct's --cflags cap */
 
 namespace tool::driver;
 /* The compile-mode entry and the plumbing `main` cannot see through the trait. */
 trait DriverOps {
     int  fail(const char *msg);
-    int  default_output(const char *in, char *out, size_t cap);
+    int  default_output(const char *in, char **out);
     /* Phase 29: parse the built-in `Vec` / `Map` unit before the input and
        return its program node, or -1 when the layer is not installed. */
     int  load_builtin(const char *in);
@@ -320,17 +320,16 @@ impl DriverOps for Driver {
         return frontend::parse::ct_parse_fail(msg);
     }
 
-    int default_output(const char *in, char *out, size_t cap)
+    int default_output(const char *in, char **out)
     {
         size_t n;
         (void)self;
 
         n = strlen(in);
-        if (n >= 3 && strcmp(in + n - 3, ".ct") == 0) {
-            if (snprintf(out, cap, "%.*s.c", (int)(n - 3), in) >= (int)cap) return -1;
-            return 0;
-        }
-        if (snprintf(out, cap, "%s.c", in) >= (int)cap) return -1;
+        if (n >= 3 && strcmp(in + n - 3, ".ct") == 0)
+            *out = tool::sh::ct_scratch_fmt("%.*s.c", (int)(n - 3), in);
+        else
+            *out = tool::sh::ct_scratch_fmt("%s.c", in);
         return 0;
     }
 
@@ -343,7 +342,7 @@ impl DriverOps for Driver {
        exactly as before. */
     int load_builtin(const char *in)
     {
-        char cand[MAX_PATH];
+        char *cand;
         const char *savepath;
         int bi, prog, head, rr;
         char *insrc = 0;
@@ -391,7 +390,7 @@ impl DriverOps for Driver {
                  : (bi == 6 ? "utf16/U16String.h.ct" : "Box.h.ct"))))));
             if (insrc && !layer_wanted(insrc, bi)) continue;
             prog = -1;
-            rr = self->m->find_builtin(in, base, cand, sizeof cand);
+            rr = self->m->find_builtin(in, base, &cand);
             if (rr == -2) return -2;
             if (rr == 0) {
                 savepath = self->m->path;
@@ -443,8 +442,7 @@ impl DriverOps for Driver {
     int run(int argc, char **argv)
     {
         const char *in;
-        const char *out;
-        char outbuf[MAX_PATH];
+        char *out;
         int i, prog, stdprog, io_from;
         FILE *f;
 
@@ -591,16 +589,16 @@ impl DriverOps for Driver {
                 while (ai < argc && argv[ai][0] == '-') ai++;
                 if (ai < argc) inp = argv[ai];
                 if (inp && file_has_import(inp)) {
-                    char dir[MAX_PATH];
+                    char *dir = (char *)0;
                     char *barg[10];
                     int bi = 0;
-                    if (self->m->path_dir(inp, dir, sizeof dir) != 0) dir[0] = 0;
+                    if (self->m->path_dir(inp, &dir) != 0) dir = (char *)0;
                     barg[bi++] = (char *)"build";
                     barg[bi++] = (char *)inp;
                     barg[bi++] = (char *)"--emit-c";
                     barg[bi++] = (char *)"-o";
                     barg[bi++] = (char *)"/tmp";
-                    if (dir[0]) {
+                    if (dir && dir[0]) {
                         barg[bi++] = (char *)"-I";
                         barg[bi++] = dir;
                     }
@@ -819,10 +817,7 @@ impl DriverOps for Driver {
                     return 1;
                 }
                 i++;
-                if (snprintf(self->m->map_path, sizeof self->m->map_path, "%s", argv[i]) >= (int)sizeof self->m->map_path) {
-                    fprintf(stderr, "ctc: map path is too long\n");
-                    return 1;
-                }
+                self->m->map_path = tool::sh::ct_scratch_dup(argv[i]);
                 self->m->have_map = 1;
                 continue;
             }
@@ -832,11 +827,7 @@ impl DriverOps for Driver {
                     return 1;
                 }
                 i++;
-                if (snprintf(self->m->model_path, sizeof self->m->model_path, "%s", argv[i])
-                    >= (int)sizeof self->m->model_path) {
-                    fprintf(stderr, "ctc: model path is too long\n");
-                    return 1;
-                }
+                self->m->model_path = tool::sh::ct_scratch_dup(argv[i]);
                 self->m->have_model = 1;
                 continue;
             }
@@ -878,11 +869,10 @@ impl DriverOps for Driver {
         /* `ct check` resolves no output path at all: it never opens a file, so
            asking for one could only fail on a path it does not need (SH-49). */
         if (!out && !self->m->check_mode) {
-            if (self->default_output(in, outbuf, sizeof outbuf) != 0) {
-                fprintf(stderr, "ctc: output path too long\n");
+            if (self->default_output(in, &out) != 0) {
+                fprintf(stderr, "ctc: out of memory\n");
                 return 1;
             }
-            out = outbuf;
         }
 
         if (self->m->show_c_boundary) {

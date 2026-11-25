@@ -19,6 +19,7 @@
 #include "Arena.h"
 #include "Diag.h"
 #include "Pkg.h"
+#include "Sh.h"
 
 
 struct ct_buf;
@@ -70,6 +71,7 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
+struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -81,7 +83,6 @@ struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
-struct tool_sh_Sh;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;

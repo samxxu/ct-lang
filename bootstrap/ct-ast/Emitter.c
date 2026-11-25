@@ -14,6 +14,7 @@
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"
 #include "EmitterCore.h"
+#include "Sh.h"
 #include "EmitterTry.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Emitter.h.ct"
@@ -22,7 +23,6 @@
 #include <string.h>
 #include <ctype.h>
 #define MAX_TEXT   160
-#define MAX_PATH   1024
 #define MAX_HOISTS 4
 #define MAX_HOISTS_MAX 65536
 #define N_MATSEQ 73
@@ -180,6 +180,7 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
+struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -191,7 +192,6 @@ struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
-struct tool_sh_Sh;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
@@ -396,7 +396,7 @@ static int em_field_fields(struct backend_emit_Emitter *, int, int, int);
 static int em_field_field_union(struct backend_emit_Emitter *, int, int, int);
 static int ensure_hoist_capacity(struct backend_emit_Emitter *, int);
 static int ensure_into_capacity(struct backend_emit_Emitter *, int);
-void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char *, const char *);
+void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char * *, const char *);
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);
 void backend_emit_ct_emit_bind_units(void *);
 void backend_emit_ct_emit_bind_flags(int *, char *, int *);
@@ -3537,16 +3537,18 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_expr(void *self, int n
     }
 }
 
-static int backend_emit_Emitter_backend_emit_EmitOps_header_guard(void *self, const char * base, char * out, int cap) {
+static int backend_emit_Emitter_backend_emit_EmitOps_header_guard(void *self, const char * base, char * * out) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     size_t n;
     size_t i;
     size_t m;
+    char * buf;
     (void)(_self);
     n = strlen(base);
+    buf = tool_sh_ct_scratch_alloc(((int)(n) + 6));
     m = 0;
     if ((((n > 0) && (base[0] >= '0')) && (base[0] <= '9'))) {
-        out[m] = '_';
+        buf[m] = '_';
         m++;
     }
     for (i = 0; i < n; i++) {
@@ -3559,18 +3561,13 @@ static int backend_emit_Emitter_backend_emit_EmitOps_header_guard(void *self, co
                 c = '_';
             }
         }
-        if ((m + 1) >= (size_t)(cap)) {
-            return _self->__backend_emit_emitops_vptr->fail(_self, "output name too long");
-        }
-        out[m] = c;
+        buf[m] = c;
         m++;
     }
-    if ((m + 3) >= (size_t)(cap)) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "output name too long");
-    }
-    out[m] = '_';
-    out[(m + 1)] = 'H';
-    out[(m + 2)] = 0;
+    buf[m] = '_';
+    buf[(m + 1)] = 'H';
+    buf[(m + 2)] = 0;
+    (*out) = buf;
     return 0;
 }
 
@@ -3579,16 +3576,14 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_unit(void *self, int u
     if (_self->no_write) {
         return 0;
     }
-    char path[MAX_PATH];
+    char * path;
     FILE * f;
     int rc;
     (void)(_self);
     _self->errmsg[0] = 0;
     _self->failline = 0;
     _self->gprefix = _self->units[u].nsprefix;
-    if (snprintf(path, sizeof(path), "%s/%s.c", _self->outdir, _self->units[u].base) >= (int)(sizeof(path))) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "output path is too long");
-    }
+    path = tool_sh_ct_scratch_fmt("%s/%s.c", (*_self->outdir), _self->units[u].base);
     f = fopen(path, "w");
     if ((!f)) {
         return _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the output file");
@@ -3608,18 +3603,16 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_unit_header(void *sel
     if (_self->no_write) {
         return 0;
     }
-    char path[MAX_PATH];
-    char guard[MAX_PATH];
+    char * path;
+    char * guard;
     FILE * f;
     int rc;
     (void)(_self);
     _self->gprefix = _self->units[u].nsprefix;
 {
         const char * hb = ((strcmp(_self->units[u].base, "String") == 0) ? "String_" : _self->units[u].base);
-        if (snprintf(path, sizeof(path), "%s/%s.h", _self->outdir, hb) >= (int)(sizeof(path))) {
-            return _self->__backend_emit_emitops_vptr->fail(_self, "output path is too long");
-        }
-        if (_self->__backend_emit_emitops_vptr->header_guard(_self, hb, guard, sizeof(guard)) != 0) {
+        path = tool_sh_ct_scratch_fmt("%s/%s.h", (*_self->outdir), hb);
+        if (_self->__backend_emit_emitops_vptr->header_guard(_self, hb, (&guard)) != 0) {
             return (-1);
         }
     }
@@ -4033,7 +4026,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_map(void *self, const
             if ((((_self->units && (su >= 0)) && (su < (*_self->nunits))) && _self->units[su].has_shim)) {
                 fputs(",\"shim\":{\"header\":\"", f);
                 _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->units[su].shim_h);
-                if (_self->units[su].shim_c[0]) {
+                if (_self->units[su].shim_c) {
                     fputs("\",\"source\":\"", f);
                     _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->units[su].shim_c);
                 }
@@ -4249,19 +4242,17 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_header(void *self, co
     if (_self->no_write) {
         return 0;
     }
-    char path[MAX_PATH];
+    char * path;
     if ((_self->abi_mode && (*_self->abi_mode))) {
         return _self->__backend_emit_emitops_vptr->write_abi_header(_self, outc);
     }
-    char base[MAX_PATH];
-    char guard[MAX_PATH];
+    char * base;
+    char * guard;
     const char * name;
     FILE * f;
     size_t n;
     (void)(_self);
-    if (snprintf(path, sizeof(path), "%s", outc) >= (int)(sizeof(path))) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "output path too long");
-    }
+    path = tool_sh_ct_scratch_dup(outc);
     n = strlen(path);
     if ((((n < 3) || (path[(n - 1)] != 'c')) || (path[(n - 2)] != '.'))) {
         return _self->__backend_emit_emitops_vptr->fail(_self, "output must end in .c");
@@ -4269,15 +4260,13 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_header(void *self, co
     path[(n - 1)] = 'h';
     name = strrchr(path, '/');
     name = (name ? (name + 1) : path);
-    if (snprintf(base, sizeof(base), "%s", name) >= (int)(sizeof(base))) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "output path too long");
-    }
+    base = tool_sh_ct_scratch_dup(name);
     n = strlen(base);
     if (n < 3) {
         return _self->__backend_emit_emitops_vptr->fail(_self, "output name too short");
     }
     base[(n - 2)] = 0;
-    if (_self->__backend_emit_emitops_vptr->header_guard(_self, base, guard, sizeof(guard)) != 0) {
+    if (_self->__backend_emit_emitops_vptr->header_guard(_self, base, (&guard)) != 0) {
         return (-1);
     }
     f = fopen(path, "w");
@@ -12179,7 +12168,7 @@ static int ensure_into_capacity(struct backend_emit_Emitter * self, int need) {
     self->intocap = cap;
     return 0;
 }
-void backend_emit_ct_emit_bind(void * arena, void * sym, void * ty, void * lex, const char * version, char * outdir, const char * prog) {
+void backend_emit_ct_emit_bind(void * arena, void * sym, void * ty, void * lex, const char * version, char * * outdir, const char * prog) {
     backend_emit_g_emit.arena = (struct runtime_arena_Arena *)(arena);
     backend_emit_g_emit.sym = (struct frontend_sym_Symbols *)(sym);
     backend_emit_g_emit.ty = (struct frontend_type_TypeCheck *)(ty);

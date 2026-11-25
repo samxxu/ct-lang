@@ -38,11 +38,11 @@ import backend::emit::EmitterText;
 import backend::emit::EmitterQuery;
 import backend::emit::EmitterMapText;
 import backend::emit::EmitterCore;
+import tool::sh::Sh;
 import backend::emit::EmitterTry;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
-#define MAX_PATH   1024
 #define MAX_HOISTS 4
 #define MAX_HOISTS_MAX 65536
 /* Phase 30: the receiver block and its `$` / `.name` reference. */
@@ -9842,29 +9842,32 @@ impl EmitOps for Emitter {
 
     /* `foo` -> `FOO_H`; a leading digit gets an underscore so the guard is a
        valid identifier. */
-    int header_guard(const char *base, char *out, int cap)
+    /* S1a-0 C2l: the guard is a run-scoped block sized from the name, not a
+       `char[MAX_PATH]` argument; a long header name is no longer a failure. */
+    int header_guard(const char *base, char **out)
     {
         size_t n, i, m;
+        char *buf;
         (void)self;
 
         n = strlen(base);
+        buf = tool::sh::ct_scratch_alloc((int)n + 6);
         m = 0;
         if (n > 0 && base[0] >= '0' && base[0] <= '9') {
-            out[m] = '_';
+            buf[m] = '_';
             m++;
         }
         for (i = 0; i < n; i++) {
             char c = base[i];
             if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
             else if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) c = '_';
-            if (m + 1 >= (size_t)cap) return self->fail("output name too long");
-            out[m] = c;
+            buf[m] = c;
             m++;
         }
-        if (m + 3 >= (size_t)cap) return self->fail("output name too long");
-        out[m] = '_';
-        out[m + 1] = 'H';
-        out[m + 2] = 0;
+        buf[m] = '_';
+        buf[m + 1] = 'H';
+        buf[m + 2] = 0;
+        *out = buf;
         return 0;
     }
 
@@ -9875,7 +9878,7 @@ impl EmitOps for Emitter {
     int emit_unit(int u)
     {
         if (self->no_write) return 0;
-        char path[MAX_PATH];
+        char *path;
         FILE *f;
         int rc;
         (void)self;
@@ -9883,8 +9886,7 @@ impl EmitOps for Emitter {
         self->errmsg[0] = 0;
         self->failline = 0;
         self->gprefix = self->units[u].nsprefix;
-        if (snprintf(path, sizeof path, "%s/%s.c", self->outdir, self->units[u].base) >= (int)sizeof path)
-            return self->fail("output path is too long");
+        path = tool::sh::ct_scratch_fmt("%s/%s.c", *self->outdir, self->units[u].base);
         f = fopen(path, "w");
         if (!f) return self->fail("cannot write the output file");
         self->out = f;
@@ -9900,8 +9902,8 @@ impl EmitOps for Emitter {
     int write_unit_header(int u)
     {
         if (self->no_write) return 0;
-        char path[MAX_PATH];
-        char guard[MAX_PATH];
+        char *path;
+        char *guard;
         FILE *f;
         int rc;
         (void)self;
@@ -9915,9 +9917,8 @@ impl EmitOps for Emitter {
         {
             const char *hb = strcmp(self->units[u].base, "String") == 0
                              ? "String_" : self->units[u].base;
-            if (snprintf(path, sizeof path, "%s/%s.h", self->outdir, hb) >= (int)sizeof path)
-                return self->fail("output path is too long");
-            if (self->header_guard(hb, guard, sizeof guard) != 0) return -1;
+            path = tool::sh::ct_scratch_fmt("%s/%s.h", *self->outdir, hb);
+            if (self->header_guard(hb, &guard) != 0) return -1;
         }
         f = fopen(path, "w");
         if (!f) return self->fail("cannot write the header");
@@ -10257,7 +10258,7 @@ impl EmitOps for Emitter {
                     && self->units[su].has_shim) {
                     fputs(",\"shim\":{\"header\":\"", f);
                     self->emit_json_str(f, self->units[su].shim_h);
-                    if (self->units[su].shim_c[0]) {
+                    if (self->units[su].shim_c) {
                         fputs("\",\"source\":\"", f);
                         self->emit_json_str(f, self->units[su].shim_c);
                     }
@@ -10423,30 +10424,30 @@ impl EmitOps for Emitter {
     int write_header(const char *outc)
     {
         if (self->no_write) return 0;
-        char path[MAX_PATH];
+        char *path;
         if (self->abi_mode && *self->abi_mode)
             return self->write_abi_header(outc);
-        char base[MAX_PATH];
-        char guard[MAX_PATH];
+        char *base;
+        char *guard;
         const char *name;
         FILE *f;
         size_t n;
 
         (void)self;
-        if (snprintf(path, sizeof path, "%s", outc) >= (int)sizeof path)
-            return self->fail("output path too long");
+        /* S1a-0 C2l: the compile-mode `-o` becomes a run-scoped block; the
+           `.c` -> `.h` spelling and the header guard are derived from it. */
+        path = tool::sh::ct_scratch_dup(outc);
         n = strlen(path);
         if (n < 3 || path[n - 1] != 'c' || path[n - 2] != '.')
             return self->fail("output must end in .c");
         path[n - 1] = 'h';
         name = strrchr(path, '/');
         name = name ? name + 1 : path;
-        if (snprintf(base, sizeof base, "%s", name) >= (int)sizeof base)
-            return self->fail("output path too long");
+        base = tool::sh::ct_scratch_dup(name);
         n = strlen(base);
         if (n < 3) return self->fail("output name too short");
         base[n - 2] = 0;
-        if (self->header_guard(base, guard, sizeof guard) != 0) return -1;
+        if (self->header_guard(base, &guard) != 0) return -1;
 
         f = fopen(path, "w");
         if (!f) return self->fail("cannot write the header");
@@ -10756,9 +10757,9 @@ static struct Emitter g_emit;
    no #include and a prototype that named `struct Symbols *` would
    scope a fresh, incompatible type. The bind calls are split so no signature
    exceeds MAX_PARAMS. */
-pub void ct_emit_bind(void *arena, void *sym, void *ty, void *lex, const char *version, char *outdir, const char *prog);
+pub void ct_emit_bind(void *arena, void *sym, void *ty, void *lex, const char *version, char **outdir, const char *prog);
 void ct_emit_bind(void *arena, void *sym, void *ty, void *lex,
-                  const char *version, char *outdir, const char *prog)
+                  const char *version, char **outdir, const char *prog)
 {
     g_emit.arena = (struct Arena *)arena;
     g_emit.sym = (struct Symbols *)sym;

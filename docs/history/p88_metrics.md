@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10965 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10966 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=61718 io_cap=1024
+     emitted_before=48223 emitted_after=61636 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -54,6 +54,11 @@
       持有的精确自有路径（`diag_reset` 释放），`Cache.paths` 的目录/键文件
       改自有块，Sh 增 `ct_text_fmt`/`ct_text_dup` 与 run-scoped scratch 池。
       Emitter.h.ct 不变（10965），发射 C 61465 -> 61718，切片清单仍为 76)
+     (S1a-0 C2m 后复测：Unit.path/shim_*、Module 的 outdir/map_path/
+      model_path 与导入解析、Driver 的默认输出/`-I` 根、Emitter 的
+      `.c`/`.h`/header guard、ModuleBoundary 的 root/candidate 全部改
+      `char *` 或 run-scoped scratch 块；Emitter.h.ct 10965 -> 10966，
+      发射 C 61718 -> 61636，切片清单仍为 76)
      (S1a-0 C2k 后复测：`MAX_PKG_PATH` 退场，store / 锁行 / 索引 / 锁根路径
       改精确自有字符串，落在 Pkg.h.ct 与 Driver.h.ct；Emitter.h.ct 仍不变，
       发射 C 61409 -> 61465，切片清单仍为 76)

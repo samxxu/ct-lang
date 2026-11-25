@@ -28,6 +28,7 @@ import tool::cache::Cache;
 import tool::diag::Diag;
 import tool::driver::Driver;
 import tool::pkg::Pkg;
+import tool::sh::Sh;
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -101,7 +102,7 @@ int main(int argc, char **argv)
        tables, the options and the version; `out`/`path` follow through the
        setters as the driver re-points them. Bind after the entry-name branch
        because `prog` is part of the wired state. */
-    backend::emit::ct_emit_bind(arena, sym, ty, lex, CTC_VERSION, m->outdir, m->prog);
+    backend::emit::ct_emit_bind(arena, sym, ty, lex, CTC_VERSION, &m->outdir, m->prog);
     backend::emit::ct_emit_bind_tables(m->units, &m->nunits, &p->maps, &p->nmaps, &p->calls, &p->ncalls, &m->build_mode, &m->line_mode, &m->runtime_checks, &m->abi_mode, &m->lib_root, m->abi_exports, &m->abi_n);
     backend::emit::ct_emit_bind_flags(&m->freestanding, m->alloc_map, &p->slice_used);
     backend::emit::ct_emit_bind_parse(&p->nparams, p->pend_fields, &p->npend);
@@ -145,8 +146,12 @@ int main(int argc, char **argv)
         return tool::pkg::ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);
     {
         int rc = tool::driver::ct_driver_run(argc, argv);
-        /* S1a-0 C2g: the run's --cflags/--ldflags accumulators. */
+        /* S1a-0 C2g: the run's --cflags/--ldflags accumulators.
+           S1a-0 C2l: the run-scoped path blocks (unit paths, output/map/model
+           paths, emitter paths) are released together after the command. */
         frontend::module::ct_module_free_flags();
+        tool::diag::ct_diag_reset();
+        tool::sh::ct_scratch_free_all();
         return rc;
     }
 }

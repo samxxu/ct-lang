@@ -79,7 +79,6 @@ pub struct Limits {
 #define MAX_NODES                    262144
 #define MAX_PARAMS                   16
 #define MAX_PARAMS_MAX               65536
-#define MAX_PATH                     1024
 #define MAX_PKG_CMD                  2048
 #define MAX_PKG_DEPS                 16
 #define MAX_PKG_DEPS_MAX             65536

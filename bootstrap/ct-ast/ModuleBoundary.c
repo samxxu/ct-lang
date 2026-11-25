@@ -20,7 +20,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #define MAX_TEXT   160
-#define MAX_PATH   1024
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -70,6 +69,7 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
+struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -81,7 +81,6 @@ struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
-struct tool_sh_Sh;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
@@ -106,20 +105,20 @@ int frontend_module_ct_append_flags(char * *, int *, int, const char *);
 int frontend_module_ct_cmd_raw(char * *, int *, const char *);
 int frontend_module_ct_cmd_token(char * *, int *, const char *);
 int frontend_module_ct_ensure_dir(const char *);
-void frontend_module_ct_norm_path(const char *, char *, int);
+int frontend_module_ct_norm_path(const char *, char * *);
 int frontend_module_ct_pkg_key(const char *, const char *, char *, int);
 int frontend_module_ct_rel_cands(const char *, const char *, char *, char *);
-int frontend_module_ct_root_find(const char *, const char *, char *, int, int *, int *, char *, int);
+int frontend_module_ct_root_find(const char *, const char *, char * *, int *, int *, char * *);
 int frontend_module_has_word(const char *, const char *);
 const char * frontend_module_io_header_for(const char *);
 int frontend_module_word_is(const char *, const char *);
 int frontend_module_c_has_manifest(const char * dir) {
-    char p[1024];
+    char * p;
     FILE * f;
     if (((dir == 0) || (dir[0] == 0))) {
         return 0;
     }
-    snprintf(p, sizeof(p), "%s/ct.pkg", dir);
+    p = tool_sh_ct_scratch_fmt("%s/ct.pkg", dir);
     f = fopen(p, "r");
     if ((!f)) {
         return 0;
@@ -128,14 +127,14 @@ int frontend_module_c_has_manifest(const char * dir) {
     return 1;
 }
 int frontend_module_c_manifest_boundary(const char * dir) {
-    char p[1024];
+    char * p;
     char line[512];
     FILE * f;
     int r = (-1);
     if (((dir == 0) || (dir[0] == 0))) {
         return (-1);
     }
-    snprintf(p, sizeof(p), "%s/ct.pkg", dir);
+    p = tool_sh_ct_scratch_fmt("%s/ct.pkg", dir);
     f = fopen(p, "r");
     if ((!f)) {
         return (-1);
@@ -241,25 +240,24 @@ int frontend_module_ct_ensure_dir(const char * path) {
     }
     return ((mkdir(path, 493) == 0) ? 0 : (-1));
 }
-void frontend_module_ct_norm_path(const char * in, char * out, int cap) {
-    char buf[MAX_PATH];
+int frontend_module_ct_norm_path(const char * in, char * * out) {
+    char buf[4096];
     if (realpath(in, buf)) {
-        snprintf(out, (size_t)(cap), "%s", buf);
+        (*out) = tool_sh_ct_scratch_dup(buf);
     }
     else {
-        snprintf(out, (size_t)(cap), "%s", in);
+        (*out) = tool_sh_ct_scratch_dup(in);
     }
+    return 0;
 }
 int frontend_module_ct_pkg_key(const char * root, const char * key, char * out, int cap) {
-    char path[MAX_PATH];
+    char * path;
     char line[320];
     FILE * f;
     size_t kl;
     int found;
     out[0] = 0;
-    if (snprintf(path, sizeof(path), "%s/ct.pkg", root) >= (int)(sizeof(path))) {
-        return 0;
-    }
+    path = tool_sh_ct_scratch_fmt("%s/ct.pkg", root);
     f = fopen(path, "rb");
     if ((!f)) {
         return 0;
@@ -316,12 +314,12 @@ int frontend_module_ct_rel_cands(const char * root, const char * rel, char * fir
     snprintf(fallback, MAX_TEXT, "%s", rel);
     return 2;
 }
-int frontend_module_ct_root_find(const char * root, const char * rel, char * out, int cap, int * is_hdr, int * is_map, char * err, int errcap) {
+int frontend_module_ct_root_find(const char * root, const char * rel, char * * out, int * is_hdr, int * is_map, char * * err) {
     char flat[MAX_TEXT];
     char doubled[MAX_TEXT];
-    char hdr[MAX_PATH];
-    char map[MAX_PATH];
-    char first_hit[MAX_PATH];
+    char * hdr;
+    char * map;
+    char * first_hit = (char *)(0);
     int first_hdr;
     int first_map;
     int nc;
@@ -330,6 +328,8 @@ int frontend_module_ct_root_find(const char * root, const char * rel, char * out
     int has_m;
     int nhit;
     FILE * f;
+    (*out) = (char *)(0);
+    (*err) = (char *)(0);
     (*is_hdr) = 0;
     (*is_map) = 0;
     first_hdr = 0;
@@ -344,10 +344,8 @@ int frontend_module_ct_root_find(const char * root, const char * rel, char * out
         else {
             c = doubled;
         }
-        if (((snprintf(hdr, sizeof(hdr), "%s/%s.h.ct", root, c) >= (int)(sizeof(hdr))) || (snprintf(map, sizeof(map), "%s/%s.m.ct", root, c) >= (int)(sizeof(map))))) {
-            snprintf(err, (size_t)(errcap), "import path is too long");
-            return (-1);
-        }
+        hdr = tool_sh_ct_scratch_fmt("%s/%s.h.ct", root, c);
+        map = tool_sh_ct_scratch_fmt("%s/%s.m.ct", root, c);
         f = fopen(hdr, "rb");
         has_h = (f != NULL);
         if (f) {
@@ -359,17 +357,17 @@ int frontend_module_ct_root_find(const char * root, const char * rel, char * out
             fclose(f);
         }
         if ((has_h && has_m)) {
-            snprintf(err, (size_t)(errcap), "import '%s' is ambiguous: both %s and %s exist", rel, hdr, map);
+            (*err) = tool_sh_ct_scratch_fmt("import '%s' is ambiguous: both %s and %s exist", rel, hdr, map);
             return (-1);
         }
         if (((!has_h) && (!has_m))) {
             continue;
         }
         if (nhit > 0) {
-            snprintf(err, (size_t)(errcap), "import '%s' is ambiguous: both %s and %s exist", rel, first_hit, (has_h ? hdr : map));
+            (*err) = tool_sh_ct_scratch_fmt("import '%s' is ambiguous: both %s and %s exist", rel, first_hit, (has_h ? hdr : map));
             return (-1);
         }
-        snprintf(first_hit, sizeof(first_hit), "%s", (has_h ? hdr : map));
+        first_hit = tool_sh_ct_scratch_dup((has_h ? hdr : map));
         first_hdr = has_h;
         first_map = has_m;
         nhit = 1;
@@ -377,10 +375,7 @@ int frontend_module_ct_root_find(const char * root, const char * rel, char * out
     if (nhit == 1) {
         (*is_hdr) = first_hdr;
         (*is_map) = first_map;
-        if (snprintf(out, (size_t)(cap), "%s", first_hit) >= cap) {
-            snprintf(err, (size_t)(errcap), "import path is too long");
-            return (-1);
-        }
+        (*out) = first_hit;
         return 1;
     }
     return 0;

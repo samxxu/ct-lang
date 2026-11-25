@@ -11,12 +11,12 @@
 #include "Arena.h"
 #include "Diag.h"
 #include "Pkg.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/tool/driver/Driver.h.ct"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define MAX_PATH 1024
 #define MAX_FLAGS 1024                  /* mirrors Module.h.ct's --cflags cap */
 struct ct_buf;
 struct Str;
@@ -67,6 +67,7 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
+struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -78,7 +79,6 @@ struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
-struct tool_sh_Sh;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
@@ -94,7 +94,7 @@ struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct tool_driver_DriverOps_vtbl {
     int (*fail)(void *, const char *);
-    int (*default_output)(void *, const char *, char *, size_t);
+    int (*default_output)(void *, const char *, char * *);
     int (*load_builtin)(void *, const char *);
     int (*run)(void *, int, char * *);
 };
@@ -134,26 +134,23 @@ static int tool_driver_Driver_tool_driver_DriverOps_fail(void *self, const char 
     return frontend_parse_ct_parse_fail(msg);
 }
 
-static int tool_driver_Driver_tool_driver_DriverOps_default_output(void *self, const char * in, char * out, size_t cap) {
+static int tool_driver_Driver_tool_driver_DriverOps_default_output(void *self, const char * in, char * * out) {
     struct tool_driver_Driver *_self = (struct tool_driver_Driver *)self;
     size_t n;
     (void)(_self);
     n = strlen(in);
     if (((n >= 3) && (strcmp(((in + n) - 3), ".ct") == 0))) {
-        if (snprintf(out, cap, "%.*s.c", (int)((n - 3)), in) >= (int)(cap)) {
-            return (-1);
-        }
-        return 0;
+        (*out) = tool_sh_ct_scratch_fmt("%.*s.c", (int)((n - 3)), in);
     }
-    if (snprintf(out, cap, "%s.c", in) >= (int)(cap)) {
-        return (-1);
+    else {
+        (*out) = tool_sh_ct_scratch_fmt("%s.c", in);
     }
     return 0;
 }
 
 static int tool_driver_Driver_tool_driver_DriverOps_load_builtin(void *self, const char * in) {
     struct tool_driver_Driver *_self = (struct tool_driver_Driver *)self;
-    char cand[MAX_PATH];
+    char * cand;
     const char * savepath;
     int bi;
     int prog;
@@ -190,7 +187,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_load_builtin(void *self, con
             continue;
         }
         prog = (-1);
-        rr = _self->m->__frontend_module_moduleops_vptr->find_builtin(_self->m, in, base, cand, sizeof(cand));
+        rr = _self->m->__frontend_module_moduleops_vptr->find_builtin(_self->m, in, base, (&cand));
         if (rr == (-2)) {
             return (-2);
         }
@@ -251,8 +248,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_load_builtin(void *self, con
 static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, char * * argv) {
     struct tool_driver_Driver *_self = (struct tool_driver_Driver *)self;
     const char * in;
-    const char * out;
-    char outbuf[MAX_PATH];
+    char * out;
     int i;
     int prog;
     int stdprog;
@@ -403,18 +399,18 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
                 inp = argv[ai];
             }
             if ((inp && file_has_import(inp))) {
-                char dir[MAX_PATH];
+                char * dir = (char *)(0);
                 char * barg[10];
                 int bi = 0;
-                if (_self->m->__frontend_module_moduleops_vptr->path_dir(_self->m, inp, dir, sizeof(dir)) != 0) {
-                    dir[0] = 0;
+                if (_self->m->__frontend_module_moduleops_vptr->path_dir(_self->m, inp, (&dir)) != 0) {
+                    dir = (char *)(0);
                 }
                 barg[bi++] = (char *)("build");
                 barg[bi++] = (char *)(inp);
                 barg[bi++] = (char *)("--emit-c");
                 barg[bi++] = (char *)("-o");
                 barg[bi++] = (char *)("/tmp");
-                if (dir[0]) {
+                if ((dir && dir[0])) {
                     barg[bi++] = (char *)("-I");
                     barg[bi++] = dir;
                 }
@@ -601,10 +597,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
                 return 1;
             }
             i++;
-            if (snprintf(_self->m->map_path, sizeof(_self->m->map_path), "%s", argv[i]) >= (int)(sizeof(_self->m->map_path))) {
-                fprintf(stderr, "ctc: map path is too long\n");
-                return 1;
-            }
+            _self->m->map_path = tool_sh_ct_scratch_dup(argv[i]);
             _self->m->have_map = 1;
             continue;
         }
@@ -614,10 +607,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
                 return 1;
             }
             i++;
-            if (snprintf(_self->m->model_path, sizeof(_self->m->model_path), "%s", argv[i]) >= (int)(sizeof(_self->m->model_path))) {
-                fprintf(stderr, "ctc: model path is too long\n");
-                return 1;
-            }
+            _self->m->model_path = tool_sh_ct_scratch_dup(argv[i]);
             _self->m->have_model = 1;
             continue;
         }
@@ -652,11 +642,10 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         }
     }
     if (((!out) && (!_self->m->check_mode))) {
-        if (_self->__tool_driver_driverops_vptr->default_output(_self, in, outbuf, sizeof(outbuf)) != 0) {
-            fprintf(stderr, "ctc: output path too long\n");
+        if (_self->__tool_driver_driverops_vptr->default_output(_self, in, (&out)) != 0) {
+            fprintf(stderr, "ctc: out of memory\n");
             return 1;
         }
-        out = outbuf;
     }
     if (_self->m->show_c_boundary) {
         printf("%s\n", (_self->m->__frontend_module_moduleops_vptr->c_boundary_for(_self->m, in) ? "strict" : "allow"));

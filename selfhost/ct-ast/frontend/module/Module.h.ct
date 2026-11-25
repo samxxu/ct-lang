@@ -40,7 +40,6 @@ import frontend::module::ModuleBoundary;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
-#define MAX_PATH   1024
 #define MAX_UNITS  64
 #define MAX_UNITS_MAX 65536
 #define MAX_IMPORTS 32
@@ -78,7 +77,7 @@ pub trait ModuleOps {
     int  fail_emit(const char *msg);
     int  read_file(const char *path);
     int  base_name(const char *path, char *out, int cap, int *is_hdr, int *is_map);
-    int  path_dir(const char *path, char *out, int cap);
+    int  path_dir(const char *path, char **out);
     /* S1a-0 C1: the three module tables grow by doubling from their old caps
        (MAX_UNITS / MAX_IMPORTS / MAX_INCDIRS) to their `*_MAX` ceiling. */
     int  ensure_unit_capacity(int need);
@@ -86,13 +85,13 @@ pub trait ModuleOps {
     int  ensure_unit_dep_capacity(int u, int need);
     int  ensure_reach(int need);
     int  scan_imports(const char *from);
-    int  resolve_import(const char *from, const char *rel, char *out, int cap,
+    int  resolve_import(const char *from, const char *rel, char **out,
                         int *is_hdr, int *is_map, int line);
     int  load_unit(const char *path);
     /* Phase 29 E29-5: locate the built-in container layer for `ct build`, with
        the same five probes the compile-mode driver uses. `base` names the file
        inside the layer (`Vec.h.ct`, `Option.h.ct`, `Result.h.ct`). */
-    int  find_builtin(const char *in, const char *base, char *out, int cap);
+    int  find_builtin(const char *in, const char *base, char **out);
     int  is_builtin_unit(int u);
     int  builtin_slot(int u);
     int  builtin_live_for(int u);
@@ -152,10 +151,10 @@ pub struct Module {
     int  nunits;
     int  unitcap;               /* S1a-0 C1: grows from MAX_UNITS on demand */
     int  build_mode;
-    /* Array bounds are literals because this struct lands in a generated header
-       that carries no macros; 1024 is MAX_PATH. The import roots grow from
-       MAX_INCDIRS (16) on demand, so their storage is a heap block too. */
-    char outdir[1024];
+    /* S1a-0 C2l: the output / map / model paths are run-scoped owned blocks;
+       the import roots grow from MAX_INCDIRS (16) on demand, so their storage
+       is a heap block too. */
+    char *outdir;               /* S1a-0 C2l: run-scoped owned path */
     const char **incdirs;
     int  ninc;
     int  inccap;
@@ -181,9 +180,9 @@ pub struct Module {
     int  builtin_live[8];      /* slot order, parallel to builtin_units[] */
     int  computed_live;
     int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
-    char map_path[1024];
+    char *map_path;             /* S1a-0 C2l: run-scoped owned path */
     int  have_map;
-    char model_path[1024];
+    char *model_path;           /* S1a-0 C2l: run-scoped owned path */
     int  have_model;
     const char *prog;
     int  diag_json;             /* --diagnostics=json */
@@ -234,7 +233,7 @@ pub struct Module {
 } use ModuleOps;
 
 /* Declared here, after the struct, so the parameter spells the mangled type. */
-static int ct_pkg_ns_clash(struct Module *m, char *msg, int cap, char *file, int fcap);
+static int ct_pkg_ns_clash(struct Module *m, char **msg, char **file);
 
 /* SH-87: is `word` one of layer unit `u`'s own functions? The list is derived
    from the parsed rows (`fn_start..fn_end`), not written down here, so a new
@@ -415,7 +414,8 @@ static const char *cycle_file(struct Module *m, int si)
 {
     int o = m->sym->structs[si].owner;
 
-    if (o >= 0 && o < m->nunits && m->units[o].path[0]) return m->units[o].path;
+    if (o >= 0 && o < m->nunits && m->units[o].path && m->units[o].path[0])
+        return m->units[o].path;
     return m->path;
 }
 
@@ -681,22 +681,23 @@ impl ModuleOps for Module {
         return 0;
     }
 
-    int path_dir(const char *path, char *out, int cap)
+    /* S1a-0 C2l: the directory is a fresh owned block; the caller's old
+       `char[MAX_PATH]` (and its "path is too long") is gone. */
+    int path_dir(const char *path, char **out)
     {
         const char *slash;
         size_t n;
         (void)self;
 
+        *out = (char *)0;
         slash = strrchr(path, '/');
         if (!slash) {
-            if (cap < 2) return self->fail("path is too long");
-            snprintf(out, (size_t)cap, "%s", ".");
+            *out = tool::sh::ct_scratch_dup(".");
             return 0;
         }
         n = (size_t)(slash - path);
         if (n == 0) n = 1;   /* "/x" -> "/" */
-        if (n + 1 > (size_t)cap) return self->fail("path is too long");
-        snprintf(out, (size_t)cap, "%.*s", (int)n, path);
+        *out = tool::sh::ct_scratch_fmt("%.*s", (int)n, path);
         return 0;
     }
 
@@ -843,34 +844,32 @@ impl ModuleOps for Module {
        (`<root>/app/model/Item.h.ct`) second, so old trees keep resolving. The
        second pass names a plain `.ct` unit, which is the mistake worth
        reporting. */
-    int resolve_import(const char *from, const char *rel, char *out, int cap,
+    int resolve_import(const char *from, const char *rel, char **out,
                        int *is_hdr, int *is_map, int line)
     {
-        char dir[MAX_PATH];
-        char cand[MAX_PATH];
-        char first[MAX_PATH];
-        char firstroot[MAX_PATH];
-        char ncand[MAX_PATH];
-        char nfirst[MAX_PATH];
-        char nroot[MAX_PATH];
-        char nfirstroot[MAX_PATH];
-        char msg[MAX_PATH * 2 + MAX_TEXT];
+        char *dir;
+        char *cand = (char *)0;
+        char *first = (char *)0;
+        char *firstroot = (char *)0;
+        char *ncand;
+        char *nfirst;
+        char *nroot;
+        char *nfirstroot;
+        char *msg;
         const char *root;
         FILE *f;
         int r, st, hit, cand_hdr, cand_map, first_local;
         (void)self;
 
-        if (self->path_dir(from, dir, sizeof dir) != 0) return -1;
+        *out = (char *)0;
         *is_hdr = 0;
         *is_map = 0;
         hit = 0;
         first_local = 0;
-        first[0] = 0;
-        firstroot[0] = 0;
+        if (self->path_dir(from, &dir) != 0) return -1;
         for (r = -1; r < self->ninc; r++) {
             root = (r < 0) ? dir : self->incdirs[r];
-            st = ct_root_find(root, rel, cand, sizeof cand, &cand_hdr, &cand_map,
-                              msg, sizeof msg);
+            st = ct_root_find(root, rel, &cand, &cand_hdr, &cand_map, &msg);
             if (st < 0) {
                 if (line > 0) return tool::diag::ct_sem_error(line, 1, msg, from);
                 return self->fail(msg);
@@ -879,8 +878,8 @@ impl ModuleOps for Module {
             if (!hit) {
                 hit = 1;
                 first_local = (r < 0);
-                snprintf(first, sizeof first, "%s", cand);
-                snprintf(firstroot, sizeof firstroot, "%s", root);
+                first = tool::sh::ct_scratch_dup(cand);
+                firstroot = tool::sh::ct_scratch_dup(root);
                 *is_hdr = cand_hdr;
                 *is_map = cand_map;
                 continue;
@@ -891,22 +890,21 @@ impl ModuleOps for Module {
                normalized first: `-I x` and `-I ./x`, `a/../b`, or a symlinked
                root all name one directory, and comparing the spellings would
                report a clash that is not there. */
-            ct_norm_path(cand, ncand, sizeof ncand);
-            ct_norm_path(first, nfirst, sizeof nfirst);
+            ct_norm_path(cand, &ncand);
+            ct_norm_path(first, &nfirst);
             if (strcmp(ncand, nfirst) == 0) continue;
-            ct_norm_path(root, nroot, sizeof nroot);
-            ct_norm_path(firstroot, nfirstroot, sizeof nfirstroot);
+            ct_norm_path(root, &nroot);
+            ct_norm_path(firstroot, &nfirstroot);
             if (strcmp(nroot, nfirstroot) == 0) continue;
             if (first_local) continue;
-            snprintf(msg, sizeof msg,
-                     "unit '%s' exists in two import roots: '%s' and '%s'",
-                     rel, first, cand);
+            msg = tool::sh::ct_scratch_fmt(
+                "unit '%s' exists in two import roots: '%s' and '%s'",
+                rel, first, cand);
             if (line > 0) return tool::diag::ct_sem_error(line, 1, msg, from);
             return self->fail(msg);
         }
         if (hit) {
-            if (snprintf(out, (size_t)cap, "%s", first) >= cap)
-                return self->fail("import path is too long");
+            *out = first;
             return 0;
         }
         for (r = -1; r < self->ninc; r++) {
@@ -919,20 +917,18 @@ impl ModuleOps for Module {
                 const char *c;
                 if (ci == 0) c = flat;
                 else c = doubled;
-                if (snprintf(cand, sizeof cand, "%s/%s.ct", root, c) >= (int)sizeof cand)
-                    return self->fail("import path is too long");
+                cand = tool::sh::ct_scratch_fmt("%s/%s.ct", root, c);
                 f = fopen(cand, "rb");
                 if (f) {
                     fclose(f);
-                    if (snprintf(cand, sizeof cand,
-                                 "only a .h.ct unit can be imported: rename '%s.ct' to '%s.h.ct'",
-                                 rel, rel) >= (int)sizeof cand)
-                        return self->fail("import path is too long");
+                    cand = tool::sh::ct_scratch_fmt(
+                        "only a .h.ct unit can be imported: rename '%s.ct' to '%s.h.ct'",
+                        rel, rel);
                     return self->fail(cand);
                 }
             }
         }
-        snprintf(cand, sizeof cand, "cannot resolve import '%s'", rel);
+        cand = tool::sh::ct_scratch_fmt("cannot resolve import '%s'", rel);
         return self->fail(cand);
     }
 
@@ -942,17 +938,18 @@ impl ModuleOps for Module {
        and the compatibility warnings live here (compile mode calls it too). 0 when found, -1 when
        this installation has none, -2 on a hard error (a bogus CT_CORE_DIR). A
        program that never uses a container still builds without the layer. */
-    int find_builtin(const char *in, const char *base, char *out, int cap)
+    int find_builtin(const char *in, const char *base, char **out)
     {
-        char cand[MAX_PATH];
-        char alt[MAX_PATH];
+        char *cand;
+        char *alt = (char *)0;
+        char *msg;
         const char *env_core;
         const char *env_std;
         const char *slash;
         struct stat st;
-        int n;
         FILE *probe;
 
+        *out = (char *)0;
         env_core = getenv("CT_CORE_DIR");
         env_std = getenv("CT_STD_DIR");
         /* 1/2: CT_CORE_DIR is authoritative; a missing directory is a hard
@@ -962,9 +959,8 @@ impl ModuleOps for Module {
             ok = stat(env_core, &st);
             if (ok == 0) ok = S_ISDIR(st.st_mode); else ok = 0;
             if (!ok) {
-                char msg[MAX_PATH + 64];
-                snprintf(msg, sizeof msg,
-                         "CT_CORE_DIR points to a missing directory: %s", env_core);
+                msg = tool::sh::ct_scratch_fmt(
+                    "CT_CORE_DIR points to a missing directory: %s", env_core);
                 self->fail(msg);
                 return -2;
             }
@@ -973,13 +969,12 @@ impl ModuleOps for Module {
                 g_module_legacy_env_warned = 1;
                 fprintf(stderr, "ctc: warning: CT_STD_DIR is deprecated; use CT_CORE_DIR\n");
             }
-            n = snprintf(cand, sizeof cand, "%s/%s", env_core, base);
-            if (n < 0 || n >= (int)sizeof cand) return -1;
+            cand = tool::sh::ct_scratch_fmt("%s/%s", env_core, base);
             if (strcmp(cand, in) == 0) return -1;
             probe = fopen(cand, "r");
             if (!probe) return -1;
             fclose(probe);
-            if (snprintf(out, cap, "%s", cand) >= cap) return -1;
+            *out = cand;
             return 0;
         }
         /* 3: the legacy key still works during the one-MINOR window. */
@@ -989,12 +984,12 @@ impl ModuleOps for Module {
                 fprintf(stderr, "ctc: warning: CT_STD_DIR is deprecated; use CT_CORE_DIR\n");
             }
             if (stat(env_std, &st) == 0 && S_ISDIR(st.st_mode)) {
-                n = snprintf(cand, sizeof cand, "%s/%s", env_std, base);
-                if (n > 0 && n < (int)sizeof cand && strcmp(cand, in) != 0) {
+                cand = tool::sh::ct_scratch_fmt("%s/%s", env_std, base);
+                if (strcmp(cand, in) != 0) {
                     probe = fopen(cand, "r");
                     if (probe) {
                         fclose(probe);
-                        if (snprintf(out, cap, "%s", cand) >= cap) return -1;
+                        *out = cand;
                         return 0;
                     }
                 }
@@ -1003,33 +998,32 @@ impl ModuleOps for Module {
         /* 5: ./lib/core, the input's sibling ../lib/core, then the old
            ./lib/std / sibling spellings (the old hit never resolves silently; DOC-87 迁移回退). */
         if (stat("lib/core", &st) == 0 && S_ISDIR(st.st_mode)) {
-            n = snprintf(cand, sizeof cand, "lib/core/%s", base);
-            if (n > 0 && n < (int)sizeof cand && strcmp(cand, in) != 0) {
+            cand = tool::sh::ct_scratch_fmt("lib/core/%s", base);
+            if (strcmp(cand, in) != 0) {
                 probe = fopen(cand, "r");
                 if (probe) {
                     fclose(probe);
-                    if (snprintf(out, cap, "%s", cand) >= cap) return -1;
+                    *out = cand;
                     return 0;
                 }
             }
         }
         slash = strrchr(in, '/');
-        if (slash && (size_t)(slash - in) < sizeof alt) {
-            memcpy(alt, in, (size_t)(slash - in));
-            alt[slash - in] = 0;
-            n = snprintf(cand, sizeof cand, "%s/../lib/core/%s", alt, base);
-            if (n > 0 && n < (int)sizeof cand && strcmp(cand, in) != 0) {
+        if (slash) {
+            alt = tool::sh::ct_scratch_fmt("%.*s", (int)(slash - in), in);
+            cand = tool::sh::ct_scratch_fmt("%s/../lib/core/%s", alt, base);
+            if (strcmp(cand, in) != 0) {
                 probe = fopen(cand, "r");
                 if (probe) {
                     fclose(probe);
-                    if (snprintf(out, cap, "%s", cand) >= cap) return -1;
+                    *out = cand;
                     return 0;
                 }
             }
         }
         if (stat("lib/std", &st) == 0 && S_ISDIR(st.st_mode)) { /* DOC-87 迁移回退 */
-            n = snprintf(cand, sizeof cand, "lib/std/%s", base); /* DOC-87 迁移回退 */
-            if (n > 0 && n < (int)sizeof cand && strcmp(cand, in) != 0) {
+            cand = tool::sh::ct_scratch_fmt("lib/std/%s", base); /* DOC-87 迁移回退 */
+            if (strcmp(cand, in) != 0) {
                 probe = fopen(cand, "r");
                 if (probe) {
                     fclose(probe);
@@ -1037,14 +1031,14 @@ impl ModuleOps for Module {
                         g_module_legacy_path_warned = 1;
                         fprintf(stderr, "ctc: warning: lib/std is deprecated; use lib/core (DOC-87)\n"); /* DOC-87 迁移回退 */
                     }
-                    if (snprintf(out, cap, "%s", cand) >= cap) return -1;
+                    *out = cand;
                     return 0;
                 }
             }
         }
-        if (slash && (size_t)(slash - in) < sizeof alt) {
-            n = snprintf(cand, sizeof cand, "%s/../lib/std/%s", alt, base); /* DOC-87 迁移回退 */
-            if (n > 0 && n < (int)sizeof cand && strcmp(cand, in) != 0) {
+        if (slash) {
+            cand = tool::sh::ct_scratch_fmt("%s/../lib/std/%s", alt, base); /* DOC-87 迁移回退 */
+            if (strcmp(cand, in) != 0) {
                 probe = fopen(cand, "r");
                 if (probe) {
                     fclose(probe);
@@ -1052,7 +1046,7 @@ impl ModuleOps for Module {
                         g_module_legacy_path_warned = 1;
                         fprintf(stderr, "ctc: warning: lib/std is deprecated; use lib/core (DOC-87)\n"); /* DOC-87 迁移回退 */
                     }
-                    if (snprintf(out, cap, "%s", cand) >= cap) return -1;
+                    *out = cand;
                     return 0;
                 }
             }
@@ -1076,7 +1070,7 @@ impl ModuleOps for Module {
        shared tables before its importers are parsed. Returns the unit index. */
     int load_unit(const char *path)
     {
-        char dep[MAX_PATH];
+        char *dep;
         char *mysrc;
         int mysrclen;
         int u, i, k, d, nrels, rb, is_hdr, is_map, dep_is_map, dup, dn, gn;
@@ -1087,10 +1081,7 @@ impl ModuleOps for Module {
         if (self->ensure_unit_capacity(self->nunits + 1) != 0) return -1;
         u = self->nunits;
         self->nunits++;
-        if (snprintf(self->units[u].path, MAX_PATH, "%s", path) >= MAX_PATH) {
-            self->fail("path is too long");
-            return -1;
-        }
+        self->units[u].path = tool::sh::ct_scratch_dup(path);
         self->units[u].ndep = 0;
         self->units[u].prog = -1;
         self->units[u].digest = 0;
@@ -1128,44 +1119,44 @@ impl ModuleOps for Module {
            Header-only shims are the normal case; a source without its header
            cannot declare anything for a recipe, so it is rejected by name. */
         self->units[u].has_shim = 0;
-        self->units[u].shim_dir[0] = 0;
-        self->units[u].shim_h[0] = 0;
-        self->units[u].shim_c[0] = 0;
+        self->units[u].shim_dir = (char *)0;
+        self->units[u].shim_h = (char *)0;
+        self->units[u].shim_c = (char *)0;
         if (is_map || is_hdr) {
-            char dir[MAX_PATH];
-            char h[MAX_PATH];
-            char c[MAX_PATH];
+            char *dir;
+            char *h;
+            char *c;
+            char *msg;
             struct stat st;
             /* The diagnostic names the file the user has to add, so it holds a
                path; `sem_error` prints the message directly (no 160-byte cap). */
-            char msg[MAX_PATH + 128];
-            if (self->path_dir(path, dir, sizeof dir) != 0) return -1;
-            if (snprintf(h, sizeof h, "%s/%s.shim.h", dir, self->units[u].base) >= (int)sizeof h
-             || snprintf(c, sizeof c, "%s/%s.shim.c", dir, self->units[u].base) >= (int)sizeof c) {
-                self->fail("path is too long");
-                return -1;
-            }
+            if (self->path_dir(path, &dir) != 0) return -1;
+            h = tool::sh::ct_scratch_fmt("%s/%s.shim.h", dir, self->units[u].base);
+            c = tool::sh::ct_scratch_fmt("%s/%s.shim.c", dir, self->units[u].base);
             if (stat(h, &st) == 0) {
                 if (!S_ISREG(st.st_mode) || access(h, R_OK) != 0) {
-                    snprintf(msg, sizeof msg, "a shim header is not a readable file: %s", h);
+                    msg = tool::sh::ct_scratch_fmt(
+                        "a shim header is not a readable file: %s", h);
                     return tool::diag::ct_sem_error(1, 1, msg, path);
                 }
-                snprintf(self->units[u].shim_h, MAX_PATH, "%s", h);
+                self->units[u].shim_h = h;
             }
             if (stat(c, &st) == 0) {
                 if (!S_ISREG(st.st_mode)) {
-                    snprintf(msg, sizeof msg, "a shim source is not a regular file: %s", c);
+                    msg = tool::sh::ct_scratch_fmt(
+                        "a shim source is not a regular file: %s", c);
                     return tool::diag::ct_sem_error(1, 1, msg, path);
                 }
-                snprintf(self->units[u].shim_c, MAX_PATH, "%s", c);
+                self->units[u].shim_c = c;
             }
-            if (is_map && self->units[u].shim_c[0] && !self->units[u].shim_h[0]) {
-                snprintf(msg, sizeof msg, "a shim source needs a matching .shim.h: %s", h);
+            if (is_map && self->units[u].shim_c && !self->units[u].shim_h) {
+                msg = tool::sh::ct_scratch_fmt(
+                    "a shim source needs a matching .shim.h: %s", h);
                 return tool::diag::ct_sem_error(1, 1, msg, path);
             }
-            if (self->units[u].shim_h[0]) {
+            if (self->units[u].shim_h) {
                 self->units[u].has_shim = 1;
-                snprintf(self->units[u].shim_dir, MAX_PATH, "%s", dir);
+                self->units[u].shim_dir = dir;
             }
         }
 
@@ -1181,7 +1172,7 @@ impl ModuleOps for Module {
         for (i = 0; i < nrels; i++) {
             if (self->resolve_import(path,
                                      self->p->rels + (size_t)(rb + i) * MAX_TEXT,
-                                     dep, sizeof dep, &is_hdr, &dep_is_map,
+                                     &dep, &is_hdr, &dep_is_map,
                                      self->p->rel_line[rb + i]) != 0) return -1;
             /* SH-71 A-1: a mapping unit may also import a header unit. The
                type host's trait signature has to name the interface type it
@@ -1200,10 +1191,10 @@ impl ModuleOps for Module {
                index, and `-1` is an out-of-bounds read; name the two units
                instead of walking into the crash. */
             if (self->units[d].prog < 0) {
-                char cmsg[MAX_PATH + 128];
-                snprintf(cmsg, sizeof cmsg,
-                         "circular import: '%s' imports '%s', which is still being loaded",
-                         self->units[u].path, self->units[d].path);
+                char *cmsg;
+                cmsg = tool::sh::ct_scratch_fmt(
+                    "circular import: '%s' imports '%s', which is still being loaded",
+                    self->units[u].path, self->units[d].path);
                 return tool::diag::ct_sem_error(self->p->rel_line[rb + i], 1, cmsg, path);
             }
             /* Two `import` lines may name the same unit; a dependency is listed
@@ -1641,10 +1632,11 @@ impl ModuleOps for Module {
        `--ns-root` (D13 option A: validation, not derivation). */
     int check_ns_dir(int u)
     {
-        char rest[MAX_PATH];
-        char dir[MAX_TEXT];
+        char *dir;
+        char *msg;
         char want[MAX_TEXT];
         const char *p;
+        const char *rest;
         size_t rn, k, m;
 
         (void)self;
@@ -1654,15 +1646,14 @@ impl ModuleOps for Module {
         if (strncmp(self->units[u].path, self->nsroot, rn) != 0) return 0;
         p = self->units[u].path + rn;
         if (*p == '/') p++;
-        snprintf(rest, sizeof rest, "%s", p);
+        rest = p;
         if (strncmp(rest, "./", 2) == 0 || strncmp(rest, "../", 3) == 0
             || strstr(rest, "/./") != NULL || strstr(rest, "/../") != NULL) return 0;
 
         k = strlen(rest);
         while (k > 0 && rest[k - 1] != '/') k--;
         if (k > 0) k--;                    /* drop the slash before the basename */
-        if (k >= sizeof dir) return self->fail("path is too long");
-        snprintf(dir, sizeof dir, "%.*s", (int)k, rest);
+        dir = tool::sh::ct_scratch_fmt("%.*s", (int)k, rest);
 
         m = 0;
         for (k = 0; self->units[u].ns[k]; k++) {
@@ -1678,9 +1669,9 @@ impl ModuleOps for Module {
         }
         want[m] = 0;
         if (strcmp(dir, want) != 0) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg, "namespace '%s' does not match the directory '%s'",
-                     self->units[u].ns, dir);
+            msg = tool::sh::ct_scratch_fmt(
+                "namespace '%s' does not match the directory '%s'",
+                self->units[u].ns, dir);
             return self->fail(msg);
         }
         return 0;
@@ -1746,7 +1737,7 @@ impl ModuleOps for Module {
                 if (w < 0 || (size_t)w >= ihcap - n) { free(ih); return -1; }
                 n += (size_t)w;
             }
-            if (self->units[u].shim_c[0] && stat(self->units[u].shim_c, &st) == 0) {
+            if (self->units[u].shim_c && stat(self->units[u].shim_c, &st) == 0) {
                 w = snprintf(ih + n, ihcap - n, "sc@%lu.%lu;",
                              (unsigned long)st.st_mtime, (unsigned long)st.st_size);
                 if (w < 0 || (size_t)w >= ihcap - n) { free(ih); return -1; }
@@ -1992,7 +1983,7 @@ impl ModuleOps for Module {
         /* S1a-0 C2f: the link/archive lines grow from the old MAX_CMD. */
         char *cmd;
         int cmdcap, code, st;
-        char root[MAX_PATH];
+        char *root;
         (void)self;
 
         cmd = 0;
@@ -2189,10 +2180,7 @@ impl ModuleOps for Module {
                     return 1;
                 }
                 i++;
-                if (snprintf(self->map_path, sizeof self->map_path, "%s", argv[i]) >= (int)sizeof self->map_path) {
-                    fprintf(stderr, "ctc: map path is too long\n");
-                    return 1;
-                }
+                self->map_path = tool::sh::ct_scratch_dup(argv[i]);
                 self->have_map = 1;
                 continue;
             }
@@ -2202,11 +2190,7 @@ impl ModuleOps for Module {
                     return 1;
                 }
                 i++;
-                if (snprintf(self->model_path, sizeof self->model_path, "%s", argv[i])
-                    >= (int)sizeof self->model_path) {
-                    fprintf(stderr, "ctc: model path is too long\n");
-                    return 1;
-                }
+                self->model_path = tool::sh::ct_scratch_dup(argv[i]);
                 self->have_model = 1;
                 continue;
             }
@@ -2301,17 +2285,14 @@ impl ModuleOps for Module {
             self->exe = oarg ? oarg : "a.out";
             outdir = self->outdir_opt ? self->outdir_opt : ".ctbuild";
         }
-        if (snprintf(self->outdir, sizeof self->outdir, "%s", outdir) >= (int)sizeof self->outdir) {
-            fprintf(stderr, "ctc: output directory is too long\n");
-            return 1;
-        }
+        self->outdir = tool::sh::ct_scratch_dup(outdir);
         if (!self->emit_c && ct_ensure_dir(self->outdir) != 0) {
             fprintf(stderr, "ctc: cannot create '%s'%s\n", self->outdir,
                     self->diag_codes ? " [E-DRIVER-004]" : "");
             return 1;
         }
         if (!self->nsroot) {
-            if (self->path_dir(inputs[0], root, sizeof root) != 0) {
+            if (self->path_dir(inputs[0], &root) != 0) {
                 return frontend::parse::ct_parse_report();
             }
             self->nsroot = root;
@@ -2320,9 +2301,9 @@ impl ModuleOps for Module {
            the same segment make every `import <seg>::x` ambiguous regardless of
            which files exist. */
         {
-            char nmsg[MAX_PATH * 2 + MAX_TEXT];
-            char nfile[MAX_PATH];
-            if (ct_pkg_ns_clash(self, nmsg, sizeof nmsg, nfile, sizeof nfile)) {
+            char *nmsg;
+            char *nfile;
+            if (ct_pkg_ns_clash(self, &nmsg, &nfile)) {
                 tool::diag::ct_sem_error(1, 1, nmsg, nfile);
                 fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
                 return 1;
@@ -2406,7 +2387,7 @@ impl ModuleOps for Module {
         self->builtin_live[7] = 0;
         backend::emit::ct_emit_clear_builtins();
         {
-            char bpath[MAX_PATH];
+            char *bpath;
             int bi;
             for (bi = 0; bi < 8; bi++) {
                 const char *base;
@@ -2420,7 +2401,7 @@ impl ModuleOps for Module {
                      : (bi == 5 ? "utf16/U16Str.h.ct"
                      : (bi == 6 ? "utf16/U16String.h.ct" : "Box.h.ct"))))));
                 {
-                    int br = self->find_builtin(inputs[0], base, bpath, sizeof bpath);
+                    int br = self->find_builtin(inputs[0], base, &bpath);
                     if (br == -2) return frontend::parse::ct_parse_report();
                     if (br != 0) continue;
                 }
@@ -2488,23 +2469,16 @@ impl ModuleOps for Module {
             }
             if (self->lib_mode) {
                 const char *od = self->outdir_opt ? self->outdir_opt : ".ctbuild";
-                char hp[MAX_PATH];
+                char *hp;
                 if (self->lib_scan(root_u) != 0) return 1;
-                if (snprintf(self->outdir, sizeof self->outdir, "%s", od)
-                    >= (int)sizeof self->outdir) {
-                    fprintf(stderr, "ctc: output directory is too long\n");
-                    return 1;
-                }
+                self->outdir = tool::sh::ct_scratch_dup(od);
                 if (ct_ensure_dir(self->outdir) != 0) {
                     fprintf(stderr, "ctc: cannot create '%s'%s\n", self->outdir,
                     self->diag_codes ? " [E-DRIVER-004]" : "");
                     return 1;
                 }
-                if (snprintf(hp, sizeof hp, "%s/%s.abi.h", self->outdir,
-                             self->units[root_u].base) >= (int)sizeof hp) {
-                    fprintf(stderr, "ctc: ABI header path is too long\n");
-                    return 1;
-                }
+                hp = tool::sh::ct_scratch_fmt("%s/%s.abi.h", self->outdir,
+                                              self->units[root_u].base);
                 self->abi_mode = 1;
                 if (backend::emit::ct_emit_header(hp) != 0) return 1;
                 /* SH-79 facet 1: --lib used to return without writing the map
@@ -2524,7 +2498,7 @@ impl ModuleOps for Module {
                     if (self->units[u].is_hdr && self->write_unit_header(u) != 0) return 1;
                 }
                 for (u = 0; u < self->nunits; u++) {
-                    char src[MAX_PATH], obj[MAX_PATH];
+                    char *src, *obj;
                     /* S1a-0 C2f: one composed cc line per object, grown from
                        the old MAX_CMD instead of a fixed 8192-byte array. */
                     char *cmd;
@@ -2540,11 +2514,8 @@ impl ModuleOps for Module {
                     cstd = self->std_flag ? self->std_flag : "-std=c99";
                     if (self->sym->atomic_used && strcmp(cstd, "-std=c99") == 0)
                         cstd = "-std=c11";
-                    if (snprintf(src, sizeof src, "%s/%s.c", self->outdir, self->units[u].base)
-                            >= (int)sizeof src
-                        || snprintf(obj, sizeof obj, "%s/%s.o", self->outdir, self->units[u].base)
-                            >= (int)sizeof obj)
-                        return 1;
+                    src = tool::sh::ct_scratch_fmt("%s/%s.c", self->outdir, self->units[u].base);
+                    obj = tool::sh::ct_scratch_fmt("%s/%s.o", self->outdir, self->units[u].base);
                     if (!ccp || !ccp[0]) ccp = "cc";
                     if (tool::sh::ct_text_init(&cmd, &cmdcap, MAX_CMD) != 0) return 1;
                     if (ct_cmd_token(&cmd, &cmdcap, ccp) != 0
@@ -2594,25 +2565,17 @@ impl ModuleOps for Module {
                    deterministic form; macOS ar has no -D, so fall back to
                    ZERO_AR_DATE=1 + rcs (R7 asserts two runs hash equal). */
                 {
-                    char archive[MAX_PATH];
+                    char *archive;
                     char *cmd;
                     int cmdcap, code2, st2;
                     const char *arp = getenv("AR");
                     cmd = 0;
                     cmdcap = 0;
                     if (!arp || !arp[0]) arp = "ar";
-                    if (oarg) {
-                        if (snprintf(archive, sizeof archive, "%s", oarg)
-                            >= (int)sizeof archive) {
-                            fprintf(stderr, "ctc: archive path is too long\n");
-                            return 1;
-                        }
-                    } else if (snprintf(archive, sizeof archive, "%s/lib%s.a",
-                                        self->outdir, self->units[root_u].base)
-                               >= (int)sizeof archive) {
-                        fprintf(stderr, "ctc: archive path is too long\n");
-                        return 1;
-                    }
+                    if (oarg) archive = tool::sh::ct_scratch_dup(oarg);
+                    else archive = tool::sh::ct_scratch_fmt("%s/lib%s.a",
+                                                            self->outdir,
+                                                            self->units[root_u].base);
                     remove(archive);
                     if (tool::sh::ct_text_init(&cmd, &cmdcap, MAX_CMD) != 0) return 1;
                     if (ct_cmd_token(&cmd, &cmdcap, arp) != 0
@@ -2623,11 +2586,11 @@ impl ModuleOps for Module {
                         return 1;
                     }
                     for (u = 0; u < self->nunits; u++) {
-                        char obj[MAX_PATH];
+                        char *obj;
                         if (self->units[u].is_map) continue;
-                        if (snprintf(obj, sizeof obj, "%s/%s.o", self->outdir,
-                                     self->units[u].base) >= (int)sizeof obj
-                            || ct_cmd_token(&cmd, &cmdcap, obj) != 0) {
+                        obj = tool::sh::ct_scratch_fmt("%s/%s.o", self->outdir,
+                                                       self->units[u].base);
+                        if (ct_cmd_token(&cmd, &cmdcap, obj) != 0) {
                             fprintf(stderr, "ctc: the ar command line is too long\n");
                             tool::sh::ct_text_free(&cmd, &cmdcap);
                             return 1;
@@ -2658,11 +2621,11 @@ impl ModuleOps for Module {
                             return 1;
                         }
                         for (u = 0; u < self->nunits; u++) {
-                            char obj[MAX_PATH];
+                            char *obj;
                             if (self->units[u].is_map) continue;
-                            if (snprintf(obj, sizeof obj, "%s/%s.o", self->outdir,
-                                         self->units[u].base) >= (int)sizeof obj
-                                || ct_cmd_token(&cmd, &cmdcap, obj) != 0) {
+                            obj = tool::sh::ct_scratch_fmt("%s/%s.o", self->outdir,
+                                                          self->units[u].base);
+                            if (ct_cmd_token(&cmd, &cmdcap, obj) != 0) {
                                 fprintf(stderr, "ctc: the ar command line is too long\n");
                                 tool::sh::ct_text_free(&cmd, &cmdcap);
                                 return 1;
@@ -2748,7 +2711,7 @@ impl ModuleOps for Module {
                 return frontend::parse::ct_parse_report();
             }
         for (o = 0; o < cn; o++) {
-            char outc[MAX_PATH];
+            char *outc;
             char *key;
             int k;
             u = corder[o];
@@ -2762,11 +2725,8 @@ impl ModuleOps for Module {
                 free(key);
                 continue;
             }
-            if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
-                    >= (int)sizeof outc) {
-                fprintf(stderr, "ctc: output path is too long\n");
-                return 1;
-            }
+            outc = tool::sh::ct_scratch_fmt("%s/%s.c", self->outdir,
+                                            self->units[u].base);
             key = (char *)0;
             if (!self->have_map && self->cache_key_of(u, &key) == 0
                 && self->cache->hit(outc, key, self->units[u].is_hdr))
@@ -2790,7 +2750,7 @@ impl ModuleOps for Module {
         backend::emit::ct_emit_bind_builtin_live(self->builtin_live);
         if (ct_shim_ambiguity(self, self->units, self->nunits)) return 1;
         for (o = 0; o < cn; o++) {
-            char outc[MAX_PATH];
+            char *outc;
             char *key;
             u = corder[o];
             if (self->units[u].is_map) continue;
@@ -2798,25 +2758,25 @@ impl ModuleOps for Module {
             if (self->emit_unit(u) != 0) {
                 /* the `.c` was already opened, so a failure leaves half a file;
                    a failed unit must not leave an artefact behind */
-                if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
-                        < (int)sizeof outc)
-                    remove(outc);
+                outc = tool::sh::ct_scratch_fmt("%s/%s.c", self->outdir,
+                                                self->units[u].base);
+                remove(outc);
                 return frontend::parse::ct_parse_report();
             }
             if (self->units[u].is_hdr && self->write_unit_header(u) != 0) {
                 /* symmetric with the `.c` above: a half-written `.h` looks like
                    a real artefact, so drop it too */
-                if (snprintf(outc, sizeof outc, "%s/%s.h", self->outdir, self->units[u].base)
-                        < (int)sizeof outc)
-                    remove(outc);
+                outc = tool::sh::ct_scratch_fmt("%s/%s.h", self->outdir,
+                                                self->units[u].base);
+                remove(outc);
                 return frontend::parse::ct_parse_report();
             }
             /* stamped only after a successful emit: a failed unit must never be
                reused, and a stale key must never vouch for new sources */
             key = (char *)0;
-            if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
-                    < (int)sizeof outc
-                && self->cache_key_of(u, &key) == 0)
+            outc = tool::sh::ct_scratch_fmt("%s/%s.c", self->outdir,
+                                            self->units[u].base);
+            if (self->cache_key_of(u, &key) == 0)
                 self->cache->store(outc, key);
             free(key);
         }
@@ -2883,7 +2843,7 @@ impl ModuleOps for Module {
             /* The shim implementation is part of the program, not an artefact:
                it is compiled straight from its source next to the mapping unit. */
             for (u = 0; u < self->nunits; u++) {
-                if (!self->units[u].is_map || !self->units[u].shim_c[0]) continue;
+                if (!self->units[u].is_map || !self->units[u].shim_c) continue;
                 printf(" %s", self->units[u].shim_c);
             }
             printf(" -o a.out\n");
@@ -2918,18 +2878,19 @@ impl ModuleOps for Module {
             || ct_cmd_token(&cmd, &cmdcap, self->outdir) != 0)
             goto cmd_too_long;
         for (u = 0; u < self->nunits; u++) {
-            char src[MAX_PATH];
+            char *src;
             if (self->units[u].is_map) continue;
             {
                 int bs = self->builtin_slot(u);
                 if (bs >= 0 && !self->builtin_live[bs]) continue;
             }
-            if (snprintf(src, sizeof src, "%s/%s.c", self->outdir, self->units[u].base)
-                    >= (int)sizeof src || ct_cmd_token(&cmd, &cmdcap, src) != 0)
+            src = tool::sh::ct_scratch_fmt("%s/%s.c", self->outdir,
+                                            self->units[u].base);
+            if (ct_cmd_token(&cmd, &cmdcap, src) != 0)
                 goto cmd_too_long;
         }
         for (u = 0; u < self->nunits; u++) {
-            if (!self->units[u].is_map || !self->units[u].shim_c[0]) continue;
+            if (!self->units[u].is_map || !self->units[u].shim_c) continue;
             if (ct_cmd_token(&cmd, &cmdcap, self->units[u].shim_c) != 0)
                 goto cmd_too_long;
         }
@@ -3102,7 +3063,7 @@ cmd_too_long:
     int leaks_for(const char *path)
     {
         char v[MAX_TEXT];
-        char dir[MAX_PATH];
+        char *dir;
         int i, n;
         size_t l;
 
@@ -3115,7 +3076,7 @@ cmd_too_long:
                 return 0;
             }
         if (path == 0 || path[0] == 0) return 0;
-        n = self->path_dir(path, dir, sizeof dir);
+        n = self->path_dir(path, &dir);
         if (n != 0) return 0;
         if (ct_pkg_key(dir, "leaks", v, sizeof v) && strcmp(v, "error") == 0) return 1;
         return 0;
@@ -3341,28 +3302,30 @@ cmd_too_long:
 
 /* The same segment claimed by two `-I` roots: an error, never a silent pick.
    `file` names the later manifest, which is the one to change. */
-static int ct_pkg_ns_clash(struct Module *m, char *msg, int cap, char *file, int fcap)
+static int ct_pkg_ns_clash(struct Module *m, char **msg, char **file)
 {
     char ns[MAX_TEXT];
-    char nroot[MAX_PATH];
-    char nother[MAX_PATH];
+    char *nroot;
+    char *nother;
     int i, j;
 
+    *msg = (char *)0;
+    *file = (char *)0;
     for (i = 0; i < m->ninc; i++) {
         if (!ct_pkg_key(m->incdirs[i], "namespace", ns, sizeof ns)) continue;
-        ct_norm_path(m->incdirs[i], nroot, sizeof nroot);
+        ct_norm_path(m->incdirs[i], &nroot);
         for (j = 0; j < i; j++) {
             char other[MAX_TEXT];
             if (!ct_pkg_key(m->incdirs[j], "namespace", other, sizeof other)) continue;
             if (strcmp(ns, other) != 0) continue;
             /* One directory spelled twice (`-I a -I ./a`) is one package, not a
                clash with itself. */
-            ct_norm_path(m->incdirs[j], nother, sizeof nother);
+            ct_norm_path(m->incdirs[j], &nother);
             if (strcmp(nroot, nother) == 0) continue;
-            snprintf(msg, (size_t)cap,
-                     "package namespace '%s' is declared by two import roots: '%s' and '%s'",
-                     ns, m->incdirs[j], m->incdirs[i]);
-            snprintf(file, (size_t)fcap, "%s/ct.pkg", m->incdirs[i]);
+            *msg = tool::sh::ct_scratch_fmt(
+                "package namespace '%s' is declared by two import roots: '%s' and '%s'",
+                ns, m->incdirs[j], m->incdirs[i]);
+            *file = tool::sh::ct_scratch_fmt("%s/ct.pkg", m->incdirs[i]);
             return 1;
         }
     }

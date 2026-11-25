@@ -127,8 +127,9 @@ pub trait SupportOps {
 }
 
 /* The field sizes are literals, not the macros above: a generated header carries
-   no `#define`s, so a struct field cannot name one. 160 is MAX_TEXT and 1024 is
-   MAX_PATH in `frontend/sym/Symbols.h.ct`. */
+   no `#define`s, so a struct field cannot name one. 160 is MAX_TEXT in
+   `frontend/sym/Symbols.h.ct`; `errfile` still carries the legacy 1024-byte
+   path bound (a later S1a-0 slice). */
 pub struct ParseSupport {
     struct Arena *arena;
     struct Lexer *lex;

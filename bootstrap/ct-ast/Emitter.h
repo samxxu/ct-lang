@@ -23,6 +23,7 @@
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"
 #include "EmitterCore.h"
+#include "Sh.h"
 #include "EmitterTry.h"
 
 
@@ -75,6 +76,7 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
+struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -86,7 +88,6 @@ struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
-struct tool_sh_Sh;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
@@ -133,7 +134,7 @@ struct backend_emit_StrRetain {
     char method[160];
     char recv[160];
 };
-void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char *, const char *);
+void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char * *, const char *);
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);
 void backend_emit_ct_emit_bind_units(void *);
 void backend_emit_ct_emit_bind_flags(int *, char *, int *);

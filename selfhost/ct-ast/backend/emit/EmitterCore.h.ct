@@ -41,7 +41,7 @@ pub trait EmitOps {
     int  emit_trait_range(int start, int end, int mode);
     int  emit_proto(int i);
     int  emit_vtable_fwd(int prog);
-    int  header_guard(const char *base, char *out, int cap);
+    int  header_guard(const char *base, char **out);
     int  write_map(const char *dest, int prog, int u);
     int  write_model(const char *dest, int prog);
     int  emit_json_str(FILE *f, const char *s);
@@ -171,7 +171,7 @@ pub struct Emitter {
     int  *abi_root;
     int  *abi_exports;
     int  *abi_n;
-    char *outdir;
+    char **outdir;              /* S1a-0 C2l: points at Module.outdir */
     const char *prog;
     /* parse-time scratch owned by the driver */
     int  *nparams;

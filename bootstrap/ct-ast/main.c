@@ -14,6 +14,7 @@
 #include "Diag.h"
 #include "Driver.h"
 #include "Pkg.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/main.ct"
 #include <stdio.h>
@@ -69,6 +70,7 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
+struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -80,7 +82,6 @@ struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
-struct tool_sh_Sh;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
@@ -140,7 +141,7 @@ int main(int argc, char * * argv) {
             m->prog = "ctc";
         }
     }
-    backend_emit_ct_emit_bind(arena, sym, ty, lex, CTC_VERSION, m->outdir, m->prog);
+    backend_emit_ct_emit_bind(arena, sym, ty, lex, CTC_VERSION, (&m->outdir), m->prog);
     backend_emit_ct_emit_bind_tables(m->units, (&m->nunits), (&p->maps), (&p->nmaps), (&p->calls), (&p->ncalls), (&m->build_mode), (&m->line_mode), (&m->runtime_checks), (&m->abi_mode), (&m->lib_root), m->abi_exports, (&m->abi_n));
     backend_emit_ct_emit_bind_flags((&m->freestanding), m->alloc_map, (&p->slice_used));
     backend_emit_ct_emit_bind_parse((&p->nparams), p->pend_fields, (&p->npend));
@@ -185,6 +186,8 @@ int main(int argc, char * * argv) {
 {
         int rc = tool_driver_ct_driver_run(argc, argv);
         frontend_module_ct_module_free_flags();
+        tool_diag_ct_diag_reset();
+        tool_sh_ct_scratch_free_all();
         return rc;
     }
 }

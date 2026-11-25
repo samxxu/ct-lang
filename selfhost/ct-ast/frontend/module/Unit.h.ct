@@ -5,12 +5,15 @@
  * (which folds its dependencies into a key) and the emitter (which reads the
  * ranges). It lives in its own unit so those three can name it without going
  * through the driver object; the array lengths are literals because a `pub
- * struct` lands in a header that carries no macros (1024 = MAX_PATH, 160 =
- * MAX_TEXT and 32 = MAX_IMPORTS of the module layer).
+ * struct` lands in a header that carries no macros (160 = MAX_TEXT and 32 =
+ * MAX_IMPORTS of the module layer). S1a-0 C2l: `path` and the three shim
+ * paths are owned blocks (`ct_scratch_*` from tool/sh), not `char[1024]`, so
+ * a unit path is never cut at the old MAX_PATH. They are released with the
+ * run's scratch pool, after every consumer has finished.
  */
 namespace frontend::module;
 pub struct Unit {
-    char path[1024];
+    char *path;                 /* owned by the run's scratch pool */
     char base[160];
     char ns[160];
     char nsprefix[160];         /* `ns` in mangled form (`a_b_`), for globals */
@@ -26,9 +29,9 @@ pub struct Unit {
     int  is_hdr;                /* a `.h.ct` unit: publishes a header, importable */
     int  is_map;                /* a `.m.ct` unit: a compile-time mapping, no output */
     int  has_shim;              /* a `.m.ct` unit with a sibling C shim (batch 39) */
-    char shim_dir[1024];        /* directory of the shim (an include root) */
-    char shim_h[1024];          /* `<base>.shim.h`; empty when absent */
-    char shim_c[1024];          /* `<base>.shim.c`; empty when absent */
+    char *shim_dir;             /* directory of the shim (an include root) */
+    char *shim_h;               /* `<base>.shim.h`; null when absent */
+    char *shim_c;               /* `<base>.shim.c`; null when absent */
     int  fn_start;
     int  fn_end;
     int  tr_start;
