@@ -91,7 +91,7 @@ pub struct TypeAlias {
        spelling. */
     const char *name;
     const char *target;
-    char path[1024];
+    const char *path;
     int  line;
     int  is_pub;
     int  owner;         /* unit index; -1 outside `build` */
@@ -114,11 +114,14 @@ pub trait TypeAliasOps {
 }
 
 pub struct Fn {
-    char name[160];
+    /* S1a-0 C2n-1: the row's spellings are interned texts owned by
+       runtime::text::Intern. A row copy is a pointer copy, and a per-unit
+       reset drops the row without freeing a text another row may share. */
+    const char *name;
     /* the C spelling: a `pub` function inside a namespace is mangled with its
        prefix, a static helper keeps the plain name */
-    char cname[160];
-    char ret[160];
+    const char *cname;
+    const char *ret;
     /* S1a-0 C1: the parameter rows are three parallel heap blocks owned by
        this row, grown on demand (`ptype`/`pdim`: MAX_TEXT bytes per position,
        `pann`: one byte). `pcap` is their common capacity; a row reused after
@@ -141,11 +144,11 @@ pub struct Fn {
        template itself is never emitted; every call site that names a concrete
        type argument gets a monomorphised instance in `ginsts`. */
     int  ntparams;
-    char tparam[160];
+    const char *tparam;
     /* Phase 28: the one trait bound of a generic template (`T name<T: Trait>`),
        empty when the parameter is unbounded. Instances inherit it through the
        template row, so the satisfaction check reads it off `funcs[ginst.func]`. */
-    char bound[160];
+    const char *bound;
     /* Phase 26: the template's N_FUNC node, so the emitter can monomorphise it
        once per instance without a second AST copy (-1 for a plain row). */
     int  body;
@@ -159,15 +162,15 @@ pub struct Fn {
 }
 
 pub struct Var {
-    char name[160];
-    char type[160];
+    const char *name;
+    const char *type;
     /* an array's declared type carries no star of its own, but `T *a[N]` and
        `T *p` spell the same type; indexing tells them apart only through this */
     int  is_array;
     /* The declared dimensions verbatim (`[5]`, `[]`, `[A][B]`), empty for a
        plain value. `foreach` counts them to refuse a multidimensional array and
        to tell an inferred-length local from an unsized file-scope one. */
-    char dims[160];
+    const char *dims;
     /* leak tracking (10.3), mirroring L2's conservative rules */
     int  st;            /* struct index when the type is `struct T *`, else -1 */
     int  owned;         /* 1 when a heap object (malloc/calloc/owned callee) */
@@ -201,8 +204,8 @@ pub struct Var {
        the declaring namespace in underscore form (`a_b`), which is what a
        qualified reference (`a::b::h`) is matched against. `extern` globals keep
        their C name and an empty `ns`: the library owns the symbol. */
-    char cname[160];
-    char ns[160];
+    const char *cname;
+    const char *ns;
     int  is_global;     /* file-scope: the mangling / qualification rules apply */
     int  is_static;     /* a block-scope `static`: its lifetime outlives the block */
     int  imported;      /* copied in from an imported unit's export */
@@ -222,7 +225,7 @@ pub struct Var {
        `slice_escape` is set on a local view built from a local array, so a
        direct `return` of it can be linted (P-4.3). */
     int  is_slice;
-    char slice_elem[160];
+    const char *slice_elem;
     int  slice_const;
     int  slice_escape;
     /* SH-106: the same lifetime-lite bookkeeping for the borrowed `Str` /
@@ -261,16 +264,16 @@ pub struct Closure {
    row, so the parser records it here and the emitter reads it at the call site
    to take addresses. `host` is normalised (see `meth_host_key`). */
 pub struct MethAnn {
-    char host[160];
-    char name[160];
+    const char *host;
+    const char *name;
     char *pann;
     int  nparams;
     int  pcap;
 }
 
 pub struct MethodSig {
-    char name[160];
-    char ret[160];
+    const char *name;
+    const char *ret;
     /* S1a-0 C1: the parameter rows grow on demand, like `Fn`'s; `ptype` is a
        MAX_TEXT-byte stride and `pann` one byte per position. */
     char *ptype;
@@ -298,7 +301,7 @@ pub struct MethodSig {
 }
 
 pub struct Trait {
-    char name[160];
+    const char *name;
     /* S1a-0 C1: the method rows grow on demand instead of stopping at 64.
        The block is owned by the row; `mcap` is its capacity and `m` may be
        NULL until the first method is appended. A generic instance row gets
@@ -311,9 +314,9 @@ pub struct Trait {
     int  is_static;             /* declared in a `.m.ct` unit: no iface, no vtable */
     int  line;
     /* the declaring unit's path, for the D-7 expansion diagnostic */
-    char path[160];
+    const char *path;
     /* the declaring namespace in underscore form, for a static namespace host */
-    char ns[160];
+    const char *ns;
     /* Phase 35: a parameterised trait (`trait Iter<T>`) is a template row.
        `ntparams > 0` marks it and `tparam[]`/`bound[]` hold the declaration;
        every `Iter<int>` use copies `m[]` into an instance row whose signatures
@@ -336,13 +339,13 @@ pub struct Trait {
 }
 
 pub struct Field {
-    char name[160];
-    char type[160];
+    const char *name;
+    const char *type;
     int  line;                  /* PH-59: declaration line for the model export */
     int  col;                   /* PH-74/J11: declaration column for the model export */
     /* array dims (`[2]`, `[N]`): a designated initialiser cannot reach an
        element, so such a field's vptrs are written by a loop instead */
-    char dims[160];
+    const char *dims;
     int  is_pub;                /* PH-73: only `pub` fields enter the public header */
     /* Phase 78 fix SH-95: a bit-field has no C address, so it can never be a
        `ref`/`out` place. The parser records the N_FIELD marker here. */
@@ -350,8 +353,8 @@ pub struct Field {
 }
 
 pub struct StructDef {
-    char name[160];
-    char use[64][160];
+    const char *name;
+    const char *use[64];
     int  nuse;
     /* field types: a receiver chain (`s.owner.greet()`) needs them, and so does
        the nested vptr initialiser of a struct-typed field. S1a-0 C1: the rows
@@ -518,8 +521,8 @@ pub struct GenericInst {
    template's field spellings and the instance's identity from somewhere that
    outlives the reset. */
 pub struct StructTmpl {
-    char name[160];             /* the source name, `Stack` */
-    char full[160];             /* namespace-qualified C name */
+    const char *name;           /* the source name, `Stack` */
+    const char *full;           /* namespace-qualified C name */
     int  ntparams;
     /* S1a-0 C3: pointer rows grown on demand; `tcap` is the shared capacity of
        `tparam`/`bound`. */
@@ -535,7 +538,7 @@ pub struct StructTmpl {
     struct Field *fields;
     int  nfields;
     int  fcap;
-    char use[64][160];
+    const char *use[64];
     int  nuse;
     int  uses_drop;              /* P36 S2a2: built-in Drop flag, copied to instances */
     int  uses_handback;          /* P36 S2a2: built-in Handback flag, copied to instances */
@@ -546,8 +549,8 @@ pub struct StructTmpl {
 }
 
 pub struct StructInst {
-    char name[160];             /* the encoded C tag, `Stack_int` */
-    char tmpl[160];             /* the template's source name */
+    const char *name;           /* the encoded C tag, `Stack_int` */
+    const char *tmpl;           /* the template's source name */
     /* The canonical type-argument spellings, in the form the encoder consumed
        (`int`, `char*`, `Vec<int>`). They are the identity of the instance: the
        encoded name is only a hash-like spelling of them (D29-6). */
@@ -574,14 +577,14 @@ pub struct StructInst *ct_insts(int *n);
    struct (`impl<T> Pair<T, int>`). The block is monomorphised once per matching
    instance, so it carries the argument *pattern* rather than an instance name. */
 pub struct StructImpl {
-    char tmpl[160];
+    const char *tmpl;
     int  ntparams;
     char **tparam;
     int  tcap;
     int  nargs;
     char **pat;                 /* a declared parameter name, or a canonical type */
     int  pcap;
-    char use[160];              /* trait name; empty for an inherent block */
+    const char *use;            /* trait name; empty for an inherent block */
     int  node;                  /* arena index of the N_IMPL node */
     int  owner;
     int  line;
@@ -753,12 +756,13 @@ pub struct Symbols {
     const char *path;
     /* `import a::b::C as D;` brings one exported name in under `D` for this unit
        only (the table resets per unit); `alias_full` is the mangled C name. */
-    /* S1a-0 C1: the import-alias rows grow on demand from 24. They are two
-       flat MAX_TEXT-row blocks; `ensure_alias_capacity` grows them together.
-       (Before this they were fixed `char [24][160]` arrays, which S1a-1's
+    /* S1a-0 C1/C2n-1: the import-alias rows grow on demand from 24. They are
+       two pointer rows now (each entry an interned text owned by
+       runtime::text::Intern); `ensure_alias_capacity` grows them together.
+       (Before C1 they were fixed `char [24][160]` arrays, which S1a-1's
        one-unit-per-method-group split immediately outgrew.) */
-    char *alias_name;
-    char *alias_full;
+    const char **alias_name;
+    const char **alias_full;
     int  nalias;
     int  aliascap;
     /* Type aliases (`pub type X = T;`): a per-unit visible table plus a global
@@ -1083,16 +1087,21 @@ impl SymbolOps for Symbols {
             return self->fail("identifier '__ct_' is reserved for the compiler");
         if (self->ensure_var_capacity(self->nvar + 1) != 0) return -1;
         i = self->nvar;
-        snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
-        snprintf(self->vars[i].type, MAX_TEXT, "%s", type);
-        snprintf(self->vars[i].cname, MAX_TEXT, "%s", name);
-        self->vars[i].ns[0] = 0;
+        self->vars[i].name = runtime::text::ct_intern(name);
+        if (!self->vars[i].name) return self->fail("out of memory");
+        self->vars[i].type = runtime::text::ct_intern(type);
+        if (!self->vars[i].type) return self->fail("out of memory");
+        self->vars[i].cname = runtime::text::ct_intern(name);
+        if (!self->vars[i].cname) return self->fail("out of memory");
+        self->vars[i].ns = runtime::text::ct_intern("");
+        if (!self->vars[i].ns) return self->fail("out of memory");
         self->vars[i].is_global = 0;
         self->vars[i].is_static = 0;
         self->vars[i].imported = 0;
         self->vars[i].ambiguous = 0;
         self->vars[i].is_array = 0;
-        self->vars[i].dims[0] = 0;
+        self->vars[i].dims = runtime::text::ct_intern("");
+        if (!self->vars[i].dims) return self->fail("out of memory");
         self->vars[i].st = -1;
         self->vars[i].owned = 0;
         self->vars[i].own_line = 0;
@@ -1109,7 +1118,8 @@ impl SymbolOps for Symbols {
         self->vars[i].is_closure = 0;
         self->vars[i].closure_id = -1;
         self->vars[i].is_slice = 0;
-        self->vars[i].slice_elem[0] = 0;
+        self->vars[i].slice_elem = runtime::text::ct_intern("");
+        if (!self->vars[i].slice_elem) return self->fail("out of memory");
         self->vars[i].slice_const = 0;
         self->vars[i].slice_escape = 0;
         self->vars[i].str_escape = 0;
@@ -1133,16 +1143,21 @@ impl SymbolOps for Symbols {
         if (self->ensure_var_capacity(self->nvar + 1) != 0) return -1;
         i = self->nvar;
         self->nvar++;
-        snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
-        snprintf(self->vars[i].type, MAX_TEXT, "%s", type);
-        snprintf(self->vars[i].cname, MAX_TEXT, "%s", cname);
-        snprintf(self->vars[i].ns, MAX_TEXT, "%s", ns);
+        self->vars[i].name = runtime::text::ct_intern(name);
+        if (!self->vars[i].name) return self->fail("out of memory");
+        self->vars[i].type = runtime::text::ct_intern(type);
+        if (!self->vars[i].type) return self->fail("out of memory");
+        self->vars[i].cname = runtime::text::ct_intern(cname);
+        if (!self->vars[i].cname) return self->fail("out of memory");
+        self->vars[i].ns = runtime::text::ct_intern(ns);
+        if (!self->vars[i].ns) return self->fail("out of memory");
         self->vars[i].is_global = 1;
         self->vars[i].is_static = 0;
         self->vars[i].imported = imported;
         self->vars[i].ambiguous = 0;
         self->vars[i].is_array = 0;
-        self->vars[i].dims[0] = 0;
+        self->vars[i].dims = runtime::text::ct_intern("");
+        if (!self->vars[i].dims) return self->fail("out of memory");
         self->vars[i].st = -1;
         self->vars[i].owned = 0;
         self->vars[i].own_line = 0;
@@ -1159,7 +1174,8 @@ impl SymbolOps for Symbols {
         self->vars[i].is_fnparam = 0;
         self->vars[i].is_const = 0;
         self->vars[i].is_slice = 0;
-        self->vars[i].slice_elem[0] = 0;
+        self->vars[i].slice_elem = runtime::text::ct_intern("");
+        if (!self->vars[i].slice_elem) return self->fail("out of memory");
         self->vars[i].slice_const = 0;
         self->vars[i].slice_escape = 0;
         self->vars[i].str_escape = 0;
@@ -1281,8 +1297,10 @@ impl SymbolOps for Symbols {
             i = self->nmeth;
             self->nmeth++;
         }
-        snprintf(self->meth[i].host, sizeof self->meth[i].host, "%s", key);
-        snprintf(self->meth[i].name, sizeof self->meth[i].name, "%s", name);
+        self->meth[i].host = runtime::text::ct_intern(key);
+        if (!self->meth[i].host) return self->fail("out of memory");
+        self->meth[i].name = runtime::text::ct_intern(name);
+        if (!self->meth[i].name) return self->fail("out of memory");
         if (nparams > 0
             && self->ensure_meth_ann_param_capacity(i, nparams) != 0) return -1;
         self->meth[i].nparams = nparams;
@@ -1325,11 +1343,13 @@ impl SymbolOps for Symbols {
        sharing the name is the ambiguity the qualification exists to settle. */
     int resolve_func(const char *name)
     {
-        char full[160];
+        const char *full;
         int i, hits;
         (void)self;
 
-        if (self->ns[0] && snprintf(full, sizeof full, "%s%s", self->ns, name) < (int)sizeof full) {
+        if (self->ns[0]) {
+            full = runtime::text::ct_intern_join(self->ns, name);
+            if (!full) return self->fail("out of memory");
             i = self->find_func(full);
             if (i >= 0) return i;
         }
@@ -1491,7 +1511,8 @@ impl SymbolOps for Symbols {
         i = self->find_struct(name);
         if (i >= 0) return i;
         if (self->ensure_struct_capacity(self->nstructs + 1) != 0) return -1;
-        snprintf(self->structs[self->nstructs].name, MAX_TEXT, "%s", name);
+        self->structs[self->nstructs].name = runtime::text::ct_intern(name);
+        if (!self->structs[self->nstructs].name) return self->fail("out of memory");
         self->structs[self->nstructs].nuse = 0;
         self->structs[self->nstructs].nfields = 0;
         self->structs[self->nstructs].defined = 0;
@@ -1656,7 +1677,12 @@ impl SymbolOps for Symbols {
         i = self->find_trait(name);
         if (i >= 0) return i;
         if (self->ensure_trait_table_capacity(self->ntraits + 1) != 0) return -1;
-        snprintf(self->traits[self->ntraits].name, MAX_TEXT, "%s", name);
+        self->traits[self->ntraits].name = runtime::text::ct_intern(name);
+        if (!self->traits[self->ntraits].name) return self->fail("out of memory");
+        self->traits[self->ntraits].path = runtime::text::ct_intern("");
+        if (!self->traits[self->ntraits].path) return self->fail("out of memory");
+        self->traits[self->ntraits].ns = runtime::text::ct_intern("");
+        if (!self->traits[self->ntraits].ns) return self->fail("out of memory");
         /* A row reused after the per-unit reset keeps its method block and
            row-block capacities (the old rows are dead, the allocation is not).
            Counts are reset so a stale instance row cannot look like a
@@ -1744,9 +1770,11 @@ impl SymbolOps for Symbols {
             snprintf(self->traits[ni].carg[pi], MAX_TEXT, "%s",
                      args && args[pi] ? args[pi] : "");
         /* The instance owns its signatures: grow its own block and copy the
-           values. `MethodSig` has no pointers, so this is a deep copy even
-           though the loop assigns rows; sharing `m` would let a later growth
-           of either row invalidate the other. */
+           values. `MethodSig`'s `name`/`ret` are pool pointers now, so the row
+           copy shares them; the substitution below replaces `ret` with a fresh
+           interned text instead of writing through the template's pointer.
+           Sharing `m` would still let a later growth of either row invalidate
+           the other, so the block is per-instance. */
         if (self->ensure_trait_capacity(ni, self->traits[ti].nm) != 0) return -1;
         self->traits[ni].nm = self->traits[ti].nm;
         for (mi = 0; mi < self->traits[ti].nm; mi++) {
@@ -1774,7 +1802,8 @@ impl SymbolOps for Symbols {
                         self->traits[ti].tparam[pi], sub,
                         tmp, MAX_TEXT) != 0)
                     return self->fail("type is too long");
-                snprintf(self->traits[ni].m[mi].ret, MAX_TEXT, "%s", tmp);
+                self->traits[ni].m[mi].ret = runtime::text::ct_intern(tmp);
+                if (!self->traits[ni].m[mi].ret) return self->fail("out of memory");
                 for (pk = 0; pk < self->traits[ni].m[mi].nparams; pk++) {
                     if (ct_generic_subst(self->traits[ni].m[mi].ptype + (pk) * MAX_TEXT,
                             self->traits[ti].tparam[pi], sub,
@@ -1787,8 +1816,8 @@ impl SymbolOps for Symbols {
         self->traits[ni].is_pub = self->traits[ti].is_pub;
         self->traits[ni].is_static = self->traits[ti].is_static;
         self->traits[ni].line = self->traits[ti].line;
-        snprintf(self->traits[ni].path, MAX_TEXT, "%s", self->traits[ti].path);
-        snprintf(self->traits[ni].ns, MAX_TEXT, "%s", self->traits[ti].ns);
+        self->traits[ni].path = self->traits[ti].path;
+        self->traits[ni].ns = self->traits[ti].ns;
         self->traits[ni].owner = owner;
         if (self->add_type(enc, 3) != 0) return -1;
         return ni;
@@ -1916,23 +1945,23 @@ impl SymbolOps for Symbols {
     int ensure_alias_capacity(int need)
     {
         int cap;
-        char *names;
-        char *fulls;
+        const char **names;
+        const char **fulls;
         (void)self;
         if (need <= self->aliascap) return 0;
         cap = self->aliascap > 0 ? self->aliascap : MAX_IMPORT_ALIASES;
         while (cap < need && cap < MAX_IMPORT_ALIASES_MAX) cap *= 2;
         if (cap > MAX_IMPORT_ALIASES_MAX) cap = MAX_IMPORT_ALIASES_MAX;
         if (need > cap) return self->fail("out of memory");
-        names = (char *)realloc(self->alias_name, (size_t)cap * MAX_TEXT);
+        names = (const char **)realloc(self->alias_name, (size_t)cap * sizeof(*names));
         if (!names) return self->fail("out of memory");
-        memset(names + (size_t)self->aliascap * MAX_TEXT, 0,
-               (size_t)(cap - self->aliascap) * MAX_TEXT);
+        memset(names + self->aliascap, 0,
+               (size_t)(cap - self->aliascap) * sizeof(*names));
         self->alias_name = names;
-        fulls = (char *)realloc(self->alias_full, (size_t)cap * MAX_TEXT);
+        fulls = (const char **)realloc(self->alias_full, (size_t)cap * sizeof(*fulls));
         if (!fulls) return self->fail("out of memory");
-        memset(fulls + (size_t)self->aliascap * MAX_TEXT, 0,
-               (size_t)(cap - self->aliascap) * MAX_TEXT);
+        memset(fulls + self->aliascap, 0,
+               (size_t)(cap - self->aliascap) * sizeof(*fulls));
         self->alias_full = fulls;
         self->aliascap = cap;
         return 0;
@@ -1947,13 +1976,15 @@ impl SymbolOps for Symbols {
         (void)self;
 
         for (i = 0; i < self->nalias; i++) {
-            if (strcmp(self->alias_name + (size_t)i * MAX_TEXT, name) != 0) continue;
-            if (strcmp(self->alias_full + (size_t)i * MAX_TEXT, full) == 0) return 0;
+            if (strcmp(self->alias_name[i], name) != 0) continue;
+            if (strcmp(self->alias_full[i], full) == 0) return 0;
             return self->fail("one alias names two imports");
         }
         if (self->ensure_alias_capacity(self->nalias + 1) != 0) return -1;
-        snprintf(self->alias_name + (size_t)self->nalias * MAX_TEXT, MAX_TEXT, "%s", name);
-        snprintf(self->alias_full + (size_t)self->nalias * MAX_TEXT, MAX_TEXT, "%s", full);
+        self->alias_name[self->nalias] = runtime::text::ct_intern(name);
+        if (!self->alias_name[self->nalias]) return self->fail("out of memory");
+        self->alias_full[self->nalias] = runtime::text::ct_intern(full);
+        if (!self->alias_full[self->nalias]) return self->fail("out of memory");
         self->nalias++;
         return 0;
     }
@@ -1984,22 +2015,27 @@ impl SymbolOps for Symbols {
        namespace, then the top level. */
     int resolve_type(const char *name, char *out, int cap)
     {
-        char qname[MAX_TEXT];
         int w, i;
         (void)self;
 
         for (i = 0; i < self->nalias; i++) {
-            if (strcmp(self->alias_name + (size_t)i * MAX_TEXT, name) != 0) continue;
-            w = snprintf(out, (size_t)cap, "%s", self->alias_full + (size_t)i * MAX_TEXT);
+            if (strcmp(self->alias_name[i], name) != 0) continue;
+            w = snprintf(out, (size_t)cap, "%s", self->alias_full[i]);
             if (w < 0 || w >= cap) return self->fail("name is too long");
             return 0;
         }
         if (self->ns[0]) {
-            w = snprintf(qname, sizeof qname, "%s%s", self->ns, name);
-            if (w < 0 || w >= (int)sizeof qname) return self->fail("name is too long");
-            if (self->find_type(qname) >= 0 || self->find_trait(qname) >= 0
-                || self->find_struct(qname) >= 0) {
-                w = snprintf(out, (size_t)cap, "%s", qname);
+            /* S1a-0 C2n-1: build the qualified spelling as a pool text, not
+               a fixed 160-byte row. The old walk stopped with "name is too
+               long" once `ns + name` passed the row, even though no such
+               declaration existed and the caller would have kept the short
+               spelling. Anything past TEXT_LIMIT cannot name a table row
+               either, so only the lookup is skipped, not the caller. */
+            const char *qn = runtime::text::ct_intern_join(self->ns, name);
+            if (!qn) return self->fail("out of memory");
+            if (self->find_type(qn) >= 0 || self->find_trait(qn) >= 0
+                || self->find_struct(qn) >= 0) {
+                w = snprintf(out, (size_t)cap, "%s", qn);
                 if (w < 0 || w >= cap) return self->fail("name is too long");
                 return 0;
             }
@@ -2064,7 +2100,8 @@ impl TypeAliasOps for Symbols {
                 }
                 self->taliases[i].line = line;
                 self->taliases[i].is_pub = is_pub;
-                snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+                self->taliases[i].path = runtime::text::ct_intern(path);
+        if (!self->taliases[i].path) return self->fail("out of memory");
                 self->taliases[i].forward = 0;
                 self->taliases[i].resolving = 1;
                 if (self->ntachain >= MAX_ALIAS_CHAIN)
@@ -2079,7 +2116,8 @@ impl TypeAliasOps for Symbols {
             memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
             self->taliases[i].name = runtime::text::ct_intern(name);
             if (!self->taliases[i].name) return self->fail("out of memory");
-            snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+            self->taliases[i].path = runtime::text::ct_intern(path);
+        if (!self->taliases[i].path) return self->fail("out of memory");
             self->taliases[i].line = line;
             self->taliases[i].is_pub = is_pub;
             self->taliases[i].owner = owner;
@@ -2095,7 +2133,7 @@ impl TypeAliasOps for Symbols {
             return self->fail(msg);
         }
         for (i = 0; i < self->nalias; i++)
-            if (strcmp(self->alias_name + (size_t)i * MAX_TEXT, name) == 0) {
+            if (strcmp(self->alias_name[i], name) == 0) {
                 snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
                 return self->fail(msg);
             }
@@ -2105,7 +2143,8 @@ impl TypeAliasOps for Symbols {
         memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
         self->taliases[i].name = runtime::text::ct_intern(name);
         if (!self->taliases[i].name) return self->fail("out of memory");
-        snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+        self->taliases[i].path = runtime::text::ct_intern(path);
+        if (!self->taliases[i].path) return self->fail("out of memory");
         self->taliases[i].line = line;
         self->taliases[i].is_pub = is_pub;
         self->taliases[i].owner = owner;
@@ -2158,7 +2197,8 @@ impl TypeAliasOps for Symbols {
         memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
         self->taliases[i].name = runtime::text::ct_intern(name);
         if (!self->taliases[i].name) return self->fail("out of memory");
-        snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+        self->taliases[i].path = runtime::text::ct_intern(path);
+        if (!self->taliases[i].path) return self->fail("out of memory");
         self->taliases[i].line = line;
         self->taliases[i].owner = owner;
         self->taliases[i].forward = 1;
@@ -2188,7 +2228,7 @@ impl TypeAliasOps for Symbols {
             return self->fail(msg);
         }
         for (i = 0; i < self->nalias; i++)
-            if (strcmp(self->alias_name + (size_t)i * MAX_TEXT, name) == 0) {
+            if (strcmp(self->alias_name[i], name) == 0) {
                 snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
                 return self->fail(msg);
             }
@@ -2200,7 +2240,8 @@ impl TypeAliasOps for Symbols {
         if (!self->taliases[i].name) return self->fail("out of memory");
         self->taliases[i].target = runtime::text::ct_intern(target);
         if (!self->taliases[i].target) return self->fail("out of memory");
-        snprintf(self->taliases[i].path, sizeof self->taliases[i].path, "%s", path);
+        self->taliases[i].path = runtime::text::ct_intern(path);
+        if (!self->taliases[i].path) return self->fail("out of memory");
         self->taliases[i].line = line;
         self->taliases[i].owner = owner;
         return 0;
@@ -2520,8 +2561,10 @@ int ct_tmpl_add(const char *name, const char *full, int ntprm,
     t = ct_tmpls(&n);
     if (!t) return -1;
     n = g_ntmpls;
-    snprintf(t[n].name, MAX_TEXT, "%s", name);
-    snprintf(t[n].full, MAX_TEXT, "%s", full);
+    t[n].name = runtime::text::ct_intern(name);
+    if (!t[n].name) { return -1; }
+    t[n].full = runtime::text::ct_intern(full);
+    if (!t[n].full) { return -1; }
     t[n].ntparams = ntprm;
     t[n].tparam = ct_rows_reserve(t[n].tparam, t[n].tcap, ntprm, &t[n].tcap);
     if (ntprm > 0 && (!t[n].tparam || t[n].tcap < ntprm)) return -1;
@@ -2577,8 +2620,10 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
     t = ct_insts(&n);
     if (!t) return -1;
     n = g_ninsts;
-    snprintf(t[n].name, MAX_TEXT, "%s", name);
-    snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
+    t[n].name = runtime::text::ct_intern(name);
+    if (!t[n].name) return -1;
+    t[n].tmpl = runtime::text::ct_intern(tmpl);
+    if (!t[n].tmpl) return -1;
     t[n].nargs = nargs;
     t[n].carg = ct_rows_reserve(t[n].carg, t[n].acap, nargs, &t[n].acap);
     if (nargs > 0 && (!t[n].carg || t[n].acap < nargs)) return -1;
@@ -2671,7 +2716,8 @@ int ct_impl_add(const char *tmpl, int ntprm, char **tparams,
     t = ct_impls(&n);
     if (!t) return -1;
     n = g_nimpls;
-    snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
+    t[n].tmpl = runtime::text::ct_intern(tmpl);
+    if (!t[n].tmpl) return -1;
     t[n].ntparams = ntprm;
     t[n].tparam = ct_rows_reserve(t[n].tparam, t[n].tcap, ntprm, &t[n].tcap);
     if (ntprm > 0 && (!t[n].tparam || t[n].tcap < ntprm)) return -1;
@@ -2683,7 +2729,8 @@ int ct_impl_add(const char *tmpl, int ntprm, char **tparams,
                  tparams && tparams[k] ? tparams[k] : "");
     for (k = 0; k < nargs; k++)
         snprintf(t[n].pat[k], MAX_TEXT, "%s", pats && pats[k] ? pats[k] : "");
-    snprintf(t[n].use, MAX_TEXT, "%s", use);
+    t[n].use = runtime::text::ct_intern(use);
+    if (!t[n].use) return -1;
     t[n].node = node;
     t[n].owner = owner;
     t[n].line = line;

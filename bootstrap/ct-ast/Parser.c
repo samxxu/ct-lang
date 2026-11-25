@@ -12,6 +12,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Diag.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Parser.h.ct"
@@ -1220,7 +1221,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     int lead;
     char ret[MAX_TEXT];
     char name[MAX_TEXT];
-    char cname[MAX_TEXT];
+    const char * cname;
     char gns[MAX_TEXT];
     char tparam[MAX_TEXT];
     char bound[MAX_TEXT];
@@ -1339,19 +1340,23 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
             return tool_diag_ct_sem_error(func_line, func_col, "a slice 'T[]' cannot be a file-scope variable; keep it a local or a parameter", _self->mem->path);
         }
         if ((is_extern || (!_self->sym->ns[0]))) {
-            snprintf(cname, sizeof(cname), "%s", name);
+            cname = runtime_text_ct_intern(name);
             gns[0] = 0;
         }
         else {
             size_t nl;
-            if (snprintf(cname, sizeof(cname), "%s%s", _self->sym->ns, name) >= (int)(sizeof(cname))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "variable name is too long");
+            cname = runtime_text_ct_intern_join(_self->sym->ns, name);
+            if ((!cname)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
             snprintf(gns, sizeof(gns), "%s", _self->sym->ns);
             nl = strlen(gns);
             if (nl > 0) {
                 gns[(nl - 1)] = 0;
             }
+        }
+        if ((!cname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         g = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_GLOBAL);
         if (g < 0) {
@@ -1378,7 +1383,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
                 int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
                 if (vi >= 0) {
                     _self->sym->vars[vi].is_array = 1;
-                    snprintf(_self->sym->vars[vi].dims, MAX_TEXT, "%s", _self->arena->nodes[g].text3);
+                    _self->sym->vars[vi].dims = runtime_text_ct_intern(_self->arena->nodes[g].text3);
+                    if ((!_self->sym->vars[vi].dims)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
                 }
             }
             if (strchr(_self->arena->nodes[g].text3, '$')) {
@@ -1585,8 +1593,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     if (is_generic) {
         _self->sym->funcs[fi].ntparams = 1;
         _self->sym->funcs[fi].is_static = 1;
-        snprintf(_self->sym->funcs[fi].tparam, sizeof(_self->sym->funcs[fi].tparam), "%s", tparam);
-        snprintf(_self->sym->funcs[fi].bound, sizeof(_self->sym->funcs[fi].bound), "%s", bound);
+        _self->sym->funcs[fi].tparam = runtime_text_ct_intern(tparam);
+        if ((!_self->sym->funcs[fi].tparam)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->sym->funcs[fi].bound = runtime_text_ct_intern(bound);
+        if ((!_self->sym->funcs[fi].bound)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
     }
     f = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_FUNC);
     if (f < 0) {
@@ -1973,7 +1987,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
                 _self->sym->vars[vi].initialized = (seen_out ? 0 : 1);
                 if (is_slice) {
                     _self->sym->vars[vi].is_slice = 1;
-                    snprintf(_self->sym->vars[vi].slice_elem, MAX_TEXT, "%s", slice_elem);
+                    _self->sym->vars[vi].slice_elem = runtime_text_ct_intern(slice_elem);
+                    if ((!_self->sym->vars[vi].slice_elem)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
                     _self->sym->vars[vi].slice_const = slice_const;
                 }
             }
@@ -1982,7 +1999,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (vi >= 0) {
                 _self->sym->vars[vi].is_array = 1;
-                snprintf(_self->sym->vars[vi].dims, MAX_TEXT, "%s", _self->arena->nodes[p].text3);
+                _self->sym->vars[vi].dims = runtime_text_ct_intern(_self->arena->nodes[p].text3);
+                if ((!_self->sym->vars[vi].dims)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
             }
         }
         if ((seen_borrow && (check_borrow_param(_self, p, bline, bcol) != 0))) {
@@ -2135,9 +2155,18 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
             return (-1);
         }
 {
-            snprintf(_self->sym->structs[si].fields[_self->sym->structs[si].nfields].name, MAX_TEXT, "%s", nm);
-            snprintf(_self->sym->structs[si].fields[_self->sym->structs[si].nfields].type, MAX_TEXT, "%s", _self->arena->nodes[m].text);
-            snprintf(_self->sym->structs[si].fields[_self->sym->structs[si].nfields].dims, MAX_TEXT, "%s", _self->arena->nodes[m].text3);
+            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].name = runtime_text_ct_intern(nm);
+            if ((!_self->sym->structs[si].fields[_self->sym->structs[si].nfields].name)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].type = runtime_text_ct_intern(_self->arena->nodes[m].text);
+            if ((!_self->sym->structs[si].fields[_self->sym->structs[si].nfields].type)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].dims = runtime_text_ct_intern(_self->arena->nodes[m].text3);
+            if ((!_self->sym->structs[si].fields[_self->sym->structs[si].nfields].dims)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             _self->sym->structs[si].fields[_self->sym->structs[si].nfields].line = _self->arena->nodes[m].line;
             _self->sym->structs[si].fields[_self->sym->structs[si].nfields].is_pub = _self->arena->nodes[m].d;
             _self->sym->structs[si].fields[_self->sym->structs[si].nfields].col = (int)(_self->arena->nodes[m].num);
@@ -2156,9 +2185,18 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
         return (-1);
     }
 {
-        snprintf(_self->pend_fields[_self->npend].name, MAX_TEXT, "%s", nm);
-        snprintf(_self->pend_fields[_self->npend].type, MAX_TEXT, "%s", _self->arena->nodes[m].text);
-        snprintf(_self->pend_fields[_self->npend].dims, MAX_TEXT, "%s", _self->arena->nodes[m].text3);
+        _self->pend_fields[_self->npend].name = runtime_text_ct_intern(nm);
+        if ((!_self->pend_fields[_self->npend].name)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->pend_fields[_self->npend].type = runtime_text_ct_intern(_self->arena->nodes[m].text);
+        if ((!_self->pend_fields[_self->npend].type)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->pend_fields[_self->npend].dims = runtime_text_ct_intern(_self->arena->nodes[m].text3);
+        if ((!_self->pend_fields[_self->npend].dims)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->pend_fields[_self->npend].line = _self->arena->nodes[m].line;
         _self->pend_fields[_self->npend].is_pub = _self->arena->nodes[m].d;
         _self->pend_fields[_self->npend].col = (int)(_self->arena->nodes[m].num);
@@ -2614,13 +2652,13 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
             tps = frontend_sym_ct_tmpls((&tn4));
             tps[ti4].nfields = _self->sym->structs[di].nfields;
             for (fi4 = 0; fi4 < tps[ti4].nfields; fi4++) {
-                snprintf(tps[ti4].fields[fi4].name, MAX_TEXT, "%s", _self->sym->structs[di].fields[fi4].name);
-                snprintf(tps[ti4].fields[fi4].type, MAX_TEXT, "%s", _self->sym->structs[di].fields[fi4].type);
-                snprintf(tps[ti4].fields[fi4].dims, MAX_TEXT, "%s", _self->sym->structs[di].fields[fi4].dims);
+                tps[ti4].fields[fi4].name = _self->sym->structs[di].fields[fi4].name;
+                tps[ti4].fields[fi4].type = _self->sym->structs[di].fields[fi4].type;
+                tps[ti4].fields[fi4].dims = _self->sym->structs[di].fields[fi4].dims;
             }
             tps[ti4].nuse = _self->sym->structs[di].nuse;
             for (ui4 = 0; ui4 < tps[ti4].nuse; ui4++) {
-                snprintf(tps[ti4].use[ui4], MAX_TEXT, "%s", _self->sym->structs[di].use[ui4]);
+                tps[ti4].use[ui4] = _self->sym->structs[di].use[ui4];
             }
             _self->sym->structs[di].is_template = 1;
             _self->sym->structs[di].ntparams = nt;
@@ -3088,16 +3126,16 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
                 _self->sym->structs[ai].uses_handback = _self->sym->structs[tagi].uses_handback;
                 _self->sym->structs[ai].has_handback_impl = _self->sym->structs[tagi].has_handback_impl;
                 for (ui = 0; ui < _self->sym->structs[tagi].nuse; ui++) {
-                    snprintf(_self->sym->structs[ai].use[ui], MAX_TEXT, "%s", _self->sym->structs[tagi].use[ui]);
+                    _self->sym->structs[ai].use[ui] = _self->sym->structs[tagi].use[ui];
                 }
                 if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, ai, _self->sym->structs[tagi].nfields) != 0) {
                     return (-1);
                 }
                 _self->sym->structs[ai].nfields = _self->sym->structs[tagi].nfields;
                 for (ui = 0; ui < _self->sym->structs[tagi].nfields; ui++) {
-                    snprintf(_self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s", _self->sym->structs[tagi].fields[ui].name);
-                    snprintf(_self->sym->structs[ai].fields[ui].type, MAX_TEXT, "%s", _self->sym->structs[tagi].fields[ui].type);
-                    snprintf(_self->sym->structs[ai].fields[ui].dims, MAX_TEXT, "%s", _self->sym->structs[tagi].fields[ui].dims);
+                    _self->sym->structs[ai].fields[ui].name = _self->sym->structs[tagi].fields[ui].name;
+                    _self->sym->structs[ai].fields[ui].type = _self->sym->structs[tagi].fields[ui].type;
+                    _self->sym->structs[ai].fields[ui].dims = _self->sym->structs[tagi].fields[ui].dims;
                     _self->sym->structs[ai].fields[ui].line = _self->sym->structs[tagi].fields[ui].line;
                     _self->sym->structs[ai].fields[ui].col = _self->sym->structs[tagi].fields[ui].col;
                     _self->sym->structs[ai].fields[ui].is_pub = _self->sym->structs[tagi].fields[ui].is_pub;
@@ -3111,9 +3149,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
                     }
                     _self->sym->structs[ai].nfields = _self->npend;
                     for (ui = 0; ui < _self->npend; ui++) {
-                        snprintf(_self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s", _self->pend_fields[ui].name);
-                        snprintf(_self->sym->structs[ai].fields[ui].type, MAX_TEXT, "%s", _self->pend_fields[ui].type);
-                        snprintf(_self->sym->structs[ai].fields[ui].dims, MAX_TEXT, "%s", _self->pend_fields[ui].dims);
+                        _self->sym->structs[ai].fields[ui].name = _self->pend_fields[ui].name;
+                        _self->sym->structs[ai].fields[ui].type = _self->pend_fields[ui].type;
+                        _self->sym->structs[ai].fields[ui].dims = _self->pend_fields[ui].dims;
                         _self->sym->structs[ai].fields[ui].line = _self->pend_fields[ui].line;
                         _self->sym->structs[ai].fields[ui].col = _self->pend_fields[ui].col;
                         _self->sym->structs[ai].fields[ui].is_pub = _self->pend_fields[ui].is_pub;
@@ -3207,7 +3245,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_use_list(void *se
                 if (_self->sym->structs[sindex].nuse >= MAX_TRAITS) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many used traits");
                 }
-                snprintf(_self->sym->structs[sindex].use[_self->sym->structs[sindex].nuse], MAX_TEXT, "%s", tname);
+                _self->sym->structs[sindex].use[_self->sym->structs[sindex].nuse] = runtime_text_ct_intern(tname);
+                if ((!_self->sym->structs[sindex].use[_self->sym->structs[sindex].nuse])) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 _self->sym->structs[sindex].nuse++;
             }
         }
@@ -3345,12 +3386,21 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     _self->sym->traits[ti].is_pub = is_pub;
     _self->sym->traits[ti].is_static = _self->unit_is_map;
     _self->sym->traits[ti].line = trait_line;
-    snprintf(_self->sym->traits[ti].path, MAX_TEXT, "%s", _self->mem->path);
-    snprintf(_self->sym->traits[ti].ns, MAX_TEXT, "%s", _self->sym->ns);
+    _self->sym->traits[ti].path = runtime_text_ct_intern(_self->mem->path);
+    if ((!_self->sym->traits[ti].path)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
 {
-        size_t nl = strlen(_self->sym->traits[ti].ns);
-        if (((nl > 0) && (_self->sym->traits[ti].ns[(nl - 1)] == '_'))) {
-            _self->sym->traits[ti].ns[(nl - 1)] = 0;
+        char nsbuf[MAX_TEXT];
+        size_t nl;
+        snprintf(nsbuf, sizeof(nsbuf), "%s", _self->sym->ns);
+        nl = strlen(nsbuf);
+        if (((nl > 0) && (nsbuf[(nl - 1)] == '_'))) {
+            nsbuf[(nl - 1)] = 0;
+        }
+        _self->sym->traits[ti].ns = runtime_text_ct_intern(nsbuf);
+        if ((!_self->sym->traits[ti].ns)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
     }
     _self->sym->traits[ti].ntparams = ntp;
@@ -3392,8 +3442,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
             return (-1);
         }
         mi = _self->sym->traits[ti].nm;
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, _self->sym->traits[ti].m[mi].name, MAX_TEXT);
-        snprintf(_self->sym->traits[ti].m[mi].ret, MAX_TEXT, "%s", ret);
+        _self->sym->traits[ti].m[mi].name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!_self->sym->traits[ti].m[mi].name)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->sym->traits[ti].m[mi].ret = runtime_text_ct_intern(ret);
+        if ((!_self->sym->traits[ti].m[mi].ret)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->sym->traits[ti].m[mi].nparams = 0;
         _self->sym->traits[ti].m[mi].body = (-1);
         _self->sym->traits[ti].m[mi].pnode = (-1);
@@ -4732,7 +4788,10 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
             int vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[p].text2);
             if (vi >= 0) {
                 self->sym->vars[vi].is_array = 1;
-                snprintf(self->sym->vars[vi].dims, MAX_TEXT, "%s", self->arena->nodes[p].text3);
+                self->sym->vars[vi].dims = runtime_text_ct_intern(self->arena->nodes[p].text3);
+                if ((!self->sym->vars[vi].dims)) {
+                    return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+                }
             }
         }
         if (((self->arena->nodes[p].aux == 1) && (check_borrow_param(self, p, self->arena->nodes[p].line, 1) != 0))) {

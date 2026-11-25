@@ -13,6 +13,7 @@
 #include "MapTable.h"
 #include "Expr.h"
 #include "ParseSupport.h"
+#include "Intern.h"
 #include "Symbols.h"
 #include "Diag.h"
 

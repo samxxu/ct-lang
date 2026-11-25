@@ -6,6 +6,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Diag.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct"
@@ -573,7 +574,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_var_type(void *
 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *self, const char * name, const char * ret, int is_static, int is_pub, int first_param) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
-    char cname[MAX_TEXT];
+    const char * cname;
     char msg[MAX_TEXT];
     int i;
     int k;
@@ -585,8 +586,12 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
         return _self->__frontend_parse_supportops_vptr->fail(_self, "identifier '__ct_' is reserved for the compiler");
     }
     i = (-1);
-    cname[0] = 0;
-    if ((_self->sym->ns[0] && (snprintf(cname, sizeof(cname), "%s%s", _self->sym->ns, name) < (int)(sizeof(cname))))) {
+    cname = (const char *)(0);
+    if (_self->sym->ns[0]) {
+        cname = runtime_text_ct_intern_join(_self->sym->ns, name);
+        if ((!cname)) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
         i = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, cname);
     }
     if (((i < 0) && (!is_pub))) {
@@ -604,7 +609,18 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
         }
         i = _self->sym->nfunc;
         _self->sym->nfunc++;
-        snprintf(_self->sym->funcs[i].name, MAX_TEXT, "%s", name);
+        _self->sym->funcs[i].name = runtime_text_ct_intern(name);
+        if ((!_self->sym->funcs[i].name)) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
+        _self->sym->funcs[i].tparam = runtime_text_ct_intern("");
+        if ((!_self->sym->funcs[i].tparam)) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
+        _self->sym->funcs[i].bound = runtime_text_ct_intern("");
+        if ((!_self->sym->funcs[i].bound)) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
         _self->sym->funcs[i].is_pub = 0;
         _self->sym->funcs[i].ret_owned = 0;
         _self->sym->funcs[i].attr = (-1);
@@ -614,17 +630,18 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
     if (pub_now) {
         _self->sym->funcs[i].is_pub = 1;
     }
-    if ((pub_now && _self->sym->ns[0])) {
-        if (snprintf(cname, sizeof(cname), "%s%s", _self->sym->ns, name) >= (int)(sizeof(cname))) {
-            return _self->__frontend_parse_supportops_vptr->fail(_self, "function name is too long");
+    if ((!(pub_now && _self->sym->ns[0]))) {
+        cname = runtime_text_ct_intern(name);
+        if ((!cname)) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
         }
     }
-    else {
-        snprintf(cname, sizeof(cname), "%s", name);
-    }
-    snprintf(_self->sym->funcs[i].cname, MAX_TEXT, "%s", cname);
+    _self->sym->funcs[i].cname = cname;
     if (fresh) {
-        snprintf(_self->sym->funcs[i].ret, MAX_TEXT, "%s", ret);
+        _self->sym->funcs[i].ret = runtime_text_ct_intern(ret);
+        if ((!_self->sym->funcs[i].ret)) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
     }
     _self->sym->funcs[i].is_static = is_static;
     prev_nparams = _self->sym->funcs[i].nparams;
@@ -835,7 +852,10 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_adopt_use(void 
     if (_self->sym->structs[si].nuse >= 64) {
         return 0;
     }
-    snprintf(_self->sym->structs[si].use[_self->sym->structs[si].nuse], 160, "%s", trait);
+    _self->sym->structs[si].use[_self->sym->structs[si].nuse] = runtime_text_ct_intern(trait);
+    if ((!_self->sym->structs[si].use[_self->sym->structs[si].nuse])) {
+        return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+    }
     _self->sym->structs[si].nuse++;
     return 0;
 }

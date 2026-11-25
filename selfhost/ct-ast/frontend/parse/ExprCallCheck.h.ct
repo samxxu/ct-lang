@@ -27,6 +27,7 @@ import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
@@ -284,8 +285,13 @@ impl ExprCallCheck for Expr {
             *self->calls = grown;
             *self->callcap = cap;
         }
-        snprintf((*self->calls)[*self->ncalls].caller, MAX_TEXT, "%s", self->cur_func);
-        snprintf((*self->calls)[*self->ncalls].callee, MAX_TEXT, "%s", callee);
+        (*self->calls)[*self->ncalls].caller =
+            runtime::text::ct_intern(self->cur_func);
+        if (!(*self->calls)[*self->ncalls].caller)
+            return self->sup->fail("out of memory");
+        (*self->calls)[*self->ncalls].callee = runtime::text::ct_intern(callee);
+        if (!(*self->calls)[*self->ncalls].callee)
+            return self->sup->fail("out of memory");
         (*self->calls)[*self->ncalls].line = line;
         (*self->ncalls)++;
         return 0;

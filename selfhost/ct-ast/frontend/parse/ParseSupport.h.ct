@@ -20,6 +20,7 @@ import frontend::lex::Lexer;
 import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import tool::diag::Diag;
 
 /* Mirror of Symbols.h.ct's whole-program function budget (macros do not cross
@@ -581,7 +582,7 @@ impl SupportOps for ParseSupport {
 
     int add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param)
     {
-        char cname[MAX_TEXT];
+        const char *cname;
         char msg[MAX_TEXT];
         int i, k, p, pub_now, fresh, prev_nparams;
 
@@ -597,10 +598,12 @@ impl SupportOps for ParseSupport {
            definition repeats the signature without it, and both must spell the
            same C name -- so a prefixed row is found from either line. */
         i = -1;
-        cname[0] = 0;
-        if (self->sym->ns[0]
-            && snprintf(cname, sizeof cname, "%s%s", self->sym->ns, name) < (int)sizeof cname)
+        cname = (const char *)0;
+        if (self->sym->ns[0]) {
+            cname = runtime::text::ct_intern_join(self->sym->ns, name);
+            if (!cname) return self->fail("out of memory");
             i = self->sym->find_func(cname);
+        }
         if (i < 0 && !is_pub) i = self->sym->find_func(name);
         pub_now = is_pub;
         if (i >= 0 && self->sym->funcs[i].is_pub) pub_now = 1;
@@ -612,7 +615,12 @@ impl SupportOps for ParseSupport {
             }
             i = self->sym->nfunc;
             self->sym->nfunc++;
-            snprintf(self->sym->funcs[i].name, MAX_TEXT, "%s", name);
+            self->sym->funcs[i].name = runtime::text::ct_intern(name);
+            if (!self->sym->funcs[i].name) return self->fail("out of memory");
+            self->sym->funcs[i].tparam = runtime::text::ct_intern("");
+            if (!self->sym->funcs[i].tparam) return self->fail("out of memory");
+            self->sym->funcs[i].bound = runtime::text::ct_intern("");
+            if (!self->sym->funcs[i].bound) return self->fail("out of memory");
             self->sym->funcs[i].is_pub = 0;
             self->sym->funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
             self->sym->funcs[i].attr = -1;       /* fresh row: no attribute yet */
@@ -620,17 +628,19 @@ impl SupportOps for ParseSupport {
             fresh = 1;
         }
         if (pub_now) self->sym->funcs[i].is_pub = 1;
-        if (pub_now && self->sym->ns[0]) {
-            if (snprintf(cname, sizeof cname, "%s%s", self->sym->ns, name) >= (int)sizeof cname)
-                return self->fail("function name is too long");
-        } else {
-            snprintf(cname, sizeof cname, "%s", name);
+        if (!(pub_now && self->sym->ns[0])) {
+            /* A static helper keeps its plain name even inside a namespace. */
+            cname = runtime::text::ct_intern(name);
+            if (!cname) return self->fail("out of memory");
         }
-        snprintf(self->sym->funcs[i].cname, MAX_TEXT, "%s", cname);
+        self->sym->funcs[i].cname = cname;
         /* The return type belongs to the first declaration: a prototype such as
            `_Noreturn void f(void);` keeps its prefix when the definition repeats
            the signature as `void f(void) {}`. */
-        if (fresh) snprintf(self->sym->funcs[i].ret, MAX_TEXT, "%s", ret);
+        if (fresh) {
+            self->sym->funcs[i].ret = runtime::text::ct_intern(ret);
+            if (!self->sym->funcs[i].ret) return self->fail("out of memory");
+        }
         self->sym->funcs[i].is_static = is_static;
         prev_nparams = self->sym->funcs[i].nparams;
         self->sym->funcs[i].nparams = 0;
@@ -831,7 +841,10 @@ impl SupportOps for ParseSupport {
         for (k = 0; k < self->sym->structs[si].nuse; k++)
             if (strcmp(self->sym->structs[si].use[k], trait) == 0) return 0;
         if (self->sym->structs[si].nuse >= 64) return 0;
-        snprintf(self->sym->structs[si].use[self->sym->structs[si].nuse], 160, "%s", trait);
+        self->sym->structs[si].use[self->sym->structs[si].nuse] =
+            runtime::text::ct_intern(trait);
+        if (!self->sym->structs[si].use[self->sym->structs[si].nuse])
+            return self->fail("out of memory");
         self->sym->structs[si].nuse++;
         return 0;
     }

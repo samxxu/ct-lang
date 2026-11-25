@@ -90,6 +90,7 @@ struct runtime_text_Intern {
 };
 const char * runtime_text_ct_intern(const char *);
 const char * runtime_text_ct_intern_len(const char *, int);
+const char * runtime_text_ct_intern_join(const char *, const char *);
 void runtime_text_ct_intern_reset(void);
 
 #endif

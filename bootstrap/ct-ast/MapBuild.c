@@ -6,6 +6,7 @@
 #include "MapTable.h"
 #include "Expr.h"
 #include "ParseSupport.h"
+#include "Intern.h"
 #include "Symbols.h"
 #include "Diag.h"
 
@@ -434,6 +435,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     char src[MAX_TEXT];
     char dst[MAX_TEXT];
     char param[MAX_TEXT];
+    char callbuf[MAX_TEXT];
     char msg[MAX_TEXT * 2];
     struct frontend_module_MapTable * m;
     struct frontend_module_MapBind * b;
@@ -495,18 +497,42 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
         return (-1);
     }
     m = (&(*_self->maps)[(*_self->nmaps)]);
-    snprintf(m->trait, MAX_TEXT, "%s", "");
-    snprintf(m->inst, MAX_TEXT, "%s", "");
-    snprintf(m->cname, MAX_TEXT, "%s", "");
-    snprintf(m->prefix, MAX_TEXT, "%s", "");
-    snprintf(m->vtable, MAX_TEXT, "%s", "");
-    snprintf(m->host_type, MAX_TEXT, "%s", src);
-    snprintf(m->bind_dst, MAX_TEXT, "%s", dst);
+    m->trait = runtime_text_ct_intern("");
+    if ((!m->trait)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->inst = runtime_text_ct_intern("");
+    if ((!m->inst)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->cname = runtime_text_ct_intern("");
+    if ((!m->cname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->prefix = runtime_text_ct_intern("");
+    if ((!m->prefix)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->vtable = runtime_text_ct_intern("");
+    if ((!m->vtable)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->host_type = runtime_text_ct_intern(src);
+    if ((!m->host_type)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->bind_dst = runtime_text_ct_intern(dst);
+    if ((!m->bind_dst)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     m->ns_host = 0;
     m->is_static = 1;
     m->type_host = 1;
     m->is_binding = 1;
-    snprintf(m->path, MAX_TEXT, "%s", _self->sup->mem->path);
+    m->path = runtime_text_ct_intern(_self->sup->mem->path);
+    if ((!m->path)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     m->line = line;
     m->unit = unit;
     if (mapb_ensure_binds(_self, m, 1) != 0) {
@@ -517,7 +543,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if (mapb_ensure_params(_self, b, 1) != 0) {
         return (-1);
     }
-    snprintf(b->method, MAX_TEXT, "%s", "from");
+    b->method = runtime_text_ct_intern("from");
+    if ((!b->method)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     snprintf(b->params[0], MAX_TEXT, "%s", param);
     b->nparams = 1;
     b->ti = (-1);
@@ -525,7 +554,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     b->direct = 0;
     b->recv = 1;
     b->variadic = 0;
-    b->wrapper[0] = 0;
+    b->wrapper = runtime_text_ct_intern("");
+    if ((!b->wrapper)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     b->line = line;
     i = _self->lex->pos;
     n = 0;
@@ -558,7 +590,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
             }
             else {
                 if ((((q != 0) && (c == '\\')) && _self->lex->src[(i + 1)])) {
-                    b->call[n] = (char)(c);
+                    callbuf[n] = (char)(c);
                     n++;
                     i++;
                     c = (unsigned char)(_self->lex->src[i]);
@@ -575,7 +607,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
                 }
             }
         }
-        b->call[n] = (char)(c);
+        callbuf[n] = (char)(c);
         n++;
         i++;
     }
@@ -585,10 +617,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if (long_call) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "map binding recipe is too long");
     }
-    while (((n > 0) && ((((b->call[(n - 1)] == ' ') || (b->call[(n - 1)] == '\t')) || (b->call[(n - 1)] == '\n')) || (b->call[(n - 1)] == '\r')))) {
+    while (((n > 0) && ((((callbuf[(n - 1)] == ' ') || (callbuf[(n - 1)] == '\t')) || (callbuf[(n - 1)] == '\n')) || (callbuf[(n - 1)] == '\r')))) {
         n--;
     }
-    b->call[n] = 0;
+    callbuf[n] = 0;
     _self->lex->pos = i;
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
@@ -597,8 +629,13 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
         return (-1);
     }
+    b->call = callbuf;
     if (check_static_call(_self, m, b) != 0) {
         return (-1);
+    }
+    b->call = runtime_text_ct_intern(callbuf);
+    if ((!b->call)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     for (k = 0; k < (*_self->nmaps); k++) {
         if ((!(*_self->maps)[k].is_binding)) {
@@ -632,6 +669,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     char hostcn[MAX_TEXT];
     char host_type[MAX_TEXT];
     char wname[MAX_TEXT];
+    char callbuf[MAX_TEXT];
     char msg[MAX_TEXT];
     struct frontend_module_MapTable * m;
     struct frontend_module_MapBind * b;
@@ -834,16 +872,37 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         return (-1);
     }
     m = (&(*_self->maps)[(*_self->nmaps)]);
-    snprintf(m->trait, MAX_TEXT, "%s", rtrait);
-    snprintf(m->inst, MAX_TEXT, "%s", inst);
-    snprintf(m->cname, MAX_TEXT, "%s", icn);
-    snprintf(m->prefix, MAX_TEXT, "%s", prefix);
-    snprintf(m->vtable, MAX_TEXT, "%s", vt);
+    m->trait = runtime_text_ct_intern(rtrait);
+    if ((!m->trait)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->inst = runtime_text_ct_intern(inst);
+    if ((!m->inst)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->cname = runtime_text_ct_intern(icn);
+    if ((!m->cname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->prefix = runtime_text_ct_intern(prefix);
+    if ((!m->prefix)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->vtable = runtime_text_ct_intern(vt);
+    if ((!m->vtable)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     m->ns_host = ns_host;
     m->is_static = is_static;
     m->type_host = type_host;
-    snprintf(m->host_type, MAX_TEXT, "%s", host_type);
-    snprintf(m->path, MAX_TEXT, "%s", _self->sup->mem->path);
+    m->host_type = runtime_text_ct_intern(host_type);
+    if ((!m->host_type)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    m->path = runtime_text_ct_intern(_self->sup->mem->path);
+    if ((!m->path)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     m->nb = 0;
     m->line = line;
     m->unit = unit;
@@ -856,7 +915,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a method name");
         }
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, b->method, MAX_TEXT);
+        b->method = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!b->method)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         mi = (-1);
         for (k = 0; k < _self->sym->traits[ti].nm; k++) {
             if (strcmp(_self->sym->traits[ti].m[k].name, b->method) == 0) {
@@ -958,7 +1020,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
                 }
                 else {
                     if ((((q != 0) && (c == '\\')) && _self->lex->src[(i + 1)])) {
-                        b->call[n] = (char)(c);
+                        callbuf[n] = (char)(c);
                         n++;
                         i++;
                         c = (unsigned char)(_self->lex->src[i]);
@@ -975,7 +1037,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
                     }
                 }
             }
-            b->call[n] = (char)(c);
+            callbuf[n] = (char)(c);
             n++;
             i++;
         }
@@ -985,22 +1047,23 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         if (long_call) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "map call is too long");
         }
-        while (((n > 0) && ((((b->call[(n - 1)] == ' ') || (b->call[(n - 1)] == '\t')) || (b->call[(n - 1)] == '\n')) || (b->call[(n - 1)] == '\r')))) {
+        while (((n > 0) && ((((callbuf[(n - 1)] == ' ') || (callbuf[(n - 1)] == '\t')) || (callbuf[(n - 1)] == '\n')) || (callbuf[(n - 1)] == '\r')))) {
             n--;
         }
-        b->call[n] = 0;
+        callbuf[n] = 0;
         _self->lex->pos = i;
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         b->direct = 0;
+        b->call = callbuf;
         if (is_static) {
             if (check_static_call(_self, m, b) != 0) {
                 return (-1);
             }
         }
         else {
-            ident = ((b->call[0] != 0) && (!((b->call[0] >= '0') && (b->call[0] <= '9'))));
-            for (j2 = 0; (ident && b->call[j2]); j2++) {
-                char cc = b->call[j2];
+            ident = ((callbuf[0] != 0) && (!((callbuf[0] >= '0') && (callbuf[0] <= '9'))));
+            for (j2 = 0; (ident && callbuf[j2]); j2++) {
+                char cc = callbuf[j2];
                 if ((!(((((cc >= 'a') && (cc <= 'z')) || ((cc >= 'A') && (cc <= 'Z'))) || ((cc >= '0') && (cc <= '9'))) || (cc == '_')))) {
                     ident = 0;
                 }
@@ -1014,19 +1077,29 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
             if (((!b->direct) && (_self->__frontend_parse_mapbuildops_vptr->check_call(_self, (char *)(b), inst) != 0))) {
                 return (-1);
             }
-            if (((!b->direct) && (_self->__frontend_parse_mapbuildops_vptr->rewrite_globals(_self, b->call) != 0))) {
+            if (((!b->direct) && (_self->__frontend_parse_mapbuildops_vptr->rewrite_globals(_self, callbuf) != 0))) {
                 return (-1);
             }
+        }
+        b->call = runtime_text_ct_intern(callbuf);
+        if ((!b->call)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
             return (-1);
         }
         if (is_static) {
-            b->wrapper[0] = 0;
+            b->wrapper = runtime_text_ct_intern("");
+            if ((!b->wrapper)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
         }
         else {
             snprintf(wname, sizeof(wname), "%s_%s", m->prefix, b->method);
-            snprintf(b->wrapper, MAX_TEXT, "%s", wname);
+            b->wrapper = runtime_text_ct_intern(wname);
+            if ((!b->wrapper)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
         }
         b->ti = ti;
         b->mi = mi;

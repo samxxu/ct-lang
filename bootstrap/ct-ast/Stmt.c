@@ -3,6 +3,7 @@
 #include "Stmt.h"
 #include "SymbolsTypeText.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Lexer.h"
 #include "Symbols.h"
 #include "Memory.h"
@@ -1615,7 +1616,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
             int svi0 = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (svi0 >= 0) {
                 _self->sym->vars[svi0].is_slice = 1;
-                snprintf(_self->sym->vars[svi0].slice_elem, MAX_TEXT, "%s", slice_elem);
+                _self->sym->vars[svi0].slice_elem = runtime_text_ct_intern(slice_elem);
+                if ((!_self->sym->vars[svi0].slice_elem)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 _self->sym->vars[svi0].slice_const = slice_const;
             }
         }
@@ -1663,7 +1667,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (vi >= 0) {
                 _self->sym->vars[vi].is_array = 1;
-                snprintf(_self->sym->vars[vi].dims, MAX_TEXT, "%s", _self->arena->nodes[n].text3);
+                _self->sym->vars[vi].dims = runtime_text_ct_intern(_self->arena->nodes[n].text3);
+                if ((!_self->sym->vars[vi].dims)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
             }
         }
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "="))) {

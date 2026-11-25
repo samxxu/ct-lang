@@ -87,6 +87,7 @@ extern void U16String_Drop_drop(void *self);
 
 const char * runtime_text_ct_intern(const char *);
 const char * runtime_text_ct_intern_len(const char *, int);
+const char * runtime_text_ct_intern_join(const char *, const char *);
 void runtime_text_ct_intern_reset(void);
 static unsigned long ct_intern_hash(const char *, int);
 static int ct_intern_grow(void);
@@ -185,6 +186,37 @@ const char * runtime_text_ct_intern(const char * s) {
 }
 const char * runtime_text_ct_intern_len(const char * s, int len) {
     return ct_intern_put(s, len);
+}
+const char * runtime_text_ct_intern_join(const char * a, const char * b) {
+    size_t la;
+    size_t lb;
+    char * buf;
+    const char * v;
+    if ((!a)) {
+        a = "";
+    }
+    if ((!b)) {
+        b = "";
+    }
+    la = strlen(a);
+    lb = strlen(b);
+    if ((la + lb) > (size_t)(TEXT_LIMIT)) {
+        return (const char *)(0);
+    }
+    buf = (char *)(malloc(((la + lb) + 1)));
+    if ((!buf)) {
+        return (const char *)(0);
+    }
+    if (la > 0) {
+        memcpy(buf, a, la);
+    }
+    if (lb > 0) {
+        memcpy((buf + la), b, lb);
+    }
+    buf[(la + lb)] = 0;
+    v = runtime_text_ct_intern_len(buf, (int)((la + lb)));
+    free(buf);
+    return v;
 }
 void runtime_text_ct_intern_reset(void) {
     int i;

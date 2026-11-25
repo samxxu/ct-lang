@@ -83,9 +83,9 @@ struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct frontend_module_Unit {
     char * path;
-    char base[160];
-    char ns[160];
-    char nsprefix[160];
+    const char * base;
+    const char * ns;
+    const char * nsprefix;
     char * dep;
     int * depu;
     int ndep;

@@ -36,6 +36,7 @@ import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::sym::Symbols;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import tool::diag::Diag;
 import frontend::sym::SymbolsTypeText;
 
@@ -356,8 +357,10 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
             int vi = self->sym->find_var(self->arena->nodes[p].text2);
             if (vi >= 0) {
                 self->sym->vars[vi].is_array = 1;
-                snprintf(self->sym->vars[vi].dims, MAX_TEXT, "%s",
-                         self->arena->nodes[p].text3);
+                self->sym->vars[vi].dims =
+                    runtime::text::ct_intern(self->arena->nodes[p].text3);
+                if (!self->sym->vars[vi].dims)
+                    return self->sup->fail("out of memory");
             }
         }
         /* the annotation rides on the N_PARAM node (`aux`): the default body
@@ -1720,7 +1723,7 @@ impl ParseOps for Parser {
         int f, b, params, fi, func_line, func_col, ar, attr, lead;
         char ret[MAX_TEXT];
         char name[MAX_TEXT];
-        char cname[MAX_TEXT];
+        const char *cname;
         char gns[MAX_TEXT];
         char tparam[MAX_TEXT];
         char bound[MAX_TEXT];
@@ -1858,16 +1861,17 @@ impl ParseOps for Parser {
                belongs to the C library and keeps its own spelling. `gns` is the
                underscore form a qualified reference matches (`a_b`). */
             if (is_extern || !self->sym->ns[0]) {
-                snprintf(cname, sizeof cname, "%s", name);
+                cname = runtime::text::ct_intern(name);
                 gns[0] = 0;
             } else {
                 size_t nl;
-                if (snprintf(cname, sizeof cname, "%s%s", self->sym->ns, name) >= (int)sizeof cname)
-                    return self->sup->fail("variable name is too long");
+                cname = runtime::text::ct_intern_join(self->sym->ns, name);
+                if (!cname) return self->sup->fail("out of memory");
                 snprintf(gns, sizeof gns, "%s", self->sym->ns);
                 nl = strlen(gns);
                 if (nl > 0) gns[nl - 1] = 0;      /* drop the trailing '_' */
             }
+            if (!cname) return self->sup->fail("out of memory");
             g = self->sup->new_node(N_GLOBAL);
             if (g < 0) return -1;
             snprintf(self->arena->nodes[g].text, MAX_TEXT, "%s", ret);
@@ -1892,8 +1896,10 @@ impl ParseOps for Parser {
                            so leaving it clear made `Vec<int> g[2]; g[0]` look
                            like indexing a container value. */
                         self->sym->vars[vi].is_array = 1;
-                        snprintf(self->sym->vars[vi].dims, MAX_TEXT, "%s",
-                                 self->arena->nodes[g].text3);
+                        self->sym->vars[vi].dims =
+                            runtime::text::ct_intern(self->arena->nodes[g].text3);
+                        if (!self->sym->vars[vi].dims)
+                            return self->sup->fail("out of memory");
                     }
                 }
                 /* Phase 24 L24-10: same check as the block-scope declarator */
@@ -2098,10 +2104,10 @@ impl ParseOps for Parser {
         if (is_generic) {
             self->sym->funcs[fi].ntparams = 1;
             self->sym->funcs[fi].is_static = 1;   /* D26-4: instances stay in this unit */
-            snprintf(self->sym->funcs[fi].tparam, sizeof self->sym->funcs[fi].tparam,
-                     "%s", tparam);
-            snprintf(self->sym->funcs[fi].bound, sizeof self->sym->funcs[fi].bound,
-                     "%s", bound);
+            self->sym->funcs[fi].tparam = runtime::text::ct_intern(tparam);
+            if (!self->sym->funcs[fi].tparam) return self->sup->fail("out of memory");
+            self->sym->funcs[fi].bound = runtime::text::ct_intern(bound);
+            if (!self->sym->funcs[fi].bound) return self->sup->fail("out of memory");
         }
         f = self->sup->new_node(N_FUNC);
         if (f < 0) {
@@ -2425,7 +2431,10 @@ impl ParseOps for Parser {
                     self->sym->vars[vi].initialized = seen_out ? 0 : 1;
                     if (is_slice) {
                         self->sym->vars[vi].is_slice = 1;
-                        snprintf(self->sym->vars[vi].slice_elem, MAX_TEXT, "%s", slice_elem);
+                        self->sym->vars[vi].slice_elem =
+                            runtime::text::ct_intern(slice_elem);
+                        if (!self->sym->vars[vi].slice_elem)
+                            return self->sup->fail("out of memory");
                         self->sym->vars[vi].slice_const = slice_const;
                     }
                 }
@@ -2434,8 +2443,10 @@ impl ParseOps for Parser {
                 int vi = self->sym->find_var(name);
                 if (vi >= 0) {
                     self->sym->vars[vi].is_array = 1;
-                    snprintf(self->sym->vars[vi].dims, MAX_TEXT, "%s",
-                             self->arena->nodes[p].text3);
+                    self->sym->vars[vi].dims =
+                        runtime::text::ct_intern(self->arena->nodes[p].text3);
+                    if (!self->sym->vars[vi].dims)
+                        return self->sup->fail("out of memory");
                 }
             }
             /* the annotation never reaches the C text: only the symbol table
@@ -2556,11 +2567,18 @@ impl ParseOps for Parser {
             if (self->sym->ensure_struct_field_capacity(si,
                     self->sym->structs[si].nfields + 1) != 0) return -1;
             {
-                snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].name, MAX_TEXT, "%s", nm);
-                snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].type, MAX_TEXT,
-                         "%s", self->arena->nodes[m].text);
-                snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].dims, MAX_TEXT,
-                         "%s", self->arena->nodes[m].text3);
+                self->sym->structs[si].fields[self->sym->structs[si].nfields].name =
+                    runtime::text::ct_intern(nm);
+                if (!self->sym->structs[si].fields[self->sym->structs[si].nfields].name)
+                    return self->sup->fail("out of memory");
+                self->sym->structs[si].fields[self->sym->structs[si].nfields].type =
+                    runtime::text::ct_intern(self->arena->nodes[m].text);
+                if (!self->sym->structs[si].fields[self->sym->structs[si].nfields].type)
+                    return self->sup->fail("out of memory");
+                self->sym->structs[si].fields[self->sym->structs[si].nfields].dims =
+                    runtime::text::ct_intern(self->arena->nodes[m].text3);
+                if (!self->sym->structs[si].fields[self->sym->structs[si].nfields].dims)
+                    return self->sup->fail("out of memory");
                 self->sym->structs[si].fields[self->sym->structs[si].nfields].line =
                     self->arena->nodes[m].line;
                 self->sym->structs[si].fields[self->sym->structs[si].nfields].is_pub =
@@ -2580,9 +2598,17 @@ impl ParseOps for Parser {
             }
         if (self->ensure_pend_fields(self->npend + 1) != 0) return -1;
         {
-            snprintf(self->pend_fields[self->npend].name, MAX_TEXT, "%s", nm);
-            snprintf(self->pend_fields[self->npend].type, MAX_TEXT, "%s", self->arena->nodes[m].text);
-            snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", self->arena->nodes[m].text3);
+            self->pend_fields[self->npend].name = runtime::text::ct_intern(nm);
+            if (!self->pend_fields[self->npend].name)
+                return self->sup->fail("out of memory");
+            self->pend_fields[self->npend].type =
+                runtime::text::ct_intern(self->arena->nodes[m].text);
+            if (!self->pend_fields[self->npend].type)
+                return self->sup->fail("out of memory");
+            self->pend_fields[self->npend].dims =
+                runtime::text::ct_intern(self->arena->nodes[m].text3);
+            if (!self->pend_fields[self->npend].dims)
+                return self->sup->fail("out of memory");
             self->pend_fields[self->npend].line = self->arena->nodes[m].line;
             self->pend_fields[self->npend].is_pub = self->arena->nodes[m].d;
             self->pend_fields[self->npend].col = (int)self->arena->nodes[m].num;
@@ -3017,17 +3043,13 @@ impl ParseOps for Parser {
                 tps = frontend::sym::ct_tmpls(&tn4);
                 tps[ti4].nfields = self->sym->structs[di].nfields;
                 for (fi4 = 0; fi4 < tps[ti4].nfields; fi4++) {
-                    snprintf(tps[ti4].fields[fi4].name, MAX_TEXT, "%s",
-                             self->sym->structs[di].fields[fi4].name);
-                    snprintf(tps[ti4].fields[fi4].type, MAX_TEXT, "%s",
-                             self->sym->structs[di].fields[fi4].type);
-                    snprintf(tps[ti4].fields[fi4].dims, MAX_TEXT, "%s",
-                             self->sym->structs[di].fields[fi4].dims);
+                    tps[ti4].fields[fi4].name = self->sym->structs[di].fields[fi4].name;
+                    tps[ti4].fields[fi4].type = self->sym->structs[di].fields[fi4].type;
+                    tps[ti4].fields[fi4].dims = self->sym->structs[di].fields[fi4].dims;
                 }
                 tps[ti4].nuse = self->sym->structs[di].nuse;
                 for (ui4 = 0; ui4 < tps[ti4].nuse; ui4++)
-                    snprintf(tps[ti4].use[ui4], MAX_TEXT, "%s",
-                             self->sym->structs[di].use[ui4]);
+                    tps[ti4].use[ui4] = self->sym->structs[di].use[ui4];
                 self->sym->structs[di].is_template = 1;
                 self->sym->structs[di].ntparams = nt;
                 self->sym->structs[di].tparam =
@@ -3430,21 +3452,21 @@ impl ParseOps for Parser {
                     self->sym->structs[ai].uses_handback = self->sym->structs[tagi].uses_handback;
                     self->sym->structs[ai].has_handback_impl = self->sym->structs[tagi].has_handback_impl;
                     for (ui = 0; ui < self->sym->structs[tagi].nuse; ui++)
-                        snprintf(self->sym->structs[ai].use[ui], MAX_TEXT, "%s", self->sym->structs[tagi].use[ui]);
+                        self->sym->structs[ai].use[ui] = self->sym->structs[tagi].use[ui];
                     if (self->sym->ensure_struct_field_capacity(ai,
                             self->sym->structs[tagi].nfields) != 0) return -1;
                     self->sym->structs[ai].nfields = self->sym->structs[tagi].nfields;
                     for (ui = 0; ui < self->sym->structs[tagi].nfields; ui++) {
-                        snprintf(self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s",
-                                 self->sym->structs[tagi].fields[ui].name);
-                        snprintf(self->sym->structs[ai].fields[ui].type, MAX_TEXT, "%s",
-                                 self->sym->structs[tagi].fields[ui].type);
+                        self->sym->structs[ai].fields[ui].name =
+                            self->sym->structs[tagi].fields[ui].name;
+                        self->sym->structs[ai].fields[ui].type =
+                            self->sym->structs[tagi].fields[ui].type;
                         /* `dims` makes an array field an array; without it the
                            alias emits a scalar and the vptr initialiser targets
                            `.items.__t_vptr` on a struct array, which no C
                            compiler accepts */
-                        snprintf(self->sym->structs[ai].fields[ui].dims, MAX_TEXT, "%s",
-                                 self->sym->structs[tagi].fields[ui].dims);
+                        self->sym->structs[ai].fields[ui].dims =
+                            self->sym->structs[tagi].fields[ui].dims;
                         self->sym->structs[ai].fields[ui].line =
                             self->sym->structs[tagi].fields[ui].line;
                         self->sym->structs[ai].fields[ui].col =
@@ -3460,12 +3482,12 @@ impl ParseOps for Parser {
                         return -1;
                     self->sym->structs[ai].nfields = self->npend;
                     for (ui = 0; ui < self->npend; ui++) {
-                        snprintf(self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s",
-                                 self->pend_fields[ui].name);
-                        snprintf(self->sym->structs[ai].fields[ui].type, MAX_TEXT, "%s",
-                                 self->pend_fields[ui].type);
-                        snprintf(self->sym->structs[ai].fields[ui].dims, MAX_TEXT, "%s",
-                                 self->pend_fields[ui].dims);
+                        self->sym->structs[ai].fields[ui].name =
+                            self->pend_fields[ui].name;
+                        self->sym->structs[ai].fields[ui].type =
+                            self->pend_fields[ui].type;
+                        self->sym->structs[ai].fields[ui].dims =
+                            self->pend_fields[ui].dims;
                         self->sym->structs[ai].fields[ui].line = self->pend_fields[ui].line;
                         self->sym->structs[ai].fields[ui].col = self->pend_fields[ui].col;
                         self->sym->structs[ai].fields[ui].is_pub = self->pend_fields[ui].is_pub;
@@ -3543,8 +3565,10 @@ impl ParseOps for Parser {
             } else {
                 if (self->sym->structs[sindex].nuse >= MAX_TRAITS)
                     return self->sup->fail("too many used traits");
-                snprintf(self->sym->structs[sindex].use[self->sym->structs[sindex].nuse],
-                         MAX_TEXT, "%s", tname);
+                self->sym->structs[sindex].use[self->sym->structs[sindex].nuse] =
+                    runtime::text::ct_intern(tname);
+                if (!self->sym->structs[sindex].use[self->sym->structs[sindex].nuse])
+                    return self->sup->fail("out of memory");
                 self->sym->structs[sindex].nuse++;
             }
             if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
@@ -3673,12 +3697,16 @@ impl ParseOps for Parser {
         self->sym->traits[ti].is_pub = is_pub;
         self->sym->traits[ti].is_static = self->unit_is_map;
         self->sym->traits[ti].line = trait_line;
-        snprintf(self->sym->traits[ti].path, MAX_TEXT, "%s", self->mem->path);
-        snprintf(self->sym->traits[ti].ns, MAX_TEXT, "%s", self->sym->ns);
+        self->sym->traits[ti].path = runtime::text::ct_intern(self->mem->path);
+        if (!self->sym->traits[ti].path) return self->sup->fail("out of memory");
         {
-            size_t nl = strlen(self->sym->traits[ti].ns);
-            if (nl > 0 && self->sym->traits[ti].ns[nl - 1] == '_')
-                self->sym->traits[ti].ns[nl - 1] = 0;
+            char nsbuf[MAX_TEXT];
+            size_t nl;
+            snprintf(nsbuf, sizeof nsbuf, "%s", self->sym->ns);
+            nl = strlen(nsbuf);
+            if (nl > 0 && nsbuf[nl - 1] == '_') nsbuf[nl - 1] = 0;
+            self->sym->traits[ti].ns = runtime::text::ct_intern(nsbuf);
+            if (!self->sym->traits[ti].ns) return self->sup->fail("out of memory");
         }
         self->sym->traits[ti].ntparams = ntp;
         self->sym->traits[ti].tparam =
@@ -3728,8 +3756,13 @@ impl ParseOps for Parser {
             if (self->sym->ensure_trait_capacity(ti, self->sym->traits[ti].nm + 1) != 0)
                 return -1;
             mi = self->sym->traits[ti].nm;
-            self->lex->tok_copy(self->sym->traits[ti].m[mi].name, MAX_TEXT);
-            snprintf(self->sym->traits[ti].m[mi].ret, MAX_TEXT, "%s", ret);
+            self->sym->traits[ti].m[mi].name = runtime::text::ct_intern_len(
+                self->lex->tokstr.ptr, self->lex->tokstr.len);
+            if (!self->sym->traits[ti].m[mi].name)
+                return self->sup->fail("out of memory");
+            self->sym->traits[ti].m[mi].ret = runtime::text::ct_intern(ret);
+            if (!self->sym->traits[ti].m[mi].ret)
+                return self->sup->fail("out of memory");
             self->sym->traits[ti].m[mi].nparams = 0;
             self->sym->traits[ti].m[mi].body = -1;
             self->sym->traits[ti].m[mi].pnode = -1;

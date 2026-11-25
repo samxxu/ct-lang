@@ -82,19 +82,19 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct frontend_module_Call {
-    char caller[160];
-    char callee[160];
+    const char * caller;
+    const char * callee;
     int line;
 };
 struct frontend_module_MapBind {
-    char method[160];
+    const char * method;
     char * * params;
     int pcap;
     int nparams;
     int ti;
     int mi;
-    char call[160];
-    char wrapper[160];
+    const char * call;
+    const char * wrapper;
     int direct;
     int recv;
     int * uses;
@@ -103,23 +103,23 @@ struct frontend_module_MapBind {
     int line;
 };
 struct frontend_module_MapTable {
-    char trait[160];
-    char inst[160];
-    char cname[160];
-    char prefix[160];
-    char vtable[160];
+    const char * trait;
+    const char * inst;
+    const char * cname;
+    const char * prefix;
+    const char * vtable;
     int ns_host;
     int is_static;
     int type_host;
-    char host_type[160];
+    const char * host_type;
     int is_binding;
-    char bind_dst[160];
+    const char * bind_dst;
     struct frontend_module_MapBind * b;
     int bcap;
     int nb;
     int line;
     int unit;
-    char path[160];
+    const char * path;
 };
 
 #endif

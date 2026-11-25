@@ -10,6 +10,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "EmitterText.h"
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"
@@ -1901,16 +1902,17 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_global_extern(void *se
 
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_global_decl(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    char cn[MAX_TEXT];
+    const char * cn;
     const char * nm = _self->arena->nodes[n].text2;
     (void)(_self);
     if ((((_self->arena->nodes[n].aux != 2) && _self->gprefix) && _self->gprefix[0])) {
-        if (snprintf(cn, sizeof(cn), "%s%s", _self->gprefix, nm) >= (int)(sizeof(cn))) {
-            return _self->__backend_emit_emitops_vptr->fail(_self, "variable name is too long");
+        cn = runtime_text_ct_intern_join(_self->gprefix, nm);
+        if ((!cn)) {
+            return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
         }
     }
     else {
-        snprintf(cn, sizeof(cn), "%s", nm);
+        cn = nm;
     }
     if (_self->__backend_emit_emitops_vptr->emit_type_name_dims(_self, _self->arena->nodes[n].text, cn, _self->arena->nodes[n].text3) != 0) {
         return (-1);

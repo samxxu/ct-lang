@@ -34,6 +34,7 @@ import frontend::sym::Symbols;
 import frontend::sym::Symbols::Adt as Adt;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import backend::emit::EmitterText;
 import backend::emit::EmitterQuery;
 import backend::emit::EmitterMapText;
@@ -8483,15 +8484,15 @@ impl EmitOps for Emitter {
        be a function pointer, so the name goes through `emit_type_name`. */
     int emit_global_decl(int n)
     {
-        char cn[MAX_TEXT];
+        const char *cn;
         const char *nm = self->arena->nodes[n].text2;
         (void)self;
 
         if (self->arena->nodes[n].aux != 2 && self->gprefix && self->gprefix[0]) {
-            if (snprintf(cn, sizeof cn, "%s%s", self->gprefix, nm) >= (int)sizeof cn)
-                return self->fail("variable name is too long");
+            cn = runtime::text::ct_intern_join(self->gprefix, nm);
+            if (!cn) return self->fail("out of memory");
         } else {
-            snprintf(cn, sizeof cn, "%s", nm);
+            cn = nm;
         }
         if (self->emit_type_name_dims(self->arena->nodes[n].text, cn,
                                       self->arena->nodes[n].text3) != 0) return -1;

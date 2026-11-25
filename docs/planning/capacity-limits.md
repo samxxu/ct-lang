@@ -183,6 +183,51 @@ S3 用生成的 `.ct` 夹具。
 - 风险：`TypeAlias` 是 `pub struct`，改字段类型会改编译器自身头文件与 seed，但**不影响用户生成 C**；
   若某调用点依赖 `char[]` 可写（例如就地 `strcat`），改为池指针前必须先改成局部 builder。
 
+## 5.2 C2n-1：Symbols / Module / MapTable / Unit 的持久文本字段迁移
+
+**范围**：把四类持久记录里的定长文本字段改成 `const char *`，由
+`runtime::text::Intern` 拥有；一次写入 = 一次 `ct_intern`，失败即 `fail("out of memory")`。
+不迁局部 scratch（一次性格格式化、解析中的临时缓冲）与 parser/Expr/Stmt 的
+arena 文本行（C2n-2）。
+
+| 单元 | 迁移字段 |
+| --- | --- |
+| `Symbols.h.ct` | `TypeAlias.path`；`Fn.name/cname/ret/tparam/bound`；`Var.name/type/dims/cname/ns/slice_elem`；`Trait.name/path/ns`；`MethAnn.host/name`；`MethodSig.name/ret`；`Field.name/type/dims`；`StructDef.name/use[]`；`StructTmpl.name/full/use[]`；`StructInst.name/tmpl`；`StructImpl.tmpl/use`；`Symbols.alias_name/alias_full`（改为指针行） |
+| `MapTable.h.ct` | `Call.caller/callee`；`MapBind.method/call/wrapper`；`MapTable.trait/inst/cname/prefix/vtable/host_type/bind_dst/path` |
+| `Unit.h.ct` | `base` / `ns` / `nsprefix`（`path`、`shim_*` 已在 C2l 改为 run-scoped 自有块） |
+| `Module.h.ct` | 无新增持久文本字段；本切片修了它对 `Unit`/`Fn`/`Var`/`StructDef` 的写入点与导入再导出路径 |
+
+**不变量**
+
+- 指针复制即可：`struct` 行复制、`ct_tmpls/ct_insts/ct_impls` 行复制、`trait_inst` 的
+  `MethodSig` 行复制都不再复制字节；池拥有文本，按单元 reset 只清计数，**不 free**。
+- 写入点全部 `ct_intern` / `ct_intern_len` / 新增 `ct_intern_join`；`ct_intern` 返回
+  NULL（OOM 或超 `TEXT_LIMIT=65536`）时调用方显式报错，不截断、不落半成品。
+- 命名空间拼接（`ns + name`）改用 `ct_intern_join`，不再经 160 字节 scratch：
+  `Fn.cname`、`Var.cname`、`resolve_func`、导入/再导出路径与 `emit_global_decl`。
+- `sizeof(field)`、对字段的 `strncpy/memcpy/memset`、`field[0] = 0` 已复查；行的
+  `memset(&row, 0, sizeof row)` 只把指针置 NULL，随后必写，不释放池文本。
+
+**证据**
+
+- 正例：`test/ast/intern_pool.sh` S5——123 字节命名空间 + 100 字节函数/全局名，
+  生成 223 字节 C 名，编译、构建、运行通过；生成 C 含完整拼写。
+- 红证：同一夹具在 `baseline b380eb57` 上 `error: name is too long`（`name is too
+  long` / `variable name is too long`），实现提交后转绿。
+- `check-goldens-ast.sh` 25/25；`check-ast.sh` 全量（71 语料逐字节、345 诊断逐字、
+  fixpoint、p88 metrics）；`check-seed.sh` 两轮逐字节；sanitizers 无报告。
+
+**剩余（不在本切片）**
+
+- `Closure.*`、`GenericInst.targ/cname`、`Adt*`、`Symbols.tbare/tfull/tachain` 与
+  `MethodSig` 之外的 `char **` 行块（`Trait.tparam/bound/carg`、`StructDef.tparam`、
+  `StructTmpl.tparam/bound`、`StructInst.carg/ctype`、`StructImpl.tparam/pat`、
+  `MapBind.params/uses/sizeofs`、`Unit.dep`）留给 C2n-2 / C2o 的单元簇。
+- parser/Expr/Stmt 的 arena `text/text2/text3` 与 `char[MAX_TEXT]` 局部缓冲（含
+  `resolve_func` 调用点之外的名字回填）仍在 C2n-2。
+- 词法器标识符上限 159（C2o）仍拒绝单一 >159 的标识符；本片段的 >160 正例来自
+  命名空间拼接后的 C 名。
+
 ## 6 关联
 
 - [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)（已落地的动态容量样板）

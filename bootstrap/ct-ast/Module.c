@@ -10,6 +10,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Cache.h"
 #include "Diag.h"
 #include "Sh.h"
@@ -655,9 +656,23 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     _self->units[u].ndep = 0;
     _self->units[u].prog = (-1);
     _self->units[u].digest = 0;
-    _self->units[u].ns[0] = 0;
-    if (_self->__frontend_module_moduleops_vptr->base_name(_self, path, _self->units[u].base, MAX_TEXT, (&is_hdr), (&is_map)) != 0) {
-        return (-1);
+    _self->units[u].ns = runtime_text_ct_intern("");
+    if ((!_self->units[u].ns)) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    _self->units[u].nsprefix = runtime_text_ct_intern("");
+    if ((!_self->units[u].nsprefix)) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+{
+        char basebuf[MAX_TEXT];
+        if (_self->__frontend_module_moduleops_vptr->base_name(_self, path, basebuf, sizeof(basebuf), (&is_hdr), (&is_map)) != 0) {
+            return (-1);
+        }
+        _self->units[u].base = runtime_text_ct_intern(basebuf);
+        if ((!_self->units[u].base)) {
+            return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+        }
     }
     _self->units[u].is_hdr = is_hdr;
     _self->units[u].is_map = is_map;
@@ -798,7 +813,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     _self->p->cur_func[0] = 0;
     _self->p->nparams = 0;
     for (i = 0; i < _self->units[u].ndep; i++) {
-        char gcn[MAX_TEXT];
+        const char * gcn;
         char gns[MAX_TEXT];
         const char * gname;
         size_t gl;
@@ -809,18 +824,25 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
             }
             gname = _self->arena->nodes[gn].text2;
             if (((_self->arena->nodes[gn].aux == 2) || (!_self->units[dn].nsprefix[0]))) {
-                snprintf(gcn, sizeof(gcn), "%s", gname);
+                gcn = runtime_text_ct_intern(gname);
+                if ((!gcn)) {
+                    return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+                }
                 gns[0] = 0;
             }
             else {
-                if (snprintf(gcn, sizeof(gcn), "%s%s", _self->units[dn].nsprefix, gname) >= (int)(sizeof(gcn))) {
-                    return _self->__frontend_module_moduleops_vptr->fail(_self, "variable name is too long");
+                gcn = runtime_text_ct_intern_join(_self->units[dn].nsprefix, gname);
+                if ((!gcn)) {
+                    return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
                 }
                 snprintf(gns, sizeof(gns), "%s", _self->units[dn].nsprefix);
                 gl = strlen(gns);
                 if (gl > 0) {
                     gns[(gl - 1)] = 0;
                 }
+            }
+            if ((!gcn)) {
+                return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
             }
             if (_self->sym->__frontend_sym_symbolops_vptr->declare_global(_self->sym, gname, _self->arena->nodes[gn].text, gcn, gns, 1) < 0) {
                 return _self->__frontend_module_moduleops_vptr->fail(_self, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
@@ -829,12 +851,15 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
                 int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, gname);
                 if (vi >= 0) {
                     _self->sym->vars[vi].is_array = 1;
-                    snprintf(_self->sym->vars[vi].dims, MAX_TEXT, "%s", _self->arena->nodes[gn].text3);
+                    _self->sym->vars[vi].dims = runtime_text_ct_intern(_self->arena->nodes[gn].text3);
+                    if ((!_self->sym->vars[vi].dims)) {
+                        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+                    }
                 }
             }
         }
         for (gn = _self->arena->nodes[_self->units[dn].prog].a; gn >= 0; gn = _self->arena->nodes[gn].next) {
-            char ccn[MAX_TEXT];
+            const char * ccn;
             char cns[MAX_TEXT];
             const char * cmn;
             size_t cl;
@@ -848,18 +873,19 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
             for (mv = _self->arena->nodes[gn].a; mv >= 0; mv = _self->arena->nodes[mv].next) {
                 cmn = _self->arena->nodes[mv].text2;
                 if ((!_self->units[dn].nsprefix[0])) {
-                    snprintf(ccn, sizeof(ccn), "%s", cmn);
+                    ccn = runtime_text_ct_intern(cmn);
                     cns[0] = 0;
                 }
                 else {
-                    if (snprintf(ccn, sizeof(ccn), "%s%s", _self->units[dn].nsprefix, cmn) >= (int)(sizeof(ccn))) {
-                        return _self->__frontend_module_moduleops_vptr->fail(_self, "variable name is too long");
-                    }
+                    ccn = runtime_text_ct_intern_join(_self->units[dn].nsprefix, cmn);
                     snprintf(cns, sizeof(cns), "%s", _self->units[dn].nsprefix);
                     cl = strlen(cns);
                     if (cl > 0) {
                         cns[(cl - 1)] = 0;
                     }
+                }
+                if ((!ccn)) {
+                    return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
                 }
                 if (_self->sym->__frontend_sym_symbolops_vptr->declare_const(_self->sym, cmn, ccn, cns, 1) < 0) {
                     return _self->__frontend_module_moduleops_vptr->fail(_self, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
@@ -947,8 +973,14 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     _self->units[u].fn_end = _self->sym->nfunc;
     _self->units[u].tr_end = _self->sym->ntraits;
     _self->units[u].call_end = _self->p->ncalls;
-    snprintf(_self->units[u].ns, MAX_TEXT, "%s", _self->p->ns_decl);
-    snprintf(_self->units[u].nsprefix, MAX_TEXT, "%s", _self->sym->ns);
+    _self->units[u].ns = runtime_text_ct_intern(_self->p->ns_decl);
+    if ((!_self->units[u].ns)) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
+    _self->units[u].nsprefix = runtime_text_ct_intern(_self->sym->ns);
+    if ((!_self->units[u].nsprefix)) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
     _self->p->nrels = rb;
     return u;
 }

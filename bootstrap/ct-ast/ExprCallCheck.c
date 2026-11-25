@@ -9,6 +9,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Diag.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
@@ -376,8 +377,14 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_record_call(void *se
         (*_self->calls) = grown;
         (*_self->callcap) = cap;
     }
-    snprintf((*_self->calls)[(*_self->ncalls)].caller, MAX_TEXT, "%s", _self->cur_func);
-    snprintf((*_self->calls)[(*_self->ncalls)].callee, MAX_TEXT, "%s", callee);
+    (*_self->calls)[(*_self->ncalls)].caller = runtime_text_ct_intern(_self->cur_func);
+    if ((!(*_self->calls)[(*_self->ncalls)].caller)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    (*_self->calls)[(*_self->ncalls)].callee = runtime_text_ct_intern(callee);
+    if ((!(*_self->calls)[(*_self->ncalls)].callee)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     (*_self->calls)[(*_self->ncalls)].line = line;
     (*_self->ncalls)++;
     return 0;

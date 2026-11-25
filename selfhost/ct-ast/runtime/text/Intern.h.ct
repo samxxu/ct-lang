@@ -45,6 +45,12 @@ pub const char *ct_intern(const char *s);
 /* Intern exactly `len` bytes of `s`; those bytes may contain NUL. A NULL `s`,
    a negative length or a length above `TEXT_LIMIT` returns NULL. */
 pub const char *ct_intern_len(const char *s, int len);
+/* Intern the concatenation of `a` and `b` (either may be NULL, treated as
+   empty). Used where a declaration's C name is its namespace prefix plus its
+   source name: the result is one pool text, so the caller needs no fixed
+   scratch buffer and a name longer than the old 160-byte row is kept whole.
+   Returns NULL on OOM or when the joined text passes `TEXT_LIMIT`. */
+pub const char *ct_intern_join(const char *a, const char *b);
 /* Release every interned text and the table. Pointers handed out before the
    call are dangling afterwards; no caller may hold one across a reset. */
 pub void ct_intern_reset(void);
@@ -149,6 +155,27 @@ const char *ct_intern(const char *s)
 const char *ct_intern_len(const char *s, int len)
 {
     return ct_intern_put(s, len);
+}
+
+const char *ct_intern_join(const char *a, const char *b)
+{
+    size_t la, lb;
+    char *buf;
+    const char *v;
+
+    if (!a) a = "";
+    if (!b) b = "";
+    la = strlen(a);
+    lb = strlen(b);
+    if (la + lb > (size_t)TEXT_LIMIT) return (const char *)0;
+    buf = (char *)malloc(la + lb + 1);
+    if (!buf) return (const char *)0;
+    if (la > 0) memcpy(buf, a, la);
+    if (lb > 0) memcpy(buf + la, b, lb);
+    buf[la + lb] = 0;
+    v = ct_intern_len(buf, (int)(la + lb));
+    free(buf);
+    return v;
 }
 
 void ct_intern_reset(void)

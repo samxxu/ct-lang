@@ -27,6 +27,7 @@ import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
@@ -147,6 +148,7 @@ impl ExprInstantiate for Expr {
         char cname[MAX_TEXT];
         char tmp[MAX_TEXT];
         char msg[MAX_TEXT];
+        const char *itxt;
         int i, k, ni, fi, suffix, taken, seq;
 
         seq = 1;
@@ -201,17 +203,20 @@ impl ExprInstantiate for Expr {
             memcpy(self->sym->funcs[ni].pann, self->sym->funcs[gfi].pann,
                    (size_t)self->sym->funcs[gfi].nparams);
         }
-        snprintf(self->sym->funcs[ni].cname, MAX_TEXT, "%s", cname);
-        snprintf(self->sym->funcs[ni].name, MAX_TEXT, "%s", cname);
+        self->sym->funcs[ni].cname = runtime::text::ct_intern(cname);
+        if (!self->sym->funcs[ni].cname) return self->sup->fail("out of memory");
+        self->sym->funcs[ni].name = self->sym->funcs[ni].cname;
         self->sym->funcs[ni].is_static = 1;
         self->sym->funcs[ni].is_pub = 0;
         self->sym->funcs[ni].ntparams = 0;
-        self->sym->funcs[ni].tparam[0] = 0;
-        snprintf(self->sym->funcs[ni].ret, MAX_TEXT, "%s",
-                 frontend::sym::ct_generic_subst(self->sym->funcs[gfi].ret,
-                                                 self->sym->funcs[gfi].tparam, targ,
-                                                 tmp, sizeof tmp) == 0
-                     ? tmp : self->sym->funcs[gfi].ret);
+        self->sym->funcs[ni].tparam = runtime::text::ct_intern("");
+        if (!self->sym->funcs[ni].tparam) return self->sup->fail("out of memory");
+        itxt = frontend::sym::ct_generic_subst(self->sym->funcs[gfi].ret,
+                                               self->sym->funcs[gfi].tparam, targ,
+                                               tmp, sizeof tmp) == 0
+                   ? tmp : self->sym->funcs[gfi].ret;
+        self->sym->funcs[ni].ret = runtime::text::ct_intern(itxt);
+        if (!self->sym->funcs[ni].ret) return self->sup->fail("out of memory");
         for (k = 0; k < self->sym->funcs[gfi].nparams; k++)
             if (frontend::sym::ct_generic_subst(self->sym->funcs[gfi].ptype + (k) * MAX_TEXT,
                                                 self->sym->funcs[gfi].tparam, targ,
@@ -426,12 +431,14 @@ impl ExprInstantiate for Expr {
                                             cargs[pi2], sub2, MAX_TEXT) != 0)
                         return self->sup->fail("type is too long");
                 }
-                snprintf(self->sym->structs[si2].fields[fi2].name, MAX_TEXT,
-                         "%s", tp[ti2].fields[fi2].name);
-                snprintf(self->sym->structs[si2].fields[fi2].type, MAX_TEXT,
-                         "%s", sub2);
-                snprintf(self->sym->structs[si2].fields[fi2].dims, MAX_TEXT,
-                         "%s", tp[ti2].fields[fi2].dims);
+                self->sym->structs[si2].fields[fi2].name =
+                    tp[ti2].fields[fi2].name;
+                self->sym->structs[si2].fields[fi2].type =
+                    runtime::text::ct_intern(sub2);
+                if (!self->sym->structs[si2].fields[fi2].type)
+                    return self->sup->fail("out of memory");
+                self->sym->structs[si2].fields[fi2].dims =
+                    tp[ti2].fields[fi2].dims;
                 self->sym->structs[si2].fields[fi2].is_bitfield =
                     tp[ti2].fields[fi2].is_bitfield;
                 self->sym->structs[si2].fields[fi2].is_pub =
@@ -440,8 +447,7 @@ impl ExprInstantiate for Expr {
             }
             self->sym->structs[si2].nfields = tp[ti2].nfields;
             for (fi2 = 0; fi2 < tp[ti2].nuse; fi2++)
-                snprintf(self->sym->structs[si2].use[fi2], MAX_TEXT,
-                         "%s", tp[ti2].use[fi2]);
+                self->sym->structs[si2].use[fi2] = tp[ti2].use[fi2];
             self->sym->structs[si2].nuse = tp[ti2].nuse;
         }
         self->sym->structs[si2].defined = 1;

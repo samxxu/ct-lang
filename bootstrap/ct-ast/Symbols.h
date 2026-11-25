@@ -174,7 +174,7 @@ extern const struct frontend_sym_TypeAliasOps_vtbl frontend_sym_Symbols_frontend
 struct frontend_sym_TypeAlias {
     const char * name;
     const char * target;
-    char path[1024];
+    const char * path;
     int line;
     int is_pub;
     int owner;
@@ -182,9 +182,9 @@ struct frontend_sym_TypeAlias {
     int resolving;
 };
 struct frontend_sym_Fn {
-    char name[160];
-    char cname[160];
-    char ret[160];
+    const char * name;
+    const char * cname;
+    const char * ret;
     char * ptype;
     char * pdim;
     char * pann;
@@ -194,18 +194,18 @@ struct frontend_sym_Fn {
     int is_pub;
     int variadic;
     int ntparams;
-    char tparam[160];
-    char bound[160];
+    const char * tparam;
+    const char * bound;
     int body;
     int line;
     int ret_owned;
     int attr;
 };
 struct frontend_sym_Var {
-    char name[160];
-    char type[160];
+    const char * name;
+    const char * type;
     int is_array;
-    char dims[160];
+    const char * dims;
     int st;
     int owned;
     int own_line;
@@ -218,8 +218,8 @@ struct frontend_sym_Var {
     int cview;
     int is_param;
     int is_fnparam;
-    char cname[160];
-    char ns[160];
+    const char * cname;
+    const char * ns;
     int is_global;
     int is_static;
     int imported;
@@ -228,7 +228,7 @@ struct frontend_sym_Var {
     int is_closure;
     int closure_id;
     int is_slice;
-    char slice_elem[160];
+    const char * slice_elem;
     int slice_const;
     int slice_escape;
     int str_escape;
@@ -249,15 +249,15 @@ struct frontend_sym_Closure {
     int col;
 };
 struct frontend_sym_MethAnn {
-    char host[160];
-    char name[160];
+    const char * host;
+    const char * name;
     char * pann;
     int nparams;
     int pcap;
 };
 struct frontend_sym_MethodSig {
-    char name[160];
-    char ret[160];
+    const char * name;
+    const char * ret;
     char * ptype;
     char * pann;
     int nparams;
@@ -269,15 +269,15 @@ struct frontend_sym_MethodSig {
     int line;
 };
 struct frontend_sym_Trait {
-    char name[160];
+    const char * name;
     struct frontend_sym_MethodSig * m;
     int nm;
     int mcap;
     int is_pub;
     int is_static;
     int line;
-    char path[160];
-    char ns[160];
+    const char * path;
+    const char * ns;
     int ntparams;
     char * * tparam;
     char * * bound;
@@ -290,17 +290,17 @@ struct frontend_sym_Trait {
     int owner;
 };
 struct frontend_sym_Field {
-    char name[160];
-    char type[160];
+    const char * name;
+    const char * type;
     int line;
     int col;
-    char dims[160];
+    const char * dims;
     int is_pub;
     int is_bitfield;
 };
 struct frontend_sym_StructDef {
-    char name[160];
-    char use[64][160];
+    const char * name;
+    const char * use[64];
     int nuse;
     struct frontend_sym_Field * fields;
     int nfields;
@@ -333,8 +333,8 @@ struct frontend_sym_GenericInst {
     int checked;
 };
 struct frontend_sym_StructTmpl {
-    char name[160];
-    char full[160];
+    const char * name;
+    const char * full;
     int ntparams;
     char * * tparam;
     char * * bound;
@@ -343,7 +343,7 @@ struct frontend_sym_StructTmpl {
     struct frontend_sym_Field * fields;
     int nfields;
     int fcap;
-    char use[64][160];
+    const char * use[64];
     int nuse;
     int uses_drop;
     int uses_handback;
@@ -353,8 +353,8 @@ struct frontend_sym_StructTmpl {
     int line;
 };
 struct frontend_sym_StructInst {
-    char name[160];
-    char tmpl[160];
+    const char * name;
+    const char * tmpl;
     char * * carg;
     char * * ctype;
     int acap;
@@ -367,14 +367,14 @@ struct frontend_sym_StructInst {
     int emitted;
 };
 struct frontend_sym_StructImpl {
-    char tmpl[160];
+    const char * tmpl;
     int ntparams;
     char * * tparam;
     int tcap;
     int nargs;
     char * * pat;
     int pcap;
-    char use[160];
+    const char * use;
     int node;
     int owner;
     int line;
@@ -442,8 +442,8 @@ struct frontend_sym_Symbols {
     int ntb;
     char ns[160];
     const char * path;
-    char * alias_name;
-    char * alias_full;
+    const char * * alias_name;
+    const char * * alias_full;
     int nalias;
     int aliascap;
     struct frontend_sym_TypeAlias * taliases;

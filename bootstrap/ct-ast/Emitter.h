@@ -19,6 +19,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "EmitterText.h"
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"

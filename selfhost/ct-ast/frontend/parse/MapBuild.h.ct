@@ -25,6 +25,7 @@ import frontend::module::MapTable::MapBind as MapBind;
 import frontend::module::MapTable;
 import frontend::parse::Expr;
 import frontend::parse::ParseSupport;
+import runtime::text::Intern;
 import frontend::sym::Symbols;
 import tool::diag::Diag;
 
@@ -611,6 +612,7 @@ impl MapBuildOps for MapBuild {
         char src[MAX_TEXT];
         char dst[MAX_TEXT];
         char param[MAX_TEXT];
+        char callbuf[MAX_TEXT];
         char msg[MAX_TEXT * 2];
         struct MapTable *m;
         struct MapBind *b;
@@ -647,25 +649,34 @@ impl MapBuildOps for MapBuild {
             return self->sup->fail("expected '->' in a map binding");
         if (mapb_ensure_maps(self, *self->nmaps + 1) != 0) return -1;
         m = &(*self->maps)[*self->nmaps];
-        snprintf(m->trait, MAX_TEXT, "%s", "");
-        snprintf(m->inst, MAX_TEXT, "%s", "");
-        snprintf(m->cname, MAX_TEXT, "%s", "");
-        snprintf(m->prefix, MAX_TEXT, "%s", "");
-        snprintf(m->vtable, MAX_TEXT, "%s", "");
-        snprintf(m->host_type, MAX_TEXT, "%s", src);
-        snprintf(m->bind_dst, MAX_TEXT, "%s", dst);
+        m->trait = runtime::text::ct_intern("");
+        if (!m->trait) return self->sup->fail("out of memory");
+        m->inst = runtime::text::ct_intern("");
+        if (!m->inst) return self->sup->fail("out of memory");
+        m->cname = runtime::text::ct_intern("");
+        if (!m->cname) return self->sup->fail("out of memory");
+        m->prefix = runtime::text::ct_intern("");
+        if (!m->prefix) return self->sup->fail("out of memory");
+        m->vtable = runtime::text::ct_intern("");
+        if (!m->vtable) return self->sup->fail("out of memory");
+        m->host_type = runtime::text::ct_intern(src);
+        if (!m->host_type) return self->sup->fail("out of memory");
+        m->bind_dst = runtime::text::ct_intern(dst);
+        if (!m->bind_dst) return self->sup->fail("out of memory");
         m->ns_host = 0;
         m->is_static = 1;
         m->type_host = 1;
         m->is_binding = 1;
-        snprintf(m->path, MAX_TEXT, "%s", self->sup->mem->path);
+        m->path = runtime::text::ct_intern(self->sup->mem->path);
+        if (!m->path) return self->sup->fail("out of memory");
         m->line = line;
         m->unit = unit;
         if (mapb_ensure_binds(self, m, 1) != 0) return -1;
         m->nb = 1;
         b = &m->b[0];
         if (mapb_ensure_params(self, b, 1) != 0) return -1;
-        snprintf(b->method, MAX_TEXT, "%s", "from");
+        b->method = runtime::text::ct_intern("from");
+        if (!b->method) return self->sup->fail("out of memory");
         snprintf(b->params[0], MAX_TEXT, "%s", param);
         b->nparams = 1;
         b->ti = -1;
@@ -673,7 +684,8 @@ impl MapBuildOps for MapBuild {
         b->direct = 0;
         b->recv = 1;
         b->variadic = 0;
-        b->wrapper[0] = 0;
+        b->wrapper = runtime::text::ct_intern("");
+        if (!b->wrapper) return self->sup->fail("out of memory");
         b->line = line;
         /* capture the recipe verbatim, exactly like the static `map trait`
            path: it is validated as one call, then expanded at the use site */
@@ -693,26 +705,29 @@ impl MapBuildOps for MapBuild {
             if (q == 0 && (c == '"' || c == '\'')) q = c;
             else if (q != 0 && c == q) q = 0;
             else if (q != 0 && c == '\\' && self->lex->src[i + 1]) {
-                b->call[n] = (char)c;
+                callbuf[n] = (char)c;
                 n++;
                 i++;
                 c = (unsigned char)self->lex->src[i];
             } else if (q == 0 && c == '(') depth++;
             else if (q == 0 && c == ')') depth--;
-            b->call[n] = (char)c;
+            callbuf[n] = (char)c;
             n++;
             i++;
         }
         if (eof) return self->sup->fail("unterminated map binding recipe");
         if (long_call) return self->sup->fail("map binding recipe is too long");
-        while (n > 0 && (b->call[n - 1] == ' ' || b->call[n - 1] == '\t'
-                         || b->call[n - 1] == '\n' || b->call[n - 1] == '\r')) n--;
-        b->call[n] = 0;
+        while (n > 0 && (callbuf[n - 1] == ' ' || callbuf[n - 1] == '\t'
+                         || callbuf[n - 1] == '\n' || callbuf[n - 1] == '\r')) n--;
+        callbuf[n] = 0;
         self->lex->pos = i;
         self->sup->lex_next();
         if (self->sup->expect(";") != 0) return -1;
         if (self->sup->expect("}") != 0) return -1;
+        b->call = callbuf;
         if (check_static_call(self, m, b) != 0) return -1;
+        b->call = runtime::text::ct_intern(callbuf);
+        if (!b->call) return self->sup->fail("out of memory");
         for (k = 0; k < *self->nmaps; k++) {
             if (!(*self->maps)[k].is_binding) continue;
             if ((*self->maps)[k].unit != unit) continue;
@@ -739,6 +754,7 @@ impl MapBuildOps for MapBuild {
         char hostcn[MAX_TEXT];
         char host_type[MAX_TEXT];
         char wname[MAX_TEXT];
+        char callbuf[MAX_TEXT];
         char msg[MAX_TEXT];
         struct MapTable *m;
         struct MapBind *b;
@@ -901,16 +917,23 @@ impl MapBuildOps for MapBuild {
         if (self->sup->expect("{") != 0) return -1;
         if (mapb_ensure_maps(self, *self->nmaps + 1) != 0) return -1;
         m = &(*self->maps)[*self->nmaps];
-        snprintf(m->trait, MAX_TEXT, "%s", rtrait);
-        snprintf(m->inst, MAX_TEXT, "%s", inst);
-        snprintf(m->cname, MAX_TEXT, "%s", icn);
-        snprintf(m->prefix, MAX_TEXT, "%s", prefix);
-        snprintf(m->vtable, MAX_TEXT, "%s", vt);
+        m->trait = runtime::text::ct_intern(rtrait);
+        if (!m->trait) return self->sup->fail("out of memory");
+        m->inst = runtime::text::ct_intern(inst);
+        if (!m->inst) return self->sup->fail("out of memory");
+        m->cname = runtime::text::ct_intern(icn);
+        if (!m->cname) return self->sup->fail("out of memory");
+        m->prefix = runtime::text::ct_intern(prefix);
+        if (!m->prefix) return self->sup->fail("out of memory");
+        m->vtable = runtime::text::ct_intern(vt);
+        if (!m->vtable) return self->sup->fail("out of memory");
         m->ns_host = ns_host;
         m->is_static = is_static;
         m->type_host = type_host;
-        snprintf(m->host_type, MAX_TEXT, "%s", host_type);
-        snprintf(m->path, MAX_TEXT, "%s", self->sup->mem->path);
+        m->host_type = runtime::text::ct_intern(host_type);
+        if (!m->host_type) return self->sup->fail("out of memory");
+        m->path = runtime::text::ct_intern(self->sup->mem->path);
+        if (!m->path) return self->sup->fail("out of memory");
         m->nb = 0;
         m->line = line;
         m->unit = unit;
@@ -920,7 +943,9 @@ impl MapBuildOps for MapBuild {
             b = &m->b[m->nb];
             b->line = self->lex->tokline;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
-            self->lex->tok_copy(b->method, MAX_TEXT);
+            b->method = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                      self->lex->tokstr.len);
+            if (!b->method) return self->sup->fail("out of memory");
             mi = -1;
             for (k = 0; k < self->sym->traits[ti].nm; k++)
                 if (strcmp(self->sym->traits[ti].m[k].name, b->method) == 0) { mi = k; break; }
@@ -1003,20 +1028,20 @@ impl MapBuildOps for MapBuild {
                 } else if (q != 0 && c == q) {
                     q = 0;
                 } else if (q != 0 && c == '\\' && self->lex->src[i + 1]) {
-                    b->call[n] = (char)c; n++; i++;
+                    callbuf[n] = (char)c; n++; i++;
                     c = (unsigned char)self->lex->src[i];
                 } else if (q == 0 && c == '(') {
                     depth++;
                 } else if (q == 0 && c == ')') {
                     depth--;
                 }
-                b->call[n] = (char)c; n++; i++;
+                callbuf[n] = (char)c; n++; i++;
             }
             if (eof) return self->sup->fail("unterminated map call");
             if (long_call) return self->sup->fail("map call is too long");
-            while (n > 0 && (b->call[n - 1] == ' ' || b->call[n - 1] == '\t'
-                             || b->call[n - 1] == '\n' || b->call[n - 1] == '\r')) n--;
-            b->call[n] = 0;
+            while (n > 0 && (callbuf[n - 1] == ' ' || callbuf[n - 1] == '\t'
+                             || callbuf[n - 1] == '\n' || callbuf[n - 1] == '\r')) n--;
+            callbuf[n] = 0;
             self->lex->pos = i;
             self->sup->lex_next();
             /* `-> f` with a bare name binds the C function itself: no wrapper is
@@ -1025,12 +1050,13 @@ impl MapBuildOps for MapBuild {
                `#include`, so ct does not look it up or check the signature.
                A static recipe is always a call and has no wrapper. */
             b->direct = 0;
+            b->call = callbuf;
             if (is_static) {
                 if (check_static_call(self, m, b) != 0) return -1;
             } else {
-                ident = (b->call[0] != 0) && !(b->call[0] >= '0' && b->call[0] <= '9');
-                for (j2 = 0; ident && b->call[j2]; j2++) {
-                    char cc = b->call[j2];
+                ident = (callbuf[0] != 0) && !(callbuf[0] >= '0' && callbuf[0] <= '9');
+                for (j2 = 0; ident && callbuf[j2]; j2++) {
+                    char cc = callbuf[j2];
                     if (!((cc >= 'a' && cc <= 'z') || (cc >= 'A' && cc <= 'Z')
                           || (cc >= '0' && cc <= '9') || cc == '_'))
                         ident = 0;
@@ -1041,17 +1067,21 @@ impl MapBuildOps for MapBuild {
                 if (b->direct && m->ns_host)
                     return self->sup->fail("a namespace host has no self: bind with a wrapper call");
                 if (!b->direct && self->check_call((char *)b, inst) != 0) return -1;
-                if (!b->direct && self->rewrite_globals(b->call) != 0) return -1;
+                if (!b->direct && self->rewrite_globals(callbuf) != 0) return -1;
             }
+            b->call = runtime::text::ct_intern(callbuf);
+            if (!b->call) return self->sup->fail("out of memory");
             if (self->sup->expect(";") != 0) return -1;
             /* `wrapper` and `method` are sibling arrays of the same struct, so
                GCC's -Wrestrict cannot prove they miss each other; build the
                name aside and copy it in. A static map has no wrapper. */
             if (is_static) {
-                b->wrapper[0] = 0;
+                b->wrapper = runtime::text::ct_intern("");
+                if (!b->wrapper) return self->sup->fail("out of memory");
             } else {
                 snprintf(wname, sizeof wname, "%s_%s", m->prefix, b->method);
-                snprintf(b->wrapper, MAX_TEXT, "%s", wname);
+                b->wrapper = runtime::text::ct_intern(wname);
+                if (!b->wrapper) return self->sup->fail("out of memory");
             }
             b->ti = ti;
             b->mi = mi;

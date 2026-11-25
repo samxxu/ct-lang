@@ -4,19 +4,21 @@
  * A unit is plain data shared by the module layer (which fills it), the cache
  * (which folds its dependencies into a key) and the emitter (which reads the
  * ranges). It lives in its own unit so those three can name it without going
- * through the driver object; the array lengths are literals because a `pub
- * struct` lands in a header that carries no macros (160 = MAX_TEXT and 32 =
- * MAX_IMPORTS of the module layer). S1a-0 C2l: `path` and the three shim
+ * through the driver object; the `dep` rows keep a 160-byte stride because a
+ * `pub struct` lands in a header that carries no macros (160 = MAX_TEXT and
+ * 32 = MAX_IMPORTS of the module layer). S1a-0 C2l: `path` and the three shim
  * paths are owned blocks (`ct_scratch_*` from tool/sh), not `char[1024]`, so
  * a unit path is never cut at the old MAX_PATH. They are released with the
- * run's scratch pool, after every consumer has finished.
+ * run's scratch pool, after every consumer has finished. S1a-0 C2n-1:
+ * `base` / `ns` / `nsprefix` are interned pool pointers, so a row reset is a
+ * pointer drop, not a free, and a long unit name is kept whole.
  */
 namespace frontend::module;
 pub struct Unit {
     char *path;                 /* owned by the run's scratch pool */
-    char base[160];
-    char ns[160];
-    char nsprefix[160];         /* `ns` in mangled form (`a_b_`), for globals */
+    const char *base;           /* interned: the file's base name */
+    const char *ns;             /* interned: `a::b`, as written */
+    const char *nsprefix;       /* interned: `ns` in mangled form (`a_b_`) */
     /* S1a-0 C1: the dependency rows grow on demand (old cap 32). `dep` is a
        flat block, one 160-byte row per import, because a pub struct lands in a
        header that carries no macros and a pointer-to-array declarator is not

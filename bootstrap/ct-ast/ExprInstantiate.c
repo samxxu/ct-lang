@@ -9,6 +9,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Diag.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
@@ -190,6 +191,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
     char cname[MAX_TEXT];
     char tmp[MAX_TEXT];
     char msg[MAX_TEXT];
+    const char * itxt;
     int i;
     int k;
     int ni;
@@ -248,13 +250,23 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
         memcpy(_self->sym->funcs[ni].pdim, _self->sym->funcs[gfi].pdim, ((size_t)(_self->sym->funcs[gfi].nparams) * MAX_TEXT));
         memcpy(_self->sym->funcs[ni].pann, _self->sym->funcs[gfi].pann, (size_t)(_self->sym->funcs[gfi].nparams));
     }
-    snprintf(_self->sym->funcs[ni].cname, MAX_TEXT, "%s", cname);
-    snprintf(_self->sym->funcs[ni].name, MAX_TEXT, "%s", cname);
+    _self->sym->funcs[ni].cname = runtime_text_ct_intern(cname);
+    if ((!_self->sym->funcs[ni].cname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->sym->funcs[ni].name = _self->sym->funcs[ni].cname;
     _self->sym->funcs[ni].is_static = 1;
     _self->sym->funcs[ni].is_pub = 0;
     _self->sym->funcs[ni].ntparams = 0;
-    _self->sym->funcs[ni].tparam[0] = 0;
-    snprintf(_self->sym->funcs[ni].ret, MAX_TEXT, "%s", ((frontend_sym_ct_generic_subst(_self->sym->funcs[gfi].ret, _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) ? tmp : _self->sym->funcs[gfi].ret));
+    _self->sym->funcs[ni].tparam = runtime_text_ct_intern("");
+    if ((!_self->sym->funcs[ni].tparam)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    itxt = ((frontend_sym_ct_generic_subst(_self->sym->funcs[gfi].ret, _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) ? tmp : _self->sym->funcs[gfi].ret);
+    _self->sym->funcs[ni].ret = runtime_text_ct_intern(itxt);
+    if ((!_self->sym->funcs[ni].ret)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     for (k = 0; k < _self->sym->funcs[gfi].nparams; k++) {
         if (frontend_sym_ct_generic_subst((_self->sym->funcs[gfi].ptype + (k * MAX_TEXT)), _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) {
             snprintf((_self->sym->funcs[ni].ptype + (k * MAX_TEXT)), MAX_TEXT, "%s", tmp);
@@ -506,9 +518,12 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
                 }
             }
-            snprintf(_self->sym->structs[si2].fields[fi2].name, MAX_TEXT, "%s", tp[ti2].fields[fi2].name);
-            snprintf(_self->sym->structs[si2].fields[fi2].type, MAX_TEXT, "%s", sub2);
-            snprintf(_self->sym->structs[si2].fields[fi2].dims, MAX_TEXT, "%s", tp[ti2].fields[fi2].dims);
+            _self->sym->structs[si2].fields[fi2].name = tp[ti2].fields[fi2].name;
+            _self->sym->structs[si2].fields[fi2].type = runtime_text_ct_intern(sub2);
+            if ((!_self->sym->structs[si2].fields[fi2].type)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            _self->sym->structs[si2].fields[fi2].dims = tp[ti2].fields[fi2].dims;
             _self->sym->structs[si2].fields[fi2].is_bitfield = tp[ti2].fields[fi2].is_bitfield;
             _self->sym->structs[si2].fields[fi2].is_pub = tp[ti2].fields[fi2].is_pub;
             if (_self->__frontend_parse_exprinstantiate_vptr->inst_register_nested(_self, sub2, (depth + 1)) != 0) {
@@ -517,7 +532,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
         }
         _self->sym->structs[si2].nfields = tp[ti2].nfields;
         for (fi2 = 0; fi2 < tp[ti2].nuse; fi2++) {
-            snprintf(_self->sym->structs[si2].use[fi2], MAX_TEXT, "%s", tp[ti2].use[fi2]);
+            _self->sym->structs[si2].use[fi2] = tp[ti2].use[fi2];
         }
         _self->sym->structs[si2].nuse = tp[ti2].nuse;
     }

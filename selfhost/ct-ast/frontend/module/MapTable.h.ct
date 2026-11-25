@@ -14,21 +14,21 @@
 namespace frontend::module;
 /* One `callee(...)` in a function body, for the map's call graph. */
 pub struct Call {
-    char caller[160];
-    char callee[160];
+    const char *caller;
+    const char *callee;
     int  line;
 }
 
 /* One `method(params) -> call` inside a `map` block (Phase 11.1). */
 pub struct MapBind {
-    char method[160];               /* trait method name */
+    const char *method;             /* trait method name */
     char **params;                  /* CT-side parameter names, from the map's (); row stride MAX_TEXT */
     int  pcap;                      /* rows allocated for params/uses/sizeofs */
     int  nparams;
     int  ti;                        /* index into the trait table */
     int  mi;                        /* index into that trait's m[] */
-    char call[160];                 /* raw, validated RHS text (no trailing ';') */
-    char wrapper[160];              /* "<inst>_<Trait>_<method>" (empty when static) */
+    const char *call;               /* raw, validated RHS text (no trailing ';') */
+    const char *wrapper;            /* "<inst>_<Trait>_<method>" (empty when static) */
     int  direct;                    /* 1 when `-> f` binds the C function itself */
     int  recv;                      /* 1 when the first parameter is a type-host receiver */
     int *uses;                      /* evaluation occurrences of each parameter in the recipe */
@@ -40,24 +40,24 @@ pub struct MapBind {
 /* `map trait T for instance x { ... }` binds trait methods to a global instance;
    `map trait T for namespace ns { ... }` binds them to a namespace (SH-20). */
 pub struct MapTable {
-    char trait[160];
-    char inst[160];                 /* the variable's source name, or the namespace path */
-    char cname[160];                /* the variable's C spelling, or the namespace prefix */
-    char prefix[160];               /* what wrappers and the vtable are named after */
-    char vtable[160];               /* "<prefix>_vtable" */
+    const char *trait;
+    const char *inst;               /* the variable's source name, or the namespace path */
+    const char *cname;              /* the variable's C spelling, or the namespace prefix */
+    const char *prefix;             /* what wrappers and the vtable are named after */
+    const char *vtable;             /* "<prefix>_vtable" */
     int  ns_host;                   /* 1 when the host is a namespace, not an object */
     int  is_static;                 /* declared in a `.m.ct` unit: no wrapper, no vtable */
     int  type_host;                 /* 1 when the host is a C type (`for type`) */
-    char host_type[160];            /* the type host's receiver spelling */
+    const char *host_type;          /* the type host's receiver spelling */
     /* LANG-29 S4 / B4: a compile-time `map binding <Source> -> <Target>` entry.
        It sits in the same table so import reachability (`map_visible`) is shared;
        it has no trait, no wrapper and no vtable. `bind_dst` is the target type. */
     int  is_binding;
-    char bind_dst[160];
+    const char *bind_dst;
     struct MapBind *b;              /* the binding block (initial MAX_METHODS rows) */
     int  bcap;                      /* rows allocated for b */
     int  nb;
     int  line;
     int  unit;                      /* the unit that declared this map */
-    char path[160];                 /* that unit's source path, for duplicates */
+    const char *path;               /* that unit's source path, for duplicates */
 }

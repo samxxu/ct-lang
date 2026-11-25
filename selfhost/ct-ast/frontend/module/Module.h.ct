@@ -33,6 +33,7 @@ import frontend::sym::Symbols::StructTmpl as StructTmpl;
 import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import tool::cache::Cache;
 import tool::diag::Diag;
 import tool::sh::Sh;
@@ -1085,8 +1086,17 @@ impl ModuleOps for Module {
         self->units[u].ndep = 0;
         self->units[u].prog = -1;
         self->units[u].digest = 0;
-        self->units[u].ns[0] = 0;
-        if (self->base_name(path, self->units[u].base, MAX_TEXT, &is_hdr, &is_map) != 0) return -1;
+        self->units[u].ns = runtime::text::ct_intern("");
+        if (!self->units[u].ns) return self->fail("out of memory");
+        self->units[u].nsprefix = runtime::text::ct_intern("");
+        if (!self->units[u].nsprefix) return self->fail("out of memory");
+        {
+            char basebuf[MAX_TEXT];
+            if (self->base_name(path, basebuf, sizeof basebuf, &is_hdr, &is_map) != 0)
+                return -1;
+            self->units[u].base = runtime::text::ct_intern(basebuf);
+            if (!self->units[u].base) return self->fail("out of memory");
+        }
         self->units[u].is_hdr = is_hdr;
         self->units[u].is_map = is_map;
         /* LANG-11: `<base>.h.ct` and `<base>.ct` would both emit `<base>.c`
@@ -1246,7 +1256,7 @@ impl ModuleOps for Module {
            owner used when it declared the global); an `extern` declaration keeps
            the library's own name and has no namespace to qualify with. */
         for (i = 0; i < self->units[u].ndep; i++) {
-            char gcn[MAX_TEXT];
+            const char *gcn;
             char gns[MAX_TEXT];
             const char *gname;
             size_t gl;
@@ -1256,16 +1266,17 @@ impl ModuleOps for Module {
                 if (self->arena->nodes[gn].kind != N_GLOBAL || self->arena->nodes[gn].d != 1) continue;
                 gname = self->arena->nodes[gn].text2;
                 if (self->arena->nodes[gn].aux == 2 || !self->units[dn].nsprefix[0]) {
-                    snprintf(gcn, sizeof gcn, "%s", gname);
+                    gcn = runtime::text::ct_intern(gname);
+                    if (!gcn) return self->fail("out of memory");
                     gns[0] = 0;
                 } else {
-                    if (snprintf(gcn, sizeof gcn, "%s%s",
-                                 self->units[dn].nsprefix, gname) >= (int)sizeof gcn)
-                        return self->fail("variable name is too long");
+                    gcn = runtime::text::ct_intern_join(self->units[dn].nsprefix, gname);
+                    if (!gcn) return self->fail("out of memory");
                     snprintf(gns, sizeof gns, "%s", self->units[dn].nsprefix);
                     gl = strlen(gns);
                     if (gl > 0) gns[gl - 1] = 0;
                 }
+                if (!gcn) return self->fail("out of memory");
                 if (self->sym->declare_global(gname, self->arena->nodes[gn].text,
                                               gcn, gns, 1) < 0)
                     return self->fail(self->sym->last_error());
@@ -1275,8 +1286,10 @@ impl ModuleOps for Module {
                     int vi = self->sym->find_var(gname);
                     if (vi >= 0) {
                         self->sym->vars[vi].is_array = 1;
-                        snprintf(self->sym->vars[vi].dims, MAX_TEXT, "%s",
-                                 self->arena->nodes[gn].text3);
+                        self->sym->vars[vi].dims =
+                            runtime::text::ct_intern(self->arena->nodes[gn].text3);
+                        if (!self->sym->vars[vi].dims)
+                            return self->fail("out of memory");
                     }
                 }
             }
@@ -1285,7 +1298,7 @@ impl ModuleOps for Module {
                under the owner's C spelling, exactly as the owner declared them. */
             for (gn = self->arena->nodes[self->units[dn].prog].a; gn >= 0;
                  gn = self->arena->nodes[gn].next) {
-                char ccn[MAX_TEXT];
+                const char *ccn;
                 char cns[MAX_TEXT];
                 const char *cmn;
                 size_t cl;
@@ -1298,16 +1311,15 @@ impl ModuleOps for Module {
                 for (mv = self->arena->nodes[gn].a; mv >= 0; mv = self->arena->nodes[mv].next) {
                     cmn = self->arena->nodes[mv].text2;
                     if (!self->units[dn].nsprefix[0]) {
-                        snprintf(ccn, sizeof ccn, "%s", cmn);
+                        ccn = runtime::text::ct_intern(cmn);
                         cns[0] = 0;
                     } else {
-                        if (snprintf(ccn, sizeof ccn, "%s%s",
-                                     self->units[dn].nsprefix, cmn) >= (int)sizeof ccn)
-                            return self->fail("variable name is too long");
+                        ccn = runtime::text::ct_intern_join(self->units[dn].nsprefix, cmn);
                         snprintf(cns, sizeof cns, "%s", self->units[dn].nsprefix);
                         cl = strlen(cns);
                         if (cl > 0) cns[cl - 1] = 0;
                     }
+                    if (!ccn) return self->fail("out of memory");
                     if (self->sym->declare_const(cmn, ccn, cns, 1) < 0)
                         return self->fail(self->sym->last_error());
                     if (self->sym->declare_const(cmn, ccn,
@@ -1399,10 +1411,12 @@ impl ModuleOps for Module {
         self->units[u].fn_end = self->sym->nfunc;
         self->units[u].tr_end = self->sym->ntraits;
         self->units[u].call_end = self->p->ncalls;
-        snprintf(self->units[u].ns, MAX_TEXT, "%s", self->p->ns_decl);
+        self->units[u].ns = runtime::text::ct_intern(self->p->ns_decl);
+        if (!self->units[u].ns) return self->fail("out of memory");
         /* `sym->ns` is the mangled prefix the unit's parser used for its
            exported names; its globals need the same prefix here. */
-        snprintf(self->units[u].nsprefix, MAX_TEXT, "%s", self->sym->ns);
+        self->units[u].nsprefix = runtime::text::ct_intern(self->sym->ns);
+        if (!self->units[u].nsprefix) return self->fail("out of memory");
         /* S1a-0 C1: drop this unit's import rows; the caller (or the next
            top-level load) starts from the slice base again, so the parser's
            block stays as large as the widest single unit, not the build. */
