@@ -296,7 +296,7 @@ struct frontend_parse_Expr {
     int cl_stack[16];
     int cl_pstart[16];
     int ncl_stack;
-    struct frontend_module_MapTable * maps;
+    struct frontend_module_MapTable * * maps;
     int * nmaps;
     int nview;
     int view_vi[64];

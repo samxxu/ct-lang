@@ -113,7 +113,7 @@ struct frontend_type_TypeCheck {
     struct runtime_arena_Arena * arena;
     struct frontend_sym_Symbols * sym;
     struct frontend_lex_Lexer * lex;
-    struct frontend_module_MapTable * maps;
+    struct frontend_module_MapTable * * maps;
     int * nmaps;
     char errmsg[160];
     const struct frontend_type_TypeOps_vtbl *__frontend_type_typeops_vptr;

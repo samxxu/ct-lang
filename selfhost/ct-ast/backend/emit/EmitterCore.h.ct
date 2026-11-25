@@ -151,7 +151,9 @@ pub struct Emitter {
     int  io_mask;
     /* PH-69-R1: `ct check` reuses the build pipeline but must not write. */
     int  no_write;
-    struct MapTable  *maps;   int *nmaps;
+    /* S1a-0 C1: the map table grows while parsing; the emitter holds the
+       parser's slot (like `calls`) and dereferences it at every read. */
+    struct MapTable  **maps;  int *nmaps;
     struct Call **calls;  int *ncalls;
     int  *build_mode;
     int  *line_mode;

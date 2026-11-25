@@ -1269,15 +1269,15 @@ static int bind_conv_maps(struct Expr *self, const char *stype, const char *meth
 
     bind_conv_key(stype, sk, sizeof sk);
     for (i = 0; i < *self->nmaps; i++) {
-        if (self->maps[i].is_binding) continue;
-        if (!self->maps[i].is_static || !self->maps[i].type_host) continue;
-        bind_conv_key(self->maps[i].host_type, hk, sizeof hk);
+        if ((*self->maps)[i].is_binding) continue;
+        if (!(*self->maps)[i].is_static || !(*self->maps)[i].type_host) continue;
+        bind_conv_key((*self->maps)[i].host_type, hk, sizeof hk);
         if (strcmp(hk, sk) != 0) continue;
-        for (j = 0; j < self->maps[i].nb; j++) {
-            int ti = self->maps[i].b[j].ti;
-            int mi = self->maps[i].b[j].mi;
-            if (strcmp(self->maps[i].b[j].method, method) != 0) continue;
-            if (self->maps[i].b[j].nparams - self->maps[i].b[j].recv != 0) continue;
+        for (j = 0; j < (*self->maps)[i].nb; j++) {
+            int ti = (*self->maps)[i].b[j].ti;
+            int mi = (*self->maps)[i].b[j].mi;
+            if (strcmp((*self->maps)[i].b[j].method, method) != 0) continue;
+            if ((*self->maps)[i].b[j].nparams - (*self->maps)[i].b[j].recv != 0) continue;
             if (ti < 0 || mi < 0 || mi >= self->sym->traits[ti].nm) continue;
             bind_conv_key(self->sym->traits[ti].m[mi].ret, rk, sizeof rk);
             if (!ret[0]) snprintf(ret, (size_t)cap, "%s",
@@ -1305,10 +1305,10 @@ static int bind_conv_binding(struct Expr *self, const char *stype, const char *t
     bind_conv_key(stype, sk, sizeof sk);
     bind_conv_key(target, tk, sizeof tk);
     for (i = 0; i < *self->nmaps; i++) {
-        if (!self->maps[i].is_binding) continue;
-        bind_conv_key(self->maps[i].host_type, hk, sizeof hk);
+        if (!(*self->maps)[i].is_binding) continue;
+        bind_conv_key((*self->maps)[i].host_type, hk, sizeof hk);
         if (strcmp(hk, sk) != 0) continue;
-        bind_conv_key(self->maps[i].bind_dst, dk, sizeof dk);
+        bind_conv_key((*self->maps)[i].bind_dst, dk, sizeof dk);
         if (strcmp(dk, tk) != 0) continue;
         seen++;
     }
@@ -5849,7 +5849,7 @@ impl ExprOps for Expr {
                                     char msg[MAX_TEXT];
                                     char tmsg[MAX_TEXT];
                                     tmsg[0] = 0;
-                                    hm = self->sup->ty->maps;
+                                    hm = *self->sup->ty->maps;
                                     hn = *self->sup->ty->nmaps;
                                     /* the same host key the emitter and the
                                        type pass compare with: `tnorm` only
@@ -8002,13 +8002,13 @@ impl ExprOps for Expr {
                     hw += (int)strlen(seg[i]);
                 }
                 for (mp = 0; mp < *self->nmaps; mp++) {
-                    if (!self->maps[mp].is_static || !self->maps[mp].ns_host)
+                    if (!(*self->maps)[mp].is_static || !(*self->maps)[mp].ns_host)
                         continue;
-                    if (strcmp(self->maps[mp].inst, host) != 0) continue;
-                    for (bi = 0; bi < self->maps[mp].nb; bi++) {
-                        if (strcmp(self->maps[mp].b[bi].method, seg[nseg - 1]) != 0) continue;
+                    if (strcmp((*self->maps)[mp].inst, host) != 0) continue;
+                    for (bi = 0; bi < (*self->maps)[mp].nb; bi++) {
+                        if (strcmp((*self->maps)[mp].b[bi].method, seg[nseg - 1]) != 0) continue;
                         if (hits < 2)
-                            snprintf(only[hits], MAX_TEXT, "%s", self->maps[mp].trait);
+                            snprintf(only[hits], MAX_TEXT, "%s", (*self->maps)[mp].trait);
                         hits++;
                     }
                 }
@@ -9509,7 +9509,7 @@ void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, 
     g_expr.calls = (struct Call **)calls;
     g_expr.ncalls = (int *)ncalls;
     g_expr.callcap = (int *)callcap;
-    g_expr.maps = (struct MapTable *)maps;
+    g_expr.maps = (struct MapTable **)maps;
     g_expr.nmaps = (int *)nmaps;
     g_expr.postfix_seed = -1;
     g_expr.into_node = -1;

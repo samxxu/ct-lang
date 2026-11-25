@@ -6,10 +6,10 @@
  * wrappers and the JSON map. Keeping them beside Unit means each consumer names
  * them through the module namespace instead of through the driver object.
  *
- * Macros do not cross a unit boundary, so the caps are declared here; MAX_TEXT
- * 160, MAX_PARAMS 16 and MAX_METHODS 64 are the values
- * `frontend/sym/Symbols.h.ct` lists. The array lengths are literals because a
- * `pub struct` lands in a header with no macros.
+ * S1a-0 C1: the per-map binding block and each binding's parameter arrays are
+ * heap blocks that grow on demand (`MAX_METHODS`, `MAX_PARAMS` and `MAX_TEXT`
+ * are still their initial sizes), so this header carries no fixed-length rows:
+ * a `pub struct` lands in a header with no macros and could not name a cap.
  */
 namespace frontend::module;
 /* One `callee(...)` in a function body, for the map's call graph. */
@@ -22,7 +22,8 @@ pub struct Call {
 /* One `method(params) -> call` inside a `map` block (Phase 11.1). */
 pub struct MapBind {
     char method[160];               /* trait method name */
-    char params[16][160];           /* CT-side parameter names, from the map's () */
+    char **params;                  /* CT-side parameter names, from the map's (); row stride MAX_TEXT */
+    int  pcap;                      /* rows allocated for params/uses/sizeofs */
     int  nparams;
     int  ti;                        /* index into the trait table */
     int  mi;                        /* index into that trait's m[] */
@@ -30,8 +31,8 @@ pub struct MapBind {
     char wrapper[160];              /* "<inst>_<Trait>_<method>" (empty when static) */
     int  direct;                    /* 1 when `-> f` binds the C function itself */
     int  recv;                      /* 1 when the first parameter is a type-host receiver */
-    int  uses[16];                  /* evaluation occurrences of each parameter in the recipe */
-    int  sizeofs[16];               /* `sizeof p` occurrences (not evaluated) */
+    int *uses;                      /* evaluation occurrences of each parameter in the recipe */
+    int *sizeofs;                   /* `sizeof p` occurrences (not evaluated) */
     int  variadic;                  /* 1 when the binding list ends in `...` (static only) */
     int  line;
 }
@@ -53,7 +54,8 @@ pub struct MapTable {
        it has no trait, no wrapper and no vtable. `bind_dst` is the target type. */
     int  is_binding;
     char bind_dst[160];
-    struct MapBind b[64];
+    struct MapBind *b;              /* the binding block (initial MAX_METHODS rows) */
+    int  bcap;                      /* rows allocated for b */
     int  nb;
     int  line;
     int  unit;                      /* the unit that declared this map */

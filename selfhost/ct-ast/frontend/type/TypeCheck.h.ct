@@ -90,7 +90,9 @@ pub struct TypeCheck {
     struct Arena *arena;
     struct Symbols *sym;
     struct Lexer   *lex;   /* only for the line of a fresh node */
-    struct MapTable  *maps;  /* the map table itself */
+    /* S1a-0 C1: the map table grows while parsing, so the type pass holds the
+       parser's slot and dereferences it at every read. */
+    struct MapTable  **maps; /* the map table slot */
     int  *nmaps;                        /* points at the driver's count: the table grows while parsing */
     char errmsg[160];
 } use TypeOps;
@@ -246,18 +248,18 @@ static int tc_expr_mcall(struct TypeCheck *self, int n, char *out, int cap)
                 if (!rt[0]) return -1;
                 type_key(rt, rk, MAX_TEXT);
                 for (i = 0; i < (*self->nmaps); i++) {
-                    if (self->maps[i].is_binding) continue;
-                    if (!self->maps[i].is_static || !self->maps[i].type_host) continue;
+                    if ((*self->maps)[i].is_binding) continue;
+                    if (!(*self->maps)[i].is_static || !(*self->maps)[i].type_host) continue;
                     if (self->arena->nodes[n].text3[0]
-                        && strcmp(self->maps[i].trait, self->arena->nodes[n].text3) != 0)
+                        && strcmp((*self->maps)[i].trait, self->arena->nodes[n].text3) != 0)
                         continue;
-                    type_key(self->maps[i].host_type, tk, MAX_TEXT);
+                    type_key((*self->maps)[i].host_type, tk, MAX_TEXT);
                     if (strcmp(tk, rk) != 0) continue;
-                    for (j = 0; j < self->maps[i].nb; j++)
-                        if (strcmp(self->maps[i].b[j].method, self->arena->nodes[n].text2) == 0) {
+                    for (j = 0; j < (*self->maps)[i].nb; j++)
+                        if (strcmp((*self->maps)[i].b[j].method, self->arena->nodes[n].text2) == 0) {
                             if (snprintf(out, (size_t)cap, "%s",
-                                         self->sym->traits[self->maps[i].b[j].ti]
-                                             .m[self->maps[i].b[j].mi].ret) >= cap) return -1;
+                                         self->sym->traits[(*self->maps)[i].b[j].ti]
+                                             .m[(*self->maps)[i].b[j].mi].ret) >= cap) return -1;
                             return 0;
                         }
                 }
@@ -941,9 +943,9 @@ impl TypeOps for TypeCheck {
         }
         if (iname[0]) {
             for (i = 0; i < (*self->nmaps); i++)
-                if (!self->maps[i].is_binding
-                    && strcmp(self->maps[i].inst, iname) == 0
-                    && strcmp(self->maps[i].trait, trait) == 0) {
+                if (!(*self->maps)[i].is_binding
+                    && strcmp((*self->maps)[i].inst, iname) == 0
+                    && strcmp((*self->maps)[i].trait, trait) == 0) {
                     bnode = self->new_node(N_BOX);
                     if (bnode < 0) return -1;
                     self->arena->nodes[bnode].a = n;
@@ -951,7 +953,7 @@ impl TypeOps for TypeCheck {
                     snprintf(self->arena->nodes[bnode].text, MAX_TEXT, "%s", trait);
                     /* the map's instance-level vtable is named from the
                        instance's C spelling, which carries its namespace */
-                    snprintf(self->arena->nodes[bnode].text2, MAX_TEXT, "%s", self->maps[i].cname);
+                    snprintf(self->arena->nodes[bnode].text2, MAX_TEXT, "%s", (*self->maps)[i].cname);
                     return bnode;
                 }
         }

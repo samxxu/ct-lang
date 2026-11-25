@@ -25,6 +25,7 @@
 #define MAX_IMPORTS 32
 #define MAX_IMPORTS_MAX 65536
 #define MAX_INIT_TEXT 16384
+#define MAX_MAPS 64
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
@@ -5255,17 +5256,18 @@ void frontend_parse_ct_parse_bind(void * arena, void * lex, void * sym, void * t
     }
     frontend_parse_g_parse.callcap = MAX_CALLS;
     if ((!frontend_parse_g_maps)) {
-        frontend_parse_g_maps = calloc(64, sizeof((*frontend_parse_g_maps)));
+        frontend_parse_g_maps = calloc(MAX_MAPS, sizeof((*frontend_parse_g_maps)));
         if ((!frontend_parse_g_maps)) {
             fprintf(stderr, "ctc: out of memory\n");
             exit(1);
         }
+        frontend_parse_g_parse.mapcap = MAX_MAPS;
     }
     frontend_parse_g_parse.maps = frontend_parse_g_maps;
     frontend_parse_g_parse.pend_fields = 0;
     frontend_parse_g_parse.pendcap = 0;
-    frontend_parse_ct_mapbuild_bind(lex, frontend_parse_g_parse.sup, sym, frontend_parse_g_parse.maps, (&frontend_parse_g_parse.nmaps), (&frontend_parse_g_parse.unit_is_map));
-    frontend_parse_ct_expr_bind(arena, lex, sym, frontend_parse_g_parse.sup, frontend_parse_g_parse.cur_func, (&frontend_parse_g_parse.calls), (&frontend_parse_g_parse.ncalls), (&frontend_parse_g_parse.callcap), frontend_parse_g_parse.maps, (&frontend_parse_g_parse.nmaps));
+    frontend_parse_ct_mapbuild_bind(lex, frontend_parse_g_parse.sup, sym, (&frontend_parse_g_parse.maps), (&frontend_parse_g_parse.nmaps), (&frontend_parse_g_parse.mapcap), (&frontend_parse_g_parse.unit_is_map));
+    frontend_parse_ct_expr_bind(arena, lex, sym, frontend_parse_g_parse.sup, frontend_parse_g_parse.cur_func, (&frontend_parse_g_parse.calls), (&frontend_parse_g_parse.ncalls), (&frontend_parse_g_parse.callcap), (&frontend_parse_g_parse.maps), (&frontend_parse_g_parse.nmaps));
     frontend_parse_g_parse.ex = frontend_parse_expr_get();
     frontend_parse_ct_stmt_bind(arena, lex, sym, frontend_parse_g_parse.mem, frontend_parse_g_parse.sup, frontend_parse_g_parse.ex);
     frontend_parse_g_parse.st = frontend_parse_stmt_get();

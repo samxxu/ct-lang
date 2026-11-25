@@ -173,7 +173,7 @@ struct backend_emit_Emitter {
     int * builtin_live;
     int io_mask;
     int no_write;
-    struct frontend_module_MapTable * maps;
+    struct frontend_module_MapTable * * maps;
     int * nmaps;
     struct frontend_module_Call * * calls;
     int * ncalls;

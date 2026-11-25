@@ -4447,7 +4447,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     char msg[MAX_TEXT];
                                     char tmsg[MAX_TEXT];
                                     tmsg[0] = 0;
-                                    hm = _self->sup->ty->maps;
+                                    hm = (*_self->sup->ty->maps);
                                     hn = (*_self->sup->ty->nmaps);
                                     frontend_type_type_key(rt2, rk, sizeof(rk));
                                     for (mi2 = 0; mi2 < hn; mi2++) {
@@ -6572,18 +6572,18 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
                 hw += (int)(strlen(seg[i]));
             }
             for (mp = 0; mp < (*_self->nmaps); mp++) {
-                if (((!_self->maps[mp].is_static) || (!_self->maps[mp].ns_host))) {
+                if (((!(*_self->maps)[mp].is_static) || (!(*_self->maps)[mp].ns_host))) {
                     continue;
                 }
-                if (strcmp(_self->maps[mp].inst, host) != 0) {
+                if (strcmp((*_self->maps)[mp].inst, host) != 0) {
                     continue;
                 }
-                for (bi = 0; bi < _self->maps[mp].nb; bi++) {
-                    if (strcmp(_self->maps[mp].b[bi].method, seg[(nseg - 1)]) != 0) {
+                for (bi = 0; bi < (*_self->maps)[mp].nb; bi++) {
+                    if (strcmp((*_self->maps)[mp].b[bi].method, seg[(nseg - 1)]) != 0) {
                         continue;
                     }
                     if (hits < 2) {
-                        snprintf(only[hits], MAX_TEXT, "%s", _self->maps[mp].trait);
+                        snprintf(only[hits], MAX_TEXT, "%s", (*_self->maps)[mp].trait);
                     }
                     hits++;
                 }
@@ -9570,23 +9570,23 @@ static int bind_conv_maps(struct frontend_parse_Expr * self, const char * stype,
     int seen = 0;
     frontend_parse_bind_conv_key(stype, sk, sizeof(sk));
     for (i = 0; i < (*self->nmaps); i++) {
-        if (self->maps[i].is_binding) {
+        if ((*self->maps)[i].is_binding) {
             continue;
         }
-        if (((!self->maps[i].is_static) || (!self->maps[i].type_host))) {
+        if (((!(*self->maps)[i].is_static) || (!(*self->maps)[i].type_host))) {
             continue;
         }
-        frontend_parse_bind_conv_key(self->maps[i].host_type, hk, sizeof(hk));
+        frontend_parse_bind_conv_key((*self->maps)[i].host_type, hk, sizeof(hk));
         if (strcmp(hk, sk) != 0) {
             continue;
         }
-        for (j = 0; j < self->maps[i].nb; j++) {
-            int ti = self->maps[i].b[j].ti;
-            int mi = self->maps[i].b[j].mi;
-            if (strcmp(self->maps[i].b[j].method, method) != 0) {
+        for (j = 0; j < (*self->maps)[i].nb; j++) {
+            int ti = (*self->maps)[i].b[j].ti;
+            int mi = (*self->maps)[i].b[j].mi;
+            if (strcmp((*self->maps)[i].b[j].method, method) != 0) {
                 continue;
             }
-            if ((self->maps[i].b[j].nparams - self->maps[i].b[j].recv) != 0) {
+            if (((*self->maps)[i].b[j].nparams - (*self->maps)[i].b[j].recv) != 0) {
                 continue;
             }
             if ((((ti < 0) || (mi < 0)) || (mi >= self->sym->traits[ti].nm))) {
@@ -9612,14 +9612,14 @@ static int bind_conv_binding(struct frontend_parse_Expr * self, const char * sty
     frontend_parse_bind_conv_key(stype, sk, sizeof(sk));
     frontend_parse_bind_conv_key(target, tk, sizeof(tk));
     for (i = 0; i < (*self->nmaps); i++) {
-        if ((!self->maps[i].is_binding)) {
+        if ((!(*self->maps)[i].is_binding)) {
             continue;
         }
-        frontend_parse_bind_conv_key(self->maps[i].host_type, hk, sizeof(hk));
+        frontend_parse_bind_conv_key((*self->maps)[i].host_type, hk, sizeof(hk));
         if (strcmp(hk, sk) != 0) {
             continue;
         }
-        frontend_parse_bind_conv_key(self->maps[i].bind_dst, dk, sizeof(dk));
+        frontend_parse_bind_conv_key((*self->maps)[i].bind_dst, dk, sizeof(dk));
         if (strcmp(dk, tk) != 0) {
             continue;
         }
@@ -10085,7 +10085,7 @@ void frontend_parse_ct_expr_bind(void * arena, void * lex, void * sym, void * su
     frontend_parse_g_expr.calls = (struct frontend_module_Call * *)(calls);
     frontend_parse_g_expr.ncalls = (int *)(ncalls);
     frontend_parse_g_expr.callcap = (int *)(callcap);
-    frontend_parse_g_expr.maps = (struct frontend_module_MapTable *)(maps);
+    frontend_parse_g_expr.maps = (struct frontend_module_MapTable * *)(maps);
     frontend_parse_g_expr.nmaps = (int *)(nmaps);
     frontend_parse_g_expr.postfix_seed = (-1);
     frontend_parse_g_expr.into_node = (-1);

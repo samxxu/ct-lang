@@ -441,7 +441,9 @@ pub struct Expr {
     /* The map table the parser owns. A qualified call may name a namespace
        host's method without the trait segment (`std::io::puts(...)`), and the
        namespace/recipe pair is only known from this table. */
-    struct MapTable *maps;
+    /* S1a-0 C1: the map table is a heap block that grows while parsing, so the
+       object holds the parser's slot and dereferences it at every read. */
+    struct MapTable **maps;
     int *nmaps;
     /* Phase 31 S23b (L31-23): the live borrowed views of this function, keyed
        by the view variable and the container, so a shadowed name cannot alias

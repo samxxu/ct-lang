@@ -923,7 +923,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
     }
     if (iname[0]) {
         for (i = 0; i < (*_self->nmaps); i++) {
-            if ((((!_self->maps[i].is_binding) && (strcmp(_self->maps[i].inst, iname) == 0)) && (strcmp(_self->maps[i].trait, trait) == 0))) {
+            if ((((!(*_self->maps)[i].is_binding) && (strcmp((*_self->maps)[i].inst, iname) == 0)) && (strcmp((*_self->maps)[i].trait, trait) == 0))) {
                 bnode = _self->__frontend_type_typeops_vptr->new_node(_self, N_BOX);
                 if (bnode < 0) {
                     return (-1);
@@ -931,7 +931,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
                 _self->arena->nodes[bnode].a = n;
                 _self->arena->nodes[bnode].aux = (mptr + (addr ? 2 : 0));
                 snprintf(_self->arena->nodes[bnode].text, MAX_TEXT, "%s", trait);
-                snprintf(_self->arena->nodes[bnode].text2, MAX_TEXT, "%s", _self->maps[i].cname);
+                snprintf(_self->arena->nodes[bnode].text2, MAX_TEXT, "%s", (*_self->maps)[i].cname);
                 return bnode;
             }
         }
@@ -2060,22 +2060,22 @@ static int tc_expr_mcall(struct frontend_type_TypeCheck * self, int n, char * ou
         }
         frontend_type_type_key(rt, rk, MAX_TEXT);
         for (i = 0; i < (*self->nmaps); i++) {
-            if (self->maps[i].is_binding) {
+            if ((*self->maps)[i].is_binding) {
                 continue;
             }
-            if (((!self->maps[i].is_static) || (!self->maps[i].type_host))) {
+            if (((!(*self->maps)[i].is_static) || (!(*self->maps)[i].type_host))) {
                 continue;
             }
-            if ((self->arena->nodes[n].text3[0] && (strcmp(self->maps[i].trait, self->arena->nodes[n].text3) != 0))) {
+            if ((self->arena->nodes[n].text3[0] && (strcmp((*self->maps)[i].trait, self->arena->nodes[n].text3) != 0))) {
                 continue;
             }
-            frontend_type_type_key(self->maps[i].host_type, tk, MAX_TEXT);
+            frontend_type_type_key((*self->maps)[i].host_type, tk, MAX_TEXT);
             if (strcmp(tk, rk) != 0) {
                 continue;
             }
-            for (j = 0; j < self->maps[i].nb; j++) {
-                if (strcmp(self->maps[i].b[j].method, self->arena->nodes[n].text2) == 0) {
-                    if (snprintf(out, (size_t)(cap), "%s", self->sym->traits[self->maps[i].b[j].ti].m[self->maps[i].b[j].mi].ret) >= cap) {
+            for (j = 0; j < (*self->maps)[i].nb; j++) {
+                if (strcmp((*self->maps)[i].b[j].method, self->arena->nodes[n].text2) == 0) {
+                    if (snprintf(out, (size_t)(cap), "%s", self->sym->traits[(*self->maps)[i].b[j].ti].m[(*self->maps)[i].b[j].mi].ret) >= cap) {
                         return (-1);
                     }
                     return 0;

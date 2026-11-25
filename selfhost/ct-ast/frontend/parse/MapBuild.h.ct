@@ -10,7 +10,9 @@
  *
  * Macros do not cross a unit boundary, so the caps, token kinds and node kind
  * used here are declared here; MAX_TEXT 160, MAX_PARAMS 16 and MAX_METHODS 64
- * are the values `frontend/sym/Symbols.h.ct` lists.
+ * are the values `frontend/sym/Symbols.h.ct` lists. S1a-0 C1: the map table,
+ * each map's binding block and each binding's parameter arrays are heap blocks
+ * that grow by doubling, so the 16/64 above are initial capacities only.
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
@@ -31,7 +33,9 @@ import tool::diag::Diag;
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
 #define MAX_METHODS 64
+#define MAX_METHODS_MAX 65536
 #define MAX_MAPS   64
+#define MAX_MAPS_MAX 65536
 
 /* token kinds (the scanner only needs these three) */
 #define T_EOF    0
@@ -57,10 +61,88 @@ pub struct MapBuild {
     struct ParseSupport *sup;
     struct Symbols *sym;
     struct Expr *ex;            /* the shared type reader (`for type` uses it) */
-    struct MapTable *maps;
+    /* S1a-0 C1: the table is the parser's heap block. `maps`/`mapcap` point at
+       the parser's slot and capacity, so a realloc is seen by every reader that
+       dereferences the slot (parse / type / emit) without re-binding them. */
+    struct MapTable **maps;
     int *nmaps;
+    int *mapcap;
     int *unit_is_map;           /* points at the parser's per-unit flag */
 } use MapBuildOps;
+
+/* S1a-0 C1: grow the map table by doubling, zeroing the new rows. The block
+   moves, so the new base is stored through the parser's slot rather than in a
+   copy; `mapcap` is the parser's capacity field for the same reason. */
+static int mapb_ensure_maps(struct MapBuild *self, int need)
+{
+    int cap;
+    struct MapTable *grown;
+    if (need <= *self->mapcap) return 0;
+    cap = *self->mapcap > 0 ? *self->mapcap : MAX_MAPS;
+    while (cap < need && cap < MAX_MAPS_MAX) cap *= 2;
+    if (cap > MAX_MAPS_MAX) cap = MAX_MAPS_MAX;
+    if (need > cap) return self->sup->fail("out of memory");
+    grown = (struct MapTable *)realloc(*self->maps, (size_t)cap * sizeof(*grown));
+    if (!grown) return self->sup->fail("out of memory");
+    memset(grown + *self->mapcap, 0,
+           (size_t)(cap - *self->mapcap) * sizeof(*grown));
+    *self->maps = grown;
+    *self->mapcap = cap;
+    return 0;
+}
+
+/* The binding block of one map. The map row itself does not move here, so the
+   caller's `m` stays valid across the realloc; new rows are zeroed and their
+   parameter blocks are allocated on first use. */
+static int mapb_ensure_binds(struct MapBuild *self, struct MapTable *m, int need)
+{
+    int cap;
+    struct MapBind *grown;
+    if (need <= m->bcap) return 0;
+    cap = m->bcap > 0 ? m->bcap : MAX_METHODS;
+    while (cap < need && cap < MAX_METHODS_MAX) cap *= 2;
+    if (cap > MAX_METHODS_MAX) cap = MAX_METHODS_MAX;
+    if (need > cap) return self->sup->fail("out of memory");
+    grown = (struct MapBind *)realloc(m->b, (size_t)cap * sizeof(*grown));
+    if (!grown) return self->sup->fail("out of memory");
+    memset(grown + m->bcap, 0, (size_t)(cap - m->bcap) * sizeof(*grown));
+    m->b = grown;
+    m->bcap = cap;
+    return 0;
+}
+
+/* One binding's three parallel arrays (`params`, `uses`, `sizeofs`) move
+   together and are zeroed together: a recipe counts uses for the same indexes
+   it names parameters by, so a half-grown set would be a silent mismatch. */
+static int mapb_ensure_params(struct MapBuild *self, struct MapBind *b, int need)
+{
+    int cap, i;
+    char **params;
+    int *uses;
+    int *sizes;
+    if (need <= b->pcap) return 0;
+    cap = b->pcap > 0 ? b->pcap : MAX_PARAMS;
+    while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
+    if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
+    if (need > cap) return self->sup->fail("out of memory");
+    params = (char **)realloc(b->params, (size_t)cap * sizeof(*params));
+    if (!params) return self->sup->fail("out of memory");
+    for (i = b->pcap; i < cap; i++) {
+        params[i] = (char *)calloc(MAX_TEXT, 1);
+        if (!params[i]) return self->sup->fail("out of memory");
+    }
+    uses = (int *)realloc(b->uses, (size_t)cap * sizeof(*uses));
+    if (!uses) return self->sup->fail("out of memory");
+    memset(uses + b->pcap, 0, (size_t)(cap - b->pcap) * sizeof(*uses));
+    sizes = (int *)realloc(b->sizeofs, (size_t)cap * sizeof(*sizes));
+    if (!sizes) return self->sup->fail("out of memory");
+    memset(sizes + b->pcap, 0, (size_t)(cap - b->pcap) * sizeof(*sizes));
+    b->params = params;
+    b->uses = uses;
+    b->sizeofs = sizes;
+    b->pcap = cap;
+    return 0;
+}
 
 static int mapb_ident(int c)
 {
@@ -563,8 +645,8 @@ impl MapBuildOps for MapBuild {
         if (self->sup->expect(")") != 0) return -1;
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("->")))
             return self->sup->fail("expected '->' in a map binding");
-        if (*self->nmaps >= MAX_MAPS) return self->sup->fail("too many maps");
-        m = &self->maps[*self->nmaps];
+        if (mapb_ensure_maps(self, *self->nmaps + 1) != 0) return -1;
+        m = &(*self->maps)[*self->nmaps];
         snprintf(m->trait, MAX_TEXT, "%s", "");
         snprintf(m->inst, MAX_TEXT, "%s", "");
         snprintf(m->cname, MAX_TEXT, "%s", "");
@@ -579,8 +661,10 @@ impl MapBuildOps for MapBuild {
         snprintf(m->path, MAX_TEXT, "%s", self->sup->mem->path);
         m->line = line;
         m->unit = unit;
+        if (mapb_ensure_binds(self, m, 1) != 0) return -1;
         m->nb = 1;
         b = &m->b[0];
+        if (mapb_ensure_params(self, b, 1) != 0) return -1;
         snprintf(b->method, MAX_TEXT, "%s", "from");
         snprintf(b->params[0], MAX_TEXT, "%s", param);
         b->nparams = 1;
@@ -630,13 +714,13 @@ impl MapBuildOps for MapBuild {
         if (self->sup->expect("}") != 0) return -1;
         if (check_static_call(self, m, b) != 0) return -1;
         for (k = 0; k < *self->nmaps; k++) {
-            if (!self->maps[k].is_binding) continue;
-            if (self->maps[k].unit != unit) continue;
-            if (strcmp(self->maps[k].host_type, src) != 0) continue;
-            if (strcmp(self->maps[k].bind_dst, dst) != 0) continue;
+            if (!(*self->maps)[k].is_binding) continue;
+            if ((*self->maps)[k].unit != unit) continue;
+            if (strcmp((*self->maps)[k].host_type, src) != 0) continue;
+            if (strcmp((*self->maps)[k].bind_dst, dst) != 0) continue;
             snprintf(msg, sizeof msg,
                      "duplicate map binding for '%s' -> '%s' (first at %s:%d)",
-                     src, dst, self->maps[k].path, self->maps[k].line);
+                     src, dst, (*self->maps)[k].path, (*self->maps)[k].line);
             return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
         }
         (*self->nmaps)++;
@@ -805,18 +889,18 @@ impl MapBuildOps for MapBuild {
            wrappers and the same vtable twice. (A static map has no prefix; the
            type-host ambiguity check at the call site covers its duplicates.) */
         for (k2 = 0; !is_static && k2 < *self->nmaps; k2++)
-            if (strcmp(self->maps[k2].prefix, prefix) == 0) {
+            if (strcmp((*self->maps)[k2].prefix, prefix) == 0) {
                 char dmsg[512];
                 snprintf(dmsg, sizeof dmsg,
                          "duplicate map of trait '%s' for instance '%s' (first at %s:%d)",
-                         tname, inst, self->maps[k2].path, self->maps[k2].line);
+                         tname, inst, (*self->maps)[k2].path, (*self->maps)[k2].line);
                 tool::diag::ct_sem_error(line, col, dmsg, self->sup->mem->path);
                 if (self->sup->skip_body() != 0) return -1;
                 return NO_NODE;
             }
         if (self->sup->expect("{") != 0) return -1;
-        if (*self->nmaps >= MAX_MAPS) return self->sup->fail("too many maps");
-        m = &self->maps[*self->nmaps];
+        if (mapb_ensure_maps(self, *self->nmaps + 1) != 0) return -1;
+        m = &(*self->maps)[*self->nmaps];
         snprintf(m->trait, MAX_TEXT, "%s", rtrait);
         snprintf(m->inst, MAX_TEXT, "%s", inst);
         snprintf(m->cname, MAX_TEXT, "%s", icn);
@@ -832,7 +916,7 @@ impl MapBuildOps for MapBuild {
         m->unit = unit;
 
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
-            if (m->nb >= MAX_METHODS) return self->sup->fail("too many map bindings");
+            if (mapb_ensure_binds(self, m, m->nb + 1) != 0) return -1;
             b = &m->b[m->nb];
             b->line = self->lex->tokline;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
@@ -862,7 +946,7 @@ impl MapBuildOps for MapBuild {
                         break;
                     }
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a parameter name");
-                    if (np >= MAX_PARAMS) return self->sup->fail("too many map parameters");
+                    if (mapb_ensure_params(self, b, np + 1) != 0) return -1;
                     self->lex->tok_copy(b->params[np], MAX_TEXT);
                     np++;
                     self->sup->lex_next();
@@ -1009,15 +1093,16 @@ static struct MapBuild g_mapbuild;
 
 /* Only primitives cross the unit boundary (a generated header carries no
    #include, so the collaborators arrive as `void *` and are cast here). */
-pub void ct_mapbuild_bind(void *lex, void *sup, void *sym, void *maps, int *nmaps, int *unit_is_map);
-void ct_mapbuild_bind(void *lex, void *sup, void *sym, void *maps, int *nmaps, int *unit_is_map)
+pub void ct_mapbuild_bind(void *lex, void *sup, void *sym, void *maps, int *nmaps, int *mapcap, int *unit_is_map);
+void ct_mapbuild_bind(void *lex, void *sup, void *sym, void *maps, int *nmaps, int *mapcap, int *unit_is_map)
 {
     g_mapbuild.lex = (struct Lexer *)lex;
     g_mapbuild.sup = (struct ParseSupport *)sup;
     g_mapbuild.ex = frontend::parse::expr_get();
     g_mapbuild.sym = (struct Symbols *)sym;
-    g_mapbuild.maps = (struct MapTable *)maps;
+    g_mapbuild.maps = (struct MapTable **)maps;
     g_mapbuild.nmaps = nmaps;
+    g_mapbuild.mapcap = mapcap;
     g_mapbuild.unit_is_map = unit_is_map;
 }
 

@@ -83,7 +83,8 @@ struct frontend_module_Call {
 };
 struct frontend_module_MapBind {
     char method[160];
-    char params[16][160];
+    char * * params;
+    int pcap;
     int nparams;
     int ti;
     int mi;
@@ -91,8 +92,8 @@ struct frontend_module_MapBind {
     char wrapper[160];
     int direct;
     int recv;
-    int uses[16];
-    int sizeofs[16];
+    int * uses;
+    int * sizeofs;
     int variadic;
     int line;
 };
@@ -108,7 +109,8 @@ struct frontend_module_MapTable {
     char host_type[160];
     int is_binding;
     char bind_dst[160];
-    struct frontend_module_MapBind b[64];
+    struct frontend_module_MapBind * b;
+    int bcap;
     int nb;
     int line;
     int unit;

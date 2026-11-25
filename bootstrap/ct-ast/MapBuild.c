@@ -16,7 +16,9 @@
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
 #define MAX_METHODS 64
+#define MAX_METHODS_MAX 65536
 #define MAX_MAPS   64
+#define MAX_MAPS_MAX 65536
 #define T_EOF    0
 #define T_ID     1
 #define T_PUNCT  4
@@ -95,12 +97,15 @@ const struct frontend_parse_MapBuildOps_vtbl frontend_parse_MapBuild_frontend_pa
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+static int mapb_ensure_maps(struct frontend_parse_MapBuild *, int);
+static int mapb_ensure_binds(struct frontend_parse_MapBuild *, struct frontend_module_MapTable *, int);
+static int mapb_ensure_params(struct frontend_parse_MapBuild *, struct frontend_module_MapBind *, int);
 static int mapb_ident(int);
 static int mapb_type_word(const char *);
 static int mapb_all_caps(const char *);
 static int mapb_param_index(struct frontend_module_MapBind *, const char *);
 static int check_static_call(struct frontend_parse_MapBuild *, struct frontend_module_MapTable *, struct frontend_module_MapBind *);
-void frontend_parse_ct_mapbuild_bind(void *, void *, void *, void *, int *, int *);
+void frontend_parse_ct_mapbuild_bind(void *, void *, void *, void *, int *, int *, int *);
 struct frontend_parse_MapBuild * frontend_parse_mapbuild_get(void);
 static struct frontend_parse_MapBuild frontend_parse_g_mapbuild = { .__frontend_parse_mapbuildops_vptr = &frontend_parse_MapBuild_frontend_parse_MapBuildOps_vtable };
 static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *self, char * b, const char * inst) {
@@ -481,10 +486,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "->")))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '->' in a map binding");
     }
-    if ((*_self->nmaps) >= MAX_MAPS) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many maps");
+    if (mapb_ensure_maps(_self, ((*_self->nmaps) + 1)) != 0) {
+        return (-1);
     }
-    m = (&_self->maps[(*_self->nmaps)]);
+    m = (&(*_self->maps)[(*_self->nmaps)]);
     snprintf(m->trait, MAX_TEXT, "%s", "");
     snprintf(m->inst, MAX_TEXT, "%s", "");
     snprintf(m->cname, MAX_TEXT, "%s", "");
@@ -499,8 +504,14 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     snprintf(m->path, MAX_TEXT, "%s", _self->sup->mem->path);
     m->line = line;
     m->unit = unit;
+    if (mapb_ensure_binds(_self, m, 1) != 0) {
+        return (-1);
+    }
     m->nb = 1;
     b = (&m->b[0]);
+    if (mapb_ensure_params(_self, b, 1) != 0) {
+        return (-1);
+    }
     snprintf(b->method, MAX_TEXT, "%s", "from");
     snprintf(b->params[0], MAX_TEXT, "%s", param);
     b->nparams = 1;
@@ -585,19 +596,19 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
         return (-1);
     }
     for (k = 0; k < (*_self->nmaps); k++) {
-        if ((!_self->maps[k].is_binding)) {
+        if ((!(*_self->maps)[k].is_binding)) {
             continue;
         }
-        if (_self->maps[k].unit != unit) {
+        if ((*_self->maps)[k].unit != unit) {
             continue;
         }
-        if (strcmp(_self->maps[k].host_type, src) != 0) {
+        if (strcmp((*_self->maps)[k].host_type, src) != 0) {
             continue;
         }
-        if (strcmp(_self->maps[k].bind_dst, dst) != 0) {
+        if (strcmp((*_self->maps)[k].bind_dst, dst) != 0) {
             continue;
         }
-        snprintf(msg, sizeof(msg), "duplicate map binding for '%s' -> '%s' (first at %s:%d)", src, dst, _self->maps[k].path, _self->maps[k].line);
+        snprintf(msg, sizeof(msg), "duplicate map binding for '%s' -> '%s' (first at %s:%d)", src, dst, (*_self->maps)[k].path, (*_self->maps)[k].line);
         return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
     }
     (*_self->nmaps)++;
@@ -801,9 +812,9 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "map symbol name is too long");
     }
     for (k2 = 0; ((!is_static) && (k2 < (*_self->nmaps))); k2++) {
-        if (strcmp(_self->maps[k2].prefix, prefix) == 0) {
+        if (strcmp((*_self->maps)[k2].prefix, prefix) == 0) {
             char dmsg[512];
-            snprintf(dmsg, sizeof(dmsg), "duplicate map of trait '%s' for instance '%s' (first at %s:%d)", tname, inst, _self->maps[k2].path, _self->maps[k2].line);
+            snprintf(dmsg, sizeof(dmsg), "duplicate map of trait '%s' for instance '%s' (first at %s:%d)", tname, inst, (*_self->maps)[k2].path, (*_self->maps)[k2].line);
             tool_diag_ct_sem_error(line, col, dmsg, _self->sup->mem->path);
             if (_self->sup->__frontend_parse_supportops_vptr->skip_body(_self->sup) != 0) {
                 return (-1);
@@ -814,10 +825,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "{") != 0) {
         return (-1);
     }
-    if ((*_self->nmaps) >= MAX_MAPS) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many maps");
+    if (mapb_ensure_maps(_self, ((*_self->nmaps) + 1)) != 0) {
+        return (-1);
     }
-    m = (&_self->maps[(*_self->nmaps)]);
+    m = (&(*_self->maps)[(*_self->nmaps)]);
     snprintf(m->trait, MAX_TEXT, "%s", rtrait);
     snprintf(m->inst, MAX_TEXT, "%s", inst);
     snprintf(m->cname, MAX_TEXT, "%s", icn);
@@ -832,8 +843,8 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     m->line = line;
     m->unit = unit;
     while (((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))))) {
-        if (m->nb >= MAX_METHODS) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many map bindings");
+        if (mapb_ensure_binds(_self, m, (m->nb + 1)) != 0) {
+            return (-1);
         }
         b = (&m->b[m->nb]);
         b->line = _self->lex->tokline;
@@ -871,8 +882,8 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a parameter name");
                 }
-                if (np >= MAX_PARAMS) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many map parameters");
+                if (mapb_ensure_params(_self, b, (np + 1)) != 0) {
+                    return (-1);
                 }
                 _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, b->params[np], MAX_TEXT);
                 np++;
@@ -1051,6 +1062,101 @@ const struct frontend_parse_MapBuildOps_vtbl frontend_parse_MapBuild_frontend_pa
     .parse = frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse
 };
 
+static int mapb_ensure_maps(struct frontend_parse_MapBuild * self, int need) {
+    int cap;
+    struct frontend_module_MapTable * grown;
+    if (need <= (*self->mapcap)) {
+        return 0;
+    }
+    cap = (((*self->mapcap) > 0) ? (*self->mapcap) : MAX_MAPS);
+    while (((cap < need) && (cap < MAX_MAPS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_MAPS_MAX) {
+        cap = MAX_MAPS_MAX;
+    }
+    if (need > cap) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    grown = (struct frontend_module_MapTable *)(realloc((*self->maps), ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    memset((grown + (*self->mapcap)), 0, ((size_t)((cap - (*self->mapcap))) * sizeof((*grown))));
+    (*self->maps) = grown;
+    (*self->mapcap) = cap;
+    return 0;
+}
+static int mapb_ensure_binds(struct frontend_parse_MapBuild * self, struct frontend_module_MapTable * m, int need) {
+    int cap;
+    struct frontend_module_MapBind * grown;
+    if (need <= m->bcap) {
+        return 0;
+    }
+    cap = ((m->bcap > 0) ? m->bcap : MAX_METHODS);
+    while (((cap < need) && (cap < MAX_METHODS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_METHODS_MAX) {
+        cap = MAX_METHODS_MAX;
+    }
+    if (need > cap) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    grown = (struct frontend_module_MapBind *)(realloc(m->b, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    memset((grown + m->bcap), 0, ((size_t)((cap - m->bcap)) * sizeof((*grown))));
+    m->b = grown;
+    m->bcap = cap;
+    return 0;
+}
+static int mapb_ensure_params(struct frontend_parse_MapBuild * self, struct frontend_module_MapBind * b, int need) {
+    int cap;
+    int i;
+    char * * params;
+    int * uses;
+    int * sizes;
+    if (need <= b->pcap) {
+        return 0;
+    }
+    cap = ((b->pcap > 0) ? b->pcap : MAX_PARAMS);
+    while (((cap < need) && (cap < MAX_PARAMS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_PARAMS_MAX) {
+        cap = MAX_PARAMS_MAX;
+    }
+    if (need > cap) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    params = (char * *)(realloc(b->params, ((size_t)(cap) * sizeof((*params)))));
+    if ((!params)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    for (i = b->pcap; i < cap; i++) {
+        params[i] = (char *)(calloc(MAX_TEXT, 1));
+        if ((!params[i])) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+        }
+    }
+    uses = (int *)(realloc(b->uses, ((size_t)(cap) * sizeof((*uses)))));
+    if ((!uses)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    memset((uses + b->pcap), 0, ((size_t)((cap - b->pcap)) * sizeof((*uses))));
+    sizes = (int *)(realloc(b->sizeofs, ((size_t)(cap) * sizeof((*sizes)))));
+    if ((!sizes)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    memset((sizes + b->pcap), 0, ((size_t)((cap - b->pcap)) * sizeof((*sizes))));
+    b->params = params;
+    b->uses = uses;
+    b->sizeofs = sizes;
+    b->pcap = cap;
+    return 0;
+}
 static int mapb_ident(int c) {
     return (((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || ((c >= '0') && (c <= '9'))) || (c == '_'));
 }
@@ -1318,13 +1424,14 @@ static int check_static_call(struct frontend_parse_MapBuild * self, struct front
     }
     return 0;
 }
-void frontend_parse_ct_mapbuild_bind(void * lex, void * sup, void * sym, void * maps, int * nmaps, int * unit_is_map) {
+void frontend_parse_ct_mapbuild_bind(void * lex, void * sup, void * sym, void * maps, int * nmaps, int * mapcap, int * unit_is_map) {
     frontend_parse_g_mapbuild.lex = (struct frontend_lex_Lexer *)(lex);
     frontend_parse_g_mapbuild.sup = (struct frontend_parse_ParseSupport *)(sup);
     frontend_parse_g_mapbuild.ex = frontend_parse_expr_get();
     frontend_parse_g_mapbuild.sym = (struct frontend_sym_Symbols *)(sym);
-    frontend_parse_g_mapbuild.maps = (struct frontend_module_MapTable *)(maps);
+    frontend_parse_g_mapbuild.maps = (struct frontend_module_MapTable * *)(maps);
     frontend_parse_g_mapbuild.nmaps = nmaps;
+    frontend_parse_g_mapbuild.mapcap = mapcap;
     frontend_parse_g_mapbuild.unit_is_map = unit_is_map;
 }
 struct frontend_parse_MapBuild * frontend_parse_mapbuild_get(void) {

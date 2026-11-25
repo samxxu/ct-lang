@@ -160,6 +160,7 @@ struct frontend_parse_Parser {
     int callcap;
     struct frontend_module_MapTable * maps;
     int nmaps;
+    int mapcap;
     int cur_unit;
     char ns_decl[160];
     char cur_func[160];

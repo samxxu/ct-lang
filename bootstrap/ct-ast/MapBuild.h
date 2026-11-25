@@ -105,12 +105,13 @@ struct frontend_parse_MapBuild {
     struct frontend_parse_ParseSupport * sup;
     struct frontend_sym_Symbols * sym;
     struct frontend_parse_Expr * ex;
-    struct frontend_module_MapTable * maps;
+    struct frontend_module_MapTable * * maps;
     int * nmaps;
+    int * mapcap;
     int * unit_is_map;
     const struct frontend_parse_MapBuildOps_vtbl *__frontend_parse_mapbuildops_vptr;
 };
-void frontend_parse_ct_mapbuild_bind(void *, void *, void *, void *, int *, int *);
+void frontend_parse_ct_mapbuild_bind(void *, void *, void *, void *, int *, int *, int *);
 struct frontend_parse_MapBuild * frontend_parse_mapbuild_get(void);
 
 #endif

@@ -47,6 +47,7 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_IMPORTS 32
 #define MAX_IMPORTS_MAX 65536
 #define MAX_INIT_TEXT 16384
+#define MAX_MAPS 64
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
@@ -201,8 +202,11 @@ pub struct Parser {
     struct Call *calls;
     int  ncalls;
     int  callcap;
+    /* S1a-0 C1: the map table is a heap block that grows on demand; the
+       capacity is kept beside the count so the owner can grow it in place. */
     struct MapTable *maps;
     int  nmaps;
+    int  mapcap;
     int  cur_unit;                      /* index of the unit being parsed */
     /* The namespace path the current unit declared and the caller recorded for
        the map; the driver re-reads both after a unit is parsed. */
@@ -4915,23 +4919,24 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
     }
     g_parse.callcap = MAX_CALLS;
     if (!g_maps) {
-        g_maps = calloc(64, sizeof(*g_maps));
+        g_maps = calloc(MAX_MAPS, sizeof(*g_maps));
         if (!g_maps) {
             fprintf(stderr, "ctc: out of memory\n");
             exit(1);
         }
+        g_parse.mapcap = MAX_MAPS;
     }
     g_parse.maps = g_maps;
     g_parse.pend_fields = 0;
     g_parse.pendcap = 0;
     /* the `map` construct (mapbuild.h.ct) reads the same cursor, primitives and
        tables, and records into the map array this unit owns */
-    ct_mapbuild_bind(lex, g_parse.sup, sym, g_parse.maps, &g_parse.nmaps,
-                     &g_parse.unit_is_map);
+    ct_mapbuild_bind(lex, g_parse.sup, sym, &g_parse.maps, &g_parse.nmaps,
+                     &g_parse.mapcap, &g_parse.unit_is_map);
     /* the expression chain: it reads the same cursor and primitives, and writes
        the call table and the current-function name this unit owns */
     ct_expr_bind(arena, lex, sym, g_parse.sup, g_parse.cur_func, &g_parse.calls, &g_parse.ncalls,
-                 &g_parse.callcap, g_parse.maps, &g_parse.nmaps);
+                 &g_parse.callcap, &g_parse.maps, &g_parse.nmaps);
     g_parse.ex = expr_get();
     /* the statement layer reads the same cursor and tables and writes nodes
        through the same primitives */

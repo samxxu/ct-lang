@@ -1,6 +1,6 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DEPS 待做；DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）；`MAX_PKG_DEPS`、`MAX_MAPS` 与 B/C/D 类待做）。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DEPS 待做；DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS` 与 B/C/D 类待做）。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
@@ -29,7 +29,7 @@
 | 常量 | 值 | 次数 | 类 | 动作 |
 | --- | --- | --- | --- | --- |
 | `MAX_FUNCS` | 512 | 19 | A | **已动态（SH-109）**；保留初始值 |
-| `MAX_METHODS` | 64 | 27 | A | **已动态**：`Trait.m` 堆块 + `MAX_METHODS_MAX=65536`；trait 实例行深拷贝方法块；parser 默认体环检查矩阵按实扩 |
+| `MAX_METHODS` | 64 | 27 | A | **已动态**：`Trait.m` 堆块 + `MAX_METHODS_MAX=65536`；trait 实例行深拷贝方法块；parser 默认体环检查矩阵按实扩；`MapTable.b`（一个 map 的绑定块）以 64 为初值倍增 |
 | `MAX_VARS` | 4096 | 12 | A | **已动态**（符号表 `vars`，`MAX_VARS_MAX=65536`）；Memory 的 `own` 计数表仍 4096，剩余 |
 | `MAX_SCOPE` | 256 | 5 | A | 符号表 `scope` 栈已动态（`MAX_SCOPE_MAX`）；可观察嵌套仍受 parser 递归深度 256 保护（D 类，360 层实测栈溢出），剩余 |
 | `MAX_TYPES` | 256 | 4 | A | **已动态**：`types`/`type_kind`/`type_target` 三组并行数组一起倍增到 `MAX_TYPES_MAX=65536` |
@@ -46,9 +46,9 @@
 | `MAX_LABELS` | 64 | 5 | A | **已动态**：label/goto 行块（`LabelRow`）倍增到 `MAX_LABELS_MAX=65536`；删除 `too many labels/gotos` |
 | `MAX_HOISTS` | 4 | 4 | A | **已动态**：`hoist_calls` 行表 + 局部接收者链倍增到 `MAX_HOISTS_MAX=65536` |
 | `MAX_INTOS` | 4 | 3 | A | **已动态**：`into_nodes` 行表倍增到 `MAX_INTOS_MAX=65536` |
-| `MAX_MAPS` | 64 | 5 | A | 动态 |
+| `MAX_MAPS` | 64 | 5 | A | **已动态**：`g_maps` 表倍增到 `MAX_MAPS_MAX=65536`（parse/type/emit 改持槽位）；`MapTable.b[64]` 改堆块（`MAX_METHODS` 初值）、`MapBind.params/uses/sizeofs[16]` 改并行堆块（`MAX_PARAMS` 初值）；`--emit-map` 与 `map_visible` 全表扫描；`emit_recipe` 的 `actual[16]` 改按绑定分配 |
 | `MAX_METH_ANN` | 256 | 4 | A | **已动态**：`MethAnn` 行表倍增到 `MAX_METH_ANN_MAX=65536`；每行注记块也随 `MAX_PARAMS` 增长 |
-| `MAX_PARAMS` | 16 | 21 | A | **已动态**：`Fn`/`MethodSig` 形参三/两组并行块 + `MethAnn` 注记块倍增到 `MAX_PARAMS_MAX=65536`；实例行深拷贝；map 参数仍 16（剩余） |
+| `MAX_PARAMS` | 16 | 21 | A | **已动态**：`Fn`/`MethodSig` 形参三/两组并行块 + `MethAnn` 注记块倍增到 `MAX_PARAMS_MAX=65536`；实例行深拷贝；map 绑定的 `params`/`uses`/`sizeofs` 并行块同样倍增（初值 16） |
 | `MAX_TYPE_ALIASES` | 64 | 6 | A | **已动态**：本地 `taliases` 倍增到 `MAX_TYPE_ALIASES_MAX=65536` |
 | `MAX_GLOBAL_TYPE_ALIASES` | 256 | 4 | A | **已动态**：全局 `gtaliases` 倍增到 `MAX_GLOBAL_TYPE_ALIASES_MAX=65536` |
 | `MAX_IMPORTS` | 32 | 10 | A | **已动态**：`Module` 的单元依赖行 `dep`/`depu` 与 `Parser` 的导入表一起倍增到 `MAX_IMPORTS_MAX=65536`；删除 `too many imports`，`cache_key_of` 的 `MAX_IH` 定长块改为按 `ndep` 分配 |

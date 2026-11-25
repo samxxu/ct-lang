@@ -1521,7 +1521,7 @@ static int map_visible(struct Emitter *e, int i)
     char *reach;
     int u, d, k, changed;
     if (e->cur_unit < 0) return 1;
-    if (e->maps[i].unit == e->cur_unit) return 1;
+    if ((*e->maps)[i].unit == e->cur_unit) return 1;
     if (ensure_reach(e, *e->nunits) != 0) return e->fail("out of memory");
     reach = e->reach;
     for (u = 0; u < *e->nunits; u++) reach[u] = 0;
@@ -1540,8 +1540,8 @@ static int map_visible(struct Emitter *e, int i)
             }
         }
     }
-    return e->maps[i].unit >= 0 && e->maps[i].unit < *e->nunits
-           && reach[e->maps[i].unit];
+    return (*e->maps)[i].unit >= 0 && (*e->maps)[i].unit < *e->nunits
+           && reach[(*e->maps)[i].unit];
 }
 
 /* The file name of a unit path, for a diagnostic that must name both
@@ -1900,14 +1900,14 @@ static int map_subst_arg(struct Emitter *e, const char *s, struct MapTable *m, s
 }
 
 /* Expand one static recipe at the call site (spec §4.10): no wrapper,
-   no vtable, the call is what a hand-written `.c` would say. */
-static int emit_recipe(struct Emitter *e, struct MapTable *m, struct MapBind *b, int recv, int args, int at)
+   no vtable, the call is what a hand-written `.c` would say. `actual`/`half`
+   are the caller's per-parameter scratch (see `emit_recipe`). */
+static int emit_recipe_impl(struct Emitter *e, struct MapTable *m, struct MapBind *b,
+                            int recv, int args, int at, int *actual, int *half)
 {
     char tok[MAX_TEXT];
     char arg[MAX_TEXT];
     char msg[512];
-    int actual[16];
-    int half[16];
     int i, hk, unused, first, depth, n, q;
     const char *p;
 
@@ -2015,6 +2015,30 @@ static int emit_recipe(struct Emitter *e, struct MapTable *m, struct MapBind *b,
     fputc(')', e->out);
     if (unused) fputc(')', e->out);
     return 0;
+}
+
+/* S1a-0 C1: one recipe's per-parameter scratch, sized to the binding (the old
+   `int actual[16]` overflowed past 16 parameters). It is a per-invocation block
+   rather than shared state because a recipe may name another map call as its
+   receiver: the nested expansion must not overwrite the outer call's spans. */
+static int emit_recipe(struct Emitter *e, struct MapTable *m, struct MapBind *b,
+                       int recv, int args, int at)
+{
+    int n, rc;
+    int *actual;
+    int *half;
+    n = b->nparams > 0 ? b->nparams : 1;
+    actual = (int *)calloc((size_t)n, sizeof(*actual));
+    half = (int *)calloc((size_t)n, sizeof(*half));
+    if (!actual || !half) {
+        free(actual);
+        free(half);
+        return e->fail("out of memory");
+    }
+    rc = emit_recipe_impl(e, m, b, recv, args, at, actual, half);
+    free(actual);
+    free(half);
+    return rc;
 }
 
 /* A raw block is written byte for byte, never indented or rewritten. Its
@@ -5067,9 +5091,9 @@ static int em_expr_box(struct Emitter *self, int n, int nk)
             return self->fail_from(n, "a namespace host value is only usable as an interface value");
         found = 0;
         for (i = 0; i < (*self->nmaps); i++)
-            if (self->maps[i].ns_host
-                && strcmp(self->maps[i].trait, self->arena->nodes[n].text) == 0
-                && strcmp(self->maps[i].prefix, self->arena->nodes[n].text2) == 0) {
+            if ((*self->maps)[i].ns_host
+                && strcmp((*self->maps)[i].trait, self->arena->nodes[n].text) == 0
+                && strcmp((*self->maps)[i].prefix, self->arena->nodes[n].text2) == 0) {
                 found = 1;
                 break;
             }
@@ -5119,12 +5143,12 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
         char msg[MAX_TEXT];
         int mi, bj, found = -1, bind = -1;
         for (mi = 0; mi < (*self->nmaps); mi++) {
-            if (!self->maps[mi].is_static || self->maps[mi].type_host) continue;
+            if (!(*self->maps)[mi].is_static || (*self->maps)[mi].type_host) continue;
             if (!map_visible(self, mi)) continue;
-            if (strcmp(self->maps[mi].trait, self->arena->nodes[n].text) != 0) continue;
-            if (strcmp(self->maps[mi].inst, self->arena->nodes[n].text3) != 0) continue;
-            for (bj = 0; bj < self->maps[mi].nb; bj++)
-                if (strcmp(self->maps[mi].b[bj].method, self->arena->nodes[n].text2) == 0) {
+            if (strcmp((*self->maps)[mi].trait, self->arena->nodes[n].text) != 0) continue;
+            if (strcmp((*self->maps)[mi].inst, self->arena->nodes[n].text3) != 0) continue;
+            for (bj = 0; bj < (*self->maps)[mi].nb; bj++)
+                if (strcmp((*self->maps)[mi].b[bj].method, self->arena->nodes[n].text2) == 0) {
                     found = mi;
                     bind = bj;
                     break;
@@ -5136,7 +5160,7 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
                      self->arena->nodes[n].text, self->arena->nodes[n].text3);
             return self->fail_from(n, msg);
         }
-        return emit_recipe(self, &self->maps[found], &self->maps[found].b[bind],
+        return emit_recipe(self, &(*self->maps)[found], &(*self->maps)[found].b[bind],
                            -1, self->arena->nodes[n].b, n);
     }
     /* LANG-29 S4 / B4: a binding-site conversion served by a `map binding`.
@@ -5160,11 +5184,11 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
         map_bind_key(rt, rk, MAX_TEXT);
         map_bind_key(tg, tk, MAX_TEXT);
         for (mi = 0; mi < (*self->nmaps); mi++) {
-            if (!self->maps[mi].is_binding) continue;
+            if (!(*self->maps)[mi].is_binding) continue;
             if (!map_visible(self, mi)) continue;
-            map_bind_key(self->maps[mi].host_type, hk, MAX_TEXT);
+            map_bind_key((*self->maps)[mi].host_type, hk, MAX_TEXT);
             if (strcmp(hk, rk) != 0) continue;
-            map_bind_key(self->maps[mi].bind_dst, dk, MAX_TEXT);
+            map_bind_key((*self->maps)[mi].bind_dst, dk, MAX_TEXT);
             if (strcmp(dk, tk) != 0) continue;
             if (cand < 0) cand = mi;
             else if (cand2 < 0) cand2 = mi;
@@ -5180,14 +5204,14 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
         if (cand2 >= 0) {
             char p1[MAX_TEXT];
             char p2[MAX_TEXT];
-            map_path_base(self->maps[cand].path, p1, sizeof p1);
-            map_path_base(self->maps[cand2].path, p2, sizeof p2);
+            map_path_base((*self->maps)[cand].path, p1, sizeof p1);
+            map_path_base((*self->maps)[cand2].path, p2, sizeof p2);
             snprintf(msg, sizeof msg,
                      "ambiguous map binding for '%s' -> '%s': %s and %s; exactly one imported binding may serve a pair",
                      rt, tg, p1, p2);
             return self->fail_from(n, msg);
         }
-        return emit_recipe(self, &self->maps[cand], &self->maps[cand].b[0],
+        return emit_recipe(self, &(*self->maps)[cand], &(*self->maps)[cand].b[0],
                            self->arena->nodes[n].a, -1, n);
     }
     if (self->arena->nodes[n].aux == 6) {
@@ -5205,18 +5229,18 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
            and be missed there */
         frontend::type::type_key(rt, rk, MAX_TEXT);
         for (mi = 0; mi < (*self->nmaps); mi++) {
-            if (self->maps[mi].is_binding) continue;
-            if (!self->maps[mi].is_static || !self->maps[mi].type_host) continue;
+            if ((*self->maps)[mi].is_binding) continue;
+            if (!(*self->maps)[mi].is_static || !(*self->maps)[mi].type_host) continue;
             if (!map_visible(self, mi)) continue;
             /* P20-01: a qualified call names the trait, so only its map
                is a candidate even when the host type has others. */
             if (self->arena->nodes[n].text3[0]
-                && strcmp(self->maps[mi].trait, self->arena->nodes[n].text3) != 0)
+                && strcmp((*self->maps)[mi].trait, self->arena->nodes[n].text3) != 0)
                 continue;
-            frontend::type::type_key(self->maps[mi].host_type, tk, MAX_TEXT);
+            frontend::type::type_key((*self->maps)[mi].host_type, tk, MAX_TEXT);
             if (strcmp(tk, rk) != 0) continue;
-            for (bj = 0; bj < self->maps[mi].nb; bj++)
-                if (strcmp(self->maps[mi].b[bj].method, self->arena->nodes[n].text2) == 0) {
+            for (bj = 0; bj < (*self->maps)[mi].nb; bj++)
+                if (strcmp((*self->maps)[mi].b[bj].method, self->arena->nodes[n].text2) == 0) {
                     if (cand < 0) {
                         cand = mi;
                         bind = bj;
@@ -5247,8 +5271,8 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
             char q2[MAX_TEXT];
             char m1[MAX_TEXT];
             char m2[MAX_TEXT];
-            int t1 = self->maps[cand].b[bind].ti;
-            int t2 = self->maps[cand2].b[bind2].ti;
+            int t1 = (*self->maps)[cand].b[bind].ti;
+            int t2 = (*self->maps)[cand2].b[bind2].ti;
             trait_qual_name(self->sym, t1, q1, sizeof q1);
             trait_qual_name(self->sym, t2, q2, sizeof q2);
             snprintf(m1, sizeof m1, "%s::%s", q1, self->arena->nodes[n].text2);
@@ -5259,10 +5283,10 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
                      "use '%s' or '%s'; ambiguous type-host map for method '%s' on type '%s':"
                      " '%s' and '%s'",
                      m1, m2, self->arena->nodes[n].text2, rt,
-                     self->maps[cand].path, self->maps[cand2].path);
+                     (*self->maps)[cand].path, (*self->maps)[cand2].path);
             return self->fail_from(n, msg);
         }
-        return emit_recipe(self, &self->maps[cand], &self->maps[cand].b[bind],
+        return emit_recipe(self, &(*self->maps)[cand], &(*self->maps)[cand].b[bind],
                            r, self->arena->nodes[n].b, n);
     }
     /* Phase 28 (D28-3): a call on the type parameter inside a bounded
@@ -8730,12 +8754,12 @@ impl EmitOps for Emitter {
         (void)self;
 
         for (i = 0; i < (*self->nmaps); i++) {
-            if (u >= 0 && self->maps[i].unit != u) continue;
-            if (self->maps[i].is_static) continue;
-            for (j = 0; j < self->maps[i].nb; j++) {
+            if (u >= 0 && (*self->maps)[i].unit != u) continue;
+            if ((*self->maps)[i].is_static) continue;
+            for (j = 0; j < (*self->maps)[i].nb; j++) {
                 struct MapBind *b;
                 struct MethodSig *sig;
-                b = &self->maps[i].b[j];
+                b = &(*self->maps)[i].b[j];
                 sig = &self->sym->traits[b->ti].m[b->mi];
                 /* a direct binding fills the slot with the C function itself */
                 if (b->direct) continue;
@@ -8758,21 +8782,21 @@ impl EmitOps for Emitter {
                     fprintf(self->out, "    %s;\n", b->call);
                 fputs("}\n", self->out);
             }
-            if (self->maps[i].nb > 0) {
+            if ((*self->maps)[i].nb > 0) {
                 /* an instance nothing boxes leaves its table unreferenced; a
                    mapped `pub` global is reachable from every importing unit */
                 if (self->map_vtable_exported(i))
                     fprintf(self->out, "const struct %s_vtbl %s = {\n",
-                            self->maps[i].trait, self->maps[i].vtable);
+                            (*self->maps)[i].trait, (*self->maps)[i].vtable);
                 else
                     fprintf(self->out, "static const struct %s_vtbl %s __attribute__((unused)) = {\n",
-                            self->maps[i].trait, self->maps[i].vtable);
-                for (j = 0; j < self->maps[i].nb; j++) {
+                            (*self->maps)[i].trait, (*self->maps)[i].vtable);
+                for (j = 0; j < (*self->maps)[i].nb; j++) {
                     if (j > 0) fputs(",\n", self->out);
-                    fprintf(self->out, "    .%s = %s", self->maps[i].b[j].method,
-                            self->maps[i].b[j].direct
-                                ? self->maps[i].b[j].call
-                                : self->maps[i].b[j].wrapper);
+                    fprintf(self->out, "    .%s = %s", (*self->maps)[i].b[j].method,
+                            (*self->maps)[i].b[j].direct
+                                ? (*self->maps)[i].b[j].call
+                                : (*self->maps)[i].b[j].wrapper);
                 }
                 fputs("\n};\n\n", self->out);
             }
@@ -9060,12 +9084,12 @@ impl EmitOps for Emitter {
         int t;
         (void)self;
 
-        t = self->sym->find_trait(self->maps[i].trait);
+        t = self->sym->find_trait((*self->maps)[i].trait);
         if (t < 0 || !self->sym->traits[t].is_pub) return 0;
         /* a namespace host has no object to be private: `pub trait` is the
            whole contract (SH-20) */
-        if (self->maps[i].ns_host) return 1;
-        return self->decl_is_pub(N_GLOBAL, self->maps[i].inst);
+        if ((*self->maps)[i].ns_host) return 1;
+        return self->decl_is_pub(N_GLOBAL, (*self->maps)[i].inst);
     }
 
     /* The header's half of the external-linkage contract: the consumer unit
@@ -9106,11 +9130,11 @@ impl EmitOps for Emitter {
         }
         if (u >= 0)
             for (i = 0; i < (*self->nmaps); i++) {
-                if (self->maps[i].unit != u) continue;
-                if (self->maps[i].is_static) continue;
+                if ((*self->maps)[i].unit != u) continue;
+                if ((*self->maps)[i].is_static) continue;
                 if (!self->map_vtable_exported(i)) continue;
                 fprintf(self->out, "extern const struct %s_vtbl %s;\n",
-                        self->maps[i].trait, self->maps[i].vtable);
+                        (*self->maps)[i].trait, (*self->maps)[i].vtable);
                 any = 1;
             }
         if (any) fputs("\n", self->out);
@@ -10207,13 +10231,13 @@ impl EmitOps for Emitter {
             /* LANG-29 S4 / B4: a `map binding` is a conversion registry entry,
                not a trait map; the `--emit-map` contract stays the Phase 11
                shape (its own reporting is out of the B4 slice). */
-            if (self->maps[i].is_binding) continue;
+            if ((*self->maps)[i].is_binding) continue;
             if (!first) fputc(',', f);
             first = 0;
             fputs("{\"trait\":\"", f);
-            self->emit_json_str(f, self->maps[i].trait);
-            if (self->maps[i].is_static) {
-                int su = self->maps[i].unit;
+            self->emit_json_str(f, (*self->maps)[i].trait);
+            if ((*self->maps)[i].is_static) {
+                int su = (*self->maps)[i].unit;
                 fputs("\",\"static\":true", f);
                 /* A mapping unit's shim is part of that map's definition, so the
                    JSON names the files a consumer build has to carry. */
@@ -10231,36 +10255,36 @@ impl EmitOps for Emitter {
             } else {
                 fputs("\",\"instance\":\"", f);
             }
-            self->emit_json_str(f, self->maps[i].inst);
+            self->emit_json_str(f, (*self->maps)[i].inst);
             fputs("\",\"host\":\"", f);
-            if (self->maps[i].type_host) fputs("type", f);
-            else fputs(self->maps[i].ns_host ? "namespace" : "instance", f);
-            if (self->maps[i].type_host) {
+            if ((*self->maps)[i].type_host) fputs("type", f);
+            else fputs((*self->maps)[i].ns_host ? "namespace" : "instance", f);
+            if ((*self->maps)[i].type_host) {
                 fputs("\",\"type\":\"", f);
-                self->emit_json_str(f, self->maps[i].host_type);
+                self->emit_json_str(f, (*self->maps)[i].host_type);
             }
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"bindings\":[", self->maps[i].line);
-            for (j = 0; j < self->maps[i].nb; j++) {
+            fprintf(f, "\",\"line\":%d,\"bindings\":[", (*self->maps)[i].line);
+            for (j = 0; j < (*self->maps)[i].nb; j++) {
                 char callee[MAX_TEXT];
                 if (j > 0) fputc(',', f);
                 fputs("{\"method\":\"", f);
-                self->emit_json_str(f, self->maps[i].b[j].method);
+                self->emit_json_str(f, (*self->maps)[i].b[j].method);
                 fputs("\",\"symbol\":\"", f);
-                if (self->maps[i].is_static) {
-                    map_recipe_callee(self->maps[i].b[j].call, callee);
+                if ((*self->maps)[i].is_static) {
+                    map_recipe_callee((*self->maps)[i].b[j].call, callee);
                     self->emit_json_str(f, callee);
                 } else {
-                    self->emit_json_str(f, self->maps[i].b[j].direct
-                                              ? self->maps[i].b[j].call
-                                              : self->maps[i].b[j].wrapper);
+                    self->emit_json_str(f, (*self->maps)[i].b[j].direct
+                                              ? (*self->maps)[i].b[j].call
+                                              : (*self->maps)[i].b[j].wrapper);
                 }
-                if (self->maps[i].is_static)
+                if ((*self->maps)[i].is_static)
                     fputs("\",\"wrapper\":false,\"inline\":true}", f);
                 else
                     fprintf(f, "\",\"wrapper\":%s}",
-                            self->maps[i].b[j].direct ? "false" : "true");
+                            (*self->maps)[i].b[j].direct ? "false" : "true");
             }
             fputs("]}", f);
         }
@@ -10745,7 +10769,7 @@ void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps,
 {
     g_emit.units = (struct Unit *)units;
     g_emit.nunits = nunits;
-    g_emit.maps = (struct MapTable *)maps;
+    g_emit.maps = (struct MapTable **)maps;
     g_emit.nmaps = nmaps;
     g_emit.calls = (struct Call **)calls;
     g_emit.ncalls = ncalls;
