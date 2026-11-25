@@ -4,7 +4,7 @@
 # Build a library whose exported signatures use `enum E` / `union U` from a C
 # header. The generated `.abi.h` must carry `enum E;` / `union U;`, and a
 # consumer that includes only the ABI header + the type header must compile
-# with -Werror=visibility and run.
+# with -Werror and run.
 set -u
 ct=${1:?usage: abi_enum_union.sh <ct-ast>}
 ct=$(cd "$(dirname "$ct")" && pwd)/$(basename "$ct")
@@ -48,9 +48,9 @@ int main(void)
     return take_enum(e) == 1 && take_union(&u) == 3 ? 0 : 1;
 }
 C
-if cc -std=c99 -Wall -Wextra -Werror=visibility -I "$work" "$work/consumer.c" "$work/lib.a" -o "$work/consumer" >"$work/cc.log" 2>&1 \
+if cc -std=c99 -Wall -Wextra -Werror -I "$work" "$work/consumer.c" "$work/lib.a" -o "$work/consumer" >"$work/cc.log" 2>&1 \
    && "$work/consumer"; then
-    ok "consumer compiles (-Werror=visibility) and runs"
+    ok "consumer compiles (-Werror) and runs"
 else
     bad "consumer" "$(head -4 "$work/cc.log")"
 fi
