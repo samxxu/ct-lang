@@ -391,6 +391,124 @@ else
     printf '  long literals: 200 and 1000 bytes round-trip\n'
 fi
 
+# --- S7: C2n-3 emitter text buffers -----------------------------------------
+# The emitter's `char[160]` locals held generated C names, member paths, type
+# spellings and initialiser items. A source identifier stops at 159 bytes, so a
+# single name fits; an *emitter-built* text does not: `recv + "." + field` for a
+# nested vptr, a `String` initialiser item longer than the old row, or a
+# diagnostic that names a long trait and struct. These fixtures are red on the
+# 160-byte rows and must stay whole after the builder migration.
+
+# S7a: a nested array field's vptr statement. `sub` was `recv + "." + field`
+# in a 160-byte row: a 90-byte local and a 90-byte field cut the member name,
+# and `cc` rejected the emitted C (`no member named 'fff…'`). The members are
+# spelled in full here, so the fix is visible in the product, not just the run.
+s7_inner="I$(mkruns i 90)"
+s7_field="f$(mkruns f 90)"
+s7_outer="O$(mkruns o 90)"
+s7_var="v$(mkruns v 90)"
+s7_trait="T$(mkruns t 40)"
+s7_meth="m$(mkruns m 20)"
+cat >"$w/nested.ct" <<CT
+trait $s7_trait {
+    int $s7_meth();
+}
+
+struct $s7_inner {
+    int x;
+} use $s7_trait;
+
+impl $s7_trait for $s7_inner {
+    int $s7_meth() { return self->x; }
+}
+
+struct $s7_outer {
+    $s7_inner $s7_field[2];
+}
+
+int main(void)
+{
+    $s7_outer $s7_var;
+    $s7_var.$s7_field[0].x = 3;
+    $s7_var.$s7_field[1].x = 4;
+    return $s7_var.$s7_field[0].x + $s7_var.$s7_field[1].x - 7;
+}
+CT
+if ! "$ct" "$w/nested.ct" -o "$w/nested.c" >"$w/nested.out" 2>"$w/nested.err"; then
+    bad "the nested long-member fixture did not compile: $(head -3 "$w/nested.err" | tr '\n' ' ')"
+elif ! $cc $cflags "$w/nested.c" -o "$w/nested" >"$w/nested.cc" 2>&1; then
+    bad "the nested vptr path was cut at 160 bytes (cc: $(head -1 "$w/nested.cc"))"
+elif ! "$w/nested"; then
+    bad "the nested long-member program exited non-zero"
+elif ! grep -q "$s7_var.$s7_field\[0\]" "$w/nested.c"; then
+    bad "the emitted C does not spell the full nested member path"
+else
+    ok
+    printf '  nested member path: 90-byte local + 90-byte field kept whole\n'
+fi
+
+# S7b: a `String` field initialised from a 200- and a 1000-byte literal. The
+# rewrite to an owning `str_dup_len` copy was guarded by `e0 - fs < MAX_TEXT`,
+# so a longer item stayed a bare literal and `release` freed static storage.
+{
+    printf 'struct Bag {\n    String s;\n}\n\nint main(void)\n{\n'
+    printf '    Bag a = { .s = '
+    i=0
+    while [ "$i" -lt 2 ]; do printf '"%s"' "$(mkruns a 100)"; i=$((i + 1)); done
+    printf ' };\n'
+    printf '    Bag b = { .s = '
+    i=0
+    while [ "$i" -lt 10 ]; do printf '"%s"' "$(mkruns b 100)"; i=$((i + 1)); done
+    printf ' };\n'
+    cat <<'CT'
+    int n = a.s.len();
+    int m = b.s.len();
+    int ok = (n == 200 && m == 1000);
+    a.s.release();
+    b.s.release();
+    return ok ? 0 : 1;
+}
+CT
+} >"$w/longfield.ct"
+if ! "$ct" "$w/longfield.ct" -o "$w/longfield.c" >"$w/longfield.out" 2>"$w/longfield.err"; then
+    bad "the long String-field initialiser did not compile: $(head -3 "$w/longfield.err" | tr '\n' ' ')"
+elif [ "$(grep -c '\.s = str_dup_len(' "$w/longfield.c")" -ne 2 ]; then
+    bad "a 200/1000-byte String initialiser item was not rewritten to an owning copy"
+elif ! grep -q "$(mkruns b 100)" "$w/longfield.c"; then
+    bad "the 1000-byte initialiser item lost its last 100-byte literal segment"
+elif ! $cc $cflags "$w/longfield.c" -o "$w/longfield" >"$w/longfield.cc" 2>&1; then
+    bad "the long String-field C did not build: $(head -1 "$w/longfield.cc")"
+elif ! "$w/longfield"; then
+    bad "the long String-field initialiser lost its bytes or double-freed (status $?)"
+else
+    ok
+    printf '  long initialiser items: 200/1000 bytes become owning copies\n'
+fi
+
+# S7d: a 150-byte label and its `goto` (the label rows are interned since
+# C2n-2; this keeps the emitter from re-introducing a row).
+s7_label="L$(mkruns l 150)"
+cat >"$w/longlabel.ct" <<CT
+int main(void)
+{
+    int n = 0;
+$s7_label:
+    n = 1;
+    if (n == 0) goto $s7_label;
+    return n - 1;
+}
+CT
+if ! "$ct" "$w/longlabel.ct" -o "$w/longlabel.c" >"$w/longlabel.out" 2>"$w/longlabel.err"; then
+    bad "the 150-byte label did not compile: $(head -3 "$w/longlabel.err" | tr '\n' ' ')"
+elif ! grep -q "$s7_label" "$w/longlabel.c"; then
+    bad "the emitted C lost the 150-byte label"
+elif ! $cc $cflags "$w/longlabel.c" -o "$w/longlabel" >"$w/longlabel.cc" 2>&1 || ! "$w/longlabel"; then
+    bad "the 150-byte label program did not build and run"
+else
+    ok
+    printf '  long label: 150-byte label emitted whole\n'
+fi
+
 echo "intern_pool: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
 exit 0
