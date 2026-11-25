@@ -372,7 +372,8 @@ struct frontend_sym_AdtVariant {
     char name[160];
     char cname[160];
     int nfields;
-    struct frontend_sym_AdtField fields[8];
+    int fcap;
+    struct frontend_sym_AdtField * fields;
     int line;
     int col;
 };
@@ -380,7 +381,8 @@ struct frontend_sym_Adt {
     char name[160];
     char full[160];
     int nvariants;
-    struct frontend_sym_AdtVariant variants[96];
+    int vcap;
+    struct frontend_sym_AdtVariant * variants;
     int is_pub;
     int owner;
     char path[1024];

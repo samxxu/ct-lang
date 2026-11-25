@@ -3214,7 +3214,7 @@ impl ParseOps for Parser {
             }
             if (adt < 0)
                 return tool::diag::ct_sem_error(tline, tcol,
-                    "too many ADT types in this build (limit 64)", self->mem->path);
+                    "too many ADT types in this build (limit 65536)", self->mem->path);
             self->arena->nodes[s].aux = 2;          /* ADT */
             self->arena->nodes[s].num = adt + 1;    /* registry row + 1 */
             for (tn = mem_first; tn >= 0; tn = self->arena->nodes[tn].next) {
@@ -3226,7 +3226,7 @@ impl ParseOps for Parser {
                         self->arena->nodes[tn].num);
                 if (v < 0) {
                     char msg[MAX_TEXT];
-                    snprintf(msg, sizeof msg, "too many variants for ADT '%s' (limit 96)", name);
+                    snprintf(msg, sizeof msg, "too many variants for ADT '%s' (limit 65536)", name);
                     return tool::diag::ct_sem_error(self->arena->nodes[tn].line,
                         self->arena->nodes[tn].num, msg, self->mem->path);
                 }
@@ -3246,7 +3246,7 @@ impl ParseOps for Parser {
                             self->arena->nodes[fld].text) < 0) {
                         char msg[MAX_TEXT];
                         snprintf(msg, sizeof msg,
-                                 "too many payload fields for '%s.%s' (limit 8)",
+                                 "too many payload fields for '%s.%s' (limit 65536)",
                                  name, self->arena->nodes[tn].text);
                         return tool::diag::ct_sem_error(self->arena->nodes[fld].line,
                             self->arena->nodes[fld].num, msg, self->mem->path);

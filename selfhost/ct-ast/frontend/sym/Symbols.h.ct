@@ -601,10 +601,18 @@ pub int ct_inst_resolve(const char *in, char *out, int cap);
    per-unit symbol tables reset, while a consumer unit must still see the
    variants of a `pub` header ADT (D84-2).
 
+   S1a-0 C3: the three counts grow on demand. `MAX_ADTS` / `MAX_ADT_VARIANTS`
+   / `MAX_ADT_FIELDS` are only the starting capacities; the formal ceiling is
+   `MAX_ADTS_MAX` / `MAX_ADT_VARIANTS_MAX` / `MAX_ADT_FIELDS_MAX` (65536, an
+   OOM guard, not a language limit). The blocks are heap rows owned by the
+   enclosing row, so a realloc of the ADT table never moves a variant block.
    Caps are literals: the generated header carries no macros. */
 #define MAX_ADTS 64
+#define MAX_ADTS_MAX 65536
 #define MAX_ADT_VARIANTS 96
+#define MAX_ADT_VARIANTS_MAX 65536
 #define MAX_ADT_FIELDS 8
+#define MAX_ADT_FIELDS_MAX 65536
 pub struct AdtField {
     char name[160];
     char type[160];
@@ -613,7 +621,8 @@ pub struct AdtVariant {
     char name[160];             /* the source name, `Circle` */
     char cname[160];            /* the emitted union member, `Circle` */
     int  nfields;
-    struct AdtField fields[8];
+    int  fcap;
+    struct AdtField *fields;    /* owned by this variant; NULL until the first field */
     int  line;
     int  col;
 }
@@ -621,7 +630,8 @@ pub struct Adt {
     char name[160];             /* the source name, `Shape` */
     char full[160];             /* the namespace-mangled C tag, `lib_Shape` */
     int  nvariants;
-    struct AdtVariant variants[96];
+    int  vcap;
+    struct AdtVariant *variants; /* owned by this row; NULL until the first variant */
     int  is_pub;
     int  owner;                 /* the unit that declared it; -1 in compile mode */
     char path[1024];
@@ -2758,16 +2768,93 @@ int ct_inst_resolve(const char *in, char *out, int cap)
    header ADT after the owner's per-unit tables are gone. */
 static struct Adt *g_adts;
 static int g_nadts;
+static int g_adtcap;
+
+/* S1a-0 C3: double the ADT table to hold `need` rows. The rows hold pointers to
+   their own variant/field blocks, so a realloc moves the rows only. -1 is OOM or
+   the formal ceiling (`MAX_ADTS_MAX`), which the caller reports as a capacity
+   error. */
+static int adt_ensure(int need)
+{
+    int cap;
+    struct Adt *p;
+
+    if (need <= g_adtcap) return 0;
+    if (need > MAX_ADTS_MAX) return -1;
+    cap = g_adtcap > 0 ? g_adtcap : MAX_ADTS;
+    while (cap < need) {
+        if (cap > MAX_ADTS_MAX / 2) {
+            cap = MAX_ADTS_MAX;
+            break;
+        }
+        cap *= 2;
+    }
+    p = realloc(g_adts, (size_t)cap * sizeof(*g_adts));
+    if (!p) return -1;
+    g_adts = p;
+    g_adtcap = cap;
+    return 0;
+}
 
 struct Adt *ct_adts(int *n)
 {
-    if (!g_adts) g_adts = calloc(MAX_ADTS, sizeof(*g_adts));
-    if (!g_adts) {
+    if (!g_adts && adt_ensure(MAX_ADTS) != 0) {
         if (n) *n = 0;
-        return g_adts;
+        return 0;
     }
     if (n) *n = g_nadts;
     return g_adts;
+}
+
+/* The variant block of one ADT. `need` is the count the caller is about to
+   store, so the block always has room for it. */
+static int adt_ensure_variants(int adt, int need)
+{
+    int cap;
+    struct AdtVariant *p;
+
+    if (!g_adts || adt < 0 || adt >= g_nadts) return -1;
+    if (need <= g_adts[adt].vcap) return 0;
+    if (need > MAX_ADT_VARIANTS_MAX) return -1;
+    cap = g_adts[adt].vcap > 0 ? g_adts[adt].vcap : MAX_ADT_VARIANTS;
+    while (cap < need) {
+        if (cap > MAX_ADT_VARIANTS_MAX / 2) {
+            cap = MAX_ADT_VARIANTS_MAX;
+            break;
+        }
+        cap *= 2;
+    }
+    p = realloc(g_adts[adt].variants, (size_t)cap * sizeof(*p));
+    if (!p) return -1;
+    g_adts[adt].variants = p;
+    g_adts[adt].vcap = cap;
+    return 0;
+}
+
+/* The payload-field block of one variant. */
+static int adt_ensure_fields(int adt, int v, int need)
+{
+    int cap;
+    struct AdtField *p;
+
+    if (!g_adts || adt < 0 || adt >= g_nadts) return -1;
+    if (v < 0 || v >= g_adts[adt].nvariants) return -1;
+    if (need <= g_adts[adt].variants[v].fcap) return 0;
+    if (need > MAX_ADT_FIELDS_MAX) return -1;
+    cap = g_adts[adt].variants[v].fcap > 0 ? g_adts[adt].variants[v].fcap
+                                           : MAX_ADT_FIELDS;
+    while (cap < need) {
+        if (cap > MAX_ADT_FIELDS_MAX / 2) {
+            cap = MAX_ADT_FIELDS_MAX;
+            break;
+        }
+        cap *= 2;
+    }
+    p = realloc(g_adts[adt].variants[v].fields, (size_t)cap * sizeof(*p));
+    if (!p) return -1;
+    g_adts[adt].variants[v].fields = p;
+    g_adts[adt].variants[v].fcap = cap;
+    return 0;
 }
 
 /* The C tag is the row's identity across units; the source name is the
@@ -2792,11 +2879,14 @@ int ct_adt_add(const char *name, const char *full, int is_pub, int owner,
     struct Adt *a = ct_adts(&n);
 
     if (ct_adt_find(full) >= 0) return -2;
-    if (!a || n >= MAX_ADTS) return -1;
+    if (!a || adt_ensure(n + 1) != 0) return -1;
+    a = g_adts;
     i = n;
     snprintf(a[i].name, MAX_TEXT, "%s", name ? name : "");
     snprintf(a[i].full, MAX_TEXT, "%s", full ? full : "");
     a[i].nvariants = 0;
+    a[i].vcap = 0;
+    a[i].variants = 0;
     a[i].is_pub = is_pub;
     a[i].owner = owner;
     snprintf(a[i].path, 1024, "%s", path ? path : "");
@@ -2827,11 +2917,14 @@ int ct_adt_add_variant(int adt, const char *name, const char *cname, int line, i
     struct Adt *a = ct_adts(&n);
 
     if (!a || adt < 0 || adt >= n) return -1;
-    if (a[adt].nvariants >= MAX_ADT_VARIANTS) return -1;
+    if (adt_ensure_variants(adt, a[adt].nvariants + 1) != 0) return -1;
+    a = g_adts;
     v = a[adt].nvariants;
     snprintf(a[adt].variants[v].name, MAX_TEXT, "%s", name ? name : "");
     snprintf(a[adt].variants[v].cname, MAX_TEXT, "%s", cname ? cname : "");
     a[adt].variants[v].nfields = 0;
+    a[adt].variants[v].fcap = 0;
+    a[adt].variants[v].fields = 0;
     a[adt].variants[v].line = line;
     a[adt].variants[v].col = col;
     a[adt].nvariants++;
@@ -2845,7 +2938,8 @@ int ct_adt_add_field(int adt, int v, const char *name, const char *type)
 
     if (!a || adt < 0 || adt >= n) return -1;
     if (v < 0 || v >= a[adt].nvariants) return -1;
-    if (a[adt].variants[v].nfields >= MAX_ADT_FIELDS) return -1;
+    if (adt_ensure_fields(adt, v, a[adt].variants[v].nfields + 1) != 0) return -1;
+    a = g_adts;
     f = a[adt].variants[v].nfields;
     snprintf(a[adt].variants[v].fields[f].name, MAX_TEXT, "%s", name ? name : "");
     snprintf(a[adt].variants[v].fields[f].type, MAX_TEXT, "%s", type ? type : "");

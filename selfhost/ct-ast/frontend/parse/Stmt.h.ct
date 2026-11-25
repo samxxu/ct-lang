@@ -37,6 +37,8 @@ import frontend::type::TypeCheck;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
+/* S1a-0 C3: the binding-name scratch ceiling (OOM guard only). */
+#define MAX_ADT_FIELDS_MAX 65536
 #define MAX_INIT_TEXT 16384
 #define MAX_LABELS 64
 #define MAX_LABELS_MAX 65536
@@ -2793,7 +2795,7 @@ impl StmtOps for Stmt {
     int parse_match(void)
     {
         int s, e, arms, tail, arm, adt, v, line, col, i;
-        int covered[96];
+        int *covered;
         int ncov, wild, seen_wild, is_ptr, a2;
         int aline, acol;
         char tybuf[MAX_TEXT];
@@ -2845,7 +2847,12 @@ impl StmtOps for Stmt {
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
         adts = frontend::sym::ct_adts(&nadts);
-        for (i = 0; i < adts[adt].nvariants && i < 96; i++) covered[i] = 0;
+        /* S1a-0 C3: the variant count is dynamic, so the coverage scratch grows
+           with it instead of stopping at a fixed 96 rows. */
+        covered = calloc((size_t)(adts[adt].nvariants > 0 ? adts[adt].nvariants : 1),
+                         sizeof(*covered));
+        if (!covered) return self->sup->fail("out of memory");
+        for (i = 0; i < adts[adt].nvariants; i++) covered[i] = 0;
         ncov = 0;
         wild = -1;
         seen_wild = 0;
@@ -2885,7 +2892,8 @@ impl StmtOps for Stmt {
                 wild = arm;
             } else {
                 int body, nb, first_bind, last_bind, w;
-                char bind_names[8][160];
+                int nbind;
+                char *bind_names;
                 if (seen_wild)
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "a wildcard match arm must be the last arm", self->mem->path);
@@ -2934,23 +2942,44 @@ impl StmtOps for Stmt {
                 first_bind = -1;
                 last_bind = -1;
                 nb = 0;
+                /* S1a-0 C3: the binding-name block grows on demand. It starts
+                   above the old 8-slot fixed array, and it is NOT bounded by
+                   the payload field count: a mismatched arm must still reach
+                   the arity diagnostic below ("binds 2 names, but the variant
+                   has 1 field"), not a generic capacity failure. */
+                nbind = adts[adt].variants[v].nfields > 8
+                            ? adts[adt].variants[v].nfields : 8;
+                bind_names = calloc((size_t)nbind, MAX_TEXT);
+                if (!bind_names) return self->sup->fail("out of memory");
                 while (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
+                    char *grown;
+                    int ncap;
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a binding name");
-                    if (nb >= 8)
-                        return self->sup->fail("too many bindings in one match arm");
-                    self->lex->tok_copy(bind_names[nb], MAX_TEXT);
+                    if (nb >= nbind) {
+                        ncap = nbind > MAX_ADT_FIELDS_MAX / 2
+                                   ? MAX_ADT_FIELDS_MAX : nbind * 2;
+                        if (nb >= ncap)
+                            return self->sup->fail("too many bindings in one match arm");
+                        grown = realloc(bind_names, (size_t)ncap * MAX_TEXT);
+                        if (!grown) return self->sup->fail("out of memory");
+                        bind_names = grown;
+                        nbind = ncap;
+                    }
+                    self->lex->tok_copy(bind_names + (size_t)nb * MAX_TEXT, MAX_TEXT);
                     for (w = 0; w < nb; w++)
-                        if (strcmp(bind_names[w], bind_names[nb]) == 0) {
+                        if (strcmp(bind_names + (size_t)w * MAX_TEXT,
+                                   bind_names + (size_t)nb * MAX_TEXT) == 0) {
                             snprintf(msg, sizeof msg, "duplicate binding '%s' in a match arm",
-                                     bind_names[nb]);
+                                     bind_names + (size_t)nb * MAX_TEXT);
                             return tool::diag::ct_sem_error(self->lex->tokline,
                                 self->lex->tokstart - self->lex->lstart + 1, msg,
                                 self->mem->path);
                         }
                     w = self->sup->new_node(N_BIND);
                     if (w < 0) return -1;
-                    snprintf(self->arena->nodes[w].text, MAX_TEXT, "%s", bind_names[nb]);
+                    snprintf(self->arena->nodes[w].text, MAX_TEXT, "%s",
+                             bind_names + (size_t)nb * MAX_TEXT);
                     if (first_bind < 0) first_bind = w;
                     else self->arena->nodes[last_bind].next = w;
                     last_bind = w;
@@ -3101,7 +3130,7 @@ impl StmtOps for Stmt {
     int parse_match_expr(void)
     {
         int s, e, arms, tail, arm, adt, v, line, col, i;
-        int covered[96];
+        int *covered;
         int ncov, wild, seen_wild, is_ptr, a2;
         int body, asg, yexpr, have_type, ytyped, block_form;
         int yline, ycol;
@@ -3157,7 +3186,12 @@ impl StmtOps for Stmt {
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
         adts = frontend::sym::ct_adts(&nadts);
-        for (i = 0; i < adts[adt].nvariants && i < 96; i++) covered[i] = 0;
+        /* S1a-0 C3: the variant count is dynamic, so the coverage scratch grows
+           with it instead of stopping at a fixed 96 rows. */
+        covered = calloc((size_t)(adts[adt].nvariants > 0 ? adts[adt].nvariants : 1),
+                         sizeof(*covered));
+        if (!covered) return self->sup->fail("out of memory");
+        for (i = 0; i < adts[adt].nvariants; i++) covered[i] = 0;
         ncov = 0;
         wild = -1;
         seen_wild = 0;
@@ -3192,7 +3226,8 @@ impl StmtOps for Stmt {
                 self->sup->lex_next();
             } else {
                 int nb, first_bind, last_bind, w;
-                char bind_names[8][160];
+                int nbind;
+                char *bind_names;
                 if (seen_wild)
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "a wildcard match arm must be the last arm", self->mem->path);
@@ -3239,23 +3274,44 @@ impl StmtOps for Stmt {
                 first_bind = -1;
                 last_bind = -1;
                 nb = 0;
+                /* S1a-0 C3: the binding-name block grows on demand. It starts
+                   above the old 8-slot fixed array, and it is NOT bounded by
+                   the payload field count: a mismatched arm must still reach
+                   the arity diagnostic below ("binds 2 names, but the variant
+                   has 1 field"), not a generic capacity failure. */
+                nbind = adts[adt].variants[v].nfields > 8
+                            ? adts[adt].variants[v].nfields : 8;
+                bind_names = calloc((size_t)nbind, MAX_TEXT);
+                if (!bind_names) return self->sup->fail("out of memory");
                 while (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
+                    char *grown;
+                    int ncap;
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a binding name");
-                    if (nb >= 8)
-                        return self->sup->fail("too many bindings in one match arm");
-                    self->lex->tok_copy(bind_names[nb], MAX_TEXT);
+                    if (nb >= nbind) {
+                        ncap = nbind > MAX_ADT_FIELDS_MAX / 2
+                                   ? MAX_ADT_FIELDS_MAX : nbind * 2;
+                        if (nb >= ncap)
+                            return self->sup->fail("too many bindings in one match arm");
+                        grown = realloc(bind_names, (size_t)ncap * MAX_TEXT);
+                        if (!grown) return self->sup->fail("out of memory");
+                        bind_names = grown;
+                        nbind = ncap;
+                    }
+                    self->lex->tok_copy(bind_names + (size_t)nb * MAX_TEXT, MAX_TEXT);
                     for (w = 0; w < nb; w++)
-                        if (strcmp(bind_names[w], bind_names[nb]) == 0) {
+                        if (strcmp(bind_names + (size_t)w * MAX_TEXT,
+                                   bind_names + (size_t)nb * MAX_TEXT) == 0) {
                             snprintf(msg, sizeof msg, "duplicate binding '%s' in a match arm",
-                                     bind_names[nb]);
+                                     bind_names + (size_t)nb * MAX_TEXT);
                             return tool::diag::ct_sem_error(self->lex->tokline,
                                 self->lex->tokstart - self->lex->lstart + 1, msg,
                                 self->mem->path);
                         }
                     w = self->sup->new_node(N_BIND);
                     if (w < 0) return -1;
-                    snprintf(self->arena->nodes[w].text, MAX_TEXT, "%s", bind_names[nb]);
+                    snprintf(self->arena->nodes[w].text, MAX_TEXT, "%s",
+                             bind_names + (size_t)nb * MAX_TEXT);
                     if (first_bind < 0) first_bind = w;
                     else self->arena->nodes[last_bind].next = w;
                     last_bind = w;

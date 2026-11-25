@@ -1,14 +1,15 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；B/C/D 类待做）。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类 ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）已动态（C3）**；`MAX_STRUCT_TPARAMS` 与 B/D 类待做）。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
 ## 0 结论
 
 - `ct-ast` 共 **49** 个 `Limits.h.ct` 常量 + **8** 个单元内本地常量 + **约 14** 处硬编码数字上限；
-- 目前**只有 `MAX_FUNCS` 已动态化**（SH-109：初始 512、倍增、安全阀 65536）；
-- 其余全部是“固定上限 + 越界报错”；其中 `MAX_METHODS=64` 已挡住新增方法，`MAX_TEXT=160` 在 31 个单元出现 **1494** 次、定长数组 **791** 处，是最大的一块；
+- A 类多数表已按需增长（SH-109 起，初值 + 倍增 + 65536 安全阀）；
+- **C 类**：`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS` 已动态（C3），`MAX_STRUCT_TPARAMS` 仍待做；
+- 尚未放开的仍是“固定上限 + 越界报错”；其中 `MAX_METHODS=64` 已挡住新增方法，`MAX_TEXT=160` 在 31 个单元出现 **1494** 次、定长数组 **791** 处，是最大的一块；
 - 放开分四类：**A 计数**（动态数组）、**B 文本/路径**（按需分配）、**C 语言语义上限**（一并放开，但必须先同步 spec / stable-subset）、**D 资源保护**（保留必要的深度/恢复保护）。
 - **形式上限（2026-11-25 所有者裁定）**：所有放开项统一收敛到一个形式上限 `CAP_LIMIT = 65536`（与 `MAX_FUNCS_MAX` 同形）；文本类另有 `TEXT_LIMIT = 65536` 字节。真实程序不应触到它，触到只作 OOM/资源保护报错。只有深度/错误恢复类保护保留原值。
 
@@ -58,12 +59,12 @@
 | `MAX_DIGEST_FILES` | 4096 | 4 | A | **已动态**：`dir_digest` 的文件路径块按倍增 realloc 到 `MAX_DIGEST_FILES_MAX=65536`（`sha_collect` 收 `char **`/`int *cap`），4100 文件树可算摘要 |
 | `MAX_INIT_ITEM` | 4096 | 3 | A | **已动态**：`rewrite_init_text` 的单项暂存按该行捕获文本长度分配（不再受 4096 限制），`MAX_INIT_ITEM_MAX=65536` 为形式上限 |
 | `MAX_RAW_INIT` | 4096 | 9 | A | **已动态**：`ParseSupport` 的花括号捕获缓冲区倍增到 `MAX_RAW_INIT_MAX=65536`，`init_raw(char **out)` 返回内部块；删除 `initializer is too long` 的 4096 上限 |
-| `MAX_LAYOUT_ADTS` | 64 | 5 | A | **已动态**：`g_adt_layout_state` 堆块倍增到 `MAX_LAYOUT_ADTS_MAX=65536`（受 C 类 MAX_ADTS=64 遮蔽） |
+| `MAX_LAYOUT_ADTS` | 64 | 5 | A | **已动态**：`g_adt_layout_state` 堆块倍增到 `MAX_LAYOUT_ADTS_MAX=65536`；ADT 表本身也按需增长（C3），不再遮蔽 |
 | `MAX_LAYOUT_INSTS` | 128 | 11 | A | **已动态**：`g_inst_layout_state`/`g_shell_emit_state` 倍增到 `MAX_LAYOUT_INSTS_MAX=65536`；`EmitterQuery` 的全表扫描去掉固定界 |
 | `MAX_WARNINGS` | 32 | 15 | A | **已落**：`warns` 倍增到 65536；`--max-warnings` 另议 |
-| `MAX_ADTS` | 64 | 5 | C | 放开到 `CAP_LIMIT`；spec §8 / stable-subset 同步 |
-| `MAX_ADT_VARIANTS` | 96 | 3 | C | 放开到 `CAP_LIMIT`；spec §8 / stable-subset 同步 |
-| `MAX_ADT_FIELDS` | 8 | 3 | C | 放开到 `CAP_LIMIT`；spec §8 / stable-subset 同步 |
+| `MAX_ADTS` | 64 | 5 | C | **已动态（C3）**：ADT 行块倍增到 `MAX_ADTS_MAX=65536`，初值 64；spec §4.73 / stable-subset 同步 |
+| `MAX_ADT_VARIANTS` | 96 | 3 | C | **已动态（C3）**：每个 ADT 的变体行块倍增到 `MAX_ADT_VARIANTS_MAX=65536`，初值 96；`match` 覆盖 scratch 按变体数分配 |
+| `MAX_ADT_FIELDS` | 8 | 3 | C | **已动态（C3）**：每个变体的负载字段行块倍增到 `MAX_ADT_FIELDS_MAX=65536`，初值 8；`match` 绑定名表按字段数分配 |
 | `MAX_STRUCT_TPARAMS` | 2 | 14 | C | 放开到 `CAP_LIMIT`；spec §8 “类型参数最多两个”同步改写 |
 | `MAX_ALIAS_CHAIN` | 32 | 7 | D | 递归链保护；保留 |
 | `MAX_LAYOUT_DEPTH` | 32 | 8 | D | 递归深度保护；保留 |

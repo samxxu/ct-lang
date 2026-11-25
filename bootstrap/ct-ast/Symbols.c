@@ -46,8 +46,11 @@
 #define MAX_METH_ANN 256
 #define MAX_METH_ANN_MAX 65536
 #define MAX_ADTS 64
+#define MAX_ADTS_MAX 65536
 #define MAX_ADT_VARIANTS 96
+#define MAX_ADT_VARIANTS_MAX 65536
 #define MAX_ADT_FIELDS 8
+#define MAX_ADT_FIELDS_MAX 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -152,6 +155,9 @@ static int insts_grow(int);
 static int impls_grow(int);
 static int impl_tparam(struct frontend_sym_StructImpl *, const char *);
 static int impl_match(int, int, const char *, const char *, const char *, char *, char *, int *, int *, int);
+static int adt_ensure(int);
+static int adt_ensure_variants(int, int);
+static int adt_ensure_fields(int, int, int);
 static struct frontend_sym_Symbols frontend_sym_g_symbols = { .__frontend_sym_symbolops_vptr = &frontend_sym_Symbols_frontend_sym_SymbolOps_vtable, .__frontend_sym_typealiasops_vptr = &frontend_sym_Symbols_frontend_sym_TypeAliasOps_vtable };
 static struct frontend_sym_StructTmpl * frontend_sym_g_tmpls;
 static int frontend_sym_g_ntmpls;
@@ -164,6 +170,7 @@ static int frontend_sym_g_nimpls;
 static int frontend_sym_g_implscap;
 static struct frontend_sym_Adt * frontend_sym_g_adts;
 static int frontend_sym_g_nadts;
+static int frontend_sym_g_adtcap;
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_fail(void *self, const char * msg) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     (void)(_self);
@@ -2549,20 +2556,101 @@ int frontend_sym_ct_inst_resolve(const char * in, char * out, int cap) {
     }
     return 0;
 }
-struct frontend_sym_Adt * frontend_sym_ct_adts(int * n) {
-    if ((!frontend_sym_g_adts)) {
-        frontend_sym_g_adts = calloc(MAX_ADTS, sizeof((*frontend_sym_g_adts)));
+static int adt_ensure(int need) {
+    int cap;
+    struct frontend_sym_Adt * p;
+    if (need <= frontend_sym_g_adtcap) {
+        return 0;
     }
-    if ((!frontend_sym_g_adts)) {
+    if (need > MAX_ADTS_MAX) {
+        return (-1);
+    }
+    cap = ((frontend_sym_g_adtcap > 0) ? frontend_sym_g_adtcap : MAX_ADTS);
+    while (cap < need) {
+        if (cap > (MAX_ADTS_MAX / 2)) {
+            cap = MAX_ADTS_MAX;
+            break;
+        }
+        cap *= 2;
+    }
+    p = realloc(frontend_sym_g_adts, ((size_t)(cap) * sizeof((*frontend_sym_g_adts))));
+    if ((!p)) {
+        return (-1);
+    }
+    frontend_sym_g_adts = p;
+    frontend_sym_g_adtcap = cap;
+    return 0;
+}
+struct frontend_sym_Adt * frontend_sym_ct_adts(int * n) {
+    if (((!frontend_sym_g_adts) && (adt_ensure(MAX_ADTS) != 0))) {
         if (n) {
             (*n) = 0;
         }
-        return frontend_sym_g_adts;
+        return 0;
     }
     if (n) {
         (*n) = frontend_sym_g_nadts;
     }
     return frontend_sym_g_adts;
+}
+static int adt_ensure_variants(int adt, int need) {
+    int cap;
+    struct frontend_sym_AdtVariant * p;
+    if ((((!frontend_sym_g_adts) || (adt < 0)) || (adt >= frontend_sym_g_nadts))) {
+        return (-1);
+    }
+    if (need <= frontend_sym_g_adts[adt].vcap) {
+        return 0;
+    }
+    if (need > MAX_ADT_VARIANTS_MAX) {
+        return (-1);
+    }
+    cap = ((frontend_sym_g_adts[adt].vcap > 0) ? frontend_sym_g_adts[adt].vcap : MAX_ADT_VARIANTS);
+    while (cap < need) {
+        if (cap > (MAX_ADT_VARIANTS_MAX / 2)) {
+            cap = MAX_ADT_VARIANTS_MAX;
+            break;
+        }
+        cap *= 2;
+    }
+    p = realloc(frontend_sym_g_adts[adt].variants, ((size_t)(cap) * sizeof((*p))));
+    if ((!p)) {
+        return (-1);
+    }
+    frontend_sym_g_adts[adt].variants = p;
+    frontend_sym_g_adts[adt].vcap = cap;
+    return 0;
+}
+static int adt_ensure_fields(int adt, int v, int need) {
+    int cap;
+    struct frontend_sym_AdtField * p;
+    if ((((!frontend_sym_g_adts) || (adt < 0)) || (adt >= frontend_sym_g_nadts))) {
+        return (-1);
+    }
+    if (((v < 0) || (v >= frontend_sym_g_adts[adt].nvariants))) {
+        return (-1);
+    }
+    if (need <= frontend_sym_g_adts[adt].variants[v].fcap) {
+        return 0;
+    }
+    if (need > MAX_ADT_FIELDS_MAX) {
+        return (-1);
+    }
+    cap = ((frontend_sym_g_adts[adt].variants[v].fcap > 0) ? frontend_sym_g_adts[adt].variants[v].fcap : MAX_ADT_FIELDS);
+    while (cap < need) {
+        if (cap > (MAX_ADT_FIELDS_MAX / 2)) {
+            cap = MAX_ADT_FIELDS_MAX;
+            break;
+        }
+        cap *= 2;
+    }
+    p = realloc(frontend_sym_g_adts[adt].variants[v].fields, ((size_t)(cap) * sizeof((*p))));
+    if ((!p)) {
+        return (-1);
+    }
+    frontend_sym_g_adts[adt].variants[v].fields = p;
+    frontend_sym_g_adts[adt].variants[v].fcap = cap;
+    return 0;
 }
 int frontend_sym_ct_adt_find(const char * name) {
     int i;
@@ -2590,13 +2678,16 @@ int frontend_sym_ct_adt_add(const char * name, const char * full, int is_pub, in
     if (frontend_sym_ct_adt_find(full) >= 0) {
         return (-2);
     }
-    if (((!a) || (n >= MAX_ADTS))) {
+    if (((!a) || (adt_ensure((n + 1)) != 0))) {
         return (-1);
     }
+    a = frontend_sym_g_adts;
     i = n;
     snprintf(a[i].name, MAX_TEXT, "%s", (name ? name : ""));
     snprintf(a[i].full, MAX_TEXT, "%s", (full ? full : ""));
     a[i].nvariants = 0;
+    a[i].vcap = 0;
+    a[i].variants = 0;
     a[i].is_pub = is_pub;
     a[i].owner = owner;
     snprintf(a[i].path, 1024, "%s", (path ? path : ""));
@@ -2628,13 +2719,16 @@ int frontend_sym_ct_adt_add_variant(int adt, const char * name, const char * cna
     if ((((!a) || (adt < 0)) || (adt >= n))) {
         return (-1);
     }
-    if (a[adt].nvariants >= MAX_ADT_VARIANTS) {
+    if (adt_ensure_variants(adt, (a[adt].nvariants + 1)) != 0) {
         return (-1);
     }
+    a = frontend_sym_g_adts;
     v = a[adt].nvariants;
     snprintf(a[adt].variants[v].name, MAX_TEXT, "%s", (name ? name : ""));
     snprintf(a[adt].variants[v].cname, MAX_TEXT, "%s", (cname ? cname : ""));
     a[adt].variants[v].nfields = 0;
+    a[adt].variants[v].fcap = 0;
+    a[adt].variants[v].fields = 0;
     a[adt].variants[v].line = line;
     a[adt].variants[v].col = col;
     a[adt].nvariants++;
@@ -2650,9 +2744,10 @@ int frontend_sym_ct_adt_add_field(int adt, int v, const char * name, const char 
     if (((v < 0) || (v >= a[adt].nvariants))) {
         return (-1);
     }
-    if (a[adt].variants[v].nfields >= MAX_ADT_FIELDS) {
+    if (adt_ensure_fields(adt, v, (a[adt].variants[v].nfields + 1)) != 0) {
         return (-1);
     }
+    a = frontend_sym_g_adts;
     f = a[adt].variants[v].nfields;
     snprintf(a[adt].variants[v].fields[f].name, MAX_TEXT, "%s", (name ? name : ""));
     snprintf(a[adt].variants[v].fields[f].type, MAX_TEXT, "%s", (type ? type : ""));

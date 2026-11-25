@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 #define MAX_TEXT 160
+#define MAX_ADT_FIELDS_MAX 65536
 #define MAX_INIT_TEXT 16384
 #define MAX_LABELS 64
 #define MAX_LABELS_MAX 65536
@@ -1963,7 +1964,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match(void *self) {
     int line;
     int col;
     int i;
-    int covered[96];
+    int * covered;
     int ncov;
     int wild;
     int seen_wild;
@@ -2031,7 +2032,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match(void *self) {
         return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
     }
     adts = frontend_sym_ct_adts((&nadts));
-    for (i = 0; ((i < adts[adt].nvariants) && (i < 96)); i++) {
+    covered = calloc((size_t)(((adts[adt].nvariants > 0) ? adts[adt].nvariants : 1)), sizeof((*covered)));
+    if ((!covered)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    for (i = 0; i < adts[adt].nvariants; i++) {
         covered[i] = 0;
     }
     ncov = 0;
@@ -2087,7 +2092,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match(void *self) {
             int first_bind;
             int last_bind;
             int w;
-            char bind_names[8][160];
+            int nbind;
+            char * bind_names;
             if (seen_wild) {
                 return tool_diag_ct_sem_error(arm_line, arm_col, "a wildcard match arm must be the last arm", _self->mem->path);
             }
@@ -2137,17 +2143,33 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match(void *self) {
             first_bind = (-1);
             last_bind = (-1);
             nb = 0;
+            nbind = ((adts[adt].variants[v].nfields > 8) ? adts[adt].variants[v].nfields : 8);
+            bind_names = calloc((size_t)(nbind), MAX_TEXT);
+            if ((!bind_names)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             while ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
+                char * grown;
+                int ncap;
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a binding name");
                 }
-                if (nb >= 8) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many bindings in one match arm");
+                if (nb >= nbind) {
+                    ncap = ((nbind > (MAX_ADT_FIELDS_MAX / 2)) ? MAX_ADT_FIELDS_MAX : (nbind * 2));
+                    if (nb >= ncap) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many bindings in one match arm");
+                    }
+                    grown = realloc(bind_names, ((size_t)(ncap) * MAX_TEXT));
+                    if ((!grown)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
+                    bind_names = grown;
+                    nbind = ncap;
                 }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, bind_names[nb], MAX_TEXT);
+                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, (bind_names + ((size_t)(nb) * MAX_TEXT)), MAX_TEXT);
                 for (w = 0; w < nb; w++) {
-                    if (strcmp(bind_names[w], bind_names[nb]) == 0) {
-                        snprintf(msg, sizeof(msg), "duplicate binding '%s' in a match arm", bind_names[nb]);
+                    if (strcmp((bind_names + ((size_t)(w) * MAX_TEXT)), (bind_names + ((size_t)(nb) * MAX_TEXT))) == 0) {
+                        snprintf(msg, sizeof(msg), "duplicate binding '%s' in a match arm", (bind_names + ((size_t)(nb) * MAX_TEXT)));
                         return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
                     }
                 }
@@ -2155,7 +2177,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match(void *self) {
                 if (w < 0) {
                     return (-1);
                 }
-                snprintf(_self->arena->nodes[w].text, MAX_TEXT, "%s", bind_names[nb]);
+                snprintf(_self->arena->nodes[w].text, MAX_TEXT, "%s", (bind_names + ((size_t)(nb) * MAX_TEXT)));
                 if (first_bind < 0) {
                     first_bind = w;
                 }
@@ -2351,7 +2373,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match_expr(void *sel
     int line;
     int col;
     int i;
-    int covered[96];
+    int * covered;
     int ncov;
     int wild;
     int seen_wild;
@@ -2429,7 +2451,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match_expr(void *sel
         return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
     }
     adts = frontend_sym_ct_adts((&nadts));
-    for (i = 0; ((i < adts[adt].nvariants) && (i < 96)); i++) {
+    covered = calloc((size_t)(((adts[adt].nvariants > 0) ? adts[adt].nvariants : 1)), sizeof((*covered)));
+    if ((!covered)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    for (i = 0; i < adts[adt].nvariants; i++) {
         covered[i] = 0;
     }
     ncov = 0;
@@ -2474,7 +2500,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match_expr(void *sel
             int first_bind;
             int last_bind;
             int w;
-            char bind_names[8][160];
+            int nbind;
+            char * bind_names;
             if (seen_wild) {
                 return tool_diag_ct_sem_error(arm_line, arm_col, "a wildcard match arm must be the last arm", _self->mem->path);
             }
@@ -2522,17 +2549,33 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match_expr(void *sel
             first_bind = (-1);
             last_bind = (-1);
             nb = 0;
+            nbind = ((adts[adt].variants[v].nfields > 8) ? adts[adt].variants[v].nfields : 8);
+            bind_names = calloc((size_t)(nbind), MAX_TEXT);
+            if ((!bind_names)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             while ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
+                char * grown;
+                int ncap;
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a binding name");
                 }
-                if (nb >= 8) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many bindings in one match arm");
+                if (nb >= nbind) {
+                    ncap = ((nbind > (MAX_ADT_FIELDS_MAX / 2)) ? MAX_ADT_FIELDS_MAX : (nbind * 2));
+                    if (nb >= ncap) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many bindings in one match arm");
+                    }
+                    grown = realloc(bind_names, ((size_t)(ncap) * MAX_TEXT));
+                    if ((!grown)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
+                    bind_names = grown;
+                    nbind = ncap;
                 }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, bind_names[nb], MAX_TEXT);
+                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, (bind_names + ((size_t)(nb) * MAX_TEXT)), MAX_TEXT);
                 for (w = 0; w < nb; w++) {
-                    if (strcmp(bind_names[w], bind_names[nb]) == 0) {
-                        snprintf(msg, sizeof(msg), "duplicate binding '%s' in a match arm", bind_names[nb]);
+                    if (strcmp((bind_names + ((size_t)(w) * MAX_TEXT)), (bind_names + ((size_t)(nb) * MAX_TEXT))) == 0) {
+                        snprintf(msg, sizeof(msg), "duplicate binding '%s' in a match arm", (bind_names + ((size_t)(nb) * MAX_TEXT)));
                         return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
                     }
                 }
@@ -2540,7 +2583,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_match_expr(void *sel
                 if (w < 0) {
                     return (-1);
                 }
-                snprintf(_self->arena->nodes[w].text, MAX_TEXT, "%s", bind_names[nb]);
+                snprintf(_self->arena->nodes[w].text, MAX_TEXT, "%s", (bind_names + ((size_t)(nb) * MAX_TEXT)));
                 if (first_bind < 0) {
                     first_bind = w;
                 }

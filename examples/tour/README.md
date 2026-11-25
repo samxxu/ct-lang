@@ -149,7 +149,7 @@ L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`
 | 16_diagnostics/loop_shadow_text | 循环计数器遮蔽，文本且仍能跑 | ct-ast | `16_diagnostics/loop_shadow_text/prog.ct` | `expected.warn` + `expected.out` |
 | 16_diagnostics/loop_shadow_json | 同一发现的 JSON：`type=loop_shadow` | ct-ast | `16_diagnostics/loop_shadow_json/prog.ct` | `expected.json`，退出 1 |
 | 16_diagnostics/recover_multi | 一次运行报 3 个独立 error | ct-ast | `16_diagnostics/recover_multi/prog.ct` | `expected.err`，退出 1 |
-| 16_diagnostics/cap_adts | 容量上限：第 65 个 ADT | ct-ast | `16_diagnostics/cap_adts/prog.ct` | `expected.err`，退出 1 |
+| 16_diagnostics/cap_adts | ADT 计数按需增长：65 个 ADT 编译通过 | ct-ast | `16_diagnostics/cap_adts/prog.ct` | 退出 0，stderr 为空 |
 | 16_diagnostics/cap_errors | 容量上限：第 21 个错误停止恢复 | ct-ast | `16_diagnostics/cap_errors/prog.ct` | `expected.err`，退出 1 |
 | 16_diagnostics/note_text | error 之后的 note 通道 | ct-ast | `16_diagnostics/note_text/prog.ct` | `expected.err`，退出 1 |
 | 16_diagnostics/note_json | `--diagnostics=json` 不接管 error/note | ct-ast | `16_diagnostics/note_json/prog.ct` | `expected.err`，退出 1 |
@@ -238,8 +238,9 @@ L0 对 `map`、闭包字面量、`loop`、默认方法、`own`/`Drop`、`borrow`
     vendor + `ct.lock` 逻辑。`install` 的“有锁安装”也依赖已拉到本地的 vendor，
     样例只固化缺 `ct.pkg` / 缺 `ct.lock` 的错误面。
 23. **错误恢复有硬上限**：`MAX_ERRORS = 20`，第 21 个错误会打印
-    `ctc: too many errors, stopping` 并立即退出（`16_diagnostics/cap_errors`）；
-    ADT 上限是 64（`16_diagnostics/cap_adts`）。两者都是“容量错”，不是语法错。
+    `ctc: too many errors, stopping` 并立即退出（`16_diagnostics/cap_errors`），
+    这是错误恢复保护，不是语法错。ADT 计数自 S1a-0 C3 起按需增长
+    （`16_diagnostics/cap_adts` 的 65 个 ADT 编译通过），旧 64 上限退役。
 
 ## 与既有门禁的关系
 

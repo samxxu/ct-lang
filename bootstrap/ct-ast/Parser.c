@@ -2854,7 +2854,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
             return tool_diag_ct_sem_error(tline, tcol, msg, _self->mem->path);
         }
         if (adt < 0) {
-            return tool_diag_ct_sem_error(tline, tcol, "too many ADT types in this build (limit 64)", _self->mem->path);
+            return tool_diag_ct_sem_error(tline, tcol, "too many ADT types in this build (limit 65536)", _self->mem->path);
         }
         _self->arena->nodes[s].aux = 2;
         _self->arena->nodes[s].num = (adt + 1);
@@ -2867,7 +2867,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
             v = frontend_sym_ct_adt_add_variant(adt, _self->arena->nodes[tn].text, _self->arena->nodes[tn].text, _self->arena->nodes[tn].line, _self->arena->nodes[tn].num);
             if (v < 0) {
                 char msg[MAX_TEXT];
-                snprintf(msg, sizeof(msg), "too many variants for ADT '%s' (limit 96)", name);
+                snprintf(msg, sizeof(msg), "too many variants for ADT '%s' (limit 65536)", name);
                 return tool_diag_ct_sem_error(_self->arena->nodes[tn].line, _self->arena->nodes[tn].num, msg, _self->mem->path);
             }
             adts = frontend_sym_ct_adts((&nadts));
@@ -2881,7 +2881,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
                 }
                 if (frontend_sym_ct_adt_add_field(adt, v, _self->arena->nodes[fld].text2, _self->arena->nodes[fld].text) < 0) {
                     char msg[MAX_TEXT];
-                    snprintf(msg, sizeof(msg), "too many payload fields for '%s.%s' (limit 8)", name, _self->arena->nodes[tn].text);
+                    snprintf(msg, sizeof(msg), "too many payload fields for '%s.%s' (limit 65536)", name, _self->arena->nodes[tn].text);
                     return tool_diag_ct_sem_error(_self->arena->nodes[fld].line, _self->arena->nodes[fld].num, msg, _self->mem->path);
                 }
                 if (((_self->sup->__frontend_parse_supportops_vptr->str_handle_kind(_self->sup, _self->arena->nodes[fld].text) == 3) || (_self->sup->__frontend_parse_supportops_vptr->str_handle_kind(_self->sup, _self->arena->nodes[fld].text) == 4))) {
