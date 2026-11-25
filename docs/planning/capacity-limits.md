@@ -30,8 +30,8 @@
 | --- | --- | --- | --- | --- |
 | `MAX_FUNCS` | 512 | 19 | A | **已动态（SH-109）**；保留初始值 |
 | `MAX_METHODS` | 64 | 27 | A | **已动态**：`Trait.m` 堆块 + `MAX_METHODS_MAX=65536`；trait 实例行深拷贝方法块；parser 默认体环检查矩阵按实扩 |
-| `MAX_VARS` | 4096 | 12 | A | 动态 |
-| `MAX_SCOPE` | 256 | 5 | A | 动态栈 |
+| `MAX_VARS` | 4096 | 12 | A | **已动态**（符号表 `vars`，`MAX_VARS_MAX=65536`）；Memory 的 `own` 计数表仍 4096，剩余 |
+| `MAX_SCOPE` | 256 | 5 | A | 符号表 `scope` 栈已动态（`MAX_SCOPE_MAX`）；可观察嵌套仍受 parser 递归深度 256 保护（D 类，360 层实测栈溢出），剩余 |
 | `MAX_TYPES` | 256 | 4 | A | 动态 |
 | `MAX_STRUCTS` | 128 | 10 | A | 动态 |
 | `MAX_TRAITS` | 64 | 8 | A | 动态（含 trait 实例） |

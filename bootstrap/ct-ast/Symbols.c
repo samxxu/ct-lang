@@ -13,7 +13,9 @@
 #define MAX_FUNCS   512
 #define MAX_FUNCS_MAX 65536
 #define MAX_VARS    4096
+#define MAX_VARS_MAX 65536
 #define MAX_SCOPE   256
+#define MAX_SCOPE_MAX 65536
 #define MAX_TYPES   256
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
@@ -180,6 +182,62 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_capacity(void *
     return 0;
 }
 
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_var_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_Var * grown;
+    (void)(_self);
+    if (need <= _self->varcap) {
+        return 0;
+    }
+    cap = ((_self->varcap > 0) ? _self->varcap : MAX_VARS);
+    while (((cap < need) && (cap < MAX_VARS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_VARS_MAX) {
+        cap = MAX_VARS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_Var *)(realloc(_self->vars, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->varcap), 0, ((size_t)((cap - _self->varcap)) * sizeof((*grown))));
+    _self->vars = grown;
+    _self->varcap = cap;
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_scope_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    int * grown;
+    (void)(_self);
+    if (need <= _self->scopecap) {
+        return 0;
+    }
+    cap = ((_self->scopecap > 0) ? _self->scopecap : MAX_SCOPE);
+    while (((cap < need) && (cap < MAX_SCOPE_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_SCOPE_MAX) {
+        cap = MAX_SCOPE_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (int *)(realloc(_self->scope, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->scopecap), 0, ((size_t)((cap - _self->scopecap)) * sizeof((*grown))));
+    _self->scope = grown;
+    _self->scopecap = cap;
+    return 0;
+}
+
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_reserved_name(void *self, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     (void)(_self);
@@ -200,8 +258,8 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_unit_name(void *
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_push_scope(void *self) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     (void)(_self);
-    if (_self->nscope >= MAX_SCOPE) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "too many nested scopes");
+    if (_self->__frontend_sym_symbolops_vptr->ensure_scope_capacity(_self, (_self->nscope + 1)) != 0) {
+        return (-1);
     }
     _self->scope[_self->nscope] = _self->nvar;
     _self->nscope++;
@@ -243,14 +301,12 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_closure_new(void *self, c
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_declare_var(void *self, const char * name, const char * type) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
-    char msg[MAX_TEXT];
     (void)(_self);
     if (_self->__frontend_sym_symbolops_vptr->reserved_name(_self, name)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "identifier '__ct_' is reserved for the compiler");
     }
-    if (_self->nvar >= MAX_VARS) {
-        snprintf(msg, sizeof(msg), "too many variables in unit '%s' (limit %d)", _self->__frontend_sym_symbolops_vptr->unit_name(_self), MAX_VARS);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+    if (_self->__frontend_sym_symbolops_vptr->ensure_var_capacity(_self, (_self->nvar + 1)) != 0) {
+        return (-1);
     }
     i = _self->nvar;
     snprintf(_self->vars[i].name, MAX_TEXT, "%s", name);
@@ -292,14 +348,12 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_declare_global(void *self
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
     int k;
-    char msg[MAX_TEXT];
     (void)(_self);
     if (_self->__frontend_sym_symbolops_vptr->reserved_name(_self, name)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "identifier '__ct_' is reserved for the compiler");
     }
-    if (_self->nvar >= MAX_VARS) {
-        snprintf(msg, sizeof(msg), "too many variables in unit '%s' (limit %d)", _self->__frontend_sym_symbolops_vptr->unit_name(_self), MAX_VARS);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+    if (_self->__frontend_sym_symbolops_vptr->ensure_var_capacity(_self, (_self->nvar + 1)) != 0) {
+        return (-1);
     }
     i = _self->nvar;
     _self->nvar++;
@@ -1065,6 +1119,8 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .fail = frontend_sym_Symbols_frontend_sym_SymbolOps_fail,
     .last_error = frontend_sym_Symbols_frontend_sym_SymbolOps_last_error,
     .ensure_fn_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_capacity,
+    .ensure_var_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_var_capacity,
+    .ensure_scope_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_scope_capacity,
     .reserved_name = frontend_sym_Symbols_frontend_sym_SymbolOps_reserved_name,
     .unit_name = frontend_sym_Symbols_frontend_sym_SymbolOps_unit_name,
     .push_scope = frontend_sym_Symbols_frontend_sym_SymbolOps_push_scope,
@@ -1472,6 +1528,14 @@ static int symbols_grow(struct frontend_sym_Symbols * self) {
         if ((!self->vars)) {
             return (-1);
         }
+        self->varcap = MAX_VARS;
+    }
+    if ((!self->scope)) {
+        self->scope = calloc(MAX_SCOPE, sizeof((*self->scope)));
+        if ((!self->scope)) {
+            return (-1);
+        }
+        self->scopecap = MAX_SCOPE;
     }
     if ((!self->ginsts)) {
         self->ginsts = calloc(MAX_GENERIC_INSTS, sizeof((*self->ginsts)));

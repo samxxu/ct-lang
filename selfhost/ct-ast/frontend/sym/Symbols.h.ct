@@ -37,7 +37,9 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_FUNCS   512
 #define MAX_FUNCS_MAX 65536
 #define MAX_VARS    4096
+#define MAX_VARS_MAX 65536
 #define MAX_SCOPE   256
+#define MAX_SCOPE_MAX 65536
 #define MAX_TYPES   256
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
@@ -362,6 +364,9 @@ pub trait SymbolOps {
     int  var_type(const char *name, char *out, int cap);
     int  find_func(const char *cname);
     int  ensure_fn_capacity(int need);
+    /* S1a-0 C1: the variable table and the scope stack grow on demand. */
+    int  ensure_var_capacity(int need);
+    int  ensure_scope_capacity(int need);
     /* Phase 78 S2b: remember / look up an inherent method's ref/out
        annotations. Both sides normalise the host spelling (struct/union tag
        prefix and generic arguments are dropped). */
@@ -612,8 +617,10 @@ pub struct Symbols {
     int  nginsts;
     struct Var  *vars;
     int  nvar;
-    int  scope[256];
+    int  varcap;
+    int  *scope;
     int  nscope;
+    int  scopecap;
     char types[256][160];
     int  type_kind[256];        /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef,
                                    5 = enum tag, 6 = union tag */
@@ -729,6 +736,46 @@ impl SymbolOps for Symbols {
         return 0;
     }
 
+    /* S1a-0 C1: MAX_VARS/MAX_SCOPE are starting capacities. Both blocks are
+       owned by the singleton and reset only by index (`nvar`/`nscope`), so a
+       moved block invalidates no caller: every reader re-indexes through
+       `self`. */
+    int ensure_var_capacity(int need)
+    {
+        int cap;
+        struct Var *grown;
+        (void)self;
+        if (need <= self->varcap) return 0;
+        cap = self->varcap > 0 ? self->varcap : MAX_VARS;
+        while (cap < need && cap < MAX_VARS_MAX) cap *= 2;
+        if (cap > MAX_VARS_MAX) cap = MAX_VARS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct Var *)realloc(self->vars, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->varcap, 0, (size_t)(cap - self->varcap) * sizeof(*grown));
+        self->vars = grown;
+        self->varcap = cap;
+        return 0;
+    }
+
+    int ensure_scope_capacity(int need)
+    {
+        int cap;
+        int *grown;
+        (void)self;
+        if (need <= self->scopecap) return 0;
+        cap = self->scopecap > 0 ? self->scopecap : MAX_SCOPE;
+        while (cap < need && cap < MAX_SCOPE_MAX) cap *= 2;
+        if (cap > MAX_SCOPE_MAX) cap = MAX_SCOPE_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (int *)realloc(self->scope, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->scopecap, 0, (size_t)(cap - self->scopecap) * sizeof(*grown));
+        self->scope = grown;
+        self->scopecap = cap;
+        return 0;
+    }
+
     int reserved_name(const char *name)
     {
         (void)self;
@@ -750,7 +797,7 @@ impl SymbolOps for Symbols {
     int push_scope(void)
     {
         (void)self;
-        if (self->nscope >= MAX_SCOPE) return self->fail("too many nested scopes");
+        if (self->ensure_scope_capacity(self->nscope + 1) != 0) return -1;
         self->scope[self->nscope] = self->nvar;
         self->nscope++;
         return 0;
@@ -790,17 +837,12 @@ impl SymbolOps for Symbols {
     int declare_var(const char *name, const char *type)
     {
         int i;
-        char msg[MAX_TEXT];
         (void)self;
         /* `__ct_` names the compiler's own locals and closure products; a user
            declaration could otherwise collide with them in the generated C. */
         if (self->reserved_name(name))
             return self->fail("identifier '__ct_' is reserved for the compiler");
-        if (self->nvar >= MAX_VARS) {
-            snprintf(msg, sizeof msg, "too many variables in unit '%s' (limit %d)",
-                     self->unit_name(), MAX_VARS);
-            return self->fail(msg);
-        }
+        if (self->ensure_var_capacity(self->nvar + 1) != 0) return -1;
         i = self->nvar;
         snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
         snprintf(self->vars[i].type, MAX_TEXT, "%s", type);
@@ -846,15 +888,10 @@ impl SymbolOps for Symbols {
                        const char *ns, int imported)
     {
         int i, k;
-        char msg[MAX_TEXT];
         (void)self;
         if (self->reserved_name(name))
             return self->fail("identifier '__ct_' is reserved for the compiler");
-        if (self->nvar >= MAX_VARS) {
-            snprintf(msg, sizeof msg, "too many variables in unit '%s' (limit %d)",
-                     self->unit_name(), MAX_VARS);
-            return self->fail(msg);
-        }
+        if (self->ensure_var_capacity(self->nvar + 1) != 0) return -1;
         i = self->nvar;
         self->nvar++;
         snprintf(self->vars[i].name, MAX_TEXT, "%s", name);
@@ -1875,6 +1912,12 @@ static int symbols_grow(struct Symbols *self)
     if (!self->vars) {
         self->vars = calloc(MAX_VARS, sizeof(*self->vars));
         if (!self->vars) return -1;
+        self->varcap = MAX_VARS;
+    }
+    if (!self->scope) {
+        self->scope = calloc(MAX_SCOPE, sizeof(*self->scope));
+        if (!self->scope) return -1;
+        self->scopecap = MAX_SCOPE;
     }
     if (!self->ginsts) {
         self->ginsts = calloc(MAX_GENERIC_INSTS, sizeof(*self->ginsts));

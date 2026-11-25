@@ -59,6 +59,7 @@ pub struct Limits {
 #define MAX_RAW_BLOCK                32768
 #define MAX_RAW_INIT                 4096
 #define MAX_SCOPE                    256
+#define MAX_SCOPE_MAX                65536
 #define MAX_STRUCTS                  128
 #define MAX_STRUCT_IMPLS             64
 #define MAX_STRUCT_INSTS             128
@@ -70,4 +71,5 @@ pub struct Limits {
 #define MAX_TYPE_ALIASES             64
 #define MAX_UNITS                    64
 #define MAX_VARS                     4096
+#define MAX_VARS_MAX                 65536
 #define MAX_WARNINGS                 32
