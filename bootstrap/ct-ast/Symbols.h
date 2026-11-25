@@ -125,6 +125,8 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*find_struct)(void *, const char *);
     int (*add_struct)(void *, const char *);
     int (*ensure_struct_capacity)(void *, int);
+    int (*ensure_struct_field_capacity)(void *, int, int);
+    int (*ensure_tmpl_field_capacity)(void *, int, int);
     int (*add_struct_inst)(void *, const char *);
     int (*find_trait)(void *, const char *);
     int (*add_trait)(void *, const char *);
@@ -278,8 +280,9 @@ struct frontend_sym_StructDef {
     char name[160];
     char use[64][160];
     int nuse;
-    struct frontend_sym_Field fields[64];
+    struct frontend_sym_Field * fields;
     int nfields;
+    int fcap;
     int defined;
     int line;
     int col;
@@ -312,8 +315,9 @@ struct frontend_sym_StructTmpl {
     int ntparams;
     char tparam[2][160];
     char bound[2][160];
-    struct frontend_sym_Field fields[64];
+    struct frontend_sym_Field * fields;
     int nfields;
+    int fcap;
     char use[64][160];
     int nuse;
     int uses_drop;

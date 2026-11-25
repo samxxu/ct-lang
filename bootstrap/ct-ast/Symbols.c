@@ -25,6 +25,7 @@
 #define MAX_STRUCTS 128
 #define MAX_STRUCTS_MAX 65536
 #define MAX_FIELDS  64
+#define MAX_FIELDS_MAX 65536
 #define MAX_TYPE_ALIASES 64
 #define MAX_GLOBAL_TYPE_ALIASES 256
 #define MAX_ALIAS_CHAIN 32
@@ -722,6 +723,71 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity(vo
     return 0;
 }
 
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_field_capacity(void *self, int si, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_Field * grown;
+    (void)(_self);
+    if (((si < 0) || (si >= _self->nstructs))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "struct table out of range");
+    }
+    if (need <= _self->structs[si].fcap) {
+        return 0;
+    }
+    cap = ((_self->structs[si].fcap > 0) ? _self->structs[si].fcap : MAX_FIELDS);
+    while (((cap < need) && (cap < MAX_FIELDS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_FIELDS_MAX) {
+        cap = MAX_FIELDS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_Field *)(realloc(_self->structs[si].fields, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->structs[si].fcap), 0, ((size_t)((cap - _self->structs[si].fcap)) * sizeof((*grown))));
+    _self->structs[si].fields = grown;
+    _self->structs[si].fcap = cap;
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_tmpl_field_capacity(void *self, int ti, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    int n;
+    struct frontend_sym_StructTmpl * t;
+    struct frontend_sym_Field * grown;
+    (void)(_self);
+    t = frontend_sym_ct_tmpls((&n));
+    if ((((!t) || (ti < 0)) || (ti >= n))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "template table out of range");
+    }
+    if (need <= t[ti].fcap) {
+        return 0;
+    }
+    cap = ((t[ti].fcap > 0) ? t[ti].fcap : MAX_FIELDS);
+    while (((cap < need) && (cap < MAX_FIELDS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_FIELDS_MAX) {
+        cap = MAX_FIELDS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_Field *)(realloc(t[ti].fields, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + t[ti].fcap), 0, ((size_t)((cap - t[ti].fcap)) * sizeof((*grown))));
+    t[ti].fields = grown;
+    t[ti].fcap = cap;
+    return 0;
+}
+
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_struct(void *self, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
@@ -1243,6 +1309,8 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .set_type_target = frontend_sym_Symbols_frontend_sym_SymbolOps_set_type_target,
     .type_target_of = frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_of,
     .ensure_struct_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity,
+    .ensure_struct_field_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_field_capacity,
+    .ensure_tmpl_field_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_tmpl_field_capacity,
     .find_struct = frontend_sym_Symbols_frontend_sym_SymbolOps_find_struct,
     .add_struct = frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct,
     .add_struct_inst = frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct_inst,

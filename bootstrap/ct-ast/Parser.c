@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define MAX_FIELDS 64
+#define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
 #define MAX_INIT_TEXT 16384
 #define MAX_METHODS 64
@@ -187,7 +188,6 @@ int frontend_parse_ct_parse_io_call_line(int);
 static struct frontend_parse_Parser frontend_parse_g_parse = { .__frontend_parse_parseops_vptr = &frontend_parse_Parser_frontend_parse_ParseOps_vtable, .__frontend_parse_parsedeclops_vptr = &frontend_parse_Parser_frontend_parse_ParseDeclOps_vtable };
 static struct frontend_module_Call frontend_parse_g_calls[8192];
 static struct frontend_module_MapTable * frontend_parse_g_maps;
-static struct frontend_sym_Field frontend_parse_g_pend_fields[64];
 static int frontend_parse_Parser_frontend_parse_ParseDeclOps_struct_def_ahead(void *self) {
     struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
     int pos;
@@ -2005,6 +2005,34 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_record_body_ahead(void 
     return r;
 }
 
+static int frontend_parse_Parser_frontend_parse_ParseOps_ensure_pend_fields(void *self, int need) {
+    struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
+    int cap;
+    struct frontend_sym_Field * grown;
+    (void)(_self);
+    if (need <= _self->pendcap) {
+        return 0;
+    }
+    cap = ((_self->pendcap > 0) ? _self->pendcap : MAX_FIELDS);
+    while (((cap < need) && (cap < MAX_FIELDS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_FIELDS_MAX) {
+        cap = MAX_FIELDS_MAX;
+    }
+    if (need > cap) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    grown = (struct frontend_sym_Field *)(realloc(_self->pend_fields, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    memset((grown + _self->pendcap), 0, ((size_t)((cap - _self->pendcap)) * sizeof((*grown))));
+    _self->pend_fields = grown;
+    _self->pendcap = cap;
+    return 0;
+}
+
 static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *self, int m) {
     struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
     int c;
@@ -2047,7 +2075,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
                 return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->arena->nodes[m].line, msg);
             }
         }
-        if (_self->sym->structs[si].nfields < MAX_FIELDS) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, si, (_self->sym->structs[si].nfields + 1)) != 0) {
+            return (-1);
+        }
+{
             snprintf(_self->sym->structs[si].fields[_self->sym->structs[si].nfields].name, MAX_TEXT, "%s", nm);
             snprintf(_self->sym->structs[si].fields[_self->sym->structs[si].nfields].type, MAX_TEXT, "%s", _self->arena->nodes[m].text);
             snprintf(_self->sym->structs[si].fields[_self->sym->structs[si].nfields].dims, MAX_TEXT, "%s", _self->arena->nodes[m].text3);
@@ -2057,10 +2088,6 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
             _self->sym->structs[si].fields[_self->sym->structs[si].nfields].is_bitfield = (_self->arena->nodes[m].aux == 1);
             _self->sym->structs[si].nfields++;
         }
-        else {
-            snprintf(msg, sizeof(msg), "too many fields in struct '%s' (limit %d)", _self->cur_record, MAX_FIELDS);
-            return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->arena->nodes[m].line, msg);
-        }
         return 0;
     }
     for (i = 0; i < _self->npend; i++) {
@@ -2069,7 +2096,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
             return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->arena->nodes[m].line, msg);
         }
     }
-    if (_self->npend < MAX_FIELDS) {
+    if (_self->__frontend_parse_parseops_vptr->ensure_pend_fields(_self, (_self->npend + 1)) != 0) {
+        return (-1);
+    }
+{
         snprintf(_self->pend_fields[_self->npend].name, MAX_TEXT, "%s", nm);
         snprintf(_self->pend_fields[_self->npend].type, MAX_TEXT, "%s", _self->arena->nodes[m].text);
         snprintf(_self->pend_fields[_self->npend].dims, MAX_TEXT, "%s", _self->arena->nodes[m].text3);
@@ -2078,10 +2108,6 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
         _self->pend_fields[_self->npend].col = (int)(_self->arena->nodes[m].num);
         _self->pend_fields[_self->npend].is_bitfield = (_self->arena->nodes[m].aux == 1);
         _self->npend++;
-    }
-    else {
-        snprintf(msg, sizeof(msg), "too many fields in a record (limit %d)", MAX_FIELDS);
-        return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->arena->nodes[m].line, msg);
     }
     return 0;
 }
@@ -2528,6 +2554,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
         }
         tps = frontend_sym_ct_tmpls((&tn4));
         if (((di >= 0) && tps)) {
+            if (_self->sym->__frontend_sym_symbolops_vptr->ensure_tmpl_field_capacity(_self->sym, ti4, _self->sym->structs[di].nfields) != 0) {
+                return (-1);
+            }
+            tps = frontend_sym_ct_tmpls((&tn4));
             tps[ti4].nfields = _self->sym->structs[di].nfields;
             for (fi4 = 0; fi4 < tps[ti4].nfields; fi4++) {
                 snprintf(tps[ti4].fields[fi4].name, MAX_TEXT, "%s", _self->sym->structs[di].fields[fi4].name);
@@ -3014,6 +3044,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
             }
             else {
                 if (((ai >= 0) && (!_self->arena->nodes[t].text[0]))) {
+                    if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, ai, _self->npend) != 0) {
+                        return (-1);
+                    }
                     _self->sym->structs[ai].nfields = _self->npend;
                     for (ui = 0; ui < _self->npend; ui++) {
                         snprintf(_self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s", _self->pend_fields[ui].name);
@@ -4510,6 +4543,7 @@ const struct frontend_parse_ParseOps_vtbl frontend_parse_Parser_frontend_parse_P
     .out_check_body = frontend_parse_Parser_frontend_parse_ParseOps_out_check_body,
     .parse_params = frontend_parse_Parser_frontend_parse_ParseOps_parse_params,
     .record_body_ahead = frontend_parse_Parser_frontend_parse_ParseOps_record_body_ahead,
+    .ensure_pend_fields = frontend_parse_Parser_frontend_parse_ParseOps_ensure_pend_fields,
     .register_field = frontend_parse_Parser_frontend_parse_ParseOps_register_field,
     .parse_record_body = frontend_parse_Parser_frontend_parse_ParseOps_parse_record_body,
     .parse_anon_member = frontend_parse_Parser_frontend_parse_ParseOps_parse_anon_member,
@@ -5156,7 +5190,8 @@ void frontend_parse_ct_parse_bind(void * arena, void * lex, void * sym, void * t
         }
     }
     frontend_parse_g_parse.maps = frontend_parse_g_maps;
-    frontend_parse_g_parse.pend_fields = frontend_parse_g_pend_fields;
+    frontend_parse_g_parse.pend_fields = 0;
+    frontend_parse_g_parse.pendcap = 0;
     frontend_parse_ct_mapbuild_bind(lex, frontend_parse_g_parse.sup, sym, frontend_parse_g_parse.maps, (&frontend_parse_g_parse.nmaps), (&frontend_parse_g_parse.unit_is_map));
     frontend_parse_ct_expr_bind(arena, lex, sym, frontend_parse_g_parse.sup, frontend_parse_g_parse.cur_func, frontend_parse_g_parse.calls, (&frontend_parse_g_parse.ncalls), frontend_parse_g_parse.maps, (&frontend_parse_g_parse.nmaps));
     frontend_parse_g_parse.ex = frontend_parse_expr_get();

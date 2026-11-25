@@ -41,6 +41,7 @@ import frontend::sym::SymbolsTypeText;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_FIELDS 64
+#define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
 #define MAX_INIT_TEXT 16384
 #define MAX_METHODS 64
@@ -135,6 +136,7 @@ pub trait ParseOps {
     int  parse_anon_member(void);
     int  record_body_ahead(void);
     int  register_field(int m);
+    int  ensure_pend_fields(int need);
     int  parse_trait(int is_pub);
     int  parse_impl(int is_pub);
     /* Phase 29: `impl<T> Name<Args> [use Trait] { … }`, the template form.
@@ -235,8 +237,9 @@ pub struct Parser {
        captured first and consumed by `parse_func` (`0` = none, else the pool
        offset plus one, so the zero-initialised singleton needs no setup). */
     int  pending_attr;
-    struct Field *pend_fields;   /* storage owned by this unit */
+    struct Field *pend_fields;   /* storage owned by this unit (grown on demand) */
     int  npend;
+    int  pendcap;
     struct ParseSupport *sup;
     struct Expr *ex;     /* the expression and type grammar */
     struct Stmt *st;     /* the statement layer */
@@ -2436,6 +2439,26 @@ impl ParseOps for Parser {
        build `.name.__x_vptr` need no second table. Two levels of nesting are the
        same walk, and a collision is what C would reject too. The row lands in
        the tag's table, or in `pend_fields` while the body has no tag. */
+    /* S1a-0 C1: the pending-field list is a heap block; MAX_FIELDS is only
+       its starting capacity. */
+    int ensure_pend_fields(int need)
+    {
+        int cap;
+        struct Field *grown;
+        (void)self;
+        if (need <= self->pendcap) return 0;
+        cap = self->pendcap > 0 ? self->pendcap : MAX_FIELDS;
+        while (cap < need && cap < MAX_FIELDS_MAX) cap *= 2;
+        if (cap > MAX_FIELDS_MAX) cap = MAX_FIELDS_MAX;
+        if (need > cap) return self->sup->fail("out of memory");
+        grown = (struct Field *)realloc(self->pend_fields, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->sup->fail("out of memory");
+        memset(grown + self->pendcap, 0, (size_t)(cap - self->pendcap) * sizeof(*grown));
+        self->pend_fields = grown;
+        self->pendcap = cap;
+        return 0;
+    }
+
     int register_field(int m)
     {
         int c, i, si;
@@ -2466,7 +2489,9 @@ impl ParseOps for Parser {
                     snprintf(msg, sizeof msg, "duplicate member '%s'", nm);
                     return self->sup->fail_at(self->arena->nodes[m].line, msg);
                 }
-            if (self->sym->structs[si].nfields < MAX_FIELDS) {
+            if (self->sym->ensure_struct_field_capacity(si,
+                    self->sym->structs[si].nfields + 1) != 0) return -1;
+            {
                 snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].name, MAX_TEXT, "%s", nm);
                 snprintf(self->sym->structs[si].fields[self->sym->structs[si].nfields].type, MAX_TEXT,
                          "%s", self->arena->nodes[m].text);
@@ -2481,13 +2506,6 @@ impl ParseOps for Parser {
                 self->sym->structs[si].fields[self->sym->structs[si].nfields].is_bitfield =
                     self->arena->nodes[m].aux == 1;
                 self->sym->structs[si].nfields++;
-            } else {
-                /* silently dropping the 65th field would skip its vptr and
-                   misjudge the default body; the cap is a hard error, and the
-                   message names the struct so a large file needs no backtracking */
-                snprintf(msg, sizeof msg, "too many fields in struct '%s' (limit %d)",
-                         self->cur_record, MAX_FIELDS);
-                return self->sup->fail_at(self->arena->nodes[m].line, msg);
             }
             return 0;
         }
@@ -2496,7 +2514,8 @@ impl ParseOps for Parser {
                 snprintf(msg, sizeof msg, "duplicate member '%s'", nm);
                 return self->sup->fail_at(self->arena->nodes[m].line, msg);
             }
-        if (self->npend < MAX_FIELDS) {
+        if (self->ensure_pend_fields(self->npend + 1) != 0) return -1;
+        {
             snprintf(self->pend_fields[self->npend].name, MAX_TEXT, "%s", nm);
             snprintf(self->pend_fields[self->npend].type, MAX_TEXT, "%s", self->arena->nodes[m].text);
             snprintf(self->pend_fields[self->npend].dims, MAX_TEXT, "%s", self->arena->nodes[m].text3);
@@ -2505,9 +2524,6 @@ impl ParseOps for Parser {
             self->pend_fields[self->npend].col = (int)self->arena->nodes[m].num;
             self->pend_fields[self->npend].is_bitfield = self->arena->nodes[m].aux == 1;
             self->npend++;
-        } else {
-            snprintf(msg, sizeof msg, "too many fields in a record (limit %d)", MAX_FIELDS);
-            return self->sup->fail_at(self->arena->nodes[m].line, msg);
         }
         return 0;
     }
@@ -2934,6 +2950,9 @@ impl ParseOps for Parser {
                     "too many generic struct templates in this build (limit 64)");
             tps = frontend::sym::ct_tmpls(&tn4);
             if (di >= 0 && tps) {
+                if (self->sym->ensure_tmpl_field_capacity(ti4,
+                        self->sym->structs[di].nfields) != 0) return -1;
+                tps = frontend::sym::ct_tmpls(&tn4);
                 tps[ti4].nfields = self->sym->structs[di].nfields;
                 for (fi4 = 0; fi4 < tps[ti4].nfields; fi4++) {
                     snprintf(tps[ti4].fields[fi4].name, MAX_TEXT, "%s",
@@ -3365,6 +3384,8 @@ impl ParseOps for Parser {
                     }
                 } else if (ai >= 0 && !self->arena->nodes[t].text[0]) {
                     /* an untagged body: the pending list belongs to this alias */
+                    if (self->sym->ensure_struct_field_capacity(ai, self->npend) != 0)
+                        return -1;
                     self->sym->structs[ai].nfields = self->npend;
                     for (ui = 0; ui < self->npend; ui++) {
                         snprintf(self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s",
@@ -4793,7 +4814,6 @@ static struct Parser g_parse;
    boundary, and a smaller array here would be an overflow, not a diagnostic. */
 static struct Call g_calls[8192];
 static struct MapTable  *g_maps;
-static struct Field   g_pend_fields[64];
 
 /* Phase 21 S5: a block-bodied closure needs `parse_block`, which lives in the
    statement layer; the expression object cannot import that layer (the edge
@@ -4834,7 +4854,8 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
         }
     }
     g_parse.maps = g_maps;
-    g_parse.pend_fields = g_pend_fields;
+    g_parse.pend_fields = 0;
+    g_parse.pendcap = 0;
     /* the `map` construct (mapbuild.h.ct) reads the same cursor, primitives and
        tables, and records into the map array this unit owns */
     ct_mapbuild_bind(lex, g_parse.sup, sym, g_parse.maps, &g_parse.nmaps,

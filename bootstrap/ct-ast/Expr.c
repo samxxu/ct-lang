@@ -1728,6 +1728,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_inst_make(void *self, cons
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
     }
     if (_self->sym->structs[si2].nfields == 0) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, si2, tp[ti2].nfields) != 0) {
+            return (-1);
+        }
         for (fi2 = 0; fi2 < tp[ti2].nfields; fi2++) {
             snprintf(sub1, sizeof(sub1), "%s", tp[ti2].fields[fi2].type);
             if (((nt2 > 0) && (frontend_sym_ct_generic_subst(sub1, tp[ti2].tparam[0], c1, sub2, MAX_TEXT) != 0))) {

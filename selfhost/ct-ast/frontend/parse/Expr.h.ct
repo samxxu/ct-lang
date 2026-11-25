@@ -3226,6 +3226,8 @@ impl ExprOps for Expr {
         si2 = self->sym->add_struct_inst(enc);
         if (si2 < 0) return self->sup->fail(self->sym->last_error());
         if (self->sym->structs[si2].nfields == 0) {
+            if (self->sym->ensure_struct_field_capacity(si2, tp[ti2].nfields) != 0)
+                return -1;
             for (fi2 = 0; fi2 < tp[ti2].nfields; fi2++) {
                 snprintf(sub1, sizeof sub1, "%s", tp[ti2].fields[fi2].type);
                 if (nt2 > 0

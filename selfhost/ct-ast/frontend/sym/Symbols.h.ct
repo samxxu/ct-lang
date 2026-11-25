@@ -49,6 +49,7 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_STRUCTS 128
 #define MAX_STRUCTS_MAX 65536
 #define MAX_FIELDS  64
+#define MAX_FIELDS_MAX 65536
 #define MAX_TYPE_ALIASES 64
 #define MAX_GLOBAL_TYPE_ALIASES 256
 #define MAX_ALIAS_CHAIN 32
@@ -322,9 +323,12 @@ pub struct StructDef {
     char use[64][160];
     int  nuse;
     /* field types: a receiver chain (`s.owner.greet()`) needs them, and so does
-       the nested vptr initialiser of a struct-typed field */
-    struct Field fields[64];
+       the nested vptr initialiser of a struct-typed field. S1a-0 C1: the rows
+       are a heap block owned by this struct row (`fcap`); a realloc of the
+       struct table does not move it. */
+    struct Field *fields;
     int  nfields;
+    int  fcap;
     int  defined;               /* a body was parsed; a forward declaration is not */
     /* PH-82: the definition's `struct` keyword position and whether the same
        source line carries the `ct: allow-cycle` marker -- the direct-cycle
@@ -390,6 +394,9 @@ pub trait SymbolOps {
     int  find_struct(const char *name);
     int  add_struct(const char *name);
     int  ensure_struct_capacity(int need);
+    /* S1a-0 C1: one struct's field block, and one template's field block. */
+    int  ensure_struct_field_capacity(int si, int need);
+    int  ensure_tmpl_field_capacity(int ti, int need);
     /* Phase 29: a monomorphised generic struct. Its own cap does not eat the
        MAX_STRUCTS budget the plain declarations rely on. */
     int  add_struct_inst(const char *name);
@@ -473,8 +480,9 @@ pub struct StructTmpl {
        unit may not see the trait's declaration, so `find_trait` waits for the
        unit that creates an instance (D33-5, L33-6). */
     char bound[2][160];
-    struct Field fields[64];
+    struct Field *fields;
     int  nfields;
+    int  fcap;
     char use[64][160];
     int  nuse;
     int  uses_drop;              /* P36 S2a2: built-in Drop flag, copied to instances */
@@ -1238,6 +1246,48 @@ impl SymbolOps for Symbols {
                (size_t)(cap - self->structcap) * sizeof(*grown));
         self->structs = grown;
         self->structcap = cap;
+        return 0;
+    }
+
+    int ensure_struct_field_capacity(int si, int need)
+    {
+        int cap;
+        struct Field *grown;
+        (void)self;
+        if (si < 0 || si >= self->nstructs) return self->fail("struct table out of range");
+        if (need <= self->structs[si].fcap) return 0;
+        cap = self->structs[si].fcap > 0 ? self->structs[si].fcap : MAX_FIELDS;
+        while (cap < need && cap < MAX_FIELDS_MAX) cap *= 2;
+        if (cap > MAX_FIELDS_MAX) cap = MAX_FIELDS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct Field *)realloc(self->structs[si].fields,
+                                        (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->structs[si].fcap, 0,
+               (size_t)(cap - self->structs[si].fcap) * sizeof(*grown));
+        self->structs[si].fields = grown;
+        self->structs[si].fcap = cap;
+        return 0;
+    }
+
+    int ensure_tmpl_field_capacity(int ti, int need)
+    {
+        int cap, n;
+        struct StructTmpl *t;
+        struct Field *grown;
+        (void)self;
+        t = ct_tmpls(&n);
+        if (!t || ti < 0 || ti >= n) return self->fail("template table out of range");
+        if (need <= t[ti].fcap) return 0;
+        cap = t[ti].fcap > 0 ? t[ti].fcap : MAX_FIELDS;
+        while (cap < need && cap < MAX_FIELDS_MAX) cap *= 2;
+        if (cap > MAX_FIELDS_MAX) cap = MAX_FIELDS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct Field *)realloc(t[ti].fields, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + t[ti].fcap, 0, (size_t)(cap - t[ti].fcap) * sizeof(*grown));
+        t[ti].fields = grown;
+        t[ti].fcap = cap;
         return 0;
     }
 

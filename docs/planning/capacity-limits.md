@@ -35,7 +35,7 @@
 | `MAX_TYPES` | 256 | 4 | A | **已动态**：`types`/`type_kind`/`type_target` 三组并行数组一起倍增到 `MAX_TYPES_MAX=65536` |
 | `MAX_STRUCTS` | 128 | 10 | A | **已动态**：单元 struct 表（与实例行共用一个块）倍增到 `MAX_STRUCTS_MAX=65536` |
 | `MAX_TRAITS` | 64 | 8 | A | **已动态**（trait 行表 + 实例行）；`StructDef.use[64]` 的采纳列表仍 64，剩余 |
-| `MAX_FIELDS` | 64 | 10 | A | 动态（单 struct 字段） |
+| `MAX_FIELDS` | 64 | 10 | A | **已动态**：`StructDef.fields`/`StructTmpl.fields`/parser 待定字段表各自倍增到 `MAX_FIELDS_MAX=65536` |
 | `MAX_STRUCT_INSTS` | 128 | 10 | A | 单元内实例行已并入动态 struct 表；全局 `g_insts` 仍固定，剩余 |
 | `MAX_STRUCT_IMPLS` | 64 | 4 | A | 动态 |
 | `MAX_STRUCT_TPLS` | 64 | 4 | A | 动态 |

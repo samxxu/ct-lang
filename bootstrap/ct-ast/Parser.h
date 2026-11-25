@@ -110,6 +110,7 @@ struct frontend_parse_ParseOps_vtbl {
     int (*parse_anon_member)(void *);
     int (*record_body_ahead)(void *);
     int (*register_field)(void *, int);
+    int (*ensure_pend_fields)(void *, int);
     int (*parse_trait)(void *, int);
     int (*parse_impl)(void *, int);
     int (*parse_impl_inst)(void *, const char *, int);
@@ -174,6 +175,7 @@ struct frontend_parse_Parser {
     int pending_attr;
     struct frontend_sym_Field * pend_fields;
     int npend;
+    int pendcap;
     struct frontend_parse_ParseSupport * sup;
     struct frontend_parse_Expr * ex;
     struct frontend_parse_Stmt * st;
