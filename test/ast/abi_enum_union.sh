@@ -7,6 +7,7 @@
 # with -Werror=visibility and run.
 set -u
 ct=${1:?usage: abi_enum_union.sh <ct-ast>}
+ct=$(cd "$(dirname "$ct")" && pwd)/$(basename "$ct")
 work=$(mktemp -d "${CT_SHORT_TMP:-${TMPDIR:-/tmp}}/abi.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 pass=0; fail=0
@@ -25,12 +26,12 @@ cat >"$work/lib.h.ct" <<CT
 pub int take_enum(enum E e) { return (int)e; }
 pub int take_union(union U *u) { return u->i; }
 CT
-if ! CT_C_BOUNDARY=allow "$ct" build --lib "$work/lib.h.ct" -o "$work/lib.a" >"$work/build.log" 2>&1; then
+cd "$work" || exit 1
+if ! CT_C_BOUNDARY=allow "$ct" build --lib lib.h.ct -o lib.a >"$work/build.log" 2>&1; then
     bad "lib build" "$(head -3 "$work/build.log")"
     echo "abi_enum_union: FAIL"; exit 1
 fi
-abi=$(find . -maxdepth 2 -name 'lib.abi.h' -newer "$work/lib.h.ct" 2>/dev/null | head -1)
-[ -n "$abi" ] || abi=$(find "$work" . -maxdepth 3 -name 'lib.abi.h' 2>/dev/null | head -1)
+abi=$work/.ctbuild/lib.abi.h
 [ -n "$abi" ] || { bad "abi header" "lib.abi.h not found"; echo "abi_enum_union: FAIL"; exit 1; }
 for want in 'enum E;' 'union U;'; do
     if grep -qxF "$want" "$abi"; then ok "abi header has '$want'"; else bad "abi header" "missing '$want'"; fi
