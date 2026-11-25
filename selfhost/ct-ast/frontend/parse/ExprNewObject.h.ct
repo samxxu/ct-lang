@@ -228,9 +228,15 @@ impl ExprNew for Expr {
         if (self->sup->rewrite_init_text(tbuf, raw, fixed, sizeof fixed) != 0) return -1;
         /* register the Box<T> instance (the type parser would do the same for
            a `Box<T>` spelling); the template's fields substitute T -> base */
-        if (self->inst_make("Box", 1, tbuf, "", tbuf, "", enc, sizeof enc, 0,
-                            nline, ncol) != 0)
-            return -1;
+        {
+            char *aa[1];
+            char *cc[1];
+            aa[0] = tbuf;
+            cc[0] = tbuf;
+            if (self->inst_make("Box", 1, aa, cc, enc, sizeof enc, 0,
+                                nline, ncol) != 0)
+                return -1;
+        }
         /* the payload-release helper and the constructor need the payload
            spelling, so the node keeps both the Box instance and the payload */
         {

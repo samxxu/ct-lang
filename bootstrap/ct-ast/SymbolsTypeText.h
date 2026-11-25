@@ -88,15 +88,17 @@ struct frontend_sym_SymbolsTypeText {
 };
 void frontend_sym_adt_strip_type(const char *, char *, int);
 int frontend_sym_ct_generic_subst(const char *, const char *, const char *, char *, int);
-int frontend_sym_ct_inst_encode(const char *, int, const char *, const char *, char *, int);
-int frontend_sym_ct_inst_split(const char *, char *, int *, char *, char *, char *, int);
+char * * frontend_sym_ct_rows_reserve(char * *, int, int, int *);
+int frontend_sym_ct_inst_arg_count(const char *);
+int frontend_sym_ct_inst_encode(const char *, int, char * *, char *, int);
+int frontend_sym_ct_inst_split(const char *, char *, int *, char * *, int, char *, int);
 int frontend_sym_ct_is_container_type(const char *);
 int frontend_sym_ct_is_string_value_type(const char *);
 int frontend_sym_ct_type_canon(const char *, char *, int);
 int frontend_sym_generic_tag_prefix(const char *, const char *);
 int frontend_sym_generic_word_char(int);
 void frontend_sym_impl_arg_canon(const char *, char *, int);
-int frontend_sym_impl_pat_split(const char *, char *, char *, char *, int *);
+int frontend_sym_impl_pat_split(const char *, char *, char * *, int, int *);
 int frontend_sym_inst_enc_one(const char *, char *, int);
 void frontend_sym_meth_host_key(const char *, char *, int);
 

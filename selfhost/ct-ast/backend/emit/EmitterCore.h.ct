@@ -232,15 +232,15 @@ pub struct Emitter {
     /* Phase 26: the template being written as a monomorphised instance. All
        three are empty when no instance is active; the type-printing paths
        substitute `gtparam` with `gtarg`, and `N_FUNC` prints `gtname` in place
-       of the template's own C name. No AST field is touched (D26-7). */
-    char gtparam[160];
-    char gtarg[160];
+       of the template's own C name. No AST field is touched (D26-7).
+       S1a-0 C3: `gtparam`/`gtarg` are row blocks of `gtntparam` entries, grown
+       on demand; `gtcap` is their shared capacity. */
+    char **gtparam;
+    char **gtarg;
+    int  gtntparam;
+    int  gtcap;
+    int  gtacap;
     char gtname[160];
-    /* Phase 29: the second parameter of a generic struct template. A method of
-       `impl<T, U> Pair<T, U>` is monomorphised once per instance, and both
-       parameters are substituted in the same body. */
-    char gtparam2[160];
-    char gtarg2[160];
     /* Phase 31: the instance whose inherent method is being written. The
        reserved element-lifecycle calls (`__ct_elem_retain` /
        `__ct_elem_release`) in a container's body bind to this instance's

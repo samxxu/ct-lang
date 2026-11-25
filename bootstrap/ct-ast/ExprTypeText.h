@@ -100,7 +100,7 @@ int frontend_parse_plist_next(const char *, int *, char *, int);
 int frontend_parse_qual_at(const char *, int);
 int frontend_parse_ref_type_is_const_value(const char *);
 int frontend_parse_slice_array_len(const char *);
-int frontend_parse_subst_tparam(const char *, const char *, const char *, const char *, const char *, char *, int);
+int frontend_parse_subst_tparam(const char *, char * *, char * *, int, char *, int);
 void frontend_parse_tbase(const char *, char *, int);
 int frontend_parse_tclass(const char *, const char *);
 void frontend_parse_tnorm(const char *, char *, int);

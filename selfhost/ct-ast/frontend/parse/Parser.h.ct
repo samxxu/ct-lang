@@ -53,7 +53,6 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
 #define MAX_RAW_BLOCK 32768
-#define MAX_STRUCT_TPARAMS 2
 #define MAX_TEXT 160
 #define MAX_TRAITS 64
 #define NO_NODE (-2)
@@ -1226,7 +1225,7 @@ static int check_struct_bounds(struct Parser *self)
         if (ti < 0) continue;
         for (k = 0; k < ins[i].nargs; k++) {
             if (!tp[ti].bound[k][0]) continue;
-            arg = k == 0 ? ins[i].carg[0] : ins[i].carg[1];
+            arg = ins[i].carg[k];
             if (self->sym->find_trait(tp[ti].bound[k]) < 0) {
                 snprintf(msg, sizeof msg, "unknown trait '%s' in a generic bound",
                          tp[ti].bound[k]);
@@ -1325,19 +1324,17 @@ static int check_trait_bounds(struct Parser *self)
    while method signatures need its C spelling (`struct Vec_int`). */
 static int parse_trait_inst_args(struct Parser *self, char *tname, int cap)
 {
-    char arg[2][MAX_TEXT];
-    char ctype[2][MAX_TEXT];
+    char **arg = 0;
+    char **ctype = 0;
     char abuf[MAX_TEXT];
-    int nargs = 0, ti;
+    int acap = 0, ccap = 0, nargs = 0, ti;
 
-    arg[0][0] = 0;
-    arg[1][0] = 0;
-    ctype[0][0] = 0;
-    ctype[1][0] = 0;
     if (self->sup->expect("<") != 0) return -1;
     for (;;) {
-        if (nargs >= MAX_STRUCT_TPARAMS)
-            return self->sup->fail("a generic trait takes at most 2 type arguments");
+        arg = frontend::sym::ct_rows_reserve(arg, acap, nargs + 1, &acap);
+        ctype = frontend::sym::ct_rows_reserve(ctype, ccap, nargs + 1, &ccap);
+        if (!arg || acap < nargs + 1 || !ctype || ccap < nargs + 1)
+            return self->sup->fail("a generic trait has too many type arguments");
         self->ex->inst_canon[0] = 0;
         if (self->ex->parse_type(abuf, sizeof abuf) != 0) return -1;
         if (frontend::sym::ct_type_canon(self->ex->inst_canon[0]
@@ -1361,8 +1358,7 @@ static int parse_trait_inst_args(struct Parser *self, char *tname, int cap)
         self->lex->tokstart = self->lex->tokstart + 1;
     }
     if (self->sup->expect(">") != 0) return -1;
-    ti = self->sym->trait_inst(tname, nargs, arg[0], arg[1],
-                               ctype[0], ctype[1], self->cur_unit);
+    ti = self->sym->trait_inst(tname, nargs, arg, ctype, self->cur_unit);
     if (ti < 0) return self->sup->fail(self->sym->last_error());
     if (snprintf(tname, (size_t)cap, "%s", self->sym->traits[ti].name) >= cap)
         return self->sup->fail("type name is too long");
@@ -1727,6 +1723,7 @@ impl ParseOps for Parser {
         char gns[MAX_TEXT];
         char tparam[MAX_TEXT];
         char bound[MAX_TEXT];
+        char *gparam[1];
         int is_generic, ret_slice;
         (void)self;
 
@@ -1980,10 +1977,16 @@ impl ParseOps for Parser {
         if (self->sup->push_scope() != 0) return -1;
         /* Parameter types written bare `T` must read as the type parameter,
            even when a struct/union/enum with that tag exists (SH-63). */
-        if (is_generic) snprintf(self->ex->in_generic_tparam, sizeof self->ex->in_generic_tparam,
-                                 "%s", tparam);
+        if (is_generic) {
+            gparam[0] = tparam;
+            self->ex->in_generic_tparam = gparam;
+            self->ex->in_generic_ntparam = 1;
+        }
         params = self->parse_params();
-        if (is_generic) self->ex->in_generic_tparam[0] = 0;
+        if (is_generic) {
+            self->ex->in_generic_tparam = 0;
+            self->ex->in_generic_ntparam = 0;
+        }
         if (params < 0) {
             self->sup->pop_scope();
             return -1;
@@ -2038,13 +2041,19 @@ impl ParseOps for Parser {
            yet, so the body may not contain one (L26-5). The expression layer
            reads this flag at the `<type>` call form. */
         if (is_generic) self->ex->in_generic = 1;
-        if (is_generic) snprintf(self->ex->in_generic_tparam, sizeof self->ex->in_generic_tparam,
-                                 "%s", tparam);
+        if (is_generic) {
+            gparam[0] = tparam;
+            self->ex->in_generic_tparam = gparam;
+            self->ex->in_generic_ntparam = 1;
+        }
         if (is_generic) snprintf(self->ex->in_generic_bound, sizeof self->ex->in_generic_bound,
                                  "%s", bound);
         b = self->st->parse_block();
         if (is_generic) self->ex->in_generic = 0;
-        if (is_generic) self->ex->in_generic_tparam[0] = 0;
+        if (is_generic) {
+            self->ex->in_generic_tparam = 0;
+            self->ex->in_generic_ntparam = 0;
+        }
         if (is_generic) self->ex->in_generic_bound[0] = 0;
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
@@ -2805,16 +2814,15 @@ impl ParseOps for Parser {
         int nt, templ;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
-        char tparam[2][MAX_TEXT];
-        char bound[2][MAX_TEXT];
+        /* S1a-0 C3: the parameter rows grow on demand (initial 2, formal cap
+           65536); `tcap`/`bcap` are their capacities. */
+        char **tparam = 0;
+        char **bound = 0;
+        int tcap = 0, bcap = 0;
         (void)self;
 
         nt = 0;
         templ = 0;
-        tparam[0][0] = 0;
-        tparam[1][0] = 0;
-        bound[0][0] = 0;
-        bound[1][0] = 0;
         struct_line = self->lex->tokline;
         struct_col = self->lex->tokstart - self->lex->lstart + 1;
         allow_cycle = self->record_line_allows_cycle(struct_line);
@@ -2850,8 +2858,10 @@ impl ParseOps for Parser {
             && self->lex->tok_is("<")) {
             self->sup->lex_next();
             for (;;) {
-                if (nt >= MAX_STRUCT_TPARAMS)
-                    return self->sup->fail("a generic struct takes at most 2 type parameters");
+                tparam = frontend::sym::ct_rows_reserve(tparam, tcap, nt + 1, &tcap);
+                bound = frontend::sym::ct_rows_reserve(bound, bcap, nt + 1, &bcap);
+                if (!tparam || tcap < nt + 1 || !bound || bcap < nt + 1)
+                    return self->sup->fail("a generic struct has too many type parameters");
                 if (self->lex->tok != T_ID)
                     return self->sup->fail("expected a type parameter name");
                 self->lex->tok_copy(tparam[nt], MAX_TEXT);
@@ -2929,18 +2939,18 @@ impl ParseOps for Parser {
         /* Phase 29: inside a template body `T`/`U` are types, the same way a
            generic function's parameter is handled (D26-4). */
         if (templ) {
-            snprintf(self->ex->in_generic_tparam, MAX_TEXT, "%s", tparam[0]);
-            if (nt > 1) snprintf(self->ex->in_generic_tparam2, MAX_TEXT, "%s", tparam[1]);
+            self->ex->in_generic_tparam = tparam;
+            self->ex->in_generic_ntparam = nt;
         }
         if (self->parse_record_body(s, 1) != 0) {
             self->cur_record[0] = 0;
-            self->ex->in_generic_tparam[0] = 0;
-            self->ex->in_generic_tparam2[0] = 0;
+            self->ex->in_generic_tparam = 0;
+            self->ex->in_generic_ntparam = 0;
             return -1;
         }
         self->cur_record[0] = 0;
-        self->ex->in_generic_tparam[0] = 0;
-        self->ex->in_generic_tparam2[0] = 0;
+        self->ex->in_generic_tparam = 0;
+        self->ex->in_generic_ntparam = 0;
         if (is_union && self->lex->tok == T_ID && self->lex->tok_is("use"))
             return self->sup->fail("a union cannot use a trait");
         if (!is_union && self->lex->tok == T_ID && self->lex->tok_is("use")) {
@@ -2987,8 +2997,7 @@ impl ParseOps for Parser {
             struct StructTmpl *tps;
 
             di = self->sym->find_struct(qname);
-            ti4 = frontend::sym::ct_tmpl_add(name, qname, nt, tparam[0], tparam[1],
-                              bound[0], bound[1],
+            ti4 = frontend::sym::ct_tmpl_add(name, qname, nt, tparam, bound,
                               self->decl_pub, self->cur_unit, self->mem->path,
                               struct_line);
             if (ti4 < 0) return self->sup->fail("out of memory");
@@ -3012,8 +3021,16 @@ impl ParseOps for Parser {
                              self->sym->structs[di].use[ui4]);
                 self->sym->structs[di].is_template = 1;
                 self->sym->structs[di].ntparams = nt;
-                snprintf(self->sym->structs[di].tparam[0], MAX_TEXT, "%s", tparam[0]);
-                snprintf(self->sym->structs[di].tparam[1], MAX_TEXT, "%s", tparam[1]);
+                self->sym->structs[di].tparam =
+                    frontend::sym::ct_rows_reserve(self->sym->structs[di].tparam,
+                        self->sym->structs[di].tcap, nt,
+                        &self->sym->structs[di].tcap);
+                if (nt > 0 && (!self->sym->structs[di].tparam
+                               || self->sym->structs[di].tcap < nt))
+                    return self->sup->fail("out of memory");
+                for (fi4 = 0; fi4 < nt; fi4++)
+                    snprintf(self->sym->structs[di].tparam[fi4], MAX_TEXT, "%s",
+                             tparam[fi4]);
                 self->sym->structs[di].is_pub = self->decl_pub;
                 /* P36 S2a2: the built-in Drop/Handback flags travel with the
                    template so consumer units can copy them onto instances. */
@@ -3539,8 +3556,9 @@ impl ParseOps for Parser {
         int seen_borrow, seen_ref, seen_out, bline;
         int rty;
         int ntp, pi, discard, save_ntraits, save_ntype, save_nnode, stride;
-        char tparam[2][MAX_TEXT];
-        char tbound[2][MAX_TEXT];
+        char **tparam = 0;
+        char **tbound = 0;
+        int tcap = 0, bcap = 0;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         char ret[MAX_TEXT];
@@ -3588,10 +3606,12 @@ impl ParseOps for Parser {
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
             self->sup->lex_next();
             for (;;) {
+                tparam = frontend::sym::ct_rows_reserve(tparam, tcap, ntp + 1, &tcap);
+                tbound = frontend::sym::ct_rows_reserve(tbound, bcap, ntp + 1, &bcap);
+                if (!tparam || tcap < ntp + 1 || !tbound || bcap < ntp + 1)
+                    return self->sup->fail("a trait has too many type parameters");
                 if (self->lex->tok != T_ID)
                     return self->sup->fail("expected a type parameter name");
-                if (ntp >= 2)
-                    return self->sup->fail("a trait supports at most two type parameters");
                 for (pi = 0; pi < ntp; pi++) {
                     if (self->lex->tok_is(tparam[pi])) {
                         char dmsg[MAX_TEXT];
@@ -3652,6 +3672,17 @@ impl ParseOps for Parser {
                 self->sym->traits[ti].ns[nl - 1] = 0;
         }
         self->sym->traits[ti].ntparams = ntp;
+        self->sym->traits[ti].tparam =
+            frontend::sym::ct_rows_reserve(self->sym->traits[ti].tparam,
+                self->sym->traits[ti].tcap, ntp, &self->sym->traits[ti].tcap);
+        self->sym->traits[ti].bound =
+            frontend::sym::ct_rows_reserve(self->sym->traits[ti].bound,
+                self->sym->traits[ti].bcap, ntp, &self->sym->traits[ti].bcap);
+        if (ntp > 0 && (!self->sym->traits[ti].tparam
+                        || !self->sym->traits[ti].bound
+                        || self->sym->traits[ti].tcap < ntp
+                        || self->sym->traits[ti].bcap < ntp))
+            return self->sup->fail("out of memory");
         for (pi = 0; pi < ntp; pi++) {
             snprintf(self->sym->traits[ti].tparam[pi], MAX_TEXT, "%s", tparam[pi]);
             snprintf(self->sym->traits[ti].bound[pi], MAX_TEXT, "%s", tbound[pi]);
@@ -4410,8 +4441,9 @@ impl ParseOps for Parser {
     int parse_impl_inst(const char *tmpl_in, int have_name)
     {
         char tmpl[MAX_TEXT];
-        char tn[2][MAX_TEXT];
-        char pat[2][MAX_TEXT];
+        char **tn = 0;
+        char **pat = 0;
+        int tcap = 0, pcap = 0;
         char use[MAX_TEXT];
         char ruse[MAX_TEXT];
         char ret[MAX_TEXT];
@@ -4422,10 +4454,6 @@ impl ParseOps for Parser {
         nt = 0;
         nargs = 0;
         snprintf(htype, sizeof htype, "%s", "void *");
-        tn[0][0] = 0;
-        tn[1][0] = 0;
-        pat[0][0] = 0;
-        pat[1][0] = 0;
         use[0] = 0;
         snprintf(tmpl, sizeof tmpl, "%s", tmpl_in);
         line = self->lex->tokline;
@@ -4433,8 +4461,9 @@ impl ParseOps for Parser {
             /* the cursor sits on `<` */
             self->sup->lex_next();
             for (;;) {
-                if (nt >= MAX_STRUCT_TPARAMS)
-                    return self->sup->fail("a generic struct takes at most 2 type parameters");
+                tn = frontend::sym::ct_rows_reserve(tn, tcap, nt + 1, &tcap);
+                if (!tn || tcap < nt + 1)
+                    return self->sup->fail("a generic struct has too many type parameters");
                 if (self->lex->tok != T_ID)
                     return self->sup->fail("expected a type parameter name");
                 self->lex->tok_copy(tn[nt], MAX_TEXT);
@@ -4496,8 +4525,9 @@ impl ParseOps for Parser {
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
             self->sup->lex_next();
             for (;;) {
-                if (nargs >= MAX_STRUCT_TPARAMS)
-                    return self->sup->fail("a generic struct takes at most 2 type arguments");
+                pat = frontend::sym::ct_rows_reserve(pat, pcap, nargs + 1, &pcap);
+                if (!pat || pcap < nargs + 1)
+                    return self->sup->fail("a generic struct has too many type arguments");
                 {
                     int aline = self->lex->tokline;
                     int acol = self->lex->tokstart - self->lex->lstart + 1;
@@ -4572,17 +4602,16 @@ impl ParseOps for Parser {
                row is created per instance (S5a), so the impl keeps the symbolic
                spelling and the emitter binds it when the struct instance binds. */
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
-                char targs[2][MAX_TEXT];
-                char full[MAX_TEXT];
-                int na = 0, ai, bad = 0;
+                char full[MAX_TEXT * 2];
+                char targ[MAX_TEXT];
+                int na = 0, ai, bad = 0, fl = 0;
 
                 self->sup->lex_next();
                 for (;;) {
-                    if (na >= MAX_STRUCT_TPARAMS)
-                        return self->sup->fail("a generic trait takes at most 2 type arguments");
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a type argument");
-                    self->lex->tok_copy(targs[na], MAX_TEXT);
+                    self->lex->tok_copy(targ, MAX_TEXT);
+                    if (na >= nt || strcmp(targ, tn[na]) != 0) bad = 1;
                     na++;
                     self->sup->lex_next();
                     if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
@@ -4593,15 +4622,20 @@ impl ParseOps for Parser {
                 }
                 if (self->sup->expect(">") != 0) return -1;
                 if (na != nt) bad = 1;
-                for (ai = 0; !bad && ai < na; ai++)
-                    if (strcmp(targs[ai], tn[ai]) != 0) bad = 1;
                 if (bad)
                     return tool::diag::ct_sem_error(line, 1,
                         "unsupported generic trait implementation shape", self->mem->path);
-                if (na == 1)
-                    snprintf(full, sizeof full, "%s<%s>", ruse, targs[0]);
-                else
-                    snprintf(full, sizeof full, "%s<%s,%s>", ruse, targs[0], targs[1]);
+                fl = snprintf(full, sizeof full, "%s<", ruse);
+                for (ai = 0; ai < na; ai++) {
+                    int wr = snprintf(full + fl, sizeof full - (size_t)fl,
+                                      "%s%s", ai == 0 ? "" : ",", tn[ai]);
+                    if (fl < 0 || wr < 0 || fl + wr >= (int)sizeof full)
+                        return self->sup->fail("type is too long");
+                    fl += wr;
+                }
+                if (snprintf(full + fl, sizeof full - (size_t)fl, ">") < 0
+                    || fl + 1 >= (int)sizeof full)
+                    return self->sup->fail("type is too long");
                 snprintf(use, sizeof use, "%s", full);
             }
         }
@@ -4613,8 +4647,8 @@ impl ParseOps for Parser {
         snprintf(self->arena->nodes[node].text2, MAX_TEXT, "%s", use);
         snprintf(self->arena->nodes[node].text3, MAX_TEXT, "%s", self->mem->path);
         self->arena->nodes[node].aux = -1;   /* no struct row: this is a template */
-        self->arena->nodes[node].num = frontend::sym::ct_impl_add(tmpl, nt, tn[0], tn[1],
-                                                                 nargs, pat[0], pat[1], use,
+        self->arena->nodes[node].num = frontend::sym::ct_impl_add(tmpl, nt, tn,
+                                                                 nargs, pat, use,
                                                                  node, self->cur_unit, line);
         if (self->arena->nodes[node].num < 0) return self->sup->fail("out of memory");
         if (use[0] && self->arena->nodes[node].num >= 0) {
@@ -4641,8 +4675,8 @@ impl ParseOps for Parser {
                 }
         }
         tail = -1;
-        snprintf(self->ex->in_generic_tparam, MAX_TEXT, "%s", tn[0]);
-        snprintf(self->ex->in_generic_tparam2, MAX_TEXT, "%s", tn[1]);
+        self->ex->in_generic_tparam = tn;
+        self->ex->in_generic_ntparam = nt;
         /* Phase 33 O1 (D33-3): the method bodies inherit the struct's bound by
            the parameter's *position* in the pattern (`impl<U> Box<U>` maps
            through `pat`, not through the name), so `self->value.show()`
@@ -4656,7 +4690,7 @@ impl ParseOps for Parser {
             struct StructTmpl *tps = frontend::sym::ct_tmpls(&tbn);
             (void)tbn;
             if (tbi >= 0 && tps && tps[tbi].ntparams > 0 && tn[0][0]) {
-                for (kb = 0; kb < nargs && kb < MAX_STRUCT_TPARAMS; kb++)
+                for (kb = 0; kb < nargs; kb++)
                     if (strcmp(pat[kb], tn[0]) == 0) {
                         snprintf(self->ex->in_generic_bound, MAX_TEXT, "%s",
                                  tps[tbi].bound[kb]);
@@ -4793,8 +4827,8 @@ impl ParseOps for Parser {
             else self->arena->nodes[tail].next = mnode;
             tail = mnode;
         }
-        self->ex->in_generic_tparam[0] = 0;
-        self->ex->in_generic_tparam2[0] = 0;
+        self->ex->in_generic_tparam = 0;
+        self->ex->in_generic_ntparam = 0;
         self->ex->in_generic_bound[0] = 0;
         if (self->sup->expect("}") != 0) return -1;
         /* L36-1 (S1b): a `drop` body may not `release()` the same `self` field

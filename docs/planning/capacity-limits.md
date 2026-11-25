@@ -1,6 +1,6 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类 ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）已动态（C3）**；`MAX_STRUCT_TPARAMS` 与 B/D 类待做）。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；B/D 类待做）。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
@@ -8,7 +8,7 @@
 
 - `ct-ast` 共 **49** 个 `Limits.h.ct` 常量 + **8** 个单元内本地常量 + **约 14** 处硬编码数字上限；
 - A 类多数表已按需增长（SH-109 起，初值 + 倍增 + 65536 安全阀）；
-- **C 类**：`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS` 已动态（C3），`MAX_STRUCT_TPARAMS` 仍待做；
+- **C 类**：`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS` 与 `MAX_STRUCT_TPARAMS` 均已动态（C3）；
 - 尚未放开的仍是“固定上限 + 越界报错”；其中 `MAX_METHODS=64` 已挡住新增方法，`MAX_TEXT=160` 在 31 个单元出现 **1494** 次、定长数组 **791** 处，是最大的一块；
 - 放开分四类：**A 计数**（动态数组）、**B 文本/路径**（按需分配）、**C 语言语义上限**（一并放开，但必须先同步 spec / stable-subset）、**D 资源保护**（保留必要的深度/恢复保护）。
 - **形式上限（2026-11-25 所有者裁定）**：所有放开项统一收敛到一个形式上限 `CAP_LIMIT = 65536`（与 `MAX_FUNCS_MAX` 同形）；文本类另有 `TEXT_LIMIT = 65536` 字节。真实程序不应触到它，触到只作 OOM/资源保护报错。只有深度/错误恢复类保护保留原值。
@@ -65,7 +65,7 @@
 | `MAX_ADTS` | 64 | 5 | C | **已动态（C3）**：ADT 行块倍增到 `MAX_ADTS_MAX=65536`，初值 64；spec §4.73 / stable-subset 同步 |
 | `MAX_ADT_VARIANTS` | 96 | 3 | C | **已动态（C3）**：每个 ADT 的变体行块倍增到 `MAX_ADT_VARIANTS_MAX=65536`，初值 96；`match` 覆盖 scratch 按变体数分配 |
 | `MAX_ADT_FIELDS` | 8 | 3 | C | **已动态（C3）**：每个变体的负载字段行块倍增到 `MAX_ADT_FIELDS_MAX=65536`，初值 8；`match` 绑定名表按字段数分配 |
-| `MAX_STRUCT_TPARAMS` | 2 | 14 | C | 放开到 `CAP_LIMIT`；spec §8 “类型参数最多两个”同步改写 |
+| `MAX_STRUCT_TPARAMS` | 2 | 14 | C | **已动态（C3）**：行块倍增到 `MAX_STRUCT_TPARAMS_MAX=65536`，初值 2；spec §8 / §4.51 / §4.55 / stable-subset 同步 |
 | `MAX_ALIAS_CHAIN` | 32 | 7 | D | 递归链保护；保留 |
 | `MAX_LAYOUT_DEPTH` | 32 | 8 | D | 递归深度保护；保留 |
 | `MAX_PKG_DEPTH` | 8 | 4 | D | 依赖深度保护；保留 |

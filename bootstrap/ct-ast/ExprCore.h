@@ -89,7 +89,7 @@ struct frontend_parse_ExprOps_vtbl {
     int (*type_append)(void *, char *, int, int *, const char *);
     int (*parse_type)(void *, char *, int);
     int (*parse_inst_type)(void *, char *, int);
-    int (*inst_make)(void *, const char *, int, const char *, const char *, const char *, const char *, char *, int, int, int, int);
+    int (*inst_make)(void *, const char *, int, char * *, char * *, char *, int, int, int, int);
     int (*inst_register_nested)(void *, const char *, int);
     int (*container_vptr_type)(void *, const char *, int);
     int (*container_iface_ptr)(void *, const char *);
@@ -267,8 +267,8 @@ struct frontend_parse_Expr {
     char decl_prefix[160];
     int fnval_ok;
     int in_generic;
-    char in_generic_tparam[160];
-    char in_generic_tparam2[160];
+    char * * in_generic_tparam;
+    int in_generic_ntparam;
     char inst_canon[160];
     int type_depth;
     int cur_unit;

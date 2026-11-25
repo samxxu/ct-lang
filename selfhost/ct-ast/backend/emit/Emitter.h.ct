@@ -434,13 +434,15 @@ static int sb_is_tparam(struct Emitter *self, const char *raw)
 {
     char t[MAX_TEXT];
     size_t n;
+    int i;
     snprintf(t, sizeof t, "%s", raw ? raw : "");
     n = strlen(t);
     while (n > 0 && (t[n - 1] == ' ' || t[n - 1] == '\t' || t[n - 1] == '*')) n--;
     t[n] = 0;
     if (n == 0) return 0;
-    if (self->gtparam[0] && strcmp(t, self->gtparam) == 0) return 1;
-    if (self->gtparam2[0] && strcmp(t, self->gtparam2) == 0) return 1;
+    for (i = 0; i < self->gtntparam; i++)
+        if (self->gtparam[i] && self->gtparam[i][0]
+            && strcmp(t, self->gtparam[i]) == 0) return 1;
     return 0;
 }
 
@@ -1391,26 +1393,28 @@ static int unit_init_needed(struct Emitter *e, int n)
    active or the result does not fit (the caller keeps the original). */
 static int emit_gsub_type(struct Emitter *self, const char *type, char *buf, int cap)
 {
-    char mid[160];
-    char fin[160];
+    char cur[160];
+    char nxt[160];
     char res[160];
-    if (!self->gtarg[0] || !self->gtparam[0]) return -1;
-    if (frontend::sym::ct_generic_subst(type, self->gtparam, self->gtarg, mid, sizeof mid) != 0)
-        return -1;
-    if (self->gtarg2[0] && self->gtparam2[0]) {
-        if (frontend::sym::ct_generic_subst(mid, self->gtparam2, self->gtarg2, fin, sizeof fin) != 0)
+    int i;
+    if (self->gtntparam <= 0) return -1;
+    snprintf(cur, sizeof cur, "%s", type ? type : "");
+    for (i = 0; i < self->gtntparam; i++) {
+        if (!self->gtparam[i] || !self->gtparam[i][0]) continue;
+        if (!self->gtarg[i]) continue;
+        if (frontend::sym::ct_generic_subst(cur, self->gtparam[i], self->gtarg[i],
+                                            nxt, sizeof nxt) != 0)
             return -1;
-    } else {
-        snprintf(fin, sizeof fin, "%s", mid);
+        snprintf(cur, sizeof cur, "%s", nxt);
     }
     /* A substituted spelling may still name an instance (`Vec<T>` -> `Vec<int>`).
        The variable that made it concrete already registered the row, so print
        its monomorphised C spelling instead of a template-shaped type. */
-    if (strchr(fin, '<') && frontend::sym::ct_inst_resolve(fin, res, sizeof res) == 0) {
+    if (strchr(cur, '<') && frontend::sym::ct_inst_resolve(cur, res, sizeof res) == 0) {
         snprintf(buf, (size_t)cap, "%s", res);
         return 0;
     }
-    snprintf(buf, (size_t)cap, "%s", fin);
+    snprintf(buf, (size_t)cap, "%s", cur);
     return 0;
 }
 
@@ -2301,18 +2305,23 @@ static int emit_generic_defs(struct Emitter *self, int u)
             continue;
         t = self->sym->funcs[self->sym->ginsts[i].func].body;
         if (t < 0) continue;
-        snprintf(self->gtparam, sizeof self->gtparam, "%s",
+        self->gtparam = frontend::sym::ct_rows_reserve(self->gtparam, self->gtcap,
+                                                       1, &self->gtcap);
+        self->gtarg = frontend::sym::ct_rows_reserve(self->gtarg, self->gtacap,
+                                                     1, &self->gtacap);
+        if (!self->gtparam || self->gtcap < 1 || !self->gtarg || self->gtacap < 1)
+            return self->fail("out of memory");
+        snprintf(self->gtparam[0], MAX_TEXT, "%s",
                  self->sym->funcs[self->sym->ginsts[i].func].tparam);
-        snprintf(self->gtarg, sizeof self->gtarg, "%s", self->sym->ginsts[i].targ);
+        snprintf(self->gtarg[0], MAX_TEXT, "%s", self->sym->ginsts[i].targ);
+        self->gtntparam = 1;
         snprintf(self->gtname, sizeof self->gtname, "%s", self->sym->ginsts[i].cname);
         if (self->emit_node(t, 0) != 0) {
-            self->gtparam[0] = 0;
-            self->gtarg[0] = 0;
+            self->gtntparam = 0;
             self->gtname[0] = 0;
             return -1;
         }
-        self->gtparam[0] = 0;
-        self->gtarg[0] = 0;
+        self->gtntparam = 0;
         self->gtname[0] = 0;
     }
     return 0;
@@ -3171,34 +3180,39 @@ static int emit_struct_insts(struct Emitter *self, int u, int header)
    written with `T`/`U` replaced by the concrete C spellings. */
 static void impl_inst_bind(struct Emitter *self, int ki, int ii)
 {
-    int k, n, nins, pi, bind_at[2];
+    int k, n, nins, pi, at, nt;
     struct StructImpl *im;
     struct StructInst *ins;
 
     im = frontend::sym::ct_impls(&n);
     ins = frontend::sym::ct_insts(&nins);
-    self->gtparam[0] = 0;
-    self->gtarg[0] = 0;
-    self->gtparam2[0] = 0;
-    self->gtarg2[0] = 0;
+    self->gtntparam = 0;
     self->ginst[0] = 0;
     if (!im || !ins || ki < 0 || ki >= n || ii < 0 || ii >= nins) return;
+    nt = im[ki].ntparams;
+    self->gtparam = frontend::sym::ct_rows_reserve(self->gtparam, self->gtcap,
+                                                   nt, &self->gtcap);
+    self->gtarg = frontend::sym::ct_rows_reserve(self->gtarg, self->gtacap,
+                                                 nt, &self->gtacap);
+    if (nt > 0 && (!self->gtparam || self->gtcap < nt
+                   || !self->gtarg || self->gtacap < nt)) return;
     snprintf(self->ginst, sizeof self->ginst, "%s", ins[ii].name);
-    bind_at[0] = -1;
-    bind_at[1] = -1;
-    for (k = 0; k < ins[ii].nargs; k++) {
-        pi = -1;
-        if (im[ki].ntparams > 0 && strcmp(im[ki].pat[k], im[ki].tparam[0]) == 0) pi = 0;
-        else if (im[ki].ntparams > 1 && strcmp(im[ki].pat[k], im[ki].tparam[1]) == 0) pi = 1;
-        if (pi >= 0) bind_at[pi] = k;
-    }
-    if (bind_at[0] >= 0) {
-        snprintf(self->gtparam, MAX_TEXT, "%s", im[ki].tparam[0]);
-        snprintf(self->gtarg, MAX_TEXT, "%s", ins[ii].ctype[bind_at[0]]);
-    }
-    if (bind_at[1] >= 0) {
-        snprintf(self->gtparam2, MAX_TEXT, "%s", im[ki].tparam[1]);
-        snprintf(self->gtarg2, MAX_TEXT, "%s", ins[ii].ctype[bind_at[1]]);
+    self->gtntparam = nt;
+    for (pi = 0; pi < nt; pi++) {
+        at = -1;
+        for (k = 0; k < ins[ii].nargs; k++)
+            if (im[ki].tparam[pi] && im[ki].pat[k]
+                && strcmp(im[ki].pat[k], im[ki].tparam[pi]) == 0) {
+                at = k;
+                break;
+            }
+        if (at >= 0 && ins[ii].ctype[at]) {
+            snprintf(self->gtparam[pi], MAX_TEXT, "%s", im[ki].tparam[pi]);
+            snprintf(self->gtarg[pi], MAX_TEXT, "%s", ins[ii].ctype[at]);
+        } else {
+            self->gtparam[pi][0] = 0;
+            self->gtarg[pi][0] = 0;
+        }
     }
 }
 
@@ -3270,8 +3284,7 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     tname = frontend::sym::ct_impls(&nimpls)[ki].use;
     /* Phase 35 S5a: a template impl's `use Iter<T>` is spelled per instance. */
     if (self->sym->impl_use_concrete(tname, ins[ii].nargs,
-                             ins[ii].carg[0], ins[ii].carg[1],
-                             ins[ii].ctype[0], ins[ii].ctype[1], -1,
+                             ins[ii].carg, ins[ii].ctype, -1,
                              cuse, sizeof cuse) != 0)
         return -1;
     tname = cuse;
@@ -3383,8 +3396,7 @@ static int impl_emit_one(struct Emitter *self, int ki, int ii)
            no vtable type, so a generic impl of them emits only the methods. */
         if (!builtin) {
             if (self->sym->impl_use_concrete(im[ki].use, ins[ii].nargs,
-                                     ins[ii].carg[0], ins[ii].carg[1],
-                                     ins[ii].ctype[0], ins[ii].ctype[1], -1,
+                                     ins[ii].carg, ins[ii].ctype, -1,
                                      cuse, sizeof cuse) != 0)
                 return -1;
             fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
@@ -5299,9 +5311,9 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
         char msgb[MAX_TEXT];
         size_t tl;
         int si;
-        if (!self->gtarg[0])
+        if (self->gtntparam <= 0 || !self->gtarg[0])
             return self->fail_from(n, "a constrained call needs an instance");
-        snprintf(tg, sizeof tg, "%s", self->gtarg);
+        snprintf(tg, sizeof tg, "%s", self->gtarg[0]);
         tl = strlen(tg);
         while (tl > 0 && (tg[tl - 1] == ' ' || tg[tl - 1] == '*')) {
             tl--;
@@ -5314,7 +5326,7 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
         if (si < 0) {
             snprintf(msgb, sizeof msgb,
                      "type argument '%s' cannot satisfy trait '%s' (not a struct)",
-                     self->gtarg, self->arena->nodes[n].text);
+                     self->gtarg[0], self->arena->nodes[n].text);
             return self->fail_from(n, msgb);
         }
         fprintf(self->out, "%s_%s_vtable.%s(", self->sym->structs[si].name,

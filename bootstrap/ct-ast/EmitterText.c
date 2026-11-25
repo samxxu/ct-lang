@@ -273,6 +273,7 @@ int backend_emit_elem_ret_ctype(int inst, const char * text, char * out, int cap
     int ti;
     int tn;
     int k;
+    int j;
     struct frontend_sym_StructInst * ins;
     struct frontend_sym_StructTmpl * tps;
     ins = frontend_sym_ct_insts((&k));
@@ -280,11 +281,13 @@ int backend_emit_elem_ret_ctype(int inst, const char * text, char * out, int cap
     tps = frontend_sym_ct_tmpls((&tn));
     snprintf(cur, sizeof(cur), "%s", text);
     if (((ti >= 0) && tps)) {
-        if (((tps[ti].ntparams > 0) && (frontend_sym_ct_generic_subst(cur, tps[ti].tparam[0], ins[inst].ctype[0], nxt, sizeof(nxt)) == 0))) {
-            snprintf(cur, sizeof(cur), "%s", nxt);
-        }
-        if (((tps[ti].ntparams > 1) && (frontend_sym_ct_generic_subst(cur, tps[ti].tparam[1], ins[inst].ctype[1], nxt, sizeof(nxt)) == 0))) {
-            snprintf(cur, sizeof(cur), "%s", nxt);
+        for (j = 0; j < tps[ti].ntparams; j++) {
+            if (j >= ins[inst].nargs) {
+                break;
+            }
+            if (((tps[ti].tparam[j] && ins[inst].ctype[j]) && (frontend_sym_ct_generic_subst(cur, tps[ti].tparam[j], ins[inst].ctype[j], nxt, sizeof(nxt)) == 0))) {
+                snprintf(cur, sizeof(cur), "%s", nxt);
+            }
         }
     }
     if ((strchr(cur, '<') && (frontend_sym_ct_inst_resolve(cur, res, sizeof(res)) == 0))) {

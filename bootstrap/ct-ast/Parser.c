@@ -31,7 +31,6 @@
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
 #define MAX_RAW_BLOCK 32768
-#define MAX_STRUCT_TPARAMS 2
 #define MAX_TEXT 160
 #define MAX_TRAITS 64
 #define NO_NODE (-2)
@@ -1223,6 +1222,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     char gns[MAX_TEXT];
     char tparam[MAX_TEXT];
     char bound[MAX_TEXT];
+    char * gparam[1];
     int is_generic;
     int ret_slice;
     (void)(_self);
@@ -1470,11 +1470,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         return (-1);
     }
     if (is_generic) {
-        snprintf(_self->ex->in_generic_tparam, sizeof(_self->ex->in_generic_tparam), "%s", tparam);
+        gparam[0] = tparam;
+        _self->ex->in_generic_tparam = gparam;
+        _self->ex->in_generic_ntparam = 1;
     }
     params = _self->__frontend_parse_parseops_vptr->parse_params(_self);
     if (is_generic) {
-        _self->ex->in_generic_tparam[0] = 0;
+        _self->ex->in_generic_tparam = 0;
+        _self->ex->in_generic_ntparam = 0;
     }
     if (params < 0) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
@@ -1526,7 +1529,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         _self->ex->in_generic = 1;
     }
     if (is_generic) {
-        snprintf(_self->ex->in_generic_tparam, sizeof(_self->ex->in_generic_tparam), "%s", tparam);
+        gparam[0] = tparam;
+        _self->ex->in_generic_tparam = gparam;
+        _self->ex->in_generic_ntparam = 1;
     }
     if (is_generic) {
         snprintf(_self->ex->in_generic_bound, sizeof(_self->ex->in_generic_bound), "%s", bound);
@@ -1536,7 +1541,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         _self->ex->in_generic = 0;
     }
     if (is_generic) {
-        _self->ex->in_generic_tparam[0] = 0;
+        _self->ex->in_generic_tparam = 0;
+        _self->ex->in_generic_ntparam = 0;
     }
     if (is_generic) {
         _self->ex->in_generic_bound[0] = 0;
@@ -2422,15 +2428,13 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
     int templ;
     char name[MAX_TEXT];
     char qname[MAX_TEXT];
-    char tparam[2][MAX_TEXT];
-    char bound[2][MAX_TEXT];
+    char * * tparam = 0;
+    char * * bound = 0;
+    int tcap = 0;
+    int bcap = 0;
     (void)(_self);
     nt = 0;
     templ = 0;
-    tparam[0][0] = 0;
-    tparam[1][0] = 0;
-    bound[0][0] = 0;
-    bound[1][0] = 0;
     struct_line = _self->lex->tokline;
     struct_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
     allow_cycle = _self->__frontend_parse_parseops_vptr->record_line_allows_cycle(_self, struct_line);
@@ -2461,8 +2465,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
     if ((((name[0] && (!is_union)) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         for (; ; ) {
-            if (nt >= MAX_STRUCT_TPARAMS) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic struct takes at most 2 type parameters");
+            tparam = frontend_sym_ct_rows_reserve(tparam, tcap, (nt + 1), (&tcap));
+            bound = frontend_sym_ct_rows_reserve(bound, bcap, (nt + 1), (&bcap));
+            if (((((!tparam) || (tcap < (nt + 1))) || (!bound)) || (bcap < (nt + 1)))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic struct has too many type parameters");
             }
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type parameter name");
@@ -2532,20 +2538,18 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
     _self->npend = 0;
     snprintf(_self->cur_record, MAX_TEXT, "%s", qname);
     if (templ) {
-        snprintf(_self->ex->in_generic_tparam, MAX_TEXT, "%s", tparam[0]);
-        if (nt > 1) {
-            snprintf(_self->ex->in_generic_tparam2, MAX_TEXT, "%s", tparam[1]);
-        }
+        _self->ex->in_generic_tparam = tparam;
+        _self->ex->in_generic_ntparam = nt;
     }
     if (_self->__frontend_parse_parseops_vptr->parse_record_body(_self, s, 1) != 0) {
         _self->cur_record[0] = 0;
-        _self->ex->in_generic_tparam[0] = 0;
-        _self->ex->in_generic_tparam2[0] = 0;
+        _self->ex->in_generic_tparam = 0;
+        _self->ex->in_generic_ntparam = 0;
         return (-1);
     }
     _self->cur_record[0] = 0;
-    _self->ex->in_generic_tparam[0] = 0;
-    _self->ex->in_generic_tparam2[0] = 0;
+    _self->ex->in_generic_tparam = 0;
+    _self->ex->in_generic_ntparam = 0;
     if (((is_union && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "use"))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a union cannot use a trait");
     }
@@ -2590,7 +2594,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
         int ui4;
         struct frontend_sym_StructTmpl * tps;
         di = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, qname);
-        ti4 = frontend_sym_ct_tmpl_add(name, qname, nt, tparam[0], tparam[1], bound[0], bound[1], _self->decl_pub, _self->cur_unit, _self->mem->path, struct_line);
+        ti4 = frontend_sym_ct_tmpl_add(name, qname, nt, tparam, bound, _self->decl_pub, _self->cur_unit, _self->mem->path, struct_line);
         if (ti4 < 0) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
@@ -2612,8 +2616,13 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
             }
             _self->sym->structs[di].is_template = 1;
             _self->sym->structs[di].ntparams = nt;
-            snprintf(_self->sym->structs[di].tparam[0], MAX_TEXT, "%s", tparam[0]);
-            snprintf(_self->sym->structs[di].tparam[1], MAX_TEXT, "%s", tparam[1]);
+            _self->sym->structs[di].tparam = frontend_sym_ct_rows_reserve(_self->sym->structs[di].tparam, _self->sym->structs[di].tcap, nt, (&_self->sym->structs[di].tcap));
+            if (((nt > 0) && ((!_self->sym->structs[di].tparam) || (_self->sym->structs[di].tcap < nt)))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            for (fi4 = 0; fi4 < nt; fi4++) {
+                snprintf(_self->sym->structs[di].tparam[fi4], MAX_TEXT, "%s", tparam[fi4]);
+            }
             _self->sym->structs[di].is_pub = _self->decl_pub;
             tps[ti4].uses_drop = _self->sym->structs[di].uses_drop;
             tps[ti4].uses_handback = _self->sym->structs[di].uses_handback;
@@ -3229,8 +3238,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     int save_ntype;
     int save_nnode;
     int stride;
-    char tparam[2][MAX_TEXT];
-    char tbound[2][MAX_TEXT];
+    char * * tparam = 0;
+    char * * tbound = 0;
+    int tcap = 0;
+    int bcap = 0;
     char name[MAX_TEXT];
     char qname[MAX_TEXT];
     char ret[MAX_TEXT];
@@ -3269,11 +3280,13 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         for (; ; ) {
+            tparam = frontend_sym_ct_rows_reserve(tparam, tcap, (ntp + 1), (&tcap));
+            tbound = frontend_sym_ct_rows_reserve(tbound, bcap, (ntp + 1), (&bcap));
+            if (((((!tparam) || (tcap < (ntp + 1))) || (!tbound)) || (bcap < (ntp + 1)))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a trait has too many type parameters");
+            }
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type parameter name");
-            }
-            if (ntp >= 2) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a trait supports at most two type parameters");
             }
             for (pi = 0; pi < ntp; pi++) {
                 if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, tparam[pi])) {
@@ -3333,6 +3346,11 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         }
     }
     _self->sym->traits[ti].ntparams = ntp;
+    _self->sym->traits[ti].tparam = frontend_sym_ct_rows_reserve(_self->sym->traits[ti].tparam, _self->sym->traits[ti].tcap, ntp, (&_self->sym->traits[ti].tcap));
+    _self->sym->traits[ti].bound = frontend_sym_ct_rows_reserve(_self->sym->traits[ti].bound, _self->sym->traits[ti].bcap, ntp, (&_self->sym->traits[ti].bcap));
+    if (((ntp > 0) && ((((!_self->sym->traits[ti].tparam) || (!_self->sym->traits[ti].bound)) || (_self->sym->traits[ti].tcap < ntp)) || (_self->sym->traits[ti].bcap < ntp)))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     for (pi = 0; pi < ntp; pi++) {
         snprintf(_self->sym->traits[ti].tparam[pi], MAX_TEXT, "%s", tparam[pi]);
         snprintf(_self->sym->traits[ti].bound[pi], MAX_TEXT, "%s", tbound[pi]);
@@ -4117,8 +4135,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
 static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *self, const char * tmpl_in, int have_name) {
     struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
     char tmpl[MAX_TEXT];
-    char tn[2][MAX_TEXT];
-    char pat[2][MAX_TEXT];
+    char * * tn = 0;
+    char * * pat = 0;
+    int tcap = 0;
+    int pcap = 0;
     char use[MAX_TEXT];
     char ruse[MAX_TEXT];
     char ret[MAX_TEXT];
@@ -4139,18 +4159,15 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     nt = 0;
     nargs = 0;
     snprintf(htype, sizeof(htype), "%s", "void *");
-    tn[0][0] = 0;
-    tn[1][0] = 0;
-    pat[0][0] = 0;
-    pat[1][0] = 0;
     use[0] = 0;
     snprintf(tmpl, sizeof(tmpl), "%s", tmpl_in);
     line = _self->lex->tokline;
     if (have_name) {
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         for (; ; ) {
-            if (nt >= MAX_STRUCT_TPARAMS) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic struct takes at most 2 type parameters");
+            tn = frontend_sym_ct_rows_reserve(tn, tcap, (nt + 1), (&tcap));
+            if (((!tn) || (tcap < (nt + 1)))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic struct has too many type parameters");
             }
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type parameter name");
@@ -4212,8 +4229,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         for (; ; ) {
-            if (nargs >= MAX_STRUCT_TPARAMS) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic struct takes at most 2 type arguments");
+            pat = frontend_sym_ct_rows_reserve(pat, pcap, (nargs + 1), (&pcap));
+            if (((!pat) || (pcap < (nargs + 1)))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic struct has too many type arguments");
             }
 {
                 int aline = _self->lex->tokline;
@@ -4287,20 +4305,21 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
-            char targs[2][MAX_TEXT];
-            char full[MAX_TEXT];
+            char full[MAX_TEXT * 2];
+            char targ[MAX_TEXT];
             int na = 0;
             int ai;
             int bad = 0;
+            int fl = 0;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             for (; ; ) {
-                if (na >= MAX_STRUCT_TPARAMS) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic trait takes at most 2 type arguments");
-                }
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type argument");
                 }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, targs[na], MAX_TEXT);
+                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, targ, MAX_TEXT);
+                if (((na >= nt) || (strcmp(targ, tn[na]) != 0))) {
+                    bad = 1;
+                }
                 na++;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
@@ -4315,19 +4334,19 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
             if (na != nt) {
                 bad = 1;
             }
-            for (ai = 0; ((!bad) && (ai < na)); ai++) {
-                if (strcmp(targs[ai], tn[ai]) != 0) {
-                    bad = 1;
-                }
-            }
             if (bad) {
                 return tool_diag_ct_sem_error(line, 1, "unsupported generic trait implementation shape", _self->mem->path);
             }
-            if (na == 1) {
-                snprintf(full, sizeof(full), "%s<%s>", ruse, targs[0]);
+            fl = snprintf(full, sizeof(full), "%s<", ruse);
+            for (ai = 0; ai < na; ai++) {
+                int wr = snprintf((full + fl), (sizeof(full) - (size_t)(fl)), "%s%s", ((ai == 0) ? "" : ","), tn[ai]);
+                if ((((fl < 0) || (wr < 0)) || ((fl + wr) >= (int)(sizeof(full))))) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
+                }
+                fl += wr;
             }
-            else {
-                snprintf(full, sizeof(full), "%s<%s,%s>", ruse, targs[0], targs[1]);
+            if (((snprintf((full + fl), (sizeof(full) - (size_t)(fl)), ">") < 0) || ((fl + 1) >= (int)(sizeof(full))))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
             }
             snprintf(use, sizeof(use), "%s", full);
         }
@@ -4344,7 +4363,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     snprintf(_self->arena->nodes[node].text2, MAX_TEXT, "%s", use);
     snprintf(_self->arena->nodes[node].text3, MAX_TEXT, "%s", _self->mem->path);
     _self->arena->nodes[node].aux = (-1);
-    _self->arena->nodes[node].num = frontend_sym_ct_impl_add(tmpl, nt, tn[0], tn[1], nargs, pat[0], pat[1], use, node, _self->cur_unit, line);
+    _self->arena->nodes[node].num = frontend_sym_ct_impl_add(tmpl, nt, tn, nargs, pat, use, node, _self->cur_unit, line);
     if (_self->arena->nodes[node].num < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
@@ -4370,8 +4389,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         }
     }
     tail = (-1);
-    snprintf(_self->ex->in_generic_tparam, MAX_TEXT, "%s", tn[0]);
-    snprintf(_self->ex->in_generic_tparam2, MAX_TEXT, "%s", tn[1]);
+    _self->ex->in_generic_tparam = tn;
+    _self->ex->in_generic_ntparam = nt;
     _self->ex->in_generic_bound[0] = 0;
 {
         int tbi = frontend_sym_ct_tmpl_find(tmpl);
@@ -4380,7 +4399,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         struct frontend_sym_StructTmpl * tps = frontend_sym_ct_tmpls((&tbn));
         (void)(tbn);
         if (((((tbi >= 0) && tps) && (tps[tbi].ntparams > 0)) && tn[0][0])) {
-            for (kb = 0; ((kb < nargs) && (kb < MAX_STRUCT_TPARAMS)); kb++) {
+            for (kb = 0; kb < nargs; kb++) {
                 if (strcmp(pat[kb], tn[0]) == 0) {
                     snprintf(_self->ex->in_generic_bound, MAX_TEXT, "%s", tps[tbi].bound[kb]);
                     if (_self->ex->in_generic_bound[0]) {
@@ -4524,8 +4543,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         }
         tail = mnode;
     }
-    _self->ex->in_generic_tparam[0] = 0;
-    _self->ex->in_generic_tparam2[0] = 0;
+    _self->ex->in_generic_tparam = 0;
+    _self->ex->in_generic_ntparam = 0;
     _self->ex->in_generic_bound[0] = 0;
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
         return (-1);
@@ -4947,7 +4966,7 @@ static int check_struct_bounds(struct frontend_parse_Parser * self) {
             if ((!tp[ti].bound[k][0])) {
                 continue;
             }
-            arg = ((k == 0) ? ins[i].carg[0] : ins[i].carg[1]);
+            arg = ins[i].carg[k];
             if (self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, tp[ti].bound[k]) < 0) {
                 snprintf(msg, sizeof(msg), "unknown trait '%s' in a generic bound", tp[ti].bound[k]);
                 tool_diag_ct_sem_error(ins[i].line, ins[i].col, msg, self->mem->path);
@@ -5044,21 +5063,21 @@ static int check_trait_bounds(struct frontend_parse_Parser * self) {
     return ((tool_diag_ct_diag_nsem() > base) ? (-1) : 0);
 }
 static int parse_trait_inst_args(struct frontend_parse_Parser * self, char * tname, int cap) {
-    char arg[2][MAX_TEXT];
-    char ctype[2][MAX_TEXT];
+    char * * arg = 0;
+    char * * ctype = 0;
     char abuf[MAX_TEXT];
+    int acap = 0;
+    int ccap = 0;
     int nargs = 0;
     int ti;
-    arg[0][0] = 0;
-    arg[1][0] = 0;
-    ctype[0][0] = 0;
-    ctype[1][0] = 0;
     if (self->sup->__frontend_parse_supportops_vptr->expect(self->sup, "<") != 0) {
         return (-1);
     }
     for (; ; ) {
-        if (nargs >= MAX_STRUCT_TPARAMS) {
-            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a generic trait takes at most 2 type arguments");
+        arg = frontend_sym_ct_rows_reserve(arg, acap, (nargs + 1), (&acap));
+        ctype = frontend_sym_ct_rows_reserve(ctype, ccap, (nargs + 1), (&ccap));
+        if (((((!arg) || (acap < (nargs + 1))) || (!ctype)) || (ccap < (nargs + 1)))) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a generic trait has too many type arguments");
         }
         self->ex->inst_canon[0] = 0;
         if (self->ex->__frontend_parse_exprops_vptr->parse_type(self->ex, abuf, sizeof(abuf)) != 0) {
@@ -5084,7 +5103,7 @@ static int parse_trait_inst_args(struct frontend_parse_Parser * self, char * tna
     if (self->sup->__frontend_parse_supportops_vptr->expect(self->sup, ">") != 0) {
         return (-1);
     }
-    ti = self->sym->__frontend_sym_symbolops_vptr->trait_inst(self->sym, tname, nargs, arg[0], arg[1], ctype[0], ctype[1], self->cur_unit);
+    ti = self->sym->__frontend_sym_symbolops_vptr->trait_inst(self->sym, tname, nargs, arg, ctype, self->cur_unit);
     if (ti < 0) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, self->sym->__frontend_sym_symbolops_vptr->last_error(self->sym));
     }

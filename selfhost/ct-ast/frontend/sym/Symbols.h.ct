@@ -65,6 +65,7 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_STRUCT_INSTS 128
 #define MAX_STRUCT_INSTS_MAX 65536
 #define MAX_STRUCT_TPARAMS 2
+#define MAX_STRUCT_TPARAMS_MAX 65536
 #define MAX_STRUCT_IMPLS 64
 #define MAX_STRUCT_IMPLS_MAX 65536
 /* Phase 78 S2b: one row per inherent method carrying ref/out annotations.
@@ -313,11 +314,16 @@ pub struct Trait {
        the normalised arguments of an instance, and `owner` is the declaring
        unit (the cross-unit guard names it). */
     int  ntparams;
-    char tparam[2][160];
-    char bound[2][160];
+    /* S1a-0 C3: pointer rows (one MAX_TEXT buffer per row), grown on demand.
+       `tcap` is the shared capacity of `tparam`/`bound`; `cacap` of `carg`. */
+    char **tparam;
+    char **bound;
+    int  tcap;
+    int  bcap;
     int  tmpl;
     int  nargs;
-    char carg[2][160];
+    char **carg;
+    int  cacap;
     int  owner;
 }
 
@@ -363,7 +369,9 @@ pub struct StructDef {
        and `declared_here` says this unit's `.h` already carries the definition,
        so the `.c` must not repeat it. */
     int  ntparams;
-    char tparam[2][160];
+    /* S1a-0 C3: the declaration's parameter names are heap rows (`tcap`). */
+    char **tparam;
+    int  tcap;
     int  is_template;
     int  is_inst;
     int  is_pub;
@@ -441,18 +449,18 @@ pub trait SymbolOps {
     /* S1a-0 C1: grow annotation row `mi` to hold `need` parameter flags. */
     int  ensure_meth_ann_param_capacity(int mi, int need);
     /* Phase 35: find or create the instance row of a parameterised trait.
-       `a1`/`a2` are the source-canonical arguments the encoded name and `carg[]`
-       use; `c1`/`c2` are the C spellings substituted into method signatures.
-       The row is registered as an iface type too. -1 sets last_error. */
-    int  trait_inst(const char *tname, int nargs, const char *a1, const char *a2,
-                    const char *c1, const char *c2, int owner);
+       `args` are the source-canonical arguments the encoded name and `carg[]`
+       use; `cargs` are the C spellings substituted into method signatures. Both
+       are row blocks of `nargs` entries (S1a-0 C3: any arity up to the formal
+       cap). The row is registered as an iface type too. -1 sets last_error. */
+    int  trait_inst(const char *tname, int nargs, char **args, char **cargs,
+                    int owner);
     /* Phase 35 S5a: the concrete trait row a template impl's `use` names for
        one instance. A plain name passes through; the symbolic `Iter<T>` binds
        positionally to the instance's arguments. `owner` is the unit allowed to
        create the row (-1 in the emitter, where the parser already made it). */
-    int  impl_use_concrete(const char *use, int nargs, const char *a1, const char *a2,
-                           const char *c1, const char *c2, int owner,
-                           char *out, int cap);
+    int  impl_use_concrete(const char *use, int nargs, char **args, char **cargs,
+                           int owner, char *out, int cap);
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
     int  method_trait_amb(const char *stype, const char *method, const char *first,
                           char *other, int ocap);
@@ -504,13 +512,17 @@ pub struct StructTmpl {
     char name[160];             /* the source name, `Stack` */
     char full[160];             /* namespace-qualified C name */
     int  ntparams;
-    char tparam[2][160];
+    /* S1a-0 C3: pointer rows grown on demand; `tcap` is the shared capacity of
+       `tparam`/`bound`. */
+    char **tparam;
     /* Phase 33 O1: the trait bound written after a parameter
        (`struct Box<T: Show>`), position-aligned with `tparam`; empty when the
        parameter is unbounded. It is a spelling, not a resolved row: a consumer
        unit may not see the trait's declaration, so `find_trait` waits for the
        unit that creates an instance (D33-5, L33-6). */
-    char bound[2][160];
+    char **bound;
+    int  tcap;
+    int  bcap;
     struct Field *fields;
     int  nfields;
     int  fcap;
@@ -530,10 +542,12 @@ pub struct StructInst {
     /* The canonical type-argument spellings, in the form the encoder consumed
        (`int`, `char*`, `Vec<int>`). They are the identity of the instance: the
        encoded name is only a hash-like spelling of them (D29-6). */
-    char carg[2][160];
+    char **carg;
     /* The same arguments in the C spelling (`struct Vec_int`), which is what a
        method's `T` has to become when the block is monomorphised. */
-    char ctype[2][160];
+    char **ctype;
+    int  acap;
+    int  ccap;
     int  nargs;
     int  owner;                 /* the unit that first named the instance */
     /* Phase 33 O1: where the first type argument was written, so the bound
@@ -553,28 +567,32 @@ pub struct StructInst *ct_insts(int *n);
 pub struct StructImpl {
     char tmpl[160];
     int  ntparams;
-    char tparam[2][160];
+    char **tparam;
+    int  tcap;
     int  nargs;
-    char pat[2][160];           /* a declared parameter name, or a canonical type */
+    char **pat;                 /* a declared parameter name, or a canonical type */
+    int  pcap;
     char use[160];              /* trait name; empty for an inherent block */
     int  node;                  /* arena index of the N_IMPL node */
     int  owner;
     int  line;
 }
 pub struct StructImpl *ct_impls(int *n);
-pub int ct_impl_find(const char *tmpl, int nargs, const char *p1, const char *p2, const char *use);
-pub int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2, int nargs, const char *p1, const char *p2, const char *use, int node, int owner, int line);
+pub int ct_impl_find(const char *tmpl, int nargs, char **pats, const char *use);
+pub int ct_impl_add(const char *tmpl, int ntprm, char **tparams, int nargs,
+                    char **pats, const char *use, int node, int owner, int line);
 /* 1 when the instance row `inst` is covered by the block `ii`. */
 pub int ct_impl_matches(int ii, int inst);
 /* Phase 32 S6: bind the block's type parameters to the instance's concrete C
-   arguments (`T` -> `struct Vec_int`). Each pair receives a parameter name and
-   its value; returns how many were bound (0..2), or -1 when the block does not
-   cover the instance. */
-pub int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2, int cap);
+   arguments (`T` -> `struct Vec_int`). `names`/`values` are row blocks of at
+   least `cap` entries; each bound parameter i writes names[i]/values[i].
+   Returns how many were bound, or -1 when the block does not cover the
+   instance. */
+pub int ct_method_bind(int ii, int inst, char **names, char **values, int cap);
 pub int ct_tmpl_find(const char *name);
-pub int ct_tmpl_add(const char *name, const char *full, int ntprm, const char *t1, const char *t2, const char *b1, const char *b2, int is_pub, int owner, const char *path, int line);
+pub int ct_tmpl_add(const char *name, const char *full, int ntprm, char **tparams, char **bounds, int is_pub, int owner, const char *path, int line);
 pub int ct_inst_find(const char *name);
-pub int ct_inst_add(const char *name, const char *tmpl, int nargs, const char *a1, const char *a2, const char *c1, const char *c2, int owner, int carried, int line, int col);
+pub int ct_inst_add(const char *name, const char *tmpl, int nargs, char **args, char **cargs, int owner, int carried, int line, int col);
 /* Phase 29 §2.2: the canonical spelling of one type argument (trim, collapse
    whitespace, glue `*` to the previous token) and the encoded instance name. */
 /* Phase 29 L29-9/L29-11: 1 when `type` is a by-value built-in container
@@ -1473,8 +1491,6 @@ impl SymbolOps for Symbols {
         self->structs[self->nstructs].has_handback_impl = 0;
         self->structs[self->nstructs].has_drop_impl = 0;
         self->structs[self->nstructs].ntparams = 0;
-        self->structs[self->nstructs].tparam[0][0] = 0;
-        self->structs[self->nstructs].tparam[1][0] = 0;
         self->structs[self->nstructs].is_template = 0;
         self->structs[self->nstructs].is_inst = 0;
         self->structs[self->nstructs].is_pub = 0;
@@ -1630,14 +1646,18 @@ impl SymbolOps for Symbols {
         if (self->ensure_trait_table_capacity(self->ntraits + 1) != 0) return -1;
         snprintf(self->traits[self->ntraits].name, MAX_TEXT, "%s", name);
         /* A row reused after the per-unit reset keeps its method block and
-           capacity (the old rows are dead, the allocation is not). */
+           row-block capacities (the old rows are dead, the allocation is not).
+           Counts are reset so a stale instance row cannot look like a
+           template. */
         self->traits[self->ntraits].nm = 0;
+        self->traits[self->ntraits].nargs = 0;
+        self->traits[self->ntraits].ntparams = 0;
         self->ntraits++;
         return self->ntraits - 1;
     }
 
-    int trait_inst(const char *tname, int nargs, const char *a1, const char *a2,
-                   const char *c1, const char *c2, int owner)
+    int trait_inst(const char *tname, int nargs, char **args, char **cargs,
+                   int owner)
     {
         char enc[MAX_TEXT];
         char msg[MAX_TEXT * 2];
@@ -1666,7 +1686,7 @@ impl SymbolOps for Symbols {
             return self->fail("a generic trait instance must be created in its owner unit");
         /* `Iter<char *>` and `Iter<char*>` must land on the same row. Nested
            instances keep their source-canonical spelling (`Vec<int>`). */
-        if (ct_inst_encode(tname, nargs, a1, a2, enc, MAX_TEXT) != 0)
+        if (ct_inst_encode(tname, nargs, args, enc, MAX_TEXT) != 0)
             return self->fail(
                 "the instantiated trait name exceeds 159 characters; shorten the trait or its arguments");
         ni = self->find_trait(enc);
@@ -1702,8 +1722,15 @@ impl SymbolOps for Symbols {
         self->traits[ni].tmpl = ti;
         self->traits[ni].ntparams = 0;
         self->traits[ni].nargs = nargs;
-        snprintf(self->traits[ni].carg[0], MAX_TEXT, "%s", a1);
-        if (nargs > 1) snprintf(self->traits[ni].carg[1], MAX_TEXT, "%s", a2);
+        self->traits[ni].carg = ct_rows_reserve(self->traits[ni].carg,
+                                                self->traits[ni].cacap,
+                                                nargs, &self->traits[ni].cacap);
+        if ((nargs > 0 && !self->traits[ni].carg)
+            || self->traits[ni].cacap < nargs)
+            return self->fail("out of memory");
+        for (pi = 0; pi < nargs; pi++)
+            snprintf(self->traits[ni].carg[pi], MAX_TEXT, "%s",
+                     args && args[pi] ? args[pi] : "");
         /* The instance owns its signatures: grow its own block and copy the
            values. `MethodSig` has no pointers, so this is a deep copy even
            though the loop assigns rows; sharing `m` would let a later growth
@@ -1730,14 +1757,15 @@ impl SymbolOps for Symbols {
                then run its ordinary return/parameter compatibility checks
                against this row instead of learning about trait parameters. */
             for (pi = 0; pi < nargs; pi++) {
+                const char *sub = cargs && cargs[pi] ? cargs[pi] : "";
                 if (ct_generic_subst(self->traits[ni].m[mi].ret,
-                        self->traits[ti].tparam[pi], pi == 0 ? c1 : c2,
+                        self->traits[ti].tparam[pi], sub,
                         tmp, MAX_TEXT) != 0)
                     return self->fail("type is too long");
                 snprintf(self->traits[ni].m[mi].ret, MAX_TEXT, "%s", tmp);
                 for (pk = 0; pk < self->traits[ni].m[mi].nparams; pk++) {
                     if (ct_generic_subst(self->traits[ni].m[mi].ptype + (pk) * MAX_TEXT,
-                            self->traits[ti].tparam[pi], pi == 0 ? c1 : c2,
+                            self->traits[ti].tparam[pi], sub,
                             tmp, MAX_TEXT) != 0)
                         return self->fail("type is too long");
                     snprintf(self->traits[ni].m[mi].ptype + (pk) * MAX_TEXT, MAX_TEXT, "%s", tmp);
@@ -1754,9 +1782,8 @@ impl SymbolOps for Symbols {
         return ni;
     }
 
-    int impl_use_concrete(const char *use, int nargs, const char *a1, const char *a2,
-                          const char *c1, const char *c2, int owner,
-                          char *out, int cap)
+    int impl_use_concrete(const char *use, int nargs, char **args, char **cargs,
+                          int owner, char *out, int cap)
     {
         char tname[MAX_TEXT];
         char enc[MAX_TEXT];
@@ -1774,10 +1801,10 @@ impl SymbolOps for Symbols {
         memcpy(tname, use, nl);
         tname[nl] = 0;
         if (nargs < 1) return -1;
-        if (ct_inst_encode(tname, nargs, a1, a2, enc, MAX_TEXT) != 0) return -1;
+        if (ct_inst_encode(tname, nargs, args, enc, MAX_TEXT) != 0) return -1;
         ni = self->find_trait(enc);
         if (ni < 0 && owner >= 0)
-            ni = self->trait_inst(tname, nargs, a1, a2, c1, c2, owner);
+            ni = self->trait_inst(tname, nargs, args, cargs, owner);
         if (ni < 0) return -1;
         if (snprintf(out, (size_t)cap, "%s", self->traits[ni].name) >= cap) return -1;
         return 0;
@@ -2426,14 +2453,15 @@ int ct_tmpl_find(const char *name)
 }
 
 int ct_tmpl_add(const char *name, const char *full, int ntprm,
-                const char *t1, const char *t2, const char *b1, const char *b2,
+                char **tparams, char **bounds,
                 int is_pub, int owner, const char *path, int line)
 {
-    int i, n;
+    int i, n, k;
     struct StructTmpl *t;
 
     i = ct_tmpl_find(name);
     if (i >= 0) return i;
+    if (ntprm < 0 || ntprm > MAX_STRUCT_TPARAMS_MAX) return -1;
     if (tmpls_grow(g_ntmpls + 1) != 0) return -1;
     t = ct_tmpls(&n);
     if (!t) return -1;
@@ -2441,10 +2469,14 @@ int ct_tmpl_add(const char *name, const char *full, int ntprm,
     snprintf(t[n].name, MAX_TEXT, "%s", name);
     snprintf(t[n].full, MAX_TEXT, "%s", full);
     t[n].ntparams = ntprm;
-    snprintf(t[n].tparam[0], MAX_TEXT, "%s", t1);
-    snprintf(t[n].tparam[1], MAX_TEXT, "%s", t2);
-    snprintf(t[n].bound[0], MAX_TEXT, "%s", b1);
-    snprintf(t[n].bound[1], MAX_TEXT, "%s", b2);
+    t[n].tparam = ct_rows_reserve(t[n].tparam, t[n].tcap, ntprm, &t[n].tcap);
+    if (ntprm > 0 && (!t[n].tparam || t[n].tcap < ntprm)) return -1;
+    t[n].bound = ct_rows_reserve(t[n].bound, t[n].bcap, ntprm, &t[n].bcap);
+    if (ntprm > 0 && (!t[n].bound || t[n].bcap < ntprm)) return -1;
+    for (k = 0; k < ntprm; k++) {
+        snprintf(t[n].tparam[k], MAX_TEXT, "%s", tparams && tparams[k] ? tparams[k] : "");
+        snprintf(t[n].bound[k], MAX_TEXT, "%s", bounds && bounds[k] ? bounds[k] : "");
+    }
     t[n].nfields = 0;
     t[n].nuse = 0;
     t[n].uses_drop = 0;
@@ -2468,19 +2500,22 @@ int ct_inst_find(const char *name)
 }
 
 int ct_inst_add(const char *name, const char *tmpl, int nargs,
-                const char *a1, const char *a2, const char *c1, const char *c2,
+                char **args, char **cargs,
                 int owner, int carried, int line, int col)
 {
-    int i, n;
+    int i, n, k;
     struct StructInst *t;
 
+    if (nargs < 0 || nargs > MAX_STRUCT_TPARAMS_MAX) return -1;
     i = ct_inst_find(name);
     t = ct_insts(&n);
     if (i >= 0) {
         /* The same encoding must always mean the same argument list (L29-5). */
         if (t[i].nargs != nargs) return -2;
-        if (strcmp(t[i].carg[0], a1) != 0) return -2;
-        if (nargs > 1 && strcmp(t[i].carg[1], a2) != 0) return -2;
+        for (k = 0; k < nargs; k++) {
+            if (!t[i].carg[k] || !args || !args[k]
+                || strcmp(t[i].carg[k], args[k]) != 0) return -2;
+        }
         if (carried && !t[i].carried) t[i].carried = 1;
         return i;
     }
@@ -2491,10 +2526,14 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
     snprintf(t[n].name, MAX_TEXT, "%s", name);
     snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
     t[n].nargs = nargs;
-    snprintf(t[n].carg[0], MAX_TEXT, "%s", a1);
-    snprintf(t[n].carg[1], MAX_TEXT, "%s", a2);
-    snprintf(t[n].ctype[0], MAX_TEXT, "%s", c1);
-    snprintf(t[n].ctype[1], MAX_TEXT, "%s", c2);
+    t[n].carg = ct_rows_reserve(t[n].carg, t[n].acap, nargs, &t[n].acap);
+    if (nargs > 0 && (!t[n].carg || t[n].acap < nargs)) return -1;
+    t[n].ctype = ct_rows_reserve(t[n].ctype, t[n].ccap, nargs, &t[n].ccap);
+    if (nargs > 0 && (!t[n].ctype || t[n].ccap < nargs)) return -1;
+    for (k = 0; k < nargs; k++) {
+        snprintf(t[n].carg[k], MAX_TEXT, "%s", args && args[k] ? args[k] : "");
+        snprintf(t[n].ctype[k], MAX_TEXT, "%s", cargs && cargs[k] ? cargs[k] : "");
+    }
     t[n].owner = owner;
     t[n].carried = carried;
     t[n].line = line;
@@ -2541,31 +2580,38 @@ struct StructImpl *ct_impls(int *n)
     return g_impls;
 }
 
-int ct_impl_find(const char *tmpl, int nargs, const char *p1, const char *p2,
-                 const char *use)
+int ct_impl_find(const char *tmpl, int nargs, char **pats, const char *use)
 {
-    int i, n;
+    int i, n, k, ok;
     struct StructImpl *t = ct_impls(&n);
 
     for (i = 0; i < n; i++) {
         if (strcmp(t[i].tmpl, tmpl) != 0) continue;
         if (t[i].nargs != nargs) continue;
-        if (strcmp(t[i].pat[0], p1) != 0) continue;
-        if (nargs > 1 && strcmp(t[i].pat[1], p2) != 0) continue;
+        ok = 1;
+        for (k = 0; k < nargs; k++)
+            if (!t[i].pat[k] || !pats || !pats[k]
+                || strcmp(t[i].pat[k], pats[k]) != 0) {
+                ok = 0;
+                break;
+            }
+        if (!ok) continue;
         if (strcmp(t[i].use, use) != 0) continue;
         return i;
     }
     return -1;
 }
 
-int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2,
-                int nargs, const char *p1, const char *p2, const char *use,
+int ct_impl_add(const char *tmpl, int ntprm, char **tparams,
+                int nargs, char **pats, const char *use,
                 int node, int owner, int line)
 {
-    int i, n;
+    int i, n, k;
     struct StructImpl *t = ct_impls(&n);
 
-    i = ct_impl_find(tmpl, nargs, p1, p2, use);
+    if (ntprm < 0 || ntprm > MAX_STRUCT_TPARAMS_MAX
+        || nargs < 0 || nargs > MAX_STRUCT_TPARAMS_MAX) return -1;
+    i = ct_impl_find(tmpl, nargs, pats, use);
     if (i >= 0) return i;
     if (impls_grow(g_nimpls + 1) != 0) return -1;
     t = ct_impls(&n);
@@ -2573,11 +2619,16 @@ int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2,
     n = g_nimpls;
     snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
     t[n].ntparams = ntprm;
-    snprintf(t[n].tparam[0], MAX_TEXT, "%s", t1);
-    snprintf(t[n].tparam[1], MAX_TEXT, "%s", t2);
+    t[n].tparam = ct_rows_reserve(t[n].tparam, t[n].tcap, ntprm, &t[n].tcap);
+    if (ntprm > 0 && (!t[n].tparam || t[n].tcap < ntprm)) return -1;
     t[n].nargs = nargs;
-    snprintf(t[n].pat[0], MAX_TEXT, "%s", p1);
-    snprintf(t[n].pat[1], MAX_TEXT, "%s", p2);
+    t[n].pat = ct_rows_reserve(t[n].pat, t[n].pcap, nargs, &t[n].pcap);
+    if (nargs > 0 && (!t[n].pat || t[n].pcap < nargs)) return -1;
+    for (k = 0; k < ntprm; k++)
+        snprintf(t[n].tparam[k], MAX_TEXT, "%s",
+                 tparams && tparams[k] ? tparams[k] : "");
+    for (k = 0; k < nargs; k++)
+        snprintf(t[n].pat[k], MAX_TEXT, "%s", pats && pats[k] ? pats[k] : "");
     snprintf(t[n].use, MAX_TEXT, "%s", use);
     t[n].node = node;
     t[n].owner = owner;
@@ -2594,35 +2645,40 @@ int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2,
 
 static int impl_tparam(struct StructImpl *t, const char *pat)
 {
-    if (t->ntparams > 0 && strcmp(pat, t->tparam[0]) == 0) return 0;
-    if (t->ntparams > 1 && strcmp(pat, t->tparam[1]) == 0) return 1;
+    int i;
+    for (i = 0; i < t->ntparams; i++)
+        if (t->tparam[i] && strcmp(pat, t->tparam[i]) == 0) return i;
     return -1;
 }
 
-static int impl_match(int ii, int ti, const char *pat, const char *arg,
-                      const char *cspell, char *v1, char *v2, int *s1, int *s2,
-                      int depth)
+/* S1a-0 C3: `vals`/`set` are indexed by type-parameter position, so the walk
+   is no longer fixed at two slots. A nested pattern gets its own row block, so
+   a recursive `impl_match` never invalidates the parent's arguments. */
+static int impl_match(int ii, const char *pat, const char *arg,
+                      const char *cspell, char **vals, int *set, int depth)
 {
-    char name[MAX_TEXT], a1[MAX_TEXT], a2[MAX_TEXT];
-    char base[MAX_TEXT], cbase[MAX_TEXT];
-    int na, pi, k, n, ai;
+    char name[MAX_TEXT], base[MAX_TEXT], cbase[MAX_TEXT];
+    char **pargs = 0;
+    int pcap = 0, need, na, pi, k, n, ai;
     struct StructImpl *t = ct_impls(&n);
 
     if (!t || ii < 0 || ii >= n || depth > 8) return 0;
     pi = impl_tparam(&t[ii], pat);
     if (pi >= 0) {
-        char *dst = pi == 0 ? v1 : v2;
-        int *set = pi == 0 ? s1 : s2;
-        if (*set) return strcmp(dst, cspell) == 0;
-        *set = 1;
-        snprintf(dst, MAX_TEXT, "%s", cspell);
+        if (set[pi]) return strcmp(vals[pi], cspell) == 0;
+        set[pi] = 1;
+        snprintf(vals[pi], MAX_TEXT, "%s", cspell);
         return 1;
     }
-    if (!impl_pat_split(pat, name, a1, a2, &na)) {
+    need = ct_inst_arg_count(pat);
+    if (need <= 0) {
         impl_arg_canon(pat, base, sizeof base);
         impl_arg_canon(arg, cbase, sizeof cbase);
         return strcmp(base, cbase) == 0;
     }
+    pargs = ct_rows_reserve(0, 0, need, &pcap);
+    if (!pargs || pcap < need) return 0;
+    if (!impl_pat_split(pat, name, pargs, pcap, &na)) return 0;
     impl_arg_canon(arg, cbase, sizeof cbase);
     ai = ct_inst_find(cbase);
     if (ai < 0) return 0;
@@ -2630,13 +2686,10 @@ static int impl_match(int ii, int ti, const char *pat, const char *arg,
         struct StructInst *ins = ct_insts(&k);
         if (!ins || k <= ai) return 0;
         if (strcmp(ins[ai].tmpl, name) != 0 || ins[ai].nargs != na) return 0;
-        if (!impl_match(ii, ti, a1, ins[ai].carg[0], ins[ai].ctype[0], v1, v2, s1, s2,
-                        depth + 1))
-            return 0;
-        if (na > 1
-            && !impl_match(ii, ti, a2, ins[ai].carg[1], ins[ai].ctype[1], v1, v2,
-                           s1, s2, depth + 1))
-            return 0;
+        for (k = 0; k < na; k++)
+            if (!impl_match(ii, pargs[k], ins[ai].carg[k], ins[ai].ctype[k],
+                            vals, set, depth + 1))
+                return 0;
     }
     return 1;
 }
@@ -2646,70 +2699,66 @@ static int impl_match(int ii, int ti, const char *pat, const char *arg,
    a parameter written twice must receive the same argument both times. */
 int ct_impl_matches(int ii, int inst)
 {
-    int k, n, nins, s1, s2;
+    int k, n, nins, nt, *set;
+    char **vals = 0;
+    int vcap = 0;
     struct StructImpl *t = ct_impls(&n);
     struct StructInst *ins = ct_insts(&nins);
-    char v1[MAX_TEXT], v2[MAX_TEXT];
 
     if (!t || !ins || ii < 0 || ii >= n || inst < 0 || inst >= nins) return 0;
     if (strcmp(t[ii].tmpl, ins[inst].tmpl) != 0) return 0;
     if (t[ii].nargs != ins[inst].nargs) return 0;
-    v1[0] = 0;
-    v2[0] = 0;
-    s1 = 0;
-    s2 = 0;
+    nt = t[ii].ntparams;
+    set = 0;
+    if (nt > 0) {
+        vals = ct_rows_reserve(0, 0, nt, &vcap);
+        set = (int *)calloc((size_t)nt, sizeof(*set));
+        if (!vals || vcap < nt || !set) return 0;
+    }
     for (k = 0; k < ins[inst].nargs; k++)
-        if (!impl_match(ii, ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k],
-                        v1, v2, &s1, &s2, 0))
+        if (!impl_match(ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k],
+                        vals, set, 0))
             return 0;
-    if (s1 == 0 && t[ii].ntparams > 0) return 0;
-    if (s2 == 0 && t[ii].ntparams > 1) return 0;
+    for (k = 0; k < nt; k++)
+        if (!set[k]) return 0;
     return 1;
 }
 
 /* Phase 32 S6 / 33 S5: the same pattern walk as `ct_impl_matches`, but it also
    hands back what each parameter binds to -- the C spelling of the matched
-   argument, however deep in the pattern it sat. */
-int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2,
-                   int cap)
+   argument, however deep in the pattern it sat. `names`/`values` are row blocks
+   with at least `cap` entries and receive one pair per bound parameter. */
+int ct_method_bind(int ii, int inst, char **names, char **values, int cap)
 {
-    int k, n, nins, s1, s2, bound;
+    int k, n, nins, nt, bound, *set;
+    char **vals = 0;
+    int vcap = 0;
     struct StructImpl *t = ct_impls(&n);
     struct StructInst *ins = ct_insts(&nins);
-    char v1b[MAX_TEXT], v2b[MAX_TEXT];
 
-    if (n1 && cap > 0) n1[0] = 0;
-    if (n2 && cap > 0) n2[0] = 0;
-    if (v1 && cap > 0) v1[0] = 0;
-    if (v2 && cap > 0) v2[0] = 0;
     if (!t || !ins || ii < 0 || ii >= n || inst < 0 || inst >= nins) return -1;
+    if (cap < 0) return -1;
     if (!ct_impl_matches(ii, inst)) return -1;
-    v1b[0] = 0;
-    v2b[0] = 0;
-    s1 = 0;
-    s2 = 0;
-    for (k = 0; k < ins[inst].nargs; k++)
-        impl_match(ii, ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k],
-                   v1b, v2b, &s1, &s2, 0);
-    bound = 0;
-    if (s1 && n1 && v1) {
-        snprintf(n1, (size_t)cap, "%s", t[ii].tparam[0]);
-        snprintf(v1, (size_t)cap, "%s", v1b);
-        bound++;
+    nt = t[ii].ntparams;
+    if (nt > cap) return -1;
+    if (nt > 0) {
+        vals = ct_rows_reserve(0, 0, nt, &vcap);
+        set = (int *)calloc((size_t)nt, sizeof(*set));
+        if (!vals || vcap < nt || !set) return -1;
     }
-    if (s2 && n2 && v2) {
-        snprintf(n2, (size_t)cap, "%s", t[ii].tparam[1]);
-        snprintf(v2, (size_t)cap, "%s", v2b);
+    for (k = 0; k < ins[inst].nargs; k++)
+        impl_match(ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k],
+                   vals, set, 0);
+    bound = 0;
+    for (k = 0; k < nt; k++) {
+        if (!set[k]) continue;
+        if (!names || !names[k] || !values || !values[k]) continue;
+        snprintf(names[k], MAX_TEXT, "%s", t[ii].tparam[k]);
+        snprintf(values[k], MAX_TEXT, "%s", vals[k]);
         bound++;
     }
     return bound;
 }
-
-
-
-
-
-
 
 /* `Vec<int>` / `struct Vec<int> *` -> `struct Vec_int` plus the trailing
    suffix. A miss means the instance was never created, so the caller keeps the
@@ -2717,18 +2766,21 @@ int ct_method_bind(int ii, int inst, char *n1, char *v1, char *n2, char *v2,
 int ct_inst_resolve(const char *in, char *out, int cap)
 {
     char name[MAX_TEXT];
-    char a1[MAX_TEXT];
-    char a2[MAX_TEXT];
     char tail[MAX_TEXT];
     char enc[MAX_TEXT];
-    char cc1[MAX_TEXT];
-    char cc2[MAX_TEXT];
-    int nargs, found, k, nins;
+    char cc[MAX_TEXT];
+    char **args = 0;
+    int acap = 0;
+    int need, nargs, found, k, j, nins, ok;
     struct StructInst *ins;
 
-    if (ct_inst_split(in, name, &nargs, a1, a2, tail, sizeof tail) != 0) return -1;
+    need = ct_inst_arg_count(in);
+    if (need <= 0) return -1;
+    args = ct_rows_reserve(0, 0, need, &acap);
+    if (!args || acap < need) return -1;
+    if (ct_inst_split(in, name, &nargs, args, acap, tail, sizeof tail) != 0) return -1;
     if (nargs <= 0) return -1;
-    if (ct_inst_encode(name, nargs, a1, a2, enc, sizeof enc) != 0) return -1;
+    if (ct_inst_encode(name, nargs, args, enc, sizeof enc) != 0) return -1;
     found = ct_inst_find(enc);
     if (found < 0) {
         /* Phase 31 O2: a nested spelling arrives with C arguments
@@ -2739,14 +2791,16 @@ int ct_inst_resolve(const char *in, char *out, int cap)
         ins = ct_insts(&nins);
         for (k = 0; ins && k < nins; k++) {
             if (strcmp(ins[k].tmpl, name) != 0 || ins[k].nargs != nargs) continue;
-            if (nargs > 0) {
-                if (ct_type_canon(ins[k].ctype[0], cc1, sizeof cc1) != 0
-                    || strcmp(cc1, a1) != 0) continue;
+            ok = 1;
+            for (j = 0; j < nargs; j++) {
+                if (!ins[k].ctype[j] || !args[j]
+                    || ct_type_canon(ins[k].ctype[j], cc, sizeof cc) != 0
+                    || strcmp(cc, args[j]) != 0) {
+                    ok = 0;
+                    break;
+                }
             }
-            if (nargs > 1) {
-                if (ct_type_canon(ins[k].ctype[1], cc2, sizeof cc2) != 0
-                    || strcmp(cc2, a2) != 0) continue;
-            }
+            if (!ok) continue;
             found = k;
             break;
         }

@@ -143,8 +143,8 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*ensure_meth_param_capacity)(void *, int, int, int);
     int (*ensure_meth_ann_capacity)(void *, int);
     int (*ensure_meth_ann_param_capacity)(void *, int, int);
-    int (*trait_inst)(void *, const char *, int, const char *, const char *, const char *, const char *, int);
-    int (*impl_use_concrete)(void *, const char *, int, const char *, const char *, const char *, const char *, int, char *, int);
+    int (*trait_inst)(void *, const char *, int, char * *, char * *, int);
+    int (*impl_use_concrete)(void *, const char *, int, char * *, char * *, int, char *, int);
     int (*method_trait)(void *, const char *, const char *, char *, int);
     int (*method_trait_amb)(void *, const char *, const char *, const char *, char *, int);
     int (*ns_decl_name)(void *, const char *, char *, int);
@@ -274,11 +274,14 @@ struct frontend_sym_Trait {
     char path[160];
     char ns[160];
     int ntparams;
-    char tparam[2][160];
-    char bound[2][160];
+    char * * tparam;
+    char * * bound;
+    int tcap;
+    int bcap;
     int tmpl;
     int nargs;
-    char carg[2][160];
+    char * * carg;
+    int cacap;
     int owner;
 };
 struct frontend_sym_Field {
@@ -306,7 +309,8 @@ struct frontend_sym_StructDef {
     int has_handback_impl;
     int has_drop_impl;
     int ntparams;
-    char tparam[2][160];
+    char * * tparam;
+    int tcap;
     int is_template;
     int is_inst;
     int is_pub;
@@ -327,8 +331,10 @@ struct frontend_sym_StructTmpl {
     char name[160];
     char full[160];
     int ntparams;
-    char tparam[2][160];
-    char bound[2][160];
+    char * * tparam;
+    char * * bound;
+    int tcap;
+    int bcap;
     struct frontend_sym_Field * fields;
     int nfields;
     int fcap;
@@ -344,8 +350,10 @@ struct frontend_sym_StructTmpl {
 struct frontend_sym_StructInst {
     char name[160];
     char tmpl[160];
-    char carg[2][160];
-    char ctype[2][160];
+    char * * carg;
+    char * * ctype;
+    int acap;
+    int ccap;
     int nargs;
     int owner;
     int line;
@@ -356,9 +364,11 @@ struct frontend_sym_StructInst {
 struct frontend_sym_StructImpl {
     char tmpl[160];
     int ntparams;
-    char tparam[2][160];
+    char * * tparam;
+    int tcap;
     int nargs;
-    char pat[2][160];
+    char * * pat;
+    int pcap;
     char use[160];
     int node;
     int owner;
@@ -449,14 +459,14 @@ struct frontend_sym_Symbols {
 struct frontend_sym_StructTmpl * frontend_sym_ct_tmpls(int *);
 struct frontend_sym_StructInst * frontend_sym_ct_insts(int *);
 struct frontend_sym_StructImpl * frontend_sym_ct_impls(int *);
-int frontend_sym_ct_impl_find(const char *, int, const char *, const char *, const char *);
-int frontend_sym_ct_impl_add(const char *, int, const char *, const char *, int, const char *, const char *, const char *, int, int, int);
+int frontend_sym_ct_impl_find(const char *, int, char * *, const char *);
+int frontend_sym_ct_impl_add(const char *, int, char * *, int, char * *, const char *, int, int, int);
 int frontend_sym_ct_impl_matches(int, int);
-int frontend_sym_ct_method_bind(int, int, char *, char *, char *, char *, int);
+int frontend_sym_ct_method_bind(int, int, char * *, char * *, int);
 int frontend_sym_ct_tmpl_find(const char *);
-int frontend_sym_ct_tmpl_add(const char *, const char *, int, const char *, const char *, const char *, const char *, int, int, const char *, int);
+int frontend_sym_ct_tmpl_add(const char *, const char *, int, char * *, char * *, int, int, const char *, int);
 int frontend_sym_ct_inst_find(const char *);
-int frontend_sym_ct_inst_add(const char *, const char *, int, const char *, const char *, const char *, const char *, int, int, int, int);
+int frontend_sym_ct_inst_add(const char *, const char *, int, char * *, char * *, int, int, int, int);
 int frontend_sym_ct_inst_resolve(const char *, char *, int);
 struct frontend_sym_Adt * frontend_sym_ct_adts(int *);
 int frontend_sym_ct_adt_find(const char *);

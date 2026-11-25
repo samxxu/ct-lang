@@ -31,9 +31,8 @@ pub trait ExprOps {
        register its struct layout. `depth` bounds nested instantiation; `line` /
        `col` are the first type argument's source position (0 when a nested
        registration has no argument list of its own). */
-    int  inst_make(const char *tname, int nargs, const char *a1, const char *a2,
-                   const char *c1, const char *c2, char *enc, int enc_cap,
-                   int depth, int line, int col);
+    int  inst_make(const char *tname, int nargs, char **args, char **cargs,
+                   char *enc, int enc_cap, int depth, int line, int col);
     /* Phase 29: a substituted field spelling may itself name an instance
        (`MapEntry<K, V>`); register it so the emitter can print its layout. */
     int  inst_register_nested(const char *spell, int depth);
@@ -332,14 +331,13 @@ pub struct Expr {
        parsed. A generic call there would need an instance of a function whose
        own instance set is not fixed yet, so it is refused (L26-5). */
     int  in_generic;
-    /* Phase 26 fix (SH-62): the current template's type parameter spelling
-       while its body is parsed. `next_is_type_name` otherwise treats an
-       ALL_CAPS name as a C macro constant, which turned `sizeof(T)` into a
-       raw expression and let `ct compile` emit `sizeof(T)`. */
-    char in_generic_tparam[160];
-    /* Phase 29: the second type parameter of a generic struct template
-       (`struct Pair<T, U>`), empty when the template or the function has one. */
-    char in_generic_tparam2[160];
+    /* Phase 26 fix (SH-62) / S1a-0 C3: the current template's type parameter
+       spellings while its body is parsed, a caller-owned row block of
+       `in_generic_ntparam` entries. `next_is_type_name` otherwise treats an
+       ALL_CAPS name as a C macro constant, which turned `sizeof(T)` into a raw
+       expression and let `ct compile` emit `sizeof(T)`. */
+    char **in_generic_tparam;
+    int  in_generic_ntparam;
     /* Phase 29: set while `parse_type` reads a type argument that is itself an
        instance. Since S20b the surrounding instance takes that argument by its
        C spelling (`struct Vec_int`), so the encoder produces one name in every

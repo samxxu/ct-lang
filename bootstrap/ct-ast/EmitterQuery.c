@@ -194,16 +194,16 @@ int backend_emit_inst_is_builtin_Box(const char * name) {
 }
 int backend_emit_emit_impl_score(struct frontend_sym_StructImpl * im, int ki) {
     int i;
+    int j;
     int s;
     int tp;
     s = 0;
     for (i = 0; i < im[ki].nargs; i++) {
         tp = 0;
-        if (((im[ki].ntparams > 0) && (strcmp(im[ki].pat[i], im[ki].tparam[0]) == 0))) {
-            tp = 1;
-        }
-        if (((im[ki].ntparams > 1) && (strcmp(im[ki].pat[i], im[ki].tparam[1]) == 0))) {
-            tp = 1;
+        for (j = 0; j < im[ki].ntparams; j++) {
+            if ((im[ki].tparam[j] && (strcmp(im[ki].pat[i], im[ki].tparam[j]) == 0))) {
+                tp = 1;
+            }
         }
         if ((!tp)) {
             s++;

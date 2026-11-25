@@ -2406,7 +2406,7 @@ int main(void) {
 可见性修饰符的完整集合（`pub readonly` / `setter`）、继承、默认编译路径上的全量类型检查、嵌套定义、
 模板参数推导、单参数多约束与 supertrait。泛型**函数**（§4.48）、**约束泛型**（§4.50）、
 **泛型 struct**（§4.51）、**有界泛型 struct**（§4.54）与**泛型 trait**（§4.55）均已落地，
-类型参数最多两个（泛型函数只支持一个），但都不做推导。
+类型参数的个数按需增长（初始 2，倍增到形式上限 65536，S1a-0 C3；泛型函数仍只支持一个），但都不做推导。
 
 另有三类已知边界，写代码时按此规避：
 
@@ -2538,11 +2538,14 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 
 ### 4.51 泛型 struct、固有方法与内置容器（Phase 29）
 
-- **声明**：`struct Name<T, U> { … }`，最多两个类型参数。类型参数可以出现在字段类型的任意位置
+- **声明**：`struct Name<T, U, V, …> { … }`，类型参数个数按需（初始 2，倍增到形式上限 65536，
+  S1a-0 C3；不再有“最多两个”的语义上限）。类型参数可以出现在字段类型的任意位置
   （裸 `T`、`T *`、`T items[N]`）。
 - **实例化**：使用点写 `Name<Arg[, Arg]>`（`struct` 前缀可有可无）。每个 `(模板, 实参组合)`
-  生成一个独立的 C struct，标签是编码拼写 `<Name>_<arg1>[_<arg2>]`：`*`→`_p`、空格→`_`、
-  `_`→`__`、`<`→`_l`、`>`→`_r`、`,`→`_c`。类型位里的 `>>` 自动拆成两个闭合
+  生成一个独立的 C struct，标签是编码拼写 `<Name>_<arg1>[_<arg2>[_<arg3>…]]`：`*`→`_p`、空格→`_`、
+  `_`→`__`、`<`→`_l`、`>`→`_r`、`,`→`_c`。
+  实参个数必须与声明的类型参数个数一致，不一致报
+  `generic struct '<Name>' takes <n> type arguments, <m> given`。类型位里的 `>>` 自动拆成两个闭合
   （`Box<Box<int>>` 合法）。只发射**可达**实例：源文件里出现过的实例才落码；同一实例在整个
   构建里只有一份定义，由**模板所在单元**发布到生成头，其他单元只引用。
 - **固有方法**：`impl<T> Name<Args> { … }` 给实例加方法，落码 `<Instance>_<method>`，调用点
@@ -2764,7 +2767,8 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 
 ### 4.55 泛型 trait（Phase 35，仅 ct-ast）
 
-- **声明**：`trait Iter<T> { T next(void); }` 最多两个类型参数，参数可各带一个 bound（`trait Seq<T: Show>`）；一个参数写多个 bound 报 `a type parameter supports one trait bound`。泛型 trait 不支持默认方法体，报 `a generic trait cannot carry a default method body`。
+- **声明**：`trait Iter<T, U, V, …> { T next(void); }` 类型参数个数按需（初始 2，倍增到形式上限
+  65536，S1a-0 C3），参数可各带一个 bound（`trait Seq<T: Show>`）；一个参数写多个 bound 报 `a type parameter supports one trait bound`。泛型 trait 不支持默认方法体，报 `a generic trait cannot carry a default method body`。
 - **单态化命名**：实例名一律 `<Trait>_<ct_inst_encode 输出>`，产物随之变成 `Iter<int>` → `Iter_int_vtbl` / `Iter_int_iface` / `__iter_int_vptr` / `Circle_Iter_int_next` / `Circle_Iter_int_vtable`；`Iter<char *>` → `Iter_char_p_*`；嵌套实参按转义（`Iter<Vec<int>>` → `Iter_Vec_lint_r_*`）；编码达到 64 字符时退化为 40 字符前缀 + 8 位哈希。非泛型 trait 的产物命名与布局逐字节不变。
 - **impl 与使用**：`impl Iter<int> for Circle { … }`；接口值、字段、形参与 `T: Iter<int>` 约束都按实例行处理，实例的方法签名在创建实例时把 `T` 换成实参的 C 拼写，派发仍走既有 vtable 槽。
 - **约束**：`trait Seq<T: Show>` 在实例创建单元校验实参的 `use` / `impl`（与 §4.54 同一套判据），不满足报 `'int' does not satisfy the bound 'Show' of 'Seq'`。

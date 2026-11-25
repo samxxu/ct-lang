@@ -9,6 +9,7 @@
 #include <ctype.h>
 #define MAX_TEXT    160
 #define MAX_STRUCT_TPARAMS 2
+#define MAX_STRUCT_TPARAMS_MAX 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -86,15 +87,17 @@ extern void U16String_Drop_drop(void *self);
 
 void frontend_sym_adt_strip_type(const char *, char *, int);
 int frontend_sym_ct_generic_subst(const char *, const char *, const char *, char *, int);
-int frontend_sym_ct_inst_encode(const char *, int, const char *, const char *, char *, int);
-int frontend_sym_ct_inst_split(const char *, char *, int *, char *, char *, char *, int);
+char * * frontend_sym_ct_rows_reserve(char * *, int, int, int *);
+int frontend_sym_ct_inst_arg_count(const char *);
+int frontend_sym_ct_inst_encode(const char *, int, char * *, char *, int);
+int frontend_sym_ct_inst_split(const char *, char *, int *, char * *, int, char *, int);
 int frontend_sym_ct_is_container_type(const char *);
 int frontend_sym_ct_is_string_value_type(const char *);
 int frontend_sym_ct_type_canon(const char *, char *, int);
 int frontend_sym_generic_tag_prefix(const char *, const char *);
 int frontend_sym_generic_word_char(int);
 void frontend_sym_impl_arg_canon(const char *, char *, int);
-int frontend_sym_impl_pat_split(const char *, char *, char *, char *, int *);
+int frontend_sym_impl_pat_split(const char *, char *, char * *, int, int *);
 int frontend_sym_inst_enc_one(const char *, char *, int);
 void frontend_sym_meth_host_key(const char *, char *, int);
 void frontend_sym_adt_strip_type(const char * in, char * out, int cap) {
@@ -181,7 +184,101 @@ int frontend_sym_ct_generic_subst(const char * in, const char * word, const char
     out[n] = 0;
     return 0;
 }
-int frontend_sym_ct_inst_encode(const char * tmpl, int nargs, const char * a1, const char * a2, char * out, int cap) {
+char * * frontend_sym_ct_rows_reserve(char * * rows, int have, int need, int * got) {
+    char * * grown;
+    int cap;
+    int i;
+    if (have < 0) {
+        have = 0;
+    }
+    if (need <= have) {
+        if (got) {
+            (*got) = have;
+        }
+        return rows;
+    }
+    if (need > MAX_STRUCT_TPARAMS_MAX) {
+        if (got) {
+            (*got) = have;
+        }
+        return rows;
+    }
+    cap = ((have > 0) ? have : MAX_STRUCT_TPARAMS);
+    while (((cap < need) && (cap < MAX_STRUCT_TPARAMS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_STRUCT_TPARAMS_MAX) {
+        cap = MAX_STRUCT_TPARAMS_MAX;
+    }
+    if (need > cap) {
+        if (got) {
+            (*got) = have;
+        }
+        return rows;
+    }
+    grown = (char * *)(realloc(rows, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        if (got) {
+            (*got) = have;
+        }
+        return rows;
+    }
+    for (i = have; i < cap; i++) {
+        grown[i] = (char *)(calloc((size_t)(MAX_TEXT), 1));
+        if ((!grown[i])) {
+            if (got) {
+                (*got) = i;
+            }
+            return grown;
+        }
+    }
+    if (got) {
+        (*got) = cap;
+    }
+    return grown;
+}
+int frontend_sym_ct_inst_arg_count(const char * in) {
+    const char * p;
+    const char * lt;
+    int depth;
+    int n;
+    if ((!in)) {
+        return 0;
+    }
+    p = in;
+    while ((((*p) == ' ') || ((*p) == '\t'))) {
+        p++;
+    }
+    if (strncmp(p, "struct ", 7) == 0) {
+        p += 7;
+    }
+    lt = strchr(p, '<');
+    if ((!lt)) {
+        return 0;
+    }
+    depth = 1;
+    n = 1;
+    for (p = (lt + 1); (*p); p++) {
+        if ((*p) == '<') {
+            depth++;
+        }
+        else {
+            if ((*p) == '>') {
+                depth--;
+                if (depth == 0) {
+                    return n;
+                }
+            }
+            else {
+                if ((((*p) == ',') && (depth == 1))) {
+                    n++;
+                }
+            }
+        }
+    }
+    return 0;
+}
+int frontend_sym_ct_inst_encode(const char * tmpl, int nargs, char * * args, char * out, int cap) {
     char buf[MAX_TEXT * 2];
     char enc[MAX_TEXT];
     int n;
@@ -189,7 +286,7 @@ int frontend_sym_ct_inst_encode(const char * tmpl, int nargs, const char * a1, c
     int r;
     int k;
     int h;
-    if (nargs > MAX_STRUCT_TPARAMS) {
+    if (((nargs < 0) || (nargs > MAX_STRUCT_TPARAMS_MAX))) {
         return (-1);
     }
     r = snprintf(buf, sizeof(buf), "%s", tmpl);
@@ -198,7 +295,7 @@ int frontend_sym_ct_inst_encode(const char * tmpl, int nargs, const char * a1, c
     }
     n = r;
     for (i = 0; i < nargs; i++) {
-        if (frontend_sym_inst_enc_one(((i == 0) ? a1 : a2), enc, MAX_TEXT) < 0) {
+        if (frontend_sym_inst_enc_one(((args && args[i]) ? args[i] : ""), enc, MAX_TEXT) < 0) {
             return (-1);
         }
         r = snprintf((buf + n), (sizeof(buf) - (size_t)(n)), "_%s", enc);
@@ -224,7 +321,7 @@ int frontend_sym_ct_inst_encode(const char * tmpl, int nargs, const char * a1, c
     snprintf(out, (size_t)(cap), "%s", buf);
     return 0;
 }
-int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char * a1, char * a2, char * tail, int cap) {
+int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char * * args, int argcap, char * tail, int cap) {
     const char * p;
     const char * lt;
     const char * gt;
@@ -233,8 +330,6 @@ int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char *
     int depth;
     int i;
     (*nargs) = 0;
-    a1[0] = 0;
-    a2[0] = 0;
     tail[0] = 0;
     p = in;
     while ((*p) == ' ') {
@@ -284,7 +379,7 @@ int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char *
                 int len = (int)((b - a));
                 char raw[MAX_TEXT];
                 char canon[MAX_TEXT];
-                if (((((*nargs) >= MAX_STRUCT_TPARAMS) || (len <= 0)) || (len >= MAX_TEXT))) {
+                if ((((((*nargs) >= argcap) || ((*nargs) >= MAX_STRUCT_TPARAMS_MAX)) || (len <= 0)) || (len >= MAX_TEXT))) {
                     return (-1);
                 }
                 memcpy(raw, a, (size_t)(len));
@@ -292,12 +387,10 @@ int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char *
                 if (frontend_sym_ct_type_canon(raw, canon, sizeof(canon)) != 0) {
                     return (-1);
                 }
-                if ((*nargs) == 0) {
-                    snprintf(a1, (size_t)(cap), "%s", canon);
+                if (((!args) || (!args[(*nargs)]))) {
+                    return (-1);
                 }
-                else {
-                    snprintf(a2, (size_t)(cap), "%s", canon);
-                }
+                snprintf(args[(*nargs)], MAX_TEXT, "%s", canon);
                 (*nargs) = ((*nargs) + 1);
                 if (b == gt) {
                     break;
@@ -444,7 +537,7 @@ void frontend_sym_impl_arg_canon(const char * arg, char * out, int cap) {
     }
     out[n] = 0;
 }
-int frontend_sym_impl_pat_split(const char * pat, char * name, char * a1, char * a2, int * na) {
+int frontend_sym_impl_pat_split(const char * pat, char * name, char * * args, int argcap, int * na) {
     const char * lt = strchr(pat, '<');
     const char * end;
     const char * p;
@@ -452,6 +545,7 @@ int frontend_sym_impl_pat_split(const char * pat, char * name, char * a1, char *
     int depth = 0;
     int n = 0;
     int len;
+    (*na) = 0;
     if ((!lt)) {
         return 0;
     }
@@ -465,14 +559,19 @@ int frontend_sym_impl_pat_split(const char * pat, char * name, char * a1, char *
     memcpy(name, pat, (size_t)((lt - pat)));
     name[(size_t)((lt - pat))] = 0;
     end = ((pat + len) - 1);
-    a1[0] = 0;
-    a2[0] = 0;
     seg = (lt + 1);
     for (p = (lt + 1); p <= end; p++) {
         if (((p == end) || (((*p) == ',') && (depth == 0)))) {
-            char * dst = ((n == 0) ? a1 : a2);
+            char * dst;
             int sl = (int)((p - seg));
             int i = 0;
+            if (((n >= argcap) || (n >= MAX_STRUCT_TPARAMS_MAX))) {
+                return 0;
+            }
+            dst = (args ? args[n] : 0);
+            if ((!dst)) {
+                return 0;
+            }
             while (((sl > 0) && (((*seg) == ' ') || ((*seg) == '\t')))) {
                 seg++;
                 sl--;

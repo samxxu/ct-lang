@@ -4847,6 +4847,7 @@ static void sb_norm_own_type(struct backend_emit_Emitter * self, char * t, int c
 static int sb_is_tparam(struct backend_emit_Emitter * self, const char * raw) {
     char t[MAX_TEXT];
     size_t n;
+    int i;
     snprintf(t, sizeof(t), "%s", (raw ? raw : ""));
     n = strlen(t);
     while (((n > 0) && (((t[(n - 1)] == ' ') || (t[(n - 1)] == '\t')) || (t[(n - 1)] == '*')))) {
@@ -4856,11 +4857,10 @@ static int sb_is_tparam(struct backend_emit_Emitter * self, const char * raw) {
     if (n == 0) {
         return 0;
     }
-    if ((self->gtparam[0] && (strcmp(t, self->gtparam) == 0))) {
-        return 1;
-    }
-    if ((self->gtparam2[0] && (strcmp(t, self->gtparam2) == 0))) {
-        return 1;
+    for (i = 0; i < self->gtntparam; i++) {
+        if (((self->gtparam[i] && self->gtparam[i][0]) && (strcmp(t, self->gtparam[i]) == 0))) {
+            return 1;
+        }
     }
     return 0;
 }
@@ -5912,28 +5912,31 @@ static int unit_init_needed(struct backend_emit_Emitter * e, int n) {
     return 1;
 }
 static int emit_gsub_type(struct backend_emit_Emitter * self, const char * type, char * buf, int cap) {
-    char mid[160];
-    char fin[160];
+    char cur[160];
+    char nxt[160];
     char res[160];
-    if (((!self->gtarg[0]) || (!self->gtparam[0]))) {
+    int i;
+    if (self->gtntparam <= 0) {
         return (-1);
     }
-    if (frontend_sym_ct_generic_subst(type, self->gtparam, self->gtarg, mid, sizeof(mid)) != 0) {
-        return (-1);
-    }
-    if ((self->gtarg2[0] && self->gtparam2[0])) {
-        if (frontend_sym_ct_generic_subst(mid, self->gtparam2, self->gtarg2, fin, sizeof(fin)) != 0) {
+    snprintf(cur, sizeof(cur), "%s", (type ? type : ""));
+    for (i = 0; i < self->gtntparam; i++) {
+        if (((!self->gtparam[i]) || (!self->gtparam[i][0]))) {
+            continue;
+        }
+        if ((!self->gtarg[i])) {
+            continue;
+        }
+        if (frontend_sym_ct_generic_subst(cur, self->gtparam[i], self->gtarg[i], nxt, sizeof(nxt)) != 0) {
             return (-1);
         }
+        snprintf(cur, sizeof(cur), "%s", nxt);
     }
-    else {
-        snprintf(fin, sizeof(fin), "%s", mid);
-    }
-    if ((strchr(fin, '<') && (frontend_sym_ct_inst_resolve(fin, res, sizeof(res)) == 0))) {
+    if ((strchr(cur, '<') && (frontend_sym_ct_inst_resolve(cur, res, sizeof(res)) == 0))) {
         snprintf(buf, (size_t)(cap), "%s", res);
         return 0;
     }
-    snprintf(buf, (size_t)(cap), "%s", fin);
+    snprintf(buf, (size_t)(cap), "%s", cur);
     return 0;
 }
 static int adoption_default_only(struct backend_emit_Emitter * e, int si, const char * tname) {
@@ -6877,17 +6880,21 @@ static int emit_generic_defs(struct backend_emit_Emitter * self, int u) {
         if (t < 0) {
             continue;
         }
-        snprintf(self->gtparam, sizeof(self->gtparam), "%s", self->sym->funcs[self->sym->ginsts[i].func].tparam);
-        snprintf(self->gtarg, sizeof(self->gtarg), "%s", self->sym->ginsts[i].targ);
+        self->gtparam = frontend_sym_ct_rows_reserve(self->gtparam, self->gtcap, 1, (&self->gtcap));
+        self->gtarg = frontend_sym_ct_rows_reserve(self->gtarg, self->gtacap, 1, (&self->gtacap));
+        if (((((!self->gtparam) || (self->gtcap < 1)) || (!self->gtarg)) || (self->gtacap < 1))) {
+            return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+        }
+        snprintf(self->gtparam[0], MAX_TEXT, "%s", self->sym->funcs[self->sym->ginsts[i].func].tparam);
+        snprintf(self->gtarg[0], MAX_TEXT, "%s", self->sym->ginsts[i].targ);
+        self->gtntparam = 1;
         snprintf(self->gtname, sizeof(self->gtname), "%s", self->sym->ginsts[i].cname);
         if (self->__backend_emit_emitops_vptr->emit_node(self, t, 0) != 0) {
-            self->gtparam[0] = 0;
-            self->gtarg[0] = 0;
+            self->gtntparam = 0;
             self->gtname[0] = 0;
             return (-1);
         }
-        self->gtparam[0] = 0;
-        self->gtarg[0] = 0;
+        self->gtntparam = 0;
         self->gtname[0] = 0;
     }
     return 0;
@@ -7717,43 +7724,41 @@ static void impl_inst_bind(struct backend_emit_Emitter * self, int ki, int ii) {
     int n;
     int nins;
     int pi;
-    int bind_at[2];
+    int at;
+    int nt;
     struct frontend_sym_StructImpl * im;
     struct frontend_sym_StructInst * ins;
     im = frontend_sym_ct_impls((&n));
     ins = frontend_sym_ct_insts((&nins));
-    self->gtparam[0] = 0;
-    self->gtarg[0] = 0;
-    self->gtparam2[0] = 0;
-    self->gtarg2[0] = 0;
+    self->gtntparam = 0;
     self->ginst[0] = 0;
     if (((((((!im) || (!ins)) || (ki < 0)) || (ki >= n)) || (ii < 0)) || (ii >= nins))) {
         return;
     }
+    nt = im[ki].ntparams;
+    self->gtparam = frontend_sym_ct_rows_reserve(self->gtparam, self->gtcap, nt, (&self->gtcap));
+    self->gtarg = frontend_sym_ct_rows_reserve(self->gtarg, self->gtacap, nt, (&self->gtacap));
+    if (((nt > 0) && ((((!self->gtparam) || (self->gtcap < nt)) || (!self->gtarg)) || (self->gtacap < nt)))) {
+        return;
+    }
     snprintf(self->ginst, sizeof(self->ginst), "%s", ins[ii].name);
-    bind_at[0] = (-1);
-    bind_at[1] = (-1);
-    for (k = 0; k < ins[ii].nargs; k++) {
-        pi = (-1);
-        if (((im[ki].ntparams > 0) && (strcmp(im[ki].pat[k], im[ki].tparam[0]) == 0))) {
-            pi = 0;
-        }
-        else {
-            if (((im[ki].ntparams > 1) && (strcmp(im[ki].pat[k], im[ki].tparam[1]) == 0))) {
-                pi = 1;
+    self->gtntparam = nt;
+    for (pi = 0; pi < nt; pi++) {
+        at = (-1);
+        for (k = 0; k < ins[ii].nargs; k++) {
+            if (((im[ki].tparam[pi] && im[ki].pat[k]) && (strcmp(im[ki].pat[k], im[ki].tparam[pi]) == 0))) {
+                at = k;
+                break;
             }
         }
-        if (pi >= 0) {
-            bind_at[pi] = k;
+        if (((at >= 0) && ins[ii].ctype[at])) {
+            snprintf(self->gtparam[pi], MAX_TEXT, "%s", im[ki].tparam[pi]);
+            snprintf(self->gtarg[pi], MAX_TEXT, "%s", ins[ii].ctype[at]);
         }
-    }
-    if (bind_at[0] >= 0) {
-        snprintf(self->gtparam, MAX_TEXT, "%s", im[ki].tparam[0]);
-        snprintf(self->gtarg, MAX_TEXT, "%s", ins[ii].ctype[bind_at[0]]);
-    }
-    if (bind_at[1] >= 0) {
-        snprintf(self->gtparam2, MAX_TEXT, "%s", im[ki].tparam[1]);
-        snprintf(self->gtarg2, MAX_TEXT, "%s", ins[ii].ctype[bind_at[1]]);
+        else {
+            self->gtparam[pi][0] = 0;
+            self->gtarg[pi][0] = 0;
+        }
     }
 }
 static int impl_method_shadowed(struct backend_emit_Emitter * self, int ki, int ii, const char * fname) {
@@ -7821,7 +7826,7 @@ static int impl_emit_method(struct backend_emit_Emitter * self, int ki, int ii, 
         exported = 0;
     }
     tname = frontend_sym_ct_impls((&nimpls))[ki].use;
-    if (self->sym->__frontend_sym_symbolops_vptr->impl_use_concrete(self->sym, tname, ins[ii].nargs, ins[ii].carg[0], ins[ii].carg[1], ins[ii].ctype[0], ins[ii].ctype[1], (-1), cuse, sizeof(cuse)) != 0) {
+    if (self->sym->__frontend_sym_symbolops_vptr->impl_use_concrete(self->sym, tname, ins[ii].nargs, ins[ii].carg, ins[ii].ctype, (-1), cuse, sizeof(cuse)) != 0) {
         return (-1);
     }
     tname = cuse;
@@ -7952,7 +7957,7 @@ static int impl_emit_one(struct backend_emit_Emitter * self, int ki, int ii) {
         int first = 1;
         int builtin = (((strcmp(im[ki].use, "Drop") == 0) || (strcmp(im[ki].use, "Handback") == 0)) && (self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, im[ki].use) < 0));
         if ((!builtin)) {
-            if (self->sym->__frontend_sym_symbolops_vptr->impl_use_concrete(self->sym, im[ki].use, ins[ii].nargs, ins[ii].carg[0], ins[ii].carg[1], ins[ii].ctype[0], ins[ii].ctype[1], (-1), cuse, sizeof(cuse)) != 0) {
+            if (self->sym->__frontend_sym_symbolops_vptr->impl_use_concrete(self->sym, im[ki].use, ins[ii].nargs, ins[ii].carg, ins[ii].ctype, (-1), cuse, sizeof(cuse)) != 0) {
                 return (-1);
             }
             fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n", cuse, ins[ii].name, cuse);
@@ -9916,10 +9921,10 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         char msgb[MAX_TEXT];
         size_t tl;
         int si;
-        if ((!self->gtarg[0])) {
+        if (((self->gtntparam <= 0) || (!self->gtarg[0]))) {
             return self->__backend_emit_emitops_vptr->fail_from(self, n, "a constrained call needs an instance");
         }
-        snprintf(tg, sizeof(tg), "%s", self->gtarg);
+        snprintf(tg, sizeof(tg), "%s", self->gtarg[0]);
         tl = strlen(tg);
         while (((tl > 0) && ((tg[(tl - 1)] == ' ') || (tg[(tl - 1)] == '*')))) {
             tl--;
@@ -9938,7 +9943,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
         if (si < 0) {
-            snprintf(msgb, sizeof(msgb), "type argument '%s' cannot satisfy trait '%s' (not a struct)", self->gtarg, self->arena->nodes[n].text);
+            snprintf(msgb, sizeof(msgb), "type argument '%s' cannot satisfy trait '%s' (not a struct)", self->gtarg[0], self->arena->nodes[n].text);
             return self->__backend_emit_emitops_vptr->fail_from(self, n, msgb);
         }
         fprintf(self->out, "%s_%s_vtable.%s(", self->sym->structs[si].name, self->arena->nodes[n].text, self->arena->nodes[n].text2);

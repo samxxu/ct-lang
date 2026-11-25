@@ -478,7 +478,7 @@ impl TypeOps for TypeCheck {
         char base[MAX_TEXT];
         char ret[MAX_TEXT];
         char tmp[MAX_TEXT];
-        int m, inst, ti, tn, ii, nimpls, k, ni, hit;
+        int m, inst, ti, tn, ii, nimpls, k, ni, j, hit;
         struct StructImpl *im;
         struct StructInst *ins;
         struct StructTmpl *tp;
@@ -540,15 +540,11 @@ impl TypeOps for TypeCheck {
         tp = frontend::sym::ct_tmpls(&tn);
         hit = 1;
         if (ti >= 0 && tp) {
-            if (tp[ti].ntparams > 0) {
-                if (frontend::sym::ct_generic_subst(ret, tp[ti].tparam[0],
-                                                    ins[inst].ctype[0], tmp, MAX_TEXT) != 0)
-                    hit = 0;
-                else snprintf(ret, sizeof ret, "%s", tmp);
-            }
-            if (hit && tp[ti].ntparams > 1) {
-                if (frontend::sym::ct_generic_subst(ret, tp[ti].tparam[1],
-                                                    ins[inst].ctype[1], tmp, MAX_TEXT) != 0)
+            for (j = 0; hit && j < tp[ti].ntparams; j++) {
+                if (j >= ins[inst].nargs) break;
+                if (!tp[ti].tparam[j] || !ins[inst].ctype[j]) continue;
+                if (frontend::sym::ct_generic_subst(ret, tp[ti].tparam[j],
+                                                    ins[inst].ctype[j], tmp, MAX_TEXT) != 0)
                     hit = 0;
                 else snprintf(ret, sizeof ret, "%s", tmp);
             }

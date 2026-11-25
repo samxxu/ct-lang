@@ -305,8 +305,14 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
     if (_self->sup->__frontend_parse_supportops_vptr->rewrite_init_text(_self->sup, tbuf, raw, fixed, sizeof(fixed)) != 0) {
         return (-1);
     }
-    if (_self->__frontend_parse_exprops_vptr->inst_make(_self, "Box", 1, tbuf, "", tbuf, "", enc, sizeof(enc), 0, nline, ncol) != 0) {
-        return (-1);
+{
+        char * aa[1];
+        char * cc[1];
+        aa[0] = tbuf;
+        cc[0] = tbuf;
+        if (_self->__frontend_parse_exprops_vptr->inst_make(_self, "Box", 1, aa, cc, enc, sizeof(enc), 0, nline, ncol) != 0) {
+            return (-1);
+        }
     }
 {
         int n;

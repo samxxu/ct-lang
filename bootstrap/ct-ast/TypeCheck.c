@@ -146,6 +146,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret(void *s
     int nimpls;
     int k;
     int ni;
+    int j;
     int hit;
     struct frontend_sym_StructImpl * im;
     struct frontend_sym_StructInst * ins;
@@ -225,16 +226,14 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret(void *s
     tp = frontend_sym_ct_tmpls((&tn));
     hit = 1;
     if (((ti >= 0) && tp)) {
-        if (tp[ti].ntparams > 0) {
-            if (frontend_sym_ct_generic_subst(ret, tp[ti].tparam[0], ins[inst].ctype[0], tmp, MAX_TEXT) != 0) {
-                hit = 0;
+        for (j = 0; (hit && (j < tp[ti].ntparams)); j++) {
+            if (j >= ins[inst].nargs) {
+                break;
             }
-            else {
-                snprintf(ret, sizeof(ret), "%s", tmp);
+            if (((!tp[ti].tparam[j]) || (!ins[inst].ctype[j]))) {
+                continue;
             }
-        }
-        if ((hit && (tp[ti].ntparams > 1))) {
-            if (frontend_sym_ct_generic_subst(ret, tp[ti].tparam[1], ins[inst].ctype[1], tmp, MAX_TEXT) != 0) {
+            if (frontend_sym_ct_generic_subst(ret, tp[ti].tparam[j], ins[inst].ctype[j], tmp, MAX_TEXT) != 0) {
                 hit = 0;
             }
             else {

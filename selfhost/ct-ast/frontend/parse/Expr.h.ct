@@ -78,7 +78,6 @@ import frontend::parse::ExprNewObject;
 #define MAX_ARG_POS 32
 #define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
-#define MAX_STRUCT_TPARAMS 2
 #define MAX_TEXT 160
 #define N_ADDR 27
 #define N_ARROW 25
@@ -154,6 +153,31 @@ import frontend::parse::ExprNewObject;
 #define U_BNOT 3
 
 namespace frontend::parse;
+
+/* S1a-0 C3: the current template's type parameters are a row block, not a
+   fixed pair. These two predicates replace the old `T`/`U` comparisons; every
+   parser site that used to test one or two spellings now walks the whole list. */
+static int expr_generic_param(struct Expr *self, const char *name)
+{
+    int i;
+    if (!self->in_generic_tparam || !name || !name[0]) return 0;
+    for (i = 0; i < self->in_generic_ntparam; i++)
+        if (self->in_generic_tparam[i] && self->in_generic_tparam[i][0]
+            && strcmp(name, self->in_generic_tparam[i]) == 0)
+            return 1;
+    return 0;
+}
+
+static int expr_generic_token(struct Expr *self)
+{
+    int i;
+    if (!self->in_generic_tparam) return 0;
+    for (i = 0; i < self->in_generic_ntparam; i++)
+        if (self->in_generic_tparam[i] && self->in_generic_tparam[i][0]
+            && self->lex->tok_is(self->in_generic_tparam[i]))
+            return 1;
+    return 0;
+}
 
 /* Phase 31 S23a: 1 when `n` is a borrowed container view -- `get` / `entry` on
    a `Vec` / `Map`, a field or deref of one, or a local carrying the provenance
@@ -1539,9 +1563,13 @@ static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target
     if (self->sup->expr_type(recv, st, sizeof st) != 0 || !st[0])
         return tool::diag::ct_sem_error(line, col,
             "cannot resolve the source type of this conversion", self->sup->mem->path);
-    if (frontend::sym::ct_inst_encode("Option", 1, target, "", enc, sizeof enc) != 0)
-        return tool::diag::ct_sem_error(line, col,
-            "the strict conversion target is too long", self->sup->mem->path);
+    {
+        char *aa[1];
+        aa[0] = (char *)target;
+        if (frontend::sym::ct_inst_encode("Option", 1, aa, enc, sizeof enc) != 0)
+            return tool::diag::ct_sem_error(line, col,
+                "the strict conversion target is too long", self->sup->mem->path);
+    }
     if (snprintf(expect, sizeof expect, "struct %s", enc) >= (int)sizeof expect)
         return tool::diag::ct_sem_error(line, col,
             "the strict conversion target is too long", self->sup->mem->path);
@@ -2538,17 +2566,16 @@ impl ExprOps for Expr {
                 }
                 /* Phase 26 fix (SH-63): the declaration's type parameter wins
                    over a same-named tag; it is kept as `T` for emission. */
-                if (self->in_generic_tparam[0]
-                    && self->lex->tok_is(self->in_generic_tparam)) {
-                    if (self->type_append(out, cap, &n, self->in_generic_tparam) != 0) return -1;
-                    self->sup->lex_next();
-                    continue;
-                }
-                if (self->in_generic_tparam2[0]
-                    && self->lex->tok_is(self->in_generic_tparam2)) {
-                    if (self->type_append(out, cap, &n, self->in_generic_tparam2) != 0) return -1;
-                    self->sup->lex_next();
-                    continue;
+                {
+                    int gpi, gdone = 0;
+                    for (gpi = 0; !gdone && gpi < self->in_generic_ntparam; gpi++) {
+                        const char *gpn = self->in_generic_tparam[gpi];
+                        if (!gpn || !gpn[0] || !self->lex->tok_is(gpn)) continue;
+                        if (self->type_append(out, cap, &n, gpn) != 0) return -1;
+                        self->sup->lex_next();
+                        gdone = 1;
+                    }
+                    if (gdone) continue;
                 }
                 /* PH-81 / LANG-24: `box` is the deprecated alias for `Box`
                    and a common identifier (`Box box;`). It is a type only when
@@ -2869,11 +2896,12 @@ impl ExprOps for Expr {
     {
         char tname[MAX_TEXT];
         char enc[MAX_TEXT];
-        char carg[2][MAX_TEXT];
-        char ctype[2][MAX_TEXT];
+        char **carg = 0;
+        char **ctype = 0;
         char canon[MAX_TEXT];
         char abuf[MAX_TEXT];
         struct StructTmpl *tp;
+        int ccap = 0, tccap = 0;
         int n, ti2, tn, nargs, nt2, pline, pcol;
 
         n = (int)strlen(out);
@@ -2902,8 +2930,10 @@ impl ExprOps for Expr {
         pline = 0;
         pcol = 1;
         for (;;) {
-            if (nargs >= MAX_STRUCT_TPARAMS)
-                return self->sup->fail("a generic struct takes at most 2 type parameters");
+            carg = frontend::sym::ct_rows_reserve(carg, ccap, nargs + 1, &ccap);
+            ctype = frontend::sym::ct_rows_reserve(ctype, tccap, nargs + 1, &tccap);
+            if (!carg || ccap < nargs + 1 || !ctype || tccap < nargs + 1)
+                return self->sup->fail("a generic struct has too many type arguments");
             if (nargs == 0) {
                 pline = self->lex->tokline;
                 pcol = self->lex->tokstart - self->lex->lstart + 1;
@@ -2981,13 +3011,9 @@ impl ExprOps for Expr {
         self->sup->lex_next();
         if (nargs != nt2) {
             char msg[MAX_TEXT * 2];
-            /* L29-2 (E29-12): over-arity is the same frozen text for a
-               built-in container and a user template, so `Vec<int, int>` and
-               `Stack<int, int, int>` stay byte-identical. A user template
-               with more than two parameters is already cut off by the loop
-               above; this branch is the one-parameter container case. */
-            if (nargs > nt2)
-                return self->sup->fail("a generic struct takes at most 2 type parameters");
+            /* S1a-0 C3: the arity is now the template's own count; over- and
+               under-arity share one message so a user template and a built-in
+               container are still judged by the same rule. */
             snprintf(msg, sizeof msg,
                      "generic struct '%s' takes %d type arguments, %d given",
                      tname, nt2, nargs);
@@ -2996,21 +3022,29 @@ impl ExprOps for Expr {
         /* A type parameter used as a type argument stays symbolic: the instance
            is created when the surrounding template is itself instantiated, and
            the emitter resolves the substituted spelling then (D29-3). */
-        if (self->in_generic_tparam[0]
-            && (strcmp(carg[0], self->in_generic_tparam) == 0
-                || (nargs > 1 && strcmp(carg[1], self->in_generic_tparam) == 0)
-                || (self->in_generic_tparam2[0]
-                    && (strcmp(carg[0], self->in_generic_tparam2) == 0
-                        || (nargs > 1 && strcmp(carg[1], self->in_generic_tparam2) == 0))))) {
+        {
+            int gi, sym = 0, rl;
             char raw[MAX_TEXT];
-            if (nargs == 1)
-                snprintf(raw, sizeof raw, "%s<%s>", tname, carg[0]);
-            else
-                snprintf(raw, sizeof raw, "%s<%s,%s>", tname, carg[0], carg[1]);
-            snprintf(self->inst_canon, sizeof self->inst_canon, "%s", raw);
-            snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "%s", raw);
-            if (self->type_append(out, cap, &n, raw) != 0) return -1;
-            return 0;
+            for (gi = 0; gi < nargs; gi++)
+                if (expr_generic_param(self, carg[gi])) sym = 1;
+            if (sym) {
+                rl = snprintf(raw, sizeof raw, "%s<", tname);
+                for (gi = 0; gi < nargs; gi++) {
+                    int wr = snprintf(raw + rl, sizeof raw - (size_t)rl,
+                                      "%s%s", gi == 0 ? "" : ",", carg[gi]);
+                    if (rl < 0 || wr < 0 || rl + wr >= (int)sizeof raw)
+                        return self->sup->fail("type is too long");
+                    rl += wr;
+                }
+                if (rl + 2 > (int)sizeof raw)
+                    return self->sup->fail("type is too long");
+                raw[rl] = '>';
+                raw[rl + 1] = 0;
+                snprintf(self->inst_canon, sizeof self->inst_canon, "%s", raw);
+                snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "%s", raw);
+                if (self->type_append(out, cap, &n, raw) != 0) return -1;
+                return 0;
+            }
         }
         /* L29-8 (D29-9): the built-in `Map` compares keys by content and has no
            `Hash` / `Eq` bound to widen that, so the key whitelist is enforced
@@ -3038,17 +3072,28 @@ impl ExprOps for Expr {
                      carg[0]);
             return self->sup->fail(kmsg);
         }
-        if (frontend::sym::ct_inst_encode(tname, nargs, carg[0], carg[1], enc, MAX_TEXT) != 0)
+        if (frontend::sym::ct_inst_encode(tname, nargs, carg, enc, MAX_TEXT) != 0)
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");
-        if (self->inst_make(tname, nargs, carg[0], carg[1], ctype[0], ctype[1],
+        if (self->inst_make(tname, nargs, carg, ctype,
                             enc, MAX_TEXT, 0, pline, pcol) != 0)
             return -1;
         snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", enc);
-        if (nargs == 1)
-            snprintf(canon, sizeof canon, "%s<%s>", tname, carg[0]);
-        else
-            snprintf(canon, sizeof canon, "%s<%s,%s>", tname, carg[0], carg[1]);
+        {
+            int gi, cl;
+            cl = snprintf(canon, sizeof canon, "%s<", tname);
+            for (gi = 0; gi < nargs; gi++) {
+                int wr = snprintf(canon + cl, sizeof canon - (size_t)cl,
+                                  "%s%s", gi == 0 ? "" : ",", carg[gi]);
+                if (cl < 0 || wr < 0 || cl + wr >= (int)sizeof canon)
+                    return self->sup->fail("type name is too long");
+                cl += wr;
+            }
+            if (cl + 2 > (int)sizeof canon)
+                return self->sup->fail("type name is too long");
+            canon[cl] = '>';
+            canon[cl + 1] = 0;
+        }
         snprintf(self->inst_canon, sizeof self->inst_canon, "%s", canon);
         if (self->type_append(out, cap, &n, "struct") != 0) return -1;
         if (self->type_append(out, cap, &n, enc) != 0) return -1;
@@ -3131,14 +3176,13 @@ impl ExprOps for Expr {
                 ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
                 tp = frontend::sym::ct_tmpls(&tn);
                 if (ti >= 0 && tp) {
-                    if (tp[ti].ntparams > 0
-                        && frontend::sym::ct_generic_subst(cur, tp[ti].tparam[0],
-                                ins[inst].ctype[0], nxt, MAX_TEXT) == 0)
-                        snprintf(cur, sizeof cur, "%s", nxt);
-                    if (tp[ti].ntparams > 1
-                        && frontend::sym::ct_generic_subst(cur, tp[ti].tparam[1],
-                                ins[inst].ctype[1], nxt, MAX_TEXT) == 0)
-                        snprintf(cur, sizeof cur, "%s", nxt);
+                    for (k = 0; k < tp[ti].ntparams; k++) {
+                        if (k >= ins[inst].nargs) break;
+                        if (tp[ti].tparam[k] && ins[inst].ctype[k]
+                            && frontend::sym::ct_generic_subst(cur, tp[ti].tparam[k],
+                                    ins[inst].ctype[k], nxt, MAX_TEXT) == 0)
+                            snprintf(cur, sizeof cur, "%s", nxt);
+                    }
                 }
             }
         }
@@ -3187,15 +3231,17 @@ impl ExprOps for Expr {
     }
 
     /* The single creation path for a concrete instance: encode, register the
-       identity row, copy the template's fields with both parameters substituted
+       identity row, copy the template's fields with every parameter substituted
        and let every matching `use` block adopt its trait. The arity check is
        shared with the type parser, so a built-in container gets no private
-       branch (E29-12). */    int inst_make(const char *tname, int nargs, const char *a1, const char *a2,
-                  const char *c1, const char *c2, char *enc, int enc_cap, int depth,
-                  int line, int col)
+       branch (E29-12). `args` are the source-canonical arguments and `cargs`
+       the C spellings; both hold `nargs` rows (S1a-0 C3: any arity up to the
+       formal cap). */
+    int inst_make(const char *tname, int nargs, char **args, char **cargs,
+                  char *enc, int enc_cap, int depth, int line, int col)
     {
         struct StructTmpl *tp;
-        int tn, ti2, k, si2, fi2, nt2, carried2;
+        int tn, ti2, k, si2, fi2, pi2, nt2, carried2;
         char sub1[MAX_TEXT];
         char sub2[MAX_TEXT];
 
@@ -3205,8 +3251,6 @@ impl ExprOps for Expr {
         nt2 = tp[ti2].ntparams;
         if (nargs != nt2) {
             char msg[MAX_TEXT * 2];
-            if (nargs > nt2)
-                return self->sup->fail("a generic struct takes at most 2 type parameters");
             snprintf(msg, sizeof msg,
                      "generic struct '%s' takes %d type arguments, %d given",
                      tname, nt2, nargs);
@@ -3217,29 +3261,30 @@ impl ExprOps for Expr {
            refuses the same shape for a field; this check catches the type
            argument form, which never reaches that layer. */
         if (strcmp(tname, "Box") == 0 && nargs > 0) {
-            if (strcmp(c1, "struct Str") == 0 || strcmp(c1, "Str") == 0
-                || strcmp(c1, "struct U16Str") == 0 || strcmp(c1, "U16Str") == 0
-                || strcmp(c1, "struct __ct_slice") == 0
-                || strstr(c1, "[]") != 0)
+            const char *c0 = cargs && cargs[0] ? cargs[0] : "";
+            if (strcmp(c0, "struct Str") == 0 || strcmp(c0, "Str") == 0
+                || strcmp(c0, "struct U16Str") == 0 || strcmp(c0, "U16Str") == 0
+                || strcmp(c0, "struct __ct_slice") == 0
+                || strstr(c0, "[]") != 0)
                 return self->sup->fail(
                     "a borrowed view cannot be boxed; Box<T> owns its payload (use String for an owning string)");
         }
         /* L29-13 (Phase 31 O1 partial unfreeze): interface values
            (`struct X_iface`) are stored as a two-word non-owning copy, so only
            vptr-bearing concrete structs are refused here. */
-        if ((strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0)
-            && (self->container_vptr_type(c1, 0)
-                || (nargs > 1 && self->container_vptr_type(c2, 0))))
-            return self->sup->fail(
-                "interface and vptr-bearing values cannot be stored in a container");
-        /* L31-1: an interface pointer has no boxing path into the slot; the
-           value form (`Vec<Show>`) is what the user wants. */
-        if ((strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0)
-            && (self->container_iface_ptr(c1)
-                || (nargs > 1 && self->container_iface_ptr(c2))))
-            return self->sup->fail(
-                "a container of interface pointers is not supported; store the interface value itself");
-        if (frontend::sym::ct_inst_encode(tname, nargs, a1, a2, enc, enc_cap) != 0)
+        if (strcmp(tname, "Vec") == 0 || strcmp(tname, "Map") == 0) {
+            for (pi2 = 0; pi2 < nargs; pi2++)
+                if (self->container_vptr_type(cargs[pi2], 0))
+                    return self->sup->fail(
+                        "interface and vptr-bearing values cannot be stored in a container");
+            /* L31-1: an interface pointer has no boxing path into the slot; the
+               value form (`Vec<Show>`) is what the user wants. */
+            for (pi2 = 0; pi2 < nargs; pi2++)
+                if (self->container_iface_ptr(cargs[pi2]))
+                    return self->sup->fail(
+                        "a container of interface pointers is not supported; store the interface value itself");
+        }
+        if (frontend::sym::ct_inst_encode(tname, nargs, args, enc, enc_cap) != 0)
             return self->sup->fail(
                 "the instantiated name exceeds 159 characters; shorten the template or its arguments");
         /* S20b follow-up: the encoded tag is a C struct name, so it may not
@@ -3255,7 +3300,7 @@ impl ExprOps for Expr {
             }
         }
         carried2 = (tp[ti2].is_pub && tp[ti2].owner == self->cur_unit) ? 1 : 0;
-        k = frontend::sym::ct_inst_add(enc, tname, nargs, a1, a2, c1, c2,
+        k = frontend::sym::ct_inst_add(enc, tname, nargs, args, cargs,
                                        self->cur_unit, carried2, line, col);
         if (k == -2) {
             char msg[MAX_TEXT * 2];
@@ -3270,15 +3315,11 @@ impl ExprOps for Expr {
             if (self->sym->ensure_struct_field_capacity(si2, tp[ti2].nfields) != 0)
                 return -1;
             for (fi2 = 0; fi2 < tp[ti2].nfields; fi2++) {
-                snprintf(sub1, sizeof sub1, "%s", tp[ti2].fields[fi2].type);
-                if (nt2 > 0
-                    && frontend::sym::ct_generic_subst(sub1, tp[ti2].tparam[0], c1,
-                                        sub2, MAX_TEXT) != 0)
-                    return self->sup->fail("type is too long");
-                if (nt2 > 1) {
+                snprintf(sub2, sizeof sub2, "%s", tp[ti2].fields[fi2].type);
+                for (pi2 = 0; pi2 < nt2; pi2++) {
                     snprintf(sub1, sizeof sub1, "%s", sub2);
-                    if (frontend::sym::ct_generic_subst(sub1, tp[ti2].tparam[1], c2,
-                                         sub2, MAX_TEXT) != 0)
+                    if (frontend::sym::ct_generic_subst(sub1, tp[ti2].tparam[pi2],
+                                            cargs[pi2], sub2, MAX_TEXT) != 0)
                         return self->sup->fail("type is too long");
                 }
                 snprintf(self->sym->structs[si2].fields[fi2].name, MAX_TEXT,
@@ -3325,7 +3366,7 @@ impl ExprOps for Expr {
                         /* Handback has no vptr either; the flag is read by the
                            prototype emission like for non-generic impls. */
                     } else if (self->sym->impl_use_concrete(im3[ii3].use,
-                            nargs, a1, a2, c1, c2, self->cur_unit,
+                            nargs, args, cargs, self->cur_unit,
                             cuse, sizeof cuse) != 0) {
                         return self->sup->fail("type is too long");
                     } else {
@@ -3341,7 +3382,7 @@ impl ExprOps for Expr {
            the field used to carry. */
         if (strcmp(tname, "Map") == 0 && nt2 > 1) {
             char esub[MAX_TEXT * 2];
-            snprintf(esub, sizeof esub, "struct MapEntry<%s, %s> *", c1, c2);
+            snprintf(esub, sizeof esub, "struct MapEntry<%s, %s> *", cargs[0], cargs[1]);
             if (self->inst_register_nested(esub, depth + 1) != 0) return -1;
         }
         return 0;
@@ -3350,38 +3391,39 @@ impl ExprOps for Expr {
     int inst_register_nested(const char *spell, int depth)
     {
         char name[MAX_TEXT];
-        char a1[MAX_TEXT];
-        char a2[MAX_TEXT];
         char tail[MAX_TEXT];
-        char c1[MAX_TEXT];
-        char c2[MAX_TEXT];
         char enc[MAX_TEXT];
-        int nargs, ti2;
+        char **args = 0;
+        char **cargs = 0;
+        int acap = 0, ccap = 0, need, nargs, ti2, k, bad;
 
         if (depth > 4) return 0;
-        if (frontend::sym::ct_inst_split(spell, name, &nargs, a1, a2, tail,
+        need = frontend::sym::ct_inst_arg_count(spell);
+        if (need <= 0) return 0;
+        args = frontend::sym::ct_rows_reserve(args, acap, need, &acap);
+        cargs = frontend::sym::ct_rows_reserve(cargs, ccap, need, &ccap);
+        if (!args || acap < need || !cargs || ccap < need) return 0;
+        if (frontend::sym::ct_inst_split(spell, name, &nargs, args, acap, tail,
                                          sizeof tail) != 0)
             return 0;
-        if (nargs <= 0 || !a1[0]) return 0;
+        if (nargs <= 0 || !args[0][0]) return 0;
         /* A parameter of the surrounding template stays symbolic; the emitter
            resolves it once the outer instance binds. */
-        if (self->in_generic_tparam[0]
-            && (strcmp(a1, self->in_generic_tparam) == 0
-                || (nargs > 1 && strcmp(a2, self->in_generic_tparam) == 0)
-                || (self->in_generic_tparam2[0]
-                    && (strcmp(a1, self->in_generic_tparam2) == 0
-                        || (nargs > 1 && strcmp(a2, self->in_generic_tparam2) == 0)))))
-            return 0;
-        if (self->inst_register_nested(a1, depth + 1) != 0) return -1;
-        if (nargs > 1 && self->inst_register_nested(a2, depth + 1) != 0) return -1;
-        if (frontend::sym::ct_type_canon(a1, c1, sizeof c1) != 0) return 0;
-        if (frontend::sym::ct_type_canon(a2, c2, sizeof c2) != 0) return 0;
+        bad = 0;
+        for (k = 0; k < nargs; k++)
+            if (expr_generic_param(self, args[k])) bad = 1;
+        if (bad) return 0;
+        for (k = 0; k < nargs; k++)
+            if (self->inst_register_nested(args[k], depth + 1) != 0) return -1;
+        for (k = 0; k < nargs; k++)
+            if (frontend::sym::ct_type_canon(args[k], cargs[k], MAX_TEXT) != 0)
+                return 0;
         ti2 = frontend::sym::ct_tmpl_find(name);
         if (ti2 < 0) return 0;
-        if (frontend::sym::ct_inst_encode(name, nargs, c1, c2, enc, sizeof enc) != 0)
+        if (frontend::sym::ct_inst_encode(name, nargs, cargs, enc, sizeof enc) != 0)
             return 0;
         if (frontend::sym::ct_inst_find(enc) >= 0) return 0;
-        return self->inst_make(name, nargs, c1, c2, c1, c2, enc, sizeof enc, depth,
+        return self->inst_make(name, nargs, cargs, cargs, enc, sizeof enc, depth,
                                0, 0);
     }
 
@@ -3415,16 +3457,17 @@ impl ExprOps for Expr {
                §4.48 promises a hard error here instead of a silent product;
                the scan runs at the `[` so the diagnostic points at the
                dimension rather than the token after it. */
-            if (self->in_generic_tparam[0]) {
+            if (self->in_generic_ntparam > 0) {
                 int p = open + 1;
                 int depth = 0;
-                int tlen = (int)strlen(self->in_generic_tparam);
                 while (self->lex->src[p]) {
                     char ch = self->lex->src[p];
                     int id0 = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
                               || ch == '_';
                     if (id0) {
                         int q = p + 1;
+                        int gpi, hit = 0;
+                        const char *hitn = 0;
                         while (self->lex->src[q]) {
                             char c2 = self->lex->src[q];
                             if (!((c2 >= 'A' && c2 <= 'Z') || (c2 >= 'a' && c2 <= 'z')
@@ -3432,13 +3475,23 @@ impl ExprOps for Expr {
                                 break;
                             q++;
                         }
-                        if (q - p == tlen
-                            && strncmp(self->lex->src + p, self->in_generic_tparam,
-                                       (size_t)tlen) == 0) {
+                        for (gpi = 0; gpi < self->in_generic_ntparam; gpi++) {
+                            const char *gpn = self->in_generic_tparam[gpi];
+                            int tlen;
+                            if (!gpn || !gpn[0]) continue;
+                            tlen = (int)strlen(gpn);
+                            if (q - p == tlen
+                                && strncmp(self->lex->src + p, gpn, (size_t)tlen) == 0) {
+                                hit = 1;
+                                hitn = gpn;
+                                break;
+                            }
+                        }
+                        if (hit) {
                             char dmsg[MAX_TEXT + 96];
                             snprintf(dmsg, sizeof dmsg,
                                      "type parameter '%s' cannot be used in an array dimension",
-                                     self->in_generic_tparam);
+                                     hitn);
                             return self->sup->fail(dmsg);
                         }
                         p = q;
@@ -3609,8 +3662,7 @@ impl ExprOps for Expr {
             } else
             /* `T` inside its own template body is a type, even though the
                ALL_CAPS rule below would read it as a macro constant. */
-            if (self->in_generic && self->in_generic_tparam[0]
-                && self->lex->tok_is(self->in_generic_tparam)) {
+            if (self->in_generic && expr_generic_token(self)) {
                 res = 1;
             } else
             /* `_Atomic(type)` is a type on its own: the word is a keyword, so
@@ -5503,8 +5555,9 @@ impl ExprOps for Expr {
                            trait signature now, while the concrete type is still
                            unknown. The emitter spells the vtable from the
                            instance's type argument. */
-                        if (self->in_generic_tparam[0] && self->in_generic_bound[0]
-                            && strcmp(ibase, self->in_generic_tparam) == 0) {
+                        if (self->in_generic_ntparam > 0 && self->in_generic_tparam[0]
+                            && self->in_generic_bound[0]
+                            && strcmp(ibase, self->in_generic_tparam[0]) == 0) {
                             char msgb[MAX_TEXT];
                             int bt, bmi = -1, bi2, bgot;
                             bt = self->sym->find_trait(self->in_generic_bound);
@@ -6501,8 +6554,7 @@ impl ExprOps for Expr {
                    would reach the output as an undeclared name; refuse it
                    instead of emitting bad C (SH-62). `struct T` / `union T` /
                    `enum T` is a tag, not the parameter, so it stays legal. */
-                if (self->in_generic && self->in_generic_tparam[0]
-                    && strcmp(tbuf, self->in_generic_tparam) == 0 && !prev_tag)
+                if (self->in_generic && expr_generic_param(self, tbuf) && !prev_tag)
                     return self->sup->fail("type parameter cannot be used inside _Generic");
                 prev_tag = strcmp(tbuf, "struct") == 0 || strcmp(tbuf, "union") == 0
                            || strcmp(tbuf, "enum") == 0;
@@ -6597,8 +6649,7 @@ impl ExprOps for Expr {
             self->lex->tok_copy(fname, sizeof fname);
             /* Phase 26 fix (SH-62): a type parameter has no field list here;
                the instance emission substitutes `T` and C checks the field. */
-            if (self->in_generic && self->in_generic_tparam[0]
-                && strcmp(tbuf, self->in_generic_tparam) == 0) {
+            if (self->in_generic && expr_generic_param(self, tbuf)) {
                 self->sup->lex_next();
                 if (self->sup->expect(")") != 0) return -1;
                 n = self->sup->new_node(N_OFFSETOF);
@@ -6922,8 +6973,7 @@ impl ExprOps for Expr {
                a bare function value, `fnval_ok` -- must reject it. One guard at
                the shared entry covers them all instead of patching each exit;
                without it `return T;` emitted the raw `T`. */
-            if (self->in_generic && self->in_generic_tparam[0]
-                && strcmp(self->arena->nodes[n].text2, self->in_generic_tparam) == 0) {
+            if (self->in_generic && expr_generic_param(self, self->arena->nodes[n].text2)) {
                 char vmsg[MAX_TEXT + 64];
                 snprintf(vmsg, sizeof vmsg,
                          "type parameter '%s' cannot be used as a value",
@@ -8504,8 +8554,8 @@ impl ExprTraitInst for Expr {
     int parse_trait_inst_type(char *out, int cap)
     {
         char tname[MAX_TEXT];
-        char carg[2][MAX_TEXT];
-        char ctype[2][MAX_TEXT];
+        char **carg = 0;
+        char **ctype = 0;
         char canon[MAX_TEXT];
         char abuf[MAX_TEXT];
         char tail[MAX_TEXT];
@@ -8513,6 +8563,7 @@ impl ExprTraitInst for Expr {
         char iface[MAX_TEXT];
         char msg[MAX_TEXT * 2];
         size_t base_len;
+        int ccap = 0, tccap = 0, gpi;
         int n, sti, ni, nargs;
 
         n = (int)strlen(out);
@@ -8529,8 +8580,10 @@ impl ExprTraitInst for Expr {
         self->sup->lex_next();
         nargs = 0;
         for (;;) {
-            if (nargs >= 2)
-                return self->sup->fail("a generic trait takes at most 2 type arguments");
+            carg = frontend::sym::ct_rows_reserve(carg, ccap, nargs + 1, &ccap);
+            ctype = frontend::sym::ct_rows_reserve(ctype, tccap, nargs + 1, &tccap);
+            if (!carg || ccap < nargs + 1 || !ctype || tccap < nargs + 1)
+                return self->sup->fail("a generic trait has too many type arguments");
             self->inst_canon[0] = 0;
             self->type_depth++;
             if (self->type_depth > 4) {
@@ -8560,15 +8613,9 @@ impl ExprTraitInst for Expr {
                          "type argument '%s' cannot instantiate a generic trait", abuf);
                 return self->sup->fail(msg);
             }
-            if (self->in_generic_tparam[0]) {
-                if (frontend::sym::ct_generic_subst(abuf, self->in_generic_tparam, "",
-                                                    symbolic, sizeof symbolic) != 0)
-                    return self->sup->fail("type is too long");
-                if (strcmp(symbolic, abuf) != 0)
-                    return self->sup->fail("symbolic trait type arguments are not supported yet");
-            }
-            if (self->in_generic_tparam2[0]) {
-                if (frontend::sym::ct_generic_subst(abuf, self->in_generic_tparam2, "",
+            for (gpi = 0; gpi < self->in_generic_ntparam; gpi++) {
+                if (!self->in_generic_tparam[gpi]) continue;
+                if (frontend::sym::ct_generic_subst(abuf, self->in_generic_tparam[gpi], "",
                                                     symbolic, sizeof symbolic) != 0)
                     return self->sup->fail("type is too long");
                 if (strcmp(symbolic, abuf) != 0)
@@ -8604,15 +8651,21 @@ impl ExprTraitInst for Expr {
         if (self->lex->tok != T_PUNCT || !self->lex->tok_is(">"))
             return self->sup->fail("expected '>' after the type arguments");
         self->sup->lex_next();
-        ni = self->sym->trait_inst(tname, nargs, carg[0], carg[1],
-                                   ctype[0], ctype[1], self->cur_unit);
+        ni = self->sym->trait_inst(tname, nargs, carg, ctype, self->cur_unit);
         if (ni < 0) return self->sup->fail(self->sym->last_error());
-        if (nargs == 1) {
-            if (snprintf(canon, sizeof canon, "%s<%s>", tname, carg[0]) >= (int)sizeof canon)
+        {
+            int cl = snprintf(canon, sizeof canon, "%s<", tname);
+            for (gpi = 0; gpi < nargs; gpi++) {
+                int wr = snprintf(canon + cl, sizeof canon - (size_t)cl,
+                                  "%s%s", gpi == 0 ? "" : ",", carg[gpi]);
+                if (cl < 0 || wr < 0 || cl + wr >= (int)sizeof canon)
+                    return self->sup->fail("type is too long");
+                cl += wr;
+            }
+            if (cl + 2 > (int)sizeof canon)
                 return self->sup->fail("type is too long");
-        } else if (snprintf(canon, sizeof canon, "%s<%s,%s>", tname, carg[0], carg[1])
-                   >= (int)sizeof canon) {
-            return self->sup->fail("type is too long");
+            canon[cl] = '>';
+            canon[cl + 1] = 0;
         }
         if (snprintf(iface, sizeof iface, "%s_iface", self->sym->traits[ni].name)
             >= (int)sizeof iface)
@@ -9232,7 +9285,10 @@ impl ExprTypes for Expr {
        is needed because `ct_method_bind` reads its type parameters. */
     int chk_mcall_args(const char *ibase, const char *fname, int args)
     {
-        char base[MAX_TEXT], n1[MAX_TEXT], v1[MAX_TEXT], n2[MAX_TEXT], v2[MAX_TEXT];
+        char base[MAX_TEXT];
+        char **bn = 0;
+        char **bv = 0;
+        int bcap = 0, bvcap = 0, bnt;
         char fty[MAX_TEXT], out[MAX_TEXT];
         int ii, nimpls, inst, m, found, foundm, ai, k;
         struct StructImpl *im;
@@ -9306,8 +9362,13 @@ impl ExprTypes for Expr {
             }
             }
         }
-        if (frontend::sym::ct_method_bind(found, inst, n1, v1, n2, v2,
-                                          MAX_TEXT) < 0)
+        bnt = im[found].ntparams;
+        if (bnt > 0) {
+            bn = frontend::sym::ct_rows_reserve(bn, bcap, bnt, &bcap);
+            bv = frontend::sym::ct_rows_reserve(bv, bvcap, bnt, &bvcap);
+            if (!bn || bcap < bnt || !bv || bvcap < bnt) return 0;
+        }
+        if (frontend::sym::ct_method_bind(found, inst, bn, bv, bnt) < 0)
             return 0;
         ai = args;
         k = 0;
@@ -9315,7 +9376,7 @@ impl ExprTypes for Expr {
             int pi = self->arena->nodes[foundm].a;
             while (pi >= 0 && ai > 0) {
                 int is_zero = 0;
-                if (subst_tparam(self->arena->nodes[pi].text, n1, v1, n2, v2,
+                if (subst_tparam(self->arena->nodes[pi].text, bn, bv, bnt,
                                  fty, sizeof fty) == 0
                     && self->chk_type(ai, out, sizeof out, &is_zero) == 0) {
                     if (self->arg_base + k < self->argcap) {

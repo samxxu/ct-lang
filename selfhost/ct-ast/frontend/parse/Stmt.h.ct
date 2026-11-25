@@ -3925,8 +3925,7 @@ impl StmtOps for Stmt {
                        layout is registered here so the C spelling exists even
                        when the user never wrote `MapEntry<...>` themselves. */
                     if (self->ex->inst_make("MapEntry", 2,
-                                            ins[inst].carg[0], ins[inst].carg[1],
-                                            ins[inst].ctype[0], ins[inst].ctype[1],
+                                            ins[inst].carg, ins[inst].ctype,
                                             enc, MAX_TEXT, 0, 0, 0) != 0)
                         return -1;
                     snprintf(elem, sizeof elem, "struct %s", enc);

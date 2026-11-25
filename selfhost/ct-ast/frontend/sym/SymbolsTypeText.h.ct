@@ -15,6 +15,7 @@
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT    160
 #define MAX_STRUCT_TPARAMS 2
+#define MAX_STRUCT_TPARAMS_MAX 65536
 
 namespace frontend::sym;
 /* A stateless unit: the type exists only because a unit file is
@@ -25,15 +26,25 @@ pub struct SymbolsTypeText {
 
 pub void adt_strip_type(const char *in, char *out, int cap);
 pub int ct_generic_subst(const char *in, const char *word, const char *repl, char *out, int cap);
-pub int ct_inst_encode(const char *tmpl, int nargs, const char *a1, const char *a2, char *out, int cap);
-pub int ct_inst_split(const char *in, char *name, int *nargs, char *a1, char *a2, char *tail, int cap);
+/* S1a-0 C3: every cap is a starting capacity, not a language limit. A "row
+   block" is an array of `char *`, one MAX_TEXT buffer per row; the block grows
+   by doubling to MAX_STRUCT_TPARAMS_MAX (the formal/OOM ceiling). Rows are
+   zeroed on allocation, and an existing row keeps its buffer across a grow, so
+   a caller can reserve once and keep appending. */
+pub char **ct_rows_reserve(char **rows, int have, int need, int *got);
+/* The number of top-level type arguments in `Name<a[, b[, …]]>`; 0 when the
+   spelling carries no argument list. The parser grows its row block from this
+   before calling `ct_inst_split`, so the splitter never truncates. */
+pub int ct_inst_arg_count(const char *in);
+pub int ct_inst_encode(const char *tmpl, int nargs, char **args, char *out, int cap);
+pub int ct_inst_split(const char *in, char *name, int *nargs, char **args, int argcap, char *tail, int cap);
 pub int ct_is_container_type(const char *type);
 pub int ct_is_string_value_type(const char *type);
 pub int ct_type_canon(const char *in, char *out, int cap);
 pub int generic_tag_prefix(const char *in, const char *p);
 pub int generic_word_char(int c);
 pub void impl_arg_canon(const char *arg, char *out, int cap);
-pub int impl_pat_split(const char *pat, char *name, char *a1, char *a2, int *na);
+pub int impl_pat_split(const char *pat, char *name, char **args, int argcap, int *na);
 pub int inst_enc_one(const char *arg, char *out, int cap);
 pub void meth_host_key(const char *host, char *out, int cap);
 
@@ -100,20 +111,87 @@ int ct_generic_subst(const char *in, const char *word, const char *repl, char *o
     return 0;
 }
 
-int ct_inst_encode(const char *tmpl, int nargs, const char *a1, const char *a2,
-                   char *out, int cap)
+/* Grow a row block to `need` rows. `have` is the current capacity (the
+   caller stores the returned `got`); `rows` may be NULL. New rows are
+   allocated zeroed, so a later `snprintf` starts from an empty spelling.
+   Allocation failure returns the block it could build (never a dangling old
+   pointer) with `got` below `need`; the caller reports OOM. */
+char **ct_rows_reserve(char **rows, int have, int need, int *got)
+{
+    char **grown;
+    int cap, i;
+
+    if (have < 0) have = 0;
+    if (need <= have) {
+        if (got) *got = have;
+        return rows;
+    }
+    if (need > MAX_STRUCT_TPARAMS_MAX) {
+        if (got) *got = have;
+        return rows;
+    }
+    cap = have > 0 ? have : MAX_STRUCT_TPARAMS;
+    while (cap < need && cap < MAX_STRUCT_TPARAMS_MAX) cap *= 2;
+    if (cap > MAX_STRUCT_TPARAMS_MAX) cap = MAX_STRUCT_TPARAMS_MAX;
+    if (need > cap) {
+        if (got) *got = have;
+        return rows;
+    }
+    grown = (char **)realloc(rows, (size_t)cap * sizeof(*grown));
+    if (!grown) {
+        if (got) *got = have;
+        return rows;
+    }
+    for (i = have; i < cap; i++) {
+        grown[i] = (char *)calloc((size_t)MAX_TEXT, 1);
+        if (!grown[i]) {
+            if (got) *got = i;
+            return grown;
+        }
+    }
+    if (got) *got = cap;
+    return grown;
+}
+
+/* S1a-0 C3: count the top-level arguments of the first `<…>` group. The parser
+   reserves exactly this many rows before `ct_inst_split`, so no spelling that
+   fits the formal limit can be truncated by a two-slot buffer. */
+int ct_inst_arg_count(const char *in)
+{
+    const char *p, *lt;
+    int depth, n;
+
+    if (!in) return 0;
+    p = in;
+    while (*p == ' ' || *p == '\t') p++;
+    if (strncmp(p, "struct ", 7) == 0) p += 7;
+    lt = strchr(p, '<');
+    if (!lt) return 0;
+    depth = 1;
+    n = 1;
+    for (p = lt + 1; *p; p++) {
+        if (*p == '<') depth++;
+        else if (*p == '>') {
+            depth--;
+            if (depth == 0) return n;
+        } else if (*p == ',' && depth == 1) n++;
+    }
+    return 0;
+}
+
+int ct_inst_encode(const char *tmpl, int nargs, char **args, char *out, int cap)
 {
     char buf[MAX_TEXT * 2];
     char enc[MAX_TEXT];
     int n, i, r, k;
     int h;
 
-    if (nargs > MAX_STRUCT_TPARAMS) return -1;
+    if (nargs < 0 || nargs > MAX_STRUCT_TPARAMS_MAX) return -1;
     r = snprintf(buf, sizeof buf, "%s", tmpl);
     if (r < 0 || r >= (int)sizeof buf) return -1;
     n = r;
     for (i = 0; i < nargs; i++) {
-        if (inst_enc_one(i == 0 ? a1 : a2, enc, MAX_TEXT) < 0) return -1;
+        if (inst_enc_one(args && args[i] ? args[i] : "", enc, MAX_TEXT) < 0) return -1;
         r = snprintf(buf + n, sizeof buf - (size_t)n, "_%s", enc);
         if (r < 0 || n + r >= (int)sizeof buf) return -1;
         n += r;
@@ -137,14 +215,13 @@ int ct_inst_encode(const char *tmpl, int nargs, const char *a1, const char *a2,
    nesting (`Vec<Vec<int> >` has one argument) and either arity of the frozen
    cap. Both the emitter (resolve) and the parser (register a nested instance)
    read the same shape through this one scanner. */
-int ct_inst_split(const char *in, char *name, int *nargs, char *a1, char *a2, char *tail, int cap)
+int ct_inst_split(const char *in, char *name, int *nargs, char **args, int argcap,
+                  char *tail, int cap)
 {
     const char *p, *lt, *gt, *base;
     int r, depth, i;
 
     *nargs = 0;
-    a1[0] = 0;
-    a2[0] = 0;
     tail[0] = 0;
     p = in;
     while (*p == ' ') p++;
@@ -176,12 +253,13 @@ int ct_inst_split(const char *in, char *name, int *nargs, char *a1, char *a2, ch
                 int len = (int)(b - a);
                 char raw[MAX_TEXT];
                 char canon[MAX_TEXT];
-                if (*nargs >= MAX_STRUCT_TPARAMS || len <= 0 || len >= MAX_TEXT) return -1;
+                if (*nargs >= argcap || *nargs >= MAX_STRUCT_TPARAMS_MAX
+                    || len <= 0 || len >= MAX_TEXT) return -1;
                 memcpy(raw, a, (size_t)len);
                 raw[len] = 0;
                 if (ct_type_canon(raw, canon, sizeof canon) != 0) return -1;
-                if (*nargs == 0) snprintf(a1, (size_t)cap, "%s", canon);
-                else snprintf(a2, (size_t)cap, "%s", canon);
+                if (!args || !args[*nargs]) return -1;
+                snprintf(args[*nargs], MAX_TEXT, "%s", canon);
                 *nargs = *nargs + 1;
                 if (b == gt) break;
                 a = b + 1;
@@ -311,12 +389,13 @@ void impl_arg_canon(const char *arg, char *out, int cap)
 
 /* `Name<a, b>` -> name plus the two top-level argument spellings. 0 when the
    spelling is not a template application. */
-int impl_pat_split(const char *pat, char *name, char *a1, char *a2, int *na)
+int impl_pat_split(const char *pat, char *name, char **args, int argcap, int *na)
 {
     const char *lt = strchr(pat, '<');
     const char *end, *p, *seg;
     int depth = 0, n = 0, len;
 
+    *na = 0;
     if (!lt) return 0;
     len = (int)strlen(pat);
     if (len == 0 || pat[len - 1] != '>') return 0;
@@ -324,13 +403,14 @@ int impl_pat_split(const char *pat, char *name, char *a1, char *a2, int *na)
     memcpy(name, pat, (size_t)(lt - pat));
     name[(size_t)(lt - pat)] = 0;
     end = pat + len - 1;
-    a1[0] = 0;
-    a2[0] = 0;
     seg = lt + 1;
     for (p = lt + 1; p <= end; p++) {
         if (p == end || (*p == ',' && depth == 0)) {
-            char *dst = n == 0 ? a1 : a2;
+            char *dst;
             int sl = (int)(p - seg), i = 0;
+            if (n >= argcap || n >= MAX_STRUCT_TPARAMS_MAX) return 0;
+            dst = args ? args[n] : 0;
+            if (!dst) return 0;
             while (sl > 0 && (*seg == ' ' || *seg == '\t')) {
                 seg++;
                 sl--;

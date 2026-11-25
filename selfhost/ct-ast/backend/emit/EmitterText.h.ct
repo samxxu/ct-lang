@@ -210,7 +210,7 @@ int elem_ret_ctype(int inst, const char *text, char *out, int cap)
     char cur[MAX_TEXT];
     char nxt[MAX_TEXT];
     char res[MAX_TEXT];
-    int ti, tn, k;
+    int ti, tn, k, j;
     struct StructInst *ins;
     struct StructTmpl *tps;
 
@@ -219,14 +219,13 @@ int elem_ret_ctype(int inst, const char *text, char *out, int cap)
     tps = frontend::sym::ct_tmpls(&tn);
     snprintf(cur, sizeof cur, "%s", text);
     if (ti >= 0 && tps) {
-        if (tps[ti].ntparams > 0
-            && frontend::sym::ct_generic_subst(cur, tps[ti].tparam[0],
-                    ins[inst].ctype[0], nxt, sizeof nxt) == 0)
-            snprintf(cur, sizeof cur, "%s", nxt);
-        if (tps[ti].ntparams > 1
-            && frontend::sym::ct_generic_subst(cur, tps[ti].tparam[1],
-                    ins[inst].ctype[1], nxt, sizeof nxt) == 0)
-            snprintf(cur, sizeof cur, "%s", nxt);
+        for (j = 0; j < tps[ti].ntparams; j++) {
+            if (j >= ins[inst].nargs) break;
+            if (tps[ti].tparam[j] && ins[inst].ctype[j]
+                && frontend::sym::ct_generic_subst(cur, tps[ti].tparam[j],
+                        ins[inst].ctype[j], nxt, sizeof nxt) == 0)
+                snprintf(cur, sizeof cur, "%s", nxt);
+        }
     }
     if (strchr(cur, '<') && frontend::sym::ct_inst_resolve(cur, res, sizeof res) == 0)
         snprintf(cur, sizeof cur, "%s", res);

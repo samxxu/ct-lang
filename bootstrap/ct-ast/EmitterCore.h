@@ -223,11 +223,12 @@ struct backend_emit_Emitter {
     int nclvar;
     int range_depth;
     int range_k;
-    char gtparam[160];
-    char gtarg[160];
+    char * * gtparam;
+    char * * gtarg;
+    int gtntparam;
+    int gtcap;
+    int gtacap;
     char gtname[160];
-    char gtparam2[160];
-    char gtarg2[160];
     char ginst[160];
     const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
     const struct backend_emit_EmitterTryOps_vtbl *__backend_emit_emittertryops_vptr;

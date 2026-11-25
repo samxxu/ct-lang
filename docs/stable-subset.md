@@ -39,6 +39,7 @@
 | 切片 `T[]` 的拼写、位置白名单与边界行为 | 已冻结 | 同上 | v1.1.0 起 | spec §4.69；[SH-108](../issues/selfhost/sh108-p87-dogfood-t-a-fp.md) |
 | `ref` / `out` 参数语义与 `out` 定值分析 | 已冻结 | 同上；逃逸契约已写入 spec §4.68（J-4b） | v1.1.0 起 | spec §4.68；D-011 J-4b |
 | ADT 与 `match` 的形态（无泛型 ADT、无 or 模式）；ADT/变体/负载计数按需增长到形式上限 65536，不再有 64/16/8 语义上限（S1a-0 C3） | 已冻结 | 同上 | v1.1.0 起 | spec §4.73 |
+| 泛型元数（struct / trait 的类型参数个数）：初始 2、倍增到形式上限 65536，不再有“最多两个”语义上限（S1a-0 C3） | 已冻结 | 同上 | v1.1.0 起 | spec §8、§4.51、§4.55 |
 | `Box<T>` / `new` 的语义与规范拼写 | 已冻结 | REQ + ADR；`box<T>` 别名已于 v1.1.0 删除（硬错） | v1.1.0 起 | [D-016](decisions/D-016.md)；LANG-24 |
 | `MAX_FUNCS` 动态增长（初始 512、翻倍、65536 安全阀） | 冻结中 | REQ + ADR；只允许扩大安全阀，不收紧 | **当前 pre 窗口（v1.1 前；2026-11-23 提前）** | [提案](proposals/ct-max-funcs-growth.md)；[SH-109](../issues/selfhost/sh109-max-funcs-capacity.md) |
 | `lib/core` 目录与 `namespace core` 布局 | 冻结中 | REQ + ADR；根拼写兼容一个 MINOR | **v1.0 前（当前 pre 窗口；Stage 1+2）** | [DOC-87](../issues/docs/doc-87-lib-core-rename.md) |

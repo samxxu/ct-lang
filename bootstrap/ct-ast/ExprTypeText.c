@@ -96,7 +96,7 @@ int frontend_parse_plist_next(const char *, int *, char *, int);
 int frontend_parse_qual_at(const char *, int);
 int frontend_parse_ref_type_is_const_value(const char *);
 int frontend_parse_slice_array_len(const char *);
-int frontend_parse_subst_tparam(const char *, const char *, const char *, const char *, const char *, char *, int);
+int frontend_parse_subst_tparam(const char *, char * *, char * *, int, char *, int);
 void frontend_parse_tbase(const char *, char *, int);
 int frontend_parse_tclass(const char *, const char *);
 void frontend_parse_tnorm(const char *, char *, int);
@@ -161,6 +161,7 @@ int frontend_parse_id_char(int c) {
 }
 int frontend_parse_inst_impl_score(int ii) {
     int i;
+    int j;
     int s;
     int tp;
     struct frontend_sym_StructImpl * im;
@@ -172,11 +173,10 @@ int frontend_parse_inst_impl_score(int ii) {
     s = 0;
     for (i = 0; i < im[ii].nargs; i++) {
         tp = 0;
-        if (((im[ii].ntparams > 0) && (strcmp(im[ii].pat[i], im[ii].tparam[0]) == 0))) {
-            tp = 1;
-        }
-        if (((im[ii].ntparams > 1) && (strcmp(im[ii].pat[i], im[ii].tparam[1]) == 0))) {
-            tp = 1;
+        for (j = 0; j < im[ii].ntparams; j++) {
+            if ((im[ii].tparam[j] && (strcmp(im[ii].pat[i], im[ii].tparam[j]) == 0))) {
+                tp = 1;
+            }
         }
         if ((!tp)) {
             s++;
@@ -257,7 +257,7 @@ int frontend_parse_slice_array_len(const char * dims) {
     }
     return v;
 }
-int frontend_parse_subst_tparam(const char * spell, const char * n1, const char * v1, const char * n2, const char * v2, char * out, int cap) {
+int frontend_parse_subst_tparam(const char * spell, char * * names, char * * vals, int n, char * out, int cap) {
     char k[MAX_TEXT];
     char p[MAX_TEXT];
     int i;
@@ -268,30 +268,27 @@ int frontend_parse_subst_tparam(const char * spell, const char * n1, const char 
         }
     }
     k[j] = 0;
-    if ((n1 && n1[0])) {
-        if (strcmp(k, n1) == 0) {
-            snprintf(out, (size_t)(cap), "%s", v1);
+    for (i = 0; i < n; i++) {
+        const char * nv = ((names && names[i]) ? names[i] : "");
+        const char * vv = ((vals && vals[i]) ? vals[i] : "");
+        if ((!nv[0])) {
+            continue;
+        }
+        if (strcmp(k, nv) == 0) {
+            snprintf(out, (size_t)(cap), "%s", vv);
             return 0;
         }
-        snprintf(p, sizeof(p), "%s*", n1);
+        snprintf(p, sizeof(p), "%s*", nv);
         if (strcmp(k, p) == 0) {
-            snprintf(out, (size_t)(cap), "%s *", v1);
+            snprintf(out, (size_t)(cap), "%s *", vv);
             return 0;
         }
     }
-    if ((n2 && n2[0])) {
-        if (strcmp(k, n2) == 0) {
-            snprintf(out, (size_t)(cap), "%s", v2);
-            return 0;
+    for (i = 0; i < n; i++) {
+        const char * nv = ((names && names[i]) ? names[i] : "");
+        if ((nv[0] && strstr(k, nv))) {
+            return (-1);
         }
-        snprintf(p, sizeof(p), "%s*", n2);
-        if (strcmp(k, p) == 0) {
-            snprintf(out, (size_t)(cap), "%s *", v2);
-            return 0;
-        }
-    }
-    if ((((n1 && n1[0]) && strstr(k, n1)) || ((n2 && n2[0]) && strstr(k, n2)))) {
-        return (-1);
     }
     snprintf(out, (size_t)(cap), "%s", spell);
     return 0;

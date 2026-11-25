@@ -41,6 +41,7 @@
 #define MAX_STRUCT_INSTS 128
 #define MAX_STRUCT_INSTS_MAX 65536
 #define MAX_STRUCT_TPARAMS 2
+#define MAX_STRUCT_TPARAMS_MAX 65536
 #define MAX_STRUCT_IMPLS 64
 #define MAX_STRUCT_IMPLS_MAX 65536
 #define MAX_METH_ANN 256
@@ -131,14 +132,14 @@ extern void U16String_Drop_drop(void *self);
 struct frontend_sym_StructTmpl * frontend_sym_ct_tmpls(int *);
 struct frontend_sym_StructInst * frontend_sym_ct_insts(int *);
 struct frontend_sym_StructImpl * frontend_sym_ct_impls(int *);
-int frontend_sym_ct_impl_find(const char *, int, const char *, const char *, const char *);
-int frontend_sym_ct_impl_add(const char *, int, const char *, const char *, int, const char *, const char *, const char *, int, int, int);
+int frontend_sym_ct_impl_find(const char *, int, char * *, const char *);
+int frontend_sym_ct_impl_add(const char *, int, char * *, int, char * *, const char *, int, int, int);
 int frontend_sym_ct_impl_matches(int, int);
-int frontend_sym_ct_method_bind(int, int, char *, char *, char *, char *, int);
+int frontend_sym_ct_method_bind(int, int, char * *, char * *, int);
 int frontend_sym_ct_tmpl_find(const char *);
-int frontend_sym_ct_tmpl_add(const char *, const char *, int, const char *, const char *, const char *, const char *, int, int, const char *, int);
+int frontend_sym_ct_tmpl_add(const char *, const char *, int, char * *, char * *, int, int, const char *, int);
 int frontend_sym_ct_inst_find(const char *);
-int frontend_sym_ct_inst_add(const char *, const char *, int, const char *, const char *, const char *, const char *, int, int, int, int);
+int frontend_sym_ct_inst_add(const char *, const char *, int, char * *, char * *, int, int, int, int);
 int frontend_sym_ct_inst_resolve(const char *, char *, int);
 struct frontend_sym_Adt * frontend_sym_ct_adts(int *);
 int frontend_sym_ct_adt_find(const char *);
@@ -154,7 +155,7 @@ static int tmpls_grow(int);
 static int insts_grow(int);
 static int impls_grow(int);
 static int impl_tparam(struct frontend_sym_StructImpl *, const char *);
-static int impl_match(int, int, const char *, const char *, const char *, char *, char *, int *, int *, int);
+static int impl_match(int, const char *, const char *, const char *, char * *, int *, int);
 static int adt_ensure(int);
 static int adt_ensure_variants(int, int);
 static int adt_ensure_fields(int, int, int);
@@ -1007,8 +1008,6 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct(void *self, co
     _self->structs[_self->nstructs].has_handback_impl = 0;
     _self->structs[_self->nstructs].has_drop_impl = 0;
     _self->structs[_self->nstructs].ntparams = 0;
-    _self->structs[_self->nstructs].tparam[0][0] = 0;
-    _self->structs[_self->nstructs].tparam[1][0] = 0;
     _self->structs[_self->nstructs].is_template = 0;
     _self->structs[_self->nstructs].is_inst = 0;
     _self->structs[_self->nstructs].is_pub = 0;
@@ -1219,11 +1218,13 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_trait(void *self, con
     }
     snprintf(_self->traits[_self->ntraits].name, MAX_TEXT, "%s", name);
     _self->traits[_self->ntraits].nm = 0;
+    _self->traits[_self->ntraits].nargs = 0;
+    _self->traits[_self->ntraits].ntparams = 0;
     _self->ntraits++;
     return (_self->ntraits - 1);
 }
 
-static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, const char * tname, int nargs, const char * a1, const char * a2, const char * c1, const char * c2, int owner) {
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, const char * tname, int nargs, char * * args, char * * cargs, int owner) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     char enc[MAX_TEXT];
     char msg[MAX_TEXT * 2];
@@ -1249,7 +1250,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
     if ((((owner >= 0) && (_self->traits[ti].owner >= 0)) && (_self->traits[ti].owner != owner))) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "a generic trait instance must be created in its owner unit");
     }
-    if (frontend_sym_ct_inst_encode(tname, nargs, a1, a2, enc, MAX_TEXT) != 0) {
+    if (frontend_sym_ct_inst_encode(tname, nargs, args, enc, MAX_TEXT) != 0) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "the instantiated trait name exceeds 159 characters; shorten the trait or its arguments");
     }
     ni = _self->__frontend_sym_symbolops_vptr->find_trait(_self, enc);
@@ -1280,9 +1281,12 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
     _self->traits[ni].tmpl = ti;
     _self->traits[ni].ntparams = 0;
     _self->traits[ni].nargs = nargs;
-    snprintf(_self->traits[ni].carg[0], MAX_TEXT, "%s", a1);
-    if (nargs > 1) {
-        snprintf(_self->traits[ni].carg[1], MAX_TEXT, "%s", a2);
+    _self->traits[ni].carg = frontend_sym_ct_rows_reserve(_self->traits[ni].carg, _self->traits[ni].cacap, nargs, (&_self->traits[ni].cacap));
+    if ((((nargs > 0) && (!_self->traits[ni].carg)) || (_self->traits[ni].cacap < nargs))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    for (pi = 0; pi < nargs; pi++) {
+        snprintf(_self->traits[ni].carg[pi], MAX_TEXT, "%s", ((args && args[pi]) ? args[pi] : ""));
     }
     if (_self->__frontend_sym_symbolops_vptr->ensure_trait_capacity(_self, ni, _self->traits[ti].nm) != 0) {
         return (-1);
@@ -1301,12 +1305,13 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
             memcpy(_self->traits[ni].m[mi].pann, _self->traits[ti].m[mi].pann, (size_t)(_self->traits[ti].m[mi].nparams));
         }
         for (pi = 0; pi < nargs; pi++) {
-            if (frontend_sym_ct_generic_subst(_self->traits[ni].m[mi].ret, _self->traits[ti].tparam[pi], ((pi == 0) ? c1 : c2), tmp, MAX_TEXT) != 0) {
+            const char * sub = ((cargs && cargs[pi]) ? cargs[pi] : "");
+            if (frontend_sym_ct_generic_subst(_self->traits[ni].m[mi].ret, _self->traits[ti].tparam[pi], sub, tmp, MAX_TEXT) != 0) {
                 return _self->__frontend_sym_symbolops_vptr->fail(_self, "type is too long");
             }
             snprintf(_self->traits[ni].m[mi].ret, MAX_TEXT, "%s", tmp);
             for (pk = 0; pk < _self->traits[ni].m[mi].nparams; pk++) {
-                if (frontend_sym_ct_generic_subst((_self->traits[ni].m[mi].ptype + (pk * MAX_TEXT)), _self->traits[ti].tparam[pi], ((pi == 0) ? c1 : c2), tmp, MAX_TEXT) != 0) {
+                if (frontend_sym_ct_generic_subst((_self->traits[ni].m[mi].ptype + (pk * MAX_TEXT)), _self->traits[ti].tparam[pi], sub, tmp, MAX_TEXT) != 0) {
                     return _self->__frontend_sym_symbolops_vptr->fail(_self, "type is too long");
                 }
                 snprintf((_self->traits[ni].m[mi].ptype + (pk * MAX_TEXT)), MAX_TEXT, "%s", tmp);
@@ -1325,7 +1330,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
     return ni;
 }
 
-static int frontend_sym_Symbols_frontend_sym_SymbolOps_impl_use_concrete(void *self, const char * use, int nargs, const char * a1, const char * a2, const char * c1, const char * c2, int owner, char * out, int cap) {
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_impl_use_concrete(void *self, const char * use, int nargs, char * * args, char * * cargs, int owner, char * out, int cap) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     char tname[MAX_TEXT];
     char enc[MAX_TEXT];
@@ -1348,12 +1353,12 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_impl_use_concrete(void *s
     if (nargs < 1) {
         return (-1);
     }
-    if (frontend_sym_ct_inst_encode(tname, nargs, a1, a2, enc, MAX_TEXT) != 0) {
+    if (frontend_sym_ct_inst_encode(tname, nargs, args, enc, MAX_TEXT) != 0) {
         return (-1);
     }
     ni = _self->__frontend_sym_symbolops_vptr->find_trait(_self, enc);
     if (((ni < 0) && (owner >= 0))) {
-        ni = _self->__frontend_sym_symbolops_vptr->trait_inst(_self, tname, nargs, a1, a2, c1, c2, owner);
+        ni = _self->__frontend_sym_symbolops_vptr->trait_inst(_self, tname, nargs, args, cargs, owner);
     }
     if (ni < 0) {
         return (-1);
@@ -2165,13 +2170,17 @@ int frontend_sym_ct_tmpl_find(const char * name) {
     }
     return (-1);
 }
-int frontend_sym_ct_tmpl_add(const char * name, const char * full, int ntprm, const char * t1, const char * t2, const char * b1, const char * b2, int is_pub, int owner, const char * path, int line) {
+int frontend_sym_ct_tmpl_add(const char * name, const char * full, int ntprm, char * * tparams, char * * bounds, int is_pub, int owner, const char * path, int line) {
     int i;
     int n;
+    int k;
     struct frontend_sym_StructTmpl * t;
     i = frontend_sym_ct_tmpl_find(name);
     if (i >= 0) {
         return i;
+    }
+    if (((ntprm < 0) || (ntprm > MAX_STRUCT_TPARAMS_MAX))) {
+        return (-1);
     }
     if (tmpls_grow((frontend_sym_g_ntmpls + 1)) != 0) {
         return (-1);
@@ -2184,10 +2193,18 @@ int frontend_sym_ct_tmpl_add(const char * name, const char * full, int ntprm, co
     snprintf(t[n].name, MAX_TEXT, "%s", name);
     snprintf(t[n].full, MAX_TEXT, "%s", full);
     t[n].ntparams = ntprm;
-    snprintf(t[n].tparam[0], MAX_TEXT, "%s", t1);
-    snprintf(t[n].tparam[1], MAX_TEXT, "%s", t2);
-    snprintf(t[n].bound[0], MAX_TEXT, "%s", b1);
-    snprintf(t[n].bound[1], MAX_TEXT, "%s", b2);
+    t[n].tparam = frontend_sym_ct_rows_reserve(t[n].tparam, t[n].tcap, ntprm, (&t[n].tcap));
+    if (((ntprm > 0) && ((!t[n].tparam) || (t[n].tcap < ntprm)))) {
+        return (-1);
+    }
+    t[n].bound = frontend_sym_ct_rows_reserve(t[n].bound, t[n].bcap, ntprm, (&t[n].bcap));
+    if (((ntprm > 0) && ((!t[n].bound) || (t[n].bcap < ntprm)))) {
+        return (-1);
+    }
+    for (k = 0; k < ntprm; k++) {
+        snprintf(t[n].tparam[k], MAX_TEXT, "%s", ((tparams && tparams[k]) ? tparams[k] : ""));
+        snprintf(t[n].bound[k], MAX_TEXT, "%s", ((bounds && bounds[k]) ? bounds[k] : ""));
+    }
     t[n].nfields = 0;
     t[n].nuse = 0;
     t[n].uses_drop = 0;
@@ -2210,21 +2227,24 @@ int frontend_sym_ct_inst_find(const char * name) {
     }
     return (-1);
 }
-int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, const char * a1, const char * a2, const char * c1, const char * c2, int owner, int carried, int line, int col) {
+int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, char * * args, char * * cargs, int owner, int carried, int line, int col) {
     int i;
     int n;
+    int k;
     struct frontend_sym_StructInst * t;
+    if (((nargs < 0) || (nargs > MAX_STRUCT_TPARAMS_MAX))) {
+        return (-1);
+    }
     i = frontend_sym_ct_inst_find(name);
     t = frontend_sym_ct_insts((&n));
     if (i >= 0) {
         if (t[i].nargs != nargs) {
             return (-2);
         }
-        if (strcmp(t[i].carg[0], a1) != 0) {
-            return (-2);
-        }
-        if (((nargs > 1) && (strcmp(t[i].carg[1], a2) != 0))) {
-            return (-2);
+        for (k = 0; k < nargs; k++) {
+            if (((((!t[i].carg[k]) || (!args)) || (!args[k])) || (strcmp(t[i].carg[k], args[k]) != 0))) {
+                return (-2);
+            }
         }
         if ((carried && (!t[i].carried))) {
             t[i].carried = 1;
@@ -2242,10 +2262,18 @@ int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, co
     snprintf(t[n].name, MAX_TEXT, "%s", name);
     snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
     t[n].nargs = nargs;
-    snprintf(t[n].carg[0], MAX_TEXT, "%s", a1);
-    snprintf(t[n].carg[1], MAX_TEXT, "%s", a2);
-    snprintf(t[n].ctype[0], MAX_TEXT, "%s", c1);
-    snprintf(t[n].ctype[1], MAX_TEXT, "%s", c2);
+    t[n].carg = frontend_sym_ct_rows_reserve(t[n].carg, t[n].acap, nargs, (&t[n].acap));
+    if (((nargs > 0) && ((!t[n].carg) || (t[n].acap < nargs)))) {
+        return (-1);
+    }
+    t[n].ctype = frontend_sym_ct_rows_reserve(t[n].ctype, t[n].ccap, nargs, (&t[n].ccap));
+    if (((nargs > 0) && ((!t[n].ctype) || (t[n].ccap < nargs)))) {
+        return (-1);
+    }
+    for (k = 0; k < nargs; k++) {
+        snprintf(t[n].carg[k], MAX_TEXT, "%s", ((args && args[k]) ? args[k] : ""));
+        snprintf(t[n].ctype[k], MAX_TEXT, "%s", ((cargs && cargs[k]) ? cargs[k] : ""));
+    }
     t[n].owner = owner;
     t[n].carried = carried;
     t[n].line = line;
@@ -2296,9 +2324,11 @@ struct frontend_sym_StructImpl * frontend_sym_ct_impls(int * n) {
     }
     return frontend_sym_g_impls;
 }
-int frontend_sym_ct_impl_find(const char * tmpl, int nargs, const char * p1, const char * p2, const char * use) {
+int frontend_sym_ct_impl_find(const char * tmpl, int nargs, char * * pats, const char * use) {
     int i;
     int n;
+    int k;
+    int ok;
     struct frontend_sym_StructImpl * t = frontend_sym_ct_impls((&n));
     for (i = 0; i < n; i++) {
         if (strcmp(t[i].tmpl, tmpl) != 0) {
@@ -2307,10 +2337,14 @@ int frontend_sym_ct_impl_find(const char * tmpl, int nargs, const char * p1, con
         if (t[i].nargs != nargs) {
             continue;
         }
-        if (strcmp(t[i].pat[0], p1) != 0) {
-            continue;
+        ok = 1;
+        for (k = 0; k < nargs; k++) {
+            if (((((!t[i].pat[k]) || (!pats)) || (!pats[k])) || (strcmp(t[i].pat[k], pats[k]) != 0))) {
+                ok = 0;
+                break;
+            }
         }
-        if (((nargs > 1) && (strcmp(t[i].pat[1], p2) != 0))) {
+        if ((!ok)) {
             continue;
         }
         if (strcmp(t[i].use, use) != 0) {
@@ -2320,11 +2354,15 @@ int frontend_sym_ct_impl_find(const char * tmpl, int nargs, const char * p1, con
     }
     return (-1);
 }
-int frontend_sym_ct_impl_add(const char * tmpl, int ntprm, const char * t1, const char * t2, int nargs, const char * p1, const char * p2, const char * use, int node, int owner, int line) {
+int frontend_sym_ct_impl_add(const char * tmpl, int ntprm, char * * tparams, int nargs, char * * pats, const char * use, int node, int owner, int line) {
     int i;
     int n;
+    int k;
     struct frontend_sym_StructImpl * t = frontend_sym_ct_impls((&n));
-    i = frontend_sym_ct_impl_find(tmpl, nargs, p1, p2, use);
+    if (((((ntprm < 0) || (ntprm > MAX_STRUCT_TPARAMS_MAX)) || (nargs < 0)) || (nargs > MAX_STRUCT_TPARAMS_MAX))) {
+        return (-1);
+    }
+    i = frontend_sym_ct_impl_find(tmpl, nargs, pats, use);
     if (i >= 0) {
         return i;
     }
@@ -2338,11 +2376,21 @@ int frontend_sym_ct_impl_add(const char * tmpl, int ntprm, const char * t1, cons
     n = frontend_sym_g_nimpls;
     snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
     t[n].ntparams = ntprm;
-    snprintf(t[n].tparam[0], MAX_TEXT, "%s", t1);
-    snprintf(t[n].tparam[1], MAX_TEXT, "%s", t2);
+    t[n].tparam = frontend_sym_ct_rows_reserve(t[n].tparam, t[n].tcap, ntprm, (&t[n].tcap));
+    if (((ntprm > 0) && ((!t[n].tparam) || (t[n].tcap < ntprm)))) {
+        return (-1);
+    }
     t[n].nargs = nargs;
-    snprintf(t[n].pat[0], MAX_TEXT, "%s", p1);
-    snprintf(t[n].pat[1], MAX_TEXT, "%s", p2);
+    t[n].pat = frontend_sym_ct_rows_reserve(t[n].pat, t[n].pcap, nargs, (&t[n].pcap));
+    if (((nargs > 0) && ((!t[n].pat) || (t[n].pcap < nargs)))) {
+        return (-1);
+    }
+    for (k = 0; k < ntprm; k++) {
+        snprintf(t[n].tparam[k], MAX_TEXT, "%s", ((tparams && tparams[k]) ? tparams[k] : ""));
+    }
+    for (k = 0; k < nargs; k++) {
+        snprintf(t[n].pat[k], MAX_TEXT, "%s", ((pats && pats[k]) ? pats[k] : ""));
+    }
     snprintf(t[n].use, MAX_TEXT, "%s", use);
     t[n].node = node;
     t[n].owner = owner;
@@ -2351,20 +2399,21 @@ int frontend_sym_ct_impl_add(const char * tmpl, int ntprm, const char * t1, cons
     return n;
 }
 static int impl_tparam(struct frontend_sym_StructImpl * t, const char * pat) {
-    if (((t->ntparams > 0) && (strcmp(pat, t->tparam[0]) == 0))) {
-        return 0;
-    }
-    if (((t->ntparams > 1) && (strcmp(pat, t->tparam[1]) == 0))) {
-        return 1;
+    int i;
+    for (i = 0; i < t->ntparams; i++) {
+        if ((t->tparam[i] && (strcmp(pat, t->tparam[i]) == 0))) {
+            return i;
+        }
     }
     return (-1);
 }
-static int impl_match(int ii, int ti, const char * pat, const char * arg, const char * cspell, char * v1, char * v2, int * s1, int * s2, int depth) {
+static int impl_match(int ii, const char * pat, const char * arg, const char * cspell, char * * vals, int * set, int depth) {
     char name[MAX_TEXT];
-    char a1[MAX_TEXT];
-    char a2[MAX_TEXT];
     char base[MAX_TEXT];
     char cbase[MAX_TEXT];
+    char * * pargs = 0;
+    int pcap = 0;
+    int need;
     int na;
     int pi;
     int k;
@@ -2376,19 +2425,25 @@ static int impl_match(int ii, int ti, const char * pat, const char * arg, const 
     }
     pi = impl_tparam((&t[ii]), pat);
     if (pi >= 0) {
-        char * dst = ((pi == 0) ? v1 : v2);
-        int * set = ((pi == 0) ? s1 : s2);
-        if ((*set)) {
-            return (strcmp(dst, cspell) == 0);
+        if (set[pi]) {
+            return (strcmp(vals[pi], cspell) == 0);
         }
-        (*set) = 1;
-        snprintf(dst, MAX_TEXT, "%s", cspell);
+        set[pi] = 1;
+        snprintf(vals[pi], MAX_TEXT, "%s", cspell);
         return 1;
     }
-    if ((!frontend_sym_impl_pat_split(pat, name, a1, a2, (&na)))) {
+    need = frontend_sym_ct_inst_arg_count(pat);
+    if (need <= 0) {
         frontend_sym_impl_arg_canon(pat, base, sizeof(base));
         frontend_sym_impl_arg_canon(arg, cbase, sizeof(cbase));
         return (strcmp(base, cbase) == 0);
+    }
+    pargs = frontend_sym_ct_rows_reserve(0, 0, need, (&pcap));
+    if (((!pargs) || (pcap < need))) {
+        return 0;
+    }
+    if ((!frontend_sym_impl_pat_split(pat, name, pargs, pcap, (&na)))) {
+        return 0;
     }
     frontend_sym_impl_arg_canon(arg, cbase, sizeof(cbase));
     ai = frontend_sym_ct_inst_find(cbase);
@@ -2403,11 +2458,10 @@ static int impl_match(int ii, int ti, const char * pat, const char * arg, const 
         if (((strcmp(ins[ai].tmpl, name) != 0) || (ins[ai].nargs != na))) {
             return 0;
         }
-        if ((!impl_match(ii, ti, a1, ins[ai].carg[0], ins[ai].ctype[0], v1, v2, s1, s2, (depth + 1)))) {
-            return 0;
-        }
-        if (((na > 1) && (!impl_match(ii, ti, a2, ins[ai].carg[1], ins[ai].ctype[1], v1, v2, s1, s2, (depth + 1))))) {
-            return 0;
+        for (k = 0; k < na; k++) {
+            if ((!impl_match(ii, pargs[k], ins[ai].carg[k], ins[ai].ctype[k], vals, set, (depth + 1)))) {
+                return 0;
+            }
         }
     }
     return 1;
@@ -2416,12 +2470,12 @@ int frontend_sym_ct_impl_matches(int ii, int inst) {
     int k;
     int n;
     int nins;
-    int s1;
-    int s2;
+    int nt;
+    int * set;
+    char * * vals = 0;
+    int vcap = 0;
     struct frontend_sym_StructImpl * t = frontend_sym_ct_impls((&n));
     struct frontend_sym_StructInst * ins = frontend_sym_ct_insts((&nins));
-    char v1[MAX_TEXT];
-    char v2[MAX_TEXT];
     if (((((((!t) || (!ins)) || (ii < 0)) || (ii >= n)) || (inst < 0)) || (inst >= nins))) {
         return 0;
     }
@@ -2431,92 +2485,105 @@ int frontend_sym_ct_impl_matches(int ii, int inst) {
     if (t[ii].nargs != ins[inst].nargs) {
         return 0;
     }
-    v1[0] = 0;
-    v2[0] = 0;
-    s1 = 0;
-    s2 = 0;
-    for (k = 0; k < ins[inst].nargs; k++) {
-        if ((!impl_match(ii, ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k], v1, v2, (&s1), (&s2), 0))) {
+    nt = t[ii].ntparams;
+    set = 0;
+    if (nt > 0) {
+        vals = frontend_sym_ct_rows_reserve(0, 0, nt, (&vcap));
+        set = (int *)(calloc((size_t)(nt), sizeof((*set))));
+        if ((((!vals) || (vcap < nt)) || (!set))) {
             return 0;
         }
     }
-    if (((s1 == 0) && (t[ii].ntparams > 0))) {
-        return 0;
+    for (k = 0; k < ins[inst].nargs; k++) {
+        if ((!impl_match(ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k], vals, set, 0))) {
+            return 0;
+        }
     }
-    if (((s2 == 0) && (t[ii].ntparams > 1))) {
-        return 0;
+    for (k = 0; k < nt; k++) {
+        if ((!set[k])) {
+            return 0;
+        }
     }
     return 1;
 }
-int frontend_sym_ct_method_bind(int ii, int inst, char * n1, char * v1, char * n2, char * v2, int cap) {
+int frontend_sym_ct_method_bind(int ii, int inst, char * * names, char * * values, int cap) {
     int k;
     int n;
     int nins;
-    int s1;
-    int s2;
+    int nt;
     int bound;
+    int * set;
+    char * * vals = 0;
+    int vcap = 0;
     struct frontend_sym_StructImpl * t = frontend_sym_ct_impls((&n));
     struct frontend_sym_StructInst * ins = frontend_sym_ct_insts((&nins));
-    char v1b[MAX_TEXT];
-    char v2b[MAX_TEXT];
-    if ((n1 && (cap > 0))) {
-        n1[0] = 0;
-    }
-    if ((n2 && (cap > 0))) {
-        n2[0] = 0;
-    }
-    if ((v1 && (cap > 0))) {
-        v1[0] = 0;
-    }
-    if ((v2 && (cap > 0))) {
-        v2[0] = 0;
-    }
     if (((((((!t) || (!ins)) || (ii < 0)) || (ii >= n)) || (inst < 0)) || (inst >= nins))) {
+        return (-1);
+    }
+    if (cap < 0) {
         return (-1);
     }
     if ((!frontend_sym_ct_impl_matches(ii, inst))) {
         return (-1);
     }
-    v1b[0] = 0;
-    v2b[0] = 0;
-    s1 = 0;
-    s2 = 0;
+    nt = t[ii].ntparams;
+    if (nt > cap) {
+        return (-1);
+    }
+    if (nt > 0) {
+        vals = frontend_sym_ct_rows_reserve(0, 0, nt, (&vcap));
+        set = (int *)(calloc((size_t)(nt), sizeof((*set))));
+        if ((((!vals) || (vcap < nt)) || (!set))) {
+            return (-1);
+        }
+    }
     for (k = 0; k < ins[inst].nargs; k++) {
-        impl_match(ii, ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k], v1b, v2b, (&s1), (&s2), 0);
+        impl_match(ii, t[ii].pat[k], ins[inst].carg[k], ins[inst].ctype[k], vals, set, 0);
     }
     bound = 0;
-    if (((s1 && n1) && v1)) {
-        snprintf(n1, (size_t)(cap), "%s", t[ii].tparam[0]);
-        snprintf(v1, (size_t)(cap), "%s", v1b);
-        bound++;
-    }
-    if (((s2 && n2) && v2)) {
-        snprintf(n2, (size_t)(cap), "%s", t[ii].tparam[1]);
-        snprintf(v2, (size_t)(cap), "%s", v2b);
+    for (k = 0; k < nt; k++) {
+        if ((!set[k])) {
+            continue;
+        }
+        if (((((!names) || (!names[k])) || (!values)) || (!values[k]))) {
+            continue;
+        }
+        snprintf(names[k], MAX_TEXT, "%s", t[ii].tparam[k]);
+        snprintf(values[k], MAX_TEXT, "%s", vals[k]);
         bound++;
     }
     return bound;
 }
 int frontend_sym_ct_inst_resolve(const char * in, char * out, int cap) {
     char name[MAX_TEXT];
-    char a1[MAX_TEXT];
-    char a2[MAX_TEXT];
     char tail[MAX_TEXT];
     char enc[MAX_TEXT];
-    char cc1[MAX_TEXT];
-    char cc2[MAX_TEXT];
+    char cc[MAX_TEXT];
+    char * * args = 0;
+    int acap = 0;
+    int need;
     int nargs;
     int found;
     int k;
+    int j;
     int nins;
+    int ok;
     struct frontend_sym_StructInst * ins;
-    if (frontend_sym_ct_inst_split(in, name, (&nargs), a1, a2, tail, sizeof(tail)) != 0) {
+    need = frontend_sym_ct_inst_arg_count(in);
+    if (need <= 0) {
+        return (-1);
+    }
+    args = frontend_sym_ct_rows_reserve(0, 0, need, (&acap));
+    if (((!args) || (acap < need))) {
+        return (-1);
+    }
+    if (frontend_sym_ct_inst_split(in, name, (&nargs), args, acap, tail, sizeof(tail)) != 0) {
         return (-1);
     }
     if (nargs <= 0) {
         return (-1);
     }
-    if (frontend_sym_ct_inst_encode(name, nargs, a1, a2, enc, sizeof(enc)) != 0) {
+    if (frontend_sym_ct_inst_encode(name, nargs, args, enc, sizeof(enc)) != 0) {
         return (-1);
     }
     found = frontend_sym_ct_inst_find(enc);
@@ -2526,15 +2593,15 @@ int frontend_sym_ct_inst_resolve(const char * in, char * out, int cap) {
             if (((strcmp(ins[k].tmpl, name) != 0) || (ins[k].nargs != nargs))) {
                 continue;
             }
-            if (nargs > 0) {
-                if (((frontend_sym_ct_type_canon(ins[k].ctype[0], cc1, sizeof(cc1)) != 0) || (strcmp(cc1, a1) != 0))) {
-                    continue;
+            ok = 1;
+            for (j = 0; j < nargs; j++) {
+                if (((((!ins[k].ctype[j]) || (!args[j])) || (frontend_sym_ct_type_canon(ins[k].ctype[j], cc, sizeof(cc)) != 0)) || (strcmp(cc, args[j]) != 0))) {
+                    ok = 0;
+                    break;
                 }
             }
-            if (nargs > 1) {
-                if (((frontend_sym_ct_type_canon(ins[k].ctype[1], cc2, sizeof(cc2)) != 0) || (strcmp(cc2, a2) != 0))) {
-                    continue;
-                }
+            if ((!ok)) {
+                continue;
             }
             found = k;
             break;
