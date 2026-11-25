@@ -7974,7 +7974,7 @@ p29_diag() {
         ok "p29 ($1)"
     fi
 }
-p29_diag generic_struct_arity 10:20 "a generic struct takes at most 2 type parameters"
+p29_diag generic_struct_arity 10:25 "generic struct 'Pair' takes 2 type arguments, 3 given"
 p29_diag generic_struct_void 5:13 "type argument 'void' cannot instantiate a generic struct"
 p29_diag generic_struct_depth 9:25 "generic type arguments nest deeper than 4"
 p29_diag builtin_type_redecl 3:1 "'Vec' is a built-in type and cannot be redeclared"
@@ -7984,24 +7984,24 @@ p29_diag foreach_container_redeclare 9:1 "cannot redeclare the foreach binding '
 p29_diag foreach_container_map_i 11:1 "'i' has no meaning in a Map foreach; use item.key / item.value"
 p29_diag container_copy 4:5 "a container is moved, not copied; use retain() or a function result"
 p29_diag container_own 13:10 "a container cannot hold an 'own' or 'borrow' value"
-# E29-12: the user template and the built-in container hit the same over-arity
-# text; the built-in layer has no private branch.
-p29_diag generic_struct_user_arity 10:21 "a generic struct takes at most 2 type parameters"
-p29_diag generic_builtin_arity 5:19 "a generic struct takes at most 2 type parameters"
+# E29-12 / S1a-0 C3: the "at most two" language cap is gone. Over-arity is now
+# the template's own arity mismatch, judged by the same path for a user template
+# and a built-in container; the count in the message is the template's.
+p29_diag generic_builtin_arity 5:19 "generic struct 'Vec' takes 1 type arguments, 2 given"
 "$work/ct-ast" test/ast/errors/generic_builtin_arity.ct -o "$work/p29a1.c" \
     >"$work/p29a1.out" 2>"$work/p29a1.err"
 p29a1_rc=$?
-"$work/ct-ast" test/ast/errors/generic_struct_user_arity.ct -o "$work/p29a2.c" \
+"$work/ct-ast" test/ast/errors/generic_struct_arity.ct -o "$work/p29a2.c" \
     >"$work/p29a2.out" 2>"$work/p29a2.err"
 p29a2_rc=$?
 if [ "$p29a1_rc" -eq 0 ] || [ "$p29a2_rc" -eq 0 ]; then
-    bad "p29: E29-12 arity" "expected both fixtures to fail"
+    bad "p29: E29-12 arity" "expected both over-arity fixtures to fail"
 else
     sed 's/.*error: //' "$work/p29a1.err" | head -1 >"$work/p29a1.msg"
     sed 's/.*error: //' "$work/p29a2.err" | head -1 >"$work/p29a2.msg"
-    if cmp -s "$work/p29a1.msg" "$work/p29a2.msg" \
-       && [ "$(cat "$work/p29a1.msg")" = "a generic struct takes at most 2 type parameters" ]; then
-        ok "p29 (E29-12 same arity text)"
+    if [ "$(cat "$work/p29a1.msg")" = "generic struct 'Vec' takes 1 type arguments, 2 given" ] \
+       && [ "$(cat "$work/p29a2.msg")" = "generic struct 'Pair' takes 2 type arguments, 3 given" ]; then
+        ok "p29 (E29-12 over-arity names the template's own count)"
     else
         bad "p29: E29-12 arity" "$(cat "$work/p29a1.msg" "$work/p29a2.msg" 2>/dev/null)"
     fi
@@ -8011,7 +8011,7 @@ fi
 # compile path. The three modes share the parser, so the first error line must
 # be byte-identical.
 for p29neg in container_copy container_own \
-             generic_builtin_arity generic_struct_user_arity; do
+             generic_builtin_arity generic_struct_arity; do
     "$work/ct-ast" "test/ast/errors/$p29neg.ct" -o "$work/p29md.c" \
         >"$work/p29md1.out" 2>"$work/p29md1.err"
     "$work/ct-ast" check "test/ast/errors/$p29neg.ct" \

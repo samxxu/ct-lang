@@ -1,0 +1,50 @@
+/* 304 (S1a-0 C3): the generic arity is no longer a language limit. A struct
+   and a trait each declare three type parameters; the concrete instance
+   substitutes all three, and a generic impl binds all three positions. */
+#include <stdio.h>
+
+struct Stack<T, U, V> {
+    T a;
+    U b;
+    V c;
+}
+
+impl<T, U, V> Stack<T, U, V> {
+    T first() { return self->a; }
+    U second() { return self->b; }
+    V third() { return self->c; }
+}
+
+trait Show3<X, Y, Z> {
+    X x(void);
+    Y y(void);
+    Z z(void);
+}
+
+struct Holder<A, B, C> {
+    A a;
+    B b;
+    C c;
+}
+
+impl<A, B, C> Holder<A, B, C> use Show3<A, B, C> {
+    A x(void) { return self->a; }
+    B y(void) { return self->b; }
+    C z(void) { return self->c; }
+}
+
+int main(void)
+{
+    Stack<int, char *, long> s;
+    s.a = 1;
+    s.b = "x";
+    s.c = 2;
+    printf("%d %s %ld\n", s.first(), s.second(), s.third());
+
+    Holder<int, char *, long> h;
+    h.a = 3;
+    h.b = "yo";
+    h.c = 4;
+    printf("%d %s %ld\n", h.x(), h.y(), h.z());
+    return 0;
+}
