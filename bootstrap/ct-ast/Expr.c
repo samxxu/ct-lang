@@ -22,6 +22,7 @@
 #include "ExprTry.h"
 #include "ExprTypes.h"
 #include "ExprBinding.h"
+#include "ExprCallCheck.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -226,20 +227,7 @@ static int ensure_arg_capacity(struct frontend_parse_Expr *, int);
 void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
 static char frontend_parse_g_expr_inst_override[160];
-static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable };
-static int frontend_parse_Expr_frontend_parse_ExprOps_arity_check(void *self, int line, int col, const char * callee, int got, int want) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char msg[MAX_TEXT];
-    if (got == want) {
-        return 0;
-    }
-    snprintf(msg, sizeof(msg), "takes %d argument(s), %d given", want, got);
-    if (_self->sup->__frontend_parse_supportops_vptr->arity_warn(_self->sup, line, col, callee, msg) != 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many warnings");
-    }
-    return 0;
-}
-
+static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable, .__frontend_parse_exprcallcheck_vptr = &frontend_parse_Expr_frontend_parse_ExprCallCheck_vtable };
 static int frontend_parse_Expr_frontend_parse_ExprOps_type_is_fnptr(void *self, const char * t) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     (void)(_self);
@@ -437,160 +425,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_map_closure_check(void *se
         cur = _self->arena->nodes[cur].next;
     }
     return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_map_arity(void *self, int line, int col, const char * trait, const char * method, int got) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int ti;
-    int mi;
-    int want;
-    ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, trait);
-    if (ti < 0) {
-        return 0;
-    }
-    for (mi = 0; mi < _self->sym->traits[ti].nm; mi++) {
-        if (strcmp(_self->sym->traits[ti].m[mi].name, method) == 0) {
-            break;
-        }
-    }
-    if (mi >= _self->sym->traits[ti].nm) {
-        return 0;
-    }
-    want = _self->sym->traits[ti].m[mi].nparams;
-    if ((_self->sym->traits[ti].m[mi].variadic && (got >= want))) {
-        return 0;
-    }
-    return _self->__frontend_parse_exprops_vptr->arity_check(_self, line, col, method, got, want);
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_argtype_mismatch(void *self, int args, int fi, int ti, int mi, char * msg, int cap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char at[MAX_TEXT];
-    char fb[MAX_TEXT];
-    char ab[MAX_TEXT];
-    const char * ft;
-    int cur;
-    int k;
-    int np;
-    int skip;
-    int r;
-    if (fi >= 0) {
-        np = _self->sym->funcs[fi].nparams;
-    }
-    else {
-        np = _self->sym->traits[ti].m[mi].nparams;
-    }
-    cur = args;
-    k = 0;
-    while (((cur > 0) && (k < np))) {
-        skip = 0;
-        if (fi >= 0) {
-            ft = (_self->sym->funcs[fi].ptype + (k * MAX_TEXT));
-        }
-        else {
-            ft = (_self->sym->traits[ti].m[mi].ptype + (k * MAX_TEXT));
-        }
-        if (((fi >= 0) && (_self->sym->funcs[fi].pdim + ((size_t)(k) * MAX_TEXT))[0])) {
-            skip = 1;
-        }
-        if (((!skip) && strchr(ft, '['))) {
-            skip = 1;
-        }
-        if ((!skip)) {
-            char itr[MAX_TEXT];
-            int iip = 0;
-            if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, ft, itr, sizeof(itr), (&iip))) {
-                skip = 1;
-            }
-        }
-        if (((!skip) && (_self->arena->nodes[cur].kind == N_CAST))) {
-            skip = 1;
-        }
-        if (((!skip) && _self->__frontend_parse_exprops_vptr->arg_is_closure(_self, cur))) {
-            skip = 1;
-        }
-        if (((((!skip) && (_self->arena->nodes[cur].kind == N_NUM)) && (_self->arena->nodes[cur].num == 0)) && strchr(ft, '*'))) {
-            skip = 1;
-        }
-        if (((!skip) && (_self->sup->__frontend_parse_supportops_vptr->expr_ctype(_self->sup, cur, at, sizeof(at)) != 0))) {
-            skip = 1;
-        }
-        if (((!skip) && strchr(at, '['))) {
-            skip = 1;
-        }
-        if ((!skip)) {
-            int fdp = 0;
-            int adp = 0;
-            const char * q;
-            for (q = ft; (*q); q++) {
-                if ((*q) == '*') {
-                    fdp++;
-                }
-            }
-            for (q = at; (*q); q++) {
-                if ((*q) == '*') {
-                    adp++;
-                }
-            }
-            r = frontend_parse_arg_class(ft, at, fb, sizeof(fb), ab, sizeof(ab));
-            if (r == 2) {
-                int fs = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (fb + 6));
-                int as = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (ab + 6));
-                r = (((fs < 0) || (as < 0)) ? (-1) : ((fs != as) ? 2 : 0));
-            }
-            if (r == 2) {
-                snprintf(msg, cap, "argument %d: expected '%s', got '%s'", (k + 1), ft, at);
-                if (((fdp == 0) || (adp == 0))) {
-                    return 2;
-                }
-                return 1;
-            }
-            if (r == 1) {
-                snprintf(msg, cap, "argument %d: expected '%s', got '%s'", (k + 1), ft, at);
-                if ((((fdp == 0) || (adp == 0)) && ((frontend_parse_tclass(ft, fb) == 1) || (frontend_parse_tclass(at, ab) == 1)))) {
-                    return 2;
-                }
-                return 1;
-            }
-        }
-        if (_self->__frontend_parse_exprops_vptr->arg_is_closure(_self, cur)) {
-            k += 2;
-        }
-        else {
-            k++;
-        }
-        cur = _self->arena->nodes[cur].next;
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_argtype_check(void *self, int line, int col, const char * callee, int args, int fi, int ti, int mi) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char msg[MAX_TEXT];
-    char full[MAX_TEXT];
-    int r;
-    r = _self->__frontend_parse_exprops_vptr->argtype_mismatch(_self, args, fi, ti, mi, msg, sizeof(msg));
-    if (r == 2) {
-        snprintf(full, sizeof(full), "type mismatch: '%s' %s", callee, msg);
-        return tool_diag_ct_sem_error(line, col, full, _self->sup->mem->path);
-    }
-    if (r == 1) {
-        if (_self->sup->__frontend_parse_supportops_vptr->type_warn(_self->sup, line, col, callee, msg) != 0) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many warnings");
-        }
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_argtype_check_static(void *self, int line, int col, const char * callee, int args, int ti, int mi) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char msg[MAX_TEXT];
-    char full[MAX_TEXT];
-    if ((!_self->__frontend_parse_exprops_vptr->argtype_mismatch(_self, args, (-1), ti, mi, msg, sizeof(msg)))) {
-        return 0;
-    }
-    snprintf(full, sizeof(full), "type mismatch: '%s' %s", callee, msg);
-    return tool_diag_ct_sem_error(line, col, full, _self->sup->mem->path);
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprOps_decl_type_compat(void *self, const char * formal, const char * actual) {
@@ -4275,7 +4109,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 return tool_diag_ct_sem_error(mline, mcol, msgb, _self->sup->mem->path);
                             }
                             bgot = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
-                            if (_self->__frontend_parse_exprops_vptr->arity_check(_self, mline, mcol, fname, bgot, _self->sym->traits[bt].m[bmi].nparams) != 0) {
+                            if (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, mline, mcol, fname, bgot, _self->sym->traits[bt].m[bmi].nparams) != 0) {
                                 return (-1);
                             }
                             if (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0) {
@@ -4286,7 +4120,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 args = na;
                                 _self->arena->nodes[m].b = ((args == 0) ? (-1) : args);
                             }
-                            if (_self->__frontend_parse_exprops_vptr->argtype_check(_self, mline, mcol, fname, args, (-1), bt, bmi) != 0) {
+                            if (_self->__frontend_parse_exprcallcheck_vptr->argtype_check(_self, mline, mcol, fname, args, (-1), bt, bmi) != 0) {
                                 return (-1);
                             }
 {
@@ -4331,7 +4165,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     for (pk = _self->arena->nodes[inm].a; pk > 0; pk = _self->arena->nodes[pk].next) {
                                         want++;
                                     }
-                                    if (_self->__frontend_parse_exprops_vptr->arity_check(_self, mline, mcol, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args)), want) != 0) {
+                                    if (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, mline, mcol, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args)), want) != 0) {
                                         return (-1);
                                     }
 {
@@ -4570,7 +4404,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                                 fits = 1;
                                                 continue;
                                             }
-                                            if ((!_self->__frontend_parse_exprops_vptr->argtype_mismatch(_self, args, (-1), tt, tm, tmsg, sizeof(tmsg)))) {
+                                            if ((!_self->__frontend_parse_exprcallcheck_vptr->argtype_mismatch(_self, args, (-1), tt, tm, tmsg, sizeof(tmsg)))) {
                                                 fits = 1;
                                             }
                                         }
@@ -4728,7 +4562,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             break;
                         }
                     }
-                    if (((mi < _self->sym->traits[t].nm) && (_self->__frontend_parse_exprops_vptr->map_arity(_self, mline, mcol, _self->arena->nodes[m].text, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0))) {
+                    if (((mi < _self->sym->traits[t].nm) && (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, mline, mcol, _self->arena->nodes[m].text, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0))) {
                         return (-1);
                     }
 {
@@ -4771,7 +4605,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         args = na;
                         _self->arena->nodes[m].b = ((args == 0) ? (-1) : args);
                     }
-                    if ((((!_self->sym->traits[t].is_static) && (mi < _self->sym->traits[t].nm)) && (_self->__frontend_parse_exprops_vptr->argtype_check(_self, mline, mcol, fname, args, (-1), t, mi) != 0))) {
+                    if ((((!_self->sym->traits[t].is_static) && (mi < _self->sym->traits[t].nm)) && (_self->__frontend_parse_exprcallcheck_vptr->argtype_check(_self, mline, mcol, fname, args, (-1), t, mi) != 0))) {
                         return (-1);
                     }
                     if (((!_self->sym->traits[t].is_static) && (mi < _self->sym->traits[t].nm))) {
@@ -5414,7 +5248,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     }
                 }
             }
-            if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, ibase, sm, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+            if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, ibase, sm, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
                 return (-1);
             }
             mn = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
@@ -5498,7 +5332,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, smsg2);
                                 }
                             }
-                            if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, sibase, sm2, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+                            if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, sibase, sm2, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
                                 return (-1);
                             }
                             mn2 = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
@@ -5678,7 +5512,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 snprintf(_self->arena->nodes[mn].text, MAX_TEXT, "%s", _self->arena->nodes[n].text2);
                 snprintf(_self->arena->nodes[mn].text2, MAX_TEXT, "%s", mname);
                 snprintf(_self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
-                if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, mname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+                if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, mname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
                     return (-1);
                 }
 {
@@ -5695,7 +5529,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                             if (_self->__frontend_parse_exprops_vptr->map_closure_check(_self, id_line, id_col, args, ti3, mi3) != 0) {
                                 return (-1);
                             }
-                            if (_self->__frontend_parse_exprops_vptr->argtype_check_static(_self, id_line, id_col, mname, args, ti3, mi3) != 0) {
+                            if (_self->__frontend_parse_exprcallcheck_vptr->argtype_check_static(_self, id_line, id_col, mname, args, ti3, mi3) != 0) {
                                 return (-1);
                             }
                         }
@@ -5719,7 +5553,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 snprintf(_self->arena->nodes[mn].text, MAX_TEXT, "%s", _self->arena->nodes[n].text2);
                 snprintf(_self->arena->nodes[mn].text2, MAX_TEXT, "%s", qc);
                 snprintf(_self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
-                if (_self->__frontend_parse_exprops_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, qc, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+                if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, qc, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
                     return (-1);
                 }
 {
@@ -5736,7 +5570,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                             if (_self->__frontend_parse_exprops_vptr->map_closure_check(_self, id_line, id_col, args, ti3, mi3) != 0) {
                                 return (-1);
                             }
-                            if (_self->__frontend_parse_exprops_vptr->argtype_check_static(_self, id_line, id_col, qc, args, ti3, mi3) != 0) {
+                            if (_self->__frontend_parse_exprcallcheck_vptr->argtype_check_static(_self, id_line, id_col, qc, args, ti3, mi3) != 0) {
                                 return (-1);
                             }
                         }
@@ -5790,13 +5624,13 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                             }
                         }
                         if (mi3 < _self->sym->traits[ti3].nm) {
-                            if (((!(_self->sym->traits[ti3].m[mi3].variadic && (got >= _self->sym->traits[ti3].m[mi3].nparams))) && (_self->__frontend_parse_exprops_vptr->arity_check(_self, id_line, id_col, qc, got, _self->sym->traits[ti3].m[mi3].nparams) != 0))) {
+                            if (((!(_self->sym->traits[ti3].m[mi3].variadic && (got >= _self->sym->traits[ti3].m[mi3].nparams))) && (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, id_line, id_col, qc, got, _self->sym->traits[ti3].m[mi3].nparams) != 0))) {
                                 return (-1);
                             }
                             if (_self->__frontend_parse_exprops_vptr->map_closure_check(_self, id_line, id_col, rest, ti3, mi3) != 0) {
                                 return (-1);
                             }
-                            if (_self->__frontend_parse_exprops_vptr->argtype_check_static(_self, id_line, id_col, qc, rest, ti3, mi3) != 0) {
+                            if (_self->__frontend_parse_exprcallcheck_vptr->argtype_check_static(_self, id_line, id_col, qc, rest, ti3, mi3) != 0) {
                                 return (-1);
                             }
                             if (_self->__frontend_parse_exprrecvmut_vptr->recv_mut_check(_self, args, rtype, _self->sym->traits[ti3].m[mi3].is_mut, id_line, id_col, qc) != 0) {
@@ -6075,7 +5909,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     hcur = _self->arena->nodes[hcur].next;
                 }
             }
-            if (((fi >= 0) && (_self->__frontend_parse_exprops_vptr->record_call(_self, _self->arena->nodes[n].text2, id_line) != 0))) {
+            if (((fi >= 0) && (_self->__frontend_parse_exprcallcheck_vptr->record_call(_self, _self->arena->nodes[n].text2, id_line) != 0))) {
                 return (-1);
             }
             if (((args > 0) && (_self->__frontend_parse_exprops_vptr->closure_arg_check(_self, id_line, id_col, _self->arena->nodes[n].text2, args, fi) != 0))) {
@@ -6088,7 +5922,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 got = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
                 want = _self->sym->funcs[fi].nparams;
                 tail_ok = (_self->sym->funcs[fi].variadic && (got > want));
-                if (((!tail_ok) && (_self->__frontend_parse_exprops_vptr->arity_check(_self, id_line, id_col, _self->arena->nodes[n].text2, got, want) != 0))) {
+                if (((!tail_ok) && (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, id_line, id_col, _self->arena->nodes[n].text2, got, want) != 0))) {
                     return (-1);
                 }
             }
@@ -6137,7 +5971,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 args = na;
                 _self->arena->nodes[n].a = args;
             }
-            if (((fi >= 0) && (_self->__frontend_parse_exprops_vptr->argtype_check(_self, id_line, id_col, _self->arena->nodes[n].text2, args, fi, (-1), (-1)) != 0))) {
+            if (((fi >= 0) && (_self->__frontend_parse_exprcallcheck_vptr->argtype_check(_self, id_line, id_col, _self->arena->nodes[n].text2, args, fi, (-1), (-1)) != 0))) {
                 return (-1);
             }
             if (fi >= 0) {
@@ -6797,42 +6631,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_args(void *self) {
     return first;
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprOps_record_call(void *self, const char * callee, int line) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    (void)(_self);
-    if ((!_self->cur_func[0])) {
-        return 0;
-    }
-    if ((*_self->ncalls) >= (*_self->callcap)) {
-        int cap;
-        struct frontend_module_Call * grown;
-        if ((*_self->ncalls) >= MAX_CALLS_MAX) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
-        cap = (((*_self->callcap) > 0) ? (*_self->callcap) : MAX_CALLS);
-        while (((cap <= (*_self->ncalls)) && (cap < MAX_CALLS_MAX))) {
-            cap *= 2;
-        }
-        if (cap > MAX_CALLS_MAX) {
-            cap = MAX_CALLS_MAX;
-        }
-        grown = (struct frontend_module_Call *)(realloc((*_self->calls), ((size_t)(cap) * sizeof((*grown)))));
-        if ((!grown)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
-        memset((grown + (*_self->callcap)), 0, ((size_t)((cap - (*_self->callcap))) * sizeof((*grown))));
-        (*_self->calls) = grown;
-        (*_self->callcap) = cap;
-    }
-    snprintf((*_self->calls)[(*_self->ncalls)].caller, MAX_TEXT, "%s", _self->cur_func);
-    snprintf((*_self->calls)[(*_self->ncalls)].callee, MAX_TEXT, "%s", callee);
-    (*_self->calls)[(*_self->ncalls)].line = line;
-    (*_self->ncalls)++;
-    return 0;
-}
-
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable = {
-    .arity_check = frontend_parse_Expr_frontend_parse_ExprOps_arity_check,
     .type_is_fnptr = frontend_parse_Expr_frontend_parse_ExprOps_type_is_fnptr,
     .type_is_void_ptr = frontend_parse_Expr_frontend_parse_ExprOps_type_is_void_ptr,
     .formal_is_env_fn = frontend_parse_Expr_frontend_parse_ExprOps_formal_is_env_fn,
@@ -6840,10 +6639,6 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .closure_arg_count = frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_count,
     .closure_arg_check = frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_check,
     .map_closure_check = frontend_parse_Expr_frontend_parse_ExprOps_map_closure_check,
-    .map_arity = frontend_parse_Expr_frontend_parse_ExprOps_map_arity,
-    .argtype_mismatch = frontend_parse_Expr_frontend_parse_ExprOps_argtype_mismatch,
-    .argtype_check = frontend_parse_Expr_frontend_parse_ExprOps_argtype_check,
-    .argtype_check_static = frontend_parse_Expr_frontend_parse_ExprOps_argtype_check_static,
     .decl_type_compat = frontend_parse_Expr_frontend_parse_ExprOps_decl_type_compat,
     .closure_bind = frontend_parse_Expr_frontend_parse_ExprOps_closure_bind,
     .closure_arg_bind = frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_bind,
@@ -6894,8 +6689,7 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .parse_closure = frontend_parse_Expr_frontend_parse_ExprOps_parse_closure,
     .parse_primary = frontend_parse_Expr_frontend_parse_ExprOps_parse_primary,
     .parse_qual_path = frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path,
-    .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args,
-    .record_call = frontend_parse_Expr_frontend_parse_ExprOps_record_call
+    .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args
 };
 
 static int expr_generic_param(struct frontend_parse_Expr * self, const char * name) {

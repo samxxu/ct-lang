@@ -30,6 +30,7 @@
 #include "ExprTry.h"
 #include "ExprTypes.h"
 #include "ExprBinding.h"
+#include "ExprCallCheck.h"
 
 
 struct ct_buf;

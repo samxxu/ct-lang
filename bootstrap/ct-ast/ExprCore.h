@@ -134,12 +134,6 @@ struct frontend_parse_ExprOps_vtbl {
     int (*parse_primary)(void *);
     int (*parse_args)(void *);
     int (*parse_qual_path)(void *, char *, int, char *, int, char *, int, int *);
-    int (*record_call)(void *, const char *, int);
-    int (*arity_check)(void *, int, int, const char *, int, int);
-    int (*map_arity)(void *, int, int, const char *, const char *, int);
-    int (*argtype_check)(void *, int, int, const char *, int, int, int, int);
-    int (*argtype_check_static)(void *, int, int, const char *, int, int, int);
-    int (*argtype_mismatch)(void *, int, int, int, int, char *, int);
     int (*type_is_fnptr)(void *, const char *);
     int (*type_is_void_ptr)(void *, const char *);
     int (*formal_is_env_fn)(void *, const char *);
@@ -155,6 +149,19 @@ struct frontend_parse_ExprOps_vtbl {
 struct frontend_parse_ExprOps_iface {
     void *self;
     const struct frontend_parse_ExprOps_vtbl *vt;
+};
+
+struct frontend_parse_ExprCallCheck_vtbl {
+    int (*record_call)(void *, const char *, int);
+    int (*arity_check)(void *, int, int, const char *, int, int);
+    int (*map_arity)(void *, int, int, const char *, const char *, int);
+    int (*argtype_check)(void *, int, int, const char *, int, int, int, int);
+    int (*argtype_check_static)(void *, int, int, const char *, int, int, int);
+    int (*argtype_mismatch)(void *, int, int, int, int, char *, int);
+};
+struct frontend_parse_ExprCallCheck_iface {
+    void *self;
+    const struct frontend_parse_ExprCallCheck_vtbl *vt;
 };
 
 struct frontend_parse_ExprTraitInst_vtbl {
@@ -322,6 +329,7 @@ struct frontend_parse_Expr {
     const struct frontend_parse_ExprNew_vtbl *__frontend_parse_exprnew_vptr;
     const struct frontend_parse_ExprAdt_vtbl *__frontend_parse_expradt_vptr;
     const struct frontend_parse_ExprRecvMut_vtbl *__frontend_parse_exprrecvmut_vptr;
+    const struct frontend_parse_ExprCallCheck_vtbl *__frontend_parse_exprcallcheck_vptr;
 };
 
 #endif
