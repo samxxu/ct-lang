@@ -1,5 +1,5 @@
 #!/bin/sh
-# S1a-0 C2a/C2b: text caps move to on-demand buffers.
+# S1a-0 C2a/C2b/C2c: text caps move to on-demand buffers.
 #
 #   C2a  MAX_RAW_BLOCK 32768  -> TEXT_LIMIT 65536 bytes for one #ct-raw block
 #        (the block already lives in the growable literal pool; the old policy
@@ -7,6 +7,8 @@
 #   C2b  MAX_KEY 768          -> one unit's incremental-cache key grows on
 #        demand to TEXT_LIMIT; a long source path must still be cached and
 #        reused, where the old compiler silently skipped the cache.
+#   C2c  MAX_INIT_TEXT 16384  -> the rewritten brace-initializer text grows on
+#        demand to TEXT_LIMIT; 9000 items must keep every element.
 #
 # Usage: sh test/ast/cap_text.sh <ct-ast>
 set -u
@@ -110,8 +112,18 @@ else
     fi
 fi
 
+# MAX_INIT_TEXT: 9000 brace-initializer items rewrite to ~18000 bytes, over
+# the old 16384-byte output buffer. The array must keep every element (the
+# program checks sizeof) instead of the old generic rejection.
+{
+    printf 'char big[] = {'
+    awk 'BEGIN { for (i = 0; i < 9000; i++) printf "1," }'
+    printf '1};\nint main(void) { return sizeof big == 9001 ? 0 : 1; }\n'
+} >"$w/init_big.ct"
+run_case init_big "$w/init_big.ct" 0 || fail=1
+
 if [ "$fail" -eq 0 ]; then
-    echo "cap_text: OK (raw block, cache key)"
+    echo "cap_text: OK (raw block, cache key, initializer text)"
     exit 0
 fi
 echo "cap_text: FAIL"
