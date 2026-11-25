@@ -11,6 +11,8 @@
 #          signature cannot express the case at all (the probe fails to build
 #          against it, which is the red evidence).
 #
+# A third case is the module's output directory: a 1500-byte logical
+# `--outdir` must reach the OS instead of failing the compiler's old cap.
 # A real >1024-byte path cannot be created on Darwin (PATH_MAX is 1024), so
 # the end-to-end filesystem case lives in cap_path_real.sh, which skips there
 # and runs on Linux CI.
@@ -71,8 +73,30 @@ elif ! "$w/cache"; then
     fail=1
 fi
 
+
+# --- module: a 1500-byte logical `--outdir` is not refused by the compiler's
+# own cap. Darwin's PATH_MAX is 1024, so the OS refuses the write; what must
+# not appear is the old "output directory is too long" (red on the baseline).
+mkdir -p "$w/mod" || exit 1
+printf 'int main(void) { return 0; }\n' >"$w/mod/prog.ct"
+outdir="$w/o"
+comp=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+while [ ${#outdir} -lt 1500 ]; do outdir="$outdir/$comp"; done
+if "$ct" build --emit-c "$w/mod/prog.ct" -o "$outdir" >"$w/mod.log" 2>"$w/mod.err"; then
+    echo "FAIL module: a 1500-byte --outdir unexpectedly produced output"
+    fail=1
+elif grep -Fq 'output directory is too long' "$w/mod.err"; then
+    echo "FAIL module: the compiler still refuses a ${#outdir}-byte --outdir"
+    fail=1
+elif grep -Fq 'cannot write the output file' "$w/mod.err"; then
+    echo "ok   module --outdir (${#outdir}-byte logical path reached the OS)"
+else
+    echo "FAIL module: unexpected error for a ${#outdir}-byte --outdir: $(tail -1 "$w/mod.err")"
+    fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
-    echo "cap_path: OK (diag file path, cache directory and key path)"
+    echo "cap_path: OK (diag file path, cache directory and key path, module --outdir)"
     exit 0
 fi
 echo "cap_path: FAIL"

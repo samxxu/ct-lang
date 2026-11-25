@@ -5113,6 +5113,16 @@ else
     bad "S1a-0 C2 diag/cache path text" "$(cat "$work/cappath.out" "$work/cappath.err" | head -6)"
 fi
 
+if bash test/ast/cap_path_real.sh "$work/ct-ast" >"$work/cappathr.out" 2>"$work/cappathr.err"; then
+    if grep -q '^skip ' "$work/cappathr.out"; then
+        skip "S1a-0 C2 real long paths" "$(cat "$work/cappathr.out")"
+    else
+        ok "S1a-0 C2 real long paths"
+    fi
+else
+    bad "S1a-0 C2 real long paths" "$(cat "$work/cappathr.out" "$work/cappathr.err" | head -6)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
