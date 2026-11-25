@@ -58,8 +58,8 @@
 | `MAX_DIGEST_FILES` | 4096 | 4 | A | 动态 |
 | `MAX_INIT_ITEM` | 4096 | 3 | A | 动态 |
 | `MAX_RAW_INIT` | 4096 | 9 | A | 动态 |
-| `MAX_LAYOUT_ADTS` | 64 | 5 | A | 动态 |
-| `MAX_LAYOUT_INSTS` | 128 | 11 | A | 动态 |
+| `MAX_LAYOUT_ADTS` | 64 | 5 | A | **已动态**：`g_adt_layout_state` 堆块倍增到 `MAX_LAYOUT_ADTS_MAX=65536`（受 C 类 MAX_ADTS=64 遮蔽） |
+| `MAX_LAYOUT_INSTS` | 128 | 11 | A | **已动态**：`g_inst_layout_state`/`g_shell_emit_state` 倍增到 `MAX_LAYOUT_INSTS_MAX=65536`；`EmitterQuery` 的全表扫描去掉固定界 |
 | `MAX_WARNINGS` | 32 | 15 | A | **已落**：`warns` 倍增到 65536；`--max-warnings` 另议 |
 | `MAX_ADTS` | 64 | 5 | C | 放开到 `CAP_LIMIT`；spec §8 / stable-subset 同步 |
 | `MAX_ADT_VARIANTS` | 96 | 3 | C | 放开到 `CAP_LIMIT`；spec §8 / stable-subset 同步 |

@@ -50,8 +50,10 @@ pub struct Limits {
 #define MAX_LABELS                   64
 #define MAX_LABELS_MAX               65536
 #define MAX_LAYOUT_ADTS              64
+#define MAX_LAYOUT_ADTS_MAX          65536
 #define MAX_LAYOUT_DEPTH             32
 #define MAX_LAYOUT_INSTS             128
+#define MAX_LAYOUT_INSTS_MAX         65536
 #define MAX_MAPS                     64
 #define MAX_METHODS                  64
 #define MAX_METHODS_MAX              65536

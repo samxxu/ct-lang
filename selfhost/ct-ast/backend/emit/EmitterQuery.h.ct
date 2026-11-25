@@ -23,7 +23,6 @@ import runtime::arena::Arena;
 #define N_IMPL 33
 #define N_VAR 10
 #define N_ARROW 25
-#define MAX_LAYOUT_INSTS 128
 
 namespace backend::emit;
 /* A stateless unit: the type exists only because a unit file is
@@ -163,7 +162,7 @@ pub int type_inst_index(const char *type)
 
     ins = frontend::sym::ct_insts(&n);
     if (!ins) return -1;
-    for (i = 0; i < n && i < MAX_LAYOUT_INSTS; i++)
+    for (i = 0; i < n; i++)
         if (type_needs_layout(type, ins[i].name)) return i;
     return -1;
 }

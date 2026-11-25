@@ -127,7 +127,9 @@
 #define P_INC 1
 #define MAX_LAYOUT_DEPTH 32
 #define MAX_LAYOUT_ADTS 64
+#define MAX_LAYOUT_ADTS_MAX 65536
 #define MAX_LAYOUT_INSTS 128
+#define MAX_LAYOUT_INSTS_MAX 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -298,6 +300,9 @@ static int inst_writes_helpers(struct backend_emit_Emitter *, int, int);
 static int inst_emit_elem_method_protos(struct backend_emit_Emitter *, const char *);
 static int inst_emit_elem_protos(struct backend_emit_Emitter *, int);
 static int inst_emit_elem_helpers(struct backend_emit_Emitter *, int);
+static int ensure_adt_layout_state(int);
+static int ensure_inst_layout_state(int);
+static int ensure_shell_emit_state(int);
 static int adt_layout_closure(struct backend_emit_Emitter *, int, int);
 static int inst_layout_closure(struct backend_emit_Emitter *, int, int);
 static int type_layout_closure(struct backend_emit_Emitter *, const char *, int);
@@ -408,9 +413,12 @@ static int backend_emit_g_oc_bypass_node = (-1);
 static int backend_emit_g_shell_u = (-1);
 static int backend_emit_g_shell_header;
 static int * backend_emit_g_slice_used;
-static int backend_emit_g_adt_layout_state[MAX_LAYOUT_ADTS];
-static int backend_emit_g_inst_layout_state[MAX_LAYOUT_INSTS];
-static int backend_emit_g_shell_emit_state[MAX_LAYOUT_INSTS];
+static int * backend_emit_g_adt_layout_state;
+static int backend_emit_g_adt_layout_cap;
+static int * backend_emit_g_inst_layout_state;
+static int backend_emit_g_inst_layout_cap;
+static int * backend_emit_g_shell_emit_state;
+static int backend_emit_g_shell_emit_cap;
 static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable };
 static int backend_emit_Emitter_backend_emit_EmitOps_expr_unstable(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
@@ -8348,6 +8356,81 @@ static void emit_slice_helpers(struct backend_emit_Emitter * self) {
     fputs("struct __ct_slice { void *ptr; int len; };\n", self->out);
     fputs("static void __attribute__((unused)) __ct_slice_check(struct __ct_slice *s, int i)\n""{\n""    if (i < 0 || i >= s->len) {\n""        fprintf(stderr, \"ct: slice index %d out of bounds (length %d)\\n\", i, s->len);\n""        exit(1);\n""    }\n""}\n""__attribute__((unused)) static void *__ct_slice_at(struct __ct_slice *s, int i, unsigned long esz)\n""{\n""    __ct_slice_check(s, i);\n""    return (char *)s->ptr + (unsigned long)i * esz;\n""}\n""__attribute__((unused)) static void *__ct_slice_get(struct __ct_slice s, int i, unsigned long esz)\n""{\n""    if (i < 0 || i >= s.len) return 0;\n""    return (char *)s.ptr + (unsigned long)i * esz;\n""}\n""__attribute__((unused)) static struct __ct_slice __ct_slice_range(void *p, int len, int lo, int hi, unsigned long esz, const char *where)\n""{\n""    struct __ct_slice s;\n""    if (lo < 0 || hi < lo || hi > len) {\n""        fprintf(stderr, \"%s: slice construction out of bounds: [%d,%d) for length %d\\n\", where, lo, hi, len);\n""        exit(1);\n""    }\n""    s.ptr = (char *)p + (unsigned long)lo * esz;\n""    s.len = hi - lo;\n""    return s;\n""}\n\n", self->out);
 }
+static int ensure_adt_layout_state(int need) {
+    int cap;
+    int * grown;
+    if (need <= backend_emit_g_adt_layout_cap) {
+        return 0;
+    }
+    cap = ((backend_emit_g_adt_layout_cap > 0) ? backend_emit_g_adt_layout_cap : MAX_LAYOUT_ADTS);
+    while (((cap < need) && (cap < MAX_LAYOUT_ADTS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_LAYOUT_ADTS_MAX) {
+        cap = MAX_LAYOUT_ADTS_MAX;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (int *)(realloc(backend_emit_g_adt_layout_state, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + backend_emit_g_adt_layout_cap), 0, ((size_t)((cap - backend_emit_g_adt_layout_cap)) * sizeof((*grown))));
+    backend_emit_g_adt_layout_state = grown;
+    backend_emit_g_adt_layout_cap = cap;
+    return 0;
+}
+static int ensure_inst_layout_state(int need) {
+    int cap;
+    int * grown;
+    if (need <= backend_emit_g_inst_layout_cap) {
+        return 0;
+    }
+    cap = ((backend_emit_g_inst_layout_cap > 0) ? backend_emit_g_inst_layout_cap : MAX_LAYOUT_INSTS);
+    while (((cap < need) && (cap < MAX_LAYOUT_INSTS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_LAYOUT_INSTS_MAX) {
+        cap = MAX_LAYOUT_INSTS_MAX;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (int *)(realloc(backend_emit_g_inst_layout_state, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + backend_emit_g_inst_layout_cap), 0, ((size_t)((cap - backend_emit_g_inst_layout_cap)) * sizeof((*grown))));
+    backend_emit_g_inst_layout_state = grown;
+    backend_emit_g_inst_layout_cap = cap;
+    return 0;
+}
+static int ensure_shell_emit_state(int need) {
+    int cap;
+    int * grown;
+    if (need <= backend_emit_g_shell_emit_cap) {
+        return 0;
+    }
+    cap = ((backend_emit_g_shell_emit_cap > 0) ? backend_emit_g_shell_emit_cap : MAX_LAYOUT_INSTS);
+    while (((cap < need) && (cap < MAX_LAYOUT_INSTS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_LAYOUT_INSTS_MAX) {
+        cap = MAX_LAYOUT_INSTS_MAX;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (int *)(realloc(backend_emit_g_shell_emit_state, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + backend_emit_g_shell_emit_cap), 0, ((size_t)((cap - backend_emit_g_shell_emit_cap)) * sizeof((*grown))));
+    backend_emit_g_shell_emit_state = grown;
+    backend_emit_g_shell_emit_cap = cap;
+    return 0;
+}
 static int type_layout_closure(struct backend_emit_Emitter * self, const char * type, int depth) {
     int ai;
     int ii;
@@ -8371,8 +8454,11 @@ static int adt_layout_closure(struct backend_emit_Emitter * self, int adi, int d
     struct frontend_sym_Adt * adts;
     char msg[MAX_TEXT];
     adts = frontend_sym_ct_adts((&nadts));
-    if (((((!adts) || (adi < 0)) || (adi >= nadts)) || (adi >= MAX_LAYOUT_ADTS))) {
+    if ((((!adts) || (adi < 0)) || (adi >= nadts))) {
         return 0;
+    }
+    if (ensure_adt_layout_state(nadts) != 0) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
     }
     if (depth > MAX_LAYOUT_DEPTH) {
         snprintf(msg, sizeof(msg), "a by-value ADT payload nests deeper than %d; use a pointer or a container", MAX_LAYOUT_DEPTH);
@@ -8464,8 +8550,11 @@ static int shell_preemit(struct backend_emit_Emitter * self, int ii, int depth) 
     struct frontend_sym_StructInst * ins;
     char msg[MAX_TEXT];
     ins = frontend_sym_ct_insts((&n));
-    if (((((!ins) || (ii < 0)) || (ii >= n)) || (ii >= MAX_LAYOUT_INSTS))) {
+    if ((((!ins) || (ii < 0)) || (ii >= n))) {
         return 0;
+    }
+    if (((ensure_inst_layout_state(n) != 0) || (ensure_shell_emit_state(n) != 0))) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
     }
     if (depth > MAX_LAYOUT_DEPTH) {
         snprintf(msg, sizeof(msg), "a by-value ADT payload nests deeper than %d; use a pointer or a container", MAX_LAYOUT_DEPTH);
@@ -8509,12 +8598,15 @@ static int preemit_adt_payload(struct backend_emit_Emitter * self, int adi) {
     if (((((!adts) || (!ins)) || (adi < 0)) || (adi >= nadts))) {
         return 0;
     }
-    for (i = 0; ((i < n) && (i < MAX_LAYOUT_INSTS)); i++) {
+    if (ensure_shell_emit_state(n) != 0) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    for (i = 0; i < n; i++) {
         backend_emit_g_shell_emit_state[i] = 0;
     }
     for (v = 0; v < adts[adi].nvariants; v++) {
         for (f = 0; f < adts[adi].variants[v].nfields; f++) {
-            for (i = 0; ((i < n) && (i < MAX_LAYOUT_INSTS)); i++) {
+            for (i = 0; i < n; i++) {
                 if ((!backend_emit_type_needs_layout(adts[adi].variants[v].fields[f].type, ins[i].name))) {
                     continue;
                 }
@@ -8531,6 +8623,7 @@ static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int
     int v;
     int f;
     int i;
+    int n_inst;
     struct frontend_sym_Adt * adts;
     int nadts;
     const char * tag;
@@ -8542,10 +8635,15 @@ static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int
     if ((((!adts) || (adi < 0)) || (adi >= nadts))) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
     }
-    for (i = 0; i < MAX_LAYOUT_ADTS; i++) {
+    n_inst = 0;
+    (void)(frontend_sym_ct_insts((&n_inst)));
+    if (((ensure_adt_layout_state(nadts) != 0) || (ensure_inst_layout_state(n_inst) != 0))) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    for (i = 0; i < nadts; i++) {
         backend_emit_g_adt_layout_state[i] = 0;
     }
-    for (i = 0; i < MAX_LAYOUT_INSTS; i++) {
+    for (i = 0; i < n_inst; i++) {
         backend_emit_g_inst_layout_state[i] = 0;
     }
     if (adt_layout_closure(self, adi, 0) != 0) {

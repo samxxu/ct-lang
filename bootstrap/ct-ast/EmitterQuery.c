@@ -12,7 +12,6 @@
 #define N_IMPL 33
 #define N_VAR 10
 #define N_ARROW 25
-#define MAX_LAYOUT_INSTS 128
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -243,7 +242,7 @@ int backend_emit_type_inst_index(const char * type) {
     if ((!ins)) {
         return (-1);
     }
-    for (i = 0; ((i < n) && (i < MAX_LAYOUT_INSTS)); i++) {
+    for (i = 0; i < n; i++) {
         if (backend_emit_type_needs_layout(type, ins[i].name)) {
             return i;
         }
