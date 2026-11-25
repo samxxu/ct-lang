@@ -15,6 +15,7 @@
 #include "ExprCore.h"
 #include "ExprAdtCtor.h"
 #include "ExprNewObject.h"
+#include "ExprSubscript.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -171,7 +172,6 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable;
-const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_parse_ExprSubscript_vtable;
 const struct frontend_parse_ExprOptional_vtbl frontend_parse_Expr_frontend_parse_ExprOptional_vtable;
 const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable;
 const struct frontend_parse_ExprRecvMut_vtbl frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable;
@@ -6908,95 +6908,6 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .parse_qual_path = frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path,
     .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args,
     .record_call = frontend_parse_Expr_frontend_parse_ExprOps_record_call
-};
-
-static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label(void *self, const char * bty, char * out, int cap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    const char * base;
-    int inst;
-    int n;
-    struct frontend_sym_StructInst * ins;
-    (void)(_self);
-    base = ((strncmp(bty, "struct ", 7) == 0) ? (bty + 7) : bty);
-    inst = frontend_sym_ct_inst_find(base);
-    if (inst >= 0) {
-        ins = frontend_sym_ct_insts((&n));
-        if (((ins && (inst < n)) && (ins[inst].nargs > 0))) {
-            if (ins[inst].nargs > 1) {
-                snprintf(out, (size_t)(cap), "%s<%s, %s>", ins[inst].tmpl, ins[inst].carg[0], ins[inst].carg[1]);
-            }
-            else {
-                snprintf(out, (size_t)(cap), "%s<%s>", ins[inst].tmpl, ins[inst].carg[0]);
-            }
-            return 0;
-        }
-    }
-    snprintf(out, (size_t)(cap), "%s", base);
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method(void *self, const char * bty, const char * name, int want, int line, int col, int writable, int idx_node) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int m;
-    int p;
-    int got = 0;
-    char label[MAX_TEXT];
-    char msg[MAX_TEXT];
-    _self->__frontend_parse_exprsubscript_vptr->custom_index_label(_self, bty, label, sizeof(label));
-    m = _self->__frontend_parse_exprops_vptr->inst_inherent_method(_self, bty, name);
-    if (m == (-2)) {
-        if (writable) {
-            snprintf(msg, sizeof(msg), "type '%s' has no writable subscript: '%s' is private to its unit", label, name);
-        }
-        else {
-            snprintf(msg, sizeof(msg), "type '%s' has no subscript: '%s' is private to its unit", label, name);
-        }
-        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
-    }
-    if (m < 0) {
-        if (writable) {
-            snprintf(msg, sizeof(msg), "type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s", label, label);
-        }
-        else {
-            snprintf(msg, sizeof(msg), "type '%s' has no subscript: declare 'V get(K)' in impl %s", label, label);
-        }
-        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
-    }
-    if (_self->arena->nodes[m].c) {
-        snprintf(msg, sizeof(msg), "type '%s' has no subscript: '%s' must be an instance method", label, name);
-        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
-    }
-    for (p = _self->arena->nodes[m].a; p > 0; p = _self->arena->nodes[p].next) {
-        got++;
-    }
-    if (got != want) {
-        if (writable) {
-            snprintf(msg, sizeof(msg), "type '%s' has no writable subscript: 'set' must take 2 parameters", label);
-        }
-        else {
-            snprintf(msg, sizeof(msg), "type '%s' has no subscript: 'get' must take 1 parameter", label);
-        }
-        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
-    }
-    if (idx_node >= 0) {
-        char kty[MAX_TEXT];
-        int kz = 0;
-        const char * pt = _self->arena->nodes[_self->arena->nodes[m].a].text;
-        if ((((_self->__frontend_parse_exprtypes_vptr->chk_type(_self, idx_node, kty, sizeof(kty), (&kz)) == 0) && kty[0]) && pt[0])) {
-            _self->chk_line = line;
-            _self->chk_col = col;
-            _self->chk_arg = 1;
-            if (_self->__frontend_parse_exprtypes_vptr->chk_assignable(_self, pt, kty, 0, 6) != 0) {
-                return (-1);
-            }
-        }
-    }
-    return m;
-}
-
-const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_parse_ExprSubscript_vtable = {
-    .custom_index_label = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label,
-    .custom_index_method = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method
 };
 
 static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_suffix_kind(void *self) {

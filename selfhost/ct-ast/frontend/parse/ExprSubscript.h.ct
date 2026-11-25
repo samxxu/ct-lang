@@ -1,0 +1,225 @@
+/*
+ * ExprSubscript.h.ct - the custom-container subscript protocol (SH-94 S1a-1, pure move out of Expr.h.ct).
+ *
+ * The method bodies are byte-identical to the ones Expr.h.ct held; the
+ * `Expr` type and every trait declaration live in ExprCore.h.ct, so this unit
+ * imports Core instead of the host and the import graph stays acyclic.
+ * Expr.h.ct imports this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+import frontend::sym::SymbolsTypeText;
+import frontend::lex::Lexer;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable;
+import backend::mem::Memory;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::sym::Symbols::Closure as Closure;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
+import runtime::arena::Arena::NodeKind as NodeKind;
+import runtime::arena::Arena::Node as Node;
+import tool::diag::Diag;
+import frontend::parse::ExprTypeText;
+import frontend::parse::ExprPure;
+import frontend::parse::ExprCore;
+import frontend::parse::ExprAdtCtor;
+import frontend::parse::ExprNewObject;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define B_ADD 1
+#define B_AND 12
+#define B_BAND 15
+#define B_BOR 16
+#define B_COMMA 19
+#define B_DIV 4
+#define B_EQ 9
+#define B_GE 8
+#define B_GT 6
+#define B_LE 7
+#define B_LT 5
+#define B_MOD 11
+#define B_MUL 3
+#define B_NE 10
+#define B_OR 13
+#define B_SHL 17
+#define B_SHR 18
+#define B_SUB 2
+#define B_XOR 14
+#define MAX_CALLS 8192
+#define MAX_CALLS_MAX 65536
+#define MAX_FUNCS 512
+#define MAX_FUNCS_MAX 65536
+#define MAX_ARG_POS 32
+#define MAX_ARG_POS_MAX 65536
+#define MAX_GENERIC_INSTS 64
+#define MAX_TEXT 160
+#define N_ADDR 27
+#define N_ARROW 25
+#define N_ASSIGN 13
+#define N_BIN 11
+#define N_BOX 34
+#define N_CALL 7
+#define N_CAST 35
+#define N_DECL 12
+#define N_DEREF 28
+#define N_FUNC 3
+#define N_IMPL 33
+#define N_INDEX 26
+#define N_MCALL 30
+#define N_MEMBER 24
+#define N_NUM 8
+#define N_OFFSETOF 47
+#define N_POST 18
+#define N_RAW 31
+#define N_SIZEOF 36
+#define N_STR 9
+#define N_TERN 37
+#define N_UNARY 17
+#define N_VAR 10
+#define N_COMPOUND 51
+#define N_VAARG 53
+#define N_FNUM 54
+#define N_PRE 57
+#define N_CLOSURE 59
+#define N_MATSEQ 73
+#define N_NEWOBJ 77
+#define N_INTO 63
+#define N_INTO_SELF 64
+#define N_TRY 71
+#define N_ADTCTOR 81
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET   76
+#define N_OPT 72
+#define P_DEC 2
+#define P_INC 1
+#define T_EOF 0
+#define T_ID 1
+#define T_NUM 2
+#define T_PUNCT 4
+#define T_STR 3
+#define U_NEG 1
+#define U_NOT 2
+#define U_BNOT 3
+#define CT_EXPR_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct ExprSubscript {
+    int unused;
+}
+
+
+impl ExprSubscript for Expr {
+    /* PH-52 D52-2: the diagnostics name the user's spelling, not the encoded
+       instance tag. `Box<int>` comes from the instance row; a plain struct
+       keeps its declared name. */
+    int custom_index_label(const char *bty, char *out, int cap)
+    {
+        const char *base;
+        int inst, n;
+        struct StructInst *ins;
+
+        (void)self;
+        base = (strncmp(bty, "struct ", 7) == 0) ? bty + 7 : bty;
+        inst = frontend::sym::ct_inst_find(base);
+        if (inst >= 0) {
+            ins = frontend::sym::ct_insts(&n);
+            if (ins && inst < n && ins[inst].nargs > 0) {
+                if (ins[inst].nargs > 1)
+                    snprintf(out, (size_t)cap, "%s<%s, %s>", ins[inst].tmpl,
+                             ins[inst].carg[0], ins[inst].carg[1]);
+                else
+                    snprintf(out, (size_t)cap, "%s<%s>", ins[inst].tmpl,
+                             ins[inst].carg[0]);
+                return 0;
+            }
+        }
+        snprintf(out, (size_t)cap, "%s", base);
+        return 0;
+    }
+
+    /* PH-52 D52-2 / D52-5: protocol matching is name + arity + instance
+       (never the parameter type); a miss is a hard error, never a C subscript
+       fallback. `writable` selects the set-side wording. Returns the method
+       node on success; a diagnostic has already been emitted on failure. */
+    int custom_index_method(const char *bty, const char *name, int want,
+                            int line, int col, int writable, int idx_node)
+    {
+        int m, p, got = 0;
+        char label[MAX_TEXT];
+        char msg[MAX_TEXT];
+
+        self->custom_index_label(bty, label, sizeof label);
+        m = self->inst_inherent_method(bty, name);
+        if (m == -2) {
+            if (writable)
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no writable subscript: '%s' is private to its unit",
+                    label, name);
+            else
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no subscript: '%s' is private to its unit",
+                    label, name);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        if (m < 0) {
+            if (writable)
+                snprintf(msg, sizeof msg,
+                    "type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s",
+                    label, label);
+            else
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no subscript: declare 'V get(K)' in impl %s",
+                    label, label);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        if (self->arena->nodes[m].c) {
+            snprintf(msg, sizeof msg,
+                "type '%s' has no subscript: '%s' must be an instance method",
+                label, name);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        for (p = self->arena->nodes[m].a; p > 0; p = self->arena->nodes[p].next)
+            got++;
+        if (got != want) {
+            if (writable)
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no writable subscript: 'set' must take 2 parameters",
+                    label);
+            else
+                snprintf(msg, sizeof msg,
+                    "type '%s' has no subscript: 'get' must take 1 parameter",
+                    label);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        /* LANG-4: the index must also fit the declared key type. Matching only
+           name+arity let `char *get(char *)` receive an int silently. */
+        if (idx_node >= 0) {
+            char kty[MAX_TEXT];
+            int kz = 0;
+            const char *pt = self->arena->nodes[self->arena->nodes[m].a].text;
+            if (self->chk_type(idx_node, kty, sizeof kty, &kz) == 0
+                && kty[0] && pt[0]) {
+                self->chk_line = line;
+                self->chk_col = col;
+                self->chk_arg = 1;
+                if (self->chk_assignable(pt, kty, 0, 6) != 0) return -1;
+            }
+        }
+        return m;
+    }
+
+}
