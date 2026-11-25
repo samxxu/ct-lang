@@ -1,1 +1,0 @@
-examples/tour/16_diagnostics/cap_params/prog.ct:6:1: error: too many parameters in unit 'prog.ct' (limit 16)

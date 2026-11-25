@@ -6135,7 +6135,7 @@ cap_grows() {
     while [ "$i" -lt 17 ]; do printf ', int a%d' "$i"; i=$((i + 1)); done
     printf ');\nint main(void) { return 0; }\n'
 } >"$work/cap_params.ct"
-cap_check params "too many parameters in unit 'cap_params.ct' (limit 16)" "$work/cap_params.ct"
+cap_grows params "$work/cap_params.ct"
 {
     printf 'trait T {\n'
     i=0

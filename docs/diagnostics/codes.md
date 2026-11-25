@@ -55,7 +55,7 @@ $ ct-ast --diagnostics=json prog.ct -o /tmp/x.c
 | E-DRIVER-003 | error | `.m.ct` 单元不产生输出 | v0.88.3+（未发版） | `ctc: a .m.ct unit produces no output` | test/ast/p_lang25.sh |
 | E-DRIVER-004 | error | 输出文件或输出目录不可写、不可创建 | v0.88.3+（未发版） | `ctc: cannot write ...` | test/ast/p_lang25.sh |
 | E-LOWER-001 | error | 临时接收者不在语句/赋值起点，无法安全物化 | v0.88.3+（未发版） | `error: a method call on a temporary is only allowed at the start of a statement or of an assignment` | test/ast/p_lang25.sh |
-| E-LOWER-002 | error | 单条语句的可 hoist 接收者超过上限 | v0.88.3+（未发版） | `error: too many hoisted receivers in one statement` | test/ast/p_lang25.sh |
+| E-LOWER-002 | error | （退役）S1a-0 C1 起 MAX_HOISTS 动态倍增，无“hoist 过多”上限 | v0.88.3+（未发版） | `error: too many hoisted receivers in one statement`（无产出路径） | — |
 | E-LOWER-004 | error | SH-111 I1：清理边形状/控制转移/环 | v0.88.3+（未发版） | `error: lowering invariant I1: ...` | test/ast/p111_invariants.sh |
 | E-LOWER-005 | error | SH-111 I2：同一条边上 defer 晚于释放 | v0.88.3+（未发版） | `error: lowering invariant I2: ...` | test/ast/p111_invariants.sh |
 | E-LOWER-006 | error | SH-111 I3：errdefer 出现在正常出口 | v0.88.3+（未发版） | `error: lowering invariant I3: ...` | test/ast/p111_invariants.sh |

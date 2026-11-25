@@ -1,0 +1,2 @@
+examples/tour/16_diagnostics/cap_adts/prog.ct:260:1: error: too many ADT types in this build (limit 64)
+ctc: 1 error(s) generated

@@ -111,7 +111,7 @@ CT_EMIT_INVARIANT_FAULT=cleanup-jump  ct-ast prog.ct -o /tmp/x.c
 | `E-LOWER-006` | I3 errdefer 走正常边 | error |
 | `E-LOWER-007` | I4 接收者临时缺失/重名 | error |
 
-`E-LOWER-001` / `E-LOWER-002` 是既有降级诊断（临时接收者不在语句起点、单语句 hoist 过多），
+`E-LOWER-001` 是既有降级诊断（临时接收者不在语句起点）；`E-LOWER-002`（单语句 hoist 过多）自 S1a-0 C1 起随 `MAX_HOISTS` 动态化退役，保留代码映射但无产出路径。
 本层不改文案，只由 LANG-25 的 registry 统一编码；`E-LOWER-003` 预留给「无法推断 hoist 类型」
 的防御分支，当前未接入，registry 不登记未实现的码。
 

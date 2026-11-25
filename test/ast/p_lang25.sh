@@ -163,21 +163,6 @@ int main(void)
     return 0;
 }
 EOF
-cat >"$work/chain6.ct" <<'EOF'
-trait H { H tap(int n); int get(); }
-struct R { int s; } use H;
-impl H for R {
-    H tap(int n) { self->s = self->s + n; return self; }
-    int get() { return self->s; }
-}
-int main(void)
-{
-    R x; x.s = 1; H h = x;
-    int got = h.tap(1)->tap(2)->tap(3)->tap(4)->tap(5)->tap(6)->get();
-    return got - 21;
-}
-EOF
-
 # ---- text: one code per diagnostic ---------------------------------------
 
 expect_text() {
@@ -218,7 +203,6 @@ expect_text driver-002 E-DRIVER-002 "$ctast" --diag-codes "$work/does-not-exist.
 expect_text driver-003 E-DRIVER-003 "$ctast" --diag-codes test/ast/67_type_alias/lib/lib.m.ct -o "$work/x.c"
 expect_text driver-004 E-DRIVER-004 "$ctast" --diag-codes "$work/clean.ct" -o "$work/no/such/x.c"
 expect_text lower-001 E-LOWER-001 "$ctast" --diag-codes "$work/chainnest.ct" -o "$work/x.c"
-expect_text lower-002 E-LOWER-002 "$ctast" --diag-codes "$work/chain6.ct" -o "$work/x.c"
 expect_text lower-I1 E-LOWER-004 env CT_EMIT_INVARIANT_FAULT=cleanup-jump "$ctast" --diag-codes "$work/ret.ct" -o "$work/x.c"
 expect_text lower-I2 E-LOWER-005 env CT_EMIT_INVARIANT_FAULT=cleanup-drop-first "$ctast" --diag-codes "$work/ret.ct" -o "$work/x.c"
 expect_text lower-I3 E-LOWER-006 env CT_EMIT_INVARIANT_FAULT=errdefer-normal "$ctast" --diag-codes "$work/err.ct" -o "$work/x.c"

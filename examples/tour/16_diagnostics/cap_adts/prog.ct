@@ -1,0 +1,267 @@
+// 场景：ADT（带负载 enum）数量超过编译器容量上限（MAX_ADTS = 64）。
+// 角度：容量上限的“容器维度”——第 65 个 ADT 处报 error，退出 1。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+enum E0 {
+    V(int x),
+    U(),
+}
+enum E1 {
+    V(int x),
+    U(),
+}
+enum E2 {
+    V(int x),
+    U(),
+}
+enum E3 {
+    V(int x),
+    U(),
+}
+enum E4 {
+    V(int x),
+    U(),
+}
+enum E5 {
+    V(int x),
+    U(),
+}
+enum E6 {
+    V(int x),
+    U(),
+}
+enum E7 {
+    V(int x),
+    U(),
+}
+enum E8 {
+    V(int x),
+    U(),
+}
+enum E9 {
+    V(int x),
+    U(),
+}
+enum E10 {
+    V(int x),
+    U(),
+}
+enum E11 {
+    V(int x),
+    U(),
+}
+enum E12 {
+    V(int x),
+    U(),
+}
+enum E13 {
+    V(int x),
+    U(),
+}
+enum E14 {
+    V(int x),
+    U(),
+}
+enum E15 {
+    V(int x),
+    U(),
+}
+enum E16 {
+    V(int x),
+    U(),
+}
+enum E17 {
+    V(int x),
+    U(),
+}
+enum E18 {
+    V(int x),
+    U(),
+}
+enum E19 {
+    V(int x),
+    U(),
+}
+enum E20 {
+    V(int x),
+    U(),
+}
+enum E21 {
+    V(int x),
+    U(),
+}
+enum E22 {
+    V(int x),
+    U(),
+}
+enum E23 {
+    V(int x),
+    U(),
+}
+enum E24 {
+    V(int x),
+    U(),
+}
+enum E25 {
+    V(int x),
+    U(),
+}
+enum E26 {
+    V(int x),
+    U(),
+}
+enum E27 {
+    V(int x),
+    U(),
+}
+enum E28 {
+    V(int x),
+    U(),
+}
+enum E29 {
+    V(int x),
+    U(),
+}
+enum E30 {
+    V(int x),
+    U(),
+}
+enum E31 {
+    V(int x),
+    U(),
+}
+enum E32 {
+    V(int x),
+    U(),
+}
+enum E33 {
+    V(int x),
+    U(),
+}
+enum E34 {
+    V(int x),
+    U(),
+}
+enum E35 {
+    V(int x),
+    U(),
+}
+enum E36 {
+    V(int x),
+    U(),
+}
+enum E37 {
+    V(int x),
+    U(),
+}
+enum E38 {
+    V(int x),
+    U(),
+}
+enum E39 {
+    V(int x),
+    U(),
+}
+enum E40 {
+    V(int x),
+    U(),
+}
+enum E41 {
+    V(int x),
+    U(),
+}
+enum E42 {
+    V(int x),
+    U(),
+}
+enum E43 {
+    V(int x),
+    U(),
+}
+enum E44 {
+    V(int x),
+    U(),
+}
+enum E45 {
+    V(int x),
+    U(),
+}
+enum E46 {
+    V(int x),
+    U(),
+}
+enum E47 {
+    V(int x),
+    U(),
+}
+enum E48 {
+    V(int x),
+    U(),
+}
+enum E49 {
+    V(int x),
+    U(),
+}
+enum E50 {
+    V(int x),
+    U(),
+}
+enum E51 {
+    V(int x),
+    U(),
+}
+enum E52 {
+    V(int x),
+    U(),
+}
+enum E53 {
+    V(int x),
+    U(),
+}
+enum E54 {
+    V(int x),
+    U(),
+}
+enum E55 {
+    V(int x),
+    U(),
+}
+enum E56 {
+    V(int x),
+    U(),
+}
+enum E57 {
+    V(int x),
+    U(),
+}
+enum E58 {
+    V(int x),
+    U(),
+}
+enum E59 {
+    V(int x),
+    U(),
+}
+enum E60 {
+    V(int x),
+    U(),
+}
+enum E61 {
+    V(int x),
+    U(),
+}
+enum E62 {
+    V(int x),
+    U(),
+}
+enum E63 {
+    V(int x),
+    U(),
+}
+enum E64 {
+    V(int x),
+    U(),
+}
+int main(void)
+{
+    return 0;
+}
