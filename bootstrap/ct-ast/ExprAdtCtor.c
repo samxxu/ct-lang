@@ -256,9 +256,18 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
     if (n < 0) {
         return (-1);
     }
-    snprintf(_self->arena->nodes[n].text, MAX_TEXT, "%s", adts[adt].full);
-    snprintf(_self->arena->nodes[n].text2, MAX_TEXT, "%s", adts[adt].variants[v].cname);
-    snprintf(_self->arena->nodes[n].text3, MAX_TEXT, "%s", adts[adt].variants[v].name);
+    _self->arena->nodes[n].text = runtime_text_ct_intern(adts[adt].full);
+    if ((!_self->arena->nodes[n].text)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->arena->nodes[n].text2 = runtime_text_ct_intern(adts[adt].variants[v].cname);
+    if ((!_self->arena->nodes[n].text2)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->arena->nodes[n].text3 = runtime_text_ct_intern(adts[adt].variants[v].name);
+    if ((!_self->arena->nodes[n].text3)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->arena->nodes[n].num = v;
     _self->arena->nodes[n].line = tline;
     _self->arena->nodes[n].a = args;

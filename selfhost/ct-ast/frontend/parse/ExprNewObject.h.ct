@@ -82,12 +82,15 @@ impl ExprNew for Expr {
         pn = self->sup->new_node(stars > 0 ? N_ARROW : N_MEMBER);
         if (pn < 0) return -1;
         self->arena->nodes[pn].a = recv;
-        snprintf(self->arena->nodes[pn].text2, MAX_TEXT, "ptr");
-        snprintf(self->arena->nodes[pn].text, MAX_TEXT, "%s", ty);
+        self->arena->nodes[pn].text2 = runtime::text::ct_internf("ptr");
+        if (!self->arena->nodes[pn].text2) return self->sup->fail("out of memory");
+        self->arena->nodes[pn].text = runtime::text::ct_intern(ty);
+        if (!self->arena->nodes[pn].text) return self->sup->fail("out of memory");
         mn = self->sup->new_node(N_ARROW);
         if (mn < 0) return -1;
         self->arena->nodes[mn].a = pn;
-        snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", fname);
+        self->arena->nodes[mn].text2 = runtime::text::ct_intern(fname);
+        if (!self->arena->nodes[mn].text2) return self->sup->fail("out of memory");
         self->arena->nodes[mn].line = line;
         self->arena->nodes[mn].num = col;
         *out = mn;
@@ -271,12 +274,15 @@ impl ExprNew for Expr {
             self->arena->nodes[r].num = off;
             self->arena->nodes[r].aux = 1;
             self->arena->nodes[n].a = r;
-            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
-            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", enc);
+            self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
+            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+            self->arena->nodes[n].text2 = runtime::text::ct_intern(enc);
+            if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
             {
                 char ctype[MAX_TEXT];
                 snprintf(ctype, sizeof ctype, "struct %s", enc);
-                snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", ctype);
+                self->arena->nodes[n].text3 = runtime::text::ct_intern(ctype);
+                if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
             }
             self->arena->nodes[n].line = nline;
             self->arena->nodes[n].num = ncol;

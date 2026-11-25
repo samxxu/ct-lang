@@ -228,6 +228,53 @@ arena 文本行（C2n-2）。
 - 词法器标识符上限 159（C2o）仍拒绝单一 >159 的标识符；本片段的 >160 正例来自
   命名空间拼接后的 C 名。
 
+## 5.3 C2n-2：parser/Expr/Stmt 的 Node 文本迁 Intern
+
+**范围**：`runtime::arena::Node` 的 `text` / `text2` / `text3` / `text4`
+从 `char[160]` 改为 `const char *`，由 `runtime::text::Intern` 拥有；
+`OutConv.formal` / `.ret` 同批。`Arena.alloc` 把四行都初始化到
+`ct_intern("")`；`ct_intern` 返回 NULL（OOM）时回滚槽位并返回 -1。
+行复制只复制指针；按单元 `reset` 只清 node 计数，池拥有文本、**不 free**。
+
+**写点**（共约 216 处）：`snprintf(row, MAX_TEXT, ...)` 204 处改为
+`ct_internf(fmt, ...)`（`"%s"` 单参形式直接 `ct_intern(s)`）；`tok_copy`
+6 处改为 `ct_intern_len(tokstr.ptr, tokstr.len)`；`row[0] = 0` 3 处与
+`OutConv` 2 处改为 `ct_intern("")` / `ct_intern(s)`；就地截尾 3 处改为
+先算长度再 `ct_intern_len`（池文本不可写）。读取点不变。
+
+**Stmt 子系统同批**：`LabelRow.name`、`Stmt.u_decl/u_asg/u_rd/u_addr`
+（`[48]` 行）、`del_names`（`[64]` 行）、`yield_type`（`[16]` 行）与
+`last_yield_type` 改为 `const char *`。`u_add` 的 `char[48][160]` 展平指针
+算术改为行指针数组；`del_take` 的返回值扩为 1=重复删除 / 0=记录 / -1=OOM；
+`yield_type` 的 out-buffer 调用改为局部 `char[MAX_TEXT]` 再 `ct_intern`；
+`last_yield_type` 只是指针复制。
+
+**`ct_internf`**（`Intern.h.ct` 唯一新增公共 helper，+1 个顶层函数）：
+`vsnprintf(NULL, 0, …)` 量长 → 精确大小 `malloc` → `vsnprintf` →
+`ct_intern_len`；结果超过 `TEXT_LIMIT = 65536` 返回 NULL，不截断、不插入。
+`MAX_FUNCS` 已按 SH-109 动态化（初值 512、安全阀 `MAX_FUNCS_MAX` 65536），
+本切片只新增这 1 个顶层 helper。
+
+**证据**
+
+- 正例：`test/ast/intern_pool.sh` 8/8——S5 的 223 字节 C 名在原型、定义、
+  调用三处逐字保留；S6 的 200/1000 字节相邻字面量逐字节往返；S1/S2 的
+  harness 覆盖 `ct_internf`（200 字节不截断、65536 接受、65537 拒绝）。
+- 红证：同一 S5 在 `baseline 3ed0851b` 上函数名只出现 1 次（仅原型），
+  定义与调用被 160 字节行截断，`intern_pool: 7 passed, 1 failed`。
+- `check-ast.sh` 全量（71 语料逐字节、343 诊断逐字、p88 66 文件逐字节、
+  2 轮自举不动点、`c2n/intern` 8/8）；`check-seed.sh` 两轮逐字节；
+  `check-goldens-ast.sh` 25/25。
+
+**剩余（C2o / C2p）**
+
+- `Parser.ns_decl/cur_func/c_base/cur_record/out_names` 与
+  `Expr.fnptr_*/decl_prefix/inst_canon/in_generic_bound/last_bare_tag`：
+  `cur_func` 仍以 `char *` 别名跨单元绑定（`ct_expr_bind`），迁移要与
+  Expr 侧指针改成 `const char **` 同批做，留给 C2o。
+- 一次性局部 `char[MAX_TEXT]` scratch 与发射器/诊断文本：合批在 C2p；
+  词法器仍拒单一 >159 标识符（C2o）。
+
 ## 6 关联
 
 - [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)（已落地的动态容量样板）

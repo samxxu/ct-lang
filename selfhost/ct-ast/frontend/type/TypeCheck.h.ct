@@ -968,10 +968,12 @@ impl TypeOps for TypeCheck {
                     if (bnode < 0) return -1;
                     self->arena->nodes[bnode].a = n;
                     self->arena->nodes[bnode].aux = mptr + (addr ? 2 : 0);
-                    snprintf(self->arena->nodes[bnode].text, MAX_TEXT, "%s", trait);
+                    self->arena->nodes[bnode].text = runtime::text::ct_intern(trait);
+                    if (!self->arena->nodes[bnode].text) return self->fail("out of memory");
                     /* the map's instance-level vtable is named from the
                        instance's C spelling, which carries its namespace */
-                    snprintf(self->arena->nodes[bnode].text2, MAX_TEXT, "%s", (*self->maps)[i].cname);
+                    self->arena->nodes[bnode].text2 = runtime::text::ct_intern((*self->maps)[i].cname);
+                    if (!self->arena->nodes[bnode].text2) return self->fail("out of memory");
                     return bnode;
                 }
         }
@@ -1180,8 +1182,10 @@ impl TypeOps for TypeCheck {
         if (bnode < 0) return -1;
         self->arena->nodes[bnode].a = n;
         self->arena->nodes[bnode].aux = is_ptr + (addr ? 2 : 0);
-        snprintf(self->arena->nodes[bnode].text, MAX_TEXT, "%s", trait);
-        snprintf(self->arena->nodes[bnode].text2, MAX_TEXT, "%s", sname);
+        self->arena->nodes[bnode].text = runtime::text::ct_intern(trait);
+        if (!self->arena->nodes[bnode].text) return self->fail("out of memory");
+        self->arena->nodes[bnode].text2 = runtime::text::ct_intern(sname);
+        if (!self->arena->nodes[bnode].text2) return self->fail("out of memory");
         return bnode;
     }
 

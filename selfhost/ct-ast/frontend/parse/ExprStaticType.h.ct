@@ -566,7 +566,8 @@ impl ExprStaticType for Expr {
                 return -1;
             }
             snprintf(cur, sizeof cur, "%s%s", self->arena->nodes[n].text3, dim);
-            snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", cur);
+            self->arena->nodes[n].text3 = runtime::text::ct_intern(cur);
+            if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
             self->arena->nodes[n].num = 0;      /* text3 is the authoritative spelling */
             /* E79-1: `T a[]` is the old spelling. With an initializer it is an
                inferred-length array and stays; a parameter, field or

@@ -76,20 +76,21 @@ pub int autodrop_append(struct Stmt *self, int blk, int base, int *tail)
                alias declared beside it (`aux = 2` prints `, *__ct_own_N = name`)
                keeps every release on the symbol this entry was declared as. */
             self->arena->nodes[self->mem->own_decl[d]].aux = 2;
-            snprintf(self->arena->nodes[v].text2, MAX_TEXT, "__ct_own_%d", self->mem->own_decl[d]);
+            self->arena->nodes[v].text2 = runtime::text::ct_internf("__ct_own_%d", self->mem->own_decl[d]);
+            if (!self->arena->nodes[v].text2) return self->sup->fail("out of memory");
         } else {
-            snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[v].text2 = runtime::text::ct_intern(name);
+            if (!self->arena->nodes[v].text2) return self->sup->fail("out of memory");
         }
         self->arena->nodes[del].a = v;
         tp = self->arena->nodes[self->mem->own_decl[d]].text;
         if (strncmp(tp, "struct ", 7) == 0) tp += 7;
-        snprintf(self->arena->nodes[del].text, MAX_TEXT, "%s", tp);
-        bl = strlen(self->arena->nodes[del].text);
-        while (bl > 0 && (self->arena->nodes[del].text[bl - 1] == '*'
-                          || self->arena->nodes[del].text[bl - 1] == ' ')) {
-            bl = bl - 1;
-            self->arena->nodes[del].text[bl] = 0;
-        }
+        /* The pool text is immutable, so the trailing `*` / blank is trimmed
+           by taking a shorter slice, not by writing a NUL into the row. */
+        bl = strlen(tp);
+        while (bl > 0 && (tp[bl - 1] == '*' || tp[bl - 1] == ' ')) bl = bl - 1;
+        self->arena->nodes[del].text = runtime::text::ct_intern_len(tp, (int)bl);
+        if (!self->arena->nodes[del].text) return self->sup->fail("out of memory");
         if (*tail < 0) self->arena->nodes[blk].a = del;
         else self->arena->nodes[*tail].next = del;
         *tail = del;
@@ -169,7 +170,8 @@ impl StmtDeferOps for Stmt {
             if (self->arena->nodes[n].kind == N_VAR
                 && strcmp(self->arena->nodes[n].text2, "$") == 0
                 && strcmp(self->arena->nodes[n].text3, "range") != 0) {
-                snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
+                self->arena->nodes[n].text2 = runtime::text::ct_intern(name);
+                if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
             }
             if (self->arena->nodes[n].kind == N_DECL
                 && strcmp(self->arena->nodes[n].text2, name) == 0)

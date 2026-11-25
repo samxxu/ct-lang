@@ -4,6 +4,7 @@
 
 #line 1 "selfhost/ct-ast/runtime/text/Intern.h.ct"
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #define TEXT_LIMIT 65536
@@ -88,6 +89,7 @@ extern void U16String_Drop_drop(void *self);
 const char * runtime_text_ct_intern(const char *);
 const char * runtime_text_ct_intern_len(const char *, int);
 const char * runtime_text_ct_intern_join(const char *, const char *);
+const char * runtime_text_ct_internf(const char *, ...);
 void runtime_text_ct_intern_reset(void);
 static unsigned long ct_intern_hash(const char *, int);
 static int ct_intern_grow(void);
@@ -215,6 +217,31 @@ const char * runtime_text_ct_intern_join(const char * a, const char * b) {
     }
     buf[(la + lb)] = 0;
     v = runtime_text_ct_intern_len(buf, (int)((la + lb)));
+    free(buf);
+    return v;
+}
+const char * runtime_text_ct_internf(const char * fmt, ...) {
+    va_list ap;
+    int n;
+    char * buf;
+    const char * v;
+    if ((!fmt)) {
+        return (const char *)(0);
+    }
+    va_start(ap, fmt);
+    n = vsnprintf(0, 0, fmt, ap);
+    va_end(ap);
+    if (((n < 0) || (n > TEXT_LIMIT))) {
+        return (const char *)(0);
+    }
+    buf = (char *)(malloc(((size_t)(n) + 1)));
+    if ((!buf)) {
+        return (const char *)(0);
+    }
+    va_start(ap, fmt);
+    vsnprintf(buf, ((size_t)(n) + 1), fmt, ap);
+    va_end(ap);
+    v = runtime_text_ct_intern_len(buf, n);
     free(buf);
     return v;
 }

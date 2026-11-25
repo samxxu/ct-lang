@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "Intern.h"
+
 
 struct ct_buf;
 struct Str;
@@ -120,10 +122,10 @@ struct runtime_arena_Node {
     int line;
     long num;
     int attr;
-    char text[160];
-    char text2[160];
-    char text3[160];
-    char text4[160];
+    const char * text;
+    const char * text2;
+    const char * text3;
+    const char * text4;
     int sflags;
 };
 struct runtime_arena_OutConv {
@@ -132,8 +134,8 @@ struct runtime_arena_OutConv {
     int temp;
     int fwd;
     int writeback;
-    char formal[160];
-    char ret[160];
+    const char * formal;
+    const char * ret;
 };
 struct runtime_arena_Arena {
     struct runtime_arena_Node * nodes;

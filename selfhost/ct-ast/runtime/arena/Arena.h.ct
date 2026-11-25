@@ -12,6 +12,8 @@
  */
 #include <stdlib.h>
 #include <string.h>
+import runtime::text::Intern;
+
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_NODES 262144
 #define NODE_LIMIT 16777216
@@ -129,12 +131,18 @@ pub struct Node {
        otherwise the offset of its captured spelling in the string pool (the
        emitter prints it at the declaration's trailing position). */
     int  attr;
-    char text[160];
-    char text2[160];
-    char text3[160];
+    /* S1a-0 C2n-2: the four text rows are pointers into `runtime::text::Intern`,
+       not fixed `char[160]` arrays. A text is allocated once, deduplicated by
+       content and never moved, so a write is a pointer assignment and a row
+       copy is a pointer copy: no `strncpy`, no `sizeof` and no truncation at
+       the old 160-byte cap. `alloc` starts each row on the interned empty
+       string. */
+    const char *text;
+    const char *text2;
+    const char *text3;
     /* Phase 53: the receiver type of an optional-chain node, kept beside the
        result type so the emitter can declare its `__ct_optN` temporary. */
-    char text4[160];
+    const char *text4;
     /* PH-80 SH-102: the ownership facts the parser learned about a declaration,
        assignment or return that feeds an owning `String` / `U16String` handle.
        Bit 1 (2) = the value comes from a borrowed view, so a binding must not
@@ -164,10 +172,12 @@ pub struct OutConv {
     int  temp;       /* the `Formal temp` N_VAR between the two conversions */
     int  fwd;        /* actual -> formal conversion call */
     int  writeback;  /* `actual = temp -> actual` assignment node */
-    char formal[160];/* C spelling of the formal's base type */
-    char ret[160];   /* C spelling of the callee's result ('void' or empty) */
+    /* S1a-0 C2n-2: these two spellings are per-unit text, so they live in the
+       intern pool like the node rows (the old `char[160]` rows could cut a
+       long formal type). */
+    const char *formal;/* C spelling of the formal's base type */
+    const char *ret;   /* C spelling of the callee's result ('void' or empty) */
 }
-
 pub struct Arena {
     /* The two pools are calloc'd on first use (SH-42): as inline arrays in a
        file-scope `static` instance they put ~69 MB of zeroes into __DATA and
@@ -225,15 +235,21 @@ static int arena_grow_strpool(struct Arena *self)
 }
 
 impl ArenaOps for Arena {
-    /* A fresh node with every child slot cleared. `text3` is left alone: the
-       parser writes it before the emitter ever reads it. Overflow stays a hard
-       error -- the caller turns -1 into a diagnostic. */
+    /* A fresh node with every child slot cleared and every text row on the
+       interned empty string. The rows are pointers now: `text3` used to be
+       left uninitialised (the parser wrote it before the emitter read it), but
+       a pointer that a `!row` check reads must never be indeterminate, so all
+       four start empty. A NULL from `ct_intern` is the explicit OOM: roll the
+       slot back and report -1 so the caller's existing diagnostic fires. */
     int alloc(int kind, int line)
     {
         int n;
+        const char *empty;
         if (self->nnode >= NODE_LIMIT) return -1;
         if (arena_grow_nodes(self) != 0) return -1;
         n = self->nnode;
+        empty = runtime::text::ct_intern("");
+        if (!empty) return -1;
         self->nnode++;
         self->nodes[n].kind = kind;
         self->nodes[n].a = -1;
@@ -245,8 +261,10 @@ impl ArenaOps for Arena {
         self->nodes[n].line = line;
         self->nodes[n].num = 0;
         self->nodes[n].attr = -1;
-        self->nodes[n].text[0] = 0;
-        self->nodes[n].text2[0] = 0;
+        self->nodes[n].text = empty;
+        self->nodes[n].text2 = empty;
+        self->nodes[n].text3 = empty;
+        self->nodes[n].text4 = empty;
         return n;
     }
 

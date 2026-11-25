@@ -12,6 +12,7 @@
 
 #include "SymbolsTypeText.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Lexer.h"
 #include "Symbols.h"
 #include "Memory.h"

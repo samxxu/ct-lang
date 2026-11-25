@@ -336,9 +336,18 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self,
     _self->arena->nodes[m].aux = 1;
     _self->arena->nodes[m].line = line;
     _self->arena->nodes[m].num = col;
-    snprintf(_self->arena->nodes[m].text, MAX_TEXT, "%s", fname);
-    snprintf(_self->arena->nodes[m].text2, MAX_TEXT, "%s", fty);
-    snprintf(_self->arena->nodes[m].text4, MAX_TEXT, "%s", rty);
+    _self->arena->nodes[m].text = runtime_text_ct_intern(fname);
+    if ((!_self->arena->nodes[m].text)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->arena->nodes[m].text2 = runtime_text_ct_intern(fty);
+    if ((!_self->arena->nodes[m].text2)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->arena->nodes[m].text4 = runtime_text_ct_intern(rty);
+    if ((!_self->arena->nodes[m].text4)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     return m;
 }
 
@@ -377,7 +386,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_subscript(void *s
     _self->arena->nodes[m].b = idx;
     _self->arena->nodes[m].line = line;
     _self->arena->nodes[m].num = col;
-    snprintf(_self->arena->nodes[m].text4, MAX_TEXT, "%s", rty);
+    _self->arena->nodes[m].text4 = runtime_text_ct_intern(rty);
+    if ((!_self->arena->nodes[m].text4)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     if (((strncmp(base, "struct Map_", 11) == 0) && ((inst = frontend_sym_ct_inst_find((base + 7))) >= 0))) {
         ins = frontend_sym_ct_insts((&nins));
         if ((((!ins) || (inst >= nins)) || (ins[inst].nargs != 2))) {
@@ -385,15 +397,24 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_subscript(void *s
         }
         snprintf(rty2, sizeof(rty2), "%s *", ins[inst].ctype[1]);
         _self->arena->nodes[m].aux = 3;
-        snprintf(_self->arena->nodes[m].text, MAX_TEXT, "%s", (base + 7));
-        snprintf(_self->arena->nodes[m].text2, MAX_TEXT, "%s", rty2);
+        _self->arena->nodes[m].text = runtime_text_ct_intern((base + 7));
+        if ((!_self->arena->nodes[m].text)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->arena->nodes[m].text2 = runtime_text_ct_intern(rty2);
+        if ((!_self->arena->nodes[m].text2)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         return m;
     }
     if (_self->__frontend_parse_exproptional_vptr->opt_result_ok(_self, base, 1, line, col) != 0) {
         return (-1);
     }
     _self->arena->nodes[m].aux = 2;
-    snprintf(_self->arena->nodes[m].text2, MAX_TEXT, "%s", base);
+    _self->arena->nodes[m].text2 = runtime_text_ct_intern(base);
+    if ((!_self->arena->nodes[m].text2)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     return m;
 }
 

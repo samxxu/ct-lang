@@ -242,7 +242,8 @@ impl EmitHoist for Emitter {
             && self->arena->nodes[self->arena->nodes[n].a].kind != N_VAR) {
             if (self->nopt >= 8)
                 return self->fail_from(n, "too many optional-chain temporaries in one statement");
-            snprintf(self->arena->nodes[n].text3, MAX_TEXT, "__ct_opt%d", self->ntmp);
+            self->arena->nodes[n].text3 = runtime::text::ct_internf("__ct_opt%d", self->ntmp);
+            if (!self->arena->nodes[n].text3) return self->fail("out of memory");
             self->ntmp++;
             self->opt_nodes[self->nopt] = n;
             self->nopt++;
@@ -257,7 +258,8 @@ impl EmitHoist for Emitter {
                inner promotion is recorded (and numbered) first. */
             if (self->arena->nodes[n].a >= 0
                 && self->hoist_scan(self->arena->nodes[n].a, 0) != 0) return -1;
-            snprintf(self->arena->nodes[n].text3, MAX_TEXT, "__ct_recv%d", self->ntmp);
+            self->arena->nodes[n].text3 = runtime::text::ct_internf("__ct_recv%d", self->ntmp);
+            if (!self->arena->nodes[n].text3) return self->fail("out of memory");
             self->ntmp++;
             self->into_nodes[self->ninto] = n;
             self->ninto++;
@@ -339,8 +341,8 @@ impl EmitHoist for Emitter {
                         free(chain);
                         return -1;
                     }
-                    snprintf(self->arena->nodes[chain[i]].text3, MAX_TEXT,
-                             "__ct_tmp%d", self->ntmp);
+                    self->arena->nodes[chain[i]].text3 = runtime::text::ct_internf("__ct_tmp%d", self->ntmp);
+                    if (!self->arena->nodes[chain[i]].text3) return self->fail("out of memory");
                     self->ntmp++;
                     self->hoist_calls[self->nhoist] = chain[i];
                     self->nhoist++;

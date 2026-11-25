@@ -372,11 +372,14 @@ impl EmitInvariant for Emitter {
         (void)self;
 
         fault = getenv("CT_EMIT_INVARIANT_FAULT");
-        if (fault && strcmp(fault, "temp-missing") == 0 && self->nhoist > 0)
-            self->arena->nodes[self->hoist_calls[0]].text3[0] = 0;
-        if (fault && strcmp(fault, "temp-dup") == 0 && self->nhoist > 1)
-            snprintf(self->arena->nodes[self->hoist_calls[1]].text3, MAX_TEXT, "%s",
-                     self->arena->nodes[self->hoist_calls[0]].text3);
+        if (fault && strcmp(fault, "temp-missing") == 0 && self->nhoist > 0) {
+            self->arena->nodes[self->hoist_calls[0]].text3 = runtime::text::ct_intern("");
+            if (!self->arena->nodes[self->hoist_calls[0]].text3) return self->fail("out of memory");
+        }
+        if (fault && strcmp(fault, "temp-dup") == 0 && self->nhoist > 1) {
+            self->arena->nodes[self->hoist_calls[1]].text3 = runtime::text::ct_intern(self->arena->nodes[self->hoist_calls[0]].text3);
+            if (!self->arena->nodes[self->hoist_calls[1]].text3) return self->fail("out of memory");
+        }
         for (i = 0; i < self->nhoist; i++) {
             c = self->hoist_calls[i];
             if (!self->arena->nodes[c].text3[0])

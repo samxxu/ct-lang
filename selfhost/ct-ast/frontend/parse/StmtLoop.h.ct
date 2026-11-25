@@ -648,15 +648,18 @@ impl StmtLoop for Stmt {
                                             self->mem->path);
         }
         self->sup->pop_scope();
-        snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", elem);
+        self->arena->nodes[s].text = runtime::text::ct_intern(elem);
+        if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
         /* aux: 0 = array, 1 = Vec, 2 = Map; text2 names the container instance
            the emitter calls `len` / `get` / `entry` on. */
         self->arena->nodes[s].aux = aux;
-        if (aux == 3)
-            snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s",
-                     self->sym->vars[vi].cname);
+        if (aux == 3) {
+                self->arena->nodes[s].text2 = runtime::text::ct_intern(self->sym->vars[vi].cname);
+                if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
+        }
         else
-            snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", aux ? iname : "");
+            self->arena->nodes[s].text2 = runtime::text::ct_intern(aux ? iname : "");
+            if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
         self->arena->nodes[s].a = c;
         self->arena->nodes[s].d = body;
         return s;
@@ -807,8 +810,10 @@ impl StmtLoop for Stmt {
         if (is_vec) {
             /* non-empty `text2` is the emitter's marker for the literal +
                constructor form */
-            snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", elemtype);
-            snprintf(self->arena->nodes[e].text2, MAX_TEXT, "%s", iname);
+            self->arena->nodes[e].text = runtime::text::ct_intern(elemtype);
+            if (!self->arena->nodes[e].text) return self->sup->fail("out of memory");
+            self->arena->nodes[e].text2 = runtime::text::ct_intern(iname);
+            if (!self->arena->nodes[e].text2) return self->sup->fail("out of memory");
         }
         return e;
     }

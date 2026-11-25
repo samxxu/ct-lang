@@ -188,7 +188,7 @@ struct frontend_parse_StmtDeferOps_iface {
 };
 
 struct frontend_parse_LabelRow {
-    char name[160];
+    const char * name;
     int line;
     int depth;
     int path[256];
@@ -213,16 +213,16 @@ struct frontend_parse_Stmt {
     struct frontend_parse_LabelRow * gotos;
     int gotocap;
     int loop_depth;
-    char u_decl[48][160];
+    const char * u_decl[48];
     int u_dline[48];
     int nu;
-    char u_asg[48][160];
+    const char * u_asg[48];
     int na;
-    char u_rd[48][160];
+    const char * u_rd[48];
     int nr;
-    char u_addr[48][160];
+    const char * u_addr[48];
     int nx;
-    char del_names[64][160];
+    const char * del_names[64];
     int ndel;
     int foreach_depth;
     int break_base[256];
@@ -247,8 +247,8 @@ struct frontend_parse_Stmt {
     int yield_line[16];
     int yield_col[16];
     int yield_count[16];
-    char yield_type[16][160];
-    char last_yield_type[160];
+    const char * yield_type[16];
+    const char * last_yield_type;
     int last_yield_expr;
     int last_yield_line;
     int last_yield_col;

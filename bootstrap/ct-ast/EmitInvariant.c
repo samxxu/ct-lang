@@ -462,10 +462,16 @@ static int backend_emit_Emitter_backend_emit_EmitInvariant_invariant_temp_check(
     (void)(_self);
     fault = getenv("CT_EMIT_INVARIANT_FAULT");
     if (((fault && (strcmp(fault, "temp-missing") == 0)) && (_self->nhoist > 0))) {
-        _self->arena->nodes[_self->hoist_calls[0]].text3[0] = 0;
+        _self->arena->nodes[_self->hoist_calls[0]].text3 = runtime_text_ct_intern("");
+        if ((!_self->arena->nodes[_self->hoist_calls[0]].text3)) {
+            return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+        }
     }
     if (((fault && (strcmp(fault, "temp-dup") == 0)) && (_self->nhoist > 1))) {
-        snprintf(_self->arena->nodes[_self->hoist_calls[1]].text3, MAX_TEXT, "%s", _self->arena->nodes[_self->hoist_calls[0]].text3);
+        _self->arena->nodes[_self->hoist_calls[1]].text3 = runtime_text_ct_intern(_self->arena->nodes[_self->hoist_calls[0]].text3);
+        if ((!_self->arena->nodes[_self->hoist_calls[1]].text3)) {
+            return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+        }
     }
     for (i = 0; i < _self->nhoist; i++) {
         c = _self->hoist_calls[i];

@@ -936,8 +936,14 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
                 }
                 _self->arena->nodes[bnode].a = n;
                 _self->arena->nodes[bnode].aux = (mptr + (addr ? 2 : 0));
-                snprintf(_self->arena->nodes[bnode].text, MAX_TEXT, "%s", trait);
-                snprintf(_self->arena->nodes[bnode].text2, MAX_TEXT, "%s", (*_self->maps)[i].cname);
+                _self->arena->nodes[bnode].text = runtime_text_ct_intern(trait);
+                if ((!_self->arena->nodes[bnode].text)) {
+                    return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+                }
+                _self->arena->nodes[bnode].text2 = runtime_text_ct_intern((*_self->maps)[i].cname);
+                if ((!_self->arena->nodes[bnode].text2)) {
+                    return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+                }
                 return bnode;
             }
         }
@@ -1401,8 +1407,14 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
     }
     _self->arena->nodes[bnode].a = n;
     _self->arena->nodes[bnode].aux = (is_ptr + (addr ? 2 : 0));
-    snprintf(_self->arena->nodes[bnode].text, MAX_TEXT, "%s", trait);
-    snprintf(_self->arena->nodes[bnode].text2, MAX_TEXT, "%s", sname);
+    _self->arena->nodes[bnode].text = runtime_text_ct_intern(trait);
+    if ((!_self->arena->nodes[bnode].text)) {
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    _self->arena->nodes[bnode].text2 = runtime_text_ct_intern(sname);
+    if ((!_self->arena->nodes[bnode].text2)) {
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
     return bnode;
 }
 

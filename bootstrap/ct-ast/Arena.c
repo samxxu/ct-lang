@@ -2,6 +2,7 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include <stddef.h>
 #include "Arena.h"
+#include "Intern.h"
 
 #line 1 "selfhost/ct-ast/runtime/arena/Arena.h.ct"
 #include <stdlib.h>
@@ -94,6 +95,7 @@ static struct runtime_arena_Arena runtime_arena_g_arena = { .__runtime_arena_are
 static int runtime_arena_Arena_runtime_arena_ArenaOps_alloc(void *self, int kind, int line) {
     struct runtime_arena_Arena *_self = (struct runtime_arena_Arena *)self;
     int n;
+    const char * empty;
     if (_self->nnode >= NODE_LIMIT) {
         return (-1);
     }
@@ -101,6 +103,10 @@ static int runtime_arena_Arena_runtime_arena_ArenaOps_alloc(void *self, int kind
         return (-1);
     }
     n = _self->nnode;
+    empty = runtime_text_ct_intern("");
+    if ((!empty)) {
+        return (-1);
+    }
     _self->nnode++;
     _self->nodes[n].kind = kind;
     _self->nodes[n].a = (-1);
@@ -112,8 +118,10 @@ static int runtime_arena_Arena_runtime_arena_ArenaOps_alloc(void *self, int kind
     _self->nodes[n].line = line;
     _self->nodes[n].num = 0;
     _self->nodes[n].attr = (-1);
-    _self->nodes[n].text[0] = 0;
-    _self->nodes[n].text2[0] = 0;
+    _self->nodes[n].text = empty;
+    _self->nodes[n].text2 = empty;
+    _self->nodes[n].text3 = empty;
+    _self->nodes[n].text4 = empty;
     return n;
 }
 

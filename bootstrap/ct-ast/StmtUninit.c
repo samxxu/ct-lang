@@ -3,6 +3,7 @@
 #include "StmtUninit.h"
 #include "SymbolsTypeText.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Lexer.h"
 #include "Symbols.h"
 #include "Memory.h"
@@ -203,7 +204,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtUninit_del_take(void *self, co
         }
     }
     if (_self->ndel < 64) {
-        snprintf(_self->del_names[_self->ndel], 160, "%s", name);
+        _self->del_names[_self->ndel] = runtime_text_ct_intern(name);
+        if ((!_self->del_names[_self->ndel])) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->ndel = (_self->ndel + 1);
     }
     return 0;
@@ -220,25 +224,25 @@ static int frontend_parse_Stmt_frontend_parse_StmtUninit_u_reset(void *self) {
 
 static int frontend_parse_Stmt_frontend_parse_StmtUninit_u_add(void *self, int which, const char * s) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    char * names;
+    const char * * names;
     int * count;
     int i;
     if (which == 0) {
-        names = _self->u_decl[0];
+        names = _self->u_decl;
         count = (&_self->nu);
     }
     else {
         if (which == 1) {
-            names = _self->u_asg[0];
+            names = _self->u_asg;
             count = (&_self->na);
         }
         else {
             if (which == 2) {
-                names = _self->u_rd[0];
+                names = _self->u_rd;
                 count = (&_self->nr);
             }
             else {
-                names = _self->u_addr[0];
+                names = _self->u_addr;
                 count = (&_self->nx);
             }
         }
@@ -247,12 +251,15 @@ static int frontend_parse_Stmt_frontend_parse_StmtUninit_u_add(void *self, int w
         return 0;
     }
     for (i = 0; i < (*count); i++) {
-        if (strcmp((names + (i * 160)), s) == 0) {
+        if (strcmp(names[i], s) == 0) {
             return 0;
         }
     }
     if ((*count) < 48) {
-        snprintf((names + ((*count) * 160)), 160, "%s", s);
+        names[(*count)] = runtime_text_ct_intern(s);
+        if ((!names[(*count)])) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         (*count) = ((*count) + 1);
     }
     return 0;

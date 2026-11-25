@@ -245,7 +245,8 @@ impl StmtMatch for Stmt {
         self->sup->lex_next();
         s = self->sup->new_node(N_MATCH);
         if (s < 0) return -1;
-        snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", adts[adt].full);
+        self->arena->nodes[s].text = runtime::text::ct_intern(adts[adt].full);
+        if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
         self->arena->nodes[s].aux = is_ptr;
         self->arena->nodes[s].a = e;
         self->arena->nodes[s].line = line;
@@ -362,8 +363,8 @@ impl StmtMatch for Stmt {
                         }
                     w = self->sup->new_node(N_BIND);
                     if (w < 0) return -1;
-                    snprintf(self->arena->nodes[w].text, MAX_TEXT, "%s",
-                             bind_names + (size_t)nb * MAX_TEXT);
+                    self->arena->nodes[w].text = runtime::text::ct_intern(bind_names + (size_t)nb * MAX_TEXT);
+                    if (!self->arena->nodes[w].text) return self->sup->fail("out of memory");
                     if (first_bind < 0) first_bind = w;
                     else self->arena->nodes[last_bind].next = w;
                     last_bind = w;
@@ -386,10 +387,10 @@ impl StmtMatch for Stmt {
                 w = 0;
                 for (i = first_bind; i >= 0; i = self->arena->nodes[i].next, w++) {
                     int vi, decl, raw;
-                    snprintf(self->arena->nodes[i].text2, MAX_TEXT, "%s",
-                             adts[adt].variants[v].fields[w].type);
-                    snprintf(self->arena->nodes[i].text3, MAX_TEXT, "%s",
-                             adts[adt].variants[v].fields[w].name);
+                    self->arena->nodes[i].text2 = runtime::text::ct_intern(adts[adt].variants[v].fields[w].type);
+                    if (!self->arena->nodes[i].text2) return self->sup->fail("out of memory");
+                    self->arena->nodes[i].text3 = runtime::text::ct_intern(adts[adt].variants[v].fields[w].name);
+                    if (!self->arena->nodes[i].text3) return self->sup->fail("out of memory");
                     if (self->sym->declare_var(self->arena->nodes[i].text,
                                                self->arena->nodes[i].text2) != 0) {
                         self->sup->pop_scope();
@@ -403,10 +404,10 @@ impl StmtMatch for Stmt {
                         self->sup->pop_scope();
                         return -1;
                     }
-                    snprintf(self->arena->nodes[decl].text, MAX_TEXT, "%s",
-                             self->arena->nodes[i].text2);
-                    snprintf(self->arena->nodes[decl].text2, MAX_TEXT, "%s",
-                             self->arena->nodes[i].text);
+                    self->arena->nodes[decl].text = runtime::text::ct_intern(self->arena->nodes[i].text2);
+                    if (!self->arena->nodes[decl].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[decl].text2 = runtime::text::ct_intern(self->arena->nodes[i].text);
+                    if (!self->arena->nodes[decl].text2) return self->sup->fail("out of memory");
                     self->arena->nodes[decl].aux = 3;   /* unused marker */
                     self->arena->nodes[decl].a = raw;
                     self->arena->nodes[raw].aux = 0;
@@ -418,10 +419,12 @@ impl StmtMatch for Stmt {
                 if (body < 0) return -1;
                 arm = self->sup->new_node(N_ARM);
                 if (arm < 0) return -1;
-                snprintf(self->arena->nodes[arm].text, MAX_TEXT, "%s", vname);
-                snprintf(self->arena->nodes[arm].text2, MAX_TEXT, "%s",
-                         adts[adt].variants[v].cname);
-                snprintf(self->arena->nodes[arm].text3, MAX_TEXT, "%s", adts[adt].full);
+                self->arena->nodes[arm].text = runtime::text::ct_intern(vname);
+                if (!self->arena->nodes[arm].text) return self->sup->fail("out of memory");
+                self->arena->nodes[arm].text2 = runtime::text::ct_intern(adts[adt].variants[v].cname);
+                if (!self->arena->nodes[arm].text2) return self->sup->fail("out of memory");
+                self->arena->nodes[arm].text3 = runtime::text::ct_intern(adts[adt].full);
+                if (!self->arena->nodes[arm].text3) return self->sup->fail("out of memory");
                 self->arena->nodes[arm].num = v;
                 self->arena->nodes[arm].a = first_bind;
                 self->arena->nodes[arm].b = body;
@@ -578,7 +581,8 @@ impl StmtMatch for Stmt {
         self->sup->lex_next();
         s = self->sup->new_node(N_MATCH);
         if (s < 0) return -1;
-        snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", adts[adt].full);
+        self->arena->nodes[s].text = runtime::text::ct_intern(adts[adt].full);
+        if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
         self->arena->nodes[s].aux = is_ptr;
         self->arena->nodes[s].a = e;
         self->arena->nodes[s].line = line;
@@ -686,8 +690,8 @@ impl StmtMatch for Stmt {
                         }
                     w = self->sup->new_node(N_BIND);
                     if (w < 0) return -1;
-                    snprintf(self->arena->nodes[w].text, MAX_TEXT, "%s",
-                             bind_names + (size_t)nb * MAX_TEXT);
+                    self->arena->nodes[w].text = runtime::text::ct_intern(bind_names + (size_t)nb * MAX_TEXT);
+                    if (!self->arena->nodes[w].text) return self->sup->fail("out of memory");
                     if (first_bind < 0) first_bind = w;
                     else self->arena->nodes[last_bind].next = w;
                     last_bind = w;
@@ -716,10 +720,10 @@ impl StmtMatch for Stmt {
                 w = 0;
                 for (i = bind_head; i >= 0; i = self->arena->nodes[i].next, w++) {
                     int vi, decl, raw;
-                    snprintf(self->arena->nodes[i].text2, MAX_TEXT, "%s",
-                             adts[adt].variants[variant].fields[w].type);
-                    snprintf(self->arena->nodes[i].text3, MAX_TEXT, "%s",
-                             adts[adt].variants[variant].fields[w].name);
+                    self->arena->nodes[i].text2 = runtime::text::ct_intern(adts[adt].variants[variant].fields[w].type);
+                    if (!self->arena->nodes[i].text2) return self->sup->fail("out of memory");
+                    self->arena->nodes[i].text3 = runtime::text::ct_intern(adts[adt].variants[variant].fields[w].name);
+                    if (!self->arena->nodes[i].text3) return self->sup->fail("out of memory");
                     if (self->sym->declare_var(self->arena->nodes[i].text,
                                                self->arena->nodes[i].text2) != 0) {
                         self->sup->pop_scope();
@@ -733,10 +737,10 @@ impl StmtMatch for Stmt {
                         self->sup->pop_scope();
                         return -1;
                     }
-                    snprintf(self->arena->nodes[decl].text, MAX_TEXT, "%s",
-                             self->arena->nodes[i].text2);
-                    snprintf(self->arena->nodes[decl].text2, MAX_TEXT, "%s",
-                             self->arena->nodes[i].text);
+                    self->arena->nodes[decl].text = runtime::text::ct_intern(self->arena->nodes[i].text2);
+                    if (!self->arena->nodes[decl].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[decl].text2 = runtime::text::ct_intern(self->arena->nodes[i].text);
+                    if (!self->arena->nodes[decl].text2) return self->sup->fail("out of memory");
                     self->arena->nodes[decl].aux = 3;   /* unused marker */
                     self->arena->nodes[decl].a = raw;
                     self->arena->nodes[raw].aux = 0;
@@ -854,12 +858,14 @@ impl StmtMatch for Stmt {
                         if (variant >= 0) self->sup->pop_scope();
                         return -1;
                     }
-                    snprintf(self->arena->nodes[tv].text2, MAX_TEXT, "%s", "__ct_mres");
+                    self->arena->nodes[tv].text2 = runtime::text::ct_intern("__ct_mres");
+                    if (!self->arena->nodes[tv].text2) return self->sup->fail("out of memory");
                     self->arena->nodes[tv].line = yline;
                     self->arena->nodes[tv].num = ycol;
                     self->arena->nodes[asg].a = tv;
                     self->arena->nodes[asg].b = yexpr;
-                    snprintf(self->arena->nodes[asg].text, MAX_TEXT, "%s", ytype);
+                    self->arena->nodes[asg].text = runtime::text::ct_intern(ytype);
+                    if (!self->arena->nodes[asg].text) return self->sup->fail("out of memory");
                     self->arena->nodes[asg].line = yline;
                     self->arena->nodes[asg].num = ycol;
                     last = -1;
@@ -882,10 +888,12 @@ impl StmtMatch for Stmt {
             self->arena->nodes[arm].line = arm_line;
             self->arena->nodes[arm].num = (variant < 0) ? -1 : variant;
             if (variant >= 0) {
-                snprintf(self->arena->nodes[arm].text, MAX_TEXT, "%s", vname);
-                snprintf(self->arena->nodes[arm].text2, MAX_TEXT, "%s",
-                         adts[adt].variants[variant].cname);
-                snprintf(self->arena->nodes[arm].text3, MAX_TEXT, "%s", adts[adt].full);
+                self->arena->nodes[arm].text = runtime::text::ct_intern(vname);
+                if (!self->arena->nodes[arm].text) return self->sup->fail("out of memory");
+                self->arena->nodes[arm].text2 = runtime::text::ct_intern(adts[adt].variants[variant].cname);
+                if (!self->arena->nodes[arm].text2) return self->sup->fail("out of memory");
+                self->arena->nodes[arm].text3 = runtime::text::ct_intern(adts[adt].full);
+                if (!self->arena->nodes[arm].text3) return self->sup->fail("out of memory");
             }
             if (variant < 0) wild = arm;
             if (variant >= 0) self->sup->pop_scope();
@@ -909,7 +917,8 @@ impl StmtMatch for Stmt {
                 "an expression match needs at least one arm that yields a value",
                 self->mem->path);
         }
-        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", rtype);
+        self->arena->nodes[s].text2 = runtime::text::ct_intern(rtype);
+        if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
         if (wild < 0) {
             for (i = 0; i < adts[adt].nvariants; i++) {
                 if (covered[i]) continue;

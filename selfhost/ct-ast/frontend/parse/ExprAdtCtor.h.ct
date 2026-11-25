@@ -157,9 +157,12 @@ impl ExprAdt for Expr {
         }
         n = self->sup->new_node(N_ADTCTOR);
         if (n < 0) return -1;
-        snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", adts[adt].full);
-        snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", adts[adt].variants[v].cname);
-        snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", adts[adt].variants[v].name);
+        self->arena->nodes[n].text = runtime::text::ct_intern(adts[adt].full);
+        if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+        self->arena->nodes[n].text2 = runtime::text::ct_intern(adts[adt].variants[v].cname);
+        if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
+        self->arena->nodes[n].text3 = runtime::text::ct_intern(adts[adt].variants[v].name);
+        if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
         self->arena->nodes[n].num = v;
         self->arena->nodes[n].line = tline;
         self->arena->nodes[n].a = args;

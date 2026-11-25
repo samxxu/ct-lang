@@ -185,7 +185,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtDeferOps_trailing_alias(void *
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     for (; n >= 0; n = _self->arena->nodes[n].next) {
         if ((((_self->arena->nodes[n].kind == N_VAR) && (strcmp(_self->arena->nodes[n].text2, "$") == 0)) && (strcmp(_self->arena->nodes[n].text3, "range") != 0))) {
-            snprintf(_self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
+            _self->arena->nodes[n].text2 = runtime_text_ct_intern(name);
+            if ((!_self->arena->nodes[n].text2)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
         }
         if (((_self->arena->nodes[n].kind == N_DECL) && (strcmp(_self->arena->nodes[n].text2, name) == 0))) {
             return tool_diag_ct_sem_error(_self->arena->nodes[n].line, 1, "a trailing block cannot shadow the '$' name", _self->mem->path);
@@ -506,21 +509,29 @@ int frontend_parse_autodrop_append(struct frontend_parse_Stmt * self, int blk, i
         name = self->arena->nodes[self->mem->own_decl[d]].text2;
         if (((vi >= 0) && (self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, name) != vi))) {
             self->arena->nodes[self->mem->own_decl[d]].aux = 2;
-            snprintf(self->arena->nodes[v].text2, MAX_TEXT, "__ct_own_%d", self->mem->own_decl[d]);
+            self->arena->nodes[v].text2 = runtime_text_ct_internf("__ct_own_%d", self->mem->own_decl[d]);
+            if ((!self->arena->nodes[v].text2)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
         }
         else {
-            snprintf(self->arena->nodes[v].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[v].text2 = runtime_text_ct_intern(name);
+            if ((!self->arena->nodes[v].text2)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
         }
         self->arena->nodes[del].a = v;
         tp = self->arena->nodes[self->mem->own_decl[d]].text;
         if (strncmp(tp, "struct ", 7) == 0) {
             tp += 7;
         }
-        snprintf(self->arena->nodes[del].text, MAX_TEXT, "%s", tp);
-        bl = strlen(self->arena->nodes[del].text);
-        while (((bl > 0) && ((self->arena->nodes[del].text[(bl - 1)] == '*') || (self->arena->nodes[del].text[(bl - 1)] == ' ')))) {
+        bl = strlen(tp);
+        while (((bl > 0) && ((tp[(bl - 1)] == '*') || (tp[(bl - 1)] == ' ')))) {
             bl = (bl - 1);
-            self->arena->nodes[del].text[bl] = 0;
+        }
+        self->arena->nodes[del].text = runtime_text_ct_intern_len(tp, (int)(bl));
+        if ((!self->arena->nodes[del].text)) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
         }
         if ((*tail) < 0) {
             self->arena->nodes[blk].a = del;

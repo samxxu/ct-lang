@@ -262,9 +262,12 @@ impl ExprOptional for Expr {
         self->arena->nodes[m].aux = 1;
         self->arena->nodes[m].line = line;
         self->arena->nodes[m].num = col;
-        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", fname);
-        snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fty);
-        snprintf(self->arena->nodes[m].text4, MAX_TEXT, "%s", rty);
+        self->arena->nodes[m].text = runtime::text::ct_intern(fname);
+        if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+        self->arena->nodes[m].text2 = runtime::text::ct_intern(fty);
+        if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
+        self->arena->nodes[m].text4 = runtime::text::ct_intern(rty);
+        if (!self->arena->nodes[m].text4) return self->sup->fail("out of memory");
         return m;
     }
 
@@ -296,7 +299,8 @@ impl ExprOptional for Expr {
         self->arena->nodes[m].b = idx;
         self->arena->nodes[m].line = line;
         self->arena->nodes[m].num = col;
-        snprintf(self->arena->nodes[m].text4, MAX_TEXT, "%s", rty);
+        self->arena->nodes[m].text4 = runtime::text::ct_intern(rty);
+        if (!self->arena->nodes[m].text4) return self->sup->fail("out of memory");
         if (strncmp(base, "struct Map_", 11) == 0
             && (inst = frontend::sym::ct_inst_find(base + 7)) >= 0) {
             ins = frontend::sym::ct_insts(&nins);
@@ -304,13 +308,16 @@ impl ExprOptional for Expr {
                 return self->sup->fail("cannot resolve the Map value type");
             snprintf(rty2, sizeof rty2, "%s *", ins[inst].ctype[1]);
             self->arena->nodes[m].aux = 3;
-            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", base + 7);
-            snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", rty2);
+            self->arena->nodes[m].text = runtime::text::ct_intern(base + 7);
+            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+            self->arena->nodes[m].text2 = runtime::text::ct_intern(rty2);
+            if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
             return m;
         }
         if (self->opt_result_ok(base, 1, line, col) != 0) return -1;
         self->arena->nodes[m].aux = 2;
-        snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", base);
+        self->arena->nodes[m].text2 = runtime::text::ct_intern(base);
+        if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
         return m;
     }
 

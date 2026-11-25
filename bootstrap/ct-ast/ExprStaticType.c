@@ -363,7 +363,10 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_parse_array_dims(vo
             }
         }
         snprintf(cur, sizeof(cur), "%s%s", _self->arena->nodes[n].text3, dim);
-        snprintf(_self->arena->nodes[n].text3, MAX_TEXT, "%s", cur);
+        _self->arena->nodes[n].text3 = runtime_text_ct_intern(cur);
+        if ((!_self->arena->nodes[n].text3)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->arena->nodes[n].num = 0;
         if ((((unsized && (!warned)) && first_dim) && (!((_self->lex->tok == T_PUNCT) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "[") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "=")))))) {
             warned = 1;

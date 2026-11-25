@@ -1656,7 +1656,8 @@ impl ParseOps for Parser {
                     return self->sup->fail_at(self->lex->tokline, "#ct-endraw without #ct-raw");
                 n = self->sup->new_node(N_PP);
                 if (n < 0) return -1;
-                self->lex->tok_copy(self->arena->nodes[n].text, MAX_TEXT);
+                self->arena->nodes[n].text = runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len);
+                if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
                 if (self->append_node(prog, n) != 0) return -1;
                 self->sup->lex_next();
                 continue;
@@ -1874,16 +1875,20 @@ impl ParseOps for Parser {
             if (!cname) return self->sup->fail("out of memory");
             g = self->sup->new_node(N_GLOBAL);
             if (g < 0) return -1;
-            snprintf(self->arena->nodes[g].text, MAX_TEXT, "%s", ret);
-            snprintf(self->arena->nodes[g].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[g].text = runtime::text::ct_intern(ret);
+            if (!self->arena->nodes[g].text) return self->sup->fail("out of memory");
+            self->arena->nodes[g].text2 = runtime::text::ct_intern(name);
+            if (!self->arena->nodes[g].text2) return self->sup->fail("out of memory");
             self->arena->nodes[g].aux = is_static;
             self->arena->nodes[g].d = is_pub;
             self->arena->nodes[g].line = func_line;
             /* a file-scope name is visible to every function body */
             if (self->sym->declare_global(name, ret, cname, gns, 0) < 0)
                 return self->sup->fail(self->sym->last_error());
-            if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
-                snprintf(self->arena->nodes[g].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
+            if (self->ex->fnptr_state && self->ex->fnptr_dims[0]) {
+                    self->arena->nodes[g].text3 = runtime::text::ct_intern(self->ex->fnptr_dims);
+                    if (!self->arena->nodes[g].text3) return self->sup->fail("out of memory");
+            }
             {
                 int dim_line = self->lex->tokline;
                 int dim_col = self->lex->tokstart - self->lex->lstart + 1;
@@ -2115,15 +2120,19 @@ impl ParseOps for Parser {
             return -1;
         }
         self->sym->funcs[fi].body = f;
-        snprintf(self->arena->nodes[f].text, MAX_TEXT, "%s", ret);
+        self->arena->nodes[f].text = runtime::text::ct_intern(ret);
+        if (!self->arena->nodes[f].text) return self->sup->fail("out of memory");
         /* the C spelling only: `cur_func` and the map keep the short name */
-        snprintf(self->arena->nodes[f].text2, MAX_TEXT, "%s", self->sym->funcs[fi].cname);
+        self->arena->nodes[f].text2 = runtime::text::ct_intern(self->sym->funcs[fi].cname);
+        if (!self->arena->nodes[f].text2) return self->sup->fail("out of memory");
         self->arena->nodes[f].aux = is_generic ? 1 : is_static;
         self->arena->nodes[f].d = is_pub;
         self->arena->nodes[f].line = func_line;
         self->arena->nodes[f].attr = attr;
-        if (is_generic)
-            snprintf(self->arena->nodes[f].text3, MAX_TEXT, "%s", tparam);
+        if (is_generic) {
+                self->arena->nodes[f].text3 = runtime::text::ct_intern(tparam);
+                if (!self->arena->nodes[f].text3) return self->sup->fail("out of memory");
+        }
         self->arena->nodes[f].a = params;
         self->arena->nodes[f].b = b;
         self->arena->nodes[f].c = self->variadic;
@@ -2404,8 +2413,10 @@ impl ParseOps for Parser {
                 return self->sup->fail("function-pointer arrays are not supported as parameters");
             p = self->sup->new_node(N_PARAM);
             if (p < 0) return -1;
-            snprintf(self->arena->nodes[p].text, MAX_TEXT, "%s", typebuf);
-            snprintf(self->arena->nodes[p].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[p].text = runtime::text::ct_intern(typebuf);
+            if (!self->arena->nodes[p].text) return self->sup->fail("out of memory");
+            self->arena->nodes[p].text2 = runtime::text::ct_intern(name);
+            if (!self->arena->nodes[p].text2) return self->sup->fail("out of memory");
             if (seen_ref) self->arena->nodes[p].aux = 2;
             else if (seen_out) self->arena->nodes[p].aux = 3;
             if (self->ex->parse_array_dims(p) != 0) return -1;
@@ -2653,7 +2664,8 @@ impl ParseOps for Parser {
 
         m = self->sup->new_node(N_FIELD);
         if (m < 0) return -1;
-        self->lex->tok_copy(self->arena->nodes[m].text, MAX_TEXT);
+        self->arena->nodes[m].text = runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len);
+        if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
         self->arena->nodes[m].aux = 2;
         self->sup->lex_next();
         if (self->parse_record_body(m, 0) != 0) return -1;
@@ -2755,12 +2767,16 @@ impl ParseOps for Parser {
             }
             m = self->sup->new_node(N_FIELD);
             if (m < 0) return -1;
-            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", typebuf);
-            snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[m].text = runtime::text::ct_intern(typebuf);
+            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+            self->arena->nodes[m].text2 = runtime::text::ct_intern(name);
+            if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
             self->arena->nodes[m].d = self->field_pub;
             self->arena->nodes[m].num = self->field_col;
-            if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
-                snprintf(self->arena->nodes[m].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
+            if (self->ex->fnptr_state && self->ex->fnptr_dims[0]) {
+                    self->arena->nodes[m].text3 = runtime::text::ct_intern(self->ex->fnptr_dims);
+                    if (!self->arena->nodes[m].text3) return self->sup->fail("out of memory");
+            }
             if (self->ex->parse_array_dims(m) != 0) return -1;
             /* `int x __attribute__((aligned(8)));`: the attribute follows the
                declarator (and a bit-field's width is emitted before it) */
@@ -2803,7 +2819,8 @@ impl ParseOps for Parser {
         w = self->sup->new_node(N_FIELDS);
         if (w < 0) return -1;
         /* the wrapper carries the first declarator's spelling, stars included */
-        snprintf(self->arena->nodes[w].text, MAX_TEXT, "%s", firsttype);
+        self->arena->nodes[w].text = runtime::text::ct_intern(firsttype);
+        if (!self->arena->nodes[w].text) return self->sup->fail("out of memory");
         self->arena->nodes[w].a = head;
         return w;
     }
@@ -2966,7 +2983,8 @@ impl ParseOps for Parser {
         s = self->sup->new_node(kind);
         if (s < 0) return -1;
         self->arena->nodes[s].line = struct_line;
-        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", qname);
+        self->arena->nodes[s].text2 = runtime::text::ct_intern(qname);
+        if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
         self->npend = 0;
         /* the fields of this body (and of any anonymous member inside it) are
            registered under `cur_record`; an untagged body leaves it empty */
@@ -3153,7 +3171,8 @@ impl ParseOps for Parser {
             if (self->lex->tok != T_ID) return self->sup->fail("expected an enum member");
             tn = self->sup->new_node(N_ADTMEM);
             if (tn < 0) return -1;
-            self->lex->tok_copy(self->arena->nodes[tn].text, MAX_TEXT);
+            self->arena->nodes[tn].text = runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len);
+            if (!self->arena->nodes[tn].text) return self->sup->fail("out of memory");
             self->arena->nodes[tn].line = self->lex->tokline;
             self->arena->nodes[tn].num = self->lex->tokstart - self->lex->lstart + 1;
             self->arena->nodes[tn].aux = 0;         /* 1 = payload list */
@@ -3181,8 +3200,10 @@ impl ParseOps for Parser {
                             "an ADT payload field cannot have type 'void'", self->mem->path);
                     fld = self->sup->new_node(N_ADTFIELD);
                     if (fld < 0) return -1;
-                    snprintf(self->arena->nodes[fld].text, MAX_TEXT, "%s", ftype);
-                    snprintf(self->arena->nodes[fld].text2, MAX_TEXT, "%s", fname);
+                    self->arena->nodes[fld].text = runtime::text::ct_intern(ftype);
+                    if (!self->arena->nodes[fld].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[fld].text2 = runtime::text::ct_intern(fname);
+                    if (!self->arena->nodes[fld].text2) return self->sup->fail("out of memory");
                     self->arena->nodes[fld].line = fline;
                     self->arena->nodes[fld].num = fcol;
                     if (self->arena->nodes[tn].a < 0) self->arena->nodes[tn].a = fld;
@@ -3235,9 +3256,12 @@ impl ParseOps for Parser {
                 "an ADT needs a tag name (write `enum Shape { ... }`)", self->mem->path);
         s = self->sup->new_node(N_ENUM);
         if (s < 0) return -1;
-        snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", name);
-        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", qname);
-        snprintf(self->arena->nodes[s].text3, MAX_TEXT, "%s", "");
+        self->arena->nodes[s].text = runtime::text::ct_intern(name);
+        if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
+        self->arena->nodes[s].text2 = runtime::text::ct_intern(qname);
+        if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
+        self->arena->nodes[s].text3 = runtime::text::ct_intern("");
+        if (!self->arena->nodes[s].text3) return self->sup->fail("out of memory");
         self->arena->nodes[s].d = is_pub;
         if (name[0]) {
             /* the pre-scan and the real member list must agree; if they ever
@@ -3332,8 +3356,10 @@ impl ParseOps for Parser {
             if (self->sup->ns_decl_name(mname, cname, sizeof cname) != 0) return -1;
             m = self->sup->new_node(N_ENUMVAL);
             if (m < 0) return -1;
-            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", cname);
-            snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", mname);
+            self->arena->nodes[m].text = runtime::text::ct_intern(cname);
+            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+            self->arena->nodes[m].text2 = runtime::text::ct_intern(mname);
+            if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
             self->arena->nodes[m].line = self->arena->nodes[tn].line;
             if (self->sym->declare_const(mname, cname, nsbuf, 0) < 0)
                 return self->sup->fail(self->sym->last_error());
@@ -3392,9 +3418,12 @@ impl ParseOps for Parser {
                 adi = (int)self->arena->nodes[t].num - 1;
                 if (adts && adi >= 0 && adi < nadts) adts[adi].is_pub = is_pub;
             }
-            snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", name);
-            snprintf(self->arena->nodes[t].text3, MAX_TEXT, "%s", self->arena->nodes[t].text2);
-            snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", qname);
+            self->arena->nodes[t].text = runtime::text::ct_intern(name);
+            if (!self->arena->nodes[t].text) return self->sup->fail("out of memory");
+            self->arena->nodes[t].text3 = runtime::text::ct_intern(self->arena->nodes[t].text2);
+            if (!self->arena->nodes[t].text3) return self->sup->fail("out of memory");
+            self->arena->nodes[t].text2 = runtime::text::ct_intern(qname);
+            if (!self->arena->nodes[t].text2) return self->sup->fail("out of memory");
             self->arena->nodes[t].d = is_pub;
             self->arena->nodes[t].line = td_line;
             if (self->sup->add_type(qname, 2) != 0) return -1;
@@ -3433,8 +3462,10 @@ impl ParseOps for Parser {
             if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
             /* keep the tag in `text`: `typedef struct Tag {...} Alias;` must emit
                the tag, or a `struct Tag` reference elsewhere is incomplete */
-            snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", self->arena->nodes[t].text2);
-            snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", qname);
+            self->arena->nodes[t].text = runtime::text::ct_intern(self->arena->nodes[t].text2);
+            if (!self->arena->nodes[t].text) return self->sup->fail("out of memory");
+            self->arena->nodes[t].text2 = runtime::text::ct_intern(qname);
+            if (!self->arena->nodes[t].text2) return self->sup->fail("out of memory");
             self->arena->nodes[t].aux = 1;
             self->arena->nodes[t].d = is_pub;
             self->arena->nodes[t].line = td_line;
@@ -3519,9 +3550,12 @@ impl ParseOps for Parser {
         t = self->sup->new_node(N_TYPEDEF);
         if (t < 0) return -1;
         if (ao >= 0) self->arena->nodes[t].attr = ao;
-        snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", typebuf);
-        snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", qname);
-        snprintf(self->arena->nodes[t].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
+        self->arena->nodes[t].text = runtime::text::ct_intern(typebuf);
+        if (!self->arena->nodes[t].text) return self->sup->fail("out of memory");
+        self->arena->nodes[t].text2 = runtime::text::ct_intern(qname);
+        if (!self->arena->nodes[t].text2) return self->sup->fail("out of memory");
+        self->arena->nodes[t].text3 = runtime::text::ct_intern(self->ex->fnptr_dims);
+        if (!self->arena->nodes[t].text3) return self->sup->fail("out of memory");
         self->arena->nodes[t].d = is_pub;
         self->arena->nodes[t].line = td_line;
         /* kind 4 marks a function-pointer alias: the type string alone is the
@@ -3873,8 +3907,10 @@ impl ParseOps for Parser {
                         int sp;
                         sp = self->sup->new_node(N_PARAM);
                         if (sp < 0) return -1;
-                        snprintf(self->arena->nodes[sp].text, MAX_TEXT, "%s", ptype);
-                        snprintf(self->arena->nodes[sp].text2, MAX_TEXT, "%s", pname);
+                        self->arena->nodes[sp].text = runtime::text::ct_intern(ptype);
+                        if (!self->arena->nodes[sp].text) return self->sup->fail("out of memory");
+                        self->arena->nodes[sp].text2 = runtime::text::ct_intern(pname);
+                        if (!self->arena->nodes[sp].text2) return self->sup->fail("out of memory");
                         if (self->ex->parse_array_dims(sp) != 0) return -1;
                         if (self->arena->nodes[sp].text3[0])
                             snprintf(ptype + strlen(ptype),
@@ -4113,10 +4149,13 @@ impl ParseOps for Parser {
         node = self->sup->new_node(N_IMPL);
         if (node < 0) return -1;
         self->arena->nodes[node].line = impl_line;
-        snprintf(self->arena->nodes[node].text2, MAX_TEXT, "%s", rtrait);
+        self->arena->nodes[node].text2 = runtime::text::ct_intern(rtrait);
+        if (!self->arena->nodes[node].text2) return self->sup->fail("out of memory");
         self->arena->nodes[node].aux = si;
-        snprintf(self->arena->nodes[node].text, MAX_TEXT, "%s", stype);
-        snprintf(self->arena->nodes[node].text3, MAX_TEXT, "%s", self->mem->path);
+        self->arena->nodes[node].text = runtime::text::ct_intern(stype);
+        if (!self->arena->nodes[node].text) return self->sup->fail("out of memory");
+        self->arena->nodes[node].text3 = runtime::text::ct_intern(self->mem->path);
+        if (!self->arena->nodes[node].text3) return self->sup->fail("out of memory");
         tail = -1;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             mline = self->lex->tokline;
@@ -4261,13 +4300,17 @@ impl ParseOps for Parser {
             self->sup->pop_scope();
             mnode = self->sup->new_node(N_METHOD);
             if (mnode < 0) return -1;
-            snprintf(self->arena->nodes[mnode].text, MAX_TEXT, "%s", ret);
-            snprintf(self->arena->nodes[mnode].text2, MAX_TEXT, "%s", mname);
+            self->arena->nodes[mnode].text = runtime::text::ct_intern(ret);
+            if (!self->arena->nodes[mnode].text) return self->sup->fail("out of memory");
+            self->arena->nodes[mnode].text2 = runtime::text::ct_intern(mname);
+            if (!self->arena->nodes[mnode].text2) return self->sup->fail("out of memory");
             /* The emitted function takes the trait's return type (L2 does the
                same), so a mismatching impl still yields C that compiles; the
                map keeps the impl's written type in `text`. */
-            if (ti >= 0 && tm_i < self->sym->traits[ti].nm)
-                snprintf(self->arena->nodes[mnode].text3, MAX_TEXT, "%s", self->sym->traits[ti].m[tm_i].ret);
+            if (ti >= 0 && tm_i < self->sym->traits[ti].nm) {
+                    self->arena->nodes[mnode].text3 = runtime::text::ct_intern(self->sym->traits[ti].m[tm_i].ret);
+                    if (!self->arena->nodes[mnode].text3) return self->sup->fail("out of memory");
+            }
             self->arena->nodes[mnode].a = params;
             self->arena->nodes[mnode].b = body;
             self->arena->nodes[mnode].num = ti;
@@ -4355,10 +4398,13 @@ impl ParseOps for Parser {
         node = self->sup->new_node(N_IMPL);
         if (node < 0) return -1;
         self->arena->nodes[node].line = impl_line;
-        snprintf(self->arena->nodes[node].text, MAX_TEXT, "%s", stype);
-        self->arena->nodes[node].text2[0] = 0;   /* inherent: no trait */
+        self->arena->nodes[node].text = runtime::text::ct_intern(stype);
+        if (!self->arena->nodes[node].text) return self->sup->fail("out of memory");
+        self->arena->nodes[node].text2 = runtime::text::ct_intern("");   /* inherent: no trait */
+        if (!self->arena->nodes[node].text2) return self->sup->fail("out of memory");
         self->arena->nodes[node].aux = si;
-        snprintf(self->arena->nodes[node].text3, MAX_TEXT, "%s", self->mem->path);
+        self->arena->nodes[node].text3 = runtime::text::ct_intern(self->mem->path);
+        if (!self->arena->nodes[node].text3) return self->sup->fail("out of memory");
         tail = -1;
         while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             mline = self->lex->tokline;
@@ -4458,8 +4504,10 @@ impl ParseOps for Parser {
             (void)mline;
             mnode = self->sup->new_node(N_METHOD);
             if (mnode < 0) return -1;
-            snprintf(self->arena->nodes[mnode].text, MAX_TEXT, "%s", ret);
-            snprintf(self->arena->nodes[mnode].text2, MAX_TEXT, "%s", mname);
+            self->arena->nodes[mnode].text = runtime::text::ct_intern(ret);
+            if (!self->arena->nodes[mnode].text) return self->sup->fail("out of memory");
+            self->arena->nodes[mnode].text2 = runtime::text::ct_intern(mname);
+            if (!self->arena->nodes[mnode].text2) return self->sup->fail("out of memory");
             self->arena->nodes[mnode].a = params;
             self->arena->nodes[mnode].b = body;
             self->arena->nodes[mnode].num = -1;   /* no trait */
@@ -4685,9 +4733,12 @@ impl ParseOps for Parser {
         node = self->sup->new_node(N_IMPL);
         if (node < 0) return -1;
         self->arena->nodes[node].line = line;
-        snprintf(self->arena->nodes[node].text, MAX_TEXT, "%s", tmpl);
-        snprintf(self->arena->nodes[node].text2, MAX_TEXT, "%s", use);
-        snprintf(self->arena->nodes[node].text3, MAX_TEXT, "%s", self->mem->path);
+        self->arena->nodes[node].text = runtime::text::ct_intern(tmpl);
+        if (!self->arena->nodes[node].text) return self->sup->fail("out of memory");
+        self->arena->nodes[node].text2 = runtime::text::ct_intern(use);
+        if (!self->arena->nodes[node].text2) return self->sup->fail("out of memory");
+        self->arena->nodes[node].text3 = runtime::text::ct_intern(self->mem->path);
+        if (!self->arena->nodes[node].text3) return self->sup->fail("out of memory");
         self->arena->nodes[node].aux = -1;   /* no struct row: this is a template */
         self->arena->nodes[node].num = frontend::sym::ct_impl_add(tmpl, nt, tn,
                                                                  nargs, pat, use,
@@ -4855,8 +4906,10 @@ impl ParseOps for Parser {
             (void)mline;
             mnode = self->sup->new_node(N_METHOD);
             if (mnode < 0) return -1;
-            snprintf(self->arena->nodes[mnode].text, MAX_TEXT, "%s", ret);
-            snprintf(self->arena->nodes[mnode].text2, MAX_TEXT, "%s", mname);
+            self->arena->nodes[mnode].text = runtime::text::ct_intern(ret);
+            if (!self->arena->nodes[mnode].text) return self->sup->fail("out of memory");
+            self->arena->nodes[mnode].text2 = runtime::text::ct_intern(mname);
+            if (!self->arena->nodes[mnode].text2) return self->sup->fail("out of memory");
             self->arena->nodes[mnode].a = params;
             self->arena->nodes[mnode].b = body;
             self->arena->nodes[mnode].num = ti;

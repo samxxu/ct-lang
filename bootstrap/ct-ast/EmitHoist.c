@@ -270,7 +270,10 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_hoist_scan(void *self, in
         if (_self->nopt >= 8) {
             return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "too many optional-chain temporaries in one statement");
         }
-        snprintf(_self->arena->nodes[n].text3, MAX_TEXT, "__ct_opt%d", _self->ntmp);
+        _self->arena->nodes[n].text3 = runtime_text_ct_internf("__ct_opt%d", _self->ntmp);
+        if ((!_self->arena->nodes[n].text3)) {
+            return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+        }
         _self->ntmp++;
         _self->opt_nodes[_self->nopt] = n;
         _self->nopt++;
@@ -282,7 +285,10 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_hoist_scan(void *self, in
         if (((_self->arena->nodes[n].a >= 0) && (_self->__backend_emit_emithoist_vptr->hoist_scan(_self, _self->arena->nodes[n].a, 0) != 0))) {
             return (-1);
         }
-        snprintf(_self->arena->nodes[n].text3, MAX_TEXT, "__ct_recv%d", _self->ntmp);
+        _self->arena->nodes[n].text3 = runtime_text_ct_internf("__ct_recv%d", _self->ntmp);
+        if ((!_self->arena->nodes[n].text3)) {
+            return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+        }
         _self->ntmp++;
         _self->into_nodes[_self->ninto] = n;
         _self->ninto++;
@@ -351,7 +357,10 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_hoist_scan(void *self, in
                     free(chain);
                     return (-1);
                 }
-                snprintf(_self->arena->nodes[chain[i]].text3, MAX_TEXT, "__ct_tmp%d", _self->ntmp);
+                _self->arena->nodes[chain[i]].text3 = runtime_text_ct_internf("__ct_tmp%d", _self->ntmp);
+                if ((!_self->arena->nodes[chain[i]].text3)) {
+                    return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+                }
                 _self->ntmp++;
                 _self->hoist_calls[_self->nhoist] = chain[i];
                 _self->nhoist++;

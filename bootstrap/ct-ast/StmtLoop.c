@@ -537,13 +537,22 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
         return tool_diag_ct_sem_error(_self->arena->nodes[nd].line, 1, msg, _self->mem->path);
     }
     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-    snprintf(_self->arena->nodes[s].text, MAX_TEXT, "%s", elem);
+    _self->arena->nodes[s].text = runtime_text_ct_intern(elem);
+    if ((!_self->arena->nodes[s].text)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->arena->nodes[s].aux = aux;
     if (aux == 3) {
-        snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "%s", _self->sym->vars[vi].cname);
+        _self->arena->nodes[s].text2 = runtime_text_ct_intern(_self->sym->vars[vi].cname);
+        if ((!_self->arena->nodes[s].text2)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
     }
     else {
-        snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "%s", (aux ? iname : ""));
+        _self->arena->nodes[s].text2 = runtime_text_ct_intern((aux ? iname : ""));
+    }
+    if ((!_self->arena->nodes[s].text2)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     _self->arena->nodes[s].a = c;
     _self->arena->nodes[s].d = body;
@@ -717,8 +726,14 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_range_init(void *se
     _self->arena->nodes[e].aux = (int)(cnt);
     _self->arena->nodes[e].line = line;
     if (is_vec) {
-        snprintf(_self->arena->nodes[e].text, MAX_TEXT, "%s", elemtype);
-        snprintf(_self->arena->nodes[e].text2, MAX_TEXT, "%s", iname);
+        _self->arena->nodes[e].text = runtime_text_ct_intern(elemtype);
+        if ((!_self->arena->nodes[e].text)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->arena->nodes[e].text2 = runtime_text_ct_intern(iname);
+        if ((!_self->arena->nodes[e].text2)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
     }
     return e;
 }

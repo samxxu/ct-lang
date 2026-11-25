@@ -26,6 +26,7 @@
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -51,6 +52,13 @@ pub const char *ct_intern_len(const char *s, int len);
    scratch buffer and a name longer than the old 160-byte row is kept whole.
    Returns NULL on OOM or when the joined text passes `TEXT_LIMIT`. */
 pub const char *ct_intern_join(const char *a, const char *b);
+/* Format into a temporary block and intern the result. The size pass
+   (`vsnprintf(NULL, 0, ...)`) makes the block exactly as large as the text, so
+   nothing is truncated at the old 160-byte row; a format longer than
+   `TEXT_LIMIT` returns NULL and is not inserted. This is the one write helper
+   for a `Node.text*` field: `snprintf(row, MAX_TEXT, ...)` became
+   `row = ct_internf(...)`, and a NULL is the caller's explicit OOM. */
+pub const char *ct_internf(const char *fmt, ...);
 /* Release every interned text and the table. Pointers handed out before the
    call are dangling afterwards; no caller may hold one across a reset. */
 pub void ct_intern_reset(void);
@@ -174,6 +182,28 @@ const char *ct_intern_join(const char *a, const char *b)
     if (lb > 0) memcpy(buf + la, b, lb);
     buf[la + lb] = 0;
     v = ct_intern_len(buf, (int)(la + lb));
+    free(buf);
+    return v;
+}
+
+const char *ct_internf(const char *fmt, ...)
+{
+    va_list ap;
+    int n;
+    char *buf;
+    const char *v;
+
+    if (!fmt) return (const char *)0;
+    va_start(ap, fmt);
+    n = vsnprintf(0, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0 || n > TEXT_LIMIT) return (const char *)0;
+    buf = (char *)malloc((size_t)n + 1);
+    if (!buf) return (const char *)0;
+    va_start(ap, fmt);
+    vsnprintf(buf, (size_t)n + 1, fmt, ap);
+    va_end(ap);
+    v = ct_intern_len(buf, n);
     free(buf);
     return v;
 }

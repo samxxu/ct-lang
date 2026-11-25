@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10154 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10155 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=66061 io_cap=1024
+     emitted_before=48223 emitted_after=66767 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -234,7 +234,7 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
 | --- | --- | --- | --- |
 | 1 | **不同 callee 名上限 512**：`Expr` 的 `io_names[512]` 记录全程序直接调用的源名，76 个切片把 ct-ast 自己的树推过上限（`too many distinct calls`，落在 `Pkg.h.ct`） | `ct-ast` 编译自己失败，自举链断 | 容量按 v0-PH-88 提到 1024（`io_names`/`io_owner`/`io_known`/`io_line` 与检查式），**只在 ct-ast 内部**；诊断文本不变，只是触发点后移 |
 | 2 | 宏不跨单元：`io_names` 的维度写进 `Expr.h`，`#define` 只进 `Expr.c` | 用 `MAX_IO_CALLS` 宏时生成 C 报 `undeclared identifier` | 维度写死字面量 1024，检查式同数；注释说明原因 |
-| 3 | `MAX_FUNCS` 是整程序顶层函数预算（512）；76 个新 free function 后 425 → 501 | 再切一批（>11 个函数）会撞顶 | 实测定量；下一相先复算 501/512；已登记为遗留约束 |
+| 3 | `MAX_FUNCS` 曾是整程序顶层函数预算（512）；76 个新 free function 后 425 → 501 | 再切一批（>11 个函数）会撞顶 | SH-109 已把该表动态化（初值 512、安全阀 `MAX_FUNCS_MAX` 65536）；C2n-2 在同一单元只新增 `ct_internf` 这 1 个顶层 helper，表按需增长，不再是硬顶。历史 501/512 数字保留作对照 |
 | 4 | `emit_node` 的 `N_DECL` 前处理**不返回**：它处理完后落回表达式语句支（`N_DECL` 也在该支的条件里） | 直接搬成函数会把原本的 fall-through 变成"已处理"，语义改变 | 该切片用三态：返回 `2` = 继续判别，其余返回值原样透传；判别处 `if (r != 2) return r;`。这是唯一一个 fall-through 支（脚本与探针均核对） |
 | 5 | 方法体里的 `self` 在发射 C 中拼作 `_self`；切片是自由函数，`self` 是普通参数 | 如果切片签名写成方法会撞 `MAX_METHODS` 且改 vtable | 自由函数 + 显式 `struct Emitter *self` 参数；ABI/命名契约不变 |
 | 6 | `String` 拼接/可增长 buffer **在本切片不适用** | 发射器是流式的：`self->out` 是 `FILE *`，逐 token `fputs/fprintf`，没有"先拼整行再写"的路径；剩余固定缓冲都受 `MAX_TEXT`=160 与 `header_guard(cap)` 的契约约束 | 不改：引入 `lib/std` 的 `String` 会给引导编译器增加一次分配器依赖与第二份 String 实现，收益为零（R88-3 的"必要时局部保留 buffer"）；登记为未覆盖项，供 M1/v1.1 复核 |
@@ -273,4 +273,5 @@ spike 只切一个方法，v0-PH-88 切 5 个判别函数并新增了"漏一个 
    **v1.0 seed cutover（`v1-PH-0`）**，届时把 76 个切片机械改成「一 kind 一臂，
    共用体调同一 helper」（v0-PH-84 无 or 模式）。
 2. `String`/可增长 buffer 见 §4 第 6 条：判定不适用，未改。
-3. `MAX_FUNCS` 余量 11 个顶层函数（501/512）：下一批切片前必须复算，不得静默撞顶。
+3. `MAX_FUNCS` 已按 SH-109 动态化（初值 512 / 安全阀 65536），历史余量 11（501/512）
+   不再是硬顶；C2n-2 的 `ct_internf` 是唯一新增的顶层 helper，容量按需增长。

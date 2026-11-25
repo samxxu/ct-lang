@@ -16,6 +16,7 @@
 
 import frontend::sym::SymbolsTypeText;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import runtime::arena::Arena::Node as Node;
 import frontend::lex::Lexer;
 import frontend::sym::Symbols;
@@ -136,7 +137,8 @@ impl StmtUninit for Stmt {
         return -1;
     }
 
-    /* 1 = this name was already deleted in the function (double release). */
+    /* 1 = this name was already deleted in the function (double release);
+       -1 = the intern pool refused the row (OOM). */
     int del_take(const char *name)
     {
         int i;
@@ -144,7 +146,8 @@ impl StmtUninit for Stmt {
         for (i = 0; i < self->ndel; i++)
             if (strcmp(self->del_names[i], name) == 0) return 1;
         if (self->ndel < 64) {
-            snprintf(self->del_names[self->ndel], 160, "%s", name);
+            self->del_names[self->ndel] = runtime::text::ct_intern(name);
+            if (!self->del_names[self->ndel]) return self->sup->fail("out of memory");
             self->ndel = self->ndel + 1;
         }
         return 0;
@@ -159,22 +162,25 @@ impl StmtUninit for Stmt {
         return 0;
     }
 
-    /* which: 0 decl, 1 assigned, 2 read, 3 address-taken */
+    /* which: 0 decl, 1 assigned, 2 read, 3 address-taken. Each row is one
+       interned text now, so the table is a pointer array, not a flattened
+       `char[48][160]` block. */
     int u_add(int which, const char *s)
     {
-        char *names;
+        const char **names;
         int *count;
         int i;
 
-        if (which == 0) { names = self->u_decl[0]; count = &self->nu; }
-        else if (which == 1) { names = self->u_asg[0]; count = &self->na; }
-        else if (which == 2) { names = self->u_rd[0]; count = &self->nr; }
-        else { names = self->u_addr[0]; count = &self->nx; }
+        if (which == 0) { names = self->u_decl; count = &self->nu; }
+        else if (which == 1) { names = self->u_asg; count = &self->na; }
+        else if (which == 2) { names = self->u_rd; count = &self->nr; }
+        else { names = self->u_addr; count = &self->nx; }
         if (!s || !s[0]) return 0;
         for (i = 0; i < *count; i++)
-            if (strcmp(names + i * 160, s) == 0) return 0;
+            if (strcmp(names[i], s) == 0) return 0;
         if (*count < 48) {
-            snprintf(names + (*count) * 160, 160, "%s", s);
+            names[*count] = runtime::text::ct_intern(s);
+            if (!names[*count]) return self->sup->fail("out of memory");
             *count = *count + 1;
         }
         return 0;

@@ -864,8 +864,10 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
             }
             t = self->sup->new_node(N_VAR);
             if (t < 0) return -1;
-            snprintf(self->arena->nodes[t].text, MAX_TEXT, "%s", ft);
-            snprintf(self->arena->nodes[t].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[t].text = runtime::text::ct_intern(ft);
+            if (!self->arena->nodes[t].text) return self->sup->fail("out of memory");
+            self->arena->nodes[t].text2 = runtime::text::ct_intern(name);
+            if (!self->arena->nodes[t].text2) return self->sup->fail("out of memory");
             self->arena->nodes[t].line = line;
             self->arena->nodes[t].num = col;
             if (self->sym->declare_var(name, ft) != 0) return -1;
@@ -884,12 +886,12 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
             self->arena->outconv[self->arena->noutconv].temp = t;
             self->arena->outconv[self->arena->noutconv].fwd = fwd;
             self->arena->outconv[self->arena->noutconv].writeback = wb;
-            snprintf(self->arena->outconv[self->arena->noutconv].formal,
-                     sizeof self->arena->outconv[self->arena->noutconv].formal,
-                     "%s", ft);
-            snprintf(self->arena->outconv[self->arena->noutconv].ret,
-                     sizeof self->arena->outconv[self->arena->noutconv].ret,
-                     "%s", ret);
+            self->arena->outconv[self->arena->noutconv].formal = runtime::text::ct_intern(ft);
+            if (!self->arena->outconv[self->arena->noutconv].formal)
+                return self->sup->fail("out of memory");
+            self->arena->outconv[self->arena->noutconv].ret = runtime::text::ct_intern(ret);
+            if (!self->arena->outconv[self->arena->noutconv].ret)
+                return self->sup->fail("out of memory");
             self->arena->noutconv++;
             if (prev < 0) args = t;
             else self->arena->nodes[prev].next = t;
@@ -1374,11 +1376,13 @@ impl ExprOps for Expr {
         self->arena->nodes[n].aux = cat;
         self->arena->nodes[n].line = line;
         self->arena->nodes[n].num = col;
-        snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", type);
+        self->arena->nodes[n].text = runtime::text::ct_intern(type);
+        if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
         selfn = self->sup->new_node(N_INTO_SELF);
         if (selfn < 0) return -1;
         self->arena->nodes[selfn].num = n;
-        snprintf(self->arena->nodes[selfn].text, MAX_TEXT, "%s", type);
+        self->arena->nodes[selfn].text = runtime::text::ct_intern(type);
+        if (!self->arena->nodes[selfn].text) return self->sup->fail("out of memory");
         save = self->into_node;
         self->into_node = n;
         blk = self->st_hook(0, 0);
@@ -1626,7 +1630,8 @@ impl ExprOps for Expr {
                 if (self->sup->expect(")") != 0) return -1;
                 n = self->sup->new_node(N_SIZEOF);
                 if (n < 0) return -1;
-                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+                self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
+                if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
                 self->arena->nodes[n].aux = kind;
                 return n;
             }
@@ -1642,7 +1647,8 @@ impl ExprOps for Expr {
                 if (rc != 0) return -1;
                 n = self->sup->new_node(N_SIZEOF);
                 if (n < 0) return -1;
-                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+                self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
+                if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
                 self->arena->nodes[n].aux = kind;
                 return n;
             }
@@ -1702,7 +1708,8 @@ impl ExprOps for Expr {
                 self->arena->nodes[rn].aux = 1;
                 cn = self->sup->new_node(N_COMPOUND);
                 if (cn < 0) return -1;
-                snprintf(self->arena->nodes[cn].text, MAX_TEXT, "%s", tbuf);
+                self->arena->nodes[cn].text = runtime::text::ct_intern(tbuf);
+                if (!self->arena->nodes[cn].text) return self->sup->fail("out of memory");
                 self->arena->nodes[cn].a = rn;
                 self->postfix_seed = cn;
                 return self->parse_postfix();
@@ -1711,7 +1718,8 @@ impl ExprOps for Expr {
             if (e < 0) return -1;
             n = self->sup->new_node(N_CAST);
             if (n < 0) return -1;
-            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+            self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
+            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
             self->arena->nodes[n].a = e;
             return n;
         }
@@ -1920,7 +1928,8 @@ impl ExprOps for Expr {
                 }
                 mv = self->sup->new_node(N_VAR);
                 if (mv < 0) return -1;
-                snprintf(self->arena->nodes[mv].text2, MAX_TEXT, "%s", mname);
+                self->arena->nodes[mv].text2 = runtime::text::ct_intern(mname);
+                if (!self->arena->nodes[mv].text2) return self->sup->fail("out of memory");
                 self->arena->nodes[mv].line = dl;
                 self->arena->nodes[mv].num = dc;
                 mas = self->sup->new_node(N_ASSIGN);
@@ -2007,9 +2016,10 @@ impl ExprOps for Expr {
                         }
                         m = self->sup->new_node(N_SLICE_RANGE);
                         if (m < 0) return -1;
-                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", selem);
-                        snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s",
-                                 self->sym->vars[svi].cname);
+                        self->arena->nodes[m].text = runtime::text::ct_intern(selem);
+                        if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                        self->arena->nodes[m].text2 = runtime::text::ct_intern(self->sym->vars[svi].cname);
+                        if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                         self->arena->nodes[m].aux = s_array ? 1 : 2;
                         self->arena->nodes[m].a = n;
                         self->arena->nodes[m].b = idx;
@@ -2024,10 +2034,13 @@ impl ExprOps for Expr {
                     if (self->sup->expect("]") != 0) return -1;
                     m = self->sup->new_node(N_SLICE_INDEX);
                     if (m < 0) return -1;
-                    if (sc)
-                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "const %s", selem);
+                    if (sc) {
+                            self->arena->nodes[m].text = runtime::text::ct_internf("const %s", selem);
+                            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                    }
                     else
-                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", selem);
+                        self->arena->nodes[m].text = runtime::text::ct_intern(selem);
+                        if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                     self->arena->nodes[m].aux = sc;
                     self->arena->nodes[m].a = n;
                     self->arena->nodes[m].b = idx;
@@ -2077,8 +2090,10 @@ impl ExprOps for Expr {
                     /* L31-3/4: a write form points at the subscript itself */
                     self->arena->nodes[m].line = bl;
                     self->arena->nodes[m].num = bc;
-                    snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", bty);
-                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "get");
+                    self->arena->nodes[m].text = runtime::text::ct_intern(bty);
+                    if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[m].text2 = runtime::text::ct_internf("get");
+                    if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                     self->arena->nodes[m].a = n;
                     self->arena->nodes[m].b = idx;
                     /* A call receiver is an rvalue: the emitter names it in a
@@ -2094,7 +2109,8 @@ impl ExprOps for Expr {
                         rd2 = 0;
                         if (self->static_ctype(rt, rty, sizeof rty, &rd2, 0)
                             && rd2 == 0)
-                            snprintf(self->arena->nodes[rt].text, MAX_TEXT, "%s", rty);
+                            self->arena->nodes[rt].text = runtime::text::ct_intern(rty);
+                            if (!self->arena->nodes[rt].text) return self->sup->fail("out of memory");
                     }
                     n = m;
                     continue;
@@ -2158,16 +2174,19 @@ impl ExprOps for Expr {
                            slot pointer, but a subscript names the value, and
                            Map's `get` pointer is the read shape the sugar has
                            always had. */
-                        if (recv_map)
-                            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "at");
+                        if (recv_map) {
+                                self->arena->nodes[n].text2 = runtime::text::ct_internf("at");
+                                if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
+                        }
                         m = self->sup->new_node(N_MCALL);
                         if (m < 0) return -1;
                         self->arena->nodes[m].aux = 9;
                         self->arena->nodes[m].line = bl;
                         self->arena->nodes[m].num = bc;
-                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", pty);
-                        snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s",
-                                 pointee_map ? "at" : "get");
+                        self->arena->nodes[m].text = runtime::text::ct_intern(pty);
+                        if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                        self->arena->nodes[m].text2 = runtime::text::ct_intern(pointee_map ? "at" : "get");
+                        if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                         self->arena->nodes[m].a = d;
                         self->arena->nodes[m].b = idx;
                         n = m;
@@ -2198,8 +2217,10 @@ impl ExprOps for Expr {
                     self->arena->nodes[m].aux = 9;
                     self->arena->nodes[m].line = bl;
                     self->arena->nodes[m].num = bc;
-                    snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", bty);
-                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "get");
+                    self->arena->nodes[m].text = runtime::text::ct_intern(bty);
+                    if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[m].text2 = runtime::text::ct_internf("get");
+                    if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                     self->arena->nodes[m].a = n;
                     self->arena->nodes[m].b = idx;
                     rt = n;
@@ -2211,7 +2232,8 @@ impl ExprOps for Expr {
                         rd2 = 0;
                         if (self->static_ctype(rt, rty, sizeof rty, &rd2, 0)
                             && rd2 == 0)
-                            snprintf(self->arena->nodes[rt].text, MAX_TEXT, "%s", rty);
+                            self->arena->nodes[rt].text = runtime::text::ct_intern(rty);
+                            if (!self->arena->nodes[rt].text) return self->sup->fail("out of memory");
                     }
                     n = m;
                     continue;
@@ -2296,12 +2318,13 @@ impl ExprOps for Expr {
                             if (m < 0) return -1;
                             snprintf(gelem, sizeof gelem, "%s",
                                      self->sym->vars[gvi].slice_elem);
-                            if (self->sym->vars[gvi].slice_const)
-                                snprintf(self->arena->nodes[m].text, MAX_TEXT,
-                                         "const %s", gelem);
+                            if (self->sym->vars[gvi].slice_const) {
+                                    self->arena->nodes[m].text = runtime::text::ct_internf("const %s", gelem);
+                                    if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                            }
                             else
-                                snprintf(self->arena->nodes[m].text, MAX_TEXT,
-                                         "%s", gelem);
+                                self->arena->nodes[m].text = runtime::text::ct_intern(gelem);
+                                if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                             self->arena->nodes[m].aux = self->sym->vars[gvi].slice_const;
                             self->arena->nodes[m].a = n;
                             self->arena->nodes[m].b = args;
@@ -2324,7 +2347,8 @@ impl ExprOps for Expr {
                     self->arena->nodes[m].a = n;
                     self->arena->nodes[m].b = (args == 0) ? -1 : args;
                     self->arena->nodes[m].aux = arrow ? 2 : 1;
-                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
+                    self->arena->nodes[m].text2 = runtime::text::ct_intern(fname);
+                    if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                     /* resolve the trait now: locals are out of scope by the time
                        the emitter runs. Inside a trait's default body the
                        adopting struct is unknown, so a call on `self` names the
@@ -2336,8 +2360,8 @@ impl ExprOps for Expr {
                            legal, so the trait name is recorded without looking
                            the method up; the cycle check runs after the whole
                            trait has been parsed. */
-                        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s",
-                                 self->sym->trait_default);
+                        self->arena->nodes[m].text = runtime::text::ct_intern(self->sym->trait_default);
+                        if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                     } else if (self->sup->expr_type(n, rtype, sizeof rtype) == 0) {
                         char ibase[MAX_TEXT];
                         size_t il;
@@ -2407,8 +2431,8 @@ impl ExprOps for Expr {
                                 }
                             }
                             self->arena->nodes[m].aux = arrow ? 8 : 7;
-                            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s",
-                                     self->in_generic_bound);
+                            self->arena->nodes[m].text = runtime::text::ct_intern(self->in_generic_bound);
+                            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                         } else if ((inm = self->inst_inherent_method(ibase, fname)) == -2) {
                             return tool::diag::ct_sem_error(mline, mcol,
                                 "method is private to its unit", self->sup->mem->path);
@@ -2590,7 +2614,8 @@ impl ExprOps for Expr {
                                 self->arena->nodes[m].b = (args == 0) ? -1 : args;
                             }
                             self->arena->nodes[m].aux = arrow ? 10 : 9;
-                            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", ibase);
+                            self->arena->nodes[m].text = runtime::text::ct_intern(ibase);
+                            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                         } else if (self->sup->is_iface_type(ibase, trname, sizeof trname)) {
                             int t = self->sym->find_trait(trname);
                             int mi, ok = 0;
@@ -2600,7 +2625,8 @@ impl ExprOps for Expr {
                             }
                             if (ok) {
                                 self->arena->nodes[m].aux = piface ? 4 : 3;
-                                snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
+                                self->arena->nodes[m].text = runtime::text::ct_intern(trname);
+                                if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                             }
                         } else if (self->sup->method_trait(rtype, fname, trname, sizeof trname) == 0) {
                             char tr2[MAX_TEXT];
@@ -2616,7 +2642,8 @@ impl ExprOps for Expr {
                                 return tool::diag::ct_sem_error(mline, mcol, pmsg,
                                                                 self->sup->mem->path);
                             }
-                            snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", trname);
+                            self->arena->nodes[m].text = runtime::text::ct_intern(trname);
+                            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                             /* 19.3 (SH-46): a second trait of the same struct
                                declaring the method means the bare call keeps
                                the first match in `use` order silently (the spec
@@ -2645,7 +2672,8 @@ impl ExprOps for Expr {
                             mf = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
                             if (mf < 0) return -1;
                             self->arena->nodes[mf].a = n;
-                            snprintf(self->arena->nodes[mf].text2, MAX_TEXT, "%s", fname);
+                            self->arena->nodes[mf].text2 = runtime::text::ct_intern(fname);
+                            if (!self->arena->nodes[mf].text2) return self->sup->fail("out of memory");
                             self->arena->nodes[m].kind = N_CALL;
                             self->arena->nodes[m].a = (args == 0) ? -1 : args;
                             self->arena->nodes[m].b = mf;
@@ -2677,7 +2705,8 @@ impl ExprOps for Expr {
                                         strcat(rt2, " *");
                                 }
                                 self->arena->nodes[m].aux = 6;
-                                snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", rt2);
+                                self->arena->nodes[m].text = runtime::text::ct_intern(rt2);
+                                if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                                 /* P20-03: the emitter picks the map, so the
                                    arity check beside the resolved-method path
                                    never sees this call. Every visible binding
@@ -2945,7 +2974,8 @@ impl ExprOps for Expr {
                                     self->arena->nodes[m].aux = aux;
                                     self->arena->nodes[m].line = mline;
                                     self->arena->nodes[m].num = mcol;
-                                    snprintf(self->arena->nodes[m].text2, MAX_TEXT, "ptr");
+                                    self->arena->nodes[m].text2 = runtime::text::ct_internf("ptr");
+                                    if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                                     self->arena->nodes[m].a = n;
                                     self->arena->nodes[m].b = -1;
                                     n = m;
@@ -2961,7 +2991,8 @@ impl ExprOps for Expr {
                             m = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
                             if (m < 0) return -1;
                             self->arena->nodes[m].a = n;
-                            snprintf(self->arena->nodes[m].text2, MAX_TEXT, "%s", fname);
+                            self->arena->nodes[m].text2 = runtime::text::ct_intern(fname);
+                            if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                         }
                     }
                 }
@@ -3175,8 +3206,10 @@ impl ExprOps for Expr {
                 /* The operand's static type is read while its locals are still
                    in scope; the emitter runs after the scopes are popped, so it
                    cannot resolve a variable operand on its own. */
-                if (self->static_ctype(n, qty, sizeof qty, &qad, 0) && qad == 0)
-                    snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", qty);
+                if (self->static_ctype(n, qty, sizeof qty, &qad, 0) && qad == 0) {
+                        self->arena->nodes[m].text = runtime::text::ct_intern(qty);
+                        if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                }
                 /* Capture the failure cleanup now, while the defer stack and
                    the `own` list still describe this point (the emitter runs
                    after the scopes are gone). */
@@ -3223,6 +3256,10 @@ impl ExprOps for Expr {
         char qc[MAX_TEXT];
         char qv[MAX_TEXT];
         char tsrc[MAX_TEXT];
+        /* S1a-0 C2n-2: `parse_qual_path` takes its in/out name in a scratch
+           buffer now that the node row is an immutable pool pointer; the
+           resulting segment is interned back into `text2`. */
+        char nbuf[MAX_TEXT];
         char tag[MAX_TEXT];
         int qf;
         int nu, nl, sl;
@@ -3295,8 +3332,10 @@ impl ExprOps for Expr {
                the `f` / `L` suffix survives a `long` */
             n = self->sup->new_node(self->lex->tokfloat ? N_FNUM : N_NUM);
             if (n < 0) return -1;
-            if (self->lex->tokfloat)
-                self->lex->tok_copy(self->arena->nodes[n].text, MAX_TEXT);
+            if (self->lex->tokfloat) {
+                    self->arena->nodes[n].text = runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len);
+                    if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+            }
             else {
                 self->arena->nodes[n].num = self->lex->toknum;
                 /* An integer suffix is spelling, not value: `U` may appear once
@@ -3311,11 +3350,12 @@ impl ExprOps for Expr {
                 }
                 if (nu > 1 || nl > 2 || sl > 3)
                     return self->sup->fail("an integer suffix may be U, L or LL");
-                if (nu && nl == 2) snprintf(self->arena->nodes[n].text, MAX_TEXT, "ULL");
-                else if (nu && nl == 1) snprintf(self->arena->nodes[n].text, MAX_TEXT, "UL");
-                else if (nu) snprintf(self->arena->nodes[n].text, MAX_TEXT, "U");
-                else if (nl == 2) snprintf(self->arena->nodes[n].text, MAX_TEXT, "LL");
-                else if (nl == 1) snprintf(self->arena->nodes[n].text, MAX_TEXT, "L");
+                if (nu && nl == 2) self->arena->nodes[n].text = runtime::text::ct_intern("ULL");
+                else if (nu && nl == 1) self->arena->nodes[n].text = runtime::text::ct_intern("UL");
+                else if (nu) self->arena->nodes[n].text = runtime::text::ct_intern("U");
+                else if (nl == 2) self->arena->nodes[n].text = runtime::text::ct_intern("LL");
+                else if (nl == 1) self->arena->nodes[n].text = runtime::text::ct_intern("L");
+                if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
             }
             self->sup->lex_next();
             return n;
@@ -3367,8 +3407,10 @@ impl ExprOps for Expr {
                 if (self->sup->expect(")") != 0) return -1;
                 n = self->sup->new_node(N_OFFSETOF);
                 if (n < 0) return -1;
-                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
-                snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", fname);
+                self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
+                if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+                self->arena->nodes[n].text2 = runtime::text::ct_intern(fname);
+                if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
                 return n;
             }
             /* Both checks run while the cursor is still on the field, so the
@@ -3404,8 +3446,10 @@ impl ExprOps for Expr {
             if (self->sup->expect(")") != 0) return -1;
             n = self->sup->new_node(N_OFFSETOF);
             if (n < 0) return -1;
-            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
-            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", fname);
+            self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
+            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+            self->arena->nodes[n].text2 = runtime::text::ct_intern(fname);
+            if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
             return n;
         }
         /* `va_arg(<ap>, <type>)` is the one stdarg macro that is not a call: its
@@ -3425,7 +3469,8 @@ impl ExprOps for Expr {
             n = self->sup->new_node(N_VAARG);
             if (n < 0) return -1;
             self->arena->nodes[n].a = ap;
-            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", tbuf);
+            self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
+            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
             return n;
         }
         /* Phase 24: the range index. `$` has no C spelling of its own -- the
@@ -3438,16 +3483,18 @@ impl ExprOps for Expr {
                 n = self->sup->new_node(N_INTO_SELF);
                 if (n < 0) return -1;
                 self->arena->nodes[n].num = self->into_node;
-                snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s",
-                         self->arena->nodes[self->into_node].text);
+                self->arena->nodes[n].text = runtime::text::ct_intern(self->arena->nodes[self->into_node].text);
+                if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
                 self->sup->lex_next();
                 return n;
             }
             if (!self->dollar_ok) return self->sup->fail("unexpected token");
             n = self->sup->new_node(N_VAR);
             if (n < 0) return -1;
-            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", "$");
-            if (self->range_ctx) snprintf(self->arena->nodes[n].text3, MAX_TEXT, "range");
+            self->arena->nodes[n].text2 = runtime::text::ct_intern("$");
+            if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
+            if (self->range_ctx) self->arena->nodes[n].text3 = runtime::text::ct_intern("range");
+            if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
             self->sup->lex_next();
             return n;
         }
@@ -3516,8 +3563,10 @@ impl ExprOps for Expr {
                 self->arena->nodes[mn].a = -1;
                 self->arena->nodes[mn].b = (args == 0) ? -1 : args;
                 self->arena->nodes[mn].aux = 11;
-                snprintf(self->arena->nodes[mn].text, MAX_TEXT, "%s", ibase);
-                snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", sm);
+                self->arena->nodes[mn].text = runtime::text::ct_intern(ibase);
+                if (!self->arena->nodes[mn].text) return self->sup->fail("out of memory");
+                self->arena->nodes[mn].text2 = runtime::text::ct_intern(sm);
+                if (!self->arena->nodes[mn].text2) return self->sup->fail("out of memory");
                 return mn;
             }
             /* P34 S5a: a non-generic inherent static call `Counter.make(5)`.
@@ -3593,8 +3642,10 @@ impl ExprOps for Expr {
                             self->arena->nodes[mn2].a = -1;
                             self->arena->nodes[mn2].b = (args == 0) ? -1 : args;
                             self->arena->nodes[mn2].aux = 11;
-                            snprintf(self->arena->nodes[mn2].text, MAX_TEXT, "%s", sibase);
-                            snprintf(self->arena->nodes[mn2].text2, MAX_TEXT, "%s", sm2);
+                            self->arena->nodes[mn2].text = runtime::text::ct_intern(sibase);
+                            if (!self->arena->nodes[mn2].text) return self->sup->fail("out of memory");
+                            self->arena->nodes[mn2].text2 = runtime::text::ct_intern(sm2);
+                            if (!self->arena->nodes[mn2].text2) return self->sup->fail("out of memory");
                             return mn2;
                         }
                     }
@@ -3660,7 +3711,8 @@ impl ExprOps for Expr {
             }
             n = self->sup->new_node(N_VAR);
             if (n < 0) return -1;
-            self->lex->tok_copy(self->arena->nodes[n].text2, MAX_TEXT);
+            self->arena->nodes[n].text2 = runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len);
+            if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
             /* Phase 78 S2a: remember that this name is a ref/out parameter, so
                the emitter spells `(*name)` and the `out` walk can tell the
                parameter from a same-named shadow. */
@@ -3717,8 +3769,8 @@ impl ExprOps for Expr {
                     self->sup->lex_next();
                     gi = self->generic_instance(gfi, targ, id_line, id_col);
                     if (gi < 0) return -1;
-                    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s",
-                             self->sym->ginsts[gi].cname);
+                    self->arena->nodes[n].text2 = runtime::text::ct_intern(self->sym->ginsts[gi].cname);
+                    if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
                 }
             }
             /* `Qual::fn(...)`: the qualifier names a namespace path or a type,
@@ -3726,9 +3778,12 @@ impl ExprOps for Expr {
                a variable instead (`a::h`), whose C spelling is the mangled one. */
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("::")) {
                 snprintf(tsrc, sizeof tsrc, "%s", self->arena->nodes[n].text2);
-                if (self->parse_qual_path(self->arena->nodes[n].text2, MAX_TEXT, qc, MAX_TEXT,
+                snprintf(nbuf, sizeof nbuf, "%s", self->arena->nodes[n].text2);
+                if (self->parse_qual_path(nbuf, MAX_TEXT, qc, MAX_TEXT,
                                           qv, MAX_TEXT, &qf) != 0)
                     return -1;
+                self->arena->nodes[n].text2 = runtime::text::ct_intern(nbuf);
+                if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
                 /* `Trait::ns`: a namespace-host interface value (SH-20). The
                    host has no object, so the node carries no operand (`a`), the
                    vtable is named after `text2` and `text3` keeps the source
@@ -3750,10 +3805,12 @@ impl ExprOps for Expr {
                     self->arena->nodes[mn].a = -1;
                     self->arena->nodes[mn].b = (args == 0) ? -1 : args;
                     self->arena->nodes[mn].aux = 5;
-                    snprintf(self->arena->nodes[mn].text, MAX_TEXT, "%s",
-                             self->arena->nodes[n].text2);
-                    snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", mname);
-                    snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
+                    self->arena->nodes[mn].text = runtime::text::ct_intern(self->arena->nodes[n].text2);
+                    if (!self->arena->nodes[mn].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[mn].text2 = runtime::text::ct_intern(mname);
+                    if (!self->arena->nodes[mn].text2) return self->sup->fail("out of memory");
+                    self->arena->nodes[mn].text3 = runtime::text::ct_intern(qv);
+                    if (!self->arena->nodes[mn].text3) return self->sup->fail("out of memory");
                     if (self->map_arity(id_line, id_col, self->arena->nodes[n].text2,
                                         mname, arg_count(self->arena, args)
                                         + self->closure_arg_count(args)) != 0)
@@ -3793,10 +3850,12 @@ impl ExprOps for Expr {
                     self->arena->nodes[mn].a = -1;
                     self->arena->nodes[mn].b = (args == 0) ? -1 : args;
                     self->arena->nodes[mn].aux = 5;
-                    snprintf(self->arena->nodes[mn].text, MAX_TEXT, "%s",
-                             self->arena->nodes[n].text2);
-                    snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", qc);
-                    snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
+                    self->arena->nodes[mn].text = runtime::text::ct_intern(self->arena->nodes[n].text2);
+                    if (!self->arena->nodes[mn].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[mn].text2 = runtime::text::ct_intern(qc);
+                    if (!self->arena->nodes[mn].text2) return self->sup->fail("out of memory");
+                    self->arena->nodes[mn].text3 = runtime::text::ct_intern(qv);
+                    if (!self->arena->nodes[mn].text3) return self->sup->fail("out of memory");
                     if (self->map_arity(id_line, id_col, self->arena->nodes[n].text2,
                                         qc, arg_count(self->arena, args)
                                         + self->closure_arg_count(args)) != 0)
@@ -3859,10 +3918,12 @@ impl ExprOps for Expr {
                     self->arena->nodes[mn].a = args;
                     self->arena->nodes[mn].b = rest;
                     self->arena->nodes[mn].aux = 6;
-                    snprintf(self->arena->nodes[mn].text, MAX_TEXT, "%s", rtype);
-                    snprintf(self->arena->nodes[mn].text2, MAX_TEXT, "%s", qc);
-                    snprintf(self->arena->nodes[mn].text3, MAX_TEXT, "%s",
-                             self->arena->nodes[n].text2);
+                    self->arena->nodes[mn].text = runtime::text::ct_intern(rtype);
+                    if (!self->arena->nodes[mn].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[mn].text2 = runtime::text::ct_intern(qc);
+                    if (!self->arena->nodes[mn].text2) return self->sup->fail("out of memory");
+                    self->arena->nodes[mn].text3 = runtime::text::ct_intern(self->arena->nodes[n].text2);
+                    if (!self->arena->nodes[mn].text3) return self->sup->fail("out of memory");
                     /* The trait's own signature is the judge: `nparams` counts
                        the method's parameters, never the receiver. */
                     {
@@ -3902,10 +3963,12 @@ impl ExprOps for Expr {
                 if (qf == 2) {
                     if (snprintf(tag, sizeof tag, "%s|%s", tsrc, qv) >= MAX_TEXT)
                         return self->sup->fail("qualified name is too long");
-                    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s",
-                             self->arena->nodes[n].text2);
-                    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", qc);
-                    snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", tag);
+                    self->arena->nodes[n].text = runtime::text::ct_intern(self->arena->nodes[n].text2);
+                    if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[n].text2 = runtime::text::ct_intern(qc);
+                    if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
+                    self->arena->nodes[n].text3 = runtime::text::ct_intern(tag);
+                    if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
                     self->arena->nodes[n].kind = N_BOX;
                     self->arena->nodes[n].a = -1;
                     self->arena->nodes[n].aux = 4;
@@ -3930,7 +3993,8 @@ impl ExprOps for Expr {
                                                " (qualified type names are not supported;"
                                                " use the bare name or an alias import)");
                     }
-                    snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", qc);
+                    self->arena->nodes[n].text3 = runtime::text::ct_intern(qc);
+                    if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
                     return n;
                 }
             }
@@ -4118,8 +4182,10 @@ impl ExprOps for Expr {
                         self->arena->nodes[n].a = args;
                         self->arena->nodes[n].b = -1;
                         self->arena->nodes[n].aux = 0;
-                        self->arena->nodes[n].text3[0] = 0;
-                        snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", helper);
+                        self->arena->nodes[n].text3 = runtime::text::ct_intern("");
+                        if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
+                        self->arena->nodes[n].text2 = runtime::text::ct_intern(helper);
+                        if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
                         self->sym->atomic_used = 1;
                         return n;
                     }
@@ -4267,8 +4333,10 @@ impl ExprOps for Expr {
                     }
                 }
                 /* the emitted call must spell the definition's C name */
-                if (fi >= 0)
-                    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", self->sym->funcs[fi].cname);
+                if (fi >= 0) {
+                        self->arena->nodes[n].text2 = runtime::text::ct_intern(self->sym->funcs[fi].cname);
+                        if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
+                }
                 if (fi >= 0 && args > 0) {
                     int cur, prev, k, first_arg;
                     cur = args;
@@ -4333,8 +4401,10 @@ impl ExprOps for Expr {
                              "variable '%s' is exported by more than one namespace; use a qualified name", nm);
                     return self->sup->fail(amsg);
                 }
-                if (self->sym->var_cname(nm, cn, sizeof cn) == 0 && strcmp(cn, nm) != 0)
-                    snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", cn);
+                if (self->sym->var_cname(nm, cn, sizeof cn) == 0 && strcmp(cn, nm) != 0) {
+                        self->arena->nodes[n].text3 = runtime::text::ct_intern(cn);
+                        if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
+                }
             } else {
                 /* CT has no preprocessor: an ALL_CAPS name is a macro constant
                    (MAX_NODES, NULL, ...) and is emitted verbatim. Anything else
@@ -4516,7 +4586,8 @@ impl ExprOps for Expr {
                 if (all_caps || strcmp(nm, "stderr") == 0
                     || strcmp(nm, "stdout") == 0 || strcmp(nm, "stdin") == 0) {
                     self->arena->nodes[n].kind = N_RAW;
-                    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", nm);
+                    self->arena->nodes[n].text = runtime::text::ct_intern(nm);
+                    if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
                     return n;
                 }
                 /* a bare function name is a value (`p = handler;`): emit the
@@ -4524,7 +4595,8 @@ impl ExprOps for Expr {
                 vf = self->sym->resolve_func(nm);
                 if (vf >= 0) {
                     self->arena->nodes[n].kind = N_RAW;
-                    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", self->sym->funcs[vf].cname);
+                    self->arena->nodes[n].text = runtime::text::ct_intern(self->sym->funcs[vf].cname);
+                    if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
                     return n;
                 }
                 /* A name this unit never declared: while a function-pointer
@@ -4533,7 +4605,8 @@ impl ExprOps for Expr {
                    Anywhere else it is a typo, which is reported here. */
                 if (self->fnval_ok) {
                     self->arena->nodes[n].kind = N_RAW;
-                    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", nm);
+                    self->arena->nodes[n].text = runtime::text::ct_intern(nm);
+                    if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
                     return n;
                 }
                 return self->sup->fail("use of an undeclared variable");
@@ -4581,8 +4654,8 @@ impl ExprOps for Expr {
             if (base < 0) return -1;
             self->arena->nodes[base].num = owner;
             self->arena->nodes[base].aux = 1;   /* pointer form for `.name` */
-            snprintf(self->arena->nodes[base].text, MAX_TEXT, "%s",
-                     self->arena->nodes[owner].text);
+            self->arena->nodes[base].text = runtime::text::ct_intern(self->arena->nodes[owner].text);
+            if (!self->arena->nodes[base].text) return self->sup->fail("out of memory");
             return base;
         }
         return self->sup->fail("expected an expression");

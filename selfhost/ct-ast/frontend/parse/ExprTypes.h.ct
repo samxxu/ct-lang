@@ -775,7 +775,8 @@ impl ExprTypes for Expr {
         }
         m = self->sup->new_node(N_SLICE_RANGE);
         if (m < 0) return -1;
-        snprintf(self->arena->nodes[m].text, MAX_TEXT, "%s", t);
+        self->arena->nodes[m].text = runtime::text::ct_intern(t);
+        if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
         self->arena->nodes[m].aux = 3;
         self->arena->nodes[m].a = n;
         self->arena->nodes[m].b = -1;

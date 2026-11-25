@@ -3,6 +3,7 @@
 #include "StmtSwitch.h"
 #include "SymbolsTypeText.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Lexer.h"
 #include "Symbols.h"
 #include "Memory.h"
@@ -449,7 +450,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtSwitch_parse_named_label(void 
     if (s < 0) {
         return (-1);
     }
-    snprintf(_self->labels[_self->nlabels].name, MAX_TEXT, "%s", name);
+    _self->labels[_self->nlabels].name = runtime_text_ct_intern(name);
+    if ((!_self->labels[_self->nlabels].name)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->labels[_self->nlabels].line = line;
     _self->labels[_self->nlabels].depth = _self->ndefer_blocks;
     for (i = 0; i < _self->ndefer_blocks; i++) {
@@ -457,7 +461,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtSwitch_parse_named_label(void 
         _self->labels[_self->nlabels].has[i] = 0;
     }
     _self->nlabels = (_self->nlabels + 1);
-    snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
+    _self->arena->nodes[s].text2 = runtime_text_ct_intern(name);
+    if ((!_self->arena->nodes[s].text2)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ":") != 0) {
         return (-1);
@@ -511,8 +518,14 @@ static int frontend_parse_Stmt_frontend_parse_StmtSwitch_parse_goto(void *self) 
         return (-1);
     }
     _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
-    snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
-    snprintf(_self->gotos[_self->ngotos].name, MAX_TEXT, "%s", name);
+    _self->arena->nodes[s].text2 = runtime_text_ct_intern(name);
+    if ((!_self->arena->nodes[s].text2)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->gotos[_self->ngotos].name = runtime_text_ct_intern(name);
+    if ((!_self->gotos[_self->ngotos].name)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->gotos[_self->ngotos].line = _self->arena->nodes[s].line;
     _self->gotos[_self->ngotos].depth = _self->ndefer_blocks;
     for (i = 0; i < _self->ndefer_blocks; i++) {

@@ -2739,7 +2739,10 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_ref_arg(void *self, in
     }
     k = _self->arena->nodes[n].kind;
     if (((((((k == N_MCALL) && ((_self->arena->nodes[n].aux == 9) || (_self->arena->nodes[n].aux == 10))) && (_self->arena->nodes[n].line > 0)) && (_self->arena->nodes[n].num > 0)) && ((strcmp(_self->arena->nodes[n].text2, "get") == 0) || (strcmp(_self->arena->nodes[n].text2, "at") == 0))) && ((strncmp(_self->arena->nodes[n].text, "struct Vec_", 11) == 0) || (strncmp(_self->arena->nodes[n].text, "Vec_", 4) == 0)))) {
-        snprintf(_self->arena->nodes[n].text2, MAX_TEXT, "%s", "at");
+        _self->arena->nodes[n].text2 = runtime_text_ct_intern("at");
+        if ((!_self->arena->nodes[n].text2)) {
+            return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+        }
         return _self->__backend_emit_emitops_vptr->emit_expr(_self, n);
     }
     if ((((k == N_VAR) && _self->sym->self_mode) && (strcmp(_self->arena->nodes[n].text2, "self") == 0))) {
@@ -7870,7 +7873,10 @@ static int emit_match_arm(struct backend_emit_Emitter * self, int arm, int ind, 
         if (((decl < 0) || (raw < 0))) {
             continue;
         }
-        snprintf(self->arena->nodes[raw].text, MAX_TEXT, "__ct_match%d%su.%s.%s", k, (ptr ? "->" : "."), self->arena->nodes[arm].text2, self->arena->nodes[i].text3);
+        self->arena->nodes[raw].text = runtime_text_ct_internf("__ct_match%d%su.%s.%s", k, (ptr ? "->" : "."), self->arena->nodes[arm].text2, self->arena->nodes[i].text3);
+        if ((!self->arena->nodes[raw].text)) {
+            return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+        }
         self->arena->nodes[decl].next = (-1);
         if (first < 0) {
             first = decl;
@@ -10453,7 +10459,10 @@ static int match_expr_emit(struct backend_emit_Emitter * self, int n) {
             if (tv >= 0) {
                 char nm[32];
                 snprintf(nm, sizeof(nm), "__ct_mres%d", k);
-                snprintf(self->arena->nodes[tv].text2, MAX_TEXT, "%s", nm);
+                self->arena->nodes[tv].text2 = runtime_text_ct_intern(nm);
+                if ((!self->arena->nodes[tv].text2)) {
+                    return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+                }
             }
         }
         if (idx < (narm - 1)) {

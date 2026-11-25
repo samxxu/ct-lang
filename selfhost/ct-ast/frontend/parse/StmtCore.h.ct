@@ -143,7 +143,9 @@ pub trait StmtDeferOps {
    `has` record the enclosing defer blocks exactly as the old parallel arrays
    did. The rows grow on demand; `struct Stmt` keeps the block and capacity. */
 pub struct LabelRow {
-    char name[160];
+    /* S1a-0 C2n-2: the label spelling is one interned text; a row copy is a
+       pointer copy and the name can exceed the old 160-byte row. */
+    const char *name;
     int  line;
     int  depth;
     int  path[256];
@@ -195,13 +197,16 @@ pub struct Stmt {
        `loop` inside an outer `loop` is diagnosed (D22-5): a hand-written `int i`
        or a native `for (int i = …)` is ordinary C shadowing and stays silent. */
     int  loop_depth;
-    /* PH-70-R2: per-function flow facts for the uninitialized-read check. */
-    char u_decl[48][160]; int u_dline[48]; int nu;
-    char u_asg[48][160]; int na;
-    char u_rd[48][160]; int nr;
-    char u_addr[48][160]; int nx;
+    /* PH-70-R2: per-function flow facts for the uninitialized-read check.
+       S1a-0 C2n-2: each row is one interned text, so the fixed 160-byte cell
+       is gone; the count still bounds the table and `u_reset` only clears it
+       (the pool owns the texts, so a reset never frees). */
+    const char *u_decl[48]; int u_dline[48]; int nu;
+    const char *u_asg[48]; int na;
+    const char *u_rd[48]; int nr;
+    const char *u_addr[48]; int nx;
     /* PH-71-R1: variables explicitly released by `delete` in this function. */
-    char del_names[64][160]; int ndel;
+    const char *del_names[64]; int ndel;
     /* How many `foreach` bodies enclose the statement being parsed. Only an
        inner `foreach` inside an outer one is diagnosed (D27-10, mirroring
        D22-5): a hand-written `item` stays ordinary C shadowing and is silent. */
@@ -245,8 +250,8 @@ pub struct Stmt {
     int  yield_line[16];
     int  yield_col[16];
     int  yield_count[16];
-    char yield_type[16][160];
-    char last_yield_type[160];
+    const char *yield_type[16];
+    const char *last_yield_type;
     int  last_yield_expr;
     int  last_yield_line;
     int  last_yield_col;

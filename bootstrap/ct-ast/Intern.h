@@ -6,6 +6,7 @@
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -91,6 +92,7 @@ struct runtime_text_Intern {
 const char * runtime_text_ct_intern(const char *);
 const char * runtime_text_ct_intern_len(const char *, int);
 const char * runtime_text_ct_intern_join(const char *, const char *);
+const char * runtime_text_ct_internf(const char *, ...);
 void runtime_text_ct_intern_reset(void);
 
 #endif

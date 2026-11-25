@@ -733,8 +733,10 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
     self->arena->nodes[e].a = head;
     self->arena->nodes[e].aux = count;
     self->arena->nodes[e].line = line;
-    snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", elem);
-    snprintf(self->arena->nodes[e].text2, MAX_TEXT, "%s", iname);
+    self->arena->nodes[e].text = runtime::text::ct_intern(elem);
+    if (!self->arena->nodes[e].text) return self->sup->fail("out of memory");
+    self->arena->nodes[e].text2 = runtime::text::ct_intern(iname);
+    if (!self->arena->nodes[e].text2) return self->sup->fail("out of memory");
     return e;
 }
 
@@ -965,8 +967,10 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
     self->arena->nodes[e].a = head;
     self->arena->nodes[e].aux = count;
     self->arena->nodes[e].line = line;
-    snprintf(self->arena->nodes[e].text, MAX_TEXT, "%s", entry);
-    snprintf(self->arena->nodes[e].text2, MAX_TEXT, "%s", iname);
+    self->arena->nodes[e].text = runtime::text::ct_intern(entry);
+    if (!self->arena->nodes[e].text) return self->sup->fail("out of memory");
+    self->arena->nodes[e].text2 = runtime::text::ct_intern(iname);
+    if (!self->arena->nodes[e].text2) return self->sup->fail("out of memory");
     return e;
 }
 
@@ -1263,14 +1267,22 @@ impl StmtOps for Stmt {
                    cannot see them after the block closes */
                 {
                     int yz = 0;
-                    if (self->sup->expr_type(ye, self->yield_type[dep], MAX_TEXT) != 0
-                        && self->ex->chk_type(ye, self->yield_type[dep], MAX_TEXT, &yz) != 0) {
+                    char ybuf[MAX_TEXT];
+                    if (self->sup->expr_type(ye, ybuf, sizeof ybuf) != 0
+                        && self->ex->chk_type(ye, ybuf, sizeof ybuf, &yz) != 0) {
                         self->sup->pop_scope();
                         self->in_match_arm = save_in_match_arm;
                         self->yield_depth = save_yield_depth;
                         return tool::diag::ct_sem_error(yl, yc,
                             "cannot determine the type yielded by this match arm",
                             self->mem->path);
+                    }
+                    self->yield_type[dep] = runtime::text::ct_intern(ybuf);
+                    if (!self->yield_type[dep]) {
+                        self->sup->pop_scope();
+                        self->in_match_arm = save_in_match_arm;
+                        self->yield_depth = save_yield_depth;
+                        return self->sup->fail("out of memory");
                     }
                 }
                 if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
@@ -1352,7 +1364,7 @@ impl StmtOps for Stmt {
             self->last_yield_line = self->yield_line[dep];
             self->last_yield_col = self->yield_col[dep];
             self->last_yield_count = self->yield_count[dep];
-            snprintf(self->last_yield_type, MAX_TEXT, "%s", self->yield_type[dep]);
+            self->last_yield_type = self->yield_type[dep];
             self->yield_depth = self->yield_depth - 1;
         }
         self->in_match_arm = save_in_match_arm;
@@ -1397,7 +1409,8 @@ impl StmtOps for Stmt {
             if (self->sup->accept(",")) {
                 if (self->lex->tok != T_STR)
                     return self->sup->fail("a static assertion message must be a string literal");
-                self->lex->tok_copy(self->arena->nodes[s].text, MAX_TEXT);
+                self->arena->nodes[s].text = runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len);
+                if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
                 self->sup->lex_next();
             }
             if (self->sup->expect(")") != 0) return -1;
@@ -1510,7 +1523,8 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             if (self->err_ahead()) {
                 is_err = 1;
-                snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
+                self->arena->nodes[s].text2 = runtime::text::ct_internf("err");
+                if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
                 self->sup->lex_next();
                 if (self->sup->expect(":")) return -1;
             }
@@ -1545,7 +1559,8 @@ impl StmtOps for Stmt {
                 }
                 if (self->defer_active_depth() > 0
                     && self->defer_prepend(s, 0, is_err) != 0) return -1;
-                if (is_err) snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
+                if (is_err) self->arena->nodes[s].text2 = runtime::text::ct_intern("err");
+                if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
                 return s;
             }
             if (is_err && self->sym->ret_type[0]
@@ -1705,7 +1720,8 @@ impl StmtOps for Stmt {
                 return -1;
             if (self->mem->leak_active && return_reads_autodrop(self, e)) {
                 self->arena->nodes[s].aux = 1;
-                snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", self->sym->ret_type);
+                self->arena->nodes[s].text = runtime::text::ct_intern(self->sym->ret_type);
+                if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
             }
             if (self->sup->expect(";") != 0) return -1;
             /* SH-33: release what is still owned before the value leaves, so
@@ -1720,12 +1736,13 @@ impl StmtOps for Stmt {
                 if (self->arena->nodes[s].a >= 0 && self->sym->ret_type[0]
                     && strcmp(self->sym->ret_type, "void") != 0) {
                     self->arena->nodes[s].aux = 1;
-                    snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s",
-                             self->sym->ret_type);
+                    self->arena->nodes[s].text = runtime::text::ct_intern(self->sym->ret_type);
+                    if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
                 }
                 if (self->defer_prepend(s, 0, is_err) != 0) return -1;
             }
-            if (is_err) snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
+            if (is_err) self->arena->nodes[s].text2 = runtime::text::ct_intern("err");
+            if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
             return s;
         }
         if (self->lex->tok == T_ID && self->lex->tok_is("delete")) {
@@ -1740,10 +1757,14 @@ impl StmtOps for Stmt {
             if (check_borrow_delete(self, e) != 0) return -1;
             if (self->ex->check_mode && *self->ex->check_mode) {
                 char dn[160];
-                if (self->del_base(e, dn, sizeof dn) == 0 && self->del_take(dn))
-                    return tool::diag::ct_sem_error(self->lex->tokline,
-                        self->lex->tokstart - self->lex->lstart + 1,
-                        "double delete of an owned object", self->mem->path);
+                if (self->del_base(e, dn, sizeof dn) == 0) {
+                    int dt = self->del_take(dn);
+                    if (dt < 0) return -1;
+                    if (dt > 0)
+                        return tool::diag::ct_sem_error(self->lex->tokline,
+                            self->lex->tokstart - self->lex->lstart + 1,
+                            "double delete of an owned object", self->mem->path);
+                }
             }
             /* the object is released: it can neither leak nor auto-drop */
             if (self->mem->leak_active && self->sup->leak_delete(e) != 0) return -1;
@@ -1757,15 +1778,15 @@ impl StmtOps for Stmt {
                     size_t dl;
                     int si;
                     if (strncmp(dp, "struct ", 7) == 0) dp += 7;
-                    snprintf(self->arena->nodes[s].text, MAX_TEXT, "%s", dp);
-                    dl = strlen(self->arena->nodes[s].text);
-                    while (dl > 0 && (self->arena->nodes[s].text[dl - 1] == '*'
-                                      || self->arena->nodes[s].text[dl - 1] == ' ')) {
-                        dl = dl - 1;
-                        self->arena->nodes[s].text[dl] = 0;
-                    }
+                    dl = strlen(dp);
+                    while (dl > 0 && (dp[dl - 1] == '*' || dp[dl - 1] == ' ')) dl = dl - 1;
+                    self->arena->nodes[s].text = runtime::text::ct_intern_len(dp, (int)dl);
+                    if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
                     si = self->sym->find_struct(self->arena->nodes[s].text);
-                    if (si < 0 || !self->sym->structs[si].uses_drop) self->arena->nodes[s].text[0] = 0;
+                    if (si < 0 || !self->sym->structs[si].uses_drop) {
+                        self->arena->nodes[s].text = runtime::text::ct_intern("");
+                        if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
+                    }
                 }
             }
             if (self->sup->expect(";") != 0) return -1;
@@ -1784,7 +1805,8 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             if (self->err_ahead()) {
                 is_err = 1;
-                snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
+                self->arena->nodes[s].text2 = runtime::text::ct_internf("err");
+                if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
                 self->sup->lex_next();
                 if (self->sup->expect(":")) return -1;
                 if (self->nbreak == 0)
@@ -1818,7 +1840,8 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             if (self->err_ahead()) {
                 is_err = 1;
-                snprintf(self->arena->nodes[s].text2, MAX_TEXT, "err");
+                self->arena->nodes[s].text2 = runtime::text::ct_internf("err");
+                if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
                 self->sup->lex_next();
                 if (self->sup->expect(":")) return -1;
                 if (self->ncont == 0)
@@ -2416,8 +2439,10 @@ impl StmtOps for Stmt {
             n = self->sup->new_node(N_DECL);
             if (n < 0) return -1;
             if (self->static_decl) self->arena->nodes[n].aux = 1;
-            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", typebuf);
-            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", name);
+            self->arena->nodes[n].text = runtime::text::ct_intern(typebuf);
+            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+            self->arena->nodes[n].text2 = runtime::text::ct_intern(name);
+            if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
             if (self->sup->declare_var(name, typebuf) != 0) return -1;
             if (is_slice) {
                 int svi0 = self->sym->find_var(name);
@@ -2440,8 +2465,10 @@ impl StmtOps for Stmt {
             }
             /* `int (*tbl[2])(int)`: the dimensions came with the declarator, and
                `parse_array_dims` only appends what follows the name (D-5) */
-            if (self->ex->fnptr_state && self->ex->fnptr_dims[0])
-                snprintf(self->arena->nodes[n].text3, MAX_TEXT, "%s", self->ex->fnptr_dims);
+            if (self->ex->fnptr_state && self->ex->fnptr_dims[0]) {
+                    self->arena->nodes[n].text3 = runtime::text::ct_intern(self->ex->fnptr_dims);
+                    if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
+            }
             {
                 int dim_line = self->lex->tokline;
                 int dim_col = self->lex->tokstart - self->lex->lstart + 1;
@@ -3018,8 +3045,8 @@ impl StmtOps for Stmt {
                 idx = self->arena->nodes[e].b;
                 if (idx < 0) return self->sup->fail("a container subscript has no index");
                 self->arena->nodes[idx].next = rhs;
-                snprintf(self->arena->nodes[e].text2, MAX_TEXT, "%s",
-                         ck == 1 ? "set" : "put");
+                self->arena->nodes[e].text2 = runtime::text::ct_intern(ck == 1 ? "set" : "put");
+                if (!self->arena->nodes[e].text2) return self->sup->fail("out of memory");
                 n = self->sup->new_node(N_EXPR);
                 if (n < 0) return -1;
                 self->arena->nodes[n].a = e;
@@ -3065,7 +3092,8 @@ impl StmtOps for Stmt {
                 if (widx < 0)
                     return self->sup->fail("a custom subscript has no index");
                 self->arena->nodes[widx].next = rhs;
-                snprintf(self->arena->nodes[e].text2, MAX_TEXT, "set");
+                self->arena->nodes[e].text2 = runtime::text::ct_internf("set");
+                if (!self->arena->nodes[e].text2) return self->sup->fail("out of memory");
                 n = self->sup->new_node(N_EXPR);
                 if (n < 0) return -1;
                 self->arena->nodes[n].a = e;

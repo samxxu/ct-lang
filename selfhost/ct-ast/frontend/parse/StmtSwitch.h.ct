@@ -16,6 +16,7 @@
 
 import frontend::sym::SymbolsTypeText;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import runtime::arena::Arena::Node as Node;
 import frontend::lex::Lexer;
 import frontend::sym::Symbols;
@@ -435,7 +436,8 @@ impl StmtSwitch for Stmt {
         }
         s = self->sup->new_node(N_LABEL);
         if (s < 0) return -1;
-        snprintf(self->labels[self->nlabels].name, MAX_TEXT, "%s", name);
+        self->labels[self->nlabels].name = runtime::text::ct_intern(name);
+        if (!self->labels[self->nlabels].name) return self->sup->fail("out of memory");
         self->labels[self->nlabels].line = line;
         self->labels[self->nlabels].depth = self->ndefer_blocks;
         for (i = 0; i < self->ndefer_blocks; i++) {
@@ -443,7 +445,8 @@ impl StmtSwitch for Stmt {
             self->labels[self->nlabels].has[i] = 0;
         }
         self->nlabels = self->nlabels + 1;
-        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
+        self->arena->nodes[s].text2 = runtime::text::ct_intern(name);
+        if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
         self->sup->lex_next();
         if (self->sup->expect(":") != 0) return -1;
         head = -1;
@@ -487,8 +490,10 @@ impl StmtSwitch for Stmt {
         if (self->lex->tok != T_ID) return self->sup->fail("expected a label name");
         if (ensure_goto_capacity(self, self->ngotos + 1) != 0) return -1;
         self->lex->tok_copy(name, sizeof name);
-        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
-        snprintf(self->gotos[self->ngotos].name, MAX_TEXT, "%s", name);
+        self->arena->nodes[s].text2 = runtime::text::ct_intern(name);
+        if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
+        self->gotos[self->ngotos].name = runtime::text::ct_intern(name);
+        if (!self->gotos[self->ngotos].name) return self->sup->fail("out of memory");
         self->gotos[self->ngotos].line = self->arena->nodes[s].line;
         self->gotos[self->ngotos].depth = self->ndefer_blocks;
         for (i = 0; i < self->ndefer_blocks; i++) {

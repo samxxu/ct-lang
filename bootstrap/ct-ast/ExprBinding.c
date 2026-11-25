@@ -344,8 +344,14 @@ int frontend_parse_bind_conv_call_binding(struct frontend_parse_Expr * self, int
         return (-1);
     }
     self->arena->nodes[n].aux = 12;
-    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
-    snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+    self->arena->nodes[n].text = runtime_text_ct_intern(stype);
+    if ((!self->arena->nodes[n].text)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    self->arena->nodes[n].text4 = runtime_text_ct_intern(target);
+    if ((!self->arena->nodes[n].text4)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
     self->arena->nodes[n].sflags = (self->arena->nodes[n].sflags | 4);
     self->arena->nodes[n].a = recv;
     self->arena->nodes[n].b = (-1);
@@ -377,15 +383,27 @@ int frontend_parse_bind_conv_call(struct frontend_parse_Expr * self, int recv, c
                 return (-1);
             }
             self->arena->nodes[n].aux = (ptr ? 10 : 9);
-            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
             if (ptr) {
-                size_t tl = strlen(self->arena->nodes[n].text);
-                while (((tl > 0) && ((self->arena->nodes[n].text[(tl - 1)] == '*') || (self->arena->nodes[n].text[(tl - 1)] == ' ')))) {
-                    self->arena->nodes[n].text[--tl] = 0;
+                size_t tl = strlen(stype);
+                while (((tl > 0) && ((stype[(tl - 1)] == '*') || (stype[(tl - 1)] == ' ')))) {
+                    tl = (tl - 1);
                 }
+                self->arena->nodes[n].text = runtime_text_ct_intern_len(stype, (int)(tl));
             }
-            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", method);
-            snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+            else {
+                self->arena->nodes[n].text = runtime_text_ct_intern(stype);
+            }
+            if ((!self->arena->nodes[n].text)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
+            self->arena->nodes[n].text2 = runtime_text_ct_intern(method);
+            if ((!self->arena->nodes[n].text2)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
+            self->arena->nodes[n].text4 = runtime_text_ct_intern(target);
+            if ((!self->arena->nodes[n].text4)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
             self->arena->nodes[n].sflags |= 4;
             self->arena->nodes[n].a = recv;
             self->arena->nodes[n].b = (-1);
@@ -399,9 +417,18 @@ int frontend_parse_bind_conv_call(struct frontend_parse_Expr * self, int recv, c
         return (-1);
     }
     self->arena->nodes[n].aux = 6;
-    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
-    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", method);
-    snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+    self->arena->nodes[n].text = runtime_text_ct_intern(stype);
+    if ((!self->arena->nodes[n].text)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    self->arena->nodes[n].text2 = runtime_text_ct_intern(method);
+    if ((!self->arena->nodes[n].text2)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    self->arena->nodes[n].text4 = runtime_text_ct_intern(target);
+    if ((!self->arena->nodes[n].text4)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
     self->arena->nodes[n].sflags |= 4;
     self->arena->nodes[n].a = recv;
     self->arena->nodes[n].b = (-1);

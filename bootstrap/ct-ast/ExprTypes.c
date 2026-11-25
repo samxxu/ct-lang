@@ -964,7 +964,10 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_slice_view_from_array(vo
     if (m < 0) {
         return (-1);
     }
-    snprintf(_self->arena->nodes[m].text, MAX_TEXT, "%s", t);
+    _self->arena->nodes[m].text = runtime_text_ct_intern(t);
+    if ((!_self->arena->nodes[m].text)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->arena->nodes[m].aux = 3;
     _self->arena->nodes[m].a = n;
     _self->arena->nodes[m].b = (-1);
