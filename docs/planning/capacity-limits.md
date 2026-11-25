@@ -1,6 +1,6 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；`MAX_MAPS` 与 B/C/D 类待做）。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DEPS 待做；DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）；`MAX_PKG_DEPS`、`MAX_MAPS` 与 B/C/D 类待做）。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
