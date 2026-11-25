@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10965 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=60462 io_cap=1024
+     emitted_before=48223 emitted_after=60819 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -35,6 +35,9 @@
      (S1a-0 C2 后复测：raw 块收到 TEXT_LIMIT、缓存键 / 初始化文本 / pkg 锁文本
       改按需堆块，落在 Parser/Cache/Module/TypeCheck/Stmt/Pkg；Emitter.h.ct
       仍不变，发射 C 60111 -> 60462，切片清单仍为 76)
+     (S1a-0 C2e 后复测：Pkg 的 17 处 MAX_PKG_CMD 命令/路径缓冲改为 owned 按需
+      文本，只改 Pkg.h.ct；Emitter.h.ct 仍不变，发射 C 60462 -> 60851，切片清单
+      仍为 76)
 -->
 
 ## 1 切片清单

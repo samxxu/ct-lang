@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <stdarg.h>
 
 #include "Sh.h"
 #include "PkgIndex.h"
