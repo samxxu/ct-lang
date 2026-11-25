@@ -5069,6 +5069,12 @@ else
     bad "S1a-0 remaining tables grow" "$(cat "$work/ttg.out" "$work/ttg.err" | head -6)"
 fi
 
+if bash test/ast/cap_grow.sh "$work/ct-ast" >"$work/capg.out" 2>"$work/capg.err"; then
+    ok "S1a-0 parser/emitter caps grow"
+else
+    bad "S1a-0 parser/emitter caps grow" "$(cat "$work/capg.out" "$work/capg.err" | head -6)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
