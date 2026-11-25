@@ -287,5 +287,39 @@ done
 # shellcheck disable=SC2086
 run_build incdirs "$w/incdirs.src/main.ct" $incs || fail=1
 
+# MAX_RAW_INIT: a captured brace list whose text is over the old 4096-byte
+# buffer (3000 short items; every single item stays tiny).
+{
+    echo 'int main(void)'
+    echo '{'
+    printf '    int a[] = {'
+    i=0
+    while [ "$i" -lt 3000 ]; do
+        printf '1,'
+        i=$((i + 1))
+    done
+    printf '};\n'
+    echo '    return a[2999] == 1 ? 0 : 1;'
+    echo '}'
+} >"$w/raw_init.ct"
+run_case raw_init "$w/raw_init.ct" 0 || fail=1
+
+# MAX_INIT_ITEM: one initializer item over the old 4096-byte item buffer, a
+# 5000-byte string literal inside a brace list.
+{
+    echo 'int main(void)'
+    echo '{'
+    printf '    char s[] = { "'
+    i=0
+    while [ "$i" -lt 5000 ]; do
+        printf 'a'
+        i=$((i + 1))
+    done
+    printf '" };\n'
+    echo '    return s[4999] == 97 ? 0 : 1;'
+    echo '}'
+} >"$w/init_item.ct"
+run_case init_item "$w/init_item.ct" 0 || fail=1
+
 [ "$fail" -eq 0 ] || exit 1
 echo "OK S1a-0 cap growth"
