@@ -45,7 +45,9 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
 #define MAX_TRAITS  64
+#define MAX_TRAITS_MAX 65536
 #define MAX_STRUCTS 128
+#define MAX_STRUCTS_MAX 65536
 #define MAX_FIELDS  64
 #define MAX_TYPE_ALIASES 64
 #define MAX_GLOBAL_TYPE_ALIASES 256
@@ -54,6 +56,7 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_GENERIC_INSTS 64
 #define MAX_STRUCT_TPLS 64
 #define MAX_STRUCT_INSTS 128
+#define MAX_STRUCT_INSTS_MAX 65536
 #define MAX_STRUCT_TPARAMS 2
 #define MAX_STRUCT_IMPLS 64
 /* Phase 78 S2b: one row per inherent method carrying ref/out annotations.
@@ -386,11 +389,14 @@ pub trait SymbolOps {
     int  add_bare_type(const char *name, const char *full);
     int  find_struct(const char *name);
     int  add_struct(const char *name);
+    int  ensure_struct_capacity(int need);
     /* Phase 29: a monomorphised generic struct. Its own cap does not eat the
        MAX_STRUCTS budget the plain declarations rely on. */
     int  add_struct_inst(const char *name);
     int  find_trait(const char *name);
     int  add_trait(const char *name);
+    /* S1a-0 C1: grow the trait table itself (not the per-trait method block). */
+    int  ensure_trait_table_capacity(int need);
     /* S1a-0 C1: grow trait `ti`'s method block to hold `need` rows. The new
        slots are zeroed; -1 (an `out of memory` message) only at allocation
        failure or past MAX_METHODS_MAX. The parser calls this before writing
@@ -637,9 +643,11 @@ pub struct Symbols {
     int  typecap;
     struct Trait *traits;
     int  ntraits;
-    struct StructDef *structs;      /* MAX_STRUCTS + MAX_STRUCT_INSTS rows */
+    int  traitscap;
+    struct StructDef *structs;      /* grown from MAX_STRUCTS + MAX_STRUCT_INSTS rows */
     int  nstructs;
     int  nstruct_inst;              /* the instance half of `structs` */
+    int  structcap;
     struct Closure *closures;
     int  nclosure;
     /* Phase 78 S2b: inherent-method parameter annotations, filled while the
@@ -1209,6 +1217,30 @@ impl SymbolOps for Symbols {
         return 1;
     }
 
+    /* S1a-0 C1: the per-unit struct block is one array for plain rows and
+       instance rows; capacity is a single total. A realloc moves rows, and no
+       caller keeps a `StructDef *` across a call that can add one (audited:
+       all readers re-index through `self`). */
+    int ensure_struct_capacity(int need)
+    {
+        int cap;
+        struct StructDef *grown;
+        (void)self;
+        if (need <= self->structcap) return 0;
+        cap = self->structcap > 0 ? self->structcap : MAX_STRUCTS + MAX_STRUCT_INSTS;
+        while (cap < need && cap < MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX) cap *= 2;
+        if (cap > MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX)
+            cap = MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct StructDef *)realloc(self->structs, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->structcap, 0,
+               (size_t)(cap - self->structcap) * sizeof(*grown));
+        self->structs = grown;
+        self->structcap = cap;
+        return 0;
+    }
+
     int find_struct(const char *name)
     {
         int i;
@@ -1225,12 +1257,7 @@ impl SymbolOps for Symbols {
         if (!name[0]) return -1;
         i = self->find_struct(name);
         if (i >= 0) return i;
-        if (self->nstructs - self->nstruct_inst >= MAX_STRUCTS) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg, "too many structs in unit '%s' (limit %d)",
-                     self->unit_name(), MAX_STRUCTS);
-            return self->fail(msg);
-        }
+        if (self->ensure_struct_capacity(self->nstructs + 1) != 0) return -1;
         snprintf(self->structs[self->nstructs].name, MAX_TEXT, "%s", name);
         self->structs[self->nstructs].nuse = 0;
         self->structs[self->nstructs].nfields = 0;
@@ -1260,13 +1287,7 @@ impl SymbolOps for Symbols {
         (void)self;
         i = self->find_struct(name);
         if (i >= 0) return i;
-        if (self->nstruct_inst >= MAX_STRUCT_INSTS) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg,
-                     "too many generic struct instances in unit '%s' (limit %d)",
-                     self->unit_name(), MAX_STRUCT_INSTS);
-            return self->fail(msg);
-        }
+        if (self->nstruct_inst >= MAX_STRUCT_INSTS_MAX) return self->fail("out of memory");
         i = self->add_struct(name);
         if (i < 0) return -1;
         self->structs[i].is_inst = 1;
@@ -1281,6 +1302,28 @@ impl SymbolOps for Symbols {
         for (i = 0; i < self->ntraits; i++)
             if (strcmp(self->traits[i].name, name) == 0) return i;
         return -1;
+    }
+
+    /* S1a-0 C1: the trait table itself moves with `realloc`; the per-trait
+       method blocks are separate allocations, so a moved row keeps its `m`
+       pointer. New rows start zeroed (m = NULL, mcap = 0). */
+    int ensure_trait_table_capacity(int need)
+    {
+        int cap;
+        struct Trait *grown;
+        (void)self;
+        if (need <= self->traitscap) return 0;
+        cap = self->traitscap > 0 ? self->traitscap : MAX_TRAITS;
+        while (cap < need && cap < MAX_TRAITS_MAX) cap *= 2;
+        if (cap > MAX_TRAITS_MAX) cap = MAX_TRAITS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct Trait *)realloc(self->traits, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->traitscap, 0,
+               (size_t)(cap - self->traitscap) * sizeof(*grown));
+        self->traits = grown;
+        self->traitscap = cap;
+        return 0;
     }
 
     /* S1a-0 C1: the method rows are a per-trait heap block, so the cap is a
@@ -1314,7 +1357,7 @@ impl SymbolOps for Symbols {
         (void)self;
         i = self->find_trait(name);
         if (i >= 0) return i;
-        if (self->ntraits >= MAX_TRAITS) return self->fail("too many traits");
+        if (self->ensure_trait_table_capacity(self->ntraits + 1) != 0) return -1;
         snprintf(self->traits[self->ntraits].name, MAX_TEXT, "%s", name);
         /* A row reused after the per-unit reset keeps its method block and
            capacity (the old rows are dead, the allocation is not). */
@@ -1967,10 +2010,12 @@ static int symbols_grow(struct Symbols *self)
     if (!self->traits) {
         self->traits = calloc(MAX_TRAITS, sizeof(*self->traits));
         if (!self->traits) return -1;
+        self->traitscap = MAX_TRAITS;
     }
     if (!self->structs) {
         self->structs = calloc(MAX_STRUCTS + MAX_STRUCT_INSTS, sizeof(*self->structs));
         if (!self->structs) return -1;
+        self->structcap = MAX_STRUCTS + MAX_STRUCT_INSTS;
     }
     if (!self->closures) {
         self->closures = calloc(MAX_CLOSURES, sizeof(*self->closures));

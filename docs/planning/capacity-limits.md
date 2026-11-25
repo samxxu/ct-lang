@@ -33,10 +33,10 @@
 | `MAX_VARS` | 4096 | 12 | A | **已动态**（符号表 `vars`，`MAX_VARS_MAX=65536`）；Memory 的 `own` 计数表仍 4096，剩余 |
 | `MAX_SCOPE` | 256 | 5 | A | 符号表 `scope` 栈已动态（`MAX_SCOPE_MAX`）；可观察嵌套仍受 parser 递归深度 256 保护（D 类，360 层实测栈溢出），剩余 |
 | `MAX_TYPES` | 256 | 4 | A | **已动态**：`types`/`type_kind`/`type_target` 三组并行数组一起倍增到 `MAX_TYPES_MAX=65536` |
-| `MAX_STRUCTS` | 128 | 10 | A | 动态 |
-| `MAX_TRAITS` | 64 | 8 | A | 动态（含 trait 实例） |
+| `MAX_STRUCTS` | 128 | 10 | A | **已动态**：单元 struct 表（与实例行共用一个块）倍增到 `MAX_STRUCTS_MAX=65536` |
+| `MAX_TRAITS` | 64 | 8 | A | **已动态**（trait 行表 + 实例行）；`StructDef.use[64]` 的采纳列表仍 64，剩余 |
 | `MAX_FIELDS` | 64 | 10 | A | 动态（单 struct 字段） |
-| `MAX_STRUCT_INSTS` | 128 | 10 | A | 动态 |
+| `MAX_STRUCT_INSTS` | 128 | 10 | A | 单元内实例行已并入动态 struct 表；全局 `g_insts` 仍固定，剩余 |
 | `MAX_STRUCT_IMPLS` | 64 | 4 | A | 动态 |
 | `MAX_STRUCT_TPLS` | 64 | 4 | A | 动态 |
 | `MAX_GENERIC_INSTS` | 64 | 5 | A | 动态 |

@@ -21,7 +21,9 @@
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
 #define MAX_TRAITS  64
+#define MAX_TRAITS_MAX 65536
 #define MAX_STRUCTS 128
+#define MAX_STRUCTS_MAX 65536
 #define MAX_FIELDS  64
 #define MAX_TYPE_ALIASES 64
 #define MAX_GLOBAL_TYPE_ALIASES 256
@@ -30,6 +32,7 @@
 #define MAX_GENERIC_INSTS 64
 #define MAX_STRUCT_TPLS 64
 #define MAX_STRUCT_INSTS 128
+#define MAX_STRUCT_INSTS_MAX 65536
 #define MAX_STRUCT_TPARAMS 2
 #define MAX_STRUCT_IMPLS 64
 #define MAX_METH_ANN 256
@@ -691,6 +694,34 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_of(void *self
     return 1;
 }
 
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_StructDef * grown;
+    (void)(_self);
+    if (need <= _self->structcap) {
+        return 0;
+    }
+    cap = ((_self->structcap > 0) ? _self->structcap : (MAX_STRUCTS + MAX_STRUCT_INSTS));
+    while (((cap < need) && (cap < (MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX)))) {
+        cap *= 2;
+    }
+    if (cap > (MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX)) {
+        cap = (MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX);
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_StructDef *)(realloc(_self->structs, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->structcap), 0, ((size_t)((cap - _self->structcap)) * sizeof((*grown))));
+    _self->structs = grown;
+    _self->structcap = cap;
+    return 0;
+}
+
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_struct(void *self, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
@@ -714,10 +745,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct(void *self, co
     if (i >= 0) {
         return i;
     }
-    if ((_self->nstructs - _self->nstruct_inst) >= MAX_STRUCTS) {
-        char msg[MAX_TEXT];
-        snprintf(msg, sizeof(msg), "too many structs in unit '%s' (limit %d)", _self->__frontend_sym_symbolops_vptr->unit_name(_self), MAX_STRUCTS);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+    if (_self->__frontend_sym_symbolops_vptr->ensure_struct_capacity(_self, (_self->nstructs + 1)) != 0) {
+        return (-1);
     }
     snprintf(_self->structs[_self->nstructs].name, MAX_TEXT, "%s", name);
     _self->structs[_self->nstructs].nuse = 0;
@@ -750,10 +779,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct_inst(void *sel
     if (i >= 0) {
         return i;
     }
-    if (_self->nstruct_inst >= MAX_STRUCT_INSTS) {
-        char msg[MAX_TEXT];
-        snprintf(msg, sizeof(msg), "too many generic struct instances in unit '%s' (limit %d)", _self->__frontend_sym_symbolops_vptr->unit_name(_self), MAX_STRUCT_INSTS);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+    if (_self->nstruct_inst >= MAX_STRUCT_INSTS_MAX) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
     i = _self->__frontend_sym_symbolops_vptr->add_struct(_self, name);
     if (i < 0) {
@@ -774,6 +801,34 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_trait(void *self, co
         }
     }
     return (-1);
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_table_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_Trait * grown;
+    (void)(_self);
+    if (need <= _self->traitscap) {
+        return 0;
+    }
+    cap = ((_self->traitscap > 0) ? _self->traitscap : MAX_TRAITS);
+    while (((cap < need) && (cap < MAX_TRAITS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_TRAITS_MAX) {
+        cap = MAX_TRAITS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_Trait *)(realloc(_self->traits, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->traitscap), 0, ((size_t)((cap - _self->traitscap)) * sizeof((*grown))));
+    _self->traits = grown;
+    _self->traitscap = cap;
+    return 0;
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_capacity(void *self, int ti, int need) {
@@ -815,8 +870,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_trait(void *self, con
     if (i >= 0) {
         return i;
     }
-    if (_self->ntraits >= MAX_TRAITS) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "too many traits");
+    if (_self->__frontend_sym_symbolops_vptr->ensure_trait_table_capacity(_self, (_self->ntraits + 1)) != 0) {
+        return (-1);
     }
     snprintf(_self->traits[_self->ntraits].name, MAX_TEXT, "%s", name);
     _self->traits[_self->ntraits].nm = 0;
@@ -1187,10 +1242,12 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .add_type = frontend_sym_Symbols_frontend_sym_SymbolOps_add_type,
     .set_type_target = frontend_sym_Symbols_frontend_sym_SymbolOps_set_type_target,
     .type_target_of = frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_of,
+    .ensure_struct_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity,
     .find_struct = frontend_sym_Symbols_frontend_sym_SymbolOps_find_struct,
     .add_struct = frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct,
     .add_struct_inst = frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct_inst,
     .find_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_find_trait,
+    .ensure_trait_table_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_table_capacity,
     .ensure_trait_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_capacity,
     .add_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_add_trait,
     .trait_inst = frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst,
@@ -1592,12 +1649,14 @@ static int symbols_grow(struct frontend_sym_Symbols * self) {
         if ((!self->traits)) {
             return (-1);
         }
+        self->traitscap = MAX_TRAITS;
     }
     if ((!self->structs)) {
         self->structs = calloc((MAX_STRUCTS + MAX_STRUCT_INSTS), sizeof((*self->structs)));
         if ((!self->structs)) {
             return (-1);
         }
+        self->structcap = (MAX_STRUCTS + MAX_STRUCT_INSTS);
     }
     if ((!self->closures)) {
         self->closures = calloc(MAX_CLOSURES, sizeof((*self->closures)));
