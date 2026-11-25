@@ -7,6 +7,7 @@
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
 #include <stdlib.h>
+#include <string.h>
 
 
 struct ct_buf;

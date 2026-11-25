@@ -11,6 +11,7 @@
  * (~70 K nodes by v0.15.0); the pool is a capacity, not a language limit.
  */
 #include <stdlib.h>
+#include <string.h>
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_NODES 262144
 #define NODE_LIMIT 16777216
@@ -208,6 +209,9 @@ static int arena_grow_nodes(struct Arena *self)
     }
     grown = (struct Node *)realloc(self->nodes, (size_t)cap * sizeof(*self->nodes));
     if (!grown) return -1;
+    /* calloc used to zero every slot; realloc only preserves the old ones. */
+    memset((char *)grown + (size_t)self->nodecap * sizeof(*self->nodes), 0,
+           (size_t)(cap - self->nodecap) * sizeof(*self->nodes));
     self->nodes = grown;
     self->nodecap = cap;
     return 0;

@@ -5,6 +5,7 @@
 
 #line 1 "selfhost/ct-ast/runtime/arena/Arena.h.ct"
 #include <stdlib.h>
+#include <string.h>
 #define MAX_NODES 262144
 #define NODE_LIMIT 16777216
 struct ct_buf;
@@ -186,6 +187,7 @@ static int arena_grow_nodes(struct runtime_arena_Arena * self) {
     if ((!grown)) {
         return (-1);
     }
+    memset(((char *)(grown) + ((size_t)(self->nodecap) * sizeof((*self->nodes)))), 0, ((size_t)((cap - self->nodecap)) * sizeof((*self->nodes))));
     self->nodes = grown;
     self->nodecap = cap;
     return 0;
