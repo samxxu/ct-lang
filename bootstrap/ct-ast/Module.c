@@ -129,6 +129,7 @@ static int cycle_Box_target(struct frontend_module_Module *, int, int);
 static int cycle_emit(struct frontend_module_Module *, int, int, int);
 static int module_src_declares_Box(const char *);
 struct frontend_module_Module * frontend_module_module_get(void);
+void frontend_module_ct_module_free_flags(void);
 void frontend_module_ct_module_bind(void *, void *, void *, void *, void *, void *, void *);
 int frontend_module_ct_module_io_mask(int);
 static int frontend_module_g_cycle_adj[CYCLE_ROWS][CYCLE_DEGREE];
@@ -1640,8 +1641,12 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     _self->exe = NULL;
     _self->outdir_opt = NULL;
     _self->cc = NULL;
-    _self->cflags[0] = 0;
-    _self->ldflags[0] = 0;
+    if (_self->cflags != 0) {
+        _self->cflags[0] = 0;
+    }
+    if (_self->ldflags != 0) {
+        _self->ldflags[0] = 0;
+    }
     for (i = 1; i < argc; i++) {
         if (((strcmp(argv[i], "-h") == 0) || (strcmp(argv[i], "--help") == 0))) {
             printf("usage: %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n""                 [--locked] [--emit-c] [--lib] [--runtime-checks] [--outdir <dir>] [--cc <path>]\n""                 [--freestanding] [--alloc <m,f[,r,c]>] [--c-boundary=strict|allow]\n""                 [--check-level=off|warn|error]\n""                 [--cflags <s>] [--ldflags <s>]\n""                 [--line|--no-line] [--emit-map <file|->] [--emit-model <file|->]\n""                 [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n", _self->prog);
@@ -1729,7 +1734,17 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                 return 1;
             }
             i++;
-            if (frontend_module_ct_append_flags((is_cf ? _self->cflags : _self->ldflags), MAX_FLAGS, argv[i]) != 0) {
+            char * * fp;
+            int * fcap;
+            if (is_cf) {
+                fp = (&_self->cflags);
+                fcap = (&_self->cflagscap);
+            }
+            else {
+                fp = (&_self->ldflags);
+                fcap = (&_self->ldflagscap);
+            }
+            if (frontend_module_ct_append_flags(fp, fcap, MAX_FLAGS, argv[i]) != 0) {
                 fprintf(stderr, "ctc: %s value is too long\n", (is_cf ? "--cflags" : "--ldflags"));
                 return 1;
             }
@@ -3459,6 +3474,14 @@ static int ct_pkg_ns_clash(struct frontend_module_Module * m, char * msg, int ca
 }
 struct frontend_module_Module * frontend_module_module_get(void) {
     return (&frontend_module_g_module);
+}
+void frontend_module_ct_module_free_flags(void) {
+    free(frontend_module_g_module.cflags);
+    free(frontend_module_g_module.ldflags);
+    frontend_module_g_module.cflags = 0;
+    frontend_module_g_module.cflagscap = 0;
+    frontend_module_g_module.ldflags = 0;
+    frontend_module_g_module.ldflagscap = 0;
 }
 int frontend_module_ct_module_io_mask(int unit) {
     return frontend_module_g_module.__frontend_module_moduleops_vptr->io_header_mask(&frontend_module_g_module, unit);

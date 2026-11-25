@@ -558,7 +558,17 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
                 return 1;
             }
             i++;
-            if (frontend_module_ct_append_flags((is_cf ? _self->m->cflags : _self->m->ldflags), MAX_FLAGS, argv[i]) != 0) {
+            char * * fp;
+            int * fcap;
+            if (is_cf) {
+                fp = (&_self->m->cflags);
+                fcap = (&_self->m->cflagscap);
+            }
+            else {
+                fp = (&_self->m->ldflags);
+                fcap = (&_self->m->ldflagscap);
+            }
+            if (frontend_module_ct_append_flags(fp, fcap, MAX_FLAGS, argv[i]) != 0) {
                 fprintf(stderr, "ctc: %s value is too long\n", (is_cf ? "--cflags" : "--ldflags"));
                 return 1;
             }

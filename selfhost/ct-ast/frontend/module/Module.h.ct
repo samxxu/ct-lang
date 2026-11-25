@@ -225,8 +225,12 @@ pub struct Module {
     const char *exe;
     const char *outdir_opt;
     const char *cc;
-    char cflags[1024];          /* MAX_FLAGS: a literal, the header has no macros */
-    char ldflags[1024];
+    /* S1a-0 C2g: the accumulated flags grow from MAX_FLAGS (the old literal
+       1024) to TEXT_LIMIT; the build line appends them verbatim. */
+    char *cflags;
+    int  cflagscap;
+    char *ldflags;
+    int  ldflagscap;
 } use ModuleOps;
 
 /* Declared here, after the struct, so the parameter spells the mangled type. */
@@ -2023,8 +2027,8 @@ impl ModuleOps for Module {
         self->exe = NULL;
         self->outdir_opt = NULL;
         self->cc = NULL;
-        self->cflags[0] = 0;
-        self->ldflags[0] = 0;
+        if (self->cflags != 0) self->cflags[0] = 0;
+        if (self->ldflags != 0) self->ldflags[0] = 0;
         for (i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>]\n"
@@ -2120,8 +2124,16 @@ impl ModuleOps for Module {
                     return 1;
                 }
                 i++;
-                if (ct_append_flags(is_cf ? self->cflags : self->ldflags,
-                                    MAX_FLAGS, argv[i]) != 0) {
+                char **fp;
+                int *fcap;
+                if (is_cf) {
+                    fp = &self->cflags;
+                    fcap = &self->cflagscap;
+                } else {
+                    fp = &self->ldflags;
+                    fcap = &self->ldflagscap;
+                }
+                if (ct_append_flags(fp, fcap, MAX_FLAGS, argv[i]) != 0) {
                     fprintf(stderr, "ctc: %s value is too long\n", is_cf ? "--cflags" : "--ldflags");
                     return 1;
                 }
@@ -3373,6 +3385,19 @@ pub struct Module *module_get(void);
 struct Module *module_get(void)
 {
     return &g_module;
+}
+
+/* S1a-0 C2g: release the run's --cflags / --ldflags accumulators. The driver
+   calls it once after the command returns, so every exit path is covered. */
+pub void ct_module_free_flags(void);
+void ct_module_free_flags(void)
+{
+    free(g_module.cflags);
+    free(g_module.ldflags);
+    g_module.cflags = 0;
+    g_module.cflagscap = 0;
+    g_module.ldflags = 0;
+    g_module.ldflagscap = 0;
 }
 
 /* The driver wires the collaborators and the shared table once, before it

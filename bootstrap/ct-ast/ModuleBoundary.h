@@ -102,7 +102,7 @@ struct frontend_module_ModuleBoundary {
 int frontend_module_c_has_manifest(const char *);
 int frontend_module_c_manifest_boundary(const char *);
 int frontend_module_c_path_is_core(const char *);
-int frontend_module_ct_append_flags(char *, int, const char *);
+int frontend_module_ct_append_flags(char * *, int *, int, const char *);
 int frontend_module_ct_cmd_raw(char * *, int *, const char *);
 int frontend_module_ct_cmd_token(char * *, int *, const char *);
 int frontend_module_ct_ensure_dir(const char *);

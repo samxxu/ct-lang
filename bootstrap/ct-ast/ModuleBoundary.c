@@ -100,7 +100,7 @@ char * realpath(const char *, char *);
 int frontend_module_c_has_manifest(const char *);
 int frontend_module_c_manifest_boundary(const char *);
 int frontend_module_c_path_is_core(const char *);
-int frontend_module_ct_append_flags(char *, int, const char *);
+int frontend_module_ct_append_flags(char * *, int *, int, const char *);
 int frontend_module_ct_cmd_raw(char * *, int *, const char *);
 int frontend_module_ct_cmd_token(char * *, int *, const char *);
 int frontend_module_ct_ensure_dir(const char *);
@@ -205,21 +205,17 @@ int frontend_module_c_path_is_core(const char * path) {
     }
     return 0;
 }
-int frontend_module_ct_append_flags(char * buf, int cap, const char * val) {
-    int n;
-    int w;
-    n = (int)(strlen(buf));
-    if ((!val[0])) {
+int frontend_module_ct_append_flags(char * * buf, int * cap, int init, const char * val) {
+    if (((!val) || (!val[0]))) {
         return 0;
     }
-    if ((n + 1) >= cap) {
+    if ((((*buf) == 0) && (tool_sh_ct_text_init(buf, cap, init) != 0))) {
         return (-1);
     }
-    w = snprintf((buf + n), (size_t)((cap - n)), "%s%s", (n ? " " : ""), val);
-    if (((w < 0) || ((n + w) >= cap))) {
+    if ((((*buf)[0] != 0) && (tool_sh_ct_text_cat(buf, cap, " ") != 0))) {
         return (-1);
     }
-    return 0;
+    return tool_sh_ct_text_cat(buf, cap, val);
 }
 int frontend_module_ct_cmd_raw(char * * cmd, int * cap, const char * frag) {
     if (((!frag) || (!frag[0]))) {

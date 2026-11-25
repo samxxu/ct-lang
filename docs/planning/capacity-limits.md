@@ -1,6 +1,6 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键（C2b）、初始化文本（C2c）、pkg 锁文本（C2d）、pkg 命令/路径文本（C2e）与 cc 命令行（C2f）已按需增长**；B/D 类其余待做）。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键（C2b）、初始化文本（C2c）、pkg 锁文本（C2d）、pkg 命令/路径文本（C2e）、cc 命令行（C2f）与 cflags/ldflags 累加器（C2g）已按需增长**；B/D 类其余待做）。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
@@ -83,7 +83,7 @@
 
 | 常量 | 值 | 位置 | 类 | 动作 |
 | --- | --- | --- | --- | --- |
-| `MAX_FLAGS` | 1024 | `Module.h.ct` / `Driver.h.ct` | B | 动态 |
+| `MAX_FLAGS` | 1024 | `Module.h.ct` / `Driver.h.ct` | B | **已动态（C2g）**：`Module.cflags`/`ldflags` 由定长 `char[1024]` 改 `char *` + 容量（`ct_append_flags(char **, int *, init, val)`，初值 1024 倍增到 `TEXT_LIMIT`）；build 与 compile 两条命令行都追加同一累加器，`ct_module_free_flags` 在 driver 返回后释放 |
 | `MAX_CMD` | 8192 | `Module.h.ct` | B | **已动态（C2f）**：`Module` 的 link/archive 命令行改 `char **` + 容量（初值 8192，倍增到 `TEXT_LIMIT=65536`）；`ct_cmd_raw`/`ct_cmd_token` 改为向 `tool/sh/Sh.h.ct` 的 `ct_text_*` 追加，quoted token 不再先落 `char q[MAX_PATH]`；lib 模式的每对象/ar 行与 `ZERO_AR_DATE=1` 包装同样按需 |
 | `MAX_ERRORS` | 20 | `Diag.h.ct` | D | 错误恢复上限；保留并明确文案 |
 | `MAX_LOCK` | 4096 | `Pkg.h.ct`（`MAX_PKG_PATH * 8`） | B | **已动态（C2d）**：`struct Pkg.lock` 改堆块倍增到 `MAX_LOCK_MAX=65536`；`get` 追加、`pkg_lock_keep` scratch、`update`/`migrate` 读写与 `ct.pkg` 读取都按实际大小分配；41 行锁（4721 字节）可 get/verify/update/build |

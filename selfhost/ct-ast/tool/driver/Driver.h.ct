@@ -772,8 +772,16 @@ impl DriverOps for Driver {
                     return 1;
                 }
                 i++;
-                if (frontend::module::ct_append_flags(
-                        is_cf ? self->m->cflags : self->m->ldflags, MAX_FLAGS, argv[i]) != 0) {
+                char **fp;
+                int *fcap;
+                if (is_cf) {
+                    fp = &self->m->cflags;
+                    fcap = &self->m->cflagscap;
+                } else {
+                    fp = &self->m->ldflags;
+                    fcap = &self->m->ldflagscap;
+                }
+                if (frontend::module::ct_append_flags(fp, fcap, MAX_FLAGS, argv[i]) != 0) {
                     fprintf(stderr, "ctc: %s value is too long\n", is_cf ? "--cflags" : "--ldflags");
                     return 1;
                 }

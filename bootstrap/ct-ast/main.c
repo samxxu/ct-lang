@@ -180,5 +180,9 @@ int main(int argc, char * * argv) {
     if (((argc > 1) && (strcmp(argv[1], "pkg") == 0))) {
         return tool_pkg_ct_pkg_install((argc - 2), (argv + 2), m->prog, CTC_VERSION);
     }
-    return tool_driver_ct_driver_run(argc, argv);
+{
+        int rc = tool_driver_ct_driver_run(argc, argv);
+        frontend_module_ct_module_free_flags();
+        return rc;
+    }
 }

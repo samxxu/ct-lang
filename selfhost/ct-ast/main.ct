@@ -143,5 +143,10 @@ int main(int argc, char **argv)
         return tool::pkg::ct_pkg_migrate(argc - 2, argv + 2, m->prog, CTC_VERSION);
     if (argc > 1 && strcmp(argv[1], "pkg") == 0)
         return tool::pkg::ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);
-    return tool::driver::ct_driver_run(argc, argv);
+    {
+        int rc = tool::driver::ct_driver_run(argc, argv);
+        /* S1a-0 C2g: the run's --cflags/--ldflags accumulators. */
+        frontend::module::ct_module_free_flags();
+        return rc;
+    }
 }

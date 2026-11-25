@@ -201,11 +201,14 @@ struct frontend_module_Module {
     const char * exe;
     const char * outdir_opt;
     const char * cc;
-    char cflags[1024];
-    char ldflags[1024];
+    char * cflags;
+    int cflagscap;
+    char * ldflags;
+    int ldflagscap;
     const struct frontend_module_ModuleOps_vtbl *__frontend_module_moduleops_vptr;
 };
 struct frontend_module_Module * frontend_module_module_get(void);
+void frontend_module_ct_module_free_flags(void);
 void frontend_module_ct_module_bind(void *, void *, void *, void *, void *, void *, void *);
 int frontend_module_ct_module_io_mask(int);
 
