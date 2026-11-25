@@ -253,6 +253,8 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.2 ADT 模式扩展 | `v1-PH-2 / S4–S6` | v1.2 train | 字面量/嵌套/结构体 → or/守卫 → 泛型 ADT；泛型 ADT 放最后 |
 | v1.2 检查器深化 | `v1-PH-2 / S7` | v1.2 train | REQ-TYPE-1、REQ-MEM-2、P-1.3 迁移 lint；REQ-MEM-1 只复评 |
 | v1.2 全局默认 strict（V1 欠账） | `v1-PH-2 / S9` | v1.2 train | 默认翻转；`selfhost/`、`lib/core/` 迁到边界单元并零 allow；`examples`/`test` 能迁则迁、C 互操作用例显式 allow；`ct migrate` 为旧包写 `c-boundary = allow` |
+| v1.2 源码狗粮化 | `v1-PH-2 / S8b` | v1.2 train | 用最新特性压缩 selfhost `.ct`（方法化/容器化/`?`/`String`/`match`）；用户语料生成 C 逐字节不变，生成 C 只要求可读（[dogfooding](../planning/dogfooding.md)） |
+| v1.2 样例与文档去指针化 | `v1-PH-2 / S8c` | v1.2 train | 每个特性 ≥1 样例（example + test + doc）；非 C 互操作样例去 `char *`/`->`/`malloc`；README/tutorial/guide/idioms/snippets 同步（[TEST-27](../../issues/testing/test27-feature-examples-pointer-free.md)） |
 
 > **v1-PH-2 已开卡（2026-11-25，规划中）**：所有者同日裁定**不再单开 v1.3/v1.4/v1.5**，
 > 存量欠账全部折进 [卡 §2](../phases/v1-PH-2/card.md) 的 S0–S10：**S1a-0 放开容量上限 →
@@ -312,7 +314,7 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 4. 依次开 `v0-PH-86` 词法器（✅ v0.86.0）、`v0-PH-87` 解析+检查（✅ v0.87.0；`match` 字面项随 v0-PH-88 的自举搬迁落地）、`v0-PH-88` 发射器+回环（✅ v0.88.0；v1-pre 收口）；
 5. 开 `v1-PH-0`（v1.0），先定 seed，再退 L1/L2；
 6. 开 `v1-PH-1 / S1`（M1 精细切分）→ `S2`（A 默认强制）（✅ v1.1.0）；
-7. 开 `v1-PH-2`（v1.2，单卡 S0–S10）：小欠账 → 容量上限动态化（S1a-0）→ SH-94 单元收敛（S1a-1）→ IR-1（S1b 总闸）→ 下标协议 → 函子 → ADT 模式 → 检查器 → IR-2 → 全局默认 strict → 收口；
+7. 开 `v1-PH-2`（v1.2，单卡 S0–S10）：小欠账 → 容量上限动态化（S1a-0）→ SH-94 单元收敛（S1a-1）→ IR-1（S1b 总闸）→ 下标协议 → 函子 → ADT 模式 → 检查器 → IR-2 → 源码狗粮化（S8b）→ 样例与文档去指针化（S8c）→ 全局默认 strict → 收口；
 8. 全局默认 strict 在 v1.2 收回 v0-PH-65 的 pre-1.0 豁免并翻转默认；C 互操作改显式 allow，本路线到 `v1.2.0` 为止。
 
 不建议把“去旧代码”“语法重写”“A 全量检查”塞进同一个 phase。

@@ -18,14 +18,14 @@ version-minor: 2
 | 项 | 值 |
 | --- | --- |
 | 编号 | `v1-PH-2`（`MINOR = 2`） |
-| 目标 | 先把 LIR + 清理 CFG 落成唯一发射底座，再在同一底座上补完下标协议、函子、ADT 模式、检查器，并把 **全局默认 strict** 作为 V1 欠账补齐 |
-| 范围 | S0 小欠账 → S1a-0 容量上限动态化 → S1a-1 单元收敛（SH-94 剩余）→ S1b IR-1（闸）→ S2–S7 功能 → S8 IR-2 收尾切换 → S9 全局默认 strict 迁移 → S10 收口；见 §2 |
-| 非目标 | 优化器、SSA、C ABI 破坏性变更、未列明的用户语法、真板硬件（`HW-*`）、外部包排期 |
-| 交付物 | ABI-3/4 修复、CI 两个 job、LANG-25 码表；**容量上限动态化（49 个 Limits + 8 个本地 + 14 处硬编码）**；**SH-94 剩余方法组拆分**；TIR 视图 + LIR + 清理 CFG + 验证器；REQ-JSACCESS-1 / REQ-INDEX-1；函子 `(A,B) => R`；ADT 模式扩展；REQ-TYPE-1 / REQ-MEM-2 / P-1.3；**全局默认 strict（in-repo 迁移 + 默认翻转）**；`v1.2.0` |
+| 目标 | 先把 LIR + 清理 CFG 落成唯一发射底座，再在同一底座上补完下标协议、函子、ADT 模式、检查器，把 **全局默认 strict** 作为 V1 欠账补齐，并用最新特性压缩 selfhost 源码 |
+| 范围 | S0 小欠账 → S1a-0 容量上限动态化 → S1a-1 单元收敛（SH-94 剩余）→ S1b IR-1（闸）→ S2–S7 功能 → S8 IR-2 收尾切换 → **S8b 源码狗粮化** → **S8c 样例与文档去指针化** → S9 全局默认 strict 迁移 → S10 收口；见 §2 |
+| 非目标 | 优化器、SSA、C ABI 破坏性变更、未列明的用户语法、真板硬件（`HW-*`）、外部包排期；**不要求生成 C 变短/逐字节不变、不做 minify、不把节点池 `kind` 改 ADT** |
+| 交付物 | ABI-3/4 修复、CI 两个 job、LANG-25 码表；**容量上限动态化（49 个 Limits + 8 个本地 + 14 处硬编码）**；**SH-94 剩余方法组拆分**；TIR 视图 + LIR + 清理 CFG + 验证器；REQ-JSACCESS-1 / REQ-INDEX-1；函子 `(A,B) => R`；ADT 模式扩展；REQ-TYPE-1 / REQ-MEM-2 / P-1.3；**源码狗粮化报告**；**特性样例矩阵 + examples/docs 去指针化**；**全局默认 strict（in-repo 迁移 + 默认翻转）**；`v1.2.0` |
 | 任务清单 | §2（S0–S10，四列齐全） |
 | 退出判据 | E-V3-1…E-V3-11（§3） |
 | version-minor | 2 |
-| 已知风险 | R-V3-1…R-V3-10（§4） |
+| 已知风险 | R-V3-1…R-V3-12（§4） |
 
 ## 1 入口与闸
 
@@ -58,7 +58,9 @@ version-minor: 2
 | S6 泛型 ADT | S4 | 只依赖模式基础设施，不依赖 S5 |
 | S7 检查器 | S1b | `REQ-MEM-2` 直接用 S1b 的清理 CFG；`REQ-TYPE-1` 用现有检查器 |
 | S8 IR-2 | S1b | emitter 契约 + 语义图 + 自举切换；建议在 S2–S7 之后，避免反复搬发射逻辑 |
-| S9 全局默认 strict | S7 | 默认翻转 + in-repo 迁移；依赖 S7 的类型检查证据与 S1b 的 LIR |
+| S8b 源码狗粮化 | S8 | 用最新特性压缩 selfhost 源码；**用户语料生成 C 逐字节不变**，编译器自身 C 允许差异；详见 [dogfooding](../../planning/dogfooding.md) |
+| S8c 样例与文档去指针化 | S2–S6（特性）、S8b（可并行） | 特性样例矩阵清零；examples/docs 用新写法；C 互操作例外逐条登记（[TEST-27](../../../issues/testing/test27-feature-examples-pointer-free.md)） |
+| S9 全局默认 strict | S8c | 默认翻转 + in-repo 迁移；依赖 S7 的类型检查证据与 S1b 的 LIR |
 | S10 收口 | S0–S9 | — |
 
 > **约束（N-1…N-6）**
@@ -85,6 +87,8 @@ version-minor: 2
 | S6 泛型 ADT | 泛型 ADT（`enum Option<T>` / `Result<T,E>`）；布局、实例化、与 `Box`/`Vec` 交互 | 同上 | 泛型实例夹具；`Box`/`Vec` 互操作；golden；sized 上限复核 | L |
 | S7 检查器与证据 | REQ-TYPE-1（`--types` 三类判定进 `build/compile` 默认，先 FP=0 再分切片）；REQ-MEM-2（用 S1b 的 CFG 做单元内写入摘要）；REQ-MEM-1 只复评；P-1.3 迁移 lint | [REQ-TYPE-1](../../planning/requirements-pool.md#L229-L243)、[REQ-MEM-2](../../planning/requirements-pool.md#L261-L277)、[J-6 台账](../../planning/j6-evidence/ledger.md) | FP=0 证据；`--check-level=off` 逃生；写入摘要正负例；迁移 lint 三档 dry-run；`check-all` 绿 | L |
 | S8 IR-2 | emitter 契约（类型/实例化/生命周期判定移出 emitter）；内建层/泛型实例语义依赖图；golden 差异清单后重基线；自举切换；**切换后按 [design §4.5](../../design/sh94-m1-core-layout.md#45-phase-demitter分两段避免与-ir-重复劳动) 做 Emitter D4–D6（EmitHeader / EmitDecl / EmitExpr）** | typed-lowered-ir §4、§6–§8、[SH-113](../../../issues/selfhost/sh113-builtin-live-boundary.md)、[SH-94](../../../issues/selfhost/sh94-giant-units-duplicate-constants.md) | emitter 无类型/实例化/生命周期判定（评审签字）；全语料等价或差异清单签字；自举 2 轮（tag 前 3 轮）逐字节；D4–D6 生成物逐字节；旧路径一提交可回滚 | L |
+| S8b 源码狗粮化 | D1 方法化（329 个 `struct X *self` 自由函数）→ D2 容器化（82 处手写 realloc / 并行数组）→ D5 错误路径（`?` / `errdefer`）→ D3 命名构建（选域 `snprintf` → `String`）→ D4 判别式（已 ADT 域用 `match`，节点池不动）→ D6 函子签名 | [dogfooding](../../planning/dogfooding.md)、[REQ-ADT-PATTERN-1](../../planning/requirements-pool.md)、[REQ-FUNCTOR-1](../../planning/requirements-pool.md) | 用户语料生成 C 逐字节不变；`check-ast` fixpoint；seed 两轮；每片报告前后 LOC/计数；生成 C 可读性 REVIEW 签字 | L |
+| S8c 样例与文档去指针化 | A：`docs/planning/feature-examples-matrix.md` 每个特性一行（example / test / doc / 状态）；B：examples 补齐缺失样例，非 C 互操作样例去掉 `char *` / `->` / `malloc`；C：README / tutorial / guide / idioms / snippets 改写；D：examples 全量构建 + 矩阵一致性断言（先 warn，收口转硬） | [TEST-27](../../../issues/testing/test27-feature-examples-pointer-free.md)、[dogfooding](../../planning/dogfooding.md)、[pointer-free-v2](../../proposals/pointer-free-v2.md) | 矩阵无 missing；新特性（S2–S6）各有 ≥1 样例；非 C 互操作样例指针清零（例外逐条有理由）；snippets 可编译；`check-ast` / `check-docs` 绿 | L |
 | S9 全局默认 strict（V1 欠账） | ① 审计 `798` 处 `#include`（`selfhost` 35 / `lib` 8 / `examples` 180 / `test` 575），分三类：边界单元、C 互操作用例、待清理；② `selfhost/` 与 `lib/core/` 迁到边界单元（`.m.ct` / shim），**零 allow**；③ `examples/`、`test/` 能迁则迁，C 互操作/负例显式 allow；④ `c_boundary_for` 去掉四目录豁免，默认 strict；manifest 无键改为 strict，`ct migrate` 为旧包写 `c-boundary = allow`；⑤ spec §1.2 / §4.66 与 README 更新；⑥ 自举与 seed 重生成 | [REQ-STRICT-1](../../planning/requirements-pool.md)、[v0-PH-65](../v0-PH-65/card.md) | 默认 strict 下 `check-all` 绿；`selfhost/`、`lib/core/` 零 allow；普通 `.ct` 无 include 不受影响；显式 allow 仍可用；`ct migrate` 旧包夹具通过；自举 2 轮 + seed 两轮逐字节 | L |
 | S10 收口 | `stable-subset` 分档更新；冷/热构建各测一次并记录（不立项）；`CTC_VERSION 1.2.0` 与 dist；**tag 与 release 不自动创建**，由所有者手工验证后执行；seed 重生成 | — | E-V3-11 | M |
 
@@ -113,6 +117,8 @@ version-minor: 2
 | E-V3-7 | 泛型 ADT：`Option<T>` / `Result<T,E>` 夹具；布局与实例化稳定；与 `Box`/`Vec` 互操作 |
 | E-V3-8 | 检查器：REQ-TYPE-1 FP=0 + 分切片；REQ-MEM-2 写入摘要；P-1.3 迁移 lint；`off` 逃生 |
 | E-V3-9 | IR-2：emitter 不再做类型/实例化/生命周期判定；语义图替换文本判活；golden 差异清单签字；自举 2 轮（tag 前 3 轮）逐字节；D4–D6 逐片生成物逐字节 |
+| E-V3-9b | 狗粮化：D1–D6 各片用户语料生成 C 逐字节；源码 LOC/自由函数/realloc/snprintf/判别式前后报告入库；生成 C 可读性 REVIEW 签字 |
+| E-V3-9c | 样例与文档：矩阵无 missing；新特性各有 ≥1 样例；非 C 互操作用例指针清零（例外有理由）；README/tutorial/guide/idioms/snippets 同步；`check-ast` / `check-docs` 绿 |
 | E-V3-10 | 全局默认 strict：默认下 `check-all` 绿；`selfhost/` 与 `lib/core/` 零 allow；普通无 include 的 `.ct` 逐字节不变；显式 allow（manifest / CLI / shim）正负例；`ct migrate` 旧包夹具通过 |
 | E-V3-11 | 收口：`CTC_VERSION 1.2.0`、dist 与发布流程同 v1.1；**不自动打 tag / 不自动发 release**——所有者手工验证后才创建 annotated tag；`check-all` 全绿、seed 两轮逐字节 |
 
@@ -130,6 +136,8 @@ version-minor: 2
 | R-V3-8 | 外部项被误当本卡前置 | N-5；`REQ-PKG-1` / `REQ-ABI-2` / 硬件项不进 E-V3-* |
 | R-V3-9 | SH-94 剩余拆分与 LIR 同文件冲突 | S1a-1 先合入，S1b 只在拆分后的单元上改；单写者；每切片独立回滚 |
 | R-V3-10 | 文本容量动态化触及 31 个单元、791 处定长数组 | C2 独立切片、独立回滚；先做 C1；长名/长路径夹具先行；`Limits.h.ct` 只留 `CAP_LIMIT` / `TEXT_LIMIT` / `NODE_LIMIT` 与 D 类 |
+| R-V3-11 | 狗粮化改动面大、易与 IR/严格迁移冲突 | 放在 S8 之后、S9 之前；一域一片；用户语料逐字节；生成 C 只记录不设门禁；REVIEW 签字可读性 |
+| R-V3-12 | 去指针化扭曲 C 互操作或硬件样例 | 例外清单（`55_c_boundary_shim` / `c-superset` / `54_freestanding_alloc` / `.m.ct` / shim）逐条登记；只改非边界样例 |
 
 回滚：S0–S10 各自独立提交；`v1.2.0` 的版本/tag 单独回滚；不改已发布 tag。
 

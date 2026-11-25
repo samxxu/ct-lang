@@ -347,6 +347,19 @@ v0-PH-52 的 D52-6 指向本条。
 | `last-touched` | 2026-11-25 |
 | `block` | 无；ADT 形态与泛型元数（C3）同批收到形式上限，spec §8 / stable-subset 与实现同一提交 |
 
+## REQ-DOGFOOD-1 — selfhost 源码狗粮化（用最新特性压缩 .ct）
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-DOGFOOD-1` |
+| `what` | 用已落地的语言特性压缩 `selfhost/ct-ast/**/*.ct`：自由函数方法化（329）、手写 realloc/并行数组容器化（82）、错误路径 `?`/`errdefer`、命名构建 `snprintf`→`String`（选域）、已 ADT 域用 `match`、函子签名。生成 C 只要求可读，不要求变短。 |
+| `why` | 语言特性已存在，但自举代码仍以 C 风格为主：397 处 `kind` 判别、300 条 `else if`、1,377 处 `snprintf`；源码 59,038 行，压缩空间在样板与手工内存管理。 |
+| `priority` | `P2` |
+| `status` | `planned`（`v1-PH-2` S8b） |
+| `owner` | REQ（待指派） |
+| `last-touched` | 2026-11-26 |
+| `block` | 无；依赖 S3 函子与 S4–S6 ADT 模式；排在 S8 之后、S9 之前；节点池 `kind` 不改 ADT |
+
 ## REQ-STRICT-1 — 全局默认 strict（V1 欠账）
 
 | 字段 | 值 |
