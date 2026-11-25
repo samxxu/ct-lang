@@ -7,18 +7,24 @@
  * for the next token; `accept` / `expect` / `fail` stay on the parser object
  * because they are about grammar, not about characters.
  *
- * Macros do not cross a unit boundary, so the capacity and the token kinds are
- * declared here: MAX_TEXT 160 is the value `frontend/sym/Symbols.h.ct` lists and
- * T_EOF..T_PP 0..5 are the kinds `frontend/parse/ParseSupport.h.ct` and the
- * parser spell. The capacity is a literal (a `pub struct` lands in the
- * generated header, which carries no macros).
+ * Macros do not cross a unit boundary, so the token kinds and the formal text
+ * bound are declared here: T_EOF..T_PP 0..5 are the kinds
+ * `frontend/parse/ParseSupport.h.ct` and the parser spell; `TEXT_LIMIT` is the
+ * one formal text bound (S1a-0 C2o). The token view is no longer clamped to the
+ * old 159-byte row: an identifier or string literal may use any length up to
+ * the formal bound, and a longer one is an explicit error rather than a silent
+ * truncation.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <limits.h>
 #include <assert.h>
 #include <string.h>
 
-#define MAX_TEXT   160
+/* S1a-0 C2o: one formal text bound for a single token, spelled as a literal
+   because a `pub struct` lands in the generated header, which carries no
+   macros. */
+#define TEXT_LIMIT 65536
 #define T_EOF    0
 #define T_ID     1
 #define T_NUM    2
@@ -64,18 +70,21 @@ pub struct Lexer {
     int  bol;
     int  tok;
     TokView tokstr;             /* the token's bytes, a view into `src` */
-    /* The C-boundary scratch buffer: `tok_cstr` copies into it. It is not the
-       token representation, only the conversion a C API argument needs. */
-    char cbuf[160];
+    /* The C-boundary scratch buffer: `tok_cstr` copies into it and grows it to
+       the token's length. It is not the token representation, only the
+       conversion a C API argument needs. */
+    char *cbuf;
+    int  cbufcap;
     long toknum;
     /* the `U` / `L` suffix of an integer literal, as written (`uLL`, `LLu`):
        the parser validates and normalizes it. The view keeps 7 bytes, so an
        invalid run is still rejected by length rather than truncated into a
        legal-looking suffix. */
     TokView toksuffix;
-    /* 1 when the current identifier is longer than the view keeps (MAX_TEXT-1):
-       the parser turns it into `identifier is too long` instead of letting a
-       truncated name collide with another one. */
+    /* 1 when the current token is longer than the formal TEXT_LIMIT: the parser
+       turns it into an explicit "too long" diagnostic instead of letting a
+       truncated name collide with another one. Ordinary long names (2000
+       bytes, say) leave this 0 and are kept whole. */
     int  toktrunc;
     int  srclen;                /* bytes in `src`, excluding the final NUL */
     int  line;                  /* 1-based */
@@ -98,15 +107,17 @@ static int lex_view_ok(struct Lexer *l)
 }
 
 /* Record the token as `[start, start+len)` of `src`. `len` is clamped to what
-   the cursor actually consumed and to MAX_TEXT-1, the old fixed buffer's cap:
-   the long-token diagnostics therefore keep their exact trigger point while
-   the bytes stay in place. */
+   the cursor actually consumed and to the formal TEXT_LIMIT; a longer token
+   sets `toktrunc` so the parser reports it instead of reading a cut name. */
 static void lex_view(struct Lexer *l, int start, int len)
 {
     int avail = l->pos - start;
     if (len < 0) len = 0;
     if (len > avail) len = avail;
-    if (len > MAX_TEXT - 1) len = MAX_TEXT - 1;
+    if (len > TEXT_LIMIT) {
+        l->toktrunc = 1;
+        len = TEXT_LIMIT;
+    }
     l->tokstr.ptr = l->src + start;
     l->tokstr.len = len;
     if (l->srclen > 0) assert(lex_view_ok(l));
@@ -166,7 +177,21 @@ impl LexOps for Lexer {
     const char *tok_cstr(void)
     {
         int n = self->tokstr.len;
-        if (n > MAX_TEXT - 1) n = MAX_TEXT - 1;
+        char *grown;
+
+        if (n < 0) n = 0;
+        if (n + 1 > self->cbufcap) {
+            grown = (char *)realloc(self->cbuf, (size_t)n + 1);
+            if (!grown) {
+                /* OOM: keep the API total (an empty string) instead of
+                   returning a dangling pointer; the caller's own allocation
+                   will report the failure. */
+                if (self->cbuf && self->cbufcap > 0) self->cbuf[0] = 0;
+                return self->cbuf ? self->cbuf : "";
+            }
+            self->cbuf = grown;
+            self->cbufcap = n + 1;
+        }
         if (n > 0) memcpy(self->cbuf, self->tokstr.ptr, (size_t)n);
         self->cbuf[n] = 0;
         return self->cbuf;
@@ -183,7 +208,7 @@ impl LexOps for Lexer {
        `toknum` set for the parser to read. */
     void next(void)
     {
-        int c, n;
+        int c;
         (void)self;
 
         for (;;) {
@@ -216,9 +241,7 @@ impl LexOps for Lexer {
         self->tokline = self->line;
         self->toktrunc = 0;
         if (self->bol && c == '#') {
-            n = 0;
-            while (self->src[self->pos] && self->src[self->pos] != '\n') { n++; self->pos++; }
-            if (n > MAX_TEXT - 1) self->toktrunc = 1;
+            while (self->src[self->pos] && self->src[self->pos] != '\n') self->pos++;
             self->tok = T_PP;
             self->bol = 0;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
@@ -226,12 +249,10 @@ impl LexOps for Lexer {
         }
         self->bol = 0;
         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
-            n = 0;
             while (self->src[self->pos] && ((self->src[self->pos] >= 'a' && self->src[self->pos] <= 'z')
                    || (self->src[self->pos] >= 'A' && self->src[self->pos] <= 'Z')
                    || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9')
-                   || self->src[self->pos] == '_')) { n++; self->pos++; }
-            if (n > MAX_TEXT - 1) self->toktrunc = 1;
+                   || self->src[self->pos] == '_')) self->pos++;
             self->tok = T_ID;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
@@ -312,18 +333,13 @@ impl LexOps for Lexer {
         }
         if (c == '"' || c == '\'') {
             char q = (char)c;
-            n = 1;                      /* the opening quote */
             self->pos++;
             while (self->src[self->pos] && self->src[self->pos] != q) {
-                if (self->src[self->pos] == '\\' && self->src[self->pos + 1]) {
-                    n++;
+                if (self->src[self->pos] == '\\' && self->src[self->pos + 1])
                     self->pos++;
-                }
-                n++;
                 self->pos++;
             }
-            if (self->src[self->pos] == q) { n++; self->pos++; }
-            if (n > MAX_TEXT - 1) self->toktrunc = 1;
+            if (self->src[self->pos] == q) self->pos++;
             self->tok = T_STR;
             lex_view(self, self->tokstart, self->pos - self->tokstart);
             return;
@@ -353,24 +369,24 @@ impl LexOps for Lexer {
             int q = 0;
             self->tokfloat = 1;
             self->toknum = 0;
-            while (q + 1 < MAX_TEXT && (self->src[self->pos] == '.'
+            while (q + 1 < TEXT_LIMIT && (self->src[self->pos] == '.'
                    || (self->src[self->pos] >= '0' && self->src[self->pos] <= '9'))) {
                 q++;
                 self->pos++;
             }
             if (self->src[self->pos] == 'e' || self->src[self->pos] == 'E') {
-                if (q + 1 < MAX_TEXT) { q++; self->pos++; }
+                if (q + 1 < TEXT_LIMIT) { q++; self->pos++; }
                 if (self->src[self->pos] == '+' || self->src[self->pos] == '-') {
-                    if (q + 1 < MAX_TEXT) { q++; self->pos++; }
+                    if (q + 1 < TEXT_LIMIT) { q++; self->pos++; }
                 }
-                while (q + 1 < MAX_TEXT && self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
+                while (q + 1 < TEXT_LIMIT && self->src[self->pos] >= '0' && self->src[self->pos] <= '9') {
                     q++;
                     self->pos++;
                 }
             }
             if (self->src[self->pos] == 'f' || self->src[self->pos] == 'F'
                 || self->src[self->pos] == 'l' || self->src[self->pos] == 'L') {
-                if (q + 1 < MAX_TEXT) { q++; self->pos++; }
+                if (q + 1 < TEXT_LIMIT) { q++; self->pos++; }
             }
             self->tok = T_NUM;
             /* An integer literal's value is in `toknum`; its text keeps the

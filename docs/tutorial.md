@@ -2160,31 +2160,26 @@ C enum 与 `switch` 的行为完全不变。
 把 `node->kind` 判别机械改写成穷尽 `match` 的做法见
 [patterns §6](patterns.md#6-kind-判别改写成穷尽-match)。
 
-## 19. 词法边界：长名字、长字符串与相邻字面量（v0-PH-86，v0.86.0 起可用）
+## 19. 词法边界：长名字、长字符串与相邻字面量（v0-PH-86；v1-PH-2 S1a-0 C2o 起按需）
 
-词法器把 token 存成源缓冲的视图，用户能看到的仍是两条长度规则：标识符超过
-159 字符报 `identifier is too long`；表达式位置的单个字符串字面量超过 158 字节报
-`string literal is too long (max 158 bytes; split it)`。需要更长的文本时拆成相邻
-字面量（编译期拼接）：
+词法器把 token 存成源缓冲的视图；单个标识符 / 字符串字面量按需容纳到形式文本上限
+`TEXT_LIMIT` = 65536 字节。旧的 159 字符标识符与 158 字节单字面量上限已退役：
+2000 字节的名字与字面量都能直接用。只有超过 65536 字节（资源保护上限）才报
+`identifier is too long (over the 65536-byte formal text limit)` 或
+`string literal exceeds 65536 bytes; split it`，绝不静默截断。相邻字面量仍会在编译期拼接：
 
 ```ct
 #include <stdio.h>
 
 int main(void)
 {
-    const char *s = "hello, " "world";   /* 相邻字面量拼接，不受 158 字节上限约束 */
+    const char *s = "hello, " "world";   /* 相邻字面量拼接 */
     printf("%s\n", s);
     return 0;
 }
 ```
 
-反例（都会在编译期停下，不要写进生产代码）：
-
-```ct
-const char *too_long = "…158 字节以上的内容…";   // error: string literal is too long (max 158 bytes; split it)
-/* 160 个字符的标识符 */ int aaaa… = 1;          // error: identifier is too long
-```
-
+真实程序不应触到形式上限；需要更长的静态文本时优先拆成相邻字面量或写入初始化器。
 实现细节（`{ptr,len}` 视图、不保证 NUL、只在 C 边界转换）见
 [language-spec §2](language-spec.md#2-词法与书写要求ct-ast)；用户代码不需要关心它。
 

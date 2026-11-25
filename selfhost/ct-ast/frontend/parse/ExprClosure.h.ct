@@ -529,7 +529,8 @@ impl ExprClosure for Expr {
 
         line = self->lex->tokline;
         col = self->lex->tokstart - self->lex->lstart + 1;
-        snprintf(owner, sizeof owner, "%s", self->cur_func ? self->cur_func : "");
+        snprintf(owner, sizeof owner, "%s",
+                 (self->cur_func && *self->cur_func) ? *self->cur_func : "");
         ci = self->sym->closure_new(owner);
         if (ci < 0) return self->sup->fail(self->sym->last_error());
         self->sym->closures[ci].line = line;

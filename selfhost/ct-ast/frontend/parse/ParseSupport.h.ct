@@ -74,6 +74,7 @@ pub trait SupportOps {
     int  type_warn(int line, int col, const char *callee, const char *msg);
     int  amb_warn(int line, int col, const char *method, const char *msg);
     int  ns_decl_name(const char *name, char *out, int cap);
+    const char *ns_decl_text(const char *name);
     int  resolve_type(const char *name, char *out, int cap);
     int  is_iface_type(const char *type, char *tout, int tcap);
     int  iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr);
@@ -520,12 +521,13 @@ impl SupportOps for ParseSupport {
     {
         (void)self;
         self->lex->next();
-        /* a name longer than the view keeps is a hard error, not a silent
+        /* a name past the formal text bound is a hard error, not a silent
            truncation: two long names sharing a prefix would collapse into one
-           symbol and the generated C would fail to compile */
+           symbol and the generated C would fail to compile. A 2000-byte name
+           is well inside the bound and is kept whole (S1a-0 C2o). */
         if (self->lex->toktrunc && self->lex->tok == T_ID) {
             self->lex->toktrunc = 0;
-            self->fail("identifier is too long");
+            self->fail("identifier is too long (over the 65536-byte formal text limit)");
             self->lex->tok = T_EOF;
         }
     }
@@ -599,7 +601,7 @@ impl SupportOps for ParseSupport {
            same C name -- so a prefixed row is found from either line. */
         i = -1;
         cname = (const char *)0;
-        if (self->sym->ns[0]) {
+        if (self->sym->ns && self->sym->ns[0]) {
             cname = runtime::text::ct_intern_join(self->sym->ns, name);
             if (!cname) return self->fail("out of memory");
             i = self->sym->find_func(cname);
@@ -628,7 +630,7 @@ impl SupportOps for ParseSupport {
             fresh = 1;
         }
         if (pub_now) self->sym->funcs[i].is_pub = 1;
-        if (!(pub_now && self->sym->ns[0])) {
+        if (!(pub_now && self->sym->ns && self->sym->ns[0])) {
             /* A static helper keeps its plain name even inside a namespace. */
             cname = runtime::text::ct_intern(name);
             if (!cname) return self->fail("out of memory");
@@ -803,6 +805,13 @@ impl SupportOps for ParseSupport {
     int amb_warn(int line, int col, const char *method, const char *msg)
     {
         return tool::diag::ct_amb_warn(line, col, method, msg, self->mem->path);
+    }
+
+    const char *ns_decl_text(const char *name)
+    {
+        const char *q = self->sym->ns_decl_text(name);
+        if (!q) self->fail("out of memory");
+        return q;
     }
 
     int ns_decl_name(const char *name, char *out, int cap)

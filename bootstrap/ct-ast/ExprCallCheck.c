@@ -353,7 +353,7 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_check_static
 static int frontend_parse_Expr_frontend_parse_ExprCallCheck_record_call(void *self, const char * callee, int line) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     (void)(_self);
-    if ((!_self->cur_func[0])) {
+    if (((!_self->cur_func) || (!(*_self->cur_func)[0]))) {
         return 0;
     }
     if ((*_self->ncalls) >= (*_self->callcap)) {
@@ -377,7 +377,7 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_record_call(void *se
         (*_self->calls) = grown;
         (*_self->callcap) = cap;
     }
-    (*_self->calls)[(*_self->ncalls)].caller = runtime_text_ct_intern(_self->cur_func);
+    (*_self->calls)[(*_self->ncalls)].caller = runtime_text_ct_intern((*_self->cur_func));
     if ((!(*_self->calls)[(*_self->ncalls)].caller)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }

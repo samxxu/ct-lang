@@ -4,10 +4,11 @@
 
 #line 1 "selfhost/ct-ast/frontend/lex/Lexer.h.ct"
 #include <stdio.h>
+#include <stdlib.h>
 #include <limits.h>
 #include <assert.h>
 #include <string.h>
-#define MAX_TEXT   160
+#define TEXT_LIMIT 65536
 #define T_EOF    0
 #define T_ID     1
 #define T_NUM    2
@@ -142,8 +143,20 @@ static int frontend_lex_Lexer_frontend_lex_LexOps_tok_copy(void *self, char * ou
 static const char * frontend_lex_Lexer_frontend_lex_LexOps_tok_cstr(void *self) {
     struct frontend_lex_Lexer *_self = (struct frontend_lex_Lexer *)self;
     int n = _self->tokstr.len;
-    if (n > (MAX_TEXT - 1)) {
-        n = (MAX_TEXT - 1);
+    char * grown;
+    if (n < 0) {
+        n = 0;
+    }
+    if ((n + 1) > _self->cbufcap) {
+        grown = (char *)(realloc(_self->cbuf, ((size_t)(n) + 1)));
+        if ((!grown)) {
+            if ((_self->cbuf && (_self->cbufcap > 0))) {
+                _self->cbuf[0] = 0;
+            }
+            return (_self->cbuf ? _self->cbuf : "");
+        }
+        _self->cbuf = grown;
+        _self->cbufcap = (n + 1);
     }
     if (n > 0) {
         memcpy(_self->cbuf, _self->tokstr.ptr, (size_t)(n));
@@ -163,7 +176,6 @@ static int frontend_lex_Lexer_frontend_lex_LexOps_tok_first(void *self) {
 static void frontend_lex_Lexer_frontend_lex_LexOps_next(void *self) {
     struct frontend_lex_Lexer *_self = (struct frontend_lex_Lexer *)self;
     int c;
-    int n;
     (void)(_self);
     for (; ; ) {
         c = (unsigned char)(_self->src[_self->pos]);
@@ -210,13 +222,8 @@ static void frontend_lex_Lexer_frontend_lex_LexOps_next(void *self) {
     _self->tokline = _self->line;
     _self->toktrunc = 0;
     if ((_self->bol && (c == '#'))) {
-        n = 0;
         while ((_self->src[_self->pos] && (_self->src[_self->pos] != '\n'))) {
-            n++;
             _self->pos++;
-        }
-        if (n > (MAX_TEXT - 1)) {
-            _self->toktrunc = 1;
         }
         _self->tok = T_PP;
         _self->bol = 0;
@@ -225,13 +232,8 @@ static void frontend_lex_Lexer_frontend_lex_LexOps_next(void *self) {
     }
     _self->bol = 0;
     if (((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || (c == '_'))) {
-        n = 0;
         while ((_self->src[_self->pos] && (((((_self->src[_self->pos] >= 'a') && (_self->src[_self->pos] <= 'z')) || ((_self->src[_self->pos] >= 'A') && (_self->src[_self->pos] <= 'Z'))) || ((_self->src[_self->pos] >= '0') && (_self->src[_self->pos] <= '9'))) || (_self->src[_self->pos] == '_')))) {
-            n++;
             _self->pos++;
-        }
-        if (n > (MAX_TEXT - 1)) {
-            _self->toktrunc = 1;
         }
         _self->tok = T_ID;
         lex_view(_self, _self->tokstart, (_self->pos - _self->tokstart));
@@ -323,22 +325,15 @@ static void frontend_lex_Lexer_frontend_lex_LexOps_next(void *self) {
     }
     if (((c == '"') || (c == '\''))) {
         char q = (char)(c);
-        n = 1;
         _self->pos++;
         while ((_self->src[_self->pos] && (_self->src[_self->pos] != q))) {
             if (((_self->src[_self->pos] == '\\') && _self->src[(_self->pos + 1)])) {
-                n++;
                 _self->pos++;
             }
-            n++;
             _self->pos++;
         }
         if (_self->src[_self->pos] == q) {
-            n++;
             _self->pos++;
-        }
-        if (n > (MAX_TEXT - 1)) {
-            _self->toktrunc = 1;
         }
         _self->tok = T_STR;
         lex_view(_self, _self->tokstart, (_self->pos - _self->tokstart));
@@ -360,28 +355,28 @@ static void frontend_lex_Lexer_frontend_lex_LexOps_next(void *self) {
         int q = 0;
         _self->tokfloat = 1;
         _self->toknum = 0;
-        while ((((q + 1) < MAX_TEXT) && ((_self->src[_self->pos] == '.') || ((_self->src[_self->pos] >= '0') && (_self->src[_self->pos] <= '9'))))) {
+        while ((((q + 1) < TEXT_LIMIT) && ((_self->src[_self->pos] == '.') || ((_self->src[_self->pos] >= '0') && (_self->src[_self->pos] <= '9'))))) {
             q++;
             _self->pos++;
         }
         if (((_self->src[_self->pos] == 'e') || (_self->src[_self->pos] == 'E'))) {
-            if ((q + 1) < MAX_TEXT) {
+            if ((q + 1) < TEXT_LIMIT) {
                 q++;
                 _self->pos++;
             }
             if (((_self->src[_self->pos] == '+') || (_self->src[_self->pos] == '-'))) {
-                if ((q + 1) < MAX_TEXT) {
+                if ((q + 1) < TEXT_LIMIT) {
                     q++;
                     _self->pos++;
                 }
             }
-            while (((((q + 1) < MAX_TEXT) && (_self->src[_self->pos] >= '0')) && (_self->src[_self->pos] <= '9'))) {
+            while (((((q + 1) < TEXT_LIMIT) && (_self->src[_self->pos] >= '0')) && (_self->src[_self->pos] <= '9'))) {
                 q++;
                 _self->pos++;
             }
         }
         if (((((_self->src[_self->pos] == 'f') || (_self->src[_self->pos] == 'F')) || (_self->src[_self->pos] == 'l')) || (_self->src[_self->pos] == 'L'))) {
-            if ((q + 1) < MAX_TEXT) {
+            if ((q + 1) < TEXT_LIMIT) {
                 q++;
                 _self->pos++;
             }
@@ -471,8 +466,9 @@ static void lex_view(struct frontend_lex_Lexer * l, int start, int len) {
     if (len > avail) {
         len = avail;
     }
-    if (len > (MAX_TEXT - 1)) {
-        len = (MAX_TEXT - 1);
+    if (len > TEXT_LIMIT) {
+        l->toktrunc = 1;
+        len = TEXT_LIMIT;
     }
     l->tokstr.ptr = (l->src + start);
     l->tokstr.len = len;

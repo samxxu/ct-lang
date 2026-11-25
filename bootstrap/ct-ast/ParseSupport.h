@@ -116,6 +116,7 @@ struct frontend_parse_SupportOps_vtbl {
     int (*type_warn)(void *, int, int, const char *, const char *);
     int (*amb_warn)(void *, int, int, const char *, const char *);
     int (*ns_decl_name)(void *, const char *, char *, int);
+    const char * (*ns_decl_text)(void *, const char *);
     int (*resolve_type)(void *, const char *, char *, int);
     int (*is_iface_type)(void *, const char *, char *, int);
     int (*iface_ref_type)(void *, const char *, char *, int, int *);

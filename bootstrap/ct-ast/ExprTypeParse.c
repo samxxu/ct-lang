@@ -579,6 +579,9 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
             if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "auto")) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'auto' is not a type in CT (write the type explicitly)");
             }
+            if (((n > 0) && (_self->lex->tokstr.len >= MAX_TEXT))) {
+                break;
+            }
             if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rname, sizeof(rname)) != 0) {
                 return (-1);
             }

@@ -1073,6 +1073,16 @@ else
     bad "c2n/intern" "$(cat "$work/intern.out" "$work/intern.err" | head -8)"
 fi
 
+# v1-PH-2 S1a-0 C2o: the hard-coded lengths are gone. A 2000-byte identifier /
+# string literal / import alias / offsetof field, a >128 export table, a
+# >8-segment qualified path and a >160-byte namespace all compile and run; a
+# token past TEXT_LIMIT is refused with the formal-limit diagnostic.
+if bash test/ast/c2o_limits.sh "$work/ct-ast" >"$work/c2o.out" 2>"$work/c2o.err"; then
+    ok "c2o/limits ($(tail -1 "$work/c2o.out"))"
+else
+    bad "c2o/limits" "$(cat "$work/c2o.out" "$work/c2o.err" | head -10)"
+fi
+
 # DOC-87 Stage 2: the built-in layer's source namespace `core`. The canonical
 # `core::` spellings compile, the root spelling stays a compatibility alias, and
 # both spellings emit byte-identical C (the C symbols stay in the root

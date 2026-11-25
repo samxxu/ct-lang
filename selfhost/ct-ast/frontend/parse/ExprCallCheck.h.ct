@@ -270,7 +270,7 @@ impl ExprCallCheck for Expr {
     int record_call(const char *callee, int line)
     {
         (void)self;
-        if (!self->cur_func[0]) return 0;
+        if (!self->cur_func || !(*self->cur_func)[0]) return 0;
         if (*self->ncalls >= *self->callcap) {
             int cap;
             struct Call *grown;
@@ -286,7 +286,7 @@ impl ExprCallCheck for Expr {
             *self->callcap = cap;
         }
         (*self->calls)[*self->ncalls].caller =
-            runtime::text::ct_intern(self->cur_func);
+            runtime::text::ct_intern(*self->cur_func);
         if (!(*self->calls)[*self->ncalls].caller)
             return self->sup->fail("out of memory");
         (*self->calls)[*self->ncalls].callee = runtime::text::ct_intern(callee);

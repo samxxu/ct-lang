@@ -918,7 +918,7 @@ impl DriverOps for Driver {
         self->sym->self_mode = 0;
         self->p->nparams = 0;
         self->p->ncalls = 0;
-        self->p->cur_func[0] = 0;
+        self->p->cur_func = "";
         /* Phase 29: the built-in container layer is parsed first so `Vec` /
            `Map` need neither an import nor an `-I`; its nodes are spliced in
            front of the input's below. A missing layer is not an error. */
@@ -948,8 +948,8 @@ impl DriverOps for Driver {
             }
         }
         /* The layer opens a namespace; the input starts at the root again. */
-        self->sym->ns[0] = 0;
-        self->p->ns_decl[0] = 0;
+        self->sym->ns = "";
+        self->p->ns_decl = "";
         /* A `.m.ct` input is a mapping unit even when it is fed to `ct check`,
            which skips the build path that normally marks it. */
         {

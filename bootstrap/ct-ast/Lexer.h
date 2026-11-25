@@ -6,6 +6,7 @@
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <limits.h>
 #include <assert.h>
 #include <string.h>
@@ -111,7 +112,8 @@ struct frontend_lex_Lexer {
     int bol;
     int tok;
     struct frontend_lex_TokView tokstr;
-    char cbuf[160];
+    char * cbuf;
+    int cbufcap;
     long toknum;
     struct frontend_lex_TokView toksuffix;
     int toktrunc;

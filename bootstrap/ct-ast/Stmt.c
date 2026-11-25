@@ -1563,7 +1563,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
     int slice_col;
     char slice_elem[MAX_TEXT];
     char typebuf[MAX_TEXT];
-    char name[MAX_TEXT];
+    const char * name;
     (void)(_self);
     ap = (_self->decl_attr ? (_self->decl_attr - 1) : (-1));
     _self->decl_attr = 0;
@@ -1608,7 +1608,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
             if ((!first_decl)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a function pointer declares one name");
             }
-            snprintf(name, sizeof(name), "%s", _self->ex->fnptr_name);
+            name = runtime_text_ct_intern(_self->ex->fnptr_name);
+            if ((!name)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             first_decl = 0;
         }
         else {
@@ -1637,7 +1640,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a variable name");
             }
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
+            name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!name)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         }
         if ((is_slice && strchr(typebuf, '*'))) {

@@ -22,6 +22,7 @@
 #include "Arena.h"
 #include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 
 
 struct ct_buf;
@@ -158,7 +159,7 @@ struct frontend_parse_Parser {
     int * build_mode;
     int * check_mode;
     int types_mode;
-    char * rels;
+    const char * * rels;
     int nrels;
     int relcap;
     struct frontend_module_Call * calls;
@@ -168,15 +169,15 @@ struct frontend_parse_Parser {
     int nmaps;
     int mapcap;
     int cur_unit;
-    char ns_decl[160];
-    char cur_func[160];
+    const char * ns_decl;
+    const char * cur_func;
     int unit_is_map;
     int c_strict;
     char c_base[160];
     int unit_is_hdr;
     int seen_decl;
     int * rel_line;
-    char cur_record[160];
+    const char * cur_record;
     int field_pub;
     int field_col;
     int nparams;

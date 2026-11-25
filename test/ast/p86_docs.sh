@@ -30,12 +30,13 @@ evidence=test/probes/p86_metrics_evidence.txt
 need "$spec" "token 文本是实现内部的源缓冲视图"
 need "$spec" "{ptr,len}"
 need "$spec" "不保证 NUL 终止"
-need "$spec" "159/158"
+need "$spec" "TEXT_LIMIT"
+need "$spec" "65536 字节"
 
 # ---- 2) the tutorial section and its exact diagnostics -------------------
 need "$tut" "## 19. 词法边界：长名字、长字符串与相邻字面量"
 need "$tut" "identifier is too long"
-need "$tut" "string literal is too long (max 158 bytes; split it)"
+need "$tut" "string literal exceeds 65536 bytes; split it"
 need "$tut" 'const char *s = "hello, " "world";'
 need "$tut" "language-spec §2"
 
@@ -73,11 +74,9 @@ if grep -qF "| \`frontend/lex/Lexer.h.ct\` | 391 | $lex_lines |" "$metrics"; the
 else
     bad "metrics no longer records the current Lexer.h.ct line count ($lex_lines)"
 fi
-if [ "$lex_lines" != "458" ]; then
-    bad "Lexer.h.ct is $lex_lines lines, the S86d report froze 458"
-else
-    ok
-fi
+# S1a-0 C2o grew the lexer (dynamic token view and C-boundary buffer); the
+# report row above is the only frozen number to keep in step.
+
 
 echo "p86docs: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

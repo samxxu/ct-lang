@@ -758,7 +758,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     }
     nrels = (_self->p->nrels - rb);
     for (i = 0; i < nrels; i++) {
-        if (_self->__frontend_module_moduleops_vptr->resolve_import(_self, path, (_self->p->rels + ((size_t)((rb + i)) * MAX_TEXT)), (&dep), (&is_hdr), (&dep_is_map), _self->p->rel_line[(rb + i)]) != 0) {
+        if (_self->__frontend_module_moduleops_vptr->resolve_import(_self, path, _self->p->rels[(rb + i)], (&dep), (&is_hdr), (&dep_is_map), _self->p->rel_line[(rb + i)]) != 0) {
             return (-1);
         }
         d = _self->__frontend_module_moduleops_vptr->load_unit(_self, dep);
@@ -802,15 +802,15 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     _self->mem->leak_frame = (-1);
     _self->mem->leak_impl = 0;
     _self->mem->ret_owned = 0;
-    _self->sym->ns[0] = 0;
+    _self->sym->ns = "";
     _self->sym->nalias = 0;
     _self->sym->ntalias = 0;
     _self->sym->ntachain = 0;
     _self->sym->alias_decl = 0;
-    _self->p->ns_decl[0] = 0;
+    _self->p->ns_decl = "";
     _self->sym->self_mode = 0;
     _self->sym->ret_type[0] = 0;
-    _self->p->cur_func[0] = 0;
+    _self->p->cur_func = "";
     _self->p->nparams = 0;
     for (i = 0; i < _self->units[u].ndep; i++) {
         const char * gcn;
@@ -1948,12 +1948,12 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     _self->p->nparams = 0;
     _self->sym->self_mode = 0;
     _self->sym->ret_type[0] = 0;
-    _self->sym->ns[0] = 0;
+    _self->sym->ns = "";
     _self->sym->nalias = 0;
     _self->sym->ntalias = 0;
     _self->sym->ntachain = 0;
     _self->sym->alias_decl = 0;
-    _self->p->ns_decl[0] = 0;
+    _self->p->ns_decl = "";
     _self->lex->line = 1;
     _self->lex->tokline = 1;
     _self->lex->lstart = 0;
@@ -1967,7 +1967,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     }
     tool_diag_ct_diag_set_leaks_error(_self->__frontend_module_moduleops_vptr->leaks_for(_self, ((ninput > 0) ? inputs[0] : "")));
     _self->diag_emitted = 0;
-    _self->p->cur_func[0] = 0;
+    _self->p->cur_func = "";
     frontend_parse_ct_parse_clear_error();
     frontend_parse_ct_parse_set_json(_self->diag_json, (_self->check_mode ? 0 : 1), _self->diag_codes);
     tool_diag_ct_diag_set_codes(_self->diag_codes);

@@ -17,9 +17,9 @@
 
 | # | 出口 | 触发 | 冻结文本 | 本卡改动 |
 | --- | --- | --- | --- | --- |
-| 1 | `Lexer::next` 的 `toktrunc`（T_ID） | 标识符 > 159 字节 | `identifier is too long` | 视图长度仍按 `MAX_TEXT-1` 封顶，触发点不变 |
-| 2 | `toktrunc`（T_STR） | 字符串 token > 159 字节（内容 > 158） | `string literal is too long (max 158 bytes; split it)` | 同上 |
-| 3 | `toktrunc`（T_PP） | 预处理行 > 159 字节 | `preprocessor line exceeds 159 bytes; split it or move it to a header` | 同上 |
+| 1 | `Lexer::next` 的 `toktrunc`（T_ID） | 标识符 > `TEXT_LIMIT`（65536 字节；S1a-0 C2o） | `identifier is too long (over the 65536-byte formal text limit)` | 视图按形式上限封顶，2000 字节名字完整保留 |
+| 2 | `toktrunc`（T_STR） | 字符串 token > `TEXT_LIMIT`（65536 字节；S1a-0 C2o） | `string literal exceeds 65536 bytes; split it` | 同上 |
+| 3 | `toktrunc`（T_PP） | 预处理行 > `TEXT_LIMIT`（65536 字节） | `preprocessor line exceeds 65536 bytes; split it or move it to a header` | 同上 |
 | 4 | `toksuffix` 视图长度 | 后缀超过 `U`+`LL` 的合法组合 | `an integer suffix may be U, L or LL` | 后缀从 `char[8]` 改为视图，长度/字符判定不变 |
 | 5 | 类型拼写累积 | 类型/限定名/初始化器超过缓冲 | `type is too long`、`qualified type name is too long`、`an impl pattern is too long` 等 | token 部分改 `tok_copy`/`%.*s`，缓冲上限不变 |
 | 6 | 解析器 `fail` 家族 | 语法错误 | `unexpected token`、`expected '>' after the type arguments`、`expected a type (tok N '…')`、`duplicate type parameter '…'` | 内嵌 token 改 `%.*s`；整数 token 保持旧的“上一个 token 文本”行为，见 §2.1 |

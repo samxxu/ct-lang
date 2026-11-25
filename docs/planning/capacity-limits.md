@@ -1,6 +1,6 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键（C2b）、初始化文本（C2c）、pkg 锁文本（C2d）、pkg 命令/路径文本（C2e）、cc 命令行（C2f）、cflags/ldflags 累加器（C2g）、pkg 行读取（C2h）、包目录/树扫描路径（C2i）与 dep 行（C2j）已按需增长**；**`MAX_PKG_PATH` 已全部退场（C2k）：store / 锁行 / 索引 / 锁根路径改按需，源码与 `Limits.h.ct` 中不再有该 cap**；B/D 类其余待做）。**C2l/C2m：`MAX_PATH` 已全部退场（`Diag.file`、Cache 路径、Unit/Driver/Module/Emitter/ModuleBoundary）**。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键（C2b）、初始化文本（C2c）、pkg 锁文本（C2d）、pkg 命令/路径文本（C2e）、cc 命令行（C2f）、cflags/ldflags 累加器（C2g）、pkg 行读取（C2h）、包目录/树扫描路径（C2i）与 dep 行（C2j）已按需增长**；**`MAX_PKG_PATH` 已全部退场（C2k）：store / 锁行 / 索引 / 锁根路径改按需，源码与 `Limits.h.ct` 中不再有该 cap**；B/D 类其余待做）。**C2l/C2m：`MAX_PATH` 已全部退场（`Diag.file`、Cache 路径、Unit/Driver/Module/Emitter/ModuleBoundary）**；**C2n 驻留池与 C2o 硬编码长度已完成（见 §5.5）**。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
@@ -104,10 +104,10 @@
 | `Expr.h.ct` | 闭包捕获 16 | A | 动态 |
 | `Expr.h.ct` | 闭包参数 16 | A | 动态 |
 | `Expr.h.ct` | 闭包嵌套 16 | D | 递归保护；保留 |
-| `Symbols.h.ct` | import 别名 24 | A | 动态 |
-| `Symbols.h.ct` | 导出类型名 128 | A | 动态 |
-| `Symbols.h.ct` / `Expr.h.ct` | 实例名 159 字符 | B | 动态文本 |
-| `Lexer.h.ct` | 标识符 159 / 字符串字面量 158 字节 | B | 动态文本 |
+| `Symbols.h.ct` | import 别名 24 | A | **已动态（C2o）**：别名行改指针行，别名本身是 pool 文本；同一提交把 import 路径段表也改为按需 |
+| `Symbols.h.ct` | 导出类型名 128 | A | **已动态（C2o）**：`tbare`/`tfull`/`tbambig` 改按需指针行（初值 `MAX_EXPORTED_TYPES`=128，形式上限 65536） |
+| `Symbols.h.ct` / `Expr.h.ct` | 实例名 159 字符 | B | **剩余**：模板实例名拼接仍在 `ExprTypeParse` 用 159 字符诊断；长**源标识符**已不经过它（C2o） |
+| `Lexer.h.ct` | 标识符 159 / 字符串字面量 158 字节 | B | **已动态（C2o）**：token 视图不再按 159 截断，只在 `TEXT_LIMIT=65536` 显式报错；`tok_cstr` 的 C 边界缓冲按 token 长度 realloc |
 
 ## 5 实施顺序（`v1-PH-2` S1a-0）
 
@@ -116,7 +116,7 @@
 | C1 计数 | 33 个 A 类（含本地 `MAX_INDEX_ROWS` 与第 4 节 A 类字面量）：`realloc` 倍增，OOM 阀与 `MAX_FUNCS` 同形 | 旧上限的越界负例改为“可增长并通过”；新增扩容用例；生成物逐字节 |
 | C2 文本/路径（已完成 C2a–C2m） | 路径/命令/键/锁/行/初始化文本等已按需增长；`MAX_PKG_PATH`、`MAX_PATH` 已退场 | 切片证据见 §2 / §3 |
 | C2n `MAX_TEXT` 驻留池 | 把 791 处 `char[MAX_TEXT]` 改“字符串驻留池 + 偏移/句柄”，一次替换；分三步：①池单元 + 符号表字段 ②parser/Expr/Stmt ③emitter/诊断 | 池自测（去重、超 `TEXT_LIMIT` 报错）；名字 API 统一；生成物逐字节；seed 两轮 |
-| C2o 硬编码长度 | 实例名 159、字面量 158、import 别名 24、导出类型名 128 → 池/动态 | 长名正例；旧上限负例改“增长成功” |
+| C2o 硬编码长度 | 标识符/字面量 159/158、import 别名 24、导出类型名 128、限定名 8 段/qcap、offsetof 字段 → 池/动态；`TEXT_LIMIT` 为唯一形式文本上限 | 长名正例（2000 字节标识符/字面量/别名/字段、24 段限定名、218 字节命名空间、>128 导出类型）；旧上限负例改“增长成功”；生成物逐字节 |
 | C2p 合批 | 每提交 4–6 个单元（单元簇），不按单 cap 一片；C4 只在收口做一次 | 每提交只重生成一次 seed；`check-ast` 绿 |
 | C3 语言上限（已完成） | `MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS` / `MAX_STRUCT_TPARAMS` 已放到形式上限，spec §8 / stable-subset 同批改写 | 已有切片证据；spec 与实现一致 |
 | C4 测试与文档 | TEST-9 的“too many”契约改为“增长成功”；spec §8 上限表退役；`Limits.h.ct` 只留 `CAP_LIMIT` / `TEXT_LIMIT` / `NODE_LIMIT` 与 D 类 | `check-all` 绿；seed 两轮逐字节 |
@@ -225,8 +225,8 @@ arena 文本行（C2n-2）。
   `MapBind.params/uses/sizeofs`、`Unit.dep`）留给 C2n-2 / C2o 的单元簇。
 - parser/Expr/Stmt 的 arena `text/text2/text3` 与 `char[MAX_TEXT]` 局部缓冲（含
   `resolve_func` 调用点之外的名字回填）仍在 C2n-2。
-- 词法器标识符上限 159（C2o）仍拒绝单一 >159 的标识符；本片段的 >160 正例来自
-  命名空间拼接后的 C 名。
+- 词法器标识符上限 159 在 C2n-1 当时仍拒绝单一 >159 的标识符；C2o 已放开
+  （现在只有 `TEXT_LIMIT` 形式上限）。本片段的 >160 正例来自命名空间拼接后的 C 名。
 
 ## 5.3 C2n-2：parser/Expr/Stmt 的 Node 文本迁 Intern
 
@@ -266,14 +266,12 @@ arena 文本行（C2n-2）。
   2 轮自举不动点、`c2n/intern` 8/8）；`check-seed.sh` 两轮逐字节；
   `check-goldens-ast.sh` 25/25。
 
-**剩余（C2o / C2p）**
+**剩余（C2p）**
 
-- `Parser.ns_decl/cur_func/c_base/cur_record/out_names` 与
-  `Expr.fnptr_*/decl_prefix/inst_canon/in_generic_bound/last_bare_tag`：
-  `cur_func` 仍以 `char *` 别名跨单元绑定（`ct_expr_bind`），迁移要与
-  Expr 侧指针改成 `const char **` 同批做，留给 C2o。
-- 一次性局部 `char[MAX_TEXT]` scratch 与发射器/诊断文本：合批在 C2p；
-  词法器仍拒单一 >159 标识符（C2o）。
+- `Parser.ns_decl/cur_func/cur_record` 与 `Expr.cur_func` 已在 C2o 迁到 pool
+  文本/指针槽；`c_base`、`out_names` 与 `Expr.fnptr_*/decl_prefix/inst_canon/
+  in_generic_bound/last_bare_tag` 的 160 行仍在 C2p 合批。
+- 一次性局部 `char[MAX_TEXT]` scratch 与发射器/诊断文本：合批在 C2p。
 
 ## 5.4 C2n-3：Emitter/Init/Emit* 簇的文本缓冲按需化
 
@@ -290,6 +288,42 @@ Intern（随输出增长），改用 `ct_scratch_*` builder。已迁：`Emitter.
 `check-seed` 两轮，warnings 559/559，sanitizers 612 项，`check-all` 9 门绿。
 **剩余**：`Emitter.h.ct` 约 112 处 `char[MAX_TEXT]` 局部（`owner` 闭包键须与
 `Parser.cur_func[160]` 同批迁移）；`type_needs_layout.pat` 等仍由上游 160 行界定。
+
+## 5.5 C2o：硬编码长度改按需
+
+**范围**：词法器/解析器单 token 的 159/158 字节、import 别名 24、导出类型名
+128 行、限定名 8 段、`offsetof` 字段名、C 边界 scratch。
+
+**实现**
+
+- `Lexer.h.ct`：`lex_view` 只按 `TEXT_LIMIT=65536` 封顶，超过时置 `toktrunc`，
+  解析器报 `identifier is too long (over the 65536-byte formal text limit)` /
+  `string literal exceeds 65536 bytes; split it`；`tok_cstr` 的 `cbuf` 改为按 token
+  长度 `realloc` 的块（不再固定 160）。PP 行上限同批收到 65536。
+- 名字写入：`Parser.cur_func` / `ns_decl` / `cur_record` 改为 pool 文本；
+  `Expr.cur_func` 改为指向 Parser 槽的 `const char **`；函数名、局部变量名、
+  结构体/字段名在解析处直接 `ct_intern_len`，不再先落 `char[160]`。
+- import：`Parser.rels` 改指针行；`skip_import` 用 `TokView` 段表（倍增）+
+  `ct_text_*` 动态拼路径/别名，段数与单段长度都只受 `TEXT_LIMIT` 约束。
+- 导出类型：`Symbols.tbare/tfull/tbambig` 改按需指针行，新增
+  `MAX_EXPORTED_TYPES`（初值 128）/`MAX_EXPORTED_TYPES_MAX`（65536）。
+- 限定名：`Expr.qseg` 持久段表按需增长，删除 `nseg >= 8`；`ns_decl_text`
+  返回 pool 文本，命名空间 `Symbols.ns` 改 pool 文本，218 字节命名空间可用。
+- `offsetof` 字段名直接 intern，诊断用动态消息。
+- 单测：`test/ast/c2o_limits.sh` 9 项（2000 字节标识符/字面量/别名/字段、
+  20 段 import、24 段限定调用、218 字节命名空间、200 个导出类型、超上限显式报错）。
+
+**证据**：baseline `32898164` 上 `test/ast/c2o_limits.sh` 红（旧上限错误）；
+实现后 9/9。`test/ast/p86_tokens.sh` 22/22（2000 字节正例 + 65537 字节负例）；
+`p86_errors` 342 条诊断（3 条旧上限负例改为 >65536 负例）；`intern_pool` 11/11；
+`check-seed` 两轮逐字节；`check-ast` 全量见交付报告。
+
+**剩余（C2p）**：模板实例名的 159 字符诊断、`Expr/Stmt` 的 500 处一次性
+`char[MAX_TEXT]` scratch、`errmsg[160]` 等诊断文本，仍由后续合批处理；它们不再
+截断**源标识符**（C2o 已保证声明/引用路径按需），只影响长类型拼写与诊断文本。
+限定名的**段数** cap 已删除（24 段可用），但 `qpath`/`cname` 的 160 字节输出缓冲
+仍在：超过 160 字节的限定路径会显式报 `qualified name is too long`，不静默截断；
+该缓冲随 C2p 的 scratch 合批一起按需化。
 
 ## 6 关联
 

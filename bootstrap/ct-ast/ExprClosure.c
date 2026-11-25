@@ -440,7 +440,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_parse_closure(void *se
     int save_assign;
     line = _self->lex->tokline;
     col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-    snprintf(owner, sizeof(owner), "%s", (_self->cur_func ? _self->cur_func : ""));
+    snprintf(owner, sizeof(owner), "%s", ((_self->cur_func && (*_self->cur_func)) ? (*_self->cur_func) : ""));
     ci = _self->sym->__frontend_sym_symbolops_vptr->closure_new(_self->sym, owner);
     if (ci < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));

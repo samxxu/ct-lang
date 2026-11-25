@@ -2350,7 +2350,7 @@ impl StmtOps for Stmt {
         int is_slice, slice_const, slice_line, slice_col;
         char slice_elem[MAX_TEXT];
         char typebuf[MAX_TEXT];
-        char name[MAX_TEXT];
+        const char *name;
         (void)self;
 
         /* the leading attribute belongs to this declaration and every name on
@@ -2399,7 +2399,8 @@ impl StmtOps for Stmt {
                    and a function pointer declares exactly one name */
                 if (!first_decl)
                     return self->sup->fail("a function pointer declares one name");
-                snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+                name = runtime::text::ct_intern(self->ex->fnptr_name);
+                if (!name) return self->sup->fail("out of memory");
                 first_decl = 0;
             } else {
             while (self->lex->tok == T_PUNCT && self->lex->tok_is("*")) {
@@ -2427,7 +2428,9 @@ impl StmtOps for Stmt {
                 snprintf(typebuf, sizeof typebuf, "%s", t2);
             }
             if (self->lex->tok != T_ID) return self->sup->fail("expected a variable name");
-            self->lex->tok_copy(name, sizeof name);
+            name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                self->lex->tokstr.len);
+            if (!name) return self->sup->fail("out of memory");
             self->sup->lex_next();
             }
             /* P-7.2 (P-4.1): a pointer-to-slice or slice array is the same

@@ -125,6 +125,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*ensure_ginst_capacity)(void *, int);
     int (*ensure_closure_capacity)(void *, int);
     int (*ensure_alias_capacity)(void *, int);
+    int (*ensure_bare_capacity)(void *, int);
     int (*ensure_type_alias_capacity)(void *, int);
     int (*ensure_global_type_alias_capacity)(void *, int);
     int (*add_meth_ann)(void *, const char *, const char *, const int *, int);
@@ -153,6 +154,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*method_trait)(void *, const char *, const char *, char *, int);
     int (*method_trait_amb)(void *, const char *, const char *, const char *, char *, int);
     int (*ns_decl_name)(void *, const char *, char *, int);
+    const char * (*ns_decl_text)(void *, const char *);
     int (*resolve_type)(void *, const char *, char *, int);
     int (*add_alias)(void *, const char *, const char *);
     int (*push_scope)(void *);
@@ -436,11 +438,12 @@ struct frontend_sym_Symbols {
     struct frontend_sym_MethAnn * meth;
     int methcap;
     int nmeth;
-    char tbare[128][160];
-    char tfull[128][160];
-    int tbambig[128];
+    const char * * tbare;
+    const char * * tfull;
+    int * tbambig;
     int ntb;
-    char ns[160];
+    int tbcap;
+    const char * ns;
     const char * path;
     const char * * alias_name;
     const char * * alias_full;

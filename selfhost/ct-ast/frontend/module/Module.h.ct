@@ -1181,7 +1181,7 @@ impl ModuleOps for Module {
         nrels = self->p->nrels - rb;
         for (i = 0; i < nrels; i++) {
             if (self->resolve_import(path,
-                                     self->p->rels + (size_t)(rb + i) * MAX_TEXT,
+                                     self->p->rels[rb + i],
                                      &dep, &is_hdr, &dep_is_map,
                                      self->p->rel_line[rb + i]) != 0) return -1;
             /* SH-71 A-1: a mapping unit may also import a header unit. The
@@ -1239,15 +1239,15 @@ impl ModuleOps for Module {
         self->mem->leak_frame = -1;
         self->mem->leak_impl = 0;
         self->mem->ret_owned = 0;
-        self->sym->ns[0] = 0;
+        self->sym->ns = "";
         self->sym->nalias = 0;
         self->sym->ntalias = 0;
         self->sym->ntachain = 0;
         self->sym->alias_decl = 0;
-        self->p->ns_decl[0] = 0;
+        self->p->ns_decl = "";
         self->sym->self_mode = 0;
         self->sym->ret_type[0] = 0;
-        self->p->cur_func[0] = 0;
+        self->p->cur_func = "";
         self->p->nparams = 0;
         /* 2a.2: an imported unit's `pub` global is declared `extern` in that
            unit's header, so C links one object for both units. Register it here
@@ -2344,12 +2344,12 @@ impl ModuleOps for Module {
         self->p->nparams = 0;
         self->sym->self_mode = 0;
         self->sym->ret_type[0] = 0;
-        self->sym->ns[0] = 0;
+        self->sym->ns = "";
         self->sym->nalias = 0;
         self->sym->ntalias = 0;
         self->sym->ntachain = 0;
         self->sym->alias_decl = 0;
-        self->p->ns_decl[0] = 0;
+        self->p->ns_decl = "";
         self->lex->line = 1;
         self->lex->tokline = 1;
         self->lex->lstart = 0;
@@ -2370,7 +2370,7 @@ impl ModuleOps for Module {
            leak policy for every unit in it (D-012's "本包"). */
         tool::diag::ct_diag_set_leaks_error(self->leaks_for(ninput > 0 ? inputs[0] : ""));
         self->diag_emitted = 0;
-        self->p->cur_func[0] = 0;
+        self->p->cur_func = "";
         frontend::parse::ct_parse_clear_error();
         /* LANG-10 7b: a parse failure follows `--diagnostics=json`; build keeps
            the document on stderr (stdout carries the cc line), check on stdout. */

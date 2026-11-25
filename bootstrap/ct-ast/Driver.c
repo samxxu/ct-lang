@@ -687,7 +687,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     _self->sym->self_mode = 0;
     _self->p->nparams = 0;
     _self->p->ncalls = 0;
-    _self->p->cur_func[0] = 0;
+    _self->p->cur_func = "";
     stdprog = _self->__tool_driver_driverops_vptr->load_builtin(_self, in);
     if (stdprog == (-2)) {
         frontend_parse_ct_parse_report();
@@ -704,8 +704,8 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
             }
         }
     }
-    _self->sym->ns[0] = 0;
-    _self->p->ns_decl[0] = 0;
+    _self->sym->ns = "";
+    _self->p->ns_decl = "";
 {
         size_t pl = strlen(in);
         _self->p->unit_is_map = (((pl > 5) && (strcmp(((in + pl) - 5), ".m.ct") == 0)) ? 1 : 0);

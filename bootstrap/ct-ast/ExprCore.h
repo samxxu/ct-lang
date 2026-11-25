@@ -286,7 +286,7 @@ struct frontend_parse_Expr {
     struct frontend_lex_Lexer * lex;
     struct frontend_sym_Symbols * sym;
     struct frontend_parse_ParseSupport * sup;
-    char * cur_func;
+    const char * * cur_func;
     struct frontend_module_Call * * calls;
     int * ncalls;
     int * callcap;
@@ -308,6 +308,8 @@ struct frontend_parse_Expr {
     char * * in_generic_tparam;
     int in_generic_ntparam;
     char inst_canon[160];
+    const char * * qseg;
+    int qsegcap;
     int type_depth;
     int cur_unit;
     int * build_mode;

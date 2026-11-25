@@ -508,7 +508,7 @@ static void frontend_parse_ParseSupport_frontend_parse_SupportOps_lex_next(void 
     _self->lex->__frontend_lex_lexops_vptr->next(_self->lex);
     if ((_self->lex->toktrunc && (_self->lex->tok == T_ID))) {
         _self->lex->toktrunc = 0;
-        _self->__frontend_parse_supportops_vptr->fail(_self, "identifier is too long");
+        _self->__frontend_parse_supportops_vptr->fail(_self, "identifier is too long (over the 65536-byte formal text limit)");
         _self->lex->tok = T_EOF;
     }
 }
@@ -587,7 +587,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
     }
     i = (-1);
     cname = (const char *)(0);
-    if (_self->sym->ns[0]) {
+    if ((_self->sym->ns && _self->sym->ns[0])) {
         cname = runtime_text_ct_intern_join(_self->sym->ns, name);
         if ((!cname)) {
             return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
@@ -630,7 +630,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
     if (pub_now) {
         _self->sym->funcs[i].is_pub = 1;
     }
-    if ((!(pub_now && _self->sym->ns[0]))) {
+    if ((!((pub_now && _self->sym->ns) && _self->sym->ns[0]))) {
         cname = runtime_text_ct_intern(name);
         if ((!cname)) {
             return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
@@ -805,6 +805,15 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_type_warn(void 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_amb_warn(void *self, int line, int col, const char * method, const char * msg) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     return tool_diag_ct_amb_warn(line, col, method, msg, _self->mem->path);
+}
+
+static const char * frontend_parse_ParseSupport_frontend_parse_SupportOps_ns_decl_text(void *self, const char * name) {
+    struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
+    const char * q = _self->sym->__frontend_sym_symbolops_vptr->ns_decl_text(_self->sym, name);
+    if ((!q)) {
+        _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+    }
+    return q;
 }
 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_ns_decl_name(void *self, const char * name, char * out, int cap) {
@@ -1193,6 +1202,7 @@ const struct frontend_parse_SupportOps_vtbl frontend_parse_ParseSupport_frontend
     .arity_warn = frontend_parse_ParseSupport_frontend_parse_SupportOps_arity_warn,
     .type_warn = frontend_parse_ParseSupport_frontend_parse_SupportOps_type_warn,
     .amb_warn = frontend_parse_ParseSupport_frontend_parse_SupportOps_amb_warn,
+    .ns_decl_text = frontend_parse_ParseSupport_frontend_parse_SupportOps_ns_decl_text,
     .ns_decl_name = frontend_parse_ParseSupport_frontend_parse_SupportOps_ns_decl_name,
     .resolve_type = frontend_parse_ParseSupport_frontend_parse_SupportOps_resolve_type,
     .is_iface_type = frontend_parse_ParseSupport_frontend_parse_SupportOps_is_iface_type,

@@ -38,6 +38,7 @@ import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import runtime::text::Intern;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::sym::SymbolsTypeText;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
@@ -190,10 +191,10 @@ pub struct Parser {
     /* The module tables the translation-unit passes fill: the import list the
        scanner and the parser share, and the call graph and `map` records the
        map JSON reports. The driver reads them back through this object.
-       S1a-0 C1: the import list is a flat heap block (row stride MAX_TEXT)
-       that grows on demand; a fixed `char[32][160]` could not hold a unit
-       with more imports than the old cap. */
-    char *rels;
+       S1a-0 C1/C2o: the import list is a pointer row block that grows on
+       demand; each row is a pool text, so neither the count nor a single
+       import path is cut at the old row width. */
+    const char **rels;
     int  nrels;
     int  relcap;
     /* These tables have element types from other units, and a generated header
@@ -211,8 +212,10 @@ pub struct Parser {
     int  cur_unit;                      /* index of the unit being parsed */
     /* The namespace path the current unit declared and the caller recorded for
        the map; the driver re-reads both after a unit is parsed. */
-    char ns_decl[160];
-    char cur_func[160];
+    /* S1a-0 C2o: the namespace spelling and the current function name are pool
+       texts, so a long namespace / function name is kept whole. Empty is "". */
+    const char *ns_decl;
+    const char *cur_func;
     /* Set while the unit being parsed is a `.m.ct` mapping unit: the content
        whitelist and the static-trait rules key off it. */
     int  unit_is_map;
@@ -236,7 +239,7 @@ pub struct Parser {
        `structs[].fields[]`; when the body has no tag (`typedef struct { … }`),
        this stays empty and the fields land in `pend_fields` instead. An
        anonymous member promotes its own fields into this same table. */
-    char cur_record[160];
+    const char *cur_record;
     int  field_pub;
     int  field_col;
     /* Parse scratch the emitter reads through pointers (`ct_emit_bind_parse`). */
@@ -677,7 +680,7 @@ impl ParseDeclOps for Parser {
     int ensure_rels(int need)
     {
         int cap;
-        char *grown;
+        const char **grown;
         int *lines;
         (void)self;
         if (need <= self->relcap) return 0;
@@ -685,10 +688,10 @@ impl ParseDeclOps for Parser {
         while (cap < need && cap < MAX_IMPORTS_MAX) cap *= 2;
         if (cap > MAX_IMPORTS_MAX) cap = MAX_IMPORTS_MAX;
         if (need > cap) return self->sup->fail("out of memory");
-        grown = (char *)realloc(self->rels, (size_t)cap * MAX_TEXT);
+        grown = (const char **)realloc(self->rels, (size_t)cap * sizeof(*grown));
         if (!grown) return self->sup->fail("out of memory");
-        memset(grown + (size_t)self->relcap * MAX_TEXT, 0,
-               (size_t)(cap - self->relcap) * MAX_TEXT);
+        memset(grown + self->relcap, 0,
+               (size_t)(cap - self->relcap) * sizeof(*grown));
         lines = (int *)realloc(self->rel_line, (size_t)cap * sizeof(*lines));
         if (!lines) return self->sup->fail("out of memory");
         memset(lines + self->relcap, 0,
@@ -701,23 +704,31 @@ impl ParseDeclOps for Parser {
 
     int skip_import(void)
     {
-        char seg[16][MAX_TEXT];
-        char rel[MAX_TEXT];
-        char full[MAX_TEXT];
-        char alias[MAX_TEXT];
-        size_t n;
-        int nseg, i, w, has_as, ns_end, import_line;
-        (void)self;
+        TokView *seg = 0;
+        int nseg = 0, segcap = 0;
+        char *rel = 0, *full = 0;
+        int relcap = 0, fullcap = 0;
+        const char *alias, *last;
+        int i, has_as, import_line, rc;
 
         import_line = self->lex->tokline;
-        nseg = 0;
-        rel[0] = 0;
         has_as = 0;
+        rc = 0;
         self->sup->lex_next();                       /* consume `import` */
         for (;;) {
-            if (self->lex->tok != T_ID) return self->sup->fail("expected an import path");
-            if (nseg >= 16) return self->sup->fail("import path is too long");
-            self->lex->tok_copy(seg[nseg], MAX_TEXT);
+            if (self->lex->tok != T_ID) { rc = self->sup->fail("expected an import path"); goto done; }
+            if (nseg >= segcap) {
+                int ncap = segcap > 0 ? segcap * 2 : 16;
+                TokView *grown;
+                if (ncap > TEXT_LIMIT) ncap = TEXT_LIMIT;
+                if (nseg >= ncap) { rc = self->sup->fail("import path is too long"); goto done; }
+                grown = (TokView *)realloc(seg, (size_t)ncap * sizeof(*grown));
+                if (!grown) { rc = self->sup->fail("out of memory"); goto done; }
+                seg = grown;
+                segcap = ncap;
+            }
+            seg[nseg].ptr = self->lex->tokstr.ptr;
+            seg[nseg].len = self->lex->tokstr.len;
             nseg++;
             self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("::")) {
@@ -726,74 +737,106 @@ impl ParseDeclOps for Parser {
             }
             break;
         }
-        snprintf(alias, sizeof alias, "%s", seg[nseg - 1]);
+        last = runtime::text::ct_intern_len(seg[nseg - 1].ptr, seg[nseg - 1].len);
+        if (!last) { rc = self->sup->fail("out of memory"); goto done; }
+        alias = last;
         if (self->lex->tok == T_ID && self->lex->tok_is("as")) {
             has_as = 1;
             self->sup->lex_next();
-            if (self->lex->tok != T_ID) return self->sup->fail("expected an alias after 'as'");
-            self->lex->tok_copy(alias, sizeof alias);
+            if (self->lex->tok != T_ID) { rc = self->sup->fail("expected an alias after 'as'"); goto done; }
+            alias = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                 self->lex->tokstr.len);
+            if (!alias) { rc = self->sup->fail("out of memory"); goto done; }
             self->sup->lex_next();
         }
-        if (self->sup->expect(";") != 0) return -1;
-        if (has_as && nseg < 2) return self->sup->fail("an imported name needs a unit");
-        n = 0;
-        for (i = 0; i < (has_as ? nseg - 1 : nseg); i++) {
-            if (n > 0) {
-                if (n + 1 >= sizeof rel) return self->sup->fail("import path is too long");
-                rel[n] = '/';
-                n++;
+        if (self->sup->expect(";") != 0) { rc = -1; goto done; }
+        if (has_as && nseg < 2) { rc = self->sup->fail("an imported name needs a unit"); goto done; }
+        /* The unit path: every segment, `/`-joined. The C spelling: every
+           segment, `_`-joined (`as` rebuilds it without the unit's file
+           segment below). Both grow on demand, so neither the segment count
+           nor a segment's length is capped by the old 16 x 160 rows. */
+        for (i = 0; i < nseg; i++) {
+            const char *si = runtime::text::ct_intern_len(seg[i].ptr, seg[i].len);
+            if (!si) { rc = self->sup->fail("out of memory"); goto done; }
+            if (i < nseg - 1 || !has_as) {
+                if (tool::sh::ct_text_cat(&rel, &relcap, i > 0 ? "/" : "") != 0
+                    || tool::sh::ct_text_cat(&rel, &relcap, si) != 0) {
+                    rc = self->sup->fail("import path is too long"); goto done;
+                }
             }
-            if (n + strlen(seg[i]) >= sizeof rel) return self->sup->fail("import path is too long");
-            snprintf(rel + n, sizeof rel - n, "%s", seg[i]);
-            n += strlen(seg[i]);
+            if (i > 0 && tool::sh::ct_text_cat(&full, &fullcap, "_") != 0) {
+                rc = self->sup->fail("qualified name is too long"); goto done;
+            }
+            if (tool::sh::ct_text_cat(&full, &fullcap, si) != 0) {
+                rc = self->sup->fail("qualified name is too long"); goto done;
+            }
         }
         /* Only the dependency-graph scan records imports: the parse pass sees
            the same lines again and would otherwise charge this unit for its
            dependencies' rows (the module layer keeps one stack). */
-        if (rel[0] && self->scan_only) {
-            if (self->ensure_rels(self->nrels + 1) != 0) return -1;
-            snprintf(self->rels + (size_t)self->nrels * MAX_TEXT, MAX_TEXT, "%s", rel);
+        if (rel && rel[0] && self->scan_only) {
+            const char *r = runtime::text::ct_intern(rel);
+            if (!r) { rc = self->sup->fail("out of memory"); goto done; }
+            if (self->ensure_rels(self->nrels + 1) != 0) { rc = -1; goto done; }
+            self->rels[self->nrels] = r;
             self->rel_line[self->nrels] = import_line;
             self->nrels++;
         }
-        /* A by-name import binds `seg[last]`; a unit import binds the type named
-           by its upper-case file name. A lower-case unit import binds nothing. */
-        if (self->scan_only) return 0;
-        if (!has_as && !(seg[nseg - 1][0] >= 'A' && seg[nseg - 1][0] <= 'Z'))
-            return 0;
-        ns_end = has_as ? nseg - 2 : nseg - 1;
-        /* the mangled C name: the namespace segments plus the name (the unit's
-           file name is not part of the namespace) */
-        w = 0;
-        for (i = 0; i < ns_end; i++) {
-            int k;
-            if (w > 0) {
-                if (w + 1 >= (int)sizeof full) return self->sup->fail("import path is too long");
-                full[w] = '_';
-                w++;
-            }
-            k = snprintf(full + w, (size_t)((int)sizeof full - w), "%s", seg[i]);
-            if (k < 0 || k >= (int)sizeof full - w) return self->sup->fail("import path is too long");
-            w += k;
-        }
-        if (w > 0) {
-            if (w + 1 >= (int)sizeof full) return self->sup->fail("import path is too long");
-            full[w] = '_';
-            w++;
-        }
+        /* A by-name import binds the last segment; a unit import binds the
+           type named by its upper-case file name. A lower-case unit import
+           binds nothing. */
+        if (self->scan_only) goto done;
+        if (!has_as && !(seg[nseg - 1].ptr[0] >= 'A' && seg[nseg - 1].ptr[0] <= 'Z'))
+            goto done;
         {
-            int k = snprintf(full + w, (size_t)((int)sizeof full - w), "%s", seg[nseg - 1]);
-            if (k < 0 || k >= (int)sizeof full - w) return self->sup->fail("import path is too long");
-            w += k;
+            const char *cn;
+            if (has_as) {
+                /* `import a::b::C::D as E;`: the C name is `a_b_D` -- the
+                   unit file segment `C` is not part of it. Rebuild the
+                   namespace prefix from segments 0..nseg-3 and append `D`. */
+                char *prefix = 0;
+                int pcap = 0;
+                char *tmp = 0;
+                int k;
+                for (k = 0; k < nseg - 2; k++) {
+                    const char *sk = runtime::text::ct_intern_len(seg[k].ptr, seg[k].len);
+                    if (!sk) { free(prefix); rc = self->sup->fail("out of memory"); goto done; }
+                    if (k > 0 && tool::sh::ct_text_cat(&prefix, &pcap, "_") != 0) {
+                        free(prefix); rc = self->sup->fail("qualified name is too long"); goto done;
+                    }
+                    if (tool::sh::ct_text_cat(&prefix, &pcap, sk) != 0) {
+                        free(prefix); rc = self->sup->fail("qualified name is too long"); goto done;
+                    }
+                }
+                if (prefix && prefix[0]) {
+                    if (tool::sh::ct_text_fmt(&tmp, 1, "%s_%s", prefix, last) != 0) {
+                        free(prefix); rc = self->sup->fail("qualified name is too long"); goto done;
+                    }
+                    cn = runtime::text::ct_intern(tmp);
+                } else {
+                    cn = last;
+                }
+                free(prefix);
+                free(tmp);
+            } else {
+                cn = runtime::text::ct_intern(full);
+            }
+            if (!cn) { rc = self->sup->fail("out of memory"); goto done; }
+            if (self->sym->find_type(cn) < 0 && self->sym->find_trait(cn) < 0
+                && self->sym->find_struct(cn) < 0) {
+                if (has_as) { rc = self->sup->fail("the imported unit does not export that name"); goto done; }
+                goto done;                       /* a unit with no such type: no alias */
+            }
+            if (self->sym->add_alias(alias, cn) != 0) {
+                rc = self->sup->fail(self->sym->last_error());
+                goto done;
+            }
         }
-        if (self->sym->find_type(full) < 0 && self->sym->find_trait(full) < 0
-            && self->sym->find_struct(full) < 0) {
-            if (has_as) return self->sup->fail("the imported unit does not export that name");
-            return 0;                            /* a unit with no such type: no alias */
-        }
-        if (self->sym->add_alias(alias, full) != 0)
-            return self->sup->fail(self->sym->last_error());
-        return 0;
+    done:
+        free(seg);
+        free(rel);
+        free(full);
+        return rc;
     }
 
     int top_decl(int is_pub)
@@ -1082,35 +1125,31 @@ impl ParseDeclOps for Parser {
 
     int parse_namespace(int prog)
     {
-        char path[MAX_TEXT];
-        char prefix[MAX_TEXT];
-        char save[MAX_TEXT];
-        size_t np, npre;
-        (void)self;
+        char *path = 0, *prefix = 0;
+        int pathcap = 0, prefixcap = 0;
+        int first, rc;
         (void)prog;
 
+        first = 1;
+        rc = 0;
         self->sup->lex_next();
-        np = 0;
-        npre = 0;
-        path[0] = 0;
-        prefix[0] = 0;
         for (;;) {
-            if (self->lex->tok != T_ID) return self->sup->fail("expected a namespace name");
-            if (np > 0) {
-                if (np + 2 >= sizeof path) return self->sup->fail("namespace is too long");
-                path[np] = ':';
-                path[np + 1] = ':';
-                np += 2;
-                path[np] = 0;
+            const char *seg;
+            if (self->lex->tok != T_ID) { rc = self->sup->fail("expected a namespace name"); goto done; }
+            seg = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                               self->lex->tokstr.len);
+            if (!seg) { rc = self->sup->fail("out of memory"); goto done; }
+            if (!first && tool::sh::ct_text_cat(&path, &pathcap, "::") != 0) {
+                rc = self->sup->fail("namespace is too long"); goto done;
             }
-            if (np + self->lex->tokstr.len >= sizeof path) return self->sup->fail("namespace is too long");
-            self->lex->tok_copy(path + np, sizeof path - np);
-            np += self->lex->tokstr.len;
-            if (npre + self->lex->tokstr.len + 1 >= sizeof prefix)
-                return self->sup->fail("namespace is too long");
-            snprintf(prefix + npre, sizeof prefix - npre, "%.*s_",
-                     self->lex->tokstr.len, self->lex->tokstr.ptr);
-            npre += self->lex->tokstr.len + 1;
+            if (tool::sh::ct_text_cat(&path, &pathcap, seg) != 0) {
+                rc = self->sup->fail("namespace is too long"); goto done;
+            }
+            if (tool::sh::ct_text_cat(&prefix, &prefixcap, seg) != 0
+                || tool::sh::ct_text_cat(&prefix, &prefixcap, "_") != 0) {
+                rc = self->sup->fail("namespace is too long"); goto done;
+            }
+            first = 0;
             self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("::")) {
                 self->sup->lex_next();
@@ -1118,12 +1157,17 @@ impl ParseDeclOps for Parser {
             }
             break;
         }
-        if (!self->sym->ns[0]) snprintf(self->ns_decl, MAX_TEXT, "%s", path);
+        if (!self->sym->ns || !self->sym->ns[0]) {
+            self->ns_decl = runtime::text::ct_intern(path);
+            if (!self->ns_decl) { rc = self->sup->fail("out of memory"); goto done; }
+        }
         /* Only the file-scoped form is accepted: a block would let one unit
            declare several namespaces, which the per-unit prefix and the
            directory check both assume away. */
-        if (self->lex->tok != T_PUNCT || !self->lex->tok_is(";"))
-            return self->sup->fail("a namespace is file-scoped: write 'namespace A::B;'");
+        if (self->lex->tok != T_PUNCT || !self->lex->tok_is(";")) {
+            rc = self->sup->fail("a namespace is file-scoped: write 'namespace A::B;'");
+            goto done;
+        }
         self->sup->lex_next();
         /* DOC-87 Stage 2: the built-in layer declares `namespace core` so the
            canonical `core::Vec` spelling resolves and the declaration is visible
@@ -1131,11 +1175,16 @@ impl ParseDeclOps for Parser {
            this MINOR (no ABI churn); `core::` is an alias of the root spelling. */
         if (strstr(self->mem->path, "lib/core/") != 0
             || strstr(self->mem->path, "lib/std/") != 0) /* DOC-87 迁移回退 */
-            return 0;
-        snprintf(save, sizeof save, "%s", self->sym->ns);
-        if (snprintf(self->sym->ns, sizeof self->sym->ns, "%s%s", save, prefix) >= (int)sizeof self->sym->ns)
-            return self->sup->fail("namespace is too long");
-        return 0;
+            goto done;
+        if (prefix && prefix[0]) {
+            const char *joined = runtime::text::ct_intern_join(self->sym->ns, prefix);
+            if (!joined) { rc = self->sup->fail("out of memory"); goto done; }
+            self->sym->ns = joined;
+        }
+    done:
+        free(path);
+        free(prefix);
+        return rc;
     }
 
 }
@@ -1587,7 +1636,7 @@ impl ParseOps for Parser {
             if (self->lex->tok == T_PP) {
                 if (self->lex->toktrunc)
                     return tool::diag::ct_sem_error(self->lex->tokline, 1,
-                        "preprocessor line exceeds 159 bytes; split it or move it to a header",
+                        "preprocessor line exceeds 65536 bytes; split it or move it to a header",
                         self->mem->path);
                 if (self->unit_is_map && self->lex->tok_prefix("#include"))
                     self->sup->map_include(self->lex->tok_cstr());
@@ -1723,7 +1772,7 @@ impl ParseOps for Parser {
     {
         int f, b, params, fi, func_line, func_col, ar, attr, lead;
         char ret[MAX_TEXT];
-        char name[MAX_TEXT];
+        const char *name;
         const char *cname;
         char gns[MAX_TEXT];
         char tparam[MAX_TEXT];
@@ -1761,10 +1810,13 @@ impl ParseOps for Parser {
             }
         }
         if (self->ex->fnptr_state) {
-            snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+            name = runtime::text::ct_intern(self->ex->fnptr_name);
+            if (!name) return self->sup->fail("out of memory");
         } else {
             if (self->lex->tok != T_ID) return self->sup->fail("expected a name");
-            self->lex->tok_copy(name, sizeof name);
+            name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                self->lex->tokstr.len);
+            if (!name) return self->sup->fail("out of memory");
             self->sup->lex_next();
         }
         /* `__ct_` names the compiler's own locals and closure products; a user
@@ -1861,7 +1913,7 @@ impl ParseOps for Parser {
                rule `pub` functions follow; `extern` is exempt because the symbol
                belongs to the C library and keeps its own spelling. `gns` is the
                underscore form a qualified reference matches (`a_b`). */
-            if (is_extern || !self->sym->ns[0]) {
+            if (is_extern || !self->sym->ns || !self->sym->ns[0]) {
                 cname = runtime::text::ct_intern(name);
                 gns[0] = 0;
             } else {
@@ -2049,7 +2101,7 @@ impl ParseOps for Parser {
             return NO_NODE;
         }
         snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
-        snprintf(self->cur_func, sizeof self->cur_func, "%s", name);
+        self->cur_func = name;
         /* the body is the leak analysis window; its own scope is the frame a
            deeper return counts as conditional against */
         self->mem->leak_active = 1;
@@ -2077,7 +2129,7 @@ impl ParseOps for Parser {
         if (is_generic) self->ex->in_generic_bound[0] = 0;
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
-        self->cur_func[0] = 0;
+        self->cur_func = "";
         self->sym->ret_type[0] = 0;
         if (b < 0) {
             self->sup->pop_scope();
@@ -2567,7 +2619,7 @@ impl ParseOps for Parser {
         if (!nm[0]) return 0;                       /* a nameless padding bit-field */
         if (self->sym->reserved_name(nm))
             return self->sup->fail("identifier '__ct_' is reserved for the compiler");
-        if (self->cur_record[0]) {
+        if (self->cur_record && self->cur_record[0]) {
             si = self->sym->find_struct(self->cur_record);
             if (si < 0) return 0;
             for (i = 0; i < self->sym->structs[si].nfields; i++)
@@ -2692,7 +2744,7 @@ impl ParseOps for Parser {
         char typebuf[MAX_TEXT];
         char base[MAX_TEXT];
         char firsttype[MAX_TEXT];
-        char name[MAX_TEXT];
+        const char *name;
         size_t bl;
         (void)self;
 
@@ -2742,9 +2794,10 @@ impl ParseOps for Parser {
         for (;;) {
             int stars = 0;
             if (self->ex->fnptr_state) {
-                snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+                name = runtime::text::ct_intern(self->ex->fnptr_name);
+                if (!name) return self->sup->fail("out of memory");
             } else if (self->lex->tok == T_PUNCT && self->lex->tok_is(":")) {
-                name[0] = 0;
+                name = "";
             } else {
                 if (count > 0) {
                     char t2[MAX_TEXT];
@@ -2761,7 +2814,9 @@ impl ParseOps for Parser {
                     snprintf(typebuf, sizeof typebuf, "%s", t2);
                 }
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
-                self->lex->tok_copy(name, sizeof name);
+                name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                    self->lex->tokstr.len);
+                if (!name) return self->sup->fail("out of memory");
                 self->field_col = self->lex->tokstart - self->lex->lstart + 1;
                 self->sup->lex_next();
             }
@@ -2769,8 +2824,7 @@ impl ParseOps for Parser {
             if (m < 0) return -1;
             self->arena->nodes[m].text = runtime::text::ct_intern(typebuf);
             if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
-            self->arena->nodes[m].text2 = runtime::text::ct_intern(name);
-            if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
+            self->arena->nodes[m].text2 = name;
             self->arena->nodes[m].d = self->field_pub;
             self->arena->nodes[m].num = self->field_col;
             if (self->ex->fnptr_state && self->ex->fnptr_dims[0]) {
@@ -2864,8 +2918,8 @@ impl ParseOps for Parser {
     {
         int s, struct_line, struct_col, allow_cycle, brace_line, brace_col, kind, ar, ao;
         int nt, templ;
-        char name[MAX_TEXT];
-        char qname[MAX_TEXT];
+        const char *name = "";
+        const char *qname = "";
         /* S1a-0 C3: the parameter rows grow on demand (initial 2, formal cap
            65536); `tcap`/`bcap` are their capacities. */
         char **tparam = 0;
@@ -2882,11 +2936,12 @@ impl ParseOps for Parser {
         brace_col = 1;
         kind = is_union ? N_UNION : N_STRUCT;
         self->sup->lex_next();
-        name[0] = 0;
-        qname[0] = 0;
         if (self->lex->tok == T_ID) {
-            self->lex->tok_copy(name, sizeof name);
-            if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+            name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                self->lex->tokstr.len);
+            if (!name) return self->sup->fail("out of memory");
+            qname = self->sup->ns_decl_text(name);
+            if (!qname) return -1;
             /* Phase 29 §2.5: the three container names belong to the built-in
                layer, so a user unit may not declare them again (L29-7). */
             if (strstr(self->mem->path, "lib/core/") == 0
@@ -2983,12 +3038,11 @@ impl ParseOps for Parser {
         s = self->sup->new_node(kind);
         if (s < 0) return -1;
         self->arena->nodes[s].line = struct_line;
-        self->arena->nodes[s].text2 = runtime::text::ct_intern(qname);
-        if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
+        self->arena->nodes[s].text2 = qname;
         self->npend = 0;
         /* the fields of this body (and of any anonymous member inside it) are
            registered under `cur_record`; an untagged body leaves it empty */
-        snprintf(self->cur_record, MAX_TEXT, "%s", qname);
+        self->cur_record = qname;
         /* Phase 29: inside a template body `T`/`U` are types, the same way a
            generic function's parameter is handled (D26-4). */
         if (templ) {
@@ -2996,12 +3050,12 @@ impl ParseOps for Parser {
             self->ex->in_generic_ntparam = nt;
         }
         if (self->parse_record_body(s, 1) != 0) {
-            self->cur_record[0] = 0;
+            self->cur_record = "";
             self->ex->in_generic_tparam = 0;
             self->ex->in_generic_ntparam = 0;
             return -1;
         }
-        self->cur_record[0] = 0;
+        self->cur_record = "";
         self->ex->in_generic_tparam = 0;
         self->ex->in_generic_ntparam = 0;
         if (is_union && self->lex->tok == T_ID && self->lex->tok_is("use"))
@@ -4269,8 +4323,9 @@ impl ParseOps for Parser {
                 }
             }
             snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
-            snprintf(self->cur_func, sizeof self->cur_func, "%s_%s_%s",
+            self->cur_func = runtime::text::ct_internf("%s_%s_%s",
                      self->sym->structs[si].name, rtrait, mname);
+            if (!self->cur_func) return self->sup->fail("out of memory");
             /* the method body tracks leaks too; a method symbol is not in the
                function table, so nothing feeds `ret_owned` back to callers */
             self->mem->leak_active = 1;
@@ -4281,7 +4336,7 @@ impl ParseOps for Parser {
             self->mem->leak_active = 0;
             self->mem->leak_frame = -1;
             self->mem->leak_impl = 0;
-            self->cur_func[0] = 0;
+            self->cur_func = "";
             self->sym->ret_type[0] = 0;
             if (body < 0) {
                 self->sup->pop_scope();
@@ -4475,7 +4530,8 @@ impl ParseOps for Parser {
                 free(pa);
             }
             snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
-            snprintf(self->cur_func, sizeof self->cur_func, "%s_%s", rname, mname);
+            self->cur_func = runtime::text::ct_internf("%s_%s", rname, mname);
+            if (!self->cur_func) return self->sup->fail("out of memory");
             self->mem->leak_active = 1;
             self->mem->leak_frame = self->sym->nscope + 1;
             self->mem->leak_impl = 1;
@@ -4484,7 +4540,7 @@ impl ParseOps for Parser {
             self->mem->leak_active = 0;
             self->mem->leak_frame = -1;
             self->mem->leak_impl = 0;
-            self->cur_func[0] = 0;
+            self->cur_func = "";
             self->sym->ret_type[0] = 0;
             if (body < 0) {
                 self->sup->pop_scope();
@@ -4877,7 +4933,8 @@ impl ParseOps for Parser {
                 free(pa);
             }
             snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
-            snprintf(self->cur_func, sizeof self->cur_func, "%s_%s", tmpl, mname);
+            self->cur_func = runtime::text::ct_internf("%s_%s", tmpl, mname);
+            if (!self->cur_func) return self->sup->fail("out of memory");
             self->mem->leak_active = 1;
             self->mem->leak_frame = self->sym->nscope + 1;
             self->mem->leak_impl = 1;
@@ -4886,7 +4943,7 @@ impl ParseOps for Parser {
             self->mem->leak_active = 0;
             self->mem->leak_frame = -1;
             self->mem->leak_impl = 0;
-            self->cur_func[0] = 0;
+            self->cur_func = "";
             self->sym->ret_type[0] = 0;
             if (body < 0) {
                 self->sup->pop_scope();
@@ -5064,7 +5121,10 @@ void ct_parse_bind(void *arena, void *lex, void *sym, void *ty, void *mem, void 
                      &g_parse.mapcap, &g_parse.unit_is_map);
     /* the expression chain: it reads the same cursor and primitives, and writes
        the call table and the current-function name this unit owns */
-    ct_expr_bind(arena, lex, sym, g_parse.sup, g_parse.cur_func, &g_parse.calls, &g_parse.ncalls,
+    g_parse.cur_func = "";
+    g_parse.ns_decl = "";
+    g_parse.cur_record = "";
+    ct_expr_bind(arena, lex, sym, g_parse.sup, &g_parse.cur_func, &g_parse.calls, &g_parse.ncalls,
                  &g_parse.callcap, &g_parse.maps, &g_parse.nmaps);
     g_parse.ex = expr_get();
     /* the statement layer reads the same cursor and tables and writes nodes

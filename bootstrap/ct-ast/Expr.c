@@ -59,6 +59,7 @@
 #define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
+#define TEXT_LIMIT 65536
 #define N_ADDR 27
 #define N_ARROW 25
 #define N_ASSIGN 13
@@ -2508,7 +2509,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         while (_self->lex->tok == T_STR) {
             int m = 0;
             if (_self->lex->toktrunc) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "string literal is too long (max 158 bytes; split it)");
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "string literal exceeds 65536 bytes; split it");
             }
             while (m < _self->lex->tokstr.len) {
                 if (_self->arena->__runtime_arena_arenaops_vptr->str_put(_self->arena, (unsigned char)(_self->lex->tokstr.ptr[m])) != 0) {
@@ -2524,7 +2525,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
     }
     if ((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "offsetof")) && _self->__frontend_parse_exprstatictype_vptr->offsetof_ahead(_self))) {
         char tbuf[MAX_TEXT];
-        char fname[MAX_TEXT];
+        const char * fname;
         char base[MAX_TEXT];
         char msg[MAX_TEXT];
         char kw[16];
@@ -2546,7 +2547,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a field name");
         }
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, fname, sizeof(fname));
+        fname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!fname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         if ((_self->in_generic && frontend_parse_expr_generic_param(_self, tbuf))) {
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
@@ -2560,10 +2564,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             if ((!_self->arena->nodes[n].text)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            _self->arena->nodes[n].text2 = runtime_text_ct_intern(fname);
-            if ((!_self->arena->nodes[n].text2)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
+            _self->arena->nodes[n].text2 = fname;
             return n;
         }
         snprintf(base, sizeof(base), "%s", tbuf);
@@ -2614,10 +2615,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         if ((!_self->arena->nodes[n].text)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-        _self->arena->nodes[n].text2 = runtime_text_ct_intern(fname);
-        if ((!_self->arena->nodes[n].text2)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->arena->nodes[n].text2 = fname;
         return n;
     }
     if ((((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "va_arg")) && _self->__frontend_parse_exprstatictype_vptr->offsetof_ahead(_self))) {
@@ -3865,10 +3863,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
 
 static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self, char * name, int ncap, char * cname, int ccap, char * qpath, int qcap, int * form) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char seg[8][MAX_TEXT];
     char cand[MAX_TEXT];
     char tn[MAX_TEXT];
     char hp[MAX_TEXT];
+    const char * * seg;
     int nseg;
     int fi;
     int i;
@@ -3877,7 +3875,20 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
     size_t us;
     (void)(_self);
     (*form) = 0;
-    snprintf(seg[0], MAX_TEXT, "%s", name);
+    seg = _self->qseg;
+    if (_self->qsegcap < 8) {
+        const char * * grown = (const char * *)(realloc(seg, (8 * sizeof((*grown)))));
+        if ((!grown)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        seg = grown;
+        _self->qseg = seg;
+        _self->qsegcap = 8;
+    }
+    seg[0] = runtime_text_ct_intern(name);
+    if ((!seg[0])) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     nseg = 1;
     for (; ; ) {
         if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::")))) {
@@ -3887,10 +3898,27 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a name after '::'");
         }
-        if (nseg >= 8) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+        if (nseg >= _self->qsegcap) {
+            int ncap = (_self->qsegcap * 2);
+            const char * * grown;
+            if (ncap > TEXT_LIMIT) {
+                ncap = TEXT_LIMIT;
+            }
+            if (nseg >= ncap) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified name is too long");
+            }
+            grown = (const char * *)(realloc(_self->qseg, ((size_t)(ncap) * sizeof((*grown)))));
+            if ((!grown)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            _self->qseg = grown;
+            _self->qsegcap = ncap;
+            seg = grown;
         }
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, seg[nseg], MAX_TEXT);
+        seg[nseg] = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!seg[nseg])) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         nseg++;
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::")))) {
@@ -4929,7 +4957,7 @@ void frontend_parse_ct_expr_bind(void * arena, void * lex, void * sym, void * su
     frontend_parse_g_expr.lex = (struct frontend_lex_Lexer *)(lex);
     frontend_parse_g_expr.sym = (struct frontend_sym_Symbols *)(sym);
     frontend_parse_g_expr.sup = (struct frontend_parse_ParseSupport *)(sup);
-    frontend_parse_g_expr.cur_func = (char *)(cur_func);
+    frontend_parse_g_expr.cur_func = (const char * *)(cur_func);
     frontend_parse_g_expr.calls = (struct frontend_module_Call * *)(calls);
     frontend_parse_g_expr.ncalls = (int *)(ncalls);
     frontend_parse_g_expr.callcap = (int *)(callcap);

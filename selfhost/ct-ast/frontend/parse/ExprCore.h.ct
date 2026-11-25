@@ -356,7 +356,9 @@ pub struct Expr {
     struct Lexer *lex;
     struct Symbols *sym;
     struct ParseSupport *sup;
-    char *cur_func;                      /* the parser's current function name */
+    /* S1a-0 C2o: a pointer to the parser's current-function slot (a pool text),
+       so a long function name is not cut at 160 bytes. */
+    const char **cur_func;
     /* S1a-0 C1: the call table is a growable block owned by parse.h.ct;
        `calls` points at that unit's slot so a realloc there is visible here
        without a second copy, and `callcap` is its capacity. */
@@ -422,6 +424,11 @@ pub struct Expr {
        path (`Vec_Vec__int`); this flag only tells the reader the argument was an
        instance. Empty when the last type was not an instance. */
     char inst_canon[160];
+    /* S1a-0 C2o: the segment scratch for `parse_qual_path`, a persistent row
+       block grown on demand (the old local `seg[8][160]` capped a path at
+       eight segments). */
+    const char **qseg;
+    int qsegcap;
     /* Phase 29: nesting depth of `parse_type` while it reads type arguments;
        deeper than four is refused (L29-4). */
     int  type_depth;

@@ -214,17 +214,18 @@ v1.1 先固化轻量 lowering 不变量——临时值物化、求值顺序、`D
 - 关键字按**独立单词**识别；`traitx`、`my_struct` 不会被误判。`into`、`foreach` 是上下文关键字，
   只在特定位置生效（§4.49、§4.52）。
 - `namespace` / `pub` / `import` 是 ct-ast 的正式关键字，不是普通标识符；在 L0 里才会被拒绝。
-- 标识符为 `[A-Za-z_][A-Za-z0-9_]*`；超过 159 字符报 `identifier is too long`，
-  不再静默截断（L0 种子的上限是 127 字符）。
+- 标识符为 `[A-Za-z_][A-Za-z0-9_]*`；单个标识符按需容纳到形式文本上限
+  `TEXT_LIMIT` = 65536 字节（S1a-0 C2o；旧 159 字节行上限已退役），超过才报
+  `identifier is too long (over the 65536-byte formal text limit)`，不静默截断。
 - 空白、换行、`//` 行注释、`/* */` 块注释可自由插入；ct-ast 丢弃注释，生成物只带 banner。
-- 字符串 / 字符字面量按 C 转义规则接受。**v0.53.1 起**：表达式位置超过 158 字节的字符串字面量
-  在编译期报 `string literal is too long (max 158 bytes; split it)`，不再静默截断；
-  更长的文本请拆成相邻字面量（它们会拼接）或写入初始化器。
+- 字符串 / 字符字面量按 C 转义规则接受。单个字面量同样按需容纳到 `TEXT_LIMIT`
+  = 65536 字节（S1a-0 C2o）：旧的 158 字节上限已退役，超过形式上限才报
+  `string literal exceeds 65536 bytes; split it`，不静默截断；相邻字面量仍会拼接。
 - 固定容量上限越界一律报错（§7），不静默丢数据；v0.53.1 起字符串字面量也归入这一类。
 - **token 文本是实现内部的源缓冲视图（v0-PH-86 起，仅 ct-ast）**：当前 token 以
   `{ptr,len}` 指向源缓冲，不逐 token 复制、也不保证 NUL 终止；源缓冲在整段解析期间
-  有效。实现内部只在 C 边界转换（调用方缓冲或词法器 scratch），因此上面的
-  159/158 上限仍是唯一的可见词法长度规则，用户代码不需要关心 NUL。
+  有效。实现内部只在 C 边界转换（调用方缓冲或词法器 scratch），因此
+  `TEXT_LIMIT` 是唯一的可见词法长度规则，用户代码不需要关心 NUL。
 
 ### 3. 语法总览
 
@@ -1513,8 +1514,8 @@ static const char *notes[] = {
 - 单个初始化器文本超过形式上限报 `error: initializer text exceeds 65536 bytes`
   （资源保护，可增长到 65536）；初始化器本身不静默截断。arena 字符串池写满时仍报
   `error: initializer is too long`，同样不截断。
-  表达式位置的字符串字面量在 v0.53.1 起同样报硬错
-  `string literal is too long (max 158 bytes; split it)`；相邻字面量会先拼接，不受该上限约束。
+  表达式位置的字符串字面量同样在超过形式上限时报硬错
+  `string literal exceeds 65536 bytes; split it`；相邻字面量会先拼接。
 
 #### 4.31 变参函数指针（ct-ast）
 
@@ -2419,7 +2420,7 @@ int main(void) {
   error（rc=1，L32-6 / v0-PH-72）。**按键类型分派仍待 `REQ-JSACCESS-1`**（同类型并存 `get(char *)` /
   `get(int)` 各选其版）；JSON 数字下标请继续用包层 `get_idx`，或等 `REQ-JSACCESS-1` 与
   `REQ-INDEX-1`（[设计草案](proposals/user-index-operator.md)）落地。
-- **表达式位置的超长字符串**（>158 字节）在 v0.53.1 起是编译期硬错，拆成相邻字面量或写入初始化器；
+- **表达式位置的超长字符串**（超过形式上限 65536 字节）是编译期硬错，拆成相邻字面量或写入初始化器；
   不再静默截断。
 - **`?.` / `?[` 只接受指针接收者**，结果必须有 `0` 表示（struct 值 / 含 Drop 的值拒绝，L53-3/4）；
   不支持 `T?` / `Maybe<T>`、可选方法调用与 `p?.b = 1`。

@@ -91,6 +91,8 @@ import frontend::parse::ExprStaticType;
 #define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
+/* S1a-0 C2o: one formal text bound (mirror of frontend/sym/Limits.h.ct). */
+#define TEXT_LIMIT 65536
 #define N_ADDR 27
 #define N_ARROW 25
 #define N_ASSIGN 13
@@ -3369,7 +3371,7 @@ impl ExprOps for Expr {
             while (self->lex->tok == T_STR) {
                 int m = 0;
                 if (self->lex->toktrunc)
-                    return self->sup->fail("string literal is too long (max 158 bytes; split it)");
+                    return self->sup->fail("string literal exceeds 65536 bytes; split it");
                 while (m < self->lex->tokstr.len) {
                     if (self->arena->str_put((unsigned char)self->lex->tokstr.ptr[m]) != 0)
                         return self->sup->fail("string pool is full");
@@ -3387,7 +3389,7 @@ impl ExprOps for Expr {
         if (self->lex->tok == T_ID && self->lex->tok_is("offsetof")
             && self->offsetof_ahead()) {
             char tbuf[MAX_TEXT];
-            char fname[MAX_TEXT];
+            const char *fname;
             char base[MAX_TEXT];
             char msg[MAX_TEXT];
             char kw[16];
@@ -3399,7 +3401,9 @@ impl ExprOps for Expr {
             if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
             if (self->sup->expect(",") != 0) return -1;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
-            self->lex->tok_copy(fname, sizeof fname);
+            fname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                 self->lex->tokstr.len);
+            if (!fname) return self->sup->fail("out of memory");
             /* Phase 26 fix (SH-62): a type parameter has no field list here;
                the instance emission substitutes `T` and C checks the field. */
             if (self->in_generic && expr_generic_param(self, tbuf)) {
@@ -3409,8 +3413,7 @@ impl ExprOps for Expr {
                 if (n < 0) return -1;
                 self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
                 if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
-                self->arena->nodes[n].text2 = runtime::text::ct_intern(fname);
-                if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
+                self->arena->nodes[n].text2 = fname;
                 return n;
             }
             /* Both checks run while the cursor is still on the field, so the
@@ -3448,8 +3451,7 @@ impl ExprOps for Expr {
             if (n < 0) return -1;
             self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
             if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
-            self->arena->nodes[n].text2 = runtime::text::ct_intern(fname);
-            if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
+            self->arena->nodes[n].text2 = fname;
             return n;
         }
         /* `va_arg(<ap>, <type>)` is the one stdarg macro that is not a call: its
@@ -4678,24 +4680,48 @@ impl ExprOps for Expr {
     int parse_qual_path(char *name, int ncap, char *cname, int ccap,
                         char *qpath, int qcap, int *form)
     {
-        char seg[8][MAX_TEXT];
         char cand[MAX_TEXT];
         char tn[MAX_TEXT];
         char hp[MAX_TEXT];
+        const char **seg;
         int nseg, fi, i, w, is_call;
         size_t us;
         (void)self;
 
         *form = 0;
-        snprintf(seg[0], MAX_TEXT, "%s", name);
+        /* S1a-0 C2o: the segments live in a growing row block. The old
+           `seg[8][160]` cut a qualified path at eight segments; only the
+           formal text bound applies now. */
+        seg = self->qseg;
+        if (self->qsegcap < 8) {
+            const char **grown = (const char **)realloc(seg, 8 * sizeof(*grown));
+            if (!grown) return self->sup->fail("out of memory");
+            seg = grown;
+            self->qseg = seg;
+            self->qsegcap = 8;
+        }
+        seg[0] = runtime::text::ct_intern(name);
+        if (!seg[0]) return self->sup->fail("out of memory");
         nseg = 1;
         for (;;) {
             if (self->lex->tok != T_PUNCT || !self->lex->tok_is("::"))
                 return self->sup->fail("expected '::'");
             self->sup->lex_next();
             if (self->lex->tok != T_ID) return self->sup->fail("expected a name after '::'");
-            if (nseg >= 8) return self->sup->fail("qualified name is too long");
-            self->lex->tok_copy(seg[nseg], MAX_TEXT);
+            if (nseg >= self->qsegcap) {
+                int ncap = self->qsegcap * 2;
+                const char **grown;
+                if (ncap > TEXT_LIMIT) ncap = TEXT_LIMIT;
+                if (nseg >= ncap) return self->sup->fail("qualified name is too long");
+                grown = (const char **)realloc(self->qseg, (size_t)ncap * sizeof(*grown));
+                if (!grown) return self->sup->fail("out of memory");
+                self->qseg = grown;
+                self->qsegcap = ncap;
+                seg = grown;
+            }
+            seg[nseg] = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+            if (!seg[nseg]) return self->sup->fail("out of memory");
             nseg++;
             self->sup->lex_next();
             if (self->lex->tok != T_PUNCT || !self->lex->tok_is("::")) break;
@@ -5025,7 +5051,7 @@ void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, 
     g_expr.lex = (struct Lexer *)lex;
     g_expr.sym = (struct Symbols *)sym;
     g_expr.sup = (struct ParseSupport *)sup;
-    g_expr.cur_func = (char *)cur_func;
+    g_expr.cur_func = (const char **)cur_func;
     g_expr.calls = (struct Call **)calls;
     g_expr.ncalls = (int *)ncalls;
     g_expr.callcap = (int *)callcap;

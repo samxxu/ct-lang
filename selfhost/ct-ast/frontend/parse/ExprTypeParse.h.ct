@@ -517,6 +517,12 @@ impl ExprTypeParse for Expr {
                    C99 would accept it as a storage class. */
                 if (self->lex->tok_is("auto"))
                     return self->sup->fail("'auto' is not a type in CT (write the type explicitly)");
+                /* S1a-0 C2o: once a type word has been read, a following name
+                   longer than the old 160-byte row is the declarator, not a
+                   second type word. Stop before the fixed `rname` lookup can
+                   report "name is too long": the caller reads the whole token
+                   into the symbol table. */
+                if (n > 0 && self->lex->tokstr.len >= MAX_TEXT) break;
                 if (self->sup->resolve_type(self->lex->tok_cstr(), rname, sizeof rname) != 0) return -1;
                 ti = self->sym->find_type(rname);
                 if (ti < 0) {
