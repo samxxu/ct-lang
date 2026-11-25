@@ -56,39 +56,53 @@ int main(void)
     memset(nodes, 0, sizeof nodes);
     arena.nodes = nodes;
     arena.nnode = 8;
+
+    /* S1a-0 C2n-2: a Node row is an intern pool pointer now. The harness
+       builds nodes by hand, so every row starts on the empty text (the
+       zero-filled array used to spell that; a NULL pointer would crash a
+       read). */
+    {
+        int init_i;
+        for (init_i = 0; init_i < 8; init_i++) {
+            nodes[init_i].text = "";
+            nodes[init_i].text2 = "";
+            nodes[init_i].text3 = "";
+            nodes[init_i].text4 = "";
+        }
+    }
     memset(&tc, 0, sizeof tc);
     tc.arena = &arena;
 
     /* ---- tc_expr_num: the normalised suffix picks the C type ---- */
-    snprintf(nodes[0].text, sizeof nodes[0].text, "");
+    nodes[0].text = "";
     tc_expr_num(&tc, 0, out, sizeof out);
     eq_str("tc_expr_num no suffix", out, "int");
-    snprintf(nodes[1].text, sizeof nodes[1].text, "U");
+    nodes[1].text = "U";
     tc_expr_num(&tc, 1, out, sizeof out);
     eq_str("tc_expr_num U", out, "unsigned");
-    snprintf(nodes[2].text, sizeof nodes[2].text, "L");
+    nodes[2].text = "L";
     tc_expr_num(&tc, 2, out, sizeof out);
     eq_str("tc_expr_num L", out, "long");
-    snprintf(nodes[3].text, sizeof nodes[3].text, "UL");
+    nodes[3].text = "UL";
     tc_expr_num(&tc, 3, out, sizeof out);
     eq_str("tc_expr_num UL", out, "unsigned long");
-    snprintf(nodes[4].text, sizeof nodes[4].text, "LL");
+    nodes[4].text = "LL";
     tc_expr_num(&tc, 4, out, sizeof out);
     eq_str("tc_expr_num LL", out, "long long");
-    snprintf(nodes[5].text, sizeof nodes[5].text, "ULL");
+    nodes[5].text = "ULL";
     tc_expr_num(&tc, 5, out, sizeof out);
     eq_str("tc_expr_num ULL", out, "unsigned long long");
     /* the buffer is bounded: a cap that cannot hold "unsigned long" refuses */
     eq_int("tc_expr_num cap", tc_expr_num(&tc, 3, out, 4), -1);
 
     /* ---- tc_expr_fnum: the literal's suffix picks the float type ---- */
-    snprintf(nodes[0].text, sizeof nodes[0].text, "1.5");
+    nodes[0].text = "1.5";
     tc_expr_fnum(&tc, 0, out, sizeof out);
     eq_str("tc_expr_fnum plain", out, "double");
-    snprintf(nodes[1].text, sizeof nodes[1].text, "1.5f");
+    nodes[1].text = "1.5f";
     tc_expr_fnum(&tc, 1, out, sizeof out);
     eq_str("tc_expr_fnum f", out, "float");
-    snprintf(nodes[2].text, sizeof nodes[2].text, "1.5L");
+    nodes[2].text = "1.5L";
     tc_expr_fnum(&tc, 2, out, sizeof out);
     eq_str("tc_expr_fnum L", out, "long double");
 

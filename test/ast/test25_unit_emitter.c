@@ -41,6 +41,20 @@ int main(void)
     memset(nodes, 0, sizeof nodes);
     arena.nodes = nodes;
     arena.nnode = 4;
+
+    /* S1a-0 C2n-2: a Node row is an intern pool pointer now. The harness
+       builds nodes by hand, so every row starts on the empty text (the
+       zero-filled array used to spell that; a NULL pointer would crash a
+       read). */
+    {
+        int init_i;
+        for (init_i = 0; init_i < 4; init_i++) {
+            nodes[init_i].text = "";
+            nodes[init_i].text2 = "";
+            nodes[init_i].text3 = "";
+            nodes[init_i].text4 = "";
+        }
+    }
     /* The shipped emitter namespaces the global (`backend_emit_g_emit`); the
      * L2-era spelling `g_emit` no longer exists in the frozen seed's C. */
     em = backend_emit_g_emit;
@@ -53,7 +67,7 @@ int main(void)
 
     /* ---- em_expr_num: value followed by the normalised suffix ---- */
     nodes[0].num = 42;
-    snprintf(nodes[0].text, sizeof nodes[0].text, "UL");
+    nodes[0].text = "UL";
     if (em_expr_num(&em, 0, 0) != 0) {
         printf("  FAIL em_expr_num returned non-zero\n");
         g_failed++;

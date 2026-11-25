@@ -10,13 +10,23 @@
 #          content, a real per-entry malloc copy, pointer stability across every
 #          table grow (4096 rows), length semantics (embedded NUL, prefix, zero),
 #          NULL / negative-length refusal, 65536 bytes accepted, 65537 refused
-#          without truncation, and a reset that leaves the pool usable.
+#          without truncation, `ct_internf`'s measuring pass (a 200-byte text
+#          kept whole, 65536 accepted, 65537 refused), and a reset that leaves
+#          the pool usable.
 #   S3     2000 distinct `pub type` aliases compile in one `.h.ct` unit; the
 #          last aliases resolve to the right width and the generated C builds
 #          and runs.
 #   S4     a three-deep alias chain still expands, the pinned alias-cycle
 #          diagnostic is byte-identical, and an imported `pub type` still
 #          resolves through the module layer (the add-visible path).
+#   S5     a 223-byte C name (namespace prefix + source name) is kept whole in
+#          every place it is emitted -- declaration prototype, function
+#          definition and call site -- which C2n-2 makes a `Node.text` row.
+#          C2n-1 only kept the prototype (the definition and the call were cut
+#          at 160 bytes and the old test's `grep` could not see it).
+#   S6     string literals of 200 and 1000 bytes (adjacent literal
+#          concatenation, the lexer's per-token cap) still round-trip through
+#          the literal pool and print byte-for-byte.
 #
 # Usage: bash test/ast/intern_pool.sh <ct-ast> [cc]
 # Exit code 0 means every assertion passed.
@@ -154,6 +164,26 @@ int main(void)
         CHECK(q != NULL && q[LIMIT - 1] == 'b');
         free(big);
     }
+
+    /* S2: `ct_internf` measures first, so a 200-byte text is kept whole (the
+       old `Node.text` row held 159) and dedups by content. */
+    {
+        char m[201];
+        memset(m, 'm', 200);
+        m[200] = 0;
+        p = runtime_text_ct_internf("%s", m);
+        CHECK(p != NULL && strlen(p) == 200);
+        CHECK(p == runtime_text_ct_intern(m));
+        p = runtime_text_ct_internf("%s/%d", "alpha", 3);
+        CHECK(p != NULL && strcmp(p, "alpha/3") == 0);
+        CHECK(p == runtime_text_ct_intern("alpha/3"));
+    }
+    /* S2: exactly TEXT_LIMIT is kept; one byte more is refused, not cut. The
+       width form avoids a second 64 KiB source buffer. */
+    p = runtime_text_ct_internf("%065536d", 1);
+    CHECK(p != NULL && strlen(p) == (size_t)LIMIT);
+    CHECK(runtime_text_ct_internf("%065537d", 1) == NULL);
+    CHECK(runtime_text_ct_internf(0) == NULL);
 
     /* The pool can be reset and used again; a second reset is a no-op. */
     runtime_text_ct_intern_reset();
@@ -298,10 +328,11 @@ pub int $longgv = 5;
 
 int main(void)
 {
-    /* The long global is declared and emitted (the C output grep below pins its
-       full spelling); only the call site is exercised at run time. A variable
-       *use* of a >160-byte C name still relays through an arena text row, which
-       is C2n-2's parser slice, not this one. */
+    /* C2n-2: the call's C name is a Node.text2 row now. Before the slice the
+       row was 160 bytes, so the definition and the call were cut while the
+       prototype stayed whole -- the emitted C still linked (definition and call
+       shared the cut name) but no longer named the declared symbol. The count
+       check below pins the full name in all three positions. */
     return ($longfn() == 7) ? 0 : 1;
 }
 CT
@@ -309,14 +340,55 @@ if ! "$ct" build --emit-c --ns-root "$longroot" -I "$root/selfhost/ct-ast" \
         "$longroot/$longrel/long.ct" -o "$w/longgen" \
         >"$w/long.out" 2>"$w/long.err"; then
     bad "the 223-byte namespaced name did not compile: $(head -3 "$w/long.err" | tr '\n' ' ')"
-elif ! grep -q "$longfn" "$w/longgen/long.c" || ! grep -q "$longgv" "$w/longgen/long.c"; then
-    bad "the emitted C did not carry the full >160-byte names"
+elif [ "$(grep -o "$longfn" "$w/longgen/long.c" | wc -l | tr -d ' ')" -lt 3 ] \
+     || [ "$(grep -o "$longgv" "$w/longgen/long.c" | wc -l | tr -d ' ')" -lt 1 ]; then
+    bad "the emitted C did not carry the full >160-byte names in every position (prototype/definition/call): $(grep -c "$longfn" "$w/longgen/long.c") of the function name, $(grep -c "$longgv" "$w/longgen/long.c") of the global"
 elif ! $cc $cflags -I "$w/longgen" "$w/longgen/long.c" -o "$w/longgen/long" \
         >"$w/long.cc" 2>&1 || ! "$w/longgen/long"; then
     bad "the >160-byte-name program did not build and run"
 else
     ok
     printf '  >160-byte names: 223-byte C name kept whole and ran\n'
+fi
+
+# --- S6: 200- and 1000-byte string literals (C2n-2) --------------------------
+# A lexer token stops at MAX_TEXT-1, so a long literal is written as adjacent
+# literals; they concatenate in the arena literal pool (`N_STR.num` is an
+# offset, never a `Node.text` row). Both lengths must survive byte for byte.
+# The fixture returns a status (no stdio) so the probe runs with the strict C
+# boundary on: 1 = wrong length, 2 = wrong edge byte.
+mkruns() {
+    awk -v c="$1" -v n="$2" 'BEGIN { for (i = 0; i < n; i++) printf "%s", c }'
+}
+{
+    printf 'int main(void)\n{\n'
+    printf '    const char *a200 = '
+    i=0
+    while [ "$i" -lt 2 ]; do printf '"%s"' "$(mkruns a 100)"; i=$((i + 1)); done
+    printf ';\n'
+    printf '    const char *a1000 = '
+    i=0
+    while [ "$i" -lt 10 ]; do printf '"%s"' "$(mkruns b 100)"; i=$((i + 1)); done
+    printf ';\n'
+    cat <<'CT'
+    int n = 0, m = 0;
+    while (a200[n]) n++;
+    while (a1000[m]) m++;
+    if (n != 200 || m != 1000) return 1;
+    if (a200[199] != 'a' || a1000[999] != 'b') return 2;
+    return 0;
+}
+CT
+} >"$w/longlit.ct"
+if ! "$ct" "$w/longlit.ct" -o "$w/longlit.c" >"$w/longlit.out" 2>"$w/longlit.err"; then
+    bad "the 200/1000-byte literals did not compile: $(head -3 "$w/longlit.err" | tr '\n' ' ')"
+elif ! $cc $cflags "$w/longlit.c" -o "$w/longlit" >"$w/longlit.cc" 2>&1; then
+    bad "the long-literal C did not build: $(head -3 "$w/longlit.cc" | tr '\n' ' ')"
+elif ! "$w/longlit"; then
+    bad "the long literals did not round-trip (status $?)"
+else
+    ok
+    printf '  long literals: 200 and 1000 bytes round-trip\n'
 fi
 
 echo "intern_pool: $pass passed, $fail failed"
