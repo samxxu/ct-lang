@@ -17,6 +17,7 @@
 #include "ExprNewObject.h"
 #include "ExprSubscript.h"
 #include "ExprOptional.h"
+#include "ExprTraitInst.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -173,7 +174,6 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable;
-const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable;
 const struct frontend_parse_ExprRecvMut_vtbl frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable;
 const struct frontend_parse_ExprTypes_vtbl frontend_parse_Expr_frontend_parse_ExprTypes_vtable;
 const struct frontend_parse_ExprTry_vtbl frontend_parse_Expr_frontend_parse_ExprTry_vtable;
@@ -6908,152 +6908,6 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .parse_qual_path = frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path,
     .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args,
     .record_call = frontend_parse_Expr_frontend_parse_ExprOps_record_call
-};
-
-static int frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_type(void *self, char * out, int cap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char tname[MAX_TEXT];
-    char * * carg = 0;
-    char * * ctype = 0;
-    char canon[MAX_TEXT];
-    char abuf[MAX_TEXT];
-    char tail[MAX_TEXT];
-    char symbolic[MAX_TEXT];
-    char iface[MAX_TEXT];
-    char msg[MAX_TEXT * 2];
-    size_t base_len;
-    int ccap = 0;
-    int tccap = 0;
-    int gpi;
-    int n;
-    int sti;
-    int ni;
-    int nargs;
-    n = (int)(strlen(out));
-    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), tname, sizeof(tname)) != 0) {
-        return (-1);
-    }
-    sti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tname);
-    if (((sti < 0) || (_self->sym->traits[sti].ntparams == 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "internal: generic trait row vanished");
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<")))) {
-        snprintf(msg, sizeof(msg), "generic trait '%s' needs type arguments in a type position", tname);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    nargs = 0;
-    for (; ; ) {
-        carg = frontend_sym_ct_rows_reserve(carg, ccap, (nargs + 1), (&ccap));
-        ctype = frontend_sym_ct_rows_reserve(ctype, tccap, (nargs + 1), (&tccap));
-        if (((((!carg) || (ccap < (nargs + 1))) || (!ctype)) || (tccap < (nargs + 1)))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic trait has too many type arguments");
-        }
-        _self->inst_canon[0] = 0;
-        _self->type_depth++;
-        if (_self->type_depth > 4) {
-            _self->type_depth--;
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "generic type arguments nest deeper than 4");
-        }
-        if (_self->__frontend_parse_exprops_vptr->parse_type(_self, abuf, sizeof(abuf)) != 0) {
-            _self->type_depth--;
-            return (-1);
-        }
-        _self->type_depth--;
-        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "["))) {
-            int gl = _self->lex->tokline;
-            int gc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "]"))) {
-                return tool_diag_ct_sem_error(gl, gc, "a slice 'T[]' cannot be a generic type argument; it is a non-owning view", _self->sup->mem->path);
-            }
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '>' after the type arguments");
-        }
-        if ((((((((!abuf[0]) || (strcmp(abuf, "void") == 0)) || strchr(abuf, '[')) || strchr(abuf, '(')) || strchr(abuf, ')')) || (strncmp(abuf, "const ", 6) == 0)) || (strncmp(abuf, "volatile ", 9) == 0))) {
-            snprintf(msg, sizeof(msg), "type argument '%s' cannot instantiate a generic trait", abuf);
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-        }
-        for (gpi = 0; gpi < _self->in_generic_ntparam; gpi++) {
-            if ((!_self->in_generic_tparam[gpi])) {
-                continue;
-            }
-            if (frontend_sym_ct_generic_subst(abuf, _self->in_generic_tparam[gpi], "", symbolic, sizeof(symbolic)) != 0) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-            }
-            if (strcmp(symbolic, abuf) != 0) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "symbolic trait type arguments are not supported yet");
-            }
-        }
-        snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);
-        tail[0] = 0;
-        if (_self->inst_canon[0]) {
-            base_len = strlen(_self->last_bare_tag);
-            if ((((base_len > 0) && (strncmp(abuf, _self->last_bare_tag, base_len) == 0)) && (frontend_sym_ct_type_canon((abuf + base_len), tail, sizeof(tail)) != 0))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-            }
-            if (snprintf(carg[nargs], MAX_TEXT, "%s%s", _self->inst_canon, tail) >= MAX_TEXT) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-            }
-        }
-        else {
-            if (frontend_sym_ct_type_canon(abuf, carg[nargs], MAX_TEXT) != 0) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-            }
-        }
-        nargs++;
-        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            continue;
-        }
-        break;
-    }
-    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">>"))) {
-        _self->lex->tokstr.ptr = ((_self->lex->src + _self->lex->tokstart) + 1);
-        _self->lex->tokstr.len = 1;
-        _self->lex->pos = (_self->lex->pos - 1);
-        _self->lex->tokstart = (_self->lex->tokstart + 1);
-    }
-    if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">")))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '>' after the type arguments");
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    ni = _self->sym->__frontend_sym_symbolops_vptr->trait_inst(_self->sym, tname, nargs, carg, ctype, _self->cur_unit);
-    if (ni < 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-    }
-{
-        int cl = snprintf(canon, sizeof(canon), "%s<", tname);
-        for (gpi = 0; gpi < nargs; gpi++) {
-            int wr = snprintf((canon + cl), (sizeof(canon) - (size_t)(cl)), "%s%s", ((gpi == 0) ? "" : ","), carg[gpi]);
-            if ((((cl < 0) || (wr < 0)) || ((cl + wr) >= (int)(sizeof(canon))))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-            }
-            cl += wr;
-        }
-        if ((cl + 2) > (int)(sizeof(canon))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-        }
-        canon[cl] = '>';
-        canon[(cl + 1)] = 0;
-    }
-    if (snprintf(iface, sizeof(iface), "%s_iface", _self->sym->traits[ni].name) >= (int)(sizeof(iface))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type name is too long");
-    }
-    snprintf(_self->inst_canon, sizeof(_self->inst_canon), "%s", canon);
-    snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "struct %s", iface);
-    _self->saw_trait = 1;
-    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-        return (-1);
-    }
-    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), iface) != 0) {
-        return (-1);
-    }
-    return 0;
-}
-
-const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable = {
-    .parse_trait_inst_type = frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_type
 };
 
 static int frontend_parse_Expr_frontend_parse_ExprRecvMut_recv_mut_check(void *self, int recv, const char * rtype, int is_mut, int line, int col, const char * method) {
