@@ -277,8 +277,9 @@ struct frontend_parse_Expr {
     int chk_line;
     int chk_col;
     int chk_arg;
-    int arg_line[32];
-    int arg_col[32];
+    int * arg_line;
+    int * arg_col;
+    int argcap;
     int narg_pos;
     int arg_base;
     char in_generic_bound[160];

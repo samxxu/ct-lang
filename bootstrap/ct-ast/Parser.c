@@ -4001,16 +4001,27 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a struct method cannot be variadic");
         }
 {
-            int pa[16];
+            int * pa;
             int pn = 0;
             int pk3;
-            for (pk3 = params; ((pk3 > 0) && (pn < 16)); pk3 = _self->arena->nodes[pk3].next) {
+            int pnmax = 0;
+            for (pk3 = params; pk3 > 0; pk3 = _self->arena->nodes[pk3].next) {
+                pnmax++;
+            }
+            pa = ((pnmax > 0) ? (int *)(calloc((size_t)(pnmax), sizeof((*pa)))) : 0);
+            if (((pnmax > 0) && (!pa))) {
+                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            for (pk3 = params; ((pk3 > 0) && (pn < pnmax)); pk3 = _self->arena->nodes[pk3].next) {
                 pa[pn++] = _self->arena->nodes[pk3].aux;
             }
             if (_self->sym->__frontend_sym_symbolops_vptr->add_meth_ann(_self->sym, rname, mname, pa, pn) != 0) {
+                free(pa);
                 _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                 return (-1);
             }
+            free(pa);
         }
         snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret);
         snprintf(_self->cur_func, sizeof(_self->cur_func), "%s_%s", rname, mname);
@@ -4406,16 +4417,27 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a struct method cannot be variadic");
         }
 {
-            int pa[16];
+            int * pa;
             int pn = 0;
             int pk3;
-            for (pk3 = params; ((pk3 > 0) && (pn < 16)); pk3 = _self->arena->nodes[pk3].next) {
+            int pnmax = 0;
+            for (pk3 = params; pk3 > 0; pk3 = _self->arena->nodes[pk3].next) {
+                pnmax++;
+            }
+            pa = ((pnmax > 0) ? (int *)(calloc((size_t)(pnmax), sizeof((*pa)))) : 0);
+            if (((pnmax > 0) && (!pa))) {
+                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            for (pk3 = params; ((pk3 > 0) && (pn < pnmax)); pk3 = _self->arena->nodes[pk3].next) {
                 pa[pn++] = _self->arena->nodes[pk3].aux;
             }
             if (_self->sym->__frontend_sym_symbolops_vptr->add_meth_ann(_self->sym, tmpl, mname, pa, pn) != 0) {
+                free(pa);
                 _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                 return (-1);
             }
+            free(pa);
         }
         snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret);
         snprintf(_self->cur_func, sizeof(_self->cur_func), "%s_%s", tmpl, mname);

@@ -139,6 +139,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*ensure_trait_table_capacity)(void *, int);
     int (*ensure_trait_capacity)(void *, int, int);
     int (*ensure_meth_param_capacity)(void *, int, int, int);
+    int (*ensure_meth_ann_capacity)(void *, int);
     int (*ensure_meth_ann_param_capacity)(void *, int, int);
     int (*trait_inst)(void *, const char *, int, const char *, const char *, const char *, const char *, int);
     int (*impl_use_concrete)(void *, const char *, int, const char *, const char *, const char *, const char *, int, char *, int);
@@ -413,7 +414,8 @@ struct frontend_sym_Symbols {
     struct frontend_sym_Closure * closures;
     int nclosure;
     int closurecap;
-    struct frontend_sym_MethAnn meth[256];
+    struct frontend_sym_MethAnn * meth;
+    int methcap;
     int nmeth;
     char tbare[128][160];
     char tfull[128][160];

@@ -42,12 +42,12 @@
 | `MAX_GENERIC_INSTS` | 64 | 5 | A | **已动态**：单元 `ginsts` 倍增到 `MAX_GENERIC_INSTS_MAX=65536` |
 | `MAX_CLOSURES` | 64 | 5 | A | **已动态**：单元 `closures` 倍增到 `MAX_CLOSURES_MAX=65536`；emitter 每帧 64 绑定上限另列剩余 |
 | `MAX_CALLS` | 8192 | 7 | A | **已动态**：调用图 `calls` 堆块倍增到 `MAX_CALLS_MAX=65536`；删除 `too many calls` |
-| `MAX_ARG_POS` | 32 | 14 | A | 动态 |
+| `MAX_ARG_POS` | 32 | 14 | A | **已动态**：`arg_line`/`arg_col` 并行块倍增到 `MAX_ARG_POS_MAX=65536`；第 33 个以后不再静默丢位置 |
 | `MAX_LABELS` | 64 | 5 | A | **已动态**：label/goto 行块（`LabelRow`）倍增到 `MAX_LABELS_MAX=65536`；删除 `too many labels/gotos` |
 | `MAX_HOISTS` | 4 | 4 | A | 动态 |
 | `MAX_INTOS` | 4 | 3 | A | 动态 |
 | `MAX_MAPS` | 64 | 5 | A | 动态 |
-| `MAX_METH_ANN` | 256 | 4 | A | 动态 |
+| `MAX_METH_ANN` | 256 | 4 | A | **已动态**：`MethAnn` 行表倍增到 `MAX_METH_ANN_MAX=65536`；每行注记块也随 `MAX_PARAMS` 增长 |
 | `MAX_PARAMS` | 16 | 21 | A | **已动态**：`Fn`/`MethodSig` 形参三/两组并行块 + `MethAnn` 注记块倍增到 `MAX_PARAMS_MAX=65536`；实例行深拷贝；map 参数仍 16（剩余） |
 | `MAX_TYPE_ALIASES` | 64 | 6 | A | **已动态**：本地 `taliases` 倍增到 `MAX_TYPE_ALIASES_MAX=65536` |
 | `MAX_GLOBAL_TYPE_ALIASES` | 256 | 4 | A | **已动态**：全局 `gtaliases` 倍增到 `MAX_GLOBAL_TYPE_ALIASES_MAX=65536` |

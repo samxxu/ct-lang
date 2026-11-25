@@ -375,8 +375,11 @@ pub struct Expr {
     /* Phase 32 S7: each argument's own start position, captured while the
        argument list is parsed. A nested call grows the frame past the
        parent's slots; the frame is popped when the list closes. */
-    int  arg_line[32];
-    int  arg_col[32];
+    /* S1a-0 C1: the two parallel position blocks grow on demand; `argcap`
+       is their common capacity (MAX_ARG_POS is only the starting size). */
+    int *arg_line;
+    int *arg_col;
+    int  argcap;
     int  narg_pos;
     int  arg_base;
     /* Phase 28: the trait bound of the template whose body is being parsed.

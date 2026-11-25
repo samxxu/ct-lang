@@ -15,6 +15,7 @@
 #include <string.h>
 #define MAX_TEXT 160
 #define MAX_ARG_POS 32
+#define MAX_ARG_POS_MAX 65536
 #define N_ADTCTOR 81
 #define T_ID 1
 #define T_PUNCT 4
@@ -216,8 +217,8 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
         if (k >= nfields) {
             break;
         }
-        aline = (((_self->arg_base + k) < MAX_ARG_POS) ? _self->arg_line[(_self->arg_base + k)] : tline);
-        acol = (((_self->arg_base + k) < MAX_ARG_POS) ? _self->arg_col[(_self->arg_base + k)] : tcol);
+        aline = (((_self->arg_base + k) < _self->argcap) ? _self->arg_line[(_self->arg_base + k)] : tline);
+        acol = (((_self->arg_base + k) < _self->argcap) ? _self->arg_col[(_self->arg_base + k)] : tcol);
         if (_self->sup->__frontend_parse_supportops_vptr->str_store_warn(_self->sup, a, adts[adt].variants[v].fields[k].type, aline, acol) != 0) {
             return (-1);
         }
@@ -241,8 +242,8 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
         if (rc != 1) {
             continue;
         }
-        aline = (((_self->arg_base + k) < MAX_ARG_POS) ? _self->arg_line[(_self->arg_base + k)] : tline);
-        acol = (((_self->arg_base + k) < MAX_ARG_POS) ? _self->arg_col[(_self->arg_base + k)] : tcol);
+        aline = (((_self->arg_base + k) < _self->argcap) ? _self->arg_line[(_self->arg_base + k)] : tline);
+        acol = (((_self->arg_base + k) < _self->argcap) ? _self->arg_col[(_self->arg_base + k)] : tcol);
         snprintf(msg, sizeof(msg), "argument %d of '%s.%s': expected '%s', got '%s'", (k + 1), adts[adt].name, vname, adts[adt].variants[v].fields[k].type, aty);
         return tool_diag_ct_sem_error(aline, acol, msg, _self->sup->mem->path);
     }

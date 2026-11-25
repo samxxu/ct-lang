@@ -44,6 +44,7 @@
 #define MAX_STRUCT_IMPLS 64
 #define MAX_STRUCT_IMPLS_MAX 65536
 #define MAX_METH_ANN 256
+#define MAX_METH_ANN_MAX 65536
 #define MAX_ADTS 64
 #define MAX_ADT_VARIANTS 96
 #define MAX_ADT_FIELDS 8
@@ -724,8 +725,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_meth_ann(void *self, 
         }
     }
     if (i < 0) {
-        if (_self->nmeth >= MAX_METH_ANN) {
-            return _self->__frontend_sym_symbolops_vptr->fail(_self, "too many inherent methods for the ref/out table");
+        if (_self->__frontend_sym_symbolops_vptr->ensure_meth_ann_capacity(_self, (_self->nmeth + 1)) != 0) {
+            return (-1);
         }
         i = _self->nmeth;
         _self->nmeth++;
@@ -1136,6 +1137,33 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_param_capacit
     memset((anns + _self->traits[ti].m[mi].pcap), 0, (size_t)((cap - _self->traits[ti].m[mi].pcap)));
     _self->traits[ti].m[mi].pann = anns;
     _self->traits[ti].m[mi].pcap = cap;
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_ann_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_MethAnn * grown;
+    if (need <= _self->methcap) {
+        return 0;
+    }
+    cap = ((_self->methcap > 0) ? _self->methcap : MAX_METH_ANN);
+    while (((cap < need) && (cap < MAX_METH_ANN_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_METH_ANN_MAX) {
+        cap = MAX_METH_ANN_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_MethAnn *)(realloc(_self->meth, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->methcap), 0, ((size_t)((cap - _self->methcap)) * sizeof((*grown))));
+    _self->meth = grown;
+    _self->methcap = cap;
     return 0;
 }
 
@@ -1574,6 +1602,7 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .ensure_trait_table_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_table_capacity,
     .ensure_trait_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_capacity,
     .ensure_meth_param_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_param_capacity,
+    .ensure_meth_ann_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_ann_capacity,
     .ensure_meth_ann_param_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_ann_param_capacity,
     .add_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_add_trait,
     .trait_inst = frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst,

@@ -27,6 +27,7 @@ import tool::diag::Diag;
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
 #define MAX_ARG_POS 32
+#define MAX_ARG_POS_MAX 65536
 #define N_ADTCTOR 81
 #define T_ID 1
 #define T_PUNCT 4
@@ -130,8 +131,8 @@ impl ExprAdt for Expr {
             if (k >= nfields) break;
             /* LANG-22: an ADT payload copies the value into the variant, so a
                non-immortal borrowed `Str` view would outlive its owner. */
-            aline = (self->arg_base + k < MAX_ARG_POS) ? self->arg_line[self->arg_base + k] : tline;
-            acol = (self->arg_base + k < MAX_ARG_POS) ? self->arg_col[self->arg_base + k] : tcol;
+            aline = (self->arg_base + k < self->argcap) ? self->arg_line[self->arg_base + k] : tline;
+            acol = (self->arg_base + k < self->argcap) ? self->arg_col[self->arg_base + k] : tcol;
             if (self->sup->str_store_warn(a, adts[adt].variants[v].fields[k].type,
                                           aline, acol) != 0)
                 return -1;
@@ -147,8 +148,8 @@ impl ExprAdt for Expr {
                 if (fs < 0 || as < 0 || fs == as) rc = 0;
             }
             if (rc != 1) continue;
-            aline = (self->arg_base + k < MAX_ARG_POS) ? self->arg_line[self->arg_base + k] : tline;
-            acol = (self->arg_base + k < MAX_ARG_POS) ? self->arg_col[self->arg_base + k] : tcol;
+            aline = (self->arg_base + k < self->argcap) ? self->arg_line[self->arg_base + k] : tline;
+            acol = (self->arg_base + k < self->argcap) ? self->arg_col[self->arg_base + k] : tcol;
             snprintf(msg, sizeof msg, "argument %d of '%s.%s': expected '%s', got '%s'",
                      k + 1, adts[adt].name, vname,
                      adts[adt].variants[v].fields[k].type, aty);

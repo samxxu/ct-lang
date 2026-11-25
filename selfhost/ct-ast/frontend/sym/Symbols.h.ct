@@ -71,6 +71,7 @@ import frontend::sym::SymbolsTypeText;
    Trait methods use their existing MethodSig row; this table only covers an
    implementation block that has no trait. */
 #define MAX_METH_ANN 256
+#define MAX_METH_ANN_MAX 65536
 
 namespace frontend::sym;
 /* A compile-time synonym for a type spelling. It never reaches the generated C;
@@ -435,6 +436,8 @@ pub trait SymbolOps {
     int  ensure_trait_capacity(int ti, int need);
     /* S1a-0 C1: grow method `mi` of trait `ti` to hold `need` parameter rows. */
     int  ensure_meth_param_capacity(int ti, int mi, int need);
+    /* S1a-0 C1: grow the annotation table to `need` rows. */
+    int  ensure_meth_ann_capacity(int need);
     /* S1a-0 C1: grow annotation row `mi` to hold `need` parameter flags. */
     int  ensure_meth_ann_param_capacity(int mi, int need);
     /* Phase 35: find or create the instance row of a parameterised trait.
@@ -693,7 +696,9 @@ pub struct Symbols {
        instance call (`Box<int>`) finds it after normalisation. */
     /* 256 = MAX_METH_ANN, spelled literally: macros do not cross the unit
        boundary, so the generated header must see the number. */
-    struct MethAnn meth[256];
+    /* S1a-0 C1: the inherent-method annotation rows grow on demand. */
+    struct MethAnn *meth;
+    int  methcap;
     int  nmeth;
     /* An exported type declared in a namespace is also reachable by its bare
        name, so a consumer need not alias-import it. A second unit exporting the
@@ -1232,8 +1237,7 @@ impl SymbolOps for Symbols {
                 break;
             }
         if (i < 0) {
-            if (self->nmeth >= MAX_METH_ANN)
-                return self->fail("too many inherent methods for the ref/out table");
+            if (self->ensure_meth_ann_capacity(self->nmeth + 1) != 0) return -1;
             i = self->nmeth;
             self->nmeth++;
         }
@@ -1566,6 +1570,25 @@ impl SymbolOps for Symbols {
                (size_t)(cap - self->traits[ti].m[mi].pcap));
         self->traits[ti].m[mi].pann = anns;
         self->traits[ti].m[mi].pcap = cap;
+        return 0;
+    }
+
+    /* S1a-0 C1: the annotation rows themselves grow on demand. */
+    int ensure_meth_ann_capacity(int need)
+    {
+        int cap;
+        struct MethAnn *grown;
+        if (need <= self->methcap) return 0;
+        cap = self->methcap > 0 ? self->methcap : MAX_METH_ANN;
+        while (cap < need && cap < MAX_METH_ANN_MAX) cap *= 2;
+        if (cap > MAX_METH_ANN_MAX) cap = MAX_METH_ANN_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct MethAnn *)realloc(self->meth, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->methcap, 0,
+               (size_t)(cap - self->methcap) * sizeof(*grown));
+        self->meth = grown;
+        self->methcap = cap;
         return 0;
     }
 

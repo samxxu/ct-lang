@@ -44,6 +44,7 @@
 #define MAX_FUNCS 512
 #define MAX_FUNCS_MAX 65536
 #define MAX_ARG_POS 32
+#define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_STRUCT_TPARAMS 2
 #define MAX_RAW_INIT 4096
@@ -228,6 +229,7 @@ static int bind_conv_explicit(struct frontend_parse_Expr *, int, const char *, i
 static int bind_conv_explicit_to(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_outconv_rewrite(struct frontend_parse_Expr *, int, int, int, int, int, const char *, int, int);
 static int bind_conv_arith(struct frontend_parse_Expr *, int, int, int, int);
+static int ensure_arg_capacity(struct frontend_parse_Expr *, int);
 static int chk_type_static(struct frontend_parse_Expr *, int, char *, int);
 void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
@@ -4328,7 +4330,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                             char ftr[MAX_TEXT];
                                             int fip = 0;
                                             if (_self->__frontend_parse_exprops_vptr->inst_subst_type(_self, ibase, _self->arena->nodes[pi].text, fty, sizeof(fty))) {
-                                                if (((((strcmp(fname, "push") == 0) || (strcmp(fname, "set") == 0)) || (strcmp(fname, "put") == 0)) && (_self->sup->__frontend_parse_supportops_vptr->str_store_warn(_self->sup, ai, fty, (((_self->arg_base + aidx) < MAX_ARG_POS) ? _self->arg_line[(_self->arg_base + aidx)] : mline), (((_self->arg_base + aidx) < MAX_ARG_POS) ? _self->arg_col[(_self->arg_base + aidx)] : mcol)) != 0))) {
+                                                if (((((strcmp(fname, "push") == 0) || (strcmp(fname, "set") == 0)) || (strcmp(fname, "put") == 0)) && (_self->sup->__frontend_parse_supportops_vptr->str_store_warn(_self->sup, ai, fty, (((_self->arg_base + aidx) < _self->argcap) ? _self->arg_line[(_self->arg_base + aidx)] : mline), (((_self->arg_base + aidx) < _self->argcap) ? _self->arg_col[(_self->arg_base + aidx)] : mcol)) != 0))) {
                                                     return (-1);
                                                 }
                                                 if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, fty, ftr, sizeof(ftr), (&fip))) {
@@ -6047,8 +6049,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 int pk3 = 0;
                 while (((pc2 > 0) && (pk3 < _self->sym->funcs[fi].nparams))) {
                     int apos = (_self->arg_base + pk3);
-                    int aline2 = ((apos < MAX_ARG_POS) ? _self->arg_line[apos] : id_line);
-                    int acol2 = ((apos < MAX_ARG_POS) ? _self->arg_col[apos] : id_col);
+                    int aline2 = ((apos < _self->argcap) ? _self->arg_line[apos] : id_line);
+                    int acol2 = ((apos < _self->argcap) ? _self->arg_col[apos] : id_col);
                     if (_self->sym->funcs[fi].pann[pk3] != 3) {
                         char at[MAX_TEXT];
                         char fk[MAX_TEXT];
@@ -6701,12 +6703,15 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_args(void *self) {
     for (; ; ) {
         int aline = _self->lex->tokline;
         int acol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+        if (ensure_arg_capacity(_self, ((base + k) + 1)) != 0) {
+            return (-1);
+        }
         _self->narg_pos = (base + k);
         e = _self->__frontend_parse_exprops_vptr->parse_expr(_self);
         if (e < 0) {
             return (-1);
         }
-        if ((base + k) < MAX_ARG_POS) {
+        if ((base + k) < _self->argcap) {
             _self->arg_line[(base + k)] = aline;
             _self->arg_col[(base + k)] = acol;
         }
@@ -7421,7 +7426,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_callptr_args(void *s
             char out[MAX_TEXT];
             int z = 0;
             if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, ai, out, sizeof(out), (&z)) == 0) {
-                if ((_self->arg_base + k) < MAX_ARG_POS) {
+                if ((_self->arg_base + k) < _self->argcap) {
                     _self->chk_line = _self->arg_line[(_self->arg_base + k)];
                     _self->chk_col = _self->arg_col[(_self->arg_base + k)];
                 }
@@ -8248,7 +8253,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_mcall_args(void *sel
         while (((pi >= 0) && (ai > 0))) {
             int is_zero = 0;
             if (((frontend_parse_subst_tparam(_self->arena->nodes[pi].text, n1, v1, n2, v2, fty, sizeof(fty)) == 0) && (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, ai, out, sizeof(out), (&is_zero)) == 0))) {
-                if ((_self->arg_base + k) < MAX_ARG_POS) {
+                if ((_self->arg_base + k) < _self->argcap) {
                     _self->chk_line = _self->arg_line[(_self->arg_base + k)];
                     _self->chk_col = _self->arg_col[(_self->arg_base + k)];
                 }
@@ -10029,6 +10034,38 @@ static int bind_conv_arith(struct frontend_parse_Expr * self, int left, int righ
     }
     snprintf(msg, sizeof(msg), "conversion is only allowed at a binding site (declaration/assignment/out/return); '%s' cannot be converted inside an expression", (lc ? lt : rt));
     return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
+}
+static int ensure_arg_capacity(struct frontend_parse_Expr * self, int need) {
+    int cap;
+    int * lines;
+    int * cols;
+    if (need <= self->argcap) {
+        return 0;
+    }
+    cap = ((self->argcap > 0) ? self->argcap : MAX_ARG_POS);
+    while (((cap < need) && (cap < MAX_ARG_POS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_ARG_POS_MAX) {
+        cap = MAX_ARG_POS_MAX;
+    }
+    if (need > cap) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    lines = (int *)(realloc(self->arg_line, ((size_t)(cap) * sizeof((*lines)))));
+    if ((!lines)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    memset((lines + self->argcap), 0, ((size_t)((cap - self->argcap)) * sizeof((*lines))));
+    self->arg_line = lines;
+    cols = (int *)(realloc(self->arg_col, ((size_t)(cap) * sizeof((*cols)))));
+    if ((!cols)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    memset((cols + self->argcap), 0, ((size_t)((cap - self->argcap)) * sizeof((*cols))));
+    self->arg_col = cols;
+    self->argcap = cap;
+    return 0;
 }
 static int chk_type_static(struct frontend_parse_Expr * self, int n, char * out, int cap) {
     int ad;

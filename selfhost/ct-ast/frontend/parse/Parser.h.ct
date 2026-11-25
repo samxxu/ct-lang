@@ -4296,14 +4296,22 @@ impl ParseOps for Parser {
             /* Phase 78 S2b: record this inherent method's ref/out annotations
                for the call site (a trait impl keeps them on its MethodSig). */
             {
-                int pa[16], pn = 0, pk3;
-                for (pk3 = params; pk3 > 0 && pn < 16;
+                int *pa, pn = 0, pk3, pnmax = 0;
+                for (pk3 = params; pk3 > 0; pk3 = self->arena->nodes[pk3].next) pnmax++;
+                pa = pnmax > 0 ? (int *)calloc((size_t)pnmax, sizeof(*pa)) : 0;
+                if (pnmax > 0 && !pa) {
+                    self->sup->pop_scope();
+                    return self->sup->fail("out of memory");
+                }
+                for (pk3 = params; pk3 > 0 && pn < pnmax;
                      pk3 = self->arena->nodes[pk3].next)
                     pa[pn++] = self->arena->nodes[pk3].aux;
                 if (self->sym->add_meth_ann(rname, mname, pa, pn) != 0) {
+                    free(pa);
                     self->sup->pop_scope();
                     return -1;
                 }
+                free(pa);
             }
             snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
             snprintf(self->cur_func, sizeof self->cur_func, "%s_%s", rname, mname);
@@ -4682,14 +4690,22 @@ impl ParseOps for Parser {
             /* Phase 78 S2b: the template host is normalised, so an instance
                call (`Box<int>`) finds the annotation row. */
             {
-                int pa[16], pn = 0, pk3;
-                for (pk3 = params; pk3 > 0 && pn < 16;
+                int *pa, pn = 0, pk3, pnmax = 0;
+                for (pk3 = params; pk3 > 0; pk3 = self->arena->nodes[pk3].next) pnmax++;
+                pa = pnmax > 0 ? (int *)calloc((size_t)pnmax, sizeof(*pa)) : 0;
+                if (pnmax > 0 && !pa) {
+                    self->sup->pop_scope();
+                    return self->sup->fail("out of memory");
+                }
+                for (pk3 = params; pk3 > 0 && pn < pnmax;
                      pk3 = self->arena->nodes[pk3].next)
                     pa[pn++] = self->arena->nodes[pk3].aux;
                 if (self->sym->add_meth_ann(tmpl, mname, pa, pn) != 0) {
+                    free(pa);
                     self->sup->pop_scope();
                     return -1;
                 }
+                free(pa);
             }
             snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
             snprintf(self->cur_func, sizeof self->cur_func, "%s_%s", tmpl, mname);
