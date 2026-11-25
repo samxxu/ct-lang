@@ -1,16 +1,20 @@
 #!/bin/sh
-# S1a-0 C2a: the raw block text cap is the formal TEXT_LIMIT (65536 bytes),
-# not the old fixed 32768. A block is stored in the growable literal pool, so
-# the only remaining bound is the resource guard; a block over the old cap must
-# compile and reach the generated C byte for byte.
+# S1a-0 C2a/C2b: text caps move to on-demand buffers.
+#
+#   C2a  MAX_RAW_BLOCK 32768  -> TEXT_LIMIT 65536 bytes for one #ct-raw block
+#        (the block already lives in the growable literal pool; the old policy
+#        cap is gone).
+#   C2b  MAX_KEY 768          -> one unit's incremental-cache key grows on
+#        demand to TEXT_LIMIT; a long source path must still be cached and
+#        reused, where the old compiler silently skipped the cache.
 #
 # Usage: sh test/ast/cap_text.sh <ct-ast>
 set -u
 ct=${1:?usage: cap_text.sh <ct-ast>}
-# the fixtures are host C programs, not package sources under test
+ct=$(cd "$(dirname "$ct")" && pwd)/$(basename "$ct")
+# the fixtures are host C programs / build inputs, not package sources
 CT_C_BOUNDARY=allow
 export CT_C_BOUNDARY
-ct=$(cd "$(dirname "$ct")" && pwd)/$(basename "$ct")
 w=$(mktemp -d "${CT_SHORT_TMP:-${TMPDIR:-/tmp}}/captext.XXXXXX") || exit 1
 trap 'rm -rf "$w"' EXIT HUP INT TERM
 cc=${CC:-cc}
@@ -60,8 +64,54 @@ else
     fail=1
 fi
 
+# MAX_KEY: build one unit whose source path alone is longer than the old
+# 768-byte key cap. The emitted `.c` carries a marker appended by the test; a
+# warm build that reuses the key leaves the marker in place (a miss rewrites
+# the whole file).
+d="$w/deep"
+n=0
+while [ $((${#d} + 14)) -lt 840 ] && [ "$n" -lt 20 ]; do
+    d="$d/ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    n=$((n + 1))
+done
+src="$d/longkey.ct"
+if [ ${#src} -le 768 ]; then
+    echo "FAIL key: could not make a source path over 768 bytes (got ${#src})"
+    fail=1
+else
+    mkdir -p "$d" || exit 1
+    printf 'int main(void)\n{\n    return 0;\n}\n' >"$src"
+    outdir="$w/keyout"
+    mkdir -p "$outdir" || exit 1
+    if ! "$ct" build --emit-c "$src" -o "$outdir" >"$w/key.out" 2>"$w/key.err"; then
+        echo "FAIL key: ct-ast build rejected a ${#src}-byte path: $(grep 'error: ' "$w/key.err" | head -1)"
+        fail=1
+    elif [ ! -f "$outdir/.ctcache/longkey.c.key" ]; then
+        echo "FAIL key: no cache key written for a ${#src}-byte path"
+        fail=1
+    else
+        klen=$(wc -c <"$outdir/.ctcache/longkey.c.key" | tr -d ' ')
+        if [ "$klen" -le 768 ]; then
+            echo "FAIL key: cache key is $klen bytes (want > 768)"
+            fail=1
+        else
+            echo "ok   key ($klen-byte key for a ${#src}-byte path)"
+        fi
+        printf '\n/* warm-hit marker */\n' >>"$outdir/longkey.c"
+        if ! "$ct" build --emit-c "$src" -o "$outdir" >"$w/key2.out" 2>"$w/key2.err"; then
+            echo "FAIL key: the warm build failed: $(tail -1 "$w/key2.err")"
+            fail=1
+        elif grep -Fq 'warm-hit marker' "$outdir/longkey.c"; then
+            echo "ok   key (the long key is reused on a warm build)"
+        else
+            echo "FAIL key: the long key was not reused"
+            fail=1
+        fi
+    fi
+fi
+
 if [ "$fail" -eq 0 ]; then
-    echo "cap_text: OK (raw block)"
+    echo "cap_text: OK (raw block, cache key)"
     exit 0
 fi
 echo "cap_text: FAIL"
