@@ -5036,6 +5036,12 @@ else
     bad "S1a-0 warning store grows" "$(cat "$work/warng.out" "$work/warng.err" | head -4)"
 fi
 
+if bash test/ast/trait_methods_grow.sh "$work/ct-ast" >"$work/methg.out" 2>"$work/methg.err"; then
+    ok "S1a-0 trait methods grow"
+else
+    bad "S1a-0 trait methods grow" "$(cat "$work/methg.out" "$work/methg.err" | head -4)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
