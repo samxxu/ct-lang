@@ -1,7 +1,7 @@
 ---
 id: SH-94
 title: "ct-ast 巨型单元与重复上限常量：Expr/Emitter 6–7k 行，MAX_GENERIC_INSTS/MAX_TEXT 多份"
-status: deferred
+status: open
 area: selfhost
 severity: P2
 opened: 2026-11-20
@@ -91,3 +91,15 @@ selfhost/ct-ast/frontend/parse/Expr.h.ct:66:#define MAX_GENERIC_INSTS 64
 - 状态：`deferred`（P2，1.0 后行为保持重构）
 - 触发：v1.0 冻结后
 - 不能关闭：Expr/Emitter 拆分与常量集中未做；不影响当前正确性
+
+## 排期（REQ，2026-11-25）
+
+- 状态：`open`（`v1-PH-2` S1a-1；前置 S1a-0 容量上限动态化）
+- 已完成（v1.1 S1）：`Limits.h.ct` 上限单源 + 镜像 selftest；`ExprCore` / `StmtCore` / `EmitterCore` 与 `ExprAdtCtor` / `ExprNewObject` / `StmtDefer` / `EmitterTry` 五个子单元。
+- 剩余（S1a-1 纯搬移 + S8 后收尾），完整切片表见 [sh94-m1-core-layout §4](../../docs/design/sh94-m1-core-layout.md#4-剩余拆分计划2026-11-25)：
+  - **Phase A（A1–A7）**：`ExprTypes` / `ExprSubscript` / `ExprOptional` / `ExprTraitInst` / `ExprRecvMut` / `ExprTry` / `ExprBinding` 七个小组各自成单元；
+  - **Phase B（B1–B5）**：`ExprOps` 拆 `ExprCallCheck` / `ExprClosure` / `ExprInstantiate` / `ExprTypeParse` / `ExprStaticType`，`ExprOps` 只留文法；
+  - **Phase C（C1–C5）**：`StmtOps` 拆 `StmtMatch` / `StmtLoop` / `StmtSwitch` / `StmtControl` / `StmtUninit`；
+  - **Phase D1–D3（S1a-1）**：Emitter 只拆 `EmitHoist` / `EmitInvariant` / `EmitInit`；
+  - **Phase D4–D6（S8 后）**：按 `LModule` 新形状拆 `EmitHeader` / `EmitDecl` / `EmitExpr`。
+- 判据：每片 `tools/sh94_split_check.py` 函数体多重集不变、生成物逐字节、seed 两轮；`ExprOps` 不再顶 `MAX_METHODS`；环数 0。

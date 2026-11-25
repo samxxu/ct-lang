@@ -244,7 +244,9 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.1 C 互操作语义矩阵 | `v1-PH-1` | v1.1 train | 并入 guide 附录，逐项给 Ct 行为、边界与权威节；不新建平行规范（[DOC-92](../../issues/docs/doc-92-c-interop-semantics-matrix.md)） |
 | v1.1 JSON 诊断 parse 通道 | `v1-PH-1` | v1.1 train | parse 错误输出与 warning/type 同构的 JSON；稳定 code 不在本项（[LANG-10](../../issues/lang/lang-10-machine-readable-diagnostics.md)） |
 | v1.2 诊断 code registry | `v1-PH-2 / S0` | v1.2 train | 稳定 `E-*`/`W-*` code + registry；与 JSON 通道分开（[LANG-25](../../issues/lang/lang-25-diagnostic-code-registry.md)） |
-| v1.2 Typed/Lowered IR | `v1-PH-2 / S1 + S8` | v1.2 train | **LIR 先行**：S1 是总闸（TIR 视图 + LIR + 清理 CFG + 验证器）；S8 做 emitter 契约、语义图与自举切换（[SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md)） |
+| v1.2 Typed/Lowered IR | `v1-PH-2 / S1b + S8` | v1.2 train | **LIR 先行**：S1b 是总闸（TIR 视图 + LIR + 清理 CFG + 验证器）；S8 做 emitter 契约、语义图与自举切换（[SH-112](../../issues/selfhost/sh112-typed-ir-architecture.md)） |
+| v1.2 单元收敛（SH-94 剩余） | `v1-PH-2 / S1a-1 + S8` | v1.2 train | 纯搬移：A/B/C 三阶段拆 Expr/Stmt；Emitter 只在 S1a-1 拆 D1–D3（hoist/invariant/init），D4–D6 等 S8 后按 LIR 形状做（[计划](../design/sh94-m1-core-layout.md#4-剩余拆分计划2026-11-25)） |
+| v1.2 容量上限动态化 | `v1-PH-2 / S1a-0` | v1.2 train | 49 个 `Limits` + 8 个本地 + 14 处硬编码：全部收到形式上限 `CAP_LIMIT` / `TEXT_LIMIT` / `NODE_LIMIT`；只留深度/恢复保护（[清单](../planning/capacity-limits.md)） |
 | v1.2 小欠账 | `v1-PH-2 / S0` | v1.2 train | ABI-3 / ABI-4 缺陷、CI-1 / CI-2 两个 nightly job、文档纠偏；缺陷可独立切 `v1.1.1` |
 | v1.2 下标协议完整化 | `v1-PH-2 / S2` | v1.2 train | REQ-JSACCESS-1 → REQ-INDEX-1：参数类型匹配、读写/借写、`+=`/`++`/`&` 二值化 |
 | v1.2 函子签名糖 | `v1-PH-2 / S3` | v1.2 train | `(A,B) => R`；先 ADR，再实现；原定 v1.1+ Wave 2（2026-11-25 改判） |
@@ -253,8 +255,8 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 | v1.2 全局默认 strict（V1 欠账） | `v1-PH-2 / S9` | v1.2 train | 默认翻转；`selfhost/`、`lib/core/` 迁到边界单元并零 allow；`examples`/`test` 能迁则迁、C 互操作用例显式 allow；`ct migrate` 为旧包写 `c-boundary = allow` |
 
 > **v1-PH-2 已开卡（2026-11-25，规划中）**：所有者同日裁定**不再单开 v1.3/v1.4/v1.5**，
-> 存量欠账全部折进 [卡 §2](../phases/v1-PH-2/card.md) 的 S0–S10，**LIR 先行（S1 总闸）**，
-> 整卡只 bump 一次 `v1.2.0`。
+> 存量欠账全部折进 [卡 §2](../phases/v1-PH-2/card.md) 的 S0–S10：**S1a-0 放开容量上限 →
+> S1a-1 做 SH-94 剩余单元收敛 → S1b 落 LIR（总闸）**，整卡只 bump 一次 `v1.2.0`。
 
 > **v1-PH-1 已开卡（2026-11-24，规划中）**：施工清单以
 > [卡 §2](../phases/v1-PH-1/card.md) 为准。本表里 SH-111 / SH-112 / SH-113 / SH-114、
@@ -306,7 +308,7 @@ A 是**终局**，但 v1.1 只承诺“strict profile 可强制”，不承诺�
 4. 依次开 `v0-PH-86` 词法器（✅ v0.86.0）、`v0-PH-87` 解析+检查（✅ v0.87.0；`match` 字面项随 v0-PH-88 的自举搬迁落地）、`v0-PH-88` 发射器+回环（✅ v0.88.0；v1-pre 收口）；
 5. 开 `v1-PH-0`（v1.0），先定 seed，再退 L1/L2；
 6. 开 `v1-PH-1 / S1`（M1 精细切分）→ `S2`（A 默认强制）（✅ v1.1.0）；
-7. 开 `v1-PH-2`（v1.2，单卡 S0–S10）：小欠账 → IR-1（总闸）→ 下标协议 → 函子 → ADT 模式 → 检查器 → IR-2 → strict profile → 收口；
+7. 开 `v1-PH-2`（v1.2，单卡 S0–S10）：小欠账 → 容量上限动态化（S1a-0）→ SH-94 单元收敛（S1a-1）→ IR-1（S1b 总闸）→ 下标协议 → 函子 → ADT 模式 → 检查器 → IR-2 → 全局默认 strict → 收口；
 8. 全局默认 strict 在 v1.2 收回 v0-PH-65 的 pre-1.0 豁免并翻转默认；C 互操作改显式 allow，本路线到 `v1.2.0` 为止。
 
 不建议把“去旧代码”“语法重写”“A 全量检查”塞进同一个 phase。

@@ -84,18 +84,133 @@ sh94_split: 1046 bodies, multiset identical; 2 moved function(s) in place; skele
   手改负例红；
 - 导入图环数 0（`python3 tools/p85_inventory.py cycles`）。
 
-## 4 剩余
+## 4 剩余拆分计划（2026-11-25）
 
-| 宿主 | 剩余行数 | 仍持有的方法 | 还能怎么切 |
+### 4.1 盘面
+
+| 宿主 | 行数 | impl 区间 | 方法 |
 | --- | --- | --- | --- |
-| `Expr.h.ct` | 9526 | `ExprOps` 64 个方法（**在 `MAX_METHODS=64` 上限**）、`ExprTypes` 7、`ExprSubscript` 2、`ExprOptional` 5、`ExprTraitInst` 1、`ExprRecvMut` 1、`ExprTry` 3、`ExprBinding` 1 + 53 个 host-free 函数 | 每个小 trait 的整段 `impl` 可独立成子单元（形状同本轮）；`ExprOps` 必须先在 Core 里再拆一个新 trait，等价于本轮 `StmtDeferOps` 的做法 |
-| `Stmt.h.ct` | 5307 | `StmtOps` 37 个方法 + 28 个 host-free 函数 | 按 statement 分支（`parse_match` / `parse_loop` / `parse_switch_body` 等）继续拆新 trait；每个子单元仍是整段 impl |
-| `Emitter.h.ct` | 10740 | `EmitOps` 54 个方法 + 201 个 host-free 函数（其中 76 个 `em_*` kind 切片） | 同 `EmitterTryOps` 的形状：`hoist_*`、`invariant_*`、`write_*` 等组可直接成子单元；`em_*` 切片是自由函数，已由第一轮工具覆盖 |
+| `Expr.h.ct` | 9510 | `ExprOps` 1740–8139；`ExprSubscript` 8140–8241；`ExprOptional` 8242–8448；`ExprTraitInst` 8449–8586；`ExprRecvMut` 8587–8624；`ExprTypes` 8625–9342；`ExprTry` 9343–9438；`ExprBinding` 9439–9510 | `ExprOps` 64（顶 `MAX_METHODS`）+ 7 个小 trait |
+| `Stmt.h.ct` | 5307 | `StmtOps` 1167–5307 | 38 + 28 个 host-free |
+| `Emitter.h.ct` | 10749 | `EmitOps` 7280–10749 | 56 + 201 个 host-free（含 76 个 `em_*`） |
 
-未做完整拆分的原因：本轮按“先 Core、后 1–2 个方法组”的步长交付，每个切片
-独立可回滚；剩余组各自需要一次新的“声明搬家 + 整段 impl 搬家”，没有技术
-阻塞，只是没有在本轮预算内继续。`Emitter` 的可见性发布是唯一一次接口变化，
-已在 §2 说明；除此之外没有改签名、没有改语义、没有改 ABI 契约。
+### 4.2 Phase A：Expr 的 7 个小 trait（低风险，先做 spike）
+
+| 片 | 新单元 | trait | 方法组 | 约行数 |
+| --- | --- | --- | --- | --- |
+| A1 | `frontend/parse/ExprTypes.h.ct` | `ExprTypes` | `chk_type` / `chk_assignable` / `chk_mcall_args` / `chk_callptr_args` / `chk_brace_init` / `slice_view_from_array` / `lit_coerce` 等 7 | 718 |
+| A2 | `ExprSubscript.h.ct` | `ExprSubscript` | `custom_index_label` / `custom_index_method` | 102 |
+| A3 | `ExprOptional.h.ct` | `ExprOptional` | `opt_suffix_kind` / `opt_field` / `opt_subscript` / `opt_lvalue_check` / `opt_result_ok` | 207 |
+| A4 | `ExprTraitInst.h.ct` | `ExprTraitInst` | `parse_trait_inst_type` | 138 |
+| A5 | `ExprRecvMut.h.ct` | `ExprRecvMut` | `recv_mut_check` | 38 |
+| A6 | `ExprTry.h.ct` | `ExprTry` | `q_suffix_ahead` / `result_tag` / `result_cols` 等 3 | 96 |
+| A7 | `ExprBinding.h.ct` | `ExprBinding` | `binding_convert` | 72 |
+
+A1 是 spike：先验证“子单元只 import Core、宿主 import 子单元、跨 trait 调用可解析”的形状；
+通过后 A2–A7 照抄。
+
+### 4.3 Phase B：拆 `ExprOps`（约 6.4k 行）
+
+`ExprOps` 按职责拆 5 个新 trait，**`ExprOps` 只保留表达式文法**：
+
+| 片 | 新 trait | 方法组 | 约方法数 |
+| --- | --- | --- | --- |
+| B1 | `ExprCallCheck` | `record_call` / `arity_check` / `map_arity` / `argtype_check` / `argtype_check_static` / `argtype_mismatch` | 6 |
+| B2 | `ExprClosure` | `type_is_fnptr` / `type_is_void_ptr` / `formal_is_env_fn` / `arg_is_closure` / `closure_arg_count` / `closure_arg_check` / `map_closure_check` / `decl_type_compat` / `parse_closure` / `closure_bind` / `closure_arg_bind` | 11 |
+| B3 | `ExprInstantiate` | `inst_make` / `inst_register_nested` / `generic_instance` / `inst_inherent_method` / `inst_static_method` / `static_call_ahead` / `inst_subst_type` / `container_elem_foreign` / `container_vptr_type` / `container_iface_ptr` | 10 |
+| B4 | `ExprTypeParse` | `is_type_word` / `type_append` / `parse_type` / `parse_inst_type` | 4 |
+| B5 | `ExprStaticType` | `static_ctype` / `ctype_expand` / `fnptr_ret` / `peel_ptr` / `container_init_check` / `container_global_init_check` / `container_subscript_kind` / `container_write_check` / `container_addr_check` / `brace_arg_ok` / `parse_array_dims` / `next_is_type_name` / `tok_is_type_name` / `offsetof_ahead` / `fnptr_field` / `const_ok` | 16 |
+| — | 剩余 `ExprOps` | `parse_expr` / `into_tail` / `into_block` / `into_member_check` / `parse_bitor`…`parse_primary` / `parse_args` / `parse_qual_path` | 约 17 |
+
+顺序 B1 → B2 → B3 → B4 → B5。若某两组存在双向调用（如 `ExprStaticType` ↔ `ExprInstantiate`），
+先把两组放同一片，或把共用方法留在 `ExprOps`，**不允许造环**。
+
+### 4.4 Phase C：拆 `StmtOps`（5.3k 行 / 38 方法）
+
+| 片 | 新 trait | 方法组 | 方法数 |
+| --- | --- | --- | --- |
+| C1 | `StmtMatch` | `match_ahead` / `parse_match` / `expr_match_ahead` / `parse_match_expr` | 4 |
+| C2 | `StmtLoop` | `loop_ahead` / `parse_loop` / `foreach_ahead` / `parse_foreach` / `range_init_ahead` / `parse_range_init` | 6 |
+| C3 | `StmtSwitch` | `parse_switch_body` / `parse_case_value` / `parse_label` / `label_ahead` / `label_find` / `parse_named_label` / `parse_goto` | 7 |
+| C4 | `StmtControl` | `missing_return_check` / `stmt_terminates` / `body_has_jump` / `func_begin` / `func_end` | 5 |
+| C5 | `StmtUninit` | `u_reset` / `u_add` / `u_mark_lvalue` / `u_scan` / `uninit_check` / `del_base` / `del_take` | 7 |
+| — | 剩余 `StmtOps` | `is_decl_start` / `parse_block` / `parse_stmt` / `parse_branch` / `parse_decl_node` / `parse_expr_stmt_node` / `string_raw_write_check` / `closure_global_init` | 约 8 |
+
+顺序 C1 → C2 → C3 → C4 → C5。
+
+### 4.5 Phase D：Emitter（分两段，避免与 IR 重复劳动）
+
+**IR 前（S1a-1）只拆稳定组：**
+
+| 片 | 新 trait | 方法组 |
+| --- | --- | --- |
+| D1 | `EmitHoist` | `expr_unstable` / `hoist_rvalue` / `hoist_scan` / `emit_hoists` / `hoist_expr` |
+| D2 | `EmitInvariant` | `invariant_check` / `invariant_scan` / `invariant_edge` / `invariant_temp_check` |
+| D3 | `EmitInit` | `emit_raw_init` / `emit_range_init` / `emit_brace_init` / `emit_map_brace_init` |
+
+**IR 后（S8 之后）按 `LModule` 新形状再拆：**
+
+| 片 | 候选 trait | 方法组 |
+| --- | --- | --- |
+| D4 | `EmitHeader` | `write_unit_header` / `emit_struct_fwd` / `emit_trait_range` / `emit_proto` / `emit_vtable_fwd` / `header_guard` / `write_map` / `write_model` / `emit_json_str` / `write_header` / `write_abi_header` |
+| D5 | `EmitDecl` | `emit_type_decl` / `emit_global_decl` / `emit_global_extern` / `decl_is_pub` / `emit_inherent_protos` / `emit_trait_decls` / `emit_impls` / `emit_maps` / `emit_unit_init` / `emit_link_externs` / `vtable_exported` / `map_vtable_exported` / `unit_has_drop_impl` / `drop_visible` / `node_mentions` |
+| D6 | `EmitExpr` | `emit_node` / `emit_field` / `emit_inline` / `emit_type_name` / `emit_type_name_dims` / `emit_expr` / `emit_outconv` / `emit_ref_arg` / `emit_value_for` / `emit_cond` / `emit_indent` |
+
+`emit_program` / `emit_unit` / `fail` / `fail_from` 留在 `EmitOps` 作入口。
+
+### 4.5.1 D1–D3 施工单（S1a-1 内，IR 之前）
+
+**执行顺序：D2 → D1 → D3**（编号不变；先自包含组，再跨 trait 调用组）。
+
+| 片 | 方法（定义行） | 约行数 | 新单元 | 对外调用 |
+| --- | --- | --- | --- | --- |
+| D2 `EmitInvariant` | `invariant_edge` 10261 / `invariant_scan` 10304 / `invariant_check` 10392 / `invariant_temp_check` 10478 | 263 | `backend/emit/EmitInvariant.h.ct` | 组内互调；由 host `emit_unit` 调用 |
+| D1 `EmitHoist` | `expr_unstable` 7285 / `hoist_rvalue` 7319 / `hoist_scan` 7341 / `emit_hoists` 7449 / `hoist_expr` 7529 | 243 | `backend/emit/EmitHoist.h.ct` | 调用留在 `EmitOps` 的 `emit_indent`（7302–7318）与 `emit_expr` |
+| D3 `EmitInit` | `emit_raw_init` 7982 / `emit_range_init` 8050 / `emit_brace_init` 8086 / `emit_map_brace_init` 8113 | 159 | `backend/emit/EmitInit.h.ct` | 调用 `emit_expr` / `emit_brace_init` 组内 |
+
+每片固定六步：
+
+1. **Core**：在 `EmitterCore.h.ct` 增 `pub trait <Name> { … }`，把这组声明从 `EmitOps` 移出；
+   把新 trait 追加到 `pub struct Emitter` 的 `use` 列表（与 `EmitOps` / `EmitterTryOps` 并列）；
+2. **子单元**：新建 `backend/emit/<Name>.h.ct`：
+   `namespace backend::emit; import backend::emit::EmitterCore; impl <Name> for Emitter { … }`；
+   只 import Core，不 import 宿主；
+3. **宿主**：`Emitter.h.ct` 删除被搬走的方法体，加 `import backend::emit::<Name>;`
+   （`g_emitter` 的 vptr 初始化依赖子单元头 `extern` 发布的 vtable）；
+4. **静止检查**：`python3 tools/p85_inventory.py cycles` 必须仍为 0；单元名全局唯一；
+5. **判据**：`tools/sh94_split_check.py --methods --baseline 2f70c862 --skeleton-baseline <parent> --map …`
+   函数体多重集不变；`check-goldens-ast.sh` 25/25；`check-ast.sh` fixpoint；
+6. **seed 与提交**：`gen-seed.sh` + `check-seed.sh` 两轮逐字节；单提交
+   `refactor(sh94-d2): 拆 EmitInvariant 方法组`（D1/D3 同形）。
+
+**跳过条件**：若某组在 S1b 设计时被 LIR 判定为整体消失（例如 invariant 被验证器替代），
+则记录“D-x 取消”并把该组从 D4–D6 一并删除；不允许先拆再删。
+
+### 4.6 每切片判据
+
+```sh
+python3 tools/sh94_split_check.py --methods --baseline 2f70c862 \
+  --skeleton-baseline <parent> \
+  --map 'selfhost/ct-ast/frontend/parse/Expr.h.ct=ExprTypes:<methods>:selfhost/ct-ast/frontend/parse/ExprTypes.h.ct'
+bash selfhost/check-goldens-ast.sh          # 25/25
+bash selfhost/check-ast.sh                  # fixpoint + 门禁
+python3 tools/p85_inventory.py cycles       # 必须 0
+bash selfhost/gen-seed.sh && bash selfhost/check-seed.sh
+```
+
+- `--baseline 2f70c862` 是函数体多重集冻结基线；`--skeleton-baseline` 取父提交；
+- 每片一个提交，独立回滚；行号随切片漂移，每片以父提交重新取区间。
+
+### 4.7 风险
+
+| 风险 | 应对 |
+| --- | --- |
+| 跨 trait 调用需要额外 import，可能成环 | A1 先 spike；`p85_inventory.py cycles` 必须 0；双向调用组合并 |
+| `pub` trait/struct 的 vtable 可见性 | 沿用本轮规则：`pub trait` + `pub struct`；新 trait 必须 `pub` |
+| 宿主 import 子单元顺序导致 vptr 初始化缺失 | 宿主单向 import 子单元；子单元头 `extern` 发布 vtable |
+| `MAX_METHODS` 仍挡新增方法 | S1a-0 先放开；方法组拆分本身也会先降下来 |
+| Emitter 拆完又被 LIR 重写 | D1–D3 先做，D4–D6 等 S8 后按新形状做 |
+| 行数/方法数估算偏差 | 以每片实测 `sh94_split_check.py` 与 `wc -l` 记录，不按估算验收 |
 
 ## 5 回滚
 
