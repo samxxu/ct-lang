@@ -16,6 +16,7 @@
 #include "EmitterCore.h"
 #include "Sh.h"
 #include "EmitterTry.h"
+#include "EmitInvariant.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Emitter.h.ct"
 #include <stdio.h>
@@ -429,7 +430,7 @@ static int * backend_emit_g_inst_layout_state;
 static int backend_emit_g_inst_layout_cap;
 static int * backend_emit_g_shell_emit_state;
 static int backend_emit_g_shell_emit_cap;
-static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable };
+static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable, .__backend_emit_emitinvariant_vptr = &backend_emit_Emitter_backend_emit_EmitInvariant_vtable };
 static int backend_emit_Emitter_backend_emit_EmitOps_expr_unstable(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int k;
@@ -614,7 +615,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_hoists(void *self, int
     char hty[MAX_TEXT];
     int hd;
     (void)(_self);
-    if (_self->__backend_emit_emitops_vptr->invariant_temp_check(_self) != 0) {
+    if (_self->__backend_emit_emitinvariant_vptr->invariant_temp_check(_self) != 0) {
         return (-1);
     }
     for (i = 0; i < _self->nopt; i++) {
@@ -710,7 +711,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, in
     _self->cur_unit = (-1);
     backend_emit_g_shell_u = (-1);
     backend_emit_g_shell_header = 0;
-    if (_self->__backend_emit_emitops_vptr->invariant_check(_self, prog) != 0) {
+    if (_self->__backend_emit_emitinvariant_vptr->invariant_check(_self, prog) != 0) {
         return (-1);
     }
     _self->gprefix = _self->sym->ns;
@@ -4283,296 +4284,6 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_header(void *self, co
     return 0;
 }
 
-static int backend_emit_Emitter_backend_emit_EmitOps_invariant_edge(void *self, int head, int err_exit, int at) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int c;
-    int ck;
-    int guard;
-    int seen_release;
-    (void)(_self);
-    guard = 0;
-    seen_release = 0;
-    for (c = head; c >= 0; c = _self->arena->nodes[c].next) {
-        guard = (guard + 1);
-        if (c >= _self->arena->nnode) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, at, "lowering invariant I1: a cleanup edge points outside the node pool");
-        }
-        if (guard > 70000) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, at, "lowering invariant I1: a cleanup edge is cyclic");
-        }
-        ck = _self->arena->nodes[c].kind;
-        if (ck == N_DELETE) {
-            seen_release = 1;
-            continue;
-        }
-        if (ck != N_DEFER_RUN) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, at, "lowering invariant I1: control transfer inside a cleanup edge");
-        }
-        if (seen_release) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, at, "lowering invariant I2: a deferred body runs after a release on the same edge");
-        }
-        if (((!err_exit) && (_self->arena->nodes[c].aux == 1))) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, at, "lowering invariant I3: an errdefer body runs on a normal exit");
-        }
-        if (((_self->arena->nodes[c].a < 0) || (_self->arena->nodes[_self->arena->nodes[c].a].kind != N_BLOCK))) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, at, "lowering invariant I1: a deferred run has no block body");
-        }
-{
-            int bg;
-            for (bg = _self->arena->nodes[_self->arena->nodes[c].a].a; bg >= 0; bg = _self->arena->nodes[bg].next) {
-                int bk = _self->arena->nodes[bg].kind;
-                if (((((bk == N_RET) || (bk == N_BREAK)) || (bk == N_CONT)) || (bk == N_GOTO))) {
-                    return _self->__backend_emit_emitops_vptr->fail_from(_self, at, "lowering invariant I1: control transfer inside a deferred body");
-                }
-            }
-        }
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_invariant_scan(void *self, int n, int depth) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int k;
-    int h;
-    int err_exit;
-    (void)(_self);
-    while (n >= 0) {
-        if (depth > 2048) {
-            char dmsg[MAX_TEXT];
-            snprintf(dmsg, sizeof(dmsg), "lowering invariant I1: AST walk is deeper than 2048 at node %d", n);
-            return _self->__backend_emit_emitops_vptr->fail(_self, dmsg);
-        }
-        if (n >= _self->arena->nnode) {
-            return _self->__backend_emit_emitops_vptr->fail(_self, "lowering invariant I1: a child index is outside the node pool");
-        }
-        k = _self->arena->nodes[n].kind;
-        if ((((k == N_RET) || (k == N_BREAK)) || (k == N_CONT))) {
-            err_exit = (strcmp(_self->arena->nodes[n].text2, "err") == 0);
-            if (_self->__backend_emit_emitops_vptr->invariant_edge(_self, _self->arena->nodes[n].b, err_exit, n) != 0) {
-                return (-1);
-            }
-            if (k == N_RET) {
-                if (((_self->arena->nodes[n].aux == 1) && (!_self->arena->nodes[n].text[0]))) {
-                    return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "lowering invariant I4: a return marked for materialisation has no type");
-                }
-                if (_self->__backend_emit_emitops_vptr->invariant_scan(_self, _self->arena->nodes[n].a, (depth + 1)) != 0) {
-                    return (-1);
-                }
-            }
-            n = _self->arena->nodes[n].next;
-            continue;
-        }
-        if (k == N_GOTO) {
-            if (_self->arena->nodes[n].b >= 0) {
-                return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "lowering invariant I1: a goto carries a cleanup edge");
-            }
-            n = _self->arena->nodes[n].next;
-            continue;
-        }
-        if (k == N_TRY) {
-            h = _self->__backend_emit_emittertryops_vptr->try_cleanup(_self, n);
-            if (_self->__backend_emit_emitops_vptr->invariant_edge(_self, h, 1, n) != 0) {
-                return (-1);
-            }
-        }
-        if ((((((((((k == N_STRUCT) || (k == N_FIELD)) || (k == N_FIELDS)) || (k == N_TYPEDEF)) || (k == N_GLOBAL)) || (k == N_PP)) || (k == N_ENUM)) || (k == N_ENUMVAL)) || (k == N_UNION))) {
-            n = _self->arena->nodes[n].next;
-            continue;
-        }
-        if (k == N_IMPL) {
-            if (_self->__backend_emit_emitops_vptr->invariant_scan(_self, _self->arena->nodes[n].a, (depth + 1)) != 0) {
-                return (-1);
-            }
-            n = _self->arena->nodes[n].next;
-            continue;
-        }
-        if (k == N_FUNC) {
-            if (_self->__backend_emit_emitops_vptr->invariant_scan(_self, _self->arena->nodes[n].b, (depth + 1)) != 0) {
-                return (-1);
-            }
-            n = _self->arena->nodes[n].next;
-            continue;
-        }
-        if (((k == N_DEFER_RUN) && (_self->arena->nodes[n].aux == 1))) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "lowering invariant I3: an errdefer body reaches a normal block tail");
-        }
-        if (_self->__backend_emit_emitops_vptr->invariant_scan(_self, _self->arena->nodes[n].a, (depth + 1)) != 0) {
-            return (-1);
-        }
-        if (_self->__backend_emit_emitops_vptr->invariant_scan(_self, _self->arena->nodes[n].b, (depth + 1)) != 0) {
-            return (-1);
-        }
-        if (_self->__backend_emit_emitops_vptr->invariant_scan(_self, _self->arena->nodes[n].c, (depth + 1)) != 0) {
-            return (-1);
-        }
-        if (_self->__backend_emit_emitops_vptr->invariant_scan(_self, _self->arena->nodes[n].d, (depth + 1)) != 0) {
-            return (-1);
-        }
-        if (((((((((((((((((((((((k == N_EXPR) || (k == N_ASSIGN)) || (k == N_DECL)) || (k == N_DECLS)) || (k == N_DELETE)) || (k == N_EMPTY)) || (k == N_SASSERT)) || (k == N_LABEL)) || (k == N_IF)) || (k == N_WHILE)) || (k == N_FOR)) || (k == N_LOOP)) || (k == N_FOREACH)) || (k == N_MATCH)) || (k == N_SWITCH)) || (k == N_CASE)) || (k == N_DOWHILE)) || (k == N_DEFER_RUN)) || (k == N_RAW)) || (k == N_BLOCK)) || (k == N_POST)) || ((k == N_BIN) && (_self->arena->nodes[n].aux == B_COMMA)))) {
-            n = _self->arena->nodes[n].next;
-            continue;
-        }
-        return 0;
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_invariant_check(void *self, int prog) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    const char * fault;
-    int i;
-    int j;
-    int tail;
-    int r;
-    int del;
-    int run;
-    int er;
-    int nj;
-    (void)(_self);
-    r = (-1);
-    fault = getenv("CT_EMIT_INVARIANT_FAULT");
-    if ((fault && fault[0])) {
-        j = (-1);
-        del = (-1);
-        run = (-1);
-        er = (-1);
-        nj = (-1);
-        if ((((strcmp(fault, "cleanup-jump") == 0) || (strcmp(fault, "cleanup-cycle") == 0)) || (strcmp(fault, "cleanup-drop-first") == 0))) {
-            for (i = 0; i < _self->arena->nnode; i++) {
-                int k = _self->arena->nodes[i].kind;
-                if ((((j < 0) && (((k == N_RET) || (k == N_BREAK)) || (k == N_CONT))) && (_self->arena->nodes[i].b >= 0))) {
-                    j = i;
-                }
-                if (((del < 0) && (k == N_DELETE))) {
-                    del = i;
-                }
-                if (((run < 0) && (k == N_DEFER_RUN))) {
-                    run = i;
-                }
-            }
-            if (j >= 0) {
-                tail = _self->arena->nodes[j].b;
-                while (_self->arena->nodes[tail].next >= 0) {
-                    tail = _self->arena->nodes[tail].next;
-                }
-                if (strcmp(fault, "cleanup-cycle") == 0) {
-                    _self->arena->nodes[_self->arena->nodes[j].b].next = _self->arena->nodes[j].b;
-                }
-                else {
-                    if (strcmp(fault, "cleanup-jump") == 0) {
-                        for (i = 0; i < _self->arena->nnode; i++) {
-                            if (((i != j) && (_self->arena->nodes[i].kind == N_RET))) {
-                                r = i;
-                                break;
-                            }
-                        }
-                        if (r >= 0) {
-                            _self->arena->nodes[tail].next = r;
-                        }
-                    }
-                    else {
-                        if (((del >= 0) && (run >= 0))) {
-                            _self->arena->nodes[j].b = del;
-                            _self->arena->nodes[del].next = run;
-                            _self->arena->nodes[run].next = (-1);
-                        }
-                    }
-                }
-            }
-        }
-        else {
-            if (strcmp(fault, "errdefer-normal") == 0) {
-                for (i = 0; i < _self->arena->nnode; i++) {
-                    int k = _self->arena->nodes[i].kind;
-                    if ((((er < 0) && (k == N_DEFER_RUN)) && (_self->arena->nodes[i].aux == 1))) {
-                        er = i;
-                    }
-                    if (((k == N_RET) && (strcmp(_self->arena->nodes[i].text2, "err") != 0))) {
-                        nj = i;
-                    }
-                }
-                if (((er >= 0) && (nj >= 0))) {
-                    if (_self->arena->nodes[nj].b < 0) {
-                        _self->arena->nodes[nj].b = er;
-                    }
-                    else {
-                        tail = _self->arena->nodes[nj].b;
-                        while (_self->arena->nodes[tail].next >= 0) {
-                            tail = _self->arena->nodes[tail].next;
-                        }
-                        _self->arena->nodes[tail].next = er;
-                    }
-                    _self->arena->nodes[er].next = (-1);
-                }
-            }
-        }
-    }
-    for (i = _self->arena->nodes[prog].a; i >= 0; i = _self->arena->nodes[i].next) {
-        if (_self->arena->nodes[i].kind == N_FUNC) {
-            if (_self->__backend_emit_emitops_vptr->invariant_scan(_self, _self->arena->nodes[i].b, 0) != 0) {
-                return (-1);
-            }
-        }
-        else {
-            if (_self->arena->nodes[i].kind == N_IMPL) {
-                for (j = _self->arena->nodes[i].a; j >= 0; j = _self->arena->nodes[j].next) {
-                    if (((_self->arena->nodes[j].kind == N_FUNC) && (_self->__backend_emit_emitops_vptr->invariant_scan(_self, _self->arena->nodes[j].b, 0) != 0))) {
-                        return (-1);
-                    }
-                }
-            }
-        }
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_invariant_temp_check(void *self) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    const char * fault;
-    int i;
-    int j;
-    int c;
-    (void)(_self);
-    fault = getenv("CT_EMIT_INVARIANT_FAULT");
-    if (((fault && (strcmp(fault, "temp-missing") == 0)) && (_self->nhoist > 0))) {
-        _self->arena->nodes[_self->hoist_calls[0]].text3[0] = 0;
-    }
-    if (((fault && (strcmp(fault, "temp-dup") == 0)) && (_self->nhoist > 1))) {
-        snprintf(_self->arena->nodes[_self->hoist_calls[1]].text3, MAX_TEXT, "%s", _self->arena->nodes[_self->hoist_calls[0]].text3);
-    }
-    for (i = 0; i < _self->nhoist; i++) {
-        c = _self->hoist_calls[i];
-        if ((!_self->arena->nodes[c].text3[0])) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, c, "lowering invariant I4: a hoisted receiver has no temporary name");
-        }
-        for (j = 0; j < i; j++) {
-            if (strcmp(_self->arena->nodes[c].text3, _self->arena->nodes[_self->hoist_calls[j]].text3) == 0) {
-                return _self->__backend_emit_emitops_vptr->fail_from(_self, c, "lowering invariant I4: two hoisted receivers share a temporary name");
-            }
-        }
-    }
-    for (i = 0; i < _self->ninto; i++) {
-        c = _self->into_nodes[i];
-        if ((!_self->arena->nodes[c].text3[0])) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, c, "lowering invariant I4: an 'into' receiver has no temporary name");
-        }
-    }
-    for (i = 0; i < _self->nopt; i++) {
-        c = _self->opt_nodes[i];
-        if (((!_self->arena->nodes[c].text3[0]) || (!_self->arena->nodes[c].text4[0]))) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, c, "lowering invariant I4: an optional-chain receiver has no temporary declaration");
-        }
-    }
-    for (i = 0; i < _self->nhoist; i++) {
-        for (j = 0; j < _self->ninto; j++) {
-            if (strcmp(_self->arena->nodes[_self->hoist_calls[i]].text3, _self->arena->nodes[_self->into_nodes[j]].text3) == 0) {
-                return _self->__backend_emit_emitops_vptr->fail_from(_self, _self->hoist_calls[i], "lowering invariant I4: two receivers share a temporary name");
-            }
-        }
-    }
-    return 0;
-}
-
 static int backend_emit_Emitter_backend_emit_EmitOps_fail(void *self, const char * msg) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     (void)(_self);
@@ -4640,10 +4351,6 @@ const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps
     .write_map = backend_emit_Emitter_backend_emit_EmitOps_write_map,
     .write_abi_header = backend_emit_Emitter_backend_emit_EmitOps_write_abi_header,
     .write_header = backend_emit_Emitter_backend_emit_EmitOps_write_header,
-    .invariant_edge = backend_emit_Emitter_backend_emit_EmitOps_invariant_edge,
-    .invariant_scan = backend_emit_Emitter_backend_emit_EmitOps_invariant_scan,
-    .invariant_check = backend_emit_Emitter_backend_emit_EmitOps_invariant_check,
-    .invariant_temp_check = backend_emit_Emitter_backend_emit_EmitOps_invariant_temp_check,
     .fail = backend_emit_Emitter_backend_emit_EmitOps_fail,
     .fail_from = backend_emit_Emitter_backend_emit_EmitOps_fail_from
 };
@@ -7287,7 +6994,7 @@ static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
     int i;
     backend_emit_g_shell_u = u;
     backend_emit_g_shell_header = 0;
-    if (self->__backend_emit_emitops_vptr->invariant_check(self, self->units[u].prog) != 0) {
+    if (self->__backend_emit_emitinvariant_vptr->invariant_check(self, self->units[u].prog) != 0) {
         return (-1);
     }
     fprintf(self->out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n", self->version, self->path);

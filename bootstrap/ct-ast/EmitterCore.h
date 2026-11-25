@@ -141,14 +141,21 @@ struct backend_emit_EmitOps_vtbl {
     int (*write_abi_header)(void *, const char *);
     int (*fail)(void *, const char *);
     int (*fail_from)(void *, int, const char *);
-    int (*invariant_check)(void *, int);
-    int (*invariant_scan)(void *, int, int);
-    int (*invariant_edge)(void *, int, int, int);
-    int (*invariant_temp_check)(void *);
 };
 struct backend_emit_EmitOps_iface {
     void *self;
     const struct backend_emit_EmitOps_vtbl *vt;
+};
+
+struct backend_emit_EmitInvariant_vtbl {
+    int (*invariant_edge)(void *, int, int, int);
+    int (*invariant_scan)(void *, int, int);
+    int (*invariant_check)(void *, int);
+    int (*invariant_temp_check)(void *);
+};
+struct backend_emit_EmitInvariant_iface {
+    void *self;
+    const struct backend_emit_EmitInvariant_vtbl *vt;
 };
 
 struct backend_emit_EmitterTryOps_vtbl {
@@ -234,6 +241,7 @@ struct backend_emit_Emitter {
     char ginst[160];
     const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
     const struct backend_emit_EmitterTryOps_vtbl *__backend_emit_emittertryops_vptr;
+    const struct backend_emit_EmitInvariant_vtbl *__backend_emit_emitinvariant_vptr;
 };
 
 #endif

@@ -35,75 +35,131 @@ namespace backend::emit;
    `ct_emit_last_error`. */
 pub trait EmitOps {
     int  emit_program(int prog);
+
     int  emit_unit(int u);
+
     int  write_unit_header(int u);
+
     int  emit_struct_fwd(void);
+
     int  emit_trait_range(int start, int end, int mode);
+
     int  emit_proto(int i);
+
     int  emit_vtable_fwd(int prog);
+
     int  header_guard(const char *base, char **out);
+
     int  write_map(const char *dest, int prog, int u);
+
     int  write_model(const char *dest, int prog);
+
     int  emit_json_str(FILE *f, const char *s);
+
     int  emit_node(int n, int ind);
+
     int  emit_field(int n, int ind);
+
     int  emit_inline(int n);
+
     int  emit_type_name(const char *type, const char *name);
+
     int  emit_type_name_dims(const char *type, const char *name, const char *dims);
+
     int  emit_expr(int n);
+
     /* LANG-26 / D-020 §6.1: a call whose `out` actual needed a temporary. The
        call is emitted as one GNU statement expression: the forward conversion
        initialises the temporary, the call runs, the write-back follows. */
     int  emit_outconv(int n);
+
     /* Phase 78 S2: one `ref` / `out` actual. A plain place takes its address;
        a Vec/Map subscript sugar already answers a pointer (`at`) and must not
        be addressed again. */
     int  emit_ref_arg(int n);
+
     /* PH-79 fix SH-100: one value against an expected C type. An array where a
        slice (`struct __ct_slice`) is expected becomes a `{ptr,len}` view. */
     int  emit_value_for(const char *want, int n);
+
     int  expr_unstable(int n);
+
     int  hoist_rvalue(int n);
+
     int  hoist_scan(int n, int top);
+
     int  emit_hoists(int ind);
+
     int  hoist_expr(int n, int ind);
+
     int  emit_cond(int n);
+
     int  emit_indent(int n);
+
     int  emit_type_decl(int n, int ind, int with_semi);
+
     int  emit_global_decl(int n);
+
     int  emit_global_extern(int n);
+
     int  decl_is_pub(int kind, const char *name);
+
     int  vtable_exported(int si, const char *tname);
+
     int  map_vtable_exported(int i);
+
     int  emit_link_externs(int prog, int u);
+
     int  emit_inherent_protos(int prog);
+
     /* PH-48 D48-2: the concrete `impl Drop` unit and the callable check; both
        live on the trait so the compiler's MAX_FUNCS budget stays untouched
        (the self-hosted build is at its top-level signature ceiling). */
     int  unit_has_drop_impl(int u, int si);
+
     int  drop_visible(int si);
+
     int  node_mentions(int n, const char *name);
+
     int  emit_trait_decls(void);
+
     int  emit_impls(int prog);
+
     int  emit_maps(int u);
+
     int  emit_unit_init(int prog);
+
     int  emit_raw_init(int raw, const char *type, const char *dims, int assign);
+
     int  emit_range_init(int n);
+
     int  emit_brace_init(int n);
+
     int  emit_map_brace_init(int n);
+
     int  write_header(const char *outc);
+
     int  write_abi_header(const char *path);
+
     int  fail(const char *msg);
+
     int  fail_from(int n, const char *msg);
+}
+
+pub trait EmitInvariant {
+    int  invariant_edge(int head, int err_exit, int at);
+
+    int  invariant_scan(int n, int depth);
+
     /* SH-111: the lowering invariants the emitter may assume. The checker is
        deliberately separate from emission: it runs before the first byte is
        written, reports at the source position of the node that broke the
        rule, and changes no product for a legal program. */
     int  invariant_check(int prog);
-    int  invariant_scan(int n, int depth);
-    int  invariant_edge(int head, int err_exit, int at);
+
     int  invariant_temp_check(void);
 }
+
 
 /* Phase 44: the postfix `?` support -- naming the `Result<T, E>` instance,
    the error column and the captured cleanup, and releasing a discarded
@@ -255,4 +311,4 @@ pub struct Emitter {
        be retained nor released. `sb_blk` holds the binding depth at each
        statement block so a `break` / `continue` can release what the skipped
        closing brace would have. The literals are the documented caps. */
-} use EmitOps, EmitterTryOps;
+} use EmitOps, EmitterTryOps, EmitInvariant;
