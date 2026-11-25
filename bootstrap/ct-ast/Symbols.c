@@ -10,6 +10,7 @@
 #include <ctype.h>
 #define MAX_TEXT    160
 #define MAX_PARAMS  16
+#define MAX_PARAMS_MAX 65536
 #define MAX_FUNCS   512
 #define MAX_FUNCS_MAX 65536
 #define MAX_VARS    4096
@@ -197,6 +198,50 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_capacity(void *
     _self->funcs = grown;
     memset((_self->funcs + _self->fncap), 0, ((size_t)((cap - _self->fncap)) * sizeof((*_self->funcs))));
     _self->fncap = cap;
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_param_capacity(void *self, int fi, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    char * types;
+    char * dims;
+    char * anns;
+    if (((fi < 0) || (fi >= _self->nfunc))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "function table out of range");
+    }
+    if (need <= _self->funcs[fi].pcap) {
+        return 0;
+    }
+    cap = ((_self->funcs[fi].pcap > 0) ? _self->funcs[fi].pcap : MAX_PARAMS);
+    while (((cap < need) && (cap < MAX_PARAMS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_PARAMS_MAX) {
+        cap = MAX_PARAMS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    types = (char *)(realloc(_self->funcs[fi].ptype, ((size_t)(cap) * MAX_TEXT)));
+    if ((!types)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((types + ((size_t)(_self->funcs[fi].pcap) * MAX_TEXT)), 0, ((size_t)((cap - _self->funcs[fi].pcap)) * MAX_TEXT));
+    _self->funcs[fi].ptype = types;
+    dims = (char *)(realloc(_self->funcs[fi].pdim, ((size_t)(cap) * MAX_TEXT)));
+    if ((!dims)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((dims + ((size_t)(_self->funcs[fi].pcap) * MAX_TEXT)), 0, ((size_t)((cap - _self->funcs[fi].pcap)) * MAX_TEXT));
+    _self->funcs[fi].pdim = dims;
+    anns = (char *)(realloc(_self->funcs[fi].pann, (size_t)(cap)));
+    if ((!anns)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((anns + _self->funcs[fi].pcap), 0, (size_t)((cap - _self->funcs[fi].pcap)));
+    _self->funcs[fi].pann = anns;
+    _self->funcs[fi].pcap = cap;
     return 0;
 }
 
@@ -687,8 +732,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_meth_ann(void *self, 
     }
     snprintf(_self->meth[i].host, sizeof(_self->meth[i].host), "%s", key);
     snprintf(_self->meth[i].name, sizeof(_self->meth[i].name), "%s", name);
+    if (((nparams > 0) && (_self->__frontend_sym_symbolops_vptr->ensure_meth_ann_param_capacity(_self, i, nparams) != 0))) {
+        return (-1);
+    }
     _self->meth[i].nparams = nparams;
-    for (k = 0; k < 16; k++) {
+    for (k = 0; k < nparams; k++) {
         _self->meth[i].pann[k] = (((k < nparams) && pann) ? (char)(pann[k]) : 0);
     }
     return 0;
@@ -1051,6 +1099,76 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_capacity(voi
     return 0;
 }
 
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_param_capacity(void *self, int ti, int mi, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    char * types;
+    char * anns;
+    if (((ti < 0) || (ti >= _self->ntraits))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "trait table out of range");
+    }
+    if (((mi < 0) || (mi > _self->traits[ti].nm))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "method table out of range");
+    }
+    if (need <= _self->traits[ti].m[mi].pcap) {
+        return 0;
+    }
+    cap = ((_self->traits[ti].m[mi].pcap > 0) ? _self->traits[ti].m[mi].pcap : MAX_PARAMS);
+    while (((cap < need) && (cap < MAX_PARAMS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_PARAMS_MAX) {
+        cap = MAX_PARAMS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    types = (char *)(realloc(_self->traits[ti].m[mi].ptype, ((size_t)(cap) * MAX_TEXT)));
+    if ((!types)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((types + ((size_t)(_self->traits[ti].m[mi].pcap) * MAX_TEXT)), 0, ((size_t)((cap - _self->traits[ti].m[mi].pcap)) * MAX_TEXT));
+    _self->traits[ti].m[mi].ptype = types;
+    anns = (char *)(realloc(_self->traits[ti].m[mi].pann, (size_t)(cap)));
+    if ((!anns)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((anns + _self->traits[ti].m[mi].pcap), 0, (size_t)((cap - _self->traits[ti].m[mi].pcap)));
+    _self->traits[ti].m[mi].pann = anns;
+    _self->traits[ti].m[mi].pcap = cap;
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_ann_param_capacity(void *self, int mi, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    char * anns;
+    if (((mi < 0) || (mi >= _self->nmeth))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "annotation table out of range");
+    }
+    if (need <= _self->meth[mi].pcap) {
+        return 0;
+    }
+    cap = ((_self->meth[mi].pcap > 0) ? _self->meth[mi].pcap : MAX_PARAMS);
+    while (((cap < need) && (cap < MAX_PARAMS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_PARAMS_MAX) {
+        cap = MAX_PARAMS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    anns = (char *)(realloc(_self->meth[mi].pann, (size_t)(cap)));
+    if ((!anns)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((anns + _self->meth[mi].pcap), 0, (size_t)((cap - _self->meth[mi].pcap)));
+    _self->meth[mi].pann = anns;
+    _self->meth[mi].pcap = cap;
+    return 0;
+}
+
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_trait(void *self, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
@@ -1135,16 +1253,26 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
     _self->traits[ni].nm = _self->traits[ti].nm;
     for (mi = 0; mi < _self->traits[ti].nm; mi++) {
         _self->traits[ni].m[mi] = _self->traits[ti].m[mi];
+        _self->traits[ni].m[mi].ptype = 0;
+        _self->traits[ni].m[mi].pann = 0;
+        _self->traits[ni].m[mi].pcap = 0;
+        if (_self->traits[ti].m[mi].nparams > 0) {
+            if (_self->__frontend_sym_symbolops_vptr->ensure_meth_param_capacity(_self, ni, mi, _self->traits[ti].m[mi].nparams) != 0) {
+                return (-1);
+            }
+            memcpy(_self->traits[ni].m[mi].ptype, _self->traits[ti].m[mi].ptype, ((size_t)(_self->traits[ti].m[mi].nparams) * MAX_TEXT));
+            memcpy(_self->traits[ni].m[mi].pann, _self->traits[ti].m[mi].pann, (size_t)(_self->traits[ti].m[mi].nparams));
+        }
         for (pi = 0; pi < nargs; pi++) {
             if (frontend_sym_ct_generic_subst(_self->traits[ni].m[mi].ret, _self->traits[ti].tparam[pi], ((pi == 0) ? c1 : c2), tmp, MAX_TEXT) != 0) {
                 return _self->__frontend_sym_symbolops_vptr->fail(_self, "type is too long");
             }
             snprintf(_self->traits[ni].m[mi].ret, MAX_TEXT, "%s", tmp);
             for (pk = 0; pk < _self->traits[ni].m[mi].nparams; pk++) {
-                if (frontend_sym_ct_generic_subst(_self->traits[ni].m[mi].ptype[pk], _self->traits[ti].tparam[pi], ((pi == 0) ? c1 : c2), tmp, MAX_TEXT) != 0) {
+                if (frontend_sym_ct_generic_subst((_self->traits[ni].m[mi].ptype + (pk * MAX_TEXT)), _self->traits[ti].tparam[pi], ((pi == 0) ? c1 : c2), tmp, MAX_TEXT) != 0) {
                     return _self->__frontend_sym_symbolops_vptr->fail(_self, "type is too long");
                 }
-                snprintf(_self->traits[ni].m[mi].ptype[pk], MAX_TEXT, "%s", tmp);
+                snprintf((_self->traits[ni].m[mi].ptype + (pk * MAX_TEXT)), MAX_TEXT, "%s", tmp);
             }
         }
     }
@@ -1406,6 +1534,7 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .fail = frontend_sym_Symbols_frontend_sym_SymbolOps_fail,
     .last_error = frontend_sym_Symbols_frontend_sym_SymbolOps_last_error,
     .ensure_fn_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_capacity,
+    .ensure_fn_param_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_param_capacity,
     .ensure_var_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_var_capacity,
     .ensure_scope_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_scope_capacity,
     .ensure_type_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_capacity,
@@ -1444,6 +1573,8 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .find_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_find_trait,
     .ensure_trait_table_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_table_capacity,
     .ensure_trait_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_capacity,
+    .ensure_meth_param_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_param_capacity,
+    .ensure_meth_ann_param_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_ann_param_capacity,
     .add_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_add_trait,
     .trait_inst = frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst,
     .impl_use_concrete = frontend_sym_Symbols_frontend_sym_SymbolOps_impl_use_concrete,

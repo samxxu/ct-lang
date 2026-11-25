@@ -14,6 +14,7 @@
 #include <string.h>
 #define MAX_TEXT   160
 #define MAX_PARAMS 16
+#define MAX_PARAMS_MAX 65536
 #define MAX_METHODS 64
 #define MAX_MAPS   64
 #define T_EOF    0

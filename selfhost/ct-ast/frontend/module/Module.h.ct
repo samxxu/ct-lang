@@ -1708,13 +1708,12 @@ impl ModuleOps for Module {
                 bad = 0;
                 snprintf(msg, sizeof msg, "'%s' cannot be exported: ", self->sym->funcs[fi].name);
                 {
-                    int tn = 0;
-                    char types[17][MAX_TEXT];
-                    snprintf(types[tn++], MAX_TEXT, "%s", self->sym->funcs[fi].ret);
-                    for (k = 0; k < self->sym->funcs[fi].nparams && tn < 17; k++)
-                        snprintf(types[tn++], MAX_TEXT, "%s", self->sym->funcs[fi].ptype[k]);
-                    for (k = 0; k < tn; k++) {
-                        const char *tp = types[k];
+                    /* S1a-0 C1: a function may carry more than 16 parameters,
+                       so walk the return type and every parameter directly
+                       instead of copying them into a 17-row stack buffer. */
+                    for (k = -1; k < self->sym->funcs[fi].nparams; k++) {
+                        const char *tp = k < 0 ? self->sym->funcs[fi].ret
+                                               : self->sym->funcs[fi].ptype + (k) * MAX_TEXT;
                         const char *base = tp;
                         if (strncmp(base, "struct ", 7) == 0) base += 7;
                         else if (strncmp(base, "union ", 6) == 0) base += 6;

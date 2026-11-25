@@ -352,10 +352,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_check(void *se
             ok = 0;
             ft = "";
             if (((fi >= 0) && (pos < np))) {
-                ft = _self->sym->funcs[fi].ptype[pos];
+                ft = (_self->sym->funcs[fi].ptype + (pos * MAX_TEXT));
             }
             if (((fi >= 0) && ((pos + 1) < np))) {
-                ok = (_self->__frontend_parse_exprops_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprops_vptr->type_is_void_ptr(_self, _self->sym->funcs[fi].ptype[(pos + 1)]));
+                ok = (_self->__frontend_parse_exprops_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprops_vptr->type_is_void_ptr(_self, (_self->sym->funcs[fi].ptype + ((pos + 1) * MAX_TEXT))));
             }
             if ((!ok)) {
                 if ((_self->__frontend_parse_exprops_vptr->type_is_fnptr(_self, ft) && (!_self->__frontend_parse_exprops_vptr->formal_is_env_fn(_self, ft)))) {
@@ -407,7 +407,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_map_closure_check(void *se
             ok = 0;
             ft = "";
             if (pos < np) {
-                ft = _self->sym->traits[ti].m[mi].ptype[pos];
+                ft = (_self->sym->traits[ti].m[mi].ptype + (pos * MAX_TEXT));
             }
             if ((_self->sym->traits[ti].m[mi].variadic && ((pos >= np) || ((pos + 1) >= np)))) {
                 snprintf(msg, sizeof(msg), "a map recipe cannot pass a closure through '...'");
@@ -416,7 +416,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_map_closure_check(void *se
                 return (-1);
             }
             if ((pos + 1) < np) {
-                ok = (_self->__frontend_parse_exprops_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprops_vptr->type_is_void_ptr(_self, _self->sym->traits[ti].m[mi].ptype[(pos + 1)]));
+                ok = (_self->__frontend_parse_exprops_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprops_vptr->type_is_void_ptr(_self, (_self->sym->traits[ti].m[mi].ptype + ((pos + 1) * MAX_TEXT))));
             }
             if ((!ok)) {
                 snprintf(msg, sizeof(msg), "a closure argument must fill a '(fn, env)' parameter pair (got '%s')", ft);
@@ -491,12 +491,12 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_argtype_mismatch(void *sel
     while (((cur > 0) && (k < np))) {
         skip = 0;
         if (fi >= 0) {
-            ft = _self->sym->funcs[fi].ptype[k];
+            ft = (_self->sym->funcs[fi].ptype + (k * MAX_TEXT));
         }
         else {
-            ft = _self->sym->traits[ti].m[mi].ptype[k];
+            ft = (_self->sym->traits[ti].m[mi].ptype + (k * MAX_TEXT));
         }
-        if (((fi >= 0) && _self->sym->funcs[fi].pdim[k][0])) {
+        if (((fi >= 0) && (_self->sym->funcs[fi].pdim + ((size_t)(k) * MAX_TEXT))[0])) {
             skip = 1;
         }
         if (((!skip) && strchr(ft, '['))) {
@@ -713,6 +713,18 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_generic_instance(void *sel
     ni = _self->sym->nfunc;
     _self->sym->nfunc++;
     memcpy((&_self->sym->funcs[ni]), (&_self->sym->funcs[gfi]), sizeof((*_self->sym->funcs)));
+    _self->sym->funcs[ni].ptype = 0;
+    _self->sym->funcs[ni].pdim = 0;
+    _self->sym->funcs[ni].pann = 0;
+    _self->sym->funcs[ni].pcap = 0;
+    if (_self->sym->funcs[gfi].nparams > 0) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_param_capacity(_self->sym, ni, _self->sym->funcs[gfi].nparams) != 0) {
+            return (-1);
+        }
+        memcpy(_self->sym->funcs[ni].ptype, _self->sym->funcs[gfi].ptype, ((size_t)(_self->sym->funcs[gfi].nparams) * MAX_TEXT));
+        memcpy(_self->sym->funcs[ni].pdim, _self->sym->funcs[gfi].pdim, ((size_t)(_self->sym->funcs[gfi].nparams) * MAX_TEXT));
+        memcpy(_self->sym->funcs[ni].pann, _self->sym->funcs[gfi].pann, (size_t)(_self->sym->funcs[gfi].nparams));
+    }
     snprintf(_self->sym->funcs[ni].cname, MAX_TEXT, "%s", cname);
     snprintf(_self->sym->funcs[ni].name, MAX_TEXT, "%s", cname);
     _self->sym->funcs[ni].is_static = 1;
@@ -721,8 +733,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_generic_instance(void *sel
     _self->sym->funcs[ni].tparam[0] = 0;
     snprintf(_self->sym->funcs[ni].ret, MAX_TEXT, "%s", ((frontend_sym_ct_generic_subst(_self->sym->funcs[gfi].ret, _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) ? tmp : _self->sym->funcs[gfi].ret));
     for (k = 0; k < _self->sym->funcs[gfi].nparams; k++) {
-        if (frontend_sym_ct_generic_subst(_self->sym->funcs[gfi].ptype[k], _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) {
-            snprintf(_self->sym->funcs[ni].ptype[k], MAX_TEXT, "%s", tmp);
+        if (frontend_sym_ct_generic_subst((_self->sym->funcs[gfi].ptype + (k * MAX_TEXT)), _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) {
+            snprintf((_self->sym->funcs[ni].ptype + (k * MAX_TEXT)), MAX_TEXT, "%s", tmp);
         }
     }
     i = _self->sym->nginsts;
@@ -4219,7 +4231,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 int ba = args;
                                 int bai = 0;
                                 while (((ba > 0) && (bai < _self->sym->traits[bt].m[bmi].nparams))) {
-                                    if (check_refout_arg(_self, ba, _self->sym->traits[bt].m[bmi].pann[bai], _self->sym->traits[bt].m[bmi].ptype[bai]) != 0) {
+                                    if (check_refout_arg(_self, ba, _self->sym->traits[bt].m[bmi].pann[bai], (_self->sym->traits[bt].m[bmi].ptype + (bai * MAX_TEXT))) != 0) {
                                         return (-1);
                                     }
                                     ba = _self->arena->nodes[ba].next;
@@ -4659,7 +4671,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     }
 {
                         int ca;
-                        int pair_ok = (((mi < _self->sym->traits[t].nm) && (_self->sym->traits[t].m[mi].nparams == 2)) && strstr(_self->sym->traits[t].m[mi].ptype[1], "void *"));
+                        int pair_ok = (((mi < _self->sym->traits[t].nm) && (_self->sym->traits[t].m[mi].nparams == 2)) && strstr((_self->sym->traits[t].m[mi].ptype + (1 * MAX_TEXT)), "void *"));
                         for (ca = args; ca >= 0; ca = _self->arena->nodes[ca].next) {
                             int is_cl = 0;
                             int clnode = (-1);
@@ -4679,7 +4691,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 continue;
                             }
                             if ((((clnode >= 0) && pair_ok) && (mi < _self->sym->traits[t].nm))) {
-                                if (closure_match(_self, (int)(_self->arena->nodes[clnode].num), _self->sym->traits[t].m[mi].ptype[0], 1, 1) != 0) {
+                                if (closure_match(_self, (int)(_self->arena->nodes[clnode].num), (_self->sym->traits[t].m[mi].ptype + (0 * MAX_TEXT)), 1, 1) != 0) {
                                     return (-1);
                                 }
                                 continue;
@@ -4704,7 +4716,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         int ma = args;
                         int mai = 0;
                         while (((ma > 0) && (mai < _self->sym->traits[t].m[mi].nparams))) {
-                            if (check_refout_arg(_self, ma, _self->sym->traits[t].m[mi].pann[mai], _self->sym->traits[t].m[mi].ptype[mai]) != 0) {
+                            if (check_refout_arg(_self, ma, _self->sym->traits[t].m[mi].pann[mai], (_self->sym->traits[t].m[mi].ptype + (mai * MAX_TEXT))) != 0) {
                                 return (-1);
                             }
                             ma = _self->arena->nodes[ma].next;
@@ -6023,7 +6035,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 int lk = 0;
                 while (((lc > 0) && (lk < _self->sym->funcs[fi].nparams))) {
                     int lcl = _self->__frontend_parse_exprops_vptr->arg_is_closure(_self, lc);
-                    if (((!lcl) && (_self->__frontend_parse_exprtypes_vptr->lit_coerce(_self, _self->sym->funcs[fi].ptype[lk], lc) != 0))) {
+                    if (((!lcl) && (_self->__frontend_parse_exprtypes_vptr->lit_coerce(_self, (_self->sym->funcs[fi].ptype + (lk * MAX_TEXT)), lc) != 0))) {
                         return (-1);
                     }
                     lc = _self->arena->nodes[lc].next;
@@ -6043,7 +6055,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                         char ak[MAX_TEXT];
                         if (((((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, pc2, at, sizeof(at)) == 0) && at[0]) && bind_conv_struct_like(_self, at)) && bind_conv_any(_self, at, "as"))) {
                             frontend_parse_bind_conv_key(at, ak, sizeof(ak));
-                            frontend_parse_bind_conv_key(_self->sym->funcs[fi].ptype[pk3], fk, sizeof(fk));
+                            frontend_parse_bind_conv_key((_self->sym->funcs[fi].ptype + (pk3 * MAX_TEXT)), fk, sizeof(fk));
                             if (strcmp(ak, fk) != 0) {
                                 char pmsg[MAX_TEXT * 2];
                                 snprintf(pmsg, sizeof(pmsg), "conversion is only allowed at a binding site (declaration/assignment/out/return); argument %d of '%s' is not one", (pk3 + 1), _self->arena->nodes[n].text2);
@@ -6070,7 +6082,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 int ra = args;
                 int rai = 0;
                 while (((ra > 0) && (rai < _self->sym->funcs[fi].nparams))) {
-                    if (check_refout_arg(_self, ra, (int)((unsigned char)(_self->sym->funcs[fi].pann[rai])), _self->sym->funcs[fi].ptype[rai]) != 0) {
+                    if (check_refout_arg(_self, ra, (int)((unsigned char)(_self->sym->funcs[fi].pann[rai])), (_self->sym->funcs[fi].ptype + (rai * MAX_TEXT))) != 0) {
                         return (-1);
                     }
                     ra = _self->arena->nodes[ra].next;
@@ -6092,7 +6104,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 while (((cur > 0) && (k < _self->sym->funcs[fi].nparams))) {
                     char tr[MAX_TEXT];
                     int ip = 0;
-                    if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, _self->sym->funcs[fi].ptype[k], tr, sizeof(tr), (&ip))) {
+                    if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, (_self->sym->funcs[fi].ptype + (k * MAX_TEXT)), tr, sizeof(tr), (&ip))) {
                         int boxed = _self->sup->__frontend_parse_supportops_vptr->maybe_box(_self->sup, cur, tr, ip);
                         if (boxed < 0) {
                             return (-1);
@@ -6121,7 +6133,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 int first_arg = args;
                 while (((cur > 0) && (k < _self->sym->funcs[fi].nparams))) {
                     int is_cl = _self->__frontend_parse_exprops_vptr->arg_is_closure(_self, cur);
-                    if (((!is_cl) && (strcmp(_self->sym->funcs[fi].ptype[k], "struct __ct_slice") == 0))) {
+                    if (((!is_cl) && (strcmp((_self->sym->funcs[fi].ptype + (k * MAX_TEXT)), "struct __ct_slice") == 0))) {
                         int view = _self->__frontend_parse_exprtypes_vptr->slice_view_from_array(_self, cur);
                         if (view < 0) {
                             return (-1);
@@ -9863,7 +9875,7 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
     if (((kind == 0) && (a >= 0))) {
         np = self->sym->funcs[a].nparams;
         for (k = 0; ((k < np) && (k < 16)); k++) {
-            snprintf(fts[k], MAX_TEXT, "%s", self->sym->funcs[a].ptype[k]);
+            snprintf(fts[k], MAX_TEXT, "%s", (self->sym->funcs[a].ptype + (k * MAX_TEXT)));
             anns[k] = (int)((unsigned char)(self->sym->funcs[a].pann[k]));
         }
     }
@@ -9871,7 +9883,7 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
         if ((((kind == 1) && (a >= 0)) && (b >= 0))) {
             np = self->sym->traits[a].m[b].nparams;
             for (k = 0; ((k < np) && (k < 16)); k++) {
-                snprintf(fts[k], MAX_TEXT, "%s", self->sym->traits[a].m[b].ptype[k]);
+                snprintf(fts[k], MAX_TEXT, "%s", (self->sym->traits[a].m[b].ptype + (k * MAX_TEXT)));
                 anns[k] = (int)((unsigned char)(self->sym->traits[a].m[b].pann[k]));
             }
         }

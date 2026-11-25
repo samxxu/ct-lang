@@ -1598,13 +1598,13 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
     if (kind == 0 && a >= 0) {
         np = self->sym->funcs[a].nparams;
         for (k = 0; k < np && k < 16; k++) {
-            snprintf(fts[k], MAX_TEXT, "%s", self->sym->funcs[a].ptype[k]);
+            snprintf(fts[k], MAX_TEXT, "%s", self->sym->funcs[a].ptype + (k) * MAX_TEXT);
             anns[k] = (int)(unsigned char)self->sym->funcs[a].pann[k];
         }
     } else if (kind == 1 && a >= 0 && b >= 0) {
         np = self->sym->traits[a].m[b].nparams;
         for (k = 0; k < np && k < 16; k++) {
-            snprintf(fts[k], MAX_TEXT, "%s", self->sym->traits[a].m[b].ptype[k]);
+            snprintf(fts[k], MAX_TEXT, "%s", self->sym->traits[a].m[b].ptype + (k) * MAX_TEXT);
             anns[k] = (int)(unsigned char)self->sym->traits[a].m[b].pann[k];
         }
     } else if (kind == 2) {
@@ -1843,10 +1843,10 @@ impl ExprOps for Expr {
             if (self->arg_is_closure(cur)) {
                 ok = 0;
                 ft = "";
-                if (fi >= 0 && pos < np) ft = self->sym->funcs[fi].ptype[pos];
+                if (fi >= 0 && pos < np) ft = self->sym->funcs[fi].ptype + (pos) * MAX_TEXT;
                 if (fi >= 0 && pos + 1 < np)
                     ok = self->formal_is_env_fn(ft)
-                         && self->type_is_void_ptr(self->sym->funcs[fi].ptype[pos + 1]);
+                         && self->type_is_void_ptr(self->sym->funcs[fi].ptype + (pos + 1) * MAX_TEXT);
                 if (!ok) {
                     if (self->type_is_fnptr(ft) && !self->formal_is_env_fn(ft)) {
                         tool::diag::ct_sem_error(line, col,
@@ -1904,7 +1904,7 @@ impl ExprOps for Expr {
             if (self->arg_is_closure(cur)) {
                 ok = 0;
                 ft = "";
-                if (pos < np) ft = self->sym->traits[ti].m[mi].ptype[pos];
+                if (pos < np) ft = self->sym->traits[ti].m[mi].ptype + (pos) * MAX_TEXT;
                 /* D25-5: the `...` tail has no fixed slot pair. When the
                    method is variadic and the pair would run past its named
                    parameters, that is L25-3 -- a case of its own, not the
@@ -1921,7 +1921,7 @@ impl ExprOps for Expr {
                 }
                 if (pos + 1 < np)
                     ok = self->formal_is_env_fn(ft)
-                         && self->type_is_void_ptr(self->sym->traits[ti].m[mi].ptype[pos + 1]);
+                         && self->type_is_void_ptr(self->sym->traits[ti].m[mi].ptype + (pos + 1) * MAX_TEXT);
                 if (!ok) {
                     snprintf(msg, sizeof msg,
                              "a closure argument must fill a '(fn, env)' parameter pair (got '%s')",
@@ -1986,11 +1986,11 @@ impl ExprOps for Expr {
         k = 0;
         while (cur > 0 && k < np) {
             skip = 0;
-            if (fi >= 0) ft = self->sym->funcs[fi].ptype[k];
-            else ft = self->sym->traits[ti].m[mi].ptype[k];
+            if (fi >= 0) ft = self->sym->funcs[fi].ptype + (k) * MAX_TEXT;
+            else ft = self->sym->traits[ti].m[mi].ptype + (k) * MAX_TEXT;
             /* an array parameter is a pointer in disguise: the dims sit in
                `pdim` (a function) or ride in the spelling (a trait method) */
-            if (fi >= 0 && self->sym->funcs[fi].pdim[k][0]) skip = 1;
+            if (fi >= 0 && (self->sym->funcs[fi].pdim + (size_t)k * MAX_TEXT)[0]) skip = 1;
             if (!skip && strchr(ft, '[')) skip = 1;
             if (!skip) {
                 char itr[MAX_TEXT];
@@ -2229,6 +2229,23 @@ impl ExprOps for Expr {
         ni = self->sym->nfunc;
         self->sym->nfunc++;
         memcpy(&self->sym->funcs[ni], &self->sym->funcs[gfi], sizeof(*self->sym->funcs));
+        /* S1a-0 C1: `memcpy` would share the template's parameter blocks, and
+           the substitution below writes into the instance's rows. Detach them
+           and take a deep copy before substituting. */
+        self->sym->funcs[ni].ptype = 0;
+        self->sym->funcs[ni].pdim = 0;
+        self->sym->funcs[ni].pann = 0;
+        self->sym->funcs[ni].pcap = 0;
+        if (self->sym->funcs[gfi].nparams > 0) {
+            if (self->sym->ensure_fn_param_capacity(ni, self->sym->funcs[gfi].nparams) != 0)
+                return -1;
+            memcpy(self->sym->funcs[ni].ptype, self->sym->funcs[gfi].ptype,
+                   (size_t)self->sym->funcs[gfi].nparams * MAX_TEXT);
+            memcpy(self->sym->funcs[ni].pdim, self->sym->funcs[gfi].pdim,
+                   (size_t)self->sym->funcs[gfi].nparams * MAX_TEXT);
+            memcpy(self->sym->funcs[ni].pann, self->sym->funcs[gfi].pann,
+                   (size_t)self->sym->funcs[gfi].nparams);
+        }
         snprintf(self->sym->funcs[ni].cname, MAX_TEXT, "%s", cname);
         snprintf(self->sym->funcs[ni].name, MAX_TEXT, "%s", cname);
         self->sym->funcs[ni].is_static = 1;
@@ -2241,10 +2258,10 @@ impl ExprOps for Expr {
                                                  tmp, sizeof tmp) == 0
                      ? tmp : self->sym->funcs[gfi].ret);
         for (k = 0; k < self->sym->funcs[gfi].nparams; k++)
-            if (frontend::sym::ct_generic_subst(self->sym->funcs[gfi].ptype[k],
+            if (frontend::sym::ct_generic_subst(self->sym->funcs[gfi].ptype + (k) * MAX_TEXT,
                                                 self->sym->funcs[gfi].tparam, targ,
                                                 tmp, sizeof tmp) == 0)
-                snprintf(self->sym->funcs[ni].ptype[k], MAX_TEXT, "%s", tmp);
+                snprintf(self->sym->funcs[ni].ptype + (k) * MAX_TEXT, MAX_TEXT, "%s", tmp);
         i = self->sym->nginsts;
         self->sym->ginsts[i].func = gfi;
         self->sym->ginsts[i].row = ni;
@@ -5500,7 +5517,7 @@ impl ExprOps for Expr {
                                 while (ba > 0 && bai < self->sym->traits[bt].m[bmi].nparams) {
                                     if (check_refout_arg(self, ba,
                                             self->sym->traits[bt].m[bmi].pann[bai],
-                                            self->sym->traits[bt].m[bmi].ptype[bai]) != 0)
+                                            self->sym->traits[bt].m[bmi].ptype + (bai) * MAX_TEXT) != 0)
                                         return -1;
                                     ba = self->arena->nodes[ba].next;
                                     bai++;
@@ -6092,7 +6109,7 @@ impl ExprOps for Expr {
                             int ca;
                             int pair_ok = (mi < self->sym->traits[t].nm
                                            && self->sym->traits[t].m[mi].nparams == 2
-                                           && strstr(self->sym->traits[t].m[mi].ptype[1], "void *"));
+                                           && strstr(self->sym->traits[t].m[mi].ptype + (1) * MAX_TEXT, "void *"));
                             for (ca = args; ca >= 0; ca = self->arena->nodes[ca].next) {
                                 int is_cl = 0, clnode = -1;
                                 if (self->arena->nodes[ca].kind == N_CLOSURE) {
@@ -6107,7 +6124,7 @@ impl ExprOps for Expr {
                                     && mi < self->sym->traits[t].nm) {
                                     if (closure_match(self,
                                             (int)self->arena->nodes[clnode].num,
-                                            self->sym->traits[t].m[mi].ptype[0], 1, 1) != 0)
+                                            self->sym->traits[t].m[mi].ptype + (0) * MAX_TEXT, 1, 1) != 0)
                                         return -1;
                                     continue;
                                 }
@@ -6143,7 +6160,7 @@ impl ExprOps for Expr {
                             while (ma > 0 && mai < self->sym->traits[t].m[mi].nparams) {
                                 if (check_refout_arg(self, ma,
                                         self->sym->traits[t].m[mi].pann[mai],
-                                        self->sym->traits[t].m[mi].ptype[mai]) != 0)
+                                        self->sym->traits[t].m[mi].ptype + (mai) * MAX_TEXT) != 0)
                                     return -1;
                                 ma = self->arena->nodes[ma].next;
                                 mai++;
@@ -7387,7 +7404,7 @@ impl ExprOps for Expr {
                     while (lc > 0 && lk < self->sym->funcs[fi].nparams) {
                         int lcl = self->arg_is_closure(lc);
                         if (!lcl
-                            && self->lit_coerce(self->sym->funcs[fi].ptype[lk], lc) != 0)
+                            && self->lit_coerce(self->sym->funcs[fi].ptype + (lk) * MAX_TEXT, lc) != 0)
                             return -1;
                         lc = self->arena->nodes[lc].next;
                         lk += lcl ? 2 : 1;
@@ -7413,7 +7430,7 @@ impl ExprOps for Expr {
                                 && bind_conv_struct_like(self, at)
                                 && bind_conv_any(self, at, "as")) {
                                 bind_conv_key(at, ak, sizeof ak);
-                                bind_conv_key(self->sym->funcs[fi].ptype[pk3], fk, sizeof fk);
+                                bind_conv_key(self->sym->funcs[fi].ptype + (pk3) * MAX_TEXT, fk, sizeof fk);
                                 if (strcmp(ak, fk) != 0) {
                                     char pmsg[MAX_TEXT * 2];
                                     snprintf(pmsg, sizeof pmsg,
@@ -7454,7 +7471,7 @@ impl ExprOps for Expr {
                     while (ra > 0 && rai < self->sym->funcs[fi].nparams) {
                         if (check_refout_arg(self, ra,
                                 (int)(unsigned char)self->sym->funcs[fi].pann[rai],
-                                self->sym->funcs[fi].ptype[rai]) != 0)
+                                self->sym->funcs[fi].ptype + (rai) * MAX_TEXT) != 0)
                             return -1;
                         ra = self->arena->nodes[ra].next;
                         rai++;
@@ -7472,7 +7489,7 @@ impl ExprOps for Expr {
                     while (cur > 0 && k < self->sym->funcs[fi].nparams) {
                         char tr[MAX_TEXT];
                         int ip = 0;
-                        if (self->sup->iface_ref_type(self->sym->funcs[fi].ptype[k], tr, sizeof tr, &ip)) {
+                        if (self->sup->iface_ref_type(self->sym->funcs[fi].ptype + (k) * MAX_TEXT, tr, sizeof tr, &ip)) {
                             int boxed = self->sup->maybe_box(cur, tr, ip);
                             if (boxed < 0) return -1;
                             if (boxed != cur) {
@@ -7496,7 +7513,7 @@ impl ExprOps for Expr {
                     while (cur > 0 && k < self->sym->funcs[fi].nparams) {
                         int is_cl = self->arg_is_closure(cur);
                         if (!is_cl
-                            && strcmp(self->sym->funcs[fi].ptype[k], "struct __ct_slice") == 0) {
+                            && strcmp(self->sym->funcs[fi].ptype + (k) * MAX_TEXT, "struct __ct_slice") == 0) {
                             int view = self->slice_view_from_array(cur);
                             if (view < 0) return -1;
                             if (view != cur) {

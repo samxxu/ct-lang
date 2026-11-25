@@ -28,6 +28,7 @@ import tool::diag::Diag;
 #define MAX_FUNCS 512
 #define MAX_FUNCS_MAX 65536
 #define MAX_PARAMS 16
+#define MAX_PARAMS_MAX 65536
 #define MAX_TEXT 160
 #define T_EOF 0
 #define T_ID 1
@@ -625,9 +626,13 @@ impl SupportOps for ParseSupport {
         self->sym->funcs[i].nparams = 0;
         p = first_param;
         k = 0;
-        while (p > 0 && k < MAX_PARAMS) {
-            snprintf(self->sym->funcs[i].ptype[k], MAX_TEXT, "%s", self->arena->nodes[p].text);
-            snprintf(self->sym->funcs[i].pdim[k], MAX_TEXT, "%s", self->arena->nodes[p].text3);
+        while (p > 0) {
+            if (self->sym->ensure_fn_param_capacity(i, k + 1) != 0)
+                return self->fail(self->sym->last_error());
+            snprintf(self->sym->funcs[i].ptype + (size_t)k * MAX_TEXT, MAX_TEXT,
+                     "%s", self->arena->nodes[p].text);
+            snprintf(self->sym->funcs[i].pdim + (size_t)k * MAX_TEXT, MAX_TEXT,
+                     "%s", self->arena->nodes[p].text3);
             /* Phase 78 S2a: `ref` / `out` is part of the C signature (the
                emitter spells `T *`), so a prototype and its definition must
                agree; silently taking the last one would emit two conflicting
@@ -643,17 +648,13 @@ impl SupportOps for ParseSupport {
             /* a parameter's trailing `__attribute__` rides with its name/dims,
                so the prototype and the definition spell it the same way */
             if (self->arena->nodes[p].attr >= 0) {
-                size_t dl = strlen(self->sym->funcs[i].pdim[k]);
-                snprintf(self->sym->funcs[i].pdim[k] + dl, MAX_TEXT - dl, " %s",
+                char *dim = self->sym->funcs[i].pdim + (size_t)k * MAX_TEXT;
+                size_t dl = strlen(dim);
+                snprintf(dim + dl, MAX_TEXT - dl, " %s",
                          self->arena->str_at(self->arena->nodes[p].attr));
             }
             k++;
             p = self->arena->nodes[p].next;
-        }
-        if (k >= MAX_PARAMS && p > 0) {
-            snprintf(msg, sizeof msg, "too many parameters in unit '%s' (limit %d)",
-                     self->sym->unit_name(), MAX_PARAMS);
-            return self->fail(msg);
         }
         self->sym->funcs[i].nparams = k;
         return i;

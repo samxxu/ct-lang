@@ -49,6 +49,7 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
+#define MAX_PARAMS_MAX 65536
 #define MAX_RAW_INIT 4096
 #define MAX_RAW_BLOCK 32768
 #define MAX_STRUCT_TPARAMS 2
@@ -3781,8 +3782,10 @@ impl ParseOps for Parser {
                         else self->arena->nodes[ptail].next = sp;
                         ptail = sp;
                     }
-                    if (np >= MAX_PARAMS) return self->sup->fail("too many method parameters");
-                    snprintf(self->sym->traits[ti].m[mi].ptype[np], MAX_TEXT, "%s", ptype);
+                    if (self->sym->ensure_meth_param_capacity(ti, mi, np + 1) != 0)
+                        return -1;
+                    snprintf(self->sym->traits[ti].m[mi].ptype + (size_t)np * MAX_TEXT,
+                             MAX_TEXT, "%s", ptype);
                     self->sym->traits[ti].m[mi].pann[np] =
                         seen_ref ? 2 : (seen_out ? 3 : 0);
                     np++;
@@ -4071,7 +4074,7 @@ impl ParseOps for Parser {
                        stays unknown; the first mismatching position is enough. */
                     int pk = 0;
                     for (k2 = params; k2 > 0; k2 = self->arena->nodes[k2].next) {
-                        const char *ft = self->sym->traits[ti].m[tm_i].ptype[pk];
+                        const char *ft = self->sym->traits[ti].m[tm_i].ptype + (pk) * MAX_TEXT;
                         if (!strchr(ft, '[') && !self->arena->nodes[k2].text3[0]
                             && self->ex->decl_type_compat(ft, self->arena->nodes[k2].text) == 1) {
                             snprintf(wmsg, sizeof wmsg,
@@ -4095,7 +4098,8 @@ impl ParseOps for Parser {
                    forgiving signature warning above. */
                 if (tm_i < self->sym->traits[ti].nm) {
                     int pk2 = 0;
-                    for (k2 = params; k2 > 0 && pk2 < MAX_PARAMS;
+                    for (k2 = params; k2 > 0
+                         && pk2 < self->sym->traits[ti].m[tm_i].nparams;
                          k2 = self->arena->nodes[k2].next, pk2++) {
                         int impl_ann = self->arena->nodes[k2].aux;
                         int trait_ann = self->sym->traits[ti].m[tm_i].pann[pk2];

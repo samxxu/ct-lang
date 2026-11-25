@@ -27,6 +27,7 @@
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
+#define MAX_PARAMS_MAX 65536
 #define MAX_RAW_INIT 4096
 #define MAX_RAW_BLOCK 32768
 #define MAX_STRUCT_TPARAMS 2
@@ -3472,10 +3473,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
                     }
                     ptail = sp;
                 }
-                if (np >= MAX_PARAMS) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many method parameters");
+                if (_self->sym->__frontend_sym_symbolops_vptr->ensure_meth_param_capacity(_self->sym, ti, mi, (np + 1)) != 0) {
+                    return (-1);
                 }
-                snprintf(_self->sym->traits[ti].m[mi].ptype[np], MAX_TEXT, "%s", ptype);
+                snprintf((_self->sym->traits[ti].m[mi].ptype + ((size_t)(np) * MAX_TEXT)), MAX_TEXT, "%s", ptype);
                 _self->sym->traits[ti].m[mi].pann[np] = (seen_ref ? 2 : (seen_out ? 3 : 0));
                 np++;
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
@@ -3787,7 +3788,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
                 else {
                     int pk = 0;
                     for (k2 = params; k2 > 0; k2 = _self->arena->nodes[k2].next) {
-                        const char * ft = _self->sym->traits[ti].m[tm_i].ptype[pk];
+                        const char * ft = (_self->sym->traits[ti].m[tm_i].ptype + (pk * MAX_TEXT));
                         if ((((!strchr(ft, '[')) && (!_self->arena->nodes[k2].text3[0])) && (_self->ex->__frontend_parse_exprops_vptr->decl_type_compat(_self->ex, ft, _self->arena->nodes[k2].text) == 1))) {
                             snprintf(wmsg, sizeof(wmsg), "parameter %d type '%s' does not match the trait's '%s'", (pk + 1), _self->arena->nodes[k2].text, ft);
                             if (tool_diag_ct_sig_warn(mline, mcol, mname, rtrait, rstruct, wmsg, _self->mem->path) != 0) {
@@ -3802,7 +3803,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
             }
             if (tm_i < _self->sym->traits[ti].nm) {
                 int pk2 = 0;
-                for (k2 = params; ((k2 > 0) && (pk2 < MAX_PARAMS)); (k2 = _self->arena->nodes[k2].next, pk2++)) {
+                for (k2 = params; ((k2 > 0) && (pk2 < _self->sym->traits[ti].m[tm_i].nparams)); (k2 = _self->arena->nodes[k2].next, pk2++)) {
                     int impl_ann = _self->arena->nodes[k2].aux;
                     int trait_ann = _self->sym->traits[ti].m[tm_i].pann[pk2];
                     if (impl_ann != trait_ann) {

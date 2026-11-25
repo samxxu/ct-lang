@@ -29,6 +29,7 @@ import tool::diag::Diag;
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
 #define MAX_PARAMS 16
+#define MAX_PARAMS_MAX 65536
 #define MAX_METHODS 64
 #define MAX_MAPS   64
 

@@ -112,6 +112,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*var_type)(void *, const char *, char *, int);
     int (*find_func)(void *, const char *);
     int (*ensure_fn_capacity)(void *, int);
+    int (*ensure_fn_param_capacity)(void *, int, int);
     int (*ensure_var_capacity)(void *, int);
     int (*ensure_scope_capacity)(void *, int);
     int (*ensure_type_capacity)(void *, int);
@@ -137,6 +138,8 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*add_trait)(void *, const char *);
     int (*ensure_trait_table_capacity)(void *, int);
     int (*ensure_trait_capacity)(void *, int, int);
+    int (*ensure_meth_param_capacity)(void *, int, int, int);
+    int (*ensure_meth_ann_param_capacity)(void *, int, int);
     int (*trait_inst)(void *, const char *, int, const char *, const char *, const char *, const char *, int);
     int (*impl_use_concrete)(void *, const char *, int, const char *, const char *, const char *, const char *, int, char *, int);
     int (*method_trait)(void *, const char *, const char *, char *, int);
@@ -174,10 +177,11 @@ struct frontend_sym_Fn {
     char name[160];
     char cname[160];
     char ret[160];
-    char ptype[16][160];
-    char pdim[16][160];
-    char pann[16];
+    char * ptype;
+    char * pdim;
+    char * pann;
     int nparams;
+    int pcap;
     int is_static;
     int is_pub;
     int variadic;
@@ -239,15 +243,17 @@ struct frontend_sym_Closure {
 struct frontend_sym_MethAnn {
     char host[160];
     char name[160];
-    char pann[16];
+    char * pann;
     int nparams;
+    int pcap;
 };
 struct frontend_sym_MethodSig {
     char name[160];
     char ret[160];
-    char ptype[16][160];
-    int pann[16];
+    char * ptype;
+    char * pann;
     int nparams;
+    int pcap;
     int variadic;
     int is_mut;
     int body;

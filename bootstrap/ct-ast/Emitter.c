@@ -29,6 +29,7 @@
 #define N_INTO_SELF 64
 #define MAX_INTOS 4
 #define MAX_PARAMS 16
+#define MAX_PARAMS_MAX 65536
 #define MAX_UNITS  64
 #define N_PP      2
 #define N_FUNC    3
@@ -813,11 +814,11 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_proto(void *self, int 
             if (k > 0) {
                 fputs(", ", _self->out);
             }
-            fputs(_self->sym->funcs[i].ptype[k], _self->out);
+            fputs((_self->sym->funcs[i].ptype + (k * MAX_TEXT)), _self->out);
             if (((_self->sym->funcs[i].pann[k] == 2) || (_self->sym->funcs[i].pann[k] == 3))) {
                 fputs(" *", _self->out);
             }
-            fputs(_self->sym->funcs[i].pdim[k], _self->out);
+            fputs((_self->sym->funcs[i].pdim + (k * MAX_TEXT)), _self->out);
         }
         if (_self->sym->funcs[i].variadic) {
             fputs(", ...", _self->out);
@@ -1017,7 +1018,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_trait_range(void *self
         for (m = 0; m < _self->sym->traits[t].nm; m++) {
             fprintf(_self->out, "    %s (*%s)(void *", _self->sym->traits[t].m[m].ret, _self->sym->traits[t].m[m].name);
             for (k = 0; k < _self->sym->traits[t].m[m].nparams; k++) {
-                fprintf(_self->out, ", %s", _self->sym->traits[t].m[m].ptype[k]);
+                fprintf(_self->out, ", %s", (_self->sym->traits[t].m[m].ptype + (k * MAX_TEXT)));
                 if (((_self->sym->traits[t].m[m].pann[k] == 2) || (_self->sym->traits[t].m[m].pann[k] == 3))) {
                     fputs(" *", _self->out);
                 }
@@ -1706,15 +1707,15 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_maps(void *self, int u
             fprintf(_self->out, "static %s %s(void *self", sig->ret, b->wrapper);
             for (k = 0; k < b->nparams; k++) {
                 fputs(", ", _self->out);
-                if (((k < MAX_PARAMS) && ((sig->pann[k] == 2) || (sig->pann[k] == 3)))) {
+                if (((sig->pann[k] == 2) || (sig->pann[k] == 3))) {
                     char pbuf[MAX_TEXT];
-                    snprintf(pbuf, sizeof(pbuf), "%s *", sig->ptype[k]);
+                    snprintf(pbuf, sizeof(pbuf), "%s *", (sig->ptype + (k * MAX_TEXT)));
                     if (_self->__backend_emit_emitops_vptr->emit_type_name(_self, pbuf, b->params[k]) != 0) {
                         return (-1);
                     }
                 }
                 else {
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name(_self, sig->ptype[k], b->params[k]) != 0) {
+                    if (_self->__backend_emit_emitops_vptr->emit_type_name(_self, (sig->ptype + (k * MAX_TEXT)), b->params[k]) != 0) {
                         return (-1);
                     }
                 }
@@ -3780,7 +3781,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_model(void *self, con
                 fputc(',', f);
             }
             fputs("{\"type\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->funcs[i].ptype[j]);
+            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (_self->sym->funcs[i].ptype + (j * MAX_TEXT)));
             fputs("\"}", f);
         }
         fputs("]}", f);
@@ -4125,7 +4126,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_abi_header(void *self
     for (i = 0; i < n; i++) {
         int p;
         for (p = (-1); p < _self->sym->funcs[order[i]].nparams; p++) {
-            const char * tp = ((p < 0) ? _self->sym->funcs[order[i]].ret : _self->sym->funcs[order[i]].ptype[p]);
+            const char * tp = ((p < 0) ? _self->sym->funcs[order[i]].ret : (_self->sym->funcs[order[i]].ptype + (p * MAX_TEXT)));
             char nm[MAX_TEXT];
             int q = 0;
             if (strncmp(tp, "struct ", 7) == 0) {
@@ -4189,7 +4190,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_abi_header(void *self
             if (j > 0) {
                 fputs(", ", f);
             }
-            fputs(_self->sym->funcs[fi].ptype[j], f);
+            fputs((_self->sym->funcs[fi].ptype + (j * MAX_TEXT)), f);
             if (((_self->sym->funcs[fi].pann[j] == 2) || (_self->sym->funcs[fi].pann[j] == 3))) {
                 fputs(" *", f);
             }
@@ -6201,7 +6202,7 @@ static int map_param_type(struct backend_emit_Emitter * e, struct frontend_modul
     if (((k < 0) || (k >= e->sym->traits[b->ti].m[b->mi].nparams))) {
         return (-1);
     }
-    snprintf(out, MAX_TEXT, "%s", e->sym->traits[b->ti].m[b->mi].ptype[k]);
+    snprintf(out, MAX_TEXT, "%s", (e->sym->traits[b->ti].m[b->mi].ptype + (k * MAX_TEXT)));
     return 0;
 }
 static const char * map_copy_brackets(struct backend_emit_Emitter * e, const char * s) {
@@ -9789,7 +9790,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
                 }
                 else {
                     if (((bm2 >= 0) && (ai < self->sym->traits[bt2].m[bm2].nparams))) {
-                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->sym->traits[bt2].m[bm2].ptype[ai], c2) != 0) {
+                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, (self->sym->traits[bt2].m[bm2].ptype + (ai * MAX_TEXT)), c2) != 0) {
                             return (-1);
                         }
                     }
@@ -9843,10 +9844,20 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
             return (-1);
         }
 {
-            int pann[16];
+            int * pann = 0;
             int pai = 0;
             int has;
-            has = self->sym->__frontend_sym_symbolops_vptr->find_meth_ann(self->sym, self->arena->nodes[n].text, self->arena->nodes[n].text2, pann, 16);
+            int nargs = 0;
+            for (c2 = self->arena->nodes[n].b; c2 >= 0; c2 = self->arena->nodes[c2].next) {
+                nargs++;
+            }
+            if (nargs > 0) {
+                pann = (int *)(calloc((size_t)(nargs), sizeof((*pann))));
+                if ((!pann)) {
+                    return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+                }
+            }
+            has = self->sym->__frontend_sym_symbolops_vptr->find_meth_ann(self->sym, self->arena->nodes[n].text, self->arena->nodes[n].text2, pann, nargs);
             c2 = self->arena->nodes[n].b;
             while (c2 >= 0) {
                 fputs(", ", self->out);
@@ -9863,6 +9874,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
                 pai++;
                 c2 = self->arena->nodes[c2].next;
             }
+            free(pann);
         }
         fputs(")", self->out);
         return 0;
@@ -9894,10 +9906,20 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
             fprintf(self->out, "%s_%s(", self->sym->structs[si].name, self->arena->nodes[n].text2);
         }
 {
-            int pann[16];
+            int * pann = 0;
             int pai = 0;
             int has;
-            has = self->sym->__frontend_sym_symbolops_vptr->find_meth_ann(self->sym, self->arena->nodes[n].text, self->arena->nodes[n].text2, pann, 16);
+            int nargs = 0;
+            for (c2 = self->arena->nodes[n].b; c2 >= 0; c2 = self->arena->nodes[c2].next) {
+                nargs++;
+            }
+            if (nargs > 0) {
+                pann = (int *)(calloc((size_t)(nargs), sizeof((*pann))));
+                if ((!pann)) {
+                    return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+                }
+            }
+            has = self->sym->__frontend_sym_symbolops_vptr->find_meth_ann(self->sym, self->arena->nodes[n].text, self->arena->nodes[n].text2, pann, nargs);
             c2 = self->arena->nodes[n].b;
             while (c2 >= 0) {
                 if (c2 != self->arena->nodes[n].b) {
@@ -9916,6 +9938,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
                 pai++;
                 c2 = self->arena->nodes[c2].next;
             }
+            free(pann);
         }
         fputs(")", self->out);
         return 0;
@@ -10102,7 +10125,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
                 }
                 else {
                     if (((mm2 >= 0) && (ai2 < self->sym->traits[tm2].m[mm2].nparams))) {
-                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->sym->traits[tm2].m[mm2].ptype[ai2], c2) != 0) {
+                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, (self->sym->traits[tm2].m[mm2].ptype + (ai2 * MAX_TEXT)), c2) != 0) {
                             return (-1);
                         }
                     }
@@ -10218,7 +10241,7 @@ static int em_expr_call(struct backend_emit_Emitter * self, int n, int nk) {
                 }
                 else {
                     if (((fi >= 0) && (ai < self->sym->funcs[fi].nparams))) {
-                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->sym->funcs[fi].ptype[ai], c) != 0) {
+                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, (self->sym->funcs[fi].ptype + (ai * MAX_TEXT)), c) != 0) {
                             return (-1);
                         }
                     }

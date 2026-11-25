@@ -1288,14 +1288,8 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
             bad = 0;
             snprintf(msg, sizeof(msg), "'%s' cannot be exported: ", _self->sym->funcs[fi].name);
 {
-                int tn = 0;
-                char types[17][MAX_TEXT];
-                snprintf(types[tn++], MAX_TEXT, "%s", _self->sym->funcs[fi].ret);
-                for (k = 0; ((k < _self->sym->funcs[fi].nparams) && (tn < 17)); k++) {
-                    snprintf(types[tn++], MAX_TEXT, "%s", _self->sym->funcs[fi].ptype[k]);
-                }
-                for (k = 0; k < tn; k++) {
-                    const char * tp = types[k];
+                for (k = (-1); k < _self->sym->funcs[fi].nparams; k++) {
+                    const char * tp = ((k < 0) ? _self->sym->funcs[fi].ret : (_self->sym->funcs[fi].ptype + (k * MAX_TEXT)));
                     const char * base = tp;
                     if (strncmp(base, "struct ", 7) == 0) {
                         base += 7;

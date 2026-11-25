@@ -14,6 +14,7 @@
 #define MAX_FUNCS 512
 #define MAX_FUNCS_MAX 65536
 #define MAX_PARAMS 16
+#define MAX_PARAMS_MAX 65536
 #define MAX_TEXT 160
 #define T_EOF 0
 #define T_ID 1
@@ -623,24 +624,24 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
     _self->sym->funcs[i].nparams = 0;
     p = first_param;
     k = 0;
-    while (((p > 0) && (k < MAX_PARAMS))) {
-        snprintf(_self->sym->funcs[i].ptype[k], MAX_TEXT, "%s", _self->arena->nodes[p].text);
-        snprintf(_self->sym->funcs[i].pdim[k], MAX_TEXT, "%s", _self->arena->nodes[p].text3);
+    while (p > 0) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_param_capacity(_self->sym, i, (k + 1)) != 0) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
+        }
+        snprintf((_self->sym->funcs[i].ptype + ((size_t)(k) * MAX_TEXT)), MAX_TEXT, "%s", _self->arena->nodes[p].text);
+        snprintf((_self->sym->funcs[i].pdim + ((size_t)(k) * MAX_TEXT)), MAX_TEXT, "%s", _self->arena->nodes[p].text3);
         if ((((!fresh) && (k < prev_nparams)) && (_self->sym->funcs[i].pann[k] != (char)(_self->arena->nodes[p].aux)))) {
             snprintf(msg, sizeof(msg), "redeclaration of '%s' changes the ref/out annotation of parameter %d", name, (k + 1));
             return _self->__frontend_parse_supportops_vptr->fail(_self, msg);
         }
         _self->sym->funcs[i].pann[k] = (char)(_self->arena->nodes[p].aux);
         if (_self->arena->nodes[p].attr >= 0) {
-            size_t dl = strlen(_self->sym->funcs[i].pdim[k]);
-            snprintf((_self->sym->funcs[i].pdim[k] + dl), (MAX_TEXT - dl), " %s", _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, _self->arena->nodes[p].attr));
+            char * dim = (_self->sym->funcs[i].pdim + ((size_t)(k) * MAX_TEXT));
+            size_t dl = strlen(dim);
+            snprintf((dim + dl), (MAX_TEXT - dl), " %s", _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, _self->arena->nodes[p].attr));
         }
         k++;
         p = _self->arena->nodes[p].next;
-    }
-    if (((k >= MAX_PARAMS) && (p > 0))) {
-        snprintf(msg, sizeof(msg), "too many parameters in unit '%s' (limit %d)", _self->sym->__frontend_sym_symbolops_vptr->unit_name(_self->sym), MAX_PARAMS);
-        return _self->__frontend_parse_supportops_vptr->fail(_self, msg);
     }
     _self->sym->funcs[i].nparams = k;
     return i;

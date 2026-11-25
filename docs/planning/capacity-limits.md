@@ -48,7 +48,7 @@
 | `MAX_INTOS` | 4 | 3 | A | 动态 |
 | `MAX_MAPS` | 64 | 5 | A | 动态 |
 | `MAX_METH_ANN` | 256 | 4 | A | 动态 |
-| `MAX_PARAMS` | 16 | 21 | A | 动态（值与类型参数分开处理；见 C 的泛型元数） |
+| `MAX_PARAMS` | 16 | 21 | A | **已动态**：`Fn`/`MethodSig` 形参三/两组并行块 + `MethAnn` 注记块倍增到 `MAX_PARAMS_MAX=65536`；实例行深拷贝；map 参数仍 16（剩余） |
 | `MAX_TYPE_ALIASES` | 64 | 6 | A | **已动态**：本地 `taliases` 倍增到 `MAX_TYPE_ALIASES_MAX=65536` |
 | `MAX_GLOBAL_TYPE_ALIASES` | 256 | 4 | A | **已动态**：全局 `gtaliases` 倍增到 `MAX_GLOBAL_TYPE_ALIASES_MAX=65536` |
 | `MAX_IMPORTS` | 32 | 10 | A | 动态 |

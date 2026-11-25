@@ -30,6 +30,7 @@ import frontend::sym::SymbolsTypeText;
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT    160
 #define MAX_PARAMS  16
+#define MAX_PARAMS_MAX 65536
 /* Whole-program budget: `nfunc` accumulates across every unit in one build
    (build mode shares one symbol table), so this is one cap for the entire
    program, not a per-unit allowance. The table itself is MAX_FUNCS + 64 rows.
@@ -108,16 +109,21 @@ pub struct Fn {
        prefix, a static helper keeps the plain name */
     char cname[160];
     char ret[160];
-    char ptype[16][160];
+    /* S1a-0 C1: the parameter rows are three parallel heap blocks owned by
+       this row, grown on demand (`ptype`/`pdim`: MAX_TEXT bytes per position,
+       `pann`: one byte). `pcap` is their common capacity; a row reused after
+       the per-unit reset keeps its blocks. */
+    char *ptype;
     /* array dims are kept apart from the type: the prototype must spell them
        (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the
        call side still compares bare types for boxing */
-    char pdim[16][160];
+    char *pdim;
     /* Phase 78 (S2): 0 = plain, 2 = `ref`, 3 = `out`. The stored type stays
        the caller's base type (type checking compares it), and the emitter adds
        the C pointer at the declaration/call boundary. */
-    char pann[16];
+    char *pann;
     int  nparams;
+    int  pcap;
     int  is_static;
     int  is_pub;
     int  variadic;      /* `int f(int n, ...)`: the prototype needs the `...` */
@@ -247,17 +253,21 @@ pub struct Closure {
 pub struct MethAnn {
     char host[160];
     char name[160];
-    char pann[16];
+    char *pann;
     int  nparams;
+    int  pcap;
 }
 
 pub struct MethodSig {
     char name[160];
     char ret[160];
-    char ptype[16][160];
+    /* S1a-0 C1: the parameter rows grow on demand, like `Fn`'s; `ptype` is a
+       MAX_TEXT-byte stride and `pann` one byte per position. */
+    char *ptype;
     /* Phase 78 (S2b): 0 = plain, 2 = `ref`, 3 = `out`. */
-    int  pann[16];
+    char *pann;
     int  nparams;
+    int  pcap;
     /* A `.m.ct` trait has no vtable slot, so its signature may end in `...`:
        the map recipe forwards the rest of the call verbatim. A real trait keeps
        this 0 -- its vtable slot is a fixed function-pointer type (batch 13). */
@@ -378,6 +388,10 @@ pub trait SymbolOps {
     int  var_type(const char *name, char *out, int cap);
     int  find_func(const char *cname);
     int  ensure_fn_capacity(int need);
+    /* S1a-0 C1: grow function `fi`'s parameter rows to hold `need` positions.
+       The three blocks move together and the new slots are zeroed; -1 only at
+       allocation failure or past MAX_PARAMS_MAX. */
+    int  ensure_fn_param_capacity(int fi, int need);
     /* S1a-0 C1: the variable table and the scope stack grow on demand. */
     int  ensure_var_capacity(int need);
     int  ensure_scope_capacity(int need);
@@ -419,6 +433,10 @@ pub trait SymbolOps {
        failure or past MAX_METHODS_MAX. The parser calls this before writing
        the row it just parsed. */
     int  ensure_trait_capacity(int ti, int need);
+    /* S1a-0 C1: grow method `mi` of trait `ti` to hold `need` parameter rows. */
+    int  ensure_meth_param_capacity(int ti, int mi, int need);
+    /* S1a-0 C1: grow annotation row `mi` to hold `need` parameter flags. */
+    int  ensure_meth_ann_param_capacity(int mi, int need);
     /* Phase 35: find or create the instance row of a parameterised trait.
        `a1`/`a2` are the source-canonical arguments the encoded name and `carg[]`
        use; `c1`/`c2` are the C spellings substituted into method signatures.
@@ -769,6 +787,37 @@ impl SymbolOps for Symbols {
         self->funcs = grown;
         memset(self->funcs + self->fncap, 0, (size_t)(cap - self->fncap) * sizeof(*self->funcs));
         self->fncap = cap;
+        return 0;
+    }
+
+    /* S1a-0 C1: a function's parameter rows are three parallel heap blocks.
+       They are owned by the row and grow together, so a moved `funcs` table
+       does not invalidate them and a reused row keeps its capacity. */
+    int ensure_fn_param_capacity(int fi, int need)
+    {
+        int cap;
+        char *types, *dims, *anns;
+        if (fi < 0 || fi >= self->nfunc) return self->fail("function table out of range");
+        if (need <= self->funcs[fi].pcap) return 0;
+        cap = self->funcs[fi].pcap > 0 ? self->funcs[fi].pcap : MAX_PARAMS;
+        while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
+        if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        types = (char *)realloc(self->funcs[fi].ptype, (size_t)cap * MAX_TEXT);
+        if (!types) return self->fail("out of memory");
+        memset(types + (size_t)self->funcs[fi].pcap * MAX_TEXT, 0,
+               (size_t)(cap - self->funcs[fi].pcap) * MAX_TEXT);
+        self->funcs[fi].ptype = types;
+        dims = (char *)realloc(self->funcs[fi].pdim, (size_t)cap * MAX_TEXT);
+        if (!dims) return self->fail("out of memory");
+        memset(dims + (size_t)self->funcs[fi].pcap * MAX_TEXT, 0,
+               (size_t)(cap - self->funcs[fi].pcap) * MAX_TEXT);
+        self->funcs[fi].pdim = dims;
+        anns = (char *)realloc(self->funcs[fi].pann, (size_t)cap);
+        if (!anns) return self->fail("out of memory");
+        memset(anns + self->funcs[fi].pcap, 0, (size_t)(cap - self->funcs[fi].pcap));
+        self->funcs[fi].pann = anns;
+        self->funcs[fi].pcap = cap;
         return 0;
     }
 
@@ -1190,8 +1239,10 @@ impl SymbolOps for Symbols {
         }
         snprintf(self->meth[i].host, sizeof self->meth[i].host, "%s", key);
         snprintf(self->meth[i].name, sizeof self->meth[i].name, "%s", name);
+        if (nparams > 0
+            && self->ensure_meth_ann_param_capacity(i, nparams) != 0) return -1;
         self->meth[i].nparams = nparams;
-        for (k = 0; k < 16; k++)
+        for (k = 0; k < nparams; k++)
             self->meth[i].pann[k] = (k < nparams && pann) ? (char)pann[k] : 0;
         return 0;
     }
@@ -1489,6 +1540,54 @@ impl SymbolOps for Symbols {
         return 0;
     }
 
+    /* S1a-0 C1: a trait method's parameter rows are two heap blocks owned by
+       the method row (`ptype` at MAX_TEXT stride, `pann` one byte). */
+    int ensure_meth_param_capacity(int ti, int mi, int need)
+    {
+        int cap;
+        char *types, *anns;
+        if (ti < 0 || ti >= self->ntraits) return self->fail("trait table out of range");
+        /* During signature parsing the row being filled is `nm` (it becomes
+           `nm + 1` when the signature closes), so `mi == nm` is valid. */
+        if (mi < 0 || mi > self->traits[ti].nm) return self->fail("method table out of range");
+        if (need <= self->traits[ti].m[mi].pcap) return 0;
+        cap = self->traits[ti].m[mi].pcap > 0 ? self->traits[ti].m[mi].pcap : MAX_PARAMS;
+        while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
+        if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        types = (char *)realloc(self->traits[ti].m[mi].ptype, (size_t)cap * MAX_TEXT);
+        if (!types) return self->fail("out of memory");
+        memset(types + (size_t)self->traits[ti].m[mi].pcap * MAX_TEXT, 0,
+               (size_t)(cap - self->traits[ti].m[mi].pcap) * MAX_TEXT);
+        self->traits[ti].m[mi].ptype = types;
+        anns = (char *)realloc(self->traits[ti].m[mi].pann, (size_t)cap);
+        if (!anns) return self->fail("out of memory");
+        memset(anns + self->traits[ti].m[mi].pcap, 0,
+               (size_t)(cap - self->traits[ti].m[mi].pcap));
+        self->traits[ti].m[mi].pann = anns;
+        self->traits[ti].m[mi].pcap = cap;
+        return 0;
+    }
+
+    /* S1a-0 C1: an inherent method's ref/out flags grow the same way. */
+    int ensure_meth_ann_param_capacity(int mi, int need)
+    {
+        int cap;
+        char *anns;
+        if (mi < 0 || mi >= self->nmeth) return self->fail("annotation table out of range");
+        if (need <= self->meth[mi].pcap) return 0;
+        cap = self->meth[mi].pcap > 0 ? self->meth[mi].pcap : MAX_PARAMS;
+        while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
+        if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        anns = (char *)realloc(self->meth[mi].pann, (size_t)cap);
+        if (!anns) return self->fail("out of memory");
+        memset(anns + self->meth[mi].pcap, 0, (size_t)(cap - self->meth[mi].pcap));
+        self->meth[mi].pann = anns;
+        self->meth[mi].pcap = cap;
+        return 0;
+    }
+
     int add_trait(const char *name)
     {
         int i;
@@ -1580,6 +1679,20 @@ impl SymbolOps for Symbols {
         self->traits[ni].nm = self->traits[ti].nm;
         for (mi = 0; mi < self->traits[ti].nm; mi++) {
             self->traits[ni].m[mi] = self->traits[ti].m[mi];
+            /* S1a-0 C1: the row assignment shares the template's parameter
+               blocks; the instance must own its copies because the
+               substitution below rewrites them. */
+            self->traits[ni].m[mi].ptype = 0;
+            self->traits[ni].m[mi].pann = 0;
+            self->traits[ni].m[mi].pcap = 0;
+            if (self->traits[ti].m[mi].nparams > 0) {
+                if (self->ensure_meth_param_capacity(ni, mi,
+                        self->traits[ti].m[mi].nparams) != 0) return -1;
+                memcpy(self->traits[ni].m[mi].ptype, self->traits[ti].m[mi].ptype,
+                       (size_t)self->traits[ti].m[mi].nparams * MAX_TEXT);
+                memcpy(self->traits[ni].m[mi].pann, self->traits[ti].m[mi].pann,
+                       (size_t)self->traits[ti].m[mi].nparams);
+            }
             /* D35-3: the instance owns concrete signatures. The impl parser can
                then run its ordinary return/parameter compatibility checks
                against this row instead of learning about trait parameters. */
@@ -1590,11 +1703,11 @@ impl SymbolOps for Symbols {
                     return self->fail("type is too long");
                 snprintf(self->traits[ni].m[mi].ret, MAX_TEXT, "%s", tmp);
                 for (pk = 0; pk < self->traits[ni].m[mi].nparams; pk++) {
-                    if (ct_generic_subst(self->traits[ni].m[mi].ptype[pk],
+                    if (ct_generic_subst(self->traits[ni].m[mi].ptype + (pk) * MAX_TEXT,
                             self->traits[ti].tparam[pi], pi == 0 ? c1 : c2,
                             tmp, MAX_TEXT) != 0)
                         return self->fail("type is too long");
-                    snprintf(self->traits[ni].m[mi].ptype[pk], MAX_TEXT, "%s", tmp);
+                    snprintf(self->traits[ni].m[mi].ptype + (pk) * MAX_TEXT, MAX_TEXT, "%s", tmp);
                 }
             }
         }
