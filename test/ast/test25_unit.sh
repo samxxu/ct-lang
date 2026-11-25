@@ -10,7 +10,7 @@
 # The three harnesses live beside this script:
 #   test25_unit_typecheck.c   tc_expr_num / tc_expr_fnum / type_key
 #   test25_unit_expr.c        ctype_adtctor / ctype_opt / ctype_slice_get /
-#                             ctype_slice_range
+#                             ctype_slice_range (ExprStaticType.c)
 #   test25_unit_emitter.c     em_expr_num / map_clean_type / map_recipe_callee
 #
 # Usage: sh test/ast/test25_unit.sh <generated-source-dir> [cc]
@@ -56,7 +56,7 @@ fi
 for harness in typecheck expr emitter; do
     case "$harness" in
         typecheck) unit=TypeCheck ;;
-        expr)      unit=Expr ;;
+        expr)      unit=ExprStaticType ;;
         emitter)   unit=Emitter ;;
     esac
     link=""

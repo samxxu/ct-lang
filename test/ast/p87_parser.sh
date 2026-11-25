@@ -23,7 +23,7 @@ fail=0
 ok()  { pass=$((pass + 1)); }
 bad() { fail=$((fail + 1)); echo "FAIL p87parser: $1" >&2; }
 
-expr=selfhost/ct-ast/frontend/parse/Expr.h.ct
+expr=selfhost/ct-ast/frontend/parse/ExprStaticType.h.ct
 if [ ! -f "$expr" ]; then
     echo "FAIL p87parser: $expr is missing" >&2
     exit 1
@@ -46,7 +46,7 @@ if "switch (" in body:
     problems.append("a switch is still in the dispatch")
 if re.search(r'case N_', body):
     problems.append("a case label is still in the dispatch")
-helpers = sorted(set(re.findall(r'^static int (ctype_\w+)\(struct Expr \*self', src, re.M)))
+helpers = sorted(set(re.findall(r'^pub int (ctype_\w+)\(struct Expr \*self', src, re.M)))
 want_helpers = ["ctype_adtctor", "ctype_var", "ctype_try", "ctype_index", "ctype_deref",
                 "ctype_addr", "ctype_member_or_arrow", "ctype_call", "ctype_opt",
                 "ctype_mcall", "ctype_slice_index", "ctype_slice_get", "ctype_slice_range"]

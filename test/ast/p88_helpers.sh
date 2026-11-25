@@ -39,7 +39,7 @@ def read(path):
 TARGETS = [
     ("selfhost/ct-ast/frontend/type/TypeCheck.h.ct", "expr_ctype", 1),
     ("selfhost/ct-ast/frontend/type/TypeCheck.h.ct", "maybe_box", 3),
-    ("selfhost/ct-ast/frontend/parse/Expr.h.ct", "chk_type", 1),
+    ("selfhost/ct-ast/frontend/parse/ExprTypes.h.ct", "chk_type", 1),
 ]
 
 def skip(s, i):
@@ -153,7 +153,7 @@ fi
 if python3 - "$root" "$tmp/mut/tree" <<'PY'
 import os, re, shutil, sys
 root, dest = sys.argv[1], sys.argv[2]
-src = os.path.join(root, "selfhost/ct-ast/frontend/parse/Expr.h.ct")
+src = os.path.join(root, "selfhost/ct-ast/frontend/parse/ExprTypes.h.ct")
 text = open(src, encoding="utf-8").read()
 pat = re.compile(r"                NodeKind\.NK_STR\(\) => \{\n.*?\n                \}\n", re.S)
 if not pat.search(text):
@@ -161,7 +161,7 @@ if not pat.search(text):
 if os.path.isdir(dest):
     shutil.rmtree(dest)
 shutil.copytree(os.path.join(root, "selfhost/ct-ast"), dest)
-open(os.path.join(dest, "frontend/parse/Expr.h.ct"), "w", encoding="utf-8").write(
+open(os.path.join(dest, "frontend/parse/ExprTypes.h.ct"), "w", encoding="utf-8").write(
     pat.sub("", text, count=1))
 PY
 then
