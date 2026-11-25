@@ -1,0 +1,234 @@
+/*
+ * StmtControl.h.ct - the return/jump control-flow checks (SH-94 S1a-1, pure move out of Stmt.h.ct).
+ *
+ * The method bodies are byte-identical to the ones Stmt.h.ct held; the
+ * `Stmt` type and every trait declaration live in StmtCore.h.ct, so this unit
+ * imports Core instead of the host and the import graph stays acyclic.
+ * Stmt.h.ct imports this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+import frontend::sym::SymbolsTypeText;
+import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
+import frontend::lex::Lexer;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::sym::Symbols::StructInst as StructInst;
+import backend::mem::Memory;
+import frontend::parse::ParseSupport;
+import frontend::parse::Expr;
+import tool::diag::Diag;
+import frontend::parse::StmtRangeText;
+import frontend::parse::StmtRangeScan;
+import frontend::parse::StmtScope;
+import frontend::parse::StmtCore;
+import frontend::parse::StmtDefer;
+import frontend::type::TypeCheck;
+import frontend::parse::StmtMatch;
+import frontend::parse::StmtLoop;
+import frontend::parse::StmtSwitch;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_TEXT 160
+#define MAX_ADT_FIELDS_MAX 65536
+#define MAX_LABELS 64
+#define MAX_LABELS_MAX 65536
+#define B_COMMA 19
+#define B_ADD 1
+#define B_SUB 2
+#define B_MUL 3
+#define B_DIV 4
+#define B_MOD 11
+#define B_SHL 17
+#define B_SHR 18
+#define B_BAND 15
+#define B_BOR 16
+#define B_XOR 14
+#define N_INDEX 26
+#define N_CALL 7
+#define N_MCALL 30
+#define N_ARROW 25
+#define N_ASSIGN 13
+#define N_BIN 11
+#define N_BLOCK 4
+#define N_CLOSURE 59
+#define N_BREAK 38
+#define N_CASE 43
+#define N_CONT 39
+#define N_DECL 12
+#define N_DECLS 40
+#define N_DELETE 41
+#define N_DEREF 28
+#define N_DOWHILE 44
+#define N_EMPTY 52
+#define N_SASSERT 55
+#define N_EXPR 6
+#define N_FOR 16
+#define N_GOTO 50
+#define N_IF 14
+#define N_INIT_RANGE 61
+#define N_MATSEQ 73
+#define N_INIT_BRACE 65
+#define N_INIT_ITEM 66
+#define N_DEFER 69
+#define N_DEFER_RUN 70
+#define N_INIT_MBRACE 67
+#define N_LABEL 49
+#define N_LOOP 60
+#define N_FOREACH 62
+#define N_MEMBER 24
+#define N_NUM 8
+#define N_STR 9
+#define N_UNARY 17
+#define N_POST 18
+#define N_PRE 57
+#define N_ADDR 27
+#define N_RAW 31
+#define N_RET 5
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET   76
+#define N_SWITCH 42
+#define N_MATCH 78
+#define N_ARM 79
+#define N_BIND 80
+#define N_VAR 10
+#define N_WHILE 15
+#define N_INTO 63
+#define N_INTO_SELF 64
+#define T_EOF 0
+#define T_ID 1
+#define T_NUM 2
+#define T_PUNCT 4
+#define T_STR 3
+#define CT_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct StmtControl {
+    int unused;
+}
+
+
+impl StmtControl for Stmt {
+    int stmt_terminates(int n)
+    {
+        int k, m;
+
+        if (n < 0) return 0;
+        k = self->arena->nodes[n].kind;
+        if (k == N_RET || k == N_BREAK || k == N_CONT) return 1;
+        if (k == N_BLOCK) {
+            m = self->arena->nodes[n].a;
+            if (m < 0) return 0;
+            while (self->arena->nodes[m].next >= 0) m = self->arena->nodes[m].next;
+            return self->stmt_terminates(m);
+        }
+        if (k == N_IF) {
+            int e = self->arena->nodes[n].c;
+            if (e < 0) return 0;
+            return self->stmt_terminates(self->arena->nodes[n].b)
+                && self->stmt_terminates(e);
+        }
+        return 0;
+    }
+
+    int body_has_jump(int n)
+    {
+        if (n < 0) return 0;
+        {
+            int k = self->arena->nodes[n].kind;
+            if (k == N_RET || k == N_WHILE || k == N_FOR || k == N_DOWHILE)
+                return 1;
+        }
+        if (self->body_has_jump(self->arena->nodes[n].a)) return 1;
+        if (self->body_has_jump(self->arena->nodes[n].b)) return 1;
+        if (self->body_has_jump(self->arena->nodes[n].c)) return 1;
+        if (self->body_has_jump(self->arena->nodes[n].d)) return 1;
+        return self->body_has_jump(self->arena->nodes[n].next);
+    }
+
+    int missing_return_check(int body, const char *ret, int line)
+    {
+        if (!self->ex->check_mode || *self->ex->check_mode != 2) return 0;
+        if (!ret || !ret[0] || strcmp(ret, "void") == 0 || body < 0) return 0;
+        if (self->body_has_jump(body)) return 0;
+        return tool::diag::ct_sem_error(line, 0,
+            "non-void function may not return a value", self->mem->path);
+    }
+
+    int func_begin(void)
+    {
+        (void)self;
+        self->nlabels = 0;
+        self->ngotos = 0;
+        self->f_string_local = 0;
+        self->nbreak = 0;
+        self->ncont = 0;
+        self->u_reset();
+        self->ndel = 0;
+        self->ndefer_blocks = 0;
+        self->ndefer_next_id = 0;
+        self->in_defer = 0;
+        self->in_errdefer = 0;
+        return 0;
+    }
+
+    int func_end(void)
+    {
+        int i, j, k, gd, ld;
+        char msg[MAX_TEXT];
+        (void)self;
+
+        /* SH-102: a `goto` cannot be released correctly across a scope that
+           owns a `String` / `U16String` local, so it is a hard error rather
+           than a silent leak or a release of an uninitialised handle. */
+        if (self->f_string_local && self->ngotos > 0)
+            return self->sup->fail_at(self->gotos[0].line,
+                "a goto cannot cross an owning String scope; restructure the code or release() explicitly");
+        for (i = 0; i < self->ngotos; i++) {
+            int li = self->label_find(self->gotos[i].name);
+            if (li < 0) {
+                snprintf(msg, sizeof msg, "label '%s' is not defined", self->gotos[i].name);
+                return self->sup->fail_at(self->gotos[i].line, msg);
+            }
+            /* Only a path element below the label/goto LCA is a block boundary
+               the jump actually crosses. A defer on an ancestor common to both
+               sides is not crossed. */
+            gd = self->gotos[i].depth;
+            ld = self->labels[li].depth;
+            k = 0;
+            while (k < gd && k < ld
+                   && self->gotos[i].path[k] == self->labels[li].path[k]) k++;
+            for (j = k; j < gd; j++)
+                if (self->gotos[i].has[j]) {
+                    int b, has_err = 0;
+                    for (b = 0; b < 256; b++)
+                        if (self->defer_ids[b] == self->gotos[i].path[j])
+                            has_err = self->defer_block_err[b];
+                    return self->sup->fail_at(self->gotos[i].line,
+                        has_err ? "a goto cannot cross a block with errdefer"
+                                : "a goto cannot cross a block with defer");
+                }
+            for (j = k; j < ld; j++)
+                if (self->labels[li].has[j]) {
+                    int b, has_err = 0;
+                    for (b = 0; b < 256; b++)
+                        if (self->defer_ids[b] == self->labels[li].path[j])
+                            has_err = self->defer_block_err[b];
+                    return self->sup->fail_at(self->gotos[i].line,
+                        has_err ? "a goto cannot cross a block with errdefer"
+                                : "a goto cannot cross a block with defer");
+                }
+        }
+        return 0;
+    }
+}

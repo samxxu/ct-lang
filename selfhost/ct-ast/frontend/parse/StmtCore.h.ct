@@ -23,10 +23,6 @@ pub trait StmtOps {
 
     int  parse_block(void);
 
-    int  missing_return_check(int body, const char *ret, int line);
-
-    int  stmt_terminates(int n);
-
     int  u_reset(void);
 
     int  u_add(int which, const char *s);
@@ -41,8 +37,6 @@ pub trait StmtOps {
 
     int  del_take(const char *name);
 
-    int  body_has_jump(int n);
-
     int  parse_stmt(void);
 
     int  parse_branch(void);
@@ -55,11 +49,20 @@ pub trait StmtOps {
     int  parse_expr_stmt_node(void);
 
     int  closure_global_init(int e, const char *name, int line, int col);
+}
+
+pub trait StmtControl {
+    int  missing_return_check(int body, const char *ret, int line);
+
+    int  stmt_terminates(int n);
+
+    int  body_has_jump(int n);
 
     int  func_begin(void);
 
     int  func_end(void);
 }
+
 
 pub trait StmtSwitch {
     int  parse_switch_body(void);
@@ -245,4 +248,4 @@ pub struct Stmt {
     int  last_yield_line;
     int  last_yield_col;
     int  last_yield_count;
-} use StmtOps, StmtDeferOps, StmtMatch, StmtLoop, StmtSwitch;
+} use StmtOps, StmtDeferOps, StmtMatch, StmtLoop, StmtSwitch, StmtControl;

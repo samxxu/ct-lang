@@ -27,6 +27,7 @@
 #include "StmtMatch.h"
 #include "StmtLoop.h"
 #include "StmtSwitch.h"
+#include "StmtControl.h"
 
 
 struct ct_buf;

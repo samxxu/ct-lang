@@ -18,6 +18,7 @@
 #include "StmtMatch.h"
 #include "StmtLoop.h"
 #include "StmtSwitch.h"
+#include "StmtControl.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
 #include <limits.h>
@@ -196,7 +197,7 @@ static int parse_map_brace_init(struct frontend_parse_Stmt *, const char *, cons
 static int stmt_owning_struct(struct frontend_parse_Stmt *, const char *);
 void frontend_parse_ct_stmt_bind(void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Stmt * frontend_parse_stmt_get(void);
-static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable, .__frontend_parse_stmtdeferops_vptr = &frontend_parse_Stmt_frontend_parse_StmtDeferOps_vtable, .__frontend_parse_stmtmatch_vptr = &frontend_parse_Stmt_frontend_parse_StmtMatch_vtable, .__frontend_parse_stmtloop_vptr = &frontend_parse_Stmt_frontend_parse_StmtLoop_vtable, .__frontend_parse_stmtswitch_vptr = &frontend_parse_Stmt_frontend_parse_StmtSwitch_vtable };
+static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable, .__frontend_parse_stmtdeferops_vptr = &frontend_parse_Stmt_frontend_parse_StmtDeferOps_vtable, .__frontend_parse_stmtmatch_vptr = &frontend_parse_Stmt_frontend_parse_StmtMatch_vtable, .__frontend_parse_stmtloop_vptr = &frontend_parse_Stmt_frontend_parse_StmtLoop_vtable, .__frontend_parse_stmtswitch_vptr = &frontend_parse_Stmt_frontend_parse_StmtSwitch_vtable, .__frontend_parse_stmtcontrol_vptr = &frontend_parse_Stmt_frontend_parse_StmtControl_vtable };
 static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     char rn[MAX_TEXT];
@@ -558,77 +559,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_uninit_check(void *self, i
     return 0;
 }
 
-static int frontend_parse_Stmt_frontend_parse_StmtOps_stmt_terminates(void *self, int n) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int k;
-    int m;
-    if (n < 0) {
-        return 0;
-    }
-    k = _self->arena->nodes[n].kind;
-    if ((((k == N_RET) || (k == N_BREAK)) || (k == N_CONT))) {
-        return 1;
-    }
-    if (k == N_BLOCK) {
-        m = _self->arena->nodes[n].a;
-        if (m < 0) {
-            return 0;
-        }
-        while (_self->arena->nodes[m].next >= 0) {
-            m = _self->arena->nodes[m].next;
-        }
-        return _self->__frontend_parse_stmtops_vptr->stmt_terminates(_self, m);
-    }
-    if (k == N_IF) {
-        int e = _self->arena->nodes[n].c;
-        if (e < 0) {
-            return 0;
-        }
-        return (_self->__frontend_parse_stmtops_vptr->stmt_terminates(_self, _self->arena->nodes[n].b) && _self->__frontend_parse_stmtops_vptr->stmt_terminates(_self, e));
-    }
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_body_has_jump(void *self, int n) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    if (n < 0) {
-        return 0;
-    }
-{
-        int k = _self->arena->nodes[n].kind;
-        if (((((k == N_RET) || (k == N_WHILE)) || (k == N_FOR)) || (k == N_DOWHILE))) {
-            return 1;
-        }
-    }
-    if (_self->__frontend_parse_stmtops_vptr->body_has_jump(_self, _self->arena->nodes[n].a)) {
-        return 1;
-    }
-    if (_self->__frontend_parse_stmtops_vptr->body_has_jump(_self, _self->arena->nodes[n].b)) {
-        return 1;
-    }
-    if (_self->__frontend_parse_stmtops_vptr->body_has_jump(_self, _self->arena->nodes[n].c)) {
-        return 1;
-    }
-    if (_self->__frontend_parse_stmtops_vptr->body_has_jump(_self, _self->arena->nodes[n].d)) {
-        return 1;
-    }
-    return _self->__frontend_parse_stmtops_vptr->body_has_jump(_self, _self->arena->nodes[n].next);
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_missing_return_check(void *self, int body, const char * ret, int line) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    if (((!_self->ex->check_mode) || ((*_self->ex->check_mode) != 2))) {
-        return 0;
-    }
-    if (((((!ret) || (!ret[0])) || (strcmp(ret, "void") == 0)) || (body < 0))) {
-        return 0;
-    }
-    if (_self->__frontend_parse_stmtops_vptr->body_has_jump(_self, body)) {
-        return 0;
-    }
-    return tool_diag_ct_sem_error(line, 0, "non-void function may not return a value", _self->mem->path);
-}
-
 static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     int blk;
@@ -755,7 +685,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
                 _self->arena->nodes[tail].next = s;
             }
             tail = s;
-            prev_jump = _self->__frontend_parse_stmtops_vptr->stmt_terminates(_self, s);
+            prev_jump = _self->__frontend_parse_stmtcontrol_vptr->stmt_terminates(_self, s);
         }
     }
     if (_self->__frontend_parse_stmtdeferops_vptr->defer_flush_block(_self, blk, (&tail)) != 0) {
@@ -1766,75 +1696,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_branch(void *self) {
     return b;
 }
 
-static int frontend_parse_Stmt_frontend_parse_StmtOps_func_begin(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    (void)(_self);
-    _self->nlabels = 0;
-    _self->ngotos = 0;
-    _self->f_string_local = 0;
-    _self->nbreak = 0;
-    _self->ncont = 0;
-    _self->__frontend_parse_stmtops_vptr->u_reset(_self);
-    _self->ndel = 0;
-    _self->ndefer_blocks = 0;
-    _self->ndefer_next_id = 0;
-    _self->in_defer = 0;
-    _self->in_errdefer = 0;
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_func_end(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int i;
-    int j;
-    int k;
-    int gd;
-    int ld;
-    char msg[MAX_TEXT];
-    (void)(_self);
-    if ((_self->f_string_local && (_self->ngotos > 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[0].line, "a goto cannot cross an owning String scope; restructure the code or release() explicitly");
-    }
-    for (i = 0; i < _self->ngotos; i++) {
-        int li = _self->__frontend_parse_stmtswitch_vptr->label_find(_self, _self->gotos[i].name);
-        if (li < 0) {
-            snprintf(msg, sizeof(msg), "label '%s' is not defined", _self->gotos[i].name);
-            return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[i].line, msg);
-        }
-        gd = _self->gotos[i].depth;
-        ld = _self->labels[li].depth;
-        k = 0;
-        while ((((k < gd) && (k < ld)) && (_self->gotos[i].path[k] == _self->labels[li].path[k]))) {
-            k++;
-        }
-        for (j = k; j < gd; j++) {
-            if (_self->gotos[i].has[j]) {
-                int b;
-                int has_err = 0;
-                for (b = 0; b < 256; b++) {
-                    if (_self->defer_ids[b] == _self->gotos[i].path[j]) {
-                        has_err = _self->defer_block_err[b];
-                    }
-                }
-                return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[i].line, (has_err ? "a goto cannot cross a block with errdefer" : "a goto cannot cross a block with defer"));
-            }
-        }
-        for (j = k; j < ld; j++) {
-            if (_self->labels[li].has[j]) {
-                int b;
-                int has_err = 0;
-                for (b = 0; b < 256; b++) {
-                    if (_self->defer_ids[b] == _self->labels[li].path[j]) {
-                        has_err = _self->defer_block_err[b];
-                    }
-                }
-                return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[i].line, (has_err ? "a goto cannot cross a block with errdefer" : "a goto cannot cross a block with defer"));
-            }
-        }
-    }
-    return 0;
-}
-
 static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     int n;
@@ -2752,14 +2613,9 @@ const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_Stmt
     .u_mark_lvalue = frontend_parse_Stmt_frontend_parse_StmtOps_u_mark_lvalue,
     .u_scan = frontend_parse_Stmt_frontend_parse_StmtOps_u_scan,
     .uninit_check = frontend_parse_Stmt_frontend_parse_StmtOps_uninit_check,
-    .stmt_terminates = frontend_parse_Stmt_frontend_parse_StmtOps_stmt_terminates,
-    .body_has_jump = frontend_parse_Stmt_frontend_parse_StmtOps_body_has_jump,
-    .missing_return_check = frontend_parse_Stmt_frontend_parse_StmtOps_missing_return_check,
     .parse_block = frontend_parse_Stmt_frontend_parse_StmtOps_parse_block,
     .parse_stmt = frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt,
     .parse_branch = frontend_parse_Stmt_frontend_parse_StmtOps_parse_branch,
-    .func_begin = frontend_parse_Stmt_frontend_parse_StmtOps_func_begin,
-    .func_end = frontend_parse_Stmt_frontend_parse_StmtOps_func_end,
     .parse_decl_node = frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node,
     .string_raw_write_check = frontend_parse_Stmt_frontend_parse_StmtOps_string_raw_write_check,
     .parse_expr_stmt_node = frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node,

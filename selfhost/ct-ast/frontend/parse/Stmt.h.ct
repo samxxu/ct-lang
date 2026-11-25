@@ -38,6 +38,7 @@ import frontend::type::TypeCheck;
 import frontend::parse::StmtMatch;
 import frontend::parse::StmtLoop;
 import frontend::parse::StmtSwitch;
+import frontend::parse::StmtControl;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -1314,55 +1315,9 @@ impl StmtOps for Stmt {
        a block whose last reachable statement terminates, or an if/else whose
        both arms terminate. Loops stay conservative (a `while (1)` is not
        treated as terminating, so code after it stays reachable). */
-    int stmt_terminates(int n)
-    {
-        int k, m;
-
-        if (n < 0) return 0;
-        k = self->arena->nodes[n].kind;
-        if (k == N_RET || k == N_BREAK || k == N_CONT) return 1;
-        if (k == N_BLOCK) {
-            m = self->arena->nodes[n].a;
-            if (m < 0) return 0;
-            while (self->arena->nodes[m].next >= 0) m = self->arena->nodes[m].next;
-            return self->stmt_terminates(m);
-        }
-        if (k == N_IF) {
-            int e = self->arena->nodes[n].c;
-            if (e < 0) return 0;
-            return self->stmt_terminates(self->arena->nodes[n].b)
-                && self->stmt_terminates(e);
-        }
-        return 0;
-    }
-
     /* PH-70-R2: a non-void function whose body has neither `return` nor a loop
        falls off the end (UB). Loops are exempt because `while (1)` may never
        fall through; the check is deliberately conservative. */
-    int body_has_jump(int n)
-    {
-        if (n < 0) return 0;
-        {
-            int k = self->arena->nodes[n].kind;
-            if (k == N_RET || k == N_WHILE || k == N_FOR || k == N_DOWHILE)
-                return 1;
-        }
-        if (self->body_has_jump(self->arena->nodes[n].a)) return 1;
-        if (self->body_has_jump(self->arena->nodes[n].b)) return 1;
-        if (self->body_has_jump(self->arena->nodes[n].c)) return 1;
-        if (self->body_has_jump(self->arena->nodes[n].d)) return 1;
-        return self->body_has_jump(self->arena->nodes[n].next);
-    }
-
-    int missing_return_check(int body, const char *ret, int line)
-    {
-        if (!self->ex->check_mode || *self->ex->check_mode != 2) return 0;
-        if (!ret || !ret[0] || strcmp(ret, "void") == 0 || body < 0) return 0;
-        if (self->body_has_jump(body)) return 0;
-        return tool::diag::ct_sem_error(line, 0,
-            "non-void function may not return a value", self->mem->path);
-    }
-
     int parse_block(void)
     {
         int blk, tail, s, base;
@@ -2506,75 +2461,8 @@ impl StmtOps for Stmt {
        empty chain is an error rather than an emitted `name: }`. */
     /* `goto name;` -- recorded for the end-of-body check, since the label may
        be defined later in the same function (D-5). */
-    int func_begin(void)
-    {
-        (void)self;
-        self->nlabels = 0;
-        self->ngotos = 0;
-        self->f_string_local = 0;
-        self->nbreak = 0;
-        self->ncont = 0;
-        self->u_reset();
-        self->ndel = 0;
-        self->ndefer_blocks = 0;
-        self->ndefer_next_id = 0;
-        self->in_defer = 0;
-        self->in_errdefer = 0;
-        return 0;
-    }
-
     /* Labels are function-scoped, so an unresolved `goto` is judged here, when
        the whole body has been seen; the complaint points at the `goto` line. */
-    int func_end(void)
-    {
-        int i, j, k, gd, ld;
-        char msg[MAX_TEXT];
-        (void)self;
-
-        /* SH-102: a `goto` cannot be released correctly across a scope that
-           owns a `String` / `U16String` local, so it is a hard error rather
-           than a silent leak or a release of an uninitialised handle. */
-        if (self->f_string_local && self->ngotos > 0)
-            return self->sup->fail_at(self->gotos[0].line,
-                "a goto cannot cross an owning String scope; restructure the code or release() explicitly");
-        for (i = 0; i < self->ngotos; i++) {
-            int li = self->label_find(self->gotos[i].name);
-            if (li < 0) {
-                snprintf(msg, sizeof msg, "label '%s' is not defined", self->gotos[i].name);
-                return self->sup->fail_at(self->gotos[i].line, msg);
-            }
-            /* Only a path element below the label/goto LCA is a block boundary
-               the jump actually crosses. A defer on an ancestor common to both
-               sides is not crossed. */
-            gd = self->gotos[i].depth;
-            ld = self->labels[li].depth;
-            k = 0;
-            while (k < gd && k < ld
-                   && self->gotos[i].path[k] == self->labels[li].path[k]) k++;
-            for (j = k; j < gd; j++)
-                if (self->gotos[i].has[j]) {
-                    int b, has_err = 0;
-                    for (b = 0; b < 256; b++)
-                        if (self->defer_ids[b] == self->gotos[i].path[j])
-                            has_err = self->defer_block_err[b];
-                    return self->sup->fail_at(self->gotos[i].line,
-                        has_err ? "a goto cannot cross a block with errdefer"
-                                : "a goto cannot cross a block with defer");
-                }
-            for (j = k; j < ld; j++)
-                if (self->labels[li].has[j]) {
-                    int b, has_err = 0;
-                    for (b = 0; b < 256; b++)
-                        if (self->defer_ids[b] == self->labels[li].path[j])
-                            has_err = self->defer_block_err[b];
-                    return self->sup->fail_at(self->gotos[i].line,
-                        has_err ? "a goto cannot cross a block with errdefer"
-                                : "a goto cannot cross a block with defer");
-                }
-        }
-        return 0;
-    }
-
     /* `<type> name[dims] [= expr] (, name[dims] [= expr])*` without the trailing
        semicolon. Several declarators share the type and come back as an N_DECLS
        wrapper, so every consumer still sees one statement node. */

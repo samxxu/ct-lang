@@ -1531,7 +1531,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     _self->mem->leak_frame = (_self->sym->nscope + 1);
     _self->mem->leak_impl = 0;
     _self->mem->ret_owned = 0;
-    _self->st->__frontend_parse_stmtops_vptr->func_begin(_self->st);
+    _self->st->__frontend_parse_stmtcontrol_vptr->func_begin(_self->st);
     if (is_generic) {
         _self->ex->in_generic = 1;
     }
@@ -1566,7 +1566,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
-    if (_self->st->__frontend_parse_stmtops_vptr->func_end(_self->st) != 0) {
+    if (_self->st->__frontend_parse_stmtcontrol_vptr->func_end(_self->st) != 0) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
@@ -1609,7 +1609,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
-    if (_self->st->__frontend_parse_stmtops_vptr->missing_return_check(_self->st, b, ret, func_line) != 0) {
+    if (_self->st->__frontend_parse_stmtcontrol_vptr->missing_return_check(_self->st, b, ret, func_line) != 0) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
@@ -3883,7 +3883,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         _self->mem->leak_active = 1;
         _self->mem->leak_frame = (_self->sym->nscope + 1);
         _self->mem->leak_impl = 1;
-        _self->st->__frontend_parse_stmtops_vptr->func_begin(_self->st);
+        _self->st->__frontend_parse_stmtcontrol_vptr->func_begin(_self->st);
         body = _self->st->__frontend_parse_stmtops_vptr->parse_block(_self->st);
         _self->mem->leak_active = 0;
         _self->mem->leak_frame = (-1);
@@ -3898,7 +3898,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
         }
-        if (_self->st->__frontend_parse_stmtops_vptr->func_end(_self->st) != 0) {
+        if (_self->st->__frontend_parse_stmtcontrol_vptr->func_end(_self->st) != 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
         }
@@ -4092,7 +4092,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
         _self->mem->leak_active = 1;
         _self->mem->leak_frame = (_self->sym->nscope + 1);
         _self->mem->leak_impl = 1;
-        _self->st->__frontend_parse_stmtops_vptr->func_begin(_self->st);
+        _self->st->__frontend_parse_stmtcontrol_vptr->func_begin(_self->st);
         body = _self->st->__frontend_parse_stmtops_vptr->parse_block(_self->st);
         _self->mem->leak_active = 0;
         _self->mem->leak_frame = (-1);
@@ -4107,7 +4107,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
         }
-        if (_self->st->__frontend_parse_stmtops_vptr->func_end(_self->st) != 0) {
+        if (_self->st->__frontend_parse_stmtcontrol_vptr->func_end(_self->st) != 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
         }
@@ -4509,7 +4509,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         _self->mem->leak_active = 1;
         _self->mem->leak_frame = (_self->sym->nscope + 1);
         _self->mem->leak_impl = 1;
-        _self->st->__frontend_parse_stmtops_vptr->func_begin(_self->st);
+        _self->st->__frontend_parse_stmtcontrol_vptr->func_begin(_self->st);
         body = _self->st->__frontend_parse_stmtops_vptr->parse_block(_self->st);
         _self->mem->leak_active = 0;
         _self->mem->leak_frame = (-1);
@@ -4524,7 +4524,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
         }
-        if (_self->st->__frontend_parse_stmtops_vptr->func_end(_self->st) != 0) {
+        if (_self->st->__frontend_parse_stmtcontrol_vptr->func_end(_self->st) != 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
         }
@@ -4750,7 +4750,7 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
     self->mem->leak_active = 1;
     self->mem->leak_frame = (self->sym->nscope + 1);
     self->mem->leak_impl = 1;
-    self->st->__frontend_parse_stmtops_vptr->func_begin(self->st);
+    self->st->__frontend_parse_stmtcontrol_vptr->func_begin(self->st);
     body = self->st->__frontend_parse_stmtops_vptr->parse_block(self->st);
     self->mem->leak_active = 0;
     self->mem->leak_frame = (-1);
@@ -4764,7 +4764,7 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
     if (self->__frontend_parse_parseops_vptr->out_check_body(self, body, self->sym->traits[ti].m[mi].pnode, self->sym->traits[ti].m[mi].line) != 0) {
         return (-1);
     }
-    if (self->st->__frontend_parse_stmtops_vptr->func_end(self->st) != 0) {
+    if (self->st->__frontend_parse_stmtcontrol_vptr->func_end(self->st) != 0) {
         return (-1);
     }
     self->sym->traits[ti].m[mi].body = body;
