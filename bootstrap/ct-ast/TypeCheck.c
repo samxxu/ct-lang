@@ -2,6 +2,7 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include "TypeCheck.h"
 #include "SymbolsTypeText.h"
+#include "Intern.h"
 #include "Lexer.h"
 #include "MapTable.h"
 #include "Symbols.h"
@@ -270,8 +271,8 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_new_node(void *self, in
 static int frontend_type_TypeCheck_frontend_type_TypeOps_fail(void *self, const char * msg) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     (void)(_self);
-    if ((!_self->errmsg[0])) {
-        snprintf(_self->errmsg, sizeof(_self->errmsg), "%s", msg);
+    if (((!_self->errmsg) || (!_self->errmsg[0]))) {
+        _self->errmsg = runtime_text_ct_internf("%s", msg);
     }
     return (-1);
 }
@@ -279,7 +280,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_fail(void *self, const 
 static const char * frontend_type_TypeCheck_frontend_type_TypeOps_last_error(void *self) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     (void)(_self);
-    return _self->errmsg;
+    return (_self->errmsg ? _self->errmsg : "");
 }
 
 static int frontend_type_TypeCheck_frontend_type_TypeOps_is_iface_type(void *self, const char * type, char * tout, int tcap) {
@@ -1616,7 +1617,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
     }
     vptr = 0;
     if (ok) {
-        _self->sym->errmsg[0] = 0;
+        _self->sym->errmsg = "";
         if (_self->sym->__frontend_sym_symbolops_vptr->var_type(_self->sym, vname, vtype, (int)(sizeof(vtype))) != 0) {
             ok = 0;
         }
@@ -1795,7 +1796,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
         free(buf);
         return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
     }
-    _self->errmsg[0] = 0;
+    _self->errmsg = "";
     if (_self->__frontend_type_typeops_vptr->rewrite_init_names(_self, buf, named, namedcap) != 0) {
         had = (_self->errmsg[0] != 0);
         free(item);
@@ -2073,7 +2074,7 @@ static int tc_expr_adtctor(struct frontend_type_TypeCheck * self, int n, char * 
 static int tc_expr_var(struct frontend_type_TypeCheck * self, int n, char * out, int cap) {
     int i;
     const char * why;
-    self->sym->errmsg[0] = 0;
+    self->sym->errmsg = "";
     i = self->sym->__frontend_sym_symbolops_vptr->var_type(self->sym, self->arena->nodes[n].text2, out, cap);
     if (i < 0) {
         why = self->sym->__frontend_sym_symbolops_vptr->last_error(self->sym);

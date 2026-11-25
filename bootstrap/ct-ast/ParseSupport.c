@@ -408,8 +408,12 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_fail(void *self
         }
     }
     (void)(_self);
-    if ((!_self->errmsg[0])) {
-        snprintf(_self->errmsg, sizeof(_self->errmsg), "%s", msg);
+    if (((!_self->errmsg) || (!_self->errmsg[0]))) {
+        const char * recorded = runtime_text_ct_internf("%s", msg);
+        if ((!recorded)) {
+            return (-1);
+        }
+        _self->errmsg = recorded;
         _self->errfile[0] = 0;
         if (_self->mem->path) {
             snprintf(_self->errfile, sizeof(_self->errfile), "%s", _self->mem->path);
@@ -430,8 +434,12 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_fail(void *self
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_fail_at(void *self, int line, const char * msg) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     (void)(_self);
-    if ((!_self->errmsg[0])) {
-        snprintf(_self->errmsg, sizeof(_self->errmsg), "%s", msg);
+    if (((!_self->errmsg) || (!_self->errmsg[0]))) {
+        const char * recorded = runtime_text_ct_internf("%s", msg);
+        if ((!recorded)) {
+            return (-1);
+        }
+        _self->errmsg = recorded;
         _self->errfile[0] = 0;
         if (_self->mem->path) {
             snprintf(_self->errfile, sizeof(_self->errfile), "%s", _self->mem->path);
@@ -449,8 +457,12 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_fail_at(void *s
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_fail_driver(void *self, const char * msg) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     (void)(_self);
-    if ((!_self->errmsg[0])) {
-        snprintf(_self->errmsg, sizeof(_self->errmsg), "%s", msg);
+    if (((!_self->errmsg) || (!_self->errmsg[0]))) {
+        const char * recorded = runtime_text_ct_internf("%s", msg);
+        if ((!recorded)) {
+            return (-1);
+        }
+        _self->errmsg = recorded;
         _self->errfile[0] = 0;
         _self->errline = 0;
         _self->errcol = 0;
@@ -462,7 +474,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_fail_driver(voi
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_report(void *self) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     (void)(_self);
-    if ((!_self->errmsg[0])) {
+    if (((!_self->errmsg) || (!_self->errmsg[0]))) {
         return 1;
     }
     if (_self->diag_json) {
@@ -561,7 +573,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_declare_var(voi
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_var_type(void *self, const char * name, char * out, int cap) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     const char * why;
-    _self->sym->errmsg[0] = 0;
+    _self->sym->errmsg = "";
     if (_self->sym->__frontend_sym_symbolops_vptr->var_type(_self->sym, name, out, (int)(cap)) != 0) {
         why = _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym);
         if (why[0]) {
@@ -739,7 +751,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_struct(void
     if ((!strncmp(name, "__ct_", 5))) {
         return _self->__frontend_parse_supportops_vptr->fail(_self, "identifier '__ct_' is reserved for the compiler");
     }
-    _self->sym->errmsg[0] = 0;
+    _self->sym->errmsg = "";
     i = _self->sym->__frontend_sym_symbolops_vptr->add_struct(_self->sym, name);
     if (i < 0) {
         why = _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym);
@@ -767,7 +779,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_trait(void 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_method_trait(void *self, const char * stype, const char * method, char * tout, int tcap) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     const char * why;
-    _self->sym->errmsg[0] = 0;
+    _self->sym->errmsg = "";
     if (_self->sym->__frontend_sym_symbolops_vptr->method_trait(_self->sym, stype, method, tout, (int)(tcap)) != 0) {
         why = _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym);
         if (why[0]) {
@@ -781,7 +793,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_method_trait(vo
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_method_trait_amb(void *self, const char * stype, const char * method, const char * first, char * other, int ocap) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     const char * why;
-    _self->sym->errmsg[0] = 0;
+    _self->sym->errmsg = "";
     if (_self->sym->__frontend_sym_symbolops_vptr->method_trait_amb(_self->sym, stype, method, first, other, (int)(ocap)) != 0) {
         why = _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym);
         if (why[0]) {
@@ -888,7 +900,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_maybe_box(void 
         snprintf(msg, sizeof(msg), "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view", trait);
         return tool_diag_ct_sem_error(_self->arena->nodes[n].line, ((_self->arena->nodes[n].num > 0) ? _self->arena->nodes[n].num : 1), msg, _self->mem->path);
     }
-    _self->ty->errmsg[0] = 0;
+    _self->ty->errmsg = "";
     bnode = _self->ty->__frontend_type_typeops_vptr->maybe_box(_self->ty, n, trait, addr);
     if (bnode < 0) {
         why = _self->ty->__frontend_type_typeops_vptr->last_error(_self->ty);
@@ -903,7 +915,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_maybe_box(void 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_rewrite_init_text(void *self, const char * stype, const char * raw, char * * out, int * ocap) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     const char * why;
-    _self->ty->errmsg[0] = 0;
+    _self->ty->errmsg = "";
     if (_self->ty->__frontend_type_typeops_vptr->rewrite_init_text(_self->ty, stype, raw, out, ocap) != 0) {
         why = _self->ty->__frontend_type_typeops_vptr->last_error(_self->ty);
         if (why[0]) {
@@ -1098,7 +1110,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_leak_delete(voi
 static const char * frontend_parse_ParseSupport_frontend_parse_SupportOps_last_error(void *self) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     (void)(_self);
-    return _self->errmsg;
+    return (_self->errmsg ? _self->errmsg : "");
 }
 
 static void frontend_parse_ParseSupport_frontend_parse_SupportOps_map_sig_begin(void *self, int is_map) {

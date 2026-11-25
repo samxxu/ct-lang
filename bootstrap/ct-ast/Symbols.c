@@ -183,14 +183,14 @@ static int frontend_sym_g_adtcap;
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_fail(void *self, const char * msg) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     (void)(_self);
-    snprintf(_self->errmsg, sizeof(_self->errmsg), "%s", msg);
+    _self->errmsg = runtime_text_ct_internf("%s", msg);
     return (-1);
 }
 
 static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_last_error(void *self) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     (void)(_self);
-    return _self->errmsg;
+    return (_self->errmsg ? _self->errmsg : "");
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_capacity(void *self, int need) {

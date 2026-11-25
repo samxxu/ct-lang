@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 import frontend::sym::SymbolsTypeText;
+import runtime::text::Intern;
 
 import frontend::lex::Lexer;
 import frontend::module::MapTable;
@@ -95,7 +96,7 @@ pub struct TypeCheck {
        parser's slot and dereferences it at every read. */
     struct MapTable  **maps; /* the map table slot */
     int  *nmaps;                        /* points at the driver's count: the table grows while parsing */
-    char errmsg[160];
+    const char *errmsg;         /* S1a-0 C2p: pool text, no 160-byte cut */
 } use TypeOps;
 
 /* A type spelling reduced to the key the type-host lookup compares: every
@@ -172,7 +173,7 @@ static int tc_expr_var(struct TypeCheck *self, int n, char *out, int cap)
 {
     int i;
             const char *why;
-            self->sym->errmsg[0] = 0;
+            self->sym->errmsg = "";
             i = self->sym->var_type(self->arena->nodes[n].text2, out, cap);
             if (i < 0) {
                 why = self->sym->last_error();
@@ -589,15 +590,15 @@ impl TypeOps for TypeCheck {
     int fail(const char *msg)
     {
         (void)self;
-        if (!self->errmsg[0])
-            snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+        if (!self->errmsg || !self->errmsg[0])
+            self->errmsg = runtime::text::ct_internf("%s", msg);
         return -1;
     }
 
     const char *last_error(void)
     {
         (void)self;
-        return self->errmsg;
+        return self->errmsg ? self->errmsg : "";
     }
 
     /* `struct T_iface` -> T. */
@@ -1330,7 +1331,7 @@ impl TypeOps for TypeCheck {
         /* ... of a struct that implements the trait, with matching indirection */
         vptr = 0;
         if (ok) {
-            self->sym->errmsg[0] = 0;
+            self->sym->errmsg = "";
             if (self->sym->var_type(vname, vtype, (int)sizeof vtype) != 0) ok = 0;
         }
         if (ok && !self->concrete_struct(vtype, sname, sizeof sname, &vptr)) ok = 0;
@@ -1480,7 +1481,7 @@ impl TypeOps for TypeCheck {
             free(buf);
             return self->fail("out of memory");
         }
-        self->errmsg[0] = 0;
+        self->errmsg = "";
         if (self->rewrite_init_names(buf, named, namedcap) != 0) {
             had = self->errmsg[0] != 0;
             free(item);

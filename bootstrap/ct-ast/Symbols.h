@@ -462,7 +462,7 @@ struct frontend_sym_Symbols {
     int self_mode;
     char ret_type[160];
     char trait_default[160];
-    char errmsg[160];
+    const char * errmsg;
     const struct frontend_sym_SymbolOps_vtbl *__frontend_sym_symbolops_vptr;
     const struct frontend_sym_TypeAliasOps_vtbl *__frontend_sym_typealiasops_vptr;
 };

@@ -4189,7 +4189,7 @@ impl ExprOps for Expr {
                         return n;
                     }
                 }
-                self->sym->errmsg[0] = 0;
+                self->sym->errmsg = "";
                 if (qc[0]) fi = self->sym->find_func(qc);
                 else fi = self->sym->resolve_func(self->arena->nodes[n].text2);
                 if (fi < 0) {

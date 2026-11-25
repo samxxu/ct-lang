@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+import runtime::text::Intern;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT     160
@@ -98,10 +99,13 @@ struct Warn {
        length. It used to be `char file[MAX_PATH]`, so a path over 1023 bytes
        was truncated in every diagnostic. `diag_reset` frees it. */
     char *file;
-    char var[MAX_TEXT]; /* leak: variable; mismatch: method */
-    char tname[MAX_TEXT]; /* leak: struct type; mismatch: trait */
-    char stype[MAX_TEXT];
-    char msg[MAX_TEXT];
+    /* S1a-0 C2p: the four text fields are pool texts. The old MAX_TEXT rows
+       cut a long variable/type/method name (and the message that embeds one)
+       at 159 bytes. */
+    const char *var;    /* leak: variable; mismatch: method */
+    const char *tname;  /* leak: struct type; mismatch: trait */
+    const char *stype;
+    const char *msg;
 }
 
 trait DiagStore {
@@ -200,6 +204,14 @@ static int diag_grow_warns(struct Diag *self)
     return 0;
 }
 
+/* S1a-0 C2p: record text goes into the one intern pool; an allocation failure
+   is reported by the pool itself and an empty field keeps the printers safe. */
+static const char *diag_intern(const char *s)
+{
+    const char *p = runtime::text::ct_intern(s ? s : "");
+    return p ? p : "";
+}
+
 /* S1a-0 C2l: one record's file path, exact length, owned by the store. A path
    over the formal text bound is an explicit failure, never a silent cut. */
 static char *diag_dup(const char *s)
@@ -279,10 +291,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        snprintf(w->var, sizeof w->var, "%s", method);
-        snprintf(w->tname, sizeof w->tname, "%s", trait);
-        snprintf(w->stype, sizeof w->stype, "%s", stype);
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = diag_intern(method);
+        w->tname = diag_intern(trait);
+        w->stype = diag_intern(stype);
+        w->msg = diag_intern(msg);
         self->nwarns++;
         if (self->strict == 2) self->sig_errs++;
         return 0;
@@ -299,8 +311,9 @@ impl DiagStore for Diag {
            store would otherwise keep as warnings. The count moves `nsem`, so
            `build_main` stops before any product is written. */
         if (self->types_level == 2) {
-            char full[MAX_TEXT * 2];
-            snprintf(full, sizeof full, "arity mismatch: '%s' %s", callee, msg);
+            const char *full = runtime::text::ct_internf(
+                "arity mismatch: '%s' %s", callee, msg);
+            if (!full) return -1;
             (void)self->sem_error(line, col, full, path);
             return 0;
         }
@@ -314,10 +327,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        snprintf(w->var, sizeof w->var, "%s", callee);
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = diag_intern(callee);
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }
@@ -329,11 +342,12 @@ impl DiagStore for Diag {
                          const char *path)
     {
         if (self->types_level == 2) {
-            char full[MAX_TEXT * 2];
+            const char *full;
             if (callee[0])
-                snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
+                full = runtime::text::ct_internf("type mismatch: '%s' %s", callee, msg);
             else
-                snprintf(full, sizeof full, "%s", msg);
+                full = runtime::text::ct_internf("%s", msg);
+            if (!full) return -1;
             (void)self->sem_error(line, col, full, path);
             return 0;
         }
@@ -347,10 +361,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        snprintf(w->var, sizeof w->var, "%s", callee);
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = diag_intern(callee);
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }
@@ -372,10 +386,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        snprintf(w->var, sizeof w->var, "%s", method);
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = diag_intern(method);
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }
@@ -396,10 +410,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        snprintf(w->var, sizeof w->var, "%s", method);
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = diag_intern(method);
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }
@@ -420,10 +434,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        w->var[0] = 0;
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = "";
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }
@@ -443,10 +457,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        w->var[0] = 0;
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = "";
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }
@@ -466,10 +480,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        w->var[0] = 0;
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = "";
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }
@@ -489,10 +503,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        w->var[0] = 0;
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = "";
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }
@@ -510,10 +524,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        w->var[0] = 0;
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = "";
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }
@@ -530,10 +544,10 @@ impl DiagStore for Diag {
         w->path_line = path_line;
         w->file = diag_dup(file);
         if (!w->file) return -1;
-        snprintf(w->var, sizeof w->var, "%s", var);
-        snprintf(w->tname, sizeof w->tname, "%s", tname);
-        w->stype[0] = 0;
-        w->msg[0] = 0;
+        w->var = diag_intern(var);
+        w->tname = diag_intern(tname);
+        w->stype = "";
+        w->msg = "";
         self->nwarns++;
         return 0;
     }
@@ -553,10 +567,10 @@ impl DiagStore for Diag {
         w->path_line = 0;
         w->file = diag_dup(path);
         if (!w->file) return -1;
-        w->var[0] = 0;
-        w->tname[0] = 0;
-        w->stype[0] = 0;
-        snprintf(w->msg, sizeof w->msg, "%s", msg);
+        w->var = "";
+        w->tname = "";
+        w->stype = "";
+        w->msg = diag_intern(msg);
         self->nwarns++;
         return 0;
     }

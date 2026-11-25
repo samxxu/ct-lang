@@ -2,6 +2,7 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include "Memory.h"
 #include "Symbols.h"
+#include "Intern.h"
 #include "Arena.h"
 #include "Diag.h"
 
@@ -556,15 +557,15 @@ static int backend_mem_Memory_backend_mem_MemoryOps_warn_leak(void *self, int vi
 static int backend_mem_Memory_backend_mem_MemoryOps_fail(void *self, const char * msg) {
     struct backend_mem_Memory *_self = (struct backend_mem_Memory *)self;
     (void)(_self);
-    if ((!_self->errmsg[0])) {
-        snprintf(_self->errmsg, sizeof(_self->errmsg), "%s", msg);
+    if (((!_self->errmsg) || (!_self->errmsg[0]))) {
+        _self->errmsg = runtime_text_ct_internf("%s", msg);
     }
     return (-1);
 }
 
 static const char * backend_mem_Memory_backend_mem_MemoryOps_last_error(void *self) {
     struct backend_mem_Memory *_self = (struct backend_mem_Memory *)self;
-    return _self->errmsg;
+    return (_self->errmsg ? _self->errmsg : "");
 }
 
 const struct backend_mem_MemoryOps_vtbl backend_mem_Memory_backend_mem_MemoryOps_vtable = {

@@ -14,6 +14,7 @@
 #include <string.h>
 
 import frontend::sym::Symbols;
+import runtime::text::Intern;
 import runtime::arena::Arena;
 import tool::diag::Diag;
 
@@ -71,7 +72,7 @@ pub struct Memory {
     int  leak_frame;
     int  leak_impl;              /* 1 while parsing an impl method body */
     int  ret_owned;
-    char errmsg[160];
+    const char *errmsg;         /* S1a-0 C2p: pool text, no 160-byte cut */
 } use MemoryOps;
 
 pub struct Memory *memory_get(void);
@@ -461,14 +462,14 @@ impl MemoryOps for Memory {
     int fail(const char *msg)
     {
         (void)self;
-        if (!self->errmsg[0])
-            snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+        if (!self->errmsg || !self->errmsg[0])
+            self->errmsg = runtime::text::ct_internf("%s", msg);
         return -1;
     }
 
     const char *last_error(void)
     {
-        return self->errmsg;
+        return self->errmsg ? self->errmsg : "";
     }
 }
 

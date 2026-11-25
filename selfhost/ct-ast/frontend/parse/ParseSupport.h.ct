@@ -138,7 +138,9 @@ pub struct ParseSupport {
     struct Symbols *sym;
     struct TypeCheck *ty;
     struct Memory *mem;
-    char errmsg[160];
+    /* S1a-0 C2p: the recorded message is a pool text, not a 160-byte row.
+       A long name/type in a diagnostic is no longer cut at 159 bytes. */
+    const char *errmsg;
     char errfile[1024];         /* the input the message was recorded against */
     int  errline;               /* 0 = a driver-level message, no source position */
     int  errcol;
@@ -430,8 +432,10 @@ impl SupportOps for ParseSupport {
                 msg = "a numeric literal followed by '.' is a float; add a space for a method call";
         }
         (void)self;
-        if (!self->errmsg[0]) {
-            snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+        if (!self->errmsg || !self->errmsg[0]) {
+            const char *recorded = runtime::text::ct_internf("%s", msg);
+            if (!recorded) return -1;
+            self->errmsg = recorded;
             self->errfile[0] = 0;
             if (self->mem->path) snprintf(self->errfile, sizeof self->errfile, "%s", self->mem->path);
             self->errline = self->lex->tokline;
@@ -450,8 +454,10 @@ impl SupportOps for ParseSupport {
     int fail_at(int line, const char *msg)
     {
         (void)self;
-        if (!self->errmsg[0]) {
-            snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+        if (!self->errmsg || !self->errmsg[0]) {
+            const char *recorded = runtime::text::ct_internf("%s", msg);
+            if (!recorded) return -1;
+            self->errmsg = recorded;
             self->errfile[0] = 0;
             if (self->mem->path) snprintf(self->errfile, sizeof self->errfile, "%s", self->mem->path);
             self->errline = line;
@@ -469,8 +475,10 @@ impl SupportOps for ParseSupport {
     int fail_driver(const char *msg)
     {
         (void)self;
-        if (!self->errmsg[0]) {
-            snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+        if (!self->errmsg || !self->errmsg[0]) {
+            const char *recorded = runtime::text::ct_internf("%s", msg);
+            if (!recorded) return -1;
+            self->errmsg = recorded;
             self->errfile[0] = 0;
             self->errline = 0;
             self->errcol = 0;
@@ -486,7 +494,7 @@ impl SupportOps for ParseSupport {
     int report(void)
     {
         (void)self;
-        if (!self->errmsg[0]) return 1;
+        if (!self->errmsg || !self->errmsg[0]) return 1;
         if (self->diag_json) {
             FILE *f = self->diag_json_stderr ? stderr : stdout;
             fputs("{\"errors\":[{\"severity\":\"error\",", f);
@@ -573,7 +581,7 @@ impl SupportOps for ParseSupport {
     int var_type(const char *name, char *out, int cap)
     {
         const char *why;
-        self->sym->errmsg[0] = 0;
+        self->sym->errmsg = "";
         if (self->sym->var_type(name, out, (int)cap) != 0) {
             why = self->sym->last_error();
             if (why[0]) return self->fail(why);
@@ -739,7 +747,7 @@ impl SupportOps for ParseSupport {
         int i;
         if (!strncmp(name, "__ct_", 5))
             return self->fail("identifier '__ct_' is reserved for the compiler");
-        self->sym->errmsg[0] = 0;
+        self->sym->errmsg = "";
         i = self->sym->add_struct(name);
         if (i < 0) {
             why = self->sym->last_error();
@@ -762,7 +770,7 @@ impl SupportOps for ParseSupport {
     int method_trait(const char *stype, const char *method, char *tout, int tcap)
     {
         const char *why;
-        self->sym->errmsg[0] = 0;
+        self->sym->errmsg = "";
         if (self->sym->method_trait(stype, method, tout, (int)tcap) != 0) {
             why = self->sym->last_error();
             if (why[0]) return self->fail(why);
@@ -777,7 +785,7 @@ impl SupportOps for ParseSupport {
                          char *other, int ocap)
     {
         const char *why;
-        self->sym->errmsg[0] = 0;
+        self->sym->errmsg = "";
         if (self->sym->method_trait_amb(stype, method, first, other, (int)ocap) != 0) {
             why = self->sym->last_error();
             if (why[0]) return self->fail(why);
@@ -887,7 +895,7 @@ impl SupportOps for ParseSupport {
                                                 ? self->arena->nodes[n].num : 1,
                                             msg, self->mem->path);
         }
-        self->ty->errmsg[0] = 0;
+        self->ty->errmsg = "";
         bnode = self->ty->maybe_box(n, trait, addr);
         if (bnode < 0) {
             why = self->ty->last_error();
@@ -900,7 +908,7 @@ impl SupportOps for ParseSupport {
     int rewrite_init_text(const char *stype, const char *raw, char **out, int *ocap)
     {
         const char *why;
-        self->ty->errmsg[0] = 0;
+        self->ty->errmsg = "";
         if (self->ty->rewrite_init_text(stype, raw, out, ocap) != 0) {
             why = self->ty->last_error();
             if (why[0]) return self->fail(why);
@@ -1061,7 +1069,7 @@ impl SupportOps for ParseSupport {
     const char *last_error(void)
     {
         (void)self;
-        return self->errmsg;
+        return self->errmsg ? self->errmsg : "";
     }
 
     /* SH-60 / D-60-2: one unit's signature evidence starts empty; the parser

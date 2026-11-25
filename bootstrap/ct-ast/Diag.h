@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "Intern.h"
+
 
 struct ct_buf;
 struct Str;

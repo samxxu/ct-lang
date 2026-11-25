@@ -318,12 +318,41 @@ Intern（随输出增长），改用 `ct_scratch_*` builder。已迁：`Emitter.
 `p86_errors` 342 条诊断（3 条旧上限负例改为 >65536 负例）；`intern_pool` 11/11；
 `check-seed` 两轮逐字节；`check-ast` 全量见交付报告。
 
-**剩余（C2p）**：模板实例名的 159 字符诊断、`Expr/Stmt` 的 500 处一次性
-`char[MAX_TEXT]` scratch、`errmsg[160]` 等诊断文本，仍由后续合批处理；它们不再
-截断**源标识符**（C2o 已保证声明/引用路径按需），只影响长类型拼写与诊断文本。
-限定名的**段数** cap 已删除（24 段可用），但 `qpath`/`cname` 的 160 字节输出缓冲
-仍在：超过 160 字节的限定路径会显式报 `qualified name is too long`，不静默截断；
-该缓冲随 C2p 的 scratch 合批一起按需化。
+**剩余（C2p）**：见 §5.6；C2p-1 已把 `qpath`/`cname` 按需化，C2p-2 已把
+诊断文本按需化，`Expr/Stmt`/发射器的一次性 scratch 与 `parse_type` 的类型缓冲
+仍在后续批次。
+
+## 5.6 C2p 合批（进行中）
+
+C2p 按 4–6 个单元一批迁移剩余的 160/159/128 scratch；每批重生成一次 seed，
+并以 `test/ast/c2p_limits.sh` 的对应段落做红→绿。未完成批次登记在文末。
+
+**C2p-1 限定路径（已落）**：`parse_qual_path` 的 `name`/`cname`/`qpath`
+三个输出改 pool 文本（内部用 `ct_text_*` 增长），`Parser.parse_func` 的
+`gns` 改 pool 文本，`find_qualified_global` 返回 pool 指针，新增
+`resolve_type_text`。>160 字节的限定变量/调用可用；无命名空间导入单元的
+裸名回退（`plain::twice`）照旧。证据：`c2p_limits.sh` 3/3，baseline
+`772d7611` 为 1/3。
+
+**C2p-2 诊断文本（已落）**：`ParseSupport`/`Symbols`/`TypeCheck`/`Memory`
+的 `errmsg[160]` 改 pool 文本，`Parser.emsg` 改 run-scoped，`Diag.Warn` 的
+`var`/`tname`/`stype`/`msg` 改 pool 文本。150 字节 struct 名的 trait 诊断、
+300 字节 callee 的 arity 警告不再截断。证据：`c2p_limits.sh` 5/5，baseline
+`772d7611` 为 1/5。
+
+**剩余（按文件，`grep -c '\[MAX_TEXT\]'`）**：`frontend/parse` 480 处
+（`Expr.h.ct` 107、`Parser.h.ct` 83、`Stmt.h.ct` 46、`ExprTypes.h.ct` 37、
+`MapBuild.h.ct` 26、`ExprTypeParse.h.ct` 24、`ExprStaticType.h.ct` 23 …）、
+`backend/emit` 128 处（`Emitter.h.ct` 110、`Init.h.ct` 10、
+`EmitterText.h.ct` 3、`EmitHoist.h.ct` 2、`EmitInit.h.ct` 2、
+`EmitterMapText.h.ct` 1）、`tool/pkg` 55 处、`frontend/type` 31 处、
+`frontend/sym` 21 处、`frontend/module` 20 处、`backend/mem` 7 处。另有
+8 处 `[128]` 计数行（`Emitter` 的路径/字段数组等），它们是行数容量而非文本
+scratch；实例名 159 的诊断仍在 `ExprTypeParse`。下一批优先级：`ExprTypeParse.parse_type` 的
+`rname`/`enc`/`canon` 与实例名 159（须同批改 `inst_make`/`ct_inst_encode`
+的调用方缓冲）及 `Symbols` 的 `type is too long` 系列；其后是
+`Emitter.h.ct` 的局部与 `EmitterText`/`MapBuild`/`EmitHoist`/`EmitInit`/`Init`
+（依赖 `expr_type`/`expr_ctype` 的调用方缓冲一起改）。
 
 ## 6 关联
 

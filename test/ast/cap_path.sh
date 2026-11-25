@@ -41,7 +41,7 @@ fi
 
 # --- diag: a 1500-byte logical unit path survives in the record and the line.
 if ! $cc -Wall -Wextra -std=c99 -I "$gen" test/ast/cap_path_diag.c "$gen/Diag.c" \
-        -o "$w/diag" 2>"$w/diag.build"; then
+        "$gen/Intern.c" -o "$w/diag" 2>"$w/diag.build"; then
     echo "FAIL diag: the probe did not build: $(head -3 "$w/diag.build" | tr '\n' ' ')"
     fail=1
 elif ! "$w/diag" 2>"$w/diag.out"; then

@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "SymbolsTypeText.h"
+#include "Intern.h"
 #include "Lexer.h"
 #include "MapTable.h"
 #include "Symbols.h"
@@ -120,7 +121,7 @@ struct frontend_type_TypeCheck {
     struct frontend_lex_Lexer * lex;
     struct frontend_module_MapTable * * maps;
     int * nmaps;
-    char errmsg[160];
+    const char * errmsg;
     const struct frontend_type_TypeOps_vtbl *__frontend_type_typeops_vptr;
 };
 void frontend_type_type_key(const char *, char *, int);

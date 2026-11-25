@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "Symbols.h"
+#include "Intern.h"
 #include "Arena.h"
 #include "Diag.h"
 
@@ -124,7 +125,7 @@ struct backend_mem_Memory {
     int leak_frame;
     int leak_impl;
     int ret_owned;
-    char errmsg[160];
+    const char * errmsg;
     const struct backend_mem_MemoryOps_vtbl *__backend_mem_memoryops_vptr;
 };
 struct backend_mem_Memory * backend_mem_memory_get(void);

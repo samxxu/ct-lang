@@ -804,7 +804,8 @@ pub struct Symbols {
        through. Empty everywhere else. The adopting struct is unknown at parse
        time, so the receiver resolves to the enclosing trait by construction. */
     char trait_default[160];
-    char errmsg[160];           /* the bare message `fail` recorded; Ast adds the position */
+    /* S1a-0 C2p: a pool text, not a 160-byte row. */
+    const char *errmsg;         /* the bare message `fail` recorded; Ast adds the position */
 } use SymbolOps, TypeAliasOps;
 
 pub struct Symbols *symbols_get(void);
@@ -821,14 +822,14 @@ impl SymbolOps for Symbols {
     int fail(const char *msg)
     {
         (void)self;
-        snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+        self->errmsg = runtime::text::ct_internf("%s", msg);
         return -1;
     }
 
     const char *last_error(void)
     {
         (void)self;
-        return self->errmsg;
+        return self->errmsg ? self->errmsg : "";
     }
 
     /* R10: `__ct_` names the compiler's own products. The check used to guard

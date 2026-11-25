@@ -3423,7 +3423,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     return n;
                 }
             }
-            _self->sym->errmsg[0] = 0;
+            _self->sym->errmsg = "";
             if (qc[0]) {
                 fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, qc);
             }

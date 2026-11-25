@@ -4202,9 +4202,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
                 }
             }
             if ((!found)) {
-                char emsg[MAX_TEXT];
-                snprintf(emsg, sizeof(emsg), "trait method '%s' is not implemented for struct '%s'", _self->sym->traits[ti].m[tm_i].name, sname);
-                tool_diag_ct_sem_error(brace_line, brace_col, emsg, _self->mem->path);
+                tool_diag_ct_sem_error(brace_line, brace_col, tool_sh_ct_scratch_fmt("trait method '%s' is not implemented for struct '%s'", _self->sym->traits[ti].m[tm_i].name, sname), _self->mem->path);
             }
         }
     }
@@ -5639,7 +5637,7 @@ const char * frontend_parse_ct_parse_last_error(void) {
     return frontend_parse_g_parse.sup->__frontend_parse_supportops_vptr->last_error(frontend_parse_g_parse.sup);
 }
 void frontend_parse_ct_parse_clear_error(void) {
-    frontend_parse_g_parse.sup->errmsg[0] = 0;
+    frontend_parse_g_parse.sup->errmsg = "";
     frontend_parse_g_parse.sup->errfile[0] = 0;
     frontend_parse_g_parse.sup->errline = 0;
     frontend_parse_g_parse.sup->errcol = 0;

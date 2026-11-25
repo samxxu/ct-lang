@@ -160,7 +160,7 @@ struct frontend_parse_ParseSupport {
     struct frontend_sym_Symbols * sym;
     struct frontend_type_TypeCheck * ty;
     struct backend_mem_Memory * mem;
-    char errmsg[160];
+    const char * errmsg;
     char errfile[1024];
     int errline;
     int errcol;
