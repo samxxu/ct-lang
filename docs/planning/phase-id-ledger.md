@@ -11,6 +11,7 @@ window: W2
 | PH-5 | v0-PH-5 | docs/history/design/phase5.md | docs/phases/v0-PH-5/card.md | v0.5.0 | migrated |
 | PH-6 | v0-PH-6 | docs/history/design/phase6.md | docs/phases/v0-PH-6/card.md | v0.6.0 | migrated |
 | v1-PH-1 | v1-PH-1 | docs/design/v1-phase1-draft.md | docs/phases/v1-PH-1/card.md | v1.1.0 | migrated |
+| v1-PH-2 | v1-PH-2 | docs/design/v1-phase2-draft.md | docs/phases/v1-PH-2/card.md | v1.2.0 | migrated |
 | PH-8 | v0-PH-8 | docs/history/design/phase8.md | docs/phases/v0-PH-8/card.md | v0.8.0 | migrated |
 | PH-9 | v0-PH-9 | docs/history/design/phase9.md | docs/phases/v0-PH-9/card.md | v0.9.0 | migrated |
 | PH-10 | v0-PH-10 | docs/history/design/phase10.md | docs/phases/v0-PH-10/card.md | v0.10.0 | migrated |
