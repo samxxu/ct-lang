@@ -1734,6 +1734,17 @@ else
 fi
 
 echo
+echo "== S1a-0 C2e: package-manager command text (MAX_PKG_CMD) =="
+# The probe quotes a 440-byte cache path whose `'` bytes expand the composed
+# git lines over the old 2048-byte MAX_PKG_CMD, then gets, locks and re-reads
+# the package in JSON.
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg29_long_cmd.sh"; then
+    ok "S1a-0 C2 package command text"
+else
+    bad "S1a-0 C2 package command text" "the pkg29 probe failed"
+fi
+
+echo
 echo "== PKG-25: lock merge keeps same-name different-publisher rows =="
 # The probe fetches demo/hello then acme/hello into one project and asserts both
 # lock rows survive, `ct verify --strict` accepts them, and a re-fetch of one
