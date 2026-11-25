@@ -207,5 +207,85 @@ run_case hoists "$w/hoists.ct" 0 || fail=1
 } >"$w/intos.ct"
 run_case intos "$w/intos.ct" 0 || fail=1
 
+# ---------------------------------------------------------------------------
+# S1a-0 C1: the module tables. A multi-unit build is the only way to exercise
+# the import graph, so these three cases go through `ct build` (it composes
+# and runs the host `cc` line) instead of the single-file `run_case` above.
+# ---------------------------------------------------------------------------
+export CC="${CC:-cc}"
+
+run_build()
+{
+    name=$1
+    src=$2
+    shift 2
+    if ! "$ct" build "$src" --outdir "$w/$name.gen" -o "$w/$name.bin" "$@" \
+            >"$w/$name.out" 2>"$w/$name.err"; then
+        echo "FAIL $name: ct-ast build rejected the source: $(tail -1 "$w/$name.err")"
+        return 1
+    fi
+    "$w/$name.bin"
+    got=$?
+    if [ "$got" -ne 0 ]; then
+        echo "FAIL $name: program returned $got (want 0)"
+        return 1
+    fi
+    echo "ok   $name"
+}
+
+# MAX_IMPORTS: one unit imports 40 header units (old cap 32).
+mkdir -p "$w/imports.src"
+i=0
+while [ "$i" -lt 40 ]; do
+    printf 'pub int u%s(void) { return %s; }\n' "$i" "$i" \
+        >"$w/imports.src/u$i.h.ct"
+    i=$((i + 1))
+done
+{
+    i=0
+    while [ "$i" -lt 40 ]; do
+        echo "import u$i;"
+        i=$((i + 1))
+    done
+    echo 'int main(void) { return u39() == 39 ? 0 : 1; }'
+} >"$w/imports.src/main.ct"
+run_build imports "$w/imports.src/main.ct" || fail=1
+
+# MAX_UNITS: a 70-unit import chain (old cap 64). Each unit has one import, so
+# this fails on the unit table, not on MAX_IMPORTS.
+mkdir -p "$w/units.src"
+i=0
+while [ "$i" -lt 70 ]; do
+    if [ "$i" -eq 0 ]; then
+        echo 'pub int f0(void) { return 0; }' >"$w/units.src/m0.h.ct"
+    else
+        p=$((i - 1))
+        {
+            echo "import m$p;"
+            echo "pub int f$i(void) { return f$p() + 1; }"
+        } >"$w/units.src/m$i.h.ct"
+    fi
+    i=$((i + 1))
+done
+{
+    echo 'import m69;'
+    echo 'int main(void) { return f69() == 69 ? 0 : 1; }'
+} >"$w/units.src/main.ct"
+run_build units "$w/units.src/main.ct" || fail=1
+
+# MAX_INCDIRS: 20 `-I` roots (old cap 16). The roots are never read, so the
+# case isolates the option table.
+mkdir -p "$w/incdirs.src"
+echo 'int main(void) { return 0; }' >"$w/incdirs.src/main.ct"
+incs=
+i=0
+while [ "$i" -lt 20 ]; do
+    mkdir -p "$w/incdirs.src/d$i"
+    incs="$incs -I $w/incdirs.src/d$i"
+    i=$((i + 1))
+done
+# shellcheck disable=SC2086
+run_build incdirs "$w/incdirs.src/main.ct" $incs || fail=1
+
 [ "$fail" -eq 0 ] || exit 1
 echo "OK S1a-0 cap growth"
