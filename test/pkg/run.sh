@@ -1756,6 +1756,17 @@ else
 fi
 
 echo
+echo "== S1a-0 C2i: package-manager deep paths (MAX_PKG_PATH) =="
+# The probe stages a package under a 569-byte directory and runs get, verify
+# and index refresh over it; the old 512-byte path buffers truncated it (get
+# failed silently, index refresh said "package directory path is too long").
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg31_deep_path.sh"; then
+    ok "S1a-0 C2 package deep paths"
+else
+    bad "S1a-0 C2 package deep paths" "the pkg31 probe failed"
+fi
+
+echo
 echo "== PKG-25: lock merge keeps same-name different-publisher rows =="
 # The probe fetches demo/hello then acme/hello into one project and asserts both
 # lock rows survive, `ct verify --strict` accepts them, and a re-fetch of one
