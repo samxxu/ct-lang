@@ -317,7 +317,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
         char * cc[1];
         aa[0] = tbuf;
         cc[0] = tbuf;
-        if (_self->__frontend_parse_exprops_vptr->inst_make(_self, "Box", 1, aa, cc, enc, sizeof(enc), 0, nline, ncol) != 0) {
+        if (_self->__frontend_parse_exprinstantiate_vptr->inst_make(_self, "Box", 1, aa, cc, enc, sizeof(enc), 0, nline, ncol) != 0) {
             free(fixed);
             return (-1);
         }

@@ -8110,10 +8110,10 @@ static int inst_elem_foreign(struct backend_emit_Emitter * self, int ii) {
     e1 = ins[ii].ctype[0];
     e2 = ((((strcmp(ins[ii].tmpl, "Map") == 0) || (strcmp(ins[ii].tmpl, "MapEntry") == 0)) && (ins[ii].nargs > 1)) ? ins[ii].ctype[1] : 0);
     ex = frontend_parse_expr_get();
-    if (ex->__frontend_parse_exprops_vptr->container_elem_foreign(ex, e1, tmpl)) {
+    if (ex->__frontend_parse_exprinstantiate_vptr->container_elem_foreign(ex, e1, tmpl)) {
         return 1;
     }
-    if (((e2 != 0) && ex->__frontend_parse_exprops_vptr->container_elem_foreign(ex, e2, tmpl))) {
+    if (((e2 != 0) && ex->__frontend_parse_exprinstantiate_vptr->container_elem_foreign(ex, e2, tmpl))) {
         return 1;
     }
     o1 = elem_plain_owner(self, e1);

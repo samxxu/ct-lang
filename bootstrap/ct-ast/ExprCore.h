@@ -91,16 +91,6 @@ struct frontend_parse_ExprOps_vtbl {
     int (*type_append)(void *, char *, int, int *, const char *);
     int (*parse_type)(void *, char *, int);
     int (*parse_inst_type)(void *, char *, int);
-    int (*inst_make)(void *, const char *, int, char * *, char * *, char *, int, int, int, int);
-    int (*inst_register_nested)(void *, const char *, int);
-    int (*container_vptr_type)(void *, const char *, int);
-    int (*container_iface_ptr)(void *, const char *);
-    int (*inst_subst_type)(void *, const char *, const char *, char *, int);
-    int (*container_elem_foreign)(void *, const char *, int);
-    int (*generic_instance)(void *, int, const char *, int, int);
-    int (*inst_inherent_method)(void *, const char *, const char *);
-    int (*inst_static_method)(void *, const char *, const char *);
-    int (*static_call_ahead)(void *);
     int (*container_index_check)(void *, int);
     int (*static_ctype)(void *, int, char *, int, int *, int);
     int (*ctype_expand)(void *, const char *, char *, int, int);
@@ -138,6 +128,23 @@ struct frontend_parse_ExprOps_vtbl {
 struct frontend_parse_ExprOps_iface {
     void *self;
     const struct frontend_parse_ExprOps_vtbl *vt;
+};
+
+struct frontend_parse_ExprInstantiate_vtbl {
+    int (*inst_make)(void *, const char *, int, char * *, char * *, char *, int, int, int, int);
+    int (*inst_register_nested)(void *, const char *, int);
+    int (*generic_instance)(void *, int, const char *, int, int);
+    int (*inst_inherent_method)(void *, const char *, const char *);
+    int (*inst_static_method)(void *, const char *, const char *);
+    int (*static_call_ahead)(void *);
+    int (*inst_subst_type)(void *, const char *, const char *, char *, int);
+    int (*container_elem_foreign)(void *, const char *, int);
+    int (*container_vptr_type)(void *, const char *, int);
+    int (*container_iface_ptr)(void *, const char *);
+};
+struct frontend_parse_ExprInstantiate_iface {
+    void *self;
+    const struct frontend_parse_ExprInstantiate_vtbl *vt;
 };
 
 struct frontend_parse_ExprClosure_vtbl {
@@ -338,6 +345,7 @@ struct frontend_parse_Expr {
     const struct frontend_parse_ExprRecvMut_vtbl *__frontend_parse_exprrecvmut_vptr;
     const struct frontend_parse_ExprCallCheck_vtbl *__frontend_parse_exprcallcheck_vptr;
     const struct frontend_parse_ExprClosure_vtbl *__frontend_parse_exprclosure_vptr;
+    const struct frontend_parse_ExprInstantiate_vtbl *__frontend_parse_exprinstantiate_vptr;
 };
 
 #endif

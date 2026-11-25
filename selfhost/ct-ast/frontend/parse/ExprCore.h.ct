@@ -31,52 +31,6 @@ pub trait ExprOps {
        the encoded instance tag to `out`. */
     int  parse_inst_type(char *out, int cap);
 
-    /* Phase 29: create (or reuse) the monomorphised row for `Name<c1, c2>` and
-       register its struct layout. `depth` bounds nested instantiation; `line` /
-       `col` are the first type argument's source position (0 when a nested
-       registration has no argument list of its own). */
-    int  inst_make(const char *tname, int nargs, char **args, char **cargs,
-                   char *enc, int enc_cap, int depth, int line, int col);
-
-    /* Phase 29: a substituted field spelling may itself name an instance
-       (`MapEntry<K, V>`); register it so the emitter can print its layout. */
-    int  inst_register_nested(const char *spell, int depth);
-
-    /* L29-13: 1 when this C type is a struct that carries a vptr (directly or
-       through a value field). Interface values (`struct X_iface`) are not
-       flagged: Phase 31 O1 stores them as a plain two-word copy. */
-    int  container_vptr_type(const char *ctype, int depth);
-
-    /* L31-1: 1 when this C type is an interface pointer (`struct X_iface *`).
-       There is no boxing path from a concrete value into an interface-pointer
-       slot, so such an element is refused and pointed at the value form. */
-    int  container_iface_ptr(const char *ctype);
-
-    /* Phase 31: replace the template's type parameters in `spell` with the
-       instance's concrete C arguments (`T` -> `struct Show_iface`). A spelling
-       that mentions no parameter passes through unchanged. */
-    int  inst_subst_type(const char *ibase, const char *spell, char *out, int cap);
-
-    /* L31-2 / Phase 33 O3: 1 when a container element (an interface value or an
-       owning instance) is declared in a unit other than the container template's
-       own. The emitter uses it to move the instance's helpers and methods to the
-       unit that named it. */
-    int  container_elem_foreign(const char *ctype, int container_tmpl);
-
-    /* Phase 26: register (or reuse) the instance of template `gfi` for the
-       concrete type spelling `targ`; returns its index in `sym->ginsts`. */
-    int  generic_instance(int gfi, const char *targ, int line, int col);
-
-    /* Phase 29: the method node `impl<T> Name<Args>` declares for the receiver
-       type `ibase` (a `struct <instance>` spelling), or -1. */
-    int  inst_inherent_method(const char *ibase, const char *fname);
-
-    /* P29-2: the receiverless (static) method of an instance, and the
-       lookahead that tells `Vec<int>::from(...)` from `Vec < 3`. */
-    int  inst_static_method(const char *ibase, const char *fname);
-
-    int  static_call_ahead(void);
-
     /* Phase 29 V29-4: a `Vec` / `Map` handle is a two-field struct in C, so the
        subscript and brace-initializer spellings C would reject (`struct Vec_int`
        is not an array, `{ "k": 1 }` is not an aggregate) are refused here with a
@@ -165,6 +119,55 @@ pub trait ExprOps {
     int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap,
                          int *form);
 }
+
+pub trait ExprInstantiate {
+    /* Phase 29: create (or reuse) the monomorphised row for `Name<c1, c2>` and
+       register its struct layout. `depth` bounds nested instantiation; `line` /
+       `col` are the first type argument's source position (0 when a nested
+       registration has no argument list of its own). */
+    int  inst_make(const char *tname, int nargs, char **args, char **cargs,
+                   char *enc, int enc_cap, int depth, int line, int col);
+
+    /* Phase 29: a substituted field spelling may itself name an instance
+       (`MapEntry<K, V>`); register it so the emitter can print its layout. */
+    int  inst_register_nested(const char *spell, int depth);
+
+    /* Phase 26: register (or reuse) the instance of template `gfi` for the
+       concrete type spelling `targ`; returns its index in `sym->ginsts`. */
+    int  generic_instance(int gfi, const char *targ, int line, int col);
+
+    /* Phase 29: the method node `impl<T> Name<Args>` declares for the receiver
+       type `ibase` (a `struct <instance>` spelling), or -1. */
+    int  inst_inherent_method(const char *ibase, const char *fname);
+
+    /* P29-2: the receiverless (static) method of an instance, and the
+       lookahead that tells `Vec<int>::from(...)` from `Vec < 3`. */
+    int  inst_static_method(const char *ibase, const char *fname);
+
+    int  static_call_ahead(void);
+
+    /* Phase 31: replace the template's type parameters in `spell` with the
+       instance's concrete C arguments (`T` -> `struct Show_iface`). A spelling
+       that mentions no parameter passes through unchanged. */
+    int  inst_subst_type(const char *ibase, const char *spell, char *out, int cap);
+
+    /* L31-2 / Phase 33 O3: 1 when a container element (an interface value or an
+       owning instance) is declared in a unit other than the container template's
+       own. The emitter uses it to move the instance's helpers and methods to the
+       unit that named it. */
+    int  container_elem_foreign(const char *ctype, int container_tmpl);
+
+    /* L29-13: 1 when this C type is a struct that carries a vptr (directly or
+       through a value field). Interface values (`struct X_iface`) are not
+       flagged: Phase 31 O1 stores them as a plain two-word copy. */
+    int  container_vptr_type(const char *ctype, int depth);
+
+    /* L31-1: 1 when this C type is an interface pointer (`struct X_iface *`).
+       There is no boxing path from a concrete value into an interface-pointer
+       slot, so such an element is refused and pointed at the value form. */
+    int  container_iface_ptr(const char *ctype);
+}
+
 
 pub trait ExprClosure {
     /* Phase 21 S4: closure actuals fill a `(fn, env)` pair and count as two
@@ -532,4 +535,4 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut, ExprCallCheck, ExprClosure;
+} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut, ExprCallCheck, ExprClosure, ExprInstantiate;

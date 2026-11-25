@@ -3192,7 +3192,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_foreach(void *self) 
                 }
             }
             if (aux == 2) {
-                if (_self->ex->__frontend_parse_exprops_vptr->inst_make(_self->ex, "MapEntry", 2, ins[inst].carg, ins[inst].ctype, enc, MAX_TEXT, 0, 0, 0) != 0) {
+                if (_self->ex->__frontend_parse_exprinstantiate_vptr->inst_make(_self->ex, "MapEntry", 2, ins[inst].carg, ins[inst].ctype, enc, MAX_TEXT, 0, 0, 0) != 0) {
                     return (-1);
                 }
                 snprintf(elem, sizeof(elem), "struct %s", enc);

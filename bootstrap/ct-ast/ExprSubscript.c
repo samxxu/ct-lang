@@ -207,7 +207,7 @@ static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method(
     char label[MAX_TEXT];
     char msg[MAX_TEXT];
     _self->__frontend_parse_exprsubscript_vptr->custom_index_label(_self, bty, label, sizeof(label));
-    m = _self->__frontend_parse_exprops_vptr->inst_inherent_method(_self, bty, name);
+    m = _self->__frontend_parse_exprinstantiate_vptr->inst_inherent_method(_self, bty, name);
     if (m == (-2)) {
         if (writable) {
             snprintf(msg, sizeof(msg), "type '%s' has no writable subscript: '%s' is private to its unit", label, name);

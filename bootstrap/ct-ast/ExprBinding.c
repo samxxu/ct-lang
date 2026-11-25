@@ -248,7 +248,7 @@ int frontend_parse_bind_conv_inherent(struct frontend_parse_Expr * self, const c
     if ((!frontend_parse_bind_conv_ibase(self, stype, ibase, sizeof(ibase), is_ptr))) {
         return (-1);
     }
-    m = self->__frontend_parse_exprops_vptr->inst_inherent_method(self, ibase, method);
+    m = self->__frontend_parse_exprinstantiate_vptr->inst_inherent_method(self, ibase, method);
     if (m == (-2)) {
         return (-2);
     }

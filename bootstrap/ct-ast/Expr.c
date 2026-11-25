@@ -24,6 +24,7 @@
 #include "ExprBinding.h"
 #include "ExprCallCheck.h"
 #include "ExprClosure.h"
+#include "ExprInstantiate.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -183,7 +184,6 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-static int expr_generic_param(struct frontend_parse_Expr *, const char *);
 static int expr_generic_token(struct frontend_parse_Expr *);
 int frontend_parse_expr_borrow_root(struct frontend_parse_Expr *, int);
 void frontend_parse_expr_view_bind(struct frontend_parse_Expr *, const char *, int);
@@ -222,7 +222,7 @@ static int ensure_arg_capacity(struct frontend_parse_Expr *, int);
 void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
 static char frontend_parse_g_expr_inst_override[160];
-static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable, .__frontend_parse_exprcallcheck_vptr = &frontend_parse_Expr_frontend_parse_ExprCallCheck_vtable, .__frontend_parse_exprclosure_vptr = &frontend_parse_Expr_frontend_parse_ExprClosure_vtable };
+static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable, .__frontend_parse_exprcallcheck_vptr = &frontend_parse_Expr_frontend_parse_ExprCallCheck_vtable, .__frontend_parse_exprclosure_vptr = &frontend_parse_Expr_frontend_parse_ExprClosure_vtable, .__frontend_parse_exprinstantiate_vptr = &frontend_parse_Expr_frontend_parse_ExprInstantiate_vtable };
 static int frontend_parse_Expr_frontend_parse_ExprOps_is_type_word(void *self, const char * w) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     (void)(_self);
@@ -246,93 +246,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_type_append(void *self, ch
     }
     (*n) += w;
     return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_generic_instance(void *self, int gfi, const char * targ, int line, int col) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char cname[MAX_TEXT];
-    char tmp[MAX_TEXT];
-    char msg[MAX_TEXT];
-    int i;
-    int k;
-    int ni;
-    int fi;
-    int suffix;
-    int taken;
-    int seq;
-    seq = 1;
-    for (i = 0; i < _self->sym->nginsts; i++) {
-        if (_self->sym->ginsts[i].owner != _self->cur_unit) {
-            continue;
-        }
-        if (((_self->sym->ginsts[i].func == gfi) && (strcmp(_self->sym->ginsts[i].targ, targ) == 0))) {
-            return i;
-        }
-        seq++;
-    }
-    if (_self->sym->__frontend_sym_symbolops_vptr->ensure_ginst_capacity(_self->sym, (_self->sym->nginsts + 1)) != 0) {
-        return (-1);
-    }
-    if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_capacity(_self->sym, (_self->sym->nfunc + 1)) != 0) {
-        snprintf(msg, sizeof(msg), "too many functions (limit %d, whole program)", MAX_FUNCS_MAX);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-    }
-    taken = 1;
-    for (suffix = 0; ((suffix <= 8) && taken); suffix++) {
-        if (suffix == 0) {
-            snprintf(cname, sizeof(cname), "%s__ct%d", _self->sym->funcs[gfi].cname, seq);
-        }
-        else {
-            snprintf(cname, sizeof(cname), "%s__ct%d_%d", _self->sym->funcs[gfi].cname, seq, suffix);
-        }
-        fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, cname);
-        taken = (fi >= 0);
-        for (i = 0; (taken && (i < _self->sym->nginsts)); i++) {
-            if (((_self->sym->ginsts[i].row == fi) && (_self->sym->ginsts[i].owner != _self->cur_unit))) {
-                taken = 0;
-            }
-        }
-    }
-    if (taken) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot name a generic instance uniquely");
-    }
-    ni = _self->sym->nfunc;
-    _self->sym->nfunc++;
-    memcpy((&_self->sym->funcs[ni]), (&_self->sym->funcs[gfi]), sizeof((*_self->sym->funcs)));
-    _self->sym->funcs[ni].ptype = 0;
-    _self->sym->funcs[ni].pdim = 0;
-    _self->sym->funcs[ni].pann = 0;
-    _self->sym->funcs[ni].pcap = 0;
-    if (_self->sym->funcs[gfi].nparams > 0) {
-        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_param_capacity(_self->sym, ni, _self->sym->funcs[gfi].nparams) != 0) {
-            return (-1);
-        }
-        memcpy(_self->sym->funcs[ni].ptype, _self->sym->funcs[gfi].ptype, ((size_t)(_self->sym->funcs[gfi].nparams) * MAX_TEXT));
-        memcpy(_self->sym->funcs[ni].pdim, _self->sym->funcs[gfi].pdim, ((size_t)(_self->sym->funcs[gfi].nparams) * MAX_TEXT));
-        memcpy(_self->sym->funcs[ni].pann, _self->sym->funcs[gfi].pann, (size_t)(_self->sym->funcs[gfi].nparams));
-    }
-    snprintf(_self->sym->funcs[ni].cname, MAX_TEXT, "%s", cname);
-    snprintf(_self->sym->funcs[ni].name, MAX_TEXT, "%s", cname);
-    _self->sym->funcs[ni].is_static = 1;
-    _self->sym->funcs[ni].is_pub = 0;
-    _self->sym->funcs[ni].ntparams = 0;
-    _self->sym->funcs[ni].tparam[0] = 0;
-    snprintf(_self->sym->funcs[ni].ret, MAX_TEXT, "%s", ((frontend_sym_ct_generic_subst(_self->sym->funcs[gfi].ret, _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) ? tmp : _self->sym->funcs[gfi].ret));
-    for (k = 0; k < _self->sym->funcs[gfi].nparams; k++) {
-        if (frontend_sym_ct_generic_subst((_self->sym->funcs[gfi].ptype + (k * MAX_TEXT)), _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) {
-            snprintf((_self->sym->funcs[ni].ptype + (k * MAX_TEXT)), MAX_TEXT, "%s", tmp);
-        }
-    }
-    i = _self->sym->nginsts;
-    _self->sym->ginsts[i].func = gfi;
-    _self->sym->ginsts[i].row = ni;
-    _self->sym->ginsts[i].owner = _self->cur_unit;
-    snprintf(_self->sym->ginsts[i].targ, MAX_TEXT, "%s", targ);
-    snprintf(_self->sym->ginsts[i].cname, MAX_TEXT, "%s", cname);
-    _self->sym->ginsts[i].line = line;
-    _self->sym->ginsts[i].col = col;
-    _self->sym->nginsts++;
-    return i;
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprOps_parse_type(void *self, char * out, int cap) {
@@ -1077,7 +990,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_inst_type(void *self
         int rl;
         char raw[MAX_TEXT];
         for (gi = 0; gi < nargs; gi++) {
-            if (expr_generic_param(_self, carg[gi])) {
+            if (frontend_parse_expr_generic_param(_self, carg[gi])) {
                 sym = 1;
             }
         }
@@ -1114,7 +1027,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_inst_type(void *self
     if (frontend_sym_ct_inst_encode(tname, nargs, carg, enc, MAX_TEXT) != 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the instantiated name exceeds 159 characters; shorten the template or its arguments");
     }
-    if (_self->__frontend_parse_exprops_vptr->inst_make(_self, tname, nargs, carg, ctype, enc, MAX_TEXT, 0, pline, pcol) != 0) {
+    if (_self->__frontend_parse_exprinstantiate_vptr->inst_make(_self, tname, nargs, carg, ctype, enc, MAX_TEXT, 0, pline, pcol) != 0) {
         return (-1);
     }
     snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "struct %s", enc);
@@ -1143,361 +1056,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_inst_type(void *self
         return (-1);
     }
     return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_container_vptr_type(void *self, const char * ctype, int depth) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char base[MAX_TEXT];
-    const char * p;
-    int si;
-    int fi;
-    if (depth > 8) {
-        return 0;
-    }
-    p = ctype;
-    while ((*p) == ' ') {
-        p++;
-    }
-    if (strncmp(p, "struct ", 7) == 0) {
-        p += 7;
-    }
-    snprintf(base, sizeof(base), "%s", p);
-    if (strchr(base, '*') != 0) {
-        return 0;
-    }
-    si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
-    if (si < 0) {
-        return 0;
-    }
-    if (_self->sym->structs[si].is_template) {
-        return 0;
-    }
-    if (_self->sym->structs[si].nuse > 0) {
-        return 1;
-    }
-    for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        if (_self->__frontend_parse_exprops_vptr->container_vptr_type(_self, _self->sym->structs[si].fields[fi].type, (depth + 1))) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_container_iface_ptr(void *self, const char * ctype) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char base[MAX_TEXT];
-    const char * p;
-    int n;
-    int has_ptr;
-    (void)(_self);
-    p = ctype;
-    while ((*p) == ' ') {
-        p++;
-    }
-    if (strncmp(p, "struct ", 7) == 0) {
-        p += 7;
-    }
-    snprintf(base, sizeof(base), "%s", p);
-    n = strlen(base);
-    has_ptr = 0;
-    while (((n > 0) && ((base[(n - 1)] == ' ') || (base[(n - 1)] == '*')))) {
-        if (base[(n - 1)] == '*') {
-            has_ptr = 1;
-        }
-        base[--n] = 0;
-    }
-    if ((!has_ptr)) {
-        return 0;
-    }
-    if (((n > 6) && (strcmp(((base + n) - 6), "_iface") == 0))) {
-        return 1;
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_inst_subst_type(void *self, const char * ibase, const char * spell, char * out, int cap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char base[MAX_TEXT];
-    char cur[MAX_TEXT];
-    char nxt[MAX_TEXT];
-    int inst;
-    int ti;
-    int tn;
-    int k;
-    struct frontend_sym_StructInst * ins;
-    struct frontend_sym_StructTmpl * tp;
-    (void)(_self);
-    snprintf(cur, sizeof(cur), "%s", spell);
-    if (strncmp(ibase, "struct ", 7) == 0) {
-        snprintf(base, sizeof(base), "%s", (ibase + 7));
-        inst = frontend_sym_ct_inst_find(base);
-        if (inst >= 0) {
-            ins = frontend_sym_ct_insts((&k));
-            ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
-            tp = frontend_sym_ct_tmpls((&tn));
-            if (((ti >= 0) && tp)) {
-                for (k = 0; k < tp[ti].ntparams; k++) {
-                    if (k >= ins[inst].nargs) {
-                        break;
-                    }
-                    if (((tp[ti].tparam[k] && ins[inst].ctype[k]) && (frontend_sym_ct_generic_subst(cur, tp[ti].tparam[k], ins[inst].ctype[k], nxt, MAX_TEXT) == 0))) {
-                        snprintf(cur, sizeof(cur), "%s", nxt);
-                    }
-                }
-            }
-        }
-    }
-    if (snprintf(out, (size_t)(cap), "%s", cur) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_container_elem_foreign(void *self, const char * ctype, int container_tmpl) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char base[MAX_TEXT];
-    char tr[MAX_TEXT];
-    int ip;
-    int ti;
-    int inst;
-    int k;
-    int ti2;
-    int tn;
-    int life;
-    struct frontend_sym_StructInst * ins;
-    struct frontend_sym_StructTmpl * tps;
-    tps = frontend_sym_ct_tmpls((&tn));
-    if (((!tps) || (container_tmpl < 0))) {
-        return 0;
-    }
-    if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, ctype, tr, sizeof(tr), (&ip))) {
-        ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tr);
-        if ((((ti >= 0) && _self->sym->traits[ti].path[0]) && (strcmp(_self->sym->traits[ti].path, tps[container_tmpl].path) != 0))) {
-            return 1;
-        }
-        return 0;
-    }
-    if (strncmp(ctype, "struct ", 7) != 0) {
-        return 0;
-    }
-    snprintf(base, sizeof(base), "%s", (ctype + 7));
-    inst = frontend_sym_ct_inst_find(base);
-    if (inst < 0) {
-        return 0;
-    }
-    ins = frontend_sym_ct_insts((&k));
-    ti2 = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
-    if (((ti2 < 0) || (tps[ti2].owner < 0))) {
-        return 0;
-    }
-    if (tps[ti2].owner == tps[container_tmpl].owner) {
-        return 0;
-    }
-    if (frontend_sym_ct_is_container_type(ctype)) {
-        return 1;
-    }
-    life = ((_self->__frontend_parse_exprops_vptr->inst_inherent_method(_self, ctype, "retain") >= 0) && (_self->__frontend_parse_exprops_vptr->inst_inherent_method(_self, ctype, "release") >= 0));
-    return life;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_inst_make(void *self, const char * tname, int nargs, char * * args, char * * cargs, char * enc, int enc_cap, int depth, int line, int col) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    struct frontend_sym_StructTmpl * tp;
-    int tn;
-    int ti2;
-    int k;
-    int si2;
-    int fi2;
-    int pi2;
-    int nt2;
-    int carried2;
-    char sub1[MAX_TEXT];
-    char sub2[MAX_TEXT];
-    ti2 = frontend_sym_ct_tmpl_find(tname);
-    tp = frontend_sym_ct_tmpls((&tn));
-    if (((!tp) || (ti2 < 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "internal: template row vanished");
-    }
-    nt2 = tp[ti2].ntparams;
-    if (nargs != nt2) {
-        char msg[MAX_TEXT * 2];
-        snprintf(msg, sizeof(msg), "generic struct '%s' takes %d type arguments, %d given", tname, nt2, nargs);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-    }
-    if (((strcmp(tname, "Box") == 0) && (nargs > 0))) {
-        const char * c0 = ((cargs && cargs[0]) ? cargs[0] : "");
-        if (((((((strcmp(c0, "struct Str") == 0) || (strcmp(c0, "Str") == 0)) || (strcmp(c0, "struct U16Str") == 0)) || (strcmp(c0, "U16Str") == 0)) || (strcmp(c0, "struct __ct_slice") == 0)) || (strstr(c0, "[]") != 0))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a borrowed view cannot be boxed; Box<T> owns its payload (use String for an owning string)");
-        }
-    }
-    if (((strcmp(tname, "Vec") == 0) || (strcmp(tname, "Map") == 0))) {
-        for (pi2 = 0; pi2 < nargs; pi2++) {
-            if (_self->__frontend_parse_exprops_vptr->container_vptr_type(_self, cargs[pi2], 0)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "interface and vptr-bearing values cannot be stored in a container");
-            }
-        }
-        for (pi2 = 0; pi2 < nargs; pi2++) {
-            if (_self->__frontend_parse_exprops_vptr->container_iface_ptr(_self, cargs[pi2])) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a container of interface pointers is not supported; store the interface value itself");
-            }
-        }
-    }
-    if (frontend_sym_ct_inst_encode(tname, nargs, args, enc, enc_cap) != 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the instantiated name exceeds 159 characters; shorten the template or its arguments");
-    }
-{
-        int cx = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, enc);
-        if (((cx >= 0) && (!_self->sym->structs[cx].is_inst))) {
-            char cmsg[MAX_TEXT * 2];
-            snprintf(cmsg, sizeof(cmsg), "the instance name '%s' collides with a declared struct", enc);
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, cmsg);
-        }
-    }
-    carried2 = ((tp[ti2].is_pub && (tp[ti2].owner == _self->cur_unit)) ? 1 : 0);
-    k = frontend_sym_ct_inst_add(enc, tname, nargs, args, cargs, _self->cur_unit, carried2, line, col);
-    if (k == (-2)) {
-        char msg[MAX_TEXT * 2];
-        snprintf(msg, sizeof(msg), "two type arguments encode to the same C name '%s'", enc);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-    }
-    if (k < 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
-    si2 = _self->sym->__frontend_sym_symbolops_vptr->add_struct_inst(_self->sym, enc);
-    if (si2 < 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-    }
-    if (_self->sym->structs[si2].nfields == 0) {
-        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, si2, tp[ti2].nfields) != 0) {
-            return (-1);
-        }
-        for (fi2 = 0; fi2 < tp[ti2].nfields; fi2++) {
-            snprintf(sub2, sizeof(sub2), "%s", tp[ti2].fields[fi2].type);
-            for (pi2 = 0; pi2 < nt2; pi2++) {
-                snprintf(sub1, sizeof(sub1), "%s", sub2);
-                if (frontend_sym_ct_generic_subst(sub1, tp[ti2].tparam[pi2], cargs[pi2], sub2, MAX_TEXT) != 0) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-                }
-            }
-            snprintf(_self->sym->structs[si2].fields[fi2].name, MAX_TEXT, "%s", tp[ti2].fields[fi2].name);
-            snprintf(_self->sym->structs[si2].fields[fi2].type, MAX_TEXT, "%s", sub2);
-            snprintf(_self->sym->structs[si2].fields[fi2].dims, MAX_TEXT, "%s", tp[ti2].fields[fi2].dims);
-            _self->sym->structs[si2].fields[fi2].is_bitfield = tp[ti2].fields[fi2].is_bitfield;
-            _self->sym->structs[si2].fields[fi2].is_pub = tp[ti2].fields[fi2].is_pub;
-            if (_self->__frontend_parse_exprops_vptr->inst_register_nested(_self, sub2, (depth + 1)) != 0) {
-                return (-1);
-            }
-        }
-        _self->sym->structs[si2].nfields = tp[ti2].nfields;
-        for (fi2 = 0; fi2 < tp[ti2].nuse; fi2++) {
-            snprintf(_self->sym->structs[si2].use[fi2], MAX_TEXT, "%s", tp[ti2].use[fi2]);
-        }
-        _self->sym->structs[si2].nuse = tp[ti2].nuse;
-    }
-    _self->sym->structs[si2].defined = 1;
-    _self->sym->structs[si2].is_pub = tp[ti2].is_pub;
-    _self->sym->structs[si2].declared_here = carried2;
-    _self->sym->structs[si2].uses_drop = tp[ti2].uses_drop;
-    _self->sym->structs[si2].uses_handback = tp[ti2].uses_handback;
-{
-        int ii3;
-        int nimpls3;
-        struct frontend_sym_StructImpl * im3 = frontend_sym_ct_impls((&nimpls3));
-        for (ii3 = 0; (im3 && (ii3 < nimpls3)); ii3++) {
-            if ((im3[ii3].use[0] && frontend_sym_ct_impl_matches(ii3, k))) {
-                int is_builtin = (((strcmp(im3[ii3].use, "Drop") == 0) || (strcmp(im3[ii3].use, "Handback") == 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, im3[ii3].use) < 0));
-                char cuse[MAX_TEXT];
-                if (is_builtin) {
-                    if (strcmp(im3[ii3].use, "Drop") == 0) {
-                        _self->sym->structs[si2].has_drop_impl = 1;
-                    }
-                }
-                else {
-                    if (_self->sym->__frontend_sym_symbolops_vptr->impl_use_concrete(_self->sym, im3[ii3].use, nargs, args, cargs, _self->cur_unit, cuse, sizeof(cuse)) != 0) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-                    }
-                    else {
-                        _self->sup->__frontend_parse_supportops_vptr->adopt_use(_self->sup, enc, cuse);
-                    }
-                }
-            }
-        }
-    }
-    if (_self->sup->__frontend_parse_supportops_vptr->add_type(_self->sup, enc, 1) != 0) {
-        return (-1);
-    }
-    if (((strcmp(tname, "Map") == 0) && (nt2 > 1))) {
-        char esub[MAX_TEXT * 2];
-        snprintf(esub, sizeof(esub), "struct MapEntry<%s, %s> *", cargs[0], cargs[1]);
-        if (_self->__frontend_parse_exprops_vptr->inst_register_nested(_self, esub, (depth + 1)) != 0) {
-            return (-1);
-        }
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_inst_register_nested(void *self, const char * spell, int depth) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char name[MAX_TEXT];
-    char tail[MAX_TEXT];
-    char enc[MAX_TEXT];
-    char * * args = 0;
-    char * * cargs = 0;
-    int acap = 0;
-    int ccap = 0;
-    int need;
-    int nargs;
-    int ti2;
-    int k;
-    int bad;
-    if (depth > 4) {
-        return 0;
-    }
-    need = frontend_sym_ct_inst_arg_count(spell);
-    if (need <= 0) {
-        return 0;
-    }
-    args = frontend_sym_ct_rows_reserve(args, acap, need, (&acap));
-    cargs = frontend_sym_ct_rows_reserve(cargs, ccap, need, (&ccap));
-    if (((((!args) || (acap < need)) || (!cargs)) || (ccap < need))) {
-        return 0;
-    }
-    if (frontend_sym_ct_inst_split(spell, name, (&nargs), args, acap, tail, sizeof(tail)) != 0) {
-        return 0;
-    }
-    if (((nargs <= 0) || (!args[0][0]))) {
-        return 0;
-    }
-    bad = 0;
-    for (k = 0; k < nargs; k++) {
-        if (expr_generic_param(_self, args[k])) {
-            bad = 1;
-        }
-    }
-    if (bad) {
-        return 0;
-    }
-    for (k = 0; k < nargs; k++) {
-        if (_self->__frontend_parse_exprops_vptr->inst_register_nested(_self, args[k], (depth + 1)) != 0) {
-            return (-1);
-        }
-    }
-    for (k = 0; k < nargs; k++) {
-        if (frontend_sym_ct_type_canon(args[k], cargs[k], MAX_TEXT) != 0) {
-            return 0;
-        }
-    }
-    ti2 = frontend_sym_ct_tmpl_find(name);
-    if (ti2 < 0) {
-        return 0;
-    }
-    if (frontend_sym_ct_inst_encode(name, nargs, cargs, enc, sizeof(enc)) != 0) {
-        return 0;
-    }
-    if (frontend_sym_ct_inst_find(enc) >= 0) {
-        return 0;
-    }
-    return _self->__frontend_parse_exprops_vptr->inst_make(_self, name, nargs, cargs, cargs, enc, sizeof(enc), depth, 0, 0);
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprOps_parse_array_dims(void *self, int n) {
@@ -2819,144 +2377,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
     return _self->__frontend_parse_exprops_vptr->parse_postfix(_self);
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprOps_inst_inherent_method(void *self, const char * ibase, const char * fname) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int ii;
-    int nimpls;
-    int inst;
-    int m;
-    int ni;
-    char base[MAX_TEXT];
-    struct frontend_sym_StructImpl * im;
-    if (strncmp(ibase, "struct ", 7) != 0) {
-        return (-1);
-    }
-    snprintf(base, sizeof(base), "%s", (ibase + 7));
-    inst = frontend_sym_ct_inst_find(base);
-    if (inst >= 0) {
-        int best = (-1);
-        int bestscore = (-1);
-        im = frontend_sym_ct_impls((&nimpls));
-        for (ii = 0; (im && (ii < nimpls)); ii++) {
-            int score;
-            if (im[ii].use[0]) {
-                continue;
-            }
-            if ((!frontend_sym_ct_impl_matches(ii, inst))) {
-                continue;
-            }
-            score = frontend_parse_inst_impl_score(ii);
-            for (m = _self->arena->nodes[im[ii].node].a; m >= 0; m = _self->arena->nodes[m].next) {
-                if (strcmp(_self->arena->nodes[m].text2, fname) == 0) {
-                    if (((_self->arena->nodes[m].d != 1) && (strcmp(_self->arena->nodes[im[ii].node].text3, _self->sup->mem->path) != 0))) {
-                        return (-2);
-                    }
-                    if (score > bestscore) {
-                        bestscore = score;
-                        best = m;
-                    }
-                    break;
-                }
-            }
-        }
-        if (best >= 0) {
-            return best;
-        }
-    }
-    for (ni = 0; ni < _self->arena->nnode; ni++) {
-        if (_self->arena->nodes[ni].kind != N_IMPL) {
-            continue;
-        }
-        if (_self->arena->nodes[ni].text2[0]) {
-            continue;
-        }
-        if (_self->arena->nodes[ni].aux == (-1)) {
-            continue;
-        }
-        if (strcmp(_self->arena->nodes[ni].text, ibase) != 0) {
-            continue;
-        }
-        for (m = _self->arena->nodes[ni].a; m >= 0; m = _self->arena->nodes[m].next) {
-            if (strcmp(_self->arena->nodes[m].text2, fname) == 0) {
-                if (((_self->arena->nodes[m].d != 1) && (strcmp(_self->arena->nodes[ni].text3, _self->sup->mem->path) != 0))) {
-                    return (-2);
-                }
-                return m;
-            }
-        }
-    }
-    return (-1);
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_inst_static_method(void *self, const char * ibase, const char * fname) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int ii;
-    int nimpls;
-    int inst;
-    int m;
-    int ni;
-    char base[MAX_TEXT];
-    struct frontend_sym_StructImpl * im;
-    if (strncmp(ibase, "struct ", 7) != 0) {
-        return (-1);
-    }
-    snprintf(base, sizeof(base), "%s", (ibase + 7));
-    inst = frontend_sym_ct_inst_find(base);
-    if (inst >= 0) {
-        int best = (-1);
-        int bestscore = (-1);
-        im = frontend_sym_ct_impls((&nimpls));
-        for (ii = 0; (im && (ii < nimpls)); ii++) {
-            int score;
-            if (im[ii].use[0]) {
-                continue;
-            }
-            if ((!frontend_sym_ct_impl_matches(ii, inst))) {
-                continue;
-            }
-            score = frontend_parse_inst_impl_score(ii);
-            for (m = _self->arena->nodes[im[ii].node].a; m >= 0; m = _self->arena->nodes[m].next) {
-                if ((_self->arena->nodes[m].c && (strcmp(_self->arena->nodes[m].text2, fname) == 0))) {
-                    if (((_self->arena->nodes[m].d != 1) && (strcmp(_self->arena->nodes[im[ii].node].text3, _self->sup->mem->path) != 0))) {
-                        return (-2);
-                    }
-                    if (score > bestscore) {
-                        bestscore = score;
-                        best = m;
-                    }
-                    break;
-                }
-            }
-        }
-        if (best >= 0) {
-            return best;
-        }
-    }
-    for (ni = 0; ni < _self->arena->nnode; ni++) {
-        if (_self->arena->nodes[ni].kind != N_IMPL) {
-            continue;
-        }
-        if (_self->arena->nodes[ni].text2[0]) {
-            continue;
-        }
-        if (_self->arena->nodes[ni].aux == (-1)) {
-            continue;
-        }
-        if (strcmp(_self->arena->nodes[ni].text, ibase) != 0) {
-            continue;
-        }
-        for (m = _self->arena->nodes[ni].a; m >= 0; m = _self->arena->nodes[m].next) {
-            if ((_self->arena->nodes[m].c && (strcmp(_self->arena->nodes[m].text2, fname) == 0))) {
-                if (((_self->arena->nodes[m].d != 1) && (strcmp(_self->arena->nodes[ni].text3, _self->sup->mem->path) != 0))) {
-                    return (-2);
-                }
-                return m;
-            }
-        }
-    }
-    return (-1);
-}
-
 static int frontend_parse_Expr_frontend_parse_ExprOps_ctype_expand(void *self, const char * in, char * out, int cap, int depth) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     char name[MAX_TEXT];
@@ -3249,117 +2669,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_brace_arg_ok(void *self, c
         return (-1);
     }
     return ((fs == as) ? 0 : 1);
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_static_call_ahead(void *self) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int sp;
-    int sbol;
-    int stok;
-    int sline;
-    int stokline;
-    int sstart;
-    int slstart;
-    int sfloat;
-    int strunc;
-    int depth;
-    int r;
-    long snum;
-    const char * stext_ptr;
-    int stext_len;
-    const char * ssuf_ptr;
-    int ssuf_len;
-    sp = _self->lex->pos;
-    sbol = _self->lex->bol;
-    stok = _self->lex->tok;
-    snum = _self->lex->toknum;
-    sline = _self->lex->line;
-    stokline = _self->lex->tokline;
-    sstart = _self->lex->tokstart;
-    slstart = _self->lex->lstart;
-    sfloat = _self->lex->tokfloat;
-    strunc = _self->lex->toktrunc;
-    stext_ptr = _self->lex->tokstr.ptr;
-    stext_len = _self->lex->tokstr.len;
-    ssuf_ptr = _self->lex->toksuffix.ptr;
-    ssuf_len = _self->lex->toksuffix.len;
-    depth = 0;
-    r = 0;
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<")))) {
-        _self->lex->pos = sp;
-        _self->lex->bol = sbol;
-        _self->lex->tok = stok;
-        _self->lex->toknum = snum;
-        _self->lex->line = sline;
-        _self->lex->tokline = stokline;
-        _self->lex->tokstart = sstart;
-        _self->lex->lstart = slstart;
-        _self->lex->tokfloat = sfloat;
-        _self->lex->toktrunc = strunc;
-        _self->lex->tokstr.ptr = stext_ptr;
-        _self->lex->tokstr.len = stext_len;
-        _self->lex->toksuffix.ptr = ssuf_ptr;
-        _self->lex->toksuffix.len = ssuf_len;
-        return 0;
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    depth = 1;
-    while (_self->lex->tok != T_EOF) {
-        if (_self->lex->tok == T_PUNCT) {
-            if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<")) {
-                depth++;
-            }
-            else {
-                if ((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">") && (depth > 0))) {
-                    depth--;
-                    if (depth == 0) {
-                        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                        break;
-                    }
-                }
-                else {
-                    if ((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">>") && (depth > 1))) {
-                        depth -= 2;
-                        if (depth == 0) {
-                            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                            break;
-                        }
-                    }
-                    else {
-                        if ((((((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ";") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "="))) {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    }
-    if ((((depth == 0) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::"))) {
-        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        if (_self->lex->tok == T_ID) {
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
-                r = 1;
-            }
-        }
-    }
-    _self->lex->pos = sp;
-    _self->lex->bol = sbol;
-    _self->lex->tok = stok;
-    _self->lex->toknum = snum;
-    _self->lex->line = sline;
-    _self->lex->tokline = stokline;
-    _self->lex->tokstart = sstart;
-    _self->lex->lstart = slstart;
-    _self->lex->tokfloat = sfloat;
-    _self->lex->toktrunc = strunc;
-    _self->lex->tokstr.ptr = stext_ptr;
-    _self->lex->tokstr.len = stext_len;
-    _self->lex->toksuffix.ptr = ssuf_ptr;
-    _self->lex->toksuffix.len = ssuf_len;
-    return r;
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) {
@@ -3896,7 +3205,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             snprintf(_self->arena->nodes[m].text, MAX_TEXT, "%s", _self->in_generic_bound);
                         }
                         else {
-                            if ((inm = _self->__frontend_parse_exprops_vptr->inst_inherent_method(_self, ibase, fname)) == (-2)) {
+                            if ((inm = _self->__frontend_parse_exprinstantiate_vptr->inst_inherent_method(_self, ibase, fname)) == (-2)) {
                                 return tool_diag_ct_sem_error(mline, mcol, "method is private to its unit", _self->sup->mem->path);
                             }
                             else {
@@ -3981,7 +3290,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                             char fty[MAX_TEXT];
                                             char ftr[MAX_TEXT];
                                             int fip = 0;
-                                            if (_self->__frontend_parse_exprops_vptr->inst_subst_type(_self, ibase, _self->arena->nodes[pi].text, fty, sizeof(fty))) {
+                                            if (_self->__frontend_parse_exprinstantiate_vptr->inst_subst_type(_self, ibase, _self->arena->nodes[pi].text, fty, sizeof(fty))) {
                                                 if (((((strcmp(fname, "push") == 0) || (strcmp(fname, "set") == 0)) || (strcmp(fname, "put") == 0)) && (_self->sup->__frontend_parse_supportops_vptr->str_store_warn(_self->sup, ai, fty, (((_self->arg_base + aidx) < _self->argcap) ? _self->arg_line[(_self->arg_base + aidx)] : mline), (((_self->arg_base + aidx) < _self->argcap) ? _self->arg_col[(_self->arg_base + aidx)] : mcol)) != 0))) {
                                                     return (-1);
                                                 }
@@ -4598,7 +3907,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             else {
                 _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
             }
-            if (((_self->in_generic && expr_generic_param(_self, tbuf)) && (!prev_tag))) {
+            if (((_self->in_generic && frontend_parse_expr_generic_param(_self, tbuf)) && (!prev_tag))) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type parameter cannot be used inside _Generic");
             }
             prev_tag = (((strcmp(tbuf, "struct") == 0) || (strcmp(tbuf, "union") == 0)) || (strcmp(tbuf, "enum") == 0));
@@ -4723,7 +4032,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a field name");
         }
         _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, fname, sizeof(fname));
-        if ((_self->in_generic && expr_generic_param(_self, tbuf))) {
+        if ((_self->in_generic && frontend_parse_expr_generic_param(_self, tbuf))) {
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
                 return (-1);
@@ -4840,7 +4149,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
     if (_self->lex->tok == T_ID) {
         id_line = _self->lex->tokline;
         id_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-        if ((((frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) || (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box") && (frontend_sym_ct_tmpl_find("Box") >= 0))) && _self->__frontend_parse_exprops_vptr->static_call_ahead(_self))) {
+        if ((((frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) || (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box") && (frontend_sym_ct_tmpl_find("Box") >= 0))) && _self->__frontend_parse_exprinstantiate_vptr->static_call_ahead(_self))) {
             char ibase[MAX_TEXT];
             char sm[MAX_TEXT];
             char smsg[MAX_TEXT + 64];
@@ -4866,7 +4175,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 return (-1);
             }
 {
-                int smi = _self->__frontend_parse_exprops_vptr->inst_static_method(_self, ibase, sm);
+                int smi = _self->__frontend_parse_exprinstantiate_vptr->inst_static_method(_self, ibase, sm);
                 if (smi == (-2)) {
                     return tool_diag_ct_sem_error(id_line, id_col, "static method is private to its unit", _self->sup->mem->path);
                 }
@@ -4961,7 +4270,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                                 return (-1);
                             }
 {
-                                int smi2 = _self->__frontend_parse_exprops_vptr->inst_static_method(_self, sibase, sm2);
+                                int smi2 = _self->__frontend_parse_exprinstantiate_vptr->inst_static_method(_self, sibase, sm2);
                                 if (smi2 == (-2)) {
                                     return tool_diag_ct_sem_error(id_line, id_col, "static method is private to its unit", _self->sup->mem->path);
                                 }
@@ -5086,7 +4395,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         if (((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "="))) && (view_use(_self, _self->arena->nodes[n].text2, id_line, id_col) != 0))) {
             return (-1);
         }
-        if ((_self->in_generic && expr_generic_param(_self, _self->arena->nodes[n].text2))) {
+        if ((_self->in_generic && frontend_parse_expr_generic_param(_self, _self->arena->nodes[n].text2))) {
             char vmsg[MAX_TEXT + 64];
             snprintf(vmsg, sizeof(vmsg), "type parameter '%s' cannot be used as a value", _self->arena->nodes[n].text2);
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, vmsg);
@@ -5112,7 +4421,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '>' after the generic type argument");
                 }
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                gi = _self->__frontend_parse_exprops_vptr->generic_instance(_self, gfi, targ, id_line, id_col);
+                gi = _self->__frontend_parse_exprinstantiate_vptr->generic_instance(_self, gfi, targ, id_line, id_col);
                 if (gi < 0) {
                     return (-1);
                 }
@@ -6272,15 +5581,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_args(void *self) {
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable = {
     .is_type_word = frontend_parse_Expr_frontend_parse_ExprOps_is_type_word,
     .type_append = frontend_parse_Expr_frontend_parse_ExprOps_type_append,
-    .generic_instance = frontend_parse_Expr_frontend_parse_ExprOps_generic_instance,
     .parse_type = frontend_parse_Expr_frontend_parse_ExprOps_parse_type,
     .parse_inst_type = frontend_parse_Expr_frontend_parse_ExprOps_parse_inst_type,
-    .container_vptr_type = frontend_parse_Expr_frontend_parse_ExprOps_container_vptr_type,
-    .container_iface_ptr = frontend_parse_Expr_frontend_parse_ExprOps_container_iface_ptr,
-    .inst_subst_type = frontend_parse_Expr_frontend_parse_ExprOps_inst_subst_type,
-    .container_elem_foreign = frontend_parse_Expr_frontend_parse_ExprOps_container_elem_foreign,
-    .inst_make = frontend_parse_Expr_frontend_parse_ExprOps_inst_make,
-    .inst_register_nested = frontend_parse_Expr_frontend_parse_ExprOps_inst_register_nested,
     .parse_array_dims = frontend_parse_Expr_frontend_parse_ExprOps_parse_array_dims,
     .tok_is_type_name = frontend_parse_Expr_frontend_parse_ExprOps_tok_is_type_name,
     .next_is_type_name = frontend_parse_Expr_frontend_parse_ExprOps_next_is_type_name,
@@ -6299,8 +5601,6 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .parse_add = frontend_parse_Expr_frontend_parse_ExprOps_parse_add,
     .parse_mul = frontend_parse_Expr_frontend_parse_ExprOps_parse_mul,
     .parse_unary = frontend_parse_Expr_frontend_parse_ExprOps_parse_unary,
-    .inst_inherent_method = frontend_parse_Expr_frontend_parse_ExprOps_inst_inherent_method,
-    .inst_static_method = frontend_parse_Expr_frontend_parse_ExprOps_inst_static_method,
     .ctype_expand = frontend_parse_Expr_frontend_parse_ExprOps_ctype_expand,
     .fnptr_ret = frontend_parse_Expr_frontend_parse_ExprOps_fnptr_ret,
     .peel_ptr = frontend_parse_Expr_frontend_parse_ExprOps_peel_ptr,
@@ -6312,25 +5612,12 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .container_write_check = frontend_parse_Expr_frontend_parse_ExprOps_container_write_check,
     .container_addr_check = frontend_parse_Expr_frontend_parse_ExprOps_container_addr_check,
     .brace_arg_ok = frontend_parse_Expr_frontend_parse_ExprOps_brace_arg_ok,
-    .static_call_ahead = frontend_parse_Expr_frontend_parse_ExprOps_static_call_ahead,
     .parse_postfix = frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix,
     .parse_primary = frontend_parse_Expr_frontend_parse_ExprOps_parse_primary,
     .parse_qual_path = frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path,
     .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args
 };
 
-static int expr_generic_param(struct frontend_parse_Expr * self, const char * name) {
-    int i;
-    if ((((!self->in_generic_tparam) || (!name)) || (!name[0]))) {
-        return 0;
-    }
-    for (i = 0; i < self->in_generic_ntparam; i++) {
-        if (((self->in_generic_tparam[i] && self->in_generic_tparam[i][0]) && (strcmp(name, self->in_generic_tparam[i]) == 0))) {
-            return 1;
-        }
-    }
-    return 0;
-}
 static int expr_generic_token(struct frontend_parse_Expr * self) {
     int i;
     if ((!self->in_generic_tparam)) {
@@ -6956,7 +6243,7 @@ static int ctype_mcall(struct frontend_parse_Expr * self, int n, char * out, int
     (void)(array_depth);
     (void)(depth);
     if (((self->arena->nodes[n].aux == 9) || (self->arena->nodes[n].aux == 10))) {
-        i = self->__frontend_parse_exprops_vptr->inst_inherent_method(self, self->arena->nodes[n].text, self->arena->nodes[n].text2);
+        i = self->__frontend_parse_exprinstantiate_vptr->inst_inherent_method(self, self->arena->nodes[n].text, self->arena->nodes[n].text2);
     }
     else {
         i = (-1);
@@ -6972,7 +6259,7 @@ static int ctype_mcall(struct frontend_parse_Expr * self, int n, char * out, int
             snprintf(tmp2, sizeof(tmp2), "struct %s", ib);
             snprintf(ib, sizeof(ib), "%s", tmp2);
         }
-        if (self->__frontend_parse_exprops_vptr->inst_subst_type(self, ib, self->arena->nodes[i].text, rs, sizeof(rs))) {
+        if (self->__frontend_parse_exprinstantiate_vptr->inst_subst_type(self, ib, self->arena->nodes[i].text, rs, sizeof(rs))) {
             if (snprintf(out, (size_t)(cap), "%s", rs) >= cap) {
                 return 0;
             }
