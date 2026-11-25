@@ -92,7 +92,7 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 int tool_pkg_pkg_index_refresh(int, char * *, const char *, const char *);
-int tool_pkg_ct_pkg_lock_roots(const char *, int, char * *, int *, int *, char * *, int *, int *);
+int tool_pkg_ct_pkg_lock_roots(const char *, int, char * * *, int *, int *, char * * *, int *, int *);
 int tool_pkg_ct_pkg_get(int, char * *, const char *, const char *);
 int tool_pkg_ct_pkg_install(int, char * *, const char *, const char *);
 int tool_pkg_ct_pkg_update(int, char * *, const char *, const char *);

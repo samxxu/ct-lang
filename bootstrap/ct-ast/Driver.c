@@ -292,8 +292,8 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     }
     if (((argc > 1) && (strcmp(argv[1], "build") == 0))) {
         _self->m->types_level = 2;
-        char * roots;
-        char * notes;
+        char * * roots;
+        char * * notes;
         char * bargv[256];
         int nroots;
         int nnotes;
@@ -326,7 +326,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
             return 1;
         }
         for (ai = 0; ai < nnotes; ai++) {
-            fprintf(stderr, "ctc: note: %s\n", (notes + ((size_t)(ai) * 512)));
+            fprintf(stderr, "ctc: note: %s\n", notes[ai]);
         }
         bi = 0;
         bargv[bi++] = "build";
@@ -380,7 +380,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
                 return 1;
             }
             bargv[bi++] = "-I";
-            bargv[bi++] = (roots + ((size_t)(ai) * 512));
+            bargv[bi++] = roots[ai];
         }
         return _self->m->__frontend_module_moduleops_vptr->build_main(_self->m, bi, bargv);
     }

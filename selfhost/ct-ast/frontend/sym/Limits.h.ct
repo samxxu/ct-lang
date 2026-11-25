@@ -84,7 +84,6 @@ pub struct Limits {
 #define MAX_PKG_DEPS                 16
 #define MAX_PKG_DEPS_MAX             65536
 #define MAX_PKG_DEPTH                8
-#define MAX_PKG_PATH                 512
 #define MAX_RAW_INIT                 4096
 #define MAX_RAW_INIT_MAX             65536
 #define MAX_SCOPE                    256

@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10965 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=61409 io_cap=1024
+     emitted_before=48223 emitted_after=61465 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -50,6 +50,9 @@
      (S1a-0 C2j 后复测：manifest 的 dep 行改 `struct DepList`（每行一条精确字符串，
       递归安全），`remember_dep` 的重复行比较按 spec 全长；只改 Pkg.h.ct，
       Emitter.h.ct 仍不变，发射 C 61335 -> 61409，切片清单仍为 76)
+     (S1a-0 C2k 后复测：`MAX_PKG_PATH` 退场，store / 锁行 / 索引 / 锁根路径
+      改精确自有字符串，落在 Pkg.h.ct 与 Driver.h.ct；Emitter.h.ct 仍不变，
+      发射 C 61409 -> 61465，切片清单仍为 76)
 -->
 
 ## 1 切片清单
