@@ -51,5 +51,22 @@ run_case()
 } >"$w/calls.ct"
 run_case calls "$w/calls.ct" 0 || fail=1
 
+# MAX_LABELS: 100 labels and 100 gotos in one function (old cap 64 each).
+{
+    echo 'int main(void)'
+    echo '{'
+    echo '    int x = 0;'
+    echo '    goto L0;'
+    i=100
+    echo "L$i: return x == 100 ? 0 : 1;"
+    i=0
+    while [ "$i" -lt 100 ]; do
+        echo "L$i: x++; goto L$((i + 1));"
+        i=$((i + 1))
+    done
+} >"$w/labels.ct"
+echo '}' >>"$w/labels.ct"
+run_case labels "$w/labels.ct" 0 || fail=1
+
 [ "$fail" -eq 0 ] || exit 1
 echo "OK S1a-0 cap growth"
