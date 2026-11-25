@@ -28,6 +28,7 @@
 #include "StmtLoop.h"
 #include "StmtSwitch.h"
 #include "StmtControl.h"
+#include "StmtUninit.h"
 
 
 struct ct_buf;

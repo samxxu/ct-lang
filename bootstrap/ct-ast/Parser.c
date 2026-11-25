@@ -1605,7 +1605,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     _self->arena->nodes[f].a = params;
     _self->arena->nodes[f].b = b;
     _self->arena->nodes[f].c = _self->variadic;
-    if (_self->st->__frontend_parse_stmtops_vptr->uninit_check(_self->st, b, func_line) != 0) {
+    if (_self->st->__frontend_parse_stmtuninit_vptr->uninit_check(_self->st, b, func_line) != 0) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }

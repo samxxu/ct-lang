@@ -39,6 +39,7 @@ import frontend::parse::StmtMatch;
 import frontend::parse::StmtLoop;
 import frontend::parse::StmtSwitch;
 import frontend::parse::StmtControl;
+import frontend::parse::StmtUninit;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -1159,157 +1160,8 @@ impl StmtOps for Stmt {
         return look;
     }
 
-    /* PH-71-R1: the base variable of a `delete` expression (`r`, `p->next`). */
-    int del_base(int n, char *out, int cap)
-    {
-        int k;
-
-        if (n < 0) return -1;
-        k = self->arena->nodes[n].kind;
-        if (k == N_VAR) {
-            snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text2);
-            return 0;
-        }
-        if (k == N_MEMBER || k == N_ARROW || k == N_INDEX || k == N_DEREF)
-            return self->del_base(self->arena->nodes[n].a, out, cap);
-        return -1;
-    }
-
-    /* 1 = this name was already deleted in the function (double release). */
-    int del_take(const char *name)
-    {
-        int i;
-
-        for (i = 0; i < self->ndel; i++)
-            if (strcmp(self->del_names[i], name) == 0) return 1;
-        if (self->ndel < 64) {
-            snprintf(self->del_names[self->ndel], 160, "%s", name);
-            self->ndel = self->ndel + 1;
-        }
-        return 0;
-    }
-
-    int u_reset(void)
-    {
-        self->nu = 0;
-        self->na = 0;
-        self->nr = 0;
-        self->nx = 0;
-        return 0;
-    }
-
-    /* which: 0 decl, 1 assigned, 2 read, 3 address-taken */
-    int u_add(int which, const char *s)
-    {
-        char *names;
-        int *count;
-        int i;
-
-        if (which == 0) { names = self->u_decl[0]; count = &self->nu; }
-        else if (which == 1) { names = self->u_asg[0]; count = &self->na; }
-        else if (which == 2) { names = self->u_rd[0]; count = &self->nr; }
-        else { names = self->u_addr[0]; count = &self->nx; }
-        if (!s || !s[0]) return 0;
-        for (i = 0; i < *count; i++)
-            if (strcmp(names + i * 160, s) == 0) return 0;
-        if (*count < 48) {
-            snprintf(names + (*count) * 160, 160, "%s", s);
-            *count = *count + 1;
-        }
-        return 0;
-    }
-
     /* An assignment target (possibly `a.b`, `p->c`, `v[i]`) counts as a
        definition of the base variable. */
-    int u_mark_lvalue(int n)
-    {
-        if (n < 0) return 0;
-        if (self->arena->nodes[n].kind == N_VAR) {
-            self->u_add(1, self->arena->nodes[n].text2);
-            return 0;
-        }
-        if (self->arena->nodes[n].kind == N_ADDR)
-            return self->u_mark_lvalue(self->arena->nodes[n].a);
-        if (self->arena->nodes[n].kind == N_MEMBER
-            || self->arena->nodes[n].kind == N_ARROW
-            || self->arena->nodes[n].kind == N_INDEX
-            || self->arena->nodes[n].kind == N_DEREF)
-            return self->u_mark_lvalue(self->arena->nodes[n].a);
-        return 0;
-    }
-
-    int u_scan(int n)
-    {
-        int k;
-
-        if (n < 0) return 0;
-        k = self->arena->nodes[n].kind;
-        if (k == N_DECL) {
-            if (self->arena->nodes[n].a < 0) {
-                self->u_add(0, self->arena->nodes[n].text2);
-                self->u_dline[self->nu - 1] = self->arena->nodes[n].line;
-            }
-            self->u_scan(self->arena->nodes[n].a);
-            return self->u_scan(self->arena->nodes[n].next);
-        }
-        if (k == N_ASSIGN) {
-            self->u_mark_lvalue(self->arena->nodes[n].a);
-            self->u_scan(self->arena->nodes[n].b);
-            return self->u_scan(self->arena->nodes[n].next);
-        }
-        if (k == N_POST) {
-            self->u_mark_lvalue(self->arena->nodes[n].a);
-            self->u_scan(self->arena->nodes[n].b);
-            return self->u_scan(self->arena->nodes[n].next);
-        }
-        if (k == N_ADDR) {
-            if (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)
-                self->u_add(3, self->arena->nodes[self->arena->nodes[n].a].text2);
-            self->u_scan(self->arena->nodes[n].a);
-            return self->u_scan(self->arena->nodes[n].next);
-        }
-        if (k == N_VAR) {
-            self->u_add(2, self->arena->nodes[n].text2);
-            return self->u_scan(self->arena->nodes[n].next);
-        }
-        if (k == N_MEMBER || k == N_ARROW || k == N_INDEX || k == N_DEREF) {
-            /* A member/subscript access may write through the base (e.g.
-               `strcpy(c.name, ...)`), so treat the base as defined. */
-            self->u_mark_lvalue(self->arena->nodes[n].a);
-            self->u_scan(self->arena->nodes[n].b);
-            self->u_scan(self->arena->nodes[n].c);
-            return self->u_scan(self->arena->nodes[n].next);
-        }
-        if (self->u_scan(self->arena->nodes[n].a)) return 1;
-        if (self->u_scan(self->arena->nodes[n].b)) return 1;
-        if (self->u_scan(self->arena->nodes[n].c)) return 1;
-        if (self->u_scan(self->arena->nodes[n].d)) return 1;
-        return self->u_scan(self->arena->nodes[n].next);
-    }
-
-    int uninit_check(int body, int line)
-    {
-        int i;
-
-        if (!self->ex->check_mode || *self->ex->check_mode != 2) return 0;
-        if (body < 0) return 0;
-        self->u_scan(body);
-        for (i = 0; i < self->nu; i++) {
-            int j, seen = 0, defd = 0;
-            for (j = 0; j < self->nr; j++)
-                if (strcmp(self->u_rd[j], self->u_decl[i]) == 0) { seen = 1; break; }
-            if (!seen) continue;
-            for (j = 0; j < self->na; j++)
-                if (strcmp(self->u_asg[j], self->u_decl[i]) == 0) { defd = 1; break; }
-            for (j = 0; j < self->nx; j++)
-                if (strcmp(self->u_addr[j], self->u_decl[i]) == 0) { defd = 1; break; }
-            if (defd) continue;
-            return tool::diag::ct_sem_error(line, 0,
-                "read of uninitialized variable", self->mem->path);
-        }
-        return 0;
-    }
-
     /* PH-70-R1: a small structured control-flow judgement. A statement
        `terminates` when control cannot reach the statement after it: a jump,
        a block whose last reachable statement terminates, or an if/else whose

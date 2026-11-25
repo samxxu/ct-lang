@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10966 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=64590 io_cap=1024
+     emitted_before=48223 emitted_after=64772 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -119,6 +119,10 @@
      (v1-PH-2 S1a-1 C4 后复测：`StmtOps` 的 5 个控制流方法拆成
       `StmtControl` trait，方法体搬入 `frontend/parse/StmtControl.h.ct`，
       Emitter.h.ct 不变（10966），发射 C 64409 -> 64590，切片清单仍为 76)
+     (v1-PH-2 S1a-1 C5 后复测：`StmtOps` 的 7 个未初始化跟踪方法拆成
+      `StmtUninit` trait，方法体搬入 `frontend/parse/StmtUninit.h.ct`，
+      Emitter.h.ct 不变（10966），发射 C 64590 -> 64772，切片清单仍为 76；
+      Phase C 完成，StmtOps 只留 8 个文法方法)
 -->
 
 ## 1 切片清单

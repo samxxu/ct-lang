@@ -1,0 +1,271 @@
+/*
+ * StmtUninit.h.ct - the uninitialised-variable tracking (SH-94 S1a-1, pure move out of Stmt.h.ct).
+ *
+ * The method bodies are byte-identical to the ones Stmt.h.ct held; the
+ * `Stmt` type and every trait declaration live in StmtCore.h.ct, so this unit
+ * imports Core instead of the host and the import graph stays acyclic.
+ * Stmt.h.ct imports this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+import frontend::sym::SymbolsTypeText;
+import runtime::arena::Arena;
+import runtime::arena::Arena::Node as Node;
+import frontend::lex::Lexer;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::sym::Symbols::StructInst as StructInst;
+import backend::mem::Memory;
+import frontend::parse::ParseSupport;
+import frontend::parse::Expr;
+import tool::diag::Diag;
+import frontend::parse::StmtRangeText;
+import frontend::parse::StmtRangeScan;
+import frontend::parse::StmtScope;
+import frontend::parse::StmtCore;
+import frontend::parse::StmtDefer;
+import frontend::type::TypeCheck;
+import frontend::parse::StmtMatch;
+import frontend::parse::StmtLoop;
+import frontend::parse::StmtSwitch;
+import frontend::parse::StmtControl;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_TEXT 160
+#define MAX_ADT_FIELDS_MAX 65536
+#define MAX_LABELS 64
+#define MAX_LABELS_MAX 65536
+#define B_COMMA 19
+#define B_ADD 1
+#define B_SUB 2
+#define B_MUL 3
+#define B_DIV 4
+#define B_MOD 11
+#define B_SHL 17
+#define B_SHR 18
+#define B_BAND 15
+#define B_BOR 16
+#define B_XOR 14
+#define N_INDEX 26
+#define N_CALL 7
+#define N_MCALL 30
+#define N_ARROW 25
+#define N_ASSIGN 13
+#define N_BIN 11
+#define N_BLOCK 4
+#define N_CLOSURE 59
+#define N_BREAK 38
+#define N_CASE 43
+#define N_CONT 39
+#define N_DECL 12
+#define N_DECLS 40
+#define N_DELETE 41
+#define N_DEREF 28
+#define N_DOWHILE 44
+#define N_EMPTY 52
+#define N_SASSERT 55
+#define N_EXPR 6
+#define N_FOR 16
+#define N_GOTO 50
+#define N_IF 14
+#define N_INIT_RANGE 61
+#define N_MATSEQ 73
+#define N_INIT_BRACE 65
+#define N_INIT_ITEM 66
+#define N_DEFER 69
+#define N_DEFER_RUN 70
+#define N_INIT_MBRACE 67
+#define N_LABEL 49
+#define N_LOOP 60
+#define N_FOREACH 62
+#define N_MEMBER 24
+#define N_NUM 8
+#define N_STR 9
+#define N_UNARY 17
+#define N_POST 18
+#define N_PRE 57
+#define N_ADDR 27
+#define N_RAW 31
+#define N_RET 5
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET   76
+#define N_SWITCH 42
+#define N_MATCH 78
+#define N_ARM 79
+#define N_BIND 80
+#define N_VAR 10
+#define N_WHILE 15
+#define N_INTO 63
+#define N_INTO_SELF 64
+#define T_EOF 0
+#define T_ID 1
+#define T_NUM 2
+#define T_PUNCT 4
+#define T_STR 3
+#define CT_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct StmtUninit {
+    int unused;
+}
+
+
+impl StmtUninit for Stmt {
+    /* PH-71-R1: the base variable of a `delete` expression (`r`, `p->next`). */
+    int del_base(int n, char *out, int cap)
+    {
+        int k;
+
+        if (n < 0) return -1;
+        k = self->arena->nodes[n].kind;
+        if (k == N_VAR) {
+            snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text2);
+            return 0;
+        }
+        if (k == N_MEMBER || k == N_ARROW || k == N_INDEX || k == N_DEREF)
+            return self->del_base(self->arena->nodes[n].a, out, cap);
+        return -1;
+    }
+
+    /* 1 = this name was already deleted in the function (double release). */
+    int del_take(const char *name)
+    {
+        int i;
+
+        for (i = 0; i < self->ndel; i++)
+            if (strcmp(self->del_names[i], name) == 0) return 1;
+        if (self->ndel < 64) {
+            snprintf(self->del_names[self->ndel], 160, "%s", name);
+            self->ndel = self->ndel + 1;
+        }
+        return 0;
+    }
+
+    int u_reset(void)
+    {
+        self->nu = 0;
+        self->na = 0;
+        self->nr = 0;
+        self->nx = 0;
+        return 0;
+    }
+
+    /* which: 0 decl, 1 assigned, 2 read, 3 address-taken */
+    int u_add(int which, const char *s)
+    {
+        char *names;
+        int *count;
+        int i;
+
+        if (which == 0) { names = self->u_decl[0]; count = &self->nu; }
+        else if (which == 1) { names = self->u_asg[0]; count = &self->na; }
+        else if (which == 2) { names = self->u_rd[0]; count = &self->nr; }
+        else { names = self->u_addr[0]; count = &self->nx; }
+        if (!s || !s[0]) return 0;
+        for (i = 0; i < *count; i++)
+            if (strcmp(names + i * 160, s) == 0) return 0;
+        if (*count < 48) {
+            snprintf(names + (*count) * 160, 160, "%s", s);
+            *count = *count + 1;
+        }
+        return 0;
+    }
+
+    int u_mark_lvalue(int n)
+    {
+        if (n < 0) return 0;
+        if (self->arena->nodes[n].kind == N_VAR) {
+            self->u_add(1, self->arena->nodes[n].text2);
+            return 0;
+        }
+        if (self->arena->nodes[n].kind == N_ADDR)
+            return self->u_mark_lvalue(self->arena->nodes[n].a);
+        if (self->arena->nodes[n].kind == N_MEMBER
+            || self->arena->nodes[n].kind == N_ARROW
+            || self->arena->nodes[n].kind == N_INDEX
+            || self->arena->nodes[n].kind == N_DEREF)
+            return self->u_mark_lvalue(self->arena->nodes[n].a);
+        return 0;
+    }
+
+    int u_scan(int n)
+    {
+        int k;
+
+        if (n < 0) return 0;
+        k = self->arena->nodes[n].kind;
+        if (k == N_DECL) {
+            if (self->arena->nodes[n].a < 0) {
+                self->u_add(0, self->arena->nodes[n].text2);
+                self->u_dline[self->nu - 1] = self->arena->nodes[n].line;
+            }
+            self->u_scan(self->arena->nodes[n].a);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_ASSIGN) {
+            self->u_mark_lvalue(self->arena->nodes[n].a);
+            self->u_scan(self->arena->nodes[n].b);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_POST) {
+            self->u_mark_lvalue(self->arena->nodes[n].a);
+            self->u_scan(self->arena->nodes[n].b);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_ADDR) {
+            if (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)
+                self->u_add(3, self->arena->nodes[self->arena->nodes[n].a].text2);
+            self->u_scan(self->arena->nodes[n].a);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_VAR) {
+            self->u_add(2, self->arena->nodes[n].text2);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (k == N_MEMBER || k == N_ARROW || k == N_INDEX || k == N_DEREF) {
+            /* A member/subscript access may write through the base (e.g.
+               `strcpy(c.name, ...)`), so treat the base as defined. */
+            self->u_mark_lvalue(self->arena->nodes[n].a);
+            self->u_scan(self->arena->nodes[n].b);
+            self->u_scan(self->arena->nodes[n].c);
+            return self->u_scan(self->arena->nodes[n].next);
+        }
+        if (self->u_scan(self->arena->nodes[n].a)) return 1;
+        if (self->u_scan(self->arena->nodes[n].b)) return 1;
+        if (self->u_scan(self->arena->nodes[n].c)) return 1;
+        if (self->u_scan(self->arena->nodes[n].d)) return 1;
+        return self->u_scan(self->arena->nodes[n].next);
+    }
+
+    int uninit_check(int body, int line)
+    {
+        int i;
+
+        if (!self->ex->check_mode || *self->ex->check_mode != 2) return 0;
+        if (body < 0) return 0;
+        self->u_scan(body);
+        for (i = 0; i < self->nu; i++) {
+            int j, seen = 0, defd = 0;
+            for (j = 0; j < self->nr; j++)
+                if (strcmp(self->u_rd[j], self->u_decl[i]) == 0) { seen = 1; break; }
+            if (!seen) continue;
+            for (j = 0; j < self->na; j++)
+                if (strcmp(self->u_asg[j], self->u_decl[i]) == 0) { defd = 1; break; }
+            for (j = 0; j < self->nx; j++)
+                if (strcmp(self->u_addr[j], self->u_decl[i]) == 0) { defd = 1; break; }
+            if (defd) continue;
+            return tool::diag::ct_sem_error(line, 0,
+                "read of uninitialized variable", self->mem->path);
+        }
+        return 0;
+    }
+}

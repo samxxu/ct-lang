@@ -90,13 +90,6 @@ struct tool_driver_Driver;
 struct frontend_parse_StmtOps_vtbl {
     int (*is_decl_start)(void *);
     int (*parse_block)(void *);
-    int (*u_reset)(void *);
-    int (*u_add)(void *, int, const char *);
-    int (*u_mark_lvalue)(void *, int);
-    int (*u_scan)(void *, int);
-    int (*uninit_check)(void *, int, int);
-    int (*del_base)(void *, int, char *, int);
-    int (*del_take)(void *, const char *);
     int (*parse_stmt)(void *);
     int (*parse_branch)(void *);
     int (*parse_decl_node)(void *);
@@ -107,6 +100,20 @@ struct frontend_parse_StmtOps_vtbl {
 struct frontend_parse_StmtOps_iface {
     void *self;
     const struct frontend_parse_StmtOps_vtbl *vt;
+};
+
+struct frontend_parse_StmtUninit_vtbl {
+    int (*u_reset)(void *);
+    int (*u_add)(void *, int, const char *);
+    int (*u_mark_lvalue)(void *, int);
+    int (*u_scan)(void *, int);
+    int (*uninit_check)(void *, int, int);
+    int (*del_base)(void *, int, char *, int);
+    int (*del_take)(void *, const char *);
+};
+struct frontend_parse_StmtUninit_iface {
+    void *self;
+    const struct frontend_parse_StmtUninit_vtbl *vt;
 };
 
 struct frontend_parse_StmtControl_vtbl {
@@ -251,6 +258,7 @@ struct frontend_parse_Stmt {
     const struct frontend_parse_StmtLoop_vtbl *__frontend_parse_stmtloop_vptr;
     const struct frontend_parse_StmtSwitch_vtbl *__frontend_parse_stmtswitch_vptr;
     const struct frontend_parse_StmtControl_vtbl *__frontend_parse_stmtcontrol_vptr;
+    const struct frontend_parse_StmtUninit_vtbl *__frontend_parse_stmtuninit_vptr;
 };
 
 #endif

@@ -254,7 +254,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtControl_func_begin(void *self)
     _self->f_string_local = 0;
     _self->nbreak = 0;
     _self->ncont = 0;
-    _self->__frontend_parse_stmtops_vptr->u_reset(_self);
+    _self->__frontend_parse_stmtuninit_vptr->u_reset(_self);
     _self->ndel = 0;
     _self->ndefer_blocks = 0;
     _self->ndefer_next_id = 0;

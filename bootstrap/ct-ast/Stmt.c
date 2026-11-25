@@ -19,6 +19,7 @@
 #include "StmtLoop.h"
 #include "StmtSwitch.h"
 #include "StmtControl.h"
+#include "StmtUninit.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
 #include <limits.h>
@@ -197,7 +198,7 @@ static int parse_map_brace_init(struct frontend_parse_Stmt *, const char *, cons
 static int stmt_owning_struct(struct frontend_parse_Stmt *, const char *);
 void frontend_parse_ct_stmt_bind(void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Stmt * frontend_parse_stmt_get(void);
-static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable, .__frontend_parse_stmtdeferops_vptr = &frontend_parse_Stmt_frontend_parse_StmtDeferOps_vtable, .__frontend_parse_stmtmatch_vptr = &frontend_parse_Stmt_frontend_parse_StmtMatch_vtable, .__frontend_parse_stmtloop_vptr = &frontend_parse_Stmt_frontend_parse_StmtLoop_vtable, .__frontend_parse_stmtswitch_vptr = &frontend_parse_Stmt_frontend_parse_StmtSwitch_vtable, .__frontend_parse_stmtcontrol_vptr = &frontend_parse_Stmt_frontend_parse_StmtControl_vtable };
+static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable, .__frontend_parse_stmtdeferops_vptr = &frontend_parse_Stmt_frontend_parse_StmtDeferOps_vtable, .__frontend_parse_stmtmatch_vptr = &frontend_parse_Stmt_frontend_parse_StmtMatch_vtable, .__frontend_parse_stmtloop_vptr = &frontend_parse_Stmt_frontend_parse_StmtLoop_vtable, .__frontend_parse_stmtswitch_vptr = &frontend_parse_Stmt_frontend_parse_StmtSwitch_vtable, .__frontend_parse_stmtcontrol_vptr = &frontend_parse_Stmt_frontend_parse_StmtControl_vtable, .__frontend_parse_stmtuninit_vptr = &frontend_parse_Stmt_frontend_parse_StmtUninit_vtable };
 static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     char rn[MAX_TEXT];
@@ -358,205 +359,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
     _self->lex->tokstr.ptr = save_text_ptr;
     _self->lex->tokstr.len = save_text_len;
     return look;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_del_base(void *self, int n, char * out, int cap) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int k;
-    if (n < 0) {
-        return (-1);
-    }
-    k = _self->arena->nodes[n].kind;
-    if (k == N_VAR) {
-        snprintf(out, (size_t)(cap), "%s", _self->arena->nodes[n].text2);
-        return 0;
-    }
-    if (((((k == N_MEMBER) || (k == N_ARROW)) || (k == N_INDEX)) || (k == N_DEREF))) {
-        return _self->__frontend_parse_stmtops_vptr->del_base(_self, _self->arena->nodes[n].a, out, cap);
-    }
-    return (-1);
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_del_take(void *self, const char * name) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int i;
-    for (i = 0; i < _self->ndel; i++) {
-        if (strcmp(_self->del_names[i], name) == 0) {
-            return 1;
-        }
-    }
-    if (_self->ndel < 64) {
-        snprintf(_self->del_names[_self->ndel], 160, "%s", name);
-        _self->ndel = (_self->ndel + 1);
-    }
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_u_reset(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    _self->nu = 0;
-    _self->na = 0;
-    _self->nr = 0;
-    _self->nx = 0;
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_u_add(void *self, int which, const char * s) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    char * names;
-    int * count;
-    int i;
-    if (which == 0) {
-        names = _self->u_decl[0];
-        count = (&_self->nu);
-    }
-    else {
-        if (which == 1) {
-            names = _self->u_asg[0];
-            count = (&_self->na);
-        }
-        else {
-            if (which == 2) {
-                names = _self->u_rd[0];
-                count = (&_self->nr);
-            }
-            else {
-                names = _self->u_addr[0];
-                count = (&_self->nx);
-            }
-        }
-    }
-    if (((!s) || (!s[0]))) {
-        return 0;
-    }
-    for (i = 0; i < (*count); i++) {
-        if (strcmp((names + (i * 160)), s) == 0) {
-            return 0;
-        }
-    }
-    if ((*count) < 48) {
-        snprintf((names + ((*count) * 160)), 160, "%s", s);
-        (*count) = ((*count) + 1);
-    }
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_u_mark_lvalue(void *self, int n) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    if (n < 0) {
-        return 0;
-    }
-    if (_self->arena->nodes[n].kind == N_VAR) {
-        _self->__frontend_parse_stmtops_vptr->u_add(_self, 1, _self->arena->nodes[n].text2);
-        return 0;
-    }
-    if (_self->arena->nodes[n].kind == N_ADDR) {
-        return _self->__frontend_parse_stmtops_vptr->u_mark_lvalue(_self, _self->arena->nodes[n].a);
-    }
-    if (((((_self->arena->nodes[n].kind == N_MEMBER) || (_self->arena->nodes[n].kind == N_ARROW)) || (_self->arena->nodes[n].kind == N_INDEX)) || (_self->arena->nodes[n].kind == N_DEREF))) {
-        return _self->__frontend_parse_stmtops_vptr->u_mark_lvalue(_self, _self->arena->nodes[n].a);
-    }
-    return 0;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_u_scan(void *self, int n) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int k;
-    if (n < 0) {
-        return 0;
-    }
-    k = _self->arena->nodes[n].kind;
-    if (k == N_DECL) {
-        if (_self->arena->nodes[n].a < 0) {
-            _self->__frontend_parse_stmtops_vptr->u_add(_self, 0, _self->arena->nodes[n].text2);
-            _self->u_dline[(_self->nu - 1)] = _self->arena->nodes[n].line;
-        }
-        _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].a);
-        return _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].next);
-    }
-    if (k == N_ASSIGN) {
-        _self->__frontend_parse_stmtops_vptr->u_mark_lvalue(_self, _self->arena->nodes[n].a);
-        _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].b);
-        return _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].next);
-    }
-    if (k == N_POST) {
-        _self->__frontend_parse_stmtops_vptr->u_mark_lvalue(_self, _self->arena->nodes[n].a);
-        _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].b);
-        return _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].next);
-    }
-    if (k == N_ADDR) {
-        if (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_VAR) {
-            _self->__frontend_parse_stmtops_vptr->u_add(_self, 3, _self->arena->nodes[_self->arena->nodes[n].a].text2);
-        }
-        _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].a);
-        return _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].next);
-    }
-    if (k == N_VAR) {
-        _self->__frontend_parse_stmtops_vptr->u_add(_self, 2, _self->arena->nodes[n].text2);
-        return _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].next);
-    }
-    if (((((k == N_MEMBER) || (k == N_ARROW)) || (k == N_INDEX)) || (k == N_DEREF))) {
-        _self->__frontend_parse_stmtops_vptr->u_mark_lvalue(_self, _self->arena->nodes[n].a);
-        _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].b);
-        _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].c);
-        return _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].next);
-    }
-    if (_self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].a)) {
-        return 1;
-    }
-    if (_self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].b)) {
-        return 1;
-    }
-    if (_self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].c)) {
-        return 1;
-    }
-    if (_self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].d)) {
-        return 1;
-    }
-    return _self->__frontend_parse_stmtops_vptr->u_scan(_self, _self->arena->nodes[n].next);
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_uninit_check(void *self, int body, int line) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int i;
-    if (((!_self->ex->check_mode) || ((*_self->ex->check_mode) != 2))) {
-        return 0;
-    }
-    if (body < 0) {
-        return 0;
-    }
-    _self->__frontend_parse_stmtops_vptr->u_scan(_self, body);
-    for (i = 0; i < _self->nu; i++) {
-        int j;
-        int seen = 0;
-        int defd = 0;
-        for (j = 0; j < _self->nr; j++) {
-            if (strcmp(_self->u_rd[j], _self->u_decl[i]) == 0) {
-                seen = 1;
-                break;
-            }
-        }
-        if ((!seen)) {
-            continue;
-        }
-        for (j = 0; j < _self->na; j++) {
-            if (strcmp(_self->u_asg[j], _self->u_decl[i]) == 0) {
-                defd = 1;
-                break;
-            }
-        }
-        for (j = 0; j < _self->nx; j++) {
-            if (strcmp(_self->u_addr[j], _self->u_decl[i]) == 0) {
-                defd = 1;
-                break;
-            }
-        }
-        if (defd) {
-            continue;
-        }
-        return tool_diag_ct_sem_error(line, 0, "read of uninitialized variable", _self->mem->path);
-    }
-    return 0;
 }
 
 static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
@@ -1103,7 +905,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         }
         if ((_self->ex->check_mode && (*_self->ex->check_mode))) {
             char dn[160];
-            if (((_self->__frontend_parse_stmtops_vptr->del_base(_self, e, dn, sizeof(dn)) == 0) && _self->__frontend_parse_stmtops_vptr->del_take(_self, dn))) {
+            if (((_self->__frontend_parse_stmtuninit_vptr->del_base(_self, e, dn, sizeof(dn)) == 0) && _self->__frontend_parse_stmtuninit_vptr->del_take(_self, dn))) {
                 return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "double delete of an owned object", _self->mem->path);
             }
         }
@@ -2606,13 +2408,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_closure_global_init(void *
 
 const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_StmtOps_vtable = {
     .is_decl_start = frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start,
-    .del_base = frontend_parse_Stmt_frontend_parse_StmtOps_del_base,
-    .del_take = frontend_parse_Stmt_frontend_parse_StmtOps_del_take,
-    .u_reset = frontend_parse_Stmt_frontend_parse_StmtOps_u_reset,
-    .u_add = frontend_parse_Stmt_frontend_parse_StmtOps_u_add,
-    .u_mark_lvalue = frontend_parse_Stmt_frontend_parse_StmtOps_u_mark_lvalue,
-    .u_scan = frontend_parse_Stmt_frontend_parse_StmtOps_u_scan,
-    .uninit_check = frontend_parse_Stmt_frontend_parse_StmtOps_uninit_check,
     .parse_block = frontend_parse_Stmt_frontend_parse_StmtOps_parse_block,
     .parse_stmt = frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt,
     .parse_branch = frontend_parse_Stmt_frontend_parse_StmtOps_parse_branch,
