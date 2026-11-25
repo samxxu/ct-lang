@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10965 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=61005 io_cap=1024
+     emitted_before=48223 emitted_after=61169 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -38,6 +38,12 @@
      (S1a-0 C2e 后复测：Pkg 的 17 处 MAX_PKG_CMD 命令/路径缓冲改为 owned 按需
       文本，只改 Pkg.h.ct；Emitter.h.ct 仍不变，发射 C 60462 -> 60851，切片清单
       仍为 76)
+     (S1a-0 C2f/C2g 后复测：cc 命令行与 cflags/ldflags 累加器按需增长，落在
+      Module/Driver/ModuleBoundary/main；Emitter.h.ct 仍不变，发射 C 60851 ->
+      61005，切片清单仍为 76)
+     (S1a-0 C2h 后复测：Pkg 的行读取改 `pkg_text_fgets`、index `seen` 改指针行、
+      诊断消息改 `pkg_text_setf`，落在 Pkg.h.ct / main.ct；Emitter.h.ct 仍不变，
+      发射 C 61005 -> 61169，切片清单仍为 76)
 -->
 
 ## 1 切片清单

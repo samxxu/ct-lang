@@ -148,7 +148,7 @@ int main(int argc, char * * argv) {
             return tool_pkg_ct_index_verify((argc - 3), (argv + 3), m->prog, CTC_VERSION);
         }
         if (((argc > 2) && (strcmp(argv[2], "refresh") == 0))) {
-            return tool_pkg_pkg_index_refresh((argc - 3), (argv + 3), m->prog, CTC_VERSION);
+            return tool_pkg_ct_index_refresh((argc - 3), (argv + 3), m->prog, CTC_VERSION);
         }
         if (((argc == 2) || ((argc == 3) && ((strcmp(argv[2], "-h") == 0) || (strcmp(argv[2], "--help") == 0))))) {
             printf("usage: %s index verify [<file>] [--json] [-q]\n", m->prog);

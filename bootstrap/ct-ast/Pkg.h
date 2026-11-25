@@ -97,5 +97,6 @@ int tool_pkg_ct_pkg_update(int, char * *, const char *, const char *);
 int tool_pkg_ct_pkg_verify(int, char * *, const char *, const char *);
 int tool_pkg_ct_pkg_migrate(int, char * *, const char *, const char *);
 int tool_pkg_ct_index_verify(int, char * *, const char *, const char *);
+int tool_pkg_ct_index_refresh(int, char * *, const char *, const char *);
 
 #endif

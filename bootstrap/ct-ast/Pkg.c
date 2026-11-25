@@ -21,7 +21,6 @@
 #define MAX_PKG_CMD    2048
 #define TEXT_LIMIT     65536
 #define MAX_PKG_DEPTH  8
-#define MAX_PKG_LINE   1024             /* MAX_PKG_PATH * 2, spelled out */
 #define MAX_PKG_GITERR 8                /* PKG-23: trailing git stderr lines */
 #define MAX_INDEX_ROWS 1024             /* PKG-18: one package version per list row */
 #define MAX_INDEX_ROWS_MAX 65536        /* S1a-0 C1: formal cap for MAX_INDEX_ROWS */
@@ -216,7 +215,7 @@ static int pkg_read_meta(const char *, char *, size_t, char *, size_t, char *, s
 static int pkg_pin_lookup(const char *, const char *, char *, size_t, char * *, int *, char *, size_t, char *, size_t);
 static int pkg_official_resolve(const char *, char * *, int *, char *, size_t, char *, size_t);
 static int pkg_index_lookup(const char *, const char *, char * *, int *, char *, size_t, char *, size_t, char *, size_t);
-static int index_legacy_msg(char *, size_t, const char *, const char *);
+static int index_legacy_msg(char * *, int *, const char *, const char *);
 static int pkg_index_verify(int, char * *, const char *, const char *);
 int tool_pkg_pkg_index_refresh(int, char * *, const char *, const char *);
 static int pkg_append_words(struct tool_pkg_Pkg *, char * *, int *, const char *);
@@ -228,7 +227,7 @@ static int pkg_update(const char *);
 static int pkg_verify(const char *, int);
 static int pkg_verify_strict(void);
 static int pkg_read_identity(const char *, char *, size_t, char *, size_t);
-static int pkg_identity_msg(const char *, const char *, const char *, const char *, char *, size_t);
+static int pkg_identity_msg(const char *, const char *, const char *, const char *, char * *, int *);
 static int pkg_store_root(char *, size_t);
 static int pkg_store_dir(const char *, const char *, const char *, char *, size_t);
 static int pkg_store_pkgdir(const char *, const char *, char *, size_t);
@@ -243,6 +242,7 @@ static int pkg_text_begin(struct tool_pkg_Pkg *, char * *, int *);
 static int pkg_text_cat(struct tool_pkg_Pkg *, char * *, int *, const char *);
 static int pkg_text_printf(struct tool_pkg_Pkg *, char * *, int *, const char *, ...);
 static int pkg_text_quote(struct tool_pkg_Pkg *, char * *, int *, const char *);
+static int pkg_text_setf(struct tool_pkg_Pkg *, char * *, int *, const char *, ...);
 static char * pkg_text_dup(struct tool_pkg_Pkg *, const char *);
 static int pkg_text_fgets(struct tool_pkg_Pkg *, char * *, int *, FILE *);
 static void sha256_init(struct tool_pkg_Sha256 *);
@@ -262,7 +262,7 @@ static int pkg_recs_ensure(struct tool_pkg_Pkg *, int);
 static int pkg_lockrows_ensure(struct tool_pkg_LockRow * *, int *, int);
 static int pkg_lockparsed_ensure(struct tool_pkg_LockParsedRow * *, int *, int);
 static int index_row_parse(char *, char *[8]);
-static int index_row_check(char *[8], int, const char *, char *, size_t, char *, size_t);
+static int index_row_check(char *[8], int, const char *, char *, size_t, char * *, int *);
 static int pkg_update_v2(const char *);
 static int manifest_strict_default(void);
 static int pkg_migrate(const char *);
@@ -273,6 +273,7 @@ int tool_pkg_ct_pkg_update(int, char * *, const char *, const char *);
 int tool_pkg_ct_pkg_verify(int, char * *, const char *, const char *);
 int tool_pkg_ct_pkg_migrate(int, char * *, const char *, const char *);
 int tool_pkg_ct_index_verify(int, char * *, const char *, const char *);
+int tool_pkg_ct_index_refresh(int, char * *, const char *, const char *);
 static const char * tool_pkg_g_hexd = "0123456789abcdef";
 static const unsigned int tool_pkg_g_sha_k[64] = {
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
@@ -1978,8 +1979,12 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get(void *self, const char * spec, const
         }
         f = fopen("./ct.lock", "r");
         if (f != NULL) {
-            char line[MAX_PKG_LINE];
-            while (fgets(line, sizeof(line), f) != NULL) {
+            char * line;
+            int linecap;
+            int fr;
+            line = 0;
+            linecap = 0;
+            while ((fr = pkg_text_fgets(_self, (&line), (&linecap), f)) == 1) {
                 if (strncmp(line, "std/std ", 8) == 0) {
                     legacy = 1;
                 }
@@ -2111,7 +2116,8 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
     char dpath[MAX_PKG_PATH];
     char drange[32];
     char dname[MAX_TEXT];
-    char iline[MAX_PKG_LINE];
+    char * iline;
+    int ilinecap;
     char imp[MAX_TEXT];
     char rel[MAX_PKG_PATH];
     char cand[MAX_PKG_PATH];
@@ -2125,6 +2131,8 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
     int seen;
     size_t nl;
     (void)(_self);
+    iline = 0;
+    ilinecap = 0;
     pdeps = NULL;
     depcap = 0;
     ndeps = 0;
@@ -2223,7 +2231,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
             if (f == NULL) {
                 continue;
             }
-            while (fgets(iline, sizeof(iline), f) != NULL) {
+            while (pkg_text_fgets(_self, (&iline), (&ilinecap), f) == 1) {
                 char * p = iline;
                 char * q = imp;
                 while ((((*p) == ' ') || ((*p) == '\t'))) {
@@ -2397,7 +2405,8 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install_main(void *self, int argc, char 
     int ai;
     char cdir[MAX_PKG_PATH];
     char cpath[MAX_PKG_PATH];
-    char cline[MAX_PKG_LINE];
+    char * cline;
+    int clinecap;
     char cname[MAX_TEXT];
     char cpub[MAX_TEXT];
     char cver[MAX_TEXT];
@@ -2418,6 +2427,8 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install_main(void *self, int argc, char 
     struct stat cst;
     FILE * cf;
     (void)(_self);
+    cline = 0;
+    clinecap = 0;
     if (((argc > 1) && (strcmp(argv[0], "check") == 0))) {
         for (ai = 2; ai < argc; ai++) {
             if (((strcmp(argv[ai], "-h") == 0) || (strcmp(argv[ai], "--help") == 0))) {
@@ -2452,7 +2463,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install_main(void *self, int argc, char 
         cpub[0] = 0;
         cver[0] = 0;
         cns[0] = 0;
-        while (fgets(cline, sizeof(cline), cf) != NULL) {
+        while (pkg_text_fgets(_self, (&cline), (&clinecap), cf) == 1) {
             cp = cline;
             while ((((*cp) == ' ') || ((*cp) == '\t'))) {
                 cp++;
@@ -2571,7 +2582,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install_main(void *self, int argc, char 
                     if (cf == NULL) {
                         continue;
                     }
-                    while (fgets(cline, sizeof(cline), cf) != NULL) {
+                    while (pkg_text_fgets(_self, (&cline), (&clinecap), cf) == 1) {
                         for (cp = cline; (cp = strstr(cp, "-I")) != NULL; cp += 2) {
                             if ((((((cp != cline) && (cp[(-1)] != ' ')) && (cp[(-1)] != '\t')) && (cp[(-1)] != '"')) && (cp[(-1)] != '\''))) {
                                 continue;
@@ -2831,6 +2842,30 @@ static int pkg_text_quote(struct tool_pkg_Pkg * self, char * * buf, int * cap, c
     o++;
     (*buf)[o] = 0;
     return 0;
+}
+static int pkg_text_setf(struct tool_pkg_Pkg * self, char * * buf, int * cap, const char * fmt, ...) {
+    va_list ap;
+    size_t l;
+    int n;
+    if (pkg_text_begin(self, buf, cap) != 0) {
+        return (-1);
+    }
+    for (; ; ) {
+        l = strlen((*buf));
+        va_start(ap, fmt);
+        n = vsnprintf(((*buf) + l), (size_t)(((*cap) - (int)(l))), fmt, ap);
+        va_end(ap);
+        if (n < 0) {
+            return (-1);
+        }
+        if ((size_t)(n) < (size_t)(((*cap) - (int)(l)))) {
+            return 0;
+        }
+        (*buf)[l] = 0;
+        if (pkg_text_grow(self, buf, cap, (int)(((l + (size_t)(n)) + 1))) != 0) {
+            return (-1);
+        }
+    }
 }
 static char * pkg_text_dup(struct tool_pkg_Pkg * self, const char * s) {
     char * out;
@@ -3142,8 +3177,10 @@ static int pkg_scrub(struct tool_pkg_Pkg * self, const char * in, char * * out, 
 }
 static int pkg_git_diag(struct tool_pkg_Pkg * self, const char * errfile, const char * cache, const char * spec) {
     FILE * f;
-    char line[MAX_PKG_LINE];
-    char ring[MAX_PKG_GITERR][MAX_PKG_LINE];
+    char * line;
+    char * ring[MAX_PKG_GITERR];
+    int linecap;
+    int ringcap[MAX_PKG_GITERR];
     char * scrubbed;
     char * all;
     int scrubbedcap;
@@ -3154,6 +3191,8 @@ static int pkg_git_diag(struct tool_pkg_Pkg * self, const char * errfile, const 
     int i;
     int shown;
     int start;
+    int fr;
+    int slot;
     int cache_bad;
     int auth_bad;
     int tag_bad;
@@ -3164,6 +3203,12 @@ static int pkg_git_diag(struct tool_pkg_Pkg * self, const char * errfile, const 
     allcap = 0;
     over = 0;
     n = 0;
+    line = 0;
+    linecap = 0;
+    for (i = 0; i < MAX_PKG_GITERR; i++) {
+        ring[i] = 0;
+        ringcap[i] = 0;
+    }
     if (pkg_text_begin(self, (&all), (&allcap)) != 0) {
         fprintf(stderr, "  git said: (out of memory while collecting git output)\n");
         remove(errfile);
@@ -3171,7 +3216,7 @@ static int pkg_git_diag(struct tool_pkg_Pkg * self, const char * errfile, const 
     }
     f = fopen(errfile, "r");
     if (f != 0) {
-        while (fgets(line, sizeof(line), f) != 0) {
+        while ((fr = pkg_text_fgets(self, (&line), (&linecap), f)) == 1) {
             ll = strlen(line);
             while (((ll > 0) && ((line[(ll - 1)] == '\n') || (line[(ll - 1)] == '\r')))) {
                 ll--;
@@ -3180,7 +3225,13 @@ static int pkg_git_diag(struct tool_pkg_Pkg * self, const char * errfile, const 
             if (line[0] == 0) {
                 continue;
             }
-            snprintf(ring[(n % MAX_PKG_GITERR)], MAX_PKG_LINE, "%s", line);
+            slot = (n % MAX_PKG_GITERR);
+            if (((pkg_text_begin(self, (&ring[slot]), (&ringcap[slot])) != 0) || (pkg_text_cat(self, (&ring[slot]), (&ringcap[slot]), line) != 0))) {
+                if ((!over)) {
+                    fprintf(stderr, "  git said: (failure output over 65536 bytes; ""only the first lines are summarized)\n");
+                    over = 1;
+                }
+            }
             if ((((pkg_scrub(self, line, (&scrubbed), (&scrubbedcap)) != 0) || (pkg_text_cat(self, (&all), (&allcap), scrubbed) != 0)) || (pkg_text_cat(self, (&all), (&allcap), "\n") != 0))) {
                 if ((!over)) {
                     fprintf(stderr, "  git said: (failure output over 65536 bytes; ""only the first lines are summarized)\n");
@@ -3188,6 +3239,10 @@ static int pkg_git_diag(struct tool_pkg_Pkg * self, const char * errfile, const 
                 }
             }
             n++;
+        }
+        if (((fr < 0) && (!over))) {
+            fprintf(stderr, "  git said: (failure output over 65536 bytes; ""only the first lines are summarized)\n");
+            over = 1;
         }
         fclose(f);
     }
@@ -3439,10 +3494,13 @@ static int pkg_official_resolve(const char * name, char * * url, int * ucap, cha
 }
 static int pkg_read_identity(const char * dir, char * publisher, size_t pcap, char * nsroot, size_t ncap) {
     char path[MAX_PKG_PATH];
-    char line[MAX_PKG_LINE];
+    char * line;
+    int linecap;
     FILE * f;
     publisher[0] = 0;
     nsroot[0] = 0;
+    line = 0;
+    linecap = 0;
     if (snprintf(path, sizeof(path), "%s/ct.pkg", dir) >= (int)(sizeof(path))) {
         return (-1);
     }
@@ -3450,7 +3508,7 @@ static int pkg_read_identity(const char * dir, char * publisher, size_t pcap, ch
     if ((!f)) {
         return (-1);
     }
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while (pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f) == 1) {
         char * ls;
         char * eq;
         char * v;
@@ -3570,42 +3628,45 @@ static int pkg_mkdirs(const char * path) {
     }
     return 0;
 }
-static int pkg_identity_msg(const char * src, const char * publisher, const char * name, const char * nsroot, char * msg, size_t cap) {
+static int pkg_identity_msg(const char * src, const char * publisher, const char * name, const char * nsroot, char * * msg, int * msgcap) {
     char nspath[MAX_PKG_PATH];
     struct stat st;
     if ((!publisher[0])) {
-        snprintf(msg, cap, "'%s/ct.pkg' is missing 'publisher'", src);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "'%s/ct.pkg' is missing 'publisher'", src);
         return (-1);
     }
     if (strcmp(publisher, "local") == 0) {
-        snprintf(msg, cap, "'%s/ct.pkg' is missing 'publisher' (local is a placeholder)", src);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "'%s/ct.pkg' is missing 'publisher' (local is a placeholder)", src);
         return (-1);
     }
     if ((((strchr(publisher, '/') || strstr(publisher, "..")) || strchr(name, '/')) || strstr(name, ".."))) {
-        snprintf(msg, cap, "invalid package identity '%s/%s'", publisher, name);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "invalid package identity '%s/%s'", publisher, name);
         return (-1);
     }
     if ((!nsroot[0])) {
-        snprintf(msg, cap, "'%s/ct.pkg' is missing 'ns-root'", src);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "'%s/ct.pkg' is missing 'ns-root'", src);
         return (-1);
     }
     if (((nsroot[0] == '/') || (strstr(nsroot, "..") != NULL))) {
-        snprintf(msg, cap, "ns-root '%s' must be a relative path without '..'", nsroot);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "ns-root '%s' must be a relative path without '..'", nsroot);
         return (-1);
     }
     if (snprintf(nspath, sizeof(nspath), "%s/%s", src, nsroot) >= (int)(sizeof(nspath))) {
-        snprintf(msg, cap, "ns-root path is too long under '%s'", src);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "ns-root path is too long under '%s'", src);
         return (-1);
     }
     if (((stat(nspath, (&st)) != 0) || (!S_ISDIR(st.st_mode)))) {
-        snprintf(msg, cap, "ns-root '%s' of '%s/%s' is not a directory", nspath, publisher, name);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "ns-root '%s' of '%s/%s' is not a directory", nspath, publisher, name);
         return (-1);
     }
     return 0;
 }
 static int pkg_identity_check(const char * src, const char * publisher, const char * name, const char * nsroot) {
-    char msg[MAX_PKG_LINE];
-    if (pkg_identity_msg(src, publisher, name, nsroot, msg, sizeof(msg)) != 0) {
+    char * msg;
+    int msgcap;
+    msg = 0;
+    msgcap = 0;
+    if (pkg_identity_msg(src, publisher, name, nsroot, (&msg), (&msgcap)) != 0) {
         fprintf(stderr, "ctc: %s\n", msg);
         return (-1);
     }
@@ -3743,9 +3804,8 @@ static int pkg_read_meta(const char * dir, char * cflags, size_t ccap, char * ld
     fclose(f);
     return (ok ? 0 : (-1));
 }
-static int index_legacy_msg(char * out, size_t cap, const char * spec, const char * ver) {
-    int w = snprintf(out, cap, "index row for '%s %s' is legacy (five fields); ""a six-field row is required", spec, ver);
-    return (((w < 0) || ((size_t)(w) >= cap)) ? (-1) : 0);
+static int index_legacy_msg(char * * out, int * outcap, const char * spec, const char * ver) {
+    return pkg_text_setf((&tool_pkg_g_pkg), out, outcap, "index row for '%s %s' is legacy (five fields); ""a six-field row is required", spec, ver);
 }
 static int index_row_parse(char * line, char * tok[8]) {
     char * p;
@@ -3785,48 +3845,50 @@ static int index_row_parse(char * line, char * tok[8]) {
     }
     return ntok;
 }
-static int index_row_check(char * tok[8], int ntok, const char * legacy_spec, char * kind, size_t kcap, char * msg, size_t mcap) {
+static int index_row_check(char * tok[8], int ntok, const char * legacy_spec, char * kind, size_t kcap, char * * msg, int * msgcap) {
     if (ntok == 5) {
         snprintf(kind, kcap, "%s", "legacy-five-field");
-        index_legacy_msg(msg, mcap, legacy_spec, tok[1]);
+        index_legacy_msg(msg, msgcap, legacy_spec, tok[1]);
         return 1;
     }
     if (ntok != 6) {
         snprintf(kind, kcap, "%s", "field-count");
-        snprintf(msg, mcap, "index row has %d fields; six are required", ntok);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "index row has %d fields; six are required", ntok);
         return 2;
     }
     if ((!tool_pkg_index_name_ok(tok[0]))) {
         snprintf(kind, kcap, "%s", "identity");
-        snprintf(msg, mcap, "index package name '%s' must match [a-z0-9][a-z0-9-]*", tok[0]);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "index package name '%s' must match [a-z0-9][a-z0-9-]*", tok[0]);
         return 2;
     }
     if ((((!tok[2][0]) || (strcmp(tok[2], "local") == 0)) || (strchr(tok[2], '/') != NULL))) {
         snprintf(kind, kcap, "%s", "identity");
-        snprintf(msg, mcap, "index publisher '%s' must be non-empty, not 'local', without '/'", tok[2]);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "index publisher '%s' must be non-empty, not 'local', without '/'", tok[2]);
         return 2;
     }
     if ((!tool_pkg_index_version_ok(tok[1]))) {
         snprintf(kind, kcap, "%s", "identity");
-        snprintf(msg, mcap, "index version '%s' must be x.y.z", tok[1]);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "index version '%s' must be x.y.z", tok[1]);
         return 2;
     }
     if (((tok[4][0] != 'v') || (strcmp((tok[4] + 1), tok[1]) != 0))) {
         snprintf(kind, kcap, "%s", "tag-version");
-        snprintf(msg, mcap, "index tag '%s' must be 'v%s'", tok[4], tok[1]);
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "index tag '%s' must be 'v%s'", tok[4], tok[1]);
         return 2;
     }
     if ((!sha_hex_ok(tok[5]))) {
         snprintf(kind, kcap, "%s", "digest");
-        snprintf(msg, mcap, "index digest must be sha256:<64 lowercase hex>");
+        pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "index digest must be sha256:<64 lowercase hex>");
         return 2;
     }
     return 0;
 }
 static int pkg_index_lookup(const char * name, const char * range, char * * url, int * ucap, char * tag, size_t tcap, char * sha, size_t scap, char * pub, size_t pcap) {
     char path[MAX_PKG_PATH];
-    char line[MAX_PKG_LINE];
-    char bestmsg[MAX_PKG_LINE];
+    char * line;
+    char * bestmsg;
+    int linecap;
+    int bestmsgcap;
     char ambb[MAX_TEXT];
     char bestpub[MAX_TEXT];
     char bestver[MAX_TEXT];
@@ -3844,7 +3906,12 @@ static int pkg_index_lookup(const char * name, const char * range, char * * url,
     int lineno;
     int best_line;
     int best_bad;
+    int fr;
     size_t plen;
+    line = 0;
+    linecap = 0;
+    bestmsg = 0;
+    bestmsgcap = 0;
     ip = (tool_pkg_g_pkg.have_index ? tool_pkg_g_pkg.index : getenv("CT_INDEX"));
     if (((!ip) || (!ip[0]))) {
         return 1;
@@ -3869,12 +3936,11 @@ static int pkg_index_lookup(const char * name, const char * range, char * * url,
     best_line = 0;
     best_bad = 0;
     bestkind[0] = 0;
-    bestmsg[0] = 0;
     lineno = 0;
     bad = 0;
     amb = 0;
     ambb[0] = 0;
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while ((fr = pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f)) == 1) {
         char * tok[8];
         const char * publisher;
         const char * rurl;
@@ -3956,7 +4022,7 @@ static int pkg_index_lookup(const char * name, const char * range, char * * url,
                     }
                     snprintf(tag, tcap, "%s", rtag);
                     snprintf(sha, scap, "%s", rsha);
-                    best_bad = (index_row_check(tok, ntok, name, bestkind, sizeof(bestkind), bestmsg, sizeof(bestmsg)) == 2);
+                    best_bad = (index_row_check(tok, ntok, name, bestkind, sizeof(bestkind), (&bestmsg), (&bestmsgcap)) == 2);
                 }
                 else {
                     best_bad = 0;
@@ -3965,10 +4031,17 @@ static int pkg_index_lookup(const char * name, const char * range, char * * url,
         }
     }
     fclose(f);
+    if (fr < 0) {
+        fprintf(stderr, "ctc: the package index line is over 65536 bytes\n");
+        return (-1);
+    }
     if (found) {
         if (best_legacy) {
-            char msg[MAX_PKG_LINE];
-            index_legacy_msg(msg, sizeof(msg), name, bestver);
+            char * msg;
+            int msgcap;
+            msg = 0;
+            msgcap = 0;
+            index_legacy_msg((&msg), (&msgcap), name, bestver);
             fprintf(stderr, "ctc: %s\n", msg);
             return (-1);
         }
@@ -3985,10 +4058,12 @@ static int pkg_index_lookup(const char * name, const char * range, char * * url,
 }
 static int pkg_index_verify(int argc, char * * argv, const char * prog, const char * version) {
     char path[MAX_PKG_PATH];
-    char line[MAX_PKG_LINE];
-    char key[MAX_PKG_LINE];
+    char * line;
+    char * key;
+    int linecap;
+    int keycap;
     char * errs;
-    char * seen;
+    char * * seen;
     const char * positional;
     const char * ip;
     const char * home;
@@ -4005,6 +4080,11 @@ static int pkg_index_verify(int argc, char * * argv, const char * prog, const ch
     int lineno;
     int i;
     int rc;
+    int fr;
+    line = 0;
+    linecap = 0;
+    key = 0;
+    keycap = 0;
     positional = NULL;
     json = 0;
     quiet = 0;
@@ -4068,21 +4148,26 @@ static int pkg_index_verify(int argc, char * * argv, const char * prog, const ch
     }
 {
         struct stat st;
+        char * msg;
+        int msgcap;
+        msg = 0;
+        msgcap = 0;
         if (stat(path, (&st)) != 0) {
-            char msg[MAX_PKG_LINE];
-            snprintf(msg, sizeof(msg), "cannot read the package index '%s'", path);
+            pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "cannot read the package index '%s'", path);
             return tool_pkg_index_io_fail(prog, path, json, "io", msg);
         }
         if ((!S_ISREG(st.st_mode))) {
-            char msg[MAX_PKG_LINE];
-            snprintf(msg, sizeof(msg), "not a regular file: '%s'", path);
+            pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "not a regular file: '%s'", path);
             return tool_pkg_index_io_fail(prog, path, json, "io", msg);
         }
     }
     f = fopen(path, "r");
     if (f == NULL) {
-        char msg[MAX_PKG_LINE];
-        snprintf(msg, sizeof(msg), "cannot read the package index '%s'", path);
+        char * msg;
+        int msgcap;
+        msg = 0;
+        msgcap = 0;
+        pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "cannot read the package index '%s'", path);
         return tool_pkg_index_io_fail(prog, path, json, "io", msg);
     }
     errs = NULL;
@@ -4094,49 +4179,41 @@ static int pkg_index_verify(int argc, char * * argv, const char * prog, const ch
     rows = 0;
     valid = 0;
     lineno = 0;
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while ((fr = pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f)) == 1) {
         char * tok[8];
         char kind[32];
-        char msg[MAX_PKG_LINE];
+        char * msg;
+        int msgcap;
         int ntok;
         int dup;
         int st;
-        size_t ll;
+        msg = 0;
+        msgcap = 0;
         lineno++;
-        ll = strlen(line);
-        if (((ll == (sizeof(line) - 1)) && (line[(ll - 1)] != '\n'))) {
-            int c;
-            while ((((c = fgetc(f)) != EOF) && (c != '\n'))) {
-            }
-            rows++;
-            if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "field-count", "index line is longer than 1023 bytes") != 0) {
-                goto oom;
-            }
-            continue;
-        }
         ntok = index_row_parse(line, tok);
         if (ntok == 0) {
             continue;
         }
         rows++;
-        st = index_row_check(tok, ntok, tok[0], kind, sizeof(kind), msg, sizeof(msg));
+        st = index_row_check(tok, ntok, tok[0], kind, sizeof(kind), (&msg), (&msgcap));
         if (st != 0) {
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, kind, msg) != 0) {
                 goto oom;
             }
             continue;
         }
-        snprintf(key, sizeof(key), "%s/%s %s", tok[2], tok[0], tok[1]);
+        if (pkg_text_setf((&tool_pkg_g_pkg), (&key), (&keycap), "%s/%s %s", tok[2], tok[0], tok[1]) != 0) {
+            goto oom;
+        }
         dup = 0;
         for (i = 0; i < nseen; i++) {
-            if (strcmp((seen + ((size_t)(i) * MAX_PKG_LINE)), key) == 0) {
+            if (strcmp(seen[i], key) == 0) {
                 dup = 1;
                 break;
             }
         }
         if (dup) {
-            char msg[512];
-            snprintf(msg, sizeof(msg), "index row '%s' appears more than once", key);
+            pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "index row '%s' appears more than once", key);
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "duplicate", msg) != 0) {
                 goto oom;
             }
@@ -4144,16 +4221,25 @@ static int pkg_index_verify(int argc, char * * argv, const char * prog, const ch
         }
         if (nseen >= cseen) {
             int nc = (cseen ? (cseen * 2) : 16);
-            char * np = (char *)(realloc(seen, ((size_t)(nc) * MAX_PKG_LINE)));
+            char * * np = (char * *)(realloc(seen, ((size_t)(nc) * sizeof((*np)))));
             if (np == NULL) {
                 goto oom;
             }
             seen = np;
             cseen = nc;
         }
-        snprintf((seen + ((size_t)(nseen) * MAX_PKG_LINE)), MAX_PKG_LINE, "%s", key);
+        seen[nseen] = pkg_text_dup((&tool_pkg_g_pkg), key);
+        if (seen[nseen] == 0) {
+            goto oom;
+        }
         nseen++;
         valid++;
+    }
+    if (fr < 0) {
+        fprintf(stderr, "%s: index line is over 65536 bytes\n", prog);
+        free(errs);
+        free(seen);
+        return 2;
     }
     if (ferror(f)) {
         fclose(f);
@@ -4217,16 +4303,22 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     char list_path[MAX_PKG_PATH];
     char out_path[MAX_PKG_PATH];
     char list_dir[MAX_PKG_PATH];
-    char line[MAX_PKG_LINE];
-    char rowbuf[MAX_PKG_LINE * 2];
+    char * line;
+    char * rowbuf;
+    int linecap;
+    int rowbufcap;
     char * deps;
     int depcap;
     char nsroot[MAX_TEXT];
-    char imsg[512];
     char kind[32];
-    char msg[MAX_PKG_LINE];
-    char key[MAX_TEXT * 2 + 40];
-    char prev[MAX_TEXT * 2 + 40];
+    char * imsg;
+    char * msg;
+    int imsgcap;
+    int msgcap;
+    char * key;
+    char * prev;
+    int keycap;
+    int prevcap;
     char tmpname[MAX_PKG_PATH + 64];
     char * errs;
     char * buf;
@@ -4254,12 +4346,25 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     int w;
     int c;
     int diffline;
+    int fr;
     int av[3];
     int bv[3];
     size_t total;
     size_t off;
     size_t n;
     size_t m;
+    line = 0;
+    linecap = 0;
+    rowbuf = 0;
+    rowbufcap = 0;
+    imsg = 0;
+    imsgcap = 0;
+    msg = 0;
+    msgcap = 0;
+    key = 0;
+    keycap = 0;
+    prev = 0;
+    prevcap = 0;
     check = 0;
     have_list = 0;
     have_out = 0;
@@ -4356,22 +4461,10 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     nrows = 0;
     seen = 0;
     lineno = 0;
-    while (fgets(line, sizeof(line), lf) != NULL) {
+    while ((fr = pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), lf)) == 1) {
         char * tok[8];
         struct tool_pkg_IndexRow * r;
-        size_t ll;
         lineno++;
-        ll = strlen(line);
-        if (((ll == (sizeof(line) - 1)) && (line[(ll - 1)] != '\n'))) {
-            int c;
-            while ((((c = fgetc(lf)) != EOF) && (c != '\n'))) {
-            }
-            seen++;
-            if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "list", "package list line is longer than 1023 bytes") != 0) {
-                goto refresh_oom;
-            }
-            continue;
-        }
         ntok = index_row_parse(line, tok);
         if (ntok == 0) {
             continue;
@@ -4429,63 +4522,68 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
         }
         ndeps = 0;
         if (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->read_manifest(&tool_pkg_g_pkg, r->dir, r->name, sizeof(r->name), r->ver, sizeof(r->ver), (&deps), (&depcap), (&ndeps)) != 0) {
-            snprintf(msg, sizeof(msg), "cannot read '%s/ct.pkg' or it lacks 'name'/'version'", r->dir);
+            pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "cannot read '%s/ct.pkg' or it lacks 'name'/'version'", r->dir);
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "package", msg) != 0) {
                 goto refresh_oom;
             }
             continue;
         }
         if (pkg_read_identity(r->dir, r->pub, sizeof(r->pub), nsroot, sizeof(nsroot)) != 0) {
-            snprintf(msg, sizeof(msg), "cannot read '%s/ct.pkg'", r->dir);
+            pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "cannot read '%s/ct.pkg'", r->dir);
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "package", msg) != 0) {
                 goto refresh_oom;
             }
             continue;
         }
-        if (pkg_identity_msg(r->dir, r->pub, r->name, nsroot, imsg, sizeof(imsg)) != 0) {
+        if (pkg_identity_msg(r->dir, r->pub, r->name, nsroot, (&imsg), (&imsgcap)) != 0) {
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "identity", imsg) != 0) {
                 goto refresh_oom;
             }
             continue;
         }
         if (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->dir_digest(&tool_pkg_g_pkg, r->dir, r->dig, sizeof(r->dig)) != 0) {
-            snprintf(msg, sizeof(msg), "cannot compute the tree digest of '%s'", r->dir);
+            pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "cannot compute the tree digest of '%s'", r->dir);
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "package", msg) != 0) {
                 goto refresh_oom;
             }
             continue;
         }
-        w = snprintf(rowbuf, sizeof(rowbuf), "%s %s %s %s %s %s", r->name, r->ver, r->pub, r->url, r->tag, r->dig);
-        if (((w < 0) || ((size_t)(w) >= sizeof(rowbuf)))) {
-            if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "row", "generated index row is too long") != 0) {
-                goto refresh_oom;
-            }
-            continue;
+        if (pkg_text_setf((&tool_pkg_g_pkg), (&rowbuf), (&rowbufcap), "%s %s %s %s %s %s", r->name, r->ver, r->pub, r->url, r->tag, r->dig) != 0) {
+            goto refresh_oom;
         }
         ntok = index_row_parse(rowbuf, tok);
-        if (index_row_check(tok, ntok, tok[0], kind, sizeof(kind), msg, sizeof(msg)) != 0) {
+        if (index_row_check(tok, ntok, tok[0], kind, sizeof(kind), (&msg), (&msgcap)) != 0) {
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, kind, msg) != 0) {
                 goto refresh_oom;
             }
             continue;
         }
-        snprintf(key, sizeof(key), "%s/%s %s", r->pub, r->name, r->ver);
+        if (pkg_text_setf((&tool_pkg_g_pkg), (&key), (&keycap), "%s/%s %s", r->pub, r->name, r->ver) != 0) {
+            goto refresh_oom;
+        }
         j = 0;
         for (i = 0; i < nrows; i++) {
-            snprintf(prev, sizeof(prev), "%s/%s %s", rows[i].pub, rows[i].name, rows[i].ver);
+            pkg_text_setf((&tool_pkg_g_pkg), (&prev), (&prevcap), "%s/%s %s", rows[i].pub, rows[i].name, rows[i].ver);
             if (strcmp(prev, key) == 0) {
                 j = 1;
                 break;
             }
         }
         if (j) {
-            snprintf(msg, sizeof(msg), "index row '%s' appears more than once", key);
+            pkg_text_setf((&tool_pkg_g_pkg), (&msg), (&msgcap), "index row '%s' appears more than once", key);
             if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "duplicate", msg) != 0) {
                 goto refresh_oom;
             }
             continue;
         }
         nrows++;
+    }
+    if (fr < 0) {
+        fclose(lf);
+        free(errs);
+        free(rows);
+        fprintf(stderr, "%s: package list line is over 65536 bytes\n", prog);
+        return 2;
     }
     if (ferror(lf)) {
         fclose(lf);
@@ -4541,7 +4639,10 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
         }
         memcpy((&rows[(j + 1)]), (&tmp), sizeof(tmp));
     }
-    total = (((size_t)(nrows) * (size_t)(MAX_PKG_LINE)) + 1);
+    total = 1;
+    for (i = 0; i < nrows; i++) {
+        total += ((((((strlen(rows[i].name) + strlen(rows[i].ver)) + strlen(rows[i].pub)) + strlen(rows[i].url)) + strlen(rows[i].tag)) + strlen(rows[i].dig)) + 6);
+    }
     buf = (char *)(malloc(total));
     if (buf == NULL) {
         free(errs);
@@ -4723,13 +4824,17 @@ static int pkg_check_requires(const char * pkg, const char * req) {
 }
 static int pkg_verify_lock(const char * prog, struct tool_pkg_LockRow * * rows, int * nlock, int * cap) {
     FILE * f;
-    char line[MAX_PKG_LINE];
+    char * line;
+    int linecap;
     char head[64];
     char vdir[MAX_PKG_PATH];
     char vdig[80];
     int rc;
     int i;
     int j;
+    int fr;
+    line = 0;
+    linecap = 0;
     (*nlock) = 0;
     rc = 0;
     f = fopen("./ct.lock", "r");
@@ -4747,7 +4852,7 @@ static int pkg_verify_lock(const char * prog, struct tool_pkg_LockRow * * rows, 
         fprintf(stderr, "ctc: ct.lock is v1 (no '# ct-lock 2' header); run 'ct migrate'\n");
         return 1;
     }
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while ((fr = pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f)) == 1) {
         char * tok[12];
         char * p;
         int ntok;
@@ -4821,6 +4926,11 @@ static int pkg_verify_lock(const char * prog, struct tool_pkg_LockRow * * rows, 
         }
         (*nlock) = ((*nlock) + 1);
     }
+    if (fr < 0) {
+        fclose(f);
+        fprintf(stderr, "ctc: ct.lock line is over 65536 bytes\n");
+        return 1;
+    }
     if (fclose(f) != 0) {
         fprintf(stderr, "ctc: cannot read './ct.lock'\n");
         return 1;
@@ -4842,18 +4952,22 @@ static int pkg_verify_lock(const char * prog, struct tool_pkg_LockRow * * rows, 
 }
 static int pkg_lock_keep(char * dst, size_t cap) {
     FILE * f;
-    char line[MAX_PKG_LINE];
+    char * line;
+    int linecap;
+    int fr;
     size_t len;
     size_t ll;
     size_t nl;
     int i;
+    line = 0;
+    linecap = 0;
     len = 0;
     dst[0] = 0;
     f = fopen("./ct.lock", "r");
     if ((!f)) {
         return 0;
     }
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while ((fr = pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f)) == 1) {
         char * p;
         p = line;
         while ((((*p) == ' ') || ((*p) == '\t'))) {
@@ -4886,6 +5000,11 @@ static int pkg_lock_keep(char * dst, size_t cap) {
         memcpy((dst + len), line, ll);
         len += ll;
         dst[len] = 0;
+    }
+    if (fr < 0) {
+        fclose(f);
+        fprintf(stderr, "ctc: ct.lock line is over 65536 bytes\n");
+        return (-1);
     }
     fclose(f);
     if (((len > 0) && (dst[(len - 1)] != '\n'))) {
@@ -5154,12 +5273,16 @@ static int pkg_update(const char * prog) {
 }
 static int manifest_strict_default(void) {
     FILE * f;
-    char line[MAX_PKG_LINE];
+    char * line;
+    int linecap;
+    int fr;
+    line = 0;
+    linecap = 0;
     f = fopen("./ct.pkg", "r");
     if (f == NULL) {
         return 0;
     }
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while ((fr = pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f)) == 1) {
         char * p = line;
         char * eq;
         size_t kl;
@@ -5187,14 +5310,23 @@ static int manifest_strict_default(void) {
         fclose(f);
         return ((((strncmp(p, "on", 2) == 0) || (strncmp(p, "true", 4) == 0)) || (strncmp(p, "1", 1) == 0)) ? 1 : 0);
     }
+    if (fr < 0) {
+        fclose(f);
+        fprintf(stderr, "ctc: ct.pkg line is over 65536 bytes\n");
+        return 0;
+    }
     fclose(f);
     return 0;
 }
 static int pkg_verify_strict(void) {
     FILE * f;
-    char line[MAX_PKG_LINE];
+    char * line;
+    int linecap;
+    int fr;
     char head[64];
     int fmt;
+    line = 0;
+    linecap = 0;
     f = fopen("./ct.lock", "r");
     if (f == NULL) {
         return 0;
@@ -5211,7 +5343,7 @@ static int pkg_verify_strict(void) {
         fclose(f);
         return 1;
     }
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while ((fr = pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f)) == 1) {
         char * tok[12];
         char * p;
         int ntok;
@@ -5248,12 +5380,19 @@ static int pkg_verify_strict(void) {
             return 1;
         }
     }
+    if (fr < 0) {
+        fclose(f);
+        fprintf(stderr, "ctc: ct.lock line is over 65536 bytes\n");
+        return 1;
+    }
     fclose(f);
     return 0;
 }
 static int pkg_migrate(const char * prog) {
     FILE * f;
-    char line[MAX_PKG_LINE];
+    char * line;
+    int linecap;
+    int fr;
     char head[64];
     char * out;
     int outcap;
@@ -5277,6 +5416,9 @@ static int pkg_migrate(const char * prog) {
     char typ[16];
     char commit[64];
     struct stat st;
+    line = 0;
+    linecap = 0;
+    fr = 0;
     deps = NULL;
     depcap = 0;
     ndeps = 0;
@@ -5309,7 +5451,7 @@ static int pkg_migrate(const char * prog) {
     }
     nrow = 0;
     rc = 0;
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while ((fr = pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f)) == 1) {
         char * tok[12];
         char * p;
         int ntok;
@@ -5421,6 +5563,12 @@ static int pkg_migrate(const char * prog) {
         outlen += w;
         nrow++;
     }
+    if (fr < 0) {
+        fclose(f);
+        free(out);
+        fprintf(stderr, "ctc: ct.lock line is over 65536 bytes\n");
+        return 1;
+    }
     fclose(f);
     if (rc != 0) {
         free(out);
@@ -5468,7 +5616,9 @@ static int pkg_verify(const char * prog, int strict) {
 }
 int tool_pkg_ct_pkg_lock_roots(const char * prog, int locked, char * * roots, int * nroots, int * rootcap, char * * notes, int * nnotes, int * notecap) {
     FILE * f;
-    char line[MAX_PKG_LINE];
+    char * line;
+    int linecap;
+    int fr;
     char head[64];
     struct tool_pkg_LockParsedRow * lrows;
     int nrow;
@@ -5477,6 +5627,9 @@ int tool_pkg_ct_pkg_lock_roots(const char * prog, int locked, char * * roots, in
     int i;
     int j;
     struct stat st;
+    line = 0;
+    linecap = 0;
+    fr = 0;
     (*nroots) = 0;
     (*nnotes) = 0;
     f = fopen("./ct.lock", "r");
@@ -5502,7 +5655,7 @@ int tool_pkg_ct_pkg_lock_roots(const char * prog, int locked, char * * roots, in
     nrow = 0;
     rowcap = 0;
     lrows = NULL;
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while ((fr = pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f)) == 1) {
         char * tok[12];
         char * p;
         struct tool_pkg_LockParsedRow * row;
@@ -5560,6 +5713,11 @@ int tool_pkg_ct_pkg_lock_roots(const char * prog, int locked, char * * roots, in
             snprintf(row->dig, 80, "%s", tok[6]);
         }
         nrow++;
+    }
+    if (fr < 0) {
+        fclose(f);
+        fprintf(stderr, "ctc: ct.lock line is over 65536 bytes\n");
+        return 1;
     }
     fclose(f);
     if (nrow == 0) {
@@ -5736,6 +5894,12 @@ int tool_pkg_ct_pkg_migrate(int argc, char * * argv, const char * prog, const ch
 int tool_pkg_ct_index_verify(int argc, char * * argv, const char * prog, const char * version) {
     int rc;
     rc = pkg_index_verify(argc, argv, prog, version);
+    pkg_owned_free((&tool_pkg_g_pkg));
+    return rc;
+}
+int tool_pkg_ct_index_refresh(int argc, char * * argv, const char * prog, const char * version) {
+    int rc;
+    rc = tool_pkg_pkg_index_refresh(argc, argv, prog, version);
     pkg_owned_free((&tool_pkg_g_pkg));
     return rc;
 }
