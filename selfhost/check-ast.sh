@@ -5107,6 +5107,12 @@ else
     bad "S1a-0 C2 flag text" "$(cat "$work/capflg.out" "$work/capflg.err" | head -6)"
 fi
 
+if bash test/ast/cap_path.sh "$work/ct-ast" >"$work/cappath.out" 2>"$work/cappath.err"; then
+    ok "S1a-0 C2 diag/cache path text"
+else
+    bad "S1a-0 C2 diag/cache path text" "$(cat "$work/cappath.out" "$work/cappath.err" | head -6)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
