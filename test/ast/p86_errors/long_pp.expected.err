@@ -1,2 +1,2 @@
-test/ast/p86_errors/long_pp.ct:1:1: error: preprocessor line exceeds 159 bytes; split it or move it to a header
+test/ast/p86_errors/long_pp.ct:1:1: error: preprocessor line exceeds 65536 bytes; split it or move it to a header
 ctc: 1 error(s) generated

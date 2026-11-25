@@ -9,10 +9,11 @@
 #               `src + start`, and no token path copies bytes into it;
 #   emitted C   the compiler the probe receives really carries that view
 #               (when the emitted tree is passed as the second argument);
-#   behavioural the boundaries the old fixed buffer imposed still hold:
-#               159-byte identifiers / 157-byte string bodies are accepted,
-#               160 / 158 report the frozen diagnostic, adjacent literals
-#               concatenate, and `...` / `..` / `.5` keep their order;
+#   behavioural the formal text bound is the only token limit (S1a-0 C2o):
+#               2000-byte identifiers / string literals are kept whole, one
+#               byte past TEXT_LIMIT reports an explicit diagnostic (never a
+#               truncation), adjacent literals concatenate, and `...` / `..` /
+#               `.5` keep their order;
 #   lifetime    a multi-unit build (a header unit parsed before the input)
 #               still emits the right names, so no view escaped into the AST
 #               past the source buffer it belongs to.
@@ -98,15 +99,15 @@ run_err() { # run_err <name> <src> <needle>
 }
 
 rep() { printf '%*s' "$1" '' | tr ' ' "$2"; }
-id159=$(rep 159 a)
-id160=$(rep 160 a)
-s157=$(rep 157 x)
-s158=$(rep 158 x)
+id2000=$(rep 2000 a)
+idover=$(rep 65537 a)
+s2000=$(rep 2000 x)
+sover=$(rep 65537 x)
 
-printf 'int %s = 7;\nint main(void) { return %s == 7 ? 0 : 1; }\n' "$id159" "$id159" >"$work/id159.ct"
-printf 'int %s = 7;\nint main(void) { return %s == 7 ? 0 : 1; }\n' "$id160" "$id160" >"$work/id160.ct"
-printf 'int main(void) { const char *p = "%s"; return p[0] == 0x78 ? 0 : 1; }\n' "$s157" >"$work/s157.ct"
-printf 'int main(void) { const char *p = "%s"; return p[0] == 0x78 ? 0 : 1; }\n' "$s158" >"$work/s158.ct"
+printf 'int %s = 7;\nint main(void) { return %s == 7 ? 0 : 1; }\n' "$id2000" "$id2000" >"$work/id2000.ct"
+printf 'int %s = 7;\nint main(void) { return %s == 7 ? 0 : 1; }\n' "$idover" "$idover" >"$work/idover.ct"
+printf 'int main(void) { const char *p = "%s"; return p[0] == 0x78 ? 0 : 1; }\n' "$s2000" >"$work/s2000.ct"
+printf 'int main(void) { const char *p = "%s"; return p[0] == 0x78 ? 0 : 1; }\n' "$sover" >"$work/sover.ct"
 cat >"$work/adj.ct" <<'EOF'
 int main(void) { const char *p = "abc" "def"; return p[0] == 'a' && p[3] == 'd' ? 0 : 1; }
 EOF
@@ -130,10 +131,10 @@ int main(void)
 }
 EOF
 
-run_ok id159 "$work/id159.ct"
-run_err id160 "$work/id160.ct" "identifier is too long"
-run_ok s157 "$work/s157.ct"
-run_err s158 "$work/s158.ct" "string literal is too long (max 158 bytes; split it)"
+run_ok id2000 "$work/id2000.ct"
+run_err idover "$work/idover.ct" "identifier is too long (over the 65536-byte formal text limit)"
+run_ok s2000 "$work/s2000.ct"
+run_err sover "$work/sover.ct" "string literal exceeds 65536 bytes; split it"
 run_ok adj "$work/adj.ct"
 run_ok dots "$work/dots.ct"
 run_ok punct "$work/punct.ct"

@@ -13,12 +13,12 @@ fail=0
 
 python3 - "$work/pp.ct" <<'PY'
 import sys
-macro = "#define LONG_MACRO(x) ((x)" + "".join(" + %d" % i for i in range(1, 40)) + ")"
+macro = "#define LONG_MACRO(x) ((x)" + "".join(" + %d" % i for i in range(1, 12000)) + ")"
 open(sys.argv[1], "w").write(macro + "\nint main(void) { return LONG_MACRO(1); }\n")
 PY
 mkdir -p "$work/ppout"
 ( cd "$root" && "$ctast" build --emit-c -o "$work/ppout" "$work/pp.ct" ) >"$work/pp.log" 2>&1
-if [ $? -eq 0 ] || ! grep -q "preprocessor line exceeds 159 bytes" "$work/pp.log"; then
+if [ $? -eq 0 ] || ! grep -q "preprocessor line exceeds 65536 bytes" "$work/pp.log"; then
     echo "FAIL p72/diagpos: long preprocessor line not refused" >&2
     sed 's/^/  /' "$work/pp.log" | head -4 >&2
     fail=1

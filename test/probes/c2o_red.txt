@@ -1,0 +1,30 @@
+C2o hard-coded lengths — red/green evidence
+
+baseline: 32898164
+baseline compiler: built from the frozen seed at 32898164
+command: bash test/ast/c2o_limits.sh <baseline-ct-ast>
+exit: 1
+output:
+FAIL c2o: id: compile failed: .../id.ct:1:5: error: identifier is too long
+FAIL c2o: str: compile failed: .../str.ct:3:21: error: string literal is too long (max 158 bytes; split it)
+FAIL c2o: the 20-segment/2000-byte-alias program did not compile: .../main.ct:1:88: error: import path is too long
+FAIL c2o: the 200-exported-type program failed: ctc: too many exported type names
+FAIL c2o: the 24-segment qualified call failed: .../main.ct:1:88: error: import path is too long
+FAIL c2o: the >200-byte-namespace program failed: ...:1:167: error: namespace is too long
+FAIL c2o: off: compile failed: .../off.ct:2:16: error: identifier is too long
+FAIL c2o: a 65537-byte identifier was not refused with the formal-limit message
+FAIL c2o: a 65537-byte string literal was not refused with the formal-limit message
+c2o: 0 passed, 9 failed
+
+green (implementation commit parent tree):
+command: bash test/ast/c2o_limits.sh <ct-ast built from the implementation>
+exit: 0
+output:
+  2000-byte identifier: global/function/local kept whole
+  2000-byte string literal: kept whole
+  20-segment import path + 2000-byte alias: resolved and ran
+  200 exported type rows: beyond the old 128-row table
+  24-segment qualified call: beyond the old 8-segment cap
+  >200-byte namespace: kept whole and ran
+  2000-byte offsetof field: declared and referenced whole
+c2o: 9 passed, 0 failed

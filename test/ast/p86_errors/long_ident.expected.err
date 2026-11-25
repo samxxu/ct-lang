@@ -1,1 +1,1 @@
-test/ast/p86_errors/long_ident.ct:1:5: error: identifier is too long
+test/ast/p86_errors/long_ident.ct:1:5: error: identifier is too long (over the 65536-byte formal text limit)

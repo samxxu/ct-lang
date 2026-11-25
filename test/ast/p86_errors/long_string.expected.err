@@ -1,1 +1,1 @@
-test/ast/p86_errors/long_string.ct:1:34: error: string literal is too long (max 158 bytes; split it)
+test/ast/p86_errors/long_string.ct:1:34: error: string literal exceeds 65536 bytes; split it
