@@ -5101,6 +5101,12 @@ else
     bad "S1a-0 C2 cc command text" "$(cat "$work/capcmd.out" "$work/capcmd.err" | head -6)"
 fi
 
+if bash test/ast/cap_flags.sh "$work/ct-ast" >"$work/capflg.out" 2>"$work/capflg.err"; then
+    ok "S1a-0 C2 flag text"
+else
+    bad "S1a-0 C2 flag text" "$(cat "$work/capflg.out" "$work/capflg.err" | head -6)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
