@@ -68,8 +68,8 @@ struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
-struct tool_cache_Cache;
 struct tool_sh_Sh;
+struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
 struct tool_pkg_PkgIndex;
@@ -89,10 +89,21 @@ int tool_sh_ct_text_init(char * *, int *, int);
 int tool_sh_ct_text_reset(char * *, int *, int);
 int tool_sh_ct_text_cat(char * *, int *, const char *);
 int tool_sh_ct_text_printf(char * *, int *, const char *, ...);
+int tool_sh_ct_text_fmt(char * *, int, const char *, ...);
+int tool_sh_ct_text_dup(const char *, char * *);
+char * tool_sh_ct_scratch_fmt(const char *, ...);
+char * tool_sh_ct_scratch_dup(const char *);
+char * tool_sh_ct_scratch_alloc(int);
+void tool_sh_ct_scratch_free_all(void);
 int tool_sh_ct_text_quote(char * *, int *, const char *);
 void tool_sh_ct_text_free(char * *, int *);
 int tool_sh_ct_sh_quote(const char *, char * *, int *);
 static int ct_text_need(char * *, int *, int, int);
+static void ct_scratch_keep(char *);
+static void ct_scratch_die(const char *);
+static char * * tool_sh_g_scratch;
+static int tool_sh_g_nscratch;
+static int tool_sh_g_capscratch;
 static int ct_text_need(char * * buf, int * cap, int need, int init) {
     int ncap;
     char * np;
@@ -180,6 +191,177 @@ int tool_sh_ct_text_printf(char * * buf, int * cap, const char * fmt, ...) {
             return (-1);
         }
     }
+}
+int tool_sh_ct_text_fmt(char * * out, int init, const char * fmt, ...) {
+    va_list ap;
+    char * buf;
+    char * grown;
+    int cap;
+    int n;
+    int ncap;
+    (*out) = (char *)(0);
+    cap = ((init > 0) ? init : 1);
+    if (cap > TEXT_LIMIT) {
+        cap = TEXT_LIMIT;
+    }
+    buf = (char *)(malloc((size_t)(cap)));
+    if ((!buf)) {
+        return (-1);
+    }
+    for (; ; ) {
+        va_start(ap, fmt);
+        n = vsnprintf(buf, (size_t)(cap), fmt, ap);
+        va_end(ap);
+        if (n < 0) {
+            free(buf);
+            return (-1);
+        }
+        if (n < cap) {
+            break;
+        }
+        if (cap >= TEXT_LIMIT) {
+            free(buf);
+            return (-3);
+        }
+        ncap = (cap * 2);
+        if (ncap > TEXT_LIMIT) {
+            ncap = TEXT_LIMIT;
+        }
+        grown = (char *)(realloc(buf, (size_t)(ncap)));
+        if ((!grown)) {
+            free(buf);
+            return (-1);
+        }
+        buf = grown;
+        cap = ncap;
+    }
+    (*out) = buf;
+    return 0;
+}
+int tool_sh_ct_text_dup(const char * s, char * * out) {
+    size_t n;
+    char * buf;
+    (*out) = (char *)(0);
+    if ((!s)) {
+        return (-1);
+    }
+    n = strlen(s);
+    if (n > (size_t)(TEXT_LIMIT)) {
+        return (-3);
+    }
+    buf = (char *)(malloc((n + 1)));
+    if ((!buf)) {
+        return (-1);
+    }
+    memcpy(buf, s, (n + 1));
+    (*out) = buf;
+    return 0;
+}
+static void ct_scratch_keep(char * p) {
+    char * * grown;
+    int ncap;
+    if (tool_sh_g_nscratch >= tool_sh_g_capscratch) {
+        ncap = ((tool_sh_g_capscratch > 0) ? (tool_sh_g_capscratch * 2) : 256);
+        grown = (char * *)(realloc(tool_sh_g_scratch, ((size_t)(ncap) * sizeof((*grown)))));
+        if ((!grown)) {
+            fprintf(stderr, "ctc: out of memory\n");
+            exit(1);
+        }
+        tool_sh_g_scratch = grown;
+        tool_sh_g_capscratch = ncap;
+    }
+    tool_sh_g_scratch[tool_sh_g_nscratch] = p;
+    tool_sh_g_nscratch++;
+}
+static void ct_scratch_die(const char * what) {
+    fprintf(stderr, "ctc: %s\n", what);
+    exit(1);
+}
+char * tool_sh_ct_scratch_fmt(const char * fmt, ...) {
+    va_list ap;
+    char * buf;
+    char * grown;
+    int cap;
+    int n;
+    int ncap;
+    cap = 1024;
+    buf = (char *)(malloc((size_t)(cap)));
+    if ((!buf)) {
+        ct_scratch_die("out of memory");
+    }
+    for (; ; ) {
+        va_start(ap, fmt);
+        n = vsnprintf(buf, (size_t)(cap), fmt, ap);
+        va_end(ap);
+        if (n < 0) {
+            free(buf);
+            ct_scratch_die("bad formatted path");
+        }
+        if (n < cap) {
+            break;
+        }
+        if (cap >= TEXT_LIMIT) {
+            free(buf);
+            ct_scratch_die("text exceeds 65536 bytes");
+        }
+        ncap = (cap * 2);
+        if (ncap > TEXT_LIMIT) {
+            ncap = TEXT_LIMIT;
+        }
+        grown = (char *)(realloc(buf, (size_t)(ncap)));
+        if ((!grown)) {
+            free(buf);
+            ct_scratch_die("out of memory");
+        }
+        buf = grown;
+        cap = ncap;
+    }
+    ct_scratch_keep(buf);
+    return buf;
+}
+char * tool_sh_ct_scratch_dup(const char * s) {
+    size_t n;
+    char * p;
+    if ((!s)) {
+        s = "";
+    }
+    n = strlen(s);
+    if (n > (size_t)(TEXT_LIMIT)) {
+        ct_scratch_die("text exceeds 65536 bytes");
+    }
+    p = (char *)(malloc((n + 1)));
+    if ((!p)) {
+        ct_scratch_die("out of memory");
+    }
+    memcpy(p, s, (n + 1));
+    ct_scratch_keep(p);
+    return p;
+}
+char * tool_sh_ct_scratch_alloc(int size) {
+    char * p;
+    if (size < 1) {
+        size = 1;
+    }
+    if (size > TEXT_LIMIT) {
+        ct_scratch_die("text exceeds 65536 bytes");
+    }
+    p = (char *)(malloc((size_t)(size)));
+    if ((!p)) {
+        ct_scratch_die("out of memory");
+    }
+    p[0] = 0;
+    ct_scratch_keep(p);
+    return p;
+}
+void tool_sh_ct_scratch_free_all(void) {
+    int i;
+    for (i = 0; i < tool_sh_g_nscratch; i++) {
+        free(tool_sh_g_scratch[i]);
+    }
+    free(tool_sh_g_scratch);
+    tool_sh_g_scratch = (char * *)(0);
+    tool_sh_g_nscratch = 0;
+    tool_sh_g_capscratch = 0;
 }
 int tool_sh_ct_text_quote(char * * buf, int * cap, const char * s) {
     size_t l;

@@ -10,6 +10,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include "Sh.h"
+
 
 struct ct_buf;
 struct Str;
@@ -71,8 +73,8 @@ struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
-struct tool_cache_Cache;
 struct tool_sh_Sh;
+struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
 struct tool_pkg_PkgIndex;
@@ -88,7 +90,7 @@ struct tool_driver_Driver;
 struct tool_cache_CacheOps_vtbl {
     unsigned long (*digest)(void *, const char *);
     int (*key)(void *, const char *, const char *, unsigned long, int, int, int, const char *, char * *, int *);
-    int (*paths)(void *, const char *, char *, int, char *, int);
+    int (*paths)(void *, const char *, char * *, char * *);
     int (*hit)(void *, const char *, const char *, int);
     void (*store)(void *, const char *, const char *);
 };

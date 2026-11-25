@@ -36,6 +36,24 @@ pub int ct_text_reset(char **buf, int *cap, int init);
 pub int ct_text_cat(char **buf, int *cap, const char *s);
 /* Append `fmt`/...; retries after growth, so nothing is cut. */
 pub int ct_text_printf(char **buf, int *cap, const char *fmt, ...);
+/* S1a-0 C2l: one formatted block, owned by the caller and returned in *out.
+   It starts at `init` (a path caller passes 1024) and doubles to TEXT_LIMIT;
+   -1 is OOM, -3 is over the formal bound. Unlike `ct_text_printf` this writes
+   a fresh block, so a path helper needs no companion capacity field. */
+pub int ct_text_fmt(char **out, int init, const char *fmt, ...);
+/* Copy `s` into a fresh exact block; same error codes. */
+pub int ct_text_dup(const char *s, char **out);
+/* S1a-0 C2l: run-scoped path strings. These allocate a fresh block (a path
+   starts at the old 1024 and doubles to TEXT_LIMIT), register it in one pool
+   and return it; `ct_scratch_free_all` releases the whole pool when the
+   command ends. A helper that may fail mid-build (an early return) therefore
+   needs no per-site free, and OOM / over-limit is an explicit hard stop. */
+pub char *ct_scratch_fmt(const char *fmt, ...);
+pub char *ct_scratch_dup(const char *s);
+/* A raw run-scoped block of `size` bytes, for a caller that fills it itself
+   (e.g. a header guard built character by character). */
+pub char *ct_scratch_alloc(int size);
+pub void ct_scratch_free_all(void);
 /* Append `s` single-quoted for the shell. */
 pub int ct_text_quote(char **buf, int *cap, const char *s);
 /* Release the block and reset the caller's slot. */
@@ -119,6 +137,156 @@ int ct_text_printf(char **buf, int *cap, const char *fmt, ...)
         (*buf)[l] = 0;
         if (ct_text_need(buf, cap, (int)(l + (size_t)n + 1), 1) != 0) return -1;
     }
+}
+
+int ct_text_fmt(char **out, int init, const char *fmt, ...)
+{
+    va_list ap;
+    char *buf, *grown;
+    int cap, n, ncap;
+
+    *out = (char *)0;
+    cap = init > 0 ? init : 1;
+    if (cap > TEXT_LIMIT) cap = TEXT_LIMIT;
+    buf = (char *)malloc((size_t)cap);
+    if (!buf) return -1;
+    for (;;) {
+        va_start(ap, fmt);
+        n = vsnprintf(buf, (size_t)cap, fmt, ap);
+        va_end(ap);
+        if (n < 0) { free(buf); return -1; }
+        if (n < cap) break;
+        if (cap >= TEXT_LIMIT) { free(buf); return -3; }
+        ncap = cap * 2;
+        if (ncap > TEXT_LIMIT) ncap = TEXT_LIMIT;
+        grown = (char *)realloc(buf, (size_t)ncap);
+        if (!grown) { free(buf); return -1; }
+        buf = grown;
+        cap = ncap;
+    }
+    *out = buf;
+    return 0;
+}
+
+int ct_text_dup(const char *s, char **out)
+{
+    size_t n;
+    char *buf;
+
+    *out = (char *)0;
+    if (!s) return -1;
+    n = strlen(s);
+    if (n > (size_t)TEXT_LIMIT) return -3;
+    buf = (char *)malloc(n + 1);
+    if (!buf) return -1;
+    memcpy(buf, s, n + 1);
+    *out = buf;
+    return 0;
+}
+
+/* --- S1a-0 C2l: the run-scoped path pool ------------------------------- */
+static char **g_scratch;
+static int g_nscratch;
+static int g_capscratch;
+
+static void ct_scratch_keep(char *p)
+{
+    char **grown;
+    int ncap;
+
+    if (g_nscratch >= g_capscratch) {
+        ncap = g_capscratch > 0 ? g_capscratch * 2 : 256;
+        grown = (char **)realloc(g_scratch, (size_t)ncap * sizeof(*grown));
+        if (!grown) {
+            fprintf(stderr, "ctc: out of memory\n");
+            exit(1);
+        }
+        g_scratch = grown;
+        g_capscratch = ncap;
+    }
+    g_scratch[g_nscratch] = p;
+    g_nscratch++;
+}
+
+static void ct_scratch_die(const char *what)
+{
+    fprintf(stderr, "ctc: %s\n", what);
+    exit(1);
+}
+
+char *ct_scratch_fmt(const char *fmt, ...)
+{
+    va_list ap;
+    char *buf, *grown;
+    int cap, n, ncap;
+
+    cap = 1024;
+    buf = (char *)malloc((size_t)cap);
+    if (!buf) ct_scratch_die("out of memory");
+    for (;;) {
+        va_start(ap, fmt);
+        n = vsnprintf(buf, (size_t)cap, fmt, ap);
+        va_end(ap);
+        if (n < 0) {
+            free(buf);
+            ct_scratch_die("bad formatted path");
+        }
+        if (n < cap) break;
+        if (cap >= TEXT_LIMIT) {
+            free(buf);
+            ct_scratch_die("text exceeds 65536 bytes");
+        }
+        ncap = cap * 2;
+        if (ncap > TEXT_LIMIT) ncap = TEXT_LIMIT;
+        grown = (char *)realloc(buf, (size_t)ncap);
+        if (!grown) {
+            free(buf);
+            ct_scratch_die("out of memory");
+        }
+        buf = grown;
+        cap = ncap;
+    }
+    ct_scratch_keep(buf);
+    return buf;
+}
+
+char *ct_scratch_dup(const char *s)
+{
+    size_t n;
+    char *p;
+
+    if (!s) s = "";
+    n = strlen(s);
+    if (n > (size_t)TEXT_LIMIT) ct_scratch_die("text exceeds 65536 bytes");
+    p = (char *)malloc(n + 1);
+    if (!p) ct_scratch_die("out of memory");
+    memcpy(p, s, n + 1);
+    ct_scratch_keep(p);
+    return p;
+}
+
+char *ct_scratch_alloc(int size)
+{
+    char *p;
+
+    if (size < 1) size = 1;
+    if (size > TEXT_LIMIT) ct_scratch_die("text exceeds 65536 bytes");
+    p = (char *)malloc((size_t)size);
+    if (!p) ct_scratch_die("out of memory");
+    p[0] = 0;
+    ct_scratch_keep(p);
+    return p;
+}
+
+void ct_scratch_free_all(void)
+{
+    int i;
+
+    for (i = 0; i < g_nscratch; i++) free(g_scratch[i]);
+    free(g_scratch);
+    g_scratch = (char **)0;
+    g_nscratch = 0;
+    g_capscratch = 0;
 }
 
 int ct_text_quote(char **buf, int *cap, const char *s)

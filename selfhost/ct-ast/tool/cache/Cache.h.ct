@@ -6,18 +6,21 @@
  * version string that goes into every key and turns a unit's key material into
  * a stamped key. Nothing here parses or emits.
  *
- * Macros do not cross a unit boundary, so the caps are declared here; MAX_PATH
- * 1024 and MAX_KEY 768 are the values `frontend/module/Module.h.ct` spells. The
- * cache deliberately knows nothing about `Unit`: the module layer hands in the
- * key material as strings and numbers, so this unit never imports upward.
+ * Macros do not cross a unit boundary, so the caps are declared here; MAX_KEY
+ * 768 is the value `frontend/module/Module.h.ct` spells. S1a-0 C2l: the cache
+ * directory and key-file paths are exact owned strings (the old MAX_PATH 1024
+ * buffers silently disabled the cache on a longer output path). The cache
+ * deliberately knows nothing about `Unit`: the module layer hands in the key
+ * material as strings and numbers, so this unit never imports upward.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
+import tool::sh::Sh;
+
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
-#define MAX_PATH 1024
 #define MAX_KEY  768
 /* S1a-0 C2b: the key grows on demand from MAX_KEY to the formal text bound. */
 #define MAX_KEY_MAX 65536
@@ -28,7 +31,9 @@ pub trait CacheOps {
     int  key(const char *path, const char *imports, unsigned long dep,
              int line_force, int diag_json, int runtime_checks,
              const char *nsroot, char **out, int *ocap);
-    int  paths(const char *outc, char *dir, int dcap, char *kf, int kcap);
+    /* S1a-0 C2l: both paths are owned by this call and freed by the caller
+       (`hit` / `store`). */
+    int  paths(const char *outc, char **dir, char **kf);
     int  hit(const char *outc, const char *key, int need_h);
     void store(const char *outc, const char *key);
 }
@@ -115,20 +120,32 @@ impl CacheOps for Cache {
     }
 
     /* `<dir of outc>/.ctcache/<base>.key`: the cache sits beside the unit's own
-       outputs, so `-o <dir>` keeps it out of the source tree. */
-    int paths(const char *outc, char *dir, int dcap, char *kf, int kcap)
+       outputs, so `-o <dir>` keeps it out of the source tree. S1a-0 C2l: the
+       two blocks grow from the old 1024-byte stack buffers to TEXT_LIMIT; a
+       non-zero return means OOM or a path over the formal bound, never a
+       silently disabled cache. */
+    int paths(const char *outc, char **dir, char **kf)
     {
         const char *slash;
         const char *base;
-        int w;
+        int rc;
         (void)self;
+        *dir = (char *)0;
+        *kf = (char *)0;
         slash = strrchr(outc, '/');
         base = slash ? slash + 1 : outc;
-        if (slash) w = snprintf(dir, (size_t)dcap, "%.*s/.ctcache", (int)(slash - outc), outc);
-        else w = snprintf(dir, (size_t)dcap, ".ctcache");
-        if (w < 0 || w >= dcap) return -1;
-        w = snprintf(kf, (size_t)kcap, "%s/%s.key", dir, base);
-        if (w < 0 || w >= kcap) return -1;
+        if (slash)
+            rc = tool::sh::ct_text_fmt(dir, 1024, "%.*s/.ctcache",
+                                       (int)(slash - outc), outc);
+        else
+            rc = tool::sh::ct_text_fmt(dir, 1024, ".ctcache");
+        if (rc != 0) return rc;
+        rc = tool::sh::ct_text_fmt(kf, 1024, "%s/%s.key", *dir, base);
+        if (rc != 0) {
+            free(*dir);
+            *dir = (char *)0;
+            return rc;
+        }
         return 0;
     }
 
@@ -138,53 +155,62 @@ impl CacheOps for Cache {
        `.h` probe is skipped there. */
     int hit(const char *outc, const char *key, int need_h)
     {
-        char dir[MAX_PATH];
-        char kf[MAX_PATH];
-        char hp[MAX_PATH];
-        char *buf;
+        char *dir = (char *)0;
+        char *kf = (char *)0;
+        char *hp = (char *)0;
+        char *buf = (char *)0;
         FILE *f;
         size_t n, kl, hl;
+        int ok = 0;
         (void)self;
 
-        if (self->paths(outc, dir, sizeof dir, kf, sizeof kf) != 0) return 0;
+        if (self->paths(outc, &dir, &kf) != 0) goto done;
         kl = strlen(key);
         buf = (char *)malloc(kl + 1);
-        if (!buf) return 0;
+        if (!buf) goto done;
         f = fopen(kf, "r");
-        if (!f) { free(buf); return 0; }
+        if (!f) goto done;
         n = fread(buf, 1, kl + 1, f);
         fclose(f);
-        if (n != kl || memcmp(buf, key, kl) != 0) { free(buf); return 0; }
-        free(buf);
+        if (n != kl || memcmp(buf, key, kl) != 0) goto done;
         if (need_h) {
-            if (snprintf(hp, sizeof hp, "%s", outc) >= (int)sizeof hp) return 0;
+            if (tool::sh::ct_text_dup(outc, &hp) != 0) goto done;
             hl = strlen(hp);
-            if (hl < 3 || hp[hl - 1] != 'c' || hp[hl - 2] != '.') return 0;
+            if (hl < 3 || hp[hl - 1] != 'c' || hp[hl - 2] != '.') goto done;
             hp[hl - 1] = 'h';
             f = fopen(hp, "rb");
-            if (!f) return 0;
+            if (!f) goto done;
             fclose(f);
         }
         f = fopen(outc, "rb");
-        if (!f) return 0;
+        if (!f) goto done;
         fclose(f);
-        return 1;
+        ok = 1;
+done:
+        free(dir);
+        free(kf);
+        free(hp);
+        free(buf);
+        return ok;
     }
 
     /* Best effort by design: a cache that cannot be written costs a rebuild,
        never a broken build, so an unwritable directory stays silent. */
     void store(const char *outc, const char *key)
     {
-        char dir[MAX_PATH];
-        char kf[MAX_PATH];
+        char *dir = (char *)0;
+        char *kf = (char *)0;
         FILE *f;
         (void)self;
-        if (self->paths(outc, dir, sizeof dir, kf, sizeof kf) != 0) return;
+        if (self->paths(outc, &dir, &kf) != 0) return;
         mkdir(dir, 0755);            /* EEXIST on a warm cache is the normal case */
         f = fopen(kf, "w");
-        if (!f) return;
-        fprintf(f, "%s", key);       /* no newline: `hit` compares byte for byte */
-        fclose(f);
+        if (f) {
+            fprintf(f, "%s", key);   /* no newline: `hit` compares byte for byte */
+            fclose(f);
+        }
+        free(dir);
+        free(kf);
     }
 }
 

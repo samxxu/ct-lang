@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define MAX_TEXT     160
-#define MAX_PATH     1024
+#define TEXT_LIMIT   65536              /* S1a-0 C2l: formal text / path bound */
 #define MAX_ERRORS   20                 /* recovery cap: past this the compiler stops */
 #define MAX_WARNINGS 32
 #define WARN_LIMIT   65536
@@ -71,8 +71,8 @@ struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
-struct tool_cache_Cache;
 struct tool_sh_Sh;
+struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
 struct tool_pkg_PkgIndex;
@@ -124,7 +124,7 @@ struct tool_diag_Warn {
     int line;
     int col;
     int path_line;
-    char file[MAX_PATH];
+    char * file;
     char var[MAX_TEXT];
     char tname[MAX_TEXT];
     char stype[MAX_TEXT];
@@ -145,6 +145,8 @@ struct tool_diag_Diag {
 const char * tool_diag_ct_diag_code_for_error(const char *);
 const char * tool_diag_ct_diag_warn_code(int);
 static int diag_grow_warns(struct tool_diag_Diag *);
+static char * diag_dup(const char *);
+static void diag_loc(FILE *, const struct tool_diag_Warn *, int);
 int tool_diag_ct_sem_error(int, int, const char *, const char *);
 int tool_diag_ct_sem_note(int, int, const char *, const char *);
 int tool_diag_ct_sig_warn(int, int, const char *, const char *, const char *, const char *, const char *);
@@ -216,7 +218,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_sig_warn(void *self, int li
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     snprintf(w->var, sizeof(w->var), "%s", method);
     snprintf(w->tname, sizeof(w->tname), "%s", trait);
     snprintf(w->stype, sizeof(w->stype), "%s", stype);
@@ -246,7 +251,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_arity_warn(void *self, int 
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     snprintf(w->var, sizeof(w->var), "%s", callee);
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -278,7 +286,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_type_warn(void *self, int l
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     snprintf(w->var, sizeof(w->var), "%s", callee);
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -299,7 +310,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_amb_warn(void *self, int li
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     snprintf(w->var, sizeof(w->var), "%s", method);
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -320,7 +334,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_recv_warn(void *self, int l
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     snprintf(w->var, sizeof(w->var), "%s", method);
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -341,7 +358,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_loop_warn(void *self, int l
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     w->var[0] = 0;
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -362,7 +382,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_slice_warn(void *self, int 
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     w->var[0] = 0;
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -383,7 +406,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_deprecated(void *self, int 
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     w->var[0] = 0;
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -404,7 +430,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_str_warn(void *self, int li
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     w->var[0] = 0;
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -425,7 +454,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_std_shadow(void *self, int 
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     w->var[0] = 0;
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -446,7 +478,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_leak(void *self, int kind, 
     w->line = line;
     w->col = 0;
     w->path_line = path_line;
-    snprintf(w->file, sizeof(w->file), "%s", file);
+    w->file = diag_dup(file);
+    if ((!w->file)) {
+        return (-1);
+    }
     snprintf(w->var, sizeof(w->var), "%s", var);
     snprintf(w->tname, sizeof(w->tname), "%s", tname);
     w->stype[0] = 0;
@@ -467,7 +502,10 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_cycle(void *self, int line,
     w->line = line;
     w->col = col;
     w->path_line = 0;
-    snprintf(w->file, sizeof(w->file), "%s", path);
+    w->file = diag_dup(path);
+    if ((!w->file)) {
+        return (-1);
+    }
     w->var[0] = 0;
     w->tname[0] = 0;
     w->stype[0] = 0;
@@ -732,7 +770,6 @@ static int tool_diag_Diag_tool_diag_DiagStore_emit(void *self, int json, int to_
     else {
         for (i = 0; i < _self->nwarns; i++) {
             struct tool_diag_Warn * w = (&_self->warns[i]);
-            char loc[MAX_PATH + 32];
             char csuf[64];
             const char * wcode = tool_diag_ct_diag_warn_code(w->kind);
             if ((_self->codes && wcode[0])) {
@@ -741,70 +778,65 @@ static int tool_diag_Diag_tool_diag_DiagStore_emit(void *self, int json, int to_
             else {
                 csuf[0] = 0;
             }
-            if ((_self->strict && (w->col > 0))) {
-                snprintf(loc, sizeof(loc), "%s:%d:%d:", w->file, w->line, w->col);
-            }
-            else {
-                snprintf(loc, sizeof(loc), "%s:%d:", w->file, w->line);
-            }
+            diag_loc(tf, w, _self->strict);
             if (w->kind == 1) {
-                fprintf(tf, "%s %s: signature mismatch: '%s' in impl of '%s' for '%s': %s%s\n", loc, sigsev, w->var, w->tname, w->stype, w->msg, csuf);
+                fprintf(tf, " %s: signature mismatch: '%s' in impl of '%s' for '%s': %s%s\n", sigsev, w->var, w->tname, w->stype, w->msg, csuf);
             }
             else {
                 if (w->kind == 2) {
-                    fprintf(tf, "%s %s: potential leak: '%s' (%s*) may leak on a return path (line %d)%s\n", loc, leaksev, w->var, w->tname, w->path_line, csuf);
+                    fprintf(tf, " %s: potential leak: '%s' (%s*) may leak on a return path (line %d)%s\n", leaksev, w->var, w->tname, w->path_line, csuf);
                 }
                 else {
                     if (w->kind == 3) {
-                        fprintf(tf, "%s %s: a borrowed pointer escapes through 'return'%s\n", loc, sev, csuf);
+                        fprintf(tf, " %s: a borrowed pointer escapes through 'return'%s\n", sev, csuf);
                     }
                     else {
                         if (w->kind == 4) {
-                            fprintf(tf, "%s %s: arity mismatch: '%s' %s%s\n", loc, sev, w->var, w->msg, csuf);
+                            fprintf(tf, " %s: arity mismatch: '%s' %s%s\n", sev, w->var, w->msg, csuf);
                         }
                         else {
                             if (w->kind == 5) {
                                 if (w->var[0]) {
-                                    fprintf(tf, "%s %s: type mismatch: '%s' %s%s\n", loc, sev, w->var, w->msg, csuf);
+                                    fprintf(tf, " %s: type mismatch: '%s' %s%s\n", sev, w->var, w->msg, csuf);
                                 }
                                 else {
-                                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                                 }
                             }
                             else {
                                 if (w->kind == 6) {
-                                    fprintf(tf, "%s %s: ambiguous method: '%s' %s%s\n", loc, sev, w->var, w->msg, csuf);
+                                    fprintf(tf, " %s: ambiguous method: '%s' %s%s\n", sev, w->var, w->msg, csuf);
                                 }
                                 else {
                                     if (w->kind == 7) {
-                                        fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                                        fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                                     }
                                     else {
                                         if (w->kind == 8) {
-                                            fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                                            fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                                         }
                                         else {
                                             if (w->kind == 9) {
-                                                fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                                                fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                                             }
                                             else {
                                                 if (w->kind == 11) {
-                                                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                                                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                                                 }
                                                 else {
                                                     if (w->kind == 12) {
-                                                        fprintf(tf, "%s warning: %s%s\n", loc, w->msg, csuf);
+                                                        fprintf(tf, " warning: %s%s\n", w->msg, csuf);
                                                     }
                                                     else {
                                                         if (w->kind == 13) {
-                                                            fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                                                            fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                                                         }
                                                         else {
                                                             if (w->kind == 10) {
-                                                                fprintf(tf, "%s %s: %s%s\n", loc, leaksev, w->msg, csuf);
+                                                                fprintf(tf, " %s: %s%s\n", leaksev, w->msg, csuf);
                                                             }
                                                             else {
-                                                                fprintf(tf, "%s %s: potential leak: '%s' (%s*) allocated but never deleted%s\n", loc, leaksev, w->var, w->tname, csuf);
+                                                                fprintf(tf, " %s: potential leak: '%s' (%s*) allocated but never deleted%s\n", leaksev, w->var, w->tname, csuf);
                                                             }
                                                         }
                                                     }
@@ -862,7 +894,12 @@ static void tool_diag_Diag_tool_diag_DiagStore_set_leaks_error(void *self, int o
 
 static void tool_diag_Diag_tool_diag_DiagStore_reset(void *self) {
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
+    int i;
     (void)(_self);
+    for (i = 0; i < _self->nwarns; i++) {
+        free(_self->warns[i].file);
+        _self->warns[i].file = (char *)(0);
+    }
     _self->nwarns = 0;
     _self->nsem = 0;
     _self->sig_errs = 0;
@@ -1038,6 +1075,30 @@ static int diag_grow_warns(struct tool_diag_Diag * self) {
     self->warns = grown;
     self->wcap = cap;
     return 0;
+}
+static char * diag_dup(const char * s) {
+    size_t n;
+    char * p;
+    n = strlen(s);
+    if (n > (size_t)(TEXT_LIMIT)) {
+        fprintf(stderr, "ctc: diagnostic path exceeds %d bytes\n", TEXT_LIMIT);
+        return (char *)(0);
+    }
+    p = (char *)(malloc((n + 1)));
+    if ((!p)) {
+        fprintf(stderr, "ctc: out of memory\n");
+        return (char *)(0);
+    }
+    memcpy(p, s, (n + 1));
+    return p;
+}
+static void diag_loc(FILE * f, const struct tool_diag_Warn * w, int strict) {
+    if ((strict && (w->col > 0))) {
+        fprintf(f, "%s:%d:%d:", w->file, w->line, w->col);
+    }
+    else {
+        fprintf(f, "%s:%d:", w->file, w->line);
+    }
 }
 int tool_diag_ct_sem_error(int line, int col, const char * msg, const char * path) {
     return tool_diag_g_diag.__tool_diag_diagstore_vptr->sem_error(&tool_diag_g_diag, line, col, msg, path);

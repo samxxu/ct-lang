@@ -19,7 +19,7 @@
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT     160
-#define MAX_PATH     1024
+#define TEXT_LIMIT   65536              /* S1a-0 C2l: formal text / path bound */
 #define MAX_ERRORS   20                 /* recovery cap: past this the compiler stops */
 #define MAX_WARNINGS 32
 #define WARN_LIMIT   65536
@@ -94,7 +94,10 @@ struct Warn {
     int  col;           /* 1-based column of the token the finding is about (0: none);
                            `ct check` reports it, compile-mode text stays `file:line:` */
     int  path_line;     /* kind 2: the conditional return that leaves it behind */
-    char file[MAX_PATH];
+    /* S1a-0 C2l: the unit path is owned by the record, allocated at its exact
+       length. It used to be `char file[MAX_PATH]`, so a path over 1023 bytes
+       was truncated in every diagnostic. `diag_reset` frees it. */
+    char *file;
     char var[MAX_TEXT]; /* leak: variable; mismatch: method */
     char tname[MAX_TEXT]; /* leak: struct type; mismatch: trait */
     char stype[MAX_TEXT];
@@ -197,6 +200,35 @@ static int diag_grow_warns(struct Diag *self)
     return 0;
 }
 
+/* S1a-0 C2l: one record's file path, exact length, owned by the store. A path
+   over the formal text bound is an explicit failure, never a silent cut. */
+static char *diag_dup(const char *s)
+{
+    size_t n;
+    char *p;
+
+    n = strlen(s);
+    if (n > (size_t)TEXT_LIMIT) {
+        fprintf(stderr, "ctc: diagnostic path exceeds %d bytes\n", TEXT_LIMIT);
+        return (char *)0;
+    }
+    p = (char *)malloc(n + 1);
+    if (!p) {
+        fprintf(stderr, "ctc: out of memory\n");
+        return (char *)0;
+    }
+    memcpy(p, s, n + 1);
+    return p;
+}
+
+/* The location prefix, printed straight from the record: a `char loc[]` copy
+   is what used to cap the path. `ct check` adds the column (D19-4). */
+static void diag_loc(FILE *f, const struct Warn *w, int strict)
+{
+    if (strict && w->col > 0) fprintf(f, "%s:%d:%d:", w->file, w->line, w->col);
+    else fprintf(f, "%s:%d:", w->file, w->line);
+}
+
 impl DiagStore for Diag {
     /* A semantic error in L2's shape (`file:line:col: error: ...`). Reporting is
        followed by resynchronisation in `parse_program`, so the rest of the file
@@ -245,7 +277,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         snprintf(w->var, sizeof w->var, "%s", method);
         snprintf(w->tname, sizeof w->tname, "%s", trait);
         snprintf(w->stype, sizeof w->stype, "%s", stype);
@@ -279,7 +312,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         snprintf(w->var, sizeof w->var, "%s", callee);
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -311,7 +345,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         snprintf(w->var, sizeof w->var, "%s", callee);
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -335,7 +370,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         snprintf(w->var, sizeof w->var, "%s", method);
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -358,7 +394,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         snprintf(w->var, sizeof w->var, "%s", method);
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -381,7 +418,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         w->var[0] = 0;
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -403,7 +441,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         w->var[0] = 0;
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -425,7 +464,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         w->var[0] = 0;
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -447,7 +487,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         w->var[0] = 0;
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -467,7 +508,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         w->var[0] = 0;
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -486,7 +528,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = 0;
         w->path_line = path_line;
-        snprintf(w->file, sizeof w->file, "%s", file);
+        w->file = diag_dup(file);
+        if (!w->file) return -1;
         snprintf(w->var, sizeof w->var, "%s", var);
         snprintf(w->tname, sizeof w->tname, "%s", tname);
         w->stype[0] = 0;
@@ -508,7 +551,8 @@ impl DiagStore for Diag {
         w->line = line;
         w->col = col;
         w->path_line = 0;
-        snprintf(w->file, sizeof w->file, "%s", path);
+        w->file = diag_dup(path);
+        if (!w->file) return -1;
         w->var[0] = 0;
         w->tname[0] = 0;
         w->stype[0] = 0;
@@ -716,59 +760,57 @@ impl DiagStore for Diag {
                 /* `ct check` follows the source location contract
                    (`file:line:col:`); compile and build stay `file:line:` so
                    their bytes do not move (D19-4). */
-                char loc[MAX_PATH + 32];
                 char csuf[64];
                 const char *wcode = ct_diag_warn_code(w->kind);
                 if (self->codes && wcode[0]) snprintf(csuf, sizeof csuf, " [%s]", wcode);
                 else csuf[0] = 0;
-                if (self->strict && w->col > 0)
-                    snprintf(loc, sizeof loc, "%s:%d:%d:", w->file, w->line, w->col);
-                else
-                    snprintf(loc, sizeof loc, "%s:%d:", w->file, w->line);
+                /* S1a-0 C2l: the location prints from the owned path; the old
+                   fixed `loc` copy cut it at the 1024-byte cap. */
+                diag_loc(tf, w, self->strict);
                 if (w->kind == 1)
-                    fprintf(tf, "%s %s: signature mismatch: '%s' in impl of '%s' for '%s': %s%s\n",
-                            loc, sigsev, w->var, w->tname, w->stype, w->msg, csuf);
+                    fprintf(tf, " %s: signature mismatch: '%s' in impl of '%s' for '%s': %s%s\n",
+                            sigsev, w->var, w->tname, w->stype, w->msg, csuf);
                 else if (w->kind == 2)
-                    fprintf(tf, "%s %s: potential leak: '%s' (%s*) may leak on a return path (line %d)%s\n",
-                            loc, leaksev, w->var, w->tname, w->path_line, csuf);
+                    fprintf(tf, " %s: potential leak: '%s' (%s*) may leak on a return path (line %d)%s\n",
+                            leaksev, w->var, w->tname, w->path_line, csuf);
                 else if (w->kind == 3)
-                    fprintf(tf, "%s %s: a borrowed pointer escapes through 'return'%s\n",
-                            loc, sev, csuf);
+                    fprintf(tf, " %s: a borrowed pointer escapes through 'return'%s\n",
+                            sev, csuf);
                 else if (w->kind == 4)
-                    fprintf(tf, "%s %s: arity mismatch: '%s' %s%s\n",
-                            loc, sev, w->var, w->msg, csuf);
+                    fprintf(tf, " %s: arity mismatch: '%s' %s%s\n",
+                            sev, w->var, w->msg, csuf);
                 else if (w->kind == 5) {
                     /* Phase 32: an empty callee means the message already
                        carries its own label (`initializer: …`), so nothing
                        is prefixed. */
                     if (w->var[0])
-                        fprintf(tf, "%s %s: type mismatch: '%s' %s%s\n",
-                                loc, sev, w->var, w->msg, csuf);
+                        fprintf(tf, " %s: type mismatch: '%s' %s%s\n",
+                                sev, w->var, w->msg, csuf);
                     else
-                        fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                        fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                 }
                 else if (w->kind == 6)
-                    fprintf(tf, "%s %s: ambiguous method: '%s' %s%s\n",
-                            loc, sev, w->var, w->msg, csuf);
+                    fprintf(tf, " %s: ambiguous method: '%s' %s%s\n",
+                            sev, w->var, w->msg, csuf);
                 else if (w->kind == 7)
-                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                 else if (w->kind == 8)
-                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                 else if (w->kind == 9)
-                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                 else if (w->kind == 11)
-                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                 else if (w->kind == 12)
                     /* LANG-24: the deprecated alias always prints `warning:`,
                        even when `ct check` escalates the other findings. */
-                    fprintf(tf, "%s warning: %s%s\n", loc, w->msg, csuf);
+                    fprintf(tf, " warning: %s%s\n", w->msg, csuf);
                 else if (w->kind == 13)
-                    fprintf(tf, "%s %s: %s%s\n", loc, sev, w->msg, csuf);
+                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                 else if (w->kind == 10)
-                    fprintf(tf, "%s %s: %s%s\n", loc, leaksev, w->msg, csuf);
+                    fprintf(tf, " %s: %s%s\n", leaksev, w->msg, csuf);
                 else
-                    fprintf(tf, "%s %s: potential leak: '%s' (%s*) allocated but never deleted%s\n",
-                            loc, leaksev, w->var, w->tname, csuf);
+                    fprintf(tf, " %s: potential leak: '%s' (%s*) allocated but never deleted%s\n",
+                            leaksev, w->var, w->tname, csuf);
             }
         }
         /* PH-82: the leak escalation is the run's failure signal even when
@@ -813,7 +855,14 @@ impl DiagStore for Diag {
 
     void reset(void)
     {
+        int i;
         (void)self;
+        /* S1a-0 C2l: each record owns its file path; a reset (one per unit in
+           build mode) releases them before the slots are reused. */
+        for (i = 0; i < self->nwarns; i++) {
+            free(self->warns[i].file);
+            self->warns[i].file = (char *)0;
+        }
         self->nwarns = 0;
         self->nsem = 0;
         self->sig_errs = 0;
