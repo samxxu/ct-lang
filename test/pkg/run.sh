@@ -1714,6 +1714,16 @@ else
 fi
 
 echo
+echo "== S1a-0 C1: package-manager dependency rows (MAX_PKG_DEPS) =="
+# The probe declares 20 local dependencies in one manifest and round-trips the
+# 21 resulting rows through get/verify/build/install.
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg27_deps.sh"; then
+    ok "S1a-0 C1 package dependency rows"
+else
+    bad "S1a-0 C1 package dependency rows" "the pkg27 probe failed"
+fi
+
+echo
 echo "== PKG-25: lock merge keeps same-name different-publisher rows =="
 # The probe fetches demo/hello then acme/hello into one project and asserts both
 # lock rows survive, `ct verify --strict` accepts them, and a re-fetch of one
