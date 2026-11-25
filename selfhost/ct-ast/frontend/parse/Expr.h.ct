@@ -45,6 +45,7 @@ import frontend::parse::ExprSubscript;
 import frontend::parse::ExprOptional;
 import frontend::parse::ExprTraitInst;
 import frontend::parse::ExprRecvMut;
+import frontend::parse::ExprTry;
 
 #define B_ADD 1
 #define B_AND 12
@@ -8984,99 +8985,6 @@ impl ExprTypes for Expr {
             return -1;
         }
         return 0;
-    }
-}
-
-impl ExprTry for Expr {
-    int q_suffix_ahead(void)
-    {
-        int sp, sbol, stok, sline, stokline, sstart, slstart, sfloat, strunc;
-        long snum;
-        const char *stext_ptr; int stext_len;
-        const char *ssuf_ptr; int ssuf_len;
-        int r;
-
-        sp = self->lex->pos;
-        sbol = self->lex->bol;
-        stok = self->lex->tok;
-        snum = self->lex->toknum;
-        sline = self->lex->line;
-        stokline = self->lex->tokline;
-        sstart = self->lex->tokstart;
-        slstart = self->lex->lstart;
-        sfloat = self->lex->tokfloat;
-        strunc = self->lex->toktrunc;
-        stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
-        ssuf_ptr = self->lex->toksuffix.ptr; ssuf_len = self->lex->toksuffix.len;
-        self->sup->lex_next();          /* the token after the `?` */
-        r = 1;
-        if (self->lex->tok == T_ID || self->lex->tok == T_NUM
-            || self->lex->tok == T_STR) {
-            r = 0;
-        } else if (self->lex->tok == T_PUNCT) {
-            /* `&&` / `||` cannot start an expression either, but the design's
-               disambiguation table rules them ternary (a missing `:` is the
-               report a user sees, not a silently shifted operator). */
-            if (self->lex->tok_is("(") || self->lex->tok_is("-")
-                || self->lex->tok_is("!") || self->lex->tok_is("~")
-                || self->lex->tok_is("&") || self->lex->tok_is("*")
-                || self->lex->tok_is("++") || self->lex->tok_is("--")
-                || self->lex->tok_is("&&") || self->lex->tok_is("||"))
-                r = 0;
-        }
-        self->lex->pos = sp;
-        self->lex->bol = sbol;
-        self->lex->tok = stok;
-        self->lex->toknum = snum;
-        self->lex->line = sline;
-        self->lex->tokline = stokline;
-        self->lex->tokstart = sstart;
-        self->lex->lstart = slstart;
-        self->lex->tokfloat = sfloat;
-        self->lex->toktrunc = strunc;
-        self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
-        self->lex->toksuffix.ptr = ssuf_ptr; self->lex->toksuffix.len = ssuf_len;
-        return r;
-    }
-
-    int result_tag(const char *ctype, char *tag, int cap)
-    {
-        char buf[MAX_TEXT];
-        size_t n;
-        int inst, ninst;
-        struct StructInst *ins;
-
-        (void)self;
-        if (!ctype || !ctype[0]) return 0;
-        if (snprintf(buf, sizeof buf, "%s", ctype) >= (int)sizeof buf) return 0;
-        n = strlen(buf);
-        while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '*')) {
-            if (buf[n - 1] == '*') return 0;
-            buf[--n] = 0;
-        }
-        if (strncmp(buf, "struct ", 7) == 0) memmove(buf, buf + 7, strlen(buf + 7) + 1);
-        else if (strncmp(buf, "union ", 6) == 0 || strncmp(buf, "enum ", 5) == 0) return 0;
-        inst = frontend::sym::ct_inst_find(buf);
-        if (inst < 0) return 0;
-        ins = frontend::sym::ct_insts(&ninst);
-        if (!ins || inst >= ninst) return 0;
-        if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2) return 0;
-        if (snprintf(tag, (size_t)cap, "%s", buf) >= cap) return 0;
-        return 1;
-    }
-
-    int result_cols(int inst, char *val, int vcap, char *err, int ecap)
-    {
-        int ninst;
-        struct StructInst *ins;
-
-        (void)self;
-        ins = frontend::sym::ct_insts(&ninst);
-        if (!ins || inst < 0 || inst >= ninst) return 0;
-        if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2) return 0;
-        if (snprintf(val, (size_t)vcap, "%s", ins[inst].ctype[0]) >= vcap) return 0;
-        if (snprintf(err, (size_t)ecap, "%s", ins[inst].carg[1]) >= ecap) return 0;
-        return 1;
     }
 }
 

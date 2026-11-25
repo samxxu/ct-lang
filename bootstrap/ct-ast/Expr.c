@@ -19,6 +19,7 @@
 #include "ExprOptional.h"
 #include "ExprTraitInst.h"
 #include "ExprRecvMut.h"
+#include "ExprTry.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -176,7 +177,6 @@ struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable;
 const struct frontend_parse_ExprTypes_vtbl frontend_parse_Expr_frontend_parse_ExprTypes_vtable;
-const struct frontend_parse_ExprTry_vtbl frontend_parse_Expr_frontend_parse_ExprTry_vtable;
 const struct frontend_parse_ExprBinding_vtbl frontend_parse_Expr_frontend_parse_ExprBinding_vtable;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
@@ -7897,139 +7897,6 @@ const struct frontend_parse_ExprTypes_vtbl frontend_parse_Expr_frontend_parse_Ex
     .slice_view_from_array = frontend_parse_Expr_frontend_parse_ExprTypes_slice_view_from_array,
     .chk_mcall_args = frontend_parse_Expr_frontend_parse_ExprTypes_chk_mcall_args,
     .lit_coerce = frontend_parse_Expr_frontend_parse_ExprTypes_lit_coerce
-};
-
-static int frontend_parse_Expr_frontend_parse_ExprTry_q_suffix_ahead(void *self) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int sp;
-    int sbol;
-    int stok;
-    int sline;
-    int stokline;
-    int sstart;
-    int slstart;
-    int sfloat;
-    int strunc;
-    long snum;
-    const char * stext_ptr;
-    int stext_len;
-    const char * ssuf_ptr;
-    int ssuf_len;
-    int r;
-    sp = _self->lex->pos;
-    sbol = _self->lex->bol;
-    stok = _self->lex->tok;
-    snum = _self->lex->toknum;
-    sline = _self->lex->line;
-    stokline = _self->lex->tokline;
-    sstart = _self->lex->tokstart;
-    slstart = _self->lex->lstart;
-    sfloat = _self->lex->tokfloat;
-    strunc = _self->lex->toktrunc;
-    stext_ptr = _self->lex->tokstr.ptr;
-    stext_len = _self->lex->tokstr.len;
-    ssuf_ptr = _self->lex->toksuffix.ptr;
-    ssuf_len = _self->lex->toksuffix.len;
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    r = 1;
-    if ((((_self->lex->tok == T_ID) || (_self->lex->tok == T_NUM)) || (_self->lex->tok == T_STR))) {
-        r = 0;
-    }
-    else {
-        if (_self->lex->tok == T_PUNCT) {
-            if ((((((((((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "-")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "!")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "~")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "&")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "++")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "--")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "&&")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "||"))) {
-                r = 0;
-            }
-        }
-    }
-    _self->lex->pos = sp;
-    _self->lex->bol = sbol;
-    _self->lex->tok = stok;
-    _self->lex->toknum = snum;
-    _self->lex->line = sline;
-    _self->lex->tokline = stokline;
-    _self->lex->tokstart = sstart;
-    _self->lex->lstart = slstart;
-    _self->lex->tokfloat = sfloat;
-    _self->lex->toktrunc = strunc;
-    _self->lex->tokstr.ptr = stext_ptr;
-    _self->lex->tokstr.len = stext_len;
-    _self->lex->toksuffix.ptr = ssuf_ptr;
-    _self->lex->toksuffix.len = ssuf_len;
-    return r;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprTry_result_tag(void *self, const char * ctype, char * tag, int cap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char buf[MAX_TEXT];
-    size_t n;
-    int inst;
-    int ninst;
-    struct frontend_sym_StructInst * ins;
-    (void)(_self);
-    if (((!ctype) || (!ctype[0]))) {
-        return 0;
-    }
-    if (snprintf(buf, sizeof(buf), "%s", ctype) >= (int)(sizeof(buf))) {
-        return 0;
-    }
-    n = strlen(buf);
-    while (((n > 0) && ((buf[(n - 1)] == ' ') || (buf[(n - 1)] == '*')))) {
-        if (buf[(n - 1)] == '*') {
-            return 0;
-        }
-        buf[--n] = 0;
-    }
-    if (strncmp(buf, "struct ", 7) == 0) {
-        memmove(buf, (buf + 7), (strlen((buf + 7)) + 1));
-    }
-    else {
-        if (((strncmp(buf, "union ", 6) == 0) || (strncmp(buf, "enum ", 5) == 0))) {
-            return 0;
-        }
-    }
-    inst = frontend_sym_ct_inst_find(buf);
-    if (inst < 0) {
-        return 0;
-    }
-    ins = frontend_sym_ct_insts((&ninst));
-    if (((!ins) || (inst >= ninst))) {
-        return 0;
-    }
-    if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
-        return 0;
-    }
-    if (snprintf(tag, (size_t)(cap), "%s", buf) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprTry_result_cols(void *self, int inst, char * val, int vcap, char * err, int ecap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int ninst;
-    struct frontend_sym_StructInst * ins;
-    (void)(_self);
-    ins = frontend_sym_ct_insts((&ninst));
-    if ((((!ins) || (inst < 0)) || (inst >= ninst))) {
-        return 0;
-    }
-    if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
-        return 0;
-    }
-    if (snprintf(val, (size_t)(vcap), "%s", ins[inst].ctype[0]) >= vcap) {
-        return 0;
-    }
-    if (snprintf(err, (size_t)(ecap), "%s", ins[inst].carg[1]) >= ecap) {
-        return 0;
-    }
-    return 1;
-}
-
-const struct frontend_parse_ExprTry_vtbl frontend_parse_Expr_frontend_parse_ExprTry_vtable = {
-    .q_suffix_ahead = frontend_parse_Expr_frontend_parse_ExprTry_q_suffix_ahead,
-    .result_tag = frontend_parse_Expr_frontend_parse_ExprTry_result_tag,
-    .result_cols = frontend_parse_Expr_frontend_parse_ExprTry_result_cols
 };
 
 static int frontend_parse_Expr_frontend_parse_ExprBinding_binding_convert(void *self, int expr, const char * target, int line, int col) {
