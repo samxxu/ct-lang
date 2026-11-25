@@ -209,8 +209,9 @@ impl EmitInvariant for Emitter {
            stack on a legal program. `depth` counts nesting, not siblings. */
         while (n >= 0) {
             if (depth > 2048) {
-                char dmsg[MAX_TEXT];
-                snprintf(dmsg, sizeof dmsg,
+                /* S1a-0 C2n-3: a message is not a fixed row. */
+                const char *dmsg;
+                dmsg = tool::sh::ct_scratch_fmt(
                          "lowering invariant I1: AST walk is deeper than 2048 at node %d", n);
                 return self->fail(dmsg);
             }

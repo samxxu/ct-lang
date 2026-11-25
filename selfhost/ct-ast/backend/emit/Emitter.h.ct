@@ -200,15 +200,19 @@ namespace backend::emit;
    `if` (`defined_after = defined_before || (then_defined && else_defined)`). */
 pub struct FldSnap {
     int  n;
-    char path[128][160];
+    /* S1a-0 C2n-3: field paths are pool text; the snapshot copies pointers. */
+    const char *path[128];
     int  owner[128];
     int  defined[128];
 }
 
 pub struct StrRetain {
     int  n;
-    char name[256][160];
-    char type[256][160];
+    /* S1a-0 C2n-3: names, types and field paths are pool text. A name or type
+       is a source identifier (already interned upstream); a field path is a
+       generated `base.field` and is interned where it is built. */
+    const char *name[256];
+    const char *type[256];
     int  own[256];
     int  blk[256];
     int  bkind[256];    /* 1 = loop body, 2 = switch body, 0 = plain block */
@@ -220,18 +224,18 @@ pub struct StrRetain {
        are known to hold an owning handle, so a later assignment releases the
        old value. Only straight-line member / arrow targets are tracked. */
     int  nfield;
-    char fpath[128][160];
+    const char *fpath[128];
     int  fowner[128];   /* binding index of the base local; -1 = global */
     int  fdepth[128];   /* block depth where the field was defined */
     int  fmaybe[128];   /* 1 = only conditionally defined (branch / loop body) */
     int  branch_hold;   /* the next N_BLOCK close keeps its marks for an if-merge */
     int  ln;
-    char lname[512][160];
-    char ltype[512][160];
+    const char *lname[512];
+    const char *ltype[512];
     int  lblk[256];
     int  hitparam;
-    char method[160];
-    char recv[160];
+    const char *method;
+    const char *recv;
 }
 
 
@@ -264,10 +268,14 @@ static void sb_push(struct Emitter *self, const char *name, const char *type, in
 {
     (void)self;
     int i;
+    const char *pname, *ptype;
     if (g_sb.n >= 256) return;
     i = g_sb.n;
-    snprintf(g_sb.name[i], MAX_TEXT, "%s", name);
-    snprintf(g_sb.type[i], MAX_TEXT, "%s", type);
+    pname = runtime::text::ct_intern(name);
+    ptype = runtime::text::ct_intern(type);
+    if (!pname || !ptype) return;   /* OOM: the row is not pushed */
+    g_sb.name[i] = pname;
+    g_sb.type[i] = ptype;
     g_sb.own[i] = own;
     g_sb.n++;
 }
@@ -286,10 +294,14 @@ static void sb_lpush(struct Emitter *self, const char *name, const char *type)
 {
     (void)self;
     int i;
+    const char *pname, *ptype;
     if (g_sb.ln >= 512) return;
     i = g_sb.ln;
-    snprintf(g_sb.lname[i], MAX_TEXT, "%s", name);
-    snprintf(g_sb.ltype[i], MAX_TEXT, "%s", type);
+    pname = runtime::text::ct_intern(name);
+    ptype = runtime::text::ct_intern(type);
+    if (!pname || !ptype) return;   /* OOM: the row is not pushed */
+    g_sb.lname[i] = pname;
+    g_sb.ltype[i] = ptype;
     g_sb.ln++;
 }
 
@@ -776,21 +788,34 @@ static int sb_jump_release(struct Emitter *self, int ind, int is_cont)
    definitely executed assignment. `fdepth` is the block depth of that
    assignment and `fmaybe` marks one made inside a branch / loop body, so a
    release never touches an undefined field. */
+/* S1a-0 C2n-3: compare a stored `base.field` path with its two halves without
+   building a 160-byte row. Both halves may be 159 bytes, so the old row cut
+   the key and a field's definition state was looked up under a wrong path. */
+static int sb_path_is(const char *path, const char *base, const char *field)
+{
+    size_t lb, lf;
+    if (!path) return 0;
+    lb = strlen(base);
+    lf = strlen(field);
+    return strlen(path) == lb + 1 + lf
+        && strncmp(path, base, lb) == 0
+        && path[lb] == '.'
+        && strcmp(path + lb + 1, field) == 0;
+}
+
 static int sb_field_find(struct Emitter *self, int owner, const char *base, const char *field)
 {
     int i;
-    char want[MAX_TEXT];
     (void)self;
-    snprintf(want, sizeof want, "%s.%s", base, field);
     for (i = g_sb.nfield - 1; i >= 0; i--)
-        if (g_sb.fowner[i] == owner && strcmp(g_sb.fpath[i], want) == 0) return i;
+        if (g_sb.fowner[i] == owner && sb_path_is(g_sb.fpath[i], base, field)) return i;
     return -1;
 }
 
 static void sb_field_mark(struct Emitter *self, const char *base, const char *field, int owner)
 {
     int i;
-    char want[MAX_TEXT];
+    const char *want;
     if (g_sb.nfield >= 128) return;
     i = sb_field_find(self, owner, base, field);
     if (i >= 0) {
@@ -802,8 +827,10 @@ static void sb_field_mark(struct Emitter *self, const char *base, const char *fi
         }
         return;
     }
-    snprintf(want, sizeof want, "%s.%s", base, field);
-    snprintf(g_sb.fpath[g_sb.nfield], MAX_TEXT, "%s", want);
+    want = runtime::text::ct_intern_join(base, ".");
+    want = want ? runtime::text::ct_intern_join(want, field) : (const char *)0;
+    if (!want) return;              /* OOM: the field is not tracked */
+    g_sb.fpath[g_sb.nfield] = want;
     g_sb.fowner[g_sb.nfield] = owner;
     g_sb.fdepth[g_sb.nfield] = g_sb.nblk;
     g_sb.fmaybe[g_sb.nfield] = 0;
@@ -824,9 +851,8 @@ static void sb_field_merge(struct Emitter *self, int keep_depth, int keep_ln)
             g_sb.fdepth[i] = keep_depth;
             g_sb.fmaybe[i] = 1;
         }
-        /* compact in place: `snprintf(dst, n, "%s", dst)` is undefined
-           (glibc returns an empty string), so only copy on a real move */
-        if (j != i) memmove(g_sb.fpath[j], g_sb.fpath[i], MAX_TEXT);
+        /* the pool owns the text: compacting only moves the pointer */
+        g_sb.fpath[j] = g_sb.fpath[i];
         g_sb.fowner[j] = g_sb.fowner[i];
         g_sb.fdepth[j] = g_sb.fdepth[i];
         g_sb.fmaybe[j] = g_sb.fmaybe[i];
@@ -842,7 +868,7 @@ static void sb_field_snap(struct Emitter *self, struct FldSnap *s)
     (void)self;
     s->n = g_sb.nfield;
     for (i = 0; i < g_sb.nfield && i < 128; i++) {
-        snprintf(s->path[i], MAX_TEXT, "%s", g_sb.fpath[i]);
+        s->path[i] = g_sb.fpath[i];
         s->owner[i] = g_sb.fowner[i];
         s->defined[i] = g_sb.fmaybe[i] ? 0 : 1;
     }
@@ -854,7 +880,7 @@ static void sb_field_restore(struct Emitter *self, struct FldSnap *s)
     (void)self;
     g_sb.nfield = s->n;
     for (i = 0; i < s->n && i < 128; i++) {
-        snprintf(g_sb.fpath[i], MAX_TEXT, "%s", s->path[i]);
+        g_sb.fpath[i] = s->path[i];
         g_sb.fowner[i] = s->owner[i];
         g_sb.fdepth[i] = g_sb.nblk;
         g_sb.fmaybe[i] = s->defined[i] ? 0 : 1;
@@ -881,7 +907,7 @@ static void sb_field_if_merge(struct Emitter *self, struct FldSnap *pre, struct 
         int ti = sb_snap_find(thn, pre->owner[i], pre->path[i]);
         int ei = sb_snap_find(els, pre->owner[i], pre->path[i]);
         int def = pre->defined[i] || ((ti >= 0 && thn->defined[ti]) && (ei >= 0 && els->defined[ei]));
-        snprintf(g_sb.fpath[g_sb.nfield], MAX_TEXT, "%s", pre->path[i]);
+        g_sb.fpath[g_sb.nfield] = pre->path[i];
         g_sb.fowner[g_sb.nfield] = pre->owner[i];
         g_sb.fdepth[g_sb.nfield] = g_sb.nblk;
         g_sb.fmaybe[g_sb.nfield] = def ? 0 : 1;
@@ -894,7 +920,7 @@ static void sb_field_if_merge(struct Emitter *self, struct FldSnap *pre, struct 
         if (pi >= 0) continue;   /* already merged with the pre state */
         def = (thn->defined[i] && ei >= 0 && els->defined[ei]);
         if (g_sb.nfield >= 128) break;
-        snprintf(g_sb.fpath[g_sb.nfield], MAX_TEXT, "%s", thn->path[i]);
+        g_sb.fpath[g_sb.nfield] = thn->path[i];
         g_sb.fowner[g_sb.nfield] = thn->owner[i];
         g_sb.fdepth[g_sb.nfield] = g_sb.nblk;
         g_sb.fmaybe[g_sb.nfield] = def ? 0 : 1;
@@ -905,7 +931,7 @@ static void sb_field_if_merge(struct Emitter *self, struct FldSnap *pre, struct 
         int ti = sb_snap_find(thn, els->owner[i], els->path[i]);
         if (pi >= 0 || ti >= 0) continue;   /* merged above */
         if (g_sb.nfield >= 128) break;
-        snprintf(g_sb.fpath[g_sb.nfield], MAX_TEXT, "%s", els->path[i]);
+        g_sb.fpath[g_sb.nfield] = els->path[i];
         g_sb.fowner[g_sb.nfield] = els->owner[i];
         g_sb.fdepth[g_sb.nfield] = g_sb.nblk;
         g_sb.fmaybe[g_sb.nfield] = 1;
@@ -1116,13 +1142,15 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     if (!borrowed && k == N_MEMBER && sb_field_key(self, lhs, fbase, ffield, &fowner)) {
         int maybe = 0, st = sb_field_state(self, fowner, fbase, ffield, &maybe);
         if (fowner >= 0 && (maybe || (st < 0 && sb_field_loop_unsafe(self, fowner)))) {
-            char msg[MAX_TEXT * 2];
-            snprintf(msg, sizeof msg,
+            /* S1a-0 C2n-3: the message repeats a generated `base.field`
+               key; both halves can be 159 bytes, so the 320-byte row cut it. */
+            const char *fmsg;
+            fmsg = tool::sh::ct_scratch_fmt(
                      "field '%s.%s' may be undefined before this assignment;"
                      " the compiler cannot release the old owning value safely"
                      " (initialise the struct with '{ 0 }', or release it explicitly)",
                      fbase, ffield);
-            return self->fail_from(n, msg);
+            return self->fail_from(n, fmsg);
         }
         if (st >= 0 && !maybe) release_old = 1;
     }
@@ -1306,11 +1334,13 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
     int p, k, ai;
     char uname[32];
     char fld[MAX_TEXT];
-    char msg[512];
+    const char *msg;
 
     sig = &e->sym->traits[ti].m[mi];
     if (default_missing_field(e->arena, sig->body, e->sym, si, fld)) {
-        snprintf(msg, sizeof msg,
+        /* S1a-0 C2n-3: five symbols, each up to 159 bytes; the old 512-byte
+           row could still cut the tail. */
+        msg = tool::sh::ct_scratch_fmt(
                  "trait %s::%s (declared at %s:%d) cannot be expanded for struct %s: no field '%s'",
                  e->sym->traits[ti].name, sig->name, e->sym->traits[ti].path,
                  sig->line, e->sym->structs[si].name, fld);
@@ -1324,8 +1354,10 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
         fputs(", ", e->out);
         if (e->arena->nodes[p].text2[0]) {
             if (e->arena->nodes[p].aux == 2 || e->arena->nodes[p].aux == 3) {
-                char pbuf[MAX_TEXT];
-                snprintf(pbuf, sizeof pbuf, "%s *", e->arena->nodes[p].text);
+                /* S1a-0 C2n-3: `type + " *"` is generated text (`159 + 2`); a
+                   160-byte row could drop the pointer. */
+                const char *pbuf;
+                pbuf = tool::sh::ct_scratch_fmt("%s *", e->arena->nodes[p].text);
                 if (e->emit_type_name_dims(pbuf, e->arena->nodes[p].text2,
                                            e->arena->nodes[p].text3) != 0) return -1;
             } else if (e->emit_type_name_dims(e->arena->nodes[p].text, e->arena->nodes[p].text2,
@@ -1333,8 +1365,10 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
         } else {
             snprintf(uname, sizeof uname, "__arg%d", ai);
             if (e->arena->nodes[p].aux == 2 || e->arena->nodes[p].aux == 3) {
-                char pbuf[MAX_TEXT];
-                snprintf(pbuf, sizeof pbuf, "%s *", e->arena->nodes[p].text);
+                /* S1a-0 C2n-3: `type + " *"` is generated text (`159 + 2`); a
+                   160-byte row could drop the pointer. */
+                const char *pbuf;
+                pbuf = tool::sh::ct_scratch_fmt("%s *", e->arena->nodes[p].text);
                 if (e->emit_type_name_dims(pbuf, uname,
                                            e->arena->nodes[p].text3) != 0) return -1;
             } else if (e->emit_type_name_dims(e->arena->nodes[p].text, uname,
@@ -1345,8 +1379,9 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
     fputs(") {\n", e->out);
     fprintf(e->out, "    %s *_self = (%s *)self;\n", stype, stype);
     /* SH-102: retain the method's by-value string parameters at entry. */
-    snprintf(g_sb.method, sizeof g_sb.method, "%s", sig->name);
-    snprintf(g_sb.recv, sizeof g_sb.recv, "%s", stype);
+    g_sb.method = runtime::text::ct_intern(sig->name);
+    g_sb.recv = runtime::text::ct_intern(stype);
+    if (!g_sb.method || !g_sb.recv) return e->fail("out of memory");
     sb_push_params(e, sig->pnode, 1);
     sb_retain_params(e, 1);
     e->sym->self_mode = 1;
@@ -1364,7 +1399,8 @@ static int emit_default_method(struct Emitter *e, int si, const char *stype, int
     if (!e->node_mentions(sig->body, "self")) fputs("    (void)_self;\n", e->out);
     /* Phase 44: a postfix `?` in a default body propagates the method's own
        return type. */
-    snprintf(e->cur_ret, sizeof e->cur_ret, "%s", sig->ret);
+    e->cur_ret = runtime::text::ct_intern(sig->ret);
+    if (!e->cur_ret) return e->fail("out of memory");
     k = e->arena->nodes[sig->body].a;
     while (k >= 0) {
         if (e->emit_node(k, 1) != 0) {
@@ -1973,7 +2009,7 @@ static int closure_var_lookup(struct Emitter *self, const char *name)
 static int emit_closures(struct Emitter *self, const char *owner, int restore_line)
 {
     int ci, k, wrote, pass, base_cl;
-    char save_ret[MAX_TEXT];
+    const char *save_ret;
 
     wrote = 0;
     for (pass = 0; pass < 3; pass++) {
@@ -2025,8 +2061,8 @@ static int emit_closures(struct Emitter *self, const char *owner, int restore_li
             /* Phase 44 (D44-10): a closure body has no Result return target of
                its own, so a postfix `?` there is refused rather than emitted as
                a `return` inside the trampoline. */
-            snprintf(save_ret, sizeof save_ret, "%s", self->cur_ret);
-            self->cur_ret[0] = 0;
+            save_ret = self->cur_ret;
+            self->cur_ret = "";
             if (c->is_block) {
                 int s;
                 for (s = self->arena->nodes[c->body].a; s >= 0;
@@ -2041,7 +2077,7 @@ static int emit_closures(struct Emitter *self, const char *owner, int restore_li
                 if (self->emit_expr(c->body) != 0) { self->nclvar = base_cl; self->closure_ci = 0; return -1; }
                 fputs(";\n", self->out);
             }
-            snprintf(self->cur_ret, sizeof self->cur_ret, "%s", save_ret);
+            self->cur_ret = save_ret;
             self->nclvar = base_cl;
             self->closure_ci = 0;
             fputs("}\n", self->out);
@@ -2105,7 +2141,8 @@ static int emit_closure_decl(struct Emitter *self, int n)
        no C variable, so the cap is a hard error. */
     if (self->nclvar >= 64)
         return self->fail_from(n, "too many closure bindings in one frame (limit 64)");
-    snprintf(self->clvar[self->nclvar], MAX_TEXT, "%s", self->arena->nodes[n].text2);
+    self->clvar[self->nclvar] = runtime::text::ct_intern(self->arena->nodes[n].text2);
+    if (!self->clvar[self->nclvar]) return self->fail("out of memory");
     self->clid[self->nclvar] = ci;
     self->nclvar++;
     return 0;
@@ -2177,14 +2214,15 @@ static int emit_generic_defs(struct Emitter *self, int u)
                  self->sym->funcs[self->sym->ginsts[i].func].tparam);
         snprintf(self->gtarg[0], MAX_TEXT, "%s", self->sym->ginsts[i].targ);
         self->gtntparam = 1;
-        snprintf(self->gtname, sizeof self->gtname, "%s", self->sym->ginsts[i].cname);
+        self->gtname = runtime::text::ct_intern(self->sym->ginsts[i].cname);
+        if (!self->gtname) return self->fail("out of memory");
         if (self->emit_node(t, 0) != 0) {
             self->gtntparam = 0;
-            self->gtname[0] = 0;
+            self->gtname = "";
             return -1;
         }
         self->gtntparam = 0;
-        self->gtname[0] = 0;
+        self->gtname = "";
     }
     return 0;
 }
@@ -3049,7 +3087,7 @@ static void impl_inst_bind(struct Emitter *self, int ki, int ii)
     im = frontend::sym::ct_impls(&n);
     ins = frontend::sym::ct_insts(&nins);
     self->gtntparam = 0;
-    self->ginst[0] = 0;
+    self->ginst = "";
     if (!im || !ins || ki < 0 || ki >= n || ii < 0 || ii >= nins) return;
     nt = im[ki].ntparams;
     self->gtparam = frontend::sym::ct_rows_reserve(self->gtparam, self->gtcap,
@@ -3058,7 +3096,12 @@ static void impl_inst_bind(struct Emitter *self, int ki, int ii)
                                                  nt, &self->gtacap);
     if (nt > 0 && (!self->gtparam || self->gtcap < nt
                    || !self->gtarg || self->gtacap < nt)) return;
-    snprintf(self->ginst, sizeof self->ginst, "%s", ins[ii].name);
+    {
+        /* keep the previous spelling on OOM: every reader indexes `ginst[0]` */
+        const char *g = runtime::text::ct_intern(ins[ii].name);
+        if (!g) return;
+        self->ginst = g;
+    }
     self->gtntparam = nt;
     for (pi = 0; pi < nt; pi++) {
         at = -1;
@@ -3124,7 +3167,7 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     char cname[MAX_TEXT];
     char cuse[MAX_TEXT];
     char mret[MAX_TEXT];
-    char one[MAX_TEXT];
+    const char *one;
     const char *tname;
     struct StructInst *ins;
     struct StructTmpl *tps;
@@ -3165,17 +3208,18 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     else
         snprintf(cname, sizeof cname, "%s_%s", iname, self->arena->nodes[m].text2);
     impl_inst_bind(self, ki, ii);
-    snprintf(g_sb.method, sizeof g_sb.method, "%s",
-             self->arena->nodes[m].text2);
-    snprintf(g_sb.recv, sizeof g_sb.recv, "%s", iname);
+    g_sb.method = runtime::text::ct_intern(self->arena->nodes[m].text2);
+    g_sb.recv = runtime::text::ct_intern(iname);
+    if (!g_sb.method || !g_sb.recv) return self->fail("out of memory");
     /* Phase 44: a postfix `?` in the body propagates the (instance-bound)
        return type of the method. */
     {
         char rb[MAX_TEXT];
         if (emit_gsub_type(self, mret, rb, sizeof rb) == 0)
-            snprintf(self->cur_ret, sizeof self->cur_ret, "%s", rb);
+            self->cur_ret = runtime::text::ct_intern(rb);
         else
-            snprintf(self->cur_ret, sizeof self->cur_ret, "%s", mret);
+            self->cur_ret = runtime::text::ct_intern(mret);
+        if (!self->cur_ret) return self->fail("out of memory");
     }
     /* P29-2: `c` marks a static (receiverless) method -- `Vec_int_from` takes
        only its own parameters and gets no `_self` local. */
@@ -3204,8 +3248,8 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
         fputs(statik ? (k == self->arena->nodes[m].a ? "" : ", ") : ", ", self->out);
         if (self->arena->nodes[k].aux == 2 || self->arena->nodes[k].aux == 3) {
-            char pbuf[MAX_TEXT];
-            snprintf(pbuf, sizeof pbuf, "%s *", self->arena->nodes[k].text);
+            const char *pbuf;
+            pbuf = tool::sh::ct_scratch_fmt("%s *", self->arena->nodes[k].text);
             if (self->emit_type_name_dims(pbuf, self->arena->nodes[k].text2,
                                           self->arena->nodes[k].text3) != 0) return -1;
         } else if (self->emit_type_name_dims(self->arena->nodes[k].text,
@@ -3214,7 +3258,7 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     }
     fputs(") {\n", self->out);
     if (!statik) {
-        snprintf(one, sizeof one, "struct %s", iname);
+        one = tool::sh::ct_scratch_fmt("struct %s", iname);
         fprintf(self->out, "    %s *_self = (%s *)self;\n", one, one);
     }
     /* SH-102: a by-value `String` / `U16String` parameter owns its reference
@@ -3289,7 +3333,6 @@ static int elem_has_life(struct Emitter *self, const char *elem)
 {
     char base[MAX_TEXT];
     char want[MAX_TEXT];
-    char ret[MAX_TEXT];
     int inst, si, k, n, m, got_r, got_rel;
     struct StructImpl *im;
 
@@ -3315,11 +3358,10 @@ static int elem_has_life(struct Emitter *self, const char *elem)
                  m = self->arena->nodes[m].next) {
                 if (strcmp(self->arena->nodes[m].text2, "release") == 0) got_rel = 1;
                 if (strcmp(self->arena->nodes[m].text2, "retain") == 0
-                    && self->arena->nodes[m].text[0]
-                    && elem_ret_ctype(inst, self->arena->nodes[m].text,
-                                      ret, sizeof ret)
-                    && strcmp(ret, want) == 0)
-                    got_r = 1;
+                    && self->arena->nodes[m].text[0]) {
+                    const char *ret = elem_ret_ctype(inst, self->arena->nodes[m].text);
+                    if (ret && strcmp(ret, want) == 0) got_r = 1;
+                }
             }
             if (got_r && got_rel) return 1;
         }
@@ -4640,10 +4682,10 @@ static int em_expr_try(struct Emitter *self, int n, int nk)
 
 
     char opty[MAX_TEXT];
-    char otag[MAX_TEXT];
+    const char *otag;
     char oval[MAX_TEXT];
     char oerr[MAX_TEXT];
-    char rtag[MAX_TEXT];
+    const char *rtag;
     char rval[MAX_TEXT];
     char rerr[MAX_TEXT];
     char vty[MAX_TEXT];
@@ -4661,7 +4703,8 @@ static int em_expr_try(struct Emitter *self, int n, int nk)
                || od != 0) {
         return self->fail_from(n, "'?' needs a Result operand");
     }
-    if (!self->try_result_tag(opty, otag, sizeof otag)
+    otag = self->try_result_tag(opty);
+    if (!otag
         || !self->try_result_cols(frontend::sym::ct_inst_find(otag),
                                   oval, sizeof oval, oerr, sizeof oerr))
         return self->fail_from(n, "'?' needs a Result operand");
@@ -4679,7 +4722,8 @@ static int em_expr_try(struct Emitter *self, int n, int nk)
             snprintf(ety, sizeof ety, "%s", self->sym->structs[si].fields[fi].type);
     }
     if (strcmp(self->cur_ret, "void") != 0) {
-        if (!self->try_result_tag(self->cur_ret, rtag, sizeof rtag)
+        rtag = self->try_result_tag(self->cur_ret);
+        if (!rtag
             || !self->try_result_cols(frontend::sym::ct_inst_find(rtag),
                                       rval, sizeof rval, rerr, sizeof rerr))
             return self->fail_from(n,
@@ -5661,8 +5705,8 @@ static int em_node_func(struct Emitter *self, int n, int ind, int nk)
             if (!first) fputs(", ", self->out);
             if (self->arena->nodes[c].aux == 2
                 || self->arena->nodes[c].aux == 3) {
-                char pbuf[MAX_TEXT];
-                snprintf(pbuf, sizeof pbuf, "%s *", self->arena->nodes[c].text);
+                const char *pbuf;
+                pbuf = tool::sh::ct_scratch_fmt("%s *", self->arena->nodes[c].text);
                 if (self->emit_type_name_dims(pbuf, self->arena->nodes[c].text2,
                                               self->arena->nodes[c].text3) != 0)
                     return -1;
@@ -5683,12 +5727,13 @@ static int em_node_func(struct Emitter *self, int n, int ind, int nk)
         fprintf(self->out, "%s ", self->arena->str_at(self->arena->nodes[n].attr));
     /* Phase 44: remember the (substituted) return type for a postfix
        `?` in the body. */
-    snprintf(self->cur_ret, sizeof self->cur_ret, "%s", rname);
+    self->cur_ret = runtime::text::ct_intern(rname);
+    if (!self->cur_ret) return self->fail("out of memory");
     /* SH-102: the by-value string parameters own a reference for the
        duration of the body; the opening block writes the retains. */
-    snprintf(g_sb.method, sizeof g_sb.method, "%s",
-             self->arena->nodes[n].text2);
-    g_sb.recv[0] = 0;
+    g_sb.method = runtime::text::ct_intern(self->arena->nodes[n].text2);
+    if (!g_sb.method) return self->fail("out of memory");
+    g_sb.recv = "";
     sb_push_params(self, self->arena->nodes[n].a, 0);
     g_sb.pending = 1;
     return self->emit_node(self->arena->nodes[n].b, ind);
@@ -5760,9 +5805,8 @@ static int em_node_block(struct Emitter *self, int n, int ind, int nk)
         int i2, j2 = 0;
         for (i2 = 0; i2 < g_sb.nfield; i2++) {
             if (g_sb.fowner[i2] >= save_l && g_sb.fowner[i2] >= 0) continue;
-            /* skip the self-copy: `snprintf(d, n, "%s", d)` is
-               undefined and glibc returns an empty string */
-            if (j2 != i2) memmove(g_sb.fpath[j2], g_sb.fpath[i2], MAX_TEXT);
+            /* the pool owns the path; compacting moves the pointer */
+            g_sb.fpath[j2] = g_sb.fpath[i2];
             g_sb.fowner[j2] = g_sb.fowner[i2];
             g_sb.fdepth[j2] = g_sb.fdepth[i2];
             g_sb.fmaybe[j2] = g_sb.fmaybe[i2];
@@ -6049,8 +6093,8 @@ static int em_node_delete(struct Emitter *self, int n, int ind, int nk)
            local stub. The module layer rejects the exported case before
            emission; this guard covers a row reached some other way. */
         if (!self->drop_visible(si)) {
-            char vmsg[MAX_TEXT * 2];
-            snprintf(vmsg, sizeof vmsg,
+            const char *vmsg;
+            vmsg = tool::sh::ct_scratch_fmt(
                      "Drop body for 'struct %s' is not visible in this unit;"
                      " move 'impl Drop for %s' into the unit that declares the struct",
                      self->sym->structs[si].name, self->sym->structs[si].name);
@@ -7011,7 +7055,7 @@ static int em_decl_global(struct Emitter *self, int n, int ind, int with_semi, i
 
     /* Phase 44: a file-scope initialiser has no outer function, so a
        `?` there has no error target (L44-4). */
-    self->cur_ret[0] = 0;
+    self->cur_ret = "";
     if (self->init->type_needs_init(self->arena->nodes[n].text)
         && dims_depth(self->arena->nodes[n].text3) > 1)
         return self->fail_from(n, "a multi-dimensional array cannot hold trait-carrying values");
@@ -7330,7 +7374,7 @@ impl EmitOps for Emitter {
         int n, i;
         (void)self;
 
-        self->errmsg[0] = 0;
+        self->errmsg = "";
         self->failline = 0;
         self->cur_unit = -1;
         g_shell_u = -1;
@@ -7840,8 +7884,8 @@ impl EmitOps for Emitter {
                     fputs(", ", self->out);
                     if (self->arena->nodes[k].aux == 2
                         || self->arena->nodes[k].aux == 3) {
-                        char pbuf[MAX_TEXT];
-                        snprintf(pbuf, sizeof pbuf, "%s *", self->arena->nodes[k].text);
+                        const char *pbuf;
+                        pbuf = tool::sh::ct_scratch_fmt("%s *", self->arena->nodes[k].text);
                         if (self->emit_type_name_dims(pbuf, self->arena->nodes[k].text2,
                                                       self->arena->nodes[k].text3) != 0)
                             return -1;
@@ -7854,15 +7898,16 @@ impl EmitOps for Emitter {
                 fputs(") {\n", self->out);
                 fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
                 /* SH-102: retain the by-value string parameters at entry. */
-                snprintf(g_sb.method, sizeof g_sb.method, "%s",
-                         self->arena->nodes[m].text2);
-                snprintf(g_sb.recv, sizeof g_sb.recv, "%s", sname);
+                g_sb.method = runtime::text::ct_intern(self->arena->nodes[m].text2);
+                g_sb.recv = runtime::text::ct_intern(sname);
+                if (!g_sb.method || !g_sb.recv) return self->fail("out of memory");
                 sb_push_params(self, self->arena->nodes[m].a, 0);
                 sb_retain_params(self, 1);
                 self->sym->self_mode = 1;
                 /* Phase 44: a postfix `?` in an impl body propagates the
                    method's declared return type. */
-                snprintf(self->cur_ret, sizeof self->cur_ret, "%s", mret);
+                self->cur_ret = runtime::text::ct_intern(mret);
+                if (!self->cur_ret) return self->fail("out of memory");
                 /* The trait fixes the signature, so an implementation may ignore
                    a parameter. The cast to void has to lead the body: a trailing
                    one would sit after the `return` and be dead code. */
@@ -7976,8 +8021,8 @@ impl EmitOps for Emitter {
                     if (!is_static || k != self->arena->nodes[m].a) fputs(", ", self->out);
                     if (self->arena->nodes[k].aux == 2
                         || self->arena->nodes[k].aux == 3) {
-                        char pbuf[MAX_TEXT];
-                        snprintf(pbuf, sizeof pbuf, "%s *", self->arena->nodes[k].text);
+                        const char *pbuf;
+                        pbuf = tool::sh::ct_scratch_fmt("%s *", self->arena->nodes[k].text);
                         if (self->emit_type_name_dims(pbuf, self->arena->nodes[k].text2,
                                                       self->arena->nodes[k].text3) != 0)
                             return -1;
@@ -7991,15 +8036,16 @@ impl EmitOps for Emitter {
                 if (!is_static)
                     fprintf(self->out, "    %s *_self = (%s *)self;\n", sname, sname);
                 /* SH-102: retain the by-value string parameters at entry. */
-                snprintf(g_sb.method, sizeof g_sb.method, "%s",
-                         self->arena->nodes[m].text2);
-                snprintf(g_sb.recv, sizeof g_sb.recv, "%s", sname);
+                g_sb.method = runtime::text::ct_intern(self->arena->nodes[m].text2);
+                g_sb.recv = runtime::text::ct_intern(sname);
+                if (!g_sb.method || !g_sb.recv) return self->fail("out of memory");
                 sb_push_params(self, self->arena->nodes[m].a, 0);
                 sb_retain_params(self, 1);
                 self->sym->self_mode = is_static ? 0 : 1;
                 /* Phase 44: a postfix `?` in an inherent method body
                    propagates the method's declared return type. */
-                snprintf(self->cur_ret, sizeof self->cur_ret, "%s", mret);
+                self->cur_ret = runtime::text::ct_intern(mret);
+                if (!self->cur_ret) return self->fail("out of memory");
                 body = self->arena->nodes[m].b;
                 for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next)
                     if (!self->node_mentions(body, self->arena->nodes[k].text2))
@@ -8025,7 +8071,7 @@ impl EmitOps for Emitter {
         for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
             int si, ti, ui, type_index;
             const char *tname;
-            char stype[MAX_TEXT];
+            const char *stype;
             if (self->arena->nodes[n].kind != N_STRUCT || !self->arena->nodes[n].text2[0]) continue;
             si = self->sym->find_struct(self->arena->nodes[n].text2);
             if (si < 0) continue;
@@ -8037,17 +8083,20 @@ impl EmitOps for Emitter {
                 if (self->sym->traits[ti].nm == 0) continue;
                 for (dm = 0; dm < self->sym->traits[ti].nm; dm++)
                     if (self->sym->traits[ti].m[dm].body < 0) {
-                        char emsg[MAX_TEXT];
-                        snprintf(emsg, sizeof emsg,
+                        /* S1a-0 C2n-3: the message names two symbols that
+                           can each be 159 bytes; a 160-byte row cut the
+                           struct half. Build it run-scoped. */
+                        const char *emsg;
+                        emsg = tool::sh::ct_scratch_fmt(
                                  "trait method '%s' is not implemented for struct '%s'",
                                  self->sym->traits[ti].m[dm].name, self->sym->structs[si].name);
                         return self->fail_from(n, emsg);
                     }
                 type_index = self->sym->find_type(self->sym->structs[si].name);
                 if (type_index >= 0 && self->sym->type_kind[type_index] == 1)
-                    snprintf(stype, sizeof stype, "struct %s", self->sym->structs[si].name);
+                    stype = tool::sh::ct_scratch_fmt("struct %s", self->sym->structs[si].name);
                 else
-                    snprintf(stype, sizeof stype, "%s", self->sym->structs[si].name);
+                    stype = tool::sh::ct_scratch_dup(self->sym->structs[si].name);
                 for (dm = 0; dm < self->sym->traits[ti].nm; dm++)
                     if (emit_default_method(self, si, stype, ti, dm, n) != 0) return -1;
                 if (self->vtable_exported(si, tname))
@@ -8217,8 +8266,8 @@ impl EmitOps for Emitter {
                 for (k = 0; k < b->nparams; k++) {
                     fputs(", ", self->out);
                     if (sig->pann[k] == 2 || sig->pann[k] == 3) {
-                        char pbuf[MAX_TEXT];
-                        snprintf(pbuf, sizeof pbuf, "%s *", sig->ptype + (k) * MAX_TEXT);
+                        const char *pbuf;
+                        pbuf = tool::sh::ct_scratch_fmt("%s *", sig->ptype + (k) * MAX_TEXT);
                         if (self->emit_type_name(pbuf, b->params[k]) != 0) return -1;
                     } else if (self->emit_type_name(sig->ptype + (k) * MAX_TEXT, b->params[k]) != 0) {
                         return -1;
@@ -8633,8 +8682,8 @@ impl EmitOps for Emitter {
                     if (!is_static || k != self->arena->nodes[m].a) fputs(", ", self->out);
                     if (self->arena->nodes[k].aux == 2
                         || self->arena->nodes[k].aux == 3) {
-                        char pbuf[MAX_TEXT];
-                        snprintf(pbuf, sizeof pbuf, "%s *", self->arena->nodes[k].text);
+                        const char *pbuf;
+                        pbuf = tool::sh::ct_scratch_fmt("%s *", self->arena->nodes[k].text);
                         if (self->emit_type_name_dims(pbuf, self->arena->nodes[k].text2,
                                                       self->arena->nodes[k].text3) != 0)
                             return -1;
@@ -9322,7 +9371,7 @@ impl EmitOps for Emitter {
         int rc;
         (void)self;
 
-        self->errmsg[0] = 0;
+        self->errmsg = "";
         self->failline = 0;
         self->gprefix = self->units[u].nsprefix;
         path = tool::sh::ct_scratch_fmt("%s/%s.c", *self->outdir, self->units[u].base);
@@ -9922,8 +9971,14 @@ impl EmitOps for Emitter {
     int fail(const char *msg)
     {
         (void)self;
-        if (!self->errmsg[0])
-            snprintf(self->errmsg, sizeof self->errmsg, "%s", msg);
+        if (!self->errmsg[0]) {
+            /* S1a-0 C2n-3: the message can name a 159-byte trait plus a
+               159-byte struct plus the method, so a 160-byte row cut it. The
+               pool holds one message per run (the emitter stops at the first
+               failure), so this does not grow with output. */
+            self->errmsg = runtime::text::ct_intern(msg);
+            if (!self->errmsg) self->errmsg = "out of memory";
+        }
         return -1;
     }
 
@@ -9961,6 +10016,14 @@ void ct_emit_bind(void *arena, void *sym, void *ty, void *lex,
        unit, so it holds the address of the field rather than a copy */
     ct_init_bind(sym, (void **)&g_emit.out);
     g_emit.init = init_get();
+    /* S1a-0 C2n-3: an unset pool text reads as the empty string, so the
+       `text[0]` / `strcmp(text, "void")` readers keep their meaning. */
+    g_emit.errmsg = "";
+    g_emit.cur_ret = "";
+    g_emit.gtname = "";
+    g_emit.ginst = "";
+    g_sb.method = "";
+    g_sb.recv = "";
 }
 
 pub void ct_emit_bind_tables(void *units, int *nunits, void *maps, int *nmaps, void *calls, int *ncalls, int *build_mode, int *line_mode, int *runtime_checks, int *abi_mode, int *abi_root, int *abi_exports, int *abi_n);

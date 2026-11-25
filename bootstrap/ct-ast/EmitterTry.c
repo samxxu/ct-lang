@@ -5,6 +5,8 @@
 #include "Expr.h"
 #include "Symbols.h"
 #include "Arena.h"
+#include "Intern.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterTry.h.ct"
 #include <stdio.h>
@@ -37,6 +39,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -61,7 +64,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -90,24 +92,22 @@ const struct backend_emit_EmitterTryOps_vtbl backend_emit_Emitter_backend_emit_E
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-static int backend_emit_Emitter_backend_emit_EmitterTryOps_try_result_tag(void *self, const char * ctype, char * tag, int cap) {
+static const char * backend_emit_Emitter_backend_emit_EmitterTryOps_try_result_tag(void *self, const char * ctype) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    char buf[MAX_TEXT];
+    char * buf;
     size_t n;
     int inst;
     int ninst;
     struct frontend_sym_StructInst * ins;
     (void)(_self);
     if (((!ctype) || (!ctype[0]))) {
-        return 0;
+        return (const char *)(0);
     }
-    if (snprintf(buf, sizeof(buf), "%s", ctype) >= (int)(sizeof(buf))) {
-        return 0;
-    }
+    buf = tool_sh_ct_scratch_dup(ctype);
     n = strlen(buf);
     while (((n > 0) && ((buf[(n - 1)] == ' ') || (buf[(n - 1)] == '*')))) {
         if (buf[(n - 1)] == '*') {
-            return 0;
+            return (const char *)(0);
         }
         buf[--n] = 0;
     }
@@ -116,24 +116,21 @@ static int backend_emit_Emitter_backend_emit_EmitterTryOps_try_result_tag(void *
     }
     else {
         if (((strncmp(buf, "union ", 6) == 0) || (strncmp(buf, "enum ", 5) == 0))) {
-            return 0;
+            return (const char *)(0);
         }
     }
     inst = frontend_sym_ct_inst_find(buf);
     if (inst < 0) {
-        return 0;
+        return (const char *)(0);
     }
     ins = frontend_sym_ct_insts((&ninst));
     if (((!ins) || (inst >= ninst))) {
-        return 0;
+        return (const char *)(0);
     }
     if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
-        return 0;
+        return (const char *)(0);
     }
-    if (snprintf(tag, (size_t)(cap), "%s", buf) >= cap) {
-        return 0;
-    }
-    return 1;
+    return runtime_text_ct_intern(buf);
 }
 
 static int backend_emit_Emitter_backend_emit_EmitterTryOps_try_result_cols(void *self, int inst, char * val, int vcap, char * err, int ecap) {
@@ -173,7 +170,7 @@ static int backend_emit_Emitter_backend_emit_EmitterTryOps_try_cleanup(void *sel
 
 static int backend_emit_Emitter_backend_emit_EmitterTryOps_try_release_payload(void *self, const char * ctype, const char * tmp, const char * field) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    char base[MAX_TEXT];
+    char * base;
     int si;
     int inst;
     int ninst;
@@ -184,7 +181,7 @@ static int backend_emit_Emitter_backend_emit_EmitterTryOps_try_release_payload(v
     if (((!ctype) || (strncmp(ctype, "struct ", 7) != 0))) {
         return 0;
     }
-    snprintf(base, sizeof(base), "%s", (ctype + 7));
+    base = tool_sh_ct_scratch_dup((ctype + 7));
 {
         size_t bl = strlen(base);
         while (((bl > 0) && ((base[(bl - 1)] == ' ') || (base[(bl - 1)] == '*')))) {

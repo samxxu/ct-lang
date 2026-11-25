@@ -175,7 +175,9 @@ pub trait EmitterTryOps {
     /* Phase 44: the `Result<T, E>` instance behind a C type spelling and its
        payload types, so a postfix `?` can name the operand, compare the error
        parameter and spell the outer `<Inst>_err(...)` call. */
-    int  try_result_tag(const char *ctype, char *tag, int cap);
+    /* S1a-0 C2n-3: the tag is a type spelling (pool text), so the caller passes
+       no 160-byte row; NULL means "not a Result value" or OOM. */
+    const char *try_result_tag(const char *ctype);
     int  try_result_cols(int inst, char *val, int vcap, char *err, int ecap);
     /* Phase 44: the failure cleanup the parser captured for the `?` node `n`
        (defer / errdefer bodies and `own` releases), or -1. */
@@ -262,11 +264,17 @@ pub struct Emitter {
     int  ntmp;
     int  raw_call;
     int  failline;              /* the source line of the node that failed, 0 = none */
-    char errmsg[160];
+    /* S1a-0 C2n-3: the failure message, the current return type and the other
+       per-body spellings moved from `char[160]` to pool text. A message names
+       symbols the emitter only concatenates (trait + struct + method), and the
+       return type / instance names are already interned upstream; a row cut
+       them at 160 bytes. The pool owns the text; an empty string (not NULL)
+       marks "none", so the driver's `why[0]` stays safe. */
+    const char *errmsg;
     /* Phase 44: the C return type of the function or method whose body is being
        written, so a postfix `?` knows its propagation target. Empty outside a
        function body (a file-scope `?` has no outer Result to return). */
-    char cur_ret[160];
+    const char *cur_ret;
     /* Phase 44: set while a statement discards an expression's value, so a
        postfix `?` releases the payload it would otherwise leak. */
     int  try_discard;
@@ -282,7 +290,7 @@ pub struct Emitter {
        so a captured name prints `__ct_cl_e->name`, and the closure variables in
        scope at the current statement (name -> id) for call-site expansion. */
     int  closure_ci;
-    char clvar[64][160];
+    const char *clvar[64];
     int  clid[64];
     int  nclvar;
     /* Phase 24: `> 0` while an `N_INIT_RANGE` initialiser is being written, and
@@ -302,13 +310,13 @@ pub struct Emitter {
     int  gtntparam;
     int  gtcap;
     int  gtacap;
-    char gtname[160];
+    const char *gtname;
     /* Phase 31: the instance whose inherent method is being written. The
        reserved element-lifecycle calls (`__ct_elem_retain` /
        `__ct_elem_release`) in a container's body bind to this instance's
        per-instance helper, so no AST copy is needed. Empty outside an instance
        method. */
-    char ginst[160];
+    const char *ginst;
     /* PH-80 SH-102 (D-013 §3): the owning by-value `String` / `U16String`
        bindings in the body being written. A by-value parameter is retained at
        entry, every owning local is released at scope exit, and an assignment

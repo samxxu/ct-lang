@@ -164,6 +164,7 @@ pub int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
     int starts[64], ends[64], epos[64], fields[64], litmode[64], nitem, i, depth, p, q;
     int changed, count;
     char expr[MAX_TEXT];
+    const char *et;
 
     if (len < 2 || t[0] != '{' || t[len - 1] != '}') return 0;
     if (si < 0 || self->sym->structs[si].nfields <= 0
@@ -248,15 +249,24 @@ pub int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
         if (self->sym->structs[si].fields[fi].dims[0]) continue;
         kind = frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
         if (!kind) continue;
-        if (e0 - fs >= MAX_TEXT) continue;
-        snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
-        if (!sb_text_place_p(expr)) {
+        /* S1a-0 C2n-3: an item used to be skipped once it passed the 160-byte
+           row (`if (e0 - fs >= MAX_TEXT) continue;`), which left a long literal
+           as a bare pointer in an owning `String` field and made `release`
+           free static storage. Inspect the whole item: a short one still uses
+           the local row, a long one the run-scoped pool. */
+        if (e0 - fs < MAX_TEXT) {
+            snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
+            et = expr;
+        } else {
+            et = tool::sh::ct_scratch_fmt("%.*s", e0 - fs, t + fs);
+        }
+        if (!sb_text_place_p(et)) {
             /* PH-81: a bare string literal in a `String` field is an owning
                value, not a `char *`; rewrite it to a heap copy so the box /
                struct release cannot free a literal. Only a local initializer
                may call at run time (a file-scope one stays unchanged). */
-            size_t el = strlen(expr);
-            if (el >= 2 && expr[0] == '"' && expr[el - 1] == '"'
+            size_t el = strlen(et);
+            if (el >= 2 && et[0] == '"' && et[el - 1] == '"'
                 && self->cur_ret[0]) {
                 litmode[i] = 1;
                 starts[i] = s0;
@@ -285,9 +295,14 @@ pub int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
                     (int)(e0 - fs), t + fs);
             continue;
         }
-        if (kind && e0 - fs < MAX_TEXT) {
-            snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
-            if (sb_text_place_p(expr))
+        if (kind) {
+            if (e0 - fs < MAX_TEXT) {
+                snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
+                et = expr;
+            } else {
+                et = tool::sh::ct_scratch_fmt("%.*s", e0 - fs, t + fs);
+            }
+            if (sb_text_place_p(et))
                 fprintf(self->out, "%s_retain(&(", sb_prefix(kind));
             else
                 kind = 0;

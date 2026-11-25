@@ -17,6 +17,7 @@
 #include <string.h>
 
 import frontend::sym::Symbols;
+import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -169,12 +170,18 @@ impl InitOps for Init {
         }
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
-            char sub[MAX_TEXT];
+            const char *sub;
             snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;
             if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* handled by the loop form */
             if (!self->type_needs_init(ft)) continue;
-            snprintf(sub, sizeof sub, "%s.%s", recv, self->sym->structs[si].fields[fi].name);
+            /* S1a-0 C2n-3: `recv + "." + field` is a generated member path, not
+               a source identifier. Both halves may be 159 bytes, so a 160-byte
+               row cut the path and the statement named a member that does not
+               exist. Build it run-scoped instead; the pool lives until the
+               command returns, and the recursion only reads it. */
+            sub = tool::sh::ct_scratch_fmt("%s.%s", recv,
+                                           self->sym->structs[si].fields[fi].name);
             if (self->emit_vptr_stmts(sub, ft, ind) != 0) return -1;
         }
         return self->emit_array_field_vptrs(si, recv, ind);
@@ -193,11 +200,10 @@ impl InitOps for Init {
     {
         FILE *f = (FILE *)(*self->out);
         int fi, i, j, n, depth, skip;
-        char name[MAX_TEXT];
         (void)self;
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
-            char prefix[MAX_TEXT];
+            const char *prefix;
             snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;          /* a borrowed pointer, not a value */
             if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* an array: no designator reaches it */
@@ -221,15 +227,19 @@ impl InitOps for Init {
                    (whitespace after the dot is legal C) */
                 j = i + 1;
                 while (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n' || raw[j] == '\r') j++;
-                n = 0;
+                n = j;
                 while ((raw[j] >= 'a' && raw[j] <= 'z') || (raw[j] >= 'A' && raw[j] <= 'Z')
-                       || (raw[j] >= '0' && raw[j] <= '9') || raw[j] == '_') {
-                    if (n + 1 < MAX_TEXT) { name[n] = raw[j]; n++; }
-                    j++;
-                }
-                name[n] = 0;
+                       || (raw[j] >= '0' && raw[j] <= '9') || raw[j] == '_') j++;
+                /* S1a-0 C2n-3: compare the designator with the field name by
+                   length, not through a 160-byte row; a 159-byte field name
+                   plus the dot would not fit the old row. */
                 i = j - 1;
-                if (n == 0 || strcmp(name, self->sym->structs[si].fields[fi].name) != 0) continue;
+                {
+                    const char *fname = self->sym->structs[si].fields[fi].name;
+                    size_t nl = (size_t)(j - n);
+                    if (nl == 0 || nl != strlen(fname)
+                        || memcmp(raw + n, fname, nl) != 0) continue;
+                }
                 while (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n' || raw[j] == '\r') j++;
                 if (raw[j] != '=' || raw[j + 1] == '=') continue;
                 j++;
@@ -238,7 +248,8 @@ impl InitOps for Init {
                 break;
             }
             if (skip) continue;
-            snprintf(prefix, sizeof prefix, ".%s", self->sym->structs[si].fields[fi].name);
+            /* `.field` is generated text (`1 + 159` exceeds the old row). */
+            prefix = tool::sh::ct_scratch_fmt(".%s", self->sym->structs[si].fields[fi].name);
             if (started) fputs(", ", f);
             if (self->emit_vptr_items(prefix, ft) != 0) return -1;
             started = 1;
@@ -256,36 +267,36 @@ impl InitOps for Init {
         (void)self;
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
             char ft[MAX_TEXT];
-            char sub[MAX_TEXT];
-            char next[MAX_TEXT];
+            const char *sub;
+            const char *next;
             const char *d;
             int depth, started;
             if (!self->sym->structs[si].fields[fi].dims[0]) continue;
             snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
             if (strchr(ft, '*') != 0) continue;
             if (!self->type_needs_init(ft)) continue;
-            snprintf(sub, sizeof sub, "%s.%s", recv, self->sym->structs[si].fields[fi].name);
+            /* S1a-0 C2n-3: the member path is generated text. Keep it in the
+               run-scoped pool so `recv + "." + field + "[__ct_jN]"` of any
+               length stays one exact name; the old 160-byte row cut it and the
+               emitted statement named a member that does not exist. */
+            sub = tool::sh::ct_scratch_fmt("%s.%s", recv,
+                                           self->sym->structs[si].fields[fi].name);
             d = self->sym->structs[si].fields[fi].dims;
             depth = 0;
             started = 0;
             while (*d == '[') {
                 const char *close = strchr(d, ']');
-                char bound[MAX_TEXT];
                 size_t bl;
                 if (!close) break;
                 bl = (size_t)(close - d - 1);
-                if (bl >= sizeof bound) bl = sizeof bound - 1;
-                memcpy(bound, d + 1, bl);
-                bound[bl] = 0;
-                if (!bound[0]) break;   /* `[]`: not a definition */
+                if (bl == 0) break;   /* `[]`: not a definition */
                 put_indent(f, ind + depth);
-                fprintf(f, "for (unsigned long __ct_j%d = 0; __ct_j%d < %s; __ct_j%d++) {\n",
-                        depth, depth, bound, depth);
-                /* `sub` is both the source and the destination here, which is
-                   undefined behaviour: glibc's snprintf clears the destination
-                   first, so the base name would vanish. Build in `next`, copy. */
-                snprintf(next, sizeof next, "%s[__ct_j%d]", sub, depth);
-                snprintf(sub, sizeof sub, "%s", next);
+                /* The bound is a slice of the declaration's suffix; print it
+                   directly rather than copying it into a 160-byte row. */
+                fprintf(f, "for (unsigned long __ct_j%d = 0; __ct_j%d < %.*s; __ct_j%d++) {\n",
+                        depth, depth, (int)bl, d + 1, depth);
+                next = tool::sh::ct_scratch_fmt("%s[__ct_j%d]", sub, depth);
+                sub = next;
                 depth++;
                 d = close + 1;
                 started = 1;

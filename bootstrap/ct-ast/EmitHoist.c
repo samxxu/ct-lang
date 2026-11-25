@@ -10,6 +10,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "EmitterText.h"
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"
@@ -158,6 +159,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -182,7 +184,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -393,7 +394,8 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
     int k;
     int cat;
     int s;
-    char hty[MAX_TEXT];
+    const char * hty;
+    char hbuf[MAX_TEXT];
     int hd;
     (void)(_self);
     if (_self->__backend_emit_emitinvariant_vptr->invariant_temp_check(_self) != 0) {
@@ -405,20 +407,23 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
     }
     for (i = 0; i < _self->nhoist; i++) {
         hd = 0;
-        hty[0] = 0;
         f = ((_self->arena->nodes[_self->hoist_calls[i]].kind == N_CALL) ? _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, _self->arena->nodes[_self->hoist_calls[i]].text2) : (-1));
         if (f >= 0) {
-            snprintf(hty, sizeof(hty), "%s", _self->sym->funcs[f].ret);
+            hty = runtime_text_ct_intern(_self->sym->funcs[f].ret);
         }
         else {
             if (((_self->arena->nodes[_self->hoist_calls[i]].kind == N_CALL) && _self->arena->nodes[_self->hoist_calls[i]].text[0])) {
-                snprintf(hty, sizeof(hty), "%s", _self->arena->nodes[_self->hoist_calls[i]].text);
+                hty = runtime_text_ct_intern(_self->arena->nodes[_self->hoist_calls[i]].text);
             }
             else {
-                if (((!backend_emit_hoist_ctype(_self->hoist_calls[i], hty, sizeof(hty), (&hd))) || (hd != 0))) {
+                if (((!backend_emit_hoist_ctype(_self->hoist_calls[i], hbuf, sizeof(hbuf), (&hd))) || (hd != 0))) {
                     return _self->__backend_emit_emitops_vptr->fail_from(_self, _self->hoist_calls[i], "cannot infer the type of a hoisted receiver");
                 }
+                hty = runtime_text_ct_intern(hbuf);
             }
+        }
+        if ((!hty)) {
+            return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
         }
         _self->__backend_emit_emitops_vptr->emit_indent(_self, ind);
         fprintf(_self->out, "%s %s = ", hty, _self->arena->nodes[_self->hoist_calls[i]].text3);

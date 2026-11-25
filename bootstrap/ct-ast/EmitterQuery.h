@@ -11,6 +11,7 @@
 #include "MapTable.h"
 #include "Symbols.h"
 #include "Arena.h"
+#include "Sh.h"
 
 
 struct ct_buf;
@@ -39,6 +40,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -63,7 +65,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;

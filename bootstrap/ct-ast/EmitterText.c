@@ -9,6 +9,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "SymbolsTypeText.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterText.h.ct"
@@ -42,6 +43,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -66,7 +68,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -102,7 +103,7 @@ int backend_emit_sb_text_place_p(const char *);
 int backend_emit_sb_view_ret(const char *);
 int backend_emit_unit_has_adt(int, int);
 int backend_emit_init_has_elem_groups(const char *);
-int backend_emit_elem_ret_ctype(int, const char *, char *, int);
+const char * backend_emit_elem_ret_ctype(int, const char *);
 int backend_emit_dims_depth(const char * dims) {
     int i;
     int n;
@@ -269,7 +270,7 @@ int backend_emit_init_has_elem_groups(const char * t) {
     }
     return 0;
 }
-int backend_emit_elem_ret_ctype(int inst, const char * text, char * out, int cap) {
+const char * backend_emit_elem_ret_ctype(int inst, const char * text) {
     char cur[MAX_TEXT];
     char nxt[MAX_TEXT];
     char res[MAX_TEXT];
@@ -280,24 +281,30 @@ int backend_emit_elem_ret_ctype(int inst, const char * text, char * out, int cap
     struct frontend_sym_StructInst * ins;
     struct frontend_sym_StructTmpl * tps;
     ins = frontend_sym_ct_insts((&k));
+    if ((((!ins) || (inst < 0)) || (inst >= k))) {
+        return (const char *)(0);
+    }
     ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
     tps = frontend_sym_ct_tmpls((&tn));
-    snprintf(cur, sizeof(cur), "%s", text);
+    if (snprintf(cur, sizeof(cur), "%s", text) >= (int)(sizeof(cur))) {
+        return (const char *)(0);
+    }
     if (((ti >= 0) && tps)) {
         for (j = 0; j < tps[ti].ntparams; j++) {
             if (j >= ins[inst].nargs) {
                 break;
             }
             if (((tps[ti].tparam[j] && ins[inst].ctype[j]) && (frontend_sym_ct_generic_subst(cur, tps[ti].tparam[j], ins[inst].ctype[j], nxt, sizeof(nxt)) == 0))) {
-                snprintf(cur, sizeof(cur), "%s", nxt);
+                if (snprintf(cur, sizeof(cur), "%s", nxt) >= (int)(sizeof(cur))) {
+                    return (const char *)(0);
+                }
             }
         }
     }
     if ((strchr(cur, '<') && (frontend_sym_ct_inst_resolve(cur, res, sizeof(res)) == 0))) {
-        snprintf(cur, sizeof(cur), "%s", res);
+        if (snprintf(cur, sizeof(cur), "%s", res) >= (int)(sizeof(cur))) {
+            return (const char *)(0);
+        }
     }
-    if (snprintf(out, (size_t)(cap), "%s", cur) >= cap) {
-        return 0;
-    }
-    return 1;
+    return runtime_text_ct_intern(cur);
 }

@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10155 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10218 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=66767 io_cap=1024
+     emitted_before=48223 emitted_after=66858 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -18,6 +18,9 @@
      (v1-PH-0 S0.5 后复测：五个判别函数的 if 链改为 84 臂的穷尽 match，76 个
       `em_*` 切片各占一臂；`expr_ctype` / `maybe_box` / `chk_type` 同步改为
       NodeKind match。动作等价由 66 语料逐字节、345 诊断逐字、2 轮自举不动点复核)
+     (S1a-0 C2n-3 后复测：Emitter/Init/Emit* 的持久文本改 pool 文本、生成成员
+      路径/初始化项/诊断改 run-scoped builder，Emitter.h.ct 10218 行；发射 C
+      66858 行（仅 .c）。切片清单仍为 76，判别式仍各读 1 次，本次不改 kind 分支)
      (LANG-26 后复测：`out` 写回转换与 `CT_BINDING_CONVERSION` 开关落在
       Expr.h.ct / Emitter.h.ct / Arena.h.ct；Emitter.h.ct 10343 -> 10415，
       发射 C 54413 -> 54712，切片清单不变)

@@ -57,6 +57,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -81,7 +82,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -110,14 +110,14 @@ extern const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_
 
 struct backend_emit_FldSnap {
     int n;
-    char path[128][160];
+    const char * path[128];
     int owner[128];
     int defined[128];
 };
 struct backend_emit_StrRetain {
     int n;
-    char name[256][160];
-    char type[256][160];
+    const char * name[256];
+    const char * type[256];
     int own[256];
     int blk[256];
     int bkind[256];
@@ -126,18 +126,18 @@ struct backend_emit_StrRetain {
     int loop_pending;
     int switch_pending;
     int nfield;
-    char fpath[128][160];
+    const char * fpath[128];
     int fowner[128];
     int fdepth[128];
     int fmaybe[128];
     int branch_hold;
     int ln;
-    char lname[512][160];
-    char ltype[512][160];
+    const char * lname[512];
+    const char * ltype[512];
     int lblk[256];
     int hitparam;
-    char method[160];
-    char recv[160];
+    const char * method;
+    const char * recv;
 };
 void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char * *, const char *);
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);

@@ -42,6 +42,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -66,7 +67,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -174,7 +174,7 @@ struct backend_emit_EmitInvariant_iface {
 };
 
 struct backend_emit_EmitterTryOps_vtbl {
-    int (*try_result_tag)(void *, const char *, char *, int);
+    const char * (*try_result_tag)(void *, const char *);
     int (*try_result_cols)(void *, int, char *, int, char *, int);
     int (*try_cleanup)(void *, int);
     int (*try_release_payload)(void *, const char *, const char *, const char *);
@@ -235,14 +235,14 @@ struct backend_emit_Emitter {
     int ntmp;
     int raw_call;
     int failline;
-    char errmsg[160];
-    char cur_ret[160];
+    const char * errmsg;
+    const char * cur_ret;
     int try_discard;
     const char * gprefix;
     struct backend_emit_Init * init;
     int cur_unit;
     int closure_ci;
-    char clvar[64][160];
+    const char * clvar[64];
     int clid[64];
     int nclvar;
     int range_depth;
@@ -252,8 +252,8 @@ struct backend_emit_Emitter {
     int gtntparam;
     int gtcap;
     int gtacap;
-    char gtname[160];
-    char ginst[160];
+    const char * gtname;
+    const char * ginst;
     const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
     const struct backend_emit_EmitterTryOps_vtbl *__backend_emit_emittertryops_vptr;
     const struct backend_emit_EmitInvariant_vtbl *__backend_emit_emitinvariant_vptr;

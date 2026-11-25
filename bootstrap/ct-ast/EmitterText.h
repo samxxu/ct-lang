@@ -17,6 +17,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "SymbolsTypeText.h"
 
 
@@ -46,6 +47,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -70,7 +72,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -106,6 +107,6 @@ int backend_emit_sb_text_place_p(const char *);
 int backend_emit_sb_view_ret(const char *);
 int backend_emit_unit_has_adt(int, int);
 int backend_emit_init_has_elem_groups(const char *);
-int backend_emit_elem_ret_ctype(int, const char *, char *, int);
+const char * backend_emit_elem_ret_ctype(int, const char *);
 
 #endif

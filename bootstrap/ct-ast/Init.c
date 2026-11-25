@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "Init.h"
 #include "Symbols.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Init.h.ct"
 #include <string.h>
@@ -33,6 +34,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -57,7 +59,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -237,7 +238,7 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_stmts(void *self, co
     }
     for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
         char ft[MAX_TEXT];
-        char sub[MAX_TEXT];
+        const char * sub;
         snprintf(ft, sizeof(ft), "%s", _self->sym->structs[si].fields[fi].type);
         if (strchr(ft, '*') != 0) {
             continue;
@@ -248,7 +249,7 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_stmts(void *self, co
         if ((!_self->__backend_emit_initops_vptr->type_needs_init(_self, ft))) {
             continue;
         }
-        snprintf(sub, sizeof(sub), "%s.%s", recv, _self->sym->structs[si].fields[fi].name);
+        sub = tool_sh_ct_scratch_fmt("%s.%s", recv, _self->sym->structs[si].fields[fi].name);
         if (_self->__backend_emit_initops_vptr->emit_vptr_stmts(_self, sub, ft, ind) != 0) {
             return (-1);
         }
@@ -265,11 +266,10 @@ static int backend_emit_Init_backend_emit_InitOps_emit_field_vptrs(void *self, i
     int n;
     int depth;
     int skip;
-    char name[MAX_TEXT];
     (void)(_self);
     for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
         char ft[MAX_TEXT];
-        char prefix[MAX_TEXT];
+        const char * prefix;
         snprintf(ft, sizeof(ft), "%s", _self->sym->structs[si].fields[fi].type);
         if (strchr(ft, '*') != 0) {
             continue;
@@ -309,18 +309,17 @@ static int backend_emit_Init_backend_emit_InitOps_emit_field_vptrs(void *self, i
             while (((((raw[j] == ' ') || (raw[j] == '\t')) || (raw[j] == '\n')) || (raw[j] == '\r'))) {
                 j++;
             }
-            n = 0;
+            n = j;
             while ((((((raw[j] >= 'a') && (raw[j] <= 'z')) || ((raw[j] >= 'A') && (raw[j] <= 'Z'))) || ((raw[j] >= '0') && (raw[j] <= '9'))) || (raw[j] == '_'))) {
-                if ((n + 1) < MAX_TEXT) {
-                    name[n] = raw[j];
-                    n++;
-                }
                 j++;
             }
-            name[n] = 0;
             i = (j - 1);
-            if (((n == 0) || (strcmp(name, _self->sym->structs[si].fields[fi].name) != 0))) {
-                continue;
+{
+                const char * fname = _self->sym->structs[si].fields[fi].name;
+                size_t nl = (size_t)((j - n));
+                if ((((nl == 0) || (nl != strlen(fname))) || (memcmp((raw + n), fname, nl) != 0))) {
+                    continue;
+                }
             }
             while (((((raw[j] == ' ') || (raw[j] == '\t')) || (raw[j] == '\n')) || (raw[j] == '\r'))) {
                 j++;
@@ -338,7 +337,7 @@ static int backend_emit_Init_backend_emit_InitOps_emit_field_vptrs(void *self, i
         if (skip) {
             continue;
         }
-        snprintf(prefix, sizeof(prefix), ".%s", _self->sym->structs[si].fields[fi].name);
+        prefix = tool_sh_ct_scratch_fmt(".%s", _self->sym->structs[si].fields[fi].name);
         if (started) {
             fputs(", ", f);
         }
@@ -357,8 +356,8 @@ static int backend_emit_Init_backend_emit_InitOps_emit_array_field_vptrs(void *s
     (void)(_self);
     for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
         char ft[MAX_TEXT];
-        char sub[MAX_TEXT];
-        char next[MAX_TEXT];
+        const char * sub;
+        const char * next;
         const char * d;
         int depth;
         int started;
@@ -372,30 +371,24 @@ static int backend_emit_Init_backend_emit_InitOps_emit_array_field_vptrs(void *s
         if ((!_self->__backend_emit_initops_vptr->type_needs_init(_self, ft))) {
             continue;
         }
-        snprintf(sub, sizeof(sub), "%s.%s", recv, _self->sym->structs[si].fields[fi].name);
+        sub = tool_sh_ct_scratch_fmt("%s.%s", recv, _self->sym->structs[si].fields[fi].name);
         d = _self->sym->structs[si].fields[fi].dims;
         depth = 0;
         started = 0;
         while ((*d) == '[') {
             const char * close = strchr(d, ']');
-            char bound[MAX_TEXT];
             size_t bl;
             if ((!close)) {
                 break;
             }
             bl = (size_t)(((close - d) - 1));
-            if (bl >= sizeof(bound)) {
-                bl = (sizeof(bound) - 1);
-            }
-            memcpy(bound, (d + 1), bl);
-            bound[bl] = 0;
-            if ((!bound[0])) {
+            if (bl == 0) {
                 break;
             }
             put_indent(f, (ind + depth));
-            fprintf(f, "for (unsigned long __ct_j%d = 0; __ct_j%d < %s; __ct_j%d++) {\n", depth, depth, bound, depth);
-            snprintf(next, sizeof(next), "%s[__ct_j%d]", sub, depth);
-            snprintf(sub, sizeof(sub), "%s", next);
+            fprintf(f, "for (unsigned long __ct_j%d = 0; __ct_j%d < %.*s; __ct_j%d++) {\n", depth, depth, (int)(bl), (d + 1), depth);
+            next = tool_sh_ct_scratch_fmt("%s[__ct_j%d]", sub, depth);
+            sub = next;
             depth++;
             d = (close + 1);
             started = 1;

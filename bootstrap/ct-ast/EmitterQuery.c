@@ -4,6 +4,7 @@
 #include "MapTable.h"
 #include "Symbols.h"
 #include "Arena.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterQuery.h.ct"
 #include <stdio.h>
@@ -38,6 +39,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -62,7 +64,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -215,7 +216,7 @@ int backend_emit_emit_impl_score(struct frontend_sym_StructImpl * im, int ki) {
     return s;
 }
 int backend_emit_type_needs_layout(const char * type, const char * name) {
-    char pat[MAX_TEXT];
+    const char * pat;
     const char * p;
     const char * q;
     size_t n;
@@ -225,7 +226,7 @@ int backend_emit_type_needs_layout(const char * type, const char * name) {
     if ((strchr(type, '*') || strchr(type, '('))) {
         return 0;
     }
-    snprintf(pat, sizeof(pat), "struct %s", name);
+    pat = tool_sh_ct_scratch_fmt("struct %s", name);
     n = strlen(pat);
     for (p = strstr(type, pat); p; p = strstr((p + 1), pat)) {
         if ((((p != type) && (p[(-1)] != ' ')) && (p[(-1)] != '('))) {

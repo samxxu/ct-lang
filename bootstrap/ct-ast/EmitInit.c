@@ -159,6 +159,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -183,7 +184,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -405,6 +405,7 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
     int changed;
     int count;
     char expr[MAX_TEXT];
+    const char * et;
     if ((((len < 2) || (t[0] != '{')) || (t[(len - 1)] != '}'))) {
         return 0;
     }
@@ -539,13 +540,16 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
         if ((!kind)) {
             continue;
         }
-        if ((e0 - fs) >= MAX_TEXT) {
-            continue;
+        if ((e0 - fs) < MAX_TEXT) {
+            snprintf(expr, sizeof(expr), "%.*s", (e0 - fs), (t + fs));
+            et = expr;
         }
-        snprintf(expr, sizeof(expr), "%.*s", (e0 - fs), (t + fs));
-        if ((!backend_emit_sb_text_place_p(expr))) {
-            size_t el = strlen(expr);
-            if (((((el >= 2) && (expr[0] == '"')) && (expr[(el - 1)] == '"')) && self->cur_ret[0])) {
+        else {
+            et = tool_sh_ct_scratch_fmt("%.*s", (e0 - fs), (t + fs));
+        }
+        if ((!backend_emit_sb_text_place_p(et))) {
+            size_t el = strlen(et);
+            if (((((el >= 2) && (et[0] == '"')) && (et[(el - 1)] == '"')) && self->cur_ret[0])) {
                 litmode[i] = 1;
                 starts[i] = s0;
                 ends[i] = e0;
@@ -580,9 +584,15 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
             fprintf(self->out, ", (int)(sizeof(%.*s) - 1))", (int)((e0 - fs)), (t + fs));
             continue;
         }
-        if ((kind && ((e0 - fs) < MAX_TEXT))) {
-            snprintf(expr, sizeof(expr), "%.*s", (e0 - fs), (t + fs));
-            if (backend_emit_sb_text_place_p(expr)) {
+        if (kind) {
+            if ((e0 - fs) < MAX_TEXT) {
+                snprintf(expr, sizeof(expr), "%.*s", (e0 - fs), (t + fs));
+                et = expr;
+            }
+            else {
+                et = tool_sh_ct_scratch_fmt("%.*s", (e0 - fs), (t + fs));
+            }
+            if (backend_emit_sb_text_place_p(et)) {
                 fprintf(self->out, "%s_retain(&(", backend_emit_sb_prefix(kind));
             }
             else {

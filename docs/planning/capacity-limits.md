@@ -275,6 +275,22 @@ arena 文本行（C2n-2）。
 - 一次性局部 `char[MAX_TEXT]` scratch 与发射器/诊断文本：合批在 C2p；
   词法器仍拒单一 >159 标识符（C2o）。
 
+## 5.4 C2n-3：Emitter/Init/Emit* 簇的文本缓冲按需化
+
+`backend/emit/`：持久字段/类型拼写改 `const char *` + `ct_intern`；发射输出不进
+Intern（随输出增长），改用 `ct_scratch_*` builder。已迁：`Emitter.errmsg/cur_ret/`
+`clvar[]/gtname/ginst`；`StrRetain` 的 `name/type/fpath/lname/ltype/method/recv`
+与 `FldSnap.path`；`elem_ret_ctype`/`try_result_tag` 返回池文本；`Init` 的
+`sub/next/prefix/bound`、`EmitInit` 项、`emit_hoists.hty`、`EmitInvariant` 消息与
+4 处长诊断。真实截断：嵌套 vptr 的 `recv+"."+field`（90+90 字节）截成
+`no member named`；`sb_rewrite_init` 跳过 >160 字节 `String` 项的 owning 改写
+（`release` 释放静态存储）；`.field` 设计符与字段路径键 `base.field` 截断。
+**证据**：S7 红在 baseline 38632c23（`9 passed, 2 failed`）、绿在实现后
+（`11 passed, 0 failed`）；`check-ast` 71 语料 / 343 诊断 / goldens / fixpoint，
+`check-seed` 两轮，warnings 559/559，sanitizers 612 项，`check-all` 9 门绿。
+**剩余**：`Emitter.h.ct` 约 112 处 `char[MAX_TEXT]` 局部（`owner` 闭包键须与
+`Parser.cur_func[160]` 同批迁移）；`type_needs_layout.pat` 等仍由上游 160 行界定。
+
 ## 6 关联
 
 - [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)（已落地的动态容量样板）

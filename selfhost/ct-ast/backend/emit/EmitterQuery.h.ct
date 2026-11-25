@@ -17,6 +17,7 @@ import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::sym::Symbols::StructTmpl as StructTmpl;
 import frontend::sym::Symbols::StructImpl as StructImpl;
 import runtime::arena::Arena;
+import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -138,13 +139,15 @@ pub int emit_impl_score(struct StructImpl *im, int ki)
 
 pub int type_needs_layout(const char *type, const char *name)
 {
-    char pat[MAX_TEXT];
+    const char *pat;
     const char *p, *q;
     size_t n;
 
     if (!type || !type[0] || !name || !name[0]) return 0;
     if (strchr(type, '*') || strchr(type, '(')) return 0;
-    snprintf(pat, sizeof pat, "struct %s", name);
+    /* S1a-0 C2n-3: the spelling is a generated `struct <name>`; a instance
+       name may be long, so build it run-scoped rather than in a 160-byte row. */
+    pat = tool::sh::ct_scratch_fmt("struct %s", name);
     n = strlen(pat);
     for (p = strstr(type, pat); p; p = strstr(p + 1, pat)) {
         if (p != type && p[-1] != ' ' && p[-1] != '(') continue;

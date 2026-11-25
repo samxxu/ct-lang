@@ -157,6 +157,7 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
+struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -181,7 +182,6 @@ struct backend_emit_EmitterText;
 struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
-struct tool_sh_Sh;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -265,8 +265,8 @@ static int backend_emit_Emitter_backend_emit_EmitInvariant_invariant_scan(void *
     (void)(_self);
     while (n >= 0) {
         if (depth > 2048) {
-            char dmsg[MAX_TEXT];
-            snprintf(dmsg, sizeof(dmsg), "lowering invariant I1: AST walk is deeper than 2048 at node %d", n);
+            const char * dmsg;
+            dmsg = tool_sh_ct_scratch_fmt("lowering invariant I1: AST walk is deeper than 2048 at node %d", n);
             return _self->__backend_emit_emitops_vptr->fail(_self, dmsg);
         }
         if (n >= _self->arena->nnode) {

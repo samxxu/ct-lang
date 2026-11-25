@@ -27,6 +27,7 @@ import frontend::sym::Symbols;
 import frontend::sym::Symbols::Adt as Adt;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import frontend::sym::SymbolsTypeText;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
@@ -47,7 +48,7 @@ pub int sb_text_place_p(const char *e);
 pub int sb_view_ret(const char *t);
 pub int unit_has_adt(int u, int pub_only);
 pub int init_has_elem_groups(const char *t);
-pub int elem_ret_ctype(int inst, const char *text, char *out, int cap);
+pub const char *elem_ret_ctype(int inst, const char *text);
 
 /* Number of array dimensions in a declarator suffix (`[2][3]` is 2). A trait
    object needs one vptr slot per element; more than one dimension leaves no
@@ -204,8 +205,13 @@ int init_has_elem_groups(const char *t)
 }
 
 /* Phase 31 O3 (S5b): the declared return type of an inherent method, with the
-   instance's type arguments substituted and any nested instance resolved. */
-int elem_ret_ctype(int inst, const char *text, char *out, int cap)
+   instance's type arguments substituted and any nested instance resolved.
+   S1a-0 C2n-3: the answer is pool text (a type spelling is a durable symbol
+   name, not an output line), so the caller no longer supplies a 160-byte row;
+   NULL is OOM or an over-long spelling. The substitution and resolve helpers
+   keep their own formal cap, so the two working rows below are exactly as
+   long as those helpers can answer. */
+const char *elem_ret_ctype(int inst, const char *text)
 {
     char cur[MAX_TEXT];
     char nxt[MAX_TEXT];
@@ -215,20 +221,22 @@ int elem_ret_ctype(int inst, const char *text, char *out, int cap)
     struct StructTmpl *tps;
 
     ins = frontend::sym::ct_insts(&k);
+    if (!ins || inst < 0 || inst >= k) return (const char *)0;
     ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
     tps = frontend::sym::ct_tmpls(&tn);
-    snprintf(cur, sizeof cur, "%s", text);
+    if (snprintf(cur, sizeof cur, "%s", text) >= (int)sizeof cur) return (const char *)0;
     if (ti >= 0 && tps) {
         for (j = 0; j < tps[ti].ntparams; j++) {
             if (j >= ins[inst].nargs) break;
             if (tps[ti].tparam[j] && ins[inst].ctype[j]
                 && frontend::sym::ct_generic_subst(cur, tps[ti].tparam[j],
-                        ins[inst].ctype[j], nxt, sizeof nxt) == 0)
-                snprintf(cur, sizeof cur, "%s", nxt);
+                        ins[inst].ctype[j], nxt, sizeof nxt) == 0) {
+                if (snprintf(cur, sizeof cur, "%s", nxt) >= (int)sizeof cur)
+                    return (const char *)0;
+            }
         }
     }
     if (strchr(cur, '<') && frontend::sym::ct_inst_resolve(cur, res, sizeof res) == 0)
-        snprintf(cur, sizeof cur, "%s", res);
-    if (snprintf(out, (size_t)cap, "%s", cur) >= cap) return 0;
-    return 1;
+        if (snprintf(cur, sizeof cur, "%s", res) >= (int)sizeof cur) return (const char *)0;
+    return runtime::text::ct_intern(cur);
 }
