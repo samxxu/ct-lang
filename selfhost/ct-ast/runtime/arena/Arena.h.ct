@@ -13,6 +13,7 @@
 #include <stdlib.h>
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_NODES 262144
+#define NODE_LIMIT 16777216
 namespace runtime::arena;
 /* The pool owns storage only: node kinds and the meaning of the child slots are
    documented where the nodes are built (frontend/parse/Parser.h.ct, Expr.h.ct
@@ -174,6 +175,7 @@ pub struct Arena {
        MAX_NODES / 262144, so the capacity semantics are unchanged. */
     struct Node *nodes;
     int  nnode;
+    int  nodecap;
     char *strpool;
     int  nstrpool;
     /* LANG-26: at most 32 converted `out` actuals per unit; a call with more is
@@ -189,9 +191,26 @@ pub struct Arena *arena_get(void);
    skipped byte (strings) so the caller's existing diagnostics still fire. */
 static int arena_grow_nodes(struct Arena *self)
 {
-    if (self->nodes) return 0;
-    self->nodes = calloc(MAX_NODES, sizeof(*self->nodes));
-    return self->nodes ? 0 : -1;
+    int cap;
+    struct Node *grown;
+
+    if (self->nodes && self->nnode < self->nodecap) return 0;
+    if (self->nodecap > 0) {
+        cap = self->nodecap * 2;
+    } else {
+        const char *e = getenv("CT_ARENA_INIT");
+        cap = e && atoi(e) > 0 ? atoi(e) : MAX_NODES;
+    }
+    if (cap < 8) cap = 8;
+    if (cap > NODE_LIMIT) {
+        if (self->nodecap >= NODE_LIMIT) return -1;
+        cap = NODE_LIMIT;
+    }
+    grown = (struct Node *)realloc(self->nodes, (size_t)cap * sizeof(*self->nodes));
+    if (!grown) return -1;
+    self->nodes = grown;
+    self->nodecap = cap;
+    return 0;
 }
 
 static int arena_grow_strpool(struct Arena *self)
@@ -208,7 +227,7 @@ impl ArenaOps for Arena {
     int alloc(int kind, int line)
     {
         int n;
-        if (self->nnode >= MAX_NODES) return -1;
+        if (self->nnode >= NODE_LIMIT) return -1;
         if (arena_grow_nodes(self) != 0) return -1;
         n = self->nnode;
         self->nnode++;

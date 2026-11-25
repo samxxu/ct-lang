@@ -131,6 +131,7 @@ struct runtime_arena_OutConv {
 struct runtime_arena_Arena {
     struct runtime_arena_Node * nodes;
     int nnode;
+    int nodecap;
     char * strpool;
     int nstrpool;
     struct runtime_arena_OutConv outconv[32];

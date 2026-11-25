@@ -6,6 +6,7 @@
 #line 1 "selfhost/ct-ast/runtime/arena/Arena.h.ct"
 #include <stdlib.h>
 #define MAX_NODES 262144
+#define NODE_LIMIT 16777216
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -86,7 +87,7 @@ static struct runtime_arena_Arena runtime_arena_g_arena = { .__runtime_arena_are
 static int runtime_arena_Arena_runtime_arena_ArenaOps_alloc(void *self, int kind, int line) {
     struct runtime_arena_Arena *_self = (struct runtime_arena_Arena *)self;
     int n;
-    if (_self->nnode >= MAX_NODES) {
+    if (_self->nnode >= NODE_LIMIT) {
         return (-1);
     }
     if (arena_grow_nodes(_self) != 0) {
@@ -160,11 +161,34 @@ const struct runtime_arena_ArenaOps_vtbl runtime_arena_Arena_runtime_arena_Arena
 };
 
 static int arena_grow_nodes(struct runtime_arena_Arena * self) {
-    if (self->nodes) {
+    int cap;
+    struct runtime_arena_Node * grown;
+    if ((self->nodes && (self->nnode < self->nodecap))) {
         return 0;
     }
-    self->nodes = calloc(MAX_NODES, sizeof((*self->nodes)));
-    return (self->nodes ? 0 : (-1));
+    if (self->nodecap > 0) {
+        cap = (self->nodecap * 2);
+    }
+    else {
+        const char * e = getenv("CT_ARENA_INIT");
+        cap = ((e && (atoi(e) > 0)) ? atoi(e) : MAX_NODES);
+    }
+    if (cap < 8) {
+        cap = 8;
+    }
+    if (cap > NODE_LIMIT) {
+        if (self->nodecap >= NODE_LIMIT) {
+            return (-1);
+        }
+        cap = NODE_LIMIT;
+    }
+    grown = (struct runtime_arena_Node *)(realloc(self->nodes, ((size_t)(cap) * sizeof((*self->nodes)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    self->nodes = grown;
+    self->nodecap = cap;
+    return 0;
 }
 static int arena_grow_strpool(struct runtime_arena_Arena * self) {
     if (self->strpool) {

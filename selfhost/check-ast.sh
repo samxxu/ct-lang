@@ -5024,6 +5024,12 @@ else
     bad "REQ-ABI-3/4 enum/union ABI forwards" "$(cat "$work/abieu.out" "$work/abieu.err" | head -6)"
 fi
 
+if bash test/ast/arena_grow.sh "$work/ct-ast" >"$work/arenag.out" 2>"$work/arenag.err"; then
+    ok "S1a-0 node arena grows"
+else
+    bad "S1a-0 node arena grows" "$(cat "$work/arenag.out" "$work/arenag.err" | head -4)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
