@@ -177,5 +177,35 @@ run_case meth_ann "$w/meth_ann.ct" 0 || fail=1
 } >"$w/layout.ct"
 run_case layout "$w/layout.ct" 0 || fail=1
 
+# MAX_HOISTS: a six-level custom-subscript chain (five hoisted receivers; old
+# cap 4). Each level is a `Ref_get` call whose receiver must be materialised.
+{
+    echo 'struct Ref { int n; }'
+    echo 'impl Ref {'
+    echo '    Ref get(int k) { struct Ref r; r.n = self->n + k; return r; }'
+    echo '}'
+    echo 'int main(void)'
+    echo '{'
+    echo '    struct Ref doc;'
+    echo '    doc.n = 1;'
+    echo '    struct Ref b = doc[1][1][1][1][1][1];'
+    echo '    return b.n == 7 ? 0 : 1;'
+    echo '}'
+} >"$w/hoists.ct"
+run_case hoists "$w/hoists.ct" 0 || fail=1
+
+# MAX_INTOS: five chained `into` blocks in one statement (old cap 4).
+{
+    echo 'struct R { int n; }'
+    echo 'int main(void)'
+    echo '{'
+    echo '    struct R r;'
+    echo '    r.n = 0;'
+    echo '    r into { .n = 1; } into { .n = 2; } into { .n = 3; } into { .n = 4; } into { .n = 5; };'
+    echo '    return r.n == 5 ? 0 : 1;'
+    echo '}'
+} >"$w/intos.ct"
+run_case intos "$w/intos.ct" 0 || fail=1
+
 [ "$fail" -eq 0 ] || exit 1
 echo "OK S1a-0 cap growth"
