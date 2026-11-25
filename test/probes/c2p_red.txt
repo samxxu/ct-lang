@@ -1,0 +1,11 @@
+C2p remaining scratches — red/green evidence
+
+baseline: 772d7611
+baseline compiler: built from the frozen seed at 772d7611
+command: bash test/ast/c2p_limits.sh <baseline-ct-ast>
+exit: 1
+output:
+FAIL c2p: qv: compile failed: .../qv.ct:3:213: error: qualified name is too long
+FAIL c2p: qc: compile failed: .../qc.ct:3:215: error: qualified name is too long
+  200/1000-byte literals: kept whole
+c2p: 1 passed, 2 failed

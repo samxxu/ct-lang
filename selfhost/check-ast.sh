@@ -1083,6 +1083,15 @@ else
     bad "c2o/limits" "$(cat "$work/c2o.out" "$work/c2o.err" | head -10)"
 fi
 
+# v1-PH-2 S1a-0 C2p: the remaining 160/159/128 one-shot scratches. The file
+# grows one section per batch; C2p-1 covers a qualified path whose underscore
+# form exceeds the old 160-byte qpath/cname buffer.
+if bash test/ast/c2p_limits.sh "$work/ct-ast" >"$work/c2p.out" 2>"$work/c2p.err"; then
+    ok "c2p/limits ($(tail -1 "$work/c2p.out"))"
+else
+    bad "c2p/limits" "$(cat "$work/c2p.out" "$work/c2p.err" | head -10)"
+fi
+
 # DOC-87 Stage 2: the built-in layer's source namespace `core`. The canonical
 # `core::` spellings compile, the root spelling stays a compatibility alias, and
 # both spellings emit byte-identical C (the C symbols stay in the root
