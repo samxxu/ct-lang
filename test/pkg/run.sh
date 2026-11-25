@@ -1724,6 +1724,16 @@ else
 fi
 
 echo
+echo "== S1a-0 C2d: package-manager lock text (MAX_LOCK) =="
+# The probe appends 41 lock rows, over the old 4096-byte MAX_LOCK, and
+# round-trips them through get/verify/update/build.
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg28_lock_text.sh"; then
+    ok "S1a-0 C2 package lock text"
+else
+    bad "S1a-0 C2 package lock text" "the pkg28 probe failed"
+fi
+
+echo
 echo "== PKG-25: lock merge keeps same-name different-publisher rows =="
 # The probe fetches demo/hello then acme/hello into one project and asserts both
 # lock rows survive, `ct verify --strict` accepts them, and a re-fetch of one
