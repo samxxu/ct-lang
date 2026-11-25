@@ -5060,6 +5060,12 @@ else
     bad "S1a-0 structs and traits grow" "$(cat "$work/dtg.out" "$work/dtg.err" | head -4)"
 fi
 
+if bash test/ast/fields_grow.sh "$work/ct-ast" >"$work/fldg.out" 2>"$work/fldg.err"; then
+    ok "S1a-0 struct fields grow"
+else
+    bad "S1a-0 struct fields grow" "$(cat "$work/fldg.out" "$work/fldg.err" | head -4)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
