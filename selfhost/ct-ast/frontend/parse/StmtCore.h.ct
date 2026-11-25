@@ -20,48 +20,87 @@ import runtime::arena::Arena;
 namespace frontend::parse;
 pub trait StmtOps {
     int  is_decl_start(void);
+
     int  parse_block(void);
+
     int  missing_return_check(int body, const char *ret, int line);
+
     int  stmt_terminates(int n);
+
     int  u_reset(void);
+
     int  u_add(int which, const char *s);
+
     int  u_mark_lvalue(int n);
+
     int  u_scan(int n);
+
     int  uninit_check(int body, int line);
+
     int  del_base(int n, char *out, int cap);
+
     int  del_take(const char *name);
+
     int  body_has_jump(int n);
+
     int  parse_stmt(void);
+
     int  parse_branch(void);
+
     int  parse_decl_node(void);
+
     /* PH-80: refuse a raw `String.ptr` / `Str.ptr` write (immutability). */
     int  string_raw_write_check(int e);
+
     int  parse_expr_stmt_node(void);
+
     int  parse_switch_body(void);
+
+    int  parse_label(void);
+
+    int  parse_case_value(void);
+
+    int  label_ahead(void);
+
+    int  label_find(const char *name);
+
+    int  parse_named_label(void);
+
+    int  parse_goto(void);
+
+    int  loop_ahead(void);
+
+    int  parse_loop(void);
+
+    int  foreach_ahead(void);
+
+    int  parse_foreach(void);
+
+    int  range_init_ahead(void);
+
+    int  parse_range_init(int n, const char *type);
+
+    int  closure_global_init(int e, const char *name, int line, int col);
+
+    int  func_begin(void);
+
+    int  func_end(void);
+}
+
+pub trait StmtMatch {
     /* Phase 84: `match` is a statement, so its lookahead and reader live here. */
     int  match_ahead(void);
+
     int  parse_match(void);
+
     /* LANG-29 S4 / B5: the same `match` form in expression position. The
        expression layer cannot import this one (the edge would close a cycle),
        so `parse_unary` reaches both through the parser's `st_hook`. */
     int  expr_match_ahead(void);
+
     int  parse_match_expr(void);
-    int  parse_label(void);
-    int  parse_case_value(void);
-    int  label_ahead(void);
-    int  label_find(const char *name);
-    int  parse_named_label(void);
-    int  parse_goto(void);
-    int  loop_ahead(void);
-    int  parse_loop(void);
-    int  foreach_ahead(void);
-    int  parse_foreach(void);
-    int  range_init_ahead(void);
-    int  parse_range_init(int n, const char *type);
-    int  closure_global_init(int e, const char *name, int line, int col);
-    int  func_begin(void);
-    int  func_end(void);
 }
+
 
 /* Phase 38 / Phase 40 / Phase 44: the `defer` / `errdefer` machinery -- the
    three lookaheads, the per-block stack, the failure-cleanup capture on a
@@ -200,4 +239,4 @@ pub struct Stmt {
     int  last_yield_line;
     int  last_yield_col;
     int  last_yield_count;
-} use StmtOps, StmtDeferOps;
+} use StmtOps, StmtDeferOps, StmtMatch;

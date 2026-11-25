@@ -106,10 +106,6 @@ struct frontend_parse_StmtOps_vtbl {
     int (*string_raw_write_check)(void *, int);
     int (*parse_expr_stmt_node)(void *);
     int (*parse_switch_body)(void *);
-    int (*match_ahead)(void *);
-    int (*parse_match)(void *);
-    int (*expr_match_ahead)(void *);
-    int (*parse_match_expr)(void *);
     int (*parse_label)(void *);
     int (*parse_case_value)(void *);
     int (*label_ahead)(void *);
@@ -129,6 +125,17 @@ struct frontend_parse_StmtOps_vtbl {
 struct frontend_parse_StmtOps_iface {
     void *self;
     const struct frontend_parse_StmtOps_vtbl *vt;
+};
+
+struct frontend_parse_StmtMatch_vtbl {
+    int (*match_ahead)(void *);
+    int (*parse_match)(void *);
+    int (*expr_match_ahead)(void *);
+    int (*parse_match_expr)(void *);
+};
+struct frontend_parse_StmtMatch_iface {
+    void *self;
+    const struct frontend_parse_StmtMatch_vtbl *vt;
 };
 
 struct frontend_parse_StmtDeferOps_vtbl {
@@ -219,6 +226,7 @@ struct frontend_parse_Stmt {
     int last_yield_count;
     const struct frontend_parse_StmtOps_vtbl *__frontend_parse_stmtops_vptr;
     const struct frontend_parse_StmtDeferOps_vtbl *__frontend_parse_stmtdeferops_vptr;
+    const struct frontend_parse_StmtMatch_vtbl *__frontend_parse_stmtmatch_vptr;
 };
 
 #endif
