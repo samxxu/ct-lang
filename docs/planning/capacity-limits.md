@@ -1,6 +1,6 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键（C2b）与初始化文本（C2c）已按需增长**；B/D 类其余待做）。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键（C2b）、初始化文本（C2c）与 pkg 锁文本（C2d）已按需增长**；B/D 类其余待做）。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
@@ -86,7 +86,7 @@
 | `MAX_FLAGS` | 1024 | `Module.h.ct` / `Driver.h.ct` | B | 动态 |
 | `MAX_CMD` | 8192 | `Module.h.ct` | B | 动态 |
 | `MAX_ERRORS` | 20 | `Diag.h.ct` | D | 错误恢复上限；保留并明确文案 |
-| `MAX_LOCK` | 4096 | `Pkg.h.ct`（`MAX_PKG_PATH * 8`） | B | 动态 |
+| `MAX_LOCK` | 4096 | `Pkg.h.ct`（`MAX_PKG_PATH * 8`） | B | **已动态（C2d）**：`struct Pkg.lock` 改堆块倍增到 `MAX_LOCK_MAX=65536`；`get` 追加、`pkg_lock_keep` scratch、`update`/`migrate` 读写与 `ct.pkg` 读取都按实际大小分配；41 行锁（4721 字节）可 get/verify/update/build |
 | `MAX_PKG_LINE` | 1024 | `Pkg.h.ct` | B | 动态 |
 | `MAX_PKG_GITERR` | 8 | `Pkg.h.ct` | D | 展示行数；保留 |
 | `MAX_INDEX_ROWS` | 1024 | `Pkg.h.ct` | A | **已动态**：`ct index refresh` 行表倍增到 `MAX_INDEX_ROWS_MAX=65536`；删除 `package list has more than 1024 rows` |

@@ -13,6 +13,7 @@
 #include <unistd.h>
 #define MAX_TEXT       160
 #define MAX_LOCK       4096             /* MAX_PKG_PATH * 8, spelled out */
+#define MAX_LOCK_MAX   65536             /* = TEXT_LIMIT; S1a-0 C2d */
 #define MAX_PKG_DEPS   16
 #define MAX_PKG_DEPS_MAX 65536
 #define MAX_PKG_PATH   512
@@ -177,7 +178,8 @@ struct tool_pkg_LockParsedRow {
     char dig[80];
 };
 struct tool_pkg_Pkg {
-    char lock[MAX_LOCK];
+    char * lock;
+    int lockcap;
     int locklen;
     int nlocks;
     char * seen;
@@ -215,6 +217,7 @@ static int pkg_append_words(char *, size_t, const char *);
 static int pkg_check_requires(const char *, const char *);
 static int pkg_verify_lock(const char *, struct tool_pkg_LockRow * *, int *, int *);
 static int pkg_lock_keep(char *, size_t);
+static int pkg_lock_reserve(struct tool_pkg_Pkg *, int);
 static int pkg_update(const char *);
 static int pkg_verify(const char *, int);
 static int pkg_verify_strict(void);
@@ -1366,9 +1369,22 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_fetch_git(void *self, const char * url, 
     if (pkg_store_commit(cache, publisher, mname, mver, nsroot, dig, store, sizeof(store)) != 0) {
         return (-1);
     }
-    w = snprintf((_self->lock + _self->locklen), (sizeof(_self->lock) - (size_t)(_self->locklen)), "%s/%s %s git %s %s %s %s\n", publisher, mname, mver, url, commit, nsroot, dig);
-    if (((w < 0) || ((size_t)(w) >= (sizeof(_self->lock) - (size_t)(_self->locklen))))) {
+    if (pkg_lock_reserve(_self, (_self->locklen + 1)) != 0) {
+        fprintf(stderr, "ctc: ct.lock is too large to merge\n");
         return (-1);
+    }
+    for (; ; ) {
+        w = snprintf((_self->lock + _self->locklen), (size_t)((_self->lockcap - _self->locklen)), "%s/%s %s git %s %s %s %s\n", publisher, mname, mver, url, commit, nsroot, dig);
+        if (w < 0) {
+            return (-1);
+        }
+        if (w < (_self->lockcap - _self->locklen)) {
+            break;
+        }
+        if (pkg_lock_reserve(_self, ((_self->locklen + w) + 1)) != 0) {
+            fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+            return (-1);
+        }
     }
     _self->locklen += w;
     _self->nlocks++;
@@ -1589,9 +1605,22 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get_one(void *self, const char * dir, co
     if (pkg_store_commit(dir, publisher, name, ver, nsroot, dig, store, sizeof(store)) != 0) {
         return (-1);
     }
-    w = snprintf((_self->lock + _self->locklen), (sizeof(_self->lock) - (size_t)(_self->locklen)), "%s/%s %s dir %s - %s %s\n", publisher, name, ver, dir, nsroot, dig);
-    if (((w < 0) || ((size_t)(w) >= (sizeof(_self->lock) - (size_t)(_self->locklen))))) {
+    if (pkg_lock_reserve(_self, (_self->locklen + 1)) != 0) {
+        fprintf(stderr, "ctc: ct.lock is too large to merge\n");
         return (-1);
+    }
+    for (; ; ) {
+        w = snprintf((_self->lock + _self->locklen), (size_t)((_self->lockcap - _self->locklen)), "%s/%s %s dir %s - %s %s\n", publisher, name, ver, dir, nsroot, dig);
+        if (w < 0) {
+            return (-1);
+        }
+        if (w < (_self->lockcap - _self->locklen)) {
+            break;
+        }
+        if (pkg_lock_reserve(_self, ((_self->locklen + w) + 1)) != 0) {
+            fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+            return (-1);
+        }
     }
     _self->locklen += w;
     _self->nlocks++;
@@ -1617,13 +1646,13 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get_one(void *self, const char * dir, co
 
 static int tool_pkg_Pkg_tool_pkg_PkgOps_remember_dep(void *self, const char * spec) {
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
-    char buf[MAX_LOCK];
+    char * buf;
     char newname[MAX_TEXT];
     char cur[MAX_PKG_PATH];
     char cn[MAX_TEXT];
     char * p;
     char * end;
-    long len;
+    long sz;
     size_t n;
     size_t sl;
     size_t cl;
@@ -1635,28 +1664,32 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_remember_dep(void *self, const char * sp
     if ((!f)) {
         return 0;
     }
-    len = (-1);
-    n = 0;
-    if (fseek(f, 0, SEEK_END) == 0) {
-        long sz;
-        size_t sz2;
-        sz = ftell(f);
-        if ((((sz >= 0) && ((size_t)(sz) < sizeof(buf))) && (fseek(f, 0, SEEK_SET) == 0))) {
-            sz2 = (size_t)(sz);
-            if (sz2 > 0) {
-                n = fread(buf, 1, sz2, f);
-            }
-            if (n == sz2) {
-                len = sz;
-            }
-        }
-    }
-    if (len < 0) {
+    if ((((fseek(f, 0, SEEK_END) != 0) || ((sz = ftell(f)) < 0)) || (fseek(f, 0, SEEK_SET) != 0))) {
         fclose(f);
         fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
         return (-1);
     }
+    if ((size_t)(sz) >= MAX_LOCK_MAX) {
+        fclose(f);
+        fprintf(stderr, "ctc: './ct.pkg' is too large\n");
+        return (-1);
+    }
+    buf = (char *)(malloc(((size_t)(sz) + 1)));
+    if ((!buf)) {
+        fclose(f);
+        fprintf(stderr, "ctc: out of memory\n");
+        return (-1);
+    }
+    n = 0;
+    if (sz > 0) {
+        n = fread(buf, 1, (size_t)(sz), f);
+    }
     fclose(f);
+    if (n != (size_t)(sz)) {
+        free(buf);
+        fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
+        return (-1);
+    }
     buf[n] = 0;
     sl = strlen(spec);
     have_name = (_self->__tool_pkg_pkgops_vptr->dep_name(_self, spec, newname, sizeof(newname)) == 0);
@@ -1714,6 +1747,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_remember_dep(void *self, const char * sp
     if ((!found)) {
         f = fopen("./ct.pkg", "a");
         if ((!f)) {
+            free(buf);
             fprintf(stderr, "ctc: cannot write './ct.pkg'\n");
             return (-1);
         }
@@ -1722,10 +1756,12 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_remember_dep(void *self, const char * sp
         }
         fprintf(f, "dep = %s\n", spec);
         if (fclose(f) != 0) {
+            free(buf);
             fprintf(stderr, "ctc: cannot write './ct.pkg'\n");
             return (-1);
         }
     }
+    free(buf);
     return 0;
 }
 
@@ -1790,7 +1826,8 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_dep_name(void *self, const char * spec, 
 static int tool_pkg_Pkg_tool_pkg_PkgOps_get(void *self, const char * spec, const char * root) {
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
     FILE * f;
-    char kept[MAX_LOCK];
+    char * kept;
+    size_t keptcap;
     char head[64];
     size_t klen;
     int i;
@@ -1802,7 +1839,13 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get(void *self, const char * spec, const
     _self->nrecs = 0;
     _self->nlocks = 0;
     _self->check_requires = 1;
+    if (pkg_lock_reserve(_self, 1) != 0) {
+        fprintf(stderr, "ctc: out of memory\n");
+        return 1;
+    }
     _self->lock[0] = 0;
+    kept = (char *)(0);
+    keptcap = 0;
     f = fopen("./ct.lock", "r");
     if (f != NULL) {
         if (((fgets(head, sizeof(head), f) != NULL) && (!((strncmp(head, "# ct-lock 2", 11) == 0) && (((head[11] == '\n') || (head[11] == '\r')) || (head[11] == 0)))))) {
@@ -1838,16 +1881,40 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get(void *self, const char * spec, const
             return 1;
         }
     }
-    if (pkg_lock_keep(kept, sizeof(kept)) != 0) {
+{
+        FILE * lf;
+        long lsz;
+        lf = fopen("./ct.lock", "r");
+        lsz = 0;
+        if (lf != NULL) {
+            if (fseek(lf, 0, SEEK_END) == 0) {
+                lsz = ftell(lf);
+            }
+            fclose(lf);
+        }
+        if (lsz < 0) {
+            lsz = 0;
+        }
+        keptcap = ((size_t)(lsz) + 2);
+        kept = (char *)(malloc(keptcap));
+        if ((!kept)) {
+            fprintf(stderr, "ctc: out of memory\n");
+            return 1;
+        }
+    }
+    if (pkg_lock_keep(kept, keptcap) != 0) {
+        free(kept);
         return 1;
     }
     klen = strlen(kept);
-    if ((_self->locklen + (int)(klen)) >= (int)(sizeof(_self->lock))) {
+    if (pkg_lock_reserve(_self, ((_self->locklen + (int)(klen)) + 1)) != 0) {
         fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+        free(kept);
         return 1;
     }
     memcpy((_self->lock + _self->locklen), kept, (klen + 1));
     _self->locklen += (int)(klen);
+    free(kept);
     f = fopen("./ct.lock", "w");
     if ((!f)) {
         fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
@@ -2949,6 +3016,30 @@ static int pkg_lockparsed_ensure(struct tool_pkg_LockParsedRow * * rows, int * c
     memset((grown + (*cap)), 0, ((size_t)((c - (*cap))) * sizeof((*grown))));
     (*rows) = grown;
     (*cap) = c;
+    return 0;
+}
+static int pkg_lock_reserve(struct tool_pkg_Pkg * self, int need) {
+    int cap;
+    char * grown;
+    if (need <= self->lockcap) {
+        return 0;
+    }
+    cap = ((self->lockcap > 0) ? self->lockcap : MAX_LOCK);
+    while (((cap < need) && (cap < MAX_LOCK_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_LOCK_MAX) {
+        cap = MAX_LOCK_MAX;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (char *)(realloc(self->lock, (size_t)(cap)));
+    if ((!grown)) {
+        return (-1);
+    }
+    self->lock = grown;
+    self->lockcap = cap;
     return 0;
 }
 static int pkg_pin_lookup(const char * name, const char * range, char * ver, size_t vcap, char * url, size_t ucap, char * tag, size_t tcap, char * sha, size_t scap) {
@@ -4470,8 +4561,9 @@ static int pkg_lock_keep(char * dst, size_t cap) {
 }
 static int pkg_update_v2(const char * prog) {
     FILE * f;
-    char buf[MAX_LOCK];
-    char out[MAX_LOCK];
+    char * buf;
+    char * out;
+    int outcap;
     size_t n;
     long sz;
     char pname[MAX_TEXT];
@@ -4500,6 +4592,9 @@ static int pkg_update_v2(const char * prog) {
     ndeps = 0;
     nlock = 0;
     lockcap = 0;
+    buf = (char *)(0);
+    out = (char *)(0);
+    outcap = 0;
     f = fopen("./ct.pkg", "r");
     if ((!f)) {
         fprintf(stderr, "ctc: cannot open './ct.pkg'\n");
@@ -4548,14 +4643,21 @@ static int pkg_update_v2(const char * prog) {
         fprintf(stderr, "ctc: no './ct.lock'; run `%s get` first\n", prog);
         return 1;
     }
-    if (((((fseek(f, 0, SEEK_END) != 0) || ((sz = ftell(f)) < 0)) || ((size_t)(sz) >= sizeof(buf))) || (fseek(f, 0, SEEK_SET) != 0))) {
+    if (((((fseek(f, 0, SEEK_END) != 0) || ((sz = ftell(f)) < 0)) || ((size_t)(sz) >= MAX_LOCK_MAX)) || (fseek(f, 0, SEEK_SET) != 0))) {
         fprintf(stderr, "ctc: ct.lock is too large to update\n");
+        fclose(f);
+        return 1;
+    }
+    buf = (char *)(malloc(((size_t)(sz) + 1)));
+    if ((!buf)) {
+        fprintf(stderr, "ctc: out of memory\n");
         fclose(f);
         return 1;
     }
     n = fread(buf, 1, (size_t)(sz), f);
     fclose(f);
     if (n != (size_t)(sz)) {
+        free(buf);
         fprintf(stderr, "ctc: cannot read './ct.lock'\n");
         return 1;
     }
@@ -4584,18 +4686,22 @@ static int pkg_update_v2(const char * prog) {
     if ((!legacy)) {
         f = fopen("./ct.lock", "w");
         if ((!f)) {
+            free(buf);
             fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
             return 1;
         }
         fputs(buf, f);
         if (fclose(f) != 0) {
+            free(buf);
             fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
             return 1;
         }
+        free(buf);
         printf("updated %d package(s)\n", nlock);
         return 0;
     }
     if (official) {
+        free(buf);
         fprintf(stderr, "ctc: ct.lock pins both 'std/std' and 'ct/std'; ""remove one row before migrating\n");
         return 1;
     }
@@ -4616,24 +4722,44 @@ static int pkg_update_v2(const char * prog) {
         }
     }
     if (pkg_official_resolve("std", url, sizeof(url), tag, sizeof(tag), sha, sizeof(sha)) != 0) {
+        free(buf);
         fprintf(stderr, "ctc: cannot resolve the official pin for 'std'\n");
         return 1;
     }
     tool_pkg_g_pkg.locklen = 0;
-    tool_pkg_g_pkg.lock[0] = 0;
     tool_pkg_g_pkg.nlocks = 0;
     tool_pkg_g_pkg.nseen = 0;
     tool_pkg_g_pkg.nrecs = 0;
+    if (pkg_lock_reserve((&tool_pkg_g_pkg), 1) != 0) {
+        free(buf);
+        fprintf(stderr, "ctc: out of memory\n");
+        return 1;
+    }
+    tool_pkg_g_pkg.lock[0] = 0;
     if (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->fetch_git(&tool_pkg_g_pkg, url, "std", "ct", "", tag, sha, 0) != 0) {
+        free(buf);
         fprintf(stderr, "ctc: cannot migrate 'std/std' to the official pin\n");
         return 1;
     }
     if (tool_pkg_g_pkg.nrecs == 0) {
+        free(buf);
         fprintf(stderr, "ctc: cannot migrate 'std/std': the official pin produced no row\n");
         return 1;
     }
     snprintf(newver, sizeof(newver), "%s", tool_pkg_g_pkg.recs[(tool_pkg_g_pkg.nrecs - 1)].version);
     outlen = 0;
+    outcap = (((int)(strlen(buf)) + (int)(strlen(tool_pkg_g_pkg.lock))) + 2);
+    if (outcap > MAX_LOCK_MAX) {
+        free(buf);
+        fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
+        return 1;
+    }
+    out = (char *)(malloc((size_t)(outcap)));
+    if ((!out)) {
+        free(buf);
+        fprintf(stderr, "ctc: out of memory\n");
+        return 1;
+    }
     out[0] = 0;
 {
         char * p = buf;
@@ -4646,18 +4772,10 @@ static int pkg_update_v2(const char * prog) {
             ll = ((size_t)((e - p)) + (((*e) == '\n') ? 1U : 0U));
             if (strncmp(p, "std/std ", 8) == 0) {
                 size_t nl2 = strlen(tool_pkg_g_pkg.lock);
-                if ((outlen + (int)(nl2)) >= (int)(sizeof(out))) {
-                    fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
-                    return 1;
-                }
                 memcpy((out + outlen), tool_pkg_g_pkg.lock, nl2);
                 outlen += (int)(nl2);
             }
             else {
-                if ((outlen + (int)(ll)) >= (int)(sizeof(out))) {
-                    fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
-                    return 1;
-                }
                 memcpy((out + outlen), p, ll);
                 outlen += (int)(ll);
             }
@@ -4670,14 +4788,20 @@ static int pkg_update_v2(const char * prog) {
     }
     f = fopen("./ct.lock", "w");
     if ((!f)) {
+        free(buf);
+        free(out);
         fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
         return 1;
     }
     fputs(out, f);
     if (fclose(f) != 0) {
+        free(buf);
+        free(out);
         fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
         return 1;
     }
+    free(buf);
+    free(out);
     printf("migrate std/std %s -> ct/std %s\n", oldver, newver);
     printf("updated %d package(s)\n", nlock);
     return 0;
@@ -4789,7 +4913,8 @@ static int pkg_migrate(const char * prog) {
     FILE * f;
     char line[MAX_PKG_LINE];
     char head[64];
-    char out[MAX_LOCK];
+    char * out;
+    int outcap;
     int outlen;
     int nrow;
     int fmt;
@@ -4814,9 +4939,16 @@ static int pkg_migrate(const char * prog) {
     depcap = 0;
     ndeps = 0;
     outlen = 0;
+    outcap = MAX_LOCK;
+    out = (char *)(malloc((size_t)(outcap)));
+    if ((!out)) {
+        fprintf(stderr, "ctc: out of memory\n");
+        return 1;
+    }
     out[0] = 0;
     f = fopen("./ct.lock", "r");
     if (f == NULL) {
+        free(out);
         fprintf(stderr, "ctc: no './ct.lock'; nothing to migrate\n");
         return 1;
     }
@@ -4828,6 +4960,7 @@ static int pkg_migrate(const char * prog) {
         rewind(f);
     }
     if (fmt == 2) {
+        free(out);
         fprintf(stderr, "ctc: ct.lock is already v2; nothing to migrate\n");
         fclose(f);
         return 1;
@@ -4912,34 +5045,64 @@ static int pkg_migrate(const char * prog) {
             rc = 1;
             continue;
         }
-        w = snprintf((out + outlen), (sizeof(out) - (size_t)(outlen)), "%s/%s %s git - %s %s %s\n", publisher, name, ver, (commit[0] ? commit : "-"), nsroot, dig);
-        if (((w < 0) || ((size_t)(w) >= (sizeof(out) - (size_t)(outlen))))) {
-            fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
-            fclose(f);
-            return 1;
+        for (; ; ) {
+            w = snprintf((out + outlen), (size_t)((outcap - outlen)), "%s/%s %s git - %s %s %s\n", publisher, name, ver, (commit[0] ? commit : "-"), nsroot, dig);
+            if (w < 0) {
+                free(out);
+                fclose(f);
+                return 1;
+            }
+            if (w < (outcap - outlen)) {
+                break;
+            }
+            if (((outcap >= MAX_LOCK_MAX) || (((outlen + w) + 1) > MAX_LOCK_MAX))) {
+                fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
+                free(out);
+                fclose(f);
+                return 1;
+            }
+            outcap *= 2;
+            if (outcap > MAX_LOCK_MAX) {
+                outcap = MAX_LOCK_MAX;
+            }
+{
+                char * grown = (char *)(realloc(out, (size_t)(outcap)));
+                if ((!grown)) {
+                    free(out);
+                    fclose(f);
+                    fprintf(stderr, "ctc: out of memory\n");
+                    return 1;
+                }
+                out = grown;
+            }
         }
         outlen += w;
         nrow++;
     }
     fclose(f);
     if (rc != 0) {
+        free(out);
         return 1;
     }
     if (nrow == 0) {
+        free(out);
         fprintf(stderr, "ctc: ct.lock is empty\n");
         return 1;
     }
     f = fopen("./ct.lock", "w");
     if ((!f)) {
+        free(out);
         fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
         return 1;
     }
     fputs("# ct-lock 2\n", f);
     fputs(out, f);
     if (fclose(f) != 0) {
+        free(out);
         fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
         return 1;
     }
+    free(out);
     printf("migrated %d package(s)\n", nrow);
     (void)(i);
     (void)(prog);

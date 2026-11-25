@@ -24,6 +24,8 @@ import tool::pkg::PkgIndex;
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT       160
 #define MAX_LOCK       4096             /* MAX_PKG_PATH * 8, spelled out */
+/* S1a-0 C2d: the formal bound for the lock text (doubling stops here). */
+#define MAX_LOCK_MAX   65536             /* = TEXT_LIMIT; S1a-0 C2d */
 #define MAX_PKG_DEPS   16
 /* S1a-0 C1: formal cap for MAX_PKG_DEPS (an initial size, not a ceiling). */
 #define MAX_PKG_DEPS_MAX 65536
@@ -117,6 +119,8 @@ static int pkg_append_words(char *dst, size_t cap, const char *src);
 static int pkg_check_requires(const char *pkg, const char *req);
 static int pkg_verify_lock(const char *prog, struct LockRow **rows, int *nlock, int *cap);
 static int pkg_lock_keep(char *dst, size_t cap);
+/* S1a-0 C2d: grow the lock accumulator; 0 ok, -1 OOM / over the formal cap. */
+static int pkg_lock_reserve(struct Pkg *self, int need);
 static int pkg_update(const char *prog);
 static int pkg_verify(const char *prog, int strict);
 static int pkg_verify_strict(void);
@@ -180,7 +184,10 @@ struct LockParsedRow {
 };
 
 struct Pkg {
-    char lock[MAX_LOCK];
+    /* S1a-0 C2d: the accumulated ct.lock text grows from MAX_LOCK (the old
+       fixed 4096) to MAX_LOCK_MAX; `locklen` is the bytes in use. */
+    char *lock;
+    int  lockcap;
     int  locklen;
     int  nlocks;
     /* S1a-0 C1: `seen` is a flat block (row stride MAX_TEXT) and `recs` a heap
@@ -1574,11 +1581,22 @@ impl PkgOps for Pkg {
         if (pkg_store_commit(cache, publisher, mname, mver, nsroot, dig,
                              store, sizeof store) != 0)
             return -1;
-        w = snprintf(self->lock + self->locklen,
-                     sizeof self->lock - (size_t)self->locklen,
-                     "%s/%s %s git %s %s %s %s\n",
-                     publisher, mname, mver, url, commit, nsroot, dig);
-        if (w < 0 || (size_t)w >= sizeof self->lock - (size_t)self->locklen) return -1;
+        if (pkg_lock_reserve(self, self->locklen + 1) != 0) {
+            fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+            return -1;
+        }
+        for (;;) {
+            w = snprintf(self->lock + self->locklen,
+                         (size_t)(self->lockcap - self->locklen),
+                         "%s/%s %s git %s %s %s %s\n",
+                         publisher, mname, mver, url, commit, nsroot, dig);
+            if (w < 0) return -1;
+            if (w < self->lockcap - self->locklen) break;
+            if (pkg_lock_reserve(self, self->locklen + w + 1) != 0) {
+                fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+                return -1;
+            }
+        }
         self->locklen += w;
         self->nlocks++;
         if (pkg_recs_ensure(self, self->nrecs + 1) != 0) {
@@ -1811,10 +1829,21 @@ impl PkgOps for Pkg {
         if (pkg_store_commit(dir, publisher, name, ver, nsroot, dig,
                              store, sizeof store) != 0)
             return -1;
-        w = snprintf(self->lock + self->locklen,
-                     sizeof self->lock - (size_t)self->locklen,
-                     "%s/%s %s dir %s - %s %s\n", publisher, name, ver, dir, nsroot, dig);
-        if (w < 0 || (size_t)w >= sizeof self->lock - (size_t)self->locklen) return -1;
+        if (pkg_lock_reserve(self, self->locklen + 1) != 0) {
+            fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+            return -1;
+        }
+        for (;;) {
+            w = snprintf(self->lock + self->locklen,
+                         (size_t)(self->lockcap - self->locklen),
+                         "%s/%s %s dir %s - %s %s\n", publisher, name, ver, dir, nsroot, dig);
+            if (w < 0) return -1;
+            if (w < self->lockcap - self->locklen) break;
+            if (pkg_lock_reserve(self, self->locklen + w + 1) != 0) {
+                fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+                return -1;
+            }
+        }
         self->locklen += w;
         self->nlocks++;
         if (pkg_recs_ensure(self, self->nrecs + 1) != 0) {
@@ -1842,10 +1871,13 @@ impl PkgOps for Pkg {
        the same package spelled differently) is already there. */
     int remember_dep(const char *spec)
     {
-        char buf[MAX_LOCK];
+        /* S1a-0 C2d: the manifest is read at its own size (the old MAX_LOCK
+           scratch truncated / rejected one over 4096); the formal bound is
+           still enforced so a runaway file is a named error. */
+        char *buf;
         char newname[MAX_TEXT], cur[MAX_PKG_PATH], cn[MAX_TEXT];
         char *p, *end;
-        long len;
+        long sz;
         size_t n, sl, cl;
         int found, have_name;
         FILE *f;
@@ -1853,24 +1885,31 @@ impl PkgOps for Pkg {
 
         f = fopen("./ct.pkg", "r");
         if (!f) return 0;
-        len = -1;
-        n = 0;
-        if (fseek(f, 0, SEEK_END) == 0) {
-            long sz;
-            size_t sz2;
-            sz = ftell(f);
-            if (sz >= 0 && (size_t)sz < sizeof buf && fseek(f, 0, SEEK_SET) == 0) {
-                sz2 = (size_t)sz;
-                if (sz2 > 0) n = fread(buf, 1, sz2, f);
-                if (n == sz2) len = sz;
-            }
-        }
-        if (len < 0) {
+        if (fseek(f, 0, SEEK_END) != 0 || (sz = ftell(f)) < 0
+            || fseek(f, 0, SEEK_SET) != 0) {
             fclose(f);
             fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
             return -1;
         }
+        if ((size_t)sz >= MAX_LOCK_MAX) {
+            fclose(f);
+            fprintf(stderr, "ctc: './ct.pkg' is too large\n");
+            return -1;
+        }
+        buf = (char *)malloc((size_t)sz + 1);
+        if (!buf) {
+            fclose(f);
+            fprintf(stderr, "ctc: out of memory\n");
+            return -1;
+        }
+        n = 0;
+        if (sz > 0) n = fread(buf, 1, (size_t)sz, f);
         fclose(f);
+        if (n != (size_t)sz) {
+            free(buf);
+            fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
+            return -1;
+        }
         buf[n] = 0;
         sl = strlen(spec);
         have_name = (self->dep_name(spec, newname, sizeof newname) == 0);
@@ -1911,16 +1950,19 @@ impl PkgOps for Pkg {
         if (!found) {
             f = fopen("./ct.pkg", "a");
             if (!f) {
+                free(buf);
                 fprintf(stderr, "ctc: cannot write './ct.pkg'\n");
                 return -1;
             }
             if (n > 0 && buf[n - 1] != '\n') fputc('\n', f);
             fprintf(f, "dep = %s\n", spec);
             if (fclose(f) != 0) {
+                free(buf);
                 fprintf(stderr, "ctc: cannot write './ct.pkg'\n");
                 return -1;
             }
         }
+        free(buf);
         return 0;
     }
 
@@ -1965,7 +2007,8 @@ impl PkgOps for Pkg {
     int get(const char *spec, const char *root)
     {
         FILE *f;
-        char kept[MAX_LOCK];
+        char *kept;
+        size_t keptcap;
         char head[64];
         size_t klen;
         int i, ninst, nreuse;
@@ -1976,7 +2019,13 @@ impl PkgOps for Pkg {
         self->nrecs = 0;
         self->nlocks = 0;
         self->check_requires = 1;
+        if (pkg_lock_reserve(self, 1) != 0) {
+            fprintf(stderr, "ctc: out of memory\n");
+            return 1;
+        }
         self->lock[0] = 0;
+        kept = (char *)0;
+        keptcap = 0;
         /* S7: a pre-existing v1 lock cannot be merged into a store-backed run.
            The rows would keep their five fields under a v2 header; point the
            project at the one-time bridge instead. An empty file is no lock. */
@@ -2020,14 +2069,39 @@ impl PkgOps for Pkg {
         }
         /* `ct get` names one spec; the rows it did not touch stay in the lock,
            so a second get cannot unpin the first package (PKG-2). */
-        if (pkg_lock_keep(kept, sizeof kept) != 0) return 1;
+        /* S1a-0 C2d: the kept rows are read from the existing lock, so the
+           scratch is sized from the file itself (a lock over the old 4096
+           still round-trips). */
+        {
+            FILE *lf;
+            long lsz;
+            lf = fopen("./ct.lock", "r");
+            lsz = 0;
+            if (lf != NULL) {
+                if (fseek(lf, 0, SEEK_END) == 0) lsz = ftell(lf);
+                fclose(lf);
+            }
+            if (lsz < 0) lsz = 0;
+            keptcap = (size_t)lsz + 2;
+            kept = (char *)malloc(keptcap);
+            if (!kept) {
+                fprintf(stderr, "ctc: out of memory\n");
+                return 1;
+            }
+        }
+        if (pkg_lock_keep(kept, keptcap) != 0) {
+            free(kept);
+            return 1;
+        }
         klen = strlen(kept);
-        if (self->locklen + (int)klen >= (int)sizeof self->lock) {
+        if (pkg_lock_reserve(self, self->locklen + (int)klen + 1) != 0) {
             fprintf(stderr, "ctc: ct.lock is too large to merge\n");
+            free(kept);
             return 1;
         }
         memcpy(self->lock + self->locklen, kept, klen + 1);
         self->locklen += (int)klen;
+        free(kept);
 
         f = fopen("./ct.lock", "w");
         if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
@@ -2522,6 +2596,27 @@ impl PkgOps for Pkg {
    fixed-size fields need -- so the driver reaches it through the wrappers below
    instead of through a struct accessor. */
 static struct Pkg g_pkg;
+
+/* S1a-0 C2d: the lock text doubles from MAX_LOCK to MAX_LOCK_MAX. A need over
+   the formal bound and a failed realloc both return -1; callers print the
+   "too large" / OOM message. The block belongs to `self` until the process
+   ends, like the other unit-wide tables. */
+static int pkg_lock_reserve(struct Pkg *self, int need)
+{
+    int cap;
+    char *grown;
+
+    if (need <= self->lockcap) return 0;
+    cap = self->lockcap > 0 ? self->lockcap : MAX_LOCK;
+    while (cap < need && cap < MAX_LOCK_MAX) cap *= 2;
+    if (cap > MAX_LOCK_MAX) cap = MAX_LOCK_MAX;
+    if (need > cap) return -1;
+    grown = (char *)realloc(self->lock, (size_t)cap);
+    if (!grown) return -1;
+    self->lock = grown;
+    self->lockcap = cap;
+    return 0;
+}
 
 /* --- PH-77 official pins -------------------------------------------------- */
 
@@ -3983,7 +4078,10 @@ static int pkg_lock_keep(char *dst, size_t cap)
 static int pkg_update_v2(const char *prog)
 {
     FILE *f;
-    char buf[MAX_LOCK], out[MAX_LOCK];
+    /* S1a-0 C2d: the lock being read and the rewritten lock both grow from
+       MAX_LOCK; their sizes come from the file and the rows, not a constant. */
+    char *buf, *out;
+    int outcap;
     size_t n;
     long sz;
     char pname[MAX_TEXT], pver[32];
@@ -3999,6 +4097,9 @@ static int pkg_update_v2(const char *prog)
     ndeps = 0;
     nlock = 0;
     lockcap = 0;
+    buf = (char *)0;
+    out = (char *)0;
+    outcap = 0;
     f = fopen("./ct.pkg", "r");
     if (!f) { fprintf(stderr, "ctc: cannot open './ct.pkg'\n"); return 1; }
     fclose(f);
@@ -4039,14 +4140,24 @@ static int pkg_update_v2(const char *prog)
     f = fopen("./ct.lock", "r");
     if (!f) { fprintf(stderr, "ctc: no './ct.lock'; run `%s get` first\n", prog); return 1; }
     if (fseek(f, 0, SEEK_END) != 0 || (sz = ftell(f)) < 0
-        || (size_t)sz >= sizeof buf || fseek(f, 0, SEEK_SET) != 0) {
+        || (size_t)sz >= MAX_LOCK_MAX || fseek(f, 0, SEEK_SET) != 0) {
         fprintf(stderr, "ctc: ct.lock is too large to update\n");
+        fclose(f);
+        return 1;
+    }
+    buf = (char *)malloc((size_t)sz + 1);
+    if (!buf) {
+        fprintf(stderr, "ctc: out of memory\n");
         fclose(f);
         return 1;
     }
     n = fread(buf, 1, (size_t)sz, f);
     fclose(f);
-    if (n != (size_t)sz) { fprintf(stderr, "ctc: cannot read './ct.lock'\n"); return 1; }
+    if (n != (size_t)sz) {
+        free(buf);
+        fprintf(stderr, "ctc: cannot read './ct.lock'\n");
+        return 1;
+    }
     buf[n] = 0;
 
     /* PH-77: a legacy `std/std` row (the old publisher) is migrated in place.
@@ -4065,13 +4176,23 @@ static int pkg_update_v2(const char *prog)
     }
     if (!legacy) {
         f = fopen("./ct.lock", "w");
-        if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+        if (!f) {
+            free(buf);
+            fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
+            return 1;
+        }
         fputs(buf, f);
-        if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+        if (fclose(f) != 0) {
+            free(buf);
+            fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
+            return 1;
+        }
+        free(buf);
         printf("updated %d package(s)\n", nlock);
         return 0;
     }
     if (official) {
+        free(buf);
         fprintf(stderr, "ctc: ct.lock pins both 'std/std' and 'ct/std'; "
                         "remove one row before migrating\n");
         return 1;
@@ -4090,24 +4211,46 @@ static int pkg_update_v2(const char *prog)
     }
     if (pkg_official_resolve("std", url, sizeof url, tag, sizeof tag,
                              sha, sizeof sha) != 0) {
+        free(buf);
         fprintf(stderr, "ctc: cannot resolve the official pin for 'std'\n");
         return 1;
     }
     g_pkg.locklen = 0;
-    g_pkg.lock[0] = 0;
     g_pkg.nlocks = 0;
     g_pkg.nseen = 0;
     g_pkg.nrecs = 0;
+    if (pkg_lock_reserve(&g_pkg, 1) != 0) {
+        free(buf);
+        fprintf(stderr, "ctc: out of memory\n");
+        return 1;
+    }
+    g_pkg.lock[0] = 0;
     if (g_pkg.fetch_git(url, "std", "ct", "", tag, sha, 0) != 0) {
+        free(buf);
         fprintf(stderr, "ctc: cannot migrate 'std/std' to the official pin\n");
         return 1;
     }
     if (g_pkg.nrecs == 0) {
+        free(buf);
         fprintf(stderr, "ctc: cannot migrate 'std/std': the official pin produced no row\n");
         return 1;
     }
     snprintf(newver, sizeof newver, "%s", g_pkg.recs[g_pkg.nrecs - 1].version);
     outlen = 0;
+    /* the rewritten lock is the old text with one row replaced; size it from
+       both rather than the old fixed buffer */
+    outcap = (int)strlen(buf) + (int)strlen(g_pkg.lock) + 2;
+    if (outcap > MAX_LOCK_MAX) {
+        free(buf);
+        fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
+        return 1;
+    }
+    out = (char *)malloc((size_t)outcap);
+    if (!out) {
+        free(buf);
+        fprintf(stderr, "ctc: out of memory\n");
+        return 1;
+    }
     out[0] = 0;
     {
         char *p = buf;
@@ -4118,17 +4261,9 @@ static int pkg_update_v2(const char *prog)
             ll = (size_t)(e - p) + (*e == '\n' ? 1u : 0u);
             if (strncmp(p, "std/std ", 8) == 0) {
                 size_t nl2 = strlen(g_pkg.lock);
-                if (outlen + (int)nl2 >= (int)sizeof out) {
-                    fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
-                    return 1;
-                }
                 memcpy(out + outlen, g_pkg.lock, nl2);
                 outlen += (int)nl2;
             } else {
-                if (outlen + (int)ll >= (int)sizeof out) {
-                    fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
-                    return 1;
-                }
                 memcpy(out + outlen, p, ll);
                 outlen += (int)ll;
             }
@@ -4138,9 +4273,21 @@ static int pkg_update_v2(const char *prog)
         }
     }
     f = fopen("./ct.lock", "w");
-    if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+    if (!f) {
+        free(buf);
+        free(out);
+        fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
+        return 1;
+    }
     fputs(out, f);
-    if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+    if (fclose(f) != 0) {
+        free(buf);
+        free(out);
+        fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
+        return 1;
+    }
+    free(buf);
+    free(out);
     printf("migrate std/std %s -> ct/std %s\n", oldver, newver);
     printf("updated %d package(s)\n", nlock);
     return 0;
@@ -4247,8 +4394,10 @@ static int pkg_migrate(const char *prog)
     FILE *f;
     char line[MAX_PKG_LINE];
     char head[64];
-    char out[MAX_LOCK];
-    int outlen, nrow, fmt, i, rc;
+    /* S1a-0 C2d: one v1 row becomes one v2 row; the rewritten lock grows from
+       MAX_LOCK instead of refusing the old 4096. */
+    char *out;
+    int outcap, outlen, nrow, fmt, i, rc;
     char mname[MAX_TEXT], mver[32];
     char *deps;
     int depcap, ndeps;
@@ -4261,9 +4410,16 @@ static int pkg_migrate(const char *prog)
     depcap = 0;
     ndeps = 0;
     outlen = 0;
+    outcap = MAX_LOCK;
+    out = (char *)malloc((size_t)outcap);
+    if (!out) {
+        fprintf(stderr, "ctc: out of memory\n");
+        return 1;
+    }
     out[0] = 0;
     f = fopen("./ct.lock", "r");
     if (f == NULL) {
+        free(out);
         fprintf(stderr, "ctc: no './ct.lock'; nothing to migrate\n");
         return 1;
     }
@@ -4275,6 +4431,7 @@ static int pkg_migrate(const char *prog)
     else
         rewind(f);
     if (fmt == 2) {
+        free(out);
         fprintf(stderr, "ctc: ct.lock is already v2; nothing to migrate\n");
         fclose(f);
         return 1;
@@ -4347,28 +4504,63 @@ static int pkg_migrate(const char *prog)
             rc = 1;
             continue;
         }
-        w = snprintf(out + outlen, sizeof out - (size_t)outlen,
-                     "%s/%s %s git - %s %s %s\n", publisher, name, ver,
-                     commit[0] ? commit : "-", nsroot, dig);
-        if (w < 0 || (size_t)w >= sizeof out - (size_t)outlen) {
-            fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
-            fclose(f);
-            return 1;
+        for (;;) {
+            w = snprintf(out + outlen, (size_t)(outcap - outlen),
+                         "%s/%s %s git - %s %s %s\n", publisher, name, ver,
+                         commit[0] ? commit : "-", nsroot, dig);
+            if (w < 0) {
+                free(out);
+                fclose(f);
+                return 1;
+            }
+            if (w < outcap - outlen) break;
+            if (outcap >= MAX_LOCK_MAX
+                || outlen + w + 1 > MAX_LOCK_MAX) {
+                fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
+                free(out);
+                fclose(f);
+                return 1;
+            }
+            outcap *= 2;
+            if (outcap > MAX_LOCK_MAX) outcap = MAX_LOCK_MAX;
+            {
+                char *grown = (char *)realloc(out, (size_t)outcap);
+                if (!grown) {
+                    free(out);
+                    fclose(f);
+                    fprintf(stderr, "ctc: out of memory\n");
+                    return 1;
+                }
+                out = grown;
+            }
         }
         outlen += w;
         nrow++;
     }
     fclose(f);
-    if (rc != 0) return 1;
+    if (rc != 0) {
+        free(out);
+        return 1;
+    }
     if (nrow == 0) {
+        free(out);
         fprintf(stderr, "ctc: ct.lock is empty\n");
         return 1;
     }
     f = fopen("./ct.lock", "w");
-    if (!f) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+    if (!f) {
+        free(out);
+        fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
+        return 1;
+    }
     fputs("# ct-lock 2\n", f);
     fputs(out, f);
-    if (fclose(f) != 0) { fprintf(stderr, "ctc: cannot write 'ct.lock'\n"); return 1; }
+    if (fclose(f) != 0) {
+        free(out);
+        fprintf(stderr, "ctc: cannot write 'ct.lock'\n");
+        return 1;
+    }
+    free(out);
     printf("migrated %d package(s)\n", nrow);
     (void)i;
     (void)prog;
