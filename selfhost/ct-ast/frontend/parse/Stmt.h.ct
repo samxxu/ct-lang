@@ -37,6 +37,7 @@ import frontend::parse::StmtDefer;
 import frontend::type::TypeCheck;
 import frontend::parse::StmtMatch;
 import frontend::parse::StmtLoop;
+import frontend::parse::StmtSwitch;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -738,55 +739,6 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
    detection (D31-14). Only the operators the card lists are folded and only
    while every intermediate value stays inside the guard range, so overflow
    gives up instead of judging. */
-static int map_fold_num(struct Stmt *self, int n, long *out)
-{
-    struct Node *nd;
-    long a, b;
-
-    if (n < 0) return 0;
-    nd = &self->arena->nodes[n];
-    if (nd->kind == N_NUM) {
-        *out = nd->num;
-        return 1;
-    }
-    if (nd->kind == N_UNARY) {
-        if (!map_fold_num(self, nd->a, &a)) return 0;
-        if (nd->aux == 1) { *out = -a; return 1; }
-        if (nd->aux == 2) { *out = !a; return 1; }
-        if (nd->aux == 3) { *out = ~a; return 1; }
-        return 0;
-    }
-    if (nd->kind != N_BIN) return 0;
-    if (!map_fold_num(self, nd->a, &a) || !map_fold_num(self, nd->b, &b)) return 0;
-    if (a < -1099511627776L || a > 1099511627776L) return 0;   /* 2^40 */
-    if (b < -1099511627776L || b > 1099511627776L) return 0;
-    switch (nd->aux) {
-    case B_ADD: *out = a + b; break;
-    case B_SUB: *out = a - b; break;
-    case B_MUL:
-        if (a < -2147483647L || a > 2147483647L) return 0;
-        if (b < -2147483647L || b > 2147483647L) return 0;
-        *out = a * b;
-        break;
-    case B_DIV: if (b == 0) return 0; *out = a / b; break;
-    case B_MOD: if (b == 0) return 0; *out = a % b; break;
-    case B_SHL:
-        if (b < 0 || b > 20) return 0;
-        if (a < -524288L || a > 524288L) return 0;
-        *out = a << b;
-        break;
-    case B_SHR:
-        if (b < 0 || b > 40) return 0;
-        *out = a >> b;
-        break;
-    case B_BAND: *out = a & b; break;
-    case B_BOR: *out = a | b; break;
-    case B_XOR: *out = a ^ b; break;
-    default: return 0;
-    }
-    return 1;
-}
-
 /* Phase 31 S16a: decode a string literal node into its bytes. Adjacent
    literals are already joined in the row and each keeps its quotes, so the
    scan walks every quoted segment and normalises escapes. The result stops at
@@ -1048,42 +1000,6 @@ static int stmt_owning_struct(struct Stmt *self, const char *typebuf)
    doubling from MAX_LABELS until MAX_LABELS_MAX; the new rows are zeroed and
    the block is owned by the singleton, so `func_begin` only resets the count.
    Allocation failure is the only failure left (`out of memory`). */
-static int ensure_label_capacity(struct Stmt *self, int need)
-{
-    int cap;
-    struct LabelRow *grown;
-
-    if (need <= self->labelcap) return 0;
-    cap = self->labelcap > 0 ? self->labelcap : MAX_LABELS;
-    while (cap < need && cap < MAX_LABELS_MAX) cap *= 2;
-    if (cap > MAX_LABELS_MAX) cap = MAX_LABELS_MAX;
-    if (need > cap) return self->sup->fail("out of memory");
-    grown = (struct LabelRow *)realloc(self->labels, (size_t)cap * sizeof(*grown));
-    if (!grown) return self->sup->fail("out of memory");
-    memset(grown + self->labelcap, 0, (size_t)(cap - self->labelcap) * sizeof(*grown));
-    self->labels = grown;
-    self->labelcap = cap;
-    return 0;
-}
-
-static int ensure_goto_capacity(struct Stmt *self, int need)
-{
-    int cap;
-    struct LabelRow *grown;
-
-    if (need <= self->gotocap) return 0;
-    cap = self->gotocap > 0 ? self->gotocap : MAX_LABELS;
-    while (cap < need && cap < MAX_LABELS_MAX) cap *= 2;
-    if (cap > MAX_LABELS_MAX) cap = MAX_LABELS_MAX;
-    if (need > cap) return self->sup->fail("out of memory");
-    grown = (struct LabelRow *)realloc(self->gotos, (size_t)cap * sizeof(*grown));
-    if (!grown) return self->sup->fail("out of memory");
-    memset(grown + self->gotocap, 0, (size_t)(cap - self->gotocap) * sizeof(*grown));
-    self->gotos = grown;
-    self->gotocap = cap;
-    return 0;
-}
-
 impl StmtOps for Stmt {
 
     /* Does the current token start a declaration? A short name has to be
@@ -2505,110 +2421,6 @@ impl StmtOps for Stmt {
        the statements they guard follow as ordinary statements (declarations
        directly inside the switch block included, which C allows). The body
        still opens a scope, since its declarations do not outlive the switch. */
-    int parse_switch_body(void)
-    {
-        int blk, s, tail;
-        (void)self;
-
-        if (self->sup->expect("{") != 0) return -1;
-        if (self->sup->push_scope() != 0) return -1;
-        blk = self->sup->new_node(N_BLOCK);
-        if (blk < 0) {
-            self->sup->pop_scope();
-            return -1;
-        }
-        /* `own` is refused inside a switch, so the only `own` a `break` can meet
-           are none: the baseline is the body's own scope, and this entry is what
-           stops a `case … break` from releasing an enclosing loop's object. */
-        if (jump_push(self, self->mem->own_base[self->sym->nscope - 1], -1) != 0) {
-            self->sup->pop_scope();
-            return -1;
-        }
-        /* Push the switch body's defer entry *after* the jump baseline: a
-           `break` must run this body's defers, just like a loop body's. */
-        if (self->ndefer_blocks >= 256) {
-            self->sup->pop_scope();
-            return self->sup->fail("blocks are nested too deeply");
-        }
-        self->defer_head[self->ndefer_blocks] = -1;
-        self->defer_tail[self->ndefer_blocks] = -1;
-        self->defer_block_err[self->ndefer_blocks] = 0;
-        self->ndefer_next_id = self->ndefer_next_id + 1;
-        self->defer_ids[self->ndefer_blocks] = self->ndefer_next_id;
-        self->ndefer_blocks = self->ndefer_blocks + 1;
-        self->switch_depth = self->switch_depth + 1;
-        tail = -1;
-        {
-        long case_lo[64];
-        long case_hi[64];
-        int ncase = 0;
-        while (self->lex->tok != T_EOF
-               && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
-            if (self->lex->tok == T_ID
-                && (self->lex->tok_is("case") || self->lex->tok_is("default"))) {
-                {
-                int lab_line = self->lex->tokline;
-                int lab_col = self->lex->tokstart - self->lex->lstart + 1;
-                s = self->parse_label();
-                /* PH-70-R3: duplicate `case` values/overlapping ranges are an
-                   error under `ct check` (only foldable constants are judged). */
-                if (s >= 0 && self->ex->check_mode && *self->ex->check_mode == 2
-                    && self->arena->nodes[s].aux == 0) {
-                    long lo = 0;
-                    long hi = 0;
-                    if (map_fold_num(self, self->arena->nodes[s].b, &lo)) {
-                        hi = lo;
-                        if (self->arena->nodes[s].c >= 0
-                            && !map_fold_num(self, self->arena->nodes[s].c, &hi))
-                            lo = hi + 1;
-                        if (lo <= hi) {
-                            int ci;
-                            for (ci = 0; ci < ncase; ci++)
-                                if (lo <= case_hi[ci] && hi >= case_lo[ci])
-                                    return tool::diag::ct_sem_error(
-                                        lab_line, lab_col,
-                                        "duplicate case value", self->mem->path);
-                            if (ncase < 64) {
-                                case_lo[ncase] = lo;
-                                case_hi[ncase] = hi;
-                                ncase++;
-                            }
-                        }
-                    }
-                }
-                }
-            }
-            else
-                s = self->parse_stmt();
-            if (s < 0) {
-                self->switch_depth = self->switch_depth - 1;
-                jump_pop(self, 0);
-                self->sup->pop_scope();
-                return -1;
-            }
-            if (tail < 0) self->arena->nodes[blk].a = s;
-            else self->arena->nodes[tail].next = s;
-            tail = s;
-        }
-        }
-        if (self->defer_flush_block(blk, &tail) != 0) {
-            self->switch_depth = self->switch_depth - 1;
-            jump_pop(self, 0);
-            self->sup->pop_scope();
-            return -1;
-        }
-        self->switch_depth = self->switch_depth - 1;
-        jump_pop(self, 0);
-        if (self->sup->expect("}") != 0) {
-            self->sup->pop_scope();
-            return -1;
-        }
-        self->sup->pop_scope();
-        (void)self->defer_mark_block();
-        self->ndefer_blocks = self->ndefer_blocks - 1;
-        return blk;
-    }
-
 
     /* Phase 84 (D84-1/D84-3): `match (subject) { Type.Variant(bindings) => { … } }`.
        The raw source is scanned because `match` must stay usable as an ordinary
@@ -2635,78 +2447,11 @@ impl StmtOps for Stmt {
        bare `case 1:` before another label is spelled. C does not let a label
        guard a declaration (labels open no scope), so a declaration anywhere in
        the chain is rejected. */
-    int parse_label(void)
-    {
-        int s, c, head, tail, is_def, val;
-        (void)self;
-
-        if (self->in_defer)
-            return self->sup->fail("a defer block cannot declare a label");
-        s = self->sup->new_node(N_CASE);
-        if (s < 0) return -1;
-        is_def = self->lex->tok_is("default");
-        self->arena->nodes[s].aux = is_def;
-        self->sup->lex_next();
-        if (!is_def) {
-            val = self->parse_case_value();
-            if (val < 0) return -1;
-            self->arena->nodes[s].b = val;
-            self->arena->nodes[s].c = self->case_hi;
-        }
-        if (self->sup->expect(":") != 0) return -1;
-        head = -1;
-        tail = -1;
-        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))
-               && !(self->lex->tok == T_ID
-                    && (self->lex->tok_is("case")
-                        || self->lex->tok_is("default")))
-               && !self->label_ahead()) {
-            if (self->is_decl_start()
-                || (self->lex->tok == T_ID && self->lex->tok_is("static")))
-                return self->sup->fail("a declaration cannot follow a case label; wrap it in a block");
-            c = self->parse_stmt();
-            if (c < 0) return -1;
-            if (tail < 0) head = c;
-            else self->arena->nodes[tail].next = c;
-            tail = c;
-        }
-        if (head < 0
-            && (self->lex->tok == T_EOF
-                || (self->lex->tok == T_PUNCT && self->lex->tok_is("}"))))
-            return self->sup->fail("a case label needs a statement");
-        self->arena->nodes[s].a = head;
-        return s;
-    }
-
     /* A case value is an integer constant expression (D-7): the expression is
        parsed as usual and then judged structurally, so `case (1 << 2):` is
        accepted while `case key + 1:` is an error. A whole name is allowed
        whether or not it is a declared constant: it may be a `#define` macro or,
        as in batch 4, a global the C compiler judges. */
-    int parse_case_value(void)
-    {
-        int e, hi;
-        (void)self;
-
-        self->case_hi = -1;
-        e = self->ex->parse_expr();
-        if (e < 0) return -1;
-        if (!self->ex->const_ok(e) && self->arena->nodes[e].kind != N_VAR
-            && self->arena->nodes[e].kind != N_RAW)
-            return self->sup->fail("a case label must be an integer constant");
-        /* `case <low> ... <high>:` -- a GNU / C23 range. Both ends follow the
-           same constant rule, and the high end waits in `case_hi`. */
-        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("..."))) return e;
-        self->sup->lex_next();
-        hi = self->ex->parse_expr();
-        if (hi < 0) return -1;
-        if (!self->ex->const_ok(hi) && self->arena->nodes[hi].kind != N_VAR
-            && self->arena->nodes[hi].kind != N_RAW)
-            return self->sup->fail("a case label must be an integer constant");
-        self->case_hi = hi;
-        return e;
-    }
-
     /* `loop(<count>) { … }` and `loop(<start>..<stop>) { … }` -- a shorthand for
        `for (int i = 0; i < <count>; i++) { … }` and for
        `for (int i = <start>; i < <stop>; i++) { … }`. The parser records the
@@ -2752,48 +2497,6 @@ impl StmtOps for Stmt {
        so every state field is saved, the next token is read and the cursor is
        put back. `::` is one token, so a qualified name never looks like a label
        (D-2); `default:` is handled by the case branch before this runs. */
-    int label_ahead(void)
-    {
-        int sp, sbol, stok, sline, stokline, sstart, slstart, r;
-        long snum;
-        const char *stext_ptr; int stext_len;
-        (void)self;
-
-        if (self->lex->tok != T_ID) return 0;
-        sp = self->lex->pos;
-        sbol = self->lex->bol;
-        stok = self->lex->tok;
-        snum = self->lex->toknum;
-        sline = self->lex->line;
-        stokline = self->lex->tokline;
-        sstart = self->lex->tokstart;
-        slstart = self->lex->lstart;
-        stext_ptr = self->lex->tokstr.ptr; stext_len = self->lex->tokstr.len;
-        self->sup->lex_next();
-        r = 0;
-        if (self->lex->tok == T_PUNCT && self->lex->tok_is(":")) r = 1;
-        self->lex->pos = sp;
-        self->lex->bol = sbol;
-        self->lex->tok = stok;
-        self->lex->toknum = snum;
-        self->lex->line = sline;
-        self->lex->tokline = stokline;
-        self->lex->tokstart = sstart;
-        self->lex->lstart = slstart;
-        self->lex->tokstr.ptr = stext_ptr; self->lex->tokstr.len = stext_len;
-        return r;
-    }
-
-    int label_find(const char *name)
-    {
-        int i;
-        (void)self;
-
-        for (i = 0; i < self->nlabels; i++)
-            if (strcmp(self->labels[i].name, name) == 0) return i;
-        return -1;
-    }
-
     /* `name:` owns the statements up to the next label of any kind or the
        closing brace, the same chain rule `case` follows (D-3). A run of
        labels (`again: done:`) is allowed: while nothing has been taken yet the
@@ -2801,92 +2504,8 @@ impl StmtOps for Stmt {
        C opens no scope at a label, so a declaration cannot sit directly behind
        it (D-4), and C99 rejects a label that runs straight into `}` -- an
        empty chain is an error rather than an emitted `name: }`. */
-    int parse_named_label(void)
-    {
-        int s, c, head, tail, line, i;
-        char name[MAX_TEXT];
-        char msg[MAX_TEXT];
-        (void)self;
-
-        if (self->in_defer)
-            return self->sup->fail("a defer block cannot declare a label");
-        line = self->lex->tokline;
-        self->lex->tok_copy(name, sizeof name);
-        if (ensure_label_capacity(self, self->nlabels + 1) != 0) return -1;
-        if (self->label_find(name) >= 0) {
-            snprintf(msg, sizeof msg, "duplicate label '%s'", name);
-            return self->sup->fail(msg);
-        }
-        s = self->sup->new_node(N_LABEL);
-        if (s < 0) return -1;
-        snprintf(self->labels[self->nlabels].name, MAX_TEXT, "%s", name);
-        self->labels[self->nlabels].line = line;
-        self->labels[self->nlabels].depth = self->ndefer_blocks;
-        for (i = 0; i < self->ndefer_blocks; i++) {
-            self->labels[self->nlabels].path[i] = self->defer_ids[i];
-            self->labels[self->nlabels].has[i] = 0;
-        }
-        self->nlabels = self->nlabels + 1;
-        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
-        self->sup->lex_next();
-        if (self->sup->expect(":") != 0) return -1;
-        head = -1;
-        tail = -1;
-        while (self->lex->tok != T_EOF && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))
-               && !(self->lex->tok == T_ID
-                    && (self->lex->tok_is("case")
-                        || self->lex->tok_is("default")))
-               && !(head >= 0 && self->label_ahead())) {
-            if (self->is_decl_start()
-                || (self->lex->tok == T_ID && self->lex->tok_is("static")))
-                return self->sup->fail("a declaration cannot follow a label; wrap it in a block");
-            c = self->parse_stmt();
-            if (c < 0) return -1;
-            if (tail < 0) head = c;
-            else self->arena->nodes[tail].next = c;
-            tail = c;
-        }
-        if (head < 0) return self->sup->fail("a label needs a statement");
-        self->arena->nodes[s].a = head;
-        return s;
-    }
-
     /* `goto name;` -- recorded for the end-of-body check, since the label may
        be defined later in the same function (D-5). */
-    int parse_goto(void)
-    {
-        int s, i;
-        char name[MAX_TEXT];
-        (void)self;
-
-        if (self->in_errdefer)
-            return tool::diag::ct_sem_error(self->lex->tokline,
-                self->lex->tokstart - self->lex->lstart + 1,
-                "an errdefer block cannot transfer control", self->mem->path);
-        if (self->in_defer)
-            return tool::diag::ct_sem_error(self->lex->tokline,
-                self->lex->tokstart - self->lex->lstart + 1,
-                "a defer block cannot transfer control", self->mem->path);
-        s = self->sup->new_node(N_GOTO);
-        if (s < 0) return -1;
-        self->sup->lex_next();
-        if (self->lex->tok != T_ID) return self->sup->fail("expected a label name");
-        if (ensure_goto_capacity(self, self->ngotos + 1) != 0) return -1;
-        self->lex->tok_copy(name, sizeof name);
-        snprintf(self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
-        snprintf(self->gotos[self->ngotos].name, MAX_TEXT, "%s", name);
-        self->gotos[self->ngotos].line = self->arena->nodes[s].line;
-        self->gotos[self->ngotos].depth = self->ndefer_blocks;
-        for (i = 0; i < self->ndefer_blocks; i++) {
-            self->gotos[self->ngotos].path[i] = self->defer_ids[i];
-            self->gotos[self->ngotos].has[i] = 0;
-        }
-        self->ngotos = self->ngotos + 1;
-        self->sup->lex_next();
-        if (self->sup->expect(";") != 0) return -1;
-        return s;
-    }
-
     int func_begin(void)
     {
         (void)self;

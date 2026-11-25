@@ -17,6 +17,7 @@
 #include "TypeCheck.h"
 #include "StmtMatch.h"
 #include "StmtLoop.h"
+#include "StmtSwitch.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
 #include <limits.h>
@@ -189,16 +190,13 @@ static int mark_borrow(struct frontend_parse_Stmt *, int, int, int);
 static int borrow_escape(struct frontend_parse_Stmt *, int, int);
 static int str_escape_op(struct frontend_parse_Stmt *, int, int, const char *, int, int, int, int, int);
 static int parse_vec_brace_init(struct frontend_parse_Stmt *, const char *, const char *);
-static int map_fold_num(struct frontend_parse_Stmt *, int, long *);
 static int map_decode_str(struct frontend_parse_Stmt *, int, char *, int);
 static int map_dup_key(struct frontend_parse_Stmt *, int *, int, int, char *, int *);
 static int parse_map_brace_init(struct frontend_parse_Stmt *, const char *, const char *, const char *, const char *);
 static int stmt_owning_struct(struct frontend_parse_Stmt *, const char *);
-static int ensure_label_capacity(struct frontend_parse_Stmt *, int);
-static int ensure_goto_capacity(struct frontend_parse_Stmt *, int);
 void frontend_parse_ct_stmt_bind(void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Stmt * frontend_parse_stmt_get(void);
-static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable, .__frontend_parse_stmtdeferops_vptr = &frontend_parse_Stmt_frontend_parse_StmtDeferOps_vtable, .__frontend_parse_stmtmatch_vptr = &frontend_parse_Stmt_frontend_parse_StmtMatch_vtable, .__frontend_parse_stmtloop_vptr = &frontend_parse_Stmt_frontend_parse_StmtLoop_vtable };
+static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable, .__frontend_parse_stmtdeferops_vptr = &frontend_parse_Stmt_frontend_parse_StmtDeferOps_vtable, .__frontend_parse_stmtmatch_vptr = &frontend_parse_Stmt_frontend_parse_StmtMatch_vtable, .__frontend_parse_stmtloop_vptr = &frontend_parse_Stmt_frontend_parse_StmtLoop_vtable, .__frontend_parse_stmtswitch_vptr = &frontend_parse_Stmt_frontend_parse_StmtSwitch_vtable };
 static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     char rn[MAX_TEXT];
@@ -742,7 +740,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
                 }
                 continue;
             }
-            if (((((prev_jump && _self->ex->check_mode) && ((*_self->ex->check_mode) == 2)) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ";")))) && (!_self->__frontend_parse_stmtops_vptr->label_ahead(_self)))) {
+            if (((((prev_jump && _self->ex->check_mode) && ((*_self->ex->check_mode) == 2)) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ";")))) && (!_self->__frontend_parse_stmtswitch_vptr->label_ahead(_self)))) {
                 return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "unreachable code after a jump", _self->mem->path);
             }
             s = _self->__frontend_parse_stmtops_vptr->parse_stmt(_self);
@@ -1290,7 +1288,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         return s;
     }
     if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "goto"))) {
-        return _self->__frontend_parse_stmtops_vptr->parse_goto(_self);
+        return _self->__frontend_parse_stmtswitch_vptr->parse_goto(_self);
     }
     if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "if"))) {
         s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_IF);
@@ -1492,7 +1490,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a block after switch (...)");
         }
-        e = _self->__frontend_parse_stmtops_vptr->parse_switch_body(_self);
+        e = _self->__frontend_parse_stmtswitch_vptr->parse_switch_body(_self);
         if (e < 0) {
             return (-1);
         }
@@ -1685,8 +1683,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
     if (_self->__frontend_parse_stmtloop_vptr->foreach_ahead(_self)) {
         return _self->__frontend_parse_stmtloop_vptr->parse_foreach(_self);
     }
-    if (_self->__frontend_parse_stmtops_vptr->label_ahead(_self)) {
-        return _self->__frontend_parse_stmtops_vptr->parse_named_label(_self);
+    if (_self->__frontend_parse_stmtswitch_vptr->label_ahead(_self)) {
+        return _self->__frontend_parse_stmtswitch_vptr->parse_named_label(_self);
     }
     if (_self->__frontend_parse_stmtops_vptr->is_decl_start(_self)) {
         s = _self->__frontend_parse_stmtops_vptr->parse_decl_node(_self);
@@ -1768,355 +1766,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_branch(void *self) {
     return b;
 }
 
-static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_switch_body(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int blk;
-    int s;
-    int tail;
-    (void)(_self);
-    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "{") != 0) {
-        return (-1);
-    }
-    if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
-        return (-1);
-    }
-    blk = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_BLOCK);
-    if (blk < 0) {
-        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-        return (-1);
-    }
-    if (frontend_parse_jump_push(_self, _self->mem->own_base[(_self->sym->nscope - 1)], (-1)) != 0) {
-        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-        return (-1);
-    }
-    if (_self->ndefer_blocks >= 256) {
-        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "blocks are nested too deeply");
-    }
-    _self->defer_head[_self->ndefer_blocks] = (-1);
-    _self->defer_tail[_self->ndefer_blocks] = (-1);
-    _self->defer_block_err[_self->ndefer_blocks] = 0;
-    _self->ndefer_next_id = (_self->ndefer_next_id + 1);
-    _self->defer_ids[_self->ndefer_blocks] = _self->ndefer_next_id;
-    _self->ndefer_blocks = (_self->ndefer_blocks + 1);
-    _self->switch_depth = (_self->switch_depth + 1);
-    tail = (-1);
-{
-        long case_lo[64];
-        long case_hi[64];
-        int ncase = 0;
-        while (((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))))) {
-            if (((_self->lex->tok == T_ID) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "case") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "default")))) {
-{
-                    int lab_line = _self->lex->tokline;
-                    int lab_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                    s = _self->__frontend_parse_stmtops_vptr->parse_label(_self);
-                    if (((((s >= 0) && _self->ex->check_mode) && ((*_self->ex->check_mode) == 2)) && (_self->arena->nodes[s].aux == 0))) {
-                        long lo = 0;
-                        long hi = 0;
-                        if (map_fold_num(_self, _self->arena->nodes[s].b, (&lo))) {
-                            hi = lo;
-                            if (((_self->arena->nodes[s].c >= 0) && (!map_fold_num(_self, _self->arena->nodes[s].c, (&hi))))) {
-                                lo = (hi + 1);
-                            }
-                            if (lo <= hi) {
-                                int ci;
-                                for (ci = 0; ci < ncase; ci++) {
-                                    if (((lo <= case_hi[ci]) && (hi >= case_lo[ci]))) {
-                                        return tool_diag_ct_sem_error(lab_line, lab_col, "duplicate case value", _self->mem->path);
-                                    }
-                                }
-                                if (ncase < 64) {
-                                    case_lo[ncase] = lo;
-                                    case_hi[ncase] = hi;
-                                    ncase++;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            else {
-                s = _self->__frontend_parse_stmtops_vptr->parse_stmt(_self);
-            }
-            if (s < 0) {
-                _self->switch_depth = (_self->switch_depth - 1);
-                frontend_parse_jump_pop(_self, 0);
-                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-                return (-1);
-            }
-            if (tail < 0) {
-                _self->arena->nodes[blk].a = s;
-            }
-            else {
-                _self->arena->nodes[tail].next = s;
-            }
-            tail = s;
-        }
-    }
-    if (_self->__frontend_parse_stmtdeferops_vptr->defer_flush_block(_self, blk, (&tail)) != 0) {
-        _self->switch_depth = (_self->switch_depth - 1);
-        frontend_parse_jump_pop(_self, 0);
-        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-        return (-1);
-    }
-    _self->switch_depth = (_self->switch_depth - 1);
-    frontend_parse_jump_pop(_self, 0);
-    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
-        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-        return (-1);
-    }
-    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-    (void)(_self->__frontend_parse_stmtdeferops_vptr->defer_mark_block(_self));
-    _self->ndefer_blocks = (_self->ndefer_blocks - 1);
-    return blk;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_label(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int s;
-    int c;
-    int head;
-    int tail;
-    int is_def;
-    int val;
-    (void)(_self);
-    if (_self->in_defer) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a defer block cannot declare a label");
-    }
-    s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_CASE);
-    if (s < 0) {
-        return (-1);
-    }
-    is_def = _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "default");
-    _self->arena->nodes[s].aux = is_def;
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if ((!is_def)) {
-        val = _self->__frontend_parse_stmtops_vptr->parse_case_value(_self);
-        if (val < 0) {
-            return (-1);
-        }
-        _self->arena->nodes[s].b = val;
-        _self->arena->nodes[s].c = _self->case_hi;
-    }
-    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ":") != 0) {
-        return (-1);
-    }
-    head = (-1);
-    tail = (-1);
-    while (((((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}")))) && (!((_self->lex->tok == T_ID) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "case") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "default"))))) && (!_self->__frontend_parse_stmtops_vptr->label_ahead(_self)))) {
-        if ((_self->__frontend_parse_stmtops_vptr->is_decl_start(_self) || ((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "static")))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a declaration cannot follow a case label; wrap it in a block");
-        }
-        c = _self->__frontend_parse_stmtops_vptr->parse_stmt(_self);
-        if (c < 0) {
-            return (-1);
-        }
-        if (tail < 0) {
-            head = c;
-        }
-        else {
-            _self->arena->nodes[tail].next = c;
-        }
-        tail = c;
-    }
-    if (((head < 0) && ((_self->lex->tok == T_EOF) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a case label needs a statement");
-    }
-    _self->arena->nodes[s].a = head;
-    return s;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_case_value(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int e;
-    int hi;
-    (void)(_self);
-    _self->case_hi = (-1);
-    e = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
-    if (e < 0) {
-        return (-1);
-    }
-    if ((((!_self->ex->__frontend_parse_exprstatictype_vptr->const_ok(_self->ex, e)) && (_self->arena->nodes[e].kind != N_VAR)) && (_self->arena->nodes[e].kind != N_RAW))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a case label must be an integer constant");
-    }
-    if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "...")))) {
-        return e;
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    hi = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
-    if (hi < 0) {
-        return (-1);
-    }
-    if ((((!_self->ex->__frontend_parse_exprstatictype_vptr->const_ok(_self->ex, hi)) && (_self->arena->nodes[hi].kind != N_VAR)) && (_self->arena->nodes[hi].kind != N_RAW))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a case label must be an integer constant");
-    }
-    _self->case_hi = hi;
-    return e;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_label_ahead(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int sp;
-    int sbol;
-    int stok;
-    int sline;
-    int stokline;
-    int sstart;
-    int slstart;
-    int r;
-    long snum;
-    const char * stext_ptr;
-    int stext_len;
-    (void)(_self);
-    if (_self->lex->tok != T_ID) {
-        return 0;
-    }
-    sp = _self->lex->pos;
-    sbol = _self->lex->bol;
-    stok = _self->lex->tok;
-    snum = _self->lex->toknum;
-    sline = _self->lex->line;
-    stokline = _self->lex->tokline;
-    sstart = _self->lex->tokstart;
-    slstart = _self->lex->lstart;
-    stext_ptr = _self->lex->tokstr.ptr;
-    stext_len = _self->lex->tokstr.len;
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    r = 0;
-    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ":"))) {
-        r = 1;
-    }
-    _self->lex->pos = sp;
-    _self->lex->bol = sbol;
-    _self->lex->tok = stok;
-    _self->lex->toknum = snum;
-    _self->lex->line = sline;
-    _self->lex->tokline = stokline;
-    _self->lex->tokstart = sstart;
-    _self->lex->lstart = slstart;
-    _self->lex->tokstr.ptr = stext_ptr;
-    _self->lex->tokstr.len = stext_len;
-    return r;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_label_find(void *self, const char * name) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int i;
-    (void)(_self);
-    for (i = 0; i < _self->nlabels; i++) {
-        if (strcmp(_self->labels[i].name, name) == 0) {
-            return i;
-        }
-    }
-    return (-1);
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_named_label(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int s;
-    int c;
-    int head;
-    int tail;
-    int line;
-    int i;
-    char name[MAX_TEXT];
-    char msg[MAX_TEXT];
-    (void)(_self);
-    if (_self->in_defer) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a defer block cannot declare a label");
-    }
-    line = _self->lex->tokline;
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
-    if (ensure_label_capacity(_self, (_self->nlabels + 1)) != 0) {
-        return (-1);
-    }
-    if (_self->__frontend_parse_stmtops_vptr->label_find(_self, name) >= 0) {
-        snprintf(msg, sizeof(msg), "duplicate label '%s'", name);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-    }
-    s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_LABEL);
-    if (s < 0) {
-        return (-1);
-    }
-    snprintf(_self->labels[_self->nlabels].name, MAX_TEXT, "%s", name);
-    _self->labels[_self->nlabels].line = line;
-    _self->labels[_self->nlabels].depth = _self->ndefer_blocks;
-    for (i = 0; i < _self->ndefer_blocks; i++) {
-        _self->labels[_self->nlabels].path[i] = _self->defer_ids[i];
-        _self->labels[_self->nlabels].has[i] = 0;
-    }
-    _self->nlabels = (_self->nlabels + 1);
-    snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ":") != 0) {
-        return (-1);
-    }
-    head = (-1);
-    tail = (-1);
-    while (((((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}")))) && (!((_self->lex->tok == T_ID) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "case") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "default"))))) && (!((head >= 0) && _self->__frontend_parse_stmtops_vptr->label_ahead(_self))))) {
-        if ((_self->__frontend_parse_stmtops_vptr->is_decl_start(_self) || ((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "static")))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a declaration cannot follow a label; wrap it in a block");
-        }
-        c = _self->__frontend_parse_stmtops_vptr->parse_stmt(_self);
-        if (c < 0) {
-            return (-1);
-        }
-        if (tail < 0) {
-            head = c;
-        }
-        else {
-            _self->arena->nodes[tail].next = c;
-        }
-        tail = c;
-    }
-    if (head < 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a label needs a statement");
-    }
-    _self->arena->nodes[s].a = head;
-    return s;
-}
-
-static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_goto(void *self) {
-    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    int s;
-    int i;
-    char name[MAX_TEXT];
-    (void)(_self);
-    if (_self->in_errdefer) {
-        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "an errdefer block cannot transfer control", _self->mem->path);
-    }
-    if (_self->in_defer) {
-        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a defer block cannot transfer control", _self->mem->path);
-    }
-    s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_GOTO);
-    if (s < 0) {
-        return (-1);
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if (_self->lex->tok != T_ID) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a label name");
-    }
-    if (ensure_goto_capacity(_self, (_self->ngotos + 1)) != 0) {
-        return (-1);
-    }
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
-    snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
-    snprintf(_self->gotos[_self->ngotos].name, MAX_TEXT, "%s", name);
-    _self->gotos[_self->ngotos].line = _self->arena->nodes[s].line;
-    _self->gotos[_self->ngotos].depth = _self->ndefer_blocks;
-    for (i = 0; i < _self->ndefer_blocks; i++) {
-        _self->gotos[_self->ngotos].path[i] = _self->defer_ids[i];
-        _self->gotos[_self->ngotos].has[i] = 0;
-    }
-    _self->ngotos = (_self->ngotos + 1);
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
-        return (-1);
-    }
-    return s;
-}
-
 static int frontend_parse_Stmt_frontend_parse_StmtOps_func_begin(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     (void)(_self);
@@ -2147,7 +1796,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_func_end(void *self) {
         return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[0].line, "a goto cannot cross an owning String scope; restructure the code or release() explicitly");
     }
     for (i = 0; i < _self->ngotos; i++) {
-        int li = _self->__frontend_parse_stmtops_vptr->label_find(_self, _self->gotos[i].name);
+        int li = _self->__frontend_parse_stmtswitch_vptr->label_find(_self, _self->gotos[i].name);
         if (li < 0) {
             snprintf(msg, sizeof(msg), "label '%s' is not defined", _self->gotos[i].name);
             return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[i].line, msg);
@@ -3109,13 +2758,6 @@ const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_Stmt
     .parse_block = frontend_parse_Stmt_frontend_parse_StmtOps_parse_block,
     .parse_stmt = frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt,
     .parse_branch = frontend_parse_Stmt_frontend_parse_StmtOps_parse_branch,
-    .parse_switch_body = frontend_parse_Stmt_frontend_parse_StmtOps_parse_switch_body,
-    .parse_label = frontend_parse_Stmt_frontend_parse_StmtOps_parse_label,
-    .parse_case_value = frontend_parse_Stmt_frontend_parse_StmtOps_parse_case_value,
-    .label_ahead = frontend_parse_Stmt_frontend_parse_StmtOps_label_ahead,
-    .label_find = frontend_parse_Stmt_frontend_parse_StmtOps_label_find,
-    .parse_named_label = frontend_parse_Stmt_frontend_parse_StmtOps_parse_named_label,
-    .parse_goto = frontend_parse_Stmt_frontend_parse_StmtOps_parse_goto,
     .func_begin = frontend_parse_Stmt_frontend_parse_StmtOps_func_begin,
     .func_end = frontend_parse_Stmt_frontend_parse_StmtOps_func_end,
     .parse_decl_node = frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node,
@@ -3646,105 +3288,6 @@ static int parse_vec_brace_init(struct frontend_parse_Stmt * self, const char * 
     snprintf(self->arena->nodes[e].text2, MAX_TEXT, "%s", iname);
     return e;
 }
-static int map_fold_num(struct frontend_parse_Stmt * self, int n, long * out) {
-    struct runtime_arena_Node * nd;
-    long a;
-    long b;
-    if (n < 0) {
-        return 0;
-    }
-    nd = (&self->arena->nodes[n]);
-    if (nd->kind == N_NUM) {
-        (*out) = nd->num;
-        return 1;
-    }
-    if (nd->kind == N_UNARY) {
-        if ((!map_fold_num(self, nd->a, (&a)))) {
-            return 0;
-        }
-        if (nd->aux == 1) {
-            (*out) = (-a);
-            return 1;
-        }
-        if (nd->aux == 2) {
-            (*out) = (!a);
-            return 1;
-        }
-        if (nd->aux == 3) {
-            (*out) = (~a);
-            return 1;
-        }
-        return 0;
-    }
-    if (nd->kind != N_BIN) {
-        return 0;
-    }
-    if (((!map_fold_num(self, nd->a, (&a))) || (!map_fold_num(self, nd->b, (&b))))) {
-        return 0;
-    }
-    if (((a < (-1099511627776L)) || (a > 1099511627776L))) {
-        return 0;
-    }
-    if (((b < (-1099511627776L)) || (b > 1099511627776L))) {
-        return 0;
-    }
-    switch (nd->aux) {
-        case B_ADD:
-            (*out) = (a + b);
-            break;
-        case B_SUB:
-            (*out) = (a - b);
-            break;
-        case B_MUL:
-            if (((a < (-2147483647L)) || (a > 2147483647L))) {
-                return 0;
-            }
-            if (((b < (-2147483647L)) || (b > 2147483647L))) {
-                return 0;
-            }
-            (*out) = (a * b);
-            break;
-        case B_DIV:
-            if (b == 0) {
-                return 0;
-            }
-            (*out) = (a / b);
-            break;
-        case B_MOD:
-            if (b == 0) {
-                return 0;
-            }
-            (*out) = (a % b);
-            break;
-        case B_SHL:
-            if (((b < 0) || (b > 20))) {
-                return 0;
-            }
-            if (((a < (-524288L)) || (a > 524288L))) {
-                return 0;
-            }
-            (*out) = (a << b);
-            break;
-        case B_SHR:
-            if (((b < 0) || (b > 40))) {
-                return 0;
-            }
-            (*out) = (a >> b);
-            break;
-        case B_BAND:
-            (*out) = (a & b);
-            break;
-        case B_BOR:
-            (*out) = (a | b);
-            break;
-        case B_XOR:
-            (*out) = (a ^ b);
-            break;
-        default:
-            return 0;
-    }
-    return 1;
-}
 static int map_decode_str(struct frontend_parse_Stmt * self, int n, char * out, int cap) {
     const char * s;
     int i = 0;
@@ -3890,7 +3433,7 @@ static int map_dup_key(struct frontend_parse_Stmt * self, int * keys, int count,
             kind = 3;
         }
         else {
-            if (map_fold_num(self, n, (&nv))) {
+            if (frontend_parse_map_fold_num(self, n, (&nv))) {
                 kind = 1;
             }
         }
@@ -3906,7 +3449,7 @@ static int map_dup_key(struct frontend_parse_Stmt * self, int * keys, int count,
     }
     for (j = 0; j < count; j++) {
         if (kind == 1) {
-            if ((map_fold_num(self, keys[j], (&pv)) && (pv == nv))) {
+            if ((frontend_parse_map_fold_num(self, keys[j], (&pv)) && (pv == nv))) {
                 (*first) = self->arena->nodes[keys[j]].line;
                 return 1;
             }
@@ -4071,56 +3614,6 @@ static int stmt_owning_struct(struct frontend_parse_Stmt * self, const char * ty
             return 1;
         }
     }
-    return 0;
-}
-static int ensure_label_capacity(struct frontend_parse_Stmt * self, int need) {
-    int cap;
-    struct frontend_parse_LabelRow * grown;
-    if (need <= self->labelcap) {
-        return 0;
-    }
-    cap = ((self->labelcap > 0) ? self->labelcap : MAX_LABELS);
-    while (((cap < need) && (cap < MAX_LABELS_MAX))) {
-        cap *= 2;
-    }
-    if (cap > MAX_LABELS_MAX) {
-        cap = MAX_LABELS_MAX;
-    }
-    if (need > cap) {
-        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
-    }
-    grown = (struct frontend_parse_LabelRow *)(realloc(self->labels, ((size_t)(cap) * sizeof((*grown)))));
-    if ((!grown)) {
-        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
-    }
-    memset((grown + self->labelcap), 0, ((size_t)((cap - self->labelcap)) * sizeof((*grown))));
-    self->labels = grown;
-    self->labelcap = cap;
-    return 0;
-}
-static int ensure_goto_capacity(struct frontend_parse_Stmt * self, int need) {
-    int cap;
-    struct frontend_parse_LabelRow * grown;
-    if (need <= self->gotocap) {
-        return 0;
-    }
-    cap = ((self->gotocap > 0) ? self->gotocap : MAX_LABELS);
-    while (((cap < need) && (cap < MAX_LABELS_MAX))) {
-        cap *= 2;
-    }
-    if (cap > MAX_LABELS_MAX) {
-        cap = MAX_LABELS_MAX;
-    }
-    if (need > cap) {
-        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
-    }
-    grown = (struct frontend_parse_LabelRow *)(realloc(self->gotos, ((size_t)(cap) * sizeof((*grown)))));
-    if ((!grown)) {
-        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
-    }
-    memset((grown + self->gotocap), 0, ((size_t)((cap - self->gotocap)) * sizeof((*grown))));
-    self->gotos = grown;
-    self->gotocap = cap;
     return 0;
 }
 void frontend_parse_ct_stmt_bind(void * arena, void * lex, void * sym, void * mem, void * sup, void * ex) {

@@ -105,13 +105,6 @@ struct frontend_parse_StmtOps_vtbl {
     int (*parse_decl_node)(void *);
     int (*string_raw_write_check)(void *, int);
     int (*parse_expr_stmt_node)(void *);
-    int (*parse_switch_body)(void *);
-    int (*parse_label)(void *);
-    int (*parse_case_value)(void *);
-    int (*label_ahead)(void *);
-    int (*label_find)(void *, const char *);
-    int (*parse_named_label)(void *);
-    int (*parse_goto)(void *);
     int (*closure_global_init)(void *, int, const char *, int, int);
     int (*func_begin)(void *);
     int (*func_end)(void *);
@@ -119,6 +112,20 @@ struct frontend_parse_StmtOps_vtbl {
 struct frontend_parse_StmtOps_iface {
     void *self;
     const struct frontend_parse_StmtOps_vtbl *vt;
+};
+
+struct frontend_parse_StmtSwitch_vtbl {
+    int (*parse_switch_body)(void *);
+    int (*parse_case_value)(void *);
+    int (*parse_label)(void *);
+    int (*label_ahead)(void *);
+    int (*label_find)(void *, const char *);
+    int (*parse_named_label)(void *);
+    int (*parse_goto)(void *);
+};
+struct frontend_parse_StmtSwitch_iface {
+    void *self;
+    const struct frontend_parse_StmtSwitch_vtbl *vt;
 };
 
 struct frontend_parse_StmtLoop_vtbl {
@@ -235,6 +242,7 @@ struct frontend_parse_Stmt {
     const struct frontend_parse_StmtDeferOps_vtbl *__frontend_parse_stmtdeferops_vptr;
     const struct frontend_parse_StmtMatch_vtbl *__frontend_parse_stmtmatch_vptr;
     const struct frontend_parse_StmtLoop_vtbl *__frontend_parse_stmtloop_vptr;
+    const struct frontend_parse_StmtSwitch_vtbl *__frontend_parse_stmtswitch_vptr;
 };
 
 #endif

@@ -54,11 +54,19 @@ pub trait StmtOps {
 
     int  parse_expr_stmt_node(void);
 
+    int  closure_global_init(int e, const char *name, int line, int col);
+
+    int  func_begin(void);
+
+    int  func_end(void);
+}
+
+pub trait StmtSwitch {
     int  parse_switch_body(void);
 
-    int  parse_label(void);
-
     int  parse_case_value(void);
+
+    int  parse_label(void);
 
     int  label_ahead(void);
 
@@ -67,13 +75,8 @@ pub trait StmtOps {
     int  parse_named_label(void);
 
     int  parse_goto(void);
-
-    int  closure_global_init(int e, const char *name, int line, int col);
-
-    int  func_begin(void);
-
-    int  func_end(void);
 }
+
 
 pub trait StmtLoop {
     int  loop_ahead(void);
@@ -242,4 +245,4 @@ pub struct Stmt {
     int  last_yield_line;
     int  last_yield_col;
     int  last_yield_count;
-} use StmtOps, StmtDeferOps, StmtMatch, StmtLoop;
+} use StmtOps, StmtDeferOps, StmtMatch, StmtLoop, StmtSwitch;
