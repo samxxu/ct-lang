@@ -5030,6 +5030,12 @@ else
     bad "S1a-0 node arena grows" "$(cat "$work/arenag.out" "$work/arenag.err" | head -4)"
 fi
 
+if bash test/ast/diag_warn_grow.sh "$work/ct-ast" >"$work/warng.out" 2>"$work/warng.err"; then
+    ok "S1a-0 warning store grows"
+else
+    bad "S1a-0 warning store grows" "$(cat "$work/warng.out" "$work/warng.err" | head -4)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then

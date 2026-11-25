@@ -10,6 +10,7 @@
 #define MAX_PATH     1024
 #define MAX_ERRORS   20                 /* recovery cap: past this the compiler stops */
 #define MAX_WARNINGS 32
+#define WARN_LIMIT   65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -125,8 +126,9 @@ struct tool_diag_Warn {
     char msg[MAX_TEXT];
 };
 struct tool_diag_Diag {
-    struct tool_diag_Warn warns[MAX_WARNINGS];
+    struct tool_diag_Warn * warns;
     int nwarns;
+    int wcap;
     int nsem;
     int strict;
     int sig_errs;
@@ -137,6 +139,7 @@ struct tool_diag_Diag {
 };
 const char * tool_diag_ct_diag_code_for_error(const char *);
 const char * tool_diag_ct_diag_warn_code(int);
+static int diag_grow_warns(struct tool_diag_Diag *);
 int tool_diag_ct_sem_error(int, int, const char *, const char *);
 int tool_diag_ct_sem_note(int, int, const char *, const char *);
 int tool_diag_ct_sig_warn(int, int, const char *, const char *, const char *, const char *, const char *);
@@ -200,7 +203,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_sig_warn(void *self, int li
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -230,7 +233,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_arity_warn(void *self, int 
     }
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -262,7 +265,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_type_warn(void *self, int l
     }
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -283,7 +286,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_amb_warn(void *self, int li
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -304,7 +307,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_recv_warn(void *self, int l
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -325,7 +328,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_loop_warn(void *self, int l
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -346,7 +349,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_slice_warn(void *self, int 
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -367,7 +370,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_deprecated(void *self, int 
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -388,7 +391,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_str_warn(void *self, int li
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -409,7 +412,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_std_shadow(void *self, int 
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -430,7 +433,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_leak(void *self, int kind, 
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -451,7 +454,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_cycle(void *self, int line,
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (_self->nwarns >= MAX_WARNINGS) {
+    if (diag_grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -1009,6 +1012,27 @@ const char * tool_diag_ct_diag_warn_code(int kind) {
         return "W-LANG-001";
     }
     return "";
+}
+static int diag_grow_warns(struct tool_diag_Diag * self) {
+    int cap;
+    struct tool_diag_Warn * grown;
+    if ((self->warns && (self->nwarns < self->wcap))) {
+        return 0;
+    }
+    cap = ((self->wcap > 0) ? (self->wcap * 2) : MAX_WARNINGS);
+    if (cap > WARN_LIMIT) {
+        if (self->wcap >= WARN_LIMIT) {
+            return (-1);
+        }
+        cap = WARN_LIMIT;
+    }
+    grown = (struct tool_diag_Warn *)(realloc(self->warns, ((size_t)(cap) * sizeof((*self->warns)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    self->warns = grown;
+    self->wcap = cap;
+    return 0;
 }
 int tool_diag_ct_sem_error(int line, int col, const char * msg, const char * path) {
     return tool_diag_g_diag.__tool_diag_diagstore_vptr->sem_error(&tool_diag_g_diag, line, col, msg, path);

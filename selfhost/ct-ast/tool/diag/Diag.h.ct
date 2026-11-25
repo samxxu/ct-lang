@@ -22,6 +22,7 @@
 #define MAX_PATH     1024
 #define MAX_ERRORS   20                 /* recovery cap: past this the compiler stops */
 #define MAX_WARNINGS 32
+#define WARN_LIMIT   65536
 
 namespace tool::diag;
 
@@ -151,8 +152,9 @@ trait DiagStore {
 }
 
 struct Diag {
-    struct Warn warns[MAX_WARNINGS];
+    struct Warn *warns;
     int  nwarns;
+    int  wcap;
     int  nsem;
     /* `ct check` (19.4, D19-4): the same records are the entry's findings, so
        text lines read `error:` and JSON objects carry a severity. Compile keeps
@@ -176,6 +178,24 @@ struct Diag {
        Default text stays byte-identical; JSON carries the code either way. */
     int  codes;
 } use DiagStore;
+
+/* S1a-0 C1: the warning store grows instead of stopping at MAX_WARNINGS. */
+static int diag_grow_warns(struct Diag *self)
+{
+    int cap;
+    struct Warn *grown;
+    if (self->warns && self->nwarns < self->wcap) return 0;
+    cap = self->wcap > 0 ? self->wcap * 2 : MAX_WARNINGS;
+    if (cap > WARN_LIMIT) {
+        if (self->wcap >= WARN_LIMIT) return -1;
+        cap = WARN_LIMIT;
+    }
+    grown = (struct Warn *)realloc(self->warns, (size_t)cap * sizeof(*self->warns));
+    if (!grown) return -1;
+    self->warns = grown;
+    self->wcap = cap;
+    return 0;
+}
 
 impl DiagStore for Diag {
     /* A semantic error in L2's shape (`file:line:col: error: ...`). Reporting is
@@ -219,7 +239,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 1;
         w->line = line;
@@ -253,7 +273,7 @@ impl DiagStore for Diag {
         }
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 4;
         w->line = line;
@@ -285,7 +305,7 @@ impl DiagStore for Diag {
         }
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 5;
         w->line = line;
@@ -309,7 +329,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 6;
         w->line = line;
@@ -332,7 +352,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 13;
         w->line = line;
@@ -355,7 +375,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 7;
         w->line = line;
@@ -377,7 +397,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 9;
         w->line = line;
@@ -399,7 +419,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 12;
         w->line = line;
@@ -421,7 +441,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 11;
         w->line = line;
@@ -441,7 +461,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 8;
         w->line = line;
@@ -460,7 +480,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = kind;
         w->line = line;
@@ -482,7 +502,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (self->nwarns >= MAX_WARNINGS) return -1;
+        if (diag_grow_warns(self) != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 10;
         w->line = line;
