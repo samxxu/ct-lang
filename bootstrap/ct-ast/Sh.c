@@ -71,6 +71,8 @@ struct frontend_module_Module;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_PkgRec;
+struct tool_pkg_LockRow;
+struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
 struct tool_driver_Driver;

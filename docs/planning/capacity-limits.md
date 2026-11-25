@@ -1,6 +1,6 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DEPS 待做；DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS` 与 B/C/D 类待做）。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；B/C/D 类待做）。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
@@ -54,7 +54,7 @@
 | `MAX_IMPORTS` | 32 | 10 | A | **已动态**：`Module` 的单元依赖行 `dep`/`depu` 与 `Parser` 的导入表一起倍增到 `MAX_IMPORTS_MAX=65536`；删除 `too many imports`，`cache_key_of` 的 `MAX_IH` 定长块改为按 `ndep` 分配 |
 | `MAX_INCDIRS` | 16 | 4 | A | **已动态**：`Module.incdirs` 堆块倍增到 `MAX_INCDIRS_MAX=65536`；删除 `too many -I roots` |
 | `MAX_UNITS` | 64 | 24 | A | **已动态**：`Module.units` 堆块倍增到 `MAX_UNITS_MAX=65536`（扩容后重绑 emitter），`build_main` 的 inputs/cache 行走堆块，可达性 scratch 按 `nunits` 增长；删除 `too many units` / `too many inputs` |
-| `MAX_PKG_DEPS` | 16 | 42 | A | 动态 |
+| `MAX_PKG_DEPS` | 16 | 42 | A | **已动态**：`struct Pkg` 的 `seen`（扁平 `MAX_TEXT` 行）与 `recs`（结构体行）倍增到 `MAX_PKG_DEPS_MAX=65536`；manifest 的 `dep` 行、`ct.lock` 的四列（`LockRow`：name/ver/ns/dig + install 的 ipath）、构建期锁根扫描（`LockParsedRow`）、`ct index refresh`/`ct migrate` 的 dep 表、`Driver` 的 `-I` roots/notes 全部改动态行块；删除 `too many packages` 与 `ct.lock lists more than 16 packages` |
 | `MAX_DIGEST_FILES` | 4096 | 4 | A | **已动态**：`dir_digest` 的文件路径块按倍增 realloc 到 `MAX_DIGEST_FILES_MAX=65536`（`sha_collect` 收 `char **`/`int *cap`），4100 文件树可算摘要 |
 | `MAX_INIT_ITEM` | 4096 | 3 | A | **已动态**：`rewrite_init_text` 的单项暂存按该行捕获文本长度分配（不再受 4096 限制），`MAX_INIT_ITEM_MAX=65536` 为形式上限 |
 | `MAX_RAW_INIT` | 4096 | 9 | A | **已动态**：`ParseSupport` 的花括号捕获缓冲区倍增到 `MAX_RAW_INIT_MAX=65536`，`init_raw(char **out)` 返回内部块；删除 `initializer is too long` 的 4096 上限 |

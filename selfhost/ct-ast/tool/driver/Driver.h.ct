@@ -501,12 +501,18 @@ impl DriverOps for Driver {
             /* S2: `build` reads ./ct.lock and the roots become explicit `-I`
                entries after the user's own flags. `--locked` is consumed here
                because `build_main` has no concept of strictness. */
-            char roots[16][512];
-            char notes[16][512];
+            /* S1a-0 C1: the lock reader grows these by doubling (the old
+               `char roots[16][512]` silently overflowed past 16 rows). */
+            char *roots;
+            char *notes;
             char *bargv[256];
-            int nroots, nnotes, locked, bi, ai, want_help;
+            int nroots, nnotes, rootcap, notecap, locked, bi, ai, want_help;
+            roots = NULL;
+            notes = NULL;
             nroots = 0;
             nnotes = 0;
+            rootcap = 0;
+            notecap = 0;
             locked = 0;
             want_help = 0;
             for (ai = 2; ai < argc; ai++) {
@@ -518,10 +524,11 @@ impl DriverOps for Driver {
             /* help/version must not depend on the project's lock being valid */
             if (want_help) return self->m->build_main(argc - 1, argv + 1);
             if (tool::pkg::ct_pkg_lock_roots(self->version, locked,
-                                              roots[0], &nroots, notes[0], &nnotes) != 0)
+                                              &roots, &nroots, &rootcap,
+                                              &notes, &nnotes, &notecap) != 0)
                 return 1;
             for (ai = 0; ai < nnotes; ai++)
-                fprintf(stderr, "ctc: note: %s\n", notes[ai]);
+                fprintf(stderr, "ctc: note: %s\n", notes + (size_t)ai * 512);
             bi = 0;
             bargv[bi++] = "build";
             for (ai = 2; ai < argc; ai++) {
@@ -562,7 +569,7 @@ impl DriverOps for Driver {
                     return 1;
                 }
                 bargv[bi++] = "-I";
-                bargv[bi++] = roots[ai];
+                bargv[bi++] = roots + (size_t)ai * 512;
             }
             return self->m->build_main(bi, bargv);
         }

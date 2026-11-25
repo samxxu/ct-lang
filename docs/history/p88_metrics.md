@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10953 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=59373 io_cap=1024
+     emitted_before=48223 emitted_after=59667 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -29,7 +29,8 @@
      (S1a-0 C1 后复测：map 表与 `MapBind` 参数并行表改堆块、`--emit-map` /
       `map_visible` 全表扫描改持槽位、`emit_recipe` 的 16 项暂存改按绑定分配，
       落在 Emitter.h.ct；Emitter.h.ct 10929 -> 10953，发射 C 59247 -> 59373，
-      切片清单仍为 76)
+      切片清单仍为 76。同批的 `MAX_PKG_DEPS` 只改 Pkg/Driver，Emitter.h.ct
+      不变，发射 C 59373 -> 59667)
 -->
 
 ## 1 切片清单

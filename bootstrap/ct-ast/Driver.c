@@ -85,6 +85,8 @@ struct frontend_module_Module;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_PkgRec;
+struct tool_pkg_LockRow;
+struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
 struct tool_driver_Driver;
@@ -288,17 +290,23 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     }
     if (((argc > 1) && (strcmp(argv[1], "build") == 0))) {
         _self->m->types_level = 2;
-        char roots[16][512];
-        char notes[16][512];
+        char * roots;
+        char * notes;
         char * bargv[256];
         int nroots;
         int nnotes;
+        int rootcap;
+        int notecap;
         int locked;
         int bi;
         int ai;
         int want_help;
+        roots = NULL;
+        notes = NULL;
         nroots = 0;
         nnotes = 0;
+        rootcap = 0;
+        notecap = 0;
         locked = 0;
         want_help = 0;
         for (ai = 2; ai < argc; ai++) {
@@ -312,11 +320,11 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         if (want_help) {
             return _self->m->__frontend_module_moduleops_vptr->build_main(_self->m, (argc - 1), (argv + 1));
         }
-        if (tool_pkg_ct_pkg_lock_roots(_self->version, locked, roots[0], (&nroots), notes[0], (&nnotes)) != 0) {
+        if (tool_pkg_ct_pkg_lock_roots(_self->version, locked, (&roots), (&nroots), (&rootcap), (&notes), (&nnotes), (&notecap)) != 0) {
             return 1;
         }
         for (ai = 0; ai < nnotes; ai++) {
-            fprintf(stderr, "ctc: note: %s\n", notes[ai]);
+            fprintf(stderr, "ctc: note: %s\n", (notes + ((size_t)(ai) * 512)));
         }
         bi = 0;
         bargv[bi++] = "build";
@@ -370,7 +378,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
                 return 1;
             }
             bargv[bi++] = "-I";
-            bargv[bi++] = roots[ai];
+            bargv[bi++] = (roots + ((size_t)(ai) * 512));
         }
         return _self->m->__frontend_module_moduleops_vptr->build_main(_self->m, bi, bargv);
     }
