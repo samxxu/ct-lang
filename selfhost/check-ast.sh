@@ -5081,6 +5081,12 @@ else
     bad "S1a-0 map table and binding parameters grow" "$(cat "$work/mapc.out" "$work/mapc.err" | head -6)"
 fi
 
+if bash test/ast/cap_adt.sh "$work/ct-ast" >"$work/adtc.out" 2>"$work/adtc.err"; then
+    ok "S1a-0 ADT counts grow"
+else
+    bad "S1a-0 ADT counts grow" "$(cat "$work/adtc.out" "$work/adtc.err" | head -6)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
