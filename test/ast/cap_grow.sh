@@ -68,5 +68,48 @@ run_case calls "$w/calls.ct" 0 || fail=1
 echo '}' >>"$w/labels.ct"
 run_case labels "$w/labels.ct" 0 || fail=1
 
+# MAX_PARAMS: 100 parameters in one function and 100 arguments at the call
+# (old cap 16). The function table row and the call argument frame both grow.
+{
+    printf 'int f(int a0'
+    i=1
+    while [ "$i" -lt 100 ]; do printf ', int a%d' "$i"; i=$((i + 1)); done
+    printf ')\n{\n    return a0;\n}\n'
+    printf 'int main(void)\n{\n    return f('
+    i=0
+    while [ "$i" -lt 100 ]; do
+        if [ "$i" -gt 0 ]; then printf ', '; fi
+        printf '%d' "$i"
+        i=$((i + 1))
+    done
+    printf ') == 0 ? 0 : 1;\n}\n'
+} >"$w/params.ct"
+run_case params "$w/params.ct" 0 || fail=1
+
+# MAX_PARAMS also covers a trait method's signature (MethodSig ptype/pann) and
+# the map/emitter path that reads it: 20 parameters on one trait method.
+{
+    echo 'trait Big {'
+    printf '    int f(int a0'
+    i=1
+    while [ "$i" -lt 20 ]; do printf ', int a%d' "$i"; i=$((i + 1)); done
+    printf ');\n}\n'
+    echo 'struct S { int x; } use Big;'
+    echo 'impl Big for S {'
+    printf '    int f(int a0'
+    i=1
+    while [ "$i" -lt 20 ]; do printf ', int a%d' "$i"; i=$((i + 1)); done
+    printf ')\n    {\n        return a19;\n    }\n}\n'
+    printf 'int main(void)\n{\n    struct S s = { .x = 0 };\n    return s.f('
+    i=0
+    while [ "$i" -lt 20 ]; do
+        if [ "$i" -gt 0 ]; then printf ', '; fi
+        printf '%d' "$i"
+        i=$((i + 1))
+    done
+    printf ') == 19 ? 0 : 1;\n}\n'
+} >"$w/method_params.ct"
+run_case method_params "$w/method_params.ct" 0 || fail=1
+
 [ "$fail" -eq 0 ] || exit 1
 echo "OK S1a-0 cap growth"
