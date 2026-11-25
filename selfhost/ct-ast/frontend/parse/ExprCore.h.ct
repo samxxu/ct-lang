@@ -164,7 +164,9 @@ pub trait ExprOps {
 
     int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap,
                          int *form);
+}
 
+pub trait ExprClosure {
     /* Phase 21 S4: closure actuals fill a `(fn, env)` pair and count as two
        C arguments. */
     int  type_is_fnptr(const char *t);
@@ -194,6 +196,7 @@ pub trait ExprOps {
 
     int  closure_arg_bind(int ci, const char *ftype);
 }
+
 
 pub trait ExprCallCheck {
     int  record_call(const char *callee, int line);
@@ -529,4 +532,4 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut, ExprCallCheck;
+} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut, ExprCallCheck, ExprClosure;

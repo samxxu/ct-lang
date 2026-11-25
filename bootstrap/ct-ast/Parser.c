@@ -3853,7 +3853,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
                     int pk = 0;
                     for (k2 = params; k2 > 0; k2 = _self->arena->nodes[k2].next) {
                         const char * ft = (_self->sym->traits[ti].m[tm_i].ptype + (pk * MAX_TEXT));
-                        if ((((!strchr(ft, '[')) && (!_self->arena->nodes[k2].text3[0])) && (_self->ex->__frontend_parse_exprops_vptr->decl_type_compat(_self->ex, ft, _self->arena->nodes[k2].text) == 1))) {
+                        if ((((!strchr(ft, '[')) && (!_self->arena->nodes[k2].text3[0])) && (_self->ex->__frontend_parse_exprclosure_vptr->decl_type_compat(_self->ex, ft, _self->arena->nodes[k2].text) == 1))) {
                             snprintf(wmsg, sizeof(wmsg), "parameter %d type '%s' does not match the trait's '%s'", (pk + 1), _self->arena->nodes[k2].text, ft);
                             if (tool_diag_ct_sig_warn(mline, mcol, mname, rtrait, rstruct, wmsg, _self->mem->path) != 0) {
                                 _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);

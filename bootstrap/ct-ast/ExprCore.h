@@ -134,6 +134,13 @@ struct frontend_parse_ExprOps_vtbl {
     int (*parse_primary)(void *);
     int (*parse_args)(void *);
     int (*parse_qual_path)(void *, char *, int, char *, int, char *, int, int *);
+};
+struct frontend_parse_ExprOps_iface {
+    void *self;
+    const struct frontend_parse_ExprOps_vtbl *vt;
+};
+
+struct frontend_parse_ExprClosure_vtbl {
     int (*type_is_fnptr)(void *, const char *);
     int (*type_is_void_ptr)(void *, const char *);
     int (*formal_is_env_fn)(void *, const char *);
@@ -146,9 +153,9 @@ struct frontend_parse_ExprOps_vtbl {
     int (*closure_bind)(void *, int, const char *, const char *);
     int (*closure_arg_bind)(void *, int, const char *);
 };
-struct frontend_parse_ExprOps_iface {
+struct frontend_parse_ExprClosure_iface {
     void *self;
-    const struct frontend_parse_ExprOps_vtbl *vt;
+    const struct frontend_parse_ExprClosure_vtbl *vt;
 };
 
 struct frontend_parse_ExprCallCheck_vtbl {
@@ -330,6 +337,7 @@ struct frontend_parse_Expr {
     const struct frontend_parse_ExprAdt_vtbl *__frontend_parse_expradt_vptr;
     const struct frontend_parse_ExprRecvMut_vtbl *__frontend_parse_exprrecvmut_vptr;
     const struct frontend_parse_ExprCallCheck_vtbl *__frontend_parse_exprcallcheck_vptr;
+    const struct frontend_parse_ExprClosure_vtbl *__frontend_parse_exprclosure_vptr;
 };
 
 #endif

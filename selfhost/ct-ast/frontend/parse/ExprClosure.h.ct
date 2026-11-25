@@ -1,0 +1,613 @@
+/*
+ * ExprClosure.h.ct - the closure grammar and argument checks (SH-94 S1a-1, pure move out of Expr.h.ct).
+ *
+ * The method bodies are byte-identical to the ones Expr.h.ct held; the
+ * `Expr` type and every trait declaration live in ExprCore.h.ct, so this unit
+ * imports Core instead of the host and the import graph stays acyclic.
+ * Expr.h.ct imports this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+import frontend::sym::SymbolsTypeText;
+import frontend::lex::Lexer;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable;
+import backend::mem::Memory;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::sym::Symbols::Closure as Closure;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
+import runtime::arena::Arena::NodeKind as NodeKind;
+import runtime::arena::Arena::Node as Node;
+import tool::diag::Diag;
+import frontend::parse::ExprTypeText;
+import frontend::parse::ExprPure;
+import frontend::parse::ExprCore;
+import frontend::parse::ExprAdtCtor;
+import frontend::parse::ExprNewObject;
+import frontend::parse::ExprSubscript;
+import frontend::parse::ExprOptional;
+import frontend::parse::ExprTraitInst;
+import frontend::parse::ExprRecvMut;
+import frontend::parse::ExprTry;
+import frontend::parse::ExprTypes;
+import frontend::parse::ExprBinding;
+import frontend::parse::ExprCallCheck;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define B_ADD 1
+#define B_AND 12
+#define B_BAND 15
+#define B_BOR 16
+#define B_COMMA 19
+#define B_DIV 4
+#define B_EQ 9
+#define B_GE 8
+#define B_GT 6
+#define B_LE 7
+#define B_LT 5
+#define B_MOD 11
+#define B_MUL 3
+#define B_NE 10
+#define B_OR 13
+#define B_SHL 17
+#define B_SHR 18
+#define B_SUB 2
+#define B_XOR 14
+#define MAX_CALLS 8192
+#define MAX_CALLS_MAX 65536
+#define MAX_FUNCS 512
+#define MAX_FUNCS_MAX 65536
+#define MAX_ARG_POS 32
+#define MAX_ARG_POS_MAX 65536
+#define MAX_GENERIC_INSTS 64
+#define MAX_TEXT 160
+#define N_ADDR 27
+#define N_ARROW 25
+#define N_ASSIGN 13
+#define N_BIN 11
+#define N_BOX 34
+#define N_CALL 7
+#define N_CAST 35
+#define N_DECL 12
+#define N_DEREF 28
+#define N_FUNC 3
+#define N_IMPL 33
+#define N_INDEX 26
+#define N_MCALL 30
+#define N_MEMBER 24
+#define N_NUM 8
+#define N_OFFSETOF 47
+#define N_POST 18
+#define N_RAW 31
+#define N_SIZEOF 36
+#define N_STR 9
+#define N_TERN 37
+#define N_UNARY 17
+#define N_VAR 10
+#define N_COMPOUND 51
+#define N_VAARG 53
+#define N_FNUM 54
+#define N_PRE 57
+#define N_CLOSURE 59
+#define N_MATSEQ 73
+#define N_NEWOBJ 77
+#define N_INTO 63
+#define N_INTO_SELF 64
+#define N_TRY 71
+#define N_ADTCTOR 81
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET   76
+#define N_OPT 72
+#define P_DEC 2
+#define P_INC 1
+#define T_EOF 0
+#define T_ID 1
+#define T_NUM 2
+#define T_PUNCT 4
+#define T_STR 3
+#define U_NEG 1
+#define U_NOT 2
+#define U_BNOT 3
+#define CT_EXPR_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct ExprClosure {
+    int unused;
+}
+
+pub int closure_walk(struct Expr *self, int ci, int n, int pstart);
+pub int closure_walk_shadow(struct Expr *self, int ci, int n);
+pub int closure_walk_mutate(struct Expr *self, int ci, int n);
+
+pub int closure_capture_error(struct Expr *self, int line, const char *msg)
+{
+    tool::diag::ct_sem_error(line, 1, msg, self->sup->mem->path);
+    tool::diag::ct_sem_note(line, 1, CT_EXPR_CLOSURE_HINT, self->sup->mem->path);
+    return -1;
+}
+
+pub int closure_copy(struct Expr *self, char *dst, const char *src, const char *what)
+{
+    char msg[512];
+
+    if (strlen(src) >= MAX_TEXT) {
+        snprintf(msg, sizeof msg, "%s is too long (limit %d)", what, MAX_TEXT - 1);
+        return self->sup->fail(msg);
+    }
+    snprintf(dst, MAX_TEXT, "%s", src);
+    return 0;
+}
+
+pub int closure_capture_add(struct Expr *self, int ci, int vi, int line)
+{
+    struct Closure *c = &self->sym->closures[ci];
+    const char *name = self->sym->vars[vi].name;
+    char msg[512];
+    int k;
+
+    /* E4: an `own` handle would get a second owner and a `borrow` a second
+       handback, so neither can be copied into the environment. The check runs
+       while the capture is collected, before AutoDrop / borrow is registered. */
+    if (self->sym->vars[vi].autodrop || self->sym->vars[vi].borrowed) {
+        snprintf(msg, sizeof msg,
+                 "a closure cannot capture '%s' (it is 'own' or 'borrow')", name);
+        return closure_capture_error(self, line, msg);
+    }
+    /* a closure is a binding, not a value (E7 on the capture path) */
+    if (self->sym->vars[vi].is_closure)
+        return closure_capture_error(self, line, "a closure cannot capture another closure");
+    /* An array is not a value in C: there is no assignment that would copy it
+       into the env struct, and an element-wise copy has no spelling on the
+       inline `(fn, env)` path. Refuse it instead of emitting an env field whose
+       type lost its dimensions. */
+    if (self->sym->vars[vi].is_array) {
+        snprintf(msg, sizeof msg,
+                 "a closure cannot capture the array '%s' (capture a pointer to it instead)", name);
+        return closure_capture_error(self, line, msg);
+    }
+    /* P-7.2 (P-4.1): the environment copies captured names by value; a slice
+       is a view whose storage the closure would outlive, so it is refused at
+       the capture (the array/parameter is the thing to pass instead). */
+    if (self->sym->vars[vi].is_slice) {
+        snprintf(msg, sizeof msg,
+                 "a closure cannot capture the slice '%s' (a view cannot outlive its array)", name);
+        return closure_capture_error(self, line, msg);
+    }
+    if (closure_capture_index(c, name) >= 0) return 0;
+    if (c->ncap >= 16)
+        return self->sup->fail("a closure takes too many captures (limit 16)");
+    if (closure_copy(self, c->cap_name[c->ncap], name, "a captured name") != 0) return -1;
+    if (closure_copy(self, c->cap_type[c->ncap], self->sym->vars[vi].type,
+                     "a captured type") != 0) return -1;
+    c->ncap++;
+    /* An inner literal is built inside the enclosing trampoline, so a name that
+       comes from outside the enclosing literal must also sit in its environment;
+       otherwise the inner initialiser would name a variable the trampoline does
+       not have. A name local to the enclosing body (at or after its `pstart`)
+       stays a plain local and is not copied up. */
+    for (k = self->ncl_stack - 2; k >= 0; k--) {
+        int oi = self->cl_stack[k];
+        struct Closure *oc = &self->sym->closures[oi];
+        int j, dup = 0;
+
+        if (vi >= self->cl_pstart[k]) continue;
+        for (j = 0; j < oc->ncap; j++)
+            if (strcmp(oc->cap_name[j], name) == 0) dup = 1;
+        if (dup) continue;
+        if (oc->ncap >= 16)
+            return self->sup->fail("a closure takes too many captures (limit 16)");
+        if (closure_copy(self, oc->cap_name[oc->ncap], name, "a captured name") != 0) return -1;
+        if (closure_copy(self, oc->cap_type[oc->ncap], self->sym->vars[vi].type,
+                         "a captured type") != 0) return -1;
+        oc->ncap++;
+    }
+    return 0;
+}
+
+pub int closure_walk(struct Expr *self, int ci, int n, int pstart)
+{
+    struct Node *nd;
+    int vi;
+
+    if (n < 0) return 0;
+    nd = &self->arena->nodes[n];
+    /* a nested literal owns its own environment (S5) */
+    if (nd->kind == N_CLOSURE) return 0;
+    /* calling another binding from inside a closure is the capture path the
+       call node spells in `text2`, not in a child: a closure cannot capture
+       another closure (E7). */
+    if (nd->kind == N_CALL) {
+        vi = self->sym->find_var(nd->text2);
+        if (vi >= 0 && vi < pstart && !self->sym->vars[vi].is_global
+            && self->sym->vars[vi].is_closure)
+            return closure_capture_error(self, nd->line,
+                                         "a closure cannot capture another closure");
+    }
+    if (nd->kind == N_VAR) {
+        vi = self->sym->find_var(nd->text2);
+        if (vi < 0 || vi >= pstart) return 0;
+        if (self->sym->vars[vi].is_global) return 0;
+        return closure_capture_add(self, ci, vi, nd->line);
+    }
+    if (closure_walk(self, ci, nd->a, pstart) != 0) return -1;
+    if (closure_walk(self, ci, nd->b, pstart) != 0) return -1;
+    if (closure_walk(self, ci, nd->c, pstart) != 0) return -1;
+    if (closure_walk(self, ci, nd->d, pstart) != 0) return -1;
+    return closure_walk(self, ci, nd->next, pstart);
+}
+
+pub int closure_walk_shadow(struct Expr *self, int ci, int n)
+{
+    struct Node *nd;
+    struct Closure *c = &self->sym->closures[ci];
+    char msg[512];
+    int k;
+
+    if (n < 0) return 0;
+    nd = &self->arena->nodes[n];
+    if (nd->kind == N_CLOSURE) return 0;
+    if (nd->kind == N_DECL) {
+        for (k = 0; k < c->ncap; k++) {
+            if (strcmp(c->cap_name[k], nd->text2) == 0) {
+                snprintf(msg, sizeof msg,
+                         "a local cannot shadow the captured '%s'", nd->text2);
+                return closure_capture_error(self, nd->line, msg);
+            }
+        }
+    }
+    if (closure_walk_shadow(self, ci, nd->a) != 0) return -1;
+    if (closure_walk_shadow(self, ci, nd->b) != 0) return -1;
+    if (closure_walk_shadow(self, ci, nd->c) != 0) return -1;
+    if (closure_walk_shadow(self, ci, nd->d) != 0) return -1;
+    return closure_walk_shadow(self, ci, nd->next);
+}
+
+pub int closure_walk_mutate(struct Expr *self, int ci, int n)
+{
+    struct Node *nd;
+    struct Closure *c = &self->sym->closures[ci];
+
+    if (n < 0) return 0;
+    nd = &self->arena->nodes[n];
+    if (nd->kind == N_CLOSURE) return 0;
+    if (nd->kind == N_ASSIGN && nd->a >= 0
+        && self->arena->nodes[nd->a].kind == N_VAR
+        && closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0)
+        return closure_capture_error(self, self->arena->nodes[nd->a].line,
+                                     "a captured variable cannot be reassigned inside a closure");
+    if ((nd->kind == N_PRE || nd->kind == N_POST) && nd->a >= 0
+        && self->arena->nodes[nd->a].kind == N_VAR
+        && closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0)
+        return closure_capture_error(self, self->arena->nodes[nd->a].line,
+                                     "a captured variable cannot be reassigned inside a closure");
+    if (nd->kind == N_ADDR && nd->a >= 0
+        && self->arena->nodes[nd->a].kind == N_VAR
+        && closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0)
+        return closure_capture_error(self, self->arena->nodes[nd->a].line,
+                                     "the address of a captured variable cannot be taken inside a closure");
+    if (closure_walk_mutate(self, ci, nd->a) != 0) return -1;
+    if (closure_walk_mutate(self, ci, nd->b) != 0) return -1;
+    if (closure_walk_mutate(self, ci, nd->c) != 0) return -1;
+    if (closure_walk_mutate(self, ci, nd->d) != 0) return -1;
+    return closure_walk_mutate(self, ci, nd->next);
+}
+
+impl ExprClosure for Expr {
+    int type_is_fnptr(const char *t)
+    {
+        (void)self;
+        return t != 0 && strstr(t, "(*") != 0;
+    }
+
+    int type_is_void_ptr(const char *t)
+    {
+        (void)self;
+        return t != 0 && strncmp(t, "void *", 6) == 0;
+    }
+
+    int formal_is_env_fn(const char *t)
+    {
+        char plist[MAX_TEXT];
+        char item[MAX_TEXT];
+        int lp, rp, pos;
+        size_t n, hn;
+
+        if (!self->type_is_fnptr(t)) return 0;
+        hn = strlen(t);
+        lp = -1;
+        rp = -1;
+        for (n = 0; n < hn; n++) {
+            if (t[n] == '(') lp = (int)n;
+            else if (t[n] == ')') rp = (int)n;
+        }
+        if (lp < 0 || rp <= lp + 1) return 0;
+        snprintf(plist, sizeof plist, "%.*s", rp - lp - 1, t + lp + 1);
+        pos = 0;
+        if (!plist_next(plist, &pos, item, sizeof item)) return 0;
+        if (strncmp(item, "void *", 6) != 0) return 0;
+        return item[6] != '*';
+    }
+
+    int arg_is_closure(int a)
+    {
+        const char *name;
+        int vi;
+
+        if (a < 0) return 0;
+        if (self->arena->nodes[a].kind == N_CLOSURE) return 1;
+        if (self->arena->nodes[a].kind != N_VAR) return 0;
+        name = self->arena->nodes[a].text2;
+        vi = self->sym->find_var(name);
+        return vi >= 0 && self->sym->vars[vi].is_closure;
+    }
+
+    int closure_arg_count(int args)
+    {
+        int cur, n;
+
+        cur = args;
+        n = 0;
+        while (cur > 0) {
+            if (self->arg_is_closure(cur)) n++;
+            cur = self->arena->nodes[cur].next;
+        }
+        return n;
+    }
+
+    int closure_arg_check(int line, int col, const char *callee, int args, int fi)
+    {
+        const char *e8;
+        int cur, pos, ok, np;
+        const char *ft;
+
+        e8 = "the compiler cannot see whether the callee keeps the environment; the environment dies with this frame";
+        if (fi >= 0) np = self->sym->funcs[fi].nparams;
+        else np = 0;
+        cur = args;
+        pos = 0;
+        while (cur > 0) {
+            if (self->arg_is_closure(cur)) {
+                ok = 0;
+                ft = "";
+                if (fi >= 0 && pos < np) ft = self->sym->funcs[fi].ptype + (pos) * MAX_TEXT;
+                if (fi >= 0 && pos + 1 < np)
+                    ok = self->formal_is_env_fn(ft)
+                         && self->type_is_void_ptr(self->sym->funcs[fi].ptype + (pos + 1) * MAX_TEXT);
+                if (!ok) {
+                    if (self->type_is_fnptr(ft) && !self->formal_is_env_fn(ft)) {
+                        tool::diag::ct_sem_error(line, col,
+                            "a closure cannot be used where a plain function pointer is expected",
+                            self->sup->mem->path);
+                        tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
+                                                self->sup->mem->path);
+                    } else {
+                        tool::diag::ct_sem_error(line, col,
+                            "a closure argument must fill a '(fn, env)' parameter pair",
+                            self->sup->mem->path);
+                        tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
+                                                self->sup->mem->path);
+                        tool::diag::ct_sem_note(line, col, e8, self->sup->mem->path);
+                    }
+                    return -1;
+                }
+                if (self->arena->nodes[cur].kind == N_CLOSURE) {
+                    if (self->closure_arg_bind(self->arena->nodes[cur].num, ft) != 0)
+                        return -1;
+                } else {
+                    /* R03: a declared binding fills the pair as well. Its own
+                       trampoline keeps the return type its declaration took, so
+                       only the parameter tail is compared. */
+                    int vi = self->sym->find_var(self->arena->nodes[cur].text2);
+                    if (vi >= 0 && self->sym->vars[vi].is_closure
+                        && closure_match(self, self->sym->vars[vi].closure_id, ft, 1, 0) != 0)
+                        return -1;
+                }
+                pos += 2;
+            } else {
+                pos++;
+            }
+            cur = self->arena->nodes[cur].next;
+        }
+        (void)callee;
+        return 0;
+    }
+
+    int map_closure_check(int line, int col, int args, int ti, int mi)
+    {
+        char msg[MAX_TEXT];
+        const char *ft;
+        int cur, pos, ok, np;
+
+        np = self->sym->traits[ti].m[mi].nparams;
+        cur = args;
+        pos = 0;
+        while (cur > 0) {
+            if (self->arg_is_closure(cur)) {
+                ok = 0;
+                ft = "";
+                if (pos < np) ft = self->sym->traits[ti].m[mi].ptype + (pos) * MAX_TEXT;
+                /* D25-5: the `...` tail has no fixed slot pair. When the
+                   method is variadic and the pair would run past its named
+                   parameters, that is L25-3 -- a case of its own, not the
+                   generic non-pair L25-1 (the wording would otherwise say
+                   got ''). */
+                if (self->sym->traits[ti].m[mi].variadic
+                    && (pos >= np || pos + 1 >= np)) {
+                    snprintf(msg, sizeof msg,
+                             "a map recipe cannot pass a closure through '...'");
+                    tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                    tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
+                                            self->sup->mem->path);
+                    return -1;
+                }
+                if (pos + 1 < np)
+                    ok = self->formal_is_env_fn(ft)
+                         && self->type_is_void_ptr(self->sym->traits[ti].m[mi].ptype + (pos + 1) * MAX_TEXT);
+                if (!ok) {
+                    snprintf(msg, sizeof msg,
+                             "a closure argument must fill a '(fn, env)' parameter pair (got '%s')",
+                             ft);
+                    tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                    tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
+                                            self->sup->mem->path);
+                    return -1;
+                }
+                if (self->arena->nodes[cur].kind == N_CLOSURE) {
+                    if (self->closure_arg_bind(self->arena->nodes[cur].num, ft) != 0)
+                        return -1;
+                } else {
+                    int vi = self->sym->find_var(self->arena->nodes[cur].text2);
+                    if (vi >= 0 && self->sym->vars[vi].is_closure
+                        && closure_match(self, self->sym->vars[vi].closure_id, ft, 1, 0) != 0)
+                        return -1;
+                }
+                pos += 2;
+            } else {
+                pos++;
+            }
+            cur = self->arena->nodes[cur].next;
+        }
+        return 0;
+    }
+
+    int decl_type_compat(const char *formal, const char *actual)
+    {
+        char fb[MAX_TEXT], ab[MAX_TEXT];
+        int r = arg_class(formal, actual, fb, sizeof fb, ab, sizeof ab);
+        if (r == 2) {
+            int fs = self->sym->find_struct(fb + 6);
+            int as = self->sym->find_struct(ab + 6);
+            r = (fs < 0 || as < 0) ? -1 : (fs != as);
+        }
+        return r;
+    }
+
+    int closure_bind(int ci, const char *host, const char *vname)
+    {
+        int vi;
+
+        if (closure_match(self, ci, host, 0, 1) != 0) return -1;
+        vi = self->sym->find_var(vname);
+        if (vi < 0)
+            return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
+        if (self->sym->vars[vi].is_global || self->sym->vars[vi].is_static) {
+            char msg[MAX_TEXT];
+            snprintf(msg, sizeof msg,
+                     "a closure cannot be stored in '%s' (its scope outlives the closure)", vname);
+            return self->sup->fail(msg);
+        }
+        self->sym->vars[vi].is_closure = 1;
+        self->sym->vars[vi].closure_id = ci;
+        return 0;
+    }
+
+    int closure_arg_bind(int ci, const char *ftype)
+    {
+        return closure_match(self, ci, ftype, 1, 1);
+    }
+
+    int parse_closure(void)
+    {
+        char typebuf[MAX_TEXT];
+        char name[MAX_TEXT];
+        char owner[MAX_TEXT];
+        int ci, pstart, body, n, line, col, save_assign;
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        snprintf(owner, sizeof owner, "%s", self->cur_func ? self->cur_func : "");
+        ci = self->sym->closure_new(owner);
+        if (ci < 0) return self->sup->fail(self->sym->last_error());
+        self->sym->closures[ci].line = line;
+        self->sym->closures[ci].col = col;
+        self->sup->lex_next();                       /* the `(` */
+        pstart = self->sym->nvar;
+        if (self->sym->push_scope() != 0) return self->sup->fail(self->sym->last_error());
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
+            for (;;) {
+                if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+                if (self->fnptr_state) {
+                    if (!self->fnptr_name[0])
+                        return self->sup->fail("expected a parameter name");
+                    snprintf(name, sizeof name, "%s", self->fnptr_name);
+                } else {
+                    if (self->lex->tok != T_ID)
+                        return self->sup->fail("expected a parameter name");
+                    self->lex->tok_copy(name, sizeof name);
+                    self->sup->lex_next();
+                }
+                if (self->sym->declare_var(name, typebuf) != 0)
+                    return self->sup->fail(self->sym->last_error());
+                if (self->sym->closures[ci].nparams >= 16)
+                    return self->sup->fail("a closure takes too many parameters (limit 16)");
+                if (closure_copy(self,
+                                 self->sym->closures[ci].ptype[self->sym->closures[ci].nparams],
+                                 typebuf, "a closure parameter type") != 0) return -1;
+                if (closure_copy(self,
+                                 self->sym->closures[ci].pname[self->sym->closures[ci].nparams],
+                                 name, "a closure parameter name") != 0) return -1;
+                self->sym->closures[ci].nparams++;
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
+                    self->sup->lex_next();
+                    continue;
+                }
+                break;
+            }
+        }
+        if (self->sup->expect(")") != 0) return -1;
+        if (self->lex->tok != T_PUNCT || !self->lex->tok_is("=>"))
+            return self->sup->fail("expected '=>' after a closure's parameter list");
+        self->sup->lex_next();
+        /* R09: the nesting stack is not optional. Dropping the push would leave
+           an inner literal without its parent's environment, so the emitter
+           would build it against the wrong frame; the cap is a hard error. */
+        if (self->ncl_stack >= 16)
+            return self->sup->fail("a closure is nested too deeply (limit 16)");
+        self->cl_stack[self->ncl_stack] = ci;
+        self->cl_pstart[self->ncl_stack] = pstart;
+        self->ncl_stack++;
+        /* S5: `=> { … }` is a block body; the statement layer owns blocks and
+           this object cannot import it, so the parser installed a hook. */
+        /* L44-4: a closure has no outer Result return target (D44-10). */
+        self->try_ban++;
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
+            if (!self->st_hook)
+                return self->sup->fail("a block-bodied closure needs the statement parser");
+            body = self->st_hook(0, 0);
+            self->sym->closures[ci].is_block = 1;
+        } else {
+            save_assign = self->assign_ok;
+            self->assign_ok = 1;
+            body = self->parse_expr();
+            self->assign_ok = save_assign;
+        }
+        self->try_ban--;
+        if (body < 0) return -1;
+        self->sym->closures[ci].body = body;
+        if (closure_walk(self, ci, body, pstart) != 0) return -1;
+        if (closure_walk_shadow(self, ci, body) != 0) return -1;
+        if (closure_walk_mutate(self, ci, body) != 0) return -1;
+        if (self->ncl_stack > 0 && self->cl_stack[self->ncl_stack - 1] == ci)
+            self->ncl_stack--;
+        if (self->sym->pop_scope() != 0) return self->sup->fail(self->sym->last_error());
+        n = self->sup->new_node(N_CLOSURE);
+        if (n < 0) return -1;
+        self->arena->nodes[n].num = ci;
+        self->arena->nodes[n].a = body;
+        return n;
+    }
+}

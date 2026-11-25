@@ -23,6 +23,7 @@
 #include "ExprTypes.h"
 #include "ExprBinding.h"
 #include "ExprCallCheck.h"
+#include "ExprClosure.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -189,12 +190,6 @@ void frontend_parse_expr_view_bind(struct frontend_parse_Expr *, const char *, i
 void frontend_parse_expr_iter_push(struct frontend_parse_Expr *, const char *);
 void frontend_parse_expr_iter_pop(struct frontend_parse_Expr *);
 static int closure_ahead(struct frontend_parse_Expr *);
-static int closure_capture_error(struct frontend_parse_Expr *, int, const char *);
-static int closure_copy(struct frontend_parse_Expr *, char *, const char *, const char *);
-static int closure_capture_add(struct frontend_parse_Expr *, int, int, int);
-static int closure_walk(struct frontend_parse_Expr *, int, int, int);
-static int closure_walk_shadow(struct frontend_parse_Expr *, int, int);
-static int closure_walk_mutate(struct frontend_parse_Expr *, int, int);
 static int container_sugar_kind(struct frontend_parse_Expr *, int);
 static int ref_member_flags(struct frontend_parse_Expr *, int, int *, int *);
 static int ref_arg_place(struct frontend_parse_Expr *, int);
@@ -227,244 +222,7 @@ static int ensure_arg_capacity(struct frontend_parse_Expr *, int);
 void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
 static char frontend_parse_g_expr_inst_override[160];
-static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable, .__frontend_parse_exprcallcheck_vptr = &frontend_parse_Expr_frontend_parse_ExprCallCheck_vtable };
-static int frontend_parse_Expr_frontend_parse_ExprOps_type_is_fnptr(void *self, const char * t) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    (void)(_self);
-    return ((t != 0) && (strstr(t, "(*") != 0));
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_type_is_void_ptr(void *self, const char * t) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    (void)(_self);
-    return ((t != 0) && (strncmp(t, "void *", 6) == 0));
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_formal_is_env_fn(void *self, const char * t) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char plist[MAX_TEXT];
-    char item[MAX_TEXT];
-    int lp;
-    int rp;
-    int pos;
-    size_t n;
-    size_t hn;
-    if ((!_self->__frontend_parse_exprops_vptr->type_is_fnptr(_self, t))) {
-        return 0;
-    }
-    hn = strlen(t);
-    lp = (-1);
-    rp = (-1);
-    for (n = 0; n < hn; n++) {
-        if (t[n] == '(') {
-            lp = (int)(n);
-        }
-        else {
-            if (t[n] == ')') {
-                rp = (int)(n);
-            }
-        }
-    }
-    if (((lp < 0) || (rp <= (lp + 1)))) {
-        return 0;
-    }
-    snprintf(plist, sizeof(plist), "%.*s", ((rp - lp) - 1), ((t + lp) + 1));
-    pos = 0;
-    if ((!frontend_parse_plist_next(plist, (&pos), item, sizeof(item)))) {
-        return 0;
-    }
-    if (strncmp(item, "void *", 6) != 0) {
-        return 0;
-    }
-    return (item[6] != '*');
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_arg_is_closure(void *self, int a) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    const char * name;
-    int vi;
-    if (a < 0) {
-        return 0;
-    }
-    if (_self->arena->nodes[a].kind == N_CLOSURE) {
-        return 1;
-    }
-    if (_self->arena->nodes[a].kind != N_VAR) {
-        return 0;
-    }
-    name = _self->arena->nodes[a].text2;
-    vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
-    return ((vi >= 0) && _self->sym->vars[vi].is_closure);
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_count(void *self, int args) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int cur;
-    int n;
-    cur = args;
-    n = 0;
-    while (cur > 0) {
-        if (_self->__frontend_parse_exprops_vptr->arg_is_closure(_self, cur)) {
-            n++;
-        }
-        cur = _self->arena->nodes[cur].next;
-    }
-    return n;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_check(void *self, int line, int col, const char * callee, int args, int fi) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    const char * e8;
-    int cur;
-    int pos;
-    int ok;
-    int np;
-    const char * ft;
-    e8 = "the compiler cannot see whether the callee keeps the environment; the environment dies with this frame";
-    if (fi >= 0) {
-        np = _self->sym->funcs[fi].nparams;
-    }
-    else {
-        np = 0;
-    }
-    cur = args;
-    pos = 0;
-    while (cur > 0) {
-        if (_self->__frontend_parse_exprops_vptr->arg_is_closure(_self, cur)) {
-            ok = 0;
-            ft = "";
-            if (((fi >= 0) && (pos < np))) {
-                ft = (_self->sym->funcs[fi].ptype + (pos * MAX_TEXT));
-            }
-            if (((fi >= 0) && ((pos + 1) < np))) {
-                ok = (_self->__frontend_parse_exprops_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprops_vptr->type_is_void_ptr(_self, (_self->sym->funcs[fi].ptype + ((pos + 1) * MAX_TEXT))));
-            }
-            if ((!ok)) {
-                if ((_self->__frontend_parse_exprops_vptr->type_is_fnptr(_self, ft) && (!_self->__frontend_parse_exprops_vptr->formal_is_env_fn(_self, ft)))) {
-                    tool_diag_ct_sem_error(line, col, "a closure cannot be used where a plain function pointer is expected", _self->sup->mem->path);
-                    tool_diag_ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT, _self->sup->mem->path);
-                }
-                else {
-                    tool_diag_ct_sem_error(line, col, "a closure argument must fill a '(fn, env)' parameter pair", _self->sup->mem->path);
-                    tool_diag_ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT, _self->sup->mem->path);
-                    tool_diag_ct_sem_note(line, col, e8, _self->sup->mem->path);
-                }
-                return (-1);
-            }
-            if (_self->arena->nodes[cur].kind == N_CLOSURE) {
-                if (_self->__frontend_parse_exprops_vptr->closure_arg_bind(_self, _self->arena->nodes[cur].num, ft) != 0) {
-                    return (-1);
-                }
-            }
-            else {
-                int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[cur].text2);
-                if ((((vi >= 0) && _self->sym->vars[vi].is_closure) && (frontend_parse_closure_match(_self, _self->sym->vars[vi].closure_id, ft, 1, 0) != 0))) {
-                    return (-1);
-                }
-            }
-            pos += 2;
-        }
-        else {
-            pos++;
-        }
-        cur = _self->arena->nodes[cur].next;
-    }
-    (void)(callee);
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_map_closure_check(void *self, int line, int col, int args, int ti, int mi) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char msg[MAX_TEXT];
-    const char * ft;
-    int cur;
-    int pos;
-    int ok;
-    int np;
-    np = _self->sym->traits[ti].m[mi].nparams;
-    cur = args;
-    pos = 0;
-    while (cur > 0) {
-        if (_self->__frontend_parse_exprops_vptr->arg_is_closure(_self, cur)) {
-            ok = 0;
-            ft = "";
-            if (pos < np) {
-                ft = (_self->sym->traits[ti].m[mi].ptype + (pos * MAX_TEXT));
-            }
-            if ((_self->sym->traits[ti].m[mi].variadic && ((pos >= np) || ((pos + 1) >= np)))) {
-                snprintf(msg, sizeof(msg), "a map recipe cannot pass a closure through '...'");
-                tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
-                tool_diag_ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT, _self->sup->mem->path);
-                return (-1);
-            }
-            if ((pos + 1) < np) {
-                ok = (_self->__frontend_parse_exprops_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprops_vptr->type_is_void_ptr(_self, (_self->sym->traits[ti].m[mi].ptype + ((pos + 1) * MAX_TEXT))));
-            }
-            if ((!ok)) {
-                snprintf(msg, sizeof(msg), "a closure argument must fill a '(fn, env)' parameter pair (got '%s')", ft);
-                tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
-                tool_diag_ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT, _self->sup->mem->path);
-                return (-1);
-            }
-            if (_self->arena->nodes[cur].kind == N_CLOSURE) {
-                if (_self->__frontend_parse_exprops_vptr->closure_arg_bind(_self, _self->arena->nodes[cur].num, ft) != 0) {
-                    return (-1);
-                }
-            }
-            else {
-                int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[cur].text2);
-                if ((((vi >= 0) && _self->sym->vars[vi].is_closure) && (frontend_parse_closure_match(_self, _self->sym->vars[vi].closure_id, ft, 1, 0) != 0))) {
-                    return (-1);
-                }
-            }
-            pos += 2;
-        }
-        else {
-            pos++;
-        }
-        cur = _self->arena->nodes[cur].next;
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_decl_type_compat(void *self, const char * formal, const char * actual) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char fb[MAX_TEXT];
-    char ab[MAX_TEXT];
-    int r = frontend_parse_arg_class(formal, actual, fb, sizeof(fb), ab, sizeof(ab));
-    if (r == 2) {
-        int fs = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (fb + 6));
-        int as = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (ab + 6));
-        r = (((fs < 0) || (as < 0)) ? (-1) : (fs != as));
-    }
-    return r;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_closure_bind(void *self, int ci, const char * host, const char * vname) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int vi;
-    if (frontend_parse_closure_match(_self, ci, host, 0, 1) != 0) {
-        return (-1);
-    }
-    vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, vname);
-    if (vi < 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a closure cannot be used where a plain function pointer is expected");
-    }
-    if ((_self->sym->vars[vi].is_global || _self->sym->vars[vi].is_static)) {
-        char msg[MAX_TEXT];
-        snprintf(msg, sizeof(msg), "a closure cannot be stored in '%s' (its scope outlives the closure)", vname);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-    }
-    _self->sym->vars[vi].is_closure = 1;
-    _self->sym->vars[vi].closure_id = ci;
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_bind(void *self, int ci, const char * ftype) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    return frontend_parse_closure_match(_self, ci, ftype, 1, 1);
-}
-
+static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable, .__frontend_parse_exprcallcheck_vptr = &frontend_parse_Expr_frontend_parse_ExprCallCheck_vtable, .__frontend_parse_exprclosure_vptr = &frontend_parse_Expr_frontend_parse_ExprClosure_vtable };
 static int frontend_parse_Expr_frontend_parse_ExprOps_is_type_word(void *self, const char * w) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     (void)(_self);
@@ -2899,7 +2657,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
         return n;
     }
     if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && closure_ahead(_self))) {
-        return _self->__frontend_parse_exprops_vptr->parse_closure(_self);
+        return _self->__frontend_parse_exprclosure_vptr->parse_closure(_self);
     }
     if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && _self->__frontend_parse_exprops_vptr->next_is_type_name(_self))) {
         char tbuf[MAX_TEXT];
@@ -4108,11 +3866,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 snprintf(msgb, sizeof(msgb), "trait '%s' has no method '%s'", _self->in_generic_bound, fname);
                                 return tool_diag_ct_sem_error(mline, mcol, msgb, _self->sup->mem->path);
                             }
-                            bgot = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
+                            bgot = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args));
                             if (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, mline, mcol, fname, bgot, _self->sym->traits[bt].m[bmi].nparams) != 0) {
                                 return (-1);
                             }
-                            if (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0) {
+                            if (_self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args) == 0) {
                                 int na = bind_outconv_rewrite(_self, m, args, 1, bt, bmi, "", mline, mcol);
                                 if (na < 0) {
                                     return (-1);
@@ -4165,7 +3923,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     for (pk = _self->arena->nodes[inm].a; pk > 0; pk = _self->arena->nodes[pk].next) {
                                         want++;
                                     }
-                                    if (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, mline, mcol, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args)), want) != 0) {
+                                    if (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, mline, mcol, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args)), want) != 0) {
                                         return (-1);
                                     }
 {
@@ -4336,7 +4094,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     int pm = (-1);
                                     int mut_any = 0;
                                     int mut_plain = 0;
-                                    int got2 = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
+                                    int got2 = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args));
                                     char rk[MAX_TEXT];
                                     char tk[MAX_TEXT];
                                     char msg[MAX_TEXT];
@@ -4409,7 +4167,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                             }
                                         }
                                     }
-                                    if ((((seen && (pt >= 0)) && (pm >= 0)) && (_self->__frontend_parse_exprops_vptr->map_closure_check(_self, mline, mcol, args, pt, pm) != 0))) {
+                                    if ((((seen && (pt >= 0)) && (pm >= 0)) && (_self->__frontend_parse_exprclosure_vptr->map_closure_check(_self, mline, mcol, args, pt, pm) != 0))) {
                                         return (-1);
                                     }
                                     if ((seen && (!afits))) {
@@ -4562,7 +4320,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             break;
                         }
                     }
-                    if (((mi < _self->sym->traits[t].nm) && (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, mline, mcol, _self->arena->nodes[m].text, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0))) {
+                    if (((mi < _self->sym->traits[t].nm) && (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, mline, mcol, _self->arena->nodes[m].text, fname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args))) != 0))) {
                         return (-1);
                     }
 {
@@ -4597,7 +4355,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             }
                         }
                     }
-                    if ((((!_self->sym->traits[t].is_static) && (mi < _self->sym->traits[t].nm)) && (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0))) {
+                    if ((((!_self->sym->traits[t].is_static) && (mi < _self->sym->traits[t].nm)) && (_self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args) == 0))) {
                         int na = bind_outconv_rewrite(_self, m, args, 1, t, mi, "", mline, mcol);
                         if (na < 0) {
                             return (-1);
@@ -4779,126 +4537,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         return m;
     }
-    return n;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_parse_closure(void *self) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char typebuf[MAX_TEXT];
-    char name[MAX_TEXT];
-    char owner[MAX_TEXT];
-    int ci;
-    int pstart;
-    int body;
-    int n;
-    int line;
-    int col;
-    int save_assign;
-    line = _self->lex->tokline;
-    col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-    snprintf(owner, sizeof(owner), "%s", (_self->cur_func ? _self->cur_func : ""));
-    ci = _self->sym->__frontend_sym_symbolops_vptr->closure_new(_self->sym, owner);
-    if (ci < 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-    }
-    _self->sym->closures[ci].line = line;
-    _self->sym->closures[ci].col = col;
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    pstart = _self->sym->nvar;
-    if (_self->sym->__frontend_sym_symbolops_vptr->push_scope(_self->sym) != 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-    }
-    if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
-        for (; ; ) {
-            if (_self->__frontend_parse_exprops_vptr->parse_type(_self, typebuf, sizeof(typebuf)) != 0) {
-                return (-1);
-            }
-            if (_self->fnptr_state) {
-                if ((!_self->fnptr_name[0])) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a parameter name");
-                }
-                snprintf(name, sizeof(name), "%s", _self->fnptr_name);
-            }
-            else {
-                if (_self->lex->tok != T_ID) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a parameter name");
-                }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            }
-            if (_self->sym->__frontend_sym_symbolops_vptr->declare_var(_self->sym, name, typebuf) != 0) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-            }
-            if (_self->sym->closures[ci].nparams >= 16) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a closure takes too many parameters (limit 16)");
-            }
-            if (closure_copy(_self, _self->sym->closures[ci].ptype[_self->sym->closures[ci].nparams], typebuf, "a closure parameter type") != 0) {
-                return (-1);
-            }
-            if (closure_copy(_self, _self->sym->closures[ci].pname[_self->sym->closures[ci].nparams], name, "a closure parameter name") != 0) {
-                return (-1);
-            }
-            _self->sym->closures[ci].nparams++;
-            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                continue;
-            }
-            break;
-        }
-    }
-    if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
-        return (-1);
-    }
-    if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "=>")))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '=>' after a closure's parameter list");
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if (_self->ncl_stack >= 16) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a closure is nested too deeply (limit 16)");
-    }
-    _self->cl_stack[_self->ncl_stack] = ci;
-    _self->cl_pstart[_self->ncl_stack] = pstart;
-    _self->ncl_stack++;
-    _self->try_ban++;
-    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
-        if ((!_self->st_hook)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a block-bodied closure needs the statement parser");
-        }
-        body = _self->st_hook(0, 0);
-        _self->sym->closures[ci].is_block = 1;
-    }
-    else {
-        save_assign = _self->assign_ok;
-        _self->assign_ok = 1;
-        body = _self->__frontend_parse_exprops_vptr->parse_expr(_self);
-        _self->assign_ok = save_assign;
-    }
-    _self->try_ban--;
-    if (body < 0) {
-        return (-1);
-    }
-    _self->sym->closures[ci].body = body;
-    if (closure_walk(_self, ci, body, pstart) != 0) {
-        return (-1);
-    }
-    if (closure_walk_shadow(_self, ci, body) != 0) {
-        return (-1);
-    }
-    if (closure_walk_mutate(_self, ci, body) != 0) {
-        return (-1);
-    }
-    if (((_self->ncl_stack > 0) && (_self->cl_stack[(_self->ncl_stack - 1)] == ci))) {
-        _self->ncl_stack--;
-    }
-    if (_self->sym->__frontend_sym_symbolops_vptr->pop_scope(_self->sym) != 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-    }
-    n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_CLOSURE);
-    if (n < 0) {
-        return (-1);
-    }
-    _self->arena->nodes[n].num = ci;
-    _self->arena->nodes[n].a = body;
     return n;
 }
 
@@ -5248,7 +4886,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     }
                 }
             }
-            if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, ibase, sm, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+            if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, ibase, sm, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args))) != 0) {
                 return (-1);
             }
             mn = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
@@ -5332,7 +4970,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, smsg2);
                                 }
                             }
-                            if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, sibase, sm2, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+                            if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, sibase, sm2, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args))) != 0) {
                                 return (-1);
                             }
                             mn2 = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
@@ -5512,7 +5150,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 snprintf(_self->arena->nodes[mn].text, MAX_TEXT, "%s", _self->arena->nodes[n].text2);
                 snprintf(_self->arena->nodes[mn].text2, MAX_TEXT, "%s", mname);
                 snprintf(_self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
-                if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, mname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+                if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, mname, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args))) != 0) {
                     return (-1);
                 }
 {
@@ -5526,7 +5164,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                             }
                         }
                         if (mi3 < _self->sym->traits[ti3].nm) {
-                            if (_self->__frontend_parse_exprops_vptr->map_closure_check(_self, id_line, id_col, args, ti3, mi3) != 0) {
+                            if (_self->__frontend_parse_exprclosure_vptr->map_closure_check(_self, id_line, id_col, args, ti3, mi3) != 0) {
                                 return (-1);
                             }
                             if (_self->__frontend_parse_exprcallcheck_vptr->argtype_check_static(_self, id_line, id_col, mname, args, ti3, mi3) != 0) {
@@ -5553,7 +5191,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 snprintf(_self->arena->nodes[mn].text, MAX_TEXT, "%s", _self->arena->nodes[n].text2);
                 snprintf(_self->arena->nodes[mn].text2, MAX_TEXT, "%s", qc);
                 snprintf(_self->arena->nodes[mn].text3, MAX_TEXT, "%s", qv);
-                if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, qc, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args))) != 0) {
+                if (_self->__frontend_parse_exprcallcheck_vptr->map_arity(_self, id_line, id_col, _self->arena->nodes[n].text2, qc, (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args))) != 0) {
                     return (-1);
                 }
 {
@@ -5567,7 +5205,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                             }
                         }
                         if (mi3 < _self->sym->traits[ti3].nm) {
-                            if (_self->__frontend_parse_exprops_vptr->map_closure_check(_self, id_line, id_col, args, ti3, mi3) != 0) {
+                            if (_self->__frontend_parse_exprclosure_vptr->map_closure_check(_self, id_line, id_col, args, ti3, mi3) != 0) {
                                 return (-1);
                             }
                             if (_self->__frontend_parse_exprcallcheck_vptr->argtype_check_static(_self, id_line, id_col, qc, args, ti3, mi3) != 0) {
@@ -5602,7 +5240,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 }
                 rest = _self->arena->nodes[args].next;
                 _self->arena->nodes[args].next = (-1);
-                got += _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, rest);
+                got += _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, rest);
                 mn = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
                 if (mn < 0) {
                     return (-1);
@@ -5627,7 +5265,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                             if (((!(_self->sym->traits[ti3].m[mi3].variadic && (got >= _self->sym->traits[ti3].m[mi3].nparams))) && (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, id_line, id_col, qc, got, _self->sym->traits[ti3].m[mi3].nparams) != 0))) {
                                 return (-1);
                             }
-                            if (_self->__frontend_parse_exprops_vptr->map_closure_check(_self, id_line, id_col, rest, ti3, mi3) != 0) {
+                            if (_self->__frontend_parse_exprclosure_vptr->map_closure_check(_self, id_line, id_col, rest, ti3, mi3) != 0) {
                                 return (-1);
                             }
                             if (_self->__frontend_parse_exprcallcheck_vptr->argtype_check_static(_self, id_line, id_col, qc, rest, ti3, mi3) != 0) {
@@ -5912,14 +5550,14 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             if (((fi >= 0) && (_self->__frontend_parse_exprcallcheck_vptr->record_call(_self, _self->arena->nodes[n].text2, id_line) != 0))) {
                 return (-1);
             }
-            if (((args > 0) && (_self->__frontend_parse_exprops_vptr->closure_arg_check(_self, id_line, id_col, _self->arena->nodes[n].text2, args, fi) != 0))) {
+            if (((args > 0) && (_self->__frontend_parse_exprclosure_vptr->closure_arg_check(_self, id_line, id_col, _self->arena->nodes[n].text2, args, fi) != 0))) {
                 return (-1);
             }
             if (fi >= 0) {
                 int got;
                 int want;
                 int tail_ok;
-                got = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args));
+                got = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args));
                 want = _self->sym->funcs[fi].nparams;
                 tail_ok = (_self->sym->funcs[fi].variadic && (got > want));
                 if (((!tail_ok) && (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, id_line, id_col, _self->arena->nodes[n].text2, got, want) != 0))) {
@@ -5930,7 +5568,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 int lc = args;
                 int lk = 0;
                 while (((lc > 0) && (lk < _self->sym->funcs[fi].nparams))) {
-                    int lcl = _self->__frontend_parse_exprops_vptr->arg_is_closure(_self, lc);
+                    int lcl = _self->__frontend_parse_exprclosure_vptr->arg_is_closure(_self, lc);
                     if (((!lcl) && (_self->__frontend_parse_exprtypes_vptr->lit_coerce(_self, (_self->sym->funcs[fi].ptype + (lk * MAX_TEXT)), lc) != 0))) {
                         return (-1);
                     }
@@ -5938,7 +5576,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     lk += (lcl ? 2 : 1);
                 }
             }
-            if (((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0)) && frontend_parse_bind_conv_on())) {
+            if (((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args) == 0)) && frontend_parse_bind_conv_on())) {
                 int pc2 = args;
                 int pk3 = 0;
                 while (((pc2 > 0) && (pk3 < _self->sym->funcs[fi].nparams))) {
@@ -5963,7 +5601,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     pk3++;
                 }
             }
-            if ((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprops_vptr->closure_arg_count(_self, args) == 0))) {
+            if ((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args) == 0))) {
                 int na = bind_outconv_rewrite(_self, n, args, 0, fi, (-1), "", id_line, id_col);
                 if (na < 0) {
                     return (-1);
@@ -6028,7 +5666,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 int k = 0;
                 int first_arg = args;
                 while (((cur > 0) && (k < _self->sym->funcs[fi].nparams))) {
-                    int is_cl = _self->__frontend_parse_exprops_vptr->arg_is_closure(_self, cur);
+                    int is_cl = _self->__frontend_parse_exprclosure_vptr->arg_is_closure(_self, cur);
                     if (((!is_cl) && (strcmp((_self->sym->funcs[fi].ptype + (k * MAX_TEXT)), "struct __ct_slice") == 0))) {
                         int view = _self->__frontend_parse_exprtypes_vptr->slice_view_from_array(_self, cur);
                         if (view < 0) {
@@ -6632,16 +6270,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_args(void *self) {
 }
 
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable = {
-    .type_is_fnptr = frontend_parse_Expr_frontend_parse_ExprOps_type_is_fnptr,
-    .type_is_void_ptr = frontend_parse_Expr_frontend_parse_ExprOps_type_is_void_ptr,
-    .formal_is_env_fn = frontend_parse_Expr_frontend_parse_ExprOps_formal_is_env_fn,
-    .arg_is_closure = frontend_parse_Expr_frontend_parse_ExprOps_arg_is_closure,
-    .closure_arg_count = frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_count,
-    .closure_arg_check = frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_check,
-    .map_closure_check = frontend_parse_Expr_frontend_parse_ExprOps_map_closure_check,
-    .decl_type_compat = frontend_parse_Expr_frontend_parse_ExprOps_decl_type_compat,
-    .closure_bind = frontend_parse_Expr_frontend_parse_ExprOps_closure_bind,
-    .closure_arg_bind = frontend_parse_Expr_frontend_parse_ExprOps_closure_arg_bind,
     .is_type_word = frontend_parse_Expr_frontend_parse_ExprOps_is_type_word,
     .type_append = frontend_parse_Expr_frontend_parse_ExprOps_type_append,
     .generic_instance = frontend_parse_Expr_frontend_parse_ExprOps_generic_instance,
@@ -6686,7 +6314,6 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .brace_arg_ok = frontend_parse_Expr_frontend_parse_ExprOps_brace_arg_ok,
     .static_call_ahead = frontend_parse_Expr_frontend_parse_ExprOps_static_call_ahead,
     .parse_postfix = frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix,
-    .parse_closure = frontend_parse_Expr_frontend_parse_ExprOps_parse_closure,
     .parse_primary = frontend_parse_Expr_frontend_parse_ExprOps_parse_primary,
     .parse_qual_path = frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path,
     .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args
@@ -6776,189 +6403,6 @@ static int closure_ahead(struct frontend_parse_Expr * self) {
         i++;
     }
     return ((s[i] == '=') && (s[(i + 1)] == '>'));
-}
-static int closure_capture_error(struct frontend_parse_Expr * self, int line, const char * msg) {
-    tool_diag_ct_sem_error(line, 1, msg, self->sup->mem->path);
-    tool_diag_ct_sem_note(line, 1, CT_EXPR_CLOSURE_HINT, self->sup->mem->path);
-    return (-1);
-}
-static int closure_copy(struct frontend_parse_Expr * self, char * dst, const char * src, const char * what) {
-    char msg[512];
-    if (strlen(src) >= MAX_TEXT) {
-        snprintf(msg, sizeof(msg), "%s is too long (limit %d)", what, (MAX_TEXT - 1));
-        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, msg);
-    }
-    snprintf(dst, MAX_TEXT, "%s", src);
-    return 0;
-}
-static int closure_capture_add(struct frontend_parse_Expr * self, int ci, int vi, int line) {
-    struct frontend_sym_Closure * c = (&self->sym->closures[ci]);
-    const char * name = self->sym->vars[vi].name;
-    char msg[512];
-    int k;
-    if ((self->sym->vars[vi].autodrop || self->sym->vars[vi].borrowed)) {
-        snprintf(msg, sizeof(msg), "a closure cannot capture '%s' (it is 'own' or 'borrow')", name);
-        return closure_capture_error(self, line, msg);
-    }
-    if (self->sym->vars[vi].is_closure) {
-        return closure_capture_error(self, line, "a closure cannot capture another closure");
-    }
-    if (self->sym->vars[vi].is_array) {
-        snprintf(msg, sizeof(msg), "a closure cannot capture the array '%s' (capture a pointer to it instead)", name);
-        return closure_capture_error(self, line, msg);
-    }
-    if (self->sym->vars[vi].is_slice) {
-        snprintf(msg, sizeof(msg), "a closure cannot capture the slice '%s' (a view cannot outlive its array)", name);
-        return closure_capture_error(self, line, msg);
-    }
-    if (frontend_parse_closure_capture_index(c, name) >= 0) {
-        return 0;
-    }
-    if (c->ncap >= 16) {
-        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a closure takes too many captures (limit 16)");
-    }
-    if (closure_copy(self, c->cap_name[c->ncap], name, "a captured name") != 0) {
-        return (-1);
-    }
-    if (closure_copy(self, c->cap_type[c->ncap], self->sym->vars[vi].type, "a captured type") != 0) {
-        return (-1);
-    }
-    c->ncap++;
-    for (k = (self->ncl_stack - 2); k >= 0; k--) {
-        int oi = self->cl_stack[k];
-        struct frontend_sym_Closure * oc = (&self->sym->closures[oi]);
-        int j;
-        int dup = 0;
-        if (vi >= self->cl_pstart[k]) {
-            continue;
-        }
-        for (j = 0; j < oc->ncap; j++) {
-            if (strcmp(oc->cap_name[j], name) == 0) {
-                dup = 1;
-            }
-        }
-        if (dup) {
-            continue;
-        }
-        if (oc->ncap >= 16) {
-            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a closure takes too many captures (limit 16)");
-        }
-        if (closure_copy(self, oc->cap_name[oc->ncap], name, "a captured name") != 0) {
-            return (-1);
-        }
-        if (closure_copy(self, oc->cap_type[oc->ncap], self->sym->vars[vi].type, "a captured type") != 0) {
-            return (-1);
-        }
-        oc->ncap++;
-    }
-    return 0;
-}
-static int closure_walk(struct frontend_parse_Expr * self, int ci, int n, int pstart) {
-    struct runtime_arena_Node * nd;
-    int vi;
-    if (n < 0) {
-        return 0;
-    }
-    nd = (&self->arena->nodes[n]);
-    if (nd->kind == N_CLOSURE) {
-        return 0;
-    }
-    if (nd->kind == N_CALL) {
-        vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, nd->text2);
-        if (((((vi >= 0) && (vi < pstart)) && (!self->sym->vars[vi].is_global)) && self->sym->vars[vi].is_closure)) {
-            return closure_capture_error(self, nd->line, "a closure cannot capture another closure");
-        }
-    }
-    if (nd->kind == N_VAR) {
-        vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, nd->text2);
-        if (((vi < 0) || (vi >= pstart))) {
-            return 0;
-        }
-        if (self->sym->vars[vi].is_global) {
-            return 0;
-        }
-        return closure_capture_add(self, ci, vi, nd->line);
-    }
-    if (closure_walk(self, ci, nd->a, pstart) != 0) {
-        return (-1);
-    }
-    if (closure_walk(self, ci, nd->b, pstart) != 0) {
-        return (-1);
-    }
-    if (closure_walk(self, ci, nd->c, pstart) != 0) {
-        return (-1);
-    }
-    if (closure_walk(self, ci, nd->d, pstart) != 0) {
-        return (-1);
-    }
-    return closure_walk(self, ci, nd->next, pstart);
-}
-static int closure_walk_shadow(struct frontend_parse_Expr * self, int ci, int n) {
-    struct runtime_arena_Node * nd;
-    struct frontend_sym_Closure * c = (&self->sym->closures[ci]);
-    char msg[512];
-    int k;
-    if (n < 0) {
-        return 0;
-    }
-    nd = (&self->arena->nodes[n]);
-    if (nd->kind == N_CLOSURE) {
-        return 0;
-    }
-    if (nd->kind == N_DECL) {
-        for (k = 0; k < c->ncap; k++) {
-            if (strcmp(c->cap_name[k], nd->text2) == 0) {
-                snprintf(msg, sizeof(msg), "a local cannot shadow the captured '%s'", nd->text2);
-                return closure_capture_error(self, nd->line, msg);
-            }
-        }
-    }
-    if (closure_walk_shadow(self, ci, nd->a) != 0) {
-        return (-1);
-    }
-    if (closure_walk_shadow(self, ci, nd->b) != 0) {
-        return (-1);
-    }
-    if (closure_walk_shadow(self, ci, nd->c) != 0) {
-        return (-1);
-    }
-    if (closure_walk_shadow(self, ci, nd->d) != 0) {
-        return (-1);
-    }
-    return closure_walk_shadow(self, ci, nd->next);
-}
-static int closure_walk_mutate(struct frontend_parse_Expr * self, int ci, int n) {
-    struct runtime_arena_Node * nd;
-    struct frontend_sym_Closure * c = (&self->sym->closures[ci]);
-    if (n < 0) {
-        return 0;
-    }
-    nd = (&self->arena->nodes[n]);
-    if (nd->kind == N_CLOSURE) {
-        return 0;
-    }
-    if (((((nd->kind == N_ASSIGN) && (nd->a >= 0)) && (self->arena->nodes[nd->a].kind == N_VAR)) && (frontend_parse_closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0))) {
-        return closure_capture_error(self, self->arena->nodes[nd->a].line, "a captured variable cannot be reassigned inside a closure");
-    }
-    if ((((((nd->kind == N_PRE) || (nd->kind == N_POST)) && (nd->a >= 0)) && (self->arena->nodes[nd->a].kind == N_VAR)) && (frontend_parse_closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0))) {
-        return closure_capture_error(self, self->arena->nodes[nd->a].line, "a captured variable cannot be reassigned inside a closure");
-    }
-    if (((((nd->kind == N_ADDR) && (nd->a >= 0)) && (self->arena->nodes[nd->a].kind == N_VAR)) && (frontend_parse_closure_capture_index(c, self->arena->nodes[nd->a].text2) >= 0))) {
-        return closure_capture_error(self, self->arena->nodes[nd->a].line, "the address of a captured variable cannot be taken inside a closure");
-    }
-    if (closure_walk_mutate(self, ci, nd->a) != 0) {
-        return (-1);
-    }
-    if (closure_walk_mutate(self, ci, nd->b) != 0) {
-        return (-1);
-    }
-    if (closure_walk_mutate(self, ci, nd->c) != 0) {
-        return (-1);
-    }
-    if (closure_walk_mutate(self, ci, nd->d) != 0) {
-        return (-1);
-    }
-    return closure_walk_mutate(self, ci, nd->next);
 }
 static int container_sugar_kind(struct frontend_parse_Expr * self, int n) {
     if (n < 0) {

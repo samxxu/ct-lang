@@ -261,7 +261,7 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_mismatch(voi
         if (((!skip) && (_self->arena->nodes[cur].kind == N_CAST))) {
             skip = 1;
         }
-        if (((!skip) && _self->__frontend_parse_exprops_vptr->arg_is_closure(_self, cur))) {
+        if (((!skip) && _self->__frontend_parse_exprclosure_vptr->arg_is_closure(_self, cur))) {
             skip = 1;
         }
         if (((((!skip) && (_self->arena->nodes[cur].kind == N_NUM)) && (_self->arena->nodes[cur].num == 0)) && strchr(ft, '*'))) {
@@ -308,7 +308,7 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_mismatch(voi
                 return 1;
             }
         }
-        if (_self->__frontend_parse_exprops_vptr->arg_is_closure(_self, cur)) {
+        if (_self->__frontend_parse_exprclosure_vptr->arg_is_closure(_self, cur)) {
             k += 2;
         }
         else {

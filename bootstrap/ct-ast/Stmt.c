@@ -4146,7 +4146,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
             }
         }
         frontend_parse_expr_view_bind(_self->ex, name, _self->arena->nodes[n].a);
-        if ((((_self->arena->nodes[n].a >= 0) && (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_CLOSURE)) && (_self->ex->__frontend_parse_exprops_vptr->closure_bind(_self->ex, _self->arena->nodes[_self->arena->nodes[n].a].num, typebuf, name) != 0))) {
+        if ((((_self->arena->nodes[n].a >= 0) && (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_CLOSURE)) && (_self->ex->__frontend_parse_exprclosure_vptr->closure_bind(_self->ex, _self->arena->nodes[_self->arena->nodes[n].a].num, typebuf, name) != 0))) {
             return (-1);
         }
         if ((((_self->arena->nodes[n].a >= 0) && (_self->arena->nodes[_self->arena->nodes[n].a].kind != N_CLOSURE)) && (check_closure_decl_init(_self, n, name, dcol) != 0))) {
