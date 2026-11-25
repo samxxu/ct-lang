@@ -21,16 +21,6 @@ namespace frontend::parse;
 /* `cur_func` and the call table stay the parser's (the driver reads them back),
    so this object points at them; `calls` points into storage that unit owns. */
 pub trait ExprOps {
-    int  is_type_word(const char *w);
-
-    int  type_append(char *out, int cap, int *n, const char *tok);
-
-    int  parse_type(char *out, int cap);
-
-    /* Phase 29: read `Name<arg[, arg]>` (the lexer sits on `Name`) and append
-       the encoded instance tag to `out`. */
-    int  parse_inst_type(char *out, int cap);
-
     /* Phase 29 V29-4: a `Vec` / `Map` handle is a two-field struct in C, so the
        subscript and brace-initializer spellings C would reject (`struct Vec_int`
        is not an array, `{ "k": 1 }` is not an aggregate) are refused here with a
@@ -119,6 +109,19 @@ pub trait ExprOps {
     int  parse_qual_path(char *name, int ncap, char *cname, int ccap, char *qpath, int qcap,
                          int *form);
 }
+
+pub trait ExprTypeParse {
+    int  is_type_word(const char *w);
+
+    int  type_append(char *out, int cap, int *n, const char *tok);
+
+    int  parse_type(char *out, int cap);
+
+    /* Phase 29: read `Name<arg[, arg]>` (the lexer sits on `Name`) and append
+       the encoded instance tag to `out`. */
+    int  parse_inst_type(char *out, int cap);
+}
+
 
 pub trait ExprInstantiate {
     /* Phase 29: create (or reuse) the monomorphised row for `Name<c1, c2>` and
@@ -535,4 +538,4 @@ pub struct Expr {
     int  ntry_cleanup;
     int  try_cleanup_node[512];
     int  try_cleanup_head[512];
-} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut, ExprCallCheck, ExprClosure, ExprInstantiate;
+} use ExprOps, ExprBinding, ExprTypes, ExprTraitInst, ExprSubscript, ExprOptional, ExprTry, ExprNew, ExprAdt, ExprRecvMut, ExprCallCheck, ExprClosure, ExprInstantiate, ExprTypeParse;

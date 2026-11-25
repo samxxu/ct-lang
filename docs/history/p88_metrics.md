@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10966 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=63491 io_cap=1024
+     emitted_before=48223 emitted_after=63681 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -96,6 +96,10 @@
       `ExprInstantiate` trait，方法体与 `expr_generic_param` 搬入
       `frontend/parse/ExprInstantiate.h.ct`，Emitter.h.ct 不变（10966），发射 C
       63302 -> 63491，切片清单仍为 76)
+     (v1-PH-2 S1a-1 B4 后复测：`ExprOps` 的 4 个类型解析方法拆成
+      `ExprTypeParse` trait，方法体、`type_only_qualifiers` 与
+      `g_expr_inst_override` 搬入 `frontend/parse/ExprTypeParse.h.ct`，
+      Emitter.h.ct 不变（10966），发射 C 63491 -> 63681，切片清单仍为 76)
 -->
 
 ## 1 切片清单

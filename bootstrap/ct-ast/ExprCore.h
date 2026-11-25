@@ -87,10 +87,6 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct frontend_parse_ExprOps_vtbl {
-    int (*is_type_word)(void *, const char *);
-    int (*type_append)(void *, char *, int, int *, const char *);
-    int (*parse_type)(void *, char *, int);
-    int (*parse_inst_type)(void *, char *, int);
     int (*container_index_check)(void *, int);
     int (*static_ctype)(void *, int, char *, int, int *, int);
     int (*ctype_expand)(void *, const char *, char *, int, int);
@@ -128,6 +124,17 @@ struct frontend_parse_ExprOps_vtbl {
 struct frontend_parse_ExprOps_iface {
     void *self;
     const struct frontend_parse_ExprOps_vtbl *vt;
+};
+
+struct frontend_parse_ExprTypeParse_vtbl {
+    int (*is_type_word)(void *, const char *);
+    int (*type_append)(void *, char *, int, int *, const char *);
+    int (*parse_type)(void *, char *, int);
+    int (*parse_inst_type)(void *, char *, int);
+};
+struct frontend_parse_ExprTypeParse_iface {
+    void *self;
+    const struct frontend_parse_ExprTypeParse_vtbl *vt;
 };
 
 struct frontend_parse_ExprInstantiate_vtbl {
@@ -346,6 +353,7 @@ struct frontend_parse_Expr {
     const struct frontend_parse_ExprCallCheck_vtbl *__frontend_parse_exprcallcheck_vptr;
     const struct frontend_parse_ExprClosure_vtbl *__frontend_parse_exprclosure_vptr;
     const struct frontend_parse_ExprInstantiate_vtbl *__frontend_parse_exprinstantiate_vptr;
+    const struct frontend_parse_ExprTypeParse_vtbl *__frontend_parse_exprtypeparse_vptr;
 };
 
 #endif

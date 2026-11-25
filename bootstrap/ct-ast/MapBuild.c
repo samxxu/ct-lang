@@ -453,7 +453,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if (((_self->lex->tok == T_EOF) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a source type after 'binding'");
     }
-    if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, src, sizeof(src)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, src, sizeof(src)) != 0) {
         return (-1);
     }
     if (((!src[0]) || (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "->"))))) {
@@ -463,7 +463,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if (((_self->lex->tok == T_EOF) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a target type after '->'");
     }
-    if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, dst, sizeof(dst)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, dst, sizeof(dst)) != 0) {
         return (-1);
     }
     if ((!dst[0])) {
@@ -784,7 +784,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
                 if (((_self->lex->tok == T_EOF) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type after 'for type'");
                 }
-                if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, host_type, sizeof(host_type)) != 0) {
+                if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, host_type, sizeof(host_type)) != 0) {
                     return (-1);
                 }
                 if (((!host_type[0]) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "[")))) {

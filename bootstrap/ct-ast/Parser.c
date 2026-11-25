@@ -332,7 +332,7 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_parse_type_alias(vo
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     _self->sym->alias_decl++;
     _self->ex->saw_atomic = 0;
-    if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, target, sizeof(target)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, target, sizeof(target)) != 0) {
         _self->sym->alias_decl--;
         _self->sym->__frontend_sym_typealiasops_vptr->abort_type_alias(_self->sym);
         return (-1);
@@ -617,7 +617,7 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "duplicate _Alignas on one declaration");
         }
         np = 0;
-        if (_self->ex->__frontend_parse_exprops_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), "_Alignas") != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), "_Alignas") != 0) {
             return (-1);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -635,7 +635,7 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
             else {
                 _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
             }
-            if (_self->ex->__frontend_parse_exprops_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), tbuf) != 0) {
+            if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), tbuf) != 0) {
                 return (-1);
             }
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
@@ -1235,7 +1235,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     func_line = _self->lex->tokline;
     func_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
     _self->ex->saw_atomic = 0;
-    if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
         return (-1);
     }
     ret_slice = 0;
@@ -1895,7 +1895,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
                 }
             }
         }
-        if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
             return (-1);
         }
         is_slice = 0;
@@ -2248,7 +2248,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_field_def(void *s
             fpub = 1;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         }
-        if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
             return (-1);
         }
         _self->field_pub = fpub;
@@ -2753,7 +2753,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
                 char fname[MAX_TEXT];
                 fline = _self->lex->tokline;
                 fcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, ftype, sizeof(ftype)) != 0) {
+                if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ftype, sizeof(ftype)) != 0) {
                     return (-1);
                 }
                 if (_self->lex->tok != T_ID) {
@@ -3124,7 +3124,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
         return t;
     }
     _self->ex->saw_atomic = 0;
-    if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
         return (-1);
     }
     if (_self->ex->saw_atomic) {
@@ -3376,7 +3376,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
             return tool_diag_ct_sem_error(mline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "receiver mutability is written after the parameter list: 'int f() mut;'", _self->mem->path);
         }
         _self->sup->map_sig = _self->unit_is_map;
-        rty = _self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, ret, sizeof(ret));
+        rty = _self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret));
         _self->sup->map_sig = 0;
         if (rty != 0) {
             return (-1);
@@ -3495,7 +3495,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
                     }
                 }
                 _self->sup->map_sig = _self->unit_is_map;
-                rty = _self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, ptype, sizeof(ptype));
+                rty = _self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ptype, sizeof(ptype));
                 _self->sup->map_sig = 0;
                 if (rty != 0) {
                     return (-1);
@@ -3792,7 +3792,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "static"))) {
             return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a static method cannot implement a trait", _self->mem->path);
         }
-        if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
             return (-1);
         }
         if (_self->ex->fnptr_state) {
@@ -4037,7 +4037,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
         if ((is_pub && ((!_self->unit_is_hdr) || (!type_is_pub)))) {
             return tool_diag_ct_sem_error(mline, 1, ((adt >= 0) ? "a pub method needs a pub ADT in a .h.ct unit" : "a pub method needs a pub struct in a .h.ct unit"), _self->mem->path);
         }
-        if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
             return (-1);
         }
         if (_self->ex->fnptr_state) {
@@ -4454,7 +4454,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                 return tool_diag_ct_sem_error(mline, 1, "a pub method needs a pub struct in a .h.ct unit", _self->mem->path);
             }
         }
-        if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
             return (-1);
         }
         if (_self->ex->fnptr_state) {
@@ -5087,7 +5087,7 @@ static int parse_trait_inst_args(struct frontend_parse_Parser * self, char * tna
             return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a generic trait has too many type arguments");
         }
         self->ex->inst_canon[0] = 0;
-        if (self->ex->__frontend_parse_exprops_vptr->parse_type(self->ex, abuf, sizeof(abuf)) != 0) {
+        if (self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(self->ex, abuf, sizeof(abuf)) != 0) {
             return (-1);
         }
         if (frontend_sym_ct_type_canon((self->ex->inst_canon[0] ? self->ex->inst_canon : abuf), arg[nargs], MAX_TEXT) != 0) {

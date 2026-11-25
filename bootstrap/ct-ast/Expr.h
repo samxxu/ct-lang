@@ -33,6 +33,7 @@
 #include "ExprCallCheck.h"
 #include "ExprClosure.h"
 #include "ExprInstantiate.h"
+#include "ExprTypeParse.h"
 
 
 struct ct_buf;

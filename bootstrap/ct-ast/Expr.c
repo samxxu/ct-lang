@@ -25,6 +25,7 @@
 #include "ExprCallCheck.h"
 #include "ExprClosure.h"
 #include "ExprInstantiate.h"
+#include "ExprTypeParse.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -213,7 +214,6 @@ static int ctype_mcall(struct frontend_parse_Expr *, int, char *, int, int *, in
 static int ctype_slice_index(struct frontend_parse_Expr *, int, char *, int, int *, int);
 static int ctype_slice_get(struct frontend_parse_Expr *, int, char *, int, int *, int);
 static int ctype_slice_range(struct frontend_parse_Expr *, int, char *, int, int *, int);
-static int type_only_qualifiers(const char *);
 static int bind_conv_explicit(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_conv_explicit_to(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_outconv_rewrite(struct frontend_parse_Expr *, int, int, int, int, int, const char *, int, int);
@@ -221,843 +221,7 @@ static int bind_conv_arith(struct frontend_parse_Expr *, int, int, int, int);
 static int ensure_arg_capacity(struct frontend_parse_Expr *, int);
 void frontend_parse_ct_expr_bind(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Expr * frontend_parse_expr_get(void);
-static char frontend_parse_g_expr_inst_override[160];
-static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable, .__frontend_parse_exprcallcheck_vptr = &frontend_parse_Expr_frontend_parse_ExprCallCheck_vtable, .__frontend_parse_exprclosure_vptr = &frontend_parse_Expr_frontend_parse_ExprClosure_vtable, .__frontend_parse_exprinstantiate_vptr = &frontend_parse_Expr_frontend_parse_ExprInstantiate_vtable };
-static int frontend_parse_Expr_frontend_parse_ExprOps_is_type_word(void *self, const char * w) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    (void)(_self);
-    return ((((((((((((((((((((((((((((((((((strcmp(w, "void") == 0) || (strcmp(w, "char") == 0)) || (strcmp(w, "short") == 0)) || (strcmp(w, "int") == 0)) || (strcmp(w, "long") == 0)) || (strcmp(w, "float") == 0)) || (strcmp(w, "double") == 0)) || (strcmp(w, "signed") == 0)) || (strcmp(w, "unsigned") == 0)) || (strcmp(w, "_Bool") == 0)) || (strcmp(w, "bool") == 0)) || (strcmp(w, "const") == 0)) || (strcmp(w, "volatile") == 0)) || (strcmp(w, "restrict") == 0)) || (strcmp(w, "__restrict") == 0)) || (strcmp(w, "__restrict__") == 0)) || (strcmp(w, "struct") == 0)) || (strcmp(w, "union") == 0)) || (strcmp(w, "enum") == 0)) || (strcmp(w, "size_t") == 0)) || (strcmp(w, "ssize_t") == 0)) || (strcmp(w, "ptrdiff_t") == 0)) || (strcmp(w, "wchar_t") == 0)) || (strcmp(w, "va_list") == 0)) || (strcmp(w, "int8_t") == 0)) || (strcmp(w, "int16_t") == 0)) || (strcmp(w, "int32_t") == 0)) || (strcmp(w, "int64_t") == 0)) || (strcmp(w, "uint8_t") == 0)) || (strcmp(w, "uint16_t") == 0)) || (strcmp(w, "uint32_t") == 0)) || (strcmp(w, "uint64_t") == 0)) || (strcmp(w, "FILE") == 0)) || (strcmp(w, "DIR") == 0));
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_type_append(void *self, char * out, int cap, int * n, const char * tok) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int w;
-    (void)(_self);
-    if ((*n) > 0) {
-        if (((*n) + 1) >= cap) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-        }
-        out[(*n)] = ' ';
-        (*n)++;
-    }
-    w = snprintf((out + (*n)), (size_t)((cap - (*n))), "%s", tok);
-    if (((w < 0) || (w >= (cap - (*n))))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-    }
-    (*n) += w;
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_parse_type(void *self, char * out, int cap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    int n;
-    (void)(_self);
-    n = 0;
-    out[0] = 0;
-    if (_self->decl_prefix[0]) {
-        int pn = snprintf(out, (size_t)(cap), "%s", _self->decl_prefix);
-        if (((pn < 0) || (pn >= cap))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-        }
-        n = pn;
-        _self->decl_prefix[0] = 0;
-    }
-    _self->fnptr_state = 0;
-    _self->saw_trait = 0;
-    _self->fnptr_name[0] = 0;
-    _self->fnptr_dims[0] = 0;
-    _self->last_bare_tag[0] = 0;
-    for (; ; ) {
-        if ((((n == 0) && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "atomic"))) {
-            _self->saw_atomic = 1;
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Atomic"))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "use one atomic spelling, not both");
-            }
-            if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "own"))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'own' must precede the type; an owned pointer cannot be atomic");
-            }
-            if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "int"))) {
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "_Atomic(int)") != 0) {
-                    return (-1);
-                }
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                continue;
-            }
-            if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "long"))) {
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "_Atomic(long)") != 0) {
-                    return (-1);
-                }
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                continue;
-            }
-            if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "bool"))) {
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "_Atomic(_Bool)") != 0) {
-                    return (-1);
-                }
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                continue;
-            }
-            if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "void"))) {
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*"))) {
-                    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "_Atomic(void *)") != 0) {
-                        return (-1);
-                    }
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    continue;
-                }
-            }
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "atomic supports only int, long, void * and bool");
-        }
-        if (((_self->lex->tok == T_ID) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Alignas") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Atomic")))) {
-            int need_paren;
-            int depth;
-            const char * word;
-            need_paren = _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Alignas");
-            word = (need_paren ? "_Alignas" : "_Atomic");
-            if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), word) != 0) {
-                return (-1);
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
-                if (need_paren) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '(' after _Alignas");
-                }
-                continue;
-            }
-            depth = 0;
-            for (; ; ) {
-                char tbuf[MAX_TEXT];
-                if (_self->lex->tok == T_EOF) {
-                    if (need_paren) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated _Alignas");
-                    }
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated _Atomic");
-                }
-                if (((_self->lex->tok == T_NUM) && (!_self->lex->tokfloat))) {
-                    snprintf(tbuf, sizeof(tbuf), "%ld", _self->lex->toknum);
-                }
-                else {
-                    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
-                }
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), tbuf) != 0) {
-                    return (-1);
-                }
-                if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
-                    depth++;
-                }
-                if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")"))) {
-                    depth--;
-                    if (depth == 0) {
-                        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                        break;
-                    }
-                }
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            }
-            continue;
-        }
-        if (((_self->lex->tok == T_ID) && _self->__frontend_parse_exprops_vptr->is_type_word(_self, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)))) {
-            if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "struct")) {
-                char sname[MAX_TEXT];
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                if (((_self->lex->tok == T_ID) && (frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0))) {
-                    if (_self->__frontend_parse_exprops_vptr->parse_inst_type(_self, out, cap) != 0) {
-                        return (-1);
-                    }
-                    n = (int)(strlen(out));
-                    continue;
-                }
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-                    return (-1);
-                }
-                if (_self->lex->tok != T_ID) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a struct name");
-                }
-                if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), sname, sizeof(sname)) != 0) {
-                    return (-1);
-                }
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), sname) != 0) {
-                    return (-1);
-                }
-                if (_self->sup->__frontend_parse_supportops_vptr->add_type(_self->sup, sname, 1) != 0) {
-                    return (-1);
-                }
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                continue;
-            }
-            if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) != 0) {
-                return (-1);
-            }
-            if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "enum")) {
-                char sname[MAX_TEXT];
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                if (_self->lex->tok != T_ID) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected an enum name");
-                }
-                if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), sname, sizeof(sname)) != 0) {
-                    return (-1);
-                }
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), sname) != 0) {
-                    return (-1);
-                }
-                if (_self->sup->__frontend_parse_supportops_vptr->add_type(_self->sup, sname, 5) != 0) {
-                    return (-1);
-                }
-            }
-            else {
-                if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "union")) {
-                    char sname[MAX_TEXT];
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    if (_self->lex->tok != T_ID) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a union name");
-                    }
-                    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), sname, sizeof(sname)) != 0) {
-                        return (-1);
-                    }
-                    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), sname) != 0) {
-                        return (-1);
-                    }
-                    if (_self->sup->__frontend_parse_supportops_vptr->add_type(_self->sup, sname, 6) != 0) {
-                        return (-1);
-                    }
-                }
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            continue;
-        }
-        if (_self->lex->tok == T_ID) {
-            int ti;
-            char rname[MAX_TEXT];
-            char iface[MAX_TEXT];
-{
-                const char * qp = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
-                while ((((*qp) == ' ') || ((*qp) == '\t'))) {
-                    qp++;
-                }
-                if (((qp[0] == ':') && (qp[1] == ':'))) {
-                    char qn[MAX_TEXT];
-                    int qw;
-                    int qti;
-                    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, qn, sizeof(qn));
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    for (; ; ) {
-                        if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::")))) {
-                            break;
-                        }
-                        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                        if (_self->lex->tok != T_ID) {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type name after '::'");
-                        }
-                        qw = (int)(strlen(qn));
-                        if (((qw + 1) + (int)(_self->lex->tokstr.len)) >= (int)(sizeof(qn))) {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified type name is too long");
-                        }
-                        qn[qw] = '_';
-                        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, ((qn + qw) + 1), ((sizeof(qn) - (size_t)(qw)) - 1));
-                        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    }
-{
-                        const char * resq = qn;
-                        char bare[MAX_TEXT];
-                        if (strncmp(qn, "core_utf16_", 11) == 0) {
-                            snprintf(bare, sizeof(bare), "%s", (qn + 11));
-                            resq = bare;
-                        }
-                        else {
-                            if (strncmp(qn, "core_", 5) == 0) {
-                                snprintf(bare, sizeof(bare), "%s", (qn + 5));
-                                if (strcmp(bare, "box") == 0) {
-                                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'box<T>' is no longer supported; write 'Box<T>'");
-                                }
-                                if (frontend_sym_ct_tmpl_find(bare) >= 0) {
-                                    snprintf(frontend_parse_g_expr_inst_override, sizeof(frontend_parse_g_expr_inst_override), "%s", bare);
-                                    if (_self->__frontend_parse_exprops_vptr->parse_inst_type(_self, out, cap) != 0) {
-                                        return (-1);
-                                    }
-                                    n = (int)(strlen(out));
-                                    continue;
-                                }
-                                resq = bare;
-                            }
-                        }
-                        if (_self->sym->__frontend_sym_symbolops_vptr->resolve_type(_self->sym, resq, rname, sizeof(rname)) != 0) {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown qualified type name");
-                        }
-                    }
-                    qti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rname);
-                    if (qti < 0) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown qualified type name");
-                    }
-                    if (_self->sym->type_kind[qti] == 1) {
-                        if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-                            return (-1);
-                        }
-                    }
-                    else {
-                        if (_self->sym->type_kind[qti] == 5) {
-                            if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "enum") != 0) {
-                                return (-1);
-                            }
-                        }
-                        else {
-                            if (_self->sym->type_kind[qti] == 6) {
-                                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "union") != 0) {
-                                    return (-1);
-                                }
-                            }
-                            else {
-                                if (_self->sym->type_kind[qti] == 7) {
-                                    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-                                        return (-1);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), rname) != 0) {
-                        return (-1);
-                    }
-                    _self->sup->__frontend_parse_supportops_vptr->add_type(_self->sup, rname, _self->sym->type_kind[qti]);
-                    continue;
-                }
-            }
-{
-                int gpi;
-                int gdone = 0;
-                for (gpi = 0; ((!gdone) && (gpi < _self->in_generic_ntparam)); gpi++) {
-                    const char * gpn = _self->in_generic_tparam[gpi];
-                    if ((((!gpn) || (!gpn[0])) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, gpn)))) {
-                        continue;
-                    }
-                    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), gpn) != 0) {
-                        return (-1);
-                    }
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    gdone = 1;
-                }
-                if (gdone) {
-                    continue;
-                }
-            }
-            if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box")) {
-                const char * bp = ((_self->lex->src + _self->lex->tokstart) + 3);
-                int bd = 0;
-                int bclosed = 0;
-                while ((((*bp) == ' ') || ((*bp) == '\t'))) {
-                    bp++;
-                }
-                if ((*bp) == '<') {
-                    bp++;
-                    while (((*bp) && ((*bp) != '\n'))) {
-                        if ((*bp) == '<') {
-                            bd++;
-                        }
-                        else {
-                            if ((*bp) == '>') {
-                                if (bd == 0) {
-                                    bclosed = 1;
-                                    break;
-                                }
-                                bd--;
-                            }
-                        }
-                        bp++;
-                    }
-                }
-                if ((!bclosed)) {
-                    break;
-                }
-                if (frontend_sym_ct_tmpl_find("Box") < 0) {
-                    break;
-                }
-                if (_self->__frontend_parse_exprops_vptr->parse_inst_type(_self, out, cap) != 0) {
-                    return (-1);
-                }
-                n = (int)(strlen(out));
-                continue;
-            }
-            if (frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) {
-                if (_self->__frontend_parse_exprops_vptr->parse_inst_type(_self, out, cap) != 0) {
-                    return (-1);
-                }
-                n = (int)(strlen(out));
-                continue;
-            }
-{
-                const char * qp = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
-                while ((((*qp) == ' ') || ((*qp) == '\t'))) {
-                    qp++;
-                }
-                if ((((*qp) == '<') && (((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Vec") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Map")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Option")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Result")))) {
-                    char gmsg[MAX_TEXT];
-                    snprintf(gmsg, sizeof(gmsg), "unresolved generic type '%.*s' (is the builtin layer missing? set CT_CORE_DIR, or the legacy CT_STD_DIR)", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, gmsg);
-                }
-                if ((((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Vec") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Map")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Option")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Result"))) {
-                    char gmsg[MAX_TEXT];
-                    snprintf(gmsg, sizeof(gmsg), "generic struct '%.*s' needs type arguments in a type position", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, gmsg);
-                }
-            }
-            if (_self->sym->__frontend_sym_typealiasops_vptr->find_type_alias(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) {
-                char etext[MAX_TEXT];
-                if (_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), etext, sizeof(etext)) != 0) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-                }
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), etext) != 0) {
-                    return (-1);
-                }
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                continue;
-            }
-            if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "auto")) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'auto' is not a type in CT (write the type explicitly)");
-            }
-            if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rname, sizeof(rname)) != 0) {
-                return (-1);
-            }
-            ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rname);
-            if (ti < 0) {
-{
-                    char apath[1024];
-                    int aline = 0;
-                    if (_self->sym->__frontend_sym_typealiasops_vptr->find_global_type_alias(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), apath, sizeof(apath), (&aline)) == 0) {
-                        char amsg[1400];
-                        snprintf(amsg, sizeof(amsg), "type alias '%s' is declared in %s:%d but this unit does not import it", _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), apath, aline);
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, amsg);
-                    }
-                }
-                if ((_self->sup->map_sig && ((n == 0) || type_only_qualifiers(out)))) {
-                    if ((!_self->sup->__frontend_parse_supportops_vptr->map_std_typedef(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)))) {
-                        char umsg[MAX_TEXT * 3];
-                        snprintf(umsg, sizeof(umsg), "unknown type '%s' in a .m.ct trait signature; ""declare 'pub type %s = <C spelling>;' in this unit ""or include the header that typedefs it", _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex));
-                        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), umsg, _self->sup->mem->path);
-                    }
-                    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), rname) != 0) {
-                        return (-1);
-                    }
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    continue;
-                }
-                if (n == 0) {
-                    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), rname) != 0) {
-                        return (-1);
-                    }
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    continue;
-                }
-                break;
-            }
-            if (_self->sym->type_kind[ti] == 1) {
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-                    return (-1);
-                }
-                snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "struct %s", rname);
-            }
-            else {
-                if (_self->sym->type_kind[ti] == 5) {
-                    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "enum") != 0) {
-                        return (-1);
-                    }
-                    snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "enum %s", rname);
-                }
-                else {
-                    if (_self->sym->type_kind[ti] == 6) {
-                        if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "union") != 0) {
-                            return (-1);
-                        }
-                        snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "union %s", rname);
-                    }
-                    else {
-                        if (_self->sym->type_kind[ti] == 7) {
-                            if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-                                return (-1);
-                            }
-                            snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "struct %s", rname);
-                        }
-                        else {
-                            if (_self->sym->type_kind[ti] == 3) {
-                                int sti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, rname);
-                                _self->saw_trait = 1;
-                                if (((sti >= 0) && _self->sym->traits[sti].is_static)) {
-                                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a static trait has no interface value");
-                                }
-                                if (((sti >= 0) && (_self->sym->traits[sti].ntparams > 0))) {
-                                    if (_self->__frontend_parse_exprtraitinst_vptr->parse_trait_inst_type(_self, out, cap) != 0) {
-                                        return (-1);
-                                    }
-                                    n = (int)(strlen(out));
-                                    continue;
-                                }
-                                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-                                    return (-1);
-                                }
-                                if (snprintf(iface, sizeof(iface), "%s_iface", rname) >= (int)(sizeof(iface))) {
-                                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type name is too long");
-                                }
-                                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), iface) != 0) {
-                                    return (-1);
-                                }
-                                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                                continue;
-                            }
-                        }
-                    }
-                }
-            }
-            if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), rname) != 0) {
-                return (-1);
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            continue;
-        }
-        if ((((!_self->type_no_ptr) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*"))) {
-            if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "*") != 0) {
-                return (-1);
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            continue;
-        }
-        break;
-    }
-    if ((((!_self->type_no_ptr) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
-        int save_tok;
-        int save_line;
-        int save_srcline;
-        int save_bol;
-        long save_num;
-        size_t save_pos;
-        const char * save_text_ptr;
-        int save_text_len;
-        save_tok = _self->lex->tok;
-        save_num = _self->lex->toknum;
-        save_line = _self->lex->tokline;
-        save_pos = _self->lex->pos;
-        save_srcline = _self->lex->line;
-        save_bol = _self->lex->bol;
-        save_text_ptr = _self->lex->tokstr.ptr;
-        save_text_len = _self->lex->tokstr.len;
-        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*"))) {
-            char plist[MAX_TEXT];
-            char dname[MAX_TEXT];
-            char fdims[MAX_TEXT];
-            int pn;
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (((_self->lex->tok == T_PUNCT) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "nested function pointers are not supported");
-            }
-            if (_self->lex->tok != T_ID) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a name in the function-pointer declarator");
-            }
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, dname, sizeof(dname));
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            fdims[0] = 0;
-            while (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "["))) {
-                char dim[MAX_TEXT];
-                char cur[MAX_TEXT];
-                int unsized;
-                unsized = 0;
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                if (_self->lex->tok == T_NUM) {
-                    snprintf(dim, sizeof(dim), "[%ld]", _self->lex->toknum);
-                }
-                else {
-                    if (_self->lex->tok == T_ID) {
-                        snprintf(dim, sizeof(dim), "[%.*s]", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
-                    }
-                    else {
-                        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "]"))) {
-                            snprintf(dim, sizeof(dim), "[]");
-                            unsized = 1;
-                        }
-                        else {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected an array length");
-                        }
-                    }
-                }
-                if ((!unsized)) {
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                }
-                if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "]") != 0) {
-                    return (-1);
-                }
-                if (snprintf(cur, sizeof(cur), "%s%s", fdims, dim) >= MAX_TEXT) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "array dimensions are too long");
-                }
-                snprintf(fdims, sizeof(fdims), "%s", cur);
-            }
-            if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
-                return (-1);
-            }
-            if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "(") != 0) {
-                return (-1);
-            }
-            pn = 0;
-            plist[0] = 0;
-            if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
-                for (; ; ) {
-                    char pt[MAX_TEXT];
-                    const char * joiner;
-                    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "..."))) {
-                        if (((pn == 0) || (strcmp(plist, "void") == 0))) {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a variadic function pointer needs a named parameter before '...'");
-                        }
-                        if ((pn + 6) > MAX_TEXT) {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a function-pointer signature is too long");
-                        }
-                        snprintf((plist + pn), (size_t)((MAX_TEXT - pn)), "%s", ", ...");
-                        pn += 5;
-                        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                        break;
-                    }
-                    if (_self->__frontend_parse_exprops_vptr->parse_type(_self, pt, sizeof(pt)) != 0) {
-                        return (-1);
-                    }
-                    if (_self->fnptr_state) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "nested function pointers are not supported");
-                    }
-                    if (_self->lex->tok == T_ID) {
-                        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    }
-                    joiner = ((pn > 0) ? ", " : "");
-                    if ((((pn + (int)(strlen(joiner))) + (int)(strlen(pt))) + 6) > MAX_TEXT) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a function-pointer signature is too long");
-                    }
-                    snprintf((plist + pn), (size_t)((MAX_TEXT - pn)), "%s%s", joiner, pt);
-                    pn += (int)((strlen(joiner) + strlen(pt)));
-                    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
-                        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                        continue;
-                    }
-                    break;
-                }
-            }
-            if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
-                return (-1);
-            }
-            if (pn == 0) {
-                snprintf(plist, sizeof(plist), "%s", "void");
-            }
-{
-                char sig[MAX_TEXT];
-                snprintf(sig, sizeof(sig), "(*)(%s)", plist);
-                if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), sig) != 0) {
-                    return (-1);
-                }
-            }
-            snprintf(_self->fnptr_name, MAX_TEXT, "%s", dname);
-            snprintf(_self->fnptr_dims, MAX_TEXT, "%s", fdims);
-            _self->fnptr_state = 1;
-        }
-        else {
-            _self->lex->tok = save_tok;
-            _self->lex->toknum = save_num;
-            _self->lex->tokline = save_line;
-            _self->lex->pos = save_pos;
-            _self->lex->line = save_srcline;
-            _self->lex->bol = save_bol;
-            _self->lex->tokstr.ptr = save_text_ptr;
-            _self->lex->tokstr.len = save_text_len;
-        }
-    }
-    if (n == 0) {
-        char msg[MAX_TEXT];
-        snprintf(msg, sizeof(msg), "expected a type (tok %d '%.*s')", _self->lex->tok, _self->lex->tokstr.len, _self->lex->tokstr.ptr);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-    }
-    return 0;
-}
-
-static int frontend_parse_Expr_frontend_parse_ExprOps_parse_inst_type(void *self, char * out, int cap) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char tname[MAX_TEXT];
-    char enc[MAX_TEXT];
-    char * * carg = 0;
-    char * * ctype = 0;
-    char canon[MAX_TEXT];
-    char abuf[MAX_TEXT];
-    struct frontend_sym_StructTmpl * tp;
-    int ccap = 0;
-    int tccap = 0;
-    int n;
-    int ti2;
-    int tn;
-    int nargs;
-    int nt2;
-    int pline;
-    int pcol;
-    n = (int)(strlen(out));
-    if (frontend_parse_g_expr_inst_override[0]) {
-        snprintf(tname, sizeof(tname), "%s", frontend_parse_g_expr_inst_override);
-        frontend_parse_g_expr_inst_override[0] = 0;
-    }
-    else {
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tname, sizeof(tname));
-        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    }
-    if (strcmp(tname, "box") == 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'box<T>' is no longer supported; write 'Box<T>'");
-    }
-    ti2 = frontend_sym_ct_tmpl_find(tname);
-    tp = frontend_sym_ct_tmpls((&tn));
-    if (((!tp) || (ti2 < 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "internal: template row vanished");
-    }
-    nt2 = tp[ti2].ntparams;
-    if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<")))) {
-        char msg[MAX_TEXT * 2];
-        snprintf(msg, sizeof(msg), "generic struct '%s' needs type arguments in a type position", tname);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    nargs = 0;
-    pline = 0;
-    pcol = 1;
-    for (; ; ) {
-        carg = frontend_sym_ct_rows_reserve(carg, ccap, (nargs + 1), (&ccap));
-        ctype = frontend_sym_ct_rows_reserve(ctype, tccap, (nargs + 1), (&tccap));
-        if (((((!carg) || (ccap < (nargs + 1))) || (!ctype)) || (tccap < (nargs + 1)))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic struct has too many type arguments");
-        }
-        if (nargs == 0) {
-            pline = _self->lex->tokline;
-            pcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-        }
-        _self->inst_canon[0] = 0;
-        _self->type_depth++;
-        if (_self->type_depth > 4) {
-            _self->type_depth--;
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "generic type arguments nest deeper than 4");
-        }
-        if (_self->__frontend_parse_exprops_vptr->parse_type(_self, abuf, sizeof(abuf)) != 0) {
-            _self->type_depth--;
-            return (-1);
-        }
-        _self->type_depth--;
-        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "["))) {
-            int gl = _self->lex->tokline;
-            int gc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "]"))) {
-                return tool_diag_ct_sem_error(gl, gc, ((strcmp(tname, "Box") == 0) ? "a slice 'T[]' cannot be stored in Box<T>; it is a non-owning view" : "a slice 'T[]' cannot be a generic type argument; it is a non-owning view"), _self->sup->mem->path);
-            }
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '>' after the type arguments");
-        }
-        if ((((((((!abuf[0]) || (strcmp(abuf, "void") == 0)) || strchr(abuf, '[')) || strchr(abuf, '(')) || strchr(abuf, ')')) || (strncmp(abuf, "const ", 6) == 0)) || (strncmp(abuf, "volatile ", 9) == 0))) {
-            char msg[MAX_TEXT * 2];
-            snprintf(msg, sizeof(msg), "type argument '%s' cannot instantiate a generic struct", abuf);
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-        }
-        snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);
-        if (_self->inst_canon[0]) {
-            if (snprintf(carg[nargs], MAX_TEXT, "%s", abuf) >= MAX_TEXT) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-            }
-        }
-        else {
-            if (frontend_sym_ct_type_canon(abuf, carg[nargs], MAX_TEXT) != 0) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-            }
-        }
-        nargs++;
-        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            continue;
-        }
-        break;
-    }
-    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">>"))) {
-        _self->lex->tokstr.ptr = ((_self->lex->src + _self->lex->tokstart) + 1);
-        _self->lex->tokstr.len = 1;
-        _self->lex->pos = (_self->lex->pos - 1);
-        _self->lex->tokstart = (_self->lex->tokstart + 1);
-    }
-    if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">")))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '>' after the type arguments");
-    }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-    if (nargs != nt2) {
-        char msg[MAX_TEXT * 2];
-        snprintf(msg, sizeof(msg), "generic struct '%s' takes %d type arguments, %d given", tname, nt2, nargs);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
-    }
-{
-        int gi;
-        int sym = 0;
-        int rl;
-        char raw[MAX_TEXT];
-        for (gi = 0; gi < nargs; gi++) {
-            if (frontend_parse_expr_generic_param(_self, carg[gi])) {
-                sym = 1;
-            }
-        }
-        if (sym) {
-            rl = snprintf(raw, sizeof(raw), "%s<", tname);
-            for (gi = 0; gi < nargs; gi++) {
-                int wr = snprintf((raw + rl), (sizeof(raw) - (size_t)(rl)), "%s%s", ((gi == 0) ? "" : ","), carg[gi]);
-                if ((((rl < 0) || (wr < 0)) || ((rl + wr) >= (int)(sizeof(raw))))) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-                }
-                rl += wr;
-            }
-            if ((rl + 2) > (int)(sizeof(raw))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-            }
-            raw[rl] = '>';
-            raw[(rl + 1)] = 0;
-            snprintf(_self->inst_canon, sizeof(_self->inst_canon), "%s", raw);
-            snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "%s", raw);
-            if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), raw) != 0) {
-                return (-1);
-            }
-            return 0;
-        }
-    }
-    if ((((strcmp(tname, "Map") == 0) && (nargs >= 1)) && (strcmp(carg[0], "struct Str") == 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "Map key type 'Str' is a borrowed view; use 'String' (owning)");
-    }
-    if (((((((strcmp(tname, "Map") == 0) && (nargs >= 1)) && (strcmp(carg[0], "int") != 0)) && (strcmp(carg[0], "long") != 0)) && (strcmp(carg[0], "char*") != 0)) && (strcmp(carg[0], "struct String") != 0))) {
-        char kmsg[MAX_TEXT * 2];
-        snprintf(kmsg, sizeof(kmsg), "Map does not support key type '%s' (key types: int, long, char *, String)", carg[0]);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, kmsg);
-    }
-    if (frontend_sym_ct_inst_encode(tname, nargs, carg, enc, MAX_TEXT) != 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the instantiated name exceeds 159 characters; shorten the template or its arguments");
-    }
-    if (_self->__frontend_parse_exprinstantiate_vptr->inst_make(_self, tname, nargs, carg, ctype, enc, MAX_TEXT, 0, pline, pcol) != 0) {
-        return (-1);
-    }
-    snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "struct %s", enc);
-{
-        int gi;
-        int cl;
-        cl = snprintf(canon, sizeof(canon), "%s<", tname);
-        for (gi = 0; gi < nargs; gi++) {
-            int wr = snprintf((canon + cl), (sizeof(canon) - (size_t)(cl)), "%s%s", ((gi == 0) ? "" : ","), carg[gi]);
-            if ((((cl < 0) || (wr < 0)) || ((cl + wr) >= (int)(sizeof(canon))))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type name is too long");
-            }
-            cl += wr;
-        }
-        if ((cl + 2) > (int)(sizeof(canon))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type name is too long");
-        }
-        canon[cl] = '>';
-        canon[(cl + 1)] = 0;
-    }
-    snprintf(_self->inst_canon, sizeof(_self->inst_canon), "%s", canon);
-    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-        return (-1);
-    }
-    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), enc) != 0) {
-        return (-1);
-    }
-    return 0;
-}
-
+static struct frontend_parse_Expr frontend_parse_g_expr = { .__frontend_parse_exprops_vptr = &frontend_parse_Expr_frontend_parse_ExprOps_vtable, .__frontend_parse_exprbinding_vptr = &frontend_parse_Expr_frontend_parse_ExprBinding_vtable, .__frontend_parse_exprtypes_vptr = &frontend_parse_Expr_frontend_parse_ExprTypes_vtable, .__frontend_parse_exprtraitinst_vptr = &frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable, .__frontend_parse_exprsubscript_vptr = &frontend_parse_Expr_frontend_parse_ExprSubscript_vtable, .__frontend_parse_exproptional_vptr = &frontend_parse_Expr_frontend_parse_ExprOptional_vtable, .__frontend_parse_exprtry_vptr = &frontend_parse_Expr_frontend_parse_ExprTry_vtable, .__frontend_parse_exprnew_vptr = &frontend_parse_Expr_frontend_parse_ExprNew_vtable, .__frontend_parse_expradt_vptr = &frontend_parse_Expr_frontend_parse_ExprAdt_vtable, .__frontend_parse_exprrecvmut_vptr = &frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable, .__frontend_parse_exprcallcheck_vptr = &frontend_parse_Expr_frontend_parse_ExprCallCheck_vtable, .__frontend_parse_exprclosure_vptr = &frontend_parse_Expr_frontend_parse_ExprClosure_vtable, .__frontend_parse_exprinstantiate_vptr = &frontend_parse_Expr_frontend_parse_ExprInstantiate_vtable, .__frontend_parse_exprtypeparse_vptr = &frontend_parse_Expr_frontend_parse_ExprTypeParse_vtable };
 static int frontend_parse_Expr_frontend_parse_ExprOps_parse_array_dims(void *self, int n) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     int warned = 0;
@@ -1348,7 +512,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_tok_is_type_name(void *sel
                     }
                 }
                 else {
-                    if (_self->__frontend_parse_exprops_vptr->is_type_word(_self, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex))) {
+                    if (_self->__frontend_parse_exprtypeparse_vptr->is_type_word(_self, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex))) {
                         res = 1;
                     }
                     else {
@@ -2170,7 +1334,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && _self->__frontend_parse_exprops_vptr->next_is_type_name(_self))) {
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (_self->__frontend_parse_exprops_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
+            if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
                 return (-1);
             }
             if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
@@ -2186,7 +1350,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
         }
         if (_self->__frontend_parse_exprops_vptr->tok_is_type_name(_self)) {
             _self->type_no_ptr = 1;
-            rc = _self->__frontend_parse_exprops_vptr->parse_type(_self, tbuf, sizeof(tbuf));
+            rc = _self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf));
             _self->type_no_ptr = 0;
             if (rc != 0) {
                 return (-1);
@@ -2220,7 +1384,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
     if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && _self->__frontend_parse_exprops_vptr->next_is_type_name(_self))) {
         char tbuf[MAX_TEXT];
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        if (_self->__frontend_parse_exprops_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
+        if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
             return (-1);
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
@@ -3067,7 +2231,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
             if (((((strcmp(fname, "as") == 0) || (strcmp(fname, "to") == 0)) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
                 char targ[MAX_TEXT];
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                if (_self->__frontend_parse_exprops_vptr->parse_type(_self, targ, sizeof(targ)) != 0) {
+                if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, targ, sizeof(targ)) != 0) {
                     return (-1);
                 }
                 if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ">") != 0) {
@@ -4022,7 +3186,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "(") != 0) {
             return (-1);
         }
-        if (_self->__frontend_parse_exprops_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
+        if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
             return (-1);
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ",") != 0) {
@@ -4107,7 +3271,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ",") != 0) {
             return (-1);
         }
-        if (_self->__frontend_parse_exprops_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
+        if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
             return (-1);
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
@@ -4155,7 +3319,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             char smsg[MAX_TEXT + 64];
             int mn;
             ibase[0] = 0;
-            if (_self->__frontend_parse_exprops_vptr->parse_inst_type(_self, ibase, sizeof(ibase)) != 0) {
+            if (_self->__frontend_parse_exprtypeparse_vptr->parse_inst_type(_self, ibase, sizeof(ibase)) != 0) {
                 return (-1);
             }
             if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::")))) {
@@ -4410,7 +3574,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "recursive generic calls are not supported");
                 }
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                if (_self->__frontend_parse_exprops_vptr->parse_type(_self, targ, sizeof(targ)) != 0) {
+                if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, targ, sizeof(targ)) != 0) {
                     return (-1);
                 }
                 if (((_self->fnptr_state || (strcmp(targ, "void") == 0)) || (strcmp(targ, _self->sym->funcs[gfi].tparam) == 0))) {
@@ -5579,10 +4743,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_args(void *self) {
 }
 
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable = {
-    .is_type_word = frontend_parse_Expr_frontend_parse_ExprOps_is_type_word,
-    .type_append = frontend_parse_Expr_frontend_parse_ExprOps_type_append,
-    .parse_type = frontend_parse_Expr_frontend_parse_ExprOps_parse_type,
-    .parse_inst_type = frontend_parse_Expr_frontend_parse_ExprOps_parse_inst_type,
     .parse_array_dims = frontend_parse_Expr_frontend_parse_ExprOps_parse_array_dims,
     .tok_is_type_name = frontend_parse_Expr_frontend_parse_ExprOps_tok_is_type_name,
     .next_is_type_name = frontend_parse_Expr_frontend_parse_ExprOps_next_is_type_name,
@@ -6311,28 +5471,6 @@ static int ctype_slice_range(struct frontend_parse_Expr * self, int n, char * ou
     (void)(depth);
     if (snprintf(out, cap, "%s", "struct __ct_slice") >= cap) {
         return 0;
-    }
-    return 1;
-}
-static int type_only_qualifiers(const char * spell) {
-    const char * p;
-    int n;
-    p = spell;
-    while ((((*p) == ' ') || ((*p) == '\t'))) {
-        p++;
-    }
-    while ((*p)) {
-        n = 0;
-        while (((p[n] && (p[n] != ' ')) && (p[n] != '\t'))) {
-            n++;
-        }
-        if ((!((((((n == 5) && (strncmp(p, "const", 5) == 0)) || ((n == 8) && (strncmp(p, "volatile", 8) == 0))) || ((n == 8) && (strncmp(p, "restrict", 8) == 0))) || ((n == 10) && (strncmp(p, "__restrict", 10) == 0))) || ((n == 12) && (strncmp(p, "__restrict__", 12) == 0))))) {
-            return 0;
-        }
-        p += n;
-        while ((((*p) == ' ') || ((*p) == '\t'))) {
-            p++;
-        }
     }
     return 1;
 }

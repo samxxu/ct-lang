@@ -251,7 +251,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
         save_text_ptr = _self->lex->tokstr.ptr;
         save_text_len = _self->lex->tokstr.len;
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        look = ((_self->lex->tok == T_ID) && ((_self->ex->__frontend_parse_exprops_vptr->is_type_word(_self->ex, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Atomic")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "own")));
+        look = ((_self->lex->tok == T_ID) && ((_self->ex->__frontend_parse_exprtypeparse_vptr->is_type_word(_self->ex, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Atomic")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "own")));
         _self->lex->tok = save_tok;
         _self->lex->toknum = save_num;
         _self->lex->tokfloat = save_float;
@@ -315,7 +315,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
             }
         }
     }
-    if (_self->ex->__frontend_parse_exprops_vptr->is_type_word(_self->ex, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex))) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->is_type_word(_self->ex, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex))) {
         return 1;
     }
     if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rn, sizeof(rn)) != 0) {
@@ -1617,7 +1617,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "duplicate _Alignas on one declaration");
         }
         np = 0;
-        if (_self->ex->__frontend_parse_exprops_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), "_Alignas") != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), "_Alignas") != 0) {
             return (-1);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -1635,7 +1635,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             else {
                 _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
             }
-            if (_self->ex->__frontend_parse_exprops_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), tbuf) != 0) {
+            if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), tbuf) != 0) {
                 return (-1);
             }
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
@@ -3747,7 +3747,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
     dline = _self->lex->tokline;
     iline = dline;
     icol = dcol;
-    if (_self->ex->__frontend_parse_exprops_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
         return (-1);
     }
     is_slice = 0;

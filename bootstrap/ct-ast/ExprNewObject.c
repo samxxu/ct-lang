@@ -203,7 +203,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_new_ahead(void *self) {
                 res = 1;
             }
             else {
-                if (_self->__frontend_parse_exprops_vptr->is_type_word(_self, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex))) {
+                if (_self->__frontend_parse_exprtypeparse_vptr->is_type_word(_self, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex))) {
                     res = 1;
                 }
                 else {
@@ -265,7 +265,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
         return tool_diag_ct_sem_error(nline, ncol, "'new' needs a named struct type before its initializer, as in 'new Point { 1, 2 }'", _self->sup->mem->path);
     }
-    if (_self->__frontend_parse_exprops_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
+    if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
         return (-1);
     }
     if (strncmp(tbuf, "struct ", 7) != 0) {

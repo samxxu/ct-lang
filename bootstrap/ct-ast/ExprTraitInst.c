@@ -222,7 +222,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_typ
             _self->type_depth--;
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "generic type arguments nest deeper than 4");
         }
-        if (_self->__frontend_parse_exprops_vptr->parse_type(_self, abuf, sizeof(abuf)) != 0) {
+        if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, abuf, sizeof(abuf)) != 0) {
             _self->type_depth--;
             return (-1);
         }
@@ -309,10 +309,10 @@ static int frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_typ
     snprintf(_self->inst_canon, sizeof(_self->inst_canon), "%s", canon);
     snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "struct %s", iface);
     _self->saw_trait = 1;
-    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
+    if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
         return (-1);
     }
-    if (_self->__frontend_parse_exprops_vptr->type_append(_self, out, cap, (&n), iface) != 0) {
+    if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), iface) != 0) {
         return (-1);
     }
     return 0;

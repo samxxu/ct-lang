@@ -453,7 +453,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_parse_closure(void *se
     }
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
         for (; ; ) {
-            if (_self->__frontend_parse_exprops_vptr->parse_type(_self, typebuf, sizeof(typebuf)) != 0) {
+            if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, typebuf, sizeof(typebuf)) != 0) {
                 return (-1);
             }
             if (_self->fnptr_state) {
