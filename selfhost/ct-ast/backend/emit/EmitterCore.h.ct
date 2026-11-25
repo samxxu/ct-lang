@@ -82,16 +82,6 @@ pub trait EmitOps {
        slice (`struct __ct_slice`) is expected becomes a `{ptr,len}` view. */
     int  emit_value_for(const char *want, int n);
 
-    int  expr_unstable(int n);
-
-    int  hoist_rvalue(int n);
-
-    int  hoist_scan(int n, int top);
-
-    int  emit_hoists(int ind);
-
-    int  hoist_expr(int n, int ind);
-
     int  emit_cond(int n);
 
     int  emit_indent(int n);
@@ -145,6 +135,19 @@ pub trait EmitOps {
 
     int  fail_from(int n, const char *msg);
 }
+
+pub trait EmitHoist {
+    int  expr_unstable(int n);
+
+    int  hoist_rvalue(int n);
+
+    int  hoist_scan(int n, int top);
+
+    int  emit_hoists(int ind);
+
+    int  hoist_expr(int n, int ind);
+}
+
 
 pub trait EmitInvariant {
     int  invariant_edge(int head, int err_exit, int at);
@@ -311,4 +314,4 @@ pub struct Emitter {
        be retained nor released. `sb_blk` holds the binding depth at each
        statement block so a `break` / `continue` can release what the skipped
        closing brace would have. The literals are the documented caps. */
-} use EmitOps, EmitterTryOps, EmitInvariant;
+} use EmitOps, EmitterTryOps, EmitInvariant, EmitHoist;

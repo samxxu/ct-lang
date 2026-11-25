@@ -1,0 +1,450 @@
+/*
+ * EmitHoist.h.ct - hoisting of unstable operands (SH-94 S1a-1, pure move out of Emitter.h.ct).
+ *
+ * The method bodies are byte-identical to the ones Emitter.h.ct held; the
+ * `Emitter` type and every trait declaration live in EmitterCore.h.ct, so this unit
+ * imports Core instead of the host and the import graph stays acyclic.
+ * Emitter.h.ct imports this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+import frontend::sym::SymbolsTypeText;
+import backend::emit::Init;
+import frontend::lex::Lexer;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable::MapBind as MapBind;
+import frontend::module::MapTable;
+import frontend::module::Unit;
+import frontend::parse::Expr;
+import frontend::sym::Symbols::Field as Field;
+import frontend::sym::Symbols::MethodSig as MethodSig;
+import frontend::sym::Symbols::Closure as Closure;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
+import backend::emit::EmitterText;
+import backend::emit::EmitterQuery;
+import backend::emit::EmitterMapText;
+import backend::emit::EmitterCore;
+import tool::sh::Sh;
+import backend::emit::EmitterTry;
+import backend::emit::EmitInvariant;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_TEXT   160
+#define MAX_HOISTS 4
+#define MAX_HOISTS_MAX 65536
+#define N_MATSEQ 73
+#define N_INTO 63
+#define N_INTO_SELF 64
+#define MAX_INTOS 4
+#define MAX_INTOS_MAX 65536
+#define MAX_PARAMS 16
+#define MAX_PARAMS_MAX 65536
+#define N_PP      2
+#define N_FUNC    3
+#define N_BLOCK   4
+#define N_RET     5
+#define N_EXPR    6
+#define N_CALL    7
+#define N_NUM     8
+#define N_STR     9
+#define N_VAR     10
+#define N_BIN     11
+#define N_DECL    12
+#define N_ASSIGN  13
+#define N_IF      14
+#define N_WHILE   15
+#define N_FOR     16
+#define N_UNARY   17
+#define N_POST    18
+#define N_STRUCT  20
+#define N_TYPEDEF 21
+#define N_GLOBAL  22
+#define N_FIELD   23
+#define N_MEMBER  24
+#define N_ARROW   25
+#define N_INDEX   26
+#define N_ADDR    27
+#define N_DEREF   28
+#define N_MCALL   30
+#define N_RAW     31
+#define N_IMPL    33
+#define N_BOX     34
+#define N_CAST    35
+#define N_SIZEOF  36
+#define N_TERN    37
+#define N_OPT     72
+#define N_NEWOBJ  77
+#define N_BREAK   38
+#define N_CONT    39
+#define N_DECLS   40
+#define N_DELETE  41
+#define N_SWITCH  42
+#define N_ADTCTOR 81
+#define N_ARM     79
+#define N_BIND    80
+#define N_MATCH   78
+#define N_CASE    43
+#define N_DOWHILE 44
+#define N_ENUM    45
+#define N_ENUMVAL 46
+#define N_OFFSETOF 47
+#define N_UNION   48
+#define N_LABEL   49
+#define N_GOTO    50
+#define N_COMPOUND 51
+#define N_EMPTY   52
+#define N_VAARG   53
+#define N_FNUM    54
+#define N_SASSERT 55
+#define N_FIELDS  56
+#define N_PRE     57
+#define N_RAW_TEXT 58
+#define N_CLOSURE 59
+#define N_LOOP    60
+#define N_FOREACH 62
+#define N_INIT_RANGE 61
+#define N_INIT_BRACE 65
+#define N_INIT_MBRACE 67
+#define N_DEFER_RUN 70
+#define N_DEFER 69
+#define N_TRY 71
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET   76
+#define B_SUB 2
+#define B_MUL 3
+#define B_DIV 4
+#define B_LT  5
+#define B_GT  6
+#define B_LE  7
+#define B_GE  8
+#define B_EQ  9
+#define B_NE  10
+#define B_MOD 11
+#define B_AND 12
+#define B_OR  13
+#define B_XOR 14
+#define B_BAND 15
+#define B_BOR  16
+#define B_SHL  17
+#define B_SHR  18
+#define B_COMMA 19
+#define U_NEG 1
+#define U_NOT 2
+#define U_BNOT 3
+#define P_INC 1
+#define MAX_LAYOUT_DEPTH 32
+#define MAX_LAYOUT_ADTS 64
+#define MAX_LAYOUT_ADTS_MAX 65536
+#define MAX_LAYOUT_INSTS 128
+#define MAX_LAYOUT_INSTS_MAX 65536
+
+namespace backend::emit;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct EmitHoist {
+    int unused;
+}
+
+pub int ensure_hoist_capacity(struct Emitter *self, int need)
+{
+    int cap;
+    int *grown;
+    if (need <= self->hoistcap) return 0;
+    cap = self->hoistcap > 0 ? self->hoistcap : MAX_HOISTS;
+    while (cap < need && cap < MAX_HOISTS_MAX) cap *= 2;
+    if (cap > MAX_HOISTS_MAX) cap = MAX_HOISTS_MAX;
+    if (need > cap) return self->fail("out of memory");
+    grown = (int *)realloc(self->hoist_calls, (size_t)cap * sizeof(*grown));
+    if (!grown) return self->fail("out of memory");
+    memset(grown + self->hoistcap, 0, (size_t)(cap - self->hoistcap) * sizeof(*grown));
+    self->hoist_calls = grown;
+    self->hoistcap = cap;
+    return 0;
+}
+
+pub int ensure_into_capacity(struct Emitter *self, int need)
+{
+    int cap;
+    int *grown;
+    if (need <= self->intocap) return 0;
+    cap = self->intocap > 0 ? self->intocap : MAX_INTOS;
+    while (cap < need && cap < MAX_INTOS_MAX) cap *= 2;
+    if (cap > MAX_INTOS_MAX) cap = MAX_INTOS_MAX;
+    if (need > cap) return self->fail("out of memory");
+    grown = (int *)realloc(self->into_nodes, (size_t)cap * sizeof(*grown));
+    if (!grown) return self->fail("out of memory");
+    memset(grown + self->intocap, 0, (size_t)(cap - self->intocap) * sizeof(*grown));
+    self->into_nodes = grown;
+    self->intocap = cap;
+    return 0;
+}
+
+impl EmitHoist for Emitter {
+    int expr_unstable(int n)
+    {
+        int k;
+        (void)self;
+        if (n < 0) return 0;
+        k = self->arena->nodes[n].kind;
+        if (k == N_CALL) return self->arena->nodes[n].text3[0] ? 0 : 1;
+        if (k == N_POST || k == N_PRE || k == N_ASSIGN) return 1;
+        if (k == N_INDEX || k == N_BIN)
+            return self->expr_unstable(self->arena->nodes[n].a)
+                || self->expr_unstable(self->arena->nodes[n].b);
+        if (k == N_MEMBER || k == N_ARROW || k == N_UNARY
+            || k == N_ADDR || k == N_DEREF)
+            return self->expr_unstable(self->arena->nodes[n].a);
+        return 0;
+    }
+
+    int hoist_rvalue(int n)
+    {
+        int saved, root;
+        (void)self;
+        self->nhoist = 0;
+        self->nopt = 0;
+        root = (self->arena->nodes[n].kind == N_ASSIGN) ? self->arena->nodes[n].b : self->arena->nodes[n].a;
+        saved = self->arena->nodes[n].next;
+        self->arena->nodes[n].next = -1;
+        if (self->hoist_scan(root, 1) != 0) {
+            self->arena->nodes[n].next = saved;
+            return -1;
+        }
+        self->arena->nodes[n].next = saved;
+        return 0;
+    }
+
+    int hoist_scan(int n, int top)
+    {
+        int root, lvl, i, nc, *chain = 0, chaincap = 0;
+        (void)self;
+
+        if (n < 0) return 0;
+        /* PH-53: a non-identifier optional receiver is named once. The
+           declaration lands at the statement head; the assignment stays in the
+           conditional, so `f()` is still evaluated at most once and only when
+           the surrounding expression reaches it. */
+        if (self->arena->nodes[n].kind == N_OPT
+            && self->arena->nodes[n].a >= 0
+            && self->arena->nodes[self->arena->nodes[n].a].kind != N_VAR) {
+            if (self->nopt >= 8)
+                return self->fail_from(n, "too many optional-chain temporaries in one statement");
+            snprintf(self->arena->nodes[n].text3, MAX_TEXT, "__ct_opt%d", self->ntmp);
+            self->ntmp++;
+            self->opt_nodes[self->nopt] = n;
+            self->nopt++;
+        }
+        /* Phase 30: an `into` receiver is materialised once, and its block is
+           spliced in front of the statement. Do not walk `b` here -- those are
+           statements, and they get their own hoists when they are emitted. */
+        if (self->arena->nodes[n].kind == N_INTO) {
+            if (ensure_into_capacity(self, self->ninto + 1) != 0)
+                return -1;
+            /* §2.8: a chained segment's receiver is the inner segment, so the
+               inner promotion is recorded (and numbered) first. */
+            if (self->arena->nodes[n].a >= 0
+                && self->hoist_scan(self->arena->nodes[n].a, 0) != 0) return -1;
+            snprintf(self->arena->nodes[n].text3, MAX_TEXT, "__ct_recv%d", self->ntmp);
+            self->ntmp++;
+            self->into_nodes[self->ninto] = n;
+            self->ninto++;
+            return 0;
+        }
+        /* A type-host call (aux 6) expands as a straight textual recipe: the
+           receiver is substituted once and nothing takes its address, so a
+           call result in an argument position compiles as written and needs
+           no temporary. Only dynamic dispatch materialises its receiver. */
+        if (!self->opt_scan
+            && self->arena->nodes[n].kind == N_MCALL
+            && self->arena->nodes[n].aux != 6) {
+            /* LANG-13: collect the whole receiver chain and name it innermost
+               first. Every level of `v["a"]["b"]["c"]` is a call result whose
+               address the next level would take, so a chain of any depth needs
+               one temporary per level. Only the receiver path is walked, so the
+               optional / `into` bookkeeping a recursive `hoist_scan` would
+               repeat is not redone; the recursion below sees `text3` set on
+               each named node and skips it. */
+            nc = 0;
+            lvl = n;
+            for (;;) {
+                int ok = 0;
+                char bt[MAX_TEXT];
+                root = self->arena->nodes[lvl].a;
+                while (root >= 0 && (self->arena->nodes[root].kind == N_MEMBER
+                                     || self->arena->nodes[root].kind == N_ARROW))
+                    root = self->arena->nodes[root].a;
+                if (root < 0 || self->arena->nodes[root].text3[0]) break;
+                if (self->arena->nodes[root].kind == N_CALL) {
+                    ok = self->sym->find_func(self->arena->nodes[root].text2) >= 0;
+                    /* a call through a function pointer: the parser left the
+                       result type on the node, so it can be named */
+                    if (!ok && self->arena->nodes[root].text[0]
+                        && (self->arena->nodes[lvl].aux == 9
+                            || self->arena->nodes[lvl].aux == 10)) ok = 1;
+                }
+                /* Phase 31 O3: a chained subscript (`g[i][j]`, `b.mv()[0]`)
+                   puts the inner call in receiver position; its result is an
+                   rvalue, so it must be named before its address is taken.
+                   aux 5/6 reuse `text3` for their own spelling and never
+                   materialise. */
+                if (!ok && self->arena->nodes[root].kind == N_MCALL
+                    && self->arena->nodes[root].aux != 5
+                    && self->arena->nodes[root].aux != 6) {
+                    int rd = 0;
+                    if (hoist_ctype(root, bt, sizeof bt, &rd) && rd == 0
+                        && materializable_ctype(bt)) ok = 1;
+                }
+                if (!ok) break;
+                if (nc >= chaincap) {
+                    int ncap = chaincap > 0 ? chaincap * 2 : MAX_HOISTS;
+                    int *grown;
+                    if (ncap > MAX_HOISTS_MAX) ncap = MAX_HOISTS_MAX;
+                    if (nc >= ncap) {
+                        free(chain);
+                        return self->fail_from(n, "out of memory");
+                    }
+                    grown = (int *)realloc(chain, (size_t)ncap * sizeof(*grown));
+                    if (!grown) {
+                        free(chain);
+                        return self->fail_from(n, "out of memory");
+                    }
+                    chain = grown;
+                    chaincap = ncap;
+                }
+                chain[nc] = root;
+                nc++;
+                if (self->arena->nodes[root].kind != N_MCALL) break;
+                lvl = root;
+            }
+            if (nc > 0) {
+                if (!top) {
+                    free(chain);
+                    return self->fail_from(n, "a method call on a temporary is only allowed at the start of a statement or of an assignment");
+                }
+                for (i = nc - 1; i >= 0; i--) {
+                    if (ensure_hoist_capacity(self, self->nhoist + 1) != 0) {
+                        free(chain);
+                        return -1;
+                    }
+                    snprintf(self->arena->nodes[chain[i]].text3, MAX_TEXT,
+                             "__ct_tmp%d", self->ntmp);
+                    self->ntmp++;
+                    self->hoist_calls[self->nhoist] = chain[i];
+                    self->nhoist++;
+                }
+                free(chain);
+            }
+        }
+        if (self->arena->nodes[n].a >= 0 && self->hoist_scan(self->arena->nodes[n].a, 0) != 0) return -1;
+        if (self->arena->nodes[n].b >= 0 && self->hoist_scan(self->arena->nodes[n].b, 0) != 0) return -1;
+        if (self->arena->nodes[n].c >= 0 && self->hoist_scan(self->arena->nodes[n].c, 0) != 0) return -1;
+        if (self->arena->nodes[n].d >= 0 && self->hoist_scan(self->arena->nodes[n].d, 0) != 0) return -1;
+        if (self->arena->nodes[n].next >= 0 && self->hoist_scan(self->arena->nodes[n].next, 0) != 0) return -1;
+        return 0;
+    }
+
+    int emit_hoists(int ind)
+    {
+        int i, f, k, cat, s;
+        char hty[MAX_TEXT];
+        int hd;
+        (void)self;
+
+        /* SH-111 I4: every receiver the scan decided to hoist already has a
+           dedicated temporary, and no two temps share a spelling. Checked before the
+           first declaration is written, so a collision never reaches C. */
+        if (self->invariant_temp_check() != 0) return -1;
+        for (i = 0; i < self->nopt; i++) {
+            self->emit_indent(ind);
+            fprintf(self->out, "%s %s;\n",
+                    self->arena->nodes[self->opt_nodes[i]].text4,
+                    self->arena->nodes[self->opt_nodes[i]].text3);
+        }
+        for (i = 0; i < self->nhoist; i++) {
+            hd = 0;
+            hty[0] = 0;
+            f = (self->arena->nodes[self->hoist_calls[i]].kind == N_CALL)
+                    ? self->sym->find_func(self->arena->nodes[self->hoist_calls[i]].text2)
+                    : -1;
+            if (f >= 0) snprintf(hty, sizeof hty, "%s", self->sym->funcs[f].ret);
+            else if (self->arena->nodes[self->hoist_calls[i]].kind == N_CALL
+                     && self->arena->nodes[self->hoist_calls[i]].text[0])
+                snprintf(hty, sizeof hty, "%s",
+                         self->arena->nodes[self->hoist_calls[i]].text);
+            else if (!hoist_ctype(self->hoist_calls[i], hty, sizeof hty, &hd)
+                     || hd != 0)
+                return self->fail_from(self->hoist_calls[i], "cannot infer the type of a hoisted receiver");
+            self->emit_indent(ind);
+            fprintf(self->out, "%s %s = ", hty, self->arena->nodes[self->hoist_calls[i]].text3);
+            self->raw_call = self->hoist_calls[i];
+            if (self->emit_expr(self->hoist_calls[i]) != 0) {
+                self->raw_call = -1;
+                return -1;
+            }
+            self->raw_call = -1;
+            fputs(";\n", self->out);
+        }
+    /* Phase 30 §2.3: promote by value category. A pointer receiver is
+           copied; a left-value value receiver is addressed in place; a
+           right-value value receiver is moved into a fresh local. The block's
+           statements then splice in at the same indentation. */
+        for (i = 0; i < self->ninto; i++) {
+            int save;
+            k = self->into_nodes[i];
+            cat = self->arena->nodes[k].aux;
+            self->emit_indent(ind);
+            if (cat == 2) {
+                /* addressed in place, spelled like a user declaration */
+                fprintf(self->out, "%s * %s = &(", self->arena->nodes[k].text,
+                        self->arena->nodes[k].text3);
+            } else {
+                /* a promoted receiver is spelled exactly like a user
+                   declaration (`struct AppConfig * __ct_recv0`), so E30-9 can
+                   compare the two products after normalisation */
+                fprintf(self->out, "%s %s = ", self->arena->nodes[k].text,
+                        self->arena->nodes[k].text3);
+            }
+            if (self->emit_expr(self->arena->nodes[k].a) != 0) return -1;
+            if (cat == 2) fputs(")", self->out);
+            fputs(";\n", self->out);
+            /* the spliced statements run their own hoist pass; the receiver
+               list must not be re-emitted from inside the block */
+            save = self->ninto;
+            self->ninto = 0;
+            for (s = self->arena->nodes[k].b; s >= 0; s = self->arena->nodes[s].next)
+                if (self->emit_node(s, ind) != 0) return -1;
+            self->ninto = save;
+        }
+        self->nhoist = 0;
+        self->ninto = 0;
+        self->nopt = 0;
+        return 0;
+    }
+
+    int hoist_expr(int n, int ind)
+    {
+        if (n < 0) return 0;
+        self->nhoist = 0;
+        self->nopt = 0;
+        self->opt_scan = 1;
+        if (self->hoist_scan(n, 1) != 0) {
+            self->opt_scan = 0;
+            return -1;
+        }
+        self->opt_scan = 0;
+        return self->emit_hoists(ind);
+    }
+}

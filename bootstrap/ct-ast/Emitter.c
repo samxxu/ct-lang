@@ -17,6 +17,7 @@
 #include "Sh.h"
 #include "EmitterTry.h"
 #include "EmitInvariant.h"
+#include "EmitHoist.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Emitter.h.ct"
 #include <stdio.h>
@@ -395,8 +396,6 @@ static int em_inline_expr(struct backend_emit_Emitter *, int, int);
 static int em_inline_post(struct backend_emit_Emitter *, int, int);
 static int em_field_fields(struct backend_emit_Emitter *, int, int, int);
 static int em_field_field_union(struct backend_emit_Emitter *, int, int, int);
-static int ensure_hoist_capacity(struct backend_emit_Emitter *, int);
-static int ensure_into_capacity(struct backend_emit_Emitter *, int);
 void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char * *, const char *);
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);
 void backend_emit_ct_emit_bind_units(void *);
@@ -430,30 +429,7 @@ static int * backend_emit_g_inst_layout_state;
 static int backend_emit_g_inst_layout_cap;
 static int * backend_emit_g_shell_emit_state;
 static int backend_emit_g_shell_emit_cap;
-static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable, .__backend_emit_emitinvariant_vptr = &backend_emit_Emitter_backend_emit_EmitInvariant_vtable };
-static int backend_emit_Emitter_backend_emit_EmitOps_expr_unstable(void *self, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int k;
-    (void)(_self);
-    if (n < 0) {
-        return 0;
-    }
-    k = _self->arena->nodes[n].kind;
-    if (k == N_CALL) {
-        return (_self->arena->nodes[n].text3[0] ? 0 : 1);
-    }
-    if ((((k == N_POST) || (k == N_PRE)) || (k == N_ASSIGN))) {
-        return 1;
-    }
-    if (((k == N_INDEX) || (k == N_BIN))) {
-        return (_self->__backend_emit_emitops_vptr->expr_unstable(_self, _self->arena->nodes[n].a) || _self->__backend_emit_emitops_vptr->expr_unstable(_self, _self->arena->nodes[n].b));
-    }
-    if ((((((k == N_MEMBER) || (k == N_ARROW)) || (k == N_UNARY)) || (k == N_ADDR)) || (k == N_DEREF))) {
-        return _self->__backend_emit_emitops_vptr->expr_unstable(_self, _self->arena->nodes[n].a);
-    }
-    return 0;
-}
-
+static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable, .__backend_emit_emitinvariant_vptr = &backend_emit_Emitter_backend_emit_EmitInvariant_vtable, .__backend_emit_emithoist_vptr = &backend_emit_Emitter_backend_emit_EmitHoist_vtable };
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_indent(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int i;
@@ -462,240 +438,6 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_indent(void *self, int
         fputc(' ', _self->out);
     }
     return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_hoist_rvalue(void *self, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int saved;
-    int root;
-    (void)(_self);
-    _self->nhoist = 0;
-    _self->nopt = 0;
-    root = ((_self->arena->nodes[n].kind == N_ASSIGN) ? _self->arena->nodes[n].b : _self->arena->nodes[n].a);
-    saved = _self->arena->nodes[n].next;
-    _self->arena->nodes[n].next = (-1);
-    if (_self->__backend_emit_emitops_vptr->hoist_scan(_self, root, 1) != 0) {
-        _self->arena->nodes[n].next = saved;
-        return (-1);
-    }
-    _self->arena->nodes[n].next = saved;
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_hoist_scan(void *self, int n, int top) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int root;
-    int lvl;
-    int i;
-    int nc;
-    int * chain = 0;
-    int chaincap = 0;
-    (void)(_self);
-    if (n < 0) {
-        return 0;
-    }
-    if ((((_self->arena->nodes[n].kind == N_OPT) && (_self->arena->nodes[n].a >= 0)) && (_self->arena->nodes[_self->arena->nodes[n].a].kind != N_VAR))) {
-        if (_self->nopt >= 8) {
-            return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "too many optional-chain temporaries in one statement");
-        }
-        snprintf(_self->arena->nodes[n].text3, MAX_TEXT, "__ct_opt%d", _self->ntmp);
-        _self->ntmp++;
-        _self->opt_nodes[_self->nopt] = n;
-        _self->nopt++;
-    }
-    if (_self->arena->nodes[n].kind == N_INTO) {
-        if (ensure_into_capacity(_self, (_self->ninto + 1)) != 0) {
-            return (-1);
-        }
-        if (((_self->arena->nodes[n].a >= 0) && (_self->__backend_emit_emitops_vptr->hoist_scan(_self, _self->arena->nodes[n].a, 0) != 0))) {
-            return (-1);
-        }
-        snprintf(_self->arena->nodes[n].text3, MAX_TEXT, "__ct_recv%d", _self->ntmp);
-        _self->ntmp++;
-        _self->into_nodes[_self->ninto] = n;
-        _self->ninto++;
-        return 0;
-    }
-    if ((((!_self->opt_scan) && (_self->arena->nodes[n].kind == N_MCALL)) && (_self->arena->nodes[n].aux != 6))) {
-        nc = 0;
-        lvl = n;
-        for (; ; ) {
-            int ok = 0;
-            char bt[MAX_TEXT];
-            root = _self->arena->nodes[lvl].a;
-            while (((root >= 0) && ((_self->arena->nodes[root].kind == N_MEMBER) || (_self->arena->nodes[root].kind == N_ARROW)))) {
-                root = _self->arena->nodes[root].a;
-            }
-            if (((root < 0) || _self->arena->nodes[root].text3[0])) {
-                break;
-            }
-            if (_self->arena->nodes[root].kind == N_CALL) {
-                ok = (_self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, _self->arena->nodes[root].text2) >= 0);
-                if ((((!ok) && _self->arena->nodes[root].text[0]) && ((_self->arena->nodes[lvl].aux == 9) || (_self->arena->nodes[lvl].aux == 10)))) {
-                    ok = 1;
-                }
-            }
-            if (((((!ok) && (_self->arena->nodes[root].kind == N_MCALL)) && (_self->arena->nodes[root].aux != 5)) && (_self->arena->nodes[root].aux != 6))) {
-                int rd = 0;
-                if (((backend_emit_hoist_ctype(root, bt, sizeof(bt), (&rd)) && (rd == 0)) && backend_emit_materializable_ctype(bt))) {
-                    ok = 1;
-                }
-            }
-            if ((!ok)) {
-                break;
-            }
-            if (nc >= chaincap) {
-                int ncap = ((chaincap > 0) ? (chaincap * 2) : MAX_HOISTS);
-                int * grown;
-                if (ncap > MAX_HOISTS_MAX) {
-                    ncap = MAX_HOISTS_MAX;
-                }
-                if (nc >= ncap) {
-                    free(chain);
-                    return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "out of memory");
-                }
-                grown = (int *)(realloc(chain, ((size_t)(ncap) * sizeof((*grown)))));
-                if ((!grown)) {
-                    free(chain);
-                    return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "out of memory");
-                }
-                chain = grown;
-                chaincap = ncap;
-            }
-            chain[nc] = root;
-            nc++;
-            if (_self->arena->nodes[root].kind != N_MCALL) {
-                break;
-            }
-            lvl = root;
-        }
-        if (nc > 0) {
-            if ((!top)) {
-                free(chain);
-                return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "a method call on a temporary is only allowed at the start of a statement or of an assignment");
-            }
-            for (i = (nc - 1); i >= 0; i--) {
-                if (ensure_hoist_capacity(_self, (_self->nhoist + 1)) != 0) {
-                    free(chain);
-                    return (-1);
-                }
-                snprintf(_self->arena->nodes[chain[i]].text3, MAX_TEXT, "__ct_tmp%d", _self->ntmp);
-                _self->ntmp++;
-                _self->hoist_calls[_self->nhoist] = chain[i];
-                _self->nhoist++;
-            }
-            free(chain);
-        }
-    }
-    if (((_self->arena->nodes[n].a >= 0) && (_self->__backend_emit_emitops_vptr->hoist_scan(_self, _self->arena->nodes[n].a, 0) != 0))) {
-        return (-1);
-    }
-    if (((_self->arena->nodes[n].b >= 0) && (_self->__backend_emit_emitops_vptr->hoist_scan(_self, _self->arena->nodes[n].b, 0) != 0))) {
-        return (-1);
-    }
-    if (((_self->arena->nodes[n].c >= 0) && (_self->__backend_emit_emitops_vptr->hoist_scan(_self, _self->arena->nodes[n].c, 0) != 0))) {
-        return (-1);
-    }
-    if (((_self->arena->nodes[n].d >= 0) && (_self->__backend_emit_emitops_vptr->hoist_scan(_self, _self->arena->nodes[n].d, 0) != 0))) {
-        return (-1);
-    }
-    if (((_self->arena->nodes[n].next >= 0) && (_self->__backend_emit_emitops_vptr->hoist_scan(_self, _self->arena->nodes[n].next, 0) != 0))) {
-        return (-1);
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_hoists(void *self, int ind) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int i;
-    int f;
-    int k;
-    int cat;
-    int s;
-    char hty[MAX_TEXT];
-    int hd;
-    (void)(_self);
-    if (_self->__backend_emit_emitinvariant_vptr->invariant_temp_check(_self) != 0) {
-        return (-1);
-    }
-    for (i = 0; i < _self->nopt; i++) {
-        _self->__backend_emit_emitops_vptr->emit_indent(_self, ind);
-        fprintf(_self->out, "%s %s;\n", _self->arena->nodes[_self->opt_nodes[i]].text4, _self->arena->nodes[_self->opt_nodes[i]].text3);
-    }
-    for (i = 0; i < _self->nhoist; i++) {
-        hd = 0;
-        hty[0] = 0;
-        f = ((_self->arena->nodes[_self->hoist_calls[i]].kind == N_CALL) ? _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, _self->arena->nodes[_self->hoist_calls[i]].text2) : (-1));
-        if (f >= 0) {
-            snprintf(hty, sizeof(hty), "%s", _self->sym->funcs[f].ret);
-        }
-        else {
-            if (((_self->arena->nodes[_self->hoist_calls[i]].kind == N_CALL) && _self->arena->nodes[_self->hoist_calls[i]].text[0])) {
-                snprintf(hty, sizeof(hty), "%s", _self->arena->nodes[_self->hoist_calls[i]].text);
-            }
-            else {
-                if (((!backend_emit_hoist_ctype(_self->hoist_calls[i], hty, sizeof(hty), (&hd))) || (hd != 0))) {
-                    return _self->__backend_emit_emitops_vptr->fail_from(_self, _self->hoist_calls[i], "cannot infer the type of a hoisted receiver");
-                }
-            }
-        }
-        _self->__backend_emit_emitops_vptr->emit_indent(_self, ind);
-        fprintf(_self->out, "%s %s = ", hty, _self->arena->nodes[_self->hoist_calls[i]].text3);
-        _self->raw_call = _self->hoist_calls[i];
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->hoist_calls[i]) != 0) {
-            _self->raw_call = (-1);
-            return (-1);
-        }
-        _self->raw_call = (-1);
-        fputs(";\n", _self->out);
-    }
-    for (i = 0; i < _self->ninto; i++) {
-        int save;
-        k = _self->into_nodes[i];
-        cat = _self->arena->nodes[k].aux;
-        _self->__backend_emit_emitops_vptr->emit_indent(_self, ind);
-        if (cat == 2) {
-            fprintf(_self->out, "%s * %s = &(", _self->arena->nodes[k].text, _self->arena->nodes[k].text3);
-        }
-        else {
-            fprintf(_self->out, "%s %s = ", _self->arena->nodes[k].text, _self->arena->nodes[k].text3);
-        }
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[k].a) != 0) {
-            return (-1);
-        }
-        if (cat == 2) {
-            fputs(")", _self->out);
-        }
-        fputs(";\n", _self->out);
-        save = _self->ninto;
-        _self->ninto = 0;
-        for (s = _self->arena->nodes[k].b; s >= 0; s = _self->arena->nodes[s].next) {
-            if (_self->__backend_emit_emitops_vptr->emit_node(_self, s, ind) != 0) {
-                return (-1);
-            }
-        }
-        _self->ninto = save;
-    }
-    _self->nhoist = 0;
-    _self->ninto = 0;
-    _self->nopt = 0;
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_hoist_expr(void *self, int n, int ind) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    if (n < 0) {
-        return 0;
-    }
-    _self->nhoist = 0;
-    _self->nopt = 0;
-    _self->opt_scan = 1;
-    if (_self->__backend_emit_emitops_vptr->hoist_scan(_self, n, 1) != 0) {
-        _self->opt_scan = 0;
-        return (-1);
-    }
-    _self->opt_scan = 0;
-    return _self->__backend_emit_emitops_vptr->emit_hoists(_self, ind);
 }
 
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, int prog) {
@@ -4303,12 +4045,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_fail_from(void *self, int n
 }
 
 const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps_vtable = {
-    .expr_unstable = backend_emit_Emitter_backend_emit_EmitOps_expr_unstable,
     .emit_indent = backend_emit_Emitter_backend_emit_EmitOps_emit_indent,
-    .hoist_rvalue = backend_emit_Emitter_backend_emit_EmitOps_hoist_rvalue,
-    .hoist_scan = backend_emit_Emitter_backend_emit_EmitOps_hoist_scan,
-    .emit_hoists = backend_emit_Emitter_backend_emit_EmitOps_emit_hoists,
-    .hoist_expr = backend_emit_Emitter_backend_emit_EmitOps_hoist_expr,
     .emit_program = backend_emit_Emitter_backend_emit_EmitOps_emit_program,
     .emit_proto = backend_emit_Emitter_backend_emit_EmitOps_emit_proto,
     .unit_has_drop_impl = backend_emit_Emitter_backend_emit_EmitOps_unit_has_drop_impl,
@@ -5363,10 +5100,10 @@ static int sb_decl(struct backend_emit_Emitter * self, int n, int ind) {
         sb_mark_aggregate(self, n);
         return 0;
     }
-    if (self->__backend_emit_emitops_vptr->hoist_rvalue(self, n) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_rvalue(self, n) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitops_vptr->emit_hoists(self, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->emit_hoists(self, ind) != 0) {
         return (-1);
     }
     self->__backend_emit_emitops_vptr->emit_indent(self, ind);
@@ -5454,10 +5191,10 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
         return 0;
     }
     sb_norm_own_type(self, t, sizeof(t));
-    if (self->__backend_emit_emitops_vptr->hoist_rvalue(self, n) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_rvalue(self, n) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitops_vptr->emit_hoists(self, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->emit_hoists(self, ind) != 0) {
         return (-1);
     }
     idx = ((k == N_VAR) ? sb_find(self, self->arena->nodes[lhs].text2) : (-1));
@@ -9841,7 +9578,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
     if ((((((((rk != N_VAR) && (rk != N_INDEX)) && (rk != N_CALL)) && (rk != N_MEMBER)) && (rk != N_ARROW)) && (rk != N_INTO_SELF)) && (rk != N_INTO))) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "method receiver must be a variable, an element, a call or a field chain");
     }
-    if (((self->runtime_checks && (*self->runtime_checks)) && self->__backend_emit_emitops_vptr->expr_unstable(self, self->arena->nodes[n].a))) {
+    if (((self->runtime_checks && (*self->runtime_checks)) && self->__backend_emit_emithoist_vptr->expr_unstable(self, self->arena->nodes[n].a))) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "runtime checks need a stable receiver; bind it to a local first");
     }
     if ((!self->arena->nodes[n].text[0])) {
@@ -10376,10 +10113,10 @@ static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int n
     if (((sret >= 0) && (!wrap))) {
         wrap = 1;
     }
-    if (self->__backend_emit_emitops_vptr->hoist_rvalue(self, n) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_rvalue(self, n) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitops_vptr->emit_hoists(self, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->emit_hoists(self, ind) != 0) {
         return (-1);
     }
     if (wrap) {
@@ -10665,10 +10402,10 @@ static int em_node_decls(struct backend_emit_Emitter * self, int n, int ind, int
             return (-1);
         }
         if (sh == 0) {
-            if (self->__backend_emit_emitops_vptr->hoist_rvalue(self, c) != 0) {
+            if (self->__backend_emit_emithoist_vptr->hoist_rvalue(self, c) != 0) {
                 return (-1);
             }
-            if (self->__backend_emit_emitops_vptr->emit_hoists(self, ind) != 0) {
+            if (self->__backend_emit_emithoist_vptr->emit_hoists(self, ind) != 0) {
                 return (-1);
             }
             self->__backend_emit_emitops_vptr->emit_indent(self, ind);
@@ -10768,10 +10505,10 @@ static int em_node_expression_statement(struct backend_emit_Emitter * self, int 
             return 0;
         }
     }
-    if (self->__backend_emit_emitops_vptr->hoist_rvalue(self, n) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_rvalue(self, n) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitops_vptr->emit_hoists(self, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->emit_hoists(self, ind) != 0) {
         return (-1);
     }
     if (((nk == N_EXPR) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_INTO))) {
@@ -10789,7 +10526,7 @@ static int em_node_if(struct backend_emit_Emitter * self, int n, int ind, int nk
     struct backend_emit_FldSnap pre;
     struct backend_emit_FldSnap thn;
     struct backend_emit_FldSnap els;
-    if (self->__backend_emit_emitops_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
         return (-1);
     }
     self->__backend_emit_emitops_vptr->emit_indent(self, ind);
@@ -10825,7 +10562,7 @@ static int em_node_if(struct backend_emit_Emitter * self, int n, int ind, int nk
 }
 static int em_node_while(struct backend_emit_Emitter * self, int n, int ind, int nk) {
     (void)(nk);
-    if (self->__backend_emit_emitops_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
         return (-1);
     }
     self->__backend_emit_emitops_vptr->emit_indent(self, ind);
@@ -10844,13 +10581,13 @@ static int em_node_while(struct backend_emit_Emitter * self, int n, int ind, int
 static int em_node_for(struct backend_emit_Emitter * self, int n, int ind, int nk) {
     (void)(nk);
     int init = self->arena->nodes[n].a;
-    if (self->__backend_emit_emitops_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitops_vptr->hoist_expr(self, self->arena->nodes[n].b, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].b, ind) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitops_vptr->hoist_expr(self, self->arena->nodes[n].c, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].c, ind) != 0) {
         return (-1);
     }
     if ((((init >= 0) && (self->arena->nodes[init].kind == N_DECL)) && self->arena->nodes[init].aux)) {
@@ -11185,7 +10922,7 @@ static int em_node_match(struct backend_emit_Emitter * self, int n, int ind, int
 }
 static int em_node_switch(struct backend_emit_Emitter * self, int n, int ind, int nk) {
     (void)(nk);
-    if (self->__backend_emit_emitops_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
         return (-1);
     }
     self->__backend_emit_emitops_vptr->emit_indent(self, ind);
@@ -11250,7 +10987,7 @@ static int em_node_dowhile(struct backend_emit_Emitter * self, int n, int ind, i
     (void)(nk);
     int b;
     int c;
-    if (self->__backend_emit_emitops_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
+    if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
         return (-1);
     }
     self->__backend_emit_emitops_vptr->emit_indent(self, ind);
@@ -11823,56 +11560,6 @@ static int em_field_field_union(struct backend_emit_Emitter * self, int n, int i
     }
     self->__backend_emit_emitops_vptr->emit_indent(self, ind);
     fputs("}", self->out);
-    return 0;
-}
-static int ensure_hoist_capacity(struct backend_emit_Emitter * self, int need) {
-    int cap;
-    int * grown;
-    if (need <= self->hoistcap) {
-        return 0;
-    }
-    cap = ((self->hoistcap > 0) ? self->hoistcap : MAX_HOISTS);
-    while (((cap < need) && (cap < MAX_HOISTS_MAX))) {
-        cap *= 2;
-    }
-    if (cap > MAX_HOISTS_MAX) {
-        cap = MAX_HOISTS_MAX;
-    }
-    if (need > cap) {
-        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
-    }
-    grown = (int *)(realloc(self->hoist_calls, ((size_t)(cap) * sizeof((*grown)))));
-    if ((!grown)) {
-        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
-    }
-    memset((grown + self->hoistcap), 0, ((size_t)((cap - self->hoistcap)) * sizeof((*grown))));
-    self->hoist_calls = grown;
-    self->hoistcap = cap;
-    return 0;
-}
-static int ensure_into_capacity(struct backend_emit_Emitter * self, int need) {
-    int cap;
-    int * grown;
-    if (need <= self->intocap) {
-        return 0;
-    }
-    cap = ((self->intocap > 0) ? self->intocap : MAX_INTOS);
-    while (((cap < need) && (cap < MAX_INTOS_MAX))) {
-        cap *= 2;
-    }
-    if (cap > MAX_INTOS_MAX) {
-        cap = MAX_INTOS_MAX;
-    }
-    if (need > cap) {
-        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
-    }
-    grown = (int *)(realloc(self->into_nodes, ((size_t)(cap) * sizeof((*grown)))));
-    if ((!grown)) {
-        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
-    }
-    memset((grown + self->intocap), 0, ((size_t)((cap - self->intocap)) * sizeof((*grown))));
-    self->into_nodes = grown;
-    self->intocap = cap;
     return 0;
 }
 void backend_emit_ct_emit_bind(void * arena, void * sym, void * ty, void * lex, const char * version, char * * outdir, const char * prog) {
