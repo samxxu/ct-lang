@@ -1705,6 +1705,15 @@ else
 fi
 
 echo
+echo "== S1a-0 C1: package-manager counting caps (digest files, index rows) =="
+# The probe grows past the old MAX_DIGEST_FILES=4096 and MAX_INDEX_ROWS=1024.
+if CT_AST="$work/ct-ast" bash "$root/test/pkg/pkg26_caps.sh"; then
+    ok "S1a-0 C1 package counting caps"
+else
+    bad "S1a-0 C1 package counting caps" "the pkg26 probe failed"
+fi
+
+echo
 echo "== PKG-25: lock merge keeps same-name different-publisher rows =="
 # The probe fetches demo/hello then acme/hello into one project and asserts both
 # lock rows survive, `ct verify --strict` accepts them, and a re-fetch of one
