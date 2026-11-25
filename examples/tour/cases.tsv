@@ -55,7 +55,7 @@
 16_diagnostics|loop_shadow_text|compile-warn|no|0|nested loop shadow, text; still runs
 16_diagnostics|loop_shadow_json|check-json|no|1|same finding as JSON (type=loop_shadow)
 16_diagnostics|recover_multi|compile|no|1|error recovery: three impls, three errors
-16_diagnostics|cap_fields|compile|no|1|capacity cap: the 65th struct field
+16_diagnostics|cap_params|compile|no|1|capacity cap: the 17th parameter
 16_diagnostics|cap_errors|compile|no|1|capacity cap: 21st error stops recovery
 16_diagnostics|note_text|compile|no|1|note channel after an error
 16_diagnostics|note_json|json-err|no|1|json switch does not swallow error/note

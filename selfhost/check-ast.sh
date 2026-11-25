@@ -1014,7 +1014,7 @@ fi
 # re-run and compared with the manifest frozen at baseline 1e2c30f7; the S86c
 # scope decision and its L2 pass-through evidence are checked on disk too.
 if bash test/ast/p86_errors.sh "$work/ct-ast" >"$work/p86err.out" 2>"$work/p86err.err"; then
-    ok "p86/errors (E86-4: 344 diagnostics byte-identical, scope evidence)"
+    ok "p86/errors (E86-4: 343 diagnostics byte-identical, scope evidence)"
 else
     bad "p86/errors" "$(cat "$work/p86err.out" "$work/p86err.err" | head -8)"
 fi
@@ -2925,10 +2925,8 @@ p34_diag() {
     fi
 }
 p34_diag generic_enum 2:12 "generic enums are not supported"
-# Capacity is not an L26 code, but it must fail loudly at the 65th instance
-# (R7). The position is the `(` of the 65th call, i.e. the token that found the
-# table full.
-p26_diag generic_too_many 76:80 "too many generic instances in this unit"
+# S1a-0 C1: MAX_GENERIC_INSTS grows on demand, so the old 65th-instance hard
+# error is gone; the growth case lives in test/ast/table_tables_grow.sh (`ginsts`).
 # `_Generic` is copied verbatim; a type parameter inside it would leak into the
 # emitted C. SH-62 requires a hard error, never an exit-0 bad product.
 p26_diag generic_generic_selector 7:24 "type parameter cannot be used inside _Generic"
@@ -2963,7 +2961,6 @@ p26_chk generic_missing_arg "generic function 'id' needs a type argument"
 p26_chk generic_two_params "only one type parameter is supported"
 p26_chk generic_void_arg "'void' cannot be a generic type argument"
 p26_chk generic_recursive "recursive generic calls are not supported"
-p26_chk generic_too_many "too many generic instances in this unit"
 p26_chk generic_generic_selector "type parameter cannot be used inside _Generic"
 p26_chk generic_tparam_value_return "type parameter 'T' cannot be used as a value"
 p26_chk generic_tparam_value_arg "type parameter 'T' cannot be used as a value"
@@ -6112,6 +6109,20 @@ cap_check() {
         bad "cap $cap_name" "$(cat "$work/cap-$cap_name.err")"
     fi
 }
+# S1a-0 C1: the counting caps grow on demand, so the old "one past the cap"
+# fixture must now compile instead of reporting. A fixed cap is only kept for
+# the D-class depth guards (see `cap scopes` / `cap closure_bind` below).
+cap_grows() {
+    cap_name="$1"
+    cap_file="$2"
+    if "$work/ct-ast" "$cap_file" -o "$work/cap-$cap_name.c" \
+            >"$work/cap-$cap_name.out" 2>"$work/cap-$cap_name.err"; then
+        ok "cap $cap_name (grows past the initial capacity)"
+    else
+        bad "cap $cap_name (grows past the initial capacity)" \
+            "$(cat "$work/cap-$cap_name.err")"
+    fi
+}
 {
     printf 'int f(int a0'
     i=1
@@ -6125,7 +6136,7 @@ cap_check params "too many parameters in unit 'cap_params.ct' (limit 16)" "$work
     while [ "$i" -lt 65 ]; do printf '    int m%d();\n' "$i"; i=$((i + 1)); done
     printf '}\nint main(void) { return 0; }\n'
 } >"$work/cap_methods.ct"
-cap_check methods "too many trait methods" "$work/cap_methods.ct"
+cap_grows methods "$work/cap_methods.ct"
 {
     i=0
     while [ "$i" -lt 1200 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done
@@ -6159,29 +6170,42 @@ fi
     while [ "$i" -lt 257 ]; do printf '}'; i=$((i + 1)); done
     printf '\n}\n'
 } >"$work/cap_scopes.ct"
-cap_check scopes "too many nested scopes" "$work/cap_scopes.ct"
+# MAX_SCOPE's symbol stack is dynamic, but 257 nested blocks hit the parser's
+# recursive-descent depth guard first (D class; 360 blocks overflow the C stack,
+# so the guard is correct and stays). The message is pinned so the guard cannot
+# silently disappear.
+cap_check scopes "blocks are nested too deeply" "$work/cap_scopes.ct"
 {
     printf 'int main(void) {\n'
     i=0
     while [ "$i" -lt 4097 ]; do printf '    int v%d = 0;\n' "$i"; i=$((i + 1)); done
     printf '    return 0;\n}\n'
 } >"$work/cap_vars.ct"
-cap_check vars "too many variables in unit 'cap_vars.ct' (limit 4096)" "$work/cap_vars.ct"
+cap_grows vars "$work/cap_vars.ct"
 {
     printf 'struct Big {\n'
     i=0
     while [ "$i" -lt 65 ]; do printf '    int f%d;\n' "$i"; i=$((i + 1)); done
     printf '};\nint main(void) { return 0; }\n'
 } >"$work/cap_fields.ct"
-cap_check fields "too many fields in struct 'Big' (limit 64)" "$work/cap_fields.ct"
+cap_grows fields "$work/cap_fields.ct"
 {
     i=0
     while [ "$i" -lt 129 ]; do printf 'struct S%d { int x; };\n' "$i"; i=$((i + 1)); done
     printf 'int main(void) { return 0; }\n'
 } >"$work/cap_structs.ct"
-cap_check structs "too many structs in unit 'cap_structs.ct' (limit 128)" "$work/cap_structs.ct"
-# R09: the closure table and the nesting stack now fail hard instead of silently
-# dropping the binding or pretending the literal is a plain call.
+cap_grows structs "$work/cap_structs.ct"
+# R09 / S1a-0 C1: the closure table grows; the emitter's per-frame binding
+# table is still a fixed 64 (its own slice), so one frame keeps failing loudly.
+{
+    i=0
+    while [ "$i" -lt 65 ]; do
+        printf 'int c%d(void)\n{\n    int n = 1;\n    int (*c)(void) = () => n;\n    return c();\n}\n' "$i"
+        i=$((i + 1))
+    done
+    printf 'int main(void) { return c64(); }\n'
+} >"$work/cap_closures.ct"
+cap_grows closures "$work/cap_closures.ct"
 {
     printf 'int main(void)\n{\n    int n = 1;\n'
     i=0
@@ -6190,8 +6214,8 @@ cap_check structs "too many structs in unit 'cap_structs.ct' (limit 128)" "$work
         i=$((i + 1))
     done
     printf '    return c0(0);\n}\n'
-} >"$work/cap_closures.ct"
-cap_check closures "too many closures in unit 'cap_closures.ct' (limit 64)" "$work/cap_closures.ct"
+} >"$work/cap_closure_bind.ct"
+cap_check closure_bind "too many closure bindings in one frame" "$work/cap_closure_bind.ct"
 {
     printf 'int main(void)\n{\n    int n = 1;\n'
     i=0

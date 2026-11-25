@@ -1,0 +1,9 @@
+// 场景：函数参数超过编译器容量上限（MAX_PARAMS = 16）。
+// 角度：参数表仍是固定上限；第 17 个参数处报 error，退出 1。
+// 期望：stderr 与 expected.err 逐字节一致，退出码 1。
+int too_many(int a0, int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8, int a9, int a10, int a11, int a12, int a13, int a14, int a15, int a16);
+
+int main(void)
+{
+    return 0;
+}

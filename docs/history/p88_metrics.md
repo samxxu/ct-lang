@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10749 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=57821 io_cap=1024
+     emitted_before=48223 emitted_after=58389 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -105,9 +105,9 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
 - **第 1 层（测试语料）**：66 个语料（`test/cases/*.ct` + `examples/*/*.ct`）
   banner 归一后逐字节一致（`p88_emit` 第 3 项；清单
   [test/probes/p85_corpus_sha.tsv](../../test/probes/p85_corpus_sha.tsv)）。
-- **诊断**：345 条负例 `exit + stderr sha256` 与
+- **诊断**：344 条负例 `exit + stderr sha256` 与
   [p86_error_diags.tsv](../../test/probes/p86_error_diags.tsv) 逐条一致
-  （`p86_errors` 23/0）。
+  （`p86_errors` 23/0；S1a-0 C1 把 `generic_too_many` 从负例改为增长正例，减 1）。
 - **自举不动点**：`CT_FIXPOINT_ROUNDS=2` 与 `=3` 均逐字节一致（原始输出见 §5）。
 - **第 2 层（编译器自身产物）**：允许差异；以不动点 + ASan + 行为测试验收。
 

@@ -3359,6 +3359,8 @@ impl ParseOps for Parser {
                     self->sym->structs[ai].has_handback_impl = self->sym->structs[tagi].has_handback_impl;
                     for (ui = 0; ui < self->sym->structs[tagi].nuse; ui++)
                         snprintf(self->sym->structs[ai].use[ui], MAX_TEXT, "%s", self->sym->structs[tagi].use[ui]);
+                    if (self->sym->ensure_struct_field_capacity(ai,
+                            self->sym->structs[tagi].nfields) != 0) return -1;
                     self->sym->structs[ai].nfields = self->sym->structs[tagi].nfields;
                     for (ui = 0; ui < self->sym->structs[tagi].nfields; ui++) {
                         snprintf(self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s",

@@ -3031,6 +3031,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
                 for (ui = 0; ui < _self->sym->structs[tagi].nuse; ui++) {
                     snprintf(_self->sym->structs[ai].use[ui], MAX_TEXT, "%s", _self->sym->structs[tagi].use[ui]);
                 }
+                if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, ai, _self->sym->structs[tagi].nfields) != 0) {
+                    return (-1);
+                }
                 _self->sym->structs[ai].nfields = _self->sym->structs[tagi].nfields;
                 for (ui = 0; ui < _self->sym->structs[tagi].nfields; ui++) {
                     snprintf(_self->sym->structs[ai].fields[ui].name, MAX_TEXT, "%s", _self->sym->structs[tagi].fields[ui].name);
