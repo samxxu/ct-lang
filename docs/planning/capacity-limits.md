@@ -41,9 +41,9 @@
 | `MAX_STRUCT_TPLS` | 64 | 4 | A | **已动态**：全局 `g_tmpls` 倍增到 `MAX_STRUCT_TPLS_MAX=65536` |
 | `MAX_GENERIC_INSTS` | 64 | 5 | A | **已动态**：单元 `ginsts` 倍增到 `MAX_GENERIC_INSTS_MAX=65536` |
 | `MAX_CLOSURES` | 64 | 5 | A | **已动态**：单元 `closures` 倍增到 `MAX_CLOSURES_MAX=65536`；emitter 每帧 64 绑定上限另列剩余 |
-| `MAX_CALLS` | 8192 | 7 | A | 动态 |
+| `MAX_CALLS` | 8192 | 7 | A | **已动态**：调用图 `calls` 堆块倍增到 `MAX_CALLS_MAX=65536`；删除 `too many calls` |
 | `MAX_ARG_POS` | 32 | 14 | A | 动态 |
-| `MAX_LABELS` | 64 | 5 | A | 动态 |
+| `MAX_LABELS` | 64 | 5 | A | **已动态**：label/goto 行块（`LabelRow`）倍增到 `MAX_LABELS_MAX=65536`；删除 `too many labels/gotos` |
 | `MAX_HOISTS` | 4 | 4 | A | 动态 |
 | `MAX_INTOS` | 4 | 3 | A | 动态 |
 | `MAX_MAPS` | 64 | 5 | A | 动态 |

@@ -69,6 +69,7 @@ struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
+struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
@@ -146,6 +147,13 @@ struct frontend_parse_StmtDeferOps_iface {
     const struct frontend_parse_StmtDeferOps_vtbl *vt;
 };
 
+struct frontend_parse_LabelRow {
+    char name[160];
+    int line;
+    int depth;
+    int path[256];
+    char has[256];
+};
 struct frontend_parse_Stmt {
     struct runtime_arena_Arena * arena;
     struct frontend_lex_Lexer * lex;
@@ -158,12 +166,12 @@ struct frontend_parse_Stmt {
     int static_decl;
     int decl_attr;
     int nlabels;
+    struct frontend_parse_LabelRow * labels;
+    int labelcap;
     int f_string_local;
-    char label_names[64][160];
-    int label_lines[64];
     int ngotos;
-    char goto_names[64][160];
-    int goto_lines[64];
+    struct frontend_parse_LabelRow * gotos;
+    int gotocap;
     int loop_depth;
     char u_decl[48][160];
     int u_dline[48];
@@ -192,12 +200,6 @@ struct frontend_parse_Stmt {
     int ndefer_next_id;
     int defer_break_base[256];
     int defer_cont_base[256];
-    int label_path[64][256];
-    int goto_path[64][256];
-    char label_path_has[64][256];
-    char goto_path_has[64][256];
-    int label_path_depth[64];
-    int goto_path_depth[64];
     int match_arm_pending;
     int in_match_arm;
     int yield_depth;

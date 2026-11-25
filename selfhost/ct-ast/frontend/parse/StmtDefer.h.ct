@@ -267,11 +267,11 @@ impl StmtDeferOps for Stmt {
         if (b < 0 || self->defer_head[b] < 0) return 0;
         id = self->defer_ids[b];
         for (i = 0; i < self->nlabels; i++)
-            for (j = 0; j < self->label_path_depth[i]; j++)
-                if (self->label_path[i][j] == id) self->label_path_has[i][j] = 1;
+            for (j = 0; j < self->labels[i].depth; j++)
+                if (self->labels[i].path[j] == id) self->labels[i].has[j] = 1;
         for (i = 0; i < self->ngotos; i++)
-            for (j = 0; j < self->goto_path_depth[i]; j++)
-                if (self->goto_path[i][j] == id) self->goto_path_has[i][j] = 1;
+            for (j = 0; j < self->gotos[i].depth; j++)
+                if (self->gotos[i].path[j] == id) self->gotos[i].has[j] = 1;
         return 0;
     }
 

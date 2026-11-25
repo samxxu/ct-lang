@@ -87,6 +87,18 @@ pub trait StmtDeferOps {
     int  defer_flush_block(int blk, int *tail);
 }
 
+/* S1a-0 C1: one label/goto row. `name`/`line` are its spelling and position,
+   `depth` is the defer-block depth at the point it was written, and `path` /
+   `has` record the enclosing defer blocks exactly as the old parallel arrays
+   did. The rows grow on demand; `struct Stmt` keeps the block and capacity. */
+pub struct LabelRow {
+    char name[160];
+    int  line;
+    int  depth;
+    int  path[256];
+    char has[256];
+}
+
 pub struct Stmt {
     struct Arena *arena;
     struct Lexer *lex;
@@ -116,15 +128,18 @@ pub struct Stmt {
        lengths are literals because a `pub struct` lands in the generated
        header, which carries no macros (`MAX_LABELS` is the value used here). */
     int  nlabels;
+    /* S1a-0 C1: the two tables grow on demand (MAX_LABELS is the starting
+       capacity). The block survives `func_begin`, which only resets the count:
+       labels are function-scoped, so a long build reuses the rows. */
+    struct LabelRow *labels;
+    int  labelcap;
     /* SH-102: a local owning `String` / `U16String` binding makes any `goto`
        in the same function unsafe (a jump can skip a scope's release or enter
        it past the declaration), so the body is refused at `func_end`. */
     int  f_string_local;
-    char label_names[64][160];
-    int  label_lines[64];
     int  ngotos;
-    char goto_names[64][160];
-    int  goto_lines[64];
+    struct LabelRow *gotos;
+    int  gotocap;
     /* How many `loop` bodies enclose the statement being parsed. Only an inner
        `loop` inside an outer `loop` is diagnosed (D22-5): a hand-written `int i`
        or a native `for (int i = …)` is ordinary C shadowing and stays silent. */
@@ -165,14 +180,7 @@ pub struct Stmt {
     int  ndefer_next_id;
     int  defer_break_base[256];
     int  defer_cont_base[256];
-    /* The defer depth at each label/goto, so `func_end` can reject a jump
-       across a block that owns a defer while allowing a same-block jump. */
-    int  label_path[64][256];
-    int  goto_path[64][256];
-    char label_path_has[64][256];
-    char goto_path_has[64][256];
-    int  label_path_depth[64];
-    int  goto_path_depth[64];
+
     /* LANG-29 S4 / B5: an expression-match arm block. `match_arm_pending`
        marks the next `parse_block` as an arm's direct block; the `yield_*`
        frames are a small stack so an expression match nested inside an arm

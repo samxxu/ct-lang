@@ -47,6 +47,7 @@ pub struct Limits {
 #define MAX_INTOS                    4
 #define MAX_KEY                      768
 #define MAX_LABELS                   64
+#define MAX_LABELS_MAX               65536
 #define MAX_LAYOUT_ADTS              64
 #define MAX_LAYOUT_DEPTH             32
 #define MAX_LAYOUT_INSTS             128

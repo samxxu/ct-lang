@@ -78,6 +78,7 @@ struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
+struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
@@ -296,16 +297,16 @@ static int frontend_parse_Stmt_frontend_parse_StmtDeferOps_defer_mark_block(void
     }
     id = _self->defer_ids[b];
     for (i = 0; i < _self->nlabels; i++) {
-        for (j = 0; j < _self->label_path_depth[i]; j++) {
-            if (_self->label_path[i][j] == id) {
-                _self->label_path_has[i][j] = 1;
+        for (j = 0; j < _self->labels[i].depth; j++) {
+            if (_self->labels[i].path[j] == id) {
+                _self->labels[i].has[j] = 1;
             }
         }
     }
     for (i = 0; i < _self->ngotos; i++) {
-        for (j = 0; j < _self->goto_path_depth[i]; j++) {
-            if (_self->goto_path[i][j] == id) {
-                _self->goto_path_has[i][j] = 1;
+        for (j = 0; j < _self->gotos[i].depth; j++) {
+            if (_self->gotos[i].path[j] == id) {
+                _self->gotos[i].has[j] = 1;
             }
         }
     }

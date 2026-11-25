@@ -24,6 +24,7 @@
 #define MAX_RAW_INIT 4096
 #define MAX_INIT_TEXT 16384
 #define MAX_LABELS 64
+#define MAX_LABELS_MAX 65536
 #define B_COMMA 19
 #define B_ADD 1
 #define B_SUB 2
@@ -149,6 +150,7 @@ struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
+struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
 struct frontend_parse_Parser;
@@ -192,6 +194,8 @@ static int parse_map_brace_init(struct frontend_parse_Stmt *, const char *, cons
 static int kw_paren_ahead(struct frontend_parse_Stmt *, const char *);
 static int stmt_owning_struct(struct frontend_parse_Stmt *, const char *);
 static void match_expr_type_key(const char *, char *, int);
+static int ensure_label_capacity(struct frontend_parse_Stmt *, int);
+static int ensure_goto_capacity(struct frontend_parse_Stmt *, int);
 void frontend_parse_ct_stmt_bind(void *, void *, void *, void *, void *, void *);
 struct frontend_parse_Stmt * frontend_parse_stmt_get(void);
 static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable, .__frontend_parse_stmtdeferops_vptr = &frontend_parse_Stmt_frontend_parse_StmtDeferOps_vtable };
@@ -3488,7 +3492,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_label_find(void *self, con
     int i;
     (void)(_self);
     for (i = 0; i < _self->nlabels; i++) {
-        if (strcmp(_self->label_names[i], name) == 0) {
+        if (strcmp(_self->labels[i].name, name) == 0) {
             return i;
         }
     }
@@ -3511,8 +3515,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_named_label(void *se
     }
     line = _self->lex->tokline;
     _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
-    if (_self->nlabels >= MAX_LABELS) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many labels in one function");
+    if (ensure_label_capacity(_self, (_self->nlabels + 1)) != 0) {
+        return (-1);
     }
     if (_self->__frontend_parse_stmtops_vptr->label_find(_self, name) >= 0) {
         snprintf(msg, sizeof(msg), "duplicate label '%s'", name);
@@ -3522,12 +3526,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_named_label(void *se
     if (s < 0) {
         return (-1);
     }
-    snprintf(_self->label_names[_self->nlabels], MAX_TEXT, "%s", name);
-    _self->label_lines[_self->nlabels] = line;
-    _self->label_path_depth[_self->nlabels] = _self->ndefer_blocks;
+    snprintf(_self->labels[_self->nlabels].name, MAX_TEXT, "%s", name);
+    _self->labels[_self->nlabels].line = line;
+    _self->labels[_self->nlabels].depth = _self->ndefer_blocks;
     for (i = 0; i < _self->ndefer_blocks; i++) {
-        _self->label_path[_self->nlabels][i] = _self->defer_ids[i];
-        _self->label_path_has[_self->nlabels][i] = 0;
+        _self->labels[_self->nlabels].path[i] = _self->defer_ids[i];
+        _self->labels[_self->nlabels].has[i] = 0;
     }
     _self->nlabels = (_self->nlabels + 1);
     snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
@@ -3580,17 +3584,17 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_goto(void *self) {
     if (_self->lex->tok != T_ID) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a label name");
     }
-    if (_self->ngotos >= MAX_LABELS) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many gotos in one function");
+    if (ensure_goto_capacity(_self, (_self->ngotos + 1)) != 0) {
+        return (-1);
     }
     _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
     snprintf(_self->arena->nodes[s].text2, MAX_TEXT, "%s", name);
-    snprintf(_self->goto_names[_self->ngotos], MAX_TEXT, "%s", name);
-    _self->goto_lines[_self->ngotos] = _self->arena->nodes[s].line;
-    _self->goto_path_depth[_self->ngotos] = _self->ndefer_blocks;
+    snprintf(_self->gotos[_self->ngotos].name, MAX_TEXT, "%s", name);
+    _self->gotos[_self->ngotos].line = _self->arena->nodes[s].line;
+    _self->gotos[_self->ngotos].depth = _self->ndefer_blocks;
     for (i = 0; i < _self->ndefer_blocks; i++) {
-        _self->goto_path[_self->ngotos][i] = _self->defer_ids[i];
-        _self->goto_path_has[_self->ngotos][i] = 0;
+        _self->gotos[_self->ngotos].path[i] = _self->defer_ids[i];
+        _self->gotos[_self->ngotos].has[i] = 0;
     }
     _self->ngotos = (_self->ngotos + 1);
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -3627,42 +3631,42 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_func_end(void *self) {
     char msg[MAX_TEXT];
     (void)(_self);
     if ((_self->f_string_local && (_self->ngotos > 0))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->goto_lines[0], "a goto cannot cross an owning String scope; restructure the code or release() explicitly");
+        return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[0].line, "a goto cannot cross an owning String scope; restructure the code or release() explicitly");
     }
     for (i = 0; i < _self->ngotos; i++) {
-        int li = _self->__frontend_parse_stmtops_vptr->label_find(_self, _self->goto_names[i]);
+        int li = _self->__frontend_parse_stmtops_vptr->label_find(_self, _self->gotos[i].name);
         if (li < 0) {
-            snprintf(msg, sizeof(msg), "label '%s' is not defined", _self->goto_names[i]);
-            return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->goto_lines[i], msg);
+            snprintf(msg, sizeof(msg), "label '%s' is not defined", _self->gotos[i].name);
+            return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[i].line, msg);
         }
-        gd = _self->goto_path_depth[i];
-        ld = _self->label_path_depth[li];
+        gd = _self->gotos[i].depth;
+        ld = _self->labels[li].depth;
         k = 0;
-        while ((((k < gd) && (k < ld)) && (_self->goto_path[i][k] == _self->label_path[li][k]))) {
+        while ((((k < gd) && (k < ld)) && (_self->gotos[i].path[k] == _self->labels[li].path[k]))) {
             k++;
         }
         for (j = k; j < gd; j++) {
-            if (_self->goto_path_has[i][j]) {
+            if (_self->gotos[i].has[j]) {
                 int b;
                 int has_err = 0;
                 for (b = 0; b < 256; b++) {
-                    if (_self->defer_ids[b] == _self->goto_path[i][j]) {
+                    if (_self->defer_ids[b] == _self->gotos[i].path[j]) {
                         has_err = _self->defer_block_err[b];
                     }
                 }
-                return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->goto_lines[i], (has_err ? "a goto cannot cross a block with errdefer" : "a goto cannot cross a block with defer"));
+                return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[i].line, (has_err ? "a goto cannot cross a block with errdefer" : "a goto cannot cross a block with defer"));
             }
         }
         for (j = k; j < ld; j++) {
-            if (_self->label_path_has[li][j]) {
+            if (_self->labels[li].has[j]) {
                 int b;
                 int has_err = 0;
                 for (b = 0; b < 256; b++) {
-                    if (_self->defer_ids[b] == _self->label_path[li][j]) {
+                    if (_self->defer_ids[b] == _self->labels[li].path[j]) {
                         has_err = _self->defer_block_err[b];
                     }
                 }
-                return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->goto_lines[i], (has_err ? "a goto cannot cross a block with errdefer" : "a goto cannot cross a block with defer"));
+                return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[i].line, (has_err ? "a goto cannot cross a block with errdefer" : "a goto cannot cross a block with defer"));
             }
         }
     }
@@ -5708,6 +5712,56 @@ static void match_expr_type_key(const char * in, char * out, int cap) {
         }
     }
     snprintf(out, (size_t)(cap), "%s", k);
+}
+static int ensure_label_capacity(struct frontend_parse_Stmt * self, int need) {
+    int cap;
+    struct frontend_parse_LabelRow * grown;
+    if (need <= self->labelcap) {
+        return 0;
+    }
+    cap = ((self->labelcap > 0) ? self->labelcap : MAX_LABELS);
+    while (((cap < need) && (cap < MAX_LABELS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_LABELS_MAX) {
+        cap = MAX_LABELS_MAX;
+    }
+    if (need > cap) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    grown = (struct frontend_parse_LabelRow *)(realloc(self->labels, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    memset((grown + self->labelcap), 0, ((size_t)((cap - self->labelcap)) * sizeof((*grown))));
+    self->labels = grown;
+    self->labelcap = cap;
+    return 0;
+}
+static int ensure_goto_capacity(struct frontend_parse_Stmt * self, int need) {
+    int cap;
+    struct frontend_parse_LabelRow * grown;
+    if (need <= self->gotocap) {
+        return 0;
+    }
+    cap = ((self->gotocap > 0) ? self->gotocap : MAX_LABELS);
+    while (((cap < need) && (cap < MAX_LABELS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_LABELS_MAX) {
+        cap = MAX_LABELS_MAX;
+    }
+    if (need > cap) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    grown = (struct frontend_parse_LabelRow *)(realloc(self->gotos, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    memset((grown + self->gotocap), 0, ((size_t)((cap - self->gotocap)) * sizeof((*grown))));
+    self->gotos = grown;
+    self->gotocap = cap;
+    return 0;
 }
 void frontend_parse_ct_stmt_bind(void * arena, void * lex, void * sym, void * mem, void * sup, void * ex) {
     frontend_parse_g_stmt.arena = (struct runtime_arena_Arena *)(arena);
