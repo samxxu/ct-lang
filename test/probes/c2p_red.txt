@@ -18,3 +18,13 @@ output:
   >160-byte qualified call: resolved and emitted whole
   200/1000-byte literals: kept whole
 c2p: 3 passed, 0 failed
+
+C2p-2 diagnostics red (baseline 772d7611, same frozen-seed compiler):
+command: bash test/ast/c2p_limits.sh <baseline-ct-ast>
+exit: 1
+output:
+FAIL c2p: qv: compile failed: .../qv.ct:3:213: error: qualified name is too long
+FAIL c2p: qc: compile failed: .../qc.ct:3:215: error: qualified name is too long
+FAIL c2p: diag-trait: the 150-byte struct name is missing from the diagnostic (the message was cut at 160 bytes)
+FAIL c2p: diag-warn: the 300-byte callee name is missing from the arity warning (Warn.var was cut at 160 bytes)
+c2p: 1 passed, 4 failed

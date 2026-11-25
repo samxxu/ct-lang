@@ -94,5 +94,40 @@ if run_product lit "$work/lit.ct"; then
     fi
 fi
 
+# ---- C2p-2.1) a diagnostic that embeds a 150-byte struct name ---------------
+# The message is "trait method 'g' is not implemented for struct '<name>'":
+# with the 150-byte name it is past 160 bytes, so the old Parser.emsg[160] cut
+# the name itself off.
+sname=$(printf '%*s' 150 '' | tr ' ' s)
+cat >"$work/diagtrait.ct" <<CT
+trait T { int f(); int g(); }
+struct $sname { int n; } use T;
+impl T for $sname { int f() { return 1; } }
+int main(void) { return 0; }
+CT
+"$CT" check "$work/diagtrait.ct" >"$work/diagtrait.out" 2>"$work/diagtrait.err"
+rc=$?
+if [ "$rc" -eq 1 ] && grep -qF "$sname" "$work/diagtrait.err" \
+   && grep -qF "trait method 'g' is not implemented for struct" "$work/diagtrait.err"; then
+    ok; printf '  long diagnostic: the 150-byte struct name is kept whole\n'
+else
+    bad "diag-trait: the 150-byte struct name is missing from the diagnostic (the message was cut at 160 bytes)"
+fi
+
+# ---- C2p-2.2) an arity warning naming a 300-byte callee --------------------
+# Warn.var was a 160-byte row, so the warning named a truncated function.
+fname=$(printf '%*s' 300 '' | tr ' ' f)
+cat >"$work/diagwarn.ct" <<CT
+int $fname(int a) { return a; }
+int main(void) { return $fname(1, 2); }
+CT
+"$CT" compile "$work/diagwarn.ct" -o "$work/diagwarn.c" >"$work/diagwarn.out" 2>"$work/diagwarn.err"
+if grep -qF "warning: arity mismatch" "$work/diagwarn.err" \
+   && grep -qF "$fname" "$work/diagwarn.err"; then
+    ok; printf '  arity warning: the 300-byte callee name is kept whole\n'
+else
+    bad "diag-warn: the 300-byte callee name is missing from the arity warning (Warn.var was cut at 160 bytes)"
+fi
+
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
