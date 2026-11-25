@@ -36,11 +36,11 @@
 | `MAX_STRUCTS` | 128 | 10 | A | **已动态**：单元 struct 表（与实例行共用一个块）倍增到 `MAX_STRUCTS_MAX=65536` |
 | `MAX_TRAITS` | 64 | 8 | A | **已动态**（trait 行表 + 实例行）；`StructDef.use[64]` 的采纳列表仍 64，剩余 |
 | `MAX_FIELDS` | 64 | 10 | A | **已动态**：`StructDef.fields`/`StructTmpl.fields`/parser 待定字段表各自倍增到 `MAX_FIELDS_MAX=65536` |
-| `MAX_STRUCT_INSTS` | 128 | 10 | A | 单元内实例行已并入动态 struct 表；全局 `g_insts` 仍固定，剩余 |
-| `MAX_STRUCT_IMPLS` | 64 | 4 | A | 动态 |
-| `MAX_STRUCT_TPLS` | 64 | 4 | A | 动态 |
-| `MAX_GENERIC_INSTS` | 64 | 5 | A | 动态 |
-| `MAX_CLOSURES` | 64 | 5 | A | 动态 |
+| `MAX_STRUCT_INSTS` | 128 | 10 | A | **已动态**：单元内实例行并入 struct 表；全局 `g_insts` 倍增到 `MAX_STRUCT_INSTS_MAX=65536` |
+| `MAX_STRUCT_IMPLS` | 64 | 4 | A | **已动态**：全局 `g_impls` 倍增到 `MAX_STRUCT_IMPLS_MAX=65536` |
+| `MAX_STRUCT_TPLS` | 64 | 4 | A | **已动态**：全局 `g_tmpls` 倍增到 `MAX_STRUCT_TPLS_MAX=65536` |
+| `MAX_GENERIC_INSTS` | 64 | 5 | A | **已动态**：单元 `ginsts` 倍增到 `MAX_GENERIC_INSTS_MAX=65536` |
+| `MAX_CLOSURES` | 64 | 5 | A | **已动态**：单元 `closures` 倍增到 `MAX_CLOSURES_MAX=65536`；emitter 每帧 64 绑定上限另列剩余 |
 | `MAX_CALLS` | 8192 | 7 | A | 动态 |
 | `MAX_ARG_POS` | 32 | 14 | A | 动态 |
 | `MAX_LABELS` | 64 | 5 | A | 动态 |
@@ -49,8 +49,8 @@
 | `MAX_MAPS` | 64 | 5 | A | 动态 |
 | `MAX_METH_ANN` | 256 | 4 | A | 动态 |
 | `MAX_PARAMS` | 16 | 21 | A | 动态（值与类型参数分开处理；见 C 的泛型元数） |
-| `MAX_TYPE_ALIASES` | 64 | 6 | A | 动态 |
-| `MAX_GLOBAL_TYPE_ALIASES` | 256 | 4 | A | 动态 |
+| `MAX_TYPE_ALIASES` | 64 | 6 | A | **已动态**：本地 `taliases` 倍增到 `MAX_TYPE_ALIASES_MAX=65536` |
+| `MAX_GLOBAL_TYPE_ALIASES` | 256 | 4 | A | **已动态**：全局 `gtaliases` 倍增到 `MAX_GLOBAL_TYPE_ALIASES_MAX=65536` |
 | `MAX_IMPORTS` | 32 | 10 | A | 动态 |
 | `MAX_INCDIRS` | 16 | 4 | A | 动态 |
 | `MAX_UNITS` | 64 | 24 | A | 动态 |

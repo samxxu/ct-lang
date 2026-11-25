@@ -51,15 +51,21 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_FIELDS  64
 #define MAX_FIELDS_MAX 65536
 #define MAX_TYPE_ALIASES 64
+#define MAX_TYPE_ALIASES_MAX 65536
 #define MAX_GLOBAL_TYPE_ALIASES 256
+#define MAX_GLOBAL_TYPE_ALIASES_MAX 65536
 #define MAX_ALIAS_CHAIN 32
 #define MAX_CLOSURES 64
+#define MAX_CLOSURES_MAX 65536
 #define MAX_GENERIC_INSTS 64
+#define MAX_GENERIC_INSTS_MAX 65536
 #define MAX_STRUCT_TPLS 64
+#define MAX_STRUCT_TPLS_MAX 65536
 #define MAX_STRUCT_INSTS 128
 #define MAX_STRUCT_INSTS_MAX 65536
 #define MAX_STRUCT_TPARAMS 2
 #define MAX_STRUCT_IMPLS 64
+#define MAX_STRUCT_IMPLS_MAX 65536
 /* Phase 78 S2b: one row per inherent method carrying ref/out annotations.
    Trait methods use their existing MethodSig row; this table only covers an
    implementation block that has no trait. */
@@ -376,6 +382,10 @@ pub trait SymbolOps {
     int  ensure_var_capacity(int need);
     int  ensure_scope_capacity(int need);
     int  ensure_type_capacity(int need);
+    int  ensure_ginst_capacity(int need);
+    int  ensure_closure_capacity(int need);
+    int  ensure_type_alias_capacity(int need);
+    int  ensure_global_type_alias_capacity(int need);
     /* Phase 78 S2b: remember / look up an inherent method's ref/out
        annotations. Both sides normalise the host spelling (struct/union tag
        prefix and generic arguments are dropped). */
@@ -631,6 +641,7 @@ pub struct Symbols {
     int  nfunc_base;
     struct GenericInst *ginsts;
     int  nginsts;
+    int  ginstcap;
     struct Var  *vars;
     int  nvar;
     int  varcap;
@@ -658,6 +669,7 @@ pub struct Symbols {
     int  structcap;
     struct Closure *closures;
     int  nclosure;
+    int  closurecap;
     /* Phase 78 S2b: inherent-method parameter annotations, filled while the
        impl block is parsed. A template impl stores its template host, so an
        instance call (`Box<int>`) finds it after normalisation. */
@@ -692,10 +704,12 @@ pub struct Symbols {
        treating the name as an opaque C type. Both blocks are heap allocated. */
     struct TypeAlias *taliases;
     int  ntalias;
+    int  taliascap;
     char tachain[32][160];      /* MAX_ALIAS_CHAIN, spelled out for the header */
     int  ntachain;
     struct TypeAlias *gtaliases;
     int  ngtalias;
+    int  gtaliascap;
     /* 1 while `parse_type` reads the right-hand side of a `type` declaration.
        A forward reference there is deferred as raw text (so alias cycles and
        legal forward targets stay one mechanism); outside it, a forward row is
@@ -833,6 +847,85 @@ impl SymbolOps for Symbols {
         return 0;
     }
 
+    /* S1a-0 C1: the four remaining per-unit tables. Each row record holds
+       only values, so a moved block invalidates no caller (all readers use
+       indices through `self`). */
+    int ensure_ginst_capacity(int need)
+    {
+        int cap;
+        struct GenericInst *grown;
+        (void)self;
+        if (need <= self->ginstcap) return 0;
+        cap = self->ginstcap > 0 ? self->ginstcap : MAX_GENERIC_INSTS;
+        while (cap < need && cap < MAX_GENERIC_INSTS_MAX) cap *= 2;
+        if (cap > MAX_GENERIC_INSTS_MAX) cap = MAX_GENERIC_INSTS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct GenericInst *)realloc(self->ginsts, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->ginstcap, 0,
+               (size_t)(cap - self->ginstcap) * sizeof(*grown));
+        self->ginsts = grown;
+        self->ginstcap = cap;
+        return 0;
+    }
+
+    int ensure_closure_capacity(int need)
+    {
+        int cap;
+        struct Closure *grown;
+        (void)self;
+        if (need <= self->closurecap) return 0;
+        cap = self->closurecap > 0 ? self->closurecap : MAX_CLOSURES;
+        while (cap < need && cap < MAX_CLOSURES_MAX) cap *= 2;
+        if (cap > MAX_CLOSURES_MAX) cap = MAX_CLOSURES_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct Closure *)realloc(self->closures, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->closurecap, 0,
+               (size_t)(cap - self->closurecap) * sizeof(*grown));
+        self->closures = grown;
+        self->closurecap = cap;
+        return 0;
+    }
+
+    int ensure_type_alias_capacity(int need)
+    {
+        int cap;
+        struct TypeAlias *grown;
+        (void)self;
+        if (need <= self->taliascap) return 0;
+        cap = self->taliascap > 0 ? self->taliascap : MAX_TYPE_ALIASES;
+        while (cap < need && cap < MAX_TYPE_ALIASES_MAX) cap *= 2;
+        if (cap > MAX_TYPE_ALIASES_MAX) cap = MAX_TYPE_ALIASES_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct TypeAlias *)realloc(self->taliases, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->taliascap, 0,
+               (size_t)(cap - self->taliascap) * sizeof(*grown));
+        self->taliases = grown;
+        self->taliascap = cap;
+        return 0;
+    }
+
+    int ensure_global_type_alias_capacity(int need)
+    {
+        int cap;
+        struct TypeAlias *grown;
+        (void)self;
+        if (need <= self->gtaliascap) return 0;
+        cap = self->gtaliascap > 0 ? self->gtaliascap : MAX_GLOBAL_TYPE_ALIASES;
+        while (cap < need && cap < MAX_GLOBAL_TYPE_ALIASES_MAX) cap *= 2;
+        if (cap > MAX_GLOBAL_TYPE_ALIASES_MAX) cap = MAX_GLOBAL_TYPE_ALIASES_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct TypeAlias *)realloc(self->gtaliases, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->gtaliascap, 0,
+               (size_t)(cap - self->gtaliascap) * sizeof(*grown));
+        self->gtaliases = grown;
+        self->gtaliascap = cap;
+        return 0;
+    }
+
     int reserved_name(const char *name)
     {
         (void)self;
@@ -872,13 +965,8 @@ impl SymbolOps for Symbols {
     int closure_new(const char *owner)
     {
         struct Closure *c;
-        char msg[MAX_TEXT];
         (void)self;
-        if (self->nclosure >= MAX_CLOSURES) {
-            snprintf(msg, sizeof msg, "too many closures in unit '%s' (limit %d)",
-                     self->unit_name(), MAX_CLOSURES);
-            return self->fail(msg);
-        }
+        if (self->ensure_closure_capacity(self->nclosure + 1) != 0) return -1;
         c = &self->closures[self->nclosure];
         snprintf(c->owner, MAX_TEXT, "%s", owner ? owner : "");
         c->ret[0] = 0;
@@ -1797,8 +1885,7 @@ impl TypeAliasOps for Symbols {
                 snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
                 return self->fail(msg);
             }
-        if (self->ntalias >= MAX_TYPE_ALIASES)
-            return self->fail("too many type aliases in this unit");
+        if (self->ensure_type_alias_capacity(self->ntalias + 1) != 0) return -1;
         i = self->ntalias;
         self->ntalias++;
         memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
@@ -1824,8 +1911,7 @@ impl TypeAliasOps for Symbols {
         snprintf(self->taliases[i].target, sizeof self->taliases[i].target, "%s", target);
         self->taliases[i].forward = 0;
         self->taliases[i].resolving = 0;
-        if (self->ngtalias >= MAX_GLOBAL_TYPE_ALIASES)
-            return self->fail("too many type aliases in this build");
+        if (self->ensure_global_type_alias_capacity(self->ngtalias + 1) != 0) return -1;
         g = self->ngtalias;
         self->ngtalias++;
         self->gtaliases[g] = self->taliases[i];
@@ -1848,8 +1934,7 @@ impl TypeAliasOps for Symbols {
         int i;
         if (self->find_type_alias(name) >= 0) return 0;
         if (self->find_type(name) >= 0) return 0;
-        if (self->ntalias >= MAX_TYPE_ALIASES)
-            return self->fail("too many type aliases in this unit");
+        if (self->ensure_type_alias_capacity(self->ntalias + 1) != 0) return -1;
         i = self->ntalias;
         self->ntalias++;
         memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
@@ -1887,8 +1972,7 @@ impl TypeAliasOps for Symbols {
                 snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
                 return self->fail(msg);
             }
-        if (self->ntalias >= MAX_TYPE_ALIASES)
-            return self->fail("too many type aliases in this unit");
+        if (self->ensure_type_alias_capacity(self->ntalias + 1) != 0) return -1;
         i = self->ntalias;
         self->ntalias++;
         memset(&self->taliases[i], 0, sizeof(self->taliases[i]));
@@ -2056,6 +2140,7 @@ static int symbols_grow(struct Symbols *self)
     if (!self->ginsts) {
         self->ginsts = calloc(MAX_GENERIC_INSTS, sizeof(*self->ginsts));
         if (!self->ginsts) return -1;
+        self->ginstcap = MAX_GENERIC_INSTS;
     }
     if (!self->traits) {
         self->traits = calloc(MAX_TRAITS, sizeof(*self->traits));
@@ -2070,14 +2155,17 @@ static int symbols_grow(struct Symbols *self)
     if (!self->closures) {
         self->closures = calloc(MAX_CLOSURES, sizeof(*self->closures));
         if (!self->closures) return -1;
+        self->closurecap = MAX_CLOSURES;
     }
     if (!self->taliases) {
         self->taliases = calloc(MAX_TYPE_ALIASES, sizeof(*self->taliases));
         if (!self->taliases) return -1;
+        self->taliascap = MAX_TYPE_ALIASES;
     }
     if (!self->gtaliases) {
         self->gtaliases = calloc(MAX_GLOBAL_TYPE_ALIASES, sizeof(*self->gtaliases));
         if (!self->gtaliases) return -1;
+        self->gtaliascap = MAX_GLOBAL_TYPE_ALIASES;
     }
     if (!self->types) {
         self->types = calloc(MAX_TYPES, MAX_TEXT);
@@ -2110,12 +2198,55 @@ struct Symbols *symbols_get(void)
    later unit reuses the one the template's owner published (D29-10). */
 static struct StructTmpl *g_tmpls;
 static int g_ntmpls;
+static int g_tmplscap;
 static struct StructInst *g_insts;
 static int g_ninsts;
+static int g_instscap;
+
+/* S1a-0 C1: the three build-wide registries grow on demand. They are never
+   reset, so a capacity only moves forward. */
+static int tmpls_grow(int need)
+{
+    int cap;
+    struct StructTmpl *grown;
+
+    if (need <= g_tmplscap) return 0;
+    cap = g_tmplscap > 0 ? g_tmplscap : MAX_STRUCT_TPLS;
+    while (cap < need && cap < MAX_STRUCT_TPLS_MAX) cap *= 2;
+    if (cap > MAX_STRUCT_TPLS_MAX) cap = MAX_STRUCT_TPLS_MAX;
+    if (need > cap) return -1;
+    grown = (struct StructTmpl *)realloc(g_tmpls, (size_t)cap * sizeof(*grown));
+    if (!grown) return -1;
+    memset(grown + g_tmplscap, 0, (size_t)(cap - g_tmplscap) * sizeof(*grown));
+    g_tmpls = grown;
+    g_tmplscap = cap;
+    return 0;
+}
+
+static int insts_grow(int need)
+{
+    int cap;
+    struct StructInst *grown;
+
+    if (need <= g_instscap) return 0;
+    cap = g_instscap > 0 ? g_instscap : MAX_STRUCT_INSTS;
+    while (cap < need && cap < MAX_STRUCT_INSTS_MAX) cap *= 2;
+    if (cap > MAX_STRUCT_INSTS_MAX) cap = MAX_STRUCT_INSTS_MAX;
+    if (need > cap) return -1;
+    grown = (struct StructInst *)realloc(g_insts, (size_t)cap * sizeof(*grown));
+    if (!grown) return -1;
+    memset(grown + g_instscap, 0, (size_t)(cap - g_instscap) * sizeof(*grown));
+    g_insts = grown;
+    g_instscap = cap;
+    return 0;
+}
 
 struct StructTmpl *ct_tmpls(int *n)
 {
-    if (!g_tmpls) g_tmpls = calloc(MAX_STRUCT_TPLS, sizeof(*g_tmpls));
+    if (!g_tmpls) {
+        g_tmpls = calloc(MAX_STRUCT_TPLS, sizeof(*g_tmpls));
+        if (g_tmpls) g_tmplscap = MAX_STRUCT_TPLS;
+    }
     if (!g_tmpls) {
         if (n) *n = 0;
         return g_tmpls;
@@ -2126,7 +2257,10 @@ struct StructTmpl *ct_tmpls(int *n)
 
 struct StructInst *ct_insts(int *n)
 {
-    if (!g_insts) g_insts = calloc(MAX_STRUCT_INSTS, sizeof(*g_insts));
+    if (!g_insts) {
+        g_insts = calloc(MAX_STRUCT_INSTS, sizeof(*g_insts));
+        if (g_insts) g_instscap = MAX_STRUCT_INSTS;
+    }
     if (!g_insts) {
         if (n) *n = 0;
         return g_insts;
@@ -2150,11 +2284,14 @@ int ct_tmpl_add(const char *name, const char *full, int ntprm,
                 int is_pub, int owner, const char *path, int line)
 {
     int i, n;
-    struct StructTmpl *t = ct_tmpls(&n);
+    struct StructTmpl *t;
 
     i = ct_tmpl_find(name);
     if (i >= 0) return i;
-    if (!t || n >= MAX_STRUCT_TPLS) return -1;
+    if (tmpls_grow(g_ntmpls + 1) != 0) return -1;
+    t = ct_tmpls(&n);
+    if (!t) return -1;
+    n = g_ntmpls;
     snprintf(t[n].name, MAX_TEXT, "%s", name);
     snprintf(t[n].full, MAX_TEXT, "%s", full);
     t[n].ntparams = ntprm;
@@ -2189,9 +2326,10 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
                 int owner, int carried, int line, int col)
 {
     int i, n;
-    struct StructInst *t = ct_insts(&n);
+    struct StructInst *t;
 
     i = ct_inst_find(name);
+    t = ct_insts(&n);
     if (i >= 0) {
         /* The same encoding must always mean the same argument list (L29-5). */
         if (t[i].nargs != nargs) return -2;
@@ -2200,7 +2338,10 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
         if (carried && !t[i].carried) t[i].carried = 1;
         return i;
     }
-    if (!t || n >= MAX_STRUCT_INSTS) return -1;
+    if (insts_grow(g_ninsts + 1) != 0) return -1;
+    t = ct_insts(&n);
+    if (!t) return -1;
+    n = g_ninsts;
     snprintf(t[n].name, MAX_TEXT, "%s", name);
     snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
     t[n].nargs = nargs;
@@ -2220,10 +2361,32 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
 
 static struct StructImpl *g_impls;
 static int g_nimpls;
+static int g_implscap;
+
+static int impls_grow(int need)
+{
+    int cap;
+    struct StructImpl *grown;
+
+    if (need <= g_implscap) return 0;
+    cap = g_implscap > 0 ? g_implscap : MAX_STRUCT_IMPLS;
+    while (cap < need && cap < MAX_STRUCT_IMPLS_MAX) cap *= 2;
+    if (cap > MAX_STRUCT_IMPLS_MAX) cap = MAX_STRUCT_IMPLS_MAX;
+    if (need > cap) return -1;
+    grown = (struct StructImpl *)realloc(g_impls, (size_t)cap * sizeof(*grown));
+    if (!grown) return -1;
+    memset(grown + g_implscap, 0, (size_t)(cap - g_implscap) * sizeof(*grown));
+    g_impls = grown;
+    g_implscap = cap;
+    return 0;
+}
 
 struct StructImpl *ct_impls(int *n)
 {
-    if (!g_impls) g_impls = calloc(MAX_STRUCT_IMPLS, sizeof(*g_impls));
+    if (!g_impls) {
+        g_impls = calloc(MAX_STRUCT_IMPLS, sizeof(*g_impls));
+        if (g_impls) g_implscap = MAX_STRUCT_IMPLS;
+    }
     if (!g_impls) {
         if (n) *n = 0;
         return g_impls;
@@ -2258,7 +2421,10 @@ int ct_impl_add(const char *tmpl, int ntprm, const char *t1, const char *t2,
 
     i = ct_impl_find(tmpl, nargs, p1, p2, use);
     if (i >= 0) return i;
-    if (!t || n >= MAX_STRUCT_IMPLS) return -1;
+    if (impls_grow(g_nimpls + 1) != 0) return -1;
+    t = ct_impls(&n);
+    if (!t) return -1;
+    n = g_nimpls;
     snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
     t[n].ntparams = ntprm;
     snprintf(t[n].tparam[0], MAX_TEXT, "%s", t1);

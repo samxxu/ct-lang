@@ -682,8 +682,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_generic_instance(void *sel
         }
         seq++;
     }
-    if (_self->sym->nginsts >= MAX_GENERIC_INSTS) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many generic instances in this unit");
+    if (_self->sym->__frontend_sym_symbolops_vptr->ensure_ginst_capacity(_self->sym, (_self->sym->nginsts + 1)) != 0) {
+        return (-1);
     }
     if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_capacity(_self->sym, (_self->sym->nfunc + 1)) != 0) {
         snprintf(msg, sizeof(msg), "too many functions (limit %d, whole program)", MAX_FUNCS_MAX);
@@ -1721,7 +1721,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_inst_make(void *self, cons
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
     }
     if (k < 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the instantiated name exceeds 159 characters; shorten the template or its arguments");
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     si2 = _self->sym->__frontend_sym_symbolops_vptr->add_struct_inst(_self->sym, enc);
     if (si2 < 0) {

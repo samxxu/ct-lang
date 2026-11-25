@@ -114,6 +114,10 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*ensure_var_capacity)(void *, int);
     int (*ensure_scope_capacity)(void *, int);
     int (*ensure_type_capacity)(void *, int);
+    int (*ensure_ginst_capacity)(void *, int);
+    int (*ensure_closure_capacity)(void *, int);
+    int (*ensure_type_alias_capacity)(void *, int);
+    int (*ensure_global_type_alias_capacity)(void *, int);
     int (*add_meth_ann)(void *, const char *, const char *, const int *, int);
     int (*find_meth_ann)(void *, const char *, const char *, int *, int);
     int (*resolve_func)(void *, const char *);
@@ -380,6 +384,7 @@ struct frontend_sym_Symbols {
     int nfunc_base;
     struct frontend_sym_GenericInst * ginsts;
     int nginsts;
+    int ginstcap;
     struct frontend_sym_Var * vars;
     int nvar;
     int varcap;
@@ -400,6 +405,7 @@ struct frontend_sym_Symbols {
     int structcap;
     struct frontend_sym_Closure * closures;
     int nclosure;
+    int closurecap;
     struct frontend_sym_MethAnn meth[256];
     int nmeth;
     char tbare[128][160];
@@ -413,10 +419,12 @@ struct frontend_sym_Symbols {
     int nalias;
     struct frontend_sym_TypeAlias * taliases;
     int ntalias;
+    int taliascap;
     char tachain[32][160];
     int ntachain;
     struct frontend_sym_TypeAlias * gtaliases;
     int ngtalias;
+    int gtaliascap;
     int alias_decl;
     int self_mode;
     char ret_type[160];

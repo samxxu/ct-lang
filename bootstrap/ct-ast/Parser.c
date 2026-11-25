@@ -2550,7 +2550,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
         di = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, qname);
         ti4 = frontend_sym_ct_tmpl_add(name, qname, nt, tparam[0], tparam[1], bound[0], bound[1], _self->decl_pub, _self->cur_unit, _self->mem->path, struct_line);
         if (ti4 < 0) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many generic struct templates in this build (limit 64)");
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         tps = frontend_sym_ct_tmpls((&tn4));
         if (((di >= 0) && tps)) {
@@ -4289,6 +4289,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     snprintf(_self->arena->nodes[node].text3, MAX_TEXT, "%s", _self->mem->path);
     _self->arena->nodes[node].aux = (-1);
     _self->arena->nodes[node].num = frontend_sym_ct_impl_add(tmpl, nt, tn[0], tn[1], nargs, pat[0], pat[1], use, node, _self->cur_unit, line);
+    if (_self->arena->nodes[node].num < 0) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     if ((use[0] && (_self->arena->nodes[node].num >= 0))) {
         int is_builtin = (((strcmp(use, "Drop") == 0) || (strcmp(use, "Handback") == 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, use) < 0));
         int ii2;

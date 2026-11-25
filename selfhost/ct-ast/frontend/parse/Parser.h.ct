@@ -2945,9 +2945,7 @@ impl ParseOps for Parser {
                               bound[0], bound[1],
                               self->decl_pub, self->cur_unit, self->mem->path,
                               struct_line);
-            if (ti4 < 0)
-                return self->sup->fail(
-                    "too many generic struct templates in this build (limit 64)");
+            if (ti4 < 0) return self->sup->fail("out of memory");
             tps = frontend::sym::ct_tmpls(&tn4);
             if (di >= 0 && tps) {
                 if (self->sym->ensure_tmpl_field_capacity(ti4,
@@ -4559,6 +4557,7 @@ impl ParseOps for Parser {
         self->arena->nodes[node].num = frontend::sym::ct_impl_add(tmpl, nt, tn[0], tn[1],
                                                                  nargs, pat[0], pat[1], use,
                                                                  node, self->cur_unit, line);
+        if (self->arena->nodes[node].num < 0) return self->sup->fail("out of memory");
         if (use[0] && self->arena->nodes[node].num >= 0) {
             /* Instances that already exist adopt the trait now; the ones that
                appear later adopt it in `parse_inst_type`. Both fill the use

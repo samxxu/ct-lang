@@ -27,15 +27,21 @@
 #define MAX_FIELDS  64
 #define MAX_FIELDS_MAX 65536
 #define MAX_TYPE_ALIASES 64
+#define MAX_TYPE_ALIASES_MAX 65536
 #define MAX_GLOBAL_TYPE_ALIASES 256
+#define MAX_GLOBAL_TYPE_ALIASES_MAX 65536
 #define MAX_ALIAS_CHAIN 32
 #define MAX_CLOSURES 64
+#define MAX_CLOSURES_MAX 65536
 #define MAX_GENERIC_INSTS 64
+#define MAX_GENERIC_INSTS_MAX 65536
 #define MAX_STRUCT_TPLS 64
+#define MAX_STRUCT_TPLS_MAX 65536
 #define MAX_STRUCT_INSTS 128
 #define MAX_STRUCT_INSTS_MAX 65536
 #define MAX_STRUCT_TPARAMS 2
 #define MAX_STRUCT_IMPLS 64
+#define MAX_STRUCT_IMPLS_MAX 65536
 #define MAX_METH_ANN 256
 #define MAX_ADTS 64
 #define MAX_ADT_VARIANTS 96
@@ -136,15 +142,21 @@ int frontend_sym_ct_adt_variant(int, const char *);
 int frontend_sym_ct_adt_has_variant(int, const char *);
 struct frontend_sym_Symbols * frontend_sym_symbols_get(void);
 static int symbols_grow(struct frontend_sym_Symbols *);
+static int tmpls_grow(int);
+static int insts_grow(int);
+static int impls_grow(int);
 static int impl_tparam(struct frontend_sym_StructImpl *, const char *);
 static int impl_match(int, int, const char *, const char *, const char *, char *, char *, int *, int *, int);
 static struct frontend_sym_Symbols frontend_sym_g_symbols = { .__frontend_sym_symbolops_vptr = &frontend_sym_Symbols_frontend_sym_SymbolOps_vtable, .__frontend_sym_typealiasops_vptr = &frontend_sym_Symbols_frontend_sym_TypeAliasOps_vtable };
 static struct frontend_sym_StructTmpl * frontend_sym_g_tmpls;
 static int frontend_sym_g_ntmpls;
+static int frontend_sym_g_tmplscap;
 static struct frontend_sym_StructInst * frontend_sym_g_insts;
 static int frontend_sym_g_ninsts;
+static int frontend_sym_g_instscap;
 static struct frontend_sym_StructImpl * frontend_sym_g_impls;
 static int frontend_sym_g_nimpls;
+static int frontend_sym_g_implscap;
 static struct frontend_sym_Adt * frontend_sym_g_adts;
 static int frontend_sym_g_nadts;
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_fail(void *self, const char * msg) {
@@ -285,6 +297,118 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_capacity(void
     return 0;
 }
 
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_ginst_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_GenericInst * grown;
+    (void)(_self);
+    if (need <= _self->ginstcap) {
+        return 0;
+    }
+    cap = ((_self->ginstcap > 0) ? _self->ginstcap : MAX_GENERIC_INSTS);
+    while (((cap < need) && (cap < MAX_GENERIC_INSTS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_GENERIC_INSTS_MAX) {
+        cap = MAX_GENERIC_INSTS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_GenericInst *)(realloc(_self->ginsts, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->ginstcap), 0, ((size_t)((cap - _self->ginstcap)) * sizeof((*grown))));
+    _self->ginsts = grown;
+    _self->ginstcap = cap;
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_closure_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_Closure * grown;
+    (void)(_self);
+    if (need <= _self->closurecap) {
+        return 0;
+    }
+    cap = ((_self->closurecap > 0) ? _self->closurecap : MAX_CLOSURES);
+    while (((cap < need) && (cap < MAX_CLOSURES_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_CLOSURES_MAX) {
+        cap = MAX_CLOSURES_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_Closure *)(realloc(_self->closures, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->closurecap), 0, ((size_t)((cap - _self->closurecap)) * sizeof((*grown))));
+    _self->closures = grown;
+    _self->closurecap = cap;
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_alias_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_TypeAlias * grown;
+    (void)(_self);
+    if (need <= _self->taliascap) {
+        return 0;
+    }
+    cap = ((_self->taliascap > 0) ? _self->taliascap : MAX_TYPE_ALIASES);
+    while (((cap < need) && (cap < MAX_TYPE_ALIASES_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_TYPE_ALIASES_MAX) {
+        cap = MAX_TYPE_ALIASES_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_TypeAlias *)(realloc(_self->taliases, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->taliascap), 0, ((size_t)((cap - _self->taliascap)) * sizeof((*grown))));
+    _self->taliases = grown;
+    _self->taliascap = cap;
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_global_type_alias_capacity(void *self, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_TypeAlias * grown;
+    (void)(_self);
+    if (need <= _self->gtaliascap) {
+        return 0;
+    }
+    cap = ((_self->gtaliascap > 0) ? _self->gtaliascap : MAX_GLOBAL_TYPE_ALIASES);
+    while (((cap < need) && (cap < MAX_GLOBAL_TYPE_ALIASES_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_GLOBAL_TYPE_ALIASES_MAX) {
+        cap = MAX_GLOBAL_TYPE_ALIASES_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_TypeAlias *)(realloc(_self->gtaliases, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->gtaliascap), 0, ((size_t)((cap - _self->gtaliascap)) * sizeof((*grown))));
+    _self->gtaliases = grown;
+    _self->gtaliascap = cap;
+    return 0;
+}
+
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_reserved_name(void *self, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     (void)(_self);
@@ -327,11 +451,9 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_pop_scope(void *self) {
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_closure_new(void *self, const char * owner) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     struct frontend_sym_Closure * c;
-    char msg[MAX_TEXT];
     (void)(_self);
-    if (_self->nclosure >= MAX_CLOSURES) {
-        snprintf(msg, sizeof(msg), "too many closures in unit '%s' (limit %d)", _self->__frontend_sym_symbolops_vptr->unit_name(_self), MAX_CLOSURES);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+    if (_self->__frontend_sym_symbolops_vptr->ensure_closure_capacity(_self, (_self->nclosure + 1)) != 0) {
+        return (-1);
     }
     c = (&_self->closures[_self->nclosure]);
     snprintf(c->owner, MAX_TEXT, "%s", (owner ? owner : ""));
@@ -1286,6 +1408,10 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .ensure_var_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_var_capacity,
     .ensure_scope_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_scope_capacity,
     .ensure_type_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_capacity,
+    .ensure_ginst_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_ginst_capacity,
+    .ensure_closure_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_closure_capacity,
+    .ensure_type_alias_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_alias_capacity,
+    .ensure_global_type_alias_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_global_type_alias_capacity,
     .reserved_name = frontend_sym_Symbols_frontend_sym_SymbolOps_reserved_name,
     .unit_name = frontend_sym_Symbols_frontend_sym_SymbolOps_unit_name,
     .push_scope = frontend_sym_Symbols_frontend_sym_SymbolOps_push_scope,
@@ -1398,8 +1524,8 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
             return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
         }
     }
-    if (_self->ntalias >= MAX_TYPE_ALIASES) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "too many type aliases in this unit");
+    if (_self->__frontend_sym_symbolops_vptr->ensure_type_alias_capacity(_self, (_self->ntalias + 1)) != 0) {
+        return (-1);
     }
     i = _self->ntalias;
     _self->ntalias++;
@@ -1432,8 +1558,8 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_finish_type_alias(void
     snprintf(_self->taliases[i].target, sizeof(_self->taliases[i].target), "%s", target);
     _self->taliases[i].forward = 0;
     _self->taliases[i].resolving = 0;
-    if (_self->ngtalias >= MAX_GLOBAL_TYPE_ALIASES) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "too many type aliases in this build");
+    if (_self->__frontend_sym_symbolops_vptr->ensure_global_type_alias_capacity(_self, (_self->ngtalias + 1)) != 0) {
+        return (-1);
     }
     g = _self->ngtalias;
     _self->ngtalias++;
@@ -1460,8 +1586,8 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_forward_type_alias
     if (_self->__frontend_sym_symbolops_vptr->find_type(_self, name) >= 0) {
         return 0;
     }
-    if (_self->ntalias >= MAX_TYPE_ALIASES) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "too many type aliases in this unit");
+    if (_self->__frontend_sym_symbolops_vptr->ensure_type_alias_capacity(_self, (_self->ntalias + 1)) != 0) {
+        return (-1);
     }
     i = _self->ntalias;
     _self->ntalias++;
@@ -1498,8 +1624,8 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_visible_type_alias
             return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
         }
     }
-    if (_self->ntalias >= MAX_TYPE_ALIASES) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "too many type aliases in this unit");
+    if (_self->__frontend_sym_symbolops_vptr->ensure_type_alias_capacity(_self, (_self->ntalias + 1)) != 0) {
+        return (-1);
     }
     i = _self->ntalias;
     _self->ntalias++;
@@ -1711,6 +1837,7 @@ static int symbols_grow(struct frontend_sym_Symbols * self) {
         if ((!self->ginsts)) {
             return (-1);
         }
+        self->ginstcap = MAX_GENERIC_INSTS;
     }
     if ((!self->traits)) {
         self->traits = calloc(MAX_TRAITS, sizeof((*self->traits)));
@@ -1731,18 +1858,21 @@ static int symbols_grow(struct frontend_sym_Symbols * self) {
         if ((!self->closures)) {
             return (-1);
         }
+        self->closurecap = MAX_CLOSURES;
     }
     if ((!self->taliases)) {
         self->taliases = calloc(MAX_TYPE_ALIASES, sizeof((*self->taliases)));
         if ((!self->taliases)) {
             return (-1);
         }
+        self->taliascap = MAX_TYPE_ALIASES;
     }
     if ((!self->gtaliases)) {
         self->gtaliases = calloc(MAX_GLOBAL_TYPE_ALIASES, sizeof((*self->gtaliases)));
         if ((!self->gtaliases)) {
             return (-1);
         }
+        self->gtaliascap = MAX_GLOBAL_TYPE_ALIASES;
     }
     if ((!self->types)) {
         self->types = calloc(MAX_TYPES, MAX_TEXT);
@@ -1768,9 +1898,62 @@ struct frontend_sym_Symbols * frontend_sym_symbols_get(void) {
     }
     return (&frontend_sym_g_symbols);
 }
+static int tmpls_grow(int need) {
+    int cap;
+    struct frontend_sym_StructTmpl * grown;
+    if (need <= frontend_sym_g_tmplscap) {
+        return 0;
+    }
+    cap = ((frontend_sym_g_tmplscap > 0) ? frontend_sym_g_tmplscap : MAX_STRUCT_TPLS);
+    while (((cap < need) && (cap < MAX_STRUCT_TPLS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_STRUCT_TPLS_MAX) {
+        cap = MAX_STRUCT_TPLS_MAX;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (struct frontend_sym_StructTmpl *)(realloc(frontend_sym_g_tmpls, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + frontend_sym_g_tmplscap), 0, ((size_t)((cap - frontend_sym_g_tmplscap)) * sizeof((*grown))));
+    frontend_sym_g_tmpls = grown;
+    frontend_sym_g_tmplscap = cap;
+    return 0;
+}
+static int insts_grow(int need) {
+    int cap;
+    struct frontend_sym_StructInst * grown;
+    if (need <= frontend_sym_g_instscap) {
+        return 0;
+    }
+    cap = ((frontend_sym_g_instscap > 0) ? frontend_sym_g_instscap : MAX_STRUCT_INSTS);
+    while (((cap < need) && (cap < MAX_STRUCT_INSTS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_STRUCT_INSTS_MAX) {
+        cap = MAX_STRUCT_INSTS_MAX;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (struct frontend_sym_StructInst *)(realloc(frontend_sym_g_insts, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + frontend_sym_g_instscap), 0, ((size_t)((cap - frontend_sym_g_instscap)) * sizeof((*grown))));
+    frontend_sym_g_insts = grown;
+    frontend_sym_g_instscap = cap;
+    return 0;
+}
 struct frontend_sym_StructTmpl * frontend_sym_ct_tmpls(int * n) {
     if ((!frontend_sym_g_tmpls)) {
         frontend_sym_g_tmpls = calloc(MAX_STRUCT_TPLS, sizeof((*frontend_sym_g_tmpls)));
+        if (frontend_sym_g_tmpls) {
+            frontend_sym_g_tmplscap = MAX_STRUCT_TPLS;
+        }
     }
     if ((!frontend_sym_g_tmpls)) {
         if (n) {
@@ -1786,6 +1969,9 @@ struct frontend_sym_StructTmpl * frontend_sym_ct_tmpls(int * n) {
 struct frontend_sym_StructInst * frontend_sym_ct_insts(int * n) {
     if ((!frontend_sym_g_insts)) {
         frontend_sym_g_insts = calloc(MAX_STRUCT_INSTS, sizeof((*frontend_sym_g_insts)));
+        if (frontend_sym_g_insts) {
+            frontend_sym_g_instscap = MAX_STRUCT_INSTS;
+        }
     }
     if ((!frontend_sym_g_insts)) {
         if (n) {
@@ -1812,14 +1998,19 @@ int frontend_sym_ct_tmpl_find(const char * name) {
 int frontend_sym_ct_tmpl_add(const char * name, const char * full, int ntprm, const char * t1, const char * t2, const char * b1, const char * b2, int is_pub, int owner, const char * path, int line) {
     int i;
     int n;
-    struct frontend_sym_StructTmpl * t = frontend_sym_ct_tmpls((&n));
+    struct frontend_sym_StructTmpl * t;
     i = frontend_sym_ct_tmpl_find(name);
     if (i >= 0) {
         return i;
     }
-    if (((!t) || (n >= MAX_STRUCT_TPLS))) {
+    if (tmpls_grow((frontend_sym_g_ntmpls + 1)) != 0) {
         return (-1);
     }
+    t = frontend_sym_ct_tmpls((&n));
+    if ((!t)) {
+        return (-1);
+    }
+    n = frontend_sym_g_ntmpls;
     snprintf(t[n].name, MAX_TEXT, "%s", name);
     snprintf(t[n].full, MAX_TEXT, "%s", full);
     t[n].ntparams = ntprm;
@@ -1852,8 +2043,9 @@ int frontend_sym_ct_inst_find(const char * name) {
 int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, const char * a1, const char * a2, const char * c1, const char * c2, int owner, int carried, int line, int col) {
     int i;
     int n;
-    struct frontend_sym_StructInst * t = frontend_sym_ct_insts((&n));
+    struct frontend_sym_StructInst * t;
     i = frontend_sym_ct_inst_find(name);
+    t = frontend_sym_ct_insts((&n));
     if (i >= 0) {
         if (t[i].nargs != nargs) {
             return (-2);
@@ -1869,9 +2061,14 @@ int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, co
         }
         return i;
     }
-    if (((!t) || (n >= MAX_STRUCT_INSTS))) {
+    if (insts_grow((frontend_sym_g_ninsts + 1)) != 0) {
         return (-1);
     }
+    t = frontend_sym_ct_insts((&n));
+    if ((!t)) {
+        return (-1);
+    }
+    n = frontend_sym_g_ninsts;
     snprintf(t[n].name, MAX_TEXT, "%s", name);
     snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
     t[n].nargs = nargs;
@@ -1886,9 +2083,37 @@ int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, co
     frontend_sym_g_ninsts++;
     return n;
 }
+static int impls_grow(int need) {
+    int cap;
+    struct frontend_sym_StructImpl * grown;
+    if (need <= frontend_sym_g_implscap) {
+        return 0;
+    }
+    cap = ((frontend_sym_g_implscap > 0) ? frontend_sym_g_implscap : MAX_STRUCT_IMPLS);
+    while (((cap < need) && (cap < MAX_STRUCT_IMPLS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_STRUCT_IMPLS_MAX) {
+        cap = MAX_STRUCT_IMPLS_MAX;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (struct frontend_sym_StructImpl *)(realloc(frontend_sym_g_impls, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + frontend_sym_g_implscap), 0, ((size_t)((cap - frontend_sym_g_implscap)) * sizeof((*grown))));
+    frontend_sym_g_impls = grown;
+    frontend_sym_g_implscap = cap;
+    return 0;
+}
 struct frontend_sym_StructImpl * frontend_sym_ct_impls(int * n) {
     if ((!frontend_sym_g_impls)) {
         frontend_sym_g_impls = calloc(MAX_STRUCT_IMPLS, sizeof((*frontend_sym_g_impls)));
+        if (frontend_sym_g_impls) {
+            frontend_sym_g_implscap = MAX_STRUCT_IMPLS;
+        }
     }
     if ((!frontend_sym_g_impls)) {
         if (n) {
@@ -1933,9 +2158,14 @@ int frontend_sym_ct_impl_add(const char * tmpl, int ntprm, const char * t1, cons
     if (i >= 0) {
         return i;
     }
-    if (((!t) || (n >= MAX_STRUCT_IMPLS))) {
+    if (impls_grow((frontend_sym_g_nimpls + 1)) != 0) {
         return (-1);
     }
+    t = frontend_sym_ct_impls((&n));
+    if ((!t)) {
+        return (-1);
+    }
+    n = frontend_sym_g_nimpls;
     snprintf(t[n].tmpl, MAX_TEXT, "%s", tmpl);
     t[n].ntparams = ntprm;
     snprintf(t[n].tparam[0], MAX_TEXT, "%s", t1);
