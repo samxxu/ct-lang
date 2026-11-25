@@ -82,6 +82,7 @@ struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
+struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 const struct backend_emit_EmitterTryOps_vtbl backend_emit_Emitter_backend_emit_EmitterTryOps_vtable;
 extern void String_Drop_drop(void *self);

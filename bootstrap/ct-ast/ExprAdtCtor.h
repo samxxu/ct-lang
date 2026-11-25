@@ -89,6 +89,7 @@ struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
+struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 extern const struct frontend_parse_ExprAdt_vtbl frontend_parse_Expr_frontend_parse_ExprAdt_vtable;
 

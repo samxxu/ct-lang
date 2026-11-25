@@ -88,6 +88,7 @@ struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
+struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 int tool_pkg_pkg_index_refresh(int, char * *, const char *, const char *);
 int tool_pkg_ct_pkg_lock_roots(const char *, int, char * *, int *, int *, char * *, int *, int *);

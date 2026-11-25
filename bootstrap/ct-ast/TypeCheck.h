@@ -86,6 +86,7 @@ struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
+struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct frontend_type_TypeOps_vtbl {
     int (*is_iface_type)(void *, const char *, char *, int);

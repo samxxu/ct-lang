@@ -81,6 +81,7 @@ struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
+struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct runtime_arena_ArenaOps_vtbl {
     int (*alloc)(void *, int, int);

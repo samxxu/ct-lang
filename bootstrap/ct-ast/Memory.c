@@ -88,6 +88,7 @@ struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
+struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 const struct backend_mem_MemoryOps_vtbl backend_mem_Memory_backend_mem_MemoryOps_vtable;
 extern void String_Drop_drop(void *self);

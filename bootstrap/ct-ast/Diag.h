@@ -81,6 +81,7 @@ struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
+struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 const char * tool_diag_ct_diag_code_for_error(const char *);
 const char * tool_diag_ct_diag_warn_code(int);

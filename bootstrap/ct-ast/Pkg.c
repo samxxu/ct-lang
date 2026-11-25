@@ -101,6 +101,7 @@ struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
+struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct tool_pkg_PkgOps_vtbl {
     int (*read_manifest)(void *, const char *, char *, size_t, char *, size_t, char * *, int *, int *);
@@ -111,7 +112,7 @@ struct tool_pkg_PkgOps_vtbl {
     int (*copy_tree)(void *, const char *, const char *);
     int (*dir_digest)(void *, const char *, char *, size_t);
     int (*ensure_dir)(void *, const char *);
-    int (*split_spec)(void *, const char *, char *, size_t, char *, size_t);
+    int (*split_spec)(void *, const char *, char * *, char * *);
     int (*is_git_ref)(void *, const char *);
     int (*git_url)(void *, const char *, char * *, int *);
     int (*git_name)(void *, const char *, char *, size_t);
@@ -142,7 +143,7 @@ extern void U16String_Drop_drop(void *self);
 
 struct tool_pkg_IndexRow {
     int line;
-    char dir[MAX_PKG_PATH];
+    char * dir;
     char name[MAX_TEXT];
     char ver[32];
     char pub[MAX_TEXT];
@@ -211,6 +212,11 @@ struct tool_pkg_Sha256 {
     unsigned long total;
     unsigned char buf[64];
 };
+struct tool_pkg_ShaPaths {
+    char * * row;
+    int n;
+    int cap;
+};
 static int pkg_read_meta(const char *, char *, size_t, char *, size_t, char *, size_t);
 static int pkg_pin_lookup(const char *, const char *, char *, size_t, char * *, int *, char *, size_t, char *, size_t);
 static int pkg_official_resolve(const char *, char * *, int *, char *, size_t, char *, size_t);
@@ -243,6 +249,8 @@ static int pkg_text_cat(struct tool_pkg_Pkg *, char * *, int *, const char *);
 static int pkg_text_printf(struct tool_pkg_Pkg *, char * *, int *, const char *, ...);
 static int pkg_text_quote(struct tool_pkg_Pkg *, char * *, int *, const char *);
 static int pkg_text_setf(struct tool_pkg_Pkg *, char * *, int *, const char *, ...);
+static char * pkg_pathf(struct tool_pkg_Pkg *, const char *, ...);
+static char * pkg_text_dupn(struct tool_pkg_Pkg *, const char *, size_t);
 static char * pkg_text_dup(struct tool_pkg_Pkg *, const char *);
 static int pkg_text_fgets(struct tool_pkg_Pkg *, char * *, int *, FILE *);
 static void sha256_init(struct tool_pkg_Sha256 *);
@@ -251,8 +259,12 @@ static void sha256_update(struct tool_pkg_Sha256 *, const unsigned char *, size_
 static void sha256_final(struct tool_pkg_Sha256 *);
 static void sha256_hex(const struct tool_pkg_Sha256 *, char *);
 static int sha256_file(struct tool_pkg_Sha256 *, const char *, const char *);
-static int sha_collect(const char *, const char *, char * *, int *, int *);
-static void sha_sort(char *, int);
+static char * sha_join(const char *, const char *);
+static char * sha_copy(const char *);
+static int sha_paths_add(struct tool_pkg_ShaPaths *, const char *);
+static void sha_paths_free(struct tool_pkg_ShaPaths *);
+static int sha_collect(const char *, const char *, struct tool_pkg_ShaPaths *);
+static void sha_sort(struct tool_pkg_ShaPaths *);
 static int sha_hex_ok(const char *);
 static int pkg_scrub(struct tool_pkg_Pkg *, const char *, char * *, int *);
 static int pkg_git_diag(struct tool_pkg_Pkg *, const char *, const char *, const char *);
@@ -296,23 +308,26 @@ static const unsigned int tool_pkg_g_sha_k[64] = {
 static struct tool_pkg_Pkg tool_pkg_g_pkg = { .__tool_pkg_pkgops_vptr = &tool_pkg_Pkg_tool_pkg_PkgOps_vtable };
 static int tool_pkg_Pkg_tool_pkg_PkgOps_read_manifest(void *self, const char * dir, char * name, size_t ncap, char * ver, size_t vcap, char * * deps, int * depcap, int * ndeps) {
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
-    char path[MAX_PKG_PATH];
-    char line[MAX_PKG_PATH];
+    char * path;
+    char * line;
+    int linecap;
     FILE * f;
     int ok;
-    (void)(_self);
-    if (snprintf(path, sizeof(path), "%s/ct.pkg", dir) >= (int)(sizeof(path))) {
+    path = pkg_pathf(_self, "%s/ct.pkg", dir);
+    if ((!path)) {
         return (-1);
     }
     f = fopen(path, "r");
     if ((!f)) {
         return (-1);
     }
+    line = 0;
+    linecap = 0;
     name[0] = 0;
     ver[0] = 0;
     (*ndeps) = 0;
     ok = 1;
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while (pkg_text_fgets(_self, (&line), (&linecap), f) == 1) {
         char * ls;
         char * le;
         char * eq;
@@ -616,8 +631,8 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_copy_tree(void *self, const char * src, 
     struct dirent * e;
     struct stat st;
     struct stat ds;
-    char s[MAX_PKG_PATH];
-    char t[MAX_PKG_PATH];
+    char * s;
+    char * t;
     int rc;
     (void)(_self);
     rc = 0;
@@ -644,14 +659,24 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_copy_tree(void *self, const char * src, 
         if (strcmp(e->d_name, ".ctcache") == 0) {
             continue;
         }
-        snprintf(s, sizeof(s), "%s/%s", src, e->d_name);
-        snprintf(t, sizeof(t), "%s/%s", dst, e->d_name);
+        s = sha_join(src, e->d_name);
+        t = sha_join(dst, e->d_name);
+        if (((!s) || (!t))) {
+            free(s);
+            free(t);
+            rc = (-1);
+            break;
+        }
         if (stat(s, (&st)) != 0) {
+            free(s);
+            free(t);
             rc = (-1);
             break;
         }
         if (S_ISDIR(st.st_mode)) {
             if (_self->__tool_pkg_pkgops_vptr->copy_tree(_self, s, t) != 0) {
+                free(s);
+                free(t);
                 rc = (-1);
                 break;
             }
@@ -659,11 +684,15 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_copy_tree(void *self, const char * src, 
         else {
             if (S_ISREG(st.st_mode)) {
                 if (_self->__tool_pkg_pkgops_vptr->copy_file(_self, s, t) != 0) {
+                    free(s);
+                    free(t);
                     rc = (-1);
                     break;
                 }
             }
         }
+        free(s);
+        free(t);
     }
     closedir(d);
     return rc;
@@ -673,40 +702,43 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_dir_digest(void *self, const char * dir,
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
     struct tool_pkg_Sha256 sha;
     struct stat st;
-    char * list;
+    struct tool_pkg_ShaPaths sp;
     char hex[65];
+    char * full;
     int i;
-    int n;
-    int listcap;
+    int rc;
     int w;
     (void)(_self);
     if (((stat(dir, (&st)) != 0) || (!S_ISDIR(st.st_mode)))) {
         return (-1);
     }
-    listcap = MAX_DIGEST_FILES;
-    list = (char *)(malloc(((size_t)(listcap) * (size_t)(MAX_PKG_PATH))));
-    if ((!list)) {
+    sp.row = 0;
+    sp.n = 0;
+    sp.cap = 0;
+    if (sha_collect(dir, "", (&sp)) != 0) {
+        sha_paths_free((&sp));
         return (-1);
     }
-    n = 0;
-    if (sha_collect(dir, "", (&list), (&n), (&listcap)) != 0) {
-        free(list);
-        return (-1);
-    }
-    sha_sort(list, n);
+    sha_sort((&sp));
     sha256_init((&sha));
-    for (i = 0; i < n; i++) {
-        char full[MAX_PKG_PATH];
-        if (snprintf(full, sizeof(full), "%s/%s", dir, (list + ((size_t)(i) * MAX_PKG_PATH))) >= (int)(sizeof(full))) {
-            free(list);
-            return (-1);
+    rc = 0;
+    for (i = 0; i < sp.n; i++) {
+        full = sha_join(dir, sp.row[i]);
+        if ((!full)) {
+            rc = (-1);
+            break;
         }
-        if (sha256_file((&sha), (list + ((size_t)(i) * MAX_PKG_PATH)), full) != 0) {
-            free(list);
-            return (-1);
+        if (sha256_file((&sha), sp.row[i], full) != 0) {
+            free(full);
+            rc = (-1);
+            break;
         }
+        free(full);
     }
-    free(list);
+    sha_paths_free((&sp));
+    if (rc != 0) {
+        return (-1);
+    }
     sha256_final((&sha));
     sha256_hex((&sha), hex);
     w = snprintf(out, cap, "sha256:%s", hex);
@@ -729,12 +761,11 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_ensure_dir(void *self, const char * path
     return (-1);
 }
 
-static int tool_pkg_Pkg_tool_pkg_PkgOps_split_spec(void *self, const char * spec, char * path, size_t pcap, char * range, size_t rcap) {
+static int tool_pkg_Pkg_tool_pkg_PkgOps_split_spec(void *self, const char * spec, char * * path, char * * range) {
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
     const char * at;
     const char * q;
     size_t n;
-    (void)(_self);
     at = NULL;
     for (q = spec; (*q); q++) {
         if ((*q) == '@') {
@@ -742,21 +773,14 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_split_spec(void *self, const char * spec
         }
     }
     if ((!at)) {
-        if (strlen(spec) >= pcap) {
-            return (-1);
-        }
-        snprintf(path, pcap, "%s", spec);
-        range[0] = 0;
-        return 0;
+        (*path) = pkg_text_dup(_self, spec);
+        (*range) = pkg_text_dup(_self, "");
+        return (((*path) && (*range)) ? 0 : (-1));
     }
     n = (size_t)((at - spec));
-    if (((n >= pcap) || (strlen((at + 1)) >= rcap))) {
-        return (-1);
-    }
-    memcpy(path, spec, n);
-    path[n] = 0;
-    snprintf(range, rcap, "%s", (at + 1));
-    return 0;
+    (*path) = pkg_text_dupn(_self, spec, n);
+    (*range) = pkg_text_dup(_self, (at + 1));
+    return (((*path) && (*range)) ? 0 : (-1));
 }
 
 static int tool_pkg_Pkg_tool_pkg_PkgOps_is_git_ref(void *self, const char * spec) {
@@ -1542,9 +1566,9 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get_git(void *self, const char * spec, c
 
 static int tool_pkg_Pkg_tool_pkg_PkgOps_get_spec(void *self, const char * spec, const char * base, int depth) {
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
-    char path[MAX_PKG_PATH];
-    char range[32];
-    char full[MAX_PKG_PATH];
+    char * path;
+    char * range;
+    char * full;
     char * url;
     int urlcap;
     char tag[MAX_TEXT];
@@ -1556,7 +1580,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get_spec(void *self, const char * spec, 
     (void)(_self);
     url = 0;
     urlcap = 0;
-    if (_self->__tool_pkg_pkgops_vptr->split_spec(_self, spec, path, sizeof(path), range, sizeof(range)) != 0) {
+    if (_self->__tool_pkg_pkgops_vptr->split_spec(_self, spec, (&path), (&range)) != 0) {
         return (-1);
     }
     ix = (_self->have_index ? _self->index : getenv("CT_INDEX"));
@@ -1604,21 +1628,18 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get_spec(void *self, const char * spec, 
         return _self->__tool_pkg_pkgops_vptr->get_git(_self, path, range, depth);
     }
     if (strncmp(path, "file://", 7) == 0) {
-        if (snprintf(full, sizeof(full), "%s", (path + 7)) >= (int)(sizeof(full))) {
-            return (-1);
-        }
+        full = pkg_text_dup(_self, (path + 7));
     }
     else {
         if (path[0] == '/') {
-            if (snprintf(full, sizeof(full), "%s", path) >= (int)(sizeof(full))) {
-                return (-1);
-            }
+            full = pkg_text_dup(_self, path);
         }
         else {
-            if (snprintf(full, sizeof(full), "%s/%s", base, path) >= (int)(sizeof(full))) {
-                return (-1);
-            }
+            full = pkg_pathf(_self, "%s/%s", base, path);
         }
+    }
+    if ((!full)) {
+        return (-1);
     }
     return _self->__tool_pkg_pkgops_vptr->get_one(_self, full, range, depth);
 }
@@ -1878,10 +1899,10 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_remember_dep(void *self, const char * sp
 
 static int tool_pkg_Pkg_tool_pkg_PkgOps_dep_name(void *self, const char * spec, char * name, size_t cap) {
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
-    char path[MAX_PKG_PATH];
-    char range[32];
-    char full[MAX_PKG_PATH];
-    char mp[MAX_PKG_PATH];
+    char * path;
+    char * range;
+    char * full;
+    char * mp;
     char sname[MAX_TEXT];
     char sver[32];
     char * deps;
@@ -1892,30 +1913,28 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_dep_name(void *self, const char * spec, 
     deps = NULL;
     depcap = 0;
     ndeps = 0;
-    if (_self->__tool_pkg_pkgops_vptr->split_spec(_self, spec, path, sizeof(path), range, sizeof(range)) != 0) {
+    if (_self->__tool_pkg_pkgops_vptr->split_spec(_self, spec, (&path), (&range)) != 0) {
         return (-1);
     }
     if (_self->__tool_pkg_pkgops_vptr->is_git_ref(_self, path)) {
         return _self->__tool_pkg_pkgops_vptr->git_name(_self, path, name, cap);
     }
     if (strncmp(path, "file://", 7) == 0) {
-        if (snprintf(full, sizeof(full), "%s", (path + 7)) >= (int)(sizeof(full))) {
-            return (-1);
-        }
+        full = pkg_text_dup(_self, (path + 7));
     }
     else {
         if (path[0] == '/') {
-            if (snprintf(full, sizeof(full), "%s", path) >= (int)(sizeof(full))) {
-                return (-1);
-            }
+            full = pkg_text_dup(_self, path);
         }
         else {
-            if (snprintf(full, sizeof(full), "./%s", path) >= (int)(sizeof(full))) {
-                return (-1);
-            }
+            full = pkg_pathf(_self, "./%s", path);
         }
     }
-    if (snprintf(mp, sizeof(mp), "%s/ct.pkg", full) >= (int)(sizeof(mp))) {
+    if ((!full)) {
+        return (-1);
+    }
+    mp = pkg_pathf(_self, "%s/ct.pkg", full);
+    if ((!mp)) {
         return (-1);
     }
     f = fopen(mp, "r");
@@ -2113,8 +2132,8 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
     int alldfcap;
     int qcfcap;
     int qlfcap;
-    char dpath[MAX_PKG_PATH];
-    char drange[32];
+    char * dpath;
+    char * drange;
     char dname[MAX_TEXT];
     char * iline;
     int ilinecap;
@@ -2165,7 +2184,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_install(void *self, const char * prog) {
     for (i = 0; i < ndeps; i++) {
         char * spec;
         spec = (pdeps + ((size_t)(i) * MAX_PKG_PATH));
-        if (((_self->__tool_pkg_pkgops_vptr->split_spec(_self, spec, dpath, sizeof(dpath), drange, sizeof(drange)) != 0) || (_self->__tool_pkg_pkgops_vptr->dep_name(_self, spec, dname, sizeof(dname)) != 0))) {
+        if (((_self->__tool_pkg_pkgops_vptr->split_spec(_self, spec, (&dpath), (&drange)) != 0) || (_self->__tool_pkg_pkgops_vptr->dep_name(_self, spec, dname, sizeof(dname)) != 0))) {
             fprintf(stderr, "ctc: bad dependency '%s'\n", spec);
             rc = 1;
             continue;
@@ -2867,6 +2886,39 @@ static int pkg_text_setf(struct tool_pkg_Pkg * self, char * * buf, int * cap, co
         }
     }
 }
+static char * pkg_pathf(struct tool_pkg_Pkg * self, const char * fmt, ...) {
+    va_list ap;
+    int n;
+    char * out;
+    va_start(ap, fmt);
+    n = vsnprintf(0, 0, fmt, ap);
+    va_end(ap);
+    if (((n < 0) || (n >= TEXT_LIMIT))) {
+        fprintf(stderr, "ctc: path over 65536 bytes\n");
+        return (char *)(0);
+    }
+    out = (char *)(pkg_owned_alloc(self, ((size_t)(n) + 1)));
+    if ((!out)) {
+        return (char *)(0);
+    }
+    va_start(ap, fmt);
+    vsnprintf(out, ((size_t)(n) + 1), fmt, ap);
+    va_end(ap);
+    return out;
+}
+static char * pkg_text_dupn(struct tool_pkg_Pkg * self, const char * s, size_t n) {
+    char * out;
+    int cap;
+    if (n >= (size_t)(TEXT_LIMIT)) {
+        return (char *)(0);
+    }
+    out = 0;
+    cap = 0;
+    if (pkg_text_printf(self, (&out), (&cap), "%.*s", (int)(n), s) != 0) {
+        return (char *)(0);
+    }
+    return out;
+}
 static char * pkg_text_dup(struct tool_pkg_Pkg * self, const char * s) {
     char * out;
     int cap;
@@ -3028,17 +3080,90 @@ static int sha256_file(struct tool_pkg_Sha256 * s, const char * rel, const char 
     fclose(f);
     return 0;
 }
-static int sha_collect(const char * dir, const char * rel, char * * list, int * n, int * cap) {
+static char * sha_join(const char * a, const char * b) {
+    size_t la;
+    size_t lb;
+    char * out;
+    la = strlen(a);
+    lb = strlen(b);
+    if (((la + lb) + 2) > (size_t)(TEXT_LIMIT)) {
+        return (char *)(0);
+    }
+    out = (char *)(malloc(((la + lb) + 2)));
+    if ((!out)) {
+        return (char *)(0);
+    }
+    memcpy(out, a, la);
+    out[la] = '/';
+    memcpy(((out + la) + 1), b, (lb + 1));
+    return out;
+}
+static char * sha_copy(const char * s) {
+    size_t l;
+    char * out;
+    l = strlen(s);
+    if ((l + 1) > (size_t)(TEXT_LIMIT)) {
+        return (char *)(0);
+    }
+    out = (char *)(malloc((l + 1)));
+    if ((!out)) {
+        return (char *)(0);
+    }
+    memcpy(out, s, (l + 1));
+    return out;
+}
+static int sha_paths_add(struct tool_pkg_ShaPaths * sp, const char * rel) {
+    int c;
+    char * * grown;
+    char * copy;
+    if (sp->n >= sp->cap) {
+        c = ((sp->cap > 0) ? (sp->cap * 2) : MAX_DIGEST_FILES);
+        while (((c <= sp->n) && (c < MAX_DIGEST_FILES_MAX))) {
+            c *= 2;
+        }
+        if (c > MAX_DIGEST_FILES_MAX) {
+            c = MAX_DIGEST_FILES_MAX;
+        }
+        if (sp->n >= MAX_DIGEST_FILES_MAX) {
+            return (-1);
+        }
+        grown = (char * *)(realloc(sp->row, ((size_t)(c) * sizeof((*grown)))));
+        if ((!grown)) {
+            return (-1);
+        }
+        sp->row = grown;
+        sp->cap = c;
+    }
+    copy = sha_copy(rel);
+    if ((!copy)) {
+        return (-1);
+    }
+    sp->row[sp->n] = copy;
+    sp->n++;
+    return 0;
+}
+static void sha_paths_free(struct tool_pkg_ShaPaths * sp) {
+    int i;
+    for (i = 0; i < sp->n; i++) {
+        free(sp->row[i]);
+    }
+    free(sp->row);
+    sp->row = 0;
+    sp->n = 0;
+    sp->cap = 0;
+}
+static int sha_collect(const char * dir, const char * rel, struct tool_pkg_ShaPaths * sp) {
     DIR * d;
     struct dirent * e;
     struct stat st;
-    char full[MAX_PKG_PATH];
-    char r[MAX_PKG_PATH];
-    int w;
+    char * full;
+    char * r;
+    int rc;
     d = opendir(dir);
     if ((!d)) {
         return (-1);
     }
+    rc = 0;
     for (; ; ) {
         e = readdir(d);
         if (e == NULL) {
@@ -3053,75 +3178,63 @@ static int sha_collect(const char * dir, const char * rel, char * * list, int * 
         if (strcmp(e->d_name, ".ctcache") == 0) {
             continue;
         }
-        if (snprintf(full, sizeof(full), "%s/%s", dir, e->d_name) >= (int)(sizeof(full))) {
-            continue;
+        full = sha_join(dir, e->d_name);
+        if ((!full)) {
+            rc = (-1);
+            break;
         }
         if (rel[0]) {
-            w = snprintf(r, sizeof(r), "%s/%s", rel, e->d_name);
+            r = sha_join(rel, e->d_name);
         }
         else {
-            w = snprintf(r, sizeof(r), "%s", e->d_name);
+            r = sha_copy(e->d_name);
         }
-        if (((w < 0) || ((size_t)(w) >= sizeof(r)))) {
-            continue;
+        if ((!r)) {
+            free(full);
+            rc = (-1);
+            break;
         }
         if (stat(full, (&st)) != 0) {
+            free(full);
+            free(r);
             continue;
         }
         if (S_ISDIR(st.st_mode)) {
-            if (sha_collect(full, r, list, n, cap) != 0) {
-                closedir(d);
-                return (-1);
+            if (sha_collect(full, r, sp) != 0) {
+                free(full);
+                free(r);
+                rc = (-1);
+                break;
             }
         }
         else {
             if (S_ISREG(st.st_mode)) {
-                if ((*n) >= (*cap)) {
-                    int ncap;
-                    int i;
-                    char * grown;
-                    ncap = (((*cap) > 0) ? (*cap) : MAX_DIGEST_FILES);
-                    while (((ncap <= (*n)) && (ncap < MAX_DIGEST_FILES_MAX))) {
-                        ncap *= 2;
-                    }
-                    if (ncap > MAX_DIGEST_FILES_MAX) {
-                        ncap = MAX_DIGEST_FILES_MAX;
-                    }
-                    if ((*n) >= MAX_DIGEST_FILES_MAX) {
-                        closedir(d);
-                        return (-1);
-                    }
-                    grown = (char *)(realloc((*list), ((size_t)(ncap) * MAX_PKG_PATH)));
-                    if ((!grown)) {
-                        closedir(d);
-                        return (-1);
-                    }
-                    for (i = (*cap); i < ncap; i++) {
-                        grown[((size_t)(i) * MAX_PKG_PATH)] = 0;
-                    }
-                    (*list) = grown;
-                    (*cap) = ncap;
+                if (sha_paths_add(sp, r) != 0) {
+                    free(full);
+                    free(r);
+                    rc = (-1);
+                    break;
                 }
-                snprintf(((*list) + ((size_t)((*n)) * MAX_PKG_PATH)), MAX_PKG_PATH, "%s", r);
-                (*n) = ((*n) + 1);
             }
         }
+        free(full);
+        free(r);
     }
     closedir(d);
-    return 0;
+    return rc;
 }
-static void sha_sort(char * list, int n) {
-    char tmp[MAX_PKG_PATH];
+static void sha_sort(struct tool_pkg_ShaPaths * sp) {
+    char * tmp;
     int i;
     int j;
-    for (i = 1; i < n; i++) {
-        snprintf(tmp, sizeof(tmp), "%s", (list + ((size_t)(i) * MAX_PKG_PATH)));
+    for (i = 1; i < sp->n; i++) {
+        tmp = sp->row[i];
         j = (i - 1);
-        while (((j >= 0) && (strcmp((list + ((size_t)(j) * MAX_PKG_PATH)), tmp) > 0))) {
-            memcpy((list + ((size_t)((j + 1)) * MAX_PKG_PATH)), (list + ((size_t)(j) * MAX_PKG_PATH)), MAX_PKG_PATH);
+        while (((j >= 0) && (strcmp(sp->row[j], tmp) > 0))) {
+            sp->row[(j + 1)] = sp->row[j];
             j--;
         }
-        snprintf((list + ((size_t)((j + 1)) * MAX_PKG_PATH)), MAX_PKG_PATH, "%s", tmp);
+        sp->row[(j + 1)] = tmp;
     }
 }
 static int sha_hex_ok(const char * s) {
@@ -3493,7 +3606,7 @@ static int pkg_official_resolve(const char * name, char * * url, int * ucap, cha
     return pkg_pin_lookup(name, "", ver, sizeof(ver), url, ucap, tag, tcap, sha, scap);
 }
 static int pkg_read_identity(const char * dir, char * publisher, size_t pcap, char * nsroot, size_t ncap) {
-    char path[MAX_PKG_PATH];
+    char * path;
     char * line;
     int linecap;
     FILE * f;
@@ -3501,7 +3614,8 @@ static int pkg_read_identity(const char * dir, char * publisher, size_t pcap, ch
     nsroot[0] = 0;
     line = 0;
     linecap = 0;
-    if (snprintf(path, sizeof(path), "%s/ct.pkg", dir) >= (int)(sizeof(path))) {
+    path = pkg_pathf((&tool_pkg_g_pkg), "%s/ct.pkg", dir);
+    if ((!path)) {
         return (-1);
     }
     f = fopen(path, "r");
@@ -3629,7 +3743,7 @@ static int pkg_mkdirs(const char * path) {
     return 0;
 }
 static int pkg_identity_msg(const char * src, const char * publisher, const char * name, const char * nsroot, char * * msg, int * msgcap) {
-    char nspath[MAX_PKG_PATH];
+    char * nspath;
     struct stat st;
     if ((!publisher[0])) {
         pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "'%s/ct.pkg' is missing 'publisher'", src);
@@ -3651,7 +3765,8 @@ static int pkg_identity_msg(const char * src, const char * publisher, const char
         pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "ns-root '%s' must be a relative path without '..'", nsroot);
         return (-1);
     }
-    if (snprintf(nspath, sizeof(nspath), "%s/%s", src, nsroot) >= (int)(sizeof(nspath))) {
+    nspath = pkg_pathf((&tool_pkg_g_pkg), "%s/%s", src, nsroot);
+    if ((!nspath)) {
         pkg_text_setf((&tool_pkg_g_pkg), msg, msgcap, "ns-root path is too long under '%s'", src);
         return (-1);
     }
@@ -3713,14 +3828,18 @@ static int pkg_store_commit(const char * src, const char * publisher, const char
     return 0;
 }
 static int pkg_read_meta(const char * dir, char * cflags, size_t ccap, char * ldflags, size_t lcap, char * req, size_t rcap) {
-    char path[MAX_PKG_PATH];
-    char line[MAX_PKG_PATH];
+    char * path;
+    char * line;
+    int linecap;
     FILE * f;
     int ok;
     cflags[0] = 0;
     ldflags[0] = 0;
     req[0] = 0;
-    if (snprintf(path, sizeof(path), "%s/ct.pkg", dir) >= (int)(sizeof(path))) {
+    line = 0;
+    linecap = 0;
+    path = pkg_pathf((&tool_pkg_g_pkg), "%s/ct.pkg", dir);
+    if ((!path)) {
         return (-1);
     }
     f = fopen(path, "r");
@@ -3728,7 +3847,7 @@ static int pkg_read_meta(const char * dir, char * cflags, size_t ccap, char * ld
         return 0;
     }
     ok = 1;
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while (pkg_text_fgets((&tool_pkg_g_pkg), (&line), (&linecap), f) == 1) {
         char * ls;
         char * le;
         char * eq;
@@ -4300,9 +4419,10 @@ static int pkg_index_verify(int argc, char * * argv, const char * prog, const ch
         return 2;
 }
 int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const char * version) {
-    char list_path[MAX_PKG_PATH];
-    char out_path[MAX_PKG_PATH];
-    char list_dir[MAX_PKG_PATH];
+    char * list_path;
+    char * out_path;
+    char * list_dir;
+    int list_dircap;
     char * line;
     char * rowbuf;
     int linecap;
@@ -4319,7 +4439,7 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     char * prev;
     int keycap;
     int prevcap;
-    char tmpname[MAX_PKG_PATH + 64];
+    char * tmpname;
     char * errs;
     char * buf;
     char * old;
@@ -4357,6 +4477,10 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     linecap = 0;
     rowbuf = 0;
     rowbufcap = 0;
+    list_path = 0;
+    out_path = 0;
+    list_dir = 0;
+    list_dircap = 0;
     imsg = 0;
     imsgcap = 0;
     msg = 0;
@@ -4371,8 +4495,6 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     deps = NULL;
     depcap = 0;
     ndeps = 0;
-    list_path[0] = 0;
-    out_path[0] = 0;
     for (ai = 0; ai < argc; ai++) {
         if (((strcmp(argv[ai], "-h") == 0) || (strcmp(argv[ai], "--help") == 0))) {
             printf("usage: %s index refresh --packages <list> --out <index> [--check]\n", prog);
@@ -4396,8 +4518,8 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
                 fprintf(stderr, "%s: --packages needs a file\n", prog);
                 return 2;
             }
-            if (snprintf(list_path, sizeof(list_path), "%s", argv[ai]) >= (int)(sizeof(list_path))) {
-                fprintf(stderr, "%s: package-list path is too long\n", prog);
+            list_path = pkg_text_dup((&tool_pkg_g_pkg), argv[ai]);
+            if ((!list_path)) {
                 return 2;
             }
             have_list = 1;
@@ -4409,8 +4531,8 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
                 fprintf(stderr, "%s: --out needs a file\n", prog);
                 return 2;
             }
-            if (snprintf(out_path, sizeof(out_path), "%s", argv[ai]) >= (int)(sizeof(out_path))) {
-                fprintf(stderr, "%s: index path is too long\n", prog);
+            out_path = pkg_text_dup((&tool_pkg_g_pkg), argv[ai]);
+            if ((!out_path)) {
                 return 2;
             }
             have_out = 1;
@@ -4431,14 +4553,20 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
     if (slash != NULL) {
         int dl = (int)((slash - list_path));
         if (dl == 0) {
-            snprintf(list_dir, sizeof(list_dir), "/");
+            if (pkg_text_setf((&tool_pkg_g_pkg), (&list_dir), (&list_dircap), "%s", "/") != 0) {
+                return 2;
+            }
         }
         else {
-            snprintf(list_dir, sizeof(list_dir), "%.*s", dl, list_path);
+            if (pkg_text_setf((&tool_pkg_g_pkg), (&list_dir), (&list_dircap), "%.*s", dl, list_path) != 0) {
+                return 2;
+            }
         }
     }
     else {
-        snprintf(list_dir, sizeof(list_dir), ".");
+        if (pkg_text_setf((&tool_pkg_g_pkg), (&list_dir), (&list_dircap), "%s", ".") != 0) {
+            return 2;
+        }
     }
     lf = fopen(list_path, "r");
     if (lf == NULL) {
@@ -4503,13 +4631,13 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
         r = (&rows[nrows]);
         r->line = lineno;
         if (tok[0][0] == '/') {
-            w = snprintf(r->dir, sizeof(r->dir), "%s", tok[0]);
+            r->dir = pkg_text_dup((&tool_pkg_g_pkg), tok[0]);
         }
         else {
-            w = snprintf(r->dir, sizeof(r->dir), "%s/%s", list_dir, tok[0]);
+            r->dir = pkg_pathf((&tool_pkg_g_pkg), "%s/%s", list_dir, tok[0]);
         }
-        if (((w < 0) || ((size_t)(w) >= sizeof(r->dir)))) {
-            if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "list", "package directory path is too long") != 0) {
+        if ((!r->dir)) {
+            if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "list", "out of memory or package path over 65536 bytes") != 0) {
                 goto refresh_oom;
             }
             continue;
@@ -4733,9 +4861,9 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
         free(buf);
         return 2;
     }
-    w = snprintf(tmpname, sizeof(tmpname), "%s.tmp.%ld", out_path, (long)(getpid()));
-    if (((w < 0) || ((size_t)(w) >= sizeof(tmpname)))) {
-        fprintf(stderr, "%s: index path is too long: '%s'\n", prog, out_path);
+    tmpname = pkg_pathf((&tool_pkg_g_pkg), "%s.tmp.%ld", out_path, (long)(getpid()));
+    if ((!tmpname)) {
+        fprintf(stderr, "%s: cannot name the temporary index for '%s'\n", prog, out_path);
         free(buf);
         return 2;
     }
@@ -5071,12 +5199,12 @@ static int pkg_update_v2(const char * prog) {
     }
     rc = 0;
     for (i = 0; i < ndeps; i++) {
-        char path[MAX_PKG_PATH];
-        char range[32];
+        char * path;
+        char * range;
         char dname[MAX_TEXT];
         char * spec;
         spec = (pdeps + ((size_t)(i) * MAX_PKG_PATH));
-        if (((tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->split_spec(&tool_pkg_g_pkg, spec, path, sizeof(path), range, sizeof(range)) != 0) || (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->dep_name(&tool_pkg_g_pkg, spec, dname, sizeof(dname)) != 0))) {
+        if (((tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->split_spec(&tool_pkg_g_pkg, spec, (&path), (&range)) != 0) || (tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->dep_name(&tool_pkg_g_pkg, spec, dname, sizeof(dname)) != 0))) {
             fprintf(stderr, "ctc: bad dependency '%s'\n", spec);
             rc = 1;
             continue;

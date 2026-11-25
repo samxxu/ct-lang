@@ -47,7 +47,9 @@ namespace tool::pkg;
    index behind. `line` is the package-list line the row came from. */
 struct IndexRow {
     int  line;
-    char dir[MAX_PKG_PATH];
+    /* S1a-0 C2i: the package directory grows with the tree walk; the row owns
+       an exact-size string (command scope) instead of a 512-byte field. */
+    char *dir;
     char name[MAX_TEXT];
     char ver[32];
     char pub[MAX_TEXT];
@@ -68,7 +70,7 @@ trait PkgOps {
     int  copy_tree(const char *src, const char *dst);
     int  dir_digest(const char *dir, char *out, size_t cap);
     int  ensure_dir(const char *path);
-    int  split_spec(const char *spec, char *path, size_t pcap, char *range, size_t rcap);
+    int  split_spec(const char *spec, char **path, char **range);
     int  is_git_ref(const char *spec);
     int  git_url(const char *spec, char **url, int *ucap);
     int  git_name(const char *spec, char *name, size_t cap);
@@ -431,6 +433,44 @@ static int pkg_text_setf(struct Pkg *self, char **buf, int *cap, const char *fmt
     }
 }
 
+/* S1a-0 C2i: format one path into an exact-size owned block. The size pass
+   (`vsnprintf(NULL, 0, ...)`) makes the allocation as large as the path, and
+   a path over the formal TEXT_LIMIT is an explicit error, never a cut. */
+static char *pkg_pathf(struct Pkg *self, const char *fmt, ...)
+{
+    va_list ap;
+    int n;
+    char *out;
+
+    va_start(ap, fmt);
+    n = vsnprintf(0, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0 || n >= TEXT_LIMIT) {
+        fprintf(stderr, "ctc: path over 65536 bytes\n");
+        return (char *)0;
+    }
+    out = (char *)pkg_owned_alloc(self, (size_t)n + 1);
+    if (!out) return (char *)0;
+    va_start(ap, fmt);
+    vsnprintf(out, (size_t)n + 1, fmt, ap);
+    va_end(ap);
+    return out;
+}
+
+/* Exact-size copy of a `s[0..n)` range (a spec's path half). NULL is OOM /
+   over TEXT_LIMIT. */
+static char *pkg_text_dupn(struct Pkg *self, const char *s, size_t n)
+{
+    char *out;
+    int cap;
+
+    if (n >= (size_t)TEXT_LIMIT) return (char *)0;
+    out = 0;
+    cap = 0;
+    if (pkg_text_printf(self, &out, &cap, "%.*s", (int)n, s) != 0) return (char *)0;
+    return out;
+}
+
 /* A standalone owned copy (package rows keep their URL after the fetch
    returns). NULL means OOM / over TEXT_LIMIT. */
 static char *pkg_text_dup(struct Pkg *self, const char *s)
@@ -644,86 +684,135 @@ static int sha256_file(struct Sha256 *s, const char *rel, const char *path)
     return 0;
 }
 
-/* Collect the relative paths of every regular file under `dir` into `list`
-   (row stride MAX_PKG_PATH); `vendor`, `.git` and `.ctcache` are not part of
-   a package, matching what `copy_tree` ships. */
-static int sha_collect(const char *dir, const char *rel, char **list, int *n, int *cap)
+/* S1a-0 C2i: the tree walk holds one exact-size relative path per file. The
+   rows are pointers, so a file name is not cut at MAX_PKG_PATH; `sha_sort`
+   orders the pointers and the digest streams them in that order. */
+struct ShaPaths {
+    char **row;
+    int n;
+    int cap;
+};
+
+/* Join `a` and `b` with one '/'; NULL is OOM or over the formal TEXT_LIMIT
+   (there is no truncating path). */
+static char *sha_join(const char *a, const char *b)
+{
+    size_t la, lb;
+    char *out;
+
+    la = strlen(a);
+    lb = strlen(b);
+    if (la + lb + 2 > (size_t)TEXT_LIMIT) return (char *)0;
+    out = (char *)malloc(la + lb + 2);
+    if (!out) return (char *)0;
+    memcpy(out, a, la);
+    out[la] = '/';
+    memcpy(out + la + 1, b, lb + 1);
+    return out;
+}
+
+static char *sha_copy(const char *s)
+{
+    size_t l;
+    char *out;
+
+    l = strlen(s);
+    if (l + 1 > (size_t)TEXT_LIMIT) return (char *)0;
+    out = (char *)malloc(l + 1);
+    if (!out) return (char *)0;
+    memcpy(out, s, l + 1);
+    return out;
+}
+
+/* S1a-0 C1 keeps the MAX_DIGEST_FILES row cap; C2i changes the row width by
+   making every row its own exact-size string. */
+static int sha_paths_add(struct ShaPaths *sp, const char *rel)
+{
+    int c;
+    char **grown;
+    char *copy;
+
+    if (sp->n >= sp->cap) {
+        c = sp->cap > 0 ? sp->cap * 2 : MAX_DIGEST_FILES;
+        while (c <= sp->n && c < MAX_DIGEST_FILES_MAX) c *= 2;
+        if (c > MAX_DIGEST_FILES_MAX) c = MAX_DIGEST_FILES_MAX;
+        if (sp->n >= MAX_DIGEST_FILES_MAX) return -1;
+        grown = (char **)realloc(sp->row, (size_t)c * sizeof(*grown));
+        if (!grown) return -1;
+        sp->row = grown;
+        sp->cap = c;
+    }
+    copy = sha_copy(rel);
+    if (!copy) return -1;
+    sp->row[sp->n] = copy;
+    sp->n++;
+    return 0;
+}
+
+static void sha_paths_free(struct ShaPaths *sp)
+{
+    int i;
+
+    for (i = 0; i < sp->n; i++) free(sp->row[i]);
+    free(sp->row);
+    sp->row = 0;
+    sp->n = 0;
+    sp->cap = 0;
+}
+
+/* Collect the relative paths of every regular file under `dir`; `vendor`,
+   `.git` and `.ctcache` are not part of a package, matching what `copy_tree`
+   ships. */
+static int sha_collect(const char *dir, const char *rel, struct ShaPaths *sp)
 {
     DIR *d;
     struct dirent *e;
     struct stat st;
-    char full[MAX_PKG_PATH], r[MAX_PKG_PATH];
-    int w;
+    char *full, *r;
+    int rc;
 
     d = opendir(dir);
     if (!d) return -1;
+    rc = 0;
     for (;;) {
         e = readdir(d);
         if (e == NULL) break;
         if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
         if (strcmp(e->d_name, ".git") == 0 || strcmp(e->d_name, "vendor") == 0) continue;
         if (strcmp(e->d_name, ".ctcache") == 0) continue;
-        if (snprintf(full, sizeof full, "%s/%s", dir, e->d_name) >= (int)sizeof full) continue;
-        if (rel[0]) w = snprintf(r, sizeof r, "%s/%s", rel, e->d_name);
-        else        w = snprintf(r, sizeof r, "%s", e->d_name);
-        if (w < 0 || (size_t)w >= sizeof r) continue;
-        if (stat(full, &st) != 0) continue;
+        full = sha_join(dir, e->d_name);
+        if (!full) { rc = -1; break; }
+        if (rel[0]) r = sha_join(rel, e->d_name);
+        else        r = sha_copy(e->d_name);
+        if (!r) { free(full); rc = -1; break; }
+        if (stat(full, &st) != 0) { free(full); free(r); continue; }
         if (S_ISDIR(st.st_mode)) {
-            if (sha_collect(full, r, list, n, cap) != 0) {
-                closedir(d);
-                return -1;
-            }
+            if (sha_collect(full, r, sp) != 0) { free(full); free(r); rc = -1; break; }
         } else if (S_ISREG(st.st_mode)) {
-            /* S1a-0 C1: the path list doubles from MAX_DIGEST_FILES and only
-               stops at MAX_DIGEST_FILES_MAX; `list` moves, so it is passed by
-               address. */
-            if (*n >= *cap) {
-                int ncap, i;
-                char *grown;
-                ncap = *cap > 0 ? *cap : MAX_DIGEST_FILES;
-                while (ncap <= *n && ncap < MAX_DIGEST_FILES_MAX) ncap *= 2;
-                if (ncap > MAX_DIGEST_FILES_MAX) ncap = MAX_DIGEST_FILES_MAX;
-                if (*n >= MAX_DIGEST_FILES_MAX) {
-                    closedir(d);
-                    return -1;
-                }
-                grown = (char *)realloc(*list, (size_t)ncap * MAX_PKG_PATH);
-                if (!grown) {
-                    closedir(d);
-                    return -1;
-                }
-                for (i = *cap; i < ncap; i++)
-                    grown[(size_t)i * MAX_PKG_PATH] = 0;
-                *list = grown;
-                *cap = ncap;
-            }
-            snprintf(*list + (size_t)(*n) * MAX_PKG_PATH, MAX_PKG_PATH, "%s", r);
-            *n = *n + 1;
+            if (sha_paths_add(sp, r) != 0) { free(full); free(r); rc = -1; break; }
         }
+        free(full);
+        free(r);
     }
     closedir(d);
-    return 0;
+    return rc;
 }
 
 /* Insertion sort on the collected rows: the digest must not depend on the
-   `readdir` order, which differs between filesystems. */
-static void sha_sort(char *list, int n)
+   `readdir` order, which differs between filesystems. Only the pointers move. */
+static void sha_sort(struct ShaPaths *sp)
 {
-    char tmp[MAX_PKG_PATH];
+    char *tmp;
     int i, j;
 
-    for (i = 1; i < n; i++) {
-        snprintf(tmp, sizeof tmp, "%s", list + (size_t)i * MAX_PKG_PATH);
+    for (i = 1; i < sp->n; i++) {
+        tmp = sp->row[i];
         j = i - 1;
-        while (j >= 0 && strcmp(list + (size_t)j * MAX_PKG_PATH, tmp) > 0) {
-            /* A row copy, not a formatted print: gcc cannot see that the two
-               rows are disjoint and warns -Wrestrict on the overlapping-looking
-               `snprintf`, which the warning-free gate treats as a failure. */
-            memcpy(list + (size_t)(j + 1) * MAX_PKG_PATH,
-                   list + (size_t)j * MAX_PKG_PATH, MAX_PKG_PATH);
+        while (j >= 0 && strcmp(sp->row[j], tmp) > 0) {
+            sp->row[j + 1] = sp->row[j];
             j--;
         }
-        snprintf(list + (size_t)(j + 1) * MAX_PKG_PATH, MAX_PKG_PATH, "%s", tmp);
+        sp->row[j + 1] = tmp;
     }
 }
 
@@ -1039,20 +1128,23 @@ impl PkgOps for Pkg {
     int read_manifest(const char *dir, char *name, size_t ncap, char *ver, size_t vcap,
                       char **deps, int *depcap, int *ndeps)
     {
-        char path[MAX_PKG_PATH];
-        char line[MAX_PKG_PATH];
+        char *path;
+        char *line;
+        int linecap;
         FILE *f;
         int ok;
-        (void)self;
 
-        if (snprintf(path, sizeof path, "%s/ct.pkg", dir) >= (int)sizeof path) return -1;
+        path = pkg_pathf(self, "%s/ct.pkg", dir);
+        if (!path) return -1;
         f = fopen(path, "r");
         if (!f) return -1;
+        line = 0;
+        linecap = 0;
         name[0] = 0;
         ver[0] = 0;
         *ndeps = 0;
         ok = 1;
-        while (fgets(line, sizeof line, f) != NULL) {
+        while (pkg_text_fgets(self, &line, &linecap, f) == 1) {
             char *ls, *le, *eq, *k, *v, *ve;
             size_t kl, vl, ll;
             ll = strlen(line);
@@ -1232,7 +1324,7 @@ impl PkgOps for Pkg {
         struct dirent *e;
         struct stat st;
         struct stat ds;
-        char s[MAX_PKG_PATH], t[MAX_PKG_PATH];
+        char *s, *t;
         int rc;
         (void)self;
 
@@ -1248,14 +1340,19 @@ impl PkgOps for Pkg {
             if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
             if (strcmp(e->d_name, ".git") == 0 || strcmp(e->d_name, "vendor") == 0) continue;
             if (strcmp(e->d_name, ".ctcache") == 0) continue;
-            snprintf(s, sizeof s, "%s/%s", src, e->d_name);
-            snprintf(t, sizeof t, "%s/%s", dst, e->d_name);
-            if (stat(s, &st) != 0) { rc = -1; break; }
+            /* S1a-0 C2i: source and destination paths grow with the tree, not
+               with a 512-byte stack row. */
+            s = sha_join(src, e->d_name);
+            t = sha_join(dst, e->d_name);
+            if (!s || !t) { free(s); free(t); rc = -1; break; }
+            if (stat(s, &st) != 0) { free(s); free(t); rc = -1; break; }
             if (S_ISDIR(st.st_mode)) {
-                if (self->copy_tree(s, t) != 0) { rc = -1; break; }
+                if (self->copy_tree(s, t) != 0) { free(s); free(t); rc = -1; break; }
             } else if (S_ISREG(st.st_mode)) {
-                if (self->copy_file(s, t) != 0) { rc = -1; break; }
+                if (self->copy_file(s, t) != 0) { free(s); free(t); rc = -1; break; }
             }
+            free(s);
+            free(t);
         }
         closedir(d);
         return rc;
@@ -1268,35 +1365,35 @@ impl PkgOps for Pkg {
     {
         struct Sha256 sha;
         struct stat st;
-        char *list;
+        struct ShaPaths sp;
         char hex[65];
-        int i, n, listcap, w;
+        char *full;
+        int i, rc, w;
         (void)self;
 
         if (stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) return -1;
-        listcap = MAX_DIGEST_FILES;
-        list = (char *)malloc((size_t)listcap * (size_t)MAX_PKG_PATH);
-        if (!list) return -1;
-        n = 0;
-        if (sha_collect(dir, "", &list, &n, &listcap) != 0) {
-            free(list);
+        sp.row = 0;
+        sp.n = 0;
+        sp.cap = 0;
+        if (sha_collect(dir, "", &sp) != 0) {
+            sha_paths_free(&sp);
             return -1;
         }
-        sha_sort(list, n);
+        sha_sort(&sp);
         sha256_init(&sha);
-        for (i = 0; i < n; i++) {
-            char full[MAX_PKG_PATH];
-            if (snprintf(full, sizeof full, "%s/%s", dir, list + (size_t)i * MAX_PKG_PATH)
-                >= (int)sizeof full) {
-                free(list);
-                return -1;
+        rc = 0;
+        for (i = 0; i < sp.n; i++) {
+            full = sha_join(dir, sp.row[i]);
+            if (!full) { rc = -1; break; }
+            if (sha256_file(&sha, sp.row[i], full) != 0) {
+                free(full);
+                rc = -1;
+                break;
             }
-            if (sha256_file(&sha, list + (size_t)i * MAX_PKG_PATH, full) != 0) {
-                free(list);
-                return -1;
-            }
+            free(full);
         }
-        free(list);
+        sha_paths_free(&sp);
+        if (rc != 0) return -1;
         sha256_final(&sha);
         sha256_hex(&sha, hex);
         w = snprintf(out, cap, "sha256:%s", hex);
@@ -1314,27 +1411,25 @@ impl PkgOps for Pkg {
     }
 
     /* `path[@range]`: the last `@` separates the two, so a path may contain one. */
-    int split_spec(const char *spec, char *path, size_t pcap, char *range, size_t rcap)
+    int split_spec(const char *spec, char **path, char **range)
     {
         const char *at, *q;
         size_t n;
-        (void)self;
 
         at = NULL;
         for (q = spec; *q; q++)
             if (*q == '@') at = q;
         if (!at) {
-            if (strlen(spec) >= pcap) return -1;
-            snprintf(path, pcap, "%s", spec);
-            range[0] = 0;
-            return 0;
+            /* S1a-0 C2i: both halves are exact-size owned strings; the path is
+               no longer refused at MAX_PKG_PATH. */
+            *path = pkg_text_dup(self, spec);
+            *range = pkg_text_dup(self, "");
+            return (*path && *range) ? 0 : -1;
         }
         n = (size_t)(at - spec);
-        if (n >= pcap || strlen(at + 1) >= rcap) return -1;
-        memcpy(path, spec, n);
-        path[n] = 0;
-        snprintf(range, rcap, "%s", at + 1);
-        return 0;
+        *path = pkg_text_dupn(self, spec, n);
+        *range = pkg_text_dup(self, at + 1);
+        return (*path && *range) ? 0 : -1;
     }
 
     /* A spec is a git source unless it names a filesystem location. */
@@ -2034,7 +2129,7 @@ impl PkgOps for Pkg {
          - any other `<publisher>/<name>` needs an explicit index. */
     int get_spec(const char *spec, const char *base, int depth)
     {
-        char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
+        char *path, *range, *full;
         char *url;
         int urlcap;
         char tag[MAX_TEXT], sha[80], pub[MAX_TEXT];
@@ -2046,7 +2141,7 @@ impl PkgOps for Pkg {
         url = 0;
         urlcap = 0;
 
-        if (self->split_spec(spec, path, sizeof path, range, sizeof range) != 0) return -1;
+        if (self->split_spec(spec, &path, &range) != 0) return -1;
         ix = self->have_index ? self->index : getenv("CT_INDEX");
         if (self->is_git_ref(path)) {
             if (strchr(path, '/') == NULL && strstr(path, "://") == NULL) {
@@ -2112,12 +2207,13 @@ impl PkgOps for Pkg {
             return self->get_git(path, range, depth);
         }
         if (strncmp(path, "file://", 7) == 0) {
-            if (snprintf(full, sizeof full, "%s", path + 7) >= (int)sizeof full) return -1;
+            full = pkg_text_dup(self, path + 7);
         } else if (path[0] == '/') {
-            if (snprintf(full, sizeof full, "%s", path) >= (int)sizeof full) return -1;
-        } else if (snprintf(full, sizeof full, "%s/%s", base, path) >= (int)sizeof full) {
-            return -1;
+            full = pkg_text_dup(self, path);
+        } else {
+            full = pkg_pathf(self, "%s/%s", base, path);
         }
+        if (!full) return -1;
         return self->get_one(full, range, depth);
     }
 
@@ -2356,8 +2452,8 @@ impl PkgOps for Pkg {
        gone. */
     int dep_name(const char *spec, char *name, size_t cap)
     {
-        char path[MAX_PKG_PATH], range[32], full[MAX_PKG_PATH];
-        char mp[MAX_PKG_PATH], sname[MAX_TEXT], sver[32];
+        char *path, *range, *full, *mp;
+        char sname[MAX_TEXT], sver[32];
         char *deps;
         int depcap, ndeps;
         FILE *f;
@@ -2366,16 +2462,18 @@ impl PkgOps for Pkg {
         deps = NULL;
         depcap = 0;
         ndeps = 0;
-        if (self->split_spec(spec, path, sizeof path, range, sizeof range) != 0) return -1;
+        if (self->split_spec(spec, &path, &range) != 0) return -1;
         if (self->is_git_ref(path)) return self->git_name(path, name, cap);
         if (strncmp(path, "file://", 7) == 0) {
-            if (snprintf(full, sizeof full, "%s", path + 7) >= (int)sizeof full) return -1;
+            full = pkg_text_dup(self, path + 7);
         } else if (path[0] == '/') {
-            if (snprintf(full, sizeof full, "%s", path) >= (int)sizeof full) return -1;
-        } else if (snprintf(full, sizeof full, "./%s", path) >= (int)sizeof full) {
-            return -1;
+            full = pkg_text_dup(self, path);
+        } else {
+            full = pkg_pathf(self, "./%s", path);
         }
-        if (snprintf(mp, sizeof mp, "%s/ct.pkg", full) >= (int)sizeof mp) return -1;
+        if (!full) return -1;
+        mp = pkg_pathf(self, "%s/ct.pkg", full);
+        if (!mp) return -1;
         f = fopen(mp, "r");
         if (!f) return self->git_name(path, name, cap);
         fclose(f);
@@ -2556,7 +2654,8 @@ impl PkgOps for Pkg {
         char vdir[MAX_PKG_PATH], cf[MAX_TEXT], lf[MAX_TEXT], rq[MAX_TEXT];
         char *allcf, *alldf, *qcf, *qlf;
         int allcfcap, alldfcap, qcfcap, qlfcap;
-        char dpath[MAX_PKG_PATH], drange[32], dname[MAX_TEXT];
+        char *dpath, *drange;
+        char dname[MAX_TEXT];
         char *iline;
         int ilinecap;
         char imp[MAX_TEXT], rel[MAX_PKG_PATH], cand[MAX_PKG_PATH];
@@ -2600,7 +2699,7 @@ impl PkgOps for Pkg {
         for (i = 0; i < ndeps; i++) {
             char *spec;
             spec = pdeps + (size_t)i * MAX_PKG_PATH;
-            if (self->split_spec(spec, dpath, sizeof dpath, drange, sizeof drange) != 0
+            if (self->split_spec(spec, &dpath, &drange) != 0
                 || self->dep_name(spec, dname, sizeof dname) != 0) {
                 fprintf(stderr, "ctc: bad dependency '%s'\n", spec);
                 rc = 1;
@@ -3097,7 +3196,7 @@ static int pkg_official_resolve(const char *name, char **url, int *ucap,
 static int pkg_read_identity(const char *dir, char *publisher, size_t pcap,
                              char *nsroot, size_t ncap)
 {
-    char path[MAX_PKG_PATH];
+    char *path;
     char *line;
     int linecap;
     FILE *f;
@@ -3106,7 +3205,8 @@ static int pkg_read_identity(const char *dir, char *publisher, size_t pcap,
     nsroot[0] = 0;
     line = 0;
     linecap = 0;
-    if (snprintf(path, sizeof path, "%s/ct.pkg", dir) >= (int)sizeof path) return -1;
+    path = pkg_pathf(&g_pkg, "%s/ct.pkg", dir);
+    if (!path) return -1;
     f = fopen(path, "r");
     if (!f) return -1;
     while (pkg_text_fgets(&g_pkg, &line, &linecap, f) == 1) {
@@ -3212,7 +3312,7 @@ static int pkg_identity_msg(const char *src, const char *publisher,
                             const char *name, const char *nsroot,
                             char **msg, int *msgcap)
 {
-    char nspath[MAX_PKG_PATH];
+    char *nspath;
     struct stat st;
 
     if (!publisher[0]) {
@@ -3235,7 +3335,8 @@ static int pkg_identity_msg(const char *src, const char *publisher,
         pkg_text_setf(&g_pkg, msg, msgcap, "ns-root '%s' must be a relative path without '..'", nsroot);
         return -1;
     }
-    if (snprintf(nspath, sizeof nspath, "%s/%s", src, nsroot) >= (int)sizeof nspath) {
+    nspath = pkg_pathf(&g_pkg, "%s/%s", src, nsroot);
+    if (!nspath) {
         pkg_text_setf(&g_pkg, msg, msgcap, "ns-root path is too long under '%s'", src);
         return -1;
     }
@@ -3314,19 +3415,23 @@ static int pkg_store_commit(const char *src, const char *publisher, const char *
 static int pkg_read_meta(const char *dir, char *cflags, size_t ccap,
                          char *ldflags, size_t lcap, char *req, size_t rcap)
 {
-    char path[MAX_PKG_PATH];
-    char line[MAX_PKG_PATH];
+    char *path;
+    char *line;
+    int linecap;
     FILE *f;
     int ok;
 
     cflags[0] = 0;
     ldflags[0] = 0;
     req[0] = 0;
-    if (snprintf(path, sizeof path, "%s/ct.pkg", dir) >= (int)sizeof path) return -1;
+    line = 0;
+    linecap = 0;
+    path = pkg_pathf(&g_pkg, "%s/ct.pkg", dir);
+    if (!path) return -1;
     f = fopen(path, "r");
     if (!f) return 0;
     ok = 1;
-    while (fgets(line, sizeof line, f) != NULL) {
+    while (pkg_text_fgets(&g_pkg, &line, &linecap, f) == 1) {
         char *ls, *le, *eq, *k, *v, *ve;
         size_t kl, vl, ll;
         ll = strlen(line);
@@ -3871,7 +3976,8 @@ oom:
    accepted without network or credentials. */
 int pkg_index_refresh(int argc, char **argv, const char *prog, const char *version)
 {
-    char list_path[MAX_PKG_PATH], out_path[MAX_PKG_PATH], list_dir[MAX_PKG_PATH];
+    char *list_path, *out_path, *list_dir;
+    int list_dircap;
     /* S1a-0 C2h: the list line, the generated row, the two duplicate keys and
        every diagnostic message grow from MAX_PKG_LINE to TEXT_LIMIT. */
     char *line, *rowbuf;
@@ -3883,7 +3989,7 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
     int imsgcap, msgcap;
     char *key, *prev;
     int keycap, prevcap;
-    char tmpname[MAX_PKG_PATH + 64];
+    char *tmpname;
     char *errs, *buf, *old;
     struct IndexRow *rows, tmp;
     struct stat st;
@@ -3897,6 +4003,10 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
     linecap = 0;
     rowbuf = 0;
     rowbufcap = 0;
+    list_path = 0;
+    out_path = 0;
+    list_dir = 0;
+    list_dircap = 0;
     imsg = 0;
     imsgcap = 0;
     msg = 0;
@@ -3911,8 +4021,6 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
     deps = NULL;
     depcap = 0;
     ndeps = 0;
-    list_path[0] = 0;
-    out_path[0] = 0;
     for (ai = 0; ai < argc; ai++) {
         if (strcmp(argv[ai], "-h") == 0 || strcmp(argv[ai], "--help") == 0) {
             printf("usage: %s index refresh --packages <list> --out <index> [--check]\n", prog);
@@ -3936,10 +4044,8 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
                 fprintf(stderr, "%s: --packages needs a file\n", prog);
                 return 2;
             }
-            if (snprintf(list_path, sizeof list_path, "%s", argv[ai]) >= (int)sizeof list_path) {
-                fprintf(stderr, "%s: package-list path is too long\n", prog);
-                return 2;
-            }
+            list_path = pkg_text_dup(&g_pkg, argv[ai]);
+            if (!list_path) return 2;
             have_list = 1;
             continue;
         }
@@ -3949,10 +4055,8 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
                 fprintf(stderr, "%s: --out needs a file\n", prog);
                 return 2;
             }
-            if (snprintf(out_path, sizeof out_path, "%s", argv[ai]) >= (int)sizeof out_path) {
-                fprintf(stderr, "%s: index path is too long\n", prog);
-                return 2;
-            }
+            out_path = pkg_text_dup(&g_pkg, argv[ai]);
+            if (!out_path) return 2;
             have_out = 1;
             continue;
         }
@@ -3973,10 +4077,14 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
     slash = strrchr(list_path, '/');
     if (slash != NULL) {
         int dl = (int)(slash - list_path);
-        if (dl == 0) snprintf(list_dir, sizeof list_dir, "/");
-        else snprintf(list_dir, sizeof list_dir, "%.*s", dl, list_path);
+        if (dl == 0) {
+            if (pkg_text_setf(&g_pkg, &list_dir, &list_dircap, "%s", "/") != 0) return 2;
+        } else if (pkg_text_setf(&g_pkg, &list_dir, &list_dircap,
+                                 "%.*s", dl, list_path) != 0) {
+            return 2;
+        }
     } else {
-        snprintf(list_dir, sizeof list_dir, ".");
+        if (pkg_text_setf(&g_pkg, &list_dir, &list_dircap, "%s", ".") != 0) return 2;
     }
 
     lf = fopen(list_path, "r");
@@ -4037,14 +4145,16 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
         }
         r = &rows[nrows];
         r->line = lineno;
+        /* S1a-0 C2i: the row's directory is an exact-size owned string; a long
+           package path is walked whole instead of being refused at 512. */
         if (tok[0][0] == '/') {
-            w = snprintf(r->dir, sizeof r->dir, "%s", tok[0]);
+            r->dir = pkg_text_dup(&g_pkg, tok[0]);
         } else {
-            w = snprintf(r->dir, sizeof r->dir, "%s/%s", list_dir, tok[0]);
+            r->dir = pkg_pathf(&g_pkg, "%s/%s", list_dir, tok[0]);
         }
-        if (w < 0 || (size_t)w >= sizeof r->dir) {
+        if (!r->dir) {
             if (index_err_add(&errs, &nerr, &cerr, lineno, "list",
-                              "package directory path is too long") != 0)
+                              "out of memory or package path over 65536 bytes") != 0)
                 goto refresh_oom;
             continue;
         }
@@ -4264,9 +4374,9 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
         free(buf);
         return 2;
     }
-    w = snprintf(tmpname, sizeof tmpname, "%s.tmp.%ld", out_path, (long)getpid());
-    if (w < 0 || (size_t)w >= sizeof tmpname) {
-        fprintf(stderr, "%s: index path is too long: '%s'\n", prog, out_path);
+    tmpname = pkg_pathf(&g_pkg, "%s.tmp.%ld", out_path, (long)getpid());
+    if (!tmpname) {
+        fprintf(stderr, "%s: cannot name the temporary index for '%s'\n", prog, out_path);
         free(buf);
         return 2;
     }
@@ -4586,10 +4696,11 @@ static int pkg_update_v2(const char *prog)
     if (pkg_verify_lock(prog, &lrows, &nlock, &lockcap) != 0) return 1;
     rc = 0;
     for (i = 0; i < ndeps; i++) {
-        char path[MAX_PKG_PATH], range[32], dname[MAX_TEXT];
+        char *path, *range;
+        char dname[MAX_TEXT];
         char *spec;
         spec = pdeps + (size_t)i * MAX_PKG_PATH;
-        if (g_pkg.split_spec(spec, path, sizeof path, range, sizeof range) != 0
+        if (g_pkg.split_spec(spec, &path, &range) != 0
             || g_pkg.dep_name(spec, dname, sizeof dname) != 0) {
             fprintf(stderr, "ctc: bad dependency '%s'\n", spec);
             rc = 1;

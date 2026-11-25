@@ -114,6 +114,7 @@ struct tool_pkg_LockRow;
 struct tool_pkg_LockParsedRow;
 struct tool_pkg_Pkg;
 struct tool_pkg_Sha256;
+struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 const struct frontend_module_ModuleOps_vtbl frontend_module_Module_frontend_module_ModuleOps_vtable;
 extern void String_Drop_drop(void *self);
