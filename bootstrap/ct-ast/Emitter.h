@@ -27,6 +27,7 @@
 #include "EmitterTry.h"
 #include "EmitInvariant.h"
 #include "EmitHoist.h"
+#include "EmitInit.h"
 
 
 struct ct_buf;

@@ -18,6 +18,7 @@
 #include "EmitterTry.h"
 #include "EmitInvariant.h"
 #include "EmitHoist.h"
+#include "EmitInit.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Emitter.h.ct"
 #include <stdio.h>
@@ -234,7 +235,6 @@ static int sb_field_key(struct backend_emit_Emitter *, int, char *, char *, int 
 static int sb_field_state(struct backend_emit_Emitter *, int, const char *, const char *, int *);
 static int sb_field_loop_unsafe(struct backend_emit_Emitter *, int);
 static int sb_owning_struct_type(struct backend_emit_Emitter *, const char *);
-static int sb_rewrite_init(struct backend_emit_Emitter *, const char *, int, int);
 static int sb_release_from(struct backend_emit_Emitter *, int, int, int);
 static int sb_container_view(const char *);
 static int sb_ret_mentions(struct backend_emit_Emitter *, int, const char *);
@@ -429,7 +429,7 @@ static int * backend_emit_g_inst_layout_state;
 static int backend_emit_g_inst_layout_cap;
 static int * backend_emit_g_shell_emit_state;
 static int backend_emit_g_shell_emit_cap;
-static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable, .__backend_emit_emitinvariant_vptr = &backend_emit_Emitter_backend_emit_EmitInvariant_vtable, .__backend_emit_emithoist_vptr = &backend_emit_Emitter_backend_emit_EmitHoist_vtable };
+static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable, .__backend_emit_emitinvariant_vptr = &backend_emit_Emitter_backend_emit_EmitInvariant_vtable, .__backend_emit_emithoist_vptr = &backend_emit_Emitter_backend_emit_EmitHoist_vtable, .__backend_emit_emitinit_vptr = &backend_emit_Emitter_backend_emit_EmitInit_vtable };
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_indent(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int i;
@@ -862,177 +862,6 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_unit_init(void *self, 
         fputs("    }\n", _self->out);
     }
     fputs("}\n\n", _self->out);
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_raw_init(void *self, int raw, const char * type, const char * dims, int assign) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    const char * t;
-    const char * base;
-    int len;
-    int i;
-    int only_space;
-    int si;
-    (void)(_self);
-    t = (_self->arena->nodes[raw].aux ? _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, (int)(_self->arena->nodes[raw].num)) : _self->arena->nodes[raw].text);
-    len = (int)(strlen(t));
-    base = _self->init->__backend_emit_initops_vptr->strip_quals(_self->init, type);
-    if (strncmp(base, "struct ", 7) == 0) {
-        base += 7;
-    }
-    while ((*base) == ' ') {
-        base++;
-    }
-    si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
-    if (assign) {
-        fputs(" = ", _self->out);
-    }
-    if (((len < 2) || (t[(len - 1)] != '}'))) {
-        fputs(t, _self->out);
-        return 0;
-    }
-    only_space = 1;
-    for (i = 1; i < (len - 1); i++) {
-        if (((((t[i] != ' ') && (t[i] != '\t')) && (t[i] != '\n')) && (t[i] != '\r'))) {
-            only_space = 0;
-        }
-    }
-    if ((dims && dims[0])) {
-        if ((only_space || (!_self->init->__backend_emit_initops_vptr->type_has_vptr(_self->init, type)))) {
-            fputs(t, _self->out);
-            return 0;
-        }
-        return _self->init->__backend_emit_initops_vptr->emit_elem_vptrs(_self->init, t, type);
-    }
-    if (only_space) {
-        fputs("{ ", _self->out);
-        if (_self->init->__backend_emit_initops_vptr->type_has_vptr(_self->init, type)) {
-            if (_self->init->__backend_emit_initops_vptr->emit_vptr_items(_self->init, "", type) != 0) {
-                return (-1);
-            }
-        }
-        if (((si >= 0) && (_self->init->__backend_emit_initops_vptr->emit_field_vptrs(_self->init, si, _self->init->__backend_emit_initops_vptr->type_has_vptr(_self->init, type), 0) != 0))) {
-            return (-1);
-        }
-        fputs(" }", _self->out);
-        return 0;
-    }
-    if ((!((si >= 0) && sb_rewrite_init(_self, t, len, si)))) {
-        fwrite(t, 1, (size_t)((len - 1)), _self->out);
-    }
-    if (_self->init->__backend_emit_initops_vptr->type_has_vptr(_self->init, type)) {
-        fputs(", ", _self->out);
-        if (_self->init->__backend_emit_initops_vptr->emit_vptr_items(_self->init, "", type) != 0) {
-            return (-1);
-        }
-    }
-    if (((si >= 0) && (_self->init->__backend_emit_initops_vptr->emit_field_vptrs(_self->init, si, 1, t) != 0))) {
-        return (-1);
-    }
-    fputs("}", _self->out);
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_range_init(void *self, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    long k;
-    long start;
-    int count;
-    int save_k;
-    int save_depth;
-    const char * elem;
-    const char * iname;
-    (void)(_self);
-    start = _self->arena->nodes[n].num;
-    count = _self->arena->nodes[n].aux;
-    elem = _self->arena->nodes[n].text;
-    iname = _self->arena->nodes[n].text2;
-    if (iname[0]) {
-        fprintf(_self->out, " = %s_from((%s[%d]){ ", iname, elem, count);
-    }
-    else {
-        fputs(" = { ", _self->out);
-    }
-    save_k = _self->range_k;
-    save_depth = _self->range_depth;
-    for (k = start; k < (start + count); k++) {
-        if (k != start) {
-            fputs(", ", _self->out);
-        }
-        _self->range_k = (int)(k);
-        _self->range_depth = (save_depth + 1);
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[n].a) != 0) {
-            return (-1);
-        }
-    }
-    _self->range_k = save_k;
-    _self->range_depth = save_depth;
-    if (iname[0]) {
-        fprintf(_self->out, " }, %d)", count);
-    }
-    else {
-        fputs(" }", _self->out);
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_brace_init(void *self, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int e;
-    int count;
-    const char * elem;
-    const char * iname;
-    (void)(_self);
-    elem = _self->arena->nodes[n].text;
-    iname = _self->arena->nodes[n].text2;
-    count = _self->arena->nodes[n].aux;
-    if (count <= 0) {
-        fprintf(_self->out, " = %s_from(0, 0)", iname);
-        return 0;
-    }
-    fprintf(_self->out, " = %s_from((%s[%d]){ ", iname, elem, count);
-    for (e = _self->arena->nodes[n].a; e >= 0; e = _self->arena->nodes[e].next) {
-        if (e != _self->arena->nodes[n].a) {
-            fputs(", ", _self->out);
-        }
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, e) != 0) {
-            return (-1);
-        }
-    }
-    fprintf(_self->out, " }, %d)", count);
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_map_brace_init(void *self, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int it;
-    int count;
-    const char * entry;
-    const char * iname;
-    (void)(_self);
-    entry = _self->arena->nodes[n].text;
-    iname = _self->arena->nodes[n].text2;
-    count = _self->arena->nodes[n].aux;
-    if (count <= 0) {
-        fprintf(_self->out, " = %s_from(0, 0)", iname);
-        return 0;
-    }
-    fprintf(_self->out, " = %s_from((%s[%d]){ ", iname, entry, count);
-    for (it = _self->arena->nodes[n].a; it >= 0; it = _self->arena->nodes[it].next) {
-        if (it != _self->arena->nodes[n].a) {
-            fputs(", ", _self->out);
-        }
-        fputc('{', _self->out);
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[it].a) != 0) {
-            return (-1);
-        }
-        fputs(", ", _self->out);
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[it].b) != 0) {
-            return (-1);
-        }
-        fputc('}', _self->out);
-    }
-    fprintf(_self->out, " }, %d)", count);
     return 0;
 }
 
@@ -4055,10 +3884,6 @@ const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps
     .emit_struct_fwd = backend_emit_Emitter_backend_emit_EmitOps_emit_struct_fwd,
     .emit_trait_range = backend_emit_Emitter_backend_emit_EmitOps_emit_trait_range,
     .emit_unit_init = backend_emit_Emitter_backend_emit_EmitOps_emit_unit_init,
-    .emit_raw_init = backend_emit_Emitter_backend_emit_EmitOps_emit_raw_init,
-    .emit_range_init = backend_emit_Emitter_backend_emit_EmitOps_emit_range_init,
-    .emit_brace_init = backend_emit_Emitter_backend_emit_EmitOps_emit_brace_init,
-    .emit_map_brace_init = backend_emit_Emitter_backend_emit_EmitOps_emit_map_brace_init,
     .emit_impls = backend_emit_Emitter_backend_emit_EmitOps_emit_impls,
     .emit_maps = backend_emit_Emitter_backend_emit_EmitOps_emit_maps,
     .emit_field = backend_emit_Emitter_backend_emit_EmitOps_emit_field,
@@ -4534,215 +4359,6 @@ static int sb_owning_struct_type(struct backend_emit_Emitter * self, const char 
         }
     }
     return 0;
-}
-static int sb_rewrite_init(struct backend_emit_Emitter * self, const char * t, int len, int si) {
-    int starts[64];
-    int ends[64];
-    int epos[64];
-    int fields[64];
-    int litmode[64];
-    int nitem;
-    int i;
-    int depth;
-    int p;
-    int q;
-    int changed;
-    int count;
-    char expr[MAX_TEXT];
-    if ((((len < 2) || (t[0] != '{')) || (t[(len - 1)] != '}'))) {
-        return 0;
-    }
-    if ((((si < 0) || (self->sym->structs[si].nfields <= 0)) || (self->sym->structs[si].nfields > 64))) {
-        return 0;
-    }
-    nitem = 0;
-    depth = 0;
-    p = 1;
-    q = 1;
-    count = 0;
-    while (p < (len - 1)) {
-        char c = t[p];
-        if (((c == '"') || (c == '\''))) {
-            char quote = c;
-            p++;
-            while (((p < (len - 1)) && (t[p] != quote))) {
-                if (((t[p] == '\\') && ((p + 1) < (len - 1)))) {
-                    p++;
-                }
-                p++;
-            }
-            p++;
-            continue;
-        }
-        if ((((c == '/') && ((p + 1) < (len - 1))) && (t[(p + 1)] == '/'))) {
-            while (((p < (len - 1)) && (t[p] != '\n'))) {
-                p++;
-            }
-            continue;
-        }
-        if ((((c == '/') && ((p + 1) < (len - 1))) && (t[(p + 1)] == '*'))) {
-            p += 2;
-            while ((((p + 1) < (len - 1)) && (!((t[p] == '*') && (t[(p + 1)] == '/'))))) {
-                p++;
-            }
-            p += 2;
-            continue;
-        }
-        if ((((c == '{') || (c == '(')) || (c == '['))) {
-            depth++;
-        }
-        else {
-            if ((((c == '}') || (c == ')')) || (c == ']'))) {
-                depth--;
-            }
-            else {
-                if (((c == ',') && (depth == 0))) {
-                    if (nitem >= 64) {
-                        return 0;
-                    }
-                    starts[nitem] = q;
-                    ends[nitem] = p;
-                    nitem++;
-                    q = (p + 1);
-                }
-            }
-        }
-        p++;
-    }
-    if (nitem >= 64) {
-        return 0;
-    }
-    starts[nitem] = q;
-    ends[nitem] = (len - 1);
-    nitem++;
-    if (self->sym->structs[si].nfields < nitem) {
-        return 0;
-    }
-    changed = 0;
-    for (i = 0; i < nitem; i++) {
-        int s0 = starts[i];
-        int e0 = ends[i];
-        int fs;
-        int fi;
-        int kind;
-        litmode[i] = 0;
-        while (((s0 < e0) && ((((t[s0] == ' ') || (t[s0] == '\t')) || (t[s0] == '\n')) || (t[s0] == '\r')))) {
-            s0++;
-        }
-        while (((e0 > s0) && ((((t[(e0 - 1)] == ' ') || (t[(e0 - 1)] == '\t')) || (t[(e0 - 1)] == '\n')) || (t[(e0 - 1)] == '\r')))) {
-            e0--;
-        }
-        fs = s0;
-        fi = (-1);
-        if (((s0 < e0) && (t[s0] == '.'))) {
-            int ne = (s0 + 1);
-            char nm[MAX_TEXT];
-            while (((ne < e0) && (((((t[ne] >= 'A') && (t[ne] <= 'Z')) || ((t[ne] >= 'a') && (t[ne] <= 'z'))) || ((t[ne] >= '0') && (t[ne] <= '9'))) || (t[ne] == '_')))) {
-                ne++;
-            }
-            snprintf(nm, sizeof(nm), "%.*s", (ne - (s0 + 1)), ((t + s0) + 1));
-            while (((ne < e0) && ((t[ne] == ' ') || (t[ne] == '\t')))) {
-                ne++;
-            }
-            if (((ne >= e0) || (t[ne] != '='))) {
-                return 0;
-            }
-            for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-                if (strcmp(self->sym->structs[si].fields[fi].name, nm) == 0) {
-                    break;
-                }
-            }
-            if (fi >= self->sym->structs[si].nfields) {
-                return 0;
-            }
-            ne++;
-            while (((ne < e0) && ((t[ne] == ' ') || (t[ne] == '\t')))) {
-                ne++;
-            }
-            fs = ne;
-            count = (fi + 1);
-        }
-        else {
-            if (((s0 < e0) && (t[s0] == '['))) {
-                return 0;
-            }
-            else {
-                fi = count;
-                count++;
-                if (fi >= self->sym->structs[si].nfields) {
-                    return 0;
-                }
-            }
-        }
-        fields[i] = fi;
-        epos[i] = fs;
-        if (self->sym->structs[si].fields[fi].dims[0]) {
-            continue;
-        }
-        kind = frontend_sym_ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
-        if ((!kind)) {
-            continue;
-        }
-        if ((e0 - fs) >= MAX_TEXT) {
-            continue;
-        }
-        snprintf(expr, sizeof(expr), "%.*s", (e0 - fs), (t + fs));
-        if ((!backend_emit_sb_text_place_p(expr))) {
-            size_t el = strlen(expr);
-            if (((((el >= 2) && (expr[0] == '"')) && (expr[(el - 1)] == '"')) && self->cur_ret[0])) {
-                litmode[i] = 1;
-                starts[i] = s0;
-                ends[i] = e0;
-                changed = 1;
-            }
-            continue;
-        }
-        starts[i] = s0;
-        ends[i] = e0;
-        changed = 1;
-    }
-    if ((!changed)) {
-        return 0;
-    }
-    fputs("{ ", self->out);
-    for (i = 0; i < nitem; i++) {
-        int s0 = starts[i];
-        int e0 = ends[i];
-        int fs = epos[i];
-        int kind;
-        int fi = fields[i];
-        if (i > 0) {
-            fputs(", ", self->out);
-        }
-        if (fs > s0) {
-            fwrite((t + s0), 1, (size_t)((fs - s0)), self->out);
-        }
-        kind = (self->sym->structs[si].fields[fi].dims[0] ? 0 : frontend_sym_ct_is_string_value_type(self->sym->structs[si].fields[fi].type));
-        if (litmode[i]) {
-            fputs("str_dup_len(", self->out);
-            fwrite((t + fs), 1, (size_t)((e0 - fs)), self->out);
-            fprintf(self->out, ", (int)(sizeof(%.*s) - 1))", (int)((e0 - fs)), (t + fs));
-            continue;
-        }
-        if ((kind && ((e0 - fs) < MAX_TEXT))) {
-            snprintf(expr, sizeof(expr), "%.*s", (e0 - fs), (t + fs));
-            if (backend_emit_sb_text_place_p(expr)) {
-                fprintf(self->out, "%s_retain(&(", backend_emit_sb_prefix(kind));
-            }
-            else {
-                kind = 0;
-            }
-        }
-        else {
-            kind = 0;
-        }
-        fwrite((t + fs), 1, (size_t)((e0 - fs)), self->out);
-        if (kind) {
-            fputs("))", self->out);
-        }
-    }
-    fputs(" ", self->out);
-    return 1;
 }
 static int sb_release_from(struct backend_emit_Emitter * self, int base, int skip, int ind) {
     int i;
@@ -8616,7 +8232,7 @@ static int em_expr_cast(struct backend_emit_Emitter * self, int n, int nk) {
 static int em_expr_compound(struct backend_emit_Emitter * self, int n, int nk) {
     (void)(nk);
     fprintf(self->out, "(%s)", self->arena->nodes[n].text);
-    return self->__backend_emit_emitops_vptr->emit_raw_init(self, self->arena->nodes[n].a, self->arena->nodes[n].text, "", 0);
+    return self->__backend_emit_emitinit_vptr->emit_raw_init(self, self->arena->nodes[n].a, self->arena->nodes[n].text, "", 0);
 }
 static int em_expr_vaarg(struct backend_emit_Emitter * self, int n, int nk) {
     (void)(nk);
@@ -9098,7 +8714,7 @@ static int em_expr_newobj(struct backend_emit_Emitter * self, int n, int nk) {
     snprintf(tmp, sizeof(tmp), "__ct_new%d", k);
     snprintf(ctype, sizeof(ctype), "struct %s", self->arena->nodes[n].text2);
     fprintf(self->out, "({ %s %s = %s__new(&(%s)", ctype, tmp, self->arena->nodes[n].text2, self->arena->nodes[n].text);
-    if (self->__backend_emit_emitops_vptr->emit_raw_init(self, self->arena->nodes[n].a, self->arena->nodes[n].text, "", 0) != 0) {
+    if (self->__backend_emit_emitinit_vptr->emit_raw_init(self, self->arena->nodes[n].a, self->arena->nodes[n].text, "", 0) != 0) {
         return (-1);
     }
     fprintf(self->out, "); %s; })", tmp);
@@ -11234,13 +10850,13 @@ static int em_decl_global(struct backend_emit_Emitter * self, int n, int ind, in
         return (-1);
     }
     if (((self->arena->nodes[n].a >= 0) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_INIT_RANGE))) {
-        if (self->__backend_emit_emitops_vptr->emit_range_init(self, self->arena->nodes[n].a) != 0) {
+        if (self->__backend_emit_emitinit_vptr->emit_range_init(self, self->arena->nodes[n].a) != 0) {
             return (-1);
         }
     }
     else {
         if (((self->arena->nodes[n].a >= 0) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW))) {
-            if (self->__backend_emit_emitops_vptr->emit_raw_init(self, self->arena->nodes[n].a, self->arena->nodes[n].text, self->arena->nodes[n].text3, 1) != 0) {
+            if (self->__backend_emit_emitinit_vptr->emit_raw_init(self, self->arena->nodes[n].a, self->arena->nodes[n].text, self->arena->nodes[n].text3, 1) != 0) {
                 return (-1);
             }
         }
@@ -11298,25 +10914,25 @@ static int em_inline_decls(struct backend_emit_Emitter * self, int n, int nk) {
             }
             if (self->arena->nodes[c].a >= 0) {
                 if (self->arena->nodes[self->arena->nodes[c].a].kind == N_INIT_RANGE) {
-                    if (self->__backend_emit_emitops_vptr->emit_range_init(self, self->arena->nodes[c].a) != 0) {
+                    if (self->__backend_emit_emitinit_vptr->emit_range_init(self, self->arena->nodes[c].a) != 0) {
                         return (-1);
                     }
                 }
                 else {
                     if (self->arena->nodes[self->arena->nodes[c].a].kind == N_INIT_BRACE) {
-                        if (self->__backend_emit_emitops_vptr->emit_brace_init(self, self->arena->nodes[c].a) != 0) {
+                        if (self->__backend_emit_emitinit_vptr->emit_brace_init(self, self->arena->nodes[c].a) != 0) {
                             return (-1);
                         }
                     }
                     else {
                         if (self->arena->nodes[self->arena->nodes[c].a].kind == N_INIT_MBRACE) {
-                            if (self->__backend_emit_emitops_vptr->emit_map_brace_init(self, self->arena->nodes[c].a) != 0) {
+                            if (self->__backend_emit_emitinit_vptr->emit_map_brace_init(self, self->arena->nodes[c].a) != 0) {
                                 return (-1);
                             }
                         }
                         else {
                             if (self->arena->nodes[self->arena->nodes[c].a].kind == N_RAW) {
-                                if (self->__backend_emit_emitops_vptr->emit_raw_init(self, self->arena->nodes[c].a, self->arena->nodes[c].text, self->arena->nodes[c].text3, 1) != 0) {
+                                if (self->__backend_emit_emitinit_vptr->emit_raw_init(self, self->arena->nodes[c].a, self->arena->nodes[c].text, self->arena->nodes[c].text3, 1) != 0) {
                                     return (-1);
                                 }
                             }
@@ -11369,25 +10985,25 @@ static int em_inline_decl_field(struct backend_emit_Emitter * self, int n, int n
     }
     if (nk == N_DECL) {
         if (((self->arena->nodes[n].a >= 0) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_INIT_RANGE))) {
-            if (self->__backend_emit_emitops_vptr->emit_range_init(self, self->arena->nodes[n].a) != 0) {
+            if (self->__backend_emit_emitinit_vptr->emit_range_init(self, self->arena->nodes[n].a) != 0) {
                 return (-1);
             }
         }
         else {
             if (((self->arena->nodes[n].a >= 0) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_INIT_BRACE))) {
-                if (self->__backend_emit_emitops_vptr->emit_brace_init(self, self->arena->nodes[n].a) != 0) {
+                if (self->__backend_emit_emitinit_vptr->emit_brace_init(self, self->arena->nodes[n].a) != 0) {
                     return (-1);
                 }
             }
             else {
                 if (((self->arena->nodes[n].a >= 0) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_INIT_MBRACE))) {
-                    if (self->__backend_emit_emitops_vptr->emit_map_brace_init(self, self->arena->nodes[n].a) != 0) {
+                    if (self->__backend_emit_emitinit_vptr->emit_map_brace_init(self, self->arena->nodes[n].a) != 0) {
                         return (-1);
                     }
                 }
                 else {
                     if (((self->arena->nodes[n].a >= 0) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW))) {
-                        if (self->__backend_emit_emitops_vptr->emit_raw_init(self, self->arena->nodes[n].a, self->arena->nodes[n].text, self->arena->nodes[n].text3, 1) != 0) {
+                        if (self->__backend_emit_emitinit_vptr->emit_raw_init(self, self->arena->nodes[n].a, self->arena->nodes[n].text, self->arena->nodes[n].text3, 1) != 0) {
                             return (-1);
                         }
                     }

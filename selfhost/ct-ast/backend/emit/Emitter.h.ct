@@ -42,6 +42,7 @@ import tool::sh::Sh;
 import backend::emit::EmitterTry;
 import backend::emit::EmitInvariant;
 import backend::emit::EmitHoist;
+import backend::emit::EmitInit;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
@@ -659,148 +660,6 @@ static int sb_owning_struct_type(struct Emitter *self, const char *type)
    initialiser is a call result moves (no retain). Returns 1 when it printed
    the rewritten `{ … }` text (without the closing brace, which the caller's
    vptr suffix path appends), 0 when nothing needed rewriting. */
-static int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
-{
-    int starts[64], ends[64], epos[64], fields[64], litmode[64], nitem, i, depth, p, q;
-    int changed, count;
-    char expr[MAX_TEXT];
-
-    if (len < 2 || t[0] != '{' || t[len - 1] != '}') return 0;
-    if (si < 0 || self->sym->structs[si].nfields <= 0
-        || self->sym->structs[si].nfields > 64) return 0;
-    nitem = 0;
-    depth = 0;
-    p = 1;
-    q = 1;
-    count = 0;
-    while (p < len - 1) {
-        char c = t[p];
-        if (c == '"' || c == '\'') {
-            char quote = c;
-            p++;
-            while (p < len - 1 && t[p] != quote) {
-                if (t[p] == '\\' && p + 1 < len - 1) p++;
-                p++;
-            }
-            p++;
-            continue;
-        }
-        if (c == '/' && p + 1 < len - 1 && t[p + 1] == '/') {
-            while (p < len - 1 && t[p] != '\n') p++;
-            continue;
-        }
-        if (c == '/' && p + 1 < len - 1 && t[p + 1] == '*') {
-            p += 2;
-            while (p + 1 < len - 1 && !(t[p] == '*' && t[p + 1] == '/')) p++;
-            p += 2;
-            continue;
-        }
-        if (c == '{' || c == '(' || c == '[') depth++;
-        else if (c == '}' || c == ')' || c == ']') depth--;
-        else if (c == ',' && depth == 0) {
-            if (nitem >= 64) return 0;
-            starts[nitem] = q;
-            ends[nitem] = p;
-            nitem++;
-            q = p + 1;
-        }
-        p++;
-    }
-    if (nitem >= 64) return 0;
-    starts[nitem] = q;
-    ends[nitem] = len - 1;
-    nitem++;
-    if (self->sym->structs[si].nfields < nitem) return 0;
-
-    changed = 0;
-    for (i = 0; i < nitem; i++) {
-        int s0 = starts[i], e0 = ends[i], fs, fi, kind;
-        litmode[i] = 0;
-        while (s0 < e0 && (t[s0] == ' ' || t[s0] == '\t' || t[s0] == '\n' || t[s0] == '\r')) s0++;
-        while (e0 > s0 && (t[e0 - 1] == ' ' || t[e0 - 1] == '\t'
-                           || t[e0 - 1] == '\n' || t[e0 - 1] == '\r')) e0--;
-        fs = s0;
-        fi = -1;
-        if (s0 < e0 && t[s0] == '.') {
-            int ne = s0 + 1;
-            char nm[MAX_TEXT];
-            while (ne < e0 && ((t[ne] >= 'A' && t[ne] <= 'Z') || (t[ne] >= 'a' && t[ne] <= 'z')
-                               || (t[ne] >= '0' && t[ne] <= '9') || t[ne] == '_')) ne++;
-            snprintf(nm, sizeof nm, "%.*s", ne - (s0 + 1), t + s0 + 1);
-            while (ne < e0 && (t[ne] == ' ' || t[ne] == '\t')) ne++;
-            if (ne >= e0 || t[ne] != '=') return 0;   /* unexpected designator */
-            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-                if (strcmp(self->sym->structs[si].fields[fi].name, nm) == 0) break;
-            if (fi >= self->sym->structs[si].nfields) return 0;
-            ne++;
-            while (ne < e0 && (t[ne] == ' ' || t[ne] == '\t')) ne++;
-            fs = ne;
-            count = fi + 1;
-        } else if (s0 < e0 && t[s0] == '[') {
-            return 0;   /* array designator: leave the initialiser alone */
-        } else {
-            fi = count;
-            count++;
-            if (fi >= self->sym->structs[si].nfields) return 0;
-        }
-        fields[i] = fi;
-        epos[i] = fs;
-        if (self->sym->structs[si].fields[fi].dims[0]) continue;
-        kind = frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
-        if (!kind) continue;
-        if (e0 - fs >= MAX_TEXT) continue;
-        snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
-        if (!sb_text_place_p(expr)) {
-            /* PH-81: a bare string literal in a `String` field is an owning
-               value, not a `char *`; rewrite it to a heap copy so the box /
-               struct release cannot free a literal. Only a local initializer
-               may call at run time (a file-scope one stays unchanged). */
-            size_t el = strlen(expr);
-            if (el >= 2 && expr[0] == '"' && expr[el - 1] == '"'
-                && self->cur_ret[0]) {
-                litmode[i] = 1;
-                starts[i] = s0;
-                ends[i] = e0;
-                changed = 1;
-            }
-            continue;
-        }
-        starts[i] = s0;
-        ends[i] = e0;
-        changed = 1;
-    }
-    if (!changed) return 0;
-    fputs("{ ", self->out);
-    for (i = 0; i < nitem; i++) {
-        int s0 = starts[i], e0 = ends[i], fs = epos[i];
-        int kind, fi = fields[i];
-        if (i > 0) fputs(", ", self->out);
-        if (fs > s0) fwrite(t + s0, 1, (size_t)(fs - s0), self->out);   /* designator */
-        kind = self->sym->structs[si].fields[fi].dims[0] ? 0
-               : frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
-        if (litmode[i]) {
-            fputs("str_dup_len(", self->out);
-            fwrite(t + fs, 1, (size_t)(e0 - fs), self->out);
-            fprintf(self->out, ", (int)(sizeof(%.*s) - 1))",
-                    (int)(e0 - fs), t + fs);
-            continue;
-        }
-        if (kind && e0 - fs < MAX_TEXT) {
-            snprintf(expr, sizeof expr, "%.*s", e0 - fs, t + fs);
-            if (sb_text_place_p(expr))
-                fprintf(self->out, "%s_retain(&(", sb_prefix(kind));
-            else
-                kind = 0;
-        } else {
-            kind = 0;
-        }
-        fwrite(t + fs, 1, (size_t)(e0 - fs), self->out);
-        if (kind) fputs("))", self->out);
-    }
-    fputs(" ", self->out);
-    return 1;
-}
-
 /* Release the tracked bindings [base, sb_n) in reverse declaration order,
    skipping `skip` (a handle that a `return` moves out). */
 static int sb_release_from(struct Emitter *self, int base, int skip, int ind)
@@ -7901,64 +7760,6 @@ impl EmitOps for Emitter {
        trait-carrying struct needs. `assign` writes the declaration's leading
        ` = `; a compound literal calls it with 0, since the braces follow the
        `(type)` directly. */
-    int emit_raw_init(int raw, const char *type, const char *dims, int assign)
-    {
-        const char *t;
-        const char *base;
-        int len, i, only_space, si;
-        (void)self;
-
-        /* A captured initialiser may be longer than `text` holds; the parser
-           then keeps it in the arena string pool and sets `aux = 1` with the
-           offset in `num`. An `N_RAW` naming a macro or a function keeps its
-           spelling in `text` as before. */
-        t = self->arena->nodes[raw].aux
-                ? self->arena->str_at((int)self->arena->nodes[raw].num)
-                : self->arena->nodes[raw].text;
-        len = (int)strlen(t);
-        base = self->init->strip_quals(type);
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        si = self->sym->find_struct(base);
-        if (assign) fputs(" = ", self->out);
-        if (len < 2 || t[len - 1] != '}') {
-            fputs(t, self->out);
-            return 0;
-        }
-        only_space = 1;
-        for (i = 1; i < len - 1; i++)
-            if (t[i] != ' ' && t[i] != '\t' && t[i] != '\n' && t[i] != '\r') only_space = 0;
-        /* An array has no designator of its own: the elements' braces are the
-           only slot C offers, so the items go inside each element. `{}` stays as
-           written -- an array needs an element to attach to. */
-        if (dims && dims[0]) {
-            if (only_space || !self->init->type_has_vptr(type)) {
-                fputs(t, self->out);
-                return 0;
-            }
-            return self->init->emit_elem_vptrs(t, type);
-        }
-        if (only_space) {
-            fputs("{ ", self->out);
-            if (self->init->type_has_vptr(type)) {
-                if (self->init->emit_vptr_items("", type) != 0) return -1;
-            }
-            if (si >= 0 && self->init->emit_field_vptrs(si, self->init->type_has_vptr(type), 0) != 0) return -1;
-            fputs(" }", self->out);
-            return 0;
-        }
-        if (!(si >= 0 && sb_rewrite_init(self, t, len, si)))
-            fwrite(t, 1, (size_t)(len - 1), self->out);
-        if (self->init->type_has_vptr(type)) {
-            fputs(", ", self->out);
-            if (self->init->emit_vptr_items("", type) != 0) return -1;
-        }
-        /* the captured text already has members, so a nested item needs its comma */
-        if (si >= 0 && self->init->emit_field_vptrs(si, 1, t) != 0) return -1;
-        fputs("}", self->out);
-        return 0;
-    }
-
     /* Phase 24: `int a[] = 0..n($ * 2 + 1)` as ` = { <elem>, <elem>, … }`.
        The node keeps one element subtree, and every element re-emits it with
        `range_k` set to the current index, so `$` prints as `((int)<k>)` and the
@@ -7969,95 +7770,17 @@ impl EmitOps for Emitter {
        instance name, so the same list becomes a composite literal handed to the
        built-in constructor: `Vec_int_from((int[4]){ … }, 4)`. The compiler knows
        only the entry's name and the type argument, never `Vec`'s fields. */
-    int emit_range_init(int n)
-    {
-        long k, start;
-        int count, save_k, save_depth;
-        const char *elem, *iname;
-        (void)self;
-
-        start = self->arena->nodes[n].num;
-        count = self->arena->nodes[n].aux;
-        elem = self->arena->nodes[n].text;
-        iname = self->arena->nodes[n].text2;
-        if (iname[0])
-            fprintf(self->out, " = %s_from((%s[%d]){ ", iname, elem, count);
-        else
-            fputs(" = { ", self->out);
-        save_k = self->range_k;
-        save_depth = self->range_depth;
-        for (k = start; k < start + count; k++) {
-            if (k != start) fputs(", ", self->out);
-            self->range_k = (int)k;
-            self->range_depth = save_depth + 1;
-            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-        }
-        self->range_k = save_k;
-        self->range_depth = save_depth;
-        if (iname[0]) fprintf(self->out, " }, %d)", count);
-        else fputs(" }", self->out);
-        return 0;
-    }
-
     /* Phase 31 S11a: a `Vec<T>` brace initializer. The node carries the element
        type, the instance name and the element expressions chained through
        `next` (`aux` is the count), so the list streams exactly like the range
        form and the node count follows the source. An empty list hands the
        constructor `(0, 0)`: `Vec_<enc>_from` answers an empty handle, a shape
        the range form can never spell (`stop <= start` is refused). */
-    int emit_brace_init(int n)
-    {
-        int e, count;
-        const char *elem, *iname;
-        (void)self;
-
-        elem = self->arena->nodes[n].text;
-        iname = self->arena->nodes[n].text2;
-        count = self->arena->nodes[n].aux;
-        if (count <= 0) {
-            fprintf(self->out, " = %s_from(0, 0)", iname);
-            return 0;
-        }
-        fprintf(self->out, " = %s_from((%s[%d]){ ", iname, elem, count);
-        for (e = self->arena->nodes[n].a; e >= 0; e = self->arena->nodes[e].next) {
-            if (e != self->arena->nodes[n].a) fputs(", ", self->out);
-            if (self->emit_expr(e) != 0) return -1;
-        }
-        fprintf(self->out, " }, %d)", count);
-        return 0;
-    }
-
     /* Phase 31 S14b: a `Map` brace initializer. The node names the `MapEntry`
        struct and the `Map` instance; each item node carries its key in `a` and
        its value in `b`, chained through `next`. The list is streamed as one
        composite literal, and an empty list hands the constructor `(0, 0)` so the
        empty map still owns a releasable header. */
-    int emit_map_brace_init(int n)
-    {
-        int it, count;
-        const char *entry, *iname;
-        (void)self;
-
-        entry = self->arena->nodes[n].text;
-        iname = self->arena->nodes[n].text2;
-        count = self->arena->nodes[n].aux;
-        if (count <= 0) {
-            fprintf(self->out, " = %s_from(0, 0)", iname);
-            return 0;
-        }
-        fprintf(self->out, " = %s_from((%s[%d]){ ", iname, entry, count);
-        for (it = self->arena->nodes[n].a; it >= 0; it = self->arena->nodes[it].next) {
-            if (it != self->arena->nodes[n].a) fputs(", ", self->out);
-            fputc('{', self->out);
-            if (self->emit_expr(self->arena->nodes[it].a) != 0) return -1;
-            fputs(", ", self->out);
-            if (self->emit_expr(self->arena->nodes[it].b) != 0) return -1;
-            fputc('}', self->out);
-        }
-        fprintf(self->out, " }, %d)", count);
-        return 0;
-    }
-
     /* Impl methods and their vtables, emitted before the ordinary functions so
        `main` can already dispatch through them. */
     int emit_impls(int prog)

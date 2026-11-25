@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10430 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10153 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=65203 io_cap=1024
+     emitted_before=48223 emitted_after=65420 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -130,6 +130,10 @@
       `EmitHoist` trait，方法体与 2 个 helper 搬入
       `backend/emit/EmitHoist.h.ct`；Emitter.h.ct 10717 -> 10430，发射 C
       64987 -> 65203，切片清单仍为 76)
+     (v1-PH-2 S1a-1 D3 后复测：`EmitOps` 的 4 个初始化器方法拆成
+      `EmitInit` trait，方法体与 `sb_rewrite_init` 搬入
+      `backend/emit/EmitInit.h.ct`；Emitter.h.ct 10430 -> 10153，发射 C
+      65203 -> 65420，切片清单仍为 76；D1–D3 完成)
 -->
 
 ## 1 切片清单

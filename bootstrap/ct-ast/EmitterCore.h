@@ -128,10 +128,6 @@ struct backend_emit_EmitOps_vtbl {
     int (*emit_impls)(void *, int);
     int (*emit_maps)(void *, int);
     int (*emit_unit_init)(void *, int);
-    int (*emit_raw_init)(void *, int, const char *, const char *, int);
-    int (*emit_range_init)(void *, int);
-    int (*emit_brace_init)(void *, int);
-    int (*emit_map_brace_init)(void *, int);
     int (*write_header)(void *, const char *);
     int (*write_abi_header)(void *, const char *);
     int (*fail)(void *, const char *);
@@ -140,6 +136,17 @@ struct backend_emit_EmitOps_vtbl {
 struct backend_emit_EmitOps_iface {
     void *self;
     const struct backend_emit_EmitOps_vtbl *vt;
+};
+
+struct backend_emit_EmitInit_vtbl {
+    int (*emit_raw_init)(void *, int, const char *, const char *, int);
+    int (*emit_range_init)(void *, int);
+    int (*emit_brace_init)(void *, int);
+    int (*emit_map_brace_init)(void *, int);
+};
+struct backend_emit_EmitInit_iface {
+    void *self;
+    const struct backend_emit_EmitInit_vtbl *vt;
 };
 
 struct backend_emit_EmitHoist_vtbl {
@@ -250,6 +257,7 @@ struct backend_emit_Emitter {
     const struct backend_emit_EmitterTryOps_vtbl *__backend_emit_emittertryops_vptr;
     const struct backend_emit_EmitInvariant_vtbl *__backend_emit_emitinvariant_vptr;
     const struct backend_emit_EmitHoist_vtbl *__backend_emit_emithoist_vptr;
+    const struct backend_emit_EmitInit_vtbl *__backend_emit_emitinit_vptr;
 };
 
 #endif

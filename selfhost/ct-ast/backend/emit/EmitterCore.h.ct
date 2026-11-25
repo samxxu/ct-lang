@@ -119,14 +119,6 @@ pub trait EmitOps {
 
     int  emit_unit_init(int prog);
 
-    int  emit_raw_init(int raw, const char *type, const char *dims, int assign);
-
-    int  emit_range_init(int n);
-
-    int  emit_brace_init(int n);
-
-    int  emit_map_brace_init(int n);
-
     int  write_header(const char *outc);
 
     int  write_abi_header(const char *path);
@@ -135,6 +127,17 @@ pub trait EmitOps {
 
     int  fail_from(int n, const char *msg);
 }
+
+pub trait EmitInit {
+    int  emit_raw_init(int raw, const char *type, const char *dims, int assign);
+
+    int  emit_range_init(int n);
+
+    int  emit_brace_init(int n);
+
+    int  emit_map_brace_init(int n);
+}
+
 
 pub trait EmitHoist {
     int  expr_unstable(int n);
@@ -314,4 +317,4 @@ pub struct Emitter {
        be retained nor released. `sb_blk` holds the binding depth at each
        statement block so a `break` / `continue` can release what the skipped
        closing brace would have. The literals are the documented caps. */
-} use EmitOps, EmitterTryOps, EmitInvariant, EmitHoist;
+} use EmitOps, EmitterTryOps, EmitInvariant, EmitHoist, EmitInit;
