@@ -30,6 +30,7 @@ import frontend::sym::SymbolsTypeText;
 /* one item of a `{ … }` list, and the text it rewrites to (boxing a struct
    operand appends to it); a long string literal makes an item large */
 #define MAX_INIT_ITEM 4096
+#define MAX_INIT_ITEM_MAX 65536
 #define MAX_INIT_TEXT 16384
 /* only the node kinds this unit reads; the numbers are the ones the parser
    builds and the emitter dispatches on */
@@ -1333,7 +1334,7 @@ impl TypeOps for TypeCheck {
     int rewrite_init_text(const char *stype, const char *raw, char *out, int cap)
     {
         int len, i, depth, in_str, start, seg;
-        char item[MAX_INIT_ITEM];
+        char *item;
         char fixed[MAX_INIT_TEXT];
 
         len = (int)strlen(raw);
@@ -1342,6 +1343,11 @@ impl TypeOps for TypeCheck {
             return 0;
         }
         if (cap < 3) return -1;
+        /* S1a-0 C1: one item may exceed the old MAX_INIT_ITEM (4096); the
+           scratch only has to hold this line's captured text, so it is sized
+           from `len` and freed before returning. */
+        item = (char *)malloc((size_t)len + 1);
+        if (!item) return self->fail("out of memory");
         out[0] = '{';
         out[1] = 0;
         start = 1;
@@ -1359,11 +1365,16 @@ impl TypeOps for TypeCheck {
             else if (c == '}' || c == ']' || c == ')') depth--;
             else if (c == ',' && depth == 0) {
                 seg = i - start;
-                if (seg >= (int)sizeof item) return self->fail("initializer is too long");
                 memcpy(item, raw + start, (size_t)seg);
                 item[seg] = 0;
-                if (self->init_item_text(stype, item, fixed, sizeof fixed) != 0) return -1;
-                if (strlen(out) + strlen(fixed) + 2 >= (size_t)cap) return -1;
+                if (self->init_item_text(stype, item, fixed, sizeof fixed) != 0) {
+                    free(item);
+                    return -1;
+                }
+                if (strlen(out) + strlen(fixed) + 2 >= (size_t)cap) {
+                    free(item);
+                    return -1;
+                }
                 strcat(out, fixed);
                 strcat(out, ",");
                 start = i + 1;
@@ -1371,11 +1382,16 @@ impl TypeOps for TypeCheck {
         }
         seg = len - 1 - start;
         if (seg < 0) seg = 0;
-        if (seg >= (int)sizeof item) return self->fail("initializer is too long");
         memcpy(item, raw + start, (size_t)seg);
         item[seg] = 0;
-        if (self->init_item_text(stype, item, fixed, sizeof fixed) != 0) return -1;
-        if (strlen(out) + strlen(fixed) + 2 >= (size_t)cap) return -1;
+        if (self->init_item_text(stype, item, fixed, sizeof fixed) != 0) {
+            free(item);
+            return -1;
+        }
+        if (strlen(out) + strlen(fixed) + 2 >= (size_t)cap) {
+            free(item);
+            return -1;
+        }
         strcat(out, fixed);
         strcat(out, "}");
         /* The captured text still spells a namespaced global the way the source
@@ -1383,9 +1399,16 @@ impl TypeOps for TypeCheck {
            Substituting here keeps the initialiser and the declaration in step. */
         {
             char named[MAX_INIT_TEXT];
-            if (self->rewrite_init_names(out, named, sizeof named) != 0) return -1;
-            if (snprintf(out, (size_t)cap, "%s", named) >= cap) return -1;
+            if (self->rewrite_init_names(out, named, sizeof named) != 0) {
+                free(item);
+                return -1;
+            }
+            if (snprintf(out, (size_t)cap, "%s", named) >= cap) {
+                free(item);
+                return -1;
+            }
         }
+        free(item);
         return 0;
     }
 

@@ -51,7 +51,6 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
-#define MAX_RAW_INIT 4096
 #define MAX_RAW_BLOCK 32768
 #define MAX_STRUCT_TPARAMS 2
 #define MAX_TEXT 160
@@ -1916,7 +1915,7 @@ impl ParseOps for Parser {
                        `text` field, so the rewritten initialiser is copied into
                        the arena string pool; `aux = 1` records that and `num`
                        holds the offset (see `emit_raw_init`). */
-                    char raw[MAX_RAW_INIT];
+                    char *raw;
                     char fixed[MAX_INIT_TEXT];
                     int off, k;
                     /* V29-4: a Vec / Map has no C aggregate initializer. */
@@ -1928,7 +1927,7 @@ impl ParseOps for Parser {
                            declaration; the `{` keeps its own source position. */
                         int bl = self->lex->tokline;
                         int bc = self->lex->tokstart - self->lex->lstart + 1;
-                        if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+                        if (self->sup->init_raw(&raw) != 0) return -1;
                         if (self->ex->chk_brace_init(ret, raw, bl, bc) != 0)
                             return -1;
                     }

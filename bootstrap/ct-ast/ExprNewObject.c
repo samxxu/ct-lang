@@ -14,7 +14,6 @@
 #include <stdio.h>
 #include <string.h>
 #define MAX_TEXT 160
-#define MAX_RAW_INIT 4096
 #define N_ARROW 25
 #define N_MEMBER 24
 #define N_NEWOBJ 77
@@ -243,7 +242,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     char tbuf[MAX_TEXT];
     char base[MAX_TEXT];
-    char raw[MAX_RAW_INIT];
+    char * raw;
     char fixed[4096];
     char enc[MAX_TEXT];
     int nline;
@@ -294,7 +293,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
 {
         int bl = _self->lex->tokline;
         int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-        if (_self->sup->__frontend_parse_supportops_vptr->init_raw(_self->sup, raw, sizeof(raw)) != 0) {
+        if (_self->sup->__frontend_parse_supportops_vptr->init_raw(_self->sup, (&raw)) != 0) {
             return (-1);
         }
         if (_self->__frontend_parse_exprtypes_vptr->chk_brace_init(_self, tbuf, raw, bl, bc) != 0) {

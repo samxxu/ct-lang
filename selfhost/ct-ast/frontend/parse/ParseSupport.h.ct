@@ -25,6 +25,8 @@ import tool::diag::Diag;
 /* Mirror of Symbols.h.ct's whole-program function budget (macros do not cross
    units). Raised 256 -> 512 together with the other three mirrors. */
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define MAX_RAW_INIT 4096
+#define MAX_RAW_INIT_MAX 65536
 #define MAX_FUNCS 512
 #define MAX_FUNCS_MAX 65536
 #define MAX_PARAMS 16
@@ -102,7 +104,10 @@ pub trait SupportOps {
     int  str_escape_class(int e);
     int  str_escape_class_at(int e, int depth);
     int  str_store_warn(int e, const char *type, int line, int col);
-    int  init_raw(char *out, int cap);
+    /* S1a-0 C1: the captured brace-initializer text grows on demand; the
+       caller receives a pointer into the support object's buffer. */
+    int  ensure_raw(int need);
+    int  init_raw(char **out);
     /* P-7.2: `[` `]` lookahead used by every declaration position, so a slice
        spelling can be accepted (local / parameter) or refused (field / global)
        with the placement named. It sits here rather than on the expression
@@ -154,6 +159,10 @@ pub struct ParseSupport {
        evidence for a standard typedef. */
     char map_headers[16][64];
     int  nmap_headers;
+    /* S1a-0 C1: one captured initializer at a time; a caller consumes the
+       text before the next `init_raw` call, so one growing buffer is enough. */
+    char *raw;
+    int  rawcap;
 } use SupportOps;
 
 pub struct ParseSupport *parse_support_get(void);
@@ -899,44 +908,64 @@ impl SupportOps for ParseSupport {
         return self->fail("unterminated body");
     }
 
+    /* S1a-0 C1: the capture buffer doubles from MAX_RAW_INIT up to
+       MAX_RAW_INIT_MAX; only the resource limit reports a failure. */
+    int ensure_raw(int need)
+    {
+        int cap;
+        char *grown;
+        (void)self;
+        if (need <= self->rawcap) return 0;
+        cap = self->rawcap > 0 ? self->rawcap : MAX_RAW_INIT;
+        while (cap < need && cap < MAX_RAW_INIT_MAX) cap *= 2;
+        if (cap > MAX_RAW_INIT_MAX) cap = MAX_RAW_INIT_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (char *)realloc(self->raw, (size_t)cap);
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->rawcap, 0, (size_t)(cap - self->rawcap));
+        self->raw = grown;
+        self->rawcap = cap;
+        return 0;
+    }
+
     /* Capture a `{ ... }` initializer verbatim on behalf of whoever is reading
        one -- a declaration (the statement layer) or a compound literal (the
        expression layer). The cursor sits on the `{` token, so `pos` already
        points behind it; the scan works on the source characters because braces
        and commas are not tokens the caller wants. The captured text includes
        both braces and the caller appends the vptr items. */
-    int init_raw(char *out, int cap)
+    int init_raw(char **out)
     {
         int depth, n, c;
         (void)self;
 
         n = 0;
-        if (n + 1 >= (int)cap) return self->fail("initializer is too long");
-        out[n] = '{';
+        if (self->ensure_raw(n + 2) != 0) return -1;
+        self->raw[n] = '{';
         n++;
         depth = 1;
         while (self->lex->src[self->lex->pos] && depth > 0) {
             c = (unsigned char)self->lex->src[self->lex->pos];
             if (c == '"') {
-                if (n + 1 >= (int)cap) return self->fail("initializer is too long");
-                out[n] = '"';
+                if (self->ensure_raw(n + 2) != 0) return -1;
+                self->raw[n] = '"';
                 n++;
                 self->lex->pos++;
                 while (self->lex->src[self->lex->pos] && self->lex->src[self->lex->pos] != '"') {
                     if (self->lex->src[self->lex->pos] == '\\' && self->lex->src[self->lex->pos + 1]) {
-                        if (n + 1 >= (int)cap) return self->fail("initializer is too long");
-                        out[n] = self->lex->src[self->lex->pos];
+                        if (self->ensure_raw(n + 3) != 0) return -1;
+                        self->raw[n] = self->lex->src[self->lex->pos];
                         n++;
                         self->lex->pos++;
                     }
-                    if (n + 1 >= (int)cap) return self->fail("initializer is too long");
-                    out[n] = self->lex->src[self->lex->pos];
+                    if (self->ensure_raw(n + 2) != 0) return -1;
+                    self->raw[n] = self->lex->src[self->lex->pos];
                     n++;
                     self->lex->pos++;
                 }
                 if (self->lex->src[self->lex->pos] == '"') {
-                    if (n + 1 >= (int)cap) return self->fail("initializer is too long");
-                    out[n] = '"';
+                    if (self->ensure_raw(n + 2) != 0) return -1;
+                    self->raw[n] = '"';
                     n++;
                     self->lex->pos++;
                 }
@@ -944,14 +973,15 @@ impl SupportOps for ParseSupport {
             }
             if (c == '{') depth++;
             else if (c == '}') depth--;
-            if (n + 1 >= (int)cap) return self->fail("initializer is too long");
-            out[n] = (char)c;
+            if (self->ensure_raw(n + 2) != 0) return -1;
+            self->raw[n] = (char)c;
             n++;
             self->lex->pos++;
         }
         if (depth != 0) return self->fail("unterminated initializer");
-        out[n] = 0;
+        self->raw[n] = 0;
         self->lex_next();
+        *out = self->raw;
         return 0;
     }
 

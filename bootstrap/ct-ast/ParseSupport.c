@@ -11,6 +11,8 @@
 #line 1 "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct"
 #include <stdio.h>
 #include <string.h>
+#define MAX_RAW_INIT 4096
+#define MAX_RAW_INIT_MAX 65536
 #define MAX_FUNCS 512
 #define MAX_FUNCS_MAX 65536
 #define MAX_PARAMS 16
@@ -904,49 +906,77 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_skip_body(void 
     return _self->__frontend_parse_supportops_vptr->fail(_self, "unterminated body");
 }
 
-static int frontend_parse_ParseSupport_frontend_parse_SupportOps_init_raw(void *self, char * out, int cap) {
+static int frontend_parse_ParseSupport_frontend_parse_SupportOps_ensure_raw(void *self, int need) {
+    struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
+    int cap;
+    char * grown;
+    (void)(_self);
+    if (need <= _self->rawcap) {
+        return 0;
+    }
+    cap = ((_self->rawcap > 0) ? _self->rawcap : MAX_RAW_INIT);
+    while (((cap < need) && (cap < MAX_RAW_INIT_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_RAW_INIT_MAX) {
+        cap = MAX_RAW_INIT_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+    }
+    grown = (char *)(realloc(_self->raw, (size_t)(cap)));
+    if ((!grown)) {
+        return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->rawcap), 0, (size_t)((cap - _self->rawcap)));
+    _self->raw = grown;
+    _self->rawcap = cap;
+    return 0;
+}
+
+static int frontend_parse_ParseSupport_frontend_parse_SupportOps_init_raw(void *self, char * * out) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     int depth;
     int n;
     int c;
     (void)(_self);
     n = 0;
-    if ((n + 1) >= (int)(cap)) {
-        return _self->__frontend_parse_supportops_vptr->fail(_self, "initializer is too long");
+    if (_self->__frontend_parse_supportops_vptr->ensure_raw(_self, (n + 2)) != 0) {
+        return (-1);
     }
-    out[n] = '{';
+    _self->raw[n] = '{';
     n++;
     depth = 1;
     while ((_self->lex->src[_self->lex->pos] && (depth > 0))) {
         c = (unsigned char)(_self->lex->src[_self->lex->pos]);
         if (c == '"') {
-            if ((n + 1) >= (int)(cap)) {
-                return _self->__frontend_parse_supportops_vptr->fail(_self, "initializer is too long");
+            if (_self->__frontend_parse_supportops_vptr->ensure_raw(_self, (n + 2)) != 0) {
+                return (-1);
             }
-            out[n] = '"';
+            _self->raw[n] = '"';
             n++;
             _self->lex->pos++;
             while ((_self->lex->src[_self->lex->pos] && (_self->lex->src[_self->lex->pos] != '"'))) {
                 if (((_self->lex->src[_self->lex->pos] == '\\') && _self->lex->src[(_self->lex->pos + 1)])) {
-                    if ((n + 1) >= (int)(cap)) {
-                        return _self->__frontend_parse_supportops_vptr->fail(_self, "initializer is too long");
+                    if (_self->__frontend_parse_supportops_vptr->ensure_raw(_self, (n + 3)) != 0) {
+                        return (-1);
                     }
-                    out[n] = _self->lex->src[_self->lex->pos];
+                    _self->raw[n] = _self->lex->src[_self->lex->pos];
                     n++;
                     _self->lex->pos++;
                 }
-                if ((n + 1) >= (int)(cap)) {
-                    return _self->__frontend_parse_supportops_vptr->fail(_self, "initializer is too long");
+                if (_self->__frontend_parse_supportops_vptr->ensure_raw(_self, (n + 2)) != 0) {
+                    return (-1);
                 }
-                out[n] = _self->lex->src[_self->lex->pos];
+                _self->raw[n] = _self->lex->src[_self->lex->pos];
                 n++;
                 _self->lex->pos++;
             }
             if (_self->lex->src[_self->lex->pos] == '"') {
-                if ((n + 1) >= (int)(cap)) {
-                    return _self->__frontend_parse_supportops_vptr->fail(_self, "initializer is too long");
+                if (_self->__frontend_parse_supportops_vptr->ensure_raw(_self, (n + 2)) != 0) {
+                    return (-1);
                 }
-                out[n] = '"';
+                _self->raw[n] = '"';
                 n++;
                 _self->lex->pos++;
             }
@@ -960,18 +990,19 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_init_raw(void *
                 depth--;
             }
         }
-        if ((n + 1) >= (int)(cap)) {
-            return _self->__frontend_parse_supportops_vptr->fail(_self, "initializer is too long");
+        if (_self->__frontend_parse_supportops_vptr->ensure_raw(_self, (n + 2)) != 0) {
+            return (-1);
         }
-        out[n] = (char)(c);
+        _self->raw[n] = (char)(c);
         n++;
         _self->lex->pos++;
     }
     if (depth != 0) {
         return _self->__frontend_parse_supportops_vptr->fail(_self, "unterminated initializer");
     }
-    out[n] = 0;
+    _self->raw[n] = 0;
     _self->__frontend_parse_supportops_vptr->lex_next(_self);
+    (*out) = _self->raw;
     return 0;
 }
 
@@ -1147,6 +1178,7 @@ const struct frontend_parse_SupportOps_vtbl frontend_parse_ParseSupport_frontend
     .maybe_box = frontend_parse_ParseSupport_frontend_parse_SupportOps_maybe_box,
     .rewrite_init_text = frontend_parse_ParseSupport_frontend_parse_SupportOps_rewrite_init_text,
     .skip_body = frontend_parse_ParseSupport_frontend_parse_SupportOps_skip_body,
+    .ensure_raw = frontend_parse_ParseSupport_frontend_parse_SupportOps_ensure_raw,
     .init_raw = frontend_parse_ParseSupport_frontend_parse_SupportOps_init_raw,
     .skip_after_error = frontend_parse_ParseSupport_frontend_parse_SupportOps_skip_after_error,
     .mark_owned = frontend_parse_ParseSupport_frontend_parse_SupportOps_mark_owned,

@@ -37,7 +37,6 @@ import frontend::type::TypeCheck;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
-#define MAX_RAW_INIT 4096
 #define MAX_INIT_TEXT 16384
 #define MAX_LABELS 64
 #define MAX_LABELS_MAX 65536
@@ -4677,7 +4676,7 @@ impl StmtOps for Stmt {
                     char mapname[MAX_TEXT];
                     char ktype[MAX_TEXT];
                     char vtype[MAX_TEXT];
-                    char raw[MAX_RAW_INIT];
+                    char *raw;
                     char fixed[MAX_INIT_TEXT];
                     int off, k;
                     if (range_vec_target(typebuf, elemtype, (int)sizeof elemtype,
@@ -4725,7 +4724,7 @@ impl StmtOps for Stmt {
                            the interface-field rewrite moves the bytes. */
                         int bl = self->lex->tokline;
                         int bc = self->lex->tokstart - self->lex->lstart + 1;
-                        if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+                        if (self->sup->init_raw(&raw) != 0) return -1;
                         if (self->ex->chk_brace_init(typebuf, raw, bl, bc) != 0)
                             return -1;
                     }

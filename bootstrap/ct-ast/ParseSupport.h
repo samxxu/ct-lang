@@ -131,7 +131,8 @@ struct frontend_parse_SupportOps_vtbl {
     int (*str_escape_class)(void *, int);
     int (*str_escape_class_at)(void *, int, int);
     int (*str_store_warn)(void *, int, const char *, int, int);
-    int (*init_raw)(void *, char *, int);
+    int (*ensure_raw)(void *, int);
+    int (*init_raw)(void *, char * *);
     int (*slice_brackets_ahead)(void *, int *, int *);
     int (*skip_after_error)(void *);
     const char * (*last_error)(void *);
@@ -164,6 +165,8 @@ struct frontend_parse_ParseSupport {
     int map_sig;
     char map_headers[16][64];
     int nmap_headers;
+    char * raw;
+    int rawcap;
     const struct frontend_parse_SupportOps_vtbl *__frontend_parse_supportops_vptr;
 };
 struct frontend_parse_ParseSupport * frontend_parse_parse_support_get(void);

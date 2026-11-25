@@ -47,7 +47,6 @@
 #define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_STRUCT_TPARAMS 2
-#define MAX_RAW_INIT 4096
 #define MAX_TEXT 160
 #define N_ADDR 27
 #define N_ARROW 25
@@ -3017,7 +3016,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
             return (-1);
         }
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
-            char raw[MAX_RAW_INIT];
+            char * raw;
             int rn;
             int cn;
             int off;
@@ -3036,7 +3035,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
 {
                 int bl = _self->lex->tokline;
                 int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                if (_self->sup->__frontend_parse_supportops_vptr->init_raw(_self->sup, raw, sizeof(raw)) != 0) {
+                if (_self->sup->__frontend_parse_supportops_vptr->init_raw(_self->sup, (&raw)) != 0) {
                     return (-1);
                 }
                 if (_self->__frontend_parse_exprtypes_vptr->chk_brace_init(_self, tbuf, raw, bl, bc) != 0) {

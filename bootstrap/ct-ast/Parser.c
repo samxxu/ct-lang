@@ -29,7 +29,6 @@
 #define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
-#define MAX_RAW_INIT 4096
 #define MAX_RAW_BLOCK 32768
 #define MAX_STRUCT_TPARAMS 2
 #define MAX_TEXT 160
@@ -1397,7 +1396,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         }
         if (_self->sup->__frontend_parse_supportops_vptr->accept(_self->sup, "=")) {
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
-                char raw[MAX_RAW_INIT];
+                char * raw;
                 char fixed[MAX_INIT_TEXT];
                 int off;
                 int k;
@@ -1411,7 +1410,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
 {
                     int bl = _self->lex->tokline;
                     int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                    if (_self->sup->__frontend_parse_supportops_vptr->init_raw(_self->sup, raw, sizeof(raw)) != 0) {
+                    if (_self->sup->__frontend_parse_supportops_vptr->init_raw(_self->sup, (&raw)) != 0) {
                         return (-1);
                     }
                     if (_self->ex->__frontend_parse_exprtypes_vptr->chk_brace_init(_self->ex, ret, raw, bl, bc) != 0) {

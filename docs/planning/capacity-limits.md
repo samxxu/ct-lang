@@ -56,8 +56,8 @@
 | `MAX_UNITS` | 64 | 24 | A | **已动态**：`Module.units` 堆块倍增到 `MAX_UNITS_MAX=65536`（扩容后重绑 emitter），`build_main` 的 inputs/cache 行走堆块，可达性 scratch 按 `nunits` 增长；删除 `too many units` / `too many inputs` |
 | `MAX_PKG_DEPS` | 16 | 42 | A | 动态 |
 | `MAX_DIGEST_FILES` | 4096 | 4 | A | **已动态**：`dir_digest` 的文件路径块按倍增 realloc 到 `MAX_DIGEST_FILES_MAX=65536`（`sha_collect` 收 `char **`/`int *cap`），4100 文件树可算摘要 |
-| `MAX_INIT_ITEM` | 4096 | 3 | A | 动态 |
-| `MAX_RAW_INIT` | 4096 | 9 | A | 动态 |
+| `MAX_INIT_ITEM` | 4096 | 3 | A | **已动态**：`rewrite_init_text` 的单项暂存按该行捕获文本长度分配（不再受 4096 限制），`MAX_INIT_ITEM_MAX=65536` 为形式上限 |
+| `MAX_RAW_INIT` | 4096 | 9 | A | **已动态**：`ParseSupport` 的花括号捕获缓冲区倍增到 `MAX_RAW_INIT_MAX=65536`，`init_raw(char **out)` 返回内部块；删除 `initializer is too long` 的 4096 上限 |
 | `MAX_LAYOUT_ADTS` | 64 | 5 | A | **已动态**：`g_adt_layout_state` 堆块倍增到 `MAX_LAYOUT_ADTS_MAX=65536`（受 C 类 MAX_ADTS=64 遮蔽） |
 | `MAX_LAYOUT_INSTS` | 128 | 11 | A | **已动态**：`g_inst_layout_state`/`g_shell_emit_state` 倍增到 `MAX_LAYOUT_INSTS_MAX=65536`；`EmitterQuery` 的全表扫描去掉固定界 |
 | `MAX_WARNINGS` | 32 | 15 | A | **已落**：`warns` 倍增到 65536；`--max-warnings` 另议 |

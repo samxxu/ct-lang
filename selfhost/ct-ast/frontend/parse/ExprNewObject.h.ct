@@ -25,7 +25,6 @@ import tool::diag::Diag;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
-#define MAX_RAW_INIT 4096
 #define N_ARROW 25
 #define N_MEMBER 24
 #define N_NEWOBJ 77
@@ -163,7 +162,7 @@ impl ExprNew for Expr {
     {
         char tbuf[MAX_TEXT];
         char base[MAX_TEXT];
-        char raw[MAX_RAW_INIT];
+        char *raw;
         char fixed[4096];
         char enc[MAX_TEXT];
         int nline, ncol, off, k, si;
@@ -223,7 +222,7 @@ impl ExprNew for Expr {
                same literal-item judgement applies (`new P { .x = "s" }`). */
             int bl = self->lex->tokline;
             int bc = self->lex->tokstart - self->lex->lstart + 1;
-            if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+            if (self->sup->init_raw(&raw) != 0) return -1;
             if (self->chk_brace_init(tbuf, raw, bl, bc) != 0) return -1;
         }
         if (self->sup->rewrite_init_text(tbuf, raw, fixed, sizeof fixed) != 0) return -1;

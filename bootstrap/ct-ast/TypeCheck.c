@@ -12,6 +12,7 @@
 #include <string.h>
 #define MAX_TEXT 160
 #define MAX_INIT_ITEM 4096
+#define MAX_INIT_ITEM_MAX 65536
 #define MAX_INIT_TEXT 16384
 #define N_CALL   7
 #define N_VAR    10
@@ -1638,7 +1639,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
     int in_str;
     int start;
     int seg;
-    char item[MAX_INIT_ITEM];
+    char * item;
     char fixed[MAX_INIT_TEXT];
     len = (int)(strlen(raw));
     if (((len < 2) || (raw[(len - 1)] != '}'))) {
@@ -1649,6 +1650,10 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
     }
     if (cap < 3) {
         return (-1);
+    }
+    item = (char *)(malloc(((size_t)(len) + 1)));
+    if ((!item)) {
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
     }
     out[0] = '{';
     out[1] = 0;
@@ -1682,15 +1687,14 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
             else {
                 if (((c == ',') && (depth == 0))) {
                     seg = (i - start);
-                    if (seg >= (int)(sizeof(item))) {
-                        return _self->__frontend_type_typeops_vptr->fail(_self, "initializer is too long");
-                    }
                     memcpy(item, (raw + start), (size_t)(seg));
                     item[seg] = 0;
                     if (_self->__frontend_type_typeops_vptr->init_item_text(_self, stype, item, fixed, sizeof(fixed)) != 0) {
+                        free(item);
                         return (-1);
                     }
                     if (((strlen(out) + strlen(fixed)) + 2) >= (size_t)(cap)) {
+                        free(item);
                         return (-1);
                     }
                     strcat(out, fixed);
@@ -1704,15 +1708,14 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
     if (seg < 0) {
         seg = 0;
     }
-    if (seg >= (int)(sizeof(item))) {
-        return _self->__frontend_type_typeops_vptr->fail(_self, "initializer is too long");
-    }
     memcpy(item, (raw + start), (size_t)(seg));
     item[seg] = 0;
     if (_self->__frontend_type_typeops_vptr->init_item_text(_self, stype, item, fixed, sizeof(fixed)) != 0) {
+        free(item);
         return (-1);
     }
     if (((strlen(out) + strlen(fixed)) + 2) >= (size_t)(cap)) {
+        free(item);
         return (-1);
     }
     strcat(out, fixed);
@@ -1720,12 +1723,15 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
 {
         char named[MAX_INIT_TEXT];
         if (_self->__frontend_type_typeops_vptr->rewrite_init_names(_self, out, named, sizeof(named)) != 0) {
+            free(item);
             return (-1);
         }
         if (snprintf(out, (size_t)(cap), "%s", named) >= cap) {
+            free(item);
             return (-1);
         }
     }
+    free(item);
     return 0;
 }
 

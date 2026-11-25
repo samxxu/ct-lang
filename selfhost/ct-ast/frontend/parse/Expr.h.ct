@@ -79,7 +79,6 @@ import frontend::parse::ExprNewObject;
 #define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_STRUCT_TPARAMS 2
-#define MAX_RAW_INIT 4096
 #define MAX_TEXT 160
 #define N_ADDR 27
 #define N_ARROW 25
@@ -4409,7 +4408,7 @@ impl ExprOps for Expr {
                 /* a compound literal's braces go to the arena string pool for the
                    same reason a declaration initialiser does (`aux = 1`,
                    `num` = offset) */
-                char raw[MAX_RAW_INIT];
+                char *raw;
                 int rn, cn, off, k;
                 size_t tl = strlen(tbuf);
                 if (tl > 0 && tbuf[tl - 1] == '*')
@@ -4422,7 +4421,7 @@ impl ExprOps for Expr {
                        initializer too; judge its literal items. */
                     int bl = self->lex->tokline;
                     int bc = self->lex->tokstart - self->lex->lstart + 1;
-                    if (self->sup->init_raw(raw, sizeof raw) != 0) return -1;
+                    if (self->sup->init_raw(&raw) != 0) return -1;
                     if (self->chk_brace_init(tbuf, raw, bl, bc) != 0) return -1;
                 }
                 off = self->arena->str_begin();

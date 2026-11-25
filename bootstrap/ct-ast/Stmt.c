@@ -21,7 +21,6 @@
 #include <stdio.h>
 #include <string.h>
 #define MAX_TEXT 160
-#define MAX_RAW_INIT 4096
 #define MAX_INIT_TEXT 16384
 #define MAX_LABELS 64
 #define MAX_LABELS_MAX 65536
@@ -3949,7 +3948,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                     char mapname[MAX_TEXT];
                     char ktype[MAX_TEXT];
                     char vtype[MAX_TEXT];
-                    char raw[MAX_RAW_INIT];
+                    char * raw;
                     char fixed[MAX_INIT_TEXT];
                     int off;
                     int k;
@@ -3983,7 +3982,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
 {
                                 int bl = _self->lex->tokline;
                                 int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                                if (_self->sup->__frontend_parse_supportops_vptr->init_raw(_self->sup, raw, sizeof(raw)) != 0) {
+                                if (_self->sup->__frontend_parse_supportops_vptr->init_raw(_self->sup, (&raw)) != 0) {
                                     return (-1);
                                 }
                                 if (_self->ex->__frontend_parse_exprtypes_vptr->chk_brace_init(_self->ex, typebuf, raw, bl, bc) != 0) {
