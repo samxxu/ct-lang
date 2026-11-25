@@ -5048,6 +5048,12 @@ else
     bad "S1a-0 vars grow" "$(cat "$work/vsg.out" "$work/vsg.err" | head -4)"
 fi
 
+if bash test/ast/types_grow.sh "$work/ct-ast" >"$work/tyg.out" 2>"$work/tyg.err"; then
+    ok "S1a-0 types grow"
+else
+    bad "S1a-0 types grow" "$(cat "$work/tyg.out" "$work/tyg.err" | head -4)"
+fi
+
 
 # Phase 39 R9: the ABI guide is discoverable and states the nm caveat.
 if grep -Fq -- '--lib' docs/package-guide.md && grep -Fq 'nm -g' docs/package-guide.md; then
