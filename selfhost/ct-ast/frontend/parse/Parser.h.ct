@@ -44,6 +44,7 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_IMPORTS 32
 #define MAX_INIT_TEXT 16384
 #define MAX_METHODS 64
+#define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_RAW_INIT 4096
 #define MAX_RAW_BLOCK 32768
@@ -383,7 +384,7 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
    bodies would recurse forever at run time (D-6). Only calls the parser tagged
    with this trait (`N_MCALL.text`) count, which is exactly the sibling set. */
 static void trait_default_edges(struct Arena *arena, int n, struct Symbols *sym,
-                                int ti, int from, char *edge)
+                                int ti, int from, char *edge, int stride)
 {
     int mi;
 
@@ -392,14 +393,14 @@ static void trait_default_edges(struct Arena *arena, int n, struct Symbols *sym,
             && strcmp(arena->nodes[n].text, sym->traits[ti].name) == 0) {
             for (mi = 0; mi < sym->traits[ti].nm; mi++)
                 if (strcmp(sym->traits[ti].m[mi].name, arena->nodes[n].text2) == 0) {
-                    edge[from * MAX_METHODS + mi] = 1;
+                    edge[from * stride + mi] = 1;
                     break;
                 }
         }
-        trait_default_edges(arena, arena->nodes[n].a, sym, ti, from, edge);
-        trait_default_edges(arena, arena->nodes[n].b, sym, ti, from, edge);
-        trait_default_edges(arena, arena->nodes[n].c, sym, ti, from, edge);
-        trait_default_edges(arena, arena->nodes[n].d, sym, ti, from, edge);
+        trait_default_edges(arena, arena->nodes[n].a, sym, ti, from, edge, stride);
+        trait_default_edges(arena, arena->nodes[n].b, sym, ti, from, edge, stride);
+        trait_default_edges(arena, arena->nodes[n].c, sym, ti, from, edge, stride);
+        trait_default_edges(arena, arena->nodes[n].d, sym, ti, from, edge, stride);
     }
 }
 
@@ -3470,7 +3471,7 @@ impl ParseOps for Parser {
         int ti, mi, np, trait_line, mline, pfirst, ptail, dm, di, dj, dk, dcycle;
         int seen_borrow, seen_ref, seen_out, bline;
         int rty;
-        int ntp, pi, discard, save_ntraits, save_ntype, save_nnode;
+        int ntp, pi, discard, save_ntraits, save_ntype, save_nnode, stride;
         char tparam[2][MAX_TEXT];
         char tbound[2][MAX_TEXT];
         char name[MAX_TEXT];
@@ -3478,7 +3479,7 @@ impl ParseOps for Parser {
         char ret[MAX_TEXT];
         char ptype[MAX_TEXT];
         char pname[MAX_TEXT];
-        char edge[MAX_METHODS * MAX_METHODS];
+        char *edge;
         (void)self;
 
         trait_line = self->lex->tokline;
@@ -3615,7 +3616,10 @@ impl ParseOps for Parser {
             if (self->ex->fnptr_state)
                 return self->sup->fail("a trait method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
-            if (self->sym->traits[ti].nm >= MAX_METHODS) return self->sup->fail("too many trait methods");
+            /* S1a-0 C1: the method block grows on demand; only the OOM valve
+               (MAX_METHODS_MAX) can stop it now. */
+            if (self->sym->ensure_trait_capacity(ti, self->sym->traits[ti].nm + 1) != 0)
+                return -1;
             mi = self->sym->traits[ti].nm;
             self->lex->tok_copy(self->sym->traits[ti].m[mi].name, MAX_TEXT);
             snprintf(self->sym->traits[ti].m[mi].ret, MAX_TEXT, "%s", ret);
@@ -3797,21 +3801,29 @@ impl ParseOps for Parser {
         if (self->sup->expect("}") != 0) return -1;
         /* D-6: a cycle of default bodies has no non-default method to break it
            and would recurse forever at run time. The declaration line is where
-           the diagnostic belongs. */
-        for (di = 0; di < MAX_METHODS * MAX_METHODS; di++) edge[di] = 0;
-        for (dm = 0; dm < self->sym->traits[ti].nm; dm++)
-            if (self->sym->traits[ti].m[dm].body >= 0)
-                trait_default_edges(self->arena,
-                                    self->arena->nodes[self->sym->traits[ti].m[dm].body].a,
-                                    self->sym, ti, dm, edge);
-        for (dk = 0; dk < self->sym->traits[ti].nm; dk++)
-            for (di = 0; di < self->sym->traits[ti].nm; di++)
-                if (edge[di * MAX_METHODS + dk])
-                    for (dj = 0; dj < self->sym->traits[ti].nm; dj++)
-                        if (edge[dk * MAX_METHODS + dj]) edge[di * MAX_METHODS + dj] = 1;
+           the diagnostic belongs. S1a-0 C1: the adjacency matrix is sized by
+           the trait's final method count (the old fixed 64x64 stack block was
+           the MAX_METHODS cap); it is zeroed and released here. */
+        stride = self->sym->traits[ti].nm;
         dcycle = 0;
-        for (di = 0; di < self->sym->traits[ti].nm; di++)
-            if (edge[di * MAX_METHODS + di]) dcycle = 1;
+        if (stride > 0) {
+            size_t cells = (size_t)stride * (size_t)stride;
+            edge = (char *)calloc(cells, 1);
+            if (!edge) return self->sup->fail("out of memory");
+            for (dm = 0; dm < stride; dm++)
+                if (self->sym->traits[ti].m[dm].body >= 0)
+                    trait_default_edges(self->arena,
+                                        self->arena->nodes[self->sym->traits[ti].m[dm].body].a,
+                                        self->sym, ti, dm, edge, stride);
+            for (dk = 0; dk < stride; dk++)
+                for (di = 0; di < stride; di++)
+                    if (edge[di * stride + dk])
+                        for (dj = 0; dj < stride; dj++)
+                            if (edge[dk * stride + dj]) edge[di * stride + dj] = 1;
+            for (di = 0; di < stride; di++)
+                if (edge[di * stride + di]) dcycle = 1;
+            free(edge);
+        }
         if (dcycle) {
             char cmsg[MAX_TEXT];
             snprintf(cmsg, sizeof cmsg,

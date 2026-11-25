@@ -16,6 +16,7 @@
 #define MAX_SCOPE   256
 #define MAX_TYPES   256
 #define MAX_METHODS 64
+#define MAX_METHODS_MAX 65536
 #define MAX_TRAITS  64
 #define MAX_STRUCTS 128
 #define MAX_FIELDS  64
@@ -678,6 +679,37 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_trait(void *self, co
     return (-1);
 }
 
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_capacity(void *self, int ti, int need) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int cap;
+    struct frontend_sym_MethodSig * grown;
+    (void)(_self);
+    if (((ti < 0) || (ti >= _self->ntraits))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "trait table out of range");
+    }
+    if (need <= _self->traits[ti].mcap) {
+        return 0;
+    }
+    cap = ((_self->traits[ti].mcap > 0) ? _self->traits[ti].mcap : MAX_METHODS);
+    while (((cap < need) && (cap < MAX_METHODS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_METHODS_MAX) {
+        cap = MAX_METHODS_MAX;
+    }
+    if (need > cap) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    grown = (struct frontend_sym_MethodSig *)(realloc(_self->traits[ti].m, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    memset((grown + _self->traits[ti].mcap), 0, ((size_t)((cap - _self->traits[ti].mcap)) * sizeof((*grown))));
+    _self->traits[ti].m = grown;
+    _self->traits[ti].mcap = cap;
+    return 0;
+}
+
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_trait(void *self, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
@@ -755,6 +787,9 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
     snprintf(_self->traits[ni].carg[0], MAX_TEXT, "%s", a1);
     if (nargs > 1) {
         snprintf(_self->traits[ni].carg[1], MAX_TEXT, "%s", a2);
+    }
+    if (_self->__frontend_sym_symbolops_vptr->ensure_trait_capacity(_self, ni, _self->traits[ti].nm) != 0) {
+        return (-1);
     }
     _self->traits[ni].nm = _self->traits[ti].nm;
     for (mi = 0; mi < _self->traits[ti].nm; mi++) {
@@ -1056,6 +1091,7 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .add_struct = frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct,
     .add_struct_inst = frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct_inst,
     .find_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_find_trait,
+    .ensure_trait_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_capacity,
     .add_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_add_trait,
     .trait_inst = frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst,
     .impl_use_concrete = frontend_sym_Symbols_frontend_sym_SymbolOps_impl_use_concrete,

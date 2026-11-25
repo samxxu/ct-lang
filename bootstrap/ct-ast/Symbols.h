@@ -124,6 +124,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*add_struct_inst)(void *, const char *);
     int (*find_trait)(void *, const char *);
     int (*add_trait)(void *, const char *);
+    int (*ensure_trait_capacity)(void *, int, int);
     int (*trait_inst)(void *, const char *, int, const char *, const char *, const char *, const char *, int);
     int (*impl_use_concrete)(void *, const char *, int, const char *, const char *, const char *, const char *, int, char *, int);
     int (*method_trait)(void *, const char *, const char *, char *, int);
@@ -243,8 +244,9 @@ struct frontend_sym_MethodSig {
 };
 struct frontend_sym_Trait {
     char name[160];
-    struct frontend_sym_MethodSig m[64];
+    struct frontend_sym_MethodSig * m;
     int nm;
+    int mcap;
     int is_pub;
     int is_static;
     int line;

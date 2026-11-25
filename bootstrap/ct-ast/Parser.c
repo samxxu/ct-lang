@@ -22,6 +22,7 @@
 #define MAX_IMPORTS 32
 #define MAX_INIT_TEXT 16384
 #define MAX_METHODS 64
+#define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
 #define MAX_RAW_INIT 4096
 #define MAX_RAW_BLOCK 32768
@@ -156,7 +157,7 @@ extern void U16String_Drop_drop(void *self);
 static int borrow_struct_of(struct frontend_parse_Parser *, const char *, int);
 static int check_borrow_param(struct frontend_parse_Parser *, int, int, int);
 static int parse_trait_body(struct frontend_parse_Parser *, int, int, const char *);
-static void trait_default_edges(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int, int, char *);
+static void trait_default_edges(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int, int, char *, int);
 static int pp_is(const char *, const char *);
 static int raw_text_node(struct frontend_parse_Parser *);
 static int impl_declares(struct frontend_parse_Parser *, int, const char *);
@@ -3149,6 +3150,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     int save_ntraits;
     int save_ntype;
     int save_nnode;
+    int stride;
     char tparam[2][MAX_TEXT];
     char tbound[2][MAX_TEXT];
     char name[MAX_TEXT];
@@ -3156,7 +3158,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     char ret[MAX_TEXT];
     char ptype[MAX_TEXT];
     char pname[MAX_TEXT];
-    char edge[MAX_METHODS * MAX_METHODS];
+    char * edge;
     (void)(_self);
     trait_line = _self->lex->tokline;
     if ((_self->unit_is_map && (!is_pub))) {
@@ -3282,8 +3284,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a method name");
         }
-        if (_self->sym->traits[ti].nm >= MAX_METHODS) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many trait methods");
+        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_trait_capacity(_self->sym, ti, (_self->sym->traits[ti].nm + 1)) != 0) {
+            return (-1);
         }
         mi = _self->sym->traits[ti].nm;
         _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, _self->sym->traits[ti].m[mi].name, MAX_TEXT);
@@ -3478,30 +3480,36 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
         return (-1);
     }
-    for (di = 0; di < (MAX_METHODS * MAX_METHODS); di++) {
-        edge[di] = 0;
-    }
-    for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
-        if (_self->sym->traits[ti].m[dm].body >= 0) {
-            trait_default_edges(_self->arena, _self->arena->nodes[_self->sym->traits[ti].m[dm].body].a, _self->sym, ti, dm, edge);
+    stride = _self->sym->traits[ti].nm;
+    dcycle = 0;
+    if (stride > 0) {
+        size_t cells = ((size_t)(stride) * (size_t)(stride));
+        edge = (char *)(calloc(cells, 1));
+        if ((!edge)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-    }
-    for (dk = 0; dk < _self->sym->traits[ti].nm; dk++) {
-        for (di = 0; di < _self->sym->traits[ti].nm; di++) {
-            if (edge[((di * MAX_METHODS) + dk)]) {
-                for (dj = 0; dj < _self->sym->traits[ti].nm; dj++) {
-                    if (edge[((dk * MAX_METHODS) + dj)]) {
-                        edge[((di * MAX_METHODS) + dj)] = 1;
+        for (dm = 0; dm < stride; dm++) {
+            if (_self->sym->traits[ti].m[dm].body >= 0) {
+                trait_default_edges(_self->arena, _self->arena->nodes[_self->sym->traits[ti].m[dm].body].a, _self->sym, ti, dm, edge, stride);
+            }
+        }
+        for (dk = 0; dk < stride; dk++) {
+            for (di = 0; di < stride; di++) {
+                if (edge[((di * stride) + dk)]) {
+                    for (dj = 0; dj < stride; dj++) {
+                        if (edge[((dk * stride) + dj)]) {
+                            edge[((di * stride) + dj)] = 1;
+                        }
                     }
                 }
             }
         }
-    }
-    dcycle = 0;
-    for (di = 0; di < _self->sym->traits[ti].nm; di++) {
-        if (edge[((di * MAX_METHODS) + di)]) {
-            dcycle = 1;
+        for (di = 0; di < stride; di++) {
+            if (edge[((di * stride) + di)]) {
+                dcycle = 1;
+            }
         }
+        free(edge);
     }
     if (dcycle) {
         char cmsg[MAX_TEXT];
@@ -4632,21 +4640,21 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
     self->sym->traits[ti].m[mi].body = body;
     return 0;
 }
-static void trait_default_edges(struct runtime_arena_Arena * arena, int n, struct frontend_sym_Symbols * sym, int ti, int from, char * edge) {
+static void trait_default_edges(struct runtime_arena_Arena * arena, int n, struct frontend_sym_Symbols * sym, int ti, int from, char * edge, int stride) {
     int mi;
     for (; n >= 0; n = arena->nodes[n].next) {
         if (((arena->nodes[n].kind == N_MCALL) && (strcmp(arena->nodes[n].text, sym->traits[ti].name) == 0))) {
             for (mi = 0; mi < sym->traits[ti].nm; mi++) {
                 if (strcmp(sym->traits[ti].m[mi].name, arena->nodes[n].text2) == 0) {
-                    edge[((from * MAX_METHODS) + mi)] = 1;
+                    edge[((from * stride) + mi)] = 1;
                     break;
                 }
             }
         }
-        trait_default_edges(arena, arena->nodes[n].a, sym, ti, from, edge);
-        trait_default_edges(arena, arena->nodes[n].b, sym, ti, from, edge);
-        trait_default_edges(arena, arena->nodes[n].c, sym, ti, from, edge);
-        trait_default_edges(arena, arena->nodes[n].d, sym, ti, from, edge);
+        trait_default_edges(arena, arena->nodes[n].a, sym, ti, from, edge, stride);
+        trait_default_edges(arena, arena->nodes[n].b, sym, ti, from, edge, stride);
+        trait_default_edges(arena, arena->nodes[n].c, sym, ti, from, edge, stride);
+        trait_default_edges(arena, arena->nodes[n].d, sym, ti, from, edge, stride);
     }
 }
 static int pp_is(const char * text, const char * name) {

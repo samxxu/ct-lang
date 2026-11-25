@@ -40,6 +40,7 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_SCOPE   256
 #define MAX_TYPES   256
 #define MAX_METHODS 64
+#define MAX_METHODS_MAX 65536
 #define MAX_TRAITS  64
 #define MAX_STRUCTS 128
 #define MAX_FIELDS  64
@@ -265,8 +266,14 @@ pub struct MethodSig {
 
 pub struct Trait {
     char name[160];
-    struct MethodSig m[64];
+    /* S1a-0 C1: the method rows grow on demand instead of stopping at 64.
+       The block is owned by the row; `mcap` is its capacity and `m` may be
+       NULL until the first method is appended. A generic instance row gets
+       its own block and copies the `MethodSig` values (they hold no
+       pointers), so a realloc of `traits` or of `m` never aliases two rows. */
+    struct MethodSig *m;
     int  nm;
+    int  mcap;
     int  is_pub;
     int  is_static;             /* declared in a `.m.ct` unit: no iface, no vtable */
     int  line;
@@ -377,6 +384,11 @@ pub trait SymbolOps {
     int  add_struct_inst(const char *name);
     int  find_trait(const char *name);
     int  add_trait(const char *name);
+    /* S1a-0 C1: grow trait `ti`'s method block to hold `need` rows. The new
+       slots are zeroed; -1 (an `out of memory` message) only at allocation
+       failure or past MAX_METHODS_MAX. The parser calls this before writing
+       the row it just parsed. */
+    int  ensure_trait_capacity(int ti, int need);
     /* Phase 35: find or create the instance row of a parameterised trait.
        `a1`/`a2` are the source-canonical arguments the encoded name and `carg[]`
        use; `c1`/`c2` are the C spellings substituted into method signatures.
@@ -1193,6 +1205,31 @@ impl SymbolOps for Symbols {
         return -1;
     }
 
+    /* S1a-0 C1: the method rows are a per-trait heap block, so the cap is a
+       starting capacity rather than a limit. Doubling is bounded by
+       MAX_METHODS_MAX; the caller has an index, never a row address, so the
+       `traits` block moving underneath does not matter. */
+    int ensure_trait_capacity(int ti, int need)
+    {
+        int cap;
+        struct MethodSig *grown;
+        (void)self;
+        if (ti < 0 || ti >= self->ntraits) return self->fail("trait table out of range");
+        if (need <= self->traits[ti].mcap) return 0;
+        cap = self->traits[ti].mcap > 0 ? self->traits[ti].mcap : MAX_METHODS;
+        while (cap < need && cap < MAX_METHODS_MAX) cap *= 2;
+        if (cap > MAX_METHODS_MAX) cap = MAX_METHODS_MAX;
+        if (need > cap) return self->fail("out of memory");
+        grown = (struct MethodSig *)realloc(self->traits[ti].m,
+                                           (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->traits[ti].mcap, 0,
+               (size_t)(cap - self->traits[ti].mcap) * sizeof(*grown));
+        self->traits[ti].m = grown;
+        self->traits[ti].mcap = cap;
+        return 0;
+    }
+
     int add_trait(const char *name)
     {
         int i;
@@ -1201,6 +1238,8 @@ impl SymbolOps for Symbols {
         if (i >= 0) return i;
         if (self->ntraits >= MAX_TRAITS) return self->fail("too many traits");
         snprintf(self->traits[self->ntraits].name, MAX_TEXT, "%s", name);
+        /* A row reused after the per-unit reset keeps its method block and
+           capacity (the old rows are dead, the allocation is not). */
         self->traits[self->ntraits].nm = 0;
         self->ntraits++;
         return self->ntraits - 1;
@@ -1274,6 +1313,11 @@ impl SymbolOps for Symbols {
         self->traits[ni].nargs = nargs;
         snprintf(self->traits[ni].carg[0], MAX_TEXT, "%s", a1);
         if (nargs > 1) snprintf(self->traits[ni].carg[1], MAX_TEXT, "%s", a2);
+        /* The instance owns its signatures: grow its own block and copy the
+           values. `MethodSig` has no pointers, so this is a deep copy even
+           though the loop assigns rows; sharing `m` would let a later growth
+           of either row invalidate the other. */
+        if (self->ensure_trait_capacity(ni, self->traits[ti].nm) != 0) return -1;
         self->traits[ni].nm = self->traits[ti].nm;
         for (mi = 0; mi < self->traits[ti].nm; mi++) {
             self->traits[ni].m[mi] = self->traits[ti].m[mi];
