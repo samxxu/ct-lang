@@ -277,6 +277,48 @@ else
     printf '  imported pub type: resolved across units\n'
 fi
 
+
+# --- S5: a >160-byte C name (namespace prefix + source name), C2n-1 ----------
+# The row fields are pool pointers now, so `ns + name` is built by
+# `ct_intern_join` instead of a 160-byte scratch buffer. 25 short namespace
+# segments (123 bytes, so the namespace itself stays inside its own cap) plus a
+# 100-byte function/global name gives a 223-byte C name: b380eb57 rejects it
+# with `name is too long`, the migrated table keeps it whole.
+longroot="$w/longns"
+longrel="n00/n01/n02/n03/n04/n05/n06/n07/n08/n09/n10/n11/n12/n13/n14/n15/n16/n17/n18/n19/n20/n21/n22/n23/n24"
+longns="n00::n01::n02::n03::n04::n05::n06::n07::n08::n09::n10::n11::n12::n13::n14::n15::n16::n17::n18::n19::n20::n21::n22::n23::n24"
+longfn="f$(printf 'x%.0s' $(seq 1 99))"
+longgv="g$(printf 'y%.0s' $(seq 1 99))"
+mkdir -p "$longroot/$longrel" "$w/longgen"
+cat >"$longroot/$longrel/long.ct" <<CT
+namespace $longns;
+
+pub int $longfn(void) { return 7; }
+pub int $longgv = 5;
+
+int main(void)
+{
+    /* The long global is declared and emitted (the C output grep below pins its
+       full spelling); only the call site is exercised at run time. A variable
+       *use* of a >160-byte C name still relays through an arena text row, which
+       is C2n-2's parser slice, not this one. */
+    return ($longfn() == 7) ? 0 : 1;
+}
+CT
+if ! "$ct" build --emit-c --ns-root "$longroot" -I "$root/selfhost/ct-ast" \
+        "$longroot/$longrel/long.ct" -o "$w/longgen" \
+        >"$w/long.out" 2>"$w/long.err"; then
+    bad "the 223-byte namespaced name did not compile: $(head -3 "$w/long.err" | tr '\n' ' ')"
+elif ! grep -q "$longfn" "$w/longgen/long.c" || ! grep -q "$longgv" "$w/longgen/long.c"; then
+    bad "the emitted C did not carry the full >160-byte names"
+elif ! $cc $cflags -I "$w/longgen" "$w/longgen/long.c" -o "$w/longgen/long" \
+        >"$w/long.cc" 2>&1 || ! "$w/longgen/long"; then
+    bad "the >160-byte-name program did not build and run"
+else
+    ok
+    printf '  >160-byte names: 223-byte C name kept whole and ran\n'
+fi
+
 echo "intern_pool: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
 exit 0
