@@ -101,8 +101,8 @@ int frontend_module_c_has_manifest(const char *);
 int frontend_module_c_manifest_boundary(const char *);
 int frontend_module_c_path_is_core(const char *);
 int frontend_module_ct_append_flags(char *, int, const char *);
-int frontend_module_ct_cmd_raw(char *, int, int *, const char *);
-int frontend_module_ct_cmd_token(char *, int, int *, const char *);
+int frontend_module_ct_cmd_raw(char * *, int *, const char *);
+int frontend_module_ct_cmd_token(char * *, int *, const char *);
 int frontend_module_ct_ensure_dir(const char *);
 void frontend_module_ct_norm_path(const char *, char *, int);
 int frontend_module_ct_pkg_key(const char *, const char *, char *, int);
@@ -221,30 +221,20 @@ int frontend_module_ct_append_flags(char * buf, int cap, const char * val) {
     }
     return 0;
 }
-int frontend_module_ct_cmd_raw(char * cmd, int cap, int * n, const char * frag) {
-    int w;
+int frontend_module_ct_cmd_raw(char * * cmd, int * cap, const char * frag) {
     if (((!frag) || (!frag[0]))) {
         return 0;
     }
-    w = snprintf((cmd + (*n)), (size_t)((cap - (*n))), "%s%s", ((*n) ? " " : ""), frag);
-    if (((w < 0) || (((*n) + w) >= cap))) {
+    if (((((*cmd) != 0) && ((*cmd)[0] != 0)) && (tool_sh_ct_text_cat(cmd, cap, " ") != 0))) {
         return (-1);
     }
-    (*n) += w;
-    return 0;
+    return tool_sh_ct_text_cat(cmd, cap, frag);
 }
-int frontend_module_ct_cmd_token(char * cmd, int cap, int * n, const char * tok) {
-    char q[MAX_PATH];
-    int w;
-    if (tool_sh_ct_sh_quote(tok, q, (int)(sizeof(q))) != 0) {
+int frontend_module_ct_cmd_token(char * * cmd, int * cap, const char * tok) {
+    if (((((*cmd) != 0) && ((*cmd)[0] != 0)) && (tool_sh_ct_text_cat(cmd, cap, " ") != 0))) {
         return (-1);
     }
-    w = snprintf((cmd + (*n)), (size_t)((cap - (*n))), "%s%s", ((*n) ? " " : ""), q);
-    if (((w < 0) || (((*n) + w) >= cap))) {
-        return (-1);
-    }
-    (*n) += w;
-    return 0;
+    return tool_sh_ct_text_quote(cmd, cap, tok);
 }
 int frontend_module_ct_ensure_dir(const char * path) {
     struct stat st;

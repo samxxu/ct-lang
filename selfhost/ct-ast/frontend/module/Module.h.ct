@@ -1985,10 +1985,14 @@ impl ModuleOps for Module {
         const char *outdir;
         const char *oarg;
         const char *ccpath;
-        char cmd[MAX_CMD];
-        int ncmd, code, st;
+        /* S1a-0 C2f: the link/archive lines grow from the old MAX_CMD. */
+        char *cmd;
+        int cmdcap, code, st;
         char root[MAX_PATH];
         (void)self;
+
+        cmd = 0;
+        cmdcap = 0;
 
         inputs = (const char **)calloc((size_t)argc, sizeof(*inputs));
         if (!inputs) {
@@ -2508,10 +2512,15 @@ impl ModuleOps for Module {
                     if (self->units[u].is_hdr && self->write_unit_header(u) != 0) return 1;
                 }
                 for (u = 0; u < self->nunits; u++) {
-                    char src[MAX_PATH], obj[MAX_PATH], cmd[MAX_CMD];
-                    int ncmd = 0, code2, st2;
+                    char src[MAX_PATH], obj[MAX_PATH];
+                    /* S1a-0 C2f: one composed cc line per object, grown from
+                       the old MAX_CMD instead of a fixed 8192-byte array. */
+                    char *cmd;
+                    int cmdcap, code2, st2;
                     const char *ccp = self->cc;
                     const char *cstd;
+                    cmd = 0;
+                    cmdcap = 0;
                     if (self->units[u].is_map) continue;
                     /* Phase 41: _Atomic needs C11. Keep the user's explicit
                        gnu99/c11 choice; lift the default c99 only when an
@@ -2525,33 +2534,42 @@ impl ModuleOps for Module {
                             >= (int)sizeof obj)
                         return 1;
                     if (!ccp || !ccp[0]) ccp = "cc";
-                    if (ct_cmd_token(cmd, MAX_CMD, &ncmd, ccp) != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd,
+                    if (tool::sh::ct_text_init(&cmd, &cmdcap, MAX_CMD) != 0) return 1;
+                    if (ct_cmd_token(&cmd, &cmdcap, ccp) != 0
+                        || ct_cmd_token(&cmd, &cmdcap,
                                         cstd) != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-fvisibility=hidden") != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-I") != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->outdir) != 0)
+                        || ct_cmd_token(&cmd, &cmdcap, "-fvisibility=hidden") != 0
+                        || ct_cmd_token(&cmd, &cmdcap, "-I") != 0
+                        || ct_cmd_token(&cmd, &cmdcap, self->outdir) != 0) {
+                        fprintf(stderr, "ctc: the cc command line is too long\n");
+                        tool::sh::ct_text_free(&cmd, &cmdcap);
                         return 1;
+                    }
                     {
                         int kk;
                         for (kk = 0; kk < self->nunits; kk++) {
                             if (!self->units[kk].has_shim) continue;
-                            if (ct_cmd_token(cmd, MAX_CMD, &ncmd, "-I") != 0
-                                || ct_cmd_token(cmd, MAX_CMD, &ncmd,
-                                                self->units[kk].shim_dir) != 0)
+                            if (ct_cmd_token(&cmd, &cmdcap, "-I") != 0
+                                || ct_cmd_token(&cmd, &cmdcap,
+                                                self->units[kk].shim_dir) != 0) {
+                                fprintf(stderr, "ctc: the cc command line is too long\n");
+                                tool::sh::ct_text_free(&cmd, &cmdcap);
                                 return 1;
+                            }
                         }
                     }
-                    if (ct_cmd_token(cmd, MAX_CMD, &ncmd, "-c") != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, src) != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-o") != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, obj) != 0) {
+                    if (ct_cmd_token(&cmd, &cmdcap, "-c") != 0
+                        || ct_cmd_token(&cmd, &cmdcap, src) != 0
+                        || ct_cmd_token(&cmd, &cmdcap, "-o") != 0
+                        || ct_cmd_token(&cmd, &cmdcap, obj) != 0) {
                         fprintf(stderr, "ctc: the cc command line is too long\n");
+                        tool::sh::ct_text_free(&cmd, &cmdcap);
                         return 1;
                     }
                     printf("%s\n", cmd);
                     fflush(stdout);
                     st2 = system(cmd);
+                    tool::sh::ct_text_free(&cmd, &cmdcap);
                     if (st2 < 0) {
                         fprintf(stderr, "ctc: cannot run '%s'\n", ccp);
                         return 1;
@@ -2564,9 +2582,12 @@ impl ModuleOps for Module {
                    deterministic form; macOS ar has no -D, so fall back to
                    ZERO_AR_DATE=1 + rcs (R7 asserts two runs hash equal). */
                 {
-                    char archive[MAX_PATH], cmd[MAX_CMD];
-                    int ncmd = 0, code2, st2;
+                    char archive[MAX_PATH];
+                    char *cmd;
+                    int cmdcap, code2, st2;
                     const char *arp = getenv("AR");
+                    cmd = 0;
+                    cmdcap = 0;
                     if (!arp || !arp[0]) arp = "ar";
                     if (oarg) {
                         if (snprintf(archive, sizeof archive, "%s", oarg)
@@ -2581,10 +2602,12 @@ impl ModuleOps for Module {
                         return 1;
                     }
                     remove(archive);
-                    if (ct_cmd_token(cmd, MAX_CMD, &ncmd, arp) != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, "rcsD") != 0
-                        || ct_cmd_token(cmd, MAX_CMD, &ncmd, archive) != 0) {
+                    if (tool::sh::ct_text_init(&cmd, &cmdcap, MAX_CMD) != 0) return 1;
+                    if (ct_cmd_token(&cmd, &cmdcap, arp) != 0
+                        || ct_cmd_token(&cmd, &cmdcap, "rcsD") != 0
+                        || ct_cmd_token(&cmd, &cmdcap, archive) != 0) {
                         fprintf(stderr, "ctc: the ar command line is too long\n");
+                        tool::sh::ct_text_free(&cmd, &cmdcap);
                         return 1;
                     }
                     for (u = 0; u < self->nunits; u++) {
@@ -2592,47 +2615,76 @@ impl ModuleOps for Module {
                         if (self->units[u].is_map) continue;
                         if (snprintf(obj, sizeof obj, "%s/%s.o", self->outdir,
                                      self->units[u].base) >= (int)sizeof obj
-                            || ct_cmd_token(cmd, MAX_CMD, &ncmd, obj) != 0) {
+                            || ct_cmd_token(&cmd, &cmdcap, obj) != 0) {
                             fprintf(stderr, "ctc: the ar command line is too long\n");
+                            tool::sh::ct_text_free(&cmd, &cmdcap);
                             return 1;
                         }
                     }
                     {
-                        char qcmd[MAX_CMD + 16];
-                        snprintf(qcmd, sizeof qcmd, "%s 2>/dev/null", cmd);
+                        char *qcmd;
+                        int qcap;
+                        qcmd = 0;
+                        qcap = 0;
+                        if (tool::sh::ct_text_printf(&qcmd, &qcap, "%s 2>/dev/null", cmd) != 0) {
+                            tool::sh::ct_text_free(&qcmd, &qcap);
+                            tool::sh::ct_text_free(&cmd, &cmdcap);
+                            return 1;
+                        }
                         st2 = system(qcmd);
+                        tool::sh::ct_text_free(&qcmd, &qcap);
                     }
                     if (st2 < 0 || ((st2 & 0x7f) ? 128 + (st2 & 0x7f) : ((st2 >> 8) & 0xff)) != 0) {
                         /* fallback: non-deterministic ar, fixed timestamp via
                            the shell's environment assignment (C99 has no setenv) */
-                        ncmd = 0;
-                        if (ct_cmd_token(cmd, MAX_CMD, &ncmd, arp) != 0
-                            || ct_cmd_token(cmd, MAX_CMD, &ncmd, "rcs") != 0
-                            || ct_cmd_token(cmd, MAX_CMD, &ncmd, archive) != 0)
+                        tool::sh::ct_text_reset(&cmd, &cmdcap, MAX_CMD);
+                        if (ct_cmd_token(&cmd, &cmdcap, arp) != 0
+                            || ct_cmd_token(&cmd, &cmdcap, "rcs") != 0
+                            || ct_cmd_token(&cmd, &cmdcap, archive) != 0) {
+                            fprintf(stderr, "ctc: the ar command line is too long\n");
+                            tool::sh::ct_text_free(&cmd, &cmdcap);
                             return 1;
+                        }
                         for (u = 0; u < self->nunits; u++) {
                             char obj[MAX_PATH];
                             if (self->units[u].is_map) continue;
                             if (snprintf(obj, sizeof obj, "%s/%s.o", self->outdir,
                                          self->units[u].base) >= (int)sizeof obj
-                                || ct_cmd_token(cmd, MAX_CMD, &ncmd, obj) != 0)
+                                || ct_cmd_token(&cmd, &cmdcap, obj) != 0) {
+                                fprintf(stderr, "ctc: the ar command line is too long\n");
+                                tool::sh::ct_text_free(&cmd, &cmdcap);
                                 return 1;
+                            }
                         }
                         {
-                            char envcmd[MAX_CMD + 32];
-                            snprintf(envcmd, sizeof envcmd, "ZERO_AR_DATE=1 %s", cmd);
+                            char *envcmd;
+                            int envcap;
+                            envcmd = 0;
+                            envcap = 0;
+                            if (tool::sh::ct_text_printf(&envcmd, &envcap,
+                                                         "ZERO_AR_DATE=1 %s", cmd) != 0) {
+                                tool::sh::ct_text_free(&envcmd, &envcap);
+                                tool::sh::ct_text_free(&cmd, &cmdcap);
+                                return 1;
+                            }
                             st2 = system(envcmd);
+                            tool::sh::ct_text_free(&envcmd, &envcap);
                         }
-                        if (st2 < 0) return 1;
+                        if (st2 < 0) {
+                            tool::sh::ct_text_free(&cmd, &cmdcap);
+                            return 1;
+                        }
                         if (st2 & 0x7f) code2 = 128 + (st2 & 0x7f);
                         else code2 = (st2 >> 8) & 0xff;
                         if (code2 != 0) {
                             fprintf(stderr, "ctc: ar failed\n");
+                            tool::sh::ct_text_free(&cmd, &cmdcap);
                             return 1;
                         }
                         printf("%s\n", cmd);
                         fflush(stdout);
                     }
+                    tool::sh::ct_text_free(&cmd, &cmdcap);
                 }
                 return 0;
             }
@@ -2831,11 +2883,10 @@ impl ModuleOps for Module {
         ccpath = self->cc;
         if (!ccpath) ccpath = getenv("CC");
         if (!ccpath || !ccpath[0]) ccpath = "cc";
-        ncmd = 0;
-        cmd[0] = 0;
-        if (ct_cmd_token(cmd, MAX_CMD, &ncmd, ccpath) != 0
-            || ct_cmd_raw(cmd, MAX_CMD, &ncmd, self->std_flag) != 0
-            || ct_cmd_raw(cmd, MAX_CMD, &ncmd, self->cflags) != 0)
+        if (tool::sh::ct_text_init(&cmd, &cmdcap, MAX_CMD) != 0) return 1;
+        if (ct_cmd_token(&cmd, &cmdcap, ccpath) != 0
+            || ct_cmd_raw(&cmd, &cmdcap, self->std_flag) != 0
+            || ct_cmd_raw(&cmd, &cmdcap, self->cflags) != 0)
             goto cmd_too_long;
         for (u = 0; u < self->nunits; u++) {
             int dupd = 0;
@@ -2845,14 +2896,14 @@ impl ModuleOps for Module {
                     && strcmp(self->units[i].shim_dir, self->units[u].shim_dir) == 0)
                     dupd = 1;
             if (dupd) continue;
-            if (ct_cmd_raw(cmd, MAX_CMD, &ncmd, "-I") != 0
-                || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->units[u].shim_dir) != 0)
+            if (ct_cmd_raw(&cmd, &cmdcap, "-I") != 0
+                || ct_cmd_token(&cmd, &cmdcap, self->units[u].shim_dir) != 0)
                 goto cmd_too_long;
         }
         /* Same root, same order as the printed line: the output directory last,
            so a generated `<Type>.h` cannot shadow a system header. */
-        if (ct_cmd_raw(cmd, MAX_CMD, &ncmd, "-I") != 0
-            || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->outdir) != 0)
+        if (ct_cmd_raw(&cmd, &cmdcap, "-I") != 0
+            || ct_cmd_token(&cmd, &cmdcap, self->outdir) != 0)
             goto cmd_too_long;
         for (u = 0; u < self->nunits; u++) {
             char src[MAX_PATH];
@@ -2862,21 +2913,22 @@ impl ModuleOps for Module {
                 if (bs >= 0 && !self->builtin_live[bs]) continue;
             }
             if (snprintf(src, sizeof src, "%s/%s.c", self->outdir, self->units[u].base)
-                    >= (int)sizeof src || ct_cmd_token(cmd, MAX_CMD, &ncmd, src) != 0)
+                    >= (int)sizeof src || ct_cmd_token(&cmd, &cmdcap, src) != 0)
                 goto cmd_too_long;
         }
         for (u = 0; u < self->nunits; u++) {
             if (!self->units[u].is_map || !self->units[u].shim_c[0]) continue;
-            if (ct_cmd_token(cmd, MAX_CMD, &ncmd, self->units[u].shim_c) != 0)
+            if (ct_cmd_token(&cmd, &cmdcap, self->units[u].shim_c) != 0)
                 goto cmd_too_long;
         }
-        if (ct_cmd_raw(cmd, MAX_CMD, &ncmd, self->ldflags) != 0
-            || ct_cmd_token(cmd, MAX_CMD, &ncmd, "-o") != 0
-            || ct_cmd_token(cmd, MAX_CMD, &ncmd, self->exe) != 0)
+        if (ct_cmd_raw(&cmd, &cmdcap, self->ldflags) != 0
+            || ct_cmd_token(&cmd, &cmdcap, "-o") != 0
+            || ct_cmd_token(&cmd, &cmdcap, self->exe) != 0)
             goto cmd_too_long;
         printf("%s\n", cmd);
         fflush(stdout);
         st = system(cmd);
+        tool::sh::ct_text_free(&cmd, &cmdcap);
         if (st < 0) {
             fprintf(stderr, "ctc: cannot run '%s'\n", ccpath);
             return 1;
@@ -2886,6 +2938,7 @@ impl ModuleOps for Module {
         if (code == 127) fprintf(stderr, "ctc: cannot run '%s'\n", ccpath);
         return code;
 cmd_too_long:
+        tool::sh::ct_text_free(&cmd, &cmdcap);
         fprintf(stderr, "ctc: the cc command line is too long\n");
         return 1;
     }

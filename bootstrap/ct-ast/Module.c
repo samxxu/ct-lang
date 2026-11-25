@@ -1603,12 +1603,14 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     const char * outdir;
     const char * oarg;
     const char * ccpath;
-    char cmd[MAX_CMD];
-    int ncmd;
+    char * cmd;
+    int cmdcap;
     int code;
     int st;
     char root[MAX_PATH];
     (void)(_self);
+    cmd = 0;
+    cmdcap = 0;
     inputs = (const char * *)(calloc((size_t)(argc), sizeof((*inputs))));
     if ((!inputs)) {
         fprintf(stderr, "ctc: out of memory\n");
@@ -2091,12 +2093,14 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             for (u = 0; u < _self->nunits; u++) {
                 char src[MAX_PATH];
                 char obj[MAX_PATH];
-                char cmd[MAX_CMD];
-                int ncmd = 0;
+                char * cmd;
+                int cmdcap;
                 int code2;
                 int st2;
                 const char * ccp = _self->cc;
                 const char * cstd;
+                cmd = 0;
+                cmdcap = 0;
                 if (_self->units[u].is_map) {
                     continue;
                 }
@@ -2110,7 +2114,12 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                 if (((!ccp) || (!ccp[0]))) {
                     ccp = "cc";
                 }
-                if ((((((frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), ccp) != 0) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), cstd) != 0)) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), "-fvisibility=hidden") != 0)) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), "-I") != 0)) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), _self->outdir) != 0))) {
+                if (tool_sh_ct_text_init((&cmd), (&cmdcap), MAX_CMD) != 0) {
+                    return 1;
+                }
+                if ((((((frontend_module_ct_cmd_token((&cmd), (&cmdcap), ccp) != 0) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), cstd) != 0)) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), "-fvisibility=hidden") != 0)) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), "-I") != 0)) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), _self->outdir) != 0))) {
+                    fprintf(stderr, "ctc: the cc command line is too long\n");
+                    tool_sh_ct_text_free((&cmd), (&cmdcap));
                     return 1;
                 }
 {
@@ -2119,18 +2128,22 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                         if ((!_self->units[kk].has_shim)) {
                             continue;
                         }
-                        if (((frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), "-I") != 0) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), _self->units[kk].shim_dir) != 0))) {
+                        if (((frontend_module_ct_cmd_token((&cmd), (&cmdcap), "-I") != 0) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), _self->units[kk].shim_dir) != 0))) {
+                            fprintf(stderr, "ctc: the cc command line is too long\n");
+                            tool_sh_ct_text_free((&cmd), (&cmdcap));
                             return 1;
                         }
                     }
                 }
-                if (((((frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), "-c") != 0) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), src) != 0)) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), "-o") != 0)) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), obj) != 0))) {
+                if (((((frontend_module_ct_cmd_token((&cmd), (&cmdcap), "-c") != 0) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), src) != 0)) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), "-o") != 0)) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), obj) != 0))) {
                     fprintf(stderr, "ctc: the cc command line is too long\n");
+                    tool_sh_ct_text_free((&cmd), (&cmdcap));
                     return 1;
                 }
                 printf("%s\n", cmd);
                 fflush(stdout);
                 st2 = system(cmd);
+                tool_sh_ct_text_free((&cmd), (&cmdcap));
                 if (st2 < 0) {
                     fprintf(stderr, "ctc: cannot run '%s'\n", ccp);
                     return 1;
@@ -2147,11 +2160,13 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             }
 {
                 char archive[MAX_PATH];
-                char cmd[MAX_CMD];
-                int ncmd = 0;
+                char * cmd;
+                int cmdcap;
                 int code2;
                 int st2;
                 const char * arp = getenv("AR");
+                cmd = 0;
+                cmdcap = 0;
                 if (((!arp) || (!arp[0]))) {
                     arp = "ar";
                 }
@@ -2168,8 +2183,12 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                     }
                 }
                 remove(archive);
-                if ((((frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), arp) != 0) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), "rcsD") != 0)) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), archive) != 0))) {
+                if (tool_sh_ct_text_init((&cmd), (&cmdcap), MAX_CMD) != 0) {
+                    return 1;
+                }
+                if ((((frontend_module_ct_cmd_token((&cmd), (&cmdcap), arp) != 0) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), "rcsD") != 0)) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), archive) != 0))) {
                     fprintf(stderr, "ctc: the ar command line is too long\n");
+                    tool_sh_ct_text_free((&cmd), (&cmdcap));
                     return 1;
                 }
                 for (u = 0; u < _self->nunits; u++) {
@@ -2177,19 +2196,30 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                     if (_self->units[u].is_map) {
                         continue;
                     }
-                    if (((snprintf(obj, sizeof(obj), "%s/%s.o", _self->outdir, _self->units[u].base) >= (int)(sizeof(obj))) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), obj) != 0))) {
+                    if (((snprintf(obj, sizeof(obj), "%s/%s.o", _self->outdir, _self->units[u].base) >= (int)(sizeof(obj))) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), obj) != 0))) {
                         fprintf(stderr, "ctc: the ar command line is too long\n");
+                        tool_sh_ct_text_free((&cmd), (&cmdcap));
                         return 1;
                     }
                 }
 {
-                    char qcmd[MAX_CMD + 16];
-                    snprintf(qcmd, sizeof(qcmd), "%s 2>/dev/null", cmd);
+                    char * qcmd;
+                    int qcap;
+                    qcmd = 0;
+                    qcap = 0;
+                    if (tool_sh_ct_text_printf((&qcmd), (&qcap), "%s 2>/dev/null", cmd) != 0) {
+                        tool_sh_ct_text_free((&qcmd), (&qcap));
+                        tool_sh_ct_text_free((&cmd), (&cmdcap));
+                        return 1;
+                    }
                     st2 = system(qcmd);
+                    tool_sh_ct_text_free((&qcmd), (&qcap));
                 }
                 if (((st2 < 0) || (((st2 & 127) ? (128 + (st2 & 127)) : ((st2 >> 8) & 255)) != 0))) {
-                    ncmd = 0;
-                    if ((((frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), arp) != 0) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), "rcs") != 0)) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), archive) != 0))) {
+                    tool_sh_ct_text_reset((&cmd), (&cmdcap), MAX_CMD);
+                    if ((((frontend_module_ct_cmd_token((&cmd), (&cmdcap), arp) != 0) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), "rcs") != 0)) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), archive) != 0))) {
+                        fprintf(stderr, "ctc: the ar command line is too long\n");
+                        tool_sh_ct_text_free((&cmd), (&cmdcap));
                         return 1;
                     }
                     for (u = 0; u < _self->nunits; u++) {
@@ -2197,16 +2227,27 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                         if (_self->units[u].is_map) {
                             continue;
                         }
-                        if (((snprintf(obj, sizeof(obj), "%s/%s.o", _self->outdir, _self->units[u].base) >= (int)(sizeof(obj))) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), obj) != 0))) {
+                        if (((snprintf(obj, sizeof(obj), "%s/%s.o", _self->outdir, _self->units[u].base) >= (int)(sizeof(obj))) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), obj) != 0))) {
+                            fprintf(stderr, "ctc: the ar command line is too long\n");
+                            tool_sh_ct_text_free((&cmd), (&cmdcap));
                             return 1;
                         }
                     }
 {
-                        char envcmd[MAX_CMD + 32];
-                        snprintf(envcmd, sizeof(envcmd), "ZERO_AR_DATE=1 %s", cmd);
+                        char * envcmd;
+                        int envcap;
+                        envcmd = 0;
+                        envcap = 0;
+                        if (tool_sh_ct_text_printf((&envcmd), (&envcap), "ZERO_AR_DATE=1 %s", cmd) != 0) {
+                            tool_sh_ct_text_free((&envcmd), (&envcap));
+                            tool_sh_ct_text_free((&cmd), (&cmdcap));
+                            return 1;
+                        }
                         st2 = system(envcmd);
+                        tool_sh_ct_text_free((&envcmd), (&envcap));
                     }
                     if (st2 < 0) {
+                        tool_sh_ct_text_free((&cmd), (&cmdcap));
                         return 1;
                     }
                     if ((st2 & 127)) {
@@ -2217,11 +2258,13 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                     }
                     if (code2 != 0) {
                         fprintf(stderr, "ctc: ar failed\n");
+                        tool_sh_ct_text_free((&cmd), (&cmdcap));
                         return 1;
                     }
                     printf("%s\n", cmd);
                     fflush(stdout);
                 }
+                tool_sh_ct_text_free((&cmd), (&cmdcap));
             }
             return 0;
         }
@@ -2418,9 +2461,10 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     if (((!ccpath) || (!ccpath[0]))) {
         ccpath = "cc";
     }
-    ncmd = 0;
-    cmd[0] = 0;
-    if ((((frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), ccpath) != 0) || (frontend_module_ct_cmd_raw(cmd, MAX_CMD, (&ncmd), _self->std_flag) != 0)) || (frontend_module_ct_cmd_raw(cmd, MAX_CMD, (&ncmd), _self->cflags) != 0))) {
+    if (tool_sh_ct_text_init((&cmd), (&cmdcap), MAX_CMD) != 0) {
+        return 1;
+    }
+    if ((((frontend_module_ct_cmd_token((&cmd), (&cmdcap), ccpath) != 0) || (frontend_module_ct_cmd_raw((&cmd), (&cmdcap), _self->std_flag) != 0)) || (frontend_module_ct_cmd_raw((&cmd), (&cmdcap), _self->cflags) != 0))) {
         goto cmd_too_long;
     }
     for (u = 0; u < _self->nunits; u++) {
@@ -2436,11 +2480,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         if (dupd) {
             continue;
         }
-        if (((frontend_module_ct_cmd_raw(cmd, MAX_CMD, (&ncmd), "-I") != 0) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), _self->units[u].shim_dir) != 0))) {
+        if (((frontend_module_ct_cmd_raw((&cmd), (&cmdcap), "-I") != 0) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), _self->units[u].shim_dir) != 0))) {
             goto cmd_too_long;
         }
     }
-    if (((frontend_module_ct_cmd_raw(cmd, MAX_CMD, (&ncmd), "-I") != 0) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), _self->outdir) != 0))) {
+    if (((frontend_module_ct_cmd_raw((&cmd), (&cmdcap), "-I") != 0) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), _self->outdir) != 0))) {
         goto cmd_too_long;
     }
     for (u = 0; u < _self->nunits; u++) {
@@ -2454,7 +2498,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                 continue;
             }
         }
-        if (((snprintf(src, sizeof(src), "%s/%s.c", _self->outdir, _self->units[u].base) >= (int)(sizeof(src))) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), src) != 0))) {
+        if (((snprintf(src, sizeof(src), "%s/%s.c", _self->outdir, _self->units[u].base) >= (int)(sizeof(src))) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), src) != 0))) {
             goto cmd_too_long;
         }
     }
@@ -2462,16 +2506,17 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         if (((!_self->units[u].is_map) || (!_self->units[u].shim_c[0]))) {
             continue;
         }
-        if (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), _self->units[u].shim_c) != 0) {
+        if (frontend_module_ct_cmd_token((&cmd), (&cmdcap), _self->units[u].shim_c) != 0) {
             goto cmd_too_long;
         }
     }
-    if ((((frontend_module_ct_cmd_raw(cmd, MAX_CMD, (&ncmd), _self->ldflags) != 0) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), "-o") != 0)) || (frontend_module_ct_cmd_token(cmd, MAX_CMD, (&ncmd), _self->exe) != 0))) {
+    if ((((frontend_module_ct_cmd_raw((&cmd), (&cmdcap), _self->ldflags) != 0) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), "-o") != 0)) || (frontend_module_ct_cmd_token((&cmd), (&cmdcap), _self->exe) != 0))) {
         goto cmd_too_long;
     }
     printf("%s\n", cmd);
     fflush(stdout);
     st = system(cmd);
+    tool_sh_ct_text_free((&cmd), (&cmdcap));
     if (st < 0) {
         fprintf(stderr, "ctc: cannot run '%s'\n", ccpath);
         return 1;
@@ -2488,6 +2533,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     return code;
     cmd_too_long:
         ;
+        tool_sh_ct_text_free((&cmd), (&cmdcap));
         fprintf(stderr, "ctc: the cc command line is too long\n");
         return 1;
 }

@@ -6,6 +6,9 @@
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
 
 
 struct ct_buf;
@@ -83,6 +86,12 @@ struct tool_driver_Driver;
 struct tool_sh_Sh {
     int unused;
 };
-int tool_sh_ct_sh_quote(const char *, char *, int);
+int tool_sh_ct_text_init(char * *, int *, int);
+int tool_sh_ct_text_reset(char * *, int *, int);
+int tool_sh_ct_text_cat(char * *, int *, const char *);
+int tool_sh_ct_text_printf(char * *, int *, const char *, ...);
+int tool_sh_ct_text_quote(char * *, int *, const char *);
+void tool_sh_ct_text_free(char * *, int *);
+int tool_sh_ct_sh_quote(const char *, char * *, int *);
 
 #endif

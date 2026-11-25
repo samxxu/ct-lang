@@ -46,8 +46,8 @@ pub int c_has_manifest(const char *dir);
 pub int c_manifest_boundary(const char *dir);
 pub int c_path_is_core(const char *path);
 pub int ct_append_flags(char *buf, int cap, const char *val);
-pub int ct_cmd_raw(char *cmd, int cap, int *n, const char *frag);
-pub int ct_cmd_token(char *cmd, int cap, int *n, const char *tok);
+pub int ct_cmd_raw(char **cmd, int *cap, const char *frag);
+pub int ct_cmd_token(char **cmd, int *cap, const char *tok);
 pub int ct_ensure_dir(const char *path);
 pub void ct_norm_path(const char *in, char *out, int cap);
 pub int ct_pkg_key(const char *root, const char *key, char *out, int cap);
@@ -147,29 +147,26 @@ int ct_append_flags(char *buf, int cap, const char *val)
     return 0;
 }
 
-/* A verbatim fragment: user flags are pass-through, never re-quoted. */
-int ct_cmd_raw(char *cmd, int cap, int *n, const char *frag)
+/* A verbatim fragment: user flags are pass-through, never re-quoted. S1a-0
+   C2f: the cc line is `char **` + capacity text owned by the caller, so a
+   fragment past the old 8192 bytes grows the buffer instead of failing. */
+int ct_cmd_raw(char **cmd, int *cap, const char *frag)
 {
-    int w;
-
     if (!frag || !frag[0]) return 0;
-    w = snprintf(cmd + *n, (size_t)(cap - *n), "%s%s", *n ? " " : "", frag);
-    if (w < 0 || *n + w >= cap) return -1;
-    *n += w;
-    return 0;
+    if (*cmd != 0 && (*cmd)[0] != 0
+        && tool::sh::ct_text_cat(cmd, cap, " ") != 0)
+        return -1;
+    return tool::sh::ct_text_cat(cmd, cap, frag);
 }
 
-/* One shell-quoted token on the growing cc line. */
-int ct_cmd_token(char *cmd, int cap, int *n, const char *tok)
+/* One shell-quoted token on the growing cc line. The quoted form is appended
+   in place; no stack copy is sized by MAX_PATH any more. */
+int ct_cmd_token(char **cmd, int *cap, const char *tok)
 {
-    char q[MAX_PATH];
-    int w;
-
-    if (tool::sh::ct_sh_quote(tok, q, (int)sizeof q) != 0) return -1;
-    w = snprintf(cmd + *n, (size_t)(cap - *n), "%s%s", *n ? " " : "", q);
-    if (w < 0 || *n + w >= cap) return -1;
-    *n += w;
-    return 0;
+    if (*cmd != 0 && (*cmd)[0] != 0
+        && tool::sh::ct_text_cat(cmd, cap, " ") != 0)
+        return -1;
+    return tool::sh::ct_text_quote(cmd, cap, tok);
 }
 
 /* The intermediate directory in the default form: created on demand, so a
