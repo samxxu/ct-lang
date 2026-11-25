@@ -21,6 +21,7 @@
 #include "ExprRecvMut.h"
 #include "ExprTry.h"
 #include "ExprTypes.h"
+#include "ExprBinding.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -177,7 +178,6 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable;
-const struct frontend_parse_ExprBinding_vtbl frontend_parse_Expr_frontend_parse_ExprBinding_vtable;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
@@ -218,15 +218,6 @@ static int ctype_slice_index(struct frontend_parse_Expr *, int, char *, int, int
 static int ctype_slice_get(struct frontend_parse_Expr *, int, char *, int, int *, int);
 static int ctype_slice_range(struct frontend_parse_Expr *, int, char *, int, int *, int);
 static int type_only_qualifiers(const char *);
-static int bind_conv_struct_like(struct frontend_parse_Expr *, const char *);
-static int bind_conv_ibase(struct frontend_parse_Expr *, const char *, char *, int, int *);
-static int bind_conv_inherent(struct frontend_parse_Expr *, const char *, const char *, char *, int, int *);
-static int bind_conv_maps(struct frontend_parse_Expr *, const char *, const char *, char *, int);
-static int bind_conv_binding(struct frontend_parse_Expr *, const char *, const char *);
-static int bind_conv_call_binding(struct frontend_parse_Expr *, int, const char *, const char *, int, int);
-static int bind_conv_any(struct frontend_parse_Expr *, const char *, const char *);
-static int bind_conv_call(struct frontend_parse_Expr *, int, const char *, const char *, const char *, int, int);
-static int bind_conv_site(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_conv_explicit(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_conv_explicit_to(struct frontend_parse_Expr *, int, const char *, int, int);
 static int bind_outconv_rewrite(struct frontend_parse_Expr *, int, int, int, int, int, const char *, int, int);
@@ -6124,7 +6115,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                         char at[MAX_TEXT];
                         char fk[MAX_TEXT];
                         char ak[MAX_TEXT];
-                        if (((((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, pc2, at, sizeof(at)) == 0) && at[0]) && bind_conv_struct_like(_self, at)) && bind_conv_any(_self, at, "as"))) {
+                        if (((((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, pc2, at, sizeof(at)) == 0) && at[0]) && frontend_parse_bind_conv_struct_like(_self, at)) && frontend_parse_bind_conv_any(_self, at, "as"))) {
                             frontend_parse_bind_conv_key(at, ak, sizeof(ak));
                             frontend_parse_bind_conv_key((_self->sym->funcs[fi].ptype + (pk3 * MAX_TEXT)), fk, sizeof(fk));
                             if (strcmp(ak, fk) != 0) {
@@ -6905,15 +6896,6 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .parse_qual_path = frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path,
     .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args,
     .record_call = frontend_parse_Expr_frontend_parse_ExprOps_record_call
-};
-
-static int frontend_parse_Expr_frontend_parse_ExprBinding_binding_convert(void *self, int expr, const char * target, int line, int col) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    return bind_conv_site(_self, expr, target, line, col);
-}
-
-const struct frontend_parse_ExprBinding_vtbl frontend_parse_Expr_frontend_parse_ExprBinding_vtable = {
-    .binding_convert = frontend_parse_Expr_frontend_parse_ExprBinding_binding_convert
 };
 
 static int expr_generic_param(struct frontend_parse_Expr * self, const char * name) {
@@ -7829,290 +7811,6 @@ static int type_only_qualifiers(const char * spell) {
     }
     return 1;
 }
-static int bind_conv_struct_like(struct frontend_parse_Expr * self, const char * t) {
-    const char * p = t;
-    while ((((*p) == ' ') || ((*p) == '\t'))) {
-        p++;
-    }
-    if ((((strncmp(p, "struct ", 7) == 0) || (strncmp(p, "union ", 6) == 0)) || (strncmp(p, "enum ", 5) == 0))) {
-        return 1;
-    }
-    if (strstr(t, "_iface") != 0) {
-        return 1;
-    }
-    return (self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, t) >= 0);
-}
-static int bind_conv_ibase(struct frontend_parse_Expr * self, const char * stype, char * out, int cap, int * is_ptr) {
-    char b[MAX_TEXT];
-    size_t n;
-    snprintf(b, sizeof(b), "%s", stype);
-    n = strlen(b);
-    while (((n > 0) && ((b[(n - 1)] == ' ') || (b[(n - 1)] == '\t')))) {
-        b[--n] = 0;
-    }
-    (*is_ptr) = 0;
-    if (((n > 0) && (b[(n - 1)] == '*'))) {
-        (*is_ptr) = 1;
-        b[--n] = 0;
-        while (((n > 0) && ((b[(n - 1)] == ' ') || (b[(n - 1)] == '\t')))) {
-            b[--n] = 0;
-        }
-    }
-    if (((strncmp(b, "struct ", 7) != 0) && (strncmp(b, "union ", 6) != 0))) {
-        if (self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, b) < 0) {
-            return 0;
-        }
-        if (snprintf(out, (size_t)(cap), "struct %s", b) >= cap) {
-            return 0;
-        }
-        return 1;
-    }
-    if (snprintf(out, (size_t)(cap), "%s", b) >= cap) {
-        return 0;
-    }
-    return 1;
-}
-static int bind_conv_inherent(struct frontend_parse_Expr * self, const char * stype, const char * method, char * ret, int cap, int * is_ptr) {
-    char ibase[MAX_TEXT];
-    int m;
-    int np;
-    if ((!bind_conv_ibase(self, stype, ibase, sizeof(ibase), is_ptr))) {
-        return (-1);
-    }
-    m = self->__frontend_parse_exprops_vptr->inst_inherent_method(self, ibase, method);
-    if (m == (-2)) {
-        return (-2);
-    }
-    if (m < 0) {
-        return (-1);
-    }
-    np = 0;
-{
-        int pi;
-        for (pi = self->arena->nodes[m].a; pi > 0; pi = self->arena->nodes[pi].next) {
-            np++;
-        }
-    }
-    if (np != 0) {
-        return (-3);
-    }
-    ret[0] = 0;
-    if ((!self->sup->ty->__frontend_type_typeops_vptr->inst_method_ret(self->sup->ty, ibase, method, ret, cap))) {
-        snprintf(ret, (size_t)(cap), "%s", self->arena->nodes[m].text);
-    }
-    return m;
-}
-static int bind_conv_maps(struct frontend_parse_Expr * self, const char * stype, const char * method, char * ret, int cap) {
-    char sk[MAX_TEXT];
-    char hk[MAX_TEXT];
-    char rk[MAX_TEXT];
-    int i;
-    int j;
-    int seen = 0;
-    frontend_parse_bind_conv_key(stype, sk, sizeof(sk));
-    for (i = 0; i < (*self->nmaps); i++) {
-        if ((*self->maps)[i].is_binding) {
-            continue;
-        }
-        if (((!(*self->maps)[i].is_static) || (!(*self->maps)[i].type_host))) {
-            continue;
-        }
-        frontend_parse_bind_conv_key((*self->maps)[i].host_type, hk, sizeof(hk));
-        if (strcmp(hk, sk) != 0) {
-            continue;
-        }
-        for (j = 0; j < (*self->maps)[i].nb; j++) {
-            int ti = (*self->maps)[i].b[j].ti;
-            int mi = (*self->maps)[i].b[j].mi;
-            if (strcmp((*self->maps)[i].b[j].method, method) != 0) {
-                continue;
-            }
-            if (((*self->maps)[i].b[j].nparams - (*self->maps)[i].b[j].recv) != 0) {
-                continue;
-            }
-            if ((((ti < 0) || (mi < 0)) || (mi >= self->sym->traits[ti].nm))) {
-                continue;
-            }
-            frontend_parse_bind_conv_key(self->sym->traits[ti].m[mi].ret, rk, sizeof(rk));
-            if ((!ret[0])) {
-                snprintf(ret, (size_t)(cap), "%s", self->sym->traits[ti].m[mi].ret);
-            }
-            seen++;
-        }
-    }
-    (void)(rk);
-    return seen;
-}
-static int bind_conv_binding(struct frontend_parse_Expr * self, const char * stype, const char * target) {
-    char sk[MAX_TEXT];
-    char tk[MAX_TEXT];
-    char hk[MAX_TEXT];
-    char dk[MAX_TEXT];
-    int i;
-    int seen = 0;
-    frontend_parse_bind_conv_key(stype, sk, sizeof(sk));
-    frontend_parse_bind_conv_key(target, tk, sizeof(tk));
-    for (i = 0; i < (*self->nmaps); i++) {
-        if ((!(*self->maps)[i].is_binding)) {
-            continue;
-        }
-        frontend_parse_bind_conv_key((*self->maps)[i].host_type, hk, sizeof(hk));
-        if (strcmp(hk, sk) != 0) {
-            continue;
-        }
-        frontend_parse_bind_conv_key((*self->maps)[i].bind_dst, dk, sizeof(dk));
-        if (strcmp(dk, tk) != 0) {
-            continue;
-        }
-        seen++;
-    }
-    return seen;
-}
-static int bind_conv_call_binding(struct frontend_parse_Expr * self, int recv, const char * stype, const char * target, int line, int col) {
-    int n = self->sup->__frontend_parse_supportops_vptr->new_node(self->sup, N_MCALL);
-    if (n < 0) {
-        return (-1);
-    }
-    self->arena->nodes[n].aux = 12;
-    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
-    snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
-    self->arena->nodes[n].sflags = (self->arena->nodes[n].sflags | 4);
-    self->arena->nodes[n].a = recv;
-    self->arena->nodes[n].b = (-1);
-    self->arena->nodes[n].line = line;
-    self->arena->nodes[n].num = col;
-    return n;
-}
-static int bind_conv_any(struct frontend_parse_Expr * self, const char * stype, const char * method) {
-    char ret[MAX_TEXT];
-    int ptr = 0;
-    ret[0] = 0;
-    if (bind_conv_inherent(self, stype, method, ret, sizeof(ret), (&ptr)) >= 0) {
-        return 1;
-    }
-    ret[0] = 0;
-    if (bind_conv_maps(self, stype, method, ret, sizeof(ret)) > 0) {
-        return 1;
-    }
-    return 0;
-}
-static int bind_conv_call(struct frontend_parse_Expr * self, int recv, const char * stype, const char * method, const char * target, int line, int col) {
-    int n;
-    int ptr = 0;
-    char ibase[MAX_TEXT];
-    if (bind_conv_ibase(self, stype, ibase, sizeof(ibase), (&ptr))) {
-        if (bind_conv_inherent(self, stype, method, ibase, (int)(sizeof(ibase)), (&ptr)) >= 0) {
-            n = self->sup->__frontend_parse_supportops_vptr->new_node(self->sup, N_MCALL);
-            if (n < 0) {
-                return (-1);
-            }
-            self->arena->nodes[n].aux = (ptr ? 10 : 9);
-            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
-            if (ptr) {
-                size_t tl = strlen(self->arena->nodes[n].text);
-                while (((tl > 0) && ((self->arena->nodes[n].text[(tl - 1)] == '*') || (self->arena->nodes[n].text[(tl - 1)] == ' ')))) {
-                    self->arena->nodes[n].text[--tl] = 0;
-                }
-            }
-            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", method);
-            snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
-            self->arena->nodes[n].sflags |= 4;
-            self->arena->nodes[n].a = recv;
-            self->arena->nodes[n].b = (-1);
-            self->arena->nodes[n].line = line;
-            self->arena->nodes[n].num = col;
-            return n;
-        }
-    }
-    n = self->sup->__frontend_parse_supportops_vptr->new_node(self->sup, N_MCALL);
-    if (n < 0) {
-        return (-1);
-    }
-    self->arena->nodes[n].aux = 6;
-    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
-    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", method);
-    snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
-    self->arena->nodes[n].sflags |= 4;
-    self->arena->nodes[n].a = recv;
-    self->arena->nodes[n].b = (-1);
-    self->arena->nodes[n].line = line;
-    self->arena->nodes[n].num = col;
-    return n;
-}
-static int bind_conv_site(struct frontend_parse_Expr * self, int expr, const char * target, int line, int col) {
-    char st[MAX_TEXT];
-    char sk[MAX_TEXT];
-    char tk[MAX_TEXT];
-    char ret[MAX_TEXT];
-    char tr[MAX_TEXT];
-    char msg[MAX_TEXT * 2];
-    int ptr = 0;
-    int nm;
-    int ip = 0;
-    int mm;
-    if ((!frontend_parse_bind_conv_on())) {
-        return expr;
-    }
-    if ((((expr < 0) || (!target)) || (!target[0]))) {
-        return expr;
-    }
-    if (strcmp(target, "void") == 0) {
-        return expr;
-    }
-    if (strchr(target, '*')) {
-        return expr;
-    }
-    if (((self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, expr, st, sizeof(st)) != 0) || (!st[0]))) {
-        return expr;
-    }
-    if (strchr(st, '*')) {
-        return expr;
-    }
-    frontend_parse_bind_conv_key(st, sk, sizeof(sk));
-    frontend_parse_bind_conv_key(target, tk, sizeof(tk));
-    if (strcmp(sk, tk) == 0) {
-        return expr;
-    }
-    if ((self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, target, tr, sizeof(tr), (&ip)) && (self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, tr) >= 0))) {
-        return expr;
-    }
-    ret[0] = 0;
-    mm = bind_conv_inherent(self, st, "as", ret, sizeof(ret), (&ptr));
-    if (mm >= 0) {
-        char rk[MAX_TEXT];
-        frontend_parse_bind_conv_key(ret, rk, sizeof(rk));
-        if (strcmp(rk, tk) == 0) {
-            return bind_conv_call(self, expr, st, "as", target, line, col);
-        }
-        snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s': inherent 'as' answers '%s'", st, target, ret);
-        return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
-    }
-    if (mm == (-2)) {
-        return tool_diag_ct_sem_error(line, col, "method is private to its unit", self->sup->mem->path);
-    }
-    if (mm == (-3)) {
-        return tool_diag_ct_sem_error(line, col, "an 'as' conversion takes no arguments", self->sup->mem->path);
-    }
-    if (bind_conv_binding(self, st, target) > 0) {
-        return bind_conv_call_binding(self, expr, st, target, line, col);
-    }
-    ret[0] = 0;
-    nm = bind_conv_maps(self, st, "as", ret, sizeof(ret));
-    if (nm > 0) {
-        return bind_conv_call(self, expr, st, "as", target, line, col);
-    }
-    if (((self->types_mode && (*self->types_mode)) && (!(self->build_mode && (*self->build_mode))))) {
-        return expr;
-    }
-    if ((((((frontend_sym_ct_is_string_value_type(st) || frontend_sym_ct_is_string_value_type(target)) || frontend_sym_ct_is_container_type(st)) || frontend_sym_ct_is_container_type(target)) || (strstr(st, "Box_") != 0)) || (strstr(target, "Box_") != 0))) {
-        return expr;
-    }
-    if ((bind_conv_struct_like(self, st) && bind_conv_struct_like(self, target))) {
-        snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', ""import a mapping trait that declares 'as', or import a mapping unit ""with a 'map binding' for this pair", st, target, st);
-        return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
-    }
-    return expr;
-}
 static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const char * target, int line, int col) {
     char st[MAX_TEXT];
     char sk[MAX_TEXT];
@@ -8131,7 +7829,7 @@ static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const
         return recv;
     }
     ret[0] = 0;
-    mm = bind_conv_inherent(self, st, "as", ret, sizeof(ret), (&ptr));
+    mm = frontend_parse_bind_conv_inherent(self, st, "as", ret, sizeof(ret), (&ptr));
     if (mm == (-2)) {
         return tool_diag_ct_sem_error(line, col, "method is private to its unit", self->sup->mem->path);
     }
@@ -8145,15 +7843,15 @@ static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const
             snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s': inherent 'as' answers '%s'", st, target, ret);
             return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
         }
-        return bind_conv_call(self, recv, st, "as", target, line, col);
+        return frontend_parse_bind_conv_call(self, recv, st, "as", target, line, col);
     }
-    if (bind_conv_binding(self, st, target) > 0) {
-        return bind_conv_call_binding(self, recv, st, target, line, col);
+    if (frontend_parse_bind_conv_binding(self, st, target) > 0) {
+        return frontend_parse_bind_conv_call_binding(self, recv, st, target, line, col);
     }
     ret[0] = 0;
-    nm = bind_conv_maps(self, st, "as", ret, sizeof(ret));
+    nm = frontend_parse_bind_conv_maps(self, st, "as", ret, sizeof(ret));
     if (nm > 0) {
-        return bind_conv_call(self, recv, st, "as", target, line, col);
+        return frontend_parse_bind_conv_call(self, recv, st, "as", target, line, col);
     }
     snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', ""import a mapping trait that declares 'as', or import a mapping unit ""with a 'map binding' for this pair", st, target, st);
     return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
@@ -8184,7 +7882,7 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, co
     }
     frontend_parse_bind_conv_key(expect, ek, sizeof(ek));
     ret[0] = 0;
-    mm = bind_conv_inherent(self, st, "to", ret, sizeof(ret), (&ptr));
+    mm = frontend_parse_bind_conv_inherent(self, st, "to", ret, sizeof(ret), (&ptr));
     if (mm == (-2)) {
         return tool_diag_ct_sem_error(line, col, "method is private to its unit", self->sup->mem->path);
     }
@@ -8197,12 +7895,12 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, co
             snprintf(msg, sizeof(msg), "no strict conversion from '%s' to '%s': 'to' answers '%s', expected '%s'", st, target, ret, expect);
             return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
         }
-        return bind_conv_call(self, recv, st, "to", expect, line, col);
+        return frontend_parse_bind_conv_call(self, recv, st, "to", expect, line, col);
     }
     ret[0] = 0;
-    nm = bind_conv_maps(self, st, "to", ret, sizeof(ret));
+    nm = frontend_parse_bind_conv_maps(self, st, "to", ret, sizeof(ret));
     if (nm > 0) {
-        return bind_conv_call(self, recv, st, "to", expect, line, col);
+        return frontend_parse_bind_conv_call(self, recv, st, "to", expect, line, col);
     }
     snprintf(msg, sizeof(msg), "no strict conversion from '%s' to '%s'; add an inherent 'to' method returning '%s' or import a mapping trait that declares 'to'", st, target, expect);
     return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
@@ -8279,7 +7977,7 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
             char itr[MAX_TEXT];
             frontend_parse_bind_conv_key(at, ak, sizeof(ak));
             frontend_parse_bind_conv_key(ft, fk, sizeof(fk));
-            if ((((((((((strcmp(ak, fk) != 0) && (!(self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, ft, itr, sizeof(itr), (&ip)) && (self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, itr) >= 0)))) && (!frontend_sym_ct_is_string_value_type(at))) && (!frontend_sym_ct_is_string_value_type(ft))) && (!frontend_sym_ct_is_container_type(at))) && (!frontend_sym_ct_is_container_type(ft))) && (strstr(at, "Box_") == 0)) && (strstr(ft, "Box_") == 0)) && (bind_conv_any(self, at, "as") || (bind_conv_struct_like(self, at) && bind_conv_struct_like(self, ft))))) {
+            if ((((((((((strcmp(ak, fk) != 0) && (!(self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, ft, itr, sizeof(itr), (&ip)) && (self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, itr) >= 0)))) && (!frontend_sym_ct_is_string_value_type(at))) && (!frontend_sym_ct_is_string_value_type(ft))) && (!frontend_sym_ct_is_container_type(at))) && (!frontend_sym_ct_is_container_type(ft))) && (strstr(at, "Box_") == 0)) && (strstr(ft, "Box_") == 0)) && (frontend_parse_bind_conv_any(self, at, "as") || (frontend_parse_bind_conv_struct_like(self, at) && frontend_parse_bind_conv_struct_like(self, ft))))) {
                 do_conv = 1;
             }
         }
@@ -8367,11 +8065,11 @@ static int bind_conv_arith(struct frontend_parse_Expr * self, int left, int righ
     if ((!frontend_parse_bind_conv_on())) {
         return 0;
     }
-    if (((((left >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, left, lt, sizeof(lt)) == 0)) && lt[0]) && bind_conv_struct_like(self, lt))) {
-        lc = bind_conv_any(self, lt, "as");
+    if (((((left >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, left, lt, sizeof(lt)) == 0)) && lt[0]) && frontend_parse_bind_conv_struct_like(self, lt))) {
+        lc = frontend_parse_bind_conv_any(self, lt, "as");
     }
-    if (((((right >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, right, rt, sizeof(rt)) == 0)) && rt[0]) && bind_conv_struct_like(self, rt))) {
-        rc = bind_conv_any(self, rt, "as");
+    if (((((right >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, right, rt, sizeof(rt)) == 0)) && rt[0]) && frontend_parse_bind_conv_struct_like(self, rt))) {
+        rc = frontend_parse_bind_conv_any(self, rt, "as");
     }
     if (((!lc) && (!rc))) {
         return 0;

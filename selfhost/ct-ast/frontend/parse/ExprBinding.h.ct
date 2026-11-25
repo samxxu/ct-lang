@@ -1,0 +1,391 @@
+/*
+ * ExprBinding.h.ct - the binding-conversion lookup (SH-94 S1a-1, pure move out of Expr.h.ct).
+ *
+ * The method bodies are byte-identical to the ones Expr.h.ct held; the
+ * `Expr` type and every trait declaration live in ExprCore.h.ct, so this unit
+ * imports Core instead of the host and the import graph stays acyclic.
+ * Expr.h.ct imports this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+import frontend::sym::SymbolsTypeText;
+import frontend::lex::Lexer;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable;
+import backend::mem::Memory;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::sym::Symbols::Closure as Closure;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
+import runtime::arena::Arena::NodeKind as NodeKind;
+import runtime::arena::Arena::Node as Node;
+import tool::diag::Diag;
+import frontend::parse::ExprTypeText;
+import frontend::parse::ExprPure;
+import frontend::parse::ExprCore;
+import frontend::parse::ExprAdtCtor;
+import frontend::parse::ExprNewObject;
+import frontend::parse::ExprSubscript;
+import frontend::parse::ExprOptional;
+import frontend::parse::ExprTraitInst;
+import frontend::parse::ExprRecvMut;
+import frontend::parse::ExprTry;
+import frontend::parse::ExprTypes;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define B_ADD 1
+#define B_AND 12
+#define B_BAND 15
+#define B_BOR 16
+#define B_COMMA 19
+#define B_DIV 4
+#define B_EQ 9
+#define B_GE 8
+#define B_GT 6
+#define B_LE 7
+#define B_LT 5
+#define B_MOD 11
+#define B_MUL 3
+#define B_NE 10
+#define B_OR 13
+#define B_SHL 17
+#define B_SHR 18
+#define B_SUB 2
+#define B_XOR 14
+#define MAX_CALLS 8192
+#define MAX_CALLS_MAX 65536
+#define MAX_FUNCS 512
+#define MAX_FUNCS_MAX 65536
+#define MAX_ARG_POS 32
+#define MAX_ARG_POS_MAX 65536
+#define MAX_GENERIC_INSTS 64
+#define MAX_TEXT 160
+#define N_ADDR 27
+#define N_ARROW 25
+#define N_ASSIGN 13
+#define N_BIN 11
+#define N_BOX 34
+#define N_CALL 7
+#define N_CAST 35
+#define N_DECL 12
+#define N_DEREF 28
+#define N_FUNC 3
+#define N_IMPL 33
+#define N_INDEX 26
+#define N_MCALL 30
+#define N_MEMBER 24
+#define N_NUM 8
+#define N_OFFSETOF 47
+#define N_POST 18
+#define N_RAW 31
+#define N_SIZEOF 36
+#define N_STR 9
+#define N_TERN 37
+#define N_UNARY 17
+#define N_VAR 10
+#define N_COMPOUND 51
+#define N_VAARG 53
+#define N_FNUM 54
+#define N_PRE 57
+#define N_CLOSURE 59
+#define N_MATSEQ 73
+#define N_NEWOBJ 77
+#define N_INTO 63
+#define N_INTO_SELF 64
+#define N_TRY 71
+#define N_ADTCTOR 81
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET   76
+#define N_OPT 72
+#define P_DEC 2
+#define P_INC 1
+#define T_EOF 0
+#define T_ID 1
+#define T_NUM 2
+#define T_PUNCT 4
+#define T_STR 3
+#define U_NEG 1
+#define U_NOT 2
+#define U_BNOT 3
+#define CT_EXPR_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct ExprBinding {
+    int unused;
+}
+
+pub int bind_conv_struct_like(struct Expr *self, const char *t)
+{
+    const char *p = t;
+
+    while (*p == ' ' || *p == '\t') p++;
+    if (strncmp(p, "struct ", 7) == 0 || strncmp(p, "union ", 6) == 0
+        || strncmp(p, "enum ", 5) == 0)
+        return 1;
+    if (strstr(t, "_iface") != 0) return 1;
+    return self->sym->find_struct(t) >= 0;
+}
+
+pub int bind_conv_ibase(struct Expr *self, const char *stype, char *out, int cap, int *is_ptr)
+{
+    char b[MAX_TEXT];
+    size_t n;
+
+    snprintf(b, sizeof b, "%s", stype);
+    n = strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) b[--n] = 0;
+    *is_ptr = 0;
+    if (n > 0 && b[n - 1] == '*') {
+        *is_ptr = 1;
+        b[--n] = 0;
+        while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) b[--n] = 0;
+    }
+    if (strncmp(b, "struct ", 7) != 0 && strncmp(b, "union ", 6) != 0) {
+        if (self->sym->find_struct(b) < 0) return 0;
+        if (snprintf(out, (size_t)cap, "struct %s", b) >= cap) return 0;
+        return 1;
+    }
+    if (snprintf(out, (size_t)cap, "%s", b) >= cap) return 0;
+    return 1;
+}
+
+pub int bind_conv_inherent(struct Expr *self, const char *stype, const char *method, char *ret, int cap, int *is_ptr)
+{
+    char ibase[MAX_TEXT];
+    int m, np;
+
+    if (!bind_conv_ibase(self, stype, ibase, sizeof ibase, is_ptr)) return -1;
+    m = self->inst_inherent_method(ibase, method);
+    if (m == -2) return -2;
+    if (m < 0) return -1;
+    np = 0;
+    {
+        int pi;
+        for (pi = self->arena->nodes[m].a; pi > 0; pi = self->arena->nodes[pi].next) np++;
+    }
+    if (np != 0) return -3;
+    ret[0] = 0;
+    if (!self->sup->ty->inst_method_ret(ibase, method, ret, cap)) {
+        snprintf(ret, (size_t)cap, "%s", self->arena->nodes[m].text);
+    }
+    return m;
+}
+
+pub int bind_conv_maps(struct Expr *self, const char *stype, const char *method, char *ret, int cap)
+{
+    char sk[MAX_TEXT];
+    char hk[MAX_TEXT];
+    char rk[MAX_TEXT];
+    int i, j, seen = 0;
+
+    bind_conv_key(stype, sk, sizeof sk);
+    for (i = 0; i < *self->nmaps; i++) {
+        if ((*self->maps)[i].is_binding) continue;
+        if (!(*self->maps)[i].is_static || !(*self->maps)[i].type_host) continue;
+        bind_conv_key((*self->maps)[i].host_type, hk, sizeof hk);
+        if (strcmp(hk, sk) != 0) continue;
+        for (j = 0; j < (*self->maps)[i].nb; j++) {
+            int ti = (*self->maps)[i].b[j].ti;
+            int mi = (*self->maps)[i].b[j].mi;
+            if (strcmp((*self->maps)[i].b[j].method, method) != 0) continue;
+            if ((*self->maps)[i].b[j].nparams - (*self->maps)[i].b[j].recv != 0) continue;
+            if (ti < 0 || mi < 0 || mi >= self->sym->traits[ti].nm) continue;
+            bind_conv_key(self->sym->traits[ti].m[mi].ret, rk, sizeof rk);
+            if (!ret[0]) snprintf(ret, (size_t)cap, "%s",
+                                  self->sym->traits[ti].m[mi].ret);
+            seen++;
+        }
+    }
+    (void)rk;
+    return seen;
+}
+
+pub int bind_conv_binding(struct Expr *self, const char *stype, const char *target)
+{
+    char sk[MAX_TEXT];
+    char tk[MAX_TEXT];
+    char hk[MAX_TEXT];
+    char dk[MAX_TEXT];
+    int i, seen = 0;
+
+    bind_conv_key(stype, sk, sizeof sk);
+    bind_conv_key(target, tk, sizeof tk);
+    for (i = 0; i < *self->nmaps; i++) {
+        if (!(*self->maps)[i].is_binding) continue;
+        bind_conv_key((*self->maps)[i].host_type, hk, sizeof hk);
+        if (strcmp(hk, sk) != 0) continue;
+        bind_conv_key((*self->maps)[i].bind_dst, dk, sizeof dk);
+        if (strcmp(dk, tk) != 0) continue;
+        seen++;
+    }
+    return seen;
+}
+
+pub int bind_conv_call_binding(struct Expr *self, int recv, const char *stype,
+                                  const char *target, int line, int col)
+{
+    int n = self->sup->new_node(N_MCALL);
+    if (n < 0) return -1;
+    self->arena->nodes[n].aux = 12;
+    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
+    snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+    self->arena->nodes[n].sflags = self->arena->nodes[n].sflags | 4;
+    self->arena->nodes[n].a = recv;
+    self->arena->nodes[n].b = -1;
+    self->arena->nodes[n].line = line;
+    self->arena->nodes[n].num = col;
+    return n;
+}
+
+/* Does any conversion (inherent or mapped) exist for this source spelling? */
+pub int bind_conv_any(struct Expr *self, const char *stype, const char *method)
+{
+    char ret[MAX_TEXT];
+    int ptr = 0;
+
+    ret[0] = 0;
+    if (bind_conv_inherent(self, stype, method, ret, sizeof ret, &ptr) >= 0) return 1;
+    ret[0] = 0;
+    if (bind_conv_maps(self, stype, method, ret, sizeof ret) > 0) return 1;
+    return 0;
+}
+
+pub int bind_conv_call(struct Expr *self, int recv, const char *stype, const char *method, const char *target, int line, int col)
+{
+    int n, ptr = 0;
+    char ibase[MAX_TEXT];
+
+    if (bind_conv_ibase(self, stype, ibase, sizeof ibase, &ptr)) {
+        /* an inherent method wins over a mapping trait (D-020 lookup order) */
+        if (bind_conv_inherent(self, stype, method, ibase, (int)sizeof ibase, &ptr) >= 0) {
+            n = self->sup->new_node(N_MCALL);
+            if (n < 0) return -1;
+            self->arena->nodes[n].aux = ptr ? 10 : 9;
+            snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
+            if (ptr) {
+                size_t tl = strlen(self->arena->nodes[n].text);
+                while (tl > 0 && (self->arena->nodes[n].text[tl - 1] == '*'
+                                  || self->arena->nodes[n].text[tl - 1] == ' '))
+                    self->arena->nodes[n].text[--tl] = 0;
+            }
+            snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", method);
+            snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+            self->arena->nodes[n].sflags |= 4;
+            self->arena->nodes[n].a = recv;
+            self->arena->nodes[n].b = -1;
+            self->arena->nodes[n].line = line;
+            self->arena->nodes[n].num = col;
+            return n;
+        }
+    }
+    n = self->sup->new_node(N_MCALL);
+    if (n < 0) return -1;
+    self->arena->nodes[n].aux = 6;
+    snprintf(self->arena->nodes[n].text, MAX_TEXT, "%s", stype);
+    snprintf(self->arena->nodes[n].text2, MAX_TEXT, "%s", method);
+    snprintf(self->arena->nodes[n].text4, MAX_TEXT, "%s", target);
+    self->arena->nodes[n].sflags |= 4;
+    self->arena->nodes[n].a = recv;
+    self->arena->nodes[n].b = -1;
+    self->arena->nodes[n].line = line;
+    self->arena->nodes[n].num = col;
+    return n;
+}
+
+pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line, int col)
+{
+    char st[MAX_TEXT];
+    char sk[MAX_TEXT];
+    char tk[MAX_TEXT];
+    char ret[MAX_TEXT];
+    char tr[MAX_TEXT];
+    char msg[MAX_TEXT * 2];
+    int ptr = 0, nm, ip = 0, mm;
+
+    /* D-020 §6.3: off means v1.0 -- no implicit conversion at any binding site */
+    if (!bind_conv_on()) return expr;
+    if (expr < 0 || !target || !target[0]) return expr;
+    if (strcmp(target, "void") == 0) return expr;
+    if (strchr(target, '*')) return expr;
+    if (self->sup->expr_type(expr, st, sizeof st) != 0 || !st[0]) return expr;
+    if (strchr(st, '*')) return expr;
+    bind_conv_key(st, sk, sizeof sk);
+    bind_conv_key(target, tk, sizeof tk);
+    if (strcmp(sk, tk) == 0) return expr;
+    /* an interface target is filled by the boxing pass, not by a conversion */
+    if (self->sup->iface_ref_type(target, tr, sizeof tr, &ip)
+        && self->sym->find_trait(tr) >= 0)
+        return expr;
+    ret[0] = 0;
+    mm = bind_conv_inherent(self, st, "as", ret, sizeof ret, &ptr);
+    if (mm >= 0) {
+        char rk[MAX_TEXT];
+        bind_conv_key(ret, rk, sizeof rk);
+        if (strcmp(rk, tk) == 0)
+            return bind_conv_call(self, expr, st, "as", target, line, col);
+        snprintf(msg, sizeof msg,
+                 "no conversion from '%s' to '%s': inherent 'as' answers '%s'",
+                 st, target, ret);
+        return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+    }
+    if (mm == -2)
+        return tool::diag::ct_sem_error(line, col,
+            "method is private to its unit", self->sup->mem->path);
+    if (mm == -3)
+        return tool::diag::ct_sem_error(line, col,
+            "an 'as' conversion takes no arguments", self->sup->mem->path);
+    /* D-021 §4 lookup order: inherent `as`, then a `map binding`, then an
+       imported `map trait`. The binding is keyed by the pair, so it is asked
+       before the method table. */
+    if (bind_conv_binding(self, st, target) > 0)
+        return bind_conv_call_binding(self, expr, st, target, line, col);
+    ret[0] = 0;
+    nm = bind_conv_maps(self, st, "as", ret, sizeof ret);
+    if (nm > 0)
+        return bind_conv_call(self, expr, st, "as", target, line, col);
+    /* No candidate. Under `--types` the existing kernel owns the
+       "expected/got" diagnostic (its wording is pinned by p32/p43/p86), so
+       leave the expression alone. In compile mode an aggregate-to-aggregate
+       binding has no C conversion at all; name the missing conversion instead
+       of emitting C that `cc` will reject. */
+    if (self->types_mode && *self->types_mode
+        && !(self->build_mode && *self->build_mode)) return expr;
+    /* The owning-string and container types have their own binding
+       diagnostics (escape, copy/move, element type). A conversion error here
+       would preempt them, so those families keep the existing behaviour. */
+    if (frontend::sym::ct_is_string_value_type(st)
+        || frontend::sym::ct_is_string_value_type(target)
+        || frontend::sym::ct_is_container_type(st)
+        || frontend::sym::ct_is_container_type(target)
+        || strstr(st, "Box_") != 0 || strstr(target, "Box_") != 0)
+        return expr;
+    if (bind_conv_struct_like(self, st) && bind_conv_struct_like(self, target)) {
+        snprintf(msg, sizeof msg,
+                 "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', "
+                 "import a mapping trait that declares 'as', or import a mapping unit "
+                 "with a 'map binding' for this pair",
+                 st, target, st);
+        return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+    }
+    return expr;
+}
+
+impl ExprBinding for Expr {
+    int binding_convert(int expr, const char *target, int line, int col)
+    {
+        return bind_conv_site(self, expr, target, line, col);
+    }
+}
