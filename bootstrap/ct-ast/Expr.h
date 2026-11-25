@@ -24,6 +24,7 @@
 #include "ExprAdtCtor.h"
 #include "ExprNewObject.h"
 #include "ExprSubscript.h"
+#include "ExprOptional.h"
 
 
 struct ct_buf;
@@ -101,7 +102,6 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 extern const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable;
-extern const struct frontend_parse_ExprOptional_vtbl frontend_parse_Expr_frontend_parse_ExprOptional_vtable;
 extern const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable;
 extern const struct frontend_parse_ExprRecvMut_vtbl frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable;
 extern const struct frontend_parse_ExprTypes_vtbl frontend_parse_Expr_frontend_parse_ExprTypes_vtable;
