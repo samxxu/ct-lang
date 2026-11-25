@@ -44,6 +44,7 @@ import frontend::parse::ExprNewObject;
 import frontend::parse::ExprSubscript;
 import frontend::parse::ExprOptional;
 import frontend::parse::ExprTraitInst;
+import frontend::parse::ExprRecvMut;
 
 #define B_ADD 1
 #define B_AND 12
@@ -8250,34 +8251,6 @@ impl ExprOps for Expr {
    or a decimal integer / floating literal with an optional suffix. `out` is
    the C value type, `is_zero` marks the integer constant 0 (the null pointer
    constant). 0 means "not one literal". */
-impl ExprRecvMut for Expr {
-    int recv_mut_check(int recv, const char *rtype, int is_mut, int line, int col,
-                       const char *method)
-    {
-        char msg[MAX_TEXT * 2];
-        const char *t;
-        int k, why, vi;
-
-        if (!is_mut) return 0;
-        why = 0;
-        k = (recv >= 0) ? self->arena->nodes[recv].kind : -1;
-        if (k == N_STR || k == N_NUM || k == N_FNUM) why = 1;
-        t = rtype ? rtype : "";
-        while (*t == ' ' || *t == '\t') t++;
-        if (!why && strncmp(t, "const ", 6) == 0) why = 2;
-        if (!why && k == N_VAR) {
-            vi = self->sym->find_var(self->arena->nodes[recv].text2);
-            if (vi >= 0 && strncmp(self->sym->vars[vi].type, "const ", 6) == 0) why = 2;
-        }
-        if (!why) return 0;
-        snprintf(msg, sizeof msg, "'%s' writes its receiver, but the receiver is %s",
-                 method, why == 1 ? "a literal" : "a top-level const value");
-        if (tool::diag::ct_recv_warn(line, col, method, msg, self->sup->mem->path) != 0)
-            return self->sup->fail("too many warnings");
-        return 0;
-    }
-}
-
 /* v1-PH-0 S0.5b: the shared tail of the kinds whose type is judged by
    `static_ctype` (the old `break` group). */
 static int chk_type_static(struct Expr *self, int n, char *out, int cap)

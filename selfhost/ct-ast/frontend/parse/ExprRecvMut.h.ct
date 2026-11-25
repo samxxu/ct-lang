@@ -1,0 +1,154 @@
+/*
+ * ExprRecvMut.h.ct - the receiver-mutability check (SH-94 S1a-1, pure move out of Expr.h.ct).
+ *
+ * The method bodies are byte-identical to the ones Expr.h.ct held; the
+ * `Expr` type and every trait declaration live in ExprCore.h.ct, so this unit
+ * imports Core instead of the host and the import graph stays acyclic.
+ * Expr.h.ct imports this unit for the vtable.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+import frontend::sym::SymbolsTypeText;
+import frontend::lex::Lexer;
+import frontend::module::MapTable::Call as Call;
+import frontend::module::MapTable;
+import backend::mem::Memory;
+import frontend::parse::ParseSupport;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Adt as Adt;
+import frontend::sym::Symbols::Closure as Closure;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructImpl as StructImpl;
+import frontend::type::TypeCheck;
+import runtime::arena::Arena;
+import runtime::arena::Arena::NodeKind as NodeKind;
+import runtime::arena::Arena::Node as Node;
+import tool::diag::Diag;
+import frontend::parse::ExprTypeText;
+import frontend::parse::ExprPure;
+import frontend::parse::ExprCore;
+import frontend::parse::ExprAdtCtor;
+import frontend::parse::ExprNewObject;
+import frontend::parse::ExprSubscript;
+import frontend::parse::ExprOptional;
+import frontend::parse::ExprTraitInst;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define B_ADD 1
+#define B_AND 12
+#define B_BAND 15
+#define B_BOR 16
+#define B_COMMA 19
+#define B_DIV 4
+#define B_EQ 9
+#define B_GE 8
+#define B_GT 6
+#define B_LE 7
+#define B_LT 5
+#define B_MOD 11
+#define B_MUL 3
+#define B_NE 10
+#define B_OR 13
+#define B_SHL 17
+#define B_SHR 18
+#define B_SUB 2
+#define B_XOR 14
+#define MAX_CALLS 8192
+#define MAX_CALLS_MAX 65536
+#define MAX_FUNCS 512
+#define MAX_FUNCS_MAX 65536
+#define MAX_ARG_POS 32
+#define MAX_ARG_POS_MAX 65536
+#define MAX_GENERIC_INSTS 64
+#define MAX_TEXT 160
+#define N_ADDR 27
+#define N_ARROW 25
+#define N_ASSIGN 13
+#define N_BIN 11
+#define N_BOX 34
+#define N_CALL 7
+#define N_CAST 35
+#define N_DECL 12
+#define N_DEREF 28
+#define N_FUNC 3
+#define N_IMPL 33
+#define N_INDEX 26
+#define N_MCALL 30
+#define N_MEMBER 24
+#define N_NUM 8
+#define N_OFFSETOF 47
+#define N_POST 18
+#define N_RAW 31
+#define N_SIZEOF 36
+#define N_STR 9
+#define N_TERN 37
+#define N_UNARY 17
+#define N_VAR 10
+#define N_COMPOUND 51
+#define N_VAARG 53
+#define N_FNUM 54
+#define N_PRE 57
+#define N_CLOSURE 59
+#define N_MATSEQ 73
+#define N_NEWOBJ 77
+#define N_INTO 63
+#define N_INTO_SELF 64
+#define N_TRY 71
+#define N_ADTCTOR 81
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET   76
+#define N_OPT 72
+#define P_DEC 2
+#define P_INC 1
+#define T_EOF 0
+#define T_ID 1
+#define T_NUM 2
+#define T_PUNCT 4
+#define T_STR 3
+#define U_NEG 1
+#define U_NOT 2
+#define U_BNOT 3
+#define CT_EXPR_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
+
+namespace frontend::parse;
+/* A stateless unit: the type exists only because a unit file is
+   named after its main type. Nothing instantiates it. */
+pub struct ExprRecvMut {
+    int unused;
+}
+
+
+impl ExprRecvMut for Expr {
+    int recv_mut_check(int recv, const char *rtype, int is_mut, int line, int col,
+                       const char *method)
+    {
+        char msg[MAX_TEXT * 2];
+        const char *t;
+        int k, why, vi;
+
+        if (!is_mut) return 0;
+        why = 0;
+        k = (recv >= 0) ? self->arena->nodes[recv].kind : -1;
+        if (k == N_STR || k == N_NUM || k == N_FNUM) why = 1;
+        t = rtype ? rtype : "";
+        while (*t == ' ' || *t == '\t') t++;
+        if (!why && strncmp(t, "const ", 6) == 0) why = 2;
+        if (!why && k == N_VAR) {
+            vi = self->sym->find_var(self->arena->nodes[recv].text2);
+            if (vi >= 0 && strncmp(self->sym->vars[vi].type, "const ", 6) == 0) why = 2;
+        }
+        if (!why) return 0;
+        snprintf(msg, sizeof msg, "'%s' writes its receiver, but the receiver is %s",
+                 method, why == 1 ? "a literal" : "a top-level const value");
+        if (tool::diag::ct_recv_warn(line, col, method, msg, self->sup->mem->path) != 0)
+            return self->sup->fail("too many warnings");
+        return 0;
+    }
+}

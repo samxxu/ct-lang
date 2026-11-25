@@ -18,6 +18,7 @@
 #include "ExprSubscript.h"
 #include "ExprOptional.h"
 #include "ExprTraitInst.h"
+#include "ExprRecvMut.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include <stdio.h>
@@ -174,7 +175,6 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_ExprOps_vtable;
-const struct frontend_parse_ExprRecvMut_vtbl frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable;
 const struct frontend_parse_ExprTypes_vtbl frontend_parse_Expr_frontend_parse_ExprTypes_vtable;
 const struct frontend_parse_ExprTry_vtbl frontend_parse_Expr_frontend_parse_ExprTry_vtable;
 const struct frontend_parse_ExprBinding_vtbl frontend_parse_Expr_frontend_parse_ExprBinding_vtable;
@@ -6908,48 +6908,6 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .parse_qual_path = frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path,
     .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args,
     .record_call = frontend_parse_Expr_frontend_parse_ExprOps_record_call
-};
-
-static int frontend_parse_Expr_frontend_parse_ExprRecvMut_recv_mut_check(void *self, int recv, const char * rtype, int is_mut, int line, int col, const char * method) {
-    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char msg[MAX_TEXT * 2];
-    const char * t;
-    int k;
-    int why;
-    int vi;
-    if ((!is_mut)) {
-        return 0;
-    }
-    why = 0;
-    k = ((recv >= 0) ? _self->arena->nodes[recv].kind : (-1));
-    if ((((k == N_STR) || (k == N_NUM)) || (k == N_FNUM))) {
-        why = 1;
-    }
-    t = (rtype ? rtype : "");
-    while ((((*t) == ' ') || ((*t) == '\t'))) {
-        t++;
-    }
-    if (((!why) && (strncmp(t, "const ", 6) == 0))) {
-        why = 2;
-    }
-    if (((!why) && (k == N_VAR))) {
-        vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[recv].text2);
-        if (((vi >= 0) && (strncmp(_self->sym->vars[vi].type, "const ", 6) == 0))) {
-            why = 2;
-        }
-    }
-    if ((!why)) {
-        return 0;
-    }
-    snprintf(msg, sizeof(msg), "'%s' writes its receiver, but the receiver is %s", method, ((why == 1) ? "a literal" : "a top-level const value"));
-    if (tool_diag_ct_recv_warn(line, col, method, msg, _self->sup->mem->path) != 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many warnings");
-    }
-    return 0;
-}
-
-const struct frontend_parse_ExprRecvMut_vtbl frontend_parse_Expr_frontend_parse_ExprRecvMut_vtable = {
-    .recv_mut_check = frontend_parse_Expr_frontend_parse_ExprRecvMut_recv_mut_check
 };
 
 static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_callptr_args(void *self, const char * ftype, const char * callee, int args, int line, int col) {
