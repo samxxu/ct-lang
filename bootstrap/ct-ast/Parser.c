@@ -24,7 +24,6 @@
 #define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
 #define MAX_IMPORTS_MAX 65536
-#define MAX_INIT_TEXT 16384
 #define MAX_MAPS 64
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
@@ -1400,9 +1399,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         if (_self->sup->__frontend_parse_supportops_vptr->accept(_self->sup, "=")) {
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
                 char * raw;
-                char fixed[MAX_INIT_TEXT];
+                char * fixed;
                 int off;
                 int k;
+                int fixedcap;
                 if (_self->ex->__frontend_parse_exprops_vptr->container_global_init_check(_self->ex, ret) != 0) {
                     return (-1);
                 }
@@ -1420,16 +1420,21 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
                         return (-1);
                     }
                 }
-                if (_self->sup->__frontend_parse_supportops_vptr->rewrite_init_text(_self->sup, ret, raw, fixed, sizeof(fixed)) != 0) {
+                fixed = (char *)(0);
+                fixedcap = 0;
+                if (_self->sup->__frontend_parse_supportops_vptr->rewrite_init_text(_self->sup, ret, raw, (&fixed), (&fixedcap)) != 0) {
+                    free(fixed);
                     return (-1);
                 }
                 off = _self->arena->__runtime_arena_arenaops_vptr->str_begin(_self->arena);
                 for (k = 0; fixed[k]; k++) {
                     if (_self->arena->__runtime_arena_arenaops_vptr->str_put(_self->arena, fixed[k]) != 0) {
+                        free(fixed);
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "initializer is too long");
                     }
                 }
                 _self->arena->__runtime_arena_arenaops_vptr->str_end(_self->arena);
+                free(fixed);
                 _self->arena->nodes[e].num = off;
                 _self->arena->nodes[e].aux = 1;
             }

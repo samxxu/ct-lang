@@ -46,7 +46,6 @@ import frontend::sym::SymbolsTypeText;
 #define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
 #define MAX_IMPORTS_MAX 65536
-#define MAX_INIT_TEXT 16384
 #define MAX_MAPS 64
 #define MAX_METHODS 64
 #define MAX_METHODS_MAX 65536
@@ -1919,8 +1918,8 @@ impl ParseOps for Parser {
                        the arena string pool; `aux = 1` records that and `num`
                        holds the offset (see `emit_raw_init`). */
                     char *raw;
-                    char fixed[MAX_INIT_TEXT];
-                    int off, k;
+                    char *fixed;
+                    int off, k, fixedcap;
                     /* V29-4: a Vec / Map has no C aggregate initializer. */
                     if (self->ex->container_global_init_check(ret) != 0) return -1;
                     e = self->sup->new_node(N_RAW);
@@ -1934,12 +1933,20 @@ impl ParseOps for Parser {
                         if (self->ex->chk_brace_init(ret, raw, bl, bc) != 0)
                             return -1;
                     }
-                    if (self->sup->rewrite_init_text(ret, raw, fixed, sizeof fixed) != 0) return -1;
+                    fixed = (char *)0;
+                    fixedcap = 0;
+                    if (self->sup->rewrite_init_text(ret, raw, &fixed, &fixedcap) != 0) {
+                        free(fixed);
+                        return -1;
+                    }
                     off = self->arena->str_begin();
                     for (k = 0; fixed[k]; k++)
-                        if (self->arena->str_put(fixed[k]) != 0)
+                        if (self->arena->str_put(fixed[k]) != 0) {
+                            free(fixed);
                             return self->sup->fail("initializer is too long");
+                        }
                     self->arena->str_end();
+                    free(fixed);
                     self->arena->nodes[e].num = off;
                     self->arena->nodes[e].aux = 1;
                 } else if (self->st->range_init_ahead()) {

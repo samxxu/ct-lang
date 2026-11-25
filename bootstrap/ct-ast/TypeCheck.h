@@ -97,7 +97,7 @@ struct frontend_type_TypeOps_vtbl {
     int (*inst_method_ret)(void *, const char *, const char *, char *, int);
     int (*type_has_array_init)(void *, const char *);
     int (*init_item_text)(void *, const char *, const char *, char *, int);
-    int (*rewrite_init_text)(void *, const char *, const char *, char *, int);
+    int (*rewrite_init_text)(void *, const char *, const char *, char * *, int *);
     int (*rewrite_init_names)(void *, const char *, char *, int);
     int (*new_node)(void *, int);
     int (*needs_init)(void *, const char *);

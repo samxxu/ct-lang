@@ -1506,11 +1506,13 @@ static const char *notes[] = {
 };
 ```
 
-- 花括号初始化器不再受节点的 160 字节 `text` 字段限制：捕获与重写各用独立的
-  大缓冲区（单个初始化器 4 KiB，重写后 16 KiB，单个列表项 4 KiB），最终文本存进
-  arena 的字符串池。
+- 花括号初始化器不再受节点的 160 字节 `text` 字段限制：捕获、单个列表项与重写后的
+  文本各用按需缓冲（初值分别为 4 KiB / 4 KiB / 16 KiB，倍增到形式上限 `TEXT_LIMIT`
+  = 65536 字节），最终文本存进 arena 的字符串池。
 - 因此关键字表、消息表这类长列表，以及由长字符串组成的列表项，都能完整保留。
-- 超出上述上限仍报 `error: initializer is too long`，初始化器本身不静默截断。
+- 单个初始化器文本超过形式上限报 `error: initializer text exceeds 65536 bytes`
+  （资源保护，可增长到 65536）；初始化器本身不静默截断。arena 字符串池写满时仍报
+  `error: initializer is too long`，同样不截断。
   表达式位置的字符串字面量在 v0.53.1 起同样报硬错
   `string literal is too long (max 158 bytes; split it)`；相邻字面量会先拼接，不受该上限约束。
 

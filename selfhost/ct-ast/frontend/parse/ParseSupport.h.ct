@@ -81,7 +81,7 @@ pub trait SupportOps {
     int  expr_type(int n, char *out, int cap);
     int  expr_ctype(int n, char *out, int cap);
     int  maybe_box(int n, const char *trait, int addr);
-    int  rewrite_init_text(const char *stype, const char *raw, char *out, int cap);
+    int  rewrite_init_text(const char *stype, const char *raw, char **out, int *ocap);
     int  mark_owned(int n, int line);
     int  leak_decl(int n);
     int  leak_scope(int from, int to);
@@ -874,11 +874,11 @@ impl SupportOps for ParseSupport {
         return bnode;
     }
 
-    int rewrite_init_text(const char *stype, const char *raw, char *out, int cap)
+    int rewrite_init_text(const char *stype, const char *raw, char **out, int *ocap)
     {
         const char *why;
         self->ty->errmsg[0] = 0;
-        if (self->ty->rewrite_init_text(stype, raw, out, (int)cap) != 0) {
+        if (self->ty->rewrite_init_text(stype, raw, out, ocap) != 0) {
             why = self->ty->last_error();
             if (why[0]) return self->fail(why);
             return -1;

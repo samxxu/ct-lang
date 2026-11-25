@@ -15,6 +15,7 @@
  */
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 import frontend::sym::SymbolsTypeText;
 
@@ -39,7 +40,6 @@ import frontend::type::TypeCheck;
 #define MAX_TEXT 160
 /* S1a-0 C3: the binding-name scratch ceiling (OOM guard only). */
 #define MAX_ADT_FIELDS_MAX 65536
-#define MAX_INIT_TEXT 16384
 #define MAX_LABELS 64
 #define MAX_LABELS_MAX 65536
 
@@ -4732,8 +4732,8 @@ impl StmtOps for Stmt {
                     char ktype[MAX_TEXT];
                     char vtype[MAX_TEXT];
                     char *raw;
-                    char fixed[MAX_INIT_TEXT];
-                    int off, k;
+                    char *fixed;
+                    int off, k, fixedcap;
                     if (range_vec_target(typebuf, elemtype, (int)sizeof elemtype,
                                          iname, (int)sizeof iname)) {
                         /* Phase 31 S11a: `Vec<T> v = {…}` lowers to `from(…, n)`.
@@ -4783,12 +4783,20 @@ impl StmtOps for Stmt {
                         if (self->ex->chk_brace_init(typebuf, raw, bl, bc) != 0)
                             return -1;
                     }
-                    if (self->sup->rewrite_init_text(typebuf, raw, fixed, sizeof fixed) != 0) return -1;
+                    fixed = (char *)0;
+                    fixedcap = 0;
+                    if (self->sup->rewrite_init_text(typebuf, raw, &fixed, &fixedcap) != 0) {
+                        free(fixed);
+                        return -1;
+                    }
                     off = self->arena->str_begin();
                     for (k = 0; fixed[k]; k++)
-                        if (self->arena->str_put(fixed[k]) != 0)
+                        if (self->arena->str_put(fixed[k]) != 0) {
+                            free(fixed);
                             return self->sup->fail("initializer is too long");
+                        }
                     self->arena->str_end();
+                    free(fixed);
                     self->arena->nodes[e].num = off;
                     self->arena->nodes[e].aux = 1;
                     }

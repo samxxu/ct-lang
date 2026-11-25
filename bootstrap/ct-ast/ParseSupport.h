@@ -119,7 +119,7 @@ struct frontend_parse_SupportOps_vtbl {
     int (*expr_type)(void *, int, char *, int);
     int (*expr_ctype)(void *, int, char *, int);
     int (*maybe_box)(void *, int, const char *, int);
-    int (*rewrite_init_text)(void *, const char *, const char *, char *, int);
+    int (*rewrite_init_text)(void *, const char *, const char *, char * *, int *);
     int (*mark_owned)(void *, int, int);
     int (*leak_decl)(void *, int);
     int (*leak_scope)(void *, int, int);

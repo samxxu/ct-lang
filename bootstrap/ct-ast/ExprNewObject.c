@@ -12,6 +12,7 @@
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprNewObject.h.ct"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #define MAX_TEXT 160
 #define N_ARROW 25
@@ -245,7 +246,8 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
     char tbuf[MAX_TEXT];
     char base[MAX_TEXT];
     char * raw;
-    char fixed[4096];
+    char * fixed;
+    int fixedcap;
     char enc[MAX_TEXT];
     int nline;
     int ncol;
@@ -302,7 +304,10 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
             return (-1);
         }
     }
-    if (_self->sup->__frontend_parse_supportops_vptr->rewrite_init_text(_self->sup, tbuf, raw, fixed, sizeof(fixed)) != 0) {
+    fixed = (char *)(0);
+    fixedcap = 0;
+    if (_self->sup->__frontend_parse_supportops_vptr->rewrite_init_text(_self->sup, tbuf, raw, (&fixed), (&fixedcap)) != 0) {
+        free(fixed);
         return (-1);
     }
 {
@@ -311,6 +316,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
         aa[0] = tbuf;
         cc[0] = tbuf;
         if (_self->__frontend_parse_exprops_vptr->inst_make(_self, "Box", 1, aa, cc, enc, sizeof(enc), 0, nline, ncol) != 0) {
+            free(fixed);
             return (-1);
         }
     }
@@ -319,19 +325,23 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
         int r;
         n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_NEWOBJ);
         if (n < 0) {
+            free(fixed);
             return (-1);
         }
         r = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_RAW);
         if (r < 0) {
+            free(fixed);
             return (-1);
         }
         off = _self->arena->__runtime_arena_arenaops_vptr->str_begin(_self->arena);
         for (k = 0; fixed[k]; k++) {
             if (_self->arena->__runtime_arena_arenaops_vptr->str_put(_self->arena, fixed[k]) != 0) {
+                free(fixed);
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "initializer is too long");
             }
         }
         _self->arena->__runtime_arena_arenaops_vptr->str_end(_self->arena);
+        free(fixed);
         _self->arena->nodes[r].num = off;
         _self->arena->nodes[r].aux = 1;
         _self->arena->nodes[n].a = r;

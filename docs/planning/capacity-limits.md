@@ -1,6 +1,6 @@
 # 容量上限清单与放开计划（L0 遗留）
 
-> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键已按需增长（C2b）**；B/D 类其余待做）。
+> 状态：**盘点完成；S1a-0 实施中**（2026-11-25：`MAX_NODES`/`MAX_WARNINGS` 与 A 类表/实例/形参/调用/标签/布局/hoist/into 等已动态；2026-11-25 再落 module 表（UNITS/IMPORTS/INCDIRS）、pkg 表（DIGEST_FILES/INDEX_ROWS 已动态）与初始化文本（RAW_INIT/INIT_ITEM）与 map 表；`MAX_MAPS`（含 `MapTable.b` 与 `MapBind` 参数并行表）已动态；`MAX_PKG_DEPS`（含 `ct.lock` 行块与构建期锁根）已动态；**C 类已全部动态：ADT 计数（`MAX_ADTS` / `MAX_ADT_VARIANTS` / `MAX_ADT_FIELDS`）与泛型元数（`MAX_STRUCT_TPARAMS`）**；**C2 文本/路径开始：raw 块已收到 `TEXT_LIMIT=65536`（C2a），缓存键（C2b）与初始化文本（C2c）已按需增长**；B/D 类其余待做）。
 > 目标：把 L0 阶段留下的“固定上限 + 越界硬报错”全部改为按需容量；只保留 OOM 安全阀与真正的语言语义上限。
 > 基线：`v1.1.0`（`54b60225` 之后的规划提交）。
 
@@ -76,7 +76,7 @@
 | `MAX_PKG_PATH` | 512 | 85 | B | 同上（包内路径） |
 | `MAX_PKG_CMD` | 2048 | 35 | B | 命令缓冲动态化 |
 | `MAX_KEY` | 768 | 8 | B | **已动态（C2b）**：缓存键按需增长（初值 768，倍增到 `MAX_KEY_MAX=65536`）；`Cache.key` 返回 `char **` + 容量，OOM/超限显式报错，不再静默跳过缓存 |
-| `MAX_INIT_TEXT` | 16384 | 8 | B | 初始化文本动态化 |
+| `MAX_INIT_TEXT` | 16384 | 8 | B | **已动态（C2c）**：重写文本按需倍增到 `MAX_INIT_TEXT_MAX=65536`；单项与改名 scratch 按实际长度分配；超限报 `initializer text exceeds 65536 bytes`，不再无诊断地返回 -1 |
 | `MAX_RAW_BLOCK` | 32768 | 3 | B | **已动态（C2a）**：块字节写入可增长的字面量池，定长上限删除，只余形式上限 `TEXT_LIMIT=65536` |
 
 ## 3 单元内本地常量（不在 Limits）

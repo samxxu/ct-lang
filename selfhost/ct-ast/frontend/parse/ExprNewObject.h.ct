@@ -11,6 +11,7 @@
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 import frontend::lex::Lexer;
@@ -163,7 +164,8 @@ impl ExprNew for Expr {
         char tbuf[MAX_TEXT];
         char base[MAX_TEXT];
         char *raw;
-        char fixed[4096];
+        char *fixed;
+        int fixedcap;
         char enc[MAX_TEXT];
         int nline, ncol, off, k, si;
 
@@ -225,7 +227,12 @@ impl ExprNew for Expr {
             if (self->sup->init_raw(&raw) != 0) return -1;
             if (self->chk_brace_init(tbuf, raw, bl, bc) != 0) return -1;
         }
-        if (self->sup->rewrite_init_text(tbuf, raw, fixed, sizeof fixed) != 0) return -1;
+        fixed = (char *)0;
+        fixedcap = 0;
+        if (self->sup->rewrite_init_text(tbuf, raw, &fixed, &fixedcap) != 0) {
+            free(fixed);
+            return -1;
+        }
         /* register the Box<T> instance (the type parser would do the same for
            a `Box<T>` spelling); the template's fields substitute T -> base */
         {
@@ -234,22 +241,33 @@ impl ExprNew for Expr {
             aa[0] = tbuf;
             cc[0] = tbuf;
             if (self->inst_make("Box", 1, aa, cc, enc, sizeof enc, 0,
-                                nline, ncol) != 0)
+                                nline, ncol) != 0) {
+                free(fixed);
                 return -1;
+            }
         }
         /* the payload-release helper and the constructor need the payload
            spelling, so the node keeps both the Box instance and the payload */
         {
             int n, r;
             n = self->sup->new_node(N_NEWOBJ);
-            if (n < 0) return -1;
+            if (n < 0) {
+                free(fixed);
+                return -1;
+            }
             r = self->sup->new_node(N_RAW);
-            if (r < 0) return -1;
+            if (r < 0) {
+                free(fixed);
+                return -1;
+            }
             off = self->arena->str_begin();
             for (k = 0; fixed[k]; k++)
-                if (self->arena->str_put(fixed[k]) != 0)
+                if (self->arena->str_put(fixed[k]) != 0) {
+                    free(fixed);
                     return self->sup->fail("initializer is too long");
+                }
             self->arena->str_end();
+            free(fixed);
             self->arena->nodes[r].num = off;
             self->arena->nodes[r].aux = 1;
             self->arena->nodes[n].a = r;

@@ -868,11 +868,11 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_maybe_box(void 
     return bnode;
 }
 
-static int frontend_parse_ParseSupport_frontend_parse_SupportOps_rewrite_init_text(void *self, const char * stype, const char * raw, char * out, int cap) {
+static int frontend_parse_ParseSupport_frontend_parse_SupportOps_rewrite_init_text(void *self, const char * stype, const char * raw, char * * out, int * ocap) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     const char * why;
     _self->ty->errmsg[0] = 0;
-    if (_self->ty->__frontend_type_typeops_vptr->rewrite_init_text(_self->ty, stype, raw, out, (int)(cap)) != 0) {
+    if (_self->ty->__frontend_type_typeops_vptr->rewrite_init_text(_self->ty, stype, raw, out, ocap) != 0) {
         why = _self->ty->__frontend_type_typeops_vptr->last_error(_self->ty);
         if (why[0]) {
             return _self->__frontend_parse_supportops_vptr->fail(_self, why);

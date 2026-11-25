@@ -19,10 +19,10 @@
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #define MAX_TEXT 160
 #define MAX_ADT_FIELDS_MAX 65536
-#define MAX_INIT_TEXT 16384
 #define MAX_LABELS 64
 #define MAX_LABELS_MAX 65536
 #define B_COMMA 19
@@ -3994,9 +3994,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                     char ktype[MAX_TEXT];
                     char vtype[MAX_TEXT];
                     char * raw;
-                    char fixed[MAX_INIT_TEXT];
+                    char * fixed;
                     int off;
                     int k;
+                    int fixedcap;
                     if (frontend_parse_range_vec_target(typebuf, elemtype, (int)(sizeof(elemtype)), iname, (int)(sizeof(iname)))) {
                         if (_self->static_decl) {
                             return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a Vec brace initializer is only supported in a local declaration", _self->mem->path);
@@ -4034,16 +4035,21 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                                     return (-1);
                                 }
                             }
-                            if (_self->sup->__frontend_parse_supportops_vptr->rewrite_init_text(_self->sup, typebuf, raw, fixed, sizeof(fixed)) != 0) {
+                            fixed = (char *)(0);
+                            fixedcap = 0;
+                            if (_self->sup->__frontend_parse_supportops_vptr->rewrite_init_text(_self->sup, typebuf, raw, (&fixed), (&fixedcap)) != 0) {
+                                free(fixed);
                                 return (-1);
                             }
                             off = _self->arena->__runtime_arena_arenaops_vptr->str_begin(_self->arena);
                             for (k = 0; fixed[k]; k++) {
                                 if (_self->arena->__runtime_arena_arenaops_vptr->str_put(_self->arena, fixed[k]) != 0) {
+                                    free(fixed);
                                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "initializer is too long");
                                 }
                             }
                             _self->arena->__runtime_arena_arenaops_vptr->str_end(_self->arena);
+                            free(fixed);
                             _self->arena->nodes[e].num = off;
                             _self->arena->nodes[e].aux = 1;
                         }

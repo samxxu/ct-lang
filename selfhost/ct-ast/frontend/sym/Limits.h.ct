@@ -58,6 +58,7 @@ pub struct Limits {
 #define MAX_INIT_ITEM                4096
 #define MAX_INIT_ITEM_MAX            65536
 #define MAX_INIT_TEXT                16384
+#define MAX_INIT_TEXT_MAX            65536
 #define MAX_INTOS                    4
 #define MAX_INTOS_MAX                65536
 #define MAX_KEY                      768

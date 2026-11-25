@@ -14,6 +14,7 @@
 #define MAX_INIT_ITEM 4096
 #define MAX_INIT_ITEM_MAX 65536
 #define MAX_INIT_TEXT 16384
+#define MAX_INIT_TEXT_MAX 65536
 #define N_CALL   7
 #define N_VAR    10
 #define N_MATCH  78
@@ -132,6 +133,7 @@ static int tc_expr_sizeof(struct frontend_type_TypeCheck *, int, char *, int);
 static int tc_expr_into(struct frontend_type_TypeCheck *, int, char *, int);
 static int ctype_member(struct frontend_type_TypeCheck *, int, char *, int, int);
 static int tc_expr_match(struct frontend_type_TypeCheck *, int, char *, int);
+static int init_text_reserve(char * *, int *, int);
 static struct frontend_type_TypeCheck frontend_type_g_type = { .__frontend_type_typeops_vptr = &frontend_type_TypeCheck_frontend_type_TypeOps_vtable };
 static int frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret(void *self, const char * ibase, const char * fname, char * out, int cap) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
@@ -1632,7 +1634,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
     return 0;
 }
 
-static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void *self, const char * stype, const char * raw, char * out, int cap) {
+static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void *self, const char * stype, const char * raw, char * * out, int * ocap) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     int len;
     int i;
@@ -1640,24 +1642,51 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
     int in_str;
     int start;
     int seg;
+    int need;
+    int cap;
+    int fixedcap;
+    int namedcap;
+    int had;
+    char * buf;
     char * item;
-    char fixed[MAX_INIT_TEXT];
+    char * fixed;
+    char * named;
+    (void)(_self);
+    (*out) = (char *)(0);
+    (*ocap) = 0;
+    buf = (char *)(0);
+    cap = 0;
     len = (int)(strlen(raw));
     if (((len < 2) || (raw[(len - 1)] != '}'))) {
-        if (snprintf(out, (size_t)(cap), "%s", raw) >= cap) {
-            return (-1);
+        need = (len + 1);
+        if (need > MAX_INIT_TEXT_MAX) {
+            return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
         }
+        if (init_text_reserve((&buf), (&cap), need) != 0) {
+            return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+        }
+        snprintf(buf, (size_t)(cap), "%s", raw);
+        (*out) = buf;
+        (*ocap) = cap;
         return 0;
-    }
-    if (cap < 3) {
-        return (-1);
     }
     item = (char *)(malloc(((size_t)(len) + 1)));
     if ((!item)) {
         return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
     }
-    out[0] = '{';
-    out[1] = 0;
+    fixedcap = (len + 1024);
+    fixed = (char *)(malloc((size_t)(fixedcap)));
+    if ((!fixed)) {
+        free(item);
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    if (init_text_reserve((&buf), (&cap), 3) != 0) {
+        free(item);
+        free(fixed);
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    buf[0] = '{';
+    buf[1] = 0;
     start = 1;
     depth = 0;
     in_str = 0;
@@ -1690,16 +1719,27 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
                     seg = (i - start);
                     memcpy(item, (raw + start), (size_t)(seg));
                     item[seg] = 0;
-                    if (_self->__frontend_type_typeops_vptr->init_item_text(_self, stype, item, fixed, sizeof(fixed)) != 0) {
+                    if (_self->__frontend_type_typeops_vptr->init_item_text(_self, stype, item, fixed, fixedcap) != 0) {
                         free(item);
-                        return (-1);
+                        free(fixed);
+                        free(buf);
+                        return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
                     }
-                    if (((strlen(out) + strlen(fixed)) + 2) >= (size_t)(cap)) {
+                    need = (((int)(strlen(buf)) + (int)(strlen(fixed))) + 3);
+                    if (need > MAX_INIT_TEXT_MAX) {
                         free(item);
-                        return (-1);
+                        free(fixed);
+                        free(buf);
+                        return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
                     }
-                    strcat(out, fixed);
-                    strcat(out, ",");
+                    if (init_text_reserve((&buf), (&cap), need) != 0) {
+                        free(item);
+                        free(fixed);
+                        free(buf);
+                        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+                    }
+                    strcat(buf, fixed);
+                    strcat(buf, ",");
                     start = (i + 1);
                 }
             }
@@ -1711,28 +1751,68 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
     }
     memcpy(item, (raw + start), (size_t)(seg));
     item[seg] = 0;
-    if (_self->__frontend_type_typeops_vptr->init_item_text(_self, stype, item, fixed, sizeof(fixed)) != 0) {
+    if (_self->__frontend_type_typeops_vptr->init_item_text(_self, stype, item, fixed, fixedcap) != 0) {
         free(item);
-        return (-1);
+        free(fixed);
+        free(buf);
+        return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
     }
-    if (((strlen(out) + strlen(fixed)) + 2) >= (size_t)(cap)) {
+    need = (((int)(strlen(buf)) + (int)(strlen(fixed))) + 3);
+    if (need > MAX_INIT_TEXT_MAX) {
         free(item);
-        return (-1);
+        free(fixed);
+        free(buf);
+        return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
     }
-    strcat(out, fixed);
-    strcat(out, "}");
-{
-        char named[MAX_INIT_TEXT];
-        if (_self->__frontend_type_typeops_vptr->rewrite_init_names(_self, out, named, sizeof(named)) != 0) {
-            free(item);
+    if (init_text_reserve((&buf), (&cap), need) != 0) {
+        free(item);
+        free(fixed);
+        free(buf);
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    strcat(buf, fixed);
+    strcat(buf, "}");
+    namedcap = MAX_INIT_TEXT_MAX;
+    named = (char *)(malloc((size_t)(namedcap)));
+    if ((!named)) {
+        free(item);
+        free(fixed);
+        free(buf);
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    _self->errmsg[0] = 0;
+    if (_self->__frontend_type_typeops_vptr->rewrite_init_names(_self, buf, named, namedcap) != 0) {
+        had = (_self->errmsg[0] != 0);
+        free(item);
+        free(fixed);
+        free(named);
+        free(buf);
+        if (had) {
             return (-1);
         }
-        if (snprintf(out, (size_t)(cap), "%s", named) >= cap) {
-            free(item);
-            return (-1);
-        }
+        return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
     }
+    need = ((int)(strlen(named)) + 1);
+    if (need > MAX_INIT_TEXT_MAX) {
+        free(item);
+        free(fixed);
+        free(named);
+        free(buf);
+        return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
+    }
+    if (init_text_reserve((&buf), (&cap), need) != 0) {
+        free(item);
+        free(fixed);
+        free(named);
+        free(buf);
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    snprintf(buf, (size_t)(cap), "%s", named);
     free(item);
+    free(fixed);
+    free(named);
+    (*out) = buf;
+    (*ocap) = cap;
     return 0;
 }
 
@@ -2295,6 +2375,30 @@ static int tc_expr_match(struct frontend_type_TypeCheck * self, int n, char * ou
     if (snprintf(out, (size_t)(cap), "%s", self->arena->nodes[n].text2) >= cap) {
         return (-1);
     }
+    return 0;
+}
+static int init_text_reserve(char * * buf, int * cap, int need) {
+    int ncap;
+    char * grown;
+    if (need <= (*cap)) {
+        return 0;
+    }
+    ncap = (((*cap) > 0) ? (*cap) : MAX_INIT_TEXT);
+    while (((ncap < need) && (ncap < MAX_INIT_TEXT_MAX))) {
+        ncap *= 2;
+    }
+    if (ncap > MAX_INIT_TEXT_MAX) {
+        ncap = MAX_INIT_TEXT_MAX;
+    }
+    if (need > ncap) {
+        return (-1);
+    }
+    grown = (char *)(realloc((*buf), (size_t)(ncap)));
+    if ((!grown)) {
+        return (-1);
+    }
+    (*buf) = grown;
+    (*cap) = ncap;
     return 0;
 }
 struct frontend_type_TypeCheck * frontend_type_type_get(void) {
