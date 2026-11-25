@@ -1298,15 +1298,19 @@ static int frontend_module_Module_frontend_module_ModuleOps_cache_order(void *se
     return 0;
 }
 
-static int frontend_module_Module_frontend_module_ModuleOps_cache_key_of(void *self, int u, char * out, int cap) {
+static int frontend_module_Module_frontend_module_ModuleOps_cache_key_of(void *self, int u, char * * out) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
     char * ih;
+    char * key;
+    int kcap;
+    int rc;
     unsigned long dep;
     size_t n;
     size_t k;
     size_t ihcap;
     int w;
     (void)(_self);
+    (*out) = (char *)(0);
     n = 0;
     ihcap = (((size_t)(_self->units[u].ndep) * (MAX_TEXT + 4)) + 256);
     ih = (char *)(malloc(ihcap));
@@ -1345,11 +1349,22 @@ static int frontend_module_Module_frontend_module_ModuleOps_cache_key_of(void *s
     for (k = 0; k < (size_t)(_self->units[u].ndep); k++) {
         dep = ((dep * (unsigned long)(1099511628211)) + _self->units[_self->units[u].depu[k]].digest);
     }
-    if (_self->cache->__tool_cache_cacheops_vptr->key(_self->cache, _self->units[u].path, ih, dep, _self->line_force, _self->diag_json, _self->runtime_checks, _self->nsroot, out, cap) != 0) {
+    key = (char *)(0);
+    kcap = 0;
+    rc = _self->cache->__tool_cache_cacheops_vptr->key(_self->cache, _self->units[u].path, ih, dep, _self->line_force, _self->diag_json, _self->runtime_checks, _self->nsroot, (&key), (&kcap));
+    if (rc != 0) {
         free(ih);
+        free(key);
+        if (rc == (-2)) {
+            return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+        }
+        if (rc == (-3)) {
+            return _self->__frontend_module_moduleops_vptr->fail(_self, "cache key exceeds 65536 bytes");
+        }
         return (-1);
     }
-    _self->units[u].digest = _self->cache->__tool_cache_cacheops_vptr->digest(_self->cache, out);
+    _self->units[u].digest = _self->cache->__tool_cache_cacheops_vptr->digest(_self->cache, key);
+    (*out) = key;
     free(ih);
     return 0;
 }
@@ -2259,24 +2274,27 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     }
     for (o = 0; o < cn; o++) {
         char outc[MAX_PATH];
-        char key[MAX_KEY];
+        char * key;
         int k;
         u = corder[o];
         dirty[u] = 1;
         if (_self->units[u].is_map) {
-            if (_self->__frontend_module_moduleops_vptr->cache_key_of(_self, u, key, sizeof(key)) != 0) {
+            if (_self->__frontend_module_moduleops_vptr->cache_key_of(_self, u, (&key)) != 0) {
                 return frontend_parse_ct_parse_report();
             }
             dirty[u] = 0;
+            free(key);
             continue;
         }
         if (snprintf(outc, sizeof(outc), "%s/%s.c", _self->outdir, _self->units[u].base) >= (int)(sizeof(outc))) {
             fprintf(stderr, "ctc: output path is too long\n");
             return 1;
         }
-        if ((((!_self->have_map) && (_self->__frontend_module_moduleops_vptr->cache_key_of(_self, u, key, sizeof(key)) == 0)) && _self->cache->__tool_cache_cacheops_vptr->hit(_self->cache, outc, key, _self->units[u].is_hdr))) {
+        key = (char *)(0);
+        if ((((!_self->have_map) && (_self->__frontend_module_moduleops_vptr->cache_key_of(_self, u, (&key)) == 0)) && _self->cache->__tool_cache_cacheops_vptr->hit(_self->cache, outc, key, _self->units[u].is_hdr))) {
             dirty[u] = 0;
         }
+        free(key);
         for (k = 0; k < _self->units[u].ndep; k++) {
             if (dirty[_self->units[u].depu[k]]) {
                 dirty[u] = 1;
@@ -2296,7 +2314,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     }
     for (o = 0; o < cn; o++) {
         char outc[MAX_PATH];
-        char key[MAX_KEY];
+        char * key;
         u = corder[o];
         if (_self->units[u].is_map) {
             continue;
@@ -2316,9 +2334,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             }
             return frontend_parse_ct_parse_report();
         }
-        if (((snprintf(outc, sizeof(outc), "%s/%s.c", _self->outdir, _self->units[u].base) < (int)(sizeof(outc))) && (_self->__frontend_module_moduleops_vptr->cache_key_of(_self, u, key, sizeof(key)) == 0))) {
+        key = (char *)(0);
+        if (((snprintf(outc, sizeof(outc), "%s/%s.c", _self->outdir, _self->units[u].base) < (int)(sizeof(outc))) && (_self->__frontend_module_moduleops_vptr->cache_key_of(_self, u, (&key)) == 0))) {
             _self->cache->__tool_cache_cacheops_vptr->store(_self->cache, outc, key);
         }
+        free(key);
     }
 {
         int entry = ((_self->lib_root >= 0) ? _self->lib_root : (-1));

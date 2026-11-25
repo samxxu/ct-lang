@@ -121,7 +121,7 @@ pub trait ModuleOps {
     int  module_src_wants_Box(const char *path);
     int  module_inputs_want_Box(const char **ins, int n);
     int  cache_order(int u, int *state, int *order, int *n);
-    int  cache_key_of(int u, char *out, int cap);
+    int  cache_key_of(int u, char **out);
     int  lib_scan(int root_u);
     int  build_main(int argc, char **argv);
     int  emit_program(int prog);
@@ -1704,17 +1704,22 @@ impl ModuleOps for Module {
     /* The key material of unit `u`: its import list as text and the folded
        dependency digest. The cache turns this into a stamped key; the module
        layer owns the graph, so the folding happens here. */
-    int cache_key_of(int u, char *out, int cap)
+    int cache_key_of(int u, char **out)
     {
         /* S1a-0 C1: the key material is one row per import, so a fixed
            MAX_IH block cannot outlive the old 32-import cap. Sized from the
-           actual `ndep`; `MAX_IH` is gone with the cap it mirrored. */
+           actual `ndep`; `MAX_IH` is gone with the cap it mirrored.
+           S1a-0 C2b: the finished key is a heap string owned by the caller --
+           a unit path may put it over the old 768-byte buffer. */
         char *ih;
+        char *key;
+        int kcap, rc;
         unsigned long dep;
         size_t n, k, ihcap;
         int w;
         (void)self;
 
+        *out = (char *)0;
         n = 0;
         ihcap = (size_t)self->units[u].ndep * (MAX_TEXT + 4) + 256;
         ih = (char *)malloc(ihcap);
@@ -1748,14 +1753,21 @@ impl ModuleOps for Module {
         for (k = 0; k < (size_t)self->units[u].ndep; k++)
             dep = dep * (unsigned long)1099511628211
                 + self->units[self->units[u].depu[k]].digest;
-        if (self->cache->key(self->units[u].path, ih, dep, self->line_force,
-                             self->diag_json, self->runtime_checks,
-                             self->nsroot, out, cap) != 0) {
+        key = (char *)0;
+        kcap = 0;
+        rc = self->cache->key(self->units[u].path, ih, dep, self->line_force,
+                              self->diag_json, self->runtime_checks,
+                              self->nsroot, &key, &kcap);
+        if (rc != 0) {
             free(ih);
-            return -1;
+            free(key);
+            if (rc == -2) return self->fail("out of memory");
+            if (rc == -3) return self->fail("cache key exceeds 65536 bytes");
+            return -1;               /* no key (the path could not be stamped) */
         }
         /* the unit's own digest is what its dependants fold next */
-        self->units[u].digest = self->cache->digest(out);
+        self->units[u].digest = self->cache->digest(key);
+        *out = key;
         free(ih);
         return 0;
     }
@@ -2673,16 +2685,17 @@ impl ModuleOps for Module {
             }
         for (o = 0; o < cn; o++) {
             char outc[MAX_PATH];
-            char key[MAX_KEY];
+            char *key;
             int k;
             u = corder[o];
             dirty[u] = 1;
             /* A map unit writes nothing, but its digest is folded by every
                consumer, so the key is computed and it is never a cache hit. */
             if (self->units[u].is_map) {
-                if (self->cache_key_of(u, key, sizeof key) != 0)
+                if (self->cache_key_of(u, &key) != 0)
                     return frontend::parse::ct_parse_report();
                 dirty[u] = 0;
+                free(key);
                 continue;
             }
             if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
@@ -2690,9 +2703,11 @@ impl ModuleOps for Module {
                 fprintf(stderr, "ctc: output path is too long\n");
                 return 1;
             }
-            if (!self->have_map && self->cache_key_of(u, key, sizeof key) == 0
+            key = (char *)0;
+            if (!self->have_map && self->cache_key_of(u, &key) == 0
                 && self->cache->hit(outc, key, self->units[u].is_hdr))
                 dirty[u] = 0;
+            free(key);
             for (k = 0; k < self->units[u].ndep; k++)
                 if (dirty[self->units[u].depu[k]]) dirty[u] = 1;
             /* Phase 29: the built-in layer's `.h` carries one definition per
@@ -2712,7 +2727,7 @@ impl ModuleOps for Module {
         if (ct_shim_ambiguity(self, self->units, self->nunits)) return 1;
         for (o = 0; o < cn; o++) {
             char outc[MAX_PATH];
-            char key[MAX_KEY];
+            char *key;
             u = corder[o];
             if (self->units[u].is_map) continue;
             if (!dirty[u]) continue;
@@ -2734,10 +2749,12 @@ impl ModuleOps for Module {
             }
             /* stamped only after a successful emit: a failed unit must never be
                reused, and a stale key must never vouch for new sources */
+            key = (char *)0;
             if (snprintf(outc, sizeof outc, "%s/%s.c", self->outdir, self->units[u].base)
                     < (int)sizeof outc
-                && self->cache_key_of(u, key, sizeof key) == 0)
+                && self->cache_key_of(u, &key) == 0)
                 self->cache->store(outc, key);
+            free(key);
         }
         {
             /* SH-79: the model/map describe the entry unit, not whatever unit

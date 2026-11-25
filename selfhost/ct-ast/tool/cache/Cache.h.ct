@@ -12,19 +12,22 @@
  * key material as strings and numbers, so this unit never imports upward.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_PATH 1024
 #define MAX_KEY  768
+/* S1a-0 C2b: the key grows on demand from MAX_KEY to the formal text bound. */
+#define MAX_KEY_MAX 65536
 
 namespace tool::cache;
 pub trait CacheOps {
     unsigned long digest(const char *s);
     int  key(const char *path, const char *imports, unsigned long dep,
              int line_force, int diag_json, int runtime_checks,
-             const char *nsroot, char *out, int cap);
+             const char *nsroot, char **out, int *ocap);
     int  paths(const char *outc, char *dir, int dcap, char *kf, int kcap);
     int  hit(const char *outc, const char *key, int need_h);
     void store(const char *outc, const char *key);
@@ -62,29 +65,52 @@ impl CacheOps for Cache {
        for byte. */
     int key(const char *path, const char *imports, unsigned long dep,
             int line_force, int diag_json, int runtime_checks,
-            const char *nsroot, char *out, int cap)
+            const char *nsroot, char **out, int *ocap)
     {
         char stamp[64];
         struct stat st;
-        int w;
+        int w, cap, ncap;
+        char *buf, *grown;
         (void)self;
 
+        /* S1a-0 C2b: the key is owned by this function and handed back whole.
+           It starts at the old 768 and doubles until it fits, the way the
+           table caps do; the formal cap is the resource guard. -2 is OOM and
+           -3 is "over the formal text bound", so the caller can name the
+           cause instead of silently skipping the cache. */
+        *out = (char *)0;
+        *ocap = 0;
         if (stat(path, &st) != 0) return -1;
         snprintf(stamp, sizeof stamp, "%lu.%lu",
                  (unsigned long)st.st_mtime, (unsigned long)st.st_size);
-        /* runtime_checks=0 must keep the L2 spelling byte for byte; only the
-           new option adds a component, so a default build stays comparable. */
-        if (runtime_checks)
-            w = snprintf(out, (size_t)cap,
-                         "ctc %s L%d D%d R%d N%s P%s S%s I%lu K%lu",
-                         self->version, line_force, diag_json, runtime_checks, nsroot,
-                         path, stamp, self->digest(imports), dep);
-        else
-            w = snprintf(out, (size_t)cap,
-                         "ctc %s L%d D%d N%s P%s S%s I%lu K%lu",
-                         self->version, line_force, diag_json, nsroot,
-                         path, stamp, self->digest(imports), dep);
-        if (w < 0 || w >= cap) return -1;
+        cap = MAX_KEY;
+        buf = (char *)malloc((size_t)cap);
+        if (!buf) return -2;
+        for (;;) {
+            /* runtime_checks=0 must keep the L2 spelling byte for byte; only the
+               new option adds a component, so a default build stays comparable. */
+            if (runtime_checks)
+                w = snprintf(buf, (size_t)cap,
+                             "ctc %s L%d D%d R%d N%s P%s S%s I%lu K%lu",
+                             self->version, line_force, diag_json, runtime_checks, nsroot,
+                             path, stamp, self->digest(imports), dep);
+            else
+                w = snprintf(buf, (size_t)cap,
+                             "ctc %s L%d D%d N%s P%s S%s I%lu K%lu",
+                             self->version, line_force, diag_json, nsroot,
+                             path, stamp, self->digest(imports), dep);
+            if (w < 0) { free(buf); return -1; }
+            if (w < cap) break;
+            if (cap >= MAX_KEY_MAX) { free(buf); return -3; }
+            ncap = cap * 2;
+            if (ncap > MAX_KEY_MAX) ncap = MAX_KEY_MAX;
+            grown = (char *)realloc(buf, (size_t)ncap);
+            if (!grown) { free(buf); return -2; }
+            buf = grown;
+            cap = ncap;
+        }
+        *out = buf;
+        *ocap = cap;
         return 0;
     }
 
@@ -115,18 +141,21 @@ impl CacheOps for Cache {
         char dir[MAX_PATH];
         char kf[MAX_PATH];
         char hp[MAX_PATH];
-        char buf[MAX_KEY];
+        char *buf;
         FILE *f;
         size_t n, kl, hl;
         (void)self;
 
         if (self->paths(outc, dir, sizeof dir, kf, sizeof kf) != 0) return 0;
-        f = fopen(kf, "r");
-        if (!f) return 0;
-        n = fread(buf, 1, sizeof buf, f);
-        fclose(f);
         kl = strlen(key);
-        if (n != kl || memcmp(buf, key, kl) != 0) return 0;
+        buf = (char *)malloc(kl + 1);
+        if (!buf) return 0;
+        f = fopen(kf, "r");
+        if (!f) { free(buf); return 0; }
+        n = fread(buf, 1, kl + 1, f);
+        fclose(f);
+        if (n != kl || memcmp(buf, key, kl) != 0) { free(buf); return 0; }
+        free(buf);
         if (need_h) {
             if (snprintf(hp, sizeof hp, "%s", outc) >= (int)sizeof hp) return 0;
             hl = strlen(hp);

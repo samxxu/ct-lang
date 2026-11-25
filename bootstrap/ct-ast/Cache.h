@@ -6,6 +6,7 @@
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -84,7 +85,7 @@ struct tool_pkg_Sha256;
 struct tool_driver_Driver;
 struct tool_cache_CacheOps_vtbl {
     unsigned long (*digest)(void *, const char *);
-    int (*key)(void *, const char *, const char *, unsigned long, int, int, int, const char *, char *, int);
+    int (*key)(void *, const char *, const char *, unsigned long, int, int, int, const char *, char * *, int *);
     int (*paths)(void *, const char *, char *, int, char *, int);
     int (*hit)(void *, const char *, const char *, int);
     void (*store)(void *, const char *, const char *);

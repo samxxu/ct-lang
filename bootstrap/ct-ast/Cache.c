@@ -4,10 +4,12 @@
 
 #line 1 "selfhost/ct-ast/tool/cache/Cache.h.ct"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #define MAX_PATH 1024
 #define MAX_KEY  768
+#define MAX_KEY_MAX 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -101,25 +103,59 @@ static unsigned long tool_cache_Cache_tool_cache_CacheOps_digest(void *self, con
     return h;
 }
 
-static int tool_cache_Cache_tool_cache_CacheOps_key(void *self, const char * path, const char * imports, unsigned long dep, int line_force, int diag_json, int runtime_checks, const char * nsroot, char * out, int cap) {
+static int tool_cache_Cache_tool_cache_CacheOps_key(void *self, const char * path, const char * imports, unsigned long dep, int line_force, int diag_json, int runtime_checks, const char * nsroot, char * * out, int * ocap) {
     struct tool_cache_Cache *_self = (struct tool_cache_Cache *)self;
     char stamp[64];
     struct stat st;
     int w;
+    int cap;
+    int ncap;
+    char * buf;
+    char * grown;
     (void)(_self);
+    (*out) = (char *)(0);
+    (*ocap) = 0;
     if (stat(path, (&st)) != 0) {
         return (-1);
     }
     snprintf(stamp, sizeof(stamp), "%lu.%lu", (unsigned long)(st.st_mtime), (unsigned long)(st.st_size));
-    if (runtime_checks) {
-        w = snprintf(out, (size_t)(cap), "ctc %s L%d D%d R%d N%s P%s S%s I%lu K%lu", _self->version, line_force, diag_json, runtime_checks, nsroot, path, stamp, _self->__tool_cache_cacheops_vptr->digest(_self, imports), dep);
+    cap = MAX_KEY;
+    buf = (char *)(malloc((size_t)(cap)));
+    if ((!buf)) {
+        return (-2);
     }
-    else {
-        w = snprintf(out, (size_t)(cap), "ctc %s L%d D%d N%s P%s S%s I%lu K%lu", _self->version, line_force, diag_json, nsroot, path, stamp, _self->__tool_cache_cacheops_vptr->digest(_self, imports), dep);
+    for (; ; ) {
+        if (runtime_checks) {
+            w = snprintf(buf, (size_t)(cap), "ctc %s L%d D%d R%d N%s P%s S%s I%lu K%lu", _self->version, line_force, diag_json, runtime_checks, nsroot, path, stamp, _self->__tool_cache_cacheops_vptr->digest(_self, imports), dep);
+        }
+        else {
+            w = snprintf(buf, (size_t)(cap), "ctc %s L%d D%d N%s P%s S%s I%lu K%lu", _self->version, line_force, diag_json, nsroot, path, stamp, _self->__tool_cache_cacheops_vptr->digest(_self, imports), dep);
+        }
+        if (w < 0) {
+            free(buf);
+            return (-1);
+        }
+        if (w < cap) {
+            break;
+        }
+        if (cap >= MAX_KEY_MAX) {
+            free(buf);
+            return (-3);
+        }
+        ncap = (cap * 2);
+        if (ncap > MAX_KEY_MAX) {
+            ncap = MAX_KEY_MAX;
+        }
+        grown = (char *)(realloc(buf, (size_t)(ncap)));
+        if ((!grown)) {
+            free(buf);
+            return (-2);
+        }
+        buf = grown;
+        cap = ncap;
     }
-    if (((w < 0) || (w >= cap))) {
-        return (-1);
-    }
+    (*out) = buf;
+    (*ocap) = cap;
     return 0;
 }
 
@@ -152,7 +188,7 @@ static int tool_cache_Cache_tool_cache_CacheOps_hit(void *self, const char * out
     char dir[MAX_PATH];
     char kf[MAX_PATH];
     char hp[MAX_PATH];
-    char buf[MAX_KEY];
+    char * buf;
     FILE * f;
     size_t n;
     size_t kl;
@@ -161,16 +197,23 @@ static int tool_cache_Cache_tool_cache_CacheOps_hit(void *self, const char * out
     if (_self->__tool_cache_cacheops_vptr->paths(_self, outc, dir, sizeof(dir), kf, sizeof(kf)) != 0) {
         return 0;
     }
+    kl = strlen(key);
+    buf = (char *)(malloc((kl + 1)));
+    if ((!buf)) {
+        return 0;
+    }
     f = fopen(kf, "r");
     if ((!f)) {
+        free(buf);
         return 0;
     }
-    n = fread(buf, 1, sizeof(buf), f);
+    n = fread(buf, 1, (kl + 1), f);
     fclose(f);
-    kl = strlen(key);
     if (((n != kl) || (memcmp(buf, key, kl) != 0))) {
+        free(buf);
         return 0;
     }
+    free(buf);
     if (need_h) {
         if (snprintf(hp, sizeof(hp), "%s", outc) >= (int)(sizeof(hp))) {
             return 0;

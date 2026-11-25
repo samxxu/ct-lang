@@ -130,7 +130,7 @@ struct frontend_module_ModuleOps_vtbl {
     int (*module_src_wants_Box)(void *, const char *);
     int (*module_inputs_want_Box)(void *, const char * *, int);
     int (*cache_order)(void *, int, int *, int *, int *);
-    int (*cache_key_of)(void *, int, char *, int);
+    int (*cache_key_of)(void *, int, char * *);
     int (*lib_scan)(void *, int);
     int (*build_main)(void *, int, char * *);
     int (*emit_program)(void *, int);
