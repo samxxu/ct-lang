@@ -66,7 +66,7 @@ rc=0
 
 | # | 缺口 | 实测 | 锚点 |
 | --- | --- | --- | --- |
-| G1 | **参数类型不参与匹配**：只有 `char *get(char *)` 时 `x[0]` 也命中，展开成 `get(0)`，静默返回空 | `printf("[%s]\n", j[0])` → `J_get(&j, 0)`，rc=0，运行输出 `[none]` | 协议匹配 [Expr.h.ct:6269-6320](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L6269-L6320)；D52-2 / D52-6 |
+| G1 | **参数类型不参与匹配**：只有 `char *get(char *)` 时 `x[0]` 也命中，展开成 `get(0)`，静默返回空 | `printf("[%s]\n", j[0])` → `J_get(&j, 0)`，rc=0，运行输出 `[none]` | 协议匹配 [Expr.h.ct:6269-6320](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3073-L3124)；D52-2 / D52-6 |
 | G2 | **复合赋值 / 自增 / 取址一律拒绝**，借用形态本是合法写法却也被拦 | `b[0] += 2;` → rc=1，`a custom subscript supports only '='; use set(k, v)` | [Expr.h.ct:2994-3011](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2994-L3011)、[:4032-4050](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4032-L4050) |
 | G3 | **下标结果不能取成员**：`q[0].x` 原样发射 `Q_get(&q,0).x`，ct-ast rc=0、`cc` 才报错 | `cc`：`member reference type 'struct P *' is a pointer; did you mean to use '->'?` | [Expr.h.ct:4230-4286](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4230-L4286) |
 | G4 | **无缺失/越界语义**：协议层零规定，包各写各的（`NULL` / 哨兵 / `Option`） | ct-json 只能提供 `get_idx(i)` 过渡方法 | §2 议题 C |
@@ -125,7 +125,7 @@ ct-json 需要 `doc[0]` 与 `doc["k"]` 并存。方案 A 下同类型只能有�
 | 交互面 | 裁定 |
 | --- | --- |
 | `into` 块 | `x into { … }` 内的 `$` 是接收者别名；**`$[k]` 不在本条范围**（`$` 的静态类型判定与 `into` 的物化语义耦合，另案）。块外的 `x[k]` 不受影响。 |
-| 泛型 | 沿用 v0-PH-52 的实例还原：`Box<int>` 的下标按 `Box_int_get` 展开，诊断里的类型名用 `ct_inst_find` 还原成 `Box<int>`（[Expr.h.ct:6245-6263](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L6245-L6263)）。参数类型匹配在**实例化后的签名**上做。 |
+| 泛型 | 沿用 v0-PH-52 的实例还原：`Box<int>` 的下标按 `Box_int_get` 展开，诊断里的类型名用 `ct_inst_find` 还原成 `Box<int>`（[Expr.h.ct:6245-6263](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3049-L3067)）。参数类型匹配在**实例化后的签名**上做。 |
 | `impl` 签名 | 只有固有 `impl X { … }` 参与；`impl Trait for X` 里的同名方法不参与（今天已如此，`inst_inherent_method` 保证）。固有 impl 与 trait impl 同名时，`x[k]` 永远选固有那个。 |
 | 跨单元 | `get` / `set` 私有（无 `pub`）→ 消费单元不可见 → 沿用 L52-10 的硬错文案，不放宽。 |
 
@@ -205,12 +205,12 @@ ct-json 需要 `doc[0]` 与 `doc["k"]` 并存。方案 A 下同类型只能有�
 | --- | --- | --- | --- |
 | Lexer | [Lexer.h.ct](../../selfhost/ct-ast/frontend/lex/Lexer.h.ct) | **零改动** | `[` / `]` 已是单字符 punct |
 | Parser 后缀 | [Expr.h.ct:4178-4286](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4178-L4286) | 已有 `[` 后缀与自定义下标分支（4230-4286）；把 4235 的判据从「是 struct 值」扩到「struct 值 + 能匹配到签名」 | 不改 `Vec_` / `Map_` 分支（4188-4229） |
-| 协议匹配 | [Expr.h.ct:6269-6320](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L6269-L6320) `custom_index_method` | 增加「实参静态类型 → 候选签名」筛选与候选清单文案 | 现签名 `(bty, name, want, line, col, writable)` 需要多一个实参类型入参 |
+| 协议匹配 | [Expr.h.ct:6269-6320](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3073-L3124) `custom_index_method` | 增加「实参静态类型 → 候选签名」筛选与候选清单文案 | 现签名 `(bty, name, want, line, col, writable)` 需要多一个实参类型入参 |
 | 写形态守卫 | [Expr.h.ct:2994-3011](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2994-L3011) | 借用形态的 `*x[k] = v` 不被这条守卫误拦 | 守卫按 `container_subscript_kind(left) == 3` 判定 |
 | 写/取址守卫 | [Expr.h.ct:4008-4050](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L4008-L4050) | `+=` / `++` / `&x[k]` 的文案统一（D-IX-7） | 文案冻结后逐字断言 |
 | 类型推导 | [Expr.h.ct:3762](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3762) `static_ctype` | 若下标结果要参与外层匹配，需要 `N_MCALL` 返回类型 | 先核对现状，避免扩大面 |
 | 发射 | [Emitter.h.ct:5261-5293](../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5261-L5293)（`aux == 9`） | 一般无需改动；借用写形态要确认 `(*X_get(...)) = v` 的括号路径 | 现有 `b3.ct` 已产出该形状 |
-| 泛型实例名 | [Expr.h.ct:6245-6263](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L6245-L6263) | 复用 `ct_inst_find` 还原 | 不新增逻辑 |
+| 泛型实例名 | [Expr.h.ct:6245-6263](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3049-L3067) | 复用 `ct_inst_find` 还原 | 不新增逻辑 |
 | 规范 | [language-spec.md](../language-spec.md) 自定义下标一节 | 补 D-IX-1…7 的口径（缺失语义、借用形态、匹配规则、拒绝清单） | 见 §6 T-4 |
 
 **不做**：`frontend/type/TypeCheck.h.ct` 的 `maybe_box` 路径不动（接口装箱与下标无关）。

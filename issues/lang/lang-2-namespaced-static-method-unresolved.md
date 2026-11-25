@@ -88,6 +88,6 @@ if (self->sym->find_struct(sres2) < 0
 
 名字解析，不是可见性：struct 在符号表里登记为 `lib_Box`（`ns_decl_name` 前缀，`Symbols.h.ct:1171-1178`；
 `Parser.h.ct:2158-2170` 的 `add_struct(qname)`），而静态调用识别在
-[Expr.h.ct:5239](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L5239) 用**裸 token** `Box` 查 `find_struct`，
-未命中后落到「接收者当变量」的路径，最终在 [Expr.h.ct:5854](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L5854)
+[Expr.h.ct:5239](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2043) 用**裸 token** `Box` 查 `find_struct`，
+未命中后落到「接收者当变量」的路径，最终在 [Expr.h.ct:5854](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2658)
 报 `use of an undeclared variable`。

@@ -211,7 +211,7 @@ L:
 ```
 
 `goto` 跳过第一条赋值后，`L` 处仍释放未初始化的 `h.tag`。现有硬错只覆盖「local owning `String`」
-（[Stmt.h.ct:3934-3936](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L3934-L3936)），不覆盖字段。
+（[Stmt.h.ct:3934-3936](../../selfhost/ct-ast/frontend/parse/StmtLoop.h.ct#L511-L513)），不覆盖字段。
 
 ### E1-5 原型：汇合丢弃标记（15+/5−，1 文件）→ R6a 转绿
 
@@ -339,7 +339,7 @@ exit=0
 | owner 化字段键 | +10/−5（估） | `sb_field_find` 增加 owner 比较；`sb_field_mark` / `sb_field_known` 同步 |
 | 基址重绑 / 整结构体赋值清除 | +15（估） | 新增 `sb_field_forget(base)`；在 `sb_var` 赋值路径调用 |
 | 箭头基址关闭 / 取址降级 | +10（估） | `N_ARROW` 不进 `release_old`；`&h` 逃逸时降级不跟踪（或硬错，二选一） |
-| `goto` 硬错扩展 | +15（估） | `Stmt.h.ct` 加一个 `f_field_local` 标记 + `func_end` 条件（[Stmt.h.ct:4368-4374](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L4368-L4374) 处增判） |
+| `goto` 硬错扩展 | +15（估） | `Stmt.h.ct` 加一个 `f_field_local` 标记 + `func_end` 条件（[Stmt.h.ct:4368-4374](../../selfhost/ct-ast/frontend/parse/StmtSwitch.h.ct#L474-L480) 处增判） |
 | 夹具 | 5–7 文件，+120（估） | `test/ast/p80_retain/{field_branch,field_loop,field_loop_known,field_switch,field_shadow,field_ptr}.ct` + `expected.*.out` + 脚本行 |
 | 文档 / 台账 | 5 文件，+60/−10（估） | 卡 §7.9 / §7.9.1、`language-spec.md`、新 issue、新 decision、D-013 注记 |
 | **合计** | **约 12 文件，+245/−20；1 个 DEV 轮次（S）** | 不改 ABI、不改 `refs` 布局、不 bump MINOR、不打 tag |

@@ -55,9 +55,9 @@ $ echo rc=$?    # 1
 
 ### E2 只记「已解析的自由函数调用表达式」
 
-[Expr.h.ct:5732](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L5732) 是唯一的记录点：
+[Expr.h.ct:5732](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2536) 是唯一的记录点：
 在 `N_CALL` 后缀解析里，只有 `find_func(...) >= 0` 且 `cur_func` 非空时才 `record_call`。
-上限检查在 [Expr.h.ct:6227](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L6227)。
+上限检查在 [Expr.h.ct:6227](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3031)。
 
 证据（同一份 1100 次调用，改走函数指针即可通过）：
 

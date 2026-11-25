@@ -13,7 +13,7 @@
 
 类型在固有 `impl` 里只声明了**参数类型与下标实参类型不一致**的 `get`（典型是 `char *get(char *)`），
 同时源码里写下标。v0-PH-52 的协议匹配只看「方法名 + 参数个数 + 非 `static`」
-（[Expr.h.ct:6269-6320](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L6269-L6320)），于是 `x[0]` 被展开成
+（[Expr.h.ct:6269-6320](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L3073-L3124)），于是 `x[0]` 被展开成
 `X_get(&x, 0)`——把一个整数当指针传入。
 
 ## 最小复现

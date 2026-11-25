@@ -328,8 +328,8 @@ retain + 释放旧字段**；不能静默浅拷贝后让字段释放。原型未
 
 ### E1-7 原型自曝的洞 2：`goto` 跳过结构化局部的零初始化
 
-现有 `goto` 硬错只覆盖「local owning `String`」（[Stmt.h.ct:3931-3936](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L3931-L3936)、
-[:4368-4374](../../selfhost/ct-ast/frontend/parse/Stmt.h.ct#L4368-L4374)），不覆盖「含 owning 字段的
+现有 `goto` 硬错只覆盖「local owning `String`」（[Stmt.h.ct:3931-3936](../../selfhost/ct-ast/frontend/parse/StmtLoop.h.ct#L508-L513)、
+[:4368-4374](../../selfhost/ct-ast/frontend/parse/StmtSwitch.h.ct#L474-L480)），不覆盖「含 owning 字段的
 结构体局部」。原型把裸 `Holder h;` 改成 `= { 0 }` 后，`goto` 跳过这条初始化就会让字段处于未定义：
 
 ```console

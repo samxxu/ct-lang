@@ -46,8 +46,8 @@ error: static method 'make' of type 'Box' cannot be resolved; namespace-qualifie
 
 ## 定位
 
-通用兜底在 [Expr.h.ct:5854](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L5854)；
-静态调用识别在 [Expr.h.ct:5239](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L5239)。
+通用兜底在 [Expr.h.ct:5854](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2658)；
+静态调用识别在 [Expr.h.ct:5239](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2043)。
 
 ## 说明
 

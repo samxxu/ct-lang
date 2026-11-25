@@ -54,7 +54,7 @@ rc=1
 
 - 上限：[Expr.h.ct:55](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L55)；
 - 存储：[Parser.h.ct:3759](../../selfhost/ct-ast/frontend/parse/Parser.h.ct#L3759) 的 `static struct Call g_calls[1024]`；
-- 计数点：[Expr.h.ct:5732](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L5732)；上限检查：`:6227`；
+- 计数点：[Expr.h.ct:5732](../../selfhost/ct-ast/frontend/parse/Expr.h.ct#L2536)；上限检查：`:6227`；
 - 归零只在整次 build（`Module.h.ct:1503`）与单文件编译（`Driver.h.ct:438`）。
 
 ## 诊断判据（2026-11-15 补）
