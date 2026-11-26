@@ -1463,6 +1463,50 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
             m->exprs[eid - 1].num = ar->nodes[n].num;
             m->exprs[eid - 1].aux = ar->nodes[n].aux;
             break;
+        case N_CLOSURE: {
+            /* The environment initialiser: the capture names in order, or `0`
+               for a capturing-free literal. A nested literal (inside another
+               trampoline) reads the outer environment, but those bodies are
+               generated C, so the LIR only ever prints a top-level literal. */
+            struct Closure *cl;
+            struct Symbols *csym = tb_sym();
+            int ci = (int)ar->nodes[n].num;
+            char buf[2048];
+            int bn = 0, q;
+            if (ci >= 0 && ci < csym->nclosure) {
+                cl = &csym->closures[ci];
+                if (cl->ncap == 0) {
+                    buf[bn++] = '0';
+                } else {
+                    for (q = 0; q < cl->ncap && q < 16; q++) {
+                        const char *cn = cl->cap_name[q];
+                        if (q > 0) { buf[bn++] = ','; buf[bn++] = ' '; }
+                        if (cn && strcmp(cn, "self") == 0) {
+                            if (bn < (int)sizeof(buf) - 6) {
+                                memcpy(buf + bn, "_self", 5);
+                                bn += 5;
+                            }
+                        } else if (cn) {
+                            int cl2 = (int)strlen(cn);
+                            if (bn + cl2 < (int)sizeof(buf)) {
+                                memcpy(buf + bn, cn, (size_t)cl2);
+                                bn += cl2;
+                            }
+                        }
+                    }
+                }
+            }
+            buf[bn] = 0;
+            m->exprs[eid - 1].num = ci;
+            m->exprs[eid - 1].aux = ar->nodes[n].aux;
+            m->exprs[eid - 1].text = runtime::text::ct_intern(buf);
+            break;
+        }
+        case N_TRY:
+            /* the parser stamped the operand's Result spelling */
+            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            m->exprs[eid - 1].num = n;
+            break;
         case N_OPT:
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
             m->exprs[eid - 1].aux = ar->nodes[n].aux;

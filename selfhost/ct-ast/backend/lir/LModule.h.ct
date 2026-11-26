@@ -82,6 +82,10 @@ namespace backend::lir;
 #define LE_COMPOUND        35
 #define LE_SLICE           36
 #define LE_OPT             37
+#define LE_TRY             38
+#define LE_CLOSURE_ARG     39
+#define LE_CLOSURE_PAIR    40
+#define LE_CLOSURE_CALL    41
 
 /* Binary / unary / assignment operator codes: the AST's, copied so the
    printing tables stay one table (Arena.h.ct is authoritative). */
@@ -133,6 +137,7 @@ namespace backend::lir;
 #define LS_LOOP            19
 #define LS_FOREACH         20
 #define LS_TEMPDECL        21
+#define LS_CLOSURE_DECL    22
 
 /* Jump kinds. */
 #define LJ_BREAK            1
@@ -164,6 +169,7 @@ namespace backend::lir;
 #define LTK_RET             4
 #define LTK_SRET            5
 #define LTK_NEW             6
+#define LTK_Q               7
 
 /* RawC origins (contract §4.1). */
 #define LR_INCLUDE          1
@@ -215,6 +221,7 @@ pub struct ct_lexpr {
     int kcap;
     const char *text;   /* literal spelling / name / field / callee / cast type */
     const char *member; /* second spelling: offsetof member, raw origin */
+    const char *extra;  /* third spelling: `?` value / error field types */
     long num;           /* integer literal value */
     int op;             /* operator code */
     struct ct_lspan span;
@@ -427,6 +434,7 @@ pub int lmod_add_decl(struct LModule *self, int func);
 pub void lmod_report(struct LModule *self, const char *unit);
 pub void lmod_report_printed(struct LModule *self);
 pub const char *lmod_temp_name(struct LModule *self, int temp, int delta);
+pub int lmod_temp_num(struct LModule *self, int temp, int delta);
 
 /* ------------------------------------------------------------------------- */
 /* Tables                                                                    */
@@ -700,6 +708,7 @@ static const char *lir_tmp_prefix(int kind)
         case LTK_RET: return "__ct_ret";
         case LTK_SRET: return "__ct_sret";
         case LTK_NEW: return "__ct_new";
+        case LTK_Q: return "__ct_q";
         default: return "__ct_tmp";
     }
 }
@@ -743,6 +752,12 @@ pub const char *lmod_temp_name(struct LModule *self, int temp, int delta)
     snprintf(buf, sizeof(buf), "%s%d", lir_tmp_prefix(t->kind),
              t->num + delta);
     return buf;
+}
+
+pub int lmod_temp_num(struct LModule *self, int temp, int delta)
+{
+    if (temp <= 0 || temp > self->ntemps) return 0;
+    return self->temps[temp - 1].num + delta;
 }
 
 pub int lmod_new_rawc(struct LModule *self, int origin, int trusted, const char *text)

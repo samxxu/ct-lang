@@ -571,6 +571,7 @@ static int lver_tmp_prefix_ok(const char *nm)
     else if (strncmp(p, "ret", 3) == 0) p += 3;
     else if (strncmp(p, "sret", 4) == 0) p += 4;
     else if (strncmp(p, "new", 3) == 0) p += 3;
+    else if (*p == 'q') p += 1;
     else return 0;
     if (!*p) return 0;
     while (*p) {
