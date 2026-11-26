@@ -493,11 +493,16 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
         fi = (-1);
         if (((s0 < e0) && (t[s0] == '.'))) {
             int ne = (s0 + 1);
-            char nm[MAX_TEXT];
+            int nl;
+            const char * fname;
             while (((ne < e0) && (((((t[ne] >= 'A') && (t[ne] <= 'Z')) || ((t[ne] >= 'a') && (t[ne] <= 'z'))) || ((t[ne] >= '0') && (t[ne] <= '9'))) || (t[ne] == '_')))) {
                 ne++;
             }
-            snprintf(nm, sizeof(nm), "%.*s", (ne - (s0 + 1)), ((t + s0) + 1));
+            nl = (ne - (s0 + 1));
+            fname = runtime_text_ct_intern_len(((t + s0) + 1), nl);
+            if ((!fname)) {
+                return (-1);
+            }
             while (((ne < e0) && ((t[ne] == ' ') || (t[ne] == '\t')))) {
                 ne++;
             }
@@ -505,7 +510,7 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
                 return 0;
             }
             for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-                if (strcmp(self->sym->structs[si].fields[fi].name, nm) == 0) {
+                if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0) {
                     break;
                 }
             }

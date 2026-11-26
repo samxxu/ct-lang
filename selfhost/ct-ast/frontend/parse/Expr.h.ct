@@ -1409,7 +1409,7 @@ impl ExprOps for Expr {
     /* L30-5: `.name` on a CT struct receiver must name a field. An opaque C
        host has no member table; a misspelling there surfaces from `cc` on the
        generated line (R7), so only a defined CT struct is checked. */
-    int into_member_check(int base, char *fname, int line, int col)
+    int into_member_check(int base, const char *fname, int line, int col)
     {
         int owner, si, fi, tlen;
         char st[MAX_TEXT];
@@ -1865,10 +1865,10 @@ impl ExprOps for Expr {
     int parse_postfix(void)
     {
         int n, m, idx, args, mline, mcol;
-        char fname[MAX_TEXT];
+        const char *fname;
         const char *rtype;
         const char *ibase;
-        char trname[MAX_TEXT];
+        const char *trname;
         const char *trtext;
         (void)self;
 
@@ -2286,7 +2286,12 @@ impl ExprOps for Expr {
                 }
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a field or method name");
-                self->lex->tok_copy(fname, sizeof fname);
+                /* S1a-0 C2p-7: the member name is a pool text, so a 2000-byte
+                   field name reaches the symbol lookup and the emitted
+                   access whole (the old `tok_copy` into a 160-byte row cut it). */
+                fname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+                if (!fname) return self->sup->fail("out of memory");
                 mline = self->lex->tokline;
                 mcol = self->lex->tokstart - self->lex->lstart + 1;
                 self->sup->lex_next();
@@ -2454,12 +2459,11 @@ impl ExprOps for Expr {
                                it behind `void *self`). Require the arrow
                                spelling; the `->` path itself is unchanged. */
                             if (!arrow && piface) {
-                                char pmsg[MAX_TEXT];
-                                snprintf(pmsg, sizeof pmsg,
-                                    "'.' cannot call method '%s' through a pointer receiver; use '->%s()'",
-                                    fname, fname);
-                                return tool::diag::ct_sem_error(mline, mcol, pmsg,
-                                                                self->sup->mem->path);
+                                return tool::diag::ct_sem_error(mline, mcol,
+                                    tool::sh::ct_scratch_fmt(
+                                        "'.' cannot call method '%s' through a pointer receiver; use '->%s()'",
+                                        fname, fname),
+                                    self->sup->mem->path);
                             }
                             /* Phase 31 S23b (L31-22): the loop reads the very
                                container the body would mutate. */
@@ -2626,7 +2630,7 @@ impl ExprOps for Expr {
                             }
                             self->arena->nodes[m].aux = arrow ? 10 : 9;
                             self->arena->nodes[m].text = ibase;
-                        } else if (self->sup->is_iface_type(ibase, trname, sizeof trname)) {
+                        } else if (self->sup->is_iface_type_text(ibase, &trname)) {
                             int t = self->sym->find_trait(trname);
                             int mi, ok = 0;
                             if (t >= 0) {
@@ -2635,7 +2639,7 @@ impl ExprOps for Expr {
                             }
                             if (ok) {
                                 self->arena->nodes[m].aux = piface ? 4 : 3;
-                                self->arena->nodes[m].text = runtime::text::ct_intern(trname);
+                                self->arena->nodes[m].text = trname;
                                 if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                             }
                         } else if ((trtext = self->sym->method_trait_text(rtype, fname)) != 0) {
@@ -2645,12 +2649,11 @@ impl ExprOps for Expr {
                                ('.vt' dispatch) was handled above and keeps its
                                dot spelling. */
                             if (!arrow && piface) {
-                                char pmsg[MAX_TEXT];
-                                snprintf(pmsg, sizeof pmsg,
-                                    "'.' cannot call method '%s' through a pointer receiver; use '->%s()'",
-                                    fname, fname);
-                                return tool::diag::ct_sem_error(mline, mcol, pmsg,
-                                                                self->sup->mem->path);
+                                return tool::diag::ct_sem_error(mline, mcol,
+                                    tool::sh::ct_scratch_fmt(
+                                        "'.' cannot call method '%s' through a pointer receiver; use '->%s()'",
+                                        fname, fname),
+                                    self->sup->mem->path);
                             }
                             self->arena->nodes[m].text = trtext;
                             /* 19.3 (SH-46): a second trait of the same struct
@@ -2662,11 +2665,10 @@ impl ExprOps for Expr {
                                reach this check. */
                             tr2 = self->sup->method_trait_amb_text(rtype, fname, trtext);
                             if (tr2 != 0) {
-                                char amsg[MAX_TEXT];
-                                snprintf(amsg, sizeof amsg,
-                                         "declared by '%s' and '%s'; '%s' is used",
-                                         trtext, tr2, trtext);
-                                if (self->sup->amb_warn(mline, mcol, fname, amsg) != 0)
+                                if (self->sup->amb_warn(mline, mcol, fname,
+                                        tool::sh::ct_scratch_fmt(
+                                            "declared by '%s' and '%s'; '%s' is used",
+                                            trtext, tr2, trtext)) != 0)
                                     return self->sup->fail("too many warnings");
                             }
                         }
@@ -3175,7 +3177,9 @@ impl ExprOps for Expr {
                         self->sup->lex_next();  /* the `.` */
                         if (self->lex->tok != T_ID)
                             return self->sup->fail("expected a field name after '?.'");
-                        self->lex->tok_copy(fname, sizeof fname);
+                        fname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                             self->lex->tokstr.len);
+                        if (!fname) return self->sup->fail("out of memory");
                         self->sup->lex_next();
                         if (self->lex->tok == T_PUNCT
                             && self->lex->tok_is("("))

@@ -92,7 +92,7 @@ struct frontend_parse_ExprOps_vtbl {
     int (*parse_expr)(void *);
     int (*into_tail)(void *, int, int);
     int (*into_block)(void *, int, const char *, int, int);
-    int (*into_member_check)(void *, int, char *, int, int);
+    int (*into_member_check)(void *, int, const char *, int, int);
     int (*parse_bitor)(void *);
     int (*parse_bxor)(void *);
     int (*parse_bitand)(void *);

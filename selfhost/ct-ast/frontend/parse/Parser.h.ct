@@ -3181,8 +3181,8 @@ impl ParseOps for Parser {
         int adt, tn, tline, tcol, is_adt, pre_adt;
         const char *name;
         const char *qname;
-        char mname[MAX_TEXT];
-        char cname[MAX_TEXT];
+        const char *mname;
+        const char *cname;
         char nsbuf[MAX_TEXT];
         size_t nl;
         (void)self;
@@ -3423,11 +3423,14 @@ impl ParseOps for Parser {
         if (nl > 0) nsbuf[nl - 1] = 0;
         tail = -1;
         for (tn = mem_first; tn >= 0; tn = self->arena->nodes[tn].next) {
-            snprintf(mname, sizeof mname, "%s", self->arena->nodes[tn].text);
-            if (self->sup->ns_decl_name(mname, cname, sizeof cname) != 0) return -1;
+            /* S1a-0 C2p-7: the member name is the pool text the variant row
+               already holds; the old 160-byte copy cut a long enum member. */
+            mname = self->arena->nodes[tn].text;
+            cname = self->sup->ns_decl_text(mname);
+            if (!cname) return -1;
             m = self->sup->new_node(N_ENUMVAL);
             if (m < 0) return -1;
-            self->arena->nodes[m].text = runtime::text::ct_intern(cname);
+            self->arena->nodes[m].text = cname;
             if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
             self->arena->nodes[m].text2 = runtime::text::ct_intern(mname);
             if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
@@ -4117,7 +4120,7 @@ impl ParseOps for Parser {
         const char *rtrait;
         const char *rstruct;
         const char *ret;
-        char mname[MAX_TEXT];
+        const char *mname;
         const char *stype;
         int type_index;
         (void)self;
@@ -4279,7 +4282,12 @@ impl ParseOps for Parser {
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
-            self->lex->tok_copy(mname, sizeof mname);
+            /* S1a-0 C2p-7: the method name is a pool text, so a 2000-byte
+               method name matches the trait's row and reaches every emitted
+               spelling whole. */
+            mname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                 self->lex->tokstr.len);
+            if (!mname) return self->sup->fail("out of memory");
             mcol = self->lex->tokstart - self->lex->lstart + 1;
             self->sup->lex_next();
             if (self->sup->push_scope() != 0) return -1;
@@ -4481,7 +4489,7 @@ impl ParseOps for Parser {
     {
         int node, mnode, params, body, tail, mline, is_static, is_pub;
         const char *ret;
-        char mname[MAX_TEXT];
+        const char *mname;
         const char *stype;
         int type_index;
         /* LANG-29 S3 / B2: `si <= -2` encodes an enum ADT row (`-2 - adt`),
@@ -4553,7 +4561,12 @@ impl ParseOps for Parser {
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
-            self->lex->tok_copy(mname, sizeof mname);
+            /* S1a-0 C2p-7: the method name is a pool text, so a 2000-byte
+               method name matches the trait's row and reaches every emitted
+               spelling whole. */
+            mname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                 self->lex->tokstr.len);
+            if (!mname) return self->sup->fail("out of memory");
             self->sup->lex_next();
             if (self->sup->push_scope() != 0) return -1;
             if (!is_static && self->sup->declare_var("self", stype) != 0) {
@@ -4653,7 +4666,7 @@ impl ParseOps for Parser {
         char use[MAX_TEXT];
         char ruse[MAX_TEXT];
         const char *ret;
-        char mname[MAX_TEXT];
+        const char *mname;
         char htype[MAX_TEXT];
         int nt, nargs, line, node, tail, mnode, params, body, ti, mline, is_static, is_pub;
 
@@ -4958,7 +4971,12 @@ impl ParseOps for Parser {
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
-            self->lex->tok_copy(mname, sizeof mname);
+            /* S1a-0 C2p-7: the method name is a pool text, so a 2000-byte
+               method name matches the trait's row and reaches every emitted
+               spelling whole. */
+            mname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                 self->lex->tokstr.len);
+            if (!mname) return self->sup->fail("out of memory");
             self->sup->lex_next();
             if (self->sup->push_scope() != 0) return -1;
             if (!is_static && self->sup->declare_var("self", htype) != 0) {
