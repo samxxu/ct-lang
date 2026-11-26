@@ -1256,6 +1256,47 @@ else
     bad "c2p10_types: ct check --types rejected the 2000-byte Result: $(head -2 "$work/c2p10_types.log" | tr '\n' ' ')"
 fi
 
+
+# ---- C2p-10.6) a slice initialised from a 2000-byte-named array ---------
+# The slice initializer spells the array's C name into its `{ptr,len}` compound
+# literal through a 160-byte row, so the emitted name was cut and the host cc
+# rejected the undeclared identifier.
+cat >"$work/c2p10_slice.ct" <<CT
+int main(void)
+{
+    int $lt10 [2] = {1, 2};
+    int[] s = $lt10;
+    return s[0] - 1;
+}
+CT
+if run_product c2p10_slice "$work/c2p10_slice.ct"; then
+    if grep -qF "$lt10" "$work/c2p10_slice.c"; then
+        ok; printf '  2000-byte array name in a slice view: emitted whole\n'
+    else
+        bad "the generated C cut the 2000-byte array name in the slice view"
+    fi
+fi
+
+# ---- C2p-10.7) a duplicate 2000-byte Map key in the diagnostic ----------
+# `map_dup_key` decoded the key into a 160-byte row (and the caller formatted
+# the message into 256 bytes), so the error quoted 159 k's of a 2000-byte key.
+dk10=$(printf '%*s' 2000 '' | tr ' ' k)
+cat >"$work/c2p10_dupkey.ct" <<CT
+int main(void)
+{
+    Map<char *, int> m = { "$dk10": 1, "$dk10": 2 };
+    return 0;
+}
+CT
+"$CT" "$work/c2p10_dupkey.ct" -o "$work/c2p10_dupkey.c" >"$work/c2p10_dupkey.log" 2>&1
+if [ $? -eq 0 ]; then
+    bad "c2p10_dupkey: a duplicate Map key was accepted"
+elif grep -qF "'$dk10'" "$work/c2p10_dupkey.log"; then
+    ok; printf '  2000-byte duplicate Map key: the diagnostic quotes it whole\n'
+else
+    bad "the duplicate-key diagnostic cut the 2000-byte key"
+fi
+
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"
 
 [ "$fail" -eq 0 ]
