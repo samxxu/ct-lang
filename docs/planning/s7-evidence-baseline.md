@@ -88,6 +88,51 @@ S7 必须先裁定这一条，否则默认化会一次性把这 11 个夹具判�
 - 正例：`test/ast/<编号>_mem2_*/prog.ct` + 既有 308 夹具的跑法；
 - 每条负例只放一个判定点，避免一条夹具同时触发两族诊断（现有负例的惯例）。
 
+## 5.1 S7-c 落地与 P1 冲突（2026-11-27）
+
+实现：`selfhost/ct-ast/frontend/parse/Mem2Writes.h.ct`（parser 定义出口按 body 的 arena
+节点区间扫直接写；同一单元内再组合一层；调用点出诊断）。`Fn.pann == 1` 记 `borrow`
+（`ref/out` 仍是 2/3，C 签名不变）。build 默认 `error`，`--check-level=warn` 降级、
+`--check-level=off` 完全不跑；`check` / `compile` 走硬错。
+
+诊断（硬错，`file:line:col` 指向调用点）：
+
+```text
+call to 'put': parameter 'c' is stored outside the call (write at line 4); declare the parameter 'borrow'
+```
+
+矩阵实测（2026-11-27）：
+
+| # | 口径 | 实测 |
+| --- | --- | --- |
+| P1 | `borrow` 形参写全局，期望放行 | **冲突，按更严者保留硬错**（见下） |
+| P2 | immortal 字面量 | 通过（`test/ast/315_mem2_literal`） |
+| P3 | 值拷贝 / `own` | 通过（无指针，`test/ast/316_mem2_value_param`） |
+| P4 | 只读形参 | 通过（`test/ast/317_mem2_readonly`） |
+| P5 | 函数指针调用 | 保守放行（`test/ast/318_mem2_fnptr`） |
+| P6 | 递归自调用 | 保守放行（`test/ast/319_mem2_recursion`） |
+| N1 | 未标 `borrow` 写全局 | 硬错（`test/ast/errors/mem2_n1_write_global.ct`） |
+| N2 | 写结构体字段 | 硬错（`mem2_n2_write_field.ct`） |
+| N3 | 写容器 | 硬错（`mem2_n3_write_container.ct`） |
+| N4 | 一层传递 | 硬错，内外两层各一条（`mem2_n4_one_level.ct`） |
+| N5 | 条件写入 | 硬错（保守，`mem2_n5_conditional.ct`） |
+| N6 | `Str` 视图入库 | 归 §3 既有族，本阶段不重复立案 |
+| D1 | `goto` 跳过 `borrow` 声明 | deferred：不新增判定（`test/ast/s7_mem2_probe.sh`） |
+| D2 | 跨单元写入 | 不在本阶段：跨单元调用保守放行（probe 双单元用例） |
+
+**P1 冲突（保留既有语义）。** `void put(borrow struct Conn *c) { g = c; }` 会先命中
+§4.40 阶段一的 `check_borrow_store`：`a borrowed pointer cannot be stored in 'g' (its
+scope outlives the borrow)`。矩阵 P1 的“放行”与该规则不可同时成立；2026-11-27 所有者裁定
+**按更严者保留硬错**，不修改 `bw_neg store_global` 负例，也不放宽 `check_borrow_store`。
+写入摘要对 P1 不追加第二条诊断（probe 只断言这一点）。
+
+FP=0（2026-11-27，冻结 seed 构建的编译器）：
+
+- `examples/[0-9][0-9]_*/*.ct` + `test/cases/*.ct` + `test/ast/*/prog.ct` 共 407 个文件，
+  `check` 退出码与基线逐文件相同（0 差异）；
+- 全 `examples/**` + `test/**` 共 1508 个 `.ct`，`compile` 退出码逐文件相同（0 差异）；
+- 同一 407 个文件的 `build` 默认与 `--check-level=off` 退出码相同（0 差异）。
+
 ## 6 S7 切片顺序（每片一提交、可回滚）
 
 1. **S7-a**：`--types` 三类进 `build` / `compile` 默认，按方案 A 的严重级；语料 rc 必须不变（46 + 25 + 308 全量重跑）；
