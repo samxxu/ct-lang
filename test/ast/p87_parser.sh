@@ -34,7 +34,7 @@ import re, sys
 path = sys.argv[1]
 src = open(path, encoding="utf-8").read()
 problems = []
-m = re.search(r'^    int static_ctype\(int n, char \*out, int cap, int \*array_depth, int depth\)\n    \{\n(.*?)\n    \}\n', src, re.S | re.M)
+m = re.search(r'^    const char \*static_ctype_text\(int n, int \*array_depth, int depth\)\n    \{\n(.*?)\n    \}\n', src, re.S | re.M)
 if not m:
     print("the static_ctype definition is missing", file=sys.stderr)
     sys.exit(1)
@@ -46,7 +46,7 @@ if "switch (" in body:
     problems.append("a switch is still in the dispatch")
 if re.search(r'case N_', body):
     problems.append("a case label is still in the dispatch")
-helpers = sorted(set(re.findall(r'^pub int (ctype_\w+)\(struct Expr \*self', src, re.M)))
+helpers = sorted(set(re.findall(r'^pub const char \*(ctype_\w+)\(struct Expr \*self', src, re.M)))
 want_helpers = ["ctype_adtctor", "ctype_var", "ctype_try", "ctype_index", "ctype_deref",
                 "ctype_addr", "ctype_member_or_arrow", "ctype_call", "ctype_opt",
                 "ctype_mcall", "ctype_slice_index", "ctype_slice_get", "ctype_slice_range"]
@@ -79,7 +79,7 @@ fi
 python3 - "$expr" "$tmp/mutated.h.ct" <<'PY'
 import sys
 src = open(sys.argv[1], encoding="utf-8").read()
-needle = "        if (k == N_VAR) return ctype_var(self, n, out, cap, array_depth, depth);\n"
+needle = "        if (k == N_VAR) return ctype_var(self, n, array_depth, depth);\n"
 if needle not in src:
     print("the mutation target is missing", file=sys.stderr)
     sys.exit(2)

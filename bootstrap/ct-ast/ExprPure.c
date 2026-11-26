@@ -193,20 +193,12 @@ int frontend_parse_closure_capture_index(struct frontend_sym_Closure * c, const 
     return (-1);
 }
 void frontend_parse_bind_conv_key(const char * in, char * out, int cap) {
-    char k[MAX_TEXT];
-    frontend_type_type_key(in, k, sizeof(k));
-    if (strncmp(k, "struct", 6) == 0) {
-        memmove(k, (k + 6), (strlen((k + 6)) + 1));
-    }
-    else {
-        if (strncmp(k, "union", 5) == 0) {
-            memmove(k, (k + 5), (strlen((k + 5)) + 1));
+    const char * k = frontend_parse_bind_conv_key_text(in);
+    if ((!k)) {
+        if (cap > 0) {
+            out[0] = 0;
         }
-        else {
-            if (strncmp(k, "enum", 4) == 0) {
-                memmove(k, (k + 4), (strlen((k + 4)) + 1));
-            }
-        }
+        return;
     }
     snprintf(out, (size_t)(cap), "%s", k);
 }
@@ -231,7 +223,7 @@ int frontend_parse_bind_conv_on(void) {
     return (!(v && (strcmp(v, "0") == 0)));
 }
 int frontend_parse_expr_is_builtin_Box_type(const char * type) {
-    char base[MAX_TEXT];
+    const char * base;
     int inst;
     int ti;
     int tn;
@@ -240,9 +232,9 @@ int frontend_parse_expr_is_builtin_Box_type(const char * type) {
     if (((!type) || (!type[0]))) {
         return 0;
     }
-    snprintf(base, sizeof(base), "%s", type);
+    base = type;
     if (strncmp(base, "struct ", 7) == 0) {
-        memmove(base, (base + 7), (strlen((base + 7)) + 1));
+        base += 7;
     }
     inst = frontend_sym_ct_inst_find(base);
     if (inst < 0) {

@@ -284,19 +284,19 @@ impl ExprInstantiate for Expr {
         return 0;
     }
 
-    int inst_subst_type(const char *ibase, const char *spell, char *out, int cap)
+    const char *inst_subst_type_text(const char *ibase, const char *spell)
     {
-        char base[MAX_TEXT];
-        char cur[MAX_TEXT];
-        char nxt[MAX_TEXT];
+        const char *base;
+        const char *cur;
         int inst, ti, tn, k;
         struct StructInst *ins;
         struct StructTmpl *tp;
 
         (void)self;
-        snprintf(cur, sizeof cur, "%s", spell);
+        cur = runtime::text::ct_intern(spell);
+        if (!cur) return (const char *)0;
         if (strncmp(ibase, "struct ", 7) == 0) {
-            snprintf(base, sizeof base, "%s", ibase + 7);
+            base = ibase + 7;
             inst = frontend::sym::ct_inst_find(base);
             if (inst >= 0) {
                 ins = frontend::sym::ct_insts(&k);
@@ -305,15 +305,24 @@ impl ExprInstantiate for Expr {
                 if (ti >= 0 && tp) {
                     for (k = 0; k < tp[ti].ntparams; k++) {
                         if (k >= ins[inst].nargs) break;
-                        if (tp[ti].tparam[k] && ins[inst].ctype[k]
-                            && frontend::sym::ct_generic_subst(cur, tp[ti].tparam[k],
-                                    ins[inst].ctype[k], nxt, MAX_TEXT) == 0)
-                            snprintf(cur, sizeof cur, "%s", nxt);
+                        if (tp[ti].tparam[k] && ins[inst].ctype[k]) {
+                            cur = frontend::sym::ct_generic_subst_text(cur, tp[ti].tparam[k],
+                                                                       ins[inst].ctype[k]);
+                            if (!cur) return (const char *)0;
+                        }
                     }
                 }
             }
         }
-        if (snprintf(out, (size_t)cap, "%s", cur) >= cap) return 0;
+        return cur;
+    }
+
+    int inst_subst_type(const char *ibase, const char *spell, char *out, int cap)
+    {
+        const char *t = self->inst_subst_type_text(ibase, spell);
+
+        if (!t) return 0;
+        if (snprintf(out, (size_t)cap, "%s", t) >= cap) return 0;
         return 1;
     }
 

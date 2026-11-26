@@ -30,6 +30,7 @@ import runtime::arena::Arena;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -143,284 +144,271 @@ pub int expr_generic_token(struct Expr *self)
     return 0;
 }
 
+/* S1a-0 C2p-10: the static-type chain returns pool texts. Each helper used to
+   write into a caller row of `MAX_TEXT`; a 2000-byte struct spelling was cut at
+   159 bytes and the row was then looked up (or compared) under the cut name.
+   The text form never truncates: the only bound is the pool's `TEXT_LIMIT`,
+   and NULL is the one "this shape cannot be pinned" answer. */
 /* PH-87 S87a slice: `ADTCTOR` (static C type). */
-pub int ctype_adtctor(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_adtctor(struct Expr *self, int n, int *array_depth, int depth)
 {
     (void)array_depth;
     (void)depth;
-            /* Phase 84: a constructor's value has the ADT's C struct spelling;
-               `text` is the struct tag the registry holds. */
-            if (snprintf(out, (size_t)cap, "struct %s", self->arena->nodes[n].text) >= cap)
-                return 0;
-            return 1;
+    /* Phase 84: a constructor's value has the ADT's C struct spelling;
+       `text` is the struct tag the registry holds. */
+    return runtime::text::ct_internf("struct %s", self->arena->nodes[n].text);
 }
 
 /* PH-87 S87a slice: `VAR` (static C type). */
-pub int ctype_var(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_var(struct Expr *self, int n, int *array_depth, int depth)
 {
     const char *ty;
+    const char *dim;
     int i;
     (void)depth;
-            i = self->sym->find_var(self->arena->nodes[n].text2);
-            if (i < 0) return 0;
-            if (!self->ctype_expand(self->sym->vars[i].type, out, cap, 0)) return 0;
-            if (self->sym->vars[i].is_array) {
-                for (ty = self->sym->vars[i].dims; *ty; ty++)
-                    if (*ty == '[') (*array_depth)++;
-            }
-            return 1;
+    i = self->sym->find_var(self->arena->nodes[n].text2);
+    if (i < 0) return (const char *)0;
+    ty = self->ctype_expand_text(self->sym->vars[i].type, 0);
+    if (!ty) return (const char *)0;
+    if (self->sym->vars[i].is_array) {
+        for (dim = self->sym->vars[i].dims; *dim; dim++)
+            if (*dim == '[') (*array_depth)++;
+    }
+    return ty;
 }
 
 /* PH-87 S87a slice: `TRY` (static C type). */
-pub int ctype_try(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_try(struct Expr *self, int n, int *array_depth, int depth)
 {
-    char tmp[MAX_TEXT];
+    const char *tmp;
+    const char *qtag;
+    const char *qval;
+    const char *qerr;
     int ad;
     (void)array_depth;
-            /* Phase 44: `expr?` answers the operand's `value` type, so a
-               chained form (`f()?.x`) resolves the same spelling the operand's
-               payload has. The operand itself has to be a `Result<T, E>`. */
-            char qtag[MAX_TEXT];
-            char qval[MAX_TEXT];
-            char qerr[MAX_TEXT];
-            int qi;
-
-            if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad,
-                                    depth + 1))
-                return 0;
-            if (ad != 0) return 0;
-            if (!self->result_tag(tmp, qtag, sizeof qtag)) return 0;
-            qi = frontend::sym::ct_inst_find(qtag);
-            if (!self->result_cols(qi, qval, sizeof qval, qerr, sizeof qerr)) return 0;
-            if (snprintf(out, cap, "%s", qval) >= cap) return 0;
-            return 1;
+    /* Phase 44: `expr?` answers the operand's `value` type, so a chained form
+       (`f()?.x`) resolves the same spelling the operand's payload has. The
+       operand itself has to be a `Result<T, E>`. */
+    tmp = self->static_ctype_text(self->arena->nodes[n].a, &ad, depth + 1);
+    if (!tmp || ad != 0) return (const char *)0;
+    qtag = self->result_tag_text(tmp);
+    if (!qtag) return (const char *)0;
+    qval = self->result_cols_text(frontend::sym::ct_inst_find(qtag), &qerr);
+    if (!qval) return (const char *)0;
+    return qval;
 }
 
 /* PH-87 S87a slice: `INDEX` (static C type). */
-pub int ctype_index(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_index(struct Expr *self, int n, int *array_depth, int depth)
 {
-    char tmp[MAX_TEXT];
+    const char *tmp;
     int ad;
-            if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad, depth + 1))
-                return 0;
-            if (ad > 0) {
-                /* one array dimension: the spelling is already the element */
-                if (snprintf(out, cap, "%s", tmp) >= cap) return 0;
-                *array_depth = ad - 1;
-                return 1;
-            }
-            return self->peel_ptr(tmp, out, cap);
+    tmp = self->static_ctype_text(self->arena->nodes[n].a, &ad, depth + 1);
+    if (!tmp) return (const char *)0;
+    if (ad > 0) {
+        /* one array dimension: the spelling is already the element */
+        *array_depth = ad - 1;
+        return tmp;
+    }
+    return self->peel_ptr_text(tmp);
 }
 
 /* PH-87 S87a slice: `DEREF` (static C type). */
-pub int ctype_deref(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_deref(struct Expr *self, int n, int *array_depth, int depth)
 {
-    char tmp[MAX_TEXT];
+    const char *tmp;
     int ad;
-            if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad, depth + 1))
-                return 0;
-            if (ad > 0) {
-                if (snprintf(out, cap, "%s", tmp) >= cap) return 0;
-                *array_depth = ad - 1;
-                return 1;
-            }
-            return self->peel_ptr(tmp, out, cap);
+    tmp = self->static_ctype_text(self->arena->nodes[n].a, &ad, depth + 1);
+    if (!tmp) return (const char *)0;
+    if (ad > 0) {
+        *array_depth = ad - 1;
+        return tmp;
+    }
+    return self->peel_ptr_text(tmp);
 }
 
 /* PH-87 S87a slice: `ADDR` (static C type). */
-pub int ctype_addr(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_addr(struct Expr *self, int n, int *array_depth, int depth)
 {
-    char tmp[MAX_TEXT];
+    const char *tmp;
     int ad;
     (void)array_depth;
-            if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad, depth + 1))
-                return 0;
-            if (ad != 0) return 0;
-            if (!tmp[0] || snprintf(out, cap, "%s%s*", tmp,
-                                    tmp[strlen(tmp) - 1] == '*' ? "" : " ") >= cap)
-                return 0;
-            return 1;
+    tmp = self->static_ctype_text(self->arena->nodes[n].a, &ad, depth + 1);
+    if (!tmp || ad != 0) return (const char *)0;
+    if (!tmp[0]) return (const char *)0;
+    return runtime::text::ct_internf("%s%s*", tmp,
+                                     tmp[strlen(tmp) - 1] == '*' ? "" : " ");
 }
 
 /* PH-87 S87a slice: `MEMBER` (static C type). */
-pub int ctype_member_or_arrow(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_member_or_arrow(struct Expr *self, int n, int *array_depth, int depth)
 {
-    char tmp[MAX_TEXT];
-    char tmp2[MAX_TEXT];
+    const char *tmp;
     const char *ty;
+    const char *f;
     int i;
     int si;
     int ad;
-            /* PH-80 (D-013 §2): the synthesised `.data` view keeps the handle's
-               raw pointer but reports a read-only static type, so no `char *`
-               consumer can take it without a cast. `aux` 9 is the UTF-8 pair,
-               11 the UTF-16 pair (see the member-access synthesis). */
-            if (self->arena->nodes[n].aux == 9) {
-                if (snprintf(out, cap, "%s", "const char *") >= cap) return 0;
-                *array_depth = 0;
-                return 1;
-            }
-            if (self->arena->nodes[n].aux == 11) {
-                if (snprintf(out, cap, "%s", "const uint16_t *") >= cap) return 0;
-                *array_depth = 0;
-                return 1;
-            }
-            if (!self->static_ctype(self->arena->nodes[n].a, tmp, sizeof tmp, &ad, depth + 1))
-                return 0;
-            if (ad != 0) return 0;
-            if (self->arena->nodes[n].kind == N_ARROW) {
-                /* `->` walks through exactly one pointer */
-                if (!self->peel_ptr(tmp, tmp2, sizeof tmp2)) return 0;
-                snprintf(tmp, sizeof tmp, "%s", tmp2);
-            }
-            ty = tmp;
-            if (strncmp(ty, "struct ", 7) == 0) ty += 7;
-            si = self->sym->find_struct(ty);
-            if (si < 0) return 0;
-            for (i = 0; i < self->sym->structs[si].nfields; i++) {
-                if (strcmp(self->sym->structs[si].fields[i].name,
-                           self->arena->nodes[n].text2) != 0) continue;
-                if (!self->ctype_expand(self->sym->structs[si].fields[i].type,
-                                        out, cap, 0)) return 0;
-                for (ty = self->sym->structs[si].fields[i].dims; *ty; ty++)
-                    if (*ty == '[') (*array_depth)++;
-                return 1;
-            }
-            return 0;
+    /* PH-80 (D-013 §2): the synthesised `.data` view keeps the handle's
+       raw pointer but reports a read-only static type, so no `char *`
+       consumer can take it without a cast. `aux` 9 is the UTF-8 pair,
+       11 the UTF-16 pair (see the member-access synthesis). */
+    if (self->arena->nodes[n].aux == 9) {
+        *array_depth = 0;
+        return runtime::text::ct_intern("const char *");
+    }
+    if (self->arena->nodes[n].aux == 11) {
+        *array_depth = 0;
+        return runtime::text::ct_intern("const uint16_t *");
+    }
+    tmp = self->static_ctype_text(self->arena->nodes[n].a, &ad, depth + 1);
+    if (!tmp || ad != 0) return (const char *)0;
+    if (self->arena->nodes[n].kind == N_ARROW) {
+        /* `->` walks through exactly one pointer */
+        tmp = self->peel_ptr_text(tmp);
+        if (!tmp) return (const char *)0;
+    }
+    ty = tmp;
+    if (strncmp(ty, "struct ", 7) == 0) ty += 7;
+    si = self->sym->find_struct(ty);
+    if (si < 0) return (const char *)0;
+    for (i = 0; i < self->sym->structs[si].nfields; i++) {
+        if (strcmp(self->sym->structs[si].fields[i].name,
+                   self->arena->nodes[n].text2) != 0) continue;
+        f = self->ctype_expand_text(self->sym->structs[si].fields[i].type, 0);
+        if (!f) return (const char *)0;
+        for (ty = self->sym->structs[si].fields[i].dims; *ty; ty++)
+            if (*ty == '[') (*array_depth)++;
+        return f;
+    }
+    return (const char *)0;
 }
 
 /* PH-87 S87a slice: `CALL` (static C type). */
-pub int ctype_call(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_call(struct Expr *self, int n, int *array_depth, int depth)
 {
-    char tmp[MAX_TEXT];
-    char tmp2[MAX_TEXT];
+    const char *tmp;
+    const char *r;
     int i;
     int ad;
     (void)array_depth;
-            if (self->arena->nodes[n].aux == 2) {
-                /* `(*fp)()` / `o.f()`: the callee is an expression whose
-                   declared type is the function pointer. */
-                int ci = self->arena->nodes[n].b;
-                if (ci >= 0 && self->arena->nodes[ci].kind == N_DEREF) {
-                    int ad2;
-                    if (!self->static_ctype(self->arena->nodes[ci].a, tmp, sizeof tmp,
-                                            &ad2, depth + 1))
-                        return 0;
-                    if (ad2 != 0) return 0;
-                    if (self->fnptr_ret(tmp, out, cap)) return 1;
-                    if (!self->peel_ptr(tmp, tmp2, sizeof tmp2)) return 0;
-                    return self->fnptr_ret(tmp2, out, cap);
-                }
-                if (!self->static_ctype(ci, tmp, sizeof tmp, &ad, depth + 1)) return 0;
-                if (ad != 0) return 0;
-                return self->fnptr_ret(tmp, out, cap);
-            }
-            i = self->sym->resolve_func(self->arena->nodes[n].text2);
-            if (i >= 0) {
-                if (!self->sym->funcs[i].ret[0] || strcmp(self->sym->funcs[i].ret, "void") == 0)
-                    return 0;
-                return self->ctype_expand(self->sym->funcs[i].ret, out, cap, 0);
-            }
-            /* `fp()` on a function-pointer variable (a plain name). */
-            i = self->sym->find_var(self->arena->nodes[n].text2);
-            if (i < 0) return 0;
-            if (!self->ctype_expand(self->sym->vars[i].type, tmp, sizeof tmp, 0)) return 0;
-            return self->fnptr_ret(tmp, out, cap);
+    if (self->arena->nodes[n].aux == 2) {
+        /* `(*fp)()` / `o.f()`: the callee is an expression whose
+           declared type is the function pointer. */
+        int ci = self->arena->nodes[n].b;
+        if (ci >= 0 && self->arena->nodes[ci].kind == N_DEREF) {
+            int ad2;
+            tmp = self->static_ctype_text(self->arena->nodes[ci].a, &ad2, depth + 1);
+            if (!tmp || ad2 != 0) return (const char *)0;
+            r = self->fnptr_ret_text(tmp);
+            if (r) return r;
+            tmp = self->peel_ptr_text(tmp);
+            if (!tmp) return (const char *)0;
+            return self->fnptr_ret_text(tmp);
+        }
+        tmp = self->static_ctype_text(ci, &ad, depth + 1);
+        if (!tmp || ad != 0) return (const char *)0;
+        return self->fnptr_ret_text(tmp);
+    }
+    i = self->sym->resolve_func(self->arena->nodes[n].text2);
+    if (i >= 0) {
+        if (!self->sym->funcs[i].ret[0] || strcmp(self->sym->funcs[i].ret, "void") == 0)
+            return (const char *)0;
+        return self->ctype_expand_text(self->sym->funcs[i].ret, 0);
+    }
+    /* `fp()` on a function-pointer variable (a plain name). */
+    i = self->sym->find_var(self->arena->nodes[n].text2);
+    if (i < 0) return (const char *)0;
+    tmp = self->ctype_expand_text(self->sym->vars[i].type, 0);
+    if (!tmp) return (const char *)0;
+    return self->fnptr_ret_text(tmp);
 }
 
 /* PH-87 S87a slice: `OPT` (static C type). */
-pub int ctype_opt(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_opt(struct Expr *self, int n, int *array_depth, int depth)
 {
     (void)array_depth;
     (void)depth;
-            /* PH-53: the optional result is recorded at parse time (the
-               emitter and chained `?.` both need it). */
-            if (!self->arena->nodes[n].text2[0]) return 0;
-            if (snprintf(out, cap, "%s", self->arena->nodes[n].text2) >= cap) return 0;
-            return 1;
+    /* PH-53: the optional result is recorded at parse time (the
+       emitter and chained `?.` both need it). */
+    if (!self->arena->nodes[n].text2[0]) return (const char *)0;
+    return self->arena->nodes[n].text2;
 }
 
 /* PH-87 S87a slice: `MCALL` (static C type). */
-pub int ctype_mcall(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_mcall(struct Expr *self, int n, int *array_depth, int depth)
 {
-    char tmp2[MAX_TEXT];
+    const char *ib;
+    const char *rs;
     int si;
     int i;
     (void)array_depth;
     (void)depth;
-            /* An inherent method of an instantiated struct keeps its AST node
-               (`text` is the declared return type); a trait method reads the
-               signature. */
-            if (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)
-                i = self->inst_inherent_method(self->arena->nodes[n].text,
-                                               self->arena->nodes[n].text2);
-            else
-                i = -1;
-            if (i >= 0) {
-                char ib[MAX_TEXT];
-                char rs[MAX_TEXT];
-                if (!self->arena->nodes[i].text[0]) return 0;
-                /* Phase 31 O3: the declared return type mentions the
-                   template's parameter (`T get(int i)`), so a chained subscript
-                   (`g[i][j]`) only sees `struct Vec_int` when the parameter is
-                   replaced by this instance's concrete argument. */
-                snprintf(ib, sizeof ib, "%s", self->arena->nodes[n].text);
-                if (ib[0] && strncmp(ib, "struct ", 7) != 0) {
-                    snprintf(tmp2, sizeof tmp2, "struct %s", ib);
-                    snprintf(ib, sizeof ib, "%s", tmp2);
-                }
-                if (self->inst_subst_type(ib, self->arena->nodes[i].text,
-                                          rs, sizeof rs)) {
-                    if (snprintf(out, (size_t)cap, "%s", rs) >= cap) return 0;
-                    return 1;
-                }
-                return self->ctype_expand(self->arena->nodes[i].text, out, cap, 0);
-            }
-            si = self->sym->find_trait(self->arena->nodes[n].text);
-            if (si < 0) return 0;
-            for (i = 0; i < self->sym->traits[si].nm; i++) {
-                if (strcmp(self->sym->traits[si].m[i].name,
-                           self->arena->nodes[n].text2) != 0) continue;
-                if (!self->sym->traits[si].m[i].ret[0]
-                    || strcmp(self->sym->traits[si].m[i].ret, "void") == 0) return 0;
-                return self->ctype_expand(self->sym->traits[si].m[i].ret, out, cap, 0);
-            }
-            return 0;
-        /* PH-79 fix SH-100: the element spelling travels on the node, so the
-           value/pointer/storage types are all recoverable. `s[i]` is the
-           element value, `s.get(i)` its pointer, and a subslice (including
-           the whole-array view aux 3) the erased slice struct. */
+    /* An inherent method of an instantiated struct keeps its AST node
+       (`text` is the declared return type); a trait method reads the
+       signature. */
+    if (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)
+        i = self->inst_inherent_method(self->arena->nodes[n].text,
+                                       self->arena->nodes[n].text2);
+    else
+        i = -1;
+    if (i >= 0) {
+        if (!self->arena->nodes[i].text[0]) return (const char *)0;
+        /* Phase 31 O3: the declared return type mentions the
+           template's parameter (`T get(int i)`), so a chained subscript
+           (`g[i][j]`) only sees `struct Vec_int` when the parameter is
+           replaced by this instance's concrete argument. */
+        ib = self->arena->nodes[n].text;
+        if (ib[0] && strncmp(ib, "struct ", 7) != 0) {
+            ib = runtime::text::ct_internf("struct %s", ib);
+            if (!ib) return (const char *)0;
+        }
+        rs = self->inst_subst_type_text(ib, self->arena->nodes[i].text);
+        if (rs) return rs;
+        return self->ctype_expand_text(self->arena->nodes[i].text, 0);
+    }
+    si = self->sym->find_trait(self->arena->nodes[n].text);
+    if (si < 0) return (const char *)0;
+    for (i = 0; i < self->sym->traits[si].nm; i++) {
+        if (strcmp(self->sym->traits[si].m[i].name,
+                   self->arena->nodes[n].text2) != 0) continue;
+        if (!self->sym->traits[si].m[i].ret[0]
+            || strcmp(self->sym->traits[si].m[i].ret, "void") == 0) return (const char *)0;
+        return self->ctype_expand_text(self->sym->traits[si].m[i].ret, 0);
+    }
+    return (const char *)0;
+    /* PH-79 fix SH-100: the element spelling travels on the node, so the
+       value/pointer/storage types are all recoverable. `s[i]` is the
+       element value, `s.get(i)` its pointer, and a subslice (including
+       the whole-array view aux 3) the erased slice struct. */
 }
 
 /* PH-87 S87a slice: `SLICE_INDEX` (static C type). */
-pub int ctype_slice_index(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_slice_index(struct Expr *self, int n, int *array_depth, int depth)
 {
     (void)array_depth;
     (void)depth;
-            if (!self->arena->nodes[n].text[0]) return 0;
-            if (snprintf(out, cap, "%s", self->arena->nodes[n].text) >= cap) return 0;
-            return 1;
+    if (!self->arena->nodes[n].text[0]) return (const char *)0;
+    return self->arena->nodes[n].text;
 }
 
 /* PH-87 S87a slice: `SLICE_GET` (static C type). */
-pub int ctype_slice_get(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_slice_get(struct Expr *self, int n, int *array_depth, int depth)
 {
     (void)array_depth;
     (void)depth;
-            if (!self->arena->nodes[n].text[0]) return 0;
-            if (snprintf(out, cap, "%s *", self->arena->nodes[n].text) >= cap) return 0;
-            return 1;
+    if (!self->arena->nodes[n].text[0]) return (const char *)0;
+    return runtime::text::ct_internf("%s *", self->arena->nodes[n].text);
 }
 
 /* PH-87 S87a slice: `SLICE_RANGE` (static C type). */
-pub int ctype_slice_range(struct Expr *self, int n, char *out, int cap, int *array_depth, int depth)
+pub const char *ctype_slice_range(struct Expr *self, int n, int *array_depth, int depth)
 {
     (void)self;
     (void)n;
     (void)array_depth;
     (void)depth;
-            if (snprintf(out, cap, "%s", "struct __ct_slice") >= cap) return 0;
-            return 1;
+    return runtime::text::ct_intern("struct __ct_slice");
 }
 
 impl ExprStaticType for Expr {
@@ -430,8 +418,8 @@ impl ExprStaticType for Expr {
         int ndims = 0;
         (void)self;
         while (self->lex->tok == T_PUNCT && self->lex->tok_is("[")) {
-            char dim[MAX_TEXT];
-            char cur[MAX_TEXT];
+            const char *dim;
+            const char *cur;
             int unsized, open, raw, dline, dcol, first_dim;
             unsized = 0;
             raw = 0;
@@ -443,7 +431,7 @@ impl ExprStaticType for Expr {
             open = self->lex->tokstart;             /* the `[` itself */
             dline = self->lex->tokline;
             dcol = self->lex->tokstart - self->lex->lstart + 1;
-            dim[0] = 0;
+            dim = "";
             /* SH-66: a dimension is copied verbatim and is not one of the
                seven positions `ct_generic_subst` rewrites, so a type parameter
                inside it would reach the generated C as an undeclared name.
@@ -480,13 +468,10 @@ impl ExprStaticType for Expr {
                                 break;
                             }
                         }
-                        if (hit) {
-                            char dmsg[MAX_TEXT + 96];
-                            snprintf(dmsg, sizeof dmsg,
-                                     "type parameter '%s' cannot be used in an array dimension",
-                                     hitn);
-                            return self->sup->fail(dmsg);
-                        }
+                        if (hit)
+                            return self->sup->fail(tool::sh::ct_scratch_fmt(
+                                "type parameter '%s' cannot be used in an array dimension",
+                                hitn));
                         p = q;
                     } else if (ch == '/' && self->lex->src[p + 1] == '*') {
                         /* a block comment is not code: a dimension may carry
@@ -511,18 +496,21 @@ impl ExprStaticType for Expr {
             }
             self->sup->lex_next();
             if (self->lex->tok == T_NUM) {
-                snprintf(dim, sizeof dim, "[%ld]", self->lex->toknum);
+                dim = runtime::text::ct_internf("[%ld]", self->lex->toknum);
             } else if (self->lex->tok == T_ID) {
                 /* a constant (an enum member) is emitted under its C name; an
                    undeclared macro name stays as written (D-9) */
-                char cn[MAX_TEXT];
-                if (self->sym->var_cname(self->lex->tok_cstr(), cn, sizeof cn) == 0)
-                    snprintf(dim, sizeof dim, "[%s]", cn);
+                const char *tok = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                              self->lex->tokstr.len);
+                const char *cn = tok ? self->sym->var_cname_text(tok) : (const char *)0;
+                if (cn)
+                    dim = runtime::text::ct_internf("[%s]", cn);
                 else
-                    snprintf(dim, sizeof dim, "[%.*s]", self->lex->tokstr.len, self->lex->tokstr.ptr);
+                    dim = runtime::text::ct_internf("[%.*s]", self->lex->tokstr.len,
+                                                    self->lex->tokstr.ptr);
             } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("]")) {
                 /* `T a[][N]`: an unsized parameter dimension (10.6) */
-                snprintf(dim, sizeof dim, "[]");
+                dim = "[]";
                 unsized = 1;
             } else {
                 raw = 1;
@@ -533,40 +521,36 @@ impl ExprStaticType for Expr {
                    the expression is kept as written */
                 if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("]"))) {
                     raw = 1;
-                    dim[0] = 0;
+                    dim = "";
                 }
             }
             if (raw) {
-                /* copy the source text between the brackets, then let the lexer
-                   re-read from just past the closing one */
-                int p2, d2, q2;
+                /* the source text between the brackets (both included) is
+                   interned whole, then the lexer re-reads from just past the
+                   closing one; the old copy stopped at 160 bytes */
+                int p2, d2;
                 p2 = open + 1;
                 d2 = 0;
-                q2 = 0;
-                dim[q2] = '[';
-                q2++;
-                while (self->lex->src[p2] && q2 + 2 < MAX_TEXT) {
+                while (self->lex->src[p2]) {
                     char ch = self->lex->src[p2];
                     if (ch == '[') d2++;
                     else if (ch == ']') {
                         if (d2 == 0) break;
                         d2--;
                     }
-                    dim[q2] = ch;
-                    q2++;
                     p2++;
                 }
                 if (self->lex->src[p2] != ']') return self->sup->fail("expected an array length");
-                dim[q2] = ']';
-                q2++;
-                dim[q2] = 0;
+                dim = runtime::text::ct_intern_len(self->lex->src + open, p2 - open + 1);
+                if (!dim) return self->sup->fail("out of memory");
                 self->lex->pos = p2 + 1;
                 self->sup->lex_next();
             } else if (self->sup->expect("]") != 0) {
                 return -1;
             }
-            snprintf(cur, sizeof cur, "%s%s", self->arena->nodes[n].text3, dim);
-            self->arena->nodes[n].text3 = runtime::text::ct_intern(cur);
+            if (!dim) return self->sup->fail("out of memory");
+            cur = runtime::text::ct_intern_join(self->arena->nodes[n].text3, dim);
+            self->arena->nodes[n].text3 = cur;
             if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
             self->arena->nodes[n].num = 0;      /* text3 is the authoritative spelling */
             /* E79-1: `T a[]` is the old spelling. With an initializer it is an
@@ -783,21 +767,19 @@ impl ExprStaticType for Expr {
 
     int fnptr_field(const char *stype, const char *field)
     {
-        char buf[MAX_TEXT];
-        char *base;
+        const char *base;
         size_t n;
         int s, fi, ti;
         (void)self;
 
-        snprintf(buf, sizeof buf, "%s", stype);
-        base = buf;
+        base = stype;
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         n = strlen(base);
-        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
-            base[n - 1] = 0;
-            n--;
-        }
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) n--;
+        if (n == 0) return 0;
+        base = runtime::text::ct_intern_len(base, (int)n);
+        if (!base) return 0;
         s = self->sym->find_struct(base);
         if (s < 0) return 0;
         for (fi = 0; fi < self->sym->structs[s].nfields; fi++) {
@@ -832,19 +814,20 @@ impl ExprStaticType for Expr {
         return 0;
     }
 
-    int ctype_expand(const char *in, char *out, int cap, int depth)
+    const char *ctype_expand_text(const char *in, int depth)
     {
-        char name[MAX_TEXT];
-        char target[MAX_TEXT];
+        const char *name;
+        const char *target;
         int i, len, bare;
 
-        if (depth > 8) return 0;
+        if (depth > 8) return (const char *)0;
         len = (int)strlen(in);
         while (len > 0 && in[len - 1] == ' ') len--;
         i = 0;
         while (i < len && in[i] == ' ') i++;
-        if (i >= len || len - i >= (int)sizeof name) return 0;
-        snprintf(name, sizeof name, "%.*s", len - i, in + i);
+        if (i >= len) return (const char *)0;
+        name = runtime::text::ct_intern_len(in + i, len - i);
+        if (!name) return (const char *)0;
         bare = 1;
         for (i = 0; name[i]; i++) {
             int c = (unsigned char)name[i];
@@ -859,23 +842,31 @@ impl ExprStaticType for Expr {
                 break;
             }
         }
-        if (bare && self->sym->type_target_of(name, target, sizeof target))
-            return self->ctype_expand(target, out, cap, depth + 1);
-        if (snprintf(out, cap, "%s", name) >= cap) return 0;
+        if (bare && (target = self->sym->type_target_text(name)) != 0)
+            return self->ctype_expand_text(target, depth + 1);
+        return name;
+    }
+
+    int ctype_expand(const char *in, char *out, int cap, int depth)
+    {
+        const char *t = self->ctype_expand_text(in, depth);
+
+        if (!t) return 0;
+        if (snprintf(out, (size_t)cap, "%s", t) >= cap) return 0;
         return 1;
     }
 
-    int fnptr_ret(const char *ftype, char *out, int cap)
+    const char *fnptr_ret_text(const char *ftype)
     {
         const char *p, *q;
         int len, depth;
 
         (void)self;
         p = strstr(ftype, "(*)");
-        if (!p || p == ftype) return 0;
+        if (!p || p == ftype) return (const char *)0;
         q = p + 3;
         while (*q == ' ') q++;
-        if (*q != '(') return 0;
+        if (*q != '(') return (const char *)0;
         depth = 0;
         for (; *q; q++) {
             if (*q == '(') depth++;
@@ -884,50 +875,75 @@ impl ExprStaticType for Expr {
                 if (depth == 0) break;
             }
         }
-        if (depth != 0) return 0;
+        if (depth != 0) return (const char *)0;
         len = (int)(p - ftype);
         while (len > 0 && ftype[len - 1] == ' ') len--;
-        if (len <= 0) return 0;
-        if (snprintf(out, cap, "%.*s", len, ftype) >= cap) return 0;
+        if (len <= 0) return (const char *)0;
+        return runtime::text::ct_intern_len(ftype, len);
+    }
+
+    int fnptr_ret(const char *ftype, char *out, int cap)
+    {
+        const char *t = self->fnptr_ret_text(ftype);
+
+        if (!t) return 0;
+        if (snprintf(out, (size_t)cap, "%s", t) >= cap) return 0;
         return 1;
     }
 
-    int peel_ptr(const char *ty, char *out, int cap)
+    const char *peel_ptr_text(const char *ty)
     {
         int len;
 
         (void)self;
         len = (int)strlen(ty);
         while (len > 0 && ty[len - 1] == ' ') len--;
-        if (len <= 0 || ty[len - 1] != '*') return 0;
+        if (len <= 0 || ty[len - 1] != '*') return (const char *)0;
         len--;
         while (len > 0 && ty[len - 1] == ' ') len--;
-        if (len <= 0) return 0;
-        if (snprintf(out, cap, "%.*s", len, ty) >= cap) return 0;
+        if (len <= 0) return (const char *)0;
+        return runtime::text::ct_intern_len(ty, len);
+    }
+
+    int peel_ptr(const char *ty, char *out, int cap)
+    {
+        const char *t = self->peel_ptr_text(ty);
+
+        if (!t) return 0;
+        if (snprintf(out, (size_t)cap, "%s", t) >= cap) return 0;
         return 1;
     }
 
-    int static_ctype(int n, char *out, int cap, int *array_depth, int depth)
+    const char *static_ctype_text(int n, int *array_depth, int depth)
     {
         int k;
 
         *array_depth = 0;
-        if (n < 0 || depth > 8) return 0;
+        if (n < 0 || depth > 8) return (const char *)0;
         k = self->arena->nodes[n].kind;
-        if (k == N_ADTCTOR) return ctype_adtctor(self, n, out, cap, array_depth, depth);
-        if (k == N_VAR) return ctype_var(self, n, out, cap, array_depth, depth);
-        if (k == N_TRY) return ctype_try(self, n, out, cap, array_depth, depth);
-        if (k == N_INDEX) return ctype_index(self, n, out, cap, array_depth, depth);
-        if (k == N_DEREF) return ctype_deref(self, n, out, cap, array_depth, depth);
-        if (k == N_ADDR) return ctype_addr(self, n, out, cap, array_depth, depth);
-        if (k == N_MEMBER || k == N_ARROW) return ctype_member_or_arrow(self, n, out, cap, array_depth, depth);
-        if (k == N_CALL) return ctype_call(self, n, out, cap, array_depth, depth);
-        if (k == N_OPT) return ctype_opt(self, n, out, cap, array_depth, depth);
-        if (k == N_MCALL) return ctype_mcall(self, n, out, cap, array_depth, depth);
-        if (k == N_SLICE_INDEX) return ctype_slice_index(self, n, out, cap, array_depth, depth);
-        if (k == N_SLICE_GET) return ctype_slice_get(self, n, out, cap, array_depth, depth);
-        if (k == N_SLICE_RANGE) return ctype_slice_range(self, n, out, cap, array_depth, depth);
-        return 0;
+        if (k == N_ADTCTOR) return ctype_adtctor(self, n, array_depth, depth);
+        if (k == N_VAR) return ctype_var(self, n, array_depth, depth);
+        if (k == N_TRY) return ctype_try(self, n, array_depth, depth);
+        if (k == N_INDEX) return ctype_index(self, n, array_depth, depth);
+        if (k == N_DEREF) return ctype_deref(self, n, array_depth, depth);
+        if (k == N_ADDR) return ctype_addr(self, n, array_depth, depth);
+        if (k == N_MEMBER || k == N_ARROW) return ctype_member_or_arrow(self, n, array_depth, depth);
+        if (k == N_CALL) return ctype_call(self, n, array_depth, depth);
+        if (k == N_OPT) return ctype_opt(self, n, array_depth, depth);
+        if (k == N_MCALL) return ctype_mcall(self, n, array_depth, depth);
+        if (k == N_SLICE_INDEX) return ctype_slice_index(self, n, array_depth, depth);
+        if (k == N_SLICE_GET) return ctype_slice_get(self, n, array_depth, depth);
+        if (k == N_SLICE_RANGE) return ctype_slice_range(self, n, array_depth, depth);
+        return (const char *)0;
+    }
+
+    int static_ctype(int n, char *out, int cap, int *array_depth, int depth)
+    {
+        const char *t = self->static_ctype_text(n, array_depth, depth);
+
+        if (!t) return 0;
+        if (snprintf(out, (size_t)cap, "%s", t) >= cap) return 0;
+        return 1;
     }
 
     int container_init_check(const char *ctype)
@@ -1029,11 +1045,11 @@ impl ExprStaticType for Expr {
 
     int brace_arg_ok(const char *formal, const char *actual)
     {
-        char fb[MAX_TEXT];
-        char ab[MAX_TEXT];
+        const char *fb;
+        const char *ab;
         int r, fs, as;
 
-        r = arg_class(formal, actual, fb, sizeof fb, ab, sizeof ab);
+        r = arg_class_text(formal, actual, &fb, &ab);
         if (r != 2) return r;
         if (strncmp(fb, "struct", 6) != 0 || strncmp(ab, "struct", 6) != 0) return 2;
         fs = self->sym->find_struct(fb + 6);

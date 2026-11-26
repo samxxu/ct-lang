@@ -113,6 +113,10 @@ struct frontend_parse_ExprOps_iface {
 
 struct frontend_parse_ExprStaticType_vtbl {
     int (*static_ctype)(void *, int, char *, int, int *, int);
+    const char * (*static_ctype_text)(void *, int, int *, int);
+    const char * (*ctype_expand_text)(void *, const char *, int);
+    const char * (*fnptr_ret_text)(void *, const char *);
+    const char * (*peel_ptr_text)(void *, const char *);
     int (*ctype_expand)(void *, const char *, char *, int, int);
     int (*fnptr_ret)(void *, const char *, char *, int);
     int (*peel_ptr)(void *, const char *, char *, int);
@@ -155,6 +159,7 @@ struct frontend_parse_ExprInstantiate_vtbl {
     int (*inst_static_method)(void *, const char *, const char *);
     int (*static_call_ahead)(void *);
     int (*inst_subst_type)(void *, const char *, const char *, char *, int);
+    const char * (*inst_subst_type_text)(void *, const char *, const char *);
     int (*container_elem_foreign)(void *, const char *, int);
     int (*container_vptr_type)(void *, const char *, int);
     int (*container_iface_ptr)(void *, const char *);
@@ -205,6 +210,7 @@ struct frontend_parse_ExprTraitInst_iface {
 
 struct frontend_parse_ExprSubscript_vtbl {
     int (*custom_index_label)(void *, const char *, char *, int);
+    const char * (*custom_index_label_text)(void *, const char *);
     int (*custom_index_method)(void *, const char *, const char *, int, int, int, int, int);
 };
 struct frontend_parse_ExprSubscript_iface {
@@ -269,6 +275,8 @@ struct frontend_parse_ExprTry_vtbl {
     int (*q_suffix_ahead)(void *);
     int (*result_tag)(void *, const char *, char *, int);
     int (*result_cols)(void *, int, char *, int, char *, int);
+    const char * (*result_tag_text)(void *, const char *);
+    const char * (*result_cols_text)(void *, int, const char * *);
 };
 struct frontend_parse_ExprTry_iface {
     void *self;

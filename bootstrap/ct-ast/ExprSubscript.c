@@ -10,6 +10,7 @@
 #include "TypeCheck.h"
 #include "Arena.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -175,7 +176,7 @@ const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_pars
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label(void *self, const char * bty, char * out, int cap) {
+static const char * frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label_text(void *self, const char * bty) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     const char * base;
     int inst;
@@ -188,15 +189,25 @@ static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label(v
         ins = frontend_sym_ct_insts((&n));
         if (((ins && (inst < n)) && (ins[inst].nargs > 0))) {
             if (ins[inst].nargs > 1) {
-                snprintf(out, (size_t)(cap), "%s<%s, %s>", ins[inst].tmpl, ins[inst].carg[0], ins[inst].carg[1]);
+                return runtime_text_ct_internf("%s<%s, %s>", ins[inst].tmpl, ins[inst].carg[0], ins[inst].carg[1]);
             }
-            else {
-                snprintf(out, (size_t)(cap), "%s<%s>", ins[inst].tmpl, ins[inst].carg[0]);
-            }
-            return 0;
+            return runtime_text_ct_internf("%s<%s>", ins[inst].tmpl, ins[inst].carg[0]);
         }
     }
-    snprintf(out, (size_t)(cap), "%s", base);
+    return runtime_text_ct_intern(base);
+}
+
+static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label(void *self, const char * bty, char * out, int cap) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    const char * t = _self->__frontend_parse_exprsubscript_vptr->custom_index_label_text(_self, bty);
+    if (t) {
+        snprintf(out, (size_t)(cap), "%s", t);
+    }
+    else {
+        if (cap > 0) {
+            out[0] = 0;
+        }
+    }
     return 0;
 }
 
@@ -205,43 +216,35 @@ static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method(
     int m;
     int p;
     int got = 0;
-    char label[MAX_TEXT];
-    char msg[MAX_TEXT];
-    _self->__frontend_parse_exprsubscript_vptr->custom_index_label(_self, bty, label, sizeof(label));
+    const char * label;
+    label = _self->__frontend_parse_exprsubscript_vptr->custom_index_label_text(_self, bty);
+    if ((!label)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     m = _self->__frontend_parse_exprinstantiate_vptr->inst_inherent_method(_self, bty, name);
     if (m == (-2)) {
         if (writable) {
-            snprintf(msg, sizeof(msg), "type '%s' has no writable subscript: '%s' is private to its unit", label, name);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no writable subscript: '%s' is private to its unit", label, name), _self->sup->mem->path);
         }
-        else {
-            snprintf(msg, sizeof(msg), "type '%s' has no subscript: '%s' is private to its unit", label, name);
-        }
-        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no subscript: '%s' is private to its unit", label, name), _self->sup->mem->path);
     }
     if (m < 0) {
         if (writable) {
-            snprintf(msg, sizeof(msg), "type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s", label, label);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s", label, label), _self->sup->mem->path);
         }
-        else {
-            snprintf(msg, sizeof(msg), "type '%s' has no subscript: declare 'V get(K)' in impl %s", label, label);
-        }
-        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no subscript: declare 'V get(K)' in impl %s", label, label), _self->sup->mem->path);
     }
     if (_self->arena->nodes[m].c) {
-        snprintf(msg, sizeof(msg), "type '%s' has no subscript: '%s' must be an instance method", label, name);
-        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no subscript: '%s' must be an instance method", label, name), _self->sup->mem->path);
     }
     for (p = _self->arena->nodes[m].a; p > 0; p = _self->arena->nodes[p].next) {
         got++;
     }
     if (got != want) {
         if (writable) {
-            snprintf(msg, sizeof(msg), "type '%s' has no writable subscript: 'set' must take 2 parameters", label);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no writable subscript: 'set' must take 2 parameters", label), _self->sup->mem->path);
         }
-        else {
-            snprintf(msg, sizeof(msg), "type '%s' has no subscript: 'get' must take 1 parameter", label);
-        }
-        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no subscript: 'get' must take 1 parameter", label), _self->sup->mem->path);
     }
     if (idx_node >= 0) {
         char kty[MAX_TEXT];
@@ -260,6 +263,7 @@ static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method(
 }
 
 const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_parse_ExprSubscript_vtable = {
+    .custom_index_label_text = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label_text,
     .custom_index_label = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label,
     .custom_index_method = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method
 };

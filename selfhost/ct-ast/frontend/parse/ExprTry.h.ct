@@ -178,43 +178,70 @@ impl ExprTry for Expr {
         return r;
     }
 
-    int result_tag(const char *ctype, char *tag, int cap)
+    const char *result_tag_text(const char *ctype)
     {
-        char buf[MAX_TEXT];
+        const char *buf;
         size_t n;
         int inst, ninst;
         struct StructInst *ins;
 
         (void)self;
-        if (!ctype || !ctype[0]) return 0;
-        if (snprintf(buf, sizeof buf, "%s", ctype) >= (int)sizeof buf) return 0;
-        n = strlen(buf);
-        while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '*')) {
-            if (buf[n - 1] == '*') return 0;
-            buf[--n] = 0;
+        if (!ctype || !ctype[0]) return (const char *)0;
+        n = strlen(ctype);
+        while (n > 0 && (ctype[n - 1] == ' ' || ctype[n - 1] == '*')) {
+            if (ctype[n - 1] == '*') return (const char *)0;
+            n--;
         }
-        if (strncmp(buf, "struct ", 7) == 0) memmove(buf, buf + 7, strlen(buf + 7) + 1);
-        else if (strncmp(buf, "union ", 6) == 0 || strncmp(buf, "enum ", 5) == 0) return 0;
+        if (n == 0) return (const char *)0;
+        buf = ctype;
+        if (strncmp(buf, "struct ", 7) == 0) {
+            buf += 7;
+            n -= 7;
+        } else if (strncmp(buf, "union ", 6) == 0 || strncmp(buf, "enum ", 5) == 0)
+            return (const char *)0;
+        buf = runtime::text::ct_intern_len(buf, (int)n);
+        if (!buf) return (const char *)0;
         inst = frontend::sym::ct_inst_find(buf);
-        if (inst < 0) return 0;
+        if (inst < 0) return (const char *)0;
         ins = frontend::sym::ct_insts(&ninst);
-        if (!ins || inst >= ninst) return 0;
-        if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2) return 0;
-        if (snprintf(tag, (size_t)cap, "%s", buf) >= cap) return 0;
+        if (!ins || inst >= ninst) return (const char *)0;
+        if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2)
+            return (const char *)0;
+        return buf;
+    }
+
+    int result_tag(const char *ctype, char *tag, int cap)
+    {
+        const char *t = self->result_tag_text(ctype);
+
+        if (!t) return 0;
+        if (snprintf(tag, (size_t)cap, "%s", t) >= cap) return 0;
         return 1;
     }
 
-    int result_cols(int inst, char *val, int vcap, char *err, int ecap)
+    const char *result_cols_text(int inst, const char **err)
     {
         int ninst;
         struct StructInst *ins;
 
         (void)self;
+        if (err) *err = "";
         ins = frontend::sym::ct_insts(&ninst);
-        if (!ins || inst < 0 || inst >= ninst) return 0;
-        if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2) return 0;
-        if (snprintf(val, (size_t)vcap, "%s", ins[inst].ctype[0]) >= vcap) return 0;
-        if (snprintf(err, (size_t)ecap, "%s", ins[inst].carg[1]) >= ecap) return 0;
+        if (!ins || inst < 0 || inst >= ninst) return (const char *)0;
+        if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2)
+            return (const char *)0;
+        if (err) *err = ins[inst].carg[1];
+        return ins[inst].ctype[0];
+    }
+
+    int result_cols(int inst, char *val, int vcap, char *err, int ecap)
+    {
+        const char *v, *e;
+
+        v = self->result_cols_text(inst, &e);
+        if (!v) return 0;
+        if (snprintf(val, (size_t)vcap, "%s", v) >= vcap) return 0;
+        if (snprintf(err, (size_t)ecap, "%s", e) >= ecap) return 0;
         return 1;
     }
 }

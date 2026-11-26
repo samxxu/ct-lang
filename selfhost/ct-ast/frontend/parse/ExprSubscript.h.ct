@@ -30,6 +30,7 @@ import runtime::arena::Arena;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -126,7 +127,7 @@ impl ExprSubscript for Expr {
     /* PH-52 D52-2: the diagnostics name the user's spelling, not the encoded
        instance tag. `Box<int>` comes from the instance row; a plain struct
        keeps its declared name. */
-    int custom_index_label(const char *bty, char *out, int cap)
+    const char *custom_index_label_text(const char *bty)
     {
         const char *base;
         int inst, n;
@@ -139,15 +140,21 @@ impl ExprSubscript for Expr {
             ins = frontend::sym::ct_insts(&n);
             if (ins && inst < n && ins[inst].nargs > 0) {
                 if (ins[inst].nargs > 1)
-                    snprintf(out, (size_t)cap, "%s<%s, %s>", ins[inst].tmpl,
-                             ins[inst].carg[0], ins[inst].carg[1]);
-                else
-                    snprintf(out, (size_t)cap, "%s<%s>", ins[inst].tmpl,
-                             ins[inst].carg[0]);
-                return 0;
+                    return runtime::text::ct_internf("%s<%s, %s>", ins[inst].tmpl,
+                                                     ins[inst].carg[0], ins[inst].carg[1]);
+                return runtime::text::ct_internf("%s<%s>", ins[inst].tmpl,
+                                                 ins[inst].carg[0]);
             }
         }
-        snprintf(out, (size_t)cap, "%s", base);
+        return runtime::text::ct_intern(base);
+    }
+
+    int custom_index_label(const char *bty, char *out, int cap)
+    {
+        const char *t = self->custom_index_label_text(bty);
+
+        if (t) snprintf(out, (size_t)cap, "%s", t);
+        else if (cap > 0) out[0] = 0;
         return 0;
     }
 
@@ -159,51 +166,43 @@ impl ExprSubscript for Expr {
                             int line, int col, int writable, int idx_node)
     {
         int m, p, got = 0;
-        char label[MAX_TEXT];
-        char msg[MAX_TEXT];
+        const char *label;
 
-        self->custom_index_label(bty, label, sizeof label);
+        label = self->custom_index_label_text(bty);
+        if (!label) return self->sup->fail("out of memory");
         m = self->inst_inherent_method(bty, name);
         if (m == -2) {
             if (writable)
-                snprintf(msg, sizeof msg,
+                return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
                     "type '%s' has no writable subscript: '%s' is private to its unit",
-                    label, name);
-            else
-                snprintf(msg, sizeof msg,
-                    "type '%s' has no subscript: '%s' is private to its unit",
-                    label, name);
-            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                    label, name), self->sup->mem->path);
+            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+                "type '%s' has no subscript: '%s' is private to its unit",
+                label, name), self->sup->mem->path);
         }
         if (m < 0) {
             if (writable)
-                snprintf(msg, sizeof msg,
+                return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
                     "type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s",
-                    label, label);
-            else
-                snprintf(msg, sizeof msg,
-                    "type '%s' has no subscript: declare 'V get(K)' in impl %s",
-                    label, label);
-            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                    label, label), self->sup->mem->path);
+            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+                "type '%s' has no subscript: declare 'V get(K)' in impl %s",
+                label, label), self->sup->mem->path);
         }
-        if (self->arena->nodes[m].c) {
-            snprintf(msg, sizeof msg,
+        if (self->arena->nodes[m].c)
+            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
                 "type '%s' has no subscript: '%s' must be an instance method",
-                label, name);
-            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
-        }
+                label, name), self->sup->mem->path);
         for (p = self->arena->nodes[m].a; p > 0; p = self->arena->nodes[p].next)
             got++;
         if (got != want) {
             if (writable)
-                snprintf(msg, sizeof msg,
+                return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
                     "type '%s' has no writable subscript: 'set' must take 2 parameters",
-                    label);
-            else
-                snprintf(msg, sizeof msg,
-                    "type '%s' has no subscript: 'get' must take 1 parameter",
-                    label);
-            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                    label), self->sup->mem->path);
+            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+                "type '%s' has no subscript: 'get' must take 1 parameter",
+                label), self->sup->mem->path);
         }
         /* LANG-4: the index must also fit the declared key type. Matching only
            name+arity let `char *get(char *)` receive an int silently. */

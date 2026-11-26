@@ -114,12 +114,12 @@ pub int closure_capture_index(struct Closure *c, const char *name)
 
 pub void bind_conv_key(const char *in, char *out, int cap)
 {
-    char k[MAX_TEXT];
+    const char *k = bind_conv_key_text(in);
 
-    frontend::type::type_key(in, k, sizeof k);
-    if (strncmp(k, "struct", 6) == 0) memmove(k, k + 6, strlen(k + 6) + 1);
-    else if (strncmp(k, "union", 5) == 0) memmove(k, k + 5, strlen(k + 5) + 1);
-    else if (strncmp(k, "enum", 4) == 0) memmove(k, k + 4, strlen(k + 4) + 1);
+    if (!k) {
+        if (cap > 0) out[0] = 0;
+        return;
+    }
     snprintf(out, (size_t)cap, "%s", k);
 }
 
@@ -142,15 +142,14 @@ pub int bind_conv_on(void)
 
 pub int expr_is_builtin_Box_type(const char *type)
 {
-    char base[MAX_TEXT];
+    const char *base;
     int inst, ti, tn;
     struct StructInst *ins;
     struct StructTmpl *tps;
 
     if (!type || !type[0]) return 0;
-    snprintf(base, sizeof base, "%s", type);
-    if (strncmp(base, "struct ", 7) == 0)
-        memmove(base, base + 7, strlen(base + 7) + 1);
+    base = type;
+    if (strncmp(base, "struct ", 7) == 0) base += 7;
     inst = frontend::sym::ct_inst_find(base);
     if (inst < 0) return 0;
     ins = frontend::sym::ct_insts(&tn);

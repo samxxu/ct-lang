@@ -74,6 +74,15 @@ pub trait ExprStaticType {
        always refused. */
     int  static_ctype(int n, char *out, int cap, int *array_depth, int depth);
 
+    /* S1a-0 C2p-10: the pool-text form. The `char*`+cap forms below stay as
+       thin wrappers for the callers that still own a row; a caller that needs
+       the whole 2000-byte spelling uses this form and gets NULL only when the
+       shape cannot be pinned (never a cut copy). */
+    const char *static_ctype_text(int n, int *array_depth, int depth);
+    const char *ctype_expand_text(const char *in, int depth);
+    const char *fnptr_ret_text(const char *ftype);
+    const char *peel_ptr_text(const char *ty);
+
     /* `typedef` alias -> the spelling it was declared with (name lookup). */
     int  ctype_expand(const char *in, char *out, int cap, int depth);
 
@@ -164,6 +173,9 @@ pub trait ExprInstantiate {
        instance's concrete C arguments (`T` -> `struct Show_iface`). A spelling
        that mentions no parameter passes through unchanged. */
     int  inst_subst_type(const char *ibase, const char *spell, char *out, int cap);
+    /* S1a-0 C2p-10: the pool-text form of the substitution above, so a
+       2000-byte return type survives the template-parameter walk. */
+    const char *inst_subst_type_text(const char *ibase, const char *spell);
 
     /* L31-2 / Phase 33 O3: 1 when a container element (an interface value or an
        owning instance) is declared in a unit other than the container template's
@@ -251,6 +263,9 @@ pub trait ExprTraitInst {
    on failure. */
 pub trait ExprSubscript {
     int  custom_index_label(const char *bty, char *out, int cap);
+    /* S1a-0 C2p-10: the pool-text label, so a 2000-byte instance/struct name
+       in a subscript diagnostic is quoted whole. */
+    const char *custom_index_label_text(const char *bty);
     int  custom_index_method(const char *bty, const char *name, int want,
                              int line, int col, int writable, int idx_node);
 }
@@ -353,6 +368,11 @@ pub trait ExprTry {
        types. A pointer to a Result answers 0 (L44-1). */
     int  result_tag(const char *ctype, char *tag, int cap);
     int  result_cols(int inst, char *val, int vcap, char *err, int ecap);
+    /* S1a-0 C2p-10: the pool-text forms; `result_cols_text` writes the error
+       spelling through `*err` and answers the value spelling (NULL on a
+       spelling that is not a `Result<T, E>` instance). */
+    const char *result_tag_text(const char *ctype);
+    const char *result_cols_text(int inst, const char **err);
 }
 
 pub trait ExprBinding {

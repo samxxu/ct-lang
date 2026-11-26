@@ -1068,9 +1068,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_unary(void *self) {
 
 static int frontend_parse_Expr_frontend_parse_ExprOps_container_index_check(void *self, int base) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char ty[MAX_TEXT];
+    const char * ty;
     int ad;
-    if ((!_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, base, ty, sizeof(ty), (&ad), 0))) {
+    ty = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, base, (&ad), 0);
+    if ((!ty)) {
         return 0;
     }
     if (ad > 0) {
@@ -1146,13 +1147,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 return tool_diag_ct_sem_error(dl, dc, "a const value cannot be a '$' target (PH-76)", _self->sup->mem->path);
             }
 {
-                char rty[MAX_TEXT];
+                const char * rty;
                 int mz = 0;
                 int mad = 0;
-                int trc;
-                rty[0] = 0;
-                trc = _self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, n, rty, sizeof(rty), (&mad), 0);
-                if (((trc == 0) || (!rty[0]))) {
+                rty = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, n, (&mad), 0);
+                if (((!rty) || (!rty[0]))) {
                     return tool_diag_ct_sem_error(dl, dc, "'$' needs a non-void result; this hop has none (PH-76)", _self->sup->mem->path);
                 }
                 if ((_self->types_mode && (*_self->types_mode))) {
@@ -1298,14 +1297,17 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 n = m;
                 continue;
             }
-            char bty[MAX_TEXT];
+            const char * bty;
             int bd = 0;
-            int known = _self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, n, bty, sizeof(bty), (&bd), 0);
+            int known;
             int sugar = 0;
+            bty = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, n, (&bd), 0);
+            known = (bty != 0);
             if (((((known && (bd == 0)) && (strchr(bty, '*') == 0)) && (strncmp(bty, "struct ", 7) != 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, bty) >= 0))) {
-                char nb[MAX_TEXT];
-                snprintf(nb, sizeof(nb), "struct %s", bty);
-                snprintf(bty, sizeof(bty), "%s", nb);
+                bty = runtime_text_ct_internf("struct %s", bty);
+                if ((!bty)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
             }
             if (((known && (bd == 0)) && (strchr(bty, '*') == 0))) {
                 if (((strncmp(bty, "struct Vec_", 11) == 0) || (strncmp(bty, "struct Map_", 11) == 0))) {
@@ -1317,7 +1319,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 int rd2;
                 int bl = _self->lex->tokline;
                 int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                char rty[MAX_TEXT];
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 idx = _self->__frontend_parse_exprops_vptr->parse_expr(_self);
                 if (idx < 0) {
@@ -1348,9 +1349,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     rt = _self->arena->nodes[rt].a;
                 }
                 if ((((rt >= 0) && (_self->arena->nodes[rt].kind == N_CALL)) && (!_self->arena->nodes[rt].text[0]))) {
+                    const char * rty;
                     rd2 = 0;
-                    if ((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, rt, rty, sizeof(rty), (&rd2), 0) && (rd2 == 0))) {
-                        _self->arena->nodes[rt].text = runtime_text_ct_intern(rty);
+                    rty = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, rt, (&rd2), 0);
+                    if ((rty && (rd2 == 0))) {
+                        _self->arena->nodes[rt].text = rty;
                     }
                     if ((!_self->arena->nodes[rt].text)) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -1360,7 +1363,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 continue;
             }
             if ((((((((known && (bd == 0)) && (strchr(bty, '*') != 0)) && (n >= 0)) && (_self->arena->nodes[n].kind == N_MCALL)) && (_self->arena->nodes[n].line > 0)) && (_self->arena->nodes[n].num > 0)) && ((strcmp(_self->arena->nodes[n].text2, "get") == 0) || (strcmp(_self->arena->nodes[n].text2, "at") == 0)))) {
-                char pty[MAX_TEXT];
+                const char * pty;
                 size_t pl;
                 int star;
                 int pointee_map;
@@ -1369,20 +1372,20 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 int bc;
                 int d;
                 star = 0;
-                snprintf(pty, sizeof(pty), "%s", bty);
-                pl = strlen(pty);
-                while (((pl > 0) && (pty[(pl - 1)] == ' '))) {
+                pl = strlen(bty);
+                while (((pl > 0) && (bty[(pl - 1)] == ' '))) {
                     pl--;
-                    pty[pl] = 0;
                 }
-                if (((pl > 0) && (pty[(pl - 1)] == '*'))) {
+                if (((pl > 0) && (bty[(pl - 1)] == '*'))) {
                     star = 1;
                     pl--;
-                    pty[pl] = 0;
                 }
-                while (((pl > 0) && (pty[(pl - 1)] == ' '))) {
+                while (((pl > 0) && (bty[(pl - 1)] == ' '))) {
                     pl--;
-                    pty[pl] = 0;
+                }
+                pty = runtime_text_ct_intern_len(bty, (int)(pl));
+                if ((!pty)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
                 pointee_map = ((strncmp(pty, "struct Map_", 11) == 0) ? 1 : 0);
                 recv_map = ((strncmp(_self->arena->nodes[n].text, "struct Map_", 11) == 0) || (strncmp(_self->arena->nodes[n].text, "Map_", 4) == 0));
@@ -1435,7 +1438,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 int gm;
                 int rt;
                 int rd2;
-                char rty[MAX_TEXT];
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 idx = _self->__frontend_parse_exprops_vptr->parse_expr(_self);
                 if (idx < 0) {
@@ -1470,9 +1472,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     rt = _self->arena->nodes[rt].a;
                 }
                 if ((((rt >= 0) && (_self->arena->nodes[rt].kind == N_CALL)) && (!_self->arena->nodes[rt].text[0]))) {
+                    const char * rty;
                     rd2 = 0;
-                    if ((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, rt, rty, sizeof(rty), (&rd2), 0) && (rd2 == 0))) {
-                        _self->arena->nodes[rt].text = runtime_text_ct_intern(rty);
+                    rty = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, rt, (&rd2), 0);
+                    if ((rty && (rd2 == 0))) {
+                        _self->arena->nodes[rt].text = rty;
                     }
                     if ((!_self->arena->nodes[rt].text)) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -1839,7 +1843,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         }
                         if (((!_self->arena->nodes[m].text[0]) && _self->__frontend_parse_exprstatictype_vptr->fnptr_field(_self, rtype, fname))) {
                             int mf;
-                            char fpt[MAX_TEXT];
+                            const char * fpt;
                             int fad = 0;
                             mf = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, (arrow ? N_ARROW : N_MEMBER));
                             if (mf < 0) {
@@ -1854,7 +1858,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             _self->arena->nodes[m].a = ((args == 0) ? (-1) : args);
                             _self->arena->nodes[m].b = mf;
                             _self->arena->nodes[m].aux = 2;
-                            if (((((_self->types_mode && (*_self->types_mode)) && _self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, mf, fpt, sizeof(fpt), (&fad), 0)) && (fad == 0)) && (_self->__frontend_parse_exprtypes_vptr->chk_callptr_args(_self, fpt, fname, args, mline, mcol) != 0))) {
+                            fpt = ((_self->types_mode && (*_self->types_mode)) ? _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, mf, (&fad), 0) : (const char *)(0));
+                            if (((fpt && (fad == 0)) && (_self->__frontend_parse_exprtypes_vptr->chk_callptr_args(_self, fpt, fname, args, mline, mcol) != 0))) {
                                 return (-1);
                             }
                         }
@@ -2205,35 +2210,34 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 _self->arena->nodes[m].b = n;
                 _self->arena->nodes[m].aux = 2;
                 if ((_self->types_mode && (*_self->types_mode))) {
-                    char ppt[MAX_TEXT];
-                    char lbl[MAX_TEXT];
+                    const char * ppt;
+                    const char * lbl;
                     int pad = 0;
                     int typed = 0;
-                    if ((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, n, ppt, sizeof(ppt), (&pad), 0) && (pad == 0))) {
+                    ppt = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, n, (&pad), 0);
+                    if ((ppt && (pad == 0))) {
                         typed = 1;
                     }
                     else {
                         if (_self->arena->nodes[n].kind == N_DEREF) {
                             int dn = _self->arena->nodes[n].a;
-                            char dty[MAX_TEXT];
+                            const char * dty;
                             int dad = 0;
-                            if (((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, dn, dty, sizeof(dty), (&dad), 0) && (dad == 0)) && strstr(dty, "(*"))) {
-                                snprintf(ppt, sizeof(ppt), "%s", dty);
+                            dty = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, dn, (&dad), 0);
+                            if (((dty && (dad == 0)) && strstr(dty, "(*"))) {
+                                ppt = dty;
                                 typed = 1;
                             }
                         }
                     }
                     if (typed) {
-                        lbl[0] = 0;
+                        lbl = "function pointer";
                         if (_self->arena->nodes[n].kind == N_VAR) {
-                            snprintf(lbl, sizeof(lbl), "%s", _self->arena->nodes[n].text2);
+                            lbl = _self->arena->nodes[n].text2;
                         }
                         else {
                             if (((_self->arena->nodes[n].kind == N_DEREF) && (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_VAR))) {
-                                snprintf(lbl, sizeof(lbl), "%s", _self->arena->nodes[_self->arena->nodes[n].a].text2);
-                            }
-                            else {
-                                snprintf(lbl, sizeof(lbl), "%s", "function pointer");
+                                lbl = _self->arena->nodes[_self->arena->nodes[n].a].text2;
                             }
                         }
                         if (_self->__frontend_parse_exprtypes_vptr->chk_callptr_args(_self, ppt, lbl, args, pcl, pcc) != 0) {
@@ -2248,7 +2252,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "?"))) {
             int qline;
             int qcol;
-            char qty[MAX_TEXT];
+            const char * qty;
             int qad = 0;
             int okind;
             int oline;
@@ -2309,8 +2313,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
             _self->arena->nodes[m].a = n;
             _self->arena->nodes[m].line = qline;
             _self->arena->nodes[m].num = qcol;
-            if ((_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, n, qty, sizeof(qty), (&qad), 0) && (qad == 0))) {
-                _self->arena->nodes[m].text = runtime_text_ct_intern(qty);
+            qty = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, n, (&qad), 0);
+            if ((qty && (qad == 0))) {
+                _self->arena->nodes[m].text = qty;
                 if ((!_self->arena->nodes[m].text)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }

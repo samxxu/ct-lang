@@ -358,11 +358,10 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_iface_pt
     return 0;
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_subst_type(void *self, const char * ibase, const char * spell, char * out, int cap) {
+static const char * frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_subst_type_text(void *self, const char * ibase, const char * spell) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char base[MAX_TEXT];
-    char cur[MAX_TEXT];
-    char nxt[MAX_TEXT];
+    const char * base;
+    const char * cur;
     int inst;
     int ti;
     int tn;
@@ -370,9 +369,12 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_subst_type(vo
     struct frontend_sym_StructInst * ins;
     struct frontend_sym_StructTmpl * tp;
     (void)(_self);
-    snprintf(cur, sizeof(cur), "%s", spell);
+    cur = runtime_text_ct_intern(spell);
+    if ((!cur)) {
+        return (const char *)(0);
+    }
     if (strncmp(ibase, "struct ", 7) == 0) {
-        snprintf(base, sizeof(base), "%s", (ibase + 7));
+        base = (ibase + 7);
         inst = frontend_sym_ct_inst_find(base);
         if (inst >= 0) {
             ins = frontend_sym_ct_insts((&k));
@@ -383,14 +385,26 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_subst_type(vo
                     if (k >= ins[inst].nargs) {
                         break;
                     }
-                    if (((tp[ti].tparam[k] && ins[inst].ctype[k]) && (frontend_sym_ct_generic_subst(cur, tp[ti].tparam[k], ins[inst].ctype[k], nxt, MAX_TEXT) == 0))) {
-                        snprintf(cur, sizeof(cur), "%s", nxt);
+                    if ((tp[ti].tparam[k] && ins[inst].ctype[k])) {
+                        cur = frontend_sym_ct_generic_subst_text(cur, tp[ti].tparam[k], ins[inst].ctype[k]);
+                        if ((!cur)) {
+                            return (const char *)(0);
+                        }
                     }
                 }
             }
         }
     }
-    if (snprintf(out, (size_t)(cap), "%s", cur) >= cap) {
+    return cur;
+}
+
+static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_subst_type(void *self, const char * ibase, const char * spell, char * out, int cap) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    const char * t = _self->__frontend_parse_exprinstantiate_vptr->inst_subst_type_text(_self, ibase, spell);
+    if ((!t)) {
+        return 0;
+    }
+    if (snprintf(out, (size_t)(cap), "%s", t) >= cap) {
         return 0;
     }
     return 1;
@@ -894,6 +908,7 @@ const struct frontend_parse_ExprInstantiate_vtbl frontend_parse_Expr_frontend_pa
     .generic_instance = frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance,
     .container_vptr_type = frontend_parse_Expr_frontend_parse_ExprInstantiate_container_vptr_type,
     .container_iface_ptr = frontend_parse_Expr_frontend_parse_ExprInstantiate_container_iface_ptr,
+    .inst_subst_type_text = frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_subst_type_text,
     .inst_subst_type = frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_subst_type,
     .container_elem_foreign = frontend_parse_Expr_frontend_parse_ExprInstantiate_container_elem_foreign,
     .inst_make = frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make,

@@ -30,6 +30,7 @@ import runtime::arena::Arena;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -175,33 +176,30 @@ impl ExprOptional for Expr {
     /* PH-53 L53-3/L53-4: a struct/union value has no NULL representation. */
     int opt_result_ok(const char *ty, int subscript, int line, int col)
     {
-        char label[MAX_TEXT];
-        char msg[MAX_TEXT];
+        const char *label;
 
         (void)self;
         if (strchr(ty, '*') != 0) return 0;
         if (strncmp(ty, "struct ", 7) != 0 && strncmp(ty, "union ", 6) != 0)
             return 0;
-        self->custom_index_label(ty, label, sizeof label);
+        label = self->custom_index_label_text(ty);
+        if (!label) return self->sup->fail("out of memory");
         if (subscript)
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
                 "optional subscript result must be a pointer or scalar; '%s' has no NULL representation",
-                label);
-        else
-            snprintf(msg, sizeof msg,
-                "optional chain result must be a pointer or scalar; '%s' has no NULL representation",
-                label);
-        return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                label), self->sup->mem->path);
+        return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+            "optional chain result must be a pointer or scalar; '%s' has no NULL representation",
+            label), self->sup->mem->path);
     }
 
     /* `recv?.field`: recv must be a struct pointer; the field must exist and
        its value must have a NULL spelling (L53-3). */
     int opt_field(int recv, const char *fname, int line, int col)
     {
-        char rty[MAX_TEXT];
-        char base[MAX_TEXT];
-        char fty[MAX_TEXT];
-        char msg[MAX_TEXT];
+        const char *rty;
+        const char *base;
+        const char *fty;
         size_t n;
         int ad = 0, si, fi, i, m, inst, nins;
         struct StructInst *ins;
@@ -220,13 +218,14 @@ impl ExprOptional for Expr {
                     "optional chain on a map lookup requires a value-typed V; got pointer value type; use a map of values or guard the inner pointer",
                     self->sup->mem->path);
         }
-        if (!self->static_ctype(recv, rty, sizeof rty, &ad, 0) || ad != 0)
+        rty = self->static_ctype_text(recv, &ad, 0);
+        if (!rty || ad != 0)
             return self->sup->fail("cannot resolve the receiver type of '?.'");
         if (strchr(rty, '*') == 0)
             return tool::diag::ct_sem_error(line, col,
                 "optional chain '?.' requires a pointer receiver; a struct value has no empty state",
                 self->sup->mem->path);
-        snprintf(base, sizeof base, "%s", rty);
+        base = rty;
         n = strlen(base);
         while (n > 0 && base[n - 1] == ' ') n--;
         if (n == 0 || base[n - 1] != '*')
@@ -235,10 +234,11 @@ impl ExprOptional for Expr {
                 self->sup->mem->path);
         n--;
         while (n > 0 && base[n - 1] == ' ') n--;
-        base[n] = 0;
+        base = runtime::text::ct_intern_len(base, (int)n);
+        if (!base) return self->sup->fail("out of memory");
         if (strncmp(base, "struct ", 7) == 0) {
-            snprintf(msg, sizeof msg, "%s", base + 7);
-            snprintf(base, sizeof base, "%s", msg);
+            base = runtime::text::ct_intern(base + 7);
+            if (!base) return self->sup->fail("out of memory");
         }
         si = self->sym->find_struct(base);
         if (si < 0) return self->sup->fail("the '?.' receiver is not a struct pointer");
@@ -248,12 +248,11 @@ impl ExprOptional for Expr {
                 fi = i;
                 break;
             }
-        if (fi < 0) {
-            snprintf(msg, sizeof msg, "type '%s' has no field '%s'", base, fname);
-            return self->sup->fail(msg);
-        }
-        if (!self->ctype_expand(self->sym->structs[si].fields[fi].type,
-                                fty, sizeof fty, 0))
+        if (fi < 0)
+            return self->sup->fail(tool::sh::ct_scratch_fmt(
+                "type '%s' has no field '%s'", base, fname));
+        fty = self->ctype_expand_text(self->sym->structs[si].fields[fi].type, 0);
+        if (!fty)
             return self->sup->fail("cannot resolve the optional field type");
         if (self->opt_result_ok(fty, 0, line, col) != 0) return -1;
         m = self->sup->new_node(N_OPT);
@@ -264,60 +263,58 @@ impl ExprOptional for Expr {
         self->arena->nodes[m].num = col;
         self->arena->nodes[m].text = runtime::text::ct_intern(fname);
         if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
-        self->arena->nodes[m].text2 = runtime::text::ct_intern(fty);
-        if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
-        self->arena->nodes[m].text4 = runtime::text::ct_intern(rty);
-        if (!self->arena->nodes[m].text4) return self->sup->fail("out of memory");
+        self->arena->nodes[m].text2 = fty;
+        self->arena->nodes[m].text4 = rty;
         return m;
     }
 
     /* `recv?[key]`: C pointer element or `Map *` get; L53-2 / L53-4. */
     int opt_subscript(int recv, int idx, int line, int col)
     {
-        char rty[MAX_TEXT];
-        char base[MAX_TEXT];
-        char rty2[MAX_TEXT];
+        const char *rty;
+        const char *base;
+        const char *rty2;
         size_t n;
         int ad = 0, m, inst, nins;
         struct StructInst *ins;
 
-        if (!self->static_ctype(recv, rty, sizeof rty, &ad, 0) || ad != 0)
+        rty = self->static_ctype_text(recv, &ad, 0);
+        if (!rty || ad != 0)
             return self->sup->fail("cannot resolve the receiver type of '?['");
         if (strchr(rty, '*') == 0)
             return tool::diag::ct_sem_error(line, col,
                 "optional subscript '?[' requires a pointer receiver; a struct value has no empty state",
                 self->sup->mem->path);
-        snprintf(base, sizeof base, "%s", rty);
+        base = rty;
         n = strlen(base);
         while (n > 0 && base[n - 1] == ' ') n--;
         n--;                            /* exactly one pointer layer */
         while (n > 0 && base[n - 1] == ' ') n--;
-        base[n] = 0;
+        base = runtime::text::ct_intern_len(base, (int)n);
+        if (!base) return self->sup->fail("out of memory");
         m = self->sup->new_node(N_OPT);
         if (m < 0) return -1;
         self->arena->nodes[m].a = recv;
         self->arena->nodes[m].b = idx;
         self->arena->nodes[m].line = line;
         self->arena->nodes[m].num = col;
-        self->arena->nodes[m].text4 = runtime::text::ct_intern(rty);
-        if (!self->arena->nodes[m].text4) return self->sup->fail("out of memory");
+        self->arena->nodes[m].text4 = rty;
         if (strncmp(base, "struct Map_", 11) == 0
             && (inst = frontend::sym::ct_inst_find(base + 7)) >= 0) {
             ins = frontend::sym::ct_insts(&nins);
             if (!ins || inst >= nins || ins[inst].nargs != 2)
                 return self->sup->fail("cannot resolve the Map value type");
-            snprintf(rty2, sizeof rty2, "%s *", ins[inst].ctype[1]);
+            rty2 = runtime::text::ct_internf("%s *", ins[inst].ctype[1]);
+            if (!rty2) return self->sup->fail("out of memory");
             self->arena->nodes[m].aux = 3;
             self->arena->nodes[m].text = runtime::text::ct_intern(base + 7);
             if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
-            self->arena->nodes[m].text2 = runtime::text::ct_intern(rty2);
-            if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
+            self->arena->nodes[m].text2 = rty2;
             return m;
         }
         if (self->opt_result_ok(base, 1, line, col) != 0) return -1;
         self->arena->nodes[m].aux = 2;
-        self->arena->nodes[m].text2 = runtime::text::ct_intern(base);
-        if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
+        self->arena->nodes[m].text2 = base;
         return m;
     }
 

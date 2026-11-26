@@ -239,68 +239,100 @@ static int frontend_parse_Expr_frontend_parse_ExprTry_q_suffix_ahead(void *self)
     return r;
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprTry_result_tag(void *self, const char * ctype, char * tag, int cap) {
+static const char * frontend_parse_Expr_frontend_parse_ExprTry_result_tag_text(void *self, const char * ctype) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char buf[MAX_TEXT];
+    const char * buf;
     size_t n;
     int inst;
     int ninst;
     struct frontend_sym_StructInst * ins;
     (void)(_self);
     if (((!ctype) || (!ctype[0]))) {
-        return 0;
+        return (const char *)(0);
     }
-    if (snprintf(buf, sizeof(buf), "%s", ctype) >= (int)(sizeof(buf))) {
-        return 0;
-    }
-    n = strlen(buf);
-    while (((n > 0) && ((buf[(n - 1)] == ' ') || (buf[(n - 1)] == '*')))) {
-        if (buf[(n - 1)] == '*') {
-            return 0;
+    n = strlen(ctype);
+    while (((n > 0) && ((ctype[(n - 1)] == ' ') || (ctype[(n - 1)] == '*')))) {
+        if (ctype[(n - 1)] == '*') {
+            return (const char *)(0);
         }
-        buf[--n] = 0;
+        n--;
     }
+    if (n == 0) {
+        return (const char *)(0);
+    }
+    buf = ctype;
     if (strncmp(buf, "struct ", 7) == 0) {
-        memmove(buf, (buf + 7), (strlen((buf + 7)) + 1));
+        buf += 7;
+        n -= 7;
     }
     else {
         if (((strncmp(buf, "union ", 6) == 0) || (strncmp(buf, "enum ", 5) == 0))) {
-            return 0;
+            return (const char *)(0);
         }
+    }
+    buf = runtime_text_ct_intern_len(buf, (int)(n));
+    if ((!buf)) {
+        return (const char *)(0);
     }
     inst = frontend_sym_ct_inst_find(buf);
     if (inst < 0) {
-        return 0;
+        return (const char *)(0);
     }
     ins = frontend_sym_ct_insts((&ninst));
     if (((!ins) || (inst >= ninst))) {
-        return 0;
+        return (const char *)(0);
     }
     if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
+        return (const char *)(0);
+    }
+    return buf;
+}
+
+static int frontend_parse_Expr_frontend_parse_ExprTry_result_tag(void *self, const char * ctype, char * tag, int cap) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    const char * t = _self->__frontend_parse_exprtry_vptr->result_tag_text(_self, ctype);
+    if ((!t)) {
         return 0;
     }
-    if (snprintf(tag, (size_t)(cap), "%s", buf) >= cap) {
+    if (snprintf(tag, (size_t)(cap), "%s", t) >= cap) {
         return 0;
     }
     return 1;
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprTry_result_cols(void *self, int inst, char * val, int vcap, char * err, int ecap) {
+static const char * frontend_parse_Expr_frontend_parse_ExprTry_result_cols_text(void *self, int inst, const char * * err) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     int ninst;
     struct frontend_sym_StructInst * ins;
     (void)(_self);
+    if (err) {
+        (*err) = "";
+    }
     ins = frontend_sym_ct_insts((&ninst));
     if ((((!ins) || (inst < 0)) || (inst >= ninst))) {
-        return 0;
+        return (const char *)(0);
     }
     if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
+        return (const char *)(0);
+    }
+    if (err) {
+        (*err) = ins[inst].carg[1];
+    }
+    return ins[inst].ctype[0];
+}
+
+static int frontend_parse_Expr_frontend_parse_ExprTry_result_cols(void *self, int inst, char * val, int vcap, char * err, int ecap) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    const char * v;
+    const char * e;
+    v = _self->__frontend_parse_exprtry_vptr->result_cols_text(_self, inst, (&e));
+    if ((!v)) {
         return 0;
     }
-    if (snprintf(val, (size_t)(vcap), "%s", ins[inst].ctype[0]) >= vcap) {
+    if (snprintf(val, (size_t)(vcap), "%s", v) >= vcap) {
         return 0;
     }
-    if (snprintf(err, (size_t)(ecap), "%s", ins[inst].carg[1]) >= ecap) {
+    if (snprintf(err, (size_t)(ecap), "%s", e) >= ecap) {
         return 0;
     }
     return 1;
@@ -308,7 +340,9 @@ static int frontend_parse_Expr_frontend_parse_ExprTry_result_cols(void *self, in
 
 const struct frontend_parse_ExprTry_vtbl frontend_parse_Expr_frontend_parse_ExprTry_vtable = {
     .q_suffix_ahead = frontend_parse_Expr_frontend_parse_ExprTry_q_suffix_ahead,
+    .result_tag_text = frontend_parse_Expr_frontend_parse_ExprTry_result_tag_text,
     .result_tag = frontend_parse_Expr_frontend_parse_ExprTry_result_tag,
+    .result_cols_text = frontend_parse_Expr_frontend_parse_ExprTry_result_cols_text,
     .result_cols = frontend_parse_Expr_frontend_parse_ExprTry_result_cols
 };
 

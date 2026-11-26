@@ -18,6 +18,7 @@
 #include "TypeCheck.h"
 #include "Arena.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -117,18 +118,18 @@ struct frontend_parse_ExprStaticType {
     int unused;
 };
 int frontend_parse_expr_generic_token(struct frontend_parse_Expr *);
-int frontend_parse_ctype_adtctor(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_var(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_try(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_index(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_deref(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_addr(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_member_or_arrow(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_call(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_opt(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_mcall(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_slice_index(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_slice_get(struct frontend_parse_Expr *, int, char *, int, int *, int);
-int frontend_parse_ctype_slice_range(struct frontend_parse_Expr *, int, char *, int, int *, int);
+const char * frontend_parse_ctype_adtctor(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_var(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_try(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_index(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_deref(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_addr(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_member_or_arrow(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_call(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_opt(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_mcall(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_slice_index(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_slice_get(struct frontend_parse_Expr *, int, int *, int);
+const char * frontend_parse_ctype_slice_range(struct frontend_parse_Expr *, int, int *, int);
 
 #endif

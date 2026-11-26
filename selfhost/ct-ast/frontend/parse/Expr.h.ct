@@ -1832,10 +1832,11 @@ impl ExprOps for Expr {
        value is refused. A base this pass cannot pin is not judged. */
     int container_index_check(int base)
     {
-        char ty[MAX_TEXT];
+        const char *ty;
         int ad;
 
-        if (!self->static_ctype(base, ty, sizeof ty, &ad, 0)) return 0;
+        ty = self->static_ctype_text(base, &ad, 0);
+        if (!ty) return 0;
         if (ad > 0) return 0;
         if (strchr(ty, '*') != 0) return 0;
         if (strncmp(ty, "struct Vec_", 11) == 0)
@@ -1917,14 +1918,13 @@ impl ExprOps for Expr {
                         "a const value cannot be a '$' target (PH-76)",
                         self->sup->mem->path);
                 {
-                    char rty[MAX_TEXT];
-                    int mz = 0, mad = 0, trc;
-                    rty[0] = 0;
-                    trc = self->static_ctype(n, rty, sizeof rty, &mad, 0);
+                    const char *rty;
+                    int mz = 0, mad = 0;
+                    rty = self->static_ctype_text(n, &mad, 0);
                     /* A void hop has no value to assign; an unresolvable call
                        has no type to check either, so v1 refuses both at `$`
                        instead of emitting `x = ...void...` for the host cc. */
-                    if (trc == 0 || !rty[0])
+                    if (!rty || !rty[0])
                         return tool::diag::ct_sem_error(dl, dc,
                             "'$' needs a non-void result; this hop has none (PH-76)",
                             self->sup->mem->path);
@@ -2066,10 +2066,12 @@ impl ExprOps for Expr {
                    node is built exactly as an inherent method call would be
                    (aux 9: value receiver, emitted with `&`). A base this pass
                    cannot pin keeps C's subscript meaning. */
-                char bty[MAX_TEXT];
+                const char *bty;
                 int bd = 0;
-                int known = self->static_ctype(n, bty, sizeof bty, &bd, 0);
+                int known;
                 int sugar = 0;
+                bty = self->static_ctype_text(n, &bd, 0);
+                known = bty != 0;
                 /* PH-80: a built-in struct reached through a bare name can
                    still be spelled `String` / `Str` at this point (the
                    canonical `struct ` prefix is added by `parse_type` only
@@ -2078,9 +2080,8 @@ impl ExprOps for Expr {
                 if (known && bd == 0 && strchr(bty, '*') == 0
                     && strncmp(bty, "struct ", 7) != 0
                     && self->sym->find_struct(bty) >= 0) {
-                    char nb[MAX_TEXT];
-                    snprintf(nb, sizeof nb, "struct %s", bty);
-                    snprintf(bty, sizeof bty, "%s", nb);
+                    bty = runtime::text::ct_internf("struct %s", bty);
+                    if (!bty) return self->sup->fail("out of memory");
                 }
                 if (known && bd == 0 && strchr(bty, '*') == 0) {
                     if (strncmp(bty, "struct Vec_", 11) == 0
@@ -2091,7 +2092,6 @@ impl ExprOps for Expr {
                     int rt, rd2;
                     int bl = self->lex->tokline;
                     int bc = self->lex->tokstart - self->lex->lstart + 1;
-                    char rty[MAX_TEXT];
                     self->sup->lex_next();
                     idx = self->parse_expr();
                     if (idx < 0) return -1;
@@ -2118,11 +2118,12 @@ impl ExprOps for Expr {
                         rt = self->arena->nodes[rt].a;
                     if (rt >= 0 && self->arena->nodes[rt].kind == N_CALL
                         && !self->arena->nodes[rt].text[0]) {
+                        const char *rty;
                         rd2 = 0;
-                        if (self->static_ctype(rt, rty, sizeof rty, &rd2, 0)
-                            && rd2 == 0)
-                            self->arena->nodes[rt].text = runtime::text::ct_intern(rty);
-                            if (!self->arena->nodes[rt].text) return self->sup->fail("out of memory");
+                        rty = self->static_ctype_text(rt, &rd2, 0);
+                        if (rty && rd2 == 0)
+                            self->arena->nodes[rt].text = rty;
+                        if (!self->arena->nodes[rt].text) return self->sup->fail("out of memory");
                     }
                     n = m;
                     continue;
@@ -2144,25 +2145,19 @@ impl ExprOps for Expr {
                     && self->arena->nodes[n].num > 0
                     && (strcmp(self->arena->nodes[n].text2, "get") == 0
                         || strcmp(self->arena->nodes[n].text2, "at") == 0)) {
-                    char pty[MAX_TEXT];
+                    const char *pty;
                     size_t pl;
                     int star, pointee_map, recv_map, bl, bc, d;
                     star = 0;
-                    snprintf(pty, sizeof pty, "%s", bty);
-                    pl = strlen(pty);
-                    while (pl > 0 && pty[pl - 1] == ' ') {
-                        pl--;
-                        pty[pl] = 0;
-                    }
-                    if (pl > 0 && pty[pl - 1] == '*') {
+                    pl = strlen(bty);
+                    while (pl > 0 && bty[pl - 1] == ' ') pl--;
+                    if (pl > 0 && bty[pl - 1] == '*') {
                         star = 1;
                         pl--;
-                        pty[pl] = 0;
                     }
-                    while (pl > 0 && pty[pl - 1] == ' ') {
-                        pl--;
-                        pty[pl] = 0;
-                    }
+                    while (pl > 0 && bty[pl - 1] == ' ') pl--;
+                    pty = runtime::text::ct_intern_len(bty, (int)pl);
+                    if (!pty) return self->sup->fail("out of memory");
                     pointee_map = strncmp(pty, "struct Map_", 11) == 0 ? 1 : 0;
                     recv_map = strncmp(self->arena->nodes[n].text, "struct Map_", 11) == 0
                                || strncmp(self->arena->nodes[n].text, "Map_", 4) == 0;
@@ -2217,7 +2212,6 @@ impl ExprOps for Expr {
                     int bl = self->lex->tokline;
                     int bc = self->lex->tokstart - self->lex->lstart + 1;
                     int gm, rt, rd2;
-                    char rty[MAX_TEXT];
                     self->sup->lex_next();
                     idx = self->parse_expr();
                     if (idx < 0) return -1;
@@ -2241,11 +2235,12 @@ impl ExprOps for Expr {
                         rt = self->arena->nodes[rt].a;
                     if (rt >= 0 && self->arena->nodes[rt].kind == N_CALL
                         && !self->arena->nodes[rt].text[0]) {
+                        const char *rty;
                         rd2 = 0;
-                        if (self->static_ctype(rt, rty, sizeof rty, &rd2, 0)
-                            && rd2 == 0)
-                            self->arena->nodes[rt].text = runtime::text::ct_intern(rty);
-                            if (!self->arena->nodes[rt].text) return self->sup->fail("out of memory");
+                        rty = self->static_ctype_text(rt, &rd2, 0);
+                        if (rty && rd2 == 0)
+                            self->arena->nodes[rt].text = rty;
+                        if (!self->arena->nodes[rt].text) return self->sup->fail("out of memory");
                     }
                     n = m;
                     continue;
@@ -2678,7 +2673,7 @@ impl ExprOps for Expr {
                            with a member node as the callee (D-4). */
                         if (!self->arena->nodes[m].text[0] && self->fnptr_field(rtype, fname)) {
                             int mf;
-                            char fpt[MAX_TEXT];
+                            const char *fpt;
                             int fad = 0;
                             mf = self->sup->new_node(arrow ? N_ARROW : N_MEMBER);
                             if (mf < 0) return -1;
@@ -2692,9 +2687,10 @@ impl ExprOps for Expr {
                             /* SH-115: the call is the member expression, so
                                the prototype comes from the field's type --
                                the residual path LANG-19 left open. */
-                            if (self->types_mode && *self->types_mode
-                                && self->static_ctype(mf, fpt, sizeof fpt, &fad, 0)
-                                && fad == 0
+                            fpt = (self->types_mode && *self->types_mode)
+                                  ? self->static_ctype_text(mf, &fad, 0)
+                                  : (const char *)0;
+                            if (fpt && fad == 0
                                 && self->chk_callptr_args(fpt, fname, args, mline, mcol) != 0)
                                 return -1;
                         }
@@ -3116,11 +3112,12 @@ impl ExprOps for Expr {
                        actuals the same way a named call judges them. A callee
                        whose type the tables cannot pin stays silent. */
                     if (self->types_mode && *self->types_mode) {
-                        char ppt[MAX_TEXT];
-                        char lbl[MAX_TEXT];
+                        const char *ppt;
+                        const char *lbl;
                         int pad = 0;
                         int typed = 0;
-                        if (self->static_ctype(n, ppt, sizeof ppt, &pad, 0) && pad == 0) {
+                        ppt = self->static_ctype_text(n, &pad, 0);
+                        if (ppt && pad == 0) {
                             typed = 1;
                         } else if (self->arena->nodes[n].kind == N_DEREF) {
                             /* `(*p)` where `p` already *is* the function
@@ -3128,26 +3125,22 @@ impl ExprOps for Expr {
                                yields the same function pointer, so its
                                spelling is the one to judge. */
                             int dn = self->arena->nodes[n].a;
-                            char dty[MAX_TEXT];
+                            const char *dty;
                             int dad = 0;
-                            if (self->static_ctype(dn, dty, sizeof dty, &dad, 0)
-                                && dad == 0 && strstr(dty, "(*")) {
-                                snprintf(ppt, sizeof ppt, "%s", dty);
+                            dty = self->static_ctype_text(dn, &dad, 0);
+                            if (dty && dad == 0 && strstr(dty, "(*")) {
+                                ppt = dty;
                                 typed = 1;
                             }
                         }
                         if (typed) {
-                            lbl[0] = 0;
-                            if (self->arena->nodes[n].kind == N_VAR) {
-                                snprintf(lbl, sizeof lbl, "%s", self->arena->nodes[n].text2);
-                            } else if (self->arena->nodes[n].kind == N_DEREF
-                                       && self->arena->nodes[self->arena->nodes[n].a].kind
-                                          == N_VAR) {
-                                snprintf(lbl, sizeof lbl, "%s",
-                                         self->arena->nodes[self->arena->nodes[n].a].text2);
-                            } else {
-                                snprintf(lbl, sizeof lbl, "%s", "function pointer");
-                            }
+                            lbl = "function pointer";
+                            if (self->arena->nodes[n].kind == N_VAR)
+                                lbl = self->arena->nodes[n].text2;
+                            else if (self->arena->nodes[n].kind == N_DEREF
+                                     && self->arena->nodes[self->arena->nodes[n].a].kind
+                                        == N_VAR)
+                                lbl = self->arena->nodes[self->arena->nodes[n].a].text2;
                             if (self->chk_callptr_args(ppt, lbl, args, pcl, pcc) != 0)
                                 return -1;
                         }
@@ -3162,7 +3155,7 @@ impl ExprOps for Expr {
                postfix loop stops here without consuming it. */
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("?")) {
                 int qline, qcol;
-                char qty[MAX_TEXT];
+                const char *qty;
                 int qad = 0;
                 int okind, oline, ocol;
                 /* PH-53: `?.` / `?[` are parser combinations, not lexer
@@ -3221,8 +3214,9 @@ impl ExprOps for Expr {
                 /* The operand's static type is read while its locals are still
                    in scope; the emitter runs after the scopes are popped, so it
                    cannot resolve a variable operand on its own. */
-                if (self->static_ctype(n, qty, sizeof qty, &qad, 0) && qad == 0) {
-                        self->arena->nodes[m].text = runtime::text::ct_intern(qty);
+                qty = self->static_ctype_text(n, &qad, 0);
+                if (qty && qad == 0) {
+                        self->arena->nodes[m].text = qty;
                         if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                 }
                 /* Capture the failure cleanup now, while the defer stack and

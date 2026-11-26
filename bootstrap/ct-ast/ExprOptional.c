@@ -10,6 +10,7 @@
 #include "TypeCheck.h"
 #include "Arena.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -243,8 +244,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_suffix_kind(void 
 
 static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_result_ok(void *self, const char * ty, int subscript, int line, int col) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char label[MAX_TEXT];
-    char msg[MAX_TEXT];
+    const char * label;
     (void)(_self);
     if (strchr(ty, '*') != 0) {
         return 0;
@@ -252,22 +252,21 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_result_ok(void *s
     if (((strncmp(ty, "struct ", 7) != 0) && (strncmp(ty, "union ", 6) != 0))) {
         return 0;
     }
-    _self->__frontend_parse_exprsubscript_vptr->custom_index_label(_self, ty, label, sizeof(label));
+    label = _self->__frontend_parse_exprsubscript_vptr->custom_index_label_text(_self, ty);
+    if ((!label)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     if (subscript) {
-        snprintf(msg, sizeof(msg), "optional subscript result must be a pointer or scalar; '%s' has no NULL representation", label);
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("optional subscript result must be a pointer or scalar; '%s' has no NULL representation", label), _self->sup->mem->path);
     }
-    else {
-        snprintf(msg, sizeof(msg), "optional chain result must be a pointer or scalar; '%s' has no NULL representation", label);
-    }
-    return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+    return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("optional chain result must be a pointer or scalar; '%s' has no NULL representation", label), _self->sup->mem->path);
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self, int recv, const char * fname, int line, int col) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char rty[MAX_TEXT];
-    char base[MAX_TEXT];
-    char fty[MAX_TEXT];
-    char msg[MAX_TEXT];
+    const char * rty;
+    const char * base;
+    const char * fty;
     size_t n;
     int ad = 0;
     int si;
@@ -284,13 +283,14 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self,
             return tool_diag_ct_sem_error(line, col, "optional chain on a map lookup requires a value-typed V; got pointer value type; use a map of values or guard the inner pointer", _self->sup->mem->path);
         }
     }
-    if (((!_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, recv, rty, sizeof(rty), (&ad), 0)) || (ad != 0))) {
+    rty = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, recv, (&ad), 0);
+    if (((!rty) || (ad != 0))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot resolve the receiver type of '?.'");
     }
     if (strchr(rty, '*') == 0) {
         return tool_diag_ct_sem_error(line, col, "optional chain '?.' requires a pointer receiver; a struct value has no empty state", _self->sup->mem->path);
     }
-    snprintf(base, sizeof(base), "%s", rty);
+    base = rty;
     n = strlen(base);
     while (((n > 0) && (base[(n - 1)] == ' '))) {
         n--;
@@ -302,10 +302,15 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self,
     while (((n > 0) && (base[(n - 1)] == ' '))) {
         n--;
     }
-    base[n] = 0;
+    base = runtime_text_ct_intern_len(base, (int)(n));
+    if ((!base)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     if (strncmp(base, "struct ", 7) == 0) {
-        snprintf(msg, sizeof(msg), "%s", (base + 7));
-        snprintf(base, sizeof(base), "%s", msg);
+        base = runtime_text_ct_intern((base + 7));
+        if ((!base)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
     }
     si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
     if (si < 0) {
@@ -319,10 +324,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self,
         }
     }
     if (fi < 0) {
-        snprintf(msg, sizeof(msg), "type '%s' has no field '%s'", base, fname);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("type '%s' has no field '%s'", base, fname));
     }
-    if ((!_self->__frontend_parse_exprstatictype_vptr->ctype_expand(_self, _self->sym->structs[si].fields[fi].type, fty, sizeof(fty), 0))) {
+    fty = _self->__frontend_parse_exprstatictype_vptr->ctype_expand_text(_self, _self->sym->structs[si].fields[fi].type, 0);
+    if ((!fty)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot resolve the optional field type");
     }
     if (_self->__frontend_parse_exproptional_vptr->opt_result_ok(_self, fty, 0, line, col) != 0) {
@@ -340,35 +345,30 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self,
     if ((!_self->arena->nodes[m].text)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    _self->arena->nodes[m].text2 = runtime_text_ct_intern(fty);
-    if ((!_self->arena->nodes[m].text2)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
-    _self->arena->nodes[m].text4 = runtime_text_ct_intern(rty);
-    if ((!_self->arena->nodes[m].text4)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->arena->nodes[m].text2 = fty;
+    _self->arena->nodes[m].text4 = rty;
     return m;
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_subscript(void *self, int recv, int idx, int line, int col) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char rty[MAX_TEXT];
-    char base[MAX_TEXT];
-    char rty2[MAX_TEXT];
+    const char * rty;
+    const char * base;
+    const char * rty2;
     size_t n;
     int ad = 0;
     int m;
     int inst;
     int nins;
     struct frontend_sym_StructInst * ins;
-    if (((!_self->__frontend_parse_exprstatictype_vptr->static_ctype(_self, recv, rty, sizeof(rty), (&ad), 0)) || (ad != 0))) {
+    rty = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, recv, (&ad), 0);
+    if (((!rty) || (ad != 0))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot resolve the receiver type of '?['");
     }
     if (strchr(rty, '*') == 0) {
         return tool_diag_ct_sem_error(line, col, "optional subscript '?[' requires a pointer receiver; a struct value has no empty state", _self->sup->mem->path);
     }
-    snprintf(base, sizeof(base), "%s", rty);
+    base = rty;
     n = strlen(base);
     while (((n > 0) && (base[(n - 1)] == ' '))) {
         n--;
@@ -377,7 +377,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_subscript(void *s
     while (((n > 0) && (base[(n - 1)] == ' '))) {
         n--;
     }
-    base[n] = 0;
+    base = runtime_text_ct_intern_len(base, (int)(n));
+    if ((!base)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     m = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_OPT);
     if (m < 0) {
         return (-1);
@@ -386,35 +389,29 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_subscript(void *s
     _self->arena->nodes[m].b = idx;
     _self->arena->nodes[m].line = line;
     _self->arena->nodes[m].num = col;
-    _self->arena->nodes[m].text4 = runtime_text_ct_intern(rty);
-    if ((!_self->arena->nodes[m].text4)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->arena->nodes[m].text4 = rty;
     if (((strncmp(base, "struct Map_", 11) == 0) && ((inst = frontend_sym_ct_inst_find((base + 7))) >= 0))) {
         ins = frontend_sym_ct_insts((&nins));
         if ((((!ins) || (inst >= nins)) || (ins[inst].nargs != 2))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot resolve the Map value type");
         }
-        snprintf(rty2, sizeof(rty2), "%s *", ins[inst].ctype[1]);
+        rty2 = runtime_text_ct_internf("%s *", ins[inst].ctype[1]);
+        if ((!rty2)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->arena->nodes[m].aux = 3;
         _self->arena->nodes[m].text = runtime_text_ct_intern((base + 7));
         if ((!_self->arena->nodes[m].text)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-        _self->arena->nodes[m].text2 = runtime_text_ct_intern(rty2);
-        if ((!_self->arena->nodes[m].text2)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->arena->nodes[m].text2 = rty2;
         return m;
     }
     if (_self->__frontend_parse_exproptional_vptr->opt_result_ok(_self, base, 1, line, col) != 0) {
         return (-1);
     }
     _self->arena->nodes[m].aux = 2;
-    _self->arena->nodes[m].text2 = runtime_text_ct_intern(base);
-    if ((!_self->arena->nodes[m].text2)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->arena->nodes[m].text2 = base;
     return m;
 }
 
