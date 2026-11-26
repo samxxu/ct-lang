@@ -7,6 +7,7 @@
 #include "MapTable.h"
 #include "Expr.h"
 #include "MapBuild.h"
+#include "Mem2Writes.h"
 #include "ParseSupport.h"
 #include "Stmt.h"
 #include "Symbols.h"
@@ -175,6 +176,9 @@ struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
+struct frontend_parse_ct_mem2_arg;
+struct frontend_parse_ct_mem2_call;
+struct frontend_parse_Mem2Writes;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
@@ -1361,6 +1365,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     int ar;
     int attr;
     int lead;
+    int body_start;
     const char * ret;
     const char * name;
     const char * cname;
@@ -1731,6 +1736,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
     }
+    body_start = _self->arena->nnode;
     b = _self->st->__frontend_parse_stmtops_vptr->parse_block(_self->st);
     if (is_generic) {
         _self->ex->in_generic = 0;
@@ -1808,6 +1814,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     _self->arena->nodes[f].a = params;
     _self->arena->nodes[f].b = b;
     _self->arena->nodes[f].c = _self->variadic;
+    if (frontend_parse_mem2_scan_function(_self->arena, _self->sym, fi, params, body_start, _self->arena->nnode) != 0) {
+        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+        return (-1);
+    }
     if (_self->st->__frontend_parse_stmtuninit_vptr->uninit_check(_self->st, b, func_line) != 0) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
@@ -2205,6 +2215,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
         }
         if ((seen_borrow && (check_borrow_param(_self, p, bline, bcol) != 0))) {
             return (-1);
+        }
+        if (seen_borrow) {
+            _self->arena->nodes[p].aux = 1;
         }
         ao = (-1);
         ar = _self->sup->__frontend_parse_supportops_vptr->attr_pool(_self->sup, (&ao));

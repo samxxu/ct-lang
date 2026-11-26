@@ -15,6 +15,7 @@
 #include "MapTable.h"
 #include "Expr.h"
 #include "MapBuild.h"
+#include "Mem2Writes.h"
 #include "ParseSupport.h"
 #include "Stmt.h"
 #include "Symbols.h"
@@ -119,6 +120,9 @@ struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
+struct frontend_parse_ct_mem2_arg;
+struct frontend_parse_ct_mem2_call;
+struct frontend_parse_Mem2Writes;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;

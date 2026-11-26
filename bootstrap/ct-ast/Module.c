@@ -9,6 +9,7 @@
 #include "Lexer.h"
 #include "Unit.h"
 #include "Parser.h"
+#include "Mem2Writes.h"
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
@@ -137,6 +138,9 @@ struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
+struct frontend_parse_ct_mem2_arg;
+struct frontend_parse_ct_mem2_call;
+struct frontend_parse_Mem2Writes;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
@@ -2118,6 +2122,29 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         if (tool_diag_ct_diag_leaks_failed()) {
             tool_diag_ct_diag_emit(_self->diag_json, 1);
             return 1;
+        }
+        if ((_self->check_mode || (_self->types_level > 0))) {
+            for (u = 0; u < _self->nunits; u++) {
+                int is_builtin = 0;
+                int bj;
+                for (bj = 0; bj < _self->nbuiltin; bj++) {
+                    if (_self->builtin_units[bj] == u) {
+                        is_builtin = 1;
+                    }
+                }
+                if (is_builtin) {
+                    continue;
+                }
+                if (frontend_parse_mem2_finish_unit(_self->arena, _self->sym, _self->units[u].fn_start, _self->units[u].fn_end, _self->check_mode, _self->types_level, _self->units[u].path) != 0) {
+                    if (tool_diag_ct_diag_nsem()) {
+                        fprintf(stderr, "ctc: %d error(s) generated\n", tool_diag_ct_diag_nsem());
+                    }
+                    else {
+                        frontend_parse_ct_parse_report();
+                    }
+                    return 1;
+                }
+            }
         }
         if (backend_tir_ct_tir_shadow_on()) {
             for (u = 0; u < _self->nunits; u++) {

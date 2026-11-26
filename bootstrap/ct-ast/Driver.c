@@ -9,6 +9,7 @@
 #include "Lexer.h"
 #include "Module.h"
 #include "Parser.h"
+#include "Mem2Writes.h"
 #include "Symbols.h"
 #include "Arena.h"
 #include "Diag.h"
@@ -114,6 +115,9 @@ struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
+struct frontend_parse_ct_mem2_arg;
+struct frontend_parse_ct_mem2_call;
+struct frontend_parse_Mem2Writes;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
@@ -299,6 +303,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     int prog;
     int stdprog;
     int io_from;
+    int fn_start;
     FILE * f;
     in = NULL;
     out = NULL;
@@ -817,6 +822,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         return frontend_parse_ct_parse_report();
     }
 {
+        fn_start = _self->sym->nfunc;
         prog = frontend_parse_ct_parse_program();
         if (((prog >= 0) && _self->m->freestanding)) {
             const char * iofn = _self->m->__frontend_module_moduleops_vptr->io_first_name(_self->m, io_from);
@@ -867,6 +873,17 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     if (((!_self->m->check_mode) && tool_diag_ct_diag_leaks_failed())) {
         tool_diag_ct_diag_emit(_self->m->diag_json, 0);
         return 1;
+    }
+{
+        if (frontend_parse_mem2_finish_unit(_self->arena, _self->sym, fn_start, _self->sym->nfunc, 1, _self->m->types_level, in) != 0) {
+            if (tool_diag_ct_diag_nsem()) {
+                fprintf(stderr, "ctc: %d error(s) generated\n", tool_diag_ct_diag_nsem());
+            }
+            else {
+                frontend_parse_ct_parse_report();
+            }
+            return 1;
+        }
     }
     if (_self->m->check_mode) {
         if (tool_diag_ct_diag_emit(_self->m->diag_json, 0) != 0) {

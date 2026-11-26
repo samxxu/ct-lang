@@ -200,6 +200,9 @@ struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
+struct frontend_parse_ct_mem2_arg;
+struct frontend_parse_ct_mem2_call;
+struct frontend_parse_Mem2Writes;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
 struct frontend_parse_StmtScope;
@@ -1085,7 +1088,7 @@ static const char * frontend_parse_Expr_frontend_parse_ExprStaticType_expr_fnptr
         }
         n = _self->sym->funcs[fi].nparams;
         for (i = 0; i < n; i++) {
-            if (_self->sym->funcs[fi].pann[i]) {
+            if (((_self->sym->funcs[fi].pann[i] == 2) || (_self->sym->funcs[fi].pann[i] == 3))) {
                 return (const char *)(0);
             }
             if ((_self->sym->funcs[fi].pdim[i] && _self->sym->funcs[fi].pdim[i][0])) {
