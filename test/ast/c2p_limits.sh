@@ -16,6 +16,14 @@
 #          pointer rows of interned texts. Each unit compiles a 2000-byte
 #          spelling, runs it and checks the emitted C.
 #
+#   C2p-5 caller rows and keys: every `expr_type`/`expr_ctype` call now reads
+#          through the pool-text form (no caller-sized out buffer); a closure's
+#          capture list, the trait a default body / generic bound names, the
+#          function-pointer declarator name and the ADT tag are pool texts; and
+#          the comparison keys (`type_key` / `bind_conv_key` / `map_bind_key`)
+#          compare the whole spelling, so two types that agree for 159 bytes no
+#          longer collide. The 2000-byte fixtures run end to end.
+#
 # Usage: bash test/ast/c2p_limits.sh <ct-ast>
 set -u
 CT=${1:?usage: c2p_limits.sh <ct-ast>}
@@ -417,6 +425,160 @@ if mkdir -p "$work/adout" \
     fi
 else
     bad "c2p4_type_alias: compile failed: $(head -2 "$work/ad.log" | tr '\n' ' ')"
+fi
+
+# ===========================================================================
+# C2p-5: the last 160-byte caller rows (S1a-0 C2p-5)
+#
+# `expr_type` / `expr_ctype` used to be called with a `char[160]` out buffer at
+# 38 sites, and a handful of rows outlived their parse call (the closure
+# capture list, the trait a default body belongs to, the function-pointer
+# declarator name, the generic bound, the ADT tag). The comparison keys
+# (`type_key` / `bind_conv_key` / `map_bind_key`) were also cut at 160, so two
+# spellings that agreed for 159 bytes collided.
+# ===========================================================================
+
+# ---- C2p-5.0) no expr_type/expr_ctype call passes a caller-sized row ------
+# The migration's mechanical half: every call goes through the pool-text form.
+nscratch=$(grep -rEn 'expr_(type|ctype)\([^;]*\(int\)[[:space:]]*sizeof|expr_(type|ctype)\([^;]*[[:space:]]sizeof[[:space:]]+[A-Za-z_]' \
+              selfhost/ct-ast --include='*.h.ct' | wc -l | tr -d ' ')
+if [ "$nscratch" -eq 0 ]; then
+    ok; printf '  expr_type/expr_ctype: no caller-sized out buffer is passed\n'
+else
+    bad "$nscratch expr_type/expr_ctype call(s) still pass a caller-sized out buffer"
+fi
+
+# ---- C2p-5.1) a closure captures a 2000-byte name and a 2000-byte type ----
+# `Closure.cap_name` / `.cap_type` were `char[16][160]` rows and `closure_copy`
+# refused a spelling at the 160-byte limit.
+capn=$(printf '%*s' 2000 '' | tr ' ' v)
+cat >"$work/c2p5_closure_cap.ct" <<CT
+struct $long { int n; };
+int main(void) {
+    int $capn = 3;
+    struct $long a = { .n = 4 };
+    int (*f)(void) = () => $capn + a.n;
+    return f() - 7;
+}
+CT
+if run_product c2p5_closure_cap "$work/c2p5_closure_cap.ct"; then
+    if grep -qF "$capn" "$work/c2p5_closure_cap.c"; then
+        ok; printf '  2000-byte closure capture: name and type kept whole\n'
+    else
+        bad "the generated C cut the 2000-byte captured name"
+    fi
+fi
+
+# ---- C2p-5.2) a 2000-byte ADT tag (constructor and match arm) -------------
+# The tag read as "not an ADT" once the declaration lookahead resolved it
+# through a 160-byte row.
+cat >"$work/c2p5_adt_tag.ct" <<CT
+enum $long { Pay(int r), Empty() }
+int area($long s)
+{
+    match (s) {
+        $long.Pay(r) => { return r; }
+        $long.Empty() => { return 0; }
+    }
+}
+int main(void) { $long c = $long.Pay(7); return area(c) - 7; }
+CT
+if run_product c2p5_adt_tag "$work/c2p5_adt_tag.ct"; then
+    if grep -qF "$long" "$work/c2p5_adt_tag.c"; then
+        ok; printf '  2000-byte ADT tag: subject, constructor and arm kept whole\n'
+    else
+        bad "the generated C cut the 2000-byte ADT tag"
+    fi
+fi
+
+# ---- C2p-5.3) a 2000-byte function-pointer declarator name ----------------
+# `Expr.fnptr_name` was `char[160]`; the call named a function that did not
+# exist under the cut spelling.
+fpname=$(printf '%*s' 2000 '' | tr ' ' q)
+cat >"$work/c2p5_fnptr_name.ct" <<CT
+int inc(int x) { return x + 1; }
+int main(void) { int (*$fpname)(int) = inc; return $fpname(2) - 3; }
+CT
+if run_product c2p5_fnptr_name "$work/c2p5_fnptr_name.ct"; then
+    if grep -qF "$fpname" "$work/c2p5_fnptr_name.c"; then
+        ok; printf '  2000-byte function-pointer name: declarator and call kept whole\n'
+    else
+        bad "the generated C cut the 2000-byte function-pointer name"
+    fi
+fi
+
+# ---- C2p-5.4) a 2000-byte trait name in a default body and a bound --------
+# `Symbols.trait_default` and `Expr.in_generic_bound` were 160-byte rows;
+# `method_trait` answered into a caller row, so the dispatch fell through to a
+# type-host map and reported "no method".
+ttrait=$(printf '%*s' 2000 '' | tr ' ' t)
+cat >"$work/c2p5_trait_name.ct" <<CT
+trait $ttrait { int get(); int twice() { return self->get() * 2; } }
+struct S { int n; } use $ttrait;
+impl $ttrait for S { int get() { return self->n; } }
+T pick<T: $ttrait>(T x) { return x; }
+int main(void) {
+    S s = { .n = 5 };
+    S r = pick<S>(s);
+    return r.twice() - 10;
+}
+CT
+if run_product c2p5_trait_name "$work/c2p5_trait_name.ct"; then
+    ok; printf '  2000-byte trait name: default body, adoption and bound kept whole\n'
+fi
+
+# ---- C2p-5.5) two long type keys that differ only after byte 159 ----------
+# The two sources below are identical for the first 1000 bytes; the old
+# `bind_conv_key`/`map_bind_key` rows produced one key, so the second
+# conversion reported "ambiguous map binding". Each type must select its own.
+kB=$(printf '%*s' 1000 '' | tr ' ' b)
+tA="struct ${kB}X"
+tB="struct ${kB}Y"
+kbd="$work/c2p5_keys"
+mkdir -p "$kbd"
+cat >"$kbd/shapes.h.ct" <<CT
+pub struct ${kB}X { int n; }
+pub struct ${kB}Y { int n; }
+pub struct Num { int n; }
+pub struct Num from_a($tA x) { Num r = { x.n + 1 }; return r; }
+pub struct Num from_b($tB x) { Num r = { x.n + 100 }; return r; }
+CT
+cat >"$kbd/ops.m.ct" <<CT
+import shapes;
+map binding $tA -> struct Num {
+    from(x) -> from_a(x);
+}
+map binding $tB -> struct Num {
+    from(x) -> from_b(x);
+}
+CT
+cat >"$kbd/prog.ct" <<CT
+import shapes;
+import ops;
+int main(void) {
+    $tA a = { 1 };
+    $tB b = { 2 };
+    struct Num na = a;
+    struct Num nb = b;
+    return na.n * 1000 + nb.n - 2102;
+}
+CT
+if mkdir -p "$work/c2p5_keys_out" \
+   && "$CT" build --emit-c -I "$kbd" "$kbd/prog.ct" -o "$work/c2p5_keys_out" >"$work/c2p5_keys.log" 2>&1; then
+    if "$CC" -std=c99 -I "$work/c2p5_keys_out" "$work/c2p5_keys_out"/*.c \
+            -o "$work/c2p5_keys.bin" >"$work/c2p5_keys.cc" 2>&1 \
+       && "$work/c2p5_keys.bin"; then
+        if grep -qF "from_a" "$work/c2p5_keys_out/prog.c" \
+           && grep -qF "from_b" "$work/c2p5_keys_out/prog.c"; then
+            ok; printf '  long keys: the two bindings differ past byte 159 and each is chosen\n'
+        else
+            bad "the generated C lost one of the two long-key conversions"
+        fi
+    else
+        bad "c2p5_keys: cc failed: $(head -2 "$work/c2p5_keys.cc" | tr '\n' ' ')"
+    fi
+else
+    bad "c2p5_keys: compile failed: $(head -2 "$work/c2p5_keys.log" | tr '\n' ' ')"
 fi
 
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"

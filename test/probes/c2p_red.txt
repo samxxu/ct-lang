@@ -113,3 +113,44 @@ output:
   2000-byte ADT field name: union member kept whole
   2000-byte type alias target: expanded and emitted whole
 c2p: 16 passed, 0 failed
+
+C2p-5 remaining caller rows / persistent names / comparison keys (baseline 86ae58db, frozen-seed compiler):
+command: bash test/ast/c2p_limits.sh <baseline-ct-ast>
+exit: 1
+output:
+  >160-byte qualified variable: resolved and emitted whole
+  >160-byte qualified call: resolved and emitted whole
+  200/1000-byte literals: kept whole
+  long diagnostic: the 150-byte struct name is kept whole
+  arity warning: the 300-byte callee name is kept whole
+  2000-byte struct type: local/field/param/return/receiver kept whole
+  2000-byte generic argument: instance field kept whole
+  2000-byte template name: instance encoded from the whole spelling
+  2000-byte trait receiver: vptr initialiser and interface box kept whole
+  2000-byte trait method parameter: kept whole in the signature
+  2000-byte trait method return: impl body and return kept whole
+  2000-byte closure parameter: trampoline kept whole
+  2000-byte map binding: host pair and recipe kept whole
+  2000-byte ADT variant name: constructor and match arm kept whole
+  2000-byte ADT field name: union member kept whole
+  2000-byte type alias target: expanded and emitted whole
+FAIL c2p: 41 expr_type/expr_ctype call(s) still pass a caller-sized out buffer
+FAIL c2p: c2p5_closure_cap: compile failed: c2p5_closure_cap.ct:5:2034: error: a captured name is too long (limit 159)
+FAIL c2p: c2p5_adt_tag: compile failed: c2p5_adt_tag.ct:4:5: error: cannot determine the type of the match subject
+FAIL c2p: c2p5_fnptr_name: cc failed: call to undeclared function 'qqq…(2000 q)…' (the generated C cut the declarator name at 160)
+FAIL c2p: c2p5_trait_name: compile failed: c2p5_trait_name.ct:2:25: error: name is too long
+FAIL c2p: c2p5_keys: compile failed: prog.ct:6:1: error: ambiguous map binding for 'struct bbb…(1000 b)…'
+c2p: 16 passed, 6 failed
+
+green (C2p-5 implementation):
+command: bash test/ast/c2p_limits.sh <ct-ast built from this commit's seed>
+exit: 0
+output:
+  ... C2p-1..C2p-4 sections unchanged ...
+  expr_type/expr_ctype: no caller-sized out buffer is passed
+  2000-byte closure capture: name and type kept whole
+  2000-byte ADT tag: subject, constructor and arm kept whole
+  2000-byte function-pointer name: declarator and call kept whole
+  2000-byte trait name: default body, adoption and bound kept whole
+  long keys: the two bindings differ past byte 159 and each is chosen
+c2p: 22 passed, 0 failed
