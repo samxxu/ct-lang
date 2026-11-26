@@ -178,6 +178,9 @@ int frontend_sym_ct_adt_add_variant(int, const char *, const char *, int, int);
 int frontend_sym_ct_adt_add_field(int, int, const char *, const char *);
 int frontend_sym_ct_adt_variant(int, const char *);
 int frontend_sym_ct_adt_has_variant(int, const char *);
+int frontend_sym_ct_adt_set_template(int, int);
+int frontend_sym_ct_adt_add_tparam(int, const char *);
+int frontend_sym_ct_adt_inst_add(int, const char *, int, char * *);
 struct frontend_sym_Symbols * frontend_sym_symbols_get(void);
 static int symbols_grow(struct frontend_sym_Symbols *);
 static int tmpls_grow(int);
@@ -2630,6 +2633,8 @@ int frontend_sym_ct_tmpl_add(const char * name, const char * full, int ntprm, ch
     t[n].uses_handback = 0;
     t[n].is_pub = is_pub;
     t[n].owner = owner;
+    t[n].is_adt = 0;
+    t[n].adt = (-1);
     snprintf(t[n].path, 1024, "%s", path);
     t[n].line = line;
     frontend_sym_g_ntmpls++;
@@ -3208,6 +3213,12 @@ int frontend_sym_ct_adt_add(const char * name, const char * full, int is_pub, in
     a[i].owner = owner;
     snprintf(a[i].path, 1024, "%s", (path ? path : ""));
     a[i].line = line;
+    a[i].is_template = 0;
+    a[i].ntparams = 0;
+    a[i].tparams = 0;
+    a[i].tcap = 0;
+    a[i].tmpl = (-1);
+    a[i].emitted = 0;
     frontend_sym_g_nadts++;
     return i;
 }
@@ -3281,6 +3292,119 @@ int frontend_sym_ct_adt_add_field(int adt, int v, const char * name, const char 
     }
     a[adt].variants[v].nfields++;
     return f;
+}
+int frontend_sym_ct_adt_set_template(int adt, int ntparams) {
+    int n;
+    struct frontend_sym_Adt * a = frontend_sym_ct_adts((&n));
+    if ((((!a) || (adt < 0)) || (adt >= n))) {
+        return (-1);
+    }
+    if (((ntparams < 0) || (ntparams > CAP_LIMIT))) {
+        return (-1);
+    }
+    a[adt].is_template = 1;
+    a[adt].ntparams = ntparams;
+    return 0;
+}
+int frontend_sym_ct_adt_add_tparam(int adt, const char * name) {
+    int n;
+    int k;
+    struct frontend_sym_Adt * a = frontend_sym_ct_adts((&n));
+    const char * * grown;
+    if ((((!a) || (adt < 0)) || (adt >= n))) {
+        return (-1);
+    }
+    if (((a[adt].ntparams < 0) || (a[adt].ntparams >= CAP_LIMIT))) {
+        return (-1);
+    }
+    if ((a[adt].ntparams + 1) > a[adt].tcap) {
+        int cap = ((a[adt].tcap > 0) ? a[adt].tcap : 2);
+        while (((cap < (a[adt].ntparams + 1)) && (cap < CAP_LIMIT))) {
+            cap *= 2;
+        }
+        if (cap > CAP_LIMIT) {
+            cap = CAP_LIMIT;
+        }
+        if ((a[adt].ntparams + 1) > cap) {
+            return (-1);
+        }
+        grown = (const char * *)(realloc(a[adt].tparams, ((size_t)(cap) * sizeof((*grown)))));
+        if ((!grown)) {
+            return (-1);
+        }
+        a = frontend_sym_g_adts;
+        a[adt].tparams = grown;
+        a[adt].tcap = cap;
+    }
+    a = frontend_sym_g_adts;
+    k = a[adt].ntparams;
+    a[adt].tparams[k] = runtime_text_ct_intern((name ? name : ""));
+    if ((!a[adt].tparams[k])) {
+        return (-1);
+    }
+    a[adt].ntparams = (k + 1);
+    return k;
+}
+int frontend_sym_ct_adt_inst_add(int tmpl, const char * full, int nargs, char * * cargs) {
+    int n;
+    int v;
+    int f;
+    int k;
+    int arow;
+    int vrow;
+    struct frontend_sym_Adt * a = frontend_sym_ct_adts((&n));
+    int ti;
+    const char * sub;
+    if ((((((!a) || (tmpl < 0)) || (tmpl >= n)) || (!full)) || (!full[0]))) {
+        return (-1);
+    }
+    ti = frontend_sym_ct_adt_find(full);
+    if (ti >= 0) {
+        return ti;
+    }
+    if ((!a[tmpl].is_template)) {
+        return (-1);
+    }
+    if (nargs != a[tmpl].ntparams) {
+        return (-1);
+    }
+    arow = frontend_sym_ct_adt_add(full, full, a[tmpl].is_pub, a[tmpl].owner, a[tmpl].path, a[tmpl].line);
+    if (arow < 0) {
+        return arow;
+    }
+    a = frontend_sym_g_adts;
+    a[arow].tmpl = tmpl;
+    for (v = 0; v < a[tmpl].nvariants; v++) {
+        vrow = frontend_sym_ct_adt_add_variant(arow, a[tmpl].variants[v].name, a[tmpl].variants[v].cname, a[tmpl].variants[v].line, a[tmpl].variants[v].col);
+        if (vrow < 0) {
+            return (-1);
+        }
+        a = frontend_sym_g_adts;
+        for (f = 0; f < a[tmpl].variants[v].nfields; f++) {
+            sub = a[tmpl].variants[v].fields[f].type;
+            for (k = 0; k < nargs; k++) {
+                sub = frontend_sym_ct_generic_subst_text(sub, a[tmpl].tparams[k], ((cargs && cargs[k]) ? cargs[k] : ""));
+                if ((!sub)) {
+                    return (-1);
+                }
+            }
+            if ((sub && strchr(sub, '<'))) {
+                char * rbuf = tool_sh_ct_scratch_alloc(CAP_LIMIT);
+                if ((rbuf && (frontend_sym_ct_inst_resolve(sub, rbuf, CAP_LIMIT) == 0))) {
+                    const char * pooled = runtime_text_ct_intern(rbuf);
+                    if ((!pooled)) {
+                        return (-1);
+                    }
+                    sub = pooled;
+                }
+            }
+            if (frontend_sym_ct_adt_add_field(arow, vrow, a[tmpl].variants[v].fields[f].name, sub) < 0) {
+                return (-1);
+            }
+            a = frontend_sym_g_adts;
+        }
+    }
+    return arow;
 }
 int frontend_sym_ct_adt_from_type(const char * spelling) {
     const char * raw;

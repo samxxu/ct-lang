@@ -1009,7 +1009,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
     }
     nt2 = tp[ti2].ntparams;
     if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<")))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("generic struct '%s' needs type arguments in a type position", tname));
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf((tp[ti2].is_adt ? "generic ADT '%s' needs type arguments in a type position" : "generic struct '%s' needs type arguments in a type position"), tname));
     }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     nargs = 0;
@@ -1083,7 +1083,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
     }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (nargs != nt2) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("generic struct '%s' takes %d type arguments, %d given", tname, nt2, nargs));
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf((tp[ti2].is_adt ? "generic ADT '%s' takes %d type arguments, %d given" : "generic struct '%s' takes %d type arguments, %d given"), tname, nt2, nargs));
     }
 {
         int gi;

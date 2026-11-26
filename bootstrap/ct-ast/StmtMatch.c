@@ -538,7 +538,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
     int last;
     int i;
     int rc;
+    int gpat;
+    int adt_override;
     const char * bname;
+    const char * gtb;
     char msgbuf[3 * MAX_TEXT];
     char lit[64];
     line = _self->lex->tokline;
@@ -644,11 +647,75 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
     if (_self->lex->tok != T_ID) {
         return tool_diag_ct_sem_error(line, col, "expected a pattern", _self->mem->path);
     }
-    bname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-    if ((!bname)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    gpat = 0;
+    adt_override = (-1);
+{
+        const char * gp = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
+        while ((((((*gp) == ' ') || ((*gp) == '\t')) || ((*gp) == '\n')) || ((*gp) == '\r'))) {
+            gp++;
+        }
+        if ((*gp) == '<') {
+            int gd = 0;
+            for (; ; ) {
+                if ((!(*gp))) {
+                    break;
+                }
+                if ((*gp) == '<') {
+                    gd++;
+                }
+                else {
+                    if ((*gp) == '>') {
+                        gd--;
+                        gp++;
+                        if (gd == 0) {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                gp++;
+            }
+            while ((((((*gp) == ' ') || ((*gp) == '\t')) || ((*gp) == '\n')) || ((*gp) == '\r'))) {
+                gp++;
+            }
+            if ((*gp) == '.') {
+                gpat = 1;
+            }
+        }
     }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    if (gpat) {
+        int nadts2;
+        struct frontend_sym_Adt * adts2;
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&gtb)) != 0) {
+            return (-1);
+        }
+        adt_override = frontend_sym_ct_adt_from_type(gtb);
+        if (adt_override < 0) {
+            const char * lt = strchr(gtb, '<');
+            if (lt) {
+                gtb = runtime_text_ct_intern_len(gtb, (int)((lt - gtb)));
+                if ((!gtb)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                adt_override = frontend_sym_ct_adt_find(gtb);
+            }
+        }
+        if (adt_override < 0) {
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("'%s' is not an ADT", gtb), _self->mem->path);
+        }
+        adts2 = frontend_sym_ct_adts((&nadts2));
+        if (((!adts2) || (adt_override >= nadts2))) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the ADT row is missing");
+        }
+        bname = adts2[adt_override].full;
+    }
+    else {
+        bname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!bname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    }
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "."))) {
         const char * vname;
         int v;
@@ -676,6 +743,17 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
             if (other < 0) {
                 snprintf(msgbuf, sizeof(msgbuf), "match arm names '%s', which is not an ADT", bname);
                 return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+            }
+            if (other != adt) {
+                adts = frontend_sym_ct_adts((&nadts));
+                if (((((((adts && (other >= 0)) && (other < nadts)) && (adt >= 0)) && (adt < nadts)) && adts[other].is_template) && (adts[adt].tmpl == other))) {
+                    other = adt;
+                }
+                else {
+                    if (((((((adts && (other >= 0)) && (other < nadts)) && (adt >= 0)) && (adt < nadts)) && adts[adt].is_template) && (adts[other].tmpl == adt))) {
+                        other = adt;
+                    }
+                }
             }
             if (other != adt) {
                 adts = frontend_sym_ct_adts((&nadts));

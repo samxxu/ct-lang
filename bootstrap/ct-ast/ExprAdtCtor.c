@@ -146,6 +146,7 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_adt_ctor_ahead(void *self)
     const char * p;
     const char * rn;
     int i;
+    int depth;
     (void)(_self);
     if (_self->lex->tok != T_ID) {
         return 0;
@@ -163,6 +164,31 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_adt_ctor_ahead(void *self)
     p = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
     while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
         p++;
+    }
+    if ((*p) == '<') {
+        depth = 0;
+        for (; ; ) {
+            if ((!(*p))) {
+                return 0;
+            }
+            if ((*p) == '<') {
+                depth++;
+            }
+            else {
+                if ((*p) == '>') {
+                    depth--;
+                    p++;
+                    if (depth == 0) {
+                        break;
+                    }
+                    continue;
+                }
+            }
+            p++;
+        }
+        while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
+            p++;
+        }
     }
     if ((*p) != '.') {
         return 0;
@@ -200,16 +226,16 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
     int k;
     int a;
     const char * rn;
+    const char * tb;
     const char * vname;
     struct frontend_sym_Adt * adts;
     int nadts;
     tline = _self->lex->tokline;
     tcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-    rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len));
-    if ((!rn)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    if (_self->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self, (&tb)) != 0) {
+        return (-1);
     }
-    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    rn = tb;
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ".")))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '.' after an ADT type name");
     }
@@ -225,6 +251,16 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
     }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     adt = frontend_sym_ct_adt_from_type(rn);
+    if (adt < 0) {
+        const char * lt = strchr(rn, '<');
+        if (lt) {
+            rn = runtime_text_ct_intern_len(rn, (int)((lt - rn)));
+            if ((!rn)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            adt = frontend_sym_ct_adt_find(rn);
+        }
+    }
     if (adt < 0) {
         return tool_diag_ct_sem_error(tline, tcol, tool_sh_ct_scratch_fmt("'%s' is not an ADT", rn), _self->sup->mem->path);
     }
@@ -299,7 +335,7 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
     if (n < 0) {
         return (-1);
     }
-    _self->arena->nodes[n].text = runtime_text_ct_intern(adts[adt].full);
+    _self->arena->nodes[n].text = runtime_text_ct_intern((adts[adt].is_template ? tb : adts[adt].full));
     if ((!_self->arena->nodes[n].text)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }

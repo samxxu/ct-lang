@@ -517,7 +517,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
     nt2 = tp[ti2].ntparams;
     if (nargs != nt2) {
         char msg[MAX_TEXT * 2];
-        snprintf(msg, sizeof(msg), "generic struct '%s' takes %d type arguments, %d given", tname, nt2, nargs);
+        snprintf(msg, sizeof(msg), (tp[ti2].is_adt ? "generic ADT '%s' takes %d type arguments, %d given" : "generic struct '%s' takes %d type arguments, %d given"), tname, nt2, nargs);
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
     }
     if (((strcmp(tname, "Box") == 0) && (nargs > 0))) {
@@ -555,6 +555,43 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
     }
     if (k < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    if (tp[ti2].is_adt) {
+        int adn;
+        int av;
+        int af;
+        int ak;
+        struct frontend_sym_Adt * adtmpl;
+        for (av = 0; ; av++) {
+            adtmpl = frontend_sym_ct_adts((&adn));
+            if ((((!adtmpl) || (tp[ti2].adt < 0)) || (tp[ti2].adt >= adn))) {
+                break;
+            }
+            if (av >= adtmpl[tp[ti2].adt].nvariants) {
+                break;
+            }
+            for (af = 0; af < adtmpl[tp[ti2].adt].variants[av].nfields; af++) {
+                const char * sub = adtmpl[tp[ti2].adt].variants[av].fields[af].type;
+                for (ak = 0; ak < nt2; ak++) {
+                    sub = frontend_sym_ct_generic_subst_text(sub, tp[ti2].tparam[ak], cargs[ak]);
+                    if ((!sub)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
+                }
+                if ((sub && strchr(sub, '<'))) {
+                    if (_self->__frontend_parse_exprinstantiate_vptr->inst_register_nested(_self, sub, (depth + 1)) != 0) {
+                        return (-1);
+                    }
+                }
+                adtmpl = frontend_sym_ct_adts((&adn));
+                if ((!adtmpl)) {
+                    break;
+                }
+            }
+        }
+        if (frontend_sym_ct_adt_inst_add(tp[ti2].adt, enc, nargs, cargs) < 0) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("cannot instantiate generic ADT '%s'", tname));
+        }
     }
     si2 = _self->sym->__frontend_sym_symbolops_vptr->add_struct_inst(_self->sym, enc);
     if (si2 < 0) {

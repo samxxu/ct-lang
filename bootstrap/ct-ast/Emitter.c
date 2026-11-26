@@ -327,6 +327,8 @@ static int emit_closure_values(struct backend_emit_Emitter *, int);
 static int emit_closure_decl(struct backend_emit_Emitter *, int);
 static int emit_closure_arg(struct backend_emit_Emitter *, int);
 static int emit_adt_decl(struct backend_emit_Emitter *, int, int, int);
+static int adt_emit_instance(struct backend_emit_Emitter *, int);
+static int adt_row_for_emit(struct backend_emit_Emitter *, const char *);
 static int emit_match_arm(struct backend_emit_Emitter *, int, int, int, int);
 static int emit_struct_insts(struct backend_emit_Emitter *, int, int);
 static int inst_elem_foreign(struct backend_emit_Emitter *, int);
@@ -369,6 +371,7 @@ static int type_layout_closure(struct backend_emit_Emitter *, const char *, int)
 static int shell_owned_here(struct backend_emit_Emitter *, int);
 static int shell_preemit(struct backend_emit_Emitter *, int, int);
 static int preemit_adt_payload(struct backend_emit_Emitter *, int);
+static int emit_adt_layout_body(struct backend_emit_Emitter *, int, int, const char *, const char *, int, int);
 static int emit_cond_row(struct backend_emit_Emitter *, int, const char *, const char *, int, int, int *);
 static int emit_cond_rows(struct backend_emit_Emitter *, int, const char *, const char *, int, int *);
 static int emit_find_group(const char *, int, const char * *, const char * *);
@@ -4259,6 +4262,9 @@ static int adt_owns(struct backend_emit_Emitter * self, int adi, int depth) {
     if (((((!adts) || (adi < 0)) || (adi >= n)) || (depth > 16))) {
         return 0;
     }
+    if (adts[adi].is_template) {
+        return 0;
+    }
     for (v = 0; v < adts[adi].nvariants; v++) {
         for (f = 0; f < adts[adi].variants[v].nfields; f++) {
             if (adt_own_kind(self, adts[adi].variants[v].fields[f].type, depth)) {
@@ -6587,6 +6593,9 @@ static int emit_adt_life_defs(struct backend_emit_Emitter * self, int u) {
         if (((u >= 0) && (adts[i].owner != u))) {
             continue;
         }
+        if (adts[i].is_template) {
+            continue;
+        }
         if ((!adt_owns(self, i, 0))) {
             continue;
         }
@@ -6950,6 +6959,15 @@ static int inst_emit_one(struct backend_emit_Emitter * self, int ii) {
     }
     if (insts[ii].emitted) {
         return 0;
+    }
+{
+        int adi = frontend_sym_ct_adt_find(insts[ii].name);
+        int nadts = 0;
+        struct frontend_sym_Adt * adts = frontend_sym_ct_adts((&nadts));
+        if ((((adts && (adi >= 0)) && (adi < nadts)) && (adts[adi].tmpl >= 0))) {
+            insts[ii].emitted = 1;
+            return adt_emit_instance(self, adi);
+        }
     }
     ti = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, insts[ii].name);
     if (ti < 0) {
@@ -8106,6 +8124,16 @@ static int preemit_adt_payload(struct backend_emit_Emitter * self, int adi) {
     }
     for (v = 0; v < adts[adi].nvariants; v++) {
         for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+            const char * ft = adts[adi].variants[v].fields[f].type;
+            if (((ft && (!strchr(ft, '*'))) && (!strchr(ft, '[')))) {
+                int dep = frontend_sym_ct_adt_from_type(ft);
+                if ((((((dep >= 0) && (dep != adi)) && (dep < nadts)) && (adts[dep].tmpl >= 0)) && (!adts[dep].emitted))) {
+                    if (adt_emit_instance(self, dep) != 0) {
+                        return (-1);
+                    }
+                }
+            }
+            adts = frontend_sym_ct_adts((&nadts));
             for (i = 0; i < n; i++) {
                 if ((!backend_emit_type_needs_layout(adts[adi].variants[v].fields[f].type, ins[i].name))) {
                     continue;
@@ -8118,43 +8146,15 @@ static int preemit_adt_payload(struct backend_emit_Emitter * self, int adi) {
     }
     return 0;
 }
-static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int with_semi) {
-    int adi;
+static int emit_adt_layout_body(struct backend_emit_Emitter * self, int adi, int n, const char * tag, const char * alias, int is_typedef, int ind) {
     int v;
     int f;
-    int i;
-    int n_inst;
     struct frontend_sym_Adt * adts;
     int nadts;
-    const char * tag;
-    const char * alias;
-    int is_typedef;
-    (void)(with_semi);
-    adi = ((int)(self->arena->nodes[n].num) - 1);
     adts = frontend_sym_ct_adts((&nadts));
     if ((((!adts) || (adi < 0)) || (adi >= nadts))) {
-        return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
+        return self->__backend_emit_emitops_vptr->fail(self, "the ADT row is missing");
     }
-    n_inst = 0;
-    (void)(frontend_sym_ct_insts((&n_inst)));
-    if (((ensure_adt_layout_state(nadts) != 0) || (ensure_inst_layout_state(n_inst) != 0))) {
-        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
-    }
-    for (i = 0; i < nadts; i++) {
-        backend_emit_g_adt_layout_state[i] = 0;
-    }
-    for (i = 0; i < n_inst; i++) {
-        backend_emit_g_inst_layout_state[i] = 0;
-    }
-    if (adt_layout_closure(self, adi, 0) != 0) {
-        return (-1);
-    }
-    if (preemit_adt_payload(self, adi) != 0) {
-        return (-1);
-    }
-    is_typedef = ((self->arena->nodes[n].aux & 1) ? 1 : 0);
-    tag = adts[adi].full;
-    alias = self->arena->nodes[n].text2;
     if (is_typedef) {
         fprintf(self->out, "typedef struct %s {\n", tag);
     }
@@ -8185,7 +8185,7 @@ static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int
     if (is_typedef) {
         fprintf(self->out, " %s", alias);
     }
-    if (self->arena->nodes[n].attr >= 0) {
+    if (((n >= 0) && (self->arena->nodes[n].attr >= 0))) {
         fprintf(self->out, " %s", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
     }
     fputs(";\n", self->out);
@@ -8201,6 +8201,85 @@ static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int
         fprintf(self->out, "void %s_release(struct %s *);\n", tag, tag);
     }
     return 0;
+}
+static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int with_semi) {
+    int adi;
+    int i;
+    int n_inst;
+    struct frontend_sym_Adt * adts;
+    int nadts;
+    const char * tag;
+    const char * alias;
+    int is_typedef;
+    (void)(with_semi);
+    adi = ((int)(self->arena->nodes[n].num) - 1);
+    adts = frontend_sym_ct_adts((&nadts));
+    if ((((!adts) || (adi < 0)) || (adi >= nadts))) {
+        return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
+    }
+    if (adts[adi].is_template) {
+        return 0;
+    }
+    n_inst = 0;
+    (void)(frontend_sym_ct_insts((&n_inst)));
+    if (((ensure_adt_layout_state(nadts) != 0) || (ensure_inst_layout_state(n_inst) != 0))) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    for (i = 0; i < nadts; i++) {
+        backend_emit_g_adt_layout_state[i] = 0;
+    }
+    for (i = 0; i < n_inst; i++) {
+        backend_emit_g_inst_layout_state[i] = 0;
+    }
+    if (adt_layout_closure(self, adi, 0) != 0) {
+        return (-1);
+    }
+    if (preemit_adt_payload(self, adi) != 0) {
+        return (-1);
+    }
+    is_typedef = ((self->arena->nodes[n].aux & 1) ? 1 : 0);
+    tag = adts[adi].full;
+    alias = self->arena->nodes[n].text2;
+    return emit_adt_layout_body(self, adi, n, tag, alias, is_typedef, ind);
+}
+static int adt_emit_instance(struct backend_emit_Emitter * self, int adi) {
+    int i;
+    int n_inst;
+    int n;
+    struct frontend_sym_Adt * adts;
+    adts = frontend_sym_ct_adts((&n));
+    if ((((!adts) || (adi < 0)) || (adi >= n))) {
+        return 0;
+    }
+    if ((adts[adi].is_template || (adts[adi].tmpl < 0))) {
+        return 0;
+    }
+    if (adts[adi].emitted) {
+        return 0;
+    }
+    n_inst = 0;
+    (void)(frontend_sym_ct_insts((&n_inst)));
+    if (((ensure_adt_layout_state(n) != 0) || (ensure_inst_layout_state(n_inst) != 0))) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    for (i = 0; i < n; i++) {
+        backend_emit_g_adt_layout_state[i] = 0;
+    }
+    for (i = 0; i < n_inst; i++) {
+        backend_emit_g_inst_layout_state[i] = 0;
+    }
+    if (adt_layout_closure(self, adi, 0) != 0) {
+        return (-1);
+    }
+    if (preemit_adt_payload(self, adi) != 0) {
+        return (-1);
+    }
+    adts = frontend_sym_ct_adts((&n));
+    if (((!adts) || (adi >= n))) {
+        return (-1);
+    }
+    adts[adi].emitted = 1;
+    return emit_adt_layout_body(self, adi, (-1), adts[adi].full, "", 0, 0);
 }
 static int emit_cond_row(struct backend_emit_Emitter * self, int arm, const char * p, const char * end, int k, int leading_and, int * ncond) {
     const char * eq;
@@ -8664,6 +8743,52 @@ static int fail_unknown_statement(struct backend_emit_Emitter * self, int nk) {
     snprintf(msg, sizeof(msg), "unknown statement node (kind %d)", nk);
     return self->__backend_emit_emitops_vptr->fail(self, msg);
 }
+static int adt_row_for_emit(struct backend_emit_Emitter * self, const char * tag) {
+    int a;
+    int n;
+    int ii;
+    int nn;
+    int b;
+    struct frontend_sym_Adt * adts;
+    struct frontend_sym_StructInst * ins;
+    if ((!tag)) {
+        return (-1);
+    }
+    if (strncmp(tag, "struct ", 7) == 0) {
+        tag += 7;
+    }
+{
+        const char * lt = strchr(tag, '<');
+        if (lt) {
+            const char * base = runtime_text_ct_intern_len(tag, (int)((lt - tag)));
+            if ((!base)) {
+                return (-1);
+            }
+            tag = base;
+        }
+    }
+    a = frontend_sym_ct_adt_find(tag);
+    adts = frontend_sym_ct_adts((&n));
+    if ((((!adts) || (a < 0)) || (a >= n))) {
+        return a;
+    }
+    if ((!adts[a].is_template)) {
+        return a;
+    }
+    if ((!self->ginst[0])) {
+        return a;
+    }
+    ii = frontend_sym_ct_inst_find(self->ginst);
+    ins = frontend_sym_ct_insts((&nn));
+    if (((ii < 0) || (!ins))) {
+        return a;
+    }
+    b = frontend_sym_ct_adt_find(ins[ii].name);
+    if (((b >= 0) && (b < n))) {
+        return b;
+    }
+    return a;
+}
 static int em_expr_adtctor(struct backend_emit_Emitter * self, int n, int nk) {
     (void)(nk);
     int adi2;
@@ -8673,7 +8798,7 @@ static int em_expr_adtctor(struct backend_emit_Emitter * self, int n, int nk) {
     const char * pfx;
     struct frontend_sym_Adt * adts2;
     int nadts2;
-    adi2 = frontend_sym_ct_adt_find(self->arena->nodes[n].text);
+    adi2 = adt_row_for_emit(self, self->arena->nodes[n].text);
     adts2 = frontend_sym_ct_adts((&nadts2));
     if ((((!adts2) || (adi2 < 0)) || (adi2 >= nadts2))) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
@@ -11224,7 +11349,7 @@ static int match_expr_emit(struct backend_emit_Emitter * self, int n) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "a statement match is not an expression");
     }
     adts = frontend_sym_ct_adts((&nadts));
-    tagi = frontend_sym_ct_adt_find(self->arena->nodes[n].text);
+    tagi = adt_row_for_emit(self, self->arena->nodes[n].text);
     if ((((!adts) || (tagi < 0)) || (tagi >= nadts))) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
     }
@@ -11232,6 +11357,12 @@ static int match_expr_emit(struct backend_emit_Emitter * self, int n) {
     self->ntmp++;
     ptr = self->arena->nodes[n].aux;
     rtype = self->arena->nodes[n].text2;
+{
+        const char * rsub = emit_gsub_type_text(self, rtype);
+        if (rsub) {
+            rtype = rsub;
+        }
+    }
     rnorm = sb_norm_own_type_text(self, rtype);
     if ((!rnorm)) {
         rnorm = rtype;
@@ -11349,7 +11480,7 @@ static int em_node_match(struct backend_emit_Emitter * self, int n, int ind, int
     tagi = (-1);
     nonadt = (self->arena->nodes[n].aux & 4);
     if ((!nonadt)) {
-        tagi = frontend_sym_ct_adt_find(self->arena->nodes[n].text);
+        tagi = adt_row_for_emit(self, self->arena->nodes[n].text);
         if ((((!adts) || (tagi < 0)) || (tagi >= nadts))) {
             return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
         }

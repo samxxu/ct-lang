@@ -400,6 +400,8 @@ struct frontend_sym_StructTmpl {
     int uses_handback;
     int is_pub;
     int owner;
+    int is_adt;
+    int adt;
     char path[1024];
     int line;
 };
@@ -453,6 +455,12 @@ struct frontend_sym_Adt {
     int owner;
     char path[1024];
     int line;
+    int is_template;
+    int ntparams;
+    const char * * tparams;
+    int tcap;
+    int tmpl;
+    int emitted;
 };
 struct frontend_sym_Symbols {
     struct frontend_sym_Fn * funcs;
@@ -534,6 +542,9 @@ int frontend_sym_ct_adt_add_variant(int, const char *, const char *, int, int);
 int frontend_sym_ct_adt_add_field(int, int, const char *, const char *);
 int frontend_sym_ct_adt_variant(int, const char *);
 int frontend_sym_ct_adt_has_variant(int, const char *);
+int frontend_sym_ct_adt_set_template(int, int);
+int frontend_sym_ct_adt_add_tparam(int, const char *);
+int frontend_sym_ct_adt_inst_add(int, const char *, int, char * *);
 struct frontend_sym_Symbols * frontend_sym_symbols_get(void);
 
 #endif

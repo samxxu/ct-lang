@@ -2919,6 +2919,15 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     int tcol;
     int is_adt;
     int pre_adt;
+    char * * tparam = 0;
+    char * * bound = 0;
+    int tcap = 0;
+    int bcap = 0;
+    int nt = 0;
+    int templ = 0;
+    int ltline = 0;
+    int ltcol = 0;
+    int early_ti = (-1);
     const char * name;
     const char * qname;
     const char * mname;
@@ -2964,8 +2973,51 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected an enum name");
         }
     }
-    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "generic enums are not supported");
+    if (((name[0] && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
+        ltline = _self->lex->tokline;
+        ltcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        for (; ; ) {
+            tparam = frontend_sym_ct_rows_reserve(tparam, tcap, (nt + 1), (&tcap));
+            bound = frontend_sym_ct_rows_reserve(bound, bcap, (nt + 1), (&bcap));
+            if (((((!tparam) || (tcap < (nt + 1))) || (!bound)) || (bcap < (nt + 1)))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a generic ADT has too many type parameters");
+            }
+            if (_self->lex->tok != T_ID) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type parameter name");
+            }
+            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tparam[nt], MAX_TEXT);
+            nt++;
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ":"))) {
+                const char * raw;
+                int bi;
+                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                if (_self->lex->tok != T_ID) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a trait name after ':'");
+                }
+                raw = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+                if ((!raw)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                bi = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, raw);
+                if (((((bi >= 0) && _self->sym->traits[bi].is_static) || (strcmp(raw, "Drop") == 0)) || (strcmp(raw, "Handback") == 0))) {
+                    return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("trait '%s' cannot bound a type parameter", raw), _self->mem->path);
+                }
+                snprintf(bound[(nt - 1)], MAX_TEXT, "%s", raw);
+            }
+            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
+                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                continue;
+            }
+            break;
+        }
+        if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">")))) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '>' after the type parameters");
+        }
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        templ = 1;
     }
     pre_adt = 0;
     if (((name[0] && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
@@ -2976,6 +3028,29 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     }
     if ((name[0] && (_self->sup->__frontend_parse_supportops_vptr->add_type(_self->sup, qname, (pre_adt ? 7 : 5)) != 0))) {
         return (-1);
+    }
+    if (((templ && pre_adt) && name[0])) {
+        struct frontend_sym_StructTmpl * tps_e;
+        int tn_e;
+        if (frontend_sym_ct_tmpl_find(name) >= 0) {
+            return tool_diag_ct_sem_error(ltline, ltcol, tool_sh_ct_scratch_fmt("generic ADT '%s' conflicts with an existing generic type of the same name", name), _self->mem->path);
+        }
+        early_ti = frontend_sym_ct_tmpl_add(name, qname, nt, tparam, bound, is_pub, _self->cur_unit, _self->mem->path, tline);
+        if (early_ti < 0) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        tps_e = frontend_sym_ct_tmpls((&tn_e));
+        if ((!tps_e)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        tps_e[early_ti].is_adt = 1;
+        tps_e[early_ti].adt = (-1);
+        tps_e[early_ti].is_pub = is_pub;
+        tps_e[early_ti].owner = _self->cur_unit;
+    }
+    if (templ) {
+        _self->ex->in_generic_tparam = tparam;
+        _self->ex->in_generic_ntparam = nt;
     }
     while (((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))))) {
         if (_self->lex->tok != T_ID) {
@@ -3093,9 +3168,16 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
         return (-1);
     }
+    if (templ) {
+        _self->ex->in_generic_tparam = 0;
+        _self->ex->in_generic_ntparam = 0;
+    }
     is_adt = has_payload;
     if ((is_adt && (!name[0]))) {
         return tool_diag_ct_sem_error(tline, tcol, "an ADT needs a tag name (write `enum Shape { ... }`)", _self->mem->path);
+    }
+    if ((templ && (!is_adt))) {
+        return tool_diag_ct_sem_error(ltline, ltcol, "generic enums are not supported", _self->mem->path);
     }
     s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ENUM);
     if (s < 0) {
@@ -3162,6 +3244,40 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
                     return tool_diag_ct_sem_error(_self->arena->nodes[fld].line, _self->arena->nodes[fld].num, msg, _self->mem->path);
                 }
             }
+        }
+        if (templ) {
+            int ti5;
+            int tn5;
+            int pi5;
+            struct frontend_sym_StructTmpl * tps5;
+            if (frontend_sym_ct_adt_set_template(adt, 0) != 0) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            for (pi5 = 0; pi5 < nt; pi5++) {
+                if (frontend_sym_ct_adt_add_tparam(adt, tparam[pi5]) < 0) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+            }
+            if (((early_ti < 0) && (frontend_sym_ct_tmpl_find(name) >= 0))) {
+                return tool_diag_ct_sem_error(tline, tcol, tool_sh_ct_scratch_fmt("generic ADT '%s' conflicts with an existing generic type of the same name", name), _self->mem->path);
+            }
+            if (early_ti < 0) {
+                ti5 = frontend_sym_ct_tmpl_add(name, qname, nt, tparam, bound, is_pub, _self->cur_unit, _self->mem->path, tline);
+                if (ti5 < 0) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+            }
+            else {
+                ti5 = early_ti;
+            }
+            tps5 = frontend_sym_ct_tmpls((&tn5));
+            if ((!tps5)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            tps5[ti5].is_adt = 1;
+            tps5[ti5].adt = adt;
+            tps5[ti5].is_pub = is_pub;
+            tps5[ti5].owner = _self->cur_unit;
         }
         ao = (-1);
         ar = _self->sup->__frontend_parse_supportops_vptr->attr_pool(_self->sup, (&ao));
@@ -4862,6 +4978,24 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
             }
         }
     }
+{
+        int tbi2 = frontend_sym_ct_tmpl_find(tmpl);
+        int tbn2;
+        struct frontend_sym_StructTmpl * tps2 = frontend_sym_ct_tmpls((&tbn2));
+        (void)(tbn2);
+        if ((((tbi2 >= 0) && tps2) && tps2[tbi2].is_adt)) {
+            int adn2;
+            struct frontend_sym_Adt * ad2 = frontend_sym_ct_adts((&adn2));
+            int ai2 = tps2[tbi2].adt;
+            if ((((!ad2) || (ai2 < 0)) || (ai2 >= adn2))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the ADT row is missing");
+            }
+            htype = runtime_text_ct_internf("struct %s", ad2[ai2].full);
+            if ((!htype)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+        }
+    }
     while (((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))))) {
         mline = _self->lex->tokline;
         ret = "";
@@ -4895,8 +5029,27 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         }
         if (is_pub) {
             int tsi = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, tmpl);
-            if ((((!_self->unit_is_hdr) || (tsi < 0)) || (!_self->sym->structs[tsi].is_pub))) {
-                return tool_diag_ct_sem_error(mline, 1, "a pub method needs a pub struct in a .h.ct unit", _self->mem->path);
+            int tpub = 0;
+            int is_adt_t = 0;
+            if (tsi >= 0) {
+                tpub = _self->sym->structs[tsi].is_pub;
+            }
+            else {
+                int tbi3 = frontend_sym_ct_tmpl_find(tmpl);
+                int tbn3;
+                struct frontend_sym_StructTmpl * tps3 = frontend_sym_ct_tmpls((&tbn3));
+                if ((((tbi3 >= 0) && tps3) && tps3[tbi3].is_adt)) {
+                    int adn3;
+                    struct frontend_sym_Adt * ad3 = frontend_sym_ct_adts((&adn3));
+                    int ai3 = tps3[tbi3].adt;
+                    if (((ad3 && (ai3 >= 0)) && (ai3 < adn3))) {
+                        tpub = ad3[ai3].is_pub;
+                        is_adt_t = 1;
+                    }
+                }
+            }
+            if (((!_self->unit_is_hdr) || (!tpub))) {
+                return tool_diag_ct_sem_error(mline, 1, (is_adt_t ? "a pub method needs a pub ADT in a .h.ct unit" : "a pub method needs a pub struct in a .h.ct unit"), _self->mem->path);
             }
         }
         if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ret)) != 0) {
