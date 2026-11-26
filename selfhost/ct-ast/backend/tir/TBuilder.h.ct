@@ -1723,6 +1723,8 @@ static int tb_stmt_match_arm(struct TBuilder *tb, int n)
     tb->m->stmts[sid - 1].num = ar->nodes[n].num;
     tb->m->stmts[sid - 1].text2 = runtime::text::ct_intern(
         ar->nodes[n].text4 ? ar->nodes[n].text4 : "");
+    /* v1-PH-2 S5: the guard expression id (`d`, -1 when unguarded). */
+    tb->m->stmts[sid - 1].guard = ar->nodes[n].d;
     {
         /* The binding declarations: `path|name|type;` each, in source order.
            `path` is the accessor after the match temporary (`.` / `->` / `*`);

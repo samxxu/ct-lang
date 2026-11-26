@@ -8,7 +8,7 @@
 #   * the slice inventory per dispatcher (76 total);
 #   * the emitted-C line count for the baseline tree and the HEAD tree, both
 #     emitted by the same compiler (so the delta is the source change);
-#   * the distinct-callee capacity the rewrite forced (1024);
+#   * the distinct-callee capacity the rewrite forced (2048 after v1-PH-2 S5);
 # and it requires the sharp-edge section to keep the entries a reviewer needs
 # (the fall-through arm, the String verdict, the MAX_FUNCS headroom).
 #
@@ -89,12 +89,12 @@ else
 fi
 
 # ---- 3) the capacity the rewrite forced ---------------------------------
-if [ "$io_cap" = "1024" ] \
-   && grep -rq 'char io_names\[1024\]\[64\];' selfhost/ct-ast/frontend/parse/ \
-   && grep -rq 'e->nio >= 1024' selfhost/ct-ast/frontend/parse/; then
-    ok; echo "  p88metrics: distinct-callee capacity is 1024"
+if [ "$io_cap" = "2048" ] \
+   && grep -rq 'char io_names\[2048\]\[64\];' selfhost/ct-ast/frontend/parse/ \
+   && grep -rq 'e->nio >= 2048' selfhost/ct-ast/frontend/parse/; then
+    ok; echo "  p88metrics: distinct-callee capacity is 2048"
 else
-    bad "the distinct-callee capacity is not the documented 1024"
+    bad "the distinct-callee capacity is not the documented 2048"
 fi
 
 # ---- 4) the sharp-edge entries a reviewer needs -------------------------

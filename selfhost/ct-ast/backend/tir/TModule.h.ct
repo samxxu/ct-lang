@@ -319,6 +319,10 @@ pub struct ct_tstmt {
     int flags;          /* per-kind child-shape bitmask (S1b-S2, see TBuilder) */
     const char *text;   /* goto / label name (S1b-S2) */
     const char *text2;  /* foreach: the container's C unit name */
+    /* v1-PH-2 S5: TS_ARM's guard expression id (0 = no guard). A guarded arm
+       never counts toward exhaustiveness; the S5 LIR slice keeps such a match
+       on the AST body seam, so the fact travels only to make that visible. */
+    int guard;
 }
 
 pub struct ct_tscope {

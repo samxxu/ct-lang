@@ -1549,6 +1549,17 @@ static int lw_expr(struct Lower *w, int teid)
             struct ct_tadt *a = lw_adt_row(w, t->text);
             int temp, j;
             if (!a) { lw_abort(w, "L7820"); return 0; }
+            /* v1-PH-2 S5: an or-pattern group set or a guard needs the flag
+               arm shape, which this slice does not model yet; keep the whole
+               function on the AST body seam (byte-identical by construction). */
+            for (j = 1; j < t->nkids; j++) {
+                struct ct_tstmt *arm = &w->m->stmts[t->kids[j] - 1];
+                if (arm->guard >= 0
+                    || (arm->text2 && strchr(arm->text2, '|'))) {
+                    lw_abort(w, "L7822");
+                    return 0;
+                }
+            }
             temp = lmod_new_temp(w->l, LTK_MATCH, lw_type(w, t->type),
                                  w->hoist_block);
             if (temp <= 0) { w->hard = 1; return 0; }
@@ -2961,6 +2972,16 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             nonadt = s->aux & 4;
             a = nonadt ? (struct ct_tadt *)0 : lw_adt_row(w, s->text);
             if (!nonadt && !a) { lw_abort(w, "L7830"); return 0; }
+            /* v1-PH-2 S5: or-patterns / guards keep this function on the AST
+               body seam; see TK_MATCH_ARM. */
+            for (j = 1; j < s->nkids; j++) {
+                struct ct_tstmt *arm = &w->m->stmts[s->kids[j] - 1];
+                if (arm->guard >= 0
+                    || (arm->text2 && strchr(arm->text2, '|'))) {
+                    lw_abort(w, "L7832");
+                    return 0;
+                }
+            }
             temp = lmod_new_temp(w->l, LTK_MATCH, 0, block);
             if (temp <= 0) { w->hard = 1; return 0; }
             sid = lmod_new_stmt(w->l, LS_MATCH, s->span.file, s->span.line,

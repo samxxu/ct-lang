@@ -4265,34 +4265,350 @@ static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi)
    N_RAW initialiser carries the accessor, then lets the ordinary block writer
    emit the block: scope release, `defer` and AutoDrop behave exactly as in a
    hand-written block. The chain is restored after the write. */
-/* v1-PH-2 S4: the arm's extra runtime tests. The parser serialises them as
-   `path=value;` rows (path empty = the subject itself, otherwise an accessor
-   beginning with `.` or `->`). The tag test of a root variant is emitted by
-   the caller; everything nested or literal lands here. */
+/* v1-PH-2 S4/S5: the arm's extra runtime tests. The parser serialises them
+   as `path=value;` rows (path empty = the subject itself, otherwise an
+   accessor beginning with `.` or `->`). S5 groups the rows of an or-pattern
+   alternative with `|`: the groups are ORed, the rows inside one group ANDed.
+   A single group therefore prints exactly the S4 shape (` && (row)` per row),
+   and `--ir=on` stays byte-identical. */
+static int emit_cond_row(struct Emitter *self, int arm, const char *p,
+                         const char *end, int k, int leading_and, int *ncond)
+{
+    const char *eq;
+    const char *semi;
+    const char *q;
+
+    eq = (const char *)0;
+    semi = (const char *)0;
+    for (q = p; q < end; q++) {
+        if (*q == '=' && !eq) eq = q;
+        if (*q == ';') { semi = q; break; }
+    }
+    if (!eq || !semi || eq > semi)
+        return self->fail_from(arm, "malformed match pattern test");
+    if (leading_and) fputs(" && ", self->out);
+    fputs("(", self->out);
+    fprintf(self->out, "__ct_match%d", k);
+    fwrite(p, 1, (size_t)(eq - p), self->out);
+    fputs(" == ", self->out);
+    fwrite(eq + 1, 1, (size_t)(semi - eq - 1), self->out);
+    fputs(")", self->out);
+    (*ncond)++;
+    return 0;
+}
+
+/* One group's rows, joined by `&&`, without a leading operator. */
+static int emit_cond_rows(struct Emitter *self, int arm, const char *p,
+                          const char *end, int k, int *ncond)
+{
+    int first = 1;
+
+    if (p >= end) { fputs("1", self->out); return 0; }
+    while (p < end) {
+        const char *semi;
+        if (emit_cond_row(self, arm, p, end, k, !first, ncond) != 0) return -1;
+        first = 0;
+        semi = p;
+        while (semi < end && *semi != ';') semi++;
+        p = semi + 1;
+    }
+    return 0;
+}
+
+/* Find group `gi` of `enc` (groups separated by `|`). */
+static int emit_find_group(const char *enc, int gi, const char **start,
+                           const char **end)
+{
+    const char *p;
+    int i;
+
+    p = enc;
+    for (i = 0; ; i++) {
+        const char *bar;
+        bar = strchr(p, '|');
+        if (i == gi) {
+            *start = p;
+            *end = bar ? bar : p + strlen(p);
+            return 0;
+        }
+        if (!bar) return -1;
+        p = bar + 1;
+    }
+}
+
 static int emit_arm_conds(struct Emitter *self, int arm, int k, int *ncond)
 {
     const char *enc;
+    const char *p;
 
     *ncond = 0;
     enc = self->arena->nodes[arm].text4;
     if (!enc || !enc[0]) return 0;
-    while (*enc) {
-        const char *eq;
-        const char *semi;
-
-        eq = strchr(enc, '=');
-        semi = strchr(enc, ';');
-        if (!eq || !semi || eq > semi)
-            return self->fail_from(arm, "malformed match pattern test");
-        fputs(" && (", self->out);
-        fprintf(self->out, "__ct_match%d", k);
-        fwrite(enc, 1, (size_t)(eq - enc), self->out);
-        fputs(" == ", self->out);
-        fwrite(eq + 1, 1, (size_t)(semi - eq - 1), self->out);
-        fputs(")", self->out);
-        (*ncond)++;
-        enc = semi + 1;
+    if (!strchr(enc, '|')) {
+        /* the S4 shape, byte for byte */
+        p = enc;
+        while (*p) {
+            const char *semi;
+            if (emit_cond_row(self, arm, p, p + strlen(p), k, 1, ncond) != 0)
+                return -1;
+            semi = p;
+            while (*semi && *semi != ';') semi++;
+            p = *semi ? semi + 1 : semi;
+        }
+        return 0;
     }
+    fputs(" && (", self->out);
+    {
+        int gi = 0;
+        for (;;) {
+            const char *gs;
+            const char *ge;
+            if (emit_find_group(enc, gi, &gs, &ge) != 0) break;
+            if (gi > 0) fputs(" || ", self->out);
+            fputs("(", self->out);
+            if (emit_cond_rows(self, arm, gs, ge, k, ncond) != 0) return -1;
+            fputs(")", self->out);
+            gi++;
+        }
+    }
+    fputs(")", self->out);
+    return 0;
+}
+
+/* A growable text buffer for one generated initialiser (the conditional
+   accessor of an or-pattern binding). */
+struct EmitBuf {
+    char *p;
+    int len;
+    int cap;
+};
+
+static int eb_put(struct EmitBuf *b, const char *s, int n)
+{
+    int need, ncap;
+    char *grown;
+
+    if (n <= 0) return 0;
+    need = b->len + n + 1;
+    if (need > b->cap) {
+        ncap = b->cap > 0 ? b->cap : 128;
+        while (ncap < need) ncap *= 2;
+        grown = (char *)realloc(b->p, (size_t)ncap);
+        if (!grown) return -1;
+        b->p = grown;
+        b->cap = ncap;
+    }
+    memcpy(b->p + b->len, s, (size_t)n);
+    b->len += n;
+    b->p[b->len] = 0;
+    return 0;
+}
+
+static int eb_str(struct EmitBuf *b, const char *s)
+{
+    return eb_put(b, s, (int)strlen(s));
+}
+
+static int eb_int(struct EmitBuf *b, int v)
+{
+    char tmp[32];
+    snprintf(tmp, sizeof tmp, "%d", v);
+    return eb_str(b, tmp);
+}
+
+/* Append one condition row as the C text `(__ct_matchK<path> == value)`. */
+static int eb_row(struct EmitBuf *b, int arm, const char *p, const char *end,
+                  int k)
+{
+    const char *eq;
+    const char *semi;
+    const char *q;
+
+    eq = (const char *)0;
+    semi = (const char *)0;
+    for (q = p; q < end; q++) {
+        if (*q == '=' && !eq) eq = q;
+        if (*q == ';') { semi = q; break; }
+    }
+    if (!eq || !semi || eq > semi)
+        return -1;
+    if (eb_str(b, "(__ct_match") || eb_int(b, k)
+        || eb_put(b, p, (int)(eq - p)) || eb_str(b, " == ")
+        || eb_put(b, eq + 1, (int)(semi - eq - 1)) || eb_str(b, ")"))
+        return -1;
+    (void)arm;
+    return 0;
+}
+
+/* Append one group's rows joined by `&&`; an empty group is `1`. */
+static int eb_rows(struct EmitBuf *b, int arm, const char *p,
+                   const char *end, int k)
+{
+    int first = 1;
+
+    if (p >= end) return eb_str(b, "1");
+    while (p < end) {
+        const char *semi;
+        if (!first && eb_str(b, " && ")) return -1;
+        first = 0;
+        if (eb_row(b, arm, p, end, k)) return -1;
+        semi = p;
+        while (semi < end && *semi != ';') semi++;
+        p = semi + 1;
+    }
+    return 0;
+}
+
+/* The initialiser text of one binding: a plain accessor, or a conditional one
+   when the or-pattern alternatives read the same name from different payloads
+   (the parser only allows that for integer-family values). */
+static int match_bind_text(struct Emitter *self, int arm, int bind, int k)
+{
+    const char *path;
+    const char *enc;
+    int raw;
+
+    raw = self->arena->nodes[bind].b;
+    path = self->arena->nodes[bind].text4;
+    if (!path) path = "";
+    if (path[0] != '?') {
+        if (strcmp(path, "*") == 0)
+            self->arena->nodes[raw].text = runtime::text::ct_internf(
+                "(*__ct_match%d)", k);
+        else if (path[0])
+            self->arena->nodes[raw].text = runtime::text::ct_internf(
+                "__ct_match%d%s", k, path);
+        else
+            self->arena->nodes[raw].text = runtime::text::ct_internf(
+                "__ct_match%d", k);
+        if (!self->arena->nodes[raw].text) return -1;
+        return 0;
+    }
+    enc = self->arena->nodes[arm].text4;
+    {
+        struct EmitBuf b;
+        int nentry, i;
+        const char *p;
+        int *gis;
+        const char **paths;
+        int *plens;
+
+        nentry = 0;
+        p = path + 1;
+        while (*p) {
+            const char *semi;
+            nentry++;
+            semi = strchr(p, ',');
+            if (!semi) break;
+            p = semi + 1;
+        }
+        if (nentry <= 0) return self->fail_from(bind, "malformed or-pattern binding");
+        gis = (int *)malloc((size_t)nentry * sizeof(*gis));
+        paths = (const char **)malloc((size_t)nentry * sizeof(*paths));
+        plens = (int *)malloc((size_t)nentry * sizeof(*plens));
+        if (!gis || !paths || !plens) {
+            free(gis);
+            free((void *)paths);
+            free(plens);
+            return -1;
+        }
+        p = path + 1;
+        for (i = 0; i < nentry; i++) {
+            const char *colon;
+            const char *semi;
+            int gi;
+            const char *q;
+
+            colon = strchr(p, ':');
+            if (!colon) {
+                free(gis);
+                free((void *)paths);
+                free(plens);
+                return self->fail_from(bind, "malformed or-pattern binding");
+            }
+            semi = strchr(colon + 1, ',');
+            gi = 0;
+            for (q = p; q < colon; q++) {
+                if (*q < '0' || *q > '9') {
+                    free(gis);
+                    free((void *)paths);
+                    free(plens);
+                    return self->fail_from(bind, "malformed or-pattern binding");
+                }
+                gi = gi * 10 + (*q - '0');
+            }
+            gis[i] = gi;
+            paths[i] = colon + 1;
+            plens[i] = (int)((semi ? semi : colon + 1 + strlen(colon + 1))
+                             - (colon + 1));
+            p = semi ? semi + 1 : colon + 1 + strlen(colon + 1);
+        }
+        b.p = (char *)0;
+        b.len = 0;
+        b.cap = 0;
+        for (i = 0; i < nentry; i++) {
+            const char *gs;
+            const char *ge;
+            if (eb_str(&b, "(")
+                || emit_find_group(enc, gis[i], &gs, &ge) != 0
+                || eb_rows(&b, arm, gs, ge, k)
+                || eb_str(&b, " ? __ct_match") || eb_int(&b, k)
+                || eb_put(&b, paths[i], plens[i])
+                || eb_str(&b, " : ")) {
+                free(b.p);
+                free(gis);
+                free((void *)paths);
+                free(plens);
+                return self->fail_from(bind, "malformed or-pattern binding");
+            }
+        }
+        if (eb_str(&b, "__ct_match") || eb_int(&b, k)
+            || eb_put(&b, paths[nentry - 1], plens[nentry - 1])) {
+            free(b.p);
+            free(gis);
+            free((void *)paths);
+            free(plens);
+            return -1;
+        }
+        for (i = 0; i < nentry; i++)
+            if (eb_str(&b, ")")) {
+                free(b.p);
+                free(gis);
+                free((void *)paths);
+                free(plens);
+                return -1;
+            }
+        free(gis);
+        free((void *)paths);
+        free(plens);
+        self->arena->nodes[raw].text = runtime::text::ct_intern(b.p ? b.p : "");
+        free(b.p);
+        if (!self->arena->nodes[raw].text) return -1;
+    }
+    return 0;
+}
+
+/* Patch one binding's initialiser and emit its declaration. */
+static int match_bind_one(struct Emitter *self, int arm, int bind, int ind, int k)
+{
+    int decl, raw;
+
+    decl = self->arena->nodes[bind].a;
+    raw = self->arena->nodes[bind].b;
+    if (decl < 0 || raw < 0) return 0;
+    if (match_bind_text(self, arm, bind, k) != 0)
+        return self->fail("out of memory");
+    if (self->emit_node(decl, ind) != 0) return -1;
+    return 1;
+}
+
+static int match_bind_emit(struct Emitter *self, int arm, int ind, int k)
+{
+    int i;
+
+    for (i = self->arena->nodes[arm].a; i >= 0;
+         i = self->arena->nodes[i].next)
+        if (match_bind_one(self, arm, i, ind, k) < 0) return -1;
     return 0;
 }
 
@@ -4317,20 +4633,8 @@ static int emit_match_arm(struct Emitter *self, int arm, int ind, int k, int ptr
         int decl = self->arena->nodes[i].a;
         int raw = self->arena->nodes[i].b;
         if (decl < 0 || raw < 0) continue;
-        {
-            const char *path;
-            path = self->arena->nodes[i].text4;
-            if (path && strcmp(path, "*") == 0)
-                self->arena->nodes[raw].text = runtime::text::ct_internf(
-                    "(*__ct_match%d)", k);
-            else if (path && path[0])
-                self->arena->nodes[raw].text = runtime::text::ct_internf(
-                    "__ct_match%d%s", k, path);
-            else
-                self->arena->nodes[raw].text = runtime::text::ct_internf(
-                    "__ct_match%d", k);
-        }
-        if (!self->arena->nodes[raw].text) return self->fail("out of memory");
+        if (match_bind_text(self, arm, i, k) != 0)
+            return self->fail("out of memory");
         self->arena->nodes[decl].next = -1;
         if (first < 0) first = decl;
         else self->arena->nodes[last].next = decl;
@@ -4352,6 +4656,56 @@ static int emit_match_arm(struct Emitter *self, int arm, int ind, int k, int ptr
     return r;
 }
 
+/* S5: the guarded / mixed match shape. Every arm is an independent `if` on a
+   `__ct_matchedK` flag, so an arm whose guard is false can fall through to the
+   next one. The pattern bindings are declared before the guard (a guard may
+   name them) and released when the arm's wrapper block ends, whether the
+   guard passed or not. `ind` is the indentation of the statements inside the
+   wrapper; the caller has written `if (...) {`. */
+static int emit_match_arm_ext(struct Emitter *self, int arm, int ind, int k,
+                              int set_matched)
+{
+    int guard, b, save_sb, save_l, level;
+
+    b = self->arena->nodes[arm].b;
+    if (b < 0) return self->fail_from(arm, "the match arm has no body");
+    guard = self->arena->nodes[arm].d;
+    save_sb = g_sb.n;
+    save_l = g_sb.ln;
+    if (g_sb.nblk < 256) {
+        g_sb.blk[g_sb.nblk] = save_sb;
+        g_sb.lblk[g_sb.nblk] = save_l;
+        g_sb.bkind[g_sb.nblk] = 0;
+        g_sb.nblk++;
+    }
+    if (match_bind_emit(self, arm, ind, k) != 0) return -1;
+    level = ind;
+    if (guard >= 0) {
+        self->emit_indent(ind);
+        fputs("if (", self->out);
+        if (self->emit_expr(guard) != 0) return -1;
+        fputs(") {\n", self->out);
+        level = ind + 1;
+    }
+    if (set_matched) {
+        self->emit_indent(level);
+        fprintf(self->out, "__ct_matched%d = 1;\n", k);
+    }
+    self->emit_indent(level);
+    if (self->emit_node(b, level) != 0) return -1;
+    if (guard >= 0) {
+        self->emit_indent(ind);
+        fputs("}\n", self->out);
+    }
+    sb_release_from(self, save_sb, -1, ind);
+    g_sb.n = save_sb;
+    g_sb.ln = save_l;
+    if (g_sb.nblk > 0) g_sb.nblk--;
+    sb_field_merge(self, g_sb.nblk, save_l);
+    self->emit_indent(ind - 1);
+    fputs("}\n", self->out);
+    return 0;
+}
 
 /* ======================================================================
  * PH-88 (v0.88.0): the emitter's node-kind dispatch, one slice per kind.
@@ -6814,9 +7168,22 @@ static int em_node_foreach(struct Emitter *self, int n, int ind, int nk)
    the final `__ct_mresN;` is the value the surrounding expression sees. The
    name is patched here because the parser runs before the emitter's
    temporary numbering. */
+/* S5: the flag shape is used only when a guard can make an arm fall through.
+   An or-pattern without guards keeps the if/else chain (the condition set is
+   a DNF and the binding accessor a ternary), byte for byte. */
+static int match_extended(struct Emitter *self, int n)
+{
+    int arm;
+
+    for (arm = self->arena->nodes[n].b; arm >= 0;
+         arm = self->arena->nodes[arm].next)
+        if (self->arena->nodes[arm].d >= 0) return 1;
+    return 0;
+}
+
 static int match_expr_emit(struct Emitter *self, int n)
 {
-    int k, arm, narm, idx, ptr, tagi, self_deref;
+    int k, arm, narm, idx, ptr, tagi, self_deref, ext;
     const char *rtype;
     const char *rnorm;
     struct Adt *adts;
@@ -6852,6 +7219,9 @@ static int match_expr_emit(struct Emitter *self, int n)
     for (arm = self->arena->nodes[n].b; arm >= 0; arm = self->arena->nodes[arm].next)
         narm++;
     idx = 0;
+    ext = match_extended(self, n);
+    if (ext)
+        fprintf(self->out, "int __ct_matched%d __attribute__((unused)) = 0; ", k);
     for (arm = self->arena->nodes[n].b; arm >= 0;
          arm = self->arena->nodes[arm].next, idx++) {
         /* the parser's placeholder name -> this match's result temporary */
@@ -6865,13 +7235,35 @@ static int match_expr_emit(struct Emitter *self, int n)
                 if (!self->arena->nodes[tv].text2) return self->fail("out of memory");
             }
         }
+        if (ext) {
+            int exncond;
+            if (narm == 1) {
+                fputs("{\n", self->out);
+                if (emit_match_arm_ext(self, arm, 1, k, 0) != 0) return -1;
+                continue;
+            }
+            fputs("if (", self->out);
+            fprintf(self->out, "!__ct_matched%d && (", k);
+            if ((int)self->arena->nodes[arm].num >= 0)
+                fprintf(self->out, "__ct_match%d%stag == %d", k,
+                        ptr ? "->" : ".", (int)self->arena->nodes[arm].num);
+            else
+                fputs("1", self->out);
+            if (emit_arm_conds(self, arm, k, &exncond) != 0) return -1;
+            fputs(")) {\n", self->out);
+            if (emit_match_arm_ext(self, arm, 1, k, 1) != 0) return -1;
+            continue;
+        }
         if (idx < narm - 1) {
             if (self->arena->nodes[arm].aux & 1)
                 return self->fail_from(arm, "a wildcard match arm must be the last arm");
             int exncond;
             fputs(idx == 0 ? "if (" : "else if (", self->out);
-            fprintf(self->out, "__ct_match%d%stag == %d",
-                    k, ptr ? "->" : ".", (int)self->arena->nodes[arm].num);
+            if ((int)self->arena->nodes[arm].num >= 0)
+                fprintf(self->out, "__ct_match%d%stag == %d",
+                        k, ptr ? "->" : ".", (int)self->arena->nodes[arm].num);
+            else
+                fputs("1", self->out);
             if (emit_arm_conds(self, arm, k, &exncond) != 0) return -1;
             fputs(") ", self->out);
         } else if (narm > 1) {
@@ -6890,7 +7282,7 @@ static int em_node_match(struct Emitter *self, int n, int ind, int nk)
 {
     (void)nk;
 
-    int k, arm, narm, idx, ptr, tagi, nonadt, ncond, self_deref;
+    int k, arm, narm, idx, ptr, tagi, nonadt, ncond, self_deref, ext;
     struct Adt *adts;
     int nadts;
 
@@ -6928,14 +7320,41 @@ static int em_node_match(struct Emitter *self, int n, int ind, int nk)
     for (arm = self->arena->nodes[n].b; arm >= 0; arm = self->arena->nodes[arm].next)
         narm++;
     idx = 0;
+    ext = match_extended(self, n);
+    if (ext) {
+        self->emit_indent(ind);
+        fprintf(self->out, "int __ct_matched%d __attribute__((unused)) = 0;\n", k);
+        g_sb.branch_hold = 0;
+    }
     for (arm = self->arena->nodes[n].b; arm >= 0;
          arm = self->arena->nodes[arm].next, idx++) {
+        if (ext) {
+            if (narm == 1) {
+                self->emit_indent(ind);
+                fputs("{\n", self->out);
+                if (emit_match_arm_ext(self, arm, ind + 1, k, 0) != 0)
+                    return -1;
+                continue;
+            }
+            self->emit_indent(ind);
+            fputs("if (", self->out);
+            fprintf(self->out, "!__ct_matched%d && (", k);
+            if (!nonadt && (int)self->arena->nodes[arm].num >= 0)
+                fprintf(self->out, "__ct_match%d%stag == %d",
+                        k, ptr ? "->" : ".", (int)self->arena->nodes[arm].num);
+            else
+                fputs("1", self->out);
+            if (emit_arm_conds(self, arm, k, &ncond) != 0) return -1;
+            fputs(")) {\n", self->out);
+            if (emit_match_arm_ext(self, arm, ind + 1, k, 1) != 0) return -1;
+            continue;
+        }
         if (idx < narm - 1) {
             if (self->arena->nodes[arm].aux & 1)
                 return self->fail_from(arm, "a wildcard match arm must be the last arm");
             self->emit_indent(ind);
             fputs(idx == 0 ? "if (" : "else if (", self->out);
-            if (!nonadt && self->arena->nodes[arm].num >= 0)
+            if (!nonadt && (int)self->arena->nodes[arm].num >= 0)
                 fprintf(self->out, "__ct_match%d%stag == %d",
                         k, ptr ? "->" : ".", (int)self->arena->nodes[arm].num);
             else

@@ -127,6 +127,11 @@ pub trait StmtMatch {
     int  pat_desc(int form, const char *text, const char *text2, long num);
 
     int  pat_parse_one(const char *type, const char *path);
+
+    /* v1-PH-2 S5: one atom of the pattern grammar. `pat_parse_one` wraps it
+       with the `|` alternatives; recursion still goes through `pat_parse_one`
+       so a nested or-pattern forks the current alternative set. */
+    int  pat_parse_atom(const char *type, const char *path);
 }
 
 

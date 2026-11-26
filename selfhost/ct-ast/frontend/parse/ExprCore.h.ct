@@ -422,14 +422,16 @@ pub struct Expr {
        graph above only keeps calls to known functions; libc I/O is unknown by
        design, so it needs this second list. */
     /* PH-88: the emitter's one-function-per-kind dispatch slices add ~80 distinct
-       callees to ct-ast's own tree. A macro cannot cross a unit boundary (the
-       struct is emitted into Expr.h), so the capacity is a literal; the check
-       below spells the same number. Capacity, not semantics: the diagnostic
-       text is unchanged, only the point it fires moves. */
-    char io_names[1024][64];
-    int  io_owner[1024];   /* cur_unit of the caller, so build mode can scope */
-    int  io_known[1024];   /* 1 when the callee resolves to a user/layer function */
-    int  io_line[1024];
+       callees to ct-ast's own tree. v1-PH-2 S5's pattern scratch (DNF groups,
+       or-pattern bindings, guards) adds another ~28, so the budget doubles
+       again. A macro cannot cross a unit boundary (the struct is emitted into
+       Expr.h), so the capacity is a literal; the check below spells the same
+       number. Capacity, not semantics: the diagnostic text is unchanged, only
+       the point it fires moves. */
+    char io_names[2048][64];
+    int  io_owner[2048];   /* cur_unit of the caller, so build mode can scope */
+    int  io_known[2048];   /* 1 when the callee resolves to a user/layer function */
+    int  io_line[2048];
     int  nio;
     /* A function-pointer declarator carries its name inside the type
        (`int (*cb)(void *)`), so `parse_type` reads it and the caller takes it

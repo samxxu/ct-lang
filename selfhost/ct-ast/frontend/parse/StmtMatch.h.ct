@@ -129,12 +129,19 @@ pub const char *match_expr_type_key_text(const char *in)
 }
 
 /* ------------------------------------------------------------------------- */
-/* v1-PH-2 S4: the pattern scratch.                                           */
+/* v1-PH-2 S5: the pattern scratch is a DNF of alternatives.                  */
 /*                                                                            */
-/* One arm at a time: the subject kind is fixed by `pat_begin`, the recursive */
-/* reader appends bindings (name/type/access path) and runtime tests (a       */
-/* `path=value;` row per literal/tag test), and `pat_commit` turns the        */
-/* bindings into the N_BIND -> N_DECL/N_RAW chain the emitter already reads.  */
+/* One arm at a time: the subject kind is fixed by `pat_begin`; the recursive */
+/* reader appends runtime tests (`path=value;` rows) and bindings (name /     */
+/* type / access path) to every alternative in the current set, and `|` forks */
+/* the set. An `|` at any depth multiplies the alternatives, so the final     */
+/* set is the disjunctive normal form of the arm's pattern: each group is one */
+/* conjunction of tests. `pat_bind_finish` checks that all alternatives bind  */
+/* the same names with the same types; `pat_commit` turns the prepared rows   */
+/* into the N_BIND -> N_DECL/N_RAW chain the emitter already reads.            */
+/*                                                                            */
+/* The emitter ORs the group conditions and picks a binding accessor per      */
+/* group when the alternatives read the same name from different payloads.    */
 /* The pattern descriptors are N_BIND rows hung off `N_ARM.d` only; no        */
 /* statement or expression walker reaches them.                               */
 /* ------------------------------------------------------------------------- */
@@ -144,6 +151,7 @@ pub const char *match_expr_type_key_text(const char *in)
 #define PAT_WILD    4
 #define PAT_BINDER  5
 #define PAT_FIELD   6
+#define PAT_OR      7
 
 #define PAT_K_OTHER 0
 #define PAT_K_ADT   1
@@ -151,33 +159,52 @@ pub const char *match_expr_type_key_text(const char *in)
 #define PAT_K_INT   3
 #define PAT_K_PTR   4
 
+/* One binding of one alternative: name, declared type and the accessor after
+   the match temporary (`.` / `->`, `*` for a pointer subject bound whole). */
+struct PatBind {
+    const char *name;
+    const char *type;
+    const char *path;
+};
+
+/* One DNF alternative: a conjunction of `path=value;` rows, its canonical
+   spelling for duplicate detection, and the bindings it introduces. */
+struct PatGroup {
+    char *conds;
+    int condlen;
+    int condcap;
+    char *sig;
+    int siglen;
+    int sigcap;
+    int root_form;              /* the root atom's PAT_* form, 0 when unset */
+    int root_variant;           /* root variant index, -1 */
+    struct PatBind *binds;
+    int nbinds;
+    int bcap;
+};
+
 struct PatCtx {
     int adt;                    /* subject ADT row, -1 for a non-ADT subject */
     const char *subject_type;   /* the subject type spelling */
     int is_ptr;                 /* the subject spelling ended in `*` */
     int non_adt;                /* statement match on a struct / integer value */
-    int root_variant;           /* root variant index, -1 */
-    const char *root_cname;     /* root variant's union member */
-    int root_wild;              /* the root is `_` */
-    int root_catch;             /* the root catches every value of the subject */
-    int root_irref;             /* the root pattern is irrefutable */
-    int root_head;              /* descriptor tree root, -1 for `_` */
     int bind_head;
-    char *conds;                /* `path=value;` rows, in source order */
-    int condlen;
-    int condcap;
-    char *sig;                  /* canonical spelling for duplicate detection */
-    int siglen;
-    int sigcap;
-    const char **bname;
+    struct PatGroup *grp;       /* the current alternative set */
+    int ngrp;
+    int grpcap;
+    const char **bname;         /* prepared binding rows for pat_commit */
     const char **btype;
     const char **bpath;
     int nbind;
     int bcap;
+    const char *arm_conds;      /* interned arm condition text (groups, `|`) */
+    const char *arm_sig;        /* interned duplicate-detection signature */
     const char *cbase;          /* pat_classify's stripped base, pooled */
 };
 
 static struct PatCtx g_pat;
+
+static int pat_int_base(const char *b);
 
 static int pat_buf_put(char **buf, int *len, int *cap, const char *s)
 {
@@ -201,34 +228,443 @@ static int pat_buf_put(char **buf, int *len, int *cap, const char *s)
     return 0;
 }
 
-static int pat_bind_add(const char *name, const char *type, const char *path)
+static void pat_group_clear(struct PatGroup *g)
 {
-    int i, ncap;
+    free(g->conds);
+    free(g->sig);
+    free((void *)g->binds);
+    g->conds = (char *)0;
+    g->condlen = 0;
+    g->condcap = 0;
+    g->sig = (char *)0;
+    g->siglen = 0;
+    g->sigcap = 0;
+    g->binds = (struct PatBind *)0;
+    g->nbinds = 0;
+    g->bcap = 0;
+    g->root_form = 0;
+    g->root_variant = -1;
+}
+
+static void pat_groups_clear(struct PatGroup *grp, int n)
+{
+    int i;
+
+    if (!grp) return;
+    for (i = 0; i < n; i++) pat_group_clear(&grp[i]);
+    free(grp);
+}
+
+static int pat_group_init(struct PatGroup *g)
+{
+    g->conds = (char *)0;
+    g->condlen = 0;
+    g->condcap = 0;
+    g->sig = (char *)0;
+    g->siglen = 0;
+    g->sigcap = 0;
+    g->binds = (struct PatBind *)0;
+    g->nbinds = 0;
+    g->bcap = 0;
+    g->root_form = 0;
+    g->root_variant = -1;
+    if (pat_buf_put(&g->conds, &g->condlen, &g->condcap, "")) return -1;
+    if (pat_buf_put(&g->sig, &g->siglen, &g->sigcap, "")) return -1;
+    return 0;
+}
+
+/* Allocate `n` empty groups (a fresh alternative set). */
+static int pat_groups_alloc(int n, struct PatGroup **out)
+{
+    struct PatGroup *g;
+    int i;
+
+    if (n <= 0) n = 1;
+    g = (struct PatGroup *)calloc((size_t)n, sizeof(*g));
+    if (!g) return -1;
+    for (i = 0; i < n; i++)
+        if (pat_group_init(&g[i])) { pat_groups_clear(g, n); return -1; }
+    *out = g;
+    return 0;
+}
+
+static int pat_group_copy(struct PatGroup *dst, const struct PatGroup *src)
+{
+    dst->conds = (char *)0;
+    dst->condlen = 0;
+    dst->condcap = 0;
+    dst->sig = (char *)0;
+    dst->siglen = 0;
+    dst->sigcap = 0;
+    dst->binds = (struct PatBind *)0;
+    dst->nbinds = 0;
+    dst->bcap = 0;
+    dst->root_form = src->root_form;
+    dst->root_variant = src->root_variant;
+    if (pat_buf_put(&dst->conds, &dst->condlen, &dst->condcap,
+                    src->conds ? src->conds : "")) return -1;
+    if (pat_buf_put(&dst->sig, &dst->siglen, &dst->sigcap,
+                    src->sig ? src->sig : "")) return -1;
+    if (src->nbinds > 0) {
+        dst->binds = (struct PatBind *)malloc(
+            (size_t)src->nbinds * sizeof(*dst->binds));
+        if (!dst->binds) return -1;
+        memcpy(dst->binds, src->binds,
+               (size_t)src->nbinds * sizeof(*dst->binds));
+        dst->nbinds = src->nbinds;
+        dst->bcap = src->nbinds;
+    }
+    return 0;
+}
+
+/* Deep copy of a whole alternative set. */
+static int pat_groups_copy(struct PatGroup **out, int *nout,
+                           const struct PatGroup *src, int n)
+{
+    struct PatGroup *g;
+    int i;
+
+    if (n <= 0) n = 1;
+    g = (struct PatGroup *)calloc((size_t)n, sizeof(*g));
+    if (!g) return -1;
+    for (i = 0; i < n; i++) {
+        if (pat_group_copy(&g[i], &src[i])) {
+            pat_groups_clear(g, n);
+            return -1;
+        }
+    }
+    *out = g;
+    *nout = n;
+    return 0;
+}
+
+/* Append copies of `src` to the accumulation set. */
+static int pat_groups_append(struct PatGroup **acc, int *nacc,
+                             const struct PatGroup *src, int n)
+{
+    struct PatGroup *grown;
+    int i, base;
+
+    if (n <= 0) return 0;
+    grown = (struct PatGroup *)realloc(*acc,
+                (size_t)(*nacc + n) * sizeof(*grown));
+    if (!grown) return -1;
+    base = *nacc;
+    memset(grown + base, 0, (size_t)n * sizeof(*grown));
+    for (i = 0; i < n; i++) {
+        if (pat_group_copy(&grown[base + i], &src[i])) {
+            pat_groups_clear(grown + base, i);
+            *acc = grown;
+            return -1;
+        }
+    }
+    *acc = grown;
+    *nacc = base + n;
+    return 0;
+}
+
+/* Append one runtime test row to every alternative. */
+static int pat_cond_add(const char *row)
+{
+    int i;
+
+    for (i = 0; i < g_pat.ngrp; i++)
+        if (pat_buf_put(&g_pat.grp[i].conds, &g_pat.grp[i].condlen,
+                        &g_pat.grp[i].condcap, row)) return -1;
+    return 0;
+}
+
+/* Append one canonical-spelling token to every alternative. */
+static int pat_sig_add(const char *s)
+{
+    int i;
+
+    for (i = 0; i < g_pat.ngrp; i++)
+        if (pat_buf_put(&g_pat.grp[i].sig, &g_pat.grp[i].siglen,
+                        &g_pat.grp[i].sigcap, s)) return -1;
+    return 0;
+}
+
+/* Record the root atom form of the current alternative(s). */
+static void pat_root_set(int form, int variant)
+{
+    int i;
+
+    for (i = 0; i < g_pat.ngrp; i++) {
+        g_pat.grp[i].root_form = form;
+        g_pat.grp[i].root_variant = variant;
+    }
+}
+
+/* A binding of the current alternative set: duplicate names within one
+   alternative are an error (-2). */
+static int pat_group_bind_add(const char *name, const char *type,
+                              const char *path)
+{
+    int i, j;
+
+    for (i = 0; i < g_pat.ngrp; i++) {
+        struct PatGroup *g = &g_pat.grp[i];
+        struct PatBind *grown;
+        int ncap;
+
+        for (j = 0; j < g->nbinds; j++)
+            if (strcmp(g->binds[j].name, name) == 0) return -2;
+        if (g->nbinds >= g->bcap) {
+            ncap = g->bcap > 0 ? g->bcap * 2 : 8;
+            if (ncap > CAP_LIMIT) return -1;
+            grown = (struct PatBind *)realloc(g->binds,
+                        (size_t)ncap * sizeof(*grown));
+            if (!grown) return -1;
+            g->binds = grown;
+            g->bcap = ncap;
+        }
+        g->binds[g->nbinds].name = name;
+        g->binds[g->nbinds].type = type;
+        g->binds[g->nbinds].path = path;
+        g->nbinds++;
+    }
+    return 0;
+}
+
+/* The test's existing type surface: only an integer-family payload can be
+   re-read through a different union member for an or-pattern binding. */
+static int pat_cond_bind_ok(struct Symbols *sym, const char *type)
+{
+    const char *r;
+
+    if (pat_int_base(type)) return 1;
+    r = sym->resolve_type_text(type);
+    if (r && pat_int_base(r)) return 1;
+    return 0;
+}
+
+/* Cross-alternative binding consistency and the prepared accessor rows.
+   The DNF groups are the alternatives: every group must bind the same name
+   set with the same types. A name read through different accessors is legal
+   for an integer-family payload (the emitter emits a conditional accessor);
+   anything else is refused rather than silently shallow-copied. */
+static int pat_bind_finish(struct Stmt *self, int line, int col)
+{
+    char msgbuf[3 * MAX_TEXT];
+    struct PatGroup *ref;
+    int i, k, j, ncap;
     const char **grown;
 
-    for (i = 0; i < g_pat.nbind; i++)
-        if (strcmp(g_pat.bname[i], name) == 0) return -2;   /* duplicate */
-    if (g_pat.nbind >= g_pat.bcap) {
-        ncap = g_pat.bcap > 0 ? g_pat.bcap * 2 : 8;
-        if (ncap > CAP_LIMIT) return -1;
-        grown = (const char **)realloc((void *)g_pat.bname,
-                                       (size_t)ncap * sizeof(*grown));
-        if (!grown) return -1;
-        g_pat.bname = grown;
-        grown = (const char **)realloc((void *)g_pat.btype,
-                                       (size_t)ncap * sizeof(*grown));
-        if (!grown) return -1;
-        g_pat.btype = grown;
-        grown = (const char **)realloc((void *)g_pat.bpath,
-                                       (size_t)ncap * sizeof(*grown));
-        if (!grown) return -1;
-        g_pat.bpath = grown;
-        g_pat.bcap = ncap;
+    g_pat.nbind = 0;
+    g_pat.bind_head = -1;
+    if (g_pat.ngrp <= 0) return 0;
+    ref = &g_pat.grp[0];
+    for (i = 0; i < ref->nbinds; i++) {
+        const char *nm = ref->binds[i].name;
+        const char *ty = ref->binds[i].type;
+        const char *path = ref->binds[i].path;
+        int same = 1;
+
+        for (k = 1; k < g_pat.ngrp; k++) {
+            struct PatGroup *g = &g_pat.grp[k];
+            int found = -1;
+            for (j = 0; j < g->nbinds; j++)
+                if (strcmp(g->binds[j].name, nm) == 0) { found = j; break; }
+            if (found < 0) {
+                snprintf(msgbuf, sizeof msgbuf,
+                         "or-pattern alternatives bind different names ('%s' is missing)",
+                         nm);
+                return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            if (strcmp(g->binds[found].type, ty) != 0) {
+                snprintf(msgbuf, sizeof msgbuf,
+                         "or-pattern alternatives bind '%s' as different types ('%s' and '%s')",
+                         nm, ty, g->binds[found].type);
+                return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            if (strcmp(g->binds[found].path, path) != 0) same = 0;
+        }
+        for (k = 1; k < g_pat.ngrp; k++) {
+            struct PatGroup *g = &g_pat.grp[k];
+            for (j = 0; j < g->nbinds; j++) {
+                int inref = 0, q;
+                for (q = 0; q < ref->nbinds; q++)
+                    if (strcmp(ref->binds[q].name, g->binds[j].name) == 0) {
+                        inref = 1;
+                        break;
+                    }
+                if (!inref) {
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "or-pattern alternatives bind different names ('%s' is missing)",
+                             g->binds[j].name);
+                    return tool::diag::ct_sem_error(line, col, msgbuf,
+                                                    self->mem->path);
+                }
+            }
+        }
+        if (!same) {
+            char *enc;
+            int elen, ecap;
+            if (!pat_cond_bind_ok(self->sym, ty)) {
+                snprintf(msgbuf, sizeof msgbuf,
+                         "an or-pattern cannot bind '%s' of type '%s' at different offsets"
+                         " (S5: integer payloads only)", nm, ty);
+                return tool::diag::ct_sem_error(line, col, msgbuf,
+                                                self->mem->path);
+            }
+            enc = (char *)0;
+            elen = 0;
+            ecap = 0;
+            for (k = 0; k < g_pat.ngrp; k++) {
+                char head[32];
+                int found = -1, q;
+                for (q = 0; q < g_pat.grp[k].nbinds; q++)
+                    if (strcmp(g_pat.grp[k].binds[q].name, nm) == 0) {
+                        found = q;
+                        break;
+                    }
+                snprintf(head, sizeof head, "%s%d:", k == 0 ? "?" : ",", k);
+                if (pat_buf_put(&enc, &elen, &ecap, head)
+                    || pat_buf_put(&enc, &elen, &ecap,
+                                   found >= 0 ? g_pat.grp[k].binds[found].path : "")) {
+                    free(enc);
+                    return self->sup->fail("out of memory");
+                }
+            }
+            path = runtime::text::ct_intern(enc ? enc : "");
+            free(enc);
+            if (!path) return self->sup->fail("out of memory");
+        }
+        if (g_pat.nbind >= g_pat.bcap) {
+            ncap = g_pat.bcap > 0 ? g_pat.bcap * 2 : 8;
+            if (ncap > CAP_LIMIT) return -1;
+            grown = (const char **)realloc((void *)g_pat.bname,
+                                           (size_t)ncap * sizeof(*grown));
+            if (!grown) return -1;
+            g_pat.bname = grown;
+            grown = (const char **)realloc((void *)g_pat.btype,
+                                           (size_t)ncap * sizeof(*grown));
+            if (!grown) return -1;
+            g_pat.btype = grown;
+            grown = (const char **)realloc((void *)g_pat.bpath,
+                                           (size_t)ncap * sizeof(*grown));
+            if (!grown) return -1;
+            g_pat.bpath = grown;
+            g_pat.bcap = ncap;
+        }
+        g_pat.bname[g_pat.nbind] = nm;
+        g_pat.btype[g_pat.nbind] = ty;
+        g_pat.bpath[g_pat.nbind] = path;
+        g_pat.nbind++;
     }
-    g_pat.bname[g_pat.nbind] = name;
-    g_pat.btype[g_pat.nbind] = type;
-    g_pat.bpath[g_pat.nbind] = path;
-    g_pat.nbind++;
+    return 0;
+}
+
+/* Which variant does this alternative cover? A root variant pattern covers
+   its variant only when every nested test is irrefutable, i.e. the group has
+   no runtime rows left. Returns -1 when the group covers no single variant. */
+static int pat_group_variant(int gi)
+{
+    struct PatGroup *g;
+
+    if (gi < 0 || gi >= g_pat.ngrp) return -1;
+    g = &g_pat.grp[gi];
+    if (g->root_form != PAT_VARIANT || g->root_variant < 0) return -1;
+    if (g->condlen != 0) return -1;
+    return g->root_variant;
+}
+
+/* The variant the alternative names, covered or not (for diagnostics). */
+static int pat_group_mention(int gi)
+{
+    struct PatGroup *g;
+
+    if (gi < 0 || gi >= g_pat.ngrp) return -1;
+    g = &g_pat.grp[gi];
+    if (g->root_form != PAT_VARIANT || g->root_variant < 0) return -1;
+    return g->root_variant;
+}
+
+/* Does this alternative catch every value of the subject? */
+static int pat_group_catch(int gi)
+{
+    struct PatGroup *g;
+
+    if (gi < 0 || gi >= g_pat.ngrp) return 0;
+    g = &g_pat.grp[gi];
+    if (g->root_form == PAT_WILD || g->root_form == PAT_BINDER) return 1;
+    /* a struct pattern with every field unconstrained (or `..`) is a catch */
+    if (g_pat.adt < 0 && g->root_form == PAT_STRUCT && g->condlen == 0) return 1;
+    return 0;
+}
+
+/* Build the arm's runtime condition text and duplicate signature.
+   `*arm_num` is the single root variant when every alternative names the same
+   one (the caller still prints that tag test); otherwise it becomes -1 and
+   every variant alternative carries its own `.tag=<v>` row so the OR set
+   stays self-contained. */
+static int pat_arm_finish(int *arm_num)
+{
+    struct PatGroup *grp;
+    char *out;
+    int i, len, cap, all_same, firstv;
+
+    grp = g_pat.grp;
+    *arm_num = -1;
+    if (g_pat.ngrp <= 0) {
+        g_pat.arm_conds = runtime::text::ct_intern("");
+        g_pat.arm_sig = runtime::text::ct_intern("");
+        return 0;
+    }
+    if (g_pat.ngrp == 1) {
+        if (g_pat.adt >= 0 && grp[0].root_form == PAT_VARIANT)
+            *arm_num = grp[0].root_variant;
+        g_pat.arm_conds = runtime::text::ct_intern(grp[0].conds ? grp[0].conds : "");
+        g_pat.arm_sig = runtime::text::ct_intern(grp[0].sig ? grp[0].sig : "");
+        if (!g_pat.arm_conds || !g_pat.arm_sig) return -1;
+        return 0;
+    }
+    all_same = 1;
+    firstv = -1;
+    for (i = 0; i < g_pat.ngrp; i++) {
+        if (grp[i].root_form != PAT_VARIANT) { all_same = 0; continue; }
+        if (firstv < 0) firstv = grp[i].root_variant;
+        else if (firstv != grp[i].root_variant) all_same = 0;
+    }
+    if (all_same && g_pat.adt >= 0 && firstv >= 0) *arm_num = firstv;
+    out = (char *)0;
+    len = 0;
+    cap = 0;
+    for (i = 0; i < g_pat.ngrp; i++) {
+        if (i > 0 && pat_buf_put(&out, &len, &cap, "|")) {
+            free(out);
+            return -1;
+        }
+        if (!all_same && grp[i].root_form == PAT_VARIANT) {
+            char row[64];
+            snprintf(row, sizeof row, "%stag=%d;",
+                     g_pat.is_ptr ? "->" : ".", grp[i].root_variant);
+            if (pat_buf_put(&out, &len, &cap, row)) { free(out); return -1; }
+        }
+        if (pat_buf_put(&out, &len, &cap, grp[i].conds ? grp[i].conds : "")) {
+            free(out);
+            return -1;
+        }
+    }
+    g_pat.arm_conds = runtime::text::ct_intern(out ? out : "");
+    free(out);
+    out = (char *)0;
+    len = 0;
+    cap = 0;
+    for (i = 0; i < g_pat.ngrp; i++) {
+        if (i > 0 && pat_buf_put(&out, &len, &cap, "|")) {
+            free(out);
+            return -1;
+        }
+        if (pat_buf_put(&out, &len, &cap, grp[i].sig ? grp[i].sig : "")) {
+            free(out);
+            return -1;
+        }
+    }
+    g_pat.arm_sig = runtime::text::ct_intern(out ? out : "");
+    free(out);
+    if (!g_pat.arm_conds || !g_pat.arm_sig) return -1;
     return 0;
 }
 
@@ -303,8 +739,7 @@ static int pat_int_base(const char *b)
 impl StmtMatch for Stmt {
     int pat_begin(int adt, const char *subject_type, int is_ptr)
     {
-        free(g_pat.conds);
-        free(g_pat.sig);
+        pat_groups_clear(g_pat.grp, g_pat.ngrp);
         free((void *)g_pat.bname);
         free((void *)g_pat.btype);
         free((void *)g_pat.bpath);
@@ -312,27 +747,21 @@ impl StmtMatch for Stmt {
         g_pat.subject_type = runtime::text::ct_intern(subject_type ? subject_type : "");
         g_pat.is_ptr = is_ptr;
         g_pat.non_adt = adt < 0;
-        g_pat.root_variant = -1;
-        g_pat.root_cname = "";
-        g_pat.root_wild = 0;
-        g_pat.root_catch = 0;
-        g_pat.root_irref = 0;
-        g_pat.root_head = -1;
         g_pat.bind_head = -1;
-        g_pat.conds = (char *)0;
-        g_pat.condlen = 0;
-        g_pat.condcap = 0;
-        g_pat.sig = (char *)0;
-        g_pat.siglen = 0;
-        g_pat.sigcap = 0;
+        g_pat.grp = (struct PatGroup *)0;
+        g_pat.ngrp = 0;
+        g_pat.grpcap = 0;
         g_pat.bname = (const char **)0;
         g_pat.btype = (const char **)0;
         g_pat.bpath = (const char **)0;
         g_pat.nbind = 0;
         g_pat.bcap = 0;
+        g_pat.arm_conds = "";
+        g_pat.arm_sig = "";
         g_pat.cbase = "";
-        if (pat_buf_put(&g_pat.conds, &g_pat.condlen, &g_pat.condcap, "")) return -1;
-        if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "")) return -1;
+        if (pat_groups_alloc(1, &g_pat.grp)) return -1;
+        g_pat.ngrp = 1;
+        g_pat.grpcap = 1;
         return 0;
     }
 
@@ -437,10 +866,62 @@ impl StmtMatch for Stmt {
         return id;
     }
 
-    /* One pattern at `path` (empty = the subject itself, otherwise `.f` /
-       `->f` accessors). Sets nodes[root].b to the irrefutability flag and
-       appends the runtime test rows to g_pat.conds. */
+    /* v1-PH-2 S5: one pattern, possibly an or-pattern. The first alternative
+       is parsed against the current set, then every `|` forks a fresh copy of
+       that base and the alternatives are concatenated (DNF). Bindings are
+       merged per alternative; `pat_bind_finish` checks them. */
     int pat_parse_one(const char *type, const char *path)
+    {
+        struct PatGroup *base;
+        struct PatGroup *acc;
+        int nbase, nacc, rc;
+
+        if (pat_groups_copy(&base, &nbase, g_pat.grp, g_pat.ngrp)) return -1;
+        rc = self->pat_parse_atom(type, path);
+        if (rc < 0) { pat_groups_clear(base, nbase); return -1; }
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("|")))
+            { pat_groups_clear(base, nbase); return rc; }
+        acc = (struct PatGroup *)0;
+        nacc = 0;
+        if (pat_groups_append(&acc, &nacc, g_pat.grp, g_pat.ngrp)) {
+            pat_groups_clear(base, nbase);
+            return -1;
+        }
+        while (self->lex->tok == T_PUNCT && self->lex->tok_is("|")) {
+            self->sup->lex_next();
+            pat_groups_clear(g_pat.grp, g_pat.ngrp);
+            g_pat.grp = (struct PatGroup *)0;
+            g_pat.ngrp = 0;
+            if (pat_groups_copy(&g_pat.grp, &g_pat.ngrp, base, nbase)) {
+                pat_groups_clear(acc, nacc);
+                pat_groups_clear(base, nbase);
+                return -1;
+            }
+            rc = self->pat_parse_atom(type, path);
+            if (rc < 0) {
+                pat_groups_clear(acc, nacc);
+                pat_groups_clear(base, nbase);
+                return -1;
+            }
+            if (pat_groups_append(&acc, &nacc, g_pat.grp, g_pat.ngrp)) {
+                pat_groups_clear(acc, nacc);
+                pat_groups_clear(base, nbase);
+                return -1;
+            }
+        }
+        pat_groups_clear(g_pat.grp, g_pat.ngrp);
+        g_pat.grp = acc;
+        g_pat.ngrp = nacc;
+        g_pat.grpcap = nacc;
+        pat_groups_clear(base, nbase);
+        return rc;
+    }
+
+    /* One pattern atom at `path` (empty = the subject itself, otherwise `.f` /
+       `->f` accessors). Appends the runtime test rows to every current
+       alternative and the bindings to every alternative; sets the root form on
+       the alternatives when this is the arm's root atom. */
+    int pat_parse_atom(const char *type, const char *path)
     {
         int line, col, kind, adt, si, ptr, id, first, last, i, rc;
         const char *bname;
@@ -462,8 +943,8 @@ impl StmtMatch for Stmt {
             id = self->pat_desc(PAT_WILD, "", "", 0);
             if (id < 0) return -1;
             self->arena->nodes[id].b = 1;
-            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "*")) return -1;
-            if (path[0] == 0) g_pat.root_head = id;
+            if (pat_sig_add("*")) return -1;
+            if (path[0] == 0) pat_root_set(PAT_WILD, -1);
             return id;
         }
         if (self->lex->tok == T_NUM
@@ -507,7 +988,7 @@ impl StmtMatch for Stmt {
             if (id < 0) return -1;
             self->arena->nodes[id].b = 0;
             snprintf(msgbuf, sizeof msgbuf, "#%ld", val);
-            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, msgbuf)) return -1;
+            if (pat_sig_add(msgbuf)) return -1;
             if (path[0] != 0) {
                 size_t need;
                 char *row;
@@ -515,15 +996,14 @@ impl StmtMatch for Stmt {
                 row = (char *)malloc(need);
                 if (!row) return self->sup->fail("out of memory");
                 snprintf(row, need, "%s=%ld;", path, val);
-                rc = pat_buf_put(&g_pat.conds, &g_pat.condlen, &g_pat.condcap, row);
+                rc = pat_cond_add(row);
                 free(row);
                 if (rc) return -1;
             } else {
                 snprintf(msgbuf, sizeof msgbuf, "=%ld;", val);
-                if (g_pat.non_adt && pat_buf_put(&g_pat.conds, &g_pat.condlen,
-                                                 &g_pat.condcap, msgbuf)) return -1;
+                if (g_pat.non_adt && pat_cond_add(msgbuf)) return -1;
             }
-            if (path[0] == 0) g_pat.root_head = id;
+            if (path[0] == 0) pat_root_set(PAT_LITERAL, -1);
             return id;
         }
         if (self->lex->tok == T_STR && self->lex->tokstr.len > 0
@@ -605,7 +1085,7 @@ impl StmtMatch for Stmt {
             first = -1;
             last = -1;
             snprintf(msgbuf, sizeof msgbuf, "V%d(", v);
-            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, msgbuf)) return -1;
+            if (pat_sig_add(msgbuf)) return -1;
             if (path[0] != 0) {
                 /* the inner tag test goes before the payload tests so the C
                    union read always follows its discriminator */
@@ -615,7 +1095,7 @@ impl StmtMatch for Stmt {
                 row = (char *)malloc(need);
                 if (!row) return self->sup->fail("out of memory");
                 snprintf(row, need, "%s.tag=%d;", path, v);
-                rc = pat_buf_put(&g_pat.conds, &g_pat.condlen, &g_pat.condcap, row);
+                rc = pat_cond_add(row);
                 free(row);
                 if (rc) return -1;
             }
@@ -684,15 +1164,8 @@ impl StmtMatch for Stmt {
             if (path[0] != 0 && adts[adt].nvariants > 1)
                 self->arena->nodes[id].b = 0;
             self->arena->nodes[id].a = first;
-            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, ")")) return -1;
-            if (path[0] == 0) {
-                g_pat.root_head = id;
-                g_pat.root_variant = v;
-                g_pat.root_cname = runtime::text::ct_intern(adts[adt].variants[v].cname);
-                g_pat.root_irref = self->arena->nodes[id].b;
-            } else if (self->arena->nodes[id].b == 0) {
-                /* irrefutability is folded by the parent */
-            }
+            if (pat_sig_add(")")) return -1;
+            if (path[0] == 0) pat_root_set(PAT_VARIANT, v);
             return id;
         }
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
@@ -735,7 +1208,7 @@ impl StmtMatch for Stmt {
             id = self->pat_desc(PAT_STRUCT, sd->name, type, 0);
             if (id < 0) return -1;
             snprintf(msgbuf, sizeof msgbuf, "S%d{", si);
-            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, msgbuf)) return -1;
+            if (pat_sig_add(msgbuf)) return -1;
             seen = (int *)calloc((size_t)(sd->nfields > 0 ? sd->nfields : 1),
                                  sizeof(*seen));
             if (!seen) return self->sup->fail("out of memory");
@@ -811,7 +1284,7 @@ impl StmtMatch for Stmt {
                     if (!fp) { free(seen); return self->sup->fail("out of memory"); }
                     snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
                     child = self->pat_desc(PAT_BINDER, fname, sd->fields[fi].type, 0);
-                    if (child >= 0 && pat_bind_add(fname, sd->fields[fi].type,
+                    if (child >= 0 && pat_group_bind_add(fname, sd->fields[fi].type,
                                                    runtime::text::ct_intern(fp)) == -2) {
                         free(fp);
                         free(seen);
@@ -822,7 +1295,7 @@ impl StmtMatch for Stmt {
                     }
                     free(fp);
                     if (child >= 0) self->arena->nodes[child].b = 1;
-                    if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "*")) {
+                    if (pat_sig_add("*")) {
                         free(seen);
                         return -1;
                     }
@@ -834,7 +1307,7 @@ impl StmtMatch for Stmt {
                 self->arena->nodes[wrap].b = self->arena->nodes[child].b;
                 if (!self->arena->nodes[child].b) any_refutable = 1;
                 snprintf(msgbuf, sizeof msgbuf, "%d:", fi);
-                if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, msgbuf)) {
+                if (pat_sig_add(msgbuf)) {
                     free(seen);
                     return -1;
                 }
@@ -860,11 +1333,8 @@ impl StmtMatch for Stmt {
                and is therefore still irrefutable. */
             self->arena->nodes[id].b = any_refutable ? 0 : 1;
             self->arena->nodes[id].a = first;
-            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "}")) return -1;
-            if (path[0] == 0) {
-                g_pat.root_head = id;
-                g_pat.root_irref = self->arena->nodes[id].b;
-            }
+            if (pat_sig_add("}")) return -1;
+            if (path[0] == 0) pat_root_set(PAT_STRUCT, -1);
             return id;
         }
         /* a binder */
@@ -878,7 +1348,7 @@ impl StmtMatch for Stmt {
             const char *bp;
             if (path[0] == 0 && g_pat.is_ptr) bp = "*";
             else bp = path[0] != 0 ? runtime::text::ct_intern(path) : "";
-            rc = pat_bind_add(bname, type, bp);
+            rc = pat_group_bind_add(bname, type, bp);
         }
         if (rc == -2) {
             snprintf(msgbuf, sizeof msgbuf,
@@ -886,8 +1356,8 @@ impl StmtMatch for Stmt {
             return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
         }
         if (rc < 0) return self->sup->fail("out of memory");
-        if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "*")) return -1;
-        if (path[0] == 0) g_pat.root_head = id;
+        if (pat_sig_add("*")) return -1;
+        if (path[0] == 0) pat_root_set(PAT_BINDER, -1);
         return id;
     }
 
@@ -918,36 +1388,9 @@ impl StmtMatch for Stmt {
                     g_pat.subject_type ? g_pat.subject_type : ""),
                 self->mem->path);
         }
-        if (self->lex->tok == T_ID && self->lex->tok_is("_")) {
-            self->sup->lex_next();
-            g_pat.root_wild = 1;
-            g_pat.root_catch = 1;
-            g_pat.root_irref = 1;
-            g_pat.root_head = -1;
-            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "*")) return -1;
-            return 0;
-        }
         rc = self->pat_parse_one(g_pat.subject_type, "");
         if (rc < 0) return -1;
-        if (g_pat.root_head < 0) return self->sup->fail("expected a pattern");
-        if (g_pat.adt >= 0) {
-            int form;
-            form = self->arena->nodes[g_pat.root_head].aux;
-            if (form == PAT_VARIANT) {
-                g_pat.root_irref = self->arena->nodes[g_pat.root_head].b;
-            } else if (form == PAT_BINDER) {
-                g_pat.root_catch = 1;
-                g_pat.root_irref = 1;
-            } else {
-                return self->sup->fail("expected a pattern");
-            }
-        } else {
-            int form;
-            form = self->arena->nodes[g_pat.root_head].aux;
-            g_pat.root_irref = self->arena->nodes[g_pat.root_head].b;
-            if (form == PAT_BINDER) g_pat.root_catch = 1;
-            else if (form == PAT_STRUCT && g_pat.root_irref) g_pat.root_catch = 1;
-        }
+        if (g_pat.ngrp <= 0) return self->sup->fail("expected a pattern");
         return 0;
     }
 
@@ -1057,9 +1500,11 @@ impl StmtMatch for Stmt {
     {
         int s, e, arms, tail, arm, adt, line, col, i;
         int *covered;
-        int ncov, wild, seen_catch, is_ptr, kind, si, ptr;
+        int *mention;
+        int ncov, seen_catch, is_ptr, kind, si, ptr;
         int arm_line, arm_col, body;
-        int arm_num, arm_bind;
+        int arm_num, arm_bind, guard, arm_wild, arm_catch, ncatch, ngi;
+        int guarded_catch;
         const char *arm_sig, *arm_conds, *arm_name;
         int a, b;
         const char *tybuf = "";
@@ -1118,20 +1563,25 @@ impl StmtMatch for Stmt {
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
         if (adt >= 0) {
+            int nv;
             adts = frontend::sym::ct_adts(&nadts);
-            covered = calloc((size_t)(adts[adt].nvariants > 0 ? adts[adt].nvariants : 1),
-                             sizeof(*covered));
+            nv = adts[adt].nvariants > 0 ? adts[adt].nvariants : 1;
+            covered = (int *)calloc((size_t)(2 * nv), sizeof(*covered));
             if (!covered) return self->sup->fail("out of memory");
-            for (i = 0; i < adts[adt].nvariants; i++) covered[i] = 0;
+            for (i = 0; i < nv; i++) covered[i] = 0;
+            mention = covered + nv;
+            for (i = 0; i < nv; i++) mention[i] = 0;
         } else {
             adts = (struct Adt *)0;
             nadts = 0;
-            covered = (int *)calloc(1, sizeof(*covered));
+            covered = (int *)calloc(2, sizeof(*covered));
             if (!covered) return self->sup->fail("out of memory");
+            mention = covered + 1;
+            mention[0] = 0;
         }
         ncov = 0;
-        wild = -1;
         seen_catch = 0;
+        guarded_catch = 0;
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{"))) {
             free(covered);
             return self->sup->fail("expected a block after match (...)");
@@ -1161,93 +1611,123 @@ impl StmtMatch for Stmt {
             arm_conds = "";
             arm_name = "";
             arm_bind = -1;
+            guard = -1;
+            arm_wild = 0;
+            arm_catch = 0;
+            ncatch = 0;
             if (self->pat_begin(adt, subject, is_ptr) != 0) { free(covered); return -1; }
             if (self->pat_parse_top() != 0) { free(covered); return -1; }
-            if (g_pat.root_wild) {
-                if (seen_catch) {
-                    free(covered);
+            for (ngi = 0; ngi < g_pat.ngrp; ngi++)
+                if (pat_group_catch(ngi)) ncatch++;
+            arm_catch = ncatch > 0;
+            arm_wild = (g_pat.ngrp == 1 && g_pat.grp[0].root_form == PAT_WILD);
+            if (seen_catch) {
+                free(covered);
+                if (arm_wild)
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "duplicate wildcard match arm", self->mem->path);
-                }
-                seen_catch = 1;
-                if (self->sup->expect("=>") != 0) { free(covered); return -1; }
-                body = self->parse_block();
-                if (body < 0) { free(covered); return -1; }
-                arm = self->sup->new_node(N_ARM);
-                if (arm < 0) { free(covered); return -1; }
-                self->arena->nodes[arm].aux = 1;
-                self->arena->nodes[arm].b = body;
-                self->arena->nodes[arm].text4 = "";
-                self->arena->nodes[arm].d = -1;
-                self->arena->nodes[arm].num = -1;
-                self->arena->nodes[arm].line = arm_line;
-                self->arena->nodes[arm].attr = arm_col;
-                self->arena->nodes[arm].num = -1;
-                wild = arm;
-            } else {
-                if (seen_catch) {
-                    free(covered);
-                    return tool::diag::ct_sem_error(arm_line, arm_col,
-                        "a wildcard match arm must be the last arm", self->mem->path);
-                }
-                if (adt >= 0 && g_pat.root_variant >= 0 && g_pat.root_irref) {
-                    if (covered[g_pat.root_variant]) {
-                        snprintf(msg, sizeof msg,
-                                 "duplicate match arm for variant '%s.%s'",
-                                 adts[adt].name,
-                                 adts[adt].variants[g_pat.root_variant].name);
-                        free(covered);
-                        return tool::diag::ct_sem_error(arm_line, arm_col, msg,
-                                                        self->mem->path);
-                    }
-                    covered[g_pat.root_variant] = 1;
-                    ncov++;
-                }
-                if (g_pat.root_catch) seen_catch = 1;
-                /* The arm body may hold a nested match, whose parser reuses
-                   this same scratch. Freeze the arm's facts before the body. */
-                arm_num = g_pat.root_variant;
-                arm_sig = runtime::text::ct_intern(g_pat.sig ? g_pat.sig : "");
-                arm_conds = runtime::text::ct_intern(g_pat.conds ? g_pat.conds : "");
-                if (adt >= 0 && arm_num >= 0)
-                    arm_name = runtime::text::ct_intern(adts[adt].variants[arm_num].name);
-                else
-                    arm_name = runtime::text::ct_intern(subject);
-                if (!arm_sig || !arm_conds || !arm_name) {
-                    free(covered);
-                    return self->sup->fail("out of memory");
-                }
-                if (self->pat_commit() != 0) { free(covered); return -1; }
-                arm_bind = g_pat.bind_head;
-                if (self->sup->expect("=>") != 0) {
+                return tool::diag::ct_sem_error(arm_line, arm_col,
+                    "a wildcard match arm must be the last arm", self->mem->path);
+            }
+            /* bindings enter scope before the guard: `p if cond` may name a
+               binding, and the emitter writes the declarations before it. */
+            if (pat_bind_finish(self, arm_line, arm_col) != 0) {
+                free(covered);
+                return -1;
+            }
+            if (self->pat_commit() != 0) { free(covered); return -1; }
+            arm_bind = g_pat.bind_head;
+            if (self->lex->tok == T_ID && self->lex->tok_is("if")) {
+                self->sup->lex_next();
+                self->ex->assign_ok = 1;
+                self->ex->try_ban++;
+                guard = self->ex->parse_expr();
+                self->ex->try_ban--;
+                self->ex->assign_ok = 0;
+                if (guard < 0) {
                     self->sup->pop_scope();
                     free(covered);
                     return -1;
                 }
-                body = self->parse_block();
-                self->sup->pop_scope();
-                if (body < 0) { free(covered); return -1; }
-                arm = self->sup->new_node(N_ARM);
-                if (arm < 0) { free(covered); return -1; }
-                self->arena->nodes[arm].num = arm_num;
-                self->arena->nodes[arm].text = arm_name;
-                self->arena->nodes[arm].text2 = arm_sig;
-                self->arena->nodes[arm].text3 = adt >= 0
-                    ? runtime::text::ct_intern(adts[adt].full) : "";
-                self->arena->nodes[arm].text4 = arm_conds;
-                if (!self->arena->nodes[arm].text || !self->arena->nodes[arm].text2
-                    || !self->arena->nodes[arm].text3 || !self->arena->nodes[arm].text4) {
-                    free(covered);
-                    return self->sup->fail("out of memory");
-                }
-                self->arena->nodes[arm].aux = (adt < 0 ? 4 : 0);
-                self->arena->nodes[arm].a = arm_bind;
-                self->arena->nodes[arm].b = body;
-                self->arena->nodes[arm].d = -1;   /* the descriptor tree is parse-time only */
-                self->arena->nodes[arm].c = -1;
-                self->arena->nodes[arm].attr = arm_col;
-                self->arena->nodes[arm].line = arm_line;
             }
+            if (guard < 0) {
+                if (adt >= 0) {
+                    for (ngi = 0; ngi < g_pat.ngrp; ngi++) {
+                        int v = pat_group_variant(ngi);
+                        if (v < 0) continue;
+                        if (covered[v]) {
+                            snprintf(msg, sizeof msg,
+                                     "duplicate match arm for variant '%s.%s'",
+                                     adts[adt].name, adts[adt].variants[v].name);
+                            self->sup->pop_scope();
+                            free(covered);
+                            return tool::diag::ct_sem_error(arm_line, arm_col,
+                                                            msg, self->mem->path);
+                        }
+                        covered[v] = 1;
+                        ncov++;
+                    }
+                }
+                if (arm_catch) seen_catch = 1;
+            } else {
+                /* a guarded arm never covers a variant: the guard may be false
+                   at run time, so the next arm must still be able to take it */
+                if (adt >= 0) {
+                    for (ngi = 0; ngi < g_pat.ngrp; ngi++) {
+                        int v = pat_group_mention(ngi);
+                        if (v >= 0) mention[v] = 1;
+                    }
+                }
+                if (arm_catch) guarded_catch = 1;
+            }
+            /* The arm body may hold a nested match, whose parser reuses this
+               same scratch. Freeze the arm's facts before the body. */
+            if (pat_arm_finish(&arm_num) != 0) {
+                self->sup->pop_scope();
+                free(covered);
+                return -1;
+            }
+            arm_sig = g_pat.arm_sig;
+            arm_conds = g_pat.arm_conds;
+            if (adt >= 0 && arm_num >= 0)
+                arm_name = runtime::text::ct_intern(adts[adt].variants[arm_num].name);
+            else
+                arm_name = runtime::text::ct_intern(subject);
+            if (!arm_sig || !arm_conds || !arm_name) {
+                self->sup->pop_scope();
+                free(covered);
+                return self->sup->fail("out of memory");
+            }
+            if (self->sup->expect("=>") != 0) {
+                self->sup->pop_scope();
+                free(covered);
+                return -1;
+            }
+            body = self->parse_block();
+            self->sup->pop_scope();
+            if (body < 0) { free(covered); return -1; }
+            arm = self->sup->new_node(N_ARM);
+            if (arm < 0) { free(covered); return -1; }
+            self->arena->nodes[arm].num = arm_num;
+            self->arena->nodes[arm].text = arm_name;
+            self->arena->nodes[arm].text2 = arm_sig;
+            self->arena->nodes[arm].text3 = adt >= 0
+                ? runtime::text::ct_intern(adts[adt].full) : "";
+            self->arena->nodes[arm].text4 = arm_conds;
+            if (!self->arena->nodes[arm].text || !self->arena->nodes[arm].text2
+                || !self->arena->nodes[arm].text3 || !self->arena->nodes[arm].text4) {
+                free(covered);
+                return self->sup->fail("out of memory");
+            }
+            self->arena->nodes[arm].aux = (arm_wild ? 1 : 0) | (adt < 0 ? 4 : 0);
+            self->arena->nodes[arm].a = arm_bind;
+            self->arena->nodes[arm].b = body;
+            /* S5: `d` carries the guard expression, -1 when there is none.
+               The pattern descriptors stay parse-time only. */
+            self->arena->nodes[arm].d = guard;
+            self->arena->nodes[arm].c = -1;
+            self->arena->nodes[arm].attr = arm_col;
+            self->arena->nodes[arm].line = arm_line;
             if (arms < 0) arms = arm;
             else self->arena->nodes[tail].next = arm;
             tail = arm;
@@ -1258,8 +1738,10 @@ impl StmtMatch for Stmt {
            irrefutable variant arm (e.g. two `Circle(0)` arms) */
         for (a = arms; a >= 0; a = self->arena->nodes[a].next) {
             if (self->arena->nodes[a].aux & 1) continue;
+            if (self->arena->nodes[a].d >= 0) continue;   /* guarded arms may repeat */
             for (b = self->arena->nodes[a].next; b >= 0; b = self->arena->nodes[b].next) {
                 if (self->arena->nodes[b].aux & 1) continue;
+                if (self->arena->nodes[b].d >= 0) continue;
                 if (self->arena->nodes[a].text2 && self->arena->nodes[b].text2
                     && strcmp(self->arena->nodes[a].text2,
                               self->arena->nodes[b].text2) == 0) {
@@ -1272,13 +1754,21 @@ impl StmtMatch for Stmt {
             }
         }
         if (adt >= 0) {
-            /* exhaustiveness: `_` / a root binder is the only catch-all */
-            if (wild < 0 && !seen_catch) {
+            /* exhaustiveness: `_` / a root binder is the only catch-all, and a
+               guarded arm never counts as coverage (S5) */
+            if (!seen_catch) {
                 for (i = 0; i < adts[adt].nvariants; i++) {
                     if (covered[i]) continue;
-                    snprintf(msg, sizeof msg, "match does not cover variant '%s.%s'"
-                             " (add the arm or write '_ => { … }')",
-                             adts[adt].name, adts[adt].variants[i].name);
+                    if (mention[i])
+                        snprintf(msg, sizeof msg,
+                                 "match does not cover variant '%s.%s'"
+                                 " (a guarded arm does not count as coverage;"
+                                 " add an unguarded arm or write '_ => { … }')",
+                                 adts[adt].name, adts[adt].variants[i].name);
+                    else
+                        snprintf(msg, sizeof msg, "match does not cover variant '%s.%s'"
+                                 " (add the arm or write '_ => { … }')",
+                                 adts[adt].name, adts[adt].variants[i].name);
                     free(covered);
                     return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
                 }
@@ -1293,8 +1783,13 @@ impl StmtMatch for Stmt {
                 }
             }
         } else if (!seen_catch) {
-            snprintf(msg, sizeof msg,
-                     "match on '%s' needs a final '_ => { … }' arm", subject);
+            if (guarded_catch)
+                snprintf(msg, sizeof msg,
+                         "match on '%s' needs a final unguarded '_ => { … }' arm"
+                         " (a guarded arm does not count as coverage)", subject);
+            else
+                snprintf(msg, sizeof msg,
+                         "match on '%s' needs a final '_ => { … }' arm", subject);
             free(covered);
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
@@ -1356,10 +1851,11 @@ impl StmtMatch for Stmt {
     {
         int s, e, arms, tail, arm, adt, line, col, i;
         int *covered;
-        int ncov, wild, seen_wild, is_ptr;
+        int *mention;
+        int ncov, seen_wild, is_ptr;
         int body, asg, yexpr, have_type, ytyped, block_form;
         int yline, ycol;
-        int arm_wild, arm_catch;
+        int arm_wild, arm_catch, guard, ncatch, ngi;
         const char *arm_sig, *arm_conds;
         const char *tybuf = "";
         const char *tname = "";
@@ -1412,12 +1908,15 @@ impl StmtMatch for Stmt {
         adts = frontend::sym::ct_adts(&nadts);
         /* S1a-0 C3: the variant count is dynamic, so the coverage scratch grows
            with it instead of stopping at a fixed 96 rows. */
-        covered = calloc((size_t)(adts[adt].nvariants > 0 ? adts[adt].nvariants : 1),
-                         sizeof(*covered));
-        if (!covered) return self->sup->fail("out of memory");
-        for (i = 0; i < adts[adt].nvariants; i++) covered[i] = 0;
+        {
+            int nv = adts[adt].nvariants > 0 ? adts[adt].nvariants : 1;
+            covered = (int *)calloc((size_t)(2 * nv), sizeof(*covered));
+            if (!covered) return self->sup->fail("out of memory");
+            for (i = 0; i < nv; i++) covered[i] = 0;
+            mention = covered + nv;
+            for (i = 0; i < nv; i++) mention[i] = 0;
+        }
         ncov = 0;
-        wild = -1;
         seen_wild = 0;
         have_type = 0;
         rtype = "";
@@ -1447,43 +1946,71 @@ impl StmtMatch for Stmt {
             pushed = 0;
             arm_wild = 0;
             arm_catch = 0;
+            ncatch = 0;
+            guard = -1;
             arm_sig = "";
             arm_conds = "";
             if (self->pat_begin(adt, tname, is_ptr) != 0) return -1;
             if (self->pat_parse_top() != 0) return -1;
-            if (g_pat.root_wild) {
-                if (seen_wild)
+            for (ngi = 0; ngi < g_pat.ngrp; ngi++)
+                if (pat_group_catch(ngi)) ncatch++;
+            arm_catch = ncatch > 0;
+            arm_wild = (g_pat.ngrp == 1 && g_pat.grp[0].root_form == PAT_WILD);
+            if (seen_wild) {
+                if (arm_wild)
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "duplicate wildcard match arm", self->mem->path);
-                seen_wild = 1;
-                arm_wild = 1;
-                arm_catch = 1;
-            } else {
-                if (seen_wild)
-                    return tool::diag::ct_sem_error(arm_line, arm_col,
-                        "a wildcard match arm must be the last arm", self->mem->path);
-                if (g_pat.root_variant >= 0 && g_pat.root_irref) {
-                    if (covered[g_pat.root_variant]) {
+                return tool::diag::ct_sem_error(arm_line, arm_col,
+                    "a wildcard match arm must be the last arm", self->mem->path);
+            }
+            if (pat_bind_finish(self, arm_line, arm_col) != 0) return -1;
+            if (self->pat_commit() != 0) return -1;
+            pushed = 1;
+            bind_head = g_pat.bind_head;
+            if (self->lex->tok == T_ID && self->lex->tok_is("if")) {
+                self->sup->lex_next();
+                self->ex->assign_ok = 1;
+                self->ex->try_ban++;
+                guard = self->ex->parse_expr();
+                self->ex->try_ban--;
+                self->ex->assign_ok = 0;
+                if (guard < 0) {
+                    self->sup->pop_scope();
+                    return -1;
+                }
+            }
+            if (guard < 0) {
+                for (ngi = 0; ngi < g_pat.ngrp; ngi++) {
+                    int v = pat_group_variant(ngi);
+                    if (v < 0) continue;
+                    if (covered[v]) {
                         snprintf(msg, sizeof msg,
                                  "duplicate match arm for variant '%s.%s'",
-                                 adts[adt].name,
-                                 adts[adt].variants[g_pat.root_variant].name);
+                                 adts[adt].name, adts[adt].variants[v].name);
+                        self->sup->pop_scope();
                         return tool::diag::ct_sem_error(arm_line, arm_col, msg,
                                                         self->mem->path);
                     }
-                    covered[g_pat.root_variant] = 1;
+                    covered[v] = 1;
                     ncov++;
                 }
-                if (g_pat.root_catch) seen_wild = 1;
-                if (self->pat_commit() != 0) return -1;
-                pushed = 1;
-                variant = g_pat.root_variant;
-                bind_head = g_pat.bind_head;
-                arm_wild = g_pat.root_wild;
-                arm_catch = g_pat.root_catch;
-                arm_sig = runtime::text::ct_intern(g_pat.sig ? g_pat.sig : "");
-                arm_conds = runtime::text::ct_intern(g_pat.conds ? g_pat.conds : "");
-                if (!arm_sig || !arm_conds) return self->sup->fail("out of memory");
+                if (arm_catch) seen_wild = 1;
+            } else {
+                /* a guarded arm never covers a variant (S5) */
+                for (ngi = 0; ngi < g_pat.ngrp; ngi++) {
+                    int v = pat_group_mention(ngi);
+                    if (v >= 0) mention[v] = 1;
+                }
+            }
+            if (pat_arm_finish(&variant) != 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            arm_sig = g_pat.arm_sig;
+            arm_conds = g_pat.arm_conds;
+            if (!arm_sig || !arm_conds) {
+                self->sup->pop_scope();
+                return self->sup->fail("out of memory");
             }
             if (self->sup->expect("=>") != 0) return -1;
             yexpr = -1;
@@ -1631,7 +2158,7 @@ impl StmtMatch for Stmt {
             self->arena->nodes[arm].c = asg;
             self->arena->nodes[arm].line = arm_line;
             self->arena->nodes[arm].attr = arm_col;
-            self->arena->nodes[arm].d = -1;   /* the descriptor tree is parse-time only */
+            self->arena->nodes[arm].d = guard;   /* S5: the guard expression, -1 none */
             self->arena->nodes[arm].text4 = arm_conds;
             if (variant >= 0) {
                 self->arena->nodes[arm].text = runtime::text::ct_intern(
@@ -1645,7 +2172,6 @@ impl StmtMatch for Stmt {
             if (!self->arena->nodes[arm].text || !self->arena->nodes[arm].text2
                 || !self->arena->nodes[arm].text3 || !self->arena->nodes[arm].text4)
                 return self->sup->fail("out of memory");
-            if (arm_wild || arm_catch) wild = arm;
             if (pushed) self->sup->pop_scope();
             if (arms < 0) arms = arm;
             else self->arena->nodes[tail].next = arm;
@@ -1669,12 +2195,18 @@ impl StmtMatch for Stmt {
         }
         self->arena->nodes[s].text2 = rtype;
         if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
-        if (wild < 0) {
+        if (!seen_wild) {
             for (i = 0; i < adts[adt].nvariants; i++) {
                 if (covered[i]) continue;
-                snprintf(msg, sizeof msg, "match does not cover variant '%s.%s'"
-                         " (add the arm or write '_ => { … }')",
-                         adts[adt].name, adts[adt].variants[i].name);
+                if (mention[i])
+                    snprintf(msg, sizeof msg, "match does not cover variant '%s.%s'"
+                             " (a guarded arm does not count as coverage;"
+                             " add an unguarded arm or write '_ => { … }')",
+                             adts[adt].name, adts[adt].variants[i].name);
+                else
+                    snprintf(msg, sizeof msg, "match does not cover variant '%s.%s'"
+                             " (add the arm or write '_ => { … }')",
+                             adts[adt].name, adts[adt].variants[i].name);
                 return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
             }
         } else if (self->ex->types_mode && *self->ex->types_mode && ncov == adts[adt].nvariants) {

@@ -595,11 +595,11 @@ static int record_io_call(struct Expr *e, const char *callee, int known, int lin
     if (callee == 0 || callee[0] == 0) return 0;
     for (i = 0; i < e->nio; i++)
         if (strcmp(e->io_names[i], callee) == 0) return 0;
-    if (e->nio >= 1024) {
+    if (e->nio >= 2048) {
         char msg[256];
         snprintf(msg, sizeof msg,
                  "too many distinct calls in unit '%s' (limit %d)",
-                 e->sym->unit_name(), 1024);
+                 e->sym->unit_name(), 2048);
         return e->sup->fail(msg);
     }
     snprintf(e->io_names[e->nio], 64, "%s", callee);
