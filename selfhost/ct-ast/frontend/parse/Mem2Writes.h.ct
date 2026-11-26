@@ -1,0 +1,367 @@
+/*
+ * Mem2Writes.h.ct - REQ-MEM-2 (v1-PH-2 S7): the intra-unit, one-level write
+ * summary behind the `borrow` parameter rule.
+ *
+ * A callee that stores one of its pointer parameters into a global, a struct
+ * field or a built-in container hands the caller's pointer to a place that may
+ * outlive the call. The source language cannot express that promise with a
+ * `const`-like qualifier, so the parameter has to say `borrow`; the call site
+ * of an unannotated callee is the point where the promise is missing.
+ *
+ * S7-c shape (docs/planning/s7-evidence-baseline.md §5):
+ *   - the scan runs once per free-function definition, over exactly the arena
+ *     nodes the body allocated, with the local symbol table still live;
+ *   - the direct write set is the function's own summary; passing a parameter
+ *     to a same-unit callee whose parameter is in *its* direct set adds one
+ *     level (N4). No fixpoint: cross-unit calls, function pointers, methods and
+ *     recursion are conservatively passed.
+ *   - the finding is reported at the call site, not at the definition, and
+ *     names the callee, the parameter and the write line.
+ *
+ * `--check-level=off` skips the pass entirely; `warn` turns the finding into a
+ * warning; `error` and `ct check` are hard errors. The pass writes no C and
+ * changes no AST fact other than the analysis marks on N_PARAM (`num` =
+ * direct write line, `sflags` = one-level write line).
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+import frontend::sym::Symbols;
+import frontend::sym::SymbolsTypeText;
+import runtime::arena::Arena;
+import tool::diag::Diag;
+
+namespace frontend::parse;
+
+/* Node kinds read by this pass; the numbers are the shared parser contract. */
+#define N_VAR     10
+#define N_MEMBER  24
+#define N_ARROW   25
+#define N_INDEX   26
+#define N_DEREF   28
+#define N_CALL     7
+#define N_MCALL   30
+#define N_ASSIGN  13
+#define N_CLOSURE 59
+
+#define CAP_LIMIT 65536
+
+typedef struct ct_mem2_arg {
+    int caller;     /* Fn index of the function whose body holds the call */
+    int cparam;     /* caller parameter index passed here, -1 for a local */
+    int callee;     /* Fn index of the resolved direct callee */
+    int argpos;     /* callee parameter position */
+    int line;       /* call-site line */
+} ct_mem2_arg;
+
+typedef struct ct_mem2_call {
+    int caller;
+    int callee;
+    int line;
+} ct_mem2_call;
+
+/* The run's edge tables. The compiler parses one program per process, so the
+   tables are process scoped and never freed (the arena has the same rule). */
+static struct ct_mem2_arg *mem2_args;
+static int mem2_nargs;
+static int mem2_acap;
+static struct ct_mem2_call *mem2_calls;
+static int mem2_ncalls;
+static int mem2_ccap;
+
+pub struct Mem2Writes {
+    int unused;
+}
+
+static int mem2_add_arg(int caller, int cparam, int callee, int argpos, int line)
+{
+    struct ct_mem2_arg *grown;
+    int cap;
+    if (mem2_nargs >= mem2_acap) {
+        cap = mem2_acap > 0 ? mem2_acap * 2 : 64;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
+        if (mem2_nargs >= cap) return -1;
+        grown = (struct ct_mem2_arg *)realloc(mem2_args,
+                                              (size_t)cap * sizeof(*grown));
+        if (!grown) return -1;
+        mem2_args = grown;
+        mem2_acap = cap;
+    }
+    mem2_args[mem2_nargs].caller = caller;
+    mem2_args[mem2_nargs].cparam = cparam;
+    mem2_args[mem2_nargs].callee = callee;
+    mem2_args[mem2_nargs].argpos = argpos;
+    mem2_args[mem2_nargs].line = line;
+    mem2_nargs++;
+    return 0;
+}
+
+static int mem2_add_call(int caller, int callee, int line)
+{
+    struct ct_mem2_call *grown;
+    int cap;
+    if (mem2_ncalls >= mem2_ccap) {
+        cap = mem2_ccap > 0 ? mem2_ccap * 2 : 64;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
+        if (mem2_ncalls >= cap) return -1;
+        grown = (struct ct_mem2_call *)realloc(mem2_calls,
+                                               (size_t)cap * sizeof(*grown));
+        if (!grown) return -1;
+        mem2_calls = grown;
+        mem2_ccap = cap;
+    }
+    mem2_calls[mem2_ncalls].caller = caller;
+    mem2_calls[mem2_ncalls].callee = callee;
+    mem2_calls[mem2_ncalls].line = line;
+    mem2_ncalls++;
+    return 0;
+}
+
+/* The N_PARAM row of position `idx`, or -1 when the chain is shorter. */
+static int mem2_param_node(struct Arena *ar, int params, int idx)
+{
+    int p;
+    int i;
+    p = params;
+    i = 0;
+    while (p > 0 && i < idx) {
+        p = ar->nodes[p].next;
+        i++;
+    }
+    return p > 0 ? p : -1;
+}
+
+/* The body's parameter chain; -1 for a prototype-only row or a template (the
+   template's body is not a callable C function). */
+static int mem2_fn_params(struct Arena *ar, struct Symbols *sym, int fi)
+{
+    int body;
+    if (fi < 0 || fi >= sym->nfunc) return -1;
+    body = sym->funcs[fi].body;
+    if (body < 0 || body >= ar->nnode) return -1;
+    if (ar->nodes[body].kind != 3) return -1;
+    return ar->nodes[body].a;
+}
+
+/* The parameter index a variable name names, or -1. */
+static int mem2_param_index(struct Arena *ar, int params, const char *name)
+{
+    int p;
+    int i;
+    p = params;
+    i = 0;
+    while (p > 0) {
+        if (strcmp(ar->nodes[p].text2, name) == 0) return i;
+        p = ar->nodes[p].next;
+        i++;
+    }
+    return -1;
+}
+
+/* A location whose stored pointer can outlive the call: a file-scope / static
+   local, a struct field, an indexed slot or a dereferenced slot. A plain local
+   is not one: it dies with the frame the callee borrowed it for. */
+static int mem2_lhs_escapes(struct Arena *ar, struct Symbols *sym, int lhs)
+{
+    int k;
+    int vi;
+    if (lhs < 0 || lhs >= ar->nnode) return 0;
+    k = ar->nodes[lhs].kind;
+    if (k == N_VAR) {
+        vi = sym->find_var(ar->nodes[lhs].text2);
+        if (vi < 0) return 0;
+        return sym->vars[vi].is_global || sym->vars[vi].is_static;
+    }
+    return k == N_ARROW || k == N_MEMBER || k == N_INDEX || k == N_DEREF;
+}
+
+/* The built-in container insertions. The receiver's static type is checked so a
+   user method that happens to be called `set` is not misread as a container. */
+static int mem2_container_method(const char *name)
+{
+    return strcmp(name, "push") == 0 || strcmp(name, "set") == 0
+        || strcmp(name, "put") == 0 || strcmp(name, "insert") == 0
+        || strcmp(name, "append") == 0 || strcmp(name, "add") == 0;
+}
+
+static int mem2_receiver_is_container(struct Arena *ar, struct Symbols *sym, int recv)
+{
+    int vi;
+    if (recv < 0 || recv >= ar->nnode) return 0;
+    if (ar->nodes[recv].kind != N_VAR) return 0;
+    vi = sym->find_var(ar->nodes[recv].text2);
+    if (vi < 0) return 0;
+    return frontend::sym::ct_is_container_type(sym->vars[vi].type);
+}
+
+/* Mark one parameter as directly escaping. First write wins so the diagnostic
+   names a stable location. */
+static void mem2_mark_direct(struct Arena *ar, int pnode, int line)
+{
+    if (pnode < 0) return;
+    if (ar->nodes[pnode].num == 0) ar->nodes[pnode].num = (long)line;
+}
+
+/* Scan one definition body. `nstart`/`nend` are the arena counters the parser
+   recorded around `parse_block`; every node the body built is in that range,
+   which makes the scan independent of the statement-tree shape. */
+pub int mem2_scan_function(struct Arena *ar, struct Symbols *sym, int fi,
+                           int params, int nstart, int nend)
+{
+    int n;
+    int p;
+    int k;
+    int rhs;
+    int cparam;
+    int recv;
+    int arg;
+    int pos;
+    int callee;
+
+    if (!ar || !sym || params < 0) return 0;
+    if (nstart < 0) nstart = 0;
+    if (nend > ar->nnode) nend = ar->nnode;
+    for (n = nstart; n < nend; n++) {
+        k = ar->nodes[n].kind;
+        if (k == N_ASSIGN) {
+            /* only plain `lhs = rhs`; `+=` cannot copy a pointer */
+            if (ar->nodes[n].aux != 0) continue;
+            rhs = ar->nodes[n].b;
+            if (rhs < 0 || rhs >= ar->nnode) continue;
+            if (ar->nodes[rhs].kind != N_VAR) continue;
+            cparam = mem2_param_index(ar, params, ar->nodes[rhs].text2);
+            if (cparam < 0) continue;
+            if (!mem2_lhs_escapes(ar, sym, ar->nodes[n].a)) continue;
+            p = mem2_param_node(ar, params, cparam);
+            mem2_mark_direct(ar, p, (int)ar->nodes[n].line);
+            continue;
+        }
+        if (k == N_MCALL) {
+            if (!mem2_container_method(ar->nodes[n].text2)) continue;
+            recv = ar->nodes[n].a;
+            if (!mem2_receiver_is_container(ar, sym, recv)) continue;
+            for (arg = ar->nodes[n].b; arg > 0; arg = ar->nodes[arg].next) {
+                if (ar->nodes[arg].kind != N_VAR) continue;
+                cparam = mem2_param_index(ar, params, ar->nodes[arg].text2);
+                if (cparam < 0) continue;
+                p = mem2_param_node(ar, params, cparam);
+                mem2_mark_direct(ar, p, (int)ar->nodes[n].line);
+            }
+            continue;
+        }
+        if (k == N_CALL) {
+            /* aux 0 is a resolved named call; 1/2 are calls through a pointer
+               and stay outside the summary (baseline §5 P5). */
+            if (ar->nodes[n].aux != 0) continue;
+            callee = sym->find_func(ar->nodes[n].text2);
+            if (callee < 0) continue;
+            if (mem2_add_call(fi, callee, (int)ar->nodes[n].line) != 0) return -1;
+            pos = 0;
+            for (arg = ar->nodes[n].a; arg > 0; arg = ar->nodes[arg].next) {
+                if (ar->nodes[arg].kind == N_CLOSURE) {
+                    /* a closure fills the callee's (fn, env) pair */
+                    pos += 2;
+                    continue;
+                }
+                if (ar->nodes[arg].kind == N_VAR) {
+                    cparam = mem2_param_index(ar, params, ar->nodes[arg].text2);
+                    if (cparam >= 0
+                        && mem2_add_arg(fi, cparam, callee, pos,
+                                        (int)ar->nodes[n].line) != 0)
+                        return -1;
+                }
+                pos++;
+            }
+            continue;
+        }
+    }
+    return 0;
+}
+
+/* The call-site judgement. A parameter is reportable when its direct write or
+   its one-level mark is set, it is not `borrow` (pann 1), and its declared type
+   is a pointer (a by-value struct parameter copies; §5 P3). */
+pub int mem2_finish_unit(struct Arena *ar, struct Symbols *sym,
+                         int fn_start, int fn_end, int check_mode,
+                         int types_level, const char *path)
+{
+    int e;
+    int c;
+    int j;
+    int p;
+    int callee;
+    int caller;
+    int errors;
+    int cparams;
+    const char *ptype;
+    const char *pname;
+    long wline;
+    char msg[512];
+
+    if (!ar || !sym) return 0;
+    if (fn_start < 0 || fn_end < fn_start) return 0;
+
+    /* one level: caller parameter <- callee's direct write line */
+    for (e = 0; e < mem2_nargs; e++) {
+        if (mem2_args[e].callee < fn_start || mem2_args[e].callee >= fn_end) continue;
+        if (mem2_args[e].caller < fn_start || mem2_args[e].caller >= fn_end) continue;
+        if (mem2_args[e].caller == mem2_args[e].callee) continue;
+        cparams = mem2_fn_params(ar, sym, mem2_args[e].callee);
+        p = mem2_param_node(ar, cparams, mem2_args[e].argpos);
+        if (p < 0) continue;
+        wline = ar->nodes[p].num;
+        if (wline == 0) continue;
+        cparams = mem2_fn_params(ar, sym, mem2_args[e].caller);
+        p = mem2_param_node(ar, cparams, mem2_args[e].cparam);
+        if (p < 0) continue;
+        if (ar->nodes[p].sflags == 0)
+            ar->nodes[p].sflags = (int)wline;
+    }
+
+    errors = 0;
+    for (c = 0; c < mem2_ncalls; c++) {
+        callee = mem2_calls[c].callee;
+        caller = mem2_calls[c].caller;
+        if (callee < fn_start || callee >= fn_end) continue;   /* cross-unit: pass */
+        if (caller < fn_start || caller >= fn_end) continue;
+        if (caller == callee) continue;                        /* recursion: pass */
+        if (sym->funcs[callee].ntparams > 0) continue;         /* template: pass */
+        cparams = mem2_fn_params(ar, sym, callee);
+        if (cparams < 0) continue;
+        for (j = 0; j < sym->funcs[callee].nparams; j++) {
+            p = mem2_param_node(ar, cparams, j);
+            if (p < 0) continue;
+            if (ar->nodes[p].num == 0 && ar->nodes[p].sflags == 0) continue;
+            if ((int)(unsigned char)sym->funcs[callee].pann[j] == 1) continue; /* borrow */
+            ptype = sym->funcs[callee].ptype[j];
+            if (!ptype || strchr(ptype, '*') == 0) continue;
+            /* Opaque C pointers and function-pointer parameters are passed:
+               the first is the C-boundary / closure-environment form (the
+               known-hole fixture 76), the second is baseline §5 P5. */
+            if (strstr(ptype, "(*)") != 0) continue;
+            /* Opaque C pointers and C strings are the boundary / registry
+               forms this stage does not own (the compiler's own
+               `ct_scratch_keep(char *)` is the in-tree instance). */
+            if (strcmp(ptype, "void *") == 0) continue;
+            if (strcmp(ptype, "char *") == 0) continue;
+            if (strcmp(ptype, "const char *") == 0) continue;
+            pname = ar->nodes[p].text2;
+            wline = ar->nodes[p].num;
+            if (wline == 0) wline = ar->nodes[p].sflags;
+            snprintf(msg, sizeof msg,
+                     "call to '%s': parameter '%s' is stored outside the call (write at line %ld); declare the parameter 'borrow'",
+                     sym->funcs[callee].name, pname ? pname : "?", wline);
+            if (check_mode) {
+                tool::diag::ct_sem_error(mem2_calls[c].line, 1, msg, path);
+                errors++;
+            } else if (types_level > 0) {
+                if (tool::diag::ct_type_fail(mem2_calls[c].line, 1, msg, path) != 0)
+                    errors++;
+            }
+        }
+    }
+    return errors > 0 ? -1 : 0;
+}

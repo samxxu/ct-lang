@@ -1156,7 +1156,11 @@ impl ExprStaticType for Expr {
         if (self->sym->funcs[fi].variadic) return (const char *)0;
         n = self->sym->funcs[fi].nparams;
         for (i = 0; i < n; i++) {
-            if (self->sym->funcs[fi].pann[i]) return (const char *)0;
+            /* pann 1 is `borrow`: it changes no C signature, so the address of
+               such a function is still spellable. Only `ref` / `out` add the
+               pointer the C function-pointer type cannot express. */
+            if (self->sym->funcs[fi].pann[i] == 2
+                || self->sym->funcs[fi].pann[i] == 3) return (const char *)0;
             if (self->sym->funcs[fi].pdim[i] && self->sym->funcs[fi].pdim[i][0])
                 return (const char *)0;
         }

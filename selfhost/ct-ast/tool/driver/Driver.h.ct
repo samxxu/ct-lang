@@ -29,6 +29,7 @@ import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Module;
 import frontend::parse::Parser;
+import frontend::parse::Mem2Writes;
 import frontend::sym::Symbols;
 import runtime::arena::Arena;
 import runtime::arena::Arena::Node as Node;
@@ -454,7 +455,7 @@ impl DriverOps for Driver {
     {
         const char *in;
         char *out;
-        int i, prog, stdprog, io_from;
+        int i, prog, stdprog, io_from, fn_start;
         FILE *f;
 
         in = NULL;
@@ -1035,6 +1036,7 @@ impl DriverOps for Driver {
         if (self->m->scan_forward_type_aliases(in, self->p->cur_unit) != 0)
             return frontend::parse::ct_parse_report();
         {
+            fn_start = self->sym->nfunc;
             prog = frontend::parse::ct_parse_program();
             if (prog >= 0 && self->m->freestanding) {
                 const char *iofn = self->m->io_first_name(io_from);
@@ -1089,6 +1091,23 @@ impl DriverOps for Driver {
         if (!self->m->check_mode && tool::diag::ct_diag_leaks_failed()) {
             tool::diag::ct_diag_emit(self->m->diag_json, 0);
             return 1;
+        }
+        /* REQ-MEM-2 S7-c: the single-unit paths (`ct check`, and a build that
+           reaches here with a check level) run the same write summary the
+           multi-unit build runs in `frontend::module`. The input unit's Fn
+           slice is `fn_start..nfunc`; the built-in layer parsed earlier is
+           outside it, so cross-layer calls stay conservative. */
+        {
+            /* `compile` / `check` are always strict here; the `warn`/`off`
+               levels belong to the multi-unit build path in `Module`. */
+            if (frontend::parse::mem2_finish_unit(self->arena, self->sym,
+                    fn_start, self->sym->nfunc, 1, self->m->types_level, in) != 0) {
+                if (tool::diag::ct_diag_nsem())
+                    fprintf(stderr, "ctc: %d error(s) generated\n",
+                            tool::diag::ct_diag_nsem());
+                else frontend::parse::ct_parse_report();
+                return 1;
+            }
         }
         /* `ct check` (19.4): the semantic findings are this entry's output and
            its exit code -- 1 when any was reported, 0 when clean. Nothing is

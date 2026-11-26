@@ -26,6 +26,7 @@ import frontend::module::MapTable::Call as Call;
 import frontend::module::MapTable;
 import frontend::parse::Expr;
 import frontend::parse::MapBuild;
+import frontend::parse::Mem2Writes;
 import frontend::parse::ParseSupport;
 import frontend::parse::Stmt;
 import frontend::sym::Symbols::Adt as Adt;
@@ -1785,7 +1786,7 @@ impl ParseOps for Parser {
     /* A function (prototype or definition) or a global variable. */
     int parse_func(int is_static, int is_pub, int is_extern)
     {
-        int f, b, params, fi, func_line, func_col, ar, attr, lead;
+        int f, b, params, fi, func_line, func_col, ar, attr, lead, body_start;
         const char *ret;
         const char *name;
         const char *cname;
@@ -2164,6 +2165,7 @@ impl ParseOps for Parser {
             self->ex->in_generic_bound = runtime::text::ct_intern(bound);
             if (!self->ex->in_generic_bound) return self->sup->fail("out of memory");
         }
+        body_start = self->arena->nnode;
         b = self->st->parse_block();
         if (is_generic) self->ex->in_generic = 0;
         if (is_generic) {
@@ -2232,6 +2234,16 @@ impl ParseOps for Parser {
         self->arena->nodes[f].a = params;
         self->arena->nodes[f].b = b;
         self->arena->nodes[f].c = self->variadic;
+        /* REQ-MEM-2 S7-c: the body's node range is exactly what this
+           definition allocated, so the write summary needs no second AST
+           walker. The local symbol table is still live here, which is what
+           tells a global from a local on the store's left-hand side. */
+        if (frontend::parse::mem2_scan_function(self->arena, self->sym, fi,
+                                                params, body_start,
+                                                self->arena->nnode) != 0) {
+            self->sup->pop_scope();
+            return -1;
+        }
         if (self->st->uninit_check(b, func_line) != 0) {
             self->sup->pop_scope();
             return -1;
@@ -2567,6 +2579,11 @@ impl ParseOps for Parser {
                learns that this parameter is lent */
             if (seen_borrow && check_borrow_param(self, p, bline, bcol) != 0)
                 return -1;
+            /* S7-c: carry `borrow` on the N_PARAM row too (1 is the value the
+               trait-method parser already uses). `add_func` copies it into
+               `Fn.pann`, where the call-site judge reads it. 2 / 3 stay
+               `ref` / `out`. */
+            if (seen_borrow) self->arena->nodes[p].aux = 1;
             /* a trailing attribute belongs to the parameter (`int *p
                __attribute__((nonnull))`), so it rides with its name/dims */
             ao = -1;

@@ -29,6 +29,7 @@ import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Unit;
 import frontend::parse::Parser;
+import frontend::parse::Mem2Writes;
 import frontend::sym::Symbols;
 import frontend::sym::Symbols::Adt as Adt;
 import frontend::sym::Symbols::StructTmpl as StructTmpl;
@@ -2523,6 +2524,32 @@ impl ModuleOps for Module {
             if (tool::diag::ct_diag_leaks_failed()) {
                 tool::diag::ct_diag_emit(self->diag_json, 1);
                 return 1;
+            }
+            /* REQ-MEM-2 S7-c: the intra-unit write summary. The per-definition
+               scan already ran with the local symbol table live; this pass
+               composes one level and reports at the call site. `ct check` is
+               always strict; the build path follows `--check-level`
+               (off = skip, warn, error), which is the documented escape.
+               Built-in layer units and generic templates are out of scope for
+               this stage, so they are skipped. */
+            if (self->check_mode || self->types_level > 0) {
+                for (u = 0; u < self->nunits; u++) {
+                    int is_builtin = 0;
+                    int bj;
+                    for (bj = 0; bj < self->nbuiltin; bj++)
+                        if (self->builtin_units[bj] == u) is_builtin = 1;
+                    if (is_builtin) continue;
+                    if (frontend::parse::mem2_finish_unit(self->arena, self->sym,
+                            self->units[u].fn_start, self->units[u].fn_end,
+                            self->check_mode, self->types_level,
+                            self->units[u].path) != 0) {
+                        if (tool::diag::ct_diag_nsem())
+                            fprintf(stderr, "ctc: %d error(s) generated\n",
+                                    tool::diag::ct_diag_nsem());
+                        else frontend::parse::ct_parse_report();
+                        return 1;
+                    }
+                }
             }
             /* S1b-S1: the TIR shadow (CT_TIR=1). Every unit is built and
                V1-V4 verified before the first product is opened, so a failure
