@@ -1667,7 +1667,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 int ba = args;
                                 int bai = 0;
                                 while (((ba > 0) && (bai < _self->sym->traits[bt].m[bmi].nparams))) {
-                                    if (check_refout_arg(_self, ba, _self->sym->traits[bt].m[bmi].pann[bai], (_self->sym->traits[bt].m[bmi].ptype + (bai * MAX_TEXT))) != 0) {
+                                    if (check_refout_arg(_self, ba, _self->sym->traits[bt].m[bmi].pann[bai], _self->sym->traits[bt].m[bmi].ptype[bai]) != 0) {
                                         return (-1);
                                     }
                                     ba = _self->arena->nodes[ba].next;
@@ -2128,7 +2128,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     }
 {
                         int ca;
-                        int pair_ok = (((mi < _self->sym->traits[t].nm) && (_self->sym->traits[t].m[mi].nparams == 2)) && strstr((_self->sym->traits[t].m[mi].ptype + (1 * MAX_TEXT)), "void *"));
+                        int pair_ok = (((mi < _self->sym->traits[t].nm) && (_self->sym->traits[t].m[mi].nparams == 2)) && strstr(_self->sym->traits[t].m[mi].ptype[1], "void *"));
                         for (ca = args; ca >= 0; ca = _self->arena->nodes[ca].next) {
                             int is_cl = 0;
                             int clnode = (-1);
@@ -2148,7 +2148,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 continue;
                             }
                             if ((((clnode >= 0) && pair_ok) && (mi < _self->sym->traits[t].nm))) {
-                                if (frontend_parse_closure_match(_self, (int)(_self->arena->nodes[clnode].num), (_self->sym->traits[t].m[mi].ptype + (0 * MAX_TEXT)), 1, 1) != 0) {
+                                if (frontend_parse_closure_match(_self, (int)(_self->arena->nodes[clnode].num), _self->sym->traits[t].m[mi].ptype[0], 1, 1) != 0) {
                                     return (-1);
                                 }
                                 continue;
@@ -2173,7 +2173,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         int ma = args;
                         int mai = 0;
                         while (((ma > 0) && (mai < _self->sym->traits[t].m[mi].nparams))) {
-                            if (check_refout_arg(_self, ma, _self->sym->traits[t].m[mi].pann[mai], (_self->sym->traits[t].m[mi].ptype + (mai * MAX_TEXT))) != 0) {
+                            if (check_refout_arg(_self, ma, _self->sym->traits[t].m[mi].pann[mai], _self->sym->traits[t].m[mi].ptype[mai]) != 0) {
                                 return (-1);
                             }
                             ma = _self->arena->nodes[ma].next;
@@ -4720,7 +4720,7 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, co
     return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
 }
 static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int args, int kind, int a, int b, const char * retin, int line, int col) {
-    char fts[16][MAX_TEXT];
+    const char * fts[16];
     int anns[16];
     char at[MAX_TEXT];
     char ak[MAX_TEXT];
@@ -4736,7 +4736,7 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
     if (((kind == 0) && (a >= 0))) {
         np = self->sym->funcs[a].nparams;
         for (k = 0; ((k < np) && (k < 16)); k++) {
-            snprintf(fts[k], MAX_TEXT, "%s", self->sym->funcs[a].ptype[k]);
+            fts[k] = self->sym->funcs[a].ptype[k];
             anns[k] = (int)((unsigned char)(self->sym->funcs[a].pann[k]));
         }
     }
@@ -4744,14 +4744,14 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
         if ((((kind == 1) && (a >= 0)) && (b >= 0))) {
             np = self->sym->traits[a].m[b].nparams;
             for (k = 0; ((k < np) && (k < 16)); k++) {
-                snprintf(fts[k], MAX_TEXT, "%s", (self->sym->traits[a].m[b].ptype + (k * MAX_TEXT)));
+                fts[k] = self->sym->traits[a].m[b].ptype[k];
                 anns[k] = (int)((unsigned char)(self->sym->traits[a].m[b].pann[k]));
             }
         }
         else {
             if (kind == 2) {
                 for (pi = a; ((pi > 0) && (np < 16)); pi = self->arena->nodes[pi].next) {
-                    snprintf(fts[np], MAX_TEXT, "%s", self->arena->nodes[pi].text);
+                    fts[np] = self->arena->nodes[pi].text;
                     anns[np] = (int)((unsigned char)(self->arena->nodes[pi].aux));
                     np++;
                 }

@@ -315,7 +315,9 @@ pub int bind_conv_call(struct Expr *self, int recv, const char *stype, const cha
 
 pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line, int col)
 {
-    char st[MAX_TEXT];
+    /* S1a-0 C2p-4: the source type is a pool text, so a 2000-byte host type
+       reaches the binding registry instead of failing the 160-byte row. */
+    const char *st;
     char sk[MAX_TEXT];
     char tk[MAX_TEXT];
     char ret[MAX_TEXT];
@@ -328,7 +330,7 @@ pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line
     if (expr < 0 || !target || !target[0]) return expr;
     if (strcmp(target, "void") == 0) return expr;
     if (strchr(target, '*')) return expr;
-    if (self->sup->expr_type(expr, st, sizeof st) != 0 || !st[0]) return expr;
+    if (self->sup->expr_type_text(expr, &st) != 0 || !st[0]) return expr;
     if (strchr(st, '*')) return expr;
     bind_conv_key(st, sk, sizeof sk);
     bind_conv_key(target, tk, sizeof tk);

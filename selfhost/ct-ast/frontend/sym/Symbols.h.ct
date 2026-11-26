@@ -21,6 +21,7 @@
 #include <ctype.h>
 import frontend::sym::SymbolsTypeText;
 import runtime::text::Intern;
+import tool::sh::Sh;
 
 /* Contract-tested caps (TEST-9): check-ast.sh generates one overflow fixture for
    MAX_PARAMS, MAX_METHODS, MAX_FUNCS, MAX_SCOPE, MAX_VARS, MAX_FIELDS and
@@ -110,8 +111,11 @@ pub trait TypeAliasOps {
     int add_visible_type_alias(const char *name, const char *target, const char *path,
                                int line, int owner);
     int find_global_type_alias(const char *name, char *path, int cap, int *line);
-    int expand_type_alias(const char *name, char *out, int cap);
-    int expand_type_text(const char *text, char *out, int cap);
+    /* S1a-0 C2p-4: the pool-text forms. The old `(char *out, int cap)` output
+       and the `id[160]` / `eb[160]` scratch rows cut an alias target at 160
+       bytes; each step now builds a dynamic block and interns the result. */
+    int expand_type_alias_text(const char *name, const char **out);
+    int expand_type_text_text(const char *text, const char **out);
     int resolve_exported_type_aliases(int owner);
 }
 
@@ -250,8 +254,11 @@ pub struct Var {
 pub struct Closure {
     char owner[160];            /* enclosing function's C name, empty at file scope */
     char ret[160];              /* return type from the host function pointer */
-    char ptype[16][160];        /* the literal's parameter types, as written */
-    char pname[16][160];        /* their names, for S3's trampoline */
+    /* S1a-0 C2p-4: the parameter rows are pointer arrays of interned texts, so
+       a 2000-byte parameter type/name is not cut at the old 160-byte row. The
+       16-slot count is still the closure's own limit (a hard error). */
+    const char *ptype[16];      /* the literal's parameter types, as written */
+    const char *pname[16];      /* their names, for S3's trampoline */
     int  nparams;
     int  body;                  /* expression node index, or an N_BLOCK */
     int  is_block;              /* 1 when the body is `=> { … }` (S5) */
@@ -277,9 +284,11 @@ pub struct MethAnn {
 pub struct MethodSig {
     const char *name;
     const char *ret;
-    /* S1a-0 C1: the parameter rows grow on demand, like `Fn`'s; `ptype` is a
-       MAX_TEXT-byte stride and `pann` one byte per position. */
-    char *ptype;
+    /* S1a-0 C1: the parameter rows grow on demand, like `Fn`'s.
+       S1a-0 C2p-4: `ptype` is a pointer row (each entry an interned text), so
+       a 2000-byte trait method parameter type is not cut at a MAX_TEXT stride;
+       `pann` is one byte per position. */
+    const char **ptype;
     /* Phase 78 (S2b): 0 = plain, 2 = `ref`, 3 = `out`. */
     char *pann;
     int  nparams;
@@ -656,12 +665,14 @@ pub int ct_inst_resolve(const char *in, char *out, int cap);
 #define MAX_ADT_FIELDS 8
 #define MAX_ADT_FIELDS_MAX 65536
 pub struct AdtField {
-    char name[160];
-    char type[160];
+    /* S1a-0 C2p-4: interned texts, so a 2000-byte payload field name or type
+       is not cut at the old 160-byte row. */
+    const char *name;
+    const char *type;
 }
 pub struct AdtVariant {
-    char name[160];             /* the source name, `Circle` */
-    char cname[160];            /* the emitted union member, `Circle` */
+    const char *name;           /* the source name, `Circle` */
+    const char *cname;          /* the emitted union member, `Circle` */
     int  nfields;
     int  fcap;
     struct AdtField *fields;    /* owned by this variant; NULL until the first field */
@@ -669,8 +680,8 @@ pub struct AdtVariant {
     int  col;
 }
 pub struct Adt {
-    char name[160];             /* the source name, `Shape` */
-    char full[160];             /* the namespace-mangled C tag, `lib_Shape` */
+    const char *name;           /* the source name, `Shape` */
+    const char *full;           /* the namespace-mangled C tag, `lib_Shape` */
     int  nvariants;
     int  vcap;
     struct AdtVariant *variants; /* owned by this row; NULL until the first variant */
@@ -802,7 +813,9 @@ pub struct Symbols {
        a use before the declaration and is reported. */
     int  alias_decl;
     int  self_mode;             /* inside an impl body: `self` -> `_self` */
-    char ret_type[160];         /* return type of the function being parsed */
+    /* S1a-0 C2p-4: an interned text, so a 2000-byte return type is kept whole
+       for the return-statement checks and the emitter's drop spelling. */
+    const char *ret_type;       /* return type of the function being parsed */
     /* Inside a trait method's default body: the trait `self->m(...)` dispatches
        through. Empty everywhere else. The adopting struct is unknown at parse
        time, so the receiver resolves to the enclosing trait by construction. */
@@ -1087,11 +1100,19 @@ impl SymbolOps for Symbols {
     int closure_new(const char *owner)
     {
         struct Closure *c;
+        int i;
         (void)self;
         if (self->ensure_closure_capacity(self->nclosure + 1) != 0) return -1;
         c = &self->closures[self->nclosure];
         snprintf(c->owner, MAX_TEXT, "%s", owner ? owner : "");
         c->ret[0] = 0;
+        /* S1a-0 C2p-4: the parameter rows are pointer rows now; a row the
+           literal never fills is the empty spelling, not NULL (`closure_match`
+           reads past `nparams` while walking the host prototype). */
+        for (i = 0; i < 16; i++) {
+            c->ptype[i] = "";
+            c->pname[i] = "";
+        }
         c->nparams = 0;
         c->body = -1;
         c->is_block = 0;
@@ -1628,11 +1649,13 @@ impl SymbolOps for Symbols {
     }
 
     /* S1a-0 C1: a trait method's parameter rows are two heap blocks owned by
-       the method row (`ptype` at MAX_TEXT stride, `pann` one byte). */
+       the method row. S1a-0 C2p-4: `ptype` is a pointer row (interned texts),
+       like `Fn`'s, and `pann` one byte per position. */
     int ensure_meth_param_capacity(int ti, int mi, int need)
     {
         int cap;
-        char *types, *anns;
+        const char **types;
+        char *anns;
         if (ti < 0 || ti >= self->ntraits) return self->fail("trait table out of range");
         /* During signature parsing the row being filled is `nm` (it becomes
            `nm + 1` when the signature closes), so `mi == nm` is valid. */
@@ -1642,10 +1665,11 @@ impl SymbolOps for Symbols {
         while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
         if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
         if (need > cap) return self->fail("out of memory");
-        types = (char *)realloc(self->traits[ti].m[mi].ptype, (size_t)cap * MAX_TEXT);
+        types = (const char **)realloc(self->traits[ti].m[mi].ptype,
+                                       (size_t)cap * sizeof(*types));
         if (!types) return self->fail("out of memory");
-        memset(types + (size_t)self->traits[ti].m[mi].pcap * MAX_TEXT, 0,
-               (size_t)(cap - self->traits[ti].m[mi].pcap) * MAX_TEXT);
+        memset(types + self->traits[ti].m[mi].pcap, 0,
+               (size_t)(cap - self->traits[ti].m[mi].pcap) * sizeof(*types));
         self->traits[ti].m[mi].ptype = types;
         anns = (char *)realloc(self->traits[ti].m[mi].pann, (size_t)cap);
         if (!anns) return self->fail("out of memory");
@@ -1723,7 +1747,6 @@ impl SymbolOps for Symbols {
     {
         const char *enc;
         char msg[MAX_TEXT * 2];
-        char tmp[MAX_TEXT];
         int ti, ni, mi, pi, pk;
 
         ti = self->find_trait(tname);
@@ -1813,27 +1836,27 @@ impl SymbolOps for Symbols {
                 if (self->ensure_meth_param_capacity(ni, mi,
                         self->traits[ti].m[mi].nparams) != 0) return -1;
                 memcpy(self->traits[ni].m[mi].ptype, self->traits[ti].m[mi].ptype,
-                       (size_t)self->traits[ti].m[mi].nparams * MAX_TEXT);
+                       (size_t)self->traits[ti].m[mi].nparams * sizeof(char *));
                 memcpy(self->traits[ni].m[mi].pann, self->traits[ti].m[mi].pann,
                        (size_t)self->traits[ti].m[mi].nparams);
             }
             /* D35-3: the instance owns concrete signatures. The impl parser can
                then run its ordinary return/parameter compatibility checks
-               against this row instead of learning about trait parameters. */
+               against this row instead of learning about trait parameters.
+               S1a-0 C2p-4: the substitution writes fresh interned texts, so a
+               2000-byte argument is not cut at a MAX_TEXT scratch row. */
             for (pi = 0; pi < nargs; pi++) {
                 const char *sub = cargs && cargs[pi] ? cargs[pi] : "";
-                if (ct_generic_subst(self->traits[ni].m[mi].ret,
-                        self->traits[ti].tparam[pi], sub,
-                        tmp, MAX_TEXT) != 0)
-                    return self->fail("type is too long");
-                self->traits[ni].m[mi].ret = runtime::text::ct_intern(tmp);
-                if (!self->traits[ni].m[mi].ret) return self->fail("out of memory");
+                const char *nret = ct_generic_subst_text(self->traits[ni].m[mi].ret,
+                                                         self->traits[ti].tparam[pi], sub);
+                if (!nret) return self->fail("out of memory");
+                self->traits[ni].m[mi].ret = nret;
                 for (pk = 0; pk < self->traits[ni].m[mi].nparams; pk++) {
-                    if (ct_generic_subst(self->traits[ni].m[mi].ptype + (pk) * MAX_TEXT,
-                            self->traits[ti].tparam[pi], sub,
-                            tmp, MAX_TEXT) != 0)
-                        return self->fail("type is too long");
-                    snprintf(self->traits[ni].m[mi].ptype + (pk) * MAX_TEXT, MAX_TEXT, "%s", tmp);
+                    const char *ntype =
+                        ct_generic_subst_text(self->traits[ni].m[mi].ptype[pk],
+                                              self->traits[ti].tparam[pi], sub);
+                    if (!ntype) return self->fail("out of memory");
+                    self->traits[ni].m[mi].ptype[pk] = ntype;
                 }
             }
         }
@@ -2352,15 +2375,19 @@ impl TypeAliasOps for Symbols {
 
     /* Expand one bare name. A forward row outside a declaration is a use before
        the declaration; inside a declaration it is deferred as text, so a legal
-       forward reference between aliases still resolves at the use site. */
-    int expand_type_alias(const char *name, char *out, int cap)
+       forward reference between aliases still resolves at the use site.
+       S1a-0 C2p-4: the result is one interned text, so a 2000-byte alias
+       target is not cut by the old 160-byte output row. */
+    int expand_type_alias_text(const char *name, const char **out)
     {
-        int i, k, w;
+        int i, k;
         char msg[512];
+        const char *pooled;
         i = self->find_type_alias(name);
         if (i < 0) {
-            w = snprintf(out, (size_t)cap, "%s", name);
-            if (w < 0 || w >= cap) return self->fail("type alias is too long");
+            pooled = runtime::text::ct_intern(name);
+            if (!pooled) return self->fail("out of memory");
+            *out = pooled;
             return 0;
         }
         if (self->taliases[i].forward) {
@@ -2369,8 +2396,9 @@ impl TypeAliasOps for Symbols {
                          "type alias '%s' must be declared before it is used", name);
                 return self->fail(msg);
             }
-            w = snprintf(out, (size_t)cap, "%s", name);
-            if (w < 0 || w >= cap) return self->fail("type alias is too long");
+            pooled = runtime::text::ct_intern(name);
+            if (!pooled) return self->fail("out of memory");
+            *out = pooled;
             return 0;
         }
         for (k = 0; k < self->ntachain; k++) {
@@ -2390,7 +2418,7 @@ impl TypeAliasOps for Symbols {
             self->ntachain--;
             return self->fail("type alias has no target");
         }
-        k = self->expand_type_text(self->taliases[i].target, out, cap);
+        k = self->expand_type_text_text(self->taliases[i].target, out);
         self->ntachain--;
         return k;
     }
@@ -2398,45 +2426,61 @@ impl TypeAliasOps for Symbols {
     /* Replace every bare identifier that names a visible alias, except the tag
        after `struct` / `enum` / `union` (`struct Alias` is a C tag, not the
        synonym). Whitespace and punctuation are copied verbatim; the host-key
-       normaliser strips the former, and the type emitter re-spaces the latter. */
-    int expand_type_text(const char *text, char *out, int cap)
+       normaliser strips the former, and the type emitter re-spaces the latter.
+       S1a-0 C2p-4: no `id[160]` / `eb[160]` scratch row -- the identifier is
+       interned from the source span and the joined text is a dynamic block. */
+    int expand_type_text_text(const char *text, const char **out)
     {
-        int i = 0, o = 0, n, after_tag = 0, w;
-        char id[160], eb[160];
+        int i = 0, after_tag = 0;
+        char *buf = 0;
+        int cap = 0;
+        const char *pooled;
+        if (tool::sh::ct_text_init(&buf, &cap, 64) != 0)
+            return self->fail("out of memory");
         while (text[i]) {
             unsigned char c = (unsigned char)text[i];
             if (isalpha(c) || c == '_') {
-                n = 0;
-                while (text[i] && (isalnum((unsigned char)text[i]) || text[i] == '_')) {
-                    if (n < (int)sizeof(id) - 1) id[n++] = text[i];
-                    i++;
-                }
-                id[n] = 0;
+                int start = i;
+                const char *tok, *rep;
+                while (text[i] && (isalnum((unsigned char)text[i]) || text[i] == '_')) i++;
+                tok = runtime::text::ct_intern_len(text + start, i - start);
+                if (!tok) goto oom;
                 if (after_tag) {
                     after_tag = 0;
-                    w = snprintf(out + o, (size_t)(cap - o), "%s", id);
-                    if (w < 0 || o + w >= cap) return self->fail("type alias is too long");
-                    o += w;
-                } else if (strcmp(id, "struct") == 0 || strcmp(id, "enum") == 0
-                           || strcmp(id, "union") == 0) {
+                    if (tool::sh::ct_text_cat(&buf, &cap, tok) != 0) goto toolong;
+                } else if (strcmp(tok, "struct") == 0 || strcmp(tok, "enum") == 0
+                           || strcmp(tok, "union") == 0) {
                     after_tag = 1;
-                    w = snprintf(out + o, (size_t)(cap - o), "%s", id);
-                    if (w < 0 || o + w >= cap) return self->fail("type alias is too long");
-                    o += w;
+                    if (tool::sh::ct_text_cat(&buf, &cap, tok) != 0) goto toolong;
                 } else {
-                    if (self->expand_type_alias(id, eb, sizeof eb) != 0) return -1;
-                    w = snprintf(out + o, (size_t)(cap - o), "%s", eb);
-                    if (w < 0 || o + w >= cap) return self->fail("type alias is too long");
-                    o += w;
+                    if (self->expand_type_alias_text(tok, &rep) != 0) {
+                        tool::sh::ct_text_free(&buf, &cap);
+                        return -1;
+                    }
+                    if (tool::sh::ct_text_cat(&buf, &cap, rep) != 0) goto toolong;
                 }
                 continue;
             }
-            if (o + 1 >= cap) return self->fail("type alias is too long");
-            out[o++] = text[i++];
-            if (c != ' ' && c != '\t' && c != '\n' && c != '\r') after_tag = 0;
+            {
+                char one[2];
+                one[0] = text[i];
+                one[1] = 0;
+                if (tool::sh::ct_text_cat(&buf, &cap, one) != 0) goto toolong;
+                i++;
+                if (c != ' ' && c != '\t' && c != '\n' && c != '\r') after_tag = 0;
+            }
         }
-        out[o] = 0;
+        pooled = runtime::text::ct_intern(buf);
+        tool::sh::ct_text_free(&buf, &cap);
+        if (!pooled) return self->fail("out of memory");
+        *out = pooled;
         return 0;
+        toolong:
+        tool::sh::ct_text_free(&buf, &cap);
+        return self->fail("type alias is too long");
+        oom:
+        tool::sh::ct_text_free(&buf, &cap);
+        return self->fail("out of memory");
     }
 
     /* At the end of a unit every local alias exists, so its exported target can
@@ -2445,25 +2489,20 @@ impl TypeAliasOps for Symbols {
     int resolve_exported_type_aliases(int owner)
     {
         int i;
-        char out[160];
-        const char *tgt;
+        const char *out;
         for (i = 0; i < self->ngtalias; i++) {
             if (self->gtaliases[i].owner != owner) continue;
             if (!self->gtaliases[i].target) continue;
-            if (self->expand_type_text(self->gtaliases[i].target, out, sizeof out) != 0)
+            if (self->expand_type_text_text(self->gtaliases[i].target, &out) != 0)
                 return -1;
-            tgt = runtime::text::ct_intern(out);
-            if (!tgt) return self->fail("out of memory");
-            self->gtaliases[i].target = tgt;
+            self->gtaliases[i].target = out;
         }
         for (i = 0; i < self->ntalias; i++) {
             if (self->taliases[i].owner != owner) continue;
             if (!self->taliases[i].target) continue;
-            if (self->expand_type_text(self->taliases[i].target, out, sizeof out) != 0)
+            if (self->expand_type_text_text(self->taliases[i].target, &out) != 0)
                 return -1;
-            tgt = runtime::text::ct_intern(out);
-            if (!tgt) return self->fail("out of memory");
-            self->taliases[i].target = tgt;
+            self->taliases[i].target = out;
         }
         return 0;
     }
@@ -2537,6 +2576,7 @@ static int symbols_grow(struct Symbols *self)
 
 struct Symbols *symbols_get(void)
 {
+    if (!g_symbols.ret_type) g_symbols.ret_type = "";   /* non-NULL before the first body */
     if (symbols_grow(&g_symbols) != 0) {
         fprintf(stderr, "ctc: out of memory\n");
         exit(1);
@@ -3127,8 +3167,10 @@ int ct_adt_add(const char *name, const char *full, int is_pub, int owner,
     if (!a || adt_ensure(n + 1) != 0) return -1;
     a = g_adts;
     i = n;
-    snprintf(a[i].name, MAX_TEXT, "%s", name ? name : "");
-    snprintf(a[i].full, MAX_TEXT, "%s", full ? full : "");
+    a[i].name = runtime::text::ct_intern(name ? name : "");
+    if (!a[i].name) return -1;
+    a[i].full = runtime::text::ct_intern(full ? full : "");
+    if (!a[i].full) return -1;
     a[i].nvariants = 0;
     a[i].vcap = 0;
     a[i].variants = 0;
@@ -3165,8 +3207,10 @@ int ct_adt_add_variant(int adt, const char *name, const char *cname, int line, i
     if (adt_ensure_variants(adt, a[adt].nvariants + 1) != 0) return -1;
     a = g_adts;
     v = a[adt].nvariants;
-    snprintf(a[adt].variants[v].name, MAX_TEXT, "%s", name ? name : "");
-    snprintf(a[adt].variants[v].cname, MAX_TEXT, "%s", cname ? cname : "");
+    a[adt].variants[v].name = runtime::text::ct_intern(name ? name : "");
+    if (!a[adt].variants[v].name) return -1;
+    a[adt].variants[v].cname = runtime::text::ct_intern(cname ? cname : "");
+    if (!a[adt].variants[v].cname) return -1;
     a[adt].variants[v].nfields = 0;
     a[adt].variants[v].fcap = 0;
     a[adt].variants[v].fields = 0;
@@ -3186,8 +3230,10 @@ int ct_adt_add_field(int adt, int v, const char *name, const char *type)
     if (adt_ensure_fields(adt, v, a[adt].variants[v].nfields + 1) != 0) return -1;
     a = g_adts;
     f = a[adt].variants[v].nfields;
-    snprintf(a[adt].variants[v].fields[f].name, MAX_TEXT, "%s", name ? name : "");
-    snprintf(a[adt].variants[v].fields[f].type, MAX_TEXT, "%s", type ? type : "");
+    a[adt].variants[v].fields[f].name = runtime::text::ct_intern(name ? name : "");
+    if (!a[adt].variants[v].fields[f].name) return -1;
+    a[adt].variants[v].fields[f].type = runtime::text::ct_intern(type ? type : "");
+    if (!a[adt].variants[v].fields[f].type) return -1;
     a[adt].variants[v].nfields++;
     return f;
 }

@@ -12,6 +12,7 @@
 
 #include "SymbolsTypeText.h"
 #include "Intern.h"
+#include "Sh.h"
 
 
 struct ct_buf;
@@ -97,8 +98,8 @@ struct frontend_sym_TypeAliasOps_vtbl {
     int (*add_forward_type_alias)(void *, const char *, const char *, int, int);
     int (*add_visible_type_alias)(void *, const char *, const char *, const char *, int, int);
     int (*find_global_type_alias)(void *, const char *, char *, int, int *);
-    int (*expand_type_alias)(void *, const char *, char *, int);
-    int (*expand_type_text)(void *, const char *, char *, int);
+    int (*expand_type_alias_text)(void *, const char *, const char * *);
+    int (*expand_type_text_text)(void *, const char *, const char * *);
     int (*resolve_exported_type_aliases)(void *, int);
 };
 struct frontend_sym_TypeAliasOps_iface {
@@ -240,8 +241,8 @@ struct frontend_sym_Var {
 struct frontend_sym_Closure {
     char owner[160];
     char ret[160];
-    char ptype[16][160];
-    char pname[16][160];
+    const char * ptype[16];
+    const char * pname[16];
     int nparams;
     int body;
     int is_block;
@@ -261,7 +262,7 @@ struct frontend_sym_MethAnn {
 struct frontend_sym_MethodSig {
     const char * name;
     const char * ret;
-    char * ptype;
+    const char * * ptype;
     char * pann;
     int nparams;
     int pcap;
@@ -383,12 +384,12 @@ struct frontend_sym_StructImpl {
     int line;
 };
 struct frontend_sym_AdtField {
-    char name[160];
-    char type[160];
+    const char * name;
+    const char * type;
 };
 struct frontend_sym_AdtVariant {
-    char name[160];
-    char cname[160];
+    const char * name;
+    const char * cname;
     int nfields;
     int fcap;
     struct frontend_sym_AdtField * fields;
@@ -396,8 +397,8 @@ struct frontend_sym_AdtVariant {
     int col;
 };
 struct frontend_sym_Adt {
-    char name[160];
-    char full[160];
+    const char * name;
+    const char * full;
     int nvariants;
     int vcap;
     struct frontend_sym_AdtVariant * variants;
@@ -460,7 +461,7 @@ struct frontend_sym_Symbols {
     int gtaliascap;
     int alias_decl;
     int self_mode;
-    char ret_type[160];
+    const char * ret_type;
     char trait_default[160];
     const char * errmsg;
     const struct frontend_sym_SymbolOps_vtbl *__frontend_sym_symbolops_vptr;

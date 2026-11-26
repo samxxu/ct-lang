@@ -128,7 +128,7 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_adt_ctor_ahead(void *self)
         p++;
     }
     i = 0;
-    while ((((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || (((*p) >= '0') && ((*p) <= '9'))) || ((*p) == '_')) && ((i + 1) < MAX_TEXT))) {
+    while (((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || (((*p) >= '0') && ((*p) <= '9'))) || ((*p) == '_'))) {
         i++;
         p++;
     }
@@ -156,7 +156,7 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
     int k;
     int a;
     char rn[MAX_TEXT];
-    char vname[MAX_TEXT];
+    const char * vname;
     char msg[3 * MAX_TEXT];
     struct frontend_sym_Adt * adts;
     int nadts;
@@ -175,7 +175,10 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
     }
     vline = _self->lex->tokline;
     vcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, vname, sizeof(vname));
+    vname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+    if ((!vname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     adt = frontend_sym_ct_adt_from_type(rn);
     if (adt < 0) {

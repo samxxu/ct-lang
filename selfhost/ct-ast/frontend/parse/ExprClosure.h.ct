@@ -439,7 +439,7 @@ impl ExprClosure for Expr {
             if (self->arg_is_closure(cur)) {
                 ok = 0;
                 ft = "";
-                if (pos < np) ft = self->sym->traits[ti].m[mi].ptype + (pos) * MAX_TEXT;
+                if (pos < np) ft = self->sym->traits[ti].m[mi].ptype[pos];
                 /* D25-5: the `...` tail has no fixed slot pair. When the
                    method is variadic and the pair would run past its named
                    parameters, that is L25-3 -- a case of its own, not the
@@ -456,7 +456,7 @@ impl ExprClosure for Expr {
                 }
                 if (pos + 1 < np)
                     ok = self->formal_is_env_fn(ft)
-                         && self->type_is_void_ptr(self->sym->traits[ti].m[mi].ptype + (pos + 1) * MAX_TEXT);
+                         && self->type_is_void_ptr(self->sym->traits[ti].m[mi].ptype[pos + 1]);
                 if (!ok) {
                     snprintf(msg, sizeof msg,
                              "a closure argument must fill a '(fn, env)' parameter pair (got '%s')",
@@ -522,8 +522,7 @@ impl ExprClosure for Expr {
 
     int parse_closure(void)
     {
-        char typebuf[MAX_TEXT];
-        char name[MAX_TEXT];
+        const char *typebuf;
         char owner[MAX_TEXT];
         int ci, pstart, body, n, line, col, save_assign;
 
@@ -540,27 +539,26 @@ impl ExprClosure for Expr {
         if (self->sym->push_scope() != 0) return self->sup->fail(self->sym->last_error());
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
             for (;;) {
-                if (self->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+                const char *pname_t;
+                if (self->parse_type_text(&typebuf) != 0) return -1;
                 if (self->fnptr_state) {
                     if (!self->fnptr_name[0])
                         return self->sup->fail("expected a parameter name");
-                    snprintf(name, sizeof name, "%s", self->fnptr_name);
+                    pname_t = runtime::text::ct_intern(self->fnptr_name);
                 } else {
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a parameter name");
-                    self->lex->tok_copy(name, sizeof name);
+                    pname_t = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                           self->lex->tokstr.len);
                     self->sup->lex_next();
                 }
-                if (self->sym->declare_var(name, typebuf) != 0)
+                if (!pname_t) return self->sup->fail("out of memory");
+                if (self->sym->declare_var(pname_t, typebuf) != 0)
                     return self->sup->fail(self->sym->last_error());
                 if (self->sym->closures[ci].nparams >= 16)
                     return self->sup->fail("a closure takes too many parameters (limit 16)");
-                if (closure_copy(self,
-                                 self->sym->closures[ci].ptype[self->sym->closures[ci].nparams],
-                                 typebuf, "a closure parameter type") != 0) return -1;
-                if (closure_copy(self,
-                                 self->sym->closures[ci].pname[self->sym->closures[ci].nparams],
-                                 name, "a closure parameter name") != 0) return -1;
+                self->sym->closures[ci].ptype[self->sym->closures[ci].nparams] = typebuf;
+                self->sym->closures[ci].pname[self->sym->closures[ci].nparams] = pname_t;
                 self->sym->closures[ci].nparams++;
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                     self->sup->lex_next();

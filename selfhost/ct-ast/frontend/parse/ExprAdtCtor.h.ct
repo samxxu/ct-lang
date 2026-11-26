@@ -61,8 +61,11 @@ impl ExprAdt for Expr {
         p++;
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
         i = 0;
-        while (((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
-                || (*p >= '0' && *p <= '9') || *p == '_') && i + 1 < MAX_TEXT) {
+        /* S1a-0 C2p-4: no MAX_TEXT bound here -- the lookahead only asks
+           whether a name and `(` follow, and a 2000-byte variant name must
+           still reach the constructor reader. */
+        while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+               || (*p >= '0' && *p <= '9') || *p == '_') {
             i++;
             p++;
         }
@@ -75,7 +78,7 @@ impl ExprAdt for Expr {
     {
         int tline, tcol, vline, vcol, args, nargs, adt, v, nfields, n, k, a;
         char rn[MAX_TEXT];
-        char vname[MAX_TEXT];
+        const char *vname;
         char msg[3 * MAX_TEXT];
         struct Adt *adts;
         int nadts;
@@ -91,7 +94,9 @@ impl ExprAdt for Expr {
         if (self->lex->tok != T_ID) return self->sup->fail("expected a variant name after '.'");
         vline = self->lex->tokline;
         vcol = self->lex->tokstart - self->lex->lstart + 1;
-        self->lex->tok_copy(vname, sizeof vname);
+        vname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                             self->lex->tokstr.len);
+        if (!vname) return self->sup->fail("out of memory");
         self->sup->lex_next();
         adt = frontend::sym::ct_adt_from_type(rn);
         if (adt < 0) {

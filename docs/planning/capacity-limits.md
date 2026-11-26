@@ -320,8 +320,10 @@ Intern（随输出增长），改用 `ct_scratch_*` builder。已迁：`Emitter.
 
 **剩余（C2p）**：见 §5.6；C2p-1 已把 `qpath`/`cname` 按需化，C2p-2 已把
 诊断文本按需化，C2p-3 已把类型拼写/实例名的 160 总闸解除（`parse_type`、
-`expr_type`/`expr_ctype`、实例编码与类型表），`Expr/Stmt`/发射器其余一次性
-scratch 仍在后续批次。
+`expr_type`/`expr_ctype`、实例编码与类型表），C2p-4 已把跨解析调用存活的
+持久类型行改指针行（trait 方法参数、闭包参数、`map binding`、ADT 名称、
+`ret_type`、类型别名展开），`Expr/Stmt`/发射器其余一次性 scratch 仍在后续
+批次。
 
 ## 5.6 C2p 合批（进行中）
 
@@ -353,17 +355,38 @@ pool-text 入口（`parse_type_text`/`parse_inst_type_text`），内部
 `Holder<struct 2000>`、2000 字节模板名实例、trait 接收者/vptr 初始化/接口
 装箱均可用。证据：`c2p_limits.sh` 9/9，baseline `f2233e7a` 为 5/9。
 
-**剩余（按文件，`grep -c '\[MAX_TEXT\]'`）**：`frontend/parse` 414 处
-（`Expr.h.ct` 95、`Parser.h.ct` 58、`Stmt.h.ct` 43、`ExprTypes.h.ct` 33、
-`MapBuild.h.ct` 26、`ExprStaticType.h.ct` 23、`ExprBinding.h.ct` 17 …）、
-`backend/emit` 124 处（`Emitter.h.ct` 106、`Init.h.ct` 10、
-`EmitterText.h.ct` 3、`EmitHoist.h.ct` 2、`EmitInit.h.ct` 2、
-`EmitterMapText.h.ct` 1）、`tool/pkg` 55 处、`frontend/type` 31 处、
-`frontend/sym` 17 处、`frontend/module` 20 处、`backend/mem` 7 处。另有
+**C2p-4 持久类型文本（已落）**：六个单元，全部是跨解析调用存活的类型/名字行。
+`MethodSig.ptype` 改指针行（trait 方法参数；实例替换走
+`ct_generic_subst_text`）；`Closure.ptype`/`pname` 改 16 槽指针行（未填槽为
+`""`，`closure_match` 会读到这里）；`MapBuild.parse_binding` 的 `src`/`dst`
+改 `parse_type_text`，`host_type`/`bind_dst` 直接保存 pool 文本，发射器
+`map binding` 的 pair 也直接读 pool（不再先落 `char[160]`）；`AdtField` 的
+`name`/`type`、`AdtVariant` 的 `name`/`cname`、`Adt` 的 `name`/`full` 改 pool
+文本，ADT 构造器前瞻去掉 160 截断、match arm 的变体名改 pool；
+`Symbols.ret_type` 改 pool 文本（impl/普通函数的返回类型与 return 语句检查）；
+`expand_type_alias`/`expand_type_text` 改 pool 文本输出，内部 `id`/`eb` 160
+scratch 与输出上限一并删除；`parse_type` 的 `(*)(...)` 声明符 scratch
+（`pt`/`plist`/`fdims`）改 pool 文本，函数指针形参可为 2000 字节类型。
+证据：`c2p_limits.sh` 16/16，baseline `af193df6` 为 9/16；发射 C 67577 ->
+67620 行（仅 .c），切片清单仍为 76。
+
+**剩余（按文件，`grep -c '\[MAX_TEXT\]'`）**：`frontend/parse` 390 处
+（`Expr.h.ct` 94、`Parser.h.ct` 53、`Stmt.h.ct` 42、`ExprTypes.h.ct` 33、
+`MapBuild.h.ct` 24、`ExprStaticType.h.ct` 23、`ExprBinding.h.ct` 16、
+`ExprInstantiate.h.ct` 14 …）、`backend/emit` 114 处（`Emitter.h.ct` 101、
+`EmitterText.h.ct` 3、`Init.h.ct` 2、`EmitInit.h.ct` 2、`EmitHoist.h.ct` 2、
+`EmitterMapText.h.ct` 1）、`tool/pkg` 55 处、`frontend/type` 29 处、
+`frontend/sym` 16 处、`frontend/module` 20 处、`backend/mem` 7 处。另有
 8 处 `[128]` 计数行（`Emitter` 的路径/字段数组等），它们是行数容量而非文本
-scratch。下一批优先级：`MethodSig.ptype`、闭包/`MapBuild`/ADT payload 的参数
-行（类型读取入口已可用 pool，剩余是行存储）与 `Emitter.h.ct` 的局部及
-`EmitterText`/`EmitHoist`/`EmitInit`/`Init` 的一次性 scratch。
+scratch。下一批优先级：`expr_type`/`expr_ctype` 的调用方缓冲（`parse` 与
+`emit` 各按 4–6 单元一批；当前直接传栈缓冲的调用点是 38 处：`Expr.h.ct` 17、
+`Stmt.h.ct` 7、`Emitter.h.ct` 4、`StmtMatch.h.ct` 3、`TypeCheck.h.ct` 2、
+`StmtLoop.h.ct` 2、`ExprTypes.h.ct`/`ExprNewObject.h.ct`/`ExprCallCheck.h.ct`
+各 1），随后是 `Closure.owner`/`ret`/`cap_*`、`Symbols.trait_default`/
+`tachain`、`ExprCore` 的 `fnptr_*`/`decl_prefix`/`in_generic_bound`/`iter`、
+`MapBuild` 的 `for type` host 路径与 `Emitter.h.ct` 的局部
+`tbuf`/`rbuf`/`ibuf` 及 `EmitterText`/`EmitHoist`/`EmitInit`/`Init` 的一次性
+scratch。
 
 ## 6 关联
 

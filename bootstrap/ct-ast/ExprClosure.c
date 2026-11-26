@@ -350,7 +350,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_map_closure_check(void
             ok = 0;
             ft = "";
             if (pos < np) {
-                ft = (_self->sym->traits[ti].m[mi].ptype + (pos * MAX_TEXT));
+                ft = _self->sym->traits[ti].m[mi].ptype[pos];
             }
             if ((_self->sym->traits[ti].m[mi].variadic && ((pos >= np) || ((pos + 1) >= np)))) {
                 snprintf(msg, sizeof(msg), "a map recipe cannot pass a closure through '...'");
@@ -359,7 +359,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_map_closure_check(void
                 return (-1);
             }
             if ((pos + 1) < np) {
-                ok = (_self->__frontend_parse_exprclosure_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprclosure_vptr->type_is_void_ptr(_self, (_self->sym->traits[ti].m[mi].ptype + ((pos + 1) * MAX_TEXT))));
+                ok = (_self->__frontend_parse_exprclosure_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprclosure_vptr->type_is_void_ptr(_self, _self->sym->traits[ti].m[mi].ptype[(pos + 1)]));
             }
             if ((!ok)) {
                 snprintf(msg, sizeof(msg), "a closure argument must fill a '(fn, env)' parameter pair (got '%s')", ft);
@@ -428,8 +428,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_arg_bind(void 
 
 static int frontend_parse_Expr_frontend_parse_ExprClosure_parse_closure(void *self) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char typebuf[MAX_TEXT];
-    char name[MAX_TEXT];
+    const char * typebuf;
     char owner[MAX_TEXT];
     int ci;
     int pstart;
@@ -454,34 +453,34 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_parse_closure(void *se
     }
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
         for (; ; ) {
-            if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, typebuf, sizeof(typebuf)) != 0) {
+            const char * pname_t;
+            if (_self->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self, (&typebuf)) != 0) {
                 return (-1);
             }
             if (_self->fnptr_state) {
                 if ((!_self->fnptr_name[0])) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a parameter name");
                 }
-                snprintf(name, sizeof(name), "%s", _self->fnptr_name);
+                pname_t = runtime_text_ct_intern(_self->fnptr_name);
             }
             else {
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a parameter name");
                 }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
+                pname_t = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             }
-            if (_self->sym->__frontend_sym_symbolops_vptr->declare_var(_self->sym, name, typebuf) != 0) {
+            if ((!pname_t)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            if (_self->sym->__frontend_sym_symbolops_vptr->declare_var(_self->sym, pname_t, typebuf) != 0) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
             }
             if (_self->sym->closures[ci].nparams >= 16) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a closure takes too many parameters (limit 16)");
             }
-            if (frontend_parse_closure_copy(_self, _self->sym->closures[ci].ptype[_self->sym->closures[ci].nparams], typebuf, "a closure parameter type") != 0) {
-                return (-1);
-            }
-            if (frontend_parse_closure_copy(_self, _self->sym->closures[ci].pname[_self->sym->closures[ci].nparams], name, "a closure parameter name") != 0) {
-                return (-1);
-            }
+            _self->sym->closures[ci].ptype[_self->sym->closures[ci].nparams] = typebuf;
+            _self->sym->closures[ci].pname[_self->sym->closures[ci].nparams] = pname_t;
             _self->sym->closures[ci].nparams++;
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);

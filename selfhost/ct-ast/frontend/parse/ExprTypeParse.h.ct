@@ -562,8 +562,8 @@ impl ExprTypeParse for Expr {
                    alias is a compile-time synonym, so the type spelling (and
                    therefore the host key) is the underlying one. */
                 if (self->sym->find_type_alias(self->lex->tok_cstr()) >= 0) {
-                    char etext[MAX_TEXT];
-                    if (self->sym->expand_type_alias(self->lex->tok_cstr(), etext, sizeof etext) != 0)
+                    const char *etext;
+                    if (self->sym->expand_type_alias_text(self->lex->tok_cstr(), &etext) != 0)
                         return self->sup->fail(self->sym->last_error());
                     if (self->type_append(out, cap, &n, etext) != 0) return -1;
                     self->sup->lex_next();
@@ -704,9 +704,12 @@ impl ExprTypeParse for Expr {
             save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
             self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("*")) {
-                char plist[MAX_TEXT];
+                /* S1a-0 C2p-4: the signature scratch is built as interned pool
+                   texts, so a 2000-byte parameter type inside `(*)(...)` is not
+                   cut at a 160-byte local. */
+                const char *plist = "";
                 char dname[MAX_TEXT];
-                char fdims[MAX_TEXT];
+                const char *fdims = "";
                 int pn;
                 self->sup->lex_next();
                 /* `int (**f)(int)` and `int (*(*f)(void))(int)` put a second
@@ -724,36 +727,34 @@ impl ExprTypeParse for Expr {
                 self->sup->lex_next();
                 /* dimensions sit inside the declarator, before the `)`: a
                    function-pointer array (`int (*tbl[2])(int)`) (D-5) */
-                fdims[0] = 0;
                 while (self->lex->tok == T_PUNCT && self->lex->tok_is("[")) {
-                    char dim[MAX_TEXT];
-                    char cur[MAX_TEXT];
+                    const char *dim;
                     int unsized;
                     unsized = 0;
                     self->sup->lex_next();
                     if (self->lex->tok == T_NUM) {
-                        snprintf(dim, sizeof dim, "[%ld]", self->lex->toknum);
+                        dim = runtime::text::ct_internf("[%ld]", self->lex->toknum);
                     } else if (self->lex->tok == T_ID) {
-                        snprintf(dim, sizeof dim, "[%.*s]", self->lex->tokstr.len, self->lex->tokstr.ptr);
+                        dim = runtime::text::ct_internf("[%.*s]", self->lex->tokstr.len,
+                                                        self->lex->tokstr.ptr);
                     } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("]")) {
-                        snprintf(dim, sizeof dim, "[]");
+                        dim = "[]";
                         unsized = 1;
                     } else {
                         return self->sup->fail("expected an array length");
                     }
+                    if (!dim) return self->sup->fail("out of memory");
                     if (!unsized) self->sup->lex_next();
                     if (self->sup->expect("]") != 0) return -1;
-                    if (snprintf(cur, sizeof cur, "%s%s", fdims, dim) >= MAX_TEXT)
-                        return self->sup->fail("array dimensions are too long");
-                    snprintf(fdims, sizeof fdims, "%s", cur);
+                    fdims = runtime::text::ct_intern_join(fdims, dim);
+                    if (!fdims) return self->sup->fail("out of memory");
                 }
                 if (self->sup->expect(")") != 0) return -1;
                 if (self->sup->expect("(") != 0) return -1;
                 pn = 0;
-                plist[0] = 0;
                 if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
                     for (;;) {
-                        char pt[MAX_TEXT];
+                        const char *pt;
                         const char *joiner;
                         /* A variadic tail belongs to the signature like any
                            other parameter (`int (*log)(const char *, ...)`), so
@@ -762,22 +763,20 @@ impl ExprTypeParse for Expr {
                         if (self->lex->tok == T_PUNCT && self->lex->tok_is("...")) {
                             if (pn == 0 || strcmp(plist, "void") == 0)
                                 return self->sup->fail("a variadic function pointer needs a named parameter before '...'");
-                            if (pn + 6 > MAX_TEXT)
-                                return self->sup->fail("a function-pointer signature is too long");
-                            snprintf(plist + pn, (size_t)(MAX_TEXT - pn), "%s", ", ...");
-                            pn += 5;
+                            plist = runtime::text::ct_intern_join(plist, ", ...");
+                            if (!plist) return self->sup->fail("out of memory");
                             self->sup->lex_next();
                             break;
                         }
-                        if (self->parse_type(pt, sizeof pt) != 0) return -1;
+                        if (self->parse_type_text(&pt) != 0) return -1;
                         if (self->fnptr_state)
                             return self->sup->fail("nested function pointers are not supported");
                         if (self->lex->tok == T_ID) self->sup->lex_next();
                         joiner = (pn > 0) ? ", " : "";
-                        if (pn + (int)strlen(joiner) + (int)strlen(pt) + 6 > MAX_TEXT)
-                            return self->sup->fail("a function-pointer signature is too long");
-                        snprintf(plist + pn, (size_t)(MAX_TEXT - pn), "%s%s", joiner, pt);
-                        pn += (int)(strlen(joiner) + strlen(pt));
+                        plist = runtime::text::ct_intern_join(plist, joiner);
+                        if (plist) plist = runtime::text::ct_intern_join(plist, pt);
+                        if (!plist) return self->sup->fail("out of memory");
+                        pn++;
                         if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                             self->sup->lex_next();
                             continue;
@@ -786,10 +785,10 @@ impl ExprTypeParse for Expr {
                     }
                 }
                 if (self->sup->expect(")") != 0) return -1;
-                if (pn == 0) snprintf(plist, sizeof plist, "%s", "void");
+                if (pn == 0) plist = "void";
                 {
-                    char sig[MAX_TEXT];
-                    snprintf(sig, sizeof sig, "(*)(%s)", plist);
+                    const char *sig = runtime::text::ct_internf("(*)(%s)", plist);
+                    if (!sig) return self->sup->fail("out of memory");
                     if (self->type_append(out, cap, &n, sig) != 0) return -1;
                 }
                 snprintf(self->fnptr_name, MAX_TEXT, "%s", dname);

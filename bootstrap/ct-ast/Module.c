@@ -809,7 +809,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     _self->sym->alias_decl = 0;
     _self->p->ns_decl = "";
     _self->sym->self_mode = 0;
-    _self->sym->ret_type[0] = 0;
+    _self->sym->ret_type = "";
     _self->p->cur_func = "";
     _self->p->nparams = 0;
     for (i = 0; i < _self->units[u].ndep; i++) {
@@ -1947,7 +1947,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     _self->p->scan_only = 0;
     _self->p->nparams = 0;
     _self->sym->self_mode = 0;
-    _self->sym->ret_type[0] = 0;
+    _self->sym->ret_type = "";
     _self->sym->ns = "";
     _self->sym->nalias = 0;
     _self->sym->ntalias = 0;

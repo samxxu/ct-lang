@@ -186,7 +186,7 @@ impl StmtMatch for Stmt {
         char tname[MAX_TEXT];
         char aname[MAX_TEXT];
         char rn[MAX_TEXT];
-        char vname[MAX_TEXT];
+        const char *vname;
         char msg[3 * MAX_TEXT];
         struct Adt *adts;
         int nadts;
@@ -305,7 +305,9 @@ impl StmtMatch for Stmt {
                     return self->sup->fail("expected '.' after the ADT name");
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a variant name");
-                self->lex->tok_copy(vname, sizeof vname);
+                vname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+                if (!vname) return self->sup->fail("out of memory");
                 v = frontend::sym::ct_adt_variant(adt, vname);
                 if (v < 0) {
                     snprintf(msg, sizeof msg, "unknown variant '%s' of ADT '%s'",
@@ -517,7 +519,7 @@ impl StmtMatch for Stmt {
         char tname[MAX_TEXT];
         char aname[MAX_TEXT];
         char rn[MAX_TEXT];
-        char vname[MAX_TEXT];
+        const char *vname;
         char msg[3 * MAX_TEXT];
         char rtype[MAX_TEXT];
         char rkey[MAX_TEXT];
@@ -632,7 +634,9 @@ impl StmtMatch for Stmt {
                     return self->sup->fail("expected '.' after the ADT name");
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a variant name");
-                self->lex->tok_copy(vname, sizeof vname);
+                vname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+                if (!vname) return self->sup->fail("out of memory");
                 v = frontend::sym::ct_adt_variant(adt, vname);
                 if (v < 0) {
                     snprintf(msg, sizeof msg, "unknown variant '%s' of ADT '%s'",

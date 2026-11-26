@@ -168,7 +168,7 @@ impl ExprCallCheck for Expr {
         while (cur > 0 && k < np) {
             skip = 0;
             if (fi >= 0) ft = self->sym->funcs[fi].ptype[k];
-            else ft = self->sym->traits[ti].m[mi].ptype + (k) * MAX_TEXT;
+            else ft = self->sym->traits[ti].m[mi].ptype[k];
             /* an array parameter is a pointer in disguise: the dims sit in
                `pdim` (a function) or ride in the spelling (a trait method) */
             if (fi >= 0 && (self->sym->funcs[fi].pdim[k])[0]) skip = 1;

@@ -804,7 +804,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_trait_range(void *self
         for (m = 0; m < _self->sym->traits[t].nm; m++) {
             fprintf(_self->out, "    %s (*%s)(void *", _self->sym->traits[t].m[m].ret, _self->sym->traits[t].m[m].name);
             for (k = 0; k < _self->sym->traits[t].m[m].nparams; k++) {
-                fprintf(_self->out, ", %s", (_self->sym->traits[t].m[m].ptype + (k * MAX_TEXT)));
+                fprintf(_self->out, ", %s", _self->sym->traits[t].m[m].ptype[k]);
                 if (((_self->sym->traits[t].m[m].pann[k] == 2) || (_self->sym->traits[t].m[m].pann[k] == 3))) {
                     fputs(" *", _self->out);
                 }
@@ -1336,13 +1336,13 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_maps(void *self, int u
                 fputs(", ", _self->out);
                 if (((sig->pann[k] == 2) || (sig->pann[k] == 3))) {
                     const char * pbuf;
-                    pbuf = tool_sh_ct_scratch_fmt("%s *", (sig->ptype + (k * MAX_TEXT)));
+                    pbuf = tool_sh_ct_scratch_fmt("%s *", sig->ptype[k]);
                     if (_self->__backend_emit_emitops_vptr->emit_type_name(_self, pbuf, b->params[k]) != 0) {
                         return (-1);
                     }
                 }
                 else {
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name(_self, (sig->ptype + (k * MAX_TEXT)), b->params[k]) != 0) {
+                    if (_self->__backend_emit_emitops_vptr->emit_type_name(_self, sig->ptype[k], b->params[k]) != 0) {
                         return (-1);
                     }
                 }
@@ -5354,7 +5354,7 @@ static int map_param_type(struct backend_emit_Emitter * e, struct frontend_modul
     if (((k < 0) || (k >= e->sym->traits[b->ti].m[b->mi].nparams))) {
         return (-1);
     }
-    snprintf(out, MAX_TEXT, "%s", (e->sym->traits[b->ti].m[b->mi].ptype + (k * MAX_TEXT)));
+    snprintf(out, MAX_TEXT, "%s", e->sym->traits[b->ti].m[b->mi].ptype[k]);
     return 0;
 }
 static const char * map_copy_brackets(struct backend_emit_Emitter * e, const char * s) {
@@ -8912,8 +8912,8 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         return emit_recipe(self, (&(*self->maps)[found]), (&(*self->maps)[found].b[bind]), (-1), self->arena->nodes[n].b, n);
     }
     if (self->arena->nodes[n].aux == 12) {
-        char rt[MAX_TEXT];
-        char tg[MAX_TEXT];
+        const char * rt = self->arena->nodes[n].text;
+        const char * tg = self->arena->nodes[n].text4;
         char rk[MAX_TEXT];
         char tk[MAX_TEXT];
         char hk[MAX_TEXT];
@@ -8922,9 +8922,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         int mi;
         int cand = (-1);
         int cand2 = (-1);
-        snprintf(rt, sizeof(rt), "%s", self->arena->nodes[n].text);
-        snprintf(tg, sizeof(tg), "%s", self->arena->nodes[n].text4);
-        if (((!rt[0]) || (!tg[0]))) {
+        if (((((!rt) || (!rt[0])) || (!tg)) || (!tg[0]))) {
             return self->__backend_emit_emitops_vptr->fail_from(self, n, "a map binding conversion lost its pair");
         }
         backend_emit_map_bind_key(rt, rk, MAX_TEXT);
@@ -9104,7 +9102,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
                 }
                 else {
                     if (((bm2 >= 0) && (ai < self->sym->traits[bt2].m[bm2].nparams))) {
-                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, (self->sym->traits[bt2].m[bm2].ptype + (ai * MAX_TEXT)), c2) != 0) {
+                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->sym->traits[bt2].m[bm2].ptype[ai], c2) != 0) {
                             return (-1);
                         }
                     }
@@ -9435,7 +9433,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
                 }
                 else {
                     if (((mm2 >= 0) && (ai2 < self->sym->traits[tm2].m[mm2].nparams))) {
-                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, (self->sym->traits[tm2].m[mm2].ptype + (ai2 * MAX_TEXT)), c2) != 0) {
+                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->sym->traits[tm2].m[mm2].ptype[ai2], c2) != 0) {
                             return (-1);
                         }
                     }

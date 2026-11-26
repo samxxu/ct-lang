@@ -1627,7 +1627,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return NO_NODE;
     }
-    snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret);
+    _self->sym->ret_type = ret;
     _self->cur_func = name;
     _self->mem->leak_active = 1;
     _self->mem->leak_frame = (_self->sym->nscope + 1);
@@ -1659,7 +1659,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     _self->mem->leak_active = 0;
     _self->mem->leak_frame = (-1);
     _self->cur_func = "";
-    _self->sym->ret_type[0] = 0;
+    _self->sym->ret_type = "";
     if (b < 0) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
@@ -2915,17 +2915,20 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
                 int fld;
                 int fline;
                 int fcol;
-                char ftype[MAX_TEXT];
-                char fname[MAX_TEXT];
+                const char * ftype;
+                const char * fname;
                 fline = _self->lex->tokline;
                 fcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ftype, sizeof(ftype)) != 0) {
+                if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ftype)) != 0) {
                     return (-1);
                 }
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a payload field name");
                 }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, fname, sizeof(fname));
+                fname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+                if ((!fname)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "["))) {
                     return tool_diag_ct_sem_error(fline, fcol, "an ADT payload field cannot be an array", _self->mem->path);
@@ -2937,14 +2940,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
                 if (fld < 0) {
                     return (-1);
                 }
-                _self->arena->nodes[fld].text = runtime_text_ct_intern(ftype);
-                if ((!_self->arena->nodes[fld].text)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                _self->arena->nodes[fld].text2 = runtime_text_ct_intern(fname);
-                if ((!_self->arena->nodes[fld].text2)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
+                _self->arena->nodes[fld].text = ftype;
+                _self->arena->nodes[fld].text2 = fname;
                 _self->arena->nodes[fld].line = fline;
                 _self->arena->nodes[fld].num = fcol;
                 if (_self->arena->nodes[tn].a < 0) {
@@ -3463,8 +3460,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     char name[MAX_TEXT];
     char qname[MAX_TEXT];
     const char * ret;
-    char ptype[MAX_TEXT];
-    char pname[MAX_TEXT];
+    const char * ptype;
+    const char * pname;
     char * edge;
     (void)(_self);
     trait_line = _self->lex->tokline;
@@ -3718,14 +3715,17 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
                     }
                 }
                 _self->sup->map_sig = _self->unit_is_map;
-                rty = _self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ptype, sizeof(ptype));
+                rty = _self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ptype));
                 _self->sup->map_sig = 0;
                 if (rty != 0) {
                     return (-1);
                 }
-                pname[0] = 0;
+                pname = "";
                 if (_self->lex->tok == T_ID) {
-                    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, pname, sizeof(pname));
+                    pname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+                    if ((!pname)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
                     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 }
 {
@@ -3734,19 +3734,16 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
                     if (sp < 0) {
                         return (-1);
                     }
-                    _self->arena->nodes[sp].text = runtime_text_ct_intern(ptype);
-                    if ((!_self->arena->nodes[sp].text)) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                    }
-                    _self->arena->nodes[sp].text2 = runtime_text_ct_intern(pname);
-                    if ((!_self->arena->nodes[sp].text2)) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                    }
+                    _self->arena->nodes[sp].text = ptype;
+                    _self->arena->nodes[sp].text2 = pname;
                     if (_self->ex->__frontend_parse_exprstatictype_vptr->parse_array_dims(_self->ex, sp) != 0) {
                         return (-1);
                     }
                     if (_self->arena->nodes[sp].text3[0]) {
-                        snprintf((ptype + strlen(ptype)), (sizeof(ptype) - strlen(ptype)), "%s", _self->arena->nodes[sp].text3);
+                        ptype = runtime_text_ct_intern_join(ptype, _self->arena->nodes[sp].text3);
+                        if ((!ptype)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        }
                     }
                     _self->arena->nodes[sp].aux = (seen_borrow ? 1 : (seen_ref ? 2 : (seen_out ? 3 : 0)));
                     if (((seen_borrow || seen_ref) || seen_out)) {
@@ -3769,7 +3766,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
                 if (_self->sym->__frontend_sym_symbolops_vptr->ensure_meth_param_capacity(_self->sym, ti, mi, (np + 1)) != 0) {
                     return (-1);
                 }
-                snprintf((_self->sym->traits[ti].m[mi].ptype + ((size_t)(np) * MAX_TEXT)), MAX_TEXT, "%s", ptype);
+                _self->sym->traits[ti].m[mi].ptype[np] = ptype;
                 _self->sym->traits[ti].m[mi].pann[np] = (seen_ref ? 2 : (seen_out ? 3 : 0));
                 np++;
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
@@ -4115,7 +4112,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
                 else {
                     int pk = 0;
                     for (k2 = params; k2 > 0; k2 = _self->arena->nodes[k2].next) {
-                        const char * ft = (_self->sym->traits[ti].m[tm_i].ptype + (pk * MAX_TEXT));
+                        const char * ft = _self->sym->traits[ti].m[tm_i].ptype[pk];
                         if ((((!strchr(ft, '[')) && (!_self->arena->nodes[k2].text3[0])) && (_self->ex->__frontend_parse_exprclosure_vptr->decl_type_compat(_self->ex, ft, _self->arena->nodes[k2].text) == 1))) {
                             wmsg = runtime_text_ct_internf("parameter %d type '%s' does not match the trait's '%s'", (pk + 1), _self->arena->nodes[k2].text, ft);
                             if ((!wmsg)) {
@@ -4144,9 +4141,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
                 }
             }
         }
-        if (snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret) >= (int)(sizeof(_self->sym->ret_type))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "return type is too long");
-        }
+        _self->sym->ret_type = ret;
         _self->cur_func = runtime_text_ct_internf("%s_%s_%s", _self->sym->structs[si].name, rtrait, mname);
         if ((!_self->cur_func)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -4160,7 +4155,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         _self->mem->leak_frame = (-1);
         _self->mem->leak_impl = 0;
         _self->cur_func = "";
-        _self->sym->ret_type[0] = 0;
+        _self->sym->ret_type = "";
         if (body < 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
@@ -4377,9 +4372,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
             }
             free(pa);
         }
-        if (snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret) >= (int)(sizeof(_self->sym->ret_type))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "return type is too long");
-        }
+        _self->sym->ret_type = ret;
         _self->cur_func = runtime_text_ct_internf("%s_%s", rname, mname);
         if ((!_self->cur_func)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -4393,7 +4386,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
         _self->mem->leak_frame = (-1);
         _self->mem->leak_impl = 0;
         _self->cur_func = "";
-        _self->sym->ret_type[0] = 0;
+        _self->sym->ret_type = "";
         if (body < 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
@@ -4814,9 +4807,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
             }
             free(pa);
         }
-        if (snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret) >= (int)(sizeof(_self->sym->ret_type))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "return type is too long");
-        }
+        _self->sym->ret_type = ret;
         _self->cur_func = runtime_text_ct_internf("%s_%s", tmpl, mname);
         if ((!_self->cur_func)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -4830,7 +4821,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         _self->mem->leak_frame = (-1);
         _self->mem->leak_impl = 0;
         _self->cur_func = "";
-        _self->sym->ret_type[0] = 0;
+        _self->sym->ret_type = "";
         if (body < 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
@@ -5022,7 +5013,7 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
     int body;
     int pi;
     char save_trait[MAX_TEXT];
-    char save_ret[MAX_TEXT];
+    const char * save_ret;
     (void)(self);
     if (self->sup->__frontend_parse_supportops_vptr->push_scope(self->sup) != 0) {
         return (-1);
@@ -5068,8 +5059,8 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
         return (-1);
     }
     snprintf(save_trait, sizeof(save_trait), "%s", self->sym->trait_default);
-    snprintf(save_ret, sizeof(save_ret), "%s", self->sym->ret_type);
-    snprintf(self->sym->ret_type, sizeof(self->sym->ret_type), "%s", ret);
+    save_ret = self->sym->ret_type;
+    self->sym->ret_type = ret;
     snprintf(self->sym->trait_default, sizeof(self->sym->trait_default), "%s", self->sym->traits[ti].name);
     self->mem->leak_active = 1;
     self->mem->leak_frame = (self->sym->nscope + 1);
@@ -5079,7 +5070,7 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
     self->mem->leak_active = 0;
     self->mem->leak_frame = (-1);
     self->mem->leak_impl = 0;
-    snprintf(self->sym->ret_type, sizeof(self->sym->ret_type), "%s", save_ret);
+    self->sym->ret_type = save_ret;
     snprintf(self->sym->trait_default, sizeof(self->sym->trait_default), "%s", save_trait);
     self->sup->__frontend_parse_supportops_vptr->pop_scope(self->sup);
     if (body < 0) {

@@ -276,7 +276,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
     char tname[MAX_TEXT];
     char aname[MAX_TEXT];
     char rn[MAX_TEXT];
-    char vname[MAX_TEXT];
+    const char * vname;
     char msg[3 * MAX_TEXT];
     struct frontend_sym_Adt * adts;
     int nadts;
@@ -426,7 +426,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a variant name");
             }
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, vname, sizeof(vname));
+            vname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!vname)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             v = frontend_sym_ct_adt_variant(adt, vname);
             if (v < 0) {
                 snprintf(msg, sizeof(msg), "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
@@ -718,7 +721,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     char tname[MAX_TEXT];
     char aname[MAX_TEXT];
     char rn[MAX_TEXT];
-    char vname[MAX_TEXT];
+    const char * vname;
     char msg[3 * MAX_TEXT];
     char rtype[MAX_TEXT];
     char rkey[MAX_TEXT];
@@ -859,7 +862,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a variant name");
             }
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, vname, sizeof(vname));
+            vname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!vname)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             v = frontend_sym_ct_adt_variant(adt, vname);
             if (v < 0) {
                 snprintf(msg, sizeof(msg), "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);

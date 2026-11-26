@@ -1246,7 +1246,7 @@ impl ModuleOps for Module {
         self->sym->alias_decl = 0;
         self->p->ns_decl = "";
         self->sym->self_mode = 0;
-        self->sym->ret_type[0] = 0;
+        self->sym->ret_type = "";
         self->p->cur_func = "";
         self->p->nparams = 0;
         /* 2a.2: an imported unit's `pub` global is declared `extern` in that
@@ -2343,7 +2343,7 @@ impl ModuleOps for Module {
         self->p->scan_only = 0;
         self->p->nparams = 0;
         self->sym->self_mode = 0;
-        self->sym->ret_type[0] = 0;
+        self->sym->ret_type = "";
         self->sym->ns = "";
         self->sym->nalias = 0;
         self->sym->ntalias = 0;

@@ -325,7 +325,7 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
 {
     int p, body, pi;
     char save_trait[MAX_TEXT];
-    char save_ret[MAX_TEXT];
+    const char *save_ret;
     (void)self;
 
     if (self->sup->push_scope() != 0) return -1;
@@ -380,8 +380,8 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
         return -1;
     }
     snprintf(save_trait, sizeof save_trait, "%s", self->sym->trait_default);
-    snprintf(save_ret, sizeof save_ret, "%s", self->sym->ret_type);
-    snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
+    save_ret = self->sym->ret_type;
+    self->sym->ret_type = ret;
     snprintf(self->sym->trait_default, sizeof self->sym->trait_default, "%s",
              self->sym->traits[ti].name);
     self->mem->leak_active = 1;
@@ -392,7 +392,7 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
     self->mem->leak_active = 0;
     self->mem->leak_frame = -1;
     self->mem->leak_impl = 0;
-    snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", save_ret);
+    self->sym->ret_type = save_ret;
     snprintf(self->sym->trait_default, sizeof self->sym->trait_default, "%s", save_trait);
     self->sup->pop_scope();
     if (body < 0) return -1;
@@ -2102,7 +2102,7 @@ impl ParseOps for Parser {
             self->sup->pop_scope();
             return NO_NODE;
         }
-        snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
+        self->sym->ret_type = ret;
         self->cur_func = name;
         /* the body is the leak analysis window; its own scope is the frame a
            deeper return counts as conditional against */
@@ -2132,7 +2132,7 @@ impl ParseOps for Parser {
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
         self->cur_func = "";
-        self->sym->ret_type[0] = 0;
+        self->sym->ret_type = "";
         if (b < 0) {
             self->sup->pop_scope();
             return -1;
@@ -3235,14 +3235,16 @@ impl ParseOps for Parser {
                 has_payload = 1;
                 while (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
                     int fld, fline, fcol;
-                    char ftype[MAX_TEXT];
-                    char fname[MAX_TEXT];
+                    const char *ftype;
+                    const char *fname;
                     fline = self->lex->tokline;
                     fcol = self->lex->tokstart - self->lex->lstart + 1;
-                    if (self->ex->parse_type(ftype, sizeof ftype) != 0) return -1;
+                    if (self->ex->parse_type_text(&ftype) != 0) return -1;
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a payload field name");
-                    self->lex->tok_copy(fname, sizeof fname);
+                    fname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                         self->lex->tokstr.len);
+                    if (!fname) return self->sup->fail("out of memory");
                     self->sup->lex_next();
                     if (self->lex->tok == T_PUNCT && self->lex->tok_is("["))
                         return tool::diag::ct_sem_error(fline, fcol,
@@ -3252,10 +3254,8 @@ impl ParseOps for Parser {
                             "an ADT payload field cannot have type 'void'", self->mem->path);
                     fld = self->sup->new_node(N_ADTFIELD);
                     if (fld < 0) return -1;
-                    self->arena->nodes[fld].text = runtime::text::ct_intern(ftype);
-                    if (!self->arena->nodes[fld].text) return self->sup->fail("out of memory");
-                    self->arena->nodes[fld].text2 = runtime::text::ct_intern(fname);
-                    if (!self->arena->nodes[fld].text2) return self->sup->fail("out of memory");
+                    self->arena->nodes[fld].text = ftype;
+                    self->arena->nodes[fld].text2 = fname;
                     self->arena->nodes[fld].line = fline;
                     self->arena->nodes[fld].num = fcol;
                     if (self->arena->nodes[tn].a < 0) self->arena->nodes[tn].a = fld;
@@ -3680,8 +3680,8 @@ impl ParseOps for Parser {
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         const char *ret;
-        char ptype[MAX_TEXT];
-        char pname[MAX_TEXT];
+        const char *ptype;
+        const char *pname;
         char *edge;
         (void)self;
 
@@ -3939,12 +3939,14 @@ impl ParseOps for Parser {
                         self->sup->lex_next();
                     }
                     self->sup->map_sig = self->unit_is_map;
-                    rty = self->ex->parse_type(ptype, sizeof ptype);
+                    rty = self->ex->parse_type_text(&ptype);
                     self->sup->map_sig = 0;
                     if (rty != 0) return -1;
-                    pname[0] = 0;
+                    pname = "";
                     if (self->lex->tok == T_ID) {
-                        self->lex->tok_copy(pname, sizeof pname);
+                        pname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                             self->lex->tokstr.len);
+                        if (!pname) return self->sup->fail("out of memory");
                         self->sup->lex_next();
                     }
                     /* a parameter may be an array (`char a[][N]`): the dims
@@ -3956,14 +3958,14 @@ impl ParseOps for Parser {
                         int sp;
                         sp = self->sup->new_node(N_PARAM);
                         if (sp < 0) return -1;
-                        self->arena->nodes[sp].text = runtime::text::ct_intern(ptype);
-                        if (!self->arena->nodes[sp].text) return self->sup->fail("out of memory");
-                        self->arena->nodes[sp].text2 = runtime::text::ct_intern(pname);
-                        if (!self->arena->nodes[sp].text2) return self->sup->fail("out of memory");
+                        self->arena->nodes[sp].text = ptype;
+                        self->arena->nodes[sp].text2 = pname;
                         if (self->ex->parse_array_dims(sp) != 0) return -1;
-                        if (self->arena->nodes[sp].text3[0])
-                            snprintf(ptype + strlen(ptype),
-                                     sizeof ptype - strlen(ptype), "%s", self->arena->nodes[sp].text3);
+                        if (self->arena->nodes[sp].text3[0]) {
+                            ptype = runtime::text::ct_intern_join(
+                                ptype, self->arena->nodes[sp].text3);
+                            if (!ptype) return self->sup->fail("out of memory");
+                        }
                         /* `aux` carries the annotation to the default body,
                            which is where the parameter becomes a variable:
                            1 = borrow, 2 = ref, 3 = out. `line` keeps the
@@ -3984,8 +3986,7 @@ impl ParseOps for Parser {
                     }
                     if (self->sym->ensure_meth_param_capacity(ti, mi, np + 1) != 0)
                         return -1;
-                    snprintf(self->sym->traits[ti].m[mi].ptype + (size_t)np * MAX_TEXT,
-                             MAX_TEXT, "%s", ptype);
+                    self->sym->traits[ti].m[mi].ptype[np] = ptype;
                     self->sym->traits[ti].m[mi].pann[np] =
                         seen_ref ? 2 : (seen_out ? 3 : 0);
                     np++;
@@ -4299,7 +4300,7 @@ impl ParseOps for Parser {
                        stays unknown; the first mismatching position is enough. */
                     int pk = 0;
                     for (k2 = params; k2 > 0; k2 = self->arena->nodes[k2].next) {
-                        const char *ft = self->sym->traits[ti].m[tm_i].ptype + (pk) * MAX_TEXT;
+                        const char *ft = self->sym->traits[ti].m[tm_i].ptype[pk];
                         if (!strchr(ft, '[') && !self->arena->nodes[k2].text3[0]
                             && self->ex->decl_type_compat(ft, self->arena->nodes[k2].text) == 1) {
                             wmsg = runtime::text::ct_internf(
@@ -4340,9 +4341,7 @@ impl ParseOps for Parser {
                     }
                 }
             }
-            if (snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret)
-                >= (int)sizeof self->sym->ret_type)
-                return self->sup->fail("return type is too long");
+            self->sym->ret_type = ret;
             self->cur_func = runtime::text::ct_internf("%s_%s_%s",
                      self->sym->structs[si].name, rtrait, mname);
             if (!self->cur_func) return self->sup->fail("out of memory");
@@ -4357,7 +4356,7 @@ impl ParseOps for Parser {
             self->mem->leak_frame = -1;
             self->mem->leak_impl = 0;
             self->cur_func = "";
-            self->sym->ret_type[0] = 0;
+            self->sym->ret_type = "";
             if (body < 0) {
                 self->sup->pop_scope();
                 return -1;
@@ -4554,9 +4553,7 @@ impl ParseOps for Parser {
                 }
                 free(pa);
             }
-            if (snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret)
-                >= (int)sizeof self->sym->ret_type)
-                return self->sup->fail("return type is too long");
+            self->sym->ret_type = ret;
             self->cur_func = runtime::text::ct_internf("%s_%s", rname, mname);
             if (!self->cur_func) return self->sup->fail("out of memory");
             self->mem->leak_active = 1;
@@ -4568,7 +4565,7 @@ impl ParseOps for Parser {
             self->mem->leak_frame = -1;
             self->mem->leak_impl = 0;
             self->cur_func = "";
-            self->sym->ret_type[0] = 0;
+            self->sym->ret_type = "";
             if (body < 0) {
                 self->sup->pop_scope();
                 return -1;
@@ -4959,9 +4956,7 @@ impl ParseOps for Parser {
                 }
                 free(pa);
             }
-            if (snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret)
-                >= (int)sizeof self->sym->ret_type)
-                return self->sup->fail("return type is too long");
+            self->sym->ret_type = ret;
             self->cur_func = runtime::text::ct_internf("%s_%s", tmpl, mname);
             if (!self->cur_func) return self->sup->fail("out of memory");
             self->mem->leak_active = 1;
@@ -4973,7 +4968,7 @@ impl ParseOps for Parser {
             self->mem->leak_frame = -1;
             self->mem->leak_impl = 0;
             self->cur_func = "";
-            self->sym->ret_type[0] = 0;
+            self->sym->ret_type = "";
             if (body < 0) {
                 self->sup->pop_scope();
                 return -1;

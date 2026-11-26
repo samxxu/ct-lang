@@ -245,7 +245,7 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_mismatch(voi
             ft = _self->sym->funcs[fi].ptype[k];
         }
         else {
-            ft = (_self->sym->traits[ti].m[mi].ptype + (k * MAX_TEXT));
+            ft = _self->sym->traits[ti].m[mi].ptype[k];
         }
         if (((fi >= 0) && _self->sym->funcs[fi].pdim[k][0])) {
             skip = 1;

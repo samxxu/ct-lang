@@ -437,7 +437,7 @@ int frontend_parse_bind_conv_call(struct frontend_parse_Expr * self, int recv, c
     return n;
 }
 int frontend_parse_bind_conv_site(struct frontend_parse_Expr * self, int expr, const char * target, int line, int col) {
-    char st[MAX_TEXT];
+    const char * st;
     char sk[MAX_TEXT];
     char tk[MAX_TEXT];
     char ret[MAX_TEXT];
@@ -459,7 +459,7 @@ int frontend_parse_bind_conv_site(struct frontend_parse_Expr * self, int expr, c
     if (strchr(target, '*')) {
         return expr;
     }
-    if (((self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, expr, st, sizeof(st)) != 0) || (!st[0]))) {
+    if (((self->sup->__frontend_parse_supportops_vptr->expr_type_text(self->sup, expr, (&st)) != 0) || (!st[0]))) {
         return expr;
     }
     if (strchr(st, '*')) {

@@ -2246,10 +2246,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
             int ip;
             int rline;
             int rcol;
-            char tt[MAX_TEXT];
+            const char * tt = "";
             char tr[MAX_TEXT];
             ip = 0;
-            tt[0] = 0;
             if (_self->ex->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self->ex, e, _self->arena->nodes[e].line, _self->arena->nodes[e].num) != 0) {
                 return (-1);
             }
@@ -2339,7 +2338,20 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "assignment target is not assignable");
                     }
                     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    if (((((k == N_VAR) && (_self->sup->__frontend_parse_supportops_vptr->var_type(_self->sup, _self->arena->nodes[e].text2, tt, sizeof(tt)) == 0)) || ((((k == N_INDEX) || (k == N_MEMBER)) || (k == N_ARROW)) && (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, e, tt, sizeof(tt)) == 0))) && strstr(tt, "(*"))) {
+                    if (k == N_VAR) {
+                        int ttvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
+                        if (ttvi >= 0) {
+                            tt = _self->sym->vars[ttvi].type;
+                        }
+                    }
+                    else {
+                        if ((((k == N_INDEX) || (k == N_MEMBER)) || (k == N_ARROW))) {
+                            if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&tt)) != 0) {
+                                tt = "";
+                            }
+                        }
+                    }
+                    if (strstr(tt, "(*")) {
                         _self->ex->fnval_ok = 1;
                     }
                     if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")) && ((strncmp(tt, "struct Vec_", 11) == 0) || (strncmp(tt, "Vec_", 4) == 0)))) {

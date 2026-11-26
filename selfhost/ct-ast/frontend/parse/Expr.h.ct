@@ -775,7 +775,7 @@ static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target
    error, never a partial write-back. */
 static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind, int a, int b, const char *retin, int line, int col)
 {
-    char fts[16][MAX_TEXT];
+    const char *fts[16];
     int anns[16];
     char at[MAX_TEXT];
     char ak[MAX_TEXT];
@@ -790,18 +790,18 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
     if (kind == 0 && a >= 0) {
         np = self->sym->funcs[a].nparams;
         for (k = 0; k < np && k < 16; k++) {
-            snprintf(fts[k], MAX_TEXT, "%s", self->sym->funcs[a].ptype[k]);
+            fts[k] = self->sym->funcs[a].ptype[k];
             anns[k] = (int)(unsigned char)self->sym->funcs[a].pann[k];
         }
     } else if (kind == 1 && a >= 0 && b >= 0) {
         np = self->sym->traits[a].m[b].nparams;
         for (k = 0; k < np && k < 16; k++) {
-            snprintf(fts[k], MAX_TEXT, "%s", self->sym->traits[a].m[b].ptype + (k) * MAX_TEXT);
+            fts[k] = self->sym->traits[a].m[b].ptype[k];
             anns[k] = (int)(unsigned char)self->sym->traits[a].m[b].pann[k];
         }
     } else if (kind == 2) {
         for (pi = a; pi > 0 && np < 16; pi = self->arena->nodes[pi].next) {
-            snprintf(fts[np], MAX_TEXT, "%s", self->arena->nodes[pi].text);
+            fts[np] = self->arena->nodes[pi].text;
             anns[np] = (int)(unsigned char)self->arena->nodes[pi].aux;
             np++;
         }
@@ -2423,7 +2423,7 @@ impl ExprOps for Expr {
                                 while (ba > 0 && bai < self->sym->traits[bt].m[bmi].nparams) {
                                     if (check_refout_arg(self, ba,
                                             self->sym->traits[bt].m[bmi].pann[bai],
-                                            self->sym->traits[bt].m[bmi].ptype + (bai) * MAX_TEXT) != 0)
+                                            self->sym->traits[bt].m[bmi].ptype[bai]) != 0)
                                         return -1;
                                     ba = self->arena->nodes[ba].next;
                                     bai++;
@@ -3021,7 +3021,7 @@ impl ExprOps for Expr {
                             int ca;
                             int pair_ok = (mi < self->sym->traits[t].nm
                                            && self->sym->traits[t].m[mi].nparams == 2
-                                           && strstr(self->sym->traits[t].m[mi].ptype + (1) * MAX_TEXT, "void *"));
+                                           && strstr(self->sym->traits[t].m[mi].ptype[1], "void *"));
                             for (ca = args; ca >= 0; ca = self->arena->nodes[ca].next) {
                                 int is_cl = 0, clnode = -1;
                                 if (self->arena->nodes[ca].kind == N_CLOSURE) {
@@ -3036,7 +3036,7 @@ impl ExprOps for Expr {
                                     && mi < self->sym->traits[t].nm) {
                                     if (closure_match(self,
                                             (int)self->arena->nodes[clnode].num,
-                                            self->sym->traits[t].m[mi].ptype + (0) * MAX_TEXT, 1, 1) != 0)
+                                            self->sym->traits[t].m[mi].ptype[0], 1, 1) != 0)
                                         return -1;
                                     continue;
                                 }
@@ -3072,7 +3072,7 @@ impl ExprOps for Expr {
                             while (ma > 0 && mai < self->sym->traits[t].m[mi].nparams) {
                                 if (check_refout_arg(self, ma,
                                         self->sym->traits[t].m[mi].pann[mai],
-                                        self->sym->traits[t].m[mi].ptype + (mai) * MAX_TEXT) != 0)
+                                        self->sym->traits[t].m[mi].ptype[mai]) != 0)
                                     return -1;
                                 ma = self->arena->nodes[ma].next;
                                 mai++;

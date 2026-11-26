@@ -248,7 +248,6 @@ impl StmtLoop for Stmt {
         char msg[MAX_TEXT];
         char t[MAX_TEXT];
         char ct[MAX_TEXT];
-        char ex[MAX_TEXT];
         const char *p;
         int bare;
 
@@ -341,8 +340,15 @@ impl StmtLoop for Stmt {
                 if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
                       || (*p >= '0' && *p <= '9') || *p == '_'))
                     bare = 0;
-            if (bare && self->sym->expand_type_alias(t, ex, sizeof ex) == 0)
-                snprintf(t, sizeof t, "%s", ex);
+            if (bare) {
+                /* S1a-0 C2p-4: the expansion is a pool text; keep it in `t`
+                   only when it fits the diagnostic row, otherwise leave the
+                   bare name for the checks below. */
+                const char *ex;
+                if (self->sym->expand_type_alias_text(t, &ex) == 0
+                    && strlen(ex) < sizeof t)
+                    snprintf(t, sizeof t, "%s", ex);
+            }
             /* `[` is a backstop here: the two checks above already reject
                arrays, but an alias could still expand to a dimensioned type. */
             if (strchr(t, '*') || strchr(t, '[') || strchr(t, '(')
@@ -401,7 +407,7 @@ impl StmtLoop for Stmt {
         int aux, inst, nargs;
         char msg[MAX_TEXT];
         char elem[MAX_TEXT];
-        char ex[MAX_TEXT];
+        const char *ex;
         char tr[MAX_TEXT];
         char iname[MAX_TEXT];
         const char *enc;
@@ -556,7 +562,7 @@ impl StmtLoop for Stmt {
         for (q = elem; *q; q++)
             if (!((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
                   || (*q >= '0' && *q <= '9') || *q == '_')) bare = 0;
-        if (bare && self->sym->expand_type_alias(elem, ex, sizeof ex) == 0
+        if (bare && self->sym->expand_type_alias_text(elem, &ex) == 0
             && strchr(ex, '[')) {
             snprintf(msg, sizeof msg,
                      "foreach does not support multidimensional arrays ('%s')",

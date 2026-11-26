@@ -205,7 +205,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_loop(void *self) {
     char msg[MAX_TEXT];
     char t[MAX_TEXT];
     char ct[MAX_TEXT];
-    char ex[MAX_TEXT];
     const char * p;
     int bare;
     line = _self->lex->tokline;
@@ -282,8 +281,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_loop(void *self) {
                 bare = 0;
             }
         }
-        if ((bare && (_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias(_self->sym, t, ex, sizeof(ex)) == 0))) {
-            snprintf(t, sizeof(t), "%s", ex);
+        if (bare) {
+            const char * ex;
+            if (((_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias_text(_self->sym, t, (&ex)) == 0) && (strlen(ex) < sizeof(t)))) {
+                snprintf(t, sizeof(t), "%s", ex);
+            }
         }
         if (((((strchr(t, '*') || strchr(t, '[')) || strchr(t, '(')) || (strncmp(t, "struct ", 7) == 0)) || (strncmp(t, "union ", 6) == 0))) {
             snprintf(msg, sizeof(msg), "a loop bound must be an integer (got '%s')", t);
@@ -346,7 +348,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
     int nargs;
     char msg[MAX_TEXT];
     char elem[MAX_TEXT];
-    char ex[MAX_TEXT];
+    const char * ex;
     char tr[MAX_TEXT];
     char iname[MAX_TEXT];
     const char * enc;
@@ -468,7 +470,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
                 bare = 0;
             }
         }
-        if (((bare && (_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias(_self->sym, elem, ex, sizeof(ex)) == 0)) && strchr(ex, '['))) {
+        if (((bare && (_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias_text(_self->sym, elem, (&ex)) == 0)) && strchr(ex, '['))) {
             snprintf(msg, sizeof(msg), "foreach does not support multidimensional arrays ('%s')", _self->sym->vars[vi].name);
             return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
         }

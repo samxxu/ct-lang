@@ -432,8 +432,8 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_rewrite_globals(vo
 
 static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void *self, int line, int col, int unit) {
     struct frontend_parse_MapBuild *_self = (struct frontend_parse_MapBuild *)self;
-    char src[MAX_TEXT];
-    char dst[MAX_TEXT];
+    const char * src;
+    const char * dst;
     char param[MAX_TEXT];
     char callbuf[MAX_TEXT];
     char msg[MAX_TEXT * 2];
@@ -456,7 +456,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if (((_self->lex->tok == T_EOF) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a source type after 'binding'");
     }
-    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, src, sizeof(src)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&src)) != 0) {
         return (-1);
     }
     if (((!src[0]) || (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "->"))))) {
@@ -466,7 +466,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if (((_self->lex->tok == T_EOF) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a target type after '->'");
     }
-    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, dst, sizeof(dst)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&dst)) != 0) {
         return (-1);
     }
     if ((!dst[0])) {
@@ -517,14 +517,8 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if ((!m->vtable)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    m->host_type = runtime_text_ct_intern(src);
-    if ((!m->host_type)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
-    m->bind_dst = runtime_text_ct_intern(dst);
-    if ((!m->bind_dst)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    m->host_type = src;
+    m->bind_dst = dst;
     m->ns_host = 0;
     m->is_static = 1;
     m->type_host = 1;

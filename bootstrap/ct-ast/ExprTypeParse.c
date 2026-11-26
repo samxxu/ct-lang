@@ -575,8 +575,8 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 }
             }
             if (_self->sym->__frontend_sym_typealiasops_vptr->find_type_alias(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) {
-                char etext[MAX_TEXT];
-                if (_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), etext, sizeof(etext)) != 0) {
+                const char * etext;
+                if (_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias_text(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), (&etext)) != 0) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
                 }
                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), etext) != 0) {
@@ -731,9 +731,9 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
         save_text_len = _self->lex->tokstr.len;
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*"))) {
-            char plist[MAX_TEXT];
+            const char * plist = "";
             char dname[MAX_TEXT];
-            char fdims[MAX_TEXT];
+            const char * fdims = "";
             int pn;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (((_self->lex->tok == T_PUNCT) && (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
@@ -744,23 +744,21 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
             }
             _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, dname, sizeof(dname));
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            fdims[0] = 0;
             while (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "["))) {
-                char dim[MAX_TEXT];
-                char cur[MAX_TEXT];
+                const char * dim;
                 int unsized;
                 unsized = 0;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 if (_self->lex->tok == T_NUM) {
-                    snprintf(dim, sizeof(dim), "[%ld]", _self->lex->toknum);
+                    dim = runtime_text_ct_internf("[%ld]", _self->lex->toknum);
                 }
                 else {
                     if (_self->lex->tok == T_ID) {
-                        snprintf(dim, sizeof(dim), "[%.*s]", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
+                        dim = runtime_text_ct_internf("[%.*s]", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
                     }
                     else {
                         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "]"))) {
-                            snprintf(dim, sizeof(dim), "[]");
+                            dim = "[]";
                             unsized = 1;
                         }
                         else {
@@ -768,16 +766,19 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                         }
                     }
                 }
+                if ((!dim)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 if ((!unsized)) {
                     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 }
                 if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "]") != 0) {
                     return (-1);
                 }
-                if (snprintf(cur, sizeof(cur), "%s%s", fdims, dim) >= MAX_TEXT) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "array dimensions are too long");
+                fdims = runtime_text_ct_intern_join(fdims, dim);
+                if ((!fdims)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                snprintf(fdims, sizeof(fdims), "%s", cur);
             }
             if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
                 return (-1);
@@ -786,24 +787,22 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 return (-1);
             }
             pn = 0;
-            plist[0] = 0;
             if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
                 for (; ; ) {
-                    char pt[MAX_TEXT];
+                    const char * pt;
                     const char * joiner;
                     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "..."))) {
                         if (((pn == 0) || (strcmp(plist, "void") == 0))) {
                             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a variadic function pointer needs a named parameter before '...'");
                         }
-                        if ((pn + 6) > MAX_TEXT) {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a function-pointer signature is too long");
+                        plist = runtime_text_ct_intern_join(plist, ", ...");
+                        if ((!plist)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                         }
-                        snprintf((plist + pn), (size_t)((MAX_TEXT - pn)), "%s", ", ...");
-                        pn += 5;
                         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                         break;
                     }
-                    if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, pt, sizeof(pt)) != 0) {
+                    if (_self->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self, (&pt)) != 0) {
                         return (-1);
                     }
                     if (_self->fnptr_state) {
@@ -813,11 +812,14 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                     }
                     joiner = ((pn > 0) ? ", " : "");
-                    if ((((pn + (int)(strlen(joiner))) + (int)(strlen(pt))) + 6) > MAX_TEXT) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a function-pointer signature is too long");
+                    plist = runtime_text_ct_intern_join(plist, joiner);
+                    if (plist) {
+                        plist = runtime_text_ct_intern_join(plist, pt);
                     }
-                    snprintf((plist + pn), (size_t)((MAX_TEXT - pn)), "%s%s", joiner, pt);
-                    pn += (int)((strlen(joiner) + strlen(pt)));
+                    if ((!plist)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
+                    pn++;
                     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
                         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                         continue;
@@ -829,11 +831,13 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 return (-1);
             }
             if (pn == 0) {
-                snprintf(plist, sizeof(plist), "%s", "void");
+                plist = "void";
             }
 {
-                char sig[MAX_TEXT];
-                snprintf(sig, sizeof(sig), "(*)(%s)", plist);
+                const char * sig = runtime_text_ct_internf("(*)(%s)", plist);
+                if ((!sig)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), sig) != 0) {
                     return (-1);
                 }

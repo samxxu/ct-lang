@@ -3025,12 +3025,13 @@ impl StmtOps for Stmt {
         } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("=")) {
             int k, ip;
             int rline, rcol;
-            char tt[MAX_TEXT];
+            /* S1a-0 C2p-4: the assignment target's type is a pool text, so a
+               2000-byte target reaches the binding site whole. */
+            const char *tt = "";
             char tr[MAX_TEXT];
             ip = 0;
             /* `N_DEREF` never fills `tt` below, and `iface_ref_type` reads it:
                an empty string is the "no type derived" case */
-            tt[0] = 0;
             /* PH-53 L53-6: `p?.b = 1` / `p?[i] = x`. */
             if (self->ex->opt_lvalue_check(e, self->arena->nodes[e].line,
                                            self->arena->nodes[e].num) != 0)
@@ -3120,11 +3121,13 @@ impl StmtOps for Stmt {
             self->sup->lex_next();
             /* `p = strcmp;`: when the target is a function pointer, an unknown
                bare name may be a C library function, so it is emitted as-is. */
-            if (((k == N_VAR && self->sup->var_type(self->arena->nodes[e].text2, tt, sizeof tt) == 0)
-                 || ((k == N_INDEX || k == N_MEMBER || k == N_ARROW)
-                     && self->sup->expr_type(e, tt, sizeof tt) == 0))
-                && strstr(tt, "(*"))
-                self->ex->fnval_ok = 1;
+            if (k == N_VAR) {
+                int ttvi = self->sym->find_var(self->arena->nodes[e].text2);
+                if (ttvi >= 0) tt = self->sym->vars[ttvi].type;
+            } else if (k == N_INDEX || k == N_MEMBER || k == N_ARROW) {
+                if (self->sup->expr_type_text(e, &tt) != 0) tt = "";
+            }
+            if (strstr(tt, "(*")) self->ex->fnval_ok = 1;
             /* Phase 31 S11b: a brace list is not an expression, so an
                assignment to a `Vec` gets the dedicated text (L31-11) instead of
                the generic "expected an expression" the primary parser gives.
