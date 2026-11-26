@@ -1504,6 +1504,7 @@ impl StmtMatch for Stmt {
         int ncov, seen_catch, is_ptr, kind, si, ptr;
         int arm_line, arm_col, body;
         int arm_num, arm_bind, guard, arm_wild, arm_catch, ncatch, ngi;
+        int guarded;
         int guarded_catch;
         const char *arm_sig, *arm_conds, *arm_name;
         int a, b;
@@ -1637,20 +1638,8 @@ impl StmtMatch for Stmt {
             }
             if (self->pat_commit() != 0) { free(covered); return -1; }
             arm_bind = g_pat.bind_head;
-            if (self->lex->tok == T_ID && self->lex->tok_is("if")) {
-                self->sup->lex_next();
-                self->ex->assign_ok = 1;
-                self->ex->try_ban++;
-                guard = self->ex->parse_expr();
-                self->ex->try_ban--;
-                self->ex->assign_ok = 0;
-                if (guard < 0) {
-                    self->sup->pop_scope();
-                    free(covered);
-                    return -1;
-                }
-            }
-            if (guard < 0) {
+            guarded = (self->lex->tok == T_ID && self->lex->tok_is("if"));
+            if (!guarded) {
                 if (adt >= 0) {
                     for (ngi = 0; ngi < g_pat.ngrp; ngi++) {
                         int v = pat_group_variant(ngi);
@@ -1680,8 +1669,8 @@ impl StmtMatch for Stmt {
                 }
                 if (arm_catch) guarded_catch = 1;
             }
-            /* The arm body may hold a nested match, whose parser reuses this
-               same scratch. Freeze the arm's facts before the body. */
+            /* Freeze the arm's facts before the guard or body parses a nested
+               match: that parser reuses this same scratch. */
             if (pat_arm_finish(&arm_num) != 0) {
                 self->sup->pop_scope();
                 free(covered);
@@ -1697,6 +1686,19 @@ impl StmtMatch for Stmt {
                 self->sup->pop_scope();
                 free(covered);
                 return self->sup->fail("out of memory");
+            }
+            if (guarded) {
+                self->sup->lex_next();
+                self->ex->assign_ok = 1;
+                self->ex->try_ban++;
+                guard = self->ex->parse_expr();
+                self->ex->try_ban--;
+                self->ex->assign_ok = 0;
+                if (guard < 0) {
+                    self->sup->pop_scope();
+                    free(covered);
+                    return -1;
+                }
             }
             if (self->sup->expect("=>") != 0) {
                 self->sup->pop_scope();
@@ -1856,6 +1858,7 @@ impl StmtMatch for Stmt {
         int body, asg, yexpr, have_type, ytyped, block_form;
         int yline, ycol;
         int arm_wild, arm_catch, guard, ncatch, ngi;
+        int guarded;
         const char *arm_sig, *arm_conds;
         const char *tybuf = "";
         const char *tname = "";
@@ -1967,19 +1970,8 @@ impl StmtMatch for Stmt {
             if (self->pat_commit() != 0) return -1;
             pushed = 1;
             bind_head = g_pat.bind_head;
-            if (self->lex->tok == T_ID && self->lex->tok_is("if")) {
-                self->sup->lex_next();
-                self->ex->assign_ok = 1;
-                self->ex->try_ban++;
-                guard = self->ex->parse_expr();
-                self->ex->try_ban--;
-                self->ex->assign_ok = 0;
-                if (guard < 0) {
-                    self->sup->pop_scope();
-                    return -1;
-                }
-            }
-            if (guard < 0) {
+            guarded = (self->lex->tok == T_ID && self->lex->tok_is("if"));
+            if (!guarded) {
                 for (ngi = 0; ngi < g_pat.ngrp; ngi++) {
                     int v = pat_group_variant(ngi);
                     if (v < 0) continue;
@@ -2002,6 +1994,8 @@ impl StmtMatch for Stmt {
                     if (v >= 0) mention[v] = 1;
                 }
             }
+            /* Freeze the arm's facts before the guard or body parses a nested
+               match: that parser reuses this same scratch. */
             if (pat_arm_finish(&variant) != 0) {
                 self->sup->pop_scope();
                 return -1;
@@ -2011,6 +2005,18 @@ impl StmtMatch for Stmt {
             if (!arm_sig || !arm_conds) {
                 self->sup->pop_scope();
                 return self->sup->fail("out of memory");
+            }
+            if (guarded) {
+                self->sup->lex_next();
+                self->ex->assign_ok = 1;
+                self->ex->try_ban++;
+                guard = self->ex->parse_expr();
+                self->ex->try_ban--;
+                self->ex->assign_ok = 0;
+                if (guard < 0) {
+                    self->sup->pop_scope();
+                    return -1;
+                }
             }
             if (self->sup->expect("=>") != 0) return -1;
             yexpr = -1;
