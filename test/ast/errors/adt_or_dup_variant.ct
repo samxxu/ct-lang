@@ -1,0 +1,10 @@
+enum Shape { Circle(int r), Rect(int w, int h) }
+
+int f(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) | Shape.Circle(r) => { return r; }
+        Shape.Rect(w, h) => { return w * h; }
+    }
+    return 0;
+}

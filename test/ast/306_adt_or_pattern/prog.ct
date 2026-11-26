@@ -1,0 +1,66 @@
+/* 306: S5 or-patterns (v1-PH-2).
+   An `A | B` arm names alternatives at any pattern position. The same name
+   bound from different payloads is one binding (the emitter picks the arm
+   that matched); coverage is counted per alternative, so a cross-variant or
+   can complete the variant list without a `_` fallback. */
+#include <stdio.h>
+
+enum Shape {
+    Circle(int r),
+    Square(int s),
+    Rect(int w, int h),
+}
+
+int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) | Shape.Square(r) => { return r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+    }
+}
+
+int pick(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) | Shape.Square(r) => { return r; }
+        Shape.Rect(w, h) => { return w * h; }
+    }
+}
+
+int expr(Shape s)
+{
+    return match (s) {
+        Shape.Circle(r) | Shape.Square(r) => r,
+        Shape.Rect(w, h) => w * h,
+    };
+}
+
+int small(int n)
+{
+    match (n) {
+        0 | 1 => { return 1; }
+        _ => { return 0; }
+    }
+}
+
+int no_binding(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) | Shape.Square(r) => { return 10; }
+        Shape.Rect(w, h) => { return 20; }
+    }
+}
+
+int main(void)
+{
+    printf("%d %d %d\n", area(Shape.Circle(3)), area(Shape.Square(4)),
+           area(Shape.Rect(2, 5)));
+    printf("%d %d %d\n", pick(Shape.Circle(7)), pick(Shape.Square(8)),
+           pick(Shape.Rect(2, 3)));
+    printf("%d %d %d\n", expr(Shape.Circle(9)), expr(Shape.Square(2)),
+           expr(Shape.Rect(4, 5)));
+    printf("%d %d %d\n", small(0), small(1), small(2));
+    printf("%d %d %d\n", no_binding(Shape.Circle(1)), no_binding(Shape.Square(2)),
+           no_binding(Shape.Rect(1, 1)));
+    return 0;
+}

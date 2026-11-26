@@ -237,6 +237,28 @@ CT
 bad_case "an alias of a non-ADT subject is an error" "$tmp/aliasint.ct" \
     "match needs an ADT, struct, or integer-like value, but 'Num' is not supported" 5
 
+# ---- S5: or-pattern coverage and binding consistency ----------------------
+bad_case "an or-pattern still has to cover every variant" \
+    test/ast/errors/adt_or_missing.ct \
+    "match does not cover variant 'Shape.Rect'" 5
+bad_case "or-pattern alternatives must bind the same names" \
+    test/ast/errors/adt_or_bind_mismatch.ct \
+    "or-pattern alternatives bind different names ('r' is missing)" 6
+bad_case "or-pattern alternatives must bind the same types" \
+    test/ast/errors/adt_or_bind_type.ct \
+    "or-pattern alternatives bind 'n' as different types ('int' and 'char')" 6
+bad_case "two alternatives naming one variant are duplicates" \
+    test/ast/errors/adt_or_dup_variant.ct \
+    "duplicate match arm for variant 'Shape.Circle'" 6
+
+# ---- S5: a guarded arm never counts as coverage ---------------------------
+bad_case "an all-guarded ADT match is not exhaustive" \
+    test/ast/errors/adt_guard_not_exhaust.ct \
+    "a guarded arm does not count as coverage" 5
+bad_case "a guarded wildcard is not a final fallback" \
+    test/ast/errors/adt_guard_wild_not_exhaust.ct \
+    "needs a final unguarded '_ => { … }' arm" 3
+
 # ---- every diagnostic is the only one (no fallback cascade) -----------------
 if [ "$(grep -c 'error:' "$tmp/o")" -gt 2 ]; then
     fail=$((fail + 1)); echo "FAIL p84errors: a rejection cascaded into several errors" >&2

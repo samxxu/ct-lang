@@ -1,0 +1,10 @@
+enum Pair { Num(int n), Ch(char n) }
+
+int f(Pair p)
+{
+    match (p) {
+        Pair.Num(n) | Pair.Ch(n) => { return n; }
+        _ => { return 0; }
+    }
+    return 0;
+}
