@@ -232,6 +232,7 @@ struct frontend_parse_StmtScope;
 struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
+struct frontend_parse_PatCtx;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
@@ -360,6 +361,7 @@ static int type_layout_closure(struct backend_emit_Emitter *, const char *, int)
 static int shell_owned_here(struct backend_emit_Emitter *, int);
 static int shell_preemit(struct backend_emit_Emitter *, int, int);
 static int preemit_adt_payload(struct backend_emit_Emitter *, int);
+static int emit_arm_conds(struct backend_emit_Emitter *, int, int, int *);
 static int fail_unknown_statement(struct backend_emit_Emitter *, int);
 static int em_expr_adtctor(struct backend_emit_Emitter *, int, int);
 static int em_expr_num(struct backend_emit_Emitter *, int, int);
@@ -8179,6 +8181,32 @@ static int emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int
     }
     return 0;
 }
+static int emit_arm_conds(struct backend_emit_Emitter * self, int arm, int k, int * ncond) {
+    const char * enc;
+    (*ncond) = 0;
+    enc = self->arena->nodes[arm].text4;
+    if (((!enc) || (!enc[0]))) {
+        return 0;
+    }
+    while ((*enc)) {
+        const char * eq;
+        const char * semi;
+        eq = strchr(enc, '=');
+        semi = strchr(enc, ';');
+        if ((((!eq) || (!semi)) || (eq > semi))) {
+            return self->__backend_emit_emitops_vptr->fail_from(self, arm, "malformed match pattern test");
+        }
+        fputs(" && (", self->out);
+        fprintf(self->out, "__ct_match%d", k);
+        fwrite(enc, 1, (size_t)((eq - enc)), self->out);
+        fputs(" == ", self->out);
+        fwrite((eq + 1), 1, (size_t)(((semi - eq) - 1)), self->out);
+        fputs(")", self->out);
+        (*ncond)++;
+        enc = (semi + 1);
+    }
+    return 0;
+}
 static int emit_match_arm(struct backend_emit_Emitter * self, int arm, int ind, int k, int ptr) {
     int b;
     int i;
@@ -8190,6 +8218,7 @@ static int emit_match_arm(struct backend_emit_Emitter * self, int arm, int ind, 
     int nadts;
     (void)(adts);
     (void)(nadts);
+    (void)(ptr);
     b = self->arena->nodes[arm].b;
     if (b < 0) {
         return self->__backend_emit_emitops_vptr->fail_from(self, arm, "the match arm has no body");
@@ -8205,7 +8234,21 @@ static int emit_match_arm(struct backend_emit_Emitter * self, int arm, int ind, 
         if (((decl < 0) || (raw < 0))) {
             continue;
         }
-        self->arena->nodes[raw].text = runtime_text_ct_internf("__ct_match%d%su.%s.%s", k, (ptr ? "->" : "."), self->arena->nodes[arm].text2, self->arena->nodes[i].text3);
+{
+            const char * path;
+            path = self->arena->nodes[i].text4;
+            if ((path && (strcmp(path, "*") == 0))) {
+                self->arena->nodes[raw].text = runtime_text_ct_internf("(*__ct_match%d)", k);
+            }
+            else {
+                if ((path && path[0])) {
+                    self->arena->nodes[raw].text = runtime_text_ct_internf("__ct_match%d%s", k, path);
+                }
+                else {
+                    self->arena->nodes[raw].text = runtime_text_ct_internf("__ct_match%d", k);
+                }
+            }
+        }
         if ((!self->arena->nodes[raw].text)) {
             return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
         }
@@ -10839,8 +10882,13 @@ static int match_expr_emit(struct backend_emit_Emitter * self, int n) {
             if ((self->arena->nodes[arm].aux & 1)) {
                 return self->__backend_emit_emitops_vptr->fail_from(self, arm, "a wildcard match arm must be the last arm");
             }
+            int exncond;
             fputs(((idx == 0) ? "if (" : "else if ("), self->out);
-            fprintf(self->out, "__ct_match%d%stag == %d) ", k, (ptr ? "->" : "."), (int)(self->arena->nodes[arm].num));
+            fprintf(self->out, "__ct_match%d%stag == %d", k, (ptr ? "->" : "."), (int)(self->arena->nodes[arm].num));
+            if (emit_arm_conds(self, arm, k, (&exncond)) != 0) {
+                return (-1);
+            }
+            fputs(") ", self->out);
         }
         else {
             if (narm > 1) {
@@ -10865,27 +10913,37 @@ static int em_node_match(struct backend_emit_Emitter * self, int n, int ind, int
     int idx;
     int ptr;
     int tagi;
+    int nonadt;
+    int ncond;
+    int self_deref;
     struct frontend_sym_Adt * adts;
     int nadts;
     adts = frontend_sym_ct_adts((&nadts));
-    tagi = frontend_sym_ct_adt_find(self->arena->nodes[n].text);
-    if ((((!adts) || (tagi < 0)) || (tagi >= nadts))) {
-        return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
+    tagi = (-1);
+    nonadt = (self->arena->nodes[n].aux & 4);
+    if ((!nonadt)) {
+        tagi = frontend_sym_ct_adt_find(self->arena->nodes[n].text);
+        if ((((!adts) || (tagi < 0)) || (tagi >= nadts))) {
+            return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
+        }
     }
     k = self->ntmp;
     self->ntmp++;
-    ptr = self->arena->nodes[n].aux;
+    ptr = (self->arena->nodes[n].aux & 1);
+    self_deref = (((self->sym->self_mode && (self->arena->nodes[n].a >= 0)) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)) && (strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0));
     self->__backend_emit_emitops_vptr->emit_indent(self, ind);
-    fprintf(self->out, "struct %s%s__ct_match%d __attribute__((unused)) = (", adts[tagi].full, (ptr ? " *" : " "), k);
-{
-        int self_deref = (((self->sym->self_mode && (self->arena->nodes[n].a >= 0)) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)) && (strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0));
-        if (self_deref) {
-            fputs("*(_self)", self->out);
-        }
-        else {
-            if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
-                return (-1);
-            }
+    if (nonadt) {
+        fprintf(self->out, "%s%s__ct_match%d __attribute__((unused)) = (", self->arena->nodes[n].text2, (ptr ? " *" : " "), k);
+    }
+    else {
+        fprintf(self->out, "struct %s%s__ct_match%d __attribute__((unused)) = (", adts[tagi].full, (ptr ? " *" : " "), k);
+    }
+    if (self_deref) {
+        fputs("*(_self)", self->out);
+    }
+    else {
+        if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
+            return (-1);
         }
     }
     fputs(");\n", self->out);
@@ -10896,12 +10954,21 @@ static int em_node_match(struct backend_emit_Emitter * self, int n, int ind, int
     idx = 0;
     for (arm = self->arena->nodes[n].b; arm >= 0; (arm = self->arena->nodes[arm].next, idx++)) {
         if (idx < (narm - 1)) {
-            if (self->arena->nodes[arm].aux) {
+            if ((self->arena->nodes[arm].aux & 1)) {
                 return self->__backend_emit_emitops_vptr->fail_from(self, arm, "a wildcard match arm must be the last arm");
             }
             self->__backend_emit_emitops_vptr->emit_indent(self, ind);
             fputs(((idx == 0) ? "if (" : "else if ("), self->out);
-            fprintf(self->out, "__ct_match%d%stag == %d) ", k, (ptr ? "->" : "."), (int)(self->arena->nodes[arm].num));
+            if (((!nonadt) && (self->arena->nodes[arm].num >= 0))) {
+                fprintf(self->out, "__ct_match%d%stag == %d", k, (ptr ? "->" : "."), (int)(self->arena->nodes[arm].num));
+            }
+            else {
+                fputs("1", self->out);
+            }
+            if (emit_arm_conds(self, arm, k, (&ncond)) != 0) {
+                return (-1);
+            }
+            fputs(") ", self->out);
         }
         else {
             if (narm > 1) {

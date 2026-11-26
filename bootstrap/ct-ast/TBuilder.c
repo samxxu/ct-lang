@@ -354,6 +354,7 @@ struct frontend_parse_StmtScope;
 struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
+struct frontend_parse_PatCtx;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
@@ -1849,7 +1850,7 @@ static int tb_stmt_match_arm(struct backend_tir_TBuilder * tb, int n) {
     }
     tb->m->stmts[(sid - 1)].aux = ar->nodes[n].aux;
     tb->m->stmts[(sid - 1)].num = ar->nodes[n].num;
-    tb->m->stmts[(sid - 1)].text2 = runtime_text_ct_intern((ar->nodes[n].text2 ? ar->nodes[n].text2 : ""));
+    tb->m->stmts[(sid - 1)].text2 = runtime_text_ct_intern((ar->nodes[n].text4 ? ar->nodes[n].text4 : ""));
 {
         char bbuf[4096];
         int bn = 0;
@@ -1862,7 +1863,7 @@ static int tb_stmt_match_arm(struct backend_tir_TBuilder * tb, int n) {
             if (bd < 0) {
                 continue;
             }
-            fld = (ar->nodes[bc].text3 ? ar->nodes[bc].text3 : "");
+            fld = (ar->nodes[bc].text4 ? ar->nodes[bc].text4 : "");
             bnm = (ar->nodes[bd].text2 ? ar->nodes[bd].text2 : "");
             bty = (ar->nodes[bd].text ? ar->nodes[bd].text : "");
             if (bn > 0) {
@@ -2176,6 +2177,7 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
             }
             m->stmts[(sid - 1)].aux = ar->nodes[n].aux;
             m->stmts[(sid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->stmts[(sid - 1)].text2 = runtime_text_ct_intern((ar->nodes[n].text2 ? ar->nodes[n].text2 : ""));
             backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
             for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
                 t = tb_stmt_match_arm(tb, c);

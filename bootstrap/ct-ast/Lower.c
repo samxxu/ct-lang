@@ -312,6 +312,7 @@ struct frontend_parse_StmtScope;
 struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
+struct frontend_parse_PatCtx;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
@@ -396,7 +397,8 @@ static int lw_sb_add(struct backend_lir_Lower *, const char *, int, int, const c
 static int lw_block_within(struct backend_lir_Lower *, int, int);
 static int lw_sb_release_stmt(struct backend_lir_Lower *, int, int, int);
 static int lw_one_stmt(struct backend_lir_Lower *, int, int, int *);
-static int lw_match_bind_stmt(struct backend_lir_Lower *, const char *, const char *, const char *, const char *, int);
+static int lw_match_bind_stmt(struct backend_lir_Lower *, const char *, const char *, const char *, int);
+static int lw_conds_put(char * *, int *, int *, const char *);
 static int lw_match_arm_block(struct backend_lir_Lower *, int, int, int, int);
 static int lw_jump_cleanups(struct backend_lir_Lower *, int, int, int, int, int, int *, int *);
 static int lw_return_cleanups(struct backend_lir_Lower *, int, int, int, int, int *, int *);
@@ -410,6 +412,7 @@ static int lw_sb_tail(struct backend_lir_Lower *, int);
 static int lw_lower_func(struct backend_lir_Lower *, int);
 static int lw_copy_scopes(struct backend_lir_Lower *);
 static int lw_lower_slice(struct backend_lir_Lower *, int, int);
+static int lw_pw_conds(const char *, const char *);
 static void lw_ind(int);
 static const char * lw_bin_op(int);
 static const char * lw_assign_op(int);
@@ -1816,17 +1819,35 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
                         return 0;
                     }
                 }
-                for (j = 1; j < t->nkids; j++) {
-                    struct backend_tir_ct_tstmt * arm = (&w->m->stmts[(t->kids[j] - 1)]);
-                    int blk = lw_match_arm_block(w, t->kids[j], temp, 1, 0);
-                    if (blk <= 0) {
-                        lw_abort(w, "L7821");
-                        return 0;
+{
+                    char * cacc;
+                    int clen;
+                    int ccap;
+                    cacc = (char *)(0);
+                    clen = 0;
+                    ccap = 0;
+                    for (j = 1; j < t->nkids; j++) {
+                        struct backend_tir_ct_tstmt * arm = (&w->m->stmts[(t->kids[j] - 1)]);
+                        int blk;
+                        if (lw_conds_put((&cacc), (&clen), (&ccap), arm->text2) != 0) {
+                            free(cacc);
+                            w->hard = 1;
+                            return 0;
+                        }
+                        blk = lw_match_arm_block(w, t->kids[j], temp, 1, 0);
+                        if (blk <= 0) {
+                            free(cacc);
+                            lw_abort(w, "L7821");
+                            return 0;
+                        }
+                        if (((backend_lir_lmod_expr_add_kid(w->l, e, (int)(arm->num)) != 0) || (backend_lir_lmod_expr_add_kid(w->l, e, blk) != 0))) {
+                            free(cacc);
+                            w->hard = 1;
+                            return 0;
+                        }
                     }
-                    if (((backend_lir_lmod_expr_add_kid(w->l, e, (int)(arm->num)) != 0) || (backend_lir_lmod_expr_add_kid(w->l, e, blk) != 0))) {
-                        w->hard = 1;
-                        return 0;
-                    }
+                    w->l->exprs[(e - 1)].extra = runtime_text_ct_intern((cacc ? cacc : ""));
+                    free(cacc);
                 }
                 return e;
             }
@@ -2335,7 +2356,7 @@ static int lw_sb_release_stmt(struct backend_lir_Lower * w, int i, int kind, int
     w->l->stmts[(sid - 1)].name = w->sb_prefix[i];
     return sid;
 }
-static int lw_match_bind_stmt(struct backend_lir_Lower * w, const char * type, const char * name, const char * field, const char * cname, int match_temp) {
+static int lw_match_bind_stmt(struct backend_lir_Lower * w, const char * type, const char * name, const char * path, int match_temp) {
     int sid;
     int k;
     sid = backend_lir_lmod_new_stmt(w->l, LS_MATCHBIND, 0, 0, 0);
@@ -2345,12 +2366,39 @@ static int lw_match_bind_stmt(struct backend_lir_Lower * w, const char * type, c
     }
     w->l->stmts[(sid - 1)].spelling = runtime_text_ct_intern((type ? type : ""));
     w->l->stmts[(sid - 1)].name = runtime_text_ct_intern((name ? name : ""));
-    w->l->stmts[(sid - 1)].member = runtime_text_ct_intern((field ? field : ""));
-    w->l->stmts[(sid - 1)].fname = runtime_text_ct_intern((cname ? cname : ""));
+    w->l->stmts[(sid - 1)].member = runtime_text_ct_intern((path ? path : ""));
+    w->l->stmts[(sid - 1)].fname = "";
     w->l->stmts[(sid - 1)].target = match_temp;
     k = lw_is_string_value(type);
     w->l->stmts[(sid - 1)].aux = k;
     return sid;
+}
+static int lw_conds_put(char * * buf, int * len, int * cap, const char * s) {
+    int n;
+    int need;
+    int ncap;
+    char * grown;
+    n = (int)(strlen((s ? s : "")));
+    need = (((*len) + n) + 2);
+    if (need > (*cap)) {
+        ncap = (((*cap) > 0) ? (*cap) : 128);
+        while (ncap < need) {
+            ncap *= 2;
+        }
+        grown = (char *)(realloc((*buf), (size_t)(ncap)));
+        if ((!grown)) {
+            return (-1);
+        }
+        (*buf) = grown;
+        (*cap) = ncap;
+    }
+    if (n > 0) {
+        memcpy(((*buf) + (*len)), s, (size_t)(n));
+    }
+    (*len) += n;
+    (*buf)[(*len)++] = '\n';
+    (*buf)[(*len)] = 0;
+    return 0;
 }
 static int lw_match_arm_block(struct backend_lir_Lower * w, int arm_tsid, int match_temp, int is_expr, int parent) {
     struct backend_tir_ct_tstmt * arm;
@@ -2436,7 +2484,7 @@ static int lw_match_arm_block(struct backend_lir_Lower * w, int arm_tsid, int ma
             enc++;
         }
 {
-            int bs = lw_match_bind_stmt(w, ty, nm, fl, arm->text2, match_temp);
+            int bs = lw_match_bind_stmt(w, ty, nm, fl, match_temp);
             int ok2 = lw_own_kind(w, ty);
             if (bs <= 0) {
                 if (getenv("CT_LIR_DEBUG")) {
@@ -3530,10 +3578,16 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
             }
         case TS_MATCH:
 {
-                struct backend_tir_ct_tadt * a = lw_adt_row(w, s->text);
+                struct backend_tir_ct_tadt * a;
                 int temp;
                 int j;
-                if ((!a)) {
+                int nonadt;
+                char * cacc;
+                int clen;
+                int ccap;
+                nonadt = (s->aux & 4);
+                a = (nonadt ? (struct backend_tir_ct_tadt *)(0) : lw_adt_row(w, s->text));
+                if (((!nonadt) && (!a))) {
                     lw_abort(w, "L7830");
                     return 0;
                 }
@@ -3552,21 +3606,34 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     return 0;
                 }
                 w->l->stmts[(sid - 1)].expr = e;
-                w->l->stmts[(sid - 1)].name = a->full;
+                w->l->stmts[(sid - 1)].name = (nonadt ? (s->text2 ? s->text2 : "") : a->full);
                 w->l->stmts[(sid - 1)].origin = temp;
                 w->l->stmts[(sid - 1)].aux = s->aux;
+                cacc = (char *)(0);
+                clen = 0;
+                ccap = 0;
                 for (j = 1; j < s->nkids; j++) {
                     struct backend_tir_ct_tstmt * arm = (&w->m->stmts[(s->kids[j] - 1)]);
-                    int blk = lw_match_arm_block(w, s->kids[j], temp, 0, block);
+                    int blk;
+                    if (lw_conds_put((&cacc), (&clen), (&ccap), arm->text2) != 0) {
+                        free(cacc);
+                        w->hard = 1;
+                        return 0;
+                    }
+                    blk = lw_match_arm_block(w, s->kids[j], temp, 0, block);
                     if (blk <= 0) {
+                        free(cacc);
                         lw_abort(w, "L7831");
                         return 0;
                     }
                     if (((backend_lir_lmod_stmt_add_kid(w->l, sid, (int)(arm->num)) != 0) || (backend_lir_lmod_stmt_add_kid(w->l, sid, blk) != 0))) {
+                        free(cacc);
                         w->hard = 1;
                         return 0;
                     }
                 }
+                w->l->stmts[(sid - 1)].spelling = runtime_text_ct_intern((cacc ? cacc : ""));
+                free(cacc);
                 (*out) = sid;
                 return 0;
             }
@@ -4030,6 +4097,25 @@ int backend_lir_ct_lir_build_unit(void * up, int mod_unit, int tmp_base) {
     w->breakcap = 0;
     return 0;
 }
+static int lw_pw_conds(const char * m, const char * seg) {
+    while ((seg && (*seg))) {
+        const char * eq;
+        const char * semi;
+        eq = strchr(seg, '=');
+        semi = strchr(seg, ';');
+        if ((((!eq) || (!semi)) || (eq > semi))) {
+            return (-1);
+        }
+        fputs(" && (", backend_lir_g_lir_out);
+        fputs(m, backend_lir_g_lir_out);
+        fwrite(seg, 1, (size_t)((eq - seg)), backend_lir_g_lir_out);
+        fputs(" == ", backend_lir_g_lir_out);
+        fwrite((eq + 1), 1, (size_t)(((semi - eq) - 1)), backend_lir_g_lir_out);
+        fputs(")", backend_lir_g_lir_out);
+        seg = (semi + 1);
+    }
+    return 0;
+}
 static void lw_ind(int ind) {
     int i;
     for (i = 0; i < ind; i++) {
@@ -4374,6 +4460,7 @@ static int lw_pw_expr(struct backend_lir_Lower * w, int eid, int ctx) {
                 const char * m = backend_lir_lmod_temp_name(w->l, kn, w->tmp_delta);
                 int narm = ((e->nkids - 1) / 2);
                 int j;
+                const char * cs = (e->extra ? e->extra : "");
                 fprintf(backend_lir_g_lir_out, "({ struct %s %s = (", (e->text ? e->text : ""), m);
                 if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
                     return (-1);
@@ -4382,18 +4469,33 @@ static int lw_pw_expr(struct backend_lir_Lower * w, int eid, int ctx) {
                 for (j = 0; j < narm; j++) {
                     int variant = e->kids[(1 + (2 * j))];
                     int blk = e->kids[(2 + (2 * j))];
+                    const char * line_end;
+                    line_end = strchr(cs, '\n');
                     if (j == (narm - 1)) {
                         if (narm > 1) {
                             fputs("else ", backend_lir_g_lir_out);
                         }
                     }
                     else {
+                        char seg[4096];
+                        const char * line = cs;
+                        int sn;
                         fputs(((j == 0) ? "if (" : "else if ("), backend_lir_g_lir_out);
-                        fprintf(backend_lir_g_lir_out, "%s%stag == %d) ", m, (e->op ? "->" : "."), variant);
+                        fprintf(backend_lir_g_lir_out, "%s%stag == %d", m, ((e->op & 1) ? "->" : "."), variant);
+                        sn = 0;
+                        while (((line < (line_end ? line_end : (cs + strlen(cs)))) && (sn < ((int)(sizeof(seg)) - 1)))) {
+                            seg[sn++] = (*line++);
+                        }
+                        seg[sn] = 0;
+                        if (lw_pw_conds(m, seg) != 0) {
+                            return (-1);
+                        }
+                        fputs(") ", backend_lir_g_lir_out);
                     }
                     if (lw_pw_block(w, blk, 0) != 0) {
                         return (-1);
                     }
+                    cs = (line_end ? (line_end + 1) : (cs + strlen(cs)));
                 }
                 fprintf(backend_lir_g_lir_out, "__ct_mres%d; })", k);
                 return 0;
@@ -5087,8 +5189,16 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
                 const char * m = backend_lir_lmod_temp_name(w->l, s->origin, w->tmp_delta);
                 int narm = (s->nkids / 2);
                 int j;
+                int nonadt = (s->aux & 4);
+                int ptr = (s->aux & 1);
+                const char * cs = (s->spelling ? s->spelling : "");
                 lw_ind(ind);
-                fprintf(backend_lir_g_lir_out, "struct %s %s __attribute__((unused)) = (", (s->name ? s->name : ""), m);
+                if (nonadt) {
+                    fprintf(backend_lir_g_lir_out, "%s%s%s __attribute__((unused)) = (", (s->name ? s->name : ""), (ptr ? " *" : " "), m);
+                }
+                else {
+                    fprintf(backend_lir_g_lir_out, "struct %s%s%s __attribute__((unused)) = (", (s->name ? s->name : ""), (ptr ? " *" : " "), m);
+                }
                 if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
                     return (-1);
                 }
@@ -5096,6 +5206,10 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
                 for (j = 0; j < narm; j++) {
                     int variant = s->kids[(2 * j)];
                     int blk = s->kids[((2 * j) + 1)];
+                    const char * line;
+                    const char * line_end;
+                    line = cs;
+                    line_end = strchr(cs, '\n');
                     lw_ind(ind);
                     if (j == (narm - 1)) {
                         if (narm > 1) {
@@ -5104,23 +5218,48 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
                     }
                     else {
                         fputs(((j == 0) ? "if (" : "else if ("), backend_lir_g_lir_out);
-                        fprintf(backend_lir_g_lir_out, "%s%stag == %d) ", m, (s->aux ? "->" : "."), variant);
+                        if (nonadt) {
+                            fputs("1", backend_lir_g_lir_out);
+                        }
+                        else {
+                            fprintf(backend_lir_g_lir_out, "%s%stag == %d", m, (ptr ? "->" : "."), variant);
+                        }
+{
+                            char seg[4096];
+                            int sn;
+                            sn = 0;
+                            while (((line < (line_end ? line_end : (cs + strlen(cs)))) && (sn < ((int)(sizeof(seg)) - 1)))) {
+                                seg[sn++] = (*line++);
+                            }
+                            seg[sn] = 0;
+                            if (lw_pw_conds(m, seg) != 0) {
+                                return (-1);
+                            }
+                        }
+                        fputs(") ", backend_lir_g_lir_out);
                     }
                     if (lw_pw_block(w, blk, ind) != 0) {
                         return (-1);
                     }
+                    cs = (line_end ? (line_end + 1) : (cs + strlen(cs)));
                 }
                 return 0;
             }
         case LS_MATCHBIND:
 {
                 const char * m = backend_lir_lmod_temp_name(w->l, s->target, w->tmp_delta);
+                const char * path = (s->member ? s->member : "");
                 lw_ind(ind);
                 fprintf(backend_lir_g_lir_out, "%s %s __attribute__((unused)) = ", (s->spelling ? s->spelling : "int"), (s->name ? s->name : ""));
                 if (((s->aux == 1) || (s->aux == 2))) {
                     fprintf(backend_lir_g_lir_out, "%s_retain(&(", ((s->aux == 2) ? "U16String" : "String"));
                 }
-                fprintf(backend_lir_g_lir_out, "%s.u.%s.%s", m, (s->fname ? s->fname : ""), (s->member ? s->member : ""));
+                if (strcmp(path, "*") == 0) {
+                    fprintf(backend_lir_g_lir_out, "(*%s)", m);
+                }
+                else {
+                    fprintf(backend_lir_g_lir_out, "%s%s", m, path);
+                }
                 if (((s->aux == 1) || (s->aux == 2))) {
                     fputs("))", backend_lir_g_lir_out);
                 }

@@ -93,6 +93,17 @@
 #define T_PUNCT 4
 #define T_STR 3
 #define CT_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
+#define PAT_VARIANT 1
+#define PAT_STRUCT  2
+#define PAT_LITERAL 3
+#define PAT_WILD    4
+#define PAT_BINDER  5
+#define PAT_FIELD   6
+#define PAT_K_OTHER 0
+#define PAT_K_ADT   1
+#define PAT_K_STRUCT 2
+#define PAT_K_INT   3
+#define PAT_K_PTR   4
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -192,6 +203,7 @@ struct frontend_parse_StmtScope;
 struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
+struct frontend_parse_PatCtx;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
@@ -210,7 +222,884 @@ const struct frontend_parse_StmtMatch_vtbl frontend_parse_Stmt_frontend_parse_St
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+struct frontend_parse_PatCtx {
+    int adt;
+    const char * subject_type;
+    int is_ptr;
+    int non_adt;
+    int root_variant;
+    const char * root_cname;
+    int root_wild;
+    int root_catch;
+    int root_irref;
+    int root_head;
+    int bind_head;
+    char * conds;
+    int condlen;
+    int condcap;
+    char * sig;
+    int siglen;
+    int sigcap;
+    const char * * bname;
+    const char * * btype;
+    const char * * bpath;
+    int nbind;
+    int bcap;
+    const char * cbase;
+};
 const char * frontend_parse_match_expr_type_key_text(const char *);
+static int pat_buf_put(char * *, int *, int *, const char *);
+static int pat_bind_add(const char *, const char *, const char *);
+static int pat_char_value(const char *, int);
+static int pat_int_base(const char *);
+static struct frontend_parse_PatCtx frontend_parse_g_pat;
+static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_begin(void *self, int adt, const char * subject_type, int is_ptr) {
+    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
+    (void)_self;
+    free(frontend_parse_g_pat.conds);
+    free(frontend_parse_g_pat.sig);
+    free((void *)(frontend_parse_g_pat.bname));
+    free((void *)(frontend_parse_g_pat.btype));
+    free((void *)(frontend_parse_g_pat.bpath));
+    frontend_parse_g_pat.adt = adt;
+    frontend_parse_g_pat.subject_type = runtime_text_ct_intern((subject_type ? subject_type : ""));
+    frontend_parse_g_pat.is_ptr = is_ptr;
+    frontend_parse_g_pat.non_adt = (adt < 0);
+    frontend_parse_g_pat.root_variant = (-1);
+    frontend_parse_g_pat.root_cname = "";
+    frontend_parse_g_pat.root_wild = 0;
+    frontend_parse_g_pat.root_catch = 0;
+    frontend_parse_g_pat.root_irref = 0;
+    frontend_parse_g_pat.root_head = (-1);
+    frontend_parse_g_pat.bind_head = (-1);
+    frontend_parse_g_pat.conds = (char *)(0);
+    frontend_parse_g_pat.condlen = 0;
+    frontend_parse_g_pat.condcap = 0;
+    frontend_parse_g_pat.sig = (char *)(0);
+    frontend_parse_g_pat.siglen = 0;
+    frontend_parse_g_pat.sigcap = 0;
+    frontend_parse_g_pat.bname = (const char * *)(0);
+    frontend_parse_g_pat.btype = (const char * *)(0);
+    frontend_parse_g_pat.bpath = (const char * *)(0);
+    frontend_parse_g_pat.nbind = 0;
+    frontend_parse_g_pat.bcap = 0;
+    frontend_parse_g_pat.cbase = "";
+    if (pat_buf_put((&frontend_parse_g_pat.conds), (&frontend_parse_g_pat.condlen), (&frontend_parse_g_pat.condcap), "")) {
+        return (-1);
+    }
+    if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "")) {
+        return (-1);
+    }
+    return 0;
+}
+
+static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_classify(void *self, const char * type, int * adt_out, int * si_out, int * is_ptr_out) {
+    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
+    char * buf;
+    int n;
+    int adt;
+    int si;
+    int ptr;
+    int result;
+    const char * b;
+    const char * res;
+    adt = (-1);
+    si = (-1);
+    ptr = 0;
+    if ((!type)) {
+        type = "";
+    }
+    n = (int)(strlen(type));
+    buf = (char *)(malloc(((size_t)(n) + 1)));
+    if ((!buf)) {
+        return PAT_K_OTHER;
+    }
+    memcpy(buf, type, ((size_t)(n) + 1));
+    while (((n > 0) && ((((buf[(n - 1)] == ' ') || (buf[(n - 1)] == '\t')) || (buf[(n - 1)] == '\n')) || (buf[(n - 1)] == '\r')))) {
+        buf[--n] = 0;
+    }
+    while (((n > 0) && (buf[(n - 1)] == '*'))) {
+        ptr = 1;
+        buf[--n] = 0;
+        while (((n > 0) && ((buf[(n - 1)] == ' ') || (buf[(n - 1)] == '\t')))) {
+            buf[--n] = 0;
+        }
+    }
+    b = buf;
+    for (; ; ) {
+        if (strncmp(b, "const ", 6) == 0) {
+            b += 6;
+            continue;
+        }
+        if (strncmp(b, "volatile ", 9) == 0) {
+            b += 9;
+            continue;
+        }
+        if (strncmp(b, "restrict ", 9) == 0) {
+            b += 9;
+            continue;
+        }
+        break;
+    }
+    while ((((*b) == ' ') || ((*b) == '\t'))) {
+        b++;
+    }
+    (*adt_out) = (-1);
+    (*si_out) = (-1);
+    (*is_ptr_out) = ptr;
+    result = PAT_K_OTHER;
+    adt = frontend_sym_ct_adt_from_type(b);
+    if (adt < 0) {
+        res = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, b);
+        if ((res && res[0])) {
+            const char * r = res;
+            if (strncmp(r, "struct ", 7) == 0) {
+                r += 7;
+            }
+            else {
+                if (strncmp(r, "union ", 6) == 0) {
+                    r += 6;
+                }
+                else {
+                    if (strncmp(r, "enum ", 5) == 0) {
+                        r += 5;
+                    }
+                }
+            }
+            adt = frontend_sym_ct_adt_from_type(r);
+            if (adt < 0) {
+                si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, r);
+            }
+        }
+    }
+    if (((adt < 0) && (si < 0))) {
+        if (strncmp(b, "struct ", 7) == 0) {
+            const char * base = (b + 7);
+            si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
+            if (si < 0) {
+                const char * rr = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, base);
+                if ((rr && (strncmp(rr, "struct ", 7) == 0))) {
+                    si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (rr + 7));
+                }
+            }
+            frontend_parse_g_pat.cbase = runtime_text_ct_intern(base);
+        }
+        else {
+            if (((strncmp(b, "union ", 6) == 0) || (strncmp(b, "enum ", 5) == 0))) {
+                frontend_parse_g_pat.cbase = runtime_text_ct_intern(b);
+            }
+            else {
+                si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, b);
+                frontend_parse_g_pat.cbase = runtime_text_ct_intern(b);
+            }
+        }
+    }
+    else {
+        const char * tag = b;
+        if (strncmp(tag, "struct ", 7) == 0) {
+            tag += 7;
+        }
+        frontend_parse_g_pat.cbase = runtime_text_ct_intern(tag);
+    }
+    if ((!frontend_parse_g_pat.cbase)) {
+        free(buf);
+        return PAT_K_OTHER;
+    }
+    (*adt_out) = adt;
+    (*si_out) = si;
+    if (adt >= 0) {
+        result = PAT_K_ADT;
+    }
+    else {
+        if (si >= 0) {
+            result = PAT_K_STRUCT;
+        }
+        else {
+            if (ptr) {
+                result = PAT_K_PTR;
+            }
+            else {
+                if (pat_int_base(b)) {
+                    result = PAT_K_INT;
+                }
+            }
+        }
+    }
+    free(buf);
+    return result;
+}
+
+static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_desc(void *self, int form, const char * text, const char * text2, long num) {
+    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
+    int id;
+    id = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_BIND);
+    if (id < 0) {
+        return (-1);
+    }
+    _self->arena->nodes[id].aux = form;
+    _self->arena->nodes[id].text = (text ? text : "");
+    _self->arena->nodes[id].text2 = (text2 ? text2 : "");
+    _self->arena->nodes[id].num = num;
+    _self->arena->nodes[id].a = (-1);
+    _self->arena->nodes[id].b = 0;
+    _self->arena->nodes[id].next = (-1);
+    _self->arena->nodes[id].line = _self->lex->tokline;
+    _self->arena->nodes[id].num = num;
+    return id;
+}
+
+static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self, const char * type, const char * path) {
+    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
+    int line;
+    int col;
+    int kind;
+    int adt;
+    int si;
+    int ptr;
+    int id;
+    int first;
+    int last;
+    int i;
+    int rc;
+    const char * bname;
+    char msgbuf[3 * MAX_TEXT];
+    char lit[64];
+    line = _self->lex->tokline;
+    col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+    kind = _self->__frontend_parse_stmtmatch_vptr->pat_classify(_self, type, (&adt), (&si), (&ptr));
+    if (kind == PAT_K_PTR) {
+        if (_self->lex->tok != T_ID) {
+            return tool_diag_ct_sem_error(line, col, "a pointer payload cannot be matched by a pattern (use '_' or bind the whole value)", _self->mem->path);
+        }
+    }
+    if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_"))) {
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        id = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_WILD, "", "", 0);
+        if (id < 0) {
+            return (-1);
+        }
+        _self->arena->nodes[id].b = 1;
+        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "*")) {
+            return (-1);
+        }
+        if (path[0] == 0) {
+            frontend_parse_g_pat.root_head = id;
+        }
+        return id;
+    }
+    if ((((_self->lex->tok == T_NUM) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "-"))) || (((_self->lex->tok == T_STR) && (_self->lex->tokstr.len > 0)) && (_self->lex->tokstr.ptr[0] == '\'')))) {
+        long val;
+        int is_char;
+        int neg;
+        neg = 0;
+        if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "-"))) {
+            neg = 1;
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            if (_self->lex->tok != T_NUM) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected an integer after '-' in a pattern");
+            }
+        }
+        is_char = ((!neg) && (_self->lex->tok == T_STR));
+        if (is_char) {
+            char cview[MAX_TEXT];
+            val = pat_char_value(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if (val < 0) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a one-character pattern literal");
+            }
+            if (_self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, cview, (int)(sizeof(cview))) != 0) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a character pattern literal is too long");
+            }
+            snprintf(lit, sizeof(lit), "'%s'", cview);
+        }
+        else {
+            if (_self->lex->tokfloat) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a floating literal cannot be a pattern");
+            }
+            val = _self->lex->toknum;
+            if (neg) {
+                val = (-val);
+            }
+            snprintf(lit, sizeof(lit), "%ld", val);
+        }
+        if (kind != PAT_K_INT) {
+            snprintf(msgbuf, sizeof(msgbuf), "literal pattern '%s' does not match type '%s'", lit, type);
+            return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+        }
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        id = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_LITERAL, runtime_text_ct_intern(lit), "", val);
+        if (id < 0) {
+            return (-1);
+        }
+        _self->arena->nodes[id].b = 0;
+        snprintf(msgbuf, sizeof(msgbuf), "#%ld", val);
+        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), msgbuf)) {
+            return (-1);
+        }
+        if (path[0] != 0) {
+            size_t need;
+            char * row;
+            need = ((strlen(path) + strlen(msgbuf)) + 4);
+            row = (char *)(malloc(need));
+            if ((!row)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            snprintf(row, need, "%s=%ld;", path, val);
+            rc = pat_buf_put((&frontend_parse_g_pat.conds), (&frontend_parse_g_pat.condlen), (&frontend_parse_g_pat.condcap), row);
+            free(row);
+            if (rc) {
+                return (-1);
+            }
+        }
+        else {
+            snprintf(msgbuf, sizeof(msgbuf), "=%ld;", val);
+            if ((frontend_parse_g_pat.non_adt && pat_buf_put((&frontend_parse_g_pat.conds), (&frontend_parse_g_pat.condlen), (&frontend_parse_g_pat.condcap), msgbuf))) {
+                return (-1);
+            }
+        }
+        if (path[0] == 0) {
+            frontend_parse_g_pat.root_head = id;
+        }
+        return id;
+    }
+    if ((((_self->lex->tok == T_STR) && (_self->lex->tokstr.len > 0)) && (_self->lex->tokstr.ptr[0] == '"'))) {
+        return tool_diag_ct_sem_error(line, col, "string literal patterns are not supported (S4: int/char/bool only)", _self->mem->path);
+    }
+    if (_self->lex->tok != T_ID) {
+        return tool_diag_ct_sem_error(line, col, "expected a pattern", _self->mem->path);
+    }
+    bname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+    if ((!bname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "."))) {
+        const char * vname;
+        int v;
+        struct frontend_sym_Adt * adts;
+        int nadts;
+        if (kind != PAT_K_ADT) {
+            int other;
+            other = frontend_sym_ct_adt_from_type(bname);
+            if (other < 0) {
+                snprintf(msgbuf, sizeof(msgbuf), "match arm names '%s', which is not an ADT", bname);
+            }
+            else {
+                snprintf(msgbuf, sizeof(msgbuf), "match arm names ADT '%s', but the subject is '%s'", bname, type);
+            }
+            return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+        }
+{
+            const char * rn;
+            int other;
+            rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, bname);
+            if ((!rn)) {
+                rn = bname;
+            }
+            other = frontend_sym_ct_adt_from_type(rn);
+            if (other < 0) {
+                snprintf(msgbuf, sizeof(msgbuf), "match arm names '%s', which is not an ADT", bname);
+                return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+            }
+            if (other != adt) {
+                adts = frontend_sym_ct_adts((&nadts));
+                snprintf(msgbuf, sizeof(msgbuf), "match arm names ADT '%s', but the subject is '%s'", adts[other].name, adts[adt].name);
+                return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+            }
+        }
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        if (_self->lex->tok != T_ID) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a variant name");
+        }
+        vname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!vname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        v = frontend_sym_ct_adt_variant(adt, vname);
+        if (v < 0) {
+            adts = frontend_sym_ct_adts((&nadts));
+            snprintf(msgbuf, sizeof(msgbuf), "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
+            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msgbuf, _self->mem->path);
+        }
+        adts = frontend_sym_ct_adts((&nadts));
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '(' after a variant name");
+        }
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        id = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_VARIANT, vname, adts[adt].variants[v].cname, v);
+        if (id < 0) {
+            return (-1);
+        }
+        first = (-1);
+        last = (-1);
+        snprintf(msgbuf, sizeof(msgbuf), "V%d(", v);
+        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), msgbuf)) {
+            return (-1);
+        }
+        if (path[0] != 0) {
+            size_t need;
+            char * row;
+            need = (strlen(path) + 32);
+            row = (char *)(malloc(need));
+            if ((!row)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            snprintf(row, need, "%s.tag=%d;", path, v);
+            rc = pat_buf_put((&frontend_parse_g_pat.conds), (&frontend_parse_g_pat.condlen), (&frontend_parse_g_pat.condcap), row);
+            free(row);
+            if (rc) {
+                return (-1);
+            }
+        }
+        for (i = 0; i < adts[adt].variants[v].nfields; i++) {
+            char * cp;
+            size_t need;
+            const char * sep;
+            int child;
+            if (i > 0) {
+                if ((!_self->sup->__frontend_parse_supportops_vptr->accept(_self->sup, ","))) {
+                    snprintf(msgbuf, sizeof(msgbuf), "match arm for '%s.%s' binds %d name%s, but the variant has %d field%s", adts[adt].name, vname, i, ((i == 1) ? "" : "s"), adts[adt].variants[v].nfields, ((adts[adt].variants[v].nfields == 1) ? "" : "s"));
+                    return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+                }
+            }
+            sep = ((path[0] == 0) ? (frontend_parse_g_pat.is_ptr ? "->" : ".") : ".");
+            need = ((((strlen(path) + strlen(sep)) + strlen(adts[adt].variants[v].cname)) + strlen(adts[adt].variants[v].fields[i].name)) + 8);
+            cp = (char *)(malloc(need));
+            if ((!cp)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            snprintf(cp, need, "%s%su.%s.%s", path, sep, adts[adt].variants[v].cname, adts[adt].variants[v].fields[i].name);
+            child = _self->__frontend_parse_stmtmatch_vptr->pat_parse_one(_self, adts[adt].variants[v].fields[i].type, cp);
+            free(cp);
+            if (child < 0) {
+                return (-1);
+            }
+            if (first < 0) {
+                first = child;
+            }
+            else {
+                _self->arena->nodes[last].next = child;
+            }
+            last = child;
+            if ((!_self->arena->nodes[child].b)) {
+                _self->arena->nodes[id].b = 0;
+            }
+            else {
+                if (((i == 0) && (adts[adt].variants[v].nfields > 0))) {
+                }
+            }
+        }
+        if (_self->sup->__frontend_parse_supportops_vptr->accept(_self->sup, ",")) {
+        }
+        if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
+            snprintf(msgbuf, sizeof(msgbuf), "match arm for '%s.%s' binds %d name%s, but the variant has %d field%s", adts[adt].name, vname, (adts[adt].variants[v].nfields + 1), (((adts[adt].variants[v].nfields + 1) == 1) ? "" : "s"), adts[adt].variants[v].nfields, ((adts[adt].variants[v].nfields == 1) ? "" : "s"));
+            return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+        }
+        if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
+            return (-1);
+        }
+        if (adts[adt].variants[v].nfields > 0) {
+            int all = 1;
+            int q;
+            for (q = first; q >= 0; q = _self->arena->nodes[q].next) {
+                if ((!_self->arena->nodes[q].b)) {
+                    all = 0;
+                }
+            }
+            _self->arena->nodes[id].b = all;
+        }
+        else {
+            _self->arena->nodes[id].b = 1;
+        }
+        if (((path[0] != 0) && (adts[adt].nvariants > 1))) {
+            _self->arena->nodes[id].b = 0;
+        }
+        _self->arena->nodes[id].a = first;
+        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), ")")) {
+            return (-1);
+        }
+        if (path[0] == 0) {
+            frontend_parse_g_pat.root_head = id;
+            frontend_parse_g_pat.root_variant = v;
+            frontend_parse_g_pat.root_cname = runtime_text_ct_intern(adts[adt].variants[v].cname);
+            frontend_parse_g_pat.root_irref = _self->arena->nodes[id].b;
+        }
+        else {
+            if (_self->arena->nodes[id].b == 0) {
+            }
+        }
+        return id;
+    }
+    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
+        struct frontend_sym_StructDef * sd;
+        int seen_n;
+        int rest;
+        int any_refutable;
+        int * seen;
+        if (kind != PAT_K_STRUCT) {
+            int other;
+            other = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, bname);
+            if (other < 0) {
+                snprintf(msgbuf, sizeof(msgbuf), "struct pattern names '%s', which is not a declared struct", bname);
+            }
+            else {
+                snprintf(msgbuf, sizeof(msgbuf), "struct pattern names '%s', but the subject is '%s'", bname, type);
+            }
+            return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+        }
+        sd = (&_self->sym->structs[si]);
+        if (((strcmp(bname, sd->name) != 0) && (strcmp(bname, frontend_parse_g_pat.cbase) != 0))) {
+            const char * rr;
+            char rbase[512];
+            rr = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, bname);
+            if ((!rr)) {
+                rr = bname;
+            }
+            if (strncmp(rr, "struct ", 7) == 0) {
+                rr += 7;
+            }
+            snprintf(rbase, sizeof(rbase), "%s", rr);
+            if (strcmp(rbase, sd->name) != 0) {
+                snprintf(msgbuf, sizeof(msgbuf), "struct pattern names '%s', but the subject is '%s'", bname, type);
+                return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+            }
+        }
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        id = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_STRUCT, sd->name, type, 0);
+        if (id < 0) {
+            return (-1);
+        }
+        snprintf(msgbuf, sizeof(msgbuf), "S%d{", si);
+        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), msgbuf)) {
+            return (-1);
+        }
+        seen = (int *)(calloc((size_t)(((sd->nfields > 0) ? sd->nfields : 1)), sizeof((*seen))));
+        if ((!seen)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        first = (-1);
+        last = (-1);
+        seen_n = 0;
+        rest = 0;
+        any_refutable = 0;
+        for (; ; ) {
+            int fi;
+            int child;
+            int wrap;
+            const char * fname;
+            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ".."))) {
+                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                rest = 1;
+                break;
+            }
+            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))) {
+                break;
+            }
+            if (_self->lex->tok != T_ID) {
+                free(seen);
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a struct pattern field");
+            }
+            fname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!fname)) {
+                free(seen);
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            fi = (-1);
+{
+                int q;
+                for (q = 0; q < sd->nfields; q++) {
+                    if (strcmp(sd->fields[q].name, fname) == 0) {
+                        fi = q;
+                        break;
+                    }
+                }
+            }
+            if (fi < 0) {
+                snprintf(msgbuf, sizeof(msgbuf), "unknown field '%s' in a struct pattern for '%s'", fname, sd->name);
+                free(seen);
+                return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msgbuf, _self->mem->path);
+            }
+            if (seen[fi]) {
+                snprintf(msgbuf, sizeof(msgbuf), "duplicate field '%s' in a struct pattern", fname);
+                free(seen);
+                return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msgbuf, _self->mem->path);
+            }
+            seen[fi] = 1;
+            seen_n++;
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ":"))) {
+                char * fp;
+                size_t need;
+                const char * sep;
+                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                sep = ((path[0] == 0) ? (frontend_parse_g_pat.is_ptr ? "->" : ".") : ".");
+                need = (((strlen(path) + strlen(sep)) + strlen(sd->fields[fi].name)) + 8);
+                fp = (char *)(malloc(need));
+                if ((!fp)) {
+                    free(seen);
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
+                child = _self->__frontend_parse_stmtmatch_vptr->pat_parse_one(_self, sd->fields[fi].type, fp);
+                free(fp);
+            }
+            else {
+                char * fp;
+                size_t need;
+                const char * sep;
+                sep = ((path[0] == 0) ? (frontend_parse_g_pat.is_ptr ? "->" : ".") : ".");
+                need = (((strlen(path) + strlen(sep)) + strlen(sd->fields[fi].name)) + 8);
+                fp = (char *)(malloc(need));
+                if ((!fp)) {
+                    free(seen);
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
+                child = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_BINDER, fname, sd->fields[fi].type, 0);
+                if (((child >= 0) && (pat_bind_add(fname, sd->fields[fi].type, runtime_text_ct_intern(fp)) == (-2)))) {
+                    free(fp);
+                    free(seen);
+                    snprintf(msgbuf, sizeof(msgbuf), "duplicate binding '%s' in a match arm", fname);
+                    return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+                }
+                free(fp);
+                if (child >= 0) {
+                    _self->arena->nodes[child].b = 1;
+                }
+                if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "*")) {
+                    free(seen);
+                    return (-1);
+                }
+            }
+            if (child < 0) {
+                free(seen);
+                return (-1);
+            }
+            wrap = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_FIELD, fname, sd->fields[fi].type, fi);
+            if (wrap < 0) {
+                free(seen);
+                return (-1);
+            }
+            _self->arena->nodes[wrap].a = child;
+            _self->arena->nodes[wrap].b = _self->arena->nodes[child].b;
+            if ((!_self->arena->nodes[child].b)) {
+                any_refutable = 1;
+            }
+            snprintf(msgbuf, sizeof(msgbuf), "%d:", fi);
+            if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), msgbuf)) {
+                free(seen);
+                return (-1);
+            }
+            if (first < 0) {
+                first = wrap;
+            }
+            else {
+                _self->arena->nodes[last].next = wrap;
+            }
+            last = wrap;
+            if (_self->sup->__frontend_parse_supportops_vptr->accept(_self->sup, ",")) {
+                continue;
+            }
+            break;
+        }
+        if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
+            free(seen);
+            return (-1);
+        }
+        if (((!rest) && (seen_n != sd->nfields))) {
+            int q;
+            for (q = 0; q < sd->nfields; q++) {
+                if ((!seen[q])) {
+                    break;
+                }
+            }
+            snprintf(msgbuf, sizeof(msgbuf), "struct pattern for '%s' is missing field '%s' (name it or write '..')", sd->name, sd->fields[q].name);
+            free(seen);
+            return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+        }
+        free(seen);
+        _self->arena->nodes[id].b = (any_refutable ? 0 : 1);
+        _self->arena->nodes[id].a = first;
+        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "}")) {
+            return (-1);
+        }
+        if (path[0] == 0) {
+            frontend_parse_g_pat.root_head = id;
+            frontend_parse_g_pat.root_irref = _self->arena->nodes[id].b;
+        }
+        return id;
+    }
+    if (((kind == PAT_K_ADT) || (kind == PAT_K_STRUCT))) {
+    }
+    id = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_BINDER, bname, type, 0);
+    if (id < 0) {
+        return (-1);
+    }
+    _self->arena->nodes[id].b = 1;
+{
+        const char * bp;
+        if (((path[0] == 0) && frontend_parse_g_pat.is_ptr)) {
+            bp = "*";
+        }
+        else {
+            bp = ((path[0] != 0) ? runtime_text_ct_intern(path) : "");
+        }
+        rc = pat_bind_add(bname, type, bp);
+    }
+    if (rc == (-2)) {
+        snprintf(msgbuf, sizeof(msgbuf), "duplicate binding '%s' in a match arm", bname);
+        return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
+    }
+    if (rc < 0) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "*")) {
+        return (-1);
+    }
+    if (path[0] == 0) {
+        frontend_parse_g_pat.root_head = id;
+    }
+    return id;
+}
+
+static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_top(void *self) {
+    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
+    int rc;
+    int kind;
+    int adt;
+    int si;
+    int ptr;
+    int line;
+    int col;
+    line = _self->lex->tokline;
+    col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+    if (frontend_parse_g_pat.adt >= 0) {
+        struct frontend_sym_Adt * adts;
+        int nadts;
+        const char * ctag;
+        adts = frontend_sym_ct_adts((&nadts));
+        ctag = runtime_text_ct_internf("struct %s", adts[frontend_parse_g_pat.adt].full);
+        if ((!ctag)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        frontend_parse_g_pat.subject_type = ctag;
+    }
+    kind = _self->__frontend_parse_stmtmatch_vptr->pat_classify(_self, frontend_parse_g_pat.subject_type, (&adt), (&si), (&ptr));
+    if (((kind == PAT_K_OTHER) || (kind == PAT_K_PTR))) {
+        frontend_parse_g_pat.cbase = (frontend_parse_g_pat.subject_type ? frontend_parse_g_pat.subject_type : "");
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("match needs an ADT, struct, or integer-like value, but '%s' is not supported", (frontend_parse_g_pat.subject_type ? frontend_parse_g_pat.subject_type : "")), _self->mem->path);
+    }
+    if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_"))) {
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        frontend_parse_g_pat.root_wild = 1;
+        frontend_parse_g_pat.root_catch = 1;
+        frontend_parse_g_pat.root_irref = 1;
+        frontend_parse_g_pat.root_head = (-1);
+        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "*")) {
+            return (-1);
+        }
+        return 0;
+    }
+    rc = _self->__frontend_parse_stmtmatch_vptr->pat_parse_one(_self, frontend_parse_g_pat.subject_type, "");
+    if (rc < 0) {
+        return (-1);
+    }
+    if (frontend_parse_g_pat.root_head < 0) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a pattern");
+    }
+    if (frontend_parse_g_pat.adt >= 0) {
+        int form;
+        form = _self->arena->nodes[frontend_parse_g_pat.root_head].aux;
+        if (form == PAT_VARIANT) {
+            frontend_parse_g_pat.root_irref = _self->arena->nodes[frontend_parse_g_pat.root_head].b;
+        }
+        else {
+            if (form == PAT_BINDER) {
+                frontend_parse_g_pat.root_catch = 1;
+                frontend_parse_g_pat.root_irref = 1;
+            }
+            else {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a pattern");
+            }
+        }
+    }
+    else {
+        int form;
+        form = _self->arena->nodes[frontend_parse_g_pat.root_head].aux;
+        frontend_parse_g_pat.root_irref = _self->arena->nodes[frontend_parse_g_pat.root_head].b;
+        if (form == PAT_BINDER) {
+            frontend_parse_g_pat.root_catch = 1;
+        }
+        else {
+            if (((form == PAT_STRUCT) && frontend_parse_g_pat.root_irref)) {
+                frontend_parse_g_pat.root_catch = 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_commit(void *self) {
+    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
+    int i;
+    int first;
+    int last;
+    int tail;
+    if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
+        return (-1);
+    }
+    first = (-1);
+    last = (-1);
+    for (i = 0; i < frontend_parse_g_pat.nbind; i++) {
+        int bind;
+        int decl;
+        int raw;
+        int vi;
+        bind = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_BIND);
+        decl = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_DECL);
+        raw = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_RAW);
+        if ((((bind < 0) || (decl < 0)) || (raw < 0))) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            return (-1);
+        }
+        _self->arena->nodes[bind].text = runtime_text_ct_intern(frontend_parse_g_pat.bname[i]);
+        _self->arena->nodes[bind].text2 = runtime_text_ct_intern(frontend_parse_g_pat.btype[i]);
+        _self->arena->nodes[bind].text3 = runtime_text_ct_intern(frontend_parse_g_pat.bname[i]);
+        _self->arena->nodes[bind].text4 = runtime_text_ct_intern(frontend_parse_g_pat.bpath[i]);
+        if (((((!_self->arena->nodes[bind].text) || (!_self->arena->nodes[bind].text2)) || (!_self->arena->nodes[bind].text3)) || (!_self->arena->nodes[bind].text4))) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        if (_self->sym->__frontend_sym_symbolops_vptr->declare_var(_self->sym, _self->arena->nodes[bind].text, _self->arena->nodes[bind].text2) != 0) {
+            const char * e = _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym);
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, e);
+        }
+        vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[bind].text);
+        if (vi >= 0) {
+            _self->sym->vars[vi].initialized = 1;
+        }
+        _self->arena->nodes[decl].text = runtime_text_ct_intern(frontend_parse_g_pat.btype[i]);
+        _self->arena->nodes[decl].text2 = runtime_text_ct_intern(frontend_parse_g_pat.bname[i]);
+        _self->arena->nodes[decl].aux = 3;
+        _self->arena->nodes[decl].a = raw;
+        _self->arena->nodes[raw].aux = 0;
+        _self->arena->nodes[bind].a = decl;
+        _self->arena->nodes[bind].b = raw;
+        _self->arena->nodes[bind].next = (-1);
+        if (first < 0) {
+            first = bind;
+        }
+        else {
+            _self->arena->nodes[last].next = bind;
+        }
+        last = bind;
+    }
+    frontend_parse_g_pat.bind_head = first;
+    (void)(tail);
+    return 0;
+}
+
 static int frontend_parse_Stmt_frontend_parse_StmtMatch_match_ahead(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     const char * p;
@@ -297,23 +1186,30 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
     int tail;
     int arm;
     int adt;
-    int v;
     int line;
     int col;
     int i;
     int * covered;
     int ncov;
     int wild;
-    int seen_wild;
+    int seen_catch;
     int is_ptr;
-    int a2;
-    int aline;
-    int acol;
+    int kind;
+    int si;
+    int ptr;
+    int arm_line;
+    int arm_col;
+    int body;
+    int arm_num;
+    int arm_bind;
+    const char * arm_sig;
+    const char * arm_conds;
+    const char * arm_name;
+    int a;
+    int b;
     const char * tybuf = "";
-    const char * tname = "";
-    const char * aname = "";
-    const char * rn = "";
-    const char * vname;
+    const char * subject = "";
+    char * subjbuf;
     char msg[3 * MAX_TEXT];
     struct frontend_sym_Adt * adts;
     int nadts;
@@ -338,286 +1234,197 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
         return tool_diag_ct_sem_error(line, col, "cannot determine the type of the match subject", _self->mem->path);
     }
 {
-        const char * b;
+        const char * bp;
         size_t n;
-        b = tybuf;
-        while ((((*b) == ' ') || ((*b) == '\t'))) {
-            b++;
+        bp = tybuf;
+        while ((((*bp) == ' ') || ((*bp) == '\t'))) {
+            bp++;
         }
-        n = strlen(b);
+        n = strlen(bp);
         is_ptr = 0;
-        while (((n > 0) && ((b[(n - 1)] == ' ') || (b[(n - 1)] == '*')))) {
-            if (b[(n - 1)] == '*') {
+        while (((n > 0) && ((bp[(n - 1)] == ' ') || (bp[(n - 1)] == '*')))) {
+            if (bp[(n - 1)] == '*') {
                 is_ptr = 1;
             }
             n--;
         }
-        if (((n >= 7) && (strncmp(b, "struct ", 7) == 0))) {
-            b += 7;
-            n -= 7;
+        subjbuf = (char *)(malloc((n + 1)));
+        if ((!subjbuf)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-        tname = runtime_text_ct_intern_len(b, (int)(n));
-        if ((!tname)) {
+        memcpy(subjbuf, bp, n);
+        subjbuf[n] = 0;
+        subject = runtime_text_ct_intern(subjbuf);
+        free(subjbuf);
+        if ((!subject)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
     }
-    adt = frontend_sym_ct_adt_from_type(tname);
-    if (adt < 0) {
-        snprintf(msg, sizeof(msg), "match needs an ADT value, but '%s' is not an ADT", tybuf);
+    adt = frontend_sym_ct_adt_from_type(subject);
+    kind = _self->__frontend_parse_stmtmatch_vptr->pat_classify(_self, subject, (&adt), (&si), (&ptr));
+    if ((((((kind != PAT_K_OTHER) && (kind != PAT_K_PTR)) && is_ptr) && (adt < 0)) && (kind != PAT_K_STRUCT))) {
+        kind = PAT_K_PTR;
+    }
+    if (((kind == PAT_K_OTHER) || (kind == PAT_K_PTR))) {
+        snprintf(msg, sizeof(msg), "match needs an ADT, struct, or integer-like value, but '%s' is not supported", tybuf);
         return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
     }
-    adts = frontend_sym_ct_adts((&nadts));
-    covered = calloc((size_t)(((adts[adt].nvariants > 0) ? adts[adt].nvariants : 1)), sizeof((*covered)));
-    if ((!covered)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    if (adt >= 0) {
+        adts = frontend_sym_ct_adts((&nadts));
+        covered = calloc((size_t)(((adts[adt].nvariants > 0) ? adts[adt].nvariants : 1)), sizeof((*covered)));
+        if ((!covered)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        for (i = 0; i < adts[adt].nvariants; i++) {
+            covered[i] = 0;
+        }
     }
-    for (i = 0; i < adts[adt].nvariants; i++) {
-        covered[i] = 0;
+    else {
+        adts = (struct frontend_sym_Adt *)(0);
+        nadts = 0;
+        covered = (int *)(calloc(1, sizeof((*covered))));
+        if ((!covered)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
     }
     ncov = 0;
     wild = (-1);
-    seen_wild = 0;
+    seen_catch = 0;
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
+        free(covered);
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a block after match (...)");
     }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MATCH);
     if (s < 0) {
+        free(covered);
         return (-1);
     }
-    _self->arena->nodes[s].text = runtime_text_ct_intern(adts[adt].full);
-    if ((!_self->arena->nodes[s].text)) {
+    _self->arena->nodes[s].text = ((adt >= 0) ? runtime_text_ct_intern(adts[adt].full) : "");
+    _self->arena->nodes[s].text2 = ((adt >= 0) ? "" : subject);
+    if (((!_self->arena->nodes[s].text) || (!_self->arena->nodes[s].text2))) {
+        free(covered);
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    _self->arena->nodes[s].aux = is_ptr;
+    _self->arena->nodes[s].aux = ((is_ptr ? 1 : 0) | ((adt < 0) ? 4 : 0));
     _self->arena->nodes[s].a = e;
     _self->arena->nodes[s].line = line;
     _self->arena->nodes[s].num = col;
     arms = (-1);
     tail = (-1);
     while (((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))))) {
-        int arm_line;
-        int arm_col;
         arm_line = _self->lex->tokline;
         arm_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-        if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_"))) {
-            int body;
-            if (seen_wild) {
+        arm_num = (-1);
+        arm_sig = "";
+        arm_conds = "";
+        arm_name = "";
+        arm_bind = (-1);
+        if (_self->__frontend_parse_stmtmatch_vptr->pat_begin(_self, adt, subject, is_ptr) != 0) {
+            free(covered);
+            return (-1);
+        }
+        if (_self->__frontend_parse_stmtmatch_vptr->pat_parse_top(_self) != 0) {
+            free(covered);
+            return (-1);
+        }
+        if (frontend_parse_g_pat.root_wild) {
+            if (seen_catch) {
+                free(covered);
                 return tool_diag_ct_sem_error(arm_line, arm_col, "duplicate wildcard match arm", _self->mem->path);
             }
-            seen_wild = 1;
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            seen_catch = 1;
             if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
+                free(covered);
                 return (-1);
             }
             body = _self->__frontend_parse_stmtops_vptr->parse_block(_self);
             if (body < 0) {
+                free(covered);
                 return (-1);
             }
             arm = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ARM);
             if (arm < 0) {
+                free(covered);
                 return (-1);
             }
             _self->arena->nodes[arm].aux = 1;
             _self->arena->nodes[arm].b = body;
+            _self->arena->nodes[arm].text4 = "";
+            _self->arena->nodes[arm].d = (-1);
+            _self->arena->nodes[arm].num = (-1);
             _self->arena->nodes[arm].line = arm_line;
-            _self->arena->nodes[arm].num = arm_col;
+            _self->arena->nodes[arm].attr = arm_col;
+            _self->arena->nodes[arm].num = (-1);
             wild = arm;
         }
         else {
-            int body;
-            int nb;
-            int first_bind;
-            int last_bind;
-            int w;
-            int nbind;
-            const char * * bind_names;
-            if (seen_wild) {
+            if (seen_catch) {
+                free(covered);
                 return tool_diag_ct_sem_error(arm_line, arm_col, "a wildcard match arm must be the last arm", _self->mem->path);
             }
-            if (_self->lex->tok != T_ID) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a match arm");
+            if ((((adt >= 0) && (frontend_parse_g_pat.root_variant >= 0)) && frontend_parse_g_pat.root_irref)) {
+                if (covered[frontend_parse_g_pat.root_variant]) {
+                    snprintf(msg, sizeof(msg), "duplicate match arm for variant '%s.%s'", adts[adt].name, adts[adt].variants[frontend_parse_g_pat.root_variant].name);
+                    free(covered);
+                    return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
+                }
+                covered[frontend_parse_g_pat.root_variant] = 1;
+                ncov++;
             }
-            aname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-            if ((!aname)) {
+            if (frontend_parse_g_pat.root_catch) {
+                seen_catch = 1;
+            }
+            arm_num = frontend_parse_g_pat.root_variant;
+            arm_sig = runtime_text_ct_intern((frontend_parse_g_pat.sig ? frontend_parse_g_pat.sig : ""));
+            arm_conds = runtime_text_ct_intern((frontend_parse_g_pat.conds ? frontend_parse_g_pat.conds : ""));
+            if (((adt >= 0) && (arm_num >= 0))) {
+                arm_name = runtime_text_ct_intern(adts[adt].variants[arm_num].name);
+            }
+            else {
+                arm_name = runtime_text_ct_intern(subject);
+            }
+            if ((((!arm_sig) || (!arm_conds)) || (!arm_name))) {
+                free(covered);
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            aline = _self->lex->tokline;
-            acol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-            rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, aname);
-            if ((!rn)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown ADT type in a match arm");
-            }
-            a2 = frontend_sym_ct_adt_from_type(rn);
-            if (a2 < 0) {
-                snprintf(msg, sizeof(msg), "match arm names '%s', which is not an ADT", aname);
-                return tool_diag_ct_sem_error(aline, acol, msg, _self->mem->path);
-            }
-            if (a2 != adt) {
-                snprintf(msg, sizeof(msg), "match arm names ADT '%s', but the subject is '%s'", adts[a2].name, adts[adt].name);
-                return tool_diag_ct_sem_error(aline, acol, msg, _self->mem->path);
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ".")))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '.' after the ADT name");
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (_self->lex->tok != T_ID) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a variant name");
-            }
-            vname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-            if ((!vname)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            v = frontend_sym_ct_adt_variant(adt, vname);
-            if (v < 0) {
-                snprintf(msg, sizeof(msg), "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
-                return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
-            }
-            if (covered[v]) {
-                snprintf(msg, sizeof(msg), "duplicate match arm for variant '%s.%s'", adts[adt].name, vname);
-                return tool_diag_ct_sem_error(aline, acol, msg, _self->mem->path);
-            }
-            covered[v] = 1;
-            ncov++;
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '(' after a variant name");
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            first_bind = (-1);
-            last_bind = (-1);
-            nb = 0;
-            nbind = ((adts[adt].variants[v].nfields > 8) ? adts[adt].variants[v].nfields : 8);
-            bind_names = frontend_sym_ct_text_rows_reserve((const char * *)(0), 0, nbind, (&nbind));
-            if (((!bind_names) && (nbind <= 0))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            while ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
-                int ncap;
-                const char * bname;
-                if (_self->lex->tok != T_ID) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a binding name");
-                }
-                if (nb >= nbind) {
-                    ncap = ((nbind > (CAP_LIMIT / 2)) ? CAP_LIMIT : (nbind * 2));
-                    if (nb >= ncap) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many bindings in one match arm");
-                    }
-                    bind_names = frontend_sym_ct_text_rows_reserve(bind_names, nbind, ncap, (&ncap));
-                    nbind = ncap;
-                }
-                bname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-                if ((!bname)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                for (w = 0; w < nb; w++) {
-                    if (strcmp(bind_names[w], bname) == 0) {
-                        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate binding '%s' in a match arm", bname), _self->mem->path);
-                    }
-                }
-                bind_names[nb] = bname;
-                w = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_BIND);
-                if (w < 0) {
-                    return (-1);
-                }
-                _self->arena->nodes[w].text = bname;
-                if ((!_self->arena->nodes[w].text)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                if (first_bind < 0) {
-                    first_bind = w;
-                }
-                else {
-                    _self->arena->nodes[last_bind].next = w;
-                }
-                last_bind = w;
-                nb++;
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                if (_self->sup->__frontend_parse_supportops_vptr->accept(_self->sup, ",")) {
-                    continue;
-                }
-                break;
-            }
-            if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
+            if (_self->__frontend_parse_stmtmatch_vptr->pat_commit(_self) != 0) {
+                free(covered);
                 return (-1);
             }
-            if (nb != adts[adt].variants[v].nfields) {
-                snprintf(msg, sizeof(msg), "match arm for '%s.%s' binds %d name%s, but the variant has %d field%s", adts[adt].name, vname, nb, ((nb == 1) ? "" : "s"), adts[adt].variants[v].nfields, ((adts[adt].variants[v].nfields == 1) ? "" : "s"));
-                return tool_diag_ct_sem_error(aline, acol, msg, _self->mem->path);
-            }
+            arm_bind = frontend_parse_g_pat.bind_head;
             if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
+                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                free(covered);
                 return (-1);
-            }
-            if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
-                return (-1);
-            }
-            w = 0;
-            for (i = first_bind; i >= 0; (i = _self->arena->nodes[i].next, w++)) {
-                int vi;
-                int decl;
-                int raw;
-                _self->arena->nodes[i].text2 = runtime_text_ct_intern(adts[adt].variants[v].fields[w].type);
-                if ((!_self->arena->nodes[i].text2)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                _self->arena->nodes[i].text3 = runtime_text_ct_intern(adts[adt].variants[v].fields[w].name);
-                if ((!_self->arena->nodes[i].text3)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                if (_self->sym->__frontend_sym_symbolops_vptr->declare_var(_self->sym, _self->arena->nodes[i].text, _self->arena->nodes[i].text2) != 0) {
-                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-                }
-                vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[i].text);
-                if (vi >= 0) {
-                    _self->sym->vars[vi].initialized = 1;
-                }
-                decl = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_DECL);
-                raw = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_RAW);
-                if (((decl < 0) || (raw < 0))) {
-                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-                    return (-1);
-                }
-                _self->arena->nodes[decl].text = runtime_text_ct_intern(_self->arena->nodes[i].text2);
-                if ((!_self->arena->nodes[decl].text)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                _self->arena->nodes[decl].text2 = runtime_text_ct_intern(_self->arena->nodes[i].text);
-                if ((!_self->arena->nodes[decl].text2)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                _self->arena->nodes[decl].aux = 3;
-                _self->arena->nodes[decl].a = raw;
-                _self->arena->nodes[raw].aux = 0;
-                _self->arena->nodes[i].a = decl;
-                _self->arena->nodes[i].b = raw;
             }
             body = _self->__frontend_parse_stmtops_vptr->parse_block(_self);
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             if (body < 0) {
+                free(covered);
                 return (-1);
             }
             arm = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ARM);
             if (arm < 0) {
+                free(covered);
                 return (-1);
             }
-            _self->arena->nodes[arm].text = runtime_text_ct_intern(vname);
-            if ((!_self->arena->nodes[arm].text)) {
+            _self->arena->nodes[arm].num = arm_num;
+            _self->arena->nodes[arm].text = arm_name;
+            _self->arena->nodes[arm].text2 = arm_sig;
+            _self->arena->nodes[arm].text3 = ((adt >= 0) ? runtime_text_ct_intern(adts[adt].full) : "");
+            _self->arena->nodes[arm].text4 = arm_conds;
+            if (((((!_self->arena->nodes[arm].text) || (!_self->arena->nodes[arm].text2)) || (!_self->arena->nodes[arm].text3)) || (!_self->arena->nodes[arm].text4))) {
+                free(covered);
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            _self->arena->nodes[arm].text2 = runtime_text_ct_intern(adts[adt].variants[v].cname);
-            if ((!_self->arena->nodes[arm].text2)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            _self->arena->nodes[arm].text3 = runtime_text_ct_intern(adts[adt].full);
-            if ((!_self->arena->nodes[arm].text3)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            _self->arena->nodes[arm].num = v;
-            _self->arena->nodes[arm].a = first_bind;
+            _self->arena->nodes[arm].aux = ((adt < 0) ? 4 : 0);
+            _self->arena->nodes[arm].a = arm_bind;
             _self->arena->nodes[arm].b = body;
-            _self->arena->nodes[arm].line = aline;
+            _self->arena->nodes[arm].d = (-1);
+            _self->arena->nodes[arm].c = (-1);
+            _self->arena->nodes[arm].attr = arm_col;
+            _self->arena->nodes[arm].line = arm_line;
         }
         if (arms < 0) {
             arms = arm;
@@ -628,26 +1435,54 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
         tail = arm;
     }
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
+        free(covered);
         return (-1);
     }
     _self->arena->nodes[s].b = arms;
-    if (wild < 0) {
-        for (i = 0; i < adts[adt].nvariants; i++) {
-            if (covered[i]) {
+    for (a = arms; a >= 0; a = _self->arena->nodes[a].next) {
+        if ((_self->arena->nodes[a].aux & 1)) {
+            continue;
+        }
+        for (b = _self->arena->nodes[a].next; b >= 0; b = _self->arena->nodes[b].next) {
+            if ((_self->arena->nodes[b].aux & 1)) {
                 continue;
             }
-            snprintf(msg, sizeof(msg), "match does not cover variant '%s.%s'"" (add the arm or write '_ => { … }')", adts[adt].name, adts[adt].variants[i].name);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            if (((_self->arena->nodes[a].text2 && _self->arena->nodes[b].text2) && (strcmp(_self->arena->nodes[a].text2, _self->arena->nodes[b].text2) == 0))) {
+                snprintf(msg, sizeof(msg), "duplicate match arm pattern '%s'", _self->arena->nodes[b].text2);
+                free(covered);
+                return tool_diag_ct_sem_error(_self->arena->nodes[b].line, _self->arena->nodes[b].attr, msg, _self->mem->path);
+            }
+        }
+    }
+    if (adt >= 0) {
+        if (((wild < 0) && (!seen_catch))) {
+            for (i = 0; i < adts[adt].nvariants; i++) {
+                if (covered[i]) {
+                    continue;
+                }
+                snprintf(msg, sizeof(msg), "match does not cover variant '%s.%s'"" (add the arm or write '_ => { … }')", adts[adt].name, adts[adt].variants[i].name);
+                free(covered);
+                return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            }
+        }
+        else {
+            if (((_self->ex->types_mode && (*_self->ex->types_mode)) && (ncov == adts[adt].nvariants))) {
+                snprintf(msg, sizeof(msg), "match covers every variant of '%s'; the wildcard arm is unnecessary", adts[adt].name);
+                if (tool_diag_ct_type_warn(line, col, "", msg, _self->mem->path) != 0) {
+                    free(covered);
+                    return (-1);
+                }
+            }
         }
     }
     else {
-        if (((_self->ex->types_mode && (*_self->ex->types_mode)) && (ncov == adts[adt].nvariants))) {
-            snprintf(msg, sizeof(msg), "match covers every variant of '%s'; the wildcard arm is unnecessary", adts[adt].name);
-            if (tool_diag_ct_type_warn(line, col, "", msg, _self->mem->path) != 0) {
-                return (-1);
-            }
+        if ((!seen_catch)) {
+            snprintf(msg, sizeof(msg), "match on '%s' needs a final '_ => { … }' arm", subject);
+            free(covered);
+            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
         }
     }
+    free(covered);
     return s;
 }
 
@@ -737,7 +1572,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     int tail;
     int arm;
     int adt;
-    int v;
     int line;
     int col;
     int i;
@@ -746,7 +1580,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     int wild;
     int seen_wild;
     int is_ptr;
-    int a2;
     int body;
     int asg;
     int yexpr;
@@ -755,11 +1588,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     int block_form;
     int yline;
     int ycol;
+    int arm_wild;
+    int arm_catch;
+    const char * arm_sig;
+    const char * arm_conds;
     const char * tybuf = "";
     const char * tname = "";
-    const char * aname = "";
-    const char * rn = "";
-    const char * vname;
     char msg[3 * MAX_TEXT];
     const char * rtype = "";
     const char * rkey = "";
@@ -853,189 +1687,61 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         int arm_col;
         int variant;
         int bind_head;
+        int pushed;
         arm_line = _self->lex->tokline;
         arm_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-        bind_head = (-1);
         variant = (-1);
-        if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_"))) {
+        bind_head = (-1);
+        pushed = 0;
+        arm_wild = 0;
+        arm_catch = 0;
+        arm_sig = "";
+        arm_conds = "";
+        if (_self->__frontend_parse_stmtmatch_vptr->pat_begin(_self, adt, tname, is_ptr) != 0) {
+            return (-1);
+        }
+        if (_self->__frontend_parse_stmtmatch_vptr->pat_parse_top(_self) != 0) {
+            return (-1);
+        }
+        if (frontend_parse_g_pat.root_wild) {
             if (seen_wild) {
                 return tool_diag_ct_sem_error(arm_line, arm_col, "duplicate wildcard match arm", _self->mem->path);
             }
             seen_wild = 1;
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            arm_wild = 1;
+            arm_catch = 1;
         }
         else {
-            int nb;
-            int first_bind;
-            int last_bind;
-            int w;
-            int nbind;
-            const char * * bind_names;
             if (seen_wild) {
                 return tool_diag_ct_sem_error(arm_line, arm_col, "a wildcard match arm must be the last arm", _self->mem->path);
             }
-            if (_self->lex->tok != T_ID) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a match arm");
-            }
-            aname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-            if ((!aname)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, aname);
-            if ((!rn)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown ADT type in a match arm");
-            }
-            a2 = frontend_sym_ct_adt_from_type(rn);
-            if (a2 < 0) {
-                snprintf(msg, sizeof(msg), "match arm names '%s', which is not an ADT", aname);
-                return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
-            }
-            if (a2 != adt) {
-                snprintf(msg, sizeof(msg), "match arm names ADT '%s', but the subject is '%s'", adts[a2].name, adts[adt].name);
-                return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ".")))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '.' after the ADT name");
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (_self->lex->tok != T_ID) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a variant name");
-            }
-            vname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-            if ((!vname)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            v = frontend_sym_ct_adt_variant(adt, vname);
-            if (v < 0) {
-                snprintf(msg, sizeof(msg), "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
-                return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
-            }
-            if (covered[v]) {
-                snprintf(msg, sizeof(msg), "duplicate match arm for variant '%s.%s'", adts[adt].name, vname);
-                return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
-            }
-            covered[v] = 1;
-            ncov++;
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '(' after a variant name");
-            }
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            first_bind = (-1);
-            last_bind = (-1);
-            nb = 0;
-            nbind = ((adts[adt].variants[v].nfields > 8) ? adts[adt].variants[v].nfields : 8);
-            bind_names = frontend_sym_ct_text_rows_reserve((const char * *)(0), 0, nbind, (&nbind));
-            if (((!bind_names) && (nbind <= 0))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            while ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")))) {
-                int ncap;
-                const char * bname;
-                if (_self->lex->tok != T_ID) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a binding name");
+            if (((frontend_parse_g_pat.root_variant >= 0) && frontend_parse_g_pat.root_irref)) {
+                if (covered[frontend_parse_g_pat.root_variant]) {
+                    snprintf(msg, sizeof(msg), "duplicate match arm for variant '%s.%s'", adts[adt].name, adts[adt].variants[frontend_parse_g_pat.root_variant].name);
+                    return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
                 }
-                if (nb >= nbind) {
-                    ncap = ((nbind > (CAP_LIMIT / 2)) ? CAP_LIMIT : (nbind * 2));
-                    if (nb >= ncap) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many bindings in one match arm");
-                    }
-                    bind_names = frontend_sym_ct_text_rows_reserve(bind_names, nbind, ncap, (&ncap));
-                    nbind = ncap;
-                }
-                bname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-                if ((!bname)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                for (w = 0; w < nb; w++) {
-                    if (strcmp(bind_names[w], bname) == 0) {
-                        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate binding '%s' in a match arm", bname), _self->mem->path);
-                    }
-                }
-                bind_names[nb] = bname;
-                w = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_BIND);
-                if (w < 0) {
-                    return (-1);
-                }
-                _self->arena->nodes[w].text = bname;
-                if ((!_self->arena->nodes[w].text)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                if (first_bind < 0) {
-                    first_bind = w;
-                }
-                else {
-                    _self->arena->nodes[last_bind].next = w;
-                }
-                last_bind = w;
-                nb++;
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                if (_self->sup->__frontend_parse_supportops_vptr->accept(_self->sup, ",")) {
-                    continue;
-                }
-                break;
+                covered[frontend_parse_g_pat.root_variant] = 1;
+                ncov++;
             }
-            if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
+            if (frontend_parse_g_pat.root_catch) {
+                seen_wild = 1;
+            }
+            if (_self->__frontend_parse_stmtmatch_vptr->pat_commit(_self) != 0) {
                 return (-1);
             }
-            if (nb != adts[adt].variants[v].nfields) {
-                snprintf(msg, sizeof(msg), "match arm for '%s.%s' binds %d name%s, but the variant has %d field%s", adts[adt].name, vname, nb, ((nb == 1) ? "" : "s"), adts[adt].variants[v].nfields, ((adts[adt].variants[v].nfields == 1) ? "" : "s"));
-                return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
+            pushed = 1;
+            variant = frontend_parse_g_pat.root_variant;
+            bind_head = frontend_parse_g_pat.bind_head;
+            arm_wild = frontend_parse_g_pat.root_wild;
+            arm_catch = frontend_parse_g_pat.root_catch;
+            arm_sig = runtime_text_ct_intern((frontend_parse_g_pat.sig ? frontend_parse_g_pat.sig : ""));
+            arm_conds = runtime_text_ct_intern((frontend_parse_g_pat.conds ? frontend_parse_g_pat.conds : ""));
+            if (((!arm_sig) || (!arm_conds))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            variant = v;
-            bind_head = first_bind;
-            (void)(last_bind);
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
             return (-1);
-        }
-        if (variant >= 0) {
-            int w;
-            if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
-                return (-1);
-            }
-            w = 0;
-            for (i = bind_head; i >= 0; (i = _self->arena->nodes[i].next, w++)) {
-                int vi;
-                int decl;
-                int raw;
-                _self->arena->nodes[i].text2 = runtime_text_ct_intern(adts[adt].variants[variant].fields[w].type);
-                if ((!_self->arena->nodes[i].text2)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                _self->arena->nodes[i].text3 = runtime_text_ct_intern(adts[adt].variants[variant].fields[w].name);
-                if ((!_self->arena->nodes[i].text3)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                if (_self->sym->__frontend_sym_symbolops_vptr->declare_var(_self->sym, _self->arena->nodes[i].text, _self->arena->nodes[i].text2) != 0) {
-                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-                }
-                vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[i].text);
-                if (vi >= 0) {
-                    _self->sym->vars[vi].initialized = 1;
-                }
-                decl = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_DECL);
-                raw = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_RAW);
-                if (((decl < 0) || (raw < 0))) {
-                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-                    return (-1);
-                }
-                _self->arena->nodes[decl].text = runtime_text_ct_intern(_self->arena->nodes[i].text2);
-                if ((!_self->arena->nodes[decl].text)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                _self->arena->nodes[decl].text2 = runtime_text_ct_intern(_self->arena->nodes[i].text);
-                if ((!_self->arena->nodes[decl].text2)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                _self->arena->nodes[decl].aux = 3;
-                _self->arena->nodes[decl].a = raw;
-                _self->arena->nodes[raw].aux = 0;
-                _self->arena->nodes[i].a = decl;
-                _self->arena->nodes[i].b = raw;
-            }
         }
         yexpr = (-1);
         ytyped = 0;
@@ -1050,7 +1756,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
             _self->match_arm_pending = 1;
             body = _self->__frontend_parse_stmtops_vptr->parse_block(_self);
             if (body < 0) {
-                if (variant >= 0) {
+                if (pushed) {
                     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                 }
                 return (-1);
@@ -1062,7 +1768,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
                 }
             }
             if ((deferring && (_self->last_yield_count > 0))) {
-                if (variant >= 0) {
+                if (pushed) {
                     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                 }
                 return tool_diag_ct_sem_error(arm_line, arm_col, "defer / own is not supported inside an expression-match arm", _self->mem->path);
@@ -1083,7 +1789,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
                     yexpr = (-1);
                 }
                 else {
-                    if (variant >= 0) {
+                    if (pushed) {
                         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                     }
                     return tool_diag_ct_sem_error(arm_line, arm_col, "an expression-match arm must yield a value (add 'yield <expr>;' or end with 'return')", _self->mem->path);
@@ -1099,7 +1805,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
             _self->ex->try_ban--;
             _self->ex->assign_ok = 0;
             if (yexpr < 0) {
-                if (variant >= 0) {
+                if (pushed) {
                     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                 }
                 return (-1);
@@ -1109,7 +1815,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
                 if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, yexpr, (&ytype)) != 0) {
                     ytype = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, yexpr, (&yz));
                     if ((!ytype)) {
-                        if (variant >= 0) {
+                        if (pushed) {
                             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                         }
                         return tool_diag_ct_sem_error(yline, ycol, "cannot determine the type yielded by this match arm", _self->mem->path);
@@ -1119,7 +1825,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
             }
             body = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_BLOCK);
             if (body < 0) {
-                if (variant >= 0) {
+                if (pushed) {
                     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                 }
                 return (-1);
@@ -1129,7 +1835,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         asg = (-1);
         if (yexpr >= 0) {
             if ((!ytyped)) {
-                if (variant >= 0) {
+                if (pushed) {
                     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                 }
                 return tool_diag_ct_sem_error(yline, ycol, "cannot determine the type yielded by this match arm", _self->mem->path);
@@ -1148,7 +1854,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
             }
             else {
                 if (strcmp(ykey, rkey) != 0) {
-                    if (variant >= 0) {
+                    if (pushed) {
                         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                     }
                     snprintf(msg, sizeof(msg), "match arm yields '%s', but an earlier arm yields '%s'", ytype, rtype);
@@ -1161,7 +1867,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
                 tv = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_VAR);
                 asg = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ASSIGN);
                 if (((tv < 0) || (asg < 0))) {
-                    if (variant >= 0) {
+                    if (pushed) {
                         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                     }
                     return (-1);
@@ -1194,36 +1900,36 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         }
         arm = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ARM);
         if (arm < 0) {
-            if (variant >= 0) {
+            if (pushed) {
                 _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             }
             return (-1);
         }
-        _self->arena->nodes[arm].aux = (((variant < 0) ? 1 : 0) | 2);
+        _self->arena->nodes[arm].aux = ((((variant < 0) && arm_wild) ? 1 : 0) | 2);
         _self->arena->nodes[arm].num = variant;
         _self->arena->nodes[arm].a = bind_head;
         _self->arena->nodes[arm].b = body;
         _self->arena->nodes[arm].c = asg;
         _self->arena->nodes[arm].line = arm_line;
-        _self->arena->nodes[arm].num = ((variant < 0) ? (-1) : variant);
+        _self->arena->nodes[arm].attr = arm_col;
+        _self->arena->nodes[arm].d = (-1);
+        _self->arena->nodes[arm].text4 = arm_conds;
         if (variant >= 0) {
-            _self->arena->nodes[arm].text = runtime_text_ct_intern(vname);
-            if ((!_self->arena->nodes[arm].text)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            _self->arena->nodes[arm].text2 = runtime_text_ct_intern(adts[adt].variants[variant].cname);
-            if ((!_self->arena->nodes[arm].text2)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
+            _self->arena->nodes[arm].text = runtime_text_ct_intern(adts[adt].variants[variant].name);
             _self->arena->nodes[arm].text3 = runtime_text_ct_intern(adts[adt].full);
-            if ((!_self->arena->nodes[arm].text3)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
         }
-        if (variant < 0) {
+        else {
+            _self->arena->nodes[arm].text = runtime_text_ct_intern(tname);
+            _self->arena->nodes[arm].text3 = runtime_text_ct_intern(adts[adt].full);
+        }
+        _self->arena->nodes[arm].text2 = arm_sig;
+        if (((((!_self->arena->nodes[arm].text) || (!_self->arena->nodes[arm].text2)) || (!_self->arena->nodes[arm].text3)) || (!_self->arena->nodes[arm].text4))) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        if ((arm_wild || arm_catch)) {
             wild = arm;
         }
-        if (variant >= 0) {
+        if (pushed) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         }
         if (arms < 0) {
@@ -1277,6 +1983,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
 }
 
 const struct frontend_parse_StmtMatch_vtbl frontend_parse_Stmt_frontend_parse_StmtMatch_vtable = {
+    .pat_begin = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_begin,
+    .pat_classify = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_classify,
+    .pat_desc = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_desc,
+    .pat_parse_one = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one,
+    .pat_parse_top = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_top,
+    .pat_commit = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_commit,
     .match_ahead = frontend_parse_Stmt_frontend_parse_StmtMatch_match_ahead,
     .parse_match = frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match,
     .expr_match_ahead = frontend_parse_Stmt_frontend_parse_StmtMatch_expr_match_ahead,
@@ -1303,4 +2015,156 @@ const char * frontend_parse_match_expr_type_key_text(const char * in) {
         }
     }
     return runtime_text_ct_intern(k);
+}
+static int pat_buf_put(char * * buf, int * len, int * cap, const char * s) {
+    int n;
+    int need;
+    int ncap;
+    char * grown;
+    n = (int)(strlen(s));
+    need = (((*len) + n) + 1);
+    if (need > (*cap)) {
+        ncap = (((*cap) > 0) ? (*cap) : 128);
+        while (((ncap < need) && (ncap < CAP_LIMIT))) {
+            ncap *= 2;
+        }
+        if (ncap < need) {
+            return (-1);
+        }
+        grown = (char *)(realloc((*buf), (size_t)(ncap)));
+        if ((!grown)) {
+            return (-1);
+        }
+        (*buf) = grown;
+        (*cap) = ncap;
+    }
+    memcpy(((*buf) + (*len)), s, (size_t)(n));
+    (*len) += n;
+    (*buf)[(*len)] = 0;
+    return 0;
+}
+static int pat_bind_add(const char * name, const char * type, const char * path) {
+    int i;
+    int ncap;
+    const char * * grown;
+    for (i = 0; i < frontend_parse_g_pat.nbind; i++) {
+        if (strcmp(frontend_parse_g_pat.bname[i], name) == 0) {
+            return (-2);
+        }
+    }
+    if (frontend_parse_g_pat.nbind >= frontend_parse_g_pat.bcap) {
+        ncap = ((frontend_parse_g_pat.bcap > 0) ? (frontend_parse_g_pat.bcap * 2) : 8);
+        if (ncap > CAP_LIMIT) {
+            return (-1);
+        }
+        grown = (const char * *)(realloc((void *)(frontend_parse_g_pat.bname), ((size_t)(ncap) * sizeof((*grown)))));
+        if ((!grown)) {
+            return (-1);
+        }
+        frontend_parse_g_pat.bname = grown;
+        grown = (const char * *)(realloc((void *)(frontend_parse_g_pat.btype), ((size_t)(ncap) * sizeof((*grown)))));
+        if ((!grown)) {
+            return (-1);
+        }
+        frontend_parse_g_pat.btype = grown;
+        grown = (const char * *)(realloc((void *)(frontend_parse_g_pat.bpath), ((size_t)(ncap) * sizeof((*grown)))));
+        if ((!grown)) {
+            return (-1);
+        }
+        frontend_parse_g_pat.bpath = grown;
+        frontend_parse_g_pat.bcap = ncap;
+    }
+    frontend_parse_g_pat.bname[frontend_parse_g_pat.nbind] = name;
+    frontend_parse_g_pat.btype[frontend_parse_g_pat.nbind] = type;
+    frontend_parse_g_pat.bpath[frontend_parse_g_pat.nbind] = path;
+    frontend_parse_g_pat.nbind++;
+    return 0;
+}
+static int pat_char_value(const char * p, int len) {
+    char c;
+    if ((((len < 3) || (p[0] != '\'')) || (p[(len - 1)] != '\''))) {
+        return (-1);
+    }
+    if (len == 3) {
+        return (unsigned char)(p[1]);
+    }
+    if (((p[1] != '\\') || (len != 4))) {
+        return (-1);
+    }
+    c = p[2];
+    if (c == 'n') {
+        return '\n';
+    }
+    if (c == 't') {
+        return '\t';
+    }
+    if (c == 'r') {
+        return '\r';
+    }
+    if (c == '0') {
+        return 0;
+    }
+    if (c == '\\') {
+        return '\\';
+    }
+    if (c == '\'') {
+        return '\'';
+    }
+    if (c == '"') {
+        return '"';
+    }
+    if (c == 'a') {
+        return 7;
+    }
+    if (c == 'b') {
+        return 8;
+    }
+    if (c == 'f') {
+        return 12;
+    }
+    if (c == 'v') {
+        return 11;
+    }
+    return (-1);
+}
+static int pat_int_base(const char * b) {
+    static const char * names[] = {
+        "int", "char", "bool", "_Bool", "short", "long", "signed",
+        "unsigned", "int8_t", "int16_t", "int32_t", "int64_t",
+        "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+        "size_t", "ssize_t", "ptrdiff_t", "intptr_t", "uintptr_t",
+        "char16_t", "char32_t", (const char *)0
+    };
+    int i;
+    int j;
+    char buf[256];
+    int n;
+    n = (int)(strlen(b));
+    if (((n <= 0) || (n >= (int)(sizeof(buf))))) {
+        return 0;
+    }
+    for (i = 0; i <= n; i++) {
+        char c = ((i < n) ? b[i] : ' ');
+        buf[i] = ((((c == '\t') || (c == '\n')) || (c == '\r')) ? ' ' : c);
+    }
+    j = 0;
+    for (i = 0; i < n; i++) {
+        if ((((buf[i] == ' ') && (j > 0)) && (buf[(j - 1)] == ' '))) {
+            continue;
+        }
+        buf[j++] = buf[i];
+    }
+    buf[j] = 0;
+    while (((j > 0) && (buf[(j - 1)] == ' '))) {
+        buf[--j] = 0;
+    }
+    for (i = 0; names[i]; i++) {
+        if (strcmp(buf, names[i]) == 0) {
+            return 1;
+        }
+    }
+    if (((((((((((((strcmp(buf, "unsigned int") == 0) || (strcmp(buf, "unsigned char") == 0)) || (strcmp(buf, "unsigned short") == 0)) || (strcmp(buf, "unsigned long") == 0)) || (strcmp(buf, "long long") == 0)) || (strcmp(buf, "unsigned long long") == 0)) || (strcmp(buf, "signed int") == 0)) || (strcmp(buf, "signed char") == 0)) || (strcmp(buf, "signed short") == 0)) || (strcmp(buf, "signed long") == 0)) || (strcmp(buf, "long int") == 0)) || (strcmp(buf, "short int") == 0))) {
+        return 1;
+    }
+    return 0;
 }

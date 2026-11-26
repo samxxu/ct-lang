@@ -112,6 +112,7 @@ struct frontend_parse_StmtScope;
 struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
+struct frontend_parse_PatCtx;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
@@ -199,6 +200,12 @@ struct frontend_parse_StmtMatch_vtbl {
     int (*parse_match)(void *);
     int (*expr_match_ahead)(void *);
     int (*parse_match_expr)(void *);
+    int (*pat_begin)(void *, int, const char *, int);
+    int (*pat_parse_top)(void *);
+    int (*pat_commit)(void *);
+    int (*pat_classify)(void *, const char *, int *, int *, int *);
+    int (*pat_desc)(void *, int, const char *, const char *, long);
+    int (*pat_parse_one)(void *, const char *, const char *);
 };
 struct frontend_parse_StmtMatch_iface {
     void *self;
