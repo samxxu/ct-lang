@@ -145,6 +145,7 @@ namespace backend::lir;
 #define LS_MATCHBIND       25
 #define LS_MATCHYIELD      26
 #define LS_RETBLOCK        27
+#define LS_DO              28
 
 /* Jump kinds. */
 #define LJ_BREAK            1
@@ -159,6 +160,7 @@ namespace backend::lir;
 #define LB_FOR_BODY         6
 #define LB_DO_BODY          7
 #define LB_DEFER_BODY       8
+#define LB_SWITCH           9
 
 /* Terminators (contract §4.1): `Jump` / `CondJump` / `Switch` / `Return` /
    `Goto`. `LT_NONE` is a block with no terminator (falls out). */

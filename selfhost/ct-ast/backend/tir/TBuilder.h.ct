@@ -1942,8 +1942,10 @@ static int tb_stmt(struct TBuilder *tb, int n)
             m->stmts[sid - 1].aux = ar->nodes[n].aux;
             if (ar->nodes[n].b >= 0)
                 tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].b, 0));
-            if (ar->nodes[n].c >= 0)
+            if (ar->nodes[n].c >= 0) {
+                m->stmts[sid - 1].flags |= 1;   /* a `case lo ... hi:` range */
                 tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].c, 0));
+            }
             for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
                 t = tb_stmt(tb, c);
                 if (t > 0) tmod_stmt_add_kid(m, sid, t);

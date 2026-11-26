@@ -86,7 +86,8 @@ S1b-S2 落下 LIR 对象模型（`backend/lir/LModule.h.ct` + `Lower.h.ct`）与
   不算分母；
 - 语句：单/多声明符 `Decl`/`Decls`、`Assign`、`ExprStmt`、`Drop`、`DeferRun` /
   `ErrDeferRun`、`RawC`（模型位）、`if` / `while` / `for` / `loop` / `foreach` /
-  块 / 空语句 / 同块 `goto` / label / `switch`·`case`（模型位）、
+  块 / 空语句 / 同块 `goto` / label / **`switch`·`case`（含 range）** /
+  **`do … while`**、
   **`delete`（Drop / free / handback）**、**`match` 语句**、**`?` 语句表达式**、
   **闭包绑定声明**、**语句头提升（`?.` / `into` / 接收者临时）**；
 - 表达式：字面量（含 `String` / `Str` 绑定）、名字（含 `ref`/`out` 的 `(*x)`、
@@ -122,18 +123,17 @@ defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，D
 - 语料：**78/78 unit `ready=1`**，**295/295 个会被发射的函数体**由 LIR 打印
   （`bodies printed=295 skipped=0`；分母包含内置层 `String` / `Str` 函数，
   S2b 时它们因 owning 返回被排除在分母外）；
-- 自举：72 个报告 unit 中 66 个 `ready=1`，**每个已降级函数体全部由 LIR
-  打印**（`skipped=0`，1452 个），整棵 C 树逐字节相同；6 个 unit 仍有 19 个
-  函数落在子集外（下表）；
+- 自举：**72/72 报告 unit `ready=1`**，**1473 个函数体全部由 LIR 打印**
+  （`bodies printed=1473 skipped=0`），整棵 C 树逐字节相同；
 - `build` 模式 `test/modules/split` 与 `test/modules/autodrop` 整树逐字节相同。
 
 ### 剩余构造（S2c 后仍未降级，函数级回退）
 
 - `?` 所在函数带活跃 cleanup（defer / errdefer / own）时，失败边还要跑清理链
-  （`L7700`），该函数回退；语料没有此形态，自举有少数；
+  （`L7700`），该函数仍回退；语料与自举都没有此形态，属保守闸；
 - ADT 构造的 payload 是 owning 值且实参是 place（需要 emitter 的 retain，
-  `L7811`）；
-- 其余自举残留集中在少数生成/边界形态（分派/实例布局），见下节。
+  `L7811`）时回退；同样未被语料/自举触发；
+- 顶层声明仍由 emitter 打印（S8 的 emitter 契约阶段迁走）。
 
 ## S1 的已知边界（不声称已覆盖）
 
