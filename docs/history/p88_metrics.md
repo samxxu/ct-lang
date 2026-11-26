@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10321 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=68868 io_cap=1024
+     emitted_before=48223 emitted_after=68903 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -75,6 +75,11 @@
       原子内建的类型、C 边界 handle 诊断）改 pool 文本 / `ct_scratch_fmt`；
       `inst_method_ret_text` 落在 TypeCheck；`Emitter.h.ct` 不变（10321），
       发射 C 68768 -> 68868 行（仅 .c），切片清单仍为 76，判别式仍各读 1 次)
+     (S1a-0 C2p-10 第五批复测：Parser 的解析器文本（`borrow` 的 struct 名、
+      `_Alignas` 捕获、泛型边界、成员/结构体/enum/ADT/trait 的注册诊断、
+      `impl` 实例与 trait 实例名、drop 字段诊断）改 pool 文本 /
+      `ct_scratch_fmt` / run-scoped 块；`Emitter.h.ct` 不变（10321），
+      发射 C 68868 -> 68903 行（仅 .c），切片清单仍为 76，判别式仍各读 1 次)
      (LANG-26 后复测：`out` 写回转换与 `CT_BINDING_CONVERSION` 开关落在
       Expr.h.ct / Emitter.h.ct / Arena.h.ct；Emitter.h.ct 10343 -> 10415，
       发射 C 54413 -> 54712，切片清单不变)

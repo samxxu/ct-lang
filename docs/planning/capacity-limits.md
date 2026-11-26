@@ -486,6 +486,51 @@ vptr 名、map 主机类型的 `sizeof`、长 ADT 变体的生命周期成员、
 `Expr`/`Parser`/`Stmt`/`ExprTypes`/`ExprStaticType` 中仍会截断用户文本的
 一次性 `msg`/类型 scratch（`expr_type` 系列调用点已在前批转 pool 文本）。
 
+**S1a-0 C2p-10（表达式/类型/语句/解析器四层，已落）**：本批把 `frontend/parse`
+剩余的 227 行 `[MAX_TEXT]` 清到 1 行（保留的确定短 scratch，见下），分五个
+红/绿对提交、每对 5 个单元左右：
+
+- **A 静态类型链**（红 20f2c1d3 / 绿 3b94f3b6）：`ExprStaticType` 的
+  `static_ctype_text` / `ctype_expand_text` / `fnptr_ret_text` /
+  `peel_ptr_text` 家族与 13 个 `ctype_*` slice；`ExprTry` 的
+  `result_tag_text` / `result_cols_text`；`ExprInstantiate` 的
+  `inst_subst_type_text`；`ExprOptional` 的 `?.` / `?[` 接收者、`ExprPure`、
+  `ExprSubscript` 的标签，以及 `Expr` 的 9 个 `static_ctype` 调用点。
+- **B 类型检查链**（红 517d4ee1 / 绿 d84b2704）：`chk_type_text` 家族
+  （`chk_assignable` / `chk_brace_init` / `chk_callptr_args` /
+  `chk_mcall_args` / `closure_match` / `lit_coerce`）、`plist_next_text` /
+  `subst_tparam_text`、`bplus_lit_type_text`、`var_type_text`，以及
+  `ExprClosure` / `ExprAdtCtor` / `ExprTraitInst` / `ExprInstantiate`。
+- **C 语句层**（红 9c9d1dc7 / 绿 d06f1089）：`Stmt` 的切片视图
+  `{ptr,len}`、`map_decode_str_text`、`_Alignas` 捕获、限定类型前瞻、
+  yield/return/赋值/初始化器类型行、`map_brace_target_text`；`StmtMatch` /
+  `ParseSupport` / `StmtControl`。
+- **D 表达式层**（红 9145c38a / 绿 1a24e846）：`Expr` 的 `$` 目标、
+  `_Generic` 选择、绑定转换、静态调用实例/方法名、原子内建类型、C 边界
+  诊断；`inst_method_ret_text`（TypeCheck）；`parse_inst_type_text` 的
+  输出块清零。
+- **E 解析器层**（红 cb7a9120 / 绿见本批最后一个 feat 提交）：`Parser` 的
+  `borrow` struct 名、`_Alignas`、泛型边界、成员/结构体/enum/ADT/trait
+  注册诊断、impl/trait 实例名、drop 字段诊断。
+
+**保留的确定短 scratch（逐类记录）**：`ExprTypeParse.type_resolve_name` 的
+`buf[MAX_TEXT]` 只用于 `strlen(name) < MAX_TEXT` 的名字；长名本来就走
+`resolve_type_text`，该行不截断任何用户文本，且歧义导出的诊断依赖 buffer
+形式。这是本批唯一保留的 `[MAX_TEXT]` 行。
+
+**证据**：`test/ast/c2p_limits.sh` 54/54（五个红证分别覆盖 42/46、46/47、
+47/49、49/52、52/54 的失败面）；71 语料生成 C 与每批上一提交逐字节相同
+（`ct-seed*` 对比，71/71）；`check-ast` 1665 passed / 0 failed / 7 skipped；
+`check-goldens-ast` 25/25；`check-warnings` 559/559；`check-seed` 两轮
+逐字节（60 .c + 59 .h）；`check-docs`、`g1`、`g8` 绿。发射 C 68571 ->
+68903 行（仅 .c），切片清单仍为 76，判别式仍各读 1 次。
+
+**C2p-10 后剩余（`grep -c '\[MAX_TEXT\]'`，行数）**：全树 101 处。
+`frontend/parse` 1（上述 keeper）；`tool/pkg` 39、`frontend/type` 21、
+`frontend/module` 20、`frontend/sym` 8、`backend/mem` 7、`backend/emit` 5。
+下一批（C2p-11）按单元簇继续：`tool/pkg` 的命令/缓存行、`frontend/type` 与
+`frontend/module` 的路径/键行、`backend/mem` 的池行。
+
 ## 6 关联
 
 - [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)（已落地的动态容量样板）

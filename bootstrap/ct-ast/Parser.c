@@ -166,6 +166,7 @@ extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
 static int borrow_struct_of(struct frontend_parse_Parser *, const char *, int);
+static const char * struct_name_text(const char *);
 static int check_borrow_param(struct frontend_parse_Parser *, int, int, int);
 static int parse_trait_body(struct frontend_parse_Parser *, int, int, const char *);
 static void trait_default_edges(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int, int, char *, int);
@@ -682,15 +683,18 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
         int r;
         int np;
         int depth;
-        char tbuf[MAX_TEXT];
-        char dpx[MAX_TEXT];
+        const char * tbuf;
+        char * dpx = 0;
+        int dcap = 0;
         if (_self->ex->decl_prefix[0]) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "duplicate _Alignas on one declaration");
         }
-        dpx[0] = 0;
         np = 0;
-        if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, sizeof(dpx), (&np), "_Alignas") != 0) {
-            return (-1);
+        if (tool_sh_ct_text_init((&dpx), (&dcap), 64) != 0) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        if (tool_sh_ct_text_cat((&dpx), (&dcap), "_Alignas") != 0) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
@@ -702,14 +706,21 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated _Alignas");
             }
             if (((_self->lex->tok == T_NUM) && (!_self->lex->tokfloat))) {
-                snprintf(tbuf, sizeof(tbuf), "%ld", _self->lex->toknum);
+                tbuf = runtime_text_ct_internf("%ld", _self->lex->toknum);
             }
             else {
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
+                tbuf = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
             }
-            if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, sizeof(dpx), (&np), tbuf) != 0) {
-                return (-1);
+            if ((!tbuf)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
+            if (((np > 0) && (tool_sh_ct_text_cat((&dpx), (&dcap), " ") != 0))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            if (tool_sh_ct_text_cat((&dpx), (&dcap), tbuf) != 0) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            np = 1;
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
                 depth++;
             }
@@ -723,6 +734,7 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         }
         _self->ex->decl_prefix = runtime_text_ct_intern(dpx);
+        tool_sh_ct_text_free((&dpx), (&dcap));
         if ((!_self->ex->decl_prefix)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
@@ -1315,7 +1327,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     const char * name;
     const char * cname;
     const char * gns = "";
-    char tparam[MAX_TEXT];
+    char * tparam;
     const char * bound;
     char * gparam[1];
     int is_generic;
@@ -1366,18 +1378,21 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "identifier '__ct_' is reserved for the compiler");
     }
     is_generic = 0;
-    tparam[0] = 0;
+    tparam = 0;
     bound = "";
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type parameter name");
         }
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tparam, sizeof(tparam));
+        tparam = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
+        if ((!tparam)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        snprintf(tparam, TEXT_LIMIT, "%.*s", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ":"))) {
             const char * raw;
-            char msg[MAX_TEXT];
             int bline;
             int bcol;
             int bi;
@@ -1398,23 +1413,25 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
             }
             bi = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, bound);
             if ((((bi < 0) && (strcmp(bound, "Drop") != 0)) && (strcmp(bound, "Handback") != 0))) {
-                snprintf(msg, sizeof(msg), "unknown trait '%s' in a generic bound", raw);
-                return tool_diag_ct_sem_error(bline, bcol, msg, _self->mem->path);
+                return tool_diag_ct_sem_error(bline, bcol, tool_sh_ct_scratch_fmt("unknown trait '%s' in a generic bound", raw), _self->mem->path);
             }
             if (((((bi >= 0) && _self->sym->traits[bi].is_static) || (strcmp(bound, "Drop") == 0)) || (strcmp(bound, "Handback") == 0))) {
-                snprintf(msg, sizeof(msg), "trait '%s' cannot bound a type parameter", raw);
-                return tool_diag_ct_sem_error(bline, bcol, msg, _self->mem->path);
+                return tool_diag_ct_sem_error(bline, bcol, tool_sh_ct_scratch_fmt("trait '%s' cannot bound a type parameter", raw), _self->mem->path);
             }
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "+"))) {
                 return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "only one trait bound is supported", _self->mem->path);
             }
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
-                char bbuf[MAX_TEXT];
+                char * bbuf;
                 if (bi < 0) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown trait in a generic bound");
                 }
-                snprintf(bbuf, sizeof(bbuf), "%s", bound);
-                if (parse_trait_inst_args(_self, bbuf, sizeof(bbuf)) < 0) {
+                bbuf = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
+                if ((!bbuf)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                snprintf(bbuf, TEXT_LIMIT, "%s", bound);
+                if (parse_trait_inst_args(_self, bbuf, TEXT_LIMIT) < 0) {
                     return (-1);
                 }
                 bound = runtime_text_ct_intern(bbuf);
@@ -2248,7 +2265,6 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
     int c;
     int i;
     int si;
-    char msg[MAX_TEXT];
     const char * nm;
     (void)(_self);
     if (_self->arena->nodes[m].kind == N_FIELDS) {
@@ -2281,8 +2297,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
         }
         for (i = 0; i < _self->sym->structs[si].nfields; i++) {
             if (strcmp(_self->sym->structs[si].fields[i].name, nm) == 0) {
-                snprintf(msg, sizeof(msg), "duplicate member '%s'", nm);
-                return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->arena->nodes[m].line, msg);
+                return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->arena->nodes[m].line, tool_sh_ct_scratch_fmt("duplicate member '%s'", nm));
             }
         }
         if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, si, (_self->sym->structs[si].nfields + 1)) != 0) {
@@ -2311,8 +2326,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
     }
     for (i = 0; i < _self->npend; i++) {
         if (strcmp(_self->pend_fields[i].name, nm) == 0) {
-            snprintf(msg, sizeof(msg), "duplicate member '%s'", nm);
-            return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->arena->nodes[m].line, msg);
+            return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->arena->nodes[m].line, tool_sh_ct_scratch_fmt("duplicate member '%s'", nm));
         }
     }
     if (_self->__frontend_parse_parseops_vptr->ensure_pend_fields(_self, (_self->npend + 1)) != 0) {
@@ -2675,8 +2689,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
             nt++;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ":"))) {
-                char raw[MAX_TEXT];
-                char msg[MAX_TEXT];
+                const char * raw;
                 int bline;
                 int bcol;
                 int bi;
@@ -2686,12 +2699,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
                 }
                 bline = _self->lex->tokline;
                 bcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, raw, sizeof(raw));
+                raw = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+                if ((!raw)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 bi = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, raw);
                 if (((((bi >= 0) && _self->sym->traits[bi].is_static) || (strcmp(raw, "Drop") == 0)) || (strcmp(raw, "Handback") == 0))) {
-                    snprintf(msg, sizeof(msg), "trait '%s' cannot bound a type parameter", raw);
-                    return tool_diag_ct_sem_error(bline, bcol, msg, _self->mem->path);
+                    return tool_diag_ct_sem_error(bline, bcol, tool_sh_ct_scratch_fmt("trait '%s' cannot bound a type parameter", raw), _self->mem->path);
                 }
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "+"))) {
                     return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a struct type parameter cannot carry more than one bound", _self->mem->path);
@@ -2720,9 +2735,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
     if (qname[0]) {
         int ex = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, qname);
         if (((ex >= 0) && _self->sym->structs[ex].defined)) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof(msg), "duplicate %s '%s'", (is_union ? "union" : "struct"), name);
-            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
+            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate %s '%s'", (is_union ? "union" : "struct"), name), _self->mem->path);
         }
     }
     brace_line = _self->lex->tokline;
@@ -2763,9 +2776,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
             if (si3 >= 0) {
                 for (ui3 = 0; ui3 < _self->sym->structs[si3].nuse; ui3++) {
                     if (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, _self->sym->structs[si3].use[ui3]) < 0) {
-                        char msg[MAX_TEXT];
-                        snprintf(msg, sizeof(msg), "struct '%s' uses undefined trait '%s'", name, _self->sym->structs[si3].use[ui3]);
-                        return tool_diag_ct_sem_error(brace_line, brace_col, msg, _self->mem->path);
+                        return tool_diag_ct_sem_error(brace_line, brace_col, tool_sh_ct_scratch_fmt("struct '%s' uses undefined trait '%s'", name, _self->sym->structs[si3].use[ui3]), _self->mem->path);
                     }
                 }
             }
@@ -2865,7 +2876,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     const char * qname;
     const char * mname;
     const char * cname;
-    char nsbuf[MAX_TEXT];
+    const char * nsbuf;
     size_t nl;
     (void)(_self);
     name = "";
@@ -2894,14 +2905,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
         }
         ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, qname);
         if (((ti >= 0) && (_self->sym->type_kind[ti] == 5))) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof(msg), "duplicate enum '%s'", name);
-            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
+            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate enum '%s'", name), _self->mem->path);
         }
         if (((ti >= 0) && (_self->sym->type_kind[ti] == 7))) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof(msg), "duplicate ADT '%s'", name);
-            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
+            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate ADT '%s'", name), _self->mem->path);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     }
@@ -3075,9 +3082,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
         }
         adt = frontend_sym_ct_adt_add(name, qname, is_pub, _self->cur_unit, _self->mem->path, tline);
         if (adt == (-2)) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof(msg), "duplicate ADT '%s'", name);
-            return tool_diag_ct_sem_error(tline, tcol, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(tline, tcol, tool_sh_ct_scratch_fmt("duplicate ADT '%s'", name), _self->mem->path);
         }
         if (adt < 0) {
             return tool_diag_ct_sem_error(tline, tcol, "too many ADT types in this build (limit 65536)", _self->mem->path);
@@ -3092,23 +3097,17 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
             int nadts;
             v = frontend_sym_ct_adt_add_variant(adt, _self->arena->nodes[tn].text, _self->arena->nodes[tn].text, _self->arena->nodes[tn].line, _self->arena->nodes[tn].num);
             if (v < 0) {
-                char msg[MAX_TEXT];
-                snprintf(msg, sizeof(msg), "too many variants for ADT '%s' (limit 65536)", name);
-                return tool_diag_ct_sem_error(_self->arena->nodes[tn].line, _self->arena->nodes[tn].num, msg, _self->mem->path);
+                return tool_diag_ct_sem_error(_self->arena->nodes[tn].line, _self->arena->nodes[tn].num, tool_sh_ct_scratch_fmt("too many variants for ADT '%s' (limit 65536)", name), _self->mem->path);
             }
             adts = frontend_sym_ct_adts((&nadts));
             for (fld = _self->arena->nodes[tn].a; fld >= 0; fld = _self->arena->nodes[fld].next) {
                 for (seen = 0; seen < adts[adt].variants[v].nfields; seen++) {
                     if (strcmp(adts[adt].variants[v].fields[seen].name, _self->arena->nodes[fld].text2) == 0) {
-                        char msg[MAX_TEXT];
-                        snprintf(msg, sizeof(msg), "duplicate payload field '%s'", _self->arena->nodes[fld].text2);
-                        return tool_diag_ct_sem_error(_self->arena->nodes[fld].line, _self->arena->nodes[fld].num, msg, _self->mem->path);
+                        return tool_diag_ct_sem_error(_self->arena->nodes[fld].line, _self->arena->nodes[fld].num, tool_sh_ct_scratch_fmt("duplicate payload field '%s'", _self->arena->nodes[fld].text2), _self->mem->path);
                     }
                 }
                 if (frontend_sym_ct_adt_add_field(adt, v, _self->arena->nodes[fld].text2, _self->arena->nodes[fld].text) < 0) {
-                    char msg[MAX_TEXT];
-                    snprintf(msg, sizeof(msg), "too many payload fields for '%s.%s' (limit 65536)", name, _self->arena->nodes[tn].text);
-                    return tool_diag_ct_sem_error(_self->arena->nodes[fld].line, _self->arena->nodes[fld].num, msg, _self->mem->path);
+                    return tool_diag_ct_sem_error(_self->arena->nodes[fld].line, _self->arena->nodes[fld].num, tool_sh_ct_scratch_fmt("too many payload fields for '%s.%s' (limit 65536)", name, _self->arena->nodes[tn].text), _self->mem->path);
                 }
                 if (((_self->sup->__frontend_parse_supportops_vptr->str_handle_kind(_self->sup, _self->arena->nodes[fld].text) == 3) || (_self->sup->__frontend_parse_supportops_vptr->str_handle_kind(_self->sup, _self->arena->nodes[fld].text) == 4))) {
                     char msg[MAX_TEXT * 2];
@@ -3127,10 +3126,13 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
         }
         return s;
     }
-    snprintf(nsbuf, sizeof(nsbuf), "%s", _self->sym->ns);
-    nl = strlen(nsbuf);
+    nl = ((_self->sym->ns && _self->sym->ns[0]) ? strlen(_self->sym->ns) : 0);
     if (nl > 0) {
-        nsbuf[(nl - 1)] = 0;
+        nl--;
+    }
+    nsbuf = runtime_text_ct_intern_len((_self->sym->ns ? _self->sym->ns : ""), (int)(nl));
+    if ((!nsbuf)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     tail = (-1);
     for (tn = mem_first; tn >= 0; tn = _self->arena->nodes[tn].next) {
@@ -3255,11 +3257,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
             struct frontend_sym_Adt * adts;
             int nadts;
             int adi;
-            char tgt[MAX_TEXT];
+            const char * tgt;
             adts = frontend_sym_ct_adts((&nadts));
             adi = ((int)(_self->arena->nodes[t].num) - 1);
             if (((adts && (adi >= 0)) && (adi < nadts))) {
-                snprintf(tgt, sizeof(tgt), "struct %s", adts[adi].full);
+                tgt = runtime_text_ct_internf("struct %s", adts[adi].full);
+                if ((!tgt)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 _self->sym->__frontend_sym_symbolops_vptr->set_type_target(_self->sym, qname, tgt);
             }
         }
@@ -3442,9 +3447,12 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_use_list(void *se
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
-            char tnbuf[MAX_TEXT];
-            snprintf(tnbuf, sizeof(tnbuf), "%s", tname);
-            if (parse_trait_inst_args(_self, tnbuf, sizeof(tnbuf)) < 0) {
+            char * tnbuf = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
+            if ((!tnbuf)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            snprintf(tnbuf, TEXT_LIMIT, "%s", tname);
+            if (parse_trait_inst_args(_self, tnbuf, TEXT_LIMIT) < 0) {
                 return (-1);
             }
             tname = runtime_text_ct_intern(tnbuf);
@@ -3534,9 +3542,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
             discard = 1;
         }
         else {
-            char dmsg[MAX_TEXT];
-            snprintf(dmsg, sizeof(dmsg), "'%s' is a reserved built-in trait and cannot be defined", name);
-            return tool_diag_ct_sem_error(trait_line, 1, dmsg, _self->mem->path);
+            return tool_diag_ct_sem_error(trait_line, 1, tool_sh_ct_scratch_fmt("'%s' is a reserved built-in trait and cannot be defined", name), _self->mem->path);
         }
     }
     save_ntraits = _self->sym->ntraits;
@@ -3561,9 +3567,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
             }
             for (pi = 0; pi < ntp; pi++) {
                 if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, tparam[pi])) {
-                    char dmsg[MAX_TEXT];
-                    snprintf(dmsg, sizeof(dmsg), "duplicate type parameter '%.*s'", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
-                    return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), dmsg, _self->mem->path);
+                    return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate type parameter '%.*s'", _self->lex->tokstr.len, _self->lex->tokstr.ptr), _self->mem->path);
                 }
             }
             _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tparam[ntp], MAX_TEXT);
@@ -3597,9 +3601,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         }
     }
     if (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, qname) >= 0) {
-        char msg[MAX_TEXT];
-        snprintf(msg, sizeof(msg), "duplicate trait '%s'", name);
-        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path);
+        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate trait '%s'", name), _self->mem->path);
     }
     ti = _self->sup->__frontend_parse_supportops_vptr->add_trait(_self->sup, qname);
     if (ti < 0) {
@@ -3613,17 +3615,17 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
 {
-        char nsbuf[MAX_TEXT];
+        const char * nsbuf;
         size_t nl;
-        snprintf(nsbuf, sizeof(nsbuf), "%s", _self->sym->ns);
-        nl = strlen(nsbuf);
-        if (((nl > 0) && (nsbuf[(nl - 1)] == '_'))) {
-            nsbuf[(nl - 1)] = 0;
+        nl = ((_self->sym->ns && _self->sym->ns[0]) ? strlen(_self->sym->ns) : 0);
+        if (((nl > 0) && (_self->sym->ns[(nl - 1)] == '_'))) {
+            nl--;
         }
-        _self->sym->traits[ti].ns = runtime_text_ct_intern(nsbuf);
-        if ((!_self->sym->traits[ti].ns)) {
+        nsbuf = runtime_text_ct_intern_len((_self->sym->ns ? _self->sym->ns : ""), (int)(nl));
+        if ((!nsbuf)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
+        _self->sym->traits[ti].ns = nsbuf;
     }
     _self->sym->traits[ti].ntparams = ntp;
     _self->sym->traits[ti].tparam = frontend_sym_ct_rows_reserve(_self->sym->traits[ti].tparam, _self->sym->traits[ti].tcap, ntp, (&_self->sym->traits[ti].tcap));
@@ -3897,9 +3899,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         free(edge);
     }
     if (dcycle) {
-        char cmsg[MAX_TEXT];
-        snprintf(cmsg, sizeof(cmsg), "trait '%s' has no non-default method to break the cycle", name);
-        return tool_diag_ct_sem_error(trait_line, 1, cmsg, _self->mem->path);
+        return tool_diag_ct_sem_error(trait_line, 1, tool_sh_ct_scratch_fmt("trait '%s' has no non-default method to break the cycle", name), _self->mem->path);
     }
     if (discard) {
         _self->sym->ntraits = save_ntraits;
@@ -3963,9 +3963,12 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
             return _self->__frontend_parse_parseops_vptr->parse_impl_inst(_self, tname, 0);
         }
 {
-            char rb[MAX_TEXT];
-            snprintf(rb, sizeof(rb), "%s", rtrait);
-            ti = parse_trait_inst_args(_self, rb, sizeof(rb));
+            char * rb = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
+            if ((!rb)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            snprintf(rb, TEXT_LIMIT, "%s", rtrait);
+            ti = parse_trait_inst_args(_self, rb, TEXT_LIMIT);
             if (ti < 0) {
                 return (-1);
             }
@@ -4497,16 +4500,16 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
 
 static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *self, const char * tmpl_in, int have_name) {
     struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
-    char tmpl[MAX_TEXT];
+    const char * tmpl;
     char * * tn = 0;
     char * * pat = 0;
     int tcap = 0;
     int pcap = 0;
-    char use[MAX_TEXT];
-    char ruse[MAX_TEXT];
+    const char * use;
+    const char * ruse;
     const char * ret;
     const char * mname;
-    char htype[MAX_TEXT];
+    const char * htype;
     int nt;
     int nargs;
     int line;
@@ -4521,9 +4524,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     int is_pub;
     nt = 0;
     nargs = 0;
-    snprintf(htype, sizeof(htype), "%s", "void *");
-    use[0] = 0;
-    snprintf(tmpl, sizeof(tmpl), "%s", tmpl_in);
+    htype = "void *";
+    use = "";
+    tmpl = tmpl_in;
     line = _self->lex->tokline;
     if (have_name) {
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -4539,8 +4542,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
             nt++;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ":"))) {
-                char braw[MAX_TEXT];
-                char msg[MAX_TEXT];
+                const char * braw;
                 int bl;
                 int bc;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -4549,9 +4551,11 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                 }
                 bl = _self->lex->tokline;
                 bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, braw, sizeof(braw));
-                snprintf(msg, sizeof(msg), "impl type parameter '%s' cannot repeat the bound '%s'", tn[(nt - 1)], braw);
-                return tool_diag_ct_sem_error(bl, bc, msg, _self->mem->path);
+                braw = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+                if ((!braw)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                return tool_diag_ct_sem_error(bl, bc, tool_sh_ct_scratch_fmt("impl type parameter '%s' cannot repeat the bound '%s'", tn[(nt - 1)], braw), _self->mem->path);
             }
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -4566,16 +4570,21 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a struct name");
         }
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tmpl, sizeof(tmpl));
+        tmpl = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!tmpl)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "for"))) {
-            char tname[MAX_TEXT];
-            snprintf(tname, sizeof(tname), "%s", tmpl);
+            const char * tname = tmpl;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a struct name after 'for'");
             }
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tmpl, sizeof(tmpl));
+            tmpl = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!tmpl)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (((strcmp(tname, "Drop") == 0) || (strcmp(tname, "Handback") == 0))) {
                 ti = (-1);
@@ -4586,7 +4595,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "impl of an unknown trait");
                 }
             }
-            snprintf(use, sizeof(use), "%s", tname);
+            use = tname;
         }
     }
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
@@ -4603,7 +4612,6 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                 int l4col = 0;
                 int deep = 0;
                 int badp = 0;
-                char pmsg[MAX_TEXT + 32];
                 if (_self->__frontend_parse_parseops_vptr->parse_pat_arg(_self, pat[nargs], MAX_TEXT, 0, (&l4line), (&l4col), (&deep), (&badp)) != 0) {
                     return (-1);
                 }
@@ -4611,11 +4619,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                     return tool_diag_ct_sem_error(l4line, l4col, "impl pattern nesting exceeds 4 levels", _self->mem->path);
                 }
                 if ((!badp)) {
-                    char cs[MAX_TEXT];
+                    char * cs = tool_sh_ct_scratch_alloc(((int)(strlen(pat[nargs])) + 1));
                     int cn = 0;
                     int bi;
                     const char * cs0 = pat[nargs];
-                    while (((*cs0) && (cn < (MAX_TEXT - 1)))) {
+                    if ((!cs)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
+                    while ((*cs0)) {
                         if ((((*cs0) != ' ') && ((*cs0) != '\t'))) {
                             cs[cn++] = (*cs0);
                         }
@@ -4635,8 +4646,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                     }
                 }
                 if (badp) {
-                    snprintf(pmsg, sizeof(pmsg), "unsupported impl pattern '%s'", pat[nargs]);
-                    return tool_diag_ct_sem_error(aline, acol, pmsg, _self->mem->path);
+                    return tool_diag_ct_sem_error(aline, acol, tool_sh_ct_scratch_fmt("unsupported impl pattern '%s'", pat[nargs]), _self->mem->path);
                 }
             }
             nargs++;
@@ -4657,29 +4667,36 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a trait name after 'use'");
         }
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, use, sizeof(use));
-        if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, use, ruse, sizeof(ruse)) != 0) {
+        use = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!use)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        ruse = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, use);
+        if ((!ruse)) {
             return (-1);
         }
-        snprintf(use, sizeof(use), "%s", ruse);
+        use = ruse;
         ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, use);
         if ((((ti < 0) && (strcmp(use, "Drop") != 0)) && (strcmp(use, "Handback") != 0))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "impl of an unknown trait");
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
-            char full[MAX_TEXT * 2];
-            char targ[MAX_TEXT];
+            char * full = 0;
+            int fcap = 0;
+            const char * targ;
             int na = 0;
             int ai;
             int bad = 0;
-            int fl = 0;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             for (; ; ) {
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type argument");
                 }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, targ, MAX_TEXT);
+                targ = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+                if ((!targ)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 if (((na >= nt) || (strcmp(targ, tn[na]) != 0))) {
                     bad = 1;
                 }
@@ -4700,18 +4717,28 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
             if (bad) {
                 return tool_diag_ct_sem_error(line, 1, "unsupported generic trait implementation shape", _self->mem->path);
             }
-            fl = snprintf(full, sizeof(full), "%s<", ruse);
+            if (tool_sh_ct_text_init((&full), (&fcap), 64) != 0) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            if (((tool_sh_ct_text_cat((&full), (&fcap), ruse) != 0) || (tool_sh_ct_text_cat((&full), (&fcap), "<") != 0))) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             for (ai = 0; ai < na; ai++) {
-                int wr = snprintf((full + fl), (sizeof(full) - (size_t)(fl)), "%s%s", ((ai == 0) ? "" : ","), tn[ai]);
-                if ((((fl < 0) || (wr < 0)) || ((fl + wr) >= (int)(sizeof(full))))) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
+                if (((ai > 0) && (tool_sh_ct_text_cat((&full), (&fcap), ",") != 0))) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                fl += wr;
+                if (tool_sh_ct_text_cat((&full), (&fcap), tn[ai]) != 0) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
             }
-            if (((snprintf((full + fl), (sizeof(full) - (size_t)(fl)), ">") < 0) || ((fl + 1) >= (int)(sizeof(full))))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
+            if (tool_sh_ct_text_cat((&full), (&fcap), ">") != 0) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            snprintf(use, sizeof(use), "%s", full);
+            use = runtime_text_ct_intern(full);
+            tool_sh_ct_text_free((&full), (&fcap));
+            if ((!use)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
         }
     }
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "{") != 0) {
@@ -4778,7 +4805,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                     }
                     if (_self->ex->in_generic_bound[0]) {
-                        snprintf(htype, sizeof(htype), "struct %s", tmpl);
+                        htype = runtime_text_ct_internf("struct %s", tmpl);
+                        if ((!htype)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        }
                     }
                     break;
                 }
@@ -4987,9 +5017,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_drop_release_walk(void 
             field = _self->arena->nodes[recv].text2;
             for (k = 0; k < (*nseen); k++) {
                 if (strcmp((seen + (k * MAX_TEXT)), field) == 0) {
-                    char msg[MAX_TEXT];
-                    snprintf(msg, sizeof(msg), "field '%s' is released more than once in drop()", field);
-                    return tool_diag_ct_sem_error(_self->arena->nodes[n].line, (int)(_self->arena->nodes[n].num), msg, _self->mem->path);
+                    return tool_diag_ct_sem_error(_self->arena->nodes[n].line, (int)(_self->arena->nodes[n].num), tool_sh_ct_scratch_fmt("field '%s' is released more than once in drop()", field), _self->mem->path);
                 }
             }
             if ((*nseen) < 32) {
@@ -5038,28 +5066,45 @@ const struct frontend_parse_ParseOps_vtbl frontend_parse_Parser_frontend_parse_P
 };
 
 static int borrow_struct_of(struct frontend_parse_Parser * self, const char * type, int is_array) {
-    char t[MAX_TEXT];
-    char base[MAX_TEXT];
+    const char * t;
     size_t bl;
     if (is_array) {
         return (-1);
     }
-    snprintf(t, sizeof(t), "%s", type);
-    bl = strlen(t);
-    if (((bl == 0) || (t[(bl - 1)] != '*'))) {
+    bl = strlen(type);
+    if (((bl == 0) || (type[(bl - 1)] != '*'))) {
         return (-1);
     }
-    while (((bl > 0) && ((t[(bl - 1)] == '*') || (t[(bl - 1)] == ' ')))) {
-        bl = (bl - 1);
-        t[bl] = 0;
+    while (((bl > 0) && ((type[(bl - 1)] == '*') || (type[(bl - 1)] == ' ')))) {
+        bl--;
+    }
+    t = runtime_text_ct_intern_len(type, (int)(bl));
+    if ((!t)) {
+        return (-1);
     }
     if (strncmp(t, "struct ", 7) == 0) {
-        snprintf(base, sizeof(base), "%s", (t + 7));
+        t += 7;
     }
-    else {
-        snprintf(base, sizeof(base), "%s", t);
+    return self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, t);
+}
+static const char * struct_name_text(const char * spell) {
+    const char * p = spell;
+    size_t n;
+    while ((*p) == ' ') {
+        p++;
     }
-    return self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
+    n = strlen(p);
+    while (((n > 0) && ((p[(n - 1)] == ' ') || (p[(n - 1)] == '*')))) {
+        n--;
+    }
+    p = runtime_text_ct_intern_len(p, (int)(n));
+    if ((!p)) {
+        return (const char *)(0);
+    }
+    if (strncmp(p, "struct ", 7) == 0) {
+        p += 7;
+    }
+    return p;
 }
 static int check_borrow_param(struct frontend_parse_Parser * self, int pnode, int line, int col) {
     int si;
@@ -5345,8 +5390,7 @@ static int check_struct_bounds(struct frontend_parse_Parser * self) {
         int ti;
         int si;
         int ok;
-        char tbase[MAX_TEXT];
-        size_t tl;
+        const char * tbase;
         char * arg;
         if (((ins[i].owner != self->cur_unit) || (ins[i].line <= 0))) {
             continue;
@@ -5365,13 +5409,9 @@ static int check_struct_bounds(struct frontend_parse_Parser * self) {
                 tool_diag_ct_sem_error(ins[i].line, ins[i].col, msg, self->mem->path);
                 continue;
             }
-            snprintf(tbase, sizeof(tbase), "%s", arg);
-            tl = strlen(tbase);
-            while (((tl > 0) && ((tbase[(tl - 1)] == ' ') || (tbase[(tl - 1)] == '*')))) {
-                tbase[--tl] = 0;
-            }
-            if (strncmp(tbase, "struct ", 7) == 0) {
-                memmove(tbase, (tbase + 7), (strlen((tbase + 7)) + 1));
+            tbase = struct_name_text(arg);
+            if ((!tbase)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
             }
             si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, tbase);
             ok = 0;
@@ -5407,8 +5447,7 @@ static int check_trait_bounds(struct frontend_parse_Parser * self) {
     int ti;
     int ok;
     char msg[512];
-    char tbase[MAX_TEXT];
-    size_t tl;
+    const char * tbase;
     base = tool_diag_ct_diag_nsem();
     for (i = 0; i < self->sym->ntraits; i++) {
         if (self->sym->traits[i].tmpl < 0) {
@@ -5429,13 +5468,9 @@ static int check_trait_bounds(struct frontend_parse_Parser * self) {
                 tool_diag_ct_sem_error(self->sym->traits[i].line, 1, msg, self->mem->path);
                 continue;
             }
-            snprintf(tbase, sizeof(tbase), "%s", arg);
-            tl = strlen(tbase);
-            while (((tl > 0) && ((tbase[(tl - 1)] == ' ') || (tbase[(tl - 1)] == '*')))) {
-                tbase[--tl] = 0;
-            }
-            if (strncmp(tbase, "struct ", 7) == 0) {
-                memmove(tbase, (tbase + 7), (strlen((tbase + 7)) + 1));
+            tbase = struct_name_text(arg);
+            if ((!tbase)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
             }
             si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, tbase);
             ok = 0;
