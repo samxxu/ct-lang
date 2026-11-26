@@ -1,7 +1,4 @@
-<p align="center">
-  <img src="docs/assets/ct-logo.png" alt="Ct logo" width="128" height="128">
-</p>
-
+![Ct logo](docs/assets/ct-logo.png)
 # Ct — C with Traits 编译器
 
 > **v1.1.0** · 中文 · [English](README.en.md)
@@ -198,6 +195,96 @@ int main(void)
 
 `ct build docs/snippets/README/0.6_driver_rollback.ct --c-boundary=allow -o /tmp/dev && /tmp/dev`
 输出 `release dev` / `rollback init` / `release dev` / `7 open failed`（成功只跑 `defer`，失败先回滚再释放）。
+
+#### 0.7 泛型：模板函数、trait 约束与泛型 trait
+
+模板按类型单态化，调用点写显式类型实参；`T: Score` 只接受实现了该 trait 的类型：
+
+```ct
+// source: docs/snippets/README/0.7_generics.ct
+T max_of<T>(T a, T b)
+{
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
+trait Score { int score(void); }
+
+struct Run { int n; } use Score;
+
+impl Score for Run {
+    int score(void) { return self->n * 10; }
+}
+
+int best<T: Score>(T a, T b)
+{
+    if (a.score() > b.score()) {
+        return a.score();
+    }
+    return b.score();
+}
+
+int main(void)
+{
+    Run a = { 3 };
+    Run b = { 5 };
+    printf("max=%d best=%d\n", max_of<int>(3, 7), best<Run>(a, b));
+    return 0;
+}
+```
+
+`ct build docs/snippets/README/0.7_generics.ct --c-boundary=allow -o /tmp/gen && /tmp/gen`
+实测 `max=7 best=50`。模板体里没有装箱、没有 vtable；每个实例是一份独立 `static` C 函数。
+
+#### 0.8 可选链 `?.` 与自定义下标
+
+`x[k]` 走固有 `get` / `set`（S2 起按**参数类型**匹配，`int` 键与 `char *` 键可以并存）；
+`p?.f` 在空指针时读作 `0`，接收者只求值一次：
+
+```ct
+// source: docs/snippets/README/0.8_optional_index.ct
+struct Cell { int value; }
+
+impl Cell {
+    int get(int k)
+    {
+        if (k == 0) {
+            return self->value;
+        }
+        return 0;
+    }
+    void set(int k, int v)
+    {
+        if (k == 0) {
+            self->value = v;
+        }
+    }
+}
+
+static struct Cell g_cell = { 5 };
+
+static struct Cell *maybe(int ok)
+{
+    if (ok != 0) {
+        return &g_cell;
+    }
+    return 0;
+}
+
+int main(void)
+{
+    Cell c;
+
+    c[0] = 9;
+    printf("slot=%d hit=%d miss=%d\n", c[0], maybe(1)?.value, maybe(0)?.value);
+    return 0;
+}
+```
+
+`ct build docs/snippets/README/0.8_optional_index.ct --c-boundary=allow -o /tmp/opt && /tmp/opt`
+实测 `slot=9 hit=5 miss=0`。
 
 ### 1. 快速开始
 

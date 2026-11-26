@@ -1,0 +1,31 @@
+T max_of<T>(T a, T b)
+{
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
+trait Score { int score(void); }
+
+struct Run { int n; } use Score;
+
+impl Score for Run {
+    int score(void) { return self->n * 10; }
+}
+
+int best<T: Score>(T a, T b)
+{
+    if (a.score() > b.score()) {
+        return a.score();
+    }
+    return b.score();
+}
+
+int main(void)
+{
+    Run a = { 3 };
+    Run b = { 5 };
+    printf("max=%d best=%d\n", max_of<int>(3, 7), best<Run>(a, b));
+    return 0;
+}

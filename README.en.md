@@ -1,15 +1,12 @@
-<p align="center">
-  <img src="docs/assets/ct-logo.png" alt="Ct logo" width="128" height="128">
-</p>
-
-# ct — C with Traits compiler
+![Ct logo](docs/assets/ct-logo.png)
+# Ct — C with Traits compiler
 
 > English · [中文](README.md)
 
 > This file is for human readers only. AI agents should use [README.md](README.md).
 > Documentation other than this file is Chinese-only.
 
-**ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into plain C.
+**Ct** is a **source-to-source compiler** that translates `.ct` files (C plus trait syntax) into plain C.
 The compilation path (`ct compile` / `ct build`) performs no type checking and no optimisation; the
 optional `ct check` runs bounded semantic checks only (call-site arity, argument types, trait-method
 ambiguity, impl signature drift). For earlier type feedback use `ct check --types` (an optional

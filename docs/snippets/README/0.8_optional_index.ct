@@ -1,0 +1,36 @@
+struct Cell { int value; }
+
+impl Cell {
+    int get(int k)
+    {
+        if (k == 0) {
+            return self->value;
+        }
+        return 0;
+    }
+    void set(int k, int v)
+    {
+        if (k == 0) {
+            self->value = v;
+        }
+    }
+}
+
+static struct Cell g_cell = { 5 };
+
+static struct Cell *maybe(int ok)
+{
+    if (ok != 0) {
+        return &g_cell;
+    }
+    return 0;
+}
+
+int main(void)
+{
+    Cell c;
+
+    c[0] = 9;
+    printf("slot=%d hit=%d miss=%d\n", c[0], maybe(1)?.value, maybe(0)?.value);
+    return 0;
+}
