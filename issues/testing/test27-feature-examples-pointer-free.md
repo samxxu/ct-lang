@@ -146,3 +146,5 @@ REQ 已把样例与文档面的剩余工作交给 **TEST/REVIEW**。以下是可
 | --- | --- | --- | --- | --- |
 | H2（部分） | `4ac331bd` | 1（guide） | `char *` 12→16，`->` 1→4（新增均为 C 互操作对照）；Ct 段 0 | `check-docs` 仅剩 `docs/decisions/D-013.md` 既有死链（他人改动，未触碰）；H2 的“只出现在 C 互操作表”未收口 |
 | H4（部分） | `cd798dd7` | 3（README + snippet + expected） | 新增 `match`/ADT 片段；README 0.5.1；其余矩阵行未补 | `check-docs` 仅剩 D-013 既有死链；H4 未收口 |
+| H1（部分） | `aaf519fd` | 1（tutorial） | §15/§17/§22/§23 增加 examples 完整链接；§18 暂时不动（S5 在改 ADT 模式 B）；source/snippets 全量未做 | `check-docs` 仅 D-013；H1 未收口 |
+| H3（部分/标注） | `9c6f0d9c` | 1（idioms） | 新增 §11.1 C 互操作边界；原有 value 正文未逐条重写 | `check-docs` 仅 D-013；H3 标注完成、逐条版本仍可补 |
