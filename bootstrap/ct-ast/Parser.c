@@ -2863,8 +2863,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     int pre_adt;
     const char * name;
     const char * qname;
-    const char * mname;
-    const char * cname;
+    char mname[MAX_TEXT];
+    char cname[MAX_TEXT];
     char nsbuf[MAX_TEXT];
     size_t nl;
     (void)(_self);
@@ -3134,16 +3134,15 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     }
     tail = (-1);
     for (tn = mem_first; tn >= 0; tn = _self->arena->nodes[tn].next) {
-        mname = _self->arena->nodes[tn].text;
-        cname = _self->sup->__frontend_parse_supportops_vptr->ns_decl_text(_self->sup, mname);
-        if ((!cname)) {
+        snprintf(mname, sizeof(mname), "%s", _self->arena->nodes[tn].text);
+        if (_self->sup->__frontend_parse_supportops_vptr->ns_decl_name(_self->sup, mname, cname, sizeof(cname)) != 0) {
             return (-1);
         }
         m = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ENUMVAL);
         if (m < 0) {
             return (-1);
         }
-        _self->arena->nodes[m].text = cname;
+        _self->arena->nodes[m].text = runtime_text_ct_intern(cname);
         if ((!_self->arena->nodes[m].text)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
@@ -3933,7 +3932,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
     const char * rtrait;
     const char * rstruct;
     const char * ret;
-    const char * mname;
+    char mname[MAX_TEXT];
     const char * stype;
     int type_index;
     (void)(_self);
@@ -4111,10 +4110,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a method name");
         }
-        mname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-        if ((!mname)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, mname, sizeof(mname));
         mcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
@@ -4304,7 +4300,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
     int is_static;
     int is_pub;
     const char * ret;
-    const char * mname;
+    char mname[MAX_TEXT];
     const char * stype;
     int type_index;
     int adt = ((si <= (-2)) ? ((-2) - si) : (-1));
@@ -4390,10 +4386,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a method name");
         }
-        mname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-        if ((!mname)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, mname, sizeof(mname));
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
             return (-1);
@@ -4505,7 +4498,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     char use[MAX_TEXT];
     char ruse[MAX_TEXT];
     const char * ret;
-    const char * mname;
+    char mname[MAX_TEXT];
     char htype[MAX_TEXT];
     int nt;
     int nargs;
@@ -4831,10 +4824,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a method name");
         }
-        mname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-        if ((!mname)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, mname, sizeof(mname));
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
             return (-1);

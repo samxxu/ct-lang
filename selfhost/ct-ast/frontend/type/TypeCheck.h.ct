@@ -1686,11 +1686,11 @@ impl TypeOps for TypeCheck {
        globals and imported globals change. */
     int rewrite_init_names(const char *in, char *out, int cap)
     {
-        const char *id;
+        char id[MAX_TEXT];
         char last[MAX_TEXT];
         char fn_cn[MAX_TEXT];
         char msg[MAX_TEXT];
-        int i, i0, n, w, vi, fi, fn_hits, fn_bad;
+        int i, n, w, vi, fi, fn_hits, fn_bad;
         char c;
         (void)self;
 
@@ -1736,16 +1736,13 @@ impl TypeOps for TypeCheck {
                 }
                 continue;
             }
-            /* S1a-0 C2p-7: the identifier is interned whole; the old 160-byte
-               `id` row silently cut a long member name in a captured
-               initialiser before this rewrite copied it out. */
-            i0 = i;
+            n = 0;
             while ((in[i] >= 'a' && in[i] <= 'z') || (in[i] >= 'A' && in[i] <= 'Z')
-                   || (in[i] >= '0' && in[i] <= '9') || in[i] == '_')
+                   || (in[i] >= '0' && in[i] <= '9') || in[i] == '_') {
+                if (n + 1 < (int)sizeof id) { id[n] = in[i]; n++; }
                 i++;
-            n = i - i0;
-            id = runtime::text::ct_intern_len(in + i0, n);
-            if (!id) return self->fail("out of memory");
+            }
+            id[n] = 0;
             /* a member name and a struct / enum / union tag are not variables */
             if (last[0] == '.' || last[0] == '>' || strcmp(last, "struct") == 0
                 || strcmp(last, "enum") == 0 || strcmp(last, "union") == 0) {

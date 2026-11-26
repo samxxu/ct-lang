@@ -1960,12 +1960,11 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
 
 static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void *self, const char * in, char * out, int cap) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
-    const char * id;
+    char id[MAX_TEXT];
     char last[MAX_TEXT];
     char fn_cn[MAX_TEXT];
     char msg[MAX_TEXT];
     int i;
-    int i0;
     int n;
     int w;
     int vi;
@@ -2031,15 +2030,15 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
             }
             continue;
         }
-        i0 = i;
+        n = 0;
         while ((((((in[i] >= 'a') && (in[i] <= 'z')) || ((in[i] >= 'A') && (in[i] <= 'Z'))) || ((in[i] >= '0') && (in[i] <= '9'))) || (in[i] == '_'))) {
+            if ((n + 1) < (int)(sizeof(id))) {
+                id[n] = in[i];
+                n++;
+            }
             i++;
         }
-        n = (i - i0);
-        id = runtime_text_ct_intern_len((in + i0), n);
-        if ((!id)) {
-            return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
-        }
+        id[n] = 0;
         if ((((((last[0] == '.') || (last[0] == '>')) || (strcmp(last, "struct") == 0)) || (strcmp(last, "enum") == 0)) || (strcmp(last, "union") == 0))) {
             if ((w + n) >= cap) {
                 return (-1);

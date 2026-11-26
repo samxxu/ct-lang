@@ -548,7 +548,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_into_block(void *self, int
     return n;
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprOps_into_member_check(void *self, int base, const char * fname, int line, int col) {
+static int frontend_parse_Expr_frontend_parse_ExprOps_into_member_check(void *self, int base, char * fname, int line, int col) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     int owner;
     int si;
@@ -1096,10 +1096,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
     int args;
     int mline;
     int mcol;
-    const char * fname;
+    char fname[MAX_TEXT];
     const char * rtype;
     const char * ibase;
-    const char * trname;
+    char trname[MAX_TEXT];
     const char * trtext;
     (void)(_self);
     n = _self->postfix_seed;
@@ -1521,10 +1521,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a field or method name");
             }
-            fname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-            if ((!fname)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
+            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, fname, sizeof(fname));
             mline = _self->lex->tokline;
             mcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -1691,7 +1688,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             else {
                                 if (inm >= 0) {
                                     if (((!arrow) && piface)) {
-                                        return tool_diag_ct_sem_error(mline, mcol, tool_sh_ct_scratch_fmt("'.' cannot call method '%s' through a pointer receiver; use '->%s()'", fname, fname), _self->sup->mem->path);
+                                        char pmsg[MAX_TEXT];
+                                        snprintf(pmsg, sizeof(pmsg), "'.' cannot call method '%s' through a pointer receiver; use '->%s()'", fname, fname);
+                                        return tool_diag_ct_sem_error(mline, mcol, pmsg, _self->sup->mem->path);
                                     }
                                     if ((((((((strcmp(fname, "clear") == 0) || (strcmp(fname, "remove") == 0)) || (strcmp(fname, "set") == 0)) || (strcmp(fname, "put") == 0)) || (strcmp(fname, "push") == 0)) && (_self->arena->nodes[n].kind == N_VAR)) && iter_hit(_self, _self->arena->nodes[n].text2))) {
                                         return tool_diag_ct_sem_error(mline, mcol, "cannot mutate the container being iterated; take a copy or collect the indices first", _self->sup->mem->path);
@@ -1800,7 +1799,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     _self->arena->nodes[m].text = ibase;
                                 }
                                 else {
-                                    if (_self->sup->__frontend_parse_supportops_vptr->is_iface_type_text(_self->sup, ibase, (&trname))) {
+                                    if (_self->sup->__frontend_parse_supportops_vptr->is_iface_type(_self->sup, ibase, trname, sizeof(trname))) {
                                         int t = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, trname);
                                         int mi;
                                         int ok = 0;
@@ -1813,7 +1812,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                         }
                                         if (ok) {
                                             _self->arena->nodes[m].aux = (piface ? 4 : 3);
-                                            _self->arena->nodes[m].text = trname;
+                                            _self->arena->nodes[m].text = runtime_text_ct_intern(trname);
                                             if ((!_self->arena->nodes[m].text)) {
                                                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                                             }
@@ -1823,12 +1822,16 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                         if ((trtext = _self->sym->__frontend_sym_symbolops_vptr->method_trait_text(_self->sym, rtype, fname)) != 0) {
                                             const char * tr2;
                                             if (((!arrow) && piface)) {
-                                                return tool_diag_ct_sem_error(mline, mcol, tool_sh_ct_scratch_fmt("'.' cannot call method '%s' through a pointer receiver; use '->%s()'", fname, fname), _self->sup->mem->path);
+                                                char pmsg[MAX_TEXT];
+                                                snprintf(pmsg, sizeof(pmsg), "'.' cannot call method '%s' through a pointer receiver; use '->%s()'", fname, fname);
+                                                return tool_diag_ct_sem_error(mline, mcol, pmsg, _self->sup->mem->path);
                                             }
                                             _self->arena->nodes[m].text = trtext;
                                             tr2 = _self->sup->__frontend_parse_supportops_vptr->method_trait_amb_text(_self->sup, rtype, fname, trtext);
                                             if (tr2 != 0) {
-                                                if (_self->sup->__frontend_parse_supportops_vptr->amb_warn(_self->sup, mline, mcol, fname, tool_sh_ct_scratch_fmt("declared by '%s' and '%s'; '%s' is used", trtext, tr2, trtext)) != 0) {
+                                                char amsg[MAX_TEXT];
+                                                snprintf(amsg, sizeof(amsg), "declared by '%s' and '%s'; '%s' is used", trtext, tr2, trtext);
+                                                if (_self->sup->__frontend_parse_supportops_vptr->amb_warn(_self->sup, mline, mcol, fname, amsg) != 0) {
                                                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many warnings");
                                                 }
                                             }
@@ -2263,10 +2266,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     if (_self->lex->tok != T_ID) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a field name after '?.'");
                     }
-                    fname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
-                    if ((!fname)) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                    }
+                    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, fname, sizeof(fname));
                     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
                         return tool_diag_ct_sem_error(oline, ocol, "optional method calls are not supported; assign the receiver to a variable first", _self->sup->mem->path);

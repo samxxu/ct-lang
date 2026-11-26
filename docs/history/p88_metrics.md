@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10318 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=68353 io_cap=1024
+     emitted_before=48223 emitted_after=68338 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -38,11 +38,6 @@
       与 `emit_gsub_type` 的三个 scratch 行、match 结果临时量类型、`foreach`
       item 绑定、`_Atomic`/`_Alignas` 说明符改 pool 文本；`Emitter.h.ct`
       10315 -> 10318，发射 C 68188 -> 68338 行（仅 .c），切片清单仍为 76，
-      判别式仍各读 1 次)
-     (S1a-0 C2p-7 后复测：`parse_postfix` 的成员名、`parse_impl` 的方法名、
-      `parse_enum_def` 的成员名、label/goto 名改 pool 文本，match 绑定名改
-      指针行，`rewrite_init_names` 的标识符按整段 intern；`Emitter.h.ct`
-      不变（10318），发射 C 68338 -> 68353 行（仅 .c），切片清单仍为 76，
       判别式仍各读 1 次)
      (LANG-26 后复测：`out` 写回转换与 `CT_BINDING_CONVERSION` 开关落在
       Expr.h.ct / Emitter.h.ct / Arena.h.ct；Emitter.h.ct 10343 -> 10415，

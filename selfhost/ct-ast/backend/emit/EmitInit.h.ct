@@ -223,20 +223,15 @@ pub int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
         fs = s0;
         fi = -1;
         if (s0 < e0 && t[s0] == '.') {
-            int ne = s0 + 1, nl;
-            const char *fname;
+            int ne = s0 + 1;
+            char nm[MAX_TEXT];
             while (ne < e0 && ((t[ne] >= 'A' && t[ne] <= 'Z') || (t[ne] >= 'a' && t[ne] <= 'z')
                                || (t[ne] >= '0' && t[ne] <= '9') || t[ne] == '_')) ne++;
-            /* S1a-0 C2p-7: compare the designator's whole span; the old
-               160-byte `nm` copy failed to match a 2000-byte field name, so
-               the vptr items were silently skipped. */
-            nl = ne - (s0 + 1);
-            fname = runtime::text::ct_intern_len(t + s0 + 1, nl);
-            if (!fname) return -1;
+            snprintf(nm, sizeof nm, "%.*s", ne - (s0 + 1), t + s0 + 1);
             while (ne < e0 && (t[ne] == ' ' || t[ne] == '\t')) ne++;
             if (ne >= e0 || t[ne] != '=') return 0;   /* unexpected designator */
             for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-                if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0) break;
+                if (strcmp(self->sym->structs[si].fields[fi].name, nm) == 0) break;
             if (fi >= self->sym->structs[si].nfields) return 0;
             ne++;
             while (ne < e0 && (t[ne] == ' ' || t[ne] == '\t')) ne++;

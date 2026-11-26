@@ -282,7 +282,7 @@ impl StmtMatch for Stmt {
             } else {
                 int body, nb, first_bind, last_bind, w;
                 int nbind;
-                const char **bind_names;
+                char *bind_names;
                 if (seen_wild)
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "a wildcard match arm must be the last arm", self->mem->path);
@@ -343,15 +343,11 @@ impl StmtMatch for Stmt {
                    has 1 field"), not a generic capacity failure. */
                 nbind = adts[adt].variants[v].nfields > 8
                             ? adts[adt].variants[v].nfields : 8;
-                /* S1a-0 C2p-7: the binding names are pool texts in a grown
-                   pointer row, so a 2000-byte binding name is declared whole
-                   (the old `calloc(nbind, MAX_TEXT)` + `tok_copy` cut it). */
-                bind_names = frontend::sym::ct_text_rows_reserve((const char **)0,
-                                                              0, nbind, &nbind);
-                if (!bind_names && nbind <= 0) return self->sup->fail("out of memory");
+                bind_names = calloc((size_t)nbind, MAX_TEXT);
+                if (!bind_names) return self->sup->fail("out of memory");
                 while (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
+                    char *grown;
                     int ncap;
-                    const char *bname;
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a binding name");
                     if (nb >= nbind) {
@@ -359,25 +355,24 @@ impl StmtMatch for Stmt {
                                    ? MAX_ADT_FIELDS_MAX : nbind * 2;
                         if (nb >= ncap)
                             return self->sup->fail("too many bindings in one match arm");
-                        bind_names = frontend::sym::ct_text_rows_reserve(
-                            bind_names, nbind, ncap, &ncap);
+                        grown = realloc(bind_names, (size_t)ncap * MAX_TEXT);
+                        if (!grown) return self->sup->fail("out of memory");
+                        bind_names = grown;
                         nbind = ncap;
                     }
-                    bname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                                         self->lex->tokstr.len);
-                    if (!bname) return self->sup->fail("out of memory");
+                    self->lex->tok_copy(bind_names + (size_t)nb * MAX_TEXT, MAX_TEXT);
                     for (w = 0; w < nb; w++)
-                        if (strcmp(bind_names[w], bname) == 0) {
+                        if (strcmp(bind_names + (size_t)w * MAX_TEXT,
+                                   bind_names + (size_t)nb * MAX_TEXT) == 0) {
+                            snprintf(msg, sizeof msg, "duplicate binding '%s' in a match arm",
+                                     bind_names + (size_t)nb * MAX_TEXT);
                             return tool::diag::ct_sem_error(self->lex->tokline,
-                                self->lex->tokstart - self->lex->lstart + 1,
-                                tool::sh::ct_scratch_fmt(
-                                    "duplicate binding '%s' in a match arm", bname),
+                                self->lex->tokstart - self->lex->lstart + 1, msg,
                                 self->mem->path);
                         }
-                    bind_names[nb] = bname;
                     w = self->sup->new_node(N_BIND);
                     if (w < 0) return -1;
-                    self->arena->nodes[w].text = bname;
+                    self->arena->nodes[w].text = runtime::text::ct_intern(bind_names + (size_t)nb * MAX_TEXT);
                     if (!self->arena->nodes[w].text) return self->sup->fail("out of memory");
                     if (first_bind < 0) first_bind = w;
                     else self->arena->nodes[last_bind].next = w;
@@ -622,7 +617,7 @@ impl StmtMatch for Stmt {
             } else {
                 int nb, first_bind, last_bind, w;
                 int nbind;
-                const char **bind_names;
+                char *bind_names;
                 if (seen_wild)
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "a wildcard match arm must be the last arm", self->mem->path);
@@ -681,15 +676,11 @@ impl StmtMatch for Stmt {
                    has 1 field"), not a generic capacity failure. */
                 nbind = adts[adt].variants[v].nfields > 8
                             ? adts[adt].variants[v].nfields : 8;
-                /* S1a-0 C2p-7: the binding names are pool texts in a grown
-                   pointer row, so a 2000-byte binding name is declared whole
-                   (the old `calloc(nbind, MAX_TEXT)` + `tok_copy` cut it). */
-                bind_names = frontend::sym::ct_text_rows_reserve((const char **)0,
-                                                              0, nbind, &nbind);
-                if (!bind_names && nbind <= 0) return self->sup->fail("out of memory");
+                bind_names = calloc((size_t)nbind, MAX_TEXT);
+                if (!bind_names) return self->sup->fail("out of memory");
                 while (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
+                    char *grown;
                     int ncap;
-                    const char *bname;
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a binding name");
                     if (nb >= nbind) {
@@ -697,25 +688,24 @@ impl StmtMatch for Stmt {
                                    ? MAX_ADT_FIELDS_MAX : nbind * 2;
                         if (nb >= ncap)
                             return self->sup->fail("too many bindings in one match arm");
-                        bind_names = frontend::sym::ct_text_rows_reserve(
-                            bind_names, nbind, ncap, &ncap);
+                        grown = realloc(bind_names, (size_t)ncap * MAX_TEXT);
+                        if (!grown) return self->sup->fail("out of memory");
+                        bind_names = grown;
                         nbind = ncap;
                     }
-                    bname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                                         self->lex->tokstr.len);
-                    if (!bname) return self->sup->fail("out of memory");
+                    self->lex->tok_copy(bind_names + (size_t)nb * MAX_TEXT, MAX_TEXT);
                     for (w = 0; w < nb; w++)
-                        if (strcmp(bind_names[w], bname) == 0) {
+                        if (strcmp(bind_names + (size_t)w * MAX_TEXT,
+                                   bind_names + (size_t)nb * MAX_TEXT) == 0) {
+                            snprintf(msg, sizeof msg, "duplicate binding '%s' in a match arm",
+                                     bind_names + (size_t)nb * MAX_TEXT);
                             return tool::diag::ct_sem_error(self->lex->tokline,
-                                self->lex->tokstart - self->lex->lstart + 1,
-                                tool::sh::ct_scratch_fmt(
-                                    "duplicate binding '%s' in a match arm", bname),
+                                self->lex->tokstart - self->lex->lstart + 1, msg,
                                 self->mem->path);
                         }
-                    bind_names[nb] = bname;
                     w = self->sup->new_node(N_BIND);
                     if (w < 0) return -1;
-                    self->arena->nodes[w].text = bname;
+                    self->arena->nodes[w].text = runtime::text::ct_intern(bind_names + (size_t)nb * MAX_TEXT);
                     if (!self->arena->nodes[w].text) return self->sup->fail("out of memory");
                     if (first_bind < 0) first_bind = w;
                     else self->arena->nodes[last_bind].next = w;
