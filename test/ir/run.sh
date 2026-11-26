@@ -245,7 +245,8 @@ fi
 # ---------------------------------------------------------------------------
 # G. the LIR path: --ir=on prints covered bodies from LIR, byte for byte
 # ---------------------------------------------------------------------------
-# G1: the six cleanup-edge fixtures are fully covered (ready=1) and identical.
+# G1: the six cleanup-edge fixtures and the AutoDrop model are fully covered
+# (ready=1), print every body from LIR, and stay byte-identical.
 lirn=0
 lirbad=0
 for f in test/ir/lir/*.ct; do
@@ -274,18 +275,14 @@ for f in test/ir/lir/*.ct; do
         lirbad=$((lirbad + 1))
         continue
     fi
-    case "$f" in
-        *c7_autodrop_model.ct)
-            if ! grep -q 'ready=0' "$work/lire.log"; then
-                bad "the AutoDrop fixture must stay on the AST path: $f"
-                lirbad=$((lirbad + 1))
-            fi ;;
-        *)
-            if ! grep -q 'ready=1' "$work/lire.log"; then
-                bad "the fixture is not printed from LIR: $f"
-                lirbad=$((lirbad + 1))
-            fi ;;
-    esac
+    if ! grep -q 'ready=1' "$work/lire.log"; then
+        bad "the fixture is not printed from LIR: $f"
+        lirbad=$((lirbad + 1))
+    fi
+    if ! grep -q 'bodies printed=[1-9][0-9]* skipped=0' "$work/lire.log"; then
+        bad "the fixture did not print its bodies from LIR: $f"
+        lirbad=$((lirbad + 1))
+    fi
     if ! grep -Eq 'cleanups=[1-9]' "$work/lire.log"; then
         bad "no cleanup entry reached LIR: $f"
         lirbad=$((lirbad + 1))
@@ -302,6 +299,8 @@ c2bad=0
 c2ready=0
 c2ok=0
 c2tot=0
+c2printed=0
+c2skipped=0
 for f in test/cases/*.ct examples/*/*.ct; do
     case "$f" in *07_dialect*|*ct-dialects*) continue ;; esac
     c2n=$((c2n + 1))
@@ -330,10 +329,28 @@ for f in test/cases/*.ct examples/*/*.ct; do
         c2ok=$((c2ok + ${ratio% *}))
         c2tot=$((c2tot + ${ratio#* }))
     fi
+    # The seam's own count: a lowered body that still fell back would hide a
+    # byte difference behind the AST writer, so require printed == lowered.
+    pline=$(grep -m1 '^lir: bodies ' "$work/lirce.log")
+    pr=$(printf '%s\n' "$pline" | sed -n 's/.*printed=\([0-9]*\) skipped=\([0-9]*\).*/\1 \2/p')
+    if [ -z "$pr" ]; then
+        bad "LIR body count missing: $f"
+        c2bad=$((c2bad + 1))
+    else
+        c2printed=$((c2printed + ${pr% *}))
+        c2skipped=$((c2skipped + ${pr#* }))
+        if [ "${pr#* }" -ne 0 ]; then
+            bad "a lowered body was not printed from LIR: $f"
+            c2bad=$((c2bad + 1))
+        elif [ -n "$ratio" ] && [ "${pr% *}" -ne "${ratio% *}" ]; then
+            bad "LIR printed ${pr% *} bodies but lowered ${ratio% *}: $f"
+            c2bad=$((c2bad + 1))
+        fi
+    fi
 done
 if [ "$c2bad" -eq 0 ] && [ "$c2n" -ge 70 ]; then ok; else bad "the corpus is not byte-identical under --ir=on"; fi
-printf 'ir: LIR corpus %d files, %d failures, %d unit-ready, functions %d/%d\n' \
-    "$c2n" "$c2bad" "$c2ready" "$c2ok" "$c2tot"
+printf 'ir: LIR corpus %d files, %d failures, %d unit-ready, functions %d/%d, bodies printed %d\n' \
+    "$c2n" "$c2bad" "$c2ready" "$c2ok" "$c2tot" "$c2printed"
 
 # V5-V10 negatives: E-IR-105..110, non-zero exit, no `.c`
 lneg=0

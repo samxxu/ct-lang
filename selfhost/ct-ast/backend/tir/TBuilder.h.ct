@@ -1365,7 +1365,10 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
             break;
         case N_STR:
             m->exprs[eid - 1].text = ar->str_at(ar->nodes[n].num);
-            m->exprs[eid - 1].op = 3;   /* string literal */
+            /* 0 plain, 1 bound to `String`, 2 bound to `Str` (PH-80); the
+               node index names the static block a `String` literal uses. */
+            m->exprs[eid - 1].op = ar->nodes[n].aux;
+            m->exprs[eid - 1].num = n;
             break;
         case N_VAR:
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
@@ -2224,6 +2227,20 @@ static int tb_impl(struct TBuilder *tb, int n)
         if (!key) return -1;
         mdecl = tb_func_decl(tb, c, key, tb->self_type, decl);
         if (mdecl < 0) return -1;
+        /* The emitted symbol is `<Struct>_<Trait>_<method>` (or
+           `<Struct>_<method>` for an inherent impl); two traits may declare
+           the same method on one struct, so the TIR key alone is ambiguous.
+           `cname` is the exact seam key the emitter can pass back. */
+        if (impl_tmpl) m->decls[mdecl - 1].is_template = 1;
+        if (si >= 0 && si < sym->nstructs) {
+            m->decls[mdecl - 1].is_method = 1;
+            m->decls[mdecl - 1].cname = runtime::text::ct_internf("%s_%s%s%s",
+                sym->structs[si].name,
+                (trait && trait[0]) ? trait : "",
+                (trait && trait[0]) ? "_" : "",
+                ar->nodes[c].text2 ? ar->nodes[c].text2 : "");
+            if (!m->decls[mdecl - 1].cname) return -1;
+        }
         if (tmod_decl_add_param(m, decl, mdecl) != 0) return -1;
         if (tmod_new_member(m, decl, ar->nodes[c].text2,
                             tmod_type(m, ar->nodes[c].text, tb->in_template),
@@ -2375,6 +2392,39 @@ static int tb_fault(struct TBuilder *tb)
 /* Build one unit's slice: declarations in source order, then instances, then
    the test seam, then verification of exactly the rows this slice appended.
    A failure is reported by the verifier and the caller writes no C. */
+/* The emitter's vptr rules read `Symbols.structs` (the `use` list and the
+   field types of a template *and* of every instance). Copy those facts into
+   TIR once per module so a lowering never has to reach back into Symbols and
+   an instance spelling such as `Pair_int` has recoverable vptr data. Rows are
+   appended in symbol order and one name is recorded once; the table is
+   process-scoped with the rest of TModule, so a later unit does not repeat
+   it. */
+static int tb_record_structs(struct TBuilder *tb)
+{
+    struct Symbols *sym;
+    struct StructDef *sd;
+    int i, j, srow;
+
+    sym = tb_sym();
+    for (i = 0; i < sym->nstructs; i++) {
+        sd = &sym->structs[i];
+        if (!sd->name || !sd->name[0]) continue;
+        if (tmod_find_struct(tb->m, sd->name) > 0) continue;
+        srow = tmod_new_struct(tb->m, sd->name, sd->is_inst);
+        if (srow <= 0) return -1;
+        tb->m->structs[srow - 1].uses_drop = sd->uses_drop;
+        tb->m->structs[srow - 1].uses_handback = sd->uses_handback;
+        tb->m->structs[srow - 1].has_drop_impl = sd->has_drop_impl;
+        for (j = 0; j < sd->nuse && j < 64; j++)
+            if (tmod_struct_add_use(tb->m, srow, sd->use[j]) != 0) return -1;
+        for (j = 0; j < sd->nfields; j++)
+            if (tmod_struct_add_field(tb->m, srow, sd->fields[j].name,
+                                      sd->fields[j].type,
+                                      sd->fields[j].dims) != 0) return -1;
+    }
+    return 0;
+}
+
 static int tb_build(int prog, const char *path, const char *base, const char *ns,
                     int is_hdr, int is_map, int mod_unit, int ndep,
                     const char *dep)
@@ -2420,6 +2470,7 @@ static int tb_build(int prog, const char *path, const char *base, const char *ns
         if (to >= 0 && tmod_graph_edge(m, from, to, TE_CONTAINS, "", 0) != 0) return 1;
     }
     if (tb_instances(tb) != 0) return 1;
+    if (tb_record_structs(tb) != 0) return 1;
     if (tb->failed) {
         fprintf(stderr, "tir: a TIR pool refused a row (capacity or OOM)\n");
         return 1;

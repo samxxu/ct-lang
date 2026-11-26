@@ -74,9 +74,9 @@ struct Driver {
    so it never depends on the lowerer; the driver binds it for the duration of
    one program. */
 static int drv_lir_body(const char *name, void *out, int ind, int ntmp,
-                        int *new_ntmp)
+                        int *new_ntmp, int stmts)
 {
-    return backend::lir::ct_lir_try_body(name, out, ind, ntmp, new_ntmp);
+    return backend::lir::ct_lir_try_body(name, out, ind, ntmp, new_ntmp, stmts);
 }
 
 static int file_has_import(const char *path)
@@ -1146,6 +1146,7 @@ impl DriverOps for Driver {
                     self->m->diag_codes ? " [E-DRIVER-004]" : "");
             return 1;
         }
+        backend::lir::ct_lir_report_printed();
         if (self->m->write_header(out) != 0) {
             return frontend::parse::ct_parse_report();
         }

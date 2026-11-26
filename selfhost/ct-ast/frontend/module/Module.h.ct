@@ -71,9 +71,9 @@ namespace frontend::module;
    body the lowerer covered end to end is printed from LIR; everything else
    keeps the emitter's own writer, byte for byte. */
 static int mod_lir_body(const char *name, void *out, int ind, int ntmp,
-                        int *new_ntmp)
+                        int *new_ntmp, int stmts)
 {
-    return backend::lir::ct_lir_try_body(name, out, ind, ntmp, new_ntmp);
+    return backend::lir::ct_lir_try_body(name, out, ind, ntmp, new_ntmp, stmts);
 }
 /* Shell-line helpers for the one-step build (Phase 17.6); defined after the
    impl. They are free functions, not methods: the L2 build path caps impl
@@ -2827,6 +2827,7 @@ impl ModuleOps for Module {
                 remove(outc);
                 return frontend::parse::ct_parse_report();
             }
+            backend::lir::ct_lir_report_printed();
             if (self->units[u].is_hdr && self->write_unit_header(u) != 0) {
                 /* symmetric with the `.c` above: a half-written `.h` looks like
                    a real artefact, so drop it too */

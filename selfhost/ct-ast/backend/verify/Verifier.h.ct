@@ -511,6 +511,19 @@ static int lver_declared(struct LModule *l, struct ct_lfunc *f, const char *name
     return 0;
 }
 
+/* The object a drop statement releases: an AutoDrop cleanup always names a
+   local through its operand expression (`name` on the statement is the base
+   type the printer needs, not the object). */
+static const char *lver_drop_object(struct LModule *l, struct ct_lstmt *s)
+{
+    struct ct_lexpr *e;
+
+    if (s->expr <= 0 || s->expr > l->nexprs) return "";
+    e = &l->exprs[s->expr - 1];
+    if (e->kind != LE_NAME) return "";
+    return e->text ? e->text : "";
+}
+
 /* V8: an object is dropped at most once per exit, and only a declared
    object is dropped. (Move-after-use stays on the AST path for S2.) */
 static int lver_v8_set(struct LModule *l, struct ct_lfunc *f, int *ids, int nids,
@@ -523,7 +536,7 @@ static int lver_v8_set(struct LModule *l, struct ct_lfunc *f, int *ids, int nids
         if (ids[i] <= 0 || ids[i] > l->nstmts) continue;
         s = &l->stmts[ids[i] - 1];
         if (s->kind != LS_DROP) continue;
-        if (!lver_declared(l, f, s->name)) {
+        if (!lver_declared(l, f, lver_drop_object(l, s))) {
             lfail(l, file, line, col, "E-IR-108",
                   "a drop names an object that is not declared here");
         }
@@ -531,8 +544,8 @@ static int lver_v8_set(struct LModule *l, struct ct_lfunc *f, int *ids, int nids
             struct ct_lstmt *p;
             if (ids[j] <= 0 || ids[j] > l->nstmts) continue;
             p = &l->stmts[ids[j] - 1];
-            if (p->kind == LS_DROP && p->name && s->name
-                && strcmp(p->name, s->name) == 0) {
+            if (p->kind == LS_DROP
+                && strcmp(lver_drop_object(l, p), lver_drop_object(l, s)) == 0) {
                 lfail(l, file, line, col, "E-IR-108",
                       "the exit drops the same object twice");
                 break;
@@ -567,6 +580,20 @@ static int lver_tmp_prefix_ok(const char *nm)
     return 1;
 }
 
+/* Which function owns a block: the one whose block list holds it, else -1. */
+static int lver_temp_func(struct LModule *l, int block)
+{
+    int i, j;
+
+    if (block <= 0) return -1;
+    for (i = 0; i < l->nfuncs; i++) {
+        struct ct_lfunc *f = &l->funcs[i];
+        for (j = 0; j < f->nblocks; j++)
+            if (f->blocks[j] == block) return i;
+    }
+    return -1;
+}
+
 static int lver_v5(struct LModule *l)
 {
     int i, j;
@@ -583,13 +610,19 @@ static int lver_v5(struct LModule *l)
                   "a temporary is declared outside every block");
             continue;
         }
-        for (j = 0; j < i; j++)
-            if (l->temps[j].name && t->name
+        /* Temporaries are function-local and each body numbers from zero
+           (the seam shifts the body by the emitter's counter), so one name
+           may recur in a different function but never in the same one. */
+        for (j = 0; j < i; j++) {
+            int fj = lver_temp_func(l, l->temps[j].decl_block);
+            int fi2 = lver_temp_func(l, t->decl_block);
+            if (l->temps[j].name && t->name && fj == fi2
                 && strcmp(l->temps[j].name, t->name) == 0) {
                 lfail(l, 0, 0, 0, "E-IR-105",
                       "two temporaries share one name");
                 break;
             }
+        }
     }
     for (i = 0; i < l->nfuncs; i++) {
         struct ct_lfunc *f = &l->funcs[i];
@@ -813,9 +846,19 @@ static void lver_block(struct LModule *l, struct ct_lfunc *f, int bid)
 
     if (bid <= 0 || bid > l->nblocks) return;
     b = &l->blocks[bid - 1];
-    /* the normal fall-out of one C block: its own scope, every entry */
+    /* The normal fall-out of one C block: its own scope, every entry. A
+       block that ends in a `return` has already released its owned objects
+       on the return edge (the parser moves the delete there), so the tail
+       holds only the deferred bodies the emitter still prints at the
+       closing brace. */
     chain[0] = b->scope;
     if (lver_expect(l, chain, 1, 0, 1, 0, 0, exp, &nexp) == 0) {
+        if (b->term == LT_RETURN) {
+            int i, k = 0;
+            for (i = 0; i < nexp; i++)
+                if (exp[i].kind != LS_DROP) exp[k++] = exp[i];
+            nexp = k;
+        }
         lver_cmp(l, exp, nexp, b->tail_cleanups, b->ntail,
                  b->span.file, b->span.line, b->span.col);
         lver_v7_set(l, b->tail_cleanups, b->ntail, 0,

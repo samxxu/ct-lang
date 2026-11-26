@@ -264,6 +264,7 @@ pub struct ct_tdecl {
     int is_inline;      /* the source spelled `inline` */
     int is_vararg;      /* the parameter list ends in `...` */
     int is_template;    /* the symbol row has type parameters (no C body) */
+    int is_method;      /* an impl method: `cname` is its emitted C symbol */
 }
 
 pub struct ct_ttype {
@@ -354,6 +355,37 @@ pub struct ct_tcleanup {
     int on_error;
     struct ct_tspan span;
     int scope;
+}
+
+/* One struct row the emitter's vptr rules need. The symbol table is the
+   authority for `use` lists and fields (an instance spelling such as
+   `Pair_int` has no TDecl row of its own but does have a symbol row), so the
+   builder copies those facts into TIR and a lowering never reads Symbols.
+
+   `uses` are the trait spellings the emitter's `emit_vptr_items` prints as
+   `.__<lower>_vptr = &<name>_<Trait>_vtable`; `fields` are needed for the
+   nested designators / statements the same emitter appends. An array field
+   keeps its dimensions as spelled (`[2]`, `[N]`), else "". */
+pub struct ct_tfieldinfo {
+    const char *name;
+    const char *type;
+    const char *dims;
+}
+
+pub struct ct_tstruct {
+    int id;
+    const char *name;
+    const char **uses;
+    int nuses;
+    int ucap;
+    struct ct_tfieldinfo *fields;
+    int nfields;
+    int fcap;
+    int is_inst;
+    int uses_drop;      /* the built-in `Drop`: no vptr, `delete` calls it */
+    int uses_handback;  /* the built-in `Handback`: no vptr, `borrow` calls it */
+    int has_drop_impl;  /* an `impl Drop` body exists in the program */
+    int drop_visible;   /* that body is visible from the emitting unit */
 }
 
 pub struct ct_tinst {
@@ -451,6 +483,9 @@ pub struct TModule {
     struct ct_tmember *members;
     int nmembers;
     int mcap;
+    struct ct_tstruct *structs;
+    int nstructs;
+    int stcap;
     struct ct_troot *roots;
     int nroots;
     int rcap;
@@ -585,6 +620,11 @@ pub int tmod_inst_add_member(struct TModule *self, int inst, int member);
 pub int tmod_new_member(struct TModule *self, int owner, const char *name,
                         int type, int value, int line);
 pub int tmod_member_count(struct TModule *self, int owner);
+pub int tmod_new_struct(struct TModule *self, const char *name, int is_inst);
+pub int tmod_struct_add_use(struct TModule *self, int srow, const char *use);
+pub int tmod_struct_add_field(struct TModule *self, int srow, const char *name,
+                              const char *type, const char *dims);
+pub int tmod_find_struct(struct TModule *self, const char *name);
 pub int tmod_add_root(struct TModule *self, int kind, int unit, const char *name);
 pub int tmod_graph_node(struct TModule *self, int kind, int id);
 pub int tmod_graph_edge(struct TModule *self, int from, int to, int kind,
@@ -1013,6 +1053,71 @@ pub int tmod_member_count(struct TModule *self, int owner)
     for (i = 0; i < self->nmembers; i++)
         if (self->members[i].owner == owner) n++;
     return n;
+}
+
+pub int tmod_new_struct(struct TModule *self, const char *name, int is_inst)
+{
+    int slot, id;
+    const char *pooled;
+
+    if (tir_reserve((void **)&self->structs, &self->stcap, self->nstructs + 1,
+                    (int)sizeof(struct ct_tstruct)) != 0) return -1;
+    pooled = runtime::text::ct_intern(name ? name : "");
+    if (!pooled) return -1;
+    slot = self->nstructs;
+    id = slot + 1;
+    self->structs[slot].id = id;
+    self->structs[slot].name = pooled;
+    self->structs[slot].is_inst = is_inst;
+    self->nstructs++;
+    return id;
+}
+
+pub int tmod_struct_add_use(struct TModule *self, int srow, const char *use)
+{
+    struct ct_tstruct *s;
+    const char *pooled;
+
+    if (srow <= 0 || srow > self->nstructs) return -1;
+    s = &self->structs[srow - 1];
+    if (tir_reserve((void **)&s->uses, &s->ucap, s->nuses + 1,
+                    (int)sizeof(const char *)) != 0) return -1;
+    pooled = runtime::text::ct_intern(use ? use : "");
+    if (!pooled) return -1;
+    s->uses[s->nuses] = pooled;
+    s->nuses++;
+    return 0;
+}
+
+pub int tmod_struct_add_field(struct TModule *self, int srow, const char *name,
+                              const char *type, const char *dims)
+{
+    struct ct_tstruct *s;
+    const char *pn, *pt, *pd;
+
+    if (srow <= 0 || srow > self->nstructs) return -1;
+    s = &self->structs[srow - 1];
+    if (tir_reserve((void **)&s->fields, &s->fcap, s->nfields + 1,
+                    (int)sizeof(struct ct_tfieldinfo)) != 0) return -1;
+    pn = runtime::text::ct_intern(name ? name : "");
+    pt = runtime::text::ct_intern(type ? type : "");
+    pd = runtime::text::ct_intern(dims ? dims : "");
+    if (!pn || !pt || !pd) return -1;
+    s->fields[s->nfields].name = pn;
+    s->fields[s->nfields].type = pt;
+    s->fields[s->nfields].dims = pd;
+    s->nfields++;
+    return 0;
+}
+
+pub int tmod_find_struct(struct TModule *self, const char *name)
+{
+    int i;
+
+    if (!name || !name[0]) return 0;
+    for (i = 0; i < self->nstructs; i++)
+        if (strcmp(self->structs[i].name, name) == 0) return self->structs[i].id;
+    return 0;
 }
 
 pub int tmod_add_root(struct TModule *self, int kind, int unit, const char *name)

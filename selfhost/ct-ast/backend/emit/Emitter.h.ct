@@ -253,7 +253,7 @@ static int g_oc_bypass_node = -1;
 /* S1b-S2b body seam: set through `ct_emit_set_body_hook` at the end of the
    unit, read by `em_node_func`. Declared here so the dispatch can see it. */
 static int (*g_body_hook)(const char *name, void *out, int ind, int ntmp,
-                          int *new_ntmp);
+                          int *new_ntmp, int stmts);
 
 /* defined further down; `sb_norm_text` needs it to substitute a template
    spelling. NULL means "no substitution applies". */
@@ -5815,11 +5815,11 @@ static int em_node_func(struct Emitter *self, int n, int ind, int nk)
        The hook is consulted before any body state is pushed; a body it does
        not print keeps this writer's own state machine untouched. */
     {
-        int (*body_hook)(const char *, void *, int, int, int *) = g_body_hook;
+        int (*body_hook)(const char *, void *, int, int, int *, int) = g_body_hook;
     if (body_hook && !self->gtname[0]) {
         int new_ntmp = self->ntmp;
         int hr = body_hook(self->arena->nodes[n].text2, self->out, ind,
-                           self->ntmp, &new_ntmp);
+                           self->ntmp, &new_ntmp, 0);
         if (hr > 0) {
             /* the LIR body allocated its own `__ct_*N` from the same
                module-wide counter, so the next writer resumes where the
@@ -8021,13 +8021,33 @@ impl EmitOps for Emitter {
                     if (!self->node_mentions(body, self->arena->nodes[k].text2))
                         fprintf(self->out, "    (void)%s;\n", self->arena->nodes[k].text2);
                 if (!self->node_mentions(body, "self")) fputs("    (void)_self;\n", self->out);
-                k = self->arena->nodes[body].a;
-                while (k >= 0) {
-                    if (self->emit_node(k, 1) != 0) {
-                        self->sym->self_mode = 0;
-                        return -1;
+                /* S1b-S2c: an impl method body is the same statement list the
+                   lowerer carries, under its TIR key `<Base>.<method>`; the
+                   signature and the `_self` / void-cast prologue stay here. */
+                {
+                    int (*body_hook)(const char *, void *, int, int, int *, int) = g_body_hook;
+                    int printed = 0;
+                    if (body_hook) {
+                        const char *key = tool::sh::ct_scratch_fmt("%s_%s%s%s",
+                                self->sym->structs[si].name, tname,
+                                (tname && tname[0]) ? "_" : "",
+                                self->arena->nodes[m].text2);
+                        int new_ntmp = self->ntmp;
+                        int hr = body_hook(key, self->out, 1, self->ntmp,
+                                           &new_ntmp, 1);
+                        if (hr < 0) { self->sym->self_mode = 0; return -1; }
+                        if (hr > 0) { self->ntmp = new_ntmp; printed = 1; }
                     }
-                    k = self->arena->nodes[k].next;
+                    if (!printed) {
+                        k = self->arena->nodes[body].a;
+                        while (k >= 0) {
+                            if (self->emit_node(k, 1) != 0) {
+                                self->sym->self_mode = 0;
+                                return -1;
+                            }
+                            k = self->arena->nodes[k].next;
+                        }
+                    }
                 }
                 sb_end_body(self, 1);
                 self->sym->self_mode = 0;
@@ -8157,13 +8177,31 @@ impl EmitOps for Emitter {
                     if (!self->node_mentions(body, self->arena->nodes[k].text2))
                         fprintf(self->out, "    (void)%s;\n", self->arena->nodes[k].text2);
                 if (!is_static && !self->node_mentions(body, "self")) fputs("    (void)_self;\n", self->out);
-                k = self->arena->nodes[body].a;
-                while (k >= 0) {
-                    if (self->emit_node(k, 1) != 0) {
-                        self->sym->self_mode = 0;
-                        return -1;
+                /* S1b-S2c: an inherent method body is the same statement list
+                   the lowerer carries under `<Struct>_<method>`; the signature
+                   and prologue stay here. */
+                {
+                    int (*body_hook)(const char *, void *, int, int, int *, int) = g_body_hook;
+                    int printed = 0;
+                    if (body_hook) {
+                        const char *key = tool::sh::ct_scratch_fmt("%s_%s", tag,
+                                self->arena->nodes[m].text2);
+                        int new_ntmp = self->ntmp;
+                        int hr = body_hook(key, self->out, 1, self->ntmp,
+                                           &new_ntmp, 1);
+                        if (hr < 0) { self->sym->self_mode = 0; return -1; }
+                        if (hr > 0) { self->ntmp = new_ntmp; printed = 1; }
                     }
-                    k = self->arena->nodes[k].next;
+                    if (!printed) {
+                        k = self->arena->nodes[body].a;
+                        while (k >= 0) {
+                            if (self->emit_node(k, 1) != 0) {
+                                self->sym->self_mode = 0;
+                                return -1;
+                            }
+                            k = self->arena->nodes[k].next;
+                        }
+                    }
                 }
                 sb_end_body(self, 1);
                 self->sym->self_mode = 0;
@@ -10262,21 +10300,21 @@ void ct_emit_set_out(void *out)
    declaration stay with this writer, so the switch cannot change their text.
    `fn` returns 1 when it printed the body, 0 to let this writer print it, -1
    on an I/O error. `void *` keeps the pointer type out of the unit boundary. */
-pub void ct_emit_set_body_hook(int (*fn)(const char *, void *, int, int, int *));
-void ct_emit_set_body_hook(int (*fn)(const char *, void *, int, int, int *))
+pub void ct_emit_set_body_hook(int (*fn)(const char *, void *, int, int, int *, int));
+void ct_emit_set_body_hook(int (*fn)(const char *, void *, int, int, int *, int))
 {
     g_body_hook = fn;
 }
 
 pub int ct_emit_body_hook(const char *name, void *out, int ind, int ntmp,
-                          int *new_ntmp);
+                          int *new_ntmp, int stmts);
 int ct_emit_body_hook(const char *name, void *out, int ind, int ntmp,
-                      int *new_ntmp)
+                      int *new_ntmp, int stmts)
 {
     {
-        int (*body_hook)(const char *, void *, int, int, int *) = g_body_hook;
+        int (*body_hook)(const char *, void *, int, int, int *, int) = g_body_hook;
         if (!body_hook) return 0;
-        return body_hook(name, out, ind, ntmp, new_ntmp);
+        return body_hook(name, out, ind, ntmp, new_ntmp, stmts);
     }
 }
 

@@ -78,6 +78,7 @@ namespace backend::lir;
 #define LE_INIT_MBRACE     31
 #define LE_RANGEK          32
 #define LE_MCALL           33
+#define LE_STRLIT          34
 
 /* Binary / unary / assignment operator codes: the AST's, copied so the
    printing tables stay one table (Arena.h.ct is authoritative). */
@@ -228,6 +229,7 @@ pub struct ct_lstmt {
     const char *spelling; /* LS_DECL: the source type spelling, verbatim */
     const char *count;  /* LS_DECL: the array's element count for a vptr loop */
     const char *vptr;   /* LS_DECL: generated vptr statements, one per line */
+    int vptr_loop;      /* LS_DECL: 1 = the vptr lines sit inside a for loop */
     int expr;           /* init / lhs / value / condition / subject */
     int rhs;            /* assignment rhs */
     int cond;
@@ -245,6 +247,7 @@ pub struct ct_lstmt {
     int ccap;
     int scope;          /* TScope id of the enclosing block */
     int origin;         /* cleanup entry id (LModule.cleanups) this statement came from */
+    int assignable;     /* LS_DROP: the operand may be nulled (`x = 0`) */
     int err_edge;       /* the exit is the `err:` form */
     struct ct_lspan span;
 }
@@ -276,6 +279,7 @@ pub struct ct_lblock {
 pub struct ct_ltemp {
     int id;
     int kind;
+    int num;            /* the module-wide counter value at creation */
     int type;
     int decl_block;
     const char *name;
@@ -300,6 +304,7 @@ pub struct ct_lfunc {
     int id;
     const char *name;       /* TIR source key (the emitter's find_func key) */
     const char *cname;      /* the emitted C symbol (differs for impl methods) */
+    const char *seam;       /* the key the emitter's body hook passes back */
     int temp_start;         /* module-wide `__ct_*N` counter at entry */
     int temp_end;           /* ... after this body; the seam keeps them in sync */
     int ret;
@@ -384,6 +389,7 @@ pub struct LModule {
     int stat_temps;
     int stat_cleanups;
     int stat_fallback;
+    int stat_printed;    /* bodies the seam actually printed from LIR */
 }
 
 static struct LModule g_lir;
@@ -414,6 +420,8 @@ pub int lmod_scope_add_cleanup(struct LModule *self, int scope, int kind,
                                int col);
 pub int lmod_add_decl(struct LModule *self, int func);
 pub void lmod_report(struct LModule *self, const char *unit);
+pub void lmod_report_printed(struct LModule *self);
+pub const char *lmod_temp_name(struct LModule *self, int temp, int delta);
 
 /* ------------------------------------------------------------------------- */
 /* Tables                                                                    */
@@ -709,11 +717,27 @@ pub int lmod_new_temp(struct LModule *self, int kind, int type, int decl_block)
     if (!nm) return -1;
     self->temps[slot].id = id;
     self->temps[slot].kind = kind;
+    self->temps[slot].num = n;
     self->temps[slot].type = type;
     self->temps[slot].decl_block = decl_block;
     self->temps[slot].name = nm;
     self->ntemps++;
     return id;
+}
+
+/* The printed spelling of one temp at the emitter's current counter. The
+   lowering records the counter value it saw; a generated product between two
+   bodies shifts it, and the shift is the same for every temp of a body. */
+pub const char *lmod_temp_name(struct LModule *self, int temp, int delta)
+{
+    static char buf[64];
+    struct ct_ltemp *t;
+
+    if (temp <= 0 || temp > self->ntemps) return "";
+    t = &self->temps[temp - 1];
+    snprintf(buf, sizeof(buf), "%s%d", lir_tmp_prefix(t->kind),
+             t->num + delta);
+    return buf;
 }
 
 pub int lmod_new_rawc(struct LModule *self, int origin, int trusted, const char *text)

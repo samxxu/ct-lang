@@ -51,6 +51,7 @@ import backend::tir::TModule::ct_texpr as ct_texpr;
 import backend::tir::TModule::ct_tstmt as ct_tstmt;
 import backend::tir::TModule::ct_tscope as ct_tscope;
 import backend::tir::TModule::ct_tvar as ct_tvar;
+import backend::tir::TModule::ct_tstruct as ct_tstruct;
 import backend::tir::TModule::ct_tcleanup as ct_tcleanup;
 import backend::tir::TModule::TModule as TModule;
 import backend::tir::TBuilder;
@@ -110,6 +111,7 @@ import backend::verify::Verifier;
 #define TS_GOTO             15
 #define TS_LABEL            16
 #define TS_EMPTY            22
+#define TS_DELETE           20
 
 #define RT_DIRECT            1
 #define RT_INDIRECT          2
@@ -171,6 +173,7 @@ import backend::verify::Verifier;
 #define LE_INIT_MBRACE     31
 #define LE_RANGEK          32
 #define LE_MCALL           33
+#define LE_STRLIT          34
 #define LB_SUB              2
 #define LB_MUL              3
 #define LB_DIV              4
@@ -255,6 +258,11 @@ pub struct Lower {
     int loopcap;
     int mode;           /* 0 off, 1 on, 2 shadow */
     int forced;         /* the CLI named the mode, so the env cannot override */
+    int tmp_delta;      /* emitter counter minus the lowering's counter
+                           (generated products move one and not the other) */
+    int func_scope;     /* TScope id of the function being lowered */
+    int func_has_self;  /* an impl method: the C spelling of `self` is `_self` */
+    int tmp_start_temps; /* LTemp count at function entry (rollback on abort) */
 }
 
 static struct Lower g_lower;
@@ -268,8 +276,23 @@ pub int ct_lir_build_unit(void *up, int mod_unit, int tmp_base);
 pub int ct_lir_ready(void);
 pub int ct_lir_emit(FILE *out);
 pub int ct_lir_try_body(const char *name, void *out, int ind, int ntmp,
-                        int *new_ntmp);
+                        int *new_ntmp, int stmts);
+/* After a unit is emitted: how many bodies the seam actually took. A body
+   whose `temp_start` did not match the emitter's counter stayed on the AST
+   path even though it lowered, so a "ready" unit still needs this count. */
+pub void ct_lir_report_printed(void)
+{
+    struct LModule *l = lmod_get();
+    const char *e;
+
+    e = getenv("CT_LIR_REPORT");
+    if (!e || !e[0]) return;
+    fprintf(stderr, "lir: bodies printed=%d skipped=%d\n", l->stat_printed,
+            l->stat_fallback);
+}
+
 pub void ct_lir_free(void);
+pub void ct_lir_report_printed(void);
 
 /* ------------------------------------------------------------------------- */
 /* switch                                                                     */
@@ -362,69 +385,63 @@ static void lw_low_text(const char *src, char *dst, int cap)
     dst[n] = 0;
 }
 
-static struct ct_tdecl *lw_struct_decl(struct Lower *w, const char *tag)
+static struct ct_tstruct *lw_struct_row(struct Lower *w, const char *tag)
 {
-    int i;
+    int id;
 
     if (!tag || !tag[0]) return 0;
-    for (i = 0; i < w->m->ndecls; i++) {
-        struct ct_tdecl *d = &w->m->decls[i];
-        if (d->kind != TD_STRUCT && d->kind != TD_UNION && d->kind != TD_ADT)
-            continue;
-        if (d->name && strcmp(d->name, tag) == 0) return d;
-    }
-    return 0;
+    id = backend::tir::tmod_find_struct(w->m, tag);
+    if (id <= 0) return 0;
+    return &w->m->structs[id - 1];
 }
 
+/* The generated vptr designators a struct initialiser carries: the shapes are
+   `.__<trait>_vptr = &<Type>_<Trait>_vtable` for each use and the same path
+   recursively for every value field of struct type. `prefix` is the member
+   path without its leading dot (`""`, `inner.`, `inner.sub.`). */
 static int lw_vptr_items(struct Lower *w, const char *tag, const char *prefix,
                          char *buf, int cap, int *used, int depth)
 {
-    struct ct_tdecl *d;
+    struct ct_tstruct *d;
     int i, u = *used;
 
     if (depth > 6) return -1;
-    d = lw_struct_decl(w, tag);
-    if (!d) return -1;
-    for (i = 0; i < d->ntraits; i++) {
-        struct ct_tdecl *td;
+    d = lw_struct_row(w, tag);
+    if (!d) return 0;
+    for (i = 0; i < d->nuses; i++) {
         char low[256];
         int n;
-        if (d->traits[i] <= 0 || d->traits[i] > w->m->ndecls) return -1;
-        td = &w->m->decls[d->traits[i] - 1];
-        lw_low_text(td->name, low, (int)sizeof(low));
+        lw_low_text(d->uses[i], low, (int)sizeof(low));
         {
             char lead[512];
             snprintf(lead, sizeof(lead), ".%s", prefix);
             n = snprintf(buf + u, (size_t)(cap - u),
                          "%s%s__%s_vptr = &%s_%s_vtable",
-                         u > 0 ? ", " : "", lead, low, tag, td->name);
+                         u > 0 ? ", " : "", lead, low, tag, d->uses[i]);
         }
         if (n < 0 || u + n >= cap) return -1;
         u += n;
     }
-    for (i = 0; i < w->m->nmembers; i++) {
-        struct ct_tmember *mb = &w->m->members[i];
-        const char *fs, *ftag;
+    for (i = 0; i < d->nfields; i++) {
+        const char *fs = d->fields[i].type;
+        const char *ftag;
         char fbuf[512];
         int fl;
-        if (mb->owner != d->id) continue;
-        fs = backend::tir::tmod_cspell(w->m, mb->type);
-        if (!fs) continue;
+        if (!fs || strchr(fs, '*')) continue;
+        if (d->fields[i].dims && d->fields[i].dims[0]) continue;
         if (strncmp(fs, "struct ", 7) == 0) ftag = fs + 7;
         else if (strncmp(fs, "union ", 6) == 0) ftag = fs + 6;
         else continue;
-        /* a pointer field is not a value the initialiser can carry a vptr
-           for: the emitter appends designators for value fields only. */
-        if (strchr(ftag, '*')) continue;
         fl = (int)strlen(ftag);
         while (fl > 0 && (ftag[fl - 1] == '*' || ftag[fl - 1] == ' ')) fl--;
         if (fl <= 0 || fl >= (int)sizeof(fbuf) - 1) continue;
         memcpy(fbuf, ftag, (size_t)fl);
         fbuf[fl] = 0;
-        if (!lw_struct_decl(w, fbuf)) continue;
+        if (!lw_struct_row(w, fbuf)) continue;
         {
             char p2[512];
-            snprintf(p2, sizeof(p2), "%s%s.", prefix, mb->name ? mb->name : "");
+            snprintf(p2, sizeof(p2), "%s%s.", prefix,
+                     d->fields[i].name ? d->fields[i].name : "");
             if (lw_vptr_items(w, fbuf, p2, buf, cap, &u, depth + 1) != 0)
                 return -1;
         }
@@ -434,37 +451,34 @@ static int lw_vptr_items(struct Lower *w, const char *tag, const char *prefix,
 }
 
 /* The same vptr set written as statements (`<recv>.__x_vptr = &...;`), one
-   per line, for an array's per-element initialiser loop. */
+   per line, for an array's per-element initialiser loop or for a heap object
+   the declaration could not initialise. */
 static int lw_vptr_stmts(struct Lower *w, const char *tag, const char *recv,
                          char *buf, int cap, int *used, int depth)
 {
-    struct ct_tdecl *d;
+    struct ct_tstruct *d;
     int i, u = *used;
 
     if (depth > 6) return -1;
-    d = lw_struct_decl(w, tag);
-    if (!d) return -1;
-    for (i = 0; i < d->ntraits; i++) {
-        struct ct_tdecl *td;
+    d = lw_struct_row(w, tag);
+    if (!d) return 0;
+    for (i = 0; i < d->nuses; i++) {
         char low[256];
         int n;
-        if (d->traits[i] <= 0 || d->traits[i] > w->m->ndecls) return -1;
-        td = &w->m->decls[d->traits[i] - 1];
-        lw_low_text(td->name, low, (int)sizeof(low));
+        lw_low_text(d->uses[i], low, (int)sizeof(low));
         n = snprintf(buf + u, (size_t)(cap - u),
-                     "%s%s.__%s_vptr = &%s_%s_vtable;\n", u > 0 ? "\n" : "",
-                     recv, low, tag, td->name);
+                     "%s%s.__%s_vptr = &%s_%s_vtable;\n", u > 0 ? "" : "",
+                     recv, low, tag, d->uses[i]);
         if (n < 0 || u + n >= cap) return -1;
         u += n;
     }
-    for (i = 0; i < w->m->nmembers; i++) {
-        struct ct_tmember *mb = &w->m->members[i];
-        const char *fs, *ftag;
-        char fbuf[512], r2[512];
+    for (i = 0; i < d->nfields; i++) {
+        const char *fs = d->fields[i].type;
+        const char *ftag;
+        char fbuf[512], r2[1024];
         int fl;
-        if (mb->owner != d->id) continue;
-        fs = backend::tir::tmod_cspell(w->m, mb->type);
         if (!fs || strchr(fs, '*')) continue;
+        if (d->fields[i].dims && d->fields[i].dims[0]) continue;
         if (strncmp(fs, "struct ", 7) == 0) ftag = fs + 7;
         else if (strncmp(fs, "union ", 6) == 0) ftag = fs + 6;
         else continue;
@@ -473,8 +487,9 @@ static int lw_vptr_stmts(struct Lower *w, const char *tag, const char *recv,
         if (fl <= 0 || fl >= (int)sizeof(fbuf) - 1) continue;
         memcpy(fbuf, ftag, (size_t)fl);
         fbuf[fl] = 0;
-        if (!lw_struct_decl(w, fbuf)) continue;
-        snprintf(r2, sizeof(r2), "%s.%s", recv, mb->name ? mb->name : "");
+        if (!lw_struct_row(w, fbuf)) continue;
+        snprintf(r2, sizeof(r2), "%s.%s", recv,
+                 d->fields[i].name ? d->fields[i].name : "");
         if (lw_vptr_stmts(w, fbuf, r2, buf, cap, &u, depth + 1) != 0)
             return -1;
     }
@@ -482,135 +497,30 @@ static int lw_vptr_stmts(struct Lower *w, const char *tag, const char *recv,
     return 0;
 }
 
-/* An instance spelling (`Stack_int`) has no TDecl row of its own, but its
-   template does. The instance needs generated vptr designators only when the
-   template adopts a trait that has a vtable (`Drop` / `Handback` have none);
-   an interface type (`X_iface`) never does. */
-/* An `impl` row names a trait impl (`impl Trait for S`) or an inherent one
-   (`impl  for S`); only the former adds a vtable. */
-static int lw_impl_has_trait(const char *name)
-{
-    const char *p;
-
-    if (!name) return 0;
-    p = name;
-    if (strncmp(p, "impl", 4) != 0) return 1;
-    p += 4;
-    while (*p == ' ') p++;
-    if (*p == '<') {                       /* generic parameter list */
-        int depth = 0;
-        while (*p) {
-            if (*p == '<') depth++;
-            else if (*p == '>') { depth--; p++; if (depth == 0) break; }
-            else p++;
-        }
-        while (*p == ' ') p++;
-    }
-    if (strncmp(p, "for", 3) == 0) return 0;   /* inherent impl */
-    return 1;
-}
-
-static int lw_instance_vptr_needed(struct Lower *w, const char *tag)
-{
-    int i, best = -1;
-    size_t bestlen = 0, tl;
-
-    if (!tag || !tag[0]) return 1;
-    tl = strlen(tag);
-    if (tl > 6 && strcmp(tag + tl - 6, "_iface") == 0) return 0;
-    for (i = 0; i < w->m->ndecls; i++) {
-        struct ct_tdecl *d = &w->m->decls[i];
-        size_t nl;
-        if (d->kind != TD_STRUCT && d->kind != TD_UNION) continue;
-        if (!d->name || !d->name[0]) continue;
-        nl = strlen(d->name);
-        if (nl >= tl || strncmp(tag, d->name, nl) != 0) continue;
-        if (tag[nl] != '_') continue;
-        if (nl > bestlen) { bestlen = nl; best = i; }
-    }
-    if (best < 0) {
-        /* an explicit impl of a trait for the instance may still add a vptr
-           (`impl Iter<int> for Pair<int>`); any TD_IMPL naming the tag that is
-           not Drop/Handback means "needs one". */
-        for (i = 0; i < w->m->ndecls; i++) {
-            struct ct_tdecl *d = &w->m->decls[i];
-            if (d->kind != TD_IMPL || !d->name) continue;
-            if (!strstr(d->name, tag)) continue;
-            if (strstr(d->name, "Drop") || strstr(d->name, "Handback")) continue;
-            if (!lw_impl_has_trait(d->name)) continue;
-            return 1;
-        }
-        return 1;   /* unknown: assume it needs one */
-    }
-    for (i = 0; i < w->m->decls[best].ntraits; i++) {
-        int ti = w->m->decls[best].traits[i];
-        struct ct_tdecl *td;
-        if (ti <= 0 || ti > w->m->ndecls) continue;
-        td = &w->m->decls[ti - 1];
-        if (td->name && (strcmp(td->name, "Drop") == 0
-                         || strcmp(td->name, "Handback") == 0))
-            continue;
-        return 1;
-    }
-    /* a generic impl (`impl Iter<T> for Pair`) gives every instance of the
-       template a generated vptr, so the instance needs a designator too. */
-    {
-        const char *tname = w->m->decls[best].name;
-        for (i = 0; i < w->m->ndecls; i++) {
-            struct ct_tdecl *d = &w->m->decls[i];
-            if (d->kind != TD_IMPL || !d->name) continue;
-            if (strstr(d->name, tname)
-                && !strstr(d->name, "Drop") && !strstr(d->name, "Handback")
-                && lw_impl_has_trait(d->name))
-                return 1;
-        }
-    }
-    return 0;
-}
-
 static int lw_struct_needs_init(struct Lower *w, const char *tag, int depth)
 {
-    int i, k;
+    struct ct_tstruct *d;
+    int i;
 
     if (!tag || !tag[0] || depth > 8) return 0;
-    for (i = 0; i < w->m->ndecls; i++) {
-        struct ct_tdecl *d = &w->m->decls[i];
-        size_t tl;
-        if (d->kind != TD_STRUCT && d->kind != TD_UNION && d->kind != TD_ADT)
-            continue;
-        if (!d->name) continue;
-        tl = strlen(tag);
-        if (tl == 0 || strlen(d->name) != tl || strncmp(d->name, tag, tl) != 0)
-            continue;
-        if (d->ntraits > 0) return 1;
-        /* a field may be (or own) a trait-carrying struct: the emitter appends
-           a `.field.__x_vptr` designator for it, which is generated C. */
-        for (k = 0; k < w->m->nmembers; k++) {
-            struct ct_tmember *mb = &w->m->members[k];
-            const char *fs;
-            const char *ftag;
-            int fl;
-            if (mb->owner != d->id) continue;
-            fs = backend::tir::tmod_cspell(w->m, mb->type);
-            if (!fs) continue;
-            /* a pointer field does not make the initialiser need a vptr */
-            if (strchr(fs, '*')) continue;
-            if (strncmp(fs, "struct ", 7) == 0) ftag = fs + 7;
-            else if (strncmp(fs, "union ", 6) == 0) ftag = fs + 6;
-            else continue;
-            fl = (int)strlen(ftag);
-            while (fl > 0 && (ftag[fl - 1] == '*' || ftag[fl - 1] == ' ')) fl--;
-            if (fl > 0 && fl < (int)strlen(ftag)) {
-                /* pointer field: copy the tag part only */
-            }
-            {
-                char buf[256];
-                int n = fl < (int)sizeof(buf) - 1 ? fl : (int)sizeof(buf) - 1;
-                memcpy(buf, ftag, (size_t)n);
-                buf[n] = 0;
-                if (lw_struct_needs_init(w, buf, depth + 1)) return 1;
-            }
-        }
+    d = lw_struct_row(w, tag);
+    if (!d) return 0;
+    if (d->nuses > 0) return 1;
+    for (i = 0; i < d->nfields; i++) {
+        const char *fs = d->fields[i].type;
+        const char *ftag;
+        int fl;
+        char buf[256];
+        if (!fs || strchr(fs, '*')) continue;
+        if (strncmp(fs, "struct ", 7) == 0) ftag = fs + 7;
+        else if (strncmp(fs, "union ", 6) == 0) ftag = fs + 6;
+        else continue;
+        fl = (int)strlen(ftag);
+        while (fl > 0 && (ftag[fl - 1] == '*' || ftag[fl - 1] == ' ')) fl--;
+        if (fl <= 0 || fl >= (int)sizeof(buf)) continue;
+        memcpy(buf, ftag, (size_t)fl);
+        buf[fl] = 0;
+        if (lw_struct_needs_init(w, buf, depth + 1)) return 1;
     }
     return 0;
 }
@@ -634,6 +544,24 @@ static int lw_type_needs_init(struct Lower *w, int tir_type)
     memcpy(buf, tag, (size_t)n);
     buf[n] = 0;
     return lw_struct_needs_init(w, buf, 0);
+}
+
+/* A return type whose value owns a handle carries the SH-102 lifetime rules
+   (retain at the call boundary, `__ct_sretN` around a return, a release on
+   every exit). Those are emitter bookkeeping, not yet a LIR row, so a
+   function returning one stays on the AST path and the unit is not "ready"
+   until S8 moves the rules. */
+static int lw_owning_spelling(const char *s)
+{
+    if (!s || !s[0]) return 0;
+    if (strstr(s, "String")) return 1;
+    if (strstr(s, "Str ")) return 1;
+    if (strncmp(s, "Str", 3) == 0) return 1;
+    if (strstr(s, "Vec<")) return 1;
+    if (strstr(s, "Option<")) return 1;
+    if (strstr(s, "Map<")) return 1;
+    if (strstr(s, "Box<")) return 1;
+    return 0;
 }
 
 static int lw_type_text(struct Lower *w, const char *spelling)
@@ -666,21 +594,6 @@ static int lw_decl_is_template(struct Lower *w, struct ct_tdecl *d)
     if (backend::tir::tmod_has_free_param(w->m, d->type)) return 1;
     for (i = 0; i < d->nparams; i++)
         if (backend::tir::tmod_has_free_param(w->m, d->params[i])) return 1;
-    return 0;
-}
-
-/* A return type whose value owns a handle carries the SH-102 lifetime rules;
-   the S2 subset keeps those on the AST path. */
-static int lw_owning_spelling(const char *s)
-{
-    if (!s || !s[0]) return 0;
-    if (strstr(s, "String")) return 1;
-    if (strstr(s, "Str ")) return 1;
-    if (strncmp(s, "Str", 3) == 0) return 1;
-    if (strstr(s, "Vec<")) return 1;
-    if (strstr(s, "Option<")) return 1;
-    if (strstr(s, "Map<")) return 1;
-    if (strstr(s, "Box<")) return 1;
     return 0;
 }
 
@@ -726,6 +639,9 @@ static int lw_decl_param_ref(struct Lower *w, int decl, int idx)
 /* A `ref` / `out` binding is a pointer in the emitted C: every read and write
    goes through `(*name)`. Names are matched from the tail so an inner shadow
    wins; only parameters are supported in this stage. */
+/* The fallback for a name the typed row did not resolve: a row outside the
+   function being lowered cannot be the referent, and a same-spelled local in
+   another function must not turn this read into a dereference. */
 static int lw_name_is_ref(struct Lower *w, const char *name)
 {
     int i;
@@ -733,7 +649,14 @@ static int lw_name_is_ref(struct Lower *w, const char *name)
     if (!name || !name[0]) return 0;
     for (i = w->m->nvars - 1; i >= 0; i--) {
         struct ct_tvar *v = &w->m->vars[i];
+        int scope;
         if (!v->name || strcmp(v->name, name) != 0) continue;
+        if (w->func_scope > 0) {
+            scope = v->scope;
+            while (scope > 0 && scope != w->func_scope)
+                scope = lw_scope_parent(w, scope);
+            if (scope != w->func_scope) continue;
+        }
         return v->is_ref;
     }
     return 0;
@@ -779,9 +702,15 @@ static int lw_expr(struct Lower *w, int teid)
             w->l->exprs[e - 1].type = lw_type(w, t->type);
             return e;
         case TK_STRING_LIT:
-            e = lmod_new_expr(w->l, LE_STR, t->span.file, t->span.line, t->span.col);
+            /* PH-80: a literal bound to `String` / `Str` becomes the matching
+               handle; the emitter's shapes are two compound literals the LIR
+               carries as their own kind. */
+            e = lmod_new_expr(w->l, LE_STRLIT, t->span.file, t->span.line,
+                              t->span.col);
             if (e <= 0) { w->hard = 1; return 0; }
             w->l->exprs[e - 1].text = t->text;
+            w->l->exprs[e - 1].op = t->op;
+            w->l->exprs[e - 1].num = t->num;
             w->l->exprs[e - 1].type = lw_type(w, t->type);
             return e;
         case TK_NAME_LOCAL:
@@ -789,6 +718,9 @@ static int lw_expr(struct Lower *w, int teid)
             e = lmod_new_expr(w->l, LE_NAME, t->span.file, t->span.line, t->span.col);
             if (e <= 0) { w->hard = 1; return 0; }
             w->l->exprs[e - 1].text = t->text;
+            if (t->kind == TK_NAME_LOCAL && t->text
+                && strcmp(t->text, "self") == 0 && w->func_has_self)
+                w->l->exprs[e - 1].text = "_self";
             w->l->exprs[e - 1].type = lw_type(w, t->type);
             if (t->text && strcmp(t->text, "$") == 0) {
                 /* the range initialiser's index placeholder */
@@ -941,6 +873,38 @@ static int lw_expr(struct Lower *w, int teid)
                     if (lw_expr_kid(w, e, t->kids[i]) != 0) return 0;
                 return e;
             }
+            if (t->op == 2 && t->target_kind == RT_DIRECT) {
+                /* An inherent method of a concrete / instantiated struct:
+                   `find_func` resolved `<Type>.<method>`, and the emitter
+                   prints a plain `<Struct>_<method>` call whose receiver is
+                   the first actual (`.` takes its address, `->` passes the
+                   pointer, a static method has no receiver). */
+                char nm[1024];
+                int j = 0, stable = 1;
+                const char *k = t->target_key;
+                if (!k || !k[0]) { lw_abort(w, "L4533"); return 0; }
+                if (t->aux != 11 && t->nkids > 0) {
+                    int rk = w->m->exprs[t->kids[0] - 1].kind;
+                    if (rk != TK_NAME_LOCAL && rk != TK_NAME_GLOBAL
+                        && rk != TK_FIELD && rk != TK_INDEX)
+                        stable = 0;
+                }
+                if (!stable) { lw_abort(w, "L4534"); return 0; }
+                while (*k && j < (int)sizeof(nm) - 1) {
+                    nm[j++] = *k == '.' ? '_' : *k;
+                    k++;
+                }
+                nm[j] = 0;
+                e = lmod_new_expr(w->l, LE_MCALL, t->span.file, t->span.line,
+                                  t->span.col);
+                if (e <= 0) { w->hard = 1; return 0; }
+                w->l->exprs[e - 1].text = runtime::text::ct_intern(nm);
+                w->l->exprs[e - 1].op = t->aux;
+                w->l->exprs[e - 1].type = lw_type(w, t->type);
+                for (i = 0; i < t->nkids; i++)
+                    if (lw_expr_kid(w, e, t->kids[i]) != 0) return 0;
+                return e;
+            }
             if (t->op != 1) {
                 lw_abort(w, "L453");
                 return 0;
@@ -961,16 +925,25 @@ static int lw_expr(struct Lower *w, int teid)
                    string / container / retain / release builtins expand to a
                    recipe and are not in the S2 subset */
                 if (t->target_kind == RT_INTRINSIC
-                    && t->target_b != 1 && t->target_b != 2 && t->target_b != 3) {
+                    && t->target_b != 1 && t->target_b != 2
+                    && t->target_b != 3 && t->target_b != 4) {
+                    /* BI_STRING (4) is the libc string / memory family: each
+                       prints as its own name, exactly like an external call.
+                       The container / retain / release classes (5 / 7 / 8)
+                       still expand to a recipe the LIR does not carry. */
                     lw_abort(w, "L467");
                     return 0;
                 }
                 w->l->exprs[e - 1].text = (t->target_key && t->target_key[0])
                                               ? t->target_key : t->text;
                 if (w->l->exprs[e - 1].text
-                    && strncmp(w->l->exprs[e - 1].text, "__ct_", 5) == 0) {
+                    && strncmp(w->l->exprs[e - 1].text, "__ct_", 5) == 0
+                    && strncmp(w->l->exprs[e - 1].text, "__ct_atomic_", 12) != 0) {
                     /* an emitter-injected helper / intrinsic prologue: its C
-                       is not a row of the program being printed */
+                       is not a row of the program being printed. The atomic
+                       family is different: the emitter writes those as
+                       `static inline` definitions in the same product, so a
+                       call to one is a call to a real symbol. */
                     lw_abort(w, "L520");
                     return 0;
                 }
@@ -1229,12 +1202,9 @@ static int lw_materialise(struct Lower *w, int *chain, int nchain, int edge,
                                      : (c->kind == CL_DROP ? 2 : 3);
             w->l->stmts[sid - 1].origin = c->id;
             w->l->stmts[sid - 1].err_edge = c->on_error;
+            w->l->stmts[sid - 1].assignable = 1;
             out[n] = sid;
             n++;
-            /* the S2 printer does not render AutoDrop yet; the function still
-               lowers and verifies (V6/V8 exercise it), but its body must not
-               be printed from LIR. */
-            w->drop_seen = 1;
         }
     }
     *nout = n;
@@ -1265,8 +1235,13 @@ static int lw_add_tail_to_block(struct Lower *w, int blk, int *ids, int n)
     return 0;
 }
 
-/* The block-tail flush of one C block: only its own scope, every entry. */
-static int lw_tail_cleanups(struct Lower *w, int blk, int scope)
+/* The block-tail flush of one C block: only its own scope, every entry.
+   `skip_owned` drops the AutoDrop / release / handback entries: a block that
+   ends in a `return` has already run that object's release on the return
+   edge (the parser moves the delete there and clears autodrop), while a
+   `defer` body is still printed at the closing brace -- dead code after the
+   return, exactly like the AST path. */
+static int lw_tail_cleanups(struct Lower *w, int blk, int scope, int skip_owned)
 {
     int chain[1];
     int ids[64];
@@ -1274,6 +1249,12 @@ static int lw_tail_cleanups(struct Lower *w, int blk, int scope)
 
     chain[0] = scope;
     if (lw_materialise(w, chain, 1, 0, 0, 0, 1, blk, ids, &n) != 0) return -1;
+    if (skip_owned) {
+        int i, k = 0;
+        for (i = 0; i < n; i++)
+            if (w->l->stmts[ids[i] - 1].kind != LS_DROP) ids[k++] = ids[i];
+        n = k;
+    }
     return lw_add_tail_to_block(w, blk, ids, n);
 }
 
@@ -1308,14 +1289,75 @@ static int lw_return_cleanups(struct Lower *w, int block, int edge, int line,
     return lw_materialise(w, chain, nchain, edge, line, col, 0, block, ids, n);
 }
 
-static int lw_active_for_return(struct Lower *w, int block, int line, int col)
+/* Does the lowered return value name `name`? The AST rule counts a field
+   spelling too, because L2 scans words. */
+static int lw_lir_mentions(struct Lower *w, int eid, const char *name)
+{
+    struct ct_lexpr *e;
+    int i;
+
+    if (eid <= 0 || eid > w->l->nexprs || !name || !name[0]) return 0;
+    e = &w->l->exprs[eid - 1];
+    if (e->kind == LE_NAME)
+        return e->text && strcmp(e->text, name) == 0;
+    if (e->kind == LE_FIELD || e->kind == LE_ARROW)
+        return (e->text && strcmp(e->text, name) == 0)
+            || lw_lir_mentions(w, e->kids[0], name);
+    if (e->kind == LE_CALL || e->kind == LE_MCALL)
+        if (e->text && strcmp(e->text, name) == 0) return 1;
+    for (i = 0; i < e->nkids; i++)
+        if (lw_lir_mentions(w, e->kids[i], name)) return 1;
+    return 0;
+}
+
+/* Does the value hand `name` over? A field read is not a transfer; a bare
+   name and an element of it are. */
+static int lw_lir_returns(struct Lower *w, int eid, const char *name)
+{
+    struct ct_lexpr *e;
+    int i;
+
+    if (eid <= 0 || eid > w->l->nexprs || !name || !name[0]) return 0;
+    e = &w->l->exprs[eid - 1];
+    if (e->kind == LE_NAME)
+        return e->text && strcmp(e->text, name) == 0;
+    if (e->kind == LE_FIELD || e->kind == LE_ARROW) return 0;
+    if (e->kind == LE_INDEX) return lw_lir_returns(w, e->kids[0], name);
+    for (i = 0; i < e->nkids; i++)
+        if (lw_lir_returns(w, e->kids[i], name)) return 1;
+    return 0;
+}
+
+/* SH-45: a `return` gets a materialised value only when a defer block is
+   active (any kind), or when it reads an object the same exit is about to
+   release. A constant return with only an AutoDrop edge prints in place. */
+static int lw_active_for_return(struct Lower *w, int block, int ret_expr,
+                                int line, int col)
 {
     int chain[LX_MAX_CHAIN];
-    int nchain = 0;
+    int nchain = 0, ci, k;
 
     if (lw_chain(w, w->l->blocks[block - 1].scope, 0, SC_FUNC, chain, &nchain) != 0)
         return 0;
-    return lw_has_active(w, chain, nchain, line, col);
+    for (ci = 0; ci < nchain; ci++) {
+        struct ct_lscope *sc = &w->l->scopes[chain[ci] - 1];
+        for (k = 0; k < sc->ncleanups; k++) {
+            struct ct_lcleanup *c = &w->l->cleanups[sc->cleanups[k] - 1];
+            const char *nm;
+            if (lw_active(w, c, line, col, 0) == 0) continue;
+            if (c->kind == CL_DEFER || c->kind == CL_ERRDEFER) return 1;
+            if (c->kind != CL_DROP && c->kind != CL_RELEASE
+                && c->kind != CL_HANDBACK) continue;
+            if (ret_expr <= 0 || c->body_stmt <= 0
+                || c->body_stmt > w->m->nexprs) continue;
+            if (w->m->exprs[c->body_stmt - 1].kind != TK_NAME_LOCAL) continue;
+            nm = w->m->exprs[c->body_stmt - 1].text;
+            if (lw_lir_mentions(w, ret_expr, nm)
+                && !lw_lir_returns(w, ret_expr, nm))
+                return 1;
+        }
+    }
+    return 0;
 }
 
 static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
@@ -1354,29 +1396,39 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
                        || strncmp(sp, "union ", 6) == 0)) {
                 const char *tag = strncmp(sp, "struct ", 7) == 0 ? sp + 7 : sp + 6;
                 if (strchr(tag, '*')) {
-                    /* A pointer to a trait-carrying struct: the emitter adds
-                       `(*p).__x_vptr = ...` after a heap allocation (a call to
-                       malloc/calloc); an aliasing initialiser needs nothing.
-                       The heap case falls back, the rest prints normally. */
+                    /* A pointer to a struct: the emitter writes the vptr
+                       statements after a heap allocation (a call to
+                       malloc/calloc) and nothing for an aliasing initialiser.
+                       The statements are keyed by the pointee's base name --
+                       `emit_vptr_stmts` strips the stars just like the type
+                       key it reads. */
                     if (s->nkids == 1) {
                         struct ct_texpr *it = &w->m->exprs[s->kids[0] - 1];
                         if ((it->kind == TK_CALL || it->kind == TK_INTRINSIC)
                             && it->text
                             && (strcmp(it->text, "malloc") == 0
                                 || strcmp(it->text, "calloc") == 0)) {
-                            lw_abort(w, "L7552");
-                            return 0;
+                            char base[512], stmts[8192], recv[1024];
+                            int bl, cs = 0;
+                            snprintf(base, sizeof(base), "%s", tag);
+                            bl = (int)strlen(base);
+                            while (bl > 0 && (base[bl - 1] == '*'
+                                              || base[bl - 1] == ' ')) bl--;
+                            base[bl] = 0;
+                            snprintf(recv, sizeof(recv), "(*%s)",
+                                     v->name ? v->name : "");
+                            if (lw_vptr_stmts(w, base, recv, stmts,
+                                              (int)sizeof(stmts), &cs, 0) != 0) {
+                                lw_abort(w, "L7552");
+                                return 0;
+                            }
+                            if (cs > 0 && stmts[cs - 1] == '\n') cs--;
+                            if (cs > 0) {
+                                w->l->stmts[sid - 1].vptr =
+                                    runtime::text::ct_intern_len(stmts, cs);
+                                w->l->stmts[sid - 1].vptr_loop = 0;
+                            }
                         }
-                    }
-                } else if (!lw_struct_decl(w, tag)) {
-                    /* An instance spelling has no TDecl row, so whether the
-                       emitter would append a vptr designator is unknown. A
-                       declaration with an initialiser prints as-is (the box
-                       of an interface value is one); a bare declaration
-                       falls back. */
-                    if (lw_instance_vptr_needed(w, tag)) {
-                        lw_abort(w, "L7550");
-                        return 0;
                     }
                 } else if (lw_type_needs_init(w, v->type)) {
                     char items[4096];
@@ -1389,7 +1441,6 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
                         char cnt[256], stmts[4096];
                         int ci = 0, cn = 0, cs = 0, k;
                         if (s->nkids != 0) { lw_abort(w, "L7555"); return 0; }
-                        if (!lw_struct_decl(w, tag)) { lw_abort(w, "L7550"); return 0; }
                         k = 0;
                         while (v->dims[k] && v->dims[k] != '[') k++;
                         if (v->dims[k] == '[') k++;
@@ -1414,6 +1465,7 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
                         w->l->stmts[sid - 1].count = runtime::text::ct_intern(cnt);
                         w->l->stmts[sid - 1].vptr =
                             runtime::text::ct_intern_len(stmts, cs);
+                        w->l->stmts[sid - 1].vptr_loop = 1;
                         *out = sid;
                         return 0;
                     }
@@ -1545,7 +1597,8 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             if (lw_add_cleanups_to_block(w, block, ids, n) != 0) return 0;
             if (b->ret_expr > 0 && w->ret_type > 0
                 && strcmp(lmod_cspell(w->l, w->ret_type), "void") != 0
-                && lw_active_for_return(w, block, s->span.line, s->span.col)) {
+                && lw_active_for_return(w, block, b->ret_expr,
+                                        s->span.line, s->span.col)) {
                 int t = lmod_new_temp(w->l, LTK_RET, w->ret_type, block);
                 if (t <= 0) { w->hard = 1; return 0; }
                 b->ret_temp = t;
@@ -1705,6 +1758,41 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             *out = sid;
             return 0;
         }
+        case TS_DELETE: {
+            /* A user `delete` (the parser-generated AutoDrop ones became
+               cleanup entries): the emitter prints a guarded release, a Drop
+               call first when the struct adopts Drop, and a null write when
+               the operand is assignable (SH-40). */
+            const char *sp, *base, *b;
+            size_t bl;
+            struct ct_texpr *te;
+            if (s->nkids != 1) { lw_abort(w, "L9000"); return 0; }
+            e = lw_expr(w, s->kids[0]);
+            if (e <= 0) return 0;
+            te = &w->m->exprs[s->kids[0] - 1];
+            sp = backend::tir::tmod_cspell(w->m, te->type);
+            if (!sp) sp = "";
+            if (strncmp(sp, "struct ", 7) == 0) sp += 7;
+            else if (strncmp(sp, "union ", 6) == 0) sp += 6;
+            bl = strlen(sp);
+            while (bl > 0 && (sp[bl - 1] == '*' || sp[bl - 1] == ' ')) bl--;
+            b = runtime::text::ct_intern_len(sp, (int)bl);
+            if (!b) { w->hard = 1; return 0; }
+            base = b;
+            sid = lmod_new_stmt(w->l, LS_DROP, s->span.file, s->span.line,
+                                s->span.col);
+            if (sid <= 0) { w->hard = 1; return 0; }
+            w->l->stmts[sid - 1].expr = e;
+            w->l->stmts[sid - 1].type = lw_type(w, te->type);
+            w->l->stmts[sid - 1].name = base;
+            w->l->stmts[sid - 1].aux = s->aux == 1 ? 1 : 2;
+            w->l->stmts[sid - 1].assignable =
+                (te->kind == TK_NAME_LOCAL || te->kind == TK_NAME_GLOBAL
+                 || te->kind == TK_FIELD || te->kind == TK_INDEX
+                 || te->kind == TK_DEREF);
+            *out = sid;
+            return 0;
+        }
         case TS_GOTO: {
             if (!s->text || !s->text[0]) { lw_abort(w, "L899"); return 0; }
             sid = lmod_new_stmt(w->l, LS_GOTO, s->span.file, s->span.line, s->span.col);
@@ -1777,7 +1865,9 @@ static int lw_block_stmt(struct Lower *w, int tsid, int kind, int parent)
     }
     if (lw_fill_block(w, tsid, blk) != 0) return 0;
     if (!w->aborted) {
-        if (lw_tail_cleanups(w, blk, s->scope) != 0) return 0;
+        if (lw_tail_cleanups(w, blk, s->scope,
+                             w->l->blocks[blk - 1].term == LT_RETURN) != 0)
+            return 0;
         /* the fall-out terminator for condition blocks: a CondJump back to
            the loop header / to the join, recorded for the S8 CFG pass */
         if (kind == LB_WHILE_BODY || kind == LB_FOR_BODY) {
@@ -1791,6 +1881,45 @@ static int lw_block_stmt(struct Lower *w, int tsid, int kind, int parent)
 /* ------------------------------------------------------------------------- */
 /* Functions and the program                                                 */
 /* ------------------------------------------------------------------------- */
+/* SH-102: an owning handle local / parameter gets emitter bookkeeping the
+   LIR does not carry yet -- a zero-init declaration, a retain at entry, a
+   release on every exit, and an `__ct_sretN` around a return. Those bodies
+   stay on the AST path. `String` / `U16String` and the owning ADT instances
+   are the spellings `sb_life_prefix_text` recognises; a borrowed `Str` view
+   and any pointer are not. Erring wide here only costs coverage, never a
+   byte. */
+static int lw_owns_handle(const char *sp)
+{
+    if (!sp || !sp[0] || strchr(sp, '*')) return 0;
+    if (strstr(sp, "String")) return 1;
+    if (strncmp(sp, "struct ", 7) == 0) sp += 7;
+    if (strncmp(sp, "Option_", 7) == 0 || strncmp(sp, "Result_", 7) == 0)
+        return 1;
+    return 0;
+}
+
+static int lw_func_has_handle(struct Lower *w, int func_scope)
+{
+    int i, k;
+
+    if (func_scope <= 0) return 0;
+    for (i = 0; i < w->m->nscopes; i++) {
+        struct ct_tscope *sc = &w->m->scopes[i];
+        int s = sc->id;
+        while (s > 0 && s != func_scope) s = lw_scope_parent(w, s);
+        if (s != func_scope) continue;
+        for (k = 0; k < sc->nvars; k++) {
+            int vi = sc->vars[k];
+            struct ct_tvar *v;
+            if (vi <= 0 || vi > w->m->nvars) continue;
+            v = &w->m->vars[vi - 1];
+            if (lw_owns_handle(backend::tir::tmod_cspell(w->m, v->type)))
+                return 1;
+        }
+    }
+    return 0;
+}
+
 static int lw_lower_func(struct Lower *w, int decl)
 {
     struct ct_tdecl *d = &w->m->decls[decl - 1];
@@ -1803,14 +1932,29 @@ static int lw_lower_func(struct Lower *w, int decl)
     rs = backend::tir::tmod_cspell(w->m, d->type);
     if (!rs) rs = "void";
     if (lw_owning_spelling(rs)) { w->l->ready = 0; return 0; }
+    if (lw_func_has_handle(w, d->scope)) { w->l->ready = 0; return 0; }
     f = lmod_new_func(w->l, d->name, lw_type_text(w, rs), decl);
     if (f <= 0) { w->hard = 1; return 0; }
     w->l->funcs[f - 1].is_static = d->is_static;
     if (d->cname && d->cname[0])
         w->l->funcs[f - 1].cname = runtime::text::ct_intern(d->cname);
+    w->l->funcs[f - 1].seam = (d->is_method && d->cname && d->cname[0])
+                                  ? w->l->funcs[f - 1].cname
+                                  : runtime::text::ct_intern(d->name);
     w->func = f;
+    w->func_scope = d->scope;
+    w->func_has_self = 0;
     w->ret_type = w->l->funcs[f - 1].ret;
+    /* Temps are function-local in the product, so number them from zero and
+       let the seam shift the whole body by the emitter's counter at entry.
+       A module-wide counter would encode the *lowering* order, which is not
+       the emission order (impl methods are written before plain functions). */
+    w->l->tmp_next = 0;
     w->l->funcs[f - 1].temp_start = w->l->tmp_next;
+    {
+        int start_temps = w->l->ntemps;
+        w->tmp_start_temps = start_temps;
+    }
     w->aborted = 0;
     w->drop_seen = 0;
     w->nloops = 0;
@@ -1832,6 +1976,7 @@ static int lw_lower_func(struct Lower *w, int decl)
                 w->hard = 1;
                 return 0;
             }
+            if (v->name && strcmp(v->name, "self") == 0) w->func_has_self = 1;
         }
     }
     if (!w->aborted) {
@@ -1848,10 +1993,20 @@ static int lw_lower_func(struct Lower *w, int decl)
             fprintf(stderr, "lir: function '%s' not lowered\n", d->name ? d->name : "");
         w->l->funcs[f - 1].ok = 0;
         w->l->ready = 0;
+        /* The body stays on the AST path, so its `__ct_*N` allocations never
+           happen in the product: give the numbers back or every later body
+           starts at a counter the emitter never reached. */
+        w->l->tmp_next = w->l->funcs[f - 1].temp_start;
+        w->l->ntemps = w->tmp_start_temps;
+        w->l->funcs[f - 1].temp_end = w->l->tmp_next;
         if (w->hard) return -1;
     } else {
         w->l->funcs[f - 1].ok = 1;
         w->l->stat_funcs_ok++;
+        if (getenv("CT_LIR_DEBUG"))
+            fprintf(stderr, "lir: lowered '%s' seam='%s'\n",
+                    d->name ? d->name : "",
+                    w->l->funcs[f - 1].seam ? w->l->funcs[f - 1].seam : "");
         if (lmod_add_decl(w->l, f) != 0) { w->hard = 1; return -1; }
     }
     return 0;
@@ -1995,7 +2150,7 @@ pub int ct_lir_build_unit(void *up, int mod_unit, int tmp_base)
     if (backend::tir::ct_tir_build_unit(up, mod_unit) != 0) return 1;
     unit = m->nunits;
     w->unit = unit;
-    l->tmp_next = tmp_base > 0 ? tmp_base : 0;
+    (void)tmp_base;   /* per-function temp numbering: no seed from the emitter */
     l->ready = 1;
     if (lw_copy_scopes(w) != 0) {
         fprintf(stderr, "lir: cannot copy the scope table\n");
@@ -2092,6 +2247,21 @@ static int lw_pw_expr(struct Lower *w, int eid, int ctx)
         case LE_STR:
         case LE_NAME:
             fputs(e->text ? e->text : "", g_lir_out);
+            return 0;
+        case LE_STRLIT:
+            if (e->op == 1) {
+                fprintf(g_lir_out,
+                        "((struct String){ (char *)ct_str_lit_%ld.d,"
+                        " (int)(sizeof(ct_str_lit_%ld.d) - 1) })",
+                        e->num, e->num);
+            } else if (e->op == 2) {
+                fprintf(g_lir_out,
+                        "((struct Str){ (char *)%s, (int)(sizeof(%s) - 1) })",
+                        e->text ? e->text : "",
+                        e->text ? e->text : "");
+            } else {
+                fputs(e->text ? e->text : "", g_lir_out);
+            }
             return 0;
         case LE_TEMP:
             fputs(e->text ? e->text : "", g_lir_out);
@@ -2269,13 +2439,15 @@ static int lw_pw_expr(struct Lower *w, int eid, int ctx)
                     e->member ? e->member : "", e->text ? e->text : "");
             return 0;
         }
-        case LE_NEWOBJ:
+        case LE_NEWOBJ: {
+            int kn = e->op + w->tmp_delta;
             fprintf(g_lir_out, "({ struct %s __ct_new%d = %s__new(&(%s)",
-                    e->text ? e->text : "", e->op, e->text ? e->text : "",
+                    e->text ? e->text : "", kn, e->text ? e->text : "",
                     e->member ? e->member : "");
             if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
-            fprintf(g_lir_out, "); __ct_new%d; })", e->op);
+            fprintf(g_lir_out, "); __ct_new%d; })", kn);
             return 0;
+        }
         case LE_VMCALL: {
             char low[256];
             lw_low_text(e->member, low, (int)sizeof(low));
@@ -2406,7 +2578,7 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
             return 0;
         case LS_DECL:
             if (lw_pw_decl(w, s, ind, 0) != 0) return -1;
-            if (s->vptr) {
+            if (s->vptr && s->vptr_loop) {
                 const char *p = s->vptr;
                 lw_ind(ind);
                 fprintf(g_lir_out,
@@ -2425,6 +2597,19 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
                 fputs("\n", g_lir_out);
                 lw_ind(ind);
                 fputs("}\n", g_lir_out);
+            } else if (s->vptr) {
+                const char *p = s->vptr;
+                lw_ind(ind);
+                while (*p) {
+                    if (*p == '\n') {
+                        fputs("\n", g_lir_out);
+                        lw_ind(ind);
+                    } else {
+                        fputc(*p, g_lir_out);
+                    }
+                    p++;
+                }
+                fputs("\n", g_lir_out);
             }
             return 0;
         case LS_DECLS: {
@@ -2450,6 +2635,39 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
             if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
             fputs(";\n", g_lir_out);
             return 0;
+        case LS_DROP: {
+            /* `if (x) { <T>_Drop_drop(x); free(x); x = 0; }` -- a user delete
+               and an AutoDrop cleanup share this shape; the struct row decides
+               whether a Drop body runs first. */
+            struct ct_tstruct *row = lw_struct_row(w, s->name);
+            lw_ind(ind);
+            fputs("if (", g_lir_out);
+            if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+            fputs(") { ", g_lir_out);
+            if (s->aux == 1) {
+                fprintf(g_lir_out, "%s_Handback_handback(",
+                        s->name ? s->name : "");
+                if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+                fputs("); ", g_lir_out);
+            } else {
+                if (row && row->uses_drop) {
+                    fprintf(g_lir_out, "%s_Drop_drop(",
+                            s->name ? s->name : "");
+                    if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+                    fputs("); ", g_lir_out);
+                }
+                fprintf(g_lir_out, "%s(",
+                        w->l->free_sym ? w->l->free_sym : "free");
+                if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+                fputs("); ", g_lir_out);
+            }
+            if (s->assignable) {
+                if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+                fputs(" = 0; ", g_lir_out);
+            }
+            fputs("}\n", g_lir_out);
+            return 0;
+        }
         case LS_DEFER_RUN:
         case LS_ERRDEFER_RUN:
             return lw_pw_block(w, s->body_blk, ind);
@@ -2495,7 +2713,7 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
             fputs(") ", g_lir_out);
             return lw_pw_block(w, s->body_blk, ind);
         case LS_FOREACH: {
-            int k = s->loop_k;
+            int k = s->loop_k + w->tmp_delta;
             const char *it = s->item_type ? s->item_type : "int";
             const char *fn = s->fname ? s->fname : "";
             int k2;
@@ -2573,7 +2791,7 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
             return 0;
         }
         case LS_LOOP: {
-            int k = s->loop_k;
+            int k = s->loop_k + w->tmp_delta;
             lw_ind(ind);
             if (!s->aux) {
                 fprintf(g_lir_out, "for (int i = 0, __ct_loop_n_%d = (", k);
@@ -2606,11 +2824,6 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
             lw_ind(ind + 1);
             fputs(";\n", g_lir_out);
             return 0;
-        case LS_DROP:
-            /* not printed in S2: any function with a drop entry is `ok=0`,
-               so this branch is unreachable. */
-            if (getenv("CT_LIR_DEBUG")) fprintf(stderr, "lir: cannot print a drop\n");
-            return -1;
         default:
             if (getenv("CT_LIR_DEBUG"))
                 fprintf(stderr, "lir: cannot print LS kind=%d\n", s->kind);
@@ -2622,14 +2835,16 @@ static int lw_pw_return(struct Lower *w, struct ct_lblock *b, int ind)
 {
     int wrap = b->ret_temp > 0;
     struct ct_ltemp *t = 0;
+    const char *tname = "";
 
     if (wrap) {
         if (b->ret_temp <= 0 || b->ret_temp > w->l->ntemps) return -1;
         t = &w->l->temps[b->ret_temp - 1];
+        tname = lmod_temp_name(w->l, b->ret_temp, w->tmp_delta);
         fputs("{\n", g_lir_out);
         ind++;
         lw_ind(ind);
-        fprintf(g_lir_out, "%s %s = ", lmod_cspell(w->l, t->type), t->name);
+        fprintf(g_lir_out, "%s %s = ", lmod_cspell(w->l, t->type), tname);
         if (lw_pw_expr(w, b->ret_expr, PW_EXPR) != 0) return -1;
         fputs(";\n", g_lir_out);
     } else {
@@ -2639,7 +2854,7 @@ static int lw_pw_return(struct Lower *w, struct ct_lblock *b, int ind)
     if (wrap) {
         if (lw_pw_cleanups(w, b->term_cleanups, b->ntermc, ind) != 0) return -1;
         lw_ind(ind);
-        fprintf(g_lir_out, "return %s;\n", t->name);
+        fprintf(g_lir_out, "return %s;\n", tname);
         ind--;
         lw_ind(ind);
         fputs("}\n", g_lir_out);
@@ -2686,8 +2901,27 @@ static int lw_pw_block(struct Lower *w, int blk, int ind)
    returned `new_ntmp` lets the emitter resume where the unswitched program
    would have been. A mismatch falls back to the AST body: the seam must never
    print a body whose temporaries would renumber the rest of the file. */
+/* The statements of a root block without its braces (an impl method body). */
+static int lw_pw_stmts_only(struct Lower *w, int blk, int ind)
+{
+    struct ct_lblock *b;
+    int i;
+
+    if (blk <= 0 || blk > w->l->nblocks) return -1;
+    b = &w->l->blocks[blk - 1];
+    for (i = 0; i < b->nstmts; i++)
+        if (lw_pw_stmt(w, b->stmts[i], ind) != 0) return -1;
+    if (b->term == LT_RETURN) {
+        if (lw_pw_return(w, b, ind) != 0) return -1;
+    } else if (b->term == LT_GOTO) {
+        return -1;
+    }
+    if (lw_pw_cleanups(w, b->tail_cleanups, b->ntail, ind) != 0) return -1;
+    return 0;
+}
+
 pub int ct_lir_try_body(const char *name, void *out, int ind, int ntmp,
-                        int *new_ntmp)
+                        int *new_ntmp, int stmts)
 {
     struct LModule *l = lmod_get();
     struct Lower *w = &g_lower;
@@ -2698,14 +2932,35 @@ pub int ct_lir_try_body(const char *name, void *out, int ind, int ntmp,
     for (i = 0; i < l->nfuncs; i++) {
         struct ct_lfunc *f = &l->funcs[i];
         if (!f->ok) continue;
-        if (!f->name || strcmp(f->name, name) != 0) continue;
-        if (f->temp_start != ntmp) return 0;
+        if (!f->seam || strcmp(f->seam, name) != 0) continue;
+        /* The two walkers number `__ct_*N` from one module-wide counter. A
+           generated product between two bodies (an instance body, a vtable
+           initialiser) moves the emitter's counter and not the lowering's,
+           so a body is printed at the emitter's current number, not at the
+           number lowering happened to record: the delta is constant for the
+           whole body. A negative delta would mean the lowering spent more
+           numbers than the emitter would have -- a real divergence, so that
+           body stays on the AST path. */
+        w->tmp_delta = ntmp;
         w->l = l;
         g_lir_out = (FILE *)out;
-        if (lw_pw_block(w, f->root, ind) != 0) return -1;
-        if (new_ntmp) *new_ntmp = f->temp_end;
+        if (stmts) {
+            /* an impl method: the emitter already wrote the signature, the
+               `_self` cast and the `(void)` prologue, so only the statement
+               list is printed here -- no braces. */
+            if (lw_pw_stmts_only(w, f->root, ind) != 0) return -1;
+        } else if (lw_pw_block(w, f->root, ind) != 0) {
+            return -1;
+        }
+        l->stat_printed++;
+        if (getenv("CT_LIR_DEBUG"))
+            fprintf(stderr, "lir: body '%s' printed ntmp=%d start=%d end=%d\n",
+                    name, ntmp, f->temp_start, f->temp_end);
+        if (new_ntmp) *new_ntmp = ntmp + f->temp_end;
         return 1;
     }
+    if (getenv("CT_LIR_DEBUG"))
+        fprintf(stderr, "lir: body '%s' not in this unit's lowered set\n", name);
     return 0;
 }
 
