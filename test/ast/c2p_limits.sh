@@ -129,5 +129,81 @@ else
     bad "diag-warn: the 300-byte callee name is missing from the arity warning (Warn.var was cut at 160 bytes)"
 fi
 
+# ---- C2p-3.1) a 2000-byte struct name as a type, whole chain --------------
+# The old `parse_type` caller rows, the type table's MAX_TEXT stride and the
+# instance arg rows all cut at 160. This one unit exercises a local, a field,
+# a parameter, a return type, an inherent method receiver and the method call.
+long=$(printf '%*s' 2000 '' | tr ' ' s)
+cat >"$work/long_struct.ct" <<CT
+struct $long { int n; };
+struct W { struct $long x; };
+struct $long mk(int x) { struct $long v; v.n = x; return v; }
+int add(struct $long a, struct $long b) { return a.n + b.n; }
+impl $long { int get() { return self->n; } }
+int main(void) {
+    struct $long v; struct $long w; struct W box;
+    v = mk(2); w = mk(3); box.x = v;
+    return add(box.x, w) - 5 + v.get() - 2;
+}
+CT
+if run_product long_struct "$work/long_struct.ct"; then
+    if grep -qF "$long" "$work/long_struct.c"; then
+        ok; printf '  2000-byte struct type: local/field/param/return/receiver kept whole\n'
+    else
+        bad "the generated C cut the 2000-byte struct type"
+    fi
+fi
+
+# ---- C2p-3.2) a 2000-byte type as a generic struct argument ---------------
+cat >"$work/long_inst_arg.ct" <<CT
+struct $long { int n; };
+struct Holder<T> { T x; };
+int main(void) {
+    struct Holder<struct $long> h;
+    h.x.n = 4;
+    return h.x.n - 4;
+}
+CT
+if run_product long_inst_arg "$work/long_inst_arg.ct"; then
+    if grep -qF "$long" "$work/long_inst_arg.c"; then
+        ok; printf '  2000-byte generic argument: instance field kept whole\n'
+    else
+        bad "the generated C cut the 2000-byte generic argument"
+    fi
+fi
+
+# ---- C2p-3.3) a 2000-byte generic template name ---------------------------
+tmpl=$(printf '%*s' 2000 '' | tr ' ' t)
+cat >"$work/long_tmpl.ct" <<CT
+struct $tmpl<T> { T x; };
+int main(void) {
+    struct $tmpl<int> h;
+    h.x = 9;
+    return h.x - 9;
+}
+CT
+if run_product long_tmpl "$work/long_tmpl.ct"; then
+    ok; printf '  2000-byte template name: instance encoded from the whole spelling\n'
+fi
+
+# ---- C2p-3.4) a trait receiver / interface box with a 2000-byte struct ----
+# The vptr writer's `type_needs_init` and `maybe_box`'s concrete-struct lookup
+# were 160-byte rows, so the long-named struct never got its `__x_vptr`
+# initialiser and boxing failed. This exercises impl receiver, vtable dispatch
+# and the implicit box.
+cat >"$work/long_trait.ct" <<CT
+trait Getter { int get(); }
+struct $long { int n; } use Getter;
+impl Getter for $long { int get() { return self->n; } }
+int main(void) {
+    struct $long v = { .n = 4 };
+    Getter g = v;
+    return v.get() + g.get() - 8;
+}
+CT
+if run_product long_trait "$work/long_trait.ct"; then
+    ok; printf '  2000-byte trait receiver: vptr initialiser and interface box kept whole\n'
+fi
+
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
